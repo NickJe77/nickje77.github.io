@@ -1,1 +1,0 @@
-# thesportingalmanac.github.io
