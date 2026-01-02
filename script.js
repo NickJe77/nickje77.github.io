@@ -1,4 +1,3 @@
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("✅ script.js loaded");
+  console.log("✅ Shared script loaded");
 });
-
