@@ -7,7 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  fetch("/data/g1-racing.json")
+  fetch("./data/g1-racing.json")
     .then(response => {
       if (!response.ok) {
         throw new Error("HTTP error " + response.status);
@@ -16,6 +16,8 @@ document.addEventListener("DOMContentLoaded", () => {
     })
     .then(data => {
       console.log("✅ Racing data loaded", data);
+
+      tableBody.innerHTML = "";
 
       data.forEach(row => {
         const tr = document.createElement("tr");
