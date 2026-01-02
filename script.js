@@ -4,6 +4,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const yearFilter = document.getElementById("yearFilter");
   const countryFilter = document.getElementById("countryFilter");
+  const raceSearch = document.getElementById("raceSearch");
 
   let racingData = [];
 
@@ -55,6 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function applyFilters() {
     const year = yearFilter.value;
     const country = countryFilter.value;
+    const search = raceSearch.value.toLowerCase();
 
     let filtered = racingData;
 
@@ -66,9 +68,16 @@ document.addEventListener("DOMContentLoaded", () => {
       filtered = filtered.filter(r => r.country === country);
     }
 
+    if (search) {
+      filtered = filtered.filter(r =>
+        r.race.toLowerCase().includes(search)
+      );
+    }
+
     renderTable(filtered);
   }
 
   yearFilter.addEventListener("change", applyFilters);
   countryFilter.addEventListener("change", applyFilters);
+  raceSearch.addEventListener("input", applyFilters);
 });
