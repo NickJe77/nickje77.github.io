@@ -12,8 +12,9 @@ document.addEventListener("DOMContentLoaded", () => {
     .then(res => res.json())
     .then(data => {
       racingData = data;
+
       populateFilters(data);
-      renderTable(data);
+      renderTable(data); // 🔑 ALWAYS render full table first
     });
 
   function populateFilters(data) {
@@ -38,6 +39,15 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderTable(data) {
     tableBody.innerHTML = "";
 
+    if (data.length === 0) {
+      tableBody.innerHTML = `
+        <tr>
+          <td colspan="7" style="opacity:0.6;">No races match your filters</td>
+        </tr>
+      `;
+      return;
+    }
+
     data.forEach(row => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -54,30 +64,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function applyFilters() {
-    const year = yearFilter.value;
-    const country = countryFilter.value;
-    const search = raceSearch.value.toLowerCase();
-
     let filtered = racingData;
 
-    if (year) {
-      filtered = filtered.filter(r => r.year == year);
-    }
-
-    if (country) {
-      filtered = filtered.filter(r => r.country === country);
-    }
-
-    if (search) {
-      filtered = filtered.filter(r =>
-        r.race.toLowerCase().includes(search)
-      );
-    }
-
-    renderTable(filtered);
-  }
-
-  yearFilter.addEventListener("change", applyFilters);
-  countryFilter.addEventListener("change", applyFilters);
-  raceSearch.addEventListener("input", applyFilters);
-});
+    const year = yearFilter.valu
