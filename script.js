@@ -79,3 +79,4 @@ document.addEventListener("DOMContentLoaded", () => {
   countryFilter.addEventListener("change", applyFilters);
   searchInput.addEventListener("input", applyFilters);
 });
+ 
