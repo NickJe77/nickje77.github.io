@@ -1,7 +1,8 @@
 alert("RACING JS LOADED");
+
 let allData = [];
 let filteredData = [];
-let currentSort = { key: null, asc: true };
+let currentSort = { key: null, asc: true }
 
 const yearFilter = document.getElementById("yearFilter");
 const countryFilter = document.getElementById("countryFilter");
