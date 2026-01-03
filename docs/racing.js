@@ -1,8 +1,6 @@
-alert("RACING JS LOADED");
-
 let allData = [];
 let filteredData = [];
-let currentSort = { key: null, asc: true }
+let currentSort = { key: null, asc: true };
 
 const yearFilter = document.getElementById("yearFilter");
 const countryFilter = document.getElementById("countryFilter");
@@ -16,7 +14,12 @@ const headers = document.querySelectorAll("#g1-table thead th");
 fetch("g1-results.json")
   .then(res => res.json())
   .then(data => {
-    allData = data;
+    // Normalise empty country values
+    allData = data.map(d => ({
+      ...d,
+      country: d.country && d.country.trim() !== "" ? d.country : "Unknown"
+    }));
+
     populateFilters();
     applyFilters();
   })
@@ -26,6 +29,9 @@ fetch("g1-results.json")
    Populate filters
    ========================= */
 function populateFilters() {
+  yearFilter.innerHTML = '<option value="">All</option>';
+  countryFilter.innerHTML = '<option value="">All</option>';
+
   const years = [...new Set(allData.map(d => d.year))].sort((a, b) => b - a);
   const countries = [...new Set(allData.map(d => d.country))].sort();
 
@@ -97,19 +103,4 @@ headers.forEach(th => {
     currentSort.asc = currentSort.key === key ? !currentSort.asc : true;
     currentSort.key = key;
 
-    filteredData.sort((a, b) => {
-      if (a[key] < b[key]) return currentSort.asc ? -1 : 1;
-      if (a[key] > b[key]) return currentSort.asc ? 1 : -1;
-      return 0;
-    });
-
-    renderTable(filteredData);
-  });
-});
-
-/* =========================
-   Event listeners
-   ========================= */
-yearFilter.addEventListener("change", applyFilters);
-countryFilter.addEventListener("change", applyFilters);
-raceSearch.addEventListener("input", applyFilters);
+    filtered
