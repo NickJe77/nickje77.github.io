@@ -78,5 +78,5 @@ document.addEventListener("DOMContentLoaded", () => {
   yearFilter.addEventListener("change", applyFilters);
   countryFilter.addEventListener("change", applyFilters);
   searchInput.addEventListener("input", applyFilters);
-});
+}); 
  
