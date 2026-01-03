@@ -1,3 +1,4 @@
+alert("RACING JS LOADED");
 let allData = [];
 let filteredData = [];
 let currentSort = { key: null, asc: true };
