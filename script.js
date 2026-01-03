@@ -1,24 +1,24 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const tableBody = document.querySelector("#racingTable tbody");
-  if (!tableBody) return;
-
+  const tableBody = document.querySelector("#results-table tbody");
   const yearFilter = document.getElementById("yearFilter");
-  const raceSearch = document.getElementById("raceSearch");
+  const searchInput = document.getElementById("searchInput");
 
-  let racingData = [];
+  let allData = [];
 
+  // ✅ IMPORTANT: relative path for GitHub Pages + custom domain
   fetch("./data/g1-racing.json")
-    .then(res => res.json())
+    .then(response => response.json())
     .then(data => {
-      racingData = data;
-
+      allData = data;
       populateYearFilter(data);
-      renderTable(data); // show all races by default
+      renderTable(data);
+    })
+    .catch(error => {
+      console.error("Error loading racing data:", error);
     });
 
   function populateYearFilter(data) {
-    const years = [...new Set(data.map(r => r.year))]
-      .sort((a, b) => b - a);
+    const years = [...new Set(data.map(item => item.year))].sort((a, b) => b - a);
 
     years.forEach(year => {
       const option = document.createElement("option");
@@ -34,20 +34,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (data.length === 0) {
       tableBody.innerHTML = `
         <tr>
-          <td colspan="7" style="opacity:0.6;">
-            No races match your filters
+          <td colspan="7" style="text-align:center; opacity:0.6;">
+            No results found
           </td>
         </tr>
       `;
       return;
     }
 
-    data.forEach(row => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${row.year}</td>
-        <td>${row.race}</td>
-        <td>${row.country}</td>
-        <td>${row.track}</td>
-        <td>${row.winner}</td>
-        <td>${row.jockey}</td>
+    data.forEach(item => {
