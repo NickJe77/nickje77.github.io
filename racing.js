@@ -2,31 +2,35 @@ document.addEventListener("DOMContentLoaded", () => {
   fetch("g1-results.json")
     .then(response => {
       if (!response.ok) {
-        throw new Error("JSON not found");
+        throw new Error("Failed to load g1-results.json");
       }
       return response.json();
     })
     .then(data => {
-      const tableBody = document.querySelector("#g1-table tbody");
+      const tbody = document.querySelector("#g1-table tbody");
+      tbody.innerHTML = "";
 
-      data.forEach(row => {
-        const tr = document.createElement("tr");
+      data.forEach(item => {
+        const row = document.createElement("tr");
 
-        tr.innerHTML = `
-          <td>${row.year}</td>
-          <td>${row.race}</td>
-          <td>${row.track}</td>
-          <td>${row.winner}</td>
-          <td>${row.jockey}</td>
-          <td>${row.trainer}</td>
-          <td>${row.country}</td>
+        row.innerHTML = `
+          <td>${item.year}</td>
+          <td>${item.race}</td>
+          <td>${item.track}</td>
+          <td>${item.winner}</td>
+          <td>${item.jockey}</td>
+          <td>${item.trainer}</td>
+          <td>${item.country}</td>
         `;
 
-        tableBody.appendChild(tr);
+        tbody.appendChild(row);
       });
     })
-    .catch(error => {
-      console.error("G1 LOAD ERROR:", error);
+    .catch(err => {
+      console.error("G1 TABLE ERROR:", err);
+      document.body.insertAdjacentHTML(
+        "beforeend",
+        "<p style='color:red'>Failed to load G1 results.</p>"
+      );
     });
 });
-
