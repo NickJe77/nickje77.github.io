@@ -15,7 +15,10 @@ document.addEventListener("DOMContentLoaded", () => {
   let selectedWinner = "all";
 
   fetch("breeders-cup-results.json", { cache: "no-store" })
-    .then(r => r.json())
+    .then(r => {
+      if (!r.ok) throw new Error("Failed to load breeders-cup-results.json");
+      return r.json();
+    })
     .then(data => {
       allResults = data.map(row => ({
         year: row.year ?? row.Year ?? "",
@@ -23,8 +26,7 @@ document.addEventListener("DOMContentLoaded", () => {
         track: row.track ?? row.Track ?? "",
         winner: row.winner ?? row.Winner ?? "",
         jockey: row.jockey ?? row.Jockey ?? "",
-        trainer: row.trainer ?? row.Trainer ?? "",
-        country: row.country ?? row.Country ?? ""
+        trainer: row.trainer ?? row.Trainer ?? ""
       }));
 
       allResults.sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0));
@@ -55,6 +57,10 @@ document.addEventListener("DOMContentLoaded", () => {
       });
 
       applyFilters();
+    })
+    .catch(err => {
+      console.error(err);
+      showMessage("Results data could not be loaded.");
     });
 
   function applyFilters() {
@@ -75,6 +81,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderTable(rows) {
     tbody.innerHTML = "";
+
+    if (!rows.length) {
+      showMessage("No results match the selected filters.");
+      return;
+    }
+
     rows.forEach(r => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -84,10 +96,22 @@ document.addEventListener("DOMContentLoaded", () => {
         <td>${r.winner}</td>
         <td>${r.jockey}</td>
         <td>${r.trainer}</td>
-        <td>${r.country}</td>
       `;
       tbody.appendChild(tr);
     });
+  }
+
+  function showMessage(msg) {
+    tbody.innerHTML = "";
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 6;
+    td.style.padding = "16px";
+    td.style.fontStyle = "italic";
+    td.style.color = "#666";
+    td.textContent = msg;
+    tr.appendChild(td);
+    tbody.appendChild(tr);
   }
 
   function setupAutocomplete(input, list, items, onSelect) {
