@@ -1,96 +1,196 @@
 document.addEventListener("DOMContentLoaded", () => {
   const tbody = document.getElementById("results-body");
-  const groups = document.querySelectorAll(".filter-group");
+  const selects = document.querySelectorAll(".filters select");
 
-  const yearInput = groups[0].querySelector("input");
-  const yearSelect = groups[0].querySelector("select");
+  if (!tbody || selects.length < 3) {
+    console.error("Required elements not found (.filters select or #results-body)");
+    return;
+  }
 
-  const raceInput = groups[1].querySelector("input");
-  const raceSelect = groups[1].querySelector("select");
-
-  const winnerInput = groups[2].querySelector("input");
-  const winnerSelect = groups[2].querySelector("select");
+  const yearSelect = selects[0];
+  const raceSelect = selects[1];
+  const winnerSelect = selects[2];
 
   let allResults = [];
 
   fetch("g1-results.json", { cache: "no-store" })
-    .then(r => r.json())
+    .then(response => {
+      if (!response.ok) throw new Error("Failed to load g1-results.json");
+      return response.json();
+    })
     .then(data => {
-      allResults = data.map(r => ({
-        year: r.year ?? r.Year ?? "",
-        race: r.race ?? r.Race ?? "",
-        track: r.track ?? r.Track ?? "",
-        winner: r.winner ?? r.Winner ?? "",
-        jockey: r.jockey ?? r.Jockey ?? "",
-        trainer: r.trainer ?? r.Trainer ?? "",
-        country: r.country ?? r.Country ?? ""
+      if (!Array.isArray(data) || data.length === 0) {
+        showMessage("No Group 1 results loaded yet.");
+        return;
+      }
+
+      // Normalise keys (supports Excel capitalisation)
+      allResults = data.map(row => ({
+        year: row.year ?? row.Year ?? "",
+        race: row.race ?? row.Race ?? "",
+        track: row.track ?? row.Track ?? "",
+        winner: row.winner ?? row.Winner ?? "",
+        jockey: row.jockey ?? row.Jockey ?? "",
+        trainer: row.trainer ?? row.Trainer ?? "",
+        country: row.country ?? row.Country ?? ""
       }));
 
-      allResults.sort((a, b) => b.year - a.year);
+      // Sort newest → oldest
+      allResults.sort((a, b) => (b.year || 0) - (a.year || 0));
 
-      populateSelect(yearSelect, [...new Set(allResults.map(r => r.year))]);
-      populateSelect(raceSelect, [...new Set(allResults.map(r => r.race))]);
-      populateSelect(winnerSelect, [...new Set(allResults.map(r => r.winner))]);
+      populateYearFilter();
+      populateRaceFilter();
+      populateWinnerFilter();
+      renderTable(allResults);
 
-      render(allResults);
+      // Make the EXISTING selects type-to-search (contains match)
+      enableTypeAhead(yearSelect);
+      enableTypeAhead(raceSelect);
+      enableTypeAhead(winnerSelect);
 
-      [yearInput, raceInput, winnerInput].forEach(i =>
-        i.addEventListener("input", () => filterOptions(i))
-      );
-
-      [yearSelect, raceSelect, winnerSelect].forEach(s =>
-        s.addEventListener("change", applyFilters)
-      );
+      // Filters apply on change
+      yearSelect.addEventListener("change", applyFilters);
+      raceSelect.addEventListener("change", applyFilters);
+      winnerSelect.addEventListener("change", applyFilters);
+    })
+    .catch(error => {
+      console.error("G1 results load error:", error);
+      showMessage("Results data could not be loaded.");
     });
 
-  function populateSelect(select, values) {
-    select.innerHTML = `<option value="all">All</option>`;
-    values.filter(Boolean).sort().forEach(v => {
-      const o = document.createElement("option");
-      o.value = v;
-      o.textContent = v;
-      select.appendChild(o);
+  function populateYearFilter() {
+    const years = [...new Set(allResults.map(r => r.year).filter(Boolean))];
+
+    yearSelect.innerHTML = `<option value="all">All</option>`;
+    years.forEach(y => {
+      const opt = document.createElement("option");
+      opt.value = String(y);
+      opt.textContent = String(y);
+      yearSelect.appendChild(opt);
     });
-    select.disabled = false;
+
+    yearSelect.disabled = false;
   }
 
-  function filterOptions(input) {
-    const select = input.nextElementSibling;
-    const term = input.value.toLowerCase();
-    [...select.options].forEach(o => {
-      o.hidden = o.value !== "all" && !o.textContent.toLowerCase().includes(term);
+  function populateRaceFilter() {
+    const races = [...new Set(allResults.map(r => r.race).filter(Boolean))].sort();
+
+    raceSelect.innerHTML = `<option value="all">All</option>`;
+    races.forEach(r => {
+      const opt = document.createElement("option");
+      opt.value = r;
+      opt.textContent = r;
+      raceSelect.appendChild(opt);
     });
+
+    raceSelect.disabled = false;
+  }
+
+  function populateWinnerFilter() {
+    const winners = [...new Set(allResults.map(r => r.winner).filter(Boolean))].sort();
+
+    winnerSelect.innerHTML = `<option value="all">All</option>`;
+    winners.forEach(w => {
+      const opt = document.createElement("option");
+      opt.value = w;
+      opt.textContent = w;
+      winnerSelect.appendChild(opt);
+    });
+
+    winnerSelect.disabled = false;
   }
 
   function applyFilters() {
+    const y = yearSelect.value;
+    const r = raceSelect.value;
+    const w = winnerSelect.value;
+
     let filtered = allResults;
 
-    if (yearSelect.value !== "all")
-      filtered = filtered.filter(r => String(r.year) === yearSelect.value);
+    if (y !== "all") filtered = filtered.filter(x => String(x.year) === y);
+    if (r !== "all") filtered = filtered.filter(x => x.race === r);
+    if (w !== "all") filtered = filtered.filter(x => x.winner === w);
 
-    if (raceSelect.value !== "all")
-      filtered = filtered.filter(r => r.race === raceSelect.value);
-
-    if (winnerSelect.value !== "all")
-      filtered = filtered.filter(r => r.winner === winnerSelect.value);
-
-    render(filtered);
+    renderTable(filtered);
   }
 
-  function render(rows) {
+  function renderTable(results) {
     tbody.innerHTML = "";
-    rows.forEach(r => {
+
+    if (!results || results.length === 0) {
+      showMessage("No results match the selected filters.");
+      return;
+    }
+
+    results.forEach(row => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${r.year}</td>
-        <td>${r.race}</td>
-        <td>${r.track}</td>
-        <td>${r.winner}</td>
-        <td>${r.jockey}</td>
-        <td>${r.trainer}</td>
-        <td>${r.country}</td>
+        <td>${row.year ?? ""}</td>
+        <td>${row.race ?? ""}</td>
+        <td>${row.track ?? ""}</td>
+        <td>${row.winner ?? ""}</td>
+        <td>${row.jockey ?? ""}</td>
+        <td>${row.trainer ?? ""}</td>
+        <td>${row.country ?? ""}</td>
       `;
       tbody.appendChild(tr);
+    });
+  }
+
+  function showMessage(message) {
+    tbody.innerHTML = "";
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+
+    td.colSpan = 7;
+    td.style.padding = "16px";
+    td.style.fontStyle = "italic";
+    td.style.color = "#666";
+    td.textContent = message;
+
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
+
+  // ✅ Type-ahead for existing <select> elements (contains match)
+  function enableTypeAhead(selectEl) {
+    let buffer = "";
+    let timer = null;
+
+    selectEl.addEventListener("keydown", (e) => {
+      // Ignore control keys
+      if (e.key.length !== 1) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      buffer += e.key;
+      const query = buffer.toLowerCase();
+
+      // Find first option that CONTAINS the typed buffer (skip "All" if not matching)
+      const options = Array.from(selectEl.options);
+      const match = options.find(opt =>
+        opt.value !== "" &&
+        opt.value !== null &&
+        opt.textContent &&
+        opt.textContent.toLowerCase().includes(query)
+      );
+
+      if (match) {
+        selectEl.value = match.value;
+        // Trigger filtering immediately
+        selectEl.dispatchEvent(new Event("change"));
+      }
+
+      // Reset buffer after a short pause
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        buffer = "";
+      }, 700);
+    });
+
+    // Clear buffer when select loses focus
+    selectEl.addEventListener("blur", () => {
+      buffer = "";
+      clearTimeout(timer);
     });
   }
 });
