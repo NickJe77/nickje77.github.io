@@ -1,132 +1,150 @@
 document.addEventListener("DOMContentLoaded", () => {
+  const tbody = document.getElementById("results-body");
 
-  let allData = [];
-  let filteredData = [];
-  let currentSort = { key: null, asc: true };
+  const yearSelect = document.getElementById("yearSelect");
+  const raceInput = document.getElementById("raceInput");
+  const raceList = document.getElementById("raceList");
+  const winnerInput = document.getElementById("winnerInput");
+  const winnerList = document.getElementById("winnerList");
 
-  const tableBody = document.querySelector("#bc-table tbody");
-  const headers = document.querySelectorAll("#bc-table thead th");
-  const yearFilter = document.getElementById("yearFilter");
-  const raceSearch = document.getElementById("raceSearch");
+  let allResults = [];
+  let allRaces = [];
+  let allWinners = [];
 
-  if (!tableBody) return;
+  let selectedRace = "all";
+  let selectedWinner = "all";
 
-  /* =========================
-     Load JSON
-     ========================= */
-  fetch("breeders-cup-results.json")
-    .then(res => {
-      if (!res.ok) throw new Error("JSON not found");
-      return res.json();
-    })
+  fetch("breeders-cup-results.json", { cache: "no-store" })
+    .then(r => r.json())
     .then(data => {
-      if (!Array.isArray(data)) {
-        data = data.results || data.data || [];
-      }
-
-      allData = data.map(row => ({
-        year: row.year,
-        race: row.race,
-        track: row.track,
-        winner: row.winner,
-        trainer: row.trainer,
-        jockey: row.jockey
+      allResults = data.map(row => ({
+        year: row.year ?? row.Year ?? "",
+        race: row.race ?? row.Race ?? "",
+        track: row.track ?? row.Track ?? "",
+        winner: row.winner ?? row.Winner ?? "",
+        jockey: row.jockey ?? row.Jockey ?? "",
+        trainer: row.trainer ?? row.Trainer ?? "",
+        country: row.country ?? row.Country ?? ""
       }));
 
-      filteredData = [...allData];
-      populateYearFilter();
-      renderTable(filteredData);
-    })
-    .catch(() => {
-      tableBody.innerHTML =
-        "<tr><td colspan='6'>No data available</td></tr>";
-    });
+      allResults.sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0));
 
-  /* =========================
-     Populate year filter
-     ========================= */
-  function populateYearFilter() {
-    yearFilter.innerHTML = '<option value="">All</option>';
+      const years = [...new Set(allResults.map(r => String(r.year)).filter(Boolean))];
+      allRaces = [...new Set(allResults.map(r => r.race).filter(Boolean))].sort();
+      allWinners = [...new Set(allResults.map(r => r.winner).filter(Boolean))].sort();
 
-    const years = [...new Set(allData.map(d => d.year))]
-      .sort((a, b) => b - a);
+      yearSelect.innerHTML = `<option value="all">All</option>`;
+      years.forEach(y => {
+        const opt = document.createElement("option");
+        opt.value = y;
+        opt.textContent = y;
+        yearSelect.appendChild(opt);
+      });
+      yearSelect.disabled = false;
 
-    years.forEach(year => {
-      const o = document.createElement("option");
-      o.value = year;
-      o.textContent = year;
-      yearFilter.appendChild(o);
-    });
-  }
+      yearSelect.addEventListener("change", applyFilters);
 
-  /* =========================
-     Apply filters
-     ========================= */
-  function applyFilters() {
-    const yearVal = yearFilter.value;
-    const raceVal = raceSearch.value.toLowerCase();
-
-    filteredData = allData.filter(d =>
-      (!yearVal || String(d.year) === yearVal) &&
-      (!raceVal || d.race.toLowerCase().includes(raceVal))
-    );
-
-    renderTable(filteredData);
-  }
-
-  /* =========================
-     Render table
-     ========================= */
-  function renderTable(data) {
-    tableBody.innerHTML = "";
-
-    if (!data.length) {
-      tableBody.innerHTML =
-        "<tr><td colspan='6'>No results found</td></tr>";
-      return;
-    }
-
-    data.forEach(d => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${d.year}</td>
-        <td>${d.race}</td>
-        <td>${d.track}</td>
-        <td>${d.winner}</td>
-        <td>${d.trainer}</td>
-        <td>${d.jockey}</td>
-      `;
-      tableBody.appendChild(tr);
-    });
-  }
-
-  /* =========================
-     Sorting
-     ========================= */
-  headers.forEach(th => {
-    th.addEventListener("click", () => {
-      const key = th.dataset.key;
-      if (!key) return;
-
-      currentSort.asc =
-        currentSort.key === key ? !currentSort.asc : true;
-      currentSort.key = key;
-
-      filteredData.sort((a, b) => {
-        if (a[key] < b[key]) return currentSort.asc ? -1 : 1;
-        if (a[key] > b[key]) return currentSort.asc ? 1 : -1;
-        return 0;
+      setupAutocomplete(raceInput, raceList, allRaces, value => {
+        selectedRace = value;
+        applyFilters();
       });
 
-      renderTable(filteredData);
+      setupAutocomplete(winnerInput, winnerList, allWinners, value => {
+        selectedWinner = value;
+        applyFilters();
+      });
+
+      applyFilters();
     });
-  });
 
-  /* =========================
-     Events
-     ========================= */
-  yearFilter.addEventListener("change", applyFilters);
-  raceSearch.addEventListener("input", applyFilters);
+  function applyFilters() {
+    let filtered = allResults;
 
+    if (yearSelect.value !== "all") {
+      filtered = filtered.filter(r => String(r.year) === yearSelect.value);
+    }
+    if (selectedRace !== "all") {
+      filtered = filtered.filter(r => r.race === selectedRace);
+    }
+    if (selectedWinner !== "all") {
+      filtered = filtered.filter(r => r.winner === selectedWinner);
+    }
+
+    renderTable(filtered);
+  }
+
+  function renderTable(rows) {
+    tbody.innerHTML = "";
+    rows.forEach(r => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${r.year}</td>
+        <td>${r.race}</td>
+        <td>${r.track}</td>
+        <td>${r.winner}</td>
+        <td>${r.jockey}</td>
+        <td>${r.trainer}</td>
+        <td>${r.country}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function setupAutocomplete(input, list, items, onSelect) {
+    let active = -1;
+    let matches = [];
+
+    input.addEventListener("input", () => open(input.value));
+    input.addEventListener("focus", () => open(input.value));
+
+    input.addEventListener("keydown", e => {
+      if (!list.classList.contains("open")) return;
+      if (e.key === "ArrowDown") active = Math.min(active + 1, matches.length - 1);
+      if (e.key === "ArrowUp") active = Math.max(active - 1, 0);
+      if (e.key === "Enter" && matches[active]) choose(matches[active]);
+      paint();
+    });
+
+    document.addEventListener("click", e => {
+      if (!list.contains(e.target) && e.target !== input) close();
+    });
+
+    function open(q) {
+      const term = q.toLowerCase();
+      matches = term
+        ? items.filter(v => v.toLowerCase().startsWith(term)).slice(0, 80)
+        : items.slice(0, 50);
+
+      list.innerHTML = "";
+      list.classList.add("open");
+
+      matches.forEach(v => {
+        const d = document.createElement("div");
+        d.className = "autocomplete-item";
+        d.textContent = v;
+        d.onclick = () => choose(v);
+        list.appendChild(d);
+      });
+
+      paint();
+    }
+
+    function choose(v) {
+      input.value = v;
+      close();
+      onSelect(v);
+    }
+
+    function paint() {
+      [...list.children].forEach((c, i) =>
+        c.classList.toggle("active", i === active)
+      );
+    }
+
+    function close() {
+      list.classList.remove("open");
+      list.innerHTML = "";
+      active = -1;
+    }
+  }
 });
-
