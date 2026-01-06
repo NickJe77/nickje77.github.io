@@ -1,16 +1,9 @@
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("✅ Breeders Cup JS running");
-
   const tbody = document.getElementById("results-body");
 
-  fetch("docs/breeders-cup-results.json", { cache: "no-store" })
-    .then(r => {
-      console.log("Fetch status:", r.status);
-      return r.json();
-    })
+  fetch("breeders-cup-results.json", { cache: "no-store" })
+    .then(res => res.json())
     .then(data => {
-      console.log("Rows loaded:", data.length);
-
       tbody.innerHTML = "";
 
       data.forEach(row => {
@@ -26,9 +19,8 @@ document.addEventListener("DOMContentLoaded", () => {
         tbody.appendChild(tr);
       });
     })
-    .catch(err => {
-      console.error("❌ Fetch failed", err);
+    .catch(() => {
       tbody.innerHTML =
-        `<tr><td colspan="6">Failed to load data</td></tr>`;
+        `<tr><td colspan="6">Unable to load results</td></tr>`;
     });
 });
