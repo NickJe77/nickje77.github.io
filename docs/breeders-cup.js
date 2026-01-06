@@ -1,26 +1,20 @@
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("Breeders Cup JS loaded");
+  console.log("✅ Breeders Cup JS loaded");
 
   const tbody = document.getElementById("results-body");
 
   if (!tbody) {
-    console.error("results-body NOT FOUND");
+    console.error("❌ results-body not found");
     return;
   }
 
   fetch("breeders-cup-results.json", { cache: "no-store" })
     .then(r => {
-      console.log("Fetch response:", r.status);
+      console.log("📡 Fetch status:", r.status);
       return r.json();
     })
     .then(data => {
-      console.log("JSON rows loaded:", data.length);
-
-      if (!Array.isArray(data) || data.length === 0) {
-        tbody.innerHTML =
-          `<tr><td colspan="6">JSON loaded but empty</td></tr>`;
-        return;
-      }
+      console.log("📦 Rows in JSON:", data.length);
 
       tbody.innerHTML = "";
 
@@ -37,11 +31,11 @@ document.addEventListener("DOMContentLoaded", () => {
         tbody.appendChild(tr);
       });
 
-      console.log("Rows rendered to table");
+      console.log("✅ Rows rendered");
     })
     .catch(err => {
-      console.error("FETCH FAILED", err);
+      console.error("🔥 FETCH FAILED", err);
       tbody.innerHTML =
-        `<tr><td colspan="6">Fetch failed – see console</td></tr>`;
+        `<tr><td colspan="6">Fetch failed – check console</td></tr>`;
     });
 });
