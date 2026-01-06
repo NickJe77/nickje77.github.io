@@ -1,159 +1,96 @@
 document.addEventListener("DOMContentLoaded", () => {
   const tbody = document.getElementById("results-body");
-  const filterSelects = document.querySelectorAll(".filters select");
+  const groups = document.querySelectorAll(".filter-group");
 
-  if (!tbody || filterSelects.length < 3) {
-    console.error("Required elements not found");
-    return;
-  }
+  const yearInput = groups[0].querySelector("input");
+  const yearSelect = groups[0].querySelector("select");
 
-  const yearSelect = filterSelects[0];
-  const raceSelect = filterSelects[1];
-  const horseSelect = filterSelects[2];
+  const raceInput = groups[1].querySelector("input");
+  const raceSelect = groups[1].querySelector("select");
+
+  const winnerInput = groups[2].querySelector("input");
+  const winnerSelect = groups[2].querySelector("select");
 
   let allResults = [];
 
   fetch("g1-results.json", { cache: "no-store" })
-    .then(response => {
-      if (!response.ok) {
-        throw new Error("Failed to load g1-results.json");
-      }
-      return response.json();
-    })
+    .then(r => r.json())
     .then(data => {
-      if (!Array.isArray(data) || data.length === 0) {
-        showMessage("No Group 1 results loaded yet.");
-        return;
-      }
-
-      // Normalise keys (handles Excel capitalisation)
-      allResults = data.map(row => ({
-        year: row.year ?? row.Year ?? "",
-        race: row.race ?? row.Race ?? "",
-        track: row.track ?? row.Track ?? "",
-        winner: row.winner ?? row.Winner ?? "",
-        jockey: row.jockey ?? row.Jockey ?? "",
-        trainer: row.trainer ?? row.Trainer ?? "",
-        country: row.country ?? row.Country ?? ""
+      allResults = data.map(r => ({
+        year: r.year ?? r.Year ?? "",
+        race: r.race ?? r.Race ?? "",
+        track: r.track ?? r.Track ?? "",
+        winner: r.winner ?? r.Winner ?? "",
+        jockey: r.jockey ?? r.Jockey ?? "",
+        trainer: r.trainer ?? r.Trainer ?? "",
+        country: r.country ?? r.Country ?? ""
       }));
 
-      // Sort newest → oldest
-      allResults.sort((a, b) => (b.year || 0) - (a.year || 0));
+      allResults.sort((a, b) => b.year - a.year);
 
-      populateYearFilter();
-      populateRaceFilter();
-      populateHorseFilter();
-      renderTable(allResults);
-    })
-    .catch(error => {
-      console.error("G1 results load error:", error);
-      showMessage("Results data could not be loaded.");
+      populateSelect(yearSelect, [...new Set(allResults.map(r => r.year))]);
+      populateSelect(raceSelect, [...new Set(allResults.map(r => r.race))]);
+      populateSelect(winnerSelect, [...new Set(allResults.map(r => r.winner))]);
+
+      render(allResults);
+
+      [yearInput, raceInput, winnerInput].forEach(i =>
+        i.addEventListener("input", () => filterOptions(i))
+      );
+
+      [yearSelect, raceSelect, winnerSelect].forEach(s =>
+        s.addEventListener("change", applyFilters)
+      );
     });
 
-  function populateYearFilter() {
-    const years = [...new Set(allResults.map(r => r.year).filter(Boolean))];
-
-    yearSelect.innerHTML = `<option value="all">All</option>`;
-    years.forEach(year => {
-      const opt = document.createElement("option");
-      opt.value = year;
-      opt.textContent = year;
-      yearSelect.appendChild(opt);
+  function populateSelect(select, values) {
+    select.innerHTML = `<option value="all">All</option>`;
+    values.filter(Boolean).sort().forEach(v => {
+      const o = document.createElement("option");
+      o.value = v;
+      o.textContent = v;
+      select.appendChild(o);
     });
-
-    yearSelect.disabled = false;
-    yearSelect.addEventListener("change", applyFilters);
+    select.disabled = false;
   }
 
-  function populateRaceFilter() {
-    const races = [...new Set(allResults.map(r => r.race).filter(Boolean))].sort();
-
-    raceSelect.innerHTML = `<option value="all">All</option>`;
-    races.forEach(race => {
-      const opt = document.createElement("option");
-      opt.value = race;
-      opt.textContent = race;
-      raceSelect.appendChild(opt);
+  function filterOptions(input) {
+    const select = input.nextElementSibling;
+    const term = input.value.toLowerCase();
+    [...select.options].forEach(o => {
+      o.hidden = o.value !== "all" && !o.textContent.toLowerCase().includes(term);
     });
-
-    raceSelect.disabled = false;
-    raceSelect.addEventListener("change", applyFilters);
-  }
-
-  function populateHorseFilter() {
-    const horses = [...new Set(allResults.map(r => r.winner).filter(Boolean))].sort();
-
-    horseSelect.innerHTML = `<option value="all">All</option>`;
-    horses.forEach(horse => {
-      const opt = document.createElement("option");
-      opt.value = horse;
-      opt.textContent = horse;
-      horseSelect.appendChild(opt);
-    });
-
-    horseSelect.disabled = false;
-    horseSelect.addEventListener("change", applyFilters);
   }
 
   function applyFilters() {
-    const selectedYear = yearSelect.value;
-    const selectedRace = raceSelect.value;
-    const selectedHorse = horseSelect.value;
-
     let filtered = allResults;
 
-    if (selectedYear !== "all") {
-      filtered = filtered.filter(r => String(r.year) === selectedYear);
-    }
+    if (yearSelect.value !== "all")
+      filtered = filtered.filter(r => String(r.year) === yearSelect.value);
 
-    if (selectedRace !== "all") {
-      filtered = filtered.filter(r => r.race === selectedRace);
-    }
+    if (raceSelect.value !== "all")
+      filtered = filtered.filter(r => r.race === raceSelect.value);
 
-    if (selectedHorse !== "all") {
-      filtered = filtered.filter(r => r.winner === selectedHorse);
-    }
+    if (winnerSelect.value !== "all")
+      filtered = filtered.filter(r => r.winner === winnerSelect.value);
 
-    renderTable(filtered);
+    render(filtered);
   }
 
-  function renderTable(results) {
+  function render(rows) {
     tbody.innerHTML = "";
-
-    if (results.length === 0) {
-      showMessage("No results match the selected filters.");
-      return;
-    }
-
-    results.forEach(row => {
+    rows.forEach(r => {
       const tr = document.createElement("tr");
-
       tr.innerHTML = `
-        <td>${row.year}</td>
-        <td>${row.race}</td>
-        <td>${row.track}</td>
-        <td>${row.winner}</td>
-        <td>${row.jockey}</td>
-        <td>${row.trainer}</td>
-        <td>${row.country}</td>
+        <td>${r.year}</td>
+        <td>${r.race}</td>
+        <td>${r.track}</td>
+        <td>${r.winner}</td>
+        <td>${r.jockey}</td>
+        <td>${r.trainer}</td>
+        <td>${r.country}</td>
       `;
-
       tbody.appendChild(tr);
     });
-  }
-
-  function showMessage(message) {
-    tbody.innerHTML = "";
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-
-    td.colSpan = 7;
-    td.style.padding = "16px";
-    td.style.fontStyle = "italic";
-    td.style.color = "#666";
-    td.textContent = message;
-
-    tr.appendChild(td);
-    tbody.appendChild(tr);
   }
 });
