@@ -3,7 +3,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const tbody = document.getElementById("results-body");
 
-  fetch("breeders-cup-results.json", { cache: "no-store" })
+  fetch("docs/breeders-cup-results.json", { cache: "no-store" })
     .then(r => {
       console.log("Fetch status:", r.status);
       return r.json();
@@ -27,7 +27,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     })
     .catch(err => {
-      console.error("❌ Error:", err);
+      console.error("❌ Fetch failed", err);
       tbody.innerHTML =
         `<tr><td colspan="6">Failed to load data</td></tr>`;
     });
