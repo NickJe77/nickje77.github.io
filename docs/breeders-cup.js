@@ -1,49 +1,86 @@
 document.addEventListener("DOMContentLoaded", () => {
   const tbody = document.querySelector(".archive-table tbody");
 
-  if (!tbody) {
-    console.error("Breeders Cup: <tbody> not found");
-    return;
-  }
+  const yearFilter = document.getElementById("yearFilter");
+  const raceFilter = document.getElementById("raceFilter");
+  const winnerFilter = document.getElementById("winnerFilter");
+
+  const raceList = document.getElementById("raceList");
+  const winnerList = document.getElementById("winnerList");
+
+  let allRows = [];
 
   fetch("g1-results.json")
-    .then(res => {
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      return res.json();
-    })
+    .then(res => res.json())
     .then(data => {
-      if (!Array.isArray(data)) {
-        console.error("Breeders Cup: data is not an array", data);
-        return;
-      }
+      // Keep Breeders’ Cup races only
+      allRows = data
+        .filter(r =>
+          String(r.race || "").toLowerCase().includes("breeders")
+        )
+        .sort((a, b) => (b.year || 0) - (a.year || 0));
 
-      const rows = data.filter(r =>
-        String(r.series || "")
-          .toLowerCase()
-          .includes("breeders")
-      );
-
-      tbody.innerHTML = "";
-
-      rows.forEach(row => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${row.year ?? ""}</td>
-          <td>${row.race ?? ""}</td>
-          <td>${row.track ?? ""}</td>
-          <td>${row.winner ?? ""}</td>
-          <td>${row.country ?? ""}</td>
-          <td>${row.trainer ?? ""}</td>
-          <td>${row.jockey ?? ""}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-
-      console.log(`Breeders Cup loaded: ${rows.length} rows`);
-    })
-    .catch(err => {
-      console.error("Breeders Cup failed to load data", err);
+      populateFilters(allRows);
+      renderTable(allRows);
     });
+
+  function populateFilters(data) {
+    const years = [...new Set(data.map(r => r.year).filter(Boolean))].sort((a, b) => b - a);
+    const races = [...new Set(data.map(r => r.race).filter(Boolean))].sort();
+    const winners = [...new Set(data.map(r => r.winner).filter(Boolean))].sort();
+
+    years.forEach(y => {
+      const opt = document.createElement("option");
+      opt.value = y;
+      opt.textContent = y;
+      yearFilter.appendChild(opt);
+    });
+
+    races.forEach(r => {
+      const opt = document.createElement("option");
+      opt.value = r;
+      raceList.appendChild(opt);
+    });
+
+    winners.forEach(w => {
+      const opt = document.createElement("option");
+      opt.value = w;
+      winnerList.appendChild(opt);
+    });
+  }
+
+  function applyFilters() {
+    const yearVal = yearFilter.value;
+    const raceVal = raceFilter.value.toLowerCase();
+    const winnerVal = winnerFilter.value.toLowerCase();
+
+    const filtered = allRows.filter(r =>
+      (!yearVal || String(r.year) === yearVal) &&
+      (!raceVal || String(r.race).toLowerCase().includes(raceVal)) &&
+      (!winnerVal || String(r.winner).toLowerCase().includes(winnerVal))
+    );
+
+    renderTable(filtered);
+  }
+
+  function renderTable(rows) {
+    tbody.innerHTML = "";
+    rows.forEach(r => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${r.year || ""}</td>
+        <td>${r.race || ""}</td>
+        <td>${r.track || ""}</td>
+        <td>${r.winner || ""}</td>
+        <td>${r.trainer || ""}</td>
+        <td>${r.jockey || ""}</td>
+        <td>${r.country || ""}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  yearFilter.addEventListener("change", applyFilters);
+  raceFilter.addEventListener("input", applyFilters);
+  winnerFilter.addEventListener("input", applyFilters);
 });
