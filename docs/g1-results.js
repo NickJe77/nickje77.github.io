@@ -2,13 +2,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const tbody = document.getElementById("results-body");
   const filterSelects = document.querySelectorAll(".filters select");
 
-  if (!tbody || filterSelects.length < 2) {
+  if (!tbody || filterSelects.length < 3) {
     console.error("Required elements not found");
     return;
   }
 
   const yearSelect = filterSelects[0];
   const raceSelect = filterSelects[1];
+  const horseSelect = filterSelects[2];
 
   let allResults = [];
 
@@ -25,7 +26,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      // Normalise keys (supports Excel caps)
+      // Normalise keys (handles Excel capitalisation)
       allResults = data.map(row => ({
         year: row.year ?? row.Year ?? "",
         race: row.race ?? row.Race ?? "",
@@ -41,6 +42,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       populateYearFilter();
       populateRaceFilter();
+      populateHorseFilter();
       renderTable(allResults);
     })
     .catch(error => {
@@ -78,9 +80,25 @@ document.addEventListener("DOMContentLoaded", () => {
     raceSelect.addEventListener("change", applyFilters);
   }
 
+  function populateHorseFilter() {
+    const horses = [...new Set(allResults.map(r => r.winner).filter(Boolean))].sort();
+
+    horseSelect.innerHTML = `<option value="all">All</option>`;
+    horses.forEach(horse => {
+      const opt = document.createElement("option");
+      opt.value = horse;
+      opt.textContent = horse;
+      horseSelect.appendChild(opt);
+    });
+
+    horseSelect.disabled = false;
+    horseSelect.addEventListener("change", applyFilters);
+  }
+
   function applyFilters() {
     const selectedYear = yearSelect.value;
     const selectedRace = raceSelect.value;
+    const selectedHorse = horseSelect.value;
 
     let filtered = allResults;
 
@@ -90,6 +108,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (selectedRace !== "all") {
       filtered = filtered.filter(r => r.race === selectedRace);
+    }
+
+    if (selectedHorse !== "all") {
+      filtered = filtered.filter(r => r.winner === selectedHorse);
     }
 
     renderTable(filtered);
