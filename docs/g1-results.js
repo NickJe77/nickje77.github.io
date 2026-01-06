@@ -1,11 +1,14 @@
 document.addEventListener("DOMContentLoaded", () => {
   const tbody = document.getElementById("results-body");
-  const yearSelect = document.querySelector(".filters select");
+  const filterSelects = document.querySelectorAll(".filters select");
 
-  if (!tbody || !yearSelect) {
+  if (!tbody || filterSelects.length < 2) {
     console.error("Required elements not found");
     return;
   }
+
+  const yearSelect = filterSelects[0];
+  const raceSelect = filterSelects[1];
 
   let allResults = [];
 
@@ -22,7 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      // Normalise keys (handles Excel caps)
+      // Normalise keys (supports Excel caps)
       allResults = data.map(row => ({
         year: row.year ?? row.Year ?? "",
         race: row.race ?? row.Race ?? "",
@@ -36,7 +39,8 @@ document.addEventListener("DOMContentLoaded", () => {
       // Sort newest → oldest
       allResults.sort((a, b) => (b.year || 0) - (a.year || 0));
 
-      populateYearFilter(allResults);
+      populateYearFilter();
+      populateRaceFilter();
       renderTable(allResults);
     })
     .catch(error => {
@@ -44,11 +48,10 @@ document.addEventListener("DOMContentLoaded", () => {
       showMessage("Results data could not be loaded.");
     });
 
-  function populateYearFilter(results) {
-    const years = [...new Set(results.map(r => r.year).filter(Boolean))];
+  function populateYearFilter() {
+    const years = [...new Set(allResults.map(r => r.year).filter(Boolean))];
 
     yearSelect.innerHTML = `<option value="all">All</option>`;
-
     years.forEach(year => {
       const opt = document.createElement("option");
       opt.value = year;
@@ -57,24 +60,46 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     yearSelect.disabled = false;
+    yearSelect.addEventListener("change", applyFilters);
+  }
 
-    yearSelect.addEventListener("change", () => {
-      const selectedYear = yearSelect.value;
+  function populateRaceFilter() {
+    const races = [...new Set(allResults.map(r => r.race).filter(Boolean))].sort();
 
-      if (selectedYear === "all") {
-        renderTable(allResults);
-      } else {
-        const filtered = allResults.filter(r => String(r.year) === selectedYear);
-        renderTable(filtered);
-      }
+    raceSelect.innerHTML = `<option value="all">All</option>`;
+    races.forEach(race => {
+      const opt = document.createElement("option");
+      opt.value = race;
+      opt.textContent = race;
+      raceSelect.appendChild(opt);
     });
+
+    raceSelect.disabled = false;
+    raceSelect.addEventListener("change", applyFilters);
+  }
+
+  function applyFilters() {
+    const selectedYear = yearSelect.value;
+    const selectedRace = raceSelect.value;
+
+    let filtered = allResults;
+
+    if (selectedYear !== "all") {
+      filtered = filtered.filter(r => String(r.year) === selectedYear);
+    }
+
+    if (selectedRace !== "all") {
+      filtered = filtered.filter(r => r.race === selectedRace);
+    }
+
+    renderTable(filtered);
   }
 
   function renderTable(results) {
     tbody.innerHTML = "";
 
     if (results.length === 0) {
-      showMessage("No results for the selected year.");
+      showMessage("No results match the selected filters.");
       return;
     }
 
