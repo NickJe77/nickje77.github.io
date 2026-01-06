@@ -5,31 +5,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const raceFilter = document.getElementById("raceFilter");
   const winnerFilter = document.getElementById("winnerFilter");
 
+  const raceList = document.getElementById("raceList");
+  const winnerList = document.getElementById("winnerList");
+
   let allRows = [];
 
-  if (!tbody) {
-    console.error("Table body not found");
-    return;
-  }
-
   fetch("g1-results.json")
-    .then(res => {
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
-    })
+    .then(res => res.json())
     .then(data => {
-      if (!Array.isArray(data)) {
-        console.error("JSON is not an array");
-        return;
-      }
-
       allRows = data;
-
       populateFilters(data);
       renderTable(data);
-    })
-    .catch(err => {
-      console.error("Failed to load results:", err);
     });
 
   function populateFilters(data) {
@@ -47,30 +33,26 @@ document.addEventListener("DOMContentLoaded", () => {
     races.forEach(r => {
       const opt = document.createElement("option");
       opt.value = r;
-      opt.textContent = r;
-      raceFilter.appendChild(opt);
+      raceList.appendChild(opt);
     });
 
     winners.forEach(w => {
       const opt = document.createElement("option");
       opt.value = w;
-      opt.textContent = w;
-      winnerFilter.appendChild(opt);
+      winnerList.appendChild(opt);
     });
   }
 
   function applyFilters() {
     const yearVal = yearFilter.value;
-    const raceVal = raceFilter.value;
-    const winnerVal = winnerFilter.value;
+    const raceVal = raceFilter.value.toLowerCase();
+    const winnerVal = winnerFilter.value.toLowerCase();
 
-    const filtered = allRows.filter(r => {
-      return (
-        (!yearVal || r.year == yearVal) &&
-        (!raceVal || r.race === raceVal) &&
-        (!winnerVal || r.winner === winnerVal)
-      );
-    });
+    const filtered = allRows.filter(r =>
+      (!yearVal || String(r.year) === yearVal) &&
+      (!raceVal || String(r.race).toLowerCase().includes(raceVal)) &&
+      (!winnerVal || String(r.winner).toLowerCase().includes(winnerVal))
+    );
 
     renderTable(filtered);
   }
@@ -94,6 +76,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   yearFilter.addEventListener("change", applyFilters);
-  raceFilter.addEventListener("change", applyFilters);
-  winnerFilter.addEventListener("change", applyFilters);
+  raceFilter.addEventListener("input", applyFilters);
+  winnerFilter.addEventListener("input", applyFilters);
 });
