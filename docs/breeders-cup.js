@@ -10,18 +10,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let allRows = [];
 
-  fetch("g1-results.json")
-    .then(res => res.json())
+  fetch("breeders-cup-results.json")
+    .then(res => {
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      return res.json();
+    })
     .then(data => {
-      // Keep Breeders’ Cup races only
-      allRows = data
-        .filter(r =>
-          String(r.race || "").toLowerCase().includes("breeders")
-        )
-        .sort((a, b) => (b.year || 0) - (a.year || 0));
+      // Sort newest → oldest
+      allRows = data.sort((a, b) => (b.year || 0) - (a.year || 0));
 
       populateFilters(allRows);
       renderTable(allRows);
+    })
+    .catch(err => {
+      console.error("Breeders Cup data load failed:", err);
     });
 
   function populateFilters(data) {
@@ -65,6 +69,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderTable(rows) {
     tbody.innerHTML = "";
+
     rows.forEach(r => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -74,7 +79,6 @@ document.addEventListener("DOMContentLoaded", () => {
         <td>${r.winner || ""}</td>
         <td>${r.trainer || ""}</td>
         <td>${r.jockey || ""}</td>
-        <td>${r.country || ""}</td>
       `;
       tbody.appendChild(tr);
     });
