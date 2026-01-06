@@ -13,13 +13,15 @@ document.addEventListener("DOMContentLoaded", () => {
   fetch("g1-results.json")
     .then(res => res.json())
     .then(data => {
-      allRows = data;
-      populateFilters(data);
-      renderTable(data);
+      // Sort newest to oldest
+      allRows = data.sort((a, b) => (b.year || 0) - (a.year || 0));
+
+      populateFilters(allRows);
+      renderTable(allRows);
     });
 
   function populateFilters(data) {
-    const years = [...new Set(data.map(r => r.year).filter(Boolean))].sort();
+    const years = [...new Set(data.map(r => r.year).filter(Boolean))].sort((a, b) => b - a);
     const races = [...new Set(data.map(r => r.race).filter(Boolean))].sort();
     const winners = [...new Set(data.map(r => r.winner).filter(Boolean))].sort();
 
