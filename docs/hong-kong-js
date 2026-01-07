@@ -1,1 +1,96 @@
+const yearFilter = document.getElementById("yearFilter");
+const raceFilter = document.getElementById("raceFilter");
+const winnerFilter = document.getElementById("winnerFilter");
+const tableBody = document.querySelector(".archive-table tbody");
+
+let allResults = [];
+
+fetch("../data/hong-kong-results.json")
+  .then(res => res.json())
+  .then(data => {
+    allResults = data;
+    populateYearFilter(data);
+    populateDatalists(data);
+    renderTable(data);
+  });
+
+function populateYearFilter(data) {
+  const years = [...new Set(data.map(r => r.year))].sort((a, b) => b - a);
+  years.forEach(year => {
+    const opt = document.createElement("option");
+    opt.value = year;
+    opt.textContent = year;
+    yearFilter.appendChild(opt);
+  });
+}
+
+function populateDatalists(data) {
+  const raceSet = new Set();
+  const winnerSet = new Set();
+
+  data.forEach(r => {
+    raceSet.add(r.race);
+    winnerSet.add(r.winner);
+  });
+
+  const raceList = document.getElementById("raceList");
+  const winnerList = document.getElementById("winnerList");
+
+  raceSet.forEach(race => {
+    const opt = document.createElement("option");
+    opt.value = race;
+    raceList.appendChild(opt);
+  });
+
+  winnerSet.forEach(winner => {
+    const opt = document.createElement("option");
+    opt.value = winner;
+    winnerList.appendChild(opt);
+  });
+}
+
+function applyFilters() {
+  let filtered = [...allResults];
+
+  if (yearFilter.value) {
+    filtered = filtered.filter(r => r.year == yearFilter.value);
+  }
+
+  if (raceFilter.value) {
+    filtered = filtered.filter(r =>
+      r.race.toLowerCase().includes(raceFilter.value.toLowerCase())
+    );
+  }
+
+  if (winnerFilter.value) {
+    filtered = filtered.filter(r =>
+      r.winner.toLowerCase().includes(winnerFilter.value.toLowerCase())
+    );
+  }
+
+  renderTable(filtered);
+}
+
+function renderTable(data) {
+  tableBody.innerHTML = "";
+
+  data.forEach(r => {
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td>${r.year}</td>
+      <td>${r.race}</td>
+      <td>${r.track}</td>
+      <td>${r.winner}</td>
+      <td>${r.trainer}</td>
+      <td>${r.jockey}</td>
+    `;
+
+    tableBody.appendChild(tr);
+  });
+}
+
+yearFilter.addEventListener("change", applyFilters);
+raceFilter.addEventListener("input", applyFilters);
+winnerFilter.addEventListener("input", applyFilters);
 
