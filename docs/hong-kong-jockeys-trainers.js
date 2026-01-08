@@ -1,11 +1,9 @@
 /* =========================================================
-   Hong Kong International Races
-   Jockeys & Trainers – Parallel Tables (SP)
+   HONG KONG INTERNATIONAL RACES
+   JOCKEYS & TRAINERS
    ========================================================= */
 
 document.addEventListener("DOMContentLoaded", () => {
-
-  const DATA_URL = "../data/hong-kong-jockeys-trainers.json";
 
   const jockeySelect  = document.getElementById("jockeySelect");
   const trainerSelect = document.getElementById("trainerSelect");
@@ -13,94 +11,109 @@ document.addEventListener("DOMContentLoaded", () => {
   const jockeyTableBody  = document.querySelector("#jockeyTable tbody");
   const trainerTableBody = document.querySelector("#trainerTable tbody");
 
-  if (!jockeySelect || !trainerSelect || !jockeyTableBody || !trainerTableBody) {
-    console.error("HK Jockeys & Trainers: Required DOM elements not found.");
-    return;
-  }
+  let results = [];
 
-  fetch(DATA_URL)
-    .then(r => {
-      if (!r.ok) throw new Error("Failed to load HK J&T JSON");
-      return r.json();
+  /* ---------- LOAD DATA ---------- */
+
+  fetch("data/hong-kong-jockeys-trainers.json")
+    .then(res => {
+      if (!res.ok) {
+        throw new Error("Failed to load hong-kong-jockeys-trainers.json");
+      }
+      return res.json();
     })
     .then(data => {
-      populateDropdowns(data);
-      bindEvents(data);
+      results = data;
+
+      // newest → oldest
+      results.sort((a, b) => b.year - a.year);
+
+      buildDropdowns(results);
     })
-    .catch(err => console.error(err));
+    .catch(err => {
+      console.error("HK Jockeys & Trainers load error:", err);
+    });
 
-  function populateDropdowns(data) {
+  /* ---------- BUILD DROPDOWNS ---------- */
 
-    const jockeys = [...new Set(data.map(d => d.jockey).filter(Boolean))].sort();
-    const trainers = [...new Set(data.map(d => d.trainer).filter(Boolean))].sort();
+  function buildDropdowns(data) {
+
+    const jockeys = [...new Set(data.map(r => r.jockey))].sort();
+    const trainers = [...new Set(data.map(r => r.trainer))].sort();
 
     jockeys.forEach(j => {
-      const o = document.createElement("option");
-      o.value = j;
-      o.textContent = j;
-      jockeySelect.appendChild(o);
+      const opt = document.createElement("option");
+      opt.value = j;
+      opt.textContent = j;
+      jockeySelect.appendChild(opt);
     });
 
     trainers.forEach(t => {
-      const o = document.createElement("option");
-      o.value = t;
-      o.textContent = t;
-      trainerSelect.appendChild(o);
+      const opt = document.createElement("option");
+      opt.value = t;
+      opt.textContent = t;
+      trainerSelect.appendChild(opt);
     });
   }
 
-  function bindEvents(data) {
-    jockeySelect.addEventListener("change", () =>
-      renderJockey(data, jockeySelect.value)
-    );
+  /* ---------- EVENTS ---------- */
 
-    trainerSelect.addEventListener("change", () =>
-      renderTrainer(data, trainerSelect.value)
-    );
-  }
+  jockeySelect.addEventListener("change", () => {
+    renderJockeyTable(jockeySelect.value);
+  });
 
-  function renderJockey(data, jockey) {
+  trainerSelect.addEventListener("change", () => {
+    renderTrainerTable(trainerSelect.value);
+  });
+
+  /* ---------- RENDER JOCKEY TABLE ---------- */
+
+  function renderJockeyTable(jockey) {
 
     jockeyTableBody.innerHTML = "";
+
     if (!jockey) return;
 
-    data
-      .filter(d => d.jockey === jockey)
-      .sort((a, b) => b.year - a.year)
-      .forEach(d => {
-        jockeyTableBody.innerHTML += `
-          <tr>
-            <td>${safe(d.year)}</td>
-            <td>${safe(d.race)}</td>
-            <td>${safe(d.horse)}</td>
-            <td>${safe(d.trainer)}</td>
-            <td>${safe(d.SP)}</td>
-          </tr>`;
-      });
+    const filtered = results.filter(r => r.jockey === jockey);
+
+    filtered.forEach(r => {
+      const tr = document.createElement("tr");
+
+      tr.innerHTML = `
+        <td>${r.year}</td>
+        <td>${r.race}</td>
+        <td>${r.horse}</td>
+        <td>${r.trainer}</td>
+        <td>${r.SP ?? ""}</td>
+      `;
+
+      jockeyTableBody.appendChild(tr);
+    });
   }
 
-  function renderTrainer(data, trainer) {
+  /* ---------- RENDER TRAINER TABLE ---------- */
+
+  function renderTrainerTable(trainer) {
 
     trainerTableBody.innerHTML = "";
+
     if (!trainer) return;
 
-    data
-      .filter(d => d.trainer === trainer)
-      .sort((a, b) => b.year - a.year)
-      .forEach(d => {
-        trainerTableBody.innerHTML += `
-          <tr>
-            <td>${safe(d.year)}</td>
-            <td>${safe(d.race)}</td>
-            <td>${safe(d.horse)}</td>
-            <td>${safe(d.jockey)}</td>
-            <td>${safe(d.SP)}</td>
-          </tr>`;
-      });
-  }
+    const filtered = results.filter(r => r.trainer === trainer);
 
-  function safe(v) {
-    return v !== undefined && v !== null ? v : "";
+    filtered.forEach(r => {
+      const tr = document.createElement("tr");
+
+      tr.innerHTML = `
+        <td>${r.year}</td>
+        <td>${r.race}</td>
+        <td>${r.horse}</td>
+        <td>${r.jockey}</td>
+        <td>${r.SP ?? ""}</td>
+      `;
+
+      trainerTableBody.appendChild(tr);
+    });
   }
 
 });
