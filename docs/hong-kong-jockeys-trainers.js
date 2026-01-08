@@ -1,3 +1,8 @@
+/* =========================================================
+   HONG KONG INTERNATIONAL RACES
+   JOCKEYS & TRAINERS – ALL RIDES
+   ========================================================= */
+
 console.log("HK Jockeys & Trainers JS loaded");
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -7,27 +12,32 @@ document.addEventListener("DOMContentLoaded", () => {
   const raceSelect    = document.getElementById("raceSelect");
   const tableBody     = document.querySelector("#resultsTable tbody");
 
-  if (!jockeySelect || !trainerSelect || !raceSelect || !tableBody) {
-    console.error("Required DOM elements not found");
-    return;
-  }
+  let allData = [];
 
-  fetch("./data/hong-kong-jockeys-trainers.json")
-    .then(res => {
-      if (!res.ok) throw new Error("JSON not found");
-      return res.json();
+  /* ---------- LOAD DATA ---------- */
+
+  fetch("/data/hong-kong-jockeys-trainers.json")
+    .then(response => {
+      if (!response.ok) {
+        throw new Error("JSON fetch failed");
+      }
+      return response.json();
     })
     .then(data => {
-      console.log("HK data loaded:", data.length, "rows");
+      console.log("HK data rows:", data.length);
 
-      buildFilters(data);
-      render(data);
+      allData = data.sort((a, b) => b.year - a.year);
+
+      buildFilters(allData);
+      renderTable(allData);
     })
-    .catch(err => {
-      console.error("HK data load failed:", err);
+    .catch(error => {
+      console.error("HK load error:", error);
       tableBody.innerHTML =
-        `<tr><td colspan="6">Failed to load data.</td></tr>`;
+        `<tr><td colspan="6">Unable to load data.</td></tr>`;
     });
+
+  /* ---------- BUILD FILTERS ---------- */
 
   function buildFilters(data) {
     const jockeys  = new Set();
@@ -35,25 +45,27 @@ document.addEventListener("DOMContentLoaded", () => {
     const races    = new Set();
 
     data.forEach(r => {
-      jockeys.add(r.jockey);
-      trainers.add(r.trainer);
-      races.add(r.race);
+      if (r.jockey)  jockeys.add(r.jockey);
+      if (r.trainer) trainers.add(r.trainer);
+      if (r.race)    races.add(r.race);
     });
 
-    jockeys.forEach(j =>
+    [...jockeys].sort().forEach(j =>
       jockeySelect.innerHTML += `<option value="${j}">${j}</option>`
     );
 
-    trainers.forEach(t =>
+    [...trainers].sort().forEach(t =>
       trainerSelect.innerHTML += `<option value="${t}">${t}</option>`
     );
 
-    races.forEach(r =>
+    [...races].sort().forEach(r =>
       raceSelect.innerHTML += `<option value="${r}">${r}</option>`
     );
   }
 
-  function render(data) {
+  /* ---------- FILTER + RENDER ---------- */
+
+  function renderTable(data) {
     tableBody.innerHTML = "";
 
     const jockey  = jockeySelect.value;
@@ -73,20 +85,25 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     filtered.forEach(r => {
-      tableBody.innerHTML += `
-        <tr>
-          <td>${r.year}</td>
-          <td>${r.race}</td>
-          <td>${r.horse}</td>
-          <td>${r.jockey}</td>
-          <td>${r.trainer}</td>
-          <td>${r.sp}</td>
-        </tr>`;
+      const row = document.createElement("tr");
+
+      row.innerHTML = `
+        <td>${r.year}</td>
+        <td>${r.race}</td>
+        <td>${r.horse}</td>
+        <td>${r.jockey}</td>
+        <td>${r.trainer}</td>
+        <td>${r.sp || ""}</td>
+      `;
+
+      tableBody.appendChild(row);
     });
   }
 
-  jockeySelect.addEventListener("change", () => render(window.hkData));
-  trainerSelect.addEventListener("change", () => render(window.hkData));
-  raceSelect.addEventListener("change", () => render(window.hkData));
+  /* ---------- EVENTS ---------- */
+
+  jockeySelect.addEventListener("change", () => renderTable(allData));
+  trainerSelect.addEventListener("change", () => renderTable(allData));
+  raceSelect.addEventListener("change", () => renderTable(allData));
 
 });
