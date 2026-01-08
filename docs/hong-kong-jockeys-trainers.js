@@ -1,112 +1,80 @@
 document.addEventListener("DOMContentLoaded", () => {
 
-  const jockeySelect = document.getElementById("jockeySelect");
+  const jockeySelect  = document.getElementById("jockeySelect");
   const trainerSelect = document.getElementById("trainerSelect");
-  const raceFilter = document.getElementById("raceFilter");
-
-  const jockeyBody = document.querySelector("#jockeyTable tbody");
-  const trainerBody = document.querySelector("#trainerTable tbody");
+  const raceSelect    = document.getElementById("raceSelect");
+  const tableBody     = document.querySelector("#resultsTable tbody");
 
   let results = [];
 
   fetch("data/hong-kong-jockeys-trainers.json")
-    .then(r => r.json())
+    .then(res => res.json())
     .then(data => {
       results = data.sort((a, b) => b.year - a.year);
       buildFilters();
-      autoSelectTop();
+      render();
     });
 
   function buildFilters() {
-    const jockeys = {};
-    const trainers = {};
+    const jockeys = new Set();
+    const trainers = new Set();
     const races = new Set();
 
     results.forEach(r => {
-      jockeys[r.jockey] = (jockeys[r.jockey] || 0) + 1;
-      trainers[r.trainer] = (trainers[r.trainer] || 0) + 1;
+      jockeys.add(r.jockey);
+      trainers.add(r.trainer);
       races.add(r.race);
     });
 
-    Object.entries(jockeys)
-      .sort((a, b) => b[1] - a[1])
-      .forEach(([name, wins]) => {
-        const o = document.createElement("option");
-        o.value = name;
-        o.textContent = `${name} (${wins})`;
-        jockeySelect.appendChild(o);
-      });
+    [...jockeys].sort().forEach(j => {
+      jockeySelect.innerHTML += `<option value="${j}">${j}</option>`;
+    });
 
-    Object.entries(trainers)
-      .sort((a, b) => b[1] - a[1])
-      .forEach(([name, wins]) => {
-        const o = document.createElement("option");
-        o.value = name;
-        o.textContent = `${name} (${wins})`;
-        trainerSelect.appendChild(o);
-      });
+    [...trainers].sort().forEach(t => {
+      trainerSelect.innerHTML += `<option value="${t}">${t}</option>`;
+    });
 
-    [...races].sort().forEach(race => {
-      const o = document.createElement("option");
-      o.value = race;
-      o.textContent = race;
-      raceFilter.appendChild(o);
+    [...races].sort().forEach(r => {
+      raceSelect.innerHTML += `<option value="${r}">${r}</option>`;
     });
   }
 
-  function autoSelectTop() {
-    jockeySelect.selectedIndex = 0;
-    trainerSelect.selectedIndex = 0;
-    render();
-  }
-
   function render() {
-    renderJockey();
-    renderTrainer();
-  }
+    tableBody.innerHTML = "";
 
-  function raceMatch(r) {
-    return !raceFilter.value || r.race === raceFilter.value;
-  }
-
-  function renderJockey() {
-    jockeyBody.innerHTML = "";
-    const jockey = jockeySelect.value;
-
-    results
-      .filter(r => r.jockey === jockey && raceMatch(r))
-      .forEach(r => {
-        jockeyBody.innerHTML += `
-          <tr>
-            <td>${r.year}</td>
-            <td>${r.race}</td>
-            <td>${r.horse}</td>
-            <td>${r.trainer}</td>
-            <td>${r.SP ?? ""}</td>
-          </tr>`;
-      });
-  }
-
-  function renderTrainer() {
-    trainerBody.innerHTML = "";
+    const jockey  = jockeySelect.value;
     const trainer = trainerSelect.value;
+    const race    = raceSelect.value;
 
-    results
-      .filter(r => r.trainer === trainer && raceMatch(r))
-      .forEach(r => {
-        trainerBody.innerHTML += `
-          <tr>
-            <td>${r.year}</td>
-            <td>${r.race}</td>
-            <td>${r.horse}</td>
-            <td>${r.jockey}</td>
-            <td>${r.SP ?? ""}</td>
-          </tr>`;
-      });
+    const filtered = results.filter(r => {
+      return (
+        (!jockey  || r.jockey === jockey) &&
+        (!trainer || r.trainer === trainer) &&
+        (!race    || r.race === race)
+      );
+    });
+
+    if (filtered.length === 0) {
+      tableBody.innerHTML =
+        `<tr><td colspan="6">No matching results.</td></tr>`;
+      return;
+    }
+
+    filtered.forEach(r => {
+      tableBody.innerHTML += `
+        <tr>
+          <td>${r.year}</td>
+          <td>${r.race}</td>
+          <td>${r.horse}</td>
+          <td>${r.jockey}</td>
+          <td>${r.trainer}</td>
+          <td>${r.SP ?? ""}</td>
+        </tr>`;
+    });
   }
 
   jockeySelect.addEventListener("change", render);
   trainerSelect.addEventListener("change", render);
-  raceFilter.addEventListener("change", render);
+  raceSelect.addEventListener("change", render);
 
 });
