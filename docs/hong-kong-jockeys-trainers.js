@@ -1,4 +1,6 @@
-console.log("HK Jockeys & Trainers JS loaded");
+/* =========================================================
+   HK INTERNATIONAL RACES – JOCKEYS & TRAINERS (ALL RIDES)
+   ========================================================= */
 
 document.addEventListener("DOMContentLoaded", () => {
 
@@ -7,15 +9,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const raceSelect    = document.getElementById("raceSelect");
   const tableBody     = document.querySelector("#resultsTable tbody");
 
+  let allData = [];
+
   fetch("https://thesportingalmanac.com/data/hong-kong-jockeys-trainers.json")
     .then(res => {
-      if (!res.ok) throw new Error("JSON load failed");
+      if (!res.ok) throw new Error("JSON fetch failed");
       return res.json();
     })
     .then(data => {
-      console.log("Rows loaded:", data.length);
-      populateFilters(data);
-      renderTable(data);
+      allData = data;
+      buildFilters(allData);
+      renderTable(allData);
     })
     .catch(err => {
       console.error(err);
@@ -23,30 +27,27 @@ document.addEventListener("DOMContentLoaded", () => {
         `<tr><td colspan="6">Failed to load data</td></tr>`;
     });
 
-  function populateFilters(data) {
-    const jockeys = new Set();
+  function buildFilters(data) {
+    const jockeys  = new Set();
     const trainers = new Set();
-    const races = new Set();
+    const races    = new Set();
 
     data.forEach(r => {
-      jockeys.add(r.jockey);
-      trainers.add(r.trainer);
-      races.add(r.race);
+      if (r.jockey)  jockeys.add(r.jockey);
+      if (r.trainer) trainers.add(r.trainer);
+      if (r.race)    races.add(r.race);
     });
 
-    jockeys.forEach(j =>
-      jockeySelect.insertAdjacentHTML("beforeend",
-        `<option value="${j}">${j}</option>`)
+    [...jockeys].sort().forEach(j =>
+      jockeySelect.add(new Option(j, j))
     );
 
-    trainers.forEach(t =>
-      trainerSelect.insertAdjacentHTML("beforeend",
-        `<option value="${t}">${t}</option>`)
+    [...trainers].sort().forEach(t =>
+      trainerSelect.add(new Option(t, t))
     );
 
-    races.forEach(r =>
-      raceSelect.insertAdjacentHTML("beforeend",
-        `<option value="${r}">${r}</option>`)
+    [...races].sort().forEach(r =>
+      raceSelect.add(new Option(r, r))
     );
   }
 
@@ -83,14 +84,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  jockeySelect.addEventListener("change", () => reload());
-  trainerSelect.addEventListener("change", () => reload());
-  raceSelect.addEventListener("change", () => reload());
-
-  function reload() {
-    fetch("https://thesportingalmanac.com/data/hong-kong-jockeys-trainers.json")
-      .then(r => r.json())
-      .then(renderTable);
-  }
+  jockeySelect.addEventListener("change", () => renderTable(allData));
+  trainerSelect.addEventListener("change", () => renderTable(allData));
+  raceSelect.addEventListener("change", () => renderTable(allData));
 
 });
