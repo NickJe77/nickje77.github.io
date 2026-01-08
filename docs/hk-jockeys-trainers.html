@@ -22,8 +22,7 @@
       object-fit: cover;
       border-radius: 18px;
       box-shadow: 0 12px 28px rgba(0,0,0,0.18);
-
-      /* ✅ Enforce HK direction (horses run RIGHT → LEFT in your reference) */
+      /* visual-only, does NOT affect data or logic */
       transform: scaleX(-1);
     }
 
@@ -96,7 +95,7 @@
       background: #f5f9ff;
     }
 
-    /* Column widths (tweak as you like) */
+    /* Column widths */
     .archive-table th:nth-child(1),
     .archive-table td:nth-child(1) { width: 90px; }
 
@@ -133,7 +132,7 @@
 
 <!-- HERO -->
 <div class="hk-hero">
-  <img src="/images/hk-hero.jpg" alt="Hong Kong International Races">
+  <img src="/images/hk-hero-jt.jpg" alt="Hong Kong International Races">
 </div>
 
 <div class="hk-wrap">
@@ -181,17 +180,8 @@
 </div>
 
 <script>
-/* =========================================================
-   HK JOCKEYS & TRAINERS – INLINE (CACHE-SAFE)
-   Data: /data/hong-kong-jockeys-trainers.json
-   Keys expected: year, race, horse, jockey, trainer, sp
-   ========================================================= */
-
 fetch("/data/hong-kong-jockeys-trainers.json")
-  .then(res => {
-    if (!res.ok) throw new Error("Failed to load /data/hong-kong-jockeys-trainers.json");
-    return res.json();
-  })
+  .then(res => res.json())
   .then(data => {
 
     const jockeyInput  = document.getElementById("jockeyInput");
@@ -204,37 +194,29 @@ fetch("/data/hong-kong-jockeys-trainers.json")
 
     const rows = document.getElementById("rows");
 
-    // Sort newest → oldest (optional but matches your other pages)
     data.sort((a, b) => (b.year || 0) - (a.year || 0));
 
-    // Build datalists (predictive)
     [...new Set(data.map(d => d.jockey).filter(Boolean))].sort()
-      .forEach(v => jockeyList.insertAdjacentHTML("beforeend", `<option value="${escapeHtml(v)}"></option>`));
+      .forEach(v => jockeyList.insertAdjacentHTML("beforeend", `<option value="${v}"></option>`));
 
     [...new Set(data.map(d => d.trainer).filter(Boolean))].sort()
-      .forEach(v => trainerList.insertAdjacentHTML("beforeend", `<option value="${escapeHtml(v)}"></option>`));
+      .forEach(v => trainerList.insertAdjacentHTML("beforeend", `<option value="${v}"></option>`));
 
     [...new Set(data.map(d => d.race).filter(Boolean))].sort()
-      .forEach(v => raceList.insertAdjacentHTML("beforeend", `<option value="${escapeHtml(v)}"></option>`));
+      .forEach(v => raceList.insertAdjacentHTML("beforeend", `<option value="${v}"></option>`));
 
     function render() {
       rows.innerHTML = "";
 
-      const j = (jockeyInput.value || "").trim().toLowerCase();
-      const t = (trainerInput.value || "").trim().toLowerCase();
-      const r = (raceInput.value || "").trim().toLowerCase();
+      const j = (jockeyInput.value || "").toLowerCase();
+      const t = (trainerInput.value || "").toLowerCase();
+      const r = (raceInput.value || "").toLowerCase();
 
-      const filtered = data.filter(d => {
-        const dj = (d.jockey || "").toLowerCase();
-        const dt = (d.trainer || "").toLowerCase();
-        const dr = (d.race || "").toLowerCase();
-
-        return (
-          (!j || dj.includes(j)) &&
-          (!t || dt.includes(t)) &&
-          (!r || dr.includes(r))
-        );
-      });
+      const filtered = data.filter(d =>
+        (!j || (d.jockey || "").toLowerCase().includes(j)) &&
+        (!t || (d.trainer || "").toLowerCase().includes(t)) &&
+        (!r || (d.race || "").toLowerCase().includes(r))
+      );
 
       if (!filtered.length) {
         rows.innerHTML = `<tr><td colspan="6">No matching rides</td></tr>`;
@@ -244,25 +226,15 @@ fetch("/data/hong-kong-jockeys-trainers.json")
       filtered.forEach(d => {
         rows.insertAdjacentHTML("beforeend", `
           <tr>
-            <td>${escapeHtml(d.year)}</td>
-            <td>${escapeHtml(d.race)}</td>
-            <td>${escapeHtml(d.horse)}</td>
-            <td>${escapeHtml(d.jockey)}</td>
-            <td>${escapeHtml(d.trainer)}</td>
-            <td>${escapeHtml(d.sp)}</td>
+            <td>${d.year}</td>
+            <td>${d.race}</td>
+            <td>${d.horse}</td>
+            <td>${d.jockey}</td>
+            <td>${d.trainer}</td>
+            <td>${d.sp || ""}</td>
           </tr>
         `);
       });
-    }
-
-    function escapeHtml(val) {
-      if (val === null || val === undefined) return "";
-      return String(val)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
     }
 
     jockeyInput.addEventListener("input", render);
@@ -271,10 +243,9 @@ fetch("/data/hong-kong-jockeys-trainers.json")
 
     render();
   })
-  .catch(err => {
-    console.error(err);
-    const rows = document.getElementById("rows");
-    rows.innerHTML = `<tr><td colspan="6">Failed to load data.</td></tr>`;
+  .catch(() => {
+    document.getElementById("rows").innerHTML =
+      `<tr><td colspan="6">Failed to load data</td></tr>`;
   });
 </script>
 
