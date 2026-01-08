@@ -22,6 +22,20 @@
       margin-bottom: 30px;
     }
 
+    .hk-filters label {
+      font-weight: 600;
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .hk-filters input {
+      width: 100%;
+      height: 44px;
+      padding: 6px 10px;
+      font-size: 15px;
+      border-radius: 6px;
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -62,29 +76,28 @@
 
   <h1>Hong Kong International Races – Jockeys & Trainers</h1>
 
+  <!-- PREDICTIVE FILTERS -->
   <div class="hk-filters">
     <div>
       <label>Jockey</label>
-      <select id="jockey">
-        <option value="">All jockeys</option>
-      </select>
+      <input id="jockeyInput" list="jockeyList" placeholder="Type jockey name">
+      <datalist id="jockeyList"></datalist>
     </div>
 
     <div>
       <label>Trainer</label>
-      <select id="trainer">
-        <option value="">All trainers</option>
-      </select>
+      <input id="trainerInput" list="trainerList" placeholder="Type trainer name">
+      <datalist id="trainerList"></datalist>
     </div>
 
     <div>
       <label>Race</label>
-      <select id="race">
-        <option value="">All races</option>
-      </select>
+      <input id="raceInput" list="raceList" placeholder="Type race name">
+      <datalist id="raceList"></datalist>
     </div>
   </div>
 
+  <!-- RESULTS -->
   <table>
     <thead>
       <tr>
@@ -105,37 +118,44 @@
 
 <script>
 /* =========================================================
-   HK JOCKEYS & TRAINERS – INLINE (CACHE SAFE)
+   HK JOCKEYS & TRAINERS – PREDICTIVE FILTERS
    ========================================================= */
 
 fetch("https://thesportingalmanac.com/data/hong-kong-jockeys-trainers.json")
   .then(r => r.json())
   .then(data => {
 
-    const jockeySel  = document.getElementById("jockey");
-    const trainerSel = document.getElementById("trainer");
-    const raceSel    = document.getElementById("race");
-    const rows       = document.getElementById("rows");
+    const jockeyInput  = document.getElementById("jockeyInput");
+    const trainerInput = document.getElementById("trainerInput");
+    const raceInput    = document.getElementById("raceInput");
 
-    const jockeys  = [...new Set(data.map(d => d.jockey))].sort();
-    const trainers = [...new Set(data.map(d => d.trainer))].sort();
-    const races    = [...new Set(data.map(d => d.race))].sort();
+    const jockeyList  = document.getElementById("jockeyList");
+    const trainerList = document.getElementById("trainerList");
+    const raceList    = document.getElementById("raceList");
 
-    jockeys.forEach(v => jockeySel.add(new Option(v, v)));
-    trainers.forEach(v => trainerSel.add(new Option(v, v)));
-    races.forEach(v => raceSel.add(new Option(v, v)));
+    const rows = document.getElementById("rows");
+
+    // Build predictive lists
+    [...new Set(data.map(d => d.jockey))].sort()
+      .forEach(v => jockeyList.innerHTML += `<option value="${v}">`);
+
+    [...new Set(data.map(d => d.trainer))].sort()
+      .forEach(v => trainerList.innerHTML += `<option value="${v}">`);
+
+    [...new Set(data.map(d => d.race))].sort()
+      .forEach(v => raceList.innerHTML += `<option value="${v}">`);
 
     function render() {
       rows.innerHTML = "";
 
-      const j = jockeySel.value;
-      const t = trainerSel.value;
-      const r = raceSel.value;
+      const j = jockeyInput.value.toLowerCase();
+      const t = trainerInput.value.toLowerCase();
+      const r = raceInput.value.toLowerCase();
 
       const filtered = data.filter(d =>
-        (!j || d.jockey === j) &&
-        (!t || d.trainer === t) &&
-        (!r || d.race === r)
+        (!j || d.jockey.toLowerCase().includes(j)) &&
+        (!t || d.trainer.toLowerCase().includes(t)) &&
+        (!r || d.race.toLowerCase().includes(r))
       );
 
       if (!filtered.length) {
@@ -144,7 +164,7 @@ fetch("https://thesportingalmanac.com/data/hong-kong-jockeys-trainers.json")
       }
 
       filtered.forEach(d => {
-        rows.insertAdjacentHTML("beforeend", `
+        rows.innerHTML += `
           <tr>
             <td>${d.year}</td>
             <td>${d.race}</td>
@@ -153,13 +173,13 @@ fetch("https://thesportingalmanac.com/data/hong-kong-jockeys-trainers.json")
             <td>${d.trainer}</td>
             <td>${d.sp || ""}</td>
           </tr>
-        `);
+        `;
       });
     }
 
-    jockeySel.onchange = render;
-    trainerSel.onchange = render;
-    raceSel.onchange = render;
+    jockeyInput.addEventListener("input", render);
+    trainerInput.addEventListener("input", render);
+    raceInput.addEventListener("input", render);
 
     render();
   });
