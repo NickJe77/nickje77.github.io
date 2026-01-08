@@ -1,6 +1,5 @@
 /* =========================================================
-   HONG KONG INTERNATIONAL RACES
-   JOCKEYS & TRAINERS – ALL RIDES
+   HK INTERNATIONAL RACES – JOCKEYS & TRAINERS (ALL RIDES)
    ========================================================= */
 
 console.log("HK Jockeys & Trainers JS loaded");
@@ -14,17 +13,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let allData = [];
 
-  /* ---------- LOAD DATA ---------- */
+  /* ---------- LOAD DATA (ABSOLUTE URL) ---------- */
 
-  fetch("/data/hong-kong-jockeys-trainers.json")
+  fetch("https://thesportingalmanac.com/data/hong-kong-jockeys-trainers.json")
     .then(response => {
-      if (!response.ok) {
-        throw new Error("JSON fetch failed");
-      }
+      console.log("Fetch response:", response.status);
+      if (!response.ok) throw new Error("JSON fetch failed");
       return response.json();
     })
     .then(data => {
-      console.log("HK data rows:", data.length);
+      console.log("HK rows loaded:", data.length);
 
       allData = data.sort((a, b) => b.year - a.year);
 
@@ -32,9 +30,9 @@ document.addEventListener("DOMContentLoaded", () => {
       renderTable(allData);
     })
     .catch(error => {
-      console.error("HK load error:", error);
+      console.error("HK JSON ERROR:", error);
       tableBody.innerHTML =
-        `<tr><td colspan="6">Unable to load data.</td></tr>`;
+        `<tr><td colspan="6">Failed to load HK data.</td></tr>`;
     });
 
   /* ---------- BUILD FILTERS ---------- */
@@ -50,6 +48,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (r.race)    races.add(r.race);
     });
 
+    jockeySelect.innerHTML = `<option value="">All jockeys</option>`;
+    trainerSelect.innerHTML = `<option value="">All trainers</option>`;
+    raceSelect.innerHTML = `<option value="">All races</option>`;
+
     [...jockeys].sort().forEach(j =>
       jockeySelect.innerHTML += `<option value="${j}">${j}</option>`
     );
@@ -63,7 +65,7 @@ document.addEventListener("DOMContentLoaded", () => {
     );
   }
 
-  /* ---------- FILTER + RENDER ---------- */
+  /* ---------- RENDER TABLE ---------- */
 
   function renderTable(data) {
     tableBody.innerHTML = "";
@@ -85,18 +87,16 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     filtered.forEach(r => {
-      const row = document.createElement("tr");
-
-      row.innerHTML = `
-        <td>${r.year}</td>
-        <td>${r.race}</td>
-        <td>${r.horse}</td>
-        <td>${r.jockey}</td>
-        <td>${r.trainer}</td>
-        <td>${r.sp || ""}</td>
+      tableBody.innerHTML += `
+        <tr>
+          <td>${r.year}</td>
+          <td>${r.race}</td>
+          <td>${r.horse}</td>
+          <td>${r.jockey}</td>
+          <td>${r.trainer}</td>
+          <td>${r.sp || ""}</td>
+        </tr>
       `;
-
-      tableBody.appendChild(row);
     });
   }
 
