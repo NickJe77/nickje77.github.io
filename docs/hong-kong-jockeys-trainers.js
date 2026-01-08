@@ -7,18 +7,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let results = [];
 
+  /* ---------- LOAD DATA ---------- */
+
   fetch("data/hong-kong-jockeys-trainers.json")
     .then(res => res.json())
     .then(data => {
+
+      // ALL RIDES (no finish filter)
       results = data.sort((a, b) => b.year - a.year);
+
       buildFilters();
       render();
     });
 
+  /* ---------- BUILD FILTER OPTIONS ---------- */
+
   function buildFilters() {
-    const jockeys = new Set();
+    const jockeys  = new Set();
     const trainers = new Set();
-    const races = new Set();
+    const races    = new Set();
 
     results.forEach(r => {
       jockeys.add(r.jockey);
@@ -39,6 +46,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  /* ---------- RENDER TABLE ---------- */
+
   function render() {
     tableBody.innerHTML = "";
 
@@ -56,7 +65,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (filtered.length === 0) {
       tableBody.innerHTML =
-        `<tr><td colspan="6">No matching results.</td></tr>`;
+        `<tr><td colspan="6">No matching rides.</td></tr>`;
       return;
     }
 
@@ -68,7 +77,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <td>${r.horse}</td>
           <td>${r.jockey}</td>
           <td>${r.trainer}</td>
-          <td>${r.SP ?? ""}</td>
+          <td>${r.sp}</td>
         </tr>`;
     });
   }
