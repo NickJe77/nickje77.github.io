@@ -30,8 +30,6 @@ function renderTable(rows){
   });
 }
 
-/* -------- YEAR FILTER -------- */
-
 function buildYearFilter(data){
   const years = new Set();
   data.forEach(r=>{
@@ -47,10 +45,7 @@ function buildYearFilter(data){
   });
 }
 
-/* -------- PREDICTIVE LISTS -------- */
-
 function buildPredictiveLists(data){
-
   const races = new Set();
   const trainers = new Set();
   const jockeys = new Set();
@@ -75,10 +70,7 @@ function fillList(id, set){
   });
 }
 
-/* -------- APPLY FILTERS -------- */
-
 function applyFilters(){
-
   const year = yearFilter.value;
   const race = raceSearch.value.toLowerCase();
   const trainer = trainerSearch.value.toLowerCase();
