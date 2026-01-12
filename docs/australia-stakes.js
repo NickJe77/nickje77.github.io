@@ -2,12 +2,8 @@ const DATA_URL = "/data/australia-stakes.json";
 
 fetch(DATA_URL)
   .then(res => res.json())
-  .then(data => {
-    renderTable(data);
-  })
-  .catch(err => {
-    console.error("JSON load failed:", err);
-  });
+  .then(data => renderTable(data))
+  .catch(err => console.error("JSON load failed:", err));
 
 function cleanNumber(val) {
   if (!val) return "";
@@ -15,47 +11,37 @@ function cleanNumber(val) {
 }
 
 function renderTable(rows) {
-  const tbody = document.querySelector("#results-body");
+
+  const tbody = document.getElementById("results-body");
   tbody.innerHTML = "";
 
-  let count = 0;
+  let rendered = 0;
 
   rows.forEach((r, i) => {
     try {
 
-      const track = r.track || "";
-      const date = r.date || "";
-      const grade = r.grade || "";
-      const distance = r.distance || "";
-      const winner = r.winner || "";
-      const margin = cleanNumber(r.margin);
-      const sp = cleanNumber(r.sp);
-      const raceGrade = r["race grade"] || "";
-      const jockey = r.jockey || "";
-      const trainer = r.trainer || "";
-
       const tr = document.createElement("tr");
 
       tr.innerHTML = `
-        <td>${date}</td>
-        <td>${track}</td>
-        <td>${grade}</td>
-        <td>${distance}</td>
-        <td>${winner}</td>
-        <td>${margin}</td>
-        <td>${sp}</td>
-        <td>${raceGrade}</td>
-        <td>${jockey}</td>
-        <td>${trainer}</td>
+        <td>${r.date || ""}</td>
+        <td>${r.track || ""}</td>
+        <td>${r.grade || ""}</td>
+        <td>${r.distance || ""}</td>
+        <td>${r.winner || ""}</td>
+        <td>${cleanNumber(r.margin)}</td>
+        <td>${cleanNumber(r.sp)}</td>
+        <td>${r["race grade"] || ""}</td>
+        <td>${r.jockey || ""}</td>
+        <td>${r.trainer || ""}</td>
       `;
 
       tbody.appendChild(tr);
-      count++;
+      rendered++;
 
     } catch (e) {
-      console.warn("Bad row skipped at index", i, r);
+      console.warn("Skipped bad row:", i, r);
     }
   });
 
-  console.log("Rendered rows:", count);
+  console.log("Australia Stakes rows rendered:", rendered);
 }
