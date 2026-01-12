@@ -1,5 +1,4 @@
 const DATA_URL = "/data/australia-stakes.json";
-
 let allRows = [];
 
 fetch(DATA_URL)
@@ -7,69 +6,90 @@ fetch(DATA_URL)
   .then(data => {
     allRows = data;
     buildYearFilter(data);
+    buildPredictiveLists(data);
     renderTable(data);
-  })
-  .catch(err => console.error("JSON load failed:", err));
+  });
 
-function cleanNumber(val) {
-  if (!val) return "";
-  return parseFloat(String(val).replace(/[^0-9.]/g, ""));
-}
-
-function renderTable(rows) {
-
+function renderTable(rows){
   const tbody = document.getElementById("results-body");
   tbody.innerHTML = "";
 
-  rows.forEach(r => {
+  rows.forEach(r=>{
+    const year = r.date ? r.date.substring(0,4) : "";
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${r.date || ""}</td>
-      <td>${r.track || ""}</td>
+      <td>${year}</td>
       <td>${r.grade || ""}</td>
-      <td>${r.distance || ""}</td>
+      <td>${r.track || ""}</td>
       <td>${r.winner || ""}</td>
-      <td>${cleanNumber(r.margin)}</td>
-      <td>${cleanNumber(r.sp)}</td>
-      <td>${r["race grade"] || ""}</td>
-      <td>${r.jockey || ""}</td>
       <td>${r.trainer || ""}</td>
+      <td>${r.jockey || ""}</td>
     `;
     tbody.appendChild(tr);
   });
 }
 
-/* -------- FILTER CONTROLS -------- */
+/* -------- YEAR FILTER -------- */
 
-function buildYearFilter(data) {
+function buildYearFilter(data){
   const years = new Set();
-
-  data.forEach(r => {
-    if (r.date) years.add(r.date.substring(0,4));
+  data.forEach(r=>{
+    if(r.date) years.add(r.date.substring(0,4));
   });
 
-  const yearSelect = document.getElementById("yearFilter");
-  [...years].sort().reverse().forEach(y => {
+  const sel = document.getElementById("yearFilter");
+  [...years].sort().reverse().forEach(y=>{
     const opt = document.createElement("option");
     opt.value = y;
     opt.textContent = y;
-    yearSelect.appendChild(opt);
+    sel.appendChild(opt);
   });
 }
 
-function applyFilters() {
+/* -------- PREDICTIVE LISTS -------- */
 
-  const year = document.getElementById("yearFilter").value;
-  const winner = document.getElementById("winnerSearch").value.toLowerCase();
-  const track = document.getElementById("trackFilter").value.toLowerCase();
+function buildPredictiveLists(data){
 
-  const filtered = allRows.filter(r => {
+  const races = new Set();
+  const trainers = new Set();
+  const jockeys = new Set();
 
-    const matchYear = year === "" || (r.date && r.date.startsWith(year));
-    const matchWinner = winner === "" || (r.winner && r.winner.toLowerCase().includes(winner));
-    const matchTrack = track === "" || (r.track && r.track.toLowerCase().includes(track));
+  data.forEach(r=>{
+    if(r.grade) races.add(r.grade);
+    if(r.trainer) trainers.add(r.trainer);
+    if(r.jockey) jockeys.add(r.jockey);
+  });
 
-    return matchYear && matchWinner && matchTrack;
+  fillList("raceList", races);
+  fillList("trainerList", trainers);
+  fillList("jockeyList", jockeys);
+}
+
+function fillList(id, set){
+  const dl = document.getElementById(id);
+  [...set].sort().forEach(v=>{
+    const opt = document.createElement("option");
+    opt.value = v;
+    dl.appendChild(opt);
+  });
+}
+
+/* -------- APPLY FILTERS -------- */
+
+function applyFilters(){
+
+  const year = yearFilter.value;
+  const race = raceSearch.value.toLowerCase();
+  const trainer = trainerSearch.value.toLowerCase();
+  const jockey = jockeySearch.value.toLowerCase();
+
+  const filtered = allRows.filter(r=>{
+    const y = !year || (r.date && r.date.startsWith(year));
+    const rMatch = !race || (r.grade && r.grade.toLowerCase().includes(race));
+    const tMatch = !trainer || (r.trainer && r.trainer.toLowerCase().includes(trainer));
+    const jMatch = !jockey || (r.jockey && r.jockey.toLowerCase().includes(jockey));
+    return y && rMatch && tMatch && jMatch;
   });
 
   renderTable(filtered);
