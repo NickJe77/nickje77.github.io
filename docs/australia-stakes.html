@@ -1,161 +1,38 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Australia — Stakes Racing | The Sporting Almanac</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8">
+<title>Australia Stakes Results | The Sporting Almanac</title>
 <link rel="stylesheet" href="racing.css">
-
-<style>
-.wrap{max-width:1200px;margin:auto;padding:16px;}
-.panel{margin-top:20px;border:1px solid #333;border-radius:16px;}
-.filters{display:grid;grid-template-columns:repeat(12,1fr);gap:10px;padding:16px;}
-.field{grid-column:span 3;display:flex;flex-direction:column;}
-.field.wide{grid-column:span 6;}
-input,select{padding:10px;border-radius:10px;border:1px solid #444;background:#111;color:white;}
-
-table{width:100%;border-collapse:collapse;}
-th,td{padding:8px;border-top:1px solid #333;color:white;}
-thead th{background:#0b0b12;}
-tbody tr:nth-child(even){background:rgba(255,255,255,.03);}
-
-.status{padding:12px;font-weight:700;color:#00ff99;}
-</style>
 </head>
 
 <body>
 
-<div class="wrap">
-<h2>Australia — Stakes Racing</h2>
+<header class="page-header">
+  <h1>Australia Stakes Results</h1>
+</header>
 
-<section class="panel">
-
-<div class="filters">
-<div class="field wide"><label>Search</label><input id="q"></div>
-<div class="field"><label>Track</label><select id="track"><option value="">All</option></select></div>
-<div class="field"><label>Grade</label><select id="grade"><option value="">All</option></select></div>
-<div class="field"><label>Distance</label><select id="distance"><option value="">All</option></select></div>
-<div class="field"><label>Race</label><input id="race"></div>
-<div class="field"><label>Winner</label><input id="winner"></div>
-<div class="field"><label>Jockey</label><input id="jockey"></div>
-<div class="field"><label>Trainer</label><input id="trainer"></div>
+<div class="table-wrap">
+  <table class="results-table">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Track</th>
+        <th>Race</th>
+        <th>Dist</th>
+        <th>Winner</th>
+        <th>Margin</th>
+        <th>SP</th>
+        <th>Grade</th>
+        <th>Jockey</th>
+        <th>Trainer</th>
+      </tr>
+    </thead>
+    <tbody id="results-body"></tbody>
+  </table>
 </div>
 
-<table>
-<thead>
-<tr>
-<th>Track</th><th>Date</th><th>Race</th><th>Dist</th>
-<th>Winner</th><th>Margin</th><th>SP</th>
-<th>Grade</th><th>Jockey</th><th>Trainer</th>
-</tr>
-</thead>
-<tbody id="tbody"></tbody>
-</table>
-
-<div class="status" id="status">Loading…</div>
-
-</section>
-</div>
-
-<script>
-const URL="/data/australia-stakes.json";
-const el=id=>document.getElementById(id);
-let raw=[],view=[];
-
-function safe(v){ return v===undefined||v===null ? "" : v; }
-
-function normalise(r){
-  let d = safe(r.date);
-  if(typeof d==="string" && d.includes("/")){
-    d = d.split("/").reverse().join("-");
-  }
-
-  return {
-    track: safe(r.track),
-    date: d,
-    race: safe(r.race),
-    distance: typeof r.distance==="number" ? r.distance+"m" : safe(r.distance),
-    winner: safe(r.winner),
-    margin: typeof r.margin==="number" ? r.margin+"L" : safe(r.margin),
-    sp: String(safe(r.sp)).replace("$",""),
-    grade: safe(r.grade || r["race grade"]),
-    jockey: safe(r.jockey),
-    trainer: safe(r.trainer)
-  };
-}
-
-function uniq(a){return [...new Set(a.filter(x=>x))].sort();}
-
-async function load(){
-  try{
-    const res=await fetch(URL,{cache:"no-store"});
-    const data=await res.json();
-
-    raw=data.map(normalise);
-
-    fill("track",raw.map(r=>r.track));
-    fill("grade",raw.map(r=>r.grade));
-    fill("distance",raw.map(r=>r.distance));
-
-    apply();
-    el("status").innerText=`Loaded ${raw.length} races`;
-  }catch(e){
-    el("status").innerText="ERROR: "+e.message;
-  }
-}
-
-function fill(id,vals){
-  const s=el(id);
-  s.innerHTML='<option value="">All</option>';
-  uniq(vals).forEach(v=>{
-    const o=document.createElement("option");
-    o.textContent=v;
-    s.appendChild(o);
-  });
-}
-
-function apply(){
-  view=raw.filter(r=>{
-    if(el("track").value && r.track!==el("track").value) return false;
-    if(el("grade").value && r.grade!==el("grade").value) return false;
-    if(el("distance").value && r.distance!==el("distance").value) return false;
-    if(el("race").value && !r.race.toLowerCase().includes(el("race").value.toLowerCase())) return false;
-    if(el("winner").value && !r.winner.toLowerCase().includes(el("winner").value.toLowerCase())) return false;
-    if(el("jockey").value && !r.jockey.toLowerCase().includes(el("jockey").value.toLowerCase())) return false;
-    if(el("trainer").value && !r.trainer.toLowerCase().includes(el("trainer").value.toLowerCase())) return false;
-    if(el("q").value && !Object.values(r).join(" ").toLowerCase().includes(el("q").value.toLowerCase())) return false;
-    return true;
-  });
-  render();
-}
-
-function render(){
-  const tb=el("tbody");
-  tb.innerHTML="";
-  view.forEach(r=>{
-    tb.innerHTML+=`
-<tr>
-<td>${r.track}</td>
-<td>${r.date}</td>
-<td>${r.race}</td>
-<td>${r.distance}</td>
-<td>${r.winner}</td>
-<td>${r.margin}</td>
-<td>${r.sp}</td>
-<td>${r.grade}</td>
-<td>${r.jockey}</td>
-<td>${r.trainer}</td>
-</tr>`;
-  });
-}
-
-document.querySelectorAll("input,select").forEach(i=>{
-  i.addEventListener("input",apply);
-  i.addEventListener("change",apply);
-});
-
-load();
-</script>
+<script src="australia-stakes.js"></script>
 
 </body>
 </html>
