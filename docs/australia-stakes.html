@@ -9,73 +9,25 @@
 
 <style>
 .wrap{max-width:1200px;margin:auto;padding:16px;}
-.topbar{position:sticky;top:0;background:#0b0b12;border-bottom:1px solid rgba(255,255,255,.15);}
-.topbar .wrap{display:flex;justify-content:space-between;align-items:center;}
-.navlinks a{margin-left:12px;color:white;text-decoration:none;opacity:.85;}
-.navlinks a.active{font-weight:700;opacity:1;}
-
-.heroCard{border-radius:18px;overflow:hidden;border:1px solid rgba(255,255,255,.15);}
-.heroImg{width:100%;height:220px;object-fit:cover;opacity:.85;}
-
-.panel{margin-top:20px;border:1px solid rgba(255,255,255,.15);border-radius:16px;}
-.filters{display:grid;grid-template-columns:repeat(12,1fr);gap:10px;padding:16px;}
-.field{grid-column:span 3;display:flex;flex-direction:column;font-size:.85rem;}
-.field.wide{grid-column:span 6;}
-input,select{padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:#111;color:white;}
-
-.tableWrap{overflow:auto;}
-table{width:100%;border-collapse:collapse;}
-th,td{padding:10px;border-top:1px solid rgba(255,255,255,.08);white-space:nowrap;}
-thead th{background:#0b0b12;}
-tbody tr:nth-child(even){background:rgba(255,255,255,.03);}
-.right{text-align:right;}
-
-.status{padding:14px;font-weight:600;}
-.debug{color:#ffb000;}
-.error{color:#ff5050;}
-.ok{color:#00ff99;}
+.status{padding:14px;font-weight:700;color:#ffb000;}
+pre{white-space:pre-wrap;word-break:break-all;background:#111;color:#0f0;padding:12px;border-radius:10px;margin-top:10px;}
+table{width:100%;border-collapse:collapse;margin-top:20px;}
+th,td{padding:8px;border-top:1px solid #333;color:white;}
 </style>
 </head>
 
 <body>
 
-<div class="topbar">
 <div class="wrap">
-<div><strong>The Sporting Almanac</strong><br><small>Australian Racing</small></div>
-<div class="navlinks">
-<a href="index.html">Home</a>
-<a href="racing.html">Racing</a>
-<a href="australia.html">Australia</a>
-<a class="active" href="australia-stakes.html">Stakes Racing</a>
-</div>
-</div>
-</div>
+<h2>Australia — Stakes Racing (Debug Mode)</h2>
 
-<div class="wrap">
-<div class="heroCard">
-<img class="heroImg" src="images/australia-stakes-hero.jpg">
-</div>
-</div>
+<div id="status" class="status">Starting…</div>
+<pre id="dump"></pre>
 
-<main class="wrap">
-<section class="panel">
-
-<div class="filters">
-<div class="field wide"><label>Search</label><input id="q"></div>
-<div class="field"><label>Track</label><select id="track"><option value="">All</option></select></div>
-<div class="field"><label>Grade</label><select id="grade"><option value="">All</option></select></div>
-<div class="field"><label>Distance</label><select id="distance"><option value="">All</option></select></div>
-<div class="field"><label>Race</label><input id="race"></div>
-<div class="field"><label>Winner</label><input id="winner"></div>
-<div class="field"><label>Jockey</label><input id="jockey"></div>
-<div class="field"><label>Trainer</label><input id="trainer"></div>
-</div>
-
-<div class="tableWrap">
 <table>
 <thead>
 <tr>
-<th>Track</th><th>Date</th><th>Race</th><th>Dist</th>
+<th>Track</th><th>Date</th><th>Race</th><th>Distance</th>
 <th>Winner</th><th>Margin</th><th>SP</th>
 <th>Grade</th><th>Jockey</th><th>Trainer</th>
 </tr>
@@ -84,98 +36,36 @@ tbody tr:nth-child(even){background:rgba(255,255,255,.03);}
 </table>
 </div>
 
-<div class="status debug" id="status">Initialising…</div>
-
-</section>
-</main>
-
 <script>
-const DATA_URL = "data/australia-stakes.json";
+const URL = "data/australia-stakes.json";
+const status = document.getElementById("status");
+const dump = document.getElementById("dump");
+const tbody = document.getElementById("tbody");
 
-const el=id=>document.getElementById(id);
-let raw=[],view=[];
-
-function normalise(r){
-  return {
-    track: r.track||"",
-    date: r.date.includes("/") ? r.date.split("/").reverse().join("-") : r.date,
-    race: r.race||"",
-    distance: typeof r.distance==="number" ? r.distance+"m" : r.distance||"",
-    winner: r.winner||"",
-    margin: typeof r.margin==="number" ? r.margin+"L" : r.margin||"",
-    sp: String(r.sp||"").replace("$",""),
-    grade: r.grade||r["race grade"]||"",
-    jockey: r.jockey||"",
-    trainer: r.trainer||""
-  };
-}
-
-function uniq(a){return [...new Set(a.filter(x=>x))].sort();}
-
-async function load(){
-  const status=el("status");
+async function run(){
   try{
-    status.innerText="Fetching JSON…";
+    status.innerText = "Fetching: " + URL;
 
-    const res=await fetch(DATA_URL,{cache:"no-store"});
-    status.innerText="HTTP status: "+res.status;
+    const res = await fetch(URL,{cache:"no-store"});
+    status.innerText = "HTTP status: " + res.status;
 
-    const txt=await res.text();
-    status.innerText="Raw text length: "+txt.length;
+    const text = await res.text();
 
-    const data=JSON.parse(txt);
-    status.innerText="Parsed records: "+data.length;
+    dump.innerText = text.slice(0,1000);
 
-    raw=data.map(normalise);
-
-    fill("track",raw.map(r=>r.track));
-    fill("grade",raw.map(r=>r.grade));
-    fill("distance",raw.map(r=>r.distance));
-
-    apply();
-    status.className="status ok";
-    status.innerText="Loaded "+raw.length+" races successfully";
-
-  }catch(e){
-    status.className="status error";
-    status.innerText="ERROR: "+e.message;
-  }
-}
-
-function fill(id,vals){
-  const s=el(id);
-  s.innerHTML='<option value="">All</option>';
-  uniq(vals).forEach(v=>{
-    const o=document.createElement("option");
-    o.textContent=v;
-    s.appendChild(o);
-  });
-}
-
-function apply(){
-  view=raw.filter(r=>{
-    if(el("track").value && r.track!==el("track").value) return false;
-    if(el("grade").value && r.grade!==el("grade").value) return false;
-    if(el("distance").value && r.distance!==el("distance").value) return false;
-
-    if(el("race").value && !r.race.toLowerCase().includes(el("race").value.toLowerCase())) return false;
-    if(el("winner").value && !r.winner.toLowerCase().includes(el("winner").value.toLowerCase())) return false;
-    if(el("jockey").value && !r.jockey.toLowerCase().includes(el("jockey").value.toLowerCase())) return false;
-    if(el("trainer").value && !r.trainer.toLowerCase().includes(el("trainer").value.toLowerCase())) return false;
-
-    if(el("q").value){
-      if(!Object.values(r).join(" ").toLowerCase().includes(el("q").value.toLowerCase())) return false;
+    let data;
+    try{
+      data = JSON.parse(text);
+    }catch(e){
+      status.innerText = "JSON PARSE ERROR: " + e.message;
+      return;
     }
-    return true;
-  });
-  render();
-}
 
-function render(){
-  const tb=el("tbody");
-  tb.innerHTML="";
-  view.forEach(r=>{
-    tb.innerHTML+=`
+    status.innerText = "Parsed records: " + data.length;
+
+    tbody.innerHTML="";
+    data.slice(0,20).forEach(r=>{
+      tbody.innerHTML+=`
 <tr>
 <td>${r.track}</td>
 <td>${r.date}</td>
@@ -184,19 +74,18 @@ function render(){
 <td>${r.winner}</td>
 <td>${r.margin}</td>
 <td>${r.sp}</td>
-<td>${r.grade}</td>
+<td>${r["race grade"] || r.grade}</td>
 <td>${r.jockey}</td>
 <td>${r.trainer}</td>
 </tr>`;
-  });
+    });
+
+  }catch(err){
+    status.innerText = "SCRIPT ERROR: " + err.message;
+  }
 }
 
-document.querySelectorAll("input,select").forEach(i=>{
-  i.addEventListener("input",apply);
-  i.addEventListener("change",apply);
-});
-
-load();
+run();
 </script>
 
 </body>
