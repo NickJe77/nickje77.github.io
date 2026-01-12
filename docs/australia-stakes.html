@@ -8,27 +8,28 @@
 <link rel="stylesheet" href="racing.css">
 
 <style>
-:root { --maxw:1200px; }
-.wrap{max-width:var(--maxw);margin:auto;padding:16px;}
-.topbar{position:sticky;top:0;z-index:50;background:rgba(10,10,14,.85);backdrop-filter:blur(8px);border-bottom:1px solid rgba(255,255,255,.12);}
+.wrap{max-width:1200px;margin:auto;padding:16px;}
+.topbar{position:sticky;top:0;background:#0b0b12;border-bottom:1px solid rgba(255,255,255,.15);}
 .topbar .wrap{display:flex;justify-content:space-between;align-items:center;}
-.navlinks a{margin-left:12px;text-decoration:none;color:white;opacity:.85;}
-.navlinks a.active{opacity:1;font-weight:700;}
-.heroCard{position:relative;border-radius:18px;overflow:hidden;border:1px solid rgba(255,255,255,.12);}
-.heroImg{width:100%;height:240px;object-fit:cover;opacity:.85;}
-.heroShade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(10,10,14,.9),rgba(10,10,14,.4),rgba(10,10,14,.1));}
-.heroContent{position:absolute;left:20px;top:20px;max-width:700px;}
-.panel{margin-top:20px;border:1px solid rgba(255,255,255,.12);border-radius:16px;overflow:hidden;}
+.navlinks a{margin-left:12px;color:white;text-decoration:none;opacity:.85;}
+.navlinks a.active{font-weight:700;opacity:1;}
+
+.heroCard{border-radius:18px;overflow:hidden;border:1px solid rgba(255,255,255,.15);}
+.heroImg{width:100%;height:220px;object-fit:cover;opacity:.85;}
+
+.panel{margin-top:20px;border:1px solid rgba(255,255,255,.15);border-radius:16px;}
 .filters{display:grid;grid-template-columns:repeat(12,1fr);gap:10px;padding:16px;}
 .field{grid-column:span 3;display:flex;flex-direction:column;font-size:.85rem;}
 .field.wide{grid-column:span 6;}
 input,select{padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:#111;color:white;}
+
 .tableWrap{overflow:auto;}
 table{width:100%;border-collapse:collapse;}
 th,td{padding:10px;border-top:1px solid rgba(255,255,255,.08);white-space:nowrap;}
 thead th{background:#0b0b12;cursor:pointer;}
 tbody tr:nth-child(even){background:rgba(255,255,255,.03);}
 .right{text-align:right;}
+
 .status{padding:12px;opacity:.85;}
 </style>
 </head>
@@ -50,22 +51,16 @@ tbody tr:nth-child(even){background:rgba(255,255,255,.03);}
 <div class="wrap">
 <div class="heroCard">
 <img class="heroImg" src="images/australia-stakes-hero.jpg">
-<div class="heroShade"></div>
-<div class="heroContent">
-<h1>Australia — Stakes Racing</h1>
-<p>Complete Australian stakes race archive with predictive filtering.</p>
-</div>
 </div>
 </div>
 
 <main class="wrap">
-
 <section class="panel">
 
 <div class="filters">
 
 <div class="field wide">
-<label>Global Search</label>
+<label>Search</label>
 <input id="q" placeholder="Search anything…">
 </div>
 
@@ -75,7 +70,7 @@ tbody tr:nth-child(even){background:rgba(255,255,255,.03);}
 </div>
 
 <div class="field">
-<label>Race Grade</label>
+<label>Grade</label>
 <select id="grade"><option value="">All</option></select>
 </div>
 
@@ -84,46 +79,20 @@ tbody tr:nth-child(even){background:rgba(255,255,255,.03);}
 <select id="distance"><option value="">All</option></select>
 </div>
 
-<div class="field">
-<label>Race</label>
-<input id="race" list="raceList">
-<datalist id="raceList"></datalist>
-</div>
-
-<div class="field">
-<label>Winner</label>
-<input id="winner" list="winnerList">
-<datalist id="winnerList"></datalist>
-</div>
-
-<div class="field">
-<label>Jockey</label>
-<input id="jockey" list="jockeyList">
-<datalist id="jockeyList"></datalist>
-</div>
-
-<div class="field">
-<label>Trainer</label>
-<input id="trainer" list="trainerList">
-<datalist id="trainerList"></datalist>
-</div>
+<div class="field"><label>Race</label><input id="race"></div>
+<div class="field"><label>Winner</label><input id="winner"></div>
+<div class="field"><label>Jockey</label><input id="jockey"></div>
+<div class="field"><label>Trainer</label><input id="trainer"></div>
 
 </div>
 
 <div class="tableWrap">
-<table id="tbl">
+<table>
 <thead>
 <tr>
-<th data-key="track">Track</th>
-<th data-key="date">Date</th>
-<th data-key="race">Race</th>
-<th data-key="distance">Distance</th>
-<th data-key="winner">Winner</th>
-<th data-key="margin">Margin</th>
-<th data-key="sp">SP</th>
-<th data-key="grade">Grade</th>
-<th data-key="jockey">Jockey</th>
-<th data-key="trainer">Trainer</th>
+<th>Track</th><th>Date</th><th>Race</th><th>Dist</th>
+<th>Winner</th><th>Margin</th><th>SP</th>
+<th>Grade</th><th>Jockey</th><th>Trainer</th>
 </tr>
 </thead>
 <tbody id="tbody"></tbody>
@@ -136,102 +105,96 @@ tbody tr:nth-child(even){background:rgba(255,255,255,.03);}
 </main>
 
 <script>
-
 const DATA_URL="data/australia-stakes.json";
 
-let raw=[],view=[];
-let sortKey="date",sortDir="desc";
-
 const el=id=>document.getElementById(id);
+let raw=[],view=[];
 
-async function loadData(){
-const res=await fetch(DATA_URL);
-raw=await res.json();
-
-buildLists();
-apply();
+function normalise(r){
+  return {
+    track: r.track || "",
+    date: r.date.includes("/") ? r.date.split("/").reverse().join("-") : r.date,
+    race: r.race || "",
+    distance: typeof r.distance==="number" ? r.distance+"m" : r.distance || "",
+    winner: r.winner || "",
+    margin: typeof r.margin==="number" ? r.margin+"L" : r.margin || "",
+    sp: String(r.sp||"").replace("$",""),
+    grade: r.grade || r["race grade"] || "",
+    jockey: r.jockey || "",
+    trainer: r.trainer || ""
+  };
 }
 
-function uniq(arr){return [...new Set(arr.filter(x=>x))].sort();}
+function uniq(a){return [...new Set(a.filter(x=>x))].sort();}
 
-function buildLists(){
-fill("track",raw.map(r=>r.track));
-fill("grade",raw.map(r=>r.grade));
-fill("distance",raw.map(r=>r.distance));
+async function load(){
+  const res=await fetch(DATA_URL);
+  const data=await res.json();
+  raw=data.map(normalise);
 
-fillList("raceList",raw.map(r=>r.race));
-fillList("winnerList",raw.map(r=>r.winner));
-fillList("jockeyList",raw.map(r=>r.jockey));
-fillList("trainerList",raw.map(r=>r.trainer));
+  fill("track",raw.map(r=>r.track));
+  fill("grade",raw.map(r=>r.grade));
+  fill("distance",raw.map(r=>r.distance));
+
+  apply();
 }
 
 function fill(id,vals){
-const s=el(id);
-const cur=s.value;
-s.innerHTML='<option value="">All</option>';
-uniq(vals).forEach(v=>{let o=document.createElement("option");o.textContent=v;s.appendChild(o);});
-s.value=cur;
-}
-
-function fillList(id,vals){
-const d=el(id);
-d.innerHTML="";
-uniq(vals).forEach(v=>{
-let o=document.createElement("option");
-o.value=v;
-d.appendChild(o);
-});
+  const s=el(id);
+  s.innerHTML='<option value="">All</option>';
+  uniq(vals).forEach(v=>{
+    const o=document.createElement("option");
+    o.textContent=v;
+    s.appendChild(o);
+  });
 }
 
 function apply(){
-view=raw.filter(r=>{
-if(el("track").value && r.track!==el("track").value) return false;
-if(el("grade").value && r.grade!==el("grade").value) return false;
-if(el("distance").value && r.distance!==el("distance").value) return false;
+  view=raw.filter(r=>{
+    if(el("track").value && r.track!==el("track").value) return false;
+    if(el("grade").value && r.grade!==el("grade").value) return false;
+    if(el("distance").value && r.distance!==el("distance").value) return false;
 
-if(el("race").value && !r.race.toLowerCase().includes(el("race").value.toLowerCase())) return false;
-if(el("winner").value && !r.winner.toLowerCase().includes(el("winner").value.toLowerCase())) return false;
-if(el("jockey").value && !r.jockey.toLowerCase().includes(el("jockey").value.toLowerCase())) return false;
-if(el("trainer").value && !r.trainer.toLowerCase().includes(el("trainer").value.toLowerCase())) return false;
+    if(el("race").value && !r.race.toLowerCase().includes(el("race").value.toLowerCase())) return false;
+    if(el("winner").value && !r.winner.toLowerCase().includes(el("winner").value.toLowerCase())) return false;
+    if(el("jockey").value && !r.jockey.toLowerCase().includes(el("jockey").value.toLowerCase())) return false;
+    if(el("trainer").value && !r.trainer.toLowerCase().includes(el("trainer").value.toLowerCase())) return false;
 
-if(el("q").value){
-const blob=Object.values(r).join(" ").toLowerCase();
-if(!blob.includes(el("q").value.toLowerCase())) return false;
-}
-return true;
-});
-
-render();
+    if(el("q").value){
+      if(!Object.values(r).join(" ").toLowerCase().includes(el("q").value.toLowerCase())) return false;
+    }
+    return true;
+  });
+  render();
 }
 
 function render(){
-const tb=el("tbody");
-tb.innerHTML="";
-view.forEach(r=>{
-tb.innerHTML+=`
+  const tb=el("tbody");
+  tb.innerHTML="";
+  view.forEach(r=>{
+    tb.innerHTML+=`
 <tr>
 <td>${r.track}</td>
 <td>${r.date}</td>
 <td>${r.race}</td>
-<td class="right">${r.distance}</td>
+<td>${r.distance}</td>
 <td>${r.winner}</td>
-<td class="right">${r.margin}</td>
-<td class="right">${r.sp}</td>
+<td>${r.margin}</td>
+<td>${r.sp}</td>
 <td>${r.grade}</td>
 <td>${r.jockey}</td>
 <td>${r.trainer}</td>
 </tr>`;
-});
-el("status").innerText=`Showing ${view.length} races`;
+  });
+  el("status").innerText=`Showing ${view.length} races`;
 }
 
 document.querySelectorAll("input,select").forEach(i=>{
-i.addEventListener("input",apply);
-i.addEventListener("change",apply);
+  i.addEventListener("input",apply);
+  i.addEventListener("change",apply);
 });
 
-loadData();
-
+load();
 </script>
 
 </body>
