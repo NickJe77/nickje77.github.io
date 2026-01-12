@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <title>Australia — Stakes Racing | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-
 <link rel="stylesheet" href="racing.css">
 
 <style>
@@ -14,12 +13,10 @@
 .field{grid-column:span 3;display:flex;flex-direction:column;}
 .field.wide{grid-column:span 6;}
 input,select{padding:10px;border-radius:10px;border:1px solid #444;background:#111;color:white;}
-
 table{width:100%;border-collapse:collapse;}
 th,td{padding:8px;border-top:1px solid #333;color:white;}
 thead th{background:#0b0b12;}
 tbody tr:nth-child(even){background:rgba(255,255,255,.03);}
-
 .status{padding:12px;font-weight:700;color:#00ff99;}
 </style>
 </head>
@@ -59,7 +56,11 @@ tbody tr:nth-child(even){background:rgba(255,255,255,.03);}
 </div>
 
 <script>
-const URL="data/australia-stakes.json";
+const PATHS = [
+  "/data/australia-stakes.json",
+  "data/australia-stakes.json"
+];
+
 const el=id=>document.getElementById(id);
 let raw=[],view=[];
 
@@ -78,24 +79,31 @@ function normalise(r){
   };
 }
 
+async function load(){
+  for(const p of PATHS){
+    try{
+      const res=await fetch(p,{cache:"no-store"});
+      if(!res.ok) continue;
+
+      const data=await res.json();
+      raw=data.map(normalise);
+
+      buildFilters();
+      apply();
+
+      el("status").innerText=`Loaded ${raw.length} races`;
+      return;
+    }catch(e){}
+  }
+  el("status").innerText="ERROR: JSON file not found in /data/";
+}
+
 function uniq(a){return [...new Set(a.filter(x=>x))].sort();}
 
-async function load(){
-  try{
-    const res=await fetch(URL,{cache:"no-store"});
-    const data=await res.json();
-
-    raw=data.map(normalise);
-
-    fill("track",raw.map(r=>r.track));
-    fill("grade",raw.map(r=>r.grade));
-    fill("distance",raw.map(r=>r.distance));
-
-    apply();
-    el("status").innerText=`Loaded ${raw.length} races`;
-  }catch(e){
-    el("status").innerText="ERROR: "+e.message;
-  }
+function buildFilters(){
+  fill("track",raw.map(r=>r.track));
+  fill("grade",raw.map(r=>r.grade));
+  fill("distance",raw.map(r=>r.distance));
 }
 
 function fill(id,vals){
@@ -113,14 +121,11 @@ function apply(){
     if(el("track").value && r.track!==el("track").value) return false;
     if(el("grade").value && r.grade!==el("grade").value) return false;
     if(el("distance").value && r.distance!==el("distance").value) return false;
-
     if(el("race").value && !r.race.toLowerCase().includes(el("race").value.toLowerCase())) return false;
     if(el("winner").value && !r.winner.toLowerCase().includes(el("winner").value.toLowerCase())) return false;
     if(el("jockey").value && !r.jockey.toLowerCase().includes(el("jockey").value.toLowerCase())) return false;
     if(el("trainer").value && !r.trainer.toLowerCase().includes(el("trainer").value.toLowerCase())) return false;
-
     if(el("q").value && !Object.values(r).join(" ").toLowerCase().includes(el("q").value.toLowerCase())) return false;
-
     return true;
   });
   render();
