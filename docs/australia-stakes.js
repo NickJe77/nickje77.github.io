@@ -10,12 +10,18 @@ fetch(DATA_URL)
     renderTable(data);
   });
 
+function extractYear(dateStr) {
+  if (!dateStr) return "";
+  const parts = dateStr.split("/");
+  return parts.length === 3 ? parts[2] : "";
+}
+
 function renderTable(rows){
   const tbody = document.getElementById("results-body");
   tbody.innerHTML = "";
 
   rows.forEach(r=>{
-    const year = r.date ? r.date.substring(0,4) : "";
+    const year = extractYear(r.date);
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -32,8 +38,10 @@ function renderTable(rows){
 
 function buildYearFilter(data){
   const years = new Set();
+
   data.forEach(r=>{
-    if(r.date) years.add(r.date.substring(0,4));
+    const y = extractYear(r.date);
+    if (y) years.add(y);
   });
 
   const sel = document.getElementById("yearFilter");
@@ -63,6 +71,7 @@ function buildPredictiveLists(data){
 
 function fillList(id, set){
   const dl = document.getElementById(id);
+  dl.innerHTML = "";
   [...set].sort().forEach(v=>{
     const opt = document.createElement("option");
     opt.value = v;
@@ -77,11 +86,14 @@ function applyFilters(){
   const jockey = jockeySearch.value.toLowerCase();
 
   const filtered = allRows.filter(r=>{
-    const y = !year || (r.date && r.date.startsWith(year));
+    const y = extractYear(r.date);
+
+    const yMatch = !year || y === year;
     const rMatch = !race || (r.grade && r.grade.toLowerCase().includes(race));
     const tMatch = !trainer || (r.trainer && r.trainer.toLowerCase().includes(trainer));
     const jMatch = !jockey || (r.jockey && r.jockey.toLowerCase().includes(jockey));
-    return y && rMatch && tMatch && jMatch;
+
+    return yMatch && rMatch && tMatch && jMatch;
   });
 
   renderTable(filtered);
