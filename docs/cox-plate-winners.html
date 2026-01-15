@@ -38,12 +38,12 @@ h1 {
     margin:30px 0 10px;
 }
 
-/* filters */
+/* FILTERS */
 .filter-bar {
     max-width:900px;
     margin:20px auto 10px;
     display:grid;
-    grid-template-columns: 1fr 2fr 2fr;
+    grid-template-columns: 1fr 2fr 2fr 2fr;
     gap:16px;
     padding:0 20px;
 }
@@ -60,9 +60,11 @@ h1 {
     border-radius:8px;
     border:1px solid #ccc;
     font-size:14px;
+    height:42px;
+    box-sizing:border-box;
 }
 
-/* table */
+/* TABLE */
 .table-wrap {
     max-width:900px;
     margin:auto;
@@ -119,8 +121,8 @@ th:nth-child(4), td:nth-child(4) { width:200px; }
 
 <h1>W.S. Cox Plate Winners</h1>
 
-<!-- FILTERS -->
 <div class="filter-bar">
+
   <div>
     <label>Year</label>
     <select id="yearFilter">
@@ -137,6 +139,12 @@ th:nth-child(4), td:nth-child(4) { width:200px; }
     <label>Jockey</label>
     <input type="text" id="jockeyFilter" placeholder="Type jockey name">
   </div>
+
+  <div>
+    <label>Trainer</label>
+    <input type="text" id="trainerFilter" placeholder="Type trainer name">
+  </div>
+
 </div>
 
 <div class="table-wrap">
@@ -154,65 +162,25 @@ th:nth-child(4), td:nth-child(4) { width:200px; }
 </div>
 
 <script>
-let allRows = [];
+let allRows=[];
 
 fetch("./data/vic-g1.json")
-.then(res => res.json())
-.then(data => {
+.then(res=>res.json())
+.then(data=>{
+ allRows=data.filter(r=>{
+  if(!r.race||!r.finish) return false;
+  const f=String(r.finish).toLowerCase().trim();
+  return r.race.toLowerCase().includes("cox") && (f==="1"||f==="1st"||f==="01");
+ }).sort((a,b)=>b.year-a.year);
 
-  allRows = data.filter(r=>{
-    if(!r.race||!r.finish) return false;
-    const f=String(r.finish).toLowerCase().trim();
-    return r.race.toLowerCase().includes("cox") && (f==="1"||f==="1st"||f==="01");
-  }).sort((a,b)=>b.year-a.year);
-
-  populateYearFilter();
-  renderTable(allRows);
+ populateYearFilter();
+ renderTable(allRows);
 });
 
 function populateYearFilter(){
-  const years = [...new Set(allRows.map(r=>r.year))].sort((a,b)=>b-a);
-  const sel = document.getElementById("yearFilter");
-  years.forEach(y=>{
-    const o=document.createElement("option");
-    o.value=y;
-    o.textContent=y;
-    sel.appendChild(o);
-  });
-}
-
-function renderTable(rows){
-  const body=document.querySelector("#resultsTable tbody");
-  body.innerHTML="";
-  rows.forEach(r=>{
-    body.innerHTML+=`
-    <tr>
-      <td>${r.year}</td>
-      <td>${r.horse}</td>
-      <td>${r.jockey}</td>
-      <td>${r.trainer}</td>
-    </tr>`;
-  });
-}
-
-function applyFilters(){
-  const year=document.getElementById("yearFilter").value;
-  const winner=document.getElementById("winnerFilter").value.toLowerCase();
-  const jockey=document.getElementById("jockeyFilter").value.toLowerCase();
-
-  const filtered=allRows.filter(r=>{
-    return (!year || r.year==year) &&
-           (!winner || r.horse.toLowerCase().includes(winner)) &&
-           (!jockey || r.jockey.toLowerCase().includes(jockey));
-  });
-
-  renderTable(filtered);
-}
-
-document.getElementById("yearFilter").addEventListener("change",applyFilters);
-document.getElementById("winnerFilter").addEventListener("input",applyFilters);
-document.getElementById("jockeyFilter").addEventListener("input",applyFilters);
-</script>
-
-</body>
-</html>
+ const years=[...new Set(allRows.map(r=>r.year))].sort((a,b)=>b-a);
+ const sel=document.getElementById("yearFilter");
+ years.forEach(y=>{
+  const o=document.createElement("option");
+  o.value=y;
+  o.textContent=y;
