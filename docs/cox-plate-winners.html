@@ -21,21 +21,132 @@ body { background:#fff; color:#111; font-family:Arial,Helvetica,sans-serif; marg
 h1 { text-align:center; margin:30px 0 10px; }
 
 .filter-bar {
- max-width:900px;
- margin:20px auto 10px;
- display:grid;
- grid-template-columns:1fr 2fr 2fr 2fr;
- gap:16px;
- padding:0 20px;
+ max-width:900px; margin:20px auto 10px;
+ display:grid; grid-template-columns:1fr 2fr 2fr 2fr;
+ gap:16px; padding:0 20px;
 }
+
 .filter-bar label { font-weight:600; font-size:14px; }
+
 .filter-bar select,
 .filter-bar input {
- width:100%; padding:10px; border-radius:8px; border:1px solid #ccc;
- font-size:14px; height:42px; box-sizing:border-box;
+ width:100%; padding:10px; border-radius:8px;
+ border:1px solid #ccc; font-size:14px; height:42px;
 }
 
 .table-wrap { max-width:900px; margin:auto; padding:10px 20px 40px; }
 
-table {
- width:100%; border-co
+table { width:100%; border-collapse:collapse; font-size:15px; }
+
+th {
+ padding:10px; background:#f3f8ff; border-bottom:1px solid #cfe0f5;
+ text-align:left; font-weight:700;
+}
+td { padding:9px 10px; border-bottom:1px solid #e1ecfa; }
+
+tr:nth-child(even) { background:#f7fbff; }
+tr:hover { background:#eaf3ff; }
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+ <a href="index.html">Home</a>
+ <a href="racing.html">Racing</a>
+ <a href="afl.html">AFL</a>
+ <a href="football.html">Football</a>
+ <a href="cricket.html">Cricket</a>
+ <a href="f1.html">F1</a>
+</div>
+
+<h1>W.S. Cox Plate Winners</h1>
+
+<div class="filter-bar">
+ <div><label>Year</label><select id="yearFilter"><option value="">All</option></select></div>
+ <div><label>Winner</label><input id="winnerFilter"></div>
+ <div><label>Jockey</label><input id="jockeyFilter"></div>
+ <div><label>Trainer</label><input id="trainerFilter"></div>
+</div>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr><th>Year</th><th>Winner</th><th>Jockey</th><th>Trainer</th></tr>
+</thead>
+<tbody id="resultsBody"></tbody>
+</table>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", ()=>{
+
+let allRows=[];
+const body=document.getElementById("resultsBody");
+
+function safe(v){ return (v||"").toString().toLowerCase(); }
+
+fetch("./data/vic-g1.json")
+.then(r=>r.json())
+.then(data=>{
+
+ allRows=data.filter(r=>{
+  if(!r.race||!r.finish) return false;
+  const f=safe(r.finish);
+  return safe(r.race).includes("cox") && (f==="1"||f==="1st"||f==="01");
+ }).sort((a,b)=>b.year-a.year);
+
+ populateYears();
+ render(allRows);
+})
+.catch(err=>{
+ body.innerHTML="<tr><td colspan='4'>DATA LOAD ERROR</td></tr>";
+ console.error(err);
+});
+
+function populateYears(){
+ const sel=document.getElementById("yearFilter");
+ [...new Set(allRows.map(r=>r.year))].forEach(y=>{
+  const o=document.createElement("option");
+  o.value=y; o.textContent=y;
+  sel.appendChild(o);
+ });
+}
+
+function render(rows){
+ body.innerHTML="";
+ rows.forEach(r=>{
+  body.innerHTML+=`
+   <tr>
+    <td>${r.year||""}</td>
+    <td>${r.horse||""}</td>
+    <td>${r.jockey||""}</td>
+    <td>${r.trainer||""}</td>
+   </tr>`;
+ });
+}
+
+function apply(){
+ const year=yearFilter.value;
+ const w=safe(winnerFilter.value);
+ const j=safe(jockeyFilter.value);
+ const t=safe(trainerFilter.value);
+
+ render(allRows.filter(r=>{
+  return (!year||r.year==year) &&
+         (!w||safe(r.horse).includes(w)) &&
+         (!j||safe(r.jockey).includes(j)) &&
+         (!t||safe(r.trainer).includes(t));
+ }));
+}
+
+yearFilter.onchange=apply;
+winnerFilter.oninput=apply;
+jockeyFilter.oninput=apply;
+trainerFilter.oninput=apply;
+
+});
+</script>
+
+</body>
+</html>
