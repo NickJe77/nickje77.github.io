@@ -1,75 +1,221 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>All Star Mile | The Sporting Almanac</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+/* All Star Mile - Winners
+   - Predictive search via datalist
+   - Year filter
+   - Robust key mapping (handles different JSON column names)
+*/
 
-<link rel="stylesheet" href="./css/racing.css">
+(() => {
+  // ✅ Set your data file here
+  // If your JSON is elsewhere, ONLY change this line.
+  const DATA_URL = "./data/all-star-mile.json";
 
-<style>
-body{background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif;margin:0;}
-.navbar{text-align:center;padding:16px 0;border-bottom:1px solid #ddd;}
-.navbar a{margin:0 18px;text-decoration:none;font-size:18px;font-weight:600;color:#0056d6;}
-.navbar a:hover{text-decoration:underline;}
+  const els = {
+    yearSelect: document.getElementById("yearSelect"),
+    queryInput: document.getElementById("queryInput"),
+    nameSuggestions: document.getElementById("nameSuggestions"),
+    clearBtn: document.getElementById("clearBtn"),
+    status: document.getElementById("status"),
+    tbody: document.getElementById("tbody"),
+    note: document.getElementById("note"),
+  };
 
-.header-hero{
-width:100%;height:340px;
-background:url("./images/all-star-mile-header.jpg") center/cover no-repeat;
-position:relative;
-}
-.header-overlay{position:absolute;inset:0;background:linear-gradient(to right,rgba(0,0,0,.6),rgba(0,0,0,.1));}
-.page-title{position:absolute;bottom:30px;left:40px;font-size:42px;font-weight:bold;letter-spacing:2px;color:white;}
+  let allRows = [];
+  let winners = [];
 
-.content-wrap{max-width:1200px;margin:auto;padding:40px;}
-.intro{font-size:18px;line-height:1.6;color:#333;margin-bottom:40px;}
+  // ---------- helpers ----------
+  const norm = (v) => (v ?? "").toString().trim();
+  const lower = (v) => norm(v).toLowerCase();
 
-.tile-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:32px;}
-.tile{position:relative;overflow:hidden;border-radius:10px;cursor:pointer;background:#f2f2f2;box-shadow:0 4px 10px rgba(0,0,0,.08);}
-.tile img{width:100%;height:100%;object-fit:cover;transition:.4s;}
-.tile:hover img{transform:scale(1.05);}
-.tile-title{position:absolute;bottom:0;width:100%;padding:14px;background:linear-gradient(to top,rgba(0,0,0,.75),transparent);font-size:18px;font-weight:bold;color:white;}
-</style>
-</head>
+  const pick = (obj, keys) => {
+    for (const k of keys) {
+      if (obj && Object.prototype.hasOwnProperty.call(obj, k) && obj[k] !== null && obj[k] !== undefined && norm(obj[k]) !== "") {
+        return obj[k];
+      }
+    }
+    return "";
+  };
 
-<body>
+  const toYear = (obj) => {
+    const y = pick(obj, ["year", "Year", "YEAR"]);
+    if (y) return parseInt(y, 10);
 
-<div class="navbar">
- <a href="index.html">Home</a>
- <a href="racing.html">Racing</a>
- <a href="afl.html">AFL</a>
- <a href="football.html">Football</a>
- <a href="cricket.html">Cricket</a>
- <a href="f1.html">F1</a>
-</div>
+    const d = pick(obj, ["date", "Date", "DATE"]);
+    // try dd/mm/yyyy or yyyy-mm-dd etc
+    const s = norm(d);
+    const m1 = s.match(/(\d{4})/);
+    return m1 ? parseInt(m1[1], 10) : "";
+  };
 
-<div class="header-hero">
- <div class="header-overlay"></div>
- <div class="page-title">ALL STAR MILE</div>
-</div>
+  const toDistance = (obj) => pick(obj, ["distance", "Distance", "DISTANCE", "dist", "Dist"]);
+  const toTrack = (obj) => pick(obj, ["track", "Track", "TRACK", "venue", "Venue"]);
+  const toDate = (obj) => pick(obj, ["date", "Date", "DATE"]);
+  const toRace = (obj) => pick(obj, ["race", "Race", "RACE"]);
+  const toHorse = (obj) => pick(obj, ["horse", "Horse", "HORSE", "winner", "Winner", "WINNER"]);
+  const toJockey = (obj) => pick(obj, ["jockey", "Jockey", "JOCKEY"]);
+  const toTrainer = (obj) => pick(obj, ["trainer", "Trainer", "TRAINER"]);
 
-<div class="content-wrap">
+  const toPos = (obj) => pick(obj, ["pos", "Pos", "position", "Position", "placing", "Placing", "finish", "Finish"]);
 
-<div class="intro">
-The All Star Mile is one of Australia’s most unique weight-for-age events, with the field selected by public vote.
-Since its inception, the race has produced unforgettable moments and champion performances.
-</div>
+  const isWinnerRow = (obj) => {
+    // Many datasets either: one row per runner with a pos/placing
+    // OR only winners list.
+    const p = norm(toPos(obj));
+    if (!p) {
+      // If no position exists, assume it's a winners-only file
+      return true;
+    }
+    const pl = lower(p);
+    return pl === "1" || pl === "1st" || pl === "first" || pl === "winner" || pl === "win";
+  };
 
-<div class="tile-grid">
+  const uniqueSorted = (arr) => Array.from(new Set(arr)).sort((a, b) => {
+    // numeric sort if both look like years
+    const na = Number(a), nb = Number(b);
+    if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+    return String(a).localeCompare(String(b));
+  });
 
-<div class="tile" onclick="location.href='all-star-mile-winners.html'">
- <img src="./images/tiles/all-star-mile-winners.jpg">
- <div class="tile-title">Winners</div>
-</div>
+  const setStatus = (msg, count) => {
+    if (typeof count === "number") {
+      els.status.innerHTML = `${msg} <strong>${count}</strong>`;
+    } else {
+      els.status.textContent = msg;
+    }
+  };
 
-<div class="tile" onclick="location.href='all-star-mile-people.html'">
- <img src="./images/tiles/all-star-mile-people.jpg">
- <div class="tile-title">Jockeys & Trainers</div>
-</div>
+  // ---------- render ----------
+  const buildYearDropdown = () => {
+    const years = uniqueSorted(winners.map(r => r.year).filter(Boolean)).reverse();
 
-</div>
+    els.yearSelect.innerHTML = "";
+    const optAll = document.createElement("option");
+    optAll.value = "ALL";
+    optAll.textContent = "All Years";
+    els.yearSelect.appendChild(optAll);
 
-</div>
+    for (const y of years) {
+      const opt = document.createElement("option");
+      opt.value = String(y);
+      opt.textContent = String(y);
+      els.yearSelect.appendChild(opt);
+    }
+  };
 
-</body>
-</html>
+  const buildSuggestions = () => {
+    // Predictive: use unique names across winner rows (horse, jockey, trainer)
+    const names = [];
+    for (const r of winners) {
+      if (r.horse) names.push(r.horse);
+      if (r.jockey) names.push(r.jockey);
+      if (r.trainer) names.push(r.trainer);
+    }
+    const list = uniqueSorted(names.filter(Boolean));
+    els.nameSuggestions.innerHTML = "";
+    for (const n of list) {
+      const opt = document.createElement("option");
+      opt.value = n;
+      els.nameSuggestions.appendChild(opt);
+    }
+  };
+
+  const renderTable = (rows) => {
+    els.tbody.innerHTML = "";
+    const frag = document.createDocumentFragment();
+
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td class="center">${r.year ?? ""}</td>
+        <td>${r.horse ?? ""}</td>
+        <td>${r.jockey ?? ""}</td>
+        <td>${r.trainer ?? ""}</td>
+        <td class="right">${r.distance ?? ""}</td>
+        <td>${r.track ?? ""}</td>
+        <td>${r.date ?? ""}</td>
+      `;
+      frag.appendChild(tr);
+    }
+
+    els.tbody.appendChild(frag);
+    setStatus("Showing", rows.length);
+  };
+
+  const applyFilters = () => {
+    const yearVal = els.yearSelect.value;
+    const q = lower(els.queryInput.value);
+
+    let rows = winners.slice();
+
+    if (yearVal && yearVal !== "ALL") {
+      const y = parseInt(yearVal, 10);
+      rows = rows.filter(r => r.year === y);
+    }
+
+    if (q) {
+      rows = rows.filter(r => {
+        return lower(r.horse).includes(q) || lower(r.jockey).includes(q) || lower(r.trainer).includes(q);
+      });
+    }
+
+    renderTable(rows);
+
+    const parts = [];
+    if (yearVal && yearVal !== "ALL") parts.push(`Year: ${yearVal}`);
+    if (q) parts.push(`Search: "${els.queryInput.value.trim()}"`);
+    els.note.textContent = parts.length ? parts.join(" • ") : "";
+  };
+
+  const clearAll = () => {
+    els.yearSelect.value = "ALL";
+    els.queryInput.value = "";
+    els.note.textContent = "";
+    applyFilters();
+  };
+
+  // ---------- load ----------
+  const load = async () => {
+    setStatus("Loading…");
+    try {
+      const res = await fetch(DATA_URL, { cache: "no-store" });
+      if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
+
+      const data = await res.json();
+      if (!Array.isArray(data)) throw new Error("JSON is not an array of records.");
+
+      allRows = data;
+
+      winners = allRows
+        .filter(isWinnerRow)
+        .map(obj => ({
+          year: toYear(obj),
+          horse: norm(toHorse(obj)),
+          jockey: norm(toJockey(obj)),
+          trainer: norm(toTrainer(obj)),
+          distance: norm(toDistance(obj)),
+          track: norm(toTrack(obj)),
+          date: norm(toDate(obj)),
+          race: norm(toRace(obj)),
+        }))
+        .filter(r => r.horse || r.jockey || r.trainer)
+        .sort((a, b) => (b.year || 0) - (a.year || 0));
+
+      buildYearDropdown();
+      buildSuggestions();
+      applyFilters();
+
+      setStatus("Loaded winners:", winners.length);
+    } catch (err) {
+      console.error(err);
+      setStatus("Error loading data");
+      els.note.textContent = `Check DATA_URL path. Current: ${DATA_URL}`;
+      els.tbody.innerHTML = `<tr><td colspan="7" style="padding:14px;">Could not load JSON. Open DevTools Console for details.</td></tr>`;
+    }
+  };
+
+  // ---------- events ----------
+  els.yearSelect.addEventListener("change", applyFilters);
+  els.queryInput.addEventListener("input", applyFilters);
+  els.clearBtn.addEventListener("click", clearAll);
+
+  load();
+})();
