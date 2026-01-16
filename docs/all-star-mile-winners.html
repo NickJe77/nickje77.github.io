@@ -23,21 +23,21 @@ position:relative;
 
 .wrap{max-width:1200px;margin:auto;padding:30px;}
 
-.status{font-size:14px;margin-bottom:12px;color:#444;}
+.filters{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;}
+.filters select,.filters input,.filters button{
+width:260px;height:44px;
+border:1px solid #ccc;
+border-radius:8px;
+padding:8px;font-size:15px;
+}
 
 table{width:100%;border-collapse:collapse;font-size:15px;}
-thead th{
-background:#f2f4f8;
-padding:10px;
-border-bottom:2px solid #ccc;
-text-align:left;
-}
-tbody td{
-padding:10px;
-border-bottom:1px solid #ddd;
-}
-tbody tr:nth-child(even){background:#fafafa;}
-tbody tr:hover{background:#f1f6ff;}
+th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;}
+th{background:#f2f4f8;}
+tr:nth-child(even){background:#fafafa;}
+tr:hover{background:#f1f6ff;}
+
+.status{margin-bottom:10px;font-size:14px;color:#444;}
 </style>
 </head>
 
@@ -59,7 +59,16 @@ tbody tr:hover{background:#f1f6ff;}
 
 <div class="wrap">
 
-<div id="status" class="status">Loading vic-g1.json…</div>
+<div class="filters">
+  <select id="yearSelect"></select>
+
+  <input id="queryInput" list="nameSuggestions" placeholder="Search horse, jockey or trainer">
+  <datalist id="nameSuggestions"></datalist>
+
+  <button id="clearBtn">Clear</button>
+</div>
+
+<div id="status" class="status"></div>
 
 <table>
 <thead>
@@ -68,8 +77,6 @@ tbody tr:hover{background:#f1f6ff;}
 <th>Winner</th>
 <th>Jockey</th>
 <th>Trainer</th>
-<th>Track</th>
-<th>Date</th>
 </tr>
 </thead>
 <tbody id="tbody"></tbody>
@@ -82,54 +89,112 @@ document.addEventListener("DOMContentLoaded",()=>{
 
 const DATA_URL="./data/vic-g1.json";
 
-const status=document.getElementById("status");
+const yearSelect=document.getElementById("yearSelect");
+const queryInput=document.getElementById("queryInput");
+const nameSuggestions=document.getElementById("nameSuggestions");
+const clearBtn=document.getElementById("clearBtn");
 const tbody=document.getElementById("tbody");
+const status=document.getElementById("status");
+
+let winners=[];
+
+const norm=v=>(v??"").toString().trim();
+const lower=v=>norm(v).toLowerCase();
+
+function pick(o,arr){
+ for(const k of arr){
+   if(o[k]!=null && norm(o[k])!=="") return o[k];
+ }
+ return "";
+}
+
+function getYear(o){
+ let y=pick(o,["year","Year"]);
+ if(y) return parseInt(y,10);
+ let d=pick(o,["date","Date"]);
+ let m=d.match(/(19|20)\d{2}/);
+ return m?parseInt(m[0],10):"";
+}
+
+function isWinner(o){
+ let p=pick(o,["pos","Pos","position","Position","placing","Placing","finish","Finish"]);
+ if(!p) return true;
+ p=lower(p);
+ return p==="1"||p==="1st"||p==="first"||p==="winner"||p==="win";
+}
 
 fetch(DATA_URL,{cache:"no-store"})
-.then(r=>{
- if(!r.ok) throw new Error("Fetch failed");
- return r.json();
-})
+.then(r=>r.json())
 .then(data=>{
- if(!Array.isArray(data)) throw new Error("JSON not array");
-
- // All Star Mile rows
  let raceRows=data.filter(o=>{
    let race=o.race||o.Race||"";
-   return race.toString().toLowerCase().includes("all star mile");
+   return race.toLowerCase().includes("all star mile");
  });
 
- // Winners only
- let winners=raceRows.filter(o=>{
-   let p=o.pos||o.Pos||o.position||o.Position||o.placing||o.Placing||o.finish||o.Finish;
-   if(!p) return true;
-   p=p.toString().toLowerCase();
-   return p==="1"||p==="1st"||p==="first"||p==="winner"||p==="win";
- });
+ winners=raceRows.filter(isWinner).map(o=>({
+   year:getYear(o),
+   horse:norm(pick(o,["horse","Horse","winner","Winner"])),
+   jockey:norm(pick(o,["jockey","Jockey"])),
+   trainer:norm(pick(o,["trainer","Trainer"]))
+ }));
 
- status.textContent="Loaded "+winners.length+" All Star Mile winners";
-
- winners.forEach(o=>{
-   tbody.innerHTML+=`
-   <tr>
-     <td>${o.year||o.Year||""}</td>
-     <td>${o.horse||o.Horse||o.winner||o.Winner||""}</td>
-     <td>${o.jockey||o.Jockey||""}</td>
-     <td>${o.trainer||o.Trainer||""}</td>
-     <td>${o.track||o.Track||""}</td>
-     <td>${o.date||o.Date||""}</td>
-   </tr>`;
- });
-
- if(winners.length===0){
-   status.textContent="vic-g1.json loaded, but no All Star Mile winners found";
- }
-
+ buildFilters();
+ render(winners);
+ status.textContent="Loaded "+winners.length+" winners";
 })
 .catch(e=>{
- status.textContent="vic-g1.json NOT LOADING";
+ status.textContent="vic-g1.json not loading";
  console.error(e);
 });
+
+function buildFilters(){
+ let years=[...new Set(winners.map(r=>r.year).filter(Boolean))].sort((a,b)=>b-a);
+ yearSelect.innerHTML="<option value='ALL'>All Years</option>";
+ years.forEach(y=>yearSelect.innerHTML+=`<option>${y}</option>`);
+
+ let names=[];
+ winners.forEach(r=>{
+   if(r.horse)names.push(r.horse);
+   if(r.jockey)names.push(r.jockey);
+   if(r.trainer)names.push(r.trainer);
+ });
+ names=[...new Set(names)].sort();
+ nameSuggestions.innerHTML="";
+ names.forEach(n=>nameSuggestions.innerHTML+=`<option value="${n}">`);
+}
+
+function apply(){
+ let y=yearSelect.value;
+ let q=lower(queryInput.value);
+
+ let rows=winners.filter(r=>{
+   return (y==="ALL"||r.year==y)&&
+   (lower(r.horse)+lower(r.jockey)+lower(r.trainer)).includes(q);
+ });
+
+ render(rows);
+}
+
+function render(rows){
+ tbody.innerHTML="";
+ rows.forEach(r=>{
+   tbody.innerHTML+=`
+   <tr>
+     <td>${r.year||""}</td>
+     <td>${r.horse||""}</td>
+     <td>${r.jockey||""}</td>
+     <td>${r.trainer||""}</td>
+   </tr>`;
+ });
+}
+
+yearSelect.onchange=apply;
+queryInput.oninput=apply;
+clearBtn.onclick=()=>{
+ yearSelect.value="ALL";
+ queryInput.value="";
+ render(winners);
+};
 
 });
 </script>
