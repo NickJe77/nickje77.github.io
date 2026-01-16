@@ -2,85 +2,121 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>All Star Mile Winners | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>All Star Mile – Winners</title>
 
 <link rel="stylesheet" href="./css/racing.css">
 
 <style>
-body{background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif;margin:0;}
-
-.navbar{text-align:center;padding:16px 0;border-bottom:1px solid #ddd;}
-.navbar a{margin:0 18px;text-decoration:none;font-size:18px;font-weight:600;color:#0056d6;}
-
-.header-hero{
-height:260px;
-background:url("./images/all-star-mile-header.jpg") center/cover no-repeat;
-position:relative;
-}
-.header-overlay{position:absolute;inset:0;background:linear-gradient(to right,rgba(0,0,0,.6),rgba(0,0,0,.1));}
-.page-title{position:absolute;bottom:28px;left:40px;font-size:40px;font-weight:bold;color:white;}
-
-.wrap{max-width:1200px;margin:auto;padding:30px;}
-
-.filters{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;}
-.filters select,.filters input,.filters button{
-width:260px;height:44px;
-border:1px solid #ccc;
-border-radius:8px;
-padding:8px;font-size:15px;
+body{
+  margin:0;
+  font-family: Arial, Helvetica, sans-serif;
+  background:#fff;
+  color:#111;
 }
 
-table{width:100%;border-collapse:collapse;font-size:15px;}
-th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;}
-th{background:#f2f4f8;}
-tr:nth-child(even){background:#fafafa;}
-tr:hover{background:#f1f6ff;}
+.wrap{
+  max-width:1400px;
+  margin:0 auto;
+  padding:28px 26px 40px;
+}
 
-.status{margin-bottom:10px;font-size:14px;color:#444;}
+h1{
+  text-align:center;
+  font-size:56px;
+  font-weight:900;
+  margin:10px 0 24px;
+}
+
+/* Filters */
+.filters{
+  display:flex;
+  gap:22px;
+  justify-content:center;
+  flex-wrap:wrap;
+  margin-bottom:28px;
+}
+
+.ctrl{
+  width:420px;
+  height:64px;
+  border:2px solid #d6d6d6;
+  border-radius:10px;
+  padding:0 18px;
+  font-size:22px;
+  box-sizing:border-box;
+  background:#fff;
+}
+
+.ctrl::placeholder{color:#9b9b9b;}
+
+select.ctrl{
+  appearance:auto;
+}
+
+/* Table */
+.table-wrap{overflow-x:auto;}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  min-width:1100px;
+}
+
+thead th{
+  background:#eef6ff;
+  font-size:28px;
+  padding:18px;
+  border-bottom:2px solid #d7e6fb;
+  text-align:left;
+}
+
+tbody td{
+  font-size:30px;
+  padding:18px;
+  border-bottom:2px solid #d7e6fb;
+}
+
+tbody tr:nth-child(even){
+  background:#f7fbff;
+}
+
+.col-finish{width:140px;}
 </style>
 </head>
 
 <body>
-
-<div class="navbar">
- <a href="index.html">Home</a>
- <a href="racing.html">Racing</a>
- <a href="afl.html">AFL</a>
- <a href="football.html">Football</a>
- <a href="cricket.html">Cricket</a>
- <a href="f1.html">F1</a>
-</div>
-
-<div class="header-hero">
- <div class="header-overlay"></div>
- <div class="page-title">ALL STAR MILE – WINNERS</div>
-</div>
-
 <div class="wrap">
 
+<h1>All Star Mile – Winners</h1>
+
 <div class="filters">
-  <select id="yearSelect"></select>
+  <select id="yearSelect" class="ctrl"></select>
 
-  <input id="queryInput" list="nameSuggestions" placeholder="Search horse, jockey or trainer">
-  <datalist id="nameSuggestions"></datalist>
+  <input id="jockeyInput" class="ctrl" placeholder="Jockey" list="jockeyList" autocomplete="off">
+  <datalist id="jockeyList"></datalist>
 
-  <button id="clearBtn">Clear</button>
+  <input id="trainerInput" class="ctrl" placeholder="Trainer" list="trainerList" autocomplete="off">
+  <datalist id="trainerList"></datalist>
+
+  <input id="horseInput" class="ctrl" placeholder="Horse" list="horseList" autocomplete="off">
+  <datalist id="horseList"></datalist>
 </div>
 
-<div id="status" class="status"></div>
-
+<div class="table-wrap">
 <table>
 <thead>
 <tr>
-<th>Year</th>
-<th>Winner</th>
-<th>Jockey</th>
-<th>Trainer</th>
+  <th>Year</th>
+  <th>Horse</th>
+  <th>Jockey</th>
+  <th>Trainer</th>
+  <th class="col-finish">Finish</th>
 </tr>
 </thead>
 <tbody id="tbody"></tbody>
 </table>
+</div>
 
 </div>
 
@@ -88,116 +124,139 @@ tr:hover{background:#f1f6ff;}
 document.addEventListener("DOMContentLoaded",()=>{
 
 const DATA_URL="./data/vic-g1.json";
+const RACE_MATCH="all star mile";
 
 const yearSelect=document.getElementById("yearSelect");
-const queryInput=document.getElementById("queryInput");
-const nameSuggestions=document.getElementById("nameSuggestions");
-const clearBtn=document.getElementById("clearBtn");
-const tbody=document.getElementById("tbody");
-const status=document.getElementById("status");
+const jockeyInput=document.getElementById("jockeyInput");
+const trainerInput=document.getElementById("trainerInput");
+const horseInput=document.getElementById("horseInput");
 
-let winners=[];
+const jockeyList=document.getElementById("jockeyList");
+const trainerList=document.getElementById("trainerList");
+const horseList=document.getElementById("horseList");
+
+const tbody=document.getElementById("tbody");
+
+let rows=[];
 
 const norm=v=>(v??"").toString().trim();
 const lower=v=>norm(v).toLowerCase();
 
-function pick(o,arr){
- for(const k of arr){
-   if(o[k]!=null && norm(o[k])!=="") return o[k];
+function pick(o,keys){
+ for(const k of keys){
+   if(o && o[k]!=null && norm(o[k])!=="") return o[k];
  }
  return "";
 }
 
 function getYear(o){
- let y=pick(o,["year","Year"]);
+ let y=pick(o,["year","Year","YEAR"]);
  if(y) return parseInt(y,10);
- let d=pick(o,["date","Date"]);
+ let d=norm(pick(o,["date","Date","DATE"]));
  let m=d.match(/(19|20)\d{2}/);
  return m?parseInt(m[0],10):"";
 }
 
-function isWinner(o){
- let p=pick(o,["pos","Pos","position","Position","placing","Placing","finish","Finish"]);
- if(!p) return true;
- p=lower(p);
- return p==="1"||p==="1st"||p==="first"||p==="winner"||p==="win";
+function getFinish(o){
+ let p=pick(o,["finish","Finish","pos","Pos","position","Position","placing","Placing"]);
+ return norm(p);
 }
 
-fetch(DATA_URL,{cache:"no-store"})
-.then(r=>r.json())
-.then(data=>{
- let raceRows=data.filter(o=>{
-   let race=o.race||o.Race||"";
-   return race.toLowerCase().includes("all star mile");
- });
-
- winners=raceRows.filter(isWinner).map(o=>({
-   year:getYear(o),
-   horse:norm(pick(o,["horse","Horse","winner","Winner"])),
-   jockey:norm(pick(o,["jockey","Jockey"])),
-   trainer:norm(pick(o,["trainer","Trainer"]))
- }));
-
- buildFilters();
- render(winners);
- status.textContent="Loaded "+winners.length+" winners";
-})
-.catch(e=>{
- status.textContent="vic-g1.json not loading";
- console.error(e);
-});
-
-function buildFilters(){
- let years=[...new Set(winners.map(r=>r.year).filter(Boolean))].sort((a,b)=>b-a);
- yearSelect.innerHTML="<option value='ALL'>All Years</option>";
- years.forEach(y=>yearSelect.innerHTML+=`<option>${y}</option>`);
-
- let names=[];
- winners.forEach(r=>{
-   if(r.horse)names.push(r.horse);
-   if(r.jockey)names.push(r.jockey);
-   if(r.trainer)names.push(r.trainer);
- });
- names=[...new Set(names)].sort();
- nameSuggestions.innerHTML="";
- names.forEach(n=>nameSuggestions.innerHTML+=`<option value="${n}">`);
+function uniqueSorted(arr){
+ return Array.from(new Set(arr.filter(Boolean))).sort((a,b)=>String(a).localeCompare(String(b)));
 }
 
-function apply(){
- let y=yearSelect.value;
- let q=lower(queryInput.value);
-
- let rows=winners.filter(r=>{
-   return (y==="ALL"||r.year==y)&&
-   (lower(r.horse)+lower(r.jockey)+lower(r.trainer)).includes(q);
+function buildYear(){
+ let years=[...new Set(rows.map(r=>r.year).filter(Boolean))].sort((a,b)=>b-a);
+ yearSelect.innerHTML="<option value=''>Year</option>";
+ years.forEach(y=>{
+   let o=document.createElement("option");
+   o.value=y;o.textContent=y;
+   yearSelect.appendChild(o);
  });
-
- render(rows);
 }
 
-function render(rows){
+function buildLists(){
+ jockeyList.innerHTML="";
+ trainerList.innerHTML="";
+ horseList.innerHTML="";
+
+ uniqueSorted(rows.map(r=>r.jockey)).forEach(v=>{
+   let o=document.createElement("option");o.value=v;jockeyList.appendChild(o);
+ });
+ uniqueSorted(rows.map(r=>r.trainer)).forEach(v=>{
+   let o=document.createElement("option");o.value=v;trainerList.appendChild(o);
+ });
+ uniqueSorted(rows.map(r=>r.horse)).forEach(v=>{
+   let o=document.createElement("option");o.value=v;horseList.appendChild(o);
+ });
+}
+
+function render(list){
  tbody.innerHTML="";
- rows.forEach(r=>{
+ list.forEach(r=>{
    tbody.innerHTML+=`
    <tr>
      <td>${r.year||""}</td>
      <td>${r.horse||""}</td>
      <td>${r.jockey||""}</td>
      <td>${r.trainer||""}</td>
+     <td>${r.finish||""}</td>
    </tr>`;
  });
 }
 
-yearSelect.onchange=apply;
-queryInput.oninput=apply;
-clearBtn.onclick=()=>{
- yearSelect.value="ALL";
- queryInput.value="";
- render(winners);
-};
+function apply(){
+ let y=yearSelect.value;
+ let jq=lower(jockeyInput.value);
+ let tq=lower(trainerInput.value);
+ let hq=lower(horseInput.value);
+
+ let out=rows.slice();
+
+ if(y) out=out.filter(r=>r.year==y);
+ if(jq) out=out.filter(r=>lower(r.jockey).includes(jq));
+ if(tq) out=out.filter(r=>lower(r.trainer).includes(tq));
+ if(hq) out=out.filter(r=>lower(r.horse).includes(hq));
+
+ render(out);
+}
+
+fetch(DATA_URL,{cache:"no-store"})
+.then(r=>r.json())
+.then(data=>{
+
+ rows=data
+ .filter(o=>lower(pick(o,["race","Race","RACE"])).includes(RACE_MATCH))
+ .filter(o=>{
+   let f=lower(pick(o,["finish","Finish","pos","Pos","position","Position","placing","Placing"]));
+   return f==="1"||f==="1st"||f==="first"||f==="winner"||f==="win";
+ })
+ .map(o=>({
+   year:getYear(o),
+   horse:norm(pick(o,["horse","Horse","winner","Winner"])),
+   jockey:norm(pick(o,["jockey","Jockey"])),
+   trainer:norm(pick(o,["trainer","Trainer"])),
+   finish:getFinish(o)
+ }))
+ .sort((a,b)=>(b.year||0)-(a.year||0));
+
+ buildYear();
+ buildLists();
+ render(rows);
+
+ yearSelect.onchange=apply;
+ jockeyInput.oninput=apply;
+ trainerInput.oninput=apply;
+ horseInput.oninput=apply;
+
+})
+.catch(e=>{
+ tbody.innerHTML="<tr><td colspan='5'>Data not loading</td></tr>";
+ console.error(e);
+});
 
 });
 </script>
-
 </body>
 </html>
