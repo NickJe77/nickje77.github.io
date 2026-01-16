@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Australian Guineas Winners</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="./css/racing.css">
+
+<style>
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#fff;color:#111;}
+
+.navbar{text-align:center;padding:16px 0;border-bottom:1px solid #ddd;}
+.navbar a{margin:0 18px;text-decoration:none;font-size:18px;font-weight:600;color:#0056d6;}
+
+.container{max-width:1200px;margin:auto;padding:30px 20px;}
+
+h1{text-align:center;font-size:44px;font-weight:800;margin-bottom:30px;}
+
+.filters{
+display:grid;
+grid-template-columns:180px 1fr 1fr 1fr;
+gap:20px;
+margin-bottom:30px;
+}
+
+.filters label{font-weight:700;margin-bottom:6px;display:block;}
+
+.filters select,
+.filters input{
+width:100%;
+height:44px;
+border:1px solid #ccc;
+border-radius:8px;
+padding:0 12px;
+font-size:16px;
+}
+
+table{width:100%;border-collapse:collapse;font-size:16px;}
+thead th{
+background:#eef6ff;
+padding:12px;
+text-align:left;
+border-bottom:2px solid #d7e6fb;
+}
+tbody td{
+padding:12px;
+border-bottom:1px solid #e0ecff;
+}
+tbody tr:nth-child(even){background:#f8fbff;}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+ <a href="index.html">Home</a>
+ <a href="racing.html">Racing</a>
+ <a href="afl.html">AFL</a>
+ <a href="football.html">Football</a>
+ <a href="cricket.html">Cricket</a>
+ <a href="f1.html">F1</a>
+</div>
+
+<div class="container">
+
+<h1>Australian Guineas Winners</h1>
+
+<div class="filters">
+
+<div>
+<label>Year</label>
+<select id="yearSelect"></select>
+</div>
+
+<div>
+<label>Winner</label>
+<input id="horseInput" list="horseList" placeholder="Type horse name">
+<datalist id="horseList"></datalist>
+</div>
+
+<div>
+<label>Jockey</label>
+<input id="jockeyInput" list="jockeyList" placeholder="Type jockey name">
+<datalist id="jockeyList"></datalist>
+</div>
+
+<div>
+<label>Trainer</label>
+<input id="trainerInput" list="trainerList" placeholder="Type trainer name">
+<datalist id="trainerList"></datalist>
+</div>
+
+</div>
+
+<table>
+<thead>
+<tr>
+<th>Year</th>
+<th>Winner</th>
+<th>Jockey</th>
+<th>Trainer</th>
+</tr>
+</thead>
+<tbody id="tbody"></tbody>
+</table>
+
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded",()=>{
+
+const DATA_URL="./data/vic-g1.json";
+const RACE="australian guineas";
+
+const yearSelect=document.getElementById("yearSelect");
+const horseInput=document.getElementById("horseInput");
+const jockeyInput=document.getElementById("jockeyInput");
+const trainerInput=document.getElementById("trainerInput");
+
+const horseList=document.getElementById("horseList");
+const jockeyList=document.getElementById("jockeyList");
+const trainerList=document.getElementById("trainerList");
+
+const tbody=document.getElementById("tbody");
+
+let rows=[];
+
+const norm=v=>(v??"").toString().trim();
+const lower=v=>norm(v).toLowerCase();
+
+function pick(o,keys){
+ for(const k of keys){
+  if(o && o[k]!=null && norm(o[k])!=="") return o[k];
+ }
+ return "";
+}
+
+function getYear(o){
+ let y=pick(o,["year","Year"]);
+ if(y) return parseInt(y,10);
+ let d=pick(o,["date","Date"]);
+ let m=d.match(/(19|20)\d{2}/);
+ return m?parseInt(m[0],10):"";
+}
+
+function unique(arr){
+ return [...new Set(arr.filter(Boolean))].sort();
+}
+
+function render(list){
+ tbody.innerHTML="";
+ list.forEach(r=>{
+  tbody.innerHTML+=`
+  <tr>
+   <td>${r.year}</td>
+   <td>${r.horse}</td>
+   <td>${r.jockey}</td>
+   <td>${r.trainer}</td>
+  </tr>`;
+ });
+}
+
+function apply(){
+ let y=yearSelect.value;
+ let h=lower(horseInput.value);
+ let j=lower(jockeyInput.value);
+ let t=lower(trainerInput.value);
+
+ let out=rows.slice();
+
+ if(y!=="ALL") out=out.filter(r=>r.year==y);
+ if(h) out=out.filter(r=>lower(r.horse).includes(h));
+ if(j) out=out.filter(r=>lower(r.jockey).includes(j));
+ if(t) out=out.filter(r=>lower(r.trainer).includes(t));
+
+ render(out);
+}
+
+fetch(DATA_URL,{cache:"no-store"})
+.then(r=>r.json())
+.then(data=>{
+
+ rows=data
+ .filter(o=>lower(pick(o,["race","Race"])).includes(RACE))
+ .filter(o=>{
+  let p=lower(pick(o,["pos","Pos","finish","Finish","placing","Placing"]));
+  return p==="1"||p==="1st"||p==="winner"||p==="first"||p==="win";
+ })
+ .map(o=>({
+  year:getYear(o),
+  horse:norm(pick(o,["horse","Horse","winner","Winner"])),
+  jockey:norm(pick(o,["jockey","Jockey"])),
+  trainer:norm(pick(o,["trainer","Trainer"]))
+ }))
+ .sort((a,b)=>b.year-a.year);
+
+ yearSelect.innerHTML="<option value='ALL'>All</option>";
+ unique(rows.map(r=>r.year)).forEach(y=>{
+  let o=document.createElement("option");o.value=y;o.textContent=y;
+  yearSelect.appendChild(o);
+ });
+
+ unique(rows.map(r=>r.horse)).forEach(v=>{
+  let o=document.createElement("option");o.value=v;horseList.appendChild(o);
+ });
+ unique(rows.map(r=>r.jockey)).forEach(v=>{
+  let o=document.createElement("option");o.value=v;jockeyList.appendChild(o);
+ });
+ unique(rows.map(r=>r.trainer)).forEach(v=>{
+  let o=document.createElement("option");o.value=v;trainerList.appendChild(o);
+ });
+
+ render(rows);
+
+ yearSelect.onchange=apply;
+ horseInput.oninput=apply;
+ jockeyInput.oninput=apply;
+ trainerInput.oninput=apply;
+
+})
+.catch(e=>{
+ tbody.innerHTML="<tr><td colspan='4'>Data not loading</td></tr>";
+ console.error(e);
+});
+
+});
+</script>
+
+</body>
+</html>
