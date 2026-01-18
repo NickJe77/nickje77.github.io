@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Melbourne Cup Jockeys & Trainers</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<link rel="stylesheet" href="./css/racing.css">
+
+<style>
+body{font-family:Arial;margin:0;background:white;}
+.navbar{text-align:center;padding:16px 0;border-bottom:1px solid #ddd;}
+.navbar a{margin:0 18px;text-decoration:none;font-size:18px;font-weight:600;color:#0056d6;}
+
+.filter-bar{max-width:900px;margin:20px auto;display:grid;grid-template-columns:repeat(4,1fr);gap:16px;padding:0 20px;}
+input,select{height:36px;padding:6px 10px;border-radius:6px;border:1px solid #ccc;width:100%;box-sizing:border-box;}
+
+.suggestions{position:absolute;background:white;border:1px solid #ccc;max-height:160px;overflow:auto;z-index:9999;width:100%;}
+.suggestions div{padding:6px 10px;cursor:pointer;}
+.suggestions div:hover{background:#eaf3ff;}
+
+table{max-width:900px;margin:auto;width:100%;border-collapse:collapse;}
+th{background:#f3f8ff;padding:10px;}
+td{padding:9px;border-bottom:1px solid #e1ecfa;}
+tr:nth-child(even){background:#f7fbff;}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="racing.html">Racing</a>
+<a href="afl.html">AFL</a>
+<a href="football.html">Football</a>
+<a href="cricket.html">Cricket</a>
+<a href="f1.html">F1</a>
+</div>
+
+<h1 style="text-align:center">Melbourne Cup – Jockeys & Trainers</h1>
+
+<div class="filter-bar">
+
+<select id="yearFilter"><option value="">Year</option></select>
+
+<div>
+<input id="jockeyFilter" placeholder="Jockey">
+<div class="suggestions" id="jockeySug"></div>
+</div>
+
+<div>
+<input id="trainerFilter" placeholder="Trainer">
+<div class="suggestions" id="trainerSug"></div>
+</div>
+
+<div>
+<input id="horseFilter" placeholder="Horse">
+<div class="suggestions" id="horseSug"></div>
+</div>
+
+</div>
+
+<table>
+<thead>
+<tr>
+<th>Year</th>
+<th>Horse</th>
+<th>Jockey</th>
+<th>Trainer</th>
+<th>Finish</th>
+</tr>
+</thead>
+<tbody id="body"></tbody>
+</table>
+
+<script>
+const safe=v=>(v||"").toString().toLowerCase().trim();
+let all=[];
+
+fetch("./data/vic-g1.json",{cache:"no-store"})
+.then(r=>r.json())
+.then(d=>{
+all=d.filter(r=>safe(r.race).includes("melbourne cup"))
+.sort((a,b)=>b.year.toString().localeCompare(a.year.toString()));
+
+[...new Set(all.map(r=>r.year))].forEach(y=>yearFilter.innerHTML+=`<option>${y}</option>`);
+
+setup(jockeyFilter,jockeySug,[...new Set(all.map(r=>r.jockey))]);
+setup(trainerFilter,trainerSug,[...new Set(all.map(r=>r.trainer))]);
+setup(horseFilter,horseSug,[...new Set(all.map(r=>r.horse))]);
+
+render(all);
+});
+
+function render(rows){
+body.innerHTML=rows.map(r=>`
+<tr>
+<td>${r.year}</td>
+<td>${r.horse}</td>
+<td>${r.jockey}</td>
+<td>${r.trainer}</td>
+<td>${r.finish}</td>
+</tr>`).join("");
+}
+
+function apply(){
+render(all.filter(r=>
+(!yearFilter.value||r.year==yearFilter.value)&&
+(!jockeyFilter.value||safe(r.jockey).includes(safe(jockeyFilter.value)))&&
+(!trainerFilter.value||safe(r.trainer).includes(safe(trainerFilter.value)))&&
+(!horseFilter.value||safe(r.horse).includes(safe(horseFilter.value)))
+));
+}
+
+yearFilter.onchange=jockeyFilter.oninput=trainerFilter.oninput=horseFilter.oninput=apply;
+
+function setup(input,box,list){
+input.oninput=()=>{
+ const v=safe(input.value);
+ box.innerHTML="";
+ if(!v)return;
+ list.filter(x=>safe(x).includes(v)).slice(0,20).forEach(x=>{
+  const d=document.createElement("div");
+  d.textContent=x;
+  d.onclick=()=>{input.value=x;box.innerHTML="";apply();}
+  box.appendChild(d);
+ });
+};
+document.addEventListener("click",e=>{
+ if(!box.contains(e.target)&&e.target!==input) box.innerHTML="";
+});
+}
+</script>
+
+</body>
+</html>
