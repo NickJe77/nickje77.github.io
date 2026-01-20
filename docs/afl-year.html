@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AFL Year by Year | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="style.css">
+
+<style>
+body{
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.year-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
+  gap:12px;
+  padding:20px;
+}
+
+.year-tile{
+  background:#111;
+  color:#fff;
+  padding:18px 10px;
+  text-align:center;
+  font-size:20px;
+  font-weight:700;
+  border-radius:8px;
+  cursor:pointer;
+  transition:.2s;
+}
+
+.year-tile:hover{
+  background:#333;
+}
+
+.year-tile.active{
+  background:#0056d6;
+}
+
+#rounds,#games,#players{
+  padding:20px;
+}
+
+#rounds button{
+  margin:4px 6px 6px 0;
+  padding:6px 10px;
+  border:1px solid #ccc;
+  background:#fff;
+  cursor:pointer;
+}
+
+#rounds button:hover{
+  background:#f0f0f0;
+}
+
+.game{
+  padding:8px;
+  border-bottom:1px solid #ddd;
+  cursor:pointer;
+}
+
+.game:hover{background:#f5f5f5;}
+
+.player-table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:10px;
+}
+
+.player-table th,.player-table td{
+  border:1px solid #ddd;
+  padding:6px;
+  text-align:center;
+}
+
+.player-table th{background:#f0f0f0;}
+</style>
+</head>
+
+<body>
+
+<nav class="home-nav">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="f1.html">F1</a>
+</nav>
+
+<h1 style="padding:20px 20px 0;">AFL Year by Year</h1>
+
+<!-- YEAR TILES -->
+<div class="year-grid" id="years"></div>
+
+<div id="rounds"></div>
+<div id="games"></div>
+<div id="players"></div>
+
+<script>
+let data=[];
+
+const yearsBox=document.getElementById("years");
+const roundsBox=document.getElementById("rounds");
+const gamesBox=document.getElementById("games");
+const playersBox=document.getElementById("players");
+
+fetch("data/afl.json",{cache:"no-store"})
+.then(r=>r.json())
+.then(d=>{
+  data=d;
+  buildYears();
+});
+
+function buildYears(){
+ const years=[...new Set(data.map(m=>m.year))].sort((a,b)=>a-b);
+
+ years.forEach(y=>{
+  const t=document.createElement("div");
+  t.className="year-tile";
+  t.textContent=y;
+  t.onclick=()=>loadYear(y,t);
+  yearsBox.appendChild(t);
+ });
+
+ // auto load latest year
+ const last=yearsBox.lastChild;
+ if(last) last.click();
+}
+
+function loadYear(year,tile){
+ document.querySelectorAll(".year-tile").forEach(x=>x.classList.remove("active"));
+ tile.classList.add("active");
+
+ roundsBox.innerHTML="";
+ gamesBox.innerHTML="";
+ playersBox.innerHTML="";
+
+ const rounds=[...new Set(data.filter(m=>m.year==year).map(m=>m.round))];
+
+ rounds.forEach(r=>{
+  const b=document.createElement("button");
+  b.textContent="Round "+r;
+  b.onclick=()=>loadRound(year,r);
+  roundsBox.appendChild(b);
+ });
+}
+
+function loadRound(year,round){
+ gamesBox.innerHTML="";
+ playersBox.innerHTML="";
+
+ data.filter(m=>m.year==year&&m.round==round).forEach(m=>{
+  const d=document.createElement("div");
+  d.className="game";
+  d.textContent=`${m.home} ${m.home_score} def ${m.away} ${m.away_score} – ${m.venue}`;
+  d.onclick=()=>loadPlayers(m);
+  gamesBox.appendChild(d);
+ });
+}
+
+function loadPlayers(match){
+ playersBox.innerHTML=`
+ <h3>${match.home} vs ${match.away}</h3>
+ <table class="player-table">
+ <tr><th>Player</th><th>Team</th><th>G</th><th>D</th><th>M</th><th>T</th></tr>
+ ${match.players.map(p=>`
+ <tr>
+ <td>${p.player}</td>
+ <td>${p.team}</td>
+ <td>${p.goals}</td>
+ <td>${p.disposals}</td>
+ <td>${p.marks}</td>
+ <td>${p.tackles}</td>
+ </tr>`).join("")}
+ </table>`;
+}
+</script>
+
+</body>
+</html>
