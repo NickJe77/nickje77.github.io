@@ -6,188 +6,203 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="afl.css">
 
 <style>
-body{font-family:Arial,Helvetica,sans-serif;background:white;margin:0;color:#111;}
-
-h1{text-align:center;margin:20px 0;}
-
-.container{max-width:900px;margin:auto;padding:20px;}
-
-input,select{
- width:100%;
- height:38px;
- padding:6px 10px;
- border-radius:6px;
- border:1px solid #ccc;
- margin-bottom:15px;
+body{
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
-.stats-box{
- background:#f7fbff;
- padding:20px;
- border-radius:10px;
- box-shadow:0 3px 8px rgba(0,0,0,.08);
- margin-bottom:20px;
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px;
 }
 
-.stats-box table{
- width:100%;
- border-collapse:collapse;
+.search-box{
+  max-width:420px;
+  position:relative;
+  margin-bottom:30px;
 }
 
-.stats-box th{
- background:#eaf3ff;
- padding:10px;
- text-align:left;
-}
-
-.stats-box td{
- padding:10px;
- border-bottom:1px solid #ddd;
+.search-box input{
+  width:100%;
+  padding:12px;
+  font-size:16px;
+  border:1px solid #ccc;
+  border-radius:8px;
 }
 
 .suggestions{
- border:1px solid #ccc;
- background:white;
- max-height:160px;
- overflow:auto;
- position:absolute;
- width:100%;
- z-index:999;
+  position:absolute;
+  top:100%;
+  left:0;
+  right:0;
+  background:#fff;
+  border:1px solid #ccc;
+  border-top:none;
+  border-radius:0 0 8px 8px;
+  max-height:240px;
+  overflow-y:auto;
+  z-index:10;
 }
 
 .suggestions div{
- padding:6px 10px;
- cursor:pointer;
+  padding:10px;
+  cursor:pointer;
 }
 
-.suggestions div:hover{background:#eaf3ff;}
+.suggestions div:hover{
+  background:#f2f6ff;
+}
+
+.player-summary,.section{
+  border:1px solid #ddd;
+  border-radius:10px;
+  padding:20px;
+  margin-bottom:30px;
+}
+
+.placeholder{
+  color:#666;
+  font-style:italic;
+}
 </style>
 </head>
 
 <body>
 
-<h1>AFL Player Performance</h1>
-
-<div class="container">
-
-<div style="position:relative;">
- <input id="playerInput" placeholder="Type player name">
- <div id="playerSug" class="suggestions"></div>
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="f1.html">F1</a>
 </div>
 
-<select id="opponentSelect">
- <option value="">Select opponent team</option>
-</select>
+<div class="page-wrap">
 
-<div id="careerStats" class="stats-box"></div>
-<div id="opponentStats" class="stats-box"></div>
+<h1>AFL Player Performance</h1>
+
+<p>
+Search any AFL player to view career totals, season breakdowns, club history and recent form.
+</p>
+
+<div class="search-box">
+  <input id="playerSearch" type="text" placeholder="Search player name...">
+  <div id="suggestions" class="suggestions" style="display:none;"></div>
+</div>
+
+<div id="playerArea">
+
+  <div class="player-summary">
+    <h2 id="playerName">Player Profile</h2>
+    <div class="placeholder" id="profileText">
+      Player profile will appear here once a player is selected.
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Career Totals</h3>
+    <div class="placeholder" id="careerText">Career statistics will appear here.</div>
+  </div>
+
+  <div class="section">
+    <h3>Season by Season</h3>
+    <div class="placeholder" id="seasonText">Season breakdown will appear here.</div>
+  </div>
+
+  <div class="section">
+    <h3>Last 10 Games</h3>
+    <div class="placeholder" id="recentText">Recent form will appear here.</div>
+  </div>
+
+</div>
 
 </div>
 
 <script>
-let data=[],players=[];
+/* TEMP PLAYER LIST — replace with JSON later */
+const players=[
+  "Patrick Dangerfield",
+  "Dustin Martin",
+  "Scott Pendlebury",
+  "Marcus Bontempelli",
+  "Christian Petracca",
+  "Nat Fyfe",
+  "Tom Hawkins",
+  "Jeremy Cameron",
+  "Nick Daicos",
+  "Gary Ablett",
+  "Buddy Franklin",
+  "Travis Boak",
+  "Sam Walsh",
+  "Clayton Oliver",
+  "Max Gawn",
+  "Rory Sloane",
+  "Lance Franklin",
+  "Joel Selwood",
+  "Toby Greene",
+  "Andrew Brayshaw"
+];
 
-fetch("data/afl.json",{cache:"no-store"})
-.then(r=>r.json())
-.then(d=>{
- data=d;
- players=data.flatMap(m=>m.players.map(p=>p.player));
- players=[...new Set(players)].sort();
+const input=document.getElementById("playerSearch");
+const box=document.getElementById("suggestions");
+
+input.addEventListener("input",()=>{
+  const q=input.value.toLowerCase();
+  box.innerHTML="";
+
+  if(q.length<2){
+    box.style.display="none";
+    return;
+  }
+
+  const matches=players.filter(p=>p.toLowerCase().includes(q));
+
+  if(!matches.length){
+    box.style.display="none";
+    return;
+  }
+
+  matches.forEach(p=>{
+    const d=document.createElement("div");
+    d.textContent=p;
+    d.onclick=()=>selectPlayer(p);
+    box.appendChild(d);
+  });
+
+  box.style.display="block";
 });
 
-const playerInput=document.getElementById("playerInput");
-const playerSug=document.getElementById("playerSug");
-const opponentSelect=document.getElementById("opponentSelect");
-const careerStats=document.getElementById("careerStats");
-const opponentStats=document.getElementById("opponentStats");
-
-function safe(v){return (v||"").toLowerCase();}
-
-playerInput.oninput=()=>{
- const v=safe(playerInput.value);
- playerSug.innerHTML="";
- if(!v) return;
- players.filter(p=>safe(p).includes(v)).slice(0,20).forEach(p=>{
-  const d=document.createElement("div");
-  d.textContent=p;
-  d.onclick=()=>selectPlayer(p);
-  playerSug.appendChild(d);
- });
-};
-
 function selectPlayer(name){
- playerInput.value=name;
- playerSug.innerHTML="";
- buildCareer(name);
- buildOpponentList(name);
+  input.value=name;
+  box.style.display="none";
+
+  document.getElementById("playerName").innerText=name;
+  document.getElementById("profileText").innerText="Player profile data will appear here once statistics are connected.";
+  document.getElementById("careerText").innerText="Career totals will appear here for "+name+".";
+  document.getElementById("seasonText").innerText="Season-by-season performance will appear here.";
+  document.getElementById("recentText").innerText="Last 10 games performance will appear here.";
 }
 
-function buildCareer(name){
- const rows=data.flatMap(m=>m.players.filter(p=>p.player==name));
-
- const goals=rows.map(r=>r.goals);
- const disposals=rows.map(r=>r.disposals);
-
- const bestGoals=Math.max(...goals);
- const bestDisp=Math.max(...disposals);
-
- const avgGoals=(goals.reduce((a,b)=>a+b,0)/goals.length).toFixed(2);
- const avgDisp=(disposals.reduce((a,b)=>a+b,0)/disposals.length).toFixed(2);
-
- careerStats.innerHTML=`
- <h3>Career Performance</h3>
- <table>
- <tr><th>Career High Goals</th><td>${bestGoals}</td></tr>
- <tr><th>Career High Disposals</th><td>${bestDisp}</td></tr>
- <tr><th>Average Goals</th><td>${avgGoals}</td></tr>
- <tr><th>Average Disposals</th><td>${avgDisp}</td></tr>
- <tr><th>Games Played</th><td>${rows.length}</td></tr>
- </table>`;
-}
-
-function buildOpponentList(name){
- const teams=[...new Set(data.flatMap(m=>
-  m.players.filter(p=>p.player==name).map(p=>p.team==m.home?m.away:m.home)
- ))].sort();
-
- opponentSelect.innerHTML="<option value=''>Select opponent team</option>";
- teams.forEach(t=>opponentSelect.innerHTML+=`<option>${t}</option>`);
-
- opponentSelect.onchange=()=>buildOpponentStats(name,opponentSelect.value);
-}
-
-function buildOpponentStats(name,team){
- if(!team){opponentStats.innerHTML="";return;}
-
- const rows=data.flatMap(m=>{
-  if((m.home==team||m.away==team)){
-   return m.players.filter(p=>p.player==name);
+/* Hide suggestions if clicking away */
+document.addEventListener("click",e=>{
+  if(!e.target.closest(".search-box")){
+    box.style.display="none";
   }
-  return [];
- });
-
- const goals=rows.map(r=>r.goals);
- const disposals=rows.map(r=>r.disposals);
-
- const bestGoals=Math.max(...goals);
- const bestDisp=Math.max(...disposals);
-
- const avgGoals=(goals.reduce((a,b)=>a+b,0)/goals.length).toFixed(2);
- const avgDisp=(disposals.reduce((a,b)=>a+b,0)/disposals.length).toFixed(2);
-
- opponentStats.innerHTML=`
- <h3>Performance vs ${team}</h3>
- <table>
- <tr><th>Best Goals</th><td>${bestGoals}</td></tr>
- <tr><th>Best Disposals</th><td>${bestDisp}</td></tr>
- <tr><th>Average Goals</th><td>${avgGoals}</td></tr>
- <tr><th>Average Disposals</th><td>${avgDisp}</td></tr>
- <tr><th>Games Played</th><td>${rows.length}</td></tr>
- </table>`;
-}
+});
 </script>
 
 </body>
