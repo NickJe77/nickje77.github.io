@@ -50,11 +50,12 @@ h1{text-align:center;margin-bottom:30px;}
 <script>
 const COUNTRY_PAGE="world-cup-country.html";
 
-let matchesByYear={};
+let matchesByYear={}, rawRows=[];
 
 fetch("data/world-cup.json",{cache:"no-store"})
 .then(r=>r.json())
 .then(data=>{
+ rawRows=data;
  normalise(data);
  buildYears();
 });
@@ -118,14 +119,16 @@ function buildSummary(year,out){
  let runnerUp="Unknown";
  let goals={};
 
- const yearMatches=matchesByYear[year];
+ const yearRows = rawRows.filter(r=>String(r.Year)===String(year));
+ const yearMatches = matchesByYear[year];
 
- // Host
- yearMatches.forEach(m=>{
-  if(m.Host) host=m.Host;
+ // HOST
+ yearRows.forEach(r=>{
+  if(r.Host) host=r.Host;
+  if(r["Host Country"]) host=r["Host Country"];
  });
 
- // Final match
+ // WINNER / RUNNER-UP (from final match score)
  const finals=yearMatches.filter(m=>isGrandFinalRound(m.round));
  const gf=finals.length?finals[finals.length-1]:null;
 
@@ -142,10 +145,10 @@ function buildSummary(year,out){
   }
  }
 
- // Goal scorers
- yearMatches.forEach(m=>{
-  if(m.Scorers){
-   const s=m.Scorers.split("(")[0].trim();
+ // TOP SCORERS (from raw scorer rows)
+ yearRows.forEach(r=>{
+  if(r.Scorers){
+   const s=r.Scorers.split("(")[0].trim();
    if(s) goals[s]=(goals[s]||0)+1;
   }
  });
