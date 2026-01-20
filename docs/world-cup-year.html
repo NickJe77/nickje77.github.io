@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <title>Football World Cup – By Year | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <link rel="stylesheet" href="style.css">
 
 <style>
@@ -96,16 +95,6 @@ function loadYear(year,btn){
  buildMatches(year,out);
 }
 
-/* ---------- SCORE PARSER (fallback only) ---------- */
-function parseFinalResult(score){
- if(!score) return null;
- const pairs=[...String(score).matchAll(/(\d+)\s*[-–]\s*(\d+)/g)]
-  .map(m=>[parseInt(m[1]),parseInt(m[2])]);
- if(!pairs.length) return null;
- if(pairs[0][0]!==pairs[0][1]) return pairs[0];
- return pairs[pairs.length-1];
-}
-
 /* ---------- SUMMARY ---------- */
 function buildSummary(year,out){
 
@@ -115,7 +104,6 @@ function buildSummary(year,out){
  let goals={};
 
  const yearRows = rawRows.filter(r=>String(r.Year)===String(year));
- const yearMatches = matchesByYear[year];
 
  // HOST
  yearRows.forEach(r=>{
@@ -123,38 +111,23 @@ function buildSummary(year,out){
   if(r["Host Country"]) host=r["Host Country"];
  });
 
- // PRIMARY FINAL ROW FROM RAW DATA
- const finalsRaw = yearRows.filter(r=>String(r.Round||"").toLowerCase()==="final");
- const gfRaw = finalsRaw.length ? finalsRaw[finalsRaw.length-1] : null;
+ // FIND REAL FINAL ROW (not empty one)
+ const finals = yearRows.filter(r =>
+   String(r.Round||"").toLowerCase()==="final" &&
+   (r["Winnning Team"] || r.Team)
+ );
 
- if(gfRaw){
-  const w = gfRaw["Winnning Team"];
-  const t1 = gfRaw.Team;
-  const t2 = gfRaw.Team__1;
+ const gf = finals.length ? finals[0] : null;
+
+ if(gf){
+  const w = gf["Winnning Team"];
+  const t1 = gf.Team;
+  const t2 = gf.Team__1;
 
   if(w){
-   winner = w;
+   winner=w;
    if(t1 && t2){
-    runnerUp = (t1===w)?t2:t1;
-   }
-  }
- }
-
- // FALLBACK: derive from score if winner still unknown
- if(winner==="Unknown"){
-  const finals = yearMatches.filter(m=>/final/i.test(m.round||""));
-  const gf = finals.length ? finals[finals.length-1] : yearMatches[yearMatches.length-1];
-
-  if(gf){
-   const sc=parseFinalResult(gf.score);
-   if(sc){
-    if(sc[0]>sc[1]){
-     winner=gf.team1;
-     runnerUp=gf.team2;
-    }else if(sc[1]>sc[0]){
-     winner=gf.team2;
-     runnerUp=gf.team1;
-    }
+    runnerUp=(t1===w)?t2:t1;
    }
   }
  }
