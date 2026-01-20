@@ -96,31 +96,19 @@ function loadYear(year,btn){
  buildMatches(year,out);
 }
 
-/* ---------- HELPERS ---------- */
-
-function isGrandFinalRound(round){
- const r=String(round||"").toLowerCase();
- if(!/\bfinal\b/.test(r)) return false;
- if(/semi|quarter|third|bronze|3rd|playoff|play-off|placement/.test(r)) return false;
- return true;
-}
+/* ---------- SCORE PARSER ---------- */
 
 function parseFinalResult(score){
  if(!score) return null;
- const s=String(score);
-
- // grab all score pairs in the string
- const pairs=[...s.matchAll(/(\d+)\s*[-–]\s*(\d+)/g)].map(m=>[parseInt(m[1]),parseInt(m[2])]);
+ const pairs=[...String(score).matchAll(/(\d+)\s*[-–]\s*(\d+)/g)]
+  .map(m=>[parseInt(m[1]),parseInt(m[2])]);
 
  if(!pairs.length) return null;
 
- // first pair = normal score
- const main=pairs[0];
+ // first = normal score
+ if(pairs[0][0]!==pairs[0][1]) return pairs[0];
 
- // if not draw, use it
- if(main[0]!==main[1]) return main;
-
- // otherwise use last pair (penalties)
+ // draw → use last (penalties)
  return pairs[pairs.length-1];
 }
 
@@ -142,10 +130,12 @@ function buildSummary(year,out){
   if(r["Host Country"]) host=r["Host Country"];
  });
 
- // FINAL RESULT
- const finals=yearMatches.filter(m=>isGrandFinalRound(m.round));
- const gf=finals.length?finals[finals.length-1]:null;
+ // FIND FINAL MATCH
+ let finals=yearMatches.filter(m=>/final/i.test(m.round||"") && !/third|bronze|3rd|playoff|placement/i.test(m.round||""));
 
+ let gf = finals.length ? finals[finals.length-1] : yearMatches[yearMatches.length-1];
+
+ // WINNER / RUNNER-UP
  if(gf){
   const sc=parseFinalResult(gf.score);
   if(sc){
