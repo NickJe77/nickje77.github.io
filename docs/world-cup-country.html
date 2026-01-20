@@ -17,54 +17,20 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
 .header .flag{font-size:64px;}
 .header h1{margin:0;}
 
-.stats{
-display:grid;
-grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-gap:14px;margin-bottom:25px;
-}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:25px;}
+.stat-box{border:1px solid #ddd;border-radius:10px;padding:14px;background:#fafafa;text-align:center;font-weight:700;}
 
-.stat-box{
-border:1px solid #ddd;border-radius:10px;
-padding:14px;background:#fafafa;
-text-align:center;font-weight:700;
-}
+.leaders{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:40px;}
+.leader-box{border:1px solid #ddd;border-radius:10px;padding:14px;background:#f9fbff;font-weight:700;}
+.leader-box h3{text-align:center;margin:0 0 10px 0;}
 
-.leaders{
-display:grid;
-grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
-gap:14px;
-margin-bottom:40px;
-}
-
-.leader-box{
-border:1px solid #ddd;border-radius:10px;
-padding:14px;background:#f9fbff;
-font-weight:700;
-}
-
-.leader-box h3{
-margin:0 0 10px 0;
-font-size:16px;
-text-align:center;
-}
-
-.leader-line{
-font-size:14px;
-font-weight:600;
-padding:4px 0;
-border-bottom:1px solid #eee;
-}
-
+.leader-line{font-size:14px;font-weight:600;padding:4px 0;border-bottom:1px solid #eee;}
 .leader-line:last-child{border-bottom:none;}
 
 .year-section{margin-bottom:40px;}
 .year-section h2{border-bottom:2px solid #0056d6;padding-bottom:6px;}
 
-.match{
-border:1px solid #ddd;border-radius:10px;
-padding:14px;margin-top:12px;background:white;
-}
-
+.match{border:1px solid #ddd;border-radius:10px;padding:14px;margin-top:12px;background:white;}
 .match h3{margin:0 0 6px 0;}
 .small{font-size:13px;color:#555;}
 .error{color:#900;font-weight:700;}
@@ -95,13 +61,54 @@ const countryCodes={
 "Japan":"JP","South Korea":"KR","Korea Republic":"KR","Australia":"AU"
 };
 
-function flagEmoji(code){
- if(!code) return "";
- return code.toUpperCase().replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt()));
+// Alpha-3 → Alpha-2 mapping for brackets like (BRA)
+const alpha3to2={
+"ARG":"AR","BRA":"BR","GER":"DE","DEU":"DE","ESP":"ES","FRA":"FR","ITA":"IT",
+"NED":"NL","URU":"UY","POR":"PT","BEL":"BE","CRO":"HR","MEX":"MX","USA":"US",
+"JPN":"JP","KOR":"KR","AUS":"AU","ENG":"GB","SUI":"CH","SWE":"SE","NOR":"NO",
+"DEN":"DK","POL":"PL","CZE":"CZ","RUS":"RU","UKR":"UA","TUR":"TR","GRE":"GR",
+"COL":"CO","CHI":"CL","PER":"PE","PAR":"PY","ECU":"EC","CRC":"CR","HON":"HN",
+"PAN":"PA","JAM":"JM","TRI":"TT","CAN":"CA","MOR":"MA","CMR":"CM","NGA":"NG",
+"GHA":"GH","SEN":"SN","TUN":"TN","ALG":"DZ","IRN":"IR","IRQ":"IQ","KSA":"SA",
+"QAT":"QA","CHN":"CN"
+};
+
+function normalizeCode(c){
+ if(!c) return "";
+ c=c.toUpperCase();
+ if(c.length===2) return c;
+ return alpha3to2[c]||c;
 }
 
-function cleanName(name){
- return name ? name.replace(/\s*\(.*?\)/g,"").trim() : "";
+function parseNameAndCode(str){
+ if(!str) return null;
+ const m=str.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+ if(m){
+  return {name:m[1].trim(),code:normalizeCode(m[2])};
+ }
+ return {name:str.trim(),code:null};
+}
+
+function flagEmoji(code){
+ return code?code.replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt())):"";
+}
+
+function parseScore(score){
+ if(!score) return null;
+ let clean=String(score).split("(")[0].trim();
+ let p=clean.split(/[-–]/);
+ if(p.length!==2) return null;
+ return [parseInt(p[0]),parseInt(p[1])];
+}
+
+function isGrandFinalRound(r){
+ r=String(r).toLowerCase();
+ return /\bfinal\b/.test(r)&&!/semi|quarter|third|bronze/.test(r);
+}
+
+function getGrandFinalMatch(list){
+ const f=list.filter(m=>isGrandFinalRound(m.round));
+ return f.length?f[f.length-1]:null;
 }
 
 if(!team){
@@ -110,55 +117,22 @@ if(!team){
  loadCountry(team);
 }
 
-function parseScore(score){
- if(!score) return null;
- let clean=String(score).split("(")[0].trim();
- let parts=clean.split(/[-–]/);
- if(parts.length!==2) return null;
- let a=parseInt(parts[0],10), b=parseInt(parts[1],10);
- if(Number.isNaN(a)||Number.isNaN(b)) return null;
- return [a,b];
-}
-
-function isGrandFinalRound(round){
- if(!round) return false;
- const r=String(round).toLowerCase();
- if(!/\bfinal\b/.test(r)) return false;
- if(/\bsemi|\bquarter|\bthird|\bbronze/.test(r)) return false;
- return true;
-}
-
-function getGrandFinalMatch(list){
- const c=list.filter(m=>isGrandFinalRound(m.round));
- if(!c.length) return null;
- return c[c.length-1];
-}
-
 function loadCountry(team){
 
  fetch("data/world-cup.json",{cache:"no-store"})
  .then(r=>r.json())
  .then(rows=>{
-  let matchesByYear={}, current=null;
+  let data={},cur=null;
 
   rows.forEach(r=>{
    if(r.Team){
-    current={
-     year:r.Year,
-     round:r.Round,
-     team1:r.Team,
-     team2:r.Team__1,
-     score:r["Final Score"],
-     winner:r["Winnning Team"],
-     events:[]
-    };
-
-    if(!matchesByYear[r.Year]) matchesByYear[r.Year]=[];
-    matchesByYear[r.Year].push(current);
+    cur={year:r.Year,round:r.Round,team1:r.Team,team2:r.Team__1,
+         score:r["Final Score"],winner:r["Winnning Team"],events:[]};
+    if(!data[r.Year]) data[r.Year]=[];
+    data[r.Year].push(cur);
    }
-
-   if(current && (r.Scorers||r["Yellow Cards"]||r["Red Cards"])){
-    current.events.push({
+   if(cur&&(r.Scorers||r["Yellow Cards"]||r["Red Cards"])){
+    cur.events.push({
      scorer:r.Scorers||"",
      yellow:r["Yellow Cards"]||"",
      red:r["Red Cards"]||""
@@ -166,76 +140,63 @@ function loadCountry(team){
    }
   });
 
-  render(team,matchesByYear);
+  render(team,data);
  });
 }
 
 function render(team,data){
 
  let appearances=0,titles=0,finals=0,matchesPlayed=0,goalsScored=0;
- let goalLeaders={},yellowLeaders={},redLeaders={};
+ let g={},y={},r={};
 
- let years=Object.keys(data).sort();
+ const myCode=countryCodes[team];
 
- years.forEach(y=>{
-  const all=data[y];
+ Object.keys(data).sort().forEach(year=>{
+  const all=data[year];
   const gf=getGrandFinalMatch(all);
-
   if(gf){
    if(gf.team1===team||gf.team2===team) finals++;
    if(gf.winner===team) titles++;
   }
 
   const ym=all.filter(m=>m.team1===team||m.team2===team);
+  if(!ym.length) return;
 
-  if(ym.length){
-   appearances++;
+  appearances++;
 
-   ym.forEach(m=>{
-    matchesPlayed++;
+  ym.forEach(m=>{
+   matchesPlayed++;
 
-    const ps=parseScore(m.score);
-    if(ps){
-     if(m.team1===team) goalsScored+=ps[0];
-     if(m.team2===team) goalsScored+=ps[1];
-    }
+   const ps=parseScore(m.score);
+   if(ps){
+    if(m.team1===team) goalsScored+=ps[0];
+    if(m.team2===team) goalsScored+=ps[1];
+   }
 
-    m.events.forEach(e=>{
-     if(e.scorer){
-      let n=cleanName(e.scorer);
-      goalLeaders[n]=(goalLeaders[n]||0)+1;
-     }
-     if(e.yellow){
-      let n=cleanName(e.yellow);
-      yellowLeaders[n]=(yellowLeaders[n]||0)+1;
-     }
-     if(e.red){
-      let n=cleanName(e.red);
-      redLeaders[n]=(redLeaders[n]||0)+1;
+   m.events.forEach(e=>{
+    ["scorer","yellow","red"].forEach(t=>{
+     if(e[t]){
+      const p=parseNameAndCode(e[t]);
+      if(p&&p.name){
+       if(!p.code || p.code===myCode){
+        const box=t==="scorer"?g:t==="yellow"?y:r;
+        box[p.name]=(box[p.name]||0)+1;
+       }
+      }
      }
     });
    });
-  }
+  });
  });
 
- function topFive(obj){
-  return Object.entries(obj)
-   .sort((a,b)=>b[1]-a[1])
-   .slice(0,5);
- }
+ const top=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,5);
 
- const tg=topFive(goalLeaders);
- const ty=topFive(yellowLeaders);
- const tr=topFive(redLeaders);
+ const tg=top(g), ty=top(y), tr=top(r);
 
- const code=countryCodes[team];
- const flag=flagEmoji(code);
+ const flag=flagEmoji(myCode);
 
  let html=`
- <div class="header">
-  <div class="flag">${flag}</div>
-  <h1>${team}</h1>
- </div>
+ <div class="header"><div class="flag">${flag}</div><h1>${team}</h1></div>
 
  <div class="stats">
   <div class="stat-box">Appearances<br>${appearances}</div>
@@ -246,39 +207,25 @@ function render(team,data){
  </div>
 
  <div class="leaders">
-  <div class="leader-box">
-   <h3>Top 5 Goals</h3>
-   ${tg.map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}
-  </div>
-
-  <div class="leader-box">
-   <h3>Top 5 Yellow Cards</h3>
-   ${ty.map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}
-  </div>
-
-  <div class="leader-box">
-   <h3>Top 5 Red Cards</h3>
-   ${tr.map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}
-  </div>
+  <div class="leader-box"><h3>Top 5 Goals</h3>${tg.map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
+  <div class="leader-box"><h3>Top 5 Yellow Cards</h3>${ty.map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
+  <div class="leader-box"><h3>Top 5 Red Cards</h3>${tr.map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
  </div>
 `;
 
- years.forEach(y=>{
-  const ym=data[y].filter(m=>m.team1===team||m.team2===team);
+ Object.keys(data).sort().forEach(year=>{
+  const ym=data[year].filter(m=>m.team1===team||m.team2===team);
   if(!ym.length) return;
 
-  html+=`<div class="year-section"><h2>${y}</h2>`;
-
+  html+=`<div class="year-section"><h2>${year}</h2>`;
   ym.forEach(m=>{
    html+=`
     <div class="match">
      <h3>${m.team1} ${m.score} ${m.team2}</h3>
      <div class="small">${m.round}</div>
      <div class="small">Winner: ${m.winner}</div>
-    </div>
-   `;
+    </div>`;
   });
-
   html+=`</div>`;
  });
 
