@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AFL Player Performance | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="afl.css">
+
+<style>
+body{font-family:Arial,Helvetica,sans-serif;background:white;margin:0;color:#111;}
+
+h1{text-align:center;margin:20px 0;}
+
+.container{max-width:900px;margin:auto;padding:20px;}
+
+input,select{
+ width:100%;
+ height:38px;
+ padding:6px 10px;
+ border-radius:6px;
+ border:1px solid #ccc;
+ margin-bottom:15px;
+}
+
+.stats-box{
+ background:#f7fbff;
+ padding:20px;
+ border-radius:10px;
+ box-shadow:0 3px 8px rgba(0,0,0,.08);
+ margin-bottom:20px;
+}
+
+.stats-box table{
+ width:100%;
+ border-collapse:collapse;
+}
+
+.stats-box th{
+ background:#eaf3ff;
+ padding:10px;
+ text-align:left;
+}
+
+.stats-box td{
+ padding:10px;
+ border-bottom:1px solid #ddd;
+}
+
+.suggestions{
+ border:1px solid #ccc;
+ background:white;
+ max-height:160px;
+ overflow:auto;
+ position:absolute;
+ width:100%;
+ z-index:999;
+}
+
+.suggestions div{
+ padding:6px 10px;
+ cursor:pointer;
+}
+
+.suggestions div:hover{background:#eaf3ff;}
+</style>
+</head>
+
+<body>
+
+<h1>AFL Player Performance</h1>
+
+<div class="container">
+
+<div style="position:relative;">
+ <input id="playerInput" placeholder="Type player name">
+ <div id="playerSug" class="suggestions"></div>
+</div>
+
+<select id="opponentSelect">
+ <option value="">Select opponent team</option>
+</select>
+
+<div id="careerStats" class="stats-box"></div>
+<div id="opponentStats" class="stats-box"></div>
+
+</div>
+
+<script>
+let data=[],players=[];
+
+fetch("data/afl.json",{cache:"no-store"})
+.then(r=>r.json())
+.then(d=>{
+ data=d;
+ players=data.flatMap(m=>m.players.map(p=>p.player));
+ players=[...new Set(players)].sort();
+});
+
+const playerInput=document.getElementById("playerInput");
+const playerSug=document.getElementById("playerSug");
+const opponentSelect=document.getElementById("opponentSelect");
+const careerStats=document.getElementById("careerStats");
+const opponentStats=document.getElementById("opponentStats");
+
+function safe(v){return (v||"").toLowerCase();}
+
+playerInput.oninput=()=>{
+ const v=safe(playerInput.value);
+ playerSug.innerHTML="";
+ if(!v) return;
+ players.filter(p=>safe(p).includes(v)).slice(0,20).forEach(p=>{
+  const d=document.createElement("div");
+  d.textContent=p;
+  d.onclick=()=>selectPlayer(p);
+  playerSug.appendChild(d);
+ });
+};
+
+function selectPlayer(name){
+ playerInput.value=name;
+ playerSug.innerHTML="";
+ buildCareer(name);
+ buildOpponentList(name);
+}
+
+function buildCareer(name){
+ const rows=data.flatMap(m=>m.players.filter(p=>p.player==name));
+
+ const goals=rows.map(r=>r.goals);
+ const disposals=rows.map(r=>r.disposals);
+
+ const bestGoals=Math.max(...goals);
+ const bestDisp=Math.max(...disposals);
+
+ const avgGoals=(goals.reduce((a,b)=>a+b,0)/goals.length).toFixed(2);
+ const avgDisp=(disposals.reduce((a,b)=>a+b,0)/disposals.length).toFixed(2);
+
+ careerStats.innerHTML=`
+ <h3>Career Performance</h3>
+ <table>
+ <tr><th>Career High Goals</th><td>${bestGoals}</td></tr>
+ <tr><th>Career High Disposals</th><td>${bestDisp}</td></tr>
+ <tr><th>Average Goals</th><td>${avgGoals}</td></tr>
+ <tr><th>Average Disposals</th><td>${avgDisp}</td></tr>
+ <tr><th>Games Played</th><td>${rows.length}</td></tr>
+ </table>`;
+}
+
+function buildOpponentList(name){
+ const teams=[...new Set(data.flatMap(m=>
+  m.players.filter(p=>p.player==name).map(p=>p.team==m.home?m.away:m.home)
+ ))].sort();
+
+ opponentSelect.innerHTML="<option value=''>Select opponent team</option>";
+ teams.forEach(t=>opponentSelect.innerHTML+=`<option>${t}</option>`);
+
+ opponentSelect.onchange=()=>buildOpponentStats(name,opponentSelect.value);
+}
+
+function buildOpponentStats(name,team){
+ if(!team){opponentStats.innerHTML="";return;}
+
+ const rows=data.flatMap(m=>{
+  if((m.home==team||m.away==team)){
+   return m.players.filter(p=>p.player==name);
+  }
+  return [];
+ });
+
+ const goals=rows.map(r=>r.goals);
+ const disposals=rows.map(r=>r.disposals);
+
+ const bestGoals=Math.max(...goals);
+ const bestDisp=Math.max(...disposals);
+
+ const avgGoals=(goals.reduce((a,b)=>a+b,0)/goals.length).toFixed(2);
+ const avgDisp=(disposals.reduce((a,b)=>a+b,0)/disposals.length).toFixed(2);
+
+ opponentStats.innerHTML=`
+ <h3>Performance vs ${team}</h3>
+ <table>
+ <tr><th>Best Goals</th><td>${bestGoals}</td></tr>
+ <tr><th>Best Disposals</th><td>${bestDisp}</td></tr>
+ <tr><th>Average Goals</th><td>${avgGoals}</td></tr>
+ <tr><th>Average Disposals</th><td>${avgDisp}</td></tr>
+ <tr><th>Games Played</th><td>${rows.length}</td></tr>
+ </table>`;
+}
+</script>
+
+</body>
+</html>
