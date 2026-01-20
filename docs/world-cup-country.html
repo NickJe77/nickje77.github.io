@@ -73,7 +73,7 @@ if(!team){
  throw new Error("No team");
 }
 
-/* ---------- Helpers ---------- */
+/* ---------- HELPERS ---------- */
 
 function isGrandFinalRound(round){
  const r=String(round||"").toLowerCase();
@@ -95,6 +95,33 @@ function parseScore(score){
  const a=parseInt(p[0]),b=parseInt(p[1]);
  if(isNaN(a)||isNaN(b)) return null;
  return [a,b];
+}
+
+function parseProgress(p){
+ if(!p) return null;
+ const s=String(p).trim();
+ if(!s) return null;
+ const a=s.split(/[-–]/);
+ if(a.length!==2) return null;
+ const x=parseInt(a[0]),y=parseInt(a[1]);
+ if(isNaN(x)||isNaN(y)) return null;
+ return [x,y];
+}
+
+function parseEvent(str){
+ if(!str) return null;
+ const s=str.trim();
+ if(!s) return null;
+ const m=s.match(/^(.*?)\s*\(([^)]+)\)$/);
+ if(m) return {name:m[1].trim(),tag:m[2].trim()};
+ return {name:s,tag:null};
+}
+
+function whoScored(prev,curr){
+ if(!prev||!curr) return null;
+ if(curr[0]===prev[0]+1 && curr[1]===prev[1]) return "team1";
+ if(curr[1]===prev[1]+1 && curr[0]===prev[0]) return "team2";
+ return null;
 }
 
 /* ---------- LOAD ---------- */
@@ -119,6 +146,15 @@ fetch("data/world-cup.json",{cache:"no-store"})
    if(!byYear[r.Year]) byYear[r.Year]=[];
    byYear[r.Year].push(cur);
   }
+
+  if(cur&&(r.Scorers||r["Yellow Cards"]||r["Red Cards"])){
+   cur.events.push({
+    scorer:r.Scorers||"",
+    progress:r["Progess Score"]||"",
+    yellow:r["Yellow Cards"]||"",
+    red:r["Red Cards"]||""
+   });
+  }
  });
 
  render(team,byYear);
@@ -129,11 +165,13 @@ fetch("data/world-cup.json",{cache:"no-store"})
 function render(team,data){
 
  let appearances=0,titles=0,finals=0,matches=0,goals=0;
+ let g={},y={},rr={};
 
  const years=Object.keys(data).sort();
 
  years.forEach(year=>{
   const matchesYear=data[year];
+
   const teamMatches=matchesYear.filter(m=>m.team1===team||m.team2===team);
   if(teamMatches.length) appearances++;
 
@@ -145,18 +183,50 @@ function render(team,data){
 
   teamMatches.forEach(m=>{
    matches++;
+
    const sc=parseScore(m.score);
    if(sc){
     if(m.team1===team) goals+=sc[0];
     if(m.team2===team) goals+=sc[1];
    }
+
+   let prev=[0,0];
+
+   m.events.forEach(e=>{
+    const prog=parseProgress(e.progress);
+
+    if(e.scorer){
+     const p=parseEvent(e.scorer);
+     const side=whoScored(prev,prog);
+     if(p&&p.name&&side){
+      const scoring=(side==="team1")?m.team1:m.team2;
+      if(scoring===team){
+       g[p.name]=(g[p.name]||0)+1;
+      }
+     }
+    }
+
+    if(prog) prev=prog;
+
+    if(e.yellow){
+     const p=parseEvent(e.yellow);
+     if(p&&p.name) y[p.name]=(y[p.name]||0)+1;
+    }
+
+    if(e.red){
+     const p=parseEvent(e.red);
+     if(p&&p.name) rr[p.name]=(rr[p.name]||0)+1;
+    }
+   });
   });
  });
+
+ const top=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,5);
 
  let html=`
  <div class="header">
   <h1>${team}</h1>
-  <div class="version">Country Page v11</div>
+  <div class="version">Country Page v12</div>
  </div>
 
  <div class="stats">
@@ -165,6 +235,12 @@ function render(team,data){
   <div class="stat-box">Finals<br>${finals}</div>
   <div class="stat-box">Matches<br>${matches}</div>
   <div class="stat-box">Goals<br>${goals}</div>
+ </div>
+
+ <div class="leaders">
+  <div class="leader-box"><h3>Top 5 Goals</h3>${top(g).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
+  <div class="leader-box"><h3>Top 5 Yellow Cards</h3>${top(y).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
+  <div class="leader-box"><h3>Top 5 Red Cards</h3>${top(rr).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
  </div>
 `;
 
