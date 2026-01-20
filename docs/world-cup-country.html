@@ -50,12 +50,24 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
 </div>
 
 <script>
-const team=new URLSearchParams(location.search).get("team");
-
+let team=new URLSearchParams(location.search).get("team");
 if(!team){
  document.getElementById("content").innerHTML="<div class='error'>No country selected.</div>";
  throw new Error("No team");
 }
+
+/* ---------- TEAM NORMALISATION ---------- */
+function normalizeTeam(name){
+ if(!name) return name;
+ name=name.trim();
+
+ if(name==="West Germany") return "Germany";
+ if(name==="FRG") return "Germany";
+
+ return name;
+}
+
+team = normalizeTeam(team);
 
 /* ---------- Helpers ---------- */
 
@@ -66,92 +78,74 @@ function isGrandFinalRound(round){
  return true;
 }
 
-function getGrandFinalMatch(matchesInYear){
- const finals=matchesInYear.filter(m=>isGrandFinalRound(m.round));
- return finals.length ? finals[finals.length-1] : null;
+function getGrandFinalMatch(matches){
+ const finals=matches.filter(m=>isGrandFinalRound(m.round));
+ return finals.length?finals[finals.length-1]:null;
 }
 
-// "2–1", "2-1", "1-1 (4-2 pens)" etc
 function parseScore(score){
  if(!score) return null;
  const clean=String(score).split("(")[0].trim();
- const parts=clean.split(/[-–]/);
- if(parts.length!==2) return null;
- const a=parseInt(parts[0].trim(),10);
- const b=parseInt(parts[1].trim(),10);
- if(Number.isNaN(a)||Number.isNaN(b)) return null;
+ const p=clean.split(/[-–]/);
+ if(p.length!==2) return null;
+ const a=parseInt(p[0]),b=parseInt(p[1]);
+ if(isNaN(a)||isNaN(b)) return null;
  return [a,b];
 }
 
-// progress "1-0" or " 1 – 0 "
 function parseProgress(p){
  if(!p) return null;
  const s=String(p).trim();
  if(!s) return null;
- const parts=s.split(/[-–]/);
- if(parts.length!==2) return null;
- const a=parseInt(parts[0].trim(),10);
- const b=parseInt(parts[1].trim(),10);
- if(Number.isNaN(a)||Number.isNaN(b)) return null;
- return [a,b];
+ const a=s.split(/[-–]/);
+ if(a.length!==2) return null;
+ const x=parseInt(a[0]),y=parseInt(a[1]);
+ if(isNaN(x)||isNaN(y)) return null;
+ return [x,y];
 }
 
-// "Player (HON)" or "Player (Honduras)" or "Player"
 function parseEvent(str){
  if(!str) return null;
- const s=String(str).trim();
+ const s=str.trim();
  if(!s) return null;
- const m=s.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+ const m=s.match(/^(.*?)\s*\(([^)]+)\)$/);
  if(m) return {name:m[1].trim(),tag:m[2].trim()};
  return {name:s,tag:null};
 }
 
-/*
-Determine which side scored based on progress score change:
-prev: [x,y], curr: [x2,y2]
-- if x increased -> team1 scored
-- if y increased -> team2 scored
-*/
-function whoScoredFromProgress(prevProg, currProg){
- if(!prevProg || !currProg) return null;
- const [a1,b1]=prevProg;
- const [a2,b2]=currProg;
-
- if(a2===a1+1 && b2===b1) return "team1";
- if(b2===b1+1 && a2===a1) return "team2";
-
- // sometimes multiple goals or weird ordering; not safe
+function whoScored(prev,curr){
+ if(!prev||!curr) return null;
+ if(curr[0]===prev[0]+1 && curr[1]===prev[1]) return "team1";
+ if(curr[1]===prev[1]+1 && curr[0]===prev[0]) return "team2";
  return null;
 }
 
-/* ---------- Load + Normalise ---------- */
+/* ---------- LOAD ---------- */
 
-fetch("data/world-cup.json?v=6",{cache:"no-store"})
+fetch("data/world-cup.json?v=7",{cache:"no-store"})
 .then(r=>r.json())
 .then(rows=>{
- let matchesByYear={};
- let cur=null;
+ let byYear={},cur=null;
 
  rows.forEach(r=>{
   if(r.Team){
    cur={
     year:r.Year,
     round:r.Round,
-    team1:r.Team,
-    team2:r.Team__1,
+    team1:normalizeTeam(r.Team),
+    team2:normalizeTeam(r.Team__1),
     score:r["Final Score"],
-    winner:r["Winnning Team"],
+    winner:normalizeTeam(r["Winnning Team"]),
     events:[]
    };
 
-   if(!matchesByYear[r.Year]) matchesByYear[r.Year]=[];
-   matchesByYear[r.Year].push(cur);
+   if(!byYear[r.Year]) byYear[r.Year]=[];
+   byYear[r.Year].push(cur);
   }
 
-  if(cur && (r.Scorers||r["Yellow Cards"]||r["Red Cards"])){
+  if(cur&&(r.Scorers||r["Yellow Cards"]||r["Red Cards"])){
    cur.events.push({
     scorer:r.Scorers||"",
-    minute:r["Time scored"]||"",
     progress:r["Progess Score"]||"",
     yellow:r["Yellow Cards"]||"",
     red:r["Red Cards"]||""
@@ -159,86 +153,64 @@ fetch("data/world-cup.json?v=6",{cache:"no-store"})
   }
  });
 
- render(team,matchesByYear);
-})
-.catch(()=>{
- document.getElementById("content").innerHTML="<div class='error'>World Cup data failed to load.</div>";
+ render(team,byYear);
 });
 
-/* ---------- Render ---------- */
+/* ---------- RENDER ---------- */
 
-function render(team,matchesByYear){
+function render(team,data){
 
- let appearances=0, titles=0, finals=0, matchesPlayed=0, goalsScored=0;
- let g={}, y={}, rr={};
+ let appearances=0,titles=0,finals=0,matches=0,goals=0;
+ let g={},y={},rr={};
 
- const years=Object.keys(matchesByYear).sort();
+ const years=Object.keys(data).sort();
 
  years.forEach(year=>{
-  const yearMatches=matchesByYear[year];
+  const matchesYear=data[year];
 
-  const teamMatches=yearMatches.filter(m=>m.team1===team || m.team2===team);
+  const teamMatches=matchesYear.filter(m=>m.team1===team||m.team2===team);
   if(teamMatches.length) appearances++;
 
-  const gf=getGrandFinalMatch(yearMatches);
+  const gf=getGrandFinalMatch(matchesYear);
   if(gf){
-   if(gf.team1===team || gf.team2===team) finals++;
+   if(gf.team1===team||gf.team2===team) finals++;
    if(gf.winner===team) titles++;
   }
 
   teamMatches.forEach(m=>{
-   matchesPlayed++;
+   matches++;
 
-   const ps=parseScore(m.score);
-   if(ps){
-    if(m.team1===team) goalsScored+=ps[0];
-    if(m.team2===team) goalsScored+=ps[1];
+   const sc=parseScore(m.score);
+   if(sc){
+    if(m.team1===team) goals+=sc[0];
+    if(m.team2===team) goals+=sc[1];
    }
 
-   // scorer attribution: use progress score deltas
-   let prevProg=[0,0];
+   let prev=[0,0];
 
    m.events.forEach(e=>{
-    // --- Scorers (strict: ONLY count if we can attribute to the team) ---
+    const prog=parseProgress(e.progress);
+
     if(e.scorer){
      const p=parseEvent(e.scorer);
-     const prog=parseProgress(e.progress);
-
-     if(p && p.name){
-      const side=whoScoredFromProgress(prevProg, prog);
-
-      // update prev progress if parse succeeded
-      if(prog) prevProg=prog;
-
-      // if we can tell who scored, only count if it was the team
-      if(side){
-       const scoringTeam = (side==="team1") ? m.team1 : m.team2;
-       if(scoringTeam===team){
-        g[p.name]=(g[p.name]||0)+1;
-       }
+     const side=whoScored(prev,prog);
+     if(p&&p.name&&side){
+      const scoring=(side==="team1")?m.team1:m.team2;
+      if(scoring===team){
+       g[p.name]=(g[p.name]||0)+1;
       }
-      // if we cannot tell from progress, DO NOT count (prevents “goals against” pollution)
      }
-    } else {
-      // even if no scorer row, still advance prevProg if a progress row exists (rare)
-      const prog=parseProgress(e.progress);
-      if(prog) prevProg=prog;
     }
 
-    // --- Cards (still forgiving; we count them for the team in this match context) ---
-    // If your dataset later proves opponent pollution here too, we can apply progress-style logic
-    // but most card rows are already aligned to the match row.
+    if(prog) prev=prog;
+
     if(e.yellow){
      const p=parseEvent(e.yellow);
-     if(p && p.name){
-      y[p.name]=(y[p.name]||0)+1;
-     }
+     if(p&&p.name) y[p.name]=(y[p.name]||0)+1;
     }
     if(e.red){
      const p=parseEvent(e.red);
-     if(p && p.name){
-      rr[p.name]=(rr[p.name]||0)+1;
-     }
+     if(p&&p.name) rr[p.name]=(rr[p.name]||0)+1;
     }
    });
   });
@@ -247,28 +219,28 @@ function render(team,matchesByYear){
  const top=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,5);
 
  let html=`
-  <div class="header">
-   <h1>${team}</h1>
-   <div class="version">Country Page v6</div>
-  </div>
+ <div class="header">
+  <h1>${team}</h1>
+  <div class="version">Country Page v7</div>
+ </div>
 
-  <div class="stats">
-   <div class="stat-box">Appearances<br>${appearances}</div>
-   <div class="stat-box">Titles<br>${titles}</div>
-   <div class="stat-box">Finals<br>${finals}</div>
-   <div class="stat-box">Matches<br>${matchesPlayed}</div>
-   <div class="stat-box">Goals<br>${goalsScored}</div>
-  </div>
+ <div class="stats">
+  <div class="stat-box">Appearances<br>${appearances}</div>
+  <div class="stat-box">Titles<br>${titles}</div>
+  <div class="stat-box">Finals<br>${finals}</div>
+  <div class="stat-box">Matches<br>${matches}</div>
+  <div class="stat-box">Goals<br>${goals}</div>
+ </div>
 
-  <div class="leaders">
-   <div class="leader-box"><h3>Top 5 Goals</h3>${top(g).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("") || "<div class='leader-line'>No scorer data</div>"}</div>
-   <div class="leader-box"><h3>Top 5 Yellow Cards</h3>${top(y).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("") || "<div class='leader-line'>No card data</div>"}</div>
-   <div class="leader-box"><h3>Top 5 Red Cards</h3>${top(rr).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("") || "<div class='leader-line'>No card data</div>"}</div>
-  </div>
- `;
+ <div class="leaders">
+  <div class="leader-box"><h3>Top 5 Goals</h3>${top(g).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
+  <div class="leader-box"><h3>Top 5 Yellow Cards</h3>${top(y).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
+  <div class="leader-box"><h3>Top 5 Red Cards</h3>${top(rr).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
+ </div>
+`;
 
  years.forEach(year=>{
-  const ym=matchesByYear[year].filter(m=>m.team1===team || m.team2===team);
+  const ym=data[year].filter(m=>m.team1===team||m.team2===team);
   if(!ym.length) return;
 
   html+=`<div class="year-section"><h2>${year}</h2>`;
