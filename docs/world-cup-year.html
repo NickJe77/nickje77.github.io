@@ -96,7 +96,7 @@ function loadYear(year,btn){
  buildMatches(year,out);
 }
 
-/* ---------- SUMMARY LOGIC ---------- */
+/* ---------- HELPERS ---------- */
 
 function isGrandFinalRound(round){
  const r=String(round||"").toLowerCase();
@@ -105,12 +105,30 @@ function isGrandFinalRound(round){
  return true;
 }
 
-function parseScore(score){
+function parseFinalResult(score){
  if(!score) return null;
- const p=String(score).split("(")[0].trim().split(/[-–]/);
- if(p.length!==2) return null;
- return [parseInt(p[0]),parseInt(p[1])];
+
+ const s=String(score);
+
+ // normal score
+ const main=s.split("(")[0].trim();
+ const m=main.split(/[-–]/).map(x=>parseInt(x));
+
+ if(m.length!==2 || isNaN(m[0]) || isNaN(m[1])) return null;
+
+ // if not a draw, done
+ if(m[0]!==m[1]) return m;
+
+ // draw → check penalties
+ const penMatch=s.match(/\((\d+)\s*[-–]\s*(\d+)\s*pen/i);
+ if(penMatch){
+  return [parseInt(penMatch[1]), parseInt(penMatch[2])];
+ }
+
+ return m;
 }
+
+/* ---------- SUMMARY ---------- */
 
 function buildSummary(year,out){
 
@@ -128,12 +146,12 @@ function buildSummary(year,out){
   if(r["Host Country"]) host=r["Host Country"];
  });
 
- // WINNER / RUNNER-UP (from final match score)
+ // FINAL RESULT
  const finals=yearMatches.filter(m=>isGrandFinalRound(m.round));
  const gf=finals.length?finals[finals.length-1]:null;
 
  if(gf){
-  const sc=parseScore(gf.score);
+  const sc=parseFinalResult(gf.score);
   if(sc){
    if(sc[0]>sc[1]){
     winner=gf.team1;
@@ -145,7 +163,7 @@ function buildSummary(year,out){
   }
  }
 
- // TOP SCORERS (from raw scorer rows)
+ // TOP SCORERS
  yearRows.forEach(r=>{
   if(r.Scorers){
    const s=r.Scorers.split("(")[0].trim();
