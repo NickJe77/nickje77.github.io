@@ -52,6 +52,30 @@ cursor:pointer;
 
 .year-tile.active{background:#0056d6;}
 
+.summary{
+border:1px solid #ddd;
+border-radius:10px;
+padding:18px;
+margin-bottom:24px;
+background:#fafafa;
+}
+
+.summary h2{margin:0 0 12px 0;}
+
+.summary-grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+gap:14px;
+}
+
+.summary-box{
+background:white;
+border:1px solid #ddd;
+border-radius:8px;
+padding:12px;
+font-weight:600;
+}
+
 .match{
 border:1px solid #ddd;
 border-radius:10px;
@@ -95,10 +119,12 @@ font-weight:600;
 const COUNTRY_PAGE="world-cup-country.html";
 
 let matchesByYear={};
+let rawRows=[];
 
 fetch("data/world-cup.json",{cache:"no-store"})
 .then(r=>r.json())
 .then(data=>{
+ rawRows=data;
  normalise(data);
  buildYears();
 });
@@ -143,6 +169,77 @@ function loadYear(year,btn){
 
  const out=document.getElementById("output");
  out.innerHTML="";
+
+ buildSummary(year,out);
+ buildMatches(year,out);
+}
+
+/* ---------- SUMMARY ---------- */
+
+function buildSummary(year,out){
+
+ let host="Unknown";
+ let winner="Unknown";
+ let runnerUp="Unknown";
+ let goals={};
+
+ const yearRows=rawRows.filter(r=>String(r.Year)===String(year));
+
+ // Host
+ yearRows.forEach(r=>{
+  if(r.Host) host=r.Host;
+  if(r["Host Country"]) host=r["Host Country"];
+ });
+
+ // Final match for winner / runner-up
+ const finals=yearRows.filter(r=>String(r.Round||"").toLowerCase().includes("final"));
+ if(finals.length){
+  const f=finals[finals.length-1];
+  winner=f["Winnning Team"];
+  if(f.Team===winner) runnerUp=f.Team__1;
+  else runnerUp=f.Team;
+ }
+
+ // Goal scorers
+ let prev=[0,0];
+ yearRows.forEach(r=>{
+  if(r.Scorers && r["Progess Score"]){
+   const prog=r["Progess Score"].split(/[-–]/).map(x=>parseInt(x));
+   if(prog.length===2){
+    const side=(prog[0]===prev[0]+1)?"team1":(prog[1]===prev[1]+1)?"team2":null;
+    const scorer=r.Scorers.split("(")[0].trim();
+    if(scorer){
+     goals[scorer]=(goals[scorer]||0)+1;
+    }
+    prev=prog;
+   }
+  }
+ });
+
+ const topGoals=Object.entries(goals).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+ const summary=document.createElement("div");
+ summary.className="summary";
+
+ summary.innerHTML=`
+  <h2>${year} World Cup Summary</h2>
+  <div class="summary-grid">
+   <div class="summary-box">Host: ${host}</div>
+   <div class="summary-box">Winner: ${winner}</div>
+   <div class="summary-box">Runner-up: ${runnerUp}</div>
+   <div class="summary-box">
+    Top Scorers:<br>
+    ${topGoals.map(g=>`${g[0]} – ${g[1]}`).join("<br>")}
+   </div>
+  </div>
+ `;
+
+ out.appendChild(summary);
+}
+
+/* ---------- MATCHES ---------- */
+
+function buildMatches(year,out){
 
  matchesByYear[year].forEach(m=>{
   const div=document.createElement("div");
