@@ -96,24 +96,17 @@ function loadYear(year,btn){
  buildMatches(year,out);
 }
 
-/* ---------- SCORE PARSER ---------- */
-
+/* ---------- SCORE PARSER (fallback only) ---------- */
 function parseFinalResult(score){
  if(!score) return null;
  const pairs=[...String(score).matchAll(/(\d+)\s*[-–]\s*(\d+)/g)]
   .map(m=>[parseInt(m[1]),parseInt(m[2])]);
-
  if(!pairs.length) return null;
-
- // first = normal score
  if(pairs[0][0]!==pairs[0][1]) return pairs[0];
-
- // draw → use last (penalties)
  return pairs[pairs.length-1];
 }
 
 /* ---------- SUMMARY ---------- */
-
 function buildSummary(year,out){
 
  let host="Unknown";
@@ -130,21 +123,38 @@ function buildSummary(year,out){
   if(r["Host Country"]) host=r["Host Country"];
  });
 
- // FIND FINAL MATCH
- let finals=yearMatches.filter(m=>/final/i.test(m.round||"") && !/third|bronze|3rd|playoff|placement/i.test(m.round||""));
+ // PRIMARY FINAL ROW FROM RAW DATA
+ const finalsRaw = yearRows.filter(r=>String(r.Round||"").toLowerCase()==="final");
+ const gfRaw = finalsRaw.length ? finalsRaw[finalsRaw.length-1] : null;
 
- let gf = finals.length ? finals[finals.length-1] : yearMatches[yearMatches.length-1];
+ if(gfRaw){
+  const w = gfRaw["Winnning Team"];
+  const t1 = gfRaw.Team;
+  const t2 = gfRaw.Team__1;
 
- // WINNER / RUNNER-UP
- if(gf){
-  const sc=parseFinalResult(gf.score);
-  if(sc){
-   if(sc[0]>sc[1]){
-    winner=gf.team1;
-    runnerUp=gf.team2;
-   }else if(sc[1]>sc[0]){
-    winner=gf.team2;
-    runnerUp=gf.team1;
+  if(w){
+   winner = w;
+   if(t1 && t2){
+    runnerUp = (t1===w)?t2:t1;
+   }
+  }
+ }
+
+ // FALLBACK: derive from score if winner still unknown
+ if(winner==="Unknown"){
+  const finals = yearMatches.filter(m=>/final/i.test(m.round||""));
+  const gf = finals.length ? finals[finals.length-1] : yearMatches[yearMatches.length-1];
+
+  if(gf){
+   const sc=parseFinalResult(gf.score);
+   if(sc){
+    if(sc[0]>sc[1]){
+     winner=gf.team1;
+     runnerUp=gf.team2;
+    }else if(sc[1]>sc[0]){
+     winner=gf.team2;
+     runnerUp=gf.team1;
+    }
    }
   }
  }
@@ -179,7 +189,6 @@ function buildSummary(year,out){
 }
 
 /* ---------- MATCHES ---------- */
-
 function buildMatches(year,out){
  matchesByYear[year].forEach(m=>{
   const div=document.createElement("div");
