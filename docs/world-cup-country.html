@@ -94,10 +94,33 @@ if(!team){
 
 function parseScore(score){
  if(!score) return null;
- let clean=score.split("(")[0].trim();
+ let clean=String(score).split("(")[0].trim();
  let parts=clean.split(/[-–]/);
  if(parts.length!==2) return null;
- return [parseInt(parts[0]),parseInt(parts[1])];
+ let a=parseInt(parts[0],10), b=parseInt(parts[1],10);
+ if(Number.isNaN(a) || Number.isNaN(b)) return null;
+ return [a,b];
+}
+
+/* Robust: identify the actual Grand Final match */
+function isGrandFinalRound(round){
+ if(!round) return false;
+ const r=String(round).toLowerCase().trim();
+ // must contain the word "final"
+ if(!/\bfinal\b/.test(r)) return false;
+ // exclude obvious non-grand-final rounds
+ if(/\bsemi\b/.test(r)) return false;
+ if(/\bquarter\b/.test(r)) return false;
+ if(/\bthird\b/.test(r)) return false;
+ if(/\bbronze\b/.test(r)) return false;
+ return true;
+}
+
+function getGrandFinalMatch(matchesInYear){
+ // collect candidates and take the LAST one (handles "Final replay" etc)
+ const candidates = matchesInYear.filter(m=>isGrandFinalRound(m.round));
+ if(!candidates.length) return null;
+ return candidates[candidates.length-1];
 }
 
 function loadCountry(team){
@@ -134,6 +157,9 @@ function loadCountry(team){
   });
 
   render(team,matchesByYear);
+ })
+ .catch(()=>{
+  document.getElementById("content").innerHTML="<div class='error'>World Cup data failed to load.</div>";
  });
 }
 
@@ -152,7 +178,18 @@ function render(team,data){
  let years=Object.keys(data).sort();
 
  years.forEach(y=>{
-  let yearMatches=data[y].filter(m=>m.team1===team||m.team2===team);
+  const allYearMatches = data[y];
+
+  // 1) Determine tournament title/final participation from the Grand Final match ONLY
+  const gf = getGrandFinalMatch(allYearMatches);
+  if(gf){
+   const playedFinal = (gf.team1===team || gf.team2===team);
+   if(playedFinal) finals++;
+   if(gf.winner===team) titles++;
+  }
+
+  // 2) Determine appearances and per-match stats from matches involving the country
+  const yearMatches = allYearMatches.filter(m=>m.team1===team||m.team2===team);
 
   if(yearMatches.length){
    appearances++;
@@ -160,15 +197,10 @@ function render(team,data){
    yearMatches.forEach(m=>{
     matchesPlayed++;
 
-    let parsed=parseScore(m.score);
+    const parsed=parseScore(m.score);
     if(parsed){
      if(m.team1===team) goalsScored+=parsed[0];
      if(m.team2===team) goalsScored+=parsed[1];
-    }
-
-    if(/final/i.test(m.round) && !/semi|quarter|third|bronze/i.test(m.round)){
-     finals++;
-     if(m.winner===team) titles++;
     }
 
     m.events.forEach(e=>{
@@ -182,7 +214,6 @@ function render(team,data){
       redLeaders[e.red]=(redLeaders[e.red]||0)+1;
      }
     });
-
    });
   }
  });
@@ -192,9 +223,9 @@ function render(team,data){
   return arr.length?arr[0]:["–",0];
  }
 
- let topGoal=topEntry(goalLeaders);
- let topYellow=topEntry(yellowLeaders);
- let topRed=topEntry(redLeaders);
+ const topGoal=topEntry(goalLeaders);
+ const topYellow=topEntry(yellowLeaders);
+ const topRed=topEntry(redLeaders);
 
  const code=countryCodes[team];
  const flag=flagEmoji(code);
@@ -220,8 +251,9 @@ function render(team,data){
  </div>
 `;
 
+ // Results by year
  years.forEach(y=>{
-  let yearMatches=data[y].filter(m=>m.team1===team||m.team2===team);
+  const yearMatches=data[y].filter(m=>m.team1===team||m.team2===team);
   if(!yearMatches.length) return;
 
   html+=`<div class="year-section"><h2>${y}</h2>`;
