@@ -8,82 +8,72 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
-body{font-family:Inter,system-ui,Arial;background:white;margin:0;}
+body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
 
 .navbar{
-display:flex;
-justify-content:center;
-gap:22px;
-padding:16px;
-border-bottom:1px solid #ddd;
-font-weight:600;
+display:flex;justify-content:center;gap:22px;
+padding:16px;border-bottom:1px solid #ddd;font-weight:600;
 }
 
-.navbar a{
-color:#0056d6;
-text-decoration:none;
-font-size:18px;
-}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 
-.page-wrap{
-max-width:1200px;
-margin:0 auto;
-padding:30px 20px;
-}
+.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px;}
 
 .year-grid{
 display:grid;
 grid-template-columns:repeat(auto-fit,minmax(90px,1fr));
-gap:12px;
-margin-bottom:30px;
+gap:12px;margin-bottom:30px;
 }
 
 .year-tile{
-background:#111;
-color:white;
-text-align:center;
-padding:12px;
-border-radius:8px;
-font-weight:700;
-cursor:pointer;
+background:#111;color:white;text-align:center;
+padding:12px;border-radius:8px;
+font-weight:700;cursor:pointer;
 }
 
 .year-tile.active{background:#0056d6;}
 
-.match{
+.summary{
 border:1px solid #ddd;
 border-radius:10px;
-padding:14px;
-margin-bottom:20px;
+padding:16px;
+margin-bottom:30px;
+background:#fafafa;
+}
+
+.summary h2{margin-top:0;}
+
+.summary-table{
+width:100%;border-collapse:collapse;font-size:14px;margin-top:10px;
+}
+
+.summary-table td{
+padding:8px;border-bottom:1px solid #ddd;
+}
+
+.summary-table tr:nth-child(even) td{background:#f3f7ff;}
+
+.match{
+border:1px solid #ddd;border-radius:10px;
+padding:14px;margin-bottom:20px;
 }
 
 .event-table{
-width:100%;
-border-collapse:collapse;
-font-size:14px;
-margin-top:10px;
+width:100%;border-collapse:collapse;
+font-size:14px;margin-top:10px;
 }
 
 .event-table th{
-background:#f0f0f0;
-padding:8px;
-text-align:left;
+background:#f0f0f0;padding:8px;text-align:left;
 }
 
 .event-table td{
-padding:8px;
-border-bottom:1px solid #ddd;
+padding:8px;border-bottom:1px solid #ddd;
 }
 
-.event-table tr:nth-child(even) td{
-background:#f3f7ff;
-}
+.event-table tr:nth-child(even) td{background:#f3f7ff;}
 
-.error{
-color:#900;
-font-weight:700;
-margin-top:20px;
-}
+.error{color:#900;font-weight:700;margin-top:20px;}
 </style>
 </head>
 
@@ -140,7 +130,7 @@ function normalise(rows){
    matchesByYear[r.Year].push(current);
   }
 
-  if(current && (r.Scorers || r["Yellow Cards"] || r["Red Cards"])){
+  if(current && (r.Scorers||r["Yellow Cards"]||r["Red Cards"])){
    current.events.push({
     scorer:r.Scorers||"",
     minute:r["Time scored"]||"",
@@ -170,7 +160,11 @@ function loadYear(year,btn){
  const out=document.getElementById("output");
  out.innerHTML="";
 
- matchesByYear[year].forEach(m=>{
+ const matches=matchesByYear[year];
+
+ buildSummary(matches,out);
+
+ matches.forEach(m=>{
   const div=document.createElement("div");
   div.className="match";
 
@@ -181,11 +175,7 @@ function loadYear(year,btn){
 
    <table class="event-table">
     <tr>
-      <th>Scorer</th>
-      <th>Minute</th>
-      <th>Score</th>
-      <th>Yellow</th>
-      <th>Red</th>
+     <th>Scorer</th><th>Minute</th><th>Score</th><th>Yellow</th><th>Red</th>
     </tr>
     ${m.events.map(e=>`
      <tr>
@@ -199,6 +189,50 @@ function loadYear(year,btn){
   `;
   out.appendChild(div);
  });
+}
+
+function buildSummary(matches,out){
+ let final=matches.find(m=>m.round.toLowerCase().includes("final"));
+
+ let winner=final?final.winner:"";
+ let runner=final?
+   (final.team1===final.winner?final.team2:final.team1):"";
+
+ let scorerCount={};
+
+ matches.forEach(m=>{
+  m.events.forEach(e=>{
+   if(e.scorer){
+    scorerCount[e.scorer]=(scorerCount[e.scorer]||0)+1;
+   }
+  });
+ });
+
+ let topScorers=Object.entries(scorerCount)
+  .sort((a,b)=>b[1]-a[1])
+  .slice(0,5);
+
+ const s=document.createElement("div");
+ s.className="summary";
+
+ s.innerHTML=`
+ <h2>${matches[0].year} Tournament Summary</h2>
+
+ <table class="summary-table">
+  <tr><td><strong>Winner</strong></td><td>${winner}</td></tr>
+  <tr><td><strong>Runner-up</strong></td><td>${runner}</td></tr>
+ </table>
+
+ <h3>Top 5 Goal Scorers</h3>
+
+ <table class="summary-table">
+  <tr><td><strong>Player</strong></td><td><strong>Goals</strong></td></tr>
+  ${topScorers.map(p=>`
+   <tr><td>${p[0]}</td><td>${p[1]}</td></tr>`).join("")}
+ </table>
+ `;
+
+ out.appendChild(s);
 }
 </script>
 
