@@ -34,6 +34,7 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
 .match h3{margin:0 0 6px 0;}
 .small{font-size:13px;color:#555;}
 .error{color:#900;font-weight:700;}
+.version{font-size:12px;color:#999;margin-bottom:10px;text-align:right;}
 </style>
 </head>
 
@@ -47,12 +48,12 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
 </div>
 
 <div class="page-wrap">
+<div class="version">World Cup Country Page v3</div>
 <div id="content"></div>
 </div>
 
 <script>
-const params=new URLSearchParams(window.location.search);
-const team=params.get("team");
+const team=new URLSearchParams(window.location.search).get("team");
 
 const countryCodes={
 "Brazil":"BR","Germany":"DE","Italy":"IT","Argentina":"AR","France":"FR",
@@ -61,21 +62,18 @@ const countryCodes={
 "Japan":"JP","South Korea":"KR","Korea Republic":"KR","Australia":"AU"
 };
 
-// Alpha-3 → Alpha-2 mapping for brackets like (BRA)
 const alpha3to2={
 "ARG":"AR","BRA":"BR","GER":"DE","DEU":"DE","ESP":"ES","FRA":"FR","ITA":"IT",
 "NED":"NL","URU":"UY","POR":"PT","BEL":"BE","CRO":"HR","MEX":"MX","USA":"US",
-"JPN":"JP","KOR":"KR","AUS":"AU","ENG":"GB","SUI":"CH","SWE":"SE","NOR":"NO",
-"DEN":"DK","POL":"PL","CZE":"CZ","RUS":"RU","UKR":"UA","TUR":"TR","GRE":"GR",
-"COL":"CO","CHI":"CL","PER":"PE","PAR":"PY","ECU":"EC","CRC":"CR","HON":"HN",
-"PAN":"PA","JAM":"JM","TRI":"TT","CAN":"CA","MOR":"MA","CMR":"CM","NGA":"NG",
-"GHA":"GH","SEN":"SN","TUN":"TN","ALG":"DZ","IRN":"IR","IRQ":"IQ","KSA":"SA",
-"QAT":"QA","CHN":"CN"
+"JPN":"JP","KOR":"KR","AUS":"AU"
 };
+
+function flagEmoji(code){
+ return code?code.replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt())):"";
+}
 
 function normalizeCode(c){
  if(!c) return "";
- c=c.toUpperCase();
  if(c.length===2) return c;
  return alpha3to2[c]||c;
 }
@@ -83,14 +81,8 @@ function normalizeCode(c){
 function parseNameAndCode(str){
  if(!str) return null;
  const m=str.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
- if(m){
-  return {name:m[1].trim(),code:normalizeCode(m[2])};
- }
+ if(m) return {name:m[1].trim(),code:normalizeCode(m[2])};
  return {name:str.trim(),code:null};
-}
-
-function flagEmoji(code){
- return code?code.replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt())):"";
 }
 
 function parseScore(score){
@@ -119,7 +111,7 @@ if(!team){
 
 function loadCountry(team){
 
- fetch("data/world-cup.json",{cache:"no-store"})
+ fetch("data/world-cup.json?v=3",{cache:"no-store"})
  .then(r=>r.json())
  .then(rows=>{
   let data={},cur=null;
@@ -154,6 +146,7 @@ function render(team,data){
  Object.keys(data).sort().forEach(year=>{
   const all=data[year];
   const gf=getGrandFinalMatch(all);
+
   if(gf){
    if(gf.team1===team||gf.team2===team) finals++;
    if(gf.winner===team) titles++;
@@ -177,11 +170,9 @@ function render(team,data){
     ["scorer","yellow","red"].forEach(t=>{
      if(e[t]){
       const p=parseNameAndCode(e[t]);
-      if(p&&p.name){
-       if(!p.code || p.code===myCode){
-        const box=t==="scorer"?g:t==="yellow"?y:r;
-        box[p.name]=(box[p.name]||0)+1;
-       }
+      if(p && p.name && (!p.code || p.code===myCode)){
+       const box=t==="scorer"?g:t==="yellow"?y:r;
+       box[p.name]=(box[p.name]||0)+1;
       }
      }
     });
@@ -190,8 +181,6 @@ function render(team,data){
  });
 
  const top=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,5);
-
- const tg=top(g), ty=top(y), tr=top(r);
 
  const flag=flagEmoji(myCode);
 
@@ -207,9 +196,9 @@ function render(team,data){
  </div>
 
  <div class="leaders">
-  <div class="leader-box"><h3>Top 5 Goals</h3>${tg.map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
-  <div class="leader-box"><h3>Top 5 Yellow Cards</h3>${ty.map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
-  <div class="leader-box"><h3>Top 5 Red Cards</h3>${tr.map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
+  <div class="leader-box"><h3>Top 5 Goals</h3>${top(g).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
+  <div class="leader-box"><h3>Top 5 Yellow Cards</h3>${top(y).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
+  <div class="leader-box"><h3>Top 5 Red Cards</h3>${top(r).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
  </div>
 `;
 
