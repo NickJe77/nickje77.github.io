@@ -20,7 +20,25 @@ h1{text-align:center;margin-bottom:30px;}
 .summary{border:1px solid #ddd;border-radius:10px;padding:18px;margin-bottom:24px;background:#fafafa;}
 .summary h2{margin:0 0 12px 0;}
 .summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;}
-.summary-box{background:white;border:1px solid #ddd;border-radius:8px;padding:12px;font-weight:600;}
+
+.summary-box{
+background:white;
+border:1px solid #ddd;
+border-radius:8px;
+padding:12px;
+font-weight:600;
+position:relative;
+overflow:hidden;
+}
+
+.flag-bg{
+position:absolute;
+font-size:72px;
+opacity:0.12;
+right:10px;
+bottom:6px;
+pointer-events:none;
+}
 
 .match{border:1px solid #ddd;border-radius:10px;padding:14px;margin-bottom:16px;background:white;}
 .match h3{margin:0 0 6px 0;}
@@ -50,6 +68,31 @@ h1{text-align:center;margin-bottom:30px;}
 const COUNTRY_PAGE="world-cup-country.html";
 
 let matchesByYear={}, rawRows=[];
+
+/* ---------- COUNTRY CODES ---------- */
+const countryCodes={
+"Brazil":"BR","Germany":"DE","Italy":"IT","Argentina":"AR","France":"FR",
+"England":"GB","Spain":"ES","Netherlands":"NL","Uruguay":"UY","Portugal":"PT",
+"Belgium":"BE","Croatia":"HR","Mexico":"MX","USA":"US","United States":"US",
+"Japan":"JP","South Korea":"KR","Korea Republic":"KR","Australia":"AU",
+"Austria":"AT","Switzerland":"CH","Sweden":"SE","Norway":"NO","Denmark":"DK",
+"Poland":"PL","Czech Republic":"CZ","Czechoslovakia":"CZ","Russia":"RU",
+"Ukraine":"UA","Turkey":"TR","Greece":"GR","Scotland":"GB","Wales":"GB",
+"Ireland":"IE","Northern Ireland":"GB","Morocco":"MA","Cameroon":"CM",
+"Nigeria":"NG","Ghana":"GH","Senegal":"SN","Tunisia":"TN","Algeria":"DZ",
+"Iran":"IR","Iraq":"IQ","Saudi Arabia":"SA","Qatar":"QA","China":"CN",
+"South Africa":"ZA","New Zealand":"NZ","Canada":"CA",
+"Costa Rica":"CR","Honduras":"HN","Panama":"PA","Jamaica":"JM",
+"Trinidad and Tobago":"TT","Colombia":"CO","Chile":"CL","Peru":"PE",
+"Paraguay":"PY","Ecuador":"EC","Bolivia":"BO","Venezuela":"VE"
+};
+
+function flagEmoji(code){
+ if(!code) return "";
+ return code.replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt()));
+}
+
+/* ---------- LOAD DATA ---------- */
 
 fetch("data/world-cup.json",{cache:"no-store"})
 .then(r=>r.json())
@@ -111,7 +154,7 @@ function buildSummary(year,out){
   if(r["Host Country"]) host=r["Host Country"];
  });
 
- // FIND REAL FINAL ROW (not empty one)
+ // REAL FINAL ROW
  const finals = yearRows.filter(r =>
    String(r.Round||"").toLowerCase()==="final" &&
    (r["Winnning Team"] || r.Team)
@@ -142,15 +185,19 @@ function buildSummary(year,out){
 
  const topGoals=Object.entries(goals).sort((a,b)=>b[1]-a[1]).slice(0,5);
 
+ const hostFlag=flagEmoji(countryCodes[host]);
+ const winFlag=flagEmoji(countryCodes[winner]);
+ const runFlag=flagEmoji(countryCodes[runnerUp]);
+
  const summary=document.createElement("div");
  summary.className="summary";
 
  summary.innerHTML=`
   <h2>${year} World Cup Summary</h2>
   <div class="summary-grid">
-   <div class="summary-box">Host: ${host}</div>
-   <div class="summary-box">Winner: ${winner}</div>
-   <div class="summary-box">Runner-up: ${runnerUp}</div>
+   <div class="summary-box"><span class="flag-bg">${hostFlag}</span>Host: ${host}</div>
+   <div class="summary-box"><span class="flag-bg">${winFlag}</span>Winner: ${winner}</div>
+   <div class="summary-box"><span class="flag-bg">${runFlag}</span>Runner-up: ${runnerUp}</div>
    <div class="summary-box">
     Top Scorers:<br>
     ${topGoals.map(g=>`${g[0]} – ${g[1]}`).join("<br>")}
