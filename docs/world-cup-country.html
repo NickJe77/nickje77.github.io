@@ -13,8 +13,9 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 .page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px;}
 
-.header{margin-bottom:20px;}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;}
 .header h1{margin:0;font-size:32px;}
+.version{font-size:12px;color:#999;}
 
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:25px;}
 .stat-box{border:1px solid #ddd;border-radius:10px;padding:14px;background:#fafafa;text-align:center;font-weight:700;}
@@ -32,6 +33,7 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
 .match{border:1px solid #ddd;border-radius:10px;padding:14px;margin-top:12px;background:white;}
 .match h3{margin:0 0 6px 0;}
 .small{font-size:13px;color:#555;}
+.error{color:#900;font-weight:700;}
 </style>
 </head>
 
@@ -51,62 +53,98 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
 <script>
 const team=new URLSearchParams(location.search).get("team");
 
-const aliases={
-"Argentina":["ARG","Argentina"],
-"Brazil":["BRA","Brazil"],
-"Germany":["GER","DEU","Germany"],
-"France":["FRA","France"],
-"Italy":["ITA","Italy"],
-"Spain":["ESP","Spain"],
-"England":["ENG","England"],
-"Netherlands":["NED","Netherlands"],
-"Portugal":["POR","Portugal"],
-"Uruguay":["URU","Uruguay"],
-"Belgium":["BEL","Belgium"],
-"Croatia":["CRO","Croatia"],
-"Australia":["AUS","Australia"],
-"Austria":["AUT","Austria"],
-"Switzerland":["SUI","Switzerland"],
-"Scotland":["SCO","Scotland"],
-"Wales":["WAL","Wales"],
-"Ireland":["IRL","Ireland"],
-"Japan":["JPN","Japan"],
-"Mexico":["MEX","Mexico"],
-"USA":["USA","United States","US"]
-};
+if(!team){
+ document.getElementById("content").innerHTML="<div class='error'>No country selected.</div>";
+ throw new Error("No team");
+}
 
+/* ---------- Helpers ---------- */
+
+// Robust “Grand Final” detector
+function isGrandFinalRound(round){
+ const r=String(round||"").toLowerCase();
+ // must include "final"
+ if(!/\bfinal\b/.test(r)) return false;
+ // exclude semis/quarters/third place/bronze etc
+ if(/semi|quarter|third|bronze|3rd|playoff|play-off|placement/.test(r)) return false;
+ return true;
+}
+
+// Return the last Grand Final match of a year (covers cases where "Final" appears earlier in text)
+function getGrandFinalMatch(matchesInYear){
+ const finals=matchesInYear.filter(m=>isGrandFinalRound(m.round));
+ return finals.length ? finals[finals.length-1] : null;
+}
+
+// Parse score safely: "2–1", "2-1", "1–1 (4–2 pens)" etc
+function parseScore(score){
+ if(!score) return null;
+ const clean=String(score).split("(")[0].trim();
+ const parts=clean.split(/[-–]/);
+ if(parts.length!==2) return null;
+ const a=parseInt(parts[0].trim(),10);
+ const b=parseInt(parts[1].trim(),10);
+ if(Number.isNaN(a) || Number.isNaN(b)) return null;
+ return [a,b];
+}
+
+// Events can be "Player (BRA)" or "Player (Brazil)" or just "Player"
 function parseEvent(str){
- const m=str.match(/^(.*?)\s*\(([^)]+)\)$/);
- if(m) return {name:m[1].trim(),country:m[2].trim()};
- return {name:str.trim(),country:null};
+ if(!str) return null;
+ const s=String(str).trim();
+ if(!s) return null;
+ const m=s.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+ if(m) return {name:m[1].trim(),tag:m[2].trim()};
+ return {name:s,tag:null};
 }
 
-function matchesTeam(bracket){
- if(!bracket) return true;
- const list=aliases[team];
- if(!list) return bracket===team;
- return list.includes(bracket);
+// Instead of relying on our own abbreviations (which you correctly called out),
+// we use a forgiving rule:
+// - If tag is present and clearly equals the opponent name, exclude.
+// - Otherwise count it (prevents “missing top 5” when codes differ).
+function shouldCountEventForTeam(tag, teamName, opponentName){
+ if(!tag) return true;
+
+ const t=tag.toLowerCase();
+ const me=teamName.toLowerCase();
+ const opp=opponentName.toLowerCase();
+
+ // If it literally matches opponent name, it’s not ours
+ if(t===opp) return false;
+
+ // If it literally matches our team name, it is ours
+ if(t===me) return true;
+
+ // If it's some code/abbrev we don't recognize, DON'T exclude (this is the key fix)
+ // because mismatched abbreviations were causing missing top-5 lists.
+ return true;
 }
 
-function isFinal(round){
- round=String(round).toLowerCase();
- return round.includes("final") && !round.includes("semi") && !round.includes("quarter");
-}
+/* ---------- Load + Normalise ---------- */
 
-fetch("data/world-cup.json",{cache:"no-store"})
+fetch("data/world-cup.json?v=4",{cache:"no-store"})
 .then(r=>r.json())
 .then(rows=>{
- let data={},cur=null;
+ let matchesByYear={};
+ let cur=null;
 
  rows.forEach(r=>{
   if(r.Team){
-   cur={year:r.Year,round:r.Round,team1:r.Team,team2:r.Team__1,
-        score:r["Final Score"],winner:r["Winnning Team"],events:[]};
-   if(!data[r.Year]) data[r.Year]=[];
-   data[r.Year].push(cur);
+   cur={
+    year:r.Year,
+    round:r.Round,
+    team1:r.Team,
+    team2:r.Team__1,
+    score:r["Final Score"],
+    winner:r["Winnning Team"],
+    events:[]
+   };
+
+   if(!matchesByYear[r.Year]) matchesByYear[r.Year]=[];
+   matchesByYear[r.Year].push(cur);
   }
 
-  if(cur&&(r.Scorers||r["Yellow Cards"]||r["Red Cards"])){
+  if(cur && (r.Scorers||r["Yellow Cards"]||r["Red Cards"])){
    cur.events.push({
     scorer:r.Scorers||"",
     yellow:r["Yellow Cards"]||"",
@@ -115,44 +153,58 @@ fetch("data/world-cup.json",{cache:"no-store"})
   }
  });
 
- render(team,data);
+ render(team,matchesByYear);
+})
+.catch(()=>{
+ document.getElementById("content").innerHTML="<div class='error'>World Cup data failed to load.</div>";
 });
 
-function render(team,data){
+/* ---------- Render ---------- */
 
- let appearances=0,titles=0,finals=0,matchesPlayed=0,goalsScored=0;
- let g={},y={},r={};
+function render(team,matchesByYear){
 
- Object.keys(data).sort().forEach(year=>{
-  const ym=data[year].filter(m=>m.team1===team||m.team2===team);
-  if(!ym.length) return;
+ let appearances=0, titles=0, finals=0, matchesPlayed=0, goalsScored=0;
+ let g={}, y={}, rr={};
 
-  appearances++;
+ const years=Object.keys(matchesByYear).sort();
 
-  const finalMatch=ym.find(m=>isFinal(m.round));
-  if(finalMatch){
-   finals++;
-   if(finalMatch.winner===team) titles++;
+ // Titles / Finals must be computed from the tournament grand final each year (global), not per-team matches.
+ years.forEach(year=>{
+  const yearMatches=matchesByYear[year];
+
+  // appearance if team played any match this year
+  const teamMatches=yearMatches.filter(m=>m.team1===team || m.team2===team);
+  if(teamMatches.length) appearances++;
+
+  // find tournament grand final for this year from ALL matches
+  const gf=getGrandFinalMatch(yearMatches);
+  if(gf){
+   const playedFinal=(gf.team1===team || gf.team2===team);
+   if(playedFinal) finals++;
+   if(gf.winner===team) titles++;
   }
 
-  ym.forEach(m=>{
+  // per-match stats + top-5 leaders come from matches the team played
+  teamMatches.forEach(m=>{
    matchesPlayed++;
 
-   const ps=String(m.score).split(/[-–]/);
-   if(ps.length===2){
-    if(m.team1===team) goalsScored+=parseInt(ps[0])||0;
-    if(m.team2===team) goalsScored+=parseInt(ps[1])||0;
+   const ps=parseScore(m.score);
+   if(ps){
+    if(m.team1===team) goalsScored+=ps[0];
+    if(m.team2===team) goalsScored+=ps[1];
    }
 
+   const opponent = (m.team1===team) ? m.team2 : m.team1;
+
    m.events.forEach(e=>{
-    [["scorer",g],["yellow",y],["red",r]].forEach(pair=>{
+    [["scorer",g],["yellow",y],["red",rr]].forEach(pair=>{
      const raw=e[pair[0]];
      if(!raw) return;
 
      const p=parseEvent(raw);
-     if(!p.name) return;
+     if(!p || !p.name) return;
 
-     if(p.country && !matchesTeam(p.country)) return;
+     if(!shouldCountEventForTeam(p.tag, team, opponent)) return;
 
      pair[1][p.name]=(pair[1][p.name]||0)+1;
     });
@@ -162,26 +214,30 @@ function render(team,data){
 
  const top=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,5);
 
+ // Build page
  let html=`
- <div class="header"><h1>${team}</h1></div>
+  <div class="header">
+   <h1>${team}</h1>
+   <div class="version">Country Page v4</div>
+  </div>
 
- <div class="stats">
-  <div class="stat-box">Appearances<br>${appearances}</div>
-  <div class="stat-box">Titles<br>${titles}</div>
-  <div class="stat-box">Finals<br>${finals}</div>
-  <div class="stat-box">Matches<br>${matchesPlayed}</div>
-  <div class="stat-box">Goals<br>${goalsScored}</div>
- </div>
+  <div class="stats">
+   <div class="stat-box">Appearances<br>${appearances}</div>
+   <div class="stat-box">Titles<br>${titles}</div>
+   <div class="stat-box">Finals<br>${finals}</div>
+   <div class="stat-box">Matches<br>${matchesPlayed}</div>
+   <div class="stat-box">Goals<br>${goalsScored}</div>
+  </div>
 
- <div class="leaders">
-  <div class="leader-box"><h3>Top 5 Goals</h3>${top(g).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
-  <div class="leader-box"><h3>Top 5 Yellow Cards</h3>${top(y).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
-  <div class="leader-box"><h3>Top 5 Red Cards</h3>${top(r).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
- </div>
-`;
+  <div class="leaders">
+   <div class="leader-box"><h3>Top 5 Goals</h3>${top(g).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
+   <div class="leader-box"><h3>Top 5 Yellow Cards</h3>${top(y).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
+   <div class="leader-box"><h3>Top 5 Red Cards</h3>${top(rr).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
+  </div>
+ `;
 
- Object.keys(data).sort().forEach(year=>{
-  const ym=data[year].filter(m=>m.team1===team||m.team2===team);
+ years.forEach(year=>{
+  const ym=matchesByYear[year].filter(m=>m.team1===team || m.team2===team);
   if(!ym.length) return;
 
   html+=`<div class="year-section"><h2>${year}</h2>`;
