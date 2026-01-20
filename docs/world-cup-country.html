@@ -2,24 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
-
 <title>World Cup Country | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet" href="style.css">
-
-<script>
-const PAGE_VERSION="3";
-const p=new URLSearchParams(location.search);
-if(p.get("v")!==PAGE_VERSION){
-  p.set("v",PAGE_VERSION);
-  location.replace(location.pathname+"?"+p.toString());
-}
-</script>
 
 <style>
 body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
@@ -47,8 +33,6 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
 .match{border:1px solid #ddd;border-radius:10px;padding:14px;margin-top:12px;background:white;}
 .match h3{margin:0 0 6px 0;}
 .small{font-size:13px;color:#555;}
-
-.version{font-size:12px;color:#999;margin-bottom:10px;text-align:right;}
 </style>
 </head>
 
@@ -58,65 +42,46 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
 <a href="index.html">Home</a>
 <a href="football.html">Football</a>
 <a href="football-world-cup.html">World Cup</a>
-<a href="worldcupcountries.html">Countries</a>
+<a href="world-cup-countries.html">Countries</a>
 </div>
 
 <div class="page-wrap">
-<div class="version">World Cup Country Page v3</div>
 <div id="content"></div>
 </div>
 
 <script>
-const team=new URLSearchParams(location.search).get("team");
+const team = new URLSearchParams(location.search).get("team");
 
 const countryCodes={
 "Brazil":"BR","Germany":"DE","Italy":"IT","Argentina":"AR","France":"FR",
 "England":"GB","Spain":"ES","Netherlands":"NL","Uruguay":"UY","Portugal":"PT",
 "Belgium":"BE","Croatia":"HR","Mexico":"MX","USA":"US","United States":"US",
-"Japan":"JP","South Korea":"KR","Korea Republic":"KR","Australia":"AU"
+"Japan":"JP","South Korea":"KR","Korea Republic":"KR","Australia":"AU",
+"Austria":"AT","Switzerland":"CH","Sweden":"SE","Norway":"NO","Denmark":"DK",
+"Poland":"PL","Czech Republic":"CZ","Russia":"RU","Ukraine":"UA","Turkey":"TR",
+"Greece":"GR","Scotland":"GB","Wales":"GB","Ireland":"IE","Morocco":"MA",
+"Cameroon":"CM","Nigeria":"NG","Ghana":"GH","Senegal":"SN","Tunisia":"TN",
+"Algeria":"DZ","Iran":"IR","Iraq":"IQ","Saudi Arabia":"SA","Qatar":"QA",
+"China":"CN","South Africa":"ZA","New Zealand":"NZ","Canada":"CA",
+"Costa Rica":"CR","Honduras":"HN","Panama":"PA","Jamaica":"JM",
+"Trinidad and Tobago":"TT","Colombia":"CO","Chile":"CL","Peru":"PE",
+"Paraguay":"PY","Ecuador":"EC","Bolivia":"BO","Venezuela":"VE"
 };
-
-const alpha3to2={
-"ARG":"AR","BRA":"BR","GER":"DE","DEU":"DE","ESP":"ES","FRA":"FR","ITA":"IT",
-"NED":"NL","URU":"UY","POR":"PT","BEL":"BE","CRO":"HR","MEX":"MX","USA":"US",
-"JPN":"JP","KOR":"KR","AUS":"AU"
-};
-
-function normalizeCode(c){
- if(!c) return "";
- if(c.length===2) return c;
- return alpha3to2[c]||c;
-}
 
 function flagEmoji(code){
  return code?code.replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt())):"";
 }
 
-function parseNameAndCode(str){
- const m=str?.match(/^(.*?)\s*\(([^)]+)\)$/);
- if(m) return {name:m[1].trim(),code:normalizeCode(m[2])};
- return {name:str?.trim(),code:null};
+function parseNameAndCountry(str){
+ if(!str) return null;
+ const m=str.match(/^(.*?)\s*\(([^)]+)\)$/);
+ if(m){
+  return {name:m[1].trim(),country:m[2].trim()};
+ }
+ return {name:str.trim(),country:null};
 }
 
-function parseScore(score){
- if(!score) return null;
- let clean=String(score).split("(")[0].trim();
- let p=clean.split(/[-–]/);
- if(p.length!==2) return null;
- return [parseInt(p[0]),parseInt(p[1])];
-}
-
-function isGrandFinalRound(r){
- r=String(r).toLowerCase();
- return /\bfinal\b/.test(r)&&!/semi|quarter|third|bronze/.test(r);
-}
-
-function getGrandFinalMatch(list){
- const f=list.filter(m=>isGrandFinalRound(m.round));
- return f.length?f[f.length-1]:null;
-}
-
-fetch("data/world-cup.json?v=3",{cache:"no-store"})
+fetch("data/world-cup.json",{cache:"no-store"})
 .then(r=>r.json())
 .then(rows=>{
  let data={},cur=null;
@@ -128,6 +93,7 @@ fetch("data/world-cup.json?v=3",{cache:"no-store"})
    if(!data[r.Year]) data[r.Year]=[];
    data[r.Year].push(cur);
   }
+
   if(cur&&(r.Scorers||r["Yellow Cards"]||r["Red Cards"])){
    cur.events.push({
     scorer:r.Scorers||"",
@@ -145,18 +111,8 @@ function render(team,data){
  let appearances=0,titles=0,finals=0,matchesPlayed=0,goalsScored=0;
  let g={},y={},r={};
 
- const myCode=countryCodes[team];
-
  Object.keys(data).sort().forEach(year=>{
-  const all=data[year];
-  const gf=getGrandFinalMatch(all);
-
-  if(gf){
-   if(gf.team1===team||gf.team2===team) finals++;
-   if(gf.winner===team) titles++;
-  }
-
-  const ym=all.filter(m=>m.team1===team||m.team2===team);
+  const ym=data[year].filter(m=>m.team1===team||m.team2===team);
   if(!ym.length) return;
 
   appearances++;
@@ -164,21 +120,26 @@ function render(team,data){
   ym.forEach(m=>{
    matchesPlayed++;
 
-   const ps=parseScore(m.score);
-   if(ps){
-    if(m.team1===team) goalsScored+=ps[0];
-    if(m.team2===team) goalsScored+=ps[1];
+   let parts=String(m.score).split(/[-–]/);
+   if(parts.length===2){
+    if(m.team1===team) goalsScored+=parseInt(parts[0])||0;
+    if(m.team2===team) goalsScored+=parseInt(parts[1])||0;
    }
 
    m.events.forEach(e=>{
-    ["scorer","yellow","red"].forEach(t=>{
-     if(e[t]){
-      const p=parseNameAndCode(e[t]);
-      if(p?.name && (!p.code||p.code===myCode)){
-       const box=t==="scorer"?g:t==="yellow"?y:r;
-       box[p.name]=(box[p.name]||0)+1;
-      }
+    [["scorer",g],["yellow",y],["red",r]].forEach(pair=>{
+     const raw=e[pair[0]];
+     if(!raw) return;
+
+     const p=parseNameAndCountry(raw);
+     if(!p||!p.name) return;
+
+     // only exclude if clearly opponent
+     if(p.country && p.country!==team && p.country!==countryCodes[team]){
+      return;
      }
+
+     pair[1][p.name]=(pair[1][p.name]||0)+1;
     });
    });
   });
@@ -186,15 +147,13 @@ function render(team,data){
 
  const top=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,5);
 
- const flag=flagEmoji(myCode);
+ const flag=flagEmoji(countryCodes[team]);
 
  let html=`
  <div class="header"><div class="flag">${flag}</div><h1>${team}</h1></div>
 
  <div class="stats">
   <div class="stat-box">Appearances<br>${appearances}</div>
-  <div class="stat-box">Titles<br>${titles}</div>
-  <div class="stat-box">Finals<br>${finals}</div>
   <div class="stat-box">Matches<br>${matchesPlayed}</div>
   <div class="stat-box">Goals<br>${goalsScored}</div>
  </div>
@@ -205,22 +164,6 @@ function render(team,data){
   <div class="leader-box"><h3>Top 5 Red Cards</h3>${top(r).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
  </div>
 `;
-
- Object.keys(data).sort().forEach(year=>{
-  const ym=data[year].filter(m=>m.team1===team||m.team2===team);
-  if(!ym.length) return;
-
-  html+=`<div class="year-section"><h2>${year}</h2>`;
-  ym.forEach(m=>{
-   html+=`
-    <div class="match">
-     <h3>${m.team1} ${m.score} ${m.team2}</h3>
-     <div class="small">${m.round}</div>
-     <div class="small">Winner: ${m.winner}</div>
-    </div>`;
-  });
-  html+=`</div>`;
- });
 
  document.getElementById("content").innerHTML=html;
 }
