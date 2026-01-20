@@ -2,50 +2,93 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>World Cup Head to Head | The Sporting Almanac</title>
+<title>Football World Cup – Head to Head | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet" href="style.css">
 
 <style>
-body{
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
-  "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-}
+body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
 
 .navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px 0;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
+display:flex;
+justify-content:center;
+gap:22px;
+padding:16px;
+border-bottom:1px solid #ddd;
+font-weight:600;
 }
-.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.navbar a{
+color:#0056d6;
+text-decoration:none;
+font-size:18px;
+}
 
 .page-wrap{
-  max-width:1000px;
-  margin:0 auto;
-  padding:30px 20px;
+max-width:1200px;
+margin:0 auto;
+padding:30px 20px;
 }
 
-.selectors{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:20px;
+h1{text-align:center;margin-bottom:25px;}
+
+.selector{
+display:flex;
+gap:14px;
+justify-content:center;
+margin-bottom:30px;
+flex-wrap:wrap;
 }
 
 select{
-  padding:10px;
-  font-size:16px;
+padding:10px;
+font-size:16px;
+border-radius:6px;
+border:1px solid #ccc;
+min-width:200px;
 }
 
-.results{
-  margin-top:30px;
-  border:1px solid #ddd;
-  border-radius:10px;
-  padding:20px;
-  font-style:italic;
+button{
+padding:10px 18px;
+font-size:16px;
+border:none;
+border-radius:6px;
+cursor:pointer;
+background:#0056d6;
+color:white;
+font-weight:600;
+}
+
+button:hover{background:#003f9e;}
+
+.match{
+border:1px solid #ddd;
+border-radius:10px;
+padding:14px;
+margin-bottom:16px;
+background:white;
+}
+
+.match h3{margin:0 0 6px 0;}
+
+.small{font-size:13px;color:#555;}
+
+.team-link{
+color:#0056d6;
+text-decoration:none;
+font-weight:600;
+}
+.team-link:hover{text-decoration:underline;}
+
+.summary{
+border:1px solid #ddd;
+border-radius:10px;
+padding:14px;
+background:#fafafa;
+margin-bottom:20px;
+font-weight:600;
+text-align:center;
 }
 </style>
 </head>
@@ -53,43 +96,129 @@ select{
 <body>
 
 <div class="navbar">
-  <a href="index.html">Home</a>
-  <a href="football-world-cup.html">World Cup</a>
+<a href="index.html">Home</a>
+<a href="football.html">Football</a>
+<a href="football-world-cup.html">World Cup</a>
+<a href="world-cup-countries.html">Countries</a>
+<a href="world-cup-year.html">By Year</a>
 </div>
 
 <div class="page-wrap">
 
-<h1>World Cup Head to Head</h1>
+<h1>World Cup – Head to Head</h1>
 
-<div class="selectors">
-  <select>
-    <option>Brazil</option>
-    <option>Germany</option>
-    <option>Argentina</option>
-    <option>France</option>
-    <option>Italy</option>
-    <option>England</option>
-    <option>Spain</option>
-    <option>Netherlands</option>
-  </select>
-
-  <select>
-    <option>Brazil</option>
-    <option>Germany</option>
-    <option>Argentina</option>
-    <option>France</option>
-    <option>Italy</option>
-    <option>England</option>
-    <option>Spain</option>
-    <option>Netherlands</option>
-  </select>
+<div class="selector">
+<select id="teamA"></select>
+<select id="teamB"></select>
+<button onclick="compare()">Compare</button>
 </div>
 
-<div class="results">
-  Head-to-head World Cup results will appear here once match data is connected.
-</div>
+<div id="summary"></div>
+<div id="results"></div>
 
 </div>
+
+<script>
+const COUNTRY_PAGE="world-cup-country.html";
+
+let allMatches=[];
+let countrySet=new Set();
+
+fetch("data/world-cup.json",{cache:"no-store"})
+.then(r=>r.json())
+.then(data=>{
+ normalise(data);
+ buildSelectors();
+});
+
+function normalise(rows){
+ let current=null;
+
+ rows.forEach(r=>{
+  if(r.Team){
+   current={
+    year:r.Year,
+    round:r.Round,
+    team1:r.Team,
+    team2:r.Team__1,
+    score:r["Final Score"],
+    winner:r["Winnning Team"]
+   };
+   allMatches.push(current);
+   countrySet.add(r.Team);
+   countrySet.add(r.Team__1);
+  }
+ });
+}
+
+function buildSelectors(){
+ const a=document.getElementById("teamA");
+ const b=document.getElementById("teamB");
+
+ Array.from(countrySet)
+  .sort((x,y)=>x.localeCompare(y))
+  .forEach(c=>{
+   a.add(new Option(c,c));
+   b.add(new Option(c,c));
+  });
+}
+
+function compare(){
+ const a=document.getElementById("teamA").value;
+ const b=document.getElementById("teamB").value;
+
+ if(!a||!b||a===b) return;
+
+ const matches=allMatches.filter(m=>
+  (m.team1===a && m.team2===b) ||
+  (m.team1===b && m.team2===a)
+ );
+
+ render(a,b,matches);
+}
+
+function render(a,b,matches){
+
+ let winsA=0,winsB=0,draws=0;
+
+ matches.forEach(m=>{
+  if(m.winner===a) winsA++;
+  else if(m.winner===b) winsB++;
+  else draws++;
+ });
+
+ const sum=document.getElementById("summary");
+ sum.innerHTML=`
+  <div class="summary">
+   <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(a)}">${a}</a>
+   vs
+   <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(b)}">${b}</a><br>
+   ${winsA} Wins – ${winsB} Wins – ${draws} Draws
+  </div>
+ `;
+
+ const out=document.getElementById("results");
+ out.innerHTML="";
+
+ matches.forEach(m=>{
+  const div=document.createElement("div");
+  div.className="match";
+
+  div.innerHTML=`
+   <h3>
+    <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.team1)}">${m.team1}</a>
+    ${m.score}
+    <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.team2)}">${m.team2}</a>
+   </h3>
+   <div class="small">${m.year} – ${m.round}</div>
+   <div class="small">Winner:
+    <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.winner)}">${m.winner}</a>
+   </div>
+  `;
+  out.appendChild(div);
+ });
+}
+</script>
 
 </body>
 </html>
