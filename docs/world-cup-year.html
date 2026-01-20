@@ -5,6 +5,80 @@
 <title>Football World Cup – Year by Year | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="style.css">
+
+<style>
+body{
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+  "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+.year-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(110px,1fr));
+  gap:12px;
+  margin-bottom:30px;
+}
+
+.year-tile{
+  background:#111;
+  color:#fff;
+  text-align:center;
+  padding:12px 0;
+  border-radius:8px;
+  font-weight:700;
+  cursor:pointer;
+}
+
+.year-tile.active{background:#0056d6;}
+
+.match{
+  border:1px solid #ddd;
+  border-radius:10px;
+  margin-bottom:18px;
+  padding:14px;
+}
+
+.match h3{
+  margin:0 0 6px;
+}
+
+.event-table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:14px;
+}
+
+.event-table th{
+  background:#f0f0f0;
+  padding:8px;
+  text-align:left;
+}
+
+.event-table td{
+  padding:8px;
+  border-bottom:1px solid #ddd;
+}
+
+.event-table tr:nth-child(even) td{
+  background:#f3f7ff;
+}
+</style>
 </head>
 
 <body>
@@ -15,24 +89,108 @@
   <a href="football-world-cup.html">World Cup</a>
 </div>
 
-<h1 style="padding:20px;">Football World Cup – Year by Year</h1>
+<div class="page-wrap">
+
+<h1>Football World Cup – Year by Year</h1>
 
 <div id="years" class="year-grid"></div>
 
+<div id="output"></div>
+
+</div>
+
 <script>
-const years=[
-1930,1934,1938,1950,1954,1958,1962,1966,1970,1974,1978,
-1982,1986,1990,1994,1998,2002,2006,2010,2014,2018,2022
-];
+let rawData=[];
+let matchesByYear={};
 
-const box=document.getElementById("years");
-
-years.forEach(y=>{
-  const d=document.createElement("div");
-  d.className="year-tile";
-  d.textContent=y;
-  box.appendChild(d);
+fetch("data/world-cup.json",{cache:"no-store"})
+.then(r=>r.json())
+.then(data=>{
+  rawData=data;
+  normaliseData();
+  buildYearTiles();
 });
+
+/* STEP 1: NORMALISE ROWS INTO MATCHES */
+function normaliseData(){
+
+  let currentMatch=null;
+
+  rawData.forEach(row=>{
+
+    if(row.Team){
+      currentMatch={
+        year:row.Year,
+        host:row.Host,
+        round:row.Round,
+        team1:row.Team,
+        team2:row.Team__1,
+        score:row["Final Score"],
+        winner:row["Winnning Team"],
+        federation:row["Winning Federation"],
+        events:[]
+      };
+
+      if(!matchesByYear[row.Year]) matchesByYear[row.Year]=[];
+      matchesByYear[row.Year].push(currentMatch);
+    }
+
+    if(currentMatch && row.Scorers){
+      currentMatch.events.push({
+        scorer:row.Scorers,
+        minute:row["Time scored"],
+        progress:row["Progess Score"]
+      });
+    }
+
+  });
+}
+
+/* STEP 2: BUILD YEAR BUTTONS */
+function buildYearTiles(){
+  const box=document.getElementById("years");
+
+  Object.keys(matchesByYear).sort().forEach(y=>{
+    const d=document.createElement("div");
+    d.className="year-tile";
+    d.textContent=y;
+    d.onclick=()=>loadYear(y,d);
+    box.appendChild(d);
+  });
+}
+
+/* STEP 3: LOAD YEAR */
+function loadYear(year,btn){
+  document.querySelectorAll(".year-tile").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+
+  const out=document.getElementById("output");
+  out.innerHTML="";
+
+  matchesByYear[year].forEach(m=>{
+    const div=document.createElement("div");
+    div.className="match";
+
+    div.innerHTML=`
+      <h3>${m.team1} ${m.score} ${m.team2}</h3>
+      <div><strong>Round:</strong> ${m.round}</div>
+      <div><strong>Winner:</strong> ${m.winner} (${m.federation})</div>
+
+      <table class="event-table">
+        <tr><th>Scorer</th><th>Minute</th><th>Score Progress</th></tr>
+        ${m.events.map(e=>`
+          <tr>
+            <td>${e.scorer}</td>
+            <td>${e.minute}</td>
+            <td>${e.progress}</td>
+          </tr>
+        `).join("")}
+      </table>
+    `;
+
+    out.appendChild(div);
+  });
+}
 </script>
 
 </body>
