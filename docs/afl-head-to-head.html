@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AFL Head to Head | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="afl.css">
+
+<style>
+body{font-family:Arial,Helvetica,sans-serif;background:white;margin:0;color:#111;}
+
+h1{text-align:center;margin:20px 0;}
+
+.selector-bar{
+ max-width:900px;
+ margin:20px auto;
+ display:grid;
+ grid-template-columns:1fr 1fr;
+ gap:20px;
+ padding:0 20px;
+}
+
+select{
+ height:38px;
+ padding:6px 10px;
+ border-radius:6px;
+ border:1px solid #ccc;
+ font-size:15px;
+}
+
+.results{
+ max-width:900px;
+ margin:30px auto;
+ padding:20px;
+ background:#f7fbff;
+ border-radius:10px;
+ box-shadow:0 3px 8px rgba(0,0,0,.08);
+}
+
+.results table{
+ width:100%;
+ border-collapse:collapse;
+}
+
+.results th{
+ background:#eaf3ff;
+ padding:10px;
+ text-align:left;
+}
+
+.results td{
+ padding:10px;
+ border-bottom:1px solid #ddd;
+}
+</style>
+</head>
+
+<body>
+
+<h1>AFL Head to Head</h1>
+
+<div class="selector-bar">
+ <select id="teamA"></select>
+ <select id="teamB"></select>
+</div>
+
+<div class="results" id="results"></div>
+
+<script>
+let data=[];
+
+fetch("data/afl.json",{cache:"no-store"})
+.then(r=>r.json())
+.then(d=>{
+ data=d;
+ initTeams();
+});
+
+const teamA=document.getElementById("teamA");
+const teamB=document.getElementById("teamB");
+const results=document.getElementById("results");
+
+function initTeams(){
+ const teams=[...new Set(data.flatMap(m=>[m.home,m.away]))].sort();
+ teamA.innerHTML="<option value=''>Select Team</option>";
+ teamB.innerHTML="<option value=''>Select Team</option>";
+ teams.forEach(t=>{
+  teamA.innerHTML+=`<option>${t}</option>`;
+  teamB.innerHTML+=`<option>${t}</option>`;
+ });
+}
+
+teamA.onchange=teamB.onchange=run;
+
+function run(){
+ if(!teamA.value||!teamB.value||teamA.value==teamB.value){
+  results.innerHTML="";
+  return;
+ }
+
+ const a=teamA.value;
+ const b=teamB.value;
+
+ const matches=data.filter(m=>
+  (m.home==a&&m.away==b)||(m.home==b&&m.away==a)
+ );
+
+ let aWins=0,bWins=0,draws=0;
+ let aScore=0,bScore=0;
+ let biggestWin=0,biggestText="";
+
+ matches.forEach(m=>{
+  const aTeamScore=m.home==a?m.home_score:m.away_score;
+  const bTeamScore=m.home==a?m.away_score:m.home_score;
+
+  aScore+=aTeamScore;
+  bScore+=bTeamScore;
+
+  if(aTeamScore>bTeamScore) aWins++;
+  else if(bTeamScore>aTeamScore) bWins++;
+  else draws++;
+
+  const margin=Math.abs(aTeamScore-bTeamScore);
+  if(margin>biggestWin){
+   biggestWin=margin;
+   biggestText=`${m.home} ${m.home_score} def ${m.away} ${m.away_score} (${m.year} R${m.round})`;
+  }
+ });
+
+ results.innerHTML=`
+ <h2 style="text-align:center">${a} vs ${b}</h2>
+
+ <table>
+ <tr><th>Games Played</th><td>${matches.length}</td></tr>
+ <tr><th>${a} Wins</th><td>${aWins}</td></tr>
+ <tr><th>${b} Wins</th><td>${bWins}</td></tr>
+ <tr><th>Draws</th><td>${draws}</td></tr>
+ <tr><th>${a} Total Score</th><td>${aScore}</td></tr>
+ <tr><th>${b} Total Score</th><td>${bScore}</td></tr>
+ <tr><th>Biggest Margin</th><td>${biggestText}</td></tr>
+ </table>
+ `;
+}
+</script>
+
+</body>
+</html>
