@@ -12,18 +12,23 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
 .navbar{display:flex;justify-content:center;gap:22px;padding:16px;border-bottom:1px solid #ddd;font-weight:600;}
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 .page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px;}
+
 .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;}
 .header h1{margin:0;font-size:32px;}
 .version{font-size:12px;color:#999;}
+
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:25px;}
 .stat-box{border:1px solid #ddd;border-radius:10px;padding:14px;background:#fafafa;text-align:center;font-weight:700;}
+
 .leaders{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:40px;}
 .leader-box{border:1px solid #ddd;border-radius:10px;padding:14px;background:#f9fbff;font-weight:700;}
 .leader-box h3{text-align:center;margin:0 0 10px 0;}
 .leader-line{font-size:14px;font-weight:600;padding:4px 0;border-bottom:1px solid #eee;}
 .leader-line:last-child{border-bottom:none;}
+
 .year-section{margin-bottom:40px;}
 .year-section h2{border-bottom:2px solid #0056d6;padding-bottom:6px;}
+
 .match{border:1px solid #ddd;border-radius:10px;padding:14px;margin-top:12px;background:white;}
 .match h3{margin:0 0 6px 0;}
 .small{font-size:13px;color:#555;}
@@ -47,9 +52,9 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
 <script>
 let team=new URLSearchParams(location.search).get("team");
 
-/* ---------- NORMALISATION ---------- */
+/* ---------- NORMALISE ---------- */
 function normalizeTeam(name){
- if(!name) return name;
+ if(!name) return "";
  let n=String(name).replace(/\u00A0/g," ").trim();
  let k=n.toLowerCase();
 
@@ -69,10 +74,6 @@ if(!team){
 }
 
 /* ---------- Helpers ---------- */
-
-function sanitize(txt){
- return String(txt||"").replace(/west\s*germany/gi,"Germany");
-}
 
 function isGrandFinalRound(round){
  const r=String(round||"").toLowerCase();
@@ -98,7 +99,7 @@ function parseScore(score){
 
 /* ---------- LOAD ---------- */
 
-fetch("data/world-cup.json?v=10",{cache:"no-store"})
+fetch("data/world-cup.json",{cache:"no-store"})
 .then(r=>r.json())
 .then(rows=>{
  let byYear={},cur=null;
@@ -131,10 +132,39 @@ function render(team,data){
 
  const years=Object.keys(data).sort();
 
+ years.forEach(year=>{
+  const matchesYear=data[year];
+  const teamMatches=matchesYear.filter(m=>m.team1===team||m.team2===team);
+  if(teamMatches.length) appearances++;
+
+  const gf=getGrandFinalMatch(matchesYear);
+  if(gf){
+   if(gf.team1===team||gf.team2===team) finals++;
+   if(gf.winner===team) titles++;
+  }
+
+  teamMatches.forEach(m=>{
+   matches++;
+   const sc=parseScore(m.score);
+   if(sc){
+    if(m.team1===team) goals+=sc[0];
+    if(m.team2===team) goals+=sc[1];
+   }
+  });
+ });
+
  let html=`
  <div class="header">
   <h1>${team}</h1>
-  <div class="version">Country Page v10</div>
+  <div class="version">Country Page v11</div>
+ </div>
+
+ <div class="stats">
+  <div class="stat-box">Appearances<br>${appearances}</div>
+  <div class="stat-box">Titles<br>${titles}</div>
+  <div class="stat-box">Finals<br>${finals}</div>
+  <div class="stat-box">Matches<br>${matches}</div>
+  <div class="stat-box">Goals<br>${goals}</div>
  </div>
 `;
 
@@ -146,9 +176,9 @@ function render(team,data){
   ym.forEach(m=>{
    html+=`
     <div class="match">
-     <h3>${sanitize(m.team1)} ${m.score} ${sanitize(m.team2)}</h3>
-     <div class="small">${sanitize(m.round)}</div>
-     <div class="small">Winner: ${sanitize(m.winner)}</div>
+     <h3>${m.team1} ${m.score} ${m.team2}</h3>
+     <div class="small">${m.round}</div>
+     <div class="small">Winner: ${m.winner}</div>
     </div>`;
   });
   html+=`</div>`;
