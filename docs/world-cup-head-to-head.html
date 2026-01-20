@@ -17,48 +17,78 @@ h1{text-align:center;margin-bottom:25px;}
 
 .selector{display:flex;gap:14px;justify-content:center;margin-bottom:30px;flex-wrap:wrap;}
 
-select,button{
-padding:10px 16px;font-size:16px;border-radius:6px;border:1px solid #ccc;
+select{
+padding:10px 14px;
+font-size:16px;
+border-radius:10px;
+border:1px solid #ccc;
+min-width:260px;
 }
 
 button{
-background:#0056d6;color:white;font-weight:600;border:none;cursor:pointer;
+padding:10px 18px;
+font-size:16px;
+border:none;
+border-radius:10px;
+cursor:pointer;
+background:#0056d6;
+color:white;
+font-weight:700;
 }
 button:hover{background:#003f9e;}
 
 .summary{
-border:1px solid #ddd;border-radius:12px;padding:18px;background:#fafafa;
-margin-bottom:20px;text-align:center;
+border:1px solid #ddd;
+border-radius:14px;
+padding:22px 18px;
+background:#fafafa;
+margin-bottom:20px;
 }
 
-.h2h-row{
-display:flex;
+.h2h-grid{
+display:grid;
+grid-template-columns: 80px 1fr 1fr 1fr 80px;
 align-items:center;
-justify-content:center;
-gap:20px;
-font-size:26px;
-font-weight:700;
-}
-
-.h2h-mid{
-font-size:28px;
-}
-
-.h2h-labels{
-display:flex;
-justify-content:center;
-gap:28px;
-margin-top:6px;
-font-size:13px;
-color:#555;
+justify-items:center;
+column-gap:30px;
+row-gap:10px;
 }
 
 .flag{
-font-size:42px;
+font-size:44px;
+line-height:1;
+}
+
+.h2h-num{
+font-size:40px;
+font-weight:800;
+}
+
+.h2h-sep{
+font-size:40px;
+font-weight:800;
+opacity:.35;
+}
+
+.h2h-labels{
+grid-column:2 / 5;
+width:100%;
+display:grid;
+grid-template-columns: 1fr 1fr 1fr;
+justify-items:center;
+column-gap:30px;
+margin-top:4px;
+font-size:14px;
+color:#555;
+font-weight:600;
+}
+
+.h2h-labels div{
+text-align:center;
 }
 
 .leaders{
-border:1px solid #ddd;border-radius:10px;padding:14px;background:#f9fbff;
+border:1px solid #ddd;border-radius:12px;padding:14px;background:#f9fbff;
 margin-bottom:24px;font-weight:600;
 }
 .leaders h3{text-align:center;margin:0 0 10px 0;}
@@ -66,12 +96,12 @@ margin-bottom:24px;font-weight:600;
 .leader-line:last-child{border-bottom:none;}
 
 .match{
-border:1px solid #ddd;border-radius:10px;padding:14px;margin-bottom:16px;background:white;
+border:1px solid #ddd;border-radius:12px;padding:14px;margin-bottom:16px;background:white;
 }
 .match h3{margin:0 0 6px 0;}
 .small{font-size:13px;color:#555;}
 
-.team-link{color:#0056d6;text-decoration:none;font-weight:600;}
+.team-link{color:#0056d6;text-decoration:none;font-weight:700;}
 .team-link:hover{text-decoration:underline;}
 </style>
 </head>
@@ -105,30 +135,63 @@ border:1px solid #ddd;border-radius:10px;padding:14px;margin-bottom:16px;backgro
 <script>
 const COUNTRY_PAGE="world-cup-country.html";
 
-const flags={
-Brazil:"🇧🇷",Belgium:"🇧🇪",Germany:"🇩🇪",France:"🇫🇷",Italy:"🇮🇹",Argentina:"🇦🇷",
-England:"🏴",Spain:"🇪🇸",Netherlands:"🇳🇱",Portugal:"🇵🇹",Uruguay:"🇺🇾"
-};
-
-function flag(t){return flags[t]||"";}
-
 let allMatches=[];
 let countrySet=new Set();
 
-function normalizeTeam(n){
- if(!n) return "";
+/* ---------- NORMALISE ---------- */
+function normalizeTeam(name){
+ if(!name) return "";
+ let n=String(name).replace(/\u00A0/g," ").trim();
  let k=n.toLowerCase();
+
  if(k.includes("west germany")) return "Germany";
  if(k==="frg") return "Germany";
- return n.trim();
+ if(k.includes("federal republic")) return "Germany";
+ if(k.includes("fr germany")) return "Germany";
+
+ return n;
 }
 
-function parseEvent(str){
- const m=str.match(/^(.*?)\s*\(([^)]+)\)$/);
+/* ---------- FLAG SUPPORT (ALL COUNTRIES) ---------- */
+const countryCodes={
+"Brazil":"BR","Germany":"DE","Italy":"IT","Argentina":"AR","France":"FR",
+"England":"GB","Spain":"ES","Netherlands":"NL","Uruguay":"UY","Portugal":"PT",
+"Belgium":"BE","Croatia":"HR","Mexico":"MX","USA":"US","United States":"US",
+"Japan":"JP","South Korea":"KR","Korea Republic":"KR","Australia":"AU",
+"Austria":"AT","Switzerland":"CH","Sweden":"SE","Norway":"NO","Denmark":"DK",
+"Poland":"PL","Czech Republic":"CZ","Czechoslovakia":"CZ","Russia":"RU",
+"Ukraine":"UA","Turkey":"TR","Greece":"GR","Scotland":"GB","Wales":"GB",
+"Ireland":"IE","Northern Ireland":"GB","Morocco":"MA","Cameroon":"CM",
+"Nigeria":"NG","Ghana":"GH","Senegal":"SN","Tunisia":"TN","Algeria":"DZ",
+"Iran":"IR","Iraq":"IQ","Saudi Arabia":"SA","Qatar":"QA","China":"CN",
+"South Africa":"ZA","New Zealand":"NZ","Canada":"CA",
+"Costa Rica":"CR","Honduras":"HN","Panama":"PA","Jamaica":"JM",
+"Trinidad and Tobago":"TT","Colombia":"CO","Chile":"CL","Peru":"PE",
+"Paraguay":"PY","Ecuador":"EC","Bolivia":"BO","Venezuela":"VE"
+};
+
+function flagEmoji(code){
+ if(!code) return "";
+ return code.toUpperCase().replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt(0)));
+}
+
+function getFlag(team){
+ const t=normalizeTeam(team);
+ const code=countryCodes[t]||"";
+ return flagEmoji(code);
+}
+
+/* ---------- SCORER PARSE ---------- */
+function parseScorerName(str){
+ if(!str) return "";
+ const s=String(str).trim();
+ if(!s) return "";
+ const m=s.match(/^(.*?)\s*\(([^)]+)\)$/);
  if(m) return m[1].trim();
- return str.trim();
+ return s;
 }
 
+/* ---------- LOAD ---------- */
 fetch("data/world-cup.json",{cache:"no-store"})
 .then(r=>r.json())
 .then(rows=>{
@@ -158,18 +221,24 @@ fetch("data/world-cup.json",{cache:"no-store"})
 function buildSelectors(){
  const a=document.getElementById("teamA");
  const b=document.getElementById("teamB");
- Array.from(countrySet).sort().forEach(c=>{
-  a.add(new Option(c,c));
-  b.add(new Option(c,c));
- });
+
+ Array.from(countrySet)
+  .filter(x=>x)
+  .sort((x,y)=>x.localeCompare(y))
+  .forEach(c=>{
+   a.add(new Option(c,c));
+   b.add(new Option(c,c));
+  });
 }
 
 function compare(){
- const a=teamA.value,b=teamB.value;
+ const a=document.getElementById("teamA").value;
+ const b=document.getElementById("teamB").value;
  if(!a||!b||a===b) return;
 
- const matches=allMatches.filter(m=>
-  (m.team1===a&&m.team2===b)||(m.team1===b&&m.team2===a)
+ const matches=allMatches.filter(m =>
+  (m.team1===a && m.team2===b) ||
+  (m.team1===b && m.team2===a)
  );
 
  render(a,b,matches);
@@ -185,24 +254,30 @@ function render(a,b,matches){
   else d++;
 
   m.events.forEach(e=>{
-   const p=parseEvent(e);
-   if(p) scorers[p]=(scorers[p]||0)+1;
+   const name=parseScorerName(e);
+   if(name) scorers[name]=(scorers[name]||0)+1;
   });
  });
 
+ const flagA=getFlag(a);
+ const flagB=getFlag(b);
+
  document.getElementById("summary").innerHTML=`
   <div class="summary">
-   <div class="h2h-row">
-    <span class="flag">${flag(a)}</span>
-    <span>${wA}</span>
-    <span class="h2h-mid">| ${d} |</span>
-    <span>${wB}</span>
-    <span class="flag">${flag(b)}</span>
-   </div>
-   <div class="h2h-labels">
-    <div>${a} Wins</div>
-    <div>Draws</div>
-    <div>${b} Wins</div>
+   <div class="h2h-grid">
+    <div class="flag">${flagA}</div>
+
+    <div class="h2h-num">${wA}</div>
+    <div class="h2h-num">${d}</div>
+    <div class="h2h-num">${wB}</div>
+
+    <div class="flag">${flagB}</div>
+
+    <div class="h2h-labels">
+     <div>${a} Wins</div>
+     <div>Draws</div>
+     <div>${b} Wins</div>
+    </div>
    </div>
   </div>
  `;
@@ -212,25 +287,30 @@ function render(a,b,matches){
  document.getElementById("scorers").innerHTML=`
   <div class="leaders">
    <h3>Top Scorers in this Match-Up</h3>
-   ${top.map(s=>`<div class="leader-line">${s[0]} – ${s[1]}</div>`).join("")||"No goals"}
+   ${top.length
+     ? top.map(s=>`<div class="leader-line">${s[0]} – ${s[1]}</div>`).join("")
+     : "<div class='leader-line'>No goals recorded</div>"}
   </div>
  `;
 
  const out=document.getElementById("results");
  out.innerHTML="";
- matches.sort((x,y)=>x.year-y.year).forEach(m=>{
-  out.innerHTML+=`
-   <div class="match">
-    <h3>
-     <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.team1)}">${m.team1}</a>
-     ${m.score}
-     <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.team2)}">${m.team2}</a>
-    </h3>
-    <div class="small">${m.year} – ${m.round}</div>
-    <div class="small">Winner: ${m.winner||"Draw"}</div>
-   </div>
-  `;
- });
+
+ matches
+  .sort((x,y)=>x.year-y.year)
+  .forEach(m=>{
+   out.innerHTML += `
+    <div class="match">
+     <h3>
+      <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.team1)}">${m.team1}</a>
+      ${m.score}
+      <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.team2)}">${m.team2}</a>
+     </h3>
+     <div class="small">${m.year} – ${m.round}</div>
+     <div class="small">Winner: ${m.winner || "Draw"}</div>
+    </div>
+   `;
+  });
 }
 </script>
 
