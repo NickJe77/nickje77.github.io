@@ -50,12 +50,11 @@ h1{text-align:center;margin-bottom:30px;}
 <script>
 const COUNTRY_PAGE="world-cup-country.html";
 
-let matchesByYear={}, rawRows=[];
+let matchesByYear={};
 
 fetch("data/world-cup.json",{cache:"no-store"})
 .then(r=>r.json())
 .then(data=>{
- rawRows=data;
  normalise(data);
  buildYears();
 });
@@ -68,8 +67,7 @@ function normalise(rows){
     round:r.Round,
     team1:r.Team,
     team2:r.Team__1,
-    score:r["Final Score"],
-    winner:r["Winnning Team"]
+    score:r["Final Score"]
    };
    if(!matchesByYear[r.Year]) matchesByYear[r.Year]=[];
    matchesByYear[r.Year].push(m);
@@ -97,7 +95,7 @@ function loadYear(year,btn){
  buildMatches(year,out);
 }
 
-/* ---------- SUMMARY ---------- */
+/* ---------- SUMMARY LOGIC ---------- */
 
 function isGrandFinalRound(round){
  const r=String(round||"").toLowerCase();
@@ -108,8 +106,7 @@ function isGrandFinalRound(round){
 
 function parseScore(score){
  if(!score) return null;
- const clean=String(score).split("(")[0].trim();
- const p=clean.split(/[-–]/);
+ const p=String(score).split("(")[0].trim().split(/[-–]/);
  if(p.length!==2) return null;
  return [parseInt(p[0]),parseInt(p[1])];
 }
@@ -121,42 +118,34 @@ function buildSummary(year,out){
  let runnerUp="Unknown";
  let goals={};
 
- const yearRows=rawRows.filter(r=>String(r.Year)===String(year));
+ const yearMatches=matchesByYear[year];
 
  // Host
- yearRows.forEach(r=>{
-  if(r.Host) host=r.Host;
-  if(r["Host Country"]) host=r["Host Country"];
+ yearMatches.forEach(m=>{
+  if(m.Host) host=m.Host;
  });
 
- // Grand Final
- const finals=yearRows.filter(r=>isGrandFinalRound(r.Round));
+ // Final match
+ const finals=yearMatches.filter(m=>isGrandFinalRound(m.round));
  const gf=finals.length?finals[finals.length-1]:null;
 
  if(gf){
-  const sc=parseScore(gf["Final Score"]);
-  const t1=gf.Team;
-  const t2=gf.Team__1;
-
-  if(sc && !isNaN(sc[0]) && !isNaN(sc[1])){
+  const sc=parseScore(gf.score);
+  if(sc){
    if(sc[0]>sc[1]){
-    winner=t1; runnerUp=t2;
+    winner=gf.team1;
+    runnerUp=gf.team2;
    }else if(sc[1]>sc[0]){
-    winner=t2; runnerUp=t1;
+    winner=gf.team2;
+    runnerUp=gf.team1;
    }
-  }
-
-  // fallback to Winner field if present
-  if(gf["Winnning Team"]){
-   winner=gf["Winnning Team"];
-   runnerUp = (t1===winner)?t2:t1;
   }
  }
 
  // Goal scorers
- yearRows.forEach(r=>{
-  if(r.Scorers){
-   const s=r.Scorers.split("(")[0].trim();
+ yearMatches.forEach(m=>{
+  if(m.Scorers){
+   const s=m.Scorers.split("(")[0].trim();
    if(s) goals[s]=(goals[s]||0)+1;
   }
  });
@@ -188,7 +177,6 @@ function buildMatches(year,out){
  matchesByYear[year].forEach(m=>{
   const div=document.createElement("div");
   div.className="match";
-
   div.innerHTML=`
    <h3>
     <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.team1)}">${m.team1}</a>
@@ -196,9 +184,6 @@ function buildMatches(year,out){
     <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.team2)}">${m.team2}</a>
    </h3>
    <div class="small">${m.round}</div>
-   <div class="small">Winner:
-    <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.winner)}">${m.winner}</a>
-   </div>
   `;
   out.appendChild(div);
  });
