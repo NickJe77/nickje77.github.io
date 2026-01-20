@@ -23,7 +23,6 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
 .leaders{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:40px;}
 .leader-box{border:1px solid #ddd;border-radius:10px;padding:14px;background:#f9fbff;font-weight:700;}
 .leader-box h3{text-align:center;margin:0 0 10px 0;}
-
 .leader-line{font-size:14px;font-weight:600;padding:4px 0;border-bottom:1px solid #eee;}
 .leader-line:last-child{border-bottom:none;}
 
@@ -60,23 +59,18 @@ if(!team){
 
 /* ---------- Helpers ---------- */
 
-// Robust “Grand Final” detector
 function isGrandFinalRound(round){
  const r=String(round||"").toLowerCase();
- // must include "final"
  if(!/\bfinal\b/.test(r)) return false;
- // exclude semis/quarters/third place/bronze etc
  if(/semi|quarter|third|bronze|3rd|playoff|play-off|placement/.test(r)) return false;
  return true;
 }
 
-// Return the last Grand Final match of a year (covers cases where "Final" appears earlier in text)
 function getGrandFinalMatch(matchesInYear){
  const finals=matchesInYear.filter(m=>isGrandFinalRound(m.round));
  return finals.length ? finals[finals.length-1] : null;
 }
 
-// Parse score safely: "2–1", "2-1", "1–1 (4–2 pens)" etc
 function parseScore(score){
  if(!score) return null;
  const clean=String(score).split("(")[0].trim();
@@ -88,7 +82,6 @@ function parseScore(score){
  return [a,b];
 }
 
-// Events can be "Player (BRA)" or "Player (Brazil)" or just "Player"
 function parseEvent(str){
  if(!str) return null;
  const s=String(str).trim();
@@ -98,31 +91,51 @@ function parseEvent(str){
  return {name:s,tag:null};
 }
 
-// Instead of relying on our own abbreviations (which you correctly called out),
-// we use a forgiving rule:
-// - If tag is present and clearly equals the opponent name, exclude.
-// - Otherwise count it (prevents “missing top 5” when codes differ).
-function shouldCountEventForTeam(tag, teamName, opponentName){
- if(!tag) return true;
+/* --- Tag matching (name + common codes) --- */
+const codeAliases={
+"Argentina":["ARG"], "Brazil":["BRA"], "Germany":["GER","DEU"], "France":["FRA"], "Italy":["ITA"],
+"Spain":["ESP"], "England":["ENG"], "Netherlands":["NED","HOL"], "Portugal":["POR"], "Uruguay":["URU"],
+"Belgium":["BEL"], "Croatia":["CRO"], "Australia":["AUS"], "Austria":["AUT"], "Switzerland":["SUI"],
+"Scotland":["SCO"], "Wales":["WAL"], "Ireland":["IRL"], "Japan":["JPN"], "Mexico":["MEX"],
+"United States":["USA","US"], "USA":["USA","US"]
+};
 
+function tagMatchesCountry(tag, countryName){
+ if(!tag) return false;
  const t=tag.toLowerCase();
- const me=teamName.toLowerCase();
- const opp=opponentName.toLowerCase();
+ const n=countryName.toLowerCase();
+ if(t===n) return true;
+ const codes=codeAliases[countryName]||[];
+ return codes.some(c=>t===c.toLowerCase());
+}
 
- // If it literally matches opponent name, it’s not ours
- if(t===opp) return false;
+/* --- Event attribution rules --- */
+/*
+Scorer MUST be correct: if tag exists and matches opponent => exclude.
+If tag exists and matches team => include.
+If tag exists but matches neither => include (unknown/messy tag; better than losing data).
+If no tag => include.
+*/
+function shouldCountScorer(tag, teamName, opponentName){
+ if(!tag) return true;
+ if(tagMatchesCountry(tag, opponentName)) return false;
+ if(tagMatchesCountry(tag, teamName)) return true;
+ return true;
+}
 
- // If it literally matches our team name, it is ours
- if(t===me) return true;
-
- // If it's some code/abbrev we don't recognize, DON'T exclude (this is the key fix)
- // because mismatched abbreviations were causing missing top-5 lists.
+/*
+Cards are sometimes missing/dirty tags. Keep forgiving:
+Exclude ONLY if tag clearly matches opponent.
+*/
+function shouldCountCard(tag, teamName, opponentName){
+ if(!tag) return true;
+ if(tagMatchesCountry(tag, opponentName)) return false;
  return true;
 }
 
 /* ---------- Load + Normalise ---------- */
 
-fetch("data/world-cup.json?v=4",{cache:"no-store"})
+fetch("data/world-cup.json?v=5",{cache:"no-store"})
 .then(r=>r.json())
 .then(rows=>{
  let matchesByYear={};
@@ -168,23 +181,18 @@ function render(team,matchesByYear){
 
  const years=Object.keys(matchesByYear).sort();
 
- // Titles / Finals must be computed from the tournament grand final each year (global), not per-team matches.
  years.forEach(year=>{
   const yearMatches=matchesByYear[year];
 
-  // appearance if team played any match this year
   const teamMatches=yearMatches.filter(m=>m.team1===team || m.team2===team);
   if(teamMatches.length) appearances++;
 
-  // find tournament grand final for this year from ALL matches
   const gf=getGrandFinalMatch(yearMatches);
   if(gf){
-   const playedFinal=(gf.team1===team || gf.team2===team);
-   if(playedFinal) finals++;
+   if(gf.team1===team || gf.team2===team) finals++;
    if(gf.winner===team) titles++;
   }
 
-  // per-match stats + top-5 leaders come from matches the team played
   teamMatches.forEach(m=>{
    matchesPlayed++;
 
@@ -194,31 +202,42 @@ function render(team,matchesByYear){
     if(m.team2===team) goalsScored+=ps[1];
    }
 
-   const opponent = (m.team1===team) ? m.team2 : m.team1;
+   const opponent=(m.team1===team)?m.team2:m.team1;
 
    m.events.forEach(e=>{
-    [["scorer",g],["yellow",y],["red",rr]].forEach(pair=>{
-     const raw=e[pair[0]];
-     if(!raw) return;
+    // scorers (strict vs opponent)
+    if(e.scorer){
+     const p=parseEvent(e.scorer);
+     if(p && p.name && shouldCountScorer(p.tag, team, opponent)){
+      g[p.name]=(g[p.name]||0)+1;
+     }
+    }
 
-     const p=parseEvent(raw);
-     if(!p || !p.name) return;
+    // yellow (forgiving but exclude clear opponent)
+    if(e.yellow){
+     const p=parseEvent(e.yellow);
+     if(p && p.name && shouldCountCard(p.tag, team, opponent)){
+      y[p.name]=(y[p.name]||0)+1;
+     }
+    }
 
-     if(!shouldCountEventForTeam(p.tag, team, opponent)) return;
-
-     pair[1][p.name]=(pair[1][p.name]||0)+1;
-    });
+    // red (forgiving but exclude clear opponent)
+    if(e.red){
+     const p=parseEvent(e.red);
+     if(p && p.name && shouldCountCard(p.tag, team, opponent)){
+      rr[p.name]=(rr[p.name]||0)+1;
+     }
+    }
    });
   });
  });
 
  const top=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,5);
 
- // Build page
  let html=`
   <div class="header">
    <h1>${team}</h1>
-   <div class="version">Country Page v4</div>
+   <div class="version">Country Page v5</div>
   </div>
 
   <div class="stats">
