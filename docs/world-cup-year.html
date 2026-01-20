@@ -130,11 +130,9 @@ fetch("data/world-cup.json",{cache:"no-store"})
 });
 
 function normalise(rows){
- let current=null;
-
  rows.forEach(r=>{
   if(r.Team){
-   current={
+   const current={
     year:r.Year,
     round:r.Round,
     team1:r.Team,
@@ -174,6 +172,39 @@ function loadYear(year,btn){
  buildMatches(year,out);
 }
 
+/* ---------- SUMMARY HELPERS ---------- */
+
+function getField(row, keys){
+ for(const k of keys){
+  if(row && row[k] !== undefined && row[k] !== null){
+   const v=String(row[k]).replace(/\u00A0/g," ").trim();
+   if(v) return v;
+  }
+ }
+ return "";
+}
+
+function isGrandFinalRound(round){
+ const r=String(round||"").toLowerCase();
+ if(!/\bfinal\b/.test(r)) return false;
+ if(/semi|quarter|third|bronze|3rd|playoff|play-off|placement/.test(r)) return false;
+ return true;
+}
+
+function getGrandFinalRow(yearRows){
+ // Find rows that look like the actual Final (not semi/quarter/third place)
+ const finals=yearRows.filter(r=>isGrandFinalRound(r.Round));
+ if(finals.length) return finals[finals.length-1];
+
+ // Fallback: strict "Final"
+ const strict=yearRows.filter(r=>String(r.Round||"").trim().toLowerCase()==="final");
+ if(strict.length) return strict[strict.length-1];
+
+ // Last resort: any "final" (kept for safety)
+ const any=yearRows.filter(r=>String(r.Round||"").toLowerCase().includes("final"));
+ return any.length ? any[any.length-1] : null;
+}
+
 /* ---------- SUMMARY ---------- */
 
 function buildSummary(year,out){
@@ -187,33 +218,38 @@ function buildSummary(year,out){
 
  // Host
  yearRows.forEach(r=>{
-  if(r.Host) host=r.Host;
-  if(r["Host Country"]) host=r["Host Country"];
+  const h=getField(r, ["Host","Host Country","HostNation","Host Nation"]);
+  if(h) host=h;
  });
 
- // Final match for winner / runner-up
- const finals=yearRows.filter(r=>String(r.Round||"").toLowerCase().includes("final"));
- if(finals.length){
-  const f=finals[finals.length-1];
-  winner=f["Winnning Team"];
-  if(f.Team===winner) runnerUp=f.Team__1;
-  else runnerUp=f.Team;
- }
+ // Grand Final winner/runner-up
+ const gf=getGrandFinalRow(yearRows);
+ if(gf){
+  const w=getField(gf, ["Winnning Team","Winning Team","Winner"]);
+  const t1=getField(gf, ["Team"]);
+  const t2=getField(gf, ["Team__1","Team 2","Opponent"]);
 
- // Goal scorers
- let prev=[0,0];
- yearRows.forEach(r=>{
-  if(r.Scorers && r["Progess Score"]){
-   const prog=r["Progess Score"].split(/[-–]/).map(x=>parseInt(x));
-   if(prog.length===2){
-    const side=(prog[0]===prev[0]+1)?"team1":(prog[1]===prev[1]+1)?"team2":null;
-    const scorer=r.Scorers.split("(")[0].trim();
-    if(scorer){
-     goals[scorer]=(goals[scorer]||0)+1;
-    }
-    prev=prog;
+  if(w) winner=w;
+  if(w && t1 && t2){
+   runnerUp = (t1===w) ? t2 : t1;
+  }else{
+   // If winner missing, still show teams if possible
+   if(t1 && t2){
+    winner = winner==="Unknown" ? "—" : winner;
+    runnerUp = "—";
    }
   }
+ }
+
+ // Goal scorers (simple count from scorer rows in that year)
+ yearRows.forEach(r=>{
+  const scorerRaw=getField(r, ["Scorers"]);
+  if(!scorerRaw) return;
+
+  const scorer=scorerRaw.split("(")[0].trim();
+  if(!scorer) return;
+
+  goals[scorer]=(goals[scorer]||0)+1;
  });
 
  const topGoals=Object.entries(goals).sort((a,b)=>b[1]-a[1]).slice(0,5);
@@ -229,7 +265,7 @@ function buildSummary(year,out){
    <div class="summary-box">Runner-up: ${runnerUp}</div>
    <div class="summary-box">
     Top Scorers:<br>
-    ${topGoals.map(g=>`${g[0]} – ${g[1]}`).join("<br>")}
+    ${topGoals.length ? topGoals.map(g=>`${g[0]} – ${g[1]}`).join("<br>") : "Unknown"}
    </div>
   </div>
  `;
