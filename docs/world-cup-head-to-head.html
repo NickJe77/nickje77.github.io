@@ -17,54 +17,56 @@ h1{text-align:center;margin-bottom:25px;}
 
 .selector{display:flex;gap:14px;justify-content:center;margin-bottom:30px;flex-wrap:wrap;}
 
-select{
-padding:10px;
-font-size:16px;
-border-radius:6px;
-border:1px solid #ccc;
-min-width:200px;
+select,button{
+padding:10px 16px;font-size:16px;border-radius:6px;border:1px solid #ccc;
 }
 
 button{
-padding:10px 18px;
-font-size:16px;
-border:none;
-border-radius:6px;
-cursor:pointer;
-background:#0056d6;
-color:white;
-font-weight:600;
+background:#0056d6;color:white;font-weight:600;border:none;cursor:pointer;
 }
 button:hover{background:#003f9e;}
 
 .summary{
-border:1px solid #ddd;
-border-radius:10px;
-padding:14px;
-background:#fafafa;
-margin-bottom:20px;
-font-weight:600;
-text-align:center;
+border:1px solid #ddd;border-radius:12px;padding:18px;background:#fafafa;
+margin-bottom:20px;text-align:center;
+}
+
+.h2h-row{
+display:flex;
+align-items:center;
+justify-content:center;
+gap:20px;
+font-size:26px;
+font-weight:700;
+}
+
+.h2h-mid{
+font-size:28px;
+}
+
+.h2h-labels{
+display:flex;
+justify-content:center;
+gap:28px;
+margin-top:6px;
+font-size:13px;
+color:#555;
+}
+
+.flag{
+font-size:42px;
 }
 
 .leaders{
-border:1px solid #ddd;
-border-radius:10px;
-padding:14px;
-background:#f9fbff;
-margin-bottom:24px;
-font-weight:600;
+border:1px solid #ddd;border-radius:10px;padding:14px;background:#f9fbff;
+margin-bottom:24px;font-weight:600;
 }
 .leaders h3{text-align:center;margin:0 0 10px 0;}
 .leader-line{font-size:14px;padding:4px 0;border-bottom:1px solid #eee;}
 .leader-line:last-child{border-bottom:none;}
 
 .match{
-border:1px solid #ddd;
-border-radius:10px;
-padding:14px;
-margin-bottom:16px;
-background:white;
+border:1px solid #ddd;border-radius:10px;padding:14px;margin-bottom:16px;background:white;
 }
 .match h3{margin:0 0 6px 0;}
 .small{font-size:13px;color:#555;}
@@ -103,40 +105,34 @@ background:white;
 <script>
 const COUNTRY_PAGE="world-cup-country.html";
 
+const flags={
+Brazil:"🇧🇷",Belgium:"🇧🇪",Germany:"🇩🇪",France:"🇫🇷",Italy:"🇮🇹",Argentina:"🇦🇷",
+England:"🏴",Spain:"🇪🇸",Netherlands:"🇳🇱",Portugal:"🇵🇹",Uruguay:"🇺🇾"
+};
+
+function flag(t){return flags[t]||"";}
+
 let allMatches=[];
 let countrySet=new Set();
 
-/* ---------- NORMALISE ---------- */
-function normalizeTeam(name){
- if(!name) return "";
- let n=String(name).replace(/\u00A0/g," ").trim();
+function normalizeTeam(n){
+ if(!n) return "";
  let k=n.toLowerCase();
  if(k.includes("west germany")) return "Germany";
  if(k==="frg") return "Germany";
- return n;
+ return n.trim();
 }
 
-/* ---------- HELPERS ---------- */
 function parseEvent(str){
- if(!str) return null;
- const s=str.trim();
- if(!s) return null;
- const m=s.match(/^(.*?)\s*\(([^)]+)\)$/);
- if(m) return {name:m[1].trim(),tag:m[2].trim()};
- return {name:s,tag:null};
+ const m=str.match(/^(.*?)\s*\(([^)]+)\)$/);
+ if(m) return m[1].trim();
+ return str.trim();
 }
 
-/* ---------- LOAD ---------- */
 fetch("data/world-cup.json",{cache:"no-store"})
 .then(r=>r.json())
 .then(rows=>{
- normalise(rows);
- buildSelectors();
-});
-
-function normalise(rows){
  let cur=null;
-
  rows.forEach(r=>{
   if(r.Team){
    cur={
@@ -152,35 +148,28 @@ function normalise(rows){
    countrySet.add(cur.team1);
    countrySet.add(cur.team2);
   }
-
   if(cur && r.Scorers){
    cur.events.push(r.Scorers);
   }
  });
-}
+ buildSelectors();
+});
 
 function buildSelectors(){
  const a=document.getElementById("teamA");
  const b=document.getElementById("teamB");
-
- Array.from(countrySet)
-  .filter(c=>c)
-  .sort((x,y)=>x.localeCompare(y))
-  .forEach(c=>{
-   a.add(new Option(c,c));
-   b.add(new Option(c,c));
-  });
+ Array.from(countrySet).sort().forEach(c=>{
+  a.add(new Option(c,c));
+  b.add(new Option(c,c));
+ });
 }
 
 function compare(){
- const a=document.getElementById("teamA").value;
- const b=document.getElementById("teamB").value;
-
+ const a=teamA.value,b=teamB.value;
  if(!a||!b||a===b) return;
 
  const matches=allMatches.filter(m=>
-  (m.team1===a && m.team2===b) ||
-  (m.team1===b && m.team2===a)
+  (m.team1===a&&m.team2===b)||(m.team1===b&&m.team2===a)
  );
 
  render(a,b,matches);
@@ -188,65 +177,59 @@ function compare(){
 
 function render(a,b,matches){
 
- let winsA=0,winsB=0,draws=0;
- let scorers={};
+ let wA=0,wB=0,d=0,scorers={};
 
  matches.forEach(m=>{
-  if(m.winner===a) winsA++;
-  else if(m.winner===b) winsB++;
-  else draws++;
+  if(m.winner===a) wA++;
+  else if(m.winner===b) wB++;
+  else d++;
 
   m.events.forEach(e=>{
    const p=parseEvent(e);
-   if(p && p.name){
-    scorers[p.name]=(scorers[p.name]||0)+1;
-   }
+   if(p) scorers[p]=(scorers[p]||0)+1;
   });
  });
 
- const topScorers=Object.entries(scorers)
-  .sort((x,y)=>y[1]-x[1])
-  .slice(0,5);
-
  document.getElementById("summary").innerHTML=`
   <div class="summary">
-   <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(a)}">${a}</a>
-   vs
-   <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(b)}">${b}</a><br>
-   ${winsA} Wins – ${winsB} Wins – ${draws} Draws
+   <div class="h2h-row">
+    <span class="flag">${flag(a)}</span>
+    <span>${wA}</span>
+    <span class="h2h-mid">| ${d} |</span>
+    <span>${wB}</span>
+    <span class="flag">${flag(b)}</span>
+   </div>
+   <div class="h2h-labels">
+    <div>${a} Wins</div>
+    <div>Draws</div>
+    <div>${b} Wins</div>
+   </div>
   </div>
  `;
+
+ const top=Object.entries(scorers).sort((x,y)=>y[1]-x[1]).slice(0,5);
 
  document.getElementById("scorers").innerHTML=`
   <div class="leaders">
    <h3>Top Scorers in this Match-Up</h3>
-   ${topScorers.length
-     ? topScorers.map(s=>`<div class="leader-line">${s[0]} – ${s[1]}</div>`).join("")
-     : "<div class='leader-line'>No goals recorded</div>"}
+   ${top.map(s=>`<div class="leader-line">${s[0]} – ${s[1]}</div>`).join("")||"No goals"}
   </div>
  `;
 
  const out=document.getElementById("results");
  out.innerHTML="";
-
  matches.sort((x,y)=>x.year-y.year).forEach(m=>{
-  const div=document.createElement("div");
-  div.className="match";
-
-  div.innerHTML=`
-   <h3>
-    <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.team1)}">${m.team1}</a>
-    ${m.score}
-    <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.team2)}">${m.team2}</a>
-   </h3>
-   <div class="small">${m.year} – ${m.round}</div>
-   <div class="small">Winner:
-    ${m.winner
-      ? `<a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.winner)}">${m.winner}</a>`
-      : "Draw"}
+  out.innerHTML+=`
+   <div class="match">
+    <h3>
+     <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.team1)}">${m.team1}</a>
+     ${m.score}
+     <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.team2)}">${m.team2}</a>
+    </h3>
+    <div class="small">${m.year} – ${m.round}</div>
+    <div class="small">Winner: ${m.winner||"Draw"}</div>
    </div>
   `;
-  out.appendChild(div);
  });
 }
 </script>
