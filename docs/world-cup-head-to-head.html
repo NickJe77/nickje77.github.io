@@ -9,37 +9,13 @@
 
 <style>
 body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
-
-.navbar{
-display:flex;
-justify-content:center;
-gap:22px;
-padding:16px;
-border-bottom:1px solid #ddd;
-font-weight:600;
-}
-
-.navbar a{
-color:#0056d6;
-text-decoration:none;
-font-size:18px;
-}
-
-.page-wrap{
-max-width:1200px;
-margin:0 auto;
-padding:30px 20px;
-}
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px;border-bottom:1px solid #ddd;font-weight:600;}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px;}
 
 h1{text-align:center;margin-bottom:25px;}
 
-.selector{
-display:flex;
-gap:14px;
-justify-content:center;
-margin-bottom:30px;
-flex-wrap:wrap;
-}
+.selector{display:flex;gap:14px;justify-content:center;margin-bottom:30px;flex-wrap:wrap;}
 
 select{
 padding:10px;
@@ -59,26 +35,13 @@ background:#0056d6;
 color:white;
 font-weight:600;
 }
-
 button:hover{background:#003f9e;}
 
-.match{
-border:1px solid #ddd;
-border-radius:10px;
-padding:14px;
-margin-bottom:16px;
-background:white;
-}
-
+.match{border:1px solid #ddd;border-radius:10px;padding:14px;margin-bottom:16px;background:white;}
 .match h3{margin:0 0 6px 0;}
-
 .small{font-size:13px;color:#555;}
 
-.team-link{
-color:#0056d6;
-text-decoration:none;
-font-weight:600;
-}
+.team-link{color:#0056d6;text-decoration:none;font-weight:600;}
 .team-link:hover{text-decoration:underline;}
 
 .summary{
@@ -124,6 +87,21 @@ const COUNTRY_PAGE="world-cup-country.html";
 let allMatches=[];
 let countrySet=new Set();
 
+/* ---------- NORMALISE ---------- */
+function normalizeTeam(name){
+ if(!name) return "";
+ let n=String(name).replace(/\u00A0/g," ").trim();
+ let k=n.toLowerCase();
+
+ if(k.includes("west germany")) return "Germany";
+ if(k==="frg") return "Germany";
+ if(k.includes("federal republic")) return "Germany";
+ if(k.includes("fr germany")) return "Germany";
+
+ return n;
+}
+
+/* ---------- LOAD ---------- */
 fetch("data/world-cup.json",{cache:"no-store"})
 .then(r=>r.json())
 .then(data=>{
@@ -132,21 +110,19 @@ fetch("data/world-cup.json",{cache:"no-store"})
 });
 
 function normalise(rows){
- let current=null;
-
  rows.forEach(r=>{
   if(r.Team){
-   current={
+   const m={
     year:r.Year,
     round:r.Round,
-    team1:r.Team,
-    team2:r.Team__1,
+    team1:normalizeTeam(r.Team),
+    team2:normalizeTeam(r.Team__1),
     score:r["Final Score"],
-    winner:r["Winnning Team"]
+    winner:normalizeTeam(r["Winnning Team"])
    };
-   allMatches.push(current);
-   countrySet.add(r.Team);
-   countrySet.add(r.Team__1);
+   allMatches.push(m);
+   countrySet.add(m.team1);
+   countrySet.add(m.team2);
   }
  });
 }
@@ -156,6 +132,7 @@ function buildSelectors(){
  const b=document.getElementById("teamB");
 
  Array.from(countrySet)
+  .filter(c=>c)
   .sort((x,y)=>x.localeCompare(y))
   .forEach(c=>{
    a.add(new Option(c,c));
@@ -200,23 +177,25 @@ function render(a,b,matches){
  const out=document.getElementById("results");
  out.innerHTML="";
 
- matches.forEach(m=>{
-  const div=document.createElement("div");
-  div.className="match";
+ matches
+  .sort((x,y)=>x.year-y.year)
+  .forEach(m=>{
+   const div=document.createElement("div");
+   div.className="match";
 
-  div.innerHTML=`
-   <h3>
-    <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.team1)}">${m.team1}</a>
-    ${m.score}
-    <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.team2)}">${m.team2}</a>
-   </h3>
-   <div class="small">${m.year} – ${m.round}</div>
-   <div class="small">Winner:
-    <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.winner)}">${m.winner}</a>
-   </div>
-  `;
-  out.appendChild(div);
- });
+   div.innerHTML=`
+    <h3>
+     <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.team1)}">${m.team1}</a>
+     ${m.score}
+     <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.team2)}">${m.team2}</a>
+    </h3>
+    <div class="small">${m.year} – ${m.round}</div>
+    <div class="small">Winner:
+     ${m.winner ? `<a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.winner)}">${m.winner}</a>` : "Draw"}
+    </div>
+   `;
+   out.appendChild(div);
+  });
 }
 </script>
 
