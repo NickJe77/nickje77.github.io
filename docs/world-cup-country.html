@@ -31,7 +31,7 @@ text-align:center;font-weight:700;
 
 .leaders{
 display:grid;
-grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
 gap:14px;
 margin-bottom:40px;
 }
@@ -39,8 +39,20 @@ margin-bottom:40px;
 .leader-box{
 border:1px solid #ddd;border-radius:10px;
 padding:14px;background:#f9fbff;
-text-align:center;
 font-weight:700;
+}
+
+.leader-box h3{
+margin:0 0 8px 0;
+font-size:16px;
+text-align:center;
+}
+
+.leader-box ol{
+margin:0;
+padding-left:20px;
+font-weight:600;
+font-size:14px;
 }
 
 .year-section{margin-bottom:40px;}
@@ -86,6 +98,11 @@ function flagEmoji(code){
  return code.toUpperCase().replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt()));
 }
 
+function cleanName(name){
+ if(!name) return "";
+ return name.replace(/\s*\(.*?\)/g,"").trim();
+}
+
 if(!team){
  document.getElementById("content").innerHTML="<div class='error'>No country selected.</div>";
 }else{
@@ -98,29 +115,22 @@ function parseScore(score){
  let parts=clean.split(/[-–]/);
  if(parts.length!==2) return null;
  let a=parseInt(parts[0],10), b=parseInt(parts[1],10);
- if(Number.isNaN(a) || Number.isNaN(b)) return null;
+ if(Number.isNaN(a)||Number.isNaN(b)) return null;
  return [a,b];
 }
 
-/* Robust: identify the actual Grand Final match */
 function isGrandFinalRound(round){
  if(!round) return false;
- const r=String(round).toLowerCase().trim();
- // must contain the word "final"
+ const r=String(round).toLowerCase();
  if(!/\bfinal\b/.test(r)) return false;
- // exclude obvious non-grand-final rounds
- if(/\bsemi\b/.test(r)) return false;
- if(/\bquarter\b/.test(r)) return false;
- if(/\bthird\b/.test(r)) return false;
- if(/\bbronze\b/.test(r)) return false;
+ if(/\bsemi|\bquarter|\bthird|\bbronze/.test(r)) return false;
  return true;
 }
 
-function getGrandFinalMatch(matchesInYear){
- // collect candidates and take the LAST one (handles "Final replay" etc)
- const candidates = matchesInYear.filter(m=>isGrandFinalRound(m.round));
- if(!candidates.length) return null;
- return candidates[candidates.length-1];
+function getGrandFinalMatch(list){
+ const c=list.filter(m=>isGrandFinalRound(m.round));
+ if(!c.length) return null;
+ return c[c.length-1];
 }
 
 function loadCountry(team){
@@ -128,8 +138,7 @@ function loadCountry(team){
  fetch("data/world-cup.json",{cache:"no-store"})
  .then(r=>r.json())
  .then(rows=>{
-  let matchesByYear={};
-  let current=null;
+  let matchesByYear={}, current=null;
 
   rows.forEach(r=>{
    if(r.Team){
@@ -157,75 +166,67 @@ function loadCountry(team){
   });
 
   render(team,matchesByYear);
- })
- .catch(()=>{
-  document.getElementById("content").innerHTML="<div class='error'>World Cup data failed to load.</div>";
  });
 }
 
 function render(team,data){
 
- let appearances=0;
- let titles=0;
- let finals=0;
- let matchesPlayed=0;
- let goalsScored=0;
+ let appearances=0,titles=0,finals=0,matchesPlayed=0,goalsScored=0;
 
- let goalLeaders={};
- let yellowLeaders={};
- let redLeaders={};
+ let goalLeaders={},yellowLeaders={},redLeaders={};
 
  let years=Object.keys(data).sort();
 
  years.forEach(y=>{
-  const allYearMatches = data[y];
+  const all=data[y];
+  const gf=getGrandFinalMatch(all);
 
-  // 1) Determine tournament title/final participation from the Grand Final match ONLY
-  const gf = getGrandFinalMatch(allYearMatches);
   if(gf){
-   const playedFinal = (gf.team1===team || gf.team2===team);
-   if(playedFinal) finals++;
+   if(gf.team1===team||gf.team2===team) finals++;
    if(gf.winner===team) titles++;
   }
 
-  // 2) Determine appearances and per-match stats from matches involving the country
-  const yearMatches = allYearMatches.filter(m=>m.team1===team||m.team2===team);
+  const ym=all.filter(m=>m.team1===team||m.team2===team);
 
-  if(yearMatches.length){
+  if(ym.length){
    appearances++;
 
-   yearMatches.forEach(m=>{
+   ym.forEach(m=>{
     matchesPlayed++;
 
-    const parsed=parseScore(m.score);
-    if(parsed){
-     if(m.team1===team) goalsScored+=parsed[0];
-     if(m.team2===team) goalsScored+=parsed[1];
+    const ps=parseScore(m.score);
+    if(ps){
+     if(m.team1===team) goalsScored+=ps[0];
+     if(m.team2===team) goalsScored+=ps[1];
     }
 
     m.events.forEach(e=>{
      if(e.scorer){
-      goalLeaders[e.scorer]=(goalLeaders[e.scorer]||0)+1;
+      let n=cleanName(e.scorer);
+      goalLeaders[n]=(goalLeaders[n]||0)+1;
      }
      if(e.yellow){
-      yellowLeaders[e.yellow]=(yellowLeaders[e.yellow]||0)+1;
+      let n=cleanName(e.yellow);
+      yellowLeaders[n]=(yellowLeaders[n]||0)+1;
      }
      if(e.red){
-      redLeaders[e.red]=(redLeaders[e.red]||0)+1;
+      let n=cleanName(e.red);
+      redLeaders[n]=(redLeaders[n]||0)+1;
      }
     });
    });
   }
  });
 
- function topEntry(obj){
-  let arr=Object.entries(obj).sort((a,b)=>b[1]-a[1]);
-  return arr.length?arr[0]:["–",0];
+ function topFive(obj){
+  return Object.entries(obj)
+   .sort((a,b)=>b[1]-a[1])
+   .slice(0,5);
  }
 
- const topGoal=topEntry(goalLeaders);
- const topYellow=topEntry(yellowLeaders);
- const topRed=topEntry(redLeaders);
+ const tg=topFive(goalLeaders);
+ const ty=topFive(yellowLeaders);
+ const tr=topFive(redLeaders);
 
  const code=countryCodes[team];
  const flag=flagEmoji(code);
@@ -245,20 +246,30 @@ function render(team,data){
  </div>
 
  <div class="leaders">
-  <div class="leader-box">Most Goals<br>${topGoal[0]} (${topGoal[1]})</div>
-  <div class="leader-box">Most Yellow Cards<br>${topYellow[0]} (${topYellow[1]})</div>
-  <div class="leader-box">Most Red Cards<br>${topRed[0]} (${topRed[1]})</div>
+  <div class="leader-box">
+   <h3>Top 5 Goals</h3>
+   <ol>${tg.map(p=>`<li>${p[0]} (${p[1]})</li>`).join("")}</ol>
+  </div>
+
+  <div class="leader-box">
+   <h3>Top 5 Yellow Cards</h3>
+   <ol>${ty.map(p=>`<li>${p[0]} (${p[1]})</li>`).join("")}</ol>
+  </div>
+
+  <div class="leader-box">
+   <h3>Top 5 Red Cards</h3>
+   <ol>${tr.map(p=>`<li>${p[0]} (${p[1]})</li>`).join("")}</ol>
+  </div>
  </div>
 `;
 
- // Results by year
  years.forEach(y=>{
-  const yearMatches=data[y].filter(m=>m.team1===team||m.team2===team);
-  if(!yearMatches.length) return;
+  const ym=data[y].filter(m=>m.team1===team||m.team2===team);
+  if(!ym.length) return;
 
   html+=`<div class="year-section"><h2>${y}</h2>`;
 
-  yearMatches.forEach(m=>{
+  ym.forEach(m=>{
    html+=`
     <div class="match">
      <h3>${m.team1} ${m.score} ${m.team2}</h3>
