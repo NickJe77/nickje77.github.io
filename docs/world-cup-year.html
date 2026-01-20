@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <title>Football World Cup – Year by Year | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <link rel="stylesheet" href="style.css">
 
 <style>
@@ -30,7 +31,7 @@ body{
 
 .year-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(110px,1fr));
+  grid-template-columns:repeat(auto-fit,minmax(100px,1fr));
   gap:12px;
   margin-bottom:30px;
 }
@@ -54,10 +55,6 @@ body{
   padding:14px;
 }
 
-.match h3{
-  margin:0 0 6px;
-}
-
 .event-table{
   width:100%;
   border-collapse:collapse;
@@ -77,6 +74,11 @@ body{
 
 .event-table tr:nth-child(even) td{
   background:#f3f7ff;
+}
+
+.error{
+  color:#900;
+  font-weight:600;
 }
 </style>
 </head>
@@ -100,54 +102,58 @@ body{
 </div>
 
 <script>
-let rawData=[];
 let matchesByYear={};
 
 fetch("data/world-cup.json",{cache:"no-store"})
-.then(r=>r.json())
+.then(r=>{
+  if(!r.ok) throw "JSON not found";
+  return r.json();
+})
 .then(data=>{
-  rawData=data;
-  normaliseData();
-  buildYearTiles();
+  normalise(data);
+  buildYears();
+})
+.catch(err=>{
+  document.getElementById("output").innerHTML=
+    "<div class='error'>World Cup data failed to load.</div>";
 });
 
-/* STEP 1: NORMALISE ROWS INTO MATCHES */
-function normaliseData(){
+/* NORMALISE CSV-STYLE ROWS */
+function normalise(rows){
 
-  let currentMatch=null;
+  let current=null;
 
-  rawData.forEach(row=>{
+  rows.forEach(r=>{
 
-    if(row.Team){
-      currentMatch={
-        year:row.Year,
-        host:row.Host,
-        round:row.Round,
-        team1:row.Team,
-        team2:row.Team__1,
-        score:row["Final Score"],
-        winner:row["Winnning Team"],
-        federation:row["Winning Federation"],
+    if(r.Team){
+      current={
+        year:r.Year,
+        round:r.Round,
+        team1:r.Team,
+        team2:r.Team__1,
+        score:r["Final Score"],
+        winner:r["Winnning Team"],
+        federation:r["Winning Federation"],
         events:[]
       };
 
-      if(!matchesByYear[row.Year]) matchesByYear[row.Year]=[];
-      matchesByYear[row.Year].push(currentMatch);
+      if(!matchesByYear[r.Year]) matchesByYear[r.Year]=[];
+      matchesByYear[r.Year].push(current);
     }
 
-    if(currentMatch && row.Scorers){
-      currentMatch.events.push({
-        scorer:row.Scorers,
-        minute:row["Time scored"],
-        progress:row["Progess Score"]
+    if(current && r.Scorers){
+      current.events.push({
+        scorer:r.Scorers,
+        minute:r["Time scored"],
+        progress:r["Progess Score"]
       });
     }
 
   });
 }
 
-/* STEP 2: BUILD YEAR BUTTONS */
-function buildYearTiles(){
+/* BUILD YEAR TILES */
+function buildYears(){
   const box=document.getElementById("years");
 
   Object.keys(matchesByYear).sort().forEach(y=>{
@@ -159,8 +165,9 @@ function buildYearTiles(){
   });
 }
 
-/* STEP 3: LOAD YEAR */
+/* LOAD YEAR */
 function loadYear(year,btn){
+
   document.querySelectorAll(".year-tile").forEach(b=>b.classList.remove("active"));
   btn.classList.add("active");
 
@@ -168,23 +175,23 @@ function loadYear(year,btn){
   out.innerHTML="";
 
   matchesByYear[year].forEach(m=>{
+
     const div=document.createElement("div");
     div.className="match";
 
     div.innerHTML=`
       <h3>${m.team1} ${m.score} ${m.team2}</h3>
       <div><strong>Round:</strong> ${m.round}</div>
-      <div><strong>Winner:</strong> ${m.winner} (${m.federation})</div>
+      <div><strong>Winner:</strong> ${m.winner}</div>
 
       <table class="event-table">
-        <tr><th>Scorer</th><th>Minute</th><th>Score Progress</th></tr>
+        <tr><th>Scorer</th><th>Minute</th><th>Score</th></tr>
         ${m.events.map(e=>`
           <tr>
             <td>${e.scorer}</td>
             <td>${e.minute}</td>
             <td>${e.progress}</td>
-          </tr>
-        `).join("")}
+          </tr>`).join("")}
       </table>
     `;
 
