@@ -50,35 +50,47 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
 </div>
 
 <script>
-const team = new URLSearchParams(location.search).get("team");
+const team=new URLSearchParams(location.search).get("team");
 
-const countryCodes={
-"Brazil":"BR","Germany":"DE","Italy":"IT","Argentina":"AR","France":"FR",
-"England":"GB","Spain":"ES","Netherlands":"NL","Uruguay":"UY","Portugal":"PT",
-"Belgium":"BE","Croatia":"HR","Mexico":"MX","USA":"US","United States":"US",
-"Japan":"JP","South Korea":"KR","Korea Republic":"KR","Australia":"AU",
-"Austria":"AT","Switzerland":"CH","Sweden":"SE","Norway":"NO","Denmark":"DK",
-"Poland":"PL","Czech Republic":"CZ","Russia":"RU","Ukraine":"UA","Turkey":"TR",
-"Greece":"GR","Scotland":"GB","Wales":"GB","Ireland":"IE","Morocco":"MA",
-"Cameroon":"CM","Nigeria":"NG","Ghana":"GH","Senegal":"SN","Tunisia":"TN",
-"Algeria":"DZ","Iran":"IR","Iraq":"IQ","Saudi Arabia":"SA","Qatar":"QA",
-"China":"CN","South Africa":"ZA","New Zealand":"NZ","Canada":"CA",
-"Costa Rica":"CR","Honduras":"HN","Panama":"PA","Jamaica":"JM",
-"Trinidad and Tobago":"TT","Colombia":"CO","Chile":"CL","Peru":"PE",
-"Paraguay":"PY","Ecuador":"EC","Bolivia":"BO","Venezuela":"VE"
+const aliases={
+"Argentina":["ARG","Argentina"],
+"Brazil":["BRA","Brazil"],
+"Germany":["GER","DEU","Germany"],
+"France":["FRA","France"],
+"Italy":["ITA","Italy"],
+"Spain":["ESP","Spain"],
+"England":["ENG","England"],
+"Netherlands":["NED","Netherlands"],
+"Portugal":["POR","Portugal"],
+"Uruguay":["URU","Uruguay"],
+"Belgium":["BEL","Belgium"],
+"Croatia":["CRO","Croatia"],
+"Australia":["AUS","Australia"],
+"Austria":["AUT","Austria"],
+"Switzerland":["SUI","Switzerland"],
+"Scotland":["SCO","Scotland"],
+"Wales":["WAL","Wales"],
+"Ireland":["IRL","Ireland"],
+"Japan":["JPN","Japan"],
+"Mexico":["MEX","Mexico"],
+"USA":["USA","United States","US"]
 };
 
 function flagEmoji(code){
  return code?code.replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt())):"";
 }
 
-function parseNameAndCountry(str){
- if(!str) return null;
+function parseEvent(str){
  const m=str.match(/^(.*?)\s*\(([^)]+)\)$/);
- if(m){
-  return {name:m[1].trim(),country:m[2].trim()};
- }
+ if(m) return {name:m[1].trim(),country:m[2].trim()};
  return {name:str.trim(),country:null};
+}
+
+function matchesTeam(bracket){
+ if(!bracket) return true;
+ const list=aliases[team];
+ if(!list) return bracket===team;
+ return list.includes(bracket);
 }
 
 fetch("data/world-cup.json",{cache:"no-store"})
@@ -108,7 +120,7 @@ fetch("data/world-cup.json",{cache:"no-store"})
 
 function render(team,data){
 
- let appearances=0,titles=0,finals=0,matchesPlayed=0,goalsScored=0;
+ let appearances=0,matchesPlayed=0,goalsScored=0;
  let g={},y={},r={};
 
  Object.keys(data).sort().forEach(year=>{
@@ -120,10 +132,10 @@ function render(team,data){
   ym.forEach(m=>{
    matchesPlayed++;
 
-   let parts=String(m.score).split(/[-–]/);
-   if(parts.length===2){
-    if(m.team1===team) goalsScored+=parseInt(parts[0])||0;
-    if(m.team2===team) goalsScored+=parseInt(parts[1])||0;
+   const ps=String(m.score).split(/[-–]/);
+   if(ps.length===2){
+    if(m.team1===team) goalsScored+=parseInt(ps[0])||0;
+    if(m.team2===team) goalsScored+=parseInt(ps[1])||0;
    }
 
    m.events.forEach(e=>{
@@ -131,13 +143,10 @@ function render(team,data){
      const raw=e[pair[0]];
      if(!raw) return;
 
-     const p=parseNameAndCountry(raw);
-     if(!p||!p.name) return;
+     const p=parseEvent(raw);
+     if(!p.name) return;
 
-     // only exclude if clearly opponent
-     if(p.country && p.country!==team && p.country!==countryCodes[team]){
-      return;
-     }
+     if(p.country && !matchesTeam(p.country)) return;
 
      pair[1][p.name]=(pair[1][p.name]||0)+1;
     });
@@ -147,10 +156,8 @@ function render(team,data){
 
  const top=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,5);
 
- const flag=flagEmoji(countryCodes[team]);
-
  let html=`
- <div class="header"><div class="flag">${flag}</div><h1>${team}</h1></div>
+ <div class="header"><h1>${team}</h1></div>
 
  <div class="stats">
   <div class="stat-box">Appearances<br>${appearances}</div>
@@ -164,6 +171,22 @@ function render(team,data){
   <div class="leader-box"><h3>Top 5 Red Cards</h3>${top(r).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
  </div>
 `;
+
+ Object.keys(data).sort().forEach(year=>{
+  const ym=data[year].filter(m=>m.team1===team||m.team2===team);
+  if(!ym.length) return;
+
+  html+=`<div class="year-section"><h2>${year}</h2>`;
+  ym.forEach(m=>{
+   html+=`
+    <div class="match">
+     <h3>${m.team1} ${m.score} ${m.team2}</h3>
+     <div class="small">${m.round}</div>
+     <div class="small">Winner: ${m.winner}</div>
+    </div>`;
+  });
+  html+=`</div>`;
+ });
 
  document.getElementById("content").innerHTML=html;
 }
