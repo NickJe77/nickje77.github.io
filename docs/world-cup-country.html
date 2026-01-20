@@ -71,6 +71,7 @@ function getGrandFinalMatch(matchesInYear){
  return finals.length ? finals[finals.length-1] : null;
 }
 
+// "2–1", "2-1", "1-1 (4-2 pens)" etc
 function parseScore(score){
  if(!score) return null;
  const clean=String(score).split("(")[0].trim();
@@ -78,10 +79,24 @@ function parseScore(score){
  if(parts.length!==2) return null;
  const a=parseInt(parts[0].trim(),10);
  const b=parseInt(parts[1].trim(),10);
- if(Number.isNaN(a) || Number.isNaN(b)) return null;
+ if(Number.isNaN(a)||Number.isNaN(b)) return null;
  return [a,b];
 }
 
+// progress "1-0" or " 1 – 0 "
+function parseProgress(p){
+ if(!p) return null;
+ const s=String(p).trim();
+ if(!s) return null;
+ const parts=s.split(/[-–]/);
+ if(parts.length!==2) return null;
+ const a=parseInt(parts[0].trim(),10);
+ const b=parseInt(parts[1].trim(),10);
+ if(Number.isNaN(a)||Number.isNaN(b)) return null;
+ return [a,b];
+}
+
+// "Player (HON)" or "Player (Honduras)" or "Player"
 function parseEvent(str){
  if(!str) return null;
  const s=String(str).trim();
@@ -91,51 +106,27 @@ function parseEvent(str){
  return {name:s,tag:null};
 }
 
-/* --- Tag matching (name + common codes) --- */
-const codeAliases={
-"Argentina":["ARG"], "Brazil":["BRA"], "Germany":["GER","DEU"], "France":["FRA"], "Italy":["ITA"],
-"Spain":["ESP"], "England":["ENG"], "Netherlands":["NED","HOL"], "Portugal":["POR"], "Uruguay":["URU"],
-"Belgium":["BEL"], "Croatia":["CRO"], "Australia":["AUS"], "Austria":["AUT"], "Switzerland":["SUI"],
-"Scotland":["SCO"], "Wales":["WAL"], "Ireland":["IRL"], "Japan":["JPN"], "Mexico":["MEX"],
-"United States":["USA","US"], "USA":["USA","US"]
-};
-
-function tagMatchesCountry(tag, countryName){
- if(!tag) return false;
- const t=tag.toLowerCase();
- const n=countryName.toLowerCase();
- if(t===n) return true;
- const codes=codeAliases[countryName]||[];
- return codes.some(c=>t===c.toLowerCase());
-}
-
-/* --- Event attribution rules --- */
 /*
-Scorer MUST be correct: if tag exists and matches opponent => exclude.
-If tag exists and matches team => include.
-If tag exists but matches neither => include (unknown/messy tag; better than losing data).
-If no tag => include.
+Determine which side scored based on progress score change:
+prev: [x,y], curr: [x2,y2]
+- if x increased -> team1 scored
+- if y increased -> team2 scored
 */
-function shouldCountScorer(tag, teamName, opponentName){
- if(!tag) return true;
- if(tagMatchesCountry(tag, opponentName)) return false;
- if(tagMatchesCountry(tag, teamName)) return true;
- return true;
-}
+function whoScoredFromProgress(prevProg, currProg){
+ if(!prevProg || !currProg) return null;
+ const [a1,b1]=prevProg;
+ const [a2,b2]=currProg;
 
-/*
-Cards are sometimes missing/dirty tags. Keep forgiving:
-Exclude ONLY if tag clearly matches opponent.
-*/
-function shouldCountCard(tag, teamName, opponentName){
- if(!tag) return true;
- if(tagMatchesCountry(tag, opponentName)) return false;
- return true;
+ if(a2===a1+1 && b2===b1) return "team1";
+ if(b2===b1+1 && a2===a1) return "team2";
+
+ // sometimes multiple goals or weird ordering; not safe
+ return null;
 }
 
 /* ---------- Load + Normalise ---------- */
 
-fetch("data/world-cup.json?v=5",{cache:"no-store"})
+fetch("data/world-cup.json?v=6",{cache:"no-store"})
 .then(r=>r.json())
 .then(rows=>{
  let matchesByYear={};
@@ -160,6 +151,8 @@ fetch("data/world-cup.json?v=5",{cache:"no-store"})
   if(cur && (r.Scorers||r["Yellow Cards"]||r["Red Cards"])){
    cur.events.push({
     scorer:r.Scorers||"",
+    minute:r["Time scored"]||"",
+    progress:r["Progess Score"]||"",
     yellow:r["Yellow Cards"]||"",
     red:r["Red Cards"]||""
    });
@@ -202,29 +195,48 @@ function render(team,matchesByYear){
     if(m.team2===team) goalsScored+=ps[1];
    }
 
-   const opponent=(m.team1===team)?m.team2:m.team1;
+   // scorer attribution: use progress score deltas
+   let prevProg=[0,0];
 
    m.events.forEach(e=>{
-    // scorers (strict vs opponent)
+    // --- Scorers (strict: ONLY count if we can attribute to the team) ---
     if(e.scorer){
      const p=parseEvent(e.scorer);
-     if(p && p.name && shouldCountScorer(p.tag, team, opponent)){
-      g[p.name]=(g[p.name]||0)+1;
+     const prog=parseProgress(e.progress);
+
+     if(p && p.name){
+      const side=whoScoredFromProgress(prevProg, prog);
+
+      // update prev progress if parse succeeded
+      if(prog) prevProg=prog;
+
+      // if we can tell who scored, only count if it was the team
+      if(side){
+       const scoringTeam = (side==="team1") ? m.team1 : m.team2;
+       if(scoringTeam===team){
+        g[p.name]=(g[p.name]||0)+1;
+       }
+      }
+      // if we cannot tell from progress, DO NOT count (prevents “goals against” pollution)
      }
+    } else {
+      // even if no scorer row, still advance prevProg if a progress row exists (rare)
+      const prog=parseProgress(e.progress);
+      if(prog) prevProg=prog;
     }
 
-    // yellow (forgiving but exclude clear opponent)
+    // --- Cards (still forgiving; we count them for the team in this match context) ---
+    // If your dataset later proves opponent pollution here too, we can apply progress-style logic
+    // but most card rows are already aligned to the match row.
     if(e.yellow){
      const p=parseEvent(e.yellow);
-     if(p && p.name && shouldCountCard(p.tag, team, opponent)){
+     if(p && p.name){
       y[p.name]=(y[p.name]||0)+1;
      }
     }
-
-    // red (forgiving but exclude clear opponent)
     if(e.red){
      const p=parseEvent(e.red);
-     if(p && p.name && shouldCountCard(p.tag, team, opponent)){
+     if(p && p.name){
       rr[p.name]=(rr[p.name]||0)+1;
      }
     }
@@ -237,7 +249,7 @@ function render(team,matchesByYear){
  let html=`
   <div class="header">
    <h1>${team}</h1>
-   <div class="version">Country Page v5</div>
+   <div class="version">Country Page v6</div>
   </div>
 
   <div class="stats">
@@ -249,9 +261,9 @@ function render(team,matchesByYear){
   </div>
 
   <div class="leaders">
-   <div class="leader-box"><h3>Top 5 Goals</h3>${top(g).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
-   <div class="leader-box"><h3>Top 5 Yellow Cards</h3>${top(y).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
-   <div class="leader-box"><h3>Top 5 Red Cards</h3>${top(rr).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("")}</div>
+   <div class="leader-box"><h3>Top 5 Goals</h3>${top(g).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("") || "<div class='leader-line'>No scorer data</div>"}</div>
+   <div class="leader-box"><h3>Top 5 Yellow Cards</h3>${top(y).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("") || "<div class='leader-line'>No card data</div>"}</div>
+   <div class="leader-box"><h3>Top 5 Red Cards</h3>${top(rr).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("") || "<div class='leader-line'>No card data</div>"}</div>
   </div>
  `;
 
