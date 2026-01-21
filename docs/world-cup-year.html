@@ -2,9 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Football World Cup – Year by Year | The Sporting Almanac</title>
+<title>Football World Cup – By Year | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <link rel="stylesheet" href="style.css">
 
 <style>
@@ -12,28 +11,57 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
 .navbar{display:flex;justify-content:center;gap:22px;padding:16px;border-bottom:1px solid #ddd;font-weight:600;}
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 .page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px;}
+h1{text-align:center;margin-bottom:30px;}
+
 .year-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:12px;margin-bottom:30px;}
 .year-tile{background:#111;color:white;text-align:center;padding:12px;border-radius:8px;font-weight:700;cursor:pointer;}
 .year-tile.active{background:#0056d6;}
-.summary{border:1px solid #ddd;border-radius:10px;padding:16px;margin-bottom:30px;background:#fafafa;}
-.summary-table{width:100%;border-collapse:collapse;font-size:14px;margin-top:10px;}
-.summary-table td{padding:8px;border-bottom:1px solid #ddd;}
-.summary-table tr:nth-child(even) td{background:#f3f7ff;}
-.match{border:1px solid #ddd;border-radius:10px;padding:14px;margin-bottom:20px;}
-.event-table{width:100%;border-collapse:collapse;font-size:14px;margin-top:10px;}
-.event-table th{background:#f0f0f0;padding:8px;text-align:left;}
-.event-table td{padding:8px;border-bottom:1px solid #ddd;}
-.event-table tr:nth-child(even) td{background:#f3f7ff;}
-.error{color:#900;font-weight:700;margin-top:20px;}
-.icon{margin-right:6px;font-size:15px;}
 
-/* CENTER Minute and Score columns */
-.event-table th:nth-child(2),
-.event-table td:nth-child(2),
-.event-table th:nth-child(3),
-.event-table td:nth-child(3){
- text-align:center;
+.summary{border:1px solid #ddd;border-radius:10px;padding:18px;margin-bottom:24px;background:#fafafa;}
+.summary h2{margin:0 0 12px 0;}
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;}
+
+.summary-box{
+background:white;
+border:1px solid #ddd;
+border-radius:8px;
+padding:12px;
+font-weight:600;
+position:relative;
+overflow:hidden;
 }
+
+.flag-bg{
+position:absolute;
+font-size:96px;
+opacity:0.18;
+right:6px;
+bottom:0px;
+pointer-events:none;
+filter:saturate(1.2);
+}
+
+.flag-bg.dual{right:50px;}
+.flag-bg.dual2{right:6px;}
+
+.match{
+border:1px solid #ddd;
+border-radius:10px;
+padding:14px;
+margin-bottom:16px;
+background:white;
+}
+
+.match h3{margin:0 0 6px 0;}
+
+.small{font-size:13px;color:#555;}
+
+.team-link{
+color:#0056d6;
+text-decoration:none;
+font-weight:600;
+}
+.team-link:hover{text-decoration:underline;}
 </style>
 </head>
 
@@ -43,54 +71,69 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
 <a href="index.html">Home</a>
 <a href="football.html">Football</a>
 <a href="football-world-cup.html">World Cup</a>
+<a href="world-cup-countries.html">Countries</a>
 </div>
 
 <div class="page-wrap">
-
-<h1>Football World Cup – Year by Year</h1>
-
+<h1>Football World Cup – By Year</h1>
 <div id="years" class="year-grid"></div>
 <div id="output"></div>
-
 </div>
 
 <script>
-let matchesByYear={};
+const COUNTRY_PAGE="world-cup-country.html";
 
+let matchesByYear={}, rawRows=[];
+
+const countryCodes={
+"Brazil":"BR","Germany":"DE","West Germany":"DE","FRG":"DE",
+"Italy":"IT","Argentina":"AR","France":"FR",
+"England":"GB","Spain":"ES","Netherlands":"NL","Uruguay":"UY","Portugal":"PT",
+"Belgium":"BE","Croatia":"HR","Mexico":"MX","USA":"US","United States":"US",
+"Japan":"JP","South Korea":"KR","Korea Republic":"KR","Australia":"AU",
+"Austria":"AT","Switzerland":"CH","Sweden":"SE","Norway":"NO","Denmark":"DK",
+"Poland":"PL","Czech Republic":"CZ","Czechoslovakia":"CZ","Russia":"RU",
+"Ukraine":"UA","Turkey":"TR","Greece":"GR","Scotland":"GB","Wales":"GB",
+"Ireland":"IE","Northern Ireland":"GB","Morocco":"MA","Cameroon":"CM",
+"Nigeria":"NG","Ghana":"GH","Senegal":"SN","Tunisia":"TN","Algeria":"DZ",
+"Iran":"IR","Iraq":"IQ","Saudi Arabia":"SA","Qatar":"QA","China":"CN",
+"South Africa":"ZA","New Zealand":"NZ","Canada":"CA",
+"Costa Rica":"CR","Honduras":"HN","Panama":"PA","Jamaica":"JM",
+"Trinidad and Tobago":"TT","Colombia":"CO","Chile":"CL","Peru":"PE",
+"Paraguay":"PY","Ecuador":"EC","Bolivia":"BO","Venezuela":"VE"
+};
+
+function flagEmoji(code){
+ if(!code) return "";
+ return code.replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt()));
+}
+
+function getFlag(name){
+ return flagEmoji(countryCodes[name]);
+}
+
+/* ---------- LOAD DATA ---------- */
 fetch("data/world-cup.json",{cache:"no-store"})
 .then(r=>r.json())
 .then(data=>{
+ rawRows=data;
  normalise(data);
  buildYears();
 });
 
 function normalise(rows){
- let current=null;
-
  rows.forEach(r=>{
   if(r.Team){
-   current={
+   const m={
     year:r.Year,
     round:r.Round,
     team1:r.Team,
     team2:r.Team__1,
     score:r["Final Score"],
-    winner:r["Winnning Team"],
-    events:[]
+    winner:r["Winnning Team"]
    };
-
    if(!matchesByYear[r.Year]) matchesByYear[r.Year]=[];
-   matchesByYear[r.Year].push(current);
-  }
-
-  if(current && (r.Scorers||r["Yellow Cards"]||r["Red Cards"])){
-   current.events.push({
-    scorer:r.Scorers||"",
-    minute:r["Time scored"]||"",
-    progress:r["Progess Score"]||"",
-    yellow:r["Yellow Cards"]||"",
-    red:r["Red Cards"]||""
-   });
+   matchesByYear[r.Year].push(m);
   }
  });
 }
@@ -109,93 +152,106 @@ function buildYears(){
 function loadYear(year,btn){
  document.querySelectorAll(".year-tile").forEach(b=>b.classList.remove("active"));
  btn.classList.add("active");
-
  const out=document.getElementById("output");
  out.innerHTML="";
+ buildSummary(year,out);
+ buildMatches(year,out);
+}
 
- const matches=matchesByYear[year];
+/* ---------- SUMMARY ---------- */
+function buildSummary(year,out){
 
- buildSummary(matches,out);
+ let host="Unknown";
+ let winner="Unknown";
+ let runnerUp="Unknown";
+ let goals={};
 
- matches.forEach(m=>{
+ const yearRows = rawRows.filter(r=>String(r.Year)===String(year));
+
+ yearRows.forEach(r=>{
+  if(r.Host) host=r.Host;
+  if(r["Host Country"]) host=r["Host Country"];
+ });
+
+ const finals = yearRows.filter(r =>
+   String(r.Round||"").toLowerCase()==="final" &&
+   (r["Winnning Team"] || r.Team)
+ );
+
+ const gf = finals.length ? finals[0] : null;
+
+ if(gf){
+  const w = gf["Winnning Team"];
+  const t1 = gf.Team;
+  const t2 = gf.Team__1;
+
+  if(w){
+   winner=w;
+   if(t1 && t2){
+    runnerUp=(t1===w)?t2:t1;
+   }
+  }
+ }
+
+ yearRows.forEach(r=>{
+  if(r.Scorers){
+   const s=r.Scorers.split("(")[0].trim();
+   if(s) goals[s]=(goals[s]||0)+1;
+  }
+ });
+
+ const topGoals=Object.entries(goals).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+ let hostFlagsHTML="";
+ if(host.includes("/")){
+  const parts=host.split("/").map(h=>h.trim());
+  hostFlagsHTML=`
+   <span class="flag-bg dual">${getFlag(parts[0])}</span>
+   <span class="flag-bg dual2">${getFlag(parts[1])}</span>
+  `;
+ }else{
+  hostFlagsHTML=`<span class="flag-bg">${getFlag(host)}</span>`;
+ }
+
+ const summary=document.createElement("div");
+ summary.className="summary";
+
+ summary.innerHTML=`
+  <h2>${year} World Cup Summary</h2>
+  <div class="summary-grid">
+   <div class="summary-box">${hostFlagsHTML}Host: ${host}</div>
+   <div class="summary-box"><span class="flag-bg">${getFlag(winner)}</span>Winner: ${winner}</div>
+   <div class="summary-box"><span class="flag-bg">${getFlag(runnerUp)}</span>Runner-up: ${runnerUp}</div>
+   <div class="summary-box">
+    Top Scorers:<br>
+    ${topGoals.map(g=>`${g[0]} – ${g[1]}`).join("<br>")}
+   </div>
+  </div>
+ `;
+
+ out.appendChild(summary);
+}
+
+/* ---------- MATCHES WITH RESULTS RESTORED ---------- */
+function buildMatches(year,out){
+ matchesByYear[year].forEach(m=>{
   const div=document.createElement("div");
   div.className="match";
 
-  div.innerHTML=`
-   <h3>${m.team1} ${m.score} ${m.team2}</h3>
-   <div><strong>Round:</strong> ${m.round}</div>
-   <div><strong>Winner:</strong> ${m.winner}</div>
+  const result = m.winner ? m.winner : "Draw";
 
-   <table class="event-table">
-    <tr>
-     <th><span class="icon">⚽</span>Scorer</th>
-     <th>Minute</th>
-     <th>Score</th>
-     <th><span class="icon">🟨</span>Yellow</th>
-     <th><span class="icon">🟥</span>Red</th>
-    </tr>
-    ${m.events.map(e=>`
-     <tr>
-      <td>${e.scorer}</td>
-      <td>${e.minute}</td>
-      <td>${e.progress}</td>
-      <td>${e.yellow}</td>
-      <td>${e.red}</td>
-     </tr>`).join("")}
-   </table>
+  div.innerHTML=`
+   <h3>
+    <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.team1)}">${m.team1}</a>
+    ${m.score}
+    <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.team2)}">${m.team2}</a>
+   </h3>
+   <div class="small">${m.round}</div>
+   <div class="small">Result: ${result}</div>
   `;
+
   out.appendChild(div);
  });
-}
-
-function buildSummary(matches,out){
-
- let finals = matches.filter(m =>
-  /final/i.test(m.round) &&
-  !/quarter|semi|third|bronze/i.test(m.round)
- );
-
- let final = finals[finals.length-1];
-
- let winner=final?final.winner:"";
- let runner=final?
-   (final.team1===final.winner?final.team2:final.team1):"";
-
- let scorerCount={};
-
- matches.forEach(m=>{
-  m.events.forEach(e=>{
-   if(e.scorer){
-    scorerCount[e.scorer]=(scorerCount[e.scorer]||0)+1;
-   }
-  });
- });
-
- let topScorers=Object.entries(scorerCount)
-  .sort((a,b)=>b[1]-a[1])
-  .slice(0,5);
-
- const s=document.createElement("div");
- s.className="summary";
-
- s.innerHTML=`
- <h2>${matches[0].year} Tournament Summary</h2>
-
- <table class="summary-table">
-  <tr><td><strong>Winner</strong></td><td>${winner}</td></tr>
-  <tr><td><strong>Runner-up</strong></td><td>${runner}</td></tr>
- </table>
-
- <h3>Top 5 Goal Scorers</h3>
-
- <table class="summary-table">
-  <tr><td><strong>Player</strong></td><td><strong>Goals</strong></td></tr>
-  ${topScorers.map(p=>`
-   <tr><td>${p[0]}</td><td>${p[1]}</td></tr>`).join("")}
- </table>
- `;
-
- out.appendChild(s);
 }
 </script>
 

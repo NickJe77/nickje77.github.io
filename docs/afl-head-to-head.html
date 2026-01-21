@@ -80,6 +80,18 @@ body{
   font-style:italic;
   padding:10px 0;
 }
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:15px;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px;
+  text-align:left;
+}
+th{background:#f4f6f8;}
 </style>
 </head>
 
@@ -99,58 +111,19 @@ body{
 <h1>AFL Head to Head</h1>
 
 <p>
-Compare two AFL teams across all matches, seasons, and venues.  
-This tool will display win–loss records, margins, venues, and key historical results once AFL match data is fully collated.
+Compare two AFL teams across all matches, seasons, and venues.
 </p>
 
 <div class="selector-grid">
 
   <div class="selector-box">
     <h3>Team One</h3>
-    <select id="team1">
-      <option>Adelaide</option>
-      <option>Brisbane</option>
-      <option>Carlton</option>
-      <option>Collingwood</option>
-      <option>Essendon</option>
-      <option>Fremantle</option>
-      <option>Geelong</option>
-      <option>Gold Coast</option>
-      <option>GWS</option>
-      <option>Hawthorn</option>
-      <option>Melbourne</option>
-      <option>North Melbourne</option>
-      <option>Port Adelaide</option>
-      <option>Richmond</option>
-      <option>St Kilda</option>
-      <option>Sydney</option>
-      <option>West Coast</option>
-      <option>Western Bulldogs</option>
-    </select>
+    <select id="team1"></select>
   </div>
 
   <div class="selector-box">
     <h3>Team Two</h3>
-    <select id="team2">
-      <option>Adelaide</option>
-      <option>Brisbane</option>
-      <option>Carlton</option>
-      <option>Collingwood</option>
-      <option>Essendon</option>
-      <option>Fremantle</option>
-      <option>Geelong</option>
-      <option>Gold Coast</option>
-      <option>GWS</option>
-      <option>Hawthorn</option>
-      <option>Melbourne</option>
-      <option>North Melbourne</option>
-      <option>Port Adelaide</option>
-      <option>Richmond</option>
-      <option>St Kilda</option>
-      <option>Sydney</option>
-      <option>West Coast</option>
-      <option>Western Bulldogs</option>
-    </select>
+    <select id="team2"></select>
   </div>
 
 </div>
@@ -159,30 +132,113 @@ This tool will display win–loss records, margins, venues, and key historical r
 
 <div id="results" class="results-box">
   <div class="placeholder">
-    Head-to-head results will appear here once AFL match data is connected.
+    Loading AFL match database...
   </div>
 </div>
 
 </div>
 
 <script>
+let data=[];
+
+fetch("afl_all_in_one.csv")
+.then(r=>r.text())
+.then(text=>{
+  const lines=text.trim().split("\n");
+  const headers=lines[0].split(",");
+  const rows=lines.slice(1);
+
+  rows.forEach(l=>{
+    const parts=l.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
+    let obj={};
+    headers.forEach((h,i)=>obj[h]=parts[i]?.replace(/^"|"$/g,""));
+    data.push(obj);
+  });
+
+  populateTeams();
+  document.getElementById("results").innerHTML=
+    "<div class='placeholder'>Select two teams and click Compare.</div>";
+});
+
+function populateTeams(){
+  const teams=new Set();
+  data.forEach(r=>{
+    if(r.Team1) teams.add(r.Team1);
+    if(r.Team2) teams.add(r.Team2);
+  });
+
+  const sorted=[...teams].sort();
+
+  const t1=document.getElementById("team1");
+  const t2=document.getElementById("team2");
+
+  sorted.forEach(t=>{
+    t1.innerHTML+=`<option>${t}</option>`;
+    t2.innerHTML+=`<option>${t}</option>`;
+  });
+}
+
 function compare(){
-  const t1=document.getElementById("team1").value;
-  const t2=document.getElementById("team2").value;
+  const a=document.getElementById("team1").value;
+  const b=document.getElementById("team2").value;
+  const box=document.getElementById("results");
 
-  const results=document.getElementById("results");
-
-  if(t1===t2){
-    results.innerHTML="<b>Please select two different teams.</b>";
+  if(a===b){
+    box.innerHTML="<b>Please select two different teams.</b>";
     return;
   }
 
-  results.innerHTML=`
-    <h3>${t1} vs ${t2}</h3>
-    <div class="placeholder">
-      Full historical results will display here when AFL match data is loaded.
-    </div>
+  const games=data.filter(r=>
+    (r.Team1===a && r.Team2===b) ||
+    (r.Team1===b && r.Team2===a)
+  );
+
+  if(games.length===0){
+    box.innerHTML="<b>No matches found.</b>";
+    return;
+  }
+
+  let aWins=0,bWins=0,marginTotal=0;
+
+  games.forEach(g=>{
+    if(g.Winner===a) aWins++;
+    if(g.Winner===b) bWins++;
+    marginTotal+=Math.abs(parseInt(g.Margin)||0);
+  });
+
+  let html=`
+  <h3>${a} vs ${b}</h3>
+  <p>
+    Games: ${games.length} |
+    ${a} wins: ${aWins} |
+    ${b} wins: ${bWins} |
+    Avg margin: ${(marginTotal/games.length).toFixed(1)}
+  </p>
+
+  <table>
+    <tr>
+      <th>Season</th>
+      <th>Round</th>
+      <th>Venue</th>
+      <th>Winner</th>
+      <th>Margin</th>
+    </tr>
   `;
+
+  games.slice(-20).reverse().forEach(g=>{
+    html+=`
+      <tr>
+        <td>${g.Season}</td>
+        <td>${g.Round}</td>
+        <td>${g.Venue}</td>
+        <td>${g.Winner}</td>
+        <td>${g.Margin}</td>
+      </tr>
+    `;
+  });
+
+  html+="</table>";
+  box.innerHTML=html;
 }
 </script>
 

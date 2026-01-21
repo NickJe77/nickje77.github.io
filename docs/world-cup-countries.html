@@ -4,73 +4,173 @@
 <meta charset="UTF-8">
 <title>Football World Cup – Countries | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <link rel="stylesheet" href="style.css">
+
+<style>
+body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
+
+.navbar{
+display:flex;
+justify-content:center;
+gap:22px;
+padding:16px;
+border-bottom:1px solid #ddd;
+font-weight:600;
+}
+
+.navbar a{
+color:#0056d6;
+text-decoration:none;
+font-size:18px;
+}
+
+.page-wrap{
+max-width:1200px;
+margin:0 auto;
+padding:30px 20px;
+}
+
+h1{
+text-align:center;
+margin-bottom:30px;
+}
+
+.country-grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+gap:16px;
+}
+
+.country-tile{
+position:relative;
+height:110px;
+border:1px solid #ddd;
+border-radius:10px;
+background:#fafafa;
+cursor:pointer;
+display:flex;
+align-items:center;
+justify-content:center;
+font-weight:700;
+text-align:center;
+overflow:hidden;
+transition:all .2s ease;
+}
+
+.country-tile:hover{
+background:#0056d6;
+color:white;
+border-color:#0056d6;
+}
+
+.country-tile .flag{
+position:absolute;
+font-size:72px;
+opacity:0.15;
+pointer-events:none;
+}
+
+.country-tile .label{
+position:relative;
+z-index:2;
+padding:0 8px;
+}
+</style>
 </head>
 
 <body>
 
 <div class="navbar">
-  <a href="index.html">Home</a>
-  <a href="football.html">Football</a>
-  <a href="football-world-cup.html">World Cup</a>
+<a href="index.html">Home</a>
+<a href="football.html">Football</a>
+<a href="football-world-cup.html">World Cup</a>
+<a href="world-cup-countries.html">Countries</a>
 </div>
 
 <div class="page-wrap">
 
 <h1>Football World Cup – Countries</h1>
 
-<p>
-Select a country to view its Football World Cup tournament history and performance record.
-</p>
-
-<select id="countrySelect" onchange="showCountry()">
-  <option value="">Select a country…</option>
-  <option value="Brazil">Brazil</option>
-  <option value="Germany">Germany</option>
-  <option value="Argentina">Argentina</option>
-  <option value="France">France</option>
-  <option value="Italy">Italy</option>
-  <option value="England">England</option>
-</select>
-
-<div id="output" class="placeholder">
-  Country performance will appear here.
-</div>
+<div id="countries" class="country-grid"></div>
 
 </div>
 
 <script>
-const data={
-  "Brazil":{appearances:22,titles:5,finals:7,best:"Champions",first:1930,last:2022},
-  "Germany":{appearances:20,titles:4,finals:8,best:"Champions",first:1934,last:2022},
-  "Argentina":{appearances:18,titles:3,finals:6,best:"Champions",first:1930,last:2022},
-  "France":{appearances:16,titles:2,finals:4,best:"Champions",first:1930,last:2022},
-  "Italy":{appearances:18,titles:4,finals:6,best:"Champions",first:1934,last:2014},
-  "England":{appearances:16,titles:1,finals:1,best:"Champions",first:1950,last:2022}
+const COUNTRY_PAGE = "world-cup-country.html";
+
+let countrySet = new Set();
+
+/* ---------- NORMALISATION ---------- */
+function normalizeCountry(name){
+ if(!name) return "";
+ let n=String(name).replace(/\u00A0/g," ").trim();
+ let k=n.toLowerCase();
+
+ if(k.includes("west germany")) return "Germany";
+ if(k==="frg") return "Germany";
+ if(k.includes("federal republic")) return "Germany";
+ if(k.includes("fr germany")) return "Germany";
+
+ return n;
+}
+
+const countryCodes={
+"Brazil":"BR","Germany":"DE","Italy":"IT","Argentina":"AR","France":"FR",
+"England":"GB","Spain":"ES","Netherlands":"NL","Uruguay":"UY","Portugal":"PT",
+"Belgium":"BE","Croatia":"HR","Mexico":"MX","USA":"US","United States":"US",
+"Japan":"JP","South Korea":"KR","Korea Republic":"KR","Australia":"AU",
+"Austria":"AT","Switzerland":"CH","Sweden":"SE","Norway":"NO","Denmark":"DK",
+"Poland":"PL","Czech Republic":"CZ","Czechoslovakia":"CZ","Russia":"RU",
+"Ukraine":"UA","Turkey":"TR","Greece":"GR","Scotland":"GB","Wales":"GB",
+"Ireland":"IE","Northern Ireland":"GB","Morocco":"MA","Cameroon":"CM",
+"Nigeria":"NG","Ghana":"GH","Senegal":"SN","Tunisia":"TN","Algeria":"DZ",
+"Iran":"IR","Iraq":"IQ","Saudi Arabia":"SA","Qatar":"QA","China":"CN",
+"South Africa":"ZA","New Zealand":"NZ","Canada":"CA",
+"Costa Rica":"CR","Honduras":"HN","Panama":"PA","Jamaica":"JM",
+"Trinidad and Tobago":"TT","Colombia":"CO","Chile":"CL","Peru":"PE",
+"Paraguay":"PY","Ecuador":"EC","Bolivia":"BO","Venezuela":"VE"
 };
 
-function showCountry(){
-  const c=document.getElementById("countrySelect").value;
-  const out=document.getElementById("output");
+function flagEmoji(code){
+ if(!code) return "";
+ return code.replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt()));
+}
 
-  if(!c){
-    out.innerHTML="Country performance will appear here.";
-    return;
-  }
+fetch("data/world-cup.json",{cache:"no-store"})
+.then(r=>r.json())
+.then(data=>{
+ data.forEach(r=>{
+  if(r.Team) countrySet.add(normalizeCountry(r.Team));
+  if(r.Team__1) countrySet.add(normalizeCountry(r.Team__1));
+ });
+ buildCountries();
+});
 
-  const d=data[c];
+function buildCountries(){
+ const box=document.getElementById("countries");
 
-  out.innerHTML=`
-    <table class="stats-table">
-      <tr><th colspan="2">${c} — Football World Cup Record</th></tr>
-      <tr><td>Appearances</td><td>${d.appearances}</td></tr>
-      <tr><td>World Cup Titles</td><td>${d.titles}</td></tr>
-      <tr><td>Finals Played</td><td>${d.finals}</td></tr>
-      <tr><td>Best Finish</td><td>${d.best}</td></tr>
-      <tr><td>First Appearance</td><td>${d.first}</td></tr>
-      <tr><td>Most Recent Appearance</td><td>${d.last}</td></tr>
-    </table>
-  `;
+ Array.from(countrySet)
+  .filter(c=>c.length>0)
+  .sort((a,b)=>a.localeCompare(b))
+  .forEach(c=>{
+   const code=countryCodes[c]||"";
+   const flag=flagEmoji(code);
+
+   const d=document.createElement("div");
+   d.className="country-tile";
+
+   d.innerHTML=`
+    <span class="flag">${flag}</span>
+    <span class="label">${c}</span>
+   `;
+
+   d.onclick=()=>{
+    window.location.href = COUNTRY_PAGE + "?team=" + encodeURIComponent(c);
+   };
+
+   box.appendChild(d);
+  });
 }
 </script>
 
