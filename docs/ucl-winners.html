@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Champions League Finals – Winners</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background:#fff;
+  margin:0;
+  padding:20px;
+}
+
+h1 {
+  text-align:center;
+  margin-bottom:20px;
+}
+
+.controls {
+  display:flex;
+  gap:10px;
+  justify-content:center;
+  margin-bottom:20px;
+}
+
+.controls input, .controls select {
+  padding:8px 10px;
+  font-size:14px;
+}
+
+table {
+  width:100%;
+  border-collapse:collapse;
+}
+
+th, td {
+  border-bottom:1px solid #ddd;
+  padding:10px;
+  text-align:left;
+}
+
+th {
+  background:#f5f5f5;
+  font-weight:bold;
+}
+
+tr:hover {
+  background:#f9f9f9;
+}
+</style>
+</head>
+<body>
+
+<h1>Champions League Finals – Winners</h1>
+
+<div class="controls">
+  <input type="text" id="searchBox" placeholder="Search team...">
+  <select id="yearFilter">
+    <option value="">All Years</option>
+  </select>
+</div>
+
+<table id="uclTable">
+  <thead>
+    <tr>
+      <th>Season</th>
+      <th>Home</th>
+      <th>Score</th>
+      <th>Away</th>
+      <th>Winner</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<script>
+let uclData = [];
+
+fetch("./data/ucl_finals_with_winners_fixed.json")
+  .then(res => res.json())
+  .then(data => {
+    uclData = data;
+    populateYearFilter(data);
+    renderTable(data);
+  })
+  .catch(err => console.error("JSON Load Error:", err));
+
+function populateYearFilter(data){
+  const years = [...new Set(data.map(r => r.season))];
+  years.sort();
+  const select = document.getElementById("yearFilter");
+  years.forEach(y=>{
+    const opt=document.createElement("option");
+    opt.value=y;
+    opt.textContent=y;
+    select.appendChild(opt);
+  });
+}
+
+function renderTable(data){
+  const tbody=document.querySelector("#uclTable tbody");
+  tbody.innerHTML="";
+  data.forEach(r=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${r.season}</td>
+      <td>${r.home}</td>
+      <td>${r.home_goals}–${r.away_goals}</td>
+      <td>${r.away}</td>
+      <td>${r.winner}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+document.getElementById("searchBox").addEventListener("input", filterData);
+document.getElementById("yearFilter").addEventListener("change", filterData);
+
+function filterData(){
+  const search=document.getElementById("searchBox").value.toLowerCase();
+  const year=document.getElementById("yearFilter").value;
+
+  const filtered=uclData.filter(r=>{
+    const teamMatch =
+      r.home.toLowerCase().includes(search) ||
+      r.away.toLowerCase().includes(search) ||
+      r.winner.toLowerCase().includes(search);
+
+    const yearMatch = year==="" || r.season===year;
+
+    return teamMatch && yearMatch;
+  });
+
+  renderTable(filtered);
+}
+</script>
+
+</body>
+</html>
+
