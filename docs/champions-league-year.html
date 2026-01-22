@@ -30,7 +30,6 @@ h1{text-align:center;margin-bottom:22px;}
 .match-card{border:1px solid #e1e1e1;border-radius:12px;padding:16px;margin:12px 0;background:#fff;}
 .match-title{font-size:18px;font-weight:700;margin:0 0 6px;}
 .match-meta{color:#555;font-size:14px;margin:0 0 10px;}
-.goals-line{font-size:14px;color:#222;margin:0;}
 .muted{color:#777;}
 </style>
 </head>
@@ -73,10 +72,8 @@ h1{text-align:center;margin-bottom:22px;}
 </div>
 
 <script>
-const DATA_URL = "data/ucl_by_year_with_goals_WITH_SCORERS.json";
-
-/* Explicit control of seasons still running */
-const IN_PROGRESS_SEASONS = [2025];
+const DATA_URL="data/ucl_by_year_with_goals_WITH_SCORERS.json";
+const IN_PROGRESS_SEASONS=[2025];
 
 const years=[2025,2024,2023,2022,2021,2020,2019,2018,2017,2016,2015,2014,2013,2012,2011,2010,2009,2008,2007,2006,2005,2004,2003,2002,2001,2000,1999,1998,1997,1996,1995,1994,1993,1992,1991,1990,1989,1988,1987,1986,1985,1984,1983,1982,1981,1980,1979,1978,1977,1976,1975,1974,1973,1972,1971,1970,1969,1968,1967,1966,1965,1964,1963,1962,1961,1960,1959,1958,1957,1956,1955];
 
@@ -104,7 +101,7 @@ function buildSeasonMap(raw){
 }
 
 function pickFinalMatch(matches){
-  const finals=matches.filter(m=>String(m.round||"").toLowerCase()==="final");
+  const finals=matches.filter(m=>String(m.round||"").toLowerCase().includes("final"));
   const pool=finals.length?finals:matches;
   let best=null,bestT=-Infinity;
   for(const m of pool){
@@ -116,10 +113,23 @@ function pickFinalMatch(matches){
 
 function computeWinnerRunner(finalMatch){
   if(!finalMatch) return{winner:"—",runner:"—"};
+
+  // JSON explicit winner fields
+  if(finalMatch.winner || finalMatch.Winner){
+    return{
+      winner: finalMatch.winner||finalMatch.Winner,
+      runner: finalMatch.runner||finalMatch.runner_up||finalMatch.RunnerUp||"—"
+    };
+  }
+
   const hg=Number(finalMatch.home_goals);
   const ag=Number(finalMatch.away_goals);
-  if(hg>ag) return{winner:finalMatch.home,runner:finalMatch.away};
-  if(ag>hg) return{winner:finalMatch.away,runner:finalMatch.home};
+
+  if(Number.isFinite(hg)&&Number.isFinite(ag)){
+    if(hg>ag) return{winner:finalMatch.home,runner:finalMatch.away};
+    if(ag>hg) return{winner:finalMatch.away,runner:finalMatch.home};
+  }
+
   return{winner:"—",runner:"—"};
 }
 
