@@ -21,7 +21,7 @@ h1{text-align:center;margin-bottom:22px;}
 .section-box{border:1px solid #ddd;border-radius:12px;padding:18px;margin-bottom:26px;background:#fff;}
 .summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;}
 .summary-card{border:1px solid #e1e1e1;border-radius:10px;padding:14px;}
-#topScorersVal{line-height:1.6;}
+#topScorersVal{line-height:1.7;}
 
 .match-card{border:1px solid #ddd;border-radius:10px;padding:14px;margin-bottom:12px;}
 </style>
@@ -55,7 +55,6 @@ h1{text-align:center;margin-bottom:22px;}
 
 <script>
 const DATA_URL="data/ucl_by_year_with_goals_WITH_SCORERS.json";
-const IN_PROGRESS=[2025];
 
 const years=[2025,2024,2023,2022,2021,2020,2019,2018,2017,2016,2015,2014,2013,2012,2011,2010,2009,2008,2007,2006,2005,2004,2003,2002,2001,2000,1999,1998,1997,1996,1995,1994,1993,1992,1991,1990,1989,1988,1987,1986,1985,1984,1983,1982,1981,1980,1979,1978,1977,1976,1975,1974,1973,1972,1971,1970,1969,1968,1967,1966,1965,1964,1963,1962,1961,1960,1959,1958,1957,1956,1955];
 
@@ -68,115 +67,88 @@ const matchesWrap=document.getElementById("matchesWrap");
 
 let DATA=null, MAP=null;
 
+/* Team normalisation */
 function normTeam(t){
  if(!t) return "—";
  if(/inter/i.test(t) && /milan|internazionale/i.test(t)) return "Inter";
- if(/^inter$/i.test(t)) return "Inter";
- return t;
+ return t.replace("C.F.","").trim();
 }
 
+/* Build season map using UEFA seasonYear */
 function buildMap(data){
  const m=new Map();
- data.forEach(r=>{
-   const y=String(r.season).slice(0,4);
-   if(!m.has(y)) m.set(y,[]);
-   m.get(y).push(r);
+ data.forEach(match=>{
+   const sy = Number(match.matchday?.seasonYear);
+   if(!sy) return;
+   const season = String(sy-1); // 2008 -> 2007 season
+   if(!m.has(season)) m.set(season,[]);
+   m.get(season).push(match);
  });
  return m;
 }
 
-/* Goals */
-function getGoals(m,side){
- return Number(
-   m.score?.regular?.[side] ??
-   m.score?.total?.[side] ??
-   m[side+"_goals"]
- );
+/* Count goals from UEFA scorer events */
+function countGoals(match){
+ let home=0, away=0;
+ const hId=match.homeTeam?.id;
+ const aId=match.awayTeam?.id;
+
+ match.playerEvents?.scorers?.forEach(s=>{
+   if(String(s.goalType).toUpperCase()!=="SCORED") return;
+   if(s.teamId===hId) home++;
+   if(s.teamId===aId) away++;
+ });
+ return [home,away];
 }
 
-/* Penalties */
-function getPens(m,side){
- const direct =
-   m.score?.penalty?.[side] ??
-   m.score?.shootout?.[side] ??
-   m.penalty?.[side] ??
-   m.shootout?.[side] ??
-   m[side+"_penalties"] ??
-   m[side+"_pens"];
+/* Count penalties */
+function countPens(match){
+ let home=0, away=0;
+ const hId=match.homeTeam?.id;
+ const aId=match.awayTeam?.id;
 
- if(Number.isFinite(Number(direct))) return Number(direct);
-
- const scan = JSON.stringify(m);
- const rx = /(\d+)\D+(\d+)/;
- const m2 = scan.match(rx);
- if(m2) return side==="home"?Number(m2[1]):Number(m2[2]);
- return NaN;
+ match.playerEvents?.penaltyScorers?.forEach(p=>{
+   if(p.penaltyType!=="SCORED") return;
+   if(p.teamId===hId) home++;
+   if(p.teamId===aId) away++;
+ });
+ return [home,away];
 }
 
-/* Final picker */
+/* Pick final */
 function pickFinal(matches){
- const finals=matches.filter(m=>String(m.round).toLowerCase()==="final");
-
- for(const f of finals){
-   const hg=getGoals(f,"home");
-   const ag=getGoals(f,"away");
-   if(hg!==ag) return f;
-
-   const hp=getPens(f,"home");
-   const ap=getPens(f,"away");
-   if(Number.isFinite(hp)&&Number.isFinite(ap)&&hp!==ap) return f;
- }
+ const finals = matches.filter(m=>String(m.matchday?.type).toUpperCase()==="FINAL");
  return finals[finals.length-1]||null;
 }
 
-/* Winner */
-function winnerRunner(final){
+/* Winner logic */
+function getWinner(final){
  if(!final) return ["—","—"];
 
- const hg=getGoals(final,"home");
- const ag=getGoals(final,"away");
-
- const home=normTeam(final.home||final.homeTeam?.translations?.displayOfficialName?.EN);
- const away=normTeam(final.away||final.awayTeam?.translations?.displayOfficialName?.EN);
+ const [hg,ag]=countGoals(final);
+ const home=normTeam(final.homeTeam?.translations?.displayOfficialName?.EN||final.homeTeam?.internationalName);
+ const away=normTeam(final.awayTeam?.translations?.displayOfficialName?.EN||final.awayTeam?.internationalName);
 
  if(hg>ag) return [home,away];
  if(ag>hg) return [away,home];
 
- const hp=getPens(final,"home");
- const ap=getPens(final,"away");
+ const [hp,ap]=countPens(final);
+ if(hp>ap) return [home,away];
+ if(ap>hp) return [away,home];
 
- if(Number.isFinite(hp)&&Number.isFinite(ap)){
-   if(hp>ap) return [home,away];
-   if(ap>hp) return [away,home];
- }
  return ["—","—"];
 }
 
-/* Top Scorers – UEFA accurate */
+/* Top scorers */
 function topScorers(matches){
  const map={};
 
  matches.forEach(m=>{
-   if(Array.isArray(m.goals)){
-     m.goals.forEach(g=>{
-       const name=g.player||g.name||g.scorer;
-       if(name) map[name]=(map[name]||0)+1;
-     });
-   }
-
-   if(Array.isArray(m.playerEvents?.scorers)){
-     m.playerEvents.scorers.forEach(s=>{
-       const type=String(s.goalType||s.type||"").toUpperCase();
-       if(type!=="SCORED") return;
-
-       const name=
-         s.player?.translations?.name?.EN ||
-         s.player?.internationalName ||
-         s.player?.name;
-
-       if(name) map[name]=(map[name]||0)+1;
-     });
-   }
+   m.playerEvents?.scorers?.forEach(s=>{
+     if(String(s.goalType).toUpperCase()!=="SCORED") return;
+     const name=s.player?.translations?.name?.EN||s.player?.internationalName||s.player?.name;
+     if(name) map[name]=(map[name]||0)+1;
+   });
  });
 
  const arr=Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,5);
@@ -190,33 +162,26 @@ function render(year){
 
  summaryBox.style.display="block";
 
- if(IN_PROGRESS.includes(year)){
-   winnerVal.textContent="In Progress";
-   runnerVal.textContent="In Progress";
-   topScorersVal.textContent="In Progress";
- }else{
-   const f=pickFinal(matches);
-   const wr=winnerRunner(f);
-   winnerVal.textContent=wr[0];
-   runnerVal.textContent=wr[1];
-   topScorersVal.innerHTML=topScorers(matches);
- }
+ const final=pickFinal(matches);
+ const wr=getWinner(final);
+ winnerVal.textContent=wr[0];
+ runnerVal.textContent=wr[1];
+ topScorersVal.innerHTML=topScorers(matches);
 
  matchesWrap.innerHTML="";
+
  matches.forEach(m=>{
-   const hg=getGoals(m,"home");
-   const ag=getGoals(m,"away");
-   const hp=getPens(m,"home");
-   const ap=getPens(m,"away");
+   const [hg,ag]=countGoals(m);
+   const [hp,ap]=countPens(m);
 
-   const penTxt=(Number.isFinite(hp)&&Number.isFinite(ap))?` (Pens ${hp}–${ap})`:"";
+   const penTxt=(hp||ap)?` (Pens ${hp}–${ap})`:"";
 
-   const home=normTeam(m.home||m.homeTeam?.translations?.displayOfficialName?.EN);
-   const away=normTeam(m.away||m.awayTeam?.translations?.displayOfficialName?.EN);
+   const home=normTeam(m.homeTeam?.translations?.displayOfficialName?.EN||m.homeTeam?.internationalName);
+   const away=normTeam(m.awayTeam?.translations?.displayOfficialName?.EN||m.awayTeam?.internationalName);
 
    const d=document.createElement("div");
    d.className="match-card";
-   d.innerHTML=`<b>${home} ${hg} – ${ag} ${away}${penTxt}</b><br>${m.date||m.fullTimeAt} • ${m.round}`;
+   d.innerHTML=`<b>${home} ${hg} – ${ag} ${away}${penTxt}</b><br>${m.kickOffTime?.date||""} • ${m.matchday?.type||""}`;
    matchesWrap.appendChild(d);
  });
 }
