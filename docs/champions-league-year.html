@@ -89,27 +89,10 @@ let SEASON_MAP=null;
 
 function safe(v){return(v===null||v===undefined||v==="")?"—":String(v);}
 
-function parseDate(d){
-  if(!d) return null;
-  if(/^\d{2}\/\d{2}\/\d{4}$/.test(d)){
-    const [dd,mm,yy]=d.split("/");
-    return new Date(`${yy}-${mm}-${dd}`).getTime();
-  }
-  const t=Date.parse(d);
-  return Number.isFinite(t)?t:null;
-}
-
-function byKeys(o,keys){
-  for(const k of keys){
-    if(o[k]!==undefined && o[k]!==null && o[k]!== "") return o[k];
-  }
-  return null;
-}
-
 function buildSeasonMap(raw){
   const map=new Map();
   raw.forEach(m=>{
-    const y=String(m.season||m.Season||m.year||"").slice(0,4);
+    const y=String(m.season||"").slice(0,4);
     if(!map.has(y)) map.set(y,[]);
     map.get(y).push(m);
   });
@@ -117,51 +100,25 @@ function buildSeasonMap(raw){
 }
 
 function pickFinalMatch(matches){
-  const finals=matches.filter(m=>String(m.round||m.Round||"").toLowerCase().includes("final"));
-  const pool=finals.length?finals:matches;
+  const finals=matches.filter(m=>String(m.round).toLowerCase()==="final");
 
-  let best=null,bestT=-Infinity;
-  for(const m of pool){
-    const t=parseDate(m.date||m.Date);
-    if(t!==null && t>bestT){
-      bestT=t;
-      best=m;
-    }
-  }
-  return best||pool[pool.length-1];
-}
+  if(!finals.length) return null;
 
-function getGoals(m,side){
-  return Number(byKeys(m,[
-    side+"_goals", side+"Goals", side.toUpperCase()+"Goals",
-    side+"_score", side+"Score",
-    side.charAt(0).toUpperCase()+side.slice(1)+" Goals",
-    side.charAt(0).toUpperCase()+side.slice(1)+"Goals"
-  ]));
-}
+  // Prefer non-draw final (replay)
+  const decisive=finals.find(m=>Number(m.home_goals)!==Number(m.away_goals));
+  if(decisive) return decisive;
 
-function getTeam(m,side){
-  return byKeys(m,[
-    side, side+"Team",
-    side.charAt(0).toUpperCase()+side.slice(1),
-    side.charAt(0).toUpperCase()+side.slice(1)+" Team",
-    side.charAt(0).toUpperCase()+side.slice(1)+"Team"
-  ])||"—";
+  return finals[finals.length-1];
 }
 
 function computeWinnerRunner(finalMatch){
   if(!finalMatch) return{winner:"—",runner:"—"};
 
-  const hg=getGoals(finalMatch,"home");
-  const ag=getGoals(finalMatch,"away");
+  const hg=Number(finalMatch.home_goals);
+  const ag=Number(finalMatch.away_goals);
 
-  const home=getTeam(finalMatch,"home");
-  const away=getTeam(finalMatch,"away");
-
-  if(Number.isFinite(hg)&&Number.isFinite(ag)){
-    if(hg>ag) return{winner:home,runner:away};
-    if(ag>hg) return{winner:away,runner:home};
-  }
+  if(hg>ag) return{winner:finalMatch.home,runner:finalMatch.away};
+  if(ag>hg) return{winner:finalMatch.away,runner:finalMatch.home};
 
   return{winner:"—",runner:"—"};
 }
@@ -170,7 +127,7 @@ function computeTopScorers(matches,topN=5){
   const c=new Map();
   matches.forEach(m=>{
     (m.goals||[]).forEach(g=>{
-      const p=typeof g==="string"?g.replace(/\s*\(?\d+.*$/,"").trim():g.player;
+      const p=g.player;
       if(p) c.set(p,(c.get(p)||0)+1);
     });
   });
@@ -179,17 +136,12 @@ function computeTopScorers(matches,topN=5){
 
 function renderMatches(matches){
   matchesWrap.innerHTML="";
-  if(!matches.length){
-    matchesWrap.innerHTML=`<p class="muted">No matches found for this season.</p>`;
-    return;
-  }
-  const sorted=[...matches].sort((a,b)=>(parseDate(a.date)||0)-(parseDate(b.date)||0));
-  sorted.forEach(m=>{
+  matches.forEach(m=>{
     const card=document.createElement("div");
     card.className="match-card";
     card.innerHTML=`
-      <div class="match-title">${safe(getTeam(m,"home"))} ${safe(getGoals(m,"home"))} – ${safe(getGoals(m,"away"))} ${safe(getTeam(m,"away"))}</div>
-      <div class="match-meta">${safe(m.date||m.Date)} • ${safe(m.round||m.Round)}</div>
+      <div class="match-title">${safe(m.home)} ${safe(m.home_goals)} – ${safe(m.away_goals)} ${safe(m.away)}</div>
+      <div class="match-meta">${safe(m.date)} • ${safe(m.round)}</div>
     `;
     matchesWrap.appendChild(card);
   });
@@ -210,15 +162,11 @@ function renderSummary(matches,year){
 
   const top=computeTopScorers(matches,5);
   scorersList.innerHTML="";
-  if(!top.length){
-    scorersList.innerHTML=`<li class="muted">No scorer data available.</li>`;
-  }else{
-    top.forEach(r=>{
-      const li=document.createElement("li");
-      li.textContent=`${r.player} – ${r.goals}`;
-      scorersList.appendChild(li);
-    });
-  }
+  top.forEach(r=>{
+    const li=document.createElement("li");
+    li.textContent=`${r.player} – ${r.goals}`;
+    scorersList.appendChild(li);
+  });
 }
 
 function setActiveYearButton(year){
