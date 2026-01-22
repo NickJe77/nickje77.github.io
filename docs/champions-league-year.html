@@ -101,33 +101,43 @@ function buildSeasonMap(raw){
 }
 
 function pickFinalMatch(matches){
-  const finals=matches.filter(m=>String(m.round||"").toLowerCase().includes("final"));
+  const finals=matches.filter(m=>String(m.round||m.Round||"").toLowerCase().includes("final"));
   const pool=finals.length?finals:matches;
   let best=null,bestT=-Infinity;
   for(const m of pool){
-    const t=parseISODate(m.date);
+    const t=parseISODate(m.date||m.Date);
     if(t!==null&&t>bestT){bestT=t;best=m;}
   }
   return best||pool[pool.length-1];
 }
 
+function getGoals(m,side){
+  return Number(
+    m[side+"_goals"] ??
+    m[side+"Goals"] ??
+    m[side.toUpperCase()+"Goals"] ??
+    m[side+"_score"] ??
+    m[side+"Score"] ??
+    m[side]
+  );
+}
+
+function getTeam(m,side){
+  return m[side] || m[side.charAt(0).toUpperCase()+side.slice(1)] || m[side+"Team"] || "—";
+}
+
 function computeWinnerRunner(finalMatch){
   if(!finalMatch) return{winner:"—",runner:"—"};
 
-  // JSON explicit winner fields
-  if(finalMatch.winner || finalMatch.Winner){
-    return{
-      winner: finalMatch.winner||finalMatch.Winner,
-      runner: finalMatch.runner||finalMatch.runner_up||finalMatch.RunnerUp||"—"
-    };
-  }
+  const hg=getGoals(finalMatch,"home");
+  const ag=getGoals(finalMatch,"away");
 
-  const hg=Number(finalMatch.home_goals);
-  const ag=Number(finalMatch.away_goals);
+  const home=getTeam(finalMatch,"home");
+  const away=getTeam(finalMatch,"away");
 
   if(Number.isFinite(hg)&&Number.isFinite(ag)){
-    if(hg>ag) return{winner:finalMatch.home,runner:finalMatch.away};
-    if(ag>hg) return{winner:finalMatch.away,runner:finalMatch.home};
+    if(hg>ag) return{winner:home,runner:away};
+    if(ag>hg) return{winner:away,runner:home};
   }
 
   return{winner:"—",runner:"—"};
@@ -155,8 +165,8 @@ function renderMatches(matches){
     const card=document.createElement("div");
     card.className="match-card";
     card.innerHTML=`
-      <div class="match-title">${safeText(m.home)} ${safeText(m.home_goals)} – ${safeText(m.away_goals)} ${safeText(m.away)}</div>
-      <div class="match-meta">${safeText(m.date)} • ${safeText(m.round)}</div>
+      <div class="match-title">${safeText(getTeam(m,"home"))} ${safeText(getGoals(m,"home"))} – ${safeText(getGoals(m,"away"))} ${safeText(getTeam(m,"away"))}</div>
+      <div class="match-meta">${safeText(m.date||m.Date)} • ${safeText(m.round||m.Round)}</div>
     `;
     matchesWrap.appendChild(card);
   });
