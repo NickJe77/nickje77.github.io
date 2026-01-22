@@ -21,6 +21,7 @@ h1{text-align:center;margin-bottom:22px;}
 .section-box{border:1px solid #ddd;border-radius:12px;padding:18px;margin-bottom:26px;background:#fff;}
 .summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;}
 .summary-card{border:1px solid #e1e1e1;border-radius:10px;padding:14px;}
+#topScorersVal{line-height:1.6;}
 
 .match-card{border:1px solid #ddd;border-radius:10px;padding:14px;margin-bottom:12px;}
 </style>
@@ -67,7 +68,6 @@ const matchesWrap=document.getElementById("matchesWrap");
 
 let DATA=null, MAP=null;
 
-/* ---------- Normalisation ---------- */
 function normTeam(t){
  if(!t) return "—";
  if(/inter/i.test(t) && /milan|internazionale/i.test(t)) return "Inter";
@@ -75,7 +75,6 @@ function normTeam(t){
  return t;
 }
 
-/* ---------- Data mapping ---------- */
 function buildMap(data){
  const m=new Map();
  data.forEach(r=>{
@@ -86,81 +85,102 @@ function buildMap(data){
  return m;
 }
 
-/* ---------- Penalty extractor (UEFA safe) ---------- */
-function extractPens(m){
- const candidates=[
-   m.score?.penalty,
-   m.score?.penalties,
-   m.shootout,
-   m.penalties,
-   m.penalty,
-   m.result,
-   m.score
- ];
-
- for(const c of candidates){
-   if(!c) continue;
-   const s=JSON.stringify(c);
-   const m2=s.match(/(\d+)[^\d]+(\d+)/);
-   if(m2) return [Number(m2[1]),Number(m2[2])];
- }
- return null;
+/* -------- Goals -------- */
+function getGoals(m,side){
+ return Number(
+   m.score?.regular?.[side] ??
+   m.score?.total?.[side] ??
+   m[side+"_goals"]
+ );
 }
 
-/* ---------- Final picker ---------- */
+/* -------- Penalties (ALL formats) -------- */
+function getPens(m,side){
+ const direct =
+   m.score?.penalty?.[side] ??
+   m.score?.shootout?.[side] ??
+   m.penalty?.[side] ??
+   m.shootout?.[side] ??
+   m[side+"_penalties"] ??
+   m[side+"_pens"];
+
+ if(Number.isFinite(Number(direct))) return Number(direct);
+
+ const scan = JSON.stringify(m);
+ const rx = new RegExp("(\\d+)\\D+(\\d+)", "g");
+ let match;
+ while((match = rx.exec(scan)) !== null){
+   return side==="home" ? Number(match[1]) : Number(match[2]);
+ }
+ return NaN;
+}
+
+/* -------- Final picker -------- */
 function pickFinal(matches){
  const finals=matches.filter(m=>String(m.round).toLowerCase()==="final");
 
- // Prefer decisive or penalty decided
  for(const f of finals){
-   const hg=Number(f.home_goals);
-   const ag=Number(f.away_goals);
+   const hg=getGoals(f,"home");
+   const ag=getGoals(f,"away");
    if(hg!==ag) return f;
-   const p=extractPens(f);
-   if(p && p[0]!==p[1]) return f;
+
+   const hp=getPens(f,"home");
+   const ap=getPens(f,"away");
+   if(Number.isFinite(hp)&&Number.isFinite(ap)&&hp!==ap) return f;
  }
 
  return finals[finals.length-1]||null;
 }
 
-/* ---------- Winner logic ---------- */
+/* -------- Winner logic -------- */
 function winnerRunner(final){
  if(!final) return ["—","—"];
 
- const hg=Number(final.home_goals);
- const ag=Number(final.away_goals);
+ const hg=getGoals(final,"home");
+ const ag=getGoals(final,"away");
 
- const home=normTeam(final.home);
- const away=normTeam(final.away);
+ const home=normTeam(final.home||final.homeTeam?.translations?.displayOfficialName?.EN);
+ const away=normTeam(final.away||final.awayTeam?.translations?.displayOfficialName?.EN);
 
  if(hg>ag) return [home,away];
  if(ag>hg) return [away,home];
 
- const p=extractPens(final);
- if(p){
-   if(p[0]>p[1]) return [home,away];
-   if(p[1]>p[0]) return [away,home];
+ const hp=getPens(final,"home");
+ const ap=getPens(final,"away");
+
+ if(Number.isFinite(hp)&&Number.isFinite(ap)){
+   if(hp>ap) return [home,away];
+   if(ap>hp) return [away,home];
  }
 
  return ["—","—"];
 }
 
-/* ---------- Top scorers ---------- */
+/* -------- Top scorers -------- */
 function topScorers(matches){
  const map={};
+
  matches.forEach(m=>{
-   (m.goals||[]).forEach(g=>{
-     if(!g.player) return;
-     map[g.player]=(map[g.player]||0)+1;
-   });
+   if(m.goals){
+     m.goals.forEach(g=>{
+       if(g.player) map[g.player]=(map[g.player]||0)+1;
+     });
+   }
+
+   if(m.playerEvents?.scorers){
+     m.playerEvents.scorers.forEach(s=>{
+       const name=s.player?.translations?.name?.EN || s.player?.internationalName;
+       if(name) map[name]=(map[name]||0)+1;
+     });
+   }
  });
 
  const arr=Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,5);
  if(!arr.length) return "—";
- return arr.map(a=>`${a[0]} (${a[1]})`).join(", ");
+ return arr.map(a=>`${a[0]} (${a[1]})`).join("<br>");
 }
 
-/* ---------- Render ---------- */
+/* -------- Render -------- */
 function render(year){
  const matches=MAP.get(String(year))||[];
 
@@ -175,21 +195,28 @@ function render(year){
    const wr=winnerRunner(f);
    winnerVal.textContent=wr[0];
    runnerVal.textContent=wr[1];
-   topScorersVal.textContent=topScorers(matches);
+   topScorersVal.innerHTML=topScorers(matches);
  }
 
  matchesWrap.innerHTML="";
  matches.forEach(m=>{
-   const p=extractPens(m);
-   const penTxt=p?` (Pens ${p[0]}–${p[1]})`:"";
+   const hg=getGoals(m,"home");
+   const ag=getGoals(m,"away");
+   const hp=getPens(m,"home");
+   const ap=getPens(m,"away");
+
+   const penTxt=(Number.isFinite(hp)&&Number.isFinite(ap))?` (Pens ${hp}–${ap})`:"";
+
+   const home=normTeam(m.home||m.homeTeam?.translations?.displayOfficialName?.EN);
+   const away=normTeam(m.away||m.awayTeam?.translations?.displayOfficialName?.EN);
+
    const d=document.createElement("div");
    d.className="match-card";
-   d.innerHTML=`<b>${normTeam(m.home)} ${m.home_goals} – ${m.away_goals} ${normTeam(m.away)}${penTxt}</b><br>${m.date} • ${m.round}`;
+   d.innerHTML=`<b>${home} ${hg} – ${ag} ${away}${penTxt}</b><br>${m.date||m.fullTimeAt} • ${m.round}`;
    matchesWrap.appendChild(d);
  });
 }
 
-/* ---------- Load ---------- */
 async function load(year){
  if(!DATA){
    DATA=await (await fetch(DATA_URL,{cache:"no-store"})).json();
@@ -198,7 +225,6 @@ async function load(year){
  render(year);
 }
 
-/* ---------- Build buttons ---------- */
 years.forEach(y=>{
  const b=document.createElement("div");
  b.className="year-btn";
