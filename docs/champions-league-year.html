@@ -5,10 +5,17 @@
 <title>UEFA Champions League – By Year | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<link rel="stylesheet" href="style.css">
+<!-- CORRECT CSS PATH -->
+<link rel="stylesheet" href="../style.css">
 
 <style>
-body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
+/* Fallback so page is NEVER invisible */
+body{
+ font-family:Inter,system-ui,Arial;
+ margin:0;
+ background:white;
+ color:black;
+}
 
 .navbar{
 display:flex;
@@ -83,4 +90,170 @@ margin-bottom:14px;
 background:white;
 }
 
-.error{color:red;font-weight:700;text-align:c
+.error{
+color:red;
+font-weight:700;
+text-align:center;
+}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+<a href="../index.html">Home</a>
+<a href="../football.html">Football</a>
+<a href="../football-champions-league.html">Champions League</a>
+<a href="champions-league-year.html">By Year</a>
+</div>
+
+<div class="page-wrap">
+
+<h1>UEFA Champions League – By Year</h1>
+
+<div id="years" class="year-grid"></div>
+<div id="output"></div>
+
+</div>
+
+<script>
+const yearsBox=document.getElementById("years");
+const output=document.getElementById("output");
+let matchesByYear={};
+
+function normaliseTeam(n){
+ if(!n) return "";
+ n=n.trim();
+ const map={
+  "Paris":"Paris Saint-Germain",
+  "B Dortmund":"Borussia Dortmund",
+  "B. Dortmund":"Borussia Dortmund",
+  "Dortmund":"Borussia Dortmund",
+  "Man City":"Manchester City",
+  "Man United":"Manchester United",
+  "Inter":"Internazionale",
+  "Atletico":"Atlético Madrid",
+  "Bayern München":"Bayern Munich",
+  "Bayern M":"Bayern Munich",
+  "AC Milan":"Milan"
+ };
+ return map[n]||n;
+}
+
+// CORRECT JSON PATH FOR YOUR DOMAIN ROOT (/docs)
+fetch("data/ucl_by_year_with_goals_WITH_SCORERS.json",{cache:"no-store"})
+.then(r=>{
+ if(!r.ok) throw new Error("HTTP "+r.status);
+ return r.json();
+})
+.then(data=>{
+ if(!Array.isArray(data)){
+  output.innerHTML="<div class='error'>JSON loaded but not an array</div>";
+  return;
+ }
+
+ data.forEach(r=>{
+  if(!r.season) return;
+  if(!matchesByYear[r.season]) matchesByYear[r.season]=[];
+  matchesByYear[r.season].push(r);
+ });
+
+ buildYears();
+})
+.catch(e=>{
+ output.innerHTML="<div class='error'>JSON failed to load.</div>";
+ console.error(e);
+});
+
+function buildYears(){
+ yearsBox.innerHTML="";
+ Object.keys(matchesByYear)
+ .sort((a,b)=>b.localeCompare(a,undefined,{numeric:true}))
+ .forEach(y=>{
+  const d=document.createElement("div");
+  d.className="year-tile";
+  d.textContent=y;
+  d.onclick=()=>loadYear(y,d);
+  yearsBox.appendChild(d);
+ });
+}
+
+function loadYear(year,btn){
+ document.querySelectorAll(".year-tile").forEach(b=>b.classList.remove("active"));
+ btn.classList.add("active");
+
+ output.innerHTML="";
+
+ const matches=matchesByYear[year]||[];
+
+ buildSummary(matches);
+
+ matches.forEach(m=>{
+  const home=normaliseTeam(m.home);
+  const away=normaliseTeam(m.away);
+
+  const score=(m.home_goals!=null&&m.away_goals!=null)
+   ?`${m.home_goals} – ${m.away_goals}`:"v";
+
+  let goals="";
+  if(Array.isArray(m.goals)){
+   goals=m.goals.map(g=>`${g.player} (${g.minute}')`).join(", ");
+  }
+
+  const div=document.createElement("div");
+  div.className="match";
+  div.innerHTML=`
+   <h3>${home} ${score} ${away}</h3>
+   <div>${m.round||""}</div>
+   <div>${m.date||""}</div>
+   ${goals?`<div><strong>Goals:</strong> ${goals}</div>`:""}
+  `;
+  output.appendChild(div);
+ });
+}
+
+function buildSummary(matches){
+
+ let final=matches.find(m=>(m.round||"").toLowerCase().includes("final"));
+ let winner="Unknown",runner="Unknown";
+
+ if(final && final.home_goals!=null){
+  if(final.home_goals>final.away_goals){
+   winner=normaliseTeam(final.home);
+   runner=normaliseTeam(final.away);
+  }else{
+   winner=normaliseTeam(final.away);
+   runner=normaliseTeam(final.home);
+  }
+ }
+
+ let scorers={};
+ matches.forEach(m=>{
+  if(Array.isArray(m.goals)){
+   m.goals.forEach(g=>{
+    if(!g.player) return;
+    scorers[g.player]=(scorers[g.player]||0)+1;
+   });
+  }
+ });
+
+ let top=Object.entries(scorers).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+ let scorerHTML=top.map(s=>`<div class="scorer">${s[0]} – ${s[1]}</div>`).join("");
+
+ const sum=document.createElement("div");
+ sum.className="summary";
+ sum.innerHTML=`
+  <h2>Season Summary</h2>
+  <div class="summary-grid">
+   <div class="summary-box"><strong>Winner</strong><br>${winner}</div>
+   <div class="summary-box"><strong>Runner-up</strong><br>${runner}</div>
+   <div class="summary-box"><strong>Top Scorers</strong><br>${scorerHTML||"No data"}</div>
+  </div>
+ `;
+ output.appendChild(sum);
+}
+</script>
+
+</body>
+</html>
