@@ -5,7 +5,7 @@
 <title>UEFA Champions League – By Year | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="/style.css">
 
 <style>
 body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
@@ -73,6 +73,8 @@ border-radius:10px;
 padding:12px;
 }
 
+.scorer{font-size:14px;margin-bottom:4px;}
+
 .match{
 border:1px solid #ddd;
 border-radius:12px;
@@ -80,16 +82,22 @@ padding:14px;
 margin-bottom:14px;
 background:white;
 }
+
+.error{
+color:red;
+font-weight:600;
+text-align:center;
+}
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="football.html">Football</a>
-<a href="football-champions-league.html">Champions League</a>
-<a href="champions-league-year.html">By Year</a>
+<a href="/index.html">Home</a>
+<a href="/football.html">Football</a>
+<a href="/football-champions-league.html">Champions League</a>
+<a href="/docs/champions-league-year.html">By Year</a>
 </div>
 
 <div class="page-wrap">
@@ -108,7 +116,6 @@ let matchesByYear={};
 
 function normaliseTeam(n){
  if(!n) return "";
- n=n.trim();
  const map={
   "Paris":"Paris Saint-Germain",
   "B Dortmund":"Borussia Dortmund",
@@ -122,14 +129,20 @@ function normaliseTeam(n){
   "Bayern M":"Bayern Munich",
   "AC Milan":"Milan"
  };
- return map[n]||n;
+ return map[n.trim()]||n.trim();
 }
 
-fetch("data/ucl_by_year_with_goals_WITH_SCORERS.json",{cache:"no-store"})
-.then(r=>r.json())
+// ABSOLUTE PATH – NO RELATIVE FAILURE POSSIBLE
+const jsonURL = window.location.origin + "/data/ucl_by_year_with_goals_WITH_SCORERS.json";
+
+fetch(jsonURL,{cache:"no-store"})
+.then(r=>{
+ if(!r.ok) throw new Error("HTTP "+r.status);
+ return r.json();
+})
 .then(data=>{
  if(!Array.isArray(data)){
-  output.innerHTML="<p>JSON did not return an array.</p>";
+  output.innerHTML="<div class='error'>JSON loaded but is not an array.</div>";
   return;
  }
 
@@ -142,7 +155,7 @@ fetch("data/ucl_by_year_with_goals_WITH_SCORERS.json",{cache:"no-store"})
  buildYears();
 })
 .catch(e=>{
- output.innerHTML="<p>JSON failed to load.</p>";
+ output.innerHTML="<div class='error'>JSON failed to load from:<br>"+jsonURL+"</div>";
  console.error(e);
 });
 
@@ -198,7 +211,7 @@ function buildSummary(matches){
  let final=matches.find(m=>(m.round||"").toLowerCase().includes("final"));
  let winner="Unknown",runner="Unknown";
 
- if(final){
+ if(final && final.home_goals!=null){
   if(final.home_goals>final.away_goals){
    winner=normaliseTeam(final.home);
    runner=normaliseTeam(final.away);
@@ -220,7 +233,7 @@ function buildSummary(matches){
 
  let top=Object.entries(scorers).sort((a,b)=>b[1]-a[1]).slice(0,5);
 
- let scorerHTML=top.map(s=>`<div>${s[0]} – ${s[1]}</div>`).join("");
+ let scorerHTML=top.map(s=>`<div class="scorer">${s[0]} – ${s[1]}</div>`).join("");
 
  const sum=document.createElement("div");
  sum.className="summary";
