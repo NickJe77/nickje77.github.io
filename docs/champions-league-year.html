@@ -7,386 +7,208 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
-  body{font-family:Inter,system-ui,Arial;margin:0;background:#fff;color:#111;}
-  .navbar{
-    display:flex;justify-content:center;gap:22px;
-    padding:16px;border-bottom:1px solid #ddd;font-weight:600;
-  }
-  .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px;border-bottom:1px solid #ddd;font-weight:600;}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 
-  .page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px;}
-  h1{text-align:center;margin:0 0 18px;}
-  .sub{text-align:center;color:#555;margin:0 0 26px;}
+.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px;}
+h1{text-align:center;margin-bottom:22px;}
 
-  .controls{
-    display:flex;justify-content:center;gap:10px;flex-wrap:wrap;
-    margin:0 0 22px;
-  }
-  select{
-    font:inherit;padding:10px 12px;border:1px solid #ccc;border-radius:10px;
-    background:#fff;min-width:220px;
-  }
+.year-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:10px;margin-bottom:28px;}
+.year-btn{background:#111;color:white;text-align:center;padding:10px 0;border-radius:8px;cursor:pointer;font-weight:600;}
+.year-btn.active{background:#0056d6;}
 
-  .summary{
-    display:grid;grid-template-columns:repeat(3, minmax(0,1fr));
-    gap:14px;margin:18px 0 22px;
-  }
-  .card{
-    border:1px solid #e5e5e5;border-radius:14px;padding:14px 14px;
-    background:#fff;
-  }
-  .card h3{margin:0 0 10px;font-size:16px;}
-  .meta{color:#555;font-size:14px;line-height:1.4;}
-  .meta b{color:#111;}
+.section-box{border:1px solid #ddd;border-radius:12px;padding:18px;margin-bottom:26px;background:#fff;}
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;}
+.summary-card{border:1px solid #e1e1e1;border-radius:10px;padding:14px;}
 
-  .table-wrap{overflow:auto;border:1px solid #e5e5e5;border-radius:14px;}
-  table{width:100%;border-collapse:collapse;font-size:14px;min-width:780px;}
-  th,td{padding:10px 12px;border-bottom:1px solid #eee;text-align:left;vertical-align:top;}
-  th{background:#fafafa;font-weight:700;}
-  .muted{color:#666;}
-  .pill{
-    display:inline-block;padding:3px 10px;border-radius:999px;
-    border:1px solid #ddd;background:#fafafa;font-size:12px;color:#333;
-  }
+.match-card{border:1px solid #ddd;border-radius:10px;padding:14px;margin-bottom:12px;}
 </style>
 </head>
-
 <body>
-  <div class="navbar">
-    <a href="index.html">Home</a>
-    <a href="football.html">Football</a>
-    <a href="champions-league.html">European Champions League</a>
-  </div>
 
-  <div class="page-wrap">
-    <h1>European Champions League – By Year</h1>
-    <p class="sub">Select a season to view the final, season summary, and all matches.</p>
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="football.html">Football</a>
+<a href="champions-league.html">European Champions League</a>
+<a href="champions-league-year.html">By Year</a>
+</div>
 
-    <div class="controls">
-      <select id="seasonSelect">
-        <option value="">Loading seasons…</option>
-      </select>
-    </div>
+<div class="page-wrap">
 
-    <div class="summary" id="summary" style="display:none;">
-      <div class="card">
-        <h3>Winner</h3>
-        <div class="meta" id="winnerBox">—</div>
-      </div>
-      <div class="card">
-        <h3>Runner-up</h3>
-        <div class="meta" id="runnerUpBox">—</div>
-      </div>
-      <div class="card">
-        <h3>Top 5 Goal Scorers</h3>
-        <div class="meta" id="topScorersBox">—</div>
-      </div>
-    </div>
+<h1>European Champions League – By Year</h1>
 
-    <div class="table-wrap" id="matchesWrap" style="display:none;">
-      <table>
-        <thead>
-          <tr>
-            <th style="width:110px;">Date</th>
-            <th style="width:120px;">Stage</th>
-            <th>Match</th>
-            <th style="width:110px;">Score</th>
-          </tr>
-        </thead>
-        <tbody id="matchesBody"></tbody>
-      </table>
-    </div>
+<div class="year-grid" id="yearGrid"></div>
 
-    <p class="muted" id="status" style="text-align:center;margin-top:18px;"></p>
-  </div>
+<div class="section-box" id="summaryBox" style="display:none;">
+<div class="summary-grid">
+  <div class="summary-card"><b>Winner</b><div id="winnerVal">—</div></div>
+  <div class="summary-card"><b>Runner-up</b><div id="runnerVal">—</div></div>
+  <div class="summary-card"><b>Top 5 Goal Scorers</b><div id="topScorersVal">—</div></div>
+</div>
+</div>
+
+<div id="matchesWrap"></div>
+
+</div>
 
 <script>
-/* =========================
-   Helpers (UEFA-ish objects)
-   ========================= */
+const DATA_URL="data/ucl_by_year_with_goals_WITH_SCORERS.json";
+const IN_PROGRESS=[2025];
 
-function get(obj, path, fallback=null){
-  try{
-    return path.split('.').reduce((o,k)=> (o && k in o) ? o[k] : undefined, obj) ?? fallback;
-  }catch(e){ return fallback; }
+const years=[2025,2024,2023,2022,2021,2020,2019,2018,2017,2016,2015,2014,2013,2012,2011,2010,2009,2008,2007,2006,2005,2004,2003,2002,2001,2000,1999,1998,1997,1996,1995,1994,1993,1992,1991,1990,1989,1988,1987,1986,1985,1984,1983,1982,1981,1980,1979,1978,1977,1976,1975,1974,1973,1972,1971,1970,1969,1968,1967,1966,1965,1964,1963,1962,1961,1960,1959,1958,1957,1956,1955];
+
+const grid=document.getElementById("yearGrid");
+const winnerVal=document.getElementById("winnerVal");
+const runnerVal=document.getElementById("runnerVal");
+const topScorersVal=document.getElementById("topScorersVal");
+const summaryBox=document.getElementById("summaryBox");
+const matchesWrap=document.getElementById("matchesWrap");
+
+let DATA=null, MAP=null;
+
+/* ---------- Normalisation ---------- */
+function normTeam(t){
+ if(!t) return "—";
+ if(/inter/i.test(t) && /milan|internazionale/i.test(t)) return "Inter";
+ if(/^inter$/i.test(t)) return "Inter";
+ return t;
 }
 
-function parseISODate(iso){
-  // iso can be "YYYY-MM-DD" or full datetime
-  if(!iso) return null;
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? null : d;
+/* ---------- Data mapping ---------- */
+function buildMap(data){
+ const m=new Map();
+ data.forEach(r=>{
+   const y=String(r.season).slice(0,4);
+   if(!m.has(y)) m.set(y,[]);
+   m.get(y).push(r);
+ });
+ return m;
 }
 
-function formatDateShort(d){
-  if(!d) return "";
-  const y = d.getFullYear();
-  const m = String(d.getMonth()+1).padStart(2,'0');
-  const day = String(d.getDate()).padStart(2,'0');
-  return `${y}-${m}-${day}`;
+/* ---------- Penalty extractor (UEFA safe) ---------- */
+function extractPens(m){
+ const candidates=[
+   m.score?.penalty,
+   m.score?.penalties,
+   m.shootout,
+   m.penalties,
+   m.penalty,
+   m.result,
+   m.score
+ ];
+
+ for(const c of candidates){
+   if(!c) continue;
+   const s=JSON.stringify(c);
+   const m2=s.match(/(\d+)[^\d]+(\d+)/);
+   if(m2) return [Number(m2[1]),Number(m2[2])];
+ }
+ return null;
 }
 
-function seasonStartYearFromMatch(match){
-  // Use kickOffTime.date if present, else kickOffTime.dateTime, else fullTimeAt, else null
-  const dateStr =
-    get(match, "kickOffTime.date") ||
-    get(match, "kickOffTime.dateTime") ||
-    get(match, "fullTimeAt") ||
-    get(match, "date") ||
-    null;
+/* ---------- Final picker ---------- */
+function pickFinal(matches){
+ const finals=matches.filter(m=>String(m.round).toLowerCase()==="final");
 
-  const d = parseISODate(dateStr);
-  if(!d) return null;
+ // Prefer decisive or penalty decided
+ for(const f of finals){
+   const hg=Number(f.home_goals);
+   const ag=Number(f.away_goals);
+   if(hg!==ag) return f;
+   const p=extractPens(f);
+   if(p && p[0]!==p[1]) return f;
+ }
 
-  const y = d.getFullYear();
-  const month = d.getMonth()+1; // 1-12
-  // Season convention: July -> next May/June, so Jan–Jun belongs to previous start year
-  return (month >= 7) ? y : (y - 1);
+ return finals[finals.length-1]||null;
 }
 
-function seasonLabel(startYear){
-  const endYY = String((startYear + 1) % 100).padStart(2,'0');
-  return `${startYear}-${endYY}`;
+/* ---------- Winner logic ---------- */
+function winnerRunner(final){
+ if(!final) return ["—","—"];
+
+ const hg=Number(final.home_goals);
+ const ag=Number(final.away_goals);
+
+ const home=normTeam(final.home);
+ const away=normTeam(final.away);
+
+ if(hg>ag) return [home,away];
+ if(ag>hg) return [away,home];
+
+ const p=extractPens(final);
+ if(p){
+   if(p[0]>p[1]) return [home,away];
+   if(p[1]>p[0]) return [away,home];
+ }
+
+ return ["—","—"];
 }
 
-function getTeamName(teamObj){
-  // Prefer official/translated display name when present
-  return (
-    get(teamObj, "translations.displayOfficialName.EN") ||
-    get(teamObj, "translations.displayName.EN") ||
-    get(teamObj, "internationalName") ||
-    get(teamObj, "name") ||
-    "Unknown"
-  );
+/* ---------- Top scorers ---------- */
+function topScorers(matches){
+ const map={};
+ matches.forEach(m=>{
+   (m.goals||[]).forEach(g=>{
+     if(!g.player) return;
+     map[g.player]=(map[g.player]||0)+1;
+   });
+ });
+
+ const arr=Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,5);
+ if(!arr.length) return "—";
+ return arr.map(a=>`${a[0]} (${a[1]})`).join(", ");
 }
 
-function getStage(match){
-  return (
-    get(match, "matchday.type") ||
-    get(match, "round") ||
-    get(match, "stage") ||
-    "—"
-  );
+/* ---------- Render ---------- */
+function render(year){
+ const matches=MAP.get(String(year))||[];
+
+ summaryBox.style.display="block";
+
+ if(IN_PROGRESS.includes(year)){
+   winnerVal.textContent="In Progress";
+   runnerVal.textContent="In Progress";
+   topScorersVal.textContent="In Progress";
+ }else{
+   const f=pickFinal(matches);
+   const wr=winnerRunner(f);
+   winnerVal.textContent=wr[0];
+   runnerVal.textContent=wr[1];
+   topScorersVal.textContent=topScorers(matches);
+ }
+
+ matchesWrap.innerHTML="";
+ matches.forEach(m=>{
+   const p=extractPens(m);
+   const penTxt=p?` (Pens ${p[0]}–${p[1]})`:"";
+   const d=document.createElement("div");
+   d.className="match-card";
+   d.innerHTML=`<b>${normTeam(m.home)} ${m.home_goals} – ${m.away_goals} ${normTeam(m.away)}${penTxt}</b><br>${m.date} • ${m.round}`;
+   matchesWrap.appendChild(d);
+ });
 }
 
-function isFinalMatch(match){
-  const t = String(get(match, "matchday.type") || "").toUpperCase();
-  return t === "FINAL";
+/* ---------- Load ---------- */
+async function load(year){
+ if(!DATA){
+   DATA=await (await fetch(DATA_URL,{cache:"no-store"})).json();
+   MAP=buildMap(DATA);
+ }
+ render(year);
 }
 
-function getScore(match){
-  // Try common score fields (varies by export)
-  const home = get(match, "score.fullTime.home") ??
-               get(match, "score.fullTime.homeTeam") ??
-               get(match, "score.home") ??
-               get(match, "homeScore") ??
-               null;
-
-  const away = get(match, "score.fullTime.away") ??
-               get(match, "score.fullTime.awayTeam") ??
-               get(match, "score.away") ??
-               get(match, "awayScore") ??
-               null;
-
-  // If still null, try "result" strings
-  const resultStr = get(match, "result") || get(match, "Final Score") || null;
-  if(home == null || away == null){
-    if(resultStr && typeof resultStr === "string" && resultStr.includes("-")){
-      return resultStr.replace(/\s+/g,' ').trim();
-    }
-    return "—";
-  }
-  return `${home}-${away}`;
-}
-
-function getWinnerRunnerUpFromFinal(finalMatch){
-  if(!finalMatch) return { winner: "—", runnerUp: "—" };
-
-  const homeName = getTeamName(get(finalMatch, "homeTeam", {}));
-  const awayName = getTeamName(get(finalMatch, "awayTeam", {}));
-  const scoreStr = getScore(finalMatch);
-
-  // Try numeric compare if we can
-  const m = scoreStr.match(/^(\d+)\s*-\s*(\d+)$/);
-  if(m){
-    const h = parseInt(m[1],10);
-    const a = parseInt(m[2],10);
-    if(h > a) return { winner: homeName, runnerUp: awayName };
-    if(a > h) return { winner: awayName, runnerUp: homeName };
-  }
-
-  // If drawn and decided by pens/ET, we may not have pens; fall back to "Home vs Away"
-  return { winner: `${homeName} (see match)`, runnerUp: `${awayName} (see match)` };
-}
-
-function collectScorersForSeason(matches){
-  // UEFA-ish: match.playerEvents.scorers[] with player.name/translations and goalType
-  // Only count SCORED
-  const totals = new Map();
-
-  for(const match of matches){
-    const scorers = get(match, "playerEvents.scorers", []);
-    if(!Array.isArray(scorers)) continue;
-
-    for(const ev of scorers){
-      const goalType = String(get(ev, "goalType") || "").toUpperCase();
-      if(goalType && goalType !== "SCORED") continue;
-
-      const p = get(ev, "player", {});
-      const name =
-        get(p, "translations.name.EN") ||
-        get(p, "internationalName") ||
-        get(p, "name") ||
-        "Unknown";
-
-      totals.set(name, (totals.get(name) || 0) + 1);
-    }
-  }
-
-  // Sort desc by goals, then name
-  return Array.from(totals.entries())
-    .sort((a,b)=> (b[1]-a[1]) || a[0].localeCompare(b[0]))
-    .slice(0,5);
-}
-
-/* =========================
-   Main
-   ========================= */
-
-const DATA_URL = "data/champions-league.json";
-
-let ALL = [];
-let BY_SEASON = new Map(); // startYear -> matches[]
-
-const seasonSelect = document.getElementById("seasonSelect");
-const statusEl = document.getElementById("status");
-const summaryEl = document.getElementById("summary");
-const winnerBox = document.getElementById("winnerBox");
-const runnerUpBox = document.getElementById("runnerUpBox");
-const topScorersBox = document.getElementById("topScorersBox");
-const matchesWrap = document.getElementById("matchesWrap");
-const matchesBody = document.getElementById("matchesBody");
-
-function buildIndex(){
-  BY_SEASON.clear();
-
-  for(const match of ALL){
-    const startYear = seasonStartYearFromMatch(match);
-    if(startYear == null) continue;
-
-    if(!BY_SEASON.has(startYear)) BY_SEASON.set(startYear, []);
-    BY_SEASON.get(startYear).push(match);
-  }
-
-  // sort matches inside each season by date
-  for(const [y, arr] of BY_SEASON.entries()){
-    arr.sort((a,b)=>{
-      const da = parseISODate(get(a,"kickOffTime.date") || get(a,"kickOffTime.dateTime") || get(a,"fullTimeAt"));
-      const db = parseISODate(get(b,"kickOffTime.date") || get(b,"kickOffTime.dateTime") || get(b,"fullTimeAt"));
-      const ta = da ? da.getTime() : 0;
-      const tb = db ? db.getTime() : 0;
-      return ta - tb;
-    });
-  }
-}
-
-function populateSeasonDropdown(){
-  const years = Array.from(BY_SEASON.keys()).sort((a,b)=>b-a);
-
-  seasonSelect.innerHTML = `<option value="">Select season…</option>` +
-    years.map(y => `<option value="${y}">${seasonLabel(y)}</option>`).join("");
-
-  // auto-select most recent season
-  if(years.length){
-    seasonSelect.value = String(years[0]);
-    renderSeason(years[0]);
-  } else {
-    statusEl.textContent = "No seasons found in the dataset.";
-  }
-}
-
-function renderSeason(startYear){
-  const y = parseInt(startYear, 10);
-  const matches = BY_SEASON.get(y) || [];
-  if(!matches.length){
-    summaryEl.style.display = "none";
-    matchesWrap.style.display = "none";
-    statusEl.textContent = "No matches found for this season.";
-    return;
-  }
-
-  // Find final (prefer matchday.type === FINAL; otherwise last match)
-  let finalMatch = matches.find(isFinalMatch);
-  if(!finalMatch) finalMatch = matches[matches.length - 1];
-
-  const { winner, runnerUp } = getWinnerRunnerUpFromFinal(finalMatch);
-  winnerBox.innerHTML = `<b>${winner}</b>`;
-  runnerUpBox.innerHTML = `<b>${runnerUp}</b>`;
-
-  const top5 = collectScorersForSeason(matches);
-  if(top5.length){
-    topScorersBox.innerHTML = top5.map(([name, goals], idx) =>
-      `${idx+1}. <b>${name}</b> — ${goals}`
-    ).join("<br>");
-  } else {
-    topScorersBox.innerHTML = "No scorer events found in this dataset export.";
-  }
-
-  // Build match rows
-  matchesBody.innerHTML = matches.map(m=>{
-    const d = parseISODate(get(m,"kickOffTime.date") || get(m,"kickOffTime.dateTime") || get(m,"fullTimeAt"));
-    const dateStr = formatDateShort(d);
-    const stage = getStage(m);
-
-    const home = getTeamName(get(m,"homeTeam",{}));
-    const away = getTeamName(get(m,"awayTeam",{}));
-    const score = getScore(m);
-
-    return `
-      <tr>
-        <td>${dateStr || "—"}</td>
-        <td><span class="pill">${stage}</span></td>
-        <td><b>${home}</b> vs <b>${away}</b></td>
-        <td>${score}</td>
-      </tr>
-    `;
-  }).join("");
-
-  summaryEl.style.display = "grid";
-  matchesWrap.style.display = "block";
-  statusEl.textContent = `${seasonLabel(y)} — ${matches.length} matches`;
-}
-
-seasonSelect.addEventListener("change", ()=>{
-  const val = seasonSelect.value;
-  if(!val){
-    summaryEl.style.display = "none";
-    matchesWrap.style.display = "none";
-    statusEl.textContent = "";
-    return;
-  }
-  renderSeason(val);
+/* ---------- Build buttons ---------- */
+years.forEach(y=>{
+ const b=document.createElement("div");
+ b.className="year-btn";
+ b.textContent=y;
+ b.onclick=()=>load(y);
+ grid.appendChild(b);
 });
 
-(async function init(){
-  try{
-    statusEl.textContent = "Loading…";
-    const res = await fetch(DATA_URL, { cache: "no-store" });
-    if(!res.ok) throw new Error(`Failed to load ${DATA_URL} (${res.status})`);
-    const data = await res.json();
-
-    if(!Array.isArray(data)) throw new Error("JSON is not an array of matches.");
-    ALL = data;
-
-    buildIndex();
-    populateSeasonDropdown();
-    statusEl.textContent = "";
-  }catch(err){
-    console.error(err);
-    seasonSelect.innerHTML = `<option value="">(Failed to load seasons)</option>`;
-    statusEl.textContent = "Error loading dataset. Check the JSON path and structure.";
-  }
-})();
+load(years[0]);
 </script>
+
 </body>
 </html>
