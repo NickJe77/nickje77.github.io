@@ -140,9 +140,9 @@ color:#333;
 <script>
 let matchesByYear = {};
 
-// TEAM NORMALISER
 function normaliseTeam(name){
  if(!name) return name;
+ name=name.trim();
  const map={
   "Paris":"Paris Saint-Germain",
   "B Dortmund":"Borussia Dortmund",
@@ -176,12 +176,15 @@ function buildMap(rows){
 
 function buildYears(){
  const box=document.getElementById("years");
- Object.keys(matchesByYear).sort().forEach(y=>{
-  const d=document.createElement("div");
-  d.className="year-tile";
-  d.textContent=y;
-  d.onclick=()=>loadYear(y,d);
-  box.appendChild(d);
+ box.innerHTML="";
+ Object.keys(matchesByYear)
+  .sort((a,b)=>b.localeCompare(a,undefined,{numeric:true}))
+  .forEach(y=>{
+   const d=document.createElement("div");
+   d.className="year-tile";
+   d.textContent=y;
+   d.onclick=()=>loadYear(y,d);
+   box.appendChild(d);
  });
 }
 
@@ -194,8 +197,10 @@ function loadYear(year,btn){
 
  const seasonMatches=matchesByYear[year];
 
+ // SUMMARY FIRST (TOP OF PAGE)
  buildSummary(seasonMatches,out);
 
+ // THEN MATCHES
  seasonMatches.forEach(m=>{
   const div=document.createElement("div");
   div.className="match";
@@ -222,19 +227,23 @@ function loadYear(year,btn){
  });
 }
 
-// SUMMARY
 function buildSummary(matches,container){
 
  let final=matches.find(m=>(m.round||"").toLowerCase().includes("final"));
  let winner="Unknown",runner="Unknown";
 
- if(final&&final.home_goals!=null){
-  if(final.home_goals>final.away_goals){
-   winner=normaliseTeam(final.home);
-   runner=normaliseTeam(final.away);
-  }else{
-   winner=normaliseTeam(final.away);
-   runner=normaliseTeam(final.home);
+ if(final){
+  if(final.winner){
+   winner=normaliseTeam(final.winner);
+   runner=normaliseTeam(final.winner===final.home?final.away:final.home);
+  }else if(final.home_goals!=null){
+   if(final.home_goals>final.away_goals){
+    winner=normaliseTeam(final.home);
+    runner=normaliseTeam(final.away);
+   }else{
+    winner=normaliseTeam(final.away);
+    runner=normaliseTeam(final.home);
+   }
   }
  }
 
@@ -243,7 +252,8 @@ function buildSummary(matches,container){
   if(Array.isArray(m.goals)){
    m.goals.forEach(g=>{
     if(!g.player) return;
-    scorerMap[g.player]=(scorerMap[g.player]||0)+1;
+    const p=g.player.trim();
+    scorerMap[p]=(scorerMap[p]||0)+1;
    });
   }
  });
