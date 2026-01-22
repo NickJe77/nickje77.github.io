@@ -18,16 +18,24 @@ h1{text-align:center;margin-bottom:22px;}
 .year-btn.active{background:#0056d6;}
 .year-btn:hover{background:#333;}
 
-.section-box{border:1px solid #ddd;border-radius:12px;padding:18px;margin:18px 0 26px;background:#fff;}
-.section-title{font-size:22px;font-weight:700;margin-bottom:14px;}
+/* Summary + matches */
+.section-box{border:1px solid #ddd;border-radius:12px;padding:18px 18px;margin:18px 0 26px;background:#fff;}
+.section-title{font-size:22px;font-weight:700;margin:0 0 14px;}
 .summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;}
-.summary-card{border:1px solid #e1e1e1;border-radius:10px;padding:14px;background:#fff;}
+.summary-card{border:1px solid #e1e1e1;border-radius:10px;padding:14px 14px;background:#fff;}
+.summary-card h3{margin:0 0 8px;font-size:16px;font-weight:700;}
+.summary-card .value{font-size:18px;}
+.scorer-list{margin:0;padding-left:18px;}
+.scorer-list li{margin:4px 0;font-size:16px;}
 
 .match-card{border:1px solid #e1e1e1;border-radius:12px;padding:16px;margin:12px 0;background:#fff;}
-.match-title{font-weight:700;}
-.match-meta{color:#555;font-size:14px;}
+.match-title{font-size:18px;font-weight:700;margin:0 0 6px;}
+.match-meta{color:#555;font-size:14px;margin:0 0 10px;}
+.goals-line{font-size:14px;color:#222;margin:0;}
+.muted{color:#777;}
 </style>
 </head>
+
 <body>
 
 <div class="navbar">
@@ -38,136 +46,375 @@ h1{text-align:center;margin-bottom:22px;}
 </div>
 
 <div class="page-wrap">
+
 <h1>European Champions League – By Year</h1>
+
 <div class="year-grid" id="yearGrid"></div>
 
 <div class="section-box" id="summaryBox" style="display:none;">
-<div class="section-title">Season Summary</div>
-<div class="summary-grid">
-<div class="summary-card"><b>Winner</b><div id="winnerVal">—</div></div>
-<div class="summary-card"><b>Runner-up</b><div id="runnerVal">—</div></div>
-</div>
+  <div class="section-title">Season Summary</div>
+  <div class="summary-grid">
+    <div class="summary-card">
+      <h3>Winner</h3>
+      <div class="value" id="winnerVal">—</div>
+    </div>
+    <div class="summary-card">
+      <h3>Runner-up</h3>
+      <div class="value" id="runnerVal">—</div>
+    </div>
+    <div class="summary-card">
+      <h3>Top Scorers</h3>
+      <ol class="scorer-list" id="scorersList"></ol>
+    </div>
+  </div>
 </div>
 
 <div id="matchesWrap"></div>
+
 </div>
 
 <script>
-const DATA_URL="data/ucl_by_year_with_goals_WITH_SCORERS.json";
-const IN_PROGRESS_SEASONS=[2025];
+/* ===== Config ===== */
+const DATA_URL = "data/ucl_by_year_with_goals_WITH_SCORERS.json";
 
+/* Explicit: seasons still running */
+const IN_PROGRESS_SEASONS = [2025];
+
+/* Your year buttons */
 const years=[2025,2024,2023,2022,2021,2020,2019,2018,2017,2016,2015,2014,2013,2012,2011,2010,2009,2008,2007,2006,2005,2004,2003,2002,2001,2000,1999,1998,1997,1996,1995,1994,1993,1992,1991,1990,1989,1988,1987,1986,1985,1984,1983,1982,1981,1980,1979,1978,1977,1976,1975,1974,1973,1972,1971,1970,1969,1968,1967,1966,1965,1964,1963,1962,1961,1960,1959,1958,1957,1956,1955];
 
-const grid=document.getElementById("yearGrid");
-const matchesWrap=document.getElementById("matchesWrap");
-const summaryBox=document.getElementById("summaryBox");
-const winnerVal=document.getElementById("winnerVal");
-const runnerVal=document.getElementById("runnerVal");
+const grid = document.getElementById("yearGrid");
+const summaryBox = document.getElementById("summaryBox");
+const winnerVal = document.getElementById("winnerVal");
+const runnerVal = document.getElementById("runnerVal");
+const scorersList = document.getElementById("scorersList");
+const matchesWrap = document.getElementById("matchesWrap");
 
-let DATA=null, MAP=null;
+let DATA_CACHE = null;
+let SEASON_MAP = null;
 
-function normTeam(t){
-  if(!t) return "—";
-  if(/inter/i.test(t) && /milan|internazionale/i.test(t)) return "Inter";
-  if(/^inter$/i.test(t)) return "Inter";
-  return t;
+/* ===== Helpers ===== */
+function safeText(v){
+  return (v === null || v === undefined || v === "") ? "—" : String(v);
 }
 
-function parsePenalties(obj){
-  for(const k in obj){
-    if(/pen/i.test(k)){
-      const v=String(obj[k]);
-      const m=v.match(/(\d+)[^\d]+(\d+)/);
-      if(m) return [Number(m[1]),Number(m[2])];
+/* Team normalisation (display-level) */
+function normalizeTeam(name){
+  if (!name) return "—";
+  const s = String(name).trim();
+
+  // Unify Inter variants
+  // Covers: "Internazionale Milan", "Internazionale", "Inter Milan", etc.
+  if (/^inter$/i.test(s)) return "Inter";
+  if (/internazionale/i.test(s) || (/^inter\b/i.test(s) && /milan/i.test(s))) return "Inter";
+
+  return s;
+}
+
+function normalizeSeasonValue(v){
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  if (!s) return null;
+  const m = s.match(/^(\d{4})/);
+  if (m) return m[1];
+  if (/^\d+$/.test(s)) return s;
+  return s;
+}
+
+function parseISODate(d){
+  if (!d) return null;
+  const t = Date.parse(d);
+  return Number.isFinite(t) ? t : null;
+}
+
+/* Build season map from flat list */
+function buildSeasonMap(raw){
+  const map = new Map();
+  if (!Array.isArray(raw)) return map;
+
+  raw.forEach(m => {
+    const seasonKey = normalizeSeasonValue(m.season ?? m.Season ?? m.year ?? m.seasonYear);
+    if (!seasonKey) return;
+    if (!map.has(seasonKey)) map.set(seasonKey, []);
+    map.get(seasonKey).push(m);
+  });
+
+  return map;
+}
+
+/* Penalties: try to extract from any likely fields / strings */
+function extractPenalties(m){
+  if (!m || typeof m !== "object") return null;
+
+  // Common direct numeric fields
+  const hp =
+    m.home_penalties ?? m.homePens ?? m.home_pens ?? m.homePenalties ?? m.home_pk ??
+    m.HomePen ?? m.HomePens ?? m.HomePenalties;
+  const ap =
+    m.away_penalties ?? m.awayPens ?? m.away_pens ?? m.awayPenalties ?? m.away_pk ??
+    m.AwayPen ?? m.AwayPens ?? m.AwayPenalties;
+
+  const nhp = Number(hp);
+  const nap = Number(ap);
+  if (Number.isFinite(nhp) && Number.isFinite(nap)) return { home: nhp, away: nap };
+
+  // If there's a combined string somewhere like "Pens 3-2" or "(3-2 pens)"
+  const candidates = [
+    m.pens, m.penalties, m.shootout, m.shoot_out, m.shootout_score,
+    m.note, m.notes, m.result, m.score, m.Score, m.final_score, m.finalScore
+  ].filter(v => v !== undefined && v !== null);
+
+  for (const c of candidates) {
+    const s = String(c);
+    // Matches: "pens 3-2", "(3-2 pens)", "3-2 (pens)"
+    const pm = s.match(/(?:pens?|penalties)\D*(\d+)\D+(\d+)/i) || s.match(/(\d+)\D+(\d+)\D*(?:pens?|penalties)/i);
+    if (pm) {
+      const a = Number(pm[1]), b = Number(pm[2]);
+      if (Number.isFinite(a) && Number.isFinite(b)) return { home: a, away: b };
     }
   }
-  if(obj.score){
-    const m=String(obj.score).match(/(\d+)[^\d]+(\d+)\s*pen/i);
-    if(m) return [Number(m[1]),Number(m[2])];
-  }
+
+  // Nothing found
   return null;
 }
 
-function buildMap(raw){
-  const m=new Map();
-  raw.forEach(r=>{
-    const y=String(r.season).slice(0,4);
-    if(!m.has(y)) m.set(y,[]);
-    m.get(y).push(r);
+/* Pick final: handle replay finals (multiple finals) */
+function pickFinalMatch(matches){
+  if (!matches || !matches.length) return null;
+
+  const finals = matches.filter(m => String(m.round || m.Round || "").toLowerCase() === "final");
+  const pool = finals.length ? finals : matches;
+
+  // Prefer a decisive final (non-draw OR decided on pens)
+  for (const m of pool) {
+    const hg = Number(m.home_goals ?? m.homeGoals ?? m.HomeGoals ?? m.home_score ?? m.homeScore);
+    const ag = Number(m.away_goals ?? m.awayGoals ?? m.AwayGoals ?? m.away_score ?? m.awayScore);
+    if (Number.isFinite(hg) && Number.isFinite(ag) && hg !== ag) return m;
+
+    const pens = extractPenalties(m);
+    if (Number.isFinite(hg) && Number.isFinite(ag) && hg === ag && pens && pens.home !== pens.away) return m;
+  }
+
+  // Otherwise pick latest by date
+  let best = null;
+  let bestT = -Infinity;
+  for (const m of pool) {
+    const t = parseISODate(m.date || m.Date);
+    if (t !== null && t > bestT) {
+      bestT = t;
+      best = m;
+    }
+  }
+  return best || pool[pool.length - 1];
+}
+
+function computeWinnerRunner(finalMatch){
+  if (!finalMatch) return { winner:"—", runner:"—" };
+
+  const homeRaw = finalMatch.home || finalMatch.Home || finalMatch.homeTeam || "—";
+  const awayRaw = finalMatch.away || finalMatch.Away || finalMatch.awayTeam || "—";
+  const home = normalizeTeam(homeRaw);
+  const away = normalizeTeam(awayRaw);
+
+  const hg = Number(finalMatch.home_goals ?? finalMatch.homeGoals ?? finalMatch.HomeGoals ?? finalMatch.home_score ?? finalMatch.homeScore);
+  const ag = Number(finalMatch.away_goals ?? finalMatch.awayGoals ?? finalMatch.AwayGoals ?? finalMatch.away_score ?? finalMatch.awayScore);
+
+  if (Number.isFinite(hg) && Number.isFinite(ag)) {
+    if (hg > ag) return { winner: home, runner: away };
+    if (ag > hg) return { winner: away, runner: home };
+
+    // Draw -> check penalties
+    const pens = extractPenalties(finalMatch);
+    if (pens && Number.isFinite(pens.home) && Number.isFinite(pens.away) && pens.home !== pens.away) {
+      if (pens.home > pens.away) return { winner: home, runner: away };
+      return { winner: away, runner: home };
+    }
+
+    return { winner:"—", runner:"—" };
+  }
+
+  return { winner:"—", runner:"—" };
+}
+
+/* Top scorers from goals array */
+function computeTopScorers(matches, topN=5){
+  const counts = new Map();
+
+  for (const m of matches) {
+    const goalsArr = m.goals || m.Goals || [];
+    if (!Array.isArray(goalsArr)) continue;
+
+    for (const g of goalsArr) {
+      let player = null;
+
+      if (typeof g === "string") {
+        player = g.replace(/\s*\(?\d+.*$/, "").trim();
+      } else if (g && typeof g === "object") {
+        player = g.player || g.Player || g.name || g.scorer || null;
+      }
+
+      player = player ? String(player).trim() : null;
+      if (!player) continue;
+
+      counts.set(player, (counts.get(player) || 0) + 1);
+    }
+  }
+
+  return Array.from(counts.entries())
+    .sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]))
+    .slice(0, topN)
+    .map(([player, goals]) => ({ player, goals }));
+}
+
+function formatGoalsList(m){
+  const goalsArr = m.goals || m.Goals || [];
+  if (!Array.isArray(goalsArr)) return "";
+
+  const parts = [];
+  for (const g of goalsArr) {
+    if (typeof g === "string") {
+      parts.push(g);
+      continue;
+    }
+    if (g && typeof g === "object") {
+      const p = g.player || g.Player || g.name || g.scorer;
+      const min = g.minute ?? g.Min ?? g.time ?? g.minuteText;
+      if (p && (min !== null && min !== undefined && min !== "")) parts.push(`${p} ${min}'`);
+      else if (p) parts.push(`${p}`);
+    }
+  }
+  return parts.join(", ");
+}
+
+function renderMatches(matches){
+  matchesWrap.innerHTML = "";
+
+  if (!matches || !matches.length) {
+    matchesWrap.innerHTML = `<p class="muted">No matches found for this season.</p>`;
+    return;
+  }
+
+  // Sort earliest -> latest
+  const sorted = [...matches].sort((a,b)=>{
+    const ta = parseISODate(a.date || a.Date) ?? -Infinity;
+    const tb = parseISODate(b.date || b.Date) ?? -Infinity;
+    if (ta !== tb) return ta - tb;
+    const ra = String(a.round || a.Round || "");
+    const rb = String(b.round || b.Round || "");
+    return ra.localeCompare(rb);
   });
-  return m;
+
+  for (const m of sorted) {
+    const date = m.date || m.Date || "";
+    const round = m.round || m.Round || "";
+    const home = normalizeTeam(m.home || m.Home || "");
+    const away = normalizeTeam(m.away || m.Away || "");
+    const hg = m.home_goals ?? m.homeGoals ?? m.HomeGoals ?? "";
+    const ag = m.away_goals ?? m.awayGoals ?? m.AwayGoals ?? "";
+    const goalsLine = formatGoalsList(m);
+
+    const pens = extractPenalties(m);
+    const penText = pens && Number.isFinite(pens.home) && Number.isFinite(pens.away)
+      ? ` (Pens ${pens.home}–${pens.away})`
+      : "";
+
+    const title = `${safeText(home)} ${safeText(hg)} – ${safeText(ag)} ${safeText(away)}${penText}`;
+
+    const metaBits = [];
+    if (date) metaBits.push(date);
+    if (round) metaBits.push(round);
+    const meta = metaBits.length ? metaBits.join(" • ") : "";
+
+    const card = document.createElement("div");
+    card.className = "match-card";
+    card.innerHTML = `
+      <div class="match-title">${title}</div>
+      <div class="match-meta">${safeText(meta)}</div>
+      <p class="goals-line">${goalsLine ? `<strong>Goals:</strong> ${goalsLine}` : `<span class="muted">No goals</span>`}</p>
+    `;
+    matchesWrap.appendChild(card);
+  }
 }
 
-function pickFinal(matches){
-  const finals=matches.filter(m=>String(m.round).toLowerCase()==="final");
-  const decisive=finals.find(m=>Number(m.home_goals)!==Number(m.away_goals));
-  return decisive||finals[finals.length-1]||null;
-}
+function renderSummary(matches, year){
+  summaryBox.style.display = "block";
 
-function winnerRunner(final){
-  if(!final) return ["—","—"];
-
-  const hg=Number(final.home_goals);
-  const ag=Number(final.away_goals);
-
-  const home=normTeam(final.home);
-  const away=normTeam(final.away);
-
-  if(hg>ag) return [home,away];
-  if(ag>hg) return [away,home];
-
-  const pens=parsePenalties(final);
-  if(pens){
-    if(pens[0]>pens[1]) return [home,away];
-    if(pens[1]>pens[0]) return [away,home];
+  if (IN_PROGRESS_SEASONS.includes(year)) {
+    winnerVal.textContent = "In Progress";
+    runnerVal.textContent = "In Progress";
+  } else {
+    const finalMatch = pickFinalMatch(matches);
+    const wr = computeWinnerRunner(finalMatch);
+    winnerVal.textContent = safeText(wr.winner);
+    runnerVal.textContent = safeText(wr.runner);
   }
 
-  return ["—","—"];
+  // Top 5 scorers (kept)
+  const top = computeTopScorers(matches, 5);
+  scorersList.innerHTML = "";
+  if (!top.length) {
+    const li = document.createElement("li");
+    li.className = "muted";
+    li.textContent = "No scorer data available.";
+    scorersList.appendChild(li);
+  } else {
+    top.forEach(row=>{
+      const li = document.createElement("li");
+      li.textContent = `${row.player} – ${row.goals}`;
+      scorersList.appendChild(li);
+    });
+  }
 }
 
-function render(matches,year){
-  summaryBox.style.display="block";
-
-  if(IN_PROGRESS_SEASONS.includes(year)){
-    winnerVal.textContent="In Progress";
-    runnerVal.textContent="In Progress";
-  }else{
-    const f=pickFinal(matches);
-    const wr=winnerRunner(f);
-    winnerVal.textContent=wr[0];
-    runnerVal.textContent=wr[1];
-  }
-
-  matchesWrap.innerHTML="";
-  matches.forEach(m=>{
-    const pens=parsePenalties(m);
-    const penTxt=pens?` (Pens ${pens[0]}–${pens[1]})`:"";
-    const d=document.createElement("div");
-    d.className="match-card";
-    d.innerHTML=`<div class="match-title">${normTeam(m.home)} ${m.home_goals} – ${m.away_goals} ${normTeam(m.away)}${penTxt}</div>
-                 <div class="match-meta">${m.date} • ${m.round}</div>`;
-    matchesWrap.appendChild(d);
+function setActiveYearButton(year){
+  document.querySelectorAll(".year-btn").forEach(btn=>{
+    btn.classList.toggle("active", String(btn.dataset.year) === String(year));
   });
 }
 
-async function load(year){
-  if(!DATA){
-    DATA=await (await fetch(DATA_URL,{cache:"no-store"})).json();
-    MAP=buildMap(DATA);
-  }
-  const m=MAP.get(String(year))||[];
-  render(m,year);
+async function ensureDataLoaded(){
+  if (DATA_CACHE && SEASON_MAP) return;
+
+  const res = await fetch(DATA_URL, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Failed to load data (${res.status})`);
+
+  const raw = await res.json();
+  DATA_CACHE = raw;
+  SEASON_MAP = buildSeasonMap(raw);
 }
 
+async function loadSeason(year){
+  try{
+    await ensureDataLoaded();
+    const seasonKey = String(year);
+    const matches = SEASON_MAP.get(seasonKey) || [];
+
+    setActiveYearButton(year);
+    renderSummary(matches, year);
+    renderMatches(matches);
+  } catch(err){
+    summaryBox.style.display = "block";
+    winnerVal.textContent = "—";
+    runnerVal.textContent = "—";
+    scorersList.innerHTML = `<li class="muted">Data failed to load.</li>`;
+    matchesWrap.innerHTML = `<p class="muted">Could not load season data. Check the JSON path: <strong>${DATA_URL}</strong></p>`;
+    console.error(err);
+  }
+}
+
+/* Build year buttons */
 years.forEach(y=>{
-  const b=document.createElement("div");
-  b.className="year-btn";
-  b.textContent=y;
-  b.onclick=()=>load(y);
-  grid.appendChild(b);
+  const d=document.createElement("div");
+  d.className="year-btn";
+  d.innerText=y;
+  d.dataset.year = y;
+  d.onclick = ()=>loadSeason(y);
+  grid.appendChild(d);
 });
 
-load(years[0]);
+/* Default load */
+loadSeason(years[0]);
 </script>
+
 </body>
 </html>
