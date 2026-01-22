@@ -50,11 +50,7 @@ font-weight:700;
 cursor:pointer;
 }
 
-.year-tile.active{
-background:#0056d6;
-}
-
-/* SUMMARY */
+.year-tile.active{background:#0056d6;}
 
 .summary{
 border:1px solid #ddd;
@@ -62,11 +58,6 @@ border-radius:14px;
 padding:18px;
 margin-bottom:25px;
 background:#fafafa;
-}
-
-.summary h2{
-margin:0 0 12px 0;
-font-size:22px;
 }
 
 .summary-grid{
@@ -82,39 +73,12 @@ border-radius:10px;
 padding:12px;
 }
 
-.summary-box h3{
-margin:0 0 8px 0;
-font-size:16px;
-}
-
-.scorer{
-font-size:14px;
-margin-bottom:4px;
-}
-
-/* MATCHES */
-
 .match{
 border:1px solid #ddd;
 border-radius:12px;
 padding:14px;
 margin-bottom:14px;
 background:white;
-}
-
-.match h3{margin:0 0 6px 0;font-size:18px;}
-
-.small{font-size:13px;color:#555;}
-
-.stage{
-font-weight:700;
-color:#222;
-}
-
-.goalscorers{
-margin-top:6px;
-font-size:14px;
-color:#333;
 }
 </style>
 </head>
@@ -138,11 +102,13 @@ color:#333;
 </div>
 
 <script>
-let matchesByYear = {};
+const yearsBox=document.getElementById("years");
+const output=document.getElementById("output");
+let matchesByYear={};
 
-function normaliseTeam(name){
- if(!name) return name;
- name=name.trim();
+function normaliseTeam(n){
+ if(!n) return "";
+ n=n.trim();
  const map={
   "Paris":"Paris Saint-Germain",
   "B Dortmund":"Borussia Dortmund",
@@ -156,35 +122,40 @@ function normaliseTeam(name){
   "Bayern M":"Bayern Munich",
   "AC Milan":"Milan"
  };
- return map[name]||name;
+ return map[n]||n;
 }
 
 fetch("data/ucl_by_year_with_goals_WITH_SCORERS.json",{cache:"no-store"})
 .then(r=>r.json())
 .then(data=>{
- buildMap(data);
+ if(!Array.isArray(data)){
+  output.innerHTML="<p>JSON did not return an array.</p>";
+  return;
+ }
+
+ data.forEach(r=>{
+  if(!r.season) return;
+  if(!matchesByYear[r.season]) matchesByYear[r.season]=[];
+  matchesByYear[r.season].push(r);
+ });
+
  buildYears();
+})
+.catch(e=>{
+ output.innerHTML="<p>JSON failed to load.</p>";
+ console.error(e);
 });
 
-function buildMap(rows){
- rows.forEach(r=>{
-  const y=r.season;
-  if(!matchesByYear[y]) matchesByYear[y]=[];
-  matchesByYear[y].push(r);
- });
-}
-
 function buildYears(){
- const box=document.getElementById("years");
- box.innerHTML="";
+ yearsBox.innerHTML="";
  Object.keys(matchesByYear)
-  .sort((a,b)=>b.localeCompare(a,undefined,{numeric:true}))
-  .forEach(y=>{
-   const d=document.createElement("div");
-   d.className="year-tile";
-   d.textContent=y;
-   d.onclick=()=>loadYear(y,d);
-   box.appendChild(d);
+ .sort((a,b)=>b.localeCompare(a,undefined,{numeric:true}))
+ .forEach(y=>{
+  const d=document.createElement("div");
+  d.className="year-tile";
+  d.textContent=y;
+  d.onclick=()=>loadYear(y,d);
+  yearsBox.appendChild(d);
  });
 }
 
@@ -192,102 +163,76 @@ function loadYear(year,btn){
  document.querySelectorAll(".year-tile").forEach(b=>b.classList.remove("active"));
  btn.classList.add("active");
 
- const out=document.getElementById("output");
- out.innerHTML="";
+ output.innerHTML="";
 
- const seasonMatches=matchesByYear[year];
+ const matches=matchesByYear[year]||[];
 
- // SUMMARY FIRST (TOP OF PAGE)
- buildSummary(seasonMatches,out);
+ buildSummary(matches);
 
- // THEN MATCHES
- seasonMatches.forEach(m=>{
-  const div=document.createElement("div");
-  div.className="match";
-
+ matches.forEach(m=>{
   const home=normaliseTeam(m.home);
   const away=normaliseTeam(m.away);
 
   const score=(m.home_goals!=null&&m.away_goals!=null)
-    ? `${m.home_goals} – ${m.away_goals}`:"v";
+   ?`${m.home_goals} – ${m.away_goals}`:"v";
 
-  let goalsHTML="";
-  if(Array.isArray(m.goals)&&m.goals.length){
-    goalsHTML=m.goals.map(g=>`${g.player} (${g.minute}')`).join(", ");
+  let goals="";
+  if(Array.isArray(m.goals)){
+   goals=m.goals.map(g=>`${g.player} (${g.minute}')`).join(", ");
   }
 
+  const div=document.createElement("div");
+  div.className="match";
   div.innerHTML=`
    <h3>${home} ${score} ${away}</h3>
-   <div class="small stage">${m.round||""}</div>
-   <div class="small">${m.date||""}</div>
-   ${goalsHTML?`<div class="goalscorers"><strong>Goals:</strong> ${goalsHTML}</div>`:""}
+   <div>${m.round||""}</div>
+   <div>${m.date||""}</div>
+   ${goals?`<div><strong>Goals:</strong> ${goals}</div>`:""}
   `;
-
-  out.appendChild(div);
+  output.appendChild(div);
  });
 }
 
-function buildSummary(matches,container){
+function buildSummary(matches){
 
  let final=matches.find(m=>(m.round||"").toLowerCase().includes("final"));
  let winner="Unknown",runner="Unknown";
 
  if(final){
-  if(final.winner){
-   winner=normaliseTeam(final.winner);
-   runner=normaliseTeam(final.winner===final.home?final.away:final.home);
-  }else if(final.home_goals!=null){
-   if(final.home_goals>final.away_goals){
-    winner=normaliseTeam(final.home);
-    runner=normaliseTeam(final.away);
-   }else{
-    winner=normaliseTeam(final.away);
-    runner=normaliseTeam(final.home);
-   }
+  if(final.home_goals>final.away_goals){
+   winner=normaliseTeam(final.home);
+   runner=normaliseTeam(final.away);
+  }else{
+   winner=normaliseTeam(final.away);
+   runner=normaliseTeam(final.home);
   }
  }
 
- let scorerMap={};
+ let scorers={};
  matches.forEach(m=>{
   if(Array.isArray(m.goals)){
    m.goals.forEach(g=>{
     if(!g.player) return;
-    const p=g.player.trim();
-    scorerMap[p]=(scorerMap[p]||0)+1;
+    scorers[g.player]=(scorers[g.player]||0)+1;
    });
   }
  });
 
- let topScorers=Object.entries(scorerMap)
-  .sort((a,b)=>b[1]-a[1])
-  .slice(0,5);
+ let top=Object.entries(scorers).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+ let scorerHTML=top.map(s=>`<div>${s[0]} – ${s[1]}</div>`).join("");
 
  const sum=document.createElement("div");
  sum.className="summary";
-
- let scorerHTML=topScorers.length
-  ?topScorers.map(s=>`<div class="scorer">${s[0]} – ${s[1]}</div>`).join("")
-  :`<div class="small">No scorer data</div>`;
-
  sum.innerHTML=`
   <h2>Season Summary</h2>
   <div class="summary-grid">
-   <div class="summary-box">
-    <h3>Winner</h3>
-    <div>${winner}</div>
-   </div>
-   <div class="summary-box">
-    <h3>Runner-up</h3>
-    <div>${runner}</div>
-   </div>
-   <div class="summary-box">
-    <h3>Top Scorers</h3>
-    ${scorerHTML}
-   </div>
+   <div class="summary-box"><strong>Winner</strong><br>${winner}</div>
+   <div class="summary-box"><strong>Runner-up</strong><br>${runner}</div>
+   <div class="summary-box"><strong>Top Scorers</strong><br>${scorerHTML||"No data"}</div>
   </div>
  `;
-
- container.appendChild(sum);
+ output.appendChild(sum);
 }
 </script>
 
