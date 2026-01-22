@@ -87,8 +87,24 @@ const matchesWrap=document.getElementById("matchesWrap");
 let DATA_CACHE=null;
 let SEASON_MAP=null;
 
-function safeText(v){return(v===null||v===undefined||v==="")?"—":String(v);}
-function parseISODate(d){const t=Date.parse(d);return Number.isFinite(t)?t:null;}
+function safe(v){return(v===null||v===undefined||v==="")?"—":String(v);}
+
+function parseDate(d){
+  if(!d) return null;
+  if(/^\d{2}\/\d{2}\/\d{4}$/.test(d)){
+    const [dd,mm,yy]=d.split("/");
+    return new Date(`${yy}-${mm}-${dd}`).getTime();
+  }
+  const t=Date.parse(d);
+  return Number.isFinite(t)?t:null;
+}
+
+function byKeys(o,keys){
+  for(const k of keys){
+    if(o[k]!==undefined && o[k]!==null && o[k]!== "") return o[k];
+  }
+  return null;
+}
 
 function buildSeasonMap(raw){
   const map=new Map();
@@ -103,27 +119,34 @@ function buildSeasonMap(raw){
 function pickFinalMatch(matches){
   const finals=matches.filter(m=>String(m.round||m.Round||"").toLowerCase().includes("final"));
   const pool=finals.length?finals:matches;
+
   let best=null,bestT=-Infinity;
   for(const m of pool){
-    const t=parseISODate(m.date||m.Date);
-    if(t!==null&&t>bestT){bestT=t;best=m;}
+    const t=parseDate(m.date||m.Date);
+    if(t!==null && t>bestT){
+      bestT=t;
+      best=m;
+    }
   }
   return best||pool[pool.length-1];
 }
 
 function getGoals(m,side){
-  return Number(
-    m[side+"_goals"] ??
-    m[side+"Goals"] ??
-    m[side.toUpperCase()+"Goals"] ??
-    m[side+"_score"] ??
-    m[side+"Score"] ??
-    m[side]
-  );
+  return Number(byKeys(m,[
+    side+"_goals", side+"Goals", side.toUpperCase()+"Goals",
+    side+"_score", side+"Score",
+    side.charAt(0).toUpperCase()+side.slice(1)+" Goals",
+    side.charAt(0).toUpperCase()+side.slice(1)+"Goals"
+  ]));
 }
 
 function getTeam(m,side){
-  return m[side] || m[side.charAt(0).toUpperCase()+side.slice(1)] || m[side+"Team"] || "—";
+  return byKeys(m,[
+    side, side+"Team",
+    side.charAt(0).toUpperCase()+side.slice(1),
+    side.charAt(0).toUpperCase()+side.slice(1)+" Team",
+    side.charAt(0).toUpperCase()+side.slice(1)+"Team"
+  ])||"—";
 }
 
 function computeWinnerRunner(finalMatch){
@@ -160,13 +183,13 @@ function renderMatches(matches){
     matchesWrap.innerHTML=`<p class="muted">No matches found for this season.</p>`;
     return;
   }
-  const sorted=[...matches].sort((a,b)=>(parseISODate(a.date)||0)-(parseISODate(b.date)||0));
+  const sorted=[...matches].sort((a,b)=>(parseDate(a.date)||0)-(parseDate(b.date)||0));
   sorted.forEach(m=>{
     const card=document.createElement("div");
     card.className="match-card";
     card.innerHTML=`
-      <div class="match-title">${safeText(getTeam(m,"home"))} ${safeText(getGoals(m,"home"))} – ${safeText(getGoals(m,"away"))} ${safeText(getTeam(m,"away"))}</div>
-      <div class="match-meta">${safeText(m.date||m.Date)} • ${safeText(m.round||m.Round)}</div>
+      <div class="match-title">${safe(getTeam(m,"home"))} ${safe(getGoals(m,"home"))} – ${safe(getGoals(m,"away"))} ${safe(getTeam(m,"away"))}</div>
+      <div class="match-meta">${safe(m.date||m.Date)} • ${safe(m.round||m.Round)}</div>
     `;
     matchesWrap.appendChild(card);
   });
@@ -181,8 +204,8 @@ function renderSummary(matches,year){
   }else{
     const finalMatch=pickFinalMatch(matches);
     const wr=computeWinnerRunner(finalMatch);
-    winnerVal.textContent=safeText(wr.winner);
-    runnerVal.textContent=safeText(wr.runner);
+    winnerVal.textContent=safe(wr.winner);
+    runnerVal.textContent=safe(wr.runner);
   }
 
   const top=computeTopScorers(matches,5);
