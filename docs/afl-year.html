@@ -31,12 +31,8 @@ body {
 select {
   padding: 6px;
   font-size: 16px;
-  margin-bottom: 15px;
-}
-
-.round {
-  margin-top: 15px;
-  font-weight: bold;
+  margin-bottom: 10px;
+  display: block;
 }
 
 .match {
@@ -56,12 +52,20 @@ select {
 
 <h1>AFL Season</h1>
 
+<!-- YEARS -->
 <div id="yearBar" class="year-bar"></div>
 
+<!-- TEAM -->
 <select id="teamSelect">
   <option value="ALL">All teams</option>
 </select>
 
+<!-- ROUND -->
+<select id="roundSelect">
+  <option value="ALL">All rounds</option>
+</select>
+
+<!-- MATCHES -->
 <div id="matches"></div>
 
 <script>
@@ -70,6 +74,7 @@ const endYear = new Date().getFullYear();
 
 const yearBar = document.getElementById("yearBar");
 const teamSelect = document.getElementById("teamSelect");
+const roundSelect = document.getElementById("roundSelect");
 const matchesDiv = document.getElementById("matches");
 
 let currentData = [];
@@ -97,6 +102,7 @@ function loadYear(year) {
     .then(data => {
       currentData = data;
       buildTeamSelector(data);
+      buildRoundSelector(data);
       renderMatches();
     })
     .catch(() => {
@@ -122,7 +128,23 @@ function buildTeamSelector(data) {
   });
 }
 
+function buildRoundSelector(data) {
+  const rounds = new Set();
+
+  data.forEach(g => rounds.add(g.round));
+
+  roundSelect.innerHTML = `<option value="ALL">All rounds</option>`;
+
+  [...rounds].forEach(r => {
+    const opt = document.createElement("option");
+    opt.value = r;
+    opt.textContent = r;
+    roundSelect.appendChild(opt);
+  });
+}
+
 teamSelect.addEventListener("change", renderMatches);
+roundSelect.addEventListener("change", renderMatches);
 
 function renderMatches() {
   matchesDiv.innerHTML = "";
@@ -130,28 +152,23 @@ function renderMatches() {
   let filtered = currentData;
 
   if (teamSelect.value !== "ALL") {
-    filtered = currentData.filter(g =>
+    filtered = filtered.filter(g =>
       g.home === teamSelect.value || g.away === teamSelect.value
     );
   }
 
-  let lastRound = "";
+  if (roundSelect.value !== "ALL") {
+    filtered = filtered.filter(g => g.round === roundSelect.value);
+  }
 
   filtered.forEach(game => {
-    if (game.round !== lastRound) {
-      const roundDiv = document.createElement("div");
-      roundDiv.className = "round";
-      roundDiv.textContent = game.round;
-      matchesDiv.appendChild(roundDiv);
-      lastRound = game.round;
-    }
-
     const div = document.createElement("div");
     div.className = "match";
 
     const stars = game.stars || "";
 
     div.innerHTML = `
+      ${game.round}: 
       ${game.home} ${game.home_score} def ${game.away} ${game.away_score}
       <span class="star">${stars}</span>
     `;
