@@ -31,6 +31,7 @@ select { padding:8px 10px; font-size:16px; margin-bottom:15px; display:block; }
 .win  { background:#e6f4ea; }
 .loss { background:#fbeaea; }
 .draw { background:#f0f0f0; }
+.alt  { background:#eaf4ff; }
 
 .muted { color:#666; font-size:13px; margin:8px 0 14px; }
 </style>
@@ -51,7 +52,7 @@ select { padding:8px 10px; font-size:16px; margin-bottom:15px; display:block; }
 <div id="matches"></div>
 
 <script>
-const BUILD_ID = "STAT_STARS_LABELS_v1";
+const BUILD_ID = "STAT_STARS_STRIPES_TEAMRULE";
 
 const startYear = 1990;
 const endYear = new Date().getFullYear();
@@ -182,16 +183,13 @@ function getStarsForMatch(gameKey) {
   currentData.forEach(p=>{
     const key = p.season+"|"+canonicalRound(p.round)+"|"+p.home_team+"|"+p.away_team;
     if(key === gameKey) {
-
-      const disposals = Number(p.D); // D = disposals
-      const goals = Number(p.G);     // G = goals
+      const disposals = Number(p.D);
+      const goals = Number(p.G);
 
       if (disposals >= 35 || goals >= 5) {
         let tag = p.player;
-
         if (goals >= 5) tag += ` (${plural(goals, "goal")})`;
         else tag += ` (${plural(disposals, "disposal")})`;
-
         stars.push(tag);
       }
     }
@@ -236,6 +234,8 @@ function renderMatches(){
   }
 
   const seen=new Set();
+  let lineIndex = 0;
+
   rows.forEach(g=>{
     const key = g.season+"|"+canonicalRound(g.round)+"|"+g.home_team+"|"+g.away_team;
     if(!seen.has(key)){
@@ -247,17 +247,33 @@ function renderMatches(){
       const div=document.createElement("div");
       div.className="match";
 
+      let coloured = false;
+
       if (selectedTeam !== "ALL" && g.home_points != null && g.away_points != null) {
-        if (g.home_points === g.away_points) div.classList.add("draw");
+        if (g.home_points === g.away_points) {
+          div.classList.add("draw");
+          coloured = true;
+        }
         else if (
           (g.home_team === selectedTeam && g.home_points > g.away_points) ||
           (g.away_team === selectedTeam && g.away_points > g.home_points)
-        ) div.classList.add("win");
-        else div.classList.add("loss");
+        ) {
+          div.classList.add("win");
+          coloured = true;
+        }
+        else {
+          div.classList.add("loss");
+          coloured = true;
+        }
+      }
+
+      if (selectedTeam === "ALL" && !coloured && lineIndex % 2 === 1) {
+        div.classList.add("alt");
       }
 
       div.textContent = text;
       matchesDiv.appendChild(div);
+      lineIndex++;
     }
   });
 }
