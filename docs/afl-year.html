@@ -6,55 +6,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body {
-  font-family: Arial, sans-serif;
-  margin: 20px;
-}
-
-h1 {
-  text-align: center;
-}
+body { font-family: Arial, sans-serif; margin:20px; }
+h1 { text-align:center; }
 
 .year-buttons, .round-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
-  margin-bottom: 15px;
+  display:flex; flex-wrap:wrap; gap:8px;
+  justify-content:center; margin-bottom:15px;
 }
 
-button {
-  padding: 8px 14px;
-  border: 1px solid #ccc;
-  background: #f5f5f5;
-  cursor: pointer;
-}
+button { padding:8px 14px; border:1px solid #ccc; background:#f5f5f5; cursor:pointer; }
+button.active { background:#ddd; font-weight:bold; }
 
-button.active {
-  background: #ddd;
-  font-weight: bold;
-}
+select { padding:8px; margin-bottom:15px; }
 
-select {
-  padding: 8px;
-  margin-bottom: 15px;
-}
-
-.match {
-  padding: 8px;
-  border-bottom: 1px solid #eee;
-}
-
+.match { padding:8px; border-bottom:1px solid #eee; }
 .win { background:#e9f9ec; }
 .loss { background:#fdecec; }
 .draw { background:#fff; }
 
-.star {
-  color: goldenrod;
-  font-size: 14px;
-  display: block;
-  margin-left: 20px;
-}
+.star { color:goldenrod; font-size:14px; margin-left:20px; }
 </style>
 </head>
 
@@ -86,10 +56,10 @@ const years = [];
 for(let y=1990;y<=2025;y++) years.push(y);
 
 const roundOrder = [
-  "Round 1","Round 2","Round 3","Round 4","Round 5","Round 6","Round 7","Round 8","Round 9","Round 10",
-  "Round 11","Round 12","Round 13","Round 14","Round 15","Round 16","Round 17","Round 18","Round 19","Round 20",
-  "Round 21","Round 22","Round 23","Round 24",
-  "Elimination Final","Qualifying Final","Semi Final","Preliminary Final","Grand Final"
+ "Round 1","Round 2","Round 3","Round 4","Round 5","Round 6","Round 7","Round 8","Round 9","Round 10",
+ "Round 11","Round 12","Round 13","Round 14","Round 15","Round 16","Round 17","Round 18","Round 19","Round 20",
+ "Round 21","Round 22","Round 23","Round 24",
+ "Elimination Final","Qualifying Final","Semi Final","Preliminary Final","Grand Final"
 ];
 
 function buildYearButtons(){
@@ -133,14 +103,20 @@ function loadYear(y){
   currentYear=y;
   currentRound="All";
 
-  fetch(`docs/data/afl/afl_${y}.json`)
-    .then(r=>r.json())
+  fetch(`data/afl/afl_${y}.json`)
+    .then(r=>{
+      if(!r.ok) throw new Error("JSON not found");
+      return r.json();
+    })
     .then(data=>{
       allMatches=data;
       buildYearButtons();
       buildRoundButtons();
       buildTeamSelect();
       render();
+    })
+    .catch(err=>{
+      console.error("Year load error:", err);
     });
 }
 
@@ -170,10 +146,7 @@ function render(){
   let list=[...allMatches];
 
   if(currentRound!=="All") list=list.filter(m=>m.round===currentRound);
-
-  if(currentTeam!=="All teams"){
-    list=list.filter(m=>m.home_team===currentTeam||m.away_team===currentTeam);
-  }
+  if(currentTeam!=="All teams") list=list.filter(m=>m.home_team===currentTeam||m.away_team===currentTeam);
 
   list.sort((a,b)=>roundOrder.indexOf(a.round)-roundOrder.indexOf(b.round));
 
@@ -205,12 +178,18 @@ function render(){
   });
 }
 
-fetch("docs/data/afl_players.json")
-  .then(r=>r.json())
+fetch("data/afl_players.json")
+  .then(r=>{
+    if(!r.ok) throw new Error("players json missing");
+    return r.json();
+  })
   .then(p=>{
     allPlayers=p;
     buildYearButtons();
     loadYear(currentYear);
+  })
+  .catch(err=>{
+    console.error("Players load error:", err);
   });
 </script>
 
