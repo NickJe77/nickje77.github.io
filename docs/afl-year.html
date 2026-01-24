@@ -74,6 +74,7 @@ function loadYear(year) {
     .then(data => {
       currentData = data;
       buildTeamSelector(data);
+      teamSelect.value = "ALL";   // 🔑 FIX: reset team filter
       buildRoundButtons(data);
       renderMatches();
     })
@@ -84,7 +85,10 @@ function loadYear(year) {
 
 function buildTeamSelector(data) {
   const teams = new Set();
-  data.forEach(g => { teams.add(g.home_team); teams.add(g.away_team); });
+  data.forEach(g => {
+    teams.add(g.home_team);
+    teams.add(g.away_team);
+  });
 
   teamSelect.innerHTML = `<option value="ALL">All teams</option>`;
   [...teams].sort().forEach(t => {
@@ -113,14 +117,22 @@ function buildRoundButtons(data) {
   const allBtn = document.createElement("button");
   allBtn.textContent = "All Rounds";
   allBtn.className = "round-btn active";
-  allBtn.onclick = () => { currentRound = "ALL"; setActiveRound(allBtn); renderMatches(); };
+  allBtn.onclick = () => {
+    currentRound = "ALL";
+    setActiveRound(allBtn);
+    renderMatches();
+  };
   roundBar.appendChild(allBtn);
 
   sortedNumeric.forEach(num => {
     const btn = document.createElement("button");
     btn.textContent = num;
     btn.className = "round-btn";
-    btn.onclick = () => { currentRound = num; setActiveRound(btn); renderMatches(); };
+    btn.onclick = () => {
+      currentRound = num;
+      setActiveRound(btn);
+      renderMatches();
+    };
     roundBar.appendChild(btn);
   });
 
@@ -128,7 +140,11 @@ function buildRoundButtons(data) {
     const btn = document.createElement("button");
     btn.textContent = r;
     btn.className = "round-btn";
-    btn.onclick = () => { currentRound = r; setActiveRound(btn); renderMatches(); };
+    btn.onclick = () => {
+      currentRound = r;
+      setActiveRound(btn);
+      renderMatches();
+    };
     roundBar.appendChild(btn);
   });
 }
@@ -146,7 +162,9 @@ function renderMatches() {
   let filtered = currentData;
 
   if (teamSelect.value !== "ALL") {
-    filtered = filtered.filter(g => g.home_team === teamSelect.value || g.away_team === teamSelect.value);
+    filtered = filtered.filter(g =>
+      g.home_team === teamSelect.value || g.away_team === teamSelect.value
+    );
   }
 
   if (currentRound !== "ALL") {
@@ -157,19 +175,9 @@ function renderMatches() {
     });
   }
 
-  // ✅ DEDUPE BY A STRONG MATCH KEY (prevents match_id collisions wiping data)
   const matchMap = new Map();
   filtered.forEach(g => {
-    const key = [
-      g.season ?? "",
-      g.match_id ?? "",
-      g.round ?? "",
-      g.home_team ?? "",
-      g.away_team ?? "",
-      g.home_points ?? "",
-      g.away_points ?? ""
-    ].join("|");
-
+    const key = `${g.season}|${g.match_id}|${g.round}|${g.home_team}|${g.away_team}`;
     if (!matchMap.has(key)) matchMap.set(key, g);
   });
 
