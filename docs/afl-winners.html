@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AFL Winners & Awards | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="style.css">
+
+<style>
+body{
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin:0;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:900px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+h1{text-align:center;margin-bottom:20px;}
+
+.year-select{
+  text-align:center;
+  margin-bottom:30px;
+}
+.year-select select{
+  padding:10px 14px;
+  font-size:16px;
+  border-radius:8px;
+}
+
+.awards-table{
+  width:100%;
+  border-collapse:collapse;
+}
+.awards-table th{
+  background:#f0f0f0;
+  text-align:left;
+  padding:10px;
+  font-size:15px;
+}
+.awards-table td{
+  border-bottom:1px solid #ddd;
+  padding:10px;
+  font-size:15px;
+}
+
+.section-head{
+  background:#eaf0ff;
+  font-weight:700;
+}
+.placeholder{
+  color:#666;
+  font-style:italic;
+}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="f1.html">F1</a>
+</div>
+
+<div class="page-wrap">
+
+<h1>AFL Winners & Awards</h1>
+
+<div class="year-select">
+  Season:
+  <select id="yearSelect"></select>
+</div>
+
+<table class="awards-table">
+  <tr class="section-head"><td colspan="2">TEAM HONOURS</td></tr>
+  <tr><td>Premiers</td><td id="premier" class="placeholder">—</td></tr>
+  <tr><td>Runner-up</td><td id="runnerUp" class="placeholder">—</td></tr>
+  <tr><td>Minor Premiers</td><td id="minorPremier" class="placeholder">—</td></tr>
+
+  <tr class="section-head"><td colspan="2">INDIVIDUAL AWARDS</td></tr>
+  <tr><td>Brownlow Medal</td><td id="brownlow" class="placeholder">—</td></tr>
+  <tr><td>Norm Smith Medal</td><td id="normSmith" class="placeholder">—</td></tr>
+  <tr><td>Coleman Medal</td><td id="coleman" class="placeholder">—</td></tr>
+  <tr><td>Rising Star</td><td id="risingStar" class="placeholder">—</td></tr>
+  <tr><td>AFLPA MVP</td><td id="aflpaMvp" class="placeholder">—</td></tr>
+</table>
+
+</div>
+
+<script>
+const files = {
+  team: "data/afl/Premiers & Minor Premiers.csv",
+  brownlow: "data/afl/Brownlow.csv",
+  norm: "data/afl/Norm Smith Medal.csv",
+  coleman: "data/afl/Coleman Medal.csv",
+  rising: "data/afl/Rising Star.csv",
+  aflpa: "data/afl/AFLPA - MVP.csv"
+};
+
+let data = {
+  team: [],
+  brownlow: [],
+  norm: [],
+  coleman: [],
+  rising: [],
+  aflpa: []
+};
+
+const yearSelect = document.getElementById("yearSelect");
+
+function parseCSV(text){
+  const lines = text.trim().split("\n");
+  const headers = lines[0].split(",").map(h=>h.trim());
+  return lines.slice(1).map(line=>{
+    const parts = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
+    let obj = {};
+    headers.forEach((h,i)=>{
+      obj[h.replace(/\u00A0/g,"").trim()] =
+        (parts[i]||"").replace(/^"|"$/g,"").trim();
+    });
+    return obj;
+  });
+}
+
+Promise.all([
+  fetch(files.team).then(r=>r.text()),
+  fetch(files.brownlow).then(r=>r.text()),
+  fetch(files.norm).then(r=>r.text()),
+  fetch(files.coleman).then(r=>r.text()),
+  fetch(files.rising).then(r=>r.text()),
+  fetch(files.aflpa).then(r=>r.text())
+]).then(([team,brownlow,norm,coleman,rising,aflpa])=>{
+  data.team = parseCSV(team);
+  data.brownlow = parseCSV(brownlow);
+  data.norm = parseCSV(norm);
+  data.coleman = parseCSV(coleman);
+  data.rising = parseCSV(rising);
+  data.aflpa = parseCSV(aflpa);
+
+  const years = new Set();
+  Object.values(data).flat().forEach(r=>{
+    if(r.Year) years.add(r.Year);
+  });
+
+  [...years].sort((a,b)=>b-a).forEach(y=>{
+    const opt=document.createElement("option");
+    opt.value=y;
+    opt.textContent=y;
+    yearSelect.appendChild(opt);
+  });
+
+  loadYear(yearSelect.value);
+});
+
+yearSelect.onchange = () => loadYear(yearSelect.value);
+
+function multi(list){
+  if(!list.length) return "—";
+  return list.join(", ");
+}
+
+function loadYear(year){
+  const team = data.team.find(r=>r.Year===year) || {};
+
+  document.getElementById("premier").textContent =
+    team["Winner"] || "—";
+  document.getElementById("runnerUp").textContent =
+    team["Runner-up"] || "—";
+  document.getElementById("minorPremier").textContent =
+    team["Minor Premier"] || "—";
+
+  document.getElementById("brownlow").textContent =
+    multi(data.brownlow.filter(r=>r.Year===year).map(r=>r.Player));
+
+  document.getElementById("normSmith").textContent =
+    multi(data.norm.filter(r=>r.Year===year).map(r=>r.Recipient));
+
+  document.getElementById("coleman").textContent =
+    multi(data.coleman.filter(r=>r.Year===year)
+      .map(r=>r.Player + " (" + r.Goals + ")"));
+
+  document.getElementById("risingStar").textContent =
+    multi(data.rising.filter(r=>r.Year===year)
+      .map(r=>r.Player || r[" Player"]));
+
+  document.getElementById("aflpaMvp").textContent =
+    multi(data.aflpa.filter(r=>r.Year===year).map(r=>r.Player));
+}
+</script>
+
+</body>
+</html>
