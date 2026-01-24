@@ -2,6 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
+<<<<<<< HEAD
 <title>AFL Season</title>
 <style>
 body { font-family: system-ui, Arial, sans-serif; }
@@ -9,19 +10,70 @@ button { margin:4px; padding:6px 10px; border-radius:6px; border:1px solid #ccc;
 .star { color:#d89b00; font-weight:600; }
 .match { margin-bottom:10px; }
 .round { margin-top:20px; }
+=======
+<title>AFL Results by Year</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body { font-family: Arial, sans-serif; margin:20px; }
+h1 { text-align:center; }
+
+.year-buttons, .round-buttons {
+  display:flex; flex-wrap:wrap; gap:8px;
+  justify-content:center; margin-bottom:15px;
+}
+
+button {
+  padding:8px 14px;
+  border:1px solid #ccc;
+  background:#f5f5f5;
+  cursor:pointer;
+}
+button.active { background:#ddd; font-weight:bold; }
+
+select { padding:8px; margin-bottom:15px; }
+
+.match { padding:8px; border-bottom:1px solid #eee; }
+.win { background:#e9f9ec; }
+.loss { background:#fdecec; }
+.draw { background:#fff; }
+
+.star { color:goldenrod; font-size:14px; margin-left:20px; }
+
+table { border-collapse:collapse; width:100%; margin-top:30px; }
+th, td { border:1px solid #ccc; padding:6px; text-align:center; }
+th { background:#f0f0f0; }
+>>>>>>> parent of ef5d434 (Update afl-year.html)
 </style>
 </head>
 <body>
 
+<<<<<<< HEAD
 <h1>AFL Season</h1>
 <div id="yearButtons"></div>
+=======
+<h1>AFL Results by Year</h1>
 
-<h2>Ladder</h2>
+<div class="year-buttons" id="yearButtons"></div>
+
+<div style="text-align:center">
+Team:
+<select id="teamSelect"></select>
+</div>
+>>>>>>> parent of ef5d434 (Update afl-year.html)
+
+<div class="round-buttons" id="roundButtons"></div>
+
+<h2 id="heading">All Matches</h2>
+<div id="matches"></div>
+
+<h2 id="ladderTitle" style="margin-top:30px">Ladder</h2>
 <div id="ladder"></div>
 
 <div id="rounds"></div>
 
 <script>
+<<<<<<< HEAD
 const years = [];
 for (let y=1990;y<=2025;y++) years.push(y);
 
@@ -52,8 +104,48 @@ function buildRounds(rows){
     if(!rounds[r.round]) rounds[r.round]={};
     if(!rounds[r.round][r.match_id]) rounds[r.round][r.match_id]=[];
     rounds[r.round][r.match_id].push(r);
-  });
+=======
+let currentYear = 1990;
+let currentRound = "All";
+let currentTeam = "All teams";
 
+let rawRows = [];
+let allMatches = [];
+let allPlayers = [];
+
+const years = [];
+for(let y=1990;y<=2025;y++) years.push(y);
+
+const roundOrder = [
+ "Round 0",
+ "Round 1","Round 2","Round 3","Round 4","Round 5","Round 6","Round 7","Round 8","Round 9","Round 10",
+ "Round 11","Round 12","Round 13","Round 14","Round 15","Round 16","Round 17","Round 18","Round 19","Round 20",
+ "Round 21","Round 22","Round 23","Round 24",
+ "Elimination Final","Qualifying Final","Semi Final","Preliminary Final","Grand Final"
+];
+
+function getActiveRoundOrder(){
+  if(currentYear >= 2024){
+    return roundOrder;
+  } else {
+    return roundOrder.filter(r => r !== "Round 0");
+  }
+}
+
+function buildYearButtons(){
+  const div=document.getElementById("yearButtons");
+  div.innerHTML="";
+  years.forEach(y=>{
+    const b=document.createElement("button");
+    b.textContent=y;
+    if(y===currentYear) b.classList.add("active");
+    b.onclick=()=>loadYear(y);
+    div.appendChild(b);
+>>>>>>> parent of ef5d434 (Update afl-year.html)
+  });
+}
+
+<<<<<<< HEAD
   for(const round in rounds){
     const h=document.createElement("h2");
     h.textContent=round;
@@ -107,6 +199,179 @@ function buildLadder(rows){
   });
 }
 
+=======
+function buildRoundButtons(){
+  const div=document.getElementById("roundButtons");
+  div.innerHTML="";
+  const activeRounds = getActiveRoundOrder();
+  ["All",...activeRounds].forEach(r=>{
+    const b=document.createElement("button");
+    b.textContent=r;
+    if(r===currentRound) b.classList.add("active");
+    b.onclick=()=>{currentRound=r;render();}
+    div.appendChild(b);
+  });
+}
+
+function buildTeamSelect(){
+  const sel=document.getElementById("teamSelect");
+  sel.innerHTML="";
+  const teams=[...new Set(allMatches.flatMap(m=>[m.home_team,m.away_team]))].sort();
+  ["All teams",...teams].forEach(t=>{
+    const o=document.createElement("option");
+    o.value=t;
+    o.textContent=t;
+    sel.appendChild(o);
+  });
+  sel.onchange=()=>{currentTeam=sel.value;render();}
+}
+
+function loadYear(y){
+  currentYear=y;
+  currentRound="All";
+
+  Promise.all([
+    fetch(`data/afl/afl_${y}.json`).then(r=>r.json()),
+    fetch(`data/afl_players_by_year/players_${y}.json`).then(r=>r.ok ? r.json() : [])
+  ]).then(([rows, players])=>{
+    rawRows = rows;
+    allPlayers = players;
+    buildMatches();
+    buildYearButtons();
+    buildRoundButtons();
+    buildTeamSelect();
+    render();
+  });
+}
+
+function buildMatches(){
+  const map = {};
+  rawRows.forEach(r=>{
+    const id = Number(r.match_id);
+    if(!map[id]){
+      map[id] = {
+        match_id: id,
+        round: r.round,
+        home_team: r.home_team,
+        away_team: r.away_team,
+        home_score: Number(r.home_points),
+        away_score: Number(r.away_points)
+      };
+    }
+  });
+  allMatches = Object.values(map);
+}
+
+function getStars(match){
+  return allPlayers.filter(p =>
+    Number(p.match_id) === Number(match.match_id) &&
+    (Number(p.D) >= 35 || Number(p.G) >= 5)
+  ).map(s=>{
+    let parts=[];
+    if(Number(s.D)>=35) parts.push(`${s.D} disposals`);
+    if(Number(s.G)>=5) parts.push(`${s.G} goals`);
+    return `⭐ ${s.player} (${s.played_for}) – ${parts.join(" & ")}`;
+  });
+}
+
+function render(){
+  const div=document.getElementById("matches");
+  div.innerHTML="";
+
+  document.getElementById("heading").textContent =
+    currentRound==="All" ? "All Matches" : currentRound;
+
+  const activeRounds = getActiveRoundOrder();
+
+  let matchList=[...allMatches];
+  if(currentRound!=="All"){
+    matchList = matchList.filter(m=>m.round===currentRound);
+  }
+  if(currentTeam!=="All teams"){
+    matchList = matchList.filter(m=>m.home_team===currentTeam||m.away_team===currentTeam);
+  }
+
+  matchList.sort((a,b)=>activeRounds.indexOf(a.round)-activeRounds.indexOf(b.round));
+
+  matchList.forEach(m=>{
+    const homeWin = m.home_score > m.away_score;
+    const awayWin = m.away_score > m.home_score;
+
+    let cls="draw";
+    if(currentTeam!=="All teams"){
+      if(m.home_team === currentTeam){
+        cls = homeWin ? "win" : awayWin ? "loss" : "draw";
+      } else if(m.away_team === currentTeam){
+        cls = awayWin ? "win" : homeWin ? "loss" : "draw";
+      }
+    }
+
+    const d=document.createElement("div");
+    d.className=`match ${cls}`;
+    d.innerHTML=`<strong>${m.round}</strong> — ${m.home_team} ${m.home_score} vs ${m.away_team} ${m.away_score}`;
+
+    const stars = getStars(m);
+    stars.forEach(s=>{
+      const st=document.createElement("div");
+      st.className="star";
+      st.textContent=s;
+      d.appendChild(st);
+    });
+
+    div.appendChild(d);
+  });
+
+  buildLadder(matchList);
+}
+
+function buildLadder(matches){
+  const table = {};
+
+  matches.forEach(m=>{
+    [m.home_team,m.away_team].forEach(t=>{
+      if(!table[t]) table[t]={team:t,played:0,win:0,loss:0,draw:0,for:0,against:0};
+    });
+
+    table[m.home_team].played++;
+    table[m.away_team].played++;
+
+    table[m.home_team].for += m.home_score;
+    table[m.home_team].against += m.away_score;
+    table[m.away_team].for += m.away_score;
+    table[m.away_team].against += m.home_score;
+
+    if(m.home_score>m.away_score){
+      table[m.home_team].win++;
+      table[m.away_team].loss++;
+    } else if(m.away_score>m.home_score){
+      table[m.away_team].win++;
+      table[m.home_team].loss++;
+    } else {
+      table[m.home_team].draw++;
+      table[m.away_team].draw++;
+    }
+  });
+
+  const arr = Object.values(table);
+  arr.forEach(t=>{
+    t.points = t.win*4 + t.draw*2;
+    t.perc = ((t.for/t.against)*100).toFixed(2);
+  });
+
+  arr.sort((a,b)=>b.points-a.points || b.perc-a.perc);
+
+  let html="<table><tr><th>Pos</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>D</th><th>F</th><th>A</th><th>%</th><th>Pts</th></tr>";
+  arr.forEach((t,i)=>{
+    html+=`<tr><td>${i+1}</td><td>${t.team}</td><td>${t.played}</td><td>${t.win}</td><td>${t.loss}</td><td>${t.draw}</td><td>${t.for}</td><td>${t.against}</td><td>${t.perc}</td><td>${t.points}</td></tr>`;
+  });
+  html+="</table>";
+
+  document.getElementById("ladder").innerHTML = html;
+}
+
+buildYearButtons();
+loadYear(currentYear);
+>>>>>>> parent of ef5d434 (Update afl-year.html)
 </script>
 </body>
 </html>
