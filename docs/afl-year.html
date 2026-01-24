@@ -54,6 +54,7 @@ let currentYear = 1990;
 let currentRound = "All";
 let currentTeam = "All teams";
 
+let rawRows = [];
 let allMatches = [];
 let allPlayers = [];
 
@@ -110,8 +111,9 @@ function loadYear(y){
 
   fetch(`data/afl/afl_${y}.json`)
     .then(r=>r.json())
-    .then(data=>{
-      allMatches=data;
+    .then(rows=>{
+      rawRows = rows;
+      buildMatches();
       buildYearButtons();
       buildRoundButtons();
       buildTeamSelect();
@@ -119,15 +121,34 @@ function loadYear(y){
     });
 }
 
+function buildMatches(){
+  const map = {};
+
+  rawRows.forEach(r=>{
+    const id = r.match_id;
+    if(!map[id]){
+      map[id] = {
+        match_id: r.match_id,
+        round: r.round,
+        home_team: r.played_for,
+        away_team: r.played_againK,
+        home_score: Number(r.HB)+Number(r.K)+Number(r.G)*6+Number(r.B),
+        away_score: 0
+      };
+    } else {
+      map[id].away_score =
+        Number(r.HB)+Number(r.K)+Number(r.G)*6+Number(r.B);
+    }
+  });
+
+  allMatches = Object.values(map);
+}
+
 function getStars(match){
   if(allPlayers.length===0) return [];
   return allPlayers.filter(p =>
     Number(p.season)===Number(currentYear) &&
-    p.round===match.round &&
-    (
-      (p.played_for===match.home_team && p.played_againK===match.away_team) ||
-      (p.played_for===match.away_team && p.played_againK===match.home_team)
-    ) &&
+    p.match_id===match.match_id &&
     (Number(p.D)>=35 || Number(p.G)>=5)
   ).map(s=>{
     let parts=[];
@@ -179,10 +200,7 @@ function render(){
 }
 
 fetch("data/afl_players.json")
-  .then(r=>{
-    if(!r.ok) return [];
-    return r.json();
-  })
+  .then(r=>r.ok ? r.json() : [])
   .then(p=>{
     allPlayers=p;
     buildYearButtons();
