@@ -109,7 +109,7 @@ th{background:#f4f6f8;}
 <div class="page-wrap">
 
 <h1>AFL Head to Head</h1>
-<p>Compare two AFL teams across all matches, seasons, and venues.</p>
+<p>Compare two AFL teams across all matches since 2020.</p>
 
 <div class="selector-grid">
   <div class="selector-box">
@@ -138,31 +138,13 @@ th{background:#f4f6f8;}
 <script>
 let allData = [];
 
-/* TEAM NORMALISATION MAP */
-const teamMap = {
-  "kangaroos": "north melbourne",
-  "north melb": "north melbourne",
-
-  "footscray": "western bulldogs",
-
-  "gws": "greater western sydney",
-  "greater western sydney giants": "greater western sydney",
-
-  "brisbane bears": "brisbane lions",
-  "fitzroy": "brisbane lions"
-};
-
+/* Remove Brisbane and normalise names */
 function norm(s){
-  let t = (s||"").trim().toLowerCase();
-  return teamMap[t] || t;
-}
-
-function titleCase(s){
-  return s.replace(/\b\w/g, c => c.toUpperCase());
+  return (s||"").trim().toLowerCase();
 }
 
 async function loadAllSeasons(){
-  const startYear = 1990;
+  const startYear = 2020;
   const endYear = new Date().getFullYear();
   const teams = new Set();
 
@@ -175,14 +157,19 @@ async function loadAllSeasons(){
       seasonData.forEach(r=>{
         if(!r.home_team || !r.away_team) return;
 
-        // normalised names
-        r._home = norm(r.home_team);
-        r._away = norm(r.away_team);
+        const home = norm(r.home_team);
+        const away = norm(r.away_team);
+
+        // remove Brisbane completely
+        if(home === "brisbane" || away === "brisbane") return;
+
+        r._home = home;
+        r._away = away;
 
         allData.push(r);
 
-        teams.add(r._home);
-        teams.add(r._away);
+        teams.add(home);
+        teams.add(away);
       });
     }catch(e){}
   }
@@ -192,7 +179,7 @@ async function loadAllSeasons(){
   const t2=document.getElementById("team2");
 
   sorted.forEach(t=>{
-    const name = titleCase(t);
+    const name = t.replace(/\b\w/g,c=>c.toUpperCase());
     t1.innerHTML+=`<option value="${t}">${name}</option>`;
     t2.innerHTML+=`<option value="${t}">${name}</option>`;
   });
@@ -228,7 +215,7 @@ function compare(){
     return;
   }
 
-  /* DEDUPE BY MATCH */
+  // dedupe by match_id
   const gameMap = {};
   rawGames.forEach(r=>{
     if(!gameMap[r.match_id]){
@@ -237,7 +224,7 @@ function compare(){
   });
   let games = Object.values(gameMap);
 
-  /* SORT NEWEST FIRST */
+  // sort newest first
   games.sort((x,y)=>{
     if(y.season!==x.season) return y.season-x.season;
     return parseInt(y.round.replace("Round ","")) -
@@ -265,12 +252,12 @@ function compare(){
   const avgPoints10 = (totalPoints10 / last10.length).toFixed(1);
 
   let html=`
-  <h3>${titleCase(a)} vs ${titleCase(b)}</h3>
+  <h3>${a.replace(/\b\w/g,c=>c.toUpperCase())} vs ${b.replace(/\b\w/g,c=>c.toUpperCase())}</h3>
   <p>
     Games: ${games.length} |
-    ${titleCase(a)} wins: ${aWins} |
+    ${a} wins: ${aWins} |
     Draws: ${draws} |
-    ${titleCase(b)} wins: ${bWins}
+    ${b} wins: ${bWins}
   </p>
   <p>
     Last 10 Avg Points per Game: ${avgPoints10}
@@ -291,8 +278,8 @@ function compare(){
 
   games.forEach(g=>{
     const winner =
-      g.home_points > g.away_points ? titleCase(g._home) :
-      g.away_points > g.home_points ? titleCase(g._away) :
+      g.home_points > g.away_points ? g._home :
+      g.away_points > g.home_points ? g._away :
       "Draw";
 
     html+=`
@@ -300,8 +287,8 @@ function compare(){
         <td>${g.season}</td>
         <td>${g.round}</td>
         <td>${g.venue || ""}</td>
-        <td>${titleCase(g._home)} v ${titleCase(g._away)}</td>
-        <td>${winner}</td>
+        <td>${g._home.replace(/\b\w/g,c=>c.toUpperCase())} v ${g._away.replace(/\b\w/g,c=>c.toUpperCase())}</td>
+        <td>${winner.replace(/\b\w/g,c=>c.toUpperCase())}</td>
         <td>${g.home_points} - ${g.away_points}</td>
         <td>${g.total_points}</td>
         <td>${g.margin}</td>
