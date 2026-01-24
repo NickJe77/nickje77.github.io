@@ -28,10 +28,11 @@ select { padding:8px 10px; font-size:16px; margin-bottom:15px; display:block; }
   border-radius:6px;
 }
 
-/* NEW: result colouring */
-.win  { background:#e6f4ea; }   /* light green */
-.loss { background:#fbeaea; }   /* light red */
-.draw { background:#f0f0f0; }   /* light grey */
+.win  { background:#e6f4ea; }
+.loss { background:#fbeaea; }
+.draw { background:#f0f0f0; }
+
+.star { color:#d4a400; font-weight:600; }
 
 .muted { color:#666; font-size:13px; margin:8px 0 14px; }
 </style>
@@ -52,7 +53,7 @@ select { padding:8px 10px; font-size:16px; margin-bottom:15px; display:block; }
 <div id="matches"></div>
 
 <script>
-const BUILD_ID = "TEAM_COLOUR_v1";
+const BUILD_ID = "STAT_STARS_v1";
 
 const startYear = 1990;
 const endYear = new Date().getFullYear();
@@ -88,10 +89,8 @@ function canonicalRound(r) {
 
 function toPoints(v) {
   if (v === null || v === undefined) return null;
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  const s = String(v).replace(/,/g, "").trim();
-  if (s === "") return null;
-  const n = Number(s);
+  if (typeof v === "number") return v;
+  const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
 
@@ -175,38 +174,49 @@ function setActiveRound(activeBtn){
 
 teamSelect.addEventListener("change",renderMatches);
 
-function formatResult(game) {
-  const round = canonicalRound(game.round);
+function getStarsForMatch(gameKey) {
+  const stars = [];
 
+  currentData.forEach(p=>{
+    const key = p.season+"|"+canonicalRound(p.round)+"|"+p.home_team+"|"+p.away_team;
+    if(key === gameKey) {
+      if (p.D >= 35 || p.G >= 5) {
+        let tag = p.player;
+        if (p.G >= 5) tag += ` (${p.G}g)`;
+        else tag += ` (${p.D})`;
+        stars.push(tag);
+      }
+    }
+  });
+
+  return stars;
+}
+
+function formatResult(game, stars) {
+  const round = canonicalRound(game.round);
   const home = game.home_team;
   const away = game.away_team;
-
   const hp = toPoints(game.home_points);
   const ap = toPoints(game.away_points);
 
   let text = `${round}: ${home} vs ${away}`;
-  let resultClass = "";
 
   if (hp !== null && ap !== null) {
-    if (hp > ap) {
-      text = `${round}: ${home} ${hp} def ${away} ${ap}`;
-      resultClass = "home-win";
-    } else if (ap > hp) {
-      text = `${round}: ${away} ${ap} def ${home} ${hp}`;
-      resultClass = "away-win";
-    } else {
-      text = `${round}: ${home} ${hp} drew ${away} ${ap}`;
-      resultClass = "draw";
-    }
+    if (hp > ap) text = `${round}: ${home} ${hp} def ${away} ${ap}`;
+    else if (ap > hp) text = `${round}: ${away} ${ap} def ${home} ${hp}`;
+    else text = `${round}: ${home} ${hp} drew ${away} ${ap}`;
   }
 
-  return { text, resultClass, home, away, hp, ap };
+  if (stars.length) {
+    text += " — ⭐ " + stars.join(", ");
+  }
+
+  return text;
 }
 
 function renderMatches(){
   matchesDiv.innerHTML="";
   let rows=currentData;
-
   const selectedTeam = teamSelect.value;
 
   if(selectedTeam!=="ALL"){
@@ -223,24 +233,22 @@ function renderMatches(){
     if(!seen.has(key)){
       seen.add(key);
 
-      const result = formatResult(g);
+      const stars = getStarsForMatch(key);
+      const text = formatResult(g, stars);
 
       const div=document.createElement("div");
       div.className="match";
 
-      if (selectedTeam !== "ALL" && result.hp !== null && result.ap !== null) {
-        if (result.text.includes("drew")) {
-          div.classList.add("draw");
-        } else if (
-          (result.text.includes(selectedTeam) && result.text.indexOf(selectedTeam) < result.text.indexOf("def"))
-        ) {
-          div.classList.add("win");
-        } else {
-          div.classList.add("loss");
-        }
+      if (selectedTeam !== "ALL" && g.home_points != null && g.away_points != null) {
+        if (g.home_points === g.away_points) div.classList.add("draw");
+        else if (
+          (g.home_team === selectedTeam && g.home_points > g.away_points) ||
+          (g.away_team === selectedTeam && g.away_points > g.home_points)
+        ) div.classList.add("win");
+        else div.classList.add("loss");
       }
 
-      div.textContent = result.text;
+      div.textContent = text;
       matchesDiv.appendChild(div);
     }
   });
