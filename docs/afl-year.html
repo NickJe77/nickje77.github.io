@@ -50,7 +50,6 @@ const matchesDiv = document.getElementById("matches");
 const statusDiv = document.getElementById("status");
 
 let currentData = [];
-let currentYear = startYear;
 let currentRound = "ALL";
 
 for (let y = startYear; y <= endYear; y++) {
@@ -63,18 +62,10 @@ for (let y = startYear; y <= endYear; y++) {
 
 loadYear(startYear);
 
-function setStatus(text) {
-  statusDiv.textContent = text || "";
-}
-
 function normalizeRound(r) {
-  return (r ?? "")
-    .toString()
-    .replace(/\s+/g," ")
-    .trim();
+  return (r ?? "").toString().replace(/\s+/g," ").trim();
 }
 
-// 🔑 CANONICALISE FINALS NAMES
 function canonicalRound(r) {
   const t = normalizeRound(r).toLowerCase();
   if (t.includes("qualifying")) return "Qualifying Final";
@@ -85,20 +76,7 @@ function canonicalRound(r) {
   return normalizeRound(r);
 }
 
-function matchKey(row) {
-  return [
-    row.season ?? "",
-    canonicalRound(row.round),
-    row.home_team ?? "",
-    row.away_team ?? "",
-    row.home_points ?? "",
-    row.away_points ?? "",
-    row.match_id ?? ""
-  ].join("|");
-}
-
 function loadYear(year) {
-  currentYear = year;
   currentRound = "ALL";
   teamSelect.value = "ALL";
 
@@ -106,26 +84,16 @@ function loadYear(year) {
   [...yearBar.children].find(b => b.textContent == year).classList.add("active");
 
   matchesDiv.innerHTML = "";
-  setStatus("Loading…");
+  statusDiv.textContent = "Loading…";
 
-  const url = `/data/afl/afl_${year}.json?cb=${Date.now()}`;
-
-  fetch(url)
-    .then(res => {
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
-    })
+  fetch(`/data/afl/afl_${year}.json?cb=${Date.now()}`)
+    .then(r => r.json())
     .then(data => {
       currentData = data;
       buildTeamSelector(data);
       buildRoundButtons(data);
       renderMatches();
-      setStatus(`Year ${year}: loaded ${data.length.toLocaleString()} player-rows`);
-    })
-    .catch(err => {
-      currentData = [];
-      matchesDiv.innerHTML = `<p>No data for this year.</p>`;
-      setStatus(`Load error: ${err.message}`);
+      statusDiv.textContent = `Year ${year}: loaded ${data.length.toLocaleString()} player-rows`;
     });
 }
 
@@ -143,16 +111,14 @@ function buildTeamSelector(data) {
     opt.textContent = t;
     teamSelect.appendChild(opt);
   });
-
-  teamSelect.value = "ALL";
 }
 
 function buildRoundButtons(data) {
   roundBar.innerHTML = "";
 
-  const roundsSet = new Set();
-  data.forEach(r => roundsSet.add(canonicalRound(r.round)));
-  const rounds = [...roundsSet];
+  const rounds = [...new Set(
+    data.map(r => canonicalRound(r.round)).filter(r => r !== "")
+  )];
 
   const numeric = [];
   const finals = [];
@@ -171,36 +137,23 @@ function buildRoundButtons(data) {
   const allBtn = document.createElement("button");
   allBtn.textContent = "All Rounds";
   allBtn.className = "round-btn active";
-  allBtn.onclick = () => {
-    currentRound = "ALL";
-    setActiveRound(allBtn);
-    renderMatches();
-  };
+  allBtn.onclick = () => { currentRound="ALL"; setActiveRound(allBtn); renderMatches(); };
   roundBar.appendChild(allBtn);
 
-  numeric.forEach(r => {
-    const btn = document.createElement("button");
-    btn.textContent = r.label;
-    btn.className = "round-btn";
-    btn.onclick = () => {
-      currentRound = r.label;
-      setActiveRound(btn);
-      renderMatches();
-    };
-    roundBar.appendChild(btn);
-  });
+  numeric.forEach(r => addRoundButton(r.label));
+  finals.forEach(r => addRoundButton(r));
+}
 
-  finals.forEach(r => {
-    const btn = document.createElement("button");
-    btn.textContent = r;
-    btn.className = "round-btn";
-    btn.onclick = () => {
-      currentRound = r;
-      setActiveRound(btn);
-      renderMatches();
-    };
-    roundBar.appendChild(btn);
-  });
+function addRoundButton(label) {
+  const btn = document.createElement("button");
+  btn.textContent = label;
+  btn.className = "round-btn";
+  btn.onclick = () => {
+    currentRound = label;
+    setActiveRound(btn);
+    renderMatches();
+  };
+  roundBar.appendChild(btn);
 }
 
 function setActiveRound(activeBtn) {
@@ -215,33 +168,25 @@ function renderMatches() {
 
   let rows = currentData;
 
-  const team = teamSelect.value;
-  if (team !== "ALL") {
-    rows = rows.filter(r => r.home_team === team || r.away_team === team);
+  if (teamSelect.value !== "ALL") {
+    rows = rows.filter(r => r.home_team === teamSelect.value || r.away_team === teamSelect.value);
   }
 
   if (currentRound !== "ALL") {
     rows = rows.filter(r => canonicalRound(r.round) === currentRound);
   }
 
-  const map = new Map();
-  for (const r of rows) {
-    const key = matchKey(r);
-    if (!map.has(key)) map.set(key, r);
-  }
-
-  const matches = [...map.values()];
-  if (matches.length === 0) {
-    matchesDiv.innerHTML = `<p>No matches found.</p>`;
-    return;
-  }
-
-  for (const game of matches) {
-    const div = document.createElement("div");
-    div.className = "match";
-    div.innerHTML = `${canonicalRound(game.round)}: ${game.home_team} ${game.home_points} def ${game.away_team} ${game.away_points}`;
-    matchesDiv.appendChild(div);
-  }
+  const seen = new Set();
+  rows.forEach(g => {
+    const key = g.season+"|"+canonicalRound(g.round)+"|"+g.home_team+"|"+g.away_team;
+    if (!seen.has(key)) {
+      seen.add(key);
+      const div = document.createElement("div");
+      div.className = "match";
+      div.textContent = `${canonicalRound(g.round)}: ${g.home_team} ${g.home_points} def ${g.away_team} ${g.away_points}`;
+      matchesDiv.appendChild(div);
+    }
+  });
 }
 </script>
 </body>
