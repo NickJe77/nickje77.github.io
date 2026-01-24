@@ -31,15 +31,6 @@ select { padding:8px; margin-bottom:15px; }
 
 .star { color:goldenrod; font-size:14px; margin-left:20px; }
 
-.debug {
-  background:#000;
-  color:#0f0;
-  padding:10px;
-  margin:10px 0;
-  font-size:13px;
-  font-family:monospace;
-}
-
 table { border-collapse:collapse; width:100%; margin-top:30px; }
 th, td { border:1px solid #ccc; padding:6px; text-align:center; }
 th { background:#f0f0f0; }
@@ -58,8 +49,6 @@ Team:
 </div>
 
 <div class="round-buttons" id="roundButtons"></div>
-
-<div class="debug" id="debugBox">Loading…</div>
 
 <h2 id="heading">All Matches</h2>
 <div id="matches"></div>
@@ -86,8 +75,6 @@ const roundOrder = [
  "Round 21","Round 22","Round 23","Round 24",
  "Elimination Final","Qualifying Final","Semi Final","Preliminary Final","Grand Final"
 ];
-
-const ladderRounds = roundOrder.slice(0, roundOrder.indexOf("Elimination Final"));
 
 function getActiveRoundOrder(){
   if(currentYear >= 2024){
@@ -187,8 +174,6 @@ function render(){
   const div=document.getElementById("matches");
   div.innerHTML="";
 
-  let starCount = 0;
-
   document.getElementById("heading").textContent =
     currentRound==="All" ? "All Matches" : currentRound;
 
@@ -222,8 +207,6 @@ function render(){
     d.innerHTML=`<strong>${m.round}</strong> — ${m.home_team} ${m.home_score} vs ${m.away_team} ${m.away_score}`;
 
     const stars = getStars(m);
-    starCount += stars.length;
-
     stars.forEach(s=>{
       const st=document.createElement("div");
       st.className="star";
@@ -234,8 +217,52 @@ function render(){
     div.appendChild(d);
   });
 
-  document.getElementById("debugBox").textContent =
-    `Year ${currentYear} | Player rows loaded: ${allPlayers.length} | Stars found: ${starCount}`;
+  buildLadder(matchList);
+}
+
+function buildLadder(matches){
+  const table = {};
+
+  matches.forEach(m=>{
+    [m.home_team,m.away_team].forEach(t=>{
+      if(!table[t]) table[t]={team:t,played:0,win:0,loss:0,draw:0,for:0,against:0};
+    });
+
+    table[m.home_team].played++;
+    table[m.away_team].played++;
+
+    table[m.home_team].for += m.home_score;
+    table[m.home_team].against += m.away_score;
+    table[m.away_team].for += m.away_score;
+    table[m.away_team].against += m.home_score;
+
+    if(m.home_score>m.away_score){
+      table[m.home_team].win++;
+      table[m.away_team].loss++;
+    } else if(m.away_score>m.home_score){
+      table[m.away_team].win++;
+      table[m.home_team].loss++;
+    } else {
+      table[m.home_team].draw++;
+      table[m.away_team].draw++;
+    }
+  });
+
+  const arr = Object.values(table);
+  arr.forEach(t=>{
+    t.points = t.win*4 + t.draw*2;
+    t.perc = ((t.for/t.against)*100).toFixed(2);
+  });
+
+  arr.sort((a,b)=>b.points-a.points || b.perc-a.perc);
+
+  let html="<table><tr><th>Pos</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>D</th><th>F</th><th>A</th><th>%</th><th>Pts</th></tr>";
+  arr.forEach((t,i)=>{
+    html+=`<tr><td>${i+1}</td><td>${t.team}</td><td>${t.played}</td><td>${t.win}</td><td>${t.loss}</td><td>${t.draw}</td><td>${t.for}</td><td>${t.against}</td><td>${t.perc}</td><td>${t.points}</td></tr>`;
+  });
+  html+="</table>";
+
+  document.getElementById("ladder").innerHTML = html;
 }
 
 buildYearButtons();
