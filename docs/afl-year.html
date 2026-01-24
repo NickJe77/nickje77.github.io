@@ -20,7 +20,19 @@ body { font-family: system-ui, Arial, sans-serif; margin:20px; }
 .year-btn.active, .round-btn.active { background:#333; color:#fff; }
 
 select { padding:8px 10px; font-size:16px; margin-bottom:15px; display:block; }
-.match { margin-left:15px; margin-bottom:6px; }
+
+.match { 
+  margin-left:15px; 
+  margin-bottom:6px; 
+  padding:4px 8px;
+  border-radius:6px;
+}
+
+/* NEW: result colouring */
+.win  { background:#e6f4ea; }   /* light green */
+.loss { background:#fbeaea; }   /* light red */
+.draw { background:#f0f0f0; }   /* light grey */
+
 .muted { color:#666; font-size:13px; margin:8px 0 14px; }
 </style>
 </head>
@@ -40,7 +52,7 @@ select { padding:8px 10px; font-size:16px; margin-bottom:15px; display:block; }
 <div id="matches"></div>
 
 <script>
-const BUILD_ID = "WINNER_FIX_v2"; // <-- if you don't see this in the status line, the new file isn't live
+const BUILD_ID = "TEAM_COLOUR_v1";
 
 const startYear = 1990;
 const endYear = new Date().getFullYear();
@@ -75,7 +87,6 @@ function canonicalRound(r) {
 }
 
 function toPoints(v) {
-  // Handles numbers, "104", " 104 ", "1,104", null, undefined, weird junk
   if (v === null || v === undefined) return null;
   if (typeof v === "number" && Number.isFinite(v)) return v;
   const s = String(v).replace(/,/g, "").trim();
@@ -102,11 +113,6 @@ function loadYear(year) {
       buildRoundButtons();
       renderMatches();
       statusDiv.textContent = `Year ${year}: loaded ${currentData.length.toLocaleString()} player-rows (${BUILD_ID})`;
-    })
-    .catch(() => {
-      currentData = [];
-      matchesDiv.innerHTML = "<p>No data for this year.</p>";
-      statusDiv.textContent = `Load error (${BUILD_ID})`;
     });
 }
 
@@ -146,7 +152,6 @@ function buildRoundButtons() {
 
   numeric.forEach(r=>addRoundButton(r.label));
 
-  // finals order as requested
   ["Elimination Final","Qualifying Final","Semi Final","Preliminary Final","Grand Final"]
     .forEach(r=>addRoundButton(r));
 }
@@ -170,30 +175,42 @@ function setActiveRound(activeBtn){
 
 teamSelect.addEventListener("change",renderMatches);
 
-function formatResultLine(game) {
+function formatResult(game) {
   const round = canonicalRound(game.round);
 
-  const home = (game.home_team ?? "").toString();
-  const away = (game.away_team ?? "").toString();
+  const home = game.home_team;
+  const away = game.away_team;
 
   const hp = toPoints(game.home_points);
   const ap = toPoints(game.away_points);
 
-  if (hp === null || ap === null) {
-    return `${round}: ${home} vs ${away}`;
+  let text = `${round}: ${home} vs ${away}`;
+  let resultClass = "";
+
+  if (hp !== null && ap !== null) {
+    if (hp > ap) {
+      text = `${round}: ${home} ${hp} def ${away} ${ap}`;
+      resultClass = "home-win";
+    } else if (ap > hp) {
+      text = `${round}: ${away} ${ap} def ${home} ${hp}`;
+      resultClass = "away-win";
+    } else {
+      text = `${round}: ${home} ${hp} drew ${away} ${ap}`;
+      resultClass = "draw";
+    }
   }
 
-  if (hp > ap) return `${round}: ${home} ${hp} def ${away} ${ap}`;
-  if (ap > hp) return `${round}: ${away} ${ap} def ${home} ${hp}`;
-  return `${round}: ${home} ${hp} drew ${away} ${ap}`;
+  return { text, resultClass, home, away, hp, ap };
 }
 
 function renderMatches(){
   matchesDiv.innerHTML="";
   let rows=currentData;
 
-  if(teamSelect.value!=="ALL"){
-    rows=rows.filter(r=>r.home_team===teamSelect.value||r.away_team===teamSelect.value);
+  const selectedTeam = teamSelect.value;
+
+  if(selectedTeam!=="ALL"){
+    rows=rows.filter(r=>r.home_team===selectedTeam||r.away_team===selectedTeam);
   }
 
   if(currentRound!=="ALL"){
@@ -202,12 +219,28 @@ function renderMatches(){
 
   const seen=new Set();
   rows.forEach(g=>{
-    const key = (g.season ?? "") + "|" + canonicalRound(g.round) + "|" + (g.home_team ?? "") + "|" + (g.away_team ?? "");
+    const key = g.season+"|"+canonicalRound(g.round)+"|"+g.home_team+"|"+g.away_team;
     if(!seen.has(key)){
       seen.add(key);
+
+      const result = formatResult(g);
+
       const div=document.createElement("div");
       div.className="match";
-      div.textContent = formatResultLine(g);
+
+      if (selectedTeam !== "ALL" && result.hp !== null && result.ap !== null) {
+        if (result.text.includes("drew")) {
+          div.classList.add("draw");
+        } else if (
+          (result.text.includes(selectedTeam) && result.text.indexOf(selectedTeam) < result.text.indexOf("def"))
+        ) {
+          div.classList.add("win");
+        } else {
+          div.classList.add("loss");
+        }
+      }
+
+      div.textContent = result.text;
       matchesDiv.appendChild(div);
     }
   });
