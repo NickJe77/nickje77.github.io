@@ -10,20 +10,21 @@ body {
   margin: 20px;
 }
 
-.year-bar {
+.year-bar, .round-bar {
   margin-bottom: 15px;
 }
 
-.year-btn {
-  margin: 3px;
-  padding: 6px 10px;
-  border-radius: 8px;
+.year-btn, .round-btn {
+  margin: 4px;
+  padding: 8px 14px; /* BIGGER BUTTONS */
+  border-radius: 10px;
   border: 1px solid #ccc;
   background: #ddd;
   cursor: pointer;
+  font-size: 15px;
 }
 
-.year-btn.active {
+.year-btn.active, .round-btn.active {
   background: #333;
   color: #fff;
 }
@@ -31,7 +32,7 @@ body {
 select {
   padding: 6px;
   font-size: 16px;
-  margin-bottom: 10px;
+  margin-bottom: 15px;
   display: block;
 }
 
@@ -60,10 +61,8 @@ select {
   <option value="ALL">All teams</option>
 </select>
 
-<!-- ROUND -->
-<select id="roundSelect">
-  <option value="ALL">All rounds</option>
-</select>
+<!-- ROUNDS -->
+<div id="roundBar" class="round-bar"></div>
 
 <!-- MATCHES -->
 <div id="matches"></div>
@@ -74,11 +73,12 @@ const endYear = new Date().getFullYear();
 
 const yearBar = document.getElementById("yearBar");
 const teamSelect = document.getElementById("teamSelect");
-const roundSelect = document.getElementById("roundSelect");
+const roundBar = document.getElementById("roundBar");
 const matchesDiv = document.getElementById("matches");
 
 let currentData = [];
 let currentYear = startYear;
+let currentRound = "ALL";
 
 // build year buttons
 for (let y = startYear; y <= endYear; y++) {
@@ -94,6 +94,8 @@ loadYear(startYear);
 
 function loadYear(year) {
   currentYear = year;
+  currentRound = "ALL";
+
   document.querySelectorAll(".year-btn").forEach(b => b.classList.remove("active"));
   [...yearBar.children].find(b => b.textContent == year).classList.add("active");
 
@@ -102,7 +104,7 @@ function loadYear(year) {
     .then(data => {
       currentData = data;
       buildTeamSelector(data);
-      buildRoundSelector(data);
+      buildRoundButtons(data);
       renderMatches();
     })
     .catch(() => {
@@ -128,23 +130,49 @@ function buildTeamSelector(data) {
   });
 }
 
-function buildRoundSelector(data) {
-  const rounds = new Set();
+function buildRoundButtons(data) {
+  roundBar.innerHTML = "";
 
+  const rounds = new Set();
   data.forEach(g => rounds.add(g.round));
 
-  roundSelect.innerHTML = `<option value="ALL">All rounds</option>`;
+  // Convert to numbers and sort, ensuring Round 0 appears
+  const sortedRounds = [...rounds].sort((a, b) => {
+    const na = parseInt(a.toString().replace(/\D/g, "")) || 0;
+    const nb = parseInt(b.toString().replace(/\D/g, "")) || 0;
+    return na - nb;
+  });
 
-  [...rounds].forEach(r => {
-    const opt = document.createElement("option");
-    opt.value = r;
-    opt.textContent = r;
-    roundSelect.appendChild(opt);
+  // ALL button
+  const allBtn = document.createElement("button");
+  allBtn.textContent = "All Rounds";
+  allBtn.className = "round-btn active";
+  allBtn.onclick = () => {
+    currentRound = "ALL";
+    setActiveRound(allBtn);
+    renderMatches();
+  };
+  roundBar.appendChild(allBtn);
+
+  sortedRounds.forEach(r => {
+    const btn = document.createElement("button");
+    btn.textContent = r;
+    btn.className = "round-btn";
+    btn.onclick = () => {
+      currentRound = r;
+      setActiveRound(btn);
+      renderMatches();
+    };
+    roundBar.appendChild(btn);
   });
 }
 
+function setActiveRound(activeBtn) {
+  document.querySelectorAll(".round-btn").forEach(b => b.classList.remove("active"));
+  activeBtn.classList.add("active");
+}
+
 teamSelect.addEventListener("change", renderMatches);
-roundSelect.addEventListener("change", renderMatches);
 
 function renderMatches() {
   matchesDiv.innerHTML = "";
@@ -157,8 +185,8 @@ function renderMatches() {
     );
   }
 
-  if (roundSelect.value !== "ALL") {
-    filtered = filtered.filter(g => g.round === roundSelect.value);
+  if (currentRound !== "ALL") {
+    filtered = filtered.filter(g => g.round == currentRound);
   }
 
   filtered.forEach(game => {
