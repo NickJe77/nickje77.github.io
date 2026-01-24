@@ -29,6 +29,8 @@ select { padding:8px; margin-bottom:15px; }
 .loss { background:#fdecec; }
 .draw { background:#fff; }
 
+.star { color:goldenrod; font-size:14px; margin-left:20px; }
+
 table { border-collapse:collapse; width:100%; margin-top:30px; }
 th, td { border:1px solid #ccc; padding:6px; text-align:center; }
 th { background:#f0f0f0; }
@@ -61,6 +63,7 @@ let currentTeam = "All teams";
 
 let rawRows = [];
 let allMatches = [];
+let allPlayers = [];
 
 const years = [];
 for(let y=1990;y<=2025;y++) years.push(y);
@@ -73,7 +76,6 @@ const roundOrder = [
  "Elimination Final","Qualifying Final","Semi Final","Preliminary Final","Grand Final"
 ];
 
-// Home & Away rounds only
 const ladderRounds = roundOrder.slice(0, roundOrder.indexOf("Elimination Final"));
 
 function getActiveRoundOrder(){
@@ -126,16 +128,18 @@ function loadYear(y){
   currentYear=y;
   currentRound="All";
 
-  fetch(`data/afl/afl_${y}.json`)
-    .then(r=>r.json())
-    .then(rows=>{
-      rawRows = rows;
-      buildMatches();
-      buildYearButtons();
-      buildRoundButtons();
-      buildTeamSelect();
-      render();
-    });
+  Promise.all([
+    fetch(`data/afl/afl_${y}.json`).then(r=>r.json()),
+    fetch(`data/afl_players/players_${y}.json`).then(r=>r.ok ? r.json() : [])
+  ]).then(([rows, players])=>{
+    rawRows = rows;
+    allPlayers = players;
+    buildMatches();
+    buildYearButtons();
+    buildRoundButtons();
+    buildTeamSelect();
+    render();
+  });
 }
 
 function buildMatches(){
@@ -154,6 +158,18 @@ function buildMatches(){
     }
   });
   allMatches = Object.values(map);
+}
+
+function getStars(match){
+  return allPlayers.filter(p =>
+    p.match_id === match.match_id &&
+    (Number(p.D) >= 35 || Number(p.G) >= 5)
+  ).map(s=>{
+    let parts=[];
+    if(Number(s.D)>=35) parts.push(`${s.D} disposals`);
+    if(Number(s.G)>=5) parts.push(`${s.G} goals`);
+    return `⭐ ${s.player} (${s.played_for}) – ${parts.join(" & ")}`;
+  });
 }
 
 function buildLadder(matches){
@@ -254,10 +270,17 @@ function render(){
     const d=document.createElement("div");
     d.className=`match ${cls}`;
     d.innerHTML=`<strong>${m.round}</strong> — ${m.home_team} ${m.home_score} vs ${m.away_team} ${m.away_score}`;
+
+    getStars(m).forEach(s=>{
+      const st=document.createElement("div");
+      st.className="star";
+      st.textContent=s;
+      d.appendChild(st);
+    });
+
     div.appendChild(d);
   });
 
-  // Hide ladder if in Finals
   if(currentRound !== "All" && !ladderRounds.includes(currentRound)){
     renderLadder([]);
     return;
