@@ -13,77 +13,32 @@ body {
   margin: 0;
   background: white;
 }
-
 .navbar {
-  display: flex;
-  justify-content: center;
-  gap: 22px;
-  padding: 16px 0;
-  border-bottom: 1px solid #ddd;
-  font-weight: 600;
+  display:flex;justify-content:center;gap:22px;
+  padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;
 }
+.navbar a {color:#0056d6;text-decoration:none;font-size:18px;}
+.page-wrap {max-width:1200px;margin:0 auto;padding:20px;}
+h1{text-align:center;margin-bottom:20px;}
 
-.navbar a {
-  color: #0056d6;
-  text-decoration: none;
-  font-size: 18px;
+.year-grid,.round-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));
+  gap:10px;margin-bottom:20px;
 }
-
-.page-wrap {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
+.year-grid button,.round-grid button{
+  padding:10px;border:1px solid #ccc;background:#f4f4f4;
+  cursor:pointer;font-weight:600;
 }
+.year-grid button:hover,.round-grid button:hover{background:#ddd;}
 
-h1 {
-  text-align: center;
-  margin-bottom: 20px;
-}
+.team-select{text-align:center;margin-bottom:20px;}
+.team-select select{padding:8px 12px;font-size:16px;}
 
-.year-grid, .round-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
-.year-grid button, .round-grid button {
-  padding: 10px;
-  border: 1px solid #ccc;
-  background: #f4f4f4;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.year-grid button:hover, .round-grid button:hover {
-  background: #ddd;
-}
-
-.team-select {
-  margin-bottom: 20px;
-  text-align: center;
-}
-
-.team-select select {
-  padding: 8px 12px;
-  font-size: 16px;
-}
-
-.match {
-  border-bottom: 1px solid #eee;
-  padding: 6px 0;
-  font-size: 15px;
-}
-
-/* result shading */
-.match.win { background: #e6f6ea; }
-.match.loss { background: #fdeaea; }
-.match.draw { background: #ffffff; }
-
-.match strong {
-  display: inline-block;
-  width: 120px;
-}
+.match{border-bottom:1px solid #eee;padding:6px 0;font-size:15px;}
+.match.win{background:#e6f6ea;}
+.match.loss{background:#fdeaea;}
+.match.draw{background:#ffffff;}
+.match strong{display:inline-block;width:120px;}
 </style>
 </head>
 
@@ -101,7 +56,7 @@ h1 {
 <div class="year-grid" id="yearGrid"></div>
 
 <div class="team-select" id="teamSelect" style="display:none;">
-  <label for="teamDropdown"><strong>Team:</strong></label>
+  <strong>Team:</strong>
   <select id="teamDropdown">
     <option value="All">All teams</option>
   </select>
@@ -112,158 +67,110 @@ h1 {
 </div>
 
 <script>
-const startYear = 1990;
-const endYear = 2025;
+const startYear=1990,endYear=2025;
+const yearGrid=document.getElementById("yearGrid");
+const roundGrid=document.getElementById("roundGrid");
+const resultsDiv=document.getElementById("results");
+const teamSelectDiv=document.getElementById("teamSelect");
+const teamDropdown=document.getElementById("teamDropdown");
 
-const yearGrid = document.getElementById("yearGrid");
-const roundGrid = document.getElementById("roundGrid");
-const resultsDiv = document.getElementById("results");
-const teamSelectDiv = document.getElementById("teamSelect");
-const teamDropdown = document.getElementById("teamDropdown");
+let allMatches=[],currentMatches=[],currentTeam="All";
 
-let allMatches = [];
-let currentMatches = [];
-let currentTeam = "All";
-
-// build year buttons
-for (let y = startYear; y <= endYear; y++) {
-  const btn = document.createElement("button");
-  btn.textContent = y;
-  btn.onclick = () => loadYear(y);
-  yearGrid.appendChild(btn);
+for(let y=startYear;y<=endYear;y++){
+  const b=document.createElement("button");
+  b.textContent=y;b.onclick=()=>loadYear(y);
+  yearGrid.appendChild(b);
 }
 
-function loadYear(year) {
-  resultsDiv.innerHTML = `<h2>${year}</h2><p>Loading...</p>`;
-  roundGrid.style.display = "none";
-  roundGrid.innerHTML = "";
-  teamSelectDiv.style.display = "none";
-  teamDropdown.innerHTML = `<option value="All">All teams</option>`;
-  currentTeam = "All";
+function loadYear(year){
+  resultsDiv.innerHTML=`<h2>${year}</h2><p>Loading...</p>`;
+  roundGrid.style.display="none";roundGrid.innerHTML="";
+  teamSelectDiv.style.display="none";
+  teamDropdown.innerHTML=`<option value="All">All teams</option>`;
+  currentTeam="All";
 
   fetch(`data/afl/afl_${year}.json`)
-    .then(r => r.json())
-    .then(rows => {
-
-      // ---- DEDUPE MATCHES ----
-      const seen = new Set();
-      const matches = [];
-
-      rows.forEach(r => {
-        const key = [
-          r.round,
-          r.home_team,
-          r.away_team,
-          r.home_points,
-          r.away_points
-        ].join("|");
-
-        if (!seen.has(key)) {
-          seen.add(key);
-          matches.push(r);
-        }
+    .then(r=>r.json())
+    .then(rows=>{
+      const seen=new Set(),matches=[];
+      rows.forEach(r=>{
+        if(!r.round) return; // remove null rounds
+        const key=[r.round,r.home_team,r.away_team,r.home_points,r.away_points].join("|");
+        if(!seen.has(key)){seen.add(key);matches.push(r);}
       });
 
-      allMatches = matches;
-      currentMatches = matches;
+      allMatches=matches;
+      currentMatches=matches;
 
       buildTeamDropdown(matches);
       buildRoundButtons(matches);
-      showMatches(matches, "All");
-    })
-    .catch(err => {
-      resultsDiv.innerHTML = `<p>No data found for ${year}</p>`;
-      console.error(err);
+      showMatches(matches,"All");
     });
 }
 
-function buildTeamDropdown(matches) {
-  const teams = new Set();
-
-  matches.forEach(m => {
-    teams.add(m.home_team);
-    teams.add(m.away_team);
+function buildTeamDropdown(matches){
+  const teams=new Set();
+  matches.forEach(m=>{teams.add(m.home_team);teams.add(m.away_team);});
+  [...teams].sort().forEach(t=>{
+    const o=document.createElement("option");
+    o.value=t;o.textContent=t;
+    teamDropdown.appendChild(o);
   });
-
-  const sortedTeams = Array.from(teams).sort();
-
-  sortedTeams.forEach(team => {
-    const opt = document.createElement("option");
-    opt.value = team;
-    opt.textContent = team;
-    teamDropdown.appendChild(opt);
-  });
-
-  teamSelectDiv.style.display = "block";
-
-  teamDropdown.onchange = () => {
-    currentTeam = teamDropdown.value;
-    filterMatches();
-  };
+  teamSelectDiv.style.display="block";
+  teamDropdown.onchange=()=>{currentTeam=teamDropdown.value;filterMatches();};
 }
 
-function buildRoundButtons(matches) {
-  const rounds = [...new Set(matches.map(m => m.round))];
-
-  roundGrid.innerHTML = "";
-  roundGrid.style.display = "grid";
-
-  const allBtn = document.createElement("button");
-  allBtn.textContent = "All";
-  allBtn.onclick = () => showMatches(currentMatches, "All");
+function buildRoundButtons(matches){
+  const rounds=[...new Set(matches.map(m=>m.round))];
+  roundGrid.innerHTML="";roundGrid.style.display="grid";
+  const allBtn=document.createElement("button");
+  allBtn.textContent="All";allBtn.onclick=()=>showMatches(currentMatches,"All");
   roundGrid.appendChild(allBtn);
-
-  rounds.forEach(r => {
-    const btn = document.createElement("button");
-    btn.textContent = r;
-    btn.onclick = () => showMatches(
-      currentMatches.filter(m => m.round === r),
-      r
-    );
-    roundGrid.appendChild(btn);
+  rounds.forEach(r=>{
+    const b=document.createElement("button");
+    b.textContent=r;
+    b.onclick=()=>showMatches(currentMatches.filter(m=>m.round===r),r);
+    roundGrid.appendChild(b);
   });
 }
 
-function filterMatches() {
-  if (currentTeam === "All") {
-    currentMatches = allMatches;
-  } else {
-    currentMatches = allMatches.filter(m =>
-      m.home_team === currentTeam || m.away_team === currentTeam
-    );
-  }
-
+function filterMatches(){
+  currentMatches = currentTeam==="All" ? allMatches :
+    allMatches.filter(m=>m.home_team===currentTeam||m.away_team===currentTeam);
   buildRoundButtons(currentMatches);
-  showMatches(currentMatches, "All");
+  showMatches(currentMatches,"All");
 }
 
-function showMatches(list, label) {
-  let html = `<h2>${label === "All" ? "All Matches" : label}</h2>`;
+function roundOrder(r){
+  const finals=["Qualifying Final","Elimination Final","Semi Final","Preliminary Final","Grand Final"];
+  if(r.startsWith("Round")){
+    return parseInt(r.replace("Round","").trim());
+  }
+  const i=finals.indexOf(r);
+  return i>-1 ? 100+i : 999;
+}
 
-  list.forEach(match => {
-    let cls = "";
+function showMatches(list,label){
+  list.sort((a,b)=>roundOrder(a.round)-roundOrder(b.round));
 
-    if (currentTeam !== "All") {
-      const isHome = match.home_team === currentTeam;
-      const teamScore = isHome ? match.home_points : match.away_points;
-      const oppScore = isHome ? match.away_points : match.home_points;
-
-      if (teamScore > oppScore) cls = "win";
-      else if (teamScore < oppScore) cls = "loss";
-      else cls = "draw";
+  let html=`<h2>${label==="All"?"All Matches":label}</h2>`;
+  list.forEach(m=>{
+    let cls="";
+    if(currentTeam!=="All"){
+      const isHome=m.home_team===currentTeam;
+      const t=isHome?m.home_points:m.away_points;
+      const o=isHome?m.away_points:m.home_points;
+      cls = t>o?"win":t<o?"loss":"draw";
     }
-
-    html += `
+    html+=`
       <div class="match ${cls}">
-        <strong>${match.round}</strong>
-        ${match.home_team} ${match.home_points}
+        <strong>${m.round}</strong>
+        ${m.home_team} ${m.home_points}
         vs
-        ${match.away_team} ${match.away_points}
-      </div>
-    `;
+        ${m.away_team} ${m.away_points}
+      </div>`;
   });
-
-  resultsDiv.innerHTML = html;
+  resultsDiv.innerHTML=html;
 }
 </script>
 
