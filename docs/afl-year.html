@@ -159,6 +159,25 @@ function addRoundButton(label,active=false){
 
 teamSelect.onchange=renderMatches;
 
+function getStarsForMatch(gameKey) {
+  const stars = [];
+  currentData.forEach(p=>{
+    const key=p.season+"|"+canonicalRound(p.round)+"|"+p.home_team+"|"+p.away_team;
+    if(key!==gameKey) return;
+
+    const disposals = Number(p.D);
+    const goals = Number(p.G);
+
+    if(disposals>=35 || goals>=5){
+      let tag=p.player;
+      if(goals>=5) tag+=` (${goals} goals)`;
+      else tag+=` (${disposals} disposals)`;
+      stars.push(tag);
+    }
+  });
+  return stars;
+}
+
 function renderMatches(){
   matchesDiv.innerHTML="";
   ladderDiv.innerHTML="";
@@ -184,10 +203,22 @@ function renderMatches(){
     seen.add(key);
 
     let text=`${canonicalRound(g.round)}: ${g.home_team} ${g.home_points} def ${g.away_team} ${g.away_points}`;
+
+    const stars=getStarsForMatch(key);
+    if(stars.length) text+=" — ⭐ "+stars.join(", ");
+
     const div=document.createElement("div");
     div.className="match";
 
     if(selectedTeam==="ALL" && i%2===1) div.classList.add("alt");
+
+    if(selectedTeam!=="ALL"){
+      if(g.home_points==g.away_points) div.classList.add("draw");
+      else if((g.home_team===selectedTeam && g.home_points>g.away_points) ||
+              (g.away_team===selectedTeam && g.away_points>g.home_points))
+        div.classList.add("win");
+      else div.classList.add("loss");
+    }
 
     div.textContent=text;
     matchesDiv.appendChild(div);
@@ -197,6 +228,7 @@ function renderMatches(){
 
 function buildLadder() {
   let ladder = {};
+  const seenMatches = new Set();
 
   currentData.forEach(g=>{
     const round = canonicalRound(g.round);
@@ -208,6 +240,10 @@ function buildLadder() {
       const sel = currentRound.match(/^Round\s*(\d+)/i);
       if (!sel || roundNum > parseInt(sel[1],10)) return;
     }
+
+    const key=g.season+"|"+round+"|"+g.home_team+"|"+g.away_team;
+    if(seenMatches.has(key)) return;
+    seenMatches.add(key);
 
     const home=g.home_team, away=g.away_team;
     const hp=+g.home_points, ap=+g.away_points;
