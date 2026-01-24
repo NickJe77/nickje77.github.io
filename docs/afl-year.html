@@ -37,21 +37,13 @@ th, td { padding:6px 10px; border:1px solid #ccc; text-align:center; }
 th { background:#f0f0f0; }
 td.team { text-align:left; font-weight:600; }
 
-/* Layout */
 .main-layout {
   display:flex;
   gap:30px;
   align-items:flex-start;
 }
-
-.ladder-wrap {
-  width:360px;
-  flex-shrink:0;
-}
-
-.results-wrap {
-  flex:1;
-}
+.ladder-wrap { width:360px; flex-shrink:0; }
+.results-wrap { flex:1; }
 </style>
 </head>
 
@@ -105,13 +97,13 @@ for (let y = startYear; y <= endYear; y++) {
 loadYear(startYear);
 
 function canonicalRound(r) {
-  const t = (r ?? "").toString().toLowerCase();
+  const t = (r ?? "").toLowerCase();
   if (t.includes("elimination")) return "Elimination Final";
   if (t.includes("qualifying")) return "Qualifying Final";
   if (t.includes("semi")) return "Semi Final";
   if (t.includes("preliminary")) return "Preliminary Final";
   if (t.includes("grand")) return "Grand Final";
-  return (r ?? "").toString().trim();
+  return (r ?? "").trim();
 }
 
 function loadYear(year) {
@@ -211,10 +203,7 @@ function renderMatches(){
     rows=rows.filter(r=>canonicalRound(r.round)===currentRound);
   }
 
-  // Only show ladder if NOT finals
-  if (!finalsRounds.includes(currentRound)) {
-    buildLadder();
-  }
+  if (!finalsRounds.includes(currentRound)) buildLadder();
 
   const seen=new Set();
   let i=0;
@@ -224,10 +213,17 @@ function renderMatches(){
     if(seen.has(key)) return;
     seen.add(key);
 
-    let text=`${canonicalRound(g.round)}: ${g.home_team} ${g.home_points} def ${g.away_team} ${g.away_points}`;
+    let line="";
+    if(g.home_points > g.away_points){
+      line = `${canonicalRound(g.round)}: ${g.home_team} ${g.home_points} def ${g.away_team} ${g.away_points}`;
+    } else if(g.away_points > g.home_points){
+      line = `${canonicalRound(g.round)}: ${g.away_team} ${g.away_points} def ${g.home_team} ${g.home_points}`;
+    } else {
+      line = `${canonicalRound(g.round)}: ${g.home_team} ${g.home_points} drew ${g.away_team} ${g.away_points}`;
+    }
 
     const stars=getStarsForMatch(key);
-    if(stars.length) text+=" — ⭐ "+stars.join(", ");
+    if(stars.length) line+=" — ⭐ "+stars.join(", ");
 
     const div=document.createElement("div");
     div.className="match";
@@ -242,7 +238,7 @@ function renderMatches(){
       else div.classList.add("loss");
     }
 
-    div.textContent=text;
+    div.textContent=line;
     matchesDiv.appendChild(div);
     i++;
   });
@@ -257,10 +253,9 @@ function buildLadder() {
     const m = round.match(/^Round\s*(\d+)/i);
     if (!m) return;
 
-    const roundNum = parseInt(m[1],10);
     if (currentRound !== "ALL") {
       const sel = currentRound.match(/^Round\s*(\d+)/i);
-      if (!sel || roundNum > parseInt(sel[1],10)) return;
+      if (!sel || parseInt(m[1]) > parseInt(sel[1])) return;
     }
 
     const key=g.season+"|"+round+"|"+g.home_team+"|"+g.away_team;
@@ -302,7 +297,6 @@ function buildLadder() {
     </tr>`;
   });
   html+="</table>";
-
   ladderDiv.innerHTML=html;
 }
 </script>
