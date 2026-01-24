@@ -158,24 +158,70 @@ Search a player and an opponent to view performance comparisons.
 </div>
 
 <script>
-const pInput=document.getElementById("playerSearch");
-const oInput=document.getElementById("opponentSearch");
+const pInput = document.getElementById("playerSearch");
+const oInput = document.getElementById("opponentSearch");
 
-pInput.addEventListener("change",updateDemo);
-oInput.addEventListener("change",updateDemo);
+let allData = [];
 
-function updateDemo(){
-  if(pInput.value && oInput.value){
-    document.getElementById("pBestDisp").innerText="42 vs "+oInput.value;
-    document.getElementById("pBestGoals").innerText="7 vs "+oInput.value;
-    document.getElementById("pAvgDisp").innerText="27.4";
-    document.getElementById("pAvgGoals").innerText="1.9";
+/* LOAD ALL SEASONS */
+async function loadAllSeasons(){
+  const startYear = 1990;
+  const endYear = new Date().getFullYear();
 
-    document.getElementById("oBestDisp").innerText="38 by "+pInput.value;
-    document.getElementById("oBestGoals").innerText="6 by "+pInput.value;
-    document.getElementById("oAvgDisp").innerText="25.1";
-    document.getElementById("oAvgGoals").innerText="1.6";
+  for(let y=startYear; y<=endYear; y++){
+    try{
+      const res = await fetch(`/data/afl/afl_${y}.json`);
+      if(res.ok){
+        const seasonData = await res.json();
+        allData = allData.concat(seasonData);
+      }
+    }catch(e){}
   }
+}
+
+loadAllSeasons();
+
+pInput.addEventListener("change",updateStats);
+oInput.addEventListener("change",updateStats);
+
+function updateStats(){
+  const player = pInput.value.trim();
+  const opponent = oInput.value.trim();
+
+  if(!player || !opponent || allData.length === 0) return;
+
+  const playerGames = allData.filter(r =>
+    r.player === player &&
+    r.played_against === opponent
+  );
+
+  const opponentGames = allData.filter(r =>
+    r.player === player &&
+    r.played_for === opponent
+  );
+
+  updateBlock(playerGames, "p");
+  updateBlock(opponentGames, "o");
+}
+
+function updateBlock(rows, prefix){
+  if(rows.length === 0){
+    document.getElementById(prefix+"BestDisp").innerText = "—";
+    document.getElementById(prefix+"BestGoals").innerText = "—";
+    document.getElementById(prefix+"AvgDisp").innerText = "—";
+    document.getElementById(prefix+"AvgGoals").innerText = "—";
+    return;
+  }
+
+  const bestDisp = Math.max(...rows.map(r=>Number(r.D)||0));
+  const bestGoals = Math.max(...rows.map(r=>Number(r.G)||0));
+  const avgDisp = (rows.reduce((s,r)=>s+(Number(r.D)||0),0)/rows.length).toFixed(1);
+  const avgGoals = (rows.reduce((s,r)=>s+(Number(r.G)||0),0)/rows.length).toFixed(2);
+
+  document.getElementById(prefix+"BestDisp").innerText = bestDisp;
+  document.getElementById(prefix+"BestGoals").innerText = bestGoals;
+  document.getElementById(prefix+"AvgDisp").innerText = avgDisp;
+  document.getElementById(prefix+"AvgGoals").innerText = avgGoals;
 }
 </script>
 
