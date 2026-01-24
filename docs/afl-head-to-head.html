@@ -136,59 +136,41 @@ th{background:#f4f6f8;}
 </div>
 
 <script>
-let data = [];
+let allData = [];
 
-/* CHANGE THIS PATH IF NEEDED */
-const DATA_FILE = "afl_all_in_one.csv";
+async function loadAllSeasons(){
+  const startYear = 1990;
+  const endYear = new Date().getFullYear();
+  const teams = new Set();
 
-fetch(DATA_FILE)
-.then(r=>{
-  if(!r.ok) throw new Error("CSV not found");
-  return r.text();
-})
-.then(text=>{
-  const lines=text.trim().split("\n");
-  const headers=lines[0].split(",");
-  const rows=lines.slice(1);
+  for(let y=startYear; y<=endYear; y++){
+    try{
+      const res = await fetch(`data/afl/afl_${y}.json`);
+      if(!res.ok) continue;
+      const seasonData = await res.json();
 
-  rows.forEach(l=>{
-    const parts=l.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
-    let obj={};
-    headers.forEach((h,i)=>obj[h]=parts[i]?.replace(/^"|"$/g,""));
-    data.push(obj);
-  });
-
-  populateTeams();
-  document.getElementById("results").innerHTML =
-    "<div class='placeholder'>Select two teams and click Compare.</div>";
-})
-.catch(err=>{
-  document.getElementById("results").innerHTML =
-    "<b style='color:red'>ERROR: Could not load afl_all_in_one.csv</b><br>" +
-    "Make sure this file is in the same folder as this HTML page.";
-});
-
-function populateTeams(){
-  const teams=new Set();
-  data.forEach(r=>{
-    if(r.Team1) teams.add(r.Team1);
-    if(r.Team2) teams.add(r.Team2);
-  });
+      seasonData.forEach(r=>{
+        allData.push(r);
+        if(r.Team1) teams.add(r.Team1);
+        if(r.Team2) teams.add(r.Team2);
+      });
+    }catch(e){}
+  }
 
   const sorted=[...teams].sort();
   const t1=document.getElementById("team1");
   const t2=document.getElementById("team2");
 
   sorted.forEach(t=>{
-    const o1=document.createElement("option");
-    o1.value=t; o1.textContent=t;
-    t1.appendChild(o1);
-
-    const o2=document.createElement("option");
-    o2.value=t; o2.textContent=t;
-    t2.appendChild(o2);
+    t1.innerHTML+=`<option>${t}</option>`;
+    t2.innerHTML+=`<option>${t}</option>`;
   });
+
+  document.getElementById("results").innerHTML =
+    "<div class='placeholder'>Select two teams and click Compare.</div>";
 }
+
+loadAllSeasons();
 
 function compare(){
   const a=document.getElementById("team1").value;
@@ -205,7 +187,7 @@ function compare(){
     return;
   }
 
-  const games=data.filter(r=>
+  let games = allData.filter(r=>
     (r.Team1===a && r.Team2===b) ||
     (r.Team1===b && r.Team2===a)
   );
@@ -215,7 +197,82 @@ function compare(){
     return;
   }
 
-  box.innerHTML = `<h3>${a} vs ${b}</h3><p>${games.length} games found.</p>`;
+  games.sort((x,y)=>{
+    if(y.Season!==x.Season) return y.Season-x.Season;
+    return y.Round-x.Round;
+  });
+
+  let aWins=0,bWins=0,draws=0;
+
+  games.forEach(g=>{
+    const s1=+g.Team1Score;
+    const s2=+g.Team2Score;
+
+    if(s1===s2) draws++;
+    else if((g.Team1===a && s1>s2) || (g.Team2===a && s2>s1)) aWins++;
+    else bWins++;
+  });
+
+  const last10 = games.slice(0,10);
+  let last10Results=[];
+  let aPts10=0,bPts10=0;
+
+  last10.forEach(g=>{
+    const s1=+g.Team1Score;
+    const s2=+g.Team2Score;
+
+    if(g.Team1===a){
+      aPts10+=s1; bPts10+=s2;
+      if(s1>s2) last10Results.push("W");
+      else if(s1<s2) last10Results.push("L");
+      else last10Results.push("D");
+    } else {
+      aPts10+=s2; bPts10+=s1;
+      if(s2>s1) last10Results.push("W");
+      else if(s2<s1) last10Results.push("L");
+      else last10Results.push("D");
+    }
+  });
+
+  let html=`
+  <h3>${a} vs ${b}</h3>
+  <p>
+    Games: ${games.length} |
+    ${a} wins: ${aWins} |
+    Draws: ${draws} |
+    ${b} wins: ${bWins}
+  </p>
+  <p>
+    Last 10: ${last10Results.join(" ")} |
+    Points: ${aPts10} – ${bPts10}
+  </p>
+
+  <table>
+    <tr>
+      <th>Season</th>
+      <th>Round</th>
+      <th>Match</th>
+      <th>Venue</th>
+      <th>Score</th>
+      <th>Winner</th>
+    </tr>
+  `;
+
+  games.forEach(g=>{
+    html+=`
+      <tr>
+        <td>${g.Season}</td>
+        <td>${g.Round}</td>
+        <td>${g.Team1} (${g.Team1Pos}) v ${g.Team2} (${g.Team2Pos})</td>
+        <td>${g.Venue}</td>
+        <td>${g.Team1Score} - ${g.Team2Score}</td>
+        <td>${g.Winner}</td>
+      </tr>
+    `;
+  });
+
+  html+="</table>";
+  box.innerHTML=html;
 }
 </script>
 
