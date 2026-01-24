@@ -15,12 +15,17 @@ body {font-family:Inter,system-ui,Arial;margin:0;background:white;}
 h1{text-align:center;margin-bottom:20px;}
 
 .year-grid,.round-grid{
-  display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));
-  gap:10px;margin-bottom:20px;
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(80px,1fr));
+  gap:10px;
+  margin-bottom:20px;
 }
 .year-grid button,.round-grid button{
-  padding:10px;border:1px solid #ccc;background:#f4f4f4;
-  cursor:pointer;font-weight:600;
+  padding:10px;
+  border:1px solid #ccc;
+  background:#f4f4f4;
+  cursor:pointer;
+  font-weight:600;
 }
 .year-grid button:hover,.round-grid button:hover{background:#ddd;}
 
@@ -28,8 +33,12 @@ h1{text-align:center;margin-bottom:20px;}
 .team-select select{padding:8px 12px;font-size:16px;}
 
 .summary-box{
-  background:#f4f8ff;border:1px solid #cdd9f5;
-  padding:12px;margin-bottom:20px;text-align:center;font-weight:600;
+  background:#f4f8ff;
+  border:1px solid #cdd9f5;
+  padding:12px;
+  margin-bottom:20px;
+  text-align:center;
+  font-weight:600;
 }
 
 .match{border-bottom:1px solid #eee;padding:6px;font-size:15px;cursor:pointer;}
@@ -73,187 +82,255 @@ h1{text-align:center;margin-bottom:20px;}
 </div>
 
 <script>
-const startYear=1990,endYear=2025;
-const yearGrid=document.getElementById("yearGrid");
-const roundGrid=document.getElementById("roundGrid");
-const resultsDiv=document.getElementById("results");
-const ladderDiv=document.getElementById("ladder");
-const summaryDiv=document.getElementById("summary");
-const teamSelectDiv=document.getElementById("teamSelect");
-const teamDropdown=document.getElementById("teamDropdown");
+const startYear = 1990;
+const endYear = 2025;
 
-let allMatches=[],currentMatches=[],currentTeam="All";
+const yearGrid = document.getElementById("yearGrid");
+const roundGrid = document.getElementById("roundGrid");
+const resultsDiv = document.getElementById("results");
+const ladderDiv = document.getElementById("ladder");
+const summaryDiv = document.getElementById("summary");
+const teamSelectDiv = document.getElementById("teamSelect");
+const teamDropdown = document.getElementById("teamDropdown");
 
-for(let y=startYear;y<=endYear;y++){
-  const b=document.createElement("button");
-  b.textContent=y;b.onclick=()=>loadYear(y);
-  yearGrid.appendChild(b);
+let allMatches = [];
+let currentMatches = [];
+let currentTeam = "All";
+
+// Build year buttons
+for (let y = startYear; y <= endYear; y++) {
+  const btn = document.createElement("button");
+  btn.textContent = y;
+  btn.onclick = () => loadYear(y);
+  yearGrid.appendChild(btn);
 }
 
-function loadYear(year){
-  resultsDiv.innerHTML=`<h2>${year}</h2><p>Loading...</p>`;
-  ladderDiv.innerHTML="";summaryDiv.innerHTML="";
-  roundGrid.style.display="none";
-  teamSelectDiv.style.display="none";
-  teamDropdown.innerHTML=`<option value="All">All teams</option>`;
-  currentTeam="All";
+function loadYear(year) {
+  resultsDiv.innerHTML = `<h2>${year}</h2><p>Loading...</p>`;
+  ladderDiv.innerHTML = "";
+  summaryDiv.innerHTML = "";
+  roundGrid.style.display = "none";
+  teamSelectDiv.style.display = "none";
+  teamDropdown.innerHTML = `<option value="All">All teams</option>`;
+  currentTeam = "All";
 
   fetch(`data/afl/afl_${year}.json`)
-    .then(r=>r.json())
-    .then(rows=>{
-      const seen=new Set(),matches=[];
-      rows.forEach(r=>{
-        if(!r.round) return;
-        const key=[r.round,r.home_team,r.away_team,r.home_points,r.away_points].join("|");
-        if(!seen.has(key)){seen.add(key);matches.push(r);}
+    .then(r => r.json())
+    .then(rows => {
+      const seen = new Set();
+      const matches = [];
+
+      rows.forEach(r => {
+        if (!r.round) return;
+        const key = [r.round, r.home_team, r.away_team, r.home_points, r.away_points].join("|");
+        if (!seen.has(key)) {
+          seen.add(key);
+          matches.push(r);
+        }
       });
 
-      allMatches=matches;
-      currentMatches=matches;
+      allMatches = matches;
+      currentMatches = matches;
 
       buildTeamDropdown(matches);
       buildRoundButtons(matches);
-      showMatches(matches,"All");
-      buildLadder(matches);   // ladder now ignores finals
+      showMatches(matches, "All");
+      buildLadder(matches);
     });
 }
 
-function buildTeamDropdown(matches){
-  const teams=new Set();
-  matches.forEach(m=>{teams.add(m.home_team);teams.add(m.away_team);});
-  [...teams].sort().forEach(t=>{
-    const o=document.createElement("option");
-    o.value=t;o.textContent=t;
-    teamDropdown.appendChild(o);
+function buildTeamDropdown(matches) {
+  const teams = new Set();
+  matches.forEach(m => {
+    teams.add(m.home_team);
+    teams.add(m.away_team);
   });
-  teamSelectDiv.style.display="block";
-  teamDropdown.onchange=()=>{currentTeam=teamDropdown.value;filterMatches();};
+
+  [...teams].sort().forEach(team => {
+    const opt = document.createElement("option");
+    opt.value = team;
+    opt.textContent = team;
+    teamDropdown.appendChild(opt);
+  });
+
+  teamSelectDiv.style.display = "block";
+  teamDropdown.onchange = () => {
+    currentTeam = teamDropdown.value;
+    filterMatches();
+  };
 }
 
-function buildRoundButtons(matches){
-  const rounds=[...new Set(matches.map(m=>m.round))];
-  roundGrid.innerHTML="";roundGrid.style.display="grid";
+function buildRoundButtons(matches) {
+  const rounds = [...new Set(matches.map(m => m.round))];
 
-  const allBtn=document.createElement("button");
-  allBtn.textContent="All";
-  allBtn.onclick=()=>showMatches(currentMatches,"All");
+  // SORT ROUNDS CORRECTLY
+  rounds.sort((a, b) => roundOrder(a) - roundOrder(b));
+
+  roundGrid.innerHTML = "";
+  roundGrid.style.display = "grid";
+
+  const allBtn = document.createElement("button");
+  allBtn.textContent = "All";
+  allBtn.onclick = () => showMatches(currentMatches, "All");
   roundGrid.appendChild(allBtn);
 
-  rounds.forEach(r=>{
-    const b=document.createElement("button");
-    b.textContent=r;
-    b.onclick=()=>showMatches(currentMatches.filter(m=>m.round===r),r);
-    roundGrid.appendChild(b);
+  rounds.forEach(r => {
+    const btn = document.createElement("button");
+    btn.textContent = r;
+    btn.onclick = () => showMatches(
+      currentMatches.filter(m => m.round === r),
+      r
+    );
+    roundGrid.appendChild(btn);
   });
 }
 
-function filterMatches(){
-  currentMatches = currentTeam==="All"
+function filterMatches() {
+  currentMatches = currentTeam === "All"
     ? allMatches
-    : allMatches.filter(m=>m.home_team===currentTeam||m.away_team===currentTeam);
+    : allMatches.filter(m =>
+        m.home_team === currentTeam || m.away_team === currentTeam
+      );
 
   buildRoundButtons(currentMatches);
-  showMatches(currentMatches,"All");
+  showMatches(currentMatches, "All");
   buildSummary();
 }
 
-function roundOrder(r){
-  const finals=["Qualifying Final","Elimination Final","Semi Final","Preliminary Final","Grand Final"];
-  if(r.startsWith("Round")) return parseInt(r.replace("Round","").trim());
-  const i=finals.indexOf(r);
-  return i>-1?100+i:999;
+function roundOrder(r) {
+  const finals = [
+    "Qualifying Final",
+    "Elimination Final",
+    "Semi Final",
+    "Preliminary Final",
+    "Grand Final"
+  ];
+
+  if (r.startsWith("Round")) {
+    return parseInt(r.replace("Round", "").trim());
+  }
+
+  const i = finals.indexOf(r);
+  return i > -1 ? 100 + i : 999;
 }
 
-function showMatches(list,label){
-  list.sort((a,b)=>roundOrder(a.round)-roundOrder(b.round));
-  let html=`<h2>${label==="All"?"All Matches":label}</h2>`;
+function showMatches(list, label) {
+  list.sort((a, b) => roundOrder(a.round) - roundOrder(b.round));
 
-  list.forEach(m=>{
-    let cls="";
-    if(currentTeam!=="All"){
-      const isHome=m.home_team===currentTeam;
-      const t=isHome?m.home_points:m.away_points;
-      const o=isHome?m.away_points:m.home_points;
-      cls=t>o?"win":t<o?"loss":"draw";
+  let html = `<h2>${label === "All" ? "All Matches" : label}</h2>`;
+
+  list.forEach(m => {
+    let cls = "";
+
+    if (currentTeam !== "All") {
+      const isHome = m.home_team === currentTeam;
+      const teamScore = isHome ? m.home_points : m.away_points;
+      const oppScore = isHome ? m.away_points : m.home_points;
+
+      if (teamScore > oppScore) cls = "win";
+      else if (teamScore < oppScore) cls = "loss";
+      else cls = "draw";
     }
-    if(m.round==="Grand Final") cls+=" grandfinal";
 
-    html+=`
+    if (m.round === "Grand Final") cls += " grandfinal";
+
+    html += `
       <div class="match ${cls}">
         <strong>${m.round}</strong>
         ${m.home_team} ${m.home_points}
         vs
         ${m.away_team} ${m.away_points}
-      </div>`;
+      </div>
+    `;
   });
 
-  resultsDiv.innerHTML=html;
+  resultsDiv.innerHTML = html;
   buildSummary();
 }
 
-function buildSummary(){
-  if(currentTeam==="All"){summaryDiv.innerHTML="";return;}
+function buildSummary() {
+  if (currentTeam === "All") {
+    summaryDiv.innerHTML = "";
+    return;
+  }
 
-  let w=0,l=0,d=0,forPts=0,againstPts=0;
+  let w = 0, l = 0, d = 0, forPts = 0, againstPts = 0;
 
-  currentMatches.forEach(m=>{
-    const isHome=m.home_team===currentTeam;
-    const t=isHome?m.home_points:m.away_points;
-    const o=isHome?m.away_points:m.home_points;
+  currentMatches.forEach(m => {
+    const isHome = m.home_team === currentTeam;
+    const t = isHome ? m.home_points : m.away_points;
+    const o = isHome ? m.away_points : m.home_points;
 
-    forPts+=t;againstPts+=o;
-    if(t>o)w++; else if(t<o)l++; else d++;
+    forPts += t;
+    againstPts += o;
+
+    if (t > o) w++;
+    else if (t < o) l++;
+    else d++;
   });
 
-  const pct=((forPts/againstPts)*100).toFixed(1);
+  const pct = ((forPts / againstPts) * 100).toFixed(1);
 
-  summaryDiv.innerHTML=`
+  summaryDiv.innerHTML = `
     <div class="summary-box">
       ${currentTeam}: ${w}W ${l}L ${d}D — ${pct}%
-    </div>`;
+    </div>
+  `;
 }
 
-function buildLadder(matches){
-  const table={};
+function buildLadder(matches) {
+  const table = {};
 
-  // ONLY count home-and-away rounds
+  // ONLY home-and-away rounds
   const haMatches = matches.filter(m => m.round.startsWith("Round"));
 
-  haMatches.forEach(m=>{
-    if(!table[m.home_team]) table[m.home_team]={team:m.home_team,w:0,l:0,d:0,for:0,against:0};
-    if(!table[m.away_team]) table[m.away_team]={team:m.away_team,w:0,l:0,d:0,for:0,against:0};
+  haMatches.forEach(m => {
+    if (!table[m.home_team])
+      table[m.home_team] = { team: m.home_team, w: 0, l: 0, d: 0, for: 0, against: 0 };
+    if (!table[m.away_team])
+      table[m.away_team] = { team: m.away_team, w: 0, l: 0, d: 0, for: 0, against: 0 };
 
-    table[m.home_team].for+=m.home_points;
-    table[m.home_team].against+=m.away_points;
-    table[m.away_team].for+=m.away_points;
-    table[m.away_team].against+=m.home_points;
+    table[m.home_team].for += m.home_points;
+    table[m.home_team].against += m.away_points;
+    table[m.away_team].for += m.away_points;
+    table[m.away_team].against += m.home_points;
 
-    if(m.home_points>m.away_points){table[m.home_team].w++;table[m.away_team].l++;}
-    else if(m.home_points<m.away_points){table[m.away_team].w++;table[m.home_team].l++;}
-    else{table[m.home_team].d++;table[m.away_team].d++;}
+    if (m.home_points > m.away_points) {
+      table[m.home_team].w++;
+      table[m.away_team].l++;
+    } else if (m.home_points < m.away_points) {
+      table[m.away_team].w++;
+      table[m.home_team].l++;
+    } else {
+      table[m.home_team].d++;
+      table[m.away_team].d++;
+    }
   });
 
-  const ladder=Object.values(table).map(t=>{
-    return {...t,pct:((t.for/t.against)*100).toFixed(1)};
-  }).sort((a,b)=>b.w-a.w || b.pct-a.pct);
+  const ladder = Object.values(table).map(t => ({
+    ...t,
+    pct: ((t.for / t.against) * 100).toFixed(1)
+  })).sort((a, b) => b.w - a.w || b.pct - a.pct);
 
-  let html=`<h2>Ladder (after home-and-away season)</h2>
-  <table class="ladder">
-  <tr><th>Pos</th><th>Team</th><th>W</th><th>L</th><th>D</th><th>%</th></tr>`;
+  let html = `<h2>Ladder (after home-and-away season)</h2>
+    <table class="ladder">
+    <tr><th>Pos</th><th>Team</th><th>W</th><th>L</th><th>D</th><th>%</th></tr>`;
 
-  ladder.forEach((t,i)=>{
-    html+=`<tr>
-      <td>${i+1}</td>
-      <td>${t.team}</td>
-      <td>${t.w}</td>
-      <td>${t.l}</td>
-      <td>${t.d}</td>
-      <td>${t.pct}</td>
-    </tr>`;
+  ladder.forEach((t, i) => {
+    html += `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${t.team}</td>
+        <td>${t.w}</td>
+        <td>${t.l}</td>
+        <td>${t.d}</td>
+        <td>${t.pct}</td>
+      </tr>
+    `;
   });
 
-  html+=`</table>`;
-  ladderDiv.innerHTML=html;
+  html += `</table>`;
+  ladderDiv.innerHTML = html;
 }
 </script>
 
