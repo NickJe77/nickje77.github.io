@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AFL Best Individual Games | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="style.css">
+
+<style>
+body{
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin:0;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1000px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+h1{text-align:center;margin-bottom:10px;}
+p{text-align:center;color:#555;margin-bottom:25px;}
+
+select{
+  padding:10px 14px;
+  font-size:16px;
+  border-radius:8px;
+  margin-bottom:20px;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:left;
+}
+th{background:#f0f0f0;}
+.rank{width:50px;text-align:center;font-weight:700;}
+.stat{width:80px;text-align:center;font-weight:700;}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="f1.html">F1</a>
+</div>
+
+<div class="page-wrap">
+
+<h1>Best Individual Games (AFL Era)</h1>
+<p>Top 10 individual performances since 1990.</p>
+
+<div style="text-align:center;">
+  Show top 10 by:
+  <select id="statSelect">
+    <option value="G">Goals</option>
+    <option value="D">Disposals</option>
+    <option value="K">Kicks</option>
+    <option value="HB">Handballs</option>
+    <option value="M">Marks</option>
+    <option value="HO">Hit Outs</option>
+  </select>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th class="rank">#</th>
+      <th>Player</th>
+      <th>Team</th>
+      <th>Opponent</th>
+      <th>Season</th>
+      <th>Round</th>
+      <th class="stat">Stat</th>
+    </tr>
+  </thead>
+  <tbody id="tableBody"></tbody>
+</table>
+
+</div>
+
+<script>
+const statSelect = document.getElementById("statSelect");
+const tableBody = document.getElementById("tableBody");
+
+let allData = [];
+
+async function loadAllSeasons(){
+  const startYear = 1990;
+  const endYear = new Date().getFullYear();
+
+  for(let y=startYear; y<=endYear; y++){
+    try{
+      const res = await fetch(`data/afl/afl_${y}.json`);
+      if(!res.ok) continue;
+      const seasonData = await res.json();
+      seasonData.forEach(r=>{
+        allData.push(r);
+      });
+    }catch(e){}
+  }
+
+  updateTable();
+}
+
+loadAllSeasons();
+statSelect.onchange = updateTable;
+
+function updateTable(){
+  const stat = statSelect.value;
+
+  const rows = allData
+    .filter(r => Number(r[stat]) > 0)
+    .sort((a,b)=> Number(b[stat]) - Number(a[stat]))
+    .slice(0,10);
+
+  tableBody.innerHTML = "";
+
+  rows.forEach((r,i)=>{
+    const tr=document.createElement("tr");
+
+    tr.innerHTML = `
+      <td class="rank">${i+1}</td>
+      <td>${r.player}</td>
+      <td>${r.played_for}</td>
+      <td>${r.played_against}</td>
+      <td>${r.season}</td>
+      <td>${r.round}</td>
+      <td class="stat">${r[stat]}</td>
+    `;
+
+    tableBody.appendChild(tr);
+  });
+}
+</script>
+
+</body>
+</html>
