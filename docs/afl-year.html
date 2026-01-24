@@ -133,14 +133,20 @@ function buildTeamSelector(data) {
 function buildRoundButtons(data) {
   roundBar.innerHTML = "";
 
-  // Extract numeric round values (handles "Round 0", "0", etc)
-  const roundNums = new Set();
+  const numericRounds = new Set();
+  const nonNumericRounds = new Set();
+
   data.forEach(g => {
-    const num = parseInt(g.round.toString().replace(/\D/g, ""));
-    if (!isNaN(num)) roundNums.add(num);
+    const match = g.round.toString().match(/\d+/);
+    if (match) {
+      numericRounds.add(parseInt(match[0]));
+    } else {
+      nonNumericRounds.add(g.round);
+    }
   });
 
-  const sortedRounds = [...roundNums].sort((a, b) => a - b);
+  const sortedNumeric = [...numericRounds].sort((a, b) => a - b);
+  const sortedNonNumeric = [...nonNumericRounds];
 
   // ALL button
   const allBtn = document.createElement("button");
@@ -153,13 +159,26 @@ function buildRoundButtons(data) {
   };
   roundBar.appendChild(allBtn);
 
-  // Round buttons (numerical, starting at 0 if present)
-  sortedRounds.forEach(num => {
+  // numeric round buttons (0,1,2,...)
+  sortedNumeric.forEach(num => {
     const btn = document.createElement("button");
     btn.textContent = num;
     btn.className = "round-btn";
     btn.onclick = () => {
       currentRound = num;
+      setActiveRound(btn);
+      renderMatches();
+    };
+    roundBar.appendChild(btn);
+  });
+
+  // finals & special rounds (kept, not deleted)
+  sortedNonNumeric.forEach(r => {
+    const btn = document.createElement("button");
+    btn.textContent = r;
+    btn.className = "round-btn";
+    btn.onclick = () => {
+      currentRound = r;
       setActiveRound(btn);
       renderMatches();
     };
@@ -187,8 +206,12 @@ function renderMatches() {
 
   if (currentRound !== "ALL") {
     filtered = filtered.filter(g => {
-      const num = parseInt(g.round.toString().replace(/\D/g, ""));
-      return num === currentRound;
+      const match = g.round.toString().match(/\d+/);
+      if (typeof currentRound === "number") {
+        return match && parseInt(match[0]) === currentRound;
+      } else {
+        return g.round === currentRound;
+      }
     });
   }
 
