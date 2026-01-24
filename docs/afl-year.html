@@ -13,32 +13,93 @@ body {
   margin: 0;
   background: white;
 }
+
 .navbar {
-  display:flex;justify-content:center;gap:22px;
-  padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
 }
-.navbar a {color:#0056d6;text-decoration:none;font-size:18px;}
-.page-wrap {max-width:1200px;margin:0 auto;padding:20px;}
-h1{text-align:center;margin-bottom:20px;}
+
+.navbar a {
+  color:#0056d6;
+  text-decoration:none;
+  font-size:18px;
+}
+
+.page-wrap {
+  max-width:1200px;
+  margin:0 auto;
+  padding:20px;
+}
+
+h1 { text-align:center; margin-bottom:20px; }
 
 .year-grid,.round-grid{
-  display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));
-  gap:10px;margin-bottom:20px;
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(80px,1fr));
+  gap:10px;
+  margin-bottom:20px;
 }
-.year-grid button,.round-grid button{
-  padding:10px;border:1px solid #ccc;background:#f4f4f4;
-  cursor:pointer;font-weight:600;
-}
-.year-grid button:hover,.round-grid button:hover{background:#ddd;}
 
-.team-select{text-align:center;margin-bottom:20px;}
+.year-grid button,.round-grid button{
+  padding:10px;
+  border:1px solid #ccc;
+  background:#f4f4f4;
+  cursor:pointer;
+  font-weight:600;
+}
+
+.year-grid button:hover,.round-grid button:hover{
+  background:#ddd;
+}
+
+.team-select{text-align:center;margin-bottom:15px;}
 .team-select select{padding:8px 12px;font-size:16px;}
 
-.match{border-bottom:1px solid #eee;padding:6px 0;font-size:15px;}
+.summary-box{
+  background:#f4f8ff;
+  border:1px solid #cdd9f5;
+  padding:12px;
+  margin-bottom:20px;
+  text-align:center;
+  font-weight:600;
+}
+
+.match{
+  border-bottom:1px solid #eee;
+  padding:6px;
+  font-size:15px;
+  cursor:pointer;
+}
+
 .match.win{background:#e6f6ea;}
 .match.loss{background:#fdeaea;}
 .match.draw{background:#ffffff;}
+.match.grandfinal{
+  border:2px solid gold;
+  background:#fffbe6;
+  font-weight:700;
+}
+
 .match strong{display:inline-block;width:120px;}
+
+.ladder{
+  margin-top:25px;
+  border-collapse:collapse;
+  width:100%;
+  font-size:14px;
+}
+
+.ladder th,.ladder td{
+  border:1px solid #ccc;
+  padding:6px;
+  text-align:center;
+}
+
+.ladder th{background:#f0f0f0;}
 </style>
 </head>
 
@@ -62,15 +123,21 @@ h1{text-align:center;margin-bottom:20px;}
   </select>
 </div>
 
+<div id="summary"></div>
+
 <div class="round-grid" id="roundGrid" style="display:none;"></div>
 <div id="results"></div>
+<div id="ladder"></div>
 </div>
 
 <script>
 const startYear=1990,endYear=2025;
+
 const yearGrid=document.getElementById("yearGrid");
 const roundGrid=document.getElementById("roundGrid");
 const resultsDiv=document.getElementById("results");
+const ladderDiv=document.getElementById("ladder");
+const summaryDiv=document.getElementById("summary");
 const teamSelectDiv=document.getElementById("teamSelect");
 const teamDropdown=document.getElementById("teamDropdown");
 
@@ -78,13 +145,16 @@ let allMatches=[],currentMatches=[],currentTeam="All";
 
 for(let y=startYear;y<=endYear;y++){
   const b=document.createElement("button");
-  b.textContent=y;b.onclick=()=>loadYear(y);
+  b.textContent=y;
+  b.onclick=()=>loadYear(y);
   yearGrid.appendChild(b);
 }
 
 function loadYear(year){
   resultsDiv.innerHTML=`<h2>${year}</h2><p>Loading...</p>`;
-  roundGrid.style.display="none";roundGrid.innerHTML="";
+  ladderDiv.innerHTML="";
+  summaryDiv.innerHTML="";
+  roundGrid.style.display="none";
   teamSelectDiv.style.display="none";
   teamDropdown.innerHTML=`<option value="All">All teams</option>`;
   currentTeam="All";
@@ -94,7 +164,7 @@ function loadYear(year){
     .then(rows=>{
       const seen=new Set(),matches=[];
       rows.forEach(r=>{
-        if(!r.round) return; // remove null rounds
+        if(!r.round) return;
         const key=[r.round,r.home_team,r.away_team,r.home_points,r.away_points].join("|");
         if(!seen.has(key)){seen.add(key);matches.push(r);}
       });
@@ -105,6 +175,7 @@ function loadYear(year){
       buildTeamDropdown(matches);
       buildRoundButtons(matches);
       showMatches(matches,"All");
+      buildLadder(matches);
     });
 }
 
@@ -122,10 +193,14 @@ function buildTeamDropdown(matches){
 
 function buildRoundButtons(matches){
   const rounds=[...new Set(matches.map(m=>m.round))];
-  roundGrid.innerHTML="";roundGrid.style.display="grid";
+  roundGrid.innerHTML="";
+  roundGrid.style.display="grid";
+
   const allBtn=document.createElement("button");
-  allBtn.textContent="All";allBtn.onclick=()=>showMatches(currentMatches,"All");
+  allBtn.textContent="All";
+  allBtn.onclick=()=>showMatches(currentMatches,"All");
   roundGrid.appendChild(allBtn);
+
   rounds.forEach(r=>{
     const b=document.createElement("button");
     b.textContent=r;
@@ -135,42 +210,101 @@ function buildRoundButtons(matches){
 }
 
 function filterMatches(){
-  currentMatches = currentTeam==="All" ? allMatches :
-    allMatches.filter(m=>m.home_team===currentTeam||m.away_team===currentTeam);
+  currentMatches = currentTeam==="All"
+    ? allMatches
+    : allMatches.filter(m=>m.home_team===currentTeam||m.away_team===currentTeam);
+
   buildRoundButtons(currentMatches);
   showMatches(currentMatches,"All");
+  buildSummary();
 }
 
 function roundOrder(r){
   const finals=["Qualifying Final","Elimination Final","Semi Final","Preliminary Final","Grand Final"];
-  if(r.startsWith("Round")){
-    return parseInt(r.replace("Round","").trim());
-  }
+  if(r.startsWith("Round")) return parseInt(r.replace("Round","").trim());
   const i=finals.indexOf(r);
-  return i>-1 ? 100+i : 999;
+  return i>-1?100+i:999;
 }
 
 function showMatches(list,label){
   list.sort((a,b)=>roundOrder(a.round)-roundOrder(b.round));
-
   let html=`<h2>${label==="All"?"All Matches":label}</h2>`;
+
   list.forEach(m=>{
     let cls="";
     if(currentTeam!=="All"){
       const isHome=m.home_team===currentTeam;
       const t=isHome?m.home_points:m.away_points;
       const o=isHome?m.away_points:m.home_points;
-      cls = t>o?"win":t<o?"loss":"draw";
+      cls=t>o?"win":t<o?"loss":"draw";
     }
+    if(m.round==="Grand Final") cls+=" grandfinal";
+
     html+=`
-      <div class="match ${cls}">
+      <div class="match ${cls}" onclick="alert('Hook this to player stats page later')">
         <strong>${m.round}</strong>
         ${m.home_team} ${m.home_points}
         vs
         ${m.away_team} ${m.away_points}
       </div>`;
   });
+
   resultsDiv.innerHTML=html;
+  buildSummary();
+}
+
+function buildSummary(){
+  if(currentTeam==="All"){summaryDiv.innerHTML="";return;}
+
+  let w=0,l=0,d=0,forPts=0,againstPts=0;
+
+  currentMatches.forEach(m=>{
+    const isHome=m.home_team===currentTeam;
+    const t=isHome?m.home_points:m.away_points;
+    const o=isHome?m.away_points:m.home_points;
+
+    forPts+=t;againstPts+=o;
+    if(t>o)w++; else if(t<o)l++; else d++;
+  });
+
+  const pct=((forPts/againstPts)*100).toFixed(1);
+
+  summaryDiv.innerHTML=`
+    <div class="summary-box">
+      ${currentTeam}: ${w}W ${l}L ${d}D — ${pct}%
+    </div>`;
+}
+
+function buildLadder(matches){
+  const table={};
+
+  matches.forEach(m=>{
+    if(!table[m.home_team]) table[m.home_team]={team:m.home_team,w:0,l:0,d:0,for:0,against:0};
+    if(!table[m.away_team]) table[m.away_team]={team:m.away_team,w:0,l:0,d:0,for:0,against:0};
+
+    table[m.home_team].for+=m.home_points;
+    table[m.home_team].against+=m.away_points;
+    table[m.away_team].for+=m.away_points;
+    table[m.away_team].against+=m.home_points;
+
+    if(m.home_points>m.away_points){table[m.home_team].w++;table[m.away_team].l++;}
+    else if(m.home_points<m.away_points){table[m.away_team].w++;table[m.home_team].l++;}
+    else{table[m.home_team].d++;table[m.away_team].d++;}
+  });
+
+  const ladder=Object.values(table).map(t=>{
+    return {...t,pct:((t.for/t.against)*100).toFixed(1)};
+  }).sort((a,b)=>b.w-a.w || b.pct-a.pct);
+
+  let html=`<h2>Ladder</h2><table class="ladder">
+  <tr><th>Pos</th><th>Team</th><th>W</th><th>L</th><th>D</th><th>%</th></tr>`;
+
+  ladder.forEach((t,i)=>{
+    html+=`<tr><td>${i+1}</td><td>${t.team}</td><td>${t.w}</td><td>${t.l}</td><td>${t.d}</td><td>${t.pct}</td></tr>`;
+  });
+
+  html+=`</table>`;
+  ladderDiv.innerHTML=html;
 }
 </script>
 
