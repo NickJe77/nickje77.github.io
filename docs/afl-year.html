@@ -10,19 +10,43 @@ body {
   margin: 20px;
 }
 
+.year-bar {
+  margin-bottom: 15px;
+}
+
+.year-btn {
+  margin: 3px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  background: #ddd;
+  cursor: pointer;
+}
+
+.year-btn.active {
+  background: #333;
+  color: #fff;
+}
+
 select {
   padding: 6px;
   font-size: 16px;
+  margin-bottom: 15px;
+}
+
+.round {
+  margin-top: 15px;
+  font-weight: bold;
 }
 
 .match {
-  margin-bottom: 8px;
+  margin-left: 15px;
+  margin-bottom: 5px;
 }
 
 .star {
   font-size: 18px;
   letter-spacing: 2px;
-  color: #000;
   font-weight: 700;
 }
 </style>
@@ -30,9 +54,13 @@ select {
 
 <body>
 
-<h1>AFL By Season</h1>
+<h1>AFL Season</h1>
 
-<select id="yearSelect"></select>
+<div id="yearBar" class="year-bar"></div>
+
+<select id="teamSelect">
+  <option value="ALL">All teams</option>
+</select>
 
 <div id="matches"></div>
 
@@ -40,46 +68,90 @@ select {
 const startYear = 1990;
 const endYear = new Date().getFullYear();
 
-const select = document.getElementById("yearSelect");
+const yearBar = document.getElementById("yearBar");
+const teamSelect = document.getElementById("teamSelect");
 const matchesDiv = document.getElementById("matches");
 
+let currentData = [];
+let currentYear = startYear;
+
+// build year buttons
 for (let y = startYear; y <= endYear; y++) {
-  const opt = document.createElement("option");
-  opt.value = y;
-  opt.textContent = y;
-  select.appendChild(opt);
+  const btn = document.createElement("button");
+  btn.textContent = y;
+  btn.className = "year-btn";
+  btn.onclick = () => loadYear(y);
+  yearBar.appendChild(btn);
 }
 
-select.value = startYear;
+// load first year
 loadYear(startYear);
 
-select.addEventListener("change", () => {
-  loadYear(select.value);
-});
-
 function loadYear(year) {
+  currentYear = year;
+  document.querySelectorAll(".year-btn").forEach(b => b.classList.remove("active"));
+  [...yearBar.children].find(b => b.textContent == year).classList.add("active");
+
   fetch(`data/afl/afl_${year}.json`)
-    .then(res => {
-      if (!res.ok) throw new Error("No file");
-      return res.json();
+    .then(res => res.json())
+    .then(data => {
+      currentData = data;
+      buildTeamSelector(data);
+      renderMatches();
     })
-    .then(data => renderMatches(data))
     .catch(() => {
       matchesDiv.innerHTML = "<p>No data for this year.</p>";
     });
 }
 
-function renderMatches(data) {
+function buildTeamSelector(data) {
+  const teams = new Set();
+
+  data.forEach(g => {
+    teams.add(g.home);
+    teams.add(g.away);
+  });
+
+  teamSelect.innerHTML = `<option value="ALL">All teams</option>`;
+
+  [...teams].sort().forEach(t => {
+    const opt = document.createElement("option");
+    opt.value = t;
+    opt.textContent = t;
+    teamSelect.appendChild(opt);
+  });
+}
+
+teamSelect.addEventListener("change", renderMatches);
+
+function renderMatches() {
   matchesDiv.innerHTML = "";
 
-  data.forEach(game => {
+  let filtered = currentData;
+
+  if (teamSelect.value !== "ALL") {
+    filtered = currentData.filter(g =>
+      g.home === teamSelect.value || g.away === teamSelect.value
+    );
+  }
+
+  let lastRound = "";
+
+  filtered.forEach(game => {
+    if (game.round !== lastRound) {
+      const roundDiv = document.createElement("div");
+      roundDiv.className = "round";
+      roundDiv.textContent = game.round;
+      matchesDiv.appendChild(roundDiv);
+      lastRound = game.round;
+    }
+
     const div = document.createElement("div");
     div.className = "match";
 
     const stars = game.stars || "";
 
     div.innerHTML = `
-      <strong>${game.round}</strong> – 
       ${game.home} ${game.home_score} def ${game.away} ${game.away_score}
       <span class="star">${stars}</span>
     `;
