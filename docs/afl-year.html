@@ -5,14 +5,8 @@
 <title>AFL Season</title>
 
 <style>
-body {
-  font-family: system-ui, Arial, sans-serif;
-  margin: 20px;
-}
-
-.year-bar, .round-bar {
-  margin-bottom: 15px;
-}
+body { font-family: system-ui, Arial, sans-serif; margin: 20px; }
+.year-bar, .round-bar { margin-bottom: 15px; }
 
 .year-btn, .round-btn {
   margin: 4px;
@@ -23,34 +17,17 @@ body {
   cursor: pointer;
   font-size: 15px;
 }
+.year-btn.active, .round-btn.active { background: #333; color: #fff; }
 
-.year-btn.active, .round-btn.active {
-  background: #333;
-  color: #fff;
-}
+select { padding: 6px; font-size: 16px; margin-bottom: 15px; display: block; }
 
-select {
-  padding: 6px;
-  font-size: 16px;
-  margin-bottom: 15px;
-  display: block;
-}
+.match { margin-left: 15px; margin-bottom: 5px; }
 
-.match {
-  margin-left: 15px;
-  margin-bottom: 5px;
-}
-
-.star {
-  font-size: 18px;
-  letter-spacing: 2px;
-  font-weight: 700;
-}
+.star { font-size: 18px; letter-spacing: 2px; font-weight: 700; }
 </style>
 </head>
 
 <body>
-
 <h1>AFL Season</h1>
 
 <div id="yearBar" class="year-bar"></div>
@@ -107,10 +84,7 @@ function loadYear(year) {
 
 function buildTeamSelector(data) {
   const teams = new Set();
-  data.forEach(g => {
-    teams.add(g.home_team);
-    teams.add(g.away_team);
-  });
+  data.forEach(g => { teams.add(g.home_team); teams.add(g.away_team); });
 
   teamSelect.innerHTML = `<option value="ALL">All teams</option>`;
   [...teams].sort().forEach(t => {
@@ -128,8 +102,8 @@ function buildRoundButtons(data) {
   const nonNumericRounds = new Set();
 
   data.forEach(g => {
-    const match = g.round.toString().match(/\d+/);
-    if (match) numericRounds.add(parseInt(match[0]));
+    const m = g.round.toString().match(/\d+/);
+    if (m) numericRounds.add(parseInt(m[0]));
     else nonNumericRounds.add(g.round);
   });
 
@@ -139,22 +113,14 @@ function buildRoundButtons(data) {
   const allBtn = document.createElement("button");
   allBtn.textContent = "All Rounds";
   allBtn.className = "round-btn active";
-  allBtn.onclick = () => {
-    currentRound = "ALL";
-    setActiveRound(allBtn);
-    renderMatches();
-  };
+  allBtn.onclick = () => { currentRound = "ALL"; setActiveRound(allBtn); renderMatches(); };
   roundBar.appendChild(allBtn);
 
   sortedNumeric.forEach(num => {
     const btn = document.createElement("button");
     btn.textContent = num;
     btn.className = "round-btn";
-    btn.onclick = () => {
-      currentRound = num;
-      setActiveRound(btn);
-      renderMatches();
-    };
+    btn.onclick = () => { currentRound = num; setActiveRound(btn); renderMatches(); };
     roundBar.appendChild(btn);
   });
 
@@ -162,11 +128,7 @@ function buildRoundButtons(data) {
     const btn = document.createElement("button");
     btn.textContent = r;
     btn.className = "round-btn";
-    btn.onclick = () => {
-      currentRound = r;
-      setActiveRound(btn);
-      renderMatches();
-    };
+    btn.onclick = () => { currentRound = r; setActiveRound(btn); renderMatches(); };
     roundBar.appendChild(btn);
   });
 }
@@ -184,45 +146,50 @@ function renderMatches() {
   let filtered = currentData;
 
   if (teamSelect.value !== "ALL") {
-    filtered = filtered.filter(g =>
-      g.home_team === teamSelect.value || g.away_team === teamSelect.value
-    );
+    filtered = filtered.filter(g => g.home_team === teamSelect.value || g.away_team === teamSelect.value);
   }
 
   if (currentRound !== "ALL") {
     filtered = filtered.filter(g => {
-      const match = g.round.toString().match(/\d+/);
-      if (typeof currentRound === "number") {
-        return match && parseInt(match[0]) === currentRound;
-      } else {
-        return g.round === currentRound;
-      }
+      const m = g.round.toString().match(/\d+/);
+      if (typeof currentRound === "number") return m && parseInt(m[0]) === currentRound;
+      return g.round === currentRound;
     });
   }
 
-  // 🔑 DEDUPE BY MATCH_ID
+  // ✅ DEDUPE BY A STRONG MATCH KEY (prevents match_id collisions wiping data)
   const matchMap = new Map();
   filtered.forEach(g => {
-    if (!matchMap.has(g.match_id)) {
-      matchMap.set(g.match_id, g);
-    }
+    const key = [
+      g.season ?? "",
+      g.match_id ?? "",
+      g.round ?? "",
+      g.home_team ?? "",
+      g.away_team ?? "",
+      g.home_points ?? "",
+      g.away_points ?? ""
+    ].join("|");
+
+    if (!matchMap.has(key)) matchMap.set(key, g);
   });
 
   const uniqueMatches = [...matchMap.values()];
 
+  if (uniqueMatches.length === 0) {
+    matchesDiv.innerHTML = "<p>No matches found for this filter.</p>";
+    return;
+  }
+
   uniqueMatches.forEach(game => {
     const div = document.createElement("div");
     div.className = "match";
-
     div.innerHTML = `
-      ${game.round}: 
+      ${game.round}:
       ${game.home_team} ${game.home_points} def ${game.away_team} ${game.away_points}
     `;
-
     matchesDiv.appendChild(div);
   });
 }
 </script>
-
 </body>
 </html>
