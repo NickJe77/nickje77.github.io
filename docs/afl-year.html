@@ -59,6 +59,16 @@ h1 {
   background: #ddd;
 }
 
+.team-select {
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.team-select select {
+  padding: 8px 12px;
+  font-size: 16px;
+}
+
 .match {
   border-bottom: 1px solid #eee;
   padding: 6px 0;
@@ -84,6 +94,14 @@ h1 {
 <h1>AFL Results by Year</h1>
 
 <div class="year-grid" id="yearGrid"></div>
+
+<div class="team-select" id="teamSelect" style="display:none;">
+  <label for="teamDropdown"><strong>Team:</strong></label>
+  <select id="teamDropdown">
+    <option value="All">All teams</option>
+  </select>
+</div>
+
 <div class="round-grid" id="roundGrid" style="display:none;"></div>
 <div id="results"></div>
 </div>
@@ -95,8 +113,12 @@ const endYear = 2025;
 const yearGrid = document.getElementById("yearGrid");
 const roundGrid = document.getElementById("roundGrid");
 const resultsDiv = document.getElementById("results");
+const teamSelectDiv = document.getElementById("teamSelect");
+const teamDropdown = document.getElementById("teamDropdown");
 
+let allMatches = [];
 let currentMatches = [];
+let currentTeam = "All";
 
 // build year buttons
 for (let y = startYear; y <= endYear; y++) {
@@ -110,6 +132,9 @@ function loadYear(year) {
   resultsDiv.innerHTML = `<h2>${year}</h2><p>Loading...</p>`;
   roundGrid.style.display = "none";
   roundGrid.innerHTML = "";
+  teamSelectDiv.style.display = "none";
+  teamDropdown.innerHTML = `<option value="All">All teams</option>`;
+  currentTeam = "All";
 
   fetch(`data/afl/afl_${year}.json`)
     .then(r => r.json())
@@ -134,15 +159,42 @@ function loadYear(year) {
         }
       });
 
+      allMatches = matches;
       currentMatches = matches;
 
+      buildTeamDropdown(matches);
       buildRoundButtons(matches);
-      showRound("All");
+      showMatches(matches, "All");
     })
     .catch(err => {
       resultsDiv.innerHTML = `<p>No data found for ${year}</p>`;
       console.error(err);
     });
+}
+
+function buildTeamDropdown(matches) {
+  const teams = new Set();
+
+  matches.forEach(m => {
+    teams.add(m.home_team);
+    teams.add(m.away_team);
+  });
+
+  const sortedTeams = Array.from(teams).sort();
+
+  sortedTeams.forEach(team => {
+    const opt = document.createElement("option");
+    opt.value = team;
+    opt.textContent = team;
+    teamDropdown.appendChild(opt);
+  });
+
+  teamSelectDiv.style.display = "block";
+
+  teamDropdown.onchange = () => {
+    currentTeam = teamDropdown.value;
+    filterMatches();
+  };
 }
 
 function buildRoundButtons(matches) {
@@ -153,24 +205,35 @@ function buildRoundButtons(matches) {
 
   const allBtn = document.createElement("button");
   allBtn.textContent = "All";
-  allBtn.onclick = () => showRound("All");
+  allBtn.onclick = () => showMatches(currentMatches, "All");
   roundGrid.appendChild(allBtn);
 
   rounds.forEach(r => {
     const btn = document.createElement("button");
     btn.textContent = r;
-    btn.onclick = () => showRound(r);
+    btn.onclick = () => showMatches(
+      currentMatches.filter(m => m.round === r),
+      r
+    );
     roundGrid.appendChild(btn);
   });
 }
 
-function showRound(round) {
-  let list = currentMatches;
-  if (round !== "All") {
-    list = currentMatches.filter(m => m.round === round);
+function filterMatches() {
+  if (currentTeam === "All") {
+    currentMatches = allMatches;
+  } else {
+    currentMatches = allMatches.filter(m =>
+      m.home_team === currentTeam || m.away_team === currentTeam
+    );
   }
 
-  let html = `<h2>${round === "All" ? "All Rounds" : round}</h2>`;
+  buildRoundButtons(currentMatches);
+  showMatches(currentMatches, "All");
+}
+
+function showMatches(list, label) {
+  let html = `<h2>${label === "All" ? "All Matches" : label}</h2>`;
 
   list.forEach(match => {
     html += `
