@@ -62,18 +62,14 @@ for (let y = startYear; y <= endYear; y++) {
 
 loadYear(startYear);
 
-function normalizeRound(r) {
-  return (r ?? "").toString().replace(/\s+/g," ").trim();
-}
-
 function canonicalRound(r) {
-  const t = normalizeRound(r).toLowerCase();
+  const t = (r ?? "").toString().toLowerCase();
   if (t.includes("qualifying")) return "Qualifying Final";
   if (t.includes("elimination")) return "Elimination Final";
   if (t.includes("semi")) return "Semi Final";
   if (t.includes("preliminary")) return "Preliminary Final";
   if (t.includes("grand")) return "Grand Final";
-  return normalizeRound(r);
+  return (r ?? "").toString().trim();
 }
 
 function loadYear(year) {
@@ -91,7 +87,7 @@ function loadYear(year) {
     .then(data=>{
       currentData=data;
       buildTeamSelector(data);
-      buildRoundButtons(data);
+      buildRoundButtons();
       renderMatches();
       statusDiv.textContent=`Year ${year}: loaded ${data.length.toLocaleString()} player-rows`;
     });
@@ -113,31 +109,17 @@ function buildTeamSelector(data) {
   });
 }
 
-function buildRoundButtons(data) {
+function buildRoundButtons() {
   roundBar.innerHTML="";
 
-  const rounds=[...new Set(data.map(r=>canonicalRound(r.round)).filter(r=>r!==""))];
+  const rounds=[...new Set(currentData.map(r=>canonicalRound(r.round)))];
 
   const numeric=[];
-  const finals=[];
-
   rounds.forEach(r=>{
     const m=r.match(/^Round\s*(\d+)/i);
     if(m) numeric.push({label:r,num:parseInt(m[1],10)});
-    else finals.push(r);
   });
-
   numeric.sort((a,b)=>a.num-b.num);
-
-  const finalsOrder=["Qualifying Final","Elimination Final","Semi Final","Preliminary Final","Grand Final"];
-
-  // 🔑 FORCE Elimination Final button if it exists in data
-  const hasElim = data.some(r => /elimination/i.test(r.round));
-  if (hasElim && !finals.includes("Elimination Final")) {
-    finals.push("Elimination Final");
-  }
-
-  finals.sort((a,b)=>finalsOrder.indexOf(a)-finalsOrder.indexOf(b));
 
   const allBtn=document.createElement("button");
   allBtn.textContent="All Rounds";
@@ -146,7 +128,10 @@ function buildRoundButtons(data) {
   roundBar.appendChild(allBtn);
 
   numeric.forEach(r=>addRoundButton(r.label));
-  finals.forEach(r=>addRoundButton(r));
+
+  // 🔒 FORCE finals buttons always
+  ["Qualifying Final","Elimination Final","Semi Final","Preliminary Final","Grand Final"]
+    .forEach(r=>addRoundButton(r));
 }
 
 function addRoundButton(label){
