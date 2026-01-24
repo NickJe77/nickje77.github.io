@@ -2,270 +2,161 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>AFL Results by Year</title>
+<title>AFL By Year | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<style>
-body { font-family: Arial, sans-serif; margin:20px; }
-h1 { text-align:center; }
+<link rel="stylesheet" href="style.css">
 
-.year-buttons, .round-buttons {
-  display:flex; flex-wrap:wrap; gap:8px;
-  justify-content:center; margin-bottom:15px;
+<style>
+body {
+  font-family: Inter, system-ui, Arial, sans-serif;
+  margin: 0;
+  background: #fff;
+}
+
+h1 {
+  text-align: center;
+  margin: 20px 0;
+}
+
+#controls {
+  text-align: center;
+  margin-bottom: 20px;
 }
 
 button {
-  padding:8px 14px;
-  border:1px solid #ccc;
-  background:#f5f5f5;
-  cursor:pointer;
+  padding: 6px 10px;
+  margin: 2px;
+  cursor: pointer;
 }
-button.active { background:#ddd; font-weight:bold; }
 
-select { padding:8px; margin-bottom:15px; }
+.round {
+  margin-bottom: 25px;
+}
 
-.match { padding:8px; border-bottom:1px solid #eee; }
-.win { background:#e9f9ec; }
-.loss { background:#fdecec; }
-.draw { background:#fff; }
+.match {
+  margin: 6px 0;
+}
 
-.star { color:goldenrod; font-size:14px; margin-left:20px; }
+.star {
+  color: #b8860b; /* darker gold for readability */
+  font-weight: 600;
+}
 
-table { border-collapse:collapse; width:100%; margin-top:30px; }
-th, td { border:1px solid #ccc; padding:6px; text-align:center; }
-th { background:#f0f0f0; }
+hr {
+  border: none;
+  border-top: 1px solid #eee;
+  margin: 10px 0;
+}
 </style>
 </head>
 
 <body>
 
-<h1>AFL Results by Year</h1>
+<h1>AFL Season</h1>
 
-<div class="year-buttons" id="yearButtons"></div>
+<div id="controls"></div>
 
-<div style="text-align:center">
-Team:
-<select id="teamSelect"></select>
-</div>
+<div id="output"></div>
 
-<div class="round-buttons" id="roundButtons"></div>
-
-<h2 id="heading">All Matches</h2>
-<div id="matches"></div>
-
-<h2 id="ladderTitle" style="margin-top:30px">Ladder</h2>
+<h2>Ladder</h2>
 <div id="ladder"></div>
 
 <script>
-let currentYear = 1990;
-let currentRound = "All";
-let currentTeam = "All teams";
+const output = document.getElementById("output");
+const ladderDiv = document.getElementById("ladder");
+const controls = document.getElementById("controls");
 
-let rawRows = [];
-let allMatches = [];
-let allPlayers = [];
+let currentYear = 2021;
 
-const years = [];
-for(let y=1990;y<=2025;y++) years.push(y);
-
-const roundOrder = [
- "Round 0",
- "Round 1","Round 2","Round 3","Round 4","Round 5","Round 6","Round 7","Round 8","Round 9","Round 10",
- "Round 11","Round 12","Round 13","Round 14","Round 15","Round 16","Round 17","Round 18","Round 19","Round 20",
- "Round 21","Round 22","Round 23","Round 24",
- "Elimination Final","Qualifying Final","Semi Final","Preliminary Final","Grand Final"
-];
-
-function getActiveRoundOrder(){
-  if(currentYear >= 2024){
-    return roundOrder;
-  } else {
-    return roundOrder.filter(r => r !== "Round 0");
-  }
+for (let y = 1990; y <= 2025; y++) {
+  const btn = document.createElement("button");
+  btn.textContent = y;
+  btn.onclick = () => loadYear(y);
+  controls.appendChild(btn);
 }
 
-function buildYearButtons(){
-  const div=document.getElementById("yearButtons");
-  div.innerHTML="";
-  years.forEach(y=>{
-    const b=document.createElement("button");
-    b.textContent=y;
-    if(y===currentYear) b.classList.add("active");
-    b.onclick=()=>loadYear(y);
-    div.appendChild(b);
+async function loadYear(y) {
+  currentYear = y;
+  output.innerHTML = "";
+  ladderDiv.innerHTML = "";
+
+  const [games, players] = await Promise.all([
+    fetch(`data/afl/afl_${y}.json`, { cache: "no-store" }).then(r => r.json()),
+    fetch(`data/afl_players_by_year/players_${y}.json`, { cache: "no-store" }).then(r => r.ok ? r.json() : [])
+  ]);
+
+  renderRounds(games, players);
+  renderLadder(games);
+}
+
+function renderRounds(games, players) {
+  const byRound = {};
+
+  games.forEach(g => {
+    if (!byRound[g.round]) byRound[g.round] = [];
+    byRound[g.round].push(g);
   });
-}
 
-function buildRoundButtons(){
-  const div=document.getElementById("roundButtons");
-  div.innerHTML="";
-  const activeRounds = getActiveRoundOrder();
-  ["All",...activeRounds].forEach(r=>{
-    const b=document.createElement("button");
-    b.textContent=r;
-    if(r===currentRound) b.classList.add("active");
-    b.onclick=()=>{currentRound=r;render();}
-    div.appendChild(b);
-  });
-}
+  Object.keys(byRound).forEach(r => {
+    const div = document.createElement("div");
+    div.className = "round";
+    div.innerHTML = `<h2>Round ${r}</h2>`;
 
-function buildTeamSelect(){
-  const sel=document.getElementById("teamSelect");
-  sel.innerHTML="";
-  const teams=[...new Set(allMatches.flatMap(m=>[m.home_team,m.away_team]))].sort();
-  ["All teams",...teams].forEach(t=>{
-    const o=document.createElement("option");
-    o.value=t;
-    o.textContent=t;
-    sel.appendChild(o);
-  });
-  sel.onchange=()=>{currentTeam=sel.value;render();}
-}
+    byRound[r].forEach(g => {
+      const m = document.createElement("div");
+      m.className = "match";
+      m.innerHTML = `<strong>${g.home} ${g.home_score} vs ${g.away} ${g.away_score}</strong>`;
 
-function loadYear(y){
-  currentYear=y;
-  currentRound="All";
+      const stars = players.filter(p =>
+        p.round == g.round &&
+        (p.team === g.home || p.team === g.away)
+      );
 
-  Promise.all([
-    fetch(`data/afl/afl_${y}.json`).then(r=>r.json()),
-    fetch(`data/afl_players_by_year/players_${y}.json`).then(r=>r.ok ? r.json() : [])
-  ]).then(([rows, players])=>{
-    rawRows = rows;
-    allPlayers = players;
-    buildMatches();
-    buildYearButtons();
-    buildRoundButtons();
-    buildTeamSelect();
-    render();
-  });
-}
+      stars.forEach(s => {
+        const star = document.createElement("div");
+        star.className = "star";
+        star.textContent = `⭐ ${s.player} (${s.team}) – ${s.stat}`;
+        m.appendChild(star);
+      });
 
-function buildMatches(){
-  const map = {};
-  rawRows.forEach(r=>{
-    const id = Number(r.match_id);
-    if(!map[id]){
-      map[id] = {
-        match_id: id,
-        round: r.round,
-        home_team: r.home_team,
-        away_team: r.away_team,
-        home_score: Number(r.home_points),
-        away_score: Number(r.away_points)
-      };
-    }
-  });
-  allMatches = Object.values(map);
-}
-
-function getStars(match){
-  return allPlayers.filter(p =>
-    Number(p.match_id) === Number(match.match_id) &&
-    (Number(p.D) >= 35 || Number(p.G) >= 5)
-  ).map(s=>{
-    let parts=[];
-    if(Number(s.D)>=35) parts.push(`${s.D} disposals`);
-    if(Number(s.G)>=5) parts.push(`${s.G} goals`);
-    return `⭐ ${s.player} (${s.played_for}) – ${parts.join(" & ")}`;
-  });
-}
-
-function render(){
-  const div=document.getElementById("matches");
-  div.innerHTML="";
-
-  document.getElementById("heading").textContent =
-    currentRound==="All" ? "All Matches" : currentRound;
-
-  const activeRounds = getActiveRoundOrder();
-
-  let matchList=[...allMatches];
-  if(currentRound!=="All"){
-    matchList = matchList.filter(m=>m.round===currentRound);
-  }
-  if(currentTeam!=="All teams"){
-    matchList = matchList.filter(m=>m.home_team===currentTeam||m.away_team===currentTeam);
-  }
-
-  matchList.sort((a,b)=>activeRounds.indexOf(a.round)-activeRounds.indexOf(b.round));
-
-  matchList.forEach(m=>{
-    const homeWin = m.home_score > m.away_score;
-    const awayWin = m.away_score > m.home_score;
-
-    let cls="draw";
-    if(currentTeam!=="All teams"){
-      if(m.home_team === currentTeam){
-        cls = homeWin ? "win" : awayWin ? "loss" : "draw";
-      } else if(m.away_team === currentTeam){
-        cls = awayWin ? "win" : homeWin ? "loss" : "draw";
-      }
-    }
-
-    const d=document.createElement("div");
-    d.className=`match ${cls}`;
-    d.innerHTML=`<strong>${m.round}</strong> — ${m.home_team} ${m.home_score} vs ${m.away_team} ${m.away_score}`;
-
-    const stars = getStars(m);
-    stars.forEach(s=>{
-      const st=document.createElement("div");
-      st.className="star";
-      st.textContent=s;
-      d.appendChild(st);
+      div.appendChild(m);
+      div.appendChild(document.createElement("hr"));
     });
 
-    div.appendChild(d);
+    output.appendChild(div);
   });
-
-  buildLadder(matchList);
 }
 
-function buildLadder(matches){
-  const table = {};
+function renderLadder(games) {
+  const ladder = {};
 
-  matches.forEach(m=>{
-    [m.home_team,m.away_team].forEach(t=>{
-      if(!table[t]) table[t]={team:t,played:0,win:0,loss:0,draw:0,for:0,against:0};
-    });
+  games.forEach(g => {
+    if (!ladder[g.home]) ladder[g.home] = { team: g.home, pts: 0 };
+    if (!ladder[g.away]) ladder[g.away] = { team: g.away, pts: 0 };
 
-    table[m.home_team].played++;
-    table[m.away_team].played++;
-
-    table[m.home_team].for += m.home_score;
-    table[m.home_team].against += m.away_score;
-    table[m.away_team].for += m.away_score;
-    table[m.away_team].against += m.home_score;
-
-    if(m.home_score>m.away_score){
-      table[m.home_team].win++;
-      table[m.away_team].loss++;
-    } else if(m.away_score>m.home_score){
-      table[m.away_team].win++;
-      table[m.home_team].loss++;
-    } else {
-      table[m.home_team].draw++;
-      table[m.away_team].draw++;
+    if (g.home_score > g.away_score) ladder[g.home].pts += 4;
+    else if (g.away_score > g.home_score) ladder[g.away].pts += 4;
+    else {
+      ladder[g.home].pts += 2;
+      ladder[g.away].pts += 2;
     }
   });
 
-  const arr = Object.values(table);
-  arr.forEach(t=>{
-    t.points = t.win*4 + t.draw*2;
-    t.perc = ((t.for/t.against)*100).toFixed(2);
+  const sorted = Object.values(ladder).sort((a,b)=>b.pts-a.pts);
+
+  const table = document.createElement("table");
+  table.innerHTML = "<tr><th>Pos</th><th>Team</th><th>Pts</th></tr>";
+
+  sorted.forEach((t,i)=>{
+    const row = document.createElement("tr");
+    row.innerHTML = `<td>${i+1}</td><td>${t.team}</td><td>${t.pts}</td>`;
+    table.appendChild(row);
   });
 
-  arr.sort((a,b)=>b.points-a.points || b.perc-a.perc);
-
-  let html="<table><tr><th>Pos</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>D</th><th>F</th><th>A</th><th>%</th><th>Pts</th></tr>";
-  arr.forEach((t,i)=>{
-    html+=`<tr><td>${i+1}</td><td>${t.team}</td><td>${t.played}</td><td>${t.win}</td><td>${t.loss}</td><td>${t.draw}</td><td>${t.for}</td><td>${t.against}</td><td>${t.perc}</td><td>${t.points}</td></tr>`;
-  });
-  html+="</table>";
-
-  document.getElementById("ladder").innerHTML = html;
+  ladderDiv.appendChild(table);
 }
 
-buildYearButtons();
 loadYear(currentYear);
 </script>
 
