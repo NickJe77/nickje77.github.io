@@ -61,7 +61,6 @@ for (let y = startYear; y <= endYear; y++) {
 loadYear(startYear);
 
 function loadYear(year) {
-  // 🔑 HARD RESET FILTERS
   currentRound = "ALL";
   teamSelect.value = "ALL";
 
@@ -83,10 +82,7 @@ function loadYear(year) {
 
 function buildTeamSelector(data) {
   const teams = new Set();
-  data.forEach(g => {
-    teams.add(g.home_team);
-    teams.add(g.away_team);
-  });
+  data.forEach(g => { teams.add(g.home_team); teams.add(g.away_team); });
 
   teamSelect.innerHTML = `<option value="ALL">All teams</option>`;
   [...teams].sort().forEach(t => {
@@ -100,7 +96,42 @@ function buildTeamSelector(data) {
 function buildRoundButtons(data) {
   roundBar.innerHTML = "";
 
-  const rounds = [...new Set(data.map(g => g.round))];
+  // clean round labels
+  const rawRounds = data.map(g => g.round.toString().trim());
+  const roundSet = [...new Set(rawRounds)];
+
+  const numericRounds = [];
+  const finalsRounds = [];
+
+  roundSet.forEach(r => {
+    if (/^Round\s*\d+/i.test(r)) {
+      numericRounds.push({
+        label: r,
+        num: parseInt(r.match(/\d+/)[0])
+      });
+    } else {
+      finalsRounds.push(r);
+    }
+  });
+
+  numericRounds.sort((a, b) => a.num - b.num);
+
+  const finalsOrder = [
+    "Qualifying Final",
+    "Elimination Final",
+    "Semi Final",
+    "Preliminary Final",
+    "Grand Final"
+  ];
+
+  finalsRounds.sort((a, b) => {
+    const ia = finalsOrder.findIndex(f => a.toLowerCase().includes(f.toLowerCase()));
+    const ib = finalsOrder.findIndex(f => b.toLowerCase().includes(f.toLowerCase()));
+    if (ia === -1 && ib === -1) return a.localeCompare(b);
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
 
   const allBtn = document.createElement("button");
   allBtn.textContent = "All Rounds";
@@ -112,9 +143,21 @@ function buildRoundButtons(data) {
   };
   roundBar.appendChild(allBtn);
 
-  rounds.forEach(r => {
+  numericRounds.forEach(r => {
     const btn = document.createElement("button");
-    btn.textContent = r;
+    btn.textContent = r.label;
+    btn.className = "round-btn";
+    btn.onclick = () => {
+      currentRound = r.label;
+      setActiveRound(btn);
+      renderMatches();
+    };
+    roundBar.appendChild(btn);
+  });
+
+  finalsRounds.forEach(r => {
+    const btn = document.createElement("button");
+    btn.textContent = r;   // will no longer be blank
     btn.className = "round-btn";
     btn.onclick = () => {
       currentRound = r;
@@ -144,7 +187,7 @@ function renderMatches() {
   }
 
   if (currentRound !== "ALL") {
-    filtered = filtered.filter(g => g.round === currentRound);
+    filtered = filtered.filter(g => g.round.toString().trim() === currentRound);
   }
 
   const seen = new Set();
