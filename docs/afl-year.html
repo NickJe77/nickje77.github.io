@@ -40,6 +40,8 @@ select { padding:8px 10px; font-size:16px; margin-bottom:15px; display:block; }
 <div id="matches"></div>
 
 <script>
+const BUILD_ID = "WINNER_FIX_v2"; // <-- if you don't see this in the status line, the new file isn't live
+
 const startYear = 1990;
 const endYear = new Date().getFullYear();
 
@@ -72,6 +74,16 @@ function canonicalRound(r) {
   return (r ?? "").toString().trim();
 }
 
+function toPoints(v) {
+  // Handles numbers, "104", " 104 ", "1,104", null, undefined, weird junk
+  if (v === null || v === undefined) return null;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  const s = String(v).replace(/,/g, "").trim();
+  if (s === "") return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
 function loadYear(year) {
   currentRound = "ALL";
   teamSelect.value = "ALL";
@@ -80,16 +92,21 @@ function loadYear(year) {
   [...yearBar.children].find(b=>b.textContent==year).classList.add("active");
 
   matchesDiv.innerHTML="";
-  statusDiv.textContent="Loading…";
+  statusDiv.textContent=`Loading… (${BUILD_ID})`;
 
   fetch(`/data/afl/afl_${year}.json?cb=${Date.now()}`)
     .then(r=>r.json())
     .then(data=>{
-      currentData=data;
-      buildTeamSelector(data);
+      currentData = Array.isArray(data) ? data : [];
+      buildTeamSelector(currentData);
       buildRoundButtons();
       renderMatches();
-      statusDiv.textContent=`Year ${year}: loaded ${data.length.toLocaleString()} player-rows`;
+      statusDiv.textContent = `Year ${year}: loaded ${currentData.length.toLocaleString()} player-rows (${BUILD_ID})`;
+    })
+    .catch(() => {
+      currentData = [];
+      matchesDiv.innerHTML = "<p>No data for this year.</p>";
+      statusDiv.textContent = `Load error (${BUILD_ID})`;
     });
 }
 
@@ -129,7 +146,7 @@ function buildRoundButtons() {
 
   numeric.forEach(r=>addRoundButton(r.label));
 
-  // ✅ FINALS ORDER FIXED
+  // finals order as requested
   ["Elimination Final","Qualifying Final","Semi Final","Preliminary Final","Grand Final"]
     .forEach(r=>addRoundButton(r));
 }
@@ -153,6 +170,24 @@ function setActiveRound(activeBtn){
 
 teamSelect.addEventListener("change",renderMatches);
 
+function formatResultLine(game) {
+  const round = canonicalRound(game.round);
+
+  const home = (game.home_team ?? "").toString();
+  const away = (game.away_team ?? "").toString();
+
+  const hp = toPoints(game.home_points);
+  const ap = toPoints(game.away_points);
+
+  if (hp === null || ap === null) {
+    return `${round}: ${home} vs ${away}`;
+  }
+
+  if (hp > ap) return `${round}: ${home} ${hp} def ${away} ${ap}`;
+  if (ap > hp) return `${round}: ${away} ${ap} def ${home} ${hp}`;
+  return `${round}: ${home} ${hp} drew ${away} ${ap}`;
+}
+
 function renderMatches(){
   matchesDiv.innerHTML="";
   let rows=currentData;
@@ -167,12 +202,12 @@ function renderMatches(){
 
   const seen=new Set();
   rows.forEach(g=>{
-    const key=g.season+"|"+canonicalRound(g.round)+"|"+g.home_team+"|"+g.away_team;
+    const key = (g.season ?? "") + "|" + canonicalRound(g.round) + "|" + (g.home_team ?? "") + "|" + (g.away_team ?? "");
     if(!seen.has(key)){
       seen.add(key);
       const div=document.createElement("div");
       div.className="match";
-      div.textContent=`${canonicalRound(g.round)}: ${g.home_team} ${g.home_points} def ${g.away_team} ${g.away_points}`;
+      div.textContent = formatResultLine(g);
       matchesDiv.appendChild(div);
     }
   });
