@@ -1,27 +1,28 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
 <title>AFL Season</title>
 
 <style>
-body { font-family: system-ui, Arial, sans-serif; margin: 20px; }
-.year-bar, .round-bar { margin-bottom: 15px; }
+  body { font-family: system-ui, Arial, sans-serif; margin: 20px; }
+  .year-bar, .round-bar { margin-bottom: 15px; }
 
-.year-btn, .round-btn {
-  margin: 4px;
-  padding: 8px 14px;
-  border-radius: 10px;
-  border: 1px solid #ccc;
-  background: #ddd;
-  cursor: pointer;
-  font-size: 15px;
-}
-.year-btn.active, .round-btn.active { background: #333; color: #fff; }
+  .year-btn, .round-btn {
+    margin: 4px;
+    padding: 10px 16px;         /* slightly bigger buttons (your original ask) */
+    border-radius: 10px;
+    border: 1px solid #ccc;
+    background: #ddd;
+    cursor: pointer;
+    font-size: 15px;
+  }
+  .year-btn.active, .round-btn.active { background: #333; color: #fff; }
 
-select { padding: 6px; font-size: 16px; margin-bottom: 15px; display: block; }
+  select { padding: 8px 10px; font-size: 16px; margin-bottom: 15px; display: block; }
 
-.match { margin-left: 15px; margin-bottom: 5px; }
+  .match { margin-left: 15px; margin-bottom: 6px; }
+  .muted { color:#666; font-size: 13px; margin: 8px 0 14px; }
 </style>
 </head>
 
@@ -36,6 +37,7 @@ select { padding: 6px; font-size: 16px; margin-bottom: 15px; display: block; }
 
 <div id="roundBar" class="round-bar"></div>
 
+<div id="status" class="muted"></div>
 <div id="matches"></div>
 
 <script>
@@ -46,10 +48,13 @@ const yearBar = document.getElementById("yearBar");
 const teamSelect = document.getElementById("teamSelect");
 const roundBar = document.getElementById("roundBar");
 const matchesDiv = document.getElementById("matches");
+const statusDiv = document.getElementById("status");
 
 let currentData = [];
+let currentYear = startYear;
 let currentRound = "ALL";
 
+// Year buttons
 for (let y = startYear; y <= endYear; y++) {
   const btn = document.createElement("button");
   btn.textContent = y;
@@ -60,29 +65,71 @@ for (let y = startYear; y <= endYear; y++) {
 
 loadYear(startYear);
 
+function setStatus(text) {
+  statusDiv.textContent = text || "";
+}
+
+function normalizeRound(r) {
+  return (r ?? "").toString().trim();
+}
+
+// Robust match key so we don't collapse a season to nothing
+function matchKey(row) {
+  const season = row.season ?? "";
+  const round = normalizeRound(row.round);
+  const home = (row.home_team ?? "").toString().trim();
+  const away = (row.away_team ?? "").toString().trim();
+  const hp = row.home_points ?? "";
+  const ap = row.away_points ?? "";
+  // match_id is allowed, but NOT relied on
+  const mid = row.match_id ?? "";
+  return [season, round, home, away, hp, ap, mid].join("|");
+}
+
 function loadYear(year) {
+  currentYear = year;
+
+  // ✅ hard reset filters on year change
   currentRound = "ALL";
   teamSelect.value = "ALL";
 
   document.querySelectorAll(".year-btn").forEach(b => b.classList.remove("active"));
   [...yearBar.children].find(b => b.textContent == year).classList.add("active");
 
-  fetch(`/data/afl/afl_${year}.json`)
-    .then(res => res.json())
+  matchesDiv.innerHTML = "";
+  setStatus("Loading…");
+
+  // ✅ cache-bust per request so we always get the real file
+  const url = `/data/afl/afl_${year}.json?cb=${Date.now()}`;
+
+  fetch(url)
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status} loading ${url}`);
+      return res.json();
+    })
     .then(data => {
+      if (!Array.isArray(data)) throw new Error("JSON loaded but is not an array");
       currentData = data;
+
       buildTeamSelector(data);
       buildRoundButtons(data);
       renderMatches();
+
+      setStatus(`Year ${year}: loaded ${data.length.toLocaleString()} player-rows`);
     })
-    .catch(() => {
-      matchesDiv.innerHTML = "<p>No data for this year.</p>";
+    .catch(err => {
+      currentData = [];
+      matchesDiv.innerHTML = `<p>No data for this year.</p>`;
+      setStatus(`Load error: ${err.message}`);
     });
 }
 
 function buildTeamSelector(data) {
   const teams = new Set();
-  data.forEach(g => { teams.add(g.home_team); teams.add(g.away_team); });
+  data.forEach(r => {
+    if (r.home_team) teams.add(r.home_team);
+    if (r.away_team) teams.add(r.away_team);
+  });
 
   teamSelect.innerHTML = `<option value="ALL">All teams</option>`;
   [...teams].sort().forEach(t => {
@@ -91,13 +138,40 @@ function buildTeamSelector(data) {
     opt.textContent = t;
     teamSelect.appendChild(opt);
   });
+
+  teamSelect.value = "ALL";
 }
 
 function buildRoundButtons(data) {
   roundBar.innerHTML = "";
 
-  const rounds = [...new Set(data.map(g => g.round.toString().trim()))];
+  const roundsSet = new Set();
+  data.forEach(r => roundsSet.add(normalizeRound(r.round)));
+  const rounds = [...roundsSet].filter(Boolean);
 
+  // Split numeric "Round X" vs finals text
+  const numeric = [];
+  const finals = [];
+
+  rounds.forEach(r => {
+    const m = r.match(/^Round\s*(\d+)/i);
+    if (m) numeric.push({ label: r, num: parseInt(m[1], 10) });
+    else finals.push(r);
+  });
+
+  numeric.sort((a,b) => a.num - b.num);
+
+  const finalsOrder = ["Qualifying Final","Elimination Final","Semi Final","Preliminary Final","Grand Final"];
+  finals.sort((a,b) => {
+    const ia = finalsOrder.findIndex(x => a.toLowerCase().includes(x.toLowerCase()));
+    const ib = finalsOrder.findIndex(x => b.toLowerCase().includes(x.toLowerCase()));
+    if (ia === -1 && ib === -1) return a.localeCompare(b);
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+
+  // All Rounds
   const allBtn = document.createElement("button");
   allBtn.textContent = "All Rounds";
   allBtn.className = "round-btn active";
@@ -108,7 +182,21 @@ function buildRoundButtons(data) {
   };
   roundBar.appendChild(allBtn);
 
-  rounds.forEach(r => {
+  // Numeric rounds
+  numeric.forEach(r => {
+    const btn = document.createElement("button");
+    btn.textContent = r.label;
+    btn.className = "round-btn";
+    btn.onclick = () => {
+      currentRound = r.label;
+      setActiveRound(btn);
+      renderMatches();
+    };
+    roundBar.appendChild(btn);
+  });
+
+  // Finals
+  finals.forEach(r => {
     const btn = document.createElement("button");
     btn.textContent = r;
     btn.className = "round-btn";
@@ -131,45 +219,38 @@ teamSelect.addEventListener("change", renderMatches);
 function renderMatches() {
   matchesDiv.innerHTML = "";
 
-  let filtered = currentData;
+  let rows = currentData;
 
-  if (teamSelect.value !== "ALL") {
-    filtered = filtered.filter(g =>
-      g.home_team === teamSelect.value || g.away_team === teamSelect.value
-    );
+  // Team filter
+  const team = teamSelect.value;
+  if (team !== "ALL") {
+    rows = rows.filter(r => r.home_team === team || r.away_team === team);
   }
 
+  // Round filter
   if (currentRound !== "ALL") {
-    filtered = filtered.filter(g => g.round.toString().trim() === currentRound);
+    rows = rows.filter(r => normalizeRound(r.round) === currentRound);
   }
 
-  const seen = new Set();
-  const unique = filtered.filter(g => {
-    if (seen.has(g.match_id)) return false;
-    seen.add(g.match_id);
-    return true;
-  });
+  // ✅ Deduplicate player-rows into matches safely
+  const map = new Map();
+  for (const r of rows) {
+    const key = matchKey(r);
+    if (!map.has(key)) map.set(key, r);
+  }
+  const matches = [...map.values()];
 
-  // 🔑 FIX: if filter kills all data, reset to ALL ROUNDS automatically
-  if (unique.length === 0 && currentRound !== "ALL") {
-    currentRound = "ALL";
-    document.querySelectorAll(".round-btn").forEach(b => {
-      if (b.textContent === "All Rounds") b.classList.add("active");
-      else b.classList.remove("active");
-    });
-    renderMatches();
+  if (matches.length === 0) {
+    matchesDiv.innerHTML = `<p>No matches found.</p>`;
     return;
   }
 
-  unique.forEach(game => {
+  for (const game of matches) {
     const div = document.createElement("div");
     div.className = "match";
-    div.innerHTML = `
-      ${game.round}:
-      ${game.home_team} ${game.home_points} def ${game.away_team} ${game.away_points}
-    `;
+    div.innerHTML = `${normalizeRound(game.round)}: ${game.home_team} ${game.home_points} def ${game.away_team} ${game.away_points}`;
     matchesDiv.appendChild(div);
-  });
+  }
 }
 </script>
 </body>
