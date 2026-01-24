@@ -2,163 +2,94 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>AFL By Year | The Sporting Almanac</title>
+<title>AFL Season | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<link rel="stylesheet" href="style.css">
-
 <style>
-body {
-  font-family: Inter, system-ui, Arial, sans-serif;
-  margin: 0;
-  background: #fff;
-}
-
-h1 {
-  text-align: center;
-  margin: 20px 0;
-}
-
-#controls {
-  text-align: center;
-  margin-bottom: 20px;
-}
-
-button {
-  padding: 6px 10px;
-  margin: 2px;
-  cursor: pointer;
-}
-
-.round {
-  margin-bottom: 25px;
-}
-
-.match {
-  margin: 6px 0;
-}
-
-.star {
-  color: #b8860b; /* darker gold for readability */
-  font-weight: 600;
-}
-
-hr {
-  border: none;
-  border-top: 1px solid #eee;
-  margin: 10px 0;
-}
+body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#fff;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px;border-bottom:1px solid #ddd;font-weight:600;}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px;}
+.year-buttons{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:20px;}
+.year-buttons button{border:1px solid #ddd;background:#f4f4f4;padding:6px 10px;border-radius:6px;cursor:pointer;}
+.year-buttons button.active{background:#0056d6;color:white;}
+h1{text-align:center;margin-bottom:15px;}
+h2{margin-top:40px;}
+.match{padding:10px 0;border-bottom:1px solid #eee;}
+.star{color:#c69214;font-weight:600;}
+.ladder-table{border-collapse:collapse;width:100%;margin-top:10px;}
+.ladder-table th,.ladder-table td{border:1px solid #ddd;padding:6px;text-align:center;}
+.ladder-table th{background:#f0f0f0;}
 </style>
 </head>
-
 <body>
 
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="afl.html">AFL</a>
+</div>
+
+<div class="page-wrap">
 <h1>AFL Season</h1>
 
-<div id="controls"></div>
+<div class="year-buttons" id="yearButtons"></div>
 
-<div id="output"></div>
-
-<h2>Ladder</h2>
 <div id="ladder"></div>
+<div id="matches"></div>
+</div>
 
 <script>
-const output = document.getElementById("output");
+const startYear = 1990;
+const endYear = 2025;
+const yearButtons = document.getElementById("yearButtons");
 const ladderDiv = document.getElementById("ladder");
-const controls = document.getElementById("controls");
+const matchesDiv = document.getElementById("matches");
 
-let currentYear = 2021;
-
-for (let y = 1990; y <= 2025; y++) {
-  const btn = document.createElement("button");
-  btn.textContent = y;
-  btn.onclick = () => loadYear(y);
-  controls.appendChild(btn);
+for(let y=startYear;y<=endYear;y++){
+  const b=document.createElement("button");
+  b.textContent=y;
+  b.onclick=()=>loadYear(y);
+  yearButtons.appendChild(b);
 }
 
-async function loadYear(y) {
-  currentYear = y;
-  output.innerHTML = "";
-  ladderDiv.innerHTML = "";
-
-  const [games, players] = await Promise.all([
-    fetch(`data/afl/afl_${y}.json`, { cache: "no-store" }).then(r => r.json()),
-    fetch(`data/afl_players_by_year/players_${y}.json`, { cache: "no-store" }).then(r => r.ok ? r.json() : [])
-  ]);
-
-  renderRounds(games, players);
-  renderLadder(games);
-}
-
-function renderRounds(games, players) {
-  const byRound = {};
-
-  games.forEach(g => {
-    if (!byRound[g.round]) byRound[g.round] = [];
-    byRound[g.round].push(g);
+function setActive(y){
+  document.querySelectorAll(".year-buttons button").forEach(b=>{
+    b.classList.toggle("active",b.textContent==y);
   });
+}
 
-  Object.keys(byRound).forEach(r => {
-    const div = document.createElement("div");
-    div.className = "round";
-    div.innerHTML = `<h2>Round ${r}</h2>`;
+async function loadYear(y){
+  setActive(y);
+  ladderDiv.innerHTML="";
+  matchesDiv.innerHTML="";
 
-    byRound[r].forEach(g => {
-      const m = document.createElement("div");
-      m.className = "match";
-      m.innerHTML = `<strong>${g.home} ${g.home_score} vs ${g.away} ${g.away_score}</strong>`;
+  const season = await fetch(`data/afl/afl_${y}.json`).then(r=>r.json());
+  const players = await fetch(`data/afl_players_by_year/players_${y}.json`).then(r=>r.ok?r.json():[]);
 
-      const stars = players.filter(p =>
-        p.round == g.round &&
-        (p.team === g.home || p.team === g.away)
-      );
+  // LADDER
+  let ladderHTML="<h2>Ladder</h2><table class='ladder-table'><tr><th>Pos</th><th>Team</th><th>Pts</th></tr>";
+  season.ladder.forEach((t,i)=>{
+    ladderHTML+=`<tr><td>${i+1}</td><td>${t.team}</td><td>${t.points}</td></tr>`;
+  });
+  ladderHTML+="</table>";
+  ladderDiv.innerHTML=ladderHTML;
 
-      stars.forEach(s => {
-        const star = document.createElement("div");
-        star.className = "star";
-        star.textContent = `⭐ ${s.player} (${s.team}) – ${s.stat}`;
-        m.appendChild(star);
+  // MATCHES
+  let matchHTML="";
+  season.rounds.forEach(r=>{
+    matchHTML+=`<h2>Round ${r.round}</h2>`;
+    r.games.forEach(g=>{
+      matchHTML+=`<div class="match"><strong>${g.home} ${g.homeScore} vs ${g.away} ${g.awayScore}</strong><br>`;
+      const stars=players.filter(p=>p.round==r.round && p.match==g.match);
+      stars.forEach(s=>{
+        matchHTML+=`<div class="star">⭐ ${s.player} (${s.team}) – ${s.stat}</div>`;
       });
-
-      div.appendChild(m);
-      div.appendChild(document.createElement("hr"));
+      matchHTML+=`</div>`;
     });
-
-    output.appendChild(div);
   });
+  matchesDiv.innerHTML=matchHTML;
 }
 
-function renderLadder(games) {
-  const ladder = {};
-
-  games.forEach(g => {
-    if (!ladder[g.home]) ladder[g.home] = { team: g.home, pts: 0 };
-    if (!ladder[g.away]) ladder[g.away] = { team: g.away, pts: 0 };
-
-    if (g.home_score > g.away_score) ladder[g.home].pts += 4;
-    else if (g.away_score > g.home_score) ladder[g.away].pts += 4;
-    else {
-      ladder[g.home].pts += 2;
-      ladder[g.away].pts += 2;
-    }
-  });
-
-  const sorted = Object.values(ladder).sort((a,b)=>b.pts-a.pts);
-
-  const table = document.createElement("table");
-  table.innerHTML = "<tr><th>Pos</th><th>Team</th><th>Pts</th></tr>";
-
-  sorted.forEach((t,i)=>{
-    const row = document.createElement("tr");
-    row.innerHTML = `<td>${i+1}</td><td>${t.team}</td><td>${t.pts}</td>`;
-    table.appendChild(row);
-  });
-
-  ladderDiv.appendChild(table);
-}
-
-loadYear(currentYear);
+loadYear(1990);
 </script>
-
 </body>
 </html>
