@@ -69,11 +69,15 @@ const years = [];
 for(let y=1990;y<=2025;y++) years.push(y);
 
 const roundOrder = [
+ "Round 0",
  "Round 1","Round 2","Round 3","Round 4","Round 5","Round 6","Round 7","Round 8","Round 9","Round 10",
  "Round 11","Round 12","Round 13","Round 14","Round 15","Round 16","Round 17","Round 18","Round 19","Round 20",
  "Round 21","Round 22","Round 23","Round 24",
  "Elimination Final","Qualifying Final","Semi Final","Preliminary Final","Grand Final"
 ];
+
+// Home & Away rounds only (for ladder)
+const ladderRounds = roundOrder.slice(0, roundOrder.indexOf("Elimination Final"));
 
 function buildYearButtons(){
   const div=document.getElementById("yearButtons");
@@ -212,19 +216,15 @@ function render(){
   document.getElementById("heading").textContent =
     currentRound==="All" ? "All Matches" : currentRound;
 
-  let list=[...allMatches];
+  let matchList=[...allMatches];
 
   if(currentRound!=="All"){
-    const idx=roundOrder.indexOf(currentRound);
-    list=list.filter(m=>roundOrder.indexOf(m.round)<=idx);
+    matchList = matchList.filter(m=>m.round===currentRound);
   }
 
-  const ladder=buildLadder(list);
-  renderLadder(ladder);
-
-  let matchList=[...allMatches];
-  if(currentRound!=="All") matchList=matchList.filter(m=>m.round===currentRound);
-  if(currentTeam!=="All teams") matchList=matchList.filter(m=>m.home_team===currentTeam||m.away_team===currentTeam);
+  if(currentTeam!=="All teams"){
+    matchList = matchList.filter(m=>m.home_team===currentTeam||m.away_team===currentTeam);
+  }
 
   matchList.sort((a,b)=>roundOrder.indexOf(a.round)-roundOrder.indexOf(b.round));
 
@@ -246,6 +246,17 @@ function render(){
     d.innerHTML=`<strong>${m.round}</strong> — ${m.home_team} ${m.home_score} vs ${m.away_team} ${m.away_score}`;
     div.appendChild(d);
   });
+
+  // Ladder logic: ONLY home & away rounds (including Round 0)
+  let ladderMatches = allMatches.filter(m=>ladderRounds.includes(m.round));
+
+  if(currentRound!=="All" && ladderRounds.includes(currentRound)){
+    const idx = ladderRounds.indexOf(currentRound);
+    ladderMatches = ladderMatches.filter(m=>ladderRounds.indexOf(m.round)<=idx);
+  }
+
+  const ladder = buildLadder(ladderMatches);
+  renderLadder(ladder);
 }
 
 fetch("data/afl_players.json")
