@@ -138,20 +138,27 @@ th{background:#f4f6f8;}
 <script>
 let allData = [];
 
-/* TEAM NAME NORMALISATION */
+/* TEAM NORMALISATION MAP */
 const teamMap = {
   "kangaroos": "north melbourne",
   "north melb": "north melbourne",
-  "brisbane": "brisbane lions",
-  "western bulldogs": "western bulldogs",
+
   "footscray": "western bulldogs",
+
   "gws": "greater western sydney",
-  "greater western sydney giants": "greater western sydney"
+  "greater western sydney giants": "greater western sydney",
+
+  "brisbane bears": "brisbane lions",
+  "fitzroy": "brisbane lions"
 };
 
 function norm(s){
   let t = (s||"").trim().toLowerCase();
   return teamMap[t] || t;
+}
+
+function titleCase(s){
+  return s.replace(/\b\w/g, c => c.toUpperCase());
 }
 
 async function loadAllSeasons(){
@@ -168,9 +175,14 @@ async function loadAllSeasons(){
       seasonData.forEach(r=>{
         if(!r.home_team || !r.away_team) return;
 
+        // normalised names
+        r._home = norm(r.home_team);
+        r._away = norm(r.away_team);
+
         allData.push(r);
-        teams.add(r.home_team.trim());
-        teams.add(r.away_team.trim());
+
+        teams.add(r._home);
+        teams.add(r._away);
       });
     }catch(e){}
   }
@@ -180,8 +192,9 @@ async function loadAllSeasons(){
   const t2=document.getElementById("team2");
 
   sorted.forEach(t=>{
-    t1.innerHTML+=`<option>${t}</option>`;
-    t2.innerHTML+=`<option>${t}</option>`;
+    const name = titleCase(t);
+    t1.innerHTML+=`<option value="${t}">${name}</option>`;
+    t2.innerHTML+=`<option value="${t}">${name}</option>`;
   });
 
   document.getElementById("results").innerHTML =
@@ -205,12 +218,9 @@ function compare(){
     return;
   }
 
-  const na = norm(a);
-  const nb = norm(b);
-
   const rawGames = allData.filter(r =>
-    (norm(r.home_team)===na && norm(r.away_team)===nb) ||
-    (norm(r.home_team)===nb && norm(r.away_team)===na)
+    (r._home===a && r._away===b) ||
+    (r._home===b && r._away===a)
   );
 
   if(rawGames.length===0){
@@ -241,7 +251,7 @@ function compare(){
     const s2=g.away_points;
 
     if(s1===s2) draws++;
-    else if((norm(g.home_team)===na && s1>s2) || (norm(g.away_team)===na && s2>s1)) aWins++;
+    else if((g._home===a && s1>s2) || (g._away===a && s2>s1)) aWins++;
     else bWins++;
   });
 
@@ -255,12 +265,12 @@ function compare(){
   const avgPoints10 = (totalPoints10 / last10.length).toFixed(1);
 
   let html=`
-  <h3>${a} vs ${b}</h3>
+  <h3>${titleCase(a)} vs ${titleCase(b)}</h3>
   <p>
     Games: ${games.length} |
-    ${a} wins: ${aWins} |
+    ${titleCase(a)} wins: ${aWins} |
     Draws: ${draws} |
-    ${b} wins: ${bWins}
+    ${titleCase(b)} wins: ${bWins}
   </p>
   <p>
     Last 10 Avg Points per Game: ${avgPoints10}
@@ -281,8 +291,8 @@ function compare(){
 
   games.forEach(g=>{
     const winner =
-      g.home_points > g.away_points ? g.home_team :
-      g.away_points > g.home_points ? g.away_team :
+      g.home_points > g.away_points ? titleCase(g._home) :
+      g.away_points > g.home_points ? titleCase(g._away) :
       "Draw";
 
     html+=`
@@ -290,7 +300,7 @@ function compare(){
         <td>${g.season}</td>
         <td>${g.round}</td>
         <td>${g.venue || ""}</td>
-        <td>${g.home_team} v ${g.away_team}</td>
+        <td>${titleCase(g._home)} v ${titleCase(g._away)}</td>
         <td>${winner}</td>
         <td>${g.home_points} - ${g.away_points}</td>
         <td>${g.total_points}</td>
