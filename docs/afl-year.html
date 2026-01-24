@@ -53,7 +53,7 @@ Team:
 <h2 id="heading">All Matches</h2>
 <div id="matches"></div>
 
-<h2 style="margin-top:30px">Ladder</h2>
+<h2 id="ladderTitle" style="margin-top:30px">Ladder</h2>
 <div id="ladder"></div>
 
 <script>
@@ -63,7 +63,6 @@ let currentTeam = "All teams";
 
 let rawRows = [];
 let allMatches = [];
-let allPlayers = [];
 
 const years = [];
 for(let y=1990;y<=2025;y++) years.push(y);
@@ -76,7 +75,7 @@ const roundOrder = [
  "Elimination Final","Qualifying Final","Semi Final","Preliminary Final","Grand Final"
 ];
 
-// Home & Away rounds only (for ladder)
+// Home & Away rounds only
 const ladderRounds = roundOrder.slice(0, roundOrder.indexOf("Elimination Final"));
 
 function getActiveRoundOrder(){
@@ -143,7 +142,6 @@ function loadYear(y){
 
 function buildMatches(){
   const map = {};
-
   rawRows.forEach(r=>{
     const id = r.match_id;
     if(!map[id]){
@@ -157,7 +155,6 @@ function buildMatches(){
       };
     }
   });
-
   allMatches = Object.values(map);
 }
 
@@ -193,7 +190,13 @@ function buildLadder(matches){
 
 function renderLadder(list){
   const div=document.getElementById("ladder");
-  if(list.length===0){ div.innerHTML=""; return; }
+  const title=document.getElementById("ladderTitle");
+  if(list.length===0){
+    div.innerHTML="";
+    title.style.display="none";
+    return;
+  }
+  title.style.display="block";
 
   let html=`<table><tr>
   <th>Pos</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>D</th>
@@ -228,11 +231,9 @@ function render(){
   const activeRounds = getActiveRoundOrder();
 
   let matchList=[...allMatches];
-
   if(currentRound!=="All"){
     matchList = matchList.filter(m=>m.round===currentRound);
   }
-
   if(currentTeam!=="All teams"){
     matchList = matchList.filter(m=>m.home_team===currentTeam||m.away_team===currentTeam);
   }
@@ -240,32 +241,24 @@ function render(){
   matchList.sort((a,b)=>activeRounds.indexOf(a.round)-activeRounds.indexOf(b.round));
 
   matchList.forEach(m=>{
-    const homeWin=m.home_score>m.away_score;
-    const awayWin=m.away_score>m.home_score;
-
-    let cls="";
-    if(currentTeam!=="All teams"){
-      if(m.home_team===currentTeam){
-        cls=homeWin?"win":awayWin?"loss":"draw";
-      } else {
-        cls=awayWin?"win":homeWin?"loss":"draw";
-      }
-    }
-
     const d=document.createElement("div");
-    d.className=`match ${cls}`;
+    d.className="match";
     d.innerHTML=`<strong>${m.round}</strong> — ${m.home_team} ${m.home_score} vs ${m.away_team} ${m.away_score}`;
     div.appendChild(d);
   });
 
-  // Ladder logic: ONLY home & away rounds (including Round 0 for 2024+)
-  let ladderMatches = allMatches.filter(m=>ladderRounds.includes(m.round));
+  // Hide ladder if in Finals
+  if(currentRound !== "All" && !ladderRounds.includes(currentRound)){
+    renderLadder([]);
+    return;
+  }
 
+  let ladderMatches = allMatches.filter(m=>ladderRounds.includes(m.round));
   if(currentYear < 2024){
     ladderMatches = ladderMatches.filter(m=>m.round !== "Round 0");
   }
 
-  if(currentRound!=="All" && ladderRounds.includes(currentRound)){
+  if(currentRound!=="All"){
     const idx = ladderRounds.indexOf(currentRound);
     ladderMatches = ladderMatches.filter(m=>ladderRounds.indexOf(m.round)<=idx);
   }
@@ -274,17 +267,8 @@ function render(){
   renderLadder(ladder);
 }
 
-fetch("data/afl_players.json")
-  .then(r=>r.ok ? r.json() : [])
-  .then(p=>{
-    allPlayers=p;
-    buildYearButtons();
-    loadYear(currentYear);
-  })
-  .catch(()=>{
-    buildYearButtons();
-    loadYear(currentYear);
-  });
+buildYearButtons();
+loadYear(currentYear);
 </script>
 
 </body>
