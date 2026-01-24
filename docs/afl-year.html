@@ -53,18 +53,14 @@ select {
 
 <h1>AFL Season</h1>
 
-<!-- YEARS -->
 <div id="yearBar" class="year-bar"></div>
 
-<!-- TEAM -->
 <select id="teamSelect">
   <option value="ALL">All teams</option>
 </select>
 
-<!-- ROUNDS -->
 <div id="roundBar" class="round-bar"></div>
 
-<!-- MATCHES -->
 <div id="matches"></div>
 
 <script>
@@ -88,7 +84,6 @@ for (let y = startYear; y <= endYear; y++) {
   yearBar.appendChild(btn);
 }
 
-// load first year
 loadYear(startYear);
 
 function loadYear(year) {
@@ -112,14 +107,12 @@ function loadYear(year) {
 
 function buildTeamSelector(data) {
   const teams = new Set();
-
   data.forEach(g => {
     teams.add(g.home_team);
     teams.add(g.away_team);
   });
 
   teamSelect.innerHTML = `<option value="ALL">All teams</option>`;
-
   [...teams].sort().forEach(t => {
     const opt = document.createElement("option");
     opt.value = t;
@@ -136,17 +129,13 @@ function buildRoundButtons(data) {
 
   data.forEach(g => {
     const match = g.round.toString().match(/\d+/);
-    if (match) {
-      numericRounds.add(parseInt(match[0]));
-    } else {
-      nonNumericRounds.add(g.round);
-    }
+    if (match) numericRounds.add(parseInt(match[0]));
+    else nonNumericRounds.add(g.round);
   });
 
   const sortedNumeric = [...numericRounds].sort((a, b) => a - b);
   const sortedNonNumeric = [...nonNumericRounds];
 
-  // ALL button
   const allBtn = document.createElement("button");
   allBtn.textContent = "All Rounds";
   allBtn.className = "round-btn active";
@@ -157,7 +146,6 @@ function buildRoundButtons(data) {
   };
   roundBar.appendChild(allBtn);
 
-  // numeric round buttons (0,1,2...)
   sortedNumeric.forEach(num => {
     const btn = document.createElement("button");
     btn.textContent = num;
@@ -170,7 +158,6 @@ function buildRoundButtons(data) {
     roundBar.appendChild(btn);
   });
 
-  // finals & special rounds
   sortedNonNumeric.forEach(r => {
     const btn = document.createElement("button");
     btn.textContent = r;
@@ -213,16 +200,23 @@ function renderMatches() {
     });
   }
 
-  filtered.forEach(game => {
+  // 🔑 DEDUPE BY MATCH_ID
+  const matchMap = new Map();
+  filtered.forEach(g => {
+    if (!matchMap.has(g.match_id)) {
+      matchMap.set(g.match_id, g);
+    }
+  });
+
+  const uniqueMatches = [...matchMap.values()];
+
+  uniqueMatches.forEach(game => {
     const div = document.createElement("div");
     div.className = "match";
-
-    const stars = game.stars || "";
 
     div.innerHTML = `
       ${game.round}: 
       ${game.home_team} ${game.home_points} def ${game.away_team} ${game.away_points}
-      <span class="star">${stars}</span>
     `;
 
     matchesDiv.appendChild(div);
