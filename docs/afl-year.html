@@ -109,6 +109,7 @@ const teamDropdown = document.getElementById("teamDropdown");
 let allMatches = [];
 let currentMatches = [];
 let currentTeam = "All";
+let currentRound = "All";
 
 for (let y = startYear; y <= endYear; y++) {
   const btn = document.createElement("button");
@@ -125,6 +126,7 @@ function loadYear(year) {
   teamSelectDiv.style.display = "none";
   teamDropdown.innerHTML = `<option value="All">All teams</option>`;
   currentTeam = "All";
+  currentRound = "All";
 
   fetch(`data/afl/afl_${year}.json`)
     .then(r => r.json())
@@ -178,18 +180,33 @@ function buildRoundButtons(matches) {
 
   const allBtn = document.createElement("button");
   allBtn.textContent = "All";
-  allBtn.onclick = () => showMatches(currentMatches, "All");
+  allBtn.onclick = () => {
+    currentRound = "All";
+    showMatches(currentMatches, "All");
+    buildLadder(allMatches);
+  };
   roundGrid.appendChild(allBtn);
 
   rounds.forEach(r => {
     const btn = document.createElement("button");
     btn.textContent = r;
-    btn.onclick = () => showMatches(
-      currentMatches.filter(m => m.round === r),
-      r
-    );
+    btn.onclick = () => {
+      currentRound = r;
+      const filtered = currentMatches.filter(m => m.round === r);
+      showMatches(filtered, r);
+      buildLadder(allMatches.filter(m => ladderRoundAllowed(m.round, r)));
+    };
     roundGrid.appendChild(btn);
   });
+}
+
+function ladderRoundAllowed(matchRound, selectedRound) {
+  if (selectedRound === "All") return matchRound.startsWith("Round");
+  if (!matchRound.startsWith("Round")) return false;
+
+  const mr = parseInt(matchRound.replace("Round","").trim());
+  const sr = parseInt(selectedRound.replace("Round","").trim());
+  return mr <= sr;
 }
 
 function filterMatches() {
@@ -202,6 +219,7 @@ function filterMatches() {
   buildRoundButtons(currentMatches);
   showMatches(currentMatches, "All");
   buildSummary();
+  buildLadder(allMatches.filter(m => ladderRoundAllowed(m.round, currentRound)));
 }
 
 function roundOrder(r) {
@@ -290,7 +308,9 @@ function buildLadder(matches) {
     pct:((t.for/t.against)*100).toFixed(1)
   })).sort((a,b)=>b.w-a.w||b.pct-a.pct);
 
-  let html=`<h2>Ladder (after home-and-away season)</h2>
+  let label = currentRound==="All" ? "Final Home & Away Ladder" : `Ladder after ${currentRound}`;
+
+  let html=`<h2>${label}</h2>
   <table class="ladder">
   <tr><th>Pos</th><th>Team</th><th>W</th><th>L</th><th>D</th><th>%</th></tr>`;
 
