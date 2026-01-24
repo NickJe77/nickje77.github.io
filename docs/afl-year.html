@@ -22,8 +22,6 @@ body { font-family: system-ui, Arial, sans-serif; margin: 20px; }
 select { padding: 6px; font-size: 16px; margin-bottom: 15px; display: block; }
 
 .match { margin-left: 15px; margin-bottom: 5px; }
-
-.star { font-size: 18px; letter-spacing: 2px; font-weight: 700; }
 </style>
 </head>
 
@@ -52,7 +50,6 @@ const matchesDiv = document.getElementById("matches");
 let currentData = [];
 let currentRound = "ALL";
 
-// build year buttons
 for (let y = startYear; y <= endYear; y++) {
   const btn = document.createElement("button");
   btn.textContent = y;
@@ -69,26 +66,23 @@ function loadYear(year) {
   document.querySelectorAll(".year-btn").forEach(b => b.classList.remove("active"));
   [...yearBar.children].find(b => b.textContent == year).classList.add("active");
 
-  fetch(`data/afl/afl_${year}.json`)
+  fetch(`/data/afl/afl_${year}.json`)
     .then(res => res.json())
     .then(data => {
       currentData = data;
       buildTeamSelector(data);
-      teamSelect.value = "ALL";   // 🔑 FIX: reset team filter
       buildRoundButtons(data);
       renderMatches();
     })
-    .catch(() => {
-      matchesDiv.innerHTML = "<p>No data for this year.</p>";
+    .catch(err => {
+      matchesDiv.innerHTML = "<p>Failed to load data.</p>";
+      console.error("FETCH FAILED:", err);
     });
 }
 
 function buildTeamSelector(data) {
   const teams = new Set();
-  data.forEach(g => {
-    teams.add(g.home_team);
-    teams.add(g.away_team);
-  });
+  data.forEach(g => { teams.add(g.home_team); teams.add(g.away_team); });
 
   teamSelect.innerHTML = `<option value="ALL">All teams</option>`;
   [...teams].sort().forEach(t => {
@@ -102,49 +96,19 @@ function buildTeamSelector(data) {
 function buildRoundButtons(data) {
   roundBar.innerHTML = "";
 
-  const numericRounds = new Set();
-  const nonNumericRounds = new Set();
-
-  data.forEach(g => {
-    const m = g.round.toString().match(/\d+/);
-    if (m) numericRounds.add(parseInt(m[0]));
-    else nonNumericRounds.add(g.round);
-  });
-
-  const sortedNumeric = [...numericRounds].sort((a, b) => a - b);
-  const sortedNonNumeric = [...nonNumericRounds];
+  const rounds = new Set(data.map(g => g.round));
 
   const allBtn = document.createElement("button");
   allBtn.textContent = "All Rounds";
   allBtn.className = "round-btn active";
-  allBtn.onclick = () => {
-    currentRound = "ALL";
-    setActiveRound(allBtn);
-    renderMatches();
-  };
+  allBtn.onclick = () => { currentRound = "ALL"; setActiveRound(allBtn); renderMatches(); };
   roundBar.appendChild(allBtn);
 
-  sortedNumeric.forEach(num => {
-    const btn = document.createElement("button");
-    btn.textContent = num;
-    btn.className = "round-btn";
-    btn.onclick = () => {
-      currentRound = num;
-      setActiveRound(btn);
-      renderMatches();
-    };
-    roundBar.appendChild(btn);
-  });
-
-  sortedNonNumeric.forEach(r => {
+  [...rounds].forEach(r => {
     const btn = document.createElement("button");
     btn.textContent = r;
     btn.className = "round-btn";
-    btn.onclick = () => {
-      currentRound = r;
-      setActiveRound(btn);
-      renderMatches();
-    };
+    btn.onclick = () => { currentRound = r; setActiveRound(btn); renderMatches(); };
     roundBar.appendChild(btn);
   });
 }
@@ -168,27 +132,17 @@ function renderMatches() {
   }
 
   if (currentRound !== "ALL") {
-    filtered = filtered.filter(g => {
-      const m = g.round.toString().match(/\d+/);
-      if (typeof currentRound === "number") return m && parseInt(m[0]) === currentRound;
-      return g.round === currentRound;
-    });
+    filtered = filtered.filter(g => g.round === currentRound);
   }
 
-  const matchMap = new Map();
-  filtered.forEach(g => {
-    const key = `${g.season}|${g.match_id}|${g.round}|${g.home_team}|${g.away_team}`;
-    if (!matchMap.has(key)) matchMap.set(key, g);
+  const seen = new Set();
+  const unique = filtered.filter(g => {
+    if (seen.has(g.match_id)) return false;
+    seen.add(g.match_id);
+    return true;
   });
 
-  const uniqueMatches = [...matchMap.values()];
-
-  if (uniqueMatches.length === 0) {
-    matchesDiv.innerHTML = "<p>No matches found for this filter.</p>";
-    return;
-  }
-
-  uniqueMatches.forEach(game => {
+  unique.forEach(game => {
     const div = document.createElement("div");
     div.className = "match";
     div.innerHTML = `
