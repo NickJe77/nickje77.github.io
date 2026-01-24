@@ -187,7 +187,6 @@ function compare(){
     return;
   }
 
-  // get all rows for these two teams
   const rawGames = allData.filter(r =>
     (r.home_team===a && r.away_team===b) ||
     (r.home_team===b && r.away_team===a)
@@ -198,7 +197,6 @@ function compare(){
     return;
   }
 
-  // dedupe by match_id (one row per game)
   const gameMap = {};
   rawGames.forEach(r=>{
     if(!gameMap[r.match_id]){
@@ -207,7 +205,6 @@ function compare(){
   });
   let games = Object.values(gameMap);
 
-  // sort newest first
   games.sort((x,y)=>{
     if(y.season!==x.season) return y.season-x.season;
     return parseInt(y.round.replace("Round ","")) -
@@ -226,25 +223,13 @@ function compare(){
   });
 
   const last10 = games.slice(0,10);
-  let last10Results=[];
-  let aPts10=0,bPts10=0;
+  let totalPoints10 = 0;
 
   last10.forEach(g=>{
-    const s1=g.home_points;
-    const s2=g.away_points;
-
-    if(g.home_team===a){
-      aPts10+=s1; bPts10+=s2;
-      if(s1>s2) last10Results.push("W");
-      else if(s1<s2) last10Results.push("L");
-      else last10Results.push("D");
-    } else {
-      aPts10+=s2; bPts10+=s1;
-      if(s2>s1) last10Results.push("W");
-      else if(s2<s1) last10Results.push("L");
-      else last10Results.push("D");
-    }
+    totalPoints10 += g.total_points;
   });
+
+  const avgPoints10 = (totalPoints10 / last10.length).toFixed(1);
 
   let html=`
   <h3>${a} vs ${b}</h3>
@@ -255,29 +240,37 @@ function compare(){
     ${b} wins: ${bWins}
   </p>
   <p>
-    Last 10: ${last10Results.join(" ")} |
-    Points: ${aPts10} – ${bPts10}
+    Last 10 Avg Points per Game: ${avgPoints10}
   </p>
 
   <table>
     <tr>
       <th>Season</th>
       <th>Round</th>
-      <th>Match</th>
       <th>Venue</th>
+      <th>Match</th>
+      <th>Winner</th>
       <th>Score</th>
+      <th>Total Points</th>
       <th>Margin</th>
     </tr>
   `;
 
   games.forEach(g=>{
+    const winner =
+      g.home_points > g.away_points ? g.home_team :
+      g.away_points > g.home_points ? g.away_team :
+      "Draw";
+
     html+=`
       <tr>
         <td>${g.season}</td>
         <td>${g.round}</td>
-        <td>${g.home_team} v ${g.away_team}</td>
         <td>${g.venue || ""}</td>
+        <td>${g.home_team} v ${g.away_team}</td>
+        <td>${winner}</td>
         <td>${g.home_points} - ${g.away_points}</td>
+        <td>${g.total_points}</td>
         <td>${g.margin}</td>
       </tr>
     `;
