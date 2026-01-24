@@ -36,7 +36,7 @@ select { padding:8px 10px; font-size:16px; margin-bottom:15px; display:block; }
 .muted { color:#666; font-size:13px; margin:8px 0 14px; }
 
 table { border-collapse: collapse; margin-top:15px; }
-th, td { padding:6px 10px; border:1px solid #ccc; text-align:right; }
+th, td { padding:6px 10px; border:1px solid #ccc; text-align:center; }
 th { background:#f0f0f0; }
 td.team { text-align:left; font-weight:600; }
 </style>
@@ -59,8 +59,6 @@ td.team { text-align:left; font-weight:600; }
 <div id="matches"></div>
 
 <script>
-const BUILD_ID = "LADDER_ROUND_BY_ROUND";
-
 const startYear = 1990;
 const endYear = new Date().getFullYear();
 
@@ -94,13 +92,6 @@ function canonicalRound(r) {
   return (r ?? "").toString().trim();
 }
 
-function toPoints(v) {
-  if (v === null || v === undefined) return null;
-  if (typeof v === "number") return v;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
 function loadYear(year) {
   currentRound = "ALL";
   teamSelect.value = "ALL";
@@ -110,24 +101,24 @@ function loadYear(year) {
 
   matchesDiv.innerHTML="";
   ladderDiv.innerHTML="";
-  statusDiv.textContent=`Loading… (${BUILD_ID})`;
+  statusDiv.textContent="Loading…";
 
   fetch(`/data/afl/afl_${year}.json?cb=${Date.now()}`)
     .then(r=>r.json())
     .then(data=>{
-      currentData = Array.isArray(data) ? data : [];
-      buildTeamSelector(currentData);
+      currentData = data;
+      buildTeamSelector();
       buildRoundButtons();
       renderMatches();
-      statusDiv.textContent = `Year ${year}: loaded ${currentData.length.toLocaleString()} player-rows (${BUILD_ID})`;
+      statusDiv.textContent = `Year ${year}: loaded ${currentData.length.toLocaleString()} player-rows`;
     });
 }
 
-function buildTeamSelector(data) {
+function buildTeamSelector() {
   const teams=new Set();
-  data.forEach(r=>{
-    if(r.home_team) teams.add(r.home_team);
-    if(r.away_team) teams.add(r.away_team);
+  currentData.forEach(r=>{
+    teams.add(r.home_team);
+    teams.add(r.away_team);
   });
 
   teamSelect.innerHTML=`<option value="ALL">All teams</option>`;
@@ -143,91 +134,30 @@ function buildRoundButtons() {
   roundBar.innerHTML="";
 
   const rounds=[...new Set(currentData.map(r=>canonicalRound(r.round)))];
+  const numeric=rounds.filter(r=>/^Round\s*\d+/i.test(r))
+    .map(r=>({label:r,num:parseInt(r.match(/\d+/)[0])}))
+    .sort((a,b)=>a.num-b.num);
 
-  const numeric=[];
-  rounds.forEach(r=>{
-    const m=r.match(/^Round\s*(\d+)/i);
-    if(m) numeric.push({label:r,num:parseInt(m[1],10)});
-  });
-  numeric.sort((a,b)=>a.num-b.num);
-
-  const allBtn=document.createElement("button");
-  allBtn.textContent="All Rounds";
-  allBtn.className="round-btn active";
-  allBtn.onclick=()=>{currentRound="ALL";setActiveRound(allBtn);renderMatches();};
-  roundBar.appendChild(allBtn);
-
+  addRoundButton("All Rounds", true);
   numeric.forEach(r=>addRoundButton(r.label));
-
   ["Elimination Final","Qualifying Final","Semi Final","Preliminary Final","Grand Final"]
     .forEach(r=>addRoundButton(r));
 }
 
-function addRoundButton(label){
+function addRoundButton(label,active=false){
   const btn=document.createElement("button");
   btn.textContent=label;
-  btn.className="round-btn";
+  btn.className="round-btn"+(active?" active":"");
   btn.onclick=()=>{
-    currentRound=label;
-    setActiveRound(btn);
+    currentRound=label==="All Rounds"?"ALL":label;
+    document.querySelectorAll(".round-btn").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
     renderMatches();
   };
   roundBar.appendChild(btn);
 }
 
-function setActiveRound(activeBtn){
-  document.querySelectorAll(".round-btn").forEach(b=>b.classList.remove("active"));
-  activeBtn.classList.add("active");
-}
-
-teamSelect.addEventListener("change",renderMatches);
-
-function plural(n, word) {
-  return `${n} ${word}${n === 1 ? "" : "s"}`;
-}
-
-function getStarsForMatch(gameKey) {
-  const stars = [];
-
-  currentData.forEach(p=>{
-    const key = p.season+"|"+canonicalRound(p.round)+"|"+p.home_team+"|"+p.away_team;
-    if(key === gameKey) {
-      const disposals = Number(p.D);
-      const goals = Number(p.G);
-
-      if (disposals >= 35 || goals >= 5) {
-        let tag = p.player;
-        if (goals >= 5) tag += ` (${plural(goals,"goal")})`;
-        else tag += ` (${plural(disposals,"disposal")})`;
-        stars.push(tag);
-      }
-    }
-  });
-
-  return stars;
-}
-
-function formatResult(game, stars) {
-  const round = canonicalRound(game.round);
-  const home = game.home_team;
-  const away = game.away_team;
-  const hp = toPoints(game.home_points);
-  const ap = toPoints(game.away_points);
-
-  let text = `${round}: ${home} vs ${away}`;
-
-  if (hp !== null && ap !== null) {
-    if (hp > ap) text = `${round}: ${home} ${hp} def ${away} ${ap}`;
-    else if (ap > hp) text = `${round}: ${away} ${ap} def ${home} ${hp}`;
-    else text = `${round}: ${home} ${hp} drew ${away} ${ap}`;
-  }
-
-  if (stars.length) {
-    text += " — ⭐ " + stars.join(", ");
-  }
-
-  return text;
-}
+teamSelect.onchange=renderMatches;
 
 function renderMatches(){
   matchesDiv.innerHTML="";
@@ -239,7 +169,6 @@ function renderMatches(){
   if(selectedTeam!=="ALL"){
     rows=rows.filter(r=>r.home_team===selectedTeam||r.away_team===selectedTeam);
   }
-
   if(currentRound!=="ALL"){
     rows=rows.filter(r=>canonicalRound(r.round)===currentRound);
   }
@@ -247,47 +176,22 @@ function renderMatches(){
   buildLadder();
 
   const seen=new Set();
-  let lineIndex = 0;
+  let i=0;
 
   rows.forEach(g=>{
-    const key = g.season+"|"+canonicalRound(g.round)+"|"+g.home_team+"|"+g.away_team;
-    if(!seen.has(key)){
-      seen.add(key);
+    const key=g.season+"|"+canonicalRound(g.round)+"|"+g.home_team+"|"+g.away_team;
+    if(seen.has(key)) return;
+    seen.add(key);
 
-      const stars = getStarsForMatch(key);
-      const text = formatResult(g, stars);
+    let text=`${canonicalRound(g.round)}: ${g.home_team} ${g.home_points} def ${g.away_team} ${g.away_points}`;
+    const div=document.createElement("div");
+    div.className="match";
 
-      const div=document.createElement("div");
-      div.className="match";
+    if(selectedTeam==="ALL" && i%2===1) div.classList.add("alt");
 
-      let coloured = false;
-
-      if (selectedTeam !== "ALL" && g.home_points != null && g.away_points != null) {
-        if (g.home_points === g.away_points) {
-          div.classList.add("draw");
-          coloured = true;
-        }
-        else if (
-          (g.home_team === selectedTeam && g.home_points > g.away_points) ||
-          (g.away_team === selectedTeam && g.away_points > g.home_points)
-        ) {
-          div.classList.add("win");
-          coloured = true;
-        }
-        else {
-          div.classList.add("loss");
-          coloured = true;
-        }
-      }
-
-      if (selectedTeam === "ALL" && !coloured && lineIndex % 2 === 1) {
-        div.classList.add("alt");
-      }
-
-      div.textContent = text;
-      matchesDiv.appendChild(div);
-      lineIndex++;
-    }
+    div.textContent=text;
+    matchesDiv.appendChild(div);
+    i++;
   });
 }
 
@@ -306,46 +210,41 @@ function buildLadder() {
     }
 
     const home=g.home_team, away=g.away_team;
-    const hp=toPoints(g.home_points), ap=toPoints(g.away_points);
-    if(hp==null||ap==null) return;
+    const hp=+g.home_points, ap=+g.away_points;
+    if(!hp||!ap) return;
 
     [home,away].forEach(t=>{
-      if(!ladder[t]) ladder[t]={team:t,played:0,win:0,loss:0,draw:0,ptsFor:0,ptsAgainst:0,points:0};
+      if(!ladder[t]) ladder[t]={team:t,win:0,loss:0,draw:0,for:0,against:0};
     });
 
-    ladder[home].played++;
-    ladder[away].played++;
-    ladder[home].ptsFor+=hp;
-    ladder[home].ptsAgainst+=ap;
-    ladder[away].ptsFor+=ap;
-    ladder[away].ptsAgainst+=hp;
+    ladder[home].for+=hp; ladder[home].against+=ap;
+    ladder[away].for+=ap; ladder[away].against+=hp;
 
-    if(hp>ap){
-      ladder[home].win++; ladder[home].points+=4;
-      ladder[away].loss++;
-    }
-    else if(ap>hp){
-      ladder[away].win++; ladder[away].points+=4;
-      ladder[home].loss++;
-    }
-    else{
-      ladder[home].draw++; ladder[away].draw++;
-      ladder[home].points+=2; ladder[away].points+=2;
-    }
+    if(hp>ap){ ladder[home].win++; ladder[away].loss++; }
+    else if(ap>hp){ ladder[away].win++; ladder[home].loss++; }
+    else{ ladder[home].draw++; ladder[away].draw++; }
   });
 
   const arr=Object.values(ladder).map(t=>{
-    t.perc = t.ptsAgainst ? (t.ptsFor/t.ptsAgainst*100).toFixed(1) : "0.0";
+    t.perc = t.against ? ((t.for/t.against)*100).toFixed(1) : "0.0";
     return t;
   });
 
-  arr.sort((a,b)=>b.points-a.points||b.perc-a.perc||a.team.localeCompare(b.team));
+  arr.sort((a,b)=>b.win-a.win || b.perc-a.perc || a.team.localeCompare(b.team));
 
-  let html="<table><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>D</th><th>Pts</th><th>%</th></tr>";
+  let html="<table><tr><th>#</th><th>Team</th><th>W</th><th>L</th><th>D</th><th>%</th></tr>";
   arr.forEach((t,i)=>{
-    html+=`<tr><td>${i+1}</td><td class="team">${t.team}</td><td>${t.played}</td><td>${t.win}</td><td>${t.loss}</td><td>${t.draw}</td><td>${t.points}</td><td>${t.perc}</td></tr>`;
+    html+=`<tr>
+      <td>${i+1}</td>
+      <td class="team">${t.team}</td>
+      <td>${t.win}</td>
+      <td>${t.loss}</td>
+      <td>${t.draw}</td>
+      <td>${t.perc}</td>
+    </tr>`;
   });
   html+="</table>";
+
   ladderDiv.innerHTML=html;
 }
 </script>
