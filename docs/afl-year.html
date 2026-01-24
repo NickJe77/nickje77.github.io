@@ -96,42 +96,7 @@ function buildTeamSelector(data) {
 function buildRoundButtons(data) {
   roundBar.innerHTML = "";
 
-  // clean round labels
-  const rawRounds = data.map(g => g.round.toString().trim());
-  const roundSet = [...new Set(rawRounds)];
-
-  const numericRounds = [];
-  const finalsRounds = [];
-
-  roundSet.forEach(r => {
-    if (/^Round\s*\d+/i.test(r)) {
-      numericRounds.push({
-        label: r,
-        num: parseInt(r.match(/\d+/)[0])
-      });
-    } else {
-      finalsRounds.push(r);
-    }
-  });
-
-  numericRounds.sort((a, b) => a.num - b.num);
-
-  const finalsOrder = [
-    "Qualifying Final",
-    "Elimination Final",
-    "Semi Final",
-    "Preliminary Final",
-    "Grand Final"
-  ];
-
-  finalsRounds.sort((a, b) => {
-    const ia = finalsOrder.findIndex(f => a.toLowerCase().includes(f.toLowerCase()));
-    const ib = finalsOrder.findIndex(f => b.toLowerCase().includes(f.toLowerCase()));
-    if (ia === -1 && ib === -1) return a.localeCompare(b);
-    if (ia === -1) return 1;
-    if (ib === -1) return -1;
-    return ia - ib;
-  });
+  const rounds = [...new Set(data.map(g => g.round.toString().trim()))];
 
   const allBtn = document.createElement("button");
   allBtn.textContent = "All Rounds";
@@ -143,21 +108,9 @@ function buildRoundButtons(data) {
   };
   roundBar.appendChild(allBtn);
 
-  numericRounds.forEach(r => {
+  rounds.forEach(r => {
     const btn = document.createElement("button");
-    btn.textContent = r.label;
-    btn.className = "round-btn";
-    btn.onclick = () => {
-      currentRound = r.label;
-      setActiveRound(btn);
-      renderMatches();
-    };
-    roundBar.appendChild(btn);
-  });
-
-  finalsRounds.forEach(r => {
-    const btn = document.createElement("button");
-    btn.textContent = r;   // will no longer be blank
+    btn.textContent = r;
     btn.className = "round-btn";
     btn.onclick = () => {
       currentRound = r;
@@ -196,6 +149,17 @@ function renderMatches() {
     seen.add(g.match_id);
     return true;
   });
+
+  // 🔑 FIX: if filter kills all data, reset to ALL ROUNDS automatically
+  if (unique.length === 0 && currentRound !== "ALL") {
+    currentRound = "ALL";
+    document.querySelectorAll(".round-btn").forEach(b => {
+      if (b.textContent === "All Rounds") b.classList.add("active");
+      else b.classList.remove("active");
+    });
+    renderMatches();
+    return;
+  }
 
   unique.forEach(game => {
     const div = document.createElement("div");
