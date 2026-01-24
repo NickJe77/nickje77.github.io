@@ -31,6 +31,15 @@ select { padding:8px; margin-bottom:15px; }
 
 .star { color:goldenrod; font-size:14px; margin-left:20px; }
 
+.debug {
+  background:#000;
+  color:#0f0;
+  padding:10px;
+  margin:10px 0;
+  font-size:13px;
+  font-family:monospace;
+}
+
 table { border-collapse:collapse; width:100%; margin-top:30px; }
 th, td { border:1px solid #ccc; padding:6px; text-align:center; }
 th { background:#f0f0f0; }
@@ -49,6 +58,8 @@ Team:
 </div>
 
 <div class="round-buttons" id="roundButtons"></div>
+
+<div class="debug" id="debugBox">Loading…</div>
 
 <h2 id="heading">All Matches</h2>
 <div id="matches"></div>
@@ -130,7 +141,7 @@ function loadYear(y){
 
   Promise.all([
     fetch(`data/afl/afl_${y}.json`).then(r=>r.json()),
-    fetch(`docs/data/afl_players_by_year/players_${y}.json`).then(r=>r.ok ? r.json() : [])
+    fetch(`data/afl_players_by_year/players_${y}.json`).then(r=>r.ok ? r.json() : [])
   ]).then(([rows, players])=>{
     rawRows = rows;
     allPlayers = players;
@@ -172,73 +183,12 @@ function getStars(match){
   });
 }
 
-function buildLadder(matches){
-  const table = {};
-
-  matches.forEach(m=>{
-    [m.home_team, m.away_team].forEach(t=>{
-      if(!table[t]){
-        table[t]={team:t,played:0,w:0,l:0,d:0,for:0,against:0,pts:0};
-      }
-    });
-
-    const home=table[m.home_team];
-    const away=table[m.away_team];
-
-    home.played++; away.played++;
-    home.for+=m.home_score; home.against+=m.away_score;
-    away.for+=m.away_score; away.against+=m.home_score;
-
-    if(m.home_score>m.away_score){ home.w++; away.l++; home.pts+=4; }
-    else if(m.home_score<m.away_score){ away.w++; home.l++; away.pts+=4; }
-    else { home.d++; away.d++; home.pts+=2; away.pts+=2; }
-  });
-
-  return Object.values(table).sort((a,b)=>{
-    if(b.pts!==a.pts) return b.pts-a.pts;
-    const pctA=(a.for/a.against)*100;
-    const pctB=(b.for/b.against)*100;
-    return pctB-pctA;
-  });
-}
-
-function renderLadder(list){
-  const div=document.getElementById("ladder");
-  const title=document.getElementById("ladderTitle");
-  if(list.length===0){
-    div.innerHTML="";
-    title.style.display="none";
-    return;
-  }
-  title.style.display="block";
-
-  let html=`<table><tr>
-  <th>Pos</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>D</th>
-  <th>For</th><th>Against</th><th>%</th><th>Pts</th></tr>`;
-
-  list.forEach((t,i)=>{
-    const pct=((t.for/t.against)*100).toFixed(1);
-    html+=`<tr>
-    <td>${i+1}</td>
-    <td>${t.team}</td>
-    <td>${t.played}</td>
-    <td>${t.w}</td>
-    <td>${t.l}</td>
-    <td>${t.d}</td>
-    <td>${t.for}</td>
-    <td>${t.against}</td>
-    <td>${pct}</td>
-    <td>${t.pts}</td>
-    </tr>`;
-  });
-
-  html+=`</table>`;
-  div.innerHTML=html;
-}
-
 function render(){
   const div=document.getElementById("matches");
   div.innerHTML="";
+
+  let starCount = 0;
+
   document.getElementById("heading").textContent =
     currentRound==="All" ? "All Matches" : currentRound;
 
@@ -271,7 +221,10 @@ function render(){
     d.className=`match ${cls}`;
     d.innerHTML=`<strong>${m.round}</strong> — ${m.home_team} ${m.home_score} vs ${m.away_team} ${m.away_score}`;
 
-    getStars(m).forEach(s=>{
+    const stars = getStars(m);
+    starCount += stars.length;
+
+    stars.forEach(s=>{
       const st=document.createElement("div");
       st.className="star";
       st.textContent=s;
@@ -281,23 +234,8 @@ function render(){
     div.appendChild(d);
   });
 
-  if(currentRound !== "All" && !ladderRounds.includes(currentRound)){
-    renderLadder([]);
-    return;
-  }
-
-  let ladderMatches = allMatches.filter(m=>ladderRounds.includes(m.round));
-  if(currentYear < 2024){
-    ladderMatches = ladderMatches.filter(m=>m.round !== "Round 0");
-  }
-
-  if(currentRound!=="All"){
-    const idx = ladderRounds.indexOf(currentRound);
-    ladderMatches = ladderMatches.filter(m=>ladderRounds.indexOf(m.round)<=idx);
-  }
-
-  const ladder = buildLadder(ladderMatches);
-  renderLadder(ladder);
+  document.getElementById("debugBox").textContent =
+    `Year ${currentYear} | Player rows loaded: ${allPlayers.length} | Stars found: ${starCount}`;
 }
 
 buildYearButtons();
