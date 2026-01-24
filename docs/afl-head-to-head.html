@@ -110,12 +110,9 @@ th{background:#f4f6f8;}
 
 <h1>AFL Head to Head</h1>
 
-<p>
-Compare two AFL teams across all matches, seasons, and venues.
-</p>
+<p>Compare two AFL teams across all matches, seasons, and venues.</p>
 
 <div class="selector-grid">
-
   <div class="selector-box">
     <h3>Team One</h3>
     <select id="team1"></select>
@@ -125,15 +122,12 @@ Compare two AFL teams across all matches, seasons, and venues.
     <h3>Team Two</h3>
     <select id="team2"></select>
   </div>
-
 </div>
 
 <button class="compare-btn" onclick="compare()">Compare</button>
 
 <div id="results" class="results-box">
-  <div class="placeholder">
-    Loading AFL match database...
-  </div>
+  <div class="placeholder">Loading AFL match database...</div>
 </div>
 
 </div>
@@ -156,7 +150,7 @@ fetch("afl_all_in_one.csv")
   });
 
   populateTeams();
-  document.getElementById("results").innerHTML=
+  document.getElementById("results").innerHTML =
     "<div class='placeholder'>Select two teams and click Compare.</div>";
 });
 
@@ -168,7 +162,6 @@ function populateTeams(){
   });
 
   const sorted=[...teams].sort();
-
   const t1=document.getElementById("team1");
   const t2=document.getElementById("team2");
 
@@ -188,7 +181,7 @@ function compare(){
     return;
   }
 
-  const games=data.filter(r=>
+  let games=data.filter(r=>
     (r.Team1===a && r.Team2===b) ||
     (r.Team1===b && r.Team2===a)
   );
@@ -198,12 +191,43 @@ function compare(){
     return;
   }
 
-  let aWins=0,bWins=0,marginTotal=0;
+  /* sort most recent first */
+  games.sort((x,y)=>{
+    if(y.Season!==x.Season) return y.Season-x.Season;
+    return y.Round-x.Round;
+  });
+
+  let aWins=0,bWins=0,draws=0;
 
   games.forEach(g=>{
-    if(g.Winner===a) aWins++;
-    if(g.Winner===b) bWins++;
-    marginTotal+=Math.abs(parseInt(g.Margin)||0);
+    const s1=parseInt(g.Team1Score);
+    const s2=parseInt(g.Team2Score);
+
+    if(s1===s2) draws++;
+    else if((g.Team1===a && s1>s2) || (g.Team2===a && s2>s1)) aWins++;
+    else bWins++;
+  });
+
+  /* last 10 */
+  const last10 = games.slice(0,10);
+  let last10Results=[];
+  let aPts10=0, bPts10=0;
+
+  last10.forEach(g=>{
+    const s1=parseInt(g.Team1Score);
+    const s2=parseInt(g.Team2Score);
+
+    if(g.Team1===a){
+      aPts10+=s1; bPts10+=s2;
+      if(s1>s2) last10Results.push("W");
+      else if(s1<s2) last10Results.push("L");
+      else last10Results.push("D");
+    }else{
+      aPts10+=s2; bPts10+=s1;
+      if(s2>s1) last10Results.push("W");
+      else if(s2<s1) last10Results.push("L");
+      else last10Results.push("D");
+    }
   });
 
   let html=`
@@ -211,28 +235,34 @@ function compare(){
   <p>
     Games: ${games.length} |
     ${a} wins: ${aWins} |
-    ${b} wins: ${bWins} |
-    Avg margin: ${(marginTotal/games.length).toFixed(1)}
+    Draws: ${draws} |
+    ${b} wins: ${bWins}
+  </p>
+  <p>
+    Last 10: ${last10Results.join(" ")} |
+    Points: ${aPts10} – ${bPts10}
   </p>
 
   <table>
     <tr>
       <th>Season</th>
       <th>Round</th>
+      <th>Match</th>
       <th>Venue</th>
+      <th>Score</th>
       <th>Winner</th>
-      <th>Margin</th>
     </tr>
   `;
 
-  games.slice(-20).reverse().forEach(g=>{
+  games.forEach(g=>{
     html+=`
       <tr>
         <td>${g.Season}</td>
         <td>${g.Round}</td>
+        <td>${g.Team1} (${g.Team1Pos}) v ${g.Team2} (${g.Team2Pos})</td>
         <td>${g.Venue}</td>
+        <td>${g.Team1Score} - ${g.Team2Score}</td>
         <td>${g.Winner}</td>
-        <td>${g.Margin}</td>
       </tr>
     `;
   });
