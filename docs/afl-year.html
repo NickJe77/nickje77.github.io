@@ -5,23 +5,23 @@
 <title>AFL Season</title>
 
 <style>
-  body { font-family: system-ui, Arial, sans-serif; margin: 20px; }
-  .year-bar, .round-bar { margin-bottom: 15px; }
+body { font-family: system-ui, Arial, sans-serif; margin:20px; }
+.year-bar, .round-bar { margin-bottom:15px; }
 
-  .year-btn, .round-btn {
-    margin: 4px;
-    padding: 10px 16px;
-    border-radius: 10px;
-    border: 1px solid #ccc;
-    background: #ddd;
-    cursor: pointer;
-    font-size: 15px;
-  }
-  .year-btn.active, .round-btn.active { background: #333; color: #fff; }
+.year-btn, .round-btn {
+  margin:4px;
+  padding:10px 16px;
+  border-radius:10px;
+  border:1px solid #ccc;
+  background:#ddd;
+  cursor:pointer;
+  font-size:15px;
+}
+.year-btn.active, .round-btn.active { background:#333; color:#fff; }
 
-  select { padding: 8px 10px; font-size: 16px; margin-bottom: 15px; display: block; }
-  .match { margin-left: 15px; margin-bottom: 6px; }
-  .muted { color:#666; font-size: 13px; margin: 8px 0 14px; }
+select { padding:8px 10px; font-size:16px; margin-bottom:15px; display:block; }
+.match { margin-left:15px; margin-bottom:6px; }
+.muted { color:#666; font-size:13px; margin:8px 0 14px; }
 </style>
 </head>
 
@@ -68,13 +68,11 @@ function normalizeRound(r) {
 
 function canonicalRound(r) {
   const t = normalizeRound(r).toLowerCase();
-
   if (t.includes("qualifying")) return "Qualifying Final";
   if (t.includes("elimination")) return "Elimination Final";
   if (t.includes("semi")) return "Semi Final";
   if (t.includes("preliminary")) return "Preliminary Final";
   if (t.includes("grand")) return "Grand Final";
-
   return normalizeRound(r);
 }
 
@@ -82,110 +80,114 @@ function loadYear(year) {
   currentRound = "ALL";
   teamSelect.value = "ALL";
 
-  document.querySelectorAll(".year-btn").forEach(b => b.classList.remove("active"));
-  [...yearBar.children].find(b => b.textContent == year).classList.add("active");
+  document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
+  [...yearBar.children].find(b=>b.textContent==year).classList.add("active");
 
-  matchesDiv.innerHTML = "";
-  statusDiv.textContent = "Loading…";
+  matchesDiv.innerHTML="";
+  statusDiv.textContent="Loading…";
 
   fetch(`/data/afl/afl_${year}.json?cb=${Date.now()}`)
-    .then(r => r.json())
-    .then(data => {
-      currentData = data;
+    .then(r=>r.json())
+    .then(data=>{
+      currentData=data;
       buildTeamSelector(data);
       buildRoundButtons(data);
       renderMatches();
-      statusDiv.textContent = `Year ${year}: loaded ${data.length.toLocaleString()} player-rows`;
+      statusDiv.textContent=`Year ${year}: loaded ${data.length.toLocaleString()} player-rows`;
     });
 }
 
 function buildTeamSelector(data) {
-  const teams = new Set();
-  data.forEach(r => {
-    if (r.home_team) teams.add(r.home_team);
-    if (r.away_team) teams.add(r.away_team);
+  const teams=new Set();
+  data.forEach(r=>{
+    if(r.home_team) teams.add(r.home_team);
+    if(r.away_team) teams.add(r.away_team);
   });
 
-  teamSelect.innerHTML = `<option value="ALL">All teams</option>`;
-  [...teams].sort().forEach(t => {
-    const opt = document.createElement("option");
-    opt.value = t;
-    opt.textContent = t;
+  teamSelect.innerHTML=`<option value="ALL">All teams</option>`;
+  [...teams].sort().forEach(t=>{
+    const opt=document.createElement("option");
+    opt.value=t;
+    opt.textContent=t;
     teamSelect.appendChild(opt);
   });
 }
 
 function buildRoundButtons(data) {
-  roundBar.innerHTML = "";
+  roundBar.innerHTML="";
 
-  const rounds = [...new Set(
-    data.map(r => canonicalRound(r.round)).filter(r => r !== "")
-  )];
+  const rounds=[...new Set(data.map(r=>canonicalRound(r.round)).filter(r=>r!==""))];
 
-  const numeric = [];
-  const finals = [];
+  const numeric=[];
+  const finals=[];
 
-  rounds.forEach(r => {
-    const m = r.match(/^Round\s*(\d+)/i);
-    if (m) numeric.push({ label: r, num: parseInt(m[1], 10) });
+  rounds.forEach(r=>{
+    const m=r.match(/^Round\s*(\d+)/i);
+    if(m) numeric.push({label:r,num:parseInt(m[1],10)});
     else finals.push(r);
   });
 
-  numeric.sort((a,b) => a.num - b.num);
+  numeric.sort((a,b)=>a.num-b.num);
 
-  const finalsOrder = ["Qualifying Final","Elimination Final","Semi Final","Preliminary Final","Grand Final"];
-  finals.sort((a,b) => finalsOrder.indexOf(a) - finalsOrder.indexOf(b));
+  const finalsOrder=["Qualifying Final","Elimination Final","Semi Final","Preliminary Final","Grand Final"];
 
-  const allBtn = document.createElement("button");
-  allBtn.textContent = "All Rounds";
-  allBtn.className = "round-btn active";
-  allBtn.onclick = () => { currentRound="ALL"; setActiveRound(allBtn); renderMatches(); };
+  // 🔑 FORCE Elimination Final button if it exists in data
+  const hasElim = data.some(r => /elimination/i.test(r.round));
+  if (hasElim && !finals.includes("Elimination Final")) {
+    finals.push("Elimination Final");
+  }
+
+  finals.sort((a,b)=>finalsOrder.indexOf(a)-finalsOrder.indexOf(b));
+
+  const allBtn=document.createElement("button");
+  allBtn.textContent="All Rounds";
+  allBtn.className="round-btn active";
+  allBtn.onclick=()=>{currentRound="ALL";setActiveRound(allBtn);renderMatches();};
   roundBar.appendChild(allBtn);
 
-  numeric.forEach(r => addRoundButton(r.label));
-  finals.forEach(r => addRoundButton(r));
+  numeric.forEach(r=>addRoundButton(r.label));
+  finals.forEach(r=>addRoundButton(r));
 }
 
-function addRoundButton(label) {
-  const btn = document.createElement("button");
-  btn.textContent = label;
-  btn.className = "round-btn";
-  btn.onclick = () => {
-    currentRound = label;
+function addRoundButton(label){
+  const btn=document.createElement("button");
+  btn.textContent=label;
+  btn.className="round-btn";
+  btn.onclick=()=>{
+    currentRound=label;
     setActiveRound(btn);
     renderMatches();
   };
   roundBar.appendChild(btn);
 }
 
-function setActiveRound(activeBtn) {
-  document.querySelectorAll(".round-btn").forEach(b => b.classList.remove("active"));
+function setActiveRound(activeBtn){
+  document.querySelectorAll(".round-btn").forEach(b=>b.classList.remove("active"));
   activeBtn.classList.add("active");
 }
 
-teamSelect.addEventListener("change", renderMatches);
+teamSelect.addEventListener("change",renderMatches);
 
-function renderMatches() {
-  matchesDiv.innerHTML = "";
+function renderMatches(){
+  matchesDiv.innerHTML="";
+  let rows=currentData;
 
-  let rows = currentData;
-
-  if (teamSelect.value !== "ALL") {
-    rows = rows.filter(r => r.home_team === teamSelect.value || r.away_team === teamSelect.value);
+  if(teamSelect.value!=="ALL"){
+    rows=rows.filter(r=>r.home_team===teamSelect.value||r.away_team===teamSelect.value);
   }
 
-  if (currentRound !== "ALL") {
-    rows = rows.filter(r => canonicalRound(r.round) === currentRound);
+  if(currentRound!=="ALL"){
+    rows=rows.filter(r=>canonicalRound(r.round)===currentRound);
   }
 
-  const seen = new Set();
-  rows.forEach(g => {
-    const key = g.season+"|"+canonicalRound(g.round)+"|"+g.home_team+"|"+g.away_team;
-    if (!seen.has(key)) {
+  const seen=new Set();
+  rows.forEach(g=>{
+    const key=g.season+"|"+canonicalRound(g.round)+"|"+g.home_team+"|"+g.away_team;
+    if(!seen.has(key)){
       seen.add(key);
-      const div = document.createElement("div");
-      div.className = "match";
-      div.textContent = `${canonicalRound(g.round)}: ${g.home_team} ${g.home_points} def ${g.away_team} ${g.away_points}`;
+      const div=document.createElement("div");
+      div.className="match";
+      div.textContent=`${canonicalRound(g.round)}: ${g.home_team} ${g.home_points} def ${g.away_team} ${g.away_points}`;
       matchesDiv.appendChild(div);
     }
   });
