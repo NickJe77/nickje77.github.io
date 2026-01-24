@@ -138,6 +138,10 @@ th{background:#f4f6f8;}
 <script>
 let allData = [];
 
+function norm(s){
+  return (s||"").trim().toLowerCase();
+}
+
 async function loadAllSeasons(){
   const startYear = 1990;
   const endYear = new Date().getFullYear();
@@ -150,9 +154,11 @@ async function loadAllSeasons(){
       const seasonData = await res.json();
 
       seasonData.forEach(r=>{
+        if(!r.home_team || !r.away_team) return;
+
         allData.push(r);
-        if(r.home_team) teams.add(r.home_team);
-        if(r.away_team) teams.add(r.away_team);
+        teams.add(r.home_team.trim());
+        teams.add(r.away_team.trim());
       });
     }catch(e){}
   }
@@ -187,13 +193,16 @@ function compare(){
     return;
   }
 
+  const na = norm(a);
+  const nb = norm(b);
+
   const rawGames = allData.filter(r =>
-    (r.home_team===a && r.away_team===b) ||
-    (r.home_team===b && r.away_team===a)
+    (norm(r.home_team)===na && norm(r.away_team)===nb) ||
+    (norm(r.home_team)===nb && norm(r.away_team)===na)
   );
 
   if(rawGames.length===0){
-    box.innerHTML="<b>No matches found.</b>";
+    box.innerHTML="<b>No matches found for this pairing.</b>";
     return;
   }
 
@@ -218,7 +227,7 @@ function compare(){
     const s2=g.away_points;
 
     if(s1===s2) draws++;
-    else if((g.home_team===a && s1>s2) || (g.away_team===a && s2>s1)) aWins++;
+    else if((norm(g.home_team)===na && s1>s2) || (norm(g.away_team)===na && s2>s1)) aWins++;
     else bWins++;
   });
 
