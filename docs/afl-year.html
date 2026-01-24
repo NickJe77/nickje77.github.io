@@ -2,64 +2,72 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>AFL Year by Year | The Sporting Almanac</title>
+<title>AFL Results by Year | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet" href="style.css">
 
 <style>
-body{
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
-               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+body {
+  font-family: Inter, system-ui, Arial, sans-serif;
+  margin: 0;
+  background: white;
 }
 
-.navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px 0;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
-}
-.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-
-.year-grid{
-  max-width:1200px;
-  margin:30px auto;
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
-  gap:14px;
-  padding:0 20px;
-}
-.year-tile{
-  background:#111;
-  color:#fff;
-  padding:14px 0;
-  text-align:center;
-  border-radius:8px;
-  font-size:18px;
-  font-weight:700;
-  cursor:pointer;
-}
-.year-tile.active{background:#0056d6;}
-
-#rounds button{
-  margin:6px;
-  padding:6px 10px;
-  border:1px solid #ccc;
-  background:#fff;
-  cursor:pointer;
+.navbar {
+  display: flex;
+  justify-content: center;
+  gap: 22px;
+  padding: 16px 0;
+  border-bottom: 1px solid #ddd;
+  font-weight: 600;
 }
 
-.game{
-  padding:8px;
-  border-bottom:1px solid #ddd;
+.navbar a {
+  color: #0056d6;
+  text-decoration: none;
+  font-size: 18px;
 }
 
-.placeholder{
-  color:#666;
-  font-style:italic;
-  padding:10px 0;
+.page-wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.year-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 10px;
+  margin-bottom: 25px;
+}
+
+.year-grid button {
+  padding: 10px;
+  border: 1px solid #ccc;
+  background: #f4f4f4;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.year-grid button:hover {
+  background: #ddd;
+}
+
+.match {
+  border-bottom: 1px solid #eee;
+  padding: 6px 0;
+  font-size: 15px;
+}
+
+.match strong {
+  display: inline-block;
+  width: 140px;
 }
 </style>
 </head>
@@ -68,53 +76,58 @@ body{
 
 <div class="navbar">
   <a href="index.html">Home</a>
-  <a href="racing.html">Racing</a>
   <a href="afl.html">AFL</a>
-  <a href="football.html">Football</a>
-  <a href="cricket.html">Cricket</a>
-  <a href="f1.html">F1</a>
+  <a href="afl-year.html">By Year</a>
 </div>
 
-<h1 style="padding:20px;">AFL Year by Year</h1>
+<div class="page-wrap">
+<h1>AFL Results by Year</h1>
 
-<div id="status" style="padding:0 20px;color:#555;">
-  AFL match data will be added once full season records are collated.
+<div class="year-grid" id="yearGrid"></div>
+<div id="results"></div>
 </div>
-
-<div id="years" class="year-grid"></div>
-<div id="rounds" style="padding:20px;"></div>
-<div id="games" style="padding:20px;"></div>
-<div id="players" style="padding:20px;"></div>
 
 <script>
-/* TEMP YEAR RANGE UNTIL JSON IS READY */
-const years = [];
-for(let y=1990;y<=2025;y++) years.push(y);
+const startYear = 1990;
+const endYear = 2025;
 
-const yearsBox=document.getElementById("years");
-const roundsBox=document.getElementById("rounds");
-const gamesBox=document.getElementById("games");
-const playersBox=document.getElementById("players");
+const yearGrid = document.getElementById("yearGrid");
+const resultsDiv = document.getElementById("results");
 
-/* BUILD YEAR TILES */
-years.forEach(y=>{
-  const t=document.createElement("div");
-  t.className="year-tile";
-  t.textContent=y;
-  t.onclick=()=>loadYear(y,t);
-  yearsBox.appendChild(t);
-});
+// build year buttons
+for (let y = startYear; y <= endYear; y++) {
+  const btn = document.createElement("button");
+  btn.textContent = y;
+  btn.onclick = () => loadYear(y);
+  yearGrid.appendChild(btn);
+}
 
-/* AUTO SELECT LATEST */
-if(yearsBox.lastChild) yearsBox.lastChild.click();
+function loadYear(year) {
+  resultsDiv.innerHTML = `<h2>${year}</h2><p>Loading...</p>`;
 
-function loadYear(year,tile){
- document.querySelectorAll(".year-tile").forEach(x=>x.classList.remove("active"));
- tile.classList.add("active");
+  fetch(`data/afl/afl_${year}.json`)
+    .then(r => r.json())
+    .then(data => {
+      let html = `<h2>${year}</h2>`;
 
- roundsBox.innerHTML="<div class='placeholder'>Round data will appear here.</div>";
- gamesBox.innerHTML="<div class='placeholder'>Match results will appear here.</div>";
- playersBox.innerHTML="<div class='placeholder'>Player statistics will appear here.</div>";
+      data.forEach(match => {
+        html += `
+          <div class="match">
+            <strong>${match.round}</strong>
+            ${match.home_team} ${match.home_points}
+            vs
+            ${match.away_team} ${match.away_points}
+            <em>(${match.venue})</em>
+          </div>
+        `;
+      });
+
+      resultsDiv.innerHTML = html;
+    })
+    .catch(err => {
+      resultsDiv.innerHTML = `<p>No data found for ${year}</p>`;
+      console.error(err);
+    });
 }
 </script>
 
