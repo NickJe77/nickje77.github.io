@@ -34,6 +34,11 @@ select { padding:8px 10px; font-size:16px; margin-bottom:15px; display:block; }
 .alt  { background:#eaf4ff; }
 
 .muted { color:#666; font-size:13px; margin:8px 0 14px; }
+
+table { border-collapse: collapse; margin-top:15px; }
+th, td { padding:6px 10px; border:1px solid #ccc; text-align:right; }
+th { background:#f0f0f0; }
+td.team { text-align:left; font-weight:600; }
 </style>
 </head>
 
@@ -48,11 +53,13 @@ select { padding:8px 10px; font-size:16px; margin-bottom:15px; display:block; }
 
 <div id="roundBar" class="round-bar"></div>
 
+<div id="ladder"></div>
+
 <div id="status" class="muted"></div>
 <div id="matches"></div>
 
 <script>
-const BUILD_ID = "STAT_STARS_STRIPES_TEAMRULE";
+const BUILD_ID = "LADDER_ROUND_BY_ROUND";
 
 const startYear = 1990;
 const endYear = new Date().getFullYear();
@@ -62,6 +69,7 @@ const teamSelect = document.getElementById("teamSelect");
 const roundBar = document.getElementById("roundBar");
 const matchesDiv = document.getElementById("matches");
 const statusDiv = document.getElementById("status");
+const ladderDiv = document.getElementById("ladder");
 
 let currentData = [];
 let currentRound = "ALL";
@@ -101,6 +109,7 @@ function loadYear(year) {
   [...yearBar.children].find(b=>b.textContent==year).classList.add("active");
 
   matchesDiv.innerHTML="";
+  ladderDiv.innerHTML="";
   statusDiv.textContent=`Loading… (${BUILD_ID})`;
 
   fetch(`/data/afl/afl_${year}.json?cb=${Date.now()}`)
@@ -188,8 +197,8 @@ function getStarsForMatch(gameKey) {
 
       if (disposals >= 35 || goals >= 5) {
         let tag = p.player;
-        if (goals >= 5) tag += ` (${plural(goals, "goal")})`;
-        else tag += ` (${plural(disposals, "disposal")})`;
+        if (goals >= 5) tag += ` (${plural(goals,"goal")})`;
+        else tag += ` (${plural(disposals,"disposal")})`;
         stars.push(tag);
       }
     }
@@ -222,6 +231,8 @@ function formatResult(game, stars) {
 
 function renderMatches(){
   matchesDiv.innerHTML="";
+  ladderDiv.innerHTML="";
+
   let rows=currentData;
   const selectedTeam = teamSelect.value;
 
@@ -232,6 +243,8 @@ function renderMatches(){
   if(currentRound!=="ALL"){
     rows=rows.filter(r=>canonicalRound(r.round)===currentRound);
   }
+
+  buildLadder();
 
   const seen=new Set();
   let lineIndex = 0;
@@ -276,6 +289,64 @@ function renderMatches(){
       lineIndex++;
     }
   });
+}
+
+function buildLadder() {
+  let ladder = {};
+
+  currentData.forEach(g=>{
+    const round = canonicalRound(g.round);
+    const m = round.match(/^Round\s*(\d+)/i);
+    if (!m) return;
+
+    const roundNum = parseInt(m[1],10);
+    if (currentRound !== "ALL") {
+      const sel = currentRound.match(/^Round\s*(\d+)/i);
+      if (!sel || roundNum > parseInt(sel[1],10)) return;
+    }
+
+    const home=g.home_team, away=g.away_team;
+    const hp=toPoints(g.home_points), ap=toPoints(g.away_points);
+    if(hp==null||ap==null) return;
+
+    [home,away].forEach(t=>{
+      if(!ladder[t]) ladder[t]={team:t,played:0,win:0,loss:0,draw:0,ptsFor:0,ptsAgainst:0,points:0};
+    });
+
+    ladder[home].played++;
+    ladder[away].played++;
+    ladder[home].ptsFor+=hp;
+    ladder[home].ptsAgainst+=ap;
+    ladder[away].ptsFor+=ap;
+    ladder[away].ptsAgainst+=hp;
+
+    if(hp>ap){
+      ladder[home].win++; ladder[home].points+=4;
+      ladder[away].loss++;
+    }
+    else if(ap>hp){
+      ladder[away].win++; ladder[away].points+=4;
+      ladder[home].loss++;
+    }
+    else{
+      ladder[home].draw++; ladder[away].draw++;
+      ladder[home].points+=2; ladder[away].points+=2;
+    }
+  });
+
+  const arr=Object.values(ladder).map(t=>{
+    t.perc = t.ptsAgainst ? (t.ptsFor/t.ptsAgainst*100).toFixed(1) : "0.0";
+    return t;
+  });
+
+  arr.sort((a,b)=>b.points-a.points||b.perc-a.perc||a.team.localeCompare(b.team));
+
+  let html="<table><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>D</th><th>Pts</th><th>%</th></tr>";
+  arr.forEach((t,i)=>{
+    html+=`<tr><td>${i+1}</td><td class="team">${t.team}</td><td>${t.played}</td><td>${t.win}</td><td>${t.loss}</td><td>${t.draw}</td><td>${t.points}</td><td>${t.perc}</td></tr>`;
+  });
+  html+="</table>";
+  ladderDiv.innerHTML=html;
 }
 </script>
 </body>
