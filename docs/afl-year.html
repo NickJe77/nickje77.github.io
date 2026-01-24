@@ -79,6 +79,14 @@ const roundOrder = [
 // Home & Away rounds only (for ladder)
 const ladderRounds = roundOrder.slice(0, roundOrder.indexOf("Elimination Final"));
 
+function getActiveRoundOrder(){
+  if(currentYear >= 2024){
+    return roundOrder;
+  } else {
+    return roundOrder.filter(r => r !== "Round 0");
+  }
+}
+
 function buildYearButtons(){
   const div=document.getElementById("yearButtons");
   div.innerHTML="";
@@ -94,7 +102,8 @@ function buildYearButtons(){
 function buildRoundButtons(){
   const div=document.getElementById("roundButtons");
   div.innerHTML="";
-  ["All",...roundOrder].forEach(r=>{
+  const activeRounds = getActiveRoundOrder();
+  ["All",...activeRounds].forEach(r=>{
     const b=document.createElement("button");
     b.textContent=r;
     if(r===currentRound) b.classList.add("active");
@@ -216,6 +225,8 @@ function render(){
   document.getElementById("heading").textContent =
     currentRound==="All" ? "All Matches" : currentRound;
 
+  const activeRounds = getActiveRoundOrder();
+
   let matchList=[...allMatches];
 
   if(currentRound!=="All"){
@@ -226,7 +237,7 @@ function render(){
     matchList = matchList.filter(m=>m.home_team===currentTeam||m.away_team===currentTeam);
   }
 
-  matchList.sort((a,b)=>roundOrder.indexOf(a.round)-roundOrder.indexOf(b.round));
+  matchList.sort((a,b)=>activeRounds.indexOf(a.round)-activeRounds.indexOf(b.round));
 
   matchList.forEach(m=>{
     const homeWin=m.home_score>m.away_score;
@@ -247,8 +258,12 @@ function render(){
     div.appendChild(d);
   });
 
-  // Ladder logic: ONLY home & away rounds (including Round 0)
+  // Ladder logic: ONLY home & away rounds (including Round 0 for 2024+)
   let ladderMatches = allMatches.filter(m=>ladderRounds.includes(m.round));
+
+  if(currentYear < 2024){
+    ladderMatches = ladderMatches.filter(m=>m.round !== "Round 0");
+  }
 
   if(currentRound!=="All" && ladderRounds.includes(currentRound)){
     const idx = ladderRounds.indexOf(currentRound);
