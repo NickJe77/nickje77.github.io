@@ -32,14 +32,12 @@ select { padding:8px 10px; font-size:16px; margin-bottom:15px; display:block; }
 .draw { background:#f0f0f0; }
 .alt  { background:#eaf4ff; }
 
-.muted { color:#666; font-size:13px; margin:8px 0 14px; }
-
 table { border-collapse: collapse; width:100%; }
 th, td { padding:6px 10px; border:1px solid #ccc; text-align:center; }
 th { background:#f0f0f0; }
 td.team { text-align:left; font-weight:600; }
 
-/* NEW LAYOUT */
+/* Layout */
 .main-layout {
   display:flex;
   gap:30px;
@@ -71,7 +69,6 @@ td.team { text-align:left; font-weight:600; }
 <div class="main-layout">
   <div id="ladder" class="ladder-wrap"></div>
   <div class="results-wrap">
-    <div id="status" class="muted"></div>
     <div id="matches"></div>
   </div>
 </div>
@@ -84,11 +81,18 @@ const yearBar = document.getElementById("yearBar");
 const teamSelect = document.getElementById("teamSelect");
 const roundBar = document.getElementById("roundBar");
 const matchesDiv = document.getElementById("matches");
-const statusDiv = document.getElementById("status");
 const ladderDiv = document.getElementById("ladder");
 
 let currentData = [];
 let currentRound = "ALL";
+
+const finalsRounds = [
+  "Elimination Final",
+  "Qualifying Final",
+  "Semi Final",
+  "Preliminary Final",
+  "Grand Final"
+];
 
 for (let y = startYear; y <= endYear; y++) {
   const btn = document.createElement("button");
@@ -119,7 +123,6 @@ function loadYear(year) {
 
   matchesDiv.innerHTML="";
   ladderDiv.innerHTML="";
-  statusDiv.textContent="Loading…";
 
   fetch(`/data/afl/afl_${year}.json?cb=${Date.now()}`)
     .then(r=>r.json())
@@ -128,7 +131,6 @@ function loadYear(year) {
       buildTeamSelector();
       buildRoundButtons();
       renderMatches();
-      statusDiv.textContent = `Year ${year}: loaded ${currentData.length.toLocaleString()} player-rows`;
     });
 }
 
@@ -158,8 +160,7 @@ function buildRoundButtons() {
 
   addRoundButton("All Rounds", true);
   numeric.forEach(r=>addRoundButton(r.label));
-  ["Elimination Final","Qualifying Final","Semi Final","Preliminary Final","Grand Final"]
-    .forEach(r=>addRoundButton(r));
+  finalsRounds.forEach(r=>addRoundButton(r));
 }
 
 function addRoundButton(label,active=false){
@@ -210,7 +211,10 @@ function renderMatches(){
     rows=rows.filter(r=>canonicalRound(r.round)===currentRound);
   }
 
-  buildLadder();
+  // Only show ladder if NOT finals
+  if (!finalsRounds.includes(currentRound)) {
+    buildLadder();
+  }
 
   const seen=new Set();
   let i=0;
