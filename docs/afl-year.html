@@ -16,7 +16,7 @@ body {
 
 .year-btn, .round-btn {
   margin: 4px;
-  padding: 8px 14px; /* BIGGER BUTTONS */
+  padding: 8px 14px;
   border-radius: 10px;
   border: 1px solid #ccc;
   background: #ddd;
@@ -133,15 +133,14 @@ function buildTeamSelector(data) {
 function buildRoundButtons(data) {
   roundBar.innerHTML = "";
 
-  const rounds = new Set();
-  data.forEach(g => rounds.add(g.round));
-
-  // Convert to numbers and sort, ensuring Round 0 appears
-  const sortedRounds = [...rounds].sort((a, b) => {
-    const na = parseInt(a.toString().replace(/\D/g, "")) || 0;
-    const nb = parseInt(b.toString().replace(/\D/g, "")) || 0;
-    return na - nb;
+  // Extract numeric round values (handles "Round 0", "0", etc)
+  const roundNums = new Set();
+  data.forEach(g => {
+    const num = parseInt(g.round.toString().replace(/\D/g, ""));
+    if (!isNaN(num)) roundNums.add(num);
   });
+
+  const sortedRounds = [...roundNums].sort((a, b) => a - b);
 
   // ALL button
   const allBtn = document.createElement("button");
@@ -154,12 +153,13 @@ function buildRoundButtons(data) {
   };
   roundBar.appendChild(allBtn);
 
-  sortedRounds.forEach(r => {
+  // Round buttons (numerical, starting at 0 if present)
+  sortedRounds.forEach(num => {
     const btn = document.createElement("button");
-    btn.textContent = r;
+    btn.textContent = num;
     btn.className = "round-btn";
     btn.onclick = () => {
-      currentRound = r;
+      currentRound = num;
       setActiveRound(btn);
       renderMatches();
     };
@@ -186,7 +186,10 @@ function renderMatches() {
   }
 
   if (currentRound !== "ALL") {
-    filtered = filtered.filter(g => g.round == currentRound);
+    filtered = filtered.filter(g => {
+      const num = parseInt(g.round.toString().replace(/\D/g, ""));
+      return num === currentRound;
+    });
   }
 
   filtered.forEach(game => {
