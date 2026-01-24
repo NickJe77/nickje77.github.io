@@ -50,6 +50,7 @@ const matchesDiv = document.getElementById("matches");
 let currentData = [];
 let currentRound = "ALL";
 
+// build year buttons
 for (let y = startYear; y <= endYear; y++) {
   const btn = document.createElement("button");
   btn.textContent = y;
@@ -74,9 +75,8 @@ function loadYear(year) {
       buildRoundButtons(data);
       renderMatches();
     })
-    .catch(err => {
-      matchesDiv.innerHTML = "<p>Failed to load data.</p>";
-      console.error("FETCH FAILED:", err);
+    .catch(() => {
+      matchesDiv.innerHTML = "<p>No data for this year.</p>";
     });
 }
 
@@ -96,19 +96,66 @@ function buildTeamSelector(data) {
 function buildRoundButtons(data) {
   roundBar.innerHTML = "";
 
-  const rounds = new Set(data.map(g => g.round));
+  const roundSet = new Set(data.map(g => g.round));
+
+  // split numeric rounds and finals
+  const numericRounds = [];
+  const finalsRounds = [];
+
+  roundSet.forEach(r => {
+    if (/^Round\s*\d+/i.test(r)) {
+      const num = parseInt(r.match(/\d+/)[0]);
+      numericRounds.push({ label: r, num });
+    } else {
+      finalsRounds.push(r);
+    }
+  });
+
+  numericRounds.sort((a, b) => a.num - b.num);
+
+  const finalsOrder = [
+    "Qualifying Final",
+    "Elimination Final",
+    "Semi Final",
+    "Preliminary Final",
+    "Grand Final"
+  ];
+
+  finalsRounds.sort((a, b) => {
+    return finalsOrder.indexOf(a) - finalsOrder.indexOf(b);
+  });
 
   const allBtn = document.createElement("button");
   allBtn.textContent = "All Rounds";
   allBtn.className = "round-btn active";
-  allBtn.onclick = () => { currentRound = "ALL"; setActiveRound(allBtn); renderMatches(); };
+  allBtn.onclick = () => {
+    currentRound = "ALL";
+    setActiveRound(allBtn);
+    renderMatches();
+  };
   roundBar.appendChild(allBtn);
 
-  [...rounds].forEach(r => {
+  numericRounds.forEach(r => {
+    const btn = document.createElement("button");
+    btn.textContent = r.label;
+    btn.className = "round-btn";
+    btn.onclick = () => {
+      currentRound = r.label;
+      setActiveRound(btn);
+      renderMatches();
+    };
+    roundBar.appendChild(btn);
+  });
+
+  finalsRounds.forEach(r => {
     const btn = document.createElement("button");
     btn.textContent = r;
     btn.className = "round-btn";
-    btn.onclick = () => { currentRound = r; setActiveRound(btn); renderMatches(); };
+    btn.onclick = () => {
+      currentRound = r;
+      setActiveRound(btn);
+      renderMatches();
+    };
     roundBar.appendChild(btn);
   });
 }
@@ -146,7 +193,7 @@ function renderMatches() {
     const div = document.createElement("div");
     div.className = "match";
     div.innerHTML = `
-      ${game.round}:
+      ${game.round}: 
       ${game.home_team} ${game.home_points} def ${game.away_team} ${game.away_points}
     `;
     matchesDiv.appendChild(div);
