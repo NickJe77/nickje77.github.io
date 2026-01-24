@@ -10,7 +10,7 @@
 
   .year-btn, .round-btn {
     margin: 4px;
-    padding: 10px 16px;         /* slightly bigger buttons (your original ask) */
+    padding: 10px 16px;
     border-radius: 10px;
     border: 1px solid #ccc;
     background: #ddd;
@@ -20,7 +20,6 @@
   .year-btn.active, .round-btn.active { background: #333; color: #fff; }
 
   select { padding: 8px 10px; font-size: 16px; margin-bottom: 15px; display: block; }
-
   .match { margin-left: 15px; margin-bottom: 6px; }
   .muted { color:#666; font-size: 13px; margin: 8px 0 14px; }
 </style>
@@ -54,7 +53,6 @@ let currentData = [];
 let currentYear = startYear;
 let currentRound = "ALL";
 
-// Year buttons
 for (let y = startYear; y <= endYear; y++) {
   const btn = document.createElement("button");
   btn.textContent = y;
@@ -70,26 +68,37 @@ function setStatus(text) {
 }
 
 function normalizeRound(r) {
-  return (r ?? "").toString().trim();
+  return (r ?? "")
+    .toString()
+    .replace(/\s+/g," ")
+    .trim();
 }
 
-// Robust match key so we don't collapse a season to nothing
+// 🔑 CANONICALISE FINALS NAMES
+function canonicalRound(r) {
+  const t = normalizeRound(r).toLowerCase();
+  if (t.includes("qualifying")) return "Qualifying Final";
+  if (t.includes("elimination")) return "Elimination Final";
+  if (t.includes("semi")) return "Semi Final";
+  if (t.includes("preliminary")) return "Preliminary Final";
+  if (t.includes("grand")) return "Grand Final";
+  return normalizeRound(r);
+}
+
 function matchKey(row) {
-  const season = row.season ?? "";
-  const round = normalizeRound(row.round);
-  const home = (row.home_team ?? "").toString().trim();
-  const away = (row.away_team ?? "").toString().trim();
-  const hp = row.home_points ?? "";
-  const ap = row.away_points ?? "";
-  // match_id is allowed, but NOT relied on
-  const mid = row.match_id ?? "";
-  return [season, round, home, away, hp, ap, mid].join("|");
+  return [
+    row.season ?? "",
+    canonicalRound(row.round),
+    row.home_team ?? "",
+    row.away_team ?? "",
+    row.home_points ?? "",
+    row.away_points ?? "",
+    row.match_id ?? ""
+  ].join("|");
 }
 
 function loadYear(year) {
   currentYear = year;
-
-  // ✅ hard reset filters on year change
   currentRound = "ALL";
   teamSelect.value = "ALL";
 
@@ -99,22 +108,18 @@ function loadYear(year) {
   matchesDiv.innerHTML = "";
   setStatus("Loading…");
 
-  // ✅ cache-bust per request so we always get the real file
   const url = `/data/afl/afl_${year}.json?cb=${Date.now()}`;
 
   fetch(url)
     .then(res => {
-      if (!res.ok) throw new Error(`HTTP ${res.status} loading ${url}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
     })
     .then(data => {
-      if (!Array.isArray(data)) throw new Error("JSON loaded but is not an array");
       currentData = data;
-
       buildTeamSelector(data);
       buildRoundButtons(data);
       renderMatches();
-
       setStatus(`Year ${year}: loaded ${data.length.toLocaleString()} player-rows`);
     })
     .catch(err => {
@@ -146,10 +151,9 @@ function buildRoundButtons(data) {
   roundBar.innerHTML = "";
 
   const roundsSet = new Set();
-  data.forEach(r => roundsSet.add(normalizeRound(r.round)));
-  const rounds = [...roundsSet].filter(Boolean);
+  data.forEach(r => roundsSet.add(canonicalRound(r.round)));
+  const rounds = [...roundsSet];
 
-  // Split numeric "Round X" vs finals text
   const numeric = [];
   const finals = [];
 
@@ -162,16 +166,8 @@ function buildRoundButtons(data) {
   numeric.sort((a,b) => a.num - b.num);
 
   const finalsOrder = ["Qualifying Final","Elimination Final","Semi Final","Preliminary Final","Grand Final"];
-  finals.sort((a,b) => {
-    const ia = finalsOrder.findIndex(x => a.toLowerCase().includes(x.toLowerCase()));
-    const ib = finalsOrder.findIndex(x => b.toLowerCase().includes(x.toLowerCase()));
-    if (ia === -1 && ib === -1) return a.localeCompare(b);
-    if (ia === -1) return 1;
-    if (ib === -1) return -1;
-    return ia - ib;
-  });
+  finals.sort((a,b) => finalsOrder.indexOf(a) - finalsOrder.indexOf(b));
 
-  // All Rounds
   const allBtn = document.createElement("button");
   allBtn.textContent = "All Rounds";
   allBtn.className = "round-btn active";
@@ -182,7 +178,6 @@ function buildRoundButtons(data) {
   };
   roundBar.appendChild(allBtn);
 
-  // Numeric rounds
   numeric.forEach(r => {
     const btn = document.createElement("button");
     btn.textContent = r.label;
@@ -195,7 +190,6 @@ function buildRoundButtons(data) {
     roundBar.appendChild(btn);
   });
 
-  // Finals
   finals.forEach(r => {
     const btn = document.createElement("button");
     btn.textContent = r;
@@ -221,25 +215,22 @@ function renderMatches() {
 
   let rows = currentData;
 
-  // Team filter
   const team = teamSelect.value;
   if (team !== "ALL") {
     rows = rows.filter(r => r.home_team === team || r.away_team === team);
   }
 
-  // Round filter
   if (currentRound !== "ALL") {
-    rows = rows.filter(r => normalizeRound(r.round) === currentRound);
+    rows = rows.filter(r => canonicalRound(r.round) === currentRound);
   }
 
-  // ✅ Deduplicate player-rows into matches safely
   const map = new Map();
   for (const r of rows) {
     const key = matchKey(r);
     if (!map.has(key)) map.set(key, r);
   }
-  const matches = [...map.values()];
 
+  const matches = [...map.values()];
   if (matches.length === 0) {
     matchesDiv.innerHTML = `<p>No matches found.</p>`;
     return;
@@ -248,7 +239,7 @@ function renderMatches() {
   for (const game of matches) {
     const div = document.createElement("div");
     div.className = "match";
-    div.innerHTML = `${normalizeRound(game.round)}: ${game.home_team} ${game.home_points} def ${game.away_team} ${game.away_points}`;
+    div.innerHTML = `${canonicalRound(game.round)}: ${game.home_team} ${game.home_points} def ${game.away_team} ${game.away_points}`;
     matchesDiv.appendChild(div);
   }
 }
