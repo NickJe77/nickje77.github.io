@@ -40,6 +40,32 @@ select{
   margin-bottom:20px;
 }
 
+/* tiles */
+.tile-wrap{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:16px;
+  margin-bottom:30px;
+}
+.tile{
+  border:1px solid #ddd;
+  border-radius:10px;
+  padding:16px;
+  background:#f6f9ff;
+  text-align:center;
+}
+.tile h3{
+  margin:0 0 6px 0;
+  font-size:14px;
+  color:#555;
+  font-weight:600;
+}
+.tile div{
+  font-size:22px;
+  font-weight:700;
+}
+
+/* tables */
 table{
   width:100%;
   border-collapse:collapse;
@@ -81,6 +107,22 @@ th{background:#f0f0f0;}
   <select id="seasonSelect"></select>
 </div>
 
+<!-- tiles -->
+<div class="tile-wrap">
+  <div class="tile">
+    <h3>Season</h3>
+    <div id="tileSeason">—</div>
+  </div>
+  <div class="tile">
+    <h3>Champion</h3>
+    <div id="tileChampion">—</div>
+  </div>
+  <div class="tile">
+    <h3>Total Points</h3>
+    <div id="tilePoints">—</div>
+  </div>
+</div>
+
 <div id="results"></div>
 
 </div>
@@ -89,26 +131,29 @@ th{background:#f0f0f0;}
 const seasonSelect = document.getElementById("seasonSelect");
 const resultsDiv = document.getElementById("results");
 
+const tileSeason = document.getElementById("tileSeason");
+const tileChampion = document.getElementById("tileChampion");
+const tilePoints = document.getElementById("tilePoints");
+
 const startYear = 1950;
 const endYear = new Date().getFullYear();
 
-let seasons = [];
-
-// Build dropdown
-for(let y = endYear; y >= startYear; y--){
-  seasons.push(y);
-  const opt = document.createElement("option");
-  opt.value = y;
-  opt.textContent = y;
+// build dropdown
+for(let y=endYear; y>=startYear; y--){
+  const opt=document.createElement("option");
+  opt.value=y;
+  opt.textContent=y;
   seasonSelect.appendChild(opt);
 }
 
-seasonSelect.addEventListener("change", () => {
-  loadSeason(seasonSelect.value);
-});
+seasonSelect.onchange = () => loadSeason(seasonSelect.value);
 
 async function loadSeason(year){
   resultsDiv.innerHTML = "Loading…";
+
+  tileSeason.textContent = year;
+  tileChampion.textContent = "—";
+  tilePoints.textContent = "—";
 
   try{
     const res = await fetch(`data/f1/${year}.json`);
@@ -127,19 +172,43 @@ async function loadSeason(year){
 function renderSeason(data){
   resultsDiv.innerHTML = "";
 
-  if(!data.races || data.races.length === 0){
+  if(!data.races || data.races.length===0){
     resultsDiv.innerHTML = "<p>No races available for this season.</p>";
     return;
   }
 
-  data.races.forEach(race => {
-    const h = document.createElement("div");
-    h.className = "race-title";
-    h.textContent = `Round ${race.round} – ${race.grand_prix}`;
+  // calculate champion
+  let totals = {};
+
+  data.races.forEach(race=>{
+    race.results.forEach(r=>{
+      if(!totals[r.driver]) totals[r.driver]=0;
+      totals[r.driver]+=Number(r.points)||0;
+    });
+  });
+
+  let champion="—";
+  let champPoints=0;
+
+  Object.entries(totals).forEach(([driver,pts])=>{
+    if(pts>champPoints){
+      champPoints=pts;
+      champion=driver;
+    }
+  });
+
+  tileChampion.textContent = champion;
+  tilePoints.textContent = champPoints;
+
+  // render races
+  data.races.forEach(race=>{
+    const h=document.createElement("div");
+    h.className="race-title";
+    h.textContent=`Round ${race.round} – ${race.grand_prix}`;
     resultsDiv.appendChild(h);
 
-    const table = document.createElement("table");
-    table.innerHTML = `
+    const table=document.createElement("table");
+    table.innerHTML=`
       <thead>
         <tr>
           <th>Pos</th>
@@ -152,13 +221,13 @@ function renderSeason(data){
       <tbody></tbody>
     `;
 
-    const tbody = table.querySelector("tbody");
+    const tbody=table.querySelector("tbody");
 
     race.results
-      .sort((a,b)=> b.points - a.points)
+      .sort((a,b)=>b.points-a.points)
       .forEach((r,i)=>{
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
+        const tr=document.createElement("tr");
+        tr.innerHTML=`
           <td>${i+1}</td>
           <td>${r.driver}</td>
           <td>${r.team}</td>
@@ -172,8 +241,8 @@ function renderSeason(data){
   });
 }
 
-// Load latest season by default
-seasonSelect.value = endYear;
+// default load
+seasonSelect.value=endYear;
 loadSeason(endYear);
 </script>
 
