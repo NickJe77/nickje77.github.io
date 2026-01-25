@@ -78,10 +78,22 @@ p{text-align:center;color:#555;margin-bottom:20px;}
   font-weight:700;
 }
 
+details{
+  margin-bottom:20px;
+  border:1px solid #ddd;
+  border-radius:8px;
+  padding:10px;
+}
+summary{
+  cursor:pointer;
+  font-weight:700;
+  font-size:18px;
+}
+
 table{
   width:100%;
   border-collapse:collapse;
-  margin-bottom:40px;
+  margin-top:10px;
 }
 th,td{
   border-bottom:1px solid #ddd;
@@ -89,12 +101,6 @@ th,td{
   text-align:left;
 }
 th{background:#f0f0f0;}
-
-.race-title{
-  margin-top:30px;
-  font-size:20px;
-  font-weight:700;
-}
 </style>
 </head>
 
@@ -147,10 +153,9 @@ const startYear = 1950;
 const endYear = new Date().getFullYear();
 let currentYear = endYear;
 
-// Sprint points scale
-const sprintPoints = {
-  1:8, 2:7, 3:6, 4:5, 5:4, 6:3, 7:2, 8:1
-};
+function cleanDriver(name){
+  return name.replace(/\s[A-Z]{3}$/, "");
+}
 
 for(let y=startYear; y<=endYear; y++){
   const btn=document.createElement("button");
@@ -195,21 +200,10 @@ function renderSeason(data){
   let totals={};
 
   data.races.forEach(race=>{
-    let sprintMap={};
-
-    if(race.sprint_results){
-      race.sprint_results.forEach(s=>{
-        sprintMap[s.driver]=sprintPoints[s.pos]||0;
-      });
-    }
-
     race.results.forEach(r=>{
-      const racePts=Number(r.points)||0;
-      const sprintPts=sprintMap[r.driver]||0;
-      const total=racePts+sprintPts;
-
+      const pts=Number(r.points)||0;
       if(!totals[r.driver]) totals[r.driver]=0;
-      totals[r.driver]+=total;
+      totals[r.driver]+=pts;
     });
   });
 
@@ -221,21 +215,14 @@ function renderSeason(data){
     }
   });
 
-  tileChampion.textContent=champion;
+  tileChampion.textContent=cleanDriver(champion);
   tilePoints.textContent=champPoints;
 
   data.races.forEach(race=>{
-    const h=document.createElement("div");
-    h.className="race-title";
-    h.textContent=`Round ${race.round} – ${race.grand_prix}`;
-    resultsDiv.appendChild(h);
-
-    let sprintMap={};
-    if(race.sprint_results){
-      race.sprint_results.forEach(s=>{
-        sprintMap[s.driver]=sprintPoints[s.pos]||0;
-      });
-    }
+    const details=document.createElement("details");
+    const summary=document.createElement("summary");
+    summary.textContent=`Round ${race.round} – ${race.grand_prix}`;
+    details.appendChild(summary);
 
     const table=document.createElement("table");
     table.innerHTML=`
@@ -245,9 +232,7 @@ function renderSeason(data){
           <th>Driver</th>
           <th>Team</th>
           <th>Grid</th>
-          <th>Race Pts</th>
-          <th>Sprint Pts</th>
-          <th>Total</th>
+          <th>Points</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -255,26 +240,21 @@ function renderSeason(data){
     const tbody=table.querySelector("tbody");
 
     race.results
-      .sort((a,b)=>b.points-a.points)
-      .forEach((r,i)=>{
-        const racePts=Number(r.points)||0;
-        const sprintPts=sprintMap[r.driver]||0;
-        const total=racePts+sprintPts;
-
+      .sort((a,b)=>a.pos-b.pos)
+      .forEach(r=>{
         const tr=document.createElement("tr");
         tr.innerHTML=`
-          <td>${i+1}</td>
-          <td>${r.driver}</td>
+          <td>${r.pos}</td>
+          <td>${cleanDriver(r.driver)}</td>
           <td>${r.team}</td>
           <td>${r.grid ?? ""}</td>
-          <td>${racePts}</td>
-          <td>${sprintPts}</td>
-          <td><b>${total}</b></td>
+          <td>${r.points}</td>
         `;
         tbody.appendChild(tr);
       });
 
-    resultsDiv.appendChild(table);
+    details.appendChild(table);
+    resultsDiv.appendChild(details);
   });
 }
 
