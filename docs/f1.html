@@ -145,89 +145,75 @@ const tilePoints = document.getElementById("tilePoints");
 
 const startYear = 1950;
 const endYear = new Date().getFullYear();
-
 let currentYear = endYear;
 
+// Sprint points scale
+const sprintPoints = {
+  1:8, 2:7, 3:6, 4:5, 5:4, 6:3, 7:2, 8:1
+};
+
 for(let y=startYear; y<=endYear; y++){
-  const btn = document.createElement("button");
-  btn.className = "year-btn";
-  btn.textContent = y;
-  btn.onclick = () => loadSeason(y);
-  btn.id = "year-" + y;
+  const btn=document.createElement("button");
+  btn.className="year-btn";
+  btn.textContent=y;
+  btn.onclick=()=>loadSeason(y);
+  btn.id="year-"+y;
   yearGrid.appendChild(btn);
 }
 
 async function loadSeason(year){
-  currentYear = year;
-
+  currentYear=year;
   document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
-  const activeBtn = document.getElementById("year-"+year);
+  const activeBtn=document.getElementById("year-"+year);
   if(activeBtn) activeBtn.classList.add("active");
 
-  tileSeason.textContent = year;
-  tileChampion.textContent = "—";
-  tilePoints.textContent = "—";
-  resultsDiv.innerHTML = "Loading…";
+  tileSeason.textContent=year;
+  tileChampion.textContent="—";
+  tilePoints.textContent="—";
+  resultsDiv.innerHTML="Loading…";
 
   try{
-    const res = await fetch(`data/f1/${year}.json`);
+    const res=await fetch(`data/f1/${year}.json`);
     if(!res.ok){
-      resultsDiv.innerHTML = "<p>No data for this season.</p>";
+      resultsDiv.innerHTML="<p>No data for this season.</p>";
       return;
     }
-    let data = await res.json();
-
-    // FIX: convert flat format (2025) to race format
-    if(Array.isArray(data)){
-      const grouped = {};
-      data.forEach(row=>{
-        const key = row.round + " - " + row.grand_prix;
-        if(!grouped[key]){
-          grouped[key] = {
-            round: row.round,
-            grand_prix: row.grand_prix,
-            results: []
-          };
-        }
-        grouped[key].results.push({
-          driver: row.driver,
-          team: row.team,
-          grid: row.grid,
-          points: row.points
-        });
-      });
-      data = {
-        season: year,
-        races: Object.values(grouped).sort((a,b)=>a.round-b.round)
-      };
-    }
-
+    const data=await res.json();
     renderSeason(data);
   }catch(e){
-    resultsDiv.innerHTML = "<p>Error loading season.</p>";
+    resultsDiv.innerHTML="<p>Error loading season.</p>";
   }
 }
 
 function renderSeason(data){
-  resultsDiv.innerHTML = "";
-
+  resultsDiv.innerHTML="";
   if(!data.races || data.races.length===0){
-    resultsDiv.innerHTML = "<p>No races available for this season.</p>";
+    resultsDiv.innerHTML="<p>No races available.</p>";
     return;
   }
 
-  let totals = {};
+  let totals={};
 
   data.races.forEach(race=>{
+    let sprintMap={};
+
+    if(race.sprint_results){
+      race.sprint_results.forEach(s=>{
+        sprintMap[s.driver]=sprintPoints[s.pos]||0;
+      });
+    }
+
     race.results.forEach(r=>{
+      const racePts=Number(r.points)||0;
+      const sprintPts=sprintMap[r.driver]||0;
+      const total=racePts+sprintPts;
+
       if(!totals[r.driver]) totals[r.driver]=0;
-      totals[r.driver]+=Number(r.points)||0;
+      totals[r.driver]+=total;
     });
   });
 
-  let champion="—";
-  let champPoints=0;
-
+  let champion="—", champPoints=0;
   Object.entries(totals).forEach(([driver,pts])=>{
     if(pts>champPoints){
       champPoints=pts;
@@ -235,14 +221,21 @@ function renderSeason(data){
     }
   });
 
-  tileChampion.textContent = champion;
-  tilePoints.textContent = champPoints;
+  tileChampion.textContent=champion;
+  tilePoints.textContent=champPoints;
 
   data.races.forEach(race=>{
     const h=document.createElement("div");
     h.className="race-title";
     h.textContent=`Round ${race.round} – ${race.grand_prix}`;
     resultsDiv.appendChild(h);
+
+    let sprintMap={};
+    if(race.sprint_results){
+      race.sprint_results.forEach(s=>{
+        sprintMap[s.driver]=sprintPoints[s.pos]||0;
+      });
+    }
 
     const table=document.createElement("table");
     table.innerHTML=`
@@ -252,24 +245,31 @@ function renderSeason(data){
           <th>Driver</th>
           <th>Team</th>
           <th>Grid</th>
-          <th>Points</th>
+          <th>Race Pts</th>
+          <th>Sprint Pts</th>
+          <th>Total</th>
         </tr>
       </thead>
       <tbody></tbody>
     `;
-
     const tbody=table.querySelector("tbody");
 
     race.results
       .sort((a,b)=>b.points-a.points)
       .forEach((r,i)=>{
+        const racePts=Number(r.points)||0;
+        const sprintPts=sprintMap[r.driver]||0;
+        const total=racePts+sprintPts;
+
         const tr=document.createElement("tr");
         tr.innerHTML=`
           <td>${i+1}</td>
           <td>${r.driver}</td>
           <td>${r.team}</td>
           <td>${r.grid ?? ""}</td>
-          <td>${r.points}</td>
+          <td>${racePts}</td>
+          <td>${sprintPts}</td>
+          <td><b>${total}</b></td>
         `;
         tbody.appendChild(tr);
       });
