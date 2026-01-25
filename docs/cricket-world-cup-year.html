@@ -61,7 +61,7 @@ h1 {
 
 .summary-box h3 {
   margin: 0 0 8px 0;
-  font-size: 16px;
+  font-size: 15px;
   color: #555;
 }
 
@@ -105,12 +105,13 @@ tr:hover {
   <a href="racing.html">Racing</a>
   <a href="afl.html">AFL</a>
   <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
   <a href="cricket-world-cup.html">Cricket World Cup</a>
 </div>
 
 <div class="page-wrap">
 
-<h1 id="title"></h1>
+<h1 id="title">Cricket World Cup</h1>
 
 <div class="summary">
   <div class="summary-box">
@@ -152,7 +153,7 @@ const year = params.get("year");
 
 document.getElementById("title").textContent = "Cricket World Cup " + year;
 
-// FILES YOU GENERATED FROM PYTHON
+// CSV paths
 const MATCH_RESULTS = "data/cwc_match_results.csv";
 const BY_TOURNAMENT = "data/cwc_by_tournament.csv";
 const BATTING = "data/cwc_batting_summary.csv";
@@ -165,7 +166,54 @@ Promise.all([
   fetch(BOWLING).then(r => r.text())
 ]).then(([matchesText, tournamentText, battingText, bowlingText]) => {
 
-  const matches = parseCSV(matchesText).filter(r => r.tournament_year == year);
-  const tournament = parseCSV(tournamentText).find(r => r.tournament_year == year);
-  const batting = parseCSV(battingText).filter(r => r.tournament_year == year);
-  const bo
+  const matches = parseCSV(matchesText).filter(r => r.tournament_year === year);
+  const tournament = parseCSV(tournamentText).find(r => r.tournament_year === year);
+  const batting = parseCSV(battingText).filter(r => r.tournament_year === year);
+  const bowling = parseCSV(bowlingText).filter(r => r.tournament_year === year);
+
+  if (tournament) {
+    document.getElementById("winner").textContent = tournament.winner;
+    document.getElementById("runnerUp").textContent = tournament.runner_up;
+  }
+
+  if (batting.length) {
+    batting.sort((a, b) => Number(b.runs) - Number(a.runs));
+    document.getElementById("topRuns").textContent =
+      batting[0].player + " (" + batting[0].runs + ")";
+  }
+
+  if (bowling.length) {
+    bowling.sort((a, b) => Number(b.wickets) - Number(a.wickets));
+    document.getElementById("topWickets").textContent =
+      bowling[0].player + " (" + bowling[0].wickets + ")";
+  }
+
+  const tbody = document.querySelector("#matchesTable tbody");
+  matches.forEach(m => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${m.date}</td>
+      <td>${m.team1}</td>
+      <td>${m.team2}</td>
+      <td>${m.result}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+});
+
+function parseCSV(text) {
+  const lines = text.trim().split("\n");
+  const headers = lines.shift().split(",");
+  return lines.map(line => {
+    const obj = {};
+    line.split(",").forEach((val, i) => {
+      obj[headers[i]] = val;
+    });
+    return obj;
+  });
+}
+</script>
+
+</body>
+</html>
