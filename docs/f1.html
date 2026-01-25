@@ -153,48 +153,92 @@ const startYear = 1950;
 const endYear = new Date().getFullYear();
 
 function cleanDriver(name){
-  return name.replace(/\s[A-Z]{3}$/, "");
+  return String(name || "").replace(/\s[A-Z]{3}$/, "");
 }
 
-const flagMap = {
+/* ---------- FLAGS & NAME NORMALIZATION ---------- */
+
+const flagByCountry = {
   "Australia":"🇦🇺",
-  "China":"🇨🇳",
-  "Japan":"🇯🇵",
   "Bahrain":"🇧🇭",
   "Saudi Arabia":"🇸🇦",
+  "China":"🇨🇳",
+  "Japan":"🇯🇵",
   "Monaco":"🇲🇨",
-  "Italy":"🇮🇹",
   "Spain":"🇪🇸",
   "Canada":"🇨🇦",
   "Austria":"🇦🇹",
-  "Hungary":"🇭🇺",
-  "Belgium":"🇧🇪",
-  "Netherlands":"🇳🇱",
-  "UK":"🇬🇧",
+  "Great Britain":"🇬🇧",
   "United Kingdom":"🇬🇧",
+  "Belgium":"🇧🇪",
+  "Hungary":"🇭🇺",
+  "Netherlands":"🇳🇱",
+  "Italy":"🇮🇹",
+  "Azerbaijan":"🇦🇿",
+  "Singapore":"🇸🇬",
+  "United States":"🇺🇸",
+  "United States of America":"🇺🇸",
   "Mexico":"🇲🇽",
   "Brazil":"🇧🇷",
-  "USA":"🇺🇸",
-  "United States":"🇺🇸",
   "Qatar":"🇶🇦",
-  "Abu Dhabi":"🇦🇪",
-  "UAE":"🇦🇪"
+  "United Arab Emirates":"🇦🇪"
 };
 
-function cleanRaceName(name){
-  let n = name.replace(/^Flag of\s+/i,"").trim();
+const countryAliases = {
+  "People's Republic of China":"China",
+  "PR China":"China",
+  "USA":"United States",
+  "United States of America":"United States",
+  "UK":"Great Britain",
+  "Britain":"Great Britain",
+  "United Kingdom":"Great Britain",
+  "UAE":"United Arab Emirates"
+};
+
+function normalizeGpRaw(s){
+  let n = String(s || "").trim();
+  n = n.replace(/^Flag of\s+/i,"").trim();
+  n = n.replace(/\s+/g," ").trim();
+
+  // collapse duplicated phrase
   const parts = n.split(" ");
-  if(parts.length > 1 && parts[parts.length-1] === parts[parts.length-2]){
-    n = parts.slice(0, -1).join(" ");
+  if(parts.length % 2 === 0){
+    const half = parts.length / 2;
+    if(parts.slice(0,half).join(" ") === parts.slice(half).join(" ")){
+      n = parts.slice(0,half).join(" ");
+    }
   }
   return n;
 }
 
-function raceWithFlag(name){
-  const clean = cleanRaceName(name);
-  const flag = flagMap[clean] || "";
-  return flag ? `${clean} ${flag}` : clean;
+function parseGpName(grandPrix){
+  let raw = normalizeGpRaw(grandPrix);
+
+  if(countryAliases[raw]) raw = countryAliases[raw];
+
+  const countries = Object.keys(flagByCountry).sort((a,b)=>b.length-a.length);
+
+  for(const c of countries){
+    if(raw === c){
+      return { label: c, country: c };
+    }
+    if(raw.startsWith(c + " ")){
+      const venue = raw.slice(c.length).trim();
+      if(!venue || venue === c) return { label: c, country: c };
+      return { label: venue, country: c };
+    }
+  }
+
+  return { label: raw, country: "" };
 }
+
+function formatRoundTitle(round, grandPrix){
+  const parsed = parseGpName(grandPrix);
+  const flag = parsed.country ? flagByCountry[parsed.country] : "";
+  return `Round ${round} – ${parsed.label}${flag ? " " + flag : ""}`;
+}
+
+/* ---------- YEAR BUTTONS ---------- */
 
 for(let y=startYear; y<=endYear; y++){
   const btn=document.createElement("button");
@@ -204,6 +248,8 @@ for(let y=startYear; y<=endYear; y++){
   btn.id="year-"+y;
   yearGrid.appendChild(btn);
 }
+
+/* ---------- LOAD SEASON ---------- */
 
 async function loadSeason(year){
   document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
@@ -228,6 +274,8 @@ async function loadSeason(year){
   }
 }
 
+/* ---------- RENDER ---------- */
+
 function renderSeason(data){
   resultsDiv.innerHTML="";
   if(!data.races || data.races.length===0){
@@ -238,14 +286,14 @@ function renderSeason(data){
   let totals={};
 
   data.races.forEach(race=>{
-    race.results.forEach(r=>{
+    (race.results||[]).forEach(r=>{
       const pts=Number(r.points)||0;
       if(!totals[r.driver]) totals[r.driver]=0;
       totals[r.driver]+=pts;
     });
   });
 
-  let champion="—", champPoints=0;
+  let champion="—", champPoints=-1;
   Object.entries(totals).forEach(([driver,pts])=>{
     if(pts>champPoints){
       champPoints=pts;
@@ -254,12 +302,12 @@ function renderSeason(data){
   });
 
   tileChampion.textContent=cleanDriver(champion);
-  tilePoints.textContent=champPoints;
+  tilePoints.textContent=(champPoints>=0?champPoints:"—");
 
   data.races.forEach(race=>{
     const details=document.createElement("details");
     const summary=document.createElement("summary");
-    summary.textContent = `Round ${race.round} – ${raceWithFlag(race.grand_prix)}`;
+    summary.textContent = formatRoundTitle(race.round, race.grand_prix);
     details.appendChild(summary);
 
     const table=document.createElement("table");
@@ -277,19 +325,27 @@ function renderSeason(data){
     `;
     const tbody=table.querySelector("tbody");
 
-    race.results
-      .sort((a,b)=>a.pos-b.pos)
-      .forEach(r=>{
-        const tr=document.createElement("tr");
-        tr.innerHTML=`
-          <td>${r.pos}</td>
-          <td>${cleanDriver(r.driver)}</td>
-          <td>${r.team}</td>
-          <td>${r.grid ?? ""}</td>
-          <td>${r.points}</td>
-        `;
-        tbody.appendChild(tr);
-      });
+    const results = (race.results||[]).slice();
+
+    // sort by pos if exists, else by points
+    results.sort((a,b)=>{
+      if(a.pos!=null && b.pos!=null) return a.pos-b.pos;
+      if(a.position!=null && b.position!=null) return a.position-b.position;
+      return (Number(b.points)||0)-(Number(a.points)||0);
+    });
+
+    results.forEach((r,i)=>{
+      const pos = r.pos ?? r.position ?? (i+1);
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>${pos}</td>
+        <td>${cleanDriver(r.driver)}</td>
+        <td>${r.team||""}</td>
+        <td>${r.grid||""}</td>
+        <td>${r.points||0}</td>
+      `;
+      tbody.appendChild(tr);
+    });
 
     details.appendChild(table);
     resultsDiv.appendChild(details);
