@@ -105,41 +105,58 @@ body {
 const DATA_URL = "data/cwc_matches_with_year.csv";
 
 function parseCSV(text) {
-  const lines = text.trim().split("\n");
-  const headers = lines.shift().split(",");
+  const rows = [];
+  let row = [], field = "", inQuotes = false;
 
-  return lines.map(line => {
-    const values = line.split(",");
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    const n = text[i + 1];
+
+    if (c === '"' && inQuotes && n === '"') {
+      field += '"';
+      i++;
+      continue;
+    }
+    if (c === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (c === "," && !inQuotes) {
+      row.push(field);
+      field = "";
+      continue;
+    }
+    if (c === "\n" && !inQuotes) {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+      continue;
+    }
+    if (c !== "\r") field += c;
+  }
+
+  if (field || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+
+  const headers = rows.shift();
+
+  return rows.map(r => {
     const obj = {};
-    headers.forEach((h, i) => obj[h.trim()] = (values[i] || "").trim());
+    headers.forEach((h, i) => obj[h] = (r[i] || "").trim());
     return obj;
   });
 }
 
 fetch(DATA_URL)
-  .then(res => {
-    if (!res.ok) throw new Error("CSV not found");
-    return res.text();
-  })
+  .then(r => r.text())
   .then(text => {
     const data = parseCSV(text);
 
-    if (!data.length) {
-      document.getElementById("yearGrid").innerHTML =
-        "<p style='color:red'>CSV loaded but contains no rows.</p>";
-      return;
-    }
-
-    if (!("year" in data[0])) {
-      document.getElementById("yearGrid").innerHTML =
-        "<p style='color:red'>CSV must contain a year column.</p>";
-      return;
-    }
-
     const years = [...new Set(
-      data
-        .map(r => Number(r.year))
-        .filter(y => !isNaN(y))
+      data.map(r => Number(r.year)).filter(y => !isNaN(y))
     )].sort((a, b) => a - b);
 
     const grid = document.getElementById("yearGrid");
@@ -157,11 +174,6 @@ fetch(DATA_URL)
       };
       grid.appendChild(card);
     });
-  })
-  .catch(err => {
-    document.getElementById("yearGrid").innerHTML =
-      "<p style='color:red'>Failed to load World Cup data.</p>";
-    console.error(err);
   });
 </script>
 
