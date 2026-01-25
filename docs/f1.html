@@ -170,23 +170,25 @@ const flagByCountry = {
 };
 
 const raceOverrides = {
+  "People's Republic of China China":"China",
+  "Peoples Republic of China China":"China",
+  "Republic of Korea South Korea":"South Korea",
+  "Türkiye Turkey":"Turkey",
   "France Switzerland":"Switzerland",
   "Germany Europe":"Germany",
-  "Pacific Japan":"Japan",
-  "Türkiye Turkey":"Turkey",
-  "Peoples Republic of China China":"China",
-  "People's Republic of China China":"China",
-  "of America Las Vegas":"Las Vegas",
-  "of America Miami":"Miami",
-  "of America United States":"United States",
-  "Republic of Korea South Korea":"South Korea"
+  "Pacific Japan":"Japan"
 };
 
 function normalizeGpRaw(s){
   let n = String(s || "").trim();
-  n = n.replace(/^Flag of\s+/i,"").trim();
+
+  n = n.replace(/^Flag of\s+/i,"");
+  n = n.replace(/People'?s Republic of\s+/i,"");
+  n = n.replace(/\sof America\s*/i," ");
   n = n.replace(/\s+/g," ").trim();
+
   if(raceOverrides[n]) return raceOverrides[n];
+
   const parts = n.split(" ");
   if(parts.length % 2 === 0){
     const half = parts.length / 2;
@@ -204,8 +206,7 @@ function parseGpName(grandPrix){
     if(raw === c) return { label:c, country:c };
     if(raw.startsWith(c+" ")){
       const venue = raw.slice(c.length).trim();
-      if(!venue || venue===c) return { label:c, country:c };
-      return { label:venue, country:c };
+      return { label:venue || c, country:c };
     }
   }
   return { label:raw, country:"" };
@@ -306,20 +307,15 @@ function renderSeason(data){
     const results = (race.results||[]).slice();
 
     results.sort((a,b)=>{
-      const ap = (a.position === null || a.position === undefined) ? 999 : a.position;
-      const bp = (b.position === null || b.position === undefined) ? 999 : b.position;
-      return ap - bp;
+      const ap = (a.position==null)?999:a.position;
+      const bp = (b.position==null)?999:b.position;
+      return ap-bp;
     });
 
     results.forEach(r=>{
-      let displayPos = r.position;
-      const timeText = String(r.time||"").toUpperCase();
-      if(timeText.includes("DNF")) displayPos = "DNF";
-      if(timeText.includes("DQ")) displayPos = "DSQ";
-
       const tr=document.createElement("tr");
       tr.innerHTML=`
-        <td>${displayPos}</td>
+        <td>${r.position ?? "DNF"}</td>
         <td>${cleanDriver(r.driver)}</td>
         <td>${r.team||""}</td>
         <td>${r.grid||""}</td>
