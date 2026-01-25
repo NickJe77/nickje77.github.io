@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Cricket World Cup (Men) | The Sporting Almanac</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <link rel="stylesheet" href="style.css">
+
+  <style>
+    body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#fff;color:#111;}
+    .navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
+    .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+    .navbar a:hover{text-decoration:underline;}
+
+    .page-wrap{max-width:1200px;margin:0 auto;padding:28px 18px 44px;}
+    .hero{
+      border-radius:16px;
+      padding:26px 22px;
+      background:linear-gradient(135deg,#0b2a5b 0%, #123a7a 45%, #1a4da0 100%);
+      color:#fff;
+      box-shadow:0 8px 24px rgba(0,0,0,.10);
+      margin-bottom:22px;
+    }
+    .hero h1{margin:0 0 8px;font-size:34px;letter-spacing:.2px;}
+    .hero p{margin:0;opacity:.92;font-size:16px;line-height:1.45;}
+
+    .controls{
+      display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+      margin:18px 0 18px;
+    }
+    .search{
+      flex:1;min-width:220px;
+      border:1px solid #d7d7d7;border-radius:10px;
+      padding:12px 12px;font-size:15px;
+      outline:none;
+    }
+    .pill{
+      border:1px solid #d7d7d7;border-radius:999px;
+      padding:10px 14px;background:#fff;cursor:pointer;
+      font-weight:600;font-size:14px;
+    }
+    .pill.active{border-color:#0056d6;color:#0056d6;}
+    .meta{
+      margin-left:auto;
+      font-size:14px;color:#444;
+    }
+
+    .year-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(110px,1fr));
+      gap:12px;
+      margin-top:10px;
+    }
+    .year-tile{
+      display:flex;flex-direction:column;justify-content:center;align-items:center;
+      text-decoration:none;
+      border:1px solid #e3e3e3;border-radius:14px;
+      padding:14px 10px;
+      background:#fff;
+      box-shadow:0 6px 16px rgba(0,0,0,.05);
+      transition:transform .08s ease, box-shadow .08s ease, border-color .08s ease;
+      min-height:78px;
+    }
+    .year-tile:hover{
+      transform:translateY(-2px);
+      box-shadow:0 10px 22px rgba(0,0,0,.08);
+      border-color:#cfd8ff;
+    }
+    .year-num{font-size:22px;font-weight:800;color:#111;line-height:1;}
+    .year-sub{margin-top:6px;font-size:12px;color:#666;}
+    .empty{
+      margin-top:14px;
+      padding:14px 14px;border:1px dashed #d7d7d7;border-radius:12px;color:#555;
+    }
+
+    .footer-note{
+      margin-top:22px;
+      font-size:13px;color:#666;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="navbar">
+    <a href="index.html">Home</a>
+    <a href="horse-racing.html">Racing</a>
+    <a href="afl.html">AFL</a>
+    <a href="football.html">Football</a>
+    <a href="world-cup.html" style="text-decoration:underline;">Cricket World Cup</a>
+  </div>
+
+  <div class="page-wrap">
+    <div class="hero">
+      <h1>Cricket World Cup (Men)</h1>
+      <p>Every match, every player, every dismissal — built from ball-by-ball data.</p>
+    </div>
+
+    <div class="controls">
+      <input id="search" class="search" type="text" placeholder="Search year (e.g. 1999) …" />
+      <button id="sortAsc" class="pill active" type="button">Oldest → Newest</button>
+      <button id="sortDesc" class="pill" type="button">Newest → Oldest</button>
+      <div id="meta" class="meta"></div>
+    </div>
+
+    <div id="grid" class="year-grid"></div>
+    <div id="empty" class="empty" style="display:none;">No years match your search.</div>
+
+    <div class="footer-note">
+      Source: Cricsheet (ball-by-ball). Pages load locally from your site’s <code>/data</code> folder.
+    </div>
+  </div>
+
+  <script>
+    // === CONFIG ===
+    const CSV_URL = "data/cwc_match_results.csv";
+    const YEAR_PAGE = "world-cup-year.html?year=";
+
+    // === Small CSV parser (no external libs) ===
+    function parseCSV(text) {
+      // Handles commas inside quotes
+      const rows = [];
+      let row = [], field = "", inQuotes = false;
+
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        const next = text[i + 1];
+
+        if (c === '"' && inQuotes && next === '"') { field += '"'; i++; continue; }
+        if (c === '"') { inQuotes = !inQuotes; continue; }
+
+        if (c === ',' && !inQuotes) { row.push(field); field = ""; continue; }
+        if (c === '\n' && !inQuotes) { row.push(field); rows.push(row); row = []; field = ""; continue; }
+
+        if (c !== '\r') field += c;
+      }
+      if (field.length || row.length) { row.push(field); rows.push(row); }
+
+      const headers = rows.shift().map(h => h.trim());
+      return rows
+        .filter(r => r.length && r.some(x => String(x).trim() !== ""))
+        .map(r => {
+          const obj = {};
+          headers.forEach((h, idx) => obj[h] = (r[idx] ?? "").trim());
+          return obj;
+        });
+    }
+
+    function getYearsFromResults(results) {
+      const years = new Set();
+      for (const r of results) {
+        const d = r.date || "";
+        const y = d.slice(0, 4);
+        if (y && /^\d{4}$/.test(y)) years.add(y);
+      }
+      return Array.from(years).sort((a,b) => Number(a) - Number(b));
+    }
+
+    function renderYears(years, order) {
+      const grid = document.getElementById("grid");
+      const empty = document.getElementById("empty");
+      const meta = document.getElementById("meta");
+
+      grid.innerHTML = "";
+      empty.style.display = years.length ? "none" : "block";
+      meta.textContent = years.length ? `${years.length} World Cups` : "";
+
+      const finalYears = [...years].sort((a,b) => order === "desc" ? Number(b)-Number(a) : Number(a)-Number(b));
+
+      for (const y of finalYears) {
+        const a = document.createElement("a");
+        a.className = "year-tile";
+        a.href = YEAR_PAGE + encodeURIComponent(y);
+
+        const top = document.createElement("div");
+        top.className = "year-num";
+        top.textContent = y;
+
+        const sub = document.createElement("div");
+        sub.className = "year-sub";
+        sub.textContent = "View matches & stats";
+
+        a.appendChild(top);
+        a.appendChild(sub);
+        grid.appendChild(a);
+      }
+    }
+
+    async function init() {
+      const res = await fetch(CSV_URL, { cache: "no-store" });
+      if (!res.ok) throw new Error(`Could not load ${CSV_URL} (${res.status})`);
+      const csvText = await res.text();
+      const results = parseCSV(csvText);
+
+      const allYears = getYearsFromResults(results);
+
+      let order = "asc";
+      let filtered = allYears;
+
+      const sortAscBtn = document.getElementById("sortAsc");
+      const sortDescBtn = document.getElementById("sortDesc");
+      const search = document.getElementById("search");
+
+      function setOrder(next) {
+        order = next;
+        sortAscBtn.classList.toggle("active", order === "asc");
+        sortDescBtn.classList.toggle("active", order === "desc");
+        renderYears(filtered, order);
+      }
+
+      function applySearch() {
+        const q = search.value.trim();
+        filtered = q ? allYears.filter(y => y.includes(q)) : allYears;
+        renderYears(filtered, order);
+      }
+
+      sortAscBtn.addEventListener("click", () => setOrder("asc"));
+      sortDescBtn.addEventListener("click", () => setOrder("desc"));
+      search.addEventListener("input", applySearch);
+
+      renderYears(allYears, order);
+    }
+
+    init().catch(err => {
+      const empty = document.getElementById("empty");
+      empty.style.display = "block";
+      empty.textContent = "Could not load World Cup data. Check that data/cwc_match_results.csv exists in your site.";
+      console.error(err);
+    });
+  </script>
+</body>
+</html>
