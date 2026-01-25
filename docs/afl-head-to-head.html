@@ -109,110 +109,164 @@ th{background:#f4f6f8;}
 <div class="page-wrap">
 
 <h1>AFL Head to Head</h1>
-
-<p>
-Compare two AFL teams across all matches, seasons, and venues.
-</p>
+<p>Compare two AFL teams across all matches since 2020.</p>
 
 <div class="selector-grid">
-
   <div class="selector-box">
     <h3>Team One</h3>
-    <select id="team1"></select>
+    <select id="team1">
+      <option value="">Select team</option>
+    </select>
   </div>
 
   <div class="selector-box">
     <h3>Team Two</h3>
-    <select id="team2"></select>
+    <select id="team2">
+      <option value="">Select team</option>
+    </select>
   </div>
-
 </div>
 
 <button class="compare-btn" onclick="compare()">Compare</button>
 
 <div id="results" class="results-box">
-  <div class="placeholder">
-    Loading AFL match database...
-  </div>
+  <div class="placeholder">Loading AFL match database…</div>
 </div>
 
 </div>
 
 <script>
-let data=[];
+let allData = [];
 
-fetch("afl_all_in_one.csv")
-.then(r=>r.text())
-.then(text=>{
-  const lines=text.trim().split("\n");
-  const headers=lines[0].split(",");
-  const rows=lines.slice(1);
+function norm(s){
+  return (s||"").trim().toLowerCase();
+}
 
-  rows.forEach(l=>{
-    const parts=l.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
-    let obj={};
-    headers.forEach((h,i)=>obj[h]=parts[i]?.replace(/^"|"$/g,""));
-    data.push(obj);
-  });
+function displayName(s){
+  if(s === "gws") return "GWS";
+  return s.replace(/\b\w/g, c => c.toUpperCase());
+}
 
-  populateTeams();
-  document.getElementById("results").innerHTML=
-    "<div class='placeholder'>Select two teams and click Compare.</div>";
-});
+async function loadAllSeasons(){
+  const startYear = 2020;
+  const endYear = new Date().getFullYear();
+  const teams = new Set();
 
-function populateTeams(){
-  const teams=new Set();
-  data.forEach(r=>{
-    if(r.Team1) teams.add(r.Team1);
-    if(r.Team2) teams.add(r.Team2);
-  });
+  for(let y=startYear; y<=endYear; y++){
+    try{
+      const res = await fetch(`data/afl/afl_${y}.json`);
+      if(!res.ok) continue;
+      const seasonData = await res.json();
+
+      seasonData.forEach(r=>{
+        if(!r.home_team || !r.away_team) return;
+
+        const home = norm(r.home_team);
+        const away = norm(r.away_team);
+
+        // remove Brisbane completely
+        if(home === "brisbane" || away === "brisbane") return;
+
+        r._home = home;
+        r._away = away;
+
+        allData.push(r);
+
+        teams.add(home);
+        teams.add(away);
+      });
+    }catch(e){}
+  }
 
   const sorted=[...teams].sort();
-
   const t1=document.getElementById("team1");
   const t2=document.getElementById("team2");
 
   sorted.forEach(t=>{
-    t1.innerHTML+=`<option>${t}</option>`;
-    t2.innerHTML+=`<option>${t}</option>`;
+    const name = displayName(t);
+    t1.innerHTML+=`<option value="${t}">${name}</option>`;
+    t2.innerHTML+=`<option value="${t}">${name}</option>`;
   });
+
+  document.getElementById("results").innerHTML =
+    "<div class='placeholder'>Select two teams and click Compare.</div>";
 }
+
+loadAllSeasons();
 
 function compare(){
   const a=document.getElementById("team1").value;
   const b=document.getElementById("team2").value;
   const box=document.getElementById("results");
 
+  if(!a || !b){
+    box.innerHTML="<b>Please select two teams.</b>";
+    return;
+  }
+
   if(a===b){
     box.innerHTML="<b>Please select two different teams.</b>";
     return;
   }
 
-  const games=data.filter(r=>
-    (r.Team1===a && r.Team2===b) ||
-    (r.Team1===b && r.Team2===a)
+  const rawGames = allData.filter(r =>
+    (r._home===a && r._away===b) ||
+    (r._home===b && r._away===a)
   );
 
-  if(games.length===0){
-    box.innerHTML="<b>No matches found.</b>";
+  if(rawGames.length===0){
+    box.innerHTML="<b>No matches found for this pairing.</b>";
     return;
   }
 
-  let aWins=0,bWins=0,marginTotal=0;
+  const gameMap = {};
+  rawGames.forEach(r=>{
+    if(!gameMap[r.match_id]){
+      gameMap[r.match_id] = r;
+    }
+  });
+  let games = Object.values(gameMap);
 
-  games.forEach(g=>{
-    if(g.Winner===a) aWins++;
-    if(g.Winner===b) bWins++;
-    marginTotal+=Math.abs(parseInt(g.Margin)||0);
+  games.sort((x,y)=>{
+    if(y.season!==x.season) return y.season-x.season;
+    return parseInt(y.round.replace("Round ","")) -
+           parseInt(x.round.replace("Round ",""));
   });
 
+  let aWins=0,bWins=0,draws=0;
+
+  games.forEach(g=>{
+    const s1=g.home_points;
+    const s2=g.away_points;
+
+    if(s1===s2) draws++;
+    else if((g._home===a && s1>s2) || (g._away===a && s2>s1)) aWins++;
+    else bWins++;
+  });
+
+  const lastN = Math.min(10, games.length);
+  const lastGames = games.slice(0, lastN);
+
+  let totalPointsN = 0;
+  lastGames.forEach(g=>{
+    totalPointsN += g.total_points;
+  });
+
+  const avgPointsN = (totalPointsN / lastGames.length).toFixed(1);
+
+  const A = displayName(a);
+  const B = displayName(b);
+
   let html=`
-  <h3>${a} vs ${b}</h3>
+  <h3>${A} vs ${B}</h3>
   <p>
     Games: ${games.length} |
-    ${a} wins: ${aWins} |
-    ${b} wins: ${bWins} |
-    Avg margin: ${(marginTotal/games.length).toFixed(1)}
+    ${A} wins: ${aWins} |
+    Draws: ${draws} |
+    ${B} wins: ${bWins}
+  </p>
+  <p>
+    Last ${lastN} Avg Points per Game: ${avgPointsN}
   </p>
 
   <table>
@@ -220,19 +274,30 @@ function compare(){
       <th>Season</th>
       <th>Round</th>
       <th>Venue</th>
+      <th>Match</th>
       <th>Winner</th>
+      <th>Score</th>
+      <th>Total Points</th>
       <th>Margin</th>
     </tr>
   `;
 
-  games.slice(-20).reverse().forEach(g=>{
+  games.forEach(g=>{
+    const winner =
+      g.home_points > g.away_points ? displayName(g._home) :
+      g.away_points > g.home_points ? displayName(g._away) :
+      "Draw";
+
     html+=`
       <tr>
-        <td>${g.Season}</td>
-        <td>${g.Round}</td>
-        <td>${g.Venue}</td>
-        <td>${g.Winner}</td>
-        <td>${g.Margin}</td>
+        <td>${g.season}</td>
+        <td>${g.round}</td>
+        <td>${g.venue || ""}</td>
+        <td>${displayName(g._home)} v ${displayName(g._away)}</td>
+        <td>${winner}</td>
+        <td>${g.home_points} - ${g.away_points}</td>
+        <td>${g.total_points}</td>
+        <td>${g.margin}</td>
       </tr>
     `;
   });
