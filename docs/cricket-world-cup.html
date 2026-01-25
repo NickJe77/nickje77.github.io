@@ -102,56 +102,25 @@ body {
 </div>
 
 <script>
-const DATA_URL = "docs/data/cwc_by_tournament.csv";
+const DATA_URL = "data/cwc_match_results.csv"; // this file has the date column
 
 function parseCSV(text) {
-  const rows = [];
-  let row = [], field = "", inQuotes = false;
+  const lines = text.trim().split("\n");
+  const headers = lines.shift().split(",");
 
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    const n = text[i + 1];
-
-    if (c === '"' && inQuotes && n === '"') {
-      field += '"';
-      i++;
-      continue;
-    }
-    if (c === '"') {
-      inQuotes = !inQuotes;
-      continue;
-    }
-    if (c === "," && !inQuotes) {
-      row.push(field);
-      field = "";
-      continue;
-    }
-    if (c === "\n" && !inQuotes) {
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = "";
-      continue;
-    }
-    if (c !== "\r") field += c;
-  }
-
-  if (field || row.length) {
-    row.push(field);
-    rows.push(row);
-  }
-
-  const headers = rows.shift();
-
-  return rows.map(r => {
+  return lines.map(line => {
+    const values = line.split(",");
     const obj = {};
-    headers.forEach((h, i) => obj[h] = (r[i] || "").trim());
+    headers.forEach((h, i) => obj[h.trim()] = (values[i] || "").trim());
     return obj;
   });
 }
 
 fetch(DATA_URL)
-  .then(r => r.text())
+  .then(res => {
+    if (!res.ok) throw new Error("CSV not found");
+    return res.text();
+  })
   .then(text => {
     const data = parseCSV(text);
 
@@ -161,11 +130,16 @@ fetch(DATA_URL)
       return;
     }
 
-    // ALWAYS use the first column as the year
-    const firstKey = Object.keys(data[0])[0];
+    if (!("date" in data[0])) {
+      document.getElementById("yearGrid").innerHTML =
+        "<p style='color:red'>CSV must contain a 'date' column.</p>";
+      return;
+    }
 
     const years = [...new Set(
-      data.map(r => Number(r[firstKey])).filter(y => !isNaN(y))
+      data
+        .map(r => new Date(r.date).getFullYear())
+        .filter(y => !isNaN(y))
     )].sort((a, b) => a - b);
 
     const grid = document.getElementById("yearGrid");
