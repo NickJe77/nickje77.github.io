@@ -151,8 +151,6 @@ const tilePoints = document.getElementById("tilePoints");
 const startYear = 1950;
 const endYear = new Date().getFullYear();
 
-let currentYear = endYear;
-
 // build year buttons
 for(let y=startYear; y<=endYear; y++){
   const btn = document.createElement("button");
@@ -163,9 +161,21 @@ for(let y=startYear; y<=endYear; y++){
   yearGrid.appendChild(btn);
 }
 
-async function loadSeason(year){
-  currentYear = year;
+async function findLatestSeasonWithData(){
+  for(let y=endYear; y>=startYear; y--){
+    try{
+      const res = await fetch(`data/f1/${y}.json`);
+      if(!res.ok) continue;
+      const data = await res.json();
+      if(data.races && data.races.length > 0){
+        return y;
+      }
+    }catch(e){}
+  }
+  return null;
+}
 
+async function loadSeason(year){
   document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
   const activeBtn = document.getElementById("year-"+year);
   if(activeBtn) activeBtn.classList.add("active");
@@ -258,8 +268,10 @@ function renderSeason(data){
   });
 }
 
-// default load
-loadSeason(endYear);
+// load latest real season (skip empty 2026)
+findLatestSeasonWithData().then(y=>{
+  if(y) loadSeason(y);
+});
 </script>
 
 </body>
