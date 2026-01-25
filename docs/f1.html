@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Formula 1 Results | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="style.css">
+
+<style>
+body{
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin:0;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1100px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+h1{text-align:center;margin-bottom:10px;}
+p{text-align:center;color:#555;margin-bottom:25px;}
+
+select{
+  padding:10px 14px;
+  font-size:16px;
+  border-radius:8px;
+  margin-bottom:20px;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-bottom:40px;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:left;
+}
+th{background:#f0f0f0;}
+
+.race-title{
+  margin-top:30px;
+  font-size:20px;
+  font-weight:700;
+}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="f1.html">F1</a>
+</div>
+
+<div class="page-wrap">
+
+<h1>Formula 1 Results</h1>
+<p>Race results by season (1950–present).</p>
+
+<div style="text-align:center;">
+  Season:
+  <select id="seasonSelect"></select>
+</div>
+
+<div id="results"></div>
+
+</div>
+
+<script>
+const seasonSelect = document.getElementById("seasonSelect");
+const resultsDiv = document.getElementById("results");
+
+const startYear = 1950;
+const endYear = new Date().getFullYear();
+
+let seasons = [];
+
+// Build dropdown
+for(let y = endYear; y >= startYear; y--){
+  seasons.push(y);
+  const opt = document.createElement("option");
+  opt.value = y;
+  opt.textContent = y;
+  seasonSelect.appendChild(opt);
+}
+
+seasonSelect.addEventListener("change", () => {
+  loadSeason(seasonSelect.value);
+});
+
+async function loadSeason(year){
+  resultsDiv.innerHTML = "Loading…";
+
+  try{
+    const res = await fetch(`data/f1/${year}.json`);
+    if(!res.ok){
+      resultsDiv.innerHTML = "<p>No data for this season.</p>";
+      return;
+    }
+
+    const data = await res.json();
+    renderSeason(data);
+  }catch(e){
+    resultsDiv.innerHTML = "<p>Error loading season.</p>";
+  }
+}
+
+function renderSeason(data){
+  resultsDiv.innerHTML = "";
+
+  if(!data.races || data.races.length === 0){
+    resultsDiv.innerHTML = "<p>No races available for this season.</p>";
+    return;
+  }
+
+  data.races.forEach(race => {
+    const h = document.createElement("div");
+    h.className = "race-title";
+    h.textContent = `Round ${race.round} – ${race.grand_prix}`;
+    resultsDiv.appendChild(h);
+
+    const table = document.createElement("table");
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th>Pos</th>
+          <th>Driver</th>
+          <th>Team</th>
+          <th>Grid</th>
+          <th>Points</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    `;
+
+    const tbody = table.querySelector("tbody");
+
+    race.results
+      .sort((a,b)=> b.points - a.points)
+      .forEach((r,i)=>{
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${i+1}</td>
+          <td>${r.driver}</td>
+          <td>${r.team}</td>
+          <td>${r.grid ?? ""}</td>
+          <td>${r.points}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+    resultsDiv.appendChild(table);
+  });
+}
+
+// Load latest season by default
+seasonSelect.value = endYear;
+loadSeason(endYear);
+</script>
+
+</body>
+</html>
