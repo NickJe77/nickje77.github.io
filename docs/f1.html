@@ -159,44 +159,15 @@ function cleanDriver(name){
 /* ================= FLAGS ================= */
 
 const flagByCountry = {
-  "Australia":"🇦🇺",
-  "Bahrain":"🇧🇭",
-  "Saudi Arabia":"🇸🇦",
-  "China":"🇨🇳",
-  "Japan":"🇯🇵",
-  "Monaco":"🇲🇨",
-  "Spain":"🇪🇸",
-  "Canada":"🇨🇦",
-  "Austria":"🇦🇹",
-  "Great Britain":"🇬🇧",
-  "Belgium":"🇧🇪",
-  "Hungary":"🇭🇺",
-  "Netherlands":"🇳🇱",
-  "Italy":"🇮🇹",
-  "Azerbaijan":"🇦🇿",
-  "Singapore":"🇸🇬",
-  "United States":"🇺🇸",
-  "Mexico":"🇲🇽",
-  "Brazil":"🇧🇷",
-  "Qatar":"🇶🇦",
-  "United Arab Emirates":"🇦🇪",
-  "France":"🇫🇷",
-  "Switzerland":"🇨🇭",
-  "Argentina":"🇦🇷",
-  "Germany":"🇩🇪",
-  "Portugal":"🇵🇹",
-  "Morocco":"🇲🇦",
-  "South Africa":"🇿🇦",
-  "Sweden":"🇸🇪",
-  "San Marino":"🇸🇲",
-  "Turkey":"🇹🇷",
-  "Russia":"🇷🇺",
-  "Malaysia":"🇲🇾",
-  "South Korea":"🇰🇷",
-  "India":"🇮🇳"
+  "Australia":"🇦🇺","Bahrain":"🇧🇭","Saudi Arabia":"🇸🇦","China":"🇨🇳","Japan":"🇯🇵",
+  "Monaco":"🇲🇨","Spain":"🇪🇸","Canada":"🇨🇦","Austria":"🇦🇹","Great Britain":"🇬🇧",
+  "Belgium":"🇧🇪","Hungary":"🇭🇺","Netherlands":"🇳🇱","Italy":"🇮🇹",
+  "Azerbaijan":"🇦🇿","Singapore":"🇸🇬","United States":"🇺🇸","Mexico":"🇲🇽",
+  "Brazil":"🇧🇷","Qatar":"🇶🇦","United Arab Emirates":"🇦🇪","France":"🇫🇷",
+  "Switzerland":"🇨🇭","Argentina":"🇦🇷","Germany":"🇩🇪","Portugal":"🇵🇹",
+  "Morocco":"🇲🇦","South Africa":"🇿🇦","Sweden":"🇸🇪","San Marino":"🇸🇲",
+  "Turkey":"🇹🇷","Russia":"🇷🇺","Malaysia":"🇲🇾","South Korea":"🇰🇷","India":"🇮🇳"
 };
-
-/* ================= OVERRIDES ================= */
 
 const raceOverrides = {
   "France Switzerland":"Switzerland",
@@ -211,13 +182,10 @@ const raceOverrides = {
   "Republic of Korea South Korea":"South Korea"
 };
 
-/* ================= NORMALISE ================= */
-
 function normalizeGpRaw(s){
   let n = String(s || "").trim();
   n = n.replace(/^Flag of\s+/i,"").trim();
   n = n.replace(/\s+/g," ").trim();
-
   if(raceOverrides[n]) return raceOverrides[n];
 
   const parts = n.split(" ");
@@ -232,27 +200,22 @@ function normalizeGpRaw(s){
 
 function parseGpName(grandPrix){
   let raw = normalizeGpRaw(grandPrix);
-
   const countries = Object.keys(flagByCountry).sort((a,b)=>b.length-a.length);
-
   for(const c of countries){
-    if(raw === c){
-      return { label: c, country: c };
-    }
-    if(raw.startsWith(c + " ")){
+    if(raw === c) return { label:c, country:c };
+    if(raw.startsWith(c+" ")){
       const venue = raw.slice(c.length).trim();
-      if(!venue || venue === c) return { label: c, country: c };
-      return { label: venue, country: c };
+      if(!venue || venue===c) return { label:c, country:c };
+      return { label:venue, country:c };
     }
   }
-
-  return { label: raw, country: "" };
+  return { label:raw, country:"" };
 }
 
 function formatRoundTitle(round, grandPrix){
   const parsed = parseGpName(grandPrix);
   const flag = parsed.country ? flagByCountry[parsed.country] : "";
-  return `Round ${round} – ${parsed.label}${flag ? " " + flag : ""}`;
+  return `Round ${round} – ${parsed.label}${flag ? " "+flag : ""}`;
 }
 
 /* ================= YEAR BUTTONS ================= */
@@ -301,7 +264,6 @@ function renderSeason(data){
   }
 
   let totals={};
-
   data.races.forEach(race=>{
     (race.results||[]).forEach(r=>{
       const pts=Number(r.points)||0;
@@ -343,12 +305,24 @@ function renderSeason(data){
     const tbody=table.querySelector("tbody");
 
     const results = (race.results||[]).slice();
-    results.sort((a,b)=>Number(a.position)-Number(b.position));
+
+    results.sort((a,b)=>{
+      const aDNF = (String(a.time||"").toUpperCase().includes("DNF") || String(a.time||"").toUpperCase().includes("DQ"));
+      const bDNF = (String(b.time||"").toUpperCase().includes("DNF") || String(b.time||"").toUpperCase().includes("DQ"));
+      if(aDNF && !bDNF) return 1;
+      if(!aDNF && bDNF) return -1;
+      return Number(a.position)-Number(b.position);
+    });
 
     results.forEach(r=>{
+      let displayPos = r.position;
+      const timeText = String(r.time||"").toUpperCase();
+      if(timeText.includes("DNF")) displayPos = "DNF";
+      if(timeText.includes("DQ")) displayPos = "DSQ";
+
       const tr=document.createElement("tr");
       tr.innerHTML=`
-        <td>${r.position}</td>
+        <td>${displayPos}</td>
         <td>${cleanDriver(r.driver)}</td>
         <td>${r.team||""}</td>
         <td>${r.grid||""}</td>
