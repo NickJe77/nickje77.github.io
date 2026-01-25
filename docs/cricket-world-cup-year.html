@@ -41,30 +41,19 @@ th{background:#f2f4f8;}
 <div class="summary">
   <div class="card"><div class="k">Matches</div><div class="v" id="matchesCount">—</div></div>
   <div class="card"><div class="k">Winner</div><div class="v" id="winner">—</div></div>
-  <div class="card"><div class="k">Top Run Scorer</div><div class="v" id="topRuns">—</div></div>
-  <div class="card"><div class="k">Top Wicket Taker</div><div class="v" id="topWickets">—</div></div>
 </div>
 
 <h2 class="section-title">Matches</h2>
 <table id="matchesTbl">
 <thead>
-<tr><th>Date</th><th>Team 1</th><th>Team 2</th><th>Winner</th><th>Venue</th></tr>
-</thead>
-<tbody></tbody>
-</table>
-
-<h2 class="section-title">Top Run Scorers</h2>
-<table id="runsTbl">
-<thead>
-<tr><th>Player</th><th>Runs</th></tr>
-</thead>
-<tbody></tbody>
-</table>
-
-<h2 class="section-title">Top Wicket Takers</h2>
-<table id="wktsTbl">
-<thead>
-<tr><th>Player</th><th>Wickets</th></tr>
+<tr>
+  <th>Team 1</th>
+  <th>Team 2</th>
+  <th>Venue</th>
+  <th>City</th>
+  <th>Country</th>
+  <th>Toss</th>
+</tr>
 </thead>
 <tbody></tbody>
 </table>
@@ -75,82 +64,80 @@ th{background:#f2f4f8;}
 const year = new URLSearchParams(location.search).get("year");
 document.getElementById("title").textContent = "Cricket World Cup " + year;
 
-const MATCHES_URL = "data/cwc_match_results.csv";
-const BATTING_URL = "data/cwc_by_tournament.csv";
-const BOWLING_URL = "data/cwc_bowling_summary.csv";
+const DATA_URL = "data/cwc_matches_with_year.csv";
 
-function parseCSV(text){
+function parseCSV(text) {
   const rows = [];
-  let row=[], field="", inQ=false;
-  for(let i=0;i<text.length;i++){
-    const c=text[i], n=text[i+1];
-    if(c=='"'&&inQ&&n=='"'){field+='"';i++;continue;}
-    if(c=='"'){inQ=!inQ;continue;}
-    if(c==","&&!inQ){row.push(field);field="";continue;}
-    if(c=="\n"&&!inQ){row.push(field);rows.push(row);row=[];field="";continue;}
-    if(c!="\r")field+=c;
+  let row = [], field = "", inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    const n = text[i + 1];
+
+    if (c === '"' && inQuotes && n === '"') {
+      field += '"';
+      i++;
+      continue;
+    }
+    if (c === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (c === "," && !inQuotes) {
+      row.push(field);
+      field = "";
+      continue;
+    }
+    if (c === "\n" && !inQuotes) {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+      continue;
+    }
+    if (c !== "\r") field += c;
   }
-  if(field||row.length){row.push(field);rows.push(row);}
-  const headers=rows.shift().map(h=>h.trim());
-  return rows.map(r=>{
-    const o={};
-    headers.forEach((h,i)=>o[h]=(r[i]||"").trim());
-    return o;
+
+  if (field || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+
+  const headers = rows.shift();
+
+  return rows.map(r => {
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = (r[i] || "").trim());
+    return obj;
   });
 }
 
-function yearFromDate(d){
-  return d ? d.slice(0,4) : "";
-}
+fetch(DATA_URL)
+  .then(r => r.text())
+  .then(text => {
+    const data = parseCSV(text).filter(r => String(r.year) === year);
 
-Promise.all([
-  fetch(MATCHES_URL).then(r=>r.text()),
-  fetch(BATTING_URL).then(r=>r.text()),
-  fetch(BOWLING_URL).then(r=>r.text())
-]).then(([mText,bText,boText])=>{
+    document.getElementById("matchesCount").textContent = data.length;
 
-  const matches=parseCSV(mText).filter(r=>yearFromDate(r.date)==year);
-  const batting=parseCSV(bText).filter(r=>r.year==year);
-  const bowling=parseCSV(boText).filter(r=>r.year==year);
+    if (data.length) {
+      document.getElementById("winner").textContent = data[data.length - 1].team1 + " / " + data[data.length - 1].team2;
+    }
 
-  document.getElementById("matchesCount").textContent = matches.length;
+    const tbody = document.querySelector("#matchesTbl tbody");
 
-  if(matches.length){
-    document.getElementById("winner").textContent = matches[matches.length-1].winner;
-  }
-
-  batting.sort((a,b)=>Number(b.runs)-Number(a.runs));
-  if(batting.length){
-    document.getElementById("topRuns").textContent = batting[0].batter+" ("+batting[0].runs+")";
-  }
-
-  bowling.sort((a,b)=>Number(b.wickets)-Number(a.wickets));
-  if(bowling.length){
-    document.getElementById("topWickets").textContent = bowling[0].bowler+" ("+bowling[0].wickets+")";
-  }
-
-  const mBody=document.querySelector("#matchesTbl tbody");
-  matches.forEach(m=>{
-    mBody.innerHTML+=`<tr>
-      <td>${m.date}</td>
-      <td>${m.team1}</td>
-      <td>${m.team2}</td>
-      <td>${m.winner}</td>
-      <td>${m.venue}</td>
-    </tr>`;
+    data.forEach(m => {
+      tbody.innerHTML += `
+        <tr>
+          <td>${m.team1}</td>
+          <td>${m.team2}</td>
+          <td>${m.venue}</td>
+          <td>${m.city}</td>
+          <td>${m.country}</td>
+          <td>${m.toss_winner} (${m.toss_elected})</td>
+        </tr>
+      `;
+    });
   });
-
-  const rBody=document.querySelector("#runsTbl tbody");
-  batting.slice(0,10).forEach(p=>{
-    rBody.innerHTML+=`<tr><td>${p.batter}</td><td>${p.runs}</td></tr>`;
-  });
-
-  const wBody=document.querySelector("#wktsTbl tbody");
-  bowling.slice(0,10).forEach(p=>{
-    wBody.innerHTML+=`<tr><td>${p.bowler}</td><td>${p.wickets}</td></tr>`;
-  });
-
-});
 </script>
 
 </body>
