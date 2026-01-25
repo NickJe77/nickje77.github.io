@@ -33,7 +33,6 @@ body{
 h1{text-align:center;margin-bottom:10px;}
 p{text-align:center;color:#555;margin-bottom:20px;}
 
-/* year tiles */
 .year-grid{
   display:flex;
   flex-wrap:wrap;
@@ -55,7 +54,6 @@ p{text-align:center;color:#555;margin-bottom:20px;}
   border-color:#222;
 }
 
-/* tiles */
 .tile-wrap{
   display:grid;
   grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
@@ -80,7 +78,6 @@ p{text-align:center;color:#555;margin-bottom:20px;}
   font-weight:700;
 }
 
-/* tables */
 table{
   width:100%;
   border-collapse:collapse;
@@ -117,10 +114,8 @@ th{background:#f0f0f0;}
 <h1>Formula 1 Results</h1>
 <p>Race results by season (1950–present).</p>
 
-<!-- YEAR BUTTONS -->
 <div class="year-grid" id="yearGrid"></div>
 
-<!-- SUMMARY TILES -->
 <div class="tile-wrap">
   <div class="tile">
     <h3>Season</h3>
@@ -151,7 +146,8 @@ const tilePoints = document.getElementById("tilePoints");
 const startYear = 1950;
 const endYear = new Date().getFullYear();
 
-// build year buttons
+let currentYear = endYear;
+
 for(let y=startYear; y<=endYear; y++){
   const btn = document.createElement("button");
   btn.className = "year-btn";
@@ -161,21 +157,9 @@ for(let y=startYear; y<=endYear; y++){
   yearGrid.appendChild(btn);
 }
 
-async function findLatestSeasonWithData(){
-  for(let y=endYear; y>=startYear; y--){
-    try{
-      const res = await fetch(`data/f1/${y}.json`);
-      if(!res.ok) continue;
-      const data = await res.json();
-      if(data.races && data.races.length > 0){
-        return y;
-      }
-    }catch(e){}
-  }
-  return null;
-}
-
 async function loadSeason(year){
+  currentYear = year;
+
   document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
   const activeBtn = document.getElementById("year-"+year);
   if(activeBtn) activeBtn.classList.add("active");
@@ -191,7 +175,33 @@ async function loadSeason(year){
       resultsDiv.innerHTML = "<p>No data for this season.</p>";
       return;
     }
-    const data = await res.json();
+    let data = await res.json();
+
+    // FIX: convert flat format (2025) to race format
+    if(Array.isArray(data)){
+      const grouped = {};
+      data.forEach(row=>{
+        const key = row.round + " - " + row.grand_prix;
+        if(!grouped[key]){
+          grouped[key] = {
+            round: row.round,
+            grand_prix: row.grand_prix,
+            results: []
+          };
+        }
+        grouped[key].results.push({
+          driver: row.driver,
+          team: row.team,
+          grid: row.grid,
+          points: row.points
+        });
+      });
+      data = {
+        season: year,
+        races: Object.values(grouped).sort((a,b)=>a.round-b.round)
+      };
+    }
+
     renderSeason(data);
   }catch(e){
     resultsDiv.innerHTML = "<p>Error loading season.</p>";
@@ -268,10 +278,7 @@ function renderSeason(data){
   });
 }
 
-// load latest real season (skip empty 2026)
-findLatestSeasonWithData().then(y=>{
-  if(y) loadSeason(y);
-});
+loadSeason(endYear);
 </script>
 
 </body>
