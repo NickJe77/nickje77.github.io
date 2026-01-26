@@ -5,90 +5,69 @@
 <title>Indian Premier League | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<link rel="stylesheet" href="style.css">
-
 <style>
-body {
-  font-family: Inter, system-ui, Arial, sans-serif;
-  margin: 0;
-  background: white;
+body{
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin:0;
 }
 
-.navbar {
-  display: flex;
-  justify-content: center;
-  gap: 24px;
-  padding: 16px 0;
-  border-bottom: 1px solid #ddd;
-  font-weight: 600;
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px;
 }
 
-.navbar a {
-  color: #0056d6;
-  text-decoration: none;
-  font-size: 18px;
+.hero{
+  background:linear-gradient(90deg,#3b007a,#7b2cbf);
+  color:white;
+  padding:40px 50px;
+  border-radius:24px;
+  margin-bottom:30px;
+}
+.hero h1{margin:0;font-size:48px;}
+.hero p{margin-top:10px;font-size:20px;opacity:0.95;}
+
+.controls{
+  margin:20px 0;
+  font-size:18px;
+}
+select{
+  font-size:16px;
+  padding:6px 10px;
 }
 
-.navbar a:hover {
-  text-decoration: underline;
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:20px;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:left;
+}
+th{
+  background:#f3f6fb;
+}
+tr:nth-child(even){
+  background:#f8fbff;
 }
 
-.page-wrap {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 30px 20px;
-}
-
-.hero {
-  background: linear-gradient(135deg, #3b0066, #6a1bb2);
-  color: white;
-  padding: 40px;
-  border-radius: 22px;
-  margin-bottom: 30px;
-}
-
-.hero h1 {
-  margin: 0 0 10px 0;
-  font-size: 42px;
-}
-
-.hero p {
-  margin: 0;
-  font-size: 18px;
-  opacity: 0.9;
-}
-
-.controls {
-  margin-bottom: 20px;
-}
-
-select {
-  padding: 8px 12px;
-  font-size: 16px;
-}
-
-.match-list {
-  border-top: 1px solid #ddd;
-}
-
-.match {
-  display: grid;
-  grid-template-columns: 140px 1fr 1fr 2fr 1fr 1fr;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid #eee;
-  font-size: 14px;
-}
-
-.match.header {
-  font-weight: 700;
-  background: #f5f8ff;
-}
-
-.match div {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.footer-note{
+  margin-top:25px;
+  font-size:14px;
+  color:#555;
 }
 </style>
 </head>
@@ -115,117 +94,73 @@ select {
     <select id="seasonSelect"></select>
   </div>
 
-  <div class="match-list" id="matchList">
-    <div class="match header">
-      <div>Date</div>
-      <div>Team 1</div>
-      <div>Team 2</div>
-      <div>Venue</div>
-      <div>Winner</div>
-      <div>Margin</div>
-    </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Team 1</th>
+        <th>Team 2</th>
+        <th>Venue</th>
+        <th>Winner</th>
+        <th>Margin</th>
+      </tr>
+    </thead>
+    <tbody id="matchTable"></tbody>
+  </table>
+
+  <div class="footer-note">
+    Data source: <a href="https://cricsheet.org" target="_blank">Cricsheet.org</a>
   </div>
 
 </div>
 
 <script>
-const INDEX_FILE = "data/ipl/index.json";
-const DATA_FOLDER = "data/ipl/";
+const indexUrl = "docs/data/ipl/index.json";
+const basePath = "docs/data/ipl/";
 
-let allMatches = [];
+const seasonSelect = document.getElementById("seasonSelect");
+const tableBody = document.getElementById("matchTable");
 
-async function loadIPL() {
-  const res = await fetch(INDEX_FILE);
-  const files = await res.json();
+fetch(indexUrl)
+  .then(r => r.json())
+  .then(files => {
+    files.forEach(file => {
+      const year = file.replace("ipl_","").replace(".json","");
+      const opt = document.createElement("option");
+      opt.value = file;
+      opt.textContent = year;
+      seasonSelect.appendChild(opt);
+    });
 
-  for (const file of files) {
-    try {
-      const matchRes = await fetch(DATA_FOLDER + file);
-      const data = await matchRes.json();
+    // load most recent season by default
+    seasonSelect.value = files[files.length - 1];
+    loadSeason(seasonSelect.value);
+  });
 
-      const info = data.info;
+seasonSelect.addEventListener("change", () => {
+  loadSeason(seasonSelect.value);
+});
 
-      const date = info.dates[0];
-      const season = date.substring(0,4);
+function loadSeason(file){
+  fetch(basePath + file)
+    .then(r => r.json())
+    .then(matches => {
+      tableBody.innerHTML = "";
 
-      const team1 = info.teams[0];
-      const team2 = info.teams[1];
-      const venue = info.venue || "";
-
-      const winner = info.outcome?.winner || "No result";
-
-      let margin = "–";
-      if (info.outcome?.by?.runs) {
-        margin = info.outcome.by.runs + " runs";
-      } else if (info.outcome?.by?.wickets) {
-        margin = info.outcome.by.wickets + " wickets";
-      }
-
-      allMatches.push({
-        season,
-        date,
-        team1,
-        team2,
-        venue,
-        winner,
-        margin
+      matches.forEach(m => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${m.date || ""}</td>
+          <td>${m.team1 || ""}</td>
+          <td>${m.team2 || ""}</td>
+          <td>${m.venue || ""}</td>
+          <td>${m.winner || ""}</td>
+          <td>${m.margin || ""}</td>
+        `;
+        tableBody.appendChild(tr);
       });
-
-    } catch (err) {
-      console.warn("Skipping bad file:", file);
-    }
-  }
-
-  buildSeasonDropdown();
+    });
 }
-
-function buildSeasonDropdown() {
-  const seasons = [...new Set(allMatches.map(m => m.season))].sort();
-
-  const select = document.getElementById("seasonSelect");
-  select.innerHTML = "";
-
-  seasons.forEach(season => {
-    const opt = document.createElement("option");
-    opt.value = season;
-    opt.textContent = season;
-    select.appendChild(opt);
-  });
-
-  if (seasons.length > 0) {
-    renderMatches(seasons[0]);
-  }
-
-  select.addEventListener("change", () => {
-    renderMatches(select.value);
-  });
-}
-
-function renderMatches(season) {
-  const list = document.getElementById("matchList");
-
-  list.querySelectorAll(".match:not(.header)").forEach(e => e.remove());
-
-  const filtered = allMatches.filter(m => m.season === season);
-
-  filtered.forEach(m => {
-    const row = document.createElement("div");
-    row.className = "match";
-
-    row.innerHTML = `
-      <div>${m.date}</div>
-      <div>${m.team1}</div>
-      <div>${m.team2}</div>
-      <div>${m.venue}</div>
-      <div>${m.winner}</div>
-      <div>${m.margin}</div>
-    `;
-
-    list.appendChild(row);
-  });
-}
-
-loadIPL();
 </script>
 
 </body>
