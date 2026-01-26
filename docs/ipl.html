@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Indian Premier League | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="style.css">
+
+<style>
+body {
+  font-family: Inter, system-ui, Arial, sans-serif;
+  margin: 0;
+  background: white;
+}
+
+.navbar {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  padding: 16px 0;
+  border-bottom: 1px solid #ddd;
+  font-weight: 600;
+}
+
+.navbar a {
+  color: #0056d6;
+  text-decoration: none;
+  font-size: 18px;
+}
+
+.navbar a:hover {
+  text-decoration: underline;
+}
+
+.page-wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 30px 20px;
+}
+
+.hero {
+  background: linear-gradient(135deg, #4a148c, #7b1fa2);
+  color: white;
+  padding: 40px;
+  border-radius: 22px;
+  margin-bottom: 30px;
+}
+
+.hero h1 {
+  margin: 0 0 10px 0;
+  font-size: 42px;
+}
+
+.hero p {
+  margin: 0;
+  font-size: 18px;
+  opacity: 0.9;
+}
+
+.controls {
+  margin-bottom: 20px;
+}
+
+select {
+  padding: 8px 12px;
+  font-size: 16px;
+}
+
+.match {
+  border-bottom: 1px solid #ddd;
+  padding: 12px 0;
+}
+
+.match strong {
+  font-size: 17px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+</div>
+
+<div class="page-wrap">
+
+  <div class="hero">
+    <h1>Indian Premier League</h1>
+    <p>Every IPL match built from ball-by-ball data.</p>
+  </div>
+
+  <div class="controls">
+    <label for="seasonSelect"><strong>Season:</strong></label>
+    <select id="seasonSelect"></select>
+  </div>
+
+  <div id="matches"></div>
+
+</div>
+
+<script>
+const INDEX_FILE = "docs/data/ipl/index.json";
+const DATA_FOLDER = "docs/data/ipl/";
+
+let matches = [];
+
+fetch(INDEX_FILE)
+  .then(r => r.json())
+  .then(files => Promise.all(
+    files.map(f => fetch(DATA_FOLDER + f).then(r => r.json()))
+  ))
+  .then(data => {
+    matches = data.map(m => {
+      const info = m.info;
+      const team1 = info.teams[0];
+      const team2 = info.teams[1];
+      const winner = info.outcome?.winner || "No result";
+      let margin = "";
+
+      if (info.outcome?.by?.runs)
+        margin = info.outcome.by.runs + " runs";
+      else if (info.outcome?.by?.wickets)
+        margin = info.outcome.by.wickets + " wickets";
+
+      return {
+        season: info.season,
+        date: info.dates[0],
+        team1,
+        team2,
+        venue: info.venue,
+        winner,
+        margin,
+        pom: info.player_of_match ? info.player_of_match.join(", ") : ""
+      };
+    });
+
+    buildSeasonDropdown();
+  });
+
+function buildSeasonDropdown() {
+  const seasons = [...new Set(matches.map(m => m.season))].sort();
+  const select = document.getElementById("seasonSelect");
+
+  seasons.forEach(s => {
+    const opt = document.createElement("option");
+    opt.value = s;
+    opt.textContent = s;
+    select.appendChild(opt);
+  });
+
+  select.addEventListener("change", () => showSeason(select.value));
+  showSeason(seasons[0]);
+}
+
+function showSeason(season) {
+  const list = document.getElementById("matches");
+  list.innerHTML = "";
+
+  matches
+    .filter(m => m.season === season)
+    .sort((a,b) => new Date(a.date) - new Date(b.date))
+    .forEach(m => {
+      const div = document.createElement("div");
+      div.className = "match";
+      div.innerHTML = `
+        <strong>${m.team1} vs ${m.team2}</strong><br>
+        ${m.date} – ${m.venue}<br>
+        Winner: ${m.winner} ${m.margin ? "(" + m.margin + ")" : ""}<br>
+        Player of the Match: ${m.pom}
+      `;
+      list.appendChild(div);
+    });
+}
+</script>
+
+</body>
+</html>
