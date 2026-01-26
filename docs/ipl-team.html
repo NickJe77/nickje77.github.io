@@ -37,11 +37,21 @@ body{
   color:white;
   padding:35px 40px;
   border-radius:22px;
-  margin-bottom:25px;
+  margin-bottom:20px;
 }
 .hero h1{
   margin:0;
   font-size:42px;
+}
+
+.controls{
+  margin-bottom:20px;
+}
+select{
+  padding:8px 12px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  font-size:14px;
 }
 
 .summary{
@@ -53,7 +63,7 @@ body{
 }
 .summary-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
   gap:15px;
 }
 .summary-box strong{
@@ -102,6 +112,13 @@ tr:nth-child(even){
   <h1 id="teamName">Team</h1>
 </div>
 
+<div class="controls">
+  Season:
+  <select id="seasonFilter">
+    <option value="all">All seasons</option>
+  </select>
+</div>
+
 <div class="summary">
   <div class="summary-grid">
     <div class="summary-box">
@@ -119,6 +136,10 @@ tr:nth-child(even){
     <div class="summary-box">
       <strong>Losses</strong>
       <span id="lossesBox">0</span>
+    </div>
+    <div class="summary-box">
+      <strong>Win %</strong>
+      <span id="winPctBox">0%</span>
     </div>
   </div>
 </div>
@@ -145,31 +166,31 @@ document.getElementById("teamName").textContent = team;
 
 const indexUrl = "data/ipl/index.json";
 const basePath = "data/ipl/";
+
 const tableBody = document.getElementById("matchesTable");
 const titlesBox = document.getElementById("titlesBox");
 const yearsBox = document.getElementById("yearsBox");
 const winsBox = document.getElementById("winsBox");
 const lossesBox = document.getElementById("lossesBox");
+const winPctBox = document.getElementById("winPctBox");
+const seasonFilter = document.getElementById("seasonFilter");
+
+let allMatches = [];
+let seasonMap = {};
 
 let titleCount = 0;
 let yearsWon = [];
-let winCount = 0;
-let lossCount = 0;
 
 fetch(indexUrl)
   .then(r=>r.json())
   .then(files=>{
-    return Promise.all(
-      files.map(f => fetch(basePath + f).then(r => r.json()))
-    );
+    return Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json())));
   })
   .then(seasons=>{
-    let allMatches = [];
-
     seasons.forEach(season=>{
       if(!season.length) return;
 
-      season.sort((a,b)=>new Date(b.date) - new Date(a.date));
+      season.sort((a,b)=>new Date(b.date)-new Date(a.date));
       const finalMatch = season[0];
       const winner = finalMatch?.outcome?.winner;
       const year = finalMatch?.date?.slice(0,4);
@@ -180,46 +201,65 @@ fetch(indexUrl)
       }
 
       season.forEach(match=>{
+        const year = match.date.slice(0,4);
         if(match.teams && match.teams.includes(team)){
           allMatches.push(match);
-
-          if(match.outcome?.winner === team){
-            winCount++;
-          } else if(match.outcome?.winner){
-            lossCount++;
-          }
+          if(!seasonMap[year]) seasonMap[year] = [];
+          seasonMap[year].push(match);
         }
       });
     });
 
     titlesBox.textContent = titleCount;
     yearsBox.textContent = yearsWon.join(", ") || "—";
-    winsBox.textContent = winCount;
-    lossesBox.textContent = lossCount;
 
-    allMatches.sort((a,b)=>new Date(b.date) - new Date(a.date));
-
-    allMatches.forEach(m=>{
-      const opponent = m.teams.find(t => t !== team) || "";
-      const result = m.outcome?.winner === team ? "Won" : "Lost";
-
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${formatDate(m.date)}</td>
-        <td>${opponent}</td>
-        <td>${m.venue || ""}</td>
-        <td class="${result === "Won" ? "winner" : "loser"}">${result}</td>
-      `;
-      tableBody.appendChild(tr);
+    Object.keys(seasonMap).sort().forEach(y=>{
+      const opt=document.createElement("option");
+      opt.value=y;
+      opt.textContent=y;
+      seasonFilter.appendChild(opt);
     });
+
+    renderMatches("all");
   });
+
+seasonFilter.addEventListener("change",()=>{
+  renderMatches(seasonFilter.value);
+});
+
+function renderMatches(year){
+  tableBody.innerHTML="";
+  let wins=0, losses=0;
+  let list = year==="all" ? allMatches : seasonMap[year] || [];
+
+  list.sort((a,b)=>new Date(b.date)-new Date(a.date));
+
+  list.forEach(m=>{
+    const opponent = m.teams.find(t=>t!==team) || "";
+    const won = m.outcome?.winner === team;
+
+    if(m.outcome?.winner){
+      won ? wins++ : losses++;
+    }
+
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${formatDate(m.date)}</td>
+      <td>${opponent}</td>
+      <td>${m.venue||""}</td>
+      <td class="${won?"winner":"loser"}">${won?"Won":"Lost"}</td>
+    `;
+    tableBody.appendChild(tr);
+  });
+
+  winsBox.textContent=wins;
+  lossesBox.textContent=losses;
+  const pct = wins+losses ? ((wins/(wins+losses))*100).toFixed(1) : 0;
+  winPctBox.textContent=pct+"%";
+}
 
 function formatDate(d){
-  return new Date(d).toLocaleDateString("en-GB",{
-    day:"2-digit",
-    month:"short",
-    year:"numeric"
-  });
+  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
 }
 </script>
 
