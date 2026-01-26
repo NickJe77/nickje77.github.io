@@ -34,20 +34,51 @@ body{
   color:white;
   padding:40px 50px;
   border-radius:24px;
-  margin-bottom:30px;
+  margin-bottom:25px;
 }
-.hero h1{margin:0;font-size:48px;}
+.hero h1{margin:0;font-size:46px;}
 .hero p{margin-top:10px;font-size:20px;opacity:0.95;}
 
-.controls{
-  margin:20px 0;
-  font-size:18px;
+.year-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(90px,1fr));
+  gap:12px;
+  margin-bottom:30px;
 }
-
-select{
+.year-btn{
+  background:#2b004f;
+  color:white;
+  border:none;
+  padding:12px 0;
+  border-radius:10px;
   font-size:16px;
-  padding:6px 10px;
-  border-radius:6px;
+  cursor:pointer;
+}
+.year-btn:hover{background:#4b0082;}
+.year-btn.active{background:#9d4edd;}
+
+.summary{
+  border:1px solid #ddd;
+  border-radius:18px;
+  padding:20px;
+  margin-bottom:30px;
+}
+.summary h2{margin-top:0;}
+
+.summary-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:20px;
+}
+.summary-box{
+  border:1px solid #ddd;
+  border-radius:14px;
+  padding:15px;
+  background:#faf7ff;
+}
+.summary-box strong{
+  display:block;
+  margin-bottom:6px;
 }
 
 table{
@@ -56,41 +87,22 @@ table{
   margin-top:20px;
   font-size:15px;
 }
-
 th,td{
   border-bottom:1px solid #ddd;
   padding:10px 12px;
   text-align:left;
 }
-
 th{
   background:#f3f6fb;
   position:sticky;
   top:0;
-  z-index:2;
 }
-
-tr:nth-child(even){
-  background:#f8fbff;
-}
-
-tr:hover{
-  background:#eef4ff;
-}
-
-.winner{
-  font-weight:600;
-  color:#1a7f37;
-}
-
-.margin{
-  font-weight:500;
-}
+tr:nth-child(even){background:#f8fbff;}
+tr:hover{background:#eef4ff;}
+.winner{font-weight:600;color:#1a7f37;}
 
 @media(max-width:900px){
-  th:nth-child(4), td:nth-child(4){
-    display:none; /* hide venue on small screens */
-  }
+  th:nth-child(4), td:nth-child(4){display:none;}
 }
 </style>
 </head>
@@ -107,102 +119,125 @@ tr:hover{
 
 <div class="page-wrap">
 
-  <div class="hero">
-    <h1>Indian Premier League</h1>
-    <p>Complete IPL match history by season.</p>
-  </div>
+<div class="hero">
+  <h1>Indian Premier League</h1>
+  <p>Complete IPL match history by season.</p>
+</div>
 
-  <div class="controls">
-    Season:
-    <select id="seasonSelect"></select>
-  </div>
+<div id="yearGrid" class="year-grid"></div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Date</th>
-        <th>Team 1</th>
-        <th>Team 2</th>
-        <th>Venue</th>
-        <th>Winner</th>
-        <th>Margin</th>
-      </tr>
-    </thead>
-    <tbody id="matchTable"></tbody>
-  </table>
+<div class="summary">
+  <h2>Season Summary</h2>
+  <div class="summary-grid">
+    <div class="summary-box">
+      <strong>Winner</strong>
+      <span id="winnerBox">—</span>
+    </div>
+    <div class="summary-box">
+      <strong>Runner-up</strong>
+      <span id="runnerBox">—</span>
+    </div>
+    <div class="summary-box">
+      <strong>Most Runs</strong>
+      <span id="runsBox">Data not yet available</span>
+    </div>
+    <div class="summary-box">
+      <strong>Most Wickets</strong>
+      <span id="wicketsBox">Data not yet available</span>
+    </div>
+  </div>
+</div>
+
+<table>
+<thead>
+<tr>
+  <th>Date</th>
+  <th>Team 1</th>
+  <th>Team 2</th>
+  <th>Venue</th>
+  <th>Winner</th>
+  <th>Margin</th>
+</tr>
+</thead>
+<tbody id="matchTable"></tbody>
+</table>
 
 </div>
 
 <script>
 const indexUrl = "data/ipl/index.json";
 const basePath = "data/ipl/";
-
-const seasonSelect = document.getElementById("seasonSelect");
+const yearGrid = document.getElementById("yearGrid");
 const tableBody = document.getElementById("matchTable");
 
-fetch(indexUrl)
-  .then(r => r.json())
-  .then(files => {
-    files.forEach(file => {
-      const year = file.replace("ipl_","").replace(".json","");
-      const opt = document.createElement("option");
-      opt.value = file;
-      opt.textContent = year;
-      seasonSelect.appendChild(opt);
-    });
+const winnerBox = document.getElementById("winnerBox");
+const runnerBox = document.getElementById("runnerBox");
 
-    seasonSelect.value = files[files.length - 1];
-    loadSeason(seasonSelect.value);
+let seasonFiles = [];
+
+fetch(indexUrl)
+  .then(r=>r.json())
+  .then(files=>{
+    seasonFiles = files;
+    files.forEach((file,i)=>{
+      const year = file.replace("ipl_","").replace(".json","");
+      const btn = document.createElement("button");
+      btn.className="year-btn";
+      btn.textContent=year;
+      btn.onclick=()=>selectSeason(file,btn);
+      yearGrid.appendChild(btn);
+      if(i===files.length-1){
+        btn.classList.add("active");
+        loadSeason(file);
+      }
+    });
   });
 
-seasonSelect.addEventListener("change", () => {
-  loadSeason(seasonSelect.value);
-});
+function selectSeason(file,btn){
+  document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  loadSeason(file);
+}
 
 function loadSeason(file){
-  fetch(basePath + file)
-    .then(r => r.json())
-    .then(matches => {
-      tableBody.innerHTML = "";
+fetch(basePath+file)
+.then(r=>r.json())
+.then(matches=>{
+  tableBody.innerHTML="";
+  matches.sort((a,b)=>new Date(b.date)-new Date(a.date));
 
-      // sort newest first
-      matches.sort((a,b)=> new Date(b.date) - new Date(a.date));
+  // FINAL determines champion
+  const finalMatch = matches[0];
+  const winner = finalMatch?.outcome?.winner || "—";
+  const teams = finalMatch?.teams || [];
+  const runnerUp = teams.find(t=>t!==winner) || "—";
 
-      matches.forEach(m => {
-        const team1 = m.teams ? m.teams[0] : "";
-        const team2 = m.teams ? m.teams[1] : "";
+  winnerBox.textContent = winner;
+  runnerBox.textContent = runnerUp;
 
-        let margin = "";
-        if (m.outcome && m.outcome.by){
-          if (m.outcome.by.runs){
-            margin = m.outcome.by.runs + " runs";
-          } else if (m.outcome.by.wickets){
-            margin = m.outcome.by.wickets + " wickets";
-          }
-        }
+  matches.forEach(m=>{
+    let margin="";
+    if(m.outcome?.by){
+      if(m.outcome.by.runs) margin=m.outcome.by.runs+" runs";
+      else if(m.outcome.by.wickets) margin=m.outcome.by.wickets+" wickets";
+    }
 
-        const winner = m.outcome ? m.outcome.winner || "" : "";
-
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${formatDate(m.date)}</td>
-          <td>${team1}</td>
-          <td>${team2}</td>
-          <td>${m.venue || ""}</td>
-          <td class="winner">${winner}</td>
-          <td class="margin">${margin}</td>
-        `;
-        tableBody.appendChild(tr);
-      });
-    });
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${formatDate(m.date)}</td>
+      <td>${m.teams?.[0]||""}</td>
+      <td>${m.teams?.[1]||""}</td>
+      <td>${m.venue||""}</td>
+      <td class="winner">${m.outcome?.winner||""}</td>
+      <td>${margin}</td>
+    `;
+    tableBody.appendChild(tr);
+  });
+});
 }
 
 function formatDate(d){
-  if(!d) return "";
-  const dt = new Date(d);
-  return dt.toLocaleDateString("en-GB",{
-    day:"2-digit", month:"short", year:"numeric"
-  });
+  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
 }
 </script>
 
