@@ -53,12 +53,13 @@ th{
   background:#f3f6fb;
 }
 tr:nth-child(even){background:#f8fbff;}
-tr:hover{background:#eef4ff; cursor:pointer;}
+tr:hover{background:#eef4ff;}
 
 .team-name{
   font-weight:600;
   color:#3b007a;
 }
+
 .titles{
   font-weight:600;
   color:#1a7f37;
@@ -104,60 +105,37 @@ const tableBody = document.getElementById("teamsTable");
 let teamTitles = {};
 let teamYears = {};
 
-function normaliseTeam(name){
-  const map = {
-    "Rising Challengers": "Rising Pune Supergiant",
-    "Rising Pune Supergiants": "Rising Pune Supergiant",
-    "Royal Challengers": "Royal Challengers Bangalore",
-    "Royal Challengers Bengaluru": "Royal Challengers Bangalore",
-    "Delhi Daredevils": "Delhi Capitals",
-    "Kings XI Punjab": "Punjab Kings",
-    "Deccan Chargers": "Sunrisers Hyderabad"
-  };
-  return map[name] || name;
-}
-
 fetch(indexUrl)
-  .then(r=>r.json())
-  .then(files=>{
-    return Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json())));
-  })
-  .then(seasons=>{
-    seasons.forEach(matches=>{
-      if(!matches.length) return;
+  .then(r => r.json())
+  .then(files => Promise.all(files.map(f => fetch(basePath + f).then(r => r.json()))))
+  .then(seasons => {
+
+    seasons.forEach(matches => {
+      if (!matches.length) return;
 
       matches.sort((a,b)=>new Date(b.date)-new Date(a.date));
       const finalMatch = matches[0];
-      let winner = finalMatch?.outcome?.winner;
+      const winner = finalMatch?.outcome?.winner;
 
-      if(winner){
-        winner = normaliseTeam(winner);
-        teamTitles[winner] = (teamTitles[winner]||0)+1;
+      if (winner) {
+        teamTitles[winner] = (teamTitles[winner] || 0) + 1;
         teamYears[winner] = teamYears[winner] || [];
         teamYears[winner].push(finalMatch.date.slice(0,4));
       }
 
-      matches.forEach(m=>{
-        m.teams?.forEach(t=>{
-          const team = normaliseTeam(t);
-          if(!(team in teamTitles)){
-            teamTitles[team] = teamTitles[team] || 0;
-            teamYears[team] = teamYears[team] || [];
-          }
+      matches.forEach(m => {
+        m.teams?.forEach(t => {
+          teamTitles[t] = teamTitles[t] || 0;
+          teamYears[t] = teamYears[t] || [];
         });
       });
     });
 
-    const teams = Object.keys(teamTitles).sort((a,b)=>{
-      if(teamTitles[b] !== teamTitles[a]){
-        return teamTitles[b] - teamTitles[a];
-      }
-      return a.localeCompare(b);
-    });
+    const teams = Object.keys(teamTitles)
+      .sort((a,b)=> teamTitles[b] - teamTitles[a]);
 
-    teams.forEach(team=>{
+    teams.forEach(team => {
       const tr = document.createElement("tr");
-      tr.onclick = ()=>location.href = "ipl-team.html?team=" + encodeURIComponent(team);
       tr.innerHTML = `
         <td class="team-name">${team}</td>
         <td class="titles">${teamTitles[team]}</td>
@@ -165,6 +143,7 @@ fetch(indexUrl)
       `;
       tableBody.appendChild(tr);
     });
+
   });
 </script>
 
