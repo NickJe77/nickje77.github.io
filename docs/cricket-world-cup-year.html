@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Cricket World Cup – Year | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#fff;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px;border-bottom:1px solid #ddd;font-weight:600;}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px;}
+h1{text-align:center;}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin:30px 0;}
+.card{border:1px solid #ddd;border-radius:14px;padding:16px;background:#f9fafc;}
+.card .k{font-size:13px;color:#666;margin-bottom:6px;font-weight:700;text-transform:uppercase;}
+.card .v{font-size:20px;font-weight:800;}
+.section-title{margin-top:40px;}
+table{width:100%;border-collapse:collapse;margin-top:12px;}
+th,td{border-bottom:1px solid #ddd;padding:8px;text-align:left;font-size:14px;}
+th{background:#f2f4f8;}
+.notice{padding:14px;border:1px dashed #ccc;border-radius:12px;margin:12px 0;}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="cricket-world-cup.html">Cricket World Cup</a>
+</div>
+
+<div class="page-wrap">
+
+<h1 id="title">Cricket World Cup</h1>
+
+<div class="summary">
+  <div class="card"><div class="k">Matches</div><div class="v" id="matchesCount">—</div></div>
+  <div class="card"><div class="k">Winner</div><div class="v" id="winner">—</div></div>
+</div>
+
+<h2 class="section-title">Matches</h2>
+<table id="matchesTbl">
+<thead>
+<tr>
+  <th>Team 1</th>
+  <th>Team 2</th>
+  <th>Venue</th>
+  <th>City</th>
+  <th>Country</th>
+  <th>Toss</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+
+</div>
+
+<script>
+const year = new URLSearchParams(location.search).get("year");
+document.getElementById("title").textContent = "Cricket World Cup " + year;
+
+const DATA_URL = "data/cwc_matches_with_year.csv";
+
+function parseCSV(text) {
+  const rows = [];
+  let row = [], field = "", inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    const n = text[i + 1];
+
+    if (c === '"' && inQuotes && n === '"') {
+      field += '"';
+      i++;
+      continue;
+    }
+    if (c === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (c === "," && !inQuotes) {
+      row.push(field);
+      field = "";
+      continue;
+    }
+    if (c === "\n" && !inQuotes) {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+      continue;
+    }
+    if (c !== "\r") field += c;
+  }
+
+  if (field || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+
+  const headers = rows.shift();
+
+  return rows.map(r => {
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = (r[i] || "").trim());
+    return obj;
+  });
+}
+
+fetch(DATA_URL)
+  .then(r => r.text())
+  .then(text => {
+    const data = parseCSV(text).filter(r => String(r.year) === year);
+
+    document.getElementById("matchesCount").textContent = data.length;
+
+    if (data.length) {
+      document.getElementById("winner").textContent = data[data.length - 1].team1 + " / " + data[data.length - 1].team2;
+    }
+
+    const tbody = document.querySelector("#matchesTbl tbody");
+
+    data.forEach(m => {
+      tbody.innerHTML += `
+        <tr>
+          <td>${m.team1}</td>
+          <td>${m.team2}</td>
+          <td>${m.venue}</td>
+          <td>${m.city}</td>
+          <td>${m.country}</td>
+          <td>${m.toss_winner} (${m.toss_elected})</td>
+        </tr>
+      `;
+    });
+  });
+</script>
+
+</body>
+</html>
