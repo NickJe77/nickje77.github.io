@@ -44,6 +44,24 @@ body{
   font-size:42px;
 }
 
+.summary{
+  border:1px solid #ddd;
+  border-radius:16px;
+  padding:18px;
+  margin-bottom:25px;
+  background:#faf7ff;
+}
+.summary-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:15px;
+}
+.summary-box strong{
+  display:block;
+  margin-bottom:6px;
+  color:#3b007a;
+}
+
 table{
   width:100%;
   border-collapse:collapse;
@@ -84,6 +102,19 @@ tr:nth-child(even){
   <h1 id="teamName">Team</h1>
 </div>
 
+<div class="summary">
+  <div class="summary-grid">
+    <div class="summary-box">
+      <strong>Championships</strong>
+      <span id="titlesBox">0</span>
+    </div>
+    <div class="summary-box">
+      <strong>Years Won</strong>
+      <span id="yearsBox">—</span>
+    </div>
+  </div>
+</div>
+
 <table>
 <thead>
 <tr>
@@ -107,6 +138,11 @@ document.getElementById("teamName").textContent = team;
 const indexUrl = "data/ipl/index.json";
 const basePath = "data/ipl/";
 const tableBody = document.getElementById("matchesTable");
+const titlesBox = document.getElementById("titlesBox");
+const yearsBox = document.getElementById("yearsBox");
+
+let titleCount = 0;
+let yearsWon = [];
 
 fetch(indexUrl)
   .then(r=>r.json())
@@ -119,12 +155,28 @@ fetch(indexUrl)
     let allMatches = [];
 
     seasons.forEach(season=>{
+      if(!season.length) return;
+
+      // FINAL = most recent match in season
+      season.sort((a,b)=>new Date(b.date) - new Date(a.date));
+      const finalMatch = season[0];
+      const winner = finalMatch?.outcome?.winner;
+      const year = finalMatch?.date?.slice(0,4);
+
+      if(winner === team){
+        titleCount++;
+        yearsWon.push(year);
+      }
+
       season.forEach(match=>{
         if(match.teams && match.teams.includes(team)){
           allMatches.push(match);
         }
       });
     });
+
+    titlesBox.textContent = titleCount;
+    yearsBox.textContent = yearsWon.join(", ") || "—";
 
     allMatches.sort((a,b)=>new Date(b.date) - new Date(a.date));
 
