@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Big Bash League – By Season | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family: Inter, system-ui, Arial, sans-serif;
+  margin:0;
+  background:#ffffff;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#003566,#0077b6);
+  color:white;
+  padding:40px 50px;
+  border-radius:24px;
+  margin-bottom:25px;
+}
+.hero h1{margin:0;font-size:46px;}
+.hero p{margin-top:10px;font-size:20px;opacity:0.95;}
+
+.year-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(90px,1fr));
+  gap:12px;
+  margin-bottom:25px;
+}
+.year-btn{
+  background:#003566;
+  color:white;
+  border:none;
+  padding:12px 0;
+  border-radius:10px;
+  font-size:16px;
+  cursor:pointer;
+}
+.year-btn:hover{background:#00509d;}
+.year-btn.active{background:#00b4d8;}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:14px;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:10px 12px;
+  text-align:left;
+}
+th{background:#f3f6fb;}
+tr:nth-child(even){background:#f8fbff;}
+tr:hover{background:#eef4ff;}
+
+.match-link{
+  color:#003566;
+  text-decoration:none;
+  font-weight:600;
+}
+.match-link:hover{text-decoration:underline;}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+</div>
+
+<div class="page-wrap">
+
+<div class="hero">
+  <h1>Big Bash League – By Season</h1>
+  <p>Select a season to view all matches.</p>
+</div>
+
+<div id="yearGrid" class="year-grid"></div>
+
+<table>
+<thead>
+<tr>
+  <th>Date</th>
+  <th>Match</th>
+  <th>Venue</th>
+  <th>Result</th>
+</tr>
+</thead>
+<tbody id="matchesTable"></tbody>
+</table>
+
+</div>
+
+<script>
+const indexUrl = "data/bbl/index.json";
+const basePath = "data/bbl/";
+
+const yearGrid = document.getElementById("yearGrid");
+const tableBody = document.getElementById("matchesTable");
+
+let allSeasons = [];
+let seasonMatches = [];
+
+fetch(indexUrl)
+  .then(r=>r.json())
+  .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
+  .then(seasons=>{
+    allSeasons = seasons;
+
+    buildYearButtons();
+    showSeason(seasons.length - 1); // latest season by default
+  });
+
+function buildYearButtons(){
+  yearGrid.innerHTML = "";
+  allSeasons.forEach((seasonData,i)=>{
+    const firstMatch = seasonData[0];
+    const year = firstMatch?.info?.dates?.[0]?.slice(0,4) || ("S"+(i+1));
+
+    const btn=document.createElement("button");
+    btn.className="year-btn";
+    btn.textContent=year;
+    btn.onclick=()=>{
+      document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      showSeason(i);
+    };
+    yearGrid.appendChild(btn);
+
+    if(i===allSeasons.length-1){
+      btn.classList.add("active");
+    }
+  });
+}
+
+function showSeason(index){
+  seasonMatches = allSeasons[index] || [];
+  renderTable(seasonMatches);
+}
+
+function renderTable(matches){
+  tableBody.innerHTML="";
+
+  matches
+    .sort((a,b)=>new Date(a.info.dates[0]) - new Date(b.info.dates[0]))
+    .forEach(match=>{
+      const date = formatDate(match.info.dates[0]);
+      const teams = match.info.teams.join(" vs ");
+      const venue = match.info.venue || "—";
+
+      let result="—";
+      if(match.info.outcome?.winner){
+        if(match.info.outcome.by?.runs){
+          result = match.info.outcome.winner+" won by "+match.info.outcome.by.runs+" runs";
+        }
+        else if(match.info.outcome.by?.wickets){
+          result = match.info.outcome.winner+" won by "+match.info.outcome.by.wickets+" wickets";
+        }
+      }
+
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>${date}</td>
+        <td>
+          <a class="match-link" href="bbl-match.html?file=${encodeURIComponent(match.file)}">
+            ${teams}
+          </a>
+        </td>
+        <td>${venue}</td>
+        <td>${result}</td>
+      `;
+      tableBody.appendChild(tr);
+    });
+}
+
+function formatDate(d){
+  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+}
+</script>
+
+</body>
+</html>
