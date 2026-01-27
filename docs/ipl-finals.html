@@ -49,9 +49,7 @@ th,td{
   padding:12px 14px;
   text-align:left;
 }
-th{
-  background:#f3f6fb;
-}
+th{background:#f3f6fb;}
 tr:nth-child(even){background:#f8fbff;}
 tr:hover{background:#eef4ff;}
 
@@ -139,35 +137,35 @@ function calculateScore(match){
 fetch(indexUrl)
   .then(r=>r.json())
   .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
-  .then(seasons=>{
-    const finals = [];
+  .then(matches=>{
+    const finals = {};
 
-    seasons.forEach(matches=>{
-      if(!matches.length) return;
+    matches.forEach(match=>{
+      if(!match.info || !match.info.event || !match.info.season) return;
 
-      matches.sort((a,b)=>new Date(b.info.dates[0]) - new Date(a.info.dates[0]));
-      const finalMatch = matches[0];
+      const season = match.info.season;
+      const date = match.info.dates[0];
 
-      const season = finalMatch.info.season;
-      const teams = finalMatch.info.teams.map(normalizeTeam);
-      const winner = normalizeTeam(finalMatch.info.outcome.winner);
-      const runnerUp = teams.find(t=>t!==winner) || "";
+      if(!finals[season] || new Date(date) > new Date(finals[season].date)){
+        const teams = match.info.teams.map(normalizeTeam);
+        const winner = normalizeTeam(match.info.outcome.winner);
+        const runnerUp = teams.find(t=>t !== winner) || "";
 
-      const score = calculateScore(finalMatch);
-
-      finals.push({
-        season,
-        winner,
-        runnerUp,
-        score,
-        date: finalMatch.info.dates[0],
-        venue: finalMatch.info.venue
-      });
+        finals[season] = {
+          season,
+          winner,
+          runnerUp,
+          score: calculateScore(match),
+          date,
+          venue: match.info.venue
+        };
+      }
     });
 
-    finals.sort((a,b)=>b.season.localeCompare(a.season));
+    const rows = Object.values(finals)
+      .sort((a,b)=> new Date(b.date) - new Date(a.date));
 
-    finals.forEach(f=>{
+    rows.forEach(f=>{
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${f.season}</td>
