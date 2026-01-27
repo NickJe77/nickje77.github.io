@@ -97,7 +97,7 @@ tr:hover{background:#eef4ff;}
 <tr>
   <th>Rank</th>
   <th>Player</th>
-  <th>Figure</th>
+  <th id="figureHeader">Runs</th>
   <th>Date</th>
   <th>Match</th>
 </tr>
@@ -124,7 +124,7 @@ fetch(indexUrl)
         const teams = match.info?.teams?.join(" vs ") || "";
 
         let batterRuns = {};
-        let bowlerWickets = {};
+        let bowlerStats = {};
 
         match.innings?.forEach(inn=>{
           inn.overs?.forEach(over=>{
@@ -132,15 +132,24 @@ fetch(indexUrl)
               const batter = ball.batter;
               const bowler = ball.bowler;
               const runs = ball.runs?.batter || 0;
+              const totalRuns = ball.runs?.total || 0;
 
               if(!batterRuns[batter]) batterRuns[batter]=0;
               batterRuns[batter]+=runs;
 
+              if(!bowlerStats[bowler]){
+                bowlerStats[bowler]={wickets:0,runs:0};
+              }
+
+              // runs conceded (exclude byes & legbyes)
+              const byes = ball.extras?.byes || 0;
+              const legbyes = ball.extras?.legbyes || 0;
+              bowlerStats[bowler].runs += (totalRuns - byes - legbyes);
+
               if(ball.wickets){
                 ball.wickets.forEach(w=>{
                   if(w.kind !== "run out"){
-                    if(!bowlerWickets[bowler]) bowlerWickets[bowler]=0;
-                    bowlerWickets[bowler]+=1;
+                    bowlerStats[bowler].wickets += 1;
                   }
                 });
               }
@@ -157,10 +166,11 @@ fetch(indexUrl)
           });
         }
 
-        for(const bowler in bowlerWickets){
+        for(const bowler in bowlerStats){
           bowlingFigures.push({
             player:bowler,
-            wickets:bowlerWickets[bowler],
+            wickets:bowlerStats[bowler].wickets,
+            runs:bowlerStats[bowler].runs,
             date,
             match:teams
           });
@@ -180,11 +190,13 @@ function showTab(tab,e){
 
 function renderTable(type){
   const tbody = document.getElementById("recordsTable");
+  const header = document.getElementById("figureHeader");
   tbody.innerHTML="";
 
   let rows=[];
 
   if(type==="batting"){
+    header.textContent = "Runs";
     rows = battingInnings.sort((a,b)=>b.runs-a.runs).slice(0,25);
     rows.forEach((r,i)=>{
       const tr=document.createElement("tr");
@@ -200,13 +212,17 @@ function renderTable(type){
   }
 
   if(type==="bowling"){
-    rows = bowlingFigures.sort((a,b)=>b.wickets-a.wickets).slice(0,25);
+    header.textContent = "Figures";
+    rows = bowlingFigures
+      .sort((a,b)=> b.wickets - a.wickets || a.runs - b.runs)
+      .slice(0,25);
+
     rows.forEach((r,i)=>{
       const tr=document.createElement("tr");
       tr.innerHTML=`
         <td>${i+1}</td>
         <td>${r.player}</td>
-        <td>${r.wickets} wickets</td>
+        <td>${r.wickets} / ${r.runs}</td>
         <td>${r.date}</td>
         <td>${r.match}</td>
       `;
