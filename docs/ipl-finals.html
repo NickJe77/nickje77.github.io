@@ -2,15 +2,17 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>IPL Finals | The Sporting Almanac</title>
+<title>Indian Premier League Finals | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 body{
-  font-family: Inter, system-ui, Arial, sans-serif;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   margin:0;
   background:#ffffff;
 }
+
 .navbar{
   display:flex;
   justify-content:center;
@@ -20,11 +22,13 @@ body{
   font-weight:600;
 }
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
 .page-wrap{
   max-width:1200px;
   margin:0 auto;
   padding:30px 20px;
 }
+
 .hero{
   background:linear-gradient(90deg,#3b007a,#7b2cbf);
   color:white;
@@ -38,7 +42,7 @@ body{
 table{
   width:100%;
   border-collapse:collapse;
-  font-size:16px;
+  font-size:15px;
 }
 th,td{
   border-bottom:1px solid #ddd;
@@ -89,9 +93,9 @@ tr:hover{background:#eef4ff;}
 </div>
 
 <script>
-const indexUrl = "https://thesportingalmanac.com/docs/data/ipl/index.json";
-const seasonPath = "https://thesportingalmanac.com/docs/data/ipl/";
-const matchPath = "https://thesportingalmanac.com/docs/data/ipl/matches/";
+const indexUrl = "data/ipl/index.json";
+const basePath = "data/ipl/";
+const matchPath = "data/ipl/matches/";
 const tableBody = document.getElementById("finalsTable");
 
 function calculateScore(match){
@@ -101,64 +105,66 @@ function calculateScore(match){
   match.innings.forEach(inn=>{
     totals[inn.team] = 0;
     wickets[inn.team] = 0;
+
     inn.overs.forEach(o=>{
       o.deliveries.forEach(d=>{
         totals[inn.team] += d.runs?.total || 0;
-        if(d.wickets) wickets[inn.team] += d.wickets.length;
+        if(d.wickets){
+          wickets[inn.team] += d.wickets.length;
+        }
       });
     });
   });
 
-  const t = Object.keys(totals);
-  return `${t[0]} ${totals[t[0]]}/${wickets[t[0]]} vs ${t[1]} ${totals[t[1]]}/${wickets[t[1]]}`;
+  const teams = Object.keys(totals);
+  if(teams.length !== 2) return "—";
+
+  return `${teams[0]} ${totals[teams[0]]}/${wickets[teams[0]]} vs ${teams[1]} ${totals[teams[1]]}/${wickets[teams[1]]}`;
 }
 
 fetch(indexUrl)
-.then(r=>r.json())
-.then(files=>Promise.all(
-  files.map(f=>fetch(seasonPath+f).then(r=>r.json()))
-))
-.then(seasons=>{
-  return Promise.all(seasons.map(async season=>{
-    try{
+  .then(r=>r.json())
+  .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
+  .then(seasons=>{
+    return Promise.all(seasons.map(season=>{
       season.sort((a,b)=>new Date(b.date)-new Date(a.date));
       const finalSummary = season[0];
 
-      const res = await fetch(matchPath+finalSummary.file);
-      if(!res.ok) return null;
+      return fetch(matchPath+finalSummary.file)
+        .then(r=>r.json())
+        .then(fullMatch=>{
+          const winner = finalSummary.outcome.winner;
+          const runnerUp = finalSummary.teams.find(t=>t!==winner);
 
-      const fullMatch = await res.json();
-
-      const winner = finalSummary.outcome.winner;
-      const runnerUp = finalSummary.teams.find(t=>t!==winner);
-
-      return {
-        season: finalSummary.date.slice(0,4),
-        winner,
-        runnerUp,
-        score: calculateScore(fullMatch),
-        date: finalSummary.date,
-        venue: finalSummary.venue
-      };
-    }catch(e){
-      return null;
-    }
-  }));
-})
-.then(finals=>{
-  finals.filter(f=>f).forEach(f=>{
-    const tr=document.createElement("tr");
-    tr.innerHTML=`
-      <td>${f.season}</td>
-      <td class="winner">${f.winner}</td>
-      <td class="runnerup">${f.runnerUp}</td>
-      <td class="score">${f.score}</td>
-      <td>${f.date}</td>
-      <td>${f.venue}</td>
-    `;
-    tableBody.appendChild(tr);
+          return {
+            season: finalSummary.date.slice(0,4),
+            winner,
+            runnerUp,
+            score: calculateScore(fullMatch),
+            date: finalSummary.date,
+            venue: finalSummary.venue
+          };
+        });
+    }));
+  })
+  .then(finals=>{
+    finals.forEach(f=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>${f.season}</td>
+        <td class="winner">${f.winner}</td>
+        <td class="runnerup">${f.runnerUp}</td>
+        <td class="score">${f.score}</td>
+        <td>${formatDate(f.date)}</td>
+        <td>${f.venue}</td>
+      `;
+      tableBody.appendChild(tr);
+    });
   });
-});
+
+function formatDate(d){
+  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+}
 </script>
 
 </body>
