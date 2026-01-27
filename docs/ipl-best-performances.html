@@ -110,77 +110,87 @@ tr:hover{background:#eef4ff;}
 <script>
 const indexUrl = "data/ipl/index.json";
 const basePath = "data/ipl/";
+const nameMapUrl = "data/ipl/player-names.json";
 
+let nameMap = {};
 let battingInnings = [];
 let bowlingFigures = [];
 
-fetch(indexUrl)
-  .then(r=>r.json())
-  .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
-  .then(seasons=>{
-    seasons.forEach(matches=>{
-      matches.forEach(match=>{
-        const date = match.info?.dates?.[0] || "";
-        const teams = match.info?.teams?.join(" vs ") || "";
+Promise.all([
+  fetch(nameMapUrl).then(r=>r.json()),
+  fetch(indexUrl).then(r=>r.json())
+])
+.then(([names, files])=>{
+  nameMap = names;
+  return Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json())));
+})
+.then(seasons=>{
+  seasons.forEach(matches=>{
+    matches.forEach(match=>{
+      const date = match.info?.dates?.[0] || "";
+      const teams = match.info?.teams?.join(" vs ") || "";
 
-        let batterRuns = {};
-        let bowlerStats = {};
+      let batterRuns = {};
+      let bowlerStats = {};
 
-        match.innings?.forEach(inn=>{
-          inn.overs?.forEach(over=>{
-            over.deliveries?.forEach(ball=>{
-              const batter = ball.batter;
-              const bowler = ball.bowler;
-              const runs = ball.runs?.batter || 0;
-              const totalRuns = ball.runs?.total || 0;
+      match.innings?.forEach(inn=>{
+        inn.overs?.forEach(over=>{
+          over.deliveries?.forEach(ball=>{
+            const batter = ball.batter;
+            const bowler = ball.bowler;
+            const runs = ball.runs?.batter || 0;
+            const totalRuns = ball.runs?.total || 0;
 
-              if(!batterRuns[batter]) batterRuns[batter]=0;
-              batterRuns[batter]+=runs;
+            if(!batterRuns[batter]) batterRuns[batter]=0;
+            batterRuns[batter]+=runs;
 
-              if(!bowlerStats[bowler]){
-                bowlerStats[bowler]={wickets:0,runs:0};
-              }
+            if(!bowlerStats[bowler]){
+              bowlerStats[bowler]={wickets:0,runs:0};
+            }
 
-              // runs conceded (exclude byes & legbyes)
-              const byes = ball.extras?.byes || 0;
-              const legbyes = ball.extras?.legbyes || 0;
-              bowlerStats[bowler].runs += (totalRuns - byes - legbyes);
+            const byes = ball.extras?.byes || 0;
+            const legbyes = ball.extras?.legbyes || 0;
+            bowlerStats[bowler].runs += (totalRuns - byes - legbyes);
 
-              if(ball.wickets){
-                ball.wickets.forEach(w=>{
-                  if(w.kind !== "run out"){
-                    bowlerStats[bowler].wickets += 1;
-                  }
-                });
-              }
-            });
+            if(ball.wickets){
+              ball.wickets.forEach(w=>{
+                if(w.kind !== "run out"){
+                  bowlerStats[bowler].wickets += 1;
+                }
+              });
+            }
           });
         });
-
-        for(const batter in batterRuns){
-          battingInnings.push({
-            player:batter,
-            runs:batterRuns[batter],
-            date,
-            match:teams
-          });
-        }
-
-        for(const bowler in bowlerStats){
-          bowlingFigures.push({
-            player:bowler,
-            wickets:bowlerStats[bowler].wickets,
-            runs:bowlerStats[bowler].runs,
-            date,
-            match:teams
-          });
-        }
-
       });
-    });
 
-    renderTable("batting");
+      for(const batter in batterRuns){
+        battingInnings.push({
+          player: fullName(batter),
+          runs: batterRuns[batter],
+          date,
+          match: teams
+        });
+      }
+
+      for(const bowler in bowlerStats){
+        bowlingFigures.push({
+          player: fullName(bowler),
+          wickets: bowlerStats[bowler].wickets,
+          runs: bowlerStats[bowler].runs,
+          date,
+          match: teams
+        });
+      }
+
+    });
   });
+
+  renderTable("batting");
+});
+
+function fullName(name){
+  return nameMap[name] || name;
+}
 
 function showTab(tab,e){
   document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
