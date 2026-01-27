@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Big Bash League Finals | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family: Inter, system-ui, Arial, sans-serif;
+  margin:0;
+  background:#ffffff;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#003566,#0077b6);
+  color:white;
+  padding:40px 50px;
+  border-radius:24px;
+  margin-bottom:25px;
+}
+.hero h1{margin:0;font-size:46px;}
+.hero p{margin-top:10px;font-size:20px;opacity:0.95;}
+
+.year-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(90px,1fr));
+  gap:12px;
+  margin-bottom:25px;
+}
+.year-btn{
+  background:#003566;
+  color:white;
+  border:none;
+  padding:12px 0;
+  border-radius:10px;
+  font-size:16px;
+  cursor:pointer;
+}
+.year-btn:hover{background:#00509d;}
+.year-btn.active{background:#00b4d8;}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:15px;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:12px 14px;
+  text-align:left;
+}
+th{background:#f3f6fb;}
+tr:nth-child(even){background:#f8fbff;}
+tr:hover{background:#eef4ff;}
+
+.winner{font-weight:600;color:#1a7f37;}
+.runnerup{color:#b42318;}
+.result{font-weight:600;}
+
+.team-link{
+  color:inherit;
+  text-decoration:none;
+}
+.team-link:hover{text-decoration:underline;}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+</div>
+
+<div class="page-wrap">
+
+<div class="hero">
+  <h1>Big Bash League Finals</h1>
+  <p>Every BBL final with result and venue.</p>
+</div>
+
+<div id="yearGrid" class="year-grid"></div>
+
+<table>
+<thead>
+<tr>
+  <th>Season</th>
+  <th>Winner</th>
+  <th>Runner-up</th>
+  <th>Result</th>
+  <th>Date</th>
+  <th>Venue</th>
+</tr>
+</thead>
+<tbody id="finalsTable"></tbody>
+</table>
+
+</div>
+
+<script>
+const indexUrl = "data/bbl/index.json";
+const basePath = "data/bbl/";
+const yearGrid = document.getElementById("yearGrid");
+const tableBody = document.getElementById("finalsTable");
+
+let finalsData = [];
+
+fetch(indexUrl)
+  .then(r=>r.json())
+  .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
+  .then(seasons=>{
+    seasons.forEach(matches=>{
+      const finalMatch = matches.find(m =>
+        m.info?.event?.stage === "Final"
+      );
+
+      if(!finalMatch) return;
+
+      const date = finalMatch.info.dates?.[0] || "";
+      const season = date.slice(0,4);
+
+      const rawWinner = finalMatch.info.outcome?.winner || "—";
+      const rawRunnerUp = finalMatch.info.teams?.find(t=>t!==rawWinner) || "—";
+
+      let result = "—";
+      if(finalMatch.info.outcome?.by){
+        if(finalMatch.info.outcome.by.runs){
+          result = "won by " + finalMatch.info.outcome.by.runs + " runs";
+        } else if(finalMatch.info.outcome.by.wickets){
+          result = "won by " + finalMatch.info.outcome.by.wickets + " wickets";
+        }
+      }
+
+      finalsData.push({
+        season,
+        winner: rawWinner,
+        runnerUp: rawRunnerUp,
+        result,
+        date,
+        venue: finalMatch.info.venue || ""
+      });
+    });
+
+    finalsData.sort((a,b)=>a.season-b.season);
+    buildYearButtons();
+    renderTable(finalsData);
+  });
+
+function buildYearButtons(){
+  yearGrid.innerHTML = "";
+
+  finalsData.forEach((f,i)=>{
+    const btn=document.createElement("button");
+    btn.className="year-btn";
+    btn.textContent=f.season;
+    btn.onclick=()=>{
+      document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      renderTable(finalsData.filter(x=>x.season===f.season));
+    };
+    yearGrid.appendChild(btn);
+
+    if(i===finalsData.length-1){
+      btn.classList.add("active");
+    }
+  });
+
+  // ALL button
+  const allBtn = document.createElement("button");
+  allBtn.className = "year-btn";
+  allBtn.textContent = "ALL";
+  allBtn.onclick = () => {
+    document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
+    allBtn.classList.add("active");
+    renderTable(finalsData);
+  };
+  yearGrid.appendChild(allBtn);
+}
+
+function renderTable(rows){
+  tableBody.innerHTML="";
+  rows.forEach(f=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${f.season}</td>
+      <td class="winner">${f.winner}</td>
+      <td class="runnerup">${f.runnerUp}</td>
+      <td class="result">${f.result}</td>
+      <td>${formatDate(f.date)}</td>
+      <td>${f.venue}</td>
+    `;
+    tableBody.appendChild(tr);
+  });
+}
+
+function formatDate(d){
+  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+}
+</script>
+
+</body>
+</html>
