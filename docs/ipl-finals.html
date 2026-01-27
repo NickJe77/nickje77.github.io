@@ -89,21 +89,24 @@ tr:hover{background:#eef4ff;}
 </div>
 
 <script>
+// Paths saved relative to /docs/
 const indexUrl = "data/ipl/index.json";
-const basePath = "data/ipl/";
+const seasonPath = "data/ipl/";
+const matchPath = "data/ipl/matches/";
 const tableBody = document.getElementById("finalsTable");
 
+// Calculate score from full match JSON
 function calculateScore(match){
   const totals = {};
   const wickets = {};
 
-  match.innings.forEach(inn=>{
+  match.innings.forEach(inn => {
     const team = inn.team;
     totals[team] = 0;
     wickets[team] = 0;
 
-    inn.overs.forEach(over=>{
-      over.deliveries.forEach(d=>{
+    inn.overs.forEach(over => {
+      over.deliveries.forEach(d => {
         totals[team] += d.runs?.total || 0;
         if(d.wickets){
           wickets[team] += d.wickets.length;
@@ -113,39 +116,39 @@ function calculateScore(match){
   });
 
   const teams = Object.keys(totals);
+  if(teams.length !== 2) return "";
   return `${teams[0]} ${totals[teams[0]]}/${wickets[teams[0]]} vs ${teams[1]} ${totals[teams[1]]}/${wickets[teams[1]]}`;
 }
 
+// Load all finals
 fetch(indexUrl)
-  .then(r=>r.json())
-  .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
-  .then(seasons=>{
-    return Promise.all(seasons.map(season=>{
-      // pick match with latest date
-      season.sort((a,b)=>new Date(b.date)-new Date(a.date));
-      const finalSummary = season[0];
+  .then(r => r.json())
+  .then(seasonFiles => Promise.all(
+    seasonFiles.map(sf => fetch(seasonPath + sf).then(r => r.json()))
+  ))
+  .then(seasons => Promise.all(
+    seasons.map(matches => {
+      if(!matches || !matches.length) return;
 
-      return fetch(basePath + finalSummary.file)
-        .then(r=>r.json())
-        .then(fullMatch=>{
-          const winner = finalSummary.outcome.winner;
-          const runnerUp = finalSummary.teams.find(t=>t!==winner);
+      matches.sort((a,b) => new Date(b.date) - new Date(a.date));
+      const finalSummary = matches[0];
 
-          return {
-            season: finalSummary.date.slice(0,4),
-            winner,
-            runnerUp,
-            score: calculateScore(fullMatch),
-            date: finalSummary.date,
-            venue: finalSummary.venue
-          };
-        });
-    }));
-  })
-  .then(finals=>{
-    finals.forEach(f=>{
-      const tr=document.createElement("tr");
-      tr.innerHTML=`
+      return fetch(matchPath + finalSummary.file)
+        .then(r => r.json())
+        .then(fullMatch => ({
+          season: finalSummary.date.slice(0,4),
+          winner: finalSummary.outcome.winner,
+          runnerUp: finalSummary.teams.find(t => t !== finalSummary.outcome.winner),
+          score: calculateScore(fullMatch),
+          date: finalSummary.date,
+          venue: finalSummary.venue
+        }));
+    })
+  ))
+  .then(finals => {
+    finals.filter(f => f).forEach(f => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
         <td>${f.season}</td>
         <td class="winner">${f.winner}</td>
         <td class="runnerup">${f.runnerUp}</td>
