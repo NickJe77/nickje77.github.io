@@ -40,7 +40,7 @@ body{
 
 .year-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(90px,1fr));
+  grid-template-columns:repeat(auto-fill,minmax(110px,1fr));
   gap:12px;
   margin-bottom:25px;
 }
@@ -50,7 +50,7 @@ body{
   border:none;
   padding:12px 0;
   border-radius:10px;
-  font-size:16px;
+  font-size:15px;
   cursor:pointer;
 }
 .year-btn:hover{background:#00509d;}
@@ -119,44 +119,50 @@ const basePath = "data/bbl/";
 const yearGrid = document.getElementById("yearGrid");
 const tableBody = document.getElementById("matchesTable");
 
-let allSeasons = [];
-let seasonMatches = [];
+let seasonsMap = {};
+let seasonOrder = [];
 
 fetch(indexUrl)
   .then(r=>r.json())
   .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
-  .then(seasons=>{
-    allSeasons = seasons;
+  .then(allMatches=>{
+    allMatches.flat().forEach(match=>{
+      const season = match.info?.season;
+      if(!season) return;
 
+      if(!seasonsMap[season]){
+        seasonsMap[season] = [];
+        seasonOrder.push(season);
+      }
+      seasonsMap[season].push(match);
+    });
+
+    seasonOrder.sort(); // chronological order
     buildYearButtons();
-    showSeason(seasons.length - 1); // latest season by default
+    showSeason(seasonOrder[seasonOrder.length-1]); // latest season
   });
 
 function buildYearButtons(){
-  yearGrid.innerHTML = "";
-  allSeasons.forEach((seasonData,i)=>{
-    const firstMatch = seasonData[0];
-    const year = firstMatch?.info?.dates?.[0]?.slice(0,4) || ("S"+(i+1));
-
+  yearGrid.innerHTML="";
+  seasonOrder.forEach((season,i)=>{
     const btn=document.createElement("button");
     btn.className="year-btn";
-    btn.textContent=year;
+    btn.textContent=season;
     btn.onclick=()=>{
       document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
       btn.classList.add("active");
-      showSeason(i);
+      showSeason(season);
     };
     yearGrid.appendChild(btn);
 
-    if(i===allSeasons.length-1){
+    if(i===seasonOrder.length-1){
       btn.classList.add("active");
     }
   });
 }
 
-function showSeason(index){
-  seasonMatches = allSeasons[index] || [];
-  renderTable(seasonMatches);
+function showSeason(season){
+  renderTable(seasonsMap[season] || []);
 }
 
 function renderTable(matches){
