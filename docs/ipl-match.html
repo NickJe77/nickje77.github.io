@@ -112,6 +112,9 @@ const fileParam = params.get("file");
 
 const indexUrl = "data/ipl/index.json";
 const basePath = "data/ipl/";
+const nameMapUrl = "data/ipl/player-names.json";
+
+let nameMap = {};
 
 const statusText = document.getElementById("statusText");
 const dateBox = document.getElementById("dateBox");
@@ -126,39 +129,49 @@ if(!fileParam){
   return;
 }
 
-fetch(indexUrl)
-.then(r=>r.json())
-.then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
-.then(seasons=>{
-  let match=null;
-  seasons.forEach(season=>{
-    season.forEach(m=>{
-      if(m.file===fileParam) match=m;
+// load name map safely, then index
+fetch(nameMapUrl)
+  .then(r => r.ok ? r.json() : {})
+  .catch(() => ({}))
+  .then(names => {
+    nameMap = names || {};
+    return fetch(indexUrl).then(r=>r.json());
+  })
+  .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
+  .then(seasons=>{
+    let match=null;
+    seasons.forEach(season=>{
+      season.forEach(m=>{
+        if(m.file===fileParam) match=m;
+      });
     });
+
+    if(!match){
+      statusText.textContent="Match not found.";
+      return;
+    }
+
+    const info = match.info;
+    statusText.textContent="Match loaded";
+
+    dateBox.textContent = formatDate(info.dates[0]);
+    teamsBox.textContent = info.teams.map(t=>fullName(t)).join(" vs ");
+    venueBox.textContent = info.venue;
+    winnerBox.textContent = fullName(info.outcome?.winner || "—");
+
+    let result="—";
+    if(info.outcome?.by){
+      if(info.outcome.by.runs) result="won by "+info.outcome.by.runs+" runs";
+      if(info.outcome.by.wickets) result="won by "+info.outcome.by.wickets+" wickets";
+    }
+    resultBox.textContent=result;
+
+    renderInnings(match.innings);
   });
 
-  if(!match){
-    statusText.textContent="Match not found.";
-    return;
-  }
-
-  const info = match.info;
-  statusText.textContent="Match loaded";
-
-  dateBox.textContent = formatDate(info.dates[0]);
-  teamsBox.textContent = info.teams.join(" vs ");
-  venueBox.textContent = info.venue;
-  winnerBox.textContent = info.outcome?.winner || "—";
-
-  let result="—";
-  if(info.outcome?.by){
-    if(info.outcome.by.runs) result="won by "+info.outcome.by.runs+" runs";
-    if(info.outcome.by.wickets) result="won by "+info.outcome.by.wickets+" wickets";
-  }
-  resultBox.textContent=result;
-
-  renderInnings(match.innings);
-});
+function fullName(name){
+  return nameMap[name] || name;
+}
 
 function renderInnings(innings){
   innings.forEach(inn=>{
@@ -199,11 +212,14 @@ function renderInnings(innings){
             let fielder=w.fielders?.[0]?.name;
             let outText="";
 
-            if(how==="caught") outText=`c ${fielder} b ${bowler}`;
-            else if(how==="bowled") outText=`b ${bowler}`;
-            else if(how==="lbw") outText=`lbw b ${bowler}`;
-            else if(how==="run out") outText=`run out (${fielder||""})`;
-            else outText=`${how} b ${bowler}`;
+            const bowlerName = fullName(bowler);
+            const fielderName = fullName(fielder);
+
+            if(how==="caught") outText=`c ${fielderName} b ${bowlerName}`;
+            else if(how==="bowled") outText=`b ${bowlerName}`;
+            else if(how==="lbw") outText=`lbw b ${bowlerName}`;
+            else if(how==="run out") outText=`run out (${fielderName||""})`;
+            else outText=`${how} b ${bowlerName}`;
 
             dismissals[w.player_out]=outText;
           });
@@ -215,7 +231,7 @@ function renderInnings(innings){
 
     const overs=(Math.floor(legalBalls/6)+"."+(legalBalls%6));
 
-    let html=`<h2>${inn.team} Innings</h2>
+    let html=`<h2>${fullName(inn.team)} Innings</h2>
     <p><strong>${runs}/${wickets}</strong> (${overs} overs)</p>
 
     <h3>Batting</h3>
@@ -226,7 +242,7 @@ function renderInnings(innings){
       const sr=((s.runs/s.balls)*100).toFixed(1);
       const howOut=dismissals[p]||"not out";
       html+=`<tr>
-        <td>${p}</td>
+        <td>${fullName(p)}</td>
         <td>${howOut}</td>
         <td>${s.runs}</td>
         <td>${s.balls}</td>
@@ -240,7 +256,7 @@ function renderInnings(innings){
     Object.entries(bowlStats).forEach(([p,s])=>{
       const o=(Math.floor(s.balls/6)+"."+(s.balls%6));
       html+=`<tr>
-        <td>${p}</td>
+        <td>${fullName(p)}</td>
         <td>${o}</td>
         <td>${s.runs}</td>
         <td>${s.wkts}</td>
