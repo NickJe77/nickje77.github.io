@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BBL Team | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family: Inter, system-ui, Arial, sans-serif;
+  margin:0;
+  background:#ffffff;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#003566,#0077b6);
+  color:white;
+  padding:40px 50px;
+  border-radius:24px;
+  margin-bottom:25px;
+}
+.hero h1{margin:0;font-size:44px;}
+.hero p{margin-top:10px;font-size:18px;opacity:0.95;}
+
+.summary-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:18px;
+  margin-bottom:25px;
+}
+
+.summary-box{
+  border:1px solid #ddd;
+  border-radius:14px;
+  padding:14px;
+  background:#f8fbff;
+  text-align:center;
+}
+.summary-box strong{display:block;margin-bottom:6px;}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:14px;
+  margin-bottom:30px;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:left;
+}
+th{background:#f3f6fb;}
+tr:nth-child(even){background:#f8fbff;}
+tr:hover{background:#eef4ff;}
+
+.match-link{
+  color:#003566;
+  text-decoration:none;
+  font-weight:600;
+}
+.match-link:hover{text-decoration:underline;}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+</div>
+
+<div class="page-wrap">
+
+<div class="hero">
+  <h1 id="teamName">Team</h1>
+  <p id="teamSummary">Loading team…</p>
+</div>
+
+<div class="summary-grid">
+  <div class="summary-box"><strong>Matches</strong><span id="matchesBox">0</span></div>
+  <div class="summary-box"><strong>Wins</strong><span id="winsBox">0</span></div>
+  <div class="summary-box"><strong>Losses</strong><span id="lossesBox">0</span></div>
+  <div class="summary-box"><strong>Win %</strong><span id="winPctBox">0%</span></div>
+</div>
+
+<h2>Matches</h2>
+
+<table>
+<thead>
+<tr>
+  <th>Date</th>
+  <th>Match</th>
+  <th>Venue</th>
+  <th>Result</th>
+</tr>
+</thead>
+<tbody id="matchesTable"></tbody>
+</table>
+
+</div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const teamParam = params.get("team");
+
+const indexUrl = "data/bbl/index.json";
+const basePath = "data/bbl/";
+
+const teamNameEl = document.getElementById("teamName");
+const teamSummaryEl = document.getElementById("teamSummary");
+
+const matchesBox = document.getElementById("matchesBox");
+const winsBox = document.getElementById("winsBox");
+const lossesBox = document.getElementById("lossesBox");
+const winPctBox = document.getElementById("winPctBox");
+const tableBody = document.getElementById("matchesTable");
+
+if(!teamParam){
+  teamNameEl.textContent="Team not specified";
+  teamSummaryEl.textContent="";
+}
+
+teamNameEl.textContent = decodeURIComponent(teamParam);
+
+let allMatches = [];
+let teamMatches = [];
+
+fetch(indexUrl)
+.then(r=>r.json())
+.then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
+.then(seasons=>{
+  seasons.forEach(season=>{
+    season.forEach(match=>{
+      allMatches.push(match);
+    });
+  });
+
+  teamMatches = allMatches.filter(m => m.info?.teams?.includes(teamParam));
+  renderTeam();
+});
+
+function renderTeam(){
+  let wins = 0;
+  let losses = 0;
+
+  teamMatches.forEach(match=>{
+    if(match.info?.outcome?.winner){
+      if(match.info.outcome.winner === teamParam){
+        wins++;
+      } else {
+        losses++;
+      }
+    }
+  });
+
+  const total = teamMatches.length;
+  const winPct = total ? ((wins/total)*100).toFixed(1) : "0.0";
+
+  teamSummaryEl.textContent = `${total} matches played`;
+  matchesBox.textContent = total;
+  winsBox.textContent = wins;
+  lossesBox.textContent = losses;
+  winPctBox.textContent = winPct + "%";
+
+  renderMatchesTable();
+}
+
+function renderMatchesTable(){
+  tableBody.innerHTML="";
+
+  teamMatches
+    .sort((a,b)=>new Date(a.info.dates[0]) - new Date(b.info.dates[0]))
+    .forEach(match=>{
+      const date = formatDate(match.info.dates[0]);
+      const teams = match.info.teams.join(" vs ");
+      const venue = match.info.venue || "—";
+
+      let result="—";
+      if(match.info.outcome?.winner){
+        if(match.info.outcome.by?.runs){
+          result = match.info.outcome.winner+" won by "+match.info.outcome.by.runs+" runs";
+        }
+        else if(match.info.outcome.by?.wickets){
+          result = match.info.outcome.winner+" won by "+match.info.outcome.by.wickets+" wickets";
+        }
+      }
+
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>${date}</td>
+        <td>
+          <a class="match-link" href="bbl-match.html?file=${encodeURIComponent(match.file)}">
+            ${teams}
+          </a>
+        </td>
+        <td>${venue}</td>
+        <td>${result}</td>
+      `;
+      tableBody.appendChild(tr);
+    });
+}
+
+function formatDate(d){
+  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+}
+</script>
+
+</body>
+</html>
