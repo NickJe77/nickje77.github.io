@@ -55,16 +55,9 @@ th{
 tr:nth-child(even){background:#f8fbff;}
 tr:hover{background:#eef4ff;}
 
-.winner{
-  font-weight:600;
-  color:#1a7f37;
-}
-.runnerup{
-  color:#b42318;
-}
-.score{
-  font-weight:600;
-}
+.winner{font-weight:600;color:#1a7f37;}
+.runnerup{color:#b42318;}
+.score{font-weight:600;}
 </style>
 </head>
 
@@ -118,6 +111,31 @@ function normalizeTeam(name){
   return teamMap[name] || name;
 }
 
+function calculateScore(match){
+  const totals = {};
+  const wickets = {};
+
+  match.innings.forEach(inn=>{
+    const team = normalizeTeam(inn.team);
+    totals[team] = 0;
+    wickets[team] = 0;
+
+    inn.overs.forEach(over=>{
+      over.deliveries.forEach(d=>{
+        totals[team] += d.runs?.total || 0;
+        if(d.wickets){
+          wickets[team] += d.wickets.length;
+        }
+      });
+    });
+  });
+
+  const teams = Object.keys(totals);
+  if(teams.length !== 2) return "";
+
+  return `${teams[0]} ${totals[teams[0]]}/${wickets[teams[0]]} vs ${teams[1]} ${totals[teams[1]]}/${wickets[teams[1]]}`;
+}
+
 fetch(indexUrl)
   .then(r=>r.json())
   .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
@@ -127,31 +145,27 @@ fetch(indexUrl)
     seasons.forEach(matches=>{
       if(!matches.length) return;
 
-      matches.sort((a,b)=>new Date(b.date) - new Date(a.date));
+      matches.sort((a,b)=>new Date(b.info.dates[0]) - new Date(a.info.dates[0]));
       const finalMatch = matches[0];
 
-      const season = finalMatch.date.slice(0,4);
-      const teams = finalMatch.teams?.map(normalizeTeam) || [];
-      const winner = normalizeTeam(finalMatch?.outcome?.winner || "");
-      const runnerUp = teams.find(t=>t !== winner) || "";
+      const season = finalMatch.info.season;
+      const teams = finalMatch.info.teams.map(normalizeTeam);
+      const winner = normalizeTeam(finalMatch.info.outcome.winner);
+      const runnerUp = teams.find(t=>t!==winner) || "";
 
-      const score =
-        finalMatch.score ||
-        finalMatch.outcome?.result ||
-        finalMatch.outcome?.margin ||
-        "";
+      const score = calculateScore(finalMatch);
 
       finals.push({
         season,
         winner,
         runnerUp,
         score,
-        date: finalMatch.date,
-        venue: finalMatch.venue || ""
+        date: finalMatch.info.dates[0],
+        venue: finalMatch.info.venue
       });
     });
 
-    finals.sort((a,b)=>b.season - a.season);
+    finals.sort((a,b)=>b.season.localeCompare(a.season));
 
     finals.forEach(f=>{
       const tr = document.createElement("tr");
