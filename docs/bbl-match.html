@@ -6,126 +6,64 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{
-  font-family: Inter, system-ui, Arial, sans-serif;
-  margin:0;
-  background:#ffffff;
-}
-
-.navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px 0;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
-}
+body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#fff;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-
-.page-wrap{
-  max-width:1200px;
-  margin:0 auto;
-  padding:30px 20px;
-}
-
-.hero{
-  background:linear-gradient(90deg,#003566,#0077b6);
-  color:white;
-  padding:40px 50px;
-  border-radius:24px;
-  margin-bottom:25px;
-}
-.hero h1{margin:0;font-size:40px;}
-.hero p{margin-top:10px;font-size:18px;opacity:0.95;}
-
-.summary-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
-  gap:18px;
-  margin-bottom:30px;
-}
-
-.summary-box{
-  border:1px solid #ddd;
-  border-radius:14px;
-  padding:14px;
-  background:#f8fbff;
-}
-.summary-box strong{display:block;margin-bottom:6px;}
-
+.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px;}
+.hero{background:linear-gradient(90deg,#003566,#0077b6);color:white;padding:40px 50px;border-radius:24px;margin-bottom:25px;}
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;margin-bottom:30px;}
+.summary-box{border:1px solid #ddd;border-radius:14px;padding:14px;background:#f8fbff;}
 h2{margin-top:35px;color:#003566;}
-h3{margin-top:20px;}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-  margin-bottom:25px;
-  font-size:14px;
-}
-th,td{
-  border-bottom:1px solid #ddd;
-  padding:8px 10px;
-  text-align:left;
-}
+table{width:100%;border-collapse:collapse;margin-bottom:25px;font-size:14px;}
+th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:left;}
 th{background:#f3f6fb;}
-tr:nth-child(even){background:#f8fbff;}
 </style>
 </head>
 
 <body>
-
 <div class="navbar">
-  <a href="index.html">Home</a>
-  <a href="racing.html">Racing</a>
-  <a href="afl.html">AFL</a>
-  <a href="football.html">Football</a>
-  <a href="cricket.html">Cricket</a>
+<a href="index.html">Home</a>
+<a href="racing.html">Racing</a>
+<a href="afl.html">AFL</a>
+<a href="football.html">Football</a>
+<a href="cricket.html">Cricket</a>
 </div>
 
 <div class="page-wrap">
-
 <div class="hero">
-  <h1>Big Bash League Match</h1>
-  <p id="statusText">Loading match…</p>
+<h1>BBL Match</h1>
+<p id="statusText">Loading match…</p>
 </div>
 
 <div class="summary-grid">
-  <div class="summary-box"><strong>Date</strong><span id="dateBox">—</span></div>
-  <div class="summary-box"><strong>Teams</strong><span id="teamsBox">—</span></div>
-  <div class="summary-box"><strong>Venue</strong><span id="venueBox">—</span></div>
-  <div class="summary-box"><strong>Winner</strong><span id="winnerBox">—</span></div>
-  <div class="summary-box"><strong>Result</strong><span id="resultBox">—</span></div>
+<div class="summary-box"><strong>Date</strong><span id="dateBox">—</span></div>
+<div class="summary-box"><strong>Teams</strong><span id="teamsBox">—</span></div>
+<div class="summary-box"><strong>Venue</strong><span id="venueBox">—</span></div>
+<div class="summary-box"><strong>Winner</strong><span id="winnerBox">—</span></div>
+<div class="summary-box"><strong>Result</strong><span id="resultBox">—</span></div>
 </div>
 
 <div id="inningsContainer"></div>
-
 </div>
 
 <script>
-document.addEventListener("DOMContentLoaded", () => {
+const params=new URLSearchParams(window.location.search);
+const fileParam=params.get("file");
 
-const params = new URLSearchParams(window.location.search);
-const fileParam = params.get("file");
+const indexUrl="data/bbl/index.json";
+const basePath="data/bbl/";
+const nameMapUrl="data/bbl/player-names.json";
 
-const indexUrl = "data/bbl/index.json";
-const basePath = "data/bbl/";
+let nameMap={};
 
-const statusText = document.getElementById("statusText");
-const dateBox = document.getElementById("dateBox");
-const teamsBox = document.getElementById("teamsBox");
-const venueBox = document.getElementById("venueBox");
-const winnerBox = document.getElementById("winnerBox");
-const resultBox = document.getElementById("resultBox");
-const inningsContainer = document.getElementById("inningsContainer");
-
-if(!fileParam){
-  statusText.textContent = "Missing match file parameter.";
-  return;
-}
-
-fetch(indexUrl)
-.then(r=>r.json())
-.then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
+Promise.all([
+  fetch(nameMapUrl).then(r=>r.json()),
+  fetch(indexUrl).then(r=>r.json())
+])
+.then(([names,files])=>{
+  nameMap=names;
+  return Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json())));
+})
 .then(seasons=>{
   let match=null;
   seasons.forEach(season=>{
@@ -134,129 +72,74 @@ fetch(indexUrl)
     });
   });
 
-  if(!match){
-    statusText.textContent="Match not found.";
-    return;
-  }
+  if(!match){document.getElementById("statusText").textContent="Match not found";return;}
 
-  const info = match.info;
-  statusText.textContent="Match loaded";
-
-  dateBox.textContent = formatDate(info.dates[0]);
-  teamsBox.textContent = info.teams.join(" vs ");
-  venueBox.textContent = info.venue || "—";
-  winnerBox.textContent = info.outcome?.winner || "—";
+  const info=match.info;
+  document.getElementById("dateBox").textContent=formatDate(info.dates[0]);
+  document.getElementById("teamsBox").textContent=info.teams.join(" vs ");
+  document.getElementById("venueBox").textContent=info.venue||"—";
+  document.getElementById("winnerBox").textContent=info.outcome?.winner||"—";
 
   let result="—";
   if(info.outcome?.by){
     if(info.outcome.by.runs) result="won by "+info.outcome.by.runs+" runs";
     if(info.outcome.by.wickets) result="won by "+info.outcome.by.wickets+" wickets";
   }
-  resultBox.textContent=result;
+  document.getElementById("resultBox").textContent=result;
 
   renderInnings(match.innings);
 });
 
+function fullName(n){return nameMap[n]||n;}
+
 function renderInnings(innings){
+  const container=document.getElementById("inningsContainer");
   innings.forEach(inn=>{
-    const batStats={}, bowlStats={}, dismissals={};
-    let runs=0, wickets=0, legalBalls=0;
+    const batStats={},bowlStats={},outs={};
+    let runs=0,wkts=0,balls=0;
 
-    inn.overs.forEach(over=>{
-      over.deliveries.forEach(d=>{
-
-        const isWide = d.extras?.wides;
-        const isNoBall = d.extras?.noballs;
-
-        const batter=d.batter;
-        const bowler=d.bowler;
+    inn.overs.forEach(o=>{
+      o.deliveries.forEach(d=>{
+        const bat=d.batter, bowl=d.bowler;
         const batRuns=d.runs.batter;
+        if(!batStats[bat]) batStats[bat]={runs:0,balls:0};
+        batStats[bat].runs+=batRuns;
+        if(!d.extras?.wides) batStats[bat].balls++;
 
-        if(!batStats[batter]) batStats[batter]={runs:0,balls:0};
-        batStats[batter].runs+=batRuns;
-
-        if(!isWide){
-          batStats[batter].balls++;
-        }
-
-        if(!bowlStats[bowler]) bowlStats[bowler]={runs:0,balls:0,wkts:0};
-        bowlStats[bowler].runs+=d.runs.total;
-
-        if(!isWide && !isNoBall){
-          bowlStats[bowler].balls++;
-          legalBalls++;
-        }
+        if(!bowlStats[bowl]) bowlStats[bowl]={runs:0,balls:0,wkts:0};
+        bowlStats[bowl].runs+=d.runs.total;
+        if(!d.extras?.wides && !d.extras?.noballs) bowlStats[bowl].balls++;
 
         if(d.wickets){
           d.wickets.forEach(w=>{
-            if(w.kind!=="run out"){
-              bowlStats[bowler].wkts++;
-            }
-            wickets++;
-
-            let how=w.kind;
-            let fielder=w.fielders?.[0]?.name;
-            let outText="";
-
-            if(how==="caught") outText=`c ${fielder} b ${bowler}`;
-            else if(how==="bowled") outText=`b ${bowler}`;
-            else if(how==="lbw") outText=`lbw b ${bowler}`;
-            else if(how==="run out") outText=`run out (${fielder||""})`;
-            else outText=`${how} b ${bowler}`;
-
-            dismissals[w.player_out]=outText;
+            if(w.kind!=="run out") bowlStats[bowl].wkts++;
+            wkts++;
+            outs[w.player_out]=w.kind+" b "+bowl;
           });
         }
-
         runs+=d.runs.total;
+        balls++;
       });
     });
 
-    const overs=(Math.floor(legalBalls/6)+"."+(legalBalls%6));
-
     let html=`<h2>${inn.team} Innings</h2>
-    <p><strong>${runs}/${wickets}</strong> (${overs} overs)</p>
-
-    <h3>Batting</h3>
-    <table>
-    <tr><th>Batter</th><th>How out</th><th>R</th><th>B</th><th>SR</th></tr>`;
-
+    <p><strong>${runs}/${wkts}</strong></p>
+    <table><tr><th>Batter</th><th>How out</th><th>R</th><th>B</th></tr>`;
     Object.entries(batStats).forEach(([p,s])=>{
-      const sr=((s.runs/s.balls)*100).toFixed(1);
-      const howOut=dismissals[p]||"not out";
-      html+=`<tr>
-        <td>${p}</td>
-        <td>${howOut}</td>
-        <td>${s.runs}</td>
-        <td>${s.balls}</td>
-        <td>${sr}</td>
-      </tr>`;
+      html+=`<tr><td>${fullName(p)}</td><td>${outs[p]||"not out"}</td><td>${s.runs}</td><td>${s.balls}</td></tr>`;
     });
-
-    html+=`</table><h3>Bowling</h3>
-    <table><tr><th>Bowler</th><th>O</th><th>R</th><th>W</th></tr>`;
-
+    html+=`</table><table><tr><th>Bowler</th><th>O</th><th>R</th><th>W</th></tr>`;
     Object.entries(bowlStats).forEach(([p,s])=>{
-      const o=(Math.floor(s.balls/6)+"."+(s.balls%6));
-      html+=`<tr>
-        <td>${p}</td>
-        <td>${o}</td>
-        <td>${s.runs}</td>
-        <td>${s.wkts}</td>
-      </tr>`;
+      html+=`<tr><td>${fullName(p)}</td><td>${Math.floor(s.balls/6)}.${s.balls%6}</td><td>${s.runs}</td><td>${s.wkts}</td></tr>`;
     });
-
     html+=`</table>`;
-    inningsContainer.innerHTML+=html;
+    container.innerHTML+=html;
   });
 }
 
 function formatDate(d){
   return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
 }
-
-});
 </script>
-
 </body>
 </html>
