@@ -59,6 +59,7 @@ body{
 table{
   width:100%;
   border-collapse:collapse;
+  margin-top:20px;
   font-size:15px;
 }
 th,td{
@@ -68,10 +69,15 @@ th,td{
 }
 th{background:#f3f6fb;}
 tr:nth-child(even){background:#f8fbff;}
-tr:hover{background:#eef4ff;}
+tr:hover{background:#eef4ff;cursor:pointer;}
 .winner{font-weight:600;color:#1a7f37;}
-.match-link{color:inherit;text-decoration:none;}
-.match-link:hover{text-decoration:underline;}
+
+.match-link{
+  color:inherit;
+  text-decoration:none;
+  display:block;
+  width:100%;
+}
 </style>
 </head>
 
@@ -120,54 +126,53 @@ fetch(indexUrl)
   .then(r=>r.json())
   .then(files=>{
     files.forEach((file,i)=>{
-      const year = file.match(/\d{4}/)[0];
+      const year = file.replace("ipl_","").replace("_FULL.json","");
       const btn = document.createElement("button");
       btn.className="year-btn";
       btn.textContent=year;
-      btn.onclick=()=>loadSeason(file,btn);
+      btn.onclick=()=>selectSeason(file,btn);
       yearGrid.appendChild(btn);
       if(i===files.length-1){
         btn.classList.add("active");
-        loadSeason(file,btn);
+        loadSeason(file);
       }
     });
   });
 
-function loadSeason(file,btn){
+function selectSeason(file,btn){
   document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
-  if(btn) btn.classList.add("active");
+  btn.classList.add("active");
+  loadSeason(file);
+}
 
-  fetch(basePath+file)
-  .then(r=>r.json())
-  .then(matches=>{
-    tableBody.innerHTML="";
-    matches.sort((a,b)=>new Date(b.info.dates[0])-new Date(a.info.dates[0]));
+function loadSeason(file){
+fetch(basePath+file)
+.then(r=>r.json())
+.then(matches=>{
+  tableBody.innerHTML="";
+  matches.sort((a,b)=>new Date(b.info.dates[0]) - new Date(a.info.dates[0]));
 
-    matches.forEach(m=>{
-      const info = m.info;
+  matches.forEach(m=>{
+    const info = m.info;
 
-      let margin="";
-      if(info.outcome?.by){
-        if(info.outcome.by.runs) margin=info.outcome.by.runs+" runs";
-        else if(info.outcome.by.wickets) margin=info.outcome.by.wickets+" wickets";
-      }
+    let margin="";
+    if(info.outcome?.by){
+      if(info.outcome.by.runs) margin = info.outcome.by.runs+" runs";
+      else if(info.outcome.by.wickets) margin = info.outcome.by.wickets+" wickets";
+    }
 
-      const tr=document.createElement("tr");
-      tr.innerHTML=`
-        <td>
-          <a class="match-link" href="ipl-match.html?file=${m.file}">
-            ${formatDate(info.dates[0])}
-          </a>
-        </td>
-        <td>${info.teams?.[0]||""}</td>
-        <td>${info.teams?.[1]||""}</td>
-        <td>${info.venue||""}</td>
-        <td class="winner">${info.outcome?.winner||""}</td>
-        <td>${margin}</td>
-      `;
-      tableBody.appendChild(tr);
-    });
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td><a class="match-link" href="ipl-match.html?file=${m.file}">${formatDate(info.dates[0])}</a></td>
+      <td><a class="match-link" href="ipl-match.html?file=${m.file}">${info.teams[0]}</a></td>
+      <td><a class="match-link" href="ipl-match.html?file=${m.file}">${info.teams[1]}</a></td>
+      <td><a class="match-link" href="ipl-match.html?file=${m.file}">${info.venue || ""}</a></td>
+      <td class="winner"><a class="match-link" href="ipl-match.html?file=${m.file}">${info.outcome?.winner || ""}</a></td>
+      <td><a class="match-link" href="ipl-match.html?file=${m.file}">${margin}</a></td>
+    `;
+    tableBody.appendChild(tr);
   });
+});
 }
 
 function formatDate(d){
