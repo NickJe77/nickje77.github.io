@@ -42,6 +42,7 @@ body{
   display:grid;
   grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
   gap:20px;
+  margin-bottom:30px;
 }
 
 .summary-box{
@@ -54,6 +55,29 @@ body{
   display:block;
   margin-bottom:6px;
 }
+
+.innings{
+  margin-bottom:40px;
+}
+
+.innings h2{
+  margin-bottom:10px;
+  color:#3b007a;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-bottom:20px;
+  font-size:14px;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:left;
+}
+th{background:#f3f6fb;}
+tr:nth-child(even){background:#f8fbff;}
 </style>
 </head>
 
@@ -82,6 +106,8 @@ body{
   <div class="summary-box"><strong>Result</strong><span id="resultBox">—</span></div>
 </div>
 
+<div id="inningsContainer"></div>
+
 </div>
 
 <script>
@@ -99,6 +125,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const venueBox = document.getElementById("venueBox");
   const winnerBox = document.getElementById("winnerBox");
   const resultBox = document.getElementById("resultBox");
+  const inningsContainer = document.getElementById("inningsContainer");
 
   if(!fileParam){
     statusText.textContent = "Missing match file parameter.";
@@ -111,25 +138,24 @@ document.addEventListener("DOMContentLoaded", () => {
       files.map(f => fetch(basePath + f).then(r => r.json()))
     ))
     .then(seasons => {
-      let foundMatch = null;
+      let match = null;
 
       seasons.forEach(matches => {
         matches.forEach(m => {
           if(m.file === fileParam){
-            foundMatch = m;
+            match = m;
           }
         });
       });
 
-      if(!foundMatch){
-        statusText.textContent = "Match not found in data.";
+      if(!match){
+        statusText.textContent = "Match not found.";
         return;
       }
 
-      const info = foundMatch.info;
+      const info = match.info;
 
       statusText.textContent = "Match loaded";
-
       dateBox.textContent = formatDate(info.dates[0]);
       teamsBox.textContent = info.teams.join(" vs ");
       venueBox.textContent = info.venue || "—";
@@ -141,11 +167,99 @@ document.addEventListener("DOMContentLoaded", () => {
         if(info.outcome.by.wickets) result = "won by " + info.outcome.by.wickets + " wickets";
       }
       resultBox.textContent = result;
+
+      renderInnings(match.innings);
     })
     .catch(err => {
       console.error(err);
       statusText.textContent = "Error loading match data.";
     });
+
+  function renderInnings(innings){
+    inningsContainer.innerHTML = "";
+
+    innings.forEach((inn,idx)=>{
+      const div = document.createElement("div");
+      div.className="innings";
+
+      div.innerHTML = `
+        <h2>${inn.team} Innings</h2>
+        <p><strong>${inn.runs}/${inn.wickets}</strong> (${inn.overs} overs)</p>
+
+        <h3>Batting</h3>
+        ${renderBattingTable(inn.batting)}
+
+        <h3>Bowling</h3>
+        ${renderBowlingTable(inn.bowling)}
+      `;
+
+      inningsContainer.appendChild(div);
+    });
+  }
+
+  function renderBattingTable(rows){
+    if(!rows || !rows.length) return "<p>No batting data.</p>";
+
+    let html = `
+      <table>
+      <tr>
+        <th>Batter</th>
+        <th>Runs</th>
+        <th>Balls</th>
+        <th>4s</th>
+        <th>6s</th>
+        <th>SR</th>
+        <th>Dismissal</th>
+      </tr>
+    `;
+
+    rows.forEach(r=>{
+      html += `
+        <tr>
+          <td>${r.name}</td>
+          <td>${r.runs}</td>
+          <td>${r.balls}</td>
+          <td>${r.fours || 0}</td>
+          <td>${r.sixes || 0}</td>
+          <td>${r.strike_rate || ""}</td>
+          <td>${r.dismissal || "not out"}</td>
+        </tr>
+      `;
+    });
+
+    html += "</table>";
+    return html;
+  }
+
+  function renderBowlingTable(rows){
+    if(!rows || !rows.length) return "<p>No bowling data.</p>";
+
+    let html = `
+      <table>
+      <tr>
+        <th>Bowler</th>
+        <th>Overs</th>
+        <th>Runs</th>
+        <th>Wkts</th>
+        <th>Econ</th>
+      </tr>
+    `;
+
+    rows.forEach(r=>{
+      html += `
+        <tr>
+          <td>${r.name}</td>
+          <td>${r.overs}</td>
+          <td>${r.runs}</td>
+          <td>${r.wickets}</td>
+          <td>${r.economy || ""}</td>
+        </tr>
+      `;
+    });
+
+    html += "</table>";
+    return html;
+  }
 
   function formatDate(d){
     return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
