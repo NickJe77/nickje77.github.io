@@ -57,11 +57,13 @@ body{
 }
 
 h2{margin-top:40px;color:#3b007a;}
+h3{margin-top:20px;}
 
 table{
   width:100%;
   border-collapse:collapse;
   margin-bottom:25px;
+  font-size:14px;
 }
 th,td{
   border-bottom:1px solid #ddd;
@@ -160,7 +162,7 @@ fetch(indexUrl)
 
 function renderInnings(innings){
   innings.forEach(inn=>{
-    const batStats={}, bowlStats={};
+    const batStats={}, bowlStats={}, dismissals={};
     let runs=0, wickets=0, balls=0;
 
     inn.overs.forEach(over=>{
@@ -178,10 +180,26 @@ function renderInnings(innings){
         bowlStats[bowler].runs+=d.runs.total;
         bowlStats[bowler].balls++;
 
-        if(d.wickets) bowlStats[bowler].wkts+=d.wickets.length;
+        if(d.wickets){
+          d.wickets.forEach(w=>{
+            bowlStats[bowler].wkts++;
+            wickets++;
+
+            let how=w.kind;
+            let fielder=w.fielders?.[0]?.name;
+            let outText="";
+
+            if(how==="caught") outText=`c ${fielder} b ${bowler}`;
+            else if(how==="bowled") outText=`b ${bowler}`;
+            else if(how==="lbw") outText=`lbw b ${bowler}`;
+            else if(how==="run out") outText=`run out (${fielder||""})`;
+            else outText=`${how} b ${bowler}`;
+
+            dismissals[w.player_out]=outText;
+          });
+        }
 
         runs+=d.runs.total;
-        if(d.wickets) wickets+=d.wickets.length;
       });
     });
 
@@ -191,18 +209,32 @@ function renderInnings(innings){
     <p><strong>${runs}/${wickets}</strong> (${overs} overs)</p>
 
     <h3>Batting</h3>
-    <table><tr><th>Batter</th><th>R</th><th>B</th><th>SR</th></tr>`;
+    <table>
+    <tr><th>Batter</th><th>How out</th><th>R</th><th>B</th><th>SR</th></tr>`;
 
     Object.entries(batStats).forEach(([p,s])=>{
       const sr=((s.runs/s.balls)*100).toFixed(1);
-      html+=`<tr><td>${p}</td><td>${s.runs}</td><td>${s.balls}</td><td>${sr}</td></tr>`;
+      const howOut=dismissals[p]||"not out";
+      html+=`<tr>
+        <td>${p}</td>
+        <td>${howOut}</td>
+        <td>${s.runs}</td>
+        <td>${s.balls}</td>
+        <td>${sr}</td>
+      </tr>`;
     });
+
     html+=`</table><h3>Bowling</h3>
     <table><tr><th>Bowler</th><th>O</th><th>R</th><th>W</th></tr>`;
 
     Object.entries(bowlStats).forEach(([p,s])=>{
       const o=(Math.floor(s.balls/6)+"."+(s.balls%6));
-      html+=`<tr><td>${p}</td><td>${o}</td><td>${s.runs}</td><td>${s.wkts}</td></tr>`;
+      html+=`<tr>
+        <td>${p}</td>
+        <td>${o}</td>
+        <td>${s.runs}</td>
+        <td>${s.wkts}</td>
+      </tr>`;
     });
 
     html+=`</table>`;
