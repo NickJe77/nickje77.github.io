@@ -34,10 +34,23 @@ body{
   color:white;
   padding:40px 50px;
   border-radius:24px;
-  margin-bottom:30px;
+  margin-bottom:20px;
 }
 .hero h1{margin:0;font-size:46px;}
 .hero p{margin-top:10px;font-size:20px;opacity:0.95;}
+
+.filter-bar{
+  margin-bottom:20px;
+  display:flex;
+  gap:12px;
+  align-items:center;
+}
+.filter-bar select{
+  padding:8px 12px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  font-size:15px;
+}
 
 .stat-grid{
   display:grid;
@@ -92,6 +105,13 @@ tr:hover{background:#eef4ff;}
   <p>Indian Premier League team history</p>
 </div>
 
+<div class="filter-bar">
+  <label for="seasonSelect"><strong>Season:</strong></label>
+  <select id="seasonSelect">
+    <option value="all">All seasons</option>
+  </select>
+</div>
+
 <div class="stat-grid">
   <div class="stat"><h3 id="titles">0</h3><span>Titles</span></div>
   <div class="stat"><h3 id="matches">0</h3><span>Matches</span></div>
@@ -134,8 +154,8 @@ function normalizeTeam(name){
 
 document.getElementById("teamName").textContent = requestedTeam || "Team";
 
-let matchesList = [];
-let titles = 0;
+let allMatches = [];
+let seasonSet = new Set();
 
 fetch(indexUrl)
   .then(r=>r.json())
@@ -143,14 +163,6 @@ fetch(indexUrl)
   .then(seasons=>{
     seasons.forEach(matches=>{
       if(!matches.length) return;
-
-      matches.sort((a,b)=>new Date(b.date)-new Date(a.date));
-      const finalMatch = matches[0];
-      const winner = normalizeTeam(finalMatch?.outcome?.winner || "");
-
-      if(winner === requestedTeam){
-        titles++;
-      }
 
       matches.forEach(m=>{
         const teams = m.teams?.map(normalizeTeam) || [];
@@ -163,8 +175,13 @@ fetch(indexUrl)
         if(winner === requestedTeam) result = "Win";
         else if(winner === opponent) result = "Loss";
 
-        matchesList.push({
+        const season = m.date?.slice(0,4) || "";
+
+        seasonSet.add(season);
+
+        allMatches.push({
           date: m.date,
+          season,
           opponent,
           result,
           venue: m.venue || ""
@@ -172,31 +189,52 @@ fetch(indexUrl)
       });
     });
 
-    matchesList.sort((a,b)=>new Date(b.date)-new Date(a.date));
-
-    const wins = matchesList.filter(m=>m.result==="Win").length;
-    const losses = matchesList.filter(m=>m.result==="Loss").length;
-    const total = matchesList.length;
-    const winPct = total ? ((wins/total)*100).toFixed(1) : "0.0";
-
-    document.getElementById("titles").textContent = titles;
-    document.getElementById("matches").textContent = total;
-    document.getElementById("wins").textContent = wins;
-    document.getElementById("losses").textContent = losses;
-    document.getElementById("winPct").textContent = winPct + "%";
-
-    const tbody = document.getElementById("matchesTable");
-    matchesList.forEach(m=>{
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${m.date}</td>
-        <td>${m.opponent}</td>
-        <td class="${m.result==="Win"?"result-win":"result-loss"}">${m.result}</td>
-        <td>${m.venue}</td>
-      `;
-      tbody.appendChild(tr);
+    const seasonSelect = document.getElementById("seasonSelect");
+    Array.from(seasonSet).sort((a,b)=>b-a).forEach(y=>{
+      const opt = document.createElement("option");
+      opt.value = y;
+      opt.textContent = y;
+      seasonSelect.appendChild(opt);
     });
+
+    seasonSelect.addEventListener("change", renderTable);
+
+    renderTable();
   });
+
+function renderTable(){
+  const season = document.getElementById("seasonSelect").value;
+  const tbody = document.getElementById("matchesTable");
+  tbody.innerHTML = "";
+
+  let filtered = allMatches;
+  if(season !== "all"){
+    filtered = allMatches.filter(m=>m.season === season);
+  }
+
+  filtered.sort((a,b)=>new Date(b.date)-new Date(a.date));
+
+  let wins = filtered.filter(m=>m.result==="Win").length;
+  let losses = filtered.filter(m=>m.result==="Loss").length;
+  let total = filtered.length;
+  let winPct = total ? ((wins/total)*100).toFixed(1) : "0.0";
+
+  document.getElementById("matches").textContent = total;
+  document.getElementById("wins").textContent = wins;
+  document.getElementById("losses").textContent = losses;
+  document.getElementById("winPct").textContent = winPct + "%";
+
+  filtered.forEach(m=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${m.date}</td>
+      <td>${m.opponent}</td>
+      <td class="${m.result==="Win"?"result-win":"result-loss"}">${m.result}</td>
+      <td>${m.venue}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
 </script>
 
 </body>
