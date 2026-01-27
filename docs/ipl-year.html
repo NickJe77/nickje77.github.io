@@ -60,10 +60,6 @@ body{
   margin-bottom:40px;
 }
 
-.innings-block h2{
-  margin-bottom:10px;
-}
-
 table{
   width:100%;
   border-collapse:collapse;
@@ -136,6 +132,7 @@ fetch(indexUrl)
 .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
 .then(seasons=>{
   let foundMatch=null;
+
   seasons.forEach(matches=>{
     matches.forEach(m=>{
       if(m.file===fileParam) foundMatch=m;
@@ -162,7 +159,7 @@ fetch(indexUrl)
   }
   resultBox.textContent=result;
 
-  renderInnings(foundMatch.innings);
+  renderInnings(foundMatch.innings || []);
 });
 
 function renderInnings(innings){
@@ -174,21 +171,21 @@ function renderInnings(innings){
       o.deliveries.forEach(d=>{
         const bat = d.batter;
         const bowl = d.bowler;
-        const runs = d.runs.batter;
-        const total = d.runs.total;
+        const runsBat = d.runs?.batter || 0;
+        const runsTot = d.runs?.total || 0;
 
         if(!batting[bat]) batting[bat]={runs:0,balls:0,fours:0,sixes:0};
-        batting[bat].runs+=runs;
-        batting[bat].balls+=1;
-        if(runs===4) batting[bat].fours++;
-        if(runs===6) batting[bat].sixes++;
+        batting[bat].runs += runsBat;
+        batting[bat].balls += 1;
+        if(runsBat===4) batting[bat].fours++;
+        if(runsBat===6) batting[bat].sixes++;
 
         if(!bowling[bowl]) bowling[bowl]={balls:0,runs:0,wkts:0};
-        bowling[bowl].balls+=1;
-        bowling[bowl].runs+=total;
+        bowling[bowl].balls += 1;
+        bowling[bowl].runs += runsTot;
 
         if(d.wickets){
-          bowling[bowl].wkts+=d.wickets.length;
+          bowling[bowl].wkts += d.wickets.length;
         }
       });
     });
@@ -197,7 +194,6 @@ function renderInnings(innings){
     div.className="innings-block";
     div.innerHTML=`<h2>Innings ${idx+1}: ${inn.team}</h2>`;
 
-    // Batting table
     let batHTML=`<table><thead><tr>
       <th>Batter</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th>
     </tr></thead><tbody>`;
@@ -215,7 +211,6 @@ function renderInnings(innings){
     });
     batHTML+=`</tbody></table>`;
 
-    // Bowling table
     let bowlHTML=`<table><thead><tr>
       <th>Bowler</th><th>O</th><th>R</th><th>W</th><th>Eco</th>
     </tr></thead><tbody>`;
@@ -233,7 +228,7 @@ function renderInnings(innings){
     });
     bowlHTML+=`</tbody></table>`;
 
-    div.innerHTML+=`<h3>Batting</h3>${batHTML}<h3>Bowling</h3>${bowlHTML}`;
+    div.innerHTML += `<h3>Batting</h3>${batHTML}<h3>Bowling</h3>${bowlHTML}`;
     inningsContainer.appendChild(div);
   });
 }
