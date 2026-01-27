@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IPL Player | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family: Inter, system-ui, Arial, sans-serif;
+  margin:0;
+  background:#ffffff;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1300px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#3b007a,#7b2cbf);
+  color:white;
+  padding:40px 50px;
+  border-radius:24px;
+  margin-bottom:18px;
+}
+.hero h1{margin:0;font-size:46px;}
+.hero p{margin-top:10px;font-size:18px;opacity:0.95;}
+
+.summary-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:16px;
+  margin:16px 0 24px;
+}
+.summary-box{
+  border:1px solid #ddd;
+  border-radius:14px;
+  padding:14px;
+  background:#faf7ff;
+}
+.summary-box strong{
+  display:block;
+  margin-bottom:6px;
+}
+.summary-box span{
+  font-size:20px;
+  font-weight:800;
+  color:#3b007a;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:15px;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:10px 12px;
+  text-align:left;
+}
+th{
+  background:#f3f6fb;
+  position:sticky;
+  top:0;
+}
+tr:nth-child(even){background:#f8fbff;}
+tr:hover{background:#eef4ff;}
+
+.match-link{
+  color:#0056d6;
+  font-weight:800;
+  text-decoration:none;
+}
+.match-link:hover{text-decoration:underline;}
+
+.badge{
+  display:inline-block;
+  padding:2px 10px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:800;
+  border:1px solid #ddd;
+  background:#fff;
+  color:#333;
+}
+
+.note{
+  color:#666;
+  margin-top:10px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+</div>
+
+<div class="page-wrap">
+
+<div class="hero">
+  <h1 id="playerName">Player</h1>
+  <p class="note">Career totals across all IPL matches in the database.</p>
+</div>
+
+<div class="summary-grid">
+  <div class="summary-box"><strong>Matches</strong><span id="mMatches">—</span></div>
+  <div class="summary-box"><strong>Runs</strong><span id="mRuns">—</span></div>
+  <div class="summary-box"><strong>Balls Faced</strong><span id="mBalls">—</span></div>
+  <div class="summary-box"><strong>Strike Rate</strong><span id="mSR">—</span></div>
+  <div class="summary-box"><strong>Wickets</strong><span id="mWkts">—</span></div>
+  <div class="summary-box"><strong>Best Bowling</strong><span id="mBB">—</span></div>
+  <div class="summary-box"><strong>Catches + Run Outs</strong><span id="mField">—</span></div>
+  <div class="summary-box"><strong>Highest Score</strong><span id="mHS">—</span></div>
+</div>
+
+<table>
+<thead>
+<tr>
+  <th>Date</th>
+  <th>Match</th>
+  <th>Batting</th>
+  <th>Bowling</th>
+  <th>Fielding</th>
+  <th>Venue</th>
+</tr>
+</thead>
+<tbody id="rows"></tbody>
+</table>
+
+</div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const player = params.get("player") || "";
+
+document.getElementById("playerName").textContent = player || "Player";
+
+const indexUrl = "data/ipl/index.json";
+const basePath = "data/ipl/";
+
+const rowsEl = document.getElementById("rows");
+
+function isWide(d){
+  return d.extras && d.extras.wides;
+}
+function isLegalBall(d){
+  return !isWide(d);
+}
+function bowlerRunsConceded(d){
+  const total = d.runs?.total || 0;
+  const byes = d.extras?.byes || 0;
+  const legbyes = d.extras?.legbyes || 0;
+  return total - byes - legbyes;
+}
+function bowlerGetsWicket(kind){
+  const k = (kind || "").toLowerCase();
+  return !["run out","retired hurt","obstructing the field"].includes(k);
+}
+function oversFromBalls(balls){
+  const o = Math.floor(balls/6);
+  const b = balls % 6;
+  return o + "." + b;
+}
+function formatDate(d){
+  if(!d) return "—";
+  const dt = new Date(d);
+  if(isNaN(dt)) return "—";
+  return dt.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+}
+function escapeHtml(s){
+  return String(s||"").replace(/[&<>"']/g, m=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+  }[m]));
+}
+
+fetch(indexUrl)
+.then(r=>r.json())
+.then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
+.then(seasons=>{
+  let matchSet = new Set();
+
+  let totalRuns = 0;
+  let totalBalls = 0;
+  let totalWkts = 0;
+  let fieldCount = 0;
+
+  let bestScore = 0;
+  let bestBowling = { wkts:0, runs:9999 };
+
+  const matchRows = [];
+
+  seasons.forEach(matches=>{
+    matches.forEach(match=>{
+      const file = match.file;
+      const date = match.info?.dates?.[0] || "";
+      const venue = match.info?.venue || "";
+      const matchUrl = "ipl-match.html?file=" + encodeURIComponent(file);
+
+      let batRuns = 0;
+      let batBalls = 0;
+      let bowlWkts = 0;
+      let bowlRuns = 0;
+      let bowlBalls = 0;
+      let fThis = 0;
+      let howOut = "";
+
+      match.innings.forEach(inn=>{
+        inn.overs.forEach(over=>{
+          over.deliveries.forEach(d=>{
+            if(d.batter === player){
+              batRuns += d.runs.batter;
+              if(!isWide(d)) batBalls++;
+            }
+
+            if(d.bowler === player){
+              bowlRuns += bowlerRunsConceded(d);
+              if(isLegalBall(d)) bowlBalls++;
+
+              if(d.wickets){
+                d.wickets.forEach(w=>{
+                  if(bowlerGetsWicket(w.kind)){
+                    bowlWkts++;
+                  }
+                });
+              }
+            }
+
+            if(d.wickets){
+              d.wickets.forEach(w=>{
+                const kind = (w.kind||"").toLowerCase();
+                const f = w.fielders?.[0]?.name || "";
+
+                if(f === player && (kind === "caught" || kind === "run out")){
+                  fThis++;
+                }
+
+                if(w.player_out === player){
+                  let text = w.kind;
+                  if(f) text += " (" + f + ")";
+                  if(d.bowler) text += " b " + d.bowler;
+                  howOut = text;
+                }
+              });
+            }
+          });
+        });
+      });
+
+      if(batBalls>0 || bowlBalls>0 || fThis>0){
+        matchSet.add(file);
+
+        totalRuns += batRuns;
+        totalBalls += batBalls;
+        totalWkts += bowlWkts;
+        fieldCount += fThis;
+
+        if(batRuns > bestScore) bestScore = batRuns;
+        if(bowlWkts > bestBowling.wkts || (bowlWkts === bestBowling.wkts && bowlRuns < bestBowling.runs)){
+          bestBowling = { wkts:bowlWkts, runs:bowlRuns };
+        }
+
+        const batCell = batBalls
+          ? `<span class="badge">${batRuns}</span> (${batBalls}) ${howOut ? " — " + escapeHtml(howOut) : ""}`
+          : "—";
+
+        const bowlCell = bowlBalls
+          ? `<span class="badge">${bowlWkts}/${bowlRuns}</span> (${oversFromBalls(bowlBalls)})`
+          : "—";
+
+        const fieldCell = fThis ? `<span class="badge">${fThis}</span>` : "—";
+
+        matchRows.push({
+          date,
+          venue,
+          url: matchUrl,
+          batCell,
+          bowlCell,
+          fieldCell
+        });
+      }
+    });
+  });
+
+  matchRows.sort((a,b)=> new Date(b.date||"1900-01-01") - new Date(a.date||"1900-01-01"));
+
+  document.getElementById("mMatches").textContent = matchSet.size;
+  document.getElementById("mRuns").textContent = totalRuns;
+  document.getElementById("mBalls").textContent = totalBalls;
+  document.getElementById("mSR").textContent = totalBalls ? ((totalRuns/totalBalls)*100).toFixed(1) : "—";
+  document.getElementById("mWkts").textContent = totalWkts;
+  document.getElementById("mBB").textContent = (bestBowling.wkts>0 || bestBowling.runs<9999) ? bestBowling.wkts + "/" + bestBowling.runs : "—";
+  document.getElementById("mField").textContent = fieldCount;
+  document.getElementById("mHS").textContent = bestScore || "—";
+
+  rowsEl.innerHTML = matchRows.map(r=>`
+    <tr>
+      <td>${formatDate(r.date)}</td>
+      <td><a class="match-link" href="${r.url}">Scorecard</a></td>
+      <td>${r.batCell}</td>
+      <td>${r.bowlCell}</td>
+      <td>${r.fieldCell}</td>
+      <td>${escapeHtml(r.venue)}</td>
+    </tr>
+  `).join("");
+})
+.catch(err=>{
+  console.error(err);
+  rowsEl.innerHTML = `<tr><td colspan="6">Error loading player data.</td></tr>`;
+});
+</script>
+
+</body>
+</html>
