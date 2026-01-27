@@ -35,24 +35,26 @@ body{
   border-radius:24px;
   margin-bottom:25px;
 }
-.hero h1{margin:0;font-size:44px;}
-.hero p{margin-top:10px;font-size:18px;opacity:0.95;}
+.hero h1{margin:0;font-size:46px;}
+.hero p{margin-top:10px;font-size:20px;opacity:0.95;}
 
-.summary-grid{
+.year-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
-  gap:18px;
+  grid-template-columns:repeat(auto-fill,minmax(110px,1fr));
+  gap:12px;
   margin-bottom:25px;
 }
-
-.summary-box{
-  border:1px solid #ddd;
-  border-radius:14px;
-  padding:14px;
-  background:#f8fbff;
-  text-align:center;
+.year-btn{
+  background:#003566;
+  color:white;
+  border:none;
+  padding:12px 0;
+  border-radius:10px;
+  font-size:15px;
+  cursor:pointer;
 }
-.summary-box strong{display:block;margin-bottom:6px;}
+.year-btn:hover{background:#00509d;}
+.year-btn.active{background:#00b4d8;}
 
 table{
   width:100%;
@@ -62,19 +64,11 @@ table{
 }
 th,td{
   border-bottom:1px solid #ddd;
-  padding:8px 10px;
+  padding:10px 12px;
   text-align:left;
 }
 th{background:#f3f6fb;}
 tr:nth-child(even){background:#f8fbff;}
-tr:hover{background:#eef4ff;}
-
-.match-link{
-  color:#003566;
-  text-decoration:none;
-  font-weight:600;
-}
-.match-link:hover{text-decoration:underline;}
 </style>
 </head>
 
@@ -91,19 +85,13 @@ tr:hover{background:#eef4ff;}
 <div class="page-wrap">
 
 <div class="hero">
-  <h1 id="teamName">Team</h1>
-  <p id="teamSummary">Loading team…</p>
+  <h1 id="teamName">BBL Team</h1>
+  <p>Season-by-season performance.</p>
 </div>
 
-<div class="summary-grid">
-  <div class="summary-box"><strong>Matches</strong><span id="matchesBox">0</span></div>
-  <div class="summary-box"><strong>Wins</strong><span id="winsBox">0</span></div>
-  <div class="summary-box"><strong>Losses</strong><span id="lossesBox">0</span></div>
-  <div class="summary-box"><strong>Win %</strong><span id="winPctBox">0%</span></div>
-</div>
+<div id="yearGrid" class="year-grid"></div>
 
 <h2>Matches</h2>
-
 <table>
 <thead>
 <tr>
@@ -124,70 +112,82 @@ const teamParam = params.get("team");
 
 const indexUrl = "data/bbl/index.json";
 const basePath = "data/bbl/";
+const nameMapUrl = "data/bbl/player-names.json";
 
-const teamNameEl = document.getElementById("teamName");
-const teamSummaryEl = document.getElementById("teamSummary");
-
-const matchesBox = document.getElementById("matchesBox");
-const winsBox = document.getElementById("winsBox");
-const lossesBox = document.getElementById("lossesBox");
-const winPctBox = document.getElementById("winPctBox");
+const yearGrid = document.getElementById("yearGrid");
 const tableBody = document.getElementById("matchesTable");
+const teamNameEl = document.getElementById("teamName");
 
-if(!teamParam){
-  teamNameEl.textContent="Team not specified";
-  teamSummaryEl.textContent="";
-}
-
-teamNameEl.textContent = decodeURIComponent(teamParam);
-
-let allMatches = [];
+let nameMap = {};
+let allSeasons = [];
 let teamMatches = [];
 
-fetch(indexUrl)
-.then(r=>r.json())
-.then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
+Promise.all([
+  fetch(nameMapUrl).then(r=>r.json()),
+  fetch(indexUrl).then(r=>r.json())
+])
+.then(([names, files])=>{
+  nameMap = names;
+  return Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json())));
+})
 .then(seasons=>{
-  seasons.forEach(season=>{
-    season.forEach(match=>{
-      allMatches.push(match);
-    });
-  });
-
-  teamMatches = allMatches.filter(m => m.info?.teams?.includes(teamParam));
-  renderTeam();
+  allSeasons = seasons;
+  teamNameEl.textContent = teamParam;
+  buildYearButtons();
+  showSeason(seasons.length - 1);
 });
 
-function renderTeam(){
-  let wins = 0;
-  let losses = 0;
-
-  teamMatches.forEach(match=>{
-    if(match.info?.outcome?.winner){
-      if(match.info.outcome.winner === teamParam){
-        wins++;
-      } else {
-        losses++;
-      }
+function buildYearButtons(){
+  yearGrid.innerHTML="";
+  allSeasons.forEach((seasonData,i)=>{
+    const seasonLabel = seasonData[0]?.info?.season || ("S"+(i+1));
+    const btn=document.createElement("button");
+    btn.className="year-btn";
+    btn.textContent=seasonLabel;
+    btn.onclick=()=>{
+      document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      showSeason(i);
+    };
+    yearGrid.appendChild(btn);
+    if(i===allSeasons.length-1){
+      btn.classList.add("active");
     }
   });
 
-  const total = teamMatches.length;
-  const winPct = total ? ((wins/total)*100).toFixed(1) : "0.0";
-
-  teamSummaryEl.textContent = `${total} matches played`;
-  matchesBox.textContent = total;
-  winsBox.textContent = wins;
-  lossesBox.textContent = losses;
-  winPctBox.textContent = winPct + "%";
-
-  renderMatchesTable();
+  const allBtn=document.createElement("button");
+  allBtn.className="year-btn";
+  allBtn.textContent="ALL";
+  allBtn.onclick=()=>{
+    document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
+    allBtn.classList.add("active");
+    showAll();
+  };
+  yearGrid.appendChild(allBtn);
 }
 
-function renderMatchesTable(){
-  tableBody.innerHTML="";
+function showSeason(index){
+  teamMatches = allSeasons[index].filter(m=>m.info.teams.includes(teamParam));
+  renderTable(teamMatches);
+}
 
-  teamMatches
+function showAll(){
+  teamMatches = [];
+  allSeasons.forEach(season=>{
+    season.forEach(m=>{
+      if(m.info.teams.includes(teamParam)){
+        teamMatches.push(m);
+      }
+    });
+  });
+  renderTable(teamMatches);
+}
+
+function fullName(n){return nameMap[n]||n;}
+
+function renderTable(matches){
+  tableBody.innerHTML="";
+  matches
     .sort((a,b)=>new Date(a.info.dates[0]) - new Date(b.info.dates[0]))
     .forEach(match=>{
       const date = formatDate(match.info.dates[0]);
@@ -208,7 +208,7 @@ function renderMatchesTable(){
       tr.innerHTML=`
         <td>${date}</td>
         <td>
-          <a class="match-link" href="bbl-match.html?file=${encodeURIComponent(match.file)}">
+          <a href="bbl-match.html?file=${encodeURIComponent(match.file)}">
             ${teams}
           </a>
         </td>
