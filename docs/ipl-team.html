@@ -156,6 +156,7 @@ document.getElementById("teamName").textContent = requestedTeam || "Team";
 
 let allMatches = [];
 let seasonSet = new Set();
+let titlesBySeason = {};
 
 fetch(indexUrl)
   .then(r=>r.json())
@@ -164,19 +165,27 @@ fetch(indexUrl)
     seasons.forEach(matches=>{
       if(!matches.length) return;
 
+      matches.sort((a,b)=>new Date(b.date)-new Date(a.date));
+      const finalMatch = matches[0];
+      const seasonYear = finalMatch.date.slice(0,4);
+      const winner = normalizeTeam(finalMatch?.outcome?.winner || "");
+
+      if(winner === requestedTeam){
+        titlesBySeason[seasonYear] = 1;
+      }
+
       matches.forEach(m=>{
         const teams = m.teams?.map(normalizeTeam) || [];
         if(!teams.includes(requestedTeam)) return;
 
         const opponent = teams.find(t=>t!==requestedTeam) || "";
-        const winner = normalizeTeam(m.outcome?.winner || "");
+        const winTeam = normalizeTeam(m.outcome?.winner || "");
 
         let result = "—";
-        if(winner === requestedTeam) result = "Win";
-        else if(winner === opponent) result = "Loss";
+        if(winTeam === requestedTeam) result = "Win";
+        else if(winTeam === opponent) result = "Loss";
 
         const season = m.date?.slice(0,4) || "";
-
         seasonSet.add(season);
 
         allMatches.push({
@@ -198,7 +207,6 @@ fetch(indexUrl)
     });
 
     seasonSelect.addEventListener("change", renderTable);
-
     renderTable();
   });
 
@@ -208,8 +216,13 @@ function renderTable(){
   tbody.innerHTML = "";
 
   let filtered = allMatches;
+  let titlesCount = 0;
+
   if(season !== "all"){
     filtered = allMatches.filter(m=>m.season === season);
+    titlesCount = titlesBySeason[season] || 0;
+  } else {
+    titlesCount = Object.values(titlesBySeason).length;
   }
 
   filtered.sort((a,b)=>new Date(b.date)-new Date(a.date));
@@ -219,6 +232,7 @@ function renderTable(){
   let total = filtered.length;
   let winPct = total ? ((wins/total)*100).toFixed(1) : "0.0";
 
+  document.getElementById("titles").textContent = titlesCount;
   document.getElementById("matches").textContent = total;
   document.getElementById("wins").textContent = wins;
   document.getElementById("losses").textContent = losses;
