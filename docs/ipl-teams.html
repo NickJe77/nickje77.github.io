@@ -2,13 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>IPL Teams | The Sporting Almanac</title>
+<title>Indian Premier League Teams | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 body{
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
-               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: Inter, system-ui, Arial, sans-serif;
   margin:0;
   background:#ffffff;
 }
@@ -34,43 +33,34 @@ body{
   color:white;
   padding:40px 50px;
   border-radius:24px;
-  margin-bottom:30px;
+  margin-bottom:18px;
 }
 .hero h1{margin:0;font-size:46px;}
 .hero p{margin-top:10px;font-size:20px;opacity:0.95;}
 
+.status{
+  border:1px solid #ddd;
+  border-radius:14px;
+  padding:12px 14px;
+  background:#f8fbff;
+  margin:0 0 18px 0;
+  color:#222;
+  font-size:14px;
+}
+
 table{
   width:100%;
   border-collapse:collapse;
-  font-size:16px;
+  font-size:15px;
 }
 th,td{
   border-bottom:1px solid #ddd;
   padding:12px 14px;
   text-align:left;
 }
-th{
-  background:#f3f6fb;
-}
+th{background:#f3f6fb;}
 tr:nth-child(even){background:#f8fbff;}
 tr:hover{background:#eef4ff;}
-
-.team-name{
-  font-weight:600;
-  color:#3b007a;
-}
-.team-name a{
-  color:#3b007a;
-  text-decoration:none;
-}
-.team-name a:hover{
-  text-decoration:underline;
-}
-
-.titles{
-  font-weight:600;
-  color:#1a7f37;
-}
 </style>
 </head>
 
@@ -86,119 +76,198 @@ tr:hover{background:#eef4ff;}
 
 <div class="page-wrap">
 
-<div class="hero">
-  <h1>Indian Premier League Teams</h1>
-  <p>All IPL teams, championships and win records.</p>
-</div>
+  <div class="hero">
+    <h1>Indian Premier League Teams</h1>
+    <p>All IPL teams, championships and win records.</p>
+  </div>
 
-<table>
-<thead>
-<tr>
-  <th>Team</th>
-  <th>Titles</th>
-  <th>Years Won</th>
-  <th>Wins</th>
-  <th>Losses</th>
-  <th>Win %</th>
-</tr>
-</thead>
-<tbody id="teamsTable"></tbody>
-</table>
+  <div id="status" class="status">Loading…</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Team</th>
+        <th>Titles</th>
+        <th>Years Won</th>
+        <th>Wins</th>
+        <th>Losses</th>
+        <th>Win %</th>
+      </tr>
+    </thead>
+    <tbody id="teamsTable"></tbody>
+  </table>
 
 </div>
 
 <script>
-const indexUrl = "data/ipl/index.json";
-const basePath = "data/ipl/";
-const tableBody = document.getElementById("teamsTable");
+document.addEventListener("DOMContentLoaded", () => {
 
-const teamMap = {
-  "Royal Challengers": "Royal Challengers Bengaluru",
-  "Royal Challengers Bangalore": "Royal Challengers Bengaluru",
-  "Rising Pune Supergiants": "Rising Pune Supergiant",
-  "Rising Pune Supergiant": "Rising Pune Supergiant",
-  "Rising Challengers": "Rising Pune Supergiant"
-};
+  const statusEl = document.getElementById("status");
+  const tableBody = document.getElementById("teamsTable");
 
-function normalizeTeam(name){
-  return teamMap[name] || name;
-}
-
-let stats = {};
-
-function initTeam(team){
-  if(!stats[team]){
-    stats[team] = {
-      titles: 0,
-      years: [],
-      wins: 0,
-      losses: 0,
-      games: 0
-    };
+  function setStatus(msg){
+    statusEl.textContent = msg;
   }
-}
 
-fetch(indexUrl)
-  .then(r=>r.json())
-  .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
-  .then(seasons=>{
-    seasons.forEach(matches=>{
-      if(!matches.length) return;
+  // Try multiple likely locations (in case this page sits in a subfolder)
+  const indexCandidates = [
+    "data/ipl/index.json",
+    "../data/ipl/index.json",
+    "../../data/ipl/index.json",
+    "/data/ipl/index.json"
+  ];
 
-      matches.sort((a,b)=>new Date(b.date)-new Date(a.date));
-      const finalMatch = matches[0];
-      const winner = normalizeTeam(finalMatch?.outcome?.winner || "");
+  function fetchJson(url){
+    return fetch(url, { cache: "no-store" }).then(r => {
+      if(!r.ok) throw new Error(`HTTP ${r.status} for ${url}`);
+      return r.json();
+    });
+  }
 
-      if(winner){
-        initTeam(winner);
-        stats[winner].titles++;
-        stats[winner].years.push(finalMatch.date.slice(0,4));
-      }
-
-      matches.forEach(m=>{
-        const teams = m.teams?.map(normalizeTeam) || [];
-        const winner = normalizeTeam(m.outcome?.winner || "");
-
-        teams.forEach(t=>{
-          initTeam(t);
-          stats[t].games++;
-        });
-
-        if(winner){
-          initTeam(winner);
-          stats[winner].wins++;
-
-          teams.forEach(t=>{
-            if(t !== winner){
-              initTeam(t);
-              stats[t].losses++;
-            }
-          });
+  async function findIndex(){
+    for(const url of indexCandidates){
+      try{
+        const data = await fetchJson(url);
+        if(Array.isArray(data) && data.length){
+          return { indexUrl: url, files: data };
         }
-      });
+      }catch(e){
+        // keep trying
+      }
+    }
+    throw new Error(
+      "Could not load index.json. Tried: " + indexCandidates.join(" | ")
+    );
+  }
+
+  function basePathFromIndex(indexUrl){
+    // indexUrl like "data/ipl/index.json" -> base "data/ipl/"
+    return indexUrl.replace(/index\.json(\?.*)?$/i, "");
+  }
+
+  async function loadAllSeasons(files, basePath){
+    // files are like "ipl_2008_FULL.json"
+    const seasonData = await Promise.all(
+      files.map(f => fetchJson(basePath + f))
+    );
+    return seasonData;
+  }
+
+  function renderTable(teams){
+    const rows = Object.entries(teams).map(([team, data]) => {
+      const total = data.wins + data.losses;
+      const pct = total ? ((data.wins / total) * 100).toFixed(1) : "0.0";
+      const years = data.years.join(", ");
+
+      return {
+        team,
+        titles: data.titles,
+        years,
+        wins: data.wins,
+        losses: data.losses,
+        pct: pct + "%"
+      };
     });
 
-    const teams = Object.keys(stats)
-      .sort((a,b)=> stats[b].titles - stats[a].titles);
+    rows.sort((a,b)=> (b.titles - a.titles) || (parseFloat(b.pct) - parseFloat(a.pct)) || (b.wins - a.wins));
 
-    teams.forEach(team=>{
-      const s = stats[team];
-      const winPct = s.games ? ((s.wins / s.games) * 100).toFixed(1) : "0.0";
-
-      const teamLink = `ipl-team.html?team=${encodeURIComponent(team)}`;
-
+    tableBody.innerHTML = "";
+    rows.forEach(r => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td class="team-name"><a href="${teamLink}">${team}</a></td>
-        <td class="titles">${s.titles}</td>
-        <td>${s.years.join(", ") || "—"}</td>
-        <td>${s.wins}</td>
-        <td>${s.losses}</td>
-        <td>${winPct}%</td>
+        <td>${escapeHtml(r.team)}</td>
+        <td>${r.titles}</td>
+        <td>${escapeHtml(r.years)}</td>
+        <td>${r.wins}</td>
+        <td>${r.losses}</td>
+        <td>${r.pct}</td>
       `;
       tableBody.appendChild(tr);
     });
-  });
+  }
+
+  function escapeHtml(s){
+    return String(s ?? "").replace(/[&<>"']/g, m => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    }[m]));
+  }
+
+  (async function main(){
+    try{
+      setStatus("Loading index…");
+
+      const { indexUrl, files } = await findIndex();
+      const basePath = basePathFromIndex(indexUrl);
+
+      setStatus(`Index loaded from: ${indexUrl} | Seasons: ${files.length}. Loading season files…`);
+
+      const seasons = await loadAllSeasons(files, basePath);
+
+      // Build stats
+      const teams = {};
+
+      seasons.forEach(matches => {
+        if(!Array.isArray(matches) || matches.length === 0) return;
+
+        // wins/losses
+        matches.forEach(match => {
+          const info = match.info;
+          if(!info || !info.teams || info.teams.length < 2) return;
+
+          const t1 = info.teams[0];
+          const t2 = info.teams[1];
+          const winner = info.outcome && info.outcome.winner ? info.outcome.winner : null;
+
+          if(!teams[t1]) teams[t1] = { wins:0, losses:0, titles:0, years:[] };
+          if(!teams[t2]) teams[t2] = { wins:0, losses:0, titles:0, years:[] };
+
+          if(winner){
+            if(winner === t1){ teams[t1].wins++; teams[t2].losses++; }
+            else if(winner === t2){ teams[t2].wins++; teams[t1].losses++; }
+          }
+        });
+
+        // champion (best-effort): take the last-dated match in the file as "final"
+        // (This matches what we did elsewhere; if you later want "actual final", we can detect playoff/final explicitly.)
+        const dated = matches
+          .filter(m => m && m.info && m.info.dates && m.info.dates[0])
+          .slice()
+          .sort((a,b)=> new Date(b.info.dates[0]) - new Date(a.info.dates[0]));
+
+        const finalMatch = dated[0];
+        if(finalMatch && finalMatch.info){
+          const seasonYear = finalMatch.info.season || (finalMatch.info.dates?.[0]?.slice(0,4) ?? "");
+          const champion = finalMatch.info.outcome && finalMatch.info.outcome.winner ? finalMatch.info.outcome.winner : null;
+
+          if(champion){
+            if(!teams[champion]) teams[champion] = { wins:0, losses:0, titles:0, years:[] };
+            teams[champion].titles++;
+            if(seasonYear && !teams[champion].years.includes(seasonYear)){
+              teams[champion].years.push(seasonYear);
+              teams[champion].years.sort();
+            }
+          }
+        }
+      });
+
+      const teamCount = Object.keys(teams).length;
+      if(teamCount === 0){
+        setStatus(`Loaded seasons, but found 0 teams. That usually means the JSON structure isn't match.info.* on your files.`);
+        return;
+      }
+
+      setStatus(`Loaded OK ✅ Teams: ${teamCount}. Rendering…`);
+      renderTable(teams);
+
+      setStatus(`Loaded OK ✅ Teams: ${teamCount} | Seasons: ${seasons.length} | Source: ${basePath}*`);
+
+    }catch(err){
+      console.error(err);
+      setStatus("ERROR: " + err.message);
+    }
+  })();
+
+});
 </script>
 
 </body>
