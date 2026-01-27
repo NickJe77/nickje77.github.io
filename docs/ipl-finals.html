@@ -12,7 +12,6 @@ body{
   margin:0;
   background:#ffffff;
 }
-
 .navbar{
   display:flex;
   justify-content:center;
@@ -22,13 +21,11 @@ body{
   font-weight:600;
 }
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-
 .page-wrap{
   max-width:1200px;
   margin:0 auto;
   padding:30px 20px;
 }
-
 .hero{
   background:linear-gradient(90deg,#3b007a,#7b2cbf);
   color:white;
@@ -38,7 +35,6 @@ body{
 }
 .hero h1{margin:0;font-size:46px;}
 .hero p{margin-top:10px;font-size:20px;opacity:0.95;}
-
 table{
   width:100%;
   border-collapse:collapse;
@@ -52,7 +48,6 @@ th,td{
 th{background:#f3f6fb;}
 tr:nth-child(even){background:#f8fbff;}
 tr:hover{background:#eef4ff;}
-
 .winner{font-weight:600;color:#1a7f37;}
 .runnerup{color:#b42318;}
 .score{font-weight:600;}
@@ -97,24 +92,12 @@ const indexUrl = "data/ipl/index.json";
 const basePath = "data/ipl/";
 const tableBody = document.getElementById("finalsTable");
 
-const teamMap = {
-  "Royal Challengers": "Royal Challengers Bengaluru",
-  "Royal Challengers Bangalore": "Royal Challengers Bengaluru",
-  "Rising Pune Supergiants": "Rising Pune Supergiant",
-  "Rising Pune Supergiant": "Rising Pune Supergiant",
-  "Rising Challengers": "Rising Pune Supergiant"
-};
-
-function normalizeTeam(name){
-  return teamMap[name] || name;
-}
-
 function calculateScore(match){
   const totals = {};
   const wickets = {};
 
   match.innings.forEach(inn=>{
-    const team = normalizeTeam(inn.team);
+    const team = inn.team;
     totals[team] = 0;
     wickets[team] = 0;
 
@@ -136,47 +119,50 @@ function calculateScore(match){
 
 fetch(indexUrl)
   .then(r=>r.json())
-  .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
+  .then(seasonFiles=>Promise.all(
+    seasonFiles.map(f=>fetch(basePath+f).then(r=>r.json()))
+  ))
   .then(seasons=>{
     const finals = [];
 
-    seasons.forEach(matches=>{
-      if(!Array.isArray(matches) || matches.length === 0) return;
+    return Promise.all(seasons.map(seasonMatches=>{
+      if(!seasonMatches.length) return;
 
-      // pick latest match in that season = final
-      matches.sort((a,b)=>new Date(b.info.dates[0]) - new Date(a.info.dates[0]));
-      const finalMatch = matches[0];
+      seasonMatches.sort((a,b)=>new Date(b.date) - new Date(a.date));
+      const finalSummary = seasonMatches[0];
 
-      const season = finalMatch.info.season;
-      const teams = finalMatch.info.teams.map(normalizeTeam);
-      const winner = normalizeTeam(finalMatch.info.outcome.winner);
-      const runnerUp = teams.find(t=>t !== winner) || "";
+      return fetch(basePath + finalSummary.file)
+        .then(r=>r.json())
+        .then(fullMatch=>{
+          const winner = finalSummary.outcome.winner;
+          const runnerUp = finalSummary.teams.find(t=>t !== winner);
 
-      finals.push({
-        season,
-        winner,
-        runnerUp,
-        score: calculateScore(finalMatch),
-        date: finalMatch.info.dates[0],
-        venue: finalMatch.info.venue
+          finals.push({
+            season: finalSummary.date.slice(0,4),
+            winner,
+            runnerUp,
+            score: calculateScore(fullMatch),
+            date: finalSummary.date,
+            venue: finalSummary.venue
+          });
+        });
+    }))
+    .then(()=>{
+      finals.sort((a,b)=>new Date(b.date) - new Date(a.date));
+
+      finals.forEach(f=>{
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${f.season}</td>
+          <td class="winner">${f.winner}</td>
+          <td class="runnerup">${f.runnerUp}</td>
+          <td class="score">${f.score}</td>
+          <td>${f.date}</td>
+          <td>${f.venue}</td>
+        `;
+        tableBody.appendChild(tr);
       });
     });
-
-    finals.sort((a,b)=>new Date(b.date) - new Date(a.date));
-
-    finals.forEach(f=>{
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${f.season}</td>
-        <td class="winner">${f.winner}</td>
-        <td class="runnerup">${f.runnerUp}</td>
-        <td class="score">${f.score}</td>
-        <td>${f.date}</td>
-        <td>${f.venue}</td>
-      `;
-      tableBody.appendChild(tr);
-    });
-  });
 </script>
 
 </body>
