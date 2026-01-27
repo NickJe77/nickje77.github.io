@@ -105,13 +105,20 @@ tr:nth-child(even){background:#f8fbff;}
 <script>
 const indexUrl="data/bbl/index.json";
 const basePath="data/bbl/";
+const nameMapUrl="data/bbl/player-names.json";
 
 const batting={}, bowling={}, fielding={}, matchesPlayed={};
 let leaders={};
+let nameMap={};
 
-fetch(indexUrl)
-.then(r=>r.json())
-.then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
+Promise.all([
+  fetch(nameMapUrl).then(r=>r.json()),
+  fetch(indexUrl).then(r=>r.json())
+])
+.then(([names, files])=>{
+  nameMap = names;
+  return Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json())));
+})
 .then(seasons=>{
   seasons.forEach(matches=>{
     matches.forEach(match=>{
@@ -148,31 +155,35 @@ fetch(indexUrl)
   leaders.runs=Object.entries(batting)
     .sort((a,b)=>b[1].runs-a[1].runs)
     .slice(0,10)
-    .map(([p,v],i)=>[i+1,p,v.runs]);
+    .map(([p,v],i)=>[i+1, fullName(p), v.runs]);
 
   leaders.wickets=Object.entries(bowling)
     .sort((a,b)=>b[1]-a[1])
     .slice(0,10)
-    .map(([p,v],i)=>[i+1,p,v]);
+    .map(([p,v],i)=>[i+1, fullName(p), v]);
 
   leaders.fielding=Object.entries(fielding)
     .sort((a,b)=>b[1]-a[1])
     .slice(0,10)
-    .map(([p,v],i)=>[i+1,p,v]);
+    .map(([p,v],i)=>[i+1, fullName(p), v]);
 
   leaders.sr=[];
   Object.keys(batting).forEach(p=>{
     const games=matchesPlayed[p]?.size||0;
     if(games>=20){
       const sr=(batting[p].runs/batting[p].balls)*100;
-      leaders.sr.push([p,sr]);
+      leaders.sr.push([fullName(p), sr]);
     }
   });
   leaders.sr.sort((a,b)=>b[1]-a[1]);
-  leaders.sr=leaders.sr.slice(0,10).map((x,i)=>[i+1,x[0],x[1].toFixed(1)]);
+  leaders.sr=leaders.sr.slice(0,10).map((x,i)=>[i+1, x[0], x[1].toFixed(1)]);
 
   render("runs");
 });
+
+function fullName(name){
+  return nameMap[name] || name;
+}
 
 function showTab(type,btn){
   document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
