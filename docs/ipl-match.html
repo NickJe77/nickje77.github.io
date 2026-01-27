@@ -56,25 +56,12 @@ body{
   margin-bottom:6px;
 }
 
-.innings{
-  margin-bottom:40px;
-}
-
-.innings h2{
-  margin-bottom:8px;
-  color:#3b007a;
-}
-
-.scoreline{
-  font-weight:600;
-  margin-bottom:12px;
-}
+h2{margin-top:40px;color:#3b007a;}
 
 table{
   width:100%;
   border-collapse:collapse;
-  margin-bottom:20px;
-  font-size:14px;
+  margin-bottom:25px;
 }
 th,td{
   border-bottom:1px solid #ddd;
@@ -118,165 +105,114 @@ tr:nth-child(even){background:#f8fbff;}
 <script>
 document.addEventListener("DOMContentLoaded", () => {
 
-  const params = new URLSearchParams(window.location.search);
-  const fileParam = params.get("file");
+const params = new URLSearchParams(window.location.search);
+const fileParam = params.get("file");
 
-  const indexUrl = "data/ipl/index.json";
-  const basePath = "data/ipl/";
+const indexUrl = "data/ipl/index.json";
+const basePath = "data/ipl/";
 
-  const statusText = document.getElementById("statusText");
-  const dateBox = document.getElementById("dateBox");
-  const teamsBox = document.getElementById("teamsBox");
-  const venueBox = document.getElementById("venueBox");
-  const winnerBox = document.getElementById("winnerBox");
-  const resultBox = document.getElementById("resultBox");
-  const inningsContainer = document.getElementById("inningsContainer");
+const statusText = document.getElementById("statusText");
+const dateBox = document.getElementById("dateBox");
+const teamsBox = document.getElementById("teamsBox");
+const venueBox = document.getElementById("venueBox");
+const winnerBox = document.getElementById("winnerBox");
+const resultBox = document.getElementById("resultBox");
+const inningsContainer = document.getElementById("inningsContainer");
 
-  if(!fileParam){
-    statusText.textContent = "Missing match file parameter.";
+if(!fileParam){
+  statusText.textContent = "Missing match file parameter.";
+  return;
+}
+
+fetch(indexUrl)
+.then(r=>r.json())
+.then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
+.then(seasons=>{
+  let match=null;
+  seasons.forEach(season=>{
+    season.forEach(m=>{
+      if(m.file===fileParam) match=m;
+    });
+  });
+
+  if(!match){
+    statusText.textContent="Match not found.";
     return;
   }
 
-  fetch(indexUrl)
-    .then(r => r.json())
-    .then(files => Promise.all(
-      files.map(f => fetch(basePath + f).then(r => r.json()))
-    ))
-    .then(seasons => {
-      let match = null;
+  const info = match.info;
+  statusText.textContent="Match loaded";
 
-      seasons.forEach(matches => {
-        matches.forEach(m => {
-          if(m.file === fileParam){
-            match = m;
-          }
-        });
+  dateBox.textContent = formatDate(info.dates[0]);
+  teamsBox.textContent = info.teams.join(" vs ");
+  venueBox.textContent = info.venue;
+  winnerBox.textContent = info.outcome?.winner || "—";
+
+  let result="—";
+  if(info.outcome?.by){
+    if(info.outcome.by.runs) result="won by "+info.outcome.by.runs+" runs";
+    if(info.outcome.by.wickets) result="won by "+info.outcome.by.wickets+" wickets";
+  }
+  resultBox.textContent=result;
+
+  renderInnings(match.innings);
+});
+
+function renderInnings(innings){
+  innings.forEach(inn=>{
+    const batStats={}, bowlStats={};
+    let runs=0, wickets=0, balls=0;
+
+    inn.overs.forEach(over=>{
+      over.deliveries.forEach(d=>{
+        balls++;
+        const batter=d.batter;
+        const bowler=d.bowler;
+        const r=d.runs.batter;
+
+        if(!batStats[batter]) batStats[batter]={runs:0,balls:0};
+        batStats[batter].runs+=r;
+        batStats[batter].balls++;
+
+        if(!bowlStats[bowler]) bowlStats[bowler]={runs:0,balls:0,wkts:0};
+        bowlStats[bowler].runs+=d.runs.total;
+        bowlStats[bowler].balls++;
+
+        if(d.wickets) bowlStats[bowler].wkts+=d.wickets.length;
+
+        runs+=d.runs.total;
+        if(d.wickets) wickets+=d.wickets.length;
       });
-
-      if(!match){
-        statusText.textContent = "Match not found.";
-        return;
-      }
-
-      const info = match.info;
-
-      statusText.textContent = "Match loaded";
-      dateBox.textContent = formatDate(info.dates[0]);
-      teamsBox.textContent = info.teams.join(" vs ");
-      venueBox.textContent = info.venue || "—";
-      winnerBox.textContent = info.outcome?.winner || "—";
-
-      let result = "—";
-      if(info.outcome?.by){
-        if(info.outcome.by.runs) result = "won by " + info.outcome.by.runs + " runs";
-        if(info.outcome.by.wickets) result = "won by " + info.outcome.by.wickets + " wickets";
-      }
-      resultBox.textContent = result;
-
-      renderInnings(match.innings);
-    })
-    .catch(err => {
-      console.error(err);
-      statusText.textContent = "Error loading match data.";
     });
 
-  function renderInnings(innings){
-    inningsContainer.innerHTML = "";
+    const overs=(Math.floor(balls/6)+"."+(balls%6));
 
-    innings.forEach(inn => {
+    let html=`<h2>${inn.team} Innings</h2>
+    <p><strong>${runs}/${wickets}</strong> (${overs} overs)</p>
 
-      const runs = inn.runs?.runs ?? inn.runs ?? "—";
-      const wickets = inn.runs?.wickets ?? inn.wickets ?? "—";
-      const overs = inn.overs?.overs ?? inn.overs ?? "—";
+    <h3>Batting</h3>
+    <table><tr><th>Batter</th><th>R</th><th>B</th><th>SR</th></tr>`;
 
-      const batting = inn.batting || [];
-      const bowling = inn.bowling || [];
-
-      const div = document.createElement("div");
-      div.className="innings";
-
-      div.innerHTML = `
-        <h2>${inn.team} Innings</h2>
-        <div class="scoreline">${runs}/${wickets} (${overs} overs)</div>
-
-        <h3>Batting</h3>
-        ${renderBattingTable(batting)}
-
-        <h3>Bowling</h3>
-        ${renderBowlingTable(bowling)}
-      `;
-
-      inningsContainer.appendChild(div);
+    Object.entries(batStats).forEach(([p,s])=>{
+      const sr=((s.runs/s.balls)*100).toFixed(1);
+      html+=`<tr><td>${p}</td><td>${s.runs}</td><td>${s.balls}</td><td>${sr}</td></tr>`;
     });
-  }
+    html+=`</table><h3>Bowling</h3>
+    <table><tr><th>Bowler</th><th>O</th><th>R</th><th>W</th></tr>`;
 
-  function renderBattingTable(rows){
-    if(!rows || !rows.length) return "<p>No batting data.</p>";
-
-    let html = `
-      <table>
-      <tr>
-        <th>Batter</th>
-        <th>Runs</th>
-        <th>Balls</th>
-        <th>4s</th>
-        <th>6s</th>
-        <th>SR</th>
-        <th>Dismissal</th>
-      </tr>
-    `;
-
-    rows.forEach(r=>{
-      html += `
-        <tr>
-          <td>${r.name}</td>
-          <td>${r.runs}</td>
-          <td>${r.balls}</td>
-          <td>${r.fours ?? 0}</td>
-          <td>${r.sixes ?? 0}</td>
-          <td>${r.strike_rate ?? ""}</td>
-          <td>${r.dismissal || "not out"}</td>
-        </tr>
-      `;
+    Object.entries(bowlStats).forEach(([p,s])=>{
+      const o=(Math.floor(s.balls/6)+"."+(s.balls%6));
+      html+=`<tr><td>${p}</td><td>${o}</td><td>${s.runs}</td><td>${s.wkts}</td></tr>`;
     });
 
-    html += "</table>";
-    return html;
-  }
+    html+=`</table>`;
+    inningsContainer.innerHTML+=html;
+  });
+}
 
-  function renderBowlingTable(rows){
-    if(!rows || !rows.length) return "<p>No bowling data.</p>";
-
-    let html = `
-      <table>
-      <tr>
-        <th>Bowler</th>
-        <th>Overs</th>
-        <th>Runs</th>
-        <th>Wkts</th>
-        <th>Econ</th>
-      </tr>
-    `;
-
-    rows.forEach(r=>{
-      html += `
-        <tr>
-          <td>${r.name}</td>
-          <td>${r.overs}</td>
-          <td>${r.runs}</td>
-          <td>${r.wickets}</td>
-          <td>${r.economy ?? ""}</td>
-        </tr>
-      `;
-    });
-
-    html += "</table>";
-    return html;
-  }
-
-  function formatDate(d){
-    return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
-  }
+function formatDate(d){
+  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+}
 
 });
 </script>
