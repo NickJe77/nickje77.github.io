@@ -58,11 +58,11 @@ tr:hover{background:#eef4ff;}
 <body>
 
 <div class="navbar">
-  <a href="index.html">Home</a>
-  <a href="racing.html">Racing</a>
-  <a href="afl.html">AFL</a>
-  <a href="football.html">Football</a>
-  <a href="cricket.html">Cricket</a>
+  <a href="/docs/index.html">Home</a>
+  <a href="/docs/racing.html">Racing</a>
+  <a href="/docs/afl.html">AFL</a>
+  <a href="/docs/football.html">Football</a>
+  <a href="/docs/cricket.html">Cricket</a>
 </div>
 
 <div class="page-wrap">
@@ -89,8 +89,8 @@ tr:hover{background:#eef4ff;}
 </div>
 
 <script>
-const indexUrl = "data/ipl/index.json";
-const basePath = "data/ipl/";
+const indexUrl = "/docs/data/ipl/index.json";
+const basePath = "/docs/data/ipl/";
 const tableBody = document.getElementById("finalsTable");
 
 function calculateScore(match){
@@ -120,59 +120,41 @@ function calculateScore(match){
 
 fetch(indexUrl)
   .then(r => r.json())
-  .then(seasonFiles => {
+  .then(seasonFiles => Promise.all(
+    seasonFiles.map(f => fetch(basePath + f).then(r => r.json()))
+  ))
+  .then(seasons => Promise.all(
+    seasons.map(seasonMatches => {
+      if(!seasonMatches || !seasonMatches.length) return;
 
-    return Promise.all(
-      seasonFiles.map(seasonFile =>
-        fetch(basePath + seasonFile).then(r => r.json())
-      )
-    );
-
-  })
-  .then(seasons => {
-
-    return Promise.all(seasons.map(seasonMatches => {
-
-      if(!Array.isArray(seasonMatches) || seasonMatches.length === 0) return;
-
-      // pick latest dated match = final
       seasonMatches.sort((a,b)=> new Date(b.date) - new Date(a.date));
       const finalSummary = seasonMatches[0];
 
       return fetch(basePath + finalSummary.file)
-        .then(r => r.json())
-        .then(fullMatch => {
-          return {
-            season: finalSummary.date.slice(0,4),
-            winner: finalSummary.outcome.winner,
-            runnerUp: finalSummary.teams.find(t=>t !== finalSummary.outcome.winner),
-            score: calculateScore(fullMatch),
-            date: finalSummary.date,
-            venue: finalSummary.venue
-          };
-        });
-
-    }));
-
-  })
-  .then(finals => {
-
-    finals
-      .filter(f => f)
-      .sort((a,b)=> new Date(b.date) - new Date(a.date))
-      .forEach(f => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${f.season}</td>
-          <td class="winner">${f.winner}</td>
-          <td class="runnerup">${f.runnerUp}</td>
-          <td class="score">${f.score}</td>
-          <td>${f.date}</td>
-          <td>${f.venue}</td>
-        `;
-        tableBody.appendChild(tr);
-      });
-
+        .then(r=>r.json())
+        .then(fullMatch => ({
+          season: finalSummary.date.slice(0,4),
+          winner: finalSummary.outcome.winner,
+          runnerUp: finalSummary.teams.find(t=>t!==finalSummary.outcome.winner),
+          score: calculateScore(fullMatch),
+          date: finalSummary.date,
+          venue: finalSummary.venue
+        }));
+    })
+  ))
+  .then(finals=>{
+    finals.filter(f=>f).forEach(f=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>${f.season}</td>
+        <td class="winner">${f.winner}</td>
+        <td class="runnerup">${f.runnerUp}</td>
+        <td class="score">${f.score}</td>
+        <td>${f.date}</td>
+        <td>${f.venue}</td>
+      `;
+      tableBody.appendChild(tr);
+    });
   });
 </script>
 
