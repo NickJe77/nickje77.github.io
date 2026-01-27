@@ -158,16 +158,28 @@ if(!file){
   log("ERROR: Missing ?file= parameter");
   log("Example: ipl-match.html?file=336022.json");
 } else {
-  const matchUrl = "./data/ipl/matches/" + file;
-  subhead.textContent = "Loading: " + file;
-  log("Fetching: " + matchUrl);
 
-  fetch(matchUrl)
-    .then(r=>{
-      log("HTTP status: " + r.status);
-      if(!r.ok) throw new Error("Fetch failed (" + r.status + ")");
+  const paths = [
+    "./data/ipl/matches/" + file,
+    "./data/ipl/" + file
+  ];
+
+  function tryFetch(i){
+    if(i >= paths.length){
+      throw new Error("File not found in any known folder");
+    }
+
+    const url = paths[i];
+    log("Trying: " + url);
+
+    return fetch(url).then(r=>{
+      log("HTTP " + r.status);
+      if(!r.ok) return tryFetch(i+1);
       return r.json();
-    })
+    });
+  }
+
+  tryFetch(0)
     .then(match=>{
       log("Loaded match JSON");
 
@@ -185,7 +197,7 @@ if(!file){
       subhead.textContent = teams.length ? (teams[0] + " vs " + teams[1]) : "Match loaded";
 
       log("Date: " + date);
-      log("Teams: " + (teams.join(" vs ") || "—"));
+      log("Teams: " + teams.join(" vs "));
       log("Venue: " + venue);
       log("Winner: " + winner);
       log("Innings: " + (match.innings ? match.innings.length : 0));
