@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BBL Best Individual Performances | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family: Inter, system-ui, Arial, sans-serif;
+  margin:0;
+  background:#ffffff;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#003566,#0077b6);
+  color:white;
+  padding:40px 50px;
+  border-radius:24px;
+  margin-bottom:25px;
+}
+.hero h1{margin:0;font-size:46px;}
+.hero p{margin-top:10px;font-size:20px;opacity:0.95;}
+
+.tabs{
+  display:flex;
+  gap:10px;
+  margin-bottom:20px;
+  flex-wrap:wrap;
+}
+.tab{
+  background:#003566;
+  color:white;
+  border:none;
+  padding:10px 16px;
+  border-radius:10px;
+  cursor:pointer;
+}
+.tab.active{background:#00b4d8;}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:15px;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:10px 12px;
+  text-align:left;
+}
+th{background:#f3f6fb;}
+tr:nth-child(even){background:#f8fbff;}
+tr:hover{background:#eef4ff;}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+</div>
+
+<div class="page-wrap">
+
+<div class="hero">
+  <h1>BBL Best Individual Performances</h1>
+  <p>Top 25 batting and bowling performances in a single Big Bash League match.</p>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('batting',event)">Batting</button>
+  <button class="tab" onclick="showTab('bowling',event)">Bowling</button>
+</div>
+
+<table>
+<thead>
+<tr>
+  <th>Rank</th>
+  <th>Player</th>
+  <th id="figureHeader">Runs</th>
+  <th>Date</th>
+  <th>Match</th>
+</tr>
+</thead>
+<tbody id="recordsTable"></tbody>
+</table>
+
+</div>
+
+<script>
+const indexUrl = "data/bbl/index.json";
+const basePath = "data/bbl/";
+
+let battingInnings = [];
+let bowlingFigures = [];
+
+fetch(indexUrl)
+.then(r=>r.json())
+.then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
+.then(seasons=>{
+  seasons.forEach(matches=>{
+    matches.forEach(match=>{
+      const date = match.info?.dates?.[0] || "";
+      const teams = match.info?.teams?.join(" vs ") || "";
+
+      let batterRuns = {};
+      let bowlerStats = {};
+
+      match.innings?.forEach(inn=>{
+        inn.overs?.forEach(over=>{
+          over.deliveries?.forEach(ball=>{
+            const batter = ball.batter;
+            const bowler = ball.bowler;
+            const runs = ball.runs?.batter || 0;
+            const totalRuns = ball.runs?.total || 0;
+
+            if(!batterRuns[batter]) batterRuns[batter]=0;
+            batterRuns[batter]+=runs;
+
+            if(!bowlerStats[bowler]){
+              bowlerStats[bowler]={wickets:0,runs:0};
+            }
+
+            const byes = ball.extras?.byes || 0;
+            const legbyes = ball.extras?.legbyes || 0;
+            bowlerStats[bowler].runs += (totalRuns - byes - legbyes);
+
+            if(ball.wickets){
+              ball.wickets.forEach(w=>{
+                if(w.kind !== "run out"){
+                  bowlerStats[bowler].wickets += 1;
+                }
+              });
+            }
+          });
+        });
+      });
+
+      for(const batter in batterRuns){
+        battingInnings.push({
+          player: batter,
+          runs: batterRuns[batter],
+          date,
+          match: teams
+        });
+      }
+
+      for(const bowler in bowlerStats){
+        bowlingFigures.push({
+          player: bowler,
+          wickets: bowlerStats[bowler].wickets,
+          runs: bowlerStats[bowler].runs,
+          date,
+          match: teams
+        });
+      }
+
+    });
+  });
+
+  renderTable("batting");
+});
+
+function showTab(tab,e){
+  document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+  e.target.classList.add("active");
+  renderTable(tab);
+}
+
+function renderTable(type){
+  const tbody = document.getElementById("recordsTable");
+  const header = document.getElementById("figureHeader");
+  tbody.innerHTML="";
+
+  let rows=[];
+
+  if(type==="batting"){
+    header.textContent = "Runs";
+    rows = battingInnings.sort((a,b)=>b.runs-a.runs).slice(0,25);
+    rows.forEach((r,i)=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>${i+1}</td>
+        <td>${r.player}</td>
+        <td>${r.runs}</td>
+        <td>${formatDate(r.date)}</td>
+        <td>${r.match}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  if(type==="bowling"){
+    header.textContent = "Figures";
+    rows = bowlingFigures
+      .sort((a,b)=> b.wickets - a.wickets || a.runs - b.runs)
+      .slice(0,25);
+
+    rows.forEach((r,i)=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>${i+1}</td>
+        <td>${r.player}</td>
+        <td>${r.wickets} / ${r.runs}</td>
+        <td>${formatDate(r.date)}</td>
+        <td>${r.match}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+}
+
+function formatDate(d){
+  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+}
+</script>
+
+</body>
+</html>
