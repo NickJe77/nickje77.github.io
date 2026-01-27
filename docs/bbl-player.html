@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BBL Player | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family: Inter, system-ui, Arial, sans-serif;
+  margin:0;
+  background:#ffffff;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#003566,#0077b6);
+  color:white;
+  padding:40px 50px;
+  border-radius:24px;
+  margin-bottom:25px;
+}
+.hero h1{margin:0;font-size:46px;}
+.hero p{margin-top:10px;font-size:20px;opacity:0.95;}
+
+.summary-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:18px;
+  margin-bottom:30px;
+}
+.summary-box{
+  border:1px solid #ddd;
+  border-radius:14px;
+  padding:14px;
+  background:#f8fbff;
+}
+.summary-box strong{display:block;margin-bottom:6px;}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:14px;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:left;
+}
+th{background:#f3f6fb;}
+tr:nth-child(even){background:#f8fbff;}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+</div>
+
+<div class="page-wrap">
+
+<div class="hero">
+  <h1 id="playerName">BBL Player</h1>
+  <p>Career summary and match list.</p>
+</div>
+
+<div class="summary-grid">
+  <div class="summary-box"><strong>Matches</strong><span id="matchesBox">—</span></div>
+  <div class="summary-box"><strong>Runs</strong><span id="runsBox">—</span></div>
+  <div class="summary-box"><strong>Wickets</strong><span id="wicketsBox">—</span></div>
+  <div class="summary-box"><strong>Strike Rate</strong><span id="srBox">—</span></div>
+</div>
+
+<h2>Matches</h2>
+<table>
+<thead>
+<tr>
+  <th>Date</th>
+  <th>Match</th>
+  <th>Venue</th>
+  <th>Bat</th>
+  <th>Bowl</th>
+</tr>
+</thead>
+<tbody id="matchesTable"></tbody>
+</table>
+
+</div>
+
+<script>
+const params=new URLSearchParams(window.location.search);
+const playerParam=params.get("player");
+
+const indexUrl="data/bbl/index.json";
+const basePath="data/bbl/";
+const nameMapUrl="data/bbl/player-names.json";
+
+const playerNameEl=document.getElementById("playerName");
+const matchesBox=document.getElementById("matchesBox");
+const runsBox=document.getElementById("runsBox");
+const wicketsBox=document.getElementById("wicketsBox");
+const srBox=document.getElementById("srBox");
+const tableBody=document.getElementById("matchesTable");
+
+let nameMap={};
+
+Promise.all([
+  fetch(nameMapUrl).then(r=>r.json()),
+  fetch(indexUrl).then(r=>r.json())
+])
+.then(([names,files])=>{
+  nameMap=names;
+  return Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json())));
+})
+.then(seasons=>{
+  let matches=0,runs=0,balls=0,wkts=0;
+  let matchRows=[];
+
+  seasons.forEach(season=>{
+    season.forEach(match=>{
+      let didPlay=false;
+      let batRuns=0, batBalls=0, bowlWkts=0, bowlRuns=0;
+
+      match.innings.forEach(inn=>{
+        inn.overs.forEach(over=>{
+          over.deliveries.forEach(d=>{
+            if(d.batter===playerParam){
+              batRuns+=d.runs.batter;
+              if(!d.extras?.wides) batBalls++;
+              didPlay=true;
+            }
+            if(d.bowler===playerParam){
+              if(!d.extras?.byes && !d.extras?.legbyes){
+                bowlRuns+=d.runs.total;
+              }
+              if(d.wickets){
+                d.wickets.forEach(w=>{
+                  if(w.kind!=="run out") bowlWkts++;
+                });
+              }
+              didPlay=true;
+            }
+          });
+        });
+      });
+
+      if(didPlay){
+        matches++;
+        runs+=batRuns;
+        balls+=batBalls;
+        wkts+=bowlWkts;
+
+        matchRows.push({
+          date: match.info.dates[0],
+          teams: match.info.teams.join(" vs "),
+          venue: match.info.venue,
+          bat: batRuns ? batRuns+" ("+batBalls+")" : "—",
+          bowl: bowlWkts ? bowlWkts+" / "+bowlRuns : "—",
+          file: match.file
+        });
+      }
+    });
+  });
+
+  playerNameEl.textContent=fullName(playerParam);
+  matchesBox.textContent=matches;
+  runsBox.textContent=runs;
+  wicketsBox.textContent=wkts;
+  srBox.textContent=balls?((runs/balls)*100).toFixed(1):"—";
+
+  matchRows
+    .sort((a,b)=>new Date(a.date)-new Date(b.date))
+    .forEach(m=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>${formatDate(m.date)}</td>
+        <td><a href="bbl-match.html?file=${encodeURIComponent(m.file)}">${m.teams}</a></td>
+        <td>${m.venue}</td>
+        <td>${m.bat}</td>
+        <td>${m.bowl}</td>
+      `;
+      tableBody.appendChild(tr);
+    });
+});
+
+function fullName(n){return nameMap[n]||n;}
+function formatDate(d){
+  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+}
+</script>
+
+</body>
+</html>
