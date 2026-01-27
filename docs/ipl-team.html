@@ -36,6 +36,7 @@ body{
   margin-bottom:20px;
 }
 .hero h1{margin:0;font-size:46px;}
+.hero p{margin-top:10px;font-size:18px;opacity:0.95;}
 
 table{
   width:100%;
@@ -50,6 +51,32 @@ th,td{
 th{background:#f3f6fb;}
 tr:nth-child(even){background:#f8fbff;}
 tr:hover{background:#eef4ff;}
+
+.match-link{
+  color:inherit;
+  text-decoration:none;
+  display:block;
+  width:100%;
+}
+.match-link:hover{ text-decoration:underline; }
+
+.badge{
+  display:inline-block;
+  padding:2px 10px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:700;
+  border:1px solid #ddd;
+  background:#fff;
+}
+.badge.win{ color:#1a7f37; }
+.badge.loss{ color:#b42318; }
+.badge.nr{ color:#555; }
+
+.note{
+  color:#666;
+  margin:10px 0 0;
+}
 </style>
 </head>
 
@@ -67,6 +94,7 @@ tr:hover{background:#eef4ff;}
 
 <div class="hero">
   <h1 id="teamName">Team</h1>
+  <p class="note">Click any match to open the full scorecard.</p>
 </div>
 
 <table>
@@ -93,43 +121,89 @@ const basePath = "data/ipl/";
 document.getElementById("teamName").textContent = team || "Team";
 
 fetch(indexUrl)
-  .then(r=>r.json())
-  .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
-  .then(seasons=>{
+  .then(r => r.json())
+  .then(files => Promise.all(files.map(f => fetch(basePath + f).then(r => r.json()))))
+  .then(seasons => {
+    const rows = [];
+
+    seasons.forEach(matches => {
+      if(!Array.isArray(matches)) return;
+
+      matches.forEach(m => {
+        const info = m?.info;
+        if(!info || !Array.isArray(info.teams) || info.teams.length < 2) return;
+        if(!info.teams.includes(team)) return;
+
+        const opponent = info.teams.find(t => t !== team) || "";
+        const date = info.dates?.[0] || "";
+        const venue = info.venue || "";
+        const winner = info.outcome?.winner || "";
+
+        let resultText = "No result";
+        let resultClass = "nr";
+        if(winner){
+          if(winner === team){ resultText = "Won"; resultClass = "win"; }
+          else { resultText = "Lost"; resultClass = "loss"; }
+        }
+
+        rows.push({
+          date,
+          opponent,
+          venue,
+          file: m.file || "",
+          resultText,
+          resultClass
+        });
+      });
+    });
+
+    // Sort newest first (safe sort even if date missing)
+    rows.sort((a,b) => new Date(b.date || "1900-01-01") - new Date(a.date || "1900-01-01"));
+
     const tableBody = document.getElementById("matchesTable");
     tableBody.innerHTML = "";
 
-    seasons.forEach(matches=>{
-      if(!Array.isArray(matches)) return;
+    rows.forEach(r => {
+      const link = r.file ? `ipl-match.html?file=${encodeURIComponent(r.file)}` : "#";
 
-      matches.forEach(match=>{
-        const info = match.info;
-        if(!info || !info.teams || info.teams.length < 2) return;
-
-        if(!info.teams.includes(team)) return;
-
-        const opponent = info.teams.find(t=>t!==team);
-        const winner = info.outcome?.winner || "";
-        let result = "No result";
-
-        if(winner){
-          result = winner === team ? "Won" : "Lost";
-        }
-
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${formatDate(info.dates[0])}</td>
-          <td>${opponent}</td>
-          <td>${info.venue || ""}</td>
-          <td>${result}</td>
-        `;
-        tableBody.appendChild(tr);
-      });
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>
+          <a class="match-link" href="${link}">${formatDate(r.date)}</a>
+        </td>
+        <td>
+          <a class="match-link" href="${link}">${escapeHtml(r.opponent)}</a>
+        </td>
+        <td>
+          <a class="match-link" href="${link}">${escapeHtml(r.venue)}</a>
+        </td>
+        <td>
+          <a class="match-link" href="${link}">
+            <span class="badge ${r.resultClass}">${r.resultText}</span>
+          </a>
+        </td>
+      `;
+      tableBody.appendChild(tr);
     });
+  })
+  .catch(err => {
+    console.error(err);
   });
 
 function formatDate(d){
-  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+  if(!d) return "—";
+  const dt = new Date(d);
+  if(isNaN(dt)) return "—";
+  return dt.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+}
+
+function escapeHtml(str){
+  return String(str || "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
 }
 </script>
 
