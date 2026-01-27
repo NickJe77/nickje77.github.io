@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>IPL Finals | The Sporting Almanac</title>
+<title>IPL Finals DEBUG | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -30,10 +30,10 @@ body{
   color:white;
   padding:40px 50px;
   border-radius:24px;
-  margin-bottom:30px;
+  margin-bottom:20px;
 }
-.hero h1{margin:0;font-size:46px;}
-.hero p{margin-top:10px;font-size:20px;opacity:0.95;}
+.hero h1{margin:0;font-size:40px;}
+.hero p{margin-top:10px;font-size:18px;opacity:0.95;}
 
 table{
   width:100%;
@@ -47,11 +47,16 @@ th,td{
 }
 th{background:#f3f6fb;}
 tr:nth-child(even){background:#f8fbff;}
-tr:hover{background:#eef4ff;}
 
-.winner{font-weight:600;color:#1a7f37;}
-.runnerup{color:#b42318;}
-.score{font-weight:600;}
+.debug{
+  background:#111;
+  color:#0f0;
+  padding:15px;
+  font-family: monospace;
+  font-size:14px;
+  margin-bottom:20px;
+  white-space:pre-wrap;
+}
 </style>
 </head>
 
@@ -68,9 +73,11 @@ tr:hover{background:#eef4ff;}
 <div class="page-wrap">
 
 <div class="hero">
-  <h1>Indian Premier League Finals</h1>
-  <p>Every IPL final with winner, runner-up, score and venue.</p>
+  <h1>Indian Premier League Finals (DEBUG)</h1>
+  <p>This page will show what data is loading.</p>
 </div>
+
+<div id="debug" class="debug">Starting debug…</div>
 
 <table>
 <thead>
@@ -89,9 +96,15 @@ tr:hover{background:#eef4ff;}
 </div>
 
 <script>
+const debugBox = document.getElementById("debug");
+const tableBody = document.getElementById("finalsTable");
+
 const indexUrl = "data/ipl/index.json";
 const basePath = "data/ipl/";
-const tableBody = document.getElementById("finalsTable");
+
+function log(msg){
+  debugBox.textContent += "\n" + msg;
+}
 
 function calculateScore(match){
   const totals = {};
@@ -118,43 +131,82 @@ function calculateScore(match){
   return `${teams[0]} ${totals[teams[0]]}/${wickets[teams[0]]} vs ${teams[1]} ${totals[teams[1]]}/${wickets[teams[1]]}`;
 }
 
+log("Fetching index.json…");
+
 fetch(indexUrl)
-  .then(r => r.json())
-  .then(seasonFiles => Promise.all(
-    seasonFiles.map(f => fetch(basePath + f).then(r => r.json()))
-  ))
-  .then(seasons => Promise.all(
-    seasons.map(seasonMatches => {
-      if(!seasonMatches || !seasonMatches.length) return;
+  .then(r=>{
+    log("index.json status: " + r.status);
+    return r.json();
+  })
+  .then(seasonFiles=>{
+    log("index.json loaded. Seasons: " + seasonFiles.length);
+
+    return Promise.all(
+      seasonFiles.map(file=>{
+        log("Loading season file: " + file);
+        return fetch(basePath + file)
+          .then(r=>{
+            log("  " + file + " status: " + r.status);
+            return r.json();
+          });
+      })
+    );
+  })
+  .then(seasons=>{
+    log("All season files loaded.");
+
+    return Promise.all(seasons.map(seasonMatches=>{
+      if(!seasonMatches || !seasonMatches.length){
+        log("Season file EMPTY");
+        return;
+      }
 
       seasonMatches.sort((a,b)=> new Date(b.date) - new Date(a.date));
       const finalSummary = seasonMatches[0];
 
+      log("Final summary file: " + finalSummary.file);
+
       return fetch(basePath + finalSummary.file)
-        .then(r=>r.json())
-        .then(fullMatch => ({
-          season: finalSummary.date.slice(0,4),
-          winner: finalSummary.outcome.winner,
-          runnerUp: finalSummary.teams.find(t=>t!==finalSummary.outcome.winner),
-          score: calculateScore(fullMatch),
-          date: finalSummary.date,
-          venue: finalSummary.venue
-        }));
-    })
-  ))
+        .then(r=>{
+          log("  Loading match file: " + finalSummary.file + " status: " + r.status);
+          return r.json();
+        })
+        .then(fullMatch=>{
+          const row = {
+            season: finalSummary.date.slice(0,4),
+            winner: finalSummary.outcome.winner,
+            runnerUp: finalSummary.teams.find(t=>t!==finalSummary.outcome.winner),
+            score: calculateScore(fullMatch),
+            date: finalSummary.date,
+            venue: finalSummary.venue
+          };
+
+          log("Built row for season " + row.season);
+
+          return row;
+        });
+    }));
+  })
   .then(finals=>{
+    log("Rendering table…");
+
     finals.filter(f=>f).forEach(f=>{
       const tr=document.createElement("tr");
       tr.innerHTML=`
         <td>${f.season}</td>
-        <td class="winner">${f.winner}</td>
-        <td class="runnerup">${f.runnerUp}</td>
-        <td class="score">${f.score}</td>
+        <td>${f.winner}</td>
+        <td>${f.runnerUp}</td>
+        <td>${f.score}</td>
         <td>${f.date}</td>
         <td>${f.venue}</td>
       `;
       tableBody.appendChild(tr);
     });
+
+    log("DONE.");
+  })
+  .catch(err=>{
+    log("ERROR: " + err);
   });
 </script>
 
