@@ -163,22 +163,32 @@ fetch(indexUrl)
 function renderInnings(innings){
   innings.forEach(inn=>{
     const batStats={}, bowlStats={}, dismissals={};
-    let runs=0, wickets=0, balls=0;
+    let runs=0, wickets=0, legalBalls=0;
 
     inn.overs.forEach(over=>{
       over.deliveries.forEach(d=>{
-        balls++;
+
+        const isWide = d.extras?.wides;
+        const isNoBall = d.extras?.noballs;
+
         const batter=d.batter;
         const bowler=d.bowler;
-        const r=d.runs.batter;
+        const batRuns=d.runs.batter;
 
         if(!batStats[batter]) batStats[batter]={runs:0,balls:0};
-        batStats[batter].runs+=r;
-        batStats[batter].balls++;
+        batStats[batter].runs+=batRuns;
+
+        if(!isWide){
+          batStats[batter].balls++;
+        }
 
         if(!bowlStats[bowler]) bowlStats[bowler]={runs:0,balls:0,wkts:0};
         bowlStats[bowler].runs+=d.runs.total;
-        bowlStats[bowler].balls++;
+
+        if(!isWide && !isNoBall){
+          bowlStats[bowler].balls++;
+          legalBalls++;
+        }
 
         if(d.wickets){
           d.wickets.forEach(w=>{
@@ -203,7 +213,7 @@ function renderInnings(innings){
       });
     });
 
-    const overs=(Math.floor(balls/6)+"."+(balls%6));
+    const overs=(Math.floor(legalBalls/6)+"."+(legalBalls%6));
 
     let html=`<h2>${inn.team} Innings</h2>
     <p><strong>${runs}/${wickets}</strong> (${overs} overs)</p>
