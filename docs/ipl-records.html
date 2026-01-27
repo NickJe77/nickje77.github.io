@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IPL League Leaders | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family: Inter, system-ui, Arial, sans-serif;
+  margin:0;
+  background:#ffffff;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#3b007a,#7b2cbf);
+  color:white;
+  padding:40px 50px;
+  border-radius:24px;
+  margin-bottom:25px;
+}
+.hero h1{margin:0;font-size:46px;}
+.hero p{margin-top:10px;font-size:20px;opacity:0.95;}
+
+.tabs{
+  display:flex;
+  gap:10px;
+  margin-bottom:20px;
+  flex-wrap:wrap;
+}
+.tab{
+  background:#2b004f;
+  color:white;
+  border:none;
+  padding:10px 16px;
+  border-radius:10px;
+  cursor:pointer;
+}
+.tab.active{background:#9d4edd;}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:15px;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:10px 12px;
+  text-align:left;
+}
+th{background:#f3f6fb;}
+tr:nth-child(even){background:#f8fbff;}
+tr:hover{background:#eef4ff;}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+</div>
+
+<div class="page-wrap">
+
+<div class="hero">
+  <h1>IPL League Leaders</h1>
+  <p>Top performers in IPL history.</p>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('runs')">Run Scorers</button>
+  <button class="tab" onclick="showTab('wickets')">Wicket Takers</button>
+  <button class="tab" onclick="showTab('fielding')">Fielders</button>
+  <button class="tab" onclick="showTab('strike')">Strike Rate (min 20 matches)</button>
+</div>
+
+<table>
+<thead>
+<tr>
+  <th>Rank</th>
+  <th>Player</th>
+  <th id="statHeader">Runs</th>
+</tr>
+</thead>
+<tbody id="recordsTable"></tbody>
+</table>
+
+</div>
+
+<script>
+const indexUrl = "data/ipl/index.json";
+const basePath = "data/ipl/";
+
+let playerStats = {};
+let currentTab = "runs";
+
+fetch(indexUrl)
+  .then(r=>r.json())
+  .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
+  .then(seasons=>{
+    seasons.forEach(matches=>{
+      matches.forEach(match=>{
+        match.innings?.forEach(inn=>{
+          inn.overs?.forEach(over=>{
+            over.deliveries?.forEach(ball=>{
+              const batter = ball.batter;
+              const bowler = ball.bowler;
+              const runs = ball.runs?.batter || 0;
+
+              if(!playerStats[batter]){
+                playerStats[batter]={runs:0,wickets:0,field:0,balls:0,matches:new Set()};
+              }
+
+              playerStats[batter].runs += runs;
+              playerStats[batter].balls += 1;
+              playerStats[batter].matches.add(match.info?.dates?.[0]);
+
+              if(ball.wickets){
+                ball.wickets.forEach(w=>{
+                  const fielder = w.fielders?.[0]?.name;
+                  const kind = w.kind;
+
+                  if(kind !== "run out"){
+                    if(!playerStats[bowler]){
+                      playerStats[bowler]={runs:0,wickets:0,field:0,balls:0,matches:new Set()};
+                    }
+                    playerStats[bowler].wickets += 1;
+                  }
+
+                  if(fielder){
+                    if(!playerStats[fielder]){
+                      playerStats[fielder]={runs:0,wickets:0,field:0,balls:0,matches:new Set()};
+                    }
+                    playerStats[fielder].field += 1;
+                  }
+                });
+              }
+            });
+          });
+        });
+      });
+    });
+
+    renderTable("runs");
+  });
+
+function showTab(tab){
+  currentTab = tab;
+  document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+  event.target.classList.add("active");
+  renderTable(tab);
+}
+
+function renderTable(type){
+  const tbody = document.getElementById("recordsTable");
+  const statHeader = document.getElementById("statHeader");
+  tbody.innerHTML="";
+
+  let rows = [];
+
+  for(const player in playerStats){
+    const p = playerStats[player];
+    const matches = p.matches.size;
+
+    if(type==="runs"){
+      rows.push({player,stat:p.runs});
+      statHeader.textContent="Runs";
+    }
+
+    if(type==="wickets"){
+      rows.push({player,stat:p.wickets});
+      statHeader.textContent="Wickets";
+    }
+
+    if(type==="fielding"){
+      rows.push({player,stat:p.field});
+      statHeader.textContent="Dismissals";
+    }
+
+    if(type==="strike"){
+      if(matches>=20){
+        const sr = (p.runs / p.balls * 100).toFixed(2);
+        rows.push({player,stat:sr});
+      }
+      statHeader.textContent="Strike Rate";
+    }
+  }
+
+  rows.sort((a,b)=>b.stat - a.stat);
+  rows.slice(0,10).forEach((r,i)=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${i+1}</td>
+      <td>${r.player}</td>
+      <td>${r.stat}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+</script>
+
+</body>
+</html>
