@@ -129,7 +129,6 @@ const teamMap = {
   "Royal Challengers Bangalore": "Royal Challengers Bengaluru",
   "Delhi Daredevils": "Delhi Capitals",
   "Rising Pune Supergiants": "Rising Pune Supergiant",
-  "Rising Pune Supergiant": "Rising Pune Supergiant",
   "Kings XI Punjab": "Punjab Kings"
 };
 
@@ -144,33 +143,37 @@ fetch(indexUrl)
   .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
   .then(seasons=>{
     seasons.forEach(matches=>{
-      if(!matches.length) return;
+      const finalMatch = matches.find(m =>
+        m.info?.event?.stage === "Final"
+      );
 
-      matches.sort((a,b)=>new Date(b.date)-new Date(a.date));
-      const finalMatch = matches[0];
+      if(!finalMatch) return;
 
-      const rawWinner = finalMatch.outcome?.winner || "—";
-      const rawRunnerUp = finalMatch.teams?.find(t=>t!==rawWinner) || "—";
+      const date = finalMatch.info.dates?.[0] || "";
+      const season = date.slice(0,4);
+
+      const rawWinner = finalMatch.info.outcome?.winner || "—";
+      const rawRunnerUp = finalMatch.info.teams?.find(t=>t!==rawWinner) || "—";
 
       const winner = normalizeTeam(rawWinner);
       const runnerUp = normalizeTeam(rawRunnerUp);
 
       let result = "—";
-      if(finalMatch.outcome?.by){
-        if(finalMatch.outcome.by.runs){
-          result = "won by " + finalMatch.outcome.by.runs + " runs";
-        } else if(finalMatch.outcome.by.wickets){
-          result = "won by " + finalMatch.outcome.by.wickets + " wickets";
+      if(finalMatch.info.outcome?.by){
+        if(finalMatch.info.outcome.by.runs){
+          result = "won by " + finalMatch.info.outcome.by.runs + " runs";
+        } else if(finalMatch.info.outcome.by.wickets){
+          result = "won by " + finalMatch.info.outcome.by.wickets + " wickets";
         }
       }
 
       finalsData.push({
-        season: finalMatch.date.slice(0,4),
+        season,
         winner,
         runnerUp,
         result,
-        date: finalMatch.date,
-        venue: finalMatch.venue || ""
+        date,
+        venue: finalMatch.info.venue || ""
       });
     });
 
