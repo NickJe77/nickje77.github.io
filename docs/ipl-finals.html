@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Indian Premier League Finals | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin:0;
+  background:#ffffff;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#3b007a,#7b2cbf);
+  color:white;
+  padding:40px 50px;
+  border-radius:24px;
+  margin-bottom:25px;
+}
+.hero h1{margin:0;font-size:46px;}
+.hero p{margin-top:10px;font-size:20px;opacity:0.95;}
+
+.year-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(90px,1fr));
+  gap:12px;
+  margin-bottom:25px;
+}
+.year-btn{
+  background:#2b004f;
+  color:white;
+  border:none;
+  padding:12px 0;
+  border-radius:10px;
+  font-size:16px;
+  cursor:pointer;
+}
+.year-btn:hover{background:#4b0082;}
+.year-btn.active{background:#9d4edd;}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:15px;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:12px 14px;
+  text-align:left;
+}
+th{background:#f3f6fb;}
+tr:nth-child(even){background:#f8fbff;}
+tr:hover{background:#eef4ff;}
+
+.winner{font-weight:600;color:#1a7f37;}
+.runnerup{color:#b42318;}
+.result{font-weight:600;}
+
+.team-link{
+  color:inherit;
+  text-decoration:none;
+}
+.team-link:hover{text-decoration:underline;}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+</div>
+
+<div class="page-wrap">
+
+<div class="hero">
+  <h1>Indian Premier League Finals</h1>
+  <p>Every IPL final with result and venue.</p>
+</div>
+
+<div id="yearGrid" class="year-grid"></div>
+
+<table>
+<thead>
+<tr>
+  <th>Season</th>
+  <th>Winner</th>
+  <th>Runner-up</th>
+  <th>Result</th>
+  <th>Date</th>
+  <th>Venue</th>
+</tr>
+</thead>
+<tbody id="finalsTable"></tbody>
+</table>
+
+</div>
+
+<script>
+const indexUrl = "data/ipl/index.json";
+const basePath = "data/ipl/";
+const yearGrid = document.getElementById("yearGrid");
+const tableBody = document.getElementById("finalsTable");
+
+/* 🔧 TEAM NAME FIXES */
+const teamMap = {
+  "Royal Challengers Bangalore": "Royal Challengers Bengaluru",
+  "Delhi Daredevils": "Delhi Capitals",
+  "Rising Pune Supergiants": "Rising Pune Supergiant",
+  "Rising Pune Supergiant": "Rising Pune Supergiant",
+  "Kings XI Punjab": "Punjab Kings"
+};
+
+function normalizeTeam(name){
+  return teamMap[name] || name;
+}
+
+let finalsData = [];
+
+fetch(indexUrl)
+  .then(r=>r.json())
+  .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
+  .then(seasons=>{
+    seasons.forEach(matches=>{
+      if(!matches.length) return;
+
+      matches.sort((a,b)=>new Date(b.date)-new Date(a.date));
+      const finalMatch = matches[0];
+
+      const rawWinner = finalMatch.outcome?.winner || "—";
+      const rawRunnerUp = finalMatch.teams?.find(t=>t!==rawWinner) || "—";
+
+      const winner = normalizeTeam(rawWinner);
+      const runnerUp = normalizeTeam(rawRunnerUp);
+
+      let result = "—";
+      if(finalMatch.outcome?.by){
+        if(finalMatch.outcome.by.runs){
+          result = "won by " + finalMatch.outcome.by.runs + " runs";
+        } else if(finalMatch.outcome.by.wickets){
+          result = "won by " + finalMatch.outcome.by.wickets + " wickets";
+        }
+      }
+
+      finalsData.push({
+        season: finalMatch.date.slice(0,4),
+        winner,
+        runnerUp,
+        result,
+        date: finalMatch.date,
+        venue: finalMatch.venue || ""
+      });
+    });
+
+    finalsData.sort((a,b)=>a.season-b.season);
+    buildYearButtons();
+    renderTable(finalsData);
+  });
+
+function buildYearButtons(){
+  finalsData.forEach((f,i)=>{
+    const btn=document.createElement("button");
+    btn.className="year-btn";
+    btn.textContent=f.season;
+    btn.onclick=()=>{
+      document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      renderTable(finalsData.filter(x=>x.season===f.season));
+    };
+    yearGrid.appendChild(btn);
+    if(i===finalsData.length-1){
+      btn.classList.add("active");
+    }
+  });
+}
+
+function renderTable(rows){
+  tableBody.innerHTML="";
+  rows.forEach(f=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${f.season}</td>
+      <td class="winner">
+        <a class="team-link" href="ipl-team.html?team=${encodeURIComponent(f.winner)}">${f.winner}</a>
+      </td>
+      <td class="runnerup">
+        <a class="team-link" href="ipl-team.html?team=${encodeURIComponent(f.runnerUp)}">${f.runnerUp}</a>
+      </td>
+      <td class="result">${f.result}</td>
+      <td>${formatDate(f.date)}</td>
+      <td>${f.venue}</td>
+    `;
+    tableBody.appendChild(tr);
+  });
+}
+
+function formatDate(d){
+  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+}
+</script>
+
+</body>
+</html>

@@ -24,7 +24,7 @@ body{
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 
 .page-wrap{
-  max-width:1100px;
+  max-width:1200px;
   margin:0 auto;
   padding:30px 20px;
 }
@@ -53,12 +53,20 @@ th{
   background:#f3f6fb;
 }
 tr:nth-child(even){background:#f8fbff;}
-tr:hover{background:#eef4ff; cursor:pointer;}
+tr:hover{background:#eef4ff;}
 
 .team-name{
   font-weight:600;
   color:#3b007a;
 }
+.team-name a{
+  color:#3b007a;
+  text-decoration:none;
+}
+.team-name a:hover{
+  text-decoration:underline;
+}
+
 .titles{
   font-weight:600;
   color:#1a7f37;
@@ -80,15 +88,18 @@ tr:hover{background:#eef4ff; cursor:pointer;}
 
 <div class="hero">
   <h1>Indian Premier League Teams</h1>
-  <p>All IPL teams and championship wins.</p>
+  <p>All IPL teams, championships and win records.</p>
 </div>
 
 <table>
 <thead>
 <tr>
   <th>Team</th>
-  <th>Championships</th>
+  <th>Titles</th>
   <th>Years Won</th>
+  <th>Wins</th>
+  <th>Losses</th>
+  <th>Win %</th>
 </tr>
 </thead>
 <tbody id="teamsTable"></tbody>
@@ -101,67 +112,89 @@ const indexUrl = "data/ipl/index.json";
 const basePath = "data/ipl/";
 const tableBody = document.getElementById("teamsTable");
 
-let teamTitles = {};
-let teamYears = {};
+const teamMap = {
+  "Royal Challengers": "Royal Challengers Bengaluru",
+  "Royal Challengers Bangalore": "Royal Challengers Bengaluru",
+  "Rising Pune Supergiants": "Rising Pune Supergiant",
+  "Rising Pune Supergiant": "Rising Pune Supergiant",
+  "Rising Challengers": "Rising Pune Supergiant"
+};
 
-function normaliseTeam(name){
-  const map = {
-    "Rising Challengers": "Rising Pune Supergiant",
-    "Rising Pune Supergiants": "Rising Pune Supergiant",
-    "Royal Challengers": "Royal Challengers Bangalore",
-    "Royal Challengers Bengaluru": "Royal Challengers Bangalore",
-    "Delhi Daredevils": "Delhi Capitals",
-    "Kings XI Punjab": "Punjab Kings",
-    "Deccan Chargers": "Sunrisers Hyderabad"
-  };
-  return map[name] || name;
+function normalizeTeam(name){
+  return teamMap[name] || name;
+}
+
+let stats = {};
+
+function initTeam(team){
+  if(!stats[team]){
+    stats[team] = {
+      titles: 0,
+      years: [],
+      wins: 0,
+      losses: 0,
+      games: 0
+    };
+  }
 }
 
 fetch(indexUrl)
   .then(r=>r.json())
-  .then(files=>{
-    return Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json())));
-  })
+  .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
   .then(seasons=>{
     seasons.forEach(matches=>{
       if(!matches.length) return;
 
       matches.sort((a,b)=>new Date(b.date)-new Date(a.date));
       const finalMatch = matches[0];
-      let winner = finalMatch?.outcome?.winner;
+      const winner = normalizeTeam(finalMatch?.outcome?.winner || "");
 
       if(winner){
-        winner = normaliseTeam(winner);
-        teamTitles[winner] = (teamTitles[winner]||0)+1;
-        teamYears[winner] = teamYears[winner] || [];
-        teamYears[winner].push(finalMatch.date.slice(0,4));
+        initTeam(winner);
+        stats[winner].titles++;
+        stats[winner].years.push(finalMatch.date.slice(0,4));
       }
 
       matches.forEach(m=>{
-        m.teams?.forEach(t=>{
-          const team = normaliseTeam(t);
-          if(!(team in teamTitles)){
-            teamTitles[team] = teamTitles[team] || 0;
-            teamYears[team] = teamYears[team] || [];
-          }
+        const teams = m.teams?.map(normalizeTeam) || [];
+        const winner = normalizeTeam(m.outcome?.winner || "");
+
+        teams.forEach(t=>{
+          initTeam(t);
+          stats[t].games++;
         });
+
+        if(winner){
+          initTeam(winner);
+          stats[winner].wins++;
+
+          teams.forEach(t=>{
+            if(t !== winner){
+              initTeam(t);
+              stats[t].losses++;
+            }
+          });
+        }
       });
     });
 
-    const teams = Object.keys(teamTitles).sort((a,b)=>{
-      if(teamTitles[b] !== teamTitles[a]){
-        return teamTitles[b] - teamTitles[a];
-      }
-      return a.localeCompare(b);
-    });
+    const teams = Object.keys(stats)
+      .sort((a,b)=> stats[b].titles - stats[a].titles);
 
     teams.forEach(team=>{
+      const s = stats[team];
+      const winPct = s.games ? ((s.wins / s.games) * 100).toFixed(1) : "0.0";
+
+      const teamLink = `ipl-team.html?team=${encodeURIComponent(team)}`;
+
       const tr = document.createElement("tr");
-      tr.onclick = ()=>location.href = "ipl-team.html?team=" + encodeURIComponent(team);
       tr.innerHTML = `
-        <td class="team-name">${team}</td>
-        <td class="titles">${teamTitles[team]}</td>
-        <td>${teamYears[team].join(", ") || "—"}</td>
+        <td class="team-name"><a href="${teamLink}">${team}</a></td>
+        <td class="titles">${s.titles}</td>
+        <td>${s.years.join(", ") || "—"}</td>
+        <td>${s.wins}</td>
+        <td>${s.losses}</td>
+        <td>${winPct}%</td>
       `;
       tableBody.appendChild(tr);
     });
