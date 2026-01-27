@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>IPL Match | The Sporting Almanac</title>
+<title>Indian Premier League Finals | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 body{
   font-family: Inter, system-ui, Arial, sans-serif;
   margin:0;
-  background:#fff;
+  background:#ffffff;
 }
 
 .navbar{
@@ -23,7 +23,7 @@ body{
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 
 .page-wrap{
-  max-width:1200px;
+  max-width:1300px;
   margin:0 auto;
   padding:30px 20px;
 }
@@ -35,32 +35,53 @@ body{
   border-radius:24px;
   margin-bottom:25px;
 }
-.hero h1{margin:0;font-size:42px;}
-.hero p{margin-top:10px;font-size:18px;}
+.hero h1{margin:0;font-size:46px;}
+.hero p{margin-top:10px;font-size:20px;opacity:0.95;}
 
-.box-grid{
+.year-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
-  gap:15px;
-  margin-bottom:30px;
+  grid-template-columns:repeat(auto-fill,minmax(90px,1fr));
+  gap:12px;
+  margin-bottom:25px;
 }
-.box{
-  border:1px solid #ddd;
-  border-radius:12px;
-  padding:14px;
-  background:#faf7ff;
-}
-.box strong{display:block;margin-bottom:6px;}
-
-.debug{
-  background:#000;
-  color:#0f0;
-  padding:15px;
+.year-btn{
+  background:#2b004f;
+  color:white;
+  border:none;
+  padding:12px 0;
   border-radius:10px;
-  font-family:monospace;
-  white-space:pre-wrap;
+  font-size:16px;
+  cursor:pointer;
 }
-.error{color:#ff4d4d;}
+.year-btn:hover{background:#4b0082;}
+.year-btn.active{background:#9d4edd;}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:20px;
+  font-size:15px;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:10px 12px;
+  text-align:left;
+}
+th{
+  background:#f3f6fb;
+}
+tr:nth-child(even){background:#f8fbff;}
+tr:hover{background:#eef4ff;}
+
+.winner{font-weight:600;color:#1a7f37;}
+.runner{color:#c0392b;}
+
+a.result-link{
+  text-decoration:none;
+  font-weight:600;
+  color:#3b007a;
+}
+a.result-link:hover{text-decoration:underline;}
 </style>
 </head>
 
@@ -77,80 +98,100 @@ body{
 <div class="page-wrap">
 
 <div class="hero">
-  <h1>IPL Match</h1>
-  <p id="statusText">Loading match…</p>
+  <h1>Indian Premier League Finals</h1>
+  <p>Every IPL final with result and venue.</p>
 </div>
 
-<div class="box-grid">
-  <div class="box"><strong>Season</strong><span id="seasonBox">—</span></div>
-  <div class="box"><strong>Date</strong><span id="dateBox">—</span></div>
-  <div class="box"><strong>Teams</strong><span id="teamsBox">—</span></div>
-  <div class="box"><strong>Venue</strong><span id="venueBox">—</span></div>
-  <div class="box"><strong>Winner</strong><span id="winnerBox">—</span></div>
-  <div class="box"><strong>Result</strong><span id="resultBox">—</span></div>
-</div>
+<div id="yearGrid" class="year-grid"></div>
 
-<div class="debug" id="debugLog"></div>
+<table>
+<thead>
+<tr>
+  <th>Season</th>
+  <th>Winner</th>
+  <th>Runner-up</th>
+  <th>Result</th>
+  <th>Date</th>
+  <th>Venue</th>
+</tr>
+</thead>
+<tbody id="finalsTable"></tbody>
+</table>
 
 </div>
 
 <script>
-const params = new URLSearchParams(window.location.search);
-const season = params.get("season");
-const fileId = params.get("file");
+const indexUrl = "data/ipl/index.json";
+const basePath = "data/ipl/";
 
-const debug = document.getElementById("debugLog");
-function log(msg){ debug.textContent += msg + "\n"; }
+const yearGrid = document.getElementById("yearGrid");
+const tableBody = document.getElementById("finalsTable");
 
-log("Season param = " + season);
-log("File param = " + fileId);
+let seasonFiles = [];
 
-if(!season || !fileId){
-  document.getElementById("statusText").textContent = "Missing match parameters";
-  log("ERROR: Missing season or file");
-  throw new Error("Missing params");
+fetch(indexUrl)
+  .then(r => r.json())
+  .then(files => {
+    seasonFiles = files;
+    files.forEach((file, i) => {
+      const year = file.replace("ipl_","").replace(".json","");
+      const btn = document.createElement("button");
+      btn.className = "year-btn";
+      btn.textContent = year;
+      btn.onclick = () => selectSeason(file, year, btn);
+      yearGrid.appendChild(btn);
+
+      if(i === files.length - 1){
+        btn.classList.add("active");
+        loadSeason(file, year);
+      }
+    });
+  });
+
+function selectSeason(file, year, btn){
+  document.querySelectorAll(".year-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  loadSeason(file, year);
 }
 
-const seasonUrl = `data/ipl/ipl_${season}.json`;
-log("Fetching season file: " + seasonUrl);
+function loadSeason(file, season){
+  fetch(basePath + file)
+    .then(r => r.json())
+    .then(matches => {
+      tableBody.innerHTML = "";
 
-fetch(seasonUrl)
-.then(r=>{
-  log("HTTP " + r.status);
-  if(!r.ok) throw new Error("Season file not found");
-  return r.json();
-})
-.then(matches=>{
-  log("Matches loaded: " + matches.length);
+      matches.sort((a,b) => new Date(b.date) - new Date(a.date));
+      const finalMatch = matches[0];
 
-  const match = matches.find(m => m.file === fileId);
+      const winner = finalMatch.outcome?.winner || "";
+      const teams = finalMatch.teams || [];
+      const runnerUp = teams.find(t => t !== winner) || "";
 
-  if(!match){
-    document.getElementById("statusText").textContent = "Match not found in season file";
-    log("ERROR: Match not found");
-    return;
-  }
+      let resultText = "";
+      if(finalMatch.outcome?.by){
+        if(finalMatch.outcome.by.runs){
+          resultText = "won by " + finalMatch.outcome.by.runs + " runs";
+        } else if(finalMatch.outcome.by.wickets){
+          resultText = "won by " + finalMatch.outcome.by.wickets + " wickets";
+        }
+      }
 
-  document.getElementById("statusText").textContent = "Match loaded";
-
-  document.getElementById("seasonBox").textContent = season;
-  document.getElementById("dateBox").textContent = formatDate(match.date);
-  document.getElementById("teamsBox").textContent = match.teams.join(" vs ");
-  document.getElementById("venueBox").textContent = match.venue || "—";
-  document.getElementById("winnerBox").textContent = match.outcome?.winner || "—";
-
-  let result="—";
-  if(match.outcome?.by){
-    if(match.outcome.by.runs) result = "Won by " + match.outcome.by.runs + " runs";
-    if(match.outcome.by.wickets) result = "Won by " + match.outcome.by.wickets + " wickets";
-  }
-  document.getElementById("resultBox").textContent = result;
-
-})
-.catch(err=>{
-  document.getElementById("statusText").textContent = "Could not load match";
-  log("ERROR: " + err.message);
-});
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${season}</td>
+        <td class="winner">${winner}</td>
+        <td class="runner">${runnerUp}</td>
+        <td>
+          <a class="result-link" href="ipl-match.html?season=${season}&file=${finalMatch.file}">
+            ${resultText}
+          </a>
+        </td>
+        <td>${formatDate(finalMatch.date)}</td>
+        <td>${finalMatch.venue || ""}</td>
+      `;
+      tableBody.appendChild(tr);
+    });
+}
 
 function formatDate(d){
   return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
