@@ -137,35 +137,34 @@ function calculateScore(match){
 fetch(indexUrl)
   .then(r=>r.json())
   .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
-  .then(matches=>{
-    const finals = {};
+  .then(seasons=>{
+    const finals = [];
 
-    matches.forEach(match=>{
-      if(!match.info || !match.info.event || !match.info.season) return;
+    seasons.forEach(matches=>{
+      if(!Array.isArray(matches) || matches.length === 0) return;
 
-      const season = match.info.season;
-      const date = match.info.dates[0];
+      // pick latest-dated match = final
+      matches.sort((a,b)=>new Date(b.info.dates[0]) - new Date(a.info.dates[0]));
+      const finalMatch = matches[0];
 
-      if(!finals[season] || new Date(date) > new Date(finals[season].date)){
-        const teams = match.info.teams.map(normalizeTeam);
-        const winner = normalizeTeam(match.info.outcome.winner);
-        const runnerUp = teams.find(t=>t !== winner) || "";
+      const season = finalMatch.info.season;
+      const teams = finalMatch.info.teams.map(normalizeTeam);
+      const winner = normalizeTeam(finalMatch.info.outcome.winner);
+      const runnerUp = teams.find(t=>t !== winner) || "";
 
-        finals[season] = {
-          season,
-          winner,
-          runnerUp,
-          score: calculateScore(match),
-          date,
-          venue: match.info.venue
-        };
-      }
+      finals.push({
+        season,
+        winner,
+        runnerUp,
+        score: calculateScore(finalMatch),
+        date: finalMatch.info.dates[0],
+        venue: finalMatch.info.venue
+      });
     });
 
-    const rows = Object.values(finals)
-      .sort((a,b)=> new Date(b.date) - new Date(a.date));
+    finals.sort((a,b)=>new Date(b.date) - new Date(a.date));
 
-    rows.forEach(f=>{
+    finals.forEach(f=>{
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${f.season}</td>
