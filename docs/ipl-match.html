@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IPL Match | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin:0;
+  background:#ffffff;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#3b007a,#7b2cbf);
+  color:white;
+  padding:40px 50px;
+  border-radius:24px;
+  margin-bottom:20px;
+}
+.hero h1{margin:0;font-size:42px;}
+.hero p{margin-top:10px;font-size:18px;opacity:0.95;}
+
+.card{
+  border:1px solid #ddd;
+  border-radius:18px;
+  padding:18px;
+  background:#faf7ff;
+  margin-bottom:18px;
+}
+
+.meta-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:14px;
+}
+.meta-box{
+  border:1px solid #ddd;
+  border-radius:14px;
+  padding:12px;
+  background:#ffffff;
+}
+.meta-box strong{
+  display:block;
+  margin-bottom:6px;
+  color:#3b007a;
+}
+
+.mono{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background:#0b0b0b;
+  color:#37ff6b;
+  border-radius:14px;
+  padding:14px;
+  border:1px solid #222;
+}
+.small{font-size:13px;}
+.err{color:#ff5c5c;}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+</div>
+
+<div class="page-wrap">
+
+<div class="hero">
+  <h1>IPL Match</h1>
+  <p id="subhead">Loading match…</p>
+</div>
+
+<div class="card">
+  <div class="meta-grid">
+    <div class="meta-box">
+      <strong>Match file</strong>
+      <span id="fileBox">—</span>
+    </div>
+    <div class="meta-box">
+      <strong>Date</strong>
+      <span id="dateBox">—</span>
+    </div>
+    <div class="meta-box">
+      <strong>Teams</strong>
+      <span id="teamsBox">—</span>
+    </div>
+    <div class="meta-box">
+      <strong>Venue</strong>
+      <span id="venueBox">—</span>
+    </div>
+    <div class="meta-box">
+      <strong>Winner</strong>
+      <span id="winnerBox">—</span>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <strong>Debug</strong>
+  <div id="debug" class="mono small">Starting…</div>
+</div>
+
+</div>
+
+<script>
+const fileBox = document.getElementById("fileBox");
+const dateBox = document.getElementById("dateBox");
+const teamsBox = document.getElementById("teamsBox");
+const venueBox = document.getElementById("venueBox");
+const winnerBox = document.getElementById("winnerBox");
+const subhead = document.getElementById("subhead");
+const debugEl = document.getElementById("debug");
+
+function log(msg){
+  debugEl.textContent += "\n" + msg;
+}
+
+function getParam(name){
+  return new URLSearchParams(window.location.search).get(name);
+}
+
+function formatDate(d){
+  if(!d) return "—";
+  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+}
+
+// STEP 1: just load the match JSON and show basic info
+const file = getParam("file");
+
+fileBox.textContent = file || "—";
+
+if(!file){
+  subhead.textContent = "No match selected";
+  log("ERROR: Missing ?file= parameter in URL");
+  log("Example: ipl-match.html?file=336022.json");
+} else {
+  const matchUrl = "data/ipl/matches/" + file;
+  subhead.textContent = "Loading: " + file;
+  log("Fetching: " + matchUrl);
+
+  fetch(matchUrl)
+    .then(r=>{
+      log("HTTP status: " + r.status);
+      if(!r.ok) throw new Error("Fetch failed (" + r.status + ")");
+      return r.json();
+    })
+    .then(match=>{
+      log("Loaded match JSON ✅");
+
+      // Basic fields (from your match JSON structure)
+      const info = match.info || {};
+      const date = (info.dates && info.dates[0]) || "";
+      const teams = info.teams || [];
+      const venue = info.venue || "";
+      const winner = (info.outcome && info.outcome.winner) ? info.outcome.winner : "";
+
+      dateBox.textContent = formatDate(date);
+      teamsBox.textContent = teams.length ? (teams[0] + " vs " + teams[1]) : "—";
+      venueBox.textContent = venue || "—";
+      winnerBox.textContent = winner || "—";
+
+      subhead.textContent = teams.length ? (teams[0] + " vs " + teams[1]) : "Match loaded";
+
+      log("Date: " + date);
+      log("Teams: " + (teams.join(" vs ") || "—"));
+      log("Venue: " + venue);
+      log("Winner: " + winner);
+
+      // sanity checks for next step
+      log("Innings count: " + (match.innings ? match.innings.length : 0));
+    })
+    .catch(err=>{
+      subhead.textContent = "Could not load match";
+      debugEl.innerHTML = debugEl.textContent + "\n" + "ERROR: " + err.message;
+      debugEl.classList.add("err");
+    });
+}
+</script>
+
+</body>
+</html>
