@@ -110,13 +110,20 @@ tr:hover{background:#eef4ff;}
 <script>
 const indexUrl = "data/bbl/index.json";
 const basePath = "data/bbl/";
+const nameMapUrl = "data/bbl/player-names.json";
 
+let nameMap = {};
 let battingInnings = [];
 let bowlingFigures = [];
 
-fetch(indexUrl)
-.then(r=>r.json())
-.then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
+Promise.all([
+  fetch(nameMapUrl).then(r=>r.json()),
+  fetch(indexUrl).then(r=>r.json())
+])
+.then(([names, files])=>{
+  nameMap = names;
+  return Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json())));
+})
 .then(seasons=>{
   seasons.forEach(matches=>{
     matches.forEach(match=>{
@@ -158,7 +165,7 @@ fetch(indexUrl)
 
       for(const batter in batterRuns){
         battingInnings.push({
-          player: batter,
+          player: fullName(batter),
           runs: batterRuns[batter],
           date,
           match: teams
@@ -167,19 +174,22 @@ fetch(indexUrl)
 
       for(const bowler in bowlerStats){
         bowlingFigures.push({
-          player: bowler,
+          player: fullName(bowler),
           wickets: bowlerStats[bowler].wickets,
           runs: bowlerStats[bowler].runs,
           date,
           match: teams
         });
       }
-
     });
   });
 
   renderTable("batting");
 });
+
+function fullName(name){
+  return nameMap[name] || name;
+}
 
 function showTab(tab,e){
   document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
