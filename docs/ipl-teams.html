@@ -33,20 +33,10 @@ body{
   color:white;
   padding:40px 50px;
   border-radius:24px;
-  margin-bottom:18px;
+  margin-bottom:20px;
 }
 .hero h1{margin:0;font-size:46px;}
 .hero p{margin-top:10px;font-size:20px;opacity:0.95;}
-
-.status{
-  border:1px solid #ddd;
-  border-radius:14px;
-  padding:12px 14px;
-  background:#f8fbff;
-  margin:0 0 18px 0;
-  color:#222;
-  font-size:14px;
-}
 
 table{
   width:100%;
@@ -67,9 +57,7 @@ tr:hover{background:#eef4ff;}
   font-weight:600;
   text-decoration:none;
 }
-.team-link:hover{
-  text-decoration:underline;
-}
+.team-link:hover{text-decoration:underline;}
 </style>
 </head>
 
@@ -85,179 +73,104 @@ tr:hover{background:#eef4ff;}
 
 <div class="page-wrap">
 
-  <div class="hero">
-    <h1>Indian Premier League Teams</h1>
-    <p>All IPL teams, championships and win records.</p>
-  </div>
+<div class="hero">
+  <h1>Indian Premier League Teams</h1>
+  <p>All IPL teams, championships and win records.</p>
+</div>
 
-  <div id="status" class="status">Loading…</div>
-
-  <table>
-    <thead>
-      <tr>
-        <th>Team</th>
-        <th>Titles</th>
-        <th>Years Won</th>
-        <th>Wins</th>
-        <th>Losses</th>
-        <th>Win %</th>
-      </tr>
-    </thead>
-    <tbody id="teamsTable"></tbody>
-  </table>
+<table>
+<thead>
+<tr>
+  <th>Team</th>
+  <th>Titles</th>
+  <th>Years Won</th>
+  <th>Wins</th>
+  <th>Losses</th>
+  <th>Win %</th>
+</tr>
+</thead>
+<tbody id="teamsTable"></tbody>
+</table>
 
 </div>
 
 <script>
-document.addEventListener("DOMContentLoaded", () => {
+const indexUrl = "data/ipl/index.json";
+const basePath = "data/ipl/";
+const tableBody = document.getElementById("teamsTable");
 
-  const statusEl = document.getElementById("status");
-  const tableBody = document.getElementById("teamsTable");
+fetch(indexUrl)
+  .then(r => r.json())
+  .then(files => Promise.all(files.map(f => fetch(basePath + f).then(r => r.json()))))
+  .then(seasons => {
 
-  function setStatus(msg){
-    statusEl.textContent = msg;
-    statusEl.style.display = "block";
-  }
+    const teams = {};
 
-  function hideStatus(){
-    statusEl.style.display = "none";
-  }
+    seasons.forEach(matches => {
+      if(!Array.isArray(matches)) return;
 
-  const indexCandidates = [
-    "data/ipl/index.json",
-    "../data/ipl/index.json",
-    "../../data/ipl/index.json",
-    "/data/ipl/index.json"
-  ];
+      matches.forEach(match => {
+        const info = match.info;
+        if(!info || !info.teams || info.teams.length < 2) return;
 
-  function fetchJson(url){
-    return fetch(url, { cache: "no-store" }).then(r => {
-      if(!r.ok) throw new Error(`HTTP ${r.status} for ${url}`);
-      return r.json();
-    });
-  }
+        const t1 = info.teams[0];
+        const t2 = info.teams[1];
+        const winner = info.outcome?.winner || null;
 
-  async function findIndex(){
-    for(const url of indexCandidates){
-      try{
-        const data = await fetchJson(url);
-        if(Array.isArray(data) && data.length){
-          return { indexUrl: url, files: data };
-        }
-      }catch(e){}
-    }
-    throw new Error("Could not load index.json");
-  }
+        if(!teams[t1]) teams[t1] = { wins:0, losses:0, titles:0, years:[] };
+        if(!teams[t2]) teams[t2] = { wins:0, losses:0, titles:0, years:[] };
 
-  function basePathFromIndex(indexUrl){
-    return indexUrl.replace(/index\.json(\?.*)?$/i, "");
-  }
-
-  async function loadAllSeasons(files, basePath){
-    return Promise.all(files.map(f => fetchJson(basePath + f)));
-  }
-
-  function escapeHtml(s){
-    return String(s ?? "").replace(/[&<>"']/g, m => ({
-      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
-    }[m]));
-  }
-
-  function renderTable(teams){
-    const rows = Object.entries(teams).map(([team, data]) => {
-      const total = data.wins + data.losses;
-      const pct = total ? ((data.wins / total) * 100).toFixed(1) : "0.0";
-      return {
-        team,
-        titles: data.titles,
-        years: data.years.join(", "),
-        wins: data.wins,
-        losses: data.losses,
-        pct: pct + "%"
-      };
-    });
-
-    rows.sort((a,b)=> (b.titles - a.titles) || (parseFloat(b.pct) - parseFloat(a.pct)) || (b.wins - a.wins));
-
-    tableBody.innerHTML = "";
-    rows.forEach(r => {
-      const teamUrl = "ipl-team.html?team=" + encodeURIComponent(r.team);
-
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>
-          <a class="team-link" href="${teamUrl}">
-            ${escapeHtml(r.team)}
-          </a>
-        </td>
-        <td>${r.titles}</td>
-        <td>${escapeHtml(r.years)}</td>
-        <td>${r.wins}</td>
-        <td>${r.losses}</td>
-        <td>${r.pct}</td>
-      `;
-      tableBody.appendChild(tr);
-    });
-  }
-
-  (async function main(){
-    try{
-      setStatus("Loading…");
-
-      const { indexUrl, files } = await findIndex();
-      const basePath = basePathFromIndex(indexUrl);
-      const seasons = await loadAllSeasons(files, basePath);
-
-      const teams = {};
-
-      seasons.forEach(matches => {
-        if(!Array.isArray(matches)) return;
-
-        matches.forEach(match => {
-          const info = match.info;
-          if(!info || !info.teams || info.teams.length < 2) return;
-
-          const t1 = info.teams[0];
-          const t2 = info.teams[1];
-          const winner = info.outcome?.winner || null;
-
-          if(!teams[t1]) teams[t1] = { wins:0, losses:0, titles:0, years:[] };
-          if(!teams[t2]) teams[t2] = { wins:0, losses:0, titles:0, years:[] };
-
-          if(winner){
-            if(winner === t1){ teams[t1].wins++; teams[t2].losses++; }
-            else if(winner === t2){ teams[t2].wins++; teams[t1].losses++; }
-          }
-        });
-
-        const finalMatch = matches
-          .filter(m => m?.info?.dates?.[0])
-          .sort((a,b)=> new Date(b.info.dates[0]) - new Date(a.info.dates[0]))[0];
-
-        if(finalMatch){
-          const seasonYear = finalMatch.info.season || finalMatch.info.dates[0].slice(0,4);
-          const champion = finalMatch.info.outcome?.winner || null;
-
-          if(champion){
-            if(!teams[champion]) teams[champion] = { wins:0, losses:0, titles:0, years:[] };
-            teams[champion].titles++;
-            if(!teams[champion].years.includes(seasonYear)){
-              teams[champion].years.push(seasonYear);
-            }
-          }
+        if(winner){
+          if(winner === t1){ teams[t1].wins++; teams[t2].losses++; }
+          else if(winner === t2){ teams[t2].wins++; teams[t1].losses++; }
         }
       });
 
-      renderTable(teams);
-      hideStatus();
+      const finalMatch = matches
+        .filter(m => m?.info?.dates?.[0])
+        .sort((a,b)=> new Date(b.info.dates[0]) - new Date(a.info.dates[0]))[0];
 
-    }catch(err){
-      console.error(err);
-      setStatus("ERROR: " + err.message);
-    }
-  })();
+      if(finalMatch){
+        const seasonYear = finalMatch.info.season || finalMatch.info.dates[0].slice(0,4);
+        const champion = finalMatch.info.outcome?.winner || null;
 
-});
+        if(champion){
+          if(!teams[champion]) teams[champion] = { wins:0, losses:0, titles:0, years:[] };
+          teams[champion].titles++;
+          if(!teams[champion].years.includes(seasonYear)){
+            teams[champion].years.push(seasonYear);
+          }
+        }
+      }
+    });
+
+    const rows = Object.entries(teams).map(([team,data])=>{
+      const total = data.wins + data.losses;
+      const pct = total ? ((data.wins/total)*100).toFixed(1) : "0.0";
+      return { team, ...data, pct };
+    });
+
+    rows.sort((a,b)=> b.titles - a.titles || b.wins - a.wins);
+
+    tableBody.innerHTML = "";
+    rows.forEach(r=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>
+          <a class="team-link" href="ipl-team.html?team=${encodeURIComponent(r.team)}">
+            ${r.team}
+          </a>
+        </td>
+        <td>${r.titles}</td>
+        <td>${r.years.join(", ")}</td>
+        <td>${r.wins}</td>
+        <td>${r.losses}</td>
+        <td>${r.pct}%</td>
+      `;
+      tableBody.appendChild(tr);
+    });
+
+  });
 </script>
 
 </body>
