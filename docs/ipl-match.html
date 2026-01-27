@@ -1,65 +1,159 @@
-<script>
-const params = new URLSearchParams(window.location.search);
-const fileParam = params.get("file");
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IPL Match | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-const indexUrl = "data/ipl/index.json";
-const basePath = "data/ipl/";
-
-const statusText = document.getElementById("statusText");
-const dateBox = document.getElementById("dateBox");
-const teamsBox = document.getElementById("teamsBox");
-const venueBox = document.getElementById("venueBox");
-const winnerBox = document.getElementById("winnerBox");
-const resultBox = document.getElementById("resultBox");
-
-if(!fileParam){
-  statusText.textContent = "Missing match file parameter.";
-  throw new Error("No file parameter");
+<style>
+body{
+  font-family: Inter, system-ui, Arial, sans-serif;
+  margin:0;
+  background:#ffffff;
 }
 
-fetch(indexUrl)
-  .then(r => r.json())
-  .then(files => Promise.all(
-    files.map(f => fetch(basePath + f).then(r => r.json()))
-  ))
-  .then(seasons => {
-    let foundMatch = null;
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 
-    seasons.forEach(matches => {
-      matches.forEach(m => {
-        if(m.file === fileParam){
-          foundMatch = m;
-        }
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#3b007a,#7b2cbf);
+  color:white;
+  padding:40px 50px;
+  border-radius:24px;
+  margin-bottom:25px;
+}
+.hero h1{margin:0;font-size:46px;}
+.hero p{margin-top:10px;font-size:20px;opacity:0.95;}
+
+.summary-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:20px;
+  margin-bottom:30px;
+}
+
+.summary-box{
+  border:1px solid #ddd;
+  border-radius:14px;
+  padding:15px;
+  background:#faf7ff;
+}
+.summary-box strong{
+  display:block;
+  margin-bottom:6px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+</div>
+
+<div class="page-wrap">
+
+<div class="hero">
+  <h1>IPL Match</h1>
+  <p id="statusText">Loading match…</p>
+</div>
+
+<div class="summary-grid">
+  <div class="summary-box"><strong>Date</strong><span id="dateBox">—</span></div>
+  <div class="summary-box"><strong>Teams</strong><span id="teamsBox">—</span></div>
+  <div class="summary-box"><strong>Venue</strong><span id="venueBox">—</span></div>
+  <div class="summary-box"><strong>Winner</strong><span id="winnerBox">—</span></div>
+  <div class="summary-box"><strong>Result</strong><span id="resultBox">—</span></div>
+</div>
+
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+  const params = new URLSearchParams(window.location.search);
+  const fileParam = params.get("file");
+
+  const indexUrl = "data/ipl/index.json";
+  const basePath = "data/ipl/";
+
+  const statusText = document.getElementById("statusText");
+  const dateBox = document.getElementById("dateBox");
+  const teamsBox = document.getElementById("teamsBox");
+  const venueBox = document.getElementById("venueBox");
+  const winnerBox = document.getElementById("winnerBox");
+  const resultBox = document.getElementById("resultBox");
+
+  if(!fileParam){
+    statusText.textContent = "Missing match file parameter.";
+    return;
+  }
+
+  fetch(indexUrl)
+    .then(r => r.json())
+    .then(files => Promise.all(
+      files.map(f => fetch(basePath + f).then(r => r.json()))
+    ))
+    .then(seasons => {
+      let foundMatch = null;
+
+      seasons.forEach(matches => {
+        matches.forEach(m => {
+          if(m.file === fileParam){
+            foundMatch = m;
+          }
+        });
       });
+
+      if(!foundMatch){
+        statusText.textContent = "Match not found in data.";
+        return;
+      }
+
+      const info = foundMatch.info;
+
+      statusText.textContent = "Match loaded";
+
+      dateBox.textContent = formatDate(info.dates[0]);
+      teamsBox.textContent = info.teams.join(" vs ");
+      venueBox.textContent = info.venue || "—";
+      winnerBox.textContent = info.outcome?.winner || "—";
+
+      let result = "—";
+      if(info.outcome?.by){
+        if(info.outcome.by.runs) result = "won by " + info.outcome.by.runs + " runs";
+        if(info.outcome.by.wickets) result = "won by " + info.outcome.by.wickets + " wickets";
+      }
+      resultBox.textContent = result;
+    })
+    .catch(err => {
+      console.error(err);
+      statusText.textContent = "Error loading match data.";
     });
 
-    if(!foundMatch){
-      statusText.textContent = "Match not found in data.";
-      return;
-    }
+  function formatDate(d){
+    return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+  }
 
-    const info = foundMatch.info;
-
-    statusText.textContent = "Match loaded";
-
-    dateBox.textContent = formatDate(info.dates[0]);
-    teamsBox.textContent = info.teams.join(" vs ");
-    venueBox.textContent = info.venue || "—";
-    winnerBox.textContent = info.outcome?.winner || "—";
-
-    let result = "—";
-    if(info.outcome?.by){
-      if(info.outcome.by.runs) result = "won by " + info.outcome.by.runs + " runs";
-      if(info.outcome.by.wickets) result = "won by " + info.outcome.by.wickets + " wickets";
-    }
-    resultBox.textContent = result;
-  })
-  .catch(err=>{
-    console.error(err);
-    statusText.textContent = "Error loading match data.";
-  });
-
-function formatDate(d){
-  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
-}
+});
 </script>
+
+</body>
+</html>
