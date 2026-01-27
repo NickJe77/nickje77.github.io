@@ -107,9 +107,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function setStatus(msg){
     statusEl.textContent = msg;
+    statusEl.style.display = "block";
   }
 
-  // Try multiple likely locations (in case this page sits in a subfolder)
+  function hideStatus(){
+    statusEl.style.display = "none";
+  }
+
   const indexCandidates = [
     "data/ipl/index.json",
     "../data/ipl/index.json",
@@ -131,38 +135,33 @@ document.addEventListener("DOMContentLoaded", () => {
         if(Array.isArray(data) && data.length){
           return { indexUrl: url, files: data };
         }
-      }catch(e){
-        // keep trying
-      }
+      }catch(e){}
     }
-    throw new Error(
-      "Could not load index.json. Tried: " + indexCandidates.join(" | ")
-    );
+    throw new Error("Could not load index.json");
   }
 
   function basePathFromIndex(indexUrl){
-    // indexUrl like "data/ipl/index.json" -> base "data/ipl/"
     return indexUrl.replace(/index\.json(\?.*)?$/i, "");
   }
 
   async function loadAllSeasons(files, basePath){
-    // files are like "ipl_2008_FULL.json"
-    const seasonData = await Promise.all(
-      files.map(f => fetchJson(basePath + f))
-    );
-    return seasonData;
+    return Promise.all(files.map(f => fetchJson(basePath + f)));
+  }
+
+  function escapeHtml(s){
+    return String(s ?? "").replace(/[&<>"']/g, m => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    }[m]));
   }
 
   function renderTable(teams){
     const rows = Object.entries(teams).map(([team, data]) => {
       const total = data.wins + data.losses;
       const pct = total ? ((data.wins / total) * 100).toFixed(1) : "0.0";
-      const years = data.years.join(", ");
-
       return {
         team,
         titles: data.titles,
-        years,
+        years: data.years.join(", "),
         wins: data.wins,
         losses: data.losses,
         pct: pct + "%"
@@ -186,37 +185,26 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  function escapeHtml(s){
-    return String(s ?? "").replace(/[&<>"']/g, m => ({
-      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
-    }[m]));
-  }
-
   (async function main(){
     try{
-      setStatus("Loading index…");
+      setStatus("Loading…");
 
       const { indexUrl, files } = await findIndex();
       const basePath = basePathFromIndex(indexUrl);
-
-      setStatus(`Index loaded from: ${indexUrl} | Seasons: ${files.length}. Loading season files…`);
-
       const seasons = await loadAllSeasons(files, basePath);
 
-      // Build stats
       const teams = {};
 
       seasons.forEach(matches => {
-        if(!Array.isArray(matches) || matches.length === 0) return;
+        if(!Array.isArray(matches)) return;
 
-        // wins/losses
         matches.forEach(match => {
           const info = match.info;
           if(!info || !info.teams || info.teams.length < 2) return;
 
           const t1 = info.teams[0];
           const t2 = info.teams[1];
-          const winner = info.outcome && info.outcome.winner ? info.outcome.winner : null;
+          const winner = info.outcome?.winner || null;
 
           if(!teams[t1]) teams[t1] = { wins:0, losses:0, titles:0, years:[] };
           if(!teams[t2]) teams[t2] = { wins:0, losses:0, titles:0, years:[] };
@@ -227,39 +215,26 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         });
 
-        // champion (best-effort): take the last-dated match in the file as "final"
-        // (This matches what we did elsewhere; if you later want "actual final", we can detect playoff/final explicitly.)
-        const dated = matches
-          .filter(m => m && m.info && m.info.dates && m.info.dates[0])
-          .slice()
-          .sort((a,b)=> new Date(b.info.dates[0]) - new Date(a.info.dates[0]));
+        const finalMatch = matches
+          .filter(m => m?.info?.dates?.[0])
+          .sort((a,b)=> new Date(b.info.dates[0]) - new Date(a.info.dates[0]))[0];
 
-        const finalMatch = dated[0];
-        if(finalMatch && finalMatch.info){
-          const seasonYear = finalMatch.info.season || (finalMatch.info.dates?.[0]?.slice(0,4) ?? "");
-          const champion = finalMatch.info.outcome && finalMatch.info.outcome.winner ? finalMatch.info.outcome.winner : null;
+        if(finalMatch){
+          const seasonYear = finalMatch.info.season || finalMatch.info.dates[0].slice(0,4);
+          const champion = finalMatch.info.outcome?.winner || null;
 
           if(champion){
             if(!teams[champion]) teams[champion] = { wins:0, losses:0, titles:0, years:[] };
             teams[champion].titles++;
-            if(seasonYear && !teams[champion].years.includes(seasonYear)){
+            if(!teams[champion].years.includes(seasonYear)){
               teams[champion].years.push(seasonYear);
-              teams[champion].years.sort();
             }
           }
         }
       });
 
-      const teamCount = Object.keys(teams).length;
-      if(teamCount === 0){
-        setStatus(`Loaded seasons, but found 0 teams. That usually means the JSON structure isn't match.info.* on your files.`);
-        return;
-      }
-
-      setStatus(`Loaded OK ✅ Teams: ${teamCount}. Rendering…`);
       renderTable(teams);
-
-      setStatus(`Loaded OK ✅ Teams: ${teamCount} | Seasons: ${seasons.length} | Source: ${basePath}*`);
+      hideStatus();   // 👈 REMOVES "Loaded OK" TEXT
 
     }catch(err){
       console.error(err);
