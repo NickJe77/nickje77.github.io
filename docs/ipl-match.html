@@ -7,10 +7,9 @@
 
 <style>
 body{
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
-               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: Inter, system-ui, Arial, sans-serif;
   margin:0;
-  background:#ffffff;
+  background:#fff;
 }
 
 .navbar{
@@ -34,48 +33,34 @@ body{
   color:white;
   padding:40px 50px;
   border-radius:24px;
-  margin-bottom:20px;
+  margin-bottom:25px;
 }
 .hero h1{margin:0;font-size:42px;}
-.hero p{margin-top:10px;font-size:18px;opacity:0.95;}
+.hero p{margin-top:10px;font-size:18px;}
 
-.card{
-  border:1px solid #ddd;
-  border-radius:18px;
-  padding:18px;
-  background:#faf7ff;
-  margin-bottom:18px;
-}
-
-.meta-grid{
+.box-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
-  gap:14px;
+  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:15px;
+  margin-bottom:30px;
 }
-.meta-box{
+.box{
   border:1px solid #ddd;
-  border-radius:14px;
-  padding:12px;
-  background:#ffffff;
-}
-.meta-box strong{
-  display:block;
-  margin-bottom:6px;
-  color:#3b007a;
-}
-
-.mono{
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  white-space: pre-wrap;
-  word-break: break-word;
-  background:#0b0b0b;
-  color:#37ff6b;
-  border-radius:14px;
+  border-radius:12px;
   padding:14px;
-  border:1px solid #222;
+  background:#faf7ff;
 }
-.small{font-size:13px;}
-.err{color:#ff5c5c;}
+.box strong{display:block;margin-bottom:6px;}
+
+.debug{
+  background:#000;
+  color:#0f0;
+  padding:15px;
+  border-radius:10px;
+  font-family:monospace;
+  white-space:pre-wrap;
+}
+.error{color:#ff4d4d;}
 </style>
 </head>
 
@@ -93,120 +78,82 @@ body{
 
 <div class="hero">
   <h1>IPL Match</h1>
-  <p id="subhead">Loading match…</p>
+  <p id="statusText">Loading match…</p>
 </div>
 
-<div class="card">
-  <div class="meta-grid">
-    <div class="meta-box">
-      <strong>Match file</strong>
-      <span id="fileBox">—</span>
-    </div>
-    <div class="meta-box">
-      <strong>Date</strong>
-      <span id="dateBox">—</span>
-    </div>
-    <div class="meta-box">
-      <strong>Teams</strong>
-      <span id="teamsBox">—</span>
-    </div>
-    <div class="meta-box">
-      <strong>Venue</strong>
-      <span id="venueBox">—</span>
-    </div>
-    <div class="meta-box">
-      <strong>Winner</strong>
-      <span id="winnerBox">—</span>
-    </div>
-  </div>
+<div class="box-grid">
+  <div class="box"><strong>Season</strong><span id="seasonBox">—</span></div>
+  <div class="box"><strong>Date</strong><span id="dateBox">—</span></div>
+  <div class="box"><strong>Teams</strong><span id="teamsBox">—</span></div>
+  <div class="box"><strong>Venue</strong><span id="venueBox">—</span></div>
+  <div class="box"><strong>Winner</strong><span id="winnerBox">—</span></div>
+  <div class="box"><strong>Result</strong><span id="resultBox">—</span></div>
 </div>
 
-<div class="card">
-  <strong>Debug</strong>
-  <div id="debug" class="mono small">Starting…</div>
-</div>
+<div class="debug" id="debugLog"></div>
 
 </div>
 
 <script>
-const fileBox = document.getElementById("fileBox");
-const dateBox = document.getElementById("dateBox");
-const teamsBox = document.getElementById("teamsBox");
-const venueBox = document.getElementById("venueBox");
-const winnerBox = document.getElementById("winnerBox");
-const subhead = document.getElementById("subhead");
-const debugEl = document.getElementById("debug");
+const params = new URLSearchParams(window.location.search);
+const season = params.get("season");
+const fileId = params.get("file");
 
-function log(msg){
-  debugEl.textContent += "\n" + msg;
+const debug = document.getElementById("debugLog");
+function log(msg){ debug.textContent += msg + "\n"; }
+
+log("Season param = " + season);
+log("File param = " + fileId);
+
+if(!season || !fileId){
+  document.getElementById("statusText").textContent = "Missing match parameters";
+  log("ERROR: Missing season or file");
+  throw new Error("Missing params");
 }
 
-function getParam(name){
-  return new URLSearchParams(window.location.search).get(name);
-}
+const seasonUrl = `data/ipl/ipl_${season}.json`;
+log("Fetching season file: " + seasonUrl);
 
-function formatDate(d){
-  if(!d) return "—";
-  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
-}
+fetch(seasonUrl)
+.then(r=>{
+  log("HTTP " + r.status);
+  if(!r.ok) throw new Error("Season file not found");
+  return r.json();
+})
+.then(matches=>{
+  log("Matches loaded: " + matches.length);
 
-const file = getParam("file");
-fileBox.textContent = file || "—";
+  const match = matches.find(m => m.file === fileId);
 
-if(!file){
-  subhead.textContent = "No match selected";
-  log("ERROR: Missing ?file= parameter");
-  log("Example: ipl-match.html?file=336022.json");
-} else {
-
-  const paths = [
-    "./data/ipl/matches/" + file,
-    "./data/ipl/" + file
-  ];
-
-  function tryFetch(i){
-    if(i >= paths.length){
-      throw new Error("File not found in any known folder");
-    }
-
-    const url = paths[i];
-    log("Trying: " + url);
-
-    return fetch(url).then(r=>{
-      log("HTTP " + r.status);
-      if(!r.ok) return tryFetch(i+1);
-      return r.json();
-    });
+  if(!match){
+    document.getElementById("statusText").textContent = "Match not found in season file";
+    log("ERROR: Match not found");
+    return;
   }
 
-  tryFetch(0)
-    .then(match=>{
-      log("Loaded match JSON");
+  document.getElementById("statusText").textContent = "Match loaded";
 
-      const info = match.info || {};
-      const date = (info.dates && info.dates[0]) || "";
-      const teams = info.teams || [];
-      const venue = info.venue || "";
-      const winner = (info.outcome && info.outcome.winner) ? info.outcome.winner : "";
+  document.getElementById("seasonBox").textContent = season;
+  document.getElementById("dateBox").textContent = formatDate(match.date);
+  document.getElementById("teamsBox").textContent = match.teams.join(" vs ");
+  document.getElementById("venueBox").textContent = match.venue || "—";
+  document.getElementById("winnerBox").textContent = match.outcome?.winner || "—";
 
-      dateBox.textContent = formatDate(date);
-      teamsBox.textContent = teams.length ? (teams[0] + " vs " + teams[1]) : "—";
-      venueBox.textContent = venue || "—";
-      winnerBox.textContent = winner || "—";
+  let result="—";
+  if(match.outcome?.by){
+    if(match.outcome.by.runs) result = "Won by " + match.outcome.by.runs + " runs";
+    if(match.outcome.by.wickets) result = "Won by " + match.outcome.by.wickets + " wickets";
+  }
+  document.getElementById("resultBox").textContent = result;
 
-      subhead.textContent = teams.length ? (teams[0] + " vs " + teams[1]) : "Match loaded";
+})
+.catch(err=>{
+  document.getElementById("statusText").textContent = "Could not load match";
+  log("ERROR: " + err.message);
+});
 
-      log("Date: " + date);
-      log("Teams: " + teams.join(" vs "));
-      log("Venue: " + venue);
-      log("Winner: " + winner);
-      log("Innings: " + (match.innings ? match.innings.length : 0));
-    })
-    .catch(err=>{
-      subhead.textContent = "Could not load match";
-      debugEl.textContent += "\nERROR: " + err.message;
-      debugEl.classList.add("err");
-    });
+function formatDate(d){
+  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
 }
 </script>
 
