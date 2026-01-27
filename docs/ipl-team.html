@@ -100,54 +100,55 @@ const basePath = "data/ipl/";
 const tableBody = document.getElementById("teamsTable");
 
 fetch(indexUrl)
-  .then(r=>r.json())
-  .then(files => Promise.all(files.map(f => fetch(basePath+f).then(r=>r.json()))))
+  .then(r => r.json())
+  .then(files => Promise.all(files.map(f => fetch(basePath + f).then(r => r.json()))))
   .then(seasons => {
 
     const teams = {};
 
     seasons.forEach(matches => {
-      if(!matches.length) return;
+      if (!matches.length) return;
 
       matches.forEach(match => {
         const t1 = match.info.teams[0];
         const t2 = match.info.teams[1];
         const winner = match.info.outcome?.winner;
 
-        if(!teams[t1]) teams[t1] = {wins:0,losses:0,titles:0,years:[]};
-        if(!teams[t2]) teams[t2] = {wins:0,losses:0,titles:0,years:[]};
+        if (!teams[t1]) teams[t1] = { wins: 0, losses: 0, titles: 0, years: [] };
+        if (!teams[t2]) teams[t2] = { wins: 0, losses: 0, titles: 0, years: [] };
 
-        if(winner){
-          if(winner === t1){
+        if (winner) {
+          if (winner === t1) {
             teams[t1].wins++;
             teams[t2].losses++;
-          } else if(winner === t2){
+          } else if (winner === t2) {
             teams[t2].wins++;
             teams[t1].losses++;
           }
         }
       });
 
-      // FINAL = last match of season
       matches.sort((a,b)=>new Date(b.info.dates[0]) - new Date(a.info.dates[0]));
       const finalMatch = matches[0];
-      const champ = finalMatch.info.outcome?.winner;
-      const year = finalMatch.info.season;
+      const champion = finalMatch.info.outcome?.winner;
+      const seasonYear = finalMatch.info.season;
 
-      if(champ){
-        if(!teams[champ]) teams[champ]={wins:0,losses:0,titles:0,years:[]};
-        teams[champ].titles++;
-        teams[champ].years.push(year);
+      if (champion) {
+        teams[champion].titles++;
+        teams[champion].years.push(seasonYear);
       }
     });
 
     renderTable(teams);
+  })
+  .catch(err => {
+    console.error("Error loading IPL team data:", err);
   });
 
-function renderTable(teams){
-  const rows = Object.entries(teams).map(([team,data])=>{
+function renderTable(teams) {
+  const rows = Object.entries(teams).map(([team, data]) => {
     const total = data.wins + data.losses;
-    const winPct = total ? ((data.wins/total)*100).toFixed(1) : "0.0";
+    const pct = total ? ((data.wins / total) * 100).toFixed(1) : "0.0";
 
     return {
       team,
@@ -155,17 +156,17 @@ function renderTable(teams){
       years: data.years.join(", "),
       wins: data.wins,
       losses: data.losses,
-      pct: winPct
+      pct
     };
   });
 
   rows.sort((a,b)=>b.titles - a.titles || b.pct - a.pct);
 
   tableBody.innerHTML = "";
-  rows.forEach(r=>{
-    const tr=document.createElement("tr");
+  rows.forEach(r => {
+    const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><a class="team-link" href="ipl-team.html?team=${encodeURIComponent(r.team)}">${r.team}</a></td>
+      <td>${r.team}</td>
       <td>${r.titles}</td>
       <td>${r.years}</td>
       <td>${r.wins}</td>
