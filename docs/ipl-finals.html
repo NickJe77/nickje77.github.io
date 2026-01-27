@@ -34,10 +34,28 @@ body{
   color:white;
   padding:40px 50px;
   border-radius:24px;
-  margin-bottom:30px;
+  margin-bottom:25px;
 }
 .hero h1{margin:0;font-size:46px;}
 .hero p{margin-top:10px;font-size:20px;opacity:0.95;}
+
+.year-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(90px,1fr));
+  gap:12px;
+  margin-bottom:25px;
+}
+.year-btn{
+  background:#2b004f;
+  color:white;
+  border:none;
+  padding:12px 0;
+  border-radius:10px;
+  font-size:16px;
+  cursor:pointer;
+}
+.year-btn:hover{background:#4b0082;}
+.year-btn.active{background:#9d4edd;}
 
 table{
   width:100%;
@@ -55,7 +73,13 @@ tr:hover{background:#eef4ff;}
 
 .winner{font-weight:600;color:#1a7f37;}
 .runnerup{color:#b42318;}
-.score{font-weight:600;}
+.result{font-weight:600;}
+
+.team-link{
+  color:inherit;
+  text-decoration:none;
+}
+.team-link:hover{text-decoration:underline;}
 </style>
 </head>
 
@@ -73,8 +97,10 @@ tr:hover{background:#eef4ff;}
 
 <div class="hero">
   <h1>Indian Premier League Finals</h1>
-  <p>Every IPL final with winner, runner-up, score and venue.</p>
+  <p>Every IPL final with result and venue.</p>
 </div>
+
+<div id="yearGrid" class="year-grid"></div>
 
 <table>
 <thead>
@@ -82,7 +108,7 @@ tr:hover{background:#eef4ff;}
   <th>Season</th>
   <th>Winner</th>
   <th>Runner-up</th>
-  <th>Score</th>
+  <th>Result</th>
   <th>Date</th>
   <th>Venue</th>
 </tr>
@@ -95,7 +121,10 @@ tr:hover{background:#eef4ff;}
 <script>
 const indexUrl = "data/ipl/index.json";
 const basePath = "data/ipl/";
+const yearGrid = document.getElementById("yearGrid");
 const tableBody = document.getElementById("finalsTable");
+
+let finalsData = [];
 
 fetch(indexUrl)
   .then(r=>r.json())
@@ -104,34 +133,68 @@ fetch(indexUrl)
     seasons.forEach(matches=>{
       if(!matches.length) return;
 
-      // sort newest first
       matches.sort((a,b)=>new Date(b.date)-new Date(a.date));
       const finalMatch = matches[0];
 
       const winner = finalMatch.outcome?.winner || "—";
       const runnerUp = finalMatch.teams?.find(t=>t!==winner) || "—";
 
-      let score = "—";
+      let result = "—";
       if(finalMatch.outcome?.by){
         if(finalMatch.outcome.by.runs){
-          score = "won by " + finalMatch.outcome.by.runs + " runs";
+          result = "won by " + finalMatch.outcome.by.runs + " runs";
         } else if(finalMatch.outcome.by.wickets){
-          score = "won by " + finalMatch.outcome.by.wickets + " wickets";
+          result = "won by " + finalMatch.outcome.by.wickets + " wickets";
         }
       }
 
-      const tr=document.createElement("tr");
-      tr.innerHTML=`
-        <td>${finalMatch.date.slice(0,4)}</td>
-        <td class="winner">${winner}</td>
-        <td class="runnerup">${runnerUp}</td>
-        <td class="score">${score}</td>
-        <td>${formatDate(finalMatch.date)}</td>
-        <td>${finalMatch.venue || ""}</td>
-      `;
-      tableBody.appendChild(tr);
+      finalsData.push({
+        season: finalMatch.date.slice(0,4),
+        winner,
+        runnerUp,
+        result,
+        date: finalMatch.date,
+        venue: finalMatch.venue || ""
+      });
     });
+
+    finalsData.sort((a,b)=>a.season-b.season);
+    buildYearButtons();
+    renderTable(finalsData);
   });
+
+function buildYearButtons(){
+  finalsData.forEach((f,i)=>{
+    const btn=document.createElement("button");
+    btn.className="year-btn";
+    btn.textContent=f.season;
+    btn.onclick=()=>{
+      document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      renderTable(finalsData.filter(x=>x.season===f.season));
+    };
+    yearGrid.appendChild(btn);
+    if(i===finalsData.length-1){
+      btn.classList.add("active");
+    }
+  });
+}
+
+function renderTable(rows){
+  tableBody.innerHTML="";
+  rows.forEach(f=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${f.season}</td>
+      <td class="winner"><a class="team-link" href="ipl-team.html?team=${encodeURIComponent(f.winner)}">${f.winner}</a></td>
+      <td class="runnerup"><a class="team-link" href="ipl-team.html?team=${encodeURIComponent(f.runnerUp)}">${f.runnerUp}</a></td>
+      <td class="result">${f.result}</td>
+      <td>${formatDate(f.date)}</td>
+      <td>${f.venue}</td>
+    `;
+    tableBody.appendChild(tr);
+  });
+}
 
 function formatDate(d){
   return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
