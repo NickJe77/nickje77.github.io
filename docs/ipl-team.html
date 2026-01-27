@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Indian Premier League Teams | The Sporting Almanac</title>
+<title>IPL Team | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -36,7 +36,6 @@ body{
   margin-bottom:20px;
 }
 .hero h1{margin:0;font-size:46px;}
-.hero p{margin-top:10px;font-size:20px;opacity:0.95;}
 
 table{
   width:100%;
@@ -51,13 +50,6 @@ th,td{
 th{background:#f3f6fb;}
 tr:nth-child(even){background:#f8fbff;}
 tr:hover{background:#eef4ff;}
-
-.team-link{
-  color:#3b007a;
-  font-weight:600;
-  text-decoration:none;
-}
-.team-link:hover{text-decoration:underline;}
 </style>
 </head>
 
@@ -74,103 +66,71 @@ tr:hover{background:#eef4ff;}
 <div class="page-wrap">
 
 <div class="hero">
-  <h1>Indian Premier League Teams</h1>
-  <p>All IPL teams, championships and win records.</p>
+  <h1 id="teamName">Team</h1>
 </div>
 
 <table>
 <thead>
 <tr>
-  <th>Team</th>
-  <th>Titles</th>
-  <th>Years Won</th>
-  <th>Wins</th>
-  <th>Losses</th>
-  <th>Win %</th>
+  <th>Date</th>
+  <th>Opponent</th>
+  <th>Venue</th>
+  <th>Result</th>
 </tr>
 </thead>
-<tbody id="teamsTable"></tbody>
+<tbody id="matchesTable"></tbody>
 </table>
 
 </div>
 
 <script>
+const params = new URLSearchParams(window.location.search);
+const team = params.get("team");
+
 const indexUrl = "data/ipl/index.json";
 const basePath = "data/ipl/";
-const tableBody = document.getElementById("teamsTable");
+
+document.getElementById("teamName").textContent = team || "Team";
 
 fetch(indexUrl)
-  .then(r => r.json())
-  .then(files => Promise.all(files.map(f => fetch(basePath + f).then(r => r.json()))))
-  .then(seasons => {
+  .then(r=>r.json())
+  .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
+  .then(seasons=>{
+    const tableBody = document.getElementById("matchesTable");
+    tableBody.innerHTML = "";
 
-    const teams = {};
-
-    seasons.forEach(matches => {
+    seasons.forEach(matches=>{
       if(!Array.isArray(matches)) return;
 
-      matches.forEach(match => {
+      matches.forEach(match=>{
         const info = match.info;
         if(!info || !info.teams || info.teams.length < 2) return;
 
-        const t1 = info.teams[0];
-        const t2 = info.teams[1];
-        const winner = info.outcome?.winner || null;
+        if(!info.teams.includes(team)) return;
 
-        if(!teams[t1]) teams[t1] = { wins:0, losses:0, titles:0, years:[] };
-        if(!teams[t2]) teams[t2] = { wins:0, losses:0, titles:0, years:[] };
+        const opponent = info.teams.find(t=>t!==team);
+        const winner = info.outcome?.winner || "";
+        let result = "No result";
 
         if(winner){
-          if(winner === t1){ teams[t1].wins++; teams[t2].losses++; }
-          else if(winner === t2){ teams[t2].wins++; teams[t1].losses++; }
+          result = winner === team ? "Won" : "Lost";
         }
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${formatDate(info.dates[0])}</td>
+          <td>${opponent}</td>
+          <td>${info.venue || ""}</td>
+          <td>${result}</td>
+        `;
+        tableBody.appendChild(tr);
       });
-
-      const finalMatch = matches
-        .filter(m => m?.info?.dates?.[0])
-        .sort((a,b)=> new Date(b.info.dates[0]) - new Date(a.info.dates[0]))[0];
-
-      if(finalMatch){
-        const seasonYear = finalMatch.info.season || finalMatch.info.dates[0].slice(0,4);
-        const champion = finalMatch.info.outcome?.winner || null;
-
-        if(champion){
-          if(!teams[champion]) teams[champion] = { wins:0, losses:0, titles:0, years:[] };
-          teams[champion].titles++;
-          if(!teams[champion].years.includes(seasonYear)){
-            teams[champion].years.push(seasonYear);
-          }
-        }
-      }
     });
-
-    const rows = Object.entries(teams).map(([team,data])=>{
-      const total = data.wins + data.losses;
-      const pct = total ? ((data.wins/total)*100).toFixed(1) : "0.0";
-      return { team, ...data, pct };
-    });
-
-    rows.sort((a,b)=> b.titles - a.titles || b.wins - a.wins);
-
-    tableBody.innerHTML = "";
-    rows.forEach(r=>{
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>
-          <a class="team-link" href="ipl-teams.html?team=${encodeURIComponent(r.team)}">
-            ${r.team}
-          </a>
-        </td>
-        <td>${r.titles}</td>
-        <td>${r.years.join(", ")}</td>
-        <td>${r.wins}</td>
-        <td>${r.losses}</td>
-        <td>${r.pct}%</td>
-      `;
-      tableBody.appendChild(tr);
-    });
-
   });
+
+function formatDate(d){
+  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+}
 </script>
 
 </body>
