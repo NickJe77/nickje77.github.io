@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BBL All-Time Leaders | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family: Inter, system-ui, Arial, sans-serif;
+  margin:0;
+  background:#ffffff;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#003566,#0077b6);
+  color:white;
+  padding:40px 50px;
+  border-radius:24px;
+  margin-bottom:25px;
+}
+.hero h1{margin:0;font-size:46px;}
+.hero p{margin-top:10px;font-size:20px;opacity:0.95;}
+
+.tabs{
+  display:flex;
+  gap:10px;
+  margin-bottom:20px;
+}
+.tab{
+  padding:10px 16px;
+  border-radius:10px;
+  border:none;
+  cursor:pointer;
+  background:#003566;
+  color:white;
+}
+.tab.active{background:#00b4d8;}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:15px;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:10px 12px;
+  text-align:left;
+}
+th{background:#f3f6fb;}
+tr:nth-child(even){background:#f8fbff;}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+</div>
+
+<div class="page-wrap">
+
+<div class="hero">
+  <h1>BBL All-Time Leaders</h1>
+  <p>Top 10 players in major statistical categories.</p>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('runs',this)">Run Scorers</button>
+  <button class="tab" onclick="showTab('wickets',this)">Wicket Takers</button>
+  <button class="tab" onclick="showTab('fielding',this)">Fielders</button>
+  <button class="tab" onclick="showTab('sr',this)">Strike Rate (20+ matches)</button>
+</div>
+
+<table>
+<thead>
+<tr><th>Rank</th><th>Player</th><th>Stat</th></tr>
+</thead>
+<tbody id="leaderTable"></tbody>
+</table>
+
+</div>
+
+<script>
+const indexUrl="data/bbl/index.json";
+const basePath="data/bbl/";
+
+const batting={}, bowling={}, fielding={}, matchesPlayed={};
+let leaders={};
+
+fetch(indexUrl)
+.then(r=>r.json())
+.then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
+.then(seasons=>{
+  seasons.forEach(matches=>{
+    matches.forEach(match=>{
+      match.innings.forEach(inn=>{
+        inn.overs.forEach(over=>{
+          over.deliveries.forEach(d=>{
+            const batter=d.batter;
+            const bowler=d.bowler;
+
+            batting[batter]=batting[batter]||{runs:0,balls:0};
+            batting[batter].runs+=d.runs.batter;
+            batting[batter].balls++;
+
+            matchesPlayed[batter]=matchesPlayed[batter]||new Set();
+            matchesPlayed[batter].add(match.file);
+
+            if(d.wickets){
+              d.wickets.forEach(w=>{
+                bowling[bowler]=(bowling[bowler]||0)+1;
+                if(w.kind==="caught"||w.kind==="run out"){
+                  const f=w.fielders?.[0]?.name;
+                  if(f) fielding[f]=(fielding[f]||0)+1;
+                }
+              });
+            }
+          });
+        });
+      });
+    });
+  });
+
+  leaders.runs=Object.entries(batting)
+    .sort((a,b)=>b[1].runs-a[1].runs)
+    .slice(0,10)
+    .map(([p,v],i)=>[i+1,p,v.runs]);
+
+  leaders.wickets=Object.entries(bowling)
+    .sort((a,b)=>b[1]-a[1])
+    .slice(0,10)
+    .map(([p,v],i)=>[i+1,p,v]);
+
+  leaders.fielding=Object.entries(fielding)
+    .sort((a,b)=>b[1]-a[1])
+    .slice(0,10)
+    .map(([p,v],i)=>[i+1,p,v]);
+
+  leaders.sr=[];
+  Object.keys(batting).forEach(p=>{
+    const games=matchesPlayed[p]?.size||0;
+    if(games>=20){
+      const sr=(batting[p].runs/batting[p].balls)*100;
+      leaders.sr.push([p,sr]);
+    }
+  });
+  leaders.sr.sort((a,b)=>b[1]-a[1]);
+  leaders.sr=leaders.sr.slice(0,10).map((x,i)=>[i+1,x[0],x[1].toFixed(1)]);
+
+  render("runs");
+});
+
+function showTab(type,btn){
+  document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  render(type);
+}
+
+function render(type){
+  const tbody=document.getElementById("leaderTable");
+  tbody.innerHTML="";
+  leaders[type].forEach(r=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+</script>
+
+</body>
+</html>
