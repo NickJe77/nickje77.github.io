@@ -38,9 +38,7 @@ body{
 .hero h1{margin:0;font-size:40px;}
 .hero p{margin-top:10px;font-size:18px;opacity:0.95;}
 
-.section{
-  margin-bottom:40px;
-}
+.section{margin-bottom:40px;}
 
 h2{
   margin-top:30px;
@@ -76,22 +74,20 @@ tfoot{background:#faf7ff;font-weight:600;}
 </div>
 
 <div class="page-wrap">
+  <div class="hero">
+    <h1 id="matchTitle">IPL Match</h1>
+    <p id="matchInfo">Loading match…</p>
+  </div>
 
-<div class="hero">
-  <h1 id="matchTitle">IPL Match</h1>
-  <p id="matchInfo">Loading match…</p>
-</div>
-
-<div id="scorecard"></div>
-
+  <div id="scorecard"></div>
 </div>
 
 <script>
 const params = new URLSearchParams(window.location.search);
 const fileParam = params.get("file");
 
-const basePath = "docs/data/ipl/";
-const seasonFile = "ipl_2008_FULL.json";
+const basePath = "data/ipl/";
+const indexFile = "index.json";
 
 const matchInfo = document.getElementById("matchInfo");
 const matchTitle = document.getElementById("matchTitle");
@@ -102,20 +98,31 @@ if(!fileParam){
   throw new Error("No file parameter");
 }
 
-fetch(basePath + seasonFile)
+fetch(basePath + indexFile)
   .then(r=>r.json())
-  .then(matches=>{
-    const found = matches.find(m => m.file === fileParam);
-    if(!found){
-      matchInfo.textContent = "Match not found.";
-      return;
-    }
-    renderMatch(found);
-  })
+  .then(seasons => loadSeasons(seasons))
   .catch(err=>{
     console.error(err);
-    matchInfo.textContent = "Error loading match data.";
+    matchInfo.textContent = "Error loading season index.";
   });
+
+async function loadSeasons(seasons){
+  for(const season of seasons){
+    const fullFile = season.replace(".json","_FULL.json");
+    try{
+      const res = await fetch(basePath + fullFile);
+      const matches = await res.json();
+      const found = matches.find(m => m.file === fileParam);
+      if(found){
+        renderMatch(found);
+        return;
+      }
+    }catch(e){
+      console.warn("Skip:", season);
+    }
+  }
+  matchInfo.textContent = "Match not found in any season.";
+}
 
 function renderMatch(match){
   const info = match.info;
@@ -199,50 +206,4 @@ function renderInnings(innings, num){
     html += `<tr>
       <td>${name}</td>
       <td>${s.runs}</td>
-      <td>${s.balls}</td>
-      <td>${s.fours}</td>
-      <td>${s.sixes}</td>
-      <td>${s.out ? "out" : "not out"}</td>
-    </tr>`;
-  });
-
-  html += `</tbody>
-    <tfoot>
-      <tr>
-        <td>Total</td>
-        <td>${totalRuns}/${totalWkts}</td>
-        <td colspan="4">${overs} overs</td>
-      </tr>
-    </tfoot>
-    </table>
-
-    <table>
-      <thead>
-        <tr>
-          <th>Bowler</th><th>O</th><th>R</th><th>W</th>
-        </tr>
-      </thead>
-      <tbody>`;
-
-  Object.entries(bowlingStats).forEach(([name, s])=>{
-    const o = (Math.floor(s.balls/6)) + "." + (s.balls%6);
-    html += `<tr>
-      <td>${name}</td>
-      <td>${o}</td>
-      <td>${s.runs}</td>
-      <td>${s.wickets}</td>
-    </tr>`;
-  });
-
-  html += `</tbody></table></div>`;
-
-  scorecardDiv.insertAdjacentHTML("beforeend", html);
-}
-
-function formatDate(d){
-  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
-}
-</script>
-
-</body>
-</html>
+      <td>${s.balls}</
