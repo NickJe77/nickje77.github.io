@@ -91,6 +91,8 @@ const params = new URLSearchParams(window.location.search);
 const fileParam = params.get("file");
 
 const basePath = "data/ipl/";
+const seasonFile = "ipl_2008_FULL.json"; // for now we use 2008 only
+
 const matchInfo = document.getElementById("matchInfo");
 const matchTitle = document.getElementById("matchTitle");
 const scorecardDiv = document.getElementById("scorecard");
@@ -100,18 +102,23 @@ if(!fileParam){
   throw new Error("No file parameter");
 }
 
-fetch(basePath + fileParam)
+fetch(basePath + seasonFile)
   .then(r=>r.json())
-  .then(data=>{
-    renderMatch(data);
+  .then(matches=>{
+    const found = matches.find(m => m.file === fileParam);
+    if(!found){
+      matchInfo.textContent = "Match not found.";
+      return;
+    }
+    renderMatch(found);
   })
   .catch(err=>{
     console.error(err);
-    matchInfo.textContent = "Error loading match file.";
+    matchInfo.textContent = "Error loading match data.";
   });
 
-function renderMatch(data){
-  const info = data.info;
+function renderMatch(match){
+  const info = match.info;
 
   const date = info.dates[0];
   const venue = info.venue;
@@ -128,7 +135,7 @@ function renderMatch(data){
   matchInfo.textContent =
     formatDate(date) + " | " + venue + " | " + winner + " " + result + " | Player of Match: " + pom;
 
-  data.innings.forEach((inn, idx)=>{
+  match.innings.forEach((inn, idx)=>{
     renderInnings(inn, idx+1);
   });
 }
