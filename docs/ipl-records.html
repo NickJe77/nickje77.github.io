@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>IPL League Leaders | The Sporting Almanac</title>
+<title>IPL Best Individual Performances | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -83,15 +83,13 @@ tr:hover{background:#eef4ff;}
 <div class="page-wrap">
 
 <div class="hero">
-  <h1>IPL League Leaders</h1>
-  <p>Top performers in IPL history.</p>
+  <h1>IPL Best Individual Performances</h1>
+  <p>Top 25 batting and bowling performances in a single IPL match.</p>
 </div>
 
 <div class="tabs">
-  <button class="tab active" onclick="showTab('runs')">Run Scorers</button>
-  <button class="tab" onclick="showTab('wickets')">Wicket Takers</button>
-  <button class="tab" onclick="showTab('fielding')">Fielders</button>
-  <button class="tab" onclick="showTab('strike')">Strike Rate (min 20 matches)</button>
+  <button class="tab active" onclick="showTab('batting',event)">Batting</button>
+  <button class="tab" onclick="showTab('bowling',event)">Bowling</button>
 </div>
 
 <table>
@@ -99,7 +97,9 @@ tr:hover{background:#eef4ff;}
 <tr>
   <th>Rank</th>
   <th>Player</th>
-  <th id="statHeader">Runs</th>
+  <th>Figure</th>
+  <th>Season</th>
+  <th>Match</th>
 </tr>
 </thead>
 <tbody id="recordsTable"></tbody>
@@ -111,8 +111,9 @@ tr:hover{background:#eef4ff;}
 const indexUrl = "data/ipl/index.json";
 const basePath = "data/ipl/";
 
-let playerStats = {};
-let currentTab = "runs";
+let battingInnings = [];
+let bowlingFigures = [];
+let currentTab = "batting";
 
 fetch(indexUrl)
   .then(r=>r.json())
@@ -120,6 +121,12 @@ fetch(indexUrl)
   .then(seasons=>{
     seasons.forEach(matches=>{
       matches.forEach(match=>{
+        const date = match.info?.dates?.[0] || "";
+        const teams = match.info?.teams?.join(" vs ") || "";
+
+        let batterRuns = {};
+        let bowlerWickets = {};
+
         match.innings?.forEach(inn=>{
           inn.overs?.forEach(over=>{
             over.deliveries?.forEach(ball=>{
@@ -127,95 +134,88 @@ fetch(indexUrl)
               const bowler = ball.bowler;
               const runs = ball.runs?.batter || 0;
 
-              if(!playerStats[batter]){
-                playerStats[batter]={runs:0,wickets:0,field:0,balls:0,matches:new Set()};
-              }
-
-              playerStats[batter].runs += runs;
-              playerStats[batter].balls += 1;
-              playerStats[batter].matches.add(match.info?.dates?.[0]);
+              if(!batterRuns[batter]) batterRuns[batter]=0;
+              batterRuns[batter]+=runs;
 
               if(ball.wickets){
                 ball.wickets.forEach(w=>{
-                  const fielder = w.fielders?.[0]?.name;
                   const kind = w.kind;
-
                   if(kind !== "run out"){
-                    if(!playerStats[bowler]){
-                      playerStats[bowler]={runs:0,wickets:0,field:0,balls:0,matches:new Set()};
-                    }
-                    playerStats[bowler].wickets += 1;
-                  }
-
-                  if(fielder){
-                    if(!playerStats[fielder]){
-                      playerStats[fielder]={runs:0,wickets:0,field:0,balls:0,matches:new Set()};
-                    }
-                    playerStats[fielder].field += 1;
+                    if(!bowlerWickets[bowler]) bowlerWickets[bowler]=0;
+                    bowlerWickets[bowler]+=1;
                   }
                 });
               }
             });
           });
         });
+
+        for(const batter in batterRuns){
+          battingInnings.push({
+            player:batter,
+            runs:batterRuns[batter],
+            date,
+            match:teams
+          });
+        }
+
+        for(const bowler in bowlerWickets){
+          bowlingFigures.push({
+            player:bowler,
+            wickets:bowlerWickets[bowler],
+            date,
+            match:teams
+          });
+        }
+
       });
     });
 
-    renderTable("runs");
+    renderTable("batting");
   });
 
-function showTab(tab){
+function showTab(tab,e){
   currentTab = tab;
   document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
-  event.target.classList.add("active");
+  e.target.classList.add("active");
   renderTable(tab);
 }
 
 function renderTable(type){
   const tbody = document.getElementById("recordsTable");
-  const statHeader = document.getElementById("statHeader");
   tbody.innerHTML="";
 
-  let rows = [];
+  let rows=[];
 
-  for(const player in playerStats){
-    const p = playerStats[player];
-    const matches = p.matches.size;
-
-    if(type==="runs"){
-      rows.push({player,stat:p.runs});
-      statHeader.textContent="Runs";
-    }
-
-    if(type==="wickets"){
-      rows.push({player,stat:p.wickets});
-      statHeader.textContent="Wickets";
-    }
-
-    if(type==="fielding"){
-      rows.push({player,stat:p.field});
-      statHeader.textContent="Dismissals";
-    }
-
-    if(type==="strike"){
-      if(matches>=20){
-        const sr = (p.runs / p.balls * 100).toFixed(2);
-        rows.push({player,stat:sr});
-      }
-      statHeader.textContent="Strike Rate";
-    }
+  if(type==="batting"){
+    rows = battingInnings.sort((a,b)=>b.runs-a.runs).slice(0,25);
+    rows.forEach((r,i)=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>${i+1}</td>
+        <td>${r.player}</td>
+        <td>${r.runs}</td>
+        <td>${r.date}</td>
+        <td>${r.match}</td>
+      `;
+      tbody.appendChild(tr);
+    });
   }
 
-  rows.sort((a,b)=>b.stat - a.stat);
-  rows.slice(0,10).forEach((r,i)=>{
-    const tr=document.createElement("tr");
-    tr.innerHTML=`
-      <td>${i+1}</td>
-      <td>${r.player}</td>
-      <td>${r.stat}</td>
-    `;
-    tbody.appendChild(tr);
-  });
+  if(type==="bowling"){
+    rows = bowlingFigures.sort((a,b)=>b.wickets-a.wickets).slice(0,25);
+    rows.forEach((r,i)=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>${i+1}</td>
+        <td>${r.player}</td>
+        <td>${r.wickets} wickets</td>
+        <td>${r.date}</td>
+        <td>${r.match}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
 }
 </script>
 
