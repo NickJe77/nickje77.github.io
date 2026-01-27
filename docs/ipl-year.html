@@ -7,8 +7,7 @@
 
 <style>
 body{
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
-               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: Inter, system-ui, Arial, sans-serif;
   margin:0;
   background:#ffffff;
 }
@@ -57,34 +56,9 @@ body{
 .year-btn:hover{background:#4b0082;}
 .year-btn.active{background:#9d4edd;}
 
-.summary{
-  border:1px solid #ddd;
-  border-radius:18px;
-  padding:20px;
-  margin-bottom:30px;
-}
-.summary h2{margin-top:0;}
-
-.summary-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
-  gap:20px;
-}
-.summary-box{
-  border:1px solid #ddd;
-  border-radius:14px;
-  padding:15px;
-  background:#faf7ff;
-}
-.summary-box strong{
-  display:block;
-  margin-bottom:6px;
-}
-
 table{
   width:100%;
   border-collapse:collapse;
-  margin-top:20px;
   font-size:15px;
 }
 th,td{
@@ -92,23 +66,12 @@ th,td{
   padding:10px 12px;
   text-align:left;
 }
-th{
-  background:#f3f6fb;
-  position:sticky;
-  top:0;
-}
+th{background:#f3f6fb;}
 tr:nth-child(even){background:#f8fbff;}
 tr:hover{background:#eef4ff;}
 .winner{font-weight:600;color:#1a7f37;}
-.match-link{
-  color:inherit;
-  text-decoration:none;
-  display:contents;
-}
-
-@media(max-width:900px){
-  th:nth-child(4), td:nth-child(4){display:none;}
-}
+.match-link{color:inherit;text-decoration:none;}
+.match-link:hover{text-decoration:underline;}
 </style>
 </head>
 
@@ -130,20 +93,6 @@ tr:hover{background:#eef4ff;}
 </div>
 
 <div id="yearGrid" class="year-grid"></div>
-
-<div class="summary">
-  <h2>Season Summary</h2>
-  <div class="summary-grid">
-    <div class="summary-box">
-      <strong>Winner</strong>
-      <span id="winnerBox">—</span>
-    </div>
-    <div class="summary-box">
-      <strong>Runner-up</strong>
-      <span id="runnerBox">—</span>
-    </div>
-  </div>
-</div>
 
 <table>
 <thead>
@@ -167,73 +116,58 @@ const basePath = "data/ipl/";
 const yearGrid = document.getElementById("yearGrid");
 const tableBody = document.getElementById("matchTable");
 
-const winnerBox = document.getElementById("winnerBox");
-const runnerBox = document.getElementById("runnerBox");
-
-let seasonFiles = [];
-
 fetch(indexUrl)
   .then(r=>r.json())
   .then(files=>{
-    seasonFiles = files;
-
     files.forEach((file,i)=>{
-      const year = file.replace("ipl_","").replace("_FULL.json","");
+      const year = file.match(/\d{4}/)[0];
       const btn = document.createElement("button");
       btn.className="year-btn";
       btn.textContent=year;
-      btn.onclick=()=>selectSeason(file,btn);
+      btn.onclick=()=>loadSeason(file,btn);
       yearGrid.appendChild(btn);
-
       if(i===files.length-1){
         btn.classList.add("active");
-        loadSeason(file);
+        loadSeason(file,btn);
       }
     });
   });
 
-function selectSeason(file,btn){
+function loadSeason(file,btn){
   document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
-  btn.classList.add("active");
-  loadSeason(file);
-}
+  if(btn) btn.classList.add("active");
 
-function loadSeason(file){
-fetch(basePath+file)
-.then(r=>r.json())
-.then(matches=>{
-  tableBody.innerHTML="";
-  matches.sort((a,b)=>new Date(b.info.dates[0])-new Date(a.info.dates[0]));
+  fetch(basePath+file)
+  .then(r=>r.json())
+  .then(matches=>{
+    tableBody.innerHTML="";
+    matches.sort((a,b)=>new Date(b.info.dates[0])-new Date(a.info.dates[0]));
 
-  const finalMatch = matches[0];
-  const winner = finalMatch?.info?.outcome?.winner || "—";
-  const teams = finalMatch?.info?.teams || [];
-  const runnerUp = teams.find(t=>t!==winner) || "—";
+    matches.forEach(m=>{
+      const info = m.info;
 
-  winnerBox.textContent = winner;
-  runnerBox.textContent = runnerUp;
+      let margin="";
+      if(info.outcome?.by){
+        if(info.outcome.by.runs) margin=info.outcome.by.runs+" runs";
+        else if(info.outcome.by.wickets) margin=info.outcome.by.wickets+" wickets";
+      }
 
-  matches.forEach(m=>{
-    let margin="";
-    if(m.info?.outcome?.by){
-      if(m.info.outcome.by.runs) margin=m.info.outcome.by.runs+" runs";
-      else if(m.info.outcome.by.wickets) margin=m.info.outcome.by.wickets+" wickets";
-    }
-
-    const tr=document.createElement("tr");
-    tr.innerHTML=`
-      <a class="match-link" href="ipl-match.html?file=${encodeURIComponent(m.file)}">
-        <td>${formatDate(m.info.dates[0])}</td>
-        <td>${m.info.teams?.[0]||""}</td>
-        <td>${m.info.teams?.[1]||""}</td>
-        <td>${m.info.venue||""}</td>
-        <td class="winner">${m.info.outcome?.winner||""}</td>
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>
+          <a class="match-link" href="ipl-match.html?file=${m.file}">
+            ${formatDate(info.dates[0])}
+          </a>
+        </td>
+        <td>${info.teams?.[0]||""}</td>
+        <td>${info.teams?.[1]||""}</td>
+        <td>${info.venue||""}</td>
+        <td class="winner">${info.outcome?.winner||""}</td>
         <td>${margin}</td>
-      </a>
-    `;
-    tableBody.appendChild(tr);
+      `;
+      tableBody.appendChild(tr);
+    });
   });
-});
 }
 
 function formatDate(d){
