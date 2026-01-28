@@ -48,7 +48,7 @@ select{
 
 .summary-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
   gap:18px;
   margin-bottom:30px;
 }
@@ -109,6 +109,9 @@ a:hover{text-decoration:underline;}
   <div class="summary-box"><strong>Runs</strong><span id="runsBox">—</span></div>
   <div class="summary-box"><strong>Wickets</strong><span id="wicketsBox">—</span></div>
   <div class="summary-box"><strong>Strike Rate</strong><span id="srBox">—</span></div>
+  <div class="summary-box"><strong>Average</strong><span id="avgBox">—</span></div>
+  <div class="summary-box"><strong>Best Score</strong><span id="bestScoreBox">—</span></div>
+  <div class="summary-box"><strong>Best Bowling</strong><span id="bestBowlBox">—</span></div>
 </div>
 
 <h2>Matches</h2>
@@ -140,6 +143,10 @@ const matchesBox = document.getElementById("matchesBox");
 const runsBox = document.getElementById("runsBox");
 const wicketsBox = document.getElementById("wicketsBox");
 const srBox = document.getElementById("srBox");
+const avgBox = document.getElementById("avgBox");
+const bestScoreBox = document.getElementById("bestScoreBox");
+const bestBowlBox = document.getElementById("bestBowlBox");
+
 const tableBody = document.getElementById("matchesTable");
 const playerSelect = document.getElementById("playerSelect");
 
@@ -225,6 +232,11 @@ function loadPlayer(player){
   let runs = 0;
   let balls = 0;
   let wkts = 0;
+  let outs = 0;
+  let bestScore = 0;
+  let bestBowlWkts = 0;
+  let bestBowlRuns = 999;
+
   matchRows = [];
 
   allMatches.forEach(match=>{
@@ -233,6 +245,7 @@ function loadPlayer(player){
     let batBalls = 0;
     let bowlWkts = 0;
     let bowlRuns = 0;
+    let wasOut = false;
 
     match.innings.forEach(inn=>{
       inn.overs.forEach(over=>{
@@ -242,6 +255,15 @@ function loadPlayer(player){
             if(!d.extras?.wides) batBalls++;
             didPlay = true;
           }
+
+          if(d.wickets){
+            d.wickets.forEach(w=>{
+              if(w.player_out === player && w.kind !== "run out"){
+                wasOut = true;
+              }
+            });
+          }
+
           if(d.bowler === player){
             if(!d.extras?.byes && !d.extras?.legbyes){
               bowlRuns += d.runs.total;
@@ -262,6 +284,14 @@ function loadPlayer(player){
       runs += batRuns;
       balls += batBalls;
       wkts += bowlWkts;
+      if(wasOut) outs++;
+
+      if(batRuns > bestScore) bestScore = batRuns;
+
+      if(bowlWkts > bestBowlWkts || (bowlWkts === bestBowlWkts && bowlRuns < bestBowlRuns)){
+        bestBowlWkts = bowlWkts;
+        bestBowlRuns = bowlRuns;
+      }
 
       matchRows.push({
         date: match.info.dates[0],
@@ -281,6 +311,9 @@ function loadPlayer(player){
   runsBox.textContent = runs;
   wicketsBox.textContent = wkts;
   srBox.textContent = balls ? ((runs/balls)*100).toFixed(1) : "—";
+  avgBox.textContent = outs ? (runs/outs).toFixed(2) : "—";
+  bestScoreBox.textContent = bestScore || "—";
+  bestBowlBox.textContent = bestBowlWkts ? bestBowlWkts + " / " + bestBowlRuns : "—";
 
   sortMode = "date";
   renderTable();
@@ -290,7 +323,6 @@ function renderTable(){
   tableBody.innerHTML = "";
 
   let rows = [...matchRows];
-
   document.querySelectorAll("th").forEach(th=>th.classList.remove("sort-active"));
 
   if(sortMode === "bat"){
