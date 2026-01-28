@@ -133,7 +133,7 @@ a.player-link:hover{
 <script>
 const indexUrl = "data/ipl/index.json";
 const basePath = "data/ipl/";
-const namesUrl = "data/ipl/player-names.json";
+const namesUrl = "data/ipl/players-names.json"; // ✅ correct filename
 
 const highestScoreTable = document.getElementById("highestScoreTable");
 const bestBowlingTable = document.getElementById("bestBowlingTable");
@@ -148,7 +148,7 @@ function playerLink(shortName){
 }
 
 Promise.all([
-  fetch(namesUrl).then(r=>r.json()),
+  fetch(namesUrl).then(r=>r.json()).catch(()=>({})),   // ✅ safe fallback
   fetch(indexUrl).then(r=>r.json())
 ])
 .then(([names, files])=>{
@@ -163,12 +163,12 @@ Promise.all([
   let seasonWickets = {};
 
   seasons.forEach(seasonData=>{
-    const seasonYear = seasonData[0]?.info?.season || "Unknown";
-
-    seasonRuns[seasonYear] = seasonRuns[seasonYear] || {};
-    seasonWickets[seasonYear] = seasonWickets[seasonYear] || {};
-
     seasonData.forEach(match=>{
+      const seasonYear = match.info.dates[0].slice(0,4);
+
+      seasonRuns[seasonYear] = seasonRuns[seasonYear] || {};
+      seasonWickets[seasonYear] = seasonWickets[seasonYear] || {};
+
       let batMap = {};
       let bowlMap = {};
 
@@ -180,14 +180,13 @@ Promise.all([
               seasonRuns[seasonYear][d.batter] = (seasonRuns[seasonYear][d.batter]||0) + d.runs.batter;
             }
             if(d.bowler){
+              bowlMap[d.bowler] = bowlMap[d.bowler] || {wkts:0,runs:0};
               if(!d.extras?.byes && !d.extras?.legbyes){
-                bowlMap[d.bowler] = bowlMap[d.bowler] || {wkts:0,runs:0};
                 bowlMap[d.bowler].runs += d.runs.total;
               }
               if(d.wickets){
                 d.wickets.forEach(w=>{
                   if(w.kind !== "run out"){
-                    bowlMap[d.bowler] = bowlMap[d.bowler] || {wkts:0,runs:0};
                     bowlMap[d.bowler].wkts++;
                     seasonWickets[seasonYear][d.bowler] = (seasonWickets[seasonYear][d.bowler]||0) + 1;
                   }
@@ -199,22 +198,11 @@ Promise.all([
       });
 
       Object.entries(batMap).forEach(([p,r])=>{
-        bestInnings.push({
-          player:p,
-          runs:r,
-          season:seasonYear,
-          match:match.info.teams.join(" vs ")
-        });
+        bestInnings.push({player:p,runs:r,season:seasonYear,match:match.info.teams.join(" vs ")});
       });
 
       Object.entries(bowlMap).forEach(([p,obj])=>{
-        bestBowling.push({
-          player:p,
-          wkts:obj.wkts,
-          runs:obj.runs,
-          season:seasonYear,
-          match:match.info.teams.join(" vs ")
-        });
+        bestBowling.push({player:p,wkts:obj.wkts,runs:obj.runs,season:seasonYear,match:match.info.teams.join(" vs ")});
       });
     });
   });
@@ -223,57 +211,31 @@ Promise.all([
   bestBowling.sort((a,b)=>b.wkts-a.wkts || a.runs-b.runs);
 
   bestInnings.slice(0,10).forEach(r=>{
-    highestScoreTable.innerHTML += `
-      <tr>
-        <td>${playerLink(r.player)}</td>
-        <td>${r.runs}</td>
-        <td>${r.season}</td>
-        <td>${r.match}</td>
-      </tr>`;
+    highestScoreTable.innerHTML += `<tr><td>${playerLink(r.player)}</td><td>${r.runs}</td><td>${r.season}</td><td>${r.match}</td></tr>`;
   });
 
   bestBowling.slice(0,10).forEach(r=>{
-    bestBowlingTable.innerHTML += `
-      <tr>
-        <td>${playerLink(r.player)}</td>
-        <td>${r.wkts} / ${r.runs}</td>
-        <td>${r.season}</td>
-        <td>${r.match}</td>
-      </tr>`;
+    bestBowlingTable.innerHTML += `<tr><td>${playerLink(r.player)}</td><td>${r.wkts} / ${r.runs}</td><td>${r.season}</td><td>${r.match}</td></tr>`;
   });
 
-  const runsList = [];
+  const runsList=[];
   Object.entries(seasonRuns).forEach(([season,players])=>{
-    Object.entries(players).forEach(([p,r])=>{
-      runsList.push({player:p,runs:r,season});
-    });
+    Object.entries(players).forEach(([p,r])=>runsList.push({player:p,runs:r,season}));
   });
 
   runsList.sort((a,b)=>b.runs-a.runs);
   runsList.slice(0,10).forEach(r=>{
-    mostRunsSeasonTable.innerHTML += `
-      <tr>
-        <td>${playerLink(r.player)}</td>
-        <td>${r.runs}</td>
-        <td>${r.season}</td>
-      </tr>`;
+    mostRunsSeasonTable.innerHTML += `<tr><td>${playerLink(r.player)}</td><td>${r.runs}</td><td>${r.season}</td></tr>`;
   });
 
-  const wicketList = [];
+  const wicketList=[];
   Object.entries(seasonWickets).forEach(([season,players])=>{
-    Object.entries(players).forEach(([p,w])=>{
-      wicketList.push({player:p,wkts:w,season});
-    });
+    Object.entries(players).forEach(([p,w])=>wicketList.push({player:p,wkts:w,season}));
   });
 
   wicketList.sort((a,b)=>b.wkts-a.wkts);
   wicketList.slice(0,10).forEach(r=>{
-    mostWicketsSeasonTable.innerHTML += `
-      <tr>
-        <td>${playerLink(r.player)}</td>
-        <td>${r.wkts}</td>
-        <td>${r.season}</td>
-      </tr>`;
+    mostWicketsSeasonTable.innerHTML += `<tr><td>${playerLink(r.player)}</td><td>${r.wkts}</td><td>${r.season}</td></tr>`;
   });
 });
 </script>
