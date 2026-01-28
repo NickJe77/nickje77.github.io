@@ -38,12 +38,13 @@ body{
 .hero h1{margin:0;font-size:46px;}
 .hero p{margin-top:10px;font-size:20px;opacity:0.95;}
 
-select{
+input[type="text"], select{
   padding:10px 14px;
   font-size:16px;
   border-radius:10px;
   border:1px solid #ccc;
   margin-top:15px;
+  margin-right:10px;
 }
 
 .summary-grid{
@@ -92,9 +93,12 @@ a:hover{text-decoration:underline;}
 <div class="hero">
   <h1 id="playerName">Select an IPL Player</h1>
   <p>Career summary and match list.</p>
-  <select id="playerSelect">
-    <option value="">— Select Player —</option>
-  </select>
+  <div>
+    <input type="text" id="playerSearch" placeholder="Type player name…" />
+    <select id="playerSelect">
+      <option value="">— Select Player —</option>
+    </select>
+  </div>
 </div>
 
 <div class="summary-grid">
@@ -135,9 +139,11 @@ const wicketsBox = document.getElementById("wicketsBox");
 const srBox = document.getElementById("srBox");
 const tableBody = document.getElementById("matchesTable");
 const playerSelect = document.getElementById("playerSelect");
+const playerSearch = document.getElementById("playerSearch");
 
 let allMatches = [];
 let nameMap = {};
+let allPlayers = [];
 
 Promise.all([
   fetch(namesUrl).then(r=>r.json()),
@@ -166,12 +172,9 @@ Promise.all([
     });
   });
 
-  Array.from(playerSet).sort().forEach(p=>{
-    const opt = document.createElement("option");
-    opt.value = p;
-    opt.textContent = nameMap[p] || p;
-    playerSelect.appendChild(opt);
-  });
+  allPlayers = Array.from(playerSet).sort();
+
+  buildDropdown(allPlayers);
 
   if(playerParam){
     playerSelect.value = playerParam;
@@ -184,7 +187,26 @@ Promise.all([
       window.location.href = "ipl-player.html?player=" + encodeURIComponent(p);
     }
   });
+
+  playerSearch.addEventListener("input", ()=>{
+    const term = playerSearch.value.toLowerCase();
+    const filtered = allPlayers.filter(p=>{
+      const display = nameMap[p] || p;
+      return display.toLowerCase().includes(term);
+    });
+    buildDropdown(filtered);
+  });
 });
+
+function buildDropdown(list){
+  playerSelect.innerHTML = `<option value="">— Select Player —</option>`;
+  list.forEach(p=>{
+    const opt = document.createElement("option");
+    opt.value = p;
+    opt.textContent = nameMap[p] || p;
+    playerSelect.appendChild(opt);
+  });
+}
 
 function loadPlayer(player){
   let matches = 0;
