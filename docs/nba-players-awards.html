@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NBA Player | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
+<style>
+body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+.page-wrap{max-width:1100px;margin:0 auto;padding:30px 20px;}
+.tile-wrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:20px;}
+.tile{border:1px solid #ddd;border-radius:10px;padding:16px;background:#f6f9ff;text-align:center;}
+table{width:100%;border-collapse:collapse;margin-top:20px;}
+th,td{border-bottom:1px solid #ddd;padding:8px 10px;}
+th{background:#f0f0f0;}
+tr:nth-child(even){background:#f6f9ff;}
+</style>
+</head>
+
+<body>
+<div class="navbar"><a href="nba.html">NBA</a></div>
+<div class="page-wrap">
+<h1 id="name"></h1>
+
+<div class="tile-wrap">
+<div class="tile"><h3>Debut</h3><div id="debut">—</div></div>
+<div class="tile"><h3>Titles</h3><div id="titles">—</div></div>
+<div class="tile"><h3>MVPs</h3><div id="mvps">—</div></div>
+</div>
+
+<h2>Regular Season</h2>
+<table>
+<thead><tr><th>Season</th><th>Team</th><th>PTS</th><th>REB</th><th>AST</th></tr></thead>
+<tbody id="reg"></tbody>
+<tfoot><tr><th>Career</th><th></th><th id="cPts"></th><th id="cReb"></th><th id="cAst"></th></tr></tfoot>
+</table>
+
+<h2>Playoffs</h2>
+<table>
+<thead><tr><th>Season</th><th>Team</th><th>PTS</th><th>REB</th><th>AST</th></tr></thead>
+<tbody id="po"></tbody>
+</table>
+
+</div>
+
+<script>
+const p=new URLSearchParams(location.search).get("player");
+document.getElementById("name").textContent=p;
+
+let career={pts:0,reb:0,ast:0};
+
+fetch("data/nba/player-seasons.json").then(r=>r.json()).then(data=>{
+const rec=data.find(x=>x.player===p);
+rec?.seasons.forEach(s=>{
+career.pts+=s.pts||0;career.reb+=s.reb||0;career.ast+=s.ast||0;
+document.getElementById("reg").innerHTML+=`<tr><td>${s.season}</td><td>${s.team}</td><td>${s.pts}</td><td>${s.reb}</td><td>${s.ast}</td></tr>`;
+});
+document.getElementById("cPts").textContent=career.pts.toFixed(1);
+document.getElementById("cReb").textContent=career.reb.toFixed(1);
+document.getElementById("cAst").textContent=career.ast.toFixed(1);
+});
+
+fetch("data/nba/player-playoffs.json").then(r=>r.json()).then(data=>{
+const rec=data.find(x=>x.player===p);
+rec?.seasons.forEach(s=>{
+document.getElementById("po").innerHTML+=`<tr><td>${s.season}</td><td>${s.team}</td><td>${s.pts}</td><td>${s.reb}</td><td>${s.ast}</td></tr>`;
+});
+});
+
+fetch("data/nba/players.json").then(r=>r.json()).then(players=>{
+let pl=players.find(x=>x.player===p);
+if(!pl){
+fetch("data/nba/leaders.json").then(r=>r.json()).then(ld=>{
+let found=ld.flatMap(x=>x.points).find(x=>x.player===p);
+pl={debut:"Unknown",titles:0,mvps:0};
+});
+}
+document.getElementById("debut").textContent=pl.debut||"—";
+document.getElementById("titles").textContent=pl.titles||0;
+document.getElementById("mvps").textContent=pl.mvps||0;
+});
+</script>
+</body>
+</html>
