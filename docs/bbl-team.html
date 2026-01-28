@@ -119,11 +119,11 @@ const tableBody = document.getElementById("matchesTable");
 const teamNameEl = document.getElementById("teamName");
 
 let nameMap = {};
-let allSeasons = [];
-let teamMatches = [];
+let seasonMap = {};   // { "2025/26": [matches...] }
+let seasonOrder = []; // keeps button order
 
 Promise.all([
-  fetch(nameMapUrl).then(r=>r.json()),
+  fetch(nameMapUrl).then(r=>r.json()).catch(()=>({})),
   fetch(indexUrl).then(r=>r.json())
 ])
 .then(([names, files])=>{
@@ -131,28 +131,38 @@ Promise.all([
   return Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json())));
 })
 .then(seasons=>{
-  allSeasons = seasons;
   teamNameEl.textContent = teamParam;
+
+  seasons.forEach(seasonData=>{
+    const label = seasonData[0]?.info?.season || "Unknown";
+
+    if(!seasonMap[label]){
+      seasonMap[label] = [];
+      seasonOrder.push(label);
+    }
+
+    seasonData.forEach(match=>{
+      seasonMap[label].push(match);
+    });
+  });
+
   buildYearButtons();
-  showSeason(seasons.length - 1);
+  showSeason(seasonOrder[seasonOrder.length-1]);
 });
 
 function buildYearButtons(){
   yearGrid.innerHTML="";
-  allSeasons.forEach((seasonData,i)=>{
-    const seasonLabel = seasonData[0]?.info?.season || ("S"+(i+1));
+
+  seasonOrder.forEach(label=>{
     const btn=document.createElement("button");
     btn.className="year-btn";
-    btn.textContent=seasonLabel;
+    btn.textContent=label;
     btn.onclick=()=>{
       document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
       btn.classList.add("active");
-      showSeason(i);
+      showSeason(label);
     };
     yearGrid.appendChild(btn);
-    if(i===allSeasons.length-1){
-      btn.classList.add("active");
-    }
   });
 
   const allBtn=document.createElement("button");
@@ -164,26 +174,26 @@ function buildYearButtons(){
     showAll();
   };
   yearGrid.appendChild(allBtn);
+
+  yearGrid.firstChild.classList.add("active");
 }
 
-function showSeason(index){
-  teamMatches = allSeasons[index].filter(m=>m.info.teams.includes(teamParam));
-  renderTable(teamMatches);
+function showSeason(label){
+  const matches = seasonMap[label].filter(m=>m.info.teams.includes(teamParam));
+  renderTable(matches);
 }
 
 function showAll(){
-  teamMatches = [];
-  allSeasons.forEach(season=>{
+  let all=[];
+  Object.values(seasonMap).forEach(season=>{
     season.forEach(m=>{
       if(m.info.teams.includes(teamParam)){
-        teamMatches.push(m);
+        all.push(m);
       }
     });
   });
-  renderTable(teamMatches);
+  renderTable(all);
 }
-
-function fullName(n){return nameMap[n]||n;}
 
 function renderTable(matches){
   tableBody.innerHTML="";
