@@ -67,6 +67,12 @@ th,td{
 th{background:#f3f6fb;}
 tr:nth-child(even){background:#f8fbff;}
 tr:hover{background:#eef4ff;}
+a.player-link{
+  color:#003566;
+  font-weight:600;
+  text-decoration:none;
+}
+a.player-link:hover{text-decoration:underline;}
 </style>
 </head>
 
@@ -110,76 +116,81 @@ tr:hover{background:#eef4ff;}
 <script>
 const indexUrl = "data/bbl/index.json";
 const basePath = "data/bbl/";
+const nameMapUrl = "data/bbl/player-names.json";
 
 let battingInnings = [];
 let bowlingFigures = [];
+let nameMap = {};
 
-fetch(indexUrl)
-  .then(r=>r.json())
-  .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
-  .then(seasons=>{
-    seasons.forEach(matches=>{
-      matches.forEach(match=>{
-        const date = match.info?.dates?.[0] || "";
-        const teams = match.info?.teams?.join(" vs ") || "";
+Promise.all([
+  fetch(nameMapUrl).then(r=>r.json()).catch(()=>({})), // safe if file missing/empty
+  fetch(indexUrl).then(r=>r.json())
+])
+.then(([names, files])=>{
+  nameMap = names;
+  return Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json())));
+})
+.then(seasons=>{
+  seasons.forEach(matches=>{
+    matches.forEach(match=>{
+      const date = match.info?.dates?.[0] || "";
+      const teams = match.info?.teams?.join(" vs ") || "";
 
-        let batterRuns = {};
-        let bowlerStats = {};
+      let batterRuns = {};
+      let bowlerStats = {};
 
-        match.innings?.forEach(inn=>{
-          inn.overs?.forEach(over=>{
-            over.deliveries?.forEach(ball=>{
-              const batter = ball.batter;
-              const bowler = ball.bowler;
-              const runs = ball.runs?.batter || 0;
-              const totalRuns = ball.runs?.total || 0;
+      match.innings?.forEach(inn=>{
+        inn.overs?.forEach(over=>{
+          over.deliveries?.forEach(ball=>{
+            const batter = ball.batter;
+            const bowler = ball.bowler;
+            const runs = ball.runs?.batter || 0;
+            const totalRuns = ball.runs?.total || 0;
 
-              if(!batterRuns[batter]) batterRuns[batter]=0;
-              batterRuns[batter]+=runs;
+            batterRuns[batter] = (batterRuns[batter]||0) + runs;
 
-              if(!bowlerStats[bowler]){
-                bowlerStats[bowler]={wickets:0,runs:0};
-              }
+            if(!bowlerStats[bowler]){
+              bowlerStats[bowler]={wickets:0,runs:0};
+            }
 
-              const byes = ball.extras?.byes || 0;
-              const legbyes = ball.extras?.legbyes || 0;
-              bowlerStats[bowler].runs += (totalRuns - byes - legbyes);
+            const byes = ball.extras?.byes || 0;
+            const legbyes = ball.extras?.legbyes || 0;
+            bowlerStats[bowler].runs += (totalRuns - byes - legbyes);
 
-              if(ball.wickets){
-                ball.wickets.forEach(w=>{
-                  if(w.kind !== "run out"){
-                    bowlerStats[bowler].wickets += 1;
-                  }
-                });
-              }
-            });
+            if(ball.wickets){
+              ball.wickets.forEach(w=>{
+                if(w.kind !== "run out"){
+                  bowlerStats[bowler].wickets += 1;
+                }
+              });
+            }
           });
         });
-
-        for(const batter in batterRuns){
-          battingInnings.push({
-            player: batter,
-            runs: batterRuns[batter],
-            date,
-            match: teams
-          });
-        }
-
-        for(const bowler in bowlerStats){
-          bowlingFigures.push({
-            player: bowler,
-            wickets: bowlerStats[bowler].wickets,
-            runs: bowlerStats[bowler].runs,
-            date,
-            match: teams
-          });
-        }
-
       });
-    });
 
-    renderTable("batting");
+      for(const batter in batterRuns){
+        battingInnings.push({
+          player: batter,
+          runs: batterRuns[batter],
+          date,
+          match: teams
+        });
+      }
+
+      for(const bowler in bowlerStats){
+        bowlingFigures.push({
+          player: bowler,
+          wickets: bowlerStats[bowler].wickets,
+          runs: bowlerStats[bowler].runs,
+          date,
+          match: teams
+        });
+      }
+    });
   });
+
+  renderTable("batting");
+});
 
 function showTab(tab,e){
   document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
@@ -201,7 +212,7 @@ function renderTable(type){
       const tr=document.createElement("tr");
       tr.innerHTML=`
         <td>${i+1}</td>
-        <td>${r.player}</td>
+        <td>${playerLink(r.player)}</td>
         <td>${r.runs}</td>
         <td>${formatDate(r.date)}</td>
         <td>${r.match}</td>
@@ -220,7 +231,7 @@ function renderTable(type){
       const tr=document.createElement("tr");
       tr.innerHTML=`
         <td>${i+1}</td>
-        <td>${r.player}</td>
+        <td>${playerLink(r.player)}</td>
         <td>${r.wickets} / ${r.runs}</td>
         <td>${formatDate(r.date)}</td>
         <td>${r.match}</td>
@@ -228,6 +239,11 @@ function renderTable(type){
       tbody.appendChild(tr);
     });
   }
+}
+
+function playerLink(shortName){
+  const display = nameMap[shortName] || shortName;
+  return `<a class="player-link" href="bbl-player.html?player=${encodeURIComponent(shortName)}">${display}</a>`;
 }
 
 function formatDate(d){
