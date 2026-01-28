@@ -70,7 +70,14 @@ th,td{
   padding:8px 10px;
   text-align:left;
 }
-th{background:#f3f6fb;}
+th{
+  background:#f3f6fb;
+  cursor:pointer;
+}
+th.sort-active{
+  color:#3b007a;
+  text-decoration:underline;
+}
 tr:nth-child(even){background:#f8fbff;}
 a{color:#3b007a;text-decoration:none;font-weight:600;}
 a:hover{text-decoration:underline;}
@@ -108,11 +115,11 @@ a:hover{text-decoration:underline;}
 <table>
 <thead>
 <tr>
-  <th>Date</th>
+  <th id="dateHeader">Date</th>
   <th>Match</th>
   <th>Venue</th>
-  <th>Bat</th>
-  <th>Bowl</th>
+  <th id="batHeader">Bat</th>
+  <th id="bowlHeader">Bowl</th>
 </tr>
 </thead>
 <tbody id="matchesTable"></tbody>
@@ -136,11 +143,15 @@ const srBox = document.getElementById("srBox");
 const tableBody = document.getElementById("matchesTable");
 const playerSelect = document.getElementById("playerSelect");
 
+const batHeader = document.getElementById("batHeader");
+const bowlHeader = document.getElementById("bowlHeader");
+const dateHeader = document.getElementById("dateHeader");
+
 let allMatches = [];
 let nameMap = {};
 let allPlayers = [];
-let typedBuffer = "";
-let bufferTimer = null;
+let matchRows = [];
+let sortMode = "date";
 
 Promise.all([
   fetch(namesUrl).then(r=>r.json()),
@@ -148,7 +159,6 @@ Promise.all([
 ])
 .then(([names, files])=>{
   nameMap = names;
-
   const fullFiles = files.filter(f => f.includes("_FULL.json"));
   return Promise.all(fullFiles.map(f=>fetch(basePath+f).then(r=>r.json())));
 })
@@ -184,19 +194,19 @@ Promise.all([
     }
   });
 
-  // predictive typing on the SAME selector
-  playerSelect.addEventListener("keydown", (e)=>{
-    if(e.key.length === 1 && /[a-zA-Z ]/.test(e.key)){
-      typedBuffer += e.key.toLowerCase();
-      filterDropdown();
-    }
-    if(e.key === "Backspace"){
-      typedBuffer = typedBuffer.slice(0, -1);
-      filterDropdown();
-    }
+  batHeader.addEventListener("click", ()=>{
+    sortMode = sortMode === "bat" ? "date" : "bat";
+    renderTable();
+  });
 
-    clearTimeout(bufferTimer);
-    bufferTimer = setTimeout(()=>{ typedBuffer = ""; }, 1000);
+  bowlHeader.addEventListener("click", ()=>{
+    sortMode = sortMode === "bowl" ? "date" : "bowl";
+    renderTable();
+  });
+
+  dateHeader.addEventListener("click", ()=>{
+    sortMode = "date";
+    renderTable();
   });
 });
 
@@ -210,20 +220,12 @@ function buildDropdown(list){
   });
 }
 
-function filterDropdown(){
-  const filtered = allPlayers.filter(p=>{
-    const display = (nameMap[p] || p).toLowerCase();
-    return display.startsWith(typedBuffer);
-  });
-  buildDropdown(filtered);
-}
-
 function loadPlayer(player){
   let matches = 0;
   let runs = 0;
   let balls = 0;
   let wkts = 0;
-  let matchRows = [];
+  matchRows = [];
 
   allMatches.forEach(match=>{
     let didPlay = false;
@@ -265,8 +267,10 @@ function loadPlayer(player){
         date: match.info.dates[0],
         teams: match.info.teams.join(" vs "),
         venue: match.info.venue || "—",
-        bat: batRuns ? batRuns+" ("+batBalls+")" : "—",
-        bowl: bowlWkts ? bowlWkts+" / "+bowlRuns : "—",
+        batRuns,
+        batBalls,
+        bowlWkts,
+        bowlRuns,
         file: match.file
       });
     }
@@ -278,21 +282,39 @@ function loadPlayer(player){
   wicketsBox.textContent = wkts;
   srBox.textContent = balls ? ((runs/balls)*100).toFixed(1) : "—";
 
+  sortMode = "date";
+  renderTable();
+}
+
+function renderTable(){
   tableBody.innerHTML = "";
 
-  matchRows
-    .sort((a,b)=>new Date(a.date)-new Date(b.date))
-    .forEach(m=>{
-      const tr=document.createElement("tr");
-      tr.innerHTML=`
-        <td>${formatDate(m.date)}</td>
-        <td><a href="ipl-match.html?file=${encodeURIComponent(m.file)}">${m.teams}</a></td>
-        <td>${m.venue}</td>
-        <td>${m.bat}</td>
-        <td>${m.bowl}</td>
-      `;
-      tableBody.appendChild(tr);
-    });
+  let rows = [...matchRows];
+
+  document.querySelectorAll("th").forEach(th=>th.classList.remove("sort-active"));
+
+  if(sortMode === "bat"){
+    batHeader.classList.add("sort-active");
+    rows.sort((a,b)=>b.batRuns - a.batRuns);
+  }else if(sortMode === "bowl"){
+    bowlHeader.classList.add("sort-active");
+    rows.sort((a,b)=>b.bowlWkts - a.bowlWkts || a.bowlRuns - b.bowlRuns);
+  }else{
+    dateHeader.classList.add("sort-active");
+    rows.sort((a,b)=>new Date(a.date) - new Date(b.date));
+  }
+
+  rows.forEach(m=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${formatDate(m.date)}</td>
+      <td><a href="ipl-match.html?file=${encodeURIComponent(m.file)}">${m.teams}</a></td>
+      <td>${m.venue}</td>
+      <td>${m.batRuns ? m.batRuns+" ("+m.batBalls+")" : "—"}</td>
+      <td>${m.bowlWkts ? m.bowlWkts+" / "+m.bowlRuns : "—"}</td>
+    `;
+    tableBody.appendChild(tr);
+  });
 }
 
 function formatDate(d){
