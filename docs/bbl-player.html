@@ -38,41 +38,48 @@ body{
 .hero h1{margin:0;font-size:46px;}
 .hero p{margin-top:10px;font-size:20px;opacity:0.95;}
 
-.selector{
-  margin-top:14px;
-}
-.selector input{
-  padding:6px 10px;
-  font-size:16px;
-  border-radius:6px;
-}
-
 .summary-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-  gap:14px;
-  margin-bottom:25px;
+  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:18px;
+  margin-bottom:30px;
 }
 .summary-box{
   border:1px solid #ddd;
   border-radius:14px;
-  padding:12px;
+  padding:14px;
   background:#f8fbff;
 }
-.summary-box strong{display:block;margin-bottom:4px;}
+.summary-box strong{display:block;margin-bottom:6px;}
 
 table{
   width:100%;
   border-collapse:collapse;
   font-size:14px;
 }
+
 th,td{
   border-bottom:1px solid #ddd;
   padding:8px 10px;
   text-align:left;
 }
+
 th{background:#f3f6fb;}
-tr:nth-child(even){background:#f8fbff;}
+
+tr:nth-child(even){
+  background:#f8fbff;
+}
+
+tr:hover{
+  background:#eef4ff;
+}
+
+a{
+  color:#003566;
+  text-decoration:none;
+  font-weight:600;
+}
+a:hover{text-decoration:underline;}
 </style>
 </head>
 
@@ -89,13 +96,8 @@ tr:nth-child(even){background:#f8fbff;}
 <div class="page-wrap">
 
 <div class="hero">
-  <h1 id="playerName">Select a BBL Player</h1>
+  <h1 id="playerName">BBL Player</h1>
   <p>Career summary and match list.</p>
-
-  <div class="selector">
-    <input id="playerInput" list="playersList" placeholder="Start typing a player name…">
-    <datalist id="playersList"></datalist>
-  </div>
 </div>
 
 <div class="summary-grid">
@@ -123,7 +125,7 @@ tr:nth-child(even){background:#f8fbff;}
 
 <script>
 const params=new URLSearchParams(window.location.search);
-let playerParam=params.get("player");
+const playerParam=params.get("player");
 
 const indexUrl="data/bbl/index.json";
 const basePath="data/bbl/";
@@ -135,14 +137,11 @@ const runsBox=document.getElementById("runsBox");
 const wicketsBox=document.getElementById("wicketsBox");
 const srBox=document.getElementById("srBox");
 const tableBody=document.getElementById("matchesTable");
-const playerInput=document.getElementById("playerInput");
-const playersList=document.getElementById("playersList");
 
 let nameMap={};
-let allMatches=[];
 
 Promise.all([
-  fetch(nameMapUrl).then(r=>r.json()),
+  fetch(nameMapUrl).then(r=>r.json()).catch(()=>({})),
   fetch(indexUrl).then(r=>r.json())
 ])
 .then(([names,files])=>{
@@ -150,92 +149,60 @@ Promise.all([
   return Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json())));
 })
 .then(seasons=>{
-  allMatches=seasons.flat();
-  buildPlayerList();
-  if(playerParam) loadPlayer(playerParam);
-});
-
-function buildPlayerList(){
-  const set=new Set();
-  allMatches.forEach(match=>{
-    match.innings.forEach(inn=>{
-      inn.overs.forEach(over=>{
-        over.deliveries.forEach(d=>{
-          set.add(d.batter);
-          set.add(d.bowler);
-        });
-      });
-    });
-  });
-
-  [...set].sort().forEach(p=>{
-    const opt=document.createElement("option");
-    opt.value=fullName(p);
-    playersList.appendChild(opt);
-  });
-}
-
-playerInput.addEventListener("change",()=>{
-  const chosen=playerInput.value;
-  const reverse=Object.entries(nameMap).find(e=>e[1]===chosen);
-  const short=reverse?reverse[0]:chosen;
-  window.location="bbl-player.html?player="+encodeURIComponent(short);
-});
-
-function loadPlayer(player){
   let matches=0,runs=0,balls=0,wkts=0;
   let matchRows=[];
 
-  allMatches.forEach(match=>{
-    let didPlay=false;
-    let batRuns=0, batBalls=0, bowlWkts=0, bowlRuns=0;
+  seasons.forEach(season=>{
+    season.forEach(match=>{
+      let didPlay=false;
+      let batRuns=0, batBalls=0, bowlWkts=0, bowlRuns=0;
 
-    match.innings.forEach(inn=>{
-      inn.overs.forEach(over=>{
-        over.deliveries.forEach(d=>{
-          if(d.batter===player){
-            batRuns+=d.runs.batter;
-            if(!d.extras?.wides) batBalls++;
-            didPlay=true;
-          }
-          if(d.bowler===player){
-            if(!d.extras?.byes && !d.extras?.legbyes){
-              bowlRuns+=d.runs.total;
+      match.innings.forEach(inn=>{
+        inn.overs.forEach(over=>{
+          over.deliveries.forEach(d=>{
+            if(d.batter===playerParam){
+              batRuns+=d.runs.batter;
+              if(!d.extras?.wides) batBalls++;
+              didPlay=true;
             }
-            if(d.wickets){
-              d.wickets.forEach(w=>{
-                if(w.kind!=="run out") bowlWkts++;
-              });
+            if(d.bowler===playerParam){
+              if(!d.extras?.byes && !d.extras?.legbyes){
+                bowlRuns+=d.runs.total;
+              }
+              if(d.wickets){
+                d.wickets.forEach(w=>{
+                  if(w.kind!=="run out") bowlWkts++;
+                });
+              }
+              didPlay=true;
             }
-            didPlay=true;
-          }
+          });
         });
       });
+
+      if(didPlay){
+        matches++;
+        runs+=batRuns;
+        balls+=batBalls;
+        wkts+=bowlWkts;
+
+        matchRows.push({
+          date: match.info.dates[0],
+          teams: match.info.teams.join(" vs "),
+          venue: match.info.venue || "—",
+          bat: batRuns ? batRuns+" ("+batBalls+")" : "—",
+          bowl: bowlWkts ? bowlWkts+" / "+bowlRuns : "—",
+          file: match.file
+        });
+      }
     });
-
-    if(didPlay){
-      matches++;
-      runs+=batRuns;
-      balls+=batBalls;
-      wkts+=bowlWkts;
-
-      matchRows.push({
-        date: match.info.dates[0],
-        teams: match.info.teams.join(" vs "),
-        venue: match.info.venue,
-        bat: batRuns ? batRuns+" ("+batBalls+")" : "—",
-        bowl: bowlWkts ? bowlWkts+" / "+bowlRuns : "—",
-        file: match.file
-      });
-    }
   });
 
-  playerNameEl.textContent=fullName(player);
+  playerNameEl.textContent=fullName(playerParam);
   matchesBox.textContent=matches;
   runsBox.textContent=runs;
   wicketsBox.textContent=wkts;
   srBox.textContent=balls?((runs/balls)*100).toFixed(1):"—";
-  tableBody.innerHTML="";
 
   matchRows
     .sort((a,b)=>new Date(a.date)-new Date(b.date))
@@ -250,9 +217,10 @@ function loadPlayer(player){
       `;
       tableBody.appendChild(tr);
     });
-}
+});
 
 function fullName(n){return nameMap[n]||n;}
+
 function formatDate(d){
   return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
 }
