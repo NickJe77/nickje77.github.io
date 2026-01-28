@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NBA Finals MVP | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
+<style>
+body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#fff;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+.page-wrap{max-width:1100px;margin:0 auto;padding:30px 20px 60px;}
+h1{text-align:center;margin:0 0 10px;}
+p{text-align:center;color:#555;margin:0 0 18px;}
+.controls{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin:0 0 18px;}
+input{padding:8px 12px;border-radius:8px;border:1px solid #ccc;font-size:14px;min-width:260px;}
+table{width:100%;border-collapse:collapse;}
+th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:left;}
+th{background:#f0f0f0;}
+tr:nth-child(even){background:#f6f9ff;}
+.player-link{color:#0056d6;text-decoration:none;font-weight:600;}
+.player-link:hover{text-decoration:underline;}
+.small{color:#666;font-size:13px;}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="nba.html">NBA</a>
+</div>
+
+<div class="page-wrap">
+  <h1>NBA Finals MVP</h1>
+  <p>Finals MVP winners by season (1976–present).</p>
+
+  <div class="controls">
+    <input id="q" placeholder="Search player or team…">
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Season</th>
+        <th>Finals MVP</th>
+        <th class="small">Champion</th>
+        <th class="small">Runner-up</th>
+        <th class="small">Series</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+
+<script>
+let finals=[];
+const q=document.getElementById("q");
+const rows=document.getElementById("rows");
+
+fetch("data/nba/finals.json")
+  .then(r=>r.json())
+  .then(d=>{
+    finals=(d||[]).filter(x=>{
+      const start=parseInt(String(x.season||"").split("-")[0]);
+      return Number.isFinite(start) && start>=1976;
+    });
+    render();
+  })
+  .catch(()=>{ rows.innerHTML="<tr><td colspan='5'>No data available.</td></tr>"; });
+
+q.addEventListener("input", render);
+
+function render(){
+  const needle=(q.value||"").toLowerCase().trim();
+  rows.innerHTML="";
+
+  const list = finals.slice().sort((a,b)=>String(a.season).localeCompare(String(b.season)));
+
+  list.forEach(f=>{
+    const hay=[f.season,f.finals_mvp,f.champion,f.runner_up,f.series].join(" ").toLowerCase();
+    if(needle && !hay.includes(needle)) return;
+
+    const mvp=f.finals_mvp || "";
+    const link = mvp ? `<a class="player-link" href="nba-player.html?player=${encodeURIComponent(mvp)}">${mvp}</a>` : "";
+
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${f.season || ""}</td>
+      <td>${link}</td>
+      <td class="small">${f.champion || ""}</td>
+      <td class="small">${f.runner_up || ""}</td>
+      <td class="small">${f.series || ""}</td>
+    `;
+    rows.appendChild(tr);
+  });
+
+  if(!rows.children.length){
+    rows.innerHTML="<tr><td colspan='5'>No matches.</td></tr>";
+  }
+}
+</script>
+
+</body>
+</html>
