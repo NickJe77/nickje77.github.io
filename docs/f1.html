@@ -103,7 +103,9 @@ th,td{
 th{background:#f0f0f0;}
 tr:nth-child(even){background:#f6f9ff;}
 
-.season-points{ text-align:center; }
+.season-points{
+  text-align:center;
+}
 </style>
 </head>
 
@@ -171,6 +173,8 @@ const flagByCountry = {
   "Morocco":"🇲🇦","South Africa":"🇿🇦","Sweden":"🇸🇪","San Marino":"🇸🇲",
   "Turkey":"🇹🇷","Russia":"🇷🇺","Malaysia":"🇲🇾","South Korea":"🇰🇷","India":"🇮🇳"
 };
+
+/* ================= CLEAN GP NAME ================= */
 
 function normalizeGpRaw(s){
   let n = String(s || "").trim();
@@ -301,14 +305,19 @@ function renderSeason(data){
 
     const results = (race.results||[]).slice();
 
-    /* FIXED SORT: finishers first, DNFs last */
+    /* FINAL SORT FIX: finishers first, DNFs always last */
     results.sort((a,b)=>{
-      const aNum = Number.isFinite(Number(a.position));
-      const bNum = Number.isFinite(Number(b.position));
+      const aTime = String(a.time||"").toUpperCase();
+      const bTime = String(b.time||"").toUpperCase();
 
-      if(aNum && bNum) return Number(a.position) - Number(b.position);
-      if(aNum && !bNum) return -1;
-      if(!aNum && bNum) return 1;
+      const aFinished = Number.isFinite(Number(a.position)) && !aTime.includes("DNF") && !aTime.includes("DQ");
+      const bFinished = Number.isFinite(Number(b.position)) && !bTime.includes("DNF") && !bTime.includes("DQ");
+
+      if(aFinished && bFinished){
+        return Number(a.position) - Number(b.position);
+      }
+      if(aFinished && !bFinished) return -1;
+      if(!aFinished && bFinished) return 1;
       return 0;
     });
 
