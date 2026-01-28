@@ -9,10 +9,8 @@
 
 <style>
 body{
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
-  "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: Inter, system-ui, Arial, sans-serif;
   margin:0;
-  background:#fff;
 }
 
 .navbar{
@@ -24,168 +22,106 @@ body{
   font-weight:600;
 }
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-.navbar a:hover{text-decoration:underline;}
 
-.page-wrap{
-  max-width:1100px;
-  margin:0 auto;
-  padding:30px 20px 60px;
-}
-
-h1{text-align:center;margin-bottom:10px;}
-p{text-align:center;color:#555;margin-bottom:20px;}
+.page-wrap{max-width:1100px;margin:0 auto;padding:30px 20px;}
 
 .controls{
   display:flex;
   justify-content:center;
-  gap:12px;
+  gap:10px;
   flex-wrap:wrap;
-  margin-bottom:20px;
+  margin-bottom:15px;
 }
-.controls select, .controls button{
+.controls select,.controls button,input{
   padding:8px 12px;
   border-radius:8px;
   border:1px solid #ccc;
-  background:#f5f5f5;
-  cursor:pointer;
   font-size:14px;
 }
-.controls button.active{
-  background:#222;
-  color:white;
-  border-color:#222;
-}
+.controls button.active{background:#222;color:white;}
 
-table{
-  width:100%;
-  border-collapse:collapse;
-}
-th,td{
-  border-bottom:1px solid #ddd;
-  padding:10px 12px;
-  text-align:left;
-}
+table{width:100%;border-collapse:collapse;}
+th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:left;}
 th{background:#f0f0f0;}
 tr:nth-child(even){background:#f6f9ff;}
 
-.player-link{
-  color:#0056d6;
-  text-decoration:none;
-  font-weight:600;
-}
-.player-link:hover{
-  text-decoration:underline;
-}
+.player-link{color:#0056d6;text-decoration:none;font-weight:600;}
+.player-link:hover{text-decoration:underline;}
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-  <a href="index.html">Home</a>
-  <a href="racing.html">Racing</a>
-  <a href="afl.html">AFL</a>
-  <a href="football.html">Football</a>
-  <a href="cricket.html">Cricket</a>
-  <a href="f1.html">F1</a>
-  <a href="nba.html">NBA</a>
+<a href="index.html">Home</a>
+<a href="nba.html">NBA</a>
 </div>
 
 <div class="page-wrap">
-
 <h1>NBA League Leaders</h1>
-<p>Top 10 statistical leaders by season (1976–77 to present).</p>
 
 <div class="controls">
-  <select id="seasonSelect"></select>
-  <button data-stat="points" class="active">Points</button>
-  <button data-stat="rebounds">Rebounds</button>
-  <button data-stat="assists">Assists</button>
-  <button data-stat="steals">Steals</button>
-  <button data-stat="blocks">Blocks</button>
+<select id="seasonSelect"></select>
+<input type="text" id="playerSearch" placeholder="Search player…">
+<button data-stat="points" class="active">Points</button>
+<button data-stat="rebounds">Rebounds</button>
+<button data-stat="assists">Assists</button>
+<button data-stat="steals">Steals</button>
+<button data-stat="blocks">Blocks</button>
 </div>
 
 <table>
-  <thead>
-    <tr>
-      <th>Rank</th>
-      <th>Player</th>
-      <th>Team</th>
-      <th id="statHeader">Value</th>
-    </tr>
-  </thead>
-  <tbody id="leaderTable"></tbody>
+<thead>
+<tr><th>#</th><th>Player</th><th>Team</th><th id="statHeader">Value</th></tr>
+</thead>
+<tbody id="leaderTable"></tbody>
 </table>
-
 </div>
 
 <script>
-let leadersData = [];
-let currentStat = "points";
+let leadersData=[],currentStat="points";
+const seasonSelect=document.getElementById("seasonSelect");
+const tableBody=document.getElementById("leaderTable");
+const statHeader=document.getElementById("statHeader");
+const buttons=document.querySelectorAll("button");
+const searchInput=document.getElementById("playerSearch");
 
-const seasonSelect = document.getElementById("seasonSelect");
-const tableBody = document.getElementById("leaderTable");
-const statHeader = document.getElementById("statHeader");
-const buttons = document.querySelectorAll(".controls button");
-
-fetch("data/nba/leaders.json")
-  .then(r => r.json())
-  .then(data => {
-    leadersData = data;
-
-    data.forEach((s, i) => {
-      const opt = document.createElement("option");
-      opt.value = s.season;
-      opt.textContent = s.season;
-      if(i === data.length - 1) opt.selected = true;
-      seasonSelect.appendChild(opt);
-    });
-
-    renderTable();
-  });
-
-seasonSelect.addEventListener("change", renderTable);
-
-buttons.forEach(btn => {
-  btn.addEventListener("click", () => {
-    buttons.forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-    currentStat = btn.dataset.stat;
-    renderTable();
-  });
+fetch("data/nba/leaders.json").then(r=>r.json()).then(data=>{
+leadersData=data;
+data.forEach((s,i)=>{
+let o=document.createElement("option");
+o.value=s.season;o.textContent=s.season;
+if(i===data.length-1)o.selected=true;
+seasonSelect.appendChild(o);
+});
+render();
 });
 
-function renderTable(){
-  const season = seasonSelect.value;
-  const seasonData = leadersData.find(s => s.season === season);
+seasonSelect.onchange=render;
+searchInput.oninput=render;
+buttons.forEach(b=>b.onclick=()=>{
+buttons.forEach(x=>x.classList.remove("active"));
+b.classList.add("active");
+currentStat=b.dataset.stat;
+render();
+});
 
-  tableBody.innerHTML = "";
-
-  if(!seasonData || !seasonData[currentStat]){
-    tableBody.innerHTML = "<tr><td colspan='4'>No data available.</td></tr>";
-    return;
-  }
-
-  statHeader.textContent = currentStat.charAt(0).toUpperCase() + currentStat.slice(1);
-
-  seasonData[currentStat].slice(0,10).forEach((row, i) => {
-    const playerParam = encodeURIComponent(row.player);
-
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${i+1}</td>
-      <td>
-        <a class="player-link" href="nba-player.html?player=${playerParam}">
-          ${row.player}
-        </a>
-      </td>
-      <td>${row.team || ""}</td>
-      <td>${row.value}</td>
-    `;
-    tableBody.appendChild(tr);
-  });
+function render(){
+const season=seasonSelect.value;
+const filter=searchInput.value.toLowerCase();
+const seasonData=leadersData.find(s=>s.season===season);
+tableBody.innerHTML="";
+if(!seasonData)return;
+statHeader.textContent=currentStat.toUpperCase();
+seasonData[currentStat].filter(r=>r.player.toLowerCase().includes(filter)).slice(0,10).forEach((r,i)=>{
+const tr=document.createElement("tr");
+tr.innerHTML=`<td>${i+1}</td>
+<td><a class="player-link" href="nba-player.html?player=${encodeURIComponent(r.player)}">${r.player}</a></td>
+<td>${r.team||""}</td>
+<td>${r.value}</td>`;
+tableBody.appendChild(tr);
+});
 }
 </script>
-
 </body>
 </html>
