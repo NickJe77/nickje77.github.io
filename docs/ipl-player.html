@@ -126,7 +126,6 @@ let playerParam = params.get("player");
 
 const indexUrl = "docs/data/ipl/index.json";
 const basePath = "docs/data/ipl/";
-const nameMapUrl = "docs/data/ipl/player-names.json";
 
 const playerNameEl = document.getElementById("playerName");
 const matchesBox = document.getElementById("matchesBox");
@@ -136,25 +135,40 @@ const srBox = document.getElementById("srBox");
 const tableBody = document.getElementById("matchesTable");
 const playerSelect = document.getElementById("playerSelect");
 
-let nameMap = {};
+let allMatches = [];
 
-Promise.all([
-  fetch(nameMapUrl).then(r=>r.json()),
-  fetch(indexUrl).then(r=>r.json())
-])
-.then(([names, files])=>{
-  nameMap = names;
+fetch(indexUrl)
+.then(r=>r.json())
+.then(files=>{
+  return Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json())));
+})
+.then(seasons=>{
+  const playerSet = new Set();
 
-  Object.keys(nameMap).sort().forEach(p=>{
-    const opt=document.createElement("option");
-    opt.value=p;
-    opt.textContent=nameMap[p];
+  seasons.forEach(season=>{
+    season.forEach(match=>{
+      allMatches.push(match);
+      match.innings.forEach(inn=>{
+        inn.overs.forEach(over=>{
+          over.deliveries.forEach(d=>{
+            if(d.batter) playerSet.add(d.batter);
+            if(d.bowler) playerSet.add(d.bowler);
+          });
+        });
+      });
+    });
+  });
+
+  Array.from(playerSet).sort().forEach(p=>{
+    const opt = document.createElement("option");
+    opt.value = p;
+    opt.textContent = p;
     playerSelect.appendChild(opt);
   });
 
   if(playerParam){
     playerSelect.value = playerParam;
-    loadPlayer(playerParam, files);
+    loadPlayer(playerParam);
   }
 
   playerSelect.addEventListener("change", ()=>{
@@ -165,65 +179,61 @@ Promise.all([
   });
 });
 
-function loadPlayer(player, files){
-Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json())))
-.then(seasons=>{
+function loadPlayer(player){
   let matches = 0;
   let runs = 0;
   let balls = 0;
   let wkts = 0;
   let matchRows = [];
 
-  seasons.forEach(season=>{
-    season.forEach(match=>{
-      let didPlay = false;
-      let batRuns = 0;
-      let batBalls = 0;
-      let bowlWkts = 0;
-      let bowlRuns = 0;
+  allMatches.forEach(match=>{
+    let didPlay = false;
+    let batRuns = 0;
+    let batBalls = 0;
+    let bowlWkts = 0;
+    let bowlRuns = 0;
 
-      match.innings.forEach(inn=>{
-        inn.overs.forEach(over=>{
-          over.deliveries.forEach(d=>{
-            if(d.batter === player){
-              batRuns += d.runs.batter;
-              if(!d.extras?.wides) batBalls++;
-              didPlay = true;
+    match.innings.forEach(inn=>{
+      inn.overs.forEach(over=>{
+        over.deliveries.forEach(d=>{
+          if(d.batter === player){
+            batRuns += d.runs.batter;
+            if(!d.extras?.wides) batBalls++;
+            didPlay = true;
+          }
+          if(d.bowler === player){
+            if(!d.extras?.byes && !d.extras?.legbyes){
+              bowlRuns += d.runs.total;
             }
-            if(d.bowler === player){
-              if(!d.extras?.byes && !d.extras?.legbyes){
-                bowlRuns += d.runs.total;
-              }
-              if(d.wickets){
-                d.wickets.forEach(w=>{
-                  if(w.kind !== "run out") bowlWkts++;
-                });
-              }
-              didPlay = true;
+            if(d.wickets){
+              d.wickets.forEach(w=>{
+                if(w.kind !== "run out") bowlWkts++;
+              });
             }
-          });
+            didPlay = true;
+          }
         });
       });
-
-      if(didPlay){
-        matches++;
-        runs += batRuns;
-        balls += batBalls;
-        wkts += bowlWkts;
-
-        matchRows.push({
-          date: match.info.dates[0],
-          teams: match.info.teams.join(" vs "),
-          venue: match.info.venue || "—",
-          bat: batRuns ? batRuns+" ("+batBalls+")" : "—",
-          bowl: bowlWkts ? bowlWkts+" / "+bowlRuns : "—",
-          file: match.file
-        });
-      }
     });
+
+    if(didPlay){
+      matches++;
+      runs += batRuns;
+      balls += batBalls;
+      wkts += bowlWkts;
+
+      matchRows.push({
+        date: match.info.dates[0],
+        teams: match.info.teams.join(" vs "),
+        venue: match.info.venue || "—",
+        bat: batRuns ? batRuns+" ("+batBalls+")" : "—",
+        bowl: bowlWkts ? bowlWkts+" / "+bowlRuns : "—",
+        file: match.file
+      });
+    }
   });
 
-  playerNameEl.textContent = fullName(player);
+  playerNameEl.textContent = player;
   matchesBox.textContent = matches;
   runsBox.textContent = runs;
   wicketsBox.textContent = wkts;
@@ -244,11 +254,6 @@ Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json())))
       `;
       tableBody.appendChild(tr);
     });
-});
-}
-
-function fullName(n){
-  return nameMap[n] || n;
 }
 
 function formatDate(d){
