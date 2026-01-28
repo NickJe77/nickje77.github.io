@@ -38,13 +38,12 @@ body{
 .hero h1{margin:0;font-size:46px;}
 .hero p{margin-top:10px;font-size:20px;opacity:0.95;}
 
-input[type="text"], select{
+select{
   padding:10px 14px;
   font-size:16px;
   border-radius:10px;
   border:1px solid #ccc;
   margin-top:15px;
-  margin-right:10px;
 }
 
 .summary-grid{
@@ -93,12 +92,9 @@ a:hover{text-decoration:underline;}
 <div class="hero">
   <h1 id="playerName">Select an IPL Player</h1>
   <p>Career summary and match list.</p>
-  <div>
-    <input type="text" id="playerSearch" placeholder="Type player name…" />
-    <select id="playerSelect">
-      <option value="">— Select Player —</option>
-    </select>
-  </div>
+  <select id="playerSelect">
+    <option value="">— Select Player —</option>
+  </select>
 </div>
 
 <div class="summary-grid">
@@ -139,11 +135,12 @@ const wicketsBox = document.getElementById("wicketsBox");
 const srBox = document.getElementById("srBox");
 const tableBody = document.getElementById("matchesTable");
 const playerSelect = document.getElementById("playerSelect");
-const playerSearch = document.getElementById("playerSearch");
 
 let allMatches = [];
 let nameMap = {};
 let allPlayers = [];
+let typedBuffer = "";
+let bufferTimer = null;
 
 Promise.all([
   fetch(namesUrl).then(r=>r.json()),
@@ -173,7 +170,6 @@ Promise.all([
   });
 
   allPlayers = Array.from(playerSet).sort();
-
   buildDropdown(allPlayers);
 
   if(playerParam){
@@ -188,13 +184,19 @@ Promise.all([
     }
   });
 
-  playerSearch.addEventListener("input", ()=>{
-    const term = playerSearch.value.toLowerCase();
-    const filtered = allPlayers.filter(p=>{
-      const display = nameMap[p] || p;
-      return display.toLowerCase().includes(term);
-    });
-    buildDropdown(filtered);
+  // predictive typing on the SAME selector
+  playerSelect.addEventListener("keydown", (e)=>{
+    if(e.key.length === 1 && /[a-zA-Z ]/.test(e.key)){
+      typedBuffer += e.key.toLowerCase();
+      filterDropdown();
+    }
+    if(e.key === "Backspace"){
+      typedBuffer = typedBuffer.slice(0, -1);
+      filterDropdown();
+    }
+
+    clearTimeout(bufferTimer);
+    bufferTimer = setTimeout(()=>{ typedBuffer = ""; }, 1000);
   });
 });
 
@@ -206,6 +208,14 @@ function buildDropdown(list){
     opt.textContent = nameMap[p] || p;
     playerSelect.appendChild(opt);
   });
+}
+
+function filterDropdown(){
+  const filtered = allPlayers.filter(p=>{
+    const display = (nameMap[p] || p).toLowerCase();
+    return display.startsWith(typedBuffer);
+  });
+  buildDropdown(filtered);
 }
 
 function loadPlayer(player){
