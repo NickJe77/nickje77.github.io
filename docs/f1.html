@@ -174,15 +174,12 @@ const flagByCountry = {
 
 function normalizeGpRaw(s){
   let n = String(s || "").trim();
-
   n = n.replace(/^Flag of\s+/i,"");
   n = n.replace(/People’?s Republic of\s+/i,"");
   n = n.replace(/Republic of\s+/i,"");
   n = n.replace(/\sof America\s*/i," ");
   n = n.replace(/\s+/g," ").trim();
-
   n = n.replace(/\b(\w+)\s+\1\b/gi,"$1"); // China China → China
-
   return n;
 }
 
@@ -192,17 +189,17 @@ function parseGpName(grandPrix){
   for(const c of countries){
     if(raw === c) return { label:c, country:c };
     if(raw.startsWith(c+" ")){
-      const venue = raw.slice(c.length).trim();
-      return { label:venue || c, country:c };
+      return { label:c, country:c };
     }
   }
   return { label:raw, country:"" };
 }
 
-function formatRoundTitle(round, grandPrix){
+function formatRoundTitle(round, grandPrix, circuit){
   const parsed = parseGpName(grandPrix);
   const flag = parsed.country ? flagByCountry[parsed.country] : "";
-  return `Round ${round} – ${parsed.label}${flag ? " "+flag : ""}`;
+  const track = circuit ? ` (${circuit})` : "";
+  return `Round ${round} – ${parsed.label}${flag ? " "+flag : ""}${track}`;
 }
 
 /* ================= YEAR BUTTONS ================= */
@@ -276,7 +273,13 @@ function renderSeason(data){
   data.races.forEach(race=>{
     const details=document.createElement("details");
     const summary=document.createElement("summary");
-    summary.textContent = formatRoundTitle(race.round, race.grand_prix);
+
+    summary.textContent = formatRoundTitle(
+      race.round,
+      race.grand_prix,
+      race.circuit || race.venue || ""
+    );
+
     details.appendChild(summary);
 
     const table=document.createElement("table");
@@ -296,7 +299,6 @@ function renderSeason(data){
     const tbody=table.querySelector("tbody");
 
     const results = (race.results||[]).slice();
-
     results.sort((a,b)=>{
       const ap = (a.position==null)?999:a.position;
       const bp = (b.position==null)?999:b.position;
