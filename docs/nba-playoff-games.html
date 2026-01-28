@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NBA Playoff Games | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
+<style>
+body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#fff;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px 60px;}
+h1{text-align:center;margin:0 0 10px;}
+p{text-align:center;color:#555;margin:0 0 18px;}
+.controls{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin:0 0 18px;}
+select,input{padding:8px 12px;border-radius:8px;border:1px solid #ccc;font-size:14px;}
+details{border:1px solid #ddd;border-radius:8px;padding:10px;margin:0 0 12px;}
+summary{font-weight:800;font-size:17px;cursor:pointer;}
+table{width:100%;border-collapse:collapse;margin-top:10px;}
+th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:left;}
+th{background:#f0f0f0;}
+tr:nth-child(even){background:#f6f9ff;}
+.small{color:#666;font-size:13px;}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="nba.html">NBA</a>
+</div>
+
+<div class="page-wrap">
+  <h1>NBA Playoff Games</h1>
+  <p>Game-by-game playoff results by season.</p>
+
+  <div class="controls">
+    <select id="seasonSelect"></select>
+    <input id="filterBox" type="text" placeholder="Filter (team, player, series)…">
+  </div>
+
+  <div id="out"></div>
+</div>
+
+<script>
+let data=[];
+const seasonSelect=document.getElementById("seasonSelect");
+const out=document.getElementById("out");
+const filterBox=document.getElementById("filterBox");
+
+fetch("data/nba/playoff-games.json")
+  .then(r=>r.json())
+  .then(d=>{
+    data=d||[];
+    data.forEach((s,i)=>{
+      const o=document.createElement("option");
+      o.value=s.season;
+      o.textContent=s.season;
+      if(i===data.length-1) o.selected=true;
+      seasonSelect.appendChild(o);
+    });
+    render();
+  })
+  .catch(()=>{ out.innerHTML="<p>Could not load data.</p>"; });
+
+seasonSelect.addEventListener("change", render);
+filterBox.addEventListener("input", render);
+
+function render(){
+  const season=seasonSelect.value;
+  const f=(filterBox.value||"").trim().toLowerCase();
+  const row=data.find(x=>x.season===season);
+  out.innerHTML="";
+
+  if(!row || !row.rounds){
+    out.innerHTML="<p>No data available.</p>";
+    return;
+  }
+
+  row.rounds.forEach(round=>{
+    const details=document.createElement("details");
+    const summary=document.createElement("summary");
+    summary.textContent=round.round;
+    details.appendChild(summary);
+
+    (round.series||[]).forEach(series=>{
+      const seriesTitle = `${series.team1} vs ${series.team2} (${series.result || ""})`.trim();
+      const seriesBlock=document.createElement("div");
+      seriesBlock.style.marginTop="10px";
+      seriesBlock.innerHTML = `<div style="font-weight:800;margin:6px 0 6px;">${seriesTitle}</div>`;
+
+      const table=document.createElement("table");
+      table.innerHTML=`
+        <thead>
+          <tr>
+            <th>Game</th>
+            <th>Date</th>
+            <th>Venue</th>
+            <th>Result</th>
+            <th class="small">Top scorers (optional)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      `;
+      const tbody=table.querySelector("tbody");
+
+      const games=(series.games||[]).slice();
+      games.forEach(g=>{
+        const hay = [
+          round.round, series.team1, series.team2,
+          seriesTitle, g.date, g.venue, g.winner, g.loser,
+          (g.top_scorers||[]).map(t=>t.player+" "+t.team).join(" ")
+        ].join(" ").toLowerCase();
+
+        if(f && !hay.includes(f)) return;
+
+        const scoreText = (g.winner && g.loser && (g.winner_score!=null) && (g.loser_score!=null))
+          ? `${g.winner} ${g.winner_score} – ${g.loser_score} ${g.loser}`
+          : (g.result || "");
+
+        const top = (g.top_scorers||[])
+          .map(t => `${t.player} (${t.team}) ${t.points}`)
+          .join(" • ");
+
+        const tr=document.createElement("tr");
+        tr.innerHTML=`
+          <td>${g.game || ""}</td>
+          <td>${g.date || ""}</td>
+          <td>${g.venue || ""}</td>
+          <td>${scoreText}</td>
+          <td class="small">${top}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      seriesBlock.appendChild(table);
+      details.appendChild(seriesBlock);
+    });
+
+    out.appendChild(details);
+  });
+}
+</script>
+
+</body>
+</html>
