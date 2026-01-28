@@ -21,6 +21,7 @@ th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:left;}
 th{background:#f0f0f0;}
 tr:nth-child(even){background:#f6f9ff;}
 .small{color:#666;font-size:13px;}
+.series-title{font-weight:800;margin:8px 0 6px;}
 </style>
 </head>
 <body>
@@ -36,7 +37,7 @@ tr:nth-child(even){background:#f6f9ff;}
 
   <div class="controls">
     <select id="seasonSelect"></select>
-    <input id="filterBox" type="text" placeholder="Filter (team, player, series)…">
+    <input id="filterBox" type="text" placeholder="Filter (team, round, game)…">
   </div>
 
   <div id="out"></div>
@@ -61,7 +62,9 @@ fetch("data/nba/playoff-games.json")
     });
     render();
   })
-  .catch(()=>{ out.innerHTML="<p>Could not load data.</p>"; });
+  .catch(()=>{
+    out.innerHTML="<p>Could not load data.</p>";
+  });
 
 seasonSelect.addEventListener("change", render);
 filterBox.addEventListener("input", render);
@@ -72,8 +75,8 @@ function render(){
   const row=data.find(x=>x.season===season);
   out.innerHTML="";
 
-  if(!row || !row.rounds){
-    out.innerHTML="<p>No data available.</p>";
+  if(!row || !row.rounds || row.rounds.length===0){
+    out.innerHTML="<p>No data available for this season.</p>";
     return;
   }
 
@@ -85,9 +88,10 @@ function render(){
 
     (round.series||[]).forEach(series=>{
       const seriesTitle = `${series.team1} vs ${series.team2} (${series.result || ""})`.trim();
+
       const seriesBlock=document.createElement("div");
-      seriesBlock.style.marginTop="10px";
-      seriesBlock.innerHTML = `<div style="font-weight:800;margin:6px 0 6px;">${seriesTitle}</div>`;
+      seriesBlock.className="series-block";
+      seriesBlock.innerHTML = `<div class="series-title">${seriesTitle}</div>`;
 
       const table=document.createElement("table");
       table.innerHTML=`
@@ -95,40 +99,37 @@ function render(){
           <tr>
             <th>Game</th>
             <th>Date</th>
-            <th>Venue</th>
             <th>Result</th>
-            <th class="small">Top scorers (optional)</th>
           </tr>
         </thead>
         <tbody></tbody>
       `;
       const tbody=table.querySelector("tbody");
 
-      const games=(series.games||[]).slice();
-      games.forEach(g=>{
+      (series.games||[]).forEach(g=>{
         const hay = [
-          round.round, series.team1, series.team2,
-          seriesTitle, g.date, g.venue, g.winner, g.loser,
-          (g.top_scorers||[]).map(t=>t.player+" "+t.team).join(" ")
+          round.round,
+          series.team1,
+          series.team2,
+          seriesTitle,
+          g.game,
+          g.date,
+          g.winner,
+          g.loser
         ].join(" ").toLowerCase();
 
         if(f && !hay.includes(f)) return;
 
-        const scoreText = (g.winner && g.loser && (g.winner_score!=null) && (g.loser_score!=null))
+        const scoreText =
+          (g.winner && g.loser && g.winner_score!=null && g.loser_score!=null)
           ? `${g.winner} ${g.winner_score} – ${g.loser_score} ${g.loser}`
-          : (g.result || "");
-
-        const top = (g.top_scorers||[])
-          .map(t => `${t.player} (${t.team}) ${t.points}`)
-          .join(" • ");
+          : "";
 
         const tr=document.createElement("tr");
         tr.innerHTML=`
           <td>${g.game || ""}</td>
           <td>${g.date || ""}</td>
-          <td>${g.venue || ""}</td>
           <td>${scoreText}</td>
-          <td class="small">${top}</td>
         `;
         tbody.appendChild(tr);
       });
