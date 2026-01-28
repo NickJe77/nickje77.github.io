@@ -27,13 +27,13 @@ body{
 .navbar a:hover{text-decoration:underline;}
 
 .page-wrap{
-  max-width:1000px;
+  max-width:1100px;
   margin:0 auto;
   padding:30px 20px 60px;
 }
 
 h1{text-align:center;margin-bottom:10px;}
-p{text-align:center;color:#555;margin-bottom:30px;}
+p{text-align:center;color:#555;margin-bottom:20px;}
 
 .tile-wrap{
   display:grid;
@@ -68,12 +68,18 @@ p{text-align:center;color:#555;margin-bottom:30px;}
 }
 .back-link:hover{text-decoration:underline;}
 
-.info{
-  max-width:800px;
-  margin:0 auto 30px;
-  text-align:center;
-  color:#444;
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:20px;
 }
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:left;
+}
+th{background:#f0f0f0;}
+tr:nth-child(even){background:#f6f9ff;}
 </style>
 </head>
 
@@ -123,7 +129,20 @@ p{text-align:center;color:#555;margin-bottom:30px;}
   </div>
 </div>
 
-<div class="info" id="extraInfo"></div>
+<h2>Season-by-Season Statistics</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Season</th>
+      <th>Team</th>
+      <th>PTS</th>
+      <th>REB</th>
+      <th>AST</th>
+    </tr>
+  </thead>
+  <tbody id="seasonStats"></tbody>
+</table>
 
 </div>
 
@@ -140,7 +159,8 @@ const tilePosition = document.getElementById("tilePosition");
 const tileDebut = document.getElementById("tileDebut");
 const tileTitles = document.getElementById("tileTitles");
 const tileMvps = document.getElementById("tileMvps");
-const extraInfo = document.getElementById("extraInfo");
+
+const seasonStatsBody = document.getElementById("seasonStats");
 
 if(!playerName){
   playerNameEl.textContent = "No player selected";
@@ -150,8 +170,8 @@ if(!playerName){
 
   fetch("data/nba/players.json")
     .then(r => r.json())
-    .then(data => {
-      const player = data.find(p => p.player === playerName);
+    .then(players => {
+      const player = players.find(p => p.player === playerName);
 
       if(!player){
         playerInfoEl.textContent = "Player not found.";
@@ -166,16 +186,32 @@ if(!playerName){
       tileDebut.textContent = player.debut || "—";
       tileTitles.textContent = player.titles ?? "—";
       tileMvps.textContent = player.mvps ?? "—";
+    });
 
-      let bio = [];
-      if(player.height) bio.push(`Height: ${player.height}`);
-      if(player.weight) bio.push(`Weight: ${player.weight}`);
-      if(player.teams) bio.push(`Teams: ${player.teams.join(", ")}`);
+  fetch("data/nba/player-seasons.json")
+    .then(r => r.json())
+    .then(data => {
+      const record = data.find(p => p.player === playerName);
 
-      extraInfo.textContent = bio.join(" • ");
+      if(!record || !record.seasons){
+        seasonStatsBody.innerHTML = "<tr><td colspan='5'>No season data available.</td></tr>";
+        return;
+      }
+
+      record.seasons.forEach(season => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${season.season}</td>
+          <td>${season.team || ""}</td>
+          <td>${season.pts ?? ""}</td>
+          <td>${season.reb ?? ""}</td>
+          <td>${season.ast ?? ""}</td>
+        `;
+        seasonStatsBody.appendChild(tr);
+      });
     })
     .catch(() => {
-      playerInfoEl.textContent = "Error loading player data.";
+      seasonStatsBody.innerHTML = "<tr><td colspan='5'>Error loading season stats.</td></tr>";
     });
 }
 </script>
