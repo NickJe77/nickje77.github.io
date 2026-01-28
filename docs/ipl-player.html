@@ -126,6 +126,7 @@ let playerParam = params.get("player");
 
 const indexUrl = "data/ipl/index.json";
 const basePath = "data/ipl/";
+const namesUrl = "data/ipl/player-names.json";
 
 const playerNameEl = document.getElementById("playerName");
 const matchesBox = document.getElementById("matchesBox");
@@ -136,10 +137,15 @@ const tableBody = document.getElementById("matchesTable");
 const playerSelect = document.getElementById("playerSelect");
 
 let allMatches = [];
+let nameMap = {};
 
-fetch(indexUrl)
-.then(r=>r.json())
-.then(files=>{
+Promise.all([
+  fetch(namesUrl).then(r=>r.json()),
+  fetch(indexUrl).then(r=>r.json())
+])
+.then(([names, files])=>{
+  nameMap = names;
+
   const fullFiles = files.filter(f => f.includes("_FULL.json"));
   return Promise.all(fullFiles.map(f=>fetch(basePath+f).then(r=>r.json())));
 })
@@ -163,7 +169,7 @@ fetch(indexUrl)
   Array.from(playerSet).sort().forEach(p=>{
     const opt = document.createElement("option");
     opt.value = p;
-    opt.textContent = p;
+    opt.textContent = nameMap[p] || p;
     playerSelect.appendChild(opt);
   });
 
@@ -234,7 +240,7 @@ function loadPlayer(player){
     }
   });
 
-  playerNameEl.textContent = player;
+  playerNameEl.textContent = nameMap[player] || player;
   matchesBox.textContent = matches;
   runsBox.textContent = runs;
   wicketsBox.textContent = wkts;
