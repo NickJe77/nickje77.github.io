@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Constructor | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
+
+<style>
+body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;}
+
+.hero{width:100%;height:260px;position:relative;overflow:hidden;}
+.hero img{width:100%;height:100%;object-fit:cover;}
+.hero::after{content:"";position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.35),rgba(0,0,0,.55));}
+
+.navbar{
+  display:flex;justify-content:center;gap:22px;padding:16px 0;
+  border-bottom:1px solid #ddd;font-weight:600;background:#fff;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{max-width:1100px;margin:0 auto;padding:30px 20px;}
+h1{text-align:center;}
+.tile-wrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:25px;}
+.tile{border:1px solid #ddd;border-radius:10px;padding:14px;text-align:center;background:#f6f9ff;}
+
+table{width:100%;border-collapse:collapse;}
+th,td{padding:8px 10px;border-bottom:1px solid #ddd;}
+th{background:#f0f0f0;}
+tr:nth-child(even){background:#f6f9ff;}
+</style>
+</head>
+
+<body>
+
+<div class="hero">
+  <img src="images/f1-header.jpg" alt="Formula 1">
+</div>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="f1.html">F1</a>
+</div>
+
+<div class="page-wrap">
+<h1 id="teamName">Constructor</h1>
+
+<div class="tile-wrap">
+  <div class="tile"><strong>Races</strong><div id="races">—</div></div>
+  <div class="tile"><strong>Wins</strong><div id="wins">—</div></div>
+  <div class="tile"><strong>Points</strong><div id="points">—</div></div>
+</div>
+
+<table>
+<thead>
+<tr><th>Season</th><th>Races</th><th>Wins</th><th>Points</th></tr>
+</thead>
+<tbody id="seasonTable"></tbody>
+</table>
+</div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const team = params.get("team");
+
+document.getElementById("teamName").textContent = team;
+
+const startYear=1950;
+const endYear=new Date().getFullYear();
+const tbody=document.getElementById("seasonTable");
+
+let total={races:0,wins:0,points:0};
+
+async function load(){
+  for(let y=startYear;y<=endYear;y++){
+    try{
+      const res = await fetch(`data/f1/${y}.json`);
+      if(!res.ok) continue;
+      const data = await res.json();
+
+      let seasonStats={races:0,wins:0,points:0};
+
+      (data.races||[]).forEach(race=>{
+        (race.results||[]).forEach(r=>{
+          if(r.team===team){
+            seasonStats.races++;
+            if(Number(r.position)===1) seasonStats.wins++;
+            seasonStats.points+=Number(r.points)||0;
+          }
+        });
+      });
+
+      if(seasonStats.races>0){
+        total.races+=seasonStats.races;
+        total.wins+=seasonStats.wins;
+        total.points+=seasonStats.points;
+
+        const tr=document.createElement("tr");
+        tr.innerHTML=`
+          <td>${y}</td>
+          <td>${seasonStats.races}</td>
+          <td>${seasonStats.wins}</td>
+          <td>${seasonStats.points.toFixed(1)}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+
+    }catch(e){}
+  }
+
+  document.getElementById("races").textContent=total.races;
+  document.getElementById("wins").textContent=total.wins;
+  document.getElementById("points").textContent=total.points.toFixed(1);
+}
+
+load();
+</script>
+
+</body>
+</html>
