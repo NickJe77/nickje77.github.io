@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Formula 1 Constructors | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
+
+<style>
+body{
+  font-family: Inter, system-ui, Arial, sans-serif;
+  margin:0;
+}
+
+.hero{
+  width:100%;
+  height:260px;
+  position:relative;
+  overflow:hidden;
+}
+.hero img{width:100%;height:100%;object-fit:cover;}
+.hero::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(to bottom, rgba(0,0,0,.35), rgba(0,0,0,.55));
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+  background:#fff;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{max-width:1100px;margin:0 auto;padding:30px 20px;}
+
+h1{text-align:center;margin-bottom:10px;}
+p{text-align:center;color:#555;margin-bottom:20px;}
+
+table{width:100%;border-collapse:collapse;}
+th,td{padding:8px 10px;border-bottom:1px solid #ddd;}
+th{background:#f0f0f0;}
+tr:nth-child(even){background:#f6f9ff;}
+a.team-link{text-decoration:none;color:#0056d6;font-weight:600;}
+</style>
+</head>
+
+<body>
+
+<div class="hero">
+  <img src="images/f1-header.jpg" alt="Formula 1">
+</div>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="f1.html">F1</a>
+</div>
+
+<div class="page-wrap">
+<h1>Formula 1 Constructors</h1>
+<p>All constructors by total race starts.</p>
+
+<table>
+<thead>
+<tr>
+  <th>Constructor</th>
+  <th>Races</th>
+  <th>Wins</th>
+  <th>Points</th>
+</tr>
+</thead>
+<tbody id="tableBody"></tbody>
+</table>
+</div>
+
+<script>
+const startYear = 1950;
+const endYear = new Date().getFullYear();
+const tbody = document.getElementById("tableBody");
+
+let stats = {};
+
+function cleanTeam(name){
+  return String(name||"").trim();
+}
+
+async function loadData(){
+  for(let y=startYear;y<=endYear;y++){
+    try{
+      const res = await fetch(`data/f1/${y}.json`);
+      if(!res.ok) continue;
+      const data = await res.json();
+
+      (data.races||[]).forEach(race=>{
+        (race.results||[]).forEach(r=>{
+          const team = cleanTeam(r.team);
+          if(!team) return;
+          if(!stats[team]){
+            stats[team]={races:0,wins:0,points:0};
+          }
+          stats[team].races++;
+          if(Number(r.position)===1) stats[team].wins++;
+          stats[team].points += Number(r.points)||0;
+        });
+      });
+    }catch(e){}
+  }
+
+  render();
+}
+
+function render(){
+  tbody.innerHTML="";
+  Object.entries(stats)
+    .sort((a,b)=>b[1].points - a[1].points)
+    .forEach(([team,s])=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td><a class="team-link" href="f1-constructor.html?team=${encodeURIComponent(team)}">${team}</a></td>
+        <td>${s.races}</td>
+        <td>${s.wins}</td>
+        <td>${s.points.toFixed(1)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+}
+
+loadData();
+</script>
+
+</body>
+</html>
