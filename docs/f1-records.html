@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Formula 1 Records | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="style.css">
+
+<style>
+body{
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin:0;
+}
+
+/* NAV */
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+  background:#fff;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+/* HERO */
+.hero{
+  width:100%;
+  height:260px;
+  position:relative;
+  overflow:hidden;
+}
+.hero img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.hero::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(to bottom, rgba(0,0,0,0.25), rgba(0,0,0,0.45));
+}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+h1{text-align:center;margin-bottom:10px;}
+h2{margin-top:40px;border-bottom:2px solid #ddd;padding-bottom:6px;}
+h3{margin-top:20px;}
+
+p{text-align:center;color:#555;margin-bottom:25px;}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:10px;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:left;
+}
+th{background:#f0f0f0;}
+tr:nth-child(even){background:#f6f9ff;}
+
+.rank{font-weight:700;}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="f1.html">F1</a>
+</div>
+
+<div class="hero">
+  <img src="images/f1-header.jpg" alt="Formula 1">
+</div>
+
+<div class="page-wrap">
+
+<h1>Formula 1 Records</h1>
+<p>All-time Formula 1 records (calculated from race results data).</p>
+
+<h2>Driver Records</h2>
+
+<h3>Most Championships</h3>
+<table id="championshipTable">
+  <thead><tr><th>Rank</th><th>Driver</th><th>Titles</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<h3>Most Race Wins</h3>
+<table id="winsTable">
+  <thead><tr><th>Rank</th><th>Driver</th><th>Wins</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<h3>Most Podiums</h3>
+<table id="podiumsTable">
+  <thead><tr><th>Rank</th><th>Driver</th><th>Podiums</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<h3>Most Career Points</h3>
+<table id="pointsTable">
+  <thead><tr><th>Rank</th><th>Driver</th><th>Points</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<h2>Team Records</h2>
+
+<h3>Most Race Wins (Constructors)</h3>
+<table id="teamWinsTable">
+  <thead><tr><th>Rank</th><th>Team</th><th>Wins</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<h2>Fastest Laps</h2>
+
+<h3>Fastest Lap by Current Venue</h3>
+<table id="fastestLapVenueTable">
+  <thead>
+    <tr>
+      <th>Circuit</th>
+      <th>Fastest Lap</th>
+      <th>Driver</th>
+      <th>Season</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+</div>
+
+<script>
+const startYear = 1950;
+const endYear = new Date().getFullYear();
+
+let driverWins = {};
+let driverPodiums = {};
+let driverPoints = {};
+let driverTitles = {};
+let teamWins = {};
+let fastestByVenue = {};
+
+function cleanDriver(name){
+  return String(name||"").replace(/\s[A-Z]{3}$/,"");
+}
+
+function normalizeVenue(name){
+  return String(name||"")
+    .replace(/^Flag of\s+/i,"")
+    .replace(/Grand Prix/i,"")
+    .replace(/\s+/g," ")
+    .trim();
+}
+
+function lapToSeconds(t){
+  if(!t) return null;
+  const parts = t.split(":");
+  if(parts.length === 2){
+    return parseInt(parts[0])*60 + parseFloat(parts[1]);
+  }
+  return null;
+}
+
+async function loadAllSeasons(){
+  for(let year=endYear; year>=startYear; year--){
+    try{
+      const res = await fetch(`data/f1/${year}.json`);
+      if(!res.ok) continue;
+      const data = await res.json();
+      processSeason(data, year);
+    }catch(e){}
+  }
+  buildTables();
+}
+
+function processSeason(data, year){
+  let seasonTotals = {};
+
+  data.races.forEach(race=>{
+    const venue = normalizeVenue(race.grand_prix);
+
+    if(race.fastest_lap_time && race.fastest_lap_driver){
+      const secs = lapToSeconds(race.fastest_lap_time);
+      if(secs){
+        if(!fastestByVenue[venue] || secs < fastestByVenue[venue].seconds){
+          fastestByVenue[venue] = {
+            time: race.fastest_lap_time,
+            driver: cleanDriver(race.fastest_lap_driver),
+            year: year,
+            seconds: secs
+          };
+        }
+      }
+    }
+
+    race.results.forEach(r=>{
+      const driver = cleanDriver(r.driver);
+      const team = r.team || "";
+      const pos = String(r.position||"");
+      const pts = Number(r.points)||0;
+
+      driverPoints[driver] = (driverPoints[driver]||0) + pts;
+      seasonTotals[driver] = (seasonTotals[driver]||0) + pts;
+
+      if(pos==="1"){
+        driverWins[driver] = (driverWins[driver]||0) + 1;
+        if(team) teamWins[team] = (teamWins[team]||0) + 1;
+      }
+
+      if(pos==="1" || pos==="2" || pos==="3"){
+        driverPodiums[driver] = (driverPodiums[driver]||0) + 1;
+      }
+    });
+  });
+
+  const champion = Object.entries(seasonTotals).sort((a,b)=>b[1]-a[1])[0];
+  if(champion){
+    driverTitles[champion[0]] = (driverTitles[champion[0]]||0) + 1;
+  }
+}
+
+function fillTable(tableId, dataObj){
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  tbody.innerHTML = "";
+  const sorted = Object.entries(dataObj).sort((a,b)=>b[1]-a[1]).slice(0,20);
+  sorted.forEach((item,i)=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td class="rank">${i+1}</td><td>${item[0]}</td><td>${item[1]}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function buildFastestLapVenue(){
+  const tbody = document.querySelector("#fastestLapVenueTable tbody");
+  tbody.innerHTML = "";
+
+  const sorted = Object.entries(fastestByVenue)
+    .sort((a,b)=>a[0].localeCompare(b[0]));
+
+  sorted.forEach(([venue,rec])=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${venue}</td>
+      <td>${rec.time}</td>
+      <td>${rec.driver}</td>
+      <td>${rec.year}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function buildTables(){
+  fillTable("championshipTable", driverTitles);
+  fillTable("winsTable", driverWins);
+  fillTable("podiumsTable", driverPodiums);
+  fillTable("pointsTable", driverPoints);
+  fillTable("teamWinsTable", teamWins);
+  buildFastestLapVenue();
+}
+
+loadAllSeasons();
+</script>
+
+</body>
+</html>
