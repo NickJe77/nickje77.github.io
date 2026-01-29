@@ -86,9 +86,7 @@ a.team-link{
   text-decoration:none;
   font-weight:600;
 }
-a.team-link:hover{
-  text-decoration:underline;
-}
+a.team-link:hover{text-decoration:underline;}
 </style>
 </head>
 
@@ -137,7 +135,7 @@ const seasonSelect = document.getElementById("seasonSelect");
 const filterBox = document.getElementById("filterBox");
 const tableBody = document.getElementById("constructorTable");
 
-let allData = [];
+let allSeasonData = [];
 let currentStats = {};
 let sortKey = "points";
 let sortDir = -1;
@@ -166,27 +164,34 @@ document.querySelectorAll("th").forEach(th=>{
   });
 });
 
+/* FAST PARALLEL LOAD */
+async function loadAllSeasons(){
+  tableBody.innerHTML = "Loading all seasons…";
+
+  const promises = [];
+  for(let y=startYear; y<=endYear; y++){
+    promises.push(fetch(`data/f1/${y}.json`).then(r=>r.ok?r.json():null));
+  }
+
+  allSeasonData = (await Promise.all(promises)).filter(x=>x);
+  buildStats(allSeasonData);
+}
+
 async function loadSeason(){
   const season = seasonSelect.value;
-  tableBody.innerHTML="Loading…";
 
   if(season==="all"){
-    allData=[];
-    for(let y=startYear;y<=endYear;y++){
-      try{
-        const r=await fetch(`data/f1/${y}.json`);
-        if(r.ok){
-          const d=await r.json();
-          allData.push(d);
-        }
-      }catch(e){}
+    if(allSeasonData.length===0){
+      loadAllSeasons();
+    }else{
+      buildStats(allSeasonData);
     }
-    buildStats(allData);
   }else{
+    tableBody.innerHTML="Loading…";
     try{
-      const r=await fetch(`data/f1/${season}.json`);
+      const r = await fetch(`data/f1/${season}.json`);
       if(!r.ok){tableBody.innerHTML="";return;}
-      const d=await r.json();
+      const d = await r.json();
       buildStats([d]);
     }catch(e){
       tableBody.innerHTML="";
@@ -227,14 +232,12 @@ function renderTable(){
   rows.sort((a,b)=>{
     let av = a[1][sortKey];
     let bv = b[1][sortKey];
-
     if(typeof av==="string") return av.localeCompare(bv)*sortDir;
     return (bv-av)*sortDir;
   });
 
   rows.forEach(([name,s])=>{
     const safeName = encodeURIComponent(name);
-
     const tr=document.createElement("tr");
     tr.innerHTML=`
       <td><a class="team-link" href="f1-constructor.html?team=${safeName}">${name}</a></td>
