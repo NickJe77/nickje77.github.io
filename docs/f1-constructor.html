@@ -2,30 +2,102 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Constructor | The Sporting Almanac</title>
+<title>Formula 1 Constructor | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <link rel="stylesheet" href="style.css">
 
 <style>
-body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;}
+body{
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin:0;
+}
 
-.hero{width:100%;height:260px;position:relative;overflow:hidden;}
-.hero img{width:100%;height:100%;object-fit:cover;}
-.hero::after{content:"";position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.35),rgba(0,0,0,.55));}
+/* HERO */
+.hero{
+  width:100%;
+  height:260px;
+  position:relative;
+  overflow:hidden;
+}
+.hero img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.hero::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(to bottom, rgba(0,0,0,0.35), rgba(0,0,0,0.55));
+}
 
+/* NAV */
 .navbar{
-  display:flex;justify-content:center;gap:22px;padding:16px 0;
-  border-bottom:1px solid #ddd;font-weight:600;background:#fff;
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+  background:#fff;
 }
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 
-.page-wrap{max-width:1100px;margin:0 auto;padding:30px 20px;}
-h1{text-align:center;}
-.tile-wrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:25px;}
-.tile{border:1px solid #ddd;border-radius:10px;padding:14px;text-align:center;background:#f6f9ff;}
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px 60px;
+}
 
-table{width:100%;border-collapse:collapse;}
-th,td{padding:8px 10px;border-bottom:1px solid #ddd;}
+h1{text-align:center;margin-bottom:20px;}
+
+.stat-boxes{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:16px;
+  margin-bottom:30px;
+}
+.stat{
+  border:1px solid #ddd;
+  border-radius:12px;
+  padding:16px;
+  text-align:center;
+  background:#f6f9ff;
+}
+.stat h3{margin:0 0 6px;font-size:14px;color:#555;}
+.stat div{font-size:22px;font-weight:700;}
+
+.year-grid{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  justify-content:center;
+  margin-bottom:20px;
+}
+.year-btn{
+  padding:6px 12px;
+  border-radius:10px;
+  border:1px solid #ccc;
+  background:#eee;
+  cursor:pointer;
+}
+.year-btn.active{
+  background:#222;
+  color:#fff;
+  border-color:#222;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:center;
+}
 th{background:#f0f0f0;}
 tr:nth-child(even){background:#f6f9ff;}
 </style>
@@ -49,75 +121,155 @@ tr:nth-child(even){background:#f6f9ff;}
 <div class="page-wrap">
 <h1 id="teamName">Constructor</h1>
 
-<div class="tile-wrap">
-  <div class="tile"><strong>Races</strong><div id="races">—</div></div>
-  <div class="tile"><strong>Wins</strong><div id="wins">—</div></div>
-  <div class="tile"><strong>Points</strong><div id="points">—</div></div>
+<div class="stat-boxes">
+  <div class="stat">
+    <h3>Races</h3>
+    <div id="totalRaces">—</div>
+  </div>
+  <div class="stat">
+    <h3>Wins</h3>
+    <div id="totalWins">—</div>
+  </div>
+  <div class="stat">
+    <h3>Points</h3>
+    <div id="totalPoints">—</div>
+  </div>
 </div>
+
+<div class="year-grid" id="yearGrid"></div>
+
+<h2>Drivers</h2>
 
 <table>
 <thead>
-<tr><th>Season</th><th>Races</th><th>Wins</th><th>Points</th></tr>
+<tr>
+  <th>Driver</th>
+  <th>Wins</th>
+  <th>Points</th>
+</tr>
 </thead>
-<tbody id="seasonTable"></tbody>
+<tbody id="driverTable"></tbody>
 </table>
+
 </div>
 
 <script>
 const params = new URLSearchParams(window.location.search);
-const team = params.get("team");
+const team = decodeURIComponent(params.get("team") || "");
 
 document.getElementById("teamName").textContent = team;
 
-const startYear=1950;
-const endYear=new Date().getFullYear();
-const tbody=document.getElementById("seasonTable");
+const yearGrid = document.getElementById("yearGrid");
+const driverTable = document.getElementById("driverTable");
 
-let total={races:0,wins:0,points:0};
+const totalRaces = document.getElementById("totalRaces");
+const totalWins = document.getElementById("totalWins");
+const totalPoints = document.getElementById("totalPoints");
 
-async function load(){
-  for(let y=startYear;y<=endYear;y++){
-    try{
-      const res = await fetch(`data/f1/${y}.json`);
-      if(!res.ok) continue;
-      const data = await res.json();
+const startYear = 1950;
+const endYear = new Date().getFullYear();
 
-      let seasonStats={races:0,wins:0,points:0};
+let allData = [];
+let currentYear = "all";
 
-      (data.races||[]).forEach(race=>{
-        (race.results||[]).forEach(r=>{
-          if(r.team===team){
-            seasonStats.races++;
-            if(Number(r.position)===1) seasonStats.wins++;
-            seasonStats.points+=Number(r.points)||0;
-          }
-        });
-      });
-
-      if(seasonStats.races>0){
-        total.races+=seasonStats.races;
-        total.wins+=seasonStats.wins;
-        total.points+=seasonStats.points;
-
-        const tr=document.createElement("tr");
-        tr.innerHTML=`
-          <td>${y}</td>
-          <td>${seasonStats.races}</td>
-          <td>${seasonStats.wins}</td>
-          <td>${seasonStats.points.toFixed(1)}</td>
-        `;
-        tbody.appendChild(tr);
-      }
-
-    }catch(e){}
-  }
-
-  document.getElementById("races").textContent=total.races;
-  document.getElementById("wins").textContent=total.wins;
-  document.getElementById("points").textContent=total.points.toFixed(1);
+/* NORMALIZE TEAM */
+function cleanConstructor(name){
+  return String(name||"").replace(/-.*/,"").trim();
 }
 
-load();
+/* REMOVE DRIVER CODES */
+function cleanDriver(name){
+  return String(name||"").replace(/\s[A-Z]{3}$/,"");
+}
+
+/* YEAR BUTTONS */
+const allBtn = document.createElement("button");
+allBtn.textContent = "All Seasons";
+allBtn.className = "year-btn active";
+allBtn.onclick = ()=>selectYear("all");
+yearGrid.appendChild(allBtn);
+
+for(let y=startYear;y<=endYear;y++){
+  const btn=document.createElement("button");
+  btn.textContent=y;
+  btn.className="year-btn";
+  btn.onclick=()=>selectYear(y);
+  btn.id="year-"+y;
+  yearGrid.appendChild(btn);
+}
+
+function setActiveYear(y){
+  document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
+  if(y==="all") allBtn.classList.add("active");
+  else{
+    const el=document.getElementById("year-"+y);
+    if(el) el.classList.add("active");
+  }
+}
+
+async function loadAll(){
+  const promises=[];
+  for(let y=startYear;y<=endYear;y++){
+    promises.push(fetch(`data/f1/${y}.json`).then(r=>r.ok?r.json():null));
+  }
+  allData = (await Promise.all(promises)).filter(x=>x);
+  render();
+}
+
+function selectYear(y){
+  currentYear = y;
+  setActiveYear(y);
+  render();
+}
+
+function render(){
+  let seasons = allData;
+  if(currentYear!=="all"){
+    seasons = allData.filter(d=>String(d.season)===String(currentYear));
+  }
+
+  let races=0, wins=0, points=0;
+  const drivers={};
+
+  seasons.forEach(data=>{
+    (data.races||[]).forEach(race=>{
+      (race.results||[]).forEach(r=>{
+        if(cleanConstructor(r.team)!==team) return;
+
+        const driver = cleanDriver(r.driver);
+        if(!drivers[driver]) drivers[driver]={wins:0,points:0};
+
+        races++;
+        points += Number(r.points)||0;
+        drivers[driver].points += Number(r.points)||0;
+
+        if(Number(r.position)===1){
+          wins++;
+          drivers[driver].wins++;
+        }
+      });
+    });
+  });
+
+  totalRaces.textContent = races;
+  totalWins.textContent = wins;
+  totalPoints.textContent = points.toFixed(1);
+
+  driverTable.innerHTML="";
+  Object.entries(drivers)
+    .sort((a,b)=>b[1].wins - a[1].wins)
+    .forEach(([name,s])=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>${name}</td>
+        <td>${s.wins}</td>
+        <td>${s.points.toFixed(1)}</td>
+      `;
+      driverTable.appendChild(tr);
+    });
+}
+
+loadAll();
 </script>
 
 </body>
