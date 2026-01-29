@@ -4,28 +4,36 @@
 <meta charset="UTF-8">
 <title>Formula 1 Constructors | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <link rel="stylesheet" href="style.css">
 
 <style>
 body{
-  font-family: Inter, system-ui, Arial, sans-serif;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   margin:0;
 }
 
+/* HERO */
 .hero{
   width:100%;
   height:260px;
   position:relative;
   overflow:hidden;
 }
-.hero img{width:100%;height:100%;object-fit:cover;}
+.hero img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
 .hero::after{
   content:"";
   position:absolute;
   inset:0;
-  background:linear-gradient(to bottom, rgba(0,0,0,.35), rgba(0,0,0,.55));
+  background:linear-gradient(to bottom, rgba(0,0,0,0.35), rgba(0,0,0,0.55));
 }
 
+/* NAV */
 .navbar{
   display:flex;
   justify-content:center;
@@ -37,16 +45,50 @@ body{
 }
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 
-.page-wrap{max-width:1100px;margin:0 auto;padding:30px 20px;}
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px 60px;
+}
 
-h1{text-align:center;margin-bottom:10px;}
+h1{text-align:center;margin-bottom:6px;}
 p{text-align:center;color:#555;margin-bottom:20px;}
 
-table{width:100%;border-collapse:collapse;}
-th,td{padding:8px 10px;border-bottom:1px solid #ddd;}
+.controls{
+  display:flex;
+  justify-content:center;
+  gap:12px;
+  margin-bottom:20px;
+}
+
+select,input{
+  padding:8px 12px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  font-size:14px;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:center;
+  cursor:pointer;
+}
 th{background:#f0f0f0;}
 tr:nth-child(even){background:#f6f9ff;}
-a.team-link{text-decoration:none;color:#0056d6;font-weight:600;}
+
+a.team-link{
+  color:#0056d6;
+  text-decoration:none;
+  font-weight:600;
+}
+a.team-link:hover{
+  text-decoration:underline;
+}
 </style>
 </head>
 
@@ -67,74 +109,144 @@ a.team-link{text-decoration:none;color:#0056d6;font-weight:600;}
 
 <div class="page-wrap">
 <h1>Formula 1 Constructors</h1>
-<p>All constructors by total race starts.</p>
+<p>Constructor performance by season or across all seasons.</p>
+
+<div class="controls">
+  <select id="seasonSelect"></select>
+  <input id="filterBox" type="text" placeholder="Filter constructor…">
+</div>
 
 <table>
 <thead>
 <tr>
-  <th>Constructor</th>
-  <th>Races</th>
-  <th>Wins</th>
-  <th>Points</th>
+  <th data-key="constructor">Constructor</th>
+  <th data-key="races">Races</th>
+  <th data-key="wins">Wins</th>
+  <th data-key="points">Points</th>
 </tr>
 </thead>
-<tbody id="tableBody"></tbody>
+<tbody id="constructorTable"></tbody>
 </table>
 </div>
 
 <script>
 const startYear = 1950;
 const endYear = new Date().getFullYear();
-const tbody = document.getElementById("tableBody");
 
-let stats = {};
+const seasonSelect = document.getElementById("seasonSelect");
+const filterBox = document.getElementById("filterBox");
+const tableBody = document.getElementById("constructorTable");
 
-function cleanTeam(name){
-  return String(name||"").trim();
+let allData = [];
+let currentStats = {};
+let sortKey = "points";
+let sortDir = -1;
+
+seasonSelect.innerHTML = `<option value="all">All Time</option>`;
+for(let y=startYear; y<=endYear; y++){
+  const opt=document.createElement("option");
+  opt.value=y;
+  opt.textContent=y;
+  seasonSelect.appendChild(opt);
 }
 
-async function loadData(){
-  for(let y=startYear;y<=endYear;y++){
+seasonSelect.addEventListener("change", loadSeason);
+filterBox.addEventListener("input", renderTable);
+
+document.querySelectorAll("th").forEach(th=>{
+  th.addEventListener("click", ()=>{
+    const key = th.dataset.key;
+    if(sortKey === key){
+      sortDir *= -1;
+    }else{
+      sortKey = key;
+      sortDir = -1;
+    }
+    renderTable();
+  });
+});
+
+async function loadSeason(){
+  const season = seasonSelect.value;
+  tableBody.innerHTML="Loading…";
+
+  if(season==="all"){
+    allData=[];
+    for(let y=startYear;y<=endYear;y++){
+      try{
+        const r=await fetch(`data/f1/${y}.json`);
+        if(r.ok){
+          const d=await r.json();
+          allData.push(d);
+        }
+      }catch(e){}
+    }
+    buildStats(allData);
+  }else{
     try{
-      const res = await fetch(`data/f1/${y}.json`);
-      if(!res.ok) continue;
-      const data = await res.json();
-
-      (data.races||[]).forEach(race=>{
-        (race.results||[]).forEach(r=>{
-          const team = cleanTeam(r.team);
-          if(!team) return;
-          if(!stats[team]){
-            stats[team]={races:0,wins:0,points:0};
-          }
-          stats[team].races++;
-          if(Number(r.position)===1) stats[team].wins++;
-          stats[team].points += Number(r.points)||0;
-        });
-      });
-    }catch(e){}
+      const r=await fetch(`data/f1/${season}.json`);
+      if(!r.ok){tableBody.innerHTML="";return;}
+      const d=await r.json();
+      buildStats([d]);
+    }catch(e){
+      tableBody.innerHTML="";
+    }
   }
-
-  render();
 }
 
-function render(){
-  tbody.innerHTML="";
-  Object.entries(stats)
-    .sort((a,b)=>b[1].points - a[1].points)
-    .forEach(([team,s])=>{
-      const tr=document.createElement("tr");
-      tr.innerHTML=`
-        <td><a class="team-link" href="f1-constructor.html?team=${encodeURIComponent(team)}">${team}</a></td>
-        <td>${s.races}</td>
-        <td>${s.wins}</td>
-        <td>${s.points.toFixed(1)}</td>
-      `;
-      tbody.appendChild(tr);
+function buildStats(seasons){
+  const stats={};
+
+  seasons.forEach(data=>{
+    (data.races||[]).forEach(race=>{
+      (race.results||[]).forEach(r=>{
+        const team = r.team;
+        if(!team) return;
+
+        if(!stats[team]){
+          stats[team]={races:0,wins:0,points:0};
+        }
+        stats[team].races++;
+        if(Number(r.position)===1) stats[team].wins++;
+        stats[team].points += Number(r.points)||0;
+      });
     });
+  });
+
+  currentStats = stats;
+  renderTable();
 }
 
-loadData();
+function renderTable(){
+  const filter = filterBox.value.toLowerCase();
+  tableBody.innerHTML="";
+
+  let rows = Object.entries(currentStats)
+    .filter(([name])=>name.toLowerCase().includes(filter));
+
+  rows.sort((a,b)=>{
+    let av = a[1][sortKey];
+    let bv = b[1][sortKey];
+
+    if(typeof av==="string") return av.localeCompare(bv)*sortDir;
+    return (bv-av)*sortDir;
+  });
+
+  rows.forEach(([name,s])=>{
+    const safeName = encodeURIComponent(name);
+
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td><a class="team-link" href="f1-constructor.html?team=${safeName}">${name}</a></td>
+      <td>${s.races}</td>
+      <td>${s.wins}</td>
+      <td>${s.points.toFixed(1)}</td>
+    `;
+    tableBody.appendChild(tr);
+  });
+}
+
+loadSeason();
 </script>
 
 </body>
