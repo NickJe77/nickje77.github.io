@@ -78,7 +78,13 @@ th,td{
   padding:8px 10px;
   text-align:left;
 }
-th{background:#f0f0f0;}
+th{
+  background:#f0f0f0;
+  cursor:pointer;
+}
+th:hover{
+  background:#e0e0e0;
+}
 tr:nth-child(even){background:#f6f9ff;}
 </style>
 </head>
@@ -112,11 +118,12 @@ tr:nth-child(even){background:#f6f9ff;}
   <table>
     <thead>
       <tr>
-        <th>Driver</th>
-        <th>Races</th>
-        <th>Wins</th>
-        <th>Podiums</th>
-        <th>Points</th>
+        <th onclick="setSort('driver')">Driver</th>
+        <th onclick="setSort('races')">Races</th>
+        <th onclick="setSort('wins')">Wins</th>
+        <th onclick="setSort('podiums')">Podiums</th>
+        <th onclick="setSort('points')">Points</th>
+        <th onclick="setSort('avg')">Avg Pts / Start</th>
       </tr>
     </thead>
     <tbody id="driverTable"></tbody>
@@ -132,8 +139,11 @@ const filterBox = document.getElementById("filterBox");
 const tableBody = document.getElementById("driverTable");
 
 let allData = [];
+let currentStats = {};
+let sortKey = "points";
+let sortDir = "desc";
 
-/* REMOVE 3-LETTER CODES (HAM, ROS, etc) */
+/* REMOVE 3-LETTER CODES */
 function cleanDriver(name){
   return String(name || "").replace(/\s[A-Z]{3}$/, "");
 }
@@ -147,7 +157,7 @@ for(let y=startYear; y<=endYear; y++){
 }
 
 seasonSelect.addEventListener("change", loadSeason);
-filterBox.addEventListener("input", render);
+filterBox.addEventListener("input", renderTable);
 
 async function loadSeason(){
   const season = seasonSelect.value;
@@ -187,7 +197,7 @@ function buildFromSingle(data){
     (race.results||[]).forEach(r=>{
       const driver = cleanDriver(r.driver);
       if(!stats[driver]){
-        stats[driver]={races:0,wins:0,podiums:0,points:0};
+        stats[driver]={driver, races:0, wins:0, podiums:0, points:0, avg:0};
       }
       stats[driver].races++;
       const pos = Number(r.position);
@@ -197,7 +207,12 @@ function buildFromSingle(data){
     });
   });
 
-  renderTable(stats);
+  Object.values(stats).forEach(d=>{
+    d.avg = d.races ? d.points / d.races : 0;
+  });
+
+  currentStats = stats;
+  renderTable();
 }
 
 function buildFromAll(){
@@ -208,7 +223,7 @@ function buildFromAll(){
       (race.results||[]).forEach(r=>{
         const driver = cleanDriver(r.driver);
         if(!stats[driver]){
-          stats[driver]={races:0,wins:0,podiums:0,points:0};
+          stats[driver]={driver, races:0, wins:0, podiums:0, points:0, avg:0};
         }
         stats[driver].races++;
         const pos = Number(r.position);
@@ -219,27 +234,58 @@ function buildFromAll(){
     });
   });
 
-  renderTable(stats);
+  Object.values(stats).forEach(d=>{
+    d.avg = d.races ? d.points / d.races : 0;
+  });
+
+  currentStats = stats;
+  renderTable();
 }
 
-function renderTable(stats){
+function setSort(key){
+  if(sortKey === key){
+    sortDir = (sortDir === "asc") ? "desc" : "asc";
+  }else{
+    sortKey = key;
+    sortDir = (key === "driver") ? "asc" : "desc";
+  }
+  renderTable();
+}
+
+function renderTable(){
   const filter = filterBox.value.toLowerCase();
   tableBody.innerHTML="";
 
-  Object.entries(stats)
-    .filter(([name])=>name.toLowerCase().includes(filter))
-    .sort((a,b)=>b[1].points - a[1].points)
-    .forEach(([name,s])=>{
-      const tr=document.createElement("tr");
-      tr.innerHTML=`
-        <td>${name}</td>
-        <td>${s.races}</td>
-        <td>${s.wins}</td>
-        <td>${s.podiums}</td>
-        <td>${s.points.toFixed(1)}</td>
-      `;
-      tableBody.appendChild(tr);
-    });
+  let rows = Object.values(currentStats)
+    .filter(r => r.driver.toLowerCase().includes(filter));
+
+  rows.sort((a,b)=>{
+    let v1 = a[sortKey];
+    let v2 = b[sortKey];
+
+    if(sortKey === "driver"){
+      return sortDir === "asc"
+        ? v1.localeCompare(v2)
+        : v2.localeCompare(v1);
+    }else{
+      return sortDir === "asc"
+        ? v1 - v2
+        : v2 - v1;
+    }
+  });
+
+  rows.forEach(r=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${r.driver}</td>
+      <td>${r.races}</td>
+      <td>${r.wins}</td>
+      <td>${r.podiums}</td>
+      <td>${r.points.toFixed(1)}</td>
+      <td>${r.avg.toFixed(2)}</td>
+    `;
+    tableBody.appendChild(tr);
+  });
 }
 
 loadSeason();
