@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Formula 1 Tracks | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="style.css">
+
+<style>
+body{
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin:0;
+}
+
+/* NAV */
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+  background:#fff;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+/* HERO */
+.hero{
+  width:100%;
+  height:260px;
+  position:relative;
+  overflow:hidden;
+}
+.hero img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+.hero::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(to bottom, rgba(0,0,0,0.25), rgba(0,0,0,0.45));
+}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px 60px;
+}
+
+h1{text-align:center;margin-bottom:6px;}
+p{text-align:center;color:#555;margin-bottom:25px;}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:left;
+}
+th{background:#f0f0f0;}
+tr:nth-child(even){background:#f6f9ff;}
+
+.track-link{
+  color:#0056d6;
+  text-decoration:none;
+  font-weight:600;
+}
+.track-link:hover{text-decoration:underline;}
+</style>
+</head>
+
+<body>
+
+<div class="hero">
+  <img src="images/f1-header.jpg" alt="Formula 1">
+</div>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="f1.html">F1</a>
+</div>
+
+<div class="page-wrap">
+
+<h1>Formula 1 Circuits</h1>
+<p>Performance by circuit (fastest lap, wins, races and total points).</p>
+
+<table>
+<thead>
+<tr>
+  <th>Circuit</th>
+  <th>Country</th>
+  <th>Fastest Lap</th>
+  <th>Fastest Lap Driver</th>
+  <th>Races</th>
+  <th>Top Driver (Wins)</th>
+  <th>Total Points</th>
+</tr>
+</thead>
+<tbody id="trackTable"></tbody>
+</table>
+
+</div>
+
+<script>
+const startYear = 1950;
+const endYear = new Date().getFullYear();
+
+let fastestLapData = [];
+let trackStats = {};
+
+function cleanDriver(name){
+  return String(name||"").replace(/\s[A-Z]{3}$/,"").trim();
+}
+
+function normalizeTrack(name){
+  let n = String(name||"").trim();
+  n = n.replace(/^Flag of\s+/i,"");
+  n = n.replace(/People’?s Republic of\s+/i,"");
+  n = n.replace(/Republic of\s+/i,"");
+  n = n.replace(/Grand Prix/i,"");
+  n = n.replace(/\s+/g," ").trim();
+  n = n.replace(/\b(\w+)\s+\1\b/gi,"$1");
+  return n;
+}
+
+async function loadFastestLaps(){
+  const res = await fetch("data/f1/f1-fastest-laps.json");
+  fastestLapData = await res.json();
+}
+
+async function loadAllSeasons(){
+  const promises = [];
+  for(let y=startYear; y<=endYear; y++){
+    promises.push(fetch(`data/f1/${y}.json`).then(r=>r.ok?r.json():null));
+  }
+  const seasons = (await Promise.all(promises)).filter(x=>x);
+  processSeasons(seasons);
+}
+
+function processSeasons(seasons){
+  seasons.forEach(season=>{
+    (season.races||[]).forEach(race=>{
+      const track = normalizeTrack(race.grand_prix);
+      if(!trackStats[track]){
+        trackStats[track] = {
+          races:0,
+          points:0,
+          winsByDriver:{}
+        };
+      }
+
+      trackStats[track].races++;
+
+      (race.results||[]).forEach(r=>{
+        const driver = cleanDriver(r.driver);
+        const pts = Number(r.points)||0;
+        const pos = String(r.position||"");
+
+        trackStats[track].points += pts;
+
+        if(pos==="1"){
+          trackStats[track].winsByDriver[driver] =
+            (trackStats[track].winsByDriver[driver]||0)+1;
+        }
+      });
+    });
+  });
+
+  buildTable();
+}
+
+function buildTable(){
+  const tbody = document.getElementById("trackTable");
+  tbody.innerHTML="";
+
+  const rows = fastestLapData.map(fl=>{
+    const track = fl.circuit;
+    const stats = trackStats[track] || {races:0,points:0,winsByDriver:{}};
+
+    let topDriver="—";
+    let topWins=0;
+    Object.entries(stats.winsByDriver).forEach(([d,w])=>{
+      if(w>topWins){
+        topWins=w;
+        topDriver=d;
+      }
+    });
+
+    return {
+      circuit: track,
+      country: fl.country,
+      time: fl.time,
+      driver: fl.driver,
+      year: fl.year,
+      races: stats.races,
+      topDriver: topDriver,
+      points: stats.points.toFixed(1)
+    };
+  });
+
+  rows.sort((a,b)=>a.circuit.localeCompare(b.circuit));
+
+  rows.forEach(r=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td><a class="track-link" href="f1-track.html?track=${encodeURIComponent(r.circuit)}">${r.circuit}</a></td>
+      <td>${r.country}</td>
+      <td>${r.time}</td>
+      <td>${r.driver} (${r.year})</td>
+      <td>${r.races}</td>
+      <td>${r.topDriver}</td>
+      <td>${r.points}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+async function init(){
+  await loadFastestLaps();
+  await loadAllSeasons();
+}
+
+init();
+</script>
+
+</body>
+</html>
