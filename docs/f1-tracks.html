@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Formula 1 Track | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="style.css">
+
+<style>
+body{
+  font-family: Inter, system-ui, Arial, sans-serif;
+  margin:0;
+}
+
+/* NAV */
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+/* HERO */
+.hero{
+  width:100%;
+  height:260px;
+  position:relative;
+  overflow:hidden;
+}
+.hero img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.hero::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(to bottom, rgba(0,0,0,0.25), rgba(0,0,0,0.45));
+}
+
+.page-wrap{
+  max-width:1100px;
+  margin:0 auto;
+  padding:30px 20px 60px;
+}
+
+h1{text-align:center;margin-bottom:6px;}
+p{text-align:center;color:#555;margin-bottom:25px;}
+
+.track-layout{
+  display:flex;
+  justify-content:center;
+  margin-bottom:25px;
+}
+.track-layout img{
+  max-width:600px;
+  width:100%;
+  border-radius:14px;
+  background:#f4f4f4;
+  padding:10px;
+}
+
+/* STATS */
+.stat-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:16px;
+  margin-bottom:30px;
+}
+.stat{
+  border:1px solid #ddd;
+  border-radius:12px;
+  padding:16px;
+  text-align:center;
+  background:#f6f9ff;
+}
+.stat h3{margin:0 0 6px;font-size:14px;color:#555;}
+.stat div{font-size:22px;font-weight:700;}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:left;
+}
+th{background:#f0f0f0;}
+tr:nth-child(even){background:#f6f9ff;}
+</style>
+</head>
+
+<body>
+
+<div class="hero">
+  <img src="images/f1-header.jpg" alt="Formula 1">
+</div>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="f1.html">F1</a>
+</div>
+
+<div class="page-wrap">
+
+<h1 id="trackName">Track</h1>
+<p id="trackCountry"></p>
+
+<div class="track-layout">
+  <img id="trackImage" src="" alt="Track layout">
+</div>
+
+<div class="stat-grid">
+  <div class="stat"><h3>Fastest Lap</h3><div id="fastestLap">—</div></div>
+  <div class="stat"><h3>Most Wins (Driver)</h3><div id="topDriver">—</div></div>
+  <div class="stat"><h3>Total Races</h3><div id="totalRaces">—</div></div>
+  <div class="stat"><h3>Total Points</h3><div id="totalPoints">—</div></div>
+</div>
+
+<h2>Race Winners</h2>
+<table>
+<thead>
+<tr>
+  <th>Season</th>
+  <th>Winner</th>
+  <th>Team</th>
+</tr>
+</thead>
+<tbody id="resultsTable"></tbody>
+</table>
+
+</div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const track = params.get("track");
+
+const trackNameEl = document.getElementById("trackName");
+const trackCountryEl = document.getElementById("trackCountry");
+const trackImageEl = document.getElementById("trackImage");
+
+const fastestLapEl = document.getElementById("fastestLap");
+const topDriverEl = document.getElementById("topDriver");
+const totalRacesEl = document.getElementById("totalRaces");
+const totalPointsEl = document.getElementById("totalPoints");
+const resultsTable = document.getElementById("resultsTable");
+
+const startYear = 1950;
+const endYear = new Date().getFullYear();
+
+let fastestLapData = [];
+let raceStats = {races:0,points:0,winsByDriver:{}};
+
+function slugify(name){
+  return name.toLowerCase()
+    .replace(/[^a-z0-9]+/g,"-")
+    .replace(/(^-|-$)/g,"");
+}
+
+function cleanDriver(name){
+  return String(name||"").replace(/\s[A-Z]{3}$/,"").trim();
+}
+
+function normalizeTrack(name){
+  let n = String(name||"").trim();
+  n = n.replace(/^Flag of\s+/i,"");
+  n = n.replace(/People’?s Republic of\s+/i,"");
+  n = n.replace(/Republic of\s+/i,"");
+  n = n.replace(/Grand Prix/i,"");
+  n = n.replace(/\s+/g," ").trim();
+  n = n.replace(/\b(\w+)\s+\1\b/gi,"$1");
+  return n;
+}
+
+async function loadFastestLaps(){
+  const res = await fetch("data/f1/f1-fastest-laps.json");
+  fastestLapData = await res.json();
+}
+
+async function loadSeasons(){
+  const promises=[];
+  for(let y=startYear;y<=endYear;y++){
+    promises.push(fetch(`data/f1/${y}.json`).then(r=>r.ok?r.json():null));
+  }
+  const seasons=(await Promise.all(promises)).filter(x=>x);
+  processSeasons(seasons);
+}
+
+function processSeasons(seasons){
+  seasons.forEach(season=>{
+    (season.races||[]).forEach(race=>{
+      const raceTrack = normalizeTrack(race.grand_prix);
+      if(raceTrack!==track) return;
+
+      raceStats.races++;
+
+      (race.results||[]).forEach(r=>{
+        const driver=cleanDriver(r.driver);
+        const pts=Number(r.points)||0;
+        const pos=String(r.position||"");
+
+        raceStats.points+=pts;
+
+        if(pos==="1"){
+          raceStats.winsByDriver[driver]=(raceStats.winsByDriver[driver]||0)+1;
+
+          const tr=document.createElement("tr");
+          tr.innerHTML=`
+            <td>${season.season}</td>
+            <td>${driver}</td>
+            <td>${r.team}</td>
+          `;
+          resultsTable.appendChild(tr);
+        }
+      });
+    });
+  });
+
+  let topDriver="—", topWins=0;
+  Object.entries(raceStats.winsByDriver).forEach(([d,w])=>{
+    if(w>topWins){
+      topWins=w;
+      topDriver=d;
+    }
+  });
+
+  totalRacesEl.textContent=raceStats.races;
+  totalPointsEl.textContent=raceStats.points.toFixed(1);
+  topDriverEl.textContent=topDriver;
+}
+
+function applyFastestLap(){
+  const rec = fastestLapData.find(f=>f.circuit===track);
+  if(rec){
+    fastestLapEl.textContent = `${rec.time} – ${rec.driver} (${rec.year})`;
+    trackCountryEl.textContent = rec.country;
+  }
+}
+
+async function init(){
+  trackNameEl.textContent = track;
+  trackImageEl.src = `images/tracks/${slugify(track)}.png`;
+
+  await loadFastestLaps();
+  applyFastestLap();
+  await loadSeasons();
+}
+
+init();
+</script>
+
+</body>
+</html>
