@@ -126,13 +126,13 @@ const driverNation = {
   "Charles Leclerc":"Monegasque","Carlos Sainz":"Spanish","Lando Norris":"British",
   "George Russell":"British","Oscar Piastri":"Australian","Sergio Pérez":"Mexican",
   "Nigel Mansell":"British","Alain Prost":"French","Jackie Stewart":"British",
-  "Nelson Piquet":"Brazilian"
+  "Nelson Piquet":"Brazilian","Juan Manuel Fangio":"Argentine","Mika Häkkinen":"Finnish"
 };
 
 const flagMap={
   "British":"🇬🇧","German":"🇩🇪","French":"🇫🇷","Italian":"🇮🇹",
   "Spanish":"🇪🇸","Brazilian":"🇧🇷","Australian":"🇦🇺","Dutch":"🇳🇱",
-  "Finnish":"🇫🇮","Mexican":"🇲🇽","Monegasque":"🇲🇨"
+  "Finnish":"🇫🇮","Mexican":"🇲🇽","Monegasque":"🇲🇨","Argentine":"🇦🇷"
 };
 
 function cleanDriver(name){
@@ -196,17 +196,27 @@ function selectYear(y){
   render();
 }
 
-/* DETERMINE CHAMPIONS PER SEASON */
+/* DETERMINE CHAMPION */
 function getSeasonChampion(seasonData){
   const totals={};
   (seasonData.races||[]).forEach(race=>{
     (race.results||[]).forEach(r=>{
       const d=cleanDriver(r.driver);
-      if(!totals[d]) totals[d]=0;
-      totals[d]+=Number(r.points)||0;
+      totals[d]=(totals[d]||0)+(Number(r.points)||0);
     });
   });
   return Object.entries(totals).sort((a,b)=>b[1]-a[1])[0]?.[0]||"";
+}
+
+function getChampionConstructor(seasonData, champion){
+  for(const race of seasonData.races){
+    for(const r of race.results){
+      if(cleanDriver(r.driver)===champion){
+        return normalizeConstructor(r.team);
+      }
+    }
+  }
+  return "";
 }
 
 function render(){
@@ -220,6 +230,14 @@ function render(){
 
   seasons.forEach(data=>{
     const champion = getSeasonChampion(data);
+    const champTeam = getChampionConstructor(data, champion);
+
+    if(champTeam===team){
+      if(!drivers[champion]){
+        drivers[champion]={wins:0,points:0,poles:0,winsFromPole:0,championships:0,nationality:driverNation[champion]||""};
+      }
+      drivers[champion].championships++;
+    }
 
     (data.races||[]).forEach(race=>{
       (race.results||[]).forEach(r=>{
@@ -243,8 +261,6 @@ function render(){
           drivers[driver].wins++;
           if(Number(r.grid)===1) drivers[driver].winsFromPole++;
         }
-
-        if(driver===champion) drivers[driver].championships++;
       });
     });
   });
