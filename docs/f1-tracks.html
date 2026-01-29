@@ -2,15 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Formula 1 Tracks | The Sporting Almanac</title>
+<title>Formula 1 Track | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet" href="style.css">
 
 <style>
 body{
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
-               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: Inter, system-ui, Arial, sans-serif;
   margin:0;
 }
 
@@ -22,7 +21,6 @@ body{
   padding:16px 0;
   border-bottom:1px solid #ddd;
   font-weight:600;
-  background:#fff;
 }
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 
@@ -37,7 +35,6 @@ body{
   width:100%;
   height:100%;
   object-fit:cover;
-  display:block;
 }
 .hero::after{
   content:"";
@@ -47,13 +44,43 @@ body{
 }
 
 .page-wrap{
-  max-width:1200px;
+  max-width:1100px;
   margin:0 auto;
   padding:30px 20px 60px;
 }
 
 h1{text-align:center;margin-bottom:6px;}
 p{text-align:center;color:#555;margin-bottom:25px;}
+
+.track-layout{
+  display:flex;
+  justify-content:center;
+  margin-bottom:25px;
+}
+.track-layout img{
+  max-width:600px;
+  width:100%;
+  border-radius:14px;
+  background:#f4f4f4;
+  padding:10px;
+}
+
+/* STATS */
+.stat-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:16px;
+  margin-bottom:30px;
+}
+.stat{
+  border:1px solid #ddd;
+  border-radius:12px;
+  padding:16px;
+  text-align:center;
+  background:#f6f9ff;
+}
+.stat h3{margin:0 0 6px;font-size:14px;color:#555;}
+.stat div{font-size:22px;font-weight:700;}
 
 table{
   width:100%;
@@ -66,13 +93,6 @@ th,td{
 }
 th{background:#f0f0f0;}
 tr:nth-child(even){background:#f6f9ff;}
-
-.track-link{
-  color:#0056d6;
-  text-decoration:none;
-  font-weight:600;
-}
-.track-link:hover{text-decoration:underline;}
 </style>
 </head>
 
@@ -93,32 +113,59 @@ tr:nth-child(even){background:#f6f9ff;}
 
 <div class="page-wrap">
 
-<h1>Formula 1 Circuits</h1>
-<p>Performance by circuit (fastest lap, wins, races and total points).</p>
+<h1 id="trackName">Track</h1>
+<p id="trackCountry"></p>
 
+<div class="track-layout">
+  <img id="trackImage" src="" alt="Track layout">
+</div>
+
+<div class="stat-grid">
+  <div class="stat"><h3>Fastest Lap</h3><div id="fastestLap">—</div></div>
+  <div class="stat"><h3>Most Wins (Driver)</h3><div id="topDriver">—</div></div>
+  <div class="stat"><h3>Total Races</h3><div id="totalRaces">—</div></div>
+  <div class="stat"><h3>Total Points</h3><div id="totalPoints">—</div></div>
+</div>
+
+<h2>Race Winners</h2>
 <table>
 <thead>
 <tr>
-  <th>Circuit</th>
-  <th>Country</th>
-  <th>Fastest Lap</th>
-  <th>Fastest Lap Driver</th>
-  <th>Races</th>
-  <th>Top Driver (Wins)</th>
-  <th>Total Points</th>
+  <th>Season</th>
+  <th>Winner</th>
+  <th>Team</th>
 </tr>
 </thead>
-<tbody id="trackTable"></tbody>
+<tbody id="resultsTable"></tbody>
 </table>
 
 </div>
 
 <script>
+const params = new URLSearchParams(window.location.search);
+const track = params.get("track");
+
+const trackNameEl = document.getElementById("trackName");
+const trackCountryEl = document.getElementById("trackCountry");
+const trackImageEl = document.getElementById("trackImage");
+
+const fastestLapEl = document.getElementById("fastestLap");
+const topDriverEl = document.getElementById("topDriver");
+const totalRacesEl = document.getElementById("totalRaces");
+const totalPointsEl = document.getElementById("totalPoints");
+const resultsTable = document.getElementById("resultsTable");
+
 const startYear = 1950;
 const endYear = new Date().getFullYear();
 
 let fastestLapData = [];
-let trackStats = {};
+let raceStats = {races:0,points:0,winsByDriver:{}};
+
+function slugify(name){
+  return name.toLowerCase()
+    .replace(/[^a-z0-9]+/g,"-")
+    .replace(/(^-|-$)/g,"");
+}
 
 function cleanDriver(name){
   return String(name||"").replace(/\s[A-Z]{3}$/,"").trim();
@@ -140,96 +187,73 @@ async function loadFastestLaps(){
   fastestLapData = await res.json();
 }
 
-async function loadAllSeasons(){
-  const promises = [];
-  for(let y=startYear; y<=endYear; y++){
+async function loadSeasons(){
+  const promises=[];
+  for(let y=startYear;y<=endYear;y++){
     promises.push(fetch(`data/f1/${y}.json`).then(r=>r.ok?r.json():null));
   }
-  const seasons = (await Promise.all(promises)).filter(x=>x);
+  const seasons=(await Promise.all(promises)).filter(x=>x);
   processSeasons(seasons);
 }
 
 function processSeasons(seasons){
   seasons.forEach(season=>{
     (season.races||[]).forEach(race=>{
-      const track = normalizeTrack(race.grand_prix);
-      if(!trackStats[track]){
-        trackStats[track] = {
-          races:0,
-          points:0,
-          winsByDriver:{}
-        };
-      }
+      const raceTrack = normalizeTrack(race.grand_prix);
+      if(raceTrack!==track) return;
 
-      trackStats[track].races++;
+      raceStats.races++;
 
       (race.results||[]).forEach(r=>{
-        const driver = cleanDriver(r.driver);
-        const pts = Number(r.points)||0;
-        const pos = String(r.position||"");
+        const driver=cleanDriver(r.driver);
+        const pts=Number(r.points)||0;
+        const pos=String(r.position||"");
 
-        trackStats[track].points += pts;
+        raceStats.points+=pts;
 
         if(pos==="1"){
-          trackStats[track].winsByDriver[driver] =
-            (trackStats[track].winsByDriver[driver]||0)+1;
+          raceStats.winsByDriver[driver]=(raceStats.winsByDriver[driver]||0)+1;
+
+          const tr=document.createElement("tr");
+          tr.innerHTML=`
+            <td>${season.season}</td>
+            <td>${driver}</td>
+            <td>${r.team}</td>
+          `;
+          resultsTable.appendChild(tr);
         }
       });
     });
   });
 
-  buildTable();
+  let topDriver="—", topWins=0;
+  Object.entries(raceStats.winsByDriver).forEach(([d,w])=>{
+    if(w>topWins){
+      topWins=w;
+      topDriver=d;
+    }
+  });
+
+  totalRacesEl.textContent=raceStats.races;
+  totalPointsEl.textContent=raceStats.points.toFixed(1);
+  topDriverEl.textContent=topDriver;
 }
 
-function buildTable(){
-  const tbody = document.getElementById("trackTable");
-  tbody.innerHTML="";
-
-  const rows = fastestLapData.map(fl=>{
-    const track = fl.circuit;
-    const stats = trackStats[track] || {races:0,points:0,winsByDriver:{}};
-
-    let topDriver="—";
-    let topWins=0;
-    Object.entries(stats.winsByDriver).forEach(([d,w])=>{
-      if(w>topWins){
-        topWins=w;
-        topDriver=d;
-      }
-    });
-
-    return {
-      circuit: track,
-      country: fl.country,
-      time: fl.time,
-      driver: fl.driver,
-      year: fl.year,
-      races: stats.races,
-      topDriver: topDriver,
-      points: stats.points.toFixed(1)
-    };
-  });
-
-  rows.sort((a,b)=>a.circuit.localeCompare(b.circuit));
-
-  rows.forEach(r=>{
-    const tr=document.createElement("tr");
-    tr.innerHTML=`
-      <td><a class="track-link" href="f1-track.html?track=${encodeURIComponent(r.circuit)}">${r.circuit}</a></td>
-      <td>${r.country}</td>
-      <td>${r.time}</td>
-      <td>${r.driver} (${r.year})</td>
-      <td>${r.races}</td>
-      <td>${r.topDriver}</td>
-      <td>${r.points}</td>
-    `;
-    tbody.appendChild(tr);
-  });
+function applyFastestLap(){
+  const rec = fastestLapData.find(f=>f.circuit===track);
+  if(rec){
+    fastestLapEl.textContent = `${rec.time} – ${rec.driver} (${rec.year})`;
+    trackCountryEl.textContent = rec.country;
+  }
 }
 
 async function init(){
+  trackNameEl.textContent = track;
+  trackImageEl.src = `images/tracks/${slugify(track)}.png`;
+
   await loadFastestLaps();
-  await loadAllSeasons();
+  applyFastestLap();
+  await loadSeasons();
 }
 
 init();
