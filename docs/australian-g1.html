@@ -3,51 +3,196 @@
 <head>
 <meta charset="UTF-8">
 <title>Australian Group 1 Races | The Sporting Almanac</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="racing.css">
-</head>
 
+<style>
+body{
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin:0;
+  background:#ffffff;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+h1{text-align:center;margin-bottom:6px;}
+.subtitle{text-align:center;color:#555;margin-bottom:30px;}
+
+.filters{
+  display:flex;
+  flex-wrap:wrap;
+  gap:12px;
+  justify-content:center;
+  margin-bottom:25px;
+}
+
+.filters select{
+  padding:8px 12px;
+  font-size:15px;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:10px;
+}
+
+th, td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:left;
+  font-size:14px;
+}
+
+th{
+  background:#f3f6ff;
+}
+
+tr:nth-child(even){
+  background:#fafcff;
+}
+</style>
+</head>
 <body>
 
-<!-- NAV -->
-<nav class="home-nav">
+<div class="navbar">
   <a href="index.html">Home</a>
   <a href="racing.html">Racing</a>
-  <a href="g1-archive.html">G1 Archive</a>
-  <a href="breeders-cup.html">Breeders' Cup</a>
-</nav>
+  <a href="afl.html">AFL</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="football.html">Football</a>
+  <a href="f1.html">Formula 1</a>
+</div>
 
-<!-- TITLE -->
-<section class="racing-intro">
-  <h1>AUSTRALIAN GROUP 1 RACES</h1>
-</section>
+<div class="page-wrap">
+  <h1>Australian Group 1 Races</h1>
+  <div class="subtitle">Filter by race, jockey, trainer or finishing position</div>
 
-<!-- GRID -->
-<section class="racing-grid">
+  <div class="filters">
+    <select id="raceFilter">
+      <option value="">All Races</option>
+    </select>
 
-  <a class="racing-tile" href="g1-victoria.html">
-    <img src="images/g1-victoria.jpg" alt="Victoria G1">
-  </a>
+    <select id="jockeyFilter">
+      <option value="">All Jockeys</option>
+    </select>
 
-  <a class="racing-tile" href="g1-nsw.html">
-    <img src="images/g1-nsw.jpg" alt="New South Wales G1">
-  </a>
+    <select id="trainerFilter">
+      <option value="">All Trainers</option>
+    </select>
 
-  <a class="racing-tile" href="g1-sa.html">
-    <img src="images/g1-sa.jpg" alt="South Australia G1">
-  </a>
+    <select id="finishFilter">
+      <option value="">All Finishes</option>
+    </select>
+  </div>
 
-  <a class="racing-tile" href="g1-wa.html">
-    <img src="images/g1-wa.jpg" alt="Western Australia G1">
-  </a>
+  <table>
+    <thead>
+      <tr>
+        <th>Race</th>
+        <th>Year</th>
+        <th>Horse</th>
+        <th>Jockey</th>
+        <th>Trainer</th>
+        <th>Finish</th>
+      </tr>
+    </thead>
+    <tbody id="resultsBody"></tbody>
+  </table>
+</div>
 
-  <a class="racing-tile" href="g1-qld.html">
-    <img src="images/g1-qld.jpg" alt="Queensland G1">
-  </a>
+<script>
+let allData = [];
 
-</section>
+fetch("docs/data/racing/aus_g1_results.json")
+  .then(res => res.json())
+  .then(data => {
+    allData = data;
+    buildDropdowns(data);
+    renderTable(data);
+  });
+
+function uniqueValues(data, key){
+  return [...new Set(
+    data
+      .map(row => row[key])
+      .filter(v => v !== "" && v !== null && v !== undefined && v !== "??")
+  )].sort();
+}
+
+function buildDropdowns(data){
+  populateSelect("raceFilter", uniqueValues(data, "race"));
+  populateSelect("jockeyFilter", uniqueValues(data, "jockey"));
+  populateSelect("trainerFilter", uniqueValues(data, "trainer"));
+  populateSelect("finishFilter", uniqueValues(data, "finish"));
+}
+
+function populateSelect(id, values){
+  const select = document.getElementById(id);
+  values.forEach(v => {
+    const opt = document.createElement("option");
+    opt.value = v;
+    opt.textContent = v;
+    select.appendChild(opt);
+  });
+}
+
+document.querySelectorAll(".filters select").forEach(sel => {
+  sel.addEventListener("change", applyFilters);
+});
+
+function applyFilters(){
+  const race = document.getElementById("raceFilter").value;
+  const jockey = document.getElementById("jockeyFilter").value;
+  const trainer = document.getElementById("trainerFilter").value;
+  const finish = document.getElementById("finishFilter").value;
+
+  const filtered = allData.filter(row => {
+    return (!race || row.race === race) &&
+           (!jockey || row.jockey === jockey) &&
+           (!trainer || row.trainer === trainer) &&
+           (!finish || row.finish == finish);
+  });
+
+  renderTable(filtered);
+}
+
+function renderTable(data){
+  const tbody = document.getElementById("resultsBody");
+  tbody.innerHTML = "";
+
+  data
+    .sort((a,b) => b.year - a.year)
+    .forEach(row => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${row.race}</td>
+        <td>${row.year}</td>
+        <td>${row.horse}</td>
+        <td>${row.jockey}</td>
+        <td>${row.trainer || ""}</td>
+        <td>${row.finish || ""}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+}
+</script>
 
 </body>
 </html>
