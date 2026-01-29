@@ -133,7 +133,6 @@ tr:nth-child(even){background:#f6f9ff;}
 
 <body>
 
-<!-- NAV FIRST -->
 <div class="navbar">
   <a href="index.html">Home</a>
   <a href="racing.html">Racing</a>
@@ -143,7 +142,6 @@ tr:nth-child(even){background:#f6f9ff;}
   <a href="f1.html">F1</a>
 </div>
 
-<!-- HERO IMAGE -->
 <div class="hero">
   <img src="images/f1-header.jpg" alt="Formula 1">
 </div>
@@ -189,8 +187,6 @@ function cleanDriver(name){
   return String(name || "").replace(/\s[A-Z]{3}$/, "");
 }
 
-/* ================= FLAGS ================= */
-
 const flagByCountry = {
   "Australia":"🇦🇺","Bahrain":"🇧🇭","Saudi Arabia":"🇸🇦","China":"🇨🇳","Japan":"🇯🇵",
   "Monaco":"🇲🇨","Spain":"🇪🇸","Canada":"🇨🇦","Austria":"🇦🇹","Great Britain":"🇬🇧",
@@ -202,15 +198,13 @@ const flagByCountry = {
   "Turkey":"🇹🇷","Russia":"🇷🇺","Malaysia":"🇲🇾","South Korea":"🇰🇷","India":"🇮🇳"
 };
 
-/* ================= CLEAN GP NAME ================= */
-
 function normalizeGpRaw(s){
   let n = String(s || "").trim();
+  n = n.replace(/People’?s Republic of China/i,"China");
+  n = n.replace(/United States of America/i,"United States");
   n = n.replace(/^Flag of\s+/i,"");
-  n = n.replace(/People’?s Republic of\s+/i,"");
   n = n.replace(/Republic of\s+/i,"");
   n = n.replace(/Grand Prix/i,"");
-  n = n.replace(/\sof America\s*/i," ");
   n = n.replace(/\s+/g," ").trim();
   n = n.replace(/\b(\w+)\s+\1\b/gi,"$1");
   return n;
@@ -221,9 +215,7 @@ function parseGpName(grandPrix){
   const countries = Object.keys(flagByCountry).sort((a,b)=>b.length-a.length);
   for(const c of countries){
     if(raw === c) return { label:c, country:c };
-    if(raw.startsWith(c+" ")){
-      return { label:c, country:c };
-    }
+    if(raw.startsWith(c+" ")) return { label:c, country:c };
   }
   return { label:raw, country:"" };
 }
@@ -231,11 +223,8 @@ function parseGpName(grandPrix){
 function formatRoundTitle(round, grandPrix, circuit){
   const parsed = parseGpName(grandPrix);
   const flag = parsed.country ? flagByCountry[parsed.country] : "";
-  const track = circuit ? circuit : "";
-  return `Round ${round} – ${parsed.label}${track ? " – "+track : ""}${flag ? " "+flag : ""}`;
+  return `Round ${round} – ${parsed.label}${circuit ? " – "+circuit : ""}${flag ? " "+flag : ""}`;
 }
-
-/* ================= YEAR BUTTONS ================= */
 
 for(let y=startYear; y<=endYear; y++){
   const btn=document.createElement("button");
@@ -245,8 +234,6 @@ for(let y=startYear; y<=endYear; y++){
   btn.id="year-"+y;
   yearGrid.appendChild(btn);
 }
-
-/* ================= LOAD ================= */
 
 async function loadSeason(year){
   document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
@@ -270,8 +257,6 @@ async function loadSeason(year){
     resultsDiv.innerHTML="<p>Error loading season.</p>";
   }
 }
-
-/* ================= RENDER ================= */
 
 function renderSeason(data){
   resultsDiv.innerHTML="";
@@ -334,17 +319,25 @@ function renderSeason(data){
     const results = (race.results||[]).slice();
 
     results.sort((a,b)=>{
-      const aTime = String(a.time||"").toUpperCase();
-      const bTime = String(b.time||"").toUpperCase();
+      const pa = Number(a.position);
+      const pb = Number(b.position);
 
-      const aFinished = Number.isFinite(Number(a.position)) && !aTime.includes("DNF") && !aTime.includes("DQ");
-      const bFinished = Number.isFinite(Number(b.position)) && !bTime.includes("DNF") && !bTime.includes("DQ");
+      const ta = String(a.time||"").toUpperCase();
+      const tb = String(b.time||"").toUpperCase();
 
-      if(aFinished && bFinished){
-        return Number(a.position) - Number(b.position);
-      }
-      if(aFinished && !bFinished) return -1;
-      if(!aFinished && bFinished) return 1;
+      const aNum = Number.isFinite(pa);
+      const bNum = Number.isFinite(pb);
+
+      if(aNum && bNum) return pa - pb;
+      if(aNum && !bNum) return -1;
+      if(!aNum && bNum) return 1;
+
+      const aDNF = ta.includes("DNF") || ta.includes("DQ");
+      const bDNF = tb.includes("DNF") || tb.includes("DQ");
+
+      if(aDNF && !bDNF) return -1;
+      if(!aDNF && bDNF) return 1;
+
       return 0;
     });
 
@@ -361,7 +354,7 @@ function renderSeason(data){
 
       const tr=document.createElement("tr");
       tr.innerHTML=`
-        <td>${displayPos}</td>
+        <td>${displayPos || ""}</td>
         <td>${cleanDriver(r.driver)}</td>
         <td>${r.team||""}</td>
         <td>${r.grid||""}</td>
