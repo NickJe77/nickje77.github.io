@@ -49,10 +49,10 @@ body{
 .page-wrap{
   max-width:1200px;
   margin:0 auto;
-  padding:30px 20px;
+  padding:30px 20px 60px;
 }
 
-h1{text-align:center;margin-bottom:10px;}
+h1{text-align:center;margin-bottom:6px;}
 p{text-align:center;color:#555;margin-bottom:25px;}
 
 h2{
@@ -62,12 +62,9 @@ h2{
 }
 h3{margin:18px 0 8px 0;}
 
-.table-wrap{margin-top:10px;}
-
 table{
   width:100%;
   border-collapse:collapse;
-  margin-top:10px;
 }
 th,td{
   border-bottom:1px solid #ddd;
@@ -77,28 +74,15 @@ th,td{
 th{background:#f0f0f0;}
 tr:nth-child(even){background:#f6f9ff;}
 .rank{font-weight:800;width:60px;}
-
-.note{
-  text-align:center;
-  color:#777;
-  font-size:14px;
-  margin-top:10px;
-}
-
-/* small helper badge */
-.badge{
-  display:inline-block;
-  font-size:12px;
-  padding:3px 8px;
-  border:1px solid #ddd;
-  border-radius:999px;
-  background:#fff;
-  color:#555;
-}
+.note{text-align:center;color:#777;font-size:14px;margin-top:10px;}
 </style>
 </head>
 
 <body>
+
+<div class="hero">
+  <img src="images/f1-header.jpg" alt="Formula 1">
+</div>
 
 <div class="navbar">
   <a href="index.html">Home</a>
@@ -109,78 +93,71 @@ tr:nth-child(even){background:#f6f9ff;}
   <a href="f1.html">F1</a>
 </div>
 
-<div class="hero">
-  <img src="images/f1-header.jpg" alt="Formula 1">
-</div>
-
 <div class="page-wrap">
 
 <h1>Formula 1 Records</h1>
-<p>All-time F1 records calculated from your season JSON files.</p>
+<p>All-time records calculated from race results (1950–present).</p>
 
 <h2>Fastest Laps</h2>
-<div class="note">
-  <span class="badge">Source:</span> per-race <code>fastest_lap_driver</code> + <code>fastest_lap_time</code> from your scraper
-</div>
 
 <h3>Fastest Lap by Current Venue</h3>
-<div class="table-wrap">
-  <table id="fastestLapVenueTable">
-    <thead>
-      <tr>
-        <th>Venue</th>
-        <th>Fastest Lap</th>
-        <th>Driver</th>
-        <th>Season</th>
-        <th>Round</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-</div>
+<table id="fastestLapVenueTable">
+<thead>
+<tr>
+  <th>Venue</th>
+  <th>Fastest Lap</th>
+  <th>Driver</th>
+  <th>Season</th>
+  <th>Round</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
 
 <h3>Most Fastest Laps (Drivers)</h3>
-<div class="table-wrap">
-  <table id="mostFastestLapsDriversTable">
-    <thead>
-      <tr><th>Rank</th><th>Driver</th><th>Fastest Laps</th></tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-</div>
+<table id="fastestLapDriverTable">
+<thead>
+<tr>
+  <th class="rank">Rank</th>
+  <th>Driver</th>
+  <th>Fastest Laps</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
 
 <h2>Driver Records</h2>
 
 <h3>Most Championships</h3>
 <table id="championshipTable">
-  <thead><tr><th>Rank</th><th>Driver</th><th>Titles</th></tr></thead>
-  <tbody></tbody>
+<thead><tr><th class="rank">Rank</th><th>Driver</th><th>Titles</th></tr></thead>
+<tbody></tbody>
 </table>
 
 <h3>Most Race Wins</h3>
 <table id="winsTable">
-  <thead><tr><th>Rank</th><th>Driver</th><th>Wins</th></tr></thead>
-  <tbody></tbody>
+<thead><tr><th class="rank">Rank</th><th>Driver</th><th>Wins</th></tr></thead>
+<tbody></tbody>
 </table>
 
 <h3>Most Podiums</h3>
 <table id="podiumsTable">
-  <thead><tr><th>Rank</th><th>Driver</th><th>Podiums</th></tr></thead>
-  <tbody></tbody>
+<thead><tr><th class="rank">Rank</th><th>Driver</th><th>Podiums</th></tr></thead>
+<tbody></tbody>
 </table>
 
 <h3>Most Career Points</h3>
 <table id="pointsTable">
-  <thead><tr><th>Rank</th><th>Driver</th><th>Points</th></tr></thead>
-  <tbody></tbody>
+<thead><tr><th class="rank">Rank</th><th>Driver</th><th>Points</th></tr></thead>
+<tbody></tbody>
 </table>
 
-<h2>Team Records</h2>
+<h2>Constructor Records</h2>
 
 <h3>Most Race Wins (Constructors)</h3>
 <table id="teamWinsTable">
-  <thead><tr><th>Rank</th><th>Team</th><th>Wins</th></tr></thead>
-  <tbody></tbody>
+<thead><tr><th class="rank">Rank</th><th>Constructor</th><th>Wins</th></tr></thead>
+<tbody></tbody>
 </table>
 
 <div class="note" id="statusNote">Loading records…</div>
@@ -197,8 +174,8 @@ let driverPoints = {};
 let driverTitles = {};
 let teamWins = {};
 
-let fastestByVenue = {};          // { venue: {seconds,time,driver,year,round} }
-let fastestLapCountByDriver = {}; // { driver: count }
+let fastestByVenue = {};
+let fastestLapCountByDriver = {};
 
 const statusNote = document.getElementById("statusNote");
 
@@ -206,34 +183,27 @@ function cleanDriver(name){
   return String(name||"").replace(/\s[A-Z]{3}$/,"").trim();
 }
 
-/* Your GP strings can be messy ("Flag of X X"). Make a stable venue label. */
 function normalizeVenueName(s){
   let n = String(s||"").trim();
   n = n.replace(/^Flag of\s+/i,"");
   n = n.replace(/People’?s Republic of\s+/i,"");
   n = n.replace(/Republic of\s+/i,"");
   n = n.replace(/Grand Prix/i,"");
-  n = n.replace(/United States of America/i,"United States");
-  n = n.replace(/United Kingdom/i,"Great Britain");
   n = n.replace(/\s+/g," ").trim();
-  n = n.replace(/\b(\w+)\s+\1\b/gi,"$1"); // Bahrain Bahrain -> Bahrain
+  n = n.replace(/\b(\w+)\s+\1\b/gi,"$1");
   return n;
 }
 
-/* Convert lap time formats like "1:32.457" or "0:59.123" into seconds */
 function lapToSeconds(t){
   if(!t) return null;
-  const s = String(t).trim();
-  const m = s.match(/^(\d+):(\d{2}\.\d{1,3})$/); // M:SS.mmm
+  const m = String(t).trim().match(/^(\d+):(\d{2}\.\d{1,3})$/);
   if(!m) return null;
-  const minutes = parseInt(m[1], 10);
-  const sec = parseFloat(m[2]);
-  if(!Number.isFinite(minutes) || !Number.isFinite(sec)) return null;
-  return minutes * 60 + sec;
+  return parseInt(m[1])*60 + parseFloat(m[2]);
 }
 
 async function loadAllSeasons(){
   let loaded = 0;
+
   for(let year=endYear; year>=startYear; year--){
     try{
       const res = await fetch(`data/f1/${year}.json`);
@@ -241,28 +211,19 @@ async function loadAllSeasons(){
       const data = await res.json();
       processSeason(data, year);
       loaded++;
-    }catch(e){
-      // ignore
-    }
+    }catch(e){}
   }
 
   buildTables();
-
-  statusNote.textContent = loaded
-    ? `Loaded ${loaded} seasons (${startYear}–${endYear}).`
-    : `No seasons loaded. Check your path: docs/data/f1/YYYY.json`;
+  statusNote.textContent = `Loaded ${loaded} seasons (${startYear}–${endYear}).`;
 }
 
 function processSeason(data, year){
   if(!data || !Array.isArray(data.races)) return;
 
-  // Used to determine season champion (titles)
   let seasonTotals = {};
 
   data.races.forEach(race=>{
-    // -------------------------
-    // Fastest lap by venue + driver count
-    // -------------------------
     const venue = normalizeVenueName(race.grand_prix);
     const flDriverRaw = race.fastest_lap_driver;
     const flTimeRaw = race.fastest_lap_time;
@@ -270,48 +231,40 @@ function processSeason(data, year){
     if(flDriverRaw && flTimeRaw){
       const secs = lapToSeconds(flTimeRaw);
       const flDriver = cleanDriver(flDriverRaw);
-
       if(secs !== null){
-        // fastest by venue
         if(!fastestByVenue[venue] || secs < fastestByVenue[venue].seconds){
           fastestByVenue[venue] = {
             seconds: secs,
-            time: String(flTimeRaw).trim(),
+            time: flTimeRaw,
             driver: flDriver,
             year: year,
             round: race.round
           };
         }
-
-        // count fastest laps by driver
-        fastestLapCountByDriver[flDriver] = (fastestLapCountByDriver[flDriver] || 0) + 1;
+        fastestLapCountByDriver[flDriver] = (fastestLapCountByDriver[flDriver]||0) + 1;
       }
     }
 
-    // -------------------------
-    // Existing records from results
-    // -------------------------
-    (race.results || []).forEach(r=>{
+    (race.results||[]).forEach(r=>{
       const driver = cleanDriver(r.driver);
       const team = r.team || "";
-      const pos = String(r.position ?? "").trim();
-      const pts = Number(r.points) || 0;
+      const pos = String(r.position ?? "");
+      const pts = Number(r.points)||0;
 
       driverPoints[driver] = (driverPoints[driver]||0) + pts;
       seasonTotals[driver] = (seasonTotals[driver]||0) + pts;
 
-      if(pos === "1"){
+      if(pos==="1"){
         driverWins[driver] = (driverWins[driver]||0) + 1;
         if(team) teamWins[team] = (teamWins[team]||0) + 1;
       }
 
-      if(pos === "1" || pos === "2" || pos === "3"){
+      if(pos==="1" || pos==="2" || pos==="3"){
         driverPodiums[driver] = (driverPodiums[driver]||0) + 1;
       }
     });
   });
 
-  // Champion of the season by total points (matches how your f1.html tile works)
   const champ = Object.entries(seasonTotals).sort((a,b)=>b[1]-a[1])[0];
   if(champ){
     driverTitles[champ[0]] = (driverTitles[champ[0]]||0) + 1;
@@ -320,53 +273,25 @@ function processSeason(data, year){
 
 function fillTopTable(tableId, obj, limit=20){
   const tbody = document.querySelector(`#${tableId} tbody`);
-  tbody.innerHTML = "";
-
-  const sorted = Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,limit);
-
-  sorted.forEach((item,i)=>{
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td class="rank">${i+1}</td><td>${item[0]}</td><td>${item[1]}</td>`;
-    tbody.appendChild(tr);
-  });
+  tbody.innerHTML="";
+  Object.entries(obj)
+    .sort((a,b)=>b[1]-a[1])
+    .slice(0,limit)
+    .forEach((item,i)=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=`<td class="rank">${i+1}</td><td>${item[0]}</td><td>${item[1]}</td>`;
+      tbody.appendChild(tr);
+    });
 }
 
 function buildFastestLapVenueTable(){
   const tbody = document.querySelector("#fastestLapVenueTable tbody");
-  tbody.innerHTML = "";
-
-  // "Current venues" in your dataset = venues that appear in the latest season file(s).
-  // Since we loaded ALL years, we'll treat "current" as venues found in the most recent year with data.
-  // We still display the *all-time* fastest lap at those venues (from any season).
-  // To get current venues we need to detect them.
-  // We'll do this by checking seasons from endYear down until we find a season with races and use those venues list.
-
-  // We'll rebuild currentVenues by fetching the newest year that exists and reading its venues.
-  // If that fetch fails, fall back to all venues in fastestByVenue.
-  (async()=>{
-    let currentVenues = null;
-
-    for(let y=endYear; y>=startYear; y--){
-      try{
-        const res = await fetch(`data/f1/${y}.json`);
-        if(!res.ok) continue;
-        const data = await res.json();
-        if(data && Array.isArray(data.races) && data.races.length){
-          currentVenues = new Set(
-            data.races.map(r=>normalizeVenueName(r.grand_prix))
-          );
-          break;
-        }
-      }catch(e){}
-    }
-
-    const entries = Object.entries(fastestByVenue)
-      .filter(([venue]) => currentVenues ? currentVenues.has(venue) : true)
-      .sort((a,b)=>a[0].localeCompare(b[0]));
-
-    entries.forEach(([venue, rec])=>{
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
+  tbody.innerHTML="";
+  Object.entries(fastestByVenue)
+    .sort((a,b)=>a[0].localeCompare(b[0]))
+    .forEach(([venue,rec])=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
         <td>${venue}</td>
         <td>${rec.time}</td>
         <td>${rec.driver}</td>
@@ -375,20 +300,16 @@ function buildFastestLapVenueTable(){
       `;
       tbody.appendChild(tr);
     });
-  })();
 }
 
 function buildTables(){
-  // Driver & team records
-  fillTopTable("championshipTable", driverTitles, 20);
-  fillTopTable("winsTable", driverWins, 20);
-  fillTopTable("podiumsTable", driverPodiums, 20);
-  fillTopTable("pointsTable", driverPoints, 20);
-  fillTopTable("teamWinsTable", teamWins, 20);
-
-  // Fastest lap records
+  fillTopTable("championshipTable", driverTitles);
+  fillTopTable("winsTable", driverWins);
+  fillTopTable("podiumsTable", driverPodiums);
+  fillTopTable("pointsTable", driverPoints);
+  fillTopTable("teamWinsTable", teamWins);
+  fillTopTable("fastestLapDriverTable", fastestLapCountByDriver);
   buildFastestLapVenueTable();
-  fillTopTable("mostFastestLapsDriversTable", fastestLapCountByDriver, 20);
 }
 
 loadAllSeasons();
