@@ -187,6 +187,8 @@ function cleanDriver(name){
   return String(name || "").replace(/\s[A-Z]{3}$/, "");
 }
 
+/* ================= FLAGS ================= */
+
 const flagByCountry = {
   "Australia":"🇦🇺","Bahrain":"🇧🇭","Saudi Arabia":"🇸🇦","China":"🇨🇳","Japan":"🇯🇵",
   "Monaco":"🇲🇨","Spain":"🇪🇸","Canada":"🇨🇦","Austria":"🇦🇹","Great Britain":"🇬🇧",
@@ -197,6 +199,8 @@ const flagByCountry = {
   "Morocco":"🇲🇦","South Africa":"🇿🇦","Sweden":"🇸🇪","San Marino":"🇸🇲",
   "Turkey":"🇹🇷","Russia":"🇷🇺","Malaysia":"🇲🇾","South Korea":"🇰🇷","India":"🇮🇳"
 };
+
+/* ================= CLEAN GP NAME ================= */
 
 function normalizeGpRaw(s){
   let n = String(s || "").trim();
@@ -226,6 +230,8 @@ function formatRoundTitle(round, grandPrix, circuit){
   return `Round ${round} – ${parsed.label}${circuit ? " – "+circuit : ""}${flag ? " "+flag : ""}`;
 }
 
+/* ================= YEAR BUTTONS ================= */
+
 for(let y=startYear; y<=endYear; y++){
   const btn=document.createElement("button");
   btn.className="year-btn";
@@ -234,6 +240,8 @@ for(let y=startYear; y<=endYear; y++){
   btn.id="year-"+y;
   yearGrid.appendChild(btn);
 }
+
+/* ================= LOAD ================= */
 
 async function loadSeason(year){
   document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
@@ -257,6 +265,8 @@ async function loadSeason(year){
     resultsDiv.innerHTML="<p>Error loading season.</p>";
   }
 }
+
+/* ================= RENDER ================= */
 
 function renderSeason(data){
   resultsDiv.innerHTML="";
@@ -318,28 +328,30 @@ function renderSeason(data){
 
     const results = (race.results||[]).slice();
 
+    /* ===== FIXED SORTING ===== */
     results.sort((a,b)=>{
+      function rank(r){
+        const pos = Number(r.position);
+        const time = String(r.time||"").toUpperCase();
+
+        if(Number.isFinite(pos)) return 0; 
+        if(time.includes("DNF") || time.includes("DQ")) return 1;
+        return 2;
+      }
+
+      const ra = rank(a);
+      const rb = rank(b);
+
+      if(ra !== rb) return ra - rb;
+
       const pa = Number(a.position);
       const pb = Number(b.position);
 
-      const ta = String(a.time||"").toUpperCase();
-      const tb = String(b.time||"").toUpperCase();
-
-      const aNum = Number.isFinite(pa);
-      const bNum = Number.isFinite(pb);
-
-      if(aNum && bNum) return pa - pb;
-      if(aNum && !bNum) return -1;
-      if(!aNum && bNum) return 1;
-
-      const aDNF = ta.includes("DNF") || ta.includes("DQ");
-      const bDNF = tb.includes("DNF") || tb.includes("DQ");
-
-      if(aDNF && !bDNF) return -1;
-      if(!aDNF && bDNF) return 1;
+      if(Number.isFinite(pa) && Number.isFinite(pb)) return pa - pb;
 
       return 0;
     });
+    /* ========================= */
 
     results.forEach(r=>{
       let displayPos = r.position;
