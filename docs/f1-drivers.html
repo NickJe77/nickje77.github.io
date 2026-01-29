@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Formula 1 Drivers | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="style.css">
+
+<style>
+body{
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin:0;
+}
+
+/* HERO */
+.hero{
+  width:100%;
+  height:260px;
+  position:relative;
+  overflow:hidden;
+}
+.hero img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+.hero::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(to bottom, rgba(0,0,0,0.35), rgba(0,0,0,0.55));
+}
+
+/* NAV */
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+  background:#fff;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px 60px;
+}
+
+h1{text-align:center;margin-bottom:6px;}
+p{text-align:center;color:#555;margin-bottom:20px;}
+
+.controls{
+  display:flex;
+  justify-content:center;
+  gap:12px;
+  margin-bottom:20px;
+}
+
+select,input{
+  padding:8px 12px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  font-size:14px;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:left;
+}
+th{background:#f0f0f0;}
+tr:nth-child(even){background:#f6f9ff;}
+</style>
+</head>
+
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <img src="images/f1-header.jpg" alt="Formula 1">
+</div>
+
+<!-- NAV -->
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="f1.html">F1</a>
+</div>
+
+<div class="page-wrap">
+  <h1>Formula 1 Drivers</h1>
+  <p>Driver performance by season or across all seasons.</p>
+
+  <div class="controls">
+    <select id="seasonSelect"></select>
+    <input id="filterBox" type="text" placeholder="Filter driver…">
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Driver</th>
+        <th>Races</th>
+        <th>Wins</th>
+        <th>Podiums</th>
+        <th>Points</th>
+      </tr>
+    </thead>
+    <tbody id="driverTable"></tbody>
+  </table>
+</div>
+
+<script>
+const startYear = 1950;
+const endYear = new Date().getFullYear();
+
+const seasonSelect = document.getElementById("seasonSelect");
+const filterBox = document.getElementById("filterBox");
+const tableBody = document.getElementById("driverTable");
+
+let allData = [];
+
+seasonSelect.innerHTML = `<option value="all">All Time</option>`;
+for(let y=startYear; y<=endYear; y++){
+  const opt=document.createElement("option");
+  opt.value=y;
+  opt.textContent=y;
+  seasonSelect.appendChild(opt);
+}
+
+seasonSelect.addEventListener("change", loadSeason);
+filterBox.addEventListener("input", render);
+
+async function loadSeason(){
+  const season = seasonSelect.value;
+  tableBody.innerHTML = "Loading…";
+
+  if(season === "all"){
+    allData = [];
+    for(let y=startYear; y<=endYear; y++){
+      try{
+        const res = await fetch(`data/f1/${y}.json`);
+        if(res.ok){
+          const d = await res.json();
+          allData.push({year:y, data:d});
+        }
+      }catch(e){}
+    }
+    buildFromAll();
+  }else{
+    try{
+      const res = await fetch(`data/f1/${season}.json`);
+      if(!res.ok){
+        tableBody.innerHTML = "";
+        return;
+      }
+      const d = await res.json();
+      buildFromSingle(d);
+    }catch(e){
+      tableBody.innerHTML = "";
+    }
+  }
+}
+
+function buildFromSingle(data){
+  const stats = {};
+
+  (data.races||[]).forEach(race=>{
+    (race.results||[]).forEach(r=>{
+      if(!stats[r.driver]){
+        stats[r.driver]={races:0,wins:0,podiums:0,points:0};
+      }
+      stats[r.driver].races++;
+      const pos = Number(r.position);
+      if(pos===1) stats[r.driver].wins++;
+      if(pos>=1 && pos<=3) stats[r.driver].podiums++;
+      stats[r.driver].points += Number(r.points)||0;
+    });
+  });
+
+  renderTable(stats);
+}
+
+function buildFromAll(){
+  const stats = {};
+
+  allData.forEach(season=>{
+    (season.data.races||[]).forEach(race=>{
+      (race.results||[]).forEach(r=>{
+        if(!stats[r.driver]){
+          stats[r.driver]={races:0,wins:0,podiums:0,points:0};
+        }
+        stats[r.driver].races++;
+        const pos = Number(r.position);
+        if(pos===1) stats[r.driver].wins++;
+        if(pos>=1 && pos<=3) stats[r.driver].podiums++;
+        stats[r.driver].points += Number(r.points)||0;
+      });
+    });
+  });
+
+  renderTable(stats);
+}
+
+function renderTable(stats){
+  const filter = filterBox.value.toLowerCase();
+  tableBody.innerHTML="";
+
+  Object.entries(stats)
+    .filter(([name])=>name.toLowerCase().includes(filter))
+    .sort((a,b)=>b[1].points - a[1].points)
+    .forEach(([name,s])=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>${name}</td>
+        <td>${s.races}</td>
+        <td>${s.wins}</td>
+        <td>${s.podiums}</td>
+        <td>${s.points.toFixed(1)}</td>
+      `;
+      tableBody.appendChild(tr);
+    });
+}
+
+loadSeason();
+</script>
+
+</body>
+</html>
