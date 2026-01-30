@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>On This Day in Sport | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin:0;
+  background:#ffffff;
+  color:#111;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1000px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+h1{text-align:center;margin-bottom:6px;}
+.subtitle{text-align:center;color:#555;margin-bottom:30px;}
+
+.section{
+  margin-bottom:40px;
+}
+
+.section h2{
+  border-bottom:2px solid #eee;
+  padding-bottom:6px;
+  margin-bottom:12px;
+}
+
+.event{
+  padding:8px 0;
+  border-bottom:1px solid #f0f0f0;
+}
+
+.event span.year{
+  font-weight:600;
+  margin-right:6px;
+}
+
+.empty{
+  color:#888;
+  font-style:italic;
+}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="nba.html">NBA</a>
+  <a href="f1.html">F1</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="racing.html">Racing</a>
+</div>
+
+<div class="page-wrap">
+  <h1>On This Day in Sport</h1>
+  <div class="subtitle" id="subtitle"></div>
+
+  <div id="content"></div>
+</div>
+
+<script>
+const DATA_URL = "docs/data/on_this_day.json";
+
+function formatDateLong(d){
+  return d.toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "long"
+  });
+}
+
+function getTodayKey(){
+  const d = new Date();
+  const mm = String(d.getMonth()+1).padStart(2,"0");
+  const dd = String(d.getDate()).padStart(2,"0");
+  return `${mm}-${dd}`;
+}
+
+function renderSection(sport, events){
+  let html = `<div class="section"><h2>${sport}</h2>`;
+
+  if(!events || events.length === 0){
+    html += `<div class="empty">No recorded events for this day.</div></div>`;
+    return html;
+  }
+
+  events.forEach(e=>{
+    html += `
+      <div class="event">
+        <span class="year">${e.year}</span>
+        ${e.text}
+      </div>
+    `;
+  });
+
+  html += `</div>`;
+  return html;
+}
+
+fetch(DATA_URL)
+  .then(r => r.json())
+  .then(data => {
+    const todayKey = getTodayKey();
+    const todayData = data[todayKey];
+
+    const subtitle = document.getElementById("subtitle");
+    subtitle.textContent = formatDateLong(new Date());
+
+    const content = document.getElementById("content");
+
+    if(!todayData){
+      content.innerHTML = `<div class="empty">No events recorded for this date yet.</div>`;
+      return;
+    }
+
+    let html = "";
+
+    // Order you want sections to appear
+    const sportOrder = ["NBA","F1","Cricket","AFL","Racing","Football"];
+
+    sportOrder.forEach(sport=>{
+      if(todayData[sport]){
+        html += renderSection(sport, todayData[sport]);
+      }
+    });
+
+    // Any other sports not in predefined order
+    Object.keys(todayData).forEach(sport=>{
+      if(!sportOrder.includes(sport)){
+        html += renderSection(sport, todayData[sport]);
+      }
+    });
+
+    content.innerHTML = html;
+  })
+  .catch(err=>{
+    document.getElementById("content").innerHTML =
+      `<div class="empty">Error loading On This Day data.</div>`;
+    console.error(err);
+  });
+</script>
+
+</body>
+</html>
