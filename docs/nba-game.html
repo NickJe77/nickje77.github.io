@@ -6,60 +6,222 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{font-family:Inter,system-ui,Arial;margin:0;background:#fff;}
-.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
+body{
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:#fff;
+}
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px 60px;}
-h1{text-align:center;}
-table{width:100%;border-collapse:collapse;}
-th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:center;}
-th{background:#f0f0f0;position:sticky;top:0;}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px 60px;
+}
+
+h1{text-align:center;margin:0 0 6px;}
+.subtitle{
+  text-align:center;
+  color:#666;
+  margin:0 0 18px;
+}
+
+.summary{
+  display:flex;
+  justify-content:center;
+  gap:16px;
+  flex-wrap:wrap;
+  margin:0 0 18px;
+}
+.card{
+  background:#f4f6fb;
+  padding:12px 18px;
+  border-radius:10px;
+  min-width:220px;
+  text-align:center;
+}
+.card b{display:block;font-size:18px;}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:center;
+  white-space:nowrap;
+}
+th{
+  background:#f0f0f0;
+  position:sticky;
+  top:0;
+  z-index:2;
+}
 tr:nth-child(even){background:#f6f9ff;}
+tr:hover{background:#e9f0ff;}
+
+.player-link{
+  color:#0056d6;
+  text-decoration:none;
+  font-weight:600;
+}
+
+.reserves-row td{
+  font-weight:700;
+  color:#000;
+  background:#f0f0f0;
+}
+
+.bad{
+  background:#fff3f3;
+  border:1px solid #ffd0d0;
+  color:#a40000;
+  padding:10px 12px;
+  border-radius:10px;
+  max-width:900px;
+  margin:0 auto 18px;
+}
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="nba.html">NBA</a>
-<a href="nba-season.html">Seasons</a>
+  <a href="index.html">Home</a>
+  <a href="nba.html">NBA</a>
+  <a href="nba-season.html">Seasons</a>
 </div>
 
 <div class="page-wrap">
 
-<h1 id="title"></h1>
-<table>
-<thead>
-<tr>
-<th>Player</th><th>Team</th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th>
-</tr>
-</thead>
-<tbody id="boxBody"></tbody>
+<h1 id="title">NBA Game</h1>
+<div class="subtitle" id="subtitle"></div>
+
+<div id="errorBox" class="bad" style="display:none;"></div>
+
+<div class="summary" id="summary" style="display:none;">
+  <div class="card"><b id="scoreLine">-</b>Final Score</div>
+</div>
+
+<table id="boxTable" style="display:none;">
+  <thead>
+    <tr>
+      <th>Player</th>
+      <th>Team</th>
+      <th>MIN</th>
+      <th>PTS</th>
+      <th>REB</th>
+      <th>AST</th>
+      <th>STL</th>
+      <th>BLK</th>
+      <th>TO</th>
+      <th>PF</th>
+    </tr>
+  </thead>
+  <tbody id="boxBody"></tbody>
 </table>
 
 </div>
 
 <script>
-const params=new URLSearchParams(location.search);
-const season=params.get("season");
-const gameStr=params.get("game");
+const params = new URLSearchParams(window.location.search);
+const season = params.get("season");
+const gameStr = params.get("game");
 
-function seasonToFile(s){return "data/nba/nba_season_"+s.replace("-","_")+".json";}
+const titleEl = document.getElementById("title");
+const subtitleEl = document.getElementById("subtitle");
+const errorBox = document.getElementById("errorBox");
 
-fetch(seasonToFile(season)).then(r=>r.json()).then(data=>{
-  const g=data.games.find(x=>`${x.home_team} vs ${x.away_team}`===gameStr);
-  document.getElementById("title").textContent=gameStr;
-  g.players.forEach(p=>{
-    const tr=document.createElement("tr");
-    tr.innerHTML=`
-    <td><a href="nba-player.html?player=${encodeURIComponent(p.player)}">${p.player}</a></td>
-    <td><a href="nba-team.html?team=${encodeURIComponent(p.team)}">${p.team}</a></td>
-    <td>${p.min||""}</td><td>${p.pts||0}</td><td>${p.reb||0}</td><td>${p.ast||0}</td>
-    <td>${p.stl||0}</td><td>${p.blk||0}</td>`;
-    boxBody.appendChild(tr);
-  });
-});
+const summaryEl = document.getElementById("summary");
+const scoreLine = document.getElementById("scoreLine");
+
+const boxTable = document.getElementById("boxTable");
+const boxBody = document.getElementById("boxBody");
+
+function seasonToFile(seasonStr){
+  return "data/nba/nba_season_" + seasonStr.replace("-", "_") + ".json";
+}
+
+function showError(msg){
+  errorBox.style.display = "block";
+  errorBox.textContent = msg;
+}
+
+async function loadGame(){
+  if(!season || !gameStr){
+    showError("Missing URL parameters.");
+    return;
+  }
+
+  const file = seasonToFile(season);
+
+  titleEl.textContent = gameStr;
+  subtitleEl.textContent = "Season " + season;
+
+  try{
+    const res = await fetch(file);
+    if(!res.ok) throw new Error("fetch failed");
+    const data = await res.json();
+
+    const match = (data.games || []).find(g => {
+      return `${g.home_team} vs ${g.away_team}` === gameStr;
+    });
+
+    if(!match){
+      showError("Game not found in season file.");
+      return;
+    }
+
+    summaryEl.style.display = "flex";
+    scoreLine.textContent =
+      `${match.home_team} ${match.home_points} – ${match.away_points} ${match.away_team}`;
+
+    (match.players || []).forEach(p=>{
+      const tr = document.createElement("tr");
+
+      if(p.player === "Reserves"){
+        tr.className = "reserves-row";
+        tr.innerHTML = `
+          <td>Reserves</td>
+          <td>${p.team}</td>
+          <td></td><td></td><td></td><td></td>
+          <td></td><td></td><td></td><td></td>
+        `;
+      } else {
+        tr.innerHTML = `
+          <td><a class="player-link" href="nba-player.html?player=${encodeURIComponent(p.player)}">${p.player}</a></td>
+          <td>${p.team}</td>
+          <td>${p.min || ""}</td>
+          <td>${p.pts || ""}</td>
+          <td>${p.reb || ""}</td>
+          <td>${p.ast || ""}</td>
+          <td>${p.stl || ""}</td>
+          <td>${p.blk || ""}</td>
+          <td>${p.to || ""}</td>
+          <td>${p.pf || ""}</td>
+        `;
+      }
+
+      boxBody.appendChild(tr);
+    });
+
+    boxTable.style.display = "table";
+
+  }catch(e){
+    showError("Could not load season file: " + file);
+  }
+}
+
+loadGame();
 </script>
 
 </body>
