@@ -66,8 +66,14 @@ th,td{
   padding:8px 10px;
   text-align:center;
 }
-th{background:#f0f0f0;}
+th{
+  background:#f0f0f0;
+  cursor:pointer;
+}
 tr:nth-child(even){background:#f6f9ff;}
+tr:hover{
+  background:#e9f0ff;
+}
 </style>
 </head>
 
@@ -109,16 +115,16 @@ tr:nth-child(even){background:#f6f9ff;}
 <table>
 <thead>
 <tr>
-  <th>Season</th>
-  <th>Game</th>
-  <th>MIN</th>
-  <th>PTS</th>
-  <th>REB</th>
-  <th>AST</th>
-  <th>STL</th>
-  <th>BLK</th>
-  <th>TO</th>
-  <th>PF</th>
+  <th onclick="sortBy('season')">Season</th>
+  <th onclick="sortBy('game')">Game</th>
+  <th onclick="sortBy('min')">MIN</th>
+  <th onclick="sortBy('pts')">PTS</th>
+  <th onclick="sortBy('reb')">REB</th>
+  <th onclick="sortBy('ast')">AST</th>
+  <th onclick="sortBy('stl')">STL</th>
+  <th onclick="sortBy('blk')">BLK</th>
+  <th onclick="sortBy('to')">TO</th>
+  <th onclick="sortBy('pf')">PF</th>
 </tr>
 </thead>
 <tbody id="logTable"></tbody>
@@ -154,6 +160,8 @@ const teamMap = {
 };
 
 let allGames = [];
+let sortKey = null;
+let sortAsc = true;
 
 async function loadPlayer(){
   const opponents = new Set();
@@ -202,36 +210,64 @@ async function loadPlayer(){
   renderTable();
 }
 
+function sortBy(key){
+  if(sortKey === key){
+    sortAsc = !sortAsc;
+  }else{
+    sortKey = key;
+    sortAsc = true;
+  }
+  renderTable();
+}
+
 function renderTable(){
   const opponentVal = oppositionSelect.value;
   logTable.innerHTML="";
 
   let games=0, pts=0, reb=0, ast=0, stl=0;
 
-  allGames
-    .filter(g=>!opponentVal || g.opponent === opponentVal)
-    .forEach(g=>{
-      games++; 
-      pts+=g.pts; 
-      reb+=g.reb; 
-      ast+=g.ast;
-      stl+=g.stl;
+  let filtered = allGames.filter(g=>!opponentVal || g.opponent === opponentVal);
 
-      const tr=document.createElement("tr");
-      tr.innerHTML=`
-        <td>${g.season}</td>
-        <td>${g.game}</td>
-        <td>${g.min}</td>
-        <td>${g.pts}</td>
-        <td>${g.reb}</td>
-        <td>${g.ast}</td>
-        <td>${g.stl}</td>
-        <td>${g.blk}</td>
-        <td>${g.to}</td>
-        <td>${g.pf}</td>
-      `;
-      logTable.appendChild(tr);
+  if(sortKey){
+    filtered.sort((a,b)=>{
+      if(typeof a[sortKey] === "string"){
+        return sortAsc 
+          ? a[sortKey].localeCompare(b[sortKey])
+          : b[sortKey].localeCompare(a[sortKey]);
+      }
+      return sortAsc ? a[sortKey]-b[sortKey] : b[sortKey]-a[sortKey];
     });
+  }
+
+  filtered.forEach(g=>{
+    games++; 
+    pts+=g.pts; 
+    reb+=g.reb; 
+    ast+=g.ast;
+    stl+=g.stl;
+
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${g.season}</td>
+      <td>${g.game}</td>
+      <td>${g.min}</td>
+      <td>${g.pts}</td>
+      <td>${g.reb}</td>
+      <td>${g.ast}</td>
+      <td>${g.stl}</td>
+      <td>${g.blk}</td>
+      <td>${g.to}</td>
+      <td>${g.pf}</td>
+    `;
+
+    tr.onclick = () => {
+      window.location.href =
+        "nba-game.html?season=" + encodeURIComponent(g.season) +
+        "&game=" + encodeURIComponent(g.game);
+    };
+
+    logTable.appendChild(tr);
+  });
 
   document.getElementById("games").textContent = games;
   document.getElementById("points").textContent = pts;
