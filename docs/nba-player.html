@@ -116,9 +116,20 @@ function showError(msg){
   errorBox.textContent=msg;
 }
 
+function extractGames(data){
+  if(Array.isArray(data)) return data;
+  if(Array.isArray(data.games)) return data.games;
+  if(Array.isArray(data.results)) return data.results;
+  return [];
+}
+
+function getPlayerName(obj){
+  return obj.name || obj.player || obj.player_name || "";
+}
+
 async function detectSeasons(){
   const seasons=[];
-  for(let y=1970;y<=2030;y++){
+  for(let y=1976;y<=2030;y++){
     const s=`${y}-${String(y+1).slice(2)}`;
     try{
       const r=await fetch(seasonToFile(s));
@@ -130,33 +141,34 @@ async function detectSeasons(){
 
 async function loadPlayer(){
   if(!playerName){
-    showError("Missing player.");
+    showError("Missing ?player= in URL");
     return;
   }
 
-  titleEl.textContent=playerName;
+  titleEl.textContent = playerName;
 
-  const seasonFiles=await detectSeasons();
+  const seasonFiles = await detectSeasons();
 
   for(const season of seasonFiles){
     try{
-      const res=await fetch(seasonToFile(season));
+      const res = await fetch(seasonToFile(season));
       if(!res.ok) continue;
 
-      const data=await res.json();
+      const data = await res.json();
+      const games = extractGames(data);
 
-      data.games.forEach(g=>{
-        if(g.player===playerName){
+      games.forEach(g=>{
+        if(getPlayerName(g) === playerName){
           rows.push({
-            season:season,
-            date:g.date||"",
-            team:g.team||"",
-            opp:g.opp||"",
-            pts:Number(g.pts)||0,
-            reb:Number(g.reb)||0,
-            ast:Number(g.ast)||0,
-            stl:Number(g.stl)||0,
-            blk:Number(g.blk)||0
+            season: season,
+            date: g.date || "",
+            team: g.team || "",
+            opp: g.opp || g.opponent || "",
+            pts: Number(g.pts) || 0,
+            reb: Number(g.reb) || 0,
+            ast: Number(g.ast) || 0,
+            stl: Number(g.stl) || 0,
+            blk: Number(g.blk) || 0
           });
         }
       });
@@ -165,7 +177,7 @@ async function loadPlayer(){
   }
 
   if(!rows.length){
-    showError("No games found for this player.");
+    showError("No games found for: " + playerName);
     return;
   }
 
@@ -205,7 +217,7 @@ function render(){
       </tr>`;
   });
 
-  const g=rows.length;
+  const g = rows.length;
 
   totalsBoxes.innerHTML=`
     <div class="stat-box"><span>${g}</span>Games</div>
@@ -227,23 +239,6 @@ function render(){
     <div class="stat-box"><span>${highs.stl}</span>Career High STL</div>
     <div class="stat-box"><span>${highs.blk}</span>Career High BLK</div>`;
 }
-
-document.querySelectorAll("th[data-key]").forEach(th=>{
-  th.addEventListener("click",()=>{
-    const key=th.dataset.key;
-    currentSort.dir =
-      currentSort.key===key && currentSort.dir==="asc" ? "desc" : "asc";
-    currentSort.key=key;
-
-    rows.sort((a,b)=>{
-      if(a[key]<b[key]) return currentSort.dir==="asc"?-1:1;
-      if(a[key]>b[key]) return currentSort.dir==="asc"?1:-1;
-      return 0;
-    });
-
-    render();
-  });
-});
 
 loadPlayer();
 </script>
