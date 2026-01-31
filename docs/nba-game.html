@@ -50,9 +50,17 @@ h1{text-align:center;margin:0 0 6px;}
 }
 .card b{display:block;font-size:18px;}
 
+.team-title{
+  text-align:center;
+  margin:30px 0 8px;
+  font-size:20px;
+  font-weight:700;
+}
+
 table{
   width:100%;
   border-collapse:collapse;
+  margin-bottom:20px;
 }
 th,td{
   border-bottom:1px solid #ddd;
@@ -112,23 +120,45 @@ tr:hover{background:#e9f0ff;}
   <div class="card"><b id="scoreLine">-</b>Final Score</div>
 </div>
 
-<table id="boxTable" style="display:none;">
-  <thead>
-    <tr>
-      <th>Player</th>
-      <th>Team</th>
-      <th>MIN</th>
-      <th>PTS</th>
-      <th>REB</th>
-      <th>AST</th>
-      <th>STL</th>
-      <th>BLK</th>
-      <th>TO</th>
-      <th>PF</th>
-    </tr>
-  </thead>
-  <tbody id="boxBody"></tbody>
+<div id="tablesWrap" style="display:none;">
+
+<h2 class="team-title" id="homeTitle"></h2>
+<table>
+<thead>
+<tr>
+  <th>Player</th>
+  <th>MIN</th>
+  <th>PTS</th>
+  <th>REB</th>
+  <th>AST</th>
+  <th>STL</th>
+  <th>BLK</th>
+  <th>TO</th>
+  <th>PF</th>
+</tr>
+</thead>
+<tbody id="homeBody"></tbody>
 </table>
+
+<h2 class="team-title" id="awayTitle"></h2>
+<table>
+<thead>
+<tr>
+  <th>Player</th>
+  <th>MIN</th>
+  <th>PTS</th>
+  <th>REB</th>
+  <th>AST</th>
+  <th>STL</th>
+  <th>BLK</th>
+  <th>TO</th>
+  <th>PF</th>
+</tr>
+</thead>
+<tbody id="awayBody"></tbody>
+</table>
+
+</div>
 
 </div>
 
@@ -144,8 +174,11 @@ const errorBox = document.getElementById("errorBox");
 const summaryEl = document.getElementById("summary");
 const scoreLine = document.getElementById("scoreLine");
 
-const boxTable = document.getElementById("boxTable");
-const boxBody = document.getElementById("boxBody");
+const tablesWrap = document.getElementById("tablesWrap");
+const homeBody = document.getElementById("homeBody");
+const awayBody = document.getElementById("awayBody");
+const homeTitle = document.getElementById("homeTitle");
+const awayTitle = document.getElementById("awayTitle");
 
 function seasonToFile(seasonStr){
   return "data/nba/nba_season_" + seasonStr.replace("-", "_") + ".json";
@@ -185,46 +218,49 @@ async function loadGame(){
     scoreLine.textContent =
       `${match.home_team} ${match.home_points} – ${match.away_points} ${match.away_team}`;
 
-    (match.players || []).forEach(p=>{
-      const tr = document.createElement("tr");
+    homeTitle.textContent = match.home_team;
+    awayTitle.textContent = match.away_team;
 
-      if(p.player === "Reserves"){
-        tr.className = "reserves-row";
-        tr.innerHTML = `
-          <td>Reserves</td>
-          <td></td>
-          <td></td>
-          <td></td>
-          <td></td>
-          <td></td>
-          <td></td>
-          <td></td>
-          <td></td>
-          <td></td>
-        `;
-      } else {
-        tr.innerHTML = `
-          <td><a class="player-link" href="nba-player.html?player=${encodeURIComponent(p.player)}">${p.player}</a></td>
-          <td>${p.team}</td>
-          <td>${p.min || ""}</td>
-          <td>${p.pts || ""}</td>
-          <td>${p.reb || ""}</td>
-          <td>${p.ast || ""}</td>
-          <td>${p.stl || ""}</td>
-          <td>${p.blk || ""}</td>
-          <td>${p.to || ""}</td>
-          <td>${p.pf || ""}</td>
-        `;
-      }
+    const homePlayers = match.players.filter(p => p.team === match.home_team);
+    const awayPlayers = match.players.filter(p => p.team === match.away_team);
 
-      boxBody.appendChild(tr);
-    });
+    renderTeam(homePlayers, homeBody);
+    renderTeam(awayPlayers, awayBody);
 
-    boxTable.style.display = "table";
+    tablesWrap.style.display = "block";
 
   }catch(e){
     showError("Could not load season file: " + file);
   }
+}
+
+function renderTeam(players, tbody){
+  players.forEach(p=>{
+    const tr = document.createElement("tr");
+
+    if(p.player === "Reserves"){
+      tr.className = "reserves-row";
+      tr.innerHTML = `
+        <td>Reserves</td>
+        <td></td><td></td><td></td><td></td>
+        <td></td><td></td><td></td><td></td>
+      `;
+    } else {
+      tr.innerHTML = `
+        <td><a class="player-link" href="nba-player.html?player=${encodeURIComponent(p.player)}">${p.player}</a></td>
+        <td>${p.min || ""}</td>
+        <td>${p.pts || ""}</td>
+        <td>${p.reb || ""}</td>
+        <td>${p.ast || ""}</td>
+        <td>${p.stl || ""}</td>
+        <td>${p.blk || ""}</td>
+        <td>${p.to || ""}</td>
+        <td>${p.pf || ""}</td>
+      `;
+    }
+
+    tbody.appendChild(tr);
+  });
 }
 
 loadGame();
