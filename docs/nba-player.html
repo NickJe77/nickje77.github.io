@@ -100,6 +100,7 @@ tr:nth-child(even){background:#f6f9ff;}
 
 <div class="stats-row" id="totalsBoxes"></div>
 <div class="stats-row" id="averagesBoxes"></div>
+<div class="stats-row" id="highsBoxes"></div>
 
 <div id="errorBox" class="bad" style="display:none;"></div>
 
@@ -129,20 +130,10 @@ const playerName = params.get("player");
 const titleEl = document.getElementById("title");
 const totalsBoxes = document.getElementById("totalsBoxes");
 const averagesBoxes = document.getElementById("averagesBoxes");
+const highsBoxes = document.getElementById("highsBoxes");
 const errorBox = document.getElementById("errorBox");
 const gamesTable = document.getElementById("gamesTable");
 const gamesBody = document.getElementById("gamesBody");
-
-/* ✅ MAKE SURE THESE FILES EXIST */
-const seasonFiles = [
-  "1976-77",
-  "1977-78",
-  "1978-79",
-  "1979-80",
-  "1981-82",
-  "1982-83",
-  "2023-24"
-];
 
 function seasonToFile(season){
   return "data/nba/nba_season_" + season.replace("-","_") + ".json";
@@ -156,6 +147,20 @@ function showError(msg){
 let rows = [];
 let currentSort = {key:null, dir:"desc"};
 
+async function detectSeasons(){
+  const seasons = [];
+  for(let y=1976; y<=2025; y++){
+    const season = `${y}-${String(y+1).slice(2)}`;
+    try{
+      const res = await fetch(seasonToFile(season));
+      if(res.ok){
+        seasons.push(season);
+      }
+    }catch(e){}
+  }
+  return seasons;
+}
+
 async function loadPlayer(){
   if(!playerName){
     showError("Missing player parameter.");
@@ -163,6 +168,8 @@ async function loadPlayer(){
   }
 
   titleEl.textContent = playerName;
+
+  const seasonFiles = await detectSeasons();
 
   for(const season of seasonFiles){
     try{
@@ -204,6 +211,7 @@ function render(){
   gamesBody.innerHTML = "";
 
   let totals = {min:0,pts:0,reb:0,ast:0,stl:0,blk:0};
+  let highs = {pts:0,reb:0,ast:0,stl:0,blk:0};
 
   rows.forEach(r=>{
     totals.min+=r.min;
@@ -212,6 +220,12 @@ function render(){
     totals.ast+=r.ast;
     totals.stl+=r.stl;
     totals.blk+=r.blk;
+
+    highs.pts = Math.max(highs.pts, r.pts);
+    highs.reb = Math.max(highs.reb, r.reb);
+    highs.ast = Math.max(highs.ast, r.ast);
+    highs.stl = Math.max(highs.stl, r.stl);
+    highs.blk = Math.max(highs.blk, r.blk);
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -241,6 +255,14 @@ function render(){
     <div class="stat-box"><span>${(totals.pts/games).toFixed(1)}</span>Avg Points</div>
     <div class="stat-box"><span>${(totals.reb/games).toFixed(1)}</span>Avg Rebounds</div>
     <div class="stat-box"><span>${(totals.ast/games).toFixed(1)}</span>Avg Assists</div>
+  `;
+
+  highsBoxes.innerHTML = `
+    <div class="stat-box"><span>${highs.pts}</span>Career High PTS</div>
+    <div class="stat-box"><span>${highs.reb}</span>Career High REB</div>
+    <div class="stat-box"><span>${highs.ast}</span>Career High AST</div>
+    <div class="stat-box"><span>${highs.stl}</span>Career High STL</div>
+    <div class="stat-box"><span>${highs.blk}</span>Career High BLK</div>
   `;
 }
 
