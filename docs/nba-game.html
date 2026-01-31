@@ -76,7 +76,7 @@ tr:nth-child(even){background:#f6f9ff;}
 }
 
 .reserves-row td{
-  font-weight:700;
+  font-weight:800;
   color:#000;
   background:#f0f0f0;
 }
@@ -175,6 +175,117 @@ function showError(msg){
   errorBox.textContent = msg;
 }
 
+function normTeamName(s){
+  return (s || "")
+    .toLowerCase()
+    .replace(/\./g,"")
+    .replace(/&/g,"and")
+    .replace(/\s+/g," ")
+    .trim();
+}
+
+/**
+ * Map full team names -> the abbreviation codes used in your players[].team
+ * Includes modern + some historical/alt names.
+ */
+const TEAM_MAP = {
+  // Modern
+  "atlanta hawks": { abbr:"ATL", nick:"Hawks" },
+  "boston celtics": { abbr:"BOS", nick:"Celtics" },
+  "brooklyn nets": { abbr:"BRK", nick:"Nets" },
+  "new jersey nets": { abbr:"NJN", nick:"Nets" },
+  "charlotte hornets": { abbr:"CHO", nick:"Hornets" },
+  "charlotte bobcats": { abbr:"CHA", nick:"Bobcats" },
+  "chicago bulls": { abbr:"CHI", nick:"Bulls" },
+  "cleveland cavaliers": { abbr:"CLE", nick:"Cavaliers" },
+  "dallas mavericks": { abbr:"DAL", nick:"Mavericks" },
+  "denver nuggets": { abbr:"DEN", nick:"Nuggets" },
+  "detroit pistons": { abbr:"DET", nick:"Pistons" },
+  "golden state warriors": { abbr:"GSW", nick:"Warriors" },
+  "san francisco warriors": { abbr:"SFW", nick:"Warriors" },
+  "houston rockets": { abbr:"HOU", nick:"Rockets" },
+  "indiana pacers": { abbr:"IND", nick:"Pacers" },
+  "los angeles clippers": { abbr:"LAC", nick:"Clippers" },
+  "san diego clippers": { abbr:"SDC", nick:"Clippers" },
+  "los angeles lakers": { abbr:"LAL", nick:"Lakers" },
+  "memphis grizzlies": { abbr:"MEM", nick:"Grizzlies" },
+  "vancouver grizzlies": { abbr:"VAN", nick:"Grizzlies" },
+  "miami heat": { abbr:"MIA", nick:"Heat" },
+  "milwaukee bucks": { abbr:"MIL", nick:"Bucks" },
+  "minnesota timberwolves": { abbr:"MIN", nick:"Timberwolves" },
+  "new orleans pelicans": { abbr:"NOP", nick:"Pelicans" },
+  "new orleans hornets": { abbr:"NOH", nick:"Hornets" },
+  "new orleans/oklahoma city hornets": { abbr:"NOK", nick:"Hornets" },
+  "new york knicks": { abbr:"NYK", nick:"Knicks" },
+  "oklahoma city thunder": { abbr:"OKC", nick:"Thunder" },
+  "seattle supersonics": { abbr:"SEA", nick:"SuperSonics" },
+  "orlando magic": { abbr:"ORL", nick:"Magic" },
+  "philadelphia 76ers": { abbr:"PHI", nick:"76ers" },
+  "phoenix suns": { abbr:"PHO", nick:"Suns" },
+  "portland trail blazers": { abbr:"POR", nick:"Trail Blazers" },
+  "sacramento kings": { abbr:"SAC", nick:"Kings" },
+  "kansas city kings": { abbr:"KCK", nick:"Kings" },
+  "san antonio spurs": { abbr:"SAS", nick:"Spurs" },
+  "toronto raptors": { abbr:"TOR", nick:"Raptors" },
+  "utah jazz": { abbr:"UTA", nick:"Jazz" },
+  "washington wizards": { abbr:"WAS", nick:"Wizards" },
+  "washington bullets": { abbr:"WSB", nick:"Bullets" },
+
+  // A few older names that can appear in late 70s/early 80s datasets
+  "buffalo braves": { abbr:"BUF", nick:"Braves" },
+  "new orleans jazz": { abbr:"NOJ", nick:"Jazz" },
+  "new york nets": { abbr:"NYN", nick:"Nets" }
+};
+
+function getTeamInfo(fullName){
+  const key = normTeamName(fullName);
+  return TEAM_MAP[key] || null;
+}
+
+function deduceAbbrFallback(fullName, codesInGame){
+  // If mapping fails, try to match by city keyword against codes present (best-effort)
+  const n = normTeamName(fullName);
+  const city = n.split(" ")[0]; // rough
+  // If only 2 codes exist, just return the first unused later; handled in loadGame.
+  if(!codesInGame || codesInGame.length === 0) return null;
+  // nothing deterministic without mapping; return null and let the caller fall back.
+  return null;
+}
+
+function clearBodies(){
+  homeBody.innerHTML = "";
+  awayBody.innerHTML = "";
+}
+
+function renderTeam(players, tbody){
+  players.forEach(p=>{
+    const tr = document.createElement("tr");
+    const isReserves = (p.player || "").toLowerCase() === "reserves";
+
+    if(isReserves){
+      tr.className = "reserves-row";
+      tr.innerHTML = `
+        <td>Reserves</td>
+        <td></td><td></td><td></td><td></td>
+        <td></td><td></td><td></td><td></td>
+      `;
+    }else{
+      tr.innerHTML = `
+        <td><a class="player-link" href="nba-player.html?player=${encodeURIComponent(p.player)}">${p.player}</a></td>
+        <td>${p.min || ""}</td>
+        <td>${p.pts || ""}</td>
+        <td>${p.reb || ""}</td>
+        <td>${p.ast || ""}</td>
+        <td>${p.stl || ""}</td>
+        <td>${p.blk || ""}</td>
+        <td>${p.to  || ""}</td>
+        <td>${p.pf  || ""}</td>
+      `;
+    }
+    tbody.appendChild(tr);
+  });
+}
+
 async function loadGame(){
   if(!season || !gameStr){
     showError("Missing URL parameters.");
@@ -190,7 +301,7 @@ async function loadGame(){
     if(!res.ok) throw new Error("fetch failed");
     const data = await res.json();
 
-    const match = data.games.find(g => `${g.home_team} vs ${g.away_team}` === gameStr);
+    const match = (data.games || []).find(g => `${g.home_team} vs ${g.away_team}` === gameStr);
     if(!match){
       showError("Game not found.");
       return;
@@ -200,16 +311,62 @@ async function loadGame(){
     scoreLine.textContent =
       `${match.home_team} ${match.home_points} – ${match.away_points} ${match.away_team}`;
 
-    homeTitle.textContent = match.home_team;
-    awayTitle.textContent = match.away_team;
+    // Titles should show nicknames (not initials)
+    const homeInfo = getTeamInfo(match.home_team);
+    const awayInfo = getTeamInfo(match.away_team);
 
-    // Get team codes from players (DEN / GSW etc)
-    const teamCodes = [...new Set(match.players.map(p => p.team))];
-    const homeCode = teamCodes[0];
-    const awayCode = teamCodes[1];
+    homeTitle.textContent = homeInfo ? homeInfo.nick : match.home_team;
+    awayTitle.textContent = awayInfo ? awayInfo.nick : match.away_team;
 
-    const homePlayers = match.players.filter(p => p.team === homeCode);
-    const awayPlayers = match.players.filter(p => p.team === awayCode);
+    clearBodies();
+
+    const players = match.players || [];
+
+    // Collect actual codes present in this game's player rows
+    const codesInGame = [...new Set(players.map(p => (p.team || "").trim()).filter(Boolean))];
+
+    // Determine the two team codes using name -> code mapping
+    let homeCode = homeInfo ? homeInfo.abbr : deduceAbbrFallback(match.home_team, codesInGame);
+    let awayCode = awayInfo ? awayInfo.abbr : deduceAbbrFallback(match.away_team, codesInGame);
+
+    // If the dataset uses alt abbreviations (e.g., BRK vs BKN), try common aliases:
+    const ALIAS = {
+      "BKN":"BRK", "BRK":"BRK",
+      "CHA":"CHO", "CHO":"CHO",
+      "PHX":"PHO", "PHO":"PHO",
+      "SA":"SAS", "SAS":"SAS",
+      "GS":"GSW", "GSW":"GSW",
+      "NO":"NOP", "NOP":"NOP"
+    };
+    if(homeCode && ALIAS[homeCode]) homeCode = ALIAS[homeCode];
+    if(awayCode && ALIAS[awayCode]) awayCode = ALIAS[awayCode];
+
+    // If mapping codes aren't found in this game, fall back to the two codes present
+    // (still better than mis-assigning).
+    if(homeCode && !codesInGame.includes(homeCode)) homeCode = null;
+    if(awayCode && !codesInGame.includes(awayCode)) awayCode = null;
+
+    if(!homeCode || !awayCode){
+      if(codesInGame.length >= 2){
+        // pick the first two distinct codes present
+        homeCode = homeCode || codesInGame[0];
+        awayCode = awayCode || codesInGame.find(c => c !== homeCode) || codesInGame[1];
+      }
+    }
+
+    const homePlayers = players.filter(p => (p.team || "").trim() === homeCode);
+    const awayPlayers = players.filter(p => (p.team || "").trim() === awayCode);
+
+    // If still empty, show a helpful error instead of blank page
+    if(homePlayers.length === 0 || awayPlayers.length === 0){
+      showError(
+        "Team split failed. Game has player team codes: " +
+        (codesInGame.join(", ") || "none") +
+        ". Home/away codes resolved to: " +
+        (homeCode || "null") + " / " + (awayCode || "null")
+      );
+      // still render whatever we have so you can see something
+    }
 
     renderTeam(homePlayers, homeBody);
     renderTeam(awayPlayers, awayBody);
@@ -217,34 +374,6 @@ async function loadGame(){
   }catch(e){
     showError("Could not load season file: " + file);
   }
-}
-
-function renderTeam(players, tbody){
-  players.forEach(p=>{
-    const tr = document.createElement("tr");
-
-    if(p.player === "Reserves"){
-      tr.className = "reserves-row";
-      tr.innerHTML = `
-        <td>Reserves</td>
-        <td></td><td></td><td></td><td></td>
-        <td></td><td></td><td></td><td></td>
-      `;
-    } else {
-      tr.innerHTML = `
-        <td><a class="player-link" href="nba-player.html?player=${encodeURIComponent(p.player)}">${p.player}</a></td>
-        <td>${p.min||""}</td>
-        <td>${p.pts||""}</td>
-        <td>${p.reb||""}</td>
-        <td>${p.ast||""}</td>
-        <td>${p.stl||""}</td>
-        <td>${p.blk||""}</td>
-        <td>${p.to||""}</td>
-        <td>${p.pf||""}</td>
-      `;
-    }
-    tbody.appendChild(tr);
-  });
 }
 
 loadGame();
