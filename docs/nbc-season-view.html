@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NBA Season | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="style.css">
+
+<style>
+body{
+  font-family: Inter, system-ui, Arial, sans-serif;
+  margin:0;
+  background:#fff;
+}
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px 60px;
+}
+h1{text-align:center;margin-bottom:10px;}
+.filters{
+  display:flex;
+  gap:16px;
+  justify-content:center;
+  margin:20px 0 30px;
+}
+select{
+  padding:8px 12px;
+  font-size:15px;
+}
+table{width:100%;border-collapse:collapse;}
+th,td{border-bottom:1px solid #ddd;padding:10px 12px;}
+th{background:#f0f0f0;}
+tr:nth-child(even){background:#f6f9ff;}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="nba.html">NBA</a>
+  <a href="nba-season.html">Seasons</a>
+</div>
+
+<div class="page-wrap">
+
+<h1 id="title"></h1>
+
+<div class="filters">
+  <select id="teamFilter">
+    <option value="">All Teams</option>
+  </select>
+  <select id="playerFilter">
+    <option value="">All Players</option>
+  </select>
+</div>
+
+<table>
+<thead>
+<tr>
+  <th>Date</th>
+  <th>Game</th>
+  <th>Winner</th>
+  <th>Score</th>
+</tr>
+</thead>
+<tbody id="gamesTable"></tbody>
+</table>
+
+</div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const seasonParam = params.get("season"); // eg 1976_77
+
+const file = "data/nba/nba_season_" + seasonParam + ".json";
+
+const teamSelect = document.getElementById("teamFilter");
+const playerSelect = document.getElementById("playerFilter");
+const gamesTable = document.getElementById("gamesTable");
+
+let gamesData = [];
+
+fetch(file)
+.then(r=>r.json())
+.then(data=>{
+  document.getElementById("title").textContent =
+    "NBA Season " + data.season;
+
+  gamesData = data.games || [];
+
+  const teams = new Set();
+  const players = new Set();
+
+  gamesData.forEach(g=>{
+    if(g.team1) teams.add(g.team1);
+    if(g.team2) teams.add(g.team2);
+    if(g.players){
+      g.players.forEach(p=>players.add(p));
+    }
+  });
+
+  teams.forEach(t=>{
+    const o=document.createElement("option");
+    o.value=t; o.textContent=t;
+    teamSelect.appendChild(o);
+  });
+
+  players.forEach(p=>{
+    const o=document.createElement("option");
+    o.value=p; o.textContent=p;
+    playerSelect.appendChild(o);
+  });
+
+  renderGames();
+});
+
+function renderGames(){
+  const teamVal = teamSelect.value;
+  const playerVal = playerSelect.value;
+
+  gamesTable.innerHTML="";
+
+  gamesData.filter(g=>{
+    let ok=true;
+    if(teamVal){
+      ok = g.team1===teamVal || g.team2===teamVal;
+    }
+    if(ok && playerVal && g.players){
+      ok = g.players.includes(playerVal);
+    }
+    return ok;
+  }).forEach(g=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${g.date||""}</td>
+      <td>${g.team1||""} vs ${g.team2||""}</td>
+      <td>${g.winner||""}</td>
+      <td>${g.score||""}</td>
+    `;
+    gamesTable.appendChild(tr);
+  });
+}
+
+teamSelect.addEventListener("change",renderGames);
+playerSelect.addEventListener("change",renderGames);
+</script>
+
+</body>
+</html>
