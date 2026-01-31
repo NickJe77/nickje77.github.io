@@ -27,8 +27,9 @@ body{
   padding:30px 20px 60px;
 }
 
-h1{text-align:center;margin-bottom:10px;}
-.subtitle{text-align:center;color:#666;margin-bottom:20px;}
+h1{text-align:center;margin-bottom:6px;}
+.subtitle{text-align:center;color:#666;margin-bottom:10px;}
+.stats{text-align:center;margin-bottom:20px;font-weight:600;}
 
 table{
   width:100%;
@@ -43,8 +44,14 @@ th{
   background:#f0f0f0;
   position:sticky;
   top:0;
+  cursor:pointer;
 }
 tr:nth-child(even){background:#f6f9ff;}
+
+tfoot tr{
+  background:#eee;
+  font-weight:700;
+}
 
 .bad{
   background:#fff3f3;
@@ -75,25 +82,30 @@ tr:nth-child(even){background:#f6f9ff;}
 <div class="page-wrap">
 
 <h1 id="title">NBA Player</h1>
-<div class="subtitle" id="subtitle"></div>
+<div class="subtitle">Career Game Log</div>
+<div class="stats" id="statsLine"></div>
 
 <div id="errorBox" class="bad" style="display:none;"></div>
 
 <table id="gamesTable" style="display:none;">
 <thead>
 <tr>
-  <th>Season</th>
+  <th data-key="season">Season</th>
   <th>Game</th>
   <th>Team</th>
-  <th>MIN</th>
-  <th>PTS</th>
-  <th>REB</th>
-  <th>AST</th>
-  <th>STL</th>
-  <th>BLK</th>
+  <th data-key="min">MIN</th>
+  <th data-key="pts">PTS</th>
+  <th data-key="reb">REB</th>
+  <th data-key="ast">AST</th>
+  <th data-key="stl">STL</th>
+  <th data-key="blk">BLK</th>
 </tr>
 </thead>
 <tbody id="gamesBody"></tbody>
+<tfoot>
+<tr id="totalsRow"></tr>
+<tr id="averagesRow"></tr>
+</tfoot>
 </table>
 
 </div>
@@ -103,10 +115,12 @@ const params = new URLSearchParams(window.location.search);
 const playerName = params.get("player");
 
 const titleEl = document.getElementById("title");
-const subtitleEl = document.getElementById("subtitle");
+const statsLine = document.getElementById("statsLine");
 const errorBox = document.getElementById("errorBox");
 const gamesTable = document.getElementById("gamesTable");
 const gamesBody = document.getElementById("gamesBody");
+const totalsRow = document.getElementById("totalsRow");
+const averagesRow = document.getElementById("averagesRow");
 
 const seasonFiles = [
   "1976-77","1977-78","1978-79","1979-80","1981-82","2023-24"
@@ -121,6 +135,9 @@ function showError(msg){
   errorBox.textContent = msg;
 }
 
+let rows = [];
+let currentSort = {key:null, dir:-1};
+
 async function loadPlayer(){
   if(!playerName){
     showError("Missing player parameter.");
@@ -128,9 +145,6 @@ async function loadPlayer(){
   }
 
   titleEl.textContent = playerName;
-  subtitleEl.textContent = "Career Game Log";
-
-  let rows = [];
 
   for(const season of seasonFiles){
     try{
@@ -145,12 +159,12 @@ async function loadPlayer(){
               season,
               game: `${g.home_team} vs ${g.away_team}`,
               team: p.team,
-              min: p.min,
-              pts: p.pts,
-              reb: p.reb,
-              ast: p.ast,
-              stl: p.stl,
-              blk: p.blk
+              min: parseFloat(p.min)||0,
+              pts: parseInt(p.pts)||0,
+              reb: parseInt(p.reb)||0,
+              ast: parseInt(p.ast)||0,
+              stl: parseInt(p.stl)||0,
+              blk: parseInt(p.blk)||0
             });
           }
         });
@@ -164,31 +178,74 @@ async function loadPlayer(){
     return;
   }
 
-  // sort newest season first
-  rows.sort((a,b)=>b.season.localeCompare(a.season));
+  renderTable();
+  gamesTable.style.display = "table";
+}
+
+function renderTable(){
+  gamesBody.innerHTML = "";
+
+  let totals = {min:0,pts:0,reb:0,ast:0,stl:0,blk:0};
 
   rows.forEach(r=>{
+    totals.min+=r.min;
+    totals.pts+=r.pts;
+    totals.reb+=r.reb;
+    totals.ast+=r.ast;
+    totals.stl+=r.stl;
+    totals.blk+=r.blk;
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${r.season}</td>
-      <td>
-        <a class="game-link" href="nba-game.html?season=${encodeURIComponent(r.season)}&game=${encodeURIComponent(r.game)}">
-          ${r.game}
-        </a>
-      </td>
+      <td><a class="game-link" href="nba-game.html?season=${encodeURIComponent(r.season)}&game=${encodeURIComponent(r.game)}">${r.game}</a></td>
       <td>${r.team}</td>
-      <td>${r.min||""}</td>
-      <td>${r.pts||""}</td>
-      <td>${r.reb||""}</td>
-      <td>${r.ast||""}</td>
-      <td>${r.stl||""}</td>
-      <td>${r.blk||""}</td>
+      <td>${r.min}</td>
+      <td>${r.pts}</td>
+      <td>${r.reb}</td>
+      <td>${r.ast}</td>
+      <td>${r.stl}</td>
+      <td>${r.blk}</td>
     `;
     gamesBody.appendChild(tr);
   });
 
-  gamesTable.style.display = "table";
+  const games = rows.length;
+
+  totalsRow.innerHTML = `
+    <td colspan="3">TOTALS (${games} games)</td>
+    <td>${totals.min}</td>
+    <td>${totals.pts}</td>
+    <td>${totals.reb}</td>
+    <td>${totals.ast}</td>
+    <td>${totals.stl}</td>
+    <td>${totals.blk}</td>
+  `;
+
+  averagesRow.innerHTML = `
+    <td colspan="3">AVERAGES</td>
+    <td>${(totals.min/games).toFixed(1)}</td>
+    <td>${(totals.pts/games).toFixed(1)}</td>
+    <td>${(totals.reb/games).toFixed(1)}</td>
+    <td>${(totals.ast/games).toFixed(1)}</td>
+    <td>${(totals.stl/games).toFixed(1)}</td>
+    <td>${(totals.blk/games).toFixed(1)}</td>
+  `;
+
+  statsLine.textContent =
+    `Games: ${games} | Points: ${totals.pts} | Rebounds: ${totals.reb} | Assists: ${totals.ast}`;
 }
+
+document.querySelectorAll("th[data-key]").forEach(th=>{
+  th.addEventListener("click",()=>{
+    const key = th.dataset.key;
+    currentSort.dir = currentSort.key===key ? currentSort.dir*-1 : -1;
+    currentSort.key = key;
+
+    rows.sort((a,b)=>(b[key]-a[key])*currentSort.dir);
+    renderTable();
+  });
+});
 
 loadPlayer();
 </script>
