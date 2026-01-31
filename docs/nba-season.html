@@ -74,6 +74,8 @@ Game Type:
 </div>
 
 <script>
+const BASE_PATH = "data/nba/";
+
 const params = new URLSearchParams(window.location.search);
 let seasonParam = params.get("season");
 
@@ -84,21 +86,24 @@ const titleEl = document.getElementById("title");
 const typeFilter = document.getElementById("typeFilter");
 
 function seasonToFile(season){
-  return "data/nba/nba_season_" + season.replace("-","_") + ".json";
+  return BASE_PATH + "nba_season_" + season.replace("-","_") + ".json";
 }
 
+/* FAST season detection (parallel, not sequential) */
 async function detectSeasons(){
-  const seasons = [];
+  const years = [];
   for(let y=1976; y<=2030; y++){
-    const season = `${y}-${String(y+1).slice(2)}`;
-    try{
-      const res = await fetch(seasonToFile(season));
-      if(res.ok){
-        seasons.push(season);
-      }
-    }catch(e){}
+    years.push(`${y}-${String(y+1).slice(2)}`);
   }
-  return seasons.sort((a,b)=>b.localeCompare(a));
+
+  const checks = years.map(season =>
+    fetch(seasonToFile(season))
+      .then(r => r.ok ? season : null)
+      .catch(()=>null)
+  );
+
+  const results = await Promise.all(checks);
+  return results.filter(Boolean).sort((a,b)=>b.localeCompare(a));
 }
 
 seasonSelect.addEventListener("change",()=>{
@@ -113,6 +118,11 @@ init();
 
 async function init(){
   const seasonFiles = await detectSeasons();
+
+  if(seasonFiles.length === 0){
+    gamesTable.innerHTML = `<tr><td colspan="4">No season files found</td></tr>`;
+    return;
+  }
 
   seasonFiles.forEach(s=>{
     const opt = document.createElement("option");
@@ -140,7 +150,7 @@ async function loadSeason(season){
     const data = await res.json();
 
     const standings = {};
-    let games = (data.games || []).slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
+    const games = data.games || []; // DO NOT SORT BY DATE
 
     games.forEach(g=>{
       const isPlayoff = g.round && g.round.toLowerCase().includes("playoff");
@@ -168,9 +178,11 @@ async function loadSeason(season){
         <td>${g.home_points} – ${g.away_points}</td>
       `;
 
-      tr.onclick = () => location.href =
-        "nba-game.html?season=" + encodeURIComponent(season) +
-        "&game=" + encodeURIComponent(g.home_team + " vs " + g.away_team);
+      tr.onclick = () =>
+        location.href = "nba-game.html?season=" +
+        encodeURIComponent(season) +
+        "&game=" +
+        encodeURIComponent(g.home_team + " vs " + g.away_team);
 
       gamesTable.appendChild(tr);
     });
