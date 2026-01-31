@@ -30,7 +30,16 @@ body{
 }
 
 h1{text-align:center;margin-bottom:6px;}
-.subtitle{text-align:center;color:#666;margin-bottom:20px;}
+.subtitle{text-align:center;color:#666;margin-bottom:12px;}
+
+.filters{
+  text-align:center;
+  margin-bottom:20px;
+}
+select{
+  padding:8px 14px;
+  font-size:15px;
+}
 
 .stats{
   display:flex;
@@ -71,7 +80,14 @@ tr:nth-child(even){background:#f6f9ff;}
 <div class="page-wrap">
 
 <h1 id="playerName"></h1>
-<div class="subtitle" id="subtitle"></div>
+<div class="subtitle">Career Game Log</div>
+
+<!-- OPPOSITION FILTER -->
+<div class="filters">
+  <select id="oppositionFilter">
+    <option value="">All Opponents</option>
+  </select>
+</div>
 
 <div class="stats">
   <div class="stat"><b id="games">0</b>Games</div>
@@ -106,7 +122,9 @@ const params = new URLSearchParams(window.location.search);
 const player = params.get("player");
 
 document.getElementById("playerName").textContent = player;
-document.getElementById("subtitle").textContent = "Career Game Log";
+
+const oppositionSelect = document.getElementById("oppositionFilter");
+const logTable = document.getElementById("logTable");
 
 const seasonFiles = [
   "nba_season_1976_77.json",
@@ -116,10 +134,7 @@ const seasonFiles = [
   "nba_season_2023_24.json"
 ];
 
-let totalGames = 0;
-let totalPoints = 0;
-let totalReb = 0;
-let totalAst = 0;
+let allGames = [];
 
 /* DATE FIX */
 function cleanDate(raw){
@@ -137,6 +152,8 @@ function cleanDate(raw){
 }
 
 async function loadPlayer(){
+  const opponents = new Set();
+
   for(const file of seasonFiles){
     try{
       const res = await fetch("data/nba/" + file);
@@ -146,26 +163,27 @@ async function loadPlayer(){
         g.players.forEach(p=>{
           if(p.player === player){
 
-            totalGames++;
-            totalPoints += p.pts || 0;
-            totalReb += p.reb || 0;
-            totalAst += p.ast || 0;
+            const opponent =
+              g.home_team === p.team
+                ? g.away_team
+                : g.home_team;
 
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-              <td>${data.season}</td>
-              <td>${cleanDate(g.date)}</td>
-              <td>${g.home_team} vs ${g.away_team}</td>
-              <td>${p.min || ""}</td>
-              <td>${p.pts || 0}</td>
-              <td>${p.reb || 0}</td>
-              <td>${p.ast || 0}</td>
-              <td>${p.stl || 0}</td>
-              <td>${p.blk || 0}</td>
-              <td>${p.to || 0}</td>
-              <td>${p.pf || 0}</td>
-            `;
-            document.getElementById("logTable").appendChild(tr);
+            opponents.add(opponent);
+
+            allGames.push({
+              season: data.season,
+              date: cleanDate(g.date),
+              game: g.home_team + " vs " + g.away_team,
+              opponent: opponent,
+              min: p.min || "",
+              pts: p.pts || 0,
+              reb: p.reb || 0,
+              ast: p.ast || 0,
+              stl: p.stl || 0,
+              blk: p.blk || 0,
+              to: p.to || 0,
+              pf: p.pf || 0
+            });
           }
         });
       });
@@ -173,11 +191,57 @@ async function loadPlayer(){
     }catch(e){}
   }
 
-  document.getElementById("games").textContent = totalGames;
-  document.getElementById("points").textContent = totalPoints;
-  document.getElementById("rebounds").textContent = totalReb;
-  document.getElementById("assists").textContent = totalAst;
+  opponents.forEach(team=>{
+    const o=document.createElement("option");
+    o.value=team;
+    o.textContent=team;
+    oppositionSelect.appendChild(o);
+  });
+
+  renderTable();
 }
+
+function renderTable(){
+  const opponentVal = oppositionSelect.value;
+
+  logTable.innerHTML="";
+
+  let games=0, pts=0, reb=0, ast=0;
+
+  allGames
+    .filter(g=>{
+      return !opponentVal || g.opponent === opponentVal;
+    })
+    .forEach(g=>{
+      games++;
+      pts+=g.pts;
+      reb+=g.reb;
+      ast+=g.ast;
+
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>${g.season}</td>
+        <td>${g.date}</td>
+        <td>${g.game}</td>
+        <td>${g.min}</td>
+        <td>${g.pts}</td>
+        <td>${g.reb}</td>
+        <td>${g.ast}</td>
+        <td>${g.stl}</td>
+        <td>${g.blk}</td>
+        <td>${g.to}</td>
+        <td>${g.pf}</td>
+      `;
+      logTable.appendChild(tr);
+    });
+
+  document.getElementById("games").textContent = games;
+  document.getElementById("points").textContent = pts;
+  document.getElementById("rebounds").textContent = reb;
+  document.getElementById("assists").textContent = ast;
+}
+
+oppositionSelect.addEventListener("change",renderTable);
 
 loadPlayer();
 </script>
