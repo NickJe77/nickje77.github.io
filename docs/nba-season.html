@@ -85,20 +85,28 @@ const standingsTable = document.getElementById("standingsTable");
 const titleEl = document.getElementById("title");
 const typeFilter = document.getElementById("typeFilter");
 
+const monthMap = {
+  "t":"Oct",
+  "v":"Nov",
+  "c":"Dec",
+  "Jan":"Jan","Feb":"Feb","Mar":"Mar","Apr":"Apr",
+  "May":"May","Jun":"Jun","Jul":"Jul","Aug":"Aug","Sep":"Sep"
+};
+
 function seasonToFile(season){
   return BASE_PATH + "nba_season_" + season.replace("-","_") + ".json";
 }
 
-/* FAST auto season detection */
+/* AUTO season detection */
 async function detectSeasons(){
-  const years = [];
-  for(let y=1976; y<=2030; y++){
+  const years=[];
+  for(let y=1976;y<=2030;y++){
     years.push(`${y}-${String(y+1).slice(2)}`);
   }
 
   const checks = years.map(season =>
     fetch(seasonToFile(season))
-      .then(r => r.ok ? season : null)
+      .then(r=>r.ok?season:null)
       .catch(()=>null)
   );
 
@@ -107,7 +115,7 @@ async function detectSeasons(){
 }
 
 seasonSelect.addEventListener("change",()=>{
-  location.href = "nba-season.html?season=" + seasonSelect.value;
+  location.href="nba-season.html?season="+seasonSelect.value;
 });
 
 typeFilter.addEventListener("change",()=>{
@@ -117,74 +125,83 @@ typeFilter.addEventListener("change",()=>{
 init();
 
 async function init(){
-  const seasonFiles = await detectSeasons();
+  const seasonFiles=await detectSeasons();
 
-  if(seasonFiles.length === 0){
-    gamesTable.innerHTML = `<tr><td colspan="4">No season files found</td></tr>`;
+  if(!seasonFiles.length){
+    gamesTable.innerHTML=`<tr><td colspan="4">No season files found</td></tr>`;
     return;
   }
 
   seasonFiles.forEach(s=>{
-    const opt = document.createElement("option");
-    opt.value = s;
-    opt.textContent = s;
+    const opt=document.createElement("option");
+    opt.value=s;
+    opt.textContent=s;
     seasonSelect.appendChild(opt);
   });
 
-  if(!seasonParam || !seasonFiles.includes(seasonParam)){
-    seasonParam = seasonFiles[0];
+  if(!seasonParam||!seasonFiles.includes(seasonParam)){
+    seasonParam=seasonFiles[0];
   }
 
-  seasonSelect.value = seasonParam;
+  seasonSelect.value=seasonParam;
   loadSeason(seasonParam);
 }
 
-/* FIX DATE BUG — add correct year based on season */
-function parseGameDate(dateStr, season){
-  if(!dateStr) return new Date(0);
+/* PARSE ODD MONTH LETTERS */
+function parseGameDate(raw,season){
+  if(!raw) return new Date(0);
 
-  const [startYear,endShort] = season.split("-");
-  const endYear = parseInt(startYear) + 1;
+  let clean = raw.replace(",","").trim();
+  let parts = clean.split(" ");
 
-  const earlyMonths = ["Jan","Feb","Mar","Apr","May","Jun"];
-  const useYear = earlyMonths.some(m => dateStr.includes(m)) ? endYear : startYear;
+  let m = monthMap[parts[0]] || parts[0];
+  let d = parts[1];
+  let y = parts[2];
 
-  return new Date(dateStr + " " + useYear);
+  return new Date(`${m} ${d} ${y}`);
+}
+
+function formatNice(raw){
+  if(!raw) return "";
+  let clean = raw.replace(",","").trim();
+  let parts = clean.split(" ");
+
+  let m = monthMap[parts[0]] || parts[0];
+  return `${m} ${parts[1]} ${parts[2]}`;
 }
 
 async function loadSeason(season){
-  const file = seasonToFile(season);
-  titleEl.textContent = "NBA Season " + season;
-  gamesTable.innerHTML = "";
-  standingsTable.innerHTML = "";
+  const file=seasonToFile(season);
+  titleEl.textContent="NBA Season "+season;
+  gamesTable.innerHTML="";
+  standingsTable.innerHTML="";
 
   try{
-    const res = await fetch(file);
-    const data = await res.json();
+    const res=await fetch(file);
+    const data=await res.json();
 
-    const standings = {};
+    const standings={};
 
-    const games = (data.games || []).slice().sort((a,b)=>{
-      return parseGameDate(b.date||"",season) - parseGameDate(a.date||"",season);
+    const games=(data.games||[]).slice().sort((a,b)=>{
+      return parseGameDate(b.date,season)-parseGameDate(a.date,season);
     });
 
     games.forEach(g=>{
-      const isPlayoff = g.round && g.round.toLowerCase().includes("playoff");
+      const isPlayoff=g.is_playoffs||false;
+      if(typeFilter.value==="playoffs"&&!isPlayoff)return;
+      if(typeFilter.value==="regular"&&isPlayoff)return;
 
-      if(typeFilter.value==="playoffs" && !isPlayoff) return;
-      if(typeFilter.value==="regular" && isPlayoff) return;
+      const winner=g.home_points>g.away_points?g.home_team:g.away_team;
+      const loser=g.home_points>g.away_points?g.away_team:g.home_team;
 
-      const winner = g.home_points > g.away_points ? g.home_team : g.away_team;
-      const loser  = g.home_points > g.away_points ? g.away_team : g.home_team;
-
-      standings[winner] = standings[winner] || {w:0,l:0};
-      standings[loser]  = standings[loser]  || {w:0,l:0};
+      standings[winner]=standings[winner]||{w:0,l:0};
+      standings[loser]=standings[loser]||{w:0,l:0};
       standings[winner].w++;
       standings[loser].l++;
 
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${g.date || ""}</td>
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>${formatNice(g.date)}</td>
         <td>
           <a href="nba-team.html?team=${encodeURIComponent(g.home_team)}">${g.home_team}</a>
           vs
@@ -194,24 +211,23 @@ async function loadSeason(season){
         <td>${g.home_points} – ${g.away_points}</td>
       `;
 
-      tr.onclick = () =>
-        location.href =
-          "nba-game.html?season=" + encodeURIComponent(season) +
-          "&game=" + encodeURIComponent(g.home_team + " vs " + g.away_team);
+      tr.onclick=()=>location.href=
+        "nba-game.html?season="+encodeURIComponent(season)+
+        "&game="+encodeURIComponent(g.home_team+" vs "+g.away_team);
 
       gamesTable.appendChild(tr);
     });
 
     Object.entries(standings)
-      .sort((a,b)=>b[1].w - a[1].w)
+      .sort((a,b)=>b[1].w-a[1].w)
       .forEach(([team,rec])=>{
-        const tr = document.createElement("tr");
-        tr.innerHTML = `<td>${team}</td><td>${rec.w}</td><td>${rec.l}</td>`;
+        const tr=document.createElement("tr");
+        tr.innerHTML=`<td>${team}</td><td>${rec.w}</td><td>${rec.l}</td>`;
         standingsTable.appendChild(tr);
       });
 
   }catch(e){
-    gamesTable.innerHTML = `<tr><td colspan="4">Could not load ${file}</td></tr>`;
+    gamesTable.innerHTML=`<tr><td colspan="4">Could not load ${file}</td></tr>`;
   }
 }
 </script>
