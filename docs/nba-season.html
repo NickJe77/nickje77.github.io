@@ -99,11 +99,13 @@ async function detectSeasons(){
   for(let y=1976;y<=2030;y++){
     years.push(`${y}-${String(y+1).slice(2)}`);
   }
+
   const checks = years.map(season =>
     fetch(seasonToFile(season))
       .then(r=>r.ok?season:null)
       .catch(()=>null)
   );
+
   const results = await Promise.all(checks);
   return results.filter(Boolean).sort((a,b)=>b.localeCompare(a));
 }
@@ -111,6 +113,7 @@ async function detectSeasons(){
 seasonSelect.addEventListener("change",()=>{
   location.href="nba-season.html?season="+seasonSelect.value;
 });
+
 typeFilter.addEventListener("change",()=>{
   loadSeason(seasonSelect.value);
 });
@@ -140,25 +143,18 @@ async function init(){
   loadSeason(seasonParam);
 }
 
-/* ---------- ROCK SOLID DATE PARSING ----------
-   Raw examples:
-     "t 10, 1980"  (t=Oct)
-     "v 21, 1980"  (v=Nov)
-     "c 05, 1980"  (c=Dec)
-     "Jan 15, 1981"
-   We DO NOT use new Date("string") parsing.
-   We build UTC timestamps ourselves.
---------------------------------------------- */
-
+/* ----- DATE FIX + SORT KEY (NO BROWSER PARSING) ----- */
 const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 function monthIndex(token){
   const t = (token || "").toLowerCase();
 
+  // your special codes
   if(t === "t") return 9;   // Oct
   if(t === "v") return 10;  // Nov
   if(t === "c") return 11;  // Dec
 
+  // normal months
   const map = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
   if(map[t] !== undefined) return map[t];
 
@@ -168,28 +164,26 @@ function monthIndex(token){
 function parseParts(raw){
   if(!raw) return null;
 
-  // Trim, then match "<month> <day>, <year>"
+  // Expect: "<mon> <day>, <year>"
   const s = String(raw).trim();
   const m = s.match(/^([A-Za-z]+)\s+(\d{1,2})\s*,\s*(\d{4})$/);
   if(!m) return null;
 
-  // Clean month token to letters only (kills hidden junk)
+  // clean month token (removes hidden junk)
   const monToken = (m[1] || "").replace(/[^A-Za-z]/g,"").trim();
-  const day = parseInt(m[2], 10);
-  const year = parseInt(m[3], 10);
-  if(!monToken || !day || !year) return null;
+  const day = parseInt(m[2],10);
+  const year = parseInt(m[3],10);
 
-  const mt = monToken.length > 3 ? monToken.slice(0,3) : monToken;
-  const mi = monthIndex(mt);
-  if(mi === null) return null;
+  const mi = monthIndex(monToken.length > 3 ? monToken.slice(0,3) : monToken);
+  if(mi === null || !day || !year) return null;
 
-  return { mi, day, year };
+  return {mi, day, year};
 }
 
 function dateKey(raw){
   const p = parseParts(raw);
-  if(!p) return -1; // invalid goes to bottom (when sorting desc)
-  return Date.UTC(p.year, p.mi, p.day);
+  if(!p) return -1;
+  return Date.UTC(p.year, p.mi, p.day); // numeric sortable
 }
 
 function formatNice(raw){
@@ -197,6 +191,7 @@ function formatNice(raw){
   if(!p) return raw || "";
   return `${MONTH_ABBR[p.mi]} ${p.day} ${p.year}`;
 }
+/* --------------------------------------------------- */
 
 async function loadSeason(season){
   const file=seasonToFile(season);
@@ -213,13 +208,13 @@ async function loadSeason(season){
     const standings={};
     let games=(data.games||[]).slice();
 
-    // Sort newest -> oldest using numeric UTC keys (stable)
+    // NEWEST -> OLDEST (descending)
     games.sort((a,b)=>{
       const kb = dateKey(b.date);
       const ka = dateKey(a.date);
       if(kb !== ka) return kb - ka;
 
-      // tie-breaker to keep stable ordering
+      // tiebreaker (keeps stable ordering)
       const gb = (b.home_team||"") + " vs " + (b.away_team||"");
       const ga = (a.home_team||"") + " vs " + (a.away_team||"");
       return gb.localeCompare(ga);
