@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NBA Leaders | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:#fff;
+}
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1100px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+h1{text-align:center;margin-bottom:20px;}
+
+select{
+  padding:8px 14px;
+  font-size:15px;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:center;
+}
+th{
+  background:#f0f0f0;
+  cursor:pointer;
+  position:sticky;
+  top:0;
+}
+tr:nth-child(even){background:#f6f9ff;}
+tr:hover{background:#e9f0ff;}
+a{color:#0056d6;text-decoration:none;font-weight:600;}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="nba.html">NBA</a>
+  <a href="nba-season.html">Seasons</a>
+</div>
+
+<div class="page-wrap">
+
+<h1>NBA Career Leaders</h1>
+
+<div style="text-align:center;margin-bottom:20px;">
+  Stat:
+  <select id="statSelect">
+    <option value="pts">Points</option>
+    <option value="reb">Rebounds</option>
+    <option value="ast">Assists</option>
+    <option value="stl">Steals</option>
+    <option value="blk">Blocks</option>
+  </select>
+</div>
+
+<table>
+<thead>
+<tr>
+  <th>Rank</th>
+  <th>Player</th>
+  <th>Total</th>
+</tr>
+</thead>
+<tbody id="leaderTable"></tbody>
+</table>
+
+</div>
+
+<script>
+const files = [
+  "nba_season_1976_77.json",
+  "nba_season_1977_78.json",
+  "nba_season_1978_79.json",
+  "nba_season_1979_80.json",
+  "nba_season_2023_24.json"
+];
+
+let players = {};
+
+async function loadData(){
+  for(const file of files){
+    const res = await fetch("data/nba/" + file);
+    const data = await res.json();
+
+    data.games.forEach(g=>{
+      g.players.forEach(p=>{
+        if(!players[p.player]){
+          players[p.player] = { pts:0, reb:0, ast:0, stl:0, blk:0 };
+        }
+        players[p.player].pts += p.pts || 0;
+        players[p.player].reb += p.reb || 0;
+        players[p.player].ast += p.ast || 0;
+        players[p.player].stl += p.stl || 0;
+        players[p.player].blk += p.blk || 0;
+      });
+    });
+  }
+  render();
+}
+
+function render(){
+  const stat = document.getElementById("statSelect").value;
+  const tbody = document.getElementById("leaderTable");
+  tbody.innerHTML="";
+
+  const sorted = Object.entries(players)
+    .sort((a,b)=>b[1][stat]-a[1][stat])
+    .slice(0,100);
+
+  sorted.forEach((p,i)=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${i+1}</td>
+      <td><a href="nba-player.html?player=${encodeURIComponent(p[0])}">${p[0]}</a></td>
+      <td>${p[1][stat]}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+document.getElementById("statSelect").addEventListener("change",render);
+loadData();
+</script>
+
+</body>
+</html>
