@@ -89,7 +89,7 @@ function seasonToFile(season){
   return BASE_PATH + "nba_season_" + season.replace("-","_") + ".json";
 }
 
-/* FAST season detection (parallel, not sequential) */
+/* FAST auto season detection */
 async function detectSeasons(){
   const years = [];
   for(let y=1976; y<=2030; y++){
@@ -139,6 +139,16 @@ async function init(){
   loadSeason(seasonParam);
 }
 
+function parseGameDate(dateStr, season){
+  const [startYear,endShort] = season.split("-");
+  const endYear = parseInt("20"+endShort);
+
+  const earlyMonths = ["Jan","Feb","Mar","Apr"];
+  const useYear = earlyMonths.some(m => dateStr.includes(m)) ? endYear : startYear;
+
+  return new Date(dateStr + " " + useYear);
+}
+
 async function loadSeason(season){
   const file = seasonToFile(season);
   titleEl.textContent = "NBA Season " + season;
@@ -150,7 +160,10 @@ async function loadSeason(season){
     const data = await res.json();
 
     const standings = {};
-    const games = data.games || []; // DO NOT SORT BY DATE
+
+    const games = (data.games || []).slice().sort((a,b)=>{
+      return parseGameDate(b.date||"",season) - parseGameDate(a.date||"",season);
+    });
 
     games.forEach(g=>{
       const isPlayoff = g.round && g.round.toLowerCase().includes("playoff");
