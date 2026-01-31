@@ -76,6 +76,11 @@ tr:hover{background:#e9f0ff;}
   text-decoration:none;
   font-weight:600;
 }
+.team-link{
+  color:#0056d6;
+  text-decoration:none;
+  font-weight:600;
+}
 .note{
   text-align:center;
   color:#888;
@@ -179,13 +184,16 @@ function playerHref(name){
   return `nba-player.html?player=${encodeURIComponent(name)}`;
 }
 
+function teamHref(name){
+  return `nba-team.html?team=${encodeURIComponent(name)}`;
+}
+
 function sortBy(key){
   if(sortKey === key){
     sortAsc = !sortAsc;
   }else{
     sortKey = key;
-    // IMPORTANT: default to HIGHEST first when you click any header
-    sortAsc = false;
+    sortAsc = false; // highest first
   }
   renderBox();
 }
@@ -199,19 +207,13 @@ function renderBox(){
       const av = a[sortKey];
       const bv = b[sortKey];
 
-      const aIsStr = (typeof av === "string");
-      const bIsStr = (typeof bv === "string");
-
-      if(aIsStr || bIsStr){
-        const aa = (av ?? "").toString();
-        const bb = (bv ?? "").toString();
-        return sortAsc ? aa.localeCompare(bb) : bb.localeCompare(aa);
+      if(typeof av === "string"){
+        return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
       }else{
         return sortAsc ? (av-bv) : (bv-av);
       }
     });
   }else{
-    // default: show best scoring lines first (feels right on load)
     sorted.sort((a,b)=>b.pts - a.pts);
   }
 
@@ -219,7 +221,7 @@ function renderBox(){
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td><a class="player-link" href="${playerHref(r.player)}">${r.player}</a></td>
-      <td>${r.team}</td>
+      <td><a class="team-link" href="${teamHref(r.team)}">${r.team}</a></td>
       <td>${r.min}</td>
       <td>${r.pts}</td>
       <td>${r.reb}</td>
@@ -235,13 +237,13 @@ function renderBox(){
 
 async function loadGame(){
   if(!season || !gameStr){
-    showError("Missing URL parameters. Expected ?season=YYYY-YY&game=Home%20Team%20vs%20Away%20Team");
+    showError("Missing URL parameters.");
     return;
   }
 
   const file = seasonToFile(season);
   if(!file){
-    showError(`Season format not recognised: "${season}" (expected like 1976-77).`);
+    showError(`Season format not recognised: "${season}".`);
     return;
   }
 
@@ -254,29 +256,29 @@ async function loadGame(){
     const data = await res.json();
 
     const match = (data.games || []).find(g => {
-      const label = `${g.home_team} vs ${g.away_team}`;
-      return label === gameStr;
+      return `${g.home_team} vs ${g.away_team}` === gameStr;
     });
 
     if(!match){
-      showError(`Couldn't find this game in ${file}. Make sure the 'game' parameter matches "Home Team vs Away Team" exactly.`);
+      showError(`Couldn't find this game.`);
       return;
     }
 
-    // Summary
     summaryEl.style.display = "flex";
-    const hs = ("home_score" in match) ? match.home_score : (match.home_pts ?? match.homeScore ?? "");
-    const as = ("away_score" in match) ? match.away_score : (match.away_pts ?? match.awayScore ?? "");
-    const scoreText = (hs !== "" && as !== "")
-      ? `${match.home_team} ${hs} – ${as} ${match.away_team}`
-      : `${match.home_team} vs ${match.away_team}`;
-    scoreLine.textContent = scoreText;
+
+    const scoreText =
+      `${match.home_team} ${match.home_points} – ${match.away_points} ${match.away_team}`;
+
+    scoreLine.innerHTML = `
+      <a class="team-link" href="${teamHref(match.home_team)}">${match.home_team}</a>
+      ${match.home_points} – ${match.away_points}
+      <a class="team-link" href="${teamHref(match.away_team)}">${match.away_team}</a>
+    `;
 
     const date = match.date || "";
-    const venue = match.venue || match.arena || "";
+    const venue = match.venue || "";
     metaLine.textContent = [date, venue].filter(Boolean).join(" • ") || "—";
 
-    // Box score rows
     rows = (match.players || []).map(p=>({
       player: p.player || "",
       team: p.team || "",
@@ -291,7 +293,7 @@ async function loadGame(){
     }));
 
     boxTable.style.display = "table";
-    hint.textContent = "Click a column header to sort (defaults to highest first).";
+    hint.textContent = "Click a column header to sort (highest first).";
     renderBox();
 
   }catch(e){
