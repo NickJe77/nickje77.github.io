@@ -19,11 +19,8 @@ body{
   border-bottom:1px solid #ddd;
   font-weight:600;
 }
-.navbar a{
-  color:#0056d6;
-  text-decoration:none;
-  font-size:18px;
-}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
 .page-wrap{
   max-width:1200px;
   margin:0 auto;
@@ -49,9 +46,20 @@ h1{text-align:center;margin-bottom:6px;}
 }
 .stat b{display:block;font-size:18px;}
 
+.filters{
+  text-align:center;
+  margin-bottom:20px;
+}
+
+select{
+  padding:8px 14px;
+  font-size:15px;
+}
+
 table{
   width:100%;
   border-collapse:collapse;
+  margin-bottom:40px;
 }
 th,td{
   border-bottom:1px solid #ddd;
@@ -65,6 +73,8 @@ th{
 }
 tr:nth-child(even){background:#f6f9ff;}
 tr:hover{background:#e9f0ff;}
+
+a{color:#0056d6;text-decoration:none;font-weight:600;}
 </style>
 </head>
 
@@ -81,6 +91,13 @@ tr:hover{background:#e9f0ff;}
 <h1 id="teamName"></h1>
 <div class="subtitle">Team History</div>
 
+<div class="filters">
+  Season:
+  <select id="seasonFilter">
+    <option value="">All Seasons</option>
+  </select>
+</div>
+
 <div class="stats">
   <div class="stat"><b id="seasons">0</b>Seasons</div>
   <div class="stat"><b id="games">0</b>Games</div>
@@ -90,8 +107,36 @@ tr:hover{background:#e9f0ff;}
   <div class="stat"><b id="pa">0</b>Points Against</div>
 </div>
 
-<h2 style="text-align:center;margin:30px 0 10px;">Games</h2>
+<h2>Season Summary</h2>
+<table>
+<thead>
+<tr>
+  <th>Season</th>
+  <th>Games</th>
+  <th>Wins</th>
+  <th>Losses</th>
+  <th>PF</th>
+  <th>PA</th>
+</tr>
+</thead>
+<tbody id="seasonTable"></tbody>
+</table>
 
+<h2>Players</h2>
+<table>
+<thead>
+<tr>
+  <th>Player</th>
+  <th>Games</th>
+  <th>Points</th>
+  <th>Rebounds</th>
+  <th>Assists</th>
+</tr>
+</thead>
+<tbody id="playersTable"></tbody>
+</table>
+
+<h2>Games</h2>
 <table>
 <thead>
 <tr>
@@ -112,6 +157,8 @@ const params = new URLSearchParams(window.location.search);
 const team = params.get("team");
 document.getElementById("teamName").textContent = team;
 
+const seasonFilter = document.getElementById("seasonFilter");
+
 const seasonFiles = [
   "nba_season_1976_77.json",
   "nba_season_1977_78.json",
@@ -121,9 +168,9 @@ const seasonFiles = [
 ];
 
 let games = [];
-
+let seasonStats = {};
+let playerStats = {};
 let seasonsSet = new Set();
-let wins=0, losses=0, pf=0, pa=0;
 
 async function loadTeam(){
   for(const file of seasonFiles){
@@ -136,19 +183,37 @@ async function loadTeam(){
         const isAway = g.away_team === team;
         if(!isHome && !isAway) return;
 
-        seasonsSet.add(data.season);
+        const season = data.season;
+        seasonsSet.add(season);
+
+        if(!seasonStats[season]){
+          seasonStats[season] = { games:0, wins:0, losses:0, pf:0, pa:0 };
+        }
 
         const teamScore = isHome ? g.home_points : g.away_points;
         const oppScore = isHome ? g.away_points : g.home_points;
-
-        pf += teamScore;
-        pa += oppScore;
-
         const result = teamScore > oppScore ? "W" : "L";
-        if(result==="W") wins++; else losses++;
+
+        seasonStats[season].games++;
+        seasonStats[season].pf += teamScore;
+        seasonStats[season].pa += oppScore;
+        if(result==="W") seasonStats[season].wins++;
+        else seasonStats[season].losses++;
+
+        g.players.forEach(p=>{
+          if(p.team !== team) return;
+
+          if(!playerStats[p.player]){
+            playerStats[p.player] = { games:0, pts:0, reb:0, ast:0 };
+          }
+          playerStats[p.player].games++;
+          playerStats[p.player].pts += p.pts||0;
+          playerStats[p.player].reb += p.reb||0;
+          playerStats[p.player].ast += p.ast||0;
+        });
 
         games.push({
-          season: data.season,
+          season: season,
           seasonParam: file.replace("nba_season_","").replace(".json",""),
           date: g.date || "",
           game: g.home_team + " vs " + g.away_team,
@@ -161,41 +226,91 @@ async function loadTeam(){
     }catch(e){}
   }
 
+  seasonsSet.forEach(s=>{
+    const o=document.createElement("option");
+    o.value=s;
+    o.textContent=s;
+    seasonFilter.appendChild(o);
+  });
+
   render();
 }
 
 function render(){
-  document.getElementById("seasons").textContent = seasonsSet.size;
-  document.getElementById("games").textContent = games.length;
+  const seasonVal = seasonFilter.value;
+
+  let totalGames=0,wins=0,losses=0,pf=0,pa=0;
+
+  Object.entries(seasonStats).forEach(([s,v])=>{
+    if(seasonVal && s!==seasonVal) return;
+    totalGames+=v.games;
+    wins+=v.wins;
+    losses+=v.losses;
+    pf+=v.pf;
+    pa+=v.pa;
+  });
+
+  document.getElementById("seasons").textContent = seasonVal?1:seasonsSet.size;
+  document.getElementById("games").textContent = totalGames;
   document.getElementById("wins").textContent = wins;
   document.getElementById("losses").textContent = losses;
   document.getElementById("pf").textContent = pf;
   document.getElementById("pa").textContent = pa;
 
-  const tbody = document.getElementById("gamesTable");
-  tbody.innerHTML="";
-
-  games.forEach(g=>{
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${g.season}</td>
-      <td>${g.date}</td>
-      <td>${g.game}</td>
-      <td>${g.result}</td>
-      <td>${g.score}</td>
+  const seasonBody = document.getElementById("seasonTable");
+  seasonBody.innerHTML="";
+  Object.entries(seasonStats).forEach(([s,v])=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${s}</td>
+      <td>${v.games}</td>
+      <td>${v.wins}</td>
+      <td>${v.losses}</td>
+      <td>${v.pf}</td>
+      <td>${v.pa}</td>
     `;
-
-    tr.onclick = () => {
-      window.location.href =
-        "nba-game.html?season=" +
-        encodeURIComponent(g.seasonParam) +
-        "&game=" + g.gameIndex;
-    };
-
-    tbody.appendChild(tr);
+    seasonBody.appendChild(tr);
   });
+
+  const playersBody = document.getElementById("playersTable");
+  playersBody.innerHTML="";
+  Object.entries(playerStats)
+    .sort((a,b)=>b[1].pts-a[1].pts)
+    .forEach(([name,v])=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td><a href="nba-player.html?player=${encodeURIComponent(name)}">${name}</a></td>
+        <td>${v.games}</td>
+        <td>${v.pts}</td>
+        <td>${v.reb}</td>
+        <td>${v.ast}</td>
+      `;
+      playersBody.appendChild(tr);
+    });
+
+  const gamesBody = document.getElementById("gamesTable");
+  gamesBody.innerHTML="";
+  games
+    .filter(g=>!seasonVal || g.season===seasonVal)
+    .forEach(g=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>${g.season}</td>
+        <td>${g.date}</td>
+        <td>${g.game}</td>
+        <td>${g.result}</td>
+        <td>${g.score}</td>
+      `;
+      tr.onclick=()=>{
+        window.location.href=
+          "nba-game.html?season="+encodeURIComponent(g.seasonParam)+
+          "&game="+g.gameIndex;
+      };
+      gamesBody.appendChild(tr);
+    });
 }
 
+seasonFilter.addEventListener("change",render);
 loadTeam();
 </script>
 
