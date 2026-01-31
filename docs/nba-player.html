@@ -105,8 +105,8 @@ const gamesBody = document.getElementById("gamesBody");
 
 let rows = [];
 
+/* data lives in /docs/data/nba/ */
 function seasonToFile(season){
-  // page is in /docs/nba/, data is in /docs/data/nba/
   return "../data/nba/nba_season_" + season.replace("-","_") + ".json";
 }
 
@@ -115,16 +115,10 @@ function showError(msg){
   errorBox.textContent = msg;
 }
 
-async function detectSeasons(){
-  const seasons=[];
-  for(let y=1976;y<=2030;y++){
-    const s=`${y}-${String(y+1).slice(2)}`;
-    try{
-      const r = await fetch(seasonToFile(s));
-      if(r.ok) seasons.push(s);
-    }catch(e){}
-  }
-  return seasons;
+async function loadSeasons(){
+  const res = await fetch("../data/nba/seasons.json");
+  if(!res.ok) throw new Error("seasons.json not found");
+  return await res.json();
 }
 
 async function loadPlayer(){
@@ -135,14 +129,25 @@ async function loadPlayer(){
 
   titleEl.textContent = playerName;
 
-  const seasonFiles = await detectSeasons();
+  let seasons;
+  try{
+    seasons = await loadSeasons();
+  }catch(e){
+    showError("Could not load seasons.json");
+    return;
+  }
 
-  for(const season of seasonFiles){
-    try{
-      const res = await fetch(seasonToFile(season));
-      if(!res.ok) continue;
+  try{
+    const responses = await Promise.all(
+      seasons.map(s => fetch(seasonToFile(s)))
+    );
 
-      const data = await res.json();
+    const jsons = await Promise.all(
+      responses.filter(r=>r.ok).map(r=>r.json())
+    );
+
+    jsons.forEach((data, i)=>{
+      const season = seasons[i];
 
       data.games.forEach(game=>{
         game.players.forEach(p=>{
@@ -167,8 +172,11 @@ async function loadPlayer(){
           }
         });
       });
+    });
 
-    }catch(e){}
+  }catch(e){
+    showError("Failed loading season files");
+    return;
   }
 
   if(!rows.length){
