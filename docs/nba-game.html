@@ -5,8 +5,6 @@
 <title>NBA Game | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<link rel="stylesheet" href="style.css">
-
 <style>
 body{
   font-family:Inter,system-ui,Arial;
@@ -64,7 +62,6 @@ th,td{
 }
 th{
   background:#f0f0f0;
-  cursor:pointer;
   position:sticky;
   top:0;
   z-index:2;
@@ -72,11 +69,6 @@ th{
 tr:nth-child(even){background:#f6f9ff;}
 tr:hover{background:#e9f0ff;}
 .player-link{
-  color:#0056d6;
-  text-decoration:none;
-  font-weight:600;
-}
-.team-link{
   color:#0056d6;
   text-decoration:none;
   font-weight:600;
@@ -122,16 +114,16 @@ tr:hover{background:#e9f0ff;}
 <table id="boxTable" style="display:none;">
   <thead>
     <tr>
-      <th onclick="sortBy('player')">Player</th>
-      <th onclick="sortBy('team')">Team</th>
-      <th onclick="sortBy('min')">MIN</th>
-      <th onclick="sortBy('pts')">PTS</th>
-      <th onclick="sortBy('reb')">REB</th>
-      <th onclick="sortBy('ast')">AST</th>
-      <th onclick="sortBy('stl')">STL</th>
-      <th onclick="sortBy('blk')">BLK</th>
-      <th onclick="sortBy('to')">TO</th>
-      <th onclick="sortBy('pf')">PF</th>
+      <th>Player</th>
+      <th>Team</th>
+      <th>MIN</th>
+      <th>PTS</th>
+      <th>REB</th>
+      <th>AST</th>
+      <th>STL</th>
+      <th>BLK</th>
+      <th>TO</th>
+      <th>PF</th>
     </tr>
   </thead>
   <tbody id="boxBody"></tbody>
@@ -158,81 +150,13 @@ const boxTable = document.getElementById("boxTable");
 const boxBody = document.getElementById("boxBody");
 const hint = document.getElementById("hint");
 
-let rows = [];
-let sortKey = null;
-let sortAsc = true;
-
-// Convert "1976-77" -> "nba_season_1976_77.json"
 function seasonToFile(seasonStr){
-  if(!seasonStr) return null;
-  const m = seasonStr.match(/^(\d{4})-(\d{2})$/);
-  if(!m) return null;
-  return `nba_season_${m[1]}_${m[1].slice(0,2)}${m[2]}.json`;
+  return "data/nba/nba_season_" + seasonStr.replace("/", "-").replace("-", "_") + ".json";
 }
 
 function showError(msg){
   errorBox.style.display = "block";
   errorBox.textContent = msg;
-}
-
-function safeNum(v){
-  const n = Number(v);
-  return isNaN(n) ? 0 : n;
-}
-
-function playerHref(name){
-  return `nba-player.html?player=${encodeURIComponent(name)}`;
-}
-
-function teamHref(name){
-  return `nba-team.html?team=${encodeURIComponent(name)}`;
-}
-
-function sortBy(key){
-  if(sortKey === key){
-    sortAsc = !sortAsc;
-  }else{
-    sortKey = key;
-    sortAsc = false; // highest first
-  }
-  renderBox();
-}
-
-function renderBox(){
-  boxBody.innerHTML = "";
-
-  let sorted = [...rows];
-  if(sortKey){
-    sorted.sort((a,b)=>{
-      const av = a[sortKey];
-      const bv = b[sortKey];
-
-      if(typeof av === "string"){
-        return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
-      }else{
-        return sortAsc ? (av-bv) : (bv-av);
-      }
-    });
-  }else{
-    sorted.sort((a,b)=>b.pts - a.pts);
-  }
-
-  sorted.forEach(r=>{
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td><a class="player-link" href="${playerHref(r.player)}">${r.player}</a></td>
-      <td><a class="team-link" href="${teamHref(r.team)}">${r.team}</a></td>
-      <td>${r.min}</td>
-      <td>${r.pts}</td>
-      <td>${r.reb}</td>
-      <td>${r.ast}</td>
-      <td>${r.stl}</td>
-      <td>${r.blk}</td>
-      <td>${r.to}</td>
-      <td>${r.pf}</td>
-    `;
-    boxBody.appendChild(tr);
-  });
 }
 
 async function loadGame(){
@@ -242,16 +166,12 @@ async function loadGame(){
   }
 
   const file = seasonToFile(season);
-  if(!file){
-    showError(`Season format not recognised: "${season}".`);
-    return;
-  }
 
   titleEl.textContent = gameStr;
-  subtitleEl.textContent = `Season ${season}`;
+  subtitleEl.textContent = "Season " + season;
 
   try{
-    const res = await fetch("data/nba/" + file);
+    const res = await fetch(file);
     if(!res.ok) throw new Error("fetch failed");
     const data = await res.json();
 
@@ -260,44 +180,37 @@ async function loadGame(){
     });
 
     if(!match){
-      showError(`Couldn't find this game.`);
+      showError("Game not found in season file.");
       return;
     }
 
     summaryEl.style.display = "flex";
-
-    const scoreText =
+    scoreLine.textContent =
       `${match.home_team} ${match.home_points} – ${match.away_points} ${match.away_team}`;
 
-    scoreLine.innerHTML = `
-      <a class="team-link" href="${teamHref(match.home_team)}">${match.home_team}</a>
-      ${match.home_points} – ${match.away_points}
-      <a class="team-link" href="${teamHref(match.away_team)}">${match.away_team}</a>
-    `;
+    metaLine.textContent = [match.date, match.venue].filter(Boolean).join(" • ");
 
-    const date = match.date || "";
-    const venue = match.venue || "";
-    metaLine.textContent = [date, venue].filter(Boolean).join(" • ") || "—";
-
-    rows = (match.players || []).map(p=>({
-      player: p.player || "",
-      team: p.team || "",
-      min: p.min || "",
-      pts: safeNum(p.pts),
-      reb: safeNum(p.reb),
-      ast: safeNum(p.ast),
-      stl: safeNum(p.stl),
-      blk: safeNum(p.blk),
-      to: safeNum(p.to),
-      pf: safeNum(p.pf)
-    }));
+    (match.players || []).forEach(p=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><a class="player-link" href="nba-player.html?player=${encodeURIComponent(p.player)}">${p.player}</a></td>
+        <td>${p.team}</td>
+        <td>${p.min || ""}</td>
+        <td>${p.pts || 0}</td>
+        <td>${p.reb || 0}</td>
+        <td>${p.ast || 0}</td>
+        <td>${p.stl || 0}</td>
+        <td>${p.blk || 0}</td>
+        <td>${p.to || 0}</td>
+        <td>${p.pf || 0}</td>
+      `;
+      boxBody.appendChild(tr);
+    });
 
     boxTable.style.display = "table";
-    hint.textContent = "Click a column header to sort (highest first).";
-    renderBox();
 
   }catch(e){
-    showError("Could not load season file: data/nba/" + file);
+    showError("Could not load season file: " + file);
   }
 }
 
