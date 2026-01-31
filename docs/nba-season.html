@@ -95,11 +95,25 @@ const seasonFiles = [
   "nba_season_2023_24.json"
 ];
 
-Promise.all(
-  seasonFiles.map(file =>
-    fetch("data/nba/" + file).then(r => r.json())
-  )
-).then(seasons => {
+async function loadSeasons(){
+  const seasons = [];
+
+  for(const file of seasonFiles){
+    try{
+      const res = await fetch("data/nba/" + file);
+      if(!res.ok) continue;   // skip missing files safely
+      const json = await res.json();
+      seasons.push(json);
+    }catch(e){
+      console.warn("Failed to load", file);
+    }
+  }
+
+  if(seasons.length === 0){
+    tableBody.innerHTML =
+      "<tr><td colspan='4'>No data available.</td></tr>";
+    return;
+  }
 
   seasons.sort((a,b) => a.season.localeCompare(b.season));
 
@@ -113,12 +127,9 @@ Promise.all(
     `;
     tableBody.appendChild(tr);
   });
+}
 
-}).catch(err => {
-  console.error(err);
-  tableBody.innerHTML =
-    "<tr><td colspan='4'>No data available.</td></tr>";
-});
+loadSeasons();
 </script>
 
 </body>
