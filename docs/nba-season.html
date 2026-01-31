@@ -32,7 +32,7 @@ tr:hover{background:#e9f0ff;}
 
 <div class="page-wrap">
 
-<h1 id="title">NBA Seasons</h1>
+<h1 id="title">NBA Season</h1>
 
 <div class="filter-bar">
 Season:
@@ -89,7 +89,7 @@ function seasonToFile(season){
 
 async function detectSeasons(){
   const seasons = [];
-  for(let y=1970; y<=2030; y++){
+  for(let y=1976; y<=2030; y++){
     const season = `${y}-${String(y+1).slice(2)}`;
     try{
       const res = await fetch(seasonToFile(season));
@@ -102,9 +102,12 @@ async function detectSeasons(){
 }
 
 seasonSelect.addEventListener("change",()=>{
-  location.href="nba-season.html?season="+seasonSelect.value;
+  location.href = "nba-season.html?season=" + seasonSelect.value;
 });
-typeFilter.addEventListener("change",()=>loadSeason(seasonSelect.value));
+
+typeFilter.addEventListener("change",()=>{
+  loadSeason(seasonSelect.value);
+});
 
 init();
 
@@ -112,9 +115,9 @@ async function init(){
   const seasonFiles = await detectSeasons();
 
   seasonFiles.forEach(s=>{
-    const opt=document.createElement("option");
-    opt.value=s;
-    opt.textContent=s;
+    const opt = document.createElement("option");
+    opt.value = s;
+    opt.textContent = s;
     seasonSelect.appendChild(opt);
   });
 
@@ -127,18 +130,17 @@ async function init(){
 }
 
 async function loadSeason(season){
-  const file=seasonToFile(season);
-  titleEl.textContent="NBA Season "+season;
-  gamesTable.innerHTML="";
-  standingsTable.innerHTML="";
+  const file = seasonToFile(season);
+  titleEl.textContent = "NBA Season " + season;
+  gamesTable.innerHTML = "";
+  standingsTable.innerHTML = "";
 
   try{
-    const res=await fetch(file);
-    const data=await res.json();
+    const res = await fetch(file);
+    const data = await res.json();
 
-    const standings={};
-
-    let games=(data.games||[]).slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
+    const standings = {};
+    let games = (data.games || []).slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
 
     games.forEach(g=>{
       const isPlayoff = g.round && g.round.toLowerCase().includes("playoff");
@@ -146,15 +148,17 @@ async function loadSeason(season){
       if(typeFilter.value==="playoffs" && !isPlayoff) return;
       if(typeFilter.value==="regular" && isPlayoff) return;
 
-      const winner = g.home_points>g.away_points?g.home_team:g.away_team;
-      const loser = g.home_points>g.away_points?g.away_team:g.home_team;
+      const winner = g.home_points > g.away_points ? g.home_team : g.away_team;
+      const loser  = g.home_points > g.away_points ? g.away_team : g.home_team;
 
-      standings[winner]=(standings[winner]||{w:0,l:0}); standings[winner].w++;
-      standings[loser]=(standings[loser]||{w:0,l:0}); standings[loser].l++;
+      standings[winner] = standings[winner] || {w:0,l:0};
+      standings[loser]  = standings[loser]  || {w:0,l:0};
+      standings[winner].w++;
+      standings[loser].l++;
 
-      const tr=document.createElement("tr");
-      tr.innerHTML=`
-        <td>${g.date||""}</td>
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${g.date || ""}</td>
         <td>
           <a href="nba-team.html?team=${encodeURIComponent(g.home_team)}">${g.home_team}</a>
           vs
@@ -163,22 +167,24 @@ async function loadSeason(season){
         <td>${winner}</td>
         <td>${g.home_points} – ${g.away_points}</td>
       `;
-      tr.onclick=()=>location.href=
-        "nba-game.html?season="+encodeURIComponent(season)+"&game="+encodeURIComponent(g.home_team+" vs "+g.away_team);
+
+      tr.onclick = () => location.href =
+        "nba-game.html?season=" + encodeURIComponent(season) +
+        "&game=" + encodeURIComponent(g.home_team + " vs " + g.away_team);
 
       gamesTable.appendChild(tr);
     });
 
     Object.entries(standings)
-      .sort((a,b)=>b[1].w-a[1].w)
+      .sort((a,b)=>b[1].w - a[1].w)
       .forEach(([team,rec])=>{
-        const tr=document.createElement("tr");
-        tr.innerHTML=`<td>${team}</td><td>${rec.w}</td><td>${rec.l}</td>`;
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${team}</td><td>${rec.w}</td><td>${rec.l}</td>`;
         standingsTable.appendChild(tr);
       });
 
   }catch(e){
-    gamesTable.innerHTML=`<tr><td colspan="4">Could not load ${file}</td></tr>`;
+    gamesTable.innerHTML = `<tr><td colspan="4">Could not load ${file}</td></tr>`;
   }
 }
 </script>
