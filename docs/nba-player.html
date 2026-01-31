@@ -6,61 +6,40 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{
-  font-family:Inter,system-ui,Arial;
-  margin:0;
-  background:#fff;
-}
-.navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px 0;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
-}
+body{font-family:Inter,system-ui,Arial;margin:0;background:#fff;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 
-.page-wrap{
-  max-width:1200px;
-  margin:0 auto;
-  padding:30px 20px 60px;
-}
+.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px 60px;}
 
-h1{text-align:center;margin-bottom:10px;}
-.subtitle{text-align:center;color:#666;margin-bottom:20px;}
+h1{text-align:center;margin-bottom:5px;}
+.subtitle{text-align:center;color:#666;margin-bottom:18px;}
 
-table{
-  width:100%;
-  border-collapse:collapse;
+.stat-row{
+  display:flex;
+  justify-content:center;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-bottom:18px;
 }
-th,td{
-  border-bottom:1px solid #ddd;
-  padding:8px 10px;
-  text-align:center;
-}
-th{
-  background:#f0f0f0;
-  position:sticky;
-  top:0;
-}
-tr:nth-child(even){background:#f6f9ff;}
-
-.bad{
-  background:#fff3f3;
-  border:1px solid #ffd0d0;
-  color:#a40000;
-  padding:10px 12px;
+.stat-box{
+  border:1px solid #ddd;
   border-radius:10px;
-  max-width:900px;
-  margin:0 auto 18px;
+  padding:10px 14px;
+  min-width:110px;
+  text-align:center;
+  background:#f9fbff;
 }
+.stat-box strong{font-size:20px;display:block;}
 
-.game-link{
-  color:#0056d6;
-  text-decoration:none;
-  font-weight:600;
-}
+table{width:100%;border-collapse:collapse;margin-top:15px;}
+th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:center;}
+th{background:#f0f0f0;cursor:pointer;position:sticky;top:0;}
+tr:nth-child(even){background:#f6f9ff;}
+tr:hover{background:#e9f0ff;}
+
+.game-link{color:#0056d6;text-decoration:none;font-weight:600;}
+.bad{background:#fff3f3;border:1px solid #ffd0d0;color:#a40000;padding:10px 12px;border-radius:10px;margin-bottom:15px;}
 </style>
 </head>
 
@@ -77,20 +56,23 @@ tr:nth-child(even){background:#f6f9ff;}
 <h1 id="title">NBA Player</h1>
 <div class="subtitle" id="subtitle"></div>
 
+<div class="stat-row" id="careerStats"></div>
+<div class="stat-row" id="avgStats"></div>
+
 <div id="errorBox" class="bad" style="display:none;"></div>
 
 <table id="gamesTable" style="display:none;">
 <thead>
 <tr>
-  <th>Season</th>
+  <th data-key="season">Season</th>
   <th>Game</th>
   <th>Team</th>
   <th>MIN</th>
-  <th>PTS</th>
-  <th>REB</th>
-  <th>AST</th>
-  <th>STL</th>
-  <th>BLK</th>
+  <th data-key="pts">PTS</th>
+  <th data-key="reb">REB</th>
+  <th data-key="ast">AST</th>
+  <th data-key="stl">STL</th>
+  <th data-key="blk">BLK</th>
 </tr>
 </thead>
 <tbody id="gamesBody"></tbody>
@@ -99,103 +81,77 @@ tr:nth-child(even){background:#f6f9ff;}
 </div>
 
 <script>
-const BASE_PATH = "data/nba/";
+const BASE_PATH="data/nba/";
+const params=new URLSearchParams(window.location.search);
+const playerName=params.get("player");
 
-const params = new URLSearchParams(window.location.search);
-const playerName = params.get("player");
+const titleEl=document.getElementById("title");
+const subtitleEl=document.getElementById("subtitle");
+const gamesBody=document.getElementById("gamesBody");
+const gamesTable=document.getElementById("gamesTable");
+const errorBox=document.getElementById("errorBox");
+const careerStats=document.getElementById("careerStats");
+const avgStats=document.getElementById("avgStats");
 
-const titleEl = document.getElementById("title");
-const subtitleEl = document.getElementById("subtitle");
-const errorBox = document.getElementById("errorBox");
-const gamesTable = document.getElementById("gamesTable");
-const gamesBody = document.getElementById("gamesBody");
+let rows=[];
+let sortDir={};
 
 function seasonToFile(season){
-  return BASE_PATH + "nba_season_" + season.replace("-","_") + ".json";
+  return BASE_PATH+"nba_season_"+season.replace("-","_")+".json";
 }
 
-/* AUTO DETECT SEASONS */
 async function detectSeasons(){
-  const years = [];
-  for(let y=1976; y<=2030; y++){
+  const years=[];
+  for(let y=1976;y<=2030;y++){
     years.push(`${y}-${String(y+1).slice(2)}`);
   }
-
-  const checks = years.map(season =>
-    fetch(seasonToFile(season))
-      .then(r => r.ok ? season : null)
-      .catch(()=>null)
-  );
-
-  const results = await Promise.all(checks);
-  return results.filter(Boolean);
+  const checks=years.map(s=>fetch(seasonToFile(s)).then(r=>r.ok?s:null).catch(()=>null));
+  return (await Promise.all(checks)).filter(Boolean);
 }
 
 function showError(msg){
-  errorBox.style.display = "block";
-  errorBox.textContent = msg;
+  errorBox.style.display="block";
+  errorBox.textContent=msg;
 }
 
-async function loadPlayer(){
-  if(!playerName){
-    showError("Missing player parameter.");
-    return;
-  }
-
-  titleEl.textContent = playerName;
-  subtitleEl.textContent = "Career Game Log";
-
-  const seasons = await detectSeasons();
-  if(!seasons.length){
-    showError("No season files found.");
-    return;
-  }
-
-  let rows = [];
-
-  for(const season of seasons){
-    try{
-      const res = await fetch(seasonToFile(season));
-      if(!res.ok) continue;
-      const data = await res.json();
-
-      (data.games || []).forEach(g=>{
-        (g.players || []).forEach(p=>{
-          if(p.player === playerName){
-            rows.push({
-              season,
-              game: `${g.home_team} vs ${g.away_team}`,
-              team: p.team,
-              min: p.min,
-              pts: p.pts,
-              reb: p.reb,
-              ast: p.ast,
-              stl: p.stl,
-              blk: p.blk
-            });
-          }
-        });
-      });
-
-    }catch(e){}
-  }
-
-  if(rows.length === 0){
-    showError("No games found for this player.");
-    return;
-  }
-
-  rows.sort((a,b)=>b.season.localeCompare(a.season));
+function renderStats(){
+  const games=rows.length;
+  let pts=0,reb=0,ast=0;
+  let bestPts=0,bestReb=0,bestAst=0;
 
   rows.forEach(r=>{
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
+    pts+=r.pts||0;
+    reb+=r.reb||0;
+    ast+=r.ast||0;
+    bestPts=Math.max(bestPts,r.pts||0);
+    bestReb=Math.max(bestReb,r.reb||0);
+    bestAst=Math.max(bestAst,r.ast||0);
+  });
+
+  careerStats.innerHTML=`
+    <div class="stat-box"><strong>${games}</strong>Games</div>
+    <div class="stat-box"><strong>${pts}</strong>Points</div>
+    <div class="stat-box"><strong>${reb}</strong>Rebounds</div>
+    <div class="stat-box"><strong>${ast}</strong>Assists</div>
+  `;
+
+  avgStats.innerHTML=`
+    <div class="stat-box"><strong>${(pts/games).toFixed(1)}</strong>Avg PTS</div>
+    <div class="stat-box"><strong>${(reb/games).toFixed(1)}</strong>Avg REB</div>
+    <div class="stat-box"><strong>${(ast/games).toFixed(1)}</strong>Avg AST</div>
+    <div class="stat-box"><strong>${bestPts}</strong>Best PTS</div>
+    <div class="stat-box"><strong>${bestReb}</strong>Best REB</div>
+    <div class="stat-box"><strong>${bestAst}</strong>Best AST</div>
+  `;
+}
+
+function renderTable(){
+  gamesBody.innerHTML="";
+  rows.forEach(r=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
       <td>${r.season}</td>
-      <td>
-        <a class="game-link" href="nba-game.html?season=${encodeURIComponent(r.season)}&game=${encodeURIComponent(r.game)}">
-          ${r.game}
-        </a>
-      </td>
+      <td><a class="game-link" href="nba-game.html?season=${encodeURIComponent(r.season)}&game=${encodeURIComponent(r.game)}">${r.game}</a></td>
       <td>${r.team}</td>
       <td>${r.min||""}</td>
       <td>${r.pts||""}</td>
@@ -206,9 +162,56 @@ async function loadPlayer(){
     `;
     gamesBody.appendChild(tr);
   });
-
-  gamesTable.style.display = "table";
 }
+
+async function loadPlayer(){
+  if(!playerName){showError("Missing player parameter");return;}
+
+  titleEl.textContent=playerName;
+  subtitleEl.textContent="Career Game Log";
+
+  const seasons=await detectSeasons();
+  if(!seasons.length){showError("No season files found");return;}
+
+  for(const season of seasons){
+    const res=await fetch(seasonToFile(season));
+    if(!res.ok) continue;
+    const data=await res.json();
+
+    (data.games||[]).forEach(g=>{
+      (g.players||[]).forEach(p=>{
+        if(p.player===playerName){
+          rows.push({
+            season,
+            game:`${g.home_team} vs ${g.away_team}`,
+            team:p.team,
+            min:p.min,
+            pts:p.pts||0,
+            reb:p.reb||0,
+            ast:p.ast||0,
+            stl:p.stl||0,
+            blk:p.blk||0
+          });
+        }
+      });
+    });
+  }
+
+  if(!rows.length){showError("No games found");return;}
+
+  renderStats();
+  renderTable();
+  gamesTable.style.display="table";
+}
+
+document.querySelectorAll("th[data-key]").forEach(th=>{
+  th.addEventListener("click",()=>{
+    const key=th.dataset.key;
+    sortDir[key]=!sortDir[key];
+    rows.sort((a,b)=>sortDir[key]?b[key]-a[key]:a[key]-b[key]);
+    renderTable();
+  });
+});
 
 loadPlayer();
 </script>
