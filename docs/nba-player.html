@@ -57,17 +57,11 @@ h1{text-align:center;margin-bottom:10px;}
   font-weight:700;
 }
 
-/* FILTER */
 .filter-row{
   text-align:center;
   margin:14px 0 18px;
   font-weight:600;
   color:#003a99;
-}
-
-.filter-row label{
-  margin-right:8px;
-  font-size:15px;
 }
 
 select{
@@ -100,6 +94,11 @@ th,td{
 
 th{
   background:#eef3ff;
+  cursor:pointer;
+}
+
+th:hover{
+  background:#dde6ff;
 }
 
 tr:nth-child(even){background:#f6f9ff;}
@@ -132,7 +131,7 @@ tr:nth-child(even){background:#f6f9ff;}
 <div class="stats-row" id="highsBoxes"></div>
 
 <div class="filter-row">
-  <label for="oppFilter">Opposition:</label>
+  Opposition:
   <select id="oppFilter">
     <option value="ALL">All teams</option>
   </select>
@@ -143,15 +142,15 @@ tr:nth-child(even){background:#f6f9ff;}
 <table>
 <thead>
 <tr>
-  <th>Season</th>
-  <th>Date</th>
-  <th>Team</th>
-  <th>Opp</th>
-  <th>PTS</th>
-  <th>REB</th>
-  <th>AST</th>
-  <th>STL</th>
-  <th>BLK</th>
+  <th data-key="season">Season</th>
+  <th data-key="date">Date</th>
+  <th data-key="team">Team</th>
+  <th data-key="opp">Opp</th>
+  <th data-key="pts">PTS</th>
+  <th data-key="reb">REB</th>
+  <th data-key="ast">AST</th>
+  <th data-key="stl">STL</th>
+  <th data-key="blk">BLK</th>
 </tr>
 </thead>
 <tbody id="gamesBody"></tbody>
@@ -173,6 +172,7 @@ const oppFilter = document.getElementById("oppFilter");
 
 let rows = [];
 let filteredRows = [];
+let currentSort = { key: null, dir: "desc" };
 
 function seasonToFile(season){
   return "../data/nba/nba_season_" + season.replace("-","_") + ".json";
@@ -183,12 +183,15 @@ function showError(msg){
   errorBox.textContent = msg;
 }
 
+/* FIX ALL BAD DATES */
 function cleanDate(d){
   if(!d) return "";
   let s = d.trim();
-  if(s.startsWith("t ")) return "Oct " + s.slice(2);
-  if(s.startsWith("ov ")) return "Nov " + s.slice(3);
-  if(s.startsWith("v ")) return "Nov " + s.slice(2);
+
+  s = s.replace(/^t\s+/i,"Oct ");
+  s = s.replace(/^ov\s+/i,"Nov ");
+  s = s.replace(/^v\s+/i,"Nov ");
+
   return s;
 }
 
@@ -243,11 +246,11 @@ async function loadPlayer(){
               date: cleanDate(game.date),
               team: p.team,
               opp: opp,
-              pts: p.pts,
-              reb: p.reb,
-              ast: p.ast,
-              stl: p.stl,
-              blk: p.blk
+              pts: Number(p.pts),
+              reb: Number(p.reb),
+              ast: Number(p.ast),
+              stl: Number(p.stl),
+              blk: Number(p.blk)
             });
           }
         });
@@ -283,11 +286,30 @@ oppFilter.addEventListener("change", applyFilter);
 function applyFilter(){
   const val = oppFilter.value;
   filteredRows = (val === "ALL")
-    ? rows
+    ? [...rows]
     : rows.filter(r => r.opp === val);
 
   render();
 }
+
+/* SORTING */
+document.querySelectorAll("th[data-key]").forEach(th=>{
+  th.addEventListener("click", ()=>{
+    const key = th.dataset.key;
+
+    currentSort.dir =
+      (currentSort.key === key && currentSort.dir === "desc") ? "asc" : "desc";
+    currentSort.key = key;
+
+    filteredRows.sort((a,b)=>{
+      if(a[key] < b[key]) return currentSort.dir === "asc" ? -1 : 1;
+      if(a[key] > b[key]) return currentSort.dir === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    render();
+  });
+});
 
 function render(){
   gamesBody.innerHTML="";
