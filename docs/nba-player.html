@@ -4,83 +4,168 @@
 <meta charset="UTF-8">
 <title>NBA Player | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <link rel="stylesheet" href="style.css">
+
 <style>
-body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;}
-.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
+body{
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:#fff;
+}
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-.page-wrap{max-width:1100px;margin:0 auto;padding:30px 20px;}
-.tile-wrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:20px;}
-.tile{border:1px solid #ddd;border-radius:10px;padding:16px;background:#f6f9ff;text-align:center;}
-table{width:100%;border-collapse:collapse;margin-top:20px;}
-th,td{border-bottom:1px solid #ddd;padding:8px 10px;}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px 60px;
+}
+
+h1{text-align:center;margin-bottom:6px;}
+.subtitle{text-align:center;color:#666;margin-bottom:20px;}
+
+.stats{
+  display:flex;
+  gap:20px;
+  justify-content:center;
+  margin-bottom:30px;
+}
+.stat{
+  background:#f4f6fb;
+  padding:12px 18px;
+  border-radius:10px;
+  text-align:center;
+}
+.stat b{display:block;font-size:18px;}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:center;
+}
 th{background:#f0f0f0;}
 tr:nth-child(even){background:#f6f9ff;}
 </style>
 </head>
 
 <body>
-<div class="navbar"><a href="nba.html">NBA</a></div>
-<div class="page-wrap">
-<h1 id="name"></h1>
 
-<div class="tile-wrap">
-<div class="tile"><h3>Debut</h3><div id="debut">—</div></div>
-<div class="tile"><h3>Titles</h3><div id="titles">—</div></div>
-<div class="tile"><h3>MVPs</h3><div id="mvps">—</div></div>
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="nba.html">NBA</a>
+  <a href="nba-season.html">Seasons</a>
 </div>
 
-<h2>Regular Season</h2>
-<table>
-<thead><tr><th>Season</th><th>Team</th><th>PTS</th><th>REB</th><th>AST</th></tr></thead>
-<tbody id="reg"></tbody>
-<tfoot><tr><th>Career</th><th></th><th id="cPts"></th><th id="cReb"></th><th id="cAst"></th></tr></tfoot>
-</table>
+<div class="page-wrap">
 
-<h2>Playoffs</h2>
+<h1 id="playerName"></h1>
+<div class="subtitle" id="subtitle"></div>
+
+<div class="stats">
+  <div class="stat"><b id="games">0</b>Games</div>
+  <div class="stat"><b id="points">0</b>Points</div>
+  <div class="stat"><b id="rebounds">0</b>Rebounds</div>
+  <div class="stat"><b id="assists">0</b>Assists</div>
+</div>
+
 <table>
-<thead><tr><th>Season</th><th>Team</th><th>PTS</th><th>REB</th><th>AST</th></tr></thead>
-<tbody id="po"></tbody>
+<thead>
+<tr>
+  <th>Season</th>
+  <th>Date</th>
+  <th>Game</th>
+  <th>MIN</th>
+  <th>PTS</th>
+  <th>REB</th>
+  <th>AST</th>
+  <th>STL</th>
+  <th>BLK</th>
+  <th>TO</th>
+  <th>PF</th>
+</tr>
+</thead>
+<tbody id="logTable"></tbody>
 </table>
 
 </div>
 
 <script>
-const p=new URLSearchParams(location.search).get("player");
-document.getElementById("name").textContent=p;
+const params = new URLSearchParams(window.location.search);
+const player = params.get("player");
 
-let career={pts:0,reb:0,ast:0};
+document.getElementById("playerName").textContent = player;
+document.getElementById("subtitle").textContent = "Career Game Log";
 
-fetch("data/nba/player-seasons.json").then(r=>r.json()).then(data=>{
-const rec=data.find(x=>x.player===p);
-rec?.seasons.forEach(s=>{
-career.pts+=s.pts||0;career.reb+=s.reb||0;career.ast+=s.ast||0;
-document.getElementById("reg").innerHTML+=`<tr><td>${s.season}</td><td>${s.team}</td><td>${s.pts}</td><td>${s.reb}</td><td>${s.ast}</td></tr>`;
-});
-document.getElementById("cPts").textContent=career.pts.toFixed(1);
-document.getElementById("cReb").textContent=career.reb.toFixed(1);
-document.getElementById("cAst").textContent=career.ast.toFixed(1);
-});
+const seasonFiles = [
+  "nba_season_1976_77.json",
+  "nba_season_1977_78.json",
+  "nba_season_1978_79.json",
+  "nba_season_1979_80.json",
+  "nba_season_2023_24.json"
+];
 
-fetch("data/nba/player-playoffs.json").then(r=>r.json()).then(data=>{
-const rec=data.find(x=>x.player===p);
-rec?.seasons.forEach(s=>{
-document.getElementById("po").innerHTML+=`<tr><td>${s.season}</td><td>${s.team}</td><td>${s.pts}</td><td>${s.reb}</td><td>${s.ast}</td></tr>`;
-});
-});
+let totalGames = 0;
+let totalPoints = 0;
+let totalReb = 0;
+let totalAst = 0;
 
-fetch("data/nba/players.json").then(r=>r.json()).then(players=>{
-let pl=players.find(x=>x.player===p);
-if(!pl){
-fetch("data/nba/leaders.json").then(r=>r.json()).then(ld=>{
-let found=ld.flatMap(x=>x.points).find(x=>x.player===p);
-pl={debut:"Unknown",titles:0,mvps:0};
-});
+async function loadPlayer(){
+  for(const file of seasonFiles){
+    try{
+      const res = await fetch("data/nba/" + file);
+      const data = await res.json();
+
+      data.games.forEach(g=>{
+        g.players.forEach(p=>{
+          if(p.player === player){
+
+            totalGames++;
+            totalPoints += p.pts || 0;
+            totalReb += p.reb || 0;
+            totalAst += p.ast || 0;
+
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td>${data.season}</td>
+              <td>${g.date || ""}</td>
+              <td>${g.home_team} vs ${g.away_team}</td>
+              <td>${p.min || ""}</td>
+              <td>${p.pts || 0}</td>
+              <td>${p.reb || 0}</td>
+              <td>${p.ast || 0}</td>
+              <td>${p.stl || 0}</td>
+              <td>${p.blk || 0}</td>
+              <td>${p.to || 0}</td>
+              <td>${p.pf || 0}</td>
+            `;
+            document.getElementById("logTable").appendChild(tr);
+          }
+        });
+      });
+
+    }catch(e){}
+  }
+
+  document.getElementById("games").textContent = totalGames;
+  document.getElementById("points").textContent = totalPoints;
+  document.getElementById("rebounds").textContent = totalReb;
+  document.getElementById("assists").textContent = totalAst;
 }
-document.getElementById("debut").textContent=pl.debut||"—";
-document.getElementById("titles").textContent=pl.titles||0;
-document.getElementById("mvps").textContent=pl.mvps||0;
-});
+
+loadPlayer();
 </script>
+
 </body>
 </html>
