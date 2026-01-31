@@ -5,8 +5,6 @@
 <title>NBA Player | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<link rel="stylesheet" href="style.css">
-
 <style>
 body{
   font-family:Inter,system-ui,Arial;
@@ -29,33 +27,8 @@ body{
   padding:30px 20px 60px;
 }
 
-h1{text-align:center;margin-bottom:6px;}
-.subtitle{text-align:center;color:#666;margin-bottom:12px;}
-
-.filters{
-  text-align:center;
-  margin-bottom:20px;
-}
-select{
-  padding:8px 14px;
-  font-size:15px;
-}
-
-.stats{
-  display:flex;
-  gap:20px;
-  justify-content:center;
-  margin-bottom:16px;
-  flex-wrap:wrap;
-}
-.stat{
-  background:#f4f6fb;
-  padding:12px 18px;
-  border-radius:10px;
-  text-align:center;
-  min-width:120px;
-}
-.stat b{display:block;font-size:18px;}
+h1{text-align:center;margin-bottom:10px;}
+.subtitle{text-align:center;color:#666;margin-bottom:20px;}
 
 table{
   width:100%;
@@ -66,18 +39,28 @@ th,td{
   padding:8px 10px;
   text-align:center;
 }
-
-/* ✅ STICKY HEADER */
 th{
   background:#f0f0f0;
-  cursor:pointer;
   position:sticky;
   top:0;
-  z-index:10;
+}
+tr:nth-child(even){background:#f6f9ff;}
+
+.bad{
+  background:#fff3f3;
+  border:1px solid #ffd0d0;
+  color:#a40000;
+  padding:10px 12px;
+  border-radius:10px;
+  max-width:900px;
+  margin:0 auto 18px;
 }
 
-tr:nth-child(even){background:#f6f9ff;}
-tr:hover{background:#e9f0ff;}
+.game-link{
+  color:#0056d6;
+  text-decoration:none;
+  font-weight:600;
+}
 </style>
 </head>
 
@@ -91,200 +74,122 @@ tr:hover{background:#e9f0ff;}
 
 <div class="page-wrap">
 
-<h1 id="playerName"></h1>
-<div class="subtitle">Career Game Log</div>
+<h1 id="title">NBA Player</h1>
+<div class="subtitle" id="subtitle"></div>
 
-<div class="filters">
-  <select id="oppositionFilter">
-    <option value="">All Opponents</option>
-  </select>
-</div>
+<div id="errorBox" class="bad" style="display:none;"></div>
 
-<!-- TOTALS -->
-<div class="stats">
-  <div class="stat"><b id="games">0</b>Games</div>
-  <div class="stat"><b id="points">0</b>Points</div>
-  <div class="stat"><b id="rebounds">0</b>Rebounds</div>
-  <div class="stat"><b id="assists">0</b>Assists</div>
-</div>
-
-<!-- AVERAGES -->
-<div class="stats">
-  <div class="stat"><b id="avgPoints">0.0</b>Avg Points</div>
-  <div class="stat"><b id="avgRebounds">0.0</b>Avg Rebounds</div>
-  <div class="stat"><b id="avgAssists">0.0</b>Avg Assists</div>
-  <div class="stat"><b id="avgSteals">0.0</b>Avg Steals</div>
-</div>
-
-<table>
+<table id="gamesTable" style="display:none;">
 <thead>
 <tr>
-  <th onclick="sortBy('season')">Season</th>
-  <th onclick="sortBy('game')">Game</th>
-  <th onclick="sortBy('min')">MIN</th>
-  <th onclick="sortBy('pts')">PTS</th>
-  <th onclick="sortBy('reb')">REB</th>
-  <th onclick="sortBy('ast')">AST</th>
-  <th onclick="sortBy('stl')">STL</th>
-  <th onclick="sortBy('blk')">BLK</th>
-  <th onclick="sortBy('to')">TO</th>
-  <th onclick="sortBy('pf')">PF</th>
+  <th>Season</th>
+  <th>Game</th>
+  <th>Team</th>
+  <th>MIN</th>
+  <th>PTS</th>
+  <th>REB</th>
+  <th>AST</th>
+  <th>STL</th>
+  <th>BLK</th>
 </tr>
 </thead>
-<tbody id="logTable"></tbody>
+<tbody id="gamesBody"></tbody>
 </table>
 
 </div>
 
 <script>
 const params = new URLSearchParams(window.location.search);
-const player = params.get("player");
-document.getElementById("playerName").textContent = player;
+const playerName = params.get("player");
 
-const oppositionSelect = document.getElementById("oppositionFilter");
-const logTable = document.getElementById("logTable");
+const titleEl = document.getElementById("title");
+const subtitleEl = document.getElementById("subtitle");
+const errorBox = document.getElementById("errorBox");
+const gamesTable = document.getElementById("gamesTable");
+const gamesBody = document.getElementById("gamesBody");
 
 const seasonFiles = [
-  "nba_season_1976_77.json",
-  "nba_season_1977_78.json",
-  "nba_season_1978_79.json",
-  "nba_season_1979_80.json",
-  "nba_season_2023_24.json"
+  "1976-77","1977-78","1978-79","1979-80","1981-82","2023-24"
 ];
 
-const teamMap = {
-  "LAL":"Los Angeles Lakers","BOS":"Boston Celtics","DET":"Detroit Pistons",
-  "CHI":"Chicago Bulls","PHI":"Philadelphia 76ers","NYK":"New York Knicks",
-  "NJN":"New Jersey Nets","MIL":"Milwaukee Bucks","ATL":"Atlanta Hawks",
-  "CLE":"Cleveland Cavaliers","IND":"Indiana Pacers","POR":"Portland Trail Blazers",
-  "PHO":"Phoenix Suns","SAS":"San Antonio Spurs","UTA":"Utah Jazz",
-  "DEN":"Denver Nuggets","HOU":"Houston Rockets","DAL":"Dallas Mavericks",
-  "LAC":"Los Angeles Clippers","SEA":"Seattle SuperSonics",
-  "WAS":"Washington Bullets","GSW":"Golden State Warriors"
-};
+function seasonToFile(season){
+  return "data/nba/nba_season_" + season.replace("-","_") + ".json";
+}
 
-let allGames = [];
-let sortKey = null;
-let sortAsc = false; // default = highest first
+function showError(msg){
+  errorBox.style.display = "block";
+  errorBox.textContent = msg;
+}
 
 async function loadPlayer(){
-  const opponents = new Set();
+  if(!playerName){
+    showError("Missing player parameter.");
+    return;
+  }
 
-  for(const file of seasonFiles){
+  titleEl.textContent = playerName;
+  subtitleEl.textContent = "Career Game Log";
+
+  let rows = [];
+
+  for(const season of seasonFiles){
     try{
-      const res = await fetch("data/nba/" + file);
+      const res = await fetch(seasonToFile(season));
+      if(!res.ok) continue;
       const data = await res.json();
 
-      data.games.forEach(g=>{
-        g.players.forEach(p=>{
-          if(p.player === player){
-
-            const playerTeamName = teamMap[p.team] || p.team;
-            const opponent =
-              g.home_team === playerTeamName ? g.away_team : g.home_team;
-
-            opponents.add(opponent);
-
-            allGames.push({
-              season: data.season,
-              game: g.home_team + " vs " + g.away_team,
-              opponent: opponent,
-              min: p.min || "",
-              pts: p.pts || 0,
-              reb: p.reb || 0,
-              ast: p.ast || 0,
-              stl: p.stl || 0,
-              blk: p.blk || 0,
-              to: p.to || 0,
-              pf: p.pf || 0
+      (data.games || []).forEach(g=>{
+        (g.players || []).forEach(p=>{
+          if(p.player === playerName){
+            rows.push({
+              season,
+              game: `${g.home_team} vs ${g.away_team}`,
+              team: p.team,
+              min: p.min,
+              pts: p.pts,
+              reb: p.reb,
+              ast: p.ast,
+              stl: p.stl,
+              blk: p.blk
             });
           }
         });
       });
+
     }catch(e){}
   }
 
-  opponents.forEach(team=>{
-    const o=document.createElement("option");
-    o.value=team;
-    o.textContent=team;
-    oppositionSelect.appendChild(o);
-  });
-
-  renderTable();
-}
-
-function sortBy(key){
-  if(sortKey === key){
-    sortAsc = !sortAsc;
-  }else{
-    sortKey = key;
-    sortAsc = false; // first click = DESC
-  }
-  renderTable();
-}
-
-function renderTable(){
-  const opponentVal = oppositionSelect.value;
-  logTable.innerHTML="";
-
-  let games=0, pts=0, reb=0, ast=0, stl=0;
-
-  let filtered = allGames.filter(g=>!opponentVal || g.opponent === opponentVal);
-
-  if(sortKey){
-    filtered.sort((a,b)=>{
-      if(typeof a[sortKey] === "string"){
-        return sortAsc 
-          ? a[sortKey].localeCompare(b[sortKey])
-          : b[sortKey].localeCompare(a[sortKey]);
-      }
-      return sortAsc ? a[sortKey]-b[sortKey] : b[sortKey]-a[sortKey];
-    });
+  if(rows.length === 0){
+    showError("No games found for this player.");
+    return;
   }
 
-  filtered.forEach(g=>{
-    games++; 
-    pts+=g.pts; 
-    reb+=g.reb; 
-    ast+=g.ast;
-    stl+=g.stl;
+  // sort newest season first
+  rows.sort((a,b)=>b.season.localeCompare(a.season));
 
-    const tr=document.createElement("tr");
-    tr.innerHTML=`
-      <td>${g.season}</td>
-      <td>${g.game}</td>
-      <td>${g.min}</td>
-      <td>${g.pts}</td>
-      <td>${g.reb}</td>
-      <td>${g.ast}</td>
-      <td>${g.stl}</td>
-      <td>${g.blk}</td>
-      <td>${g.to}</td>
-      <td>${g.pf}</td>
+  rows.forEach(r=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${r.season}</td>
+      <td>
+        <a class="game-link" href="nba-game.html?season=${encodeURIComponent(r.season)}&game=${encodeURIComponent(r.game)}">
+          ${r.game}
+        </a>
+      </td>
+      <td>${r.team}</td>
+      <td>${r.min||""}</td>
+      <td>${r.pts||""}</td>
+      <td>${r.reb||""}</td>
+      <td>${r.ast||""}</td>
+      <td>${r.stl||""}</td>
+      <td>${r.blk||""}</td>
     `;
-
-    tr.onclick = () => {
-      window.location.href =
-        "nba-game.html?season=" + encodeURIComponent(g.season) +
-        "&game=" + encodeURIComponent(g.game);
-    };
-
-    logTable.appendChild(tr);
+    gamesBody.appendChild(tr);
   });
 
-  document.getElementById("games").textContent = games;
-  document.getElementById("points").textContent = pts;
-  document.getElementById("rebounds").textContent = reb;
-  document.getElementById("assists").textContent = ast;
-
-  document.getElementById("avgPoints").textContent = games ? (pts/games).toFixed(1) : "0.0";
-  document.getElementById("avgRebounds").textContent = games ? (reb/games).toFixed(1) : "0.0";
-  document.getElementById("avgAssists").textContent = games ? (ast/games).toFixed(1) : "0.0";
-  document.getElementById("avgSteals").textContent = games ? (stl/games).toFixed(1) : "0.0";
+  gamesTable.style.display = "table";
 }
 
-oppositionSelect.addEventListener("change",renderTable);
 loadPlayer();
 </script>
 

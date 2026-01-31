@@ -5,8 +5,6 @@
 <title>NBA Game | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<link rel="stylesheet" href="style.css">
-
 <style>
 body{
   font-family:Inter,system-ui,Arial;
@@ -30,31 +28,33 @@ body{
 }
 
 h1{text-align:center;margin:0 0 6px;}
-.subtitle{
-  text-align:center;
-  color:#666;
-  margin:0 0 18px;
-}
+.subtitle{text-align:center;color:#666;margin:0 0 18px;}
 
 .summary{
   display:flex;
   justify-content:center;
-  gap:16px;
-  flex-wrap:wrap;
-  margin:0 0 18px;
+  margin-bottom:20px;
 }
 .card{
   background:#f4f6fb;
   padding:12px 18px;
   border-radius:10px;
-  min-width:180px;
+  min-width:260px;
   text-align:center;
 }
 .card b{display:block;font-size:18px;}
 
+.team-title{
+  text-align:center;
+  margin:30px 0 8px;
+  font-size:20px;
+  font-weight:700;
+}
+
 table{
   width:100%;
   border-collapse:collapse;
+  margin-bottom:20px;
 }
 th,td{
   border-bottom:1px solid #ddd;
@@ -64,24 +64,23 @@ th,td{
 }
 th{
   background:#f0f0f0;
-  cursor:pointer;
   position:sticky;
   top:0;
-  z-index:2;
 }
 tr:nth-child(even){background:#f6f9ff;}
-tr:hover{background:#e9f0ff;}
+
 .player-link{
   color:#0056d6;
   text-decoration:none;
   font-weight:600;
 }
-.note{
-  text-align:center;
-  color:#888;
-  margin-top:12px;
-  font-size:14px;
+
+.reserves-row td{
+  font-weight:800;
+  color:#000;
+  background:#f0f0f0;
 }
+
 .bad{
   background:#fff3f3;
   border:1px solid #ffd0d0;
@@ -111,28 +110,43 @@ tr:hover{background:#e9f0ff;}
 
 <div class="summary" id="summary" style="display:none;">
   <div class="card"><b id="scoreLine">-</b>Final Score</div>
-  <div class="card"><b id="metaLine">-</b>Date / Venue</div>
 </div>
 
-<table id="boxTable" style="display:none;">
-  <thead>
-    <tr>
-      <th onclick="sortBy('player')">Player</th>
-      <th onclick="sortBy('team')">Team</th>
-      <th onclick="sortBy('min')">MIN</th>
-      <th onclick="sortBy('pts')">PTS</th>
-      <th onclick="sortBy('reb')">REB</th>
-      <th onclick="sortBy('ast')">AST</th>
-      <th onclick="sortBy('stl')">STL</th>
-      <th onclick="sortBy('blk')">BLK</th>
-      <th onclick="sortBy('to')">TO</th>
-      <th onclick="sortBy('pf')">PF</th>
-    </tr>
-  </thead>
-  <tbody id="boxBody"></tbody>
+<h2 class="team-title" id="homeTitle"></h2>
+<table>
+<thead>
+<tr>
+  <th>Player</th>
+  <th>MIN</th>
+  <th>PTS</th>
+  <th>REB</th>
+  <th>AST</th>
+  <th>STL</th>
+  <th>BLK</th>
+  <th>TO</th>
+  <th>PF</th>
+</tr>
+</thead>
+<tbody id="homeBody"></tbody>
 </table>
 
-<div class="note" id="hint"></div>
+<h2 class="team-title" id="awayTitle"></h2>
+<table>
+<thead>
+<tr>
+  <th>Player</th>
+  <th>MIN</th>
+  <th>PTS</th>
+  <th>REB</th>
+  <th>AST</th>
+  <th>STL</th>
+  <th>BLK</th>
+  <th>TO</th>
+  <th>PF</th>
+</tr>
+</thead>
+<tbody id="awayBody"></tbody>
+</table>
 
 </div>
 
@@ -144,25 +158,16 @@ const gameStr = params.get("game");
 const titleEl = document.getElementById("title");
 const subtitleEl = document.getElementById("subtitle");
 const errorBox = document.getElementById("errorBox");
-
 const summaryEl = document.getElementById("summary");
 const scoreLine = document.getElementById("scoreLine");
-const metaLine = document.getElementById("metaLine");
 
-const boxTable = document.getElementById("boxTable");
-const boxBody = document.getElementById("boxBody");
-const hint = document.getElementById("hint");
+const homeBody = document.getElementById("homeBody");
+const awayBody = document.getElementById("awayBody");
+const homeTitle = document.getElementById("homeTitle");
+const awayTitle = document.getElementById("awayTitle");
 
-let rows = [];
-let sortKey = null;
-let sortAsc = true;
-
-// Convert "1976-77" -> "nba_season_1976_77.json"
 function seasonToFile(seasonStr){
-  if(!seasonStr) return null;
-  const m = seasonStr.match(/^(\d{4})-(\d{2})$/);
-  if(!m) return null;
-  return `nba_season_${m[1]}_${m[1].slice(0,2)}${m[2]}.json`;
+  return "data/nba/nba_season_" + seasonStr.replace("-", "_") + ".json";
 }
 
 function showError(msg){
@@ -170,132 +175,204 @@ function showError(msg){
   errorBox.textContent = msg;
 }
 
-function safeNum(v){
-  const n = Number(v);
-  return isNaN(n) ? 0 : n;
+function normTeamName(s){
+  return (s || "")
+    .toLowerCase()
+    .replace(/\./g,"")
+    .replace(/&/g,"and")
+    .replace(/\s+/g," ")
+    .trim();
 }
 
-function playerHref(name){
-  return `nba-player.html?player=${encodeURIComponent(name)}`;
+/**
+ * Map full team names -> the abbreviation codes used in your players[].team
+ * Includes modern + some historical/alt names.
+ */
+const TEAM_MAP = {
+  // Modern
+  "atlanta hawks": { abbr:"ATL", nick:"Hawks" },
+  "boston celtics": { abbr:"BOS", nick:"Celtics" },
+  "brooklyn nets": { abbr:"BRK", nick:"Nets" },
+  "new jersey nets": { abbr:"NJN", nick:"Nets" },
+  "charlotte hornets": { abbr:"CHO", nick:"Hornets" },
+  "charlotte bobcats": { abbr:"CHA", nick:"Bobcats" },
+  "chicago bulls": { abbr:"CHI", nick:"Bulls" },
+  "cleveland cavaliers": { abbr:"CLE", nick:"Cavaliers" },
+  "dallas mavericks": { abbr:"DAL", nick:"Mavericks" },
+  "denver nuggets": { abbr:"DEN", nick:"Nuggets" },
+  "detroit pistons": { abbr:"DET", nick:"Pistons" },
+  "golden state warriors": { abbr:"GSW", nick:"Warriors" },
+  "san francisco warriors": { abbr:"SFW", nick:"Warriors" },
+  "houston rockets": { abbr:"HOU", nick:"Rockets" },
+  "indiana pacers": { abbr:"IND", nick:"Pacers" },
+  "los angeles clippers": { abbr:"LAC", nick:"Clippers" },
+  "san diego clippers": { abbr:"SDC", nick:"Clippers" },
+  "los angeles lakers": { abbr:"LAL", nick:"Lakers" },
+  "memphis grizzlies": { abbr:"MEM", nick:"Grizzlies" },
+  "vancouver grizzlies": { abbr:"VAN", nick:"Grizzlies" },
+  "miami heat": { abbr:"MIA", nick:"Heat" },
+  "milwaukee bucks": { abbr:"MIL", nick:"Bucks" },
+  "minnesota timberwolves": { abbr:"MIN", nick:"Timberwolves" },
+  "new orleans pelicans": { abbr:"NOP", nick:"Pelicans" },
+  "new orleans hornets": { abbr:"NOH", nick:"Hornets" },
+  "new orleans/oklahoma city hornets": { abbr:"NOK", nick:"Hornets" },
+  "new york knicks": { abbr:"NYK", nick:"Knicks" },
+  "oklahoma city thunder": { abbr:"OKC", nick:"Thunder" },
+  "seattle supersonics": { abbr:"SEA", nick:"SuperSonics" },
+  "orlando magic": { abbr:"ORL", nick:"Magic" },
+  "philadelphia 76ers": { abbr:"PHI", nick:"76ers" },
+  "phoenix suns": { abbr:"PHO", nick:"Suns" },
+  "portland trail blazers": { abbr:"POR", nick:"Trail Blazers" },
+  "sacramento kings": { abbr:"SAC", nick:"Kings" },
+  "kansas city kings": { abbr:"KCK", nick:"Kings" },
+  "san antonio spurs": { abbr:"SAS", nick:"Spurs" },
+  "toronto raptors": { abbr:"TOR", nick:"Raptors" },
+  "utah jazz": { abbr:"UTA", nick:"Jazz" },
+  "washington wizards": { abbr:"WAS", nick:"Wizards" },
+  "washington bullets": { abbr:"WSB", nick:"Bullets" },
+
+  // A few older names that can appear in late 70s/early 80s datasets
+  "buffalo braves": { abbr:"BUF", nick:"Braves" },
+  "new orleans jazz": { abbr:"NOJ", nick:"Jazz" },
+  "new york nets": { abbr:"NYN", nick:"Nets" }
+};
+
+function getTeamInfo(fullName){
+  const key = normTeamName(fullName);
+  return TEAM_MAP[key] || null;
 }
 
-function sortBy(key){
-  if(sortKey === key){
-    sortAsc = !sortAsc;
-  }else{
-    sortKey = key;
-    // IMPORTANT: default to HIGHEST first when you click any header
-    sortAsc = false;
-  }
-  renderBox();
+function deduceAbbrFallback(fullName, codesInGame){
+  // If mapping fails, try to match by city keyword against codes present (best-effort)
+  const n = normTeamName(fullName);
+  const city = n.split(" ")[0]; // rough
+  // If only 2 codes exist, just return the first unused later; handled in loadGame.
+  if(!codesInGame || codesInGame.length === 0) return null;
+  // nothing deterministic without mapping; return null and let the caller fall back.
+  return null;
 }
 
-function renderBox(){
-  boxBody.innerHTML = "";
+function clearBodies(){
+  homeBody.innerHTML = "";
+  awayBody.innerHTML = "";
+}
 
-  let sorted = [...rows];
-  if(sortKey){
-    sorted.sort((a,b)=>{
-      const av = a[sortKey];
-      const bv = b[sortKey];
-
-      const aIsStr = (typeof av === "string");
-      const bIsStr = (typeof bv === "string");
-
-      if(aIsStr || bIsStr){
-        const aa = (av ?? "").toString();
-        const bb = (bv ?? "").toString();
-        return sortAsc ? aa.localeCompare(bb) : bb.localeCompare(aa);
-      }else{
-        return sortAsc ? (av-bv) : (bv-av);
-      }
-    });
-  }else{
-    // default: show best scoring lines first (feels right on load)
-    sorted.sort((a,b)=>b.pts - a.pts);
-  }
-
-  sorted.forEach(r=>{
+function renderTeam(players, tbody){
+  players.forEach(p=>{
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td><a class="player-link" href="${playerHref(r.player)}">${r.player}</a></td>
-      <td>${r.team}</td>
-      <td>${r.min}</td>
-      <td>${r.pts}</td>
-      <td>${r.reb}</td>
-      <td>${r.ast}</td>
-      <td>${r.stl}</td>
-      <td>${r.blk}</td>
-      <td>${r.to}</td>
-      <td>${r.pf}</td>
-    `;
-    boxBody.appendChild(tr);
+    const isReserves = (p.player || "").toLowerCase() === "reserves";
+
+    if(isReserves){
+      tr.className = "reserves-row";
+      tr.innerHTML = `
+        <td>Reserves</td>
+        <td></td><td></td><td></td><td></td>
+        <td></td><td></td><td></td><td></td>
+      `;
+    }else{
+      tr.innerHTML = `
+        <td><a class="player-link" href="nba-player.html?player=${encodeURIComponent(p.player)}">${p.player}</a></td>
+        <td>${p.min || ""}</td>
+        <td>${p.pts || ""}</td>
+        <td>${p.reb || ""}</td>
+        <td>${p.ast || ""}</td>
+        <td>${p.stl || ""}</td>
+        <td>${p.blk || ""}</td>
+        <td>${p.to  || ""}</td>
+        <td>${p.pf  || ""}</td>
+      `;
+    }
+    tbody.appendChild(tr);
   });
 }
 
 async function loadGame(){
   if(!season || !gameStr){
-    showError("Missing URL parameters. Expected ?season=YYYY-YY&game=Home%20Team%20vs%20Away%20Team");
+    showError("Missing URL parameters.");
     return;
   }
 
   const file = seasonToFile(season);
-  if(!file){
-    showError(`Season format not recognised: "${season}" (expected like 1976-77).`);
-    return;
-  }
-
   titleEl.textContent = gameStr;
-  subtitleEl.textContent = `Season ${season}`;
+  subtitleEl.textContent = "Season " + season;
 
   try{
-    const res = await fetch("data/nba/" + file);
+    const res = await fetch(file);
     if(!res.ok) throw new Error("fetch failed");
     const data = await res.json();
 
-    const match = (data.games || []).find(g => {
-      const label = `${g.home_team} vs ${g.away_team}`;
-      return label === gameStr;
-    });
-
+    const match = (data.games || []).find(g => `${g.home_team} vs ${g.away_team}` === gameStr);
     if(!match){
-      showError(`Couldn't find this game in ${file}. Make sure the 'game' parameter matches "Home Team vs Away Team" exactly.`);
+      showError("Game not found.");
       return;
     }
 
-    // Summary
     summaryEl.style.display = "flex";
-    const hs = ("home_score" in match) ? match.home_score : (match.home_pts ?? match.homeScore ?? "");
-    const as = ("away_score" in match) ? match.away_score : (match.away_pts ?? match.awayScore ?? "");
-    const scoreText = (hs !== "" && as !== "")
-      ? `${match.home_team} ${hs} – ${as} ${match.away_team}`
-      : `${match.home_team} vs ${match.away_team}`;
-    scoreLine.textContent = scoreText;
+    scoreLine.textContent =
+      `${match.home_team} ${match.home_points} – ${match.away_points} ${match.away_team}`;
 
-    const date = match.date || "";
-    const venue = match.venue || match.arena || "";
-    metaLine.textContent = [date, venue].filter(Boolean).join(" • ") || "—";
+    // Titles should show nicknames (not initials)
+    const homeInfo = getTeamInfo(match.home_team);
+    const awayInfo = getTeamInfo(match.away_team);
 
-    // Box score rows
-    rows = (match.players || []).map(p=>({
-      player: p.player || "",
-      team: p.team || "",
-      min: p.min || "",
-      pts: safeNum(p.pts),
-      reb: safeNum(p.reb),
-      ast: safeNum(p.ast),
-      stl: safeNum(p.stl),
-      blk: safeNum(p.blk),
-      to: safeNum(p.to),
-      pf: safeNum(p.pf)
-    }));
+    homeTitle.textContent = homeInfo ? homeInfo.nick : match.home_team;
+    awayTitle.textContent = awayInfo ? awayInfo.nick : match.away_team;
 
-    boxTable.style.display = "table";
-    hint.textContent = "Click a column header to sort (defaults to highest first).";
-    renderBox();
+    clearBodies();
+
+    const players = match.players || [];
+
+    // Collect actual codes present in this game's player rows
+    const codesInGame = [...new Set(players.map(p => (p.team || "").trim()).filter(Boolean))];
+
+    // Determine the two team codes using name -> code mapping
+    let homeCode = homeInfo ? homeInfo.abbr : deduceAbbrFallback(match.home_team, codesInGame);
+    let awayCode = awayInfo ? awayInfo.abbr : deduceAbbrFallback(match.away_team, codesInGame);
+
+    // If the dataset uses alt abbreviations (e.g., BRK vs BKN), try common aliases:
+    const ALIAS = {
+      "BKN":"BRK", "BRK":"BRK",
+      "CHA":"CHO", "CHO":"CHO",
+      "PHX":"PHO", "PHO":"PHO",
+      "SA":"SAS", "SAS":"SAS",
+      "GS":"GSW", "GSW":"GSW",
+      "NO":"NOP", "NOP":"NOP"
+    };
+    if(homeCode && ALIAS[homeCode]) homeCode = ALIAS[homeCode];
+    if(awayCode && ALIAS[awayCode]) awayCode = ALIAS[awayCode];
+
+    // If mapping codes aren't found in this game, fall back to the two codes present
+    // (still better than mis-assigning).
+    if(homeCode && !codesInGame.includes(homeCode)) homeCode = null;
+    if(awayCode && !codesInGame.includes(awayCode)) awayCode = null;
+
+    if(!homeCode || !awayCode){
+      if(codesInGame.length >= 2){
+        // pick the first two distinct codes present
+        homeCode = homeCode || codesInGame[0];
+        awayCode = awayCode || codesInGame.find(c => c !== homeCode) || codesInGame[1];
+      }
+    }
+
+    const homePlayers = players.filter(p => (p.team || "").trim() === homeCode);
+    const awayPlayers = players.filter(p => (p.team || "").trim() === awayCode);
+
+    // If still empty, show a helpful error instead of blank page
+    if(homePlayers.length === 0 || awayPlayers.length === 0){
+      showError(
+        "Team split failed. Game has player team codes: " +
+        (codesInGame.join(", ") || "none") +
+        ". Home/away codes resolved to: " +
+        (homeCode || "null") + " / " + (awayCode || "null")
+      );
+      // still render whatever we have so you can see something
+    }
+
+    renderTeam(homePlayers, homeBody);
+    renderTeam(awayPlayers, awayBody);
 
   }catch(e){
-    showError("Could not load season file: data/nba/" + file);
+    showError("Could not load season file: " + file);
   }
 }
 
