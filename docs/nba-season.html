@@ -19,6 +19,7 @@ tr:nth-child(even){background:#f6f9ff;}
 tr:hover{background:#e9f0ff;}
 .filter-bar{text-align:center;margin-bottom:15px;}
 .standings{margin-top:40px;}
+.note{margin-top:10px;text-align:center;color:#666;font-size:13px;}
 </style>
 </head>
 
@@ -71,6 +72,8 @@ Game Type:
 </table>
 </div>
 
+<div class="note" id="note"></div>
+
 </div>
 
 <script>
@@ -84,32 +87,23 @@ const gamesTable = document.getElementById("gamesTable");
 const standingsTable = document.getElementById("standingsTable");
 const titleEl = document.getElementById("title");
 const typeFilter = document.getElementById("typeFilter");
-
-const monthMap = {
-  "t":"Oct",
-  "v":"Nov",
-  "c":"Dec",
-  "Jan":"Jan","Feb":"Feb","Mar":"Mar","Apr":"Apr",
-  "May":"May","Jun":"Jun","Jul":"Jul","Aug":"Aug","Sep":"Sep"
-};
+const noteEl = document.getElementById("note");
 
 function seasonToFile(season){
   return BASE_PATH + "nba_season_" + season.replace("-","_") + ".json";
 }
 
-/* AUTO season detection */
+/* AUTO season detection (parallel) */
 async function detectSeasons(){
   const years=[];
   for(let y=1976;y<=2030;y++){
     years.push(`${y}-${String(y+1).slice(2)}`);
   }
-
   const checks = years.map(season =>
     fetch(seasonToFile(season))
       .then(r=>r.ok?season:null)
       .catch(()=>null)
   );
-
   const results = await Promise.all(checks);
   return results.filter(Boolean).sort((a,b)=>b.localeCompare(a));
 }
@@ -117,7 +111,6 @@ async function detectSeasons(){
 seasonSelect.addEventListener("change",()=>{
   location.href="nba-season.html?season="+seasonSelect.value;
 });
-
 typeFilter.addEventListener("change",()=>{
   loadSeason(seasonSelect.value);
 });
@@ -147,27 +140,62 @@ async function init(){
   loadSeason(seasonParam);
 }
 
-/* PARSE ODD MONTH LETTERS */
-function parseGameDate(raw,season){
-  if(!raw) return new Date(0);
+/* ---------- ROCK SOLID DATE PARSING ----------
+   Raw examples:
+     "t 10, 1980"  (t=Oct)
+     "v 21, 1980"  (v=Nov)
+     "c 05, 1980"  (c=Dec)
+     "Jan 15, 1981"
+   We DO NOT use new Date("string") parsing.
+   We build UTC timestamps ourselves.
+--------------------------------------------- */
 
-  let clean = raw.replace(",","").trim();
-  let parts = clean.split(" ");
+const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-  let m = monthMap[parts[0]] || parts[0];
-  let d = parts[1];
-  let y = parts[2];
+function monthIndex(token){
+  const t = (token || "").toLowerCase();
 
-  return new Date(`${m} ${d} ${y}`);
+  if(t === "t") return 9;   // Oct
+  if(t === "v") return 10;  // Nov
+  if(t === "c") return 11;  // Dec
+
+  const map = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+  if(map[t] !== undefined) return map[t];
+
+  return null;
+}
+
+function parseParts(raw){
+  if(!raw) return null;
+
+  // Trim, then match "<month> <day>, <year>"
+  const s = String(raw).trim();
+  const m = s.match(/^([A-Za-z]+)\s+(\d{1,2})\s*,\s*(\d{4})$/);
+  if(!m) return null;
+
+  // Clean month token to letters only (kills hidden junk)
+  const monToken = (m[1] || "").replace(/[^A-Za-z]/g,"").trim();
+  const day = parseInt(m[2], 10);
+  const year = parseInt(m[3], 10);
+  if(!monToken || !day || !year) return null;
+
+  const mt = monToken.length > 3 ? monToken.slice(0,3) : monToken;
+  const mi = monthIndex(mt);
+  if(mi === null) return null;
+
+  return { mi, day, year };
+}
+
+function dateKey(raw){
+  const p = parseParts(raw);
+  if(!p) return -1; // invalid goes to bottom (when sorting desc)
+  return Date.UTC(p.year, p.mi, p.day);
 }
 
 function formatNice(raw){
-  if(!raw) return "";
-  let clean = raw.replace(",","").trim();
-  let parts = clean.split(" ");
-
-  let m = monthMap[parts[0]] || parts[0];
-  return `${m} ${parts[1]} ${parts[2]}`;
+  const p = parseParts(raw);
+  if(!p) return raw || "";
+  return `${MONTH_ABBR[p.mi]} ${p.day} ${p.year}`;
 }
 
 async function loadSeason(season){
@@ -175,21 +203,35 @@ async function loadSeason(season){
   titleEl.textContent="NBA Season "+season;
   gamesTable.innerHTML="";
   standingsTable.innerHTML="";
+  noteEl.textContent="";
 
   try{
     const res=await fetch(file);
+    if(!res.ok) throw new Error("fetch failed");
     const data=await res.json();
 
     const standings={};
+    let games=(data.games||[]).slice();
 
-    const games=(data.games||[]).slice().sort((a,b)=>{
-      return parseGameDate(b.date,season)-parseGameDate(a.date,season);
+    // Sort newest -> oldest using numeric UTC keys (stable)
+    games.sort((a,b)=>{
+      const kb = dateKey(b.date);
+      const ka = dateKey(a.date);
+      if(kb !== ka) return kb - ka;
+
+      // tie-breaker to keep stable ordering
+      const gb = (b.home_team||"") + " vs " + (b.away_team||"");
+      const ga = (a.home_team||"") + " vs " + (a.away_team||"");
+      return gb.localeCompare(ga);
     });
 
+    let invalidCount = 0;
+
     games.forEach(g=>{
-      const isPlayoff=g.is_playoffs||false;
-      if(typeFilter.value==="playoffs"&&!isPlayoff)return;
-      if(typeFilter.value==="regular"&&isPlayoff)return;
+      const isPlayoff = (g.is_playoffs === true) || (g.round && String(g.round).toLowerCase().includes("playoff"));
+
+      if(typeFilter.value==="playoffs" && !isPlayoff) return;
+      if(typeFilter.value==="regular" && isPlayoff) return;
 
       const winner=g.home_points>g.away_points?g.home_team:g.away_team;
       const loser=g.home_points>g.away_points?g.away_team:g.home_team;
@@ -198,6 +240,8 @@ async function loadSeason(season){
       standings[loser]=standings[loser]||{w:0,l:0};
       standings[winner].w++;
       standings[loser].l++;
+
+      if(dateKey(g.date) === -1) invalidCount++;
 
       const tr=document.createElement("tr");
       tr.innerHTML=`
@@ -225,6 +269,10 @@ async function loadSeason(season){
         tr.innerHTML=`<td>${team}</td><td>${rec.w}</td><td>${rec.l}</td>`;
         standingsTable.appendChild(tr);
       });
+
+    if(invalidCount){
+      noteEl.textContent = `⚠️ ${invalidCount} games had dates that didn’t match "<mon> <day>, <year>" and were pushed to the bottom.`;
+    }
 
   }catch(e){
     gamesTable.innerHTML=`<tr><td colspan="4">Could not load ${file}</td></tr>`;
