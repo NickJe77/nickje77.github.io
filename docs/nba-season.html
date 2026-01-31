@@ -83,32 +83,48 @@ const standingsTable = document.getElementById("standingsTable");
 const titleEl = document.getElementById("title");
 const typeFilter = document.getElementById("typeFilter");
 
-/* AUTO SEASON LIST */
-const seasonFiles = [
-  "1976-77","1977-78","1978-79","1979-80","1981-82","2023-24"
-];
-
 function seasonToFile(season){
   return "data/nba/nba_season_" + season.replace("-","_") + ".json";
 }
 
-seasonFiles.forEach(s=>{
-  const opt=document.createElement("option");
-  opt.value=s; opt.textContent=s;
-  seasonSelect.appendChild(opt);
-});
-
-if(!seasonParam || !seasonFiles.includes(seasonParam)){
-  seasonParam = seasonFiles[0];
+async function detectSeasons(){
+  const seasons = [];
+  for(let y=1970; y<=2030; y++){
+    const season = `${y}-${String(y+1).slice(2)}`;
+    try{
+      const res = await fetch(seasonToFile(season));
+      if(res.ok){
+        seasons.push(season);
+      }
+    }catch(e){}
+  }
+  return seasons.sort((a,b)=>b.localeCompare(a));
 }
-seasonSelect.value = seasonParam;
 
 seasonSelect.addEventListener("change",()=>{
   location.href="nba-season.html?season="+seasonSelect.value;
 });
 typeFilter.addEventListener("change",()=>loadSeason(seasonSelect.value));
 
-loadSeason(seasonParam);
+init();
+
+async function init(){
+  const seasonFiles = await detectSeasons();
+
+  seasonFiles.forEach(s=>{
+    const opt=document.createElement("option");
+    opt.value=s;
+    opt.textContent=s;
+    seasonSelect.appendChild(opt);
+  });
+
+  if(!seasonParam || !seasonFiles.includes(seasonParam)){
+    seasonParam = seasonFiles[0];
+  }
+
+  seasonSelect.value = seasonParam;
+  loadSeason(seasonParam);
+}
 
 async function loadSeason(season){
   const file=seasonToFile(season);
@@ -122,7 +138,7 @@ async function loadSeason(season){
 
     const standings={};
 
-    let games=data.games.slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
+    let games=(data.games||[]).slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
 
     games.forEach(g=>{
       const isPlayoff = g.round && g.round.toLowerCase().includes("playoff");
@@ -149,6 +165,7 @@ async function loadSeason(season){
       `;
       tr.onclick=()=>location.href=
         "nba-game.html?season="+encodeURIComponent(season)+"&game="+encodeURIComponent(g.home_team+" vs "+g.away_team);
+
       gamesTable.appendChild(tr);
     });
 
