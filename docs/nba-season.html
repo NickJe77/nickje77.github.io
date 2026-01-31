@@ -19,7 +19,6 @@ tr:nth-child(even){background:#f6f9ff;}
 tr:hover{background:#e9f0ff;}
 .filter-bar{text-align:center;margin-bottom:15px;}
 .standings{margin-top:40px;}
-.note{margin-top:10px;text-align:center;color:#666;font-size:13px;}
 </style>
 </head>
 
@@ -72,28 +71,32 @@ Game Type:
 </table>
 </div>
 
-<div class="note" id="note"></div>
-
 </div>
 
 <script>
 const BASE_PATH = "data/nba/";
 
-const params = new URLSearchParams(window.location.search);
-let seasonParam = params.get("season");
+const monthMap = {
+  "t":"Oct",
+  "v":"Nov",
+  "c":"Dec",
+  "Jan":"Jan","Feb":"Feb","Mar":"Mar","Apr":"Apr",
+  "May":"May","Jun":"Jun","Jul":"Jul","Aug":"Aug","Sep":"Sep"
+};
 
 const seasonSelect = document.getElementById("seasonSelect");
 const gamesTable = document.getElementById("gamesTable");
 const standingsTable = document.getElementById("standingsTable");
 const titleEl = document.getElementById("title");
 const typeFilter = document.getElementById("typeFilter");
-const noteEl = document.getElementById("note");
+
+const params = new URLSearchParams(window.location.search);
+let seasonParam = params.get("season");
 
 function seasonToFile(season){
   return BASE_PATH + "nba_season_" + season.replace("-","_") + ".json";
 }
 
-/* AUTO season detection (parallel) */
 async function detectSeasons(){
   const years=[];
   for(let y=1976;y<=2030;y++){
@@ -143,90 +146,50 @@ async function init(){
   loadSeason(seasonParam);
 }
 
-/* ----- DATE FIX + SORT KEY (NO BROWSER PARSING) ----- */
-const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+/* CORRECT DATE PARSER */
+function parseGameDate(raw, season){
+  if(!raw) return new Date(0);
 
-function monthIndex(token){
-  const t = (token || "").toLowerCase();
+  const clean = raw.replace(",","").trim().split(" ");
+  let m = monthMap[clean[0]] || clean[0];
+  let d = clean[1];
 
-  // your special codes
-  if(t === "t") return 9;   // Oct
-  if(t === "v") return 10;  // Nov
-  if(t === "c") return 11;  // Dec
+  const [startYear] = season.split("-");
+  const endYear = parseInt(startYear) + 1;
 
-  // normal months
-  const map = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
-  if(map[t] !== undefined) return map[t];
+  const winterMonths = ["Jan","Feb","Mar","Apr","May","Jun"];
+  const year = winterMonths.includes(m) ? endYear : startYear;
 
-  return null;
-}
-
-function parseParts(raw){
-  if(!raw) return null;
-
-  // Expect: "<mon> <day>, <year>"
-  const s = String(raw).trim();
-  const m = s.match(/^([A-Za-z]+)\s+(\d{1,2})\s*,\s*(\d{4})$/);
-  if(!m) return null;
-
-  // clean month token (removes hidden junk)
-  const monToken = (m[1] || "").replace(/[^A-Za-z]/g,"").trim();
-  const day = parseInt(m[2],10);
-  const year = parseInt(m[3],10);
-
-  const mi = monthIndex(monToken.length > 3 ? monToken.slice(0,3) : monToken);
-  if(mi === null || !day || !year) return null;
-
-  return {mi, day, year};
-}
-
-function dateKey(raw){
-  const p = parseParts(raw);
-  if(!p) return -1;
-  return Date.UTC(p.year, p.mi, p.day); // numeric sortable
+  return new Date(`${m} ${d} ${year}`);
 }
 
 function formatNice(raw){
-  const p = parseParts(raw);
-  if(!p) return raw || "";
-  return `${MONTH_ABBR[p.mi]} ${p.day} ${p.year}`;
+  if(!raw) return "";
+  const clean = raw.replace(",","").trim().split(" ");
+  let m = monthMap[clean[0]] || clean[0];
+  return `${m} ${clean[1]} ${clean[2]}`;
 }
-/* --------------------------------------------------- */
 
 async function loadSeason(season){
   const file=seasonToFile(season);
   titleEl.textContent="NBA Season "+season;
   gamesTable.innerHTML="";
   standingsTable.innerHTML="";
-  noteEl.textContent="";
 
   try{
     const res=await fetch(file);
-    if(!res.ok) throw new Error("fetch failed");
     const data=await res.json();
 
     const standings={};
-    let games=(data.games||[]).slice();
 
-    // NEWEST -> OLDEST (descending)
-    games.sort((a,b)=>{
-      const kb = dateKey(b.date);
-      const ka = dateKey(a.date);
-      if(kb !== ka) return kb - ka;
-
-      // tiebreaker (keeps stable ordering)
-      const gb = (b.home_team||"") + " vs " + (b.away_team||"");
-      const ga = (a.home_team||"") + " vs " + (a.away_team||"");
-      return gb.localeCompare(ga);
+    const games=(data.games||[]).slice().sort((a,b)=>{
+      return parseGameDate(a.date,season) - parseGameDate(b.date,season);
     });
 
-    let invalidCount = 0;
-
     games.forEach(g=>{
-      const isPlayoff = (g.is_playoffs === true) || (g.round && String(g.round).toLowerCase().includes("playoff"));
-
-      if(typeFilter.value==="playoffs" && !isPlayoff) return;
-      if(typeFilter.value==="regular" && isPlayoff) return;
+      const isPlayoff=g.is_playoffs||false;
+      if(typeFilter.value==="playoffs"&&!isPlayoff)return;
+      if(typeFilter.value==="regular"&&isPlayoff)return;
 
       const winner=g.home_points>g.away_points?g.home_team:g.away_team;
       const loser=g.home_points>g.away_points?g.away_team:g.home_team;
@@ -235,8 +198,6 @@ async function loadSeason(season){
       standings[loser]=standings[loser]||{w:0,l:0};
       standings[winner].w++;
       standings[loser].l++;
-
-      if(dateKey(g.date) === -1) invalidCount++;
 
       const tr=document.createElement("tr");
       tr.innerHTML=`
@@ -264,10 +225,6 @@ async function loadSeason(season){
         tr.innerHTML=`<td>${team}</td><td>${rec.w}</td><td>${rec.l}</td>`;
         standingsTable.appendChild(tr);
       });
-
-    if(invalidCount){
-      noteEl.textContent = `⚠️ ${invalidCount} games had dates that didn’t match "<mon> <day>, <year>" and were pushed to the bottom.`;
-    }
 
   }catch(e){
     gamesTable.innerHTML=`<tr><td colspan="4">Could not load ${file}</td></tr>`;
