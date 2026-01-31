@@ -32,6 +32,11 @@ body{
 
 h1{text-align:center;margin-bottom:10px;}
 
+select{
+  padding:8px 12px;
+  font-size:15px;
+}
+
 table{
   width:100%;
   border-collapse:collapse;
@@ -43,7 +48,6 @@ th,td{
 }
 th{
   background:#f0f0f0;
-  cursor:pointer;
   position:sticky;
   top:0;
 }
@@ -62,7 +66,12 @@ tr:hover{background:#e9f0ff;}
 
 <div class="page-wrap">
 
-<h1 id="title"></h1>
+<h1 id="title">NBA Seasons</h1>
+
+<div style="text-align:center;margin-bottom:20px;">
+  Season:
+  <select id="seasonSelect"></select>
+</div>
 
 <table>
 <thead>
@@ -80,50 +89,83 @@ tr:hover{background:#e9f0ff;}
 
 <script>
 const params = new URLSearchParams(window.location.search);
-let seasonParam = params.get("season"); // may be 1976-77 or 1976_77
+let seasonParam = params.get("season");
 
-// convert 1976-77 → 1976_77
-if(seasonParam && seasonParam.includes("-")){
-  seasonParam = seasonParam.replace("-", "_");
+const seasonSelect = document.getElementById("seasonSelect");
+const gamesTable = document.getElementById("gamesTable");
+const titleEl = document.getElementById("title");
+
+const seasonFiles = [
+  "1976-77",
+  "1977-78",
+  "1978-79",
+  "1979-80",
+  "2023-24"
+];
+
+function seasonToFile(season){
+  return "data/nba/nba_season_" + season.replace("-","_") + ".json";
 }
 
-const file = "data/nba/nba_season_" + seasonParam + ".json";
-const gamesTable = document.getElementById("gamesTable");
-
-fetch(file)
-.then(r => r.json())
-.then(data => {
-  document.getElementById("title").textContent =
-    "NBA Season " + data.season;
-
-  data.games.forEach((g, index) => {
-    const winner =
-      g.home_points > g.away_points ? g.home_team : g.away_team;
-
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${g.date || ""}</td>
-      <td>${g.home_team} vs ${g.away_team}</td>
-      <td>${winner}</td>
-      <td>${g.home_points} – ${g.away_points}</td>
-    `;
-
-    tr.onclick = () => {
-      window.location.href =
-        "nba-game.html?season=" +
-        encodeURIComponent(data.season) +
-        "&game=" +
-        encodeURIComponent(g.home_team + " vs " + g.away_team);
-    };
-
-    gamesTable.appendChild(tr);
-  });
-})
-.catch(err=>{
-  document.getElementById("title").textContent =
-    "Season not found: " + seasonParam;
-  console.error(err);
+// populate dropdown
+seasonFiles.forEach(s=>{
+  const opt = document.createElement("option");
+  opt.value = s;
+  opt.textContent = s;
+  seasonSelect.appendChild(opt);
 });
+
+// default season
+if(!seasonParam){
+  seasonParam = seasonFiles[0];
+}
+
+seasonSelect.value = seasonParam;
+
+seasonSelect.addEventListener("change", ()=>{
+  window.location.href = "nba-season.html?season=" + seasonSelect.value;
+});
+
+loadSeason(seasonParam);
+
+async function loadSeason(season){
+  const file = seasonToFile(season);
+  titleEl.textContent = "NBA Season " + season;
+  gamesTable.innerHTML = "";
+
+  try{
+    const res = await fetch(file);
+    if(!res.ok) throw new Error("Fetch failed");
+    const data = await res.json();
+
+    data.games.forEach((g,index)=>{
+      const winner =
+        g.home_points > g.away_points ? g.home_team : g.away_team;
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${g.date || ""}</td>
+        <td>${g.home_team} vs ${g.away_team}</td>
+        <td>${winner}</td>
+        <td>${g.home_points} – ${g.away_points}</td>
+      `;
+
+      tr.onclick = () => {
+        window.location.href =
+          "nba-game.html?season=" +
+          encodeURIComponent(season) +
+          "&game=" +
+          encodeURIComponent(g.home_team + " vs " + g.away_team);
+      };
+
+      gamesTable.appendChild(tr);
+    });
+
+  }catch(e){
+    gamesTable.innerHTML =
+      `<tr><td colspan="4">Could not load season file: ${file}</td></tr>`;
+  }
+}
 </script>
 
 </body>
