@@ -29,7 +29,26 @@ body{
 
 h1{text-align:center;margin-bottom:6px;}
 .subtitle{text-align:center;color:#666;margin-bottom:10px;}
-.stats{text-align:center;margin-bottom:20px;font-weight:600;}
+
+.stats-row{
+  display:flex;
+  justify-content:center;
+  gap:20px;
+  margin:20px 0;
+  flex-wrap:wrap;
+}
+.stat-box{
+  background:#f4f6fb;
+  padding:12px 18px;
+  border-radius:10px;
+  min-width:150px;
+  text-align:center;
+  font-weight:600;
+}
+.stat-box span{
+  display:block;
+  font-size:20px;
+}
 
 table{
   width:100%;
@@ -47,11 +66,6 @@ th{
   cursor:pointer;
 }
 tr:nth-child(even){background:#f6f9ff;}
-
-tfoot tr{
-  background:#eee;
-  font-weight:700;
-}
 
 .bad{
   background:#fff3f3;
@@ -83,7 +97,9 @@ tfoot tr{
 
 <h1 id="title">NBA Player</h1>
 <div class="subtitle">Career Game Log</div>
-<div class="stats" id="statsLine"></div>
+
+<div class="stats-row" id="totalsBoxes"></div>
+<div class="stats-row" id="averagesBoxes"></div>
 
 <div id="errorBox" class="bad" style="display:none;"></div>
 
@@ -102,10 +118,6 @@ tfoot tr{
 </tr>
 </thead>
 <tbody id="gamesBody"></tbody>
-<tfoot>
-<tr id="totalsRow"></tr>
-<tr id="averagesRow"></tr>
-</tfoot>
 </table>
 
 </div>
@@ -115,12 +127,11 @@ const params = new URLSearchParams(window.location.search);
 const playerName = params.get("player");
 
 const titleEl = document.getElementById("title");
-const statsLine = document.getElementById("statsLine");
+const totalsBoxes = document.getElementById("totalsBoxes");
+const averagesBoxes = document.getElementById("averagesBoxes");
 const errorBox = document.getElementById("errorBox");
 const gamesTable = document.getElementById("gamesTable");
 const gamesBody = document.getElementById("gamesBody");
-const totalsRow = document.getElementById("totalsRow");
-const averagesRow = document.getElementById("averagesRow");
 
 const seasonFiles = [
   "1976-77","1977-78","1978-79","1979-80","1981-82","2023-24"
@@ -136,7 +147,7 @@ function showError(msg){
 }
 
 let rows = [];
-let currentSort = {key:null, dir:-1};
+let currentSort = {key:null, dir:"desc"};
 
 async function loadPlayer(){
   if(!playerName){
@@ -178,11 +189,11 @@ async function loadPlayer(){
     return;
   }
 
-  renderTable();
+  render();
   gamesTable.style.display = "table";
 }
 
-function renderTable(){
+function render(){
   gamesBody.innerHTML = "";
 
   let totals = {min:0,pts:0,reb:0,ast:0,stl:0,blk:0};
@@ -212,38 +223,38 @@ function renderTable(){
 
   const games = rows.length;
 
-  totalsRow.innerHTML = `
-    <td colspan="3">TOTALS (${games} games)</td>
-    <td>${totals.min}</td>
-    <td>${totals.pts}</td>
-    <td>${totals.reb}</td>
-    <td>${totals.ast}</td>
-    <td>${totals.stl}</td>
-    <td>${totals.blk}</td>
+  totalsBoxes.innerHTML = `
+    <div class="stat-box"><span>${games}</span>Games</div>
+    <div class="stat-box"><span>${totals.pts}</span>Points</div>
+    <div class="stat-box"><span>${totals.reb}</span>Rebounds</div>
+    <div class="stat-box"><span>${totals.ast}</span>Assists</div>
   `;
 
-  averagesRow.innerHTML = `
-    <td colspan="3">AVERAGES</td>
-    <td>${(totals.min/games).toFixed(1)}</td>
-    <td>${(totals.pts/games).toFixed(1)}</td>
-    <td>${(totals.reb/games).toFixed(1)}</td>
-    <td>${(totals.ast/games).toFixed(1)}</td>
-    <td>${(totals.stl/games).toFixed(1)}</td>
-    <td>${(totals.blk/games).toFixed(1)}</td>
+  averagesBoxes.innerHTML = `
+    <div class="stat-box"><span>${(totals.pts/games).toFixed(1)}</span>Avg Points</div>
+    <div class="stat-box"><span>${(totals.reb/games).toFixed(1)}</span>Avg Rebounds</div>
+    <div class="stat-box"><span>${(totals.ast/games).toFixed(1)}</span>Avg Assists</div>
   `;
-
-  statsLine.textContent =
-    `Games: ${games} | Points: ${totals.pts} | Rebounds: ${totals.reb} | Assists: ${totals.ast}`;
 }
 
 document.querySelectorAll("th[data-key]").forEach(th=>{
   th.addEventListener("click",()=>{
     const key = th.dataset.key;
-    currentSort.dir = currentSort.key===key ? currentSort.dir*-1 : -1;
-    currentSort.key = key;
 
-    rows.sort((a,b)=>(b[key]-a[key])*currentSort.dir);
-    renderTable();
+    if(currentSort.key === key){
+      currentSort.dir = currentSort.dir === "desc" ? "asc" : "desc";
+    } else {
+      currentSort.key = key;
+      currentSort.dir = "desc"; // highest first
+    }
+
+    rows.sort((a,b)=>{
+      return currentSort.dir === "desc"
+        ? b[key] - a[key]
+        : a[key] - b[key];
+    });
+
+    render();
   });
 });
 
