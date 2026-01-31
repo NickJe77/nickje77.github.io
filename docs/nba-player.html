@@ -57,10 +57,22 @@ h1{text-align:center;margin-bottom:10px;}
   font-weight:700;
 }
 
+.filter-row{
+  text-align:center;
+  margin:10px 0 16px;
+}
+
+select{
+  padding:6px 10px;
+  font-size:14px;
+  border-radius:6px;
+  border:1px solid #ccc;
+}
+
 table{
   width:100%;
   border-collapse:collapse;
-  margin-top:20px;
+  margin-top:10px;
   font-size:14px;
 }
 
@@ -103,6 +115,13 @@ tr:nth-child(even){background:#f6f9ff;}
 <div class="stats-row" id="averagesBoxes"></div>
 <div class="stats-row" id="highsBoxes"></div>
 
+<div class="filter-row">
+  Opposition:
+  <select id="oppFilter">
+    <option value="ALL">All teams</option>
+  </select>
+</div>
+
 <div id="errorBox" class="bad" style="display:none;"></div>
 
 <table>
@@ -134,8 +153,10 @@ const averagesBoxes = document.getElementById("averagesBoxes");
 const highsBoxes = document.getElementById("highsBoxes");
 const errorBox = document.getElementById("errorBox");
 const gamesBody = document.getElementById("gamesBody");
+const oppFilter = document.getElementById("oppFilter");
 
 let rows = [];
+let filteredRows = [];
 
 function seasonToFile(season){
   return "../data/nba/nba_season_" + season.replace("-","_") + ".json";
@@ -149,12 +170,9 @@ function showError(msg){
 function cleanDate(d){
   if(!d) return "";
   let s = d.trim();
-
-  // Fix truncated months from scraper
   if(s.startsWith("t ")) return "Oct " + s.slice(2);
   if(s.startsWith("ov ")) return "Nov " + s.slice(3);
   if(s.startsWith("v ")) return "Nov " + s.slice(2);
-
   return s;
 }
 
@@ -199,7 +217,6 @@ async function loadPlayer(){
             const home = game.home_team;
             const away = game.away_team;
 
-            // match "CHI" to "Chicago Bulls"
             const isHome =
               home.toLowerCase().startsWith(p.team.toLowerCase());
 
@@ -231,6 +248,28 @@ async function loadPlayer(){
     return;
   }
 
+  buildOppFilter();
+  applyFilter();
+}
+
+function buildOppFilter(){
+  const teams = [...new Set(rows.map(r => r.opp))].sort();
+  teams.forEach(t=>{
+    const opt = document.createElement("option");
+    opt.value = t;
+    opt.textContent = t;
+    oppFilter.appendChild(opt);
+  });
+}
+
+oppFilter.addEventListener("change", applyFilter);
+
+function applyFilter(){
+  const val = oppFilter.value;
+  filteredRows = (val === "ALL")
+    ? rows
+    : rows.filter(r => r.opp === val);
+
   render();
 }
 
@@ -240,7 +279,7 @@ function render(){
   let totals={pts:0,reb:0,ast:0,stl:0,blk:0};
   let highs={pts:0,reb:0,ast:0,stl:0,blk:0};
 
-  rows.forEach(r=>{
+  filteredRows.forEach(r=>{
     totals.pts+=r.pts;
     totals.reb+=r.reb;
     totals.ast+=r.ast;
@@ -267,10 +306,10 @@ function render(){
       </tr>`;
   });
 
-  const g = rows.length;
+  const g = filteredRows.length || 1;
 
   totalsBoxes.innerHTML=`
-    <div class="stat-box"><span>${g}</span>Games</div>
+    <div class="stat-box"><span>${filteredRows.length}</span>Games</div>
     <div class="stat-box"><span>${totals.pts}</span>Points</div>
     <div class="stat-box"><span>${totals.reb}</span>Rebounds</div>
     <div class="stat-box"><span>${totals.ast}</span>Assists</div>
