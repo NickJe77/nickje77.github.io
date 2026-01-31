@@ -27,8 +27,18 @@ body{
   padding:30px 20px 60px;
 }
 
-h1{text-align:center;margin-bottom:10px;}
-.subtitle{text-align:center;color:#666;margin-bottom:20px;}
+h1{text-align:center;margin-bottom:6px;}
+.subtitle{text-align:center;color:#666;margin-bottom:14px;}
+
+.controls{
+  text-align:center;
+  margin-bottom:12px;
+}
+
+select{
+  padding:6px 10px;
+  font-size:14px;
+}
 
 table{
   width:100%;
@@ -46,6 +56,11 @@ th{
 }
 tr:nth-child(even){background:#f6f9ff;}
 
+tfoot td{
+  font-weight:700;
+  background:#eaf0ff;
+}
+
 .bad{
   background:#fff3f3;
   border:1px solid #ffd0d0;
@@ -57,6 +72,12 @@ tr:nth-child(even){background:#f6f9ff;}
 }
 
 .game-link{
+  color:#0056d6;
+  text-decoration:none;
+  font-weight:600;
+}
+
+.team-link{
   color:#0056d6;
   text-decoration:none;
   font-weight:600;
@@ -77,6 +98,13 @@ tr:nth-child(even){background:#f6f9ff;}
 <h1 id="title">NBA Player</h1>
 <div class="subtitle" id="subtitle"></div>
 
+<div class="controls">
+  Season:
+  <select id="seasonFilter">
+    <option value="all">All Seasons</option>
+  </select>
+</div>
+
 <div id="errorBox" class="bad" style="display:none;"></div>
 
 <table id="gamesTable" style="display:none;">
@@ -94,6 +122,9 @@ tr:nth-child(even){background:#f6f9ff;}
 </tr>
 </thead>
 <tbody id="gamesBody"></tbody>
+<tfoot>
+<tr id="totalsRow"></tr>
+</tfoot>
 </table>
 
 </div>
@@ -107,10 +138,14 @@ const subtitleEl = document.getElementById("subtitle");
 const errorBox = document.getElementById("errorBox");
 const gamesTable = document.getElementById("gamesTable");
 const gamesBody = document.getElementById("gamesBody");
+const totalsRow = document.getElementById("totalsRow");
+const seasonFilter = document.getElementById("seasonFilter");
 
 const seasonFiles = [
   "1976-77","1977-78","1978-79","1979-80","1981-82","2023-24"
 ];
+
+let allRows = [];
 
 function seasonToFile(season){
   return "data/nba/nba_season_" + season.replace("-","_") + ".json";
@@ -130,8 +165,6 @@ async function loadPlayer(){
   titleEl.textContent = playerName;
   subtitleEl.textContent = "Career Game Log";
 
-  let rows = [];
-
   for(const season of seasonFiles){
     try{
       const res = await fetch(seasonToFile(season));
@@ -141,16 +174,16 @@ async function loadPlayer(){
       (data.games || []).forEach(g=>{
         (g.players || []).forEach(p=>{
           if(p.player === playerName){
-            rows.push({
+            allRows.push({
               season,
               game: `${g.home_team} vs ${g.away_team}`,
               team: p.team,
-              min: p.min,
-              pts: p.pts,
-              reb: p.reb,
-              ast: p.ast,
-              stl: p.stl,
-              blk: p.blk
+              min: Number(p.min)||0,
+              pts: Number(p.pts)||0,
+              reb: Number(p.reb)||0,
+              ast: Number(p.ast)||0,
+              stl: Number(p.stl)||0,
+              blk: Number(p.blk)||0
             });
           }
         });
@@ -159,15 +192,44 @@ async function loadPlayer(){
     }catch(e){}
   }
 
-  if(rows.length === 0){
+  if(allRows.length === 0){
     showError("No games found for this player.");
     return;
   }
 
-  // sort newest season first
-  rows.sort((a,b)=>b.season.localeCompare(a.season));
+  // newest first
+  allRows.sort((a,b)=>b.season.localeCompare(a.season));
+
+  // populate season dropdown
+  [...new Set(allRows.map(r=>r.season))].forEach(season=>{
+    const opt = document.createElement("option");
+    opt.value = season;
+    opt.textContent = season;
+    seasonFilter.appendChild(opt);
+  });
+
+  seasonFilter.addEventListener("change", renderTable);
+
+  renderTable();
+}
+
+function renderTable(){
+  const filter = seasonFilter.value;
+  const rows = filter==="all" ? allRows : allRows.filter(r=>r.season===filter);
+
+  gamesBody.innerHTML = "";
+  totalsRow.innerHTML = "";
+
+  let totals = {min:0,pts:0,reb:0,ast:0,stl:0,blk:0};
 
   rows.forEach(r=>{
+    totals.min += r.min;
+    totals.pts += r.pts;
+    totals.reb += r.reb;
+    totals.ast += r.ast;
+    totals.stl += r.stl;
+    totals.blk += r.blk;
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${r.season}</td>
@@ -176,16 +238,30 @@ async function loadPlayer(){
           ${r.game}
         </a>
       </td>
-      <td>${r.team}</td>
-      <td>${r.min||""}</td>
-      <td>${r.pts||""}</td>
-      <td>${r.reb||""}</td>
-      <td>${r.ast||""}</td>
-      <td>${r.stl||""}</td>
-      <td>${r.blk||""}</td>
+      <td>
+        <a class="team-link" href="nba-team.html?team=${encodeURIComponent(r.team)}">
+          ${r.team}
+        </a>
+      </td>
+      <td>${r.min}</td>
+      <td>${r.pts}</td>
+      <td>${r.reb}</td>
+      <td>${r.ast}</td>
+      <td>${r.stl}</td>
+      <td>${r.blk}</td>
     `;
     gamesBody.appendChild(tr);
   });
+
+  totalsRow.innerHTML = `
+    <td colspan="3">TOTAL</td>
+    <td>${totals.min}</td>
+    <td>${totals.pts}</td>
+    <td>${totals.reb}</td>
+    <td>${totals.ast}</td>
+    <td>${totals.stl}</td>
+    <td>${totals.blk}</td>
+  `;
 
   gamesTable.style.display = "table";
 }
