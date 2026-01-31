@@ -77,15 +77,15 @@ tr:nth-child(even){background:#f6f9ff;}
 <table>
 <thead>
 <tr>
-  <th data-key="season">Season</th>
-  <th data-key="date">Date</th>
-  <th data-key="team">Team</th>
-  <th data-key="opp">Opp</th>
-  <th data-key="pts">PTS</th>
-  <th data-key="reb">REB</th>
-  <th data-key="ast">AST</th>
-  <th data-key="stl">STL</th>
-  <th data-key="blk">BLK</th>
+  <th>Season</th>
+  <th>Date</th>
+  <th>Team</th>
+  <th>Opp</th>
+  <th>PTS</th>
+  <th>REB</th>
+  <th>AST</th>
+  <th>STL</th>
+  <th>BLK</th>
 </tr>
 </thead>
 <tbody id="gamesBody"></tbody>
@@ -105,7 +105,6 @@ const errorBox = document.getElementById("errorBox");
 const gamesBody = document.getElementById("gamesBody");
 
 let rows=[];
-let currentSort={key:null,dir:"desc"};
 
 function seasonToFile(season){
   return "/docs/data/nba/nba_season_" + season.replace("-","_") + ".json";
@@ -114,17 +113,6 @@ function seasonToFile(season){
 function showError(msg){
   errorBox.style.display="block";
   errorBox.textContent=msg;
-}
-
-function extractGames(data){
-  if(Array.isArray(data)) return data;
-  if(Array.isArray(data.games)) return data.games;
-  if(Array.isArray(data.results)) return data.results;
-  return [];
-}
-
-function getPlayerName(obj){
-  return obj.name || obj.player || obj.player_name || "";
 }
 
 async function detectSeasons(){
@@ -155,22 +143,27 @@ async function loadPlayer(){
       if(!res.ok) continue;
 
       const data = await res.json();
-      const games = extractGames(data);
 
-      games.forEach(g=>{
-        if(getPlayerName(g) === playerName){
-          rows.push({
-            season: season,
-            date: g.date || "",
-            team: g.team || "",
-            opp: g.opp || g.opponent || "",
-            pts: Number(g.pts) || 0,
-            reb: Number(g.reb) || 0,
-            ast: Number(g.ast) || 0,
-            stl: Number(g.stl) || 0,
-            blk: Number(g.blk) || 0
-          });
-        }
+      data.games.forEach(game=>{
+        game.players.forEach(p=>{
+          if(p.player === playerName){
+
+            const opp =
+              p.team === game.home_team ? game.away_team : game.home_team;
+
+            rows.push({
+              season: season,
+              date: game.date,
+              team: p.team,
+              opp: opp,
+              pts: p.pts,
+              reb: p.reb,
+              ast: p.ast,
+              stl: p.stl,
+              blk: p.blk
+            });
+          }
+        });
       });
 
     }catch(e){}
