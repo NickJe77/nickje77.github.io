@@ -2,15 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>NBA Seasons (1976–Present) | The Sporting Almanac</title>
+<title>NBA Season | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<link rel="stylesheet" href="style.css">
 
 <style>
 body{
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
-  "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family:Inter,system-ui,Arial;
   margin:0;
   background:#fff;
 }
@@ -22,21 +19,45 @@ body{
   border-bottom:1px solid #ddd;
   font-weight:600;
 }
-.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-.navbar a:hover{text-decoration:underline;}
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+  font-size:18px;
+}
 .page-wrap{
-  max-width:1100px;
+  max-width:1200px;
   margin:0 auto;
   padding:30px 20px 60px;
 }
+
 h1{text-align:center;margin-bottom:10px;}
-p{text-align:center;color:#555;margin-bottom:30px;}
-table{width:100%;border-collapse:collapse;}
-th,td{border-bottom:1px solid #ddd;padding:10px 12px;text-align:left;}
-th{background:#f0f0f0;}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:center;
+}
+th{
+  background:#f0f0f0;
+  cursor:pointer;
+  position:sticky;
+  top:0;
+}
 tr:nth-child(even){background:#f6f9ff;}
-a.season-link{color:#0056d6;text-decoration:none;font-weight:600;}
-a.season-link:hover{text-decoration:underline;}
+tr:hover{background:#e9f0ff;}
+
+.team-link{
+  color:#0056d6;
+  text-decoration:none;
+  font-weight:600;
+}
+.team-link:hover{
+  text-decoration:underline;
+}
 </style>
 </head>
 
@@ -44,79 +65,76 @@ a.season-link:hover{text-decoration:underline;}
 
 <div class="navbar">
   <a href="index.html">Home</a>
-  <a href="racing.html">Racing</a>
-  <a href="afl.html">AFL</a>
-  <a href="football.html">Football</a>
-  <a href="cricket.html">Cricket</a>
-  <a href="f1.html">F1</a>
   <a href="nba.html">NBA</a>
+  <a href="nba-season.html">Seasons</a>
 </div>
 
 <div class="page-wrap">
 
-<h1>NBA Seasons</h1>
-<p>Championship seasons from 1976–77 to the present day.</p>
+<h1 id="title"></h1>
 
 <table>
 <thead>
 <tr>
-  <th>Season</th>
-  <th>Champion</th>
-  <th>Runner-up</th>
-  <th>Finals MVP</th>
+  <th>Date</th>
+  <th>Game</th>
+  <th>Winner</th>
+  <th>Score</th>
 </tr>
 </thead>
-<tbody id="seasonTable"></tbody>
+<tbody id="gamesTable"></tbody>
 </table>
 
 </div>
 
 <script>
-const tableBody = document.getElementById("seasonTable");
+const params = new URLSearchParams(window.location.search);
+const seasonParam = params.get("season"); // eg 1976_77
+const file = "data/nba/nba_season_" + seasonParam + ".json";
 
-const seasonFiles = [
-  "nba_season_1976_77.json",
-  "nba_season_1977_78.json",
-  "nba_season_1978_79.json",
-  "nba_season_1979_80.json",
-  "nba_season_2023_24.json"
-];
+const gamesTable = document.getElementById("gamesTable");
+let gamesData = [];
 
-async function loadSeasons(){
-  const seasons = [];
+fetch(file)
+.then(r => r.json())
+.then(data => {
+  document.getElementById("title").textContent =
+    "NBA Season " + data.season;
 
-  for(const file of seasonFiles){
-    try{
-      const res = await fetch("data/nba/" + file);
-      if(!res.ok) continue;
-      const json = await res.json();
-      json.__file = file;
-      seasons.push(json);
-    }catch(e){}
-  }
+  gamesData = data.games || [];
+  render();
+});
 
-  seasons.sort((a,b)=>a.season.localeCompare(b.season));
-
-  seasons.forEach(season=>{
-    const tr=document.createElement("tr");
-
-    const seasonKey = season.season.replace("-","_");
-
-    tr.innerHTML=`
-      <td>
-        <a class="season-link" href="nba-season-view.html?season=${seasonKey}">
-          ${season.season}
-        </a>
-      </td>
-      <td>${season.champion||""}</td>
-      <td>${season.runner_up||""}</td>
-      <td>${season.finals_mvp||""}</td>
-    `;
-    tableBody.appendChild(tr);
-  });
+function teamLink(team){
+  return `<a class="team-link" href="nba-team.html?team=${encodeURIComponent(team)}"
+            onclick="event.stopPropagation()">${team}</a>`;
 }
 
-loadSeasons();
+function render(){
+  gamesTable.innerHTML = "";
+
+  gamesData.forEach((g, index) => {
+    const winner =
+      g.home_points > g.away_points ? g.home_team : g.away_team;
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${g.date || ""}</td>
+      <td>${teamLink(g.home_team)} vs ${teamLink(g.away_team)}</td>
+      <td>${teamLink(winner)}</td>
+      <td>${g.home_points} – ${g.away_points}</td>
+    `;
+
+    tr.onclick = () => {
+      window.location.href =
+        "nba-game.html?season=" +
+        encodeURIComponent(seasonParam) +
+        "&game=" + index;
+    };
+
+    gamesTable.appendChild(tr);
+  });
+}
 </script>
 
 </body>

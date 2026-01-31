@@ -8,19 +8,89 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
-body{font-family:Inter,system-ui,Arial;margin:0;background:#fff;}
-.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
+body{
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:#fff;
+}
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px 60px;}
-h1{text-align:center;}
-.score{text-align:center;font-size:22px;font-weight:700;margin:10px 0 20px;}
-table{width:100%;border-collapse:collapse;}
-th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:center;}
-th{background:#f0f0f0;}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px 60px;
+}
+
+h1{text-align:center;margin:0 0 6px;}
+.subtitle{
+  text-align:center;
+  color:#666;
+  margin:0 0 18px;
+}
+
+.summary{
+  display:flex;
+  justify-content:center;
+  gap:16px;
+  flex-wrap:wrap;
+  margin:0 0 18px;
+}
+.card{
+  background:#f4f6fb;
+  padding:12px 18px;
+  border-radius:10px;
+  min-width:180px;
+  text-align:center;
+}
+.card b{display:block;font-size:18px;}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:center;
+  white-space:nowrap;
+}
+th{
+  background:#f0f0f0;
+  cursor:pointer;
+  position:sticky;
+  top:0;
+  z-index:2;
+}
 tr:nth-child(even){background:#f6f9ff;}
-.reserves{font-weight:700;}
-.player-link{color:#0056d6;text-decoration:none;font-weight:600;}
-.player-link:hover{text-decoration:underline;}
+tr:hover{background:#e9f0ff;}
+.player-link{
+  color:#0056d6;
+  text-decoration:none;
+  font-weight:600;
+}
+.note{
+  text-align:center;
+  color:#888;
+  margin-top:12px;
+  font-size:14px;
+}
+.bad{
+  background:#fff3f3;
+  border:1px solid #ffd0d0;
+  color:#a40000;
+  padding:10px 12px;
+  border-radius:10px;
+  max-width:900px;
+  margin:0 auto 18px;
+}
 </style>
 </head>
 
@@ -34,107 +104,202 @@ tr:nth-child(even){background:#f6f9ff;}
 
 <div class="page-wrap">
 
-<h1 id="title"></h1>
-<div class="score" id="score"></div>
+<h1 id="title">NBA Game</h1>
+<div class="subtitle" id="subtitle"></div>
 
-<table>
-<thead>
-<tr>
-  <th>Player</th>
-  <th>Team</th>
-  <th>MIN</th>
-  <th>PTS</th>
-  <th>REB</th>
-  <th>AST</th>
-  <th>STL</th>
-  <th>BLK</th>
-  <th>TO</th>
-  <th>PF</th>
-</tr>
-</thead>
-<tbody id="playerTable"></tbody>
+<div id="errorBox" class="bad" style="display:none;"></div>
+
+<div class="summary" id="summary" style="display:none;">
+  <div class="card"><b id="scoreLine">-</b>Final Score</div>
+  <div class="card"><b id="metaLine">-</b>Date / Venue</div>
+</div>
+
+<table id="boxTable" style="display:none;">
+  <thead>
+    <tr>
+      <th onclick="sortBy('player')">Player</th>
+      <th onclick="sortBy('team')">Team</th>
+      <th onclick="sortBy('min')">MIN</th>
+      <th onclick="sortBy('pts')">PTS</th>
+      <th onclick="sortBy('reb')">REB</th>
+      <th onclick="sortBy('ast')">AST</th>
+      <th onclick="sortBy('stl')">STL</th>
+      <th onclick="sortBy('blk')">BLK</th>
+      <th onclick="sortBy('to')">TO</th>
+      <th onclick="sortBy('pf')">PF</th>
+    </tr>
+  </thead>
+  <tbody id="boxBody"></tbody>
 </table>
+
+<div class="note" id="hint"></div>
 
 </div>
 
 <script>
 const params = new URLSearchParams(window.location.search);
 const season = params.get("season");
-const gameIndex = parseInt(params.get("game"), 10);
+const gameStr = params.get("game");
 
-const file = "data/nba/nba_season_" + season + ".json";
 const titleEl = document.getElementById("title");
-const scoreEl = document.getElementById("score");
-const table = document.getElementById("playerTable");
+const subtitleEl = document.getElementById("subtitle");
+const errorBox = document.getElementById("errorBox");
 
-/* TEAM CODE → NICKNAME MAP */
-const teamMap = {
-  "NJN": "New Jersey Nets",
-  "DET": "Detroit Pistons",
-  "BOS": "Boston Celtics",
-  "NYK": "New York Knicks",
-  "PHI": "Philadelphia 76ers",
-  "CHI": "Chicago Bulls",
-  "LAL": "Los Angeles Lakers",
-  "GSW": "Golden State Warriors",
-  "MIL": "Milwaukee Bucks",
-  "ATL": "Atlanta Hawks",
-  "CLE": "Cleveland Cavaliers",
-  "IND": "Indiana Pacers",
-  "SEA": "Seattle SuperSonics",
-  "POR": "Portland Trail Blazers",
-  "PHO": "Phoenix Suns",
-  "SAS": "San Antonio Spurs",
-  "UTA": "Utah Jazz",
-  "DEN": "Denver Nuggets",
-  "HOU": "Houston Rockets",
-  "DAL": "Dallas Mavericks",
-  "LAC": "Los Angeles Clippers",
-  "WAS": "Washington Bullets"
-};
+const summaryEl = document.getElementById("summary");
+const scoreLine = document.getElementById("scoreLine");
+const metaLine = document.getElementById("metaLine");
 
-function teamName(code){
-  return teamMap[code] || code;
+const boxTable = document.getElementById("boxTable");
+const boxBody = document.getElementById("boxBody");
+const hint = document.getElementById("hint");
+
+let rows = [];
+let sortKey = null;
+let sortAsc = true;
+
+// Convert "1976-77" -> "nba_season_1976_77.json"
+function seasonToFile(seasonStr){
+  if(!seasonStr) return null;
+  const m = seasonStr.match(/^(\d{4})-(\d{2})$/);
+  if(!m) return null;
+  return `nba_season_${m[1]}_${m[1].slice(0,2)}${m[2]}.json`;
 }
 
-fetch(file)
-.then(r => r.json())
-.then(data => {
-  const game = data.games[gameIndex];
+function showError(msg){
+  errorBox.style.display = "block";
+  errorBox.textContent = msg;
+}
 
-  const home = game.home_team;
-  const away = game.away_team;
-  const hp = game.home_points;
-  const ap = game.away_points;
+function safeNum(v){
+  const n = Number(v);
+  return isNaN(n) ? 0 : n;
+}
 
-  titleEl.textContent = home + " vs " + away;
-  scoreEl.textContent = hp + " – " + ap;
+function playerHref(name){
+  return `nba-player.html?player=${encodeURIComponent(name)}`;
+}
 
-  game.players.forEach(p => {
+function sortBy(key){
+  if(sortKey === key){
+    sortAsc = !sortAsc;
+  }else{
+    sortKey = key;
+    // IMPORTANT: default to HIGHEST first when you click any header
+    sortAsc = false;
+  }
+  renderBox();
+}
+
+function renderBox(){
+  boxBody.innerHTML = "";
+
+  let sorted = [...rows];
+  if(sortKey){
+    sorted.sort((a,b)=>{
+      const av = a[sortKey];
+      const bv = b[sortKey];
+
+      const aIsStr = (typeof av === "string");
+      const bIsStr = (typeof bv === "string");
+
+      if(aIsStr || bIsStr){
+        const aa = (av ?? "").toString();
+        const bb = (bv ?? "").toString();
+        return sortAsc ? aa.localeCompare(bb) : bb.localeCompare(aa);
+      }else{
+        return sortAsc ? (av-bv) : (bv-av);
+      }
+    });
+  }else{
+    // default: show best scoring lines first (feels right on load)
+    sorted.sort((a,b)=>b.pts - a.pts);
+  }
+
+  sorted.forEach(r=>{
     const tr = document.createElement("tr");
-
-    const isReserves = p.player.toLowerCase() === "reserves";
-
-    const playerCell = isReserves
-      ? `<span class="reserves">${p.player}</span>`
-      : `<a class="player-link" href="nba-player.html?player=${encodeURIComponent(p.player)}">${p.player}</a>`;
-
     tr.innerHTML = `
-      <td>${playerCell}</td>
-      <td>${teamName(p.team)}</td>
-      <td>${p.min || ""}</td>
-      <td>${p.pts || 0}</td>
-      <td>${p.reb || 0}</td>
-      <td>${p.ast || 0}</td>
-      <td>${p.stl || 0}</td>
-      <td>${p.blk || 0}</td>
-      <td>${p.to || 0}</td>
-      <td>${p.pf || 0}</td>
+      <td><a class="player-link" href="${playerHref(r.player)}">${r.player}</a></td>
+      <td>${r.team}</td>
+      <td>${r.min}</td>
+      <td>${r.pts}</td>
+      <td>${r.reb}</td>
+      <td>${r.ast}</td>
+      <td>${r.stl}</td>
+      <td>${r.blk}</td>
+      <td>${r.to}</td>
+      <td>${r.pf}</td>
     `;
-
-    table.appendChild(tr);
+    boxBody.appendChild(tr);
   });
-});
+}
+
+async function loadGame(){
+  if(!season || !gameStr){
+    showError("Missing URL parameters. Expected ?season=YYYY-YY&game=Home%20Team%20vs%20Away%20Team");
+    return;
+  }
+
+  const file = seasonToFile(season);
+  if(!file){
+    showError(`Season format not recognised: "${season}" (expected like 1976-77).`);
+    return;
+  }
+
+  titleEl.textContent = gameStr;
+  subtitleEl.textContent = `Season ${season}`;
+
+  try{
+    const res = await fetch("data/nba/" + file);
+    if(!res.ok) throw new Error("fetch failed");
+    const data = await res.json();
+
+    const match = (data.games || []).find(g => {
+      const label = `${g.home_team} vs ${g.away_team}`;
+      return label === gameStr;
+    });
+
+    if(!match){
+      showError(`Couldn't find this game in ${file}. Make sure the 'game' parameter matches "Home Team vs Away Team" exactly.`);
+      return;
+    }
+
+    // Summary
+    summaryEl.style.display = "flex";
+    const hs = ("home_score" in match) ? match.home_score : (match.home_pts ?? match.homeScore ?? "");
+    const as = ("away_score" in match) ? match.away_score : (match.away_pts ?? match.awayScore ?? "");
+    const scoreText = (hs !== "" && as !== "")
+      ? `${match.home_team} ${hs} – ${as} ${match.away_team}`
+      : `${match.home_team} vs ${match.away_team}`;
+    scoreLine.textContent = scoreText;
+
+    const date = match.date || "";
+    const venue = match.venue || match.arena || "";
+    metaLine.textContent = [date, venue].filter(Boolean).join(" • ") || "—";
+
+    // Box score rows
+    rows = (match.players || []).map(p=>({
+      player: p.player || "",
+      team: p.team || "",
+      min: p.min || "",
+      pts: safeNum(p.pts),
+      reb: safeNum(p.reb),
+      ast: safeNum(p.ast),
+      stl: safeNum(p.stl),
+      blk: safeNum(p.blk),
+      to: safeNum(p.to),
+      pf: safeNum(p.pf)
+    }));
+
+    boxTable.style.display = "table";
+    hint.textContent = "Click a column header to sort (defaults to highest first).";
+    renderBox();
+
+  }catch(e){
+    showError("Could not load season file: data/nba/" + file);
+  }
+}
+
+loadGame();
 </script>
 
 </body>
