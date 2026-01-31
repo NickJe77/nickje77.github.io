@@ -21,47 +21,17 @@ body{
   border-bottom:1px solid #ddd;
   font-weight:600;
 }
-.navbar a{
-  color:#0056d6;
-  text-decoration:none;
-  font-size:18px;
-}
-.page-wrap{
-  max-width:1200px;
-  margin:0 auto;
-  padding:30px 20px 60px;
-}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px 60px;}
 h1{text-align:center;margin-bottom:10px;}
-.filters{
-  display:flex;
-  gap:16px;
-  justify-content:center;
-  margin:20px 0 30px;
-}
-select{
-  padding:8px 12px;
-  font-size:15px;
-}
-table{
-  width:100%;
-  border-collapse:collapse;
-}
-th,td{
-  border-bottom:1px solid #ddd;
-  padding:10px 12px;
-}
-th{
-  background:#f0f0f0;
-}
-tr:nth-child(even){
-  background:#f6f9ff;
-}
-tr.game-row{
-  cursor:pointer;
-}
-tr.game-row:hover{
-  background:#e9f1ff;
-}
+.filters{display:flex;gap:16px;justify-content:center;margin:20px 0 30px;}
+select{padding:8px 12px;font-size:15px;}
+table{width:100%;border-collapse:collapse;}
+th,td{border-bottom:1px solid #ddd;padding:10px 12px;}
+th{background:#f0f0f0;}
+tr:nth-child(even){background:#f6f9ff;}
+tr.game-row{cursor:pointer;}
+tr.game-row:hover{background:#e9f1ff;}
 </style>
 </head>
 
@@ -116,106 +86,77 @@ function cleanDate(raw){
   let cleaned = raw.replace(/^t\s*/i, "Oct ");
   const parsed = new Date(cleaned);
   if(!isNaN(parsed)){
-    return parsed.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric"
-    });
+    return parsed.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
   }
   return cleaned;
 }
 
 fetch(file)
-.then(r => r.json())
-.then(data => {
-  document.getElementById("title").textContent =
-    "NBA Season " + data.season;
-
+.then(r=>r.json())
+.then(data=>{
+  document.getElementById("title").textContent = "NBA Season " + data.season;
   gamesData = data.games || [];
 
-  const teams = new Set();
-  const players = new Set();
+  const teams=new Set(), players=new Set();
 
-  gamesData.forEach(g => {
+  gamesData.forEach(g=>{
     if(g.home_team) teams.add(g.home_team);
     if(g.away_team) teams.add(g.away_team);
-
     if(g.players){
-      g.players.forEach(p => {
+      g.players.forEach(p=>{
         if(p.player) players.add(p.player);
       });
     }
   });
 
-  [...teams].sort().forEach(t => {
-    const o = document.createElement("option");
-    o.value = t;
-    o.textContent = t;
-    teamSelect.appendChild(o);
+  [...teams].sort().forEach(t=>{
+    teamFilter.add(new Option(t,t));
   });
-
-  [...players].sort().forEach(p => {
-    const o = document.createElement("option");
-    o.value = p;
-    o.textContent = p;
-    playerSelect.appendChild(o);
+  [...players].sort().forEach(p=>{
+    playerFilter.add(new Option(p,p));
   });
 
   renderGames();
 });
 
 function renderGames(){
-  const teamVal = teamSelect.value;
-  const playerVal = playerSelect.value;
+  const teamVal=teamFilter.value;
+  const playerVal=playerFilter.value;
+  gamesTable.innerHTML="";
 
-  gamesTable.innerHTML = "";
-
-  gamesData.filter(g => {
-    let ok = true;
-
+  gamesData.filter((g)=>{
+    let ok=true;
     if(teamVal){
-      ok = g.home_team === teamVal || g.away_team === teamVal;
+      ok=g.home_team===teamVal||g.away_team===teamVal;
     }
-
-    if(ok && playerVal && g.players){
-      ok = g.players.some(p => p.player === playerVal);
+    if(ok&&playerVal&&g.players){
+      ok=g.players.some(p=>p.player===playerVal);
     }
-
     return ok;
-  }).forEach(g => {
+  }).forEach((g,i)=>{
+    const home=g.home_team||"", away=g.away_team||"";
+    const hp=g.home_points??"", ap=g.away_points??"";
+    const winner = hp>ap?home:away;
 
-    const home = g.home_team || "";
-    const away = g.away_team || "";
-    const hp = g.home_points ?? "";
-    const ap = g.away_points ?? "";
-
-    let winner = "";
-    if(hp !== "" && ap !== ""){
-      winner = hp > ap ? home : away;
-    }
-
-    const tr = document.createElement("tr");
-    tr.className = "game-row";
-
-    tr.innerHTML = `
+    const tr=document.createElement("tr");
+    tr.className="game-row";
+    tr.innerHTML=`
       <td>${cleanDate(g.date)}</td>
       <td>${home} vs ${away}</td>
       <td>${winner}</td>
       <td>${hp}–${ap}</td>
     `;
 
-    if(g.box_url){
-      tr.addEventListener("click", () => {
-        window.open(g.box_url, "_blank");
-      });
-    }
+    tr.onclick=()=>{
+      window.location.href=`nba-game.html?season=${seasonParam}&game=${i}`;
+    };
 
     gamesTable.appendChild(tr);
   });
 }
 
-teamSelect.addEventListener("change", renderGames);
-playerSelect.addEventListener("change", renderGames);
+teamFilter.onchange=renderGames;
+playerFilter.onchange=renderGames;
 </script>
 
 </body>
