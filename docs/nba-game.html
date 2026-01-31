@@ -10,24 +10,11 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:#fff;}
 .navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 .page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px 60px;}
-h1{text-align:center;margin-bottom:6px;}
-.subtitle{text-align:center;color:#666;margin-bottom:20px;}
-
-.summary{display:flex;justify-content:center;margin-bottom:25px;}
-.card{background:#f4f6fb;padding:12px 20px;border-radius:10px;font-weight:700;}
-
-.team-block{margin-bottom:40px;}
-.team-title{text-align:center;font-size:22px;font-weight:700;margin-bottom:10px;}
-
+h1{text-align:center;}
 table{width:100%;border-collapse:collapse;}
 th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:center;}
 th{background:#f0f0f0;position:sticky;top:0;}
 tr:nth-child(even){background:#f6f9ff;}
-
-.player-link{color:#0056d6;text-decoration:none;font-weight:600;}
-.reserves-row td{font-weight:700;color:#000;background:#eee;}
-
-.bad{background:#fff3f3;border:1px solid #ffd0d0;color:#a40000;padding:10px;border-radius:8px;}
 </style>
 </head>
 
@@ -42,110 +29,37 @@ tr:nth-child(even){background:#f6f9ff;}
 <div class="page-wrap">
 
 <h1 id="title"></h1>
-<div class="subtitle" id="subtitle"></div>
-
-<div id="errorBox" class="bad" style="display:none;"></div>
-
-<div class="summary">
-  <div class="card" id="scoreLine"></div>
-</div>
-
-<div class="team-block">
-  <div class="team-title" id="homeTeamTitle"></div>
-  <table>
-    <thead>
-      <tr>
-        <th>Player</th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>PF</th>
-      </tr>
-    </thead>
-    <tbody id="homeBody"></tbody>
-  </table>
-</div>
-
-<div class="team-block">
-  <div class="team-title" id="awayTeamTitle"></div>
-  <table>
-    <thead>
-      <tr>
-        <th>Player</th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>PF</th>
-      </tr>
-    </thead>
-    <tbody id="awayBody"></tbody>
-  </table>
-</div>
+<table>
+<thead>
+<tr>
+<th>Player</th><th>Team</th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th>
+</tr>
+</thead>
+<tbody id="boxBody"></tbody>
+</table>
 
 </div>
 
 <script>
-const params = new URLSearchParams(window.location.search);
-const season = params.get("season");
-const gameStr = params.get("game");
+const params=new URLSearchParams(location.search);
+const season=params.get("season");
+const gameStr=params.get("game");
 
-const titleEl = document.getElementById("title");
-const subtitleEl = document.getElementById("subtitle");
-const scoreLine = document.getElementById("scoreLine");
-const errorBox = document.getElementById("errorBox");
+function seasonToFile(s){return "data/nba/nba_season_"+s.replace("-","_")+".json";}
 
-const homeBody = document.getElementById("homeBody");
-const awayBody = document.getElementById("awayBody");
-const homeTeamTitle = document.getElementById("homeTeamTitle");
-const awayTeamTitle = document.getElementById("awayTeamTitle");
-
-function seasonToFile(seasonStr){
-  return "data/nba/nba_season_" + seasonStr.replace("-","_") + ".json";
-}
-
-function showError(msg){
-  errorBox.style.display="block";
-  errorBox.textContent=msg;
-}
-
-fetch(seasonToFile(season))
-.then(r=>r.json())
-.then(data=>{
-  const game = data.games.find(g=>`${g.home_team} vs ${g.away_team}`===gameStr);
-
-  if(!game){
-    showError("Game not found.");
-    return;
-  }
-
-  titleEl.textContent = gameStr;
-  subtitleEl.textContent = "Season " + season;
-  scoreLine.textContent = `${game.home_team} ${game.home_points} – ${game.away_points} ${game.away_team}`;
-
-  homeTeamTitle.textContent = game.home_team;
-  awayTeamTitle.textContent = game.away_team;
-
-  game.players.forEach(p=>{
+fetch(seasonToFile(season)).then(r=>r.json()).then(data=>{
+  const g=data.games.find(x=>`${x.home_team} vs ${x.away_team}`===gameStr);
+  document.getElementById("title").textContent=gameStr;
+  g.players.forEach(p=>{
     const tr=document.createElement("tr");
-
-    if(p.player==="Reserves"){
-      tr.className="reserves-row";
-      tr.innerHTML=`<td>Reserves</td><td colspan="8"></td>`;
-    } else {
-      tr.innerHTML=`
-        <td><a class="player-link" href="nba-player.html?season=${season}&player=${encodeURIComponent(p.player)}">${p.player}</a></td>
-        <td>${p.min||""}</td>
-        <td>${p.pts||""}</td>
-        <td>${p.reb||""}</td>
-        <td>${p.ast||""}</td>
-        <td>${p.stl||""}</td>
-        <td>${p.blk||""}</td>
-        <td>${p.to||""}</td>
-        <td>${p.pf||""}</td>
-      `;
-    }
-
-    if(p.team===game.home_team){
-      homeBody.appendChild(tr);
-    } else {
-      awayBody.appendChild(tr);
-    }
+    tr.innerHTML=`
+    <td><a href="nba-player.html?player=${encodeURIComponent(p.player)}">${p.player}</a></td>
+    <td><a href="nba-team.html?team=${encodeURIComponent(p.team)}">${p.team}</a></td>
+    <td>${p.min||""}</td><td>${p.pts||0}</td><td>${p.reb||0}</td><td>${p.ast||0}</td>
+    <td>${p.stl||0}</td><td>${p.blk||0}</td>`;
+    boxBody.appendChild(tr);
   });
-
-})
-.catch(()=>showError("Could not load season file"));
+});
 </script>
 
 </body>
