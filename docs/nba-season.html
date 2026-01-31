@@ -49,15 +49,6 @@ th{
 }
 tr:nth-child(even){background:#f6f9ff;}
 tr:hover{background:#e9f0ff;}
-
-.team-link{
-  color:#0056d6;
-  text-decoration:none;
-  font-weight:600;
-}
-.team-link:hover{
-  text-decoration:underline;
-}
 </style>
 </head>
 
@@ -89,11 +80,15 @@ tr:hover{background:#e9f0ff;}
 
 <script>
 const params = new URLSearchParams(window.location.search);
-const seasonParam = params.get("season"); // eg 1976_77
-const file = "data/nba/nba_season_" + seasonParam + ".json";
+let seasonParam = params.get("season"); // may be 1976-77 or 1976_77
 
+// convert 1976-77 → 1976_77
+if(seasonParam && seasonParam.includes("-")){
+  seasonParam = seasonParam.replace("-", "_");
+}
+
+const file = "data/nba/nba_season_" + seasonParam + ".json";
 const gamesTable = document.getElementById("gamesTable");
-let gamesData = [];
 
 fetch(file)
 .then(r => r.json())
@@ -101,40 +96,34 @@ fetch(file)
   document.getElementById("title").textContent =
     "NBA Season " + data.season;
 
-  gamesData = data.games || [];
-  render();
-});
-
-function teamLink(team){
-  return `<a class="team-link" href="nba-team.html?team=${encodeURIComponent(team)}"
-            onclick="event.stopPropagation()">${team}</a>`;
-}
-
-function render(){
-  gamesTable.innerHTML = "";
-
-  gamesData.forEach((g, index) => {
+  data.games.forEach((g, index) => {
     const winner =
       g.home_points > g.away_points ? g.home_team : g.away_team;
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${g.date || ""}</td>
-      <td>${teamLink(g.home_team)} vs ${teamLink(g.away_team)}</td>
-      <td>${teamLink(winner)}</td>
+      <td>${g.home_team} vs ${g.away_team}</td>
+      <td>${winner}</td>
       <td>${g.home_points} – ${g.away_points}</td>
     `;
 
     tr.onclick = () => {
       window.location.href =
         "nba-game.html?season=" +
-        encodeURIComponent(seasonParam) +
-        "&game=" + index;
+        encodeURIComponent(data.season) +
+        "&game=" +
+        encodeURIComponent(g.home_team + " vs " + g.away_team);
     };
 
     gamesTable.appendChild(tr);
   });
-}
+})
+.catch(err=>{
+  document.getElementById("title").textContent =
+    "Season not found: " + seasonParam;
+  console.error(err);
+});
 </script>
 
 </body>
