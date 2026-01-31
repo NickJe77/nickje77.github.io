@@ -32,7 +32,7 @@ tr:hover{background:#e9f0ff;}
 
 <div class="page-wrap">
 
-<h1 id="title">NBA Seasons</h1>
+<h1 id="title">NBA Season</h1>
 
 <div class="filter-bar">
 Season:
@@ -74,6 +74,8 @@ Game Type:
 </div>
 
 <script>
+const BASE_PATH = "data/nba/";
+
 const params = new URLSearchParams(window.location.search);
 let seasonParam = params.get("season");
 
@@ -83,32 +85,90 @@ const standingsTable = document.getElementById("standingsTable");
 const titleEl = document.getElementById("title");
 const typeFilter = document.getElementById("typeFilter");
 
-/* AUTO SEASON LIST */
-const seasonFiles = [
-  "1976-77","1977-78","1978-79","1979-80","1981-82","2023-24"
-];
+const monthMap = {
+  "t":"Oct",
+  "v":"Nov",
+  "c":"Dec",
+  "Jan":"Jan","Feb":"Feb","Mar":"Mar","Apr":"Apr",
+  "May":"May","Jun":"Jun","Jul":"Jul","Aug":"Aug","Sep":"Sep"
+};
 
 function seasonToFile(season){
-  return "data/nba/nba_season_" + season.replace("-","_") + ".json";
+  return BASE_PATH + "nba_season_" + season.replace("-","_") + ".json";
 }
 
-seasonFiles.forEach(s=>{
-  const opt=document.createElement("option");
-  opt.value=s; opt.textContent=s;
-  seasonSelect.appendChild(opt);
-});
+/* AUTO season detection */
+async function detectSeasons(){
+  const years=[];
+  for(let y=1976;y<=2030;y++){
+    years.push(`${y}-${String(y+1).slice(2)}`);
+  }
 
-if(!seasonParam || !seasonFiles.includes(seasonParam)){
-  seasonParam = seasonFiles[0];
+  const checks = years.map(season =>
+    fetch(seasonToFile(season))
+      .then(r=>r.ok?season:null)
+      .catch(()=>null)
+  );
+
+  const results = await Promise.all(checks);
+  return results.filter(Boolean).sort((a,b)=>b.localeCompare(a));
 }
-seasonSelect.value = seasonParam;
 
 seasonSelect.addEventListener("change",()=>{
   location.href="nba-season.html?season="+seasonSelect.value;
 });
-typeFilter.addEventListener("change",()=>loadSeason(seasonSelect.value));
 
-loadSeason(seasonParam);
+typeFilter.addEventListener("change",()=>{
+  loadSeason(seasonSelect.value);
+});
+
+init();
+
+async function init(){
+  const seasonFiles=await detectSeasons();
+
+  if(!seasonFiles.length){
+    gamesTable.innerHTML=`<tr><td colspan="4">No season files found</td></tr>`;
+    return;
+  }
+
+  seasonFiles.forEach(s=>{
+    const opt=document.createElement("option");
+    opt.value=s;
+    opt.textContent=s;
+    seasonSelect.appendChild(opt);
+  });
+
+  if(!seasonParam||!seasonFiles.includes(seasonParam)){
+    seasonParam=seasonFiles[0];
+  }
+
+  seasonSelect.value=seasonParam;
+  loadSeason(seasonParam);
+}
+
+/* PARSE ODD MONTH LETTERS */
+function parseGameDate(raw,season){
+  if(!raw) return new Date(0);
+
+  let clean = raw.replace(",","").trim();
+  let parts = clean.split(" ");
+
+  let m = monthMap[parts[0]] || parts[0];
+  let d = parts[1];
+  let y = parts[2];
+
+  return new Date(`${m} ${d} ${y}`);
+}
+
+function formatNice(raw){
+  if(!raw) return "";
+  let clean = raw.replace(",","").trim();
+  let parts = clean.split(" ");
+
+  let m = monthMap[parts[0]] || parts[0];
+  return `${m} ${parts[1]} ${parts[2]}`;
+}
 
 async function loadSeason(season){
   const file=seasonToFile(season);
@@ -122,23 +182,26 @@ async function loadSeason(season){
 
     const standings={};
 
-    let games=data.games.slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
+    const games=(data.games||[]).slice().sort((a,b)=>{
+      return parseGameDate(b.date,season)-parseGameDate(a.date,season);
+    });
 
     games.forEach(g=>{
-      const isPlayoff = g.round && g.round.toLowerCase().includes("playoff");
+      const isPlayoff=g.is_playoffs||false;
+      if(typeFilter.value==="playoffs"&&!isPlayoff)return;
+      if(typeFilter.value==="regular"&&isPlayoff)return;
 
-      if(typeFilter.value==="playoffs" && !isPlayoff) return;
-      if(typeFilter.value==="regular" && isPlayoff) return;
+      const winner=g.home_points>g.away_points?g.home_team:g.away_team;
+      const loser=g.home_points>g.away_points?g.away_team:g.home_team;
 
-      const winner = g.home_points>g.away_points?g.home_team:g.away_team;
-      const loser = g.home_points>g.away_points?g.away_team:g.home_team;
-
-      standings[winner]=(standings[winner]||{w:0,l:0}); standings[winner].w++;
-      standings[loser]=(standings[loser]||{w:0,l:0}); standings[loser].l++;
+      standings[winner]=standings[winner]||{w:0,l:0};
+      standings[loser]=standings[loser]||{w:0,l:0};
+      standings[winner].w++;
+      standings[loser].l++;
 
       const tr=document.createElement("tr");
       tr.innerHTML=`
-        <td>${g.date||""}</td>
+        <td>${formatNice(g.date)}</td>
         <td>
           <a href="nba-team.html?team=${encodeURIComponent(g.home_team)}">${g.home_team}</a>
           vs
@@ -147,8 +210,11 @@ async function loadSeason(season){
         <td>${winner}</td>
         <td>${g.home_points} – ${g.away_points}</td>
       `;
+
       tr.onclick=()=>location.href=
-        "nba-game.html?season="+encodeURIComponent(season)+"&game="+encodeURIComponent(g.home_team+" vs "+g.away_team);
+        "nba-game.html?season="+encodeURIComponent(season)+
+        "&game="+encodeURIComponent(g.home_team+" vs "+g.away_team);
+
       gamesTable.appendChild(tr);
     });
 
