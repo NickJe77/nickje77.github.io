@@ -28,24 +28,18 @@ body{
 }
 
 h1{text-align:center;margin:0 0 6px;}
-.subtitle{
-  text-align:center;
-  color:#666;
-  margin:0 0 18px;
-}
+.subtitle{text-align:center;color:#666;margin:0 0 18px;}
 
 .summary{
   display:flex;
   justify-content:center;
-  gap:16px;
-  flex-wrap:wrap;
-  margin:0 0 18px;
+  margin-bottom:20px;
 }
 .card{
   background:#f4f6fb;
   padding:12px 18px;
   border-radius:10px;
-  min-width:220px;
+  min-width:260px;
   text-align:center;
 }
 .card b{display:block;font-size:18px;}
@@ -72,10 +66,8 @@ th{
   background:#f0f0f0;
   position:sticky;
   top:0;
-  z-index:2;
 }
 tr:nth-child(even){background:#f6f9ff;}
-tr:hover{background:#e9f0ff;}
 
 .player-link{
   color:#0056d6;
@@ -120,8 +112,6 @@ tr:hover{background:#e9f0ff;}
   <div class="card"><b id="scoreLine">-</b>Final Score</div>
 </div>
 
-<div id="tablesWrap" style="display:none;">
-
 <h2 class="team-title" id="homeTitle"></h2>
 <table>
 <thead>
@@ -160,8 +150,6 @@ tr:hover{background:#e9f0ff;}
 
 </div>
 
-</div>
-
 <script>
 const params = new URLSearchParams(window.location.search);
 const season = params.get("season");
@@ -170,11 +158,9 @@ const gameStr = params.get("game");
 const titleEl = document.getElementById("title");
 const subtitleEl = document.getElementById("subtitle");
 const errorBox = document.getElementById("errorBox");
-
 const summaryEl = document.getElementById("summary");
 const scoreLine = document.getElementById("scoreLine");
 
-const tablesWrap = document.getElementById("tablesWrap");
 const homeBody = document.getElementById("homeBody");
 const awayBody = document.getElementById("awayBody");
 const homeTitle = document.getElementById("homeTitle");
@@ -196,7 +182,6 @@ async function loadGame(){
   }
 
   const file = seasonToFile(season);
-
   titleEl.textContent = gameStr;
   subtitleEl.textContent = "Season " + season;
 
@@ -205,12 +190,9 @@ async function loadGame(){
     if(!res.ok) throw new Error("fetch failed");
     const data = await res.json();
 
-    const match = (data.games || []).find(g => {
-      return `${g.home_team} vs ${g.away_team}` === gameStr;
-    });
-
+    const match = data.games.find(g => `${g.home_team} vs ${g.away_team}` === gameStr);
     if(!match){
-      showError("Game not found in season file.");
+      showError("Game not found.");
       return;
     }
 
@@ -221,13 +203,17 @@ async function loadGame(){
     homeTitle.textContent = match.home_team;
     awayTitle.textContent = match.away_team;
 
-    const homePlayers = match.players.filter(p => p.team === match.home_team);
-    const awayPlayers = match.players.filter(p => p.team === match.away_team);
+    // DETECT TEAM CODES FROM PLAYER LIST
+    const teamCodes = [...new Set(match.players.map(p => p.team))];
+
+    const homeCode = teamCodes[0];
+    const awayCode = teamCodes[1];
+
+    const homePlayers = match.players.filter(p => p.team === homeCode);
+    const awayPlayers = match.players.filter(p => p.team === awayCode);
 
     renderTeam(homePlayers, homeBody);
     renderTeam(awayPlayers, awayBody);
-
-    tablesWrap.style.display = "block";
 
   }catch(e){
     showError("Could not load season file: " + file);
@@ -248,17 +234,16 @@ function renderTeam(players, tbody){
     } else {
       tr.innerHTML = `
         <td><a class="player-link" href="nba-player.html?player=${encodeURIComponent(p.player)}">${p.player}</a></td>
-        <td>${p.min || ""}</td>
-        <td>${p.pts || ""}</td>
-        <td>${p.reb || ""}</td>
-        <td>${p.ast || ""}</td>
-        <td>${p.stl || ""}</td>
-        <td>${p.blk || ""}</td>
-        <td>${p.to || ""}</td>
-        <td>${p.pf || ""}</td>
+        <td>${p.min||""}</td>
+        <td>${p.pts||""}</td>
+        <td>${p.reb||""}</td>
+        <td>${p.ast||""}</td>
+        <td>${p.stl||""}</td>
+        <td>${p.blk||""}</td>
+        <td>${p.to||""}</td>
+        <td>${p.pf||""}</td>
       `;
     }
-
     tbody.appendChild(tr);
   });
 }
