@@ -30,6 +30,15 @@ body{
 h1{text-align:center;margin-bottom:6px;}
 .subtitle{text-align:center;color:#666;margin-bottom:10px;}
 
+.filter-wrap{
+  text-align:center;
+  margin:10px 0 20px;
+}
+select{
+  padding:6px 10px;
+  font-size:16px;
+}
+
 .stats-row{
   display:flex;
   justify-content:center;
@@ -98,6 +107,13 @@ tr:nth-child(even){background:#f6f9ff;}
 <h1 id="title">NBA Player</h1>
 <div class="subtitle">Career Game Log</div>
 
+<div class="filter-wrap">
+  Season:
+  <select id="seasonFilter">
+    <option value="all">All seasons</option>
+  </select>
+</div>
+
 <div class="stats-row" id="totalsBoxes"></div>
 <div class="stats-row" id="averagesBoxes"></div>
 
@@ -132,6 +148,7 @@ const averagesBoxes = document.getElementById("averagesBoxes");
 const errorBox = document.getElementById("errorBox");
 const gamesTable = document.getElementById("gamesTable");
 const gamesBody = document.getElementById("gamesBody");
+const seasonFilter = document.getElementById("seasonFilter");
 
 const seasonFiles = [
   "1976-77","1977-78","1978-79","1979-80","1981-82","2023-24"
@@ -146,7 +163,8 @@ function showError(msg){
   errorBox.textContent = msg;
 }
 
-let rows = [];
+let allRows = [];
+let filteredRows = [];
 let currentSort = {key:null, dir:"desc"};
 
 async function loadPlayer(){
@@ -166,7 +184,7 @@ async function loadPlayer(){
       (data.games || []).forEach(g=>{
         (g.players || []).forEach(p=>{
           if(p.player === playerName){
-            rows.push({
+            allRows.push({
               season,
               game: `${g.home_team} vs ${g.away_team}`,
               team: p.team,
@@ -184,13 +202,41 @@ async function loadPlayer(){
     }catch(e){}
   }
 
-  if(rows.length === 0){
+  if(allRows.length === 0){
     showError("No games found for this player.");
     return;
   }
 
-  render();
+  buildSeasonFilter();
+  applyFilter();
   gamesTable.style.display = "table";
+}
+
+function buildSeasonFilter(){
+  const seasons = [...new Set(allRows.map(r=>r.season))];
+  seasons.sort();
+  seasons.forEach(s=>{
+    const opt = document.createElement("option");
+    opt.value = s;
+    opt.textContent = s;
+    seasonFilter.appendChild(opt);
+  });
+
+  seasonFilter.addEventListener("change", applyFilter);
+}
+
+function applyFilter(){
+  const val = seasonFilter.value;
+  filteredRows = val==="all" ? [...allRows] : allRows.filter(r=>r.season===val);
+  sortRows();
+  render();
+}
+
+function sortRows(){
+  if(!currentSort.key) return;
+  filteredRows.sort((a,b)=>{
+    return currentSort.dir==="desc" ? b[currentSort.key]-a[currentSort.key] : a[currentSort.key]-b[currentSort.key];
+  });
 }
 
 function render(){
@@ -198,7 +244,7 @@ function render(){
 
   let totals = {min:0,pts:0,reb:0,ast:0,stl:0,blk:0};
 
-  rows.forEach(r=>{
+  filteredRows.forEach(r=>{
     totals.min+=r.min;
     totals.pts+=r.pts;
     totals.reb+=r.reb;
@@ -221,7 +267,7 @@ function render(){
     gamesBody.appendChild(tr);
   });
 
-  const games = rows.length;
+  const games = filteredRows.length;
 
   totalsBoxes.innerHTML = `
     <div class="stat-box"><span>${games}</span>Games</div>
@@ -230,30 +276,25 @@ function render(){
     <div class="stat-box"><span>${totals.ast}</span>Assists</div>
   `;
 
-  averagesBoxes.innerHTML = `
+  averagesBoxes.innerHTML = games ? `
     <div class="stat-box"><span>${(totals.pts/games).toFixed(1)}</span>Avg Points</div>
     <div class="stat-box"><span>${(totals.reb/games).toFixed(1)}</span>Avg Rebounds</div>
     <div class="stat-box"><span>${(totals.ast/games).toFixed(1)}</span>Avg Assists</div>
-  `;
+  ` : "";
 }
 
 document.querySelectorAll("th[data-key]").forEach(th=>{
   th.addEventListener("click",()=>{
     const key = th.dataset.key;
 
-    if(currentSort.key === key){
-      currentSort.dir = currentSort.dir === "desc" ? "asc" : "desc";
+    if(currentSort.key===key){
+      currentSort.dir = currentSort.dir==="desc" ? "asc" : "desc";
     } else {
       currentSort.key = key;
-      currentSort.dir = "desc"; // highest first
+      currentSort.dir = "desc";
     }
 
-    rows.sort((a,b)=>{
-      return currentSort.dir === "desc"
-        ? b[key] - a[key]
-        : a[key] - b[key];
-    });
-
+    sortRows();
     render();
   });
 });
