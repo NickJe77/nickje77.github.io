@@ -64,15 +64,15 @@ tr:hover{background:#e9f0ff;}
 <table id="gamesTable" style="display:none;">
 <thead>
 <tr>
-  <th data-key="season">Season</th>
+  <th>Season</th>
   <th>Game</th>
   <th>Team</th>
   <th>MIN</th>
-  <th data-key="pts">PTS</th>
-  <th data-key="reb">REB</th>
-  <th data-key="ast">AST</th>
-  <th data-key="stl">STL</th>
-  <th data-key="blk">BLK</th>
+  <th>PTS</th>
+  <th>REB</th>
+  <th>AST</th>
+  <th>STL</th>
+  <th>BLK</th>
 </tr>
 </thead>
 <tbody id="gamesBody"></tbody>
@@ -81,11 +81,11 @@ tr:hover{background:#e9f0ff;}
 </div>
 
 <script>
-const BASE_PATH = "docs/data/nba/";
+const BASE_PATH = "/data/nba/";
 
 const params = new URLSearchParams(window.location.search);
 const rawPlayer = params.get("player");
-const playerName = decodeURIComponent(rawPlayer||"").trim().toLowerCase();
+const playerName = decodeURIComponent(rawPlayer || "").trim().toLowerCase();
 
 const titleEl = document.getElementById("title");
 const subtitleEl = document.getElementById("subtitle");
@@ -96,7 +96,6 @@ const careerStats = document.getElementById("careerStats");
 const avgStats = document.getElementById("avgStats");
 
 let rows = [];
-let sortDir = {};
 
 function seasonToFile(season){
   return BASE_PATH + "nba_season_" + season.replace("-","_") + ".json";
@@ -107,9 +106,13 @@ async function detectSeasons(){
   for(let y=1976;y<=2030;y++){
     years.push(`${y}-${String(y+1).slice(2)}`);
   }
-  const checks = years.map(s =>
-    fetch(seasonToFile(s)).then(r=>r.ok?s:null).catch(()=>null)
+
+  const checks = years.map(season =>
+    fetch(seasonToFile(season))
+      .then(r => r.ok ? season : null)
+      .catch(() => null)
   );
+
   return (await Promise.all(checks)).filter(Boolean);
 }
 
@@ -119,27 +122,27 @@ function showError(msg){
 }
 
 function renderStats(){
-  const games=rows.length;
+  const games = rows.length;
   let pts=0,reb=0,ast=0;
   let bestPts=0,bestReb=0,bestAst=0;
 
   rows.forEach(r=>{
-    pts+=r.pts||0;
-    reb+=r.reb||0;
-    ast+=r.ast||0;
-    bestPts=Math.max(bestPts,r.pts||0);
-    bestReb=Math.max(bestReb,r.reb||0);
-    bestAst=Math.max(bestAst,r.ast||0);
+    pts += r.pts;
+    reb += r.reb;
+    ast += r.ast;
+    bestPts = Math.max(bestPts, r.pts);
+    bestReb = Math.max(bestReb, r.reb);
+    bestAst = Math.max(bestAst, r.ast);
   });
 
-  careerStats.innerHTML=`
+  careerStats.innerHTML = `
     <div class="stat-box"><strong>${games}</strong>Games</div>
     <div class="stat-box"><strong>${pts}</strong>Points</div>
     <div class="stat-box"><strong>${reb}</strong>Rebounds</div>
     <div class="stat-box"><strong>${ast}</strong>Assists</div>
   `;
 
-  avgStats.innerHTML=`
+  avgStats.innerHTML = `
     <div class="stat-box"><strong>${(pts/games).toFixed(1)}</strong>Avg PTS</div>
     <div class="stat-box"><strong>${(reb/games).toFixed(1)}</strong>Avg REB</div>
     <div class="stat-box"><strong>${(ast/games).toFixed(1)}</strong>Avg AST</div>
@@ -157,65 +160,66 @@ function renderTable(){
       <td>${r.season}</td>
       <td><a class="game-link" href="nba-game.html?season=${encodeURIComponent(r.season)}&game=${encodeURIComponent(r.game)}">${r.game}</a></td>
       <td>${r.team}</td>
-      <td>${r.min||""}</td>
-      <td>${r.pts||""}</td>
-      <td>${r.reb||""}</td>
-      <td>${r.ast||""}</td>
-      <td>${r.stl||""}</td>
-      <td>${r.blk||""}</td>
+      <td>${r.min}</td>
+      <td>${r.pts}</td>
+      <td>${r.reb}</td>
+      <td>${r.ast}</td>
+      <td>${r.stl}</td>
+      <td>${r.blk}</td>
     `;
     gamesBody.appendChild(tr);
   });
 }
 
 async function loadPlayer(){
-  if(!playerName){showError("Missing player parameter");return;}
+  if(!playerName){
+    showError("Missing player parameter");
+    return;
+  }
 
   titleEl.textContent = decodeURIComponent(rawPlayer);
-  subtitleEl.textContent="Career Game Log";
+  subtitleEl.textContent = "Career Game Log";
 
-  const seasons=await detectSeasons();
-  if(!seasons.length){showError("No season files found");return;}
+  const seasons = await detectSeasons();
+  if(!seasons.length){
+    showError("No season files found");
+    return;
+  }
 
   for(const season of seasons){
-    const res=await fetch(seasonToFile(season));
+    const res = await fetch(seasonToFile(season));
     if(!res.ok) continue;
-    const data=await res.json();
 
-    (data.games||[]).forEach(g=>{
-      (g.players||[]).forEach(p=>{
+    const data = await res.json();
+
+    (data.games || []).forEach(g=>{
+      (g.players || []).forEach(p=>{
         if(p.player && p.player.trim().toLowerCase() === playerName){
           rows.push({
             season,
-            game:`${g.home_team} vs ${g.away_team}`,
-            team:p.team,
-            min:p.min,
-            pts:p.pts||0,
-            reb:p.reb||0,
-            ast:p.ast||0,
-            stl:p.stl||0,
-            blk:p.blk||0
+            game: `${g.home_team} vs ${g.away_team}`,
+            team: p.team,
+            min: p.min || "",
+            pts: p.pts || 0,
+            reb: p.reb || 0,
+            ast: p.ast || 0,
+            stl: p.stl || 0,
+            blk: p.blk || 0
           });
         }
       });
     });
   }
 
-  if(!rows.length){showError("No games found for this player.");return;}
+  if(!rows.length){
+    showError("No games found for this player.");
+    return;
+  }
 
   renderStats();
   renderTable();
   gamesTable.style.display="table";
 }
-
-document.querySelectorAll("th[data-key]").forEach(th=>{
-  th.addEventListener("click",()=>{
-    const key=th.dataset.key;
-    sortDir[key]=!sortDir[key];
-    rows.sort((a,b)=>sortDir[key]?b[key]-a[key]:a[key]-b[key]);
-    renderTable();
-  });
-});
 
 loadPlayer();
 </script>
