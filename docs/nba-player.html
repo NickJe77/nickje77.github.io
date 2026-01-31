@@ -81,11 +81,11 @@ tr:hover{background:#e9f0ff;}
 </div>
 
 <script>
-const BASE_PATH = "docs/data/nba/";
+const BASE_PATH = "/data/nba/";
 
 const params = new URLSearchParams(window.location.search);
-const rawPlayer = params.get("player") || "";
-const playerKey = decodeURIComponent(rawPlayer).trim().toLowerCase();
+const rawPlayer = params.get("player");
+const playerName = decodeURIComponent(rawPlayer||"").trim().toLowerCase();
 
 const titleEl = document.getElementById("title");
 const subtitleEl = document.getElementById("subtitle");
@@ -119,17 +119,17 @@ function showError(msg){
 }
 
 function renderStats(){
-  const games = rows.length;
-  let pts=0, reb=0, ast=0;
-  let bestPts=0, bestReb=0, bestAst=0;
+  const games=rows.length;
+  let pts=0,reb=0,ast=0;
+  let bestPts=0,bestReb=0,bestAst=0;
 
   rows.forEach(r=>{
-    pts+=r.pts;
-    reb+=r.reb;
-    ast+=r.ast;
-    bestPts=Math.max(bestPts,r.pts);
-    bestReb=Math.max(bestReb,r.reb);
-    bestAst=Math.max(bestAst,r.ast);
+    pts+=r.pts||0;
+    reb+=r.reb||0;
+    ast+=r.ast||0;
+    bestPts=Math.max(bestPts,r.pts||0);
+    bestReb=Math.max(bestReb,r.reb||0);
+    bestAst=Math.max(bestAst,r.ast||0);
   });
 
   careerStats.innerHTML=`
@@ -158,39 +158,33 @@ function renderTable(){
       <td><a class="game-link" href="nba-game.html?season=${encodeURIComponent(r.season)}&game=${encodeURIComponent(r.game)}">${r.game}</a></td>
       <td>${r.team}</td>
       <td>${r.min||""}</td>
-      <td>${r.pts}</td>
-      <td>${r.reb}</td>
-      <td>${r.ast}</td>
-      <td>${r.stl}</td>
-      <td>${r.blk}</td>
+      <td>${r.pts||""}</td>
+      <td>${r.reb||""}</td>
+      <td>${r.ast||""}</td>
+      <td>${r.stl||""}</td>
+      <td>${r.blk||""}</td>
     `;
     gamesBody.appendChild(tr);
   });
 }
 
 async function loadPlayer(){
-  if(!playerKey){
-    showError("Missing player parameter");
-    return;
-  }
+  if(!playerName){showError("Missing player parameter");return;}
 
   titleEl.textContent = decodeURIComponent(rawPlayer);
-  subtitleEl.textContent = "Career Game Log";
+  subtitleEl.textContent="Career Game Log";
 
-  const seasons = await detectSeasons();
-  if(!seasons.length){
-    showError("No season files found");
-    return;
-  }
+  const seasons=await detectSeasons();
+  if(!seasons.length){showError("No season files found");return;}
 
   for(const season of seasons){
-    const res = await fetch(seasonToFile(season));
+    const res=await fetch(seasonToFile(season));
     if(!res.ok) continue;
-    const data = await res.json();
+    const data=await res.json();
 
     (data.games||[]).forEach(g=>{
       (g.players||[]).forEach(p=>{
-        if(p.player && p.player.trim().toLowerCase() === playerKey){
+        if(p.player && p.player.trim().toLowerCase() === playerName){
           rows.push({
             season,
             game:`${g.home_team} vs ${g.away_team}`,
@@ -207,10 +201,7 @@ async function loadPlayer(){
     });
   }
 
-  if(!rows.length){
-    showError("No games found for this player.");
-    return;
-  }
+  if(!rows.length){showError("No games found for this player.");return;}
 
   renderStats();
   renderTable();
