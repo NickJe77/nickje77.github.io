@@ -17,11 +17,7 @@ body { font-family: system-ui, Arial, sans-serif; margin:0; }
   border-bottom:1px solid #ddd;
   font-weight:600;
 }
-.navbar a{
-  color:#0056d6;
-  text-decoration:none;
-  font-size:18px;
-}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 
 .page-wrap{ margin:20px; }
 
@@ -46,22 +42,15 @@ table { border-collapse: collapse; width:100%; table-layout:fixed; }
 th, td { padding:6px 10px; border:1px solid #ccc; text-align:center; }
 th { background:#f0f0f0; }
 
-td.team { 
-  text-align:left; 
-  font-weight:600; 
-  white-space:nowrap;
-  width:190px;
-}
+td.team { text-align:left; font-weight:600; white-space:nowrap; width:190px; }
 
 .main-layout { display:flex; gap:30px; align-items:flex-start; }
-
 .ladder-wrap { width:460px; flex-shrink:0; }
 .results-wrap { flex:1; }
 
-.meta {
-  font-size:13px;
-  color:#555;
-}
+.meta { font-size:13px; color:#555; }
+.meta a { color:#0056d6; text-decoration:none; font-weight:600; }
+.meta a:hover { text-decoration:underline; }
 </style>
 </head>
 
@@ -77,24 +66,16 @@ td.team {
 </div>
 
 <div class="page-wrap">
-
 <h1>AFL Season</h1>
 
 <div id="yearBar" class="year-bar"></div>
-
-<select id="teamSelect">
-  <option value="ALL">All teams</option>
-</select>
-
+<select id="teamSelect"><option value="ALL">All teams</option></select>
 <div id="roundBar" class="round-bar"></div>
 
 <div class="main-layout">
   <div id="ladder" class="ladder-wrap"></div>
-  <div class="results-wrap">
-    <div id="matches"></div>
-  </div>
+  <div class="results-wrap"><div id="matches"></div></div>
 </div>
-
 </div>
 
 <script>
@@ -111,13 +92,7 @@ let rawData = [];
 let matches = [];
 let currentRound = "ALL";
 
-const finalsRounds = [
-  "Elimination Final",
-  "Qualifying Final",
-  "Semi Final",
-  "Preliminary Final",
-  "Grand Final"
-];
+const finalsRounds = ["Elimination Final","Qualifying Final","Semi Final","Preliminary Final","Grand Final"];
 
 for (let y = startYear; y <= endYear; y++) {
   const btn = document.createElement("button");
@@ -126,33 +101,28 @@ for (let y = startYear; y <= endYear; y++) {
   btn.onclick = () => loadYear(y);
   yearBar.appendChild(btn);
 }
-
 loadYear(startYear);
 
 function canonicalRound(r) {
-  const t = (r ?? "").toLowerCase();
-  if (t.includes("elimination")) return "Elimination Final";
-  if (t.includes("qualifying")) return "Qualifying Final";
-  if (t.includes("semi")) return "Semi Final";
-  if (t.includes("preliminary")) return "Preliminary Final";
-  if (t.includes("grand")) return "Grand Final";
-  return (r ?? "").trim();
+  const t=(r??"").toLowerCase();
+  if(t.includes("elimination"))return"Elimination Final";
+  if(t.includes("qualifying"))return"Qualifying Final";
+  if(t.includes("semi"))return"Semi Final";
+  if(t.includes("preliminary"))return"Preliminary Final";
+  if(t.includes("grand"))return"Grand Final";
+  return (r??"").trim();
 }
 
-function loadYear(year) {
-  currentRound = "ALL";
-  teamSelect.value = "ALL";
-
+function loadYear(year){
+  currentRound="ALL";
+  teamSelect.value="ALL";
   document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
   [...yearBar.children].find(b=>b.textContent==year).classList.add("active");
 
-  matchesDiv.innerHTML="";
-  ladderDiv.innerHTML="";
-
-  fetch(`/data/afl/afl_${year}.json?cb=${Date.now()}`)
+  fetch(`/data/afl/afl_${year}.json`)
     .then(r=>r.json())
     .then(data=>{
-      rawData = data;
+      rawData=data;
       buildMatchesFromPlayers();
       buildTeamSelector();
       buildRoundButtons();
@@ -161,190 +131,125 @@ function loadYear(year) {
 }
 
 function buildMatchesFromPlayers(){
-  const map = {};
+  const map={};
 
   rawData.forEach(p=>{
-    const key = p.match_id + "|" + canonicalRound(p.round);
-
+    const key=p.match_id+"|"+canonicalRound(p.round);
     if(!map[key]){
-      map[key] = {
-        round: canonicalRound(p.round),
-        teams: {},
-        players: [],
-        date: p.date_iso || "",
-        venue: p.venue || "",
-        crowd: p.crowd || ""
-      };
+      map[key]={round:canonicalRound(p.round),teams:{},players:[],date:p.date_iso||"",venue:p.venue||"",crowd:p.crowd||""};
     }
 
-    const team = p.played_for;
-    const opp  = p.played_against;
-
-    const points = (Number(p.G||0)*6) + Number(p.B||0);
-
-    if(!map[key].teams[team]) map[key].teams[team]=0;
-    map[key].teams[team]+=points;
-
-    if(opp && !map[key].teams[opp]) map[key].teams[opp]=0;
-
+    const pts=(+p.G||0)*6+(+p.B||0);
+    if(!map[key].teams[p.played_for])map[key].teams[p.played_for]=0;
+    map[key].teams[p.played_for]+=pts;
+    if(p.played_against&&!map[key].teams[p.played_against])map[key].teams[p.played_against]=0;
     map[key].players.push(p);
   });
 
-  matches = Object.values(map).map(m=>{
-    const t = Object.keys(m.teams);
-    return {
-      round: m.round,
-      home_team: t[0],
-      away_team: t[1],
-      home_points: m.teams[t[0]],
-      away_points: m.teams[t[1]],
-      players: m.players,
-      date: m.date,
-      venue: m.venue,
-      crowd: m.crowd
-    };
+  matches=Object.values(map).map(m=>{
+    const t=Object.keys(m.teams);
+    return {round:m.round,home_team:t[0],away_team:t[1],home_points:m.teams[t[0]],away_points:m.teams[t[1]],players:m.players,date:m.date,venue:m.venue,crowd:m.crowd};
   });
 }
 
-function buildTeamSelector() {
+function buildTeamSelector(){
   const teams=new Set();
-  matches.forEach(r=>{
-    teams.add(r.home_team);
-    teams.add(r.away_team);
-  });
-
+  matches.forEach(m=>{teams.add(m.home_team);teams.add(m.away_team);});
   teamSelect.innerHTML=`<option value="ALL">All teams</option>`;
   [...teams].sort().forEach(t=>{
-    const opt=document.createElement("option");
-    opt.value=t;
-    opt.textContent=t;
-    teamSelect.appendChild(opt);
+    const o=document.createElement("option");
+    o.value=t;o.textContent=t;teamSelect.appendChild(o);
   });
 }
 
-function buildRoundButtons() {
+function buildRoundButtons(){
   roundBar.innerHTML="";
-
   const rounds=[...new Set(matches.map(r=>canonicalRound(r.round)))];
-  const numeric=rounds.filter(r=>/^Round\s*\d+/i.test(r))
-    .map(r=>({label:r,num:parseInt(r.match(/\d+/)[0])}))
-    .sort((a,b)=>a.num-b.num);
-
-  addRoundButton("All Rounds", true);
+  const numeric=rounds.filter(r=>/^Round\s*\d+/i.test(r)).map(r=>({label:r,num:+r.match(/\d+/)[0]})).sort((a,b)=>a.num-b.num);
+  addRoundButton("All Rounds",true);
   numeric.forEach(r=>addRoundButton(r.label));
   finalsRounds.forEach(r=>addRoundButton(r));
 }
 
 function addRoundButton(label,active=false){
-  const btn=document.createElement("button");
-  btn.textContent=label;
-  btn.className="round-btn"+(active?" active":"");
-  btn.onclick=()=>{
+  const b=document.createElement("button");
+  b.textContent=label;
+  b.className="round-btn"+(active?" active":"");
+  b.onclick=()=>{
     currentRound=label==="All Rounds"?"ALL":label;
-    document.querySelectorAll(".round-btn").forEach(b=>b.classList.remove("active"));
-    btn.classList.add("active");
+    document.querySelectorAll(".round-btn").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
     renderMatches();
   };
-  roundBar.appendChild(btn);
+  roundBar.appendChild(b);
 }
 
 teamSelect.onchange=renderMatches;
 
 function getStars(match){
   return match.players
-    .filter(p=>Number(p.D)>=35 || Number(p.G)>=5)
+    .filter(p=>+p.D>=35||+p.G>=5)
     .map(p=>{
-      if(Number(p.G)>=5) return `${p.player} (${p.G} goals)`;
-      return `${p.player} (${p.D} disposals)`;
+      return `<a href="player.html?name=${encodeURIComponent(p.player)}">${p.player}</a> (${p.G>=5?`${p.G} goals`:`${p.D} disposals`})`;
     });
 }
 
 function getRunningLadderMatches(){
-  if(currentRound==="ALL"){
-    return matches.filter(m=>/^Round\s*\d+/i.test(m.round));
-  }
-  const n=parseInt(currentRound.match(/\d+/)?.[0]);
-  return matches.filter(m=>{
-    const r=parseInt(m.round.match(/\d+/)?.[0]);
-    return r && r<=n;
-  });
+  if(currentRound==="ALL")return matches.filter(m=>/^Round\s*\d+/i.test(m.round));
+  const n=+currentRound.match(/\d+/)?.[0];
+  return matches.filter(m=>(+m.round.match(/\d+/)?.[0])<=n);
 }
 
 function renderMatches(){
   matchesDiv.innerHTML="";
   ladderDiv.innerHTML="";
-
   let rows=matches;
 
-  if(teamSelect.value!=="ALL"){
-    rows=rows.filter(r=>r.home_team===teamSelect.value||r.away_team===teamSelect.value);
-  }
+  if(teamSelect.value!=="ALL")rows=rows.filter(r=>r.home_team===teamSelect.value||r.away_team===teamSelect.value);
+  if(currentRound!=="ALL")rows=rows.filter(r=>canonicalRound(r.round)===currentRound);
 
-  if(currentRound!=="ALL"){
-    rows=rows.filter(r=>canonicalRound(r.round)===currentRound);
-  }
-
-  if(!finalsRounds.includes(currentRound)){
-    buildLadder(getRunningLadderMatches());
-  }
+  if(!finalsRounds.includes(currentRound))buildLadder(getRunningLadderMatches());
 
   rows.forEach(g=>{
-    let line=g.home_points>g.away_points
+    const line=g.home_points>g.away_points
       ?`${g.home_team} ${g.home_points} def ${g.away_team} ${g.away_points}`
       :g.home_points<g.away_points
       ?`${g.home_team} ${g.home_points} def by ${g.away_team} ${g.away_points}`
       :`${g.home_team} ${g.home_points} drew ${g.away_team} ${g.away_points}`;
 
-    const meta=[g.date,g.venue,g.crowd?`Crowd: ${g.crowd}`:""].filter(Boolean);
     const stars=getStars(g);
 
     matchesDiv.innerHTML+=`
       <div class="match">
         <strong>${g.round}</strong>: ${line}
-        <div class="meta">${meta.join(" · ")}</div>
-        ${stars.length ? `<div class="meta">⭐ ${stars.join(", ")}</div>` : ""}
-      </div>
-    `;
+        <div class="meta">${[g.date,g.venue,g.crowd&&`Crowd: ${g.crowd}`].filter(Boolean).join(" · ")}</div>
+        ${stars.length?`<div class="meta">⭐ ${stars.join(", ")}</div>`:""}
+      </div>`;
   });
 }
 
 function buildLadder(rows){
   let ladder={};
-
   rows.forEach(g=>{
-    const h=g.home_team,a=g.away_team;
-    const hp=+g.home_points,ap=+g.away_points;
-
-    if(!ladder[h]) ladder[h]={team:h,w:0,l:0,d:0,f:0,ag:0};
-    if(!ladder[a]) ladder[a]={team:a,w:0,l:0,d:0,f:0,ag:0};
-
-    ladder[h].f+=hp; ladder[h].ag+=ap;
-    ladder[a].f+=ap; ladder[a].ag+=hp;
-
+    const h=g.home_team,a=g.away_team,hp=+g.home_points,ap=+g.away_points;
+    if(!ladder[h])ladder[h]={team:h,w:0,l:0,d:0,f:0,ag:0};
+    if(!ladder[a])ladder[a]={team:a,w:0,l:0,d:0,f:0,ag:0};
+    ladder[h].f+=hp;ladder[h].ag+=ap;
+    ladder[a].f+=ap;ladder[a].ag+=hp;
     if(hp>ap){ladder[h].w++;ladder[a].l++;}
     else if(ap>hp){ladder[a].w++;ladder[h].l++;}
     else{ladder[h].d++;ladder[a].d++;}
   });
 
-  const arr=Object.values(ladder).map(t=>{
-    t.p=t.ag?((t.f/t.ag)*100).toFixed(1):"0.0";
-    return t;
-  }).sort((a,b)=>b.w-a.w||b.p-a.p);
+  const arr=Object.values(ladder).map(t=>{t.p=t.ag?((t.f/t.ag)*100).toFixed(1):"0.0";return t;})
+    .sort((a,b)=>b.w-a.w||b.p-a.p);
 
-  let html="<table><colgroup><col style='width:40px'><col style='width:190px'><col><col><col><col></colgroup><tr><th>#</th><th>Team</th><th>W</th><th>L</th><th>D</th><th>%</th></tr>";
+  let html="<table><tr><th>#</th><th>Team</th><th>W</th><th>L</th><th>D</th><th>%</th></tr>";
   arr.forEach((t,i)=>{
-    html+=`<tr>
-      <td>${i+1}</td>
-      <td class="team">${t.team}</td>
-      <td>${t.w}</td>
-      <td>${t.l}</td>
-      <td>${t.d}</td>
-      <td>${t.p}</td>
-    </tr>`;
+    html+=`<tr><td>${i+1}</td><td class="team">${t.team}</td><td>${t.w}</td><td>${t.l}</td><td>${t.d}</td><td>${t.p}</td></tr>`;
   });
   ladderDiv.innerHTML=html+"</table>";
 }
 </script>
-
 </body>
 </html>
