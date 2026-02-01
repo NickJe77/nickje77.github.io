@@ -42,22 +42,28 @@ select { padding:8px 10px; font-size:16px; margin-bottom:15px; display:block; }
 
 .match { margin-bottom:6px; padding:6px 10px; border-radius:6px; }
 
-table { border-collapse: collapse; width:100%; table-layout:fixed; }
-th, td { padding:6px 10px; border:1px solid #ccc; text-align:center; }
+table { 
+  border-collapse: collapse; 
+  width:100%; 
+  table-layout: fixed; 
+}
+th, td { 
+  padding:6px 10px; 
+  border:1px solid #ccc; 
+  text-align:center; 
+}
 th { background:#f0f0f0; }
 
 td.team { 
   text-align:left; 
   font-weight:600; 
   white-space:nowrap;
-  width:160px;
+  width:190px;
 }
 
 .main-layout { display:flex; gap:30px; align-items:flex-start; }
 
-/* wider ladder panel */
-.ladder-wrap { width:420px; flex-shrink:0; }
-
+.ladder-wrap { width:460px; flex-shrink:0; }
 .results-wrap { flex:1; }
 
 .meta {
@@ -170,10 +176,8 @@ function buildMatchesFromPlayers(){
 
     if(!map[key]){
       map[key] = {
-        season: p.season,
         round: canonicalRound(p.round),
         teams: {},
-        players: [],
         date: p.date_iso || "",
         venue: p.venue || "",
         crowd: p.crowd || ""
@@ -183,28 +187,22 @@ function buildMatchesFromPlayers(){
     const team = p.played_for;
     const opp  = p.played_against;
 
-    const goals = Number(p.G || 0);
-    const behinds = Number(p.B || 0);
-    const points = goals * 6 + behinds;
+    const points = (Number(p.G||0)*6) + Number(p.B||0);
 
-    if(!map[key].teams[team]) map[key].teams[team] = 0;
-    map[key].teams[team] += points;
+    if(!map[key].teams[team]) map[key].teams[team]=0;
+    map[key].teams[team]+=points;
 
-    if(opp && !map[key].teams[opp]) map[key].teams[opp] = 0;
-
-    map[key].players.push(p);
+    if(opp && !map[key].teams[opp]) map[key].teams[opp]=0;
   });
 
   matches = Object.values(map).map(m=>{
-    const teams = Object.keys(m.teams);
+    const t = Object.keys(m.teams);
     return {
-      season: m.season,
       round: m.round,
-      home_team: teams[0],
-      away_team: teams[1],
-      home_points: m.teams[teams[0]],
-      away_points: m.teams[teams[1]],
-      players: m.players,
+      home_team: t[0],
+      away_team: t[1],
+      home_points: m.teams[t[0]],
+      away_points: m.teams[t[1]],
       date: m.date,
       venue: m.venue,
       crowd: m.crowd
@@ -272,9 +270,11 @@ function renderMatches(){
   ladderDiv.innerHTML="";
 
   let rows=matches;
+
   if(teamSelect.value!=="ALL"){
     rows=rows.filter(r=>r.home_team===teamSelect.value||r.away_team===teamSelect.value);
   }
+
   if(currentRound!=="ALL"){
     rows=rows.filter(r=>canonicalRound(r.round)===currentRound);
   }
@@ -307,6 +307,7 @@ function buildLadder(rows){
   rows.forEach(g=>{
     const h=g.home_team,a=g.away_team;
     const hp=+g.home_points,ap=+g.away_points;
+
     if(!ladder[h]) ladder[h]={team:h,w:0,l:0,d:0,f:0,ag:0};
     if(!ladder[a]) ladder[a]={team:a,w:0,l:0,d:0,f:0,ag:0};
 
@@ -323,7 +324,7 @@ function buildLadder(rows){
     return t;
   }).sort((a,b)=>b.w-a.w||b.p-a.p);
 
-  let html="<table><tr><th>#</th><th>Team</th><th>W</th><th>L</th><th>D</th><th>%</th></tr>";
+  let html="<table><colgroup><col style='width:40px'><col style='width:190px'><col><col><col><col></colgroup><tr><th>#</th><th>Team</th><th>W</th><th>L</th><th>D</th><th>%</th></tr>";
   arr.forEach((t,i)=>{
     html+=`<tr>
       <td>${i+1}</td>
