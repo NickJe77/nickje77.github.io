@@ -14,17 +14,20 @@ body{
 .top-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
 .name-wrap{display:flex;align-items:center;gap:14px;}
 .team-stripes{height:22px;width:140px;border-radius:6px;border:1px solid #ccc;}
-.player-search input{padding:8px 12px;border-radius:8px;border:1px solid #ccc;font-size:15px;width:240px;}
+.player-search input,.opponent-select{
+  padding:8px 12px;border-radius:8px;border:1px solid #ccc;
+  font-size:15px;width:240px;
+}
 h1{font-size:38px;margin:0;}
 
 #summary{
   background:white;border-radius:14px;
   box-shadow:0 6px 18px rgba(0,0,0,0.08);
-  padding:25px 30px;margin-bottom:35px;
+  padding:25px 30px;margin-bottom:20px;
 }
 
 .section-title{
-  margin-top:22px;margin-bottom:6px;
+  margin-top:16px;margin-bottom:6px;
   font-weight:700;color:#666;
   text-transform:uppercase;font-size:13px;
   letter-spacing:0.6px;
@@ -39,7 +42,7 @@ h1{font-size:38px;margin:0;}
 .stat-box strong{display:block;font-size:26px;margin-bottom:6px;}
 .stat-box span{font-size:14px;color:#555;}
 
-hr{margin:40px 0 20px;border:none;border-top:1px solid #ddd;}
+hr{margin:30px 0 20px;border:none;border-top:1px solid #ddd;}
 
 table{
   border-collapse:collapse;width:100%;background:white;
@@ -68,6 +71,12 @@ tbody tr:nth-child(even){background:#f2f7ff;}
 </div>
 
 <div id="summary">
+  <div>
+    <select id="opponentSelect" class="opponent-select">
+      <option value="all">All Opponents</option>
+    </select>
+  </div>
+
   <div class="section-title">Career Summary</div>
   <div class="stats" id="careerStats"></div>
 </div>
@@ -92,11 +101,11 @@ tbody tr:nth-child(even){background:#f2f7ff;}
 </div>
 
 <script>
-const params = new URLSearchParams(window.location.search);
-const playerName = params.get("name") || "";
-document.getElementById("playerName").textContent = playerName || "Select a player";
+const params=new URLSearchParams(window.location.search);
+const playerName=params.get("name")||"";
+document.getElementById("playerName").textContent=playerName||"Select a player";
 
-const teamStripes = {
+const teamStripes={
   "Carlton":"repeating-linear-gradient(90deg,#001A3D 0 24px,#ffffff 24px 48px,#001A3D 48px 72px,#ffffff 72px 96px)",
   "Fremantle":"repeating-linear-gradient(90deg,#2A004F 0 24px,#ffffff 24px 48px,#2A004F 48px 72px,#ffffff 72px 96px)",
   "Collingwood":"repeating-linear-gradient(90deg,#000000 0 20px,#ffffff 20px 40px,#000000 40px 60px)",
@@ -117,8 +126,10 @@ const teamStripes = {
   "North Melbourne":"repeating-linear-gradient(90deg,#0A2E8A 0 24px,#ffffff 24px 48px,#0A2E8A 48px 72px)"
 };
 
-const startYear = 1990;
-const endYear = new Date().getFullYear();
+let allGames=[];
+
+const startYear=1990;
+const endYear=new Date().getFullYear();
 let years=[];
 for(let y=startYear;y<=endYear;y++) years.push(y);
 
@@ -129,9 +140,9 @@ Promise.all(
       .catch(()=>[])
   )
 ).then(allData=>{
-  const allPlayers = allData.flat();
+  allGames=allData.flat();
 
-  const names=[...new Set(allPlayers.map(p=>p.player))].sort();
+  const names=[...new Set(allGames.map(p=>p.player))].sort();
   const datalist=document.getElementById("playerList");
   names.forEach(n=>{
     const o=document.createElement("option");
@@ -139,17 +150,38 @@ Promise.all(
     datalist.appendChild(o);
   });
 
-  const games = allPlayers.filter(p=>p.player===playerName);
+  const games=allGames.filter(p=>p.player===playerName);
+  setupOpponentFilter(games);
 
   if(games.length){
-    const latest = games.reduce((a,b)=>a.season>b.season?a:b);
-    document.getElementById("teamStripe").style.background =
-      teamStripes[latest.played_for] || "#999";
+    const latest=games.reduce((a,b)=>a.season>b.season?a:b);
+    document.getElementById("teamStripe").style.background=
+      teamStripes[latest.played_for]||"#999";
 
     renderCareer(games);
     renderTable(games);
   }
 });
+
+function setupOpponentFilter(games){
+  const opps=[...new Set(games.map(g=>g.played_against))].sort();
+  const sel=document.getElementById("opponentSelect");
+  opps.forEach(o=>{
+    const opt=document.createElement("option");
+    opt.value=o;
+    opt.textContent=o;
+    sel.appendChild(opt);
+  });
+
+  sel.addEventListener("change",()=>{
+    let filtered=games;
+    if(sel.value!=="all"){
+      filtered=games.filter(g=>g.played_against===sel.value);
+    }
+    renderCareer(filtered);
+    renderTable(filtered);
+  });
+}
 
 function renderCareer(games){
   const totalGames=games.length;
@@ -164,8 +196,8 @@ function renderCareer(games){
 
   document.getElementById("careerStats").innerHTML=`
     <div class="stat-box"><strong>${totalGames}</strong><span>Games</span></div>
-    <div class="stat-box"><strong>${bestD}</strong><span>Career Best Disposals</span></div>
-    <div class="stat-box"><strong>${bestG}</strong><span>Career Best Goals</span></div>
+    <div class="stat-box"><strong>${bestD}</strong><span>Best Disposals</span></div>
+    <div class="stat-box"><strong>${bestG}</strong><span>Best Goals</span></div>
     <div class="stat-box"><strong>${avgD}</strong><span>Avg Disposals</span></div>
     <div class="stat-box"><strong>${avgG}</strong><span>Avg Goals</span></div>
   `;
@@ -191,7 +223,7 @@ function renderTable(games){
 document.getElementById("playerSearch").addEventListener("change",e=>{
   const name=e.target.value;
   if(name){
-    window.location.href =
+    window.location.href=
       "/afl-player.html?name="+encodeURIComponent(name);
   }
 });
