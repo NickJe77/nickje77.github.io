@@ -144,81 +144,39 @@ function displayName(s){
   return s.replace(/\b\w/g,c=>c.toUpperCase());
 }
 
-function canonicalRound(r){
-  const t=(r||"").toLowerCase();
-  if(t.includes("elimination")) return "Elimination Final";
-  if(t.includes("qualifying")) return "Qualifying Final";
-  if(t.includes("semi")) return "Semi Final";
-  if(t.includes("preliminary")) return "Preliminary Final";
-  if(t.includes("grand")) return "Grand Final";
-  return (r||"").trim();
-}
-
 async function loadAllSeasons(){
-  const startYear=1990;
-  const endYear=new Date().getFullYear();
-  const teamSet=new Set();
+  const startYear = 1990;
+  const endYear = new Date().getFullYear();
+  const teamSet = new Set();
 
   const urls=[];
   for(let y=startYear;y<=endYear;y++){
-    urls.push(`/data/afl/players_${y}.json?cb=${Date.now()}`);
+    urls.push(`/data/afl/afl_${y}.json?cb=${Date.now()}`);
   }
 
   const responses = await Promise.all(
     urls.map(u=>fetch(u).then(r=>r.ok?r.json():null).catch(()=>null))
   );
 
-  responses.forEach(raw=>{
-    if(!Array.isArray(raw)) return;
+  responses.forEach(season=>{
+    if(!Array.isArray(season)) return;
 
-    const map={};
+    season.forEach(g=>{
+      if(!g.home_team || !g.away_team) return;
 
-    raw.forEach(p=>{
-      const key = p.season + "|" + p.match_id + "|" + canonicalRound(p.round);
-
-      if(!map[key]){
-        map[key]={
-          season:p.season,
-          round:canonicalRound(p.round),
-          venue:"",
-          teams:{}
-        };
-      }
-
-      if(p.venue && p.venue.trim()){
-        map[key].venue = p.venue;
-      }
-
-      const team=p.played_for;
-      if(!team) return;
-
-      const goals=Number(p.G||0);
-      const behinds=Number(p.B||0);
-      const points=goals*6 + behinds;
-
-      if(!map[key].teams[team]) map[key].teams[team]=0;
-      map[key].teams[team]+=points;
-    });
-
-    Object.values(map).forEach(m=>{
-      const teams=Object.keys(m.teams);
-      if(teams.length!==2) return;
-
-      const home=norm(teams[0]);
-      const away=norm(teams[1]);
-      const hp=m.teams[teams[0]];
-      const ap=m.teams[teams[1]];
+      const home = norm(g.home_team);
+      const away = norm(g.away_team);
 
       allMatches.push({
-        season:Number(m.season),
-        round:m.round,
-        venue:m.venue,
+        season: g.season,
+        round: g.round,
+        venue: g.venue || "",
         home,
         away,
-        hp,
-        ap,
-        total:hp+ap,
-        margin:Math.abs(hp-ap)
+        hp: Number(g.home_points),
+        ap: Number(g.away_points),
+        total: Number(g.total_points),
+        margin: Number(g.margin)
       });
 
       teamSet.add(home);
@@ -252,7 +210,7 @@ function compare(){
   if(!a||!b){ box.innerHTML="<b>Select two teams.</b>"; return; }
   if(a===b){ box.innerHTML="<b>Select different teams.</b>"; return; }
 
-  const games=allMatches.filter(g =>
+  const games = allMatches.filter(g =>
     (g.home===a && g.away===b) || (g.home===b && g.away===a)
   ).sort((x,y)=>y.season-x.season);
 
@@ -264,9 +222,9 @@ function compare(){
     else bWins++;
   });
 
-  const lastN=Math.min(10,games.length);
-  const lastGames=games.slice(0,lastN);
-  const avgPoints=(lastGames.reduce((s,g)=>s+g.total,0)/lastN).toFixed(1);
+  const lastN = Math.min(10,games.length);
+  const lastGames = games.slice(0,lastN);
+  const avgPoints = (lastGames.reduce((s,g)=>s+g.total,0)/lastN).toFixed(1);
 
   const A=displayName(a);
   const B=displayName(b);
