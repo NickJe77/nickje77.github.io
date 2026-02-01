@@ -10,6 +10,42 @@ body{
   margin:20px;
 }
 h1{margin-bottom:10px;}
+
+#summary{
+  border:1px solid #ccc;
+  padding:15px;
+  margin-bottom:25px;
+  background:#f9f9f9;
+}
+
+.stats{
+  display:grid;
+  grid-template-columns: repeat(auto-fit,minmax(180px,1fr));
+  gap:10px;
+  margin-top:10px;
+}
+
+.stat-box{
+  background:white;
+  border:1px solid #ddd;
+  padding:10px;
+  text-align:center;
+}
+
+.stat-box strong{
+  display:block;
+  font-size:18px;
+}
+
+select{
+  padding:6px;
+  font-size:14px;
+}
+
+hr{
+  margin:30px 0;
+}
+
 table{
   border-collapse:collapse;
   width:100%;
@@ -32,6 +68,20 @@ td.left{
 <body>
 
 <h1 id="playerName"></h1>
+
+<div id="summary">
+  <div>
+    <strong>Opponent:</strong>
+    <select id="opponentSelect">
+      <option value="all">All opponents</option>
+    </select>
+  </div>
+
+  <div class="stats" id="careerStats"></div>
+  <div class="stats" id="opponentStats" style="margin-top:15px;"></div>
+</div>
+
+<hr>
 
 <table>
 <thead>
@@ -71,7 +121,6 @@ Promise.all(
 ).then(allData => {
 
   const allPlayers = allData.flat();
-
   const playerGames = allPlayers.filter(p => p.player === playerName);
 
   const tbody = document.getElementById("rows");
@@ -88,6 +137,66 @@ Promise.all(
         <td>${p.B || 0}</td>
       </tr>
     `;
+  });
+
+  const opponentSelect = document.getElementById("opponentSelect");
+  const careerStatsDiv = document.getElementById("careerStats");
+  const opponentStatsDiv = document.getElementById("opponentStats");
+
+  const opponents = [...new Set(playerGames.map(g => g.played_against))].sort();
+  opponents.forEach(o => {
+    const opt = document.createElement("option");
+    opt.value = o;
+    opt.textContent = o;
+    opponentSelect.appendChild(opt);
+  });
+
+  function calcStats(games){
+    const totalGames = games.length;
+    const totalD = games.reduce((s,g)=>s+(g.D||0),0);
+    const totalG = games.reduce((s,g)=>s+(g.G||0),0);
+
+    const bestD = Math.max(...games.map(g=>g.D||0));
+    const bestG = Math.max(...games.map(g=>g.G||0));
+
+    const avgD = totalGames ? (totalD/totalGames).toFixed(1) : 0;
+    const avgG = totalGames ? (totalG/totalGames).toFixed(2) : 0;
+
+    return {totalGames, bestD, bestG, avgD, avgG};
+  }
+
+  function renderCareer(){
+    const s = calcStats(playerGames);
+    careerStatsDiv.innerHTML = `
+      <div class="stat-box"><strong>${s.totalGames}</strong>Games</div>
+      <div class="stat-box"><strong>${s.bestD}</strong>Career Best Disposals</div>
+      <div class="stat-box"><strong>${s.bestG}</strong>Career Best Goals</div>
+      <div class="stat-box"><strong>${s.avgD}</strong>Avg Disposals</div>
+      <div class="stat-box"><strong>${s.avgG}</strong>Avg Goals</div>
+    `;
+  }
+
+  function renderOpponent(opponent){
+    if(opponent==="all"){
+      opponentStatsDiv.innerHTML = "";
+      return;
+    }
+    const filtered = playerGames.filter(g=>g.played_against===opponent);
+    const s = calcStats(filtered);
+
+    opponentStatsDiv.innerHTML = `
+      <div class="stat-box"><strong>${s.totalGames}</strong>Games vs ${opponent}</div>
+      <div class="stat-box"><strong>${s.bestD}</strong>Best Disposals vs ${opponent}</div>
+      <div class="stat-box"><strong>${s.bestG}</strong>Best Goals vs ${opponent}</div>
+      <div class="stat-box"><strong>${s.avgD}</strong>Avg Disposals vs ${opponent}</div>
+      <div class="stat-box"><strong>${s.avgG}</strong>Avg Goals vs ${opponent}</div>
+    `;
+  }
+
+  renderCareer();
+
+  opponentSelect.addEventListener("change", e=>{
+    renderOpponent(e.target.value);
   });
 
 });
