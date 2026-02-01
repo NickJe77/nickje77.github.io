@@ -141,7 +141,7 @@ function loadYear(year) {
   matchesDiv.innerHTML="";
   ladderDiv.innerHTML="";
 
-  fetch(`/data/afl/afl_${year}.json?cb=${Date.now()}`)
+  fetch(`/data/afl/players_${year}.json?cb=${Date.now()}`)
     .then(r=>r.json())
     .then(data=>{
       rawData = data;
@@ -157,6 +157,7 @@ function buildMatchesFromPlayers(){
 
   rawData.forEach(p=>{
     const key = p.match_id + "|" + canonicalRound(p.round);
+
     if(!map[key]){
       map[key] = {
         season: p.season,
@@ -167,6 +168,8 @@ function buildMatchesFromPlayers(){
     }
 
     const team = p.played_for;
+    const opp  = p.played_against;
+
     const goals = Number(p.G || 0);
     const behinds = Number(p.B || 0);
     const points = goals * 6 + behinds;
@@ -174,13 +177,15 @@ function buildMatchesFromPlayers(){
     if(!map[key].teams[team]) map[key].teams[team] = 0;
     map[key].teams[team] += points;
 
+    if(opp && !map[key].teams[opp]) map[key].teams[opp] = 0;
+
     map[key].players.push(p);
   });
 
   matches = Object.values(map).map(m=>{
-    const teamNames = Object.keys(m.teams);
-    const home = teamNames[0];
-    const away = teamNames[1];
+    const teams = Object.keys(m.teams);
+    const home = teams[0];
+    const away = teams[1];
 
     return {
       season: m.season,
@@ -279,17 +284,6 @@ function renderMatches(){
 
     const div=document.createElement("div");
     div.className="match";
-
-    if(selectedTeam==="ALL" && i%2===1) div.classList.add("alt");
-
-    if(selectedTeam!=="ALL"){
-      if(g.home_points==g.away_points) div.classList.add("draw");
-      else if((g.home_team===selectedTeam && g.home_points>g.away_points) ||
-              (g.away_team===selectedTeam && g.away_points>g.home_points))
-        div.classList.add("win");
-      else div.classList.add("loss");
-    }
-
     div.textContent=line;
     matchesDiv.appendChild(div);
     i++;
