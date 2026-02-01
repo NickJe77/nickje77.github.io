@@ -42,16 +42,17 @@ h1{font-size:38px;margin:0;}
 .stat-box strong{display:block;font-size:26px;margin-bottom:6px;}
 .stat-box span{font-size:14px;color:#555;}
 
-hr{margin:30px 0 20px;border:none;border-top:1px solid #ddd;}
-
 table{
   border-collapse:collapse;width:100%;background:white;
   border-radius:10px;overflow:hidden;
   box-shadow:0 3px 10px rgba(0,0,0,0.06);
 }
 th,td{border:1px solid #ddd;padding:8px;text-align:center;}
+th{cursor:pointer;background:#eef3fb;}
 td.left{text-align:left;font-weight:600;}
 tbody tr:nth-child(even){background:#f2f7ff;}
+
+.reset-sort{margin-top:10px;padding:6px 12px;border-radius:6px;border:1px solid #aaa;cursor:pointer;}
 </style>
 </head>
 
@@ -71,28 +72,29 @@ tbody tr:nth-child(even){background:#f2f7ff;}
 </div>
 
 <div id="summary">
-  <div>
-    <select id="opponentSelect" class="opponent-select">
-      <option value="all">All Opponents</option>
-    </select>
-  </div>
+  <select id="opponentSelect" class="opponent-select">
+    <option value="all">All Opponents</option>
+  </select>
 
   <div class="section-title">Career Summary</div>
   <div class="stats" id="careerStats"></div>
+
+  <div class="section-title">Vs Selected Opponent</div>
+  <div class="stats" id="opponentStats"></div>
 </div>
 
-<hr>
+<button class="reset-sort" onclick="resetSort()">Reset Sort</button>
 
 <table>
 <thead>
 <tr>
-  <th>Season</th>
-  <th>Round</th>
+  <th onclick="sortTable('season')">Season</th>
+  <th onclick="sortTable('round')">Round</th>
   <th>Team</th>
-  <th>Opponent</th>
-  <th>D</th>
-  <th>G</th>
-  <th>B</th>
+  <th onclick="sortTable('played_against')">Opponent</th>
+  <th onclick="sortTable('D')">D</th>
+  <th onclick="sortTable('G')">G</th>
+  <th onclick="sortTable('B')">B</th>
 </tr>
 </thead>
 <tbody id="rows"></tbody>
@@ -105,128 +107,131 @@ const params=new URLSearchParams(window.location.search);
 const playerName=params.get("name")||"";
 document.getElementById("playerName").textContent=playerName||"Select a player";
 
+let allGames=[], currentGames=[], sortDir=1, sortKey=null;
+
 const teamStripes={
-  "Carlton":"repeating-linear-gradient(90deg,#001A3D 0 24px,#ffffff 24px 48px,#001A3D 48px 72px,#ffffff 72px 96px)",
-  "Fremantle":"repeating-linear-gradient(90deg,#2A004F 0 24px,#ffffff 24px 48px,#2A004F 48px 72px,#ffffff 72px 96px)",
-  "Collingwood":"repeating-linear-gradient(90deg,#000000 0 20px,#ffffff 20px 40px,#000000 40px 60px)",
-  "Richmond":"repeating-linear-gradient(90deg,#FFD200 0 20px,#000000 20px 40px,#FFD200 40px 60px)",
-  "Essendon":"repeating-linear-gradient(90deg,#CC2031 0 24px,#000000 24px 48px,#CC2031 48px 72px)",
-  "St Kilda":"repeating-linear-gradient(90deg,#000000 0 20px,#ffffff 20px 40px,#CC2031 40px 60px)",
-  "Geelong":"repeating-linear-gradient(90deg,#1C3C63 0 24px,#ffffff 24px 48px,#1C3C63 48px 72px)",
-  "Sydney":"repeating-linear-gradient(90deg,#ED171F 0 24px,#ffffff 24px 48px,#ED171F 48px 72px)",
-  "West Coast":"repeating-linear-gradient(90deg,#002B5C 0 24px,#FFD200 24px 48px,#002B5C 48px 72px)",
+  "Carlton":"repeating-linear-gradient(90deg,#001A3D 0 24px,#ffffff 24px 48px,#001A3D 48px 72px)",
+  "Collingwood":"repeating-linear-gradient(90deg,#000000 0 20px,#ffffff 20px 40px)",
+  "Richmond":"repeating-linear-gradient(90deg,#FFD200 0 20px,#000000 20px 40px)",
+  "Essendon":"repeating-linear-gradient(90deg,#CC2031 0 24px,#000000 24px 48px)",
+  "Geelong":"repeating-linear-gradient(90deg,#1C3C63 0 24px,#ffffff 24px 48px)",
+  "Sydney":"repeating-linear-gradient(90deg,#ED171F 0 24px,#ffffff 24px 48px)",
+  "West Coast":"repeating-linear-gradient(90deg,#002B5C 0 24px,#FFD200 24px 48px)",
   "Adelaide":"repeating-linear-gradient(90deg,#002B5C 0 24px,#FFD200 24px 48px,#CC2031 48px 72px)",
-  "Port Adelaide":"repeating-linear-gradient(90deg,#1C1C1C 0 24px,#00B2A9 24px 48px,#ffffff 48px 72px)",
+  "Port Adelaide":"repeating-linear-gradient(90deg,#1C1C1C 0 24px,#00B2A9 24px 48px)",
   "Brisbane":"repeating-linear-gradient(90deg,#7C003E 0 24px,#FFD200 24px 48px,#005BAC 48px 72px)",
-  "Hawthorn":"repeating-linear-gradient(90deg,#4D2004 0 24px,#FFD200 24px 48px,#4D2004 48px 72px)",
-  "Melbourne":"repeating-linear-gradient(90deg,#002B5C 0 24px,#ED171F 24px 48px,#002B5C 48px 72px)",
-  "Western Bulldogs":"repeating-linear-gradient(90deg,#1E3A8A 0 24px,#ED171F 24px 48px,#ffffff 48px 72px)",
-  "Gold Coast":"repeating-linear-gradient(90deg,#B90A32 0 24px,#FFD200 24px 48px,#005BAC 48px 72px)",
-  "GWS":"repeating-linear-gradient(90deg,#F47920 0 24px,#000000 24px 48px,#ffffff 48px 72px)",
-  "North Melbourne":"repeating-linear-gradient(90deg,#0A2E8A 0 24px,#ffffff 24px 48px,#0A2E8A 48px 72px)"
+  "Hawthorn":"repeating-linear-gradient(90deg,#4D2004 0 24px,#FFD200 24px 48px)",
+  "Melbourne":"repeating-linear-gradient(90deg,#002B5C 0 24px,#ED171F 24px 48px)",
+  "Western Bulldogs":"repeating-linear-gradient(90deg,#1E3A8A 0 24px,#ED171F 24px 48px)",
+  "Gold Coast":"repeating-linear-gradient(90deg,#B90A32 0 24px,#FFD200 24px 48px)",
+  "GWS":"repeating-linear-gradient(90deg,#F47920 0 24px,#000000 24px 48px)",
+  "North Melbourne":"repeating-linear-gradient(90deg,#0A2E8A 0 24px,#ffffff 24px 48px)"
 };
 
-let allGames=[];
-
-const startYear=1990;
-const endYear=new Date().getFullYear();
-let years=[];
-for(let y=startYear;y<=endYear;y++) years.push(y);
+const years=[];
+for(let y=1990;y<=new Date().getFullYear();y++) years.push(y);
 
 Promise.all(
   years.map(y =>
-    fetch(`/data/afl/afl_${y}.json`)
-      .then(r=>r.json())
-      .catch(()=>[])
+    fetch(`data/afl/afl_${y}.json`).then(r=>r.json()).catch(()=>[])
   )
-).then(allData=>{
-  allGames=allData.flat();
+).then(data=>{
+  allGames=data.flat();
 
   const names=[...new Set(allGames.map(p=>p.player))].sort();
-  const datalist=document.getElementById("playerList");
+  const list=document.getElementById("playerList");
   names.forEach(n=>{
     const o=document.createElement("option");
     o.value=n;
-    datalist.appendChild(o);
+    list.appendChild(o);
   });
 
-  const games=allGames.filter(p=>p.player===playerName);
-  setupOpponentFilter(games);
+  currentGames=allGames.filter(p=>p.player===playerName);
 
-  if(games.length){
-    const latest=games.reduce((a,b)=>a.season>b.season?a:b);
+  if(currentGames.length){
+    const latest=currentGames.reduce((a,b)=>a.season>b.season?a:b);
     document.getElementById("teamStripe").style.background=
       teamStripes[latest.played_for]||"#999";
 
-    renderCareer(games);
-    renderTable(games);
+    setupOpponents(currentGames);
+    renderCareer(currentGames);
+    renderOpponent([]);
+    renderTable(currentGames);
   }
 });
 
-function setupOpponentFilter(games){
-  const opps=[...new Set(games.map(g=>g.played_against))].sort();
+function setupOpponents(games){
   const sel=document.getElementById("opponentSelect");
-  opps.forEach(o=>{
+  [...new Set(games.map(g=>g.played_against))].sort().forEach(o=>{
     const opt=document.createElement("option");
     opt.value=o;
     opt.textContent=o;
     sel.appendChild(opt);
   });
 
-  sel.addEventListener("change",()=>{
-    let filtered=games;
+  sel.onchange=()=>{
+    let f=games;
     if(sel.value!=="all"){
-      filtered=games.filter(g=>g.played_against===sel.value);
+      f=games.filter(g=>g.played_against===sel.value);
     }
-    renderCareer(filtered);
-    renderTable(filtered);
-  });
+    renderOpponent(f);
+    renderTable(f);
+  };
 }
 
-function renderCareer(games){
-  const totalGames=games.length;
-  const totalD=games.reduce((s,g)=>s+(g.D||0),0);
-  const totalG=games.reduce((s,g)=>s+(g.G||0),0);
+function renderCareer(g){ renderStats(g,"careerStats"); }
+function renderOpponent(g){ renderStats(g,"opponentStats"); }
 
-  const bestD=Math.max(...games.map(g=>g.D||0));
-  const bestG=Math.max(...games.map(g=>g.G||0));
+function renderStats(g,id){
+  if(!g.length){
+    document.getElementById(id).innerHTML="";
+    return;
+  }
+  const games=g.length;
+  const d=g.reduce((s,x)=>s+(x.D||0),0);
+  const goals=g.reduce((s,x)=>s+(x.G||0),0);
 
-  const avgD=(totalD/totalGames).toFixed(1);
-  const avgG=(totalG/totalGames).toFixed(2);
-
-  document.getElementById("careerStats").innerHTML=`
-    <div class="stat-box"><strong>${totalGames}</strong><span>Games</span></div>
-    <div class="stat-box"><strong>${bestD}</strong><span>Best Disposals</span></div>
-    <div class="stat-box"><strong>${bestG}</strong><span>Best Goals</span></div>
-    <div class="stat-box"><strong>${avgD}</strong><span>Avg Disposals</span></div>
-    <div class="stat-box"><strong>${avgG}</strong><span>Avg Goals</span></div>
+  document.getElementById(id).innerHTML=`
+    <div class="stat-box"><strong>${games}</strong><span>Games</span></div>
+    <div class="stat-box"><strong>${Math.max(...g.map(x=>x.D||0))}</strong><span>Best Disposals</span></div>
+    <div class="stat-box"><strong>${Math.max(...g.map(x=>x.G||0))}</strong><span>Best Goals</span></div>
+    <div class="stat-box"><strong>${(d/games).toFixed(1)}</strong><span>Avg Disposals</span></div>
+    <div class="stat-box"><strong>${(goals/games).toFixed(2)}</strong><span>Avg Goals</span></div>
   `;
 }
 
-function renderTable(games){
+function renderTable(g){
   const tbody=document.getElementById("rows");
   tbody.innerHTML="";
-  games.forEach(p=>{
+  g.forEach(p=>{
     tbody.innerHTML+=`
-    <tr>
-      <td>${p.season}</td>
-      <td>${p.round}</td>
-      <td class="left">${p.played_for}</td>
-      <td>${p.played_against}</td>
-      <td>${p.D||0}</td>
-      <td>${p.G||0}</td>
-      <td>${p.B||0}</td>
-    </tr>`;
+      <tr>
+        <td>${p.season}</td>
+        <td>${p.round}</td>
+        <td class="left">${p.played_for}</td>
+        <td>${p.played_against}</td>
+        <td>${p.D||0}</td>
+        <td>${p.G||0}</td>
+        <td>${p.B||0}</td>
+      </tr>`;
   });
 }
 
-document.getElementById("playerSearch").addEventListener("change",e=>{
-  const name=e.target.value;
-  if(name){
-    window.location.href=
-      "/afl-player.html?name="+encodeURIComponent(name);
-  }
-});
+function sortTable(key){
+  if(sortKey===key) sortDir*=-1;
+  else{sortKey=key; sortDir=1;}
+  currentGames.sort((a,b)=>(a[key]||0)>(b[key]||0)?sortDir:-sortDir);
+  renderTable(currentGames);
+}
+
+function resetSort(){
+  currentGames=allGames.filter(p=>p.player===playerName);
+  renderTable(currentGames);
+}
+
+document.getElementById("playerSearch").onchange=e=>{
+  window.location.href="afl-player.html?name="+encodeURIComponent(e.target.value);
+};
 </script>
 
 </body>
