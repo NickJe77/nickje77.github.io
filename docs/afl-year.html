@@ -42,13 +42,22 @@ select { padding:8px 10px; font-size:16px; margin-bottom:15px; display:block; }
 
 .match { margin-bottom:6px; padding:6px 10px; border-radius:6px; }
 
-table { border-collapse: collapse; width:100%; }
+table { border-collapse: collapse; width:100%; table-layout:fixed; }
 th, td { padding:6px 10px; border:1px solid #ccc; text-align:center; }
 th { background:#f0f0f0; }
-td.team { text-align:left; font-weight:600; }
+
+td.team { 
+  text-align:left; 
+  font-weight:600; 
+  white-space:nowrap;
+  width:160px;
+}
 
 .main-layout { display:flex; gap:30px; align-items:flex-start; }
-.ladder-wrap { width:360px; flex-shrink:0; }
+
+/* wider ladder panel */
+.ladder-wrap { width:420px; flex-shrink:0; }
+
 .results-wrap { flex:1; }
 
 .meta {
@@ -188,16 +197,13 @@ function buildMatchesFromPlayers(){
 
   matches = Object.values(map).map(m=>{
     const teams = Object.keys(m.teams);
-    const home = teams[0];
-    const away = teams[1];
-
     return {
       season: m.season,
       round: m.round,
-      home_team: home,
-      away_team: away,
-      home_points: m.teams[home],
-      away_points: m.teams[away],
+      home_team: teams[0],
+      away_team: teams[1],
+      home_points: m.teams[teams[0]],
+      away_points: m.teams[teams[1]],
       players: m.players,
       date: m.date,
       venue: m.venue,
@@ -250,27 +256,14 @@ function addRoundButton(label,active=false){
 
 teamSelect.onchange=renderMatches;
 
-function getStars(match){
-  return match.players
-    .filter(p=>Number(p.D)>=35 || Number(p.G)>=5)
-    .map(p=>{
-      if(Number(p.G)>=5) return `${p.player} (${p.G} goals)`;
-      return `${p.player} (${p.D} disposals)`;
-    });
-}
-
 function getRunningLadderMatches(){
-  if(currentRound === "ALL"){
-    return matches.filter(m => /^Round\s*\d+/i.test(m.round));
+  if(currentRound==="ALL"){
+    return matches.filter(m=>/^Round\s*\d+/i.test(m.round));
   }
-
-  const currentNum = parseInt(currentRound.match(/\d+/)?.[0]);
-  if(!currentNum) return [];
-
+  const n=parseInt(currentRound.match(/\d+/)?.[0]);
   return matches.filter(m=>{
-    const r = canonicalRound(m.round);
-    const n = parseInt(r.match(/\d+/)?.[0]);
-    return n && n <= currentNum;
+    const r=parseInt(m.round.match(/\d+/)?.[0]);
+    return r && r<=n;
   });
 }
 
@@ -278,89 +271,70 @@ function renderMatches(){
   matchesDiv.innerHTML="";
   ladderDiv.innerHTML="";
 
-  let rows = matches;
-  const selectedTeam = teamSelect.value;
-
-  if(selectedTeam!=="ALL"){
-    rows = rows.filter(r=>r.home_team===selectedTeam || r.away_team===selectedTeam);
+  let rows=matches;
+  if(teamSelect.value!=="ALL"){
+    rows=rows.filter(r=>r.home_team===teamSelect.value||r.away_team===teamSelect.value);
   }
   if(currentRound!=="ALL"){
-    rows = rows.filter(r=>canonicalRound(r.round)===currentRound);
+    rows=rows.filter(r=>canonicalRound(r.round)===currentRound);
   }
 
-  if (!finalsRounds.includes(currentRound)) {
-    const ladderRows = getRunningLadderMatches();
-    buildLadder(ladderRows);
+  if(!finalsRounds.includes(currentRound)){
+    buildLadder(getRunningLadderMatches());
   }
 
   rows.forEach(g=>{
-    let line="";
-    if(g.home_points > g.away_points){
-      line = `${g.home_team} ${g.home_points} def ${g.away_team} ${g.away_points}`;
-    } else if(g.home_points < g.away_points){
-      line = `${g.home_team} ${g.home_points} def by ${g.away_team} ${g.away_points}`;
-    } else {
-      line = `${g.home_team} ${g.home_points} drew ${g.away_team} ${g.away_points}`;
-    }
+    let line=g.home_points>g.away_points
+      ?`${g.home_team} ${g.home_points} def ${g.away_team} ${g.away_points}`
+      :g.home_points<g.away_points
+      ?`${g.home_team} ${g.home_points} def by ${g.away_team} ${g.away_points}`
+      :`${g.home_team} ${g.home_points} drew ${g.away_team} ${g.away_points}`;
 
-    const meta = [];
-    if(g.date) meta.push(g.date);
-    if(g.venue) meta.push(g.venue);
-    if(g.crowd) meta.push(`Crowd: ${g.crowd}`);
+    const meta=[g.date,g.venue,g.crowd?`Crowd: ${g.crowd}`:""].filter(Boolean);
 
-    const stars=getStars(g);
-
-    const div=document.createElement("div");
-    div.className="match";
-    div.innerHTML = `
-      <strong>${g.round}</strong>: ${line}
-      <div class="meta">${meta.join(" · ")}</div>
-      ${stars.length ? `<div class="meta">⭐ ${stars.join(", ")}</div>` : ""}
+    matchesDiv.innerHTML+=`
+      <div class="match">
+        <strong>${g.round}</strong>: ${line}
+        <div class="meta">${meta.join(" · ")}</div>
+      </div>
     `;
-    matchesDiv.appendChild(div);
   });
 }
 
-function buildLadder(rows) {
-  let ladder = {};
+function buildLadder(rows){
+  let ladder={};
 
   rows.forEach(g=>{
-    const home=g.home_team, away=g.away_team;
-    const hp=+g.home_points, ap=+g.away_points;
-    if(!hp && !ap) return;
+    const h=g.home_team,a=g.away_team;
+    const hp=+g.home_points,ap=+g.away_points;
+    if(!ladder[h]) ladder[h]={team:h,w:0,l:0,d:0,f:0,ag:0};
+    if(!ladder[a]) ladder[a]={team:a,w:0,l:0,d:0,f:0,ag:0};
 
-    [home,away].forEach(t=>{
-      if(!ladder[t]) ladder[t]={team:t,win:0,loss:0,draw:0,for:0,against:0};
-    });
+    ladder[h].f+=hp; ladder[h].ag+=ap;
+    ladder[a].f+=ap; ladder[a].ag+=hp;
 
-    ladder[home].for+=hp; ladder[home].against+=ap;
-    ladder[away].for+=ap; ladder[away].against+=hp;
-
-    if(hp>ap){ ladder[home].win++; ladder[away].loss++; }
-    else if(ap>hp){ ladder[away].win++; ladder[home].loss++; }
-    else{ ladder[home].draw++; ladder[away].draw++; }
+    if(hp>ap){ladder[h].w++;ladder[a].l++;}
+    else if(ap>hp){ladder[a].w++;ladder[h].l++;}
+    else{ladder[h].d++;ladder[a].d++;}
   });
 
   const arr=Object.values(ladder).map(t=>{
-    t.perc = t.against ? ((t.for/t.against)*100).toFixed(1) : "0.0";
+    t.p=t.ag?((t.f/t.ag)*100).toFixed(1):"0.0";
     return t;
-  });
-
-  arr.sort((a,b)=>b.win-a.win || b.perc-a.perc || a.team.localeCompare(b.team));
+  }).sort((a,b)=>b.w-a.w||b.p-a.p);
 
   let html="<table><tr><th>#</th><th>Team</th><th>W</th><th>L</th><th>D</th><th>%</th></tr>";
   arr.forEach((t,i)=>{
     html+=`<tr>
       <td>${i+1}</td>
       <td class="team">${t.team}</td>
-      <td>${t.win}</td>
-      <td>${t.loss}</td>
-      <td>${t.draw}</td>
-      <td>${t.perc}</td>
+      <td>${t.w}</td>
+      <td>${t.l}</td>
+      <td>${t.d}</td>
+      <td>${t.p}</td>
     </tr>`;
   });
-  html+="</table>";
-  ladderDiv.innerHTML=html;
+  ladderDiv.innerHTML=html+"</table>";
 }
 </script>
 
