@@ -44,10 +44,7 @@ th,td{
   padding:10px 12px;
   text-align:left;
 }
-th{
-  background:#f0f0f0;
-  cursor:pointer;
-}
+th{background:#f0f0f0;}
 tr:nth-child(even){background:#f6f9ff;}
 
 .team-link{
@@ -81,10 +78,10 @@ tr:nth-child(even){background:#f6f9ff;}
 <table>
   <thead>
     <tr>
-      <th data-key="team">Team</th>
-      <th data-key="founded">Founded</th>
-      <th data-key="titles">Championships</th>
-      <th data-key="finals">Finals Appearances</th>
+      <th>Team</th>
+      <th>Founded</th>
+      <th>Championships</th>
+      <th>Finals Appearances</th>
     </tr>
   </thead>
   <tbody id="teamTable"></tbody>
@@ -95,66 +92,36 @@ tr:nth-child(even){background:#f6f9ff;}
 <script>
 const tableBody = document.getElementById("teamTable");
 
-let teams = [];
-let currentSort = { key: null, dir: "asc" };
-
-function render(){
-  tableBody.innerHTML = "";
-
-  teams.forEach(team => {
-    if(team.active === false) return;
-
-    const urlTeam = encodeURIComponent(team.team);
-
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>
-        <a class="team-link" href="nba-team.html?team=${urlTeam}">
-          ${team.team}
-        </a>
-      </td>
-      <td>${team.founded || ""}</td>
-      <td>${team.titles ?? ""}</td>
-      <td>${team.finals ?? ""}</td>
-    `;
-    tableBody.appendChild(tr);
-  });
-}
-
-fetch("data/nba/teams.json")
-  .then(r => r.json())
-  .then(data => {
-    teams = data.filter(t => t.active !== false);
-    render();
+fetch("docs/data/nba/teams.json")
+  .then(r => {
+    if(!r.ok) throw new Error("JSON not found");
+    return r.json();
   })
-  .catch(() => {
+  .then(data => {
+
+    data.forEach(team => {
+      if(team.active === false) return;
+
+      const urlTeam = encodeURIComponent(team.team);
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>
+          <a class="team-link" href="nba-team.html?team=${urlTeam}">
+            ${team.team}
+          </a>
+        </td>
+        <td>${team.founded || ""}</td>
+        <td>${team.titles ?? ""}</td>
+        <td>${team.finals ?? ""}</td>
+      `;
+      tableBody.appendChild(tr);
+    });
+  })
+  .catch(err => {
+    console.error(err);
     tableBody.innerHTML = "<tr><td colspan='4'>No data available.</td></tr>";
   });
-
-document.querySelectorAll("th[data-key]").forEach(th=>{
-  th.addEventListener("click", ()=>{
-    const key = th.dataset.key;
-
-    currentSort.dir =
-      (currentSort.key === key && currentSort.dir === "asc") ? "desc" : "asc";
-    currentSort.key = key;
-
-    teams.sort((a,b)=>{
-      const av = a[key] ?? "";
-      const bv = b[key] ?? "";
-
-      if(typeof av === "number" && typeof bv === "number"){
-        return currentSort.dir==="asc" ? av-bv : bv-av;
-      }
-
-      return currentSort.dir==="asc"
-        ? String(av).localeCompare(String(bv))
-        : String(bv).localeCompare(String(av));
-    });
-
-    render();
-  });
-});
 </script>
 
 </body>
