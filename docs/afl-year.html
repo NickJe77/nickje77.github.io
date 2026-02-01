@@ -40,11 +40,7 @@ body { font-family: system-ui, Arial, sans-serif; margin:0; }
 
 select { padding:8px 10px; font-size:16px; margin-bottom:15px; display:block; }
 
-.match { margin-bottom:6px; padding:4px 8px; border-radius:6px; }
-.win  { background:#e6f4ea; }
-.loss { background:#fbeaea; }
-.draw { background:#f0f0f0; }
-.alt  { background:#eaf4ff; }
+.match { margin-bottom:6px; padding:6px 10px; border-radius:6px; }
 
 table { border-collapse: collapse; width:100%; }
 th, td { padding:6px 10px; border:1px solid #ccc; text-align:center; }
@@ -54,6 +50,11 @@ td.team { text-align:left; font-weight:600; }
 .main-layout { display:flex; gap:30px; align-items:flex-start; }
 .ladder-wrap { width:360px; flex-shrink:0; }
 .results-wrap { flex:1; }
+
+.meta {
+  font-size:13px;
+  color:#555;
+}
 </style>
 </head>
 
@@ -141,7 +142,7 @@ function loadYear(year) {
   matchesDiv.innerHTML="";
   ladderDiv.innerHTML="";
 
-  fetch(`/data/afl/players_${year}.json?cb=${Date.now()}`)
+  fetch(`/data/afl/afl_${year}.json?cb=${Date.now()}`)
     .then(r=>r.json())
     .then(data=>{
       rawData = data;
@@ -163,7 +164,10 @@ function buildMatchesFromPlayers(){
         season: p.season,
         round: canonicalRound(p.round),
         teams: {},
-        players: []
+        players: [],
+        date: p.date_iso || "",
+        venue: p.venue || "",
+        crowd: p.crowd || ""
       };
     }
 
@@ -194,7 +198,10 @@ function buildMatchesFromPlayers(){
       away_team: away,
       home_points: m.teams[home],
       away_points: m.teams[away],
-      players: m.players
+      players: m.players,
+      date: m.date,
+      venue: m.venue,
+      crowd: m.crowd
     };
   });
 }
@@ -268,25 +275,31 @@ function renderMatches(){
 
   if (!finalsRounds.includes(currentRound)) buildLadder(rows);
 
-  let i=0;
   rows.forEach(g=>{
     let line="";
     if(g.home_points > g.away_points){
-      line = `${g.round}: ${g.home_team} ${g.home_points} def ${g.away_team} ${g.away_points}`;
+      line = `${g.home_team} ${g.home_points} def ${g.away_team} ${g.away_points}`;
     } else if(g.home_points < g.away_points){
-      line = `${g.round}: ${g.home_team} ${g.home_points} def by ${g.away_team} ${g.away_points}`;
+      line = `${g.home_team} ${g.home_points} def by ${g.away_team} ${g.away_points}`;
     } else {
-      line = `${g.round}: ${g.home_team} ${g.home_points} drew ${g.away_team} ${g.away_points}`;
+      line = `${g.home_team} ${g.home_points} drew ${g.away_team} ${g.away_points}`;
     }
 
+    const meta = [];
+    if(g.date) meta.push(g.date);
+    if(g.venue) meta.push(g.venue);
+    if(g.crowd) meta.push(`Crowd: ${g.crowd}`);
+
     const stars=getStars(g);
-    if(stars.length) line+=" — ⭐ "+stars.join(", ");
 
     const div=document.createElement("div");
     div.className="match";
-    div.textContent=line;
+    div.innerHTML = `
+      <strong>${g.round}</strong>: ${line}
+      <div class="meta">${meta.join(" · ")}</div>
+      ${stars.length ? `<div class="meta">⭐ ${stars.join(", ")}</div>` : ""}
+    `;
     matchesDiv.appendChild(div);
-    i++;
   });
 }
 
