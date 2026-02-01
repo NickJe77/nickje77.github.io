@@ -5,92 +5,230 @@
 <title>AFL Player Profile</title>
 
 <style>
-body{
-  font-family:system-ui, Arial, sans-serif;
-  margin:20px;
-}
-h1{margin-bottom:10px;}
-table{
-  border-collapse:collapse;
-  width:100%;
-}
-th,td{
-  border:1px solid #ccc;
-  padding:6px;
-  text-align:center;
-}
-th{
-  background:#eee;
-}
-td.left{
-  text-align:left;
-  font-weight:600;
-}
+body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f4f6f8;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:14px 0;background:#fff;border-bottom:1px solid #ddd;font-weight:600;}
+.navbar a{color:#0056d6;text-decoration:none;font-size:17px;}
+.navbar a:hover{text-decoration:underline;}
+
+.page{max-width:1200px;margin:0 auto;padding:25px;}
+
+.top-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:12px;}
+.name-wrap{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.team-stripes{height:22px;width:140px;border-radius:6px;border:1px solid #ccc;}
+
+#playerSearch{padding:10px 14px;border-radius:10px;border:1px solid #ccc;font-size:17px;width:320px;max-width:100%;}
+@media (max-width:700px){#playerSearch{width:100%;font-size:18px;padding:12px 16px;}}
+
+.opponent-select{padding:8px 12px;border-radius:8px;border:1px solid #ccc;font-size:15px;width:240px;}
+
+h1{font-size:38px;margin:0;}
+
+#summary{background:white;border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.08);padding:25px 30px;margin-bottom:20px;}
+.section-title{margin-top:16px;margin-bottom:6px;font-weight:700;color:#666;text-transform:uppercase;font-size:13px;letter-spacing:.6px;}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;}
+
+.stat-box{background:linear-gradient(180deg,#f9fbff,#eef3fb);border-radius:12px;padding:16px 10px;text-align:center;box-shadow:inset 0 0 0 1px #dde3ec;}
+.stat-box strong{display:block;font-size:26px;margin-bottom:4px;}
+.stat-box span{font-size:14px;color:#555;}
+
+table{border-collapse:collapse;width:100%;background:white;border-radius:10px;overflow:hidden;box-shadow:0 3px 10px rgba(0,0,0,.06);}
+th,td{border:1px solid #ddd;padding:8px;text-align:center;}
+th{cursor:pointer;background:#eef3fb;}
+td.left{text-align:left;font-weight:600;}
+tbody tr:nth-child(even){background:#f2f7ff;}
+tbody tr{cursor:pointer;}
+tbody tr:hover{background:#e8f0ff;}
+
+.reset-sort{margin-top:10px;padding:6px 12px;border-radius:6px;border:1px solid #aaa;cursor:pointer;}
 </style>
 </head>
 
 <body>
 
-<h1 id="playerName"></h1>
+<div class="navbar">
+  <a href="/index.html">Home</a>
+  <a href="/afl.html">AFL</a>
+</div>
+
+<div class="page">
+
+<div class="top-bar">
+  <div class="name-wrap">
+    <h1 id="playerName"></h1>
+    <div id="teamStripe" class="team-stripes"></div>
+  </div>
+
+  <div>
+    <input id="playerSearch" list="playerList" placeholder="Search player...">
+    <datalist id="playerList"></datalist>
+  </div>
+</div>
+
+<div id="summary">
+  <select id="opponentSelect" class="opponent-select">
+    <option value="all">All Opponents</option>
+  </select>
+
+  <div class="section-title">Career Summary</div>
+  <div class="stats" id="careerStats"></div>
+
+  <div class="section-title">Vs Selected Opponent</div>
+  <div class="stats" id="opponentStats"></div>
+</div>
+
+<button class="reset-sort" onclick="resetSort()">Reset Sort</button>
 
 <table>
 <thead>
 <tr>
-  <th>Season</th>
-  <th>Round</th>
+  <th onclick="sortTable('season')">Season</th>
+  <th onclick="sortTable('round')">Round</th>
   <th>Team</th>
   <th>Opponent</th>
-  <th>D</th>
-  <th>G</th>
-  <th>B</th>
+  <th onclick="sortTable('D')">D</th>
+  <th onclick="sortTable('G')">G</th>
+  <th onclick="sortTable('B')">B</th>
 </tr>
 </thead>
 <tbody id="rows"></tbody>
 </table>
 
+</div>
+
 <script>
-const params = new URLSearchParams(window.location.search);
-const playerName = params.get("name");
+const params=new URLSearchParams(location.search);
+const playerName=params.get("name")||"";
+document.getElementById("playerName").textContent=playerName||"Select a player";
 
-document.getElementById("playerName").textContent = playerName;
+let allGames=[], currentGames=[], sortDir=-1, sortKey=null;
 
-const startYear = 1990;
-const endYear = new Date().getFullYear();
+/* ONLY 2-colour teams alternate A,B,A,B */
+/* 3-colour teams unchanged */
+const teamStripes={
+  "Carlton":"linear-gradient(90deg,#001A3D 0 25%,#ffffff 25% 50%,#001A3D 50% 75%,#ffffff 75% 100%)",
+  "Collingwood":"linear-gradient(90deg,#000000 0 25%,#ffffff 25% 50%,#000000 50% 75%,#ffffff 75% 100%)",
+  "Geelong":"linear-gradient(90deg,#1C3C63 0 25%,#ffffff 25% 50%,#1C3C63 50% 75%,#ffffff 75% 100%)",
+  "Sydney":"linear-gradient(90deg,#ED171F 0 25%,#ffffff 25% 50%,#ED171F 50% 75%,#ffffff 75% 100%)",
+  "Hawthorn":"linear-gradient(90deg,#4D2004 0 25%,#FFD200 25% 50%,#4D2004 50% 75%,#FFD200 75% 100%)",
+  "North Melbourne":"linear-gradient(90deg,#0A2E8A 0 25%,#ffffff 25% 50%,#0A2E8A 50% 75%,#ffffff 75% 100%)",
 
-let years = [];
-for(let y=startYear; y<=endYear; y++){
-  years.push(y);
-}
+  "Richmond":"repeating-linear-gradient(90deg,#FFD200 0 24px,#000 24px 48px,#FFD200 48px 72px)",
+  "Essendon":"repeating-linear-gradient(90deg,#CC2031 0 24px,#000 24px 48px,#CC2031 48px 72px)",
+  "West Coast":"repeating-linear-gradient(90deg,#002B5C 0 24px,#FFD200 24px 48px,#002B5C 48px 72px)",
+  "Adelaide":"repeating-linear-gradient(90deg,#002B5C 0 24px,#FFD200 24px 48px,#CC2031 48px 72px)",
+  "Port Adelaide":"repeating-linear-gradient(90deg,#1C1C1C 0 24px,#00B2A9 24px 48px,#ffffff 48px 72px)",
+  "Brisbane":"repeating-linear-gradient(90deg,#7C003E 0 24px,#FFD200 24px 48px,#005BAC 48px 72px)",
+  "Melbourne":"repeating-linear-gradient(90deg,#002B5C 0 24px,#ED171F 24px 48px,#002B5C 48px 72px)",
+  "Western Bulldogs":"repeating-linear-gradient(90deg,#1E3A8A 0 24px,#ED171F 24px 48px,#ffffff 48px 72px)",
+  "Gold Coast":"repeating-linear-gradient(90deg,#B90A32 0 24px,#FFD200 24px 48px,#B90A32 48px 72px)",
+  "GWS":"repeating-linear-gradient(90deg,#F47920 0 24px,#000 24px 48px,#ffffff 48px 72px)",
+  "St Kilda":"repeating-linear-gradient(90deg,#000 0 24px,#ED171F 24px 48px,#ffffff 48px 72px)",
+  "Fremantle":"repeating-linear-gradient(90deg,#2B004F 0 24px,#ffffff 24px 48px,#2B004F 48px 72px)"
+};
 
-Promise.all(
-  years.map(y =>
-    fetch(`/data/afl/afl_${y}.json`)
-      .then(r => r.json())
-      .catch(() => [])
-  )
-).then(allData => {
+const years=[];
+for(let y=1990;y<=new Date().getFullYear();y++) years.push(y);
 
-  const allPlayers = allData.flat();
+Promise.all(years.map(y=>fetch(`/data/afl/afl_${y}.json`).then(r=>r.json()).catch(()=>[])))
+.then(data=>{
+  allGames=data.flat();
 
-  const playerGames = allPlayers.filter(p => p.player === playerName);
-
-  const tbody = document.getElementById("rows");
-
-  playerGames.forEach(p => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${p.season}</td>
-        <td>${p.round}</td>
-        <td class="left">${p.played_for}</td>
-        <td>${p.played_against}</td>
-        <td>${p.D || 0}</td>
-        <td>${p.G || 0}</td>
-        <td>${p.B || 0}</td>
-      </tr>
-    `;
+  const names=[...new Set(allGames.map(p=>p.player))].sort();
+  playerList.innerHTML="";
+  names.forEach(n=>{
+    const o=document.createElement("option");
+    o.value=n;
+    playerList.appendChild(o);
   });
 
+  currentGames=allGames.filter(p=>p.player===playerName);
+
+  if(currentGames.length){
+    const latest=currentGames.reduce((a,b)=>a.season>b.season?a:b);
+    teamStripe.style.background=teamStripes[latest.played_for] || "#999";
+
+    setupOpponents(currentGames);
+    renderCareer(currentGames);
+    renderOpponent([]);
+    renderTable(currentGames);
+  }
 });
+
+function setupOpponents(games){
+  opponentSelect.innerHTML=`<option value="all">All Opponents</option>`;
+  [...new Set(games.map(g=>g.played_against))].sort().forEach(o=>{
+    const opt=document.createElement("option");
+    opt.value=o;
+    opt.textContent=o;
+    opponentSelect.appendChild(opt);
+  });
+
+  opponentSelect.onchange=()=>{
+    let f=games;
+    if(opponentSelect.value!=="all") f=games.filter(g=>g.played_against===opponentSelect.value);
+    renderOpponent(f);
+    renderTable(f);
+  };
+}
+
+function renderCareer(g){ renderStats(g,"careerStats"); }
+function renderOpponent(g){ renderStats(g,"opponentStats"); }
+
+function renderStats(g,id){
+  if(!g.length){document.getElementById(id).innerHTML="";return;}
+
+  const games=g.length;
+  const ds=g.map(x=>x.D||0);
+  const gs=g.map(x=>x.G||0);
+
+  const bestD=Math.max(...ds);
+  const bestG=Math.max(...gs);
+
+  const dTotal=ds.reduce((a,b)=>a+b,0);
+  const gTotal=gs.reduce((a,b)=>a+b,0);
+
+  document.getElementById(id).innerHTML=`
+    <div class="stat-box"><strong>${games}</strong><span>Games</span></div>
+    <div class="stat-box"><strong>${bestD}</strong><span>Best Disposals</span></div>
+    <div class="stat-box"><strong>${bestG}</strong><span>Best Goals</span></div>
+    <div class="stat-box"><strong>${(dTotal/games).toFixed(1)}</strong><span>Avg Disposals</span></div>
+    <div class="stat-box"><strong>${(gTotal/games).toFixed(2)}</strong><span>Avg Goals</span></div>
+  `;
+}
+
+function renderTable(g){
+  rows.innerHTML="";
+  g.forEach(p=>{
+    const tr=document.createElement("tr");
+    tr.onclick=()=>location.href=
+      `afl-game.html?season=${p.season}&round=${encodeURIComponent(p.round)}&team=${encodeURIComponent(p.played_for)}&opp=${encodeURIComponent(p.played_against)}`;
+    tr.innerHTML=`
+      <td>${p.season}</td>
+      <td>${p.round}</td>
+      <td class="left">${p.played_for}</td>
+      <td>${p.played_against}</td>
+      <td>${p.D||0}</td>
+      <td>${p.G||0}</td>
+      <td>${p.B||0}</td>`;
+    rows.appendChild(tr);
+  });
+}
+
+function sortTable(key){
+  if(sortKey===key) sortDir*=-1;
+  else{sortKey=key; sortDir=-1;}
+  currentGames.sort((a,b)=>((a[key]||0)-(b[key]||0))*sortDir);
+  renderTable(currentGames);
+}
+
+function resetSort(){
+  currentGames=allGames.filter(p=>p.player===playerName);
+  renderTable(currentGames);
+}
+
+playerSearch.onchange=e=>{
+  location.href="afl-player.html?name="+encodeURIComponent(e.target.value);
+};
 </script>
 
 </body>
