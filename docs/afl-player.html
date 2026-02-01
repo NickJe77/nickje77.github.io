@@ -13,7 +13,7 @@ body{
 .page{max-width:1200px;margin:0 auto;padding:25px;}
 .top-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
 .name-wrap{display:flex;align-items:center;gap:14px;}
-.team-stripes{height:22px;width:180px;border-radius:6px;border:1px solid #ccc;}
+.team-stripes{height:22px;width:140px;border-radius:6px;border:1px solid #ccc;}
 .player-search input,.opponent-select{
   padding:8px 12px;border-radius:8px;border:1px solid #ccc;
   font-size:15px;width:240px;
@@ -39,8 +39,9 @@ h1{font-size:38px;margin:0;}
   border-radius:12px;padding:16px 10px;text-align:center;
   box-shadow:inset 0 0 0 1px #dde3ec;
 }
-.stat-box strong{display:block;font-size:26px;margin-bottom:6px;}
+.stat-box strong{display:block;font-size:26px;margin-bottom:4px;}
 .stat-box span{font-size:14px;color:#555;}
+.stat-box em{display:block;font-size:12px;color:#777;margin-top:2px;}
 
 table{
   border-collapse:collapse;width:100%;background:white;
@@ -65,7 +66,7 @@ tbody tr:nth-child(even){background:#f2f7ff;}
     <div id="teamStripe" class="team-stripes"></div>
   </div>
 
-  <div class="player-search">
+  <div>
     <input id="playerSearch" list="playerList" placeholder="Search player...">
     <datalist id="playerList"></datalist>
   </div>
@@ -109,39 +110,24 @@ document.getElementById("playerName").textContent=playerName||"Select a player";
 
 let allGames=[], currentGames=[], sortDir=-1, sortKey=null;
 
-const teamColours={
-  "Carlton":["#001A3D","#ffffff"],
-  "Collingwood":["#000000","#ffffff"],
-  "Richmond":["#FFD200","#000000"],
-  "Essendon":["#CC2031","#000000"],
-  "Geelong":["#1C3C63","#ffffff"],
-  "Sydney":["#ED171F","#ffffff"],
-  "West Coast":["#002B5C","#FFD200"],
-  "Adelaide":["#002B5C","#FFD200","#CC2031"],
-  "Port Adelaide":["#1C1C1C","#00B2A9","#ffffff"],
-  "Brisbane":["#7C003E","#FFD200","#005BAC"],
-  "Hawthorn":["#4D2004","#FFD200"],
-  "Melbourne":["#002B5C","#ED171F"],
-  "Western Bulldogs":["#1E3A8A","#ED171F","#ffffff"],
-  "Gold Coast":["#B90A32","#FFD200","#005BAC"],
-  "GWS":["#F47920","#000000","#ffffff"],
-  "North Melbourne":["#0A2E8A","#ffffff"]
+const teamStripes={
+  "Carlton":"repeating-linear-gradient(90deg,#001A3D 0 24px,#ffffff 24px 48px,#001A3D 48px 72px)",
+  "Collingwood":"repeating-linear-gradient(90deg,#000000 0 20px,#ffffff 20px 40px)",
+  "Richmond":"repeating-linear-gradient(90deg,#FFD200 0 20px,#000000 20px 40px)",
+  "Essendon":"repeating-linear-gradient(90deg,#CC2031 0 24px,#000000 24px 48px)",
+  "Geelong":"repeating-linear-gradient(90deg,#1C3C63 0 24px,#ffffff 24px 48px)",
+  "Sydney":"repeating-linear-gradient(90deg,#ED171F 0 24px,#ffffff 24px 48px)",
+  "West Coast":"repeating-linear-gradient(90deg,#002B5C 0 24px,#FFD200 24px 48px)",
+  "Adelaide":"repeating-linear-gradient(90deg,#002B5C 0 24px,#FFD200 24px 48px,#CC2031 48px 72px)",
+  "Port Adelaide":"repeating-linear-gradient(90deg,#1C1C1C 0 24px,#00B2A9 24px 48px)",
+  "Brisbane":"repeating-linear-gradient(90deg,#7C003E 0 24px,#FFD200 24px 48px,#005BAC 48px 72px)",
+  "Hawthorn":"repeating-linear-gradient(90deg,#4D2004 0 24px,#FFD200 24px 48px)",
+  "Melbourne":"repeating-linear-gradient(90deg,#002B5C 0 24px,#ED171F 24px 48px)",
+  "Western Bulldogs":"repeating-linear-gradient(90deg,#1E3A8A 0 24px,#ED171F 24px 48px)",
+  "Gold Coast":"repeating-linear-gradient(90deg,#B90A32 0 24px,#FFD200 24px 48px)",
+  "GWS":"repeating-linear-gradient(90deg,#F47920 0 24px,#000000 24px 48px)",
+  "North Melbourne":"repeating-linear-gradient(90deg,#0A2E8A 0 24px,#ffffff 24px 48px)"
 };
-
-function makeStripe(colours){
-  let seq=[];
-  if(colours.length===3){
-    seq=[...colours,...colours];
-  }else{
-    seq=[...colours,...colours,...colours];
-  }
-  const step=100/seq.length;
-  let parts=[];
-  seq.forEach((c,i)=>{
-    parts.push(`${c} ${i*step}% ${(i+1)*step}%`);
-  });
-  return `repeating-linear-gradient(90deg,${parts.join(",")})`;
-}
 
 const years=[];
 for(let y=1990;y<=new Date().getFullYear();y++) years.push(y);
@@ -154,18 +140,14 @@ Promise.all(years.map(y=>fetch(`data/afl/afl_${y}.json`).then(r=>r.json()).catch
   const list=document.getElementById("playerList");
   names.forEach(n=>{
     const o=document.createElement("option");
-    o.value=n;
-    list.appendChild(o);
+    o.value=n; list.appendChild(o);
   });
 
   currentGames=allGames.filter(p=>p.player===playerName);
 
   if(currentGames.length){
     const latest=currentGames.reduce((a,b)=>a.season>b.season?a:b);
-    const colours=teamColours[latest.played_for];
-    if(colours){
-      document.getElementById("teamStripe").style.background=makeStripe(colours);
-    }
+    document.getElementById("teamStripe").style.background=teamStripes[latest.played_for]||"#999";
     setupOpponents(currentGames);
     renderCareer(currentGames);
     renderOpponent([]);
@@ -177,9 +159,7 @@ function setupOpponents(games){
   const sel=document.getElementById("opponentSelect");
   [...new Set(games.map(g=>g.played_against))].sort().forEach(o=>{
     const opt=document.createElement("option");
-    opt.value=o;
-    opt.textContent=o;
-    sel.appendChild(opt);
+    opt.value=o; opt.textContent=o; sel.appendChild(opt);
   });
 
   sel.onchange=()=>{
@@ -194,20 +174,56 @@ function renderCareer(g){ renderStats(g,"careerStats"); }
 function renderOpponent(g){ renderStats(g,"opponentStats"); }
 
 function renderStats(g,id){
-  if(!g.length){
-    document.getElementById(id).innerHTML="";
-    return;
-  }
+  if(!g.length){document.getElementById(id).innerHTML="";return;}
+
   const games=g.length;
-  const d=g.reduce((s,x)=>s+(x.D||0),0);
-  const goals=g.reduce((s,x)=>s+(x.G||0),0);
+  const ds=g.map(x=>x.D||0);
+  const gs=g.map(x=>x.G||0);
+
+  const bestD=Math.max(...ds);
+  const bestG=Math.max(...gs);
+
+  const bestDGames=g.filter(x=>x.D===bestD);
+  const bestGGames=g.filter(x=>x.G===bestG);
+
+  const dTotal=ds.reduce((a,b)=>a+b,0);
+  const gTotal=gs.reduce((a,b)=>a+b,0);
+
+  function detailLine(arr){
+    if(arr.length===1){
+      const m=arr[0];
+      return `<em>${m.round}, ${m.season} vs ${m.played_against}</em>`;
+    }
+    return `<em>(${arr.length}×)</em>`;
+  }
 
   document.getElementById(id).innerHTML=`
-    <div class="stat-box"><strong>${games}</strong><span>Games</span></div>
-    <div class="stat-box"><strong>${Math.max(...g.map(x=>x.D||0))}</strong><span>Best Disposals</span></div>
-    <div class="stat-box"><strong>${Math.max(...g.map(x=>x.G||0))}</strong><span>Best Goals</span></div>
-    <div class="stat-box"><strong>${(d/games).toFixed(1)}</strong><span>Avg Disposals</span></div>
-    <div class="stat-box"><strong>${(goals/games).toFixed(2)}</strong><span>Avg Goals</span></div>
+    <div class="stat-box">
+      <strong>${games}</strong>
+      <span>Games</span>
+    </div>
+
+    <div class="stat-box">
+      <strong>${bestD}</strong>
+      <span>Best Disposals</span>
+      ${detailLine(bestDGames)}
+    </div>
+
+    <div class="stat-box">
+      <strong>${bestG}</strong>
+      <span>Best Goals</span>
+      ${detailLine(bestGGames)}
+    </div>
+
+    <div class="stat-box">
+      <strong>${(dTotal/games).toFixed(1)}</strong>
+      <span>Avg Disposals</span>
+    </div>
+
+    <div class="stat-box">
+      <strong>${(gTotal/games).toFixed(2)}</strong>
+      <span>Avg Goals</span>
+    </div>
   `;
 }
 
@@ -229,16 +245,9 @@ function renderTable(g){
 }
 
 function sortTable(key){
-  if(sortKey===key){
-    sortDir*=-1;
-  }else{
-    sortKey=key;
-    sortDir=-1; // FIRST CLICK = DESCENDING
-  }
-  currentGames.sort((a,b)=>(b[key]||0)-(a[key]||0));
-  if(sortDir===1){
-    currentGames.reverse();
-  }
+  if(sortKey===key) sortDir*=-1;
+  else{sortKey=key; sortDir=-1;}
+  currentGames.sort((a,b)=>(a[key]||0)-(b[key]||0)*sortDir);
   renderTable(currentGames);
 }
 
@@ -251,6 +260,5 @@ document.getElementById("playerSearch").onchange=e=>{
   window.location.href="afl-player.html?name="+encodeURIComponent(e.target.value);
 };
 </script>
-
 </body>
 </html>
