@@ -17,6 +17,14 @@ body{
   padding:25px;
 }
 
+/* top bar */
+.top-bar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:10px;
+}
+
 .name-wrap{
   display:flex;
   align-items:center;
@@ -28,6 +36,20 @@ body{
   width:120px;
   border-radius:6px;
   border:1px solid #ccc;
+}
+
+.player-search{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+
+.player-search input{
+  padding:8px 12px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  font-size:15px;
+  width:240px;
 }
 
 h1{
@@ -147,9 +169,16 @@ tbody tr:nth-child(even){
 <body>
 <div class="page">
 
-<div class="name-wrap">
-  <h1 id="playerName"></h1>
-  <div id="teamStripe" class="team-stripes"></div>
+<div class="top-bar">
+  <div class="name-wrap">
+    <h1 id="playerName"></h1>
+    <div id="teamStripe" class="team-stripes"></div>
+  </div>
+
+  <div class="player-search">
+    <input id="playerSearch" list="playerList" placeholder="Search player...">
+    <datalist id="playerList"></datalist>
+  </div>
 </div>
 
 <div id="summary">
@@ -222,15 +251,13 @@ const teamStripes = {
 
 const startYear = 1990;
 const endYear = new Date().getFullYear();
-
 let years = [];
-for(let y=startYear; y<=endYear; y++){
-  years.push(y);
-}
+for(let y=startYear; y<=endYear; y++) years.push(y);
 
 let playerGames = [];
 let originalOrder = [];
 let currentSort = {key:null, desc:true};
+let allPlayersList = [];
 
 Promise.all(
   years.map(y =>
@@ -241,6 +268,15 @@ Promise.all(
 ).then(allData => {
 
   const allPlayers = allData.flat();
+  allPlayersList = [...new Set(allPlayers.map(p => p.player))].sort();
+
+  const datalist = document.getElementById("playerList");
+  allPlayersList.forEach(name=>{
+    const opt = document.createElement("option");
+    opt.value = name;
+    datalist.appendChild(opt);
+  });
+
   playerGames = allPlayers.filter(p => p.player === playerName);
   originalOrder = [...playerGames];
 
@@ -344,6 +380,14 @@ Promise.all(
     renderTable(playerGames);
   });
 
+});
+
+/* jump to player */
+document.getElementById("playerSearch").addEventListener("change", e=>{
+  const name = e.target.value;
+  if(name){
+    window.location.href = `player.html?name=${encodeURIComponent(name)}`;
+  }
 });
 
 function renderTable(games){
