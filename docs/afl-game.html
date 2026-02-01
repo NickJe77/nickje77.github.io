@@ -5,68 +5,249 @@
 <title>AFL Game</title>
 
 <style>
-body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f4f6f8;}
-.page{max-width:1200px;margin:auto;padding:25px;}
-h1{text-align:center;}
+body{
+  font-family:system-ui, Arial, sans-serif;
+  margin:0;
+  background:#f4f6f8;
+}
 
-table{border-collapse:collapse;width:100%;background:#fff;}
-th,td{border:1px solid #ccc;padding:6px 8px;text-align:center;}
-th{background:#eee;}
-td.left{text-align:left;font-weight:600;}
+.page{
+  max-width:1200px;
+  margin:auto;
+  padding:25px;
+}
+
+h1{
+  text-align:center;
+  margin-bottom:6px;
+}
+
+.meta{
+  text-align:center;
+  color:#555;
+  margin-bottom:18px;
+}
+
+.scoreboard{
+  display:grid;
+  grid-template-columns:repeat(6,1fr);
+  gap:6px;
+  max-width:600px;
+  margin:0 auto 25px;
+}
+
+.scoreboard div{
+  background:#fff;
+  border-radius:8px;
+  padding:8px;
+  text-align:center;
+  box-shadow:0 2px 6px rgba(0,0,0,0.08);
+  font-weight:600;
+}
+
+.teams-wrap{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:20px;
+}
+
+@media(max-width:800px){
+  .teams-wrap{
+    grid-template-columns:1fr;
+  }
+}
+
+.team-box{
+  background:#fff;
+  border-radius:14px;
+  box-shadow:0 4px 12px rgba(0,0,0,0.08);
+  overflow:hidden;
+}
+
+.team-header{
+  background:#eef3fb;
+  padding:12px;
+  text-align:center;
+  font-weight:700;
+  font-size:18px;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+th,td{
+  border:1px solid #ddd;
+  padding:6px 8px;
+  text-align:center;
+  font-size:14px;
+}
+
+th{
+  background:#f3f6fb;
+}
+
+td.left{
+  text-align:left;
+  font-weight:600;
+}
 </style>
 </head>
 
 <body>
 <div class="page">
-<h1 id="title"></h1>
 
-<table>
-<thead>
-<tr>
-<th>Player</th>
-<th>Team</th>
-<th>D</th>
-<th>G</th>
-<th>B</th>
-</tr>
-</thead>
-<tbody id="rows"></tbody>
-</table>
+<h1 id="title"></h1>
+<div class="meta" id="venueLine"></div>
+
+<div class="scoreboard">
+  <div></div>
+  <div>Q1</div>
+  <div>Q2</div>
+  <div>Q3</div>
+  <div>Q4</div>
+  <div>Final</div>
+
+  <div id="teamALabel"></div>
+  <div id="aQ1"></div>
+  <div id="aQ2"></div>
+  <div id="aQ3"></div>
+  <div id="aQ4"></div>
+  <div id="aFinal"></div>
+
+  <div id="teamBLabel"></div>
+  <div id="bQ1"></div>
+  <div id="bQ2"></div>
+  <div id="bQ3"></div>
+  <div id="bQ4"></div>
+  <div id="bFinal"></div>
+</div>
+
+<div class="teams-wrap">
+
+  <div class="team-box">
+    <div class="team-header" id="teamAName"></div>
+    <table>
+      <thead>
+        <tr>
+          <th>Player</th>
+          <th>D</th>
+          <th>G</th>
+          <th>B</th>
+        </tr>
+      </thead>
+      <tbody id="teamARows"></tbody>
+    </table>
+  </div>
+
+  <div class="team-box">
+    <div class="team-header" id="teamBName"></div>
+    <table>
+      <thead>
+        <tr>
+          <th>Player</th>
+          <th>D</th>
+          <th>G</th>
+          <th>B</th>
+        </tr>
+      </thead>
+      <tbody id="teamBRows"></tbody>
+    </table>
+  </div>
+
+</div>
+
 </div>
 
 <script>
-const p=new URLSearchParams(location.search);
-const season=p.get("season");
-const round=p.get("round");
-const team=p.get("team");
-const opp=p.get("opp");
+const p = new URLSearchParams(location.search);
+const season = p.get("season");
+const round = p.get("round");
+const team = p.get("team");
+const opp = p.get("opp");
 
 document.getElementById("title").textContent =
 `${season} – ${round}: ${team} vs ${opp}`;
 
 fetch(`data/afl/afl_${season}.json`)
-.then(r=>r.json())
-.then(data=>{
-  const game=data.filter(x=>
-    x.round===round &&
+.then(r => r.json())
+.then(data => {
+
+  const game = data.filter(x =>
+    x.round === round &&
     (
-      (x.played_for===team && x.played_against===opp) ||
-      (x.played_for===opp && x.played_against===team)
+      (x.played_for === team && x.played_against === opp) ||
+      (x.played_for === opp && x.played_against === team)
     )
   );
 
-  const tbody=document.getElementById("rows");
-  game.forEach(p=>{
-    tbody.innerHTML+=`
+  if(!game.length) return;
+
+  const teamA = game.filter(p => p.played_for === team);
+  const teamB = game.filter(p => p.played_for === opp);
+
+  const aInfo = teamA[0];
+  const bInfo = teamB[0];
+
+  document.getElementById("venueLine").textContent = aInfo.venue || "";
+
+  document.getElementById("teamAName").textContent =
+    `${team} (${aInfo.ladder_pos || ""})`;
+  document.getElementById("teamBName").textContent =
+    `${opp} (${bInfo.ladder_pos || ""})`;
+
+  document.getElementById("teamALabel").textContent = team;
+  document.getElementById("teamBLabel").textContent = opp;
+
+  const aFinal = teamA.reduce((t,p)=>t+(+p.G||0)*6+(+p.B||0),0);
+  const bFinal = teamB.reduce((t,p)=>t+(+p.G||0)*6+(+p.B||0),0);
+
+  document.getElementById("aQ1").textContent = aInfo.q1 || "";
+  document.getElementById("aQ2").textContent = aInfo.q2 || "";
+  document.getElementById("aQ3").textContent = aInfo.q3 || "";
+  document.getElementById("aQ4").textContent = aInfo.q4 || "";
+  document.getElementById("aFinal").textContent = aFinal;
+
+  document.getElementById("bQ1").textContent = bInfo.q1 || "";
+  document.getElementById("bQ2").textContent = bInfo.q2 || "";
+  document.getElementById("bQ3").textContent = bInfo.q3 || "";
+  document.getElementById("bQ4").textContent = bInfo.q4 || "";
+  document.getElementById("bFinal").textContent = bFinal;
+
+  const teamATbody = document.getElementById("teamARows");
+  const teamBTbody = document.getElementById("teamBRows");
+
+  teamA.forEach(p => {
+    teamATbody.innerHTML += `
       <tr>
-        <td class="left">${p.player}</td>
-        <td>${p.played_for}</td>
+        <td class="left">
+          <a href="afl-player.html?name=${encodeURIComponent(p.player)}">
+            ${p.player}
+          </a>
+        </td>
         <td>${p.D||0}</td>
         <td>${p.G||0}</td>
         <td>${p.B||0}</td>
       </tr>`;
   });
+
+  teamB.forEach(p => {
+    teamBTbody.innerHTML += `
+      <tr>
+        <td class="left">
+          <a href="afl-player.html?name=${encodeURIComponent(p.player)}">
+            ${p.player}
+          </a>
+        </td>
+        <td>${p.D||0}</td>
+        <td>${p.G||0}</td>
+        <td>${p.B||0}</td>
+      </tr>`;
+  });
+
 });
 </script>
+
 </body>
 </html>
