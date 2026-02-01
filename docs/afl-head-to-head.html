@@ -136,7 +136,7 @@ th{background:#f4f6f8;}
 </div>
 
 <script>
-let allData = [];
+let allMatches = [];
 
 function norm(s){
   return (s||"").trim().toLowerCase();
@@ -154,24 +154,66 @@ async function loadAllSeasons(){
 
   for(let y=startYear; y<=endYear; y++){
     try{
-      const res = await fetch(`data/afl/afl_${y}.json`);
+      const res = await fetch(`/data/afl/players_${y}.json`);
       if(!res.ok) continue;
-      const seasonData = await res.json();
+      const rows = await res.json();
 
-      seasonData.forEach(r=>{
-        if(!r.home_team || !r.away_team) return;
+      const matchMap = {};
 
-        const home = norm(r.home_team);
-        const away = norm(r.away_team);
+      rows.forEach(p=>{
+        const key = p.match_id;
+        if(!matchMap[key]){
+          matchMap[key] = {
+            season: p.season,
+            round: p.round,
+            venue: p.venue || "",
+            teams: {},
+          };
+        }
 
-        r._home = home;
-        r._away = away;
+        const team = p.played_for;
+        const opp  = p.played_against;
 
-        allData.push(r);
+        const goals = Number(p.G || 0);
+        const behinds = Number(p.B || 0);
+        const points = goals * 6 + behinds;
 
-        teams.add(home);
-        teams.add(away);
+        if(!matchMap[key].teams[team]) matchMap[key].teams[team] = 0;
+        matchMap[key].teams[team] += points;
+
+        if(opp && !matchMap[key].teams[opp]) matchMap[key].teams[opp] = 0;
       });
+
+      Object.values(matchMap).forEach(m=>{
+        const t = Object.keys(m.teams);
+        if(t.length !== 2) return;
+
+        const home = t[0];
+        const away = t[1];
+        const hp = m.teams[home];
+        const ap = m.teams[away];
+
+        const match = {
+          season: m.season,
+          round: m.round,
+          venue: m.venue,
+          home_team: home,
+          away_team: away,
+          home_points: hp,
+          away_points: ap,
+          total_points: hp + ap,
+          margin: Math.abs(hp - ap)
+        };
+
+        match._home = norm(home);
+        match._away = norm(away);
+
+        allMatches.push(match);
+
+        teams.add(match._home);
+        teams.add(match._away);
+      });
+
     }catch(e){}
   }
 
@@ -200,29 +242,20 @@ function compare(){
     box.innerHTML="<b>Please select two teams.</b>";
     return;
   }
-
   if(a===b){
     box.innerHTML="<b>Please select two different teams.</b>";
     return;
   }
 
-  const rawGames = allData.filter(r =>
+  const games = allMatches.filter(r =>
     (r._home===a && r._away===b) ||
     (r._home===b && r._away===a)
   );
 
-  if(rawGames.length===0){
+  if(games.length===0){
     box.innerHTML="<b>No matches found for this pairing.</b>";
     return;
   }
-
-  const gameMap = {};
-  rawGames.forEach(r=>{
-    if(!gameMap[r.match_id]){
-      gameMap[r.match_id] = r;
-    }
-  });
-  let games = Object.values(gameMap);
 
   games.sort((x,y)=>{
     if(y.season!==x.season) return y.season-x.season;
@@ -289,7 +322,7 @@ function compare(){
       <tr>
         <td>${g.season}</td>
         <td>${g.round}</td>
-        <td>${g.venue || ""}</td>
+        <td>${g.venue}</td>
         <td>${displayName(g._home)} v ${displayName(g._away)}</td>
         <td>${winner}</td>
         <td>${g.home_points} - ${g.away_points}</td>
