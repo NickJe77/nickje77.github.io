@@ -165,7 +165,10 @@ function buildTeamSelector(){
 function buildRoundButtons(){
   roundBar.innerHTML="";
   const rounds=[...new Set(matches.map(r=>canonicalRound(r.round)))];
-  const numeric=rounds.filter(r=>/^Round\s*\d+/i.test(r)).map(r=>({label:r,num:+r.match(/\d+/)[0]})).sort((a,b)=>a.num-b.num);
+  const numeric=rounds.filter(r=>/^Round\s*\d+/i.test(r))
+    .map(r=>({label:r,num:+r.match(/\d+/)[0]}))
+    .sort((a,b)=>a.num-b.num);
+
   addRoundButton("All Rounds",true);
   numeric.forEach(r=>addRoundButton(r.label));
   finalsRounds.forEach(r=>addRoundButton(r));
@@ -188,14 +191,14 @@ teamSelect.onchange=renderMatches;
 
 function getStars(match){
   return match.players
-    .filter(p=>+p.D>=35||+p.G>=5)
+    .filter(p=>+p.D>=35 || +p.G>=5)
     .map(p=>{
       return `<a href="player.html?name=${encodeURIComponent(p.player)}">${p.player}</a> (${p.G>=5?`${p.G} goals`:`${p.D} disposals`})`;
     });
 }
 
 function getRunningLadderMatches(){
-  if(currentRound==="ALL")return matches.filter(m=>/^Round\s*\d+/i.test(m.round));
+  if(currentRound==="ALL") return matches.filter(m=>/^Round\s*\d+/i.test(m.round));
   const n=+currentRound.match(/\d+/)?.[0];
   return matches.filter(m=>(+m.round.match(/\d+/)?.[0])<=n);
 }
@@ -205,10 +208,17 @@ function renderMatches(){
   ladderDiv.innerHTML="";
   let rows=matches;
 
-  if(teamSelect.value!=="ALL")rows=rows.filter(r=>r.home_team===teamSelect.value||r.away_team===teamSelect.value);
-  if(currentRound!=="ALL")rows=rows.filter(r=>canonicalRound(r.round)===currentRound);
+  if(teamSelect.value!=="ALL"){
+    rows=rows.filter(r=>r.home_team===teamSelect.value||r.away_team===teamSelect.value);
+  }
 
-  if(!finalsRounds.includes(currentRound))buildLadder(getRunningLadderMatches());
+  if(currentRound!=="ALL"){
+    rows=rows.filter(r=>canonicalRound(r.round)===currentRound);
+  }
+
+  if(!finalsRounds.includes(currentRound)){
+    buildLadder(getRunningLadderMatches());
+  }
 
   rows.forEach(g=>{
     const line=g.home_points>g.away_points
@@ -230,23 +240,34 @@ function renderMatches(){
 
 function buildLadder(rows){
   let ladder={};
+
   rows.forEach(g=>{
     const h=g.home_team,a=g.away_team,hp=+g.home_points,ap=+g.away_points;
     if(!ladder[h])ladder[h]={team:h,w:0,l:0,d:0,f:0,ag:0};
     if(!ladder[a])ladder[a]={team:a,w:0,l:0,d:0,f:0,ag:0};
-    ladder[h].f+=hp;ladder[h].ag+=ap;
-    ladder[a].f+=ap;ladder[a].ag+=hp;
-    if(hp>ap){ladder[h].w++;ladder[a].l++;}
-    else if(ap>hp){ladder[a].w++;ladder[h].l++;}
-    else{ladder[h].d++;ladder[a].d++;}
+
+    ladder[h].f+=hp; ladder[h].ag+=ap;
+    ladder[a].f+=ap; ladder[a].ag+=hp;
+
+    if(hp>ap){ladder[h].w++; ladder[a].l++;}
+    else if(ap>hp){ladder[a].w++; ladder[h].l++;}
+    else{ladder[h].d++; ladder[a].d++;}
   });
 
-  const arr=Object.values(ladder).map(t=>{t.p=t.ag?((t.f/t.ag)*100).toFixed(1):"0.0";return t;})
+  const arr=Object.values(ladder)
+    .map(t=>{t.p=t.ag?((t.f/t.ag)*100).toFixed(1):"0.0";return t;})
     .sort((a,b)=>b.w-a.w||b.p-a.p);
 
   let html="<table><tr><th>#</th><th>Team</th><th>W</th><th>L</th><th>D</th><th>%</th></tr>";
   arr.forEach((t,i)=>{
-    html+=`<tr><td>${i+1}</td><td class="team">${t.team}</td><td>${t.w}</td><td>${t.l}</td><td>${t.d}</td><td>${t.p}</td></tr>`;
+    html+=`<tr>
+      <td>${i+1}</td>
+      <td class="team">${t.team}</td>
+      <td>${t.w}</td>
+      <td>${t.l}</td>
+      <td>${t.d}</td>
+      <td>${t.p}</td>
+    </tr>`;
   });
   ladderDiv.innerHTML=html+"</table>";
 }
