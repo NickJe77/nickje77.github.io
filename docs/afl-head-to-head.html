@@ -42,7 +42,9 @@ body{
   padding:20px;
 }
 
-.selector-box h3{margin:0 0 10px;}
+.selector-box h3{
+  margin:0 0 10px;
+}
 
 .selector-box select{
   width:100%;
@@ -61,7 +63,10 @@ body{
   border-radius:8px;
   cursor:pointer;
 }
-.compare-btn:hover{background:#003f9e;}
+
+.compare-btn:hover{
+  background:#003f9e;
+}
 
 .results-box{
   border:1px solid #ddd;
@@ -133,6 +138,17 @@ th{background:#f4f6f8;}
 <script>
 let allMatches = [];
 
+function norm(s){
+  return (s||"").trim().toLowerCase();
+}
+
+function displayName(s){
+  const t = (s||"").trim();
+  if(!t) return "";
+  if(t.toLowerCase()==="gws") return "GWS";
+  return t.replace(/\b\w/g, c => c.toUpperCase());
+}
+
 function canonicalRound(r){
   const t=(r||"").toLowerCase();
   if(t.includes("elimination")) return "Elimination Final";
@@ -143,16 +159,42 @@ function canonicalRound(r){
   return (r||"").trim();
 }
 
+function roundSortKey(r){
+  const rr = canonicalRound(r);
+  const m = rr.match(/^Round\s*(\d+)/i);
+  if(m) return 1000 + parseInt(m[1],10);
+  if(rr==="Elimination Final") return 2001;
+  if(rr==="Qualifying Final") return 2002;
+  if(rr==="Semi Final") return 2003;
+  if(rr==="Preliminary Final") return 2004;
+  if(rr==="Grand Final") return 2005;
+  return 9999;
+}
+
+function sleep0(){
+  return new Promise(res => setTimeout(res, 0));
+}
+
 async function loadAllSeasons(){
   const startYear = 1990;
   const endYear = new Date().getFullYear();
   const teamSet = new Set();
+  const box = document.getElementById("results");
+
+  allMatches = [];
+  box.innerHTML = `<div class="placeholder">Loading AFL database… (0/${endYear-startYear+1})</div>`;
 
   for(let y=startYear; y<=endYear; y++){
+    // update UI each year so it never looks "stuck"
+    box.innerHTML = `<div class="placeholder">Loading AFL database… (${y-startYear+1}/${endYear-startYear+1})</div>`;
+    await sleep0();
+
     try{
-      const res = await fetch(`/data/afl/players_${y}.json`);
+      const res = await fetch(`/data/afl/players_${y}.json?cb=${Date.now()}`);
       if(!res.ok) continue;
+
       const raw = await res.json();
+      if(!Array.isArray(raw) || raw.length===0) continue;
 
       const map = {};
 
@@ -168,12 +210,14 @@ async function loadAllSeasons(){
           };
         }
 
-        // ✅ FIX: capture venue even if first row was blank
+        // If venue is blank on first record but exists later, fill it
         if(!map[key].venue && p.venue){
           map[key].venue = p.venue;
         }
 
-        const team = p.played_for;
+        const team = (p.played_for || "").trim();
+        if(!team) return;
+
         const goals = Number(p.G||0);
         const behinds = Number(p.B||0);
         const points = goals*6 + behinds;
@@ -186,37 +230,49 @@ async function loadAllSeasons(){
         const teams = Object.keys(m.teams);
         if(teams.length!==2) return;
 
-        const home=teams[0];
-        const away=teams[1];
-        const hp=m.teams[home];
-        const ap=m.teams[away];
+        const homeRaw = teams[0];
+        const awayRaw = teams[1];
+
+        const home = norm(homeRaw);
+        const away = norm(awayRaw);
+
+        const hp = Number(m.teams[homeRaw] || 0);
+        const ap = Number(m.teams[awayRaw] || 0);
 
         allMatches.push({
-          season:m.season,
-          round:m.round,
-          venue:m.venue,
+          season: Number(m.season) || y,
+          round: m.round,
+          round_key: roundSortKey(m.round),
+          venue: m.venue || "",
           home,
           away,
           hp,
           ap,
-          total: hp+ap,
-          margin: Math.abs(hp-ap)
+          total_points: hp + ap,
+          margin: Math.abs(hp - ap)
         });
 
         teamSet.add(home);
         teamSet.add(away);
       });
 
-    }catch(e){}
+    }catch(e){
+      // skip year, keep going
+      console.warn("Skipped year", y, e);
+    }
   }
 
   const teams=[...teamSet].sort();
   const t1=document.getElementById("team1");
   const t2=document.getElementById("team2");
 
+  t1.innerHTML = `<option value="">Select team</option>`;
+  t2.innerHTML = `<option value="">Select team</option>`;
+
   teams.forEach(t=>{
-    t1.innerHTML+=`<option value="${t}">${t}</option>`;
-    t2.innerHTML+=`<option value="${t}">${t}</option>`;
+    const name = displayName(t);
+    t1.innerHTML += `<option value="${t}">${name}</option>`;
+    t2.innerHTML += `<option value="${t}">${name}</option>`;
   });
 
   document.getElementById("results").innerHTML =
@@ -230,15 +286,24 @@ function compare(){
   const b=document.getElementById("team2").value;
   const box=document.getElementById("results");
 
-  if(!a||!b){ box.innerHTML="<b>Select two teams.</b>"; return; }
-  if(a===b){ box.innerHTML="<b>Select different teams.</b>"; return; }
+  if(!a || !b){
+    box.innerHTML="<b>Please select two teams.</b>";
+    return;
+  }
+  if(a===b){
+    box.innerHTML="<b>Please select two different teams.</b>";
+    return;
+  }
 
-  const games = allMatches.filter(g =>
-    (g.home===a && g.away===b) || (g.home===b && g.away===a)
-  ).sort((x,y)=> y.season-x.season);
+  const games = allMatches
+    .filter(g => (g.home===a && g.away===b) || (g.home===b && g.away===a))
+    .sort((x,y)=>{
+      if(y.season!==x.season) return y.season-x.season;
+      return (y.round_key||0) - (x.round_key||0);
+    });
 
   if(!games.length){
-    box.innerHTML="<b>No matches found.</b>";
+    box.innerHTML="<b>No matches found for this pairing.</b>";
     return;
   }
 
@@ -250,31 +315,54 @@ function compare(){
     else bWins++;
   });
 
-  let html=`
-    <h3>${a} vs ${b}</h3>
-    <p>Games: ${games.length} | ${a} wins: ${aWins} | Draws: ${draws} | ${b} wins: ${bWins}</p>
+  const lastN = Math.min(10, games.length);
+  const lastGames = games.slice(0, lastN);
+  const totalPointsN = lastGames.reduce((sum,g)=>sum + (Number(g.total_points)||0), 0);
+  const avgPointsN = (totalPointsN / lastGames.length).toFixed(1);
 
-    <table>
+  const A = displayName(a);
+  const B = displayName(b);
+
+  let html=`
+  <h3>${A} vs ${B}</h3>
+  <p>
+    Games: ${games.length} |
+    ${A} wins: ${aWins} |
+    Draws: ${draws} |
+    ${B} wins: ${bWins}
+  </p>
+  <p>
+    Last ${lastN} Avg Points per Game: ${avgPointsN}
+  </p>
+
+  <table>
     <tr>
       <th>Season</th>
       <th>Round</th>
       <th>Venue</th>
       <th>Match</th>
+      <th>Winner</th>
       <th>Score</th>
-      <th>Total</th>
+      <th>Total Points</th>
       <th>Margin</th>
     </tr>
   `;
 
   games.forEach(g=>{
+    const winner =
+      g.hp > g.ap ? displayName(g.home) :
+      g.ap > g.hp ? displayName(g.away) :
+      "Draw";
+
     html+=`
       <tr>
         <td>${g.season}</td>
         <td>${g.round}</td>
-        <td>${g.venue}</td>
-        <td>${g.home} v ${g.away}</td>
+        <td>${g.venue || ""}</td>
+        <td>${displayName(g.home)} v ${displayName(g.away)}</td>
+        <td>${winner}</td>
         <td>${g.hp} - ${g.ap}</td>
-        <td>${g.total}</td>
+        <td>${g.total_points}</td>
         <td>${g.margin}</td>
       </tr>
     `;
