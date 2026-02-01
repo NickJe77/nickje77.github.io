@@ -46,15 +46,8 @@ h1{text-align:center;margin-bottom:6px;}
 }
 .stat b{display:block;font-size:18px;}
 
-.filters{
-  text-align:center;
-  margin-bottom:20px;
-}
-
-select{
-  padding:8px 14px;
-  font-size:15px;
-}
+.filters{text-align:center;margin-bottom:20px;}
+select{padding:8px 14px;font-size:15px;}
 
 table{
   width:100%;
@@ -136,7 +129,7 @@ a{color:#0056d6;text-decoration:none;font-weight:600;}
 <tbody id="playersTable"></tbody>
 </table>
 
-<h2>Games (Regular Season)</h2>
+<h2>Games</h2>
 <table>
 <thead>
 <tr>
@@ -172,23 +165,23 @@ let seasonStats = {};
 let playerStats = {};
 let seasonsSet = new Set();
 
-function isPlayoffGame(g){
-  return g.playoff === true || g.is_playoff === true || g.round === "Playoffs";
-}
-
 async function loadTeam(){
+  const seenGames = new Set(); // DEDUPLICATION
+
   for(const file of seasonFiles){
     try{
       const res = await fetch("data/nba/" + file);
       const data = await res.json();
 
-      data.games.forEach((g, index)=>{
-        if(isPlayoffGame(g)) return;
+      data.games.forEach(g=>{
+        if(g.home_team !== team && g.away_team !== team) return;
+
+        // unique key per game
+        const key = `${g.date}|${g.home_team}|${g.away_team}`;
+        if(seenGames.has(key)) return;
+        seenGames.add(key);
 
         const isHome = g.home_team === team;
-        const isAway = g.away_team === team;
-        if(!isHome && !isAway) return;
-
         const season = data.season;
         seasonsSet.add(season);
 
@@ -209,7 +202,6 @@ async function loadTeam(){
         if(Array.isArray(g.players)){
           g.players.forEach(p=>{
             if(p.team !== team) return;
-
             if(!playerStats[p.player]){
               playerStats[p.player] = { games:0, pts:0, reb:0, ast:0 };
             }
@@ -222,16 +214,16 @@ async function loadTeam(){
 
         games.push({
           season: season,
-          seasonParam: file.replace("nba_season_","").replace(".json",""),
           date: g.date || "",
           game: g.home_team + " vs " + g.away_team,
           result: result,
-          score: teamScore + " – " + oppScore,
-          gameIndex: index
+          score: teamScore + " – " + oppScore
         });
       });
 
-    }catch(e){}
+    }catch(e){
+      console.error("Failed:", file, e);
+    }
   }
 
   seasonsSet.forEach(s=>{
