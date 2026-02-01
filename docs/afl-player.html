@@ -7,78 +7,132 @@
 <style>
 body{
   font-family:system-ui, Arial, sans-serif;
-  margin:20px;
+  margin:0;
+  background:#f4f6f8;
 }
-h1{margin-bottom:10px;}
+
+.page{
+  max-width:1200px;
+  margin:0 auto;
+  padding:25px;
+}
+
+h1{
+  font-size:38px;
+  margin-bottom:15px;
+}
 
 #summary{
-  border:1px solid #ccc;
-  padding:15px;
-  margin-bottom:25px;
-  background:#f9f9f9;
+  background:white;
+  border-radius:14px;
+  box-shadow:0 6px 18px rgba(0,0,0,0.08);
+  padding:25px 30px;
+  margin-bottom:35px;
+}
+
+.summary-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:15px;
+}
+
+.summary-header select{
+  padding:8px 12px;
+  font-size:15px;
+  border-radius:6px;
+}
+
+.section-title{
+  margin-top:22px;
+  margin-bottom:6px;
+  font-weight:700;
+  color:#666;
+  text-transform:uppercase;
+  font-size:13px;
+  letter-spacing:0.6px;
 }
 
 .stats{
   display:grid;
   grid-template-columns: repeat(auto-fit,minmax(180px,1fr));
-  gap:10px;
-  margin-top:10px;
+  gap:16px;
 }
 
 .stat-box{
-  background:white;
-  border:1px solid #ddd;
-  padding:10px;
+  background:linear-gradient(180deg,#f9fbff,#eef3fb);
+  border-radius:12px;
+  padding:16px 10px;
   text-align:center;
+  box-shadow:inset 0 0 0 1px #dde3ec;
 }
 
 .stat-box strong{
   display:block;
-  font-size:18px;
+  font-size:26px;
+  margin-bottom:6px;
 }
 
-select{
-  padding:6px;
+.stat-box span{
   font-size:14px;
+  color:#555;
 }
 
 hr{
-  margin:30px 0;
+  margin:40px 0 20px;
+  border:none;
+  border-top:1px solid #ddd;
 }
 
 table{
   border-collapse:collapse;
   width:100%;
+  background:white;
+  border-radius:10px;
+  overflow:hidden;
+  box-shadow:0 3px 10px rgba(0,0,0,0.06);
 }
 th,td{
-  border:1px solid #ccc;
-  padding:6px;
+  border:1px solid #ddd;
+  padding:8px;
   text-align:center;
 }
 th{
-  background:#eee;
+  background:#f0f0f0;
 }
 td.left{
   text-align:left;
   font-weight:600;
 }
+
+/* zebra striping */
+tbody tr:nth-child(even){
+  background:#f2f7ff;
+}
 </style>
 </head>
 
 <body>
+<div class="page">
 
 <h1 id="playerName"></h1>
 
 <div id="summary">
-  <div>
-    <strong>Opponent:</strong>
-    <select id="opponentSelect">
-      <option value="all">All opponents</option>
-    </select>
+  <div class="summary-header">
+    <div>
+      <strong>Opponent:</strong>
+      <select id="opponentSelect">
+        <option value="all">All opponents</option>
+      </select>
+    </div>
   </div>
 
+  <div class="section-title">Career Summary</div>
   <div class="stats" id="careerStats"></div>
-  <div class="stats" id="opponentStats" style="margin-top:15px;"></div>
+
+  <div class="section-title" id="opponentTitle" style="display:none;">Vs Opponent</div>
+  <div class="stats" id="opponentStats"></div>
 </div>
 
 <hr>
@@ -97,6 +151,8 @@ td.left{
 </thead>
 <tbody id="rows"></tbody>
 </table>
+
+</div>
 
 <script>
 const params = new URLSearchParams(window.location.search);
@@ -142,6 +198,7 @@ Promise.all(
   const opponentSelect = document.getElementById("opponentSelect");
   const careerStatsDiv = document.getElementById("careerStats");
   const opponentStatsDiv = document.getElementById("opponentStats");
+  const opponentTitle = document.getElementById("opponentTitle");
 
   const opponents = [...new Set(playerGames.map(g => g.played_against))].sort();
   opponents.forEach(o => {
@@ -168,28 +225,30 @@ Promise.all(
   function renderCareer(){
     const s = calcStats(playerGames);
     careerStatsDiv.innerHTML = `
-      <div class="stat-box"><strong>${s.totalGames}</strong>Games</div>
-      <div class="stat-box"><strong>${s.bestD}</strong>Career Best Disposals</div>
-      <div class="stat-box"><strong>${s.bestG}</strong>Career Best Goals</div>
-      <div class="stat-box"><strong>${s.avgD}</strong>Avg Disposals</div>
-      <div class="stat-box"><strong>${s.avgG}</strong>Avg Goals</div>
+      <div class="stat-box"><strong>${s.totalGames}</strong><span>Games</span></div>
+      <div class="stat-box"><strong>${s.bestD}</strong><span>Career Best Disposals</span></div>
+      <div class="stat-box"><strong>${s.bestG}</strong><span>Career Best Goals</span></div>
+      <div class="stat-box"><strong>${s.avgD}</strong><span>Avg Disposals</span></div>
+      <div class="stat-box"><strong>${s.avgG}</strong><span>Avg Goals</span></div>
     `;
   }
 
   function renderOpponent(opponent){
     if(opponent==="all"){
       opponentStatsDiv.innerHTML = "";
+      opponentTitle.style.display="none";
       return;
     }
     const filtered = playerGames.filter(g=>g.played_against===opponent);
     const s = calcStats(filtered);
 
+    opponentTitle.style.display="block";
     opponentStatsDiv.innerHTML = `
-      <div class="stat-box"><strong>${s.totalGames}</strong>Games vs ${opponent}</div>
-      <div class="stat-box"><strong>${s.bestD}</strong>Best Disposals vs ${opponent}</div>
-      <div class="stat-box"><strong>${s.bestG}</strong>Best Goals vs ${opponent}</div>
-      <div class="stat-box"><strong>${s.avgD}</strong>Avg Disposals vs ${opponent}</div>
-      <div class="stat-box"><strong>${s.avgG}</strong>Avg Goals vs ${opponent}</div>
+      <div class="stat-box"><strong>${s.totalGames}</strong><span>Games vs ${opponent}</span></div>
+      <div class="stat-box"><strong>${s.bestD}</strong><span>Best Disposals</span></div>
+      <div class="stat-box"><strong>${s.bestG}</strong><span>Best Goals</span></div>
+      <div class="stat-box"><strong>${s.avgD}</strong><span>Avg Disposals</span></div>
+      <div class="stat-box"><strong>${s.avgG}</strong><span>Avg Goals</span></div>
     `;
   }
 
