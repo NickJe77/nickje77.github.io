@@ -52,9 +52,7 @@ tr:nth-child(even){background:#f6f9ff;}
   text-decoration:none;
   font-weight:600;
 }
-.team-link:hover{
-  text-decoration:underline;
-}
+.team-link:hover{text-decoration:underline;}
 </style>
 </head>
 
@@ -73,15 +71,12 @@ tr:nth-child(even){background:#f6f9ff;}
 <div class="page-wrap">
 
 <h1>NBA Teams</h1>
-<p>Franchise records from the modern NBA era (1976–77 to present).</p>
+<p>Franchise list from your NBA season data.</p>
 
 <table>
   <thead>
     <tr>
       <th>Team</th>
-      <th>Founded</th>
-      <th>Championships</th>
-      <th>Finals Appearances</th>
     </tr>
   </thead>
   <tbody id="teamTable"></tbody>
@@ -92,36 +87,52 @@ tr:nth-child(even){background:#f6f9ff;}
 <script>
 const tableBody = document.getElementById("teamTable");
 
-fetch("docs/data/nba/teams.json")
-  .then(r => {
-    if(!r.ok) throw new Error("JSON not found");
-    return r.json();
-  })
-  .then(data => {
+function seasonToFile(season){
+  return "docs/data/nba/nba_season_" + season.replace("-","_") + ".json";
+}
 
-    data.forEach(team => {
-      if(team.active === false) return;
+async function loadTeams(){
+  const res = await fetch("docs/data/nba/seasons.json");
+  if(!res.ok){
+    tableBody.innerHTML = "<tr><td>Could not load seasons.json</td></tr>";
+    return;
+  }
 
-      const urlTeam = encodeURIComponent(team.team);
+  const seasons = await res.json();
 
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>
-          <a class="team-link" href="nba-team.html?team=${urlTeam}">
-            ${team.team}
-          </a>
-        </td>
-        <td>${team.founded || ""}</td>
-        <td>${team.titles ?? ""}</td>
-        <td>${team.finals ?? ""}</td>
-      `;
-      tableBody.appendChild(tr);
+  const files = await Promise.all(
+    seasons.map(s => fetch(seasonToFile(s)))
+  );
+
+  const jsons = await Promise.all(
+    files.filter(r => r.ok).map(r => r.json())
+  );
+
+  const teams = new Set();
+
+  jsons.forEach(seasonData=>{
+    seasonData.games.forEach(game=>{
+      teams.add(game.home_team);
+      teams.add(game.away_team);
     });
-  })
-  .catch(err => {
-    console.error(err);
-    tableBody.innerHTML = "<tr><td colspan='4'>No data available.</td></tr>";
   });
+
+  const sortedTeams = [...teams].sort();
+
+  sortedTeams.forEach(team=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>
+        <a class="team-link" href="nba-team.html?team=${encodeURIComponent(team)}">
+          ${team}
+        </a>
+      </td>
+    `;
+    tableBody.appendChild(tr);
+  });
+}
+
+loadTeams();
 </script>
 
 </body>
