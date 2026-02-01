@@ -17,9 +17,21 @@ body{
   padding:25px;
 }
 
+.name-wrap{
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+.team-color{
+  width:18px;
+  height:18px;
+  border-radius:4px;
+}
+
 h1{
   font-size:38px;
-  margin-bottom:15px;
+  margin:0;
 }
 
 #summary{
@@ -100,13 +112,16 @@ th,td{
 }
 th{
   background:#f0f0f0;
+  cursor:pointer;
+}
+th.sortable:hover{
+  background:#e6eefc;
 }
 td.left{
   text-align:left;
   font-weight:600;
 }
 
-/* zebra striping */
 tbody tr:nth-child(even){
   background:#f2f7ff;
 }
@@ -116,7 +131,10 @@ tbody tr:nth-child(even){
 <body>
 <div class="page">
 
-<h1 id="playerName"></h1>
+<div class="name-wrap">
+  <div id="teamColor" class="team-color"></div>
+  <h1 id="playerName"></h1>
+</div>
 
 <div id="summary">
   <div class="summary-header">
@@ -143,10 +161,10 @@ tbody tr:nth-child(even){
   <th>Season</th>
   <th>Round</th>
   <th>Team</th>
-  <th>Opponent</th>
-  <th>D</th>
-  <th>G</th>
-  <th>B</th>
+  <th class="sortable" data-key="played_against">Opponent</th>
+  <th class="sortable" data-key="D">D</th>
+  <th class="sortable" data-key="G">G</th>
+  <th class="sortable" data-key="B">B</th>
 </tr>
 </thead>
 <tbody id="rows"></tbody>
@@ -160,6 +178,15 @@ const playerName = params.get("name");
 
 document.getElementById("playerName").textContent = playerName;
 
+const teamColors = {
+  "Adelaide":"#002b5c","Brisbane":"#7c003e","Carlton":"#001b3f",
+  "Collingwood":"#000000","Essendon":"#cc2031","Fremantle":"#2a004f",
+  "Geelong":"#1c3c63","Gold Coast":"#b90a32","GWS":"#f47920",
+  "Hawthorn":"#4d2004","Melbourne":"#002b5c","North Melbourne":"#003a8f",
+  "Port Adelaide":"#1c1c1c","Richmond":"#fdd000","St Kilda":"#000000",
+  "Sydney":"#ed171f","West Coast":"#002b5c","Western Bulldogs":"#1e3a8a"
+};
+
 const startYear = 1990;
 const endYear = new Date().getFullYear();
 
@@ -167,6 +194,9 @@ let years = [];
 for(let y=startYear; y<=endYear; y++){
   years.push(y);
 }
+
+let playerGames = [];
+let currentSort = {key:null, desc:true};
 
 Promise.all(
   years.map(y =>
@@ -177,23 +207,14 @@ Promise.all(
 ).then(allData => {
 
   const allPlayers = allData.flat();
-  const playerGames = allPlayers.filter(p => p.player === playerName);
+  playerGames = allPlayers.filter(p => p.player === playerName);
 
-  const tbody = document.getElementById("rows");
+  if(playerGames.length){
+    const team = playerGames[0].played_for;
+    document.getElementById("teamColor").style.background = teamColors[team] || "#999";
+  }
 
-  playerGames.forEach(p => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${p.season}</td>
-        <td>${p.round}</td>
-        <td class="left">${p.played_for}</td>
-        <td>${p.played_against}</td>
-        <td>${p.D || 0}</td>
-        <td>${p.G || 0}</td>
-        <td>${p.B || 0}</td>
-      </tr>
-    `;
-  });
+  renderTable(playerGames);
 
   const opponentSelect = document.getElementById("opponentSelect");
   const careerStatsDiv = document.getElementById("careerStats");
@@ -258,7 +279,48 @@ Promise.all(
     renderOpponent(e.target.value);
   });
 
+  document.querySelectorAll("th.sortable").forEach(th=>{
+    th.addEventListener("click", ()=>{
+      const key = th.dataset.key;
+      if(currentSort.key===key){
+        currentSort.desc = !currentSort.desc;
+      }else{
+        currentSort.key = key;
+        currentSort.desc = true;
+      }
+
+      playerGames.sort((a,b)=>{
+        const av = a[key] || 0;
+        const bv = b[key] || 0;
+        if(typeof av === "string"){
+          return currentSort.desc ? bv.localeCompare(av) : av.localeCompare(bv);
+        }
+        return currentSort.desc ? bv-av : av-bv;
+      });
+
+      renderTable(playerGames);
+    });
+  });
+
 });
+
+function renderTable(games){
+  const tbody = document.getElementById("rows");
+  tbody.innerHTML = "";
+  games.forEach(p => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${p.season}</td>
+        <td>${p.round}</td>
+        <td class="left">${p.played_for}</td>
+        <td>${p.played_against}</td>
+        <td>${p.D || 0}</td>
+        <td>${p.G || 0}</td>
+        <td>${p.B || 0}</td>
+      </tr>
+    `;
+  });
+}
 </script>
 
 </body>
