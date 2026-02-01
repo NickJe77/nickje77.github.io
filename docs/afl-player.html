@@ -13,7 +13,7 @@ body{
 .page{max-width:1200px;margin:0 auto;padding:25px;}
 .top-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
 .name-wrap{display:flex;align-items:center;gap:14px;}
-.team-stripes{height:22px;width:140px;border-radius:6px;border:1px solid #ccc;}
+.team-stripes{height:22px;width:180px;border-radius:6px;border:1px solid #ccc;}
 .player-search input,.opponent-select{
   padding:8px 12px;border-radius:8px;border:1px solid #ccc;
   font-size:15px;width:240px;
@@ -109,33 +109,46 @@ document.getElementById("playerName").textContent=playerName||"Select a player";
 
 let allGames=[], currentGames=[], sortDir=1, sortKey=null;
 
-const teamStripes={
-  "Carlton":"repeating-linear-gradient(90deg,#001A3D 0 24px,#ffffff 24px 48px,#001A3D 48px 72px)",
-  "Collingwood":"repeating-linear-gradient(90deg,#000000 0 20px,#ffffff 20px 40px)",
-  "Richmond":"repeating-linear-gradient(90deg,#FFD200 0 20px,#000000 20px 40px)",
-  "Essendon":"repeating-linear-gradient(90deg,#CC2031 0 24px,#000000 24px 48px)",
-  "Geelong":"repeating-linear-gradient(90deg,#1C3C63 0 24px,#ffffff 24px 48px)",
-  "Sydney":"repeating-linear-gradient(90deg,#ED171F 0 24px,#ffffff 24px 48px)",
-  "West Coast":"repeating-linear-gradient(90deg,#002B5C 0 24px,#FFD200 24px 48px)",
-  "Adelaide":"repeating-linear-gradient(90deg,#002B5C 0 24px,#FFD200 24px 48px,#CC2031 48px 72px)",
-  "Port Adelaide":"repeating-linear-gradient(90deg,#1C1C1C 0 24px,#00B2A9 24px 48px)",
-  "Brisbane":"repeating-linear-gradient(90deg,#7C003E 0 24px,#FFD200 24px 48px,#005BAC 48px 72px)",
-  "Hawthorn":"repeating-linear-gradient(90deg,#4D2004 0 24px,#FFD200 24px 48px)",
-  "Melbourne":"repeating-linear-gradient(90deg,#002B5C 0 24px,#ED171F 24px 48px)",
-  "Western Bulldogs":"repeating-linear-gradient(90deg,#1E3A8A 0 24px,#ED171F 24px 48px)",
-  "Gold Coast":"repeating-linear-gradient(90deg,#B90A32 0 24px,#FFD200 24px 48px)",
-  "GWS":"repeating-linear-gradient(90deg,#F47920 0 24px,#000000 24px 48px)",
-  "North Melbourne":"repeating-linear-gradient(90deg,#0A2E8A 0 24px,#ffffff 24px 48px)"
+/* TEAM COLOURS AS ARRAYS */
+const teamColours={
+  "Carlton":["#001A3D","#ffffff"],
+  "Collingwood":["#000000","#ffffff"],
+  "Richmond":["#FFD200","#000000"],
+  "Essendon":["#CC2031","#000000"],
+  "Geelong":["#1C3C63","#ffffff"],
+  "Sydney":["#ED171F","#ffffff"],
+  "West Coast":["#002B5C","#FFD200"],
+  "Adelaide":["#002B5C","#FFD200","#CC2031"],
+  "Port Adelaide":["#1C1C1C","#00B2A9","#ffffff"],
+  "Brisbane":["#7C003E","#FFD200","#005BAC"],
+  "Hawthorn":["#4D2004","#FFD200"],
+  "Melbourne":["#002B5C","#ED171F"],
+  "Western Bulldogs":["#1E3A8A","#ED171F","#ffffff"],
+  "Gold Coast":["#B90A32","#FFD200","#005BAC"],
+  "GWS":["#F47920","#000000","#ffffff"],
+  "North Melbourne":["#0A2E8A","#ffffff"]
 };
+
+function makeStripe(colours){
+  let seq=[];
+  if(colours.length===3){
+    seq=[...colours,...colours]; // ABCABC
+  }else if(colours.length===2){
+    seq=[...colours,...colours,...colours]; // ABABAB
+  }
+  const step=100/seq.length;
+  let parts=[];
+  seq.forEach((c,i)=>{
+    parts.push(`${c} ${i*step}% ${(i+1)*step}%`);
+  });
+  return `repeating-linear-gradient(90deg,${parts.join(",")})`;
+}
 
 const years=[];
 for(let y=1990;y<=new Date().getFullYear();y++) years.push(y);
 
-Promise.all(
-  years.map(y =>
-    fetch(`data/afl/afl_${y}.json`).then(r=>r.json()).catch(()=>[])
-  )
-).then(data=>{
+Promise.all(years.map(y=>fetch(`data/afl/afl_${y}.json`).then(r=>r.json()).catch(()=>[])))
+.then(data=>{
   allGames=data.flat();
 
   const names=[...new Set(allGames.map(p=>p.player))].sort();
@@ -150,9 +163,10 @@ Promise.all(
 
   if(currentGames.length){
     const latest=currentGames.reduce((a,b)=>a.season>b.season?a:b);
-    document.getElementById("teamStripe").style.background=
-      teamStripes[latest.played_for]||"#999";
-
+    const colours=teamColours[latest.played_for];
+    if(colours){
+      document.getElementById("teamStripe").style.background=makeStripe(colours);
+    }
     setupOpponents(currentGames);
     renderCareer(currentGames);
     renderOpponent([]);
@@ -171,9 +185,7 @@ function setupOpponents(games){
 
   sel.onchange=()=>{
     let f=games;
-    if(sel.value!=="all"){
-      f=games.filter(g=>g.played_against===sel.value);
-    }
+    if(sel.value!=="all") f=games.filter(g=>g.played_against===sel.value);
     renderOpponent(f);
     renderTable(f);
   };
