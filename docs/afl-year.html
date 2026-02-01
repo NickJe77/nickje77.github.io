@@ -42,16 +42,8 @@ select { padding:8px 10px; font-size:16px; margin-bottom:15px; display:block; }
 
 .match { margin-bottom:6px; padding:6px 10px; border-radius:6px; }
 
-table { 
-  border-collapse: collapse; 
-  width:100%; 
-  table-layout: fixed; 
-}
-th, td { 
-  padding:6px 10px; 
-  border:1px solid #ccc; 
-  text-align:center; 
-}
+table { border-collapse: collapse; width:100%; table-layout:fixed; }
+th, td { padding:6px 10px; border:1px solid #ccc; text-align:center; }
 th { background:#f0f0f0; }
 
 td.team { 
@@ -178,6 +170,7 @@ function buildMatchesFromPlayers(){
       map[key] = {
         round: canonicalRound(p.round),
         teams: {},
+        players: [],
         date: p.date_iso || "",
         venue: p.venue || "",
         crowd: p.crowd || ""
@@ -193,6 +186,8 @@ function buildMatchesFromPlayers(){
     map[key].teams[team]+=points;
 
     if(opp && !map[key].teams[opp]) map[key].teams[opp]=0;
+
+    map[key].players.push(p);
   });
 
   matches = Object.values(map).map(m=>{
@@ -203,6 +198,7 @@ function buildMatchesFromPlayers(){
       away_team: t[1],
       home_points: m.teams[t[0]],
       away_points: m.teams[t[1]],
+      players: m.players,
       date: m.date,
       venue: m.venue,
       crowd: m.crowd
@@ -254,6 +250,15 @@ function addRoundButton(label,active=false){
 
 teamSelect.onchange=renderMatches;
 
+function getStars(match){
+  return match.players
+    .filter(p=>Number(p.D)>=35 || Number(p.G)>=5)
+    .map(p=>{
+      if(Number(p.G)>=5) return `${p.player} (${p.G} goals)`;
+      return `${p.player} (${p.D} disposals)`;
+    });
+}
+
 function getRunningLadderMatches(){
   if(currentRound==="ALL"){
     return matches.filter(m=>/^Round\s*\d+/i.test(m.round));
@@ -291,11 +296,13 @@ function renderMatches(){
       :`${g.home_team} ${g.home_points} drew ${g.away_team} ${g.away_points}`;
 
     const meta=[g.date,g.venue,g.crowd?`Crowd: ${g.crowd}`:""].filter(Boolean);
+    const stars=getStars(g);
 
     matchesDiv.innerHTML+=`
       <div class="match">
         <strong>${g.round}</strong>: ${line}
         <div class="meta">${meta.join(" · ")}</div>
+        ${stars.length ? `<div class="meta">⭐ ${stars.join(", ")}</div>` : ""}
       </div>
     `;
   });
