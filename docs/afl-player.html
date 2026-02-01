@@ -1,292 +1,96 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<title>AFL Player Performance | The Sporting Almanac</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<link rel="stylesheet" href="style.css">
+<title>AFL Player Profile</title>
 
 <style>
 body{
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
-  "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family:system-ui, Arial, sans-serif;
+  margin:20px;
 }
-
-.navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px 0;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
-}
-.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-
-.page-wrap{
-  max-width:900px;
-  margin:0 auto;
-  padding:30px 20px;
-}
-
-.search-box{
-  max-width:420px;
-  margin-bottom:10px;
-}
-
-.search-box input{
-  width:100%;
-  padding:12px;
-  font-size:16px;
-  border:1px solid #ccc;
-  border-radius:8px;
-}
-
-.reset-btn{
-  margin:10px 0 20px 0;
-  padding:10px 18px;
-  font-size:15px;
-  border-radius:8px;
-  border:1px solid #ccc;
-  background:#f3f3f3;
-  cursor:pointer;
-}
-.reset-btn:hover{
-  background:#e6e6e6;
-}
-
-.stats-table{
-  width:100%;
+h1{margin-bottom:10px;}
+table{
   border-collapse:collapse;
-  margin-top:30px;
+  width:100%;
 }
-
-.stats-table th{
-  background:#f0f0f0;
+th,td{
+  border:1px solid #ccc;
+  padding:6px;
+  text-align:center;
+}
+th{
+  background:#eee;
+}
+td.left{
   text-align:left;
-  padding:10px;
-  font-size:15px;
-  font-weight:700;
-}
-
-.stats-table td{
-  border-bottom:1px solid #ddd;
-  padding:10px;
-  font-size:15px;
-}
-
-.stats-table tr:nth-child(even) td{
-  background:#f3f7ff;
-}
-
-.placeholder{
-  color:#666;
-  font-style:italic;
+  font-weight:600;
 }
 </style>
 </head>
 
 <body>
 
-<div class="navbar">
-  <a href="index.html">Home</a>
-  <a href="racing.html">Racing</a>
-  <a href="afl.html">AFL</a>
-  <a href="football.html">Football</a>
-  <a href="cricket.html">Cricket</a>
-  <a href="f1.html">F1</a>
-</div>
+<h1 id="playerName"></h1>
 
-<div class="page-wrap">
-
-<h1>AFL Player Performance</h1>
-
-<p>Search a player and an opponent to view performance comparisons.</p>
-
-<div class="search-box">
-  <input id="playerSearch" list="playerList" placeholder="Enter player name...">
-  <datalist id="playerList"></datalist>
-</div>
-
-<div class="search-box">
-  <input id="opponentSearch" list="teamList" placeholder="Enter opponent team...">
-  <datalist id="teamList"></datalist>
-</div>
-
-<button class="reset-btn" onclick="resetAll()">Reset</button>
-
-<table class="stats-table">
-
-<tr><th colspan="2">PLAYER</th></tr>
-<tr><td>Games Played</td><td id="pGames" class="placeholder">—</td></tr>
-<tr><td>Best Game Disposals</td><td id="pBestDisp" class="placeholder">—</td></tr>
-<tr><td>Best Game Goals</td><td id="pBestGoals" class="placeholder">—</td></tr>
-<tr><td>Average Disposals</td><td id="pAvgDisp" class="placeholder">—</td></tr>
-<tr><td>Average Goals</td><td id="pAvgGoals" class="placeholder">—</td></tr>
-
-<tr><th colspan="2">OPPONENT</th></tr>
-<tr><td>Games Played</td><td id="oGames" class="placeholder">—</td></tr>
-<tr><td>Best Game Disposals</td><td id="oBestDisp" class="placeholder">—</td></tr>
-<tr><td>Best Game Goals</td><td id="oBestGoals" class="placeholder">—</td></tr>
-<tr><td>Average Disposals</td><td id="oAvgDisp" class="placeholder">—</td></tr>
-<tr><td>Average Goals</td><td id="oAvgGoals" class="placeholder">—</td></tr>
-
+<table>
+<thead>
+<tr>
+  <th>Season</th>
+  <th>Round</th>
+  <th>Team</th>
+  <th>Opponent</th>
+  <th>D</th>
+  <th>G</th>
+  <th>B</th>
+</tr>
+</thead>
+<tbody id="rows"></tbody>
 </table>
 
-</div>
-
 <script>
-const pInput = document.getElementById("playerSearch");
-const oInput = document.getElementById("opponentSearch");
-const playerList = document.getElementById("playerList");
-const teamList = document.getElementById("teamList");
+const params = new URLSearchParams(window.location.search);
+const playerName = params.get("name");
 
-let allData = [];
+document.getElementById("playerName").textContent = playerName;
 
-async function loadAllSeasons(){
-  const startYear = 1990;
-  const endYear = new Date().getFullYear();
-  const players = new Set();
-  const teams = new Set();
+const startYear = 1990;
+const endYear = new Date().getFullYear();
 
-  for(let y=startYear; y<=endYear; y++){
-    try{
-      const res = await fetch(`/data/afl/afl_${y}.json`);
-      if(!res.ok) continue;
-      const seasonData = await res.json();
-      seasonData.forEach(r=>{
-        allData.push(r);
-        if(r.player) players.add(r.player);
-        if(r.played_for) teams.add(r.played_for);
-        if(r.played_against) teams.add(r.played_against);
-      });
-    }catch(e){}
-  }
+let years = [];
+for(let y=startYear; y<=endYear; y++){
+  years.push(y);
+}
 
-  [...players].sort().forEach(p=>{
-    const opt=document.createElement("option");
-    opt.value=p;
-    playerList.appendChild(opt);
+Promise.all(
+  years.map(y =>
+    fetch(`/data/afl/afl_${y}.json`)
+      .then(r => r.json())
+      .catch(() => [])
+  )
+).then(allData => {
+
+  const allPlayers = allData.flat();
+
+  const playerGames = allPlayers.filter(p => p.player === playerName);
+
+  const tbody = document.getElementById("rows");
+
+  playerGames.forEach(p => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${p.season}</td>
+        <td>${p.round}</td>
+        <td class="left">${p.played_for}</td>
+        <td>${p.played_against}</td>
+        <td>${p.D || 0}</td>
+        <td>${p.G || 0}</td>
+        <td>${p.B || 0}</td>
+      </tr>
+    `;
   });
 
-  [...teams].sort().forEach(t=>{
-    const opt=document.createElement("option");
-    opt.value=t;
-    teamList.appendChild(opt);
-  });
-}
-
-loadAllSeasons();
-
-pInput.addEventListener("input", updateStats);
-oInput.addEventListener("input", updateStats);
-
-function cleanRound(r){
-  if(!r) return "";
-  return String(r).replace(/^Round\s*/i,"");
-}
-
-function resetAll(){
-  pInput.value = "";
-  oInput.value = "";
-
-  ["pGames","pBestDisp","pBestGoals","pAvgDisp","pAvgGoals",
-   "oGames","oBestDisp","oBestGoals","oAvgDisp","oAvgGoals"
-  ].forEach(id=>{
-    document.getElementById(id).innerText = "—";
-  });
-}
-
-function updateStats(){
-  const player = pInput.value.trim();
-  const opponent = oInput.value.trim();
-
-  if(player){
-    const playerGames = allData.filter(r => r.player === player);
-    updateBlock(playerGames,"p");
-  }
-
-  if(player && opponent){
-    const oppGames = allData.filter(r =>
-      r.player === player &&
-      r.played_against === opponent
-    );
-    updateBlock(oppGames,"o");
-  } else {
-    clearOpponent();
-  }
-}
-
-function updateBlock(rows,prefix){
-  if(rows.length===0){
-    ["Games","BestDisp","BestGoals","AvgDisp","AvgGoals"].forEach(id=>{
-      document.getElementById(prefix+id).innerText="—";
-    });
-    return;
-  }
-
-  document.getElementById(prefix+"Games").innerText = rows.length;
-
-  const maxDisp = Math.max(...rows.map(r=>+r.D||0));
-  const maxGoals = Math.max(...rows.map(r=>+r.G||0));
-
-  const bestDispGames = rows.filter(r => (+r.D||0) === maxDisp);
-  const bestGoalsGames = rows.filter(r => (+r.G||0) === maxGoals);
-
-  const bestDispRow = bestDispGames[0];
-  const bestGoalsRow = bestGoalsGames[0];
-
-  const dispCount = bestDispGames.length;
-  const goalsCount = bestGoalsGames.length;
-
-  const avgDisp = (rows.reduce((s,r)=>s+(+r.D||0),0)/rows.length).toFixed(1);
-  const avgGoals = (rows.reduce((s,r)=>s+(+r.G||0),0)/rows.length).toFixed(2);
-
-  const dispYear = bestDispRow.season || bestDispRow.year || "";
-  const goalsYear = bestGoalsRow.season || bestGoalsRow.year || "";
-
-  const roundDisp = cleanRound(bestDispRow.round);
-  const roundGoals = cleanRound(bestGoalsRow.round);
-
-  if(prefix === "p"){
-    document.getElementById(prefix+"BestDisp").innerText =
-      maxDisp === 0
-        ? "0"
-        : dispCount > 1
-          ? `${maxDisp} — ${dispCount} times`
-          : `${maxDisp} vs ${bestDispRow.played_against} (Round ${roundDisp}, ${dispYear})`;
-
-    document.getElementById(prefix+"BestGoals").innerText =
-      maxGoals === 0
-        ? "0"
-        : goalsCount > 1
-          ? `${maxGoals} — ${goalsCount} times`
-          : `${maxGoals} vs ${bestGoalsRow.played_against} (Round ${roundGoals}, ${goalsYear})`;
-  } else {
-    document.getElementById(prefix+"BestDisp").innerText =
-      maxDisp === 0
-        ? "0"
-        : dispCount > 1
-          ? `${maxDisp} — ${dispCount} times`
-          : `${maxDisp} (Round ${roundDisp}, ${dispYear})`;
-
-    document.getElementById(prefix+"BestGoals").innerText =
-      maxGoals === 0
-        ? "0"
-        : goalsCount > 1
-          ? `${maxGoals} — ${goalsCount} times`
-          : `${maxGoals} (Round ${roundGoals}, ${goalsYear})`;
-  }
-
-  document.getElementById(prefix+"AvgDisp").innerText = avgDisp;
-  document.getElementById(prefix+"AvgGoals").innerText = avgGoals;
-}
-
-function clearOpponent(){
-  ["Games","BestDisp","BestGoals","AvgDisp","AvgGoals"].forEach(id=>{
-    document.getElementById("o"+id).innerText="—";
-  });
-}
+});
 </script>
 
 </body>
