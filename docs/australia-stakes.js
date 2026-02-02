@@ -12,10 +12,10 @@ const tableBody = document.getElementById("results-body");
 let allData = [];
 
 /* =========================
-   CSV PARSER
+   CSV PARSER (ROBUST)
 ========================= */
 function parseCSV(text) {
-  const lines = text.trim().split("\n");
+  const lines = text.trim().replace(/\r/g, "").split("\n");
   const headers = lines[0].split(",").map(h => h.trim());
 
   return lines.slice(1).map(line => {
@@ -29,17 +29,23 @@ function parseCSV(text) {
 }
 
 /* =========================
-   LOAD CSV (YOUR REAL PATH)
+   LOAD CSV
 ========================= */
-fetch("docs/data/australia-stakes.csv")
-  .then(res => res.text())
+fetch("data/racing/australia-stakes.csv")
+  .then(res => {
+    if (!res.ok) throw new Error("Fetch failed");
+    return res.text();
+  })
   .then(text => {
     allData = parseCSV(text);
 
-    // Extract Year from Date column (1/1/1982 → 1982)
+    // derive Year from Date (expects dd/mm/yyyy)
     allData.forEach(r => {
-      if (r.Date) {
-        r.Year = r.Date.split("/")[2];
+      if (r.Date && r.Date.includes("/")) {
+        const parts = r.Date.split("/");
+        r.Year = parts[2] || "";
+      } else {
+        r.Year = "";
       }
     });
 
@@ -54,6 +60,11 @@ fetch("docs/data/australia-stakes.csv")
    BUILD FILTERS
 ========================= */
 function populateFilters(data) {
+  yearFilter.innerHTML = `<option value="">Year</option>`;
+  raceList.innerHTML = "";
+  trainerList.innerHTML = "";
+  jockeyList.innerHTML = "";
+
   const years = new Set();
   const races = new Set();
   const trainers = new Set();
@@ -66,7 +77,7 @@ function populateFilters(data) {
     if (row.Jockey) jockeys.add(row.Jockey);
   });
 
-  [...years].sort((a,b)=>b-a).forEach(y => {
+  [...years].sort((a, b) => b - a).forEach(y => {
     const opt = document.createElement("option");
     opt.value = y;
     opt.textContent = y;
@@ -104,9 +115,9 @@ function applyFilters() {
   const filtered = allData.filter(row => {
     return (
       (!yearVal || row.Year === yearVal) &&
-      (!raceVal || row.Name.toLowerCase().includes(raceVal)) &&
-      (!trainerVal || row.Trainer.toLowerCase().includes(trainerVal)) &&
-      (!jockeyVal || row.Jockey.toLowerCase().includes(jockeyVal))
+      (!raceVal || (row.Name || "").toLowerCase().includes(raceVal)) &&
+      (!trainerVal || (row.Trainer || "").toLowerCase().includes(trainerVal)) &&
+      (!jockeyVal || (row.Jockey || "").toLowerCase().includes(jockeyVal))
     );
   });
 
