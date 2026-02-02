@@ -10,7 +10,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let allRows = [];
 
-  fetch("royal-ascot-results.json")
+  // IMPORTANT: JSON is in /docs/
+  fetch("docs/royal-ascot.json")
     .then(res => {
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
