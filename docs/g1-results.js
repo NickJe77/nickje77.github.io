@@ -11,8 +11,8 @@ const tableBody = document.querySelector("tbody");
 
 let allData = [];
 
-// LOAD DATA
-fetch("../data/g1_results.json")
+// LOAD DATA (ABSOLUTE PATH FIX)
+fetch("/data/g1_results.json")
   .then(res => res.json())
   .then(data => {
     allData = data;
