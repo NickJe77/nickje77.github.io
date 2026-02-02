@@ -10,20 +10,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let allRows = [];
 
+  console.log("Royal Ascot JS loaded");
+
   fetch("/docs/royal-ascot.json")
     .then(res => {
       console.log("Fetch status:", res.status);
       return res.json();
     })
     .then(data => {
-      console.log("Loaded rows:", data.length);
+      console.log("Rows loaded:", data.length);
 
       allRows = data.sort((a, b) => b.year - a.year);
+
       populateFilters(allRows);
       renderTable(allRows);
     })
     .catch(err => {
-      console.error("Royal Ascot JSON load failed:", err);
+      console.error("Royal Ascot JSON load FAILED:", err);
     });
 
   function populateFilters(data) {
@@ -31,7 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const races = [...new Set(data.map(r => r.race))].sort();
     const winners = [...new Set(data.map(r => r.winner))].sort();
 
-    years.forEach(y => yearFilter.innerHTML += `<option>${y}</option>`);
+    years.forEach(y => yearFilter.innerHTML += `<option value="${y}">${y}</option>`);
     races.forEach(r => raceList.innerHTML += `<option value="${r}">`);
     winners.forEach(w => winnerList.innerHTML += `<option value="${w}">`);
   }
@@ -52,6 +55,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderTable(rows) {
     tbody.innerHTML = "";
+
     rows.forEach(r => {
       tbody.innerHTML += `
         <tr>
