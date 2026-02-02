@@ -30,6 +30,19 @@ h1{font-size:38px;margin:0;}
 .stat-box{background:linear-gradient(180deg,#f9fbff,#eef3fb);border-radius:12px;padding:16px 10px;text-align:center;box-shadow:inset 0 0 0 1px #dde3ec;}
 .stat-box strong{display:block;font-size:26px;margin-bottom:4px;}
 .stat-box span{font-size:14px;color:#555;}
+/* NEW: details under stat boxes */
+.stat-box .sub{
+  margin-top:6px;
+  font-size:12px;
+  color:#666;
+  line-height:1.25;
+}
+.stat-box .sub a{
+  color:#0056d6;
+  text-decoration:none;
+  font-weight:600;
+}
+.stat-box .sub a:hover{ text-decoration:underline; }
 
 table{border-collapse:collapse;width:100%;background:white;border-radius:10px;overflow:hidden;box-shadow:0 3px 10px rgba(0,0,0,.06);}
 th,td{border:1px solid #ddd;padding:8px;text-align:center;}
@@ -126,6 +139,31 @@ const teamStripes={
   "Fremantle":"repeating-linear-gradient(90deg,#2B004F 0 24px,#ffffff 24px 48px,#2B004F 48px 72px)"
 };
 
+function gameUrl(p){
+  return `afl-game.html?season=${encodeURIComponent(p.season)}&round=${encodeURIComponent(p.round)}&team=${encodeURIComponent(p.played_for)}&opp=${encodeURIComponent(p.played_against)}`;
+}
+
+function gameLabel(p){
+  // what you asked for: opponent / rd / year (and includes their team in tooltip)
+  const opp = p.played_against || "";
+  const rd = p.round || "";
+  const yr = p.season || "";
+  return `vs ${opp} (${rd}, ${yr})`;
+}
+
+function buildBestList(list){
+  // Show up to 5, then +N more
+  const maxShow = 5;
+  const shown = list.slice(0, maxShow);
+  const more = list.length - shown.length;
+
+  const links = shown.map(p=>{
+    return `<a href="${gameUrl(p)}" title="${(p.played_for||"") + " vs " + (p.played_against||"") + " • " + (p.round||"") + " • " + (p.season||"")}">${gameLabel(p)}</a>`;
+  }).join(", ");
+
+  return links + (more > 0 ? `, … +${more} more` : "");
+}
+
 const years=[];
 for(let y=1990;y<=new Date().getFullYear();y++) years.push(y);
 
@@ -178,21 +216,61 @@ function renderStats(g,id){
   if(!g.length){document.getElementById(id).innerHTML="";return;}
 
   const games=g.length;
-  const ds=g.map(x=>x.D||0);
-  const gs=g.map(x=>x.G||0);
 
-  const bestD=Math.max(...ds);
-  const bestG=Math.max(...gs);
+  const dTotal=g.reduce((a,x)=>a+(+x.D||0),0);
+  const gTotal=g.reduce((a,x)=>a+(+x.G||0),0);
 
-  const dTotal=ds.reduce((a,b)=>a+b,0);
-  const gTotal=gs.reduce((a,b)=>a+b,0);
+  const bestD=Math.max(...g.map(x=>+x.D||0));
+  const bestG=Math.max(...g.map(x=>+x.G||0));
+
+  // "Best Game" (transparent formula, not guessing hidden ratings):
+  // Game Score = Disposals + (6 × Goals) + Behinds
+  const bestGameScore = Math.max(...g.map(x => (+x.D||0) + ((+x.G||0)*6) + (+x.B||0)));
+
+  // Find all occurrences (ties) and list them
+  const bestDGames = g.filter(x => (+x.D||0) === bestD);
+  const bestGameGames = g.filter(x => ((+x.D||0) + ((+x.G||0)*6) + (+x.B||0)) === bestGameScore);
+
+  const bestDSub = bestDGames.length
+    ? `<div class="sub">${bestDGames.length > 1 ? `(${bestDGames.length} times) ` : ""}${buildBestList(bestDGames)}</div>`
+    : "";
+
+  const bestGameSub = bestGameGames.length
+    ? `<div class="sub">${bestGameGames.length > 1 ? `(${bestGameGames.length} times) ` : ""}${buildBestList(bestGameGames)}</div>`
+    : "";
 
   document.getElementById(id).innerHTML=`
-    <div class="stat-box"><strong>${games}</strong><span>Games</span></div>
-    <div class="stat-box"><strong>${bestD}</strong><span>Best Disposals</span></div>
-    <div class="stat-box"><strong>${bestG}</strong><span>Best Goals</span></div>
-    <div class="stat-box"><strong>${(dTotal/games).toFixed(1)}</strong><span>Avg Disposals</span></div>
-    <div class="stat-box"><strong>${(gTotal/games).toFixed(2)}</strong><span>Avg Goals</span></div>
+    <div class="stat-box">
+      <strong>${games}</strong>
+      <span>Games</span>
+    </div>
+
+    <div class="stat-box" title="Game Score = Disposals + (6 × Goals) + Behinds">
+      <strong>${bestGameScore}</strong>
+      <span>Best Game</span>
+      ${bestGameSub}
+    </div>
+
+    <div class="stat-box">
+      <strong>${bestD}</strong>
+      <span>Best Disposals</span>
+      ${bestDSub}
+    </div>
+
+    <div class="stat-box">
+      <strong>${bestG}</strong>
+      <span>Best Goals</span>
+    </div>
+
+    <div class="stat-box">
+      <strong>${(dTotal/games).toFixed(1)}</strong>
+      <span>Avg Disposals</span>
+    </div>
+
+    <div class="stat-box">
+      <strong>${(gTotal/games).toFixed(2)}</strong>
+      <span>Avg Goals</span>
+    </div>
   `;
 }
 
