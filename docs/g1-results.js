@@ -2,16 +2,18 @@ const yearFilter = document.getElementById("yearFilter");
 const raceFilter = document.getElementById("raceFilter");
 const winnerFilter = document.getElementById("winnerFilter");
 const jockeyFilter = document.getElementById("jockeyFilter");
+const countryFilter = document.getElementById("countryFilter");
 
 const raceList = document.getElementById("raceList");
 const winnerList = document.getElementById("winnerList");
 const jockeyList = document.getElementById("jockeyList");
+const countryList = document.getElementById("countryList");
 
 const tableBody = document.querySelector("tbody");
 
 let allData = [];
 
-// ✅ CORRECT PATH + MATCHES YOUR JSON STRUCTURE
+// LOAD DATA
 fetch("../data/g1-results.json")
   .then(res => res.json())
   .then(data => {
@@ -26,12 +28,14 @@ function populateFilters(data) {
   const races = new Set();
   const winners = new Set();
   const jockeys = new Set();
+  const countries = new Set();
 
   data.forEach(row => {
     if (row.YEAR) years.add(row.YEAR);
     if (row.RACE) races.add(row.RACE);
     if (row.WINNER) winners.add(row.WINNER);
     if (row.JOCKEY) jockeys.add(row.JOCKEY);
+    if (row.COUNTRY) countries.add(row.COUNTRY);
   });
 
   [...years].sort((a,b)=>b-a).forEach(y => {
@@ -57,6 +61,12 @@ function populateFilters(data) {
     opt.value = j;
     jockeyList.appendChild(opt);
   });
+
+  [...countries].sort().forEach(c => {
+    const opt = document.createElement("option");
+    opt.value = c;
+    countryList.appendChild(opt);
+  });
 }
 
 // FILTER HANDLER
@@ -64,19 +74,22 @@ yearFilter.addEventListener("change", applyFilters);
 raceFilter.addEventListener("input", applyFilters);
 winnerFilter.addEventListener("input", applyFilters);
 jockeyFilter.addEventListener("input", applyFilters);
+countryFilter.addEventListener("input", applyFilters);
 
 function applyFilters() {
   const yearVal = yearFilter.value;
   const raceVal = raceFilter.value.toLowerCase();
   const winnerVal = winnerFilter.value.toLowerCase();
   const jockeyVal = jockeyFilter.value.toLowerCase();
+  const countryVal = countryFilter.value.toLowerCase();
 
   const filtered = allData.filter(row => {
     return (
       (!yearVal || row.YEAR == yearVal) &&
       (!raceVal || row.RACE.toLowerCase().includes(raceVal)) &&
       (!winnerVal || row.WINNER.toLowerCase().includes(winnerVal)) &&
-      (!jockeyVal || row.JOCKEY.toLowerCase().includes(jockeyVal))
+      (!jockeyVal || row.JOCKEY.toLowerCase().includes(jockeyVal)) &&
+      (!countryVal || row.COUNTRY.toLowerCase().includes(countryVal))
     );
   });
 
