@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const tbody = document.querySelector(".archive-table tbody");
+  const tbody = document.querySelector("tbody");
 
   const yearFilter = document.getElementById("yearFilter");
   const raceFilter = document.getElementById("raceFilter");
@@ -10,59 +10,41 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let allRows = [];
 
-  // IMPORTANT: JSON is in /docs/
-  fetch("docs/royal-ascot.json")
+  fetch("/docs/royal-ascot.json")
     .then(res => {
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
+      console.log("Fetch status:", res.status);
       return res.json();
     })
     .then(data => {
-      // Sort newest → oldest
-      allRows = data.sort((a, b) => (b.year || 0) - (a.year || 0));
+      console.log("Loaded rows:", data.length);
 
+      allRows = data.sort((a, b) => b.year - a.year);
       populateFilters(allRows);
       renderTable(allRows);
     })
     .catch(err => {
-      console.error("Royal Ascot data load failed:", err);
+      console.error("Royal Ascot JSON load failed:", err);
     });
 
   function populateFilters(data) {
-    const years = [...new Set(data.map(r => r.year).filter(Boolean))].sort((a, b) => b - a);
-    const races = [...new Set(data.map(r => r.race).filter(Boolean))].sort();
-    const winners = [...new Set(data.map(r => r.winner).filter(Boolean))].sort();
+    const years = [...new Set(data.map(r => r.year))].sort((a,b)=>b-a);
+    const races = [...new Set(data.map(r => r.race))].sort();
+    const winners = [...new Set(data.map(r => r.winner))].sort();
 
-    years.forEach(y => {
-      const opt = document.createElement("option");
-      opt.value = y;
-      opt.textContent = y;
-      yearFilter.appendChild(opt);
-    });
-
-    races.forEach(r => {
-      const opt = document.createElement("option");
-      opt.value = r;
-      raceList.appendChild(opt);
-    });
-
-    winners.forEach(w => {
-      const opt = document.createElement("option");
-      opt.value = w;
-      winnerList.appendChild(opt);
-    });
+    years.forEach(y => yearFilter.innerHTML += `<option>${y}</option>`);
+    races.forEach(r => raceList.innerHTML += `<option value="${r}">`);
+    winners.forEach(w => winnerList.innerHTML += `<option value="${w}">`);
   }
 
   function applyFilters() {
-    const yearVal = yearFilter.value;
-    const raceVal = raceFilter.value.toLowerCase();
-    const winnerVal = winnerFilter.value.toLowerCase();
+    const y = yearFilter.value;
+    const r = raceFilter.value.toLowerCase();
+    const w = winnerFilter.value.toLowerCase();
 
-    const filtered = allRows.filter(r =>
-      (!yearVal || String(r.year) === yearVal) &&
-      (!raceVal || String(r.race).toLowerCase().includes(raceVal)) &&
-      (!winnerVal || String(r.winner).toLowerCase().includes(winnerVal))
+    const filtered = allRows.filter(row =>
+      (!y || row.year == y) &&
+      (!r || row.race.toLowerCase().includes(r)) &&
+      (!w || row.winner.toLowerCase().includes(w))
     );
 
     renderTable(filtered);
@@ -70,18 +52,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderTable(rows) {
     tbody.innerHTML = "";
-
     rows.forEach(r => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${r.year || ""}</td>
-        <td>${r.race || ""}</td>
-        <td>${r.track || ""}</td>
-        <td>${r.winner || ""}</td>
-        <td>${r.trainer || ""}</td>
-        <td>${r.jockey || ""}</td>
+      tbody.innerHTML += `
+        <tr>
+          <td>${r.year}</td>
+          <td>${r.race}</td>
+          <td>${r.winner}</td>
+          <td>${r.trainer || ""}</td>
+          <td>${r.jockey || ""}</td>
+          <td>${r.sp || ""}</td>
+        </tr>
       `;
-      tbody.appendChild(tr);
     });
   }
 
