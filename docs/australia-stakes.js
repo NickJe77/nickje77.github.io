@@ -29,17 +29,17 @@ function parseCSV(text) {
 }
 
 /* =========================
-   LOAD CSV
+   LOAD CSV (YOUR REAL PATH)
 ========================= */
-fetch("docs/data/racing/australia-stakes.csv")
+fetch("docs/data/australia-stakes.csv")
   .then(res => res.text())
   .then(text => {
     allData = parseCSV(text);
 
-    // add Year field extracted from Date
+    // Extract Year from Date column (1/1/1982 → 1982)
     allData.forEach(r => {
       if (r.Date) {
-        r.Year = r.Date.split("/")[2]; // 1/1/1982 → 1982
+        r.Year = r.Date.split("/")[2];
       }
     });
 
