@@ -64,6 +64,7 @@ let allData = [];
 
 /* CSV PARSER */
 function parseCSV(text){
+  text = text.replace(/^\uFEFF/, "");
   const lines = text.trim().replace(/\r/g,"").split("\n");
   const headers = lines[0].split(",").map(h=>h.trim());
 
@@ -78,24 +79,17 @@ function parseCSV(text){
 }
 
 /* LOAD CSV */
-fetch("https://thesportingalmanac.com/docs/data/australia-stakes.csv")
-  .then(res => res.text())
+fetch("/data/australia-stakes.csv")
+  .then(res => {
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    return res.text();
+  })
   .then(text => {
     allData = parseCSV(text);
-
-    // derive Year from Date column
-    allData.forEach(r=>{
-      if(r.Date && r.Date.includes("/")){
-        r.Year = r.Date.split("/")[2];
-      } else {
-        r.Year = "";
-      }
-    });
-
     populateFilters(allData);
     renderTable(allData);
   })
-  .catch(err => console.error("CSV LOAD FAILED", err));
+  .catch(err => console.error("CSV LOAD FAILED:", err));
 
 function populateFilters(data){
   const years = new Set();
@@ -105,7 +99,7 @@ function populateFilters(data){
 
   data.forEach(r=>{
     if(r.Year) years.add(r.Year);
-    if(r.Name) races.add(r.Name);
+    if(r.Race) races.add(r.Race);
     if(r.Trainer) trainers.add(r.Trainer);
     if(r.Jockey) jockeys.add(r.Jockey);
   });
@@ -145,7 +139,7 @@ function applyFilters(){
   const filtered = allData.filter(row=>{
     return (
       (!y || row.Year === y) &&
-      (!r || (row.Name||"").toLowerCase().includes(r)) &&
+      (!r || (row.Race||"").toLowerCase().includes(r)) &&
       (!t || (row.Trainer||"").toLowerCase().includes(t)) &&
       (!j || (row.Jockey||"").toLowerCase().includes(j))
     );
@@ -160,7 +154,7 @@ function renderTable(data){
     const tr=document.createElement("tr");
     tr.innerHTML=`
       <td>${r.Year||""}</td>
-      <td>${r.Name||""}</td>
+      <td>${r.Race||""}</td>
       <td>${r.Track||""}</td>
       <td>${r.Winner||""}</td>
       <td>${r.Trainer||""}</td>
