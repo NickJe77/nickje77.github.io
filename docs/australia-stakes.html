@@ -3,9 +3,94 @@
 <head>
 <meta charset="UTF-8">
 <title>Australia Stakes Results | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet" href="racing.css">
 <link rel="stylesheet" href="archive.css">
+
+<style>
+body { font-size: 17px; }
+
+/* FILTERS */
+.filters-wrapper {
+  margin: 15px;
+}
+
+.filters-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.filters-row select,
+.filters-row input {
+  font-size: 16px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  width: 100%;
+}
+
+/* COUNT */
+#resultCount {
+  text-align: center;
+  font-weight: 700;
+  margin-top: 8px;
+  font-size: 16px;
+}
+
+/* TABLE */
+.table-container {
+  overflow-x: auto;
+  margin: 15px;
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 700px;
+  font-size: 16px;
+}
+
+.results-table th,
+.results-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid #ddd;
+  text-align: left;
+}
+
+.results-table th {
+  background: #f3f3f3;
+  font-weight: 700;
+}
+
+/* MOBILE */
+@media (max-width: 768px) {
+  body { font-size: 18px; }
+
+  .filters-row {
+    grid-template-columns: 1fr;
+  }
+
+  .filters-row select,
+  .filters-row input {
+    font-size: 18px;
+  }
+
+  .results-table {
+    font-size: 17px;
+  }
+
+  .results-table th,
+  .results-table td {
+    padding: 12px 10px;
+  }
+
+  #resultCount {
+    font-size: 18px;
+  }
+}
+</style>
 </head>
 
 <body class="archive-page">
@@ -17,26 +102,30 @@
   <div class="hero-text">AUSTRALIAN STAKES RACES 1982 - CURRENT DAY</div>
 </div>
 
-<div class="filters-row">
-  <select id="yearFilter" onchange="applyFilters()">
-    <option value="">Year</option>
-  </select>
+<div class="filters-wrapper">
+  <div class="filters-row">
+    <select id="yearFilter" onchange="applyFilters()">
+      <option value="">Year</option>
+    </select>
 
-  <input list="raceList" id="raceSearch" placeholder="Race" oninput="applyFilters()">
-  <datalist id="raceList"></datalist>
+    <input list="raceList" id="raceSearch" placeholder="Race" oninput="applyFilters()">
+    <datalist id="raceList"></datalist>
 
-  <input list="trainerList" id="trainerSearch" placeholder="Trainer" oninput="applyFilters()">
-  <datalist id="trainerList"></datalist>
+    <input list="trainerList" id="trainerSearch" placeholder="Trainer" oninput="applyFilters()">
+    <datalist id="trainerList"></datalist>
 
-  <input list="jockeyList" id="jockeySearch" placeholder="Jockey" oninput="applyFilters()">
-  <datalist id="jockeyList"></datalist>
+    <input list="jockeyList" id="jockeySearch" placeholder="Jockey" oninput="applyFilters()">
+    <datalist id="jockeyList"></datalist>
+  </div>
+
+  <div id="resultCount">Results: 0</div>
 </div>
 
 <div class="table-container">
   <table class="results-table">
     <thead>
       <tr>
-        <th>Year</th>
+        <th>Date</th>
         <th>Race</th>
         <th>Track</th>
         <th>Winner</th>
@@ -59,10 +148,10 @@ const trainerList = document.getElementById("trainerList");
 const jockeyList = document.getElementById("jockeyList");
 
 const tableBody = document.getElementById("results-body");
+const resultCount = document.getElementById("resultCount");
 
 let allData = [];
 
-/* CSV PARSER */
 function parseCSV(text){
   text = text.replace(/^\uFEFF/, "");
   const lines = text.trim().replace(/\r/g,"").split("\n");
@@ -78,18 +167,22 @@ function parseCSV(text){
   });
 }
 
-/* LOAD CSV */
 fetch("/data/australia-stakes.csv")
-  .then(res => {
-    if(!res.ok) throw new Error("HTTP " + res.status);
-    return res.text();
-  })
+  .then(res => res.text())
   .then(text => {
     allData = parseCSV(text);
+
+    allData.forEach(r=>{
+      if(r.Date && r.Date.includes("/")){
+        r.Year = r.Date.split("/")[2];
+      } else {
+        r.Year = "";
+      }
+    });
+
     populateFilters(allData);
     renderTable(allData);
-  })
-  .catch(err => console.error("CSV LOAD FAILED:", err));
+  });
 
 function populateFilters(data){
   const years = new Set();
@@ -105,28 +198,19 @@ function populateFilters(data){
   });
 
   [...years].sort((a,b)=>b-a).forEach(y=>{
-    const o=document.createElement("option");
-    o.value=y;
-    o.textContent=y;
-    yearFilter.appendChild(o);
+    yearFilter.appendChild(new Option(y,y));
   });
 
   [...races].sort().forEach(v=>{
-    const o=document.createElement("option");
-    o.value=v;
-    raceList.appendChild(o);
+    raceList.appendChild(new Option(v,v));
   });
 
   [...trainers].sort().forEach(v=>{
-    const o=document.createElement("option");
-    o.value=v;
-    trainerList.appendChild(o);
+    trainerList.appendChild(new Option(v,v));
   });
 
   [...jockeys].sort().forEach(v=>{
-    const o=document.createElement("option");
-    o.value=v;
-    jockeyList.appendChild(o);
+    jockeyList.appendChild(new Option(v,v));
   });
 }
 
@@ -150,10 +234,11 @@ function applyFilters(){
 
 function renderTable(data){
   tableBody.innerHTML="";
+
   data.forEach(r=>{
     const tr=document.createElement("tr");
     tr.innerHTML=`
-      <td>${r.Year||""}</td>
+      <td>${r.Date||""}</td>
       <td>${r.Race||""}</td>
       <td>${r.Track||""}</td>
       <td>${r.Winner||""}</td>
@@ -162,19 +247,9 @@ function renderTable(data){
     `;
     tableBody.appendChild(tr);
   });
-}
 
-/* NAV */
-fetch("g1-archive.html")
-  .then(res => res.text())
-  .then(html => {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
-    const nav = doc.querySelector("nav");
-    if(nav){
-      document.getElementById("global-nav").innerHTML = nav.outerHTML;
-    }
-  });
+  resultCount.textContent = "Results: " + data.length;
+}
 </script>
 
 </body>
