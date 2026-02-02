@@ -2,35 +2,87 @@ const yearFilter = document.getElementById("yearFilter");
 const raceFilter = document.getElementById("raceFilter");
 const winnerFilter = document.getElementById("winnerFilter");
 const jockeyFilter = document.getElementById("jockeyFilter");
+const countryFilter = document.getElementById("countryFilter");
 
 const raceList = document.getElementById("raceList");
 const winnerList = document.getElementById("winnerList");
 const jockeyList = document.getElementById("jockeyList");
+const countryList = document.getElementById("countryList");
 
 const tableBody = document.querySelector("tbody");
 
 let allData = [];
 
-// LOAD DATA (DO NOT CHANGE PATH)
-fetch("../data/g1_results.json")
+/* ---- COUNTRY NAME → ISO CODE MAP (core set) ---- */
+const countryNameToISO = {
+  "ENGLAND": "GB",
+  "UNITED KINGDOM": "GB",
+  "UK": "GB",
+  "IRELAND": "IE",
+  "FRANCE": "FR",
+  "GERMANY": "DE",
+  "ITALY": "IT",
+  "SPAIN": "ES",
+  "USA": "US",
+  "UNITED STATES": "US",
+  "AUSTRALIA": "AU",
+  "JAPAN": "JP",
+  "HONG KONG": "HK",
+  "NEW ZEALAND": "NZ",
+  "SOUTH AFRICA": "ZA",
+  "CANADA": "CA",
+  "BRAZIL": "BR",
+  "ARGENTINA": "AR",
+  "CHILE": "CL",
+  "PERU": "PE",
+  "URUGUAY": "UY",
+  "MEXICO": "MX",
+  "NETHERLANDS": "NL",
+  "BELGIUM": "BE",
+  "SWITZERLAND": "CH",
+  "SWEDEN": "SE",
+  "NORWAY": "NO",
+  "DENMARK": "DK",
+  "POLAND": "PL",
+  "CZECH REPUBLIC": "CZ",
+  "SLOVAKIA": "SK",
+  "HUNGARY": "HU",
+  "TURKEY": "TR",
+  "GREECE": "GR",
+  "RUSSIA": "RU",
+  "CHINA": "CN",
+  "SOUTH KOREA": "KR",
+  "INDIA": "IN",
+  "PAKISTAN": "PK",
+  "SINGAPORE": "SG",
+  "THAILAND": "TH",
+  "MALAYSIA": "MY",
+  "PHILIPPINES": "PH",
+  "INDONESIA": "ID"
+};
+
+/* ---- ISO CODE → FLAG EMOJI ---- */
+function isoToFlag(iso) {
+  return iso
+    ? String.fromCodePoint(...[...iso.toUpperCase()].map(c => 127397 + c.charCodeAt()))
+    : "";
+}
+
+function countryToFlag(name) {
+  if (!name) return "";
+  const key = name.trim().toUpperCase();
+  const iso = countryNameToISO[key];
+  return iso ? isoToFlag(iso) : "";
+}
+
+// LOAD DATA
+fetch("../data/g1-results.json")
   .then(res => res.json())
   .then(data => {
-    // SAFELY UNWRAP ARRAY
-    if (Array.isArray(data)) {
-      allData = data;
-    } else if (Array.isArray(data.results)) {
-      allData = data.results;
-    } else if (Array.isArray(data.data)) {
-      allData = data.data;
-    } else {
-      console.error("Unknown JSON structure:", data);
-      allData = [];
-    }
-
-    populateFilters(allData);
-    renderTable(allData);
-  })
-  .catch(err => console.error("Fetch error:", err));
+    allData = data;
+    populateFilters(data);
+    renderTable(data);
+  });
 
 // BUILD FILTER OPTIONS
 function populateFilters(data) {
@@ -38,12 +90,14 @@ function populateFilters(data) {
   const races = new Set();
   const winners = new Set();
   const jockeys = new Set();
+  const countries = new Set();
 
   data.forEach(row => {
-    if (row.year) years.add(row.year);
-    if (row.race) races.add(row.race);
-    if (row.winner) winners.add(row.winner);
-    if (row.jock) jockeys.add(row.jock);
+    if (row.YEAR) years.add(row.YEAR);
+    if (row.RACE) races.add(row.RACE);
+    if (row.WINNER) winners.add(row.WINNER);
+    if (row.JOCKEY) jockeys.add(row.JOCKEY);
+    if (row.COUNTRY) countries.add(row.COUNTRY);
   });
 
   [...years].sort((a,b)=>b-a).forEach(y => {
@@ -69,6 +123,12 @@ function populateFilters(data) {
     opt.value = j;
     jockeyList.appendChild(opt);
   });
+
+  [...countries].sort().forEach(c => {
+    const opt = document.createElement("option");
+    opt.value = c;
+    countryList.appendChild(opt);
+  });
 }
 
 // FILTER HANDLER
@@ -76,19 +136,22 @@ yearFilter.addEventListener("change", applyFilters);
 raceFilter.addEventListener("input", applyFilters);
 winnerFilter.addEventListener("input", applyFilters);
 jockeyFilter.addEventListener("input", applyFilters);
+countryFilter.addEventListener("input", applyFilters);
 
 function applyFilters() {
   const yearVal = yearFilter.value;
   const raceVal = raceFilter.value.toLowerCase();
   const winnerVal = winnerFilter.value.toLowerCase();
   const jockeyVal = jockeyFilter.value.toLowerCase();
+  const countryVal = countryFilter.value.toLowerCase();
 
   const filtered = allData.filter(row => {
     return (
-      (!yearVal || row.year == yearVal) &&
-      (!raceVal || row.race.toLowerCase().includes(raceVal)) &&
-      (!winnerVal || row.winner.toLowerCase().includes(winnerVal)) &&
-      (!jockeyVal || row.jock.toLowerCase().includes(jockeyVal))
+      (!yearVal || row.YEAR == yearVal) &&
+      (!raceVal || row.RACE.toLowerCase().includes(raceVal)) &&
+      (!winnerVal || row.WINNER.toLowerCase().includes(winnerVal)) &&
+      (!jockeyVal || row.JOCKEY.toLowerCase().includes(jockeyVal)) &&
+      (!countryVal || row.COUNTRY.toLowerCase().includes(countryVal))
     );
   });
 
@@ -100,15 +163,17 @@ function renderTable(data) {
   tableBody.innerHTML = "";
 
   data.forEach(row => {
+    const flag = countryToFlag(row.COUNTRY);
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${row.year || ""}</td>
-      <td>${row.race || ""}</td>
-      <td>${row.track || ""}</td>
-      <td>${row.winner || ""}</td>
-      <td>${row.trainer || ""}</td>
-      <td>${row.jock || ""}</td>
-      <td>${row.country || ""}</td>
+      <td>${row.YEAR || ""}</td>
+      <td>${row.RACE || ""}</td>
+      <td>${row.TRACK || ""}</td>
+      <td>${row.WINNER || ""}</td>
+      <td>${row.TRAINER || ""}</td>
+      <td>${row.JOCKEY || ""}</td>
+      <td class="flag" title="${row.COUNTRY || ""}">${flag}</td>
     `;
     tableBody.appendChild(tr);
   });
