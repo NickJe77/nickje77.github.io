@@ -12,17 +12,14 @@
 body { font-size: 17px; }
 
 /* FILTERS */
-.filters-row {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+.filters-wrapper {
   margin: 15px;
-  align-items: flex-start;
 }
 
-.filter-group {
-  display: flex;
-  flex-direction: column;
+.filters-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
 }
 
 .filters-row select,
@@ -31,12 +28,14 @@ body { font-size: 17px; }
   padding: 10px;
   border-radius: 8px;
   border: 1px solid #ccc;
+  width: 100%;
 }
 
 /* COUNT */
 #resultCount {
+  text-align: center;
   font-weight: 700;
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: 16px;
 }
 
@@ -70,12 +69,11 @@ body { font-size: 17px; }
   body { font-size: 18px; }
 
   .filters-row {
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
 
   .filters-row select,
   .filters-row input {
-    width: 100%;
     font-size: 18px;
   }
 
@@ -104,31 +102,23 @@ body { font-size: 17px; }
   <div class="hero-text">AUSTRALIAN STAKES RACES 1982 - CURRENT DAY</div>
 </div>
 
-<div class="filters-row">
-
-  <!-- YEAR + COUNT -->
-  <div class="filter-group">
+<div class="filters-wrapper">
+  <div class="filters-row">
     <select id="yearFilter" onchange="applyFilters()">
       <option value="">Year</option>
     </select>
-    <div id="resultCount">Results: 0</div>
-  </div>
 
-  <div class="filter-group">
     <input list="raceList" id="raceSearch" placeholder="Race" oninput="applyFilters()">
     <datalist id="raceList"></datalist>
-  </div>
 
-  <div class="filter-group">
     <input list="trainerList" id="trainerSearch" placeholder="Trainer" oninput="applyFilters()">
     <datalist id="trainerList"></datalist>
-  </div>
 
-  <div class="filter-group">
     <input list="jockeyList" id="jockeySearch" placeholder="Jockey" oninput="applyFilters()">
     <datalist id="jockeyList"></datalist>
   </div>
 
+  <div id="resultCount">Results: 0</div>
 </div>
 
 <div class="table-container">
@@ -162,7 +152,6 @@ const resultCount = document.getElementById("resultCount");
 
 let allData = [];
 
-/* CSV PARSER */
 function parseCSV(text){
   text = text.replace(/^\uFEFF/, "");
   const lines = text.trim().replace(/\r/g,"").split("\n");
@@ -178,16 +167,11 @@ function parseCSV(text){
   });
 }
 
-/* LOAD CSV */
 fetch("/data/australia-stakes.csv")
-  .then(res => {
-    if(!res.ok) throw new Error("HTTP " + res.status);
-    return res.text();
-  })
+  .then(res => res.text())
   .then(text => {
     allData = parseCSV(text);
 
-    // derive Year from Date
     allData.forEach(r=>{
       if(r.Date && r.Date.includes("/")){
         r.Year = r.Date.split("/")[2];
@@ -198,8 +182,7 @@ fetch("/data/australia-stakes.csv")
 
     populateFilters(allData);
     renderTable(allData);
-  })
-  .catch(err => console.error("CSV LOAD FAILED:", err));
+  });
 
 function populateFilters(data){
   const years = new Set();
@@ -215,28 +198,19 @@ function populateFilters(data){
   });
 
   [...years].sort((a,b)=>b-a).forEach(y=>{
-    const o=document.createElement("option");
-    o.value=y;
-    o.textContent=y;
-    yearFilter.appendChild(o);
+    yearFilter.appendChild(new Option(y,y));
   });
 
   [...races].sort().forEach(v=>{
-    const o=document.createElement("option");
-    o.value=v;
-    raceList.appendChild(o);
+    raceList.appendChild(new Option(v,v));
   });
 
   [...trainers].sort().forEach(v=>{
-    const o=document.createElement("option");
-    o.value=v;
-    trainerList.appendChild(o);
+    trainerList.appendChild(new Option(v,v));
   });
 
   [...jockeys].sort().forEach(v=>{
-    const o=document.createElement("option");
-    o.value=v;
-    jockeyList.appendChild(o);
+    jockeyList.appendChild(new Option(v,v));
   });
 }
 
@@ -276,18 +250,6 @@ function renderTable(data){
 
   resultCount.textContent = "Results: " + data.length;
 }
-
-/* NAV */
-fetch("g1-archive.html")
-  .then(res => res.text())
-  .then(html => {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
-    const nav = doc.querySelector("nav");
-    if(nav){
-      document.getElementById("global-nav").innerHTML = nav.outerHTML;
-    }
-  });
 </script>
 
 </body>
