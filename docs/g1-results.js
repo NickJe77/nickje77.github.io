@@ -11,7 +11,7 @@ const tableBody = document.querySelector("tbody");
 
 let allData = [];
 
-// ✅ CORRECT PATH + NAME
+// ✅ CORRECT PATH + MATCHES YOUR JSON STRUCTURE
 fetch("../data/g1-results.json")
   .then(res => res.json())
   .then(data => {
@@ -28,10 +28,10 @@ function populateFilters(data) {
   const jockeys = new Set();
 
   data.forEach(row => {
-    if (row.year) years.add(row.year);
-    if (row.race) races.add(row.race);
-    if (row.winner) winners.add(row.winner);
-    if (row.jock) jockeys.add(row.jock);
+    if (row.YEAR) years.add(row.YEAR);
+    if (row.RACE) races.add(row.RACE);
+    if (row.WINNER) winners.add(row.WINNER);
+    if (row.JOCKEY) jockeys.add(row.JOCKEY);
   });
 
   [...years].sort((a,b)=>b-a).forEach(y => {
@@ -73,10 +73,10 @@ function applyFilters() {
 
   const filtered = allData.filter(row => {
     return (
-      (!yearVal || row.year == yearVal) &&
-      (!raceVal || row.race.toLowerCase().includes(raceVal)) &&
-      (!winnerVal || row.winner.toLowerCase().includes(winnerVal)) &&
-      (!jockeyVal || row.jock.toLowerCase().includes(jockeyVal))
+      (!yearVal || row.YEAR == yearVal) &&
+      (!raceVal || row.RACE.toLowerCase().includes(raceVal)) &&
+      (!winnerVal || row.WINNER.toLowerCase().includes(winnerVal)) &&
+      (!jockeyVal || row.JOCKEY.toLowerCase().includes(jockeyVal))
     );
   });
 
@@ -90,13 +90,13 @@ function renderTable(data) {
   data.forEach(row => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${row.year || ""}</td>
-      <td>${row.race || ""}</td>
-      <td>${row.track || ""}</td>
-      <td>${row.winner || ""}</td>
-      <td>${row.trainer || ""}</td>
-      <td>${row.jock || ""}</td>
-      <td>${row.country || ""}</td>
+      <td>${row.YEAR || ""}</td>
+      <td>${row.RACE || ""}</td>
+      <td>${row.TRACK || ""}</td>
+      <td>${row.WINNER || ""}</td>
+      <td>${row.TRAINER || ""}</td>
+      <td>${row.JOCKEY || ""}</td>
+      <td>${row.COUNTRY || ""}</td>
     `;
     tableBody.appendChild(tr);
   });
