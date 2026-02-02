@@ -11,14 +11,26 @@ const tableBody = document.querySelector("tbody");
 
 let allData = [];
 
-// LOAD DATA (ABSOLUTE PATH FIX)
-fetch("/data/g1_results.json")
+// LOAD DATA (DO NOT CHANGE PATH)
+fetch("../data/g1_results.json")
   .then(res => res.json())
   .then(data => {
-    allData = data;
-    populateFilters(data);
-    renderTable(data);
-  });
+    // SAFELY UNWRAP ARRAY
+    if (Array.isArray(data)) {
+      allData = data;
+    } else if (Array.isArray(data.results)) {
+      allData = data.results;
+    } else if (Array.isArray(data.data)) {
+      allData = data.data;
+    } else {
+      console.error("Unknown JSON structure:", data);
+      allData = [];
+    }
+
+    populateFilters(allData);
+    renderTable(allData);
+  })
+  .catch(err => console.error("Fetch error:", err));
 
 // BUILD FILTER OPTIONS
 function populateFilters(data) {
@@ -89,7 +101,6 @@ function renderTable(data) {
 
   data.forEach(row => {
     const tr = document.createElement("tr");
-
     tr.innerHTML = `
       <td>${row.year || ""}</td>
       <td>${row.race || ""}</td>
@@ -99,7 +110,6 @@ function renderTable(data) {
       <td>${row.jock || ""}</td>
       <td>${row.country || ""}</td>
     `;
-
     tableBody.appendChild(tr);
   });
 }
