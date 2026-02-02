@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Ireland Stakes Results | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="racing.css">
+<link rel="stylesheet" href="archive.css">
+
+<style>
+body { font-size: 17px; }
+
+.filters-wrapper { margin: 15px; }
+
+.filters-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.filters-row select,
+.filters-row input {
+  font-size: 16px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  width: 100%;
+}
+
+#resultCount {
+  text-align: center;
+  font-weight: 700;
+  margin-top: 8px;
+  font-size: 16px;
+}
+
+.table-container { overflow-x: auto; margin: 15px; }
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 700px;
+  font-size: 16px;
+}
+
+.results-table th,
+.results-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid #ddd;
+  text-align: left;
+}
+
+.results-table th {
+  background: #f3f3f3;
+  font-weight: 700;
+}
+
+@media (max-width: 768px) {
+  body { font-size: 18px; }
+  .filters-row { grid-template-columns: 1fr; }
+  .filters-row select,
+  .filters-row input { font-size: 18px; }
+  .results-table { font-size: 17px; }
+  .results-table th,
+  .results-table td { padding: 12px 10px; }
+  #resultCount { font-size: 18px; }
+}
+</style>
+</head>
+
+<body class="archive-page">
+
+<div id="global-nav"></div>
+
+<div class="page-hero">
+  <img src="images/ireland-stakes-hero.jpg" alt="Ireland Stakes">
+  <div class="hero-text">IRELAND STAKES RACES</div>
+</div>
+
+<div class="filters-wrapper">
+  <div class="filters-row">
+    <select id="yearFilter" onchange="applyFilters()">
+      <option value="">Year</option>
+    </select>
+
+    <input list="raceList" id="raceSearch" placeholder="Race" oninput="applyFilters()">
+    <datalist id="raceList"></datalist>
+
+    <input list="trainerList" id="trainerSearch" placeholder="Trainer" oninput="applyFilters()">
+    <datalist id="trainerList"></datalist>
+
+    <input list="jockeyList" id="jockeySearch" placeholder="Jockey" oninput="applyFilters()">
+    <datalist id="jockeyList"></datalist>
+  </div>
+
+  <div id="resultCount">Results: 0</div>
+</div>
+
+<div class="table-container">
+  <table class="results-table">
+    <thead>
+      <tr>
+        <th>Year</th>
+        <th>Race</th>
+        <th>Course</th>
+        <th>Winner</th>
+        <th>Trainer</th>
+        <th>Jockey</th>
+      </tr>
+    </thead>
+    <tbody id="results-body"></tbody>
+  </table>
+</div>
+
+<script>
+const COUNTRY = "Republic Of Ireland";
+
+const yearFilter = document.getElementById("yearFilter");
+const raceSearch = document.getElementById("raceSearch");
+const trainerSearch = document.getElementById("trainerSearch");
+const jockeySearch = document.getElementById("jockeySearch");
+
+const raceList = document.getElementById("raceList");
+const trainerList = document.getElementById("trainerList");
+const jockeyList = document.getElementById("jockeyList");
+
+const tableBody = document.getElementById("results-body");
+const resultCount = document.getElementById("resultCount");
+
+let allData = [];
+
+function parseCSV(text){
+  text = text.replace(/^\uFEFF/, "");
+  const lines = text.trim().replace(/\r/g,"").split("\n");
+  const headers = lines[0].split(",").map(h=>h.trim());
+
+  return lines.slice(1).map(line=>{
+    const values = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
+    let obj = {};
+    headers.forEach((h,i)=>{
+      obj[h] = (values[i]||"").replace(/^"|"$/g,"").trim();
+    });
+    return obj;
+  });
+}
+
+fetch("/data/worldwide_stakes_races.csv")
+  .then(res => res.text())
+  .then(text => {
+    const rawData = parseCSV(text);
+
+    allData = rawData.filter(r => r.COUNTRY === COUNTRY);
+
+    populateFilters(allData);
+    renderTable(allData);
+  });
+
+function populateFilters(data){
+  const years = new Set();
+  const races = new Set();
+  const trainers = new Set();
+  const jockeys = new Set();
+
+  data.forEach(r=>{
+    if(r["YEAR"]) years.add(r["YEAR"]);
+    if(r["RACE NAME"]) races.add(r["RACE NAME"]);
+    if(r["TRAINER"]) trainers.add(r["TRAINER"]);
+    if(r["JOCKEY"]) jockeys.add(r["JOCKEY"]);
+  });
+
+  [...years].sort((a,b)=>b-a).forEach(y=>yearFilter.appendChild(new Option(y,y)));
+  [...races].sort().forEach(v=>raceList.appendChild(new Option(v,v)));
+  [...trainers].sort().forEach(v=>trainerList.appendChild(new Option(v,v)));
+  [...jockeys].sort().forEach(v=>jockeyList.appendChild(new Option(v,v)));
+}
+
+function applyFilters(){
+  const y = yearFilter.value;
+  const r = raceSearch.value.toLowerCase();
+  const t = trainerSearch.value.toLowerCase();
+  const j = jockeySearch.value.toLowerCase();
+
+  const filtered = allData.filter(row=>{
+    return (
+      (!y || row["YEAR"] === y) &&
+      (!r || (row["RACE NAME"]||"").toLowerCase().includes(r)) &&
+      (!t || (row["TRAINER"]||"").toLowerCase().includes(t)) &&
+      (!j || (row["JOCKEY"]||"").toLowerCase().includes(j))
+    );
+  });
+
+  renderTable(filtered);
+}
+
+function renderTable(data){
+  tableBody.innerHTML="";
+  data.forEach(r=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${r["YEAR"]||""}</td>
+      <td>${r["RACE NAME"]||""}</td>
+      <td>${r["COURSE"]||""}</td>
+      <td>${r["WINNER"]||""}</td>
+      <td>${r["TRAINER"]||""}</td>
+      <td>${r["JOCKEY"]||""}</td>
+    `;
+    tableBody.appendChild(tr);
+  });
+
+  resultCount.textContent = "Results: " + data.length;
+}
+
+fetch("g1-archive.html")
+  .then(res => res.text())
+  .then(html => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    const nav = doc.querySelector("nav");
+    if(nav){
+      document.getElementById("global-nav").innerHTML = nav.outerHTML;
+    }
+  });
+</script>
+
+</body>
+</html>
