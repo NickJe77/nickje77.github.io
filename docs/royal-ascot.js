@@ -1,76 +1,133 @@
-document.addEventListener("DOMContentLoaded", () => {
-  const tbody = document.querySelector("tbody");
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Royal Ascot Archive | The Sporting Almanac</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  const yearFilter = document.getElementById("yearFilter");
-  const raceFilter = document.getElementById("raceFilter");
-  const winnerFilter = document.getElementById("winnerFilter");
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="racing.css">
 
-  const raceList = document.getElementById("raceList");
-  const winnerList = document.getElementById("winnerList");
+  <style>
+    .g1-hero {
+      position: relative;
+      max-width: 1200px;
+      margin: 36px auto 40px;
+      padding: 0 24px;
+    }
 
-  let allRows = [];
+    .g1-hero img {
+      width: 100%;
+      height: 360px;
+      object-fit: cover;
+      border-radius: 18px;
+      box-shadow: 0 12px 28px rgba(0,0,0,0.18);
+    }
 
-  console.log("Royal Ascot JS loaded");
+    .g1-hero-text {
+      position: absolute;
+      left: 48px;
+      bottom: 36px;
+    }
 
-  fetch("/docs/royal-ascot.json")
-    .then(res => {
-      console.log("Fetch status:", res.status);
-      return res.json();
-    })
-    .then(data => {
-      console.log("Rows loaded:", data.length);
+    .g1-hero-text h1 {
+      margin: 0;
+      font-size: 52px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #ffffff;
+      text-shadow: 0 4px 14px rgba(0,0,0,0.55);
+    }
 
-      allRows = data.sort((a, b) => b.year - a.year);
+    .filters {
+      max-width: 1200px;
+      margin: 0 auto 30px;
+      padding: 0 24px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 20px;
+    }
 
-      populateFilters(allRows);
-      renderTable(allRows);
-    })
-    .catch(err => {
-      console.error("Royal Ascot JSON load FAILED:", err);
-    });
+    .archive-table {
+      max-width: 1200px;
+      margin: 0 auto 80px;
+      padding: 0 24px;
+      border: 1px solid #d6e4f2;
+      border-radius: 14px;
+    }
 
-  function populateFilters(data) {
-    const years = [...new Set(data.map(r => r.year))].sort((a,b)=>b-a);
-    const races = [...new Set(data.map(r => r.race))].sort();
-    const winners = [...new Set(data.map(r => r.winner))].sort();
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: system-ui, sans-serif;
+      font-size: 14px;
+    }
 
-    years.forEach(y => yearFilter.innerHTML += `<option value="${y}">${y}</option>`);
-    races.forEach(r => raceList.innerHTML += `<option value="${r}">`);
-    winners.forEach(w => winnerList.innerHTML += `<option value="${w}">`);
-  }
+    th, td {
+      padding: 12px 10px;
+      border-bottom: 1px solid #e1e8f0;
+    }
 
-  function applyFilters() {
-    const y = yearFilter.value;
-    const r = raceFilter.value.toLowerCase();
-    const w = winnerFilter.value.toLowerCase();
+    thead { background: #f3f7fc; }
+    tbody tr:nth-child(even) { background: #f5f9ff; }
+  </style>
+</head>
 
-    const filtered = allRows.filter(row =>
-      (!y || row.year == y) &&
-      (!r || row.race.toLowerCase().includes(r)) &&
-      (!w || row.winner.toLowerCase().includes(w))
-    );
+<body>
 
-    renderTable(filtered);
-  }
+<nav class="home-nav">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="major-carnivals.html">Major Carnivals</a>
+  <a href="royal-ascot.html" class="active">Royal Ascot</a>
+</nav>
 
-  function renderTable(rows) {
-    tbody.innerHTML = "";
+<div class="g1-hero">
+  <img src="images/royal-ascot-hero.jpg" alt="Royal Ascot">
+  <div class="g1-hero-text">
+    <h1>Royal Ascot</h1>
+  </div>
+</div>
 
-    rows.forEach(r => {
-      tbody.innerHTML += `
-        <tr>
-          <td>${r.year}</td>
-          <td>${r.race}</td>
-          <td>${r.winner}</td>
-          <td>${r.trainer || ""}</td>
-          <td>${r.jockey || ""}</td>
-          <td>${r.sp || ""}</td>
-        </tr>
-      `;
-    });
-  }
+<div class="filters">
+  <div>
+    <label>Year</label>
+    <select id="yearFilter">
+      <option value="">All</option>
+    </select>
+  </div>
 
-  yearFilter.addEventListener("change", applyFilters);
-  raceFilter.addEventListener("input", applyFilters);
-  winnerFilter.addEventListener("input", applyFilters);
-});
+  <div>
+    <label>Race</label>
+    <input id="raceFilter" list="raceList">
+    <datalist id="raceList"></datalist>
+  </div>
+
+  <div>
+    <label>Winner</label>
+    <input id="winnerFilter" list="winnerList">
+    <datalist id="winnerList"></datalist>
+  </div>
+</div>
+
+<div class="archive-table">
+  <table>
+    <thead>
+      <tr>
+        <th>Year</th>
+        <th>Race</th>
+        <th>Winner</th>
+        <th>Trainer</th>
+        <th>Jockey</th>
+        <th>SP</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script src="royal-ascot.js" defer></script>
+
+</body>
+</html>
