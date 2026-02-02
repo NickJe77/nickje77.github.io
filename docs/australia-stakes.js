@@ -12,7 +12,7 @@ const tableBody = document.getElementById("results-body");
 let allData = [];
 
 /* =========================
-   CSV PARSER (ROBUST)
+   CSV PARSER
 ========================= */
 function parseCSV(text) {
   const lines = text.trim().replace(/\r/g, "").split("\n");
@@ -29,9 +29,9 @@ function parseCSV(text) {
 }
 
 /* =========================
-   LOAD CSV
+   LOAD CSV  ✅ CORRECT PATH
 ========================= */
-fetch("data/racing/australia-stakes.csv")
+fetch("data/australia-stakes.csv")
   .then(res => {
     if (!res.ok) throw new Error("Fetch failed");
     return res.text();
@@ -39,7 +39,7 @@ fetch("data/racing/australia-stakes.csv")
   .then(text => {
     allData = parseCSV(text);
 
-    // derive Year from Date (expects dd/mm/yyyy)
+    // derive Year from Date (dd/mm/yyyy)
     allData.forEach(r => {
       if (r.Date && r.Date.includes("/")) {
         const parts = r.Date.split("/");
