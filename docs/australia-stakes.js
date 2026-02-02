@@ -29,7 +29,7 @@ function parseCSV(text) {
 }
 
 /* =========================
-   LOAD CSV  (CORRECT PATH)
+   LOAD CSV (CORRECT PATH)
 ========================= */
 fetch("data/australia-stakes.csv")
   .then(res => {
@@ -38,8 +38,7 @@ fetch("data/australia-stakes.csv")
   })
   .then(text => {
     allData = parseCSV(text);
-
-    console.log("LOADED ROWS:", allData); // DEBUG
+    console.log("ROWS LOADED:", allData);
 
     // derive Year from Date (dd/mm/yyyy)
     allData.forEach(r => {
