@@ -13,6 +13,23 @@ const tableBody = document.querySelector("tbody");
 
 let allData = [];
 
+// Country → flag map (use widely supported flags)
+const countryFlags = {
+  "ENGLAND": "🇬🇧",
+  "IRELAND": "🇮🇪",
+  "FRANCE": "🇫🇷",
+  "GERMANY": "🇩🇪",
+  "ITALY": "🇮🇹",
+  "SPAIN": "🇪🇸",
+  "USA": "🇺🇸",
+  "UNITED STATES": "🇺🇸",
+  "AUSTRALIA": "🇦🇺",
+  "JAPAN": "🇯🇵",
+  "HONG KONG": "🇭🇰",
+  "NEW ZEALAND": "🇳🇿",
+  "SOUTH AFRICA": "🇿🇦"
+};
+
 // LOAD DATA
 fetch("../data/g1-results.json")
   .then(res => res.json())
@@ -101,6 +118,9 @@ function renderTable(data) {
   tableBody.innerHTML = "";
 
   data.forEach(row => {
+    const countryKey = (row.COUNTRY || "").trim().toUpperCase();
+    const flag = countryFlags[countryKey] || "";
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${row.YEAR || ""}</td>
@@ -109,7 +129,7 @@ function renderTable(data) {
       <td>${row.WINNER || ""}</td>
       <td>${row.TRAINER || ""}</td>
       <td>${row.JOCKEY || ""}</td>
-      <td>${row.COUNTRY || ""}</td>
+      <td class="flag" title="${countryKey}">${flag}</td>
     `;
     tableBody.appendChild(tr);
   });
