@@ -13,22 +13,67 @@ const tableBody = document.querySelector("tbody");
 
 let allData = [];
 
-// Country → flag map (use widely supported flags)
-const countryFlags = {
-  "ENGLAND": "🇬🇧",
-  "IRELAND": "🇮🇪",
-  "FRANCE": "🇫🇷",
-  "GERMANY": "🇩🇪",
-  "ITALY": "🇮🇹",
-  "SPAIN": "🇪🇸",
-  "USA": "🇺🇸",
-  "UNITED STATES": "🇺🇸",
-  "AUSTRALIA": "🇦🇺",
-  "JAPAN": "🇯🇵",
-  "HONG KONG": "🇭🇰",
-  "NEW ZEALAND": "🇳🇿",
-  "SOUTH AFRICA": "🇿🇦"
+/* ---- COUNTRY NAME → ISO CODE MAP (core set) ---- */
+const countryNameToISO = {
+  "ENGLAND": "GB",
+  "UNITED KINGDOM": "GB",
+  "UK": "GB",
+  "IRELAND": "IE",
+  "FRANCE": "FR",
+  "GERMANY": "DE",
+  "ITALY": "IT",
+  "SPAIN": "ES",
+  "USA": "US",
+  "UNITED STATES": "US",
+  "AUSTRALIA": "AU",
+  "JAPAN": "JP",
+  "HONG KONG": "HK",
+  "NEW ZEALAND": "NZ",
+  "SOUTH AFRICA": "ZA",
+  "CANADA": "CA",
+  "BRAZIL": "BR",
+  "ARGENTINA": "AR",
+  "CHILE": "CL",
+  "PERU": "PE",
+  "URUGUAY": "UY",
+  "MEXICO": "MX",
+  "NETHERLANDS": "NL",
+  "BELGIUM": "BE",
+  "SWITZERLAND": "CH",
+  "SWEDEN": "SE",
+  "NORWAY": "NO",
+  "DENMARK": "DK",
+  "POLAND": "PL",
+  "CZECH REPUBLIC": "CZ",
+  "SLOVAKIA": "SK",
+  "HUNGARY": "HU",
+  "TURKEY": "TR",
+  "GREECE": "GR",
+  "RUSSIA": "RU",
+  "CHINA": "CN",
+  "SOUTH KOREA": "KR",
+  "INDIA": "IN",
+  "PAKISTAN": "PK",
+  "SINGAPORE": "SG",
+  "THAILAND": "TH",
+  "MALAYSIA": "MY",
+  "PHILIPPINES": "PH",
+  "INDONESIA": "ID"
 };
+
+/* ---- ISO CODE → FLAG EMOJI ---- */
+function isoToFlag(iso) {
+  return iso
+    ? String.fromCodePoint(...[...iso.toUpperCase()].map(c => 127397 + c.charCodeAt()))
+    : "";
+}
+
+function countryToFlag(name) {
+  if (!name) return "";
+  const key = name.trim().toUpperCase();
+  const iso = countryNameToISO[key];
+  return iso ? isoToFlag(iso) : "";
+}
 
 // LOAD DATA
 fetch("../data/g1-results.json")
@@ -118,8 +163,7 @@ function renderTable(data) {
   tableBody.innerHTML = "";
 
   data.forEach(row => {
-    const countryKey = (row.COUNTRY || "").trim().toUpperCase();
-    const flag = countryFlags[countryKey] || "";
+    const flag = countryToFlag(row.COUNTRY);
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -129,7 +173,7 @@ function renderTable(data) {
       <td>${row.WINNER || ""}</td>
       <td>${row.TRAINER || ""}</td>
       <td>${row.JOCKEY || ""}</td>
-      <td class="flag" title="${countryKey}">${flag}</td>
+      <td class="flag" title="${row.COUNTRY || ""}">${flag}</td>
     `;
     tableBody.appendChild(tr);
   });
