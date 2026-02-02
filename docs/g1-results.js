@@ -1,83 +1,105 @@
-document.addEventListener("DOMContentLoaded", () => {
-  const tbody = document.querySelector(".archive-table tbody");
+const yearFilter = document.getElementById("yearFilter");
+const raceFilter = document.getElementById("raceFilter");
+const winnerFilter = document.getElementById("winnerFilter");
+const jockeyFilter = document.getElementById("jockeyFilter");
 
-  const yearFilter = document.getElementById("yearFilter");
-  const raceFilter = document.getElementById("raceFilter");
-  const winnerFilter = document.getElementById("winnerFilter");
+const raceList = document.getElementById("raceList");
+const winnerList = document.getElementById("winnerList");
+const jockeyList = document.getElementById("jockeyList");
 
-  const raceList = document.getElementById("raceList");
-  const winnerList = document.getElementById("winnerList");
+const tableBody = document.querySelector("tbody");
 
-  let allRows = [];
+let allData = [];
 
-  fetch("g1-results.json")
-    .then(res => res.json())
-    .then(data => {
-      // Sort newest to oldest
-      allRows = data.sort((a, b) => (b.year || 0) - (a.year || 0));
+// LOAD DATA
+fetch("../data/g1_results.json")
+  .then(res => res.json())
+  .then(data => {
+    allData = data;
+    populateFilters(data);
+    renderTable(data);
+  });
 
-      populateFilters(allRows);
-      renderTable(allRows);
-    });
+// BUILD FILTER OPTIONS
+function populateFilters(data) {
+  const years = new Set();
+  const races = new Set();
+  const winners = new Set();
+  const jockeys = new Set();
 
-  function populateFilters(data) {
-    const years = [...new Set(data.map(r => r.year).filter(Boolean))].sort((a, b) => b - a);
-    const races = [...new Set(data.map(r => r.race).filter(Boolean))].sort();
-    const winners = [...new Set(data.map(r => r.winner).filter(Boolean))].sort();
+  data.forEach(row => {
+    if (row.year) years.add(row.year);
+    if (row.race) races.add(row.race);
+    if (row.winner) winners.add(row.winner);
+    if (row.jock) jockeys.add(row.jock);
+  });
 
-    years.forEach(y => {
-      const opt = document.createElement("option");
-      opt.value = y;
-      opt.textContent = y;
-      yearFilter.appendChild(opt);
-    });
+  [...years].sort((a,b)=>b-a).forEach(y => {
+    const opt = document.createElement("option");
+    opt.value = y;
+    yearFilter.appendChild(opt);
+  });
 
-    races.forEach(r => {
-      const opt = document.createElement("option");
-      opt.value = r;
-      raceList.appendChild(opt);
-    });
+  [...races].sort().forEach(r => {
+    const opt = document.createElement("option");
+    opt.value = r;
+    raceList.appendChild(opt);
+  });
 
-    winners.forEach(w => {
-      const opt = document.createElement("option");
-      opt.value = w;
-      winnerList.appendChild(opt);
-    });
-  }
+  [...winners].sort().forEach(w => {
+    const opt = document.createElement("option");
+    opt.value = w;
+    winnerList.appendChild(opt);
+  });
 
-  function applyFilters() {
-    const yearVal = yearFilter.value;
-    const raceVal = raceFilter.value.toLowerCase();
-    const winnerVal = winnerFilter.value.toLowerCase();
+  [...jockeys].sort().forEach(j => {
+    const opt = document.createElement("option");
+    opt.value = j;
+    jockeyList.appendChild(opt);
+  });
+}
 
-    const filtered = allRows.filter(r =>
-      (!yearVal || String(r.year) === yearVal) &&
-      (!raceVal || String(r.race).toLowerCase().includes(raceVal)) &&
-      (!winnerVal || String(r.winner).toLowerCase().includes(winnerVal))
+// FILTER HANDLER
+yearFilter.addEventListener("change", applyFilters);
+raceFilter.addEventListener("input", applyFilters);
+winnerFilter.addEventListener("input", applyFilters);
+jockeyFilter.addEventListener("input", applyFilters);
+
+function applyFilters() {
+  const yearVal = yearFilter.value;
+  const raceVal = raceFilter.value.toLowerCase();
+  const winnerVal = winnerFilter.value.toLowerCase();
+  const jockeyVal = jockeyFilter.value.toLowerCase();
+
+  const filtered = allData.filter(row => {
+    return (
+      (!yearVal || row.year == yearVal) &&
+      (!raceVal || row.race.toLowerCase().includes(raceVal)) &&
+      (!winnerVal || row.winner.toLowerCase().includes(winnerVal)) &&
+      (!jockeyVal || row.jock.toLowerCase().includes(jockeyVal))
     );
+  });
 
-    renderTable(filtered);
-  }
+  renderTable(filtered);
+}
 
-  function renderTable(rows) {
-    tbody.innerHTML = "";
+// TABLE RENDER
+function renderTable(data) {
+  tableBody.innerHTML = "";
 
-    rows.forEach(r => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${r.year || ""}</td>
-        <td>${r.race || ""}</td>
-        <td>${r.track || ""}</td>
-        <td>${r.winner || ""}</td>
-        <td>${r.trainer || ""}</td>
-        <td>${r.jockey || ""}</td>
-        <td>${r.country || ""}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-  }
+  data.forEach(row => {
+    const tr = document.createElement("tr");
 
-  yearFilter.addEventListener("change", applyFilters);
-  raceFilter.addEventListener("input", applyFilters);
-  winnerFilter.addEventListener("input", applyFilters);
-});
+    tr.innerHTML = `
+      <td>${row.year || ""}</td>
+      <td>${row.race || ""}</td>
+      <td>${row.track || ""}</td>
+      <td>${row.winner || ""}</td>
+      <td>${row.trainer || ""}</td>
+      <td>${row.jock || ""}</td>
+      <td>${row.country || ""}</td>
+    `;
+
+    tableBody.appendChild(tr);
+  });
+}
