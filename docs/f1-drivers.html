@@ -2,31 +2,78 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>F1 Driver | The Sporting Almanac</title>
+<title>Formula 1 Drivers | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet" href="style.css">
 
 <style>
-body{font-family:system-ui,Arial,sans-serif;margin:0;}
-.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
-.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+body{
+  font-family: system-ui, Arial, sans-serif;
+  margin:0;
+}
 
-.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px;}
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+  font-size:18px;
+}
 
-h1{text-align:center;margin-bottom:10px;}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:20px;}
-.stat{border:1px solid #ddd;border-radius:10px;padding:14px;text-align:center;background:#f6f9ff;}
-.stat h3{margin:0 0 5px;font-size:14px;color:#555;}
-.stat div{font-size:22px;font-weight:700;}
+.page-wrap{
+  max-width:900px;
+  margin:0 auto;
+  padding:30px 20px;
+}
 
-.controls{text-align:center;margin-bottom:15px;}
-.controls input{padding:8px 12px;border-radius:8px;border:1px solid #ccc;font-size:14px;}
+h1{
+  text-align:center;
+  margin-bottom:15px;
+}
 
-table{width:100%;border-collapse:collapse;}
-th,td{border-bottom:1px solid #ddd;padding:8px;text-align:center;}
-th{background:#f0f0f0;}
-tr:nth-child(even){background:#f6f9ff;}
+.controls{
+  text-align:center;
+  margin-bottom:15px;
+}
+.controls input{
+  padding:8px 12px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  font-size:14px;
+  width:250px;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:10px;
+  text-align:left;
+}
+th{
+  background:#f0f0f0;
+}
+tr:nth-child(even){
+  background:#f6f9ff;
+}
+
+a.driver-link{
+  color:#0056d6;
+  text-decoration:none;
+  font-weight:600;
+}
+a.driver-link:hover{
+  text-decoration:underline;
+}
 </style>
 </head>
 
@@ -35,163 +82,79 @@ tr:nth-child(even){background:#f6f9ff;}
 <div class="navbar">
   <a href="index.html">Home</a>
   <a href="f1.html">F1</a>
-  <a href="f1-drivers.html">Drivers</a>
 </div>
 
 <div class="page-wrap">
+  <h1>Formula 1 Drivers</h1>
 
-<h1 id="driverName">Driver</h1>
+  <div class="controls">
+    <input id="filterBox" placeholder="Filter driver…">
+  </div>
 
-<div class="stats">
-  <div class="stat"><h3>Races</h3><div id="totalRaces">0</div></div>
-  <div class="stat"><h3>Wins</h3><div id="totalWins">0</div></div>
-  <div class="stat"><h3>Championships</h3><div id="totalTitles">0</div></div>
-  <div class="stat"><h3>Poles</h3><div id="totalPoles">0</div></div>
-</div>
-
-<div class="controls">
-  <input id="trackFilter" placeholder="Search track…">
-</div>
-
-<table>
-<thead>
-<tr>
-  <th>Season</th>
-  <th>Race</th>
-  <th>Track</th>
-  <th>Grid</th>
-  <th>Finish</th>
-  <th>Points</th>
-</tr>
-</thead>
-<tbody id="raceTable"></tbody>
-</table>
-
+  <table>
+    <thead>
+      <tr>
+        <th>Driver</th>
+      </tr>
+    </thead>
+    <tbody id="driverTable"></tbody>
+  </table>
 </div>
 
 <script>
-const params = new URLSearchParams(window.location.search);
-const rawDriver = decodeURIComponent(params.get("driver")||"");
-const driver = cleanDriver(rawDriver);
-document.getElementById("driverName").textContent = driver;
-
 const startYear = 1950;
 const endYear = new Date().getFullYear();
 
-const totalRaces=document.getElementById("totalRaces");
-const totalWins=document.getElementById("totalWins");
-const totalTitles=document.getElementById("totalTitles");
-const totalPoles=document.getElementById("totalPoles");
-const raceTable=document.getElementById("raceTable");
-const trackFilter=document.getElementById("trackFilter");
+const tableBody = document.getElementById("driverTable");
+const filterBox = document.getElementById("filterBox");
 
-let allRows=[];
-let seasonsData=[];
+let drivers = new Set();
 
 function cleanDriver(name){
-  return String(name||"").replace(/\s[A-Z]{3}$/,"");
+  return String(name || "").replace(/\s[A-Z]{3}$/, "");
 }
 
-/* FAST LOAD */
-async function loadAll(){
-  const years=[];
-  for(let y=startYear;y<=endYear;y++) years.push(y);
+async function loadDrivers(){
+  for(let y = startYear; y <= endYear; y++){
+    try{
+      const r = await fetch(`data/f1/${y}.json`);
+      if(!r.ok) continue;
+      const d = await r.json();
 
-  const batchSize = 10;
-
-  for(let i=0;i<years.length;i+=batchSize){
-    const batch = years.slice(i,i+batchSize);
-
-    const results = await Promise.all(
-      batch.map(y=>fetch(`data/f1/${y}.json`).then(r=>r.ok?r.json():null))
-    );
-
-    results.filter(x=>x).forEach(d=>seasonsData.push(d));
-  }
-
-  build();
-}
-
-/* CHAMPION */
-function getChampion(season){
-  const totals={};
-  (season.races||[]).forEach(r=>{
-    (r.results||[]).forEach(x=>{
-      const d=cleanDriver(x.driver);
-      totals[d]=(totals[d]||0)+(Number(x.points)||0);
-    });
-  });
-  return Object.entries(totals).sort((a,b)=>b[1]-a[1])[0]?.[0];
-}
-
-/* BUILD */
-function build(){
-  let races=0,wins=0,poles=0;
-  const titleSeasons = new Set();
-  allRows=[];
-
-  seasonsData.forEach(season=>{
-    const champ = getChampion(season);
-    const seasonYear = season.season || season.year || "";
-
-    (season.races||[]).forEach(race=>{
-      (race.results||[]).forEach(r=>{
-        const d=cleanDriver(r.driver);
-        if(d!==driver) return;
-
-        races++;
-        if(Number(r.position)===1) wins++;
-        if(Number(r.grid)===1) poles++;
-
-        allRows.push({
-          season: seasonYear,
-          race: race.raceName || "",
-          track: race.circuit || race.track || "",
-          grid: r.grid,
-          finish: r.position,
-          points: r.points
+      (d.races || []).forEach(race=>{
+        (race.results || []).forEach(r=>{
+          const name = cleanDriver(r.driver);
+          if(name) drivers.add(name);
         });
       });
-    });
-
-    if(cleanDriver(champ) === driver){
-      titleSeasons.add(seasonYear);
-    }
-  });
-
-  totalRaces.textContent = races;
-  totalWins.textContent = wins;
-  totalPoles.textContent = poles;
-  totalTitles.textContent = titleSeasons.size;
-
-  renderTable();
+    }catch(e){}
+  }
+  render();
 }
 
-/* TABLE */
-function renderTable(){
-  const f=trackFilter.value.toLowerCase();
-  raceTable.innerHTML="";
+function render(){
+  const filter = filterBox.value.toLowerCase();
+  tableBody.innerHTML = "";
 
-  allRows
-    .filter(r=>r.track.toLowerCase().includes(f))
-    .sort((a,b)=>b.season-a.season)
-    .forEach(r=>{
-      const tr=document.createElement("tr");
-      tr.innerHTML=`
-        <td>${r.season}</td>
-        <td>${r.race}</td>
-        <td>${r.track}</td>
-        <td>${r.grid}</td>
-        <td>${r.finish}</td>
-        <td>${r.points}</td>
+  [...drivers]
+    .sort((a,b)=>a.localeCompare(b))
+    .filter(d=>d.toLowerCase().includes(filter))
+    .forEach(name=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>
+          <a class="driver-link" href="f1-driver.html?driver=${encodeURIComponent(name)}">
+            ${name}
+          </a>
+        </td>
       `;
-      raceTable.appendChild(tr);
+      tableBody.appendChild(tr);
     });
 }
 
-trackFilter.addEventListener("input", renderTable);
+filterBox.addEventListener("input", render);
 
-loadAll();
+loadDrivers();
 </script>
 
 </body>
