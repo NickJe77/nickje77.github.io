@@ -94,54 +94,97 @@ function cleanDriver(name){
   return String(name||"").replace(/\s[A-Z]{3}$/,"").trim();
 }
 
-function normalizeCountry(name){
-  const map = {
-    "People's Republic of China": "China",
-    "Great Britain": "United Kingdom",
-    "United States of America": "United States",
-    "United Arab Emirates": "UAE"
-  };
-  return map[name] || name;
+/* --- Country + flag handling --- */
+
+const COUNTRY_ALIASES = {
+  "United States of America": "United States",
+  "Great Britain": "United Kingdom",
+  "People's Republic of China": "China",
+  "United Arab Emirates": "UAE"
+};
+
+const FLAG_MAP = {
+  "Australia":"🇦🇺",
+  "China":"🇨🇳",
+  "Japan":"🇯🇵",
+  "Bahrain":"🇧🇭",
+  "Saudi Arabia":"🇸🇦",
+  "Qatar":"🇶🇦",
+  "United States":"🇺🇸",
+  "Mexico":"🇲🇽",
+  "Brazil":"🇧🇷",
+  "Monaco":"🇲🇨",
+  "Spain":"🇪🇸",
+  "France":"🇫🇷",
+  "Italy":"🇮🇹",
+  "United Kingdom":"🇬🇧",
+  "Austria":"🇦🇹",
+  "Hungary":"🇭🇺",
+  "Belgium":"🇧🇪",
+  "Netherlands":"🇳🇱",
+  "Singapore":"🇸🇬",
+  "Azerbaijan":"🇦🇿",
+  "Canada":"🇨🇦",
+  "UAE":"🇦🇪"
+};
+
+// Build a list of possible country prefixes, longest-first (so we match "United States of America" before "United States")
+const COUNTRY_PREFIXES = Array.from(
+  new Set([
+    ...Object.keys(COUNTRY_ALIASES),
+    ...Object.keys(FLAG_MAP)
+  ])
+).sort((a,b)=> b.split(" ").length - a.split(" ").length);
+
+function normalizeSpaces(s){
+  return String(s||"").replace(/\s+/g," ").trim();
 }
 
-function countryToFlag(country){
-  const map = {
-    "Australia":"🇦🇺","China":"🇨🇳","Japan":"🇯🇵","Bahrain":"🇧🇭","Saudi Arabia":"🇸🇦",
-    "Qatar":"🇶🇦","United States":"🇺🇸","Mexico":"🇲🇽","Brazil":"🇧🇷","Monaco":"🇲🇨",
-    "Spain":"🇪🇸","France":"🇫🇷","Italy":"🇮🇹","United Kingdom":"🇬🇧","Austria":"🇦🇹",
-    "Hungary":"🇭🇺","Belgium":"🇧🇪","Netherlands":"🇳🇱","Singapore":"🇸🇬",
-    "Azerbaijan":"🇦🇿","Canada":"🇨🇦","UAE":"🇦🇪"
-  };
-  return map[country] || "";
-}
-
-function cleanRaceName(raw){
-  let n = String(raw||"").replace(/^Flag of\s+/,"").trim();
-
+function dedupeFullPhrase(n){
+  // Handles "Australia Australia", "Saudi Arabia Saudi Arabia", etc.
   const words = n.split(" ");
-
-  // If duplicated phrase (Australia Australia)
-  if(words.length % 2 === 0){
-    const half = words.length / 2;
+  if(words.length >= 2 && words.length % 2 === 0){
+    const half = words.length/2;
     const first = words.slice(0, half).join(" ");
     const second = words.slice(half).join(" ");
-    if(first === second){
-      n = first;
+    if(first === second) return first;
+  }
+  return n;
+}
+
+function extractCountryFromRace(raw){
+  let n = normalizeSpaces(String(raw||"").replace(/^Flag of\s+/,""));
+
+  // First kill exact duplicated full phrase
+  n = dedupeFullPhrase(n);
+
+  // Now find the longest matching prefix
+  let matched = "";
+  for(const c of COUNTRY_PREFIXES){
+    if(n === c || n.startsWith(c + " ")){
+      matched = c;
+      break;
     }
   }
 
-  // Remove trailing city (Miami, Abu Dhabi, Las Vegas etc)
-  const citySuffixes = ["Miami","Abu","Vegas","Romagna"];
-  let parts = n.split(" ");
-  if(citySuffixes.includes(parts[parts.length-1])){
-    parts.pop();
-    n = parts.join(" ");
+  // Fallback: first word
+  if(!matched){
+    matched = n.split(" ")[0] || "";
   }
 
-  n = normalizeCountry(n);
-  const flag = countryToFlag(n);
-  return flag ? `${n} ${flag}` : n;
+  // Normalize to canonical country name
+  const country = COUNTRY_ALIASES[matched] || matched;
+
+  return country;
 }
+
+function formatRaceWithFlag(raw){
+  const country = extractCountryFromRace(raw);
+  const flag = FLAG_MAP[country] || "";
+  return flag ? `${country} ${flag}` : country;
+}
+
+/* --- page boot --- */
 
 const driver = cleanDriver(decodeURIComponent(params.get("driver")||""));
 document.getElementById("driverName").textContent = driver;
@@ -191,7 +234,7 @@ function build(){
     const champ=getChampion(season);
 
     (season.races||[]).forEach(race=>{
-      const raceName = cleanRaceName(race.grand_prix || "");
+      const raceLabel = formatRaceWithFlag(race.grand_prix || "");
 
       (race.results||[]).forEach(r=>{
         const d=cleanDriver(r.driver);
@@ -204,7 +247,7 @@ function build(){
 
         allRows.push({
           season:season.season,
-          race:raceName,
+          race:raceLabel,
           grid:r.grid,
           finish:r.position,
           points:r.points
@@ -245,6 +288,7 @@ function renderTable(){
 }
 
 raceFilter.addEventListener("input", renderTable);
+
 loadAll();
 </script>
 
