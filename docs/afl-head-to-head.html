@@ -140,11 +140,10 @@ function displayName(s){
   return s.replace(/\b\w/g,c=>c.toUpperCase());
 }
 
-// venue finder (your venue IS in player rows)
 function findVenue(obj){
   for (const k in obj){
     if (k.toLowerCase().includes("venue") || k.toLowerCase().includes("ground")){
-      if (typeof obj[k] === "string") return obj[k];
+      if (typeof obj[k] === "string" && obj[k].trim()) return obj[k].trim();
     }
   }
   return "";
@@ -167,7 +166,7 @@ async function loadAllSeasons(){
       const matchMap = {};
 
       raw.forEach(p=>{
-        if(!p.match_id) return;   // ✅ THIS is the key fix
+        if(!p.match_id) return;
 
         const key = p.match_id;
 
@@ -175,9 +174,15 @@ async function loadAllSeasons(){
           matchMap[key] = {
             season: p.season,
             round: p.round,
-            venue: findVenue(p),
+            venue: "",
             teams: {}
           };
+        }
+
+        // ✅ KEEP TRYING until venue found
+        if(!matchMap[key].venue){
+          const v = findVenue(p);
+          if(v) matchMap[key].venue = v;
         }
 
         const team = p.played_for;
