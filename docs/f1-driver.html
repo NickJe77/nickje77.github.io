@@ -94,19 +94,28 @@ function cleanDriver(name){
   return String(name||"").replace(/\s[A-Z]{3}$/,"").trim();
 }
 
-function cleanRaceName(name){
-  let n = String(name||"")
-    .replace(/^Flag of\s+/,"")
-    .trim();
+function countryToFlag(country){
+  const map = {
+    "Australia":"🇦🇺","China":"🇨🇳","Japan":"🇯🇵","Bahrain":"🇧🇭","Saudi Arabia":"🇸🇦",
+    "Qatar":"🇶🇦","United States":"🇺🇸","Mexico":"🇲🇽","Brazil":"🇧🇷","Monaco":"🇲🇨",
+    "Spain":"🇪🇸","France":"🇫🇷","Italy":"🇮🇹","United Kingdom":"🇬🇧","Austria":"🇦🇹",
+    "Hungary":"🇭🇺","Belgium":"🇧🇪","Netherlands":"🇳🇱","Singapore":"🇸🇬",
+    "Azerbaijan":"🇦🇿","Canada":"🇨🇦","UAE":"🇦🇪","Abu Dhabi":"🇦🇪"
+  };
+  return map[country] || "";
+}
 
-  // remove duplicate last word (Australia Australia, China China)
+function cleanRaceName(name){
+  let n = String(name||"").replace(/^Flag of\s+/,"").trim();
+
   const parts = n.split(" ");
-  if(parts.length > 1 && parts[parts.length-1] === parts[parts.length-2]){
+  if(parts.length>1 && parts[parts.length-1]===parts[parts.length-2]){
     parts.pop();
     n = parts.join(" ");
   }
 
-  return n;
+  const flag = countryToFlag(n);
+  return flag ? `${n} ${flag}` : n;
 }
 
 const driver = cleanDriver(decodeURIComponent(params.get("driver")||""));
@@ -131,8 +140,7 @@ async function loadAll(){
     try{
       const r = await fetch(`data/f1/${y}.json`);
       if(!r.ok) continue;
-      const d = await r.json();
-      seasonsData.push(d);
+      seasonsData.push(await r.json());
     }catch(e){}
   }
   build();
@@ -162,7 +170,7 @@ function build(){
 
       (race.results||[]).forEach(r=>{
         const d=cleanDriver(r.driver);
-        if(d !== driver) return;
+        if(d!==driver) return;
 
         races++;
         if(Number(r.position)===1) wins++;
@@ -179,9 +187,7 @@ function build(){
       });
     });
 
-    if(champ === driver){
-      titleSeasons.add(season.season);
-    }
+    if(champ===driver) titleSeasons.add(season.season);
   });
 
   totalRaces.textContent=races;
