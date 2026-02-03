@@ -14,42 +14,17 @@ body{
   margin:0;
 }
 
-/* HERO */
-.hero{
-  width:100%;
-  height:260px;
-  position:relative;
-  overflow:hidden;
-}
-.hero img{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-}
-.hero::after{
-  content:"";
-  position:absolute;
-  inset:0;
-  background:linear-gradient(to bottom, rgba(0,0,0,0.35), rgba(0,0,0,0.55));
-}
+.hero{width:100%;height:260px;overflow:hidden;}
+.hero img{width:100%;height:100%;object-fit:cover;}
 
-/* NAV */
 .navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px 0;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
-  background:#fff;
+  display:flex;justify-content:center;gap:22px;
+  padding:16px 0;border-bottom:1px solid #ddd;
+  font-weight:600;background:#fff;
 }
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 
-.page-wrap{
-  max-width:1200px;
-  margin:0 auto;
-  padding:30px 20px 60px;
-}
+.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px 60px;}
 
 h1{text-align:center;margin-bottom:6px;}
 p{text-align:center;color:#555;margin-bottom:20px;}
@@ -68,24 +43,12 @@ select,input{
   font-size:14px;
 }
 
-table{
-  width:100%;
-  border-collapse:collapse;
-}
-th,td{
-  border-bottom:1px solid #ddd;
-  padding:8px 10px;
-  text-align:center;
-  cursor:pointer;
-}
+table{width:100%;border-collapse:collapse;}
+th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:center;cursor:pointer;}
 th{background:#f0f0f0;}
 tr:nth-child(even){background:#f6f9ff;}
 
-a.team-link{
-  color:#0056d6;
-  text-decoration:none;
-  font-weight:600;
-}
+a.team-link{color:#0056d6;text-decoration:none;font-weight:600;}
 a.team-link:hover{text-decoration:underline;}
 </style>
 </head>
@@ -144,34 +107,17 @@ let sortDir = -1;
 function cleanConstructor(name){
   if(!name) return "";
   let n = String(name).trim();
-
-  // Remove engine suppliers
-  n = n.replace(/-Mercedes.*/i,"");
-  n = n.replace(/-Honda.*/i,"");
-  n = n.replace(/-Renault.*/i,"");
-  n = n.replace(/-Ford.*/i,"");
-  n = n.replace(/-BMW.*/i,"");
-  n = n.replace(/-TAG.*/i,"");
-  n = n.replace(/-Cosworth.*/i,"");
-  n = n.replace(/-Ferrari.*/i,"");
-  n = n.replace(/-Peugeot.*/i,"");
-  n = n.replace(/-Yamaha.*/i,"");
-  n = n.replace(/-Hart.*/i,"");
-
-  n = n.replace(/\s+/g," ").trim();
-
+  n = n.replace(/-.*$/,"").replace(/\s+/g," ").trim();
   const low = n.toLowerCase();
 
-  /* FORCE MERGES */
-  if(low.includes("red bull") || low.startsWith("rbr")) return "Red Bull";
+  if(low.includes("red bull")) return "Red Bull";
   if(low.startsWith("mclaren")) return "McLaren";
   if(low.startsWith("lotus")) return "Lotus";
   if(low.startsWith("brabham")) return "Brabham";
   if(low.startsWith("benetton")) return "Benetton";
   if(low.startsWith("toro rosso")) return "Toro Rosso";
   if(low.startsWith("alphatauri")) return "AlphaTauri";
-  if(low.startsWith("sauber")) return "Sauber";
-  if(low.startsWith("bmw sauber")) return "Sauber";
+  if(low.startsWith("sauber") || low.startsWith("bmw sauber")) return "Sauber";
   if(low.startsWith("alfa romeo")) return "Alfa Romeo";
   if(low.startsWith("williams")) return "Williams";
   if(low.startsWith("ferrari")) return "Ferrari";
@@ -182,8 +128,9 @@ function cleanConstructor(name){
   return n;
 }
 
+/* SEASON DROPDOWN */
 seasonSelect.innerHTML = `<option value="all">All Time</option>`;
-for(let y=startYear; y<=endYear; y++){
+for(let y=startYear;y<=endYear;y++){
   const opt=document.createElement("option");
   opt.value=y;
   opt.textContent=y;
@@ -196,27 +143,37 @@ filterBox.addEventListener("input", renderTable);
 document.querySelectorAll("th").forEach(th=>{
   th.addEventListener("click", ()=>{
     const key = th.dataset.key;
-    if(sortKey === key){
-      sortDir *= -1;
+    if(sortKey===key){
+      sortDir*=-1;
     }else{
-      sortKey = key;
-      sortDir = -1;
+      sortKey=key;
+      sortDir=-1;
     }
     renderTable();
   });
 });
 
-/* FAST PARALLEL LOAD */
+/* FAST BATCH LOADER */
 async function loadAllSeasons(){
   tableBody.innerHTML = "Loading all seasons…";
 
-  const promises = [];
-  for(let y=startYear; y<=endYear; y++){
-    promises.push(fetch(`data/f1/${y}.json`).then(r=>r.ok?r.json():null));
-  }
+  let years=[];
+  for(let y=startYear;y<=endYear;y++) years.push(y);
 
-  allSeasonData = (await Promise.all(promises)).filter(x=>x);
-  buildStats(allSeasonData);
+  const batchSize = 10;
+
+  for(let i=0;i<years.length;i+=batchSize){
+    const batch = years.slice(i,i+batchSize);
+
+    const promises = batch.map(y =>
+      fetch(`data/f1/${y}.json`).then(r=>r.ok?r.json():null)
+    );
+
+    const results = await Promise.all(promises);
+    results.filter(x=>x).forEach(d=>allSeasonData.push(d));
+
+    buildStats(allSeasonData);
+  }
 }
 
 async function loadSeason(){
@@ -247,10 +204,7 @@ function buildStats(seasons){
   seasons.forEach(data=>{
     (data.races||[]).forEach(race=>{
       (race.results||[]).forEach(r=>{
-        const rawTeam = r.team;
-        if(!rawTeam) return;
-
-        const team = cleanConstructor(rawTeam);
+        const team = cleanConstructor(r.team);
         if(!team) return;
 
         if(!stats[team]){
@@ -275,9 +229,7 @@ function renderTable(){
     .filter(([name])=>name.toLowerCase().includes(filter));
 
   rows.sort((a,b)=>{
-    let av = a[1][sortKey];
-    let bv = b[1][sortKey];
-    return (bv-av)*sortDir;
+    return (a[1][sortKey] - b[1][sortKey]) * sortDir;
   });
 
   rows.forEach(([name,s])=>{
