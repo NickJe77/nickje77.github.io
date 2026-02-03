@@ -140,31 +140,6 @@ function displayName(s){
   return s.replace(/\b\w/g,c=>c.toUpperCase());
 }
 
-function canonicalRound(r){
-  const t=(r||"").toLowerCase();
-  if(t.includes("elimination")) return "Elimination Final";
-  if(t.includes("qualifying")) return "Qualifying Final";
-  if(t.includes("semi")) return "Semi Final";
-  if(t.includes("preliminary")) return "Preliminary Final";
-  if(t.includes("grand")) return "Grand Final";
-  return (r||"").trim();
-}
-
-function extractVenue(p){
-  return (
-    p.venue ||
-    p.Venue ||
-    p.ground ||
-    p.Ground ||
-    p.venue_name ||
-    p.match_venue ||
-    p.stadium ||
-    p.ground_name ||
-    p.venue_full ||
-    ""
-  );
-}
-
 async function loadAllSeasons(){
   const LAST_YEAR = 2025;
   const startYear = LAST_YEAR - 5;
@@ -172,55 +147,24 @@ async function loadAllSeasons(){
 
   for(let y=startYear; y<=LAST_YEAR; y++){
     try{
-      const res = await fetch(`./data/afl/players_${y}.json`);
+      const res = await fetch(`./data/afl/afl_${y}.json`);
       if(!res.ok) continue;
 
-      const raw = await res.json();
-      if(!Array.isArray(raw)) continue;
+      const data = await res.json();
+      if(!Array.isArray(data)) continue;
 
-      const matchMap = {};
+      data.forEach(m=>{
+        const home = norm(m.home_team);
+        const away = norm(m.away_team);
+        if(!home || !away) return;
 
-      raw.forEach(p=>{
-        const key = p.season + "|" + p.match_id + "|" + canonicalRound(p.round);
-
-        if(!matchMap[key]){
-          matchMap[key] = {
-            season: p.season,
-            round: canonicalRound(p.round),
-            venue: "",
-            teams: {}
-          };
-        }
-
-        const venueValue = extractVenue(p);
-        if(venueValue && !matchMap[key].venue){
-          matchMap[key].venue = venueValue;
-        }
-
-        const team = p.played_for;
-        if(!team) return;
-
-        const goals = Number(p.G||0);
-        const behinds = Number(p.B||0);
-        const points = goals*6 + behinds;
-
-        if(!matchMap[key].teams[team]) matchMap[key].teams[team] = 0;
-        matchMap[key].teams[team] += points;
-      });
-
-      Object.values(matchMap).forEach(m=>{
-        const teams = Object.keys(m.teams);
-        if(teams.length !== 2) return;
-
-        const home = norm(teams[0]);
-        const away = norm(teams[1]);
-        const hp = m.teams[teams[0]];
-        const ap = m.teams[teams[1]];
+        const hp = Number(m.home_score || 0);
+        const ap = Number(m.away_score || 0);
 
         allMatches.push({
-          season: Number(m.season),
-          round: m.round,
-          venue: m.venue,
+          season: Number(m.season || y),
+          round: m.round || "",
+          venue: m.venue || m.Venue || m.ground || m.Ground || "",
           home,
           away,
           hp,
@@ -276,17 +220,12 @@ function compare(){
     else bWins++;
   });
 
-  const lastN = Math.min(10,games.length);
-  const lastGames = games.slice(0,lastN);
-  const avgPoints = (lastGames.reduce((s,g)=>s+g.total,0)/lastN).toFixed(1);
-
   const A=displayName(a);
   const B=displayName(b);
 
   let html=`
     <h3>${A} vs ${B}</h3>
     <p>Games: ${games.length} | ${A} wins: ${aWins} | Draws: ${draws} | ${B} wins: ${bWins}</p>
-    <p>Last ${lastN} games average total points: ${avgPoints}</p>
 
     <table>
     <tr>
