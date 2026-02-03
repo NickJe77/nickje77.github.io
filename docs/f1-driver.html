@@ -9,22 +9,52 @@
 
 <style>
 body{font-family:system-ui,Arial,sans-serif;margin:0;}
-.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;background:#fff;}
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 
-.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px;}
+.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px 60px;}
 
 h1{text-align:center;margin-bottom:10px;}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:20px;}
-.stat{border:1px solid #ddd;border-radius:10px;padding:14px;text-align:center;background:#f6f9ff;}
+
+.stats{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:16px;
+  margin-bottom:18px;
+}
+.stat{
+  border:1px solid #ddd;
+  border-radius:12px;
+  padding:14px;
+  text-align:center;
+  background:#f6f9ff;
+}
 .stat h3{margin:0 0 5px;font-size:14px;color:#555;}
 .stat div{font-size:22px;font-weight:700;}
 
-.controls{text-align:center;margin-bottom:15px;}
-.controls input{padding:8px 12px;border-radius:8px;border:1px solid #ccc;font-size:14px;}
+.controls{
+  display:flex;
+  justify-content:center;
+  gap:12px;
+  margin:12px 0 16px;
+}
+.controls input{
+  padding:8px 12px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  font-size:14px;
+  width:260px;
+}
+
+.status{
+  text-align:center;
+  color:#777;
+  font-size:13px;
+  margin-bottom:10px;
+}
 
 table{width:100%;border-collapse:collapse;}
-th,td{border-bottom:1px solid #ddd;padding:8px;text-align:center;}
+th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:center;}
 th{background:#f0f0f0;}
 tr:nth-child(even){background:#f6f9ff;}
 </style>
@@ -47,11 +77,14 @@ tr:nth-child(even){background:#f6f9ff;}
   <div class="stat"><h3>Wins</h3><div id="totalWins">0</div></div>
   <div class="stat"><h3>Championships</h3><div id="totalTitles">0</div></div>
   <div class="stat"><h3>Poles</h3><div id="totalPoles">0</div></div>
+  <div class="stat"><h3>Points</h3><div id="totalPoints">0.0</div></div>
 </div>
 
 <div class="controls">
   <input id="trackFilter" placeholder="Search track…">
 </div>
+
+<div class="status" id="statusLine">Loading…</div>
 
 <table>
 <thead>
@@ -71,97 +104,156 @@ tr:nth-child(even){background:#f6f9ff;}
 
 <script>
 const params = new URLSearchParams(window.location.search);
-const driver = decodeURIComponent(params.get("driver")||"");
-document.getElementById("driverName").textContent = driver;
+const driverRaw = decodeURIComponent(params.get("driver") || "").trim();
+
+document.getElementById("driverName").textContent = driverRaw || "Driver";
 
 const startYear = 1950;
 const endYear = new Date().getFullYear();
 
-const totalRaces=document.getElementById("totalRaces");
-const totalWins=document.getElementById("totalWins");
-const totalTitles=document.getElementById("totalTitles");
-const totalPoles=document.getElementById("totalPoles");
-const raceTable=document.getElementById("raceTable");
-const trackFilter=document.getElementById("trackFilter");
+const totalRaces = document.getElementById("totalRaces");
+const totalWins  = document.getElementById("totalWins");
+const totalTitles= document.getElementById("totalTitles");
+const totalPoles = document.getElementById("totalPoles");
+const totalPoints= document.getElementById("totalPoints");
 
-let allRows=[];
+const raceTable  = document.getElementById("raceTable");
+const trackFilter= document.getElementById("trackFilter");
+const statusLine = document.getElementById("statusLine");
+
+let allRows = [];
+let titleSeasons = new Set();
 
 function cleanDriver(name){
-  return String(name||"").replace(/\s[A-Z]{3}$/,"");
+  return String(name||"").replace(/\s[A-Z]{3}$/,"").trim();
+}
+const driverKey = cleanDriver(driverRaw);
+
+/* Try multiple possible track fields (your JSON varies by season) */
+function getTrackName(race){
+  // common candidates
+  const a =
+    race.circuitName ||
+    race.track ||
+    race.circuit ||
+    race.circuit_id ||
+    "";
+
+  // if circuit is an object
+  const b =
+    (race.circuit && typeof race.circuit === "object")
+      ? (race.circuit.name || race.circuit.circuitName || race.circuit.Location?.locality || "")
+      : "";
+
+  // if circuit is stored as circuitId and you have name elsewhere (not available here)
+  // fallback to raceName if nothing else
+  const out = String(b || a || "").trim();
+  return out || "";
 }
 
-async function loadAll(){
-  const promises=[];
-  for(let y=startYear;y<=endYear;y++){
-    promises.push(fetch(`data/f1/${y}.json`).then(r=>r.ok?r.json():null));
-  }
-  const seasons=(await Promise.all(promises)).filter(x=>x);
-  build(seasons);
-}
-
-function getChampion(season){
-  const totals={};
-  (season.races||[]).forEach(r=>{
-    (r.results||[]).forEach(x=>{
-      const d=cleanDriver(x.driver);
-      totals[d]=(totals[d]||0)+(Number(x.points)||0);
+/* Champion per season = driver with most points that season (based on your dataset) */
+function getSeasonChampionKey(season){
+  const totals = {};
+  (season.races||[]).forEach(race=>{
+    (race.results||[]).forEach(r=>{
+      const d = cleanDriver(r.driver);
+      if(!d) return;
+      totals[d] = (totals[d] || 0) + (Number(r.points) || 0);
     });
   });
-  return Object.entries(totals).sort((a,b)=>b[1]-a[1])[0]?.[0];
+  return Object.entries(totals).sort((x,y)=>y[1]-x[1])[0]?.[0] || "";
 }
 
-function build(seasons){
-  let races=0,wins=0,poles=0,titles=0;
-  allRows=[];
+/* Progressive load in batches */
+async function loadAll(){
+  if(!driverKey){
+    statusLine.textContent = "No driver selected.";
+    return;
+  }
 
-  seasons.forEach(season=>{
-    const champ=getChampion(season);
+  const years = [];
+  for(let y=startYear;y<=endYear;y++) years.push(y);
 
-    (season.races||[]).forEach(race=>{
-      (race.results||[]).forEach(r=>{
-        const d=cleanDriver(r.driver);
-        if(d!==driver) return;
+  const batchSize = 10;
+  let loaded = 0;
 
-        races++;
-        if(Number(r.position)===1) wins++;
-        if(Number(r.grid)===1) poles++;
-        if(d===champ) titles++;
+  // running totals
+  let races=0,wins=0,poles=0,points=0;
 
-        allRows.push({
-          season:season.season,
-          race:race.raceName||"",
-          track:race.circuit||race.track||"",
-          grid:r.grid,
-          finish:r.position,
-          points:r.points
+  allRows = [];
+  titleSeasons = new Set();
+
+  for(let i=0;i<years.length;i+=batchSize){
+    const batch = years.slice(i, i+batchSize);
+
+    const results = await Promise.all(
+      batch.map(y => fetch(`./data/f1/${y}.json`).then(r => r.ok ? r.json() : null).catch(()=>null))
+    );
+
+    results.filter(Boolean).forEach(season=>{
+      const champKey = getSeasonChampionKey(season);
+      if(champKey && champKey === driverKey){
+        titleSeasons.add(season.season);
+      }
+
+      (season.races||[]).forEach(race=>{
+        const raceName = String(race.raceName || race.name || "").trim();
+        const track = getTrackName(race);
+
+        (race.results||[]).forEach(r=>{
+          const d = cleanDriver(r.driver);
+          if(d !== driverKey) return;
+
+          races++;
+          points += Number(r.points) || 0;
+
+          if(Number(r.position) === 1) wins++;
+          if(Number(r.grid) === 1) poles++;
+
+          allRows.push({
+            season: season.season,
+            race: raceName,
+            track: track,
+            grid: r.grid,
+            finish: r.position,
+            points: r.points
+          });
         });
       });
     });
-  });
 
-  totalRaces.textContent=races;
-  totalWins.textContent=wins;
-  totalPoles.textContent=poles;
-  totalTitles.textContent=titles;
+    loaded += batch.length;
 
-  renderTable();
+    // update top boxes progressively so you see it fill in
+    totalRaces.textContent = races;
+    totalWins.textContent  = wins;
+    totalPoles.textContent = poles;
+    totalTitles.textContent= titleSeasons.size;   // ✅ once per season
+    totalPoints.textContent= points.toFixed(1);
+
+    statusLine.textContent = `Loading… ${loaded}/${years.length} seasons`;
+    renderTable(); // progressively draw
+  }
+
+  statusLine.textContent = `Loaded ${allRows.length} race results for ${driverRaw}`;
 }
 
 function renderTable(){
-  const f=trackFilter.value.toLowerCase();
-  raceTable.innerHTML="";
+  const f = trackFilter.value.toLowerCase();
+  raceTable.innerHTML = "";
 
-  allRows.filter(r=>r.track.toLowerCase().includes(f))
-    .sort((a,b)=>b.season-a.season)
+  allRows
+    .filter(r => (r.track||"").toLowerCase().includes(f))
+    .sort((a,b)=>Number(b.season)-Number(a.season))
     .forEach(r=>{
-      const tr=document.createElement("tr");
-      tr.innerHTML=`
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
         <td>${r.season}</td>
-        <td>${r.race}</td>
-        <td>${r.track}</td>
-        <td>${r.grid}</td>
-        <td>${r.finish}</td>
-        <td>${r.points}</td>
+        <td>${r.race || ""}</td>
+        <td>${r.track || ""}</td>
+        <td>${r.grid ?? ""}</td>
+        <td>${r.finish ?? ""}</td>
+        <td>${(Number(r.points)||0).toFixed(1)}</td>
       `;
       raceTable.appendChild(tr);
     });
