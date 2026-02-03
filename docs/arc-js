@@ -1,65 +1,57 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const tbody = document.querySelector(".archive-table tbody");
+  const tbody = document.querySelector("tbody");
 
   const yearFilter = document.getElementById("yearFilter");
   const raceFilter = document.getElementById("raceFilter");
   const winnerFilter = document.getElementById("winnerFilter");
+  const jockeyFilter = document.getElementById("jockeyFilter");
 
   const raceList = document.getElementById("raceList");
   const winnerList = document.getElementById("winnerList");
+  const jockeyList = document.getElementById("jockeyList");
 
   let allRows = [];
 
-  fetch("arc-results.json")
-    .then(res => {
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      return res.json();
-    })
+  console.log("Arc JS loaded");
+
+  // JSON must be in SAME folder as this file
+  fetch("arc.json")
+    .then(res => res.json())
     .then(data => {
-      allRows = data.sort((a, b) => (b.year || 0) - (a.year || 0));
+      console.log("Rows loaded:", data.length);
+
+      allRows = data.sort((a, b) => b.year - a.year);
+
       populateFilters(allRows);
       renderTable(allRows);
     })
     .catch(err => {
-      console.error("Arc data load failed:", err);
+      console.error("Arc JSON load FAILED:", err);
     });
 
   function populateFilters(data) {
-    const years = [...new Set(data.map(r => r.year).filter(Boolean))].sort((a, b) => b - a);
-    const races = [...new Set(data.map(r => r.race).filter(Boolean))].sort();
-    const winners = [...new Set(data.map(r => r.winner).filter(Boolean))].sort();
+    const years = [...new Set(data.map(r => r.year))].sort((a,b)=>b-a);
+    const races = [...new Set(data.map(r => r.race))].sort();
+    const winners = [...new Set(data.map(r => r.winner))].sort();
+    const jockeys = [...new Set(data.map(r => r.jockey))].sort();
 
-    years.forEach(y => {
-      const opt = document.createElement("option");
-      opt.value = y;
-      opt.textContent = y;
-      yearFilter.appendChild(opt);
-    });
-
-    races.forEach(r => {
-      const opt = document.createElement("option");
-      opt.value = r;
-      raceList.appendChild(opt);
-    });
-
-    winners.forEach(w => {
-      const opt = document.createElement("option");
-      opt.value = w;
-      winnerList.appendChild(opt);
-    });
+    years.forEach(y => yearFilter.innerHTML += `<option value="${y}">${y}</option>`);
+    races.forEach(r => raceList.innerHTML += `<option value="${r}">`);
+    winners.forEach(w => winnerList.innerHTML += `<option value="${w}">`);
+    jockeys.forEach(j => jockeyList.innerHTML += `<option value="${j}">`);
   }
 
   function applyFilters() {
-    const yearVal = yearFilter.value;
-    const raceVal = raceFilter.value.toLowerCase();
-    const winnerVal = winnerFilter.value.toLowerCase();
+    const y = yearFilter.value;
+    const r = raceFilter.value.toLowerCase();
+    const w = winnerFilter.value.toLowerCase();
+    const j = jockeyFilter.value.toLowerCase();
 
-    const filtered = allRows.filter(r =>
-      (!yearVal || String(r.year) === yearVal) &&
-      (!raceVal || String(r.race).toLowerCase().includes(raceVal)) &&
-      (!winnerVal || String(r.winner).toLowerCase().includes(winnerVal))
+    const filtered = allRows.filter(row =>
+      (!y || row.year == y) &&
+      (!r || row.race.toLowerCase().includes(r)) &&
+      (!w || row.winner.toLowerCase().includes(w)) &&
+      (!j || row.jockey.toLowerCase().includes(j))
     );
 
     renderTable(filtered);
@@ -68,21 +60,26 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderTable(rows) {
     tbody.innerHTML = "";
 
+    const fragment = document.createDocumentFragment();
+
     rows.forEach(r => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${r.year || ""}</td>
-        <td>${r.race || ""}</td>
-        <td>${r.track || ""}</td>
-        <td>${r.winner || ""}</td>
+        <td>${r.year}</td>
+        <td>${r.race}</td>
+        <td>${r.winner}</td>
         <td>${r.trainer || ""}</td>
         <td>${r.jockey || ""}</td>
+        <td>${r.sp || ""}</td>
       `;
-      tbody.appendChild(tr);
+      fragment.appendChild(tr);
     });
+
+    tbody.appendChild(fragment);
   }
 
   yearFilter.addEventListener("change", applyFilters);
   raceFilter.addEventListener("input", applyFilters);
   winnerFilter.addEventListener("input", applyFilters);
+  jockeyFilter.addEventListener("input", applyFilters);
 });
