@@ -140,31 +140,74 @@ function displayName(s){
   return s.replace(/\b\w/g,c=>c.toUpperCase());
 }
 
+// venue finder (your venue IS in player rows)
+function findVenue(obj){
+  for (const k in obj){
+    if (k.toLowerCase().includes("venue") || k.toLowerCase().includes("ground")){
+      if (typeof obj[k] === "string") return obj[k];
+    }
+  }
+  return "";
+}
+
 async function loadAllSeasons(){
   const LAST_YEAR = 2025;
   const startYear = LAST_YEAR - 5;
   const teamSet = new Set();
+  allMatches = [];
 
   for(let y=startYear; y<=LAST_YEAR; y++){
     try{
-      const res = await fetch(`./data/afl/afl_${y}.json`);
+      const res = await fetch(`./data/afl/players_${y}.json`);
       if(!res.ok) continue;
 
-      const data = await res.json();
-      if(!Array.isArray(data)) continue;
+      const raw = await res.json();
+      if(!Array.isArray(raw)) continue;
 
-      data.forEach(m=>{
-        const home = norm(m.home_team);
-        const away = norm(m.away_team);
-        if(!home || !away) return;
+      const matchMap = {};
 
-        const hp = Number(m.home_score || 0);
-        const ap = Number(m.away_score || 0);
+      raw.forEach(p=>{
+        if(!p.match_id) return;   // ✅ THIS is the key fix
+
+        const key = p.match_id;
+
+        if(!matchMap[key]){
+          matchMap[key] = {
+            season: p.season,
+            round: p.round,
+            venue: findVenue(p),
+            teams: {}
+          };
+        }
+
+        const team = p.played_for;
+        if(!team) return;
+
+        const goals = Number(p.G || 0);
+        const behinds = Number(p.B || 0);
+        const points = goals * 6 + behinds;
+
+        if(!matchMap[key].teams[team]) matchMap[key].teams[team] = 0;
+        matchMap[key].teams[team] += points;
+      });
+
+      Object.values(matchMap).forEach(m=>{
+        const teams = Object.keys(m.teams);
+        if(teams.length !== 2) return;
+
+        const homeTeam = teams[0];
+        const awayTeam = teams[1];
+
+        const home = norm(homeTeam);
+        const away = norm(awayTeam);
+
+        const hp = m.teams[homeTeam];
+        const ap = m.teams[awayTeam];
 
         allMatches.push({
-          season: Number(m.season || y),
-          round: m.round || "",
-          venue: m.venue || m.Venue || m.ground || m.Ground || "",
+          season: Number(m.season),
+          round: m.round,
+          venue: m.venue,
           home,
           away,
           hp,
