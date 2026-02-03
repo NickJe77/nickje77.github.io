@@ -118,7 +118,6 @@ tr:nth-child(even){background:#f6f9ff;}
 <script>
 const params = new URLSearchParams(window.location.search);
 const driver = decodeURIComponent(params.get("driver") || "");
-
 document.getElementById("driverName").textContent = driver;
 
 const seasonTable = document.getElementById("seasonTable");
@@ -163,13 +162,25 @@ function setActiveYear(y){
   else document.getElementById("year-"+y)?.classList.add("active");
 }
 
+/* 🔥 FAST LOADER */
 async function loadAll(){
-  const promises=[];
-  for(let y=startYear;y<=endYear;y++){
-    promises.push(fetch(`data/f1/${y}.json`).then(r=>r.ok?r.json():null));
+  let years=[];
+  for(let y=startYear;y<=endYear;y++) years.push(y);
+
+  const batchSize = 10;
+
+  for(let i=0;i<years.length;i+=batchSize){
+    const batch = years.slice(i,i+batchSize);
+
+    const promises = batch.map(y =>
+      fetch(`data/f1/${y}.json`).then(r=>r.ok?r.json():null)
+    );
+
+    const results = await Promise.all(promises);
+    results.filter(x=>x).forEach(d=>allData.push(d));
+
+    render();
   }
-  allData=(await Promise.all(promises)).filter(x=>x);
-  render();
 }
 
 function selectYear(y){
