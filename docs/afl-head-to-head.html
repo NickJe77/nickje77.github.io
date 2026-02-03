@@ -148,61 +148,25 @@ async function loadAllSeasons(){
 
   for(let y=startYear; y<=LAST_YEAR; y++){
     try{
-      const res = await fetch(`./data/afl/players_${y}.json`);
+      const res = await fetch(`./data/afl/afl_${y}.json`);
       if(!res.ok) continue;
 
-      const raw = await res.json();
-      if(!Array.isArray(raw)) continue;
+      const games = await res.json();
+      if(!Array.isArray(games)) continue;
 
-      const matchMap = {};
+      games.forEach(g=>{
+        if(!g.home_team || !g.away_team) return;
 
-      raw.forEach(p=>{
-        if(!p.match_id) return;
+        const home = norm(g.home_team);
+        const away = norm(g.away_team);
 
-        const key = p.match_id;
-
-        if(!matchMap[key]){
-          matchMap[key] = {
-            season: p.season,
-            round: p.round,
-            venue: "",
-            teams: {}
-          };
-        }
-
-        // ✅ ALWAYS overwrite when venue exists
-        if(p.venue){
-          matchMap[key].venue = p.venue;
-        }
-
-        const team = p.played_for;
-        if(!team) return;
-
-        const goals = Number(p.G || 0);
-        const behinds = Number(p.B || 0);
-        const points = goals * 6 + behinds;
-
-        if(!matchMap[key].teams[team]) matchMap[key].teams[team] = 0;
-        matchMap[key].teams[team] += points;
-      });
-
-      Object.values(matchMap).forEach(m=>{
-        const teams = Object.keys(m.teams);
-        if(teams.length !== 2) return;
-
-        const homeTeam = teams[0];
-        const awayTeam = teams[1];
-
-        const home = norm(homeTeam);
-        const away = norm(awayTeam);
-
-        const hp = m.teams[homeTeam];
-        const ap = m.teams[awayTeam];
+        const hp = Number(g.home_points ?? 0);
+        const ap = Number(g.away_points ?? 0);
 
         allMatches.push({
-          season: Number(m.season),
-          round: m.round,
-          venue: m.venue,
+          season: g.season ?? y,
+          round: g.round ?? "",
+          venue: g.venue ?? "",
           home,
           away,
           hp,
