@@ -14,7 +14,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   console.log("Royal Ascot JS loaded");
 
-  // JSON MUST be in same folder as this file
+  // JSON must be in SAME folder as this file
   fetch("royal-ascot.json")
     .then(res => res.json())
     .then(data => {
