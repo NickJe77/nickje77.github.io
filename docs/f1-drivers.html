@@ -28,26 +28,26 @@ body{
 }
 
 .page-wrap{
-  max-width:900px;
+  max-width:1100px;
   margin:0 auto;
-  padding:30px 20px;
+  padding:30px 20px 60px;
 }
 
-h1{
-  text-align:center;
-  margin-bottom:15px;
-}
+h1{text-align:center;margin-bottom:6px;}
+p{text-align:center;color:#555;margin-bottom:20px;}
 
 .controls{
-  text-align:center;
-  margin-bottom:15px;
+  display:flex;
+  justify-content:center;
+  gap:12px;
+  margin-bottom:20px;
 }
-.controls input{
+
+select,input{
   padding:8px 12px;
   border-radius:8px;
   border:1px solid #ccc;
   font-size:14px;
-  width:250px;
 }
 
 table{
@@ -56,24 +56,21 @@ table{
 }
 th,td{
   border-bottom:1px solid #ddd;
-  padding:10px;
+  padding:8px 10px;
   text-align:left;
 }
 th{
   background:#f0f0f0;
+  cursor:pointer;
 }
-tr:nth-child(even){
-  background:#f6f9ff;
-}
+tr:nth-child(even){background:#f6f9ff;}
 
 a.driver-link{
   color:#0056d6;
   text-decoration:none;
   font-weight:600;
 }
-a.driver-link:hover{
-  text-decoration:underline;
-}
+a.driver-link:hover{text-decoration:underline;}
 </style>
 </head>
 
@@ -85,20 +82,25 @@ a.driver-link:hover{
 </div>
 
 <div class="page-wrap">
-  <h1>Formula 1 Drivers</h1>
+<h1>Formula 1 Drivers</h1>
+<p>Career statistics across all Formula 1 seasons.</p>
 
-  <div class="controls">
-    <input id="filterBox" placeholder="Filter driver…">
-  </div>
+<div class="controls">
+  <input id="filterBox" type="text" placeholder="Filter driver…">
+</div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Driver</th>
-      </tr>
-    </thead>
-    <tbody id="driverTable"></tbody>
-  </table>
+<table>
+<thead>
+<tr>
+  <th onclick="setSort('driver')">Driver</th>
+  <th onclick="setSort('starts')">Starts</th>
+  <th onclick="setSort('wins')">Wins</th>
+  <th onclick="setSort('points')">Points</th>
+  <th onclick="setSort('pps')">Pts / Start</th>
+</tr>
+</thead>
+<tbody id="driverTable"></tbody>
+</table>
 </div>
 
 <script>
@@ -108,53 +110,100 @@ const endYear = new Date().getFullYear();
 const tableBody = document.getElementById("driverTable");
 const filterBox = document.getElementById("filterBox");
 
-let drivers = new Set();
+let currentStats = {};
+let sortKey = "points";
+let sortDir = "desc";
 
 function cleanDriver(name){
-  return String(name || "").replace(/\s[A-Z]{3}$/, "");
+  return String(name||"").replace(/\s[A-Z]{3}$/,"");
 }
 
-async function loadDrivers(){
-  for(let y = startYear; y <= endYear; y++){
+async function loadAll(){
+  const stats = {};
+
+  for(let y=startYear;y<=endYear;y++){
     try{
       const r = await fetch(`data/f1/${y}.json`);
       if(!r.ok) continue;
       const d = await r.json();
 
-      (d.races || []).forEach(race=>{
-        (race.results || []).forEach(r=>{
-          const name = cleanDriver(r.driver);
-          if(name) drivers.add(name);
+      (d.races||[]).forEach(race=>{
+        (race.results||[]).forEach(r=>{
+          const driver = cleanDriver(r.driver);
+          if(!driver) return;
+
+          if(!stats[driver]){
+            stats[driver]={driver, starts:0, wins:0, points:0, pps:0};
+          }
+
+          stats[driver].starts++;
+          if(Number(r.position)===1) stats[driver].wins++;
+          stats[driver].points += Number(r.points)||0;
         });
       });
     }catch(e){}
   }
-  render();
+
+  Object.values(stats).forEach(d=>{
+    d.pps = d.starts ? d.points / d.starts : 0;
+  });
+
+  currentStats = stats;
+  renderTable();
 }
 
-function render(){
+function setSort(key){
+  if(sortKey === key){
+    sortDir = sortDir === "asc" ? "desc" : "asc";
+  }else{
+    sortKey = key;
+    sortDir = key === "driver" ? "asc" : "desc";
+  }
+  renderTable();
+}
+
+function renderTable(){
   const filter = filterBox.value.toLowerCase();
-  tableBody.innerHTML = "";
+  tableBody.innerHTML="";
 
-  [...drivers]
-    .sort((a,b)=>a.localeCompare(b))
-    .filter(d=>d.toLowerCase().includes(filter))
-    .forEach(name=>{
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>
-          <a class="driver-link" href="f1-driver.html?driver=${encodeURIComponent(name)}">
-            ${name}
-          </a>
-        </td>
-      `;
-      tableBody.appendChild(tr);
-    });
+  let rows = Object.values(currentStats)
+    .filter(r => r.driver.toLowerCase().includes(filter));
+
+  rows.sort((a,b)=>{
+    let v1 = a[sortKey];
+    let v2 = b[sortKey];
+
+    if(sortKey === "driver"){
+      return sortDir==="asc"
+        ? v1.localeCompare(v2)
+        : v2.localeCompare(v1);
+    }else{
+      return sortDir==="asc"
+        ? v1 - v2
+        : v2 - v1;
+    }
+  });
+
+  rows.forEach(r=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>
+        <a class="driver-link" href="f1-driver.html?driver=${encodeURIComponent(r.driver)}">
+          ${r.driver}
+        </a>
+      </td>
+      <td>${r.starts}</td>
+      <td>${r.wins}</td>
+      <td>${r.points.toFixed(1)}</td>
+      <td>${r.pps.toFixed(2)}</td>
+    `;
+    tableBody.appendChild(tr);
+  });
 }
 
-filterBox.addEventListener("input", render);
+filterBox.addEventListener("input", renderTable);
 
-loadDrivers();
+loadAll();
 </script>
 
 </body>
