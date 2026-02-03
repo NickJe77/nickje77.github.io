@@ -71,7 +71,8 @@ tr:nth-child(even){background:#f6f9ff;}
 
 <script>
 const params = new URLSearchParams(window.location.search);
-const driver = decodeURIComponent(params.get("driver")||"");
+const rawDriver = decodeURIComponent(params.get("driver")||"");
+const driver = cleanDriver(rawDriver);
 document.getElementById("driverName").textContent = driver;
 
 const startYear = 1950;
@@ -91,13 +92,12 @@ function cleanDriver(name){
   return String(name||"").replace(/\s[A-Z]{3}$/,"");
 }
 
-/* 🔥 FAST BATCH LOADER */
+/* FAST LOAD */
 async function loadAll(){
   const years=[];
   for(let y=startYear;y<=endYear;y++) years.push(y);
 
   const batchSize = 10;
-  seasonsData=[];
 
   for(let i=0;i<years.length;i+=batchSize){
     const batch = years.slice(i,i+batchSize);
@@ -112,7 +112,7 @@ async function loadAll(){
   build();
 }
 
-/* FIND SEASON CHAMPION */
+/* CHAMPION */
 function getChampion(season){
   const totals={};
   (season.races||[]).forEach(r=>{
@@ -124,14 +124,15 @@ function getChampion(season){
   return Object.entries(totals).sort((a,b)=>b[1]-a[1])[0]?.[0];
 }
 
-/* BUILD DRIVER DATA */
+/* BUILD */
 function build(){
-  let races=0,wins=0,poles=0,titles=0;
-  allRows=[];
+  let races=0,wins=0,poles=0;
   const titleSeasons = new Set();
+  allRows=[];
 
   seasonsData.forEach(season=>{
-    const champ=getChampion(season);
+    const champ = getChampion(season);
+    const seasonYear = season.season || season.year || "";
 
     (season.races||[]).forEach(race=>{
       (race.results||[]).forEach(r=>{
@@ -143,33 +144,30 @@ function build(){
         if(Number(r.grid)===1) poles++;
 
         allRows.push({
-          season:season.season,
-          race:race.raceName||"",
-          track:race.circuit||race.track||"",
-          grid:r.grid,
-          finish:r.position,
-          points:r.points
+          season: seasonYear,
+          race: race.raceName || "",
+          track: race.circuit || race.track || "",
+          grid: r.grid,
+          finish: r.position,
+          points: r.points
         });
       });
     });
 
-    /* ONLY COUNT TITLE ONCE PER SEASON */
-    if(champ === driver){
-      titleSeasons.add(season.season);
+    if(cleanDriver(champ) === driver){
+      titleSeasons.add(seasonYear);
     }
   });
 
-  titles = titleSeasons.size;
-
-  totalRaces.textContent=races;
-  totalWins.textContent=wins;
-  totalPoles.textContent=poles;
-  totalTitles.textContent=titles;
+  totalRaces.textContent = races;
+  totalWins.textContent = wins;
+  totalPoles.textContent = poles;
+  totalTitles.textContent = titleSeasons.size;
 
   renderTable();
 }
 
-/* TABLE RENDER */
+/* TABLE */
 function renderTable(){
   const f=trackFilter.value.toLowerCase();
   raceTable.innerHTML="";
