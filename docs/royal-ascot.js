@@ -12,7 +12,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   console.log("Royal Ascot JS loaded");
 
-  // ✅ CORRECT PATH
+  // ✅ CORRECT PATH (same folder as HTML)
   fetch("royal-ascot.json")
     .then(res => {
       console.log("Fetch status:", res.status);
