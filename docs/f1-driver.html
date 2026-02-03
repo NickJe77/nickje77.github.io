@@ -94,7 +94,7 @@ function cleanDriver(name){
   return String(name||"").replace(/\s[A-Z]{3}$/,"").trim();
 }
 
-/* --- Country + flag handling --- */
+/* -------- COUNTRY + FLAGS -------- */
 
 const COUNTRY_ALIASES = {
   "United States of America": "United States",
@@ -104,44 +104,25 @@ const COUNTRY_ALIASES = {
 };
 
 const FLAG_MAP = {
-  "Australia":"🇦🇺",
-  "China":"🇨🇳",
-  "Japan":"🇯🇵",
-  "Bahrain":"🇧🇭",
-  "Saudi Arabia":"🇸🇦",
-  "Qatar":"🇶🇦",
-  "United States":"🇺🇸",
-  "Mexico":"🇲🇽",
-  "Brazil":"🇧🇷",
-  "Monaco":"🇲🇨",
-  "Spain":"🇪🇸",
-  "France":"🇫🇷",
-  "Italy":"🇮🇹",
-  "United Kingdom":"🇬🇧",
-  "Austria":"🇦🇹",
-  "Hungary":"🇭🇺",
-  "Belgium":"🇧🇪",
-  "Netherlands":"🇳🇱",
-  "Singapore":"🇸🇬",
-  "Azerbaijan":"🇦🇿",
-  "Canada":"🇨🇦",
-  "UAE":"🇦🇪"
+  "Australia":"🇦🇺","China":"🇨🇳","Japan":"🇯🇵","Bahrain":"🇧🇭","Saudi Arabia":"🇸🇦",
+  "Qatar":"🇶🇦","United States":"🇺🇸","Mexico":"🇲🇽","Brazil":"🇧🇷","Monaco":"🇲🇨",
+  "Spain":"🇪🇸","France":"🇫🇷","Italy":"🇮🇹","United Kingdom":"🇬🇧","Austria":"🇦🇹",
+  "Hungary":"🇭🇺","Belgium":"🇧🇪","Netherlands":"🇳🇱","Singapore":"🇸🇬",
+  "Azerbaijan":"🇦🇿","Canada":"🇨🇦","UAE":"🇦🇪"
 };
 
-// Build a list of possible country prefixes, longest-first (so we match "United States of America" before "United States")
 const COUNTRY_PREFIXES = Array.from(
-  new Set([
-    ...Object.keys(COUNTRY_ALIASES),
-    ...Object.keys(FLAG_MAP)
-  ])
+  new Set([...Object.keys(COUNTRY_ALIASES), ...Object.keys(FLAG_MAP)])
 ).sort((a,b)=> b.split(" ").length - a.split(" ").length);
 
 function normalizeSpaces(s){
-  return String(s||"").replace(/\s+/g," ").trim();
+  return String(s||"")
+    .replace(/[’‘]/g,"'")   // normalize curly apostrophes
+    .replace(/\s+/g," ")
+    .trim();
 }
 
 function dedupeFullPhrase(n){
-  // Handles "Australia Australia", "Saudi Arabia Saudi Arabia", etc.
   const words = n.split(" ");
   if(words.length >= 2 && words.length % 2 === 0){
     const half = words.length/2;
@@ -154,11 +135,11 @@ function dedupeFullPhrase(n){
 
 function extractCountryFromRace(raw){
   let n = normalizeSpaces(String(raw||"").replace(/^Flag of\s+/,""));
-
-  // First kill exact duplicated full phrase
   n = dedupeFullPhrase(n);
 
-  // Now find the longest matching prefix
+  // Hard catch for China variants
+  if(n.startsWith("People")) return "China";
+
   let matched = "";
   for(const c of COUNTRY_PREFIXES){
     if(n === c || n.startsWith(c + " ")){
@@ -167,15 +148,11 @@ function extractCountryFromRace(raw){
     }
   }
 
-  // Fallback: first word
   if(!matched){
     matched = n.split(" ")[0] || "";
   }
 
-  // Normalize to canonical country name
-  const country = COUNTRY_ALIASES[matched] || matched;
-
-  return country;
+  return COUNTRY_ALIASES[matched] || matched;
 }
 
 function formatRaceWithFlag(raw){
@@ -184,7 +161,7 @@ function formatRaceWithFlag(raw){
   return flag ? `${country} ${flag}` : country;
 }
 
-/* --- page boot --- */
+/* -------- PAGE LOGIC -------- */
 
 const driver = cleanDriver(decodeURIComponent(params.get("driver")||""));
 document.getElementById("driverName").textContent = driver;
@@ -288,7 +265,6 @@ function renderTable(){
 }
 
 raceFilter.addEventListener("input", renderTable);
-
 loadAll();
 </script>
 
