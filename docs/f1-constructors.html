@@ -83,6 +83,7 @@ a.team-link:hover{text-decoration:underline;}
   <th data-key="constructor">Constructor</th>
   <th data-key="races">Races</th>
   <th data-key="wins">Wins</th>
+  <th data-key="championships">Championships</th>
   <th data-key="points">Points</th>
 </tr>
 </thead>
@@ -199,22 +200,42 @@ async function loadSeason(){
 }
 
 function buildStats(seasons){
-  const stats={};
+  const stats = {};
+  const seasonChampions = {};
 
   seasons.forEach(data=>{
+    const seasonTotals = {};
+
     (data.races||[]).forEach(race=>{
       (race.results||[]).forEach(r=>{
         const team = cleanConstructor(r.team);
         if(!team) return;
 
         if(!stats[team]){
-          stats[team]={races:0,wins:0,points:0};
+          stats[team]={races:0,wins:0,points:0,championships:0};
         }
+
         stats[team].races++;
         if(Number(r.position)===1) stats[team].wins++;
         stats[team].points += Number(r.points)||0;
+
+        if(!seasonTotals[team]) seasonTotals[team]=0;
+        seasonTotals[team] += Number(r.points)||0;
       });
     });
+
+    const champion = Object.entries(seasonTotals)
+      .sort((a,b)=>b[1]-a[1])[0]?.[0];
+
+    if(champion){
+      seasonChampions[champion] = (seasonChampions[champion]||0)+1;
+    }
+  });
+
+  Object.keys(seasonChampions).forEach(team=>{
+    if(stats[team]){
+      stats[team].championships = seasonChampions[team];
+    }
   });
 
   currentStats = stats;
@@ -239,6 +260,7 @@ function renderTable(){
       <td><a class="team-link" href="f1-constructor.html?team=${safeName}">${name}</a></td>
       <td>${s.races}</td>
       <td>${s.wins}</td>
+      <td>${s.championships}</td>
       <td>${s.points.toFixed(1)}</td>
     `;
     tableBody.appendChild(tr);
