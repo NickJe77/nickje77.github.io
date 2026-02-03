@@ -9,8 +9,7 @@
 
 <style>
 body{
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
-               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: system-ui, Arial, sans-serif;
 }
 
 .navbar{
@@ -42,8 +41,6 @@ body{
   padding:20px;
 }
 
-.selector-box h3{margin:0 0 10px;}
-
 .selector-box select{
   width:100%;
   padding:10px;
@@ -51,7 +48,6 @@ body{
 }
 
 .compare-btn{
-  margin-top:20px;
   padding:12px 24px;
   font-size:16px;
   font-weight:700;
@@ -62,19 +58,11 @@ body{
   cursor:pointer;
 }
 
-.compare-btn:hover{background:#003f9e;}
-
 .results-box{
   border:1px solid #ddd;
   border-radius:10px;
   padding:20px;
   margin-top:20px;
-}
-
-.placeholder{
-  color:#666;
-  font-style:italic;
-  padding:10px 0;
 }
 
 table{
@@ -85,7 +73,6 @@ table{
 th,td{
   border-bottom:1px solid #ddd;
   padding:8px;
-  text-align:left;
 }
 th{background:#f4f6f8;}
 </style>
@@ -101,28 +88,20 @@ th{background:#f4f6f8;}
 <div class="page-wrap">
 
 <h1>AFL Head to Head</h1>
-<p>Compare two AFL teams across the last 6 seasons.</p>
 
 <div class="selector-grid">
   <div class="selector-box">
-    <h3>Team One</h3>
-    <select id="team1">
-      <option value="">Select team</option>
-    </select>
+    <select id="team1"></select>
   </div>
-
   <div class="selector-box">
-    <h3>Team Two</h3>
-    <select id="team2">
-      <option value="">Select team</option>
-    </select>
+    <select id="team2"></select>
   </div>
 </div>
 
 <button class="compare-btn" onclick="compare()">Compare</button>
 
 <div id="results" class="results-box">
-  <div class="placeholder">Loading AFL database…</div>
+  Loading AFL database…
 </div>
 
 </div>
@@ -133,16 +112,14 @@ let allMatches = [];
 function norm(s){
   return (s||"").trim().toLowerCase();
 }
-
 function displayName(s){
-  if(!s) return "";
-  if(s.toLowerCase()==="gws") return "GWS";
   return s.replace(/\b\w/g,c=>c.toUpperCase());
 }
 
 async function loadAllSeasons(){
   const LAST_YEAR = 2025;
   const startYear = LAST_YEAR - 5;
+
   const teamSet = new Set();
   allMatches = [];
 
@@ -151,28 +128,41 @@ async function loadAllSeasons(){
       const res = await fetch(`./data/afl/afl_${y}.json`);
       if(!res.ok) continue;
 
-      const games = await res.json();
-      if(!Array.isArray(games)) continue;
+      const raw = await res.json();
+      if(!Array.isArray(raw)) continue;
 
-      games.forEach(g=>{
-        if(!g.home_team || !g.away_team) return;
+      const matchMap = {};
 
-        const home = norm(g.home_team);
-        const away = norm(g.away_team);
+      raw.forEach(row=>{
+        if(!row.match_id) return;
 
-        const hp = Number(g.home_points ?? 0);
-        const ap = Number(g.away_points ?? 0);
+        if(!matchMap[row.match_id]){
+          matchMap[row.match_id] = {
+            season: row.season,
+            round: row.round,
+            venue: row.venue,
+            home: row.home_team,
+            away: row.away_team,
+            hp: Number(row.home_points),
+            ap: Number(row.away_points)
+          };
+        }
+      });
+
+      Object.values(matchMap).forEach(m=>{
+        const home = norm(m.home);
+        const away = norm(m.away);
 
         allMatches.push({
-          season: g.season ?? y,
-          round: g.round ?? "",
-          venue: g.venue ?? "",
+          season: m.season,
+          round: m.round,
+          venue: m.venue,
           home,
           away,
-          hp,
-          ap,
-          total: hp + ap,
-          margin: Math.abs(hp - ap)
+          hp: m.hp,
+          ap: m.ap,
+          total: m.hp + m.ap,
+          margin: Math.abs(m.hp - m.ap)
         });
 
         teamSet.add(home);
@@ -185,50 +175,38 @@ async function loadAllSeasons(){
   }
 
   const teams=[...teamSet].sort();
-  const t1=document.getElementById("team1");
-  const t2=document.getElementById("team2");
-
-  t1.innerHTML=`<option value="">Select team</option>`;
-  t2.innerHTML=`<option value="">Select team</option>`;
+  team1.innerHTML = `<option value="">Select team</option>`;
+  team2.innerHTML = `<option value="">Select team</option>`;
 
   teams.forEach(t=>{
-    t1.innerHTML+=`<option value="${t}">${displayName(t)}</option>`;
-    t2.innerHTML+=`<option value="${t}">${displayName(t)}</option>`;
+    team1.innerHTML+=`<option value="${t}">${displayName(t)}</option>`;
+    team2.innerHTML+=`<option value="${t}">${displayName(t)}</option>`;
   });
 
-  document.getElementById("results").innerHTML =
-    "<div class='placeholder'>Select two teams and click Compare.</div>";
+  results.innerHTML = "Select two teams and click Compare.";
 }
 
 loadAllSeasons();
 
 function compare(){
-  const a=document.getElementById("team1").value;
-  const b=document.getElementById("team2").value;
-  const box=document.getElementById("results");
-
-  if(!a||!b){ box.innerHTML="<b>Select two teams.</b>"; return; }
-  if(a===b){ box.innerHTML="<b>Select different teams.</b>"; return; }
+  const a=team1.value;
+  const b=team2.value;
+  if(!a||!b) return;
 
   const games = allMatches.filter(g =>
-    (g.home===a && g.away===b) || (g.home===b && g.away===a)
+    (g.home===a && g.away===b) ||
+    (g.home===b && g.away===a)
   ).sort((x,y)=>y.season-x.season);
 
-  let aWins=0,bWins=0,draws=0;
-
+  let aWins=0,bWins=0;
   games.forEach(g=>{
-    if(g.hp===g.ap) draws++;
-    else if((g.home===a && g.hp>g.ap) || (g.away===a && g.ap>g.hp)) aWins++;
-    else bWins++;
+    if((g.home===a && g.hp>g.ap) || (g.away===a && g.ap>g.hp)) aWins++;
+    else if(g.hp!==g.ap) bWins++;
   });
 
-  const A=displayName(a);
-  const B=displayName(b);
-
   let html=`
-    <h3>${A} vs ${B}</h3>
-    <p>Games: ${games.length} | ${A} wins: ${aWins} | Draws: ${draws} | ${B} wins: ${bWins}</p>
-
+    <h3>${displayName(a)} vs ${displayName(b)}</h3>
+    <p>Games: ${games.length} | ${displayName(a)} wins: ${aWins} | ${displayName(b)} wins: ${bWins}</p>
     <table>
     <tr>
       <th>Season</th>
@@ -236,8 +214,6 @@ function compare(){
       <th>Venue</th>
       <th>Match</th>
       <th>Score</th>
-      <th>Total</th>
-      <th>Margin</th>
     </tr>
   `;
 
@@ -249,14 +225,12 @@ function compare(){
         <td>${g.venue}</td>
         <td>${displayName(g.home)} v ${displayName(g.away)}</td>
         <td>${g.hp} - ${g.ap}</td>
-        <td>${g.total}</td>
-        <td>${g.margin}</td>
       </tr>
     `;
   });
 
   html+="</table>";
-  box.innerHTML=html;
+  results.innerHTML=html;
 }
 </script>
 
