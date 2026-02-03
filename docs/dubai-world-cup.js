@@ -4,13 +4,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const yearFilter = document.getElementById("yearFilter");
   const raceFilter = document.getElementById("raceFilter");
   const winnerFilter = document.getElementById("winnerFilter");
+  const jockeyFilter = document.getElementById("jockeyFilter");
 
   const raceList = document.getElementById("raceList");
   const winnerList = document.getElementById("winnerList");
+  const jockeyList = document.getElementById("jockeyList");
 
   let allRows = [];
 
-  fetch("dubai-world-cup-results.json")
+  console.log("Dubai World Cup JS loaded");
+
+  fetch("dubai-world-cup.json")
     .then(res => {
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
@@ -30,36 +34,25 @@ document.addEventListener("DOMContentLoaded", () => {
     const years = [...new Set(data.map(r => r.year).filter(Boolean))].sort((a, b) => b - a);
     const races = [...new Set(data.map(r => r.race).filter(Boolean))].sort();
     const winners = [...new Set(data.map(r => r.winner).filter(Boolean))].sort();
+    const jockeys = [...new Set(data.map(r => r.jockey).filter(Boolean))].sort();
 
-    years.forEach(y => {
-      const opt = document.createElement("option");
-      opt.value = y;
-      opt.textContent = y;
-      yearFilter.appendChild(opt);
-    });
-
-    races.forEach(r => {
-      const opt = document.createElement("option");
-      opt.value = r;
-      raceList.appendChild(opt);
-    });
-
-    winners.forEach(w => {
-      const opt = document.createElement("option");
-      opt.value = w;
-      winnerList.appendChild(opt);
-    });
+    years.forEach(y => yearFilter.innerHTML += `<option value="${y}">${y}</option>`);
+    races.forEach(r => raceList.innerHTML += `<option value="${r}">`);
+    winners.forEach(w => winnerList.innerHTML += `<option value="${w}">`);
+    jockeys.forEach(j => jockeyList.innerHTML += `<option value="${j}">`);
   }
 
   function applyFilters() {
-    const yearVal = yearFilter.value;
-    const raceVal = raceFilter.value.toLowerCase();
-    const winnerVal = winnerFilter.value.toLowerCase();
+    const y = yearFilter.value;
+    const r = raceFilter.value.toLowerCase();
+    const w = winnerFilter.value.toLowerCase();
+    const j = jockeyFilter.value.toLowerCase();
 
-    const filtered = allRows.filter(r =>
-      (!yearVal || String(r.year) === yearVal) &&
-      (!raceVal || String(r.race).toLowerCase().includes(raceVal)) &&
-      (!winnerVal || String(r.winner).toLowerCase().includes(winnerVal))
+    const filtered = allRows.filter(row =>
+      (!y || String(row.year) === y) &&
+      (!r || String(row.race).toLowerCase().includes(r)) &&
+      (!w || String(row.winner).toLowerCase().includes(w)) &&
+      (!j || String(row.jockey).toLowerCase().includes(j))
     );
 
     renderTable(filtered);
@@ -73,7 +66,6 @@ document.addEventListener("DOMContentLoaded", () => {
       tr.innerHTML = `
         <td>${r.year || ""}</td>
         <td>${r.race || ""}</td>
-        <td>${r.track || ""}</td>
         <td>${r.winner || ""}</td>
         <td>${r.trainer || ""}</td>
         <td>${r.jockey || ""}</td>
@@ -85,4 +77,5 @@ document.addEventListener("DOMContentLoaded", () => {
   yearFilter.addEventListener("change", applyFilters);
   raceFilter.addEventListener("input", applyFilters);
   winnerFilter.addEventListener("input", applyFilters);
+  jockeyFilter.addEventListener("input", applyFilters);
 });
