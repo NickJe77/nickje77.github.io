@@ -124,16 +124,33 @@ Promise.all([
   const info = match.info;
   const allInnings = Array.isArray(match.innings) ? match.innings : Object.values(match.innings);
 
-  // Normal innings = first 2
   const normalInnings = allInnings.slice(0,2);
-
-  // Super over innings = anything marked OR after first 2
   const superOverInnings = allInnings.filter((inn,i)=>inn.super_over || i >= 2);
+
+  function inningsRuns(inn){
+    let runs = 0;
+    inn.overs.forEach(o=>{
+      o.deliveries.forEach(d=>{
+        runs += d.runs.total;
+      });
+    });
+    return runs;
+  }
+
+  let winner = info.outcome?.winner || null;
+
+  if(!winner && superOverInnings.length === 2){
+    const t1 = inningsRuns(superOverInnings[0]);
+    const t2 = inningsRuns(superOverInnings[1]);
+
+    if(t1 > t2) winner = superOverInnings[0].team;
+    if(t2 > t1) winner = superOverInnings[1].team;
+  }
 
   document.getElementById("matchTitle").textContent = info.teams.join(" vs ");
   document.getElementById("matchMeta").textContent =
     (info.venue||"") + " • " + new Date(info.dates[0]).toDateString() +
-    " • Winner: " + (info.outcome?.winner || "—") +
+    " • Winner: " + (winner || "—") +
     (info.player_of_match ? " • Player of the Match: " + info.player_of_match.map(displayName).join(", ") : "");
 
   let html = "";
@@ -249,12 +266,10 @@ Promise.all([
     </div>`;
   }
 
-  // Render normal match
   normalInnings.forEach(inn=>{
     html += renderInnings(inn);
   });
 
-  // Render super over if exists
   if(superOverInnings.length){
     html += `<div class="superover-title">SUPER OVER</div>`;
     superOverInnings.forEach(inn=>{
