@@ -38,12 +38,14 @@ body{
 .hero h1{margin:0;font-size:46px;}
 .hero p{margin-top:10px;font-size:20px;opacity:0.95;}
 
-select{
+input, select{
   padding:8px 12px;
   font-size:15px;
   border-radius:10px;
   border:1px solid #ccc;
   margin-top:12px;
+  width:100%;
+  max-width:360px;
 }
 
 .summary-grid{
@@ -87,6 +89,13 @@ th.sort-active{
   color:#3b007a;
   text-decoration:underline;
 }
+
+/* widen Bat & Bowl columns */
+th#batHeader, th#bowlHeader,
+td.batCol, td.bowlCol{
+  min-width:110px;
+}
+
 tr:nth-child(even){background:#f8fbff;}
 a{color:#3b007a;text-decoration:none;font-weight:600;}
 a:hover{text-decoration:underline;}
@@ -108,6 +117,9 @@ a:hover{text-decoration:underline;}
 <div class="hero">
   <h1 id="playerName">Select an IPL Player</h1>
   <p>Career summary and match list.</p>
+
+  <input type="text" id="playerSearch" placeholder="Type player name…">
+
   <select id="playerSelect">
     <option value="">— Select Player —</option>
   </select>
@@ -166,6 +178,7 @@ const bestBowlBox = document.getElementById("bestBowlBox");
 
 const tableBody = document.getElementById("matchesTable");
 const playerSelect = document.getElementById("playerSelect");
+const playerSearch = document.getElementById("playerSearch");
 
 const batHeader = document.getElementById("batHeader");
 const bowlHeader = document.getElementById("bowlHeader");
@@ -221,6 +234,10 @@ Promise.all([
     }
   });
 
+  playerSearch.addEventListener("input", ()=>{
+    renderFilteredDropdown(playerSearch.value);
+  });
+
   batHeader.addEventListener("click", ()=>{
     sortMode = sortMode === "bat" ? "date" : "bat";
     renderTable();
@@ -238,13 +255,22 @@ Promise.all([
 });
 
 function buildDropdown(list){
+  allPlayers = list;
+  renderFilteredDropdown("");
+}
+
+function renderFilteredDropdown(filter){
   playerSelect.innerHTML = `<option value="">— Select Player —</option>`;
-  list.forEach(p=>{
-    const opt = document.createElement("option");
-    opt.value = p;
-    opt.textContent = nameMap[p] || p;
-    playerSelect.appendChild(opt);
-  });
+  const term = filter.toLowerCase();
+
+  allPlayers
+    .filter(p => (nameMap[p] || p).toLowerCase().includes(term))
+    .forEach(p=>{
+      const opt = document.createElement("option");
+      opt.value = p;
+      opt.textContent = nameMap[p] || p;
+      playerSelect.appendChild(opt);
+    });
 }
 
 function loadPlayer(player){
@@ -298,7 +324,6 @@ function loadPlayer(player){
       });
     });
 
-    /* 🔴 CHANGE IS HERE */
     if(batRuns > 0 || bowlWkts > 0){
       matches++;
       runs += batRuns;
@@ -336,7 +361,7 @@ function loadPlayer(player){
   avgBox.textContent = outs ? (runs/outs).toFixed(2) : "—";
   fiftiesBox.textContent = fifties;
   hundredsBox.textContent = hundreds;
-  econBox.textContent = bowlBalls ? ( ( (bestBowlRuns + runs) / bowlBalls ) * 6 ).toFixed(2) : "—";
+  econBox.textContent = bowlBalls ? ((bestBowlRuns / bowlBalls) * 6).toFixed(2) : "—";
   bestScoreBox.textContent = bestScore || "—";
   bestBowlBox.textContent = bestBowlWkts ? bestBowlWkts+" / "+bestBowlRuns : "—";
 
@@ -368,8 +393,8 @@ function renderTable(){
       <td>${m.team}</td>
       <td>${m.opp}</td>
       <td>${m.venue}</td>
-      <td>${m.batRuns ? m.batRuns+" ("+m.batBalls+")" : "—"}</td>
-      <td>${m.bowlWkts ? m.bowlWkts+" / "+m.bowlRuns : "—"}</td>
+      <td class="batCol">${m.batRuns ? m.batRuns+" ("+m.batBalls+")" : "—"}</td>
+      <td class="bowlCol">${m.bowlWkts ? m.bowlWkts+" / "+m.bowlRuns : "—"}</td>
     `;
     tableBody.appendChild(tr);
   });
