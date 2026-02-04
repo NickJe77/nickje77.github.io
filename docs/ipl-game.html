@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IPL Match | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family: Inter, system-ui, Arial, sans-serif;
+  margin:0;
+  background:#ffffff;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1100px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#3b007a,#7b2cbf);
+  color:white;
+  padding:40px 50px;
+  border-radius:24px;
+  margin-bottom:20px;
+}
+
+.hero h1{margin:0;font-size:42px;}
+.hero p{margin-top:10px;font-size:18px;opacity:0.95;}
+
+.box{
+  border:1px solid #ddd;
+  border-radius:12px;
+  padding:14px 16px;
+  margin-bottom:14px;
+  background:#faf7ff;
+}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="ipl-player.html">IPL Players</a>
+</div>
+
+<div class="page-wrap">
+
+<div class="hero">
+  <h1 id="matchTitle">Loading match…</h1>
+  <p id="matchMeta"></p>
+</div>
+
+<div id="matchData"></div>
+
+</div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const matchId = params.get("match");
+
+const indexUrl = "data/ipl/index.json";
+const basePath = "data/ipl/";
+
+const matchTitle = document.getElementById("matchTitle");
+const matchMeta = document.getElementById("matchMeta");
+const matchData = document.getElementById("matchData");
+
+if(!matchId){
+  matchTitle.textContent = "No match selected";
+  throw "No match id";
+}
+
+fetch(indexUrl)
+  .then(r=>r.json())
+  .then(files=>{
+    const fullFiles = files.filter(f=>f.includes("_FULL.json"));
+    return Promise.all(fullFiles.map(f=>fetch(basePath+f).then(r=>r.json())));
+  })
+  .then(seasons=>{
+    let foundMatch = null;
+
+    seasons.forEach(season=>{
+      season.forEach(match=>{
+        if(match.info.match_id == matchId){
+          foundMatch = match;
+        }
+      });
+    });
+
+    if(!foundMatch){
+      matchTitle.textContent = "Match not found";
+      return;
+    }
+
+    const info = foundMatch.info;
+
+    matchTitle.textContent = info.teams.join(" vs ");
+    matchMeta.textContent = `${info.venue || "Venue unknown"} • ${new Date(info.dates[0]).toDateString()}`;
+
+    matchData.innerHTML = `
+      <div class="box"><strong>Match ID:</strong> ${info.match_id}</div>
+      <div class="box"><strong>Teams:</strong> ${info.teams.join(" vs ")}</div>
+      <div class="box"><strong>Venue:</strong> ${info.venue || "—"}</div>
+      <div class="box"><strong>Date:</strong> ${new Date(info.dates[0]).toLocaleDateString()}</div>
+      <div class="box"><strong>Outcome:</strong> ${info.outcome?.winner || "—"}</div>
+    `;
+  });
+</script>
+
+</body>
+</html>
