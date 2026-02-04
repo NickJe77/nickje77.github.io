@@ -38,35 +38,13 @@ body{
 .hero h1{margin:0;font-size:42px;}
 .hero p{margin-top:10px;font-size:18px;opacity:0.95;}
 
-.section{
-  margin-top:30px;
-}
+.section{margin-top:30px;}
+.section h2{margin-bottom:6px;color:#3b007a;}
+.total-line{font-weight:700;margin-bottom:8px;}
+.small-note{margin-top:6px;font-size:13px;}
 
-.section h2{
-  margin-bottom:6px;
-  color:#3b007a;
-}
-
-.total-line{
-  font-weight:700;
-  margin-bottom:8px;
-}
-
-.small-note{
-  margin-top:6px;
-  font-size:13px;
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-  font-size:14px;
-}
-th,td{
-  border-bottom:1px solid #ddd;
-  padding:8px 10px;
-  text-align:left;
-}
+table{width:100%;border-collapse:collapse;font-size:14px;}
+th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:left;}
 th{background:#f3f6fb;}
 tr:nth-child(even){background:#f8fbff;}
 
@@ -108,13 +86,24 @@ if(!file || isNaN(index)){
   throw "Bad link";
 }
 
-function playerLink(name){
-  return `<a class="player-link" href="ipl-player.html?player=${encodeURIComponent(name)}">${name}</a>`;
+let nameMap = {};
+
+function displayName(name){
+  return nameMap[name] || name;
 }
 
-fetch("data/ipl/"+file)
-.then(r=>r.json())
-.then(season=>{
+function playerLink(name){
+  const n = displayName(name);
+  return `<a class="player-link" href="ipl-player.html?player=${encodeURIComponent(n)}">${n}</a>`;
+}
+
+Promise.all([
+  fetch("data/ipl/"+file).then(r=>r.json()),
+  fetch("data/ipl/players_names.json").then(r=>r.json())
+])
+.then(([season, names])=>{
+  nameMap = names;
+
   const match = season[index];
   if(!match){
     document.getElementById("matchTitle").textContent = "Match not found";
@@ -128,7 +117,7 @@ fetch("data/ipl/"+file)
   document.getElementById("matchMeta").textContent =
     (info.venue||"") + " • " + new Date(info.dates[0]).toDateString() +
     " • Winner: " + (info.outcome?.winner || "—") +
-    (info.player_of_match ? " • Player of the Match: " + info.player_of_match.join(", ") : "");
+    (info.player_of_match ? " • Player of the Match: " + info.player_of_match.map(displayName).join(", ") : "");
 
   let html = "";
 
@@ -141,12 +130,12 @@ fetch("data/ipl/"+file)
 
     let teamRuns = 0;
     let teamWkts = 0;
-    let teamBalls = 0;
+    let legalBalls = 0;
 
     inn.overs.forEach((over,overIndex)=>{
-      over.deliveries.forEach(d=>{
+      over.deliveries.forEach((d,ballIndex)=>{
         teamRuns += d.runs.total;
-        if(!d.extras?.wides) teamBalls++;
+        if(!d.extras?.wides) legalBalls++;
 
         if(d.extras){
           if(d.extras.byes) extras.b += d.extras.byes;
@@ -157,16 +146,18 @@ fetch("data/ipl/"+file)
         }
 
         if(d.batter){
-          batMap[d.batter] = batMap[d.batter] || {runs:0, balls:0, out:"not out"};
-          batMap[d.batter].runs += d.runs.batter;
-          if(!d.extras?.wides) batMap[d.batter].balls++;
+          const batter = displayName(d.batter);
+          batMap[batter] = batMap[batter] || {runs:0, balls:0, out:"not out"};
+          batMap[batter].runs += d.runs.batter;
+          if(!d.extras?.wides) batMap[batter].balls++;
         }
 
         if(d.bowler){
-          bowlMap[d.bowler] = bowlMap[d.bowler] || {runs:0, balls:0, wkts:0};
-          bowlMap[d.bowler].balls++;
+          const bowler = displayName(d.bowler);
+          bowlMap[bowler] = bowlMap[bowler] || {runs:0, balls:0, wkts:0};
+          bowlMap[bowler].balls++;
           if(!d.extras?.byes && !d.extras?.legbyes){
-            bowlMap[d.bowler].runs += d.runs.total;
+            bowlMap[bowler].runs += d.runs.total;
           }
         }
 
@@ -174,100 +165,71 @@ fetch("data/ipl/"+file)
           d.wickets.forEach(w=>{
             teamWkts++;
 
-            const batter = w.player_out;
-            const bowler = d.bowler;
-            const fielders = w.fielders?.map(f=>playerLink(f.name)).join(", ");
+            const batter = displayName(w.player_out);
+            const bowler = displayName(d.bowler);
+            const fielders = w.fielders?.map(f=>playerLink(displayName(f.name))).join(", ");
 
             let howOut = w.kind;
+            if(w.kind==="caught") howOut = `c ${fielders} b ${playerLink(bowler)}`;
+            else if(w.kind==="lbw") howOut = `lbw b ${playerLink(bowler)}`;
+            else if(w.kind==="bowled") howOut = `b ${playerLink(bowler)}`;
+            else if(w.kind==="run out") howOut = `run out (${fielders})`;
+            else howOut = `${w.kind} b ${playerLink(bowler)}`;
 
-            if(w.kind === "caught"){
-              howOut = `c ${fielders} b ${playerLink(bowler)}`;
-            }
-            else if(w.kind === "lbw"){
-              howOut = `lbw b ${playerLink(bowler)}`;
-            }
-            else if(w.kind === "bowled"){
-              howOut = `b ${playerLink(bowler)}`;
-            }
-            else if(w.kind === "run out"){
-              howOut = `run out (${fielders})`;
-            }
-            else{
-              howOut = `${w.kind} b ${playerLink(bowler)}`;
-            }
+            if(batMap[batter]) batMap[batter].out = howOut;
+            if(bowlMap[bowler]) bowlMap[bowler].wkts++;
 
-            if(batMap[batter]){
-              batMap[batter].out = howOut;
-            }
-
-            if(bowler){
-              bowlMap[bowler].wkts++;
-            }
-
-            fall.push(`${teamRuns}/${teamWkts} (${batter}, ${overIndex}.${d.ball})`);
+            const ballNo = ballIndex + 1;
+            fall.push(`${teamRuns}/${teamWkts} (${batter}, ${overIndex}.${ballNo})`);
           });
         }
       });
     });
 
+    const overs = (legalBalls/6).toFixed(1);
     const extrasTotal = extras.b+extras.lb+extras.w+extras.nb+extras.p;
 
     html += `
-      <div class="section">
-        <h2>${team} Innings</h2>
-        <div class="total-line">Total: ${teamRuns}/${teamWkts} (${(teamBalls/6).toFixed(1)} ov)</div>
+    <div class="section">
+      <h2>${team} Innings</h2>
+      <div class="total-line">Total: ${teamRuns}/${teamWkts} (${overs} ov)</div>
 
-        <table>
-          <tr>
-            <th>Batter</th>
-            <th>How out</th>
-            <th>R</th>
-            <th>B</th>
-            <th>SR</th>
-          </tr>
-          ${Object.entries(batMap).map(([p,s])=>{
-            const sr = s.balls ? ((s.runs/s.balls)*100).toFixed(1) : "—";
-            return `
-              <tr>
-                <td>${playerLink(p)}</td>
-                <td>${s.out}</td>
-                <td>${s.runs}</td>
-                <td>${s.balls}</td>
-                <td>${sr}</td>
-              </tr>
-            `;
-          }).join("")}
-        </table>
+      <table>
+        <tr><th>Batter</th><th>How out</th><th>R</th><th>B</th><th>SR</th></tr>
+        ${Object.entries(batMap).map(([p,s])=>{
+          const sr = s.balls?((s.runs/s.balls)*100).toFixed(1):"—";
+          return `<tr>
+            <td>${playerLink(p)}</td>
+            <td>${s.out}</td>
+            <td>${s.runs}</td>
+            <td>${s.balls}</td>
+            <td>${sr}</td>
+          </tr>`;
+        }).join("")}
+      </table>
 
-        <div class="small-note">
-          Extras: ${extrasTotal} (b ${extras.b}, lb ${extras.lb}, w ${extras.w}, nb ${extras.nb}, p ${extras.p})
-        </div>
-
-        <div class="small-note">
-          Fall of wickets: ${fall.join(", ")}
-        </div>
+      <div class="small-note">
+        Extras: ${extrasTotal} (b ${extras.b}, lb ${extras.lb}, w ${extras.w}, nb ${extras.nb}, p ${extras.p})
       </div>
 
-      <div class="section">
-        <h2>Bowling vs ${team}</h2>
-        <table>
-          <tr>
-            <th>Bowler</th>
-            <th>O</th>
-            <th>R</th>
-            <th>W</th>
-          </tr>
-          ${Object.entries(bowlMap).map(([p,s])=>`
-            <tr>
-              <td>${playerLink(p)}</td>
-              <td>${(s.balls/6).toFixed(1)}</td>
-              <td>${s.runs}</td>
-              <td>${s.wkts||0}</td>
-            </tr>
-          `).join("")}
-        </table>
+      <div class="small-note">
+        Fall of wickets: ${fall.join(", ")}
       </div>
-    `;
+    </div>
+
+    <div class="section">
+      <h2>Bowling vs ${team}</h2>
+      <table>
+        <tr><th>Bowler</th><th>O</th><th>R</th><th>W</th></tr>
+        ${Object.entries(bowlMap).map(([p,s])=>`
+          <tr>
+            <td>${playerLink(p)}</td>
+            <td>${(s.balls/6).toFixed(1)}</td>
+            <td>${s.runs}</td>
+            <td>${s.wkts}</td>
+          </tr>`).join("")}
+      </table>
+    </div>`;
   });
 
   document.getElementById("scorecard").innerHTML = html;
