@@ -64,6 +64,13 @@ th,td{
 }
 th{background:#f3f6fb;}
 tr:nth-child(even){background:#f8fbff;}
+
+a.player-link{
+  color:#3b007a;
+  font-weight:600;
+  text-decoration:none;
+}
+a.player-link:hover{text-decoration:underline;}
 </style>
 </head>
 
@@ -96,6 +103,10 @@ if(!file || isNaN(index)){
   throw "Bad link";
 }
 
+function playerLink(name){
+  return `<a class="player-link" href="ipl-player.html?player=${encodeURIComponent(name)}">${name}</a>`;
+}
+
 fetch("data/ipl/"+file)
 .then(r=>r.json())
 .then(season=>{
@@ -107,7 +118,7 @@ fetch("data/ipl/"+file)
 
   const info = match.info;
   const innings = Array.isArray(match.innings) ? match.innings : Object.values(match.innings);
-  const inn = innings[0]; // FIRST INNINGS ONLY
+  const inn = innings[0]; // T20 = 1 innings per team
 
   document.getElementById("matchTitle").textContent = info.teams.join(" vs ");
   document.getElementById("matchMeta").textContent =
@@ -127,12 +138,6 @@ fetch("data/ipl/"+file)
       teamRuns += d.runs.total;
       if(!d.extras?.wides) teamBalls++;
 
-      if(d.wickets){
-        d.wickets.forEach(w=>{
-          if(w.kind !== "run out") teamWkts++;
-        });
-      }
-
       if(d.batter){
         batMap[d.batter] = batMap[d.batter] || {runs:0, balls:0, out:"not out"};
         batMap[d.batter].runs += d.runs.batter;
@@ -145,16 +150,42 @@ fetch("data/ipl/"+file)
         if(!d.extras?.byes && !d.extras?.legbyes){
           bowlMap[d.bowler].runs += d.runs.total;
         }
-        if(d.wickets){
-          d.wickets.forEach(w=>{
-            if(w.kind !== "run out"){
-              bowlMap[d.bowler].wkts++;
-            }
-            if(batMap[w.player_out]){
-              batMap[w.player_out].out = w.kind;
-            }
-          });
-        }
+      }
+
+      if(d.wickets){
+        d.wickets.forEach(w=>{
+          teamWkts++;
+
+          const batter = w.player_out;
+          const bowler = d.bowler;
+          const fielders = w.fielders?.map(f=>playerLink(f.name)).join(", ");
+
+          let howOut = w.kind;
+
+          if(w.kind === "caught"){
+            howOut = `c ${fielders} b ${playerLink(bowler)}`;
+          }
+          else if(w.kind === "lbw"){
+            howOut = `lbw b ${playerLink(bowler)}`;
+          }
+          else if(w.kind === "bowled"){
+            howOut = `b ${playerLink(bowler)}`;
+          }
+          else if(w.kind === "run out"){
+            howOut = `run out (${fielders})`;
+          }
+          else{
+            howOut = `${w.kind} b ${playerLink(bowler)}`;
+          }
+
+          if(batMap[batter]){
+            batMap[batter].out = howOut;
+          }
+
+          if(bowler){
+            bowlMap[bowler].wkts++;
+          }
+        });
       }
     });
   });
@@ -176,7 +207,7 @@ fetch("data/ipl/"+file)
           const sr = s.balls ? ((s.runs/s.balls)*100).toFixed(1) : "—";
           return `
             <tr>
-              <td>${p}</td>
+              <td>${playerLink(p)}</td>
               <td>${s.out}</td>
               <td>${s.runs}</td>
               <td>${s.balls}</td>
@@ -198,10 +229,10 @@ fetch("data/ipl/"+file)
         </tr>
         ${Object.entries(bowlMap).map(([p,s])=>`
           <tr>
-            <td>${p}</td>
+            <td>${playerLink(p)}</td>
             <td>${(s.balls/6).toFixed(1)}</td>
             <td>${s.runs}</td>
-            <td>${s.wkts}</td>
+            <td>${s.wkts||0}</td>
           </tr>
         `).join("")}
       </table>
