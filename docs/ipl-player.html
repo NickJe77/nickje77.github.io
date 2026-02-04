@@ -139,13 +139,13 @@ a:hover{text-decoration:underline;}
 <table>
 <thead>
 <tr>
-  <th id="dateHeader">Date</th>
+  <th>Date</th>
   <th>Match</th>
   <th>Team</th>
   <th>Opposition</th>
   <th>Venue</th>
-  <th id="batHeader">Bat</th>
-  <th id="bowlHeader">Bowl</th>
+  <th>Bat</th>
+  <th>Bowl</th>
 </tr>
 </thead>
 <tbody id="matchesTable"></tbody>
@@ -154,9 +154,6 @@ a:hover{text-decoration:underline;}
 </div>
 
 <script>
-const params = new URLSearchParams(window.location.search);
-let playerParam = params.get("player");
-
 const indexUrl = "data/ipl/index.json";
 const basePath = "data/ipl/";
 const namesUrl = "data/ipl/player-names.json";
@@ -177,15 +174,10 @@ const tableBody = document.getElementById("matchesTable");
 const playerSelect = document.getElementById("playerSelect");
 const playerSearch = document.getElementById("playerSearch");
 
-const batHeader = document.getElementById("batHeader");
-const bowlHeader = document.getElementById("bowlHeader");
-const dateHeader = document.getElementById("dateHeader");
-
 let allMatches = [];
 let nameMap = {};
 let allPlayers = [];
 let matchRows = [];
-let sortMode = "date";
 
 Promise.all([
   fetch(namesUrl).then(r=>r.json()),
@@ -193,21 +185,22 @@ Promise.all([
 ])
 .then(([names, files])=>{
   nameMap = names;
-  const fullFiles = files.filter(f => f.includes("_FULL.json"));
-  return Promise.all(fullFiles.map(f=>fetch(basePath+f).then(r=>r.json())));
+  return Promise.all(
+    files.filter(f=>f.includes("_FULL.json"))
+      .map(f => fetch(basePath+f).then(r=>r.json()).then(data => ({file:f, data})))
+  );
 })
 .then(seasons=>{
   const playerSet = new Set();
 
   seasons.forEach(season=>{
-    season.forEach(match=>{
-      allMatches.push(match);
+    season.data.forEach((match,i)=>{
+      allMatches.push({match, file:season.file, index:i});
 
-      let inningsList = Array.isArray(match.innings) ? match.innings : Object.values(match.innings);
-
-      inningsList.forEach(inn=>{
-        inn.overs?.forEach(over=>{
-          over.deliveries?.forEach(d=>{
+      let innings = Array.isArray(match.innings) ? match.innings : Object.values(match.innings);
+      innings.forEach(inn=>{
+        inn.overs?.forEach(o=>{
+          o.deliveries?.forEach(d=>{
             if(d.batter) playerSet.add(d.batter);
             if(d.bowler) playerSet.add(d.bowler);
           });
@@ -216,38 +209,15 @@ Promise.all([
     });
   });
 
-  allPlayers = Array.from(playerSet).sort();
+  allPlayers = [...playerSet].sort();
   buildDropdown(allPlayers);
 
-  if(playerParam){
-    playerSelect.value = playerParam;
-    loadPlayer(playerParam);
-  }
-
   playerSelect.addEventListener("change", ()=>{
-    const p = playerSelect.value;
-    if(p){
-      window.location.href = "ipl-player.html?player=" + encodeURIComponent(p);
-    }
+    loadPlayer(playerSelect.value);
   });
 
   playerSearch.addEventListener("input", ()=>{
     renderFilteredDropdown(playerSearch.value);
-  });
-
-  batHeader.addEventListener("click", ()=>{
-    sortMode = sortMode === "bat" ? "date" : "bat";
-    renderTable();
-  });
-
-  bowlHeader.addEventListener("click", ()=>{
-    sortMode = sortMode === "bowl" ? "date" : "bowl";
-    renderTable();
-  });
-
-  dateHeader.addEventListener("click", ()=>{
-    sortMode = "date";
-    renderTable();
   });
 });
 
@@ -263,136 +233,84 @@ function renderFilteredDropdown(filter){
   allPlayers
     .filter(p => (nameMap[p] || p).toLowerCase().includes(term))
     .forEach(p=>{
-      const opt = document.createElement("option");
-      opt.value = p;
-      opt.textContent = nameMap[p] || p;
+      const opt=document.createElement("option");
+      opt.value=p;
+      opt.textContent=nameMap[p]||p;
       playerSelect.appendChild(opt);
     });
 }
 
 function loadPlayer(player){
-  let matches = 0, runs = 0, balls = 0, wkts = 0, outs = 0;
-  let fifties = 0, hundreds = 0;
-  let bestScore = 0, bestBowlWkts = 0, bestBowlRuns = 999;
-  let bowlBalls = 0;
+  matchRows=[];
+  let matches=0,runs=0,balls=0,wkts=0,outs=0;
 
-  matchRows = [];
+  allMatches.forEach(obj=>{
+    const match=obj.match;
+    let batRuns=0,batBalls=0,bowlWkts=0,bowlRuns=0,wasOut=false;
+    let team="—",opp="—";
 
-  allMatches.forEach(match=>{
-    let batRuns = 0, batBalls = 0, bowlWkts = 0, bowlRuns = 0, wasOut = false;
-    let team = "—", opp = "—";
+    let innings = Array.isArray(match.innings)?match.innings:Object.values(match.innings);
 
-    let inningsList = Array.isArray(match.innings) ? match.innings : Object.values(match.innings);
+    innings.forEach(inn=>{
+      const battingTeam=inn.team;
+      const bowlingTeam=match.info.teams.find(t=>t!==battingTeam);
 
-    inningsList.forEach(inn=>{
-      const battingTeam = inn.team;
-      const teams = match.info.teams;
-      const bowlingTeam = teams.find(t=>t !== battingTeam);
-
-      inn.overs?.forEach(over=>{
-        over.deliveries?.forEach(d=>{
-          if(d.batter === player){
-            batRuns += d.runs.batter;
+      inn.overs?.forEach(o=>{
+        o.deliveries?.forEach(d=>{
+          if(d.batter===player){
+            batRuns+=d.runs.batter;
             if(!d.extras?.wides) batBalls++;
-            team = battingTeam;
-            opp = bowlingTeam;
+            team=battingTeam;
+            opp=bowlingTeam;
           }
-
+          if(d.bowler===player){
+            bowlRuns+=d.runs.total;
+            bowlWkts+=d.wickets?.length||0;
+          }
           if(d.wickets){
             d.wickets.forEach(w=>{
-              if(w.player_out === player && w.kind !== "run out") wasOut = true;
+              if(w.player_out===player) wasOut=true;
             });
-          }
-
-          if(d.bowler === player){
-            if(!d.extras?.byes && !d.extras?.legbyes){
-              bowlRuns += d.runs.total;
-            }
-            bowlBalls++;
-            team = bowlingTeam;
-            opp = battingTeam;
-            if(d.wickets){
-              d.wickets.forEach(w=>{
-                if(w.kind !== "run out") bowlWkts++;
-              });
-            }
           }
         });
       });
     });
 
-    if(batRuns > 0 || bowlWkts > 0){
-      matches++;
-      runs += batRuns;
-      balls += batBalls;
-      wkts += bowlWkts;
-      bowlBalls += bowlBalls;
-      if(wasOut) outs++;
-
-      if(batRuns >= 100) hundreds++;
-      else if(batRuns >= 50) fifties++;
-
-      if(batRuns > bestScore) bestScore = batRuns;
-
-      if(bowlWkts > bestBowlWkts || (bowlWkts === bestBowlWkts && bowlRuns < bestBowlRuns)){
-        bestBowlWkts = bowlWkts;
-        bestBowlRuns = bowlRuns;
-      }
-
+    if(batRuns>0||bowlWkts>0){
+      matches++; runs+=batRuns; balls+=batBalls; wkts+=bowlWkts; if(wasOut) outs++;
       matchRows.push({
-        matchId: match.info.match_id,
-        date: match.info.dates[0],
-        teams: match.info.teams.join(" vs "),
-        venue: match.info.venue || "—",
-        team, opp,
-        batRuns, batBalls,
-        bowlWkts, bowlRuns
+        file:obj.file,
+        index:obj.index,
+        date:match.info.dates[0],
+        teams:match.info.teams.join(" vs "),
+        venue:match.info.venue||"—",
+        team,opp,batRuns,batBalls,bowlWkts,bowlRuns
       });
     }
   });
 
-  playerNameEl.textContent = nameMap[player] || player;
-  matchesBox.textContent = matches;
-  runsBox.textContent = runs;
-  wicketsBox.textContent = wkts;
-  srBox.textContent = balls ? ((runs/balls)*100).toFixed(1) : "—";
-  avgBox.textContent = outs ? (runs/outs).toFixed(2) : "—";
-  fiftiesBox.textContent = fifties;
-  hundredsBox.textContent = hundreds;
-  econBox.textContent = bowlBalls ? ((bestBowlRuns / bowlBalls) * 6).toFixed(2) : "—";
-  bestScoreBox.textContent = bestScore || "—";
-  bestBowlBox.textContent = bestBowlWkts ? bestBowlWkts+" / "+bestBowlRuns : "—";
+  playerNameEl.textContent=nameMap[player]||player;
+  matchesBox.textContent=matches;
+  runsBox.textContent=runs;
+  wicketsBox.textContent=wkts;
+  srBox.textContent=balls?((runs/balls)*100).toFixed(1):"—";
+  avgBox.textContent=outs?(runs/outs).toFixed(2):"—";
 
-  sortMode = "date";
   renderTable();
 }
 
 function renderTable(){
   tableBody.innerHTML="";
-  let rows=[...matchRows];
-  document.querySelectorAll("th").forEach(th=>th.classList.remove("sort-active"));
-
-  if(sortMode==="bat"){
-    batHeader.classList.add("sort-active");
-    rows.sort((a,b)=>b.batRuns-a.batRuns);
-  }else if(sortMode==="bowl"){
-    bowlHeader.classList.add("sort-active");
-    rows.sort((a,b)=>b.bowlWkts-a.bowlWkts || a.bowlRuns-b.bowlRuns);
-  }else{
-    dateHeader.classList.add("sort-active");
-    rows.sort((a,b)=>new Date(a.date)-new Date(b.date));
-  }
-
-  rows.forEach(m=>{
+  matchRows.forEach(m=>{
     const tr=document.createElement("tr");
     tr.innerHTML=`
-      <td>${new Date(m.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}</td>
-      <td><a href="ipl-game.html?match=${m.matchId}">${m.teams}</a></td>
+      <td>${new Date(m.date).toLocaleDateString()}</td>
+      <td><a href="ipl-game.html?file=${encodeURIComponent(m.file)}&i=${m.index}">${m.teams}</a></td>
       <td>${m.team}</td>
       <td>${m.opp}</td>
       <td>${m.venue}</td>
-      <td class="batCol">${m.batRuns ? m.batRuns+" ("+m.batBalls+")" : "—"}</td>
-      <td class="bowlCol">${m.bowlWkts ? m.bowlWkts+" / "+m.bowlRuns : "—"}</td>
+      <td>${m.batRuns?m.batRuns+" ("+m.batBalls+")":"—"}</td>
+      <td>${m.bowlWkts?m.bowlWkts+" / "+m.bowlRuns:"—"}</td>
     `;
     tableBody.appendChild(tr);
   });
