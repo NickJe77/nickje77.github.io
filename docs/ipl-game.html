@@ -43,13 +43,13 @@ body{
 }
 
 .section h2{
-  margin-bottom:8px;
+  margin-bottom:6px;
   color:#3b007a;
 }
 
 .total-line{
   font-weight:700;
-  margin-bottom:6px;
+  margin-bottom:8px;
 }
 
 table{
@@ -107,95 +107,106 @@ fetch("data/ipl/"+file)
 
   const info = match.info;
   const innings = Array.isArray(match.innings) ? match.innings : Object.values(match.innings);
+  const inn = innings[0]; // FIRST INNINGS ONLY
 
   document.getElementById("matchTitle").textContent = info.teams.join(" vs ");
   document.getElementById("matchMeta").textContent =
     (info.venue||"") + " • " + new Date(info.dates[0]).toDateString() +
     " • Winner: " + (info.outcome?.winner || "—");
 
-  let html = "";
+  const team = inn.team;
+  const batMap = {};
+  const bowlMap = {};
 
-  innings.forEach(inn=>{
-    const team = inn.team;
-    const batMap = {};
-    const bowlMap = {};
+  let teamRuns = 0;
+  let teamWkts = 0;
+  let teamBalls = 0;
 
-    let teamRuns = 0;
-    let teamWkts = 0;
-    let teamBalls = 0;
+  inn.overs.forEach(over=>{
+    over.deliveries.forEach(d=>{
+      teamRuns += d.runs.total;
+      if(!d.extras?.wides) teamBalls++;
 
-    inn.overs.forEach(over=>{
-      over.deliveries.forEach(d=>{
-        teamRuns += d.runs.total;
-        if(!d.extras?.wides) teamBalls++;
+      if(d.wickets){
+        d.wickets.forEach(w=>{
+          if(w.kind !== "run out") teamWkts++;
+        });
+      }
 
+      if(d.batter){
+        batMap[d.batter] = batMap[d.batter] || {runs:0, balls:0, out:"not out"};
+        batMap[d.batter].runs += d.runs.batter;
+        if(!d.extras?.wides) batMap[d.batter].balls++;
+      }
+
+      if(d.bowler){
+        bowlMap[d.bowler] = bowlMap[d.bowler] || {runs:0, balls:0, wkts:0};
+        bowlMap[d.bowler].balls++;
+        if(!d.extras?.byes && !d.extras?.legbyes){
+          bowlMap[d.bowler].runs += d.runs.total;
+        }
         if(d.wickets){
           d.wickets.forEach(w=>{
-            if(w.kind !== "run out") teamWkts++;
+            if(w.kind !== "run out"){
+              bowlMap[d.bowler].wkts++;
+            }
+            if(batMap[w.player_out]){
+              batMap[w.player_out].out = w.kind;
+            }
           });
         }
-
-        if(d.batter){
-          batMap[d.batter] = batMap[d.batter] || {runs:0, balls:0, out:"not out"};
-          batMap[d.batter].runs += d.runs.batter;
-          if(!d.extras?.wides) batMap[d.batter].balls++;
-        }
-
-        if(d.bowler){
-          bowlMap[d.bowler] = bowlMap[d.bowler] || {runs:0, balls:0, wkts:0};
-          bowlMap[d.bowler].balls++;
-          if(!d.extras?.byes && !d.extras?.legbyes){
-            bowlMap[d.bowler].runs += d.runs.total;
-          }
-          if(d.wickets){
-            d.wickets.forEach(w=>{
-              if(w.kind !== "run out"){
-                bowlMap[d.bowler].wkts++;
-              }
-              if(batMap[w.player_out]){
-                batMap[w.player_out].out = w.kind;
-              }
-            });
-          }
-        }
-      });
+      }
     });
+  });
 
-    html += `
-      <div class="section">
-        <h2>${team} Batting</h2>
-        <div class="total-line">Total: ${teamRuns}/${teamWkts} (${(teamBalls/6).toFixed(1)} ov)</div>
-        <table>
-          <tr><th>Batter</th><th>Runs</th><th>Balls</th><th>Dismissal</th></tr>
-          ${Object.entries(batMap).map(([p,s])=>`
+  let html = `
+    <div class="section">
+      <h2>${team} Innings</h2>
+      <div class="total-line">Total: ${teamRuns}/${teamWkts} (${(teamBalls/6).toFixed(1)} ov)</div>
+
+      <table>
+        <tr>
+          <th>Batter</th>
+          <th>How out</th>
+          <th>R</th>
+          <th>B</th>
+          <th>SR</th>
+        </tr>
+        ${Object.entries(batMap).map(([p,s])=>{
+          const sr = s.balls ? ((s.runs/s.balls)*100).toFixed(1) : "—";
+          return `
             <tr>
               <td>${p}</td>
+              <td>${s.out}</td>
               <td>${s.runs}</td>
               <td>${s.balls}</td>
-              <td>${s.out}</td>
+              <td>${sr}</td>
             </tr>
-          `).join("")}
-        </table>
-      </div>
-    `;
+          `;
+        }).join("")}
+      </table>
+    </div>
 
-    html += `
-      <div class="section">
-        <h2>Bowling vs ${team}</h2>
-        <table>
-          <tr><th>Bowler</th><th>Overs</th><th>Runs</th><th>Wickets</th></tr>
-          ${Object.entries(bowlMap).map(([p,s])=>`
-            <tr>
-              <td>${p}</td>
-              <td>${(s.balls/6).toFixed(1)}</td>
-              <td>${s.runs}</td>
-              <td>${s.wkts}</td>
-            </tr>
-          `).join("")}
-        </table>
-      </div>
-    `;
-  });
+    <div class="section">
+      <h2>Bowling</h2>
+      <table>
+        <tr>
+          <th>Bowler</th>
+          <th>O</th>
+          <th>R</th>
+          <th>W</th>
+        </tr>
+        ${Object.entries(bowlMap).map(([p,s])=>`
+          <tr>
+            <td>${p}</td>
+            <td>${(s.balls/6).toFixed(1)}</td>
+            <td>${s.runs}</td>
+            <td>${s.wkts}</td>
+          </tr>
+        `).join("")}
+      </table>
+    </div>
+  `;
 
   document.getElementById("scorecard").innerHTML = html;
 });
