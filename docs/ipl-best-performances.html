@@ -122,7 +122,20 @@ Promise.all([
 ])
 .then(([names, files])=>{
   nameMap = names;
-  return Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json())));
+
+  // ONLY keep FULL files, ignore .DS_Store and partial files
+  const fullFiles = files.filter(f => f.endsWith("_FULL.json"));
+
+  return Promise.all(
+    fullFiles.map(f =>
+      fetch(basePath + f)
+        .then(r => r.json())
+        .catch(err => {
+          console.warn("Failed to load:", f);
+          return [];
+        })
+    )
+  );
 })
 .then(seasons=>{
   seasons.forEach(matches=>{
@@ -149,11 +162,11 @@ Promise.all([
             const runs = ball.runs?.batter || 0;
             const totalRuns = ball.runs?.total || 0;
 
-            if(!batterRuns[batter]) batterRuns[batter]=0;
-            batterRuns[batter]+=runs;
+            if(!batterRuns[batter]) batterRuns[batter] = 0;
+            batterRuns[batter] += runs;
 
             if(!bowlerStats[bowler]){
-              bowlerStats[bowler]={wickets:0,runs:0};
+              bowlerStats[bowler] = {wickets:0, runs:0};
             }
 
             const byes = ball.extras?.byes || 0;
@@ -209,16 +222,19 @@ function showTab(tab,e){
 function renderTable(type){
   const tbody = document.getElementById("recordsTable");
   const header = document.getElementById("figureHeader");
-  tbody.innerHTML="";
+  tbody.innerHTML = "";
 
-  let rows=[];
+  let rows = [];
 
-  if(type==="batting"){
+  if(type === "batting"){
     header.textContent = "Runs";
-    rows = battingInnings.sort((a,b)=>b.runs-a.runs).slice(0,25);
+    rows = battingInnings
+      .sort((a,b)=> b.runs - a.runs)
+      .slice(0,25);
+
     rows.forEach((r,i)=>{
-      const tr=document.createElement("tr");
-      tr.innerHTML=`
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
         <td>${i+1}</td>
         <td>${r.player}</td>
         <td>${r.runs}</td>
@@ -229,15 +245,15 @@ function renderTable(type){
     });
   }
 
-  if(type==="bowling"){
+  if(type === "bowling"){
     header.textContent = "Figures";
     rows = bowlingFigures
       .sort((a,b)=> b.wickets - a.wickets || a.runs - b.runs)
       .slice(0,25);
 
     rows.forEach((r,i)=>{
-      const tr=document.createElement("tr");
-      tr.innerHTML=`
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
         <td>${i+1}</td>
         <td>${r.player}</td>
         <td>${r.wickets} / ${r.runs}</td>
