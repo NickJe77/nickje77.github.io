@@ -124,22 +124,40 @@ let seasonOrder = [];
 
 fetch(indexUrl)
   .then(r=>r.json())
-  .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
-  .then(allMatches=>{
-    allMatches.flat().forEach(match=>{
-      const season = match.info?.season;
-      if(!season) return;
+  .then(files=>{
+    return Promise.all(
+      files.map(file =>
+        fetch(basePath+file)
+          .then(r=>r.json())
+          .then(matches => ({ file, matches }))
+      )
+    );
+  })
+  .then(allSeasons=>{
+    allSeasons.forEach(seasonObj=>{
+      const seasonFile = seasonObj.file;
+      const matches = seasonObj.matches;
 
-      if(!seasonsMap[season]){
-        seasonsMap[season] = [];
-        seasonOrder.push(season);
-      }
-      seasonsMap[season].push(match);
+      matches.forEach((match, index)=>{
+        const season = match.info?.season;
+        if(!season) return;
+
+        if(!seasonsMap[season]){
+          seasonsMap[season] = [];
+          seasonOrder.push(season);
+        }
+
+        seasonsMap[season].push({
+          match,
+          file: seasonFile,
+          index: index
+        });
+      });
     });
 
-    seasonOrder.sort(); // chronological order
+    seasonOrder.sort();
     buildYearButtons();
-    showSeason(seasonOrder[seasonOrder.length-1]); // latest season
+    showSeason(seasonOrder[seasonOrder.length-1]);
   });
 
 function buildYearButtons(){
@@ -165,12 +183,13 @@ function showSeason(season){
   renderTable(seasonsMap[season] || []);
 }
 
-function renderTable(matches){
+function renderTable(rows){
   tableBody.innerHTML="";
 
-  matches
-    .sort((a,b)=>new Date(a.info.dates[0]) - new Date(b.info.dates[0]))
-    .forEach(match=>{
+  rows
+    .sort((a,b)=>new Date(a.match.info.dates[0]) - new Date(b.match.info.dates[0]))
+    .forEach(row=>{
+      const match = row.match;
       const date = formatDate(match.info.dates[0]);
       const teams = match.info.teams.join(" vs ");
       const venue = match.info.venue || "—";
@@ -189,7 +208,7 @@ function renderTable(matches){
       tr.innerHTML=`
         <td>${date}</td>
         <td>
-          <a class="match-link" href="bbl-match.html?file=${encodeURIComponent(match.file)}">
+          <a class="match-link" href="bbl-match.html?file=${row.file}&i=${row.index}">
             ${teams}
           </a>
         </td>
