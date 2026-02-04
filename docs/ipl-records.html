@@ -110,69 +110,84 @@ tr:hover{background:#eef4ff;}
 <script>
 const indexUrl = "data/ipl/index.json";
 const basePath = "data/ipl/";
+const nameMapUrl = "data/ipl/player-names.json";
 
+let nameMap = {};
 let battingInnings = [];
 let bowlingFigures = [];
 let currentTab = "batting";
 
-fetch(indexUrl)
-  .then(r=>r.json())
-  .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
-  .then(seasons=>{
-    seasons.forEach(matches=>{
-      matches.forEach(match=>{
-        const date = match.info?.dates?.[0] || "";
-        const teams = match.info?.teams?.join(" vs ") || "";
+/* Load names + data together */
+Promise.all([
+  fetch(nameMapUrl).then(r => r.json()),
+  fetch(indexUrl).then(r => r.json())
+])
+.then(([names, files]) => {
+  nameMap = names;
+  return Promise.all(files.map(f => fetch(basePath + f).then(r => r.json())));
+})
+.then(seasons=>{
+  seasons.forEach(matches=>{
+    matches.forEach(match=>{
+      const date = match.info?.dates?.[0] || "";
+      const teams = match.info?.teams?.join(" vs ") || "";
 
-        let batterRuns = {};
-        let bowlerWickets = {};
+      let batterRuns = {};
+      let bowlerWickets = {};
 
-        match.innings?.forEach(inn=>{
-          inn.overs?.forEach(over=>{
-            over.deliveries?.forEach(ball=>{
-              const batter = ball.batter;
-              const bowler = ball.bowler;
-              const runs = ball.runs?.batter || 0;
+      let inningsList = [];
+      if(Array.isArray(match.innings)){
+        inningsList = match.innings;
+      } else if(typeof match.innings === "object"){
+        inningsList = Object.values(match.innings);
+      }
 
-              if(!batterRuns[batter]) batterRuns[batter]=0;
-              batterRuns[batter]+=runs;
+      inningsList.forEach(inn=>{
+        inn.overs?.forEach(over=>{
+          over.deliveries?.forEach(ball=>{
+            const batter = ball.batter;
+            const bowler = ball.bowler;
+            const runs = ball.runs?.batter || 0;
 
-              if(ball.wickets){
-                ball.wickets.forEach(w=>{
-                  const kind = w.kind;
-                  if(kind !== "run out"){
-                    if(!bowlerWickets[bowler]) bowlerWickets[bowler]=0;
-                    bowlerWickets[bowler]+=1;
-                  }
-                });
-              }
-            });
+            batterRuns[batter] = (batterRuns[batter] || 0) + runs;
+
+            if(ball.wickets){
+              ball.wickets.forEach(w=>{
+                if(w.kind !== "run out"){
+                  bowlerWickets[bowler] = (bowlerWickets[bowler] || 0) + 1;
+                }
+              });
+            }
           });
         });
-
-        for(const batter in batterRuns){
-          battingInnings.push({
-            player:batter,
-            runs:batterRuns[batter],
-            date,
-            match:teams
-          });
-        }
-
-        for(const bowler in bowlerWickets){
-          bowlingFigures.push({
-            player:bowler,
-            wickets:bowlerWickets[bowler],
-            date,
-            match:teams
-          });
-        }
-
       });
-    });
 
-    renderTable("batting");
+      for(const batter in batterRuns){
+        battingInnings.push({
+          player: batter,
+          runs: batterRuns[batter],
+          date,
+          match: teams
+        });
+      }
+
+      for(const bowler in bowlerWickets){
+        bowlingFigures.push({
+          player: bowler,
+          wickets: bowlerWickets[bowler],
+          date,
+          match: teams
+        });
+      }
+    });
   });
+
+  renderTable("batting");
+});
+
+function fullName(name){
+  return nameMap[name] || name;
+}
 
 function showTab(tab,e){
   currentTab = tab;
@@ -193,7 +208,7 @@ function renderTable(type){
       const tr=document.createElement("tr");
       tr.innerHTML=`
         <td>${i+1}</td>
-        <td>${r.player}</td>
+        <td>${fullName(r.player)}</td>
         <td>${r.runs}</td>
         <td>${r.date}</td>
         <td>${r.match}</td>
@@ -208,7 +223,7 @@ function renderTable(type){
       const tr=document.createElement("tr");
       tr.innerHTML=`
         <td>${i+1}</td>
-        <td>${r.player}</td>
+        <td>${fullName(r.player)}</td>
         <td>${r.wickets} wickets</td>
         <td>${r.date}</td>
         <td>${r.match}</td>
