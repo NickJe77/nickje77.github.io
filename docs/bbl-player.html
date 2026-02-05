@@ -57,27 +57,18 @@ table{
   border-collapse:collapse;
   font-size:14px;
 }
-
 th,td{
   border-bottom:1px solid #ddd;
   padding:8px 10px;
-  text-align:left;
 }
-
 th{background:#f3f6fb;}
-
-tr:nth-child(even){
-  background:#f8fbff;
-}
-
-tr:hover{
-  background:#eef4ff;
-}
+tr:nth-child(even){background:#f8fbff;}
+tr:hover{background:#eef4ff;}
 
 a{
   color:#003566;
-  text-decoration:none;
   font-weight:600;
+  text-decoration:none;
 }
 a:hover{text-decoration:underline;}
 </style>
@@ -141,14 +132,14 @@ Promise.all([
   fetch(nameMapUrl).then(r=>r.ok?r.json():{}),
   fetch(indexUrl).then(r=>r.json())
 ])
-.then(([names, seasonFiles])=>{
+.then(([names, index])=>{
   nameMap = names || {};
 
   return Promise.all(
-    seasonFiles.map(file =>
-      fetch(basePath + file)
+    index.map(entry =>
+      fetch(basePath + entry.file)
         .then(r=>r.json())
-        .then(data => ({ file, data }))
+        .then(data => ({ file: entry.file, data }))
     )
   );
 })
@@ -156,28 +147,25 @@ Promise.all([
   let matches=0, runs=0, balls=0, wkts=0;
 
   seasons.forEach(season=>{
-    const seasonFile = season.file;
-    const seasonData = season.data;
-
-    seasonData.forEach((match, matchIndex)=>{
+    season.data.forEach((match, matchIndex)=>{
       let didPlay=false;
-      let batRuns=0, batBalls=0, bowlWkts=0, bowlRuns=0;
+      let batRuns=0, batBalls=0, bowlRuns=0, bowlWkts=0;
 
       match.innings.forEach(inn=>{
         inn.overs.forEach(over=>{
           over.deliveries.forEach(d=>{
-            if(d.batter === playerParam){
-              batRuns += d.runs.batter;
+            if(d.batter===playerParam){
+              batRuns+=d.runs.batter;
               if(!d.extras?.wides) batBalls++;
               didPlay=true;
             }
-            if(d.bowler === playerParam){
+            if(d.bowler===playerParam){
               if(!d.extras?.byes && !d.extras?.legbyes){
-                bowlRuns += d.runs.total;
+                bowlRuns+=d.runs.total;
               }
               if(d.wickets){
                 d.wickets.forEach(w=>{
-                  if(w.kind !== "run out") bowlWkts++;
+                  if(w.kind!=="run out") bowlWkts++;
                 });
               }
               didPlay=true;
@@ -188,21 +176,21 @@ Promise.all([
 
       if(didPlay){
         matches++;
-        runs += batRuns;
-        balls += batBalls;
-        wkts += bowlWkts;
+        runs+=batRuns;
+        balls+=batBalls;
+        wkts+=bowlWkts;
 
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
+        const tr=document.createElement("tr");
+        tr.innerHTML=`
           <td>${formatDate(match.info.dates[0])}</td>
           <td>
-            <a href="bbl-match.html?file=${encodeURIComponent(seasonFile)}&match=${matchIndex}">
+            <a href="bbl-match.html?file=${encodeURIComponent(season.file)}&match=${matchIndex}">
               ${match.info.teams.join(" vs ")}
             </a>
           </td>
-          <td>${match.info.venue || "—"}</td>
-          <td>${batRuns ? batRuns+" ("+batBalls+")" : "—"}</td>
-          <td>${bowlWkts ? bowlWkts+" / "+bowlRuns : "—"}</td>
+          <td>${match.info.venue||"—"}</td>
+          <td>${batRuns?batRuns+" ("+batBalls+")":"—"}</td>
+          <td>${bowlWkts?bowlWkts+" / "+bowlRuns:"—"}</td>
         `;
         tableBody.appendChild(tr);
       }
@@ -213,12 +201,10 @@ Promise.all([
   matchesBox.textContent = matches;
   runsBox.textContent = runs;
   wicketsBox.textContent = wkts;
-  srBox.textContent = balls ? ((runs/balls)*100).toFixed(1) : "—";
+  srBox.textContent = balls?((runs/balls)*100).toFixed(1):"—";
 });
 
-function fullName(n){
-  return nameMap[n] || n;
-}
+function fullName(n){ return nameMap[n] || n; }
 
 function formatDate(d){
   return new Date(d).toLocaleDateString("en-GB",{
