@@ -9,7 +9,7 @@
 body{
   font-family:Inter,system-ui,Arial,sans-serif;
   margin:0;
-  background:#fff;
+  background:#f6f8fc;
 }
 
 .navbar{
@@ -19,31 +19,29 @@ body{
   padding:16px 0;
   border-bottom:1px solid #ddd;
   font-weight:600;
+  background:#fff;
 }
-.navbar a{
-  color:#0056d6;
-  text-decoration:none;
-  font-size:18px;
-}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 
 .page{
-  max-width:1100px;
+  max-width:1200px;
   margin:0 auto;
-  padding:30px 20px 60px;
+  padding:30px 20px 70px;
 }
 
 .hero{
   background:linear-gradient(90deg,#4b0082,#7b2cbf);
   color:#fff;
-  padding:34px 40px;
-  border-radius:24px;
-  margin-bottom:26px;
+  padding:36px 44px;
+  border-radius:26px;
+  margin-bottom:28px;
 }
-.hero h1{margin:0;font-size:38px;}
+.hero h1{margin:0;font-size:40px;}
 .hero p{margin-top:8px;font-size:16px;opacity:.95;}
 
 .controls{
-  margin:20px 0;
+  margin:20px 0 26px;
+  font-size:16px;
 }
 select{
   padding:10px 14px;
@@ -52,33 +50,41 @@ select{
   border:1px solid #ccc;
 }
 
+.section{
+  background:#fff;
+  border-radius:22px;
+  padding:26px;
+  margin-bottom:28px;
+  box-shadow:0 10px 22px rgba(0,0,0,.06);
+}
+
+.section h2{
+  margin:0 0 18px;
+  font-size:20px;
+  letter-spacing:.4px;
+  color:#475569;
+}
+
 .stats{
   display:grid;
   grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-  gap:16px;
-  margin-bottom:30px;
+  gap:18px;
 }
 
 .stat{
-  border:1px solid #e5e7eb;
-  border-radius:14px;
-  padding:14px;
+  background:#f3f6fb;
+  border-radius:18px;
+  padding:18px 12px;
   text-align:center;
-  background:#f9fafb;
 }
 .stat strong{
   display:block;
-  font-size:22px;
+  font-size:30px;
   margin-bottom:4px;
 }
-
-.error{
-  background:#fff1f2;
-  border:1px solid #fecdd3;
-  color:#7f1d1d;
-  padding:18px;
-  border-radius:12px;
-  font-weight:700;
+.stat span{
+  font-size:14px;
+  color:#475569;
 }
 </style>
 </head>
@@ -94,8 +100,8 @@ select{
 <div class="page">
 
 <div class="hero">
-  <h1 id="playerName">Loading player…</h1>
-  <p id="subtitle"></p>
+  <h1 id="playerName">Loading…</h1>
+  <p>BBL performance breakdown</p>
 </div>
 
 <div class="controls">
@@ -103,7 +109,15 @@ select{
   <select id="teamSelect"></select>
 </div>
 
-<div class="stats" id="stats"></div>
+<div class="section">
+  <h2>CAREER SUMMARY</h2>
+  <div class="stats" id="careerStats"></div>
+</div>
+
+<div class="section">
+  <h2>VS SELECTED OPPONENT</h2>
+  <div class="stats" id="oppStats"></div>
+</div>
 
 </div>
 
@@ -112,135 +126,147 @@ select{
   const params = new URLSearchParams(location.search);
   const player = params.get("player");
 
-  const nameEl = document.getElementById("playerName");
-  const subEl = document.getElementById("subtitle");
-  const teamSelect = document.getElementById("teamSelect");
-  const statsEl = document.getElementById("stats");
-
   if(!player){
-    document.body.innerHTML =
-      '<div class="error">Missing player parameter</div>';
+    document.body.innerHTML = "<h2 style='padding:40px'>Missing player</h2>";
     return;
   }
 
-  nameEl.textContent = player;
-  subEl.textContent = "BBL performance breakdown by opposition";
+  document.getElementById("playerName").textContent = player;
 
-  // 🔹 Load all seasons automatically
+  const teamSelect = document.getElementById("teamSelect");
+  const careerEl = document.getElementById("careerStats");
+  const oppEl = document.getElementById("oppStats");
+
   const index = await fetch("data/bbl/index.json").then(r=>r.json());
-
   const seasonFiles = index.map(s=>s.file);
 
-  const matches = [];
-
-  for(const f of seasonFiles){
-    try{
-      const data = await fetch("data/bbl/"+f).then(r=>r.json());
-      if(Array.isArray(data)) matches.push(...data);
-      else matches.push(data);
-    }catch(e){}
-  }
-
-  const byTeam = {};
-  const teamsSet = new Set();
+  const career = {
+    matches:0,runs:0,balls:0,outs:0,
+    wickets:0,ballsBowled:0,runsConceded:0
+  };
+  const vs = {};
+  const teams = new Set();
 
   function init(team){
-    byTeam[team] ??= {
-      matches:0,
-      runs:0,
-      balls:0,
-      outs:0,
-      wickets:0,
-      ballsBowled:0,
-      runsConceded:0
-    };
-  }
-
-  matches.forEach(m=>{
-    if(!m.innings) return;
-
-    const teams = m.info.teams;
-
-    m.innings.forEach(inn=>{
-      const opp = teams.find(t=>t!==inn.team);
-      if(!opp) return;
-
-      inn.overs.forEach(o=>{
-        o.deliveries.forEach(d=>{
-          // Batting
-          if(d.batter === player){
-            teamsSet.add(opp);
-            init(opp);
-            byTeam[opp].runs += d.runs.batter;
-            if(!(d.extras && d.extras.wides)) byTeam[opp].balls++;
-          }
-
-          if(d.wickets){
-            d.wickets.forEach(w=>{
-              if(w.player_out === player){
-                init(opp);
-                byTeam[opp].outs++;
-              }
-            });
-          }
-
-          // Bowling
-          if(d.bowler === player){
-            teamsSet.add(opp);
-            init(opp);
-            if(!(d.extras && (d.extras.wides || d.extras.noballs))){
-              byTeam[opp].ballsBowled++;
-            }
-            byTeam[opp].runsConceded +=
-              d.runs.total -
-              ((d.extras?.byes||0)+(d.extras?.legbyes||0));
-            if(d.wickets) byTeam[opp].wickets += d.wickets.length;
-          }
-        });
-      });
-
-      if(byTeam[opp]) byTeam[opp].matches++;
-    });
-  });
-
-  const teams = ["All", ...Array.from(teamsSet).sort()];
-  teams.forEach(t=>{
-    const o = document.createElement("option");
-    o.value = t;
-    o.textContent = t;
-    teamSelect.appendChild(o);
-  });
-
-  function render(team){
-    let d={
+    vs[team] ??= {
       matches:0,runs:0,balls:0,outs:0,
       wickets:0,ballsBowled:0,runsConceded:0
     };
+  }
 
-    const src = team==="All" ? Object.values(byTeam) : [byTeam[team]];
-    src.forEach(s=>{
-      if(!s) return;
-      Object.keys(d).forEach(k=>d[k]+=s[k]||0);
+  for(const f of seasonFiles){
+    const data = await fetch("data/bbl/"+f).then(r=>r.json());
+    const matches = Array.isArray(data) ? data : [data];
+
+    matches.forEach(m=>{
+      if(!m.innings) return;
+      const tms = m.info.teams;
+
+      let played = false;
+      const oppSet = new Set();
+
+      m.innings.forEach(inn=>{
+        const opp = tms.find(t=>t!==inn.team);
+        if(!opp) return;
+
+        inn.overs.forEach(o=>{
+          o.deliveries.forEach(d=>{
+            // Batting
+            if(d.batter === player){
+              played = true;
+              teams.add(opp);
+              init(opp);
+
+              career.runs += d.runs.batter;
+              if(!(d.extras && d.extras.wides)) career.balls++;
+
+              vs[opp].runs += d.runs.batter;
+              if(!(d.extras && d.extras.wides)) vs[opp].balls++;
+            }
+
+            if(d.wickets){
+              d.wickets.forEach(w=>{
+                if(w.player_out === player){
+                  career.outs++;
+                  init(opp);
+                  vs[opp].outs++;
+                }
+              });
+            }
+
+            // Bowling
+            if(d.bowler === player){
+              played = true;
+              teams.add(opp);
+              init(opp);
+
+              if(!(d.extras && (d.extras.wides||d.extras.noballs))){
+                career.ballsBowled++;
+                vs[opp].ballsBowled++;
+              }
+
+              const conceded =
+                d.runs.total -
+                ((d.extras?.byes||0)+(d.extras?.legbyes||0));
+
+              career.runsConceded += conceded;
+              vs[opp].runsConceded += conceded;
+
+              if(d.wickets){
+                career.wickets += d.wickets.length;
+                vs[opp].wickets += d.wickets.length;
+              }
+            }
+          });
+        });
+
+        if(played) oppSet.add(opp);
+      });
+
+      if(played){
+        career.matches++;
+        oppSet.forEach(o=>{
+          init(o);
+          vs[o].matches++;
+        });
+      }
     });
+  }
 
-    const avg=d.outs?(d.runs/d.outs).toFixed(2):"—";
-    const sr=d.balls?((d.runs/d.balls)*100).toFixed(1):"—";
-    const ov=(d.ballsBowled/6).toFixed(1);
-    const econ=d.ballsBowled?(d.runsConceded/(d.ballsBowled/6)).toFixed(2):"—";
+  function render(el, d){
+    const avg = d.outs ? (d.runs/d.outs).toFixed(2) : "—";
+    const sr  = d.balls ? ((d.runs/d.balls)*100).toFixed(1) : "—";
+    const ov  = (d.ballsBowled/6).toFixed(1);
+    const eco = d.ballsBowled ? (d.runsConceded/(d.ballsBowled/6)).toFixed(2) : "—";
 
-    statsEl.innerHTML=`
-      <div class="stat"><strong>${d.matches}</strong>Matches</div>
-      <div class="stat"><strong>${d.runs}</strong>Runs</div>
-      <div class="stat"><strong>${avg}</strong>Average</div>
-      <div class="stat"><strong>${sr}</strong>Strike Rate</div>
-      <div class="stat"><strong>${d.wickets}</strong>Wickets</div>
-      <div class="stat"><strong>${ov}</strong>Overs</div>
-      <div class="stat"><strong>${econ}</strong>Economy</div>
+    el.innerHTML = `
+      <div class="stat"><strong>${d.matches}</strong><span>Matches</span></div>
+      <div class="stat"><strong>${d.runs}</strong><span>Runs</span></div>
+      <div class="stat"><strong>${avg}</strong><span>Average</span></div>
+      <div class="stat"><strong>${sr}</strong><span>Strike Rate</span></div>
+      <div class="stat"><strong>${d.wickets}</strong><span>Wickets</span></div>
+      <div class="stat"><strong>${ov}</strong><span>Overs</span></div>
+      <div class="stat"><strong>${eco}</strong><span>Economy</span></div>
     `;
   }
 
-  teamSelect.addEventListener("change",()=>render(teamSelect.value));
-  render("All");
+  render(careerEl, career);
+
+  [...teams].sort().forEach(t=>{
+    const o=document.createElement("option");
+    o.value=t;
+    o.textContent=t;
+    teamSelect.appendChild(o);
+  });
+
+  const first = teamSelect.options[0]?.value;
+  if(first){
+    render(oppEl, vs[first]);
+  }
+
+  teamSelect.addEventListener("change",()=>{
+    render(oppEl, vs[teamSelect.value]);
+  });
 })();
 </script>
 
