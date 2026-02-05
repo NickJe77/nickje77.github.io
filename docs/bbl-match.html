@@ -198,4 +198,89 @@ document.addEventListener("DOMContentLoaded", () => {
               ex.lb+=d.extras.legbyes||0;
               ex.w+=d.extras.wides||0;
               ex.nb+=d.extras.noballs||0;
-              ex.p+=d.extras.penalt
+              ex.p+=d.extras.penalty||0;
+            }
+
+            if(d.batter){
+              bat[d.batter]??={R:0,B:0,out:"not out"};
+              bat[d.batter].R+=d.runs.batter;
+              if(legalBall(d)) bat[d.batter].B++;
+            }
+
+            if(d.bowler){
+              bowl[d.bowler]??={balls:0,R:0,W:0};
+              if(legalBall(d)) bowl[d.bowler].balls++;
+              bowl[d.bowler].R+=d.runs.total-
+                ((d.extras?.byes||0)+(d.extras?.legbyes||0));
+            }
+
+            if(legalBall(d)){balls++;bo++;}
+
+            if(d.wickets){
+              d.wickets.forEach(w=>{
+                wkts++;
+                if(bat[w.player_out])
+                  bat[w.player_out].out=dismissal(w,d.bowler);
+                if(bowl[d.bowler]) bowl[d.bowler].W++;
+                fall.push(
+                  `${runs}/${wkts} (${name(w.player_out)}, ${o.over}.${bo})`
+                );
+              });
+            }
+          });
+        });
+
+        html+=`
+        <div class="innings">
+          <h2>${inn.team} Innings</h2>
+          <div class="total">Total: ${runs}/${wkts} (${(balls/6).toFixed(1)} ov)</div>
+
+          <table>
+            <tr><th>Batter</th><th>How out</th><th>R</th><th>B</th><th>SR</th></tr>
+            ${Object.entries(bat).map(([p,s])=>{
+              const sr=s.B?((s.R/s.B)*100).toFixed(1):"—";
+              return `<tr>
+                <td>${pl(p)}</td>
+                <td>${s.out}</td>
+                <td>${s.R}</td>
+                <td>${s.B}</td>
+                <td>${sr}</td>
+              </tr>`;
+            }).join("")}
+          </table>
+
+          <div class="meta-line">
+            Extras: ${ex.b+ex.lb+ex.w+ex.nb+ex.p}
+          </div>
+
+          <div class="meta-line">
+            Fall of wickets: ${fall.join(", ")}
+          </div>
+
+          <h3 style="color:var(--secondary)">Bowling vs ${inn.team}</h3>
+          <table>
+            <tr><th>Bowler</th><th>O</th><th>R</th><th>W</th></tr>
+            ${Object.entries(bowl).map(([p,s])=>`
+              <tr>
+                <td>${pl(p)}</td>
+                <td>${overs(s.balls)}</td>
+                <td>${s.R}</td>
+                <td>${s.W}</td>
+              </tr>
+            `).join("")}
+          </table>
+        </div>`;
+      });
+
+      content.innerHTML = html;
+    });
+
+  } catch(err){
+    document.getElementById("content").innerHTML =
+      `<div class="error">${err.message}</div>`;
+  }
+});
+</script>
+
+</body>
+</html>
