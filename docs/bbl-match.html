@@ -7,9 +7,9 @@
 
 <style>
 body{
-  font-family:Inter,system-ui,Arial,sans-serif;
+  font-family: Inter, system-ui, Arial, sans-serif;
   margin:0;
-  background:#fff;
+  background:#ffffff;
 }
 
 .navbar{
@@ -34,24 +34,15 @@ body{
 
 .hero{
   background:linear-gradient(90deg,#003366,#00a3cc);
-  color:#fff;
-  padding:34px 40px;
+  color:white;
+  padding:36px 40px;
   border-radius:24px;
   margin-bottom:30px;
 }
-.hero h1{
-  margin:0;
-  font-size:40px;
-}
-.hero p{
-  margin-top:10px;
-  font-size:16px;
-  opacity:.95;
-}
+.hero h1{margin:0;font-size:40px;}
+.hero p{margin-top:10px;font-size:16px;opacity:.95;}
 
-.innings{
-  margin-bottom:36px;
-}
+.innings{margin-bottom:40px;}
 
 .innings h2{
   margin:0 0 6px;
@@ -77,13 +68,11 @@ th,td{
 
 th{
   background:#f6f7fb;
-  text-align:left;
   font-weight:800;
+  text-align:left;
 }
 
-tr:nth-child(even){
-  background:#fbfcff;
-}
+tr:nth-child(even){background:#fbfcff;}
 
 a.player{
   color:#4b0082;
@@ -106,6 +95,15 @@ a.player:hover{text-decoration:underline;}
   background:#0b2a55;
   color:#fff;
   border-radius:14px;
+}
+
+.error{
+  background:#fff1f2;
+  border:1px solid #fecdd3;
+  color:#7f1d1d;
+  padding:16px;
+  border-radius:12px;
+  font-weight:700;
 }
 </style>
 </head>
@@ -130,18 +128,34 @@ a.player:hover{text-decoration:underline;}
 </div>
 
 <script>
+/* ---------------------------------------------------
+   SAFE PARAM HANDLING
+--------------------------------------------------- */
 const params = new URLSearchParams(location.search);
 const file = params.get("file");
-const matchIndex = parseInt(params.get("match"));
+const matchIndex = params.has("match") ? parseInt(params.get("match")) : 0;
 
+const titleEl = document.getElementById("title");
+const metaEl  = document.getElementById("meta");
+const content = document.getElementById("content");
+
+if(!file){
+  titleEl.textContent = "ERROR";
+  content.innerHTML = `<div class="error">Missing ?file= parameter</div>`;
+  throw new Error("Missing file param");
+}
+
+/* ---------------------------------------------------
+   HELPERS
+--------------------------------------------------- */
 function legalBall(d){
   return !(d.extras && (d.extras.wides || d.extras.noballs));
 }
 function overs(balls){
   return Math.floor(balls/6)+"."+(balls%6);
 }
-function pl(n){
-  return `<a class="player" href="bbl-player.html?player=${encodeURIComponent(n)}">${n}</a>`;
+function pl(name){
+  return `<a class="player" href="bbl-player.html?player=${encodeURIComponent(name)}">${name}</a>`;
 }
 function dismissal(w, bowler){
   const f = w.fielders?.map(x=>x.name).join(", ");
@@ -151,25 +165,140 @@ function dismissal(w, bowler){
     case "lbw": return `lbw b ${bowler}`;
     case "stumped": return `st ${f} b ${bowler}`;
     case "run out": return `run out (${f})`;
+    case "hit wicket": return `hit wicket b ${bowler}`;
     default: return w.kind;
   }
 }
 
-fetch("data/bbl/"+file)
-.then(r=>r.json())
+/* ---------------------------------------------------
+   LOAD MATCH
+--------------------------------------------------- */
+fetch("data/bbl/" + file)
+.then(r=>{
+  if(!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+})
 .then(data=>{
-  const match = Array.isArray(data)
-    ? (isNaN(matchIndex)?data[0]:data[matchIndex])
-    : data;
+  const match = Array.isArray(data) ? data[matchIndex] : data;
+
+  if(!match || !match.innings){
+    throw new Error("Match data invalid or index out of range");
+  }
 
   const info = match.info;
-  document.getElementById("title").textContent =
-    info.teams.join(" vs ");
-  document.getElementById("meta").textContent =
-    info.venue+" • "+
-    new Date(info.dates[0]).toDateString()+
-    " • Winner: "+(info.outcome?.winner||"—");
+
+  titleEl.textContent = info.teams.join(" vs ");
+  metaEl.textContent =
+    info.venue + " • " +
+    new Date(info.dates[0]).toDateString() +
+    " • Winner: " + (info.outcome?.winner || "—");
 
   let html = "";
 
   match.innings.forEach((inn,i)=>{
+    if(i === 2){
+      html += `<div class="superover">SUPER OVER</div>`;
+    }
+
+    let bat={}, bowl={}, fall=[];
+    let runs=0, wkts=0, balls=0;
+    let ex={b:0,lb:0,w:0,nb:0,p:0};
+
+    inn.overs.forEach(o=>{
+      let ballInOver = 0;
+
+      o.deliveries.forEach(d=>{
+        runs += d.runs.total;
+
+        if(d.extras){
+          ex.b  += d.extras.byes||0;
+          ex.lb += d.extras.legbyes||0;
+          ex.w  += d.extras.wides||0;
+          ex.nb += d.extras.noballs||0;
+          ex.p  += d.extras.penalty||0;
+        }
+
+        if(d.batter){
+          bat[d.batter] ??= {R:0,B:0,out:"not out"};
+          bat[d.batter].R += d.runs.batter;
+          if(legalBall(d)) bat[d.batter].B++;
+        }
+
+        if(d.bowler){
+          bowl[d.bowler] ??= {balls:0,R:0,W:0};
+          if(legalBall(d)) bowl[d.bowler].balls++;
+          bowl[d.bowler].R += d.runs.total -
+            ((d.extras?.byes||0)+(d.extras?.legbyes||0));
+        }
+
+        if(legalBall(d)){
+          balls++;
+          ballInOver++;
+        }
+
+        if(d.wickets){
+          d.wickets.forEach(w=>{
+            wkts++;
+            if(bat[w.player_out]){
+              bat[w.player_out].out = dismissal(w, d.bowler);
+            }
+            if(bowl[d.bowler]) bowl[d.bowler].W++;
+            fall.push(`${runs}/${wkts} (${w.player_out}, ${o.over}.${ballInOver})`);
+          });
+        }
+      });
+    });
+
+    html += `
+    <div class="innings">
+      <h2>${inn.team} Innings</h2>
+      <div class="total">Total: ${runs}/${wkts} (${(balls/6).toFixed(1)} ov)</div>
+
+      <table>
+        <tr><th>Batter</th><th>How out</th><th>R</th><th>B</th><th>SR</th></tr>
+        ${Object.entries(bat).map(([p,s])=>{
+          const sr = s.B ? ((s.R/s.B)*100).toFixed(1) : "—";
+          return `<tr>
+            <td>${pl(p)}</td>
+            <td>${s.out}</td>
+            <td>${s.R}</td>
+            <td>${s.B}</td>
+            <td>${sr}</td>
+          </tr>`;
+        }).join("")}
+      </table>
+
+      <div class="meta-line">
+        Extras: ${ex.b+ex.lb+ex.w+ex.nb+ex.p}
+        (b ${ex.b}, lb ${ex.lb}, w ${ex.w}, nb ${ex.nb}, p ${ex.p})
+      </div>
+
+      <div class="meta-line">
+        Fall of wickets: ${fall.join(", ")}
+      </div>
+
+      <h3 style="margin-top:18px">Bowling vs ${inn.team}</h3>
+      <table>
+        <tr><th>Bowler</th><th>O</th><th>R</th><th>W</th></tr>
+        ${Object.entries(bowl).map(([p,s])=>`
+          <tr>
+            <td>${pl(p)}</td>
+            <td>${overs(s.balls)}</td>
+            <td>${s.R}</td>
+            <td>${s.W}</td>
+          </tr>
+        `).join("")}
+      </table>
+    </div>`;
+  });
+
+  content.innerHTML = html;
+})
+.catch(err=>{
+  titleEl.textContent = "ERROR";
+  content.innerHTML = `<div class="error">${err.message}</div>`;
+});
+</script>
+
+</body>
+</html>
