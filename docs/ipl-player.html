@@ -134,23 +134,32 @@ td:nth-child(3),td:nth-child(4){text-align:left;}
 
 const params = new URLSearchParams(location.search);
 const player = params.get("player");
-if(!player) return;
+
+if(!player){
+  document.getElementById("playerName").textContent="No player specified";
+  return;
+}
+
 document.getElementById("playerName").textContent = player;
+
 const P = player.toLowerCase();
 
-let battingGames=[], bowlingGames=[];
+let battingGames=[];
+let bowlingGames=[];
 let currentTab="bat";
 
-/* IPL INDEX LOAD */
+/* ---------- LOAD IPL INDEX ---------- */
+
 const raw = await fetch("data/ipl/index.json").then(r=>r.json());
 
 const index = Array.isArray(raw)
   ? raw
-  : typeof raw === "string"
+  : typeof raw==="string"
     ? raw.split(",").map(s=>s.trim())
     : raw.files || [];
 
-/* OUT ABBREVIATION */
+/* ---------- DISMISSAL FORMAT ---------- */
+
 function abbrOut(kind){
   if(!kind) return "not out";
   const k=kind.toLowerCase();
@@ -162,14 +171,20 @@ function abbrOut(kind){
   return k;
 }
 
-/* LOAD ALL MATCHES */
+/* ---------- LOAD ALL MATCHES ---------- */
+
 for(const file of index){
 
   if(!file.includes("_FULL.json")) continue;
 
-  const data = await fetch("data/ipl/"+file).then(r=>r.json());
+  const rawData = await fetch("data/ipl/"+file).then(r=>r.json());
 
-  data.forEach(match=>{
+  const matches =
+    Array.isArray(rawData)
+      ? rawData
+      : rawData.matches || rawData.games || [];
+
+  matches.forEach(match=>{
 
     match.innings.forEach(inn=>{
 
@@ -193,18 +208,21 @@ for(const file of index){
           }
 
           d.wickets?.forEach(w=>{
+
             if(w.player_out?.toLowerCase()===P)
               batOut=abbrOut(w.kind);
 
             if(w.bowler?.toLowerCase()===P)
               bowlWkts++;
+
           });
 
         });
 
       });
 
-      const opponent = match.info.teams.find(t=>t!==inn.team);
+      const opponent =
+        match.info.teams.find(t=>t!==inn.team);
 
       if(batted){
         battingGames.push({
@@ -239,53 +257,71 @@ for(const file of index){
 
 }
 
-/* AUTO TAB */
-const totalBowlBalls = bowlingGames.reduce((a,b)=>a+b.balls,0);
+/* ---------- AUTO TAB ---------- */
 
-if(totalBowlBalls >= 30){
+const totalBowlBalls =
+  bowlingGames.reduce((a,b)=>a+b.balls,0);
+
+if(totalBowlBalls>=30){
   currentTab="bowl";
   bowlBtn.classList.add("active");
 }else{
   batBtn.classList.add("active");
 }
 
-/* OPPONENT DROPDOWN */
+/* ---------- OPPONENT SELECT ---------- */
+
 const oppSel=document.getElementById("oppSelect");
 
-["All",...new Set([...battingGames,...bowlingGames].map(g=>g.opp))]
-.forEach(o=>{
+["All",
+ ...new Set([...battingGames,...bowlingGames].map(g=>g.opp))
+].forEach(o=>{
+
   const opt=document.createElement("option");
   opt.value=o;
   opt.textContent=o;
   oppSel.appendChild(opt);
+
 });
 
-/* STATS FUNCTIONS */
+/* ---------- STAT FUNCTIONS ---------- */
 
 function batStats(list){
+
   const runs=list.reduce((a,b)=>a+b.r,0);
+
   const balls=list.reduce((a,b)=>a+b.b,0);
+
   const outs=list.filter(g=>g.out!=="not out").length;
+
   return{
     m:list.length,
     r:runs,
     a:outs?(runs/outs).toFixed(2):"—",
     s:balls?((runs/balls)*100).toFixed(1):"—",
-    h:Math.max(...list.map(g=>g.r))
+    h:list.length?Math.max(...list.map(g=>g.r)):"—"
   };
 }
 
 function bowlStats(list){
+
   const balls=list.reduce((a,b)=>a+b.balls,0);
+
   const runs=list.reduce((a,b)=>a+b.r,0);
+
   const wkts=list.reduce((a,b)=>a+b.w,0);
+
   const five=list.filter(g=>g.w>=5).length;
 
   const best=list.reduce((best,g)=>{
+
     if(!best) return g;
+
     if(g.w>best.w || (g.w===best.w && g.r<best.r))
       return g;
+
     return best;
+
   },null);
 
   return{
@@ -299,128 +335,143 @@ function bowlStats(list){
   };
 }
 
-/* RENDER */
+/* ---------- RENDER ---------- */
 
 function render(){
 
   const opp=oppSel.value;
 
-  const all=currentTab==="bat"?battingGames:bowlingGames;
-  const list=opp==="All"?all:all.filter(g=>g.opp===opp);
+  const all =
+    currentTab==="bat"
+      ? battingGames
+      : bowlingGames;
+
+  const list =
+    opp==="All"
+      ? all
+      : all.filter(g=>g.opp===opp);
 
   vsTitle.textContent =
-    opp==="All"?"VS OPPOSITION":"VS "+opp.toUpperCase();
+    opp==="All"
+      ? "VS OPPOSITION"
+      : "VS "+opp.toUpperCase();
 
-  if(currentTab==="bat"){
+/* BAT */
 
-    const c=batStats(battingGames);
-    const v=batStats(list);
+if(currentTab==="bat"){
 
-    careerStats.innerHTML=`
-      <div class="stat"><h3>${c.m}</h3><span>Matches</span></div>
-      <div class="stat"><h3>${c.r}</h3><span>Runs</span></div>
-      <div class="stat"><h3>${c.a}</h3><span>Average</span></div>
-      <div class="stat"><h3>${c.s}</h3><span>Strike Rate</span></div>
-      <div class="stat"><h3>${c.h}</h3><span>High Score</span></div>
-    `;
+const c=batStats(battingGames);
+const v=batStats(list);
 
-    vsStats.innerHTML=`
-      <div class="stat"><h3>${v.m}</h3><span>Matches</span></div>
-      <div class="stat"><h3>${v.r}</h3><span>Runs</span></div>
-      <div class="stat"><h3>${v.a}</h3><span>Average</span></div>
-      <div class="stat"><h3>${v.s}</h3><span>Strike Rate</span></div>
-      <div class="stat"><h3>${v.h}</h3><span>High Score</span></div>
-    `;
+careerStats.innerHTML=`
+<div class="stat"><h3>${c.m}</h3><span>Matches</span></div>
+<div class="stat"><h3>${c.r}</h3><span>Runs</span></div>
+<div class="stat"><h3>${c.a}</h3><span>Average</span></div>
+<div class="stat"><h3>${c.s}</h3><span>Strike Rate</span></div>
+<div class="stat"><h3>${c.h}</h3><span>High Score</span></div>
+`;
 
-    tableHead.innerHTML=`
-      <tr>
-      <th>Season</th>
-      <th>Date</th>
-      <th>Opponent</th>
-      <th>Venue</th>
-      <th>R</th>
-      <th>B</th>
-      <th>SR</th>
-      <th>Out</th>
-      </tr>`;
+vsStats.innerHTML=`
+<div class="stat"><h3>${v.m}</h3><span>Matches</span></div>
+<div class="stat"><h3>${v.r}</h3><span>Runs</span></div>
+<div class="stat"><h3>${v.a}</h3><span>Average</span></div>
+<div class="stat"><h3>${v.s}</h3><span>Strike Rate</span></div>
+<div class="stat"><h3>${v.h}</h3><span>High Score</span></div>
+`;
 
-    gamesTable.innerHTML=list.map(g=>`
-      <tr>
-      <td>${g.season}</td>
-      <td>${g.date}</td>
-      <td>${g.opp}</td>
-      <td>${g.venue}</td>
-      <td>${g.r}</td>
-      <td>${g.b}</td>
-      <td>${g.sr}</td>
-      <td>${g.out}</td>
-      </tr>`).join("");
+tableHead.innerHTML=`
+<tr>
+<th>Season</th>
+<th>Date</th>
+<th>Opponent</th>
+<th>Venue</th>
+<th>R</th>
+<th>B</th>
+<th>SR</th>
+<th>Out</th>
+</tr>`;
 
-  }else{
+gamesTable.innerHTML=list.map(g=>`
+<tr>
+<td>${g.season}</td>
+<td>${g.date}</td>
+<td>${g.opp}</td>
+<td>${g.venue}</td>
+<td>${g.r}</td>
+<td>${g.b}</td>
+<td>${g.sr}</td>
+<td>${g.out}</td>
+</tr>`).join("");
 
-    const c=bowlStats(bowlingGames);
-    const v=bowlStats(list);
+}
 
-    careerStats.innerHTML=`
-      <div class="stat"><h3>${c.m}</h3><span>Matches</span></div>
-      <div class="stat"><h3>${c.o}</h3><span>Overs</span></div>
-      <div class="stat"><h3>${c.w}</h3><span>Wickets</span></div>
-      <div class="stat"><h3>${c.a}</h3><span>Average</span></div>
-      <div class="stat"><h3>${c.e}</h3><span>Economy</span></div>
-      <div class="stat"><h3>${c.f}</h3><span>5-fors</span></div>
-      <div class="stat"><h3>${c.bf}</h3><span>Best</span></div>
-    `;
+/* BOWL */
 
-    vsStats.innerHTML=`
-      <div class="stat"><h3>${v.m}</h3><span>Matches</span></div>
-      <div class="stat"><h3>${v.o}</h3><span>Overs</span></div>
-      <div class="stat"><h3>${v.w}</h3><span>Wickets</span></div>
-      <div class="stat"><h3>${v.a}</h3><span>Average</span></div>
-      <div class="stat"><h3>${v.e}</h3><span>Economy</span></div>
-      <div class="stat"><h3>${v.f}</h3><span>5-fors</span></div>
-      <div class="stat"><h3>${v.bf}</h3><span>Best</span></div>
-    `;
+else{
 
-    tableHead.innerHTML=`
-      <tr>
-      <th>Season</th>
-      <th>Date</th>
-      <th>Opponent</th>
-      <th>Venue</th>
-      <th>O</th>
-      <th>R</th>
-      <th>W</th>
-      <th>Econ</th>
-      </tr>`;
+const c=bowlStats(bowlingGames);
+const v=bowlStats(list);
 
-    gamesTable.innerHTML=list.map(g=>`
-      <tr>
-      <td>${g.season}</td>
-      <td>${g.date}</td>
-      <td>${g.opp}</td>
-      <td>${g.venue}</td>
-      <td>${g.o}</td>
-      <td>${g.r}</td>
-      <td>${g.w}</td>
-      <td>${g.econ}</td>
-      </tr>`).join("");
+careerStats.innerHTML=`
+<div class="stat"><h3>${c.m}</h3><span>Matches</span></div>
+<div class="stat"><h3>${c.o}</h3><span>Overs</span></div>
+<div class="stat"><h3>${c.w}</h3><span>Wickets</span></div>
+<div class="stat"><h3>${c.a}</h3><span>Average</span></div>
+<div class="stat"><h3>${c.e}</h3><span>Economy</span></div>
+<div class="stat"><h3>${c.f}</h3><span>5-fors</span></div>
+<div class="stat"><h3>${c.bf}</h3><span>Best</span></div>
+`;
 
-  }
+vsStats.innerHTML=`
+<div class="stat"><h3>${v.m}</h3><span>Matches</span></div>
+<div class="stat"><h3>${v.o}</h3><span>Overs</span></div>
+<div class="stat"><h3>${v.w}</h3><span>Wickets</span></div>
+<div class="stat"><h3>${v.a}</h3><span>Average</span></div>
+<div class="stat"><h3>${v.e}</h3><span>Economy</span></div>
+<div class="stat"><h3>${v.f}</h3><span>5-fors</span></div>
+<div class="stat"><h3>${v.bf}</h3><span>Best</span></div>
+`;
+
+tableHead.innerHTML=`
+<tr>
+<th>Season</th>
+<th>Date</th>
+<th>Opponent</th>
+<th>Venue</th>
+<th>O</th>
+<th>R</th>
+<th>W</th>
+<th>Econ</th>
+</tr>`;
+
+gamesTable.innerHTML=list.map(g=>`
+<tr>
+<td>${g.season}</td>
+<td>${g.date}</td>
+<td>${g.opp}</td>
+<td>${g.venue}</td>
+<td>${g.o}</td>
+<td>${g.r}</td>
+<td>${g.w}</td>
+<td>${g.econ}</td>
+</tr>`).join("");
+
+}
 
 }
 
 batBtn.onclick=()=>{
-  currentTab="bat";
-  batBtn.classList.add("active");
-  bowlBtn.classList.remove("active");
-  render();
+currentTab="bat";
+batBtn.classList.add("active");
+bowlBtn.classList.remove("active");
+render();
 };
 
 bowlBtn.onclick=()=>{
-  currentTab="bowl";
-  bowlBtn.classList.add("active");
-  batBtn.classList.remove("active");
-  render();
+currentTab="bowl";
+bowlBtn.classList.add("active");
+batBtn.classList.remove("active");
+render();
 };
 
 oppSel.onchange=render;
