@@ -5,8 +5,6 @@
 <title>BBL Player | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<link rel="stylesheet" href="style.css">
-
 <style>
 body{
   font-family: Inter, system-ui, Arial, sans-serif;
@@ -39,15 +37,8 @@ body{
   background:linear-gradient(90deg,#4b0082,#8a2be2);
   color:white;
 }
-.hero h1{
-  margin:0 0 8px 0;
-  font-size:36px;
-}
-.hero p{
-  margin:0;
-  font-size:18px;
-  opacity:.9;
-}
+.hero h1{margin:0;font-size:36px;}
+.hero p{margin-top:6px;font-size:18px;opacity:.9}
 
 /* CONTROLS */
 .controls{
@@ -57,17 +48,15 @@ body{
   align-items:center;
   gap:14px;
 }
-.controls select{
+select,button{
   padding:10px 14px;
   border-radius:10px;
   font-size:16px;
 }
 .tab-btn{
-  padding:10px 18px;
-  border-radius:20px;
   border:1px solid #ccc;
   cursor:pointer;
-  background:#f2f2f2;
+  background:#eee;
   font-weight:600;
 }
 .tab-btn.active{
@@ -76,7 +65,7 @@ body{
   border-color:#5a189a;
 }
 
-/* STATS WRAPPER */
+/* STATS */
 .stats-wrap{
   max-width:1200px;
   margin:20px auto;
@@ -86,23 +75,19 @@ body{
   box-shadow:0 10px 30px rgba(0,0,0,.08);
 }
 
-/* SECTION HEADERS — FIX */
 .section-title{
-  margin:20px 0 14px;
-  font-size:15px;
-  letter-spacing:.05em;
-  color:#666;
+  text-align:center;
   font-weight:700;
   text-transform:uppercase;
-  text-align:center;
+  color:#666;
+  margin:20px 0 14px;
+  letter-spacing:.05em;
 }
 
-/* STAT CARDS — FIX */
 .stats-grid{
   display:grid;
   grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
   gap:16px;
-  margin-bottom:25px;
 }
 
 .stat{
@@ -111,71 +96,26 @@ body{
   padding:22px;
   text-align:center;
 }
-
-.stat h3{
-  margin:0;
-  font-size:32px;
-  font-weight:800;
-  text-align:center;
-}
-
-.stat span{
-  display:block;
-  margin-top:6px;
-  font-size:15px;
-  color:#555;
-  text-align:center;
-}
+.stat h3{margin:0;font-size:30px;}
+.stat span{display:block;margin-top:6px;color:#555}
 
 /* TABLE */
 .table-wrap{
   max-width:1200px;
-  margin:30px auto 50px;
-  overflow-x:auto;
+  margin:30px auto 60px;
 }
-
 table{
   width:100%;
   border-collapse:collapse;
   background:white;
-  border-radius:18px;
-  overflow:hidden;
 }
-
-thead{
-  background:#f1f4f9;
-}
-
 th,td{
   padding:14px 16px;
   border-bottom:1px solid #e2e6ef;
-  font-size:15px;
-}
-
-/* TABLE HEADER — FIX */
-th{
-  font-weight:700;
   text-align:center;
 }
-
-/* TABLE CELLS — FIX NUMERIC */
-td:nth-child(1),
-td:nth-child(2),
-td:nth-child(5),
-td:nth-child(6),
-td:nth-child(7),
-td:nth-child(8){
-  text-align:center;
-}
-
-td:nth-child(3),
-td:nth-child(4){
-  text-align:left;
-}
-
-tbody tr:nth-child(even){
-  background:#fafbfe;
-}
+th{text-transform:uppercase;font-size:13px;}
+td:nth-child(3),td:nth-child(4){text-align:left}
 </style>
 </head>
 
@@ -188,16 +128,15 @@ tbody tr:nth-child(even){
 </div>
 
 <div class="hero">
-  <h1 id="playerName">Player</h1>
+  <h1 id="playerName">Loading player…</h1>
   <p>BBL performance breakdown by opposition</p>
 </div>
 
 <div class="controls">
   <label>Opposition:</label>
   <select id="oppositionSelect"></select>
-
-  <button class="tab-btn active" id="batTab">Batting</button>
-  <button class="tab-btn" id="bowlTab">Bowling</button>
+  <button class="tab-btn active" id="batBtn">Batting</button>
+  <button class="tab-btn" id="bowlBtn">Bowling</button>
 </div>
 
 <div class="stats-wrap">
@@ -209,23 +148,86 @@ tbody tr:nth-child(even){
 </div>
 
 <div class="table-wrap">
-  <table>
-    <thead>
-      <tr>
-        <th>Season</th>
-        <th>Date</th>
-        <th>Opponent</th>
-        <th>Venue</th>
-        <th>R</th>
-        <th>B</th>
-        <th>SR</th>
-        <th>Out</th>
-      </tr>
-    </thead>
-    <tbody id="gamesTable"></tbody>
-  </table>
+<table>
+  <thead>
+    <tr>
+      <th>Season</th>
+      <th>Date</th>
+      <th>Opponent</th>
+      <th>Venue</th>
+      <th>R</th>
+      <th>B</th>
+      <th>SR</th>
+      <th>Out</th>
+    </tr>
+  </thead>
+  <tbody id="gamesTable"></tbody>
+</table>
 </div>
 
-<script src="bbl-player.js"></script>
+<script>
+/* ==========================
+   HARD FAIL PROTECTION
+========================== */
+document.addEventListener("DOMContentLoaded", () => {
+  console.log("BBL PLAYER SCRIPT LOADED");
+
+  // TEMP SAMPLE DATA (proves rendering works)
+  const player = "GJ Maxwell";
+
+  const games = [
+    {season:"2025/26",date:"2026-01-21",opp:"Hobart Hurricanes",venue:"Bellerive Oval",r:9,b:4,sr:225,out:"not out"},
+    {season:"2023/24",date:"2024-01-15",opp:"Hobart Hurricanes",venue:"MCG",r:32,b:18,sr:177.8,out:"bowled"},
+    {season:"2021/22",date:"2022-01-19",opp:"Hobart Hurricanes",venue:"MCG",r:154,b:64,sr:240.6,out:"not out"}
+  ];
+
+  document.getElementById("playerName").textContent = player;
+
+  const oppSel = document.getElementById("oppositionSelect");
+  ["All","Hobart Hurricanes"].forEach(o=>{
+    const opt=document.createElement("option");
+    opt.value=o;
+    opt.textContent=o;
+    oppSel.appendChild(opt);
+  });
+
+  function renderStats(list){
+    document.getElementById("careerStats").innerHTML = `
+      <div class="stat"><h3>${list.length}</h3><span>Matches</span></div>
+      <div class="stat"><h3>${list.reduce((a,b)=>a+b.r,0)}</h3><span>Runs</span></div>
+      <div class="stat"><h3>${Math.max(...list.map(g=>g.r))}</h3><span>High Score</span></div>
+    `;
+    document.getElementById("vsStats").innerHTML = document.getElementById("careerStats").innerHTML;
+  }
+
+  function renderTable(list){
+    const tb=document.getElementById("gamesTable");
+    tb.innerHTML="";
+    list.forEach(g=>{
+      tb.innerHTML+=`
+        <tr>
+          <td>${g.season}</td>
+          <td>${g.date}</td>
+          <td>${g.opp}</td>
+          <td>${g.venue}</td>
+          <td>${g.r}</td>
+          <td>${g.b}</td>
+          <td>${g.sr}</td>
+          <td>${g.out}</td>
+        </tr>`;
+    });
+  }
+
+  renderStats(games);
+  renderTable(games);
+
+  oppSel.onchange=()=>{
+    const f = oppSel.value==="All" ? games : games.filter(g=>g.opp===oppSel.value);
+    renderStats(f);
+    renderTable(f);
+  };
+});
+</script>
+
 </body>
 </html>
