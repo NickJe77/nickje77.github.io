@@ -48,6 +48,7 @@ body{
   display:flex;
   gap:18px;
   align-items:center;
+  flex-wrap:wrap;
 }
 
 select{
@@ -131,6 +132,10 @@ th{
 tbody tr:nth-child(even){
   background:#fafcff;
 }
+tbody tr td:first-child{
+  font-weight:600;
+  color:#333;
+}
 </style>
 </head>
 
@@ -189,17 +194,15 @@ function switchTab(tab){
   render();
 }
 
-function render(){
-  const opp = oppSel.value;
-  const career = matches;
-  const vs = opp==="All" ? [] : matches.filter(m=>m._opponent===opp);
-
-  currentTab==="bat"
-    ? renderBat(career, opp, vs)
-    : renderBowl(career, opp, vs);
+/* ---------- HELPERS ---------- */
+function formatSeason(s){
+  if(!s) return "";
+  if(s.includes("/")) return s;
+  if(s.length===4) return `${s}/${(+s+1).toString().slice(-2)}`;
+  if(s.length===2) return `20${s}/20${(+s+1)}`;
+  return s;
 }
 
-/* ---------- MATCH ENRICH ---------- */
 function enrichMatch(m){
   let team=null;
   m.innings.forEach(inn=>{
@@ -217,7 +220,7 @@ function enrichMatch(m){
   return true;
 }
 
-/* ---------- STAT CALCULATORS ---------- */
+/* ---------- STATS ---------- */
 function batStats(list){
   let runs=0,balls=0,outs=0,games=0,hs=0;
   list.forEach(m=>{
@@ -273,31 +276,43 @@ function bowlStats(list){
   };
 }
 
-/* ---------- RENDER BATTING ---------- */
+/* ---------- RENDER ---------- */
+function render(){
+  const opp = oppSel.value;
+  const career = matches;
+  const vs = opp==="All" ? [] : matches.filter(m=>m._opponent===opp);
+
+  currentTab==="bat"
+    ? renderBat(career,opp,vs)
+    : renderBowl(career,opp,vs);
+}
+
 function renderBat(career,opp,vs){
   const c = batStats(career);
   const o = opp!=="All" ? batStats(vs) : null;
 
-  let rows=[];
-  (opp==="All"?career:vs).forEach(m=>{
-    let r=0,b=0,out="not out";
-    m.innings.forEach(i=>{
-      i.overs.forEach(o2=>{
-        o2.deliveries.forEach(d=>{
-          if(d.batter?.toLowerCase()===P){
-            r+=d.runs.batter;
-            if(!d.extras?.wides) b++;
-          }
-          d.wickets?.forEach(w=>{
-            if(w.player_out?.toLowerCase()===P) out=w.kind;
+  const rows = (opp==="All"?career:vs)
+    .slice()
+    .sort((a,b)=>new Date(b.info.dates[0])-new Date(a.info.dates[0]))
+    .map(m=>{
+      let r=0,b=0,out="not out";
+      m.innings.forEach(i=>{
+        i.overs.forEach(o2=>{
+          o2.deliveries.forEach(d=>{
+            if(d.batter?.toLowerCase()===P){
+              r+=d.runs.batter;
+              if(!d.extras?.wides) b++;
+            }
+            d.wickets?.forEach(w=>{
+              if(w.player_out?.toLowerCase()===P) out=w.kind;
+            });
           });
         });
       });
-    });
-    if(b){
-      rows.push(`
+      if(!b) return "";
+      return `
         <tr>
-          <td>${m.info.season}</td>
+          <td>${formatSeason(m.info.season)}</td>
           <td>${m.info.dates[0]}</td>
           <td>${m._opponent}</td>
           <td>${m.info.venue}</td>
@@ -305,10 +320,8 @@ function renderBat(career,opp,vs){
           <td>${b}</td>
           <td>${((r/b)*100).toFixed(1)}</td>
           <td>${out}</td>
-        </tr>
-      `);
-    }
-  });
+        </tr>`;
+    }).join("");
 
   document.getElementById("content").innerHTML = `
     <div class="section-title">CAREER SUMMARY</div>
@@ -334,36 +347,37 @@ function renderBat(career,opp,vs){
       <thead>
         <tr><th>Season</th><th>Date</th><th>Opponent</th><th>Venue</th><th>R</th><th>B</th><th>SR</th><th>Out</th></tr>
       </thead>
-      <tbody>${rows.join("")}</tbody>
+      <tbody>${rows}</tbody>
     </table>
   `;
 }
 
-/* ---------- RENDER BOWLING ---------- */
 function renderBowl(career,opp,vs){
   const c = bowlStats(career);
   const o = opp!=="All" ? bowlStats(vs) : null;
 
-  let rows=[];
-  (opp==="All"?career:vs).forEach(m=>{
-    let b=0,r=0,w=0;
-    m.innings.forEach(i=>{
-      i.overs.forEach(o2=>{
-        o2.deliveries.forEach(d=>{
-          if(d.bowler?.toLowerCase()===P){
-            b++;
-            if(!d.extras?.byes && !d.extras?.legbyes) r+=d.runs.total;
-          }
-          d.wickets?.forEach(wi=>{
-            if(wi.bowler?.toLowerCase()===P) w++;
+  const rows = (opp==="All"?career:vs)
+    .slice()
+    .sort((a,b)=>new Date(b.info.dates[0])-new Date(a.info.dates[0]))
+    .map(m=>{
+      let b=0,r=0,w=0;
+      m.innings.forEach(i=>{
+        i.overs.forEach(o2=>{
+          o2.deliveries.forEach(d=>{
+            if(d.bowler?.toLowerCase()===P){
+              b++;
+              if(!d.extras?.byes && !d.extras?.legbyes) r+=d.runs.total;
+            }
+            d.wickets?.forEach(wi=>{
+              if(wi.bowler?.toLowerCase()===P) w++;
+            });
           });
         });
       });
-    });
-    if(b){
-      rows.push(`
+      if(!b) return "";
+      return `
         <tr>
-          <td>${m.info.season}</td>
+          <td>${formatSeason(m.info.season)}</td>
           <td>${m.info.dates[0]}</td>
           <td>${m._opponent}</td>
           <td>${m.info.venue}</td>
@@ -371,10 +385,8 @@ function renderBowl(career,opp,vs){
           <td>${r}</td>
           <td>${w}</td>
           <td>${(r/(b/6)).toFixed(2)}</td>
-        </tr>
-      `);
-    }
-  });
+        </tr>`;
+    }).join("");
 
   document.getElementById("content").innerHTML = `
     <div class="section-title">CAREER SUMMARY</div>
@@ -398,7 +410,7 @@ function renderBowl(career,opp,vs){
       <thead>
         <tr><th>Season</th><th>Date</th><th>Opponent</th><th>Venue</th><th>O</th><th>R</th><th>W</th><th>Econ</th></tr>
       </thead>
-      <tbody>${rows.join("")}</tbody>
+      <tbody>${rows}</tbody>
     </table>
   `;
 }
