@@ -103,4 +103,352 @@ tr:nth-child(even){ background:var(--row); }
   line-height:1.4;
 }
 .kv{
-  margin-top:10p
+  margin-top:10px;
+  font-size:13px;
+  color:var(--muted);
+}
+.kv b{ color:var(--text); }
+
+a.player-link{
+  color:var(--blue1);
+  font-weight:700;
+  text-decoration:none;
+}
+a.player-link:hover{ text-decoration:underline; }
+
+.error{
+  background:#fff5f5;
+  border:1px solid #fecaca;
+  color:#7f1d1d;
+  padding:14px 16px;
+  border-radius:12px;
+  font-weight:700;
+}
+</style>
+</head>
+
+<body>
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="bbl-season.html">BBL Seasons</a>
+</div>
+
+<div class="page-wrap">
+
+  <div class="hero">
+    <h1 id="matchTitle">Loading match…</h1>
+    <p id="matchMeta"></p>
+  </div>
+
+  <div id="content"></div>
+
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const file = params.get("file");
+const matchIndex = params.get("match"); // optional for multi-match files
+
+const elTitle = document.getElementById("matchTitle");
+const elMeta  = document.getElementById("matchMeta");
+const elContent = document.getElementById("content");
+
+if(!file){
+  elTitle.textContent = "No match selected";
+  elMeta.textContent = "Missing ?file= in URL";
+  throw new Error("Missing file param");
+}
+
+let nameMap = null;
+
+function displayName(name){
+  if(!name) return "";
+  return (nameMap && nameMap[name]) ? nameMap[name] : name;
+}
+
+function playerLink(name){
+  const shown = displayName(name);
+  return `<a class="player-link" href="bbl-player.html?player=${encodeURIComponent(shown)}&file=${encodeURIComponent(file)}">${shown}</a>`;
+}
+
+function safeText(v){
+  return (v===undefined || v===null) ? "" : String(v);
+}
+
+function isWide(d){ return !!(d.extras && d.extras.wides); }
+function isNoBall(d){ return !!(d.extras && d.extras.noballs); }
+
+function legalBall(d){
+  // wides and no-balls are not legal deliveries
+  return !isWide(d) && !isNoBall(d);
+}
+
+function ballLabel(overNum, ballInOver){
+  // overNum is 0-based in our loop, ballInOver is 1-based for display
+  return `${overNum}.${ballInOver}`;
+}
+
+function pickMatchObject(data){
+  // Supports:
+  // 1) [ {match} ]
+  // 2) { matches:[...] }   (future)
+  // 3) [ {match}, {match}, ... ] (future)
+  if(Array.isArray(data)){
+    if(data.length === 1) return data[0];
+    const idx = parseInt(matchIndex);
+    if(!isNaN(idx)) return data[idx];
+    return data[0];
+  }
+  if(data && Array.isArray(data.matches)){
+    const idx = parseInt(matchIndex);
+    if(isNaN(idx)) return data.matches[0];
+    return data.matches[idx];
+  }
+  return data;
+}
+
+function calcInnings(inn){
+  const bat = {};
+  const bowl = {};
+  const fall = [];
+  const extras = { b:0, lb:0, w:0, nb:0, p:0 };
+
+  let teamRuns = 0;
+  let teamWkts = 0;
+  let legalBalls = 0;
+
+  function ensureBat(p){
+    if(!bat[p]) bat[p] = { R:0, B:0, "4s":0, "6s":0, out:"not out" };
+    return bat[p];
+  }
+  function ensureBowl(p){
+    if(!bowl[p]) bowl[p] = { balls:0, R:0, W:0 };
+    return bowl[p];
+  }
+
+  // Track strike for boundaries etc – boundaries are in runs.batter
+  inn.overs.forEach((ov)=>{
+    const overNum = ov.over;
+    let legalBallCountThisOver = 0;
+
+    ov.deliveries.forEach((d)=>{
+      // total runs
+      teamRuns += d.runs.total;
+
+      // extras
+      if(d.extras){
+        if(d.extras.byes) extras.b += d.extras.byes;
+        if(d.extras.legbyes) extras.lb += d.extras.legbyes;
+        if(d.extras.wides) extras.w += d.extras.wides;
+        if(d.extras.noballs) extras.nb += d.extras.noballs;
+        if(d.extras.penalty) extras.p += d.extras.penalty;
+      }
+
+      // batting
+      if(d.batter){
+        const b = displayName(d.batter);
+        const s = ensureBat(b);
+        s.R += d.runs.batter;
+
+        // balls faced: legal balls only
+        if(legalBall(d)) s.B += 1;
+
+        if(d.runs.batter === 4) s["4s"] += 1;
+        if(d.runs.batter === 6) s["6s"] += 1;
+      }
+
+      // bowling
+      if(d.bowler){
+        const bowler = displayName(d.bowler);
+        const bs = ensureBowl(bowler);
+
+        // bowler balls: legal only
+        if(legalBall(d)) bs.balls += 1;
+
+        // bowler runs: include wides/noballs, exclude byes/legbyes
+        const byes = (d.extras && d.extras.byes) ? d.extras.byes : 0;
+        const legbyes = (d.extras && d.extras.legbyes) ? d.extras.legbyes : 0;
+        bs.R += (d.runs.total - byes - legbyes);
+      }
+
+      // legal balls tally
+      if(legalBall(d)){
+        legalBalls += 1;
+        legalBallCountThisOver += 1;
+      }
+
+      // wickets
+      if(d.wickets && d.wickets.length){
+        d.wickets.forEach(w=>{
+          teamWkts += 1;
+
+          const outBatter = displayName(w.player_out);
+          const bowler = displayName(d.bowler);
+
+          let howOut = w.kind || "out";
+
+          const flds = (w.fielders && w.fielders.length)
+            ? w.fielders.map(f=>displayName(f.name)).join(", ")
+            : "";
+
+          if(w.kind === "caught"){
+            howOut = `c ${flds || "—"} b ${displayName(bowler)}`;
+          } else if(w.kind === "lbw"){
+            howOut = `lbw b ${displayName(bowler)}`;
+          } else if(w.kind === "bowled"){
+            howOut = `b ${displayName(bowler)}`;
+          } else if(w.kind === "run out"){
+            howOut = `run out (${flds || "—"})`;
+          } else if(w.kind){
+            // keep kind, add bowler when exists
+            howOut = bowler ? `${w.kind} b ${displayName(bowler)}` : w.kind;
+          }
+
+          if(bat[outBatter]) bat[outBatter].out = howOut;
+          else ensureBat(outBatter).out = howOut;
+
+          if(bowler && bowl[bowler]) bowl[bowler].W += 1;
+
+          // fall of wicket label
+          // Use current over legal ball count as ball number in over
+          const ballInOver = legalBallCountThisOver; // already incremented for legal balls
+          fall.push(`${teamRuns}/${teamWkts} (${outBatter}, ${ballLabel(overNum, ballInOver)})`);
+        });
+      }
+    });
+  });
+
+  const oversFloat = legalBalls / 6;
+  const oversText = oversFloat.toFixed(1);
+
+  return { bat, bowl, fall, extras, teamRuns, teamWkts, legalBalls, oversText };
+}
+
+function ballsToOvers(balls){
+  const o = Math.floor(balls / 6);
+  const b = balls % 6;
+  return `${o}.${b}`;
+}
+
+function renderInningsCard(inn){
+  const team = inn.team;
+  const res = calcInnings(inn);
+
+  const extrasTotal = res.extras.b + res.extras.lb + res.extras.w + res.extras.nb + res.extras.p;
+
+  // batting rows
+  const batRows = Object.entries(res.bat).map(([p,s])=>{
+    const sr = s.B ? ((s.R/s.B)*100).toFixed(1) : "—";
+    return `<tr>
+      <td>${playerLink(p)}</td>
+      <td>${safeText(s.out)}</td>
+      <td>${s.R}</td>
+      <td>${s.B}</td>
+      <td>${s["4s"]}</td>
+      <td>${s["6s"]}</td>
+      <td>${sr}</td>
+    </tr>`;
+  }).join("");
+
+  // bowling rows
+  const bowlRows = Object.entries(res.bowl).map(([p,s])=>{
+    const overs = ballsToOvers(s.balls);
+    const econ = s.balls ? (s.R / (s.balls/6)).toFixed(2) : "—";
+    return `<tr>
+      <td>${playerLink(p)}</td>
+      <td>${overs}</td>
+      <td>${s.R}</td>
+      <td>${s.W}</td>
+      <td>${econ}</td>
+    </tr>`;
+  }).join("");
+
+  return `
+  <div class="card">
+    <div class="card-header">
+      <h2>${team} Innings</h2>
+      <div class="total">${res.teamRuns}/${res.teamWkts} (${res.oversText} ov)</div>
+    </div>
+
+    <div class="card-body">
+      <div class="table-wrap">
+        <table>
+          <tr>
+            <th>Batter</th><th>How out</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th>
+          </tr>
+          ${batRows || `<tr><td colspan="7">No batting data</td></tr>`}
+        </table>
+      </div>
+
+      <div class="kv">
+        <b>Extras:</b> ${extrasTotal}
+        (b ${res.extras.b}, lb ${res.extras.lb}, w ${res.extras.w}, nb ${res.extras.nb}${res.extras.p ? `, p ${res.extras.p}` : ""})
+      </div>
+
+      <div class="small">
+        <b>Fall of wickets:</b> ${res.fall.length ? res.fall.join(", ") : "—"}
+      </div>
+
+      <div style="height:12px;"></div>
+
+      <div class="table-wrap">
+        <table>
+          <tr><th>Bowler</th><th>O</th><th>R</th><th>W</th><th>Econ</th></tr>
+          ${bowlRows || `<tr><td colspan="5">No bowling data</td></tr>`}
+        </table>
+      </div>
+    </div>
+  </div>
+  `;
+}
+
+async function tryLoadNameMap(){
+  try{
+    const r = await fetch("data/bbl/player-names.json");
+    if(!r.ok) return null;
+    return await r.json();
+  }catch(e){
+    return null;
+  }
+}
+
+(async function main(){
+  try{
+    nameMap = await tryLoadNameMap();
+
+    const r = await fetch("data/bbl/" + file);
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    const data = await r.json();
+
+    const match = pickMatchObject(data);
+    if(!match || !match.info || !match.innings) throw new Error("Match data invalid");
+
+    const info = match.info;
+
+    elTitle.textContent = info.teams.join(" vs ");
+    elMeta.textContent =
+      (info.venue || "") +
+      (info.city ? ` (${info.city})` : "") +
+      " • " + new Date(info.dates[0]).toDateString() +
+      " • Winner: " + (info.outcome?.winner || "—") +
+      (info.player_of_match ? (" • Player of the Match: " + info.player_of_match.map(displayName).join(", ")) : "");
+
+    const inningsHtml = `
+      <div class="grid">
+        ${match.innings.map(renderInningsCard).join("")}
+      </div>
+    `;
+
+    elContent.innerHTML = inningsHtml;
+
+  }catch(err){
+    elTitle.textContent = "ERROR";
+    elMeta.textContent = "";
+    elContent.innerHTML = `<div class="error">${String(err)}</div>`;
+  }
+})();
+</script>
+
+</body>
+</html>
