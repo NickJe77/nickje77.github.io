@@ -39,6 +39,7 @@ body{
   display:flex;
   gap:12px;
   align-items:center;
+  flex-wrap:wrap;
 }
 select,button{
   padding:8px 12px;
@@ -102,13 +103,15 @@ td:nth-child(3),td:nth-child(4){text-align:left;}
 
 <div class="hero">
   <h1 id="playerName">Loading…</h1>
-  <p>BBL performance by opposition</p>
+  <p>BBL batting & bowling performance by opposition</p>
 </div>
 
 <div class="controls">
   Opposition:
   <select id="oppSelect"></select>
-  <button class="tab-btn active">Batting</button>
+
+  <button class="tab-btn" id="batBtn">Batting</button>
+  <button class="tab-btn" id="bowlBtn">Bowling</button>
 </div>
 
 <div class="section-title">CAREER SUMMARY</div>
@@ -119,18 +122,7 @@ td:nth-child(3),td:nth-child(4){text-align:left;}
 
 <div class="table-wrap">
 <table>
-<thead>
-<tr>
-  <th>Season</th>
-  <th>Date</th>
-  <th>Opponent</th>
-  <th>Venue</th>
-  <th>R</th>
-  <th>B</th>
-  <th>SR</th>
-  <th>Out</th>
-</tr>
-</thead>
+<thead id="tableHead"></thead>
 <tbody id="gamesTable"></tbody>
 </table>
 </div>
@@ -142,71 +134,107 @@ td:nth-child(3),td:nth-child(4){text-align:left;}
 
 const params = new URLSearchParams(location.search);
 const player = params.get("player");
-if(!player){ return; }
+if(!player) return;
 document.getElementById("playerName").textContent = player;
-
 const P = player.toLowerCase();
-let games = [];
+
+let battingGames=[], bowlingGames=[];
+let currentTab="bat";
 
 const index = await fetch("data/bbl/index.json").then(r=>r.json());
+
+function abbrOut(kind){
+  if(!kind) return "not out";
+  const k=kind.toLowerCase();
+  if(k==="caught") return "c";
+  if(k==="bowled") return "b";
+  if(k==="lbw") return "lbw";
+  if(k==="caught and bowled") return "c&b";
+  if(k==="run out") return "ro";
+  return k;
+}
 
 for(const file of index){
   const data = await fetch("data/bbl/"+file).then(r=>r.json());
 
   data.forEach(match=>{
     match.innings.forEach(inn=>{
-      let runs=0, balls=0, out="not out", played=false;
+      let batRuns=0,batBalls=0,batOut="not out",batted=false;
+      let bowlBalls=0,bowlRuns=0,bowlWkts=0;
 
       inn.overs.forEach(o=>{
         o.deliveries.forEach(d=>{
           if(d.batter?.toLowerCase()===P){
-            played=true;
-            runs+=d.runs.batter;
-            if(!d.extras?.wides) balls++;
+            batted=true;
+            batRuns+=d.runs.batter;
+            if(!d.extras?.wides) batBalls++;
+          }
+          if(d.bowler?.toLowerCase()===P){
+            bowlBalls++;
+            if(!d.extras?.byes && !d.extras?.legbyes) bowlRuns+=d.runs.total;
           }
           d.wickets?.forEach(w=>{
             if(w.player_out?.toLowerCase()===P){
-              out=w.kind;
+              batOut=abbrOut(w.kind);
+            }
+            if(w.bowler?.toLowerCase()===P){
+              bowlWkts++;
             }
           });
         });
       });
 
-      if(played){
-        const team = inn.team;
-        const opponent = match.info.teams.find(t=>t!==team);
+      const opponent = match.info.teams.find(t=>t!==inn.team);
 
-        games.push({
-          season: match.info.season,
-          date: match.info.dates[0],
-          opp: opponent,
-          venue: match.info.venue,
-          r: runs,
-          b: balls,
-          sr: balls ? ((runs/balls)*100).toFixed(1) : "—",
-          out
+      if(batted){
+        battingGames.push({
+          season:match.info.season,
+          date:match.info.dates[0],
+          opp:opponent,
+          venue:match.info.venue,
+          r:batRuns,
+          b:batBalls,
+          sr:batBalls?((batRuns/batBalls)*100).toFixed(1):"—",
+          out:batOut
+        });
+      }
+
+      if(bowlBalls){
+        bowlingGames.push({
+          season:match.info.season,
+          date:match.info.dates[0],
+          opp:opponent,
+          venue:match.info.venue,
+          o:(bowlBalls/6).toFixed(1),
+          balls:bowlBalls,
+          r:bowlRuns,
+          w:bowlWkts,
+          econ:((bowlRuns/(bowlBalls/6))).toFixed(2)
         });
       }
     });
   });
 }
 
-if(!games.length){
-  document.getElementById("gamesTable").innerHTML =
-    `<tr><td colspan="8">No data found</td></tr>`;
-  return;
+/* ---------- AUTO TAB SELECT (3) ---------- */
+const totalBowlBalls = bowlingGames.reduce((a,b)=>a+b.balls,0);
+if(totalBowlBalls >= 30){
+  currentTab="bowl";
+  bowlBtn.classList.add("active");
+}else{
+  batBtn.classList.add("active");
 }
 
+/* ---------- OPPONENT DROPDOWN ---------- */
 const oppSel=document.getElementById("oppSelect");
-const opponents=["All",...new Set(games.map(g=>g.opp))];
-opponents.forEach(o=>{
+["All",...new Set([...battingGames,...bowlingGames].map(g=>g.opp))].forEach(o=>{
   const opt=document.createElement("option");
-  opt.value=o;
-  opt.textContent=o;
+  opt.value=o; opt.textContent=o;
   oppSel.appendChild(opt);
 });
 
-function stats(list){
+/* ---------- STATS ---------- */
+function batStats(list){
   const runs=list.reduce((a,b)=>a+b.r,0);
   const balls=list.reduce((a,b)=>a+b.b,0);
   const outs=list.filter(g=>g.out!=="not out").length;
@@ -219,48 +247,103 @@ function stats(list){
   };
 }
 
-function render(list){
-  const c=stats(games);
-  const v=stats(list);
-
-  careerStats.innerHTML=`
-    <div class="stat"><h3>${c.m}</h3><span>Matches</span></div>
-    <div class="stat"><h3>${c.r}</h3><span>Runs</span></div>
-    <div class="stat"><h3>${c.a}</h3><span>Average</span></div>
-    <div class="stat"><h3>${c.s}</h3><span>Strike Rate</span></div>
-    <div class="stat"><h3>${c.h}</h3><span>High Score</span></div>
-  `;
-
-  vsStats.innerHTML=`
-    <div class="stat"><h3>${v.m}</h3><span>Matches</span></div>
-    <div class="stat"><h3>${v.r}</h3><span>Runs</span></div>
-    <div class="stat"><h3>${v.a}</h3><span>Average</span></div>
-    <div class="stat"><h3>${v.s}</h3><span>Strike Rate</span></div>
-    <div class="stat"><h3>${v.h}</h3><span>High Score</span></div>
-  `;
-
-  gamesTable.innerHTML=list.map(g=>`
-    <tr>
-      <td>${g.season}</td>
-      <td>${g.date}</td>
-      <td>${g.opp}</td>
-      <td>${g.venue}</td>
-      <td>${g.r}</td>
-      <td>${g.b}</td>
-      <td>${g.sr}</td>
-      <td>${g.out}</td>
-    </tr>
-  `).join("");
+function bowlStats(list){
+  const balls=list.reduce((a,b)=>a+b.balls,0);
+  const runs=list.reduce((a,b)=>a+b.r,0);
+  const wkts=list.reduce((a,b)=>a+b.w,0);
+  const five=list.filter(g=>g.w>=5).length;
+  const best=list.reduce((best,g)=>{
+    if(!best) return g;
+    if(g.w>best.w || (g.w===best.w && g.r<best.r)) return g;
+    return best;
+  },null);
+  return{
+    m:list.length,
+    o:(balls/6).toFixed(1),
+    w:wkts,
+    a:wkts?(runs/wkts).toFixed(2):"—",
+    e:balls?((runs/(balls/6))).toFixed(2):"—",
+    f:five,
+    bf:best?`${best.w}/${best.r}`:"—"
+  };
 }
 
-render(games);
+/* ---------- RENDER ---------- */
+function render(){
+  const opp=oppSel.value;
+  const all=currentTab==="bat"?battingGames:bowlingGames;
+  const list=opp==="All"?all:all.filter(g=>g.opp===opp);
 
-oppSel.onchange=()=>{
-  const f=oppSel.value==="All"?games:games.filter(g=>g.opp===oppSel.value);
-  document.getElementById("vsTitle").textContent=
-    oppSel.value==="All"?"VS OPPOSITION":"VS "+oppSel.value.toUpperCase();
-  render(f);
-};
+  vsTitle.textContent = opp==="All"?"VS OPPOSITION":"VS "+opp.toUpperCase();
+
+  if(currentTab==="bat"){
+    const c=batStats(battingGames), v=batStats(list);
+
+    careerStats.innerHTML=`
+      <div class="stat"><h3>${c.m}</h3><span>Matches</span></div>
+      <div class="stat"><h3>${c.r}</h3><span>Runs</span></div>
+      <div class="stat"><h3>${c.a}</h3><span>Average</span></div>
+      <div class="stat"><h3>${c.s}</h3><span>Strike Rate</span></div>
+      <div class="stat"><h3>${c.h}</h3><span>High Score</span></div>
+    `;
+
+    vsStats.innerHTML=`
+      <div class="stat"><h3>${v.m}</h3><span>Matches</span></div>
+      <div class="stat"><h3>${v.r}</h3><span>Runs</span></div>
+      <div class="stat"><h3>${v.a}</h3><span>Average</span></div>
+      <div class="stat"><h3>${v.s}</h3><span>Strike Rate</span></div>
+      <div class="stat"><h3>${v.h}</h3><span>High Score</span></div>
+    `;
+
+    tableHead.innerHTML=`
+      <tr><th>Season</th><th>Date</th><th>Opponent</th><th>Venue</th>
+      <th>R</th><th>B</th><th>SR</th><th>Out</th></tr>`;
+
+    gamesTable.innerHTML=list.map(g=>`
+      <tr>
+        <td>${g.season}</td><td>${g.date}</td><td>${g.opp}</td><td>${g.venue}</td>
+        <td>${g.r}</td><td>${g.b}</td><td>${g.sr}</td><td>${g.out}</td>
+      </tr>`).join("");
+  }else{
+    const c=bowlStats(bowlingGames), v=bowlStats(list);
+
+    careerStats.innerHTML=`
+      <div class="stat"><h3>${c.m}</h3><span>Matches</span></div>
+      <div class="stat"><h3>${c.o}</h3><span>Overs</span></div>
+      <div class="stat"><h3>${c.w}</h3><span>Wickets</span></div>
+      <div class="stat"><h3>${c.a}</h3><span>Average</span></div>
+      <div class="stat"><h3>${c.e}</h3><span>Economy</span></div>
+      <div class="stat"><h3>${c.f}</h3><span>5-fors</span></div>
+      <div class="stat"><h3>${c.bf}</h3><span>Best</span></div>
+    `;
+
+    vsStats.innerHTML=`
+      <div class="stat"><h3>${v.m}</h3><span>Matches</span></div>
+      <div class="stat"><h3>${v.o}</h3><span>Overs</span></div>
+      <div class="stat"><h3>${v.w}</h3><span>Wickets</span></div>
+      <div class="stat"><h3>${v.a}</h3><span>Average</span></div>
+      <div class="stat"><h3>${v.e}</h3><span>Economy</span></div>
+      <div class="stat"><h3>${v.f}</h3><span>5-fors</span></div>
+      <div class="stat"><h3>${v.bf}</h3><span>Best</span></div>
+    `;
+
+    tableHead.innerHTML=`
+      <tr><th>Season</th><th>Date</th><th>Opponent</th><th>Venue</th>
+      <th>O</th><th>R</th><th>W</th><th>Econ</th></tr>`;
+
+    gamesTable.innerHTML=list.map(g=>`
+      <tr>
+        <td>${g.season}</td><td>${g.date}</td><td>${g.opp}</td><td>${g.venue}</td>
+        <td>${g.o}</td><td>${g.r}</td><td>${g.w}</td><td>${g.econ}</td>
+      </tr>`).join("");
+  }
+}
+
+batBtn.onclick=()=>{currentTab="bat";batBtn.classList.add("active");bowlBtn.classList.remove("active");render();};
+bowlBtn.onclick=()=>{currentTab="bowl";bowlBtn.classList.add("active");batBtn.classList.remove("active");render();};
+oppSel.onchange=render;
+
+render();
 
 })();
 </script>
