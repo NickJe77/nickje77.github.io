@@ -70,13 +70,15 @@ th,td{
 }
 
 th{background:#f3f6fb;}
+tr:nth-child(even){background:#f8fbff;}
+tr:hover{background:#eef4ff;}
 
-tr:nth-child(even){
-  background:#f8fbff;
-}
-
-tr:hover{
-  background:#eef4ff;
+.notice{
+  padding:20px;
+  background:#fff3cd;
+  border:1px solid #ffeeba;
+  border-radius:10px;
+  font-weight:600;
 }
 </style>
 </head>
@@ -99,6 +101,8 @@ tr:hover{
 </div>
 
 <div id="yearGrid" class="year-grid"></div>
+
+<div id="warning"></div>
 
 <h2>Matches</h2>
 <table>
@@ -125,22 +129,29 @@ const basePath = "data/bbl/";
 const yearGrid = document.getElementById("yearGrid");
 const tableBody = document.getElementById("matchesTable");
 const teamNameEl = document.getElementById("teamName");
+const warningEl = document.getElementById("warning");
 
 let allMatches = [];
 let seasons = [];
+
+if(!teamParam){
+  warningEl.innerHTML = `
+    <div class="notice">
+      No team specified. This page requires <code>?team=Team Name</code> in the URL.
+    </div>
+  `;
+  throw new Error("Missing team parameter");
+}
 
 Promise.all([
   fetch(indexUrl).then(r=>r.json())
 ])
 .then(files=>{
-  return Promise.all(
-    files.map(f=>fetch(basePath+f).then(r=>r.json()))
-  );
+  return Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json())));
 })
 .then(yearFiles=>{
   teamNameEl.textContent = teamParam;
 
-  // Flatten all calendar-year files into one match list
   yearFiles.forEach(year=>{
     year.forEach(match=>{
       if(match.info?.dates?.[0]){
@@ -151,7 +162,10 @@ Promise.all([
 
   buildSeasons();
   buildSeasonButtons();
-  showSeason(seasons[seasons.length - 1]);
+
+  if(seasons.length){
+    showSeason(seasons[seasons.length - 1]);
+  }
 });
 
 function buildSeasons(){
@@ -171,8 +185,6 @@ function buildSeasons(){
     if(seasonMatches.length){
       seasons.push({
         label: `${y}–${(y+1).toString().slice(-2)}`,
-        start,
-        end,
         matches: seasonMatches
       });
     }
@@ -180,33 +192,28 @@ function buildSeasons(){
 }
 
 function buildSeasonButtons(){
-  yearGrid.innerHTML = "";
+  yearGrid.innerHTML="";
 
   seasons.forEach((season,i)=>{
-    const btn = document.createElement("button");
-    btn.className = "year-btn";
-    btn.textContent = season.label;
-    btn.onclick = ()=>{
+    const btn=document.createElement("button");
+    btn.className="year-btn";
+    btn.textContent=season.label;
+    btn.onclick=()=>{
       document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
       btn.classList.add("active");
       showSeason(season);
     };
     yearGrid.appendChild(btn);
-
-    if(i === seasons.length - 1){
-      btn.classList.add("active");
-    }
+    if(i===seasons.length-1) btn.classList.add("active");
   });
 
-  const allBtn = document.createElement("button");
-  allBtn.className = "year-btn";
-  allBtn.textContent = "ALL";
-  allBtn.onclick = ()=>{
+  const allBtn=document.createElement("button");
+  allBtn.className="year-btn";
+  allBtn.textContent="ALL";
+  allBtn.onclick=()=>{
     document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
     allBtn.classList.add("active");
-
-    const allTeamMatches = allMatches.filter(m=>m.info.teams.includes(teamParam));
-    renderTable(allTeamMatches);
+    renderTable(allMatches.filter(m=>m.info.teams.includes(teamParam)));
   };
   yearGrid.appendChild(allBtn);
 }
@@ -216,45 +223,19 @@ function showSeason(season){
 }
 
 function renderTable(matches){
-  tableBody.innerHTML = "";
-
+  tableBody.innerHTML="";
   matches
     .sort((a,b)=>new Date(a.info.dates[0]) - new Date(b.info.dates[0]))
     .forEach(match=>{
-      const date = formatDate(match.info.dates[0]);
-      const teams = match.info.teams.join(" vs ");
-      const venue = match.info.venue || "—";
-
-      let result = "—";
-      if(match.info.outcome?.winner){
-        if(match.info.outcome.by?.runs){
-          result = `${match.info.outcome.winner} won by ${match.info.outcome.by.runs} runs`;
-        } else if(match.info.outcome.by?.wickets){
-          result = `${match.info.outcome.winner} won by ${match.info.outcome.by.wickets} wickets`;
-        }
-      }
-
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${date}</td>
-        <td>
-          <a href="bbl-match.html?file=${encodeURIComponent(match.file)}">
-            ${teams}
-          </a>
-        </td>
-        <td>${venue}</td>
-        <td>${result}</td>
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>${new Date(match.info.dates[0]).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}</td>
+        <td><a href="bbl-match.html?file=${encodeURIComponent(match.file)}">${match.info.teams.join(" vs ")}</a></td>
+        <td>${match.info.venue||"—"}</td>
+        <td>${match.info.outcome?.winner||"—"}</td>
       `;
       tableBody.appendChild(tr);
     });
-}
-
-function formatDate(d){
-  return new Date(d).toLocaleDateString("en-GB",{
-    day:"2-digit",
-    month:"short",
-    year:"numeric"
-  });
 }
 </script>
 
