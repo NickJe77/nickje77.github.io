@@ -2,16 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Big Bash League – By Season | The Sporting Almanac</title>
+<title>BBL Seasons | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 body{
-  font-family: Inter, system-ui, Arial, sans-serif;
+  font-family:Inter,system-ui,Arial,sans-serif;
   margin:0;
   background:#ffffff;
 }
-
 .navbar{
   display:flex;
   justify-content:center;
@@ -22,206 +21,174 @@ body{
 }
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 
-.page-wrap{
-  max-width:1200px;
-  margin:0 auto;
-  padding:30px 20px;
-}
+.page-wrap{ max-width:1100px; margin:0 auto; padding:30px 20px 60px; }
 
 .hero{
-  background:linear-gradient(90deg,#003566,#0077b6);
+  background:linear-gradient(90deg,#003366,#00a3cc);
   color:white;
-  padding:40px 50px;
-  border-radius:24px;
-  margin-bottom:25px;
+  padding:34px 38px;
+  border-radius:22px;
+  margin-bottom:18px;
 }
-.hero h1{margin:0;font-size:46px;}
-.hero p{margin-top:10px;font-size:20px;opacity:0.95;}
+.hero h1{margin:0;font-size:42px;}
+.hero p{margin:10px 0 0;font-size:16px;opacity:0.95;}
 
-.year-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(110px,1fr));
-  gap:12px;
-  margin-bottom:25px;
+.controls{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin:16px 0;
 }
-.year-btn{
-  background:#003566;
-  color:white;
-  border:none;
-  padding:12px 0;
-  border-radius:10px;
+select, input{
   font-size:15px;
+  padding:10px 12px;
+  border-radius:10px;
+  border:1px solid #cbd5e1;
+}
+button{
+  font-size:15px;
+  padding:10px 14px;
+  border-radius:10px;
+  border:1px solid #0b2a55;
+  background:#0b2a55;
+  color:white;
+  font-weight:700;
   cursor:pointer;
 }
-.year-btn:hover{background:#00509d;}
-.year-btn.active{background:#00b4d8;}
+button:hover{ opacity:0.92; }
 
-table{
-  width:100%;
-  border-collapse:collapse;
-  font-size:14px;
-}
-th,td{
-  border-bottom:1px solid #ddd;
-  padding:10px 12px;
-  text-align:left;
-}
-th{background:#f3f6fb;}
-tr:nth-child(even){background:#f8fbff;}
-tr:hover{background:#eef4ff;}
+.table-wrap{ overflow-x:auto; }
+table{ width:100%; border-collapse:collapse; font-size:14px; min-width: 760px; }
+th, td{ padding:10px 10px; border-bottom:1px solid #e2e8f0; text-align:left; }
+th{ background:#f3f6fb; font-weight:800; color:#0b2a55; }
+tr:nth-child(even){ background:#f8fbff; }
 
-.match-link{
-  color:#003566;
+a.link{
+  color:#003366;
+  font-weight:800;
   text-decoration:none;
-  font-weight:600;
 }
-.match-link:hover{text-decoration:underline;}
+a.link:hover{ text-decoration:underline; }
+
+.small{ color:#475569; font-size:13px; margin-top:10px; }
 </style>
 </head>
-
 <body>
 
 <div class="navbar">
   <a href="index.html">Home</a>
-  <a href="racing.html">Racing</a>
-  <a href="afl.html">AFL</a>
-  <a href="football.html">Football</a>
   <a href="cricket.html">Cricket</a>
+  <a href="bbl-season.html">BBL Seasons</a>
 </div>
 
 <div class="page-wrap">
 
-<div class="hero">
-  <h1>Big Bash League – By Season</h1>
-  <p>Select a season to view all matches.</p>
-</div>
+  <div class="hero">
+    <h1>Big Bash League</h1>
+    <p>Season archive – click any match to open the full scorecard.</p>
+  </div>
 
-<div id="yearGrid" class="year-grid"></div>
+  <div class="controls">
+    <select id="seasonSelect">
+      <option value="bbl_2013.json">2012/13 (bbl_2013.json)</option>
+    </select>
+    <input id="filter" placeholder="Filter by team / venue / date…" />
+    <button id="loadBtn">Load</button>
+  </div>
 
-<table>
-<thead>
-<tr>
-  <th>Date</th>
-  <th>Match</th>
-  <th>Venue</th>
-  <th>Result</th>
-</tr>
-</thead>
-<tbody id="matchesTable"></tbody>
-</table>
+  <div class="table-wrap">
+    <table id="matchesTable">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Match</th>
+          <th>Venue</th>
+          <th>Winner</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="small" id="count"></div>
 
 </div>
 
 <script>
-const indexUrl = "data/bbl/index.json";
-const basePath = "data/bbl/";
+const seasonSelect = document.getElementById("seasonSelect");
+const filterInput = document.getElementById("filter");
+const loadBtn = document.getElementById("loadBtn");
+const tbody = document.querySelector("#matchesTable tbody");
+const countEl = document.getElementById("count");
 
-const yearGrid = document.getElementById("yearGrid");
-const tableBody = document.getElementById("matchesTable");
+let loadedFile = seasonSelect.value;
+let matches = [];
 
-let seasonsMap = {};
-let seasonOrder = [];
-
-fetch(indexUrl)
-  .then(r=>r.json())
-  .then(files=>{
-    return Promise.all(
-      files.map(file =>
-        fetch(basePath+file)
-          .then(r=>r.json())
-          .then(matches => ({ file, matches }))
-      )
-    );
-  })
-  .then(allSeasons=>{
-    allSeasons.forEach(seasonObj=>{
-      const seasonFile = seasonObj.file;
-      const matches = seasonObj.matches;
-
-      matches.forEach((match, index)=>{
-        const season = match.info?.season;
-        if(!season) return;
-
-        if(!seasonsMap[season]){
-          seasonsMap[season] = [];
-          seasonOrder.push(season);
-        }
-
-        seasonsMap[season].push({
-          match,
-          file: seasonFile,
-          index: index
-        });
-      });
-    });
-
-    seasonOrder.sort();
-    buildYearButtons();
-    showSeason(seasonOrder[seasonOrder.length-1]);
-  });
-
-function buildYearButtons(){
-  yearGrid.innerHTML="";
-  seasonOrder.forEach((season,i)=>{
-    const btn=document.createElement("button");
-    btn.className="year-btn";
-    btn.textContent=season;
-    btn.onclick=()=>{
-      document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
-      btn.classList.add("active");
-      showSeason(season);
-    };
-    yearGrid.appendChild(btn);
-
-    if(i===seasonOrder.length-1){
-      btn.classList.add("active");
-    }
-  });
+function toDateStr(d){
+  try{ return new Date(d).toDateString(); }catch(e){ return d; }
 }
 
-function showSeason(season){
-  renderTable(seasonsMap[season] || []);
+function normaliseMatchList(data){
+  // Your current files are: [ {match} ]
+  if(Array.isArray(data)) return data;
+  if(data && Array.isArray(data.matches)) return data.matches;
+  return [];
 }
 
-function renderTable(rows){
-  tableBody.innerHTML="";
+function render(){
+  const q = filterInput.value.trim().toLowerCase();
 
-  rows
-    .sort((a,b)=>new Date(a.match.info.dates[0]) - new Date(b.match.info.dates[0]))
-    .forEach(row=>{
-      const match = row.match;
-      const date = formatDate(match.info.dates[0]);
-      const teams = match.info.teams.join(" vs ");
-      const venue = match.info.venue || "—";
+  const rows = matches
+    .map((m, idx)=>{
+      const info = m.info || {};
+      const date = (info.dates && info.dates[0]) ? info.dates[0] : "";
+      const teams = (info.teams || []).join(" vs ");
+      const venue = info.venue || "";
+      const winner = info.outcome?.winner || "—";
 
-      let result="—";
-      if(match.info.outcome?.winner){
-        if(match.info.outcome.by?.runs){
-          result = match.info.outcome.winner+" won by "+match.info.outcome.by.runs+" runs";
-        }
-        else if(match.info.outcome.by?.wickets){
-          result = match.info.outcome.winner+" won by "+match.info.outcome.by.wickets+" wickets";
-        }
-      }
+      const haystack = `${date} ${teams} ${venue} ${winner}`.toLowerCase();
+      if(q && !haystack.includes(q)) return null;
 
-      const tr=document.createElement("tr");
-      tr.innerHTML=`
-        <td>${date}</td>
-        <td>
-          <a class="match-link" href="bbl-match.html?file=${row.file}&i=${row.index}">
-            ${teams}
-          </a>
-        </td>
-        <td>${venue}</td>
-        <td>${result}</td>
+      return `
+        <tr>
+          <td>${toDateStr(date)}</td>
+          <td>${teams}</td>
+          <td>${venue}</td>
+          <td>${winner}</td>
+          <td><a class="link" href="bbl-match.html?file=${encodeURIComponent(loadedFile)}&match=${idx}">View</a></td>
+        </tr>
       `;
-      tableBody.appendChild(tr);
-    });
+    })
+    .filter(Boolean)
+    .join("");
+
+  tbody.innerHTML = rows || `<tr><td colspan="5">No matches found.</td></tr>`;
+
+  const shown = (rows ? (tbody.querySelectorAll("tr").length) : 0);
+  countEl.textContent = `Matches shown: ${shown} (file: ${loadedFile})`;
 }
 
-function formatDate(d){
-  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+async function loadSeason(){
+  loadedFile = seasonSelect.value;
+  tbody.innerHTML = `<tr><td colspan="5">Loading…</td></tr>`;
+  countEl.textContent = "";
+
+  const r = await fetch("data/bbl/" + loadedFile);
+  if(!r.ok){
+    tbody.innerHTML = `<tr><td colspan="5">ERROR: HTTP ${r.status}</td></tr>`;
+    return;
+  }
+  const data = await r.json();
+  matches = normaliseMatchList(data);
+
+  render();
 }
+
+loadBtn.addEventListener("click", loadSeason);
+filterInput.addEventListener("input", render);
+
+loadSeason();
 </script>
 
 </body>
