@@ -6,19 +6,72 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#f6f8fc;}
-.navbar{display:flex;justify-content:center;gap:26px;padding:16px 0;border-bottom:1px solid #ddd;background:#fff;font-weight:600}
-.navbar a{color:#0056d6;text-decoration:none;font-size:18px}
-.page{max-width:1200px;margin:0 auto;padding:30px 20px 70px}
-.hero{background:linear-gradient(90deg,#4b0082,#7b2cbf);color:#fff;padding:36px 44px;border-radius:26px;margin-bottom:28px}
-.hero h1{margin:0;font-size:40px}
-.section{background:#fff;border-radius:22px;padding:26px;margin-bottom:28px;box-shadow:0 10px 22px rgba(0,0,0,.06)}
-.section h2{margin:0 0 18px;font-size:20px;color:#475569}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:18px}
-.stat{background:#f3f6fb;border-radius:18px;padding:18px 12px;text-align:center}
-.stat strong{display:block;font-size:30px;margin-bottom:4px}
-.controls{margin:20px 0}
-select{padding:10px 14px;font-size:16px;border-radius:10px}
+body{
+  font-family:Inter,system-ui,Arial,sans-serif;
+  margin:0;
+  background:#ffffff;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#4b0082,#7a2bbf);
+  color:white;
+  padding:40px 50px;
+  border-radius:24px;
+  margin-bottom:25px;
+}
+
+.hero h1{margin:0;font-size:42px;}
+.hero p{margin-top:8px;font-size:18px;opacity:.95;}
+
+.controls{
+  margin:20px 0;
+}
+
+select{
+  font-size:16px;
+  padding:8px 12px;
+  border-radius:8px;
+}
+
+.stats-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:16px;
+  margin-top:20px;
+}
+
+.stat{
+  background:#f7f9fc;
+  border-radius:14px;
+  padding:18px;
+  text-align:center;
+}
+
+.stat h3{
+  margin:0;
+  font-size:28px;
+}
+
+.stat span{
+  font-size:14px;
+  color:#555;
+}
 </style>
 </head>
 
@@ -27,151 +80,116 @@ select{padding:10px 14px;font-size:16px;border-radius:10px}
 <div class="navbar">
   <a href="index.html">Home</a>
   <a href="cricket.html">Cricket</a>
-  <a href="bbl-season.html">BBL Seasons</a>
+  <a href="bbl.html">BBL Seasons</a>
 </div>
 
-<div class="page">
+<div class="page-wrap">
 
 <div class="hero">
-  <h1 id="playerName"></h1>
+  <h1 id="playerName">Loading player…</h1>
+  <p>BBL performance breakdown by opposition</p>
 </div>
 
 <div class="controls">
   Opposition:
-  <select id="teamSelect"></select>
+  <select id="oppSelect">
+    <option value="ALL">All</option>
+  </select>
 </div>
 
-<div class="section">
-  <h2>CAREER SUMMARY</h2>
-  <div class="stats" id="career"></div>
-</div>
-
-<div class="section">
-  <h2>VS SELECTED OPPONENT</h2>
-  <div class="stats" id="opponent"></div>
-</div>
+<div class="stats-grid" id="stats"></div>
 
 </div>
 
 <script>
-(async function(){
-
 const params = new URLSearchParams(location.search);
 const rawPlayer = params.get("player");
+
+if(!rawPlayer){
+  document.body.innerHTML = "<h2 style='padding:40px'>Missing player parameter</h2>";
+  throw "No player";
+}
+
+const player = rawPlayer.toLowerCase();
+
 document.getElementById("playerName").textContent = rawPlayer;
 
-function norm(n){
-  return n.toLowerCase().replace(/[^a-z]/g,"");
-}
-const target = norm(rawPlayer);
+const statsBox = document.getElementById("stats");
+const oppSelect = document.getElementById("oppSelect");
 
-const index = await fetch("data/bbl/index.json").then(r=>r.json());
-console.log("BBL seasons loaded:", index.length);
+let matches = [];
+let opponents = new Set();
 
-const career = {m:0,r:0,b:0,o:0,w:0,bb:0,rc:0};
-const vs = {};
-const teams = new Set();
+function norm(n){ return n.toLowerCase(); }
 
-function init(t){
-  vs[t] ??= {m:0,r:0,b:0,o:0,w:0,bb:0,rc:0};
-}
+function render(filtered){
+  let runs=0, balls=0, outs=0, games=0;
 
-for(const s of index){
-  const data = await fetch("data/bbl/"+s.file).then(r=>r.json());
-  const matches = Array.isArray(data)?data:[data];
-
-  matches.forEach(m=>{
-    if(!m.innings) return;
+  filtered.forEach(m=>{
     let played=false;
-    const oppSeen=new Set();
-    const tms=m.info.teams;
-
     m.innings.forEach(inn=>{
-      const opp=tms.find(x=>x!==inn.team);
-      if(!opp) return;
-
       inn.overs.forEach(o=>{
         o.deliveries.forEach(d=>{
-          const bat = d.batter && norm(d.batter);
-          const bowl = d.bowler && norm(d.bowler);
-
-          if(bat===target){
+          if(d.batter && norm(d.batter)===player){
             played=true;
-            teams.add(opp); init(opp);
-            career.r+=d.runs.batter;
-            if(!(d.extras&&d.extras.wides)) career.b++;
-            vs[opp].r+=d.runs.batter;
-            if(!(d.extras&&d.extras.wides)) vs[opp].b++;
+            runs+=d.runs.batter;
+            if(!d.extras?.wides) balls++;
           }
-
           if(d.wickets){
             d.wickets.forEach(w=>{
-              if(norm(w.player_out)===target){
-                career.o++; init(opp); vs[opp].o++;
-              }
+              if(norm(w.player_out)===player) outs++;
             });
-          }
-
-          if(bowl===target){
-            played=true;
-            teams.add(opp); init(opp);
-            if(!(d.extras&&(d.extras.wides||d.extras.noballs))){
-              career.bb++; vs[opp].bb++;
-            }
-            const c=d.runs.total-((d.extras?.byes||0)+(d.extras?.legbyes||0));
-            career.rc+=c; vs[opp].rc+=c;
-            if(d.wickets){
-              career.w+=d.wickets.length;
-              vs[opp].w+=d.wickets.length;
-            }
           }
         });
       });
-
-      if(played) oppSeen.add(opp);
     });
-
-    if(played){
-      career.m++;
-      oppSeen.forEach(t=>{init(t);vs[t].m++;});
-    }
+    if(played) games++;
   });
-}
 
-console.log("Teams found:", teams);
+  const avg = outs ? (runs/outs).toFixed(2) : "–";
+  const sr  = balls ? ((runs/balls)*100).toFixed(1) : "–";
 
-function render(el,d){
-  const avg=d.o?(d.r/d.o).toFixed(2):"—";
-  const sr=d.b?((d.r/d.b)*100).toFixed(1):"—";
-  const ov=(d.bb/6).toFixed(1);
-  const eco=d.bb?(d.rc/(d.bb/6)).toFixed(2):"—";
-
-  el.innerHTML=`
-    <div class="stat"><strong>${d.m}</strong>Matches</div>
-    <div class="stat"><strong>${d.r}</strong>Runs</div>
-    <div class="stat"><strong>${avg}</strong>Average</div>
-    <div class="stat"><strong>${sr}</strong>Strike Rate</div>
-    <div class="stat"><strong>${d.w}</strong>Wickets</div>
-    <div class="stat"><strong>${ov}</strong>Overs</div>
-    <div class="stat"><strong>${eco}</strong>Economy</div>
+  statsBox.innerHTML = `
+    <div class="stat"><h3>${games}</h3><span>Matches</span></div>
+    <div class="stat"><h3>${runs}</h3><span>Runs</span></div>
+    <div class="stat"><h3>${avg}</h3><span>Average</span></div>
+    <div class="stat"><h3>${sr}</h3><span>Strike Rate</span></div>
   `;
 }
 
-render(document.getElementById("career"),career);
+fetch("data/bbl/index.json")
+.then(r=>r.json())
+.then(files=>{
+  return Promise.all(
+    files.map(f=>fetch("data/bbl/"+f).then(r=>r.json()))
+  );
+})
+.then(seasons=>{
+  seasons.forEach(season=>{
+    season.forEach(match=>{
+      matches.push(match);
+      match.info.teams.forEach(t=>opponents.add(t));
+    });
+  });
 
-const sel=document.getElementById("teamSelect");
-[...teams].sort().forEach(t=>{
-  const o=document.createElement("option");
-  o.value=t;o.textContent=t;sel.appendChild(o);
+  [...opponents].sort().forEach(t=>{
+    const opt=document.createElement("option");
+    opt.value=t;
+    opt.textContent=t;
+    oppSelect.appendChild(opt);
+  });
+
+  render(matches);
+
+  oppSelect.addEventListener("change",()=>{
+    const val=oppSelect.value;
+    if(val==="ALL"){
+      render(matches);
+    }else{
+      render(matches.filter(m=>m.info.teams.includes(val)));
+    }
+  });
 });
-
-if(sel.options[0]) render(document.getElementById("opponent"),vs[sel.value]);
-
-sel.addEventListener("change",()=>render(
-  document.getElementById("opponent"),vs[sel.value]
-));
-
-})();
 </script>
 
 </body>
