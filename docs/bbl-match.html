@@ -7,8 +7,9 @@
 
 <style>
 :root{
-  --primary:#4b0082;
-  --secondary:#5f3b8c;
+  --primary:#003366;
+  --secondary:#005b8f;
+  --muted:#3b82b8;
 }
 
 body{
@@ -28,7 +29,7 @@ body{
   font-weight:600;
 }
 .navbar a{
-  color:#0056d6;
+  color:var(--primary);
   text-decoration:none;
   font-size:18px;
 }
@@ -70,6 +71,7 @@ body{
 .total{
   font-weight:700;
   margin-bottom:10px;
+  color:var(--secondary);
 }
 
 /* TABLES */
@@ -83,26 +85,33 @@ th,td{
   border-bottom:1px solid #e5e7eb;
 }
 th{
-  background:#f6f7fb;
+  background:#f0f6fb;
   font-weight:800;
+  color:var(--primary);
+}
+td{
+  color:var(--primary);
 }
 tr:nth-child(even){
-  background:#fbfcff;
+  background:#f7fbff;
 }
 
 /* LINKS */
 a.player{
-  color:var(--primary);
+  color:var(--secondary);
   font-weight:700;
   text-decoration:none;
 }
-a.player:hover{text-decoration:underline;}
+a.player:hover{
+  text-decoration:underline;
+  color:var(--primary);
+}
 
 /* META */
 .meta-line{
   margin-top:8px;
   font-size:14px;
-  color:var(--secondary);
+  color:var(--muted);
 }
 
 /* SUPER OVER */
@@ -131,7 +140,6 @@ a.player:hover{text-decoration:underline;}
 
 <body>
 
-<!-- THIS ALWAYS RENDERS -->
 <div class="navbar">
   <a href="index.html">Home</a>
   <a href="cricket.html">Cricket</a>
@@ -140,22 +148,21 @@ a.player:hover{text-decoration:underline;}
 
 <div class="page">
 
-  <div class="hero">
-    <h1 id="title">BBL Match</h1>
-    <p id="meta">If you can see this, HTML is loading correctly.</p>
-  </div>
+<div class="hero">
+  <h1 id="title">BBL Match</h1>
+  <p id="meta">Loading match…</p>
+</div>
 
-  <div id="content">
-    <p>Waiting for match data…</p>
-  </div>
+<div id="content">
+  <p>Waiting for match data…</p>
+</div>
 
 </div>
 
 <script>
 document.addEventListener("DOMContentLoaded", () => {
   try {
-
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(location.search);
     const file = params.get("file");
     const matchIndex = params.has("match") ? parseInt(params.get("match")) : 0;
 
@@ -163,66 +170,55 @@ document.addEventListener("DOMContentLoaded", () => {
     const metaEl  = document.getElementById("meta");
     const content = document.getElementById("content");
 
-    if(!file){
-      throw new Error("Missing ?file= parameter");
-    }
+    if(!file) throw new Error("Missing ?file= parameter");
 
     function legalBall(d){
       return !(d.extras && (d.extras.wides || d.extras.noballs));
     }
-    function overs(balls){
-      return Math.floor(balls/6)+"."+(balls%6);
+    function overs(b){
+      return Math.floor(b/6)+"."+(b%6);
     }
     function pl(n){
       return `<a class="player" href="bbl-player.html?player=${encodeURIComponent(n)}">${n}</a>`;
     }
-    function dismissal(w, bowler){
-      const f = w.fielders?.map(x=>x.name).join(", ");
+    function dismissal(w,b){
+      const f=w.fielders?.map(x=>x.name).join(", ");
       switch(w.kind){
-        case "caught": return `c ${f} b ${bowler}`;
-        case "bowled": return `b ${bowler}`;
-        case "lbw": return `lbw b ${bowler}`;
-        case "stumped": return `st ${f} b ${bowler}`;
-        case "run out": return `run out (${f})`;
-        default: return w.kind;
+        case "caught":return `c ${f} b ${b}`;
+        case "bowled":return `b ${b}`;
+        case "lbw":return `lbw b ${b}`;
+        case "stumped":return `st ${f} b ${b}`;
+        case "run out":return `run out (${f})`;
+        default:return w.kind;
       }
     }
 
-    fetch("data/bbl/" + file)
-      .then(r => {
-        if(!r.ok) throw new Error("HTTP " + r.status);
-        return r.json();
-      })
-      .then(data => {
+    fetch("data/bbl/"+file)
+      .then(r=>{if(!r.ok)throw new Error("HTTP "+r.status);return r.json();})
+      .then(data=>{
+        const match=Array.isArray(data)?data[matchIndex]:data;
+        if(!match||!match.innings)throw new Error("Invalid match data");
 
-        const match = Array.isArray(data) ? data[matchIndex] : data;
-        if(!match || !match.innings){
-          throw new Error("Match data invalid");
-        }
+        const info=match.info;
+        titleEl.textContent=info.teams.join(" vs ");
+        metaEl.textContent=
+          info.venue+" • "+
+          new Date(info.dates[0]).toDateString()+
+          " • Winner: "+(info.outcome?.winner||"—");
 
-        const info = match.info;
-        titleEl.textContent = info.teams.join(" vs ");
-        metaEl.textContent =
-          info.venue + " • " +
-          new Date(info.dates[0]).toDateString() +
-          " • Winner: " + (info.outcome?.winner || "—");
-
-        let html = "";
+        let html="";
 
         match.innings.forEach((inn,i)=>{
-          if(i === 2){
-            html += `<div class="superover">SUPER OVER</div>`;
-          }
+          if(i===2)html+=`<div class="superover">SUPER OVER</div>`;
 
-          let bat={}, bowl={}, fall=[];
-          let runs=0, wkts=0, balls=0;
+          let bat={},bowl={},fall=[];
+          let runs=0,wkts=0,balls=0;
           let ex={b:0,lb:0,w:0,nb:0,p:0};
 
           inn.overs.forEach(o=>{
-            let ballInOver=0;
+            let bo=0;
             o.deliveries.forEach(d=>{
               runs+=d.runs.total;
-
               if(d.extras){
                 ex.b+=d.extras.byes||0;
                 ex.lb+=d.extras.legbyes||0;
@@ -230,36 +226,31 @@ document.addEventListener("DOMContentLoaded", () => {
                 ex.nb+=d.extras.noballs||0;
                 ex.p+=d.extras.penalty||0;
               }
-
               if(d.batter){
-                bat[d.batter] ??= {R:0,B:0,out:"not out"};
+                bat[d.batter]??={R:0,B:0,out:"not out"};
                 bat[d.batter].R+=d.runs.batter;
-                if(legalBall(d)) bat[d.batter].B++;
+                if(legalBall(d))bat[d.batter].B++;
               }
-
               if(d.bowler){
-                bowl[d.bowler] ??= {balls:0,R:0,W:0};
-                if(legalBall(d)) bowl[d.bowler].balls++;
+                bowl[d.bowler]??={balls:0,R:0,W:0};
+                if(legalBall(d))bowl[d.bowler].balls++;
                 bowl[d.bowler].R+=d.runs.total-
                   ((d.extras?.byes||0)+(d.extras?.legbyes||0));
               }
-
-              if(legalBall(d)){ balls++; ballInOver++; }
-
+              if(legalBall(d)){balls++;bo++;}
               if(d.wickets){
                 d.wickets.forEach(w=>{
                   wkts++;
-                  if(bat[w.player_out]){
-                    bat[w.player_out].out = dismissal(w,d.bowler);
-                  }
-                  if(bowl[d.bowler]) bowl[d.bowler].W++;
-                  fall.push(`${runs}/${wkts} (${w.player_out}, ${o.over}.${ballInOver})`);
+                  if(bat[w.player_out])
+                    bat[w.player_out].out=dismissal(w,d.bowler);
+                  if(bowl[d.bowler])bowl[d.bowler].W++;
+                  fall.push(`${runs}/${wkts} (${w.player_out}, ${o.over}.${bo})`);
                 });
               }
             });
           });
 
-          html += `
+          html+=`
           <div class="innings">
             <h2>${inn.team} Innings</h2>
             <div class="total">Total: ${runs}/${wkts} (${(balls/6).toFixed(1)} ov)</div>
@@ -286,7 +277,7 @@ document.addEventListener("DOMContentLoaded", () => {
               Fall of wickets: ${fall.join(", ")}
             </div>
 
-            <h3>Bowling vs ${inn.team}</h3>
+            <h3 style="color:var(--secondary)">Bowling vs ${inn.team}</h3>
             <table>
               <tr><th>Bowler</th><th>O</th><th>R</th><th>W</th></tr>
               ${Object.entries(bowl).map(([p,s])=>`
@@ -301,12 +292,12 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>`;
         });
 
-        content.innerHTML = html;
+        content.innerHTML=html;
       });
 
-  } catch(err) {
-    document.getElementById("content").innerHTML =
-      `<div class="error">JS ERROR: ${err.message}</div>`;
+  } catch(err){
+    document.getElementById("content").innerHTML=
+      `<div class="error">${err.message}</div>`;
   }
 });
 </script>
