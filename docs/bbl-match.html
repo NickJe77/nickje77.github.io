@@ -87,6 +87,17 @@ a.player{
 }
 a.player:hover{text-decoration:underline;}
 
+.superover{
+  grid-column:1 / -1;
+  text-align:center;
+  padding:14px;
+  border-radius:14px;
+  background:#0b2a55;
+  color:white;
+  font-weight:900;
+  letter-spacing:1px;
+}
+
 .error{
   background:#fff1f2;
   border:1px solid #fecdd3;
@@ -143,6 +154,19 @@ function playerLink(name){
   return `<a class="player" href="bbl-player.html?player=${encodeURIComponent(name)}&file=${encodeURIComponent(file)}">${name}</a>`;
 }
 
+function dismissalText(w, bowler){
+  const f = w.fielders?.map(x=>x.name).join(", ");
+  switch(w.kind){
+    case "caught": return `c ${f} b ${bowler}`;
+    case "bowled": return `b ${bowler}`;
+    case "lbw": return `lbw b ${bowler}`;
+    case "stumped": return `st ${f} b ${bowler}`;
+    case "run out": return `run out (${f})`;
+    case "hit wicket": return `hit wicket b ${bowler}`;
+    default: return w.kind;
+  }
+}
+
 fetch("data/bbl/"+file)
 .then(r=>{
   if(!r.ok) throw new Error("HTTP "+r.status);
@@ -164,7 +188,11 @@ fetch("data/bbl/"+file)
 
   let html = `<div class="grid">`;
 
-  match.innings.forEach(inn=>{
+  match.innings.forEach((inn,idx)=>{
+    if(idx===2){
+      html += `<div class="superover">SUPER OVER</div>`;
+    }
+
     let bat={}, bowl={}, fall=[];
     let runs=0, wkts=0, balls=0;
     let extras={b:0,lb:0,w:0,nb:0,p:0};
@@ -201,7 +229,10 @@ fetch("data/bbl/"+file)
         if(d.wickets){
           d.wickets.forEach(w=>{
             wkts++;
-            if(bat[w.player_out]) bat[w.player_out].out = w.kind;
+            if(bat[w.player_out]){
+              bat[w.player_out].out =
+                dismissalText(w, d.bowler);
+            }
             if(bowl[d.bowler]) bowl[d.bowler].W++;
             fall.push(`${runs}/${wkts} (${w.player_out}, ${o.over}.${ballInOver})`);
           });
