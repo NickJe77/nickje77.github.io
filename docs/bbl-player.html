@@ -6,72 +6,56 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{
-  font-family:Inter,system-ui,Arial,sans-serif;
-  margin:0;
-  background:#ffffff;
-}
-
-.navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px 0;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
-}
-.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-
-.page-wrap{
-  max-width:1200px;
-  margin:0 auto;
-  padding:30px 20px;
-}
+body{font-family:Inter,system-ui,Arial,sans-serif;margin:0}
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px;border-bottom:1px solid #ddd;font-weight:600}
+.navbar a{text-decoration:none;color:#0056d6;font-size:18px}
+.page{max-width:1200px;margin:auto;padding:30px}
 
 .hero{
   background:linear-gradient(90deg,#4b0082,#7a2bbf);
-  color:white;
-  padding:40px 50px;
-  border-radius:24px;
-  margin-bottom:25px;
+  color:#fff;
+  padding:36px 44px;
+  border-radius:22px;
 }
+.hero h1{margin:0;font-size:42px}
+.hero p{margin-top:6px;opacity:.9}
 
-.hero h1{margin:0;font-size:42px;}
-.hero p{margin-top:8px;font-size:18px;opacity:.95;}
+.controls{margin:20px 0;display:flex;gap:16px;align-items:center}
 
-.controls{
-  margin:20px 0;
+.tabs button{
+  padding:10px 18px;
+  border-radius:10px;
+  border:1px solid #ccc;
+  background:#f4f6fb;
+  cursor:pointer;
+  font-weight:600;
 }
+.tabs button.active{background:#4b0082;color:#fff;border-color:#4b0082}
 
-select{
-  font-size:16px;
-  padding:8px 12px;
-  border-radius:8px;
-}
+.section-title{margin-top:28px;font-weight:700;color:#444}
 
-.stats-grid{
+.stats{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-  gap:16px;
-  margin-top:20px;
+  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:14px;
+  margin-top:14px;
 }
-
 .stat{
   background:#f7f9fc;
   border-radius:14px;
-  padding:18px;
+  padding:16px;
   text-align:center;
 }
+.stat h3{margin:0;font-size:26px}
+.stat span{font-size:13px;color:#555}
 
-.stat h3{
-  margin:0;
-  font-size:28px;
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:20px;
 }
-
-.stat span{
-  font-size:14px;
-  color:#555;
-}
+th,td{padding:10px;border-bottom:1px solid #ddd}
+th{background:#f2f5fb}
 </style>
 </head>
 
@@ -83,112 +67,135 @@ select{
   <a href="bbl.html">BBL Seasons</a>
 </div>
 
-<div class="page-wrap">
+<div class="page">
 
 <div class="hero">
-  <h1 id="playerName">Loading player…</h1>
+  <h1 id="playerName"></h1>
   <p>BBL performance breakdown by opposition</p>
 </div>
 
 <div class="controls">
   Opposition:
-  <select id="oppSelect">
-    <option value="ALL">All</option>
-  </select>
+  <select id="opp"></select>
+
+  <div class="tabs">
+    <button id="batTab" class="active">Batting</button>
+    <button id="bowlTab">Bowling</button>
+  </div>
 </div>
 
-<div class="stats-grid" id="stats"></div>
+<div id="content"></div>
 
 </div>
 
 <script>
-const params = new URLSearchParams(location.search);
-const rawPlayer = params.get("player");
+const params=new URLSearchParams(location.search);
+const player=params.get("player");
+if(!player) throw "Missing player";
 
-if(!rawPlayer){
-  document.body.innerHTML = "<h2 style='padding:40px'>Missing player parameter</h2>";
-  throw "No player";
+const norm=n=>n.toLowerCase();
+document.getElementById("playerName").textContent=player;
+
+let matches=[],currentTab="bat";
+
+const oppSel=document.getElementById("opp");
+["All"].forEach(v=>oppSel.add(new Option(v,v)));
+
+document.getElementById("batTab").onclick=()=>switchTab("bat");
+document.getElementById("bowlTab").onclick=()=>switchTab("bowl");
+
+function switchTab(t){
+  currentTab=t;
+  document.getElementById("batTab").classList.toggle("active",t==="bat");
+  document.getElementById("bowlTab").classList.toggle("active",t==="bowl");
+  render();
 }
 
-const player = rawPlayer.toLowerCase();
+function render(){
+  const opp=oppSel.value;
+  const filtered=opp==="All"?matches:matches.filter(m=>m.info.teams.includes(opp));
+  currentTab==="bat"?renderBat(filtered):renderBowl(filtered);
+}
 
-document.getElementById("playerName").textContent = rawPlayer;
-
-const statsBox = document.getElementById("stats");
-const oppSelect = document.getElementById("oppSelect");
-
-let matches = [];
-let opponents = new Set();
-
-function norm(n){ return n.toLowerCase(); }
-
-function render(filtered){
-  let runs=0, balls=0, outs=0, games=0;
-
-  filtered.forEach(m=>{
-    let played=false;
-    m.innings.forEach(inn=>{
-      inn.overs.forEach(o=>{
+function renderBat(list){
+  let runs=0,balls=0,outs=0,games=0,hs=0;
+  list.forEach(m=>{
+    let innsRuns=0,played=false;
+    m.innings.forEach(i=>{
+      i.overs.forEach(o=>{
         o.deliveries.forEach(d=>{
-          if(d.batter && norm(d.batter)===player){
+          if(norm(d.batter)===norm(player)){
             played=true;
-            runs+=d.runs.batter;
+            innsRuns+=d.runs.batter;
             if(!d.extras?.wides) balls++;
+            runs+=d.runs.batter;
           }
-          if(d.wickets){
-            d.wickets.forEach(w=>{
-              if(norm(w.player_out)===player) outs++;
-            });
-          }
+          d.wickets?.forEach(w=>{
+            if(norm(w.player_out)===norm(player)) outs++;
+          });
         });
       });
     });
-    if(played) games++;
+    if(played){games++;hs=Math.max(hs,innsRuns);}
   });
 
-  const avg = outs ? (runs/outs).toFixed(2) : "–";
-  const sr  = balls ? ((runs/balls)*100).toFixed(1) : "–";
+  const avg=outs?(runs/outs).toFixed(2):"–";
+  const sr=balls?((runs/balls)*100).toFixed(1):"–";
 
-  statsBox.innerHTML = `
-    <div class="stat"><h3>${games}</h3><span>Matches</span></div>
-    <div class="stat"><h3>${runs}</h3><span>Runs</span></div>
-    <div class="stat"><h3>${avg}</h3><span>Average</span></div>
-    <div class="stat"><h3>${sr}</h3><span>Strike Rate</span></div>
+  document.getElementById("content").innerHTML=`
+    <div class="section-title">CAREER SUMMARY</div>
+    <div class="stats">
+      <div class="stat"><h3>${games}</h3><span>Matches</span></div>
+      <div class="stat"><h3>${runs}</h3><span>Runs</span></div>
+      <div class="stat"><h3>${avg}</h3><span>Average</span></div>
+      <div class="stat"><h3>${sr}</h3><span>Strike Rate</span></div>
+      <div class="stat"><h3>${hs}</h3><span>High Score</span></div>
+    </div>
+  `;
+}
+
+function renderBowl(list){
+  let balls=0,runs=0,wkts=0;
+  list.forEach(m=>{
+    m.innings.forEach(i=>{
+      i.overs.forEach(o=>{
+        o.deliveries.forEach(d=>{
+          if(norm(d.bowler)===norm(player)){
+            balls++;
+            if(!d.extras?.byes && !d.extras?.legbyes) runs+=d.runs.total;
+          }
+          d.wickets?.forEach(w=>{
+            if(norm(w.bowler)===norm(player)) wkts++;
+          });
+        });
+      });
+    });
+  });
+
+  const overs=(balls/6).toFixed(1);
+  const avg=wkts?(runs/wkts).toFixed(2):"–";
+  const econ=balls?((runs/(balls/6))).toFixed(2):"–";
+
+  document.getElementById("content").innerHTML=`
+    <div class="section-title">CAREER SUMMARY</div>
+    <div class="stats">
+      <div class="stat"><h3>${overs}</h3><span>Overs</span></div>
+      <div class="stat"><h3>${wkts}</h3><span>Wickets</span></div>
+      <div class="stat"><h3>${avg}</h3><span>Average</span></div>
+      <div class="stat"><h3>${econ}</h3><span>Economy</span></div>
+    </div>
   `;
 }
 
 fetch("data/bbl/index.json")
 .then(r=>r.json())
-.then(files=>{
-  return Promise.all(
-    files.map(f=>fetch("data/bbl/"+f).then(r=>r.json()))
-  );
-})
+.then(files=>Promise.all(files.map(f=>fetch("data/bbl/"+f).then(r=>r.json()))))
 .then(seasons=>{
-  seasons.forEach(season=>{
-    season.forEach(match=>{
-      matches.push(match);
-      match.info.teams.forEach(t=>opponents.add(t));
-    });
-  });
-
-  [...opponents].sort().forEach(t=>{
-    const opt=document.createElement("option");
-    opt.value=t;
-    opt.textContent=t;
-    oppSelect.appendChild(opt);
-  });
-
-  render(matches);
-
-  oppSelect.addEventListener("change",()=>{
-    const val=oppSelect.value;
-    if(val==="ALL"){
-      render(matches);
-    }else{
-      render(matches.filter(m=>m.info.teams.includes(val)));
-    }
-  });
+  seasons.forEach(s=>s.forEach(m=>{
+    matches.push(m);
+    m.info.teams.forEach(t=>oppSel.add(new Option(t,t)));
+  }));
+  render();
 });
 </script>
 
