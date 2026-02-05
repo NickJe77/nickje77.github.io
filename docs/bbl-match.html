@@ -1,10 +1,139 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<title>TEST</title>
+<meta charset="UTF-8">
+<title>BBL Match | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family:Inter,system-ui,Arial,sans-serif;
+  margin:0;
+  background:#ffffff;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
+.page-wrap{
+  max-width:1000px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#003366,#00a3cc);
+  color:white;
+  padding:30px 40px;
+  border-radius:18px;
+  margin-bottom:25px;
+}
+.hero h1{margin:0;font-size:36px;}
+.hero p{margin-top:8px;font-size:16px;}
+
+.section{
+  margin-top:25px;
+  padding:15px;
+  border:1px solid #ddd;
+  border-radius:10px;
+}
+.section h2{margin-top:0;color:#003366;}
+.total-line{font-weight:700;}
+</style>
 </head>
-<body style="font-family:Arial;padding:40px;">
-<h1>BBL MATCH TEST PAGE</h1>
-<p>If you can see this, the file is loading.</p>
-</body>
-</html>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="bbl-season.html">BBL Seasons</a>
+</div>
+
+<div class="page-wrap">
+
+<div class="hero">
+  <h1 id="matchTitle">Loading match…</h1>
+  <p id="matchMeta"></p>
+</div>
+
+<div id="scorecard"></div>
+
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const file = params.get("file");
+const index = parseInt(params.get("i"));
+
+if(!file){
+  document.getElementById("matchTitle").textContent = "No match selected";
+  throw "Missing file parameter";
+}
+
+fetch("data/bbl/" + file)
+.then(r => {
+  if(!r.ok) throw "HTTP " + r.status;
+  return r.json();
+})
+.then(data => {
+
+  let match;
+
+  // SEASON FILE (your bbl_2013.json etc)
+  if(data.matches){
+    if(isNaN(index)){
+      document.getElementById("matchTitle").textContent = "No match index supplied";
+      return;
+    }
+    match = data.matches[index];
+  }
+  // SINGLE MATCH FILE (future-proof)
+  else if(Array.isArray(data)){
+    match = data[0];
+  }
+  else{
+    match = data;
+  }
+
+  if(!match || !match.innings){
+    document.getElementById("matchTitle").textContent = "Match data invalid";
+    return;
+  }
+
+  const info = match.info;
+  const innings = match.innings;
+
+  document.getElementById("matchTitle").textContent =
+    info.teams.join(" vs ");
+
+  document.getElementById("matchMeta").textContent =
+    (info.venue || "") + " • " +
+    new Date(info.dates[0]).toDateString() +
+    " • Winner: " + (info.outcome?.winner || "—");
+
+  let html = "";
+
+  innings.forEach(inn=>{
+    let runs = 0;
+    let wkts = 0;
+    let balls = 0;
+
+    inn.overs.forEach(o=>{
+      o.deliveries.forEach(d=>{
+        runs += d.runs.total;
+        if(!d.extras?.wides) balls++;
+        if(d.wickets) wkts += d.wickets.length;
+      });
+    });
+
+    html += `
+      <div class="section">
+        <h2>${inn.
