@@ -9,7 +9,6 @@
 body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#fff}
 .navbar{display:flex;justify-content:center;gap:22px;padding:16px;border-bottom:1px solid #ddd;font-weight:600}
 .navbar a{text-decoration:none;color:#0056d6;font-size:18px}
-
 .page{max-width:1300px;margin:auto;padding:30px}
 
 .hero{
@@ -48,11 +47,7 @@ select{
   border-color:#4b0082;
 }
 
-.section-title{
-  margin-top:26px;
-  font-weight:700;
-  color:#444;
-}
+.section-title{margin-top:26px;font-weight:700;color:#444}
 
 .stats{
   display:grid;
@@ -98,7 +93,9 @@ tbody tr:nth-child(even){background:#fafcff}
 
 <div class="controls">
   Opposition:
-  <select id="opp"></select>
+  <select id="opp">
+    <option value="All">All</option>
+  </select>
 
   <div class="tabs">
     <button id="batTab" class="active">Batting</button>
@@ -113,19 +110,15 @@ tbody tr:nth-child(even){background:#fafcff}
 <script>
 const params = new URLSearchParams(location.search);
 const player = params.get("player");
-if(!player){
-  document.body.innerHTML="<h2 style='padding:40px'>Missing player parameter</h2>";
-  throw "No player";
-}
-
+if(!player) throw "Missing player";
 const P = player.toLowerCase();
-document.getElementById("playerName").textContent = player;
 
-const oppSel = document.getElementById("opp");
-oppSel.add(new Option("All","All"));
+document.getElementById("playerName").textContent = player;
 
 let matches = [];
 let currentTab = "bat";
+
+const oppSel = document.getElementById("opp");
 
 document.getElementById("batTab").onclick = ()=>switchTab("bat");
 document.getElementById("bowlTab").onclick = ()=>switchTab("bowl");
@@ -140,20 +133,32 @@ function switchTab(t){
 function render(){
   const opp = oppSel.value;
   const list = opp==="All"
-    ? matches
-    : matches.filter(m =>
-        m.info.teams.includes(opp) &&
-        m.innings.some(inn =>
-          inn.overs.some(o =>
-            o.deliveries.some(d =>
-              d.batter?.toLowerCase()===P ||
-              d.bowler?.toLowerCase()===P
-            )
-          )
-        )
-      );
+    ? matches.filter(m=>m._played)
+    : matches.filter(m=>m._played && m._opponent===opp);
 
   currentTab==="bat" ? renderBat(list) : renderBowl(list);
+}
+
+/* ---------------- DETECT PLAYER TEAM + OPPONENT ---------------- */
+
+function enrichMatch(m){
+  let playerTeam = null;
+
+  m.innings.forEach(inn=>{
+    inn.overs.forEach(o=>{
+      o.deliveries.forEach(d=>{
+        if(d.batter?.toLowerCase()===P || d.bowler?.toLowerCase()===P){
+          playerTeam = inn.team;
+        }
+      });
+    });
+  });
+
+  if(!playerTeam) return;
+
+  m._played = true;
+  m._playerTeam = playerTeam;
+  m._opponent = m.info.teams.find(t=>t!==playerTeam);
 }
 
 /* ---------------- BATTLING ---------------- */
@@ -163,13 +168,12 @@ function renderBat(list){
   let rows=[];
 
   list.forEach(m=>{
-    let r=0,b=0,out="not out",played=false;
+    let r=0,b=0,out="not out";
 
     m.innings.forEach(i=>{
       i.overs.forEach(o=>{
         o.deliveries.forEach(d=>{
           if(d.batter?.toLowerCase()===P){
-            played=true;
             r+=d.runs.batter;
             if(!d.extras?.wides) b++;
           }
@@ -180,18 +184,16 @@ function renderBat(list){
       });
     });
 
-    if(played){
+    if(r||b){
       games++;runs+=r;balls+=b;
       if(out!=="not out") outs++;
       hs=Math.max(hs,r);
-
-      const opp = m.info.teams.find(t=>!t.includes(m.info.outcome?.winner));
 
       rows.push(`
         <tr>
           <td>${m.info.season}</td>
           <td>${m.info.dates[0]}</td>
-          <td>${opp}</td>
+          <td>${m._opponent}</td>
           <td>${m.info.venue}</td>
           <td>${r}</td>
           <td>${b}</td>
@@ -249,13 +251,12 @@ function renderBowl(list){
 
     if(b){
       balls+=b;runs+=r;wkts+=w;
-      const opp = m.info.teams.find(t=>!t.includes(m.info.outcome?.winner));
 
       rows.push(`
         <tr>
           <td>${m.info.season}</td>
           <td>${m.info.dates[0]}</td>
-          <td>${opp}</td>
+          <td>${m._opponent}</td>
           <td>${m.info.venue}</td>
           <td>${(b/6).toFixed(1)}</td>
           <td>${r}</td>
@@ -296,8 +297,11 @@ fetch("data/bbl/index.json")
   const oppSet = new Set();
 
   seasons.forEach(s=>s.forEach(m=>{
-    matches.push(m);
-    m.info.teams.forEach(t=>oppSet.add(t));
+    enrichMatch(m);
+    if(m._played){
+      matches.push(m);
+      oppSet.add(m._opponent);
+    }
   }));
 
   [...oppSet].sort().forEach(t=>oppSel.add(new Option(t,t)));
