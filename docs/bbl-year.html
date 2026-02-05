@@ -6,73 +6,31 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{
-  font-family:Inter,system-ui,Arial,sans-serif;
-  margin:0;
-  background:#ffffff;
-}
+body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;}
 .navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px 0;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
+  display:flex;justify-content:center;gap:22px;
+  padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;
 }
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 
-.page-wrap{ max-width:1100px; margin:0 auto; padding:30px 20px 60px; }
+.page-wrap{max-width:1100px;margin:0 auto;padding:30px 20px 60px;}
 
 .hero{
   background:linear-gradient(90deg,#003366,#00a3cc);
-  color:white;
-  padding:34px 38px;
-  border-radius:22px;
-  margin-bottom:18px;
+  color:white;padding:36px 40px;border-radius:24px;margin-bottom:20px;
 }
 .hero h1{margin:0;font-size:42px;}
-.hero p{margin:10px 0 0;font-size:16px;opacity:0.95;}
 
-.controls{
-  display:flex;
-  gap:10px;
-  flex-wrap:wrap;
-  margin:16px 0;
-}
-select, input{
-  font-size:15px;
-  padding:10px 12px;
-  border-radius:10px;
-  border:1px solid #cbd5e1;
-}
-button{
-  font-size:15px;
-  padding:10px 14px;
-  border-radius:10px;
-  border:1px solid #0b2a55;
-  background:#0b2a55;
-  color:white;
-  font-weight:700;
-  cursor:pointer;
-}
-button:hover{ opacity:0.92; }
+table{width:100%;border-collapse:collapse;font-size:14px;}
+th,td{padding:10px;border-bottom:1px solid #e2e8f0;}
+th{background:#f3f6fb;font-weight:800;}
+tr:nth-child(even){background:#f8fbff;}
 
-.table-wrap{ overflow-x:auto; }
-table{ width:100%; border-collapse:collapse; font-size:14px; min-width: 760px; }
-th, td{ padding:10px 10px; border-bottom:1px solid #e2e8f0; text-align:left; }
-th{ background:#f3f6fb; font-weight:800; color:#0b2a55; }
-tr:nth-child(even){ background:#f8fbff; }
-
-a.link{
-  color:#003366;
-  font-weight:800;
-  text-decoration:none;
-}
-a.link:hover{ text-decoration:underline; }
-
-.small{ color:#475569; font-size:13px; margin-top:10px; }
+a.view{color:#003366;font-weight:800;text-decoration:none;}
+a.view:hover{text-decoration:underline;}
 </style>
 </head>
+
 <body>
 
 <div class="navbar">
@@ -82,113 +40,35 @@ a.link:hover{ text-decoration:underline; }
 </div>
 
 <div class="page-wrap">
-
   <div class="hero">
     <h1>Big Bash League</h1>
-    <p>Season archive – click any match to open the full scorecard.</p>
   </div>
 
-  <div class="controls">
-    <select id="seasonSelect">
-      <option value="bbl_2013.json">2012/13 (bbl_2013.json)</option>
-    </select>
-    <input id="filter" placeholder="Filter by team / venue / date…" />
-    <button id="loadBtn">Load</button>
-  </div>
-
-  <div class="table-wrap">
-    <table id="matchesTable">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Match</th>
-          <th>Venue</th>
-          <th>Winner</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </div>
-
-  <div class="small" id="count"></div>
-
+  <table id="tbl">
+    <tr><th>Date</th><th>Match</th><th>Venue</th><th>Winner</th><th></th></tr>
+  </table>
 </div>
 
 <script>
-const seasonSelect = document.getElementById("seasonSelect");
-const filterInput = document.getElementById("filter");
-const loadBtn = document.getElementById("loadBtn");
-const tbody = document.querySelector("#matchesTable tbody");
-const countEl = document.getElementById("count");
+fetch("data/bbl/bbl_2013.json")
+.then(r=>r.json())
+.then(data=>{
+  const matches = Array.isArray(data)?data:[];
+  const tbl=document.getElementById("tbl");
 
-let loadedFile = seasonSelect.value;
-let matches = [];
-
-function toDateStr(d){
-  try{ return new Date(d).toDateString(); }catch(e){ return d; }
-}
-
-function normaliseMatchList(data){
-  // Your current files are: [ {match} ]
-  if(Array.isArray(data)) return data;
-  if(data && Array.isArray(data.matches)) return data.matches;
-  return [];
-}
-
-function render(){
-  const q = filterInput.value.trim().toLowerCase();
-
-  const rows = matches
-    .map((m, idx)=>{
-      const info = m.info || {};
-      const date = (info.dates && info.dates[0]) ? info.dates[0] : "";
-      const teams = (info.teams || []).join(" vs ");
-      const venue = info.venue || "";
-      const winner = info.outcome?.winner || "—";
-
-      const haystack = `${date} ${teams} ${venue} ${winner}`.toLowerCase();
-      if(q && !haystack.includes(q)) return null;
-
-      return `
-        <tr>
-          <td>${toDateStr(date)}</td>
-          <td>${teams}</td>
-          <td>${venue}</td>
-          <td>${winner}</td>
-          <td><a class="link" href="bbl-match.html?file=${encodeURIComponent(loadedFile)}&match=${idx}">View</a></td>
-        </tr>
-      `;
-    })
-    .filter(Boolean)
-    .join("");
-
-  tbody.innerHTML = rows || `<tr><td colspan="5">No matches found.</td></tr>`;
-
-  const shown = (rows ? (tbody.querySelectorAll("tr").length) : 0);
-  countEl.textContent = `Matches shown: ${shown} (file: ${loadedFile})`;
-}
-
-async function loadSeason(){
-  loadedFile = seasonSelect.value;
-  tbody.innerHTML = `<tr><td colspan="5">Loading…</td></tr>`;
-  countEl.textContent = "";
-
-  const r = await fetch("data/bbl/" + loadedFile);
-  if(!r.ok){
-    tbody.innerHTML = `<tr><td colspan="5">ERROR: HTTP ${r.status}</td></tr>`;
-    return;
-  }
-  const data = await r.json();
-  matches = normaliseMatchList(data);
-
-  render();
-}
-
-loadBtn.addEventListener("click", loadSeason);
-filterInput.addEventListener("input", render);
-
-loadSeason();
+  matches.forEach((m,i)=>{
+    const info=m.info;
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${new Date(info.dates[0]).toDateString()}</td>
+      <td>${info.teams.join(" vs ")}</td>
+      <td>${info.venue}</td>
+      <td>${info.outcome?.winner||"—"}</td>
+      <td><a class="view" href="bbl-match.html?file=bbl_2013.json&match=${i}">View</a></td>
+    `;
+    tbl.appendChild(tr);
+  });
+});
 </script>
 
 </body>
