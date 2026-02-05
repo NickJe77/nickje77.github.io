@@ -71,7 +71,115 @@ tr:nth-child(even){background:#f8fbff;}
 <div class="navbar">
   <a href="/index.html">Home</a>
   <a href="/cricket.html">Cricket</a>
-  <a href="/bbl-seasons.html">BBL Seasons</a>
 </div>
 
-<div class="page-wra
+<div class="page-wrap">
+
+<div class="hero">
+  <h1 id="title">BBL Match</h1>
+  <p id="meta">Loading match…</p>
+</div>
+
+<div id="scorecard"></div>
+
+</div>
+
+<script>
+/* ================================
+   DATA ROOT
+================================ */
+const DATA_ROOT = location.origin + "/data/bbl/";
+
+/* ================================
+   PARAMS
+================================ */
+const params = new URLSearchParams(window.location.search);
+const file = params.get("file");
+
+const titleEl = document.getElementById("title");
+const metaEl = document.getElementById("meta");
+const scorecard = document.getElementById("scorecard");
+
+if (!file) {
+  metaEl.textContent = "No match specified.";
+  throw new Error("Missing file");
+}
+
+/* ================================
+   LOAD MATCH (ONE MATCH PER FILE)
+================================ */
+fetch(DATA_ROOT + file)
+  .then(r => r.json())
+  .then(data => {
+    const match = Array.isArray(data) ? data[0] : data;
+
+    if (!match || !match.info) {
+      metaEl.textContent = "Match data invalid.";
+      return;
+    }
+
+    const info = match.info;
+
+    titleEl.textContent = info.teams.join(" vs ");
+    metaEl.textContent =
+      `${info.venue || ""} • ${new Date(info.dates[0]).toDateString()} • Winner: ${info.outcome?.winner || "—"}`;
+
+    let html = "";
+
+    function renderInnings(inn){
+      let runs=0,wkts=0,balls=0;
+      const bat={}, bowl={};
+
+      inn.overs.forEach(over=>{
+        over.deliveries.forEach(d=>{
+          runs += d.runs.total;
+          if (!d.extras?.wides) balls++;
+
+          if (d.batter){
+            bat[d.batter] ??= {r:0,b:0,out:"not out"};
+            bat[d.batter].r += d.runs.batter;
+            if (!d.extras?.wides) bat[d.batter].b++;
+          }
+
+          if (d.bowler){
+            bowl[d.bowler] ??= {r:0,b:0,w:0};
+            bowl[d.bowler].b++;
+            if (!d.extras?.byes && !d.extras?.legbyes){
+              bowl[d.bowler].r += d.runs.total;
+            }
+          }
+
+          if (d.wickets){
+            d.wickets.forEach(w=>{
+              wkts++;
+              if (bat[w.player_out]) bat[w.player_out].out = w.kind;
+              if (w.kind !== "run out" && bowl[d.bowler]) bowl[d.bowler].w++;
+            });
+          }
+        });
+      });
+
+      html += `
+      <div class="section">
+        <h2>${inn.team} Innings</h2>
+        <div class="total-line">${runs}/${wkts} (${(balls/6).toFixed(1)} ov)</div>
+      </div>`;
+    }
+
+    match.innings.slice(0,2).forEach(renderInnings);
+
+    if (match.innings.length > 2){
+      html += `<div class="superover">SUPER OVER</div>`;
+      match.innings.slice(2).forEach(renderInnings);
+    }
+
+    scorecard.innerHTML = html;
+  })
+  .catch(err=>{
+    metaEl.textContent = "Failed to load match data.";
+    console.error(err);
+  });
+</script>
+
+</body>
+</html>
