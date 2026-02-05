@@ -19,7 +19,6 @@ body{
   color:var(--primary);
 }
 
-/* NAV */
 .navbar{
   display:flex;
   justify-content:center;
@@ -34,14 +33,12 @@ body{
   font-size:18px;
 }
 
-/* PAGE */
 .page{
   max-width:1200px;
   margin:0 auto;
   padding:30px 20px 60px;
 }
 
-/* HERO */
 .hero{
   background:linear-gradient(90deg,#003366,#00a3cc);
   color:white;
@@ -49,32 +46,13 @@ body{
   border-radius:24px;
   margin-bottom:30px;
 }
-.hero h1{
-  margin:0;
-  font-size:40px;
-}
-.hero p{
-  margin-top:10px;
-  font-size:16px;
-  opacity:.95;
-}
+.hero h1{margin:0;font-size:40px;}
+.hero p{margin-top:10px;font-size:16px;opacity:.95;}
 
-/* INNINGS */
-.innings{
-  margin-bottom:40px;
-}
-.innings h2{
-  margin:0 0 6px;
-  font-size:26px;
-  color:var(--primary);
-}
-.total{
-  font-weight:700;
-  margin-bottom:10px;
-  color:var(--secondary);
-}
+.innings{margin-bottom:40px;}
+.innings h2{margin:0 0 6px;font-size:26px;}
+.total{font-weight:700;margin-bottom:10px;color:var(--secondary);}
 
-/* TABLES */
 table{
   width:100%;
   border-collapse:collapse;
@@ -87,34 +65,18 @@ th,td{
 th{
   background:#f0f6fb;
   font-weight:800;
-  color:var(--primary);
 }
-td{
-  color:var(--primary);
-}
-tr:nth-child(even){
-  background:#f7fbff;
-}
+tr:nth-child(even){background:#f7fbff;}
 
-/* LINKS */
 a.player{
   color:var(--secondary);
   font-weight:700;
   text-decoration:none;
 }
-a.player:hover{
-  text-decoration:underline;
-  color:var(--primary);
-}
+a.player:hover{color:var(--primary);text-decoration:underline;}
 
-/* META */
-.meta-line{
-  margin-top:8px;
-  font-size:14px;
-  color:var(--muted);
-}
+.meta-line{margin-top:8px;font-size:14px;color:var(--muted);}
 
-/* SUPER OVER */
 .superover{
   margin:30px 0;
   padding:14px;
@@ -126,7 +88,6 @@ a.player:hover{
   border-radius:14px;
 }
 
-/* ERROR */
 .error{
   background:#fff1f2;
   border:1px solid #fecdd3;
@@ -172,135 +133,69 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if(!file) throw new Error("Missing ?file= parameter");
 
+    let NAME_MAP = {};
+
+    function name(n){
+      return NAME_MAP[n] || n;
+    }
+
+    function pl(n){
+      return `<a class="player" href="bbl-player.html?player=${encodeURIComponent(name(n))}">${name(n)}</a>`;
+    }
+
     function legalBall(d){
       return !(d.extras && (d.extras.wides || d.extras.noballs));
     }
-    function overs(b){
-      return Math.floor(b/6)+"."+(b%6);
-    }
-    function pl(n){
-      return `<a class="player" href="bbl-player.html?player=${encodeURIComponent(n)}">${n}</a>`;
-    }
-    function dismissal(w,b){
-      const f=w.fielders?.map(x=>x.name).join(", ");
+
+    function overs(b){ return Math.floor(b/6)+"."+(b%6); }
+
+    function dismissal(w,bowler){
+      const f = w.fielders?.map(x=>name(x.name)).join(", ");
+      const bw = name(bowler);
       switch(w.kind){
-        case "caught":return `c ${f} b ${b}`;
-        case "bowled":return `b ${b}`;
-        case "lbw":return `lbw b ${b}`;
-        case "stumped":return `st ${f} b ${b}`;
-        case "run out":return `run out (${f})`;
-        default:return w.kind;
+        case "caught": return `c ${f} b ${bw}`;
+        case "bowled": return `b ${bw}`;
+        case "lbw": return `lbw b ${bw}`;
+        case "stumped": return `st ${f} b ${bw}`;
+        case "run out": return `run out (${f})`;
+        default: return w.kind;
       }
     }
 
-    fetch("data/bbl/"+file)
-      .then(r=>{if(!r.ok)throw new Error("HTTP "+r.status);return r.json();})
-      .then(data=>{
-        const match=Array.isArray(data)?data[matchIndex]:data;
-        if(!match||!match.innings)throw new Error("Invalid match data");
+    Promise.all([
+      fetch("data/bbl/"+file).then(r=>r.json()),
+      fetch("data/bbl/player-names.json").then(r=>r.json())
+    ])
+    .then(([data,names])=>{
+      NAME_MAP = names || {};
 
-        const info=match.info;
-        titleEl.textContent=info.teams.join(" vs ");
-        metaEl.textContent=
-          info.venue+" • "+
-          new Date(info.dates[0]).toDateString()+
-          " • Winner: "+(info.outcome?.winner||"—");
+      const match = Array.isArray(data) ? data[matchIndex] : data;
+      if(!match || !match.innings) throw new Error("Invalid match data");
 
-        let html="";
+      const info = match.info;
+      titleEl.textContent = info.teams.join(" vs ");
+      metaEl.textContent =
+        info.venue+" • "+
+        new Date(info.dates[0]).toDateString()+
+        " • Winner: "+(info.outcome?.winner||"—");
 
-        match.innings.forEach((inn,i)=>{
-          if(i===2)html+=`<div class="superover">SUPER OVER</div>`;
+      let html = "";
 
-          let bat={},bowl={},fall=[];
-          let runs=0,wkts=0,balls=0;
-          let ex={b:0,lb:0,w:0,nb:0,p:0};
+      match.innings.forEach((inn,i)=>{
+        if(i===2) html += `<div class="superover">SUPER OVER</div>`;
 
-          inn.overs.forEach(o=>{
-            let bo=0;
-            o.deliveries.forEach(d=>{
-              runs+=d.runs.total;
-              if(d.extras){
-                ex.b+=d.extras.byes||0;
-                ex.lb+=d.extras.legbyes||0;
-                ex.w+=d.extras.wides||0;
-                ex.nb+=d.extras.noballs||0;
-                ex.p+=d.extras.penalty||0;
-              }
-              if(d.batter){
-                bat[d.batter]??={R:0,B:0,out:"not out"};
-                bat[d.batter].R+=d.runs.batter;
-                if(legalBall(d))bat[d.batter].B++;
-              }
-              if(d.bowler){
-                bowl[d.bowler]??={balls:0,R:0,W:0};
-                if(legalBall(d))bowl[d.bowler].balls++;
-                bowl[d.bowler].R+=d.runs.total-
-                  ((d.extras?.byes||0)+(d.extras?.legbyes||0));
-              }
-              if(legalBall(d)){balls++;bo++;}
-              if(d.wickets){
-                d.wickets.forEach(w=>{
-                  wkts++;
-                  if(bat[w.player_out])
-                    bat[w.player_out].out=dismissal(w,d.bowler);
-                  if(bowl[d.bowler])bowl[d.bowler].W++;
-                  fall.push(`${runs}/${wkts} (${w.player_out}, ${o.over}.${bo})`);
-                });
-              }
-            });
-          });
+        let bat={}, bowl={}, fall=[];
+        let runs=0, wkts=0, balls=0;
+        let ex={b:0,lb:0,w:0,nb:0,p:0};
 
-          html+=`
-          <div class="innings">
-            <h2>${inn.team} Innings</h2>
-            <div class="total">Total: ${runs}/${wkts} (${(balls/6).toFixed(1)} ov)</div>
+        inn.overs.forEach(o=>{
+          let bo=0;
+          o.deliveries.forEach(d=>{
+            runs+=d.runs.total;
 
-            <table>
-              <tr><th>Batter</th><th>How out</th><th>R</th><th>B</th><th>SR</th></tr>
-              ${Object.entries(bat).map(([p,s])=>{
-                const sr=s.B?((s.R/s.B)*100).toFixed(1):"—";
-                return `<tr>
-                  <td>${pl(p)}</td>
-                  <td>${s.out}</td>
-                  <td>${s.R}</td>
-                  <td>${s.B}</td>
-                  <td>${sr}</td>
-                </tr>`;
-              }).join("")}
-            </table>
-
-            <div class="meta-line">
-              Extras: ${ex.b+ex.lb+ex.w+ex.nb+ex.p}
-            </div>
-
-            <div class="meta-line">
-              Fall of wickets: ${fall.join(", ")}
-            </div>
-
-            <h3 style="color:var(--secondary)">Bowling vs ${inn.team}</h3>
-            <table>
-              <tr><th>Bowler</th><th>O</th><th>R</th><th>W</th></tr>
-              ${Object.entries(bowl).map(([p,s])=>`
-                <tr>
-                  <td>${pl(p)}</td>
-                  <td>${overs(s.balls)}</td>
-                  <td>${s.R}</td>
-                  <td>${s.W}</td>
-                </tr>
-              `).join("")}
-            </table>
-          </div>`;
-        });
-
-        content.innerHTML=html;
-      });
-
-  } catch(err){
-    document.getElementById("content").innerHTML=
-      `<div class="error">${err.message}</div>`;
-  }
-});
-</script>
-
-</body>
-</html>
+            if(d.extras){
+              ex.b+=d.extras.byes||0;
+              ex.lb+=d.extras.legbyes||0;
+              ex.w+=d.extras.wides||0;
+              ex.nb+=d.extras.noballs||0;
+              ex.p+=d.extras.penalt
