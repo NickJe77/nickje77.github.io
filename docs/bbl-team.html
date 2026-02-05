@@ -72,24 +72,6 @@ th,td{
 th{background:#f3f6fb;}
 tr:nth-child(even){background:#f8fbff;}
 tr:hover{background:#eef4ff;}
-
-.notice{
-  padding:14px 16px;
-  border-radius:12px;
-  margin:14px 0 18px 0;
-  border:1px solid #ddd;
-  background:#f7f7f7;
-  font-size:14px;
-}
-
-.notice strong{display:block;margin-bottom:6px;}
-
-.debug{
-  white-space:pre-wrap;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size:12px;
-  line-height:1.35;
-}
 </style>
 </head>
 
@@ -105,41 +87,31 @@ tr:hover{background:#eef4ff;}
 
 <div class="page-wrap">
 
-  <div class="hero">
-    <h1 id="teamName">BBL Team</h1>
-    <p>Season-by-season performance.</p>
-  </div>
+<div class="hero">
+  <h1 id="teamName">BBL Team</h1>
+  <p>Season-by-season performance.</p>
+</div>
 
-  <div id="yearGrid" class="year-grid"></div>
+<div id="yearGrid" class="year-grid"></div>
 
-  <!-- DEBUG / STATUS (we can remove once it’s fixed) -->
-  <div id="statusBox" class="notice" style="display:none;">
-    <strong>Status</strong>
-    <div id="statusText" class="debug"></div>
-  </div>
-
-  <h2>Matches</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Date</th>
-        <th>Match</th>
-        <th>Venue</th>
-        <th>Result</th>
-      </tr>
-    </thead>
-    <tbody id="matchesTable"></tbody>
-  </table>
+<h2>Matches</h2>
+<table>
+<thead>
+<tr>
+  <th>Date</th>
+  <th>Match</th>
+  <th>Venue</th>
+  <th>Result</th>
+</tr>
+</thead>
+<tbody id="matchesTable"></tbody>
+</table>
 
 </div>
 
 <script>
 const params = new URLSearchParams(window.location.search);
-const teamParamRaw = params.get("team");
-
-// If your URLs are like ?team=Melbourne%20Stars, URLSearchParams decodes automatically.
-// But this also trims accidental spaces.
-const teamParam = teamParamRaw ? teamParamRaw.trim() : null;
+const teamParam = params.get("team") ? params.get("team").trim() : null;
 
 const indexUrl = "data/bbl/index.json";
 const basePath = "data/bbl/";
@@ -148,271 +120,156 @@ const yearGrid = document.getElementById("yearGrid");
 const tableBody = document.getElementById("matchesTable");
 const teamNameEl = document.getElementById("teamName");
 
-const statusBox = document.getElementById("statusBox");
-const statusText = document.getElementById("statusText");
-
 let allMatches = [];
 let seasons = [];
 
-function showStatus(obj){
-  statusBox.style.display = "block";
-  statusText.textContent = JSON.stringify(obj, null, 2);
+if(!teamParam){
+  teamNameEl.textContent = "BBL Team";
+  tableBody.innerHTML = "<tr><td colspan='4'>No team specified.</td></tr>";
+  throw new Error("Missing team parameter");
 }
 
-function getMatchDateStr(match){
-  const d = match?.info?.dates;
-  if(Array.isArray(d) && d.length) return d[0];
-  if(typeof d === "string" && d.trim()) return d.trim();
-  // Some datasets use "date" instead of "dates"
-  const d2 = match?.info?.date;
-  if(typeof d2 === "string" && d2.trim()) return d2.trim();
-  return null;
-}
+teamNameEl.textContent = teamParam;
 
-function parseMatchDate(match){
-  const s = getMatchDateStr(match);
-  if(!s) return null;
-  const dt = new Date(s);
-  if(!isNaN(dt.getTime())) return dt;
+init();
 
-  // Fallback: try swapping common formats (very safe)
-  // e.g. "19/12/2017" -> "2017-12-19"
-  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if(m){
-    const dd = m[1].padStart(2,"0");
-    const mm = m[2].padStart(2,"0");
-    const yyyy = m[3];
-    const dt2 = new Date(`${yyyy}-${mm}-${dd}`);
-    if(!isNaN(dt2.getTime())) return dt2;
-  }
-  return null;
-}
-
-function teamMatchCheck(match){
-  const t = match?.info?.teams;
-  if(Array.isArray(t)) return t.includes(teamParam);
-  if(typeof t === "string") return t.includes(teamParam);
-  return false;
-}
-
-function seasonLabel(y){
-  return `${y}–${String(y+1).slice(-2)}`;
-}
-
-async function main(){
-  if(!teamParam){
-    teamNameEl.textContent = "BBL Team";
-    showStatus({
-      error: "Missing team in URL",
-      fix: "Use: bbl-team.html?team=Melbourne%20Stars"
-    });
-    return;
-  }
-
-  teamNameEl.textContent = teamParam;
-
-  let files;
+async function init(){
+  let raw;
   try{
     const r = await fetch(indexUrl);
-    files = await r.json();
+    raw = await r.json();
   }catch(e){
-    showStatus({ error: "Failed to load index.json", indexUrl, details: String(e) });
+    console.error("Failed to load index.json", e);
     return;
   }
 
-  // Load all calendar-year files
-  const yearData = [];
+  let files = [];
+  if(Array.isArray(raw)){
+    files = raw;
+  }else if(typeof raw === "string"){
+    files = raw.split(",").map(s=>s.trim());
+  }else if(raw && Array.isArray(raw.files)){
+    files = raw.files;
+  }else{
+    console.error("Unrecognised index.json format", raw);
+    return;
+  }
+
   for(const f of files){
     try{
       const r = await fetch(basePath + f);
       const data = await r.json();
-      yearData.push({ file: f, data });
+      if(Array.isArray(data)){
+        data.forEach(m=>{
+          if(m && m.info && m.info.dates && m.info.teams){
+            m.file = m.file || f;
+            allMatches.push(m);
+          }
+        });
+      }
     }catch(e){
-      // Don’t hard-fail—show in status
-      yearData.push({ file: f, data: null, error: String(e) });
+      console.warn("Failed to load season file", f, e);
     }
   }
 
-  // Flatten matches; support either: [matches...] OR {matches:[...]} OR {games:[...]}
-  allMatches = [];
-  const loadIssues = [];
+  buildSeasons();
+  buildButtons();
 
-  for(const y of yearData){
-    if(!y.data){
-      loadIssues.push({ file: y.file, error: y.error || "Unknown error" });
-      continue;
-    }
-
-    let arr = null;
-    if(Array.isArray(y.data)) arr = y.data;
-    else if(Array.isArray(y.data.matches)) arr = y.data.matches;
-    else if(Array.isArray(y.data.games)) arr = y.data.games;
-
-    if(!arr){
-      loadIssues.push({ file: y.file, error: "Unrecognized JSON shape (not array / matches[] / games[])" });
-      continue;
-    }
-
-    // Ensure each match has a .file (some datasets don’t)
-    arr.forEach(m=>{
-      if(!m.file) m.file = y.file; // fallback, so links at least exist
-      allMatches.push(m);
-    });
+  if(seasons.length){
+    showSeason(seasons[seasons.length - 1]);
   }
+}
 
-  const teamMatches = allMatches.filter(teamMatchCheck);
+function parseDate(match){
+  const d = match.info.dates;
+  if(Array.isArray(d) && d.length) return new Date(d[0]);
+  if(typeof d === "string") return new Date(d);
+  return null;
+}
 
-  // Collect a few samples to diagnose date/teams shape
-  const sample = teamMatches.slice(0, 5).map(m=>({
-    teams: m?.info?.teams,
-    dates: m?.info?.dates,
-    dateFallback: m?.info?.date,
-    parsedDate: (parseMatchDate(m) ? parseMatchDate(m).toISOString().slice(0,10) : null)
-  }));
+function buildSeasons(){
+  const teamMatches = allMatches.filter(m=>m.info.teams.includes(teamParam));
+  const dated = teamMatches.map(m=>({m,d:parseDate(m)})).filter(x=>x.d && !isNaN(x.d));
 
-  showStatus({
-    teamParam,
-    indexFilesCount: Array.isArray(files) ? files.length : null,
-    loadedCalendarFiles: yearData.length,
-    loadIssuesCount: loadIssues.length,
-    loadIssues: loadIssues.slice(0, 8),
-    allMatchesLoaded: allMatches.length,
-    teamMatchesFound: teamMatches.length,
-    sampleTeamMatches: sample
-  });
+  if(!dated.length) return;
 
-  // If zero team matches, stop here (so you can adjust teamParam / data)
-  if(teamMatches.length === 0){
-    yearGrid.innerHTML = "";
-    tableBody.innerHTML = "";
-    return;
-  }
-
-  // Build seasons based on team matches only (faster + accurate)
-  const datedTeamMatches = teamMatches
-    .map(m=>({ m, d: parseMatchDate(m) }))
-    .filter(x=>x.d);
-
-  if(datedTeamMatches.length === 0){
-    yearGrid.innerHTML = "";
-    tableBody.innerHTML = "";
-    showStatus({
-      teamParam,
-      error: "Team matches exist, but none of their dates parsed into real dates.",
-      hint: "Look at sampleTeamMatches.dates in the status panel and we’ll add a parser for that exact format."
-    });
-    return;
-  }
-
-  const years = datedTeamMatches.map(x=>x.d.getFullYear());
+  const years = dated.map(x=>x.d.getFullYear());
   const minYear = Math.min(...years);
   const maxYear = Math.max(...years);
 
-  seasons = [];
   for(let y=minYear; y<=maxYear; y++){
-    const start = new Date(y, 10, 1);      // Nov 1 (month is 0-based: 10=Nov)
-    const end   = new Date(y+1, 2, 31, 23, 59, 59); // Mar 31
+    const start = new Date(y,10,1);          // Nov 1
+    const end   = new Date(y+1,2,31,23,59); // Mar 31
 
-    const seasonMatches = datedTeamMatches
-      .filter(x=>x.d >= start && x.d <= end)
+    const matches = dated
+      .filter(x=>x.d>=start && x.d<=end)
       .map(x=>x.m);
 
-    if(seasonMatches.length){
-      seasons.push({ label: seasonLabel(y), start, end, matches: seasonMatches });
+    if(matches.length){
+      seasons.push({
+        label:`${y}–${String(y+1).slice(-2)}`,
+        matches
+      });
     }
-  }
-
-  buildSeasonButtons(teamMatches);
-
-  // Default: latest season if available
-  if(seasons.length){
-    showSeason(seasons[seasons.length - 1]);
-  }else{
-    // If no seasons built, show all team matches (still better than blank)
-    renderTable(teamMatches);
   }
 }
 
-function buildSeasonButtons(teamMatches){
-  yearGrid.innerHTML = "";
+function buildButtons(){
+  yearGrid.innerHTML="";
 
-  seasons.forEach((season,i)=>{
-    const btn = document.createElement("button");
-    btn.className = "year-btn";
-    btn.textContent = season.label;
-    btn.onclick = ()=>{
-      document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
-      btn.classList.add("active");
-      showSeason(season);
+  seasons.forEach((s,i)=>{
+    const b=document.createElement("button");
+    b.className="year-btn";
+    b.textContent=s.label;
+    b.onclick=()=>{
+      document.querySelectorAll(".year-btn").forEach(x=>x.classList.remove("active"));
+      b.classList.add("active");
+      showSeason(s);
     };
-    yearGrid.appendChild(btn);
-    if(i === seasons.length - 1) btn.classList.add("active");
+    yearGrid.appendChild(b);
+    if(i===seasons.length-1) b.classList.add("active");
   });
 
-  const allBtn = document.createElement("button");
-  allBtn.className = "year-btn";
-  allBtn.textContent = "ALL";
-  allBtn.onclick = ()=>{
-    document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
-    allBtn.classList.add("active");
-    renderTable(teamMatches);
+  const all=document.createElement("button");
+  all.className="year-btn";
+  all.textContent="ALL";
+  all.onclick=()=>{
+    document.querySelectorAll(".year-btn").forEach(x=>x.classList.remove("active"));
+    all.classList.add("active");
+    render(allMatches.filter(m=>m.info.teams.includes(teamParam)));
   };
-  yearGrid.appendChild(allBtn);
+  yearGrid.appendChild(all);
 }
 
 function showSeason(season){
-  renderTable(season.matches);
+  render(season.matches);
 }
 
-function renderTable(matches){
-  tableBody.innerHTML = "";
-
-  const rows = matches
-    .map(m=>({ m, d: parseMatchDate(m) }))
-    .sort((a,b)=>{
-      const at = a.d ? a.d.getTime() : 0;
-      const bt = b.d ? b.d.getTime() : 0;
-      return at - bt;
-    });
-
-  rows.forEach(({m, d})=>{
-    const dateStr = d ? formatDate(d) : (getMatchDateStr(m) || "—");
-    const teams = Array.isArray(m?.info?.teams) ? m.info.teams.join(" vs ") : (m?.info?.teams || "—");
-    const venue = m?.info?.venue || "—";
-
-    let result="—";
-    if(m?.info?.outcome?.winner){
-      if(m.info.outcome.by?.runs){
-        result = m.info.outcome.winner + " won by " + m.info.outcome.by.runs + " runs";
-      } else if(m.info.outcome.by?.wickets){
-        result = m.info.outcome.winner + " won by " + m.info.outcome.by.wickets + " wickets";
-      } else {
-        result = m.info.outcome.winner + " won";
+function render(matches){
+  tableBody.innerHTML="";
+  matches
+    .map(m=>({m,d:parseDate(m)}))
+    .sort((a,b)=>a.d-b.d)
+    .forEach(({m,d})=>{
+      let result="—";
+      if(m.info.outcome?.winner){
+        if(m.info.outcome.by?.runs){
+          result=`${m.info.outcome.winner} won by ${m.info.outcome.by.runs} runs`;
+        }else if(m.info.outcome.by?.wickets){
+          result=`${m.info.outcome.winner} won by ${m.info.outcome.by.wickets} wickets`;
+        }
       }
-    }
 
-    const file = m.file ? m.file : "";
-    const link = file
-      ? `<a href="bbl-match.html?file=${encodeURIComponent(file)}">${teams}</a>`
-      : teams;
-
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${dateStr}</td>
-      <td>${link}</td>
-      <td>${venue}</td>
-      <td>${result}</td>
-    `;
-    tableBody.appendChild(tr);
-  });
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>${d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}</td>
+        <td><a href="bbl-match.html?file=${encodeURIComponent(m.file)}">${m.info.teams.join(" vs ")}</a></td>
+        <td>${m.info.venue||"—"}</td>
+        <td>${result}</td>
+      `;
+      tableBody.appendChild(tr);
+    });
 }
-
-function formatDate(dt){
-  return dt.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
-}
-
-// run
-main();
 </script>
 
 </body>
