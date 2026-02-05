@@ -6,9 +6,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{font-family:Inter,system-ui,Arial,sans-serif;margin:0}
+body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#fff}
 .navbar{display:flex;justify-content:center;gap:22px;padding:16px;border-bottom:1px solid #ddd;font-weight:600}
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px}
+
 .page{max-width:1300px;margin:auto;padding:30px}
 
 .hero{
@@ -20,7 +21,12 @@ body{font-family:Inter,system-ui,Arial,sans-serif;margin:0}
 .hero h1{margin:0;font-size:42px}
 .hero p{margin-top:6px;opacity:.9}
 
-.controls{margin:20px 0;display:flex;gap:16px;align-items:center}
+.controls{
+  margin:20px 0;
+  display:flex;
+  gap:16px;
+  align-items:center;
+}
 
 select{padding:8px 12px;border-radius:8px;font-size:16px}
 
@@ -32,9 +38,17 @@ select{padding:8px 12px;border-radius:8px;font-size:16px}
   cursor:pointer;
   font-weight:600;
 }
-.tabs button.active{background:#4b0082;color:#fff;border-color:#4b0082}
+.tabs button.active{
+  background:#4b0082;
+  color:#fff;
+  border-color:#4b0082;
+}
 
-.section-title{margin-top:26px;font-weight:700;color:#444}
+.section-title{
+  margin-top:28px;
+  font-weight:700;
+  color:#444;
+}
 
 .stats{
   display:grid;
@@ -50,6 +64,8 @@ select{padding:8px 12px;border-radius:8px;font-size:16px}
 }
 .stat h3{margin:0;font-size:26px}
 .stat span{font-size:13px;color:#555}
+
+.stats.vs .stat{background:#eef2ff}
 
 table{
   width:100%;
@@ -95,21 +111,21 @@ tbody tr:nth-child(even){background:#fafcff}
 </div>
 
 <script>
-const params = new URLSearchParams(location.search);
-const player = params.get("player");
+const params=new URLSearchParams(location.search);
+const player=params.get("player");
 if(!player) throw "Missing player";
 
-const P = player.toLowerCase();
-document.getElementById("playerName").textContent = player;
+const P=player.toLowerCase();
+document.getElementById("playerName").textContent=player;
 
-const oppSel = document.getElementById("opp");
-oppSel.addEventListener("change", render);   // 🔥 THIS WAS MISSING
+const oppSel=document.getElementById("opp");
+oppSel.addEventListener("change",render);
 
-let matches = [];
-let currentTab = "bat";
+let matches=[];
+let currentTab="bat";
 
-document.getElementById("batTab").onclick = () => switchTab("bat");
-document.getElementById("bowlTab").onclick = () => switchTab("bowl");
+document.getElementById("batTab").onclick=()=>switchTab("bat");
+document.getElementById("bowlTab").onclick=()=>switchTab("bowl");
 
 function switchTab(t){
   currentTab=t;
@@ -118,47 +134,115 @@ function switchTab(t){
   render();
 }
 
-function render(){
-  const opp = oppSel.value;
-  const list = opp==="All"
-    ? matches
-    : matches.filter(m => m._opponent === opp);
+/* ---------- MAIN RENDER ---------- */
 
-  currentTab==="bat" ? renderBat(list) : renderBowl(list);
+function render(){
+  const opp=oppSel.value;
+  const careerList=matches;
+  const oppList=opp==="All" ? [] : matches.filter(m=>m._opponent===opp);
+
+  currentTab==="bat"
+    ? renderBat(careerList,opp,oppList)
+    : renderBowl(careerList,opp,oppList);
 }
 
-/* -------- determine player team & opponent -------- */
+/* ---------- DATA ENRICH ---------- */
 
 function enrichMatch(m){
-  let playerTeam=null;
+  let team=null;
 
   m.innings.forEach(inn=>{
     inn.overs.forEach(o=>{
       o.deliveries.forEach(d=>{
         if(d.batter?.toLowerCase()===P || d.bowler?.toLowerCase()===P){
-          playerTeam = inn.team;
+          team=inn.team;
         }
       });
     });
   });
 
-  if(!playerTeam) return;
+  if(!team) return false;
 
-  m._opponent = m.info.teams.find(t => t !== playerTeam);
+  m._playerTeam=team;
+  m._opponent=m.info.teams.find(t=>t!==team);
+  return true;
 }
 
-/* ---------------- BATTLING ---------------- */
+/* ---------- STAT CALCULATORS ---------- */
 
-function renderBat(list){
+function batStats(list){
   let runs=0,balls=0,outs=0,games=0,hs=0;
-  let rows=[];
 
   list.forEach(m=>{
-    let r=0,b=0,out="not out";
-
+    let r=0,b=0,out=false;
     m.innings.forEach(i=>{
       i.overs.forEach(o=>{
         o.deliveries.forEach(d=>{
+          if(d.batter?.toLowerCase()===P){
+            r+=d.runs.batter;
+            if(!d.extras?.wides) b++;
+          }
+          d.wickets?.forEach(w=>{
+            if(w.player_out?.toLowerCase()===P) out=true;
+          });
+        });
+      });
+    });
+    if(b){
+      games++;runs+=r;balls+=b;
+      if(out) outs++;
+      hs=Math.max(hs,r);
+    }
+  });
+
+  return {
+    games,runs,balls,outs,hs,
+    avg:outs?(runs/outs).toFixed(2):"–",
+    sr:balls?((runs/balls)*100).toFixed(1):"–"
+  };
+}
+
+function bowlStats(list){
+  let balls=0,runs=0,wkts=0;
+
+  list.forEach(m=>{
+    m.innings.forEach(i=>{
+      i.overs.forEach(o=>{
+        o.deliveries.forEach(d=>{
+          if(d.bowler?.toLowerCase()===P){
+            balls++;
+            if(!d.extras?.byes && !d.extras?.legbyes) runs+=d.runs.total;
+          }
+          d.wickets?.forEach(w=>{
+            if(w.bowler?.toLowerCase()===P) wkts++;
+          });
+        });
+      });
+    });
+  });
+
+  return {
+    balls,runs,wkts,
+    overs:(balls/6).toFixed(1),
+    avg:wkts?(runs/wkts).toFixed(2):"–",
+    econ:balls?((runs/(balls/6))).toFixed(2):"–"
+  };
+}
+
+/* ---------- RENDER BATTING ---------- */
+
+function renderBat(careerList,opp,oppList){
+  const c=batStats(careerList);
+  const o=opp!=="All"?batStats(oppList):null;
+
+  let rows=[];
+  const tableList=opp==="All"?careerList:oppList;
+
+  tableList.forEach(m=>{
+    let r=0,b=0,out="not out";
+    m.innings.forEach(i=>{
+      i.overs.forEach(o2=>{
+        o2.deliveries.forEach(d=>{
           if(d.batter?.toLowerCase()===P){
             r+=d.runs.batter;
             if(!d.extras?.wides) b++;
@@ -169,12 +253,7 @@ function renderBat(list){
         });
       });
     });
-
     if(b){
-      games++;runs+=r;balls+=b;
-      if(out!=="not out") outs++;
-      hs=Math.max(hs,r);
-
       rows.push(`
         <tr>
           <td>${m.info.season}</td>
@@ -193,12 +272,22 @@ function renderBat(list){
   document.getElementById("content").innerHTML=`
     <div class="section-title">CAREER SUMMARY</div>
     <div class="stats">
-      <div class="stat"><h3>${games}</h3><span>Matches</span></div>
-      <div class="stat"><h3>${runs}</h3><span>Runs</span></div>
-      <div class="stat"><h3>${outs?(runs/outs).toFixed(2):"–"}</h3><span>Average</span></div>
-      <div class="stat"><h3>${balls?((runs/balls)*100).toFixed(1):"–"}</h3><span>Strike Rate</span></div>
-      <div class="stat"><h3>${hs}</h3><span>High Score</span></div>
+      <div class="stat"><h3>${c.games}</h3><span>Matches</span></div>
+      <div class="stat"><h3>${c.runs}</h3><span>Runs</span></div>
+      <div class="stat"><h3>${c.avg}</h3><span>Average</span></div>
+      <div class="stat"><h3>${c.sr}</h3><span>Strike Rate</span></div>
+      <div class="stat"><h3>${c.hs}</h3><span>High Score</span></div>
     </div>
+
+    ${o?`
+    <div class="section-title">VS ${opp.toUpperCase()}</div>
+    <div class="stats vs">
+      <div class="stat"><h3>${o.games}</h3><span>Matches</span></div>
+      <div class="stat"><h3>${o.runs}</h3><span>Runs</span></div>
+      <div class="stat"><h3>${o.avg}</h3><span>Average</span></div>
+      <div class="stat"><h3>${o.sr}</h3><span>Strike Rate</span></div>
+      <div class="stat"><h3>${o.hs}</h3><span>High Score</span></div>
+    </div>`:""}
 
     <table>
       <thead>
@@ -209,18 +298,20 @@ function renderBat(list){
   `;
 }
 
-/* ---------------- BOWLING ---------------- */
+/* ---------- RENDER BOWLING ---------- */
 
-function renderBowl(list){
-  let balls=0,runs=0,wkts=0;
+function renderBowl(careerList,opp,oppList){
+  const c=bowlStats(careerList);
+  const o=opp!=="All"?bowlStats(oppList):null;
+
   let rows=[];
+  const tableList=opp==="All"?careerList:oppList;
 
-  list.forEach(m=>{
+  tableList.forEach(m=>{
     let b=0,r=0,w=0;
-
     m.innings.forEach(i=>{
-      i.overs.forEach(o=>{
-        o.deliveries.forEach(d=>{
+      i.overs.forEach(o2=>{
+        o2.deliveries.forEach(d=>{
           if(d.bowler?.toLowerCase()===P){
             b++;
             if(!d.extras?.byes && !d.extras?.legbyes) r+=d.runs.total;
@@ -231,9 +322,7 @@ function renderBowl(list){
         });
       });
     });
-
     if(b){
-      balls+=b;runs+=r;wkts+=w;
       rows.push(`
         <tr>
           <td>${m.info.season}</td>
@@ -252,11 +341,20 @@ function renderBowl(list){
   document.getElementById("content").innerHTML=`
     <div class="section-title">CAREER SUMMARY</div>
     <div class="stats">
-      <div class="stat"><h3>${(balls/6).toFixed(1)}</h3><span>Overs</span></div>
-      <div class="stat"><h3>${wkts}</h3><span>Wickets</span></div>
-      <div class="stat"><h3>${wkts?(runs/wkts).toFixed(2):"–"}</h3><span>Average</span></div>
-      <div class="stat"><h3>${(runs/(balls/6)).toFixed(2)}</h3><span>Economy</span></div>
+      <div class="stat"><h3>${c.overs}</h3><span>Overs</span></div>
+      <div class="stat"><h3>${c.wkts}</h3><span>Wickets</span></div>
+      <div class="stat"><h3>${c.avg}</h3><span>Average</span></div>
+      <div class="stat"><h3>${c.econ}</h3><span>Economy</span></div>
     </div>
+
+    ${o?`
+    <div class="section-title">VS ${opp.toUpperCase()}</div>
+    <div class="stats vs">
+      <div class="stat"><h3>${o.overs}</h3><span>Overs</span></div>
+      <div class="stat"><h3>${o.wkts}</h3><span>Wickets</span></div>
+      <div class="stat"><h3>${o.avg}</h3><span>Average</span></div>
+      <div class="stat"><h3>${o.econ}</h3><span>Economy</span></div>
+    </div>`:""}
 
     <table>
       <thead>
@@ -267,22 +365,19 @@ function renderBowl(list){
   `;
 }
 
-/* ---------------- LOAD DATA ---------------- */
+/* ---------- LOAD DATA ---------- */
 
 fetch("data/bbl/index.json")
 .then(r=>r.json())
 .then(files=>Promise.all(files.map(f=>fetch("data/bbl/"+f).then(r=>r.json()))))
 .then(seasons=>{
   const oppSet=new Set();
-
   seasons.forEach(s=>s.forEach(m=>{
-    enrichMatch(m);
-    if(m._opponent){
+    if(enrichMatch(m)){
       matches.push(m);
       oppSet.add(m._opponent);
     }
   }));
-
   [...oppSet].sort().forEach(t=>oppSel.add(new Option(t,t)));
   render();
 });
