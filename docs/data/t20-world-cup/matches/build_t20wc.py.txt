@@ -1,0 +1,74 @@
+import os
+import json
+from collections import defaultdict
+
+# SOURCE: your cricsheet folder
+SOURCE = os.path.expanduser("~/Desktop/icc_mens_t20_world_cup_male_json")
+
+# DESTINATION: your website folder
+DEST = os.path.expanduser("~/Desktop/docs/data/t20-world-cup")
+
+os.makedirs(DEST, exist_ok=True)
+
+seasons = defaultdict(list)
+player_names = {}
+
+print("Reading matches from:", SOURCE)
+
+for file in os.listdir(SOURCE):
+
+    if not file.endswith(".json"):
+        continue
+
+    path = os.path.join(SOURCE, file)
+
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    info = data.get("info", {})
+    dates = info.get("dates", [])
+
+    if not dates:
+        continue
+
+    year = dates[0][:4]
+
+    data["file"] = file
+
+    seasons[year].append(data)
+
+    registry = info.get("registry", {}).get("people", {})
+    for short in registry:
+        player_names[short] = short
+
+print("Building FULL season files...")
+
+index = []
+
+for year in sorted(seasons):
+
+    matches = seasons[year]
+
+    matches.sort(key=lambda m: m["info"]["dates"][0])
+
+    filename = f"t20wc_{year}_FULL.json"
+    output_path = os.path.join(DEST, filename)
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(matches, f, indent=2)
+
+    index.append(filename)
+
+    print(f"Created {filename} ({len(matches)} matches)")
+
+print("Writing index.json")
+
+with open(os.path.join(DEST, "index.json"), "w") as f:
+    json.dump(index, f, indent=2)
+
+print("Writing player-names.json")
+
+with open(os.path.join(DEST, "player-names.json"), "w") as f:
+    json.dump(player_names, f, indent=2)
+
+print("DONE — files written to:", DEST)
