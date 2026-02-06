@@ -6,6 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
+
 body{
   font-family:Inter,system-ui,Arial,sans-serif;
   margin:0;
@@ -16,7 +17,7 @@ body{
   display:flex;
   justify-content:center;
   gap:22px;
-  padding:16px 0;
+  padding:16px;
   border-bottom:1px solid #ddd;
   background:#fff;
 }
@@ -30,7 +31,7 @@ body{
 .hero{
   background:linear-gradient(90deg,#6a040f,#d00000);
   color:white;
-  padding:40px;
+  padding:30px;
   border-radius:20px;
 }
 
@@ -72,160 +73,270 @@ th{
 tr:nth-child(even){
   background:#eaf3ff;
 }
+
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-  <a href="index.html">Home</a>
-  <a href="cricket.html">Cricket</a>
-  <a href="t20-world-cup.html">T20 World Cup</a>
+<a href="index.html">Home</a>
+<a href="cricket.html">Cricket</a>
+<a href="t20-world-cup.html">T20 World Cup</a>
 </div>
 
 <div class="page">
 
 <div class="hero">
-  <h1 id="playerName">Loading player…</h1>
+<h1 id="playerName">Loading player...</h1>
 </div>
 
-<div class="stats" id="careerStats"></div>
+<div id="careerStats" class="stats"></div>
 
 <div class="table-wrap">
+
 <table>
+
 <thead>
 <tr>
-  <th>Date</th>
-  <th>Match</th>
-  <th>Runs</th>
-  <th>Balls</th>
-  <th>SR</th>
-  <th>Overs</th>
-  <th>Runs</th>
-  <th>Wkts</th>
-  <th>Econ</th>
+<th>Date</th>
+<th>Match</th>
+<th>Runs</th>
+<th>Balls</th>
+<th>SR</th>
+<th>Overs</th>
+<th>Runs</th>
+<th>Wickets</th>
+<th>Economy</th>
 </tr>
 </thead>
+
 <tbody id="tbody"></tbody>
+
 </table>
+
 </div>
 
 </div>
 
 <script>
-/* EVERYTHING LIVES HERE */
-const BASE = "/docs/data/t20-world-cup/matches/";
 
-const params = new URLSearchParams(location.search);
-const fullName = params.get("name");
+/* LIVE DATA LOCATION */
 
-document.getElementById("playerName").textContent = fullName;
+const BASE="/data/t20-world-cup/matches/";
+const INDEX=BASE+"index.json";
+const PLAYER_MAP=BASE+"players-name.json";
 
-let shortName = fullName;
+/* GET PLAYER */
 
-let matches = 0;
-let batRuns = 0;
-let batBalls = 0;
-let bowlBalls = 0;
-let bowlRuns = 0;
-let bowlWkts = 0;
+const params=new URLSearchParams(location.search);
+const fullName=params.get("name");
+
+document.getElementById("playerName").textContent=fullName;
+
+/* VARIABLES */
+
+let shortName=fullName;
+
+let matches=0;
+let batRuns=0;
+let batBalls=0;
+
+let bowlBalls=0;
+let bowlRuns=0;
+let bowlWkts=0;
+
+/* INIT */
 
 init();
 
 async function init(){
 
-  /* LOAD PLAYER NAME MAP (SAME FOLDER) */
-  const nameMap = await fetch(BASE + "players-name.json").then(r=>r.json());
+/* LOAD PLAYER MAP */
 
-  for(const short in nameMap){
-    if(nameMap[short].toLowerCase() === fullName.toLowerCase()){
-      shortName = short;
-      break;
-    }
-  }
+const map=await fetch(PLAYER_MAP).then(r=>r.json());
 
-  /* LOAD INDEX */
-  const files = await fetch(BASE + "index.json").then(r=>r.json());
+for(const short in map){
 
-  for(const file of files){
-    const matchesData = await fetch(BASE + file).then(r=>r.json());
-    matchesData.forEach(processMatch);
-  }
+if(map[short].toLowerCase()===fullName.toLowerCase()){
 
-  renderCareer();
+shortName=short;
+break;
+
 }
+
+}
+
+/* LOAD INDEX */
+
+const files=await fetch(INDEX).then(r=>r.json());
+
+for(const file of files){
+
+const season=await fetch(BASE+file).then(r=>r.json());
+
+season.forEach(processMatch);
+
+}
+
+renderCareer();
+
+}
+
+/* PROCESS MATCH */
 
 function processMatch(match){
 
-  let r = 0, b = 0;
-  let bb = 0, br = 0, bw = 0;
-  let played = false;
+let r=0,b=0,bb=0,br=0,bw=0;
+let played=false;
 
-  match.innings.forEach(inn=>{
-    inn.overs.forEach(over=>{
-      over.deliveries.forEach(d=>{
+match.innings.forEach(inn=>{
 
-        const isWide = d.extras?.wides;
-        const isNoBall = d.extras?.noballs;
+inn.overs.forEach(over=>{
 
-        if(d.batter === shortName){
-          played = true;
-          r += d.runs.batter;
-          if(!isWide) b++;
-        }
+over.deliveries.forEach(d=>{
 
-        if(d.bowler === shortName){
-          played = true;
-          if(!isWide && !isNoBall) bb++;
-          br += d.runs.total;
-        }
+const wide=d.extras?.wides;
+const noball=d.extras?.noballs;
 
-        d.wickets?.forEach(w=>{
-          if(w.bowler === shortName) bw++;
-        });
+/* BATTING */
 
-      });
-    });
-  });
+if(d.batter===shortName){
 
-  if(played){
-    matches++;
-    batRuns += r;
-    batBalls += b;
-    bowlBalls += bb;
-    bowlRuns += br;
-    bowlWkts += bw;
-    addRow(match, r, b, bb, br, bw);
-  }
+played=true;
+
+r+=d.runs.batter;
+
+if(!wide)
+b++;
+
 }
+
+/* BOWLING */
+
+if(d.bowler===shortName){
+
+played=true;
+
+if(!wide && !noball)
+bb++;
+
+br+=d.runs.total;
+
+}
+
+/* WICKETS */
+
+d.wickets?.forEach(w=>{
+
+if(w.bowler===shortName)
+bw++;
+
+});
+
+});
+
+});
+
+});
+
+if(played){
+
+matches++;
+
+batRuns+=r;
+batBalls+=b;
+
+bowlBalls+=bb;
+bowlRuns+=br;
+bowlWkts+=bw;
+
+addRow(match,r,b,bb,br,bw);
+
+}
+
+}
+
+/* ADD ROW */
 
 function addRow(match,r,b,bb,br,bw){
-  tbody.innerHTML += `
-  <tr>
-    <td>${match.info.dates[0]}</td>
-    <td>${match.info.teams.join(" vs ")}</td>
-    <td>${r}</td>
-    <td>${b}</td>
-    <td>${b?((r/b)*100).toFixed(1):"-"}</td>
-    <td>${overs(bb)}</td>
-    <td>${br}</td>
-    <td>${bw}</td>
-    <td>${bb?(br/(bb/6)).toFixed(2):"-"}</td>
-  </tr>`;
+
+tbody.innerHTML+=`
+
+<tr>
+
+<td>${match.info.dates[0]}</td>
+
+<td>${match.info.teams.join(" vs ")}</td>
+
+<td>${r}</td>
+
+<td>${b}</td>
+
+<td>${b?((r/b)*100).toFixed(1):"-"}</td>
+
+<td>${overs(bb)}</td>
+
+<td>${br}</td>
+
+<td>${bw}</td>
+
+<td>${bb?(br/(bb/6)).toFixed(2):"-"}</td>
+
+</tr>
+
+`;
+
 }
+
+/* CAREER */
 
 function renderCareer(){
-  careerStats.innerHTML = `
-  <div class="stat"><h3>${matches}</h3><span>Matches</span></div>
-  <div class="stat"><h3>${batRuns}</h3><span>Runs</span></div>
-  <div class="stat"><h3>${batBalls?((batRuns/batBalls)*100).toFixed(1):"-"}</h3><span>Strike Rate</span></div>
-  <div class="stat"><h3>${bowlWkts}</h3><span>Wickets</span></div>
-  <div class="stat"><h3>${overs(bowlBalls)}</h3><span>Overs</span></div>
-  <div class="stat"><h3>${bowlBalls?(bowlRuns/(bowlBalls/6)).toFixed(2):"-"}</h3><span>Economy</span></div>
-  `;
+
+careerStats.innerHTML=`
+
+<div class="stat">
+<h3>${matches}</h3>
+<span>Matches</span>
+</div>
+
+<div class="stat">
+<h3>${batRuns}</h3>
+<span>Runs</span>
+</div>
+
+<div class="stat">
+<h3>${batBalls?((batRuns/batBalls)*100).toFixed(1):"-"}</h3>
+<span>Strike Rate</span>
+</div>
+
+<div class="stat">
+<h3>${bowlWkts}</h3>
+<span>Wickets</span>
+</div>
+
+<div class="stat">
+<h3>${overs(bowlBalls)}</h3>
+<span>Overs</span>
+</div>
+
+<div class="stat">
+<h3>${bowlBalls?(bowlRuns/(bowlBalls/6)).toFixed(2):"-"}</h3>
+<span>Economy</span>
+</div>
+
+`;
+
 }
 
-function overs(b){ return Math.floor(b/6)+"."+(b%6); }
+/* OVERS FORMAT */
+
+function overs(b){
+
+return Math.floor(b/6)+"."+(b%6);
+
+}
+
 </script>
 
 </body>
