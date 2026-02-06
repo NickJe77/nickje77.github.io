@@ -30,7 +30,7 @@ body{
 
 .page-wrap{
   max-width:1200px;
-  margin:0 auto;
+  margin:auto;
   padding:30px 20px;
 }
 
@@ -45,12 +45,6 @@ body{
 .hero h1{
   margin:0;
   font-size:46px;
-}
-
-.hero p{
-  margin-top:10px;
-  font-size:20px;
-  opacity:.95;
 }
 
 .year-grid{
@@ -70,10 +64,6 @@ body{
   cursor:pointer;
 }
 
-.year-btn:hover{
-  background:#9d0208;
-}
-
 .year-btn.active{
   background:#dc2f02;
 }
@@ -81,13 +71,11 @@ body{
 table{
   width:100%;
   border-collapse:collapse;
-  font-size:14px;
 }
 
 th,td{
+  padding:10px;
   border-bottom:1px solid #ddd;
-  padding:10px 12px;
-  text-align:left;
 }
 
 th{
@@ -95,20 +83,16 @@ th{
 }
 
 tr:nth-child(even){
-  background:#f8fbff;
+  background:#eaf3ff;
 }
 
-tr:hover{
-  background:#eef4ff;
-}
-
-.match-link{
+a{
   color:#6a040f;
   font-weight:600;
   text-decoration:none;
 }
 
-.match-link:hover{
+a:hover{
   text-decoration:underline;
 }
 
@@ -118,16 +102,15 @@ tr:hover{
 <body>
 
 <div class="navbar">
-  <a href="index.html">Home</a>
-  <a href="cricket.html">Cricket</a>
-  <a href="t20-world-cup.html">T20 World Cup</a>
+<a href="index.html">Home</a>
+<a href="cricket.html">Cricket</a>
+<a href="t20-world-cup.html">T20 World Cup</a>
 </div>
 
 <div class="page-wrap">
 
 <div class="hero">
-  <h1>T20 World Cup – By Season</h1>
-  <p>Select a tournament year.</p>
+<h1>T20 World Cup – By Season</h1>
 </div>
 
 <div id="yearGrid" class="year-grid"></div>
@@ -153,171 +136,163 @@ tr:hover{
 
 <script>
 
-const FILES = [
+/* YOUR REAL DATA LOCATION */
 
-"t20wc_2007_FULL.json",
-"t20wc_2008_FULL.json",
-"t20wc_2009_FULL.json",
-"t20wc_2010_FULL.json",
-"t20wc_2012_FULL.json",
-"t20wc_2013_FULL.json",
-"t20wc_2014_FULL.json",
-"t20wc_2015_FULL.json",
-"t20wc_2016_FULL.json",
-"t20wc_2019_FULL.json",
-"t20wc_2021_FULL.json",
-"t20wc_2022_FULL.json",
-"t20wc_2024_FULL.json"
+const INDEX="/docs/data/t20-world-cup/matches/index.json";
+const BASE="/docs/data/t20-world-cup/matches/";
 
-];
+/* ELEMENTS */
 
-const BASE_PATH = "data/t20-world-cup/matches/";
+const yearGrid=document.getElementById("yearGrid");
+const tableBody=document.getElementById("matchesTable");
 
-let seasons = [];
-let currentSeasonIndex = 0;
+/* STORAGE */
 
-const yearGrid = document.getElementById("yearGrid");
-const tableBody = document.getElementById("matchesTable");
+let allSeasons=[];
 
+/* LOAD SEASONS */
 
-async function init(){
+loadSeasons();
 
-  for(const file of FILES){
+async function loadSeasons(){
 
-    const response = await fetch(BASE_PATH + file);
+const files=await fetch(INDEX).then(r=>r.json());
 
-    const matches = await response.json();
+for(const file of files){
 
-    seasons.push({
+const matches=await fetch(BASE+file).then(r=>r.json());
 
-      year: file.match(/\d{4}/)[0],
+allSeasons.push({
 
-      file: file,
+file:file,
+year:file.match(/\d{4}/)[0],
+matches:matches
 
-      matches: matches
-
-    });
-
-  }
-
-  seasons.sort((a,b)=> b.year - a.year);
-
-  buildYearButtons();
-
-  showSeason(0);
+});
 
 }
 
+/* SORT DESC */
+
+allSeasons.sort((a,b)=>b.year-a.year);
+
+buildYearButtons();
+
+showSeason(0);
+
+}
+
+/* BUILD YEAR BUTTONS */
 
 function buildYearButtons(){
 
-  yearGrid.innerHTML = "";
+yearGrid.innerHTML="";
 
-  seasons.forEach((season,index)=>{
+allSeasons.forEach((season,index)=>{
 
-    const btn = document.createElement("button");
+const btn=document.createElement("button");
 
-    btn.className = "year-btn";
+btn.className="year-btn";
 
-    btn.textContent = season.year;
+btn.textContent=season.year;
 
-    if(index === 0) btn.classList.add("active");
+if(index===0)
+btn.classList.add("active");
 
-    btn.onclick = () => {
+btn.onclick=()=>{
 
-      document.querySelectorAll(".year-btn")
-        .forEach(b=>b.classList.remove("active"));
+document.querySelectorAll(".year-btn")
+.forEach(b=>b.classList.remove("active"));
 
-      btn.classList.add("active");
+btn.classList.add("active");
 
-      showSeason(index);
+showSeason(index);
 
-    };
+};
 
-    yearGrid.appendChild(btn);
+yearGrid.appendChild(btn);
 
-  });
+});
 
 }
 
+/* SHOW SEASON */
 
 function showSeason(index){
 
-  currentSeasonIndex = index;
+const season=allSeasons[index];
 
-  renderMatches(seasons[index].matches);
-
-}
-
-
-function renderMatches(matches){
-
-  tableBody.innerHTML = "";
-
-  matches
-  .sort((a,b)=> new Date(a.info.dates[0]) - new Date(b.info.dates[0]))
-  .forEach((match,matchIndex)=>{
-
-    const date = new Date(match.info.dates[0])
-      .toLocaleDateString("en-GB",{
-
-        day:"2-digit",
-        month:"short",
-        year:"numeric"
-
-      });
-
-    const teams = match.info.teams.join(" vs ");
-
-    const venue = match.info.venue || "—";
-
-    let result = "—";
-
-    if(match.info.outcome?.winner){
-
-      if(match.info.outcome.by?.runs){
-
-        result =
-        `${match.info.outcome.winner} won by ${match.info.outcome.by.runs} runs`;
-
-      }
-
-      else if(match.info.outcome.by?.wickets){
-
-        result =
-        `${match.info.outcome.winner} won by ${match.info.outcome.by.wickets} wickets`;
-
-      }
-
-    }
-
-    const row = document.createElement("tr");
-
-    row.innerHTML = `
-
-      <td>${date}</td>
-
-      <td>
-        <a class="match-link"
-           href="t20wc-match.html?season=${currentSeasonIndex}&match=${matchIndex}">
-          ${teams}
-        </a>
-      </td>
-
-      <td>${venue}</td>
-
-      <td>${result}</td>
-
-    `;
-
-    tableBody.appendChild(row);
-
-  });
+renderMatches(season.matches,season.file);
 
 }
 
+/* RENDER MATCHES */
 
-init();
+function renderMatches(matches,seasonFile){
+
+tableBody.innerHTML="";
+
+matches.forEach((match,matchIndex)=>{
+
+const date=formatDate(match.info.dates[0]);
+
+const teams=match.info.teams.join(" vs ");
+
+const venue=match.info.venue||"—";
+
+let result="—";
+
+if(match.info.outcome?.winner){
+
+if(match.info.outcome.by?.runs)
+result=`${match.info.outcome.winner} won by ${match.info.outcome.by.runs} runs`;
+
+else if(match.info.outcome.by?.wickets)
+result=`${match.info.outcome.winner} won by ${match.info.outcome.by.wickets} wickets`;
+
+}
+
+/* THIS FIXES YOUR MATCH PAGE */
+
+const link=`t20wc-match.html?file=${seasonFile}&match=${matchIndex}`;
+
+const tr=document.createElement("tr");
+
+tr.innerHTML=`
+
+<td>${date}</td>
+
+<td>
+<a href="${link}">
+${teams}
+</a>
+</td>
+
+<td>${venue}</td>
+
+<td>${result}</td>
+
+`;
+
+tableBody.appendChild(tr);
+
+});
+
+}
+
+/* FORMAT DATE */
+
+function formatDate(d){
+
+return new Date(d).toLocaleDateString("en-GB",{
+
+day:"2-digit",
+month:"short",
+year:"numeric"
+
+});
+
+}
 
 </script>
 
