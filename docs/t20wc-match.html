@@ -41,10 +41,6 @@ body{
   margin-bottom:20px;
 }
 
-.hero h1{
-  margin:0;
-}
-
 .summary{
   font-size:18px;
   font-weight:600;
@@ -77,6 +73,16 @@ tr:nth-child(even){
   text-align:right;
 }
 
+.player-link{
+  color:#0056d6;
+  text-decoration:none;
+  font-weight:600;
+}
+
+.player-link:hover{
+  text-decoration:underline;
+}
+
 </style>
 </head>
 
@@ -91,13 +97,9 @@ tr:nth-child(even){
 <div class="page-wrap">
 
 <div class="hero">
-
 <h1 id="title">Loading...</h1>
-
 <p id="info"></p>
-
 <div id="result" class="summary"></div>
-
 </div>
 
 <div id="innings"></div>
@@ -105,6 +107,42 @@ tr:nth-child(even){
 </div>
 
 <script>
+
+/* MASTER PLAYER NAME MAP */
+
+let playerMap = {};
+
+async function loadPlayerMap(){
+
+playerMap = await fetch("data/players-name.json")
+.then(r=>r.json())
+.catch(()=>({}));
+
+}
+
+/* Convert short → full name */
+
+function fullName(short){
+
+return playerMap[short] || short;
+
+}
+
+/* Create clickable link */
+
+function playerLink(short){
+
+const name = fullName(short);
+
+return `<a class="player-link"
+href="player.html?name=${encodeURIComponent(name)}">
+${name}
+</a>`;
+
+}
+
+
+/* FILES */
 
 const FILES = [
 
@@ -139,10 +177,26 @@ throw new Error("Missing parameters");
 
 }
 
-loadMatch();
+
+/* Convert balls → cricket overs */
+
+function ballsToOvers(balls){
+
+const overs = Math.floor(balls/6);
+const remainder = balls % 6;
+
+return overs + "." + remainder;
+
+}
 
 
-async function loadMatch(){
+/* INIT */
+
+init();
+
+async function init(){
+
+await loadPlayerMap();
 
 const seasonFile = FILES[seasonIndex];
 
@@ -156,15 +210,7 @@ renderMatch(match);
 }
 
 
-function ballsToOvers(balls){
-
-const overs = Math.floor(balls/6);
-const remainder = balls % 6;
-
-return overs + "." + remainder;
-
-}
-
+/* RENDER */
 
 function renderMatch(match){
 
@@ -218,9 +264,8 @@ const bowler=d.bowler;
 const isWide = d.extras?.wides;
 const isNoBall = d.extras?.noballs;
 
-if(!isWide && !isNoBall){
+if(!isWide && !isNoBall)
 legalBalls++;
-}
 
 if(!batterStats[batter])
 batterStats[batter]={runs:0,balls:0};
@@ -272,7 +317,7 @@ const sr=s.balls?((s.runs/s.balls)*100).toFixed(1):"-";
 
 html+=`
 <tr>
-<td>${name}</td>
+<td>${playerLink(name)}</td>
 <td class="right">${s.runs}</td>
 <td class="right">${s.balls}</td>
 <td class="right">${sr}</td>
@@ -307,7 +352,7 @@ const econ = s.balls
 
 html+=`
 <tr>
-<td>${name}</td>
+<td>${playerLink(name)}</td>
 <td class="right">${overs}</td>
 <td class="right">${s.runs}</td>
 <td class="right">${s.wkts}</td>
