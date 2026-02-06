@@ -121,7 +121,6 @@ const BASE = "data/t20-world-cup/matches/";
 const params = new URLSearchParams(location.search);
 
 const seasonIndex = parseInt(params.get("season"));
-
 const matchIndex = parseInt(params.get("match"));
 
 if(isNaN(seasonIndex) || isNaN(matchIndex)){
@@ -145,6 +144,18 @@ const seasonData = await fetch(BASE + seasonFile)
 const match = seasonData[matchIndex];
 
 renderMatch(match);
+
+}
+
+
+/* Convert legal balls to proper cricket overs format */
+
+function ballsToOvers(balls){
+
+const overs = Math.floor(balls/6);
+const remainder = balls % 6;
+
+return overs + "." + remainder;
 
 }
 
@@ -186,7 +197,7 @@ let bowlerStats={};
 
 let runs=0;
 let wkts=0;
-let balls=0;
+let legalBalls=0;
 
 
 inn.overs.forEach(over=>{
@@ -194,28 +205,48 @@ inn.overs.forEach(over=>{
 over.deliveries.forEach(d=>{
 
 runs += d.runs.total;
-balls++;
 
-const bat=d.batter;
-const bowl=d.bowler;
+const batter=d.batter;
+const bowler=d.bowler;
 
-if(!batterStats[bat])
-batterStats[bat]={runs:0,balls:0};
+const isWide = d.extras?.wides;
+const isNoBall = d.extras?.noballs;
 
-batterStats[bat].runs+=d.runs.batter;
+/* ONLY legal balls count */
 
-if(!d.extras?.wides)
-batterStats[bat].balls++;
+if(!isWide && !isNoBall){
 
-if(!bowlerStats[bowl])
-bowlerStats[bowl]={balls:0,runs:0,wkts:0};
+legalBalls++;
 
-bowlerStats[bowl].balls++;
-bowlerStats[bowl].runs+=d.runs.total;
+}
+
+/* Batter stats */
+
+if(!batterStats[batter])
+batterStats[batter]={runs:0,balls:0};
+
+batterStats[batter].runs+=d.runs.batter;
+
+if(!isWide)
+batterStats[batter].balls++;
+
+
+/* Bowler stats */
+
+if(!bowlerStats[bowler])
+bowlerStats[bowler]={balls:0,runs:0,wkts:0};
+
+if(!isWide && !isNoBall)
+bowlerStats[bowler].balls++;
+
+bowlerStats[bowler].runs+=d.runs.total;
+
 
 if(d.wickets){
+
 wkts+=d.wickets.length;
-bowlerStats[bowl].wkts+=d.wickets.length;
+bowlerStats[bowler].wkts+=d.wickets.length;
+
 }
 
 });
@@ -223,11 +254,13 @@ bowlerStats[bowl].wkts+=d.wickets.length;
 });
 
 
-const overs=(balls/6).toFixed(1);
+const oversText = ballsToOvers(legalBalls);
+
 
 let html=`
 <div class="innings">
-<h2>${inn.team} — ${runs}/${wkts} (${overs})</h2>
+
+<h2>${inn.team} — ${runs}/${wkts} (${oversText})</h2>
 
 <table>
 <tr>
@@ -237,6 +270,7 @@ let html=`
 <th class="right">SR</th>
 </tr>
 `;
+
 
 Object.entries(batterStats).forEach(([name,s])=>{
 
@@ -253,7 +287,9 @@ html+=`
 
 });
 
+
 html+=`</table><br>`;
+
 
 html+=`
 <table>
@@ -266,15 +302,19 @@ html+=`
 </tr>
 `;
 
+
 Object.entries(bowlerStats).forEach(([name,s])=>{
 
-const o=(s.balls/6).toFixed(1);
-const econ=(s.runs/(s.balls/6)).toFixed(2);
+const overs = ballsToOvers(s.balls);
+
+const econ = s.balls
+? (s.runs/(s.balls/6)).toFixed(2)
+: "-";
 
 html+=`
 <tr>
 <td>${name}</td>
-<td class="right">${o}</td>
+<td class="right">${overs}</td>
 <td class="right">${s.runs}</td>
 <td class="right">${s.wkts}</td>
 <td class="right">${econ}</td>
@@ -282,6 +322,7 @@ html+=`
 `;
 
 });
+
 
 html+=`</table></div>`;
 
