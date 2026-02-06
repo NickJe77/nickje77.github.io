@@ -13,6 +13,8 @@ body{
   background:#f6f7f9;
 }
 
+/* NAVBAR */
+
 .navbar{
   display:flex;
   justify-content:center;
@@ -20,13 +22,23 @@ body{
   padding:16px 0;
   background:#fff;
   border-bottom:1px solid #ddd;
+  font-weight:600;
 }
+
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+}
+
+/* PAGE */
 
 .page{
   max-width:1200px;
   margin:auto;
   padding:20px;
 }
+
+/* HERO */
 
 .hero{
   background:linear-gradient(90deg,#6a040f,#d00000);
@@ -35,9 +47,11 @@ body{
   border-radius:20px;
 }
 
+/* STATS */
+
 .stats{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
   gap:15px;
   margin-top:20px;
 }
@@ -48,6 +62,12 @@ body{
   border-radius:12px;
   text-align:center;
 }
+
+.stat h3{
+  margin:0;
+}
+
+/* TABLE */
 
 .table-wrap{
   margin-top:30px;
@@ -76,6 +96,7 @@ tr:nth-child(even){
 
 </style>
 </head>
+
 <body>
 
 <div class="navbar">
@@ -87,7 +108,7 @@ tr:nth-child(even){
 <div class="page">
 
 <div class="hero">
-<h1 id="playerName">Loading...</h1>
+<h1 id="playerName">Loading player...</h1>
 </div>
 
 <div class="stats" id="careerStats"></div>
@@ -120,30 +141,41 @@ tr:nth-child(even){
 
 <script>
 
-const INDEX="data/t20-world-cup/index.json";
-const BASE="data/t20-world-cup/matches/";
-const PLAYER_MAP_FILE="data/players-name.json";
+/* CORRECT PATHS FOR YOUR SITE */
 
-let shortName="";
-let fullName="";
+const INDEX_PATH="/docs/data/t20-world-cup/index.json";
+const MATCH_PATH="/docs/data/t20-world-cup/matches/";
+const PLAYER_MAP_PATH="/docs/data/players-name.json";
 
-const params=new URLSearchParams(location.search);
+/* GET PLAYER NAME */
 
-fullName=params.get("name");
+const params=new URLSearchParams(window.location.search);
+
+const fullName=params.get("name");
 
 document.getElementById("playerName").textContent=fullName;
 
+/* VARIABLES */
+
+let shortName="";
+
+let totalMatches=0;
+let totalRuns=0;
+let totalBalls=0;
+let totalWkts=0;
+let totalBowlBalls=0;
+let totalBowlRuns=0;
 
 init();
 
 
 async function init(){
 
-/* load player map */
+/* LOAD PLAYER MAP */
 
-const map=await fetch(PLAYER_MAP_FILE).then(r=>r.json());
+const map=await fetch(PLAYER_MAP_PATH).then(r=>r.json());
 
-/* reverse lookup */
+/* REVERSE LOOKUP */
 
 for(const short in map){
 
@@ -156,25 +188,31 @@ break;
 
 }
 
-/* fallback */
+/* FALLBACK */
 
-if(!shortName) shortName=fullName;
+if(!shortName)
+shortName=fullName;
 
-const files=await fetch(INDEX).then(r=>r.json());
+/* LOAD FILE LIST */
 
-let totalRuns=0;
-let totalBalls=0;
-let totalWkts=0;
-let totalBowlBalls=0;
-let totalBowlRuns=0;
-let matches=0;
-
+const files=await fetch(INDEX_PATH).then(r=>r.json());
 
 for(const file of files){
 
-const season=await fetch(BASE+file).then(r=>r.json());
+const season=await fetch(MATCH_PATH+file).then(r=>r.json());
 
-season.forEach(match=>{
+season.forEach(match=>processMatch(match));
+
+}
+
+renderCareer();
+
+}
+
+
+/* PROCESS MATCH */
+
+function processMatch(match){
 
 let batRuns=0;
 let batBalls=0;
@@ -189,38 +227,36 @@ inn.overs.forEach(over=>{
 
 over.deliveries.forEach(d=>{
 
-const batter=d.batter;
-const bowler=d.bowler;
-
 const isWide=d.extras?.wides;
 const isNoBall=d.extras?.noballs;
 
-/* batting */
+/* BATTING */
 
-if(batter===shortName){
+if(d.batter===shortName){
 
 played=true;
 
 batRuns+=d.runs.batter;
 
-if(!isWide) batBalls++;
+if(!isWide)
+batBalls++;
 
 }
 
-/* bowling */
+/* BOWLING */
 
-if(bowler===shortName){
+if(d.bowler===shortName){
 
 played=true;
 
-if(!isWide && !isNoBall)
+if(!isWide&&!isNoBall)
 bowlBalls++;
 
 bowlRuns+=d.runs.total;
 
 }
 
-/* wickets */
+/* WICKETS */
 
 d.wickets?.forEach(w=>{
 
@@ -235,12 +271,15 @@ bowlWkts++;
 
 });
 
+/* ADD MATCH */
+
 if(played){
 
-matches++;
+totalMatches++;
 
 totalRuns+=batRuns;
 totalBalls+=batBalls;
+
 totalWkts+=bowlWkts;
 totalBowlBalls+=bowlBalls;
 totalBowlRuns+=bowlRuns;
@@ -249,21 +288,10 @@ addRow(match,batRuns,batBalls,bowlBalls,bowlRuns,bowlWkts);
 
 }
 
-});
-
-}
-
-renderStats(matches,totalRuns,totalBalls,totalWkts,totalBowlBalls,totalBowlRuns);
-
 }
 
 
-function ballsToOvers(b){
-
-return Math.floor(b/6)+"."+(b%6);
-
-}
-
+/* ADD TABLE ROW */
 
 function addRow(match,runs,balls,bowlBalls,bowlRuns,wkts){
 
@@ -296,23 +324,52 @@ tbody.appendChild(tr);
 }
 
 
-function renderStats(matches,runs,balls,wkts,bowlBalls,bowlRuns){
+/* CAREER SUMMARY */
+
+function renderCareer(){
 
 careerStats.innerHTML=`
 
-<div class="stat"><h3>${matches}</h3><span>Matches</span></div>
+<div class="stat">
+<h3>${totalMatches}</h3>
+<span>Matches</span>
+</div>
 
-<div class="stat"><h3>${runs}</h3><span>Runs</span></div>
+<div class="stat">
+<h3>${totalRuns}</h3>
+<span>Runs</span>
+</div>
 
-<div class="stat"><h3>${balls?((runs/balls)*100).toFixed(1):"-"}</h3><span>Strike Rate</span></div>
+<div class="stat">
+<h3>${totalBalls?((totalRuns/totalBalls)*100).toFixed(1):"-"}</h3>
+<span>Strike Rate</span>
+</div>
 
-<div class="stat"><h3>${wkts}</h3><span>Wickets</span></div>
+<div class="stat">
+<h3>${totalWkts}</h3>
+<span>Wickets</span>
+</div>
 
-<div class="stat"><h3>${ballsToOvers(bowlBalls)}</h3><span>Overs</span></div>
+<div class="stat">
+<h3>${ballsToOvers(totalBowlBalls)}</h3>
+<span>Overs</span>
+</div>
 
-<div class="stat"><h3>${bowlBalls?(bowlRuns/(bowlBalls/6)).toFixed(2):"-"}</h3><span>Economy</span></div>
+<div class="stat">
+<h3>${totalBowlBalls?(totalBowlRuns/(totalBowlBalls/6)).toFixed(2):"-"}</h3>
+<span>Economy</span>
+</div>
 
 `;
+
+}
+
+
+/* OVERS FORMAT */
+
+function ballsToOvers(b){
+
+return Math.floor(b/6)+"."+(b%6);
 
 }
 
