@@ -35,23 +35,9 @@ body{
   border-radius:20px;
 }
 
-.controls{
-  margin:20px 0;
-}
-
-select,button{
-  padding:10px;
-  margin-right:10px;
-}
-
-button.active{
-  background:#6a040f;
-  color:white;
-}
-
 .stats{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
   gap:15px;
   margin-top:20px;
 }
@@ -103,16 +89,6 @@ tr:nth-child(even){
 
 <div class="hero">
 <h1 id="playerName">Loading...</h1>
-<p>T20 World Cup career statistics</p>
-</div>
-
-<div class="controls">
-
-<select id="oppSelect"></select>
-
-<button id="batBtn">Batting</button>
-<button id="bowlBtn">Bowling</button>
-
 </div>
 
 <div class="stats" id="careerStats"></div>
@@ -121,7 +97,20 @@ tr:nth-child(even){
 
 <table>
 
-<thead id="thead"></thead>
+<thead>
+<tr>
+<th>Date</th>
+<th>Team</th>
+<th>Opponent</th>
+<th>Runs</th>
+<th>Balls</th>
+<th>SR</th>
+<th>Overs</th>
+<th>Runs</th>
+<th>Wkts</th>
+<th>Econ</th>
+</tr>
+</thead>
 
 <tbody id="tbody"></tbody>
 
@@ -140,11 +129,6 @@ const PLAYER_MAP_FILE="data/players-name.json";
 let playerMap={};
 let reverseMap={};
 
-let batting=[];
-let bowling=[];
-
-let tab="bat";
-
 const params=new URLSearchParams(location.search);
 
 const fullName=params.get("name");
@@ -157,15 +141,32 @@ init();
 
 async function init(){
 
+/* LOAD PLAYER MAP */
+
 playerMap=await fetch(PLAYER_MAP_FILE).then(r=>r.json());
 
 Object.entries(playerMap).forEach(([short,long])=>{
 reverseMap[long.toLowerCase()]=short;
 });
 
-const short=reverseMap[fullName.toLowerCase()]||fullName;
+/* Determine both versions */
+
+const shortName=reverseMap[fullName.toLowerCase()] || fullName;
+const shortLower=shortName.toLowerCase();
+const fullLower=fullName.toLowerCase();
+
+
+/* LOAD FILE LIST */
 
 const files=await fetch(INDEX).then(r=>r.json());
+
+let totalRuns=0;
+let totalBalls=0;
+let totalWkts=0;
+let totalBowlBalls=0;
+let totalBowlRuns=0;
+let matches=0;
+
 
 for(const file of files){
 
@@ -173,94 +174,93 @@ const season=await fetch(BASE+file).then(r=>r.json());
 
 season.forEach(match=>{
 
-const opponent=match.info.teams.find(t=>t!==match.info.teams[0]);
-
-let batRuns=0,batBalls=0,out="not out",batted=false;
-let bowlBalls=0,bowlRuns=0,bowlWkts=0;
+let batRuns=0;
+let batBalls=0;
+let bowlBalls=0;
+let bowlRuns=0;
+let bowlWkts=0;
+let played=false;
 
 match.innings.forEach(inn=>{
 
-const opp=match.info.teams.find(t=>t!==inn.team);
+const team=inn.team;
+const opponent=match.info.teams.find(t=>t!==team);
 
 inn.overs.forEach(over=>{
 
 over.deliveries.forEach(d=>{
 
+const batter=d.batter?.toLowerCase();
+const bowler=d.bowler?.toLowerCase();
+
 const isWide=d.extras?.wides;
 const isNoBall=d.extras?.noballs;
 
-if(d.batter===short){
+/* BAT */
 
-batted=true;
+if(batter===shortLower || batter===fullLower){
+
+played=true;
 
 batRuns+=d.runs.batter;
 
-if(!isWide) batBalls++;
+if(!isWide)
+batBalls++;
 
 }
 
-if(d.bowler===short){
+/* BOWL */
 
-if(!isWide && !isNoBall) bowlBalls++;
+if(bowler===shortLower || bowler===fullLower){
+
+played=true;
+
+if(!isWide && !isNoBall)
+bowlBalls++;
 
 bowlRuns+=d.runs.total;
 
 }
 
+/* WICKETS */
+
 d.wickets?.forEach(w=>{
 
-if(w.player_out===short)
-out=w.kind;
+if(w.bowler?.toLowerCase()===shortLower ||
+   w.bowler?.toLowerCase()===fullLower){
 
-if(w.bowler===short)
 bowlWkts++;
 
-});
-
-});
-
-});
-
-if(batted){
-
-batting.push({
-
-date:match.info.dates[0],
-opp:opp,
-runs:batRuns,
-balls:batBalls,
-sr:batBalls?((batRuns/batBalls)*100).toFixed(1):"-",
-out:out
-
-});
-
-}
-
-if(bowlBalls){
-
-bowling.push({
-
-date:match.info.dates[0],
-opp:opp,
-balls:bowlBalls,
-runs:bowlRuns,
-wkts:bowlWkts,
-overs:ballsToOvers(bowlBalls),
-econ:(bowlRuns/(bowlBalls/6)).toFixed(2)
-
-});
-
 }
 
 });
 
 });
 
+});
+
+});
+
+if(played){
+
+matches++;
+
+totalRuns+=batRuns;
+totalBalls+=batBalls;
+
+totalWkts+=bowlWkts;
+totalBowlBalls+=bowlBalls;
+totalBowlRuns+=bowlRuns;
+
+addRow(match,batRuns,batBalls,bowlBalls,bowlRuns,bowlWkts);
+
 }
 
-buildOpponentList();
+});
 
-render();
+}
+
+renderCareer();
 
 }
 
@@ -272,169 +272,76 @@ return Math.floor(b/6)+"."+(b%6);
 }
 
 
-function buildOpponentList(){
+function addRow(match,runs,balls,bowlBalls,bowlRuns,wkts){
 
-const set=new Set();
+const tr=document.createElement("tr");
 
-[...batting,...bowling].forEach(g=>set.add(g.opp));
+const teams=match.info.teams;
 
-const sel=document.getElementById("oppSelect");
+tr.innerHTML=`
 
-sel.innerHTML="<option>All</option>";
+<td>${match.info.dates[0]}</td>
 
-[...set].sort().forEach(o=>{
+<td>${teams[0]}</td>
 
-const opt=document.createElement("option");
-opt.value=o;
-opt.textContent=o;
+<td>${teams[1]}</td>
 
-sel.appendChild(opt);
+<td>${runs}</td>
 
-});
+<td>${balls}</td>
 
-sel.onchange=render;
+<td>${balls?((runs/balls)*100).toFixed(1):"-"}</td>
 
-}
+<td>${ballsToOvers(bowlBalls)}</td>
 
+<td>${bowlRuns}</td>
 
-batBtn.onclick=()=>{
+<td>${wkts}</td>
 
-tab="bat";
-batBtn.classList.add("active");
-bowlBtn.classList.remove("active");
-
-render();
-
-};
-
-bowlBtn.onclick=()=>{
-
-tab="bowl";
-bowlBtn.classList.add("active");
-batBtn.classList.remove("active");
-
-render();
-
-};
-
-
-function render(){
-
-const opp=oppSelect.value;
-
-const list=(tab==="bat"?batting:bowling)
-.filter(g=>opp==="All"||g.opp===opp);
-
-renderStats(list);
-
-renderTable(list);
-
-}
-
-
-function renderStats(list){
-
-let html="";
-
-if(tab==="bat"){
-
-const runs=list.reduce((a,b)=>a+b.runs,0);
-const balls=list.reduce((a,b)=>a+b.balls,0);
-const outs=list.filter(g=>g.out!=="not out").length;
-
-html=`
-
-<div class="stat"><h3>${list.length}</h3><span>Matches</span></div>
-<div class="stat"><h3>${runs}</h3><span>Runs</span></div>
-<div class="stat"><h3>${outs?(runs/outs).toFixed(2):"-"}</h3><span>Average</span></div>
-<div class="stat"><h3>${balls?((runs/balls)*100).toFixed(1):"-"}</h3><span>Strike Rate</span></div>
+<td>${bowlBalls?(bowlRuns/(bowlBalls/6)).toFixed(2):"-"}</td>
 
 `;
 
-}else{
+tbody.appendChild(tr);
 
-const balls=list.reduce((a,b)=>a+b.balls,0);
-const runs=list.reduce((a,b)=>a+b.runs,0);
-const wkts=list.reduce((a,b)=>a+b.wkts,0);
+}
 
-html=`
 
-<div class="stat"><h3>${list.length}</h3><span>Matches</span></div>
-<div class="stat"><h3>${ballsToOvers(balls)}</h3><span>Overs</span></div>
-<div class="stat"><h3>${wkts}</h3><span>Wickets</span></div>
-<div class="stat"><h3>${wkts?(runs/wkts).toFixed(2):"-"}</h3><span>Average</span></div>
-<div class="stat"><h3>${balls?(runs/(balls/6)).toFixed(2):"-"}</h3><span>Economy</span></div>
+function renderCareer(){
+
+careerStats.innerHTML=`
+
+<div class="stat">
+<h3>${matches}</h3>
+<span>Matches</span>
+</div>
+
+<div class="stat">
+<h3>${totalRuns}</h3>
+<span>Runs</span>
+</div>
+
+<div class="stat">
+<h3>${totalBalls?((totalRuns/totalBalls)*100).toFixed(1):"-"}</h3>
+<span>Strike Rate</span>
+</div>
+
+<div class="stat">
+<h3>${totalWkts}</h3>
+<span>Wickets</span>
+</div>
+
+<div class="stat">
+<h3>${ballsToOvers(totalBowlBalls)}</h3>
+<span>Overs</span>
+</div>
+
+<div class="stat">
+<h3>${totalBowlBalls?(totalBowlRuns/(totalBowlBalls/6)).toFixed(2):"-"}</h3>
+<span>Economy</span>
+</div>
 
 `;
-
-}
-
-careerStats.innerHTML=html;
-
-}
-
-
-function renderTable(list){
-
-const thead=document.getElementById("thead");
-const tbody=document.getElementById("tbody");
-
-thead.innerHTML="";
-tbody.innerHTML="";
-
-if(tab==="bat"){
-
-thead.innerHTML=`
-<tr>
-<th>Date</th>
-<th>Opponent</th>
-<th>Runs</th>
-<th>Balls</th>
-<th>SR</th>
-<th>Dismissal</th>
-</tr>`;
-
-list.forEach(g=>{
-
-tbody.innerHTML+=`
-<tr>
-<td>${g.date}</td>
-<td>${g.opp}</td>
-<td>${g.runs}</td>
-<td>${g.balls}</td>
-<td>${g.sr}</td>
-<td>${g.out}</td>
-</tr>`;
-
-});
-
-}else{
-
-thead.innerHTML=`
-<tr>
-<th>Date</th>
-<th>Opponent</th>
-<th>Overs</th>
-<th>Runs</th>
-<th>Wkts</th>
-<th>Econ</th>
-</tr>`;
-
-list.forEach(g=>{
-
-tbody.innerHTML+=`
-<tr>
-<td>${g.date}</td>
-<td>${g.opp}</td>
-<td>${g.overs}</td>
-<td>${g.runs}</td>
-<td>${g.wkts}</td>
-<td>${g.econ}</td>
-</tr>`;
-
-});
-
-}
 
 }
 
