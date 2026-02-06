@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>T20 World Cup Match | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family:Inter,system-ui,Arial,sans-serif;
+  margin:0;
+  background:#ffffff;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+  font-size:18px;
+}
+
+.page-wrap{
+  max-width:1000px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#6a040f,#d00000);
+  color:white;
+  padding:30px;
+  border-radius:18px;
+  margin-bottom:20px;
+}
+
+.hero h1{
+  margin:0;
+  font-size:32px;
+}
+
+.hero p{
+  margin-top:6px;
+  opacity:.9;
+}
+
+.innings{
+  margin-bottom:25px;
+}
+
+.innings h2{
+  margin-bottom:10px;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+th,td{
+  padding:8px;
+  border-bottom:1px solid #ddd;
+  font-size:14px;
+}
+
+th{
+  background:#f3f6fb;
+  text-align:left;
+}
+
+.right{
+  text-align:right;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="t20-world-cup.html">T20 World Cup</a>
+</div>
+
+<div class="page-wrap">
+
+<div class="hero">
+  <h1 id="matchTitle">Loading match...</h1>
+  <p id="matchInfo"></p>
+</div>
+
+<div id="inningsContainer"></div>
+
+</div>
+
+<script>
+
+const params=new URLSearchParams(location.search);
+const file=params.get("file");
+
+if(!file){
+
+ document.getElementById("matchTitle").textContent="Match not found";
+ throw new Error("No file provided");
+
+}
+
+fetch("data/t20-world-cup/"+file)
+
+.then(r=>r.json())
+
+.then(match=>{
+
+ renderMatch(match);
+
+});
+
+function renderMatch(match){
+
+ const info=match.info;
+
+ const title=info.teams.join(" vs ");
+
+ const date=new Date(info.dates[0]).toLocaleDateString("en-GB");
+
+ const venue=info.venue||"";
+
+ document.getElementById("matchTitle").textContent=title;
+
+ document.getElementById("matchInfo").textContent=
+   date+" • "+venue;
+
+ const container=document.getElementById("inningsContainer");
+
+ container.innerHTML="";
+
+ match.innings.forEach(inn=>{
+
+   const div=document.createElement("div");
+
+   div.className="innings";
+
+   const batterStats={};
+
+   const bowlerStats={};
+
+   inn.overs.forEach(over=>{
+
+     over.deliveries.forEach(d=>{
+
+       const batter=d.batter;
+       const bowler=d.bowler;
+
+       if(!batterStats[batter])
+         batterStats[batter]={runs:0,balls:0};
+
+       batterStats[batter].runs+=d.runs.batter;
+
+       if(!d.extras?.wides)
+         batterStats[batter].balls++;
+
+       if(!bowlerStats[bowler])
+         bowlerStats[bowler]={balls:0,runs:0,wkts:0};
+
+       bowlerStats[bowler].balls++;
+
+       bowlerStats[bowler].runs+=d.runs.total;
+
+       if(d.wickets)
+         bowlerStats[bowler].wkts+=d.wickets.length;
+
+     });
+
+   });
+
+   let batHTML=`
+     <h2>${inn.team} Batting</h2>
+     <table>
+     <tr>
+       <th>Batter</th>
+       <th class="right">R</th>
+       <th class="right">B</th>
+       <th class="right">SR</th>
+     </tr>
+   `;
+
+   Object.entries(batterStats).forEach(([name,s])=>{
+
+     const sr=s.balls?((s.runs/s.balls)*100).toFixed(1):"—";
+
+     batHTML+=`
+       <tr>
+         <td>${name}</td>
+         <td class="right">${s.runs}</td>
+         <td class="right">${s.balls}</td>
+         <td class="right">${sr}</td>
+       </tr>
+     `;
+
+   });
+
+   batHTML+="</table>";
+
+   let bowlHTML=`
+     <h2>${inn.team} Bowling</h2>
+     <table>
+     <tr>
+       <th>Bowler</th>
+       <th class="right">O</th>
+       <th class="right">R</th>
+       <th class="right">W</th>
+       <th class="right">Econ</th>
+     </tr>
+   `;
+
+   Object.entries(bowlerStats).forEach(([name,s])=>{
+
+     const overs=(s.balls/6).toFixed(1);
+
+     const econ=(s.runs/(s.balls/6)).toFixed(2);
+
+     bowlHTML+=`
+       <tr>
+         <td>${name}</td>
+         <td class="right">${overs}</td>
+         <td class="right">${s.runs}</td>
+         <td class="right">${s.wkts}</td>
+         <td class="right">${econ}</td>
+       </tr>
+     `;
+
+   });
+
+   bowlHTML+="</table>";
+
+   div.innerHTML=batHTML+bowlHTML;
+
+   container.appendChild(div);
+
+ });
+
+}
+
+</script>
+
+</body>
+</html>
