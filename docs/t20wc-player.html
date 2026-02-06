@@ -6,31 +6,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-
 body{
   font-family:Inter,system-ui,Arial,sans-serif;
   margin:0;
   background:#f6f7f9;
 }
 
-/* NAVBAR */
-
 .navbar{
   display:flex;
   justify-content:center;
-  gap:24px;
+  gap:22px;
   padding:16px 0;
-  background:#fff;
   border-bottom:1px solid #ddd;
-  font-weight:600;
+  background:#fff;
 }
-
-.navbar a{
-  color:#0056d6;
-  text-decoration:none;
-}
-
-/* PAGE */
 
 .page{
   max-width:1200px;
@@ -38,16 +27,12 @@ body{
   padding:20px;
 }
 
-/* HERO */
-
 .hero{
   background:linear-gradient(90deg,#6a040f,#d00000);
   color:white;
   padding:40px;
   border-radius:20px;
 }
-
-/* STATS */
 
 .stats{
   display:grid;
@@ -58,21 +43,15 @@ body{
 
 .stat{
   background:white;
-  padding:20px;
-  border-radius:12px;
+  padding:18px;
+  border-radius:14px;
   text-align:center;
 }
-
-.stat h3{
-  margin:0;
-}
-
-/* TABLE */
 
 .table-wrap{
   margin-top:30px;
   background:white;
-  border-radius:12px;
+  border-radius:14px;
   overflow:hidden;
 }
 
@@ -93,286 +72,160 @@ th{
 tr:nth-child(even){
   background:#eaf3ff;
 }
-
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="cricket.html">Cricket</a>
-<a href="t20-world-cup.html">T20 World Cup</a>
+  <a href="index.html">Home</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="t20-world-cup.html">T20 World Cup</a>
 </div>
 
 <div class="page">
 
 <div class="hero">
-<h1 id="playerName">Loading player...</h1>
+  <h1 id="playerName">Loading player…</h1>
 </div>
 
 <div class="stats" id="careerStats"></div>
 
 <div class="table-wrap">
-
 <table>
-
 <thead>
 <tr>
-<th>Date</th>
-<th>Match</th>
-<th>Runs</th>
-<th>Balls</th>
-<th>SR</th>
-<th>Overs</th>
-<th>Runs</th>
-<th>Wkts</th>
-<th>Econ</th>
+  <th>Date</th>
+  <th>Match</th>
+  <th>Runs</th>
+  <th>Balls</th>
+  <th>SR</th>
+  <th>Overs</th>
+  <th>Runs</th>
+  <th>Wkts</th>
+  <th>Econ</th>
 </tr>
 </thead>
-
 <tbody id="tbody"></tbody>
-
 </table>
-
 </div>
 
 </div>
 
 <script>
+/* EVERYTHING LIVES HERE */
+const BASE = "/docs/data/t20-world-cup/matches/";
 
-/* CORRECT PATHS FOR YOUR SITE */
+const params = new URLSearchParams(location.search);
+const fullName = params.get("name");
 
-const INDEX_PATH="/docs/data/t20-world-cup/index.json";
-const MATCH_PATH="/docs/data/t20-world-cup/matches/";
-const PLAYER_MAP_PATH="/docs/data/players-name.json";
+document.getElementById("playerName").textContent = fullName;
 
-/* GET PLAYER NAME */
+let shortName = fullName;
 
-const params=new URLSearchParams(window.location.search);
-
-const fullName=params.get("name");
-
-document.getElementById("playerName").textContent=fullName;
-
-/* VARIABLES */
-
-let shortName="";
-
-let totalMatches=0;
-let totalRuns=0;
-let totalBalls=0;
-let totalWkts=0;
-let totalBowlBalls=0;
-let totalBowlRuns=0;
+let matches = 0;
+let batRuns = 0;
+let batBalls = 0;
+let bowlBalls = 0;
+let bowlRuns = 0;
+let bowlWkts = 0;
 
 init();
 
-
 async function init(){
 
-/* LOAD PLAYER MAP */
+  /* LOAD PLAYER NAME MAP (SAME FOLDER) */
+  const nameMap = await fetch(BASE + "players-name.json").then(r=>r.json());
 
-const map=await fetch(PLAYER_MAP_PATH).then(r=>r.json());
+  for(const short in nameMap){
+    if(nameMap[short].toLowerCase() === fullName.toLowerCase()){
+      shortName = short;
+      break;
+    }
+  }
 
-/* REVERSE LOOKUP */
+  /* LOAD INDEX */
+  const files = await fetch(BASE + "index.json").then(r=>r.json());
 
-for(const short in map){
+  for(const file of files){
+    const matchesData = await fetch(BASE + file).then(r=>r.json());
+    matchesData.forEach(processMatch);
+  }
 
-if(map[short].toLowerCase()===fullName.toLowerCase()){
-
-shortName=short;
-break;
-
+  renderCareer();
 }
-
-}
-
-/* FALLBACK */
-
-if(!shortName)
-shortName=fullName;
-
-/* LOAD FILE LIST */
-
-const files=await fetch(INDEX_PATH).then(r=>r.json());
-
-for(const file of files){
-
-const season=await fetch(MATCH_PATH+file).then(r=>r.json());
-
-season.forEach(match=>processMatch(match));
-
-}
-
-renderCareer();
-
-}
-
-
-/* PROCESS MATCH */
 
 function processMatch(match){
 
-let batRuns=0;
-let batBalls=0;
-let bowlBalls=0;
-let bowlRuns=0;
-let bowlWkts=0;
-let played=false;
+  let r = 0, b = 0;
+  let bb = 0, br = 0, bw = 0;
+  let played = false;
 
-match.innings.forEach(inn=>{
+  match.innings.forEach(inn=>{
+    inn.overs.forEach(over=>{
+      over.deliveries.forEach(d=>{
 
-inn.overs.forEach(over=>{
+        const isWide = d.extras?.wides;
+        const isNoBall = d.extras?.noballs;
 
-over.deliveries.forEach(d=>{
+        if(d.batter === shortName){
+          played = true;
+          r += d.runs.batter;
+          if(!isWide) b++;
+        }
 
-const isWide=d.extras?.wides;
-const isNoBall=d.extras?.noballs;
+        if(d.bowler === shortName){
+          played = true;
+          if(!isWide && !isNoBall) bb++;
+          br += d.runs.total;
+        }
 
-/* BATTING */
+        d.wickets?.forEach(w=>{
+          if(w.bowler === shortName) bw++;
+        });
 
-if(d.batter===shortName){
+      });
+    });
+  });
 
-played=true;
-
-batRuns+=d.runs.batter;
-
-if(!isWide)
-batBalls++;
-
+  if(played){
+    matches++;
+    batRuns += r;
+    batBalls += b;
+    bowlBalls += bb;
+    bowlRuns += br;
+    bowlWkts += bw;
+    addRow(match, r, b, bb, br, bw);
+  }
 }
 
-/* BOWLING */
-
-if(d.bowler===shortName){
-
-played=true;
-
-if(!isWide&&!isNoBall)
-bowlBalls++;
-
-bowlRuns+=d.runs.total;
-
+function addRow(match,r,b,bb,br,bw){
+  tbody.innerHTML += `
+  <tr>
+    <td>${match.info.dates[0]}</td>
+    <td>${match.info.teams.join(" vs ")}</td>
+    <td>${r}</td>
+    <td>${b}</td>
+    <td>${b?((r/b)*100).toFixed(1):"-"}</td>
+    <td>${overs(bb)}</td>
+    <td>${br}</td>
+    <td>${bw}</td>
+    <td>${bb?(br/(bb/6)).toFixed(2):"-"}</td>
+  </tr>`;
 }
-
-/* WICKETS */
-
-d.wickets?.forEach(w=>{
-
-if(w.bowler===shortName)
-bowlWkts++;
-
-});
-
-});
-
-});
-
-});
-
-/* ADD MATCH */
-
-if(played){
-
-totalMatches++;
-
-totalRuns+=batRuns;
-totalBalls+=batBalls;
-
-totalWkts+=bowlWkts;
-totalBowlBalls+=bowlBalls;
-totalBowlRuns+=bowlRuns;
-
-addRow(match,batRuns,batBalls,bowlBalls,bowlRuns,bowlWkts);
-
-}
-
-}
-
-
-/* ADD TABLE ROW */
-
-function addRow(match,runs,balls,bowlBalls,bowlRuns,wkts){
-
-const tr=document.createElement("tr");
-
-tr.innerHTML=`
-
-<td>${match.info.dates[0]}</td>
-
-<td>${match.info.teams.join(" vs ")}</td>
-
-<td>${runs}</td>
-
-<td>${balls}</td>
-
-<td>${balls?((runs/balls)*100).toFixed(1):"-"}</td>
-
-<td>${ballsToOvers(bowlBalls)}</td>
-
-<td>${bowlRuns}</td>
-
-<td>${wkts}</td>
-
-<td>${bowlBalls?(bowlRuns/(bowlBalls/6)).toFixed(2):"-"}</td>
-
-`;
-
-tbody.appendChild(tr);
-
-}
-
-
-/* CAREER SUMMARY */
 
 function renderCareer(){
-
-careerStats.innerHTML=`
-
-<div class="stat">
-<h3>${totalMatches}</h3>
-<span>Matches</span>
-</div>
-
-<div class="stat">
-<h3>${totalRuns}</h3>
-<span>Runs</span>
-</div>
-
-<div class="stat">
-<h3>${totalBalls?((totalRuns/totalBalls)*100).toFixed(1):"-"}</h3>
-<span>Strike Rate</span>
-</div>
-
-<div class="stat">
-<h3>${totalWkts}</h3>
-<span>Wickets</span>
-</div>
-
-<div class="stat">
-<h3>${ballsToOvers(totalBowlBalls)}</h3>
-<span>Overs</span>
-</div>
-
-<div class="stat">
-<h3>${totalBowlBalls?(totalBowlRuns/(totalBowlBalls/6)).toFixed(2):"-"}</h3>
-<span>Economy</span>
-</div>
-
-`;
-
+  careerStats.innerHTML = `
+  <div class="stat"><h3>${matches}</h3><span>Matches</span></div>
+  <div class="stat"><h3>${batRuns}</h3><span>Runs</span></div>
+  <div class="stat"><h3>${batBalls?((batRuns/batBalls)*100).toFixed(1):"-"}</h3><span>Strike Rate</span></div>
+  <div class="stat"><h3>${bowlWkts}</h3><span>Wickets</span></div>
+  <div class="stat"><h3>${overs(bowlBalls)}</h3><span>Overs</span></div>
+  <div class="stat"><h3>${bowlBalls?(bowlRuns/(bowlBalls/6)).toFixed(2):"-"}</h3><span>Economy</span></div>
+  `;
 }
 
-
-/* OVERS FORMAT */
-
-function ballsToOvers(b){
-
-return Math.floor(b/6)+"."+(b%6);
-
-}
-
+function overs(b){ return Math.floor(b/6)+"."+(b%6); }
 </script>
 
 </body>
