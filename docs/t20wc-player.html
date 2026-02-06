@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>T20 World Cup Player | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family:Inter,system-ui,Arial,sans-serif;
+  margin:0;
+  background:#f6f7f9;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px 0;
+  background:#fff;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+  font-size:18px;
+}
+
+.page{
+  max-width:1200px;
+  margin:30px auto;
+  padding:0 20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#6a040f,#d00000);
+  color:white;
+  padding:40px;
+  border-radius:24px;
+}
+
+.hero h1{
+  margin:0;
+  font-size:38px;
+}
+
+.hero p{
+  margin-top:8px;
+  font-size:18px;
+  opacity:.9;
+}
+
+.controls{
+  margin:20px 0;
+  display:flex;
+  gap:12px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+select,button{
+  padding:8px 12px;
+  font-size:16px;
+  border-radius:8px;
+}
+
+.tab-btn{
+  border:1px solid #bbb;
+  background:#fff;
+  cursor:pointer;
+}
+
+.tab-btn.active{
+  background:#6a040f;
+  color:#fff;
+  border-color:#6a040f;
+}
+
+.section-title{
+  margin:30px 0 10px;
+  font-weight:700;
+  color:#555;
+  text-align:center;
+}
+
+.stats{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:14px;
+}
+
+.stat{
+  background:#fff;
+  padding:18px;
+  border-radius:14px;
+  text-align:center;
+}
+
+.stat h3{
+  margin:0;
+  font-size:28px;
+}
+
+.stat span{
+  font-size:14px;
+  color:#666;
+}
+
+.table-wrap{
+  margin-top:30px;
+  background:#fff;
+  border-radius:14px;
+  overflow:hidden;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+th,td{
+  padding:12px;
+  border-bottom:1px solid #eee;
+  text-align:center;
+}
+
+th{
+  background:#f1f4f8;
+}
+
+td:nth-child(3),
+td:nth-child(4){
+  text-align:left;
+}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="t20-world-cup.html">T20 World Cup</a>
+</div>
+
+<div class="page">
+
+<div class="hero">
+  <h1 id="playerName">Loading…</h1>
+  <p>T20 World Cup batting & bowling performance by opposition</p>
+</div>
+
+<div class="controls">
+
+Opposition:
+
+<select id="oppSelect"></select>
+
+<button class="tab-btn" id="batBtn">Batting</button>
+
+<button class="tab-btn" id="bowlBtn">Bowling</button>
+
+</div>
+
+<div class="section-title">CAREER SUMMARY</div>
+
+<div class="stats" id="careerStats"></div>
+
+<div class="section-title" id="vsTitle">VS OPPOSITION</div>
+
+<div class="stats" id="vsStats"></div>
+
+<div class="table-wrap">
+
+<table>
+
+<thead id="tableHead"></thead>
+
+<tbody id="gamesTable"></tbody>
+
+</table>
+
+</div>
+
+</div>
+
+<script>
+
+(async function(){
+
+const params=new URLSearchParams(location.search);
+
+const player=params.get("player");
+
+if(!player)return;
+
+document.getElementById("playerName").textContent=player;
+
+const P=player.toLowerCase();
+
+let battingGames=[];
+
+let bowlingGames=[];
+
+let currentTab="bat";
+
+const index=await fetch("data/t20-world-cup/index.json").then(r=>r.json());
+
+for(const file of index){
+
+ const data=await fetch("data/t20-world-cup/"+file).then(r=>r.json());
+
+ data.forEach(match=>{
+
+  match.innings.forEach(inn=>{
+
+   let batRuns=0,batBalls=0,batOut="not out",batted=false;
+
+   let bowlBalls=0,bowlRuns=0,bowlWkts=0;
+
+   inn.overs.forEach(o=>{
+
+    o.deliveries.forEach(d=>{
+
+     if(d.batter?.toLowerCase()===P){
+
+      batted=true;
+
+      batRuns+=d.runs.batter;
+
+      if(!d.extras?.wides)batBalls++;
+
+     }
+
+     if(d.bowler?.toLowerCase()===P){
+
+      bowlBalls++;
+
+      bowlRuns+=d.runs.total;
+
+     }
+
+     d.wickets?.forEach(w=>{
+
+      if(w.player_out?.toLowerCase()===P)
+
+       batOut=w.kind;
+
+      if(w.bowler?.toLowerCase()===P)
+
+       bowlWkts++;
+
+     });
+
+    });
+
+   });
+
+   const opponent=match.info.teams.find(t=>t!==inn.team);
+
+   if(batted){
+
+    battingGames.push({
+
+     season:match.info.dates[0].substring(0,4),
+
+     date:match.info.dates[0],
+
+     opp:opponent,
+
+     venue:match.info.venue,
+
+     r:batRuns,
+
+     b:batBalls,
+
+     sr:batBalls?((batRuns/batBalls)*100).toFixed(1):"—",
+
+     out:batOut
+
+    });
+
+   }
+
+   if(bowlBalls){
+
+    bowlingGames.push({
+
+     season:match.info.dates[0].substring(0,4),
+
+     date:match.info.dates[0],
+
+     opp:opponent,
+
+     venue:match.info.venue,
+
+     o:(bowlBalls/6).toFixed(1),
+
+     balls:bowlBalls,
+
+     r:bowlRuns,
+
+     w:bowlWkts,
+
+     econ:(bowlRuns/(bowlBalls/6)).toFixed(2)
+
+    });
+
+   }
+
+  });
+
+ });
+
+}
+
+/* AUTO TAB */
+
+if(bowlingGames.reduce((a,b)=>a+b.balls,0)>=30){
+
+ currentTab="bowl";
+
+ bowlBtn.classList.add("active");
+
+}else{
+
+ batBtn.classList.add("active");
+
+}
+
+/* OPPONENT LIST */
+
+const oppSel=document.getElementById("oppSelect");
+
+["All",...new Set([...battingGames,...bowlingGames].map(g=>g.opp))]
+
+.forEach(o=>{
+
+ const opt=document.createElement("option");
+
+ opt.value=o;
+
+ opt.textContent=o;
+
+ oppSel.appendChild(opt);
+
+});
+
+/* STATS FUNCTIONS */
+
+function batStats(list){
+
+ const runs=list.reduce((a,b)=>a+b.r,0);
+
+ const balls=list.reduce((a,b)=>a+b.b,0);
+
+ const outs=list.filter(g=>g.out!=="not out").length;
+
+ return{
+
+  m:list.length,
+
+  r:runs,
+
+  a:outs?(runs/outs).toFixed(2):"—",
+
+  s:balls?((runs/balls)*100).toFixed(1):"—",
+
+  h:Math.max(...list.map(g=>g.r),0)
+
+ };
+
+}
+
+function bowlStats(list){
+
+ const balls=list.reduce((a,b)=>a+b.balls,0);
+
+ const runs=list.reduce((a,b)=>a+b.r,0);
+
+ const wkts=list.reduce((a,b)=>a+b.w,0);
+
+ return{
+
+  m:list.length,
+
+  o:(balls/6).toFixed(1),
+
+  w:wkts,
+
+  a:wkts?(runs/wkts).toFixed(2):"—",
+
+  e:balls?((runs/(balls/6))).toFixed(2):"—"
+
+ };
+
+}
+
+/* RENDER */
+
+function render(){
+
+ const opp=oppSel.value;
+
+ const all=currentTab==="bat"?battingGames:bowlingGames;
+
+ const list=opp==="All"?all:all.filter(g=>g.opp===opp);
+
+ vsTitle.textContent=opp==="All"?"VS OPPOSITION":"VS "+opp.toUpperCase();
+
+ if(currentTab==="bat"){
+
+  const c=batStats(battingGames);
+
+  const v=batStats(list);
+
+  careerStats.innerHTML=`
+
+   <div class="stat"><h3>${c.m}</h3><span>Matches</span></div>
+
+   <div class="stat"><h3>${c.r}</h3><span>Runs</span></div>
+
+   <div class="stat"><h3>${c.a}</h3><span>Average</span></div>
+
+   <div class="stat"><h3>${c.s}</h3><span>Strike Rate</span></div>
+
+   <div class="stat"><h3>${c.h}</h3><span>High Score</span></div>`;
+
+  vsStats.innerHTML=careerStats.innerHTML;
+
+ }else{
+
+  const c=bowlStats(bowlingGames);
+
+  const v=bowlStats(list);
+
+  careerStats.innerHTML=`
+
+   <div class="stat"><h3>${c.m}</h3><span>Matches</span></div>
+
+   <div class="stat"><h3>${c.o}</h3><span>Overs</span></div>
+
+   <div class="stat"><h3>${c.w}</h3><span>Wickets</span></div>
+
+   <div class="stat"><h3>${c.a}</h3><span>Average</span></div>
+
+   <div class="stat"><h3>${c.e}</h3><span>Economy</span></div>`;
+
+  vsStats.innerHTML=careerStats.innerHTML;
+
+ }
+
+}
+
+/* EVENTS */
+
+batBtn.onclick=()=>{
+
+ currentTab="bat";
+
+ batBtn.classList.add("active");
+
+ bowlBtn.classList.remove("active");
+
+ render();
+
+};
+
+bowlBtn.onclick=()=>{
+
+ currentTab="bowl";
+
+ bowlBtn.classList.add("active");
+
+ batBtn.classList.remove("active");
+
+ render();
+
+};
+
+oppSel.onchange=render;
+
+render();
+
+})();
+</script>
+
+</body>
+</html>
