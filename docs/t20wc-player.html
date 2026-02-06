@@ -37,7 +37,7 @@ body{
 
 .stats{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
   gap:15px;
   margin-top:20px;
 }
@@ -76,7 +76,6 @@ tr:nth-child(even){
 
 </style>
 </head>
-
 <body>
 
 <div class="navbar">
@@ -100,8 +99,7 @@ tr:nth-child(even){
 <thead>
 <tr>
 <th>Date</th>
-<th>Team</th>
-<th>Opponent</th>
+<th>Match</th>
 <th>Runs</th>
 <th>Balls</th>
 <th>SR</th>
@@ -126,12 +124,12 @@ const INDEX="data/t20-world-cup/index.json";
 const BASE="data/t20-world-cup/matches/";
 const PLAYER_MAP_FILE="data/players-name.json";
 
-let playerMap={};
-let reverseMap={};
+let shortName="";
+let fullName="";
 
 const params=new URLSearchParams(location.search);
 
-const fullName=params.get("name");
+fullName=params.get("name");
 
 document.getElementById("playerName").textContent=fullName;
 
@@ -141,22 +139,26 @@ init();
 
 async function init(){
 
-/* LOAD PLAYER MAP */
+/* load player map */
 
-playerMap=await fetch(PLAYER_MAP_FILE).then(r=>r.json());
+const map=await fetch(PLAYER_MAP_FILE).then(r=>r.json());
 
-Object.entries(playerMap).forEach(([short,long])=>{
-reverseMap[long.toLowerCase()]=short;
-});
+/* reverse lookup */
 
-/* Determine both versions */
+for(const short in map){
 
-const shortName=reverseMap[fullName.toLowerCase()] || fullName;
-const shortLower=shortName.toLowerCase();
-const fullLower=fullName.toLowerCase();
+if(map[short].toLowerCase()===fullName.toLowerCase()){
 
+shortName=short;
+break;
 
-/* LOAD FILE LIST */
+}
+
+}
+
+/* fallback */
+
+if(!shortName) shortName=fullName;
 
 const files=await fetch(INDEX).then(r=>r.json());
 
@@ -183,35 +185,31 @@ let played=false;
 
 match.innings.forEach(inn=>{
 
-const team=inn.team;
-const opponent=match.info.teams.find(t=>t!==team);
-
 inn.overs.forEach(over=>{
 
 over.deliveries.forEach(d=>{
 
-const batter=d.batter?.toLowerCase();
-const bowler=d.bowler?.toLowerCase();
+const batter=d.batter;
+const bowler=d.bowler;
 
 const isWide=d.extras?.wides;
 const isNoBall=d.extras?.noballs;
 
-/* BAT */
+/* batting */
 
-if(batter===shortLower || batter===fullLower){
+if(batter===shortName){
 
 played=true;
 
 batRuns+=d.runs.batter;
 
-if(!isWide)
-batBalls++;
+if(!isWide) batBalls++;
 
 }
 
-/* BOWL */
+/* bowling */
 
-if(bowler===shortLower || bowler===fullLower){
+if(bowler===shortName){
 
 played=true;
 
@@ -222,16 +220,12 @@ bowlRuns+=d.runs.total;
 
 }
 
-/* WICKETS */
+/* wickets */
 
 d.wickets?.forEach(w=>{
 
-if(w.bowler?.toLowerCase()===shortLower ||
-   w.bowler?.toLowerCase()===fullLower){
-
+if(w.bowler===shortName)
 bowlWkts++;
-
-}
 
 });
 
@@ -247,7 +241,6 @@ matches++;
 
 totalRuns+=batRuns;
 totalBalls+=batBalls;
-
 totalWkts+=bowlWkts;
 totalBowlBalls+=bowlBalls;
 totalBowlRuns+=bowlRuns;
@@ -260,7 +253,7 @@ addRow(match,batRuns,batBalls,bowlBalls,bowlRuns,bowlWkts);
 
 }
 
-renderCareer();
+renderStats(matches,totalRuns,totalBalls,totalWkts,totalBowlBalls,totalBowlRuns);
 
 }
 
@@ -276,15 +269,11 @@ function addRow(match,runs,balls,bowlBalls,bowlRuns,wkts){
 
 const tr=document.createElement("tr");
 
-const teams=match.info.teams;
-
 tr.innerHTML=`
 
 <td>${match.info.dates[0]}</td>
 
-<td>${teams[0]}</td>
-
-<td>${teams[1]}</td>
+<td>${match.info.teams.join(" vs ")}</td>
 
 <td>${runs}</td>
 
@@ -307,39 +296,21 @@ tbody.appendChild(tr);
 }
 
 
-function renderCareer(){
+function renderStats(matches,runs,balls,wkts,bowlBalls,bowlRuns){
 
 careerStats.innerHTML=`
 
-<div class="stat">
-<h3>${matches}</h3>
-<span>Matches</span>
-</div>
+<div class="stat"><h3>${matches}</h3><span>Matches</span></div>
 
-<div class="stat">
-<h3>${totalRuns}</h3>
-<span>Runs</span>
-</div>
+<div class="stat"><h3>${runs}</h3><span>Runs</span></div>
 
-<div class="stat">
-<h3>${totalBalls?((totalRuns/totalBalls)*100).toFixed(1):"-"}</h3>
-<span>Strike Rate</span>
-</div>
+<div class="stat"><h3>${balls?((runs/balls)*100).toFixed(1):"-"}</h3><span>Strike Rate</span></div>
 
-<div class="stat">
-<h3>${totalWkts}</h3>
-<span>Wickets</span>
-</div>
+<div class="stat"><h3>${wkts}</h3><span>Wickets</span></div>
 
-<div class="stat">
-<h3>${ballsToOvers(totalBowlBalls)}</h3>
-<span>Overs</span>
-</div>
+<div class="stat"><h3>${ballsToOvers(bowlBalls)}</h3><span>Overs</span></div>
 
-<div class="stat">
-<h3>${totalBowlBalls?(totalBowlRuns/(totalBowlBalls/6)).toFixed(2):"-"}</h3>
-<span>Economy</span>
-</div>
+<div class="stat"><h3>${bowlBalls?(bowlRuns/(bowlBalls/6)).toFixed(2):"-"}</h3><span>Economy</span></div>
 
 `;
 
