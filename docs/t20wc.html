@@ -6,6 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
+
 body{
   font-family:Inter,system-ui,Arial,sans-serif;
   margin:0;
@@ -110,6 +111,7 @@ a{
 a:hover{
   text-decoration:underline;
 }
+
 </style>
 </head>
 
@@ -141,127 +143,136 @@ a:hover{
   <th>Result</th>
 </tr>
 </thead>
+
 <tbody id="matchesTable"></tbody>
+
 </table>
 
 </div>
 
 <script>
 
-const indexUrl="data/t20-world-cup/index.json";
-const basePath="data/t20-world-cup/";
+const INDEX_URL = "data/t20-world-cup/index.json";
+const BASE_PATH = "data/t20-world-cup/";
 
-const yearGrid=document.getElementById("yearGrid");
-const tableBody=document.getElementById("matchesTable");
+const yearGrid = document.getElementById("yearGrid");
+const tableBody = document.getElementById("matchesTable");
 
-let allSeasons=[];
-let currentMatches=[];
+let seasons = [];
+let currentSeasonIndex = 0;
 
-fetch(indexUrl)
-.then(r=>r.json())
-.then(files=>Promise.all(
-  files.map(f=>fetch(basePath+f).then(r=>r.json()).then(data=>({
-    file:f,
-    year:f.match(/\d{4}/)[0],
-    matches:data
-  })))
-))
-.then(seasons=>{
 
-  allSeasons=seasons.sort((a,b)=>b.year-a.year);
+async function init(){
 
-  buildYearButtons();
+  const files = await fetch(INDEX_URL).then(r=>r.json());
+
+  const loaded = await Promise.all(
+
+    files.map(async file => {
+
+      const matches = await fetch(BASE_PATH + file).then(r=>r.json());
+
+      return {
+
+        file:file,
+
+        year:file.match(/\d{4}/)[0],
+
+        matches:matches
+
+      };
+
+    })
+
+  );
+
+  seasons = loaded.sort((a,b)=>b.year - a.year);
+
+  buildButtons();
 
   showSeason(0);
 
-});
+}
 
-function buildYearButtons(){
 
-  yearGrid.innerHTML="";
+function buildButtons(){
 
-  allSeasons.forEach((season,i)=>{
+  yearGrid.innerHTML = "";
 
-    const btn=document.createElement("button");
+  seasons.forEach((season,index)=>{
 
-    btn.className="year-btn";
+    const btn = document.createElement("button");
 
-    btn.textContent=season.year;
+    btn.className = "year-btn";
 
-    btn.onclick=()=>{
+    btn.textContent = season.year;
 
-      document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
+    if(index===0) btn.classList.add("active");
+
+    btn.onclick = ()=>{
+
+      document.querySelectorAll(".year-btn")
+        .forEach(b=>b.classList.remove("active"));
 
       btn.classList.add("active");
 
-      showSeason(i);
+      showSeason(index);
 
     };
 
     yearGrid.appendChild(btn);
 
-    if(i===0) btn.classList.add("active");
-
   });
 
 }
 
+
 function showSeason(index){
 
-  currentMatches=allSeasons[index].matches;
+  currentSeasonIndex = index;
 
-  renderTable(currentMatches);
+  renderTable(seasons[index].matches);
 
 }
 
+
 function renderTable(matches){
 
-  tableBody.innerHTML="";
+  tableBody.innerHTML = "";
 
   matches
   .sort((a,b)=>new Date(a.info.dates[0]) - new Date(b.info.dates[0]))
-  .forEach(match=>{
+  .forEach((match,i)=>{
 
-    const date=formatDate(match.info.dates[0]);
+    const date = formatDate(match.info.dates[0]);
 
-    const teams=match.info.teams.join(" vs ");
+    const teams = match.info.teams.join(" vs ");
 
-    const venue=match.info.venue||"—";
+    const venue = match.info.venue || "—";
 
-    let result="—";
+    let result = "—";
 
     if(match.info.outcome?.winner){
 
-      if(match.info.outcome.by?.runs){
+      if(match.info.outcome.by?.runs)
+        result = `${match.info.outcome.winner} won by ${match.info.outcome.by.runs} runs`;
 
-        result=`${match.info.outcome.winner} won by ${match.info.outcome.by.runs} runs`;
-
-      }
-
-      else if(match.info.outcome.by?.wickets){
-
-        result=`${match.info.outcome.winner} won by ${match.info.outcome.by.wickets} wickets`;
-
-      }
+      else if(match.info.outcome.by?.wickets)
+        result = `${match.info.outcome.winner} won by ${match.info.outcome.by.wickets} wickets`;
 
     }
 
-    const tr=document.createElement("tr");
+    const tr = document.createElement("tr");
 
-    tr.innerHTML=`
-
+    tr.innerHTML = `
       <td>${date}</td>
-
       <td>
-        <a href="t20wc-match.html?file=${match.file}">
+        <a href="t20wc-match.html?season=${currentSeasonIndex}&match=${i}">
           ${teams}
         </a>
       </td>
-
       <td>${venue}</td>
-
       <td>${result}</td>
-
     `;
 
     tableBody.appendChild(tr);
@@ -270,15 +281,21 @@ function renderTable(matches){
 
 }
 
-function formatDate(d){
 
-  return new Date(d).toLocaleDateString("en-GB",{
+function formatDate(date){
+
+  return new Date(date).toLocaleDateString("en-GB",{
+
     day:"2-digit",
     month:"short",
     year:"numeric"
+
   });
 
 }
+
+
+init();
 
 </script>
 
