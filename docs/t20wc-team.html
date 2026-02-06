@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>T20 World Cup Team | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family:Inter,system-ui,Arial,sans-serif;
+  margin:0;
+  background:#ffffff;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+  font-size:18px;
+}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#6a040f,#d00000);
+  color:white;
+  padding:40px 50px;
+  border-radius:24px;
+  margin-bottom:25px;
+}
+
+.hero h1{
+  margin:0;
+  font-size:46px;
+}
+
+.hero p{
+  margin-top:10px;
+  font-size:20px;
+  opacity:.95;
+}
+
+.year-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(110px,1fr));
+  gap:12px;
+  margin-bottom:25px;
+}
+
+.year-btn{
+  background:#6a040f;
+  color:white;
+  border:none;
+  padding:12px 0;
+  border-radius:10px;
+  font-size:15px;
+  cursor:pointer;
+}
+
+.year-btn:hover{
+  background:#9d0208;
+}
+
+.year-btn.active{
+  background:#dc2f02;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:14px;
+}
+
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:10px 12px;
+  text-align:left;
+}
+
+th{
+  background:#f3f6fb;
+}
+
+tr:nth-child(even){
+  background:#f8fbff;
+}
+
+tr:hover{
+  background:#eef4ff;
+}
+
+a{
+  color:#6a040f;
+  font-weight:600;
+  text-decoration:none;
+}
+
+a:hover{
+  text-decoration:underline;
+}
+
+.team-select{
+  padding:12px;
+  font-size:18px;
+  border-radius:10px;
+  margin-bottom:20px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="t20-world-cup.html">T20 World Cup</a>
+</div>
+
+<div class="page-wrap">
+
+<div class="hero">
+  <h1 id="teamName">T20 World Cup Team</h1>
+  <p>Match history by season.</p>
+</div>
+
+<select id="teamSelect" class="team-select"></select>
+
+<div id="yearGrid" class="year-grid"></div>
+
+<h2>Matches</h2>
+
+<table>
+<thead>
+<tr>
+  <th>Date</th>
+  <th>Match</th>
+  <th>Venue</th>
+  <th>Result</th>
+</tr>
+</thead>
+<tbody id="matchesTable"></tbody>
+</table>
+
+</div>
+
+<script>
+
+const indexUrl="data/t20-world-cup/index.json";
+const basePath="data/t20-world-cup/";
+
+const teamSelect=document.getElementById("teamSelect");
+const yearGrid=document.getElementById("yearGrid");
+const tableBody=document.getElementById("matchesTable");
+const teamNameEl=document.getElementById("teamName");
+
+let allSeasons=[];
+let allTeams=[];
+let currentTeam=null;
+let teamMatches=[];
+
+fetch(indexUrl)
+
+.then(r=>r.json())
+
+.then(files=>Promise.all(
+
+ files.map(f=>fetch(basePath+f)
+
+ .then(r=>r.json())
+
+ .then(data=>({year:f.match(/\d{4}/)[0],matches:data})))
+
+))
+
+.then(seasons=>{
+
+ allSeasons=seasons.sort((a,b)=>b.year-a.year);
+
+ buildTeamList();
+
+});
+
+/* BUILD TEAM LIST */
+
+function buildTeamList(){
+
+ const set=new Set();
+
+ allSeasons.forEach(season=>{
+
+  season.matches.forEach(match=>{
+
+   match.info.teams.forEach(team=>set.add(team));
+
+  });
+
+ });
+
+ allTeams=[...set].sort();
+
+ teamSelect.innerHTML="<option>Select Team</option>";
+
+ allTeams.forEach(team=>{
+
+  const opt=document.createElement("option");
+
+  opt.value=team;
+
+  opt.textContent=team;
+
+  teamSelect.appendChild(opt);
+
+ });
+
+}
+
+teamSelect.onchange=()=>{
+
+ currentTeam=teamSelect.value;
+
+ teamNameEl.textContent=currentTeam;
+
+ buildYearButtons();
+
+};
+
+/* YEAR BUTTONS */
+
+function buildYearButtons(){
+
+ yearGrid.innerHTML="";
+
+ allSeasons.forEach((season,i)=>{
+
+  const btn=document.createElement("button");
+
+  btn.className="year-btn";
+
+  btn.textContent=season.year;
+
+  btn.onclick=()=>{
+
+   document.querySelectorAll(".year-btn")
+
+   .forEach(b=>b.classList.remove("active"));
+
+   btn.classList.add("active");
+
+   showSeason(i);
+
+  };
+
+  yearGrid.appendChild(btn);
+
+ });
+
+}
+
+/* SHOW SEASON */
+
+function showSeason(index){
+
+ teamMatches=allSeasons[index].matches
+
+ .filter(m=>m.info.teams.includes(currentTeam));
+
+ renderTable(teamMatches);
+
+}
+
+/* RENDER TABLE */
+
+function renderTable(matches){
+
+ tableBody.innerHTML="";
+
+ matches
+
+ .sort((a,b)=>new Date(a.info.dates[0])
+
+ -new Date(b.info.dates[0]))
+
+ .forEach(match=>{
+
+  const date=formatDate(match.info.dates[0]);
+
+  const teams=match.info.teams.join(" vs ");
+
+  const venue=match.info.venue||"—";
+
+  let result="—";
+
+  if(match.info.outcome?.winner){
+
+   if(match.info.outcome.by?.runs)
+
+    result=`${match.info.outcome.winner} won by ${match.info.outcome.by.runs} runs`;
+
+   else if(match.info.outcome.by?.wickets)
+
+    result=`${match.info.outcome.winner} won by ${match.info.outcome.by.wickets} wickets`;
+
+  }
+
+  const tr=document.createElement("tr");
+
+  tr.innerHTML=`
+
+   <td>${date}</td>
+
+   <td>
+
+    <a href="t20wc-match.html?file=${match.file}">
+
+     ${teams}
+
+    </a>
+
+   </td>
+
+   <td>${venue}</td>
+
+   <td>${result}</td>`;
+
+  tableBody.appendChild(tr);
+
+ });
+
+}
+
+function formatDate(d){
+
+ return new Date(d)
+
+ .toLocaleDateString("en-GB",{
+
+  day:"2-digit",
+
+  month:"short",
+
+  year:"numeric"
+
+ });
+
+}
+
+</script>
+
+</body>
+</html>
