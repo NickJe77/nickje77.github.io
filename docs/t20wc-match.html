@@ -52,7 +52,7 @@ body{
 }
 
 .innings{
-  margin-bottom:25px;
+  margin-bottom:30px;
 }
 
 .innings h2{
@@ -79,6 +79,11 @@ th{
   text-align:right;
 }
 
+.summary{
+  font-size:18px;
+  margin-top:8px;
+  font-weight:600;
+}
 </style>
 </head>
 
@@ -95,6 +100,7 @@ th{
 <div class="hero">
   <h1 id="matchTitle">Loading match...</h1>
   <p id="matchInfo"></p>
+  <div id="matchResult" class="summary"></div>
 </div>
 
 <div id="inningsContainer"></div>
@@ -103,147 +109,186 @@ th{
 
 <script>
 
-const params=new URLSearchParams(location.search);
-const file=params.get("file");
+const params = new URLSearchParams(location.search);
+const file = params.get("file");
 
 if(!file){
 
- document.getElementById("matchTitle").textContent="Match not found";
- throw new Error("No file provided");
+ document.getElementById("matchTitle").textContent = "Match not found";
+
+ throw new Error("No match file provided");
 
 }
 
-fetch("data/t20-world-cup/"+file)
+/* FIXED PATH — loads from matches folder */
 
-.then(r=>r.json())
+fetch("data/t20-world-cup/matches/" + file)
 
-.then(match=>{
+.then(r => {
 
- renderMatch(match);
+ if(!r.ok) throw new Error("Match file not found");
+
+ return r.json();
+
+})
+
+.then(match => renderMatch(match))
+
+.catch(err => {
+
+ document.getElementById("matchTitle").textContent = "Match failed to load";
+
+ console.error(err);
 
 });
 
+
 function renderMatch(match){
 
- const info=match.info;
+ const info = match.info;
 
- const title=info.teams.join(" vs ");
+ const title = info.teams.join(" vs ");
 
- const date=new Date(info.dates[0]).toLocaleDateString("en-GB");
+ const date = new Date(info.dates[0]).toLocaleDateString("en-GB");
 
- const venue=info.venue||"";
+ const venue = info.venue || "";
 
- document.getElementById("matchTitle").textContent=title;
+ document.getElementById("matchTitle").textContent = title;
 
- document.getElementById("matchInfo").textContent=
-   date+" • "+venue;
+ document.getElementById("matchInfo").textContent =
+   date + " • " + venue;
 
- const container=document.getElementById("inningsContainer");
+ if(info.outcome?.winner){
 
- container.innerHTML="";
+  let result = info.outcome.winner + " won";
 
- match.innings.forEach(inn=>{
+  if(info.outcome.by?.runs)
+   result += " by " + info.outcome.by.runs + " runs";
 
-   const div=document.createElement("div");
+  else if(info.outcome.by?.wickets)
+   result += " by " + info.outcome.by.wickets + " wickets";
 
-   div.className="innings";
+  document.getElementById("matchResult").textContent = result;
 
-   const batterStats={};
+ }
 
-   const bowlerStats={};
+ const container = document.getElementById("inningsContainer");
 
-   inn.overs.forEach(over=>{
+ container.innerHTML = "";
 
-     over.deliveries.forEach(d=>{
+ match.innings.forEach(inn => {
 
-       const batter=d.batter;
-       const bowler=d.bowler;
+  const div = document.createElement("div");
 
-       if(!batterStats[batter])
-         batterStats[batter]={runs:0,balls:0};
+  div.className = "innings";
 
-       batterStats[batter].runs+=d.runs.batter;
+  const batterStats = {};
 
-       if(!d.extras?.wides)
-         batterStats[batter].balls++;
+  const bowlerStats = {};
 
-       if(!bowlerStats[bowler])
-         bowlerStats[bowler]={balls:0,runs:0,wkts:0};
+  let teamRuns = 0;
+  let teamWkts = 0;
+  let teamBalls = 0;
 
-       bowlerStats[bowler].balls++;
+  inn.overs.forEach(over => {
 
-       bowlerStats[bowler].runs+=d.runs.total;
+   over.deliveries.forEach(d => {
 
-       if(d.wickets)
-         bowlerStats[bowler].wkts+=d.wickets.length;
+    const batter = d.batter;
+    const bowler = d.bowler;
 
-     });
+    teamRuns += d.runs.total;
+    teamBalls++;
+
+    if(!batterStats[batter])
+     batterStats[batter] = {runs:0,balls:0};
+
+    batterStats[batter].runs += d.runs.batter;
+
+    if(!d.extras?.wides)
+     batterStats[batter].balls++;
+
+    if(!bowlerStats[bowler])
+     bowlerStats[bowler] = {balls:0,runs:0,wkts:0};
+
+    bowlerStats[bowler].balls++;
+
+    bowlerStats[bowler].runs += d.runs.total;
+
+    if(d.wickets){
+     teamWkts += d.wickets.length;
+     bowlerStats[bowler].wkts += d.wickets.length;
+    }
 
    });
 
-   let batHTML=`
-     <h2>${inn.team} Batting</h2>
-     <table>
-     <tr>
-       <th>Batter</th>
-       <th class="right">R</th>
-       <th class="right">B</th>
-       <th class="right">SR</th>
-     </tr>
+  });
+
+  const overs = (teamBalls/6).toFixed(1);
+
+  let batHTML = `
+    <h2>${inn.team} — ${teamRuns}/${teamWkts} (${overs} overs)</h2>
+    <table>
+    <tr>
+      <th>Batter</th>
+      <th class="right">R</th>
+      <th class="right">B</th>
+      <th class="right">SR</th>
+    </tr>
+  `;
+
+  Object.entries(batterStats).forEach(([name,s]) => {
+
+   const sr = s.balls ? ((s.runs/s.balls)*100).toFixed(1) : "—";
+
+   batHTML += `
+    <tr>
+      <td>${name}</td>
+      <td class="right">${s.runs}</td>
+      <td class="right">${s.balls}</td>
+      <td class="right">${sr}</td>
+    </tr>
    `;
 
-   Object.entries(batterStats).forEach(([name,s])=>{
+  });
 
-     const sr=s.balls?((s.runs/s.balls)*100).toFixed(1):"—";
+  batHTML += "</table>";
 
-     batHTML+=`
-       <tr>
-         <td>${name}</td>
-         <td class="right">${s.runs}</td>
-         <td class="right">${s.balls}</td>
-         <td class="right">${sr}</td>
-       </tr>
-     `;
+  let bowlHTML = `
+    <h2>${inn.team} Bowling</h2>
+    <table>
+    <tr>
+      <th>Bowler</th>
+      <th class="right">O</th>
+      <th class="right">R</th>
+      <th class="right">W</th>
+      <th class="right">Econ</th>
+    </tr>
+  `;
 
-   });
+  Object.entries(bowlerStats).forEach(([name,s]) => {
 
-   batHTML+="</table>";
+   const overs = (s.balls/6).toFixed(1);
 
-   let bowlHTML=`
-     <h2>${inn.team} Bowling</h2>
-     <table>
-     <tr>
-       <th>Bowler</th>
-       <th class="right">O</th>
-       <th class="right">R</th>
-       <th class="right">W</th>
-       <th class="right">Econ</th>
-     </tr>
+   const econ = s.balls ? (s.runs/(s.balls/6)).toFixed(2) : "—";
+
+   bowlHTML += `
+    <tr>
+      <td>${name}</td>
+      <td class="right">${overs}</td>
+      <td class="right">${s.runs}</td>
+      <td class="right">${s.wkts}</td>
+      <td class="right">${econ}</td>
+    </tr>
    `;
 
-   Object.entries(bowlerStats).forEach(([name,s])=>{
+  });
 
-     const overs=(s.balls/6).toFixed(1);
+  bowlHTML += "</table>";
 
-     const econ=(s.runs/(s.balls/6)).toFixed(2);
+  div.innerHTML = batHTML + bowlHTML;
 
-     bowlHTML+=`
-       <tr>
-         <td>${name}</td>
-         <td class="right">${overs}</td>
-         <td class="right">${s.runs}</td>
-         <td class="right">${s.wkts}</td>
-         <td class="right">${econ}</td>
-       </tr>
-     `;
-
-   });
-
-   bowlHTML+="</table>";
-
-   div.innerHTML=batHTML+bowlHTML;
-
-   container.appendChild(div);
+  container.appendChild(div);
 
  });
 
