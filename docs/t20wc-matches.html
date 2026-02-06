@@ -2,14 +2,31 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>T20 World Cup Matches</title>
+<title>T20 World Cup Matches | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 
 body{
-font-family:Inter,system-ui;
+font-family:Inter,system-ui,Arial,sans-serif;
 margin:0;
-background:#fff;
+background:#f3f4f7;
+}
+
+.navbar{
+display:flex;
+justify-content:center;
+gap:28px;
+padding:18px;
+background:#ffffff;
+border-bottom:1px solid #ddd;
+font-weight:600;
+}
+
+.navbar a{
+color:#0056d6;
+text-decoration:none;
+font-size:18px;
 }
 
 .hero{
@@ -20,48 +37,86 @@ margin:20px;
 border-radius:16px;
 }
 
+.year-bar{
+margin:20px;
+}
+
 .year-btn{
-padding:10px;
-margin:5px;
 background:#6a040f;
 color:white;
 border:none;
+padding:10px 16px;
+margin:4px;
+border-radius:8px;
 cursor:pointer;
 }
 
-table{
-width:100%;
-border-collapse:collapse;
+.year-btn.active{
+background:#d00000;
 }
 
-td,th{
-padding:10px;
+table{
+width:95%;
+margin:20px auto;
+border-collapse:collapse;
+background:white;
+border-radius:12px;
+overflow:hidden;
+}
+
+th,td{
+padding:12px;
 border-bottom:1px solid #ddd;
+}
+
+th{
+background:#f1f4f8;
 }
 
 tr:nth-child(even){
 background:#eaf3ff;
 }
 
-</style>
+a{
+color:#6a040f;
+font-weight:600;
+text-decoration:none;
+}
 
+</style>
 </head>
+
 <body>
 
-<div class="hero">
-<h2>T20 World Cup Matches</h2>
+<div class="navbar">
+
+<a href="index.html">Home</a>
+<a href="cricket.html">Cricket</a>
+<a href="t20-world-cup.html">T20 World Cup</a>
+
 </div>
 
-<div id="years"></div>
+<div class="hero">
+
+<h2>T20 World Cup Matches</h2>
+
+</div>
+
+<div id="yearBar" class="year-bar"></div>
 
 <table>
+
 <thead>
 <tr>
 <th>Date</th>
 <th>Match</th>
+<th>Venue</th>
+<th>Result</th>
 </tr>
 </thead>
+
 <tbody id="tbody"></tbody>
+
 </table>
 
 <script>
@@ -69,6 +124,8 @@ background:#eaf3ff;
 const BASE="/data/t20-world-cup/matches/";
 
 let seasons=[];
+
+let tbody=document.getElementById("tbody");
 
 init();
 
@@ -80,62 +137,114 @@ for(const file of files){
 
 const matches=await fetch(BASE+file).then(r=>r.json());
 
-seasons.push({file,matches});
+seasons.push({
+file:file,
+year:file.match(/\d{4}/)[0],
+matches:matches
+});
 
 }
 
-buildButtons();
+seasons.sort((a,b)=>b.year-a.year);
+
+buildYearButtons();
 
 showSeason(0);
 
 }
 
-function buildButtons(){
+function buildYearButtons(){
 
-const div=document.getElementById("years");
+const bar=document.getElementById("yearBar");
 
-seasons.forEach((s,i)=>{
+seasons.forEach((season,index)=>{
 
 const btn=document.createElement("button");
 
 btn.className="year-btn";
 
-btn.textContent=s.file.match(/\d{4}/)[0];
+btn.textContent=season.year;
 
-btn.onclick=()=>showSeason(i);
+if(index===0)
+btn.classList.add("active");
 
-div.appendChild(btn);
+btn.onclick=()=>{
+
+document.querySelectorAll(".year-btn")
+.forEach(b=>b.classList.remove("active"));
+
+btn.classList.add("active");
+
+showSeason(index);
+
+};
+
+bar.appendChild(btn);
 
 });
 
 }
 
-function showSeason(i){
+function showSeason(index){
 
-const season=seasons[i];
+const season=seasons[index];
 
 tbody.innerHTML="";
 
-season.matches.forEach((m,index)=>{
+season.matches.forEach((match,i)=>{
+
+const date=formatDate(match.info.dates[0]);
+
+const teams=match.info.teams.join(" vs ");
+
+const venue=match.info.venue||"—";
+
+let result="—";
+
+if(match.info.outcome?.winner){
+
+if(match.info.outcome.by?.runs)
+result=`${match.info.outcome.winner} won by ${match.info.outcome.by.runs} runs`;
+
+else if(match.info.outcome.by?.wickets)
+result=`${match.info.outcome.winner} won by ${match.info.outcome.by.wickets} wickets`;
+
+}
+
+/* CRITICAL FIX — correct link format */
+
+const link=`t20wc-match.html?file=${season.file}&match=${i}`;
 
 tbody.innerHTML+=`
 
 <tr>
 
-<td>${m.info.dates[0]}</td>
+<td>${date}</td>
 
 <td>
-
-<a href="t20wc-match.html?file=${season.file}&match=${index}">
-${m.info.teams.join(" vs ")}
+<a href="${link}">
+${teams}
 </a>
-
 </td>
+
+<td>${venue}</td>
+
+<td>${result}</td>
 
 </tr>
 
 `;
 
+});
+
+}
+
+function formatDate(d){
+
+return new Date(d).toLocaleDateString("en-GB",{
+day:"2-digit",
+month:"short",
+year:"numeric"
 });
 
 }
