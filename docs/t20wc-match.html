@@ -10,54 +10,41 @@
 body{
   font-family:Inter,system-ui,Arial,sans-serif;
   margin:0;
-  background:#ffffff;
 }
 
 .navbar{
   display:flex;
   justify-content:center;
-  gap:22px;
-  padding:16px 0;
+  gap:20px;
+  padding:15px;
   border-bottom:1px solid #ddd;
-  font-weight:600;
 }
 
-.navbar a{
-  color:#0056d6;
-  text-decoration:none;
-}
-
-.page-wrap{
+.page{
   max-width:1000px;
   margin:auto;
-  padding:30px 20px;
+  padding:20px;
 }
 
 .hero{
   background:linear-gradient(90deg,#6a040f,#d00000);
   color:white;
   padding:30px;
-  border-radius:20px;
-  margin-bottom:25px;
-}
-
-.hero h1{
-  margin:0;
+  border-radius:16px;
+  margin-bottom:20px;
 }
 
 .innings{
   border:1px solid #ddd;
-  border-radius:14px;
-  margin-bottom:25px;
-  overflow:hidden;
+  border-radius:12px;
+  margin-bottom:20px;
 }
 
 .innings-header{
   background:linear-gradient(90deg,#6a040f,#d00000);
   color:white;
-  padding:14px 18px;
-  font-size:20px;
-  font-weight:700;
+  padding:12px;
+  font-weight:bold;
 }
 
 table{
@@ -66,20 +53,12 @@ table{
 }
 
 th,td{
-  padding:10px;
+  padding:8px;
   border-bottom:1px solid #ddd;
-}
-
-th{
-  background:#f3f6fb;
 }
 
 tr:nth-child(even){
   background:#eaf3ff;
-}
-
-.right{
-  text-align:right;
 }
 
 </style>
@@ -93,7 +72,7 @@ tr:nth-child(even){
 <a href="t20-world-cup.html">T20 World Cup</a>
 </div>
 
-<div class="page-wrap">
+<div class="page">
 
 <div class="hero">
 
@@ -111,7 +90,7 @@ tr:nth-child(even){
 
 <script>
 
-/* YOUR REAL DATA FOLDER */
+/* DATA LOCATION */
 const BASE="/docs/data/t20-world-cup/matches/";
 
 /* GET PARAMETERS */
@@ -120,16 +99,29 @@ const params=new URLSearchParams(window.location.search);
 const file=params.get("file");
 const matchIndex=parseInt(params.get("match"));
 
+console.log("FILE:", file);
+console.log("MATCH INDEX:", matchIndex);
+
 /* VALIDATE */
-if(!file || isNaN(matchIndex)){
+if(!file){
 
-document.getElementById("title").textContent="Invalid match link";
+document.getElementById("title").textContent=
+"No file parameter received in URL";
 
-throw new Error("Missing file or match index");
+throw new Error("Missing file parameter");
 
 }
 
-/* LOAD MATCH */
+if(isNaN(matchIndex)){
+
+document.getElementById("title").textContent=
+"No match index received in URL";
+
+throw new Error("Missing match index");
+
+}
+
+/* LOAD */
 loadMatch();
 
 async function loadMatch(){
@@ -142,7 +134,7 @@ const match=season[matchIndex];
 
 if(!match){
 
-title.textContent="Match not found";
+title.textContent="Match not found in file";
 return;
 
 }
@@ -153,140 +145,78 @@ renderMatch(match);
 
 console.error(err);
 
-title.textContent="Failed to load match";
+title.textContent="Failed loading file: "+file;
 
 }
 
 }
 
-/* OVERS FORMAT */
-function ballsToOvers(b){
-
+function overs(b){
 return Math.floor(b/6)+"."+(b%6);
-
 }
 
-/* RENDER MATCH */
 function renderMatch(match){
 
-const info=match.info;
+title.textContent=match.info.teams.join(" vs ");
 
-document.getElementById("title").textContent=
-info.teams.join(" vs ");
+info.textContent=
+match.info.dates[0]+" • "+(match.info.venue||"");
 
-document.getElementById("info").textContent=
-info.dates[0]+" • "+(info.venue||"");
-
-/* RESULT */
-if(info.outcome?.winner){
-
-let text=info.outcome.winner+" won";
-
-if(info.outcome.by?.runs)
-text+=" by "+info.outcome.by.runs+" runs";
-
-if(info.outcome.by?.wickets)
-text+=" by "+info.outcome.by.wickets+" wickets";
-
-document.getElementById("result").textContent=text;
-
-}
-
-/* INNINGS */
 const container=document.getElementById("innings");
 
 container.innerHTML="";
 
 match.innings.forEach(inn=>{
 
-let runs=0;
-let wkts=0;
-let balls=0;
+let runs=0,wkts=0,balls=0;
+let bat={};
 
-let batterStats={};
-let bowlerStats={};
+inn.overs.forEach(o=>{
 
-inn.overs.forEach(over=>{
-
-over.deliveries.forEach(d=>{
+o.deliveries.forEach(d=>{
 
 runs+=d.runs.total;
 
-const isWide=d.extras?.wides;
-const isNoBall=d.extras?.noballs;
-
-/* ONLY LEGAL BALLS COUNT */
-if(!isWide && !isNoBall)
+if(!d.extras?.wides&&!d.extras?.noballs)
 balls++;
 
-/* BATTER */
-const batter=d.batter;
+if(!bat[d.batter])
+bat[d.batter]={runs:0,balls:0};
 
-if(!batterStats[batter])
-batterStats[batter]={runs:0,balls:0};
+bat[d.batter].runs+=d.runs.batter;
 
-batterStats[batter].runs+=d.runs.batter;
+if(!d.extras?.wides)
+bat[d.batter].balls++;
 
-if(!isWide)
-batterStats[batter].balls++;
-
-/* BOWLER */
-const bowler=d.bowler;
-
-if(!bowlerStats[bowler])
-bowlerStats[bowler]={runs:0,balls:0,wkts:0};
-
-if(!isWide && !isNoBall)
-bowlerStats[bowler].balls++;
-
-bowlerStats[bowler].runs+=d.runs.total;
-
-/* WICKETS */
-if(d.wickets){
-
+if(d.wickets)
 wkts+=d.wickets.length;
 
-bowlerStats[bowler].wkts+=d.wickets.length;
-
-}
-
 });
 
 });
-
-/* BUILD HTML */
 
 let html=`
-
 <div class="innings">
-
 <div class="innings-header">
-
-${inn.team} — ${runs}/${wkts} (${ballsToOvers(balls)} overs)
-
+${inn.team} — ${runs}/${wkts} (${overs(balls)} overs)
 </div>
-
 <table>
-
 <tr>
 <th>Batter</th>
-<th class="right">R</th>
-<th class="right">B</th>
-<th class="right">SR</th>
+<th>R</th>
+<th>B</th>
+<th>SR</th>
 </tr>
 `;
 
-Object.entries(batterStats).forEach(([name,s])=>{
-
-const sr=s.balls?((s.runs/s.balls)*100).toFixed(1):"-";
+Object.entries(bat).forEach(([n,s])=>{
 
 html+=`
-
 <tr>
-<td>${name}</td>
-<td class="right">${s.runs}</td>
-<td class="right">${s.balls}</td>
-<td class="right">${sr}</td>
+<td>${n}</td>
+<td>${s.runs}</td>
+<td>${s.balls}</td>
+<td>${s.balls?((s.runs/s.balls)*100).toFixed(1):"-"}</td>
 </tr>
 `;
 
