@@ -10,6 +10,7 @@
 body{
   font-family:Inter,system-ui,Arial,sans-serif;
   margin:0;
+  background:#ffffff;
 }
 
 .navbar{
@@ -18,6 +19,7 @@ body{
   gap:20px;
   padding:15px;
   border-bottom:1px solid #ddd;
+  background:#fff;
 }
 
 .page{
@@ -31,21 +33,22 @@ body{
   color:white;
   padding:30px;
   border-radius:16px;
-  margin-bottom:20px;
+  margin-bottom:25px;
 }
 
 .innings{
   border:1px solid #ddd;
   border-radius:12px;
-  margin-bottom:20px;
+  margin-bottom:25px;
   overflow:hidden;
 }
 
 .innings-header{
   background:linear-gradient(90deg,#6a040f,#d00000);
   color:white;
-  padding:12px;
-  font-weight:bold;
+  padding:14px;
+  font-size:20px;
+  font-weight:700;
 }
 
 table{
@@ -54,7 +57,7 @@ table{
 }
 
 th,td{
-  padding:8px;
+  padding:10px;
   border-bottom:1px solid #ddd;
 }
 
@@ -84,7 +87,7 @@ tr:nth-child(even){
 
 <div class="hero">
 
-<h1 id="title">Loading...</h1>
+<h1 id="title">Loading match...</h1>
 
 <p id="info"></p>
 
@@ -98,46 +101,46 @@ tr:nth-child(even){
 
 <script>
 
-/* CORRECT PATHS */
-
-const INDEX="/docs/data/t20-world-cup/matches/index.json";
+/* YOUR ACTUAL DATA LOCATION */
 const BASE="/docs/data/t20-world-cup/matches/";
 
-/* GET URL PARAMS */
+/* GET URL PARAMETERS */
+const params=new URLSearchParams(location.search);
 
-const params=new URLSearchParams(window.location.search);
-
-const seasonIndex=parseInt(params.get("season"));
+const seasonFile=params.get("file");
 const matchIndex=parseInt(params.get("match"));
 
-if(isNaN(seasonIndex)||isNaN(matchIndex)){
+if(!seasonFile || isNaN(matchIndex)){
 
-title.textContent="Invalid match link";
+document.getElementById("title").textContent="Invalid match link";
 
-throw new Error("Bad parameters");
+throw new Error("Missing file or match index");
 
 }
 
+/* LOAD MATCH */
 loadMatch();
-
 
 async function loadMatch(){
 
 try{
 
-const files=await fetch(INDEX).then(r=>r.json());
-
-const seasonFile=files[seasonIndex];
-
 const season=await fetch(BASE+seasonFile).then(r=>r.json());
 
 const match=season[matchIndex];
 
-render(match);
+if(!match){
 
-}catch(e){
+title.textContent="Match not found";
+return;
 
-console.error(e);
+}
+
+renderMatch(match);
+
+}catch(err){
+
+console.error(err);
 
 title.textContent="Failed to load match";
 
@@ -145,20 +148,22 @@ title.textContent="Failed to load match";
 
 }
 
-
-function ballsToOvers(b){
+/* OVERS */
+function overs(b){
 
 return Math.floor(b/6)+"."+(b%6);
 
 }
 
-
-function render(match){
+/* RENDER */
+function renderMatch(match){
 
 title.textContent=match.info.teams.join(" vs ");
 
 info.textContent=
 match.info.dates[0]+" • "+(match.info.venue||"");
+
+/* RESULT */
 
 if(match.info.outcome?.winner){
 
@@ -178,20 +183,22 @@ const container=document.getElementById("innings");
 
 container.innerHTML="";
 
-
 match.innings.forEach(inn=>{
-
-let bat={},bowl={};
 
 let runs=0,wkts=0,balls=0;
 
-inn.overs.forEach(o=>{
+let bat={},bowl={};
 
-o.deliveries.forEach(d=>{
+inn.overs.forEach(over=>{
+
+over.deliveries.forEach(d=>{
 
 runs+=d.runs.total;
 
-if(!d.extras?.wides&&!d.extras?.noballs)
+const isWide=d.extras?.wides;
+const isNoBall=d.extras?.noballs;
+
+if(!isWide&&!isNoBall)
 balls++;
 
 if(!bat[d.batter])
@@ -199,13 +206,13 @@ bat[d.batter]={runs:0,balls:0};
 
 bat[d.batter].runs+=d.runs.batter;
 
-if(!d.extras?.wides)
+if(!isWide)
 bat[d.batter].balls++;
 
 if(!bowl[d.bowler])
 bowl[d.bowler]={runs:0,balls:0,wkts:0};
 
-if(!d.extras?.wides&&!d.extras?.noballs)
+if(!isWide&&!isNoBall)
 bowl[d.bowler].balls++;
 
 bowl[d.bowler].runs+=d.runs.total;
@@ -228,7 +235,7 @@ let html=`
 
 <div class="innings-header">
 
-${inn.team} — ${runs}/${wkts} (${ballsToOvers(balls)} overs)
+${inn.team} — ${runs}/${wkts} (${overs(balls)} overs)
 
 </div>
 
@@ -236,21 +243,21 @@ ${inn.team} — ${runs}/${wkts} (${ballsToOvers(balls)} overs)
 
 <tr>
 <th>Batter</th>
-<th>R</th>
-<th>B</th>
-<th>SR</th>
+<th class="right">R</th>
+<th class="right">B</th>
+<th class="right">SR</th>
 </tr>
 `;
 
-Object.entries(bat).forEach(([n,s])=>{
+Object.entries(bat).forEach(([name,s])=>{
 
 html+=`
 
 <tr>
-<td>${n}</td>
-<td>${s.runs}</td>
-<td>${s.balls}</td>
-<td>${s.balls?((s.runs/s.balls)*100).toFixed(1):"-"}</td>
+<td>${name}</td>
+<td class="right">${s.runs}</td>
+<td class="right">${s.balls}</td>
+<td class="right">${s.balls?((s.runs/s.balls)*100).toFixed(1):"-"}</td>
 </tr>
 `;
 
