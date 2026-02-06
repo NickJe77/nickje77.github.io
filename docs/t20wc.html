@@ -10,7 +10,6 @@
 body{
   font-family:Inter,system-ui,Arial,sans-serif;
   margin:0;
-  background:#ffffff;
 }
 
 .navbar{
@@ -42,17 +41,6 @@ body{
   margin-bottom:25px;
 }
 
-.hero h1{
-  margin:0;
-  font-size:46px;
-}
-
-.hero p{
-  margin-top:10px;
-  font-size:20px;
-  opacity:.95;
-}
-
 .year-grid{
   display:grid;
   grid-template-columns:repeat(auto-fill,minmax(110px,1fr));
@@ -66,12 +54,7 @@ body{
   border:none;
   padding:12px 0;
   border-radius:10px;
-  font-size:15px;
   cursor:pointer;
-}
-
-.year-btn:hover{
-  background:#9d0208;
 }
 
 .year-btn.active{
@@ -81,35 +64,11 @@ body{
 table{
   width:100%;
   border-collapse:collapse;
-  font-size:14px;
 }
 
 th,td{
   border-bottom:1px solid #ddd;
-  padding:10px 12px;
-  text-align:left;
-}
-
-th{
-  background:#f3f6fb;
-}
-
-tr:nth-child(even){
-  background:#f8fbff;
-}
-
-tr:hover{
-  background:#eef4ff;
-}
-
-a{
-  color:#6a040f;
-  font-weight:600;
-  text-decoration:none;
-}
-
-a:hover{
-  text-decoration:underline;
+  padding:10px;
 }
 
 </style>
@@ -118,179 +77,155 @@ a:hover{
 <body>
 
 <div class="navbar">
-  <a href="index.html">Home</a>
-  <a href="cricket.html">Cricket</a>
-  <a href="t20-world-cup.html">T20 World Cup</a>
+<a href="index.html">Home</a>
+<a href="cricket.html">Cricket</a>
+<a href="t20-world-cup.html">T20 World Cup</a>
 </div>
 
 <div class="page-wrap">
 
 <div class="hero">
-  <h1>T20 World Cup – By Season</h1>
-  <p>Select a tournament year.</p>
+<h1>T20 World Cup – By Season</h1>
+<p>Select a tournament year.</p>
 </div>
 
 <div id="yearGrid" class="year-grid"></div>
 
-<h2>Matches</h2>
-
 <table>
 <thead>
 <tr>
-  <th>Date</th>
-  <th>Match</th>
-  <th>Venue</th>
-  <th>Result</th>
+<th>Date</th>
+<th>Match</th>
+<th>Venue</th>
+<th>Result</th>
 </tr>
 </thead>
-
 <tbody id="matchesTable"></tbody>
-
 </table>
 
 </div>
 
 <script>
 
-const INDEX_URL = "data/t20-world-cup/index.json";
-const BASE_PATH = "data/t20-world-cup/";
+const INDEX="data/t20-world-cup/index.json";
+const PATH="data/t20-world-cup/";
 
-const yearGrid = document.getElementById("yearGrid");
-const tableBody = document.getElementById("matchesTable");
+let seasons=[];
+let currentSeason=0;
 
-let seasons = [];
-let currentSeasonIndex = 0;
+const yearGrid=document.getElementById("yearGrid");
+const table=document.getElementById("matchesTable");
 
 
 async function init(){
 
-  const files = await fetch(INDEX_URL).then(r=>r.json());
+const files=await fetch(INDEX).then(r=>r.json());
 
-  const loaded = await Promise.all(
+for(const file of files){
 
-    files.map(async file => {
+const json=await fetch(PATH+file).then(r=>r.json());
 
-      const matches = await fetch(BASE_PATH + file).then(r=>r.json());
+seasons.push({
 
-      return {
+year:file.match(/\d{4}/)[0],
 
-        file:file,
+matches:json.matches
 
-        year:file.match(/\d{4}/)[0],
+});
 
-        matches:matches
+}
 
-      };
+seasons.sort((a,b)=>b.year-a.year);
 
-    })
+buildButtons();
 
-  );
-
-  seasons = loaded.sort((a,b)=>b.year - a.year);
-
-  buildButtons();
-
-  showSeason(0);
+showSeason(0);
 
 }
 
 
 function buildButtons(){
 
-  yearGrid.innerHTML = "";
+yearGrid.innerHTML="";
 
-  seasons.forEach((season,index)=>{
+seasons.forEach((season,i)=>{
 
-    const btn = document.createElement("button");
+const btn=document.createElement("button");
 
-    btn.className = "year-btn";
+btn.className="year-btn";
 
-    btn.textContent = season.year;
+btn.textContent=season.year;
 
-    if(index===0) btn.classList.add("active");
+if(i===0) btn.classList.add("active");
 
-    btn.onclick = ()=>{
+btn.onclick=()=>{
 
-      document.querySelectorAll(".year-btn")
-        .forEach(b=>b.classList.remove("active"));
+document.querySelectorAll(".year-btn")
+.forEach(b=>b.classList.remove("active"));
 
-      btn.classList.add("active");
+btn.classList.add("active");
 
-      showSeason(index);
+showSeason(i);
 
-    };
+};
 
-    yearGrid.appendChild(btn);
+yearGrid.appendChild(btn);
 
-  });
-
-}
-
-
-function showSeason(index){
-
-  currentSeasonIndex = index;
-
-  renderTable(seasons[index].matches);
+});
 
 }
 
 
-function renderTable(matches){
+function showSeason(i){
 
-  tableBody.innerHTML = "";
+currentSeason=i;
 
-  matches
-  .sort((a,b)=>new Date(a.info.dates[0]) - new Date(b.info.dates[0]))
-  .forEach((match,i)=>{
-
-    const date = formatDate(match.info.dates[0]);
-
-    const teams = match.info.teams.join(" vs ");
-
-    const venue = match.info.venue || "—";
-
-    let result = "—";
-
-    if(match.info.outcome?.winner){
-
-      if(match.info.outcome.by?.runs)
-        result = `${match.info.outcome.winner} won by ${match.info.outcome.by.runs} runs`;
-
-      else if(match.info.outcome.by?.wickets)
-        result = `${match.info.outcome.winner} won by ${match.info.outcome.by.wickets} wickets`;
-
-    }
-
-    const tr = document.createElement("tr");
-
-    tr.innerHTML = `
-      <td>${date}</td>
-      <td>
-        <a href="t20wc-match.html?season=${currentSeasonIndex}&match=${i}">
-          ${teams}
-        </a>
-      </td>
-      <td>${venue}</td>
-      <td>${result}</td>
-    `;
-
-    tableBody.appendChild(tr);
-
-  });
+render(seasons[i].matches);
 
 }
 
 
-function formatDate(date){
+function render(matches){
 
-  return new Date(date).toLocaleDateString("en-GB",{
+table.innerHTML="";
 
-    day:"2-digit",
-    month:"short",
-    year:"numeric"
+matches.forEach((match,index)=>{
 
-  });
+const date=new Date(match.info.dates[0])
+.toLocaleDateString("en-GB");
+
+const teams=match.info.teams.join(" vs ");
+
+const venue=match.info.venue||"—";
+
+let result="—";
+
+if(match.info.outcome?.winner){
+
+if(match.info.outcome.by?.runs)
+result=`${match.info.outcome.winner} won by ${match.info.outcome.by.runs} runs`;
+
+else if(match.info.outcome.by?.wickets)
+result=`${match.info.outcome.winner} won by ${match.info.outcome.by.wickets} wickets`;
+
+}
+
+const tr=document.createElement("tr");
+
+tr.innerHTML=`
+<td>${date}</td>
+<td>
+<a href="t20wc-match.html?season=${currentSeason}&match=${index}">
+${teams}
+</a>
+</td>
+<td>${venue}</td>
+<td>${result}</td>
+`;
+
+table.appendChild(tr);
+
+});
 
 }
 
