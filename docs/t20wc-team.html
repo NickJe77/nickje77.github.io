@@ -144,20 +144,11 @@ font-weight:700;
 
 const BASE="/data/t20-world-cup/matches/";
 
-/* OFFICIAL TOURNAMENT DATE WINDOWS */
+/* ONLY THESE ARE VALID FINALS EVENTS */
 
-const WINDOWS=[
-
-["2007-09-11","2007-09-24"],
-["2009-06-05","2009-06-21"],
-["2010-04-30","2010-05-16"],
-["2012-09-18","2012-10-07"],
-["2014-03-16","2014-04-06"],
-["2016-03-08","2016-04-03"],
-["2021-10-17","2021-11-14"],
-["2022-10-16","2022-11-13"],
-["2024-06-01","2024-06-29"]
-
+const VALID_EVENTS = [
+"icc world twenty20",
+"icc men's t20 world cup"
 ];
 
 
@@ -197,19 +188,6 @@ return COUNTRY_CODES[team]?flag(COUNTRY_CODES[team]):"";
 }
 
 
-/* DATE CHECK */
-
-function inTournament(date){
-
-const d=new Date(date);
-
-return WINDOWS.some(([start,end])=>
-d>=new Date(start) && d<=new Date(end)
-);
-
-}
-
-
 const teamName=document.getElementById("teamName");
 const teamSelect=document.getElementById("teamSelect");
 const tbody=document.getElementById("tbody");
@@ -232,9 +210,13 @@ const season=await fetch(BASE+file).then(r=>r.json());
 
 season.forEach((match,i)=>{
 
-const date=match.info.dates[0];
+const event = (match.info.event.name || "").toLowerCase();
 
-if(!inTournament(date)) return;
+/* EXACT MATCH ONLY */
+
+const valid = VALID_EVENTS.some(v => event === v || event.startsWith(v + " "));
+
+if(!valid) return;
 
 match._file=file;
 match._index=i;
@@ -250,7 +232,8 @@ match.info.teams.forEach(t=>teamsSet.add(t));
 const teams=[...teamsSet].sort();
 
 teams.forEach(team=>{
-teamSelect.innerHTML+=`<option value="${team}">
+teamSelect.innerHTML+=`
+<option value="${team}">
 ${getFlag(team)} ${team}
 </option>`;
 });
