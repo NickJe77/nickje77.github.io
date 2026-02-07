@@ -145,11 +145,29 @@ text-decoration:none;
 
 const BASE="/data/t20-world-cup/matches/";
 
+/* OFFICIAL TOURNAMENT DATE RANGES */
+
+const TOURNAMENT_DATES={
+
+2007:["2007-09-11","2007-09-24"],
+2009:["2009-06-05","2009-06-21"],
+2010:["2010-04-30","2010-05-16"],
+2012:["2012-09-18","2012-10-07"],
+2014:["2014-03-16","2014-04-06"],
+2016:["2016-03-08","2016-04-03"],
+2021:["2021-10-17","2021-11-14"],
+2022:["2022-10-16","2022-11-13"],
+2024:["2024-06-01","2024-06-29"]
+
+};
+
+
 let seasons=[];
 let tbody=document.getElementById("tbody");
 let summaryDiv=document.getElementById("summary");
 
 init();
+
 
 async function init(){
 
@@ -157,22 +175,18 @@ const files=await fetch(BASE+"index.json").then(r=>r.json());
 
 for(const file of files){
 
+const year=file.match(/\d{4}/)[0];
+
 const data=await fetch(BASE+file).then(r=>r.json());
 
 let matches=data.filter(match=>{
 
-const eventName=(match.info?.event?.name || "").toLowerCase();
+const date=match.info.dates[0];
 
-/* CORRECT FILTER */
-
-return(
-eventName.startsWith("icc men's t20 world cup") ||
-eventName.startsWith("icc world twenty20")
-);
+return date>=TOURNAMENT_DATES[year][0] &&
+       date<=TOURNAMENT_DATES[year][1];
 
 });
-
-if(matches.length===0) continue;
 
 matches.sort((a,b)=>
 new Date(a.info.dates[0]) - new Date(b.info.dates[0])
@@ -181,10 +195,10 @@ new Date(a.info.dates[0]) - new Date(b.info.dates[0])
 const stats=calculateStats(matches);
 
 seasons.push({
-year:file.match(/\d{4}/)[0],
-file:file,
-matches:matches,
-stats:stats
+year,
+file,
+matches,
+stats
 });
 
 }
@@ -196,17 +210,18 @@ showSeason(0);
 
 }
 
+
 function calculateStats(matches){
 
 let runs={},wkts={};
 
 const finalMatch=matches[matches.length-1];
 
-const winner=finalMatch?.info.outcome?.winner || "—";
+const winner=finalMatch.info.outcome.winner;
 
 matches.forEach(match=>{
 
-match.innings?.forEach(raw=>{
+match.innings.forEach(raw=>{
 
 const inn=raw.team?raw:Object.values(raw)[0];
 
@@ -227,36 +242,31 @@ wkts[d.bowler]=(wkts[d.bowler]||0)+d.wickets.length;
 
 });
 
-const topRuns=Object.entries(runs).sort((a,b)=>b[1]-a[1])[0] || ["—",0];
-const topWkts=Object.entries(wkts).sort((a,b)=>b[1]-a[1])[0] || ["—",0];
+const topRuns=Object.entries(runs).sort((a,b)=>b[1]-a[1])[0];
+const topWkts=Object.entries(wkts).sort((a,b)=>b[1]-a[1])[0];
 
-return{
-winner:winner,
-runs:topRuns,
-wkts:topWkts
-};
+return{winner,runs:topRuns,wkts:topWkts};
 
 }
+
 
 function buildYearButtons(){
 
 const bar=document.getElementById("yearBar");
 
-bar.innerHTML="";
-
-seasons.forEach((season,index)=>{
+seasons.forEach((season,i)=>{
 
 const btn=document.createElement("button");
 
 btn.className="year-btn";
 btn.textContent=season.year;
 
-if(index===0) btn.classList.add("active");
+if(i===0) btn.classList.add("active");
 
 btn.onclick=()=>{
 document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
 btn.classList.add("active");
-showSeason(index);
+showSeason(i);
 };
 
 bar.appendChild(btn);
@@ -264,6 +274,7 @@ bar.appendChild(btn);
 });
 
 }
+
 
 function showSeason(index){
 
@@ -277,30 +288,14 @@ season.matches.forEach((match,i)=>{
 
 const isFinal=i===season.matches.length-1;
 
-const date=formatDate(match.info.dates[0]);
-const teams=match.info.teams.join(" vs ");
-const venue=match.info.venue;
-
-let result="—";
-
-if(match.info.outcome?.winner){
-
-if(match.info.outcome.by?.runs)
-result=`${match.info.outcome.winner} won by ${match.info.outcome.by.runs} runs`;
-
-else if(match.info.outcome.by?.wickets)
-result=`${match.info.outcome.winner} won by ${match.info.outcome.by.wickets} wickets`;
-
-}
-
 const link=`t20wc-match.html?file=${season.file}&match=${i}`;
 
 tbody.innerHTML+=`
 <tr class="${isFinal?'final':''}">
-<td>${date}</td>
-<td><a href="${link}">${teams}</a></td>
-<td>${venue}</td>
-<td>${result}</td>
+<td>${new Date(match.info.dates[0]).toLocaleDateString("en-GB")}</td>
+<td><a href="${link}">${match.info.teams.join(" vs ")}</a></td>
+<td>${match.info.venue}</td>
+<td>${match.info.outcome.winner} won</td>
 </tr>
 `;
 
@@ -308,40 +303,24 @@ tbody.innerHTML+=`
 
 }
 
+
 function renderSummary(stats){
 
 summaryDiv.innerHTML=`
 
 <div class="summary-box">
-Winner
-<div class="big">${stats.winner}</div>
+Winner<div class="big">${stats.winner}</div>
 </div>
 
 <div class="summary-box">
-Most Runs
-<div class="big">
-${stats.runs[0]} – ${stats.runs[1]} runs
-</div>
+Most Runs<div class="big">${stats.runs[0]} – ${stats.runs[1]}</div>
 </div>
 
 <div class="summary-box">
-Most Wickets
-<div class="big">
-${stats.wkts[0]} – ${stats.wkts[1]} wickets
-</div>
+Most Wickets<div class="big">${stats.wkts[0]} – ${stats.wkts[1]}</div>
 </div>
 
 `;
-
-}
-
-function formatDate(d){
-
-return new Date(d).toLocaleDateString("en-GB",{
-day:"2-digit",
-month:"short",
-year:"numeric"
-});
 
 }
 
