@@ -87,22 +87,22 @@ font-weight:700;
 /* TABLE */
 
 table{
-width:100%;
+width:calc(100% - 40px);
+margin:20px;
 background:white;
 border-collapse:collapse;
-margin:20px;
-border-radius:10px;
+border-radius:12px;
 overflow:hidden;
 }
 
 th,td{
-padding:10px;
+padding:12px;
 border-bottom:1px solid #ddd;
 }
 
 th{
-cursor:pointer;
 background:#f1f1f1;
+cursor:pointer;
 }
 
 tr:hover{
@@ -153,9 +153,9 @@ cursor:pointer;
 <th onclick="sortTable('opponent')">Opponent</th>
 <th onclick="sortTable('venue')">Venue</th>
 
-<th id="stat1" onclick="sortTable('stat1')"></th>
-<th id="stat2" onclick="sortTable('stat2')"></th>
-<th id="stat3" onclick="sortTable('stat3')"></th>
+<th id="col1" onclick="sortTable('stat1')"></th>
+<th id="col2" onclick="sortTable('stat2')"></th>
+<th id="col3" onclick="sortTable('stat3')"></th>
 
 </tr>
 </thead>
@@ -170,12 +170,15 @@ cursor:pointer;
 const INDEX="/data/t20-world-cup/matches/index.json";
 
 let matches=[];
-let career, oppStats={};
+let career;
+let oppStats={};
 
 let currentTab="bat";
 let currentOpp="ALL";
+
 let currentSort="date";
 let sortAsc=false;
+
 
 loadPlayer();
 
@@ -251,17 +254,24 @@ if(runs||wkts){
 const opponent=match.info.teams.find(t=>t!==playerCountry);
 
 const m={
-season:file.replace(".json",""),
+
+season:file.match(/\d{4}/)?.[0] || "",
+
 date:match.info.dates[0],
+
 opponent,
 venue:match.info.venue,
+
 runs,
 balls,
+
 wkts,
 ballsBowled,
 runsConceded,
+
 file,
 index
+
 };
 
 matches.push(m);
@@ -310,7 +320,7 @@ function renderOppFilter(){
 
 Object.keys(oppStats).sort().forEach(o=>{
 
-oppFilter.innerHTML+=`<option>${o}</option>`;
+oppFilter.innerHTML+=`<option value="${o}">${o}</option>`;
 
 });
 
@@ -367,10 +377,9 @@ render();
 
 function render(){
 
-renderSummary(careerSummary,career);
-
 const s=currentOpp==="ALL"?career:oppStats[currentOpp];
 
+renderSummary(careerSummary,career);
 renderSummary(oppSummary,s);
 
 renderTable();
@@ -380,31 +389,59 @@ renderTable();
 
 function renderSummary(div,s){
 
-div.innerHTML=currentTab==="bat"
+if(currentTab==="bat"){
 
-?`
+div.innerHTML=`
 
 <div class="box"><div class="big">${s.matches}</div>Matches</div>
+
 <div class="box"><div class="big">${s.runs}</div>Runs</div>
+
 <div class="box"><div class="big">${(s.runs/s.matches||0).toFixed(1)}</div>Average</div>
+
 <div class="box"><div class="big">${((s.runs/s.balls)*100||0).toFixed(1)}</div>Strike Rate</div>
+
 <div class="box"><div class="big">${s.bestRuns}</div>Best</div>
 
-`
+`;
 
-:`
+}else{
+
+div.innerHTML=`
 
 <div class="box"><div class="big">${s.matches}</div>Matches</div>
+
 <div class="box"><div class="big">${(s.ballsBowled/6).toFixed(1)}</div>Overs</div>
+
 <div class="box"><div class="big">${s.wkts}</div>Wickets</div>
+
 <div class="box"><div class="big">${(s.runsConceded/s.wkts||0).toFixed(1)}</div>Average</div>
+
 <div class="box"><div class="big">${(s.runsConceded/(s.ballsBowled/6)||0).toFixed(2)}</div>Economy</div>
+
 <div class="box"><div class="big">${s.bestWkts}</div>Best</div>
 
 `;
 
 }
 
+}
+
+
+/* DATE FORMAT */
+
+function formatDate(date){
+
+return new Date(date).toLocaleDateString("en-GB",{
+day:"numeric",
+month:"short",
+year:"numeric"
+});
+
+}
+
+
+/* TABLE */
 
 function renderTable(){
 
@@ -428,7 +465,10 @@ filtered.forEach(m=>{
 const tr=document.createElement("tr");
 
 tr.onclick=()=>{
-location.href=`t20-world-cup-match.html?file=${m.file}&match=${m.index}`;
+
+location.href=
+`t20-world-cup-match.html?file=${m.file}&match=${m.index}`;
+
 };
 
 tr.innerHTML=currentTab==="bat"
@@ -436,7 +476,7 @@ tr.innerHTML=currentTab==="bat"
 ?`
 
 <td>${m.season}</td>
-<td>${new Date(m.date).toLocaleDateString()}</td>
+<td>${formatDate(m.date)}</td>
 <td>${m.opponent}</td>
 <td>${m.venue}</td>
 <td>${m.runs}</td>
@@ -445,10 +485,12 @@ tr.innerHTML=currentTab==="bat"
 
 `
 
-:`
+:
+
+`
 
 <td>${m.season}</td>
-<td>${new Date(m.date).toLocaleDateString()}</td>
+<td>${formatDate(m.date)}</td>
 <td>${m.opponent}</td>
 <td>${m.venue}</td>
 <td>${m.wkts}</td>
