@@ -145,8 +145,6 @@ text-decoration:none;
 
 const BASE="/data/t20-world-cup/matches/";
 
-/* OFFICIAL TOURNAMENT DATE RANGES */
-
 const TOURNAMENT_DATES={
 
 2007:["2007-09-11","2007-09-24"],
@@ -161,13 +159,11 @@ const TOURNAMENT_DATES={
 
 };
 
-
 let seasons=[];
 let tbody=document.getElementById("tbody");
 let summaryDiv=document.getElementById("summary");
 
 init();
-
 
 async function init(){
 
@@ -177,20 +173,24 @@ for(const file of files){
 
 const year=file.match(/\d{4}/)[0];
 
+const start=new Date(TOURNAMENT_DATES[year][0]);
+const end=new Date(TOURNAMENT_DATES[year][1]);
+
 const data=await fetch(BASE+file).then(r=>r.json());
 
 let matches=data.filter(match=>{
 
-const date=match.info.dates[0];
+const matchDate=new Date(match.info.dates[0]);
 
-return date>=TOURNAMENT_DATES[year][0] &&
-       date<=TOURNAMENT_DATES[year][1];
+return matchDate>=start && matchDate<=end;
 
 });
 
 matches.sort((a,b)=>
 new Date(a.info.dates[0]) - new Date(b.info.dates[0])
 );
+
+if(matches.length===0) continue;
 
 const stats=calculateStats(matches);
 
@@ -210,14 +210,13 @@ showSeason(0);
 
 }
 
-
 function calculateStats(matches){
 
 let runs={},wkts={};
 
 const finalMatch=matches[matches.length-1];
 
-const winner=finalMatch.info.outcome.winner;
+const winner=finalMatch?.info.outcome?.winner || "—";
 
 matches.forEach(match=>{
 
@@ -242,31 +241,36 @@ wkts[d.bowler]=(wkts[d.bowler]||0)+d.wickets.length;
 
 });
 
-const topRuns=Object.entries(runs).sort((a,b)=>b[1]-a[1])[0];
-const topWkts=Object.entries(wkts).sort((a,b)=>b[1]-a[1])[0];
+const topRuns=Object.entries(runs).sort((a,b)=>b[1]-a[1])[0] || ["—",0];
+const topWkts=Object.entries(wkts).sort((a,b)=>b[1]-a[1])[0] || ["—",0];
 
-return{winner,runs:topRuns,wkts:topWkts};
+return{
+winner,
+runs:topRuns,
+wkts:topWkts
+};
 
 }
-
 
 function buildYearButtons(){
 
 const bar=document.getElementById("yearBar");
 
-seasons.forEach((season,i)=>{
+bar.innerHTML="";
+
+seasons.forEach((season,index)=>{
 
 const btn=document.createElement("button");
 
 btn.className="year-btn";
 btn.textContent=season.year;
 
-if(i===0) btn.classList.add("active");
+if(index===0) btn.classList.add("active");
 
 btn.onclick=()=>{
 document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
 btn.classList.add("active");
-showSeason(i);
+showSeason(index);
 };
 
 bar.appendChild(btn);
@@ -274,7 +278,6 @@ bar.appendChild(btn);
 });
 
 }
-
 
 function showSeason(index){
 
@@ -295,14 +298,13 @@ tbody.innerHTML+=`
 <td>${new Date(match.info.dates[0]).toLocaleDateString("en-GB")}</td>
 <td><a href="${link}">${match.info.teams.join(" vs ")}</a></td>
 <td>${match.info.venue}</td>
-<td>${match.info.outcome.winner} won</td>
+<td>${match.info.outcome?.winner || ""}</td>
 </tr>
 `;
 
 });
 
 }
-
 
 function renderSummary(stats){
 
