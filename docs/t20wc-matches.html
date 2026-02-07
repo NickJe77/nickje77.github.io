@@ -8,10 +8,13 @@
 <style>
 
 body{
-font-family:Inter,system-ui,Arial,sans-serif;
+font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+             "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 margin:0;
 background:#f3f4f7;
 }
+
+/* NAVBAR */
 
 .navbar{
 display:flex;
@@ -29,13 +32,22 @@ text-decoration:none;
 font-size:18px;
 }
 
+/* HERO */
+
 .hero{
 background:linear-gradient(90deg,#6a040f,#d00000);
 color:white;
-padding:30px;
+padding:36px;
 margin:20px;
 border-radius:18px;
 }
+
+.hero h2{
+margin:0;
+font-size:36px;
+}
+
+/* YEAR BAR */
 
 .year-bar{
 margin:20px;
@@ -57,6 +69,8 @@ font-weight:600;
 background:#d00000;
 }
 
+/* SUMMARY */
+
 .summary{
 display:grid;
 grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
@@ -75,6 +89,8 @@ text-align:center;
 font-size:26px;
 font-weight:700;
 }
+
+/* TABLE */
 
 table{
 width:calc(100% - 40px);
@@ -98,12 +114,20 @@ background:#eef5ff;
 tr.final{
 background:#ffe9b3 !important;
 font-weight:700;
+cursor:pointer;
+}
+
+tr:hover{
+background:#dde8ff;
+cursor:pointer;
 }
 
 </style>
 </head>
-
 <body>
+
+
+<!-- NAVBAR -->
 
 <div class="navbar">
 <a href="index.html">Home</a>
@@ -112,13 +136,25 @@ font-weight:700;
 <a href="t20-world-cup-player.html">Players</a>
 </div>
 
+
+<!-- HERO -->
+
 <div class="hero">
 <h2>T20 World Cup Matches</h2>
 </div>
 
+
+<!-- YEAR BAR -->
+
 <div id="yearBar" class="year-bar"></div>
 
+
+<!-- SUMMARY -->
+
 <div id="summary" class="summary"></div>
+
+
+<!-- TABLE -->
 
 <table>
 
@@ -135,18 +171,21 @@ font-weight:700;
 
 </table>
 
+
 <script>
 
+/* SAME PATH AS WORKING TEAM PAGE */
 const BASE="/data/t20-world-cup/matches/";
 
-const VALID_EVENTS=[
-"ICC World Twenty20",
-"ICC Men's T20 World Cup"
-];
+/* ELEMENTS */
 
 let seasons=[];
-let tbody=document.getElementById("tbody");
-let summary=document.getElementById("summary");
+const tbody=document.getElementById("tbody");
+const summary=document.getElementById("summary");
+const yearBar=document.getElementById("yearBar");
+
+
+/* LOAD DATA */
 
 load();
 
@@ -160,41 +199,54 @@ const season=await fetch(BASE+file).then(r=>r.json());
 
 let matches=[];
 
-/* SAFE LOOP FILTER (same as working team page) */
+/* FLEXIBLE FILTER — removes qualifiers but keeps all tournament matches */
 
 season.forEach(match=>{
 
 const event=match.info?.event?.name || "";
 
-if(!VALID_EVENTS.includes(event)) return;
-
+if(
+event.includes("World Twenty20") ||
+event.includes("T20 World Cup")
+){
 matches.push(match);
+}
 
 });
 
 if(matches.length===0) continue;
 
+/* SORT BY DATE */
+
 matches.sort((a,b)=>
 new Date(a.info.dates[0]) - new Date(b.info.dates[0])
 );
+
+/* CALCULATE STATS */
 
 const stats=calculateStats(matches);
 
 seasons.push({
 year:file.match(/\d{4}/)[0],
-file,
-matches,
-stats
+file:file,
+matches:matches,
+stats:stats
 });
 
 }
 
+/* SORT YEARS */
+
 seasons.sort((a,b)=>b.year-a.year);
 
-buildButtons();
+buildYearButtons();
+
 showSeason(0);
 
 }
+
+
+/* CALCULATE STATS */
 
 function calculateStats(matches){
 
@@ -225,73 +277,98 @@ wkts[d.bowler]=(wkts[d.bowler]||0)+d.wickets.length;
 
 });
 
-const topRuns=Object.entries(runs).sort((a,b)=>b[1]-a[1])[0]||["—",0];
-const topWkts=Object.entries(wkts).sort((a,b)=>b[1]-a[1])[0]||["—",0];
+const topRuns=Object.entries(runs)
+.sort((a,b)=>b[1]-a[1])[0] || ["—",0];
 
-return{winner,runs:topRuns,wkts:topWkts};
+const topWkts=Object.entries(wkts)
+.sort((a,b)=>b[1]-a[1])[0] || ["—",0];
+
+return{
+winner,
+runs:topRuns,
+wkts:topWkts
+};
 
 }
 
-function buildButtons(){
 
-const bar=document.getElementById("yearBar");
+/* BUILD YEAR BUTTONS */
 
-seasons.forEach((s,i)=>{
+function buildYearButtons(){
+
+yearBar.innerHTML="";
+
+seasons.forEach((season,i)=>{
 
 const btn=document.createElement("button");
 
 btn.className="year-btn"+(i===0?" active":"");
 
-btn.textContent=s.year;
+btn.textContent=season.year;
 
 btn.onclick=()=>{
-document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
+
+document.querySelectorAll(".year-btn")
+.forEach(b=>b.classList.remove("active"));
+
 btn.classList.add("active");
+
 showSeason(i);
+
 };
 
-bar.appendChild(btn);
+yearBar.appendChild(btn);
 
 });
 
 }
 
+
+/* SHOW SEASON */
+
 function showSeason(i){
 
 const season=seasons[i];
 
+/* SUMMARY */
+
 summary.innerHTML=`
 
 <div class="summary-box">
-Winner<div class="big">${season.stats.winner}</div>
+Winner
+<div class="big">${season.stats.winner}</div>
 </div>
 
 <div class="summary-box">
-Most Runs<div class="big">${season.stats.runs[0]} (${season.stats.runs[1]})</div>
+Most Runs
+<div class="big">${season.stats.runs[0]} (${season.stats.runs[1]})</div>
 </div>
 
 <div class="summary-box">
-Most Wickets<div class="big">${season.stats.wkts[0]} (${season.stats.wkts[1]})</div>
+Most Wickets
+<div class="big">${season.stats.wkts[0]} (${season.stats.wkts[1]})</div>
 </div>
 
 `;
 
+/* TABLE */
+
 tbody.innerHTML="";
 
-season.matches.forEach((m,index)=>{
+season.matches.forEach((match,index)=>{
 
 const isFinal=index===season.matches.length-1;
 
 let result="—";
 
-if(m.info.outcome?.winner){
+if(match.info.outcome?.winner){
 
 const margin=
-Object.entries(m.info.outcome.by||{})
+Object.entries(match.info.outcome.by||{})
 .map(([k,v])=>`${v} ${k}`)
 .join("");
 
-result=`${m.info.outcome.winner} won by ${margin}`;
+result=`${match.info.outcome.winner} won by ${margin}`;
 
 }
 
@@ -300,13 +377,21 @@ tbody.innerHTML+=`
 <tr class="${isFinal?'final':''}"
 onclick="location.href='t20-world-cup-match.html?file=${season.file}&match=${index}'">
 
-<td>${new Date(m.info.dates[0]).toLocaleDateString("en-GB")}</td>
+<td>
+${new Date(match.info.dates[0]).toLocaleDateString("en-GB")}
+</td>
 
-<td>${m.info.teams.join(" vs ")}</td>
+<td>
+${match.info.teams.join(" vs ")}
+</td>
 
-<td>${m.info.venue}</td>
+<td>
+${match.info.venue}
+</td>
 
-<td>${result}</td>
+<td>
+${result}
+</td>
 
 </tr>
 
@@ -317,6 +402,7 @@ onclick="location.href='t20-world-cup-match.html?file=${season.file}&match=${ind
 }
 
 </script>
+
 
 </body>
 </html>
