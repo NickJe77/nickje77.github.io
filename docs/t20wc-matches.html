@@ -83,8 +83,6 @@ width:26px;
 height:18px;
 vertical-align:middle;
 margin-right:6px;
-border-radius:3px;
-box-shadow:0 0 2px rgba(0,0,0,.3);
 }
 
 table{
@@ -108,10 +106,6 @@ background:#eaf3ff;
 tr.final{
 background:#ffe9b3 !important;
 font-weight:700;
-}
-
-tr:hover{
-background:#f0f6ff;
 }
 
 a{
@@ -157,18 +151,6 @@ text-decoration:none;
 <script>
 
 const BASE="/data/t20-world-cup/matches/";
-const FLAG_BASE="/images/flags/";
-
-const COUNTRY_CODES={
-"Afghanistan":"af","Australia":"au","Bangladesh":"bd","Canada":"ca",
-"England":"gb","Hong Kong":"hk","India":"in","Ireland":"ie",
-"Kenya":"ke","Namibia":"na","Nepal":"np","Netherlands":"nl",
-"New Zealand":"nz","Oman":"om","Pakistan":"pk",
-"Papua New Guinea":"pg","Scotland":"gb","South Africa":"za",
-"Sri Lanka":"lk","United Arab Emirates":"ae",
-"USA":"us","United States":"us","United States of America":"us",
-"Uganda":"ug","West Indies":"jm","Zimbabwe":"zw"
-};
 
 const VALID_YEARS=["2007","2009","2010","2012","2014","2016","2021","2022","2024"];
 
@@ -191,7 +173,9 @@ for(const file of worldCupFiles){
 
 const data=await fetch(BASE+file).then(r=>r.json());
 
-const matches=data.filter(m=>m.info?.event?.group);
+const matches=data.filter(match=>isWorldCupMatch(match));
+
+if(matches.length===0) continue;
 
 const stats=calculateStats(matches);
 
@@ -211,12 +195,18 @@ showSeason(0);
 
 }
 
-function flag(team){
+/* CORRECT FILTER */
 
-const code=COUNTRY_CODES[team];
-if(!code) return "";
+function isWorldCupMatch(match){
 
-return `<img class="flag" src="${FLAG_BASE}${code}.svg">`;
+const event=(match.info?.event?.name||"").toLowerCase();
+
+return(
+event.includes("world")
+&& event.includes("t20")
+&& event.includes("cup")
+&& !event.includes("qualifier")
+);
 
 }
 
@@ -225,14 +215,12 @@ function calculateStats(matches){
 let runs={},wkts={};
 let winner="";
 
-/* detect winner reliably */
+/* winner = last match winner */
+
+const finalMatch=matches[matches.length-1];
+winner=finalMatch.info.outcome?.winner;
 
 matches.forEach(match=>{
-
-const group=match.info?.event?.group?.toLowerCase();
-
-if(group==="final")
-winner=match.info.outcome?.winner;
 
 match.innings.forEach(raw=>{
 
@@ -255,16 +243,6 @@ wkts[d.bowler]=(wkts[d.bowler]||0)+d.wickets.length;
 
 });
 
-/* fallback if Final label missing */
-
-if(!winner){
-
-const finalMatch=matches[matches.length-1];
-
-winner=finalMatch.info.outcome?.winner;
-
-}
-
 const topRuns=Object.entries(runs).sort((a,b)=>b[1]-a[1])[0];
 const topWkts=Object.entries(wkts).sort((a,b)=>b[1]-a[1])[0];
 
@@ -279,6 +257,8 @@ wkts:topWkts
 function buildYearButtons(){
 
 const bar=document.getElementById("yearBar");
+
+bar.innerHTML="";
 
 seasons.forEach((season,index)=>{
 
@@ -311,12 +291,10 @@ tbody.innerHTML="";
 
 season.matches.forEach((match,i)=>{
 
-const isFinal=match.info.event.group==="Final";
+const isFinal=i===season.matches.length-1;
 
 const date=formatDate(match.info.dates[0]);
-
-const teams=match.info.teams.map(t=>flag(t)+t).join(" vs ");
-
+const teams=match.info.teams.join(" vs ");
 const venue=match.info.venue;
 
 let result="—";
@@ -352,7 +330,7 @@ summaryDiv.innerHTML=`
 
 <div class="summary-box">
 Winner
-<div class="big">${flag(stats.winner)}${stats.winner}</div>
+<div class="big">${stats.winner||"—"}</div>
 </div>
 
 <div class="summary-box">
