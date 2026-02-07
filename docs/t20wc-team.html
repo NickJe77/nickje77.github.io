@@ -14,7 +14,6 @@ margin:0;
 background:#f3f4f7;
 }
 
-
 /* NAVBAR */
 
 .navbar{
@@ -33,7 +32,6 @@ text-decoration:none;
 font-size:18px;
 }
 
-
 /* HERO */
 
 .hero{
@@ -42,35 +40,39 @@ color:white;
 padding:36px;
 margin:20px;
 border-radius:18px;
-display:flex;
-justify-content:space-between;
-align-items:center;
 }
 
-.hero-left h1{
+.hero h1{
 margin:0;
 font-size:42px;
 }
 
-.hero-left p{
-margin-top:6px;
-opacity:.9;
+/* SUMMARY BOX */
+
+.summary{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+gap:16px;
+padding:0 20px 20px 20px;
 }
 
+.box{
+background:#e7e7ec;
+padding:18px;
+border-radius:14px;
+text-align:center;
+}
+
+.box .big{
+font-size:30px;
+font-weight:700;
+}
 
 /* CONTROLS */
 
 .controls{
 padding:0 20px;
 }
-
-select{
-padding:10px;
-font-size:16px;
-border-radius:8px;
-border:none;
-}
-
 
 /* TABLE */
 
@@ -90,16 +92,21 @@ border-bottom:1px solid #ddd;
 
 th{
 background:#f1f1f1;
-text-align:left;
-}
-
-tr:nth-child(even){
-background:#f8fbff;
 }
 
 tr:hover{
 background:#eef5ff;
 cursor:pointer;
+}
+
+.result-win{
+color:#008000;
+font-weight:700;
+}
+
+.result-loss{
+color:#c00000;
+font-weight:700;
 }
 
 .section-title{
@@ -131,18 +138,17 @@ color:#666;
 
 <div class="hero">
 
-<div class="hero-left">
-
 <h1 id="teamName">Loading...</h1>
 
-<p>T20 World Cup match history</p>
-
-</div>
-
 </div>
 
 
-<!-- CONTROLS -->
+<!-- SUMMARY -->
+
+<div id="summary" class="summary"></div>
+
+
+<!-- TEAM SELECT -->
 
 <div class="controls">
 
@@ -163,6 +169,7 @@ color:#666;
 <th>Date</th>
 <th>Opponent</th>
 <th>Venue</th>
+<th>Result</th>
 
 </tr>
 
@@ -180,6 +187,7 @@ const BASE="/data/t20-world-cup/matches/";
 const teamName=document.getElementById("teamName");
 const teamSelect=document.getElementById("teamSelect");
 const tbody=document.getElementById("tbody");
+const summary=document.getElementById("summary");
 
 let ALL_MATCHES=[];
 
@@ -224,7 +232,7 @@ teamsSet.add(team);
 const teams=[...teamsSet].sort();
 
 teams.forEach(team=>{
-teamSelect.innerHTML+=`<option value="${team}">${team}</option>`;
+teamSelect.innerHTML+=`<option>${team}</option>`;
 });
 
 teamSelect.onchange=()=>{
@@ -246,10 +254,33 @@ const matches=ALL_MATCHES
 .filter(m=>m.info.teams.includes(team))
 .sort((a,b)=>new Date(b.info.dates[0]) - new Date(a.info.dates[0]));
 
+let wins=0;
+let losses=0;
 
 matches.forEach(match=>{
 
 const opponent=match.info.teams.find(t=>t!==team);
+
+let result="—";
+let resultClass="";
+
+if(match.info.outcome?.winner){
+
+if(match.info.outcome.winner===team){
+
+result="Win";
+resultClass="result-win";
+wins++;
+
+}else{
+
+result="Loss";
+resultClass="result-loss";
+losses++;
+
+}
+
+}
 
 const tr=document.createElement("tr");
 
@@ -262,12 +293,41 @@ tr.innerHTML=`
 <td>${new Date(match.info.dates[0]).toLocaleDateString("en-GB")}</td>
 <td>${opponent}</td>
 <td>${match.info.venue}</td>
+<td class="${resultClass}">${result}</td>
 
 `;
 
 tbody.appendChild(tr);
 
 });
+
+const total=wins+losses;
+
+const winPct=total ? ((wins/total)*100).toFixed(1)+"%" : "—";
+
+summary.innerHTML=`
+
+<div class="box">
+<div class="big">${total}</div>
+Matches
+</div>
+
+<div class="box">
+<div class="big">${wins}</div>
+Wins
+</div>
+
+<div class="box">
+<div class="big">${losses}</div>
+Losses
+</div>
+
+<div class="box">
+<div class="big">${winPct}</div>
+Win %
+</div>
+
+`;
 
 }
 
