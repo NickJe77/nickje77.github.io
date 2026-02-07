@@ -144,6 +144,23 @@ font-weight:700;
 
 const BASE="/data/t20-world-cup/matches/";
 
+/* OFFICIAL TOURNAMENT DATE WINDOWS */
+
+const WINDOWS=[
+
+["2007-09-11","2007-09-24"],
+["2009-06-05","2009-06-21"],
+["2010-04-30","2010-05-16"],
+["2012-09-18","2012-10-07"],
+["2014-03-16","2014-04-06"],
+["2016-03-08","2016-04-03"],
+["2021-10-17","2021-11-14"],
+["2022-10-16","2022-11-13"],
+["2024-06-01","2024-06-29"]
+
+];
+
+
 /* FLAGS */
 
 const COUNTRY_CODES={
@@ -180,6 +197,19 @@ return COUNTRY_CODES[team]?flag(COUNTRY_CODES[team]):"";
 }
 
 
+/* DATE CHECK */
+
+function inTournament(date){
+
+const d=new Date(date);
+
+return WINDOWS.some(([start,end])=>
+d>=new Date(start) && d<=new Date(end)
+);
+
+}
+
+
 const teamName=document.getElementById("teamName");
 const teamSelect=document.getElementById("teamSelect");
 const tbody=document.getElementById("tbody");
@@ -200,25 +230,14 @@ for(const file of index){
 
 const season=await fetch(BASE+file).then(r=>r.json());
 
-season.forEach((match,matchIndex)=>{
+season.forEach((match,i)=>{
 
-const event=(match.info?.event?.name || "").toLowerCase();
+const date=match.info.dates[0];
 
-/* FINAL TOURNAMENT ONLY FILTER */
-
-const isFinalTournament=
-(
-event.includes("world twenty20")
-||
-event.includes("t20 world cup")
-)
-&& !event.includes("qualifier");
-
-if(!isFinalTournament) return;
-
+if(!inTournament(date)) return;
 
 match._file=file;
-match._index=matchIndex;
+match._index=i;
 
 ALL_MATCHES.push(match);
 
@@ -231,8 +250,7 @@ match.info.teams.forEach(t=>teamsSet.add(t));
 const teams=[...teamsSet].sort();
 
 teams.forEach(team=>{
-teamSelect.innerHTML+=`
-<option value="${team}">
+teamSelect.innerHTML+=`<option value="${team}">
 ${getFlag(team)} ${team}
 </option>`;
 });
@@ -250,8 +268,7 @@ teamName.innerText=`${getFlag(team)} ${team}`;
 
 tbody.innerHTML="";
 
-let wins=0;
-let losses=0;
+let wins=0,losses=0;
 
 const matches=ALL_MATCHES
 .filter(m=>m.info.teams.includes(team))
@@ -261,8 +278,7 @@ matches.forEach(m=>{
 
 const opponent=m.info.teams.find(t=>t!==team);
 
-let result="—";
-let cls="";
+let result="—",cls="";
 
 if(m.info.outcome?.winner){
 
