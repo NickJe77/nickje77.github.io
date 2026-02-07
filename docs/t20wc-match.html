@@ -35,26 +35,53 @@ text-decoration:none;
 .hero{
 background:linear-gradient(90deg,#6a040f,#d00000);
 color:white;
-padding:25px;
-margin:20px;
-border-radius:16px;
+padding:28px;
+border-radius:0 0 16px 16px;
+}
+
+.hero h1{
+margin:0;
+font-size:32px;
+}
+
+.hero p{
+margin:6px 0 0;
+opacity:.9;
+}
+
+/* SUMMARY BOXES */
+
+.summary{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+gap:16px;
+padding:20px;
+}
+
+.summary-box{
+background:#e7e7ec;
+padding:14px;
+border-radius:10px;
+}
+
+.summary-box strong{
+display:block;
+margin-bottom:4px;
 }
 
 /* INNINGS */
 
 .innings{
 margin:20px;
-background:white;
-border-radius:12px;
-overflow:hidden;
-box-shadow:0 2px 6px rgba(0,0,0,0.08);
 }
 
-.innings-header{
-background:linear-gradient(90deg,#6a040f,#d00000);
-color:white;
-padding:12px;
+.innings h2{
+margin-bottom:6px;
+}
+
+.score{
 font-weight:700;
+margin-bottom:12px;
 }
 
 /* TABLE */
@@ -62,6 +89,8 @@ font-weight:700;
 table{
 width:100%;
 border-collapse:collapse;
+background:white;
+margin-bottom:16px;
 }
 
 th,td{
@@ -70,11 +99,8 @@ border-bottom:1px solid #ddd;
 }
 
 th{
-background:#f1f4f8;
-}
-
-tr:nth-child(even){
-background:#eaf3ff;
+background:#eef1f6;
+text-align:left;
 }
 
 .right{
@@ -94,11 +120,17 @@ text-align:right;
 
 </div>
 
-<div id="hero" class="hero">
-Loading match...
+<div class="hero">
+
+<h1>T20 World Cup Match</h1>
+<p id="heroStatus">Loading match...</p>
+
 </div>
 
+<div id="summary" class="summary"></div>
+
 <div id="inningsContainer"></div>
+
 
 <script>
 
@@ -111,13 +143,13 @@ const matchIndex=parseInt(params.get("match"));
 
 if(!file || isNaN(matchIndex)){
 
-document.getElementById("hero").innerHTML="Invalid match link";
-
+document.getElementById("heroStatus").innerText="Invalid match link";
 throw "";
 
 }
 
 init();
+
 
 async function init(){
 
@@ -130,43 +162,71 @@ renderMatch(match);
 }
 
 
-function renderMatch(match){
+/* MATCH */
 
-const hero=document.getElementById("hero");
+function renderMatch(match){
 
 const info=match.info;
 
+let winner="";
 let result="";
 
 if(info.outcome?.winner){
 
+winner=info.outcome.winner;
+
 if(info.outcome.by?.runs)
-result=`${info.outcome.winner} won by ${info.outcome.by.runs} runs`;
+result=`won by ${info.outcome.by.runs} runs`;
 
 else if(info.outcome.by?.wickets)
-result=`${info.outcome.winner} won by ${info.outcome.by.wickets} wickets`;
+result=`won by ${info.outcome.by.wickets} wickets`;
 
 }
 
-hero.innerHTML=`
+document.getElementById("heroStatus").innerText="Match loaded";
 
-<h2>${info.teams.join(" vs ")}</h2>
 
-<div>${info.venue}</div>
+/* SUMMARY */
 
-<div>${formatDate(info.dates[0])}</div>
+document.getElementById("summary").innerHTML=`
 
-<div style="margin-top:8px;font-weight:700;">
+<div class="summary-box">
+<strong>Date</strong>
+${formatDate(info.dates[0])}
+</div>
+
+<div class="summary-box">
+<strong>Teams</strong>
+${info.teams.join(" vs ")}
+</div>
+
+<div class="summary-box">
+<strong>Venue</strong>
+${info.venue}
+</div>
+
+<div class="summary-box">
+<strong>Winner</strong>
+${winner}
+</div>
+
+<div class="summary-box">
+<strong>Result</strong>
 ${result}
 </div>
 
 `;
 
+
+/* INNINGS */
+
 const container=document.getElementById("inningsContainer");
 
 container.innerHTML="";
 
-match.innings.forEach(inn=>{
+match.innings.forEach(raw=>{
+
+const inn=raw.team?raw:Object.values(raw)[0];
 
 renderInnings(container,inn);
 
@@ -175,30 +235,26 @@ renderInnings(container,inn);
 }
 
 
-/* RENDER INNINGS */
+/* INNINGS */
 
 function renderInnings(container,inn){
 
 let batterStats={};
 let bowlerStats={};
+let dismissals={};
 
 let runs=0;
 let wkts=0;
 let balls=0;
 
 
-/* COLLECT STATS */
-
 inn.overs.forEach(over=>{
 
 over.deliveries.forEach(d=>{
 
-const wide=d.extras?.wides;
-const noball=d.extras?.noballs;
-
 runs+=d.runs.total;
 
-if(!wide && !noball)
+if(!d.extras?.wides && !d.extras?.noballs)
 balls++;
 
 const batter=d.batter;
@@ -208,7 +264,7 @@ batterStats[batter]={runs:0,balls:0};
 
 batterStats[batter].runs+=d.runs.batter;
 
-if(!wide)
+if(!d.extras?.wides)
 batterStats[batter].balls++;
 
 const bowler=d.bowler;
@@ -216,16 +272,19 @@ const bowler=d.bowler;
 if(!bowlerStats[bowler])
 bowlerStats[bowler]={balls:0,runs:0,wkts:0};
 
-if(!wide && !noball)
+if(!d.extras?.wides && !d.extras?.noballs)
 bowlerStats[bowler].balls++;
 
 bowlerStats[bowler].runs+=d.runs.total;
+
 
 d.wickets?.forEach(w=>{
 
 wkts++;
 
 bowlerStats[bowler].wkts++;
+
+dismissals[w.player_out]=formatDismissal(w);
 
 });
 
@@ -237,109 +296,70 @@ bowlerStats[bowler].wkts++;
 const overs=formatOvers(balls);
 
 
-/* CREATE SECTION */
+/* CREATE */
 
 const div=document.createElement("div");
 
 div.className="innings";
 
-
-/* HEADER */
-
 div.innerHTML=`
 
-<div class="innings-header">
+<h2>${inn.team} Innings</h2>
 
-${inn.team} — ${runs}/${wkts} (${overs} overs)
+<div class="score">${runs}/${wkts} (${overs} overs)</div>
 
-</div>
-
-`;
-
-
-/* BATTING TABLE */
-
-let batHTML=`
+<strong>Batting</strong>
 
 <table>
 
 <tr>
-
 <th>Batter</th>
+<th>How out</th>
 <th class="right">R</th>
 <th class="right">B</th>
 <th class="right">SR</th>
-
 </tr>
 
-`;
-
-Object.entries(batterStats).forEach(([name,s])=>{
-
-const sr=s.balls?((s.runs/s.balls)*100).toFixed(1):"-";
-
-batHTML+=`
+${Object.entries(batterStats).map(([name,s])=>`
 
 <tr>
-
 <td>${name}</td>
+<td>${dismissals[name]||"not out"}</td>
 <td class="right">${s.runs}</td>
 <td class="right">${s.balls}</td>
-<td class="right">${sr}</td>
-
+<td class="right">${calcSR(s)}</td>
 </tr>
 
-`;
+`).join("")}
 
-});
-
-batHTML+="</table>";
+</table>
 
 
-/* BOWLING TABLE */
-
-let bowlHTML=`
+<strong>Bowling</strong>
 
 <table>
 
 <tr>
-
 <th>Bowler</th>
 <th class="right">O</th>
 <th class="right">R</th>
 <th class="right">W</th>
-<th class="right">Econ</th>
-
 </tr>
 
-`;
-
-Object.entries(bowlerStats).forEach(([name,s])=>{
-
-const overs=formatOvers(s.balls);
-
-const econ=s.balls?(s.runs/(s.balls/6)).toFixed(2):"-";
-
-bowlHTML+=`
+${Object.entries(bowlerStats).map(([name,s])=>`
 
 <tr>
-
 <td>${name}</td>
-<td class="right">${overs}</td>
+<td class="right">${formatOvers(s.balls)}</td>
 <td class="right">${s.runs}</td>
 <td class="right">${s.wkts}</td>
-<td class="right">${econ}</td>
-
 </tr>
 
+`).join("")}
+
+</table>
+
 `;
-
-});
-
-bowlHTML+="</table>";
-
-
-div.innerHTML+=batHTML+bowlHTML;
 
 container.appendChild(div);
 
@@ -347,6 +367,12 @@ container.appendChild(div);
 
 
 /* HELPERS */
+
+function calcSR(s){
+
+return s.balls?((s.runs/s.balls)*100).toFixed(1):"-";
+
+}
 
 function formatOvers(balls){
 
@@ -361,6 +387,24 @@ day:"2-digit",
 month:"short",
 year:"numeric"
 });
+
+}
+
+function formatDismissal(w){
+
+if(w.kind==="bowled")
+return `b ${w.fielders?.[0]?.name || ""}`;
+
+if(w.kind==="caught")
+return `c ${w.fielders?.[0]?.name || ""}`;
+
+if(w.kind==="lbw")
+return "lbw";
+
+if(w.kind==="run out")
+return `run out (${w.fielders?.map(f=>f.name).join("/")})`;
+
+return w.kind;
 
 }
 
