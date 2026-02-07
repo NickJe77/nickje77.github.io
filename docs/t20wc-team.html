@@ -99,17 +99,9 @@ color:#c00000;
 font-weight:700;
 }
 
-.section-title{
-text-align:center;
-font-weight:700;
-margin-top:10px;
-color:#666;
-}
-
 </style>
 </head>
 <body>
-
 
 <div class="navbar">
 <a href="index.html">Home</a>
@@ -119,22 +111,15 @@ color:#666;
 <a href="t20-world-cup-player.html">Players</a>
 </div>
 
-
 <div class="hero">
 <h1 id="teamName">Loading...</h1>
 </div>
 
-
 <div id="summary" class="summary"></div>
-
 
 <div class="controls">
 <select id="teamSelect"></select>
 </div>
-
-
-<div class="section-title">MATCH HISTORY</div>
-
 
 <table>
 <thead>
@@ -148,35 +133,9 @@ color:#666;
 <tbody id="tbody"></tbody>
 </table>
 
-
 <script>
 
 const BASE="/data/t20-world-cup/matches/";
-
-const TOURNAMENT_WINDOWS=[
-
-["2007-09-11","2007-09-24"],
-["2009-06-05","2009-06-21"],
-["2010-04-30","2010-05-16"],
-["2012-09-18","2012-10-07"],
-["2014-03-16","2014-04-06"],
-["2016-03-08","2016-04-03"],
-["2021-10-17","2021-11-14"],
-["2022-10-16","2022-11-13"],
-["2024-06-01","2024-06-29"]
-
-];
-
-function isMainTournament(date){
-
-const d=new Date(date);
-
-return TOURNAMENT_WINDOWS.some(([start,end])=>
-d>=new Date(start) && d<=new Date(end)
-);
-
-}
-
 
 const teamName=document.getElementById("teamName");
 const teamSelect=document.getElementById("teamSelect");
@@ -185,9 +144,7 @@ const summary=document.getElementById("summary");
 
 let ALL_MATCHES=[];
 
-
 load();
-
 
 async function load(){
 
@@ -201,18 +158,22 @@ const season=await fetch(BASE+file).then(r=>r.json());
 
 season.forEach((match,matchIndex)=>{
 
-const matchDate=match.info?.dates?.[0];
+const stage=(match.info?.stage || "").toLowerCase();
 
-if(!isMainTournament(matchDate)) return;
+const isMainMatch =
+stage.includes("group")
+|| stage.includes("super")
+|| stage.includes("semi")
+|| stage.includes("final");
+
+if(!isMainMatch) return;
 
 match._file=file;
 match._index=matchIndex;
 
 ALL_MATCHES.push(match);
 
-match.info.teams.forEach(team=>{
-teamsSet.add(team);
-});
+match.info.teams.forEach(team=>teamsSet.add(team));
 
 });
 
@@ -221,17 +182,14 @@ teamsSet.add(team);
 const teams=[...teamsSet].sort();
 
 teams.forEach(team=>{
-teamSelect.innerHTML+=`<option value="${team}">${team}</option>`;
+teamSelect.innerHTML+=`<option>${team}</option>`;
 });
 
-teamSelect.onchange=()=>{
-showTeam(teamSelect.value);
-};
+teamSelect.onchange=()=>showTeam(teamSelect.value);
 
 showTeam(teams[0]);
 
 }
-
 
 function showTeam(team){
 
@@ -239,12 +197,12 @@ teamName.innerText=team;
 
 tbody.innerHTML="";
 
-const matches=ALL_MATCHES
-.filter(m=>m.info.teams.includes(team))
-.sort((a,b)=>new Date(b.info.dates[0]) - new Date(a.info.dates[0]));
-
 let wins=0;
 let losses=0;
+
+const matches=ALL_MATCHES
+.filter(m=>m.info.teams.includes(team))
+.sort((a,b)=>new Date(b.info.dates[0])-new Date(a.info.dates[0]));
 
 matches.forEach(match=>{
 
@@ -288,16 +246,13 @@ tbody.appendChild(tr);
 
 });
 
-
 const total=wins+losses;
-
-const winPct=total ? ((wins/total)*100).toFixed(1)+"%" : "—";
 
 summary.innerHTML=`
 <div class="box"><div class="big">${total}</div>Matches</div>
 <div class="box"><div class="big">${wins}</div>Wins</div>
 <div class="box"><div class="big">${losses}</div>Losses</div>
-<div class="box"><div class="big">${winPct}</div>Win %</div>
+<div class="box"><div class="big">${total?((wins/total)*100).toFixed(1):"—"}%</div>Win %</div>
 `;
 
 }
