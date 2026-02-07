@@ -13,8 +13,6 @@ margin:0;
 background:#f3f4f7;
 }
 
-/* NAVBAR */
-
 .navbar{
 display:flex;
 justify-content:center;
@@ -30,8 +28,6 @@ color:#0056d6;
 text-decoration:none;
 }
 
-/* HERO */
-
 .hero{
 background:linear-gradient(90deg,#6a040f,#d00000);
 color:white;
@@ -43,13 +39,6 @@ border-radius:0 0 16px 16px;
 margin:0;
 font-size:32px;
 }
-
-.hero p{
-margin:6px 0 0;
-opacity:.9;
-}
-
-/* SUMMARY */
 
 .summary{
 display:grid;
@@ -64,13 +53,6 @@ padding:14px;
 border-radius:10px;
 }
 
-.summary-box strong{
-display:block;
-margin-bottom:4px;
-}
-
-/* INNINGS BLOCK */
-
 .innings-block{
 background:white;
 border-radius:10px;
@@ -79,17 +61,12 @@ box-shadow:0 2px 6px rgba(0,0,0,0.08);
 margin:20px;
 }
 
-/* RED HEADER BAR */
-
 .innings-header{
 background:linear-gradient(90deg,#6a040f,#d00000);
 color:white;
 padding:12px 16px;
 font-weight:700;
-font-size:18px;
 }
-
-/* CONTENT */
 
 .innings-content{
 padding:16px;
@@ -99,8 +76,6 @@ padding:16px;
 font-weight:700;
 margin-bottom:14px;
 }
-
-/* TABLE */
 
 table{
 width:100%;
@@ -115,7 +90,6 @@ border-bottom:1px solid #ddd;
 
 th{
 background:#eef1f6;
-text-align:left;
 }
 
 .right{
@@ -128,26 +102,18 @@ text-align:right;
 <body>
 
 <div class="navbar">
-
 <a href="index.html">Home</a>
 <a href="cricket.html">Cricket</a>
 <a href="t20-world-cup.html">T20 World Cup</a>
-
 </div>
-
 
 <div class="hero">
-
 <h1>T20 World Cup Match</h1>
 <p id="heroStatus">Loading match...</p>
-
 </div>
 
-
 <div id="summary" class="summary"></div>
-
 <div id="inningsContainer"></div>
-
 
 <script>
 
@@ -158,33 +124,57 @@ const params=new URLSearchParams(location.search);
 const file=params.get("file");
 const matchIndex=parseInt(params.get("match"));
 
-if(!file || isNaN(matchIndex)){
+const heroStatus=document.getElementById("heroStatus");
 
-document.getElementById("heroStatus").innerText="Invalid match link";
-throw "";
+if(!file){
+heroStatus.innerText="Missing file parameter";
+throw new Error("Missing file param");
+}
 
+if(isNaN(matchIndex)){
+heroStatus.innerText="Missing match parameter";
+throw new Error("Missing match param");
 }
 
 init();
 
-
 async function init(){
 
-const season=await fetch(BASE+file).then(r=>r.json());
+try{
 
-const match=season[matchIndex];
+heroStatus.innerText="Loading file...";
 
-if(!match){
-document.getElementById("heroStatus").innerText="Match not found";
-return;
+const response=await fetch(BASE+file);
+
+if(!response.ok){
+throw new Error("File not found: "+file);
 }
 
-renderMatch(match);
+const season=await response.json();
+
+heroStatus.innerText="Loading match...";
+
+if(!season[matchIndex]){
+throw new Error("Match index not found");
+}
+
+renderMatch(season[matchIndex]);
+
+heroStatus.innerText="Match loaded";
+
+}
+catch(err){
+
+console.error(err);
+
+heroStatus.innerText="Error loading match: "+err.message;
+
+}
 
 }
 
 
-/* MATCH HEADER */
+/* RENDER MATCH */
 
 function renderMatch(match){
 
@@ -204,9 +194,6 @@ else if(info.outcome.by?.wickets)
 result=`won by ${info.outcome.by.wickets} wickets`;
 
 }
-
-document.getElementById("heroStatus").innerText="Match loaded";
-
 
 document.getElementById("summary").innerHTML=`
 
@@ -264,7 +251,6 @@ let runs=0;
 let wkts=0;
 let balls=0;
 
-
 inn.overs?.forEach(over=>{
 
 over.deliveries.forEach(d=>{
@@ -294,9 +280,124 @@ bowlerStats[bowler].balls++;
 
 bowlerStats[bowler].runs+=d.runs.total;
 
-
 d.wickets?.forEach(w=>{
 
 wkts++;
 
-bowlerStats[bowler].wkts++
+bowlerStats[bowler].wkts++;
+
+dismissals[w.player_out]=formatDismissal(w,bowler);
+
+});
+
+});
+
+});
+
+const overs=formatOvers(balls);
+
+const div=document.createElement("div");
+
+div.className="innings-block";
+
+div.innerHTML=`
+
+<div class="innings-header">
+${inn.team} Innings
+</div>
+
+<div class="innings-content">
+
+<div class="score">
+${runs}/${wkts} (${overs} overs)
+</div>
+
+<strong>Batting</strong>
+
+<table>
+<tr>
+<th>Batter</th>
+<th>How out</th>
+<th class="right">R</th>
+<th class="right">B</th>
+<th class="right">SR</th>
+</tr>
+
+${Object.entries(batterStats).map(([name,s])=>`
+<tr>
+<td>${name}</td>
+<td>${dismissals[name]||"not out"}</td>
+<td class="right">${s.runs}</td>
+<td class="right">${s.balls}</td>
+<td class="right">${calcSR(s)}</td>
+</tr>
+`).join("")}
+
+</table>
+
+<strong>Bowling</strong>
+
+<table>
+<tr>
+<th>Bowler</th>
+<th class="right">O</th>
+<th class="right">R</th>
+<th class="right">W</th>
+</tr>
+
+${Object.entries(bowlerStats).map(([name,s])=>`
+<tr>
+<td>${name}</td>
+<td class="right">${formatOvers(s.balls)}</td>
+<td class="right">${s.runs}</td>
+<td class="right">${s.wkts}</td>
+</tr>
+`).join("")}
+
+</table>
+
+</div>
+`;
+
+container.appendChild(div);
+
+}
+
+
+/* HELPERS */
+
+function calcSR(s){
+return s.balls?((s.runs/s.balls)*100).toFixed(1):"-";
+}
+
+function formatOvers(balls){
+return Math.floor(balls/6)+"."+(balls%6);
+}
+
+function formatDate(d){
+if(!d) return "";
+return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+}
+
+function formatDismissal(w,bowler){
+
+const fielders=w.fielders?.map(f=>f.name).join("/");
+
+switch(w.kind){
+
+case "bowled": return `b ${bowler}`;
+case "caught": return `c ${fielders} b ${bowler}`;
+case "lbw": return `lbw b ${bowler}`;
+case "stumped": return `st ${fielders} b ${bowler}`;
+case "run out": return `run out (${fielders})`;
+case "caught and bowled": return `c & b ${bowler}`;
+default: return w.kind;
+
+}
+
+}
+
+</script>
+
+</body>
+</html>
