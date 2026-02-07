@@ -159,9 +159,16 @@ for(const file of files){
 
 const data=await fetch(BASE+file).then(r=>r.json());
 
-const matches=data.filter(isRealWorldCupMatch);
+let matches=data.filter(isRealWorldCupMatch);
 
 if(matches.length===0) continue;
+
+
+/* SORT MATCHES CHRONOLOGICALLY */
+matches.sort((a,b)=>
+new Date(a.info.dates[0]) - new Date(b.info.dates[0])
+);
+
 
 const stats=calculateStats(matches);
 
@@ -181,6 +188,8 @@ showSeason(0);
 
 }
 
+
+/* FILTER OUT QUALIFIERS AND WARMUPS */
 function isRealWorldCupMatch(match){
 
 const event=match.info?.event;
@@ -189,27 +198,62 @@ if(!event) return false;
 
 const name=(event.name||"").toLowerCase();
 
-const isWorldCup=
-name.includes("world twenty20")
-|| name.includes("t20 world cup");
+if(!(
+name.includes("world twenty20") ||
+name.includes("t20 world cup")
+)) return false;
 
-const hasMatchNumber=event.match_number!==undefined;
 
-return isWorldCup && hasMatchNumber;
+const stage=(event.stage||"").toLowerCase();
+
+const excludeWords=[
+"qualifier",
+"warm",
+"practice",
+"regional",
+"preliminary",
+"playoff qualifier"
+];
+
+for(const word of excludeWords){
+
+if(stage.includes(word))
+return false;
 
 }
+
+
+if(event.match_number===undefined)
+return false;
+
+return true;
+
+}
+
 
 function calculateStats(matches){
 
 let runs={},wkts={};
 
-const finalMatch=matches[matches.length-1];
+let finalMatch=null;
 
-const winner=finalMatch.info.outcome?.winner;
+for(let i=matches.length-1;i>=0;i--){
+
+if(matches[i].info.outcome?.winner){
+
+finalMatch=matches[i];
+break;
+
+}
+
+}
+
+const winner=finalMatch?.info.outcome?.winner || "—";
+
 
 matches.forEach(match=>{
 
-match.innings.forEach(raw=>{
+match.innings?.forEach(raw=>{
 
 const inn=raw.team?raw:Object.values(raw)[0];
 
@@ -230,8 +274,9 @@ wkts[d.bowler]=(wkts[d.bowler]||0)+d.wickets.length;
 
 });
 
-const topRuns=Object.entries(runs).sort((a,b)=>b[1]-a[1])[0];
-const topWkts=Object.entries(wkts).sort((a,b)=>b[1]-a[1])[0];
+
+const topRuns=Object.entries(runs).sort((a,b)=>b[1]-a[1])[0] || ["—",0];
+const topWkts=Object.entries(wkts).sort((a,b)=>b[1]-a[1])[0] || ["—",0];
 
 return{
 winner:winner,
@@ -240,6 +285,7 @@ wkts:topWkts
 };
 
 }
+
 
 function buildYearButtons(){
 
@@ -268,6 +314,7 @@ bar.appendChild(btn);
 
 }
 
+
 function showSeason(index){
 
 const season=seasons[index];
@@ -291,8 +338,11 @@ if(match.info.outcome?.winner){
 if(match.info.outcome.by?.runs)
 result=`${match.info.outcome.winner} won by ${match.info.outcome.by.runs} runs`;
 
-else
+else if(match.info.outcome.by?.wickets)
 result=`${match.info.outcome.winner} won by ${match.info.outcome.by.wickets} wickets`;
+
+else
+result=`${match.info.outcome.winner} won`;
 
 }
 
@@ -310,6 +360,7 @@ tbody.innerHTML+=`
 });
 
 }
+
 
 function renderSummary(stats){
 
@@ -337,6 +388,7 @@ ${stats.wkts[0]} – ${stats.wkts[1]} wickets
 `;
 
 }
+
 
 function formatDate(d){
 
