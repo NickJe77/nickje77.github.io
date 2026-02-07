@@ -109,11 +109,6 @@ text-decoration:none;
 
 const BASE="/data/t20-world-cup/matches/";
 
-const VALID_EVENTS=[
-"ICC World Twenty20",
-"ICC Men's T20 World Cup"
-];
-
 let seasons=[];
 let tbody=document.getElementById("tbody");
 
@@ -129,7 +124,7 @@ const matches=await fetch(BASE+file).then(r=>r.json());
 
 const validMatches=matches
 .map((match,i)=>({match,index:i}))
-.filter(obj=>isWorldCup(obj.match));
+.filter(obj=>isWorldCupFinal(obj.match));
 
 if(validMatches.length>0){
 
@@ -146,31 +141,38 @@ matches:validMatches
 seasons.sort((a,b)=>b.year-a.year);
 
 buildYearButtons();
-
 showSeason(0);
 
 }
 
-/* CORRECT FILTER SUPPORTS BOTH FORMATS */
+/* FINAL CORRECT FILTER */
 
-function isWorldCup(match){
+function isWorldCupFinal(match){
 
-let eventName="";
+let event="";
 
 if(typeof match.info.event==="string")
-eventName=match.info.event;
+event=match.info.event;
 
 else if(match.info.event?.name)
-eventName=match.info.event.name;
+event=match.info.event.name;
 
-return VALID_EVENTS.includes(eventName);
+event=event.toLowerCase();
+
+if(event.includes("qualifier"))
+return false;
+
+return (
+event.startsWith("icc world twenty20")
+||
+event.startsWith("icc men's t20 world cup")
+);
 
 }
 
 function buildYearButtons(){
 
 const bar=document.getElementById("yearBar");
-
 bar.innerHTML="";
 
 seasons.forEach((season,index)=>{
@@ -178,7 +180,6 @@ seasons.forEach((season,index)=>{
 const btn=document.createElement("button");
 
 btn.className="year-btn";
-
 btn.textContent=season.year;
 
 if(index===0)
@@ -204,7 +205,6 @@ bar.appendChild(btn);
 function showSeason(index){
 
 const season=seasons[index];
-
 tbody.innerHTML="";
 
 season.matches.forEach(obj=>{
@@ -213,9 +213,7 @@ const match=obj.match;
 const i=obj.index;
 
 const date=formatDate(match.info.dates[0]);
-
 const teams=match.info.teams.join(" vs ");
-
 const venue=match.info.venue||"—";
 
 let result="—";
@@ -233,14 +231,12 @@ result=`${match.info.outcome.winner} won by ${match.info.outcome.by.wickets} wic
 const link=`t20wc-match.html?file=${season.file}&match=${i}`;
 
 tbody.innerHTML+=`
-
 <tr>
 <td>${date}</td>
 <td><a href="${link}">${teams}</a></td>
 <td>${venue}</td>
 <td>${result}</td>
 </tr>
-
 `;
 
 });
