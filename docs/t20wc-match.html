@@ -49,7 +49,7 @@ margin:6px 0 0;
 opacity:.9;
 }
 
-/* SUMMARY BOXES */
+/* SUMMARY */
 
 .summary{
 display:grid;
@@ -69,19 +69,35 @@ display:block;
 margin-bottom:4px;
 }
 
-/* INNINGS */
+/* INNINGS BLOCK */
 
-.innings{
+.innings-block{
+background:white;
+border-radius:10px;
+overflow:hidden;
+box-shadow:0 2px 6px rgba(0,0,0,0.08);
 margin:20px;
 }
 
-.innings h2{
-margin-bottom:6px;
+/* RED HEADER BAR */
+
+.innings-header{
+background:linear-gradient(90deg,#6a040f,#d00000);
+color:white;
+padding:12px 16px;
+font-weight:700;
+font-size:18px;
+}
+
+/* CONTENT */
+
+.innings-content{
+padding:16px;
 }
 
 .score{
 font-weight:700;
-margin-bottom:12px;
+margin-bottom:14px;
 }
 
 /* TABLE */
@@ -89,8 +105,7 @@ margin-bottom:12px;
 table{
 width:100%;
 border-collapse:collapse;
-background:white;
-margin-bottom:16px;
+margin-bottom:18px;
 }
 
 th,td{
@@ -120,12 +135,14 @@ text-align:right;
 
 </div>
 
+
 <div class="hero">
 
 <h1>T20 World Cup Match</h1>
 <p id="heroStatus">Loading match...</p>
 
 </div>
+
 
 <div id="summary" class="summary"></div>
 
@@ -157,12 +174,17 @@ const season=await fetch(BASE+file).then(r=>r.json());
 
 const match=season[matchIndex];
 
+if(!match){
+document.getElementById("heroStatus").innerText="Match not found";
+return;
+}
+
 renderMatch(match);
 
 }
 
 
-/* MATCH */
+/* MATCH HEADER + SUMMARY */
 
 function renderMatch(match){
 
@@ -186,13 +208,11 @@ result=`won by ${info.outcome.by.wickets} wickets`;
 document.getElementById("heroStatus").innerText="Match loaded";
 
 
-/* SUMMARY */
-
 document.getElementById("summary").innerHTML=`
 
 <div class="summary-box">
 <strong>Date</strong>
-${formatDate(info.dates[0])}
+${formatDate(info.dates?.[0])}
 </div>
 
 <div class="summary-box">
@@ -202,7 +222,7 @@ ${info.teams.join(" vs ")}
 
 <div class="summary-box">
 <strong>Venue</strong>
-${info.venue}
+${info.venue || ""}
 </div>
 
 <div class="summary-box">
@@ -235,7 +255,7 @@ renderInnings(container,inn);
 }
 
 
-/* INNINGS */
+/* INNINGS RENDER */
 
 function renderInnings(container,inn){
 
@@ -248,7 +268,7 @@ let wkts=0;
 let balls=0;
 
 
-inn.overs.forEach(over=>{
+inn.overs?.forEach(over=>{
 
 over.deliveries.forEach(d=>{
 
@@ -296,17 +316,24 @@ dismissals[w.player_out]=formatDismissal(w);
 const overs=formatOvers(balls);
 
 
-/* CREATE */
+/* CREATE BLOCK */
 
 const div=document.createElement("div");
 
-div.className="innings";
+div.className="innings-block";
 
 div.innerHTML=`
 
-<h2>${inn.team} Innings</h2>
+<div class="innings-header">
+${inn.team} Innings
+</div>
 
-<div class="score">${runs}/${wkts} (${overs} overs)</div>
+<div class="innings-content">
+
+<div class="score">
+${runs}/${wkts} (${overs} overs)
+</div>
+
 
 <strong>Batting</strong>
 
@@ -324,7 +351,7 @@ ${Object.entries(batterStats).map(([name,s])=>`
 
 <tr>
 <td>${name}</td>
-<td>${dismissals[name]||"not out"}</td>
+<td>${dismissals[name] || "not out"}</td>
 <td class="right">${s.runs}</td>
 <td class="right">${s.balls}</td>
 <td class="right">${calcSR(s)}</td>
@@ -359,6 +386,8 @@ ${Object.entries(bowlerStats).map(([name,s])=>`
 
 </table>
 
+</div>
+
 `;
 
 container.appendChild(div);
@@ -369,18 +398,16 @@ container.appendChild(div);
 /* HELPERS */
 
 function calcSR(s){
-
 return s.balls?((s.runs/s.balls)*100).toFixed(1):"-";
-
 }
 
 function formatOvers(balls){
-
 return Math.floor(balls/6)+"."+(balls%6);
-
 }
 
 function formatDate(d){
+
+if(!d) return "";
 
 return new Date(d).toLocaleDateString("en-GB",{
 day:"2-digit",
