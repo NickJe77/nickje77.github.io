@@ -56,6 +56,27 @@ font-weight:600;
 background:#d00000;
 }
 
+.summary{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+gap:16px;
+margin:20px;
+}
+
+.summary-box{
+background:white;
+padding:16px;
+border-radius:12px;
+box-shadow:0 2px 6px rgba(0,0,0,0.1);
+text-align:center;
+}
+
+.summary-box .big{
+font-size:24px;
+font-weight:700;
+color:#6a040f;
+}
+
 table{
 width:95%;
 margin:20px auto;
@@ -101,6 +122,8 @@ text-decoration:none;
 
 <div id="yearBar" class="year-bar"></div>
 
+<div id="summary" class="summary"></div>
+
 <table>
 
 <thead>
@@ -120,22 +143,14 @@ text-decoration:none;
 
 const BASE="/data/t20-world-cup/matches/";
 
-/* ONLY REAL WORLD CUP YEARS */
-
 const VALID_YEARS=[
-"2007",
-"2009",
-"2010",
-"2012",
-"2014",
-"2016",
-"2021",
-"2022",
-"2024"
+"2007","2009","2010","2012",
+"2014","2016","2021","2022","2024"
 ];
 
 let seasons=[];
 let tbody=document.getElementById("tbody");
+let summaryDiv=document.getElementById("summary");
 
 init();
 
@@ -144,21 +159,23 @@ async function init(){
 const files=await fetch(BASE+"index.json").then(r=>r.json());
 
 const worldCupFiles=files.filter(file=>{
-
 const year=file.match(/\d{4}/)?.[0];
-
 return VALID_YEARS.includes(year);
-
 });
 
 for(const file of worldCupFiles){
 
-const matches=await fetch(BASE+file).then(r=>r.json());
+const data=await fetch(BASE+file).then(r=>r.json());
+
+const matches=data.filter(match=>isTournamentMatch(match));
+
+const stats=calculateStats(matches);
 
 seasons.push({
 year:file.match(/\d{4}/)[0],
 file:file,
-matches:matches
+matches:matches,
+stats:stats
 });
 
 }
@@ -166,8 +183,72 @@ matches:matches
 seasons.sort((a,b)=>b.year-a.year);
 
 buildYearButtons();
-
 showSeason(0);
+
+}
+
+function isTournamentMatch(match){
+
+const event=match.info?.event;
+
+if(!event) return false;
+
+if(!event.group) return false;
+
+const name=(event.name||"").toLowerCase();
+
+if(name.includes("qualifier")) return false;
+
+return true;
+
+}
+
+function calculateStats(matches){
+
+let runs={};
+let wickets={};
+let winner="";
+
+matches.forEach(match=>{
+
+const group=match.info?.event?.group;
+
+if(group==="Final")
+winner=match.info.outcome?.winner||"—";
+
+match.innings.forEach(raw=>{
+
+const inn=raw.team?raw:Object.values(raw)[0];
+
+inn.overs?.forEach(over=>{
+
+over.deliveries.forEach(d=>{
+
+runs[d.batter]=(runs[d.batter]||0)+d.runs.batter;
+
+if(d.wickets){
+wickets[d.bowler]=(wickets[d.bowler]||0)+d.wickets.length;
+}
+
+});
+
+});
+
+});
+
+});
+
+const mostRuns=Object.entries(runs)
+.sort((a,b)=>b[1]-a[1])[0];
+
+const mostWkts=Object.entries(wickets)
+.sort((a,b)=>b[1]-a[1])[0];
+
+return{
+winner:winner,
+runs:mostRuns,
+wkts:mostWkts
+};
 
 }
 
@@ -182,7 +263,6 @@ seasons.forEach((season,index)=>{
 const btn=document.createElement("button");
 
 btn.className="year-btn";
-
 btn.textContent=season.year;
 
 if(index===0)
@@ -209,14 +289,14 @@ function showSeason(index){
 
 const season=seasons[index];
 
+renderSummary(season.stats);
+
 tbody.innerHTML="";
 
 season.matches.forEach((match,i)=>{
 
 const date=formatDate(match.info.dates[0]);
-
 const teams=match.info.teams.join(" vs ");
-
 const venue=match.info.venue||"—";
 
 let result="—";
@@ -243,6 +323,29 @@ tbody.innerHTML+=`
 `;
 
 });
+
+}
+
+function renderSummary(stats){
+
+summaryDiv.innerHTML=`
+
+<div class="summary-box">
+<div class="big">${stats.winner}</div>
+Winner
+</div>
+
+<div class="summary-box">
+<div class="big">${stats.runs?stats.runs[0]:"—"}</div>
+Most Runs (${stats.runs?stats.runs[1]:"—"})
+</div>
+
+<div class="summary-box">
+<div class="big">${stats.wkts?stats.wkts[0]:"—"}</div>
+Most Wickets (${stats.wkts?stats.wkts[1]:"—"})
+</div>
+
+`;
 
 }
 
