@@ -150,6 +150,17 @@ background:#f8fbff;
 cursor:pointer;
 }
 
+/* CENTER BATTING / BOWLING STAT COLUMNS */
+
+#matchTable th:nth-child(5),
+#matchTable th:nth-child(6),
+#matchTable th:nth-child(7),
+#matchTable td:nth-child(5),
+#matchTable td:nth-child(6),
+#matchTable td:nth-child(7){
+text-align:center;
+}
+
 .section-title{
 text-align:center;
 font-weight:700;
@@ -308,17 +319,13 @@ players=[...set].sort();
 initSearch();
 
 
-/* SEARCH UI */
-
 playerSearch.oninput=function(){
 
 const q=this.value.toLowerCase();
 
 if(!q){
-
 searchResults.style.display="none";
 return;
-
 }
 
 const filtered=players.filter(p=>p.toLowerCase().includes(q)).slice(0,30);
@@ -345,8 +352,6 @@ searchResults.style.display="block";
 
 };
 
-
-/* LOAD PLAYER */
 
 const player=new URLSearchParams(location.search).get("player");
 
@@ -411,7 +416,7 @@ wkts+=d.wickets.length;
 
 });
 
-if(runs||wkts){
+if(balls>0 || ballsBowled>0){
 
 const opponent=match.info.teams.find(t=>t!==playerCountry);
 
@@ -442,12 +447,11 @@ render();
 
 }
 
-
-/* OPP FILTER */
-
 function populateOppFilter(){
 
 const set=new Set(matches.map(m=>m.opponent));
+
+oppFilter.innerHTML='<option value="ALL">All</option>';
 
 set.forEach(o=>{
 
@@ -464,15 +468,10 @@ render();
 
 }
 
-
-/* TABS */
-
 batTab.onclick=()=>{
 
 currentTab="bat";
-
 setTabs();
-
 render();
 
 };
@@ -480,13 +479,10 @@ render();
 bowlTab.onclick=()=>{
 
 currentTab="bowl";
-
 setTabs();
-
 render();
 
 };
-
 
 function setTabs(){
 
@@ -494,9 +490,6 @@ batTab.classList.toggle("active",currentTab==="bat");
 bowlTab.classList.toggle("active",currentTab==="bowl");
 
 }
-
-
-/* SUMMARY */
 
 function calcBat(list){
 
@@ -507,24 +500,21 @@ list.forEach(m=>{
 runs+=m.runs;
 balls+=m.balls;
 
-if(m.runs>0) matches++;
+if(m.balls>0) matches++;
 
 if(m.runs>best) best=m.runs;
 
 });
 
 return{
-
 matches,
 runs,
 avg:matches?(runs/matches).toFixed(1):"-",
 sr:balls?((runs/balls)*100).toFixed(1):"-",
 best
-
 };
 
 }
-
 
 function calcBowl(list){
 
@@ -536,25 +526,22 @@ wkts+=m.wkts;
 balls+=m.ballsBowled;
 runs+=m.runsConceded;
 
-if(m.wkts>0) matches++;
+if(m.ballsBowled>0) matches++;
 
 if(m.wkts>best) best=m.wkts;
 
 });
 
 return{
-
 matches,
 overs:(balls/6).toFixed(1),
 wkts,
 avg:wkts?(runs/wkts).toFixed(1):"-",
 econ:balls?(runs/(balls/6)).toFixed(2):"-",
 best
-
 };
 
 }
-
 
 function renderSummary(divId,s){
 
@@ -563,43 +550,27 @@ const div=document.getElementById(divId);
 if(currentTab==="bat"){
 
 div.innerHTML=`
-
 <div class="box"><div class="big">${s.matches}</div>Matches</div>
-
 <div class="box"><div class="big">${s.runs}</div>Runs</div>
-
 <div class="box"><div class="big">${s.avg}</div>Average</div>
-
 <div class="box"><div class="big">${s.sr}</div>Strike Rate</div>
-
 <div class="box"><div class="big">${s.best}</div>Best</div>
-
 `;
 
 }else{
 
 div.innerHTML=`
-
 <div class="box"><div class="big">${s.matches}</div>Matches</div>
-
 <div class="box"><div class="big">${s.overs}</div>Overs</div>
-
 <div class="box"><div class="big">${s.wkts}</div>Wickets</div>
-
 <div class="box"><div class="big">${s.avg}</div>Average</div>
-
 <div class="box"><div class="big">${s.econ}</div>Economy</div>
-
 <div class="box"><div class="big">${s.best}</div>Best</div>
-
 `;
 
 }
 
 }
-
-
-/* RENDER */
 
 function render(){
 
@@ -608,30 +579,22 @@ const filtered=currentOpp==="ALL"
 :matches.filter(m=>m.opponent===currentOpp);
 
 const career=currentTab==="bat"?calcBat(matches):calcBowl(matches);
-
 const opp=currentTab==="bat"?calcBat(filtered):calcBowl(filtered);
 
 renderSummary("careerSummary",career);
-
 renderSummary("oppSummary",opp);
 
 renderTable(filtered);
 
 }
 
-
-/* TABLE */
-
 function sortTable(field){
 
 sortAsc=field===sortField?!sortAsc:true;
-
 sortField=field;
-
 render();
 
 }
-
 
 function renderTable(list){
 
@@ -650,18 +613,18 @@ tbody.innerHTML="";
 
 list.forEach(m=>{
 
+if(currentTab==="bat" && m.balls===0) return;
+if(currentTab==="bowl" && m.ballsBowled===0) return;
+
 const tr=document.createElement("tr");
 
 tr.onclick=()=>{
-
 location.href=`t20-world-cup-match.html?file=${m.file}&match=${m.index}`;
-
 };
 
 tr.innerHTML=currentTab==="bat"
 
 ?`
-
 <td>${m.season}</td>
 <td>${new Date(m.date).toLocaleDateString("en-GB")}</td>
 <td>${m.opponent}</td>
@@ -669,13 +632,10 @@ tr.innerHTML=currentTab==="bat"
 <td>${m.runs}</td>
 <td>${m.balls}</td>
 <td>${((m.runs/m.balls)*100||0).toFixed(1)}</td>
-
 `
 
 :
-
 `
-
 <td>${m.season}</td>
 <td>${new Date(m.date).toLocaleDateString("en-GB")}</td>
 <td>${m.opponent}</td>
@@ -683,7 +643,6 @@ tr.innerHTML=currentTab==="bat"
 <td>${m.wkts}</td>
 <td>${(m.ballsBowled/6).toFixed(1)}</td>
 <td>${(m.runsConceded/(m.ballsBowled/6)||0).toFixed(2)}</td>
-
 `;
 
 tbody.appendChild(tr);
