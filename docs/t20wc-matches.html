@@ -78,13 +78,6 @@ color:#6a040f;
 margin-top:6px;
 }
 
-.flag{
-width:26px;
-height:18px;
-vertical-align:middle;
-margin-right:6px;
-}
-
 table{
 width:95%;
 margin:20px auto;
@@ -152,8 +145,6 @@ text-decoration:none;
 
 const BASE="/data/t20-world-cup/matches/";
 
-const VALID_YEARS=["2007","2009","2010","2012","2014","2016","2021","2022","2024"];
-
 let seasons=[];
 let tbody=document.getElementById("tbody");
 let summaryDiv=document.getElementById("summary");
@@ -164,16 +155,11 @@ async function init(){
 
 const files=await fetch(BASE+"index.json").then(r=>r.json());
 
-const worldCupFiles=files.filter(file=>{
-const year=file.match(/\d{4}/)?.[0];
-return VALID_YEARS.includes(year);
-});
-
-for(const file of worldCupFiles){
+for(const file of files){
 
 const data=await fetch(BASE+file).then(r=>r.json());
 
-const matches=data.filter(match=>isWorldCupMatch(match));
+const matches=data.filter(isRealWorldCupMatch);
 
 if(matches.length===0) continue;
 
@@ -195,30 +181,30 @@ showSeason(0);
 
 }
 
-/* CORRECT FILTER */
+/* FINAL CORRECT FILTER */
 
-function isWorldCupMatch(match){
+function isRealWorldCupMatch(match){
 
-const event=(match.info?.event?.name||"").toLowerCase();
+const name=(match.info?.event?.name||"").toLowerCase();
 
-return(
-event.includes("world")
-&& event.includes("t20")
-&& event.includes("cup")
-&& !event.includes("qualifier")
-);
+const isWorldCup=
+name.includes("world twenty20")
+|| name.includes("t20 world cup");
+
+const isQualifier=name.includes("qualifier");
+const isWarmup=name.includes("warm");
+
+return isWorldCup && !isQualifier && !isWarmup;
 
 }
 
 function calculateStats(matches){
 
 let runs={},wkts={};
-let winner="";
-
-/* winner = last match winner */
 
 const finalMatch=matches[matches.length-1];
-winner=finalMatch.info.outcome?.winner;
+
+const winner=finalMatch.info.outcome?.winner;
 
 matches.forEach(match=>{
 
@@ -330,7 +316,7 @@ summaryDiv.innerHTML=`
 
 <div class="summary-box">
 Winner
-<div class="big">${stats.winner||"—"}</div>
+<div class="big">${stats.winner}</div>
 </div>
 
 <div class="summary-box">
