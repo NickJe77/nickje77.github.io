@@ -58,23 +58,33 @@ background:#d00000;
 
 .summary{
 display:grid;
-grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
 gap:16px;
 margin:20px;
 }
 
 .summary-box{
 background:white;
-padding:16px;
+padding:18px;
 border-radius:12px;
-box-shadow:0 2px 6px rgba(0,0,0,0.1);
+box-shadow:0 2px 6px rgba(0,0,0,.1);
 text-align:center;
 }
 
 .summary-box .big{
-font-size:24px;
+font-size:22px;
 font-weight:700;
 color:#6a040f;
+margin-top:6px;
+}
+
+.flag{
+width:26px;
+height:18px;
+vertical-align:middle;
+margin-right:6px;
+border-radius:3px;
+box-shadow:0 0 2px rgba(0,0,0,.3);
 }
 
 table{
@@ -93,6 +103,11 @@ border-bottom:1px solid #ddd;
 
 tr:nth-child(even){
 background:#eaf3ff;
+}
+
+tr.final{
+background:#ffe9b3 !important;
+font-weight:700;
 }
 
 tr:hover{
@@ -142,11 +157,20 @@ text-decoration:none;
 <script>
 
 const BASE="/data/t20-world-cup/matches/";
+const FLAG_BASE="/images/flags/";
 
-const VALID_YEARS=[
-"2007","2009","2010","2012",
-"2014","2016","2021","2022","2024"
-];
+const COUNTRY_CODES={
+"Afghanistan":"af","Australia":"au","Bangladesh":"bd","Canada":"ca",
+"England":"gb","Hong Kong":"hk","India":"in","Ireland":"ie",
+"Kenya":"ke","Namibia":"na","Nepal":"np","Netherlands":"nl",
+"New Zealand":"nz","Oman":"om","Pakistan":"pk",
+"Papua New Guinea":"pg","Scotland":"gb","South Africa":"za",
+"Sri Lanka":"lk","United Arab Emirates":"ae",
+"USA":"us","United States":"us","United States of America":"us",
+"Uganda":"ug","West Indies":"jm","Zimbabwe":"zw"
+};
+
+const VALID_YEARS=["2007","2009","2010","2012","2014","2016","2021","2022","2024"];
 
 let seasons=[];
 let tbody=document.getElementById("tbody");
@@ -167,7 +191,7 @@ for(const file of worldCupFiles){
 
 const data=await fetch(BASE+file).then(r=>r.json());
 
-const matches=data.filter(match=>isTournamentMatch(match));
+const matches=data.filter(m=>m.info?.event?.group);
 
 const stats=calculateStats(matches);
 
@@ -187,34 +211,24 @@ showSeason(0);
 
 }
 
-function isTournamentMatch(match){
+function flag(team){
 
-const event=match.info?.event;
+const code=COUNTRY_CODES[team];
+if(!code) return "";
 
-if(!event) return false;
-
-if(!event.group) return false;
-
-const name=(event.name||"").toLowerCase();
-
-if(name.includes("qualifier")) return false;
-
-return true;
+return `<img class="flag" src="${FLAG_BASE}${code}.svg">`;
 
 }
 
 function calculateStats(matches){
 
-let runs={};
-let wickets={};
+let runs={},wkts={};
 let winner="";
 
 matches.forEach(match=>{
 
-const group=match.info?.event?.group;
-
-if(group==="Final")
-winner=match.info.outcome?.winner||"—";
+if(match.info.event.group==="Final")
+winner=match.info.outcome?.winner;
 
 match.innings.forEach(raw=>{
 
@@ -226,9 +240,8 @@ over.deliveries.forEach(d=>{
 
 runs[d.batter]=(runs[d.batter]||0)+d.runs.batter;
 
-if(d.wickets){
-wickets[d.bowler]=(wickets[d.bowler]||0)+d.wickets.length;
-}
+if(d.wickets)
+wkts[d.bowler]=(wkts[d.bowler]||0)+d.wickets.length;
 
 });
 
@@ -238,16 +251,13 @@ wickets[d.bowler]=(wickets[d.bowler]||0)+d.wickets.length;
 
 });
 
-const mostRuns=Object.entries(runs)
-.sort((a,b)=>b[1]-a[1])[0];
-
-const mostWkts=Object.entries(wickets)
-.sort((a,b)=>b[1]-a[1])[0];
+const topRuns=Object.entries(runs).sort((a,b)=>b[1]-a[1])[0];
+const topWkts=Object.entries(wkts).sort((a,b)=>b[1]-a[1])[0];
 
 return{
 winner:winner,
-runs:mostRuns,
-wkts:mostWkts
+runs:topRuns,
+wkts:topWkts
 };
 
 }
@@ -256,8 +266,6 @@ function buildYearButtons(){
 
 const bar=document.getElementById("yearBar");
 
-bar.innerHTML="";
-
 seasons.forEach((season,index)=>{
 
 const btn=document.createElement("button");
@@ -265,18 +273,12 @@ const btn=document.createElement("button");
 btn.className="year-btn";
 btn.textContent=season.year;
 
-if(index===0)
-btn.classList.add("active");
+if(index===0) btn.classList.add("active");
 
 btn.onclick=()=>{
-
-document.querySelectorAll(".year-btn")
-.forEach(b=>b.classList.remove("active"));
-
+document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
 btn.classList.add("active");
-
 showSeason(index);
-
 };
 
 bar.appendChild(btn);
@@ -295,9 +297,13 @@ tbody.innerHTML="";
 
 season.matches.forEach((match,i)=>{
 
+const isFinal=match.info.event.group==="Final";
+
 const date=formatDate(match.info.dates[0]);
-const teams=match.info.teams.join(" vs ");
-const venue=match.info.venue||"—";
+
+const teams=match.info.teams.map(t=>flag(t)+t).join(" vs ");
+
+const venue=match.info.venue;
 
 let result="—";
 
@@ -306,7 +312,7 @@ if(match.info.outcome?.winner){
 if(match.info.outcome.by?.runs)
 result=`${match.info.outcome.winner} won by ${match.info.outcome.by.runs} runs`;
 
-else if(match.info.outcome.by?.wickets)
+else
 result=`${match.info.outcome.winner} won by ${match.info.outcome.by.wickets} wickets`;
 
 }
@@ -314,7 +320,7 @@ result=`${match.info.outcome.winner} won by ${match.info.outcome.by.wickets} wic
 const link=`t20wc-match.html?file=${season.file}&match=${i}`;
 
 tbody.innerHTML+=`
-<tr>
+<tr class="${isFinal?'final':''}">
 <td>${date}</td>
 <td><a href="${link}">${teams}</a></td>
 <td>${venue}</td>
@@ -331,18 +337,28 @@ function renderSummary(stats){
 summaryDiv.innerHTML=`
 
 <div class="summary-box">
-<div class="big">${stats.winner}</div>
 Winner
+<div class="big">${flag(stats.winner)}${stats.winner||"—"}</div>
 </div>
 
 <div class="summary-box">
-<div class="big">${stats.runs?stats.runs[0]:"—"}</div>
-Most Runs (${stats.runs?stats.runs[1]:"—"})
+Most Runs
+<div class="big">
+<a href="t20-world-cup-player.html?player=${encodeURIComponent(stats.runs[0])}">
+${stats.runs[0]}
+</a>
+(${stats.runs[1]})
+</div>
 </div>
 
 <div class="summary-box">
-<div class="big">${stats.wkts?stats.wkts[0]:"—"}</div>
-Most Wickets (${stats.wkts?stats.wkts[1]:"—"})
+Most Wickets
+<div class="big">
+<a href="t20-world-cup-player.html?player=${encodeURIComponent(stats.wkts[0])}">
+${stats.wkts[0]}
+</a>
+(${stats.wkts[1]})
+</div>
 </div>
 
 `;
