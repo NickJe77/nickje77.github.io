@@ -1,84 +1,188 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>T20 World Cup Team</title>
+<title>T20 World Cup Team | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
+
 body{
 font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
              "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 margin:0;
-background:#fff;
+background:#f3f4f7;
 }
+
+
+/* NAVBAR */
+
+.navbar{
+display:flex;
+justify-content:center;
+gap:22px;
+padding:16px 0;
+border-bottom:1px solid #ddd;
+background:white;
+font-weight:600;
+}
+
+.navbar a{
+color:#0056d6;
+text-decoration:none;
+font-size:18px;
+}
+
+
+/* HERO */
 
 .hero{
 background:linear-gradient(90deg,#6a040f,#d00000);
 color:white;
-padding:30px;
+padding:36px;
 margin:20px;
-border-radius:16px;
-font-size:28px;
-font-weight:700;
+border-radius:18px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+}
+
+.hero-left h1{
+margin:0;
+font-size:42px;
+}
+
+.hero-left p{
+margin-top:6px;
+opacity:.9;
+}
+
+
+/* CONTROLS */
+
+.controls{
+padding:0 20px;
 }
 
 select{
-margin:20px;
 padding:10px;
 font-size:16px;
-font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
-             "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+border-radius:8px;
+border:none;
 }
+
+
+/* TABLE */
 
 table{
 width:calc(100% - 40px);
 margin:20px;
+background:white;
 border-collapse:collapse;
-font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
-             "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+border-radius:12px;
+overflow:hidden;
 }
 
-td,th{
-padding:10px;
+th,td{
+padding:12px;
 border-bottom:1px solid #ddd;
 }
 
+th{
+background:#f1f1f1;
+text-align:left;
+}
+
 tr:nth-child(even){
-background:#eaf3ff;
+background:#f8fbff;
+}
+
+tr:hover{
+background:#eef5ff;
+cursor:pointer;
+}
+
+.section-title{
+text-align:center;
+font-weight:700;
+margin-top:10px;
+color:#666;
 }
 
 </style>
-
 </head>
-
 <body>
 
-<div id="hero" class="hero">Loading teams...</div>
+
+<!-- NAVBAR -->
+
+<div class="navbar">
+
+<a href="index.html">Home</a>
+<a href="t20wc.html">T20 World Cup</a>
+<a href="t20wc-matches.html">Matches</a>
+<a href="t20wc-team.html">Teams</a>
+<a href="t20-world-cup-player.html">Players</a>
+
+</div>
+
+
+<!-- HERO -->
+
+<div class="hero">
+
+<div class="hero-left">
+
+<h1 id="teamName">Loading...</h1>
+
+<p>T20 World Cup match history</p>
+
+</div>
+
+</div>
+
+
+<!-- CONTROLS -->
+
+<div class="controls">
 
 <select id="teamSelect"></select>
+
+</div>
+
+
+<div class="section-title">MATCH HISTORY</div>
+
 
 <table>
 
 <thead>
+
 <tr>
+
 <th>Date</th>
-<th>Match</th>
+<th>Opponent</th>
+<th>Venue</th>
+
 </tr>
+
 </thead>
 
 <tbody id="tbody"></tbody>
 
 </table>
 
+
 <script>
 
 const BASE="/data/t20-world-cup/matches/";
 
-const hero=document.getElementById("hero");
+const teamName=document.getElementById("teamName");
 const teamSelect=document.getElementById("teamSelect");
 const tbody=document.getElementById("tbody");
 
 let ALL_MATCHES=[];
+
 
 load();
 
@@ -93,7 +197,7 @@ for(const file of index){
 
 const season=await fetch(BASE+file).then(r=>r.json());
 
-season.forEach(match=>{
+season.forEach((match,matchIndex)=>{
 
 const eventName = match.info?.event?.name || "";
 
@@ -103,6 +207,9 @@ eventName.includes("T20 World Cup") &&
 !eventName.includes("Warm");
 
 if(!isWorldCup) return;
+
+match._file=file;
+match._index=matchIndex;
 
 ALL_MATCHES.push(match);
 
@@ -116,10 +223,8 @@ teamsSet.add(team);
 
 const teams=[...teamsSet].sort();
 
-teamSelect.innerHTML="";
-
 teams.forEach(team=>{
-teamSelect.innerHTML+=`<option>${team}</option>`;
+teamSelect.innerHTML+=`<option value="${team}">${team}</option>`;
 });
 
 teamSelect.onchange=()=>{
@@ -133,7 +238,7 @@ showTeam(teams[0]);
 
 function showTeam(team){
 
-hero.innerHTML=team;
+teamName.innerText=team;
 
 tbody.innerHTML="";
 
@@ -141,14 +246,26 @@ const matches=ALL_MATCHES
 .filter(m=>m.info.teams.includes(team))
 .sort((a,b)=>new Date(b.info.dates[0]) - new Date(a.info.dates[0]));
 
+
 matches.forEach(match=>{
 
-tbody.innerHTML+=`
-<tr>
+const opponent=match.info.teams.find(t=>t!==team);
+
+const tr=document.createElement("tr");
+
+tr.onclick=()=>{
+location.href=`t20-world-cup-match.html?file=${match._file}&match=${match._index}`;
+};
+
+tr.innerHTML=`
+
 <td>${new Date(match.info.dates[0]).toLocaleDateString("en-GB")}</td>
-<td>${match.info.teams.join(" vs ")}</td>
-</tr>
+<td>${opponent}</td>
+<td>${match.info.venue}</td>
+
 `;
+
+tbody.appendChild(tr);
 
 });
 
