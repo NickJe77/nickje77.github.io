@@ -68,7 +68,6 @@ overflow:hidden;
 th,td{
 padding:12px;
 border-bottom:1px solid #ddd;
-text-align:left;
 }
 
 tr:nth-child(even){
@@ -130,34 +129,23 @@ async function init(){
 
 const files=await fetch(BASE+"index.json").then(r=>r.json());
 
-for(const file of files){
+/* ONLY KEEP REAL WORLD CUP FILES */
 
-const data=await fetch(BASE+file).then(r=>r.json());
+const worldCupFiles=files.filter(file =>
+file.includes("t20wc_")
+&& !file.includes("qualifier")
+&& !file.includes("warmup")
+);
 
-const validMatches=[];
+for(const file of worldCupFiles){
 
-data.forEach((match,index)=>{
-
-if(isWorldCupFinal(match)){
-
-validMatches.push({
-match:match,
-index:index
-});
-
-}
-
-});
-
-if(validMatches.length>0){
+const matches=await fetch(BASE+file).then(r=>r.json());
 
 seasons.push({
 year:file.match(/\d{4}/)[0],
 file:file,
-matches:validMatches
+matches:matches
 });
-
-}
 
 }
 
@@ -166,38 +154,6 @@ seasons.sort((a,b)=>b.year-a.year);
 buildYearButtons();
 
 showSeason(0);
-
-}
-
-function isWorldCupFinal(match){
-
-let event="";
-
-if(typeof match.info.event==="string")
-event=match.info.event;
-
-else if(match.info.event?.name)
-event=match.info.event.name;
-
-else if(match.info.tournament)
-event=match.info.tournament;
-
-event=event.toLowerCase();
-
-/* exclude qualifiers */
-
-if(event.includes("qualifier"))
-return false;
-
-/* include ALL real world cups */
-
-if(event.includes("world twenty20"))
-return true;
-
-if(event.includes("t20 world cup"))
-return true;
-
-return false;
 
 }
 
@@ -241,10 +197,7 @@ const season=seasons[index];
 
 tbody.innerHTML="";
 
-season.matches.forEach(obj=>{
-
-const match=obj.match;
-const matchIndex=obj.index;
+season.matches.forEach((match,i)=>{
 
 const date=formatDate(match.info.dates[0]);
 
@@ -256,39 +209,32 @@ let result="—";
 
 if(match.info.outcome?.winner){
 
-if(match.info.outcome.by?.runs){
-
+if(match.info.outcome.by?.runs)
 result=`${match.info.outcome.winner} won by ${match.info.outcome.by.runs} runs`;
 
-}
-else if(match.info.outcome.by?.wickets){
-
+else if(match.info.outcome.by?.wickets)
 result=`${match.info.outcome.winner} won by ${match.info.outcome.by.wickets} wickets`;
 
 }
 
-}
+const link=`t20wc-match.html?file=${season.file}&match=${i}`;
 
-const link=`t20wc-match.html?file=${season.file}&match=${matchIndex}`;
-
-const row=document.createElement("tr");
-
-row.innerHTML=`
+tbody.innerHTML+=`
+<tr>
 <td>${date}</td>
 <td><a href="${link}">${teams}</a></td>
 <td>${venue}</td>
 <td>${result}</td>
+</tr>
 `;
-
-tbody.appendChild(row);
 
 });
 
 }
 
-function formatDate(date){
+function formatDate(d){
 
-return new Date(date).toLocaleDateString("en-GB",{
+return new Date(d).toLocaleDateString("en-GB",{
 day:"2-digit",
 month:"short",
 year:"numeric"
