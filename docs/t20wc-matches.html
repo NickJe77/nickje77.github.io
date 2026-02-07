@@ -113,9 +113,9 @@ text-decoration:none;
 <body>
 
 <div class="navbar">
-<a href="../index.html">Home</a>
-<a href="../cricket.html">Cricket</a>
-<a href="../t20-world-cup.html">T20 World Cup</a>
+<a href="index.html">Home</a>
+<a href="cricket.html">Cricket</a>
+<a href="t20-world-cup.html">T20 World Cup</a>
 </div>
 
 <div class="hero">
@@ -137,14 +137,16 @@ text-decoration:none;
 </tr>
 </thead>
 
-<tbody id="tbody"></tbody>
+<tbody id="tbody">
+<tr><td colspan="4">Loading...</td></tr>
+</tbody>
 
 </table>
 
 <script>
 
-/* SAFE RELATIVE PATH */
-const BASE="../data/t20-world-cup/matches/";
+/* CORRECT PATH */
+const BASE="data/t20-world-cup/matches/";
 
 let seasons=[];
 let tbody=document.getElementById("tbody");
@@ -156,11 +158,19 @@ async function init(){
 
 try{
 
-const files=await fetch(BASE+"index.json").then(r=>r.json());
+const res=await fetch(BASE+"index.json");
+
+if(!res.ok) throw new Error("index.json not found");
+
+const files=await res.json();
 
 for(const file of files){
 
-const data=await fetch(BASE+file).then(r=>r.json());
+const fileRes=await fetch(BASE+file);
+
+if(!fileRes.ok) continue;
+
+const data=await fileRes.json();
 
 const matches=data.matches;
 
@@ -180,6 +190,9 @@ stats:stats
 });
 
 }
+
+if(seasons.length===0)
+throw new Error("No seasons found");
 
 seasons.sort((a,b)=>b.year-a.year);
 
@@ -201,7 +214,7 @@ let runs={},wkts={};
 
 const finalMatch=matches[matches.length-1];
 
-const winner=finalMatch?.info.outcome?.winner || "";
+const winner=finalMatch.info.outcome?.winner || "";
 
 matches.forEach(match=>{
 
@@ -226,8 +239,8 @@ wkts[d.bowler]=(wkts[d.bowler]||0)+d.wickets.length;
 
 });
 
-const topRuns=Object.entries(runs).sort((a,b)=>b[1]-a[1])[0] || ["",0];
-const topWkts=Object.entries(wkts).sort((a,b)=>b[1]-a[1])[0] || ["",0];
+const topRuns=Object.entries(runs).sort((a,b)=>b[1]-a[1])[0]||["",0];
+const topWkts=Object.entries(wkts).sort((a,b)=>b[1]-a[1])[0]||["",0];
 
 return{winner,runs:topRuns,wkts:topWkts};
 
