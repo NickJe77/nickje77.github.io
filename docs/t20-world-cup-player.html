@@ -13,6 +13,57 @@ margin:0;
 background:#f3f4f7;
 }
 
+/* LAYOUT */
+
+.layout{
+display:flex;
+}
+
+/* SIDEBAR */
+
+.sidebar{
+width:280px;
+background:white;
+border-right:1px solid #ddd;
+height:100vh;
+overflow-y:auto;
+position:sticky;
+top:0;
+}
+
+.search-box{
+padding:12px;
+border-bottom:1px solid #ddd;
+}
+
+.search-box input{
+width:100%;
+padding:8px;
+font-size:16px;
+}
+
+.player-list{
+list-style:none;
+padding:0;
+margin:0;
+}
+
+.player-list li{
+padding:10px 14px;
+border-bottom:1px solid #eee;
+cursor:pointer;
+}
+
+.player-list li:hover{
+background:#f0f6ff;
+}
+
+/* MAIN */
+
+.main{
+flex:1;
+}
+
 /* NAVBAR */
 
 .navbar{
@@ -22,12 +73,6 @@ gap:28px;
 padding:18px;
 background:white;
 border-bottom:1px solid #ddd;
-font-weight:600;
-}
-
-.navbar a{
-color:#0056d6;
-text-decoration:none;
 }
 
 /* HERO */
@@ -38,11 +83,7 @@ color:white;
 padding:28px;
 }
 
-.hero h1{
-margin:0;
-}
-
-/* SUMMARY BOXES */
+/* SUMMARY */
 
 .summary{
 display:grid;
@@ -56,26 +97,6 @@ background:#e7e7ec;
 padding:12px;
 border-radius:10px;
 text-align:center;
-}
-
-.summary-label{
-font-weight:700;
-}
-
-.summary-value{
-font-size:20px;
-}
-
-/* OPPOSITION FILTER */
-
-.filter-wrap{
-padding:0 20px 20px 20px;
-}
-
-select{
-padding:8px 12px;
-font-size:16px;
-border-radius:6px;
 }
 
 /* TABLE */
@@ -95,18 +116,6 @@ padding:10px;
 border-bottom:1px solid #ddd;
 }
 
-th{
-background:#eef1f6;
-}
-
-tr:nth-child(even){
-background:#f6fbff;
-}
-
-.right{
-text-align:right;
-}
-
 .match-link{
 color:#0056d6;
 text-decoration:none;
@@ -118,44 +127,62 @@ font-weight:600;
 
 <body>
 
+<div class="layout">
+
+<!-- SIDEBAR -->
+
+<div class="sidebar">
+
+<div class="search-box">
+
+<input type="text" id="playerSearch" placeholder="Search player...">
+
+</div>
+
+<ul id="playerList" class="player-list"></ul>
+
+</div>
+
+<!-- MAIN -->
+
+<div class="main">
+
 <div class="navbar">
+
 <a href="index.html">Home</a>
 <a href="cricket.html">Cricket</a>
 <a href="t20-world-cup.html">T20 World Cup</a>
+
 </div>
 
 <div class="hero">
-<h1 id="playerName">Loading...</h1>
+
+<h1 id="playerName">Select player</h1>
+
 </div>
 
 <div class="summary" id="careerSummary"></div>
-
-<div class="filter-wrap">
-
-<label><strong>Against opposition:</strong></label>
-
-<select id="oppositionFilter">
-<option value="ALL">All opponents</option>
-</select>
-
-</div>
-
-<div class="summary" id="oppositionSummary"></div>
 
 <div class="container">
 
 <table id="matchTable">
 
 <tr>
+
 <th>Date</th>
 <th>Match</th>
-<th class="right">Runs</th>
-<th class="right">Balls</th>
-<th class="right">Wickets</th>
-<th class="right">Overs</th>
+<th>Runs</th>
+<th>Balls</th>
+<th>Wickets</th>
+<th>Overs</th>
+
 </tr>
 
 </table>
+
+</div>
+
+</div>
 
 </div>
 
@@ -163,24 +190,114 @@ font-weight:600;
 
 const INDEX="/data/t20-world-cup/matches/index.json";
 
+let allPlayers=[];
+let playerStats={};
+
+initSidebar();
+
+
+async function initSidebar(){
+
+const files=await fetch(INDEX).then(r=>r.json());
+
+const playerSet=new Set();
+
+for(const file of files){
+
+const season=await fetch("/data/t20-world-cup/matches/"+file).then(r=>r.json());
+
+season.forEach(match=>{
+
+match.innings.forEach(raw=>{
+
+const inn=raw.team?raw:Object.values(raw)[0];
+
+inn.overs?.forEach(over=>{
+
+over.deliveries.forEach(d=>{
+
+playerSet.add(d.batter);
+playerSet.add(d.bowler);
+
+});
+
+});
+
+});
+
+});
+
+}
+
+allPlayers=[...playerSet].sort();
+
+renderPlayerList(allPlayers);
+
+}
+
+
+/* RENDER LIST */
+
+function renderPlayerList(players){
+
+const list=document.getElementById("playerList");
+
+list.innerHTML="";
+
+players.forEach(name=>{
+
+const li=document.createElement("li");
+
+li.textContent=name;
+
+li.onclick=()=>{
+
+location.href="t20-world-cup-player.html?player="+encodeURIComponent(name);
+
+};
+
+list.appendChild(li);
+
+});
+
+}
+
+
+/* SEARCH */
+
+document.getElementById("playerSearch").oninput=e=>{
+
+const q=e.target.value.toLowerCase();
+
+renderPlayerList(allPlayers.filter(p=>
+p.toLowerCase().includes(q)
+));
+
+};
+
+
+/* LOAD SELECTED PLAYER */
+
 const params=new URLSearchParams(location.search);
 
 const player=params.get("player");
 
-let allMatches=[];
-let playerCountry="";
+if(player){
 
 document.getElementById("playerName").innerText=player;
 
-init();
+loadPlayer(player);
 
-async function init(){
+}
+
+
+async function loadPlayer(player){
 
 const files=await fetch(INDEX).then(r=>r.json());
 
-let career={runs:0,balls:0,wkts:0,ballsBowled:0,matches:0};
+let runs=0,balls=0,wkts=0,ballsBowled=0,matches=0;
 
-let oppositionStats={};
+const table=document.getElementById("matchTable");
 
 for(const file of files){
 
@@ -188,17 +305,11 @@ const season=await fetch("/data/t20-world-cup/matches/"+file).then(r=>r.json());
 
 season.forEach((match,index)=>{
 
-let runs=0,balls=0,wkts=0,ballsBowled=0;
-
-let teams=match.info.teams;
-
-let opponent=teams.find(t=>t!==playerCountry);
+let r=0,b=0,w=0,bb=0;
 
 match.innings.forEach(raw=>{
 
 const inn=raw.team?raw:Object.values(raw)[0];
-
-if(inn.team===playerCountry) return;
 
 inn.overs?.forEach(over=>{
 
@@ -206,22 +317,20 @@ over.deliveries.forEach(d=>{
 
 if(d.batter===player){
 
-runs+=d.runs.batter;
+r+=d.runs.batter;
 
 if(!d.extras?.wides)
-balls++;
-
-playerCountry=match.info.teams.find(t=>t===inn.team);
+b++;
 
 }
 
 if(d.bowler===player){
 
 if(!d.extras?.wides && !d.extras?.noballs)
-ballsBowled++;
+bb++;
 
 if(d.wickets)
-wkts+=d.wickets.length;
+w+=d.wickets.length;
 
 }
 
@@ -231,207 +340,59 @@ wkts+=d.wickets.length;
 
 });
 
-if(runs||balls||wkts||ballsBowled){
-
-career.runs+=runs;
-career.balls+=balls;
-career.wkts+=wkts;
-career.ballsBowled+=ballsBowled;
-career.matches++;
-
-allMatches.push({match,file,index,runs,balls,wkts,ballsBowled,opponent});
-
-if(!oppositionStats[opponent])
-oppositionStats[opponent]={runs:0,balls:0,wkts:0,matches:0};
-
-oppositionStats[opponent].runs+=runs;
-oppositionStats[opponent].balls+=balls;
-oppositionStats[opponent].wkts+=wkts;
-oppositionStats[opponent].matches++;
-
-}
-
-});
-
-}
-
-document.getElementById("playerName").innerText=
-player+" ("+playerCountry+")";
-
-renderCareer(career);
-
-renderOppositionDropdown(oppositionStats);
-
-renderOppositionStats("ALL",oppositionStats);
-
-renderMatches("ALL");
-
-}
-
-
-/* DROPDOWN */
-
-function renderOppositionDropdown(stats){
-
-const select=document.getElementById("oppositionFilter");
-
-Object.keys(stats).sort().forEach(team=>{
-
-const opt=document.createElement("option");
-
-opt.value=team;
-opt.textContent=team;
-
-select.appendChild(opt);
-
-});
-
-select.onchange=e=>{
-
-renderOppositionStats(e.target.value,stats);
-
-renderMatches(e.target.value);
-
-};
-
-}
-
-
-/* OPPOSITION BOXES */
-
-function renderOppositionStats(team,stats){
-
-let s;
-
-if(team==="ALL"){
-
-s={runs:0,balls:0,wkts:0,matches:0};
-
-Object.values(stats).forEach(v=>{
-
-s.runs+=v.runs;
-s.balls+=v.balls;
-s.wkts+=v.wkts;
-s.matches+=v.matches;
-
-});
-
-}else{
-
-s=stats[team];
-
-}
-
-document.getElementById("oppositionSummary").innerHTML=`
-
-<div class="summary-box">
-
-<div class="summary-label">Matches</div>
-<div class="summary-value">${s.matches}</div>
-
-</div>
-
-<div class="summary-box">
-
-<div class="summary-label">Runs</div>
-<div class="summary-value">${s.runs}</div>
-
-</div>
-
-<div class="summary-box">
-
-<div class="summary-label">Average</div>
-<div class="summary-value">${(s.runs/s.matches||0).toFixed(1)}</div>
-
-</div>
-
-<div class="summary-box">
-
-<div class="summary-label">Strike Rate</div>
-<div class="summary-value">${((s.runs/s.balls)*100||0).toFixed(1)}</div>
-
-</div>
-
-<div class="summary-box">
-
-<div class="summary-label">Wickets</div>
-<div class="summary-value">${s.wkts}</div>
-
-</div>
-
-`;
-
-}
-
-
-/* MATCH TABLE */
-
-function renderMatches(team){
-
-const table=document.getElementById("matchTable");
-
-table.innerHTML=table.rows[0].outerHTML;
-
-allMatches.forEach(m=>{
-
-if(team!=="ALL" && m.opponent!==team) return;
+if(r||w){
+
+runs+=r;
+balls+=b;
+wkts+=w;
+ballsBowled+=bb;
+matches++;
 
 const row=document.createElement("tr");
 
 row.innerHTML=`
 
-<td>${formatDate(m.match.info.dates[0])}</td>
+<td>${formatDate(match.info.dates[0])}</td>
 
 <td>
-<a href="t20-world-cup-match.html?file=${m.file}&match=${m.index}" class="match-link">
-${m.match.info.teams.join(" vs ")}
+<a href="t20-world-cup-match.html?file=${file}&match=${index}" class="match-link">
+${match.info.teams.join(" vs ")}
 </a>
 </td>
 
-<td class="right">${m.runs}</td>
-<td class="right">${m.balls}</td>
-<td class="right">${m.wkts}</td>
-<td class="right">${formatOvers(m.ballsBowled)}</td>
+<td>${r}</td>
+<td>${b}</td>
+<td>${w}</td>
+<td>${formatOvers(bb)}</td>
 
 `;
 
 table.appendChild(row);
 
+}
+
 });
 
 }
 
+renderSummary(matches,runs,balls,wkts);
 
-/* CAREER */
+}
 
-function renderCareer(c){
+
+function renderSummary(matches,runs,balls,wkts){
 
 document.getElementById("careerSummary").innerHTML=`
 
-<div class="summary-box">
-<div class="summary-label">Matches</div>
-<div class="summary-value">${c.matches}</div>
-</div>
+<div class="summary-box">Matches<br><strong>${matches}</strong></div>
 
-<div class="summary-box">
-<div class="summary-label">Runs</div>
-<div class="summary-value">${c.runs}</div>
-</div>
+<div class="summary-box">Runs<br><strong>${runs}</strong></div>
 
-<div class="summary-box">
-<div class="summary-label">Average</div>
-<div class="summary-value">${(c.runs/c.matches||0).toFixed(1)}</div>
-</div>
+<div class="summary-box">Average<br><strong>${(runs/matches||0).toFixed(1)}</strong></div>
 
-<div class="summary-box">
-<div class="summary-label">Strike Rate</div>
-<div class="summary-value">${((c.runs/c.balls)*100||0).toFixed(1)}</div>
-</div>
+<div class="summary-box">Strike Rate<br><strong>${((runs/balls)*100||0).toFixed(1)}</strong></div>
 
-<div class="summary-box">
-<div class="summary-label">Wickets</div>
-<div class="summary-value">${c.wkts}</div>
-</div>
+<div class="summary-box">Wickets<br><strong>${wkts}</strong></div>
 
 `;
 
@@ -442,13 +403,7 @@ document.getElementById("careerSummary").innerHTML=`
 
 function formatDate(d){
 
-return new Date(d).toLocaleDateString("en-GB",{
-
-day:"2-digit",
-month:"short",
-year:"numeric"
-
-});
+return new Date(d).toLocaleDateString("en-GB");
 
 }
 
