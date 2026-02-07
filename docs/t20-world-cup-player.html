@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>T20 World Cup Player | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+
+body{
+font-family:Inter,system-ui,Arial,sans-serif;
+margin:0;
+background:#f3f4f7;
+}
+
+/* NAVBAR */
+
+.navbar{
+display:flex;
+justify-content:center;
+gap:28px;
+padding:18px;
+background:white;
+border-bottom:1px solid #ddd;
+font-weight:600;
+}
+
+.navbar a{
+color:#0056d6;
+text-decoration:none;
+}
+
+/* HERO */
+
+.hero{
+background:linear-gradient(90deg,#6a040f,#d00000);
+color:white;
+padding:28px;
+}
+
+.hero h1{
+margin:0;
+}
+
+/* SUMMARY */
+
+.summary{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+gap:16px;
+padding:20px;
+}
+
+.summary-box{
+background:#e7e7ec;
+padding:12px;
+border-radius:10px;
+text-align:center;
+}
+
+.summary-label{
+font-weight:700;
+}
+
+.summary-value{
+font-size:20px;
+}
+
+/* TABLE */
+
+.container{
+padding:20px;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+background:white;
+}
+
+th,td{
+padding:10px;
+border-bottom:1px solid #ddd;
+}
+
+th{
+background:#eef1f6;
+}
+
+tr:nth-child(even){
+background:#f6fbff;
+}
+
+.right{
+text-align:right;
+}
+
+.match-link{
+color:#0056d6;
+text-decoration:none;
+font-weight:600;
+}
+
+.match-link:hover{
+text-decoration:underline;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+
+<a href="index.html">Home</a>
+<a href="cricket.html">Cricket</a>
+<a href="t20-world-cup.html">T20 World Cup</a>
+
+</div>
+
+<div class="hero">
+
+<h1 id="playerName">Loading...</h1>
+
+</div>
+
+<div class="summary" id="careerSummary"></div>
+
+<div class="container">
+
+<h2>Match by Match</h2>
+
+<table id="matchTable">
+
+<tr>
+
+<th>Date</th>
+<th>Match</th>
+<th class="right">Runs</th>
+<th class="right">Balls</th>
+<th class="right">Wickets</th>
+<th class="right">Overs</th>
+
+</tr>
+
+</table>
+
+</div>
+
+<script>
+
+const INDEX="/data/t20-world-cup/matches/index.json";
+
+const params=new URLSearchParams(location.search);
+
+const player=params.get("player");
+
+document.getElementById("playerName").innerText=player;
+
+init();
+
+async function init(){
+
+const files=await fetch(INDEX).then(r=>r.json());
+
+let matches=[];
+let career={
+runs:0,
+balls:0,
+wkts:0,
+ballsBowled:0,
+matches:0
+};
+
+for(const file of files){
+
+const season=await fetch("/data/t20-world-cup/matches/"+file).then(r=>r.json());
+
+season.forEach((match,index)=>{
+
+let runs=0;
+let balls=0;
+let wkts=0;
+let ballsBowled=0;
+
+match.innings.forEach(raw=>{
+
+const inn=raw.team?raw:Object.values(raw)[0];
+
+inn.overs?.forEach(over=>{
+
+over.deliveries.forEach(d=>{
+
+/* batting */
+
+if(d.batter===player){
+
+runs+=d.runs.batter;
+
+if(!d.extras?.wides)
+balls++;
+
+}
+
+/* bowling */
+
+if(d.bowler===player){
+
+if(!d.extras?.wides && !d.extras?.noballs)
+ballsBowled++;
+
+if(d.wickets)
+wkts+=d.wickets.length;
+
+}
+
+});
+
+});
+
+});
+
+if(runs||balls||wkts||ballsBowled){
+
+career.runs+=runs;
+career.balls+=balls;
+career.wkts+=wkts;
+career.ballsBowled+=ballsBowled;
+career.matches++;
+
+addMatchRow(match,file,index,runs,balls,wkts,ballsBowled);
+
+}
+
+});
+
+}
+
+renderCareer(career);
+
+}
+
+
+/* ADD ROW */
+
+function addMatchRow(match,file,index,runs,balls,wkts,ballsBowled){
+
+const row=document.createElement("tr");
+
+row.innerHTML=`
+
+<td>${formatDate(match.info.dates[0])}</td>
+
+<td>
+
+<a href="t20-world-cup-match.html?file=${file}&match=${index}" class="match-link">
+
+${match.info.teams.join(" vs ")}
+
+</a>
+
+</td>
+
+<td class="right">${runs}</td>
+
+<td class="right">${balls}</td>
+
+<td class="right">${wkts}</td>
+
+<td class="right">${formatOvers(ballsBowled)}</td>
+
+`;
+
+document.getElementById("matchTable").appendChild(row);
+
+}
+
+
+/* CAREER SUMMARY */
+
+function renderCareer(c){
+
+document.getElementById("careerSummary").innerHTML=`
+
+<div class="summary-box">
+
+<div class="summary-label">Matches</div>
+
+<div class="summary-value">${c.matches}</div>
+
+</div>
+
+<div class="summary-box">
+
+<div class="summary-label">Runs</div>
+
+<div class="summary-value">${c.runs}</div>
+
+</div>
+
+<div class="summary-box">
+
+<div class="summary-label">Average</div>
+
+<div class="summary-value">${(c.runs/c.matches).toFixed(1)}</div>
+
+</div>
+
+<div class="summary-box">
+
+<div class="summary-label">Strike Rate</div>
+
+<div class="summary-value">${((c.runs/c.balls)*100).toFixed(1)}</div>
+
+</div>
+
+<div class="summary-box">
+
+<div class="summary-label">Wickets</div>
+
+<div class="summary-value">${c.wkts}</div>
+
+</div>
+
+`;
+
+}
+
+
+/* HELPERS */
+
+function formatDate(d){
+
+return new Date(d).toLocaleDateString("en-GB",{
+
+day:"2-digit",
+month:"short",
+year:"numeric"
+
+});
+
+}
+
+function formatOvers(balls){
+
+return Math.floor(balls/6)+"."+(balls%6);
+
+}
+
+</script>
+
+</body>
+</html>
