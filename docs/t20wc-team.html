@@ -1,8 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>T20 World Cup Team | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+
+body{
+font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+             "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+margin:0;
+background:#f3f4f7;
+}
+
+/* NAVBAR */
+
+.navbar{
+display:flex;
+justify-content:center;
+gap:22px;
+padding:16px 0;
+border-bottom:1px solid #ddd;
+background:white;
+font-weight:600;
+}
+
+.navbar a{
+color:#0056d6;
+text-decoration:none;
+font-size:18px;
+}
+
+/* HERO */
+
+.hero{
+background:linear-gradient(90deg,#6a040f,#d00000);
+color:white;
+padding:36px;
+margin:20px;
+border-radius:18px;
+}
+
+.hero h1{
+margin:0;
+font-size:42px;
+}
+
+/* SUMMARY BOXES */
+
+.summary{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+gap:16px;
+padding:0 20px 20px 20px;
+}
+
+.box{
+background:#e7e7ec;
+padding:18px;
+border-radius:14px;
+text-align:center;
+}
+
+.box .big{
+font-size:30px;
+font-weight:700;
+}
+
+/* TEAM SELECT */
+
+.controls{
+padding:20px;
+display:flex;
+justify-content:center;
+}
+
+select{
+padding:14px;
+font-size:18px;
+border-radius:10px;
+border:1px solid #ccc;
+width:320px;
+background:white;
+}
+
+/* TABLE */
+
+table{
+width:calc(100% - 40px);
+margin:20px;
+background:white;
+border-collapse:collapse;
+border-radius:12px;
+overflow:hidden;
+}
+
+th,td{
+padding:12px;
+border-bottom:1px solid #ddd;
+text-align:center;
+}
+
+th{
+background:#f1f1f1;
+}
+
+tr:hover{
+background:#eef5ff;
+cursor:pointer;
+}
+
+.result-win{
+color:#008000;
+font-weight:700;
+}
+
+.result-loss{
+color:#c00000;
+font-weight:700;
+}
+
+</style>
+</head>
+<body>
+
+
+<!-- NAVBAR -->
+
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="t20wc.html">T20 World Cup</a>
+<a href="t20wc-matches.html">Matches</a>
+<a href="t20wc-team.html">Teams</a>
+<a href="t20-world-cup-player.html">Players</a>
+</div>
+
+
+<!-- HERO -->
+
+<div class="hero">
+<h1 id="teamName">Loading...</h1>
+</div>
+
+
+<!-- SUMMARY -->
+
+<div id="summary" class="summary"></div>
+
+
+<!-- TEAM SELECT -->
+
+<div class="controls">
+<select id="teamSelect"></select>
+</div>
+
+
+<!-- MATCH TABLE -->
+
+<table>
+
+<thead>
+<tr>
+<th>Date</th>
+<th>Opponent</th>
+<th>Venue</th>
+<th>Result</th>
+</tr>
+</thead>
+
+<tbody id="tbody"></tbody>
+
+</table>
+
+
 <script>
 
 const BASE="/data/t20-world-cup/matches/";
 
+/* EXACT FINALS EVENT NAMES ONLY */
+
+const VALID_EVENTS=[
+"ICC World Twenty20",
+"ICC Men's T20 World Cup"
+];
+
+
+/* FLAGS */
+
 const COUNTRY_CODES={
+
 "Afghanistan":"AF",
 "Australia":"AU",
 "Bangladesh":"BD",
@@ -25,15 +212,29 @@ const COUNTRY_CODES={
 "Uganda":"UG",
 "West Indies":"JM",
 "Zimbabwe":"ZW"
+
 };
 
+
 function flag(code){
-return code.replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt()));
+
+return code.replace(/./g,
+c=>String.fromCodePoint(127397+c.charCodeAt())
+);
+
 }
 
+
 function getFlag(team){
-return COUNTRY_CODES[team]?flag(COUNTRY_CODES[team]):"";
+
+return COUNTRY_CODES[team]
+? flag(COUNTRY_CODES[team])
+: "";
+
 }
+
+
+/* PAGE ELEMENTS */
 
 const teamName=document.getElementById("teamName");
 const teamSelect=document.getElementById("teamSelect");
@@ -42,84 +243,119 @@ const summary=document.getElementById("summary");
 
 let ALL_MATCHES=[];
 
+
+/* LOAD DATA */
+
 load();
+
 
 async function load(){
 
-const index=await fetch(BASE+"index.json").then(r=>r.json());
+const index=
+await fetch(BASE+"index.json").then(r=>r.json());
 
 const teamsSet=new Set();
 
 for(const file of index){
 
-const season=await fetch(BASE+file).then(r=>r.json());
+const season=
+await fetch(BASE+file).then(r=>r.json());
 
 season.forEach((match,i)=>{
 
-const event=(match.info?.event?.name || "").toLowerCase();
+const event=
+match.info?.event?.name || "";
 
-/* KEEP ONLY MAIN WORLD CUP */
+/* ONLY KEEP REAL FINALS */
 
-if(
-(
-event.includes("world twenty20")
-||
-event.includes("t20 world cup")
-)
-&&
-!event.includes("qualifier")
-){
+if(!VALID_EVENTS.includes(event))
+return;
+
 
 match._file=file;
 match._index=i;
 
 ALL_MATCHES.push(match);
 
-match.info.teams.forEach(t=>teamsSet.add(t));
-
-}
+match.info.teams.forEach(
+t=>teamsSet.add(t)
+);
 
 });
 
 }
+
 
 const teams=[...teamsSet].sort();
 
 teams.forEach(team=>{
+
 teamSelect.innerHTML+=`
+
 <option value="${team}">
 ${getFlag(team)} ${team}
-</option>`;
+</option>
+
+`;
+
 });
 
-teamSelect.onchange=()=>showTeam(teamSelect.value);
+
+teamSelect.onchange=()=>
+showTeam(teamSelect.value);
+
 
 showTeam(teams[0]);
 
 }
 
+
+/* SHOW TEAM */
+
 function showTeam(team){
 
-teamName.innerText=`${getFlag(team)} ${team}`;
+teamName.innerText=
+`${getFlag(team)} ${team}`;
 
 tbody.innerHTML="";
 
-let wins=0,losses=0;
+let wins=0;
+let losses=0;
 
-const matches=ALL_MATCHES
+
+const matches=
+ALL_MATCHES
 .filter(m=>m.info.teams.includes(team))
-.sort((a,b)=>new Date(b.info.dates[0])-new Date(a.info.dates[0]));
+.sort(
+(a,b)=>new Date(b.info.dates[0])
+-
+new Date(a.info.dates[0])
+);
+
 
 matches.forEach(m=>{
 
-const opponent=m.info.teams.find(t=>t!==team);
+const opponent=
+m.info.teams.find(
+t=>t!==team
+);
 
-let result="—",cls="";
+
+let result="—";
+let cls="";
+
 
 if(m.info.outcome?.winner){
 
-const margin=Object.entries(m.info.outcome.by||{})
-.map(([k,v])=>`${v} ${k}`).join("");
+const margin=
+Object.entries(
+m.info.outcome.by||{}
+)
+.map(
+([k,v])=>`${v} ${k}`
+)
+.join("");
+
 
 if(m.info.outcome.winner===team){
 
@@ -137,26 +373,71 @@ losses++;
 
 }
 
+
 tbody.innerHTML+=`
-<tr onclick="location.href='t20-world-cup-match.html?file=${m._file}&match=${m._index}'">
-<td>${new Date(m.info.dates[0]).toLocaleDateString("en-GB")}</td>
-<td>${getFlag(opponent)} ${opponent}</td>
-<td>${m.info.venue}</td>
-<td class="${cls}">${result}</td>
+
+<tr onclick="
+location.href=
+'t20-world-cup-match.html?file=${m._file}&match=${m._index}'
+">
+
+<td>
+${new Date(
+m.info.dates[0]
+).toLocaleDateString("en-GB")}
+</td>
+
+<td>
+${getFlag(opponent)} ${opponent}
+</td>
+
+<td>
+${m.info.venue}
+</td>
+
+<td class="${cls}">
+${result}
+</td>
+
 </tr>
+
 `;
 
 });
 
+
 const total=wins+losses;
 
+
 summary.innerHTML=`
-<div class="box"><div class="big">${total}</div>Matches</div>
-<div class="box"><div class="big">${wins}</div>Wins</div>
-<div class="box"><div class="big">${losses}</div>Losses</div>
-<div class="box"><div class="big">${total?((wins/total)*100).toFixed(1):"—"}%</div>Win %</div>
+
+<div class="box">
+<div class="big">${total}</div>
+Matches
+</div>
+
+<div class="box">
+<div class="big">${wins}</div>
+Wins
+</div>
+
+<div class="box">
+<div class="big">${losses}</div>
+Losses
+</div>
+
+<div class="box">
+<div class="big">
+${total?((wins/total)*100).toFixed(1):"—"}%
+</div>
+Win %
+</div>
+
 `;
 
 }
 
 </script>
+
+</body>
+</html>
