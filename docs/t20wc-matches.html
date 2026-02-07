@@ -113,9 +113,9 @@ text-decoration:none;
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="cricket.html">Cricket</a>
-<a href="t20-world-cup.html">T20 World Cup</a>
+<a href="../index.html">Home</a>
+<a href="../cricket.html">Cricket</a>
+<a href="../t20-world-cup.html">T20 World Cup</a>
 </div>
 
 <div class="hero">
@@ -145,26 +145,33 @@ text-decoration:none;
 
 <script>
 
-/* CORRECT PATH BASED ON YOUR STRUCTURE */
-const BASE="cricket/data/t20-world-cup/matches/";
+/* CORRECT PATH RELATIVE TO THIS FILE */
+const BASE="data/t20-world-cup/matches/";
 
 let seasons=[];
 let tbody=document.getElementById("tbody");
 let summaryDiv=document.getElementById("summary");
 
-init();
-
 async function init(){
 
 try{
 
-const files=await fetch(BASE+"index.json").then(r=>r.json());
+const indexRes=await fetch(BASE+"index.json");
+
+if(!indexRes.ok)
+throw new Error("Cannot load index.json");
+
+const files=await indexRes.json();
 
 for(const file of files){
 
-const data=await fetch(BASE+file).then(r=>r.json());
+const res=await fetch(BASE+file);
 
-const matches=data.matches;
+if(!res.ok) continue;
+
+const json=await res.json();
+
+const matches=json.matches;
 
 if(!matches) continue;
 
@@ -175,13 +182,16 @@ new Date(a.info.dates[0]) - new Date(b.info.dates[0])
 const stats=calculateStats(matches);
 
 seasons.push({
-year:file.match(/\d{4}/)[0],
+year:file.substring(0,4),
 file:file,
 matches:matches,
 stats:stats
 });
 
 }
+
+if(seasons.length===0)
+throw new Error("No seasons loaded");
 
 seasons.sort((a,b)=>b.year-a.year);
 
@@ -274,12 +284,12 @@ season.matches.forEach((match,i)=>{
 
 const isFinal=i===season.matches.length-1;
 
-const link=`t20wc-match.html?file=${season.file}&match=${i}`;
-
 tbody.innerHTML+=`
 <tr class="${isFinal?'final':''}">
 <td>${new Date(match.info.dates[0]).toLocaleDateString("en-GB")}</td>
-<td><a href="${link}">${match.info.teams.join(" vs ")}</a></td>
+<td><a href="t20wc-match.html?file=${season.file}&match=${i}">
+${match.info.teams.join(" vs ")}
+</a></td>
 <td>${match.info.venue}</td>
 <td>${match.info.outcome?.winner || ""}</td>
 </tr>
@@ -292,22 +302,20 @@ tbody.innerHTML+=`
 function renderSummary(stats){
 
 summaryDiv.innerHTML=`
-
 <div class="summary-box">
 Winner<div class="big">${stats.winner}</div>
 </div>
-
 <div class="summary-box">
 Most Runs<div class="big">${stats.runs[0]} – ${stats.runs[1]}</div>
 </div>
-
 <div class="summary-box">
 Most Wickets<div class="big">${stats.wkts[0]} – ${stats.wkts[1]}</div>
 </div>
-
 `;
 
 }
+
+init();
 
 </script>
 
