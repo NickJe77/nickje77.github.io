@@ -10,39 +10,54 @@
 body{
 font-family:Inter,system-ui,Arial,sans-serif;
 margin:0;
-background:#ffffff;
+background:#f3f4f7;
 }
+
+/* NAVBAR */
 
 .navbar{
 display:flex;
 justify-content:center;
-gap:22px;
-padding:16px;
+gap:28px;
+padding:18px;
+background:white;
 border-bottom:1px solid #ddd;
-background:#fff;
+font-weight:600;
 }
+
+.navbar a{
+color:#0056d6;
+text-decoration:none;
+}
+
+/* HERO */
 
 .hero{
 background:linear-gradient(90deg,#6a040f,#d00000);
 color:white;
-padding:30px;
+padding:25px;
 margin:20px;
 border-radius:16px;
 }
 
+/* INNINGS */
+
 .innings{
 margin:20px;
+background:white;
 border-radius:12px;
 overflow:hidden;
-border:1px solid #ddd;
+box-shadow:0 2px 6px rgba(0,0,0,0.08);
 }
 
 .innings-header{
 background:linear-gradient(90deg,#6a040f,#d00000);
 color:white;
 padding:12px;
-font-weight:600;
+font-weight:700;
 }
+
+/* TABLE */
 
 table{
 width:100%;
@@ -50,12 +65,20 @@ border-collapse:collapse;
 }
 
 th,td{
-padding:8px;
-border-bottom:1px solid #eee;
+padding:10px;
+border-bottom:1px solid #ddd;
+}
+
+th{
+background:#f1f4f8;
 }
 
 tr:nth-child(even){
 background:#eaf3ff;
+}
+
+.right{
+text-align:right;
 }
 
 </style>
@@ -64,14 +87,18 @@ background:#eaf3ff;
 <body>
 
 <div class="navbar">
+
 <a href="index.html">Home</a>
 <a href="cricket.html">Cricket</a>
 <a href="t20-world-cup.html">T20 World Cup</a>
+
 </div>
 
-<div id="hero" class="hero">Loading match...</div>
+<div id="hero" class="hero">
+Loading match...
+</div>
 
-<div id="innings"></div>
+<div id="inningsContainer"></div>
 
 <script>
 
@@ -83,13 +110,16 @@ const file=params.get("file");
 const matchIndex=parseInt(params.get("match"));
 
 if(!file || isNaN(matchIndex)){
+
 document.getElementById("hero").innerHTML="Invalid match link";
+
 throw "";
+
 }
 
-loadMatch();
+init();
 
-async function loadMatch(){
+async function init(){
 
 const season=await fetch(BASE+file).then(r=>r.json());
 
@@ -99,20 +129,65 @@ renderMatch(match);
 
 }
 
+
 function renderMatch(match){
 
 const hero=document.getElementById("hero");
 
+const info=match.info;
+
+let result="";
+
+if(info.outcome?.winner){
+
+if(info.outcome.by?.runs)
+result=`${info.outcome.winner} won by ${info.outcome.by.runs} runs`;
+
+else if(info.outcome.by?.wickets)
+result=`${info.outcome.winner} won by ${info.outcome.by.wickets} wickets`;
+
+}
+
 hero.innerHTML=`
-<h2>${match.info.teams.join(" vs ")}</h2>
-<div>${match.info.venue} • ${match.info.dates[0]}</div>
+
+<h2>${info.teams.join(" vs ")}</h2>
+
+<div>${info.venue}</div>
+
+<div>${formatDate(info.dates[0])}</div>
+
+<div style="margin-top:8px;font-weight:700;">
+${result}
+</div>
+
 `;
 
-const container=document.getElementById("innings");
+const container=document.getElementById("inningsContainer");
+
+container.innerHTML="";
 
 match.innings.forEach(inn=>{
 
-let runs=0,wkts=0,balls=0;
+renderInnings(container,inn);
+
+});
+
+}
+
+
+/* RENDER INNINGS */
+
+function renderInnings(container,inn){
+
+let batterStats={};
+let bowlerStats={};
+
+let runs=0;
+let wkts=0;
+let balls=0;
+
+
+/* COLLECT STATS */
 
 inn.overs.forEach(over=>{
 
@@ -123,28 +198,168 @@ const noball=d.extras?.noballs;
 
 runs+=d.runs.total;
 
-if(!wide && !noball) balls++;
+if(!wide && !noball)
+balls++;
 
-if(d.wickets) wkts+=d.wickets.length;
+const batter=d.batter;
+
+if(!batterStats[batter])
+batterStats[batter]={runs:0,balls:0};
+
+batterStats[batter].runs+=d.runs.batter;
+
+if(!wide)
+batterStats[batter].balls++;
+
+const bowler=d.bowler;
+
+if(!bowlerStats[bowler])
+bowlerStats[bowler]={balls:0,runs:0,wkts:0};
+
+if(!wide && !noball)
+bowlerStats[bowler].balls++;
+
+bowlerStats[bowler].runs+=d.runs.total;
+
+d.wickets?.forEach(w=>{
+
+wkts++;
+
+bowlerStats[bowler].wkts++;
 
 });
 
 });
 
-const overs=Math.floor(balls/6)+"."+(balls%6);
+});
+
+
+const overs=formatOvers(balls);
+
+
+/* CREATE SECTION */
 
 const div=document.createElement("div");
 
 div.className="innings";
 
+
+/* HEADER */
+
 div.innerHTML=`
+
 <div class="innings-header">
-${inn.team} — ${runs}/${wkts} (${overs})
+
+${inn.team} — ${runs}/${wkts} (${overs} overs)
+
 </div>
+
 `;
+
+
+/* BATTING TABLE */
+
+let batHTML=`
+
+<table>
+
+<tr>
+
+<th>Batter</th>
+<th class="right">R</th>
+<th class="right">B</th>
+<th class="right">SR</th>
+
+</tr>
+
+`;
+
+Object.entries(batterStats).forEach(([name,s])=>{
+
+const sr=s.balls?((s.runs/s.balls)*100).toFixed(1):"-";
+
+batHTML+=`
+
+<tr>
+
+<td>${name}</td>
+<td class="right">${s.runs}</td>
+<td class="right">${s.balls}</td>
+<td class="right">${sr}</td>
+
+</tr>
+
+`;
+
+});
+
+batHTML+="</table>";
+
+
+/* BOWLING TABLE */
+
+let bowlHTML=`
+
+<table>
+
+<tr>
+
+<th>Bowler</th>
+<th class="right">O</th>
+<th class="right">R</th>
+<th class="right">W</th>
+<th class="right">Econ</th>
+
+</tr>
+
+`;
+
+Object.entries(bowlerStats).forEach(([name,s])=>{
+
+const overs=formatOvers(s.balls);
+
+const econ=s.balls?(s.runs/(s.balls/6)).toFixed(2):"-";
+
+bowlHTML+=`
+
+<tr>
+
+<td>${name}</td>
+<td class="right">${overs}</td>
+<td class="right">${s.runs}</td>
+<td class="right">${s.wkts}</td>
+<td class="right">${econ}</td>
+
+</tr>
+
+`;
+
+});
+
+bowlHTML+="</table>";
+
+
+div.innerHTML+=batHTML+bowlHTML;
 
 container.appendChild(div);
 
+}
+
+
+/* HELPERS */
+
+function formatOvers(balls){
+
+return Math.floor(balls/6)+"."+(balls%6);
+
+}
+
+function formatDate(d){
+
+return new Date(d).toLocaleDateString("en-GB",{
+day:"2-digit",
+month:"short",
+year:"numeric"
 });
 
 }
