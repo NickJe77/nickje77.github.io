@@ -44,11 +44,6 @@ margin:0;
 font-size:32px;
 }
 
-.hero p{
-margin:6px 0 0;
-opacity:.9;
-}
-
 /* SUMMARY */
 
 .summary{
@@ -62,15 +57,9 @@ padding:20px;
 background:#e7e7ec;
 padding:14px;
 border-radius:10px;
-border:1px solid rgba(0,0,0,0.06);
 }
 
-.summary-box strong{
-display:block;
-margin-bottom:4px;
-}
-
-/* INNINGS BLOCK */
+/* INNINGS */
 
 .innings-block{
 background:white;
@@ -80,55 +69,27 @@ box-shadow:0 2px 6px rgba(0,0,0,0.08);
 margin:20px;
 }
 
-/* RED HEADER BAR */
-
 .innings-header{
 background:linear-gradient(90deg,#6a040f,#d00000);
 color:white;
 padding:12px 16px;
-font-weight:800;
-font-size:18px;
+font-weight:700;
 display:flex;
 justify-content:space-between;
-align-items:center;
-gap:12px;
 }
-
-.innings-header .sub{
-font-weight:700;
-opacity:.95;
-font-size:15px;
-white-space:nowrap;
-}
-
-/* CONTENT */
 
 .innings-content{
 padding:16px;
 }
 
 .score{
-font-weight:800;
-margin-bottom:10px;
-font-size:18px;
+font-weight:700;
+margin-bottom:8px;
 }
-
-/* META LINES */
 
 .meta-line{
-margin:10px 0 14px;
-font-weight:700;
-color:#222;
-}
-
-.meta-line span{
+margin-bottom:12px;
 font-weight:600;
-color:#333;
-}
-
-.section-title{
-margin:10px 0 8px;
-font-weight:800;
 }
 
 /* TABLE */
@@ -137,58 +98,30 @@ table{
 width:100%;
 border-collapse:collapse;
 margin-bottom:14px;
-background:white;
 }
 
 th,td{
 padding:10px;
 border-bottom:1px solid #ddd;
-vertical-align:top;
 }
 
 th{
 background:#eef1f6;
-text-align:left;
-font-weight:800;
 }
 
-tbody tr:nth-child(even){
+tr:nth-child(even){
 background:#f6fbff;
-}
-
-tbody tr:hover{
-background:#eef7ff;
 }
 
 .right{
 text-align:right;
 }
 
-.howout{
-max-width:560px;
-word-break:break-word;
-}
-
-/* FOW */
-
 .fow{
-margin:10px 0 14px;
-padding:12px 14px;
-border-radius:10px;
-background:#f6f7fb;
-border:1px solid rgba(0,0,0,0.06);
-}
-
-.fow strong{
-display:block;
-margin-bottom:6px;
-}
-
-/* SMALL NOTE */
-
-.small{
-font-size:13px;
-opacity:.85;
+background:#f1f3f7;
+padding:10px;
+border-radius:8px;
+margin-bottom:12px;
 }
 
 </style>
@@ -220,54 +153,39 @@ const matchIndex=parseInt(params.get("match"));
 
 const heroStatus=document.getElementById("heroStatus");
 
-if(!file){
-heroStatus.innerText="Missing file parameter";
-throw new Error("Missing file param");
-}
-
-if(isNaN(matchIndex)){
-heroStatus.innerText="Missing match parameter";
-throw new Error("Missing match param");
-}
-
 init();
 
 async function init(){
 
 try{
 
-heroStatus.innerText="Loading file...";
-
 const response=await fetch(BASE+file);
 
-if(!response.ok){
-throw new Error("File not found: "+file);
-}
+if(!response.ok)
+throw new Error("File not found");
 
 const season=await response.json();
 
-heroStatus.innerText="Loading match...";
+const match=season[matchIndex];
 
-if(!season[matchIndex]){
-throw new Error("Match index not found");
-}
+if(!match)
+throw new Error("Match not found");
 
-renderMatch(season[matchIndex]);
+renderMatch(match);
 
 heroStatus.innerText="Match loaded";
 
 }
 catch(err){
 
-console.error(err);
-heroStatus.innerText="Error loading match: "+err.message;
+heroStatus.innerText="Error: "+err.message;
 
 }
 
 }
 
 
-/* RENDER MATCH */
+/* MATCH HEADER */
 
 function renderMatch(match){
 
@@ -275,10 +193,8 @@ const info=match.info;
 
 let winner="";
 let result="";
+let pom="";
 let stage="";
-
-if(info.event?.stage) stage=info.event.stage;
-else if(info.event?.name) stage=info.event.name;
 
 if(info.outcome?.winner){
 
@@ -290,235 +206,211 @@ result=`won by ${info.outcome.by.runs} runs`;
 else if(info.outcome.by?.wickets)
 result=`won by ${info.outcome.by.wickets} wickets`;
 
-else
-result=`won`;
-
 }
 
-const pom = Array.isArray(info.player_of_match) ? info.player_of_match.join(", ") : (info.player_of_match || "");
+if(info.player_of_match)
+pom=info.player_of_match.join(", ");
+
+if(info.event?.stage)
+stage=info.event.stage;
 
 document.getElementById("summary").innerHTML=`
 
-<div class="summary-box">
-<strong>Date</strong>
-${formatDate(info.dates?.[0])}
-</div>
+<div class="summary-box"><strong>Date</strong>${formatDate(info.dates?.[0])}</div>
 
-<div class="summary-box">
-<strong>Teams</strong>
-${info.teams?.join(" vs ") || ""}
-</div>
+<div class="summary-box"><strong>Teams</strong>${info.teams.join(" vs ")}</div>
 
-<div class="summary-box">
-<strong>Venue</strong>
-${info.venue || ""}
-</div>
+<div class="summary-box"><strong>Venue</strong>${info.venue}</div>
 
-<div class="summary-box">
-<strong>Winner</strong>
-${winner || ""}
-</div>
+<div class="summary-box"><strong>Winner</strong>${winner}</div>
 
-<div class="summary-box">
-<strong>Result</strong>
-${result || ""}
-</div>
+<div class="summary-box"><strong>Result</strong>${result}</div>
 
-${(stage || pom) ? `
-<div class="summary-box">
-<strong>Stage</strong>
-${stage || ""}
-</div>
+<div class="summary-box"><strong>Player of Match</strong>${pom}</div>
 
-<div class="summary-box">
-<strong>Player of the Match</strong>
-${pom || ""}
-</div>
-` : ""}
+<div class="summary-box"><strong>Stage</strong>${stage}</div>
 
 `;
 
 const container=document.getElementById("inningsContainer");
+
 container.innerHTML="";
 
 match.innings.forEach(raw=>{
-const inn = raw.team ? raw : Object.values(raw)[0];
+
+const inn=raw.team?raw:Object.values(raw)[0];
+
 renderInnings(container,inn);
+
 });
 
 }
 
 
-/* RENDER INNINGS */
+/* INNINGS */
 
 function renderInnings(container,inn){
 
 let batterStats={};
 let bowlerStats={};
 let dismissals={};
+let fow=[];
+let powerplays=inn.powerplays||[];
 
 let runs=0;
 let wkts=0;
-let legalBalls=0;
+let balls=0;
 
-/* Extras breakdown */
-let ex_w=0, ex_nb=0, ex_b=0, ex_lb=0, ex_p=0;
-let extrasTotal=0;
+let extras={w:0,nb:0,lb:0,b:0};
 
-/* Fall of wickets */
-let fow=[];
+inn.overs?.forEach(over=>{
 
-(inn.overs || []).forEach(over=>{
+over.deliveries.forEach(d=>{
 
-(over.deliveries || []).forEach(d=>{
+runs+=d.runs.total;
 
-/* runs */
-runs += d.runs?.total || 0;
+if(!d.extras?.wides && !d.extras?.noballs)
+balls++;
 
-/* extras values (Cricsheet keys) */
-const e = d.extras || {};
-ex_w  += (e.wides || 0);
-ex_nb += (e.noballs || 0);
-ex_b  += (e.byes || 0);
-ex_lb += (e.legbyes || 0);
-ex_p  += (e.penalty || 0);
+if(d.extras?.wides) extras.w+=d.extras.wides;
+if(d.extras?.noballs) extras.nb+=d.extras.noballs;
+if(d.extras?.legbyes) extras.lb+=d.extras.legbyes;
+if(d.extras?.byes) extras.b+=d.extras.byes;
 
-/* extras total best-practice */
-extrasTotal += ((d.runs?.total || 0) - (d.runs?.batter || 0));
-
-/* legal ball? */
-const wide = !!e.wides;
-const noball = !!e.noballs;
-const isLegal = (!wide && !noball);
-
-/* batter */
 const batter=d.batter;
 
-if(!batterStats[batter]) batterStats[batter]={runs:0,balls:0};
+if(!batterStats[batter])
+batterStats[batter]={runs:0,balls:0};
 
-batterStats[batter].runs += (d.runs?.batter || 0);
+batterStats[batter].runs+=d.runs.batter;
 
-/* batsman balls: wides don't count; no-balls DO count as a ball faced */
-if(!wide) batterStats[batter].balls++;
+if(!d.extras?.wides)
+batterStats[batter].balls++;
 
-/* bowler */
 const bowler=d.bowler;
 
-if(!bowlerStats[bowler]) bowlerStats[bowler]={balls:0,runs:0,wkts:0};
+if(!bowlerStats[bowler])
+bowlerStats[bowler]={balls:0,runs:0,wkts:0};
 
-if(isLegal) bowlerStats[bowler].balls++;
+if(!d.extras?.wides && !d.extras?.noballs)
+bowlerStats[bowler].balls++;
 
-bowlerStats[bowler].runs += (d.runs?.total || 0);
+bowlerStats[bowler].runs+=d.runs.total;
 
-/* wickets */
-(d.wickets || []).forEach(w=>{
+d.wickets?.forEach(w=>{
 
 wkts++;
+
 bowlerStats[bowler].wkts++;
 
-dismissals[w.player_out] = formatDismissal(w, bowler);
+dismissals[w.player_out]=formatDismissal(w,bowler);
 
-/* fall of wicket timing (Cricinfo style) */
-const displayBalls = isLegal ? (legalBalls + 1) : (legalBalls);
-const ovStr = ballsToOverString(displayBalls);
-fow.push(`${wkts}-${runs} (${w.player_out}, ${ovStr} ov)`);
-
-});
-
-/* increment legal balls AFTER processing a legal delivery */
-if(isLegal) legalBalls++;
+fow.push(`${wkts}-${runs} (${w.player_out}, ${formatOvers(balls)} ov)`);
 
 });
 
 });
 
-const oversStr = formatOvers(legalBalls);
+});
 
-/* extras text */
-const extrasParts=[];
-if(ex_w)  extrasParts.push(`w ${ex_w}`);
-if(ex_nb) extrasParts.push(`nb ${ex_nb}`);
-if(ex_lb) extrasParts.push(`lb ${ex_lb}`);
-if(ex_b)  extrasParts.push(`b ${ex_b}`);
-if(ex_p)  extrasParts.push(`pen ${ex_p}`);
 
-const extrasText = `${extrasTotal}${extrasParts.length ? " ("+extrasParts.join(", ")+")" : ""}`;
+const overs=formatOvers(balls);
 
-/* build block */
+const extrasTotal=extras.w+extras.nb+extras.lb+extras.b;
+
+const extrasText=`${extrasTotal} (w ${extras.w}, nb ${extras.nb}, lb ${extras.lb}, b ${extras.b})`;
+
+const powerplayText=powerplays.map(p=>`Overs ${p.from}–${p.to}`).join(", ");
+
+
+/* BUILD */
+
 const div=document.createElement("div");
+
 div.className="innings-block";
 
 div.innerHTML=`
 
 <div class="innings-header">
+
 <div>${inn.team} Innings</div>
-<div class="sub">${runs}/${wkts} (${oversStr} overs)</div>
+
+<div>${runs}/${wkts} (${overs})</div>
+
 </div>
 
 <div class="innings-content">
 
-<div class="score">${runs}/${wkts} <span class="small">(${oversStr} overs)</span></div>
+<div class="score">${runs}/${wkts} (${overs} overs)</div>
 
-<div class="section-title">Batting</div>
+${powerplays.length?`<div class="meta-line">Powerplay: ${powerplayText}</div>`:""}
+
+<strong>Batting</strong>
 
 <table>
-<thead>
+
 <tr>
-<th style="width:26%;">Batter</th>
-<th class="howout">How out</th>
-<th class="right" style="width:8%;">R</th>
-<th class="right" style="width:8%;">B</th>
-<th class="right" style="width:10%;">SR</th>
+
+<th>Batter</th>
+<th>How out</th>
+<th class="right">R</th>
+<th class="right">B</th>
+<th class="right">SR</th>
+
 </tr>
-</thead>
-<tbody>
+
 ${Object.entries(batterStats).map(([name,s])=>`
+
 <tr>
+
 <td>${name}</td>
-<td class="howout">${dismissals[name] || "not out"}</td>
+<td>${dismissals[name]||"not out"}</td>
 <td class="right">${s.runs}</td>
 <td class="right">${s.balls}</td>
 <td class="right">${calcSR(s)}</td>
+
 </tr>
+
 `).join("")}
-</tbody>
+
 </table>
 
-<div class="meta-line">Extras: <span>${extrasText}</span></div>
+<div class="meta-line">Extras: ${extrasText}</div>
 
-${fow.length ? `
-<div class="fow">
-<strong>Fall of wickets</strong>
-<div>${fow.join(", ")}</div>
-</div>
-` : ""}
+${fow.length?`<div class="fow"><strong>Fall of wickets</strong>${fow.join(", ")}</div>`:""}
 
-<div class="section-title">Bowling</div>
+<strong>Bowling</strong>
 
 <table>
-<thead>
+
 <tr>
+
 <th>Bowler</th>
-<th class="right" style="width:10%;">O</th>
-<th class="right" style="width:10%;">R</th>
-<th class="right" style="width:10%;">W</th>
-<th class="right" style="width:12%;">Econ</th>
+<th class="right">O</th>
+<th class="right">R</th>
+<th class="right">W</th>
+<th class="right">Econ</th>
+
 </tr>
-</thead>
-<tbody>
+
 ${Object.entries(bowlerStats).map(([name,s])=>`
+
 <tr>
+
 <td>${name}</td>
 <td class="right">${formatOvers(s.balls)}</td>
 <td class="right">${s.runs}</td>
 <td class="right">${s.wkts}</td>
 <td class="right">${calcEcon(s)}</td>
+
 </tr>
+
 `).join("")}
-</tbody>
+
 </table>
 
 </div>
+
 `;
 
 container.appendChild(div);
@@ -529,79 +421,34 @@ container.appendChild(div);
 /* HELPERS */
 
 function calcSR(s){
-return s.balls ? ((s.runs/s.balls)*100).toFixed(1) : "-";
+return s.balls?((s.runs/s.balls)*100).toFixed(1):"-";
 }
 
 function calcEcon(s){
-return s.balls ? (s.runs / (s.balls/6)).toFixed(2) : "-";
+return s.balls?(s.runs/(s.balls/6)).toFixed(2):"-";
 }
 
 function formatOvers(balls){
 return Math.floor(balls/6)+"."+(balls%6);
 }
 
-function ballsToOverString(balls){
-/* balls here are "ball count" in the innings timeline (legal balls only; wides/no-balls may use current) */
-const o = Math.floor(balls/6);
-const b = balls%6;
-return `${o}.${b}`;
-}
-
 function formatDate(d){
-if(!d) return "";
 return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
 }
 
+function formatDismissal(w,bowler){
 
-/* FULL DISMISSAL FORMAT (Cricinfo style) */
-
-function formatDismissal(w, bowler){
-
-const fielders = (w.fielders || []).map(f=>f.name).filter(Boolean).join("/");
+const fielders=w.fielders?.map(f=>f.name).join("/");
 
 switch(w.kind){
 
-case "bowled":
-return `b ${bowler}`;
-
-case "caught":
-return `c ${fielders || "?"} b ${bowler}`;
-
-case "lbw":
-return `lbw b ${bowler}`;
-
-case "stumped":
-return `st ${fielders || "?"} b ${bowler}`;
-
-case "run out":
-return `run out (${fielders || "?"})`;
-
-case "caught and bowled":
-return `c & b ${bowler}`;
-
-case "hit wicket":
-return `hit wicket b ${bowler}`;
-
-case "retired hurt":
-return `retired hurt`;
-
-case "retired out":
-return `retired out`;
-
-case "obstructing the field":
-return `obstructing the field`;
-
-case "handled the ball":
-return `handled the ball`;
-
-case "hit the ball twice":
-return `hit the ball twice`;
-
-case "timed out":
-return `timed out`;
-
-default:
-return w.kind || "out";
+case "bowled": return `b ${bowler}`;
+case "caught": return `c ${fielders} b ${bowler}`;
+case "lbw": return `lbw b ${bowler}`;
+case "stumped": return `st ${fielders} b ${bowler}`;
+case "run out": return `run out (${fielders})`;
+case "caught and bowled": return `c & b ${bowler}`;
+default: return w.kind;
 
 }
 
