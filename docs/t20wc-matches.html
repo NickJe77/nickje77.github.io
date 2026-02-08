@@ -1,334 +1,117 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>T20 World Cup Matches | The Sporting Almanac</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>T20 Debug – Match Loader | The Sporting Almanac</title>
 
 <style>
-
-body{
-font-family: Inter, system-ui, Arial, sans-serif;
-margin:0;
-background:#f3f4f7;
-}
-
-.navbar{
-display:flex;
-justify-content:center;
-gap:22px;
-padding:16px 0;
-border-bottom:1px solid #ddd;
-background:white;
-font-weight:600;
-}
-
-.navbar a{
-color:#0056d6;
-text-decoration:none;
-font-size:18px;
-}
-
-.hero{
-background:linear-gradient(90deg,#6a040f,#d00000);
-color:white;
-padding:36px;
-margin:20px;
-border-radius:18px;
-}
-
-.year-bar{
-padding:20px;
-text-align:center;
-}
-
-.year-btn{
-background:#6a040f;
-color:white;
-border:none;
-padding:10px 18px;
-margin:4px;
-border-radius:8px;
-cursor:pointer;
-font-weight:600;
-}
-
-.year-btn.active{
-background:#d00000;
-}
-
-.summary{
-display:grid;
-grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
-gap:16px;
-margin:20px;
-}
-
-.summary-box{
-background:white;
-padding:18px;
-border-radius:12px;
-box-shadow:0 2px 6px rgba(0,0,0,.1);
-text-align:center;
-}
-
-.summary-box .big{
-font-size:22px;
-font-weight:700;
-color:#6a040f;
-margin-top:6px;
-}
-
-table{
-width:calc(100% - 40px);
-margin:20px;
-background:white;
-border-collapse:collapse;
-border-radius:12px;
-overflow:hidden;
-}
-
-th,td{
-padding:12px;
-border-bottom:1px solid #ddd;
-text-align:center;
-}
-
-tr:nth-child(even){
-background:#eef5ff;
-}
-
-tr.final{
-background:#ffe9b3 !important;
-font-weight:700;
-cursor:pointer;
-}
-
+  body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#f6f7f9;color:#111;}
+  .wrap{max-width:1100px;margin:24px auto;padding:0 16px;}
+  .card{background:#fff;border:1px solid #e6e6e6;border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.06);padding:16px;margin-bottom:14px;}
+  h1{font-size:20px;margin:0 0 6px}
+  .muted{color:#666;font-size:14px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .pill{background:#f1f3f5;border:1px solid #e6e6e6;border-radius:999px;padding:6px 10px;font-size:13px}
+  .ok{background:#eaffea;border-color:#bfe8bf}
+  .bad{background:#ffecec;border-color:#f0b4b4}
+  pre{white-space:pre-wrap;word-break:break-word;margin:0;font-size:13px;line-height:1.35}
+  table{width:100%;border-collapse:collapse;margin-top:10px}
+  td,th{border-bottom:1px solid #eee;padding:8px;text-align:left;font-size:14px}
+  th{background:#fafafa}
+  .btn{display:inline-block;background:#0b5cff;color:#fff;text-decoration:none;padding:10px 12px;border-radius:10px;font-weight:700}
+  .btn:active{transform:translateY(1px)}
+  code{background:#f1f3f5;padding:2px 6px;border-radius:6px}
 </style>
 </head>
-
 <body>
+<div class="wrap">
 
-<div class="navbar">
-<a href="index.html">Home</a>
-<a href="t20wc.html">T20 World Cup</a>
-<a href="t20wc-matches.html">Matches</a>
-<a href="t20wc-team.html">Teams</a>
-<a href="t20-world-cup-player.html">Players</a>
+  <div class="card">
+    <h1>T20 Debug – Match Loader</h1>
+    <div class="muted">
+      This page will try multiple likely match JSON paths and show exactly what loads (or why it fails).
+      Use it to stop guessing and lock the real fix.
+    </div>
+  </div>
+
+  <div class="card" id="inputsCard">
+    <div class="row" id="inputs"></div>
+    <div style="margin-top:10px" class="muted">
+      Tip: open this with something like:
+      <br>
+      <code>t20-debug-match.html?file=123456.json</code> or <code>t20-debug-match.html?id=123456</code>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row" id="statusRow"></div>
+    <div style="margin-top:10px" class="muted">Fetch attempts log:</div>
+    <pre id="log" style="margin-top:10px"></pre>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none">
+    <h1>Loaded JSON Summary</h1>
+    <div class="muted" id="loadedFrom"></div>
+
+    <table>
+      <tr><th>Field</th><th>Value</th></tr>
+      <tr><td>Detected schema</td><td id="schema"></td></tr>
+      <tr><td>Teams</td><td id="teams"></td></tr>
+      <tr><td>Date(s)</td><td id="dates"></td></tr>
+      <tr><td>Venue</td><td id="venue"></td></tr>
+      <tr><td>Match type / event</td><td id="event"></td></tr>
+    </table>
+
+    <div style="margin-top:12px" class="muted">Top-level keys:</div>
+    <pre id="keys" style="margin-top:10px"></pre>
+  </div>
+
+  <div class="card" id="nextStepsCard" style="display:none">
+    <h1>What to do next</h1>
+    <div class="muted" id="nextSteps"></div>
+  </div>
+
 </div>
-
-<div class="hero">
-<h2>T20 World Cup Matches</h2>
-</div>
-
-<div id="yearBar" class="year-bar"></div>
-
-<div id="summary" class="summary"></div>
-
-<table>
-<thead>
-<tr>
-<th>Date</th>
-<th>Match</th>
-<th>Venue</th>
-<th>Result</th>
-</tr>
-</thead>
-<tbody id="tbody"></tbody>
-</table>
 
 <script>
-
-const BASE="/data/t20-world-cup/matches/";
-
-/* MATCH NUMBER CUT-OFFS */
-
-const MAIN_STAGE_START={
-2014:17,
-2016:17,
-2021:13,
-2022:13,
-2024:19
-};
-
-let ALL_MATCHES=[];
-let SEASONS=[];
-
-const tbody=document.getElementById("tbody");
-const yearBar=document.getElementById("yearBar");
-const summaryDiv=document.getElementById("summary");
-
-load();
-
-async function load(){
-
-const files=await fetch(BASE+"index.json").then(r=>r.json());
-
-for(const file of files){
-
-if(file.includes("2013") || file.includes("2015"))
-continue;
-
-const season=await fetch(BASE+file).then(r=>r.json());
-
-let matches=[];
-
-if(Array.isArray(season))
-matches=season;
-else if(Array.isArray(season.matches))
-matches=season.matches;
-else
-continue;
-
-matches.forEach((match,i)=>{
-
-const year=parseInt(match.info.dates[0].substring(0,4));
-
-const matchNumber=match.info.event?.match_number || 0;
-
-/* APPLY YEAR-SPECIFIC CUT-OFF */
-
-if(
-MAIN_STAGE_START[year] &&
-matchNumber < MAIN_STAGE_START[year]
-)
-return;
-
-match._file=file;
-match._index=i;
-
-ALL_MATCHES.push(match);
-
-});
-
-}
-
-const years=[...new Set(
-ALL_MATCHES.map(m=>m.info.dates[0].substring(0,4))
-)];
-
-years.sort((a,b)=>b-a);
-
-years.forEach(year=>{
-SEASONS.push({
-year,
-matches:ALL_MATCHES.filter(
-m=>m.info.dates[0].startsWith(year)
-)
-});
-});
-
-buildButtons();
-showSeason(0);
-
-}
-
-function buildButtons(){
-
-yearBar.innerHTML="";
-
-SEASONS.forEach((season,index)=>{
-
-const btn=document.createElement("button");
-
-btn.className="year-btn"+(index===0?" active":"");
-
-btn.textContent=season.year;
-
-btn.onclick=()=>{
-document.querySelectorAll(".year-btn")
-.forEach(b=>b.classList.remove("active"));
-btn.classList.add("active");
-showSeason(index);
-};
-
-yearBar.appendChild(btn);
-
-});
-
-}
-
-function showSeason(index){
-
-const season=SEASONS[index];
-
-renderSummary(season.matches);
-
-tbody.innerHTML="";
-
-season.matches.forEach((match,i)=>{
-
-const isFinal=i===season.matches.length-1;
-
-let result="—";
-
-if(match.info.outcome?.winner){
-
-const margin=
-Object.entries(match.info.outcome.by||{})
-.map(([k,v])=>`${v} ${k}`)
-.join("");
-
-result=`${match.info.outcome.winner} won by ${margin}`;
-
-}
-
-tbody.innerHTML+=`
-<tr class="${isFinal?'final':''}"
-onclick="location.href='t20-world-cup-match.html?file=${match._file}&match=${match._index}'">
-<td>${new Date(match.info.dates[0]).toLocaleDateString("en-GB")}</td>
-<td>${match.info.teams.join(" vs ")}</td>
-<td>${match.info.venue}</td>
-<td>${result}</td>
-</tr>
-`;
-
-});
-
-}
-
-function renderSummary(matches){
-
-let runs={},wkts={};
-
-matches.forEach(match=>{
-match.innings?.forEach(inn=>{
-inn.overs?.forEach(over=>{
-over.deliveries.forEach(d=>{
-runs[d.batter]=(runs[d.batter]||0)+d.runs.batter;
-if(d.wickets)
-wkts[d.bowler]=(wkts[d.bowler]||0)+d.wickets.length;
-});
-});
-});
-});
-
-const finalMatch=matches[matches.length-1];
-
-const winner=finalMatch?.info?.outcome?.winner || "—";
-
-const topRuns=Object.entries(runs).sort((a,b)=>b[1]-a[1])[0] || ["—",0];
-const topWkts=Object.entries(wkts).sort((a,b)=>b[1]-a[1])[0] || ["—",0];
-
-summaryDiv.innerHTML=`
-
-<div class="summary-box">
-Winner<div class="big">${winner}</div>
-</div>
-
-<div class="summary-box">
-Most Runs<div class="big">${topRuns[0]} – ${topRuns[1]}</div>
-</div>
-
-<div class="summary-box">
-Most Wickets<div class="big">${topWkts[0]} – ${topWkts[1]}</div>
-</div>
-
-`;
-
-}
-
-</script>
-
-</body>
-</html>
+(function(){
+  const logEl = document.getElementById("log");
+  const statusRow = document.getElementById("statusRow");
+  const inputsEl = document.getElementById("inputs");
+
+  function pill(text, cls){
+    const d = document.createElement("div");
+    d.className = "pill " + (cls || "");
+    d.textContent = text;
+    return d;
+  }
+  function log(line){
+    logEl.textContent += line + "\n";
+  }
+
+  // Read params (we accept several names because different pages often use different ones)
+  const params = new URLSearchParams(location.search);
+  const paramCandidates = ["file","id","match","game","json"];
+  let raw = null;
+  let rawKey = null;
+  for(const k of paramCandidates){
+    if(params.has(k) && params.get(k).trim()){
+      raw = params.get(k).trim();
+      rawKey = k;
+      break;
+    }
+  }
+
+  inputsEl.appendChild(pill("URL: " + location.href));
+  inputsEl.appendChild(pill("Param key: " + (rawKey || "none"), rawKey ? "ok" : "bad"));
+  inputsEl.appendChild(pill("Param value: " + (raw || "none"), raw ? "ok" : "bad"));
+
+  if(!raw){
+    statusRow.appendChild(pill("No match identifier in URL. Add ?file=XXXX.json or ?id=XXXX", "bad"));
+    log("❌ No parameter found. Supported params: file, id, match, game, json");
+    return;
+  }
+
+  // Normalize into possible filenames
+  const guesses = []
