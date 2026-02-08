@@ -19,14 +19,14 @@ body{
     display:flex;
     justify-content:center;
     gap:24px;
-    padding:16px 0;
+    padding:16px;
     border-bottom:1px solid #ddd;
     background:white;
-    font-weight:600;
 }
 
 .navbar a{
     text-decoration:none;
+    font-weight:600;
     color:#0056d6;
 }
 
@@ -42,16 +42,6 @@ body{
     padding:40px;
     border-radius:22px;
     margin-bottom:25px;
-}
-
-.hero h1{
-    margin:0;
-    font-size:38px;
-}
-
-.hero p{
-    margin-top:8px;
-    font-size:18px;
 }
 
 .year-grid{
@@ -72,10 +62,6 @@ body{
     cursor:pointer;
 }
 
-.year-btn:hover{
-    background:#b30000;
-}
-
 .year-btn.active{
     background:#ff3b3b;
 }
@@ -85,7 +71,6 @@ body{
     padding:16px;
     margin-bottom:12px;
     border-radius:14px;
-    box-shadow:0 4px 10px rgba(0,0,0,0.08);
 }
 
 .match a{
@@ -95,13 +80,9 @@ body{
     color:#8b0000;
 }
 
-.match a:hover{
-    color:#e10600;
-}
-
 .meta{
-    margin-top:4px;
     color:#555;
+    margin-top:4px;
 }
 
 </style>
@@ -118,7 +99,6 @@ body{
 
 <div class="hero">
 <h1>T20 World Cup</h1>
-<p>Complete T20 World Cup match history by edition.</p>
 </div>
 
 <div class="year-grid" id="yearGrid"></div>
@@ -130,16 +110,7 @@ body{
 <script>
 
 const YEARS = [
-2007,
-2009,
-2010,
-2012,
-2014,
-2016,
-2021,
-2022,
-2024,
-2026
+2007,2009,2010,2012,2014,2016,2021,2022,2024,2026
 ];
 
 const BASE =
@@ -147,22 +118,36 @@ const BASE =
 
 const START_DATES = {
 
-2010: "2010-04-30",
-2012: "2012-09-18",
-2021: "2021-10-17"
+2010:"2010-04-30",
+2012:"2012-09-18",
+2021:"2021-10-17"
 
 };
 
 
-function isWorldCupMatch(match)
+/* STRICT TOURNAMENT FILTER */
+
+function isRealWorldCupMatch(match)
 {
-    if(!match.info || !match.info.event)
+    if(!match.info) return false;
+
+    const event =
+        match.info.event?.name?.toLowerCase() || "";
+
+    const stage =
+        match.info.event?.stage?.toLowerCase() || "";
+
+    if(!event.includes("world cup"))
         return false;
 
-    const name =
-        match.info.event.name.toLowerCase();
+    /* EXCLUDE warmups explicitly */
 
-    return name.includes("world cup");
+    if(stage.includes("warm") ||
+       stage.includes("practice") ||
+       stage.includes("tour"))
+        return false;
+
+    return true;
 }
 
 
@@ -202,13 +187,6 @@ async function loadYear(year)
     const res =
         await fetch(BASE + file);
 
-    if(!res.ok)
-    {
-        document.getElementById("matches")
-            .innerHTML="No data found";
-        return;
-    }
-
     const data =
         await res.json();
 
@@ -217,17 +195,8 @@ async function loadYear(year)
         ? data
         : data.matches;
 
-    if(!matches)
-        return;
-
-    /* FILTER WORLD CUP ONLY */
-
     matches =
-        matches.filter(match =>
-        isWorldCupMatch(match)
-    );
-
-    /* APPLY DATE FILTER */
+        matches.filter(isRealWorldCupMatch);
 
     if(START_DATES[year])
     {
@@ -239,7 +208,6 @@ async function loadYear(year)
                 new Date(match.info.dates[0]) >= cutoff
             );
     }
-
 
     let html="";
 
@@ -258,13 +226,9 @@ async function loadYear(year)
 
         </a>
 
-        <div class="meta">
-        ${info.venue}
-        </div>
+        <div class="meta">${info.venue}</div>
 
-        <div class="meta">
-        ${info.dates[0]}
-        </div>
+        <div class="meta">${info.dates[0]}</div>
 
         </div>
 
@@ -272,11 +236,9 @@ async function loadYear(year)
     });
 
     document.getElementById("matches")
-        .innerHTML=html;
+        .innerHTML = html;
 }
 
-
-/* INIT */
 
 buildYearButtons();
 
