@@ -56,11 +56,6 @@ margin:0;
 font-size:44px;
 }
 
-.hero-left p{
-margin-top:6px;
-opacity:.9;
-}
-
 .flag{
 width:60px;
 margin-top:10px;
@@ -112,7 +107,6 @@ display:grid;
 grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
 gap:16px;
 padding:0 20px;
-margin-top:14px;
 }
 
 .box{
@@ -146,10 +140,6 @@ border-bottom:1px solid #eee;
 text-align:center;
 }
 
-th{
-background:#f5f5f5;
-}
-
 .center{
 padding:40px;
 color:#666;
@@ -165,4 +155,306 @@ color:#666;
 <a href="index.html">Home</a>
 <a href="t20-world-cup.html">T20 World Cup</a>
 <a href="t20wc-matches.html">Matches</a>
-<a href="t20-world
+<a href="t20-world-cup-player.html">Players</a>
+<a href="t20wc-teams.html">Teams</a>
+
+</div>
+
+
+<div class="hero">
+
+<div class="hero-left">
+
+<h1 id="playerName">Select Player</h1>
+
+<img id="flag" class="flag">
+
+</div>
+
+
+<div class="hero-search">
+
+<input id="playerSearch" placeholder="Search player...">
+
+<div id="searchResults" class="search-results"></div>
+
+</div>
+
+</div>
+
+
+<div id="careerSummary" class="summary"></div>
+
+
+<table>
+
+<thead>
+
+<tr>
+<th>Season</th>
+<th>Date</th>
+<th>Opponent</th>
+<th>Venue</th>
+<th>Runs</th>
+<th>Balls</th>
+<th>Strike Rate</th>
+</tr>
+
+</thead>
+
+<tbody id="tbody">
+
+<tr>
+<td colspan="7" class="center">
+Select a player
+</td>
+</tr>
+
+</tbody>
+
+</table>
+
+
+<script>
+
+const INDEX="data/t20-world-cup/matches/index.json";
+const PLAYER_NAMES="data/t20-world-cup/matches/player-names.json";
+const FOLDER="data/t20-world-cup/matches/";
+
+let playerList=[];
+let matches=[];
+let country="";
+
+/* SAFE SEARCH INIT */
+
+window.addEventListener("DOMContentLoaded",()=>{
+
+initSearch();
+
+const param=new URLSearchParams(location.search).get("player");
+
+if(param)
+loadPlayer(decodeURIComponent(param));
+
+});
+
+
+/* SEARCH */
+
+async function initSearch(){
+
+try{
+
+const data=await fetch(PLAYER_NAMES).then(r=>r.json());
+
+playerList=Object.keys(data).sort();
+
+const input=document.getElementById("playerSearch");
+
+const results=document.getElementById("searchResults");
+
+input.oninput=function(){
+
+const q=this.value.toLowerCase();
+
+if(!q){
+results.style.display="none";
+return;
+}
+
+results.innerHTML="";
+
+playerList
+.filter(p=>p.toLowerCase().includes(q))
+.slice(0,30)
+.forEach(p=>{
+
+const div=document.createElement("div");
+
+div.innerText=p;
+
+div.onclick=()=>{
+location.href=
+`t20-world-cup-player.html?player=${encodeURIComponent(p)}`;
+};
+
+results.appendChild(div);
+
+});
+
+results.style.display="block";
+
+};
+
+}catch(e){
+
+console.error("Search load failed",e);
+
+}
+
+}
+
+
+/* PLAYER LOAD */
+
+async function loadPlayer(player){
+
+playerName.innerText=player;
+
+matches=[];
+
+const files=await fetch(INDEX).then(r=>r.json());
+
+for(const file of files){
+
+const season=await fetch(FOLDER+file).then(r=>r.json());
+
+season.forEach((match,index)=>{
+
+let runs=0,balls=0,team="";
+
+Object.entries(match.info.players||{})
+.forEach(([t,list])=>{
+if(list.includes(player)){
+team=t;
+country=t;
+}
+});
+
+match.innings.forEach(innRaw=>{
+
+const inn=innRaw.team?innRaw:Object.values(innRaw)[0];
+
+inn.overs?.forEach(over=>{
+
+over.deliveries.forEach(d=>{
+
+if(d.batter===player){
+runs+=d.runs.batter;
+if(!d.extras?.wides) balls++;
+}
+
+});
+
+});
+
+});
+
+if(balls>0){
+
+const opponent=match.info.teams.find(t=>t!==team);
+
+matches.push({
+season:file.match(/\d{4}/)[0],
+date:match.info.dates[0],
+opponent,
+venue:match.info.venue,
+runs,
+balls,
+file,
+index
+});
+
+}
+
+});
+
+}
+
+flag.src=`https://flagcdn.com/w80/${code(country)}.png`;
+
+renderSummary();
+
+renderTable();
+
+}
+
+
+/* SUMMARY */
+
+function renderSummary(){
+
+let runs=0,balls=0;
+
+matches.forEach(m=>{
+runs+=m.runs;
+balls+=m.balls;
+});
+
+careerSummary.innerHTML=`
+
+<div class="box">
+<div class="big">${matches.length}</div>
+Matches
+</div>
+
+<div class="box">
+<div class="big">${runs}</div>
+Runs
+</div>
+
+<div class="box">
+<div class="big">${balls?((runs/balls)*100).toFixed(1):"-"}</div>
+Strike Rate
+</div>
+
+`;
+
+}
+
+
+/* TABLE */
+
+function renderTable(){
+
+tbody.innerHTML="";
+
+matches.forEach(m=>{
+
+const tr=document.createElement("tr");
+
+tr.onclick=()=>location.href=
+`t20-world-cup-match.html?file=${m.file}&match=${m.index}`;
+
+tr.innerHTML=`
+<td>${m.season}</td>
+<td>${new Date(m.date).toLocaleDateString("en-GB")}</td>
+<td>${m.opponent}</td>
+<td>${m.venue}</td>
+<td>${m.runs}</td>
+<td>${m.balls}</td>
+<td>${((m.runs/m.balls)*100).toFixed(1)}</td>
+`;
+
+tbody.appendChild(tr);
+
+});
+
+}
+
+
+/* COUNTRY CODE */
+
+function code(name){
+
+const map={
+India:"in",
+Australia:"au",
+England:"gb",
+Pakistan:"pk",
+South Africa:"za",
+New Zealand:"nz",
+Sri Lanka:"lk",
+West Indies:"jm",
+Afghanistan:"af",
+Bangladesh:"bd"
+};
+
+return map[name]||"un";
+
+}
+
+</script>
+
+</body>
+</html>
