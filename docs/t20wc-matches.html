@@ -148,6 +148,14 @@ const tbody=document.getElementById("tbody");
 const yearBar=document.getElementById("yearBar");
 const summaryDiv=document.getElementById("summary");
 
+/* MATCH NUMBER CUTOFFS */
+
+const MAIN_STAGE_START={
+2021:13,
+2022:13,
+2024:19
+};
+
 load();
 
 async function load(){
@@ -165,20 +173,24 @@ let matches=[];
 
 if(Array.isArray(season))
 matches=season;
-
 else if(Array.isArray(season.matches))
 matches=season.matches;
-
 else
 continue;
 
 matches.forEach((match,i)=>{
 
-const stage=(match.info.stage || "").toLowerCase();
+const year=parseInt(match.info.dates[0].substring(0,4));
 
-if(stage.includes("qualifier") ||
-   stage.includes("warm") ||
-   stage.includes("practice"))
+const matchNumber=match.info.event?.match_number;
+
+/* APPLY CUTOFF */
+
+if(
+MAIN_STAGE_START[year] &&
+matchNumber &&
+matchNumber < MAIN_STAGE_START[year]
+)
 return;
 
 match._file=file;
@@ -190,8 +202,6 @@ ALL_MATCHES.push(match);
 
 }
 
-/* GROUP BY YEAR */
-
 const years=[...new Set(
 ALL_MATCHES.map(m=>m.info.dates[0].substring(0,4))
 )];
@@ -199,14 +209,12 @@ ALL_MATCHES.map(m=>m.info.dates[0].substring(0,4))
 years.sort((a,b)=>b-a);
 
 years.forEach(year=>{
-
 SEASONS.push({
 year,
 matches:ALL_MATCHES.filter(
 m=>m.info.dates[0].startsWith(year)
 )
 });
-
 });
 
 buildButtons();
@@ -283,24 +291,15 @@ function renderSummary(matches){
 let runs={},wkts={};
 
 matches.forEach(match=>{
-
 match.innings?.forEach(inn=>{
-
 inn.overs?.forEach(over=>{
-
 over.deliveries.forEach(d=>{
-
 runs[d.batter]=(runs[d.batter]||0)+d.runs.batter;
-
 if(d.wickets)
 wkts[d.bowler]=(wkts[d.bowler]||0)+d.wickets.length;
-
 });
-
 });
-
 });
-
 });
 
 const finalMatch=matches[matches.length-1];
@@ -313,18 +312,15 @@ const topWkts=Object.entries(wkts).sort((a,b)=>b[1]-a[1])[0] || ["—",0];
 summaryDiv.innerHTML=`
 
 <div class="summary-box">
-Winner
-<div class="big">${winner}</div>
+Winner<div class="big">${winner}</div>
 </div>
 
 <div class="summary-box">
-Most Runs
-<div class="big">${topRuns[0]} – ${topRuns[1]}</div>
+Most Runs<div class="big">${topRuns[0]} – ${topRuns[1]}</div>
 </div>
 
 <div class="summary-box">
-Most Wickets
-<div class="big">${topWkts[0]} – ${topWkts[1]}</div>
+Most Wickets<div class="big">${topWkts[0]} – ${topWkts[1]}</div>
 </div>
 
 `;
