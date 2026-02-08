@@ -6,14 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-
 body{
 font-family:Inter,system-ui,Arial,sans-serif;
 margin:0;
 background:#f3f4f7;
 }
-
-/* HERO */
 
 .hero{
 background:linear-gradient(90deg,#6a040f,#d00000);
@@ -30,13 +27,6 @@ align-items:center;
 margin:0;
 font-size:42px;
 }
-
-.hero-left p{
-margin-top:6px;
-opacity:.9;
-}
-
-/* SEARCH */
 
 .search-container{
 position:relative;
@@ -63,7 +53,6 @@ max-height:300px;
 overflow-y:auto;
 display:none;
 box-shadow:0 4px 12px rgba(0,0,0,.2);
-z-index:999;
 }
 
 .search-results div{
@@ -74,8 +63,6 @@ cursor:pointer;
 .search-results div:hover{
 background:#eee;
 }
-
-/* CONTROLS */
 
 .controls{
 display:flex;
@@ -103,8 +90,6 @@ background:#d00000;
 color:white;
 }
 
-/* SUMMARY */
-
 .summary{
 display:grid;
 grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
@@ -118,13 +103,6 @@ padding:18px;
 border-radius:14px;
 text-align:center;
 }
-
-.box .big{
-font-size:30px;
-font-weight:700;
-}
-
-/* TABLE */
 
 table{
 width:calc(100% - 40px);
@@ -140,60 +118,18 @@ padding:12px;
 border-bottom:1px solid #ddd;
 }
 
-th{
-background:#f1f1f1;
-cursor:pointer;
-}
-
 tr:hover{
 background:#f8fbff;
 cursor:pointer;
-}
-
-#matchTable th:nth-child(5),
-#matchTable th:nth-child(6),
-#matchTable th:nth-child(7),
-#matchTable td:nth-child(5),
-#matchTable td:nth-child(6),
-#matchTable td:nth-child(7){
-text-align:center;
-}
-
-.section-title{
-text-align:center;
-font-weight:700;
-margin-top:10px;
-color:#666;
 }
 
 </style>
 </head>
 <body>
 
-<div class="navbar" style="
-display:flex;
-justify-content:center;
-gap:22px;
-padding:16px 0;
-border-bottom:1px solid #ddd;
-font-weight:600;
-background:white;
-">
-
-<a href="index.html" style="color:#0056d6;text-decoration:none;font-size:18px;">Home</a>
-<a href="t20-world-cup.html" style="color:#0056d6;text-decoration:none;font-size:18px;">T20 World Cup</a>
-<a href="t20-world-cup-matches.html" style="color:#0056d6;text-decoration:none;font-size:18px;">Matches</a>
-<a href="t20-world-cup-player.html" style="color:#0056d6;text-decoration:none;font-size:18px;">Players</a>
-<a href="t20-world-cup-teams.html" style="color:#0056d6;text-decoration:none;font-size:18px;">Teams</a>
-
-</div>
-
-
 <div class="hero">
-
 <div class="hero-left">
-<h1 id="playerName">Select player</h1>
-<p>T20 World Cup batting & bowling performance by opposition</p>
+<h1 id="playerName">Loading...</h1>
 </div>
 
 <div class="search-container">
@@ -203,43 +139,20 @@ background:white;
 
 </div>
 
-
-<div class="controls">
-
-<label>Opposition:</label>
-
-<select id="oppFilter">
-<option value="ALL">All</option>
-</select>
-
-<div id="batTab" class="tab active">Batting</div>
-<div id="bowlTab" class="tab">Bowling</div>
-
-</div>
-
-
-<div class="section-title">CAREER SUMMARY</div>
-<div id="careerSummary" class="summary"></div>
-
-<div class="section-title">VS OPPOSITION</div>
-<div id="oppSummary" class="summary"></div>
-
-
 <table id="matchTable">
 <thead>
 <tr>
-<th onclick="sortTable('season')">Season</th>
-<th onclick="sortTable('date')">Date</th>
-<th onclick="sortTable('opponent')">Opponent</th>
-<th onclick="sortTable('venue')">Venue</th>
+<th>Season</th>
+<th>Date</th>
+<th>Opponent</th>
+<th>Venue</th>
 <th>Runs</th>
 <th>Balls</th>
-<th>Strike Rate</th>
+<th>SR</th>
 </tr>
 </thead>
 <tbody></tbody>
 </table>
-
 
 <script>
 
@@ -248,20 +161,12 @@ const NAME_INDEX="/data/t20-world-cup/players-name.json";
 
 let nameMap={};
 let reverseNameMap={};
-
-let players=[];
 let matches=[];
 
-let currentOpp="ALL";
-let currentTab="bat";
 
-let sortField="date";
-let sortAsc=false;
+/* LOAD NAME MAP FIRST */
 
-
-/* LOAD NAME MAP */
-
-async function loadNameMap(){
+async function init(){
 
 nameMap=await fetch(NAME_INDEX).then(r=>r.json());
 
@@ -269,107 +174,26 @@ Object.entries(nameMap).forEach(([raw,proper])=>{
 reverseNameMap[proper]=raw;
 });
 
+/* NOW GET URL PLAYER */
+
+const urlPlayer=new URLSearchParams(location.search).get("player");
+
+if(urlPlayer){
+
+const raw=reverseNameMap[urlPlayer] || urlPlayer;
+
+loadPlayer(raw);
+
 }
 
+}
 
-/* GET DISPLAY NAME */
+init();
+
 
 function displayName(raw){
 return nameMap[raw] || raw;
 }
-
-function rawName(name){
-return reverseNameMap[name] || name;
-}
-
-
-/* LOAD SEARCH INDEX */
-
-async function initSearch(){
-
-await loadNameMap();
-
-const files=await fetch(INDEX).then(r=>r.json());
-
-const set=new Set();
-
-for(const file of files){
-
-const season=await fetch("/data/t20-world-cup/matches/"+file).then(r=>r.json());
-
-season.forEach(match=>{
-
-match.innings.forEach(raw=>{
-
-const inn=raw.team?raw:Object.values(raw)[0];
-
-inn.overs?.forEach(over=>{
-
-over.deliveries.forEach(d=>{
-
-set.add(d.batter);
-set.add(d.bowler);
-
-});
-
-});
-
-});
-
-});
-
-}
-
-players=[...set].sort();
-
-}
-
-initSearch();
-
-
-/* SEARCH */
-
-playerSearch.oninput=function(){
-
-const q=this.value.toLowerCase();
-
-if(!q){
-searchResults.style.display="none";
-return;
-}
-
-const filtered=players
-.map(p=>displayName(p))
-.filter(p=>p.toLowerCase().includes(q))
-.slice(0,30);
-
-searchResults.innerHTML="";
-
-filtered.forEach(name=>{
-
-const div=document.createElement("div");
-
-div.textContent=name;
-
-div.onclick=()=>{
-location.href="?player="+encodeURIComponent(name);
-};
-
-searchResults.appendChild(div);
-
-});
-
-searchResults.style.display="block";
-
-};
-
-
-/* LOAD PLAYER */
-
-const urlPlayer=new URLSearchParams(location.search).get("player");
-
-if(urlPlayer)
-loadPlayer(rawName(urlPlayer));
 
 
 async function loadPlayer(player){
@@ -380,20 +204,13 @@ matches=[];
 
 const files=await fetch(INDEX).then(r=>r.json());
 
-let playerCountry="";
-
 for(const file of files){
 
 const season=await fetch("/data/t20-world-cup/matches/"+file).then(r=>r.json());
 
 season.forEach((match,index)=>{
 
-const team=Object.keys(match.info.players||{})
-.find(t=>match.info.players[t].includes(player));
-
-if(team) playerCountry=team;
-
-let runs=0,balls=0,wkts=0,ballsBowled=0,runsConceded=0;
+let runs=0,balls=0;
 
 match.innings.forEach(raw=>{
 
@@ -408,32 +225,21 @@ runs+=d.runs.batter;
 if(!d.extras?.wides) balls++;
 }
 
-if(d.bowler===player){
-runsConceded+=d.runs.total;
-if(!d.extras?.wides&&!d.extras?.noballs) ballsBowled++;
-if(d.wickets) wkts+=d.wickets.length;
-}
-
 });
 
 });
 
 });
 
-if(balls>0 || ballsBowled>0){
-
-const opponent=match.info.teams.find(t=>t!==playerCountry);
+if(balls>0){
 
 matches.push({
 season:file.match(/\d{4}/)[0],
 date:match.info.dates[0],
-opponent,
+opponent:match.info.teams.find(t=>!match.info.players[t]?.includes(player)),
 venue:match.info.venue,
 runs,
 balls,
-wkts,
-ballsBowled,
-runsConceded,
 file,
 index
 });
@@ -444,115 +250,29 @@ index
 
 }
 
-populateOppFilter();
 render();
 
 }
 
-
-/* REMAINDER UNCHANGED */
-
-function populateOppFilter(){
-
-const set=new Set(matches.map(m=>m.opponent));
-
-oppFilter.innerHTML='<option value="ALL">All</option>';
-
-set.forEach(o=>{
-oppFilter.innerHTML+=`<option>${o}</option>`;
-});
-
-oppFilter.onchange=e=>{
-currentOpp=e.target.value;
-render();
-};
-
-}
-
-batTab.onclick=()=>{
-currentTab="bat";
-setTabs();
-render();
-};
-
-bowlTab.onclick=()=>{
-currentTab="bowl";
-setTabs();
-render();
-};
-
-function setTabs(){
-
-batTab.classList.toggle("active",currentTab==="bat");
-bowlTab.classList.toggle("active",currentTab==="bowl");
-
-}
 
 function render(){
 
-const filtered=currentOpp==="ALL"
-?matches
-:matches.filter(m=>m.opponent===currentOpp);
-
-renderTable(filtered);
-
-}
-
-function sortTable(field){
-
-sortAsc=field===sortField?!sortAsc:true;
-sortField=field;
-render();
-
-}
-
-function renderTable(list){
-
 const tbody=document.querySelector("#matchTable tbody");
-
-list.sort((a,b)=>{
-
-let A=a[sortField];
-let B=b[sortField];
-
-return sortAsc?A>B?1:-1:A<B?1:-1;
-
-});
 
 tbody.innerHTML="";
 
-list.forEach(m=>{
-
-if(currentTab==="bat" && m.balls===0) return;
-if(currentTab==="bowl" && m.ballsBowled===0) return;
+matches.forEach(m=>{
 
 const tr=document.createElement("tr");
 
-tr.onclick=()=>{
-location.href=`t20-world-cup-match.html?file=${m.file}&match=${m.index}`;
-};
-
-tr.innerHTML=currentTab==="bat"
-
-?`
+tr.innerHTML=`
 <td>${m.season}</td>
 <td>${new Date(m.date).toLocaleDateString("en-GB")}</td>
 <td>${m.opponent}</td>
 <td>${m.venue}</td>
 <td>${m.runs}</td>
 <td>${m.balls}</td>
-<td>${((m.runs/m.balls)*100||0).toFixed(1)}</td>
-`
-
-:
-`
-<td>${m.season}</td>
-<td>${new Date(m.date).toLocaleDateString("en-GB")}</td>
-<td>${m.opponent}</td>
-<td>${m.venue}</td>
-<td>${m.wkts}</td>
-<td>${(m.ballsBowled/6).toFixed(1)}</td>
-<td>${(m.runsConceded/(m.ballsBowled/6)||0).toFixed(2)}</td>
+<td>${((m.runs/m.balls)*100).toFixed(1)}</td>
 `;
 
 tbody.appendChild(tr);
