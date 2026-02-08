@@ -8,8 +8,7 @@
 <style>
 
 body{
-font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
-             "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+font-family: Inter, system-ui, Arial, sans-serif;
 margin:0;
 background:#f3f4f7;
 }
@@ -36,11 +35,6 @@ color:white;
 padding:36px;
 margin:20px;
 border-radius:18px;
-}
-
-.hero h2{
-margin:0;
-font-size:36px;
 }
 
 .year-bar{
@@ -119,6 +113,7 @@ cursor:pointer;
 <div class="navbar">
 <a href="index.html">Home</a>
 <a href="t20wc.html">T20 World Cup</a>
+<a href="t20wc-matches.html">Matches</a>
 <a href="t20wc-team.html">Teams</a>
 <a href="t20-world-cup-player.html">Players</a>
 </div>
@@ -152,7 +147,6 @@ const VALID_EVENTS=[
 ];
 
 let seasons=[];
-
 const tbody=document.getElementById("tbody");
 const summary=document.getElementById("summary");
 const yearBar=document.getElementById("yearBar");
@@ -169,7 +163,7 @@ const season=await fetch(BASE+file).then(r=>r.json());
 
 let matches=[];
 
-/* EXACT SAME FILTER AS WORKING TEAM PAGE */
+/* EXACT SAME FILTER AS TEAM PAGE */
 
 season.forEach((match,i)=>{
 
@@ -177,23 +171,24 @@ const event=match.info?.event?.name || "";
 
 if(!VALID_EVENTS.includes(event)) return;
 
-matches.push(match);
+matches.push({
+...match,
+_file:file,
+_index:i
+});
 
 });
 
 if(matches.length===0) continue;
 
-matches.sort((a,b)=>
-new Date(a.info.dates[0]) - new Date(b.info.dates[0])
-);
+matches.sort((a,b)=>new Date(a.info.dates[0]) - new Date(b.info.dates[0]));
 
 const stats=calculateStats(matches);
 
 seasons.push({
 year:file.match(/\d{4}/)[0],
-file:file,
-matches:matches,
-stats:stats
+matches,
+stats
 });
 
 }
@@ -216,20 +211,13 @@ const winner=finalMatch.info.outcome?.winner || "—";
 matches.forEach(match=>{
 
 match.innings?.forEach(inn=>{
-
 inn.overs?.forEach(over=>{
-
 over.deliveries.forEach(d=>{
-
 runs[d.batter]=(runs[d.batter]||0)+(d.runs?.batter||0);
-
 if(d.wickets)
 wkts[d.bowler]=(wkts[d.bowler]||0)+d.wickets.length;
-
 });
-
 });
-
 });
 
 });
@@ -300,7 +288,7 @@ result=`${m.info.outcome.winner} won by ${margin}`;
 
 tbody.innerHTML+=`
 <tr class="${isFinal?'final':''}"
-onclick="location.href='t20-world-cup-match.html?file=${season.file}&match=${idx}'">
+onclick="location.href='t20-world-cup-match.html?file=${m._file}&match=${m._index}'">
 <td>${new Date(m.info.dates[0]).toLocaleDateString("en-GB")}</td>
 <td>${m.info.teams.join(" vs ")}</td>
 <td>${m.info.venue}</td>
