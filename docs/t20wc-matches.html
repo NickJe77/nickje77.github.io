@@ -141,6 +141,7 @@ cursor:pointer;
 
 const BASE="/data/t20-world-cup/matches/";
 
+let ALL_MATCHES=[];
 let seasons=[];
 
 const tbody=document.getElementById("tbody");
@@ -148,21 +149,6 @@ const summary=document.getElementById("summary");
 const yearBar=document.getElementById("yearBar");
 
 load();
-
-function isMainTournament(match){
-
-const name=(match.info?.event?.name||"").toLowerCase();
-
-if(
-(name.includes("world twenty20") || name.includes("t20 world cup"))
-&&
-!name.includes("qualifier")
-)
-return true;
-
-return false;
-
-}
 
 async function load(){
 
@@ -172,35 +158,47 @@ for(const file of index){
 
 const season=await fetch(BASE+file).then(r=>r.json());
 
-let matches=[];
-
 season.forEach((match,i)=>{
 
-if(!isMainTournament(match)) return;
+match._file=file;
+match._index=i;
 
-matches.push({
-...match,
-_file:file,
-_index:i
-});
+/* SAME FILTER AS TEAM PAGE */
 
-});
+const event=match.info?.event?.name || "";
 
-if(matches.length===0) continue;
+if(
+event==="ICC World Twenty20" ||
+event==="ICC Men's T20 World Cup"
+){
+ALL_MATCHES.push(match);
+}
 
-matches.sort((a,b)=>new Date(a.info.dates[0]) - new Date(b.info.dates[0]));
-
-const stats=calculateStats(matches);
-
-seasons.push({
-year:file.match(/\d{4}/)[0],
-matches,
-stats
 });
 
 }
 
-seasons.sort((a,b)=>b.year-a.year);
+/* GROUP BY YEAR */
+
+const years=[...new Set(
+ALL_MATCHES.map(m=>m.info.dates[0].substring(0,4))
+)];
+
+years.sort((a,b)=>b-a);
+
+years.forEach(year=>{
+
+const matches=ALL_MATCHES.filter(m=>m.info.dates[0].startsWith(year));
+
+const stats=calculateStats(matches);
+
+seasons.push({
+year,
+matches,
+stats
+});
+
+});
 
 buildButtons();
 
@@ -214,7 +212,7 @@ let runs={},wkts={};
 
 const finalMatch=matches[matches.length-1];
 
-const winner=finalMatch.info.outcome?.winner || "—";
+const winner=finalMatch?.info?.outcome?.winner || "—";
 
 matches.forEach(match=>{
 
