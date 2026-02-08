@@ -13,6 +13,26 @@ margin:0;
 background:#f3f4f7;
 }
 
+/* NAVBAR */
+
+.navbar{
+display:flex;
+justify-content:center;
+gap:22px;
+padding:16px 0;
+border-bottom:1px solid #ddd;
+font-weight:600;
+background:white;
+}
+
+.navbar a{
+color:#0056d6;
+text-decoration:none;
+font-size:18px;
+}
+
+/* HERO */
+
 .hero{
 background:linear-gradient(90deg,#6a040f,#d00000);
 color:white;
@@ -25,6 +45,8 @@ border-radius:18px;
 margin:0;
 font-size:42px;
 }
+
+/* TABLE */
 
 table{
 width:calc(100% - 40px);
@@ -40,22 +62,49 @@ padding:12px;
 border-bottom:1px solid #ddd;
 }
 
+th{
+background:#f1f1f1;
+}
+
 tr:hover{
 background:#f8fbff;
 cursor:pointer;
+}
+
+.center{
+text-align:center;
+padding:40px;
+font-size:20px;
+color:#666;
 }
 
 </style>
 </head>
 <body>
 
-<div class="hero">
-<h1 id="playerName">Loading player...</h1>
+
+<div class="navbar">
+
+<a href="index.html">Home</a>
+<a href="t20-world-cup.html">T20 World Cup</a>
+<a href="t20wc-matches.html">Matches</a>
+<a href="t20-world-cup-player.html">Players</a>
+<a href="t20wc-teams.html">Teams</a>
+
 </div>
+
+
+<div class="hero">
+
+<h1 id="playerName">Loading player...</h1>
+
+</div>
+
 
 <table>
 
 <thead>
+
 <tr>
 <th>Season</th>
 <th>Date</th>
@@ -65,43 +114,41 @@ cursor:pointer;
 <th>Balls</th>
 <th>Strike Rate</th>
 </tr>
+
 </thead>
 
-<tbody id="tbody"></tbody>
+<tbody id="tbody">
+
+<tr>
+<td colspan="7" class="center">Loading...</td>
+</tr>
+
+</tbody>
 
 </table>
 
+
+
 <script>
 
-const MATCH_INDEX =
+/* CORRECT PATHS */
+
+const INDEX =
 "data/t20-world-cup/matches/index.json";
 
 const MATCH_FOLDER =
 "data/t20-world-cup/matches/";
 
 const NAME_INDEX =
-"data/t20-world-cup/players-name.json";
+"data/t20-world-cup/matches/player-names.json";
+
 
 let nameMap={};
 let reverseMap={};
-
 let matches=[];
 
 
-/* SAFE FETCH */
-
-async function safeFetch(url)
-{
-const res=await fetch(url);
-
-if(!res.ok)
-throw new Error("Failed to load "+url);
-
-return res.json();
-}
-
-
-/* INIT */
+/* START */
 
 init();
 
@@ -113,37 +160,41 @@ try{
 
 /* LOAD NAME MAP */
 
-nameMap=await safeFetch(NAME_INDEX);
+nameMap =
+await fetch(NAME_INDEX)
+.then(r=>r.json());
 
-Object.entries(nameMap).forEach(([raw,proper])=>
+Object.entries(nameMap)
+.forEach(([raw,proper])=>
 {
 reverseMap[proper]=raw;
 });
 
 
-/* GET PLAYER FROM URL */
+/* GET PLAYER */
 
-const param=
+const param =
 new URLSearchParams(location.search)
 .get("player");
 
 if(!param)
 {
-playerName.innerText="No player specified";
+showError("No player specified");
 return;
 }
 
-const player=
+const player =
 reverseMap[param] || param;
 
-playerName.innerText=
+playerName.innerText =
 nameMap[player] || player;
 
 
-/* LOAD MATCH INDEX */
+/* LOAD INDEX */
 
-const files=
-await safeFetch(MATCH_INDEX);
+const files =
+await fetch(INDEX)
+.then(r=>r.json());
 
 
 /* LOAD MATCHES */
@@ -151,8 +202,10 @@ await safeFetch(MATCH_INDEX);
 for(const file of files)
 {
 
-const season=
-await safeFetch(MATCH_FOLDER+file);
+const season =
+await fetch(MATCH_FOLDER + file)
+.then(r=>r.json());
+
 
 season.forEach((match,index)=>
 {
@@ -160,10 +213,25 @@ season.forEach((match,index)=>
 let runs=0;
 let balls=0;
 
+
+/* FIND PLAYER TEAM */
+
+let playerTeam="";
+
+Object.entries(match.info.players||{})
+.forEach(([team,list])=>
+{
+if(list.includes(player))
+playerTeam=team;
+});
+
+
+/* PARSE INNINGS */
+
 match.innings.forEach(raw=>
 {
 
-const inn=
+const inn =
 raw.team
 ? raw
 : Object.values(raw)[0];
@@ -191,17 +259,13 @@ balls++;
 });
 
 
+/* STORE RESULT */
+
 if(balls>0)
 {
 
-const team=
-Object.keys(match.info.players || {})
-.find(t=>
-match.info.players[t]?.includes(player)
-);
-
-const opponent=
-match.info.teams.find(t=>t!==team);
+const opponent =
+match.info.teams.find(t=>t!==playerTeam);
 
 matches.push({
 
@@ -233,50 +297,63 @@ index
 }
 
 
-/* RENDER */
+/* SHOW */
 
 render();
+
 
 }
 catch(err)
 {
 
-playerName.innerText="Error loading player";
-
 console.error(err);
 
-}
+showError("Error loading player");
 
 }
 
+}
 
-/* RENDER TABLE */
+
+
+/* RENDER */
 
 function render()
 {
 
-const tbody=
+const tbody =
 document.getElementById("tbody");
 
-tbody.innerHTML="";
+if(matches.length===0)
+{
+showError("No matches found");
+return;
+}
+
 
 matches.sort((a,b)=>
 new Date(b.date)-new Date(a.date)
 );
 
+
+tbody.innerHTML="";
+
+
 matches.forEach(m=>
 {
 
-const tr=
+const tr =
 document.createElement("tr");
+
 
 tr.onclick=()=>
 {
 
-location.href=
+location.href =
 `t20-world-cup-match.html?file=${m.file}&match=${m.index}`;
 
 };
+
 
 tr.innerHTML=`
 
@@ -293,9 +370,11 @@ tr.innerHTML=`
 
 <td>${m.balls}</td>
 
-<td>${((m.runs/m.balls)*100).toFixed(1)}</td>
+<td>${((m.runs/m.balls)*100)
+.toFixed(1)}</td>
 
 `;
+
 
 tbody.appendChild(tr);
 
@@ -303,7 +382,25 @@ tbody.appendChild(tr);
 
 }
 
+
+
+/* ERROR */
+
+function showError(msg)
+{
+
+document.getElementById("tbody").innerHTML=`
+
+<tr>
+<td colspan="7" class="center">${msg}</td>
+</tr>
+
+`;
+
+}
+
 </script>
+
 
 </body>
 </html>
