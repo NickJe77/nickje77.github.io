@@ -10,7 +10,7 @@
 <style>
 
 body{
-    font-family: Inter, system-ui, Arial, sans-serif;
+    font-family: Inter, Arial;
     margin:0;
     background:#f4f6f8;
 }
@@ -19,58 +19,40 @@ body{
     display:flex;
     justify-content:center;
     gap:24px;
-    padding:16px 0;
+    padding:16px;
     border-bottom:1px solid #ddd;
     background:white;
-    font-weight:600;
 }
 
 .navbar a{
+    text-decoration:none;
+    font-weight:600;
     color:#0056d6;
-    text-decoration:none;
-    font-size:18px;
 }
 
-.page-wrap{
-    max-width:1100px;
+.page{
+    max-width:1000px;
     margin:30px auto;
-    padding:0 20px;
+    padding:20px;
 }
 
-.hero{
-    background:linear-gradient(90deg,#003566,#0077b6);
-    color:white;
-    padding:40px;
-    border-radius:18px;
-    margin-bottom:20px;
-}
-
-.hero h1{
-    margin:0;
-}
-
-.match-card{
+.match{
     background:white;
-    padding:18px;
-    margin-bottom:14px;
-    border-radius:14px;
-    box-shadow:0 4px 12px rgba(0,0,0,0.08);
+    padding:16px;
+    margin-bottom:12px;
+    border-radius:12px;
 }
 
-.match-card a{
+.match a{
+    font-weight:bold;
     font-size:18px;
-    font-weight:700;
-    color:#003566;
     text-decoration:none;
+    color:#003566;
 }
 
-.match-card a:hover{
-    color:#0077b6;
-}
-
-.match-meta{
-    margin-top:4px;
+.meta{
     color:#555;
+    margin-top:4px;
 }
 
 </style>
@@ -78,87 +60,78 @@ body{
 <body>
 
 <div class="navbar">
-    <a href="index.html">Home</a>
-    <a href="cricket.html">Cricket</a>
-    <a href="t20-world-cup.html">T20 World Cup</a>
+<a href="index.html">Home</a>
+<a href="cricket.html">Cricket</a>
+<a href="t20-world-cup.html">T20 World Cup</a>
 </div>
 
-<div class="page-wrap">
+<div class="page">
 
-<div class="hero">
-    <h1>T20 World Cup Matches</h1>
-</div>
+<h1>T20 World Cup Matches</h1>
 
-<div id="matches">
-Loading matches...
-</div>
+<div id="matches">Loading matches...</div>
 
 </div>
 
 <script>
 
-const INDEX_PATH =
-    "data/icc_mens_t20_world_cup_male_json/index.json";
+const DATA_FOLDER =
+"data/t20-world-cup/matches/";
 
-const DATA_PATH =
-    "data/icc_mens_t20_world_cup_male_json/";
+const FILES = [
+
+"t20wc_2007_FULL.json",
+"t20wc_2008_FULL.json",
+"t20wc_2009_FULL.json",
+"t20wc_2010_FULL.json",
+"t20wc_2012_FULL.json",
+"t20wc_2013_FULL.json",
+"t20wc_2014_FULL.json",
+"t20wc_2015_FULL.json",
+"t20wc_2016_FULL.json",
+"t20wc_2021_FULL.json",
+"t20wc_2022_FULL.json",
+"t20wc_2023_FULL.json",
+"t20wc_2024_FULL.json",
+"t20wc_2025_FULL.json"
+
+];
 
 async function loadMatches()
 {
-    try
+    let html = "";
+
+    for(const file of FILES)
     {
-        const res = await fetch(INDEX_PATH);
+        const res = await fetch(DATA_FOLDER + file);
 
-        if(!res.ok)
-            throw new Error("Cannot load index.json");
+        if(!res.ok) continue;
 
-        const files = await res.json();
+        const yearData = await res.json();
 
-        let html = "";
+        const matches = yearData.matches;
 
-        for(const file of files)
+        if(!matches) continue;
+
+        matches.forEach((match,index)=>
         {
-            try
-            {
-                const matchRes =
-                    await fetch(DATA_PATH + file);
+            html += `
+            <div class="match">
 
-                if(!matchRes.ok)
-                    continue;
+            <a href="t20-world-cup-match.html?file=${file}&match=${index}">
+            ${match.team1} vs ${match.team2}
+            </a>
 
-                const match =
-                    await matchRes.json();
+            <div class="meta">
+            ${match.date} — ${match.venue}
+            </div>
 
-                const info = match.info;
-
-                html += `
-                <div class="match-card">
-
-                    <a href="t20-world-cup-match.html?file=${file}">
-                        ${info.teams[0]} vs ${info.teams[1]}
-                    </a>
-
-                    <div class="match-meta">
-                        ${info.venue}
-                    </div>
-
-                    <div class="match-meta">
-                        ${info.dates.join(", ")}
-                    </div>
-
-                </div>
-                `;
-            }
-            catch{}
-        }
-
-        document.getElementById("matches").innerHTML = html;
+            </div>
+            `;
+        });
     }
-    catch(err)
-    {
-        document.getElementById("matches").innerHTML =
-            "Error loading matches";
-    }
+
+    document.getElementById("matches").innerHTML = html;
 }
 
 loadMatches();
