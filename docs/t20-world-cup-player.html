@@ -85,7 +85,6 @@ cursor:pointer;
 </div>
 
 <table>
-
 <thead>
 <tr>
 <th>Season</th>
@@ -103,17 +102,15 @@ cursor:pointer;
 <td colspan="7" class="center">Loading...</td>
 </tr>
 </tbody>
-
 </table>
-
 
 <script>
 
-const INDEX="data/t20-world-cup/matches/index.json";
-const MATCH_FOLDER="data/t20-world-cup/matches/";
-const NAME_INDEX="data/t20-world-cup/matches/player-names.json";
+/* EXACT SAME DATA SOURCE AS MATCHES PAGE */
 
-let nameMap={};
+const INDEX="data/t20-world-cup/matches/index.json";
+const FOLDER="data/t20-world-cup/matches/";
+
 let matches=[];
 
 init();
@@ -121,78 +118,37 @@ init();
 async function init()
 {
 
-try{
-
-/* LOAD NAME MAP IF EXISTS */
-
-try{
-nameMap=await fetch(NAME_INDEX).then(r=>r.json());
-}catch{}
-
-
-/* GET PLAYER FROM URL */
-
-const displayName=
+const player=
+decodeURIComponent(
 new URLSearchParams(location.search)
-.get("player");
+.get("player")
+);
 
-if(!displayName){
+if(!player){
 showError("No player specified");
 return;
 }
 
-playerName.innerText=displayName;
-
-
-/* BUILD ALL POSSIBLE NAME VARIANTS */
-
-let possibleNames=new Set();
-
-possibleNames.add(displayName);
-
-/* check mapping both directions */
-
-Object.entries(nameMap).forEach(([raw,full])=>{
-
-if(full===displayName)
-possibleNames.add(raw);
-
-if(raw===displayName)
-possibleNames.add(full);
-
-});
-
-
-/* LOAD INDEX */
+playerName.innerText=player;
 
 const files=await fetch(INDEX).then(r=>r.json());
-
-
-/* LOAD MATCHES */
 
 for(const file of files){
 
 const season=
-await fetch(MATCH_FOLDER+file).then(r=>r.json());
+await fetch(FOLDER+file).then(r=>r.json());
 
 season.forEach((match,index)=>{
 
 let runs=0;
 let balls=0;
-let playerTeam="";
-
-/* detect team */
+let team="";
 
 Object.entries(match.info.players||{})
-.forEach(([team,list])=>{
-
-list.forEach(p=>{
-if(possibleNames.has(p))
-playerTeam=team;
+.forEach(([t,list])=>{
+if(list.includes(player))
+team=t;
 });
-
-});
-
 
 match.innings.forEach(innRaw=>{
 
@@ -201,57 +157,36 @@ innRaw.team
 ?innRaw
 :Object.values(innRaw)[0];
 
-
-/* format A */
-
 if(inn.overs){
 
 inn.overs.forEach(over=>{
-
 over.deliveries.forEach(d=>{
-
-if(possibleNames.has(d.batter)){
-
+if(d.batter===player){
 runs+=d.runs.batter;
-
-if(!d.extras?.wides)
-balls++;
-
+if(!d.extras?.wides) balls++;
 }
-
 });
-
 });
 
 }
-
-
-/* format B */
 
 if(inn.deliveries){
 
 inn.deliveries.forEach(d=>{
-
-if(possibleNames.has(d.batter)){
-
+if(d.batter===player){
 runs+=d.runs.batter;
-
-if(!d.extras?.wides)
-balls++;
-
+if(!d.extras?.wides) balls++;
 }
-
 });
 
 }
 
 });
-
 
 if(balls>0){
 
 const opponent=
-match.info.teams.find(t=>t!==playerTeam);
+match.info.teams.find(t=>t!==team);
 
 matches.push({
 
@@ -272,19 +207,9 @@ index
 
 }
 
-
 render();
 
 }
-catch(err){
-
-console.error(err);
-showError("Error loading player");
-
-}
-
-}
-
 
 function render(){
 
@@ -325,7 +250,6 @@ tbody.appendChild(tr);
 });
 
 }
-
 
 function showError(msg){
 
