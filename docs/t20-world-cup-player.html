@@ -6,11 +6,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
+
 body{
 font-family:Inter,system-ui,Arial,sans-serif;
 margin:0;
 background:#f3f4f7;
 }
+
+/* HERO */
 
 .hero{
 background:linear-gradient(90deg,#6a040f,#d00000);
@@ -28,81 +31,7 @@ margin:0;
 font-size:42px;
 }
 
-.search-container{
-position:relative;
-width:300px;
-}
-
-.search-container input{
-width:100%;
-padding:12px;
-border-radius:10px;
-border:none;
-font-size:16px;
-}
-
-.search-results{
-position:absolute;
-top:48px;
-left:0;
-right:0;
-background:white;
-color:black;
-border-radius:10px;
-max-height:300px;
-overflow-y:auto;
-display:none;
-box-shadow:0 4px 12px rgba(0,0,0,.2);
-}
-
-.search-results div{
-padding:10px;
-cursor:pointer;
-}
-
-.search-results div:hover{
-background:#eee;
-}
-
-.controls{
-display:flex;
-gap:14px;
-padding:0 20px 20px 20px;
-align-items:center;
-}
-
-select{
-padding:8px;
-font-size:16px;
-border-radius:8px;
-}
-
-.tab{
-padding:8px 18px;
-background:#ddd;
-border-radius:8px;
-cursor:pointer;
-font-weight:600;
-}
-
-.tab.active{
-background:#d00000;
-color:white;
-}
-
-.summary{
-display:grid;
-grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
-gap:16px;
-padding:20px;
-}
-
-.box{
-background:#e7e7ec;
-padding:18px;
-border-radius:14px;
-text-align:center;
-}
+/* TABLE */
 
 table{
 width:calc(100% - 40px);
@@ -131,15 +60,10 @@ cursor:pointer;
 <div class="hero-left">
 <h1 id="playerName">Loading...</h1>
 </div>
-
-<div class="search-container">
-<input id="playerSearch" placeholder="Search player...">
-<div id="searchResults" class="search-results"></div>
-</div>
-
 </div>
 
 <table id="matchTable">
+
 <thead>
 <tr>
 <th>Season</th>
@@ -148,81 +72,137 @@ cursor:pointer;
 <th>Venue</th>
 <th>Runs</th>
 <th>Balls</th>
-<th>SR</th>
+<th>Strike Rate</th>
 </tr>
 </thead>
+
 <tbody></tbody>
+
 </table>
+
 
 <script>
 
-const INDEX="/data/t20-world-cup/matches/index.json";
-const NAME_INDEX="/data/t20-world-cup/players-name.json";
+/* EXACT SAME PATH AS MATCHES PAGE */
+
+const MATCH_INDEX =
+"data/t20-world-cup/matches/index.json";
+
+const MATCH_FOLDER =
+"data/t20-world-cup/matches/";
+
+const NAME_INDEX =
+"data/t20-world-cup/players-name.json";
+
 
 let nameMap={};
 let reverseNameMap={};
+
 let matches=[];
 
 
-/* LOAD NAME MAP FIRST */
+/* INIT */
 
-async function init(){
+init();
 
-nameMap=await fetch(NAME_INDEX).then(r=>r.json());
 
-Object.entries(nameMap).forEach(([raw,proper])=>{
-reverseNameMap[proper]=raw;
-});
+async function init()
+{
 
-/* NOW GET URL PLAYER */
+await loadNameMap();
 
-const urlPlayer=new URLSearchParams(location.search).get("player");
+const urlPlayer =
+new URLSearchParams(location.search)
+.get("player");
 
-if(urlPlayer){
+if(!urlPlayer)
+return;
 
-const raw=reverseNameMap[urlPlayer] || urlPlayer;
+const raw =
+reverseNameMap[urlPlayer] || urlPlayer;
 
 loadPlayer(raw);
 
 }
 
+
+/* LOAD NAME MAP */
+
+async function loadNameMap()
+{
+
+nameMap =
+await fetch(NAME_INDEX)
+.then(r=>r.json());
+
+Object.entries(nameMap)
+.forEach(([raw,proper])=>
+{
+reverseNameMap[proper]=raw;
+});
+
 }
 
-init();
 
+/* DISPLAY NAME */
 
-function displayName(raw){
+function displayName(raw)
+{
 return nameMap[raw] || raw;
 }
 
 
-async function loadPlayer(player){
+/* LOAD PLAYER */
 
-playerName.innerText=displayName(player);
+async function loadPlayer(player)
+{
+
+playerName.innerText=
+displayName(player);
 
 matches=[];
 
-const files=await fetch(INDEX).then(r=>r.json());
+const files=
+await fetch(MATCH_INDEX)
+.then(r=>r.json());
 
-for(const file of files){
 
-const season=await fetch("/data/t20-world-cup/matches/"+file).then(r=>r.json());
+for(const file of files)
+{
 
-season.forEach((match,index)=>{
+const season=
+await fetch(MATCH_FOLDER+file)
+.then(r=>r.json());
 
-let runs=0,balls=0;
 
-match.innings.forEach(raw=>{
+season.forEach((match,index)=>
+{
 
-const inn=raw.team?raw:Object.values(raw)[0];
+let runs=0;
+let balls=0;
 
-inn.overs?.forEach(over=>{
+match.innings.forEach(raw=>
+{
 
-over.deliveries.forEach(d=>{
+const inn =
+raw.team
+? raw
+: Object.values(raw)[0];
 
-if(d.batter===player){
+inn.overs?.forEach(over=>
+{
+
+over.deliveries.forEach(d=>
+{
+
+if(d.batter===player)
+{
+
 runs+=d.runs.batter;
-if(!d.extras?.wides) balls++;
+
+if(!d.extras?.wides)
+balls++;
+
 }
 
 });
@@ -231,48 +211,98 @@ if(!d.extras?.wides) balls++;
 
 });
 
-if(balls>0){
+
+if(balls>0)
+{
+
+const team =
+Object.keys(match.info.players || {})
+.find(t=>
+match.info.players[t]
+.includes(player)
+);
+
+const opponent =
+match.info.teams
+.find(t=>t!==team);
 
 matches.push({
-season:file.match(/\d{4}/)[0],
-date:match.info.dates[0],
-opponent:match.info.teams.find(t=>!match.info.players[t]?.includes(player)),
-venue:match.info.venue,
+
+season:
+file.match(/\d{4}/)[0],
+
+date:
+match.info.dates[0],
+
+opponent,
+
+venue:
+match.info.venue,
+
 runs,
+
 balls,
+
 file,
+
 index
-});
-
-}
 
 });
 
 }
+
+});
+
+}
+
 
 render();
 
 }
 
 
-function render(){
+/* RENDER */
 
-const tbody=document.querySelector("#matchTable tbody");
+function render()
+{
+
+const tbody=
+document.querySelector("#matchTable tbody");
 
 tbody.innerHTML="";
 
-matches.forEach(m=>{
+matches.forEach(m=>
+{
 
-const tr=document.createElement("tr");
+const tr=
+document.createElement("tr");
+
+tr.onclick=()=>
+{
+
+location.href=
+`t20-world-cup-match.html?file=${m.file}&match=${m.index}`;
+
+};
 
 tr.innerHTML=`
+
 <td>${m.season}</td>
-<td>${new Date(m.date).toLocaleDateString("en-GB")}</td>
+
+<td>${new Date(m.date)
+.toLocaleDateString("en-GB")}</td>
+
 <td>${m.opponent}</td>
+
 <td>${m.venue}</td>
+
 <td>${m.runs}</td>
+
 <td>${m.balls}</td>
-<td>${((m.runs/m.balls)*100).toFixed(1)}</td>
+
+<td>${((m.runs/m.balls)*100)
+.toFixed(1)}</td>
+
 `;
 
 tbody.appendChild(tr);
