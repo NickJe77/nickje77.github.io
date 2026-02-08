@@ -57,6 +57,28 @@ font-weight:600;
 background:#d00000;
 }
 
+.summary{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+gap:16px;
+margin:20px;
+}
+
+.summary-box{
+background:white;
+padding:18px;
+border-radius:12px;
+box-shadow:0 2px 6px rgba(0,0,0,.1);
+text-align:center;
+}
+
+.summary-box .big{
+font-size:22px;
+font-weight:700;
+color:#6a040f;
+margin-top:6px;
+}
+
 table{
 width:calc(100% - 40px);
 margin:20px;
@@ -101,6 +123,8 @@ cursor:pointer;
 
 <div id="yearBar" class="year-bar"></div>
 
+<div id="summary" class="summary"></div>
+
 <table>
 <thead>
 <tr>
@@ -122,6 +146,7 @@ let SEASONS=[];
 
 const tbody=document.getElementById("tbody");
 const yearBar=document.getElementById("yearBar");
+const summaryDiv=document.getElementById("summary");
 
 load();
 
@@ -131,12 +156,7 @@ const files=await fetch(BASE+"index.json").then(r=>r.json());
 
 for(const file of files){
 
-/* EXCLUDE 2013 AND 2015 */
-
-if(
-file.includes("2013") ||
-file.includes("2015")
-)
+if(file.includes("2013") || file.includes("2015"))
 continue;
 
 const season=await fetch(BASE+file).then(r=>r.json());
@@ -152,18 +172,13 @@ matches=season.matches;
 else
 continue;
 
-
-/* EXCLUDE QUALIFIERS AND WARMUPS */
-
 matches.forEach((match,i)=>{
 
 const stage=(match.info.stage || "").toLowerCase();
 
-if(
-stage.includes("qualifier") ||
-stage.includes("warm") ||
-stage.includes("practice")
-)
+if(stage.includes("qualifier") ||
+   stage.includes("warm") ||
+   stage.includes("practice"))
 return;
 
 match._file=file;
@@ -174,7 +189,6 @@ ALL_MATCHES.push(match);
 });
 
 }
-
 
 /* GROUP BY YEAR */
 
@@ -195,12 +209,10 @@ m=>m.info.dates[0].startsWith(year)
 
 });
 
-
 buildButtons();
 showSeason(0);
 
 }
-
 
 function buildButtons(){
 
@@ -227,10 +239,11 @@ yearBar.appendChild(btn);
 
 }
 
-
 function showSeason(index){
 
 const season=SEASONS[index];
+
+renderSummary(season.matches);
 
 tbody.innerHTML="";
 
@@ -252,23 +265,69 @@ result=`${match.info.outcome.winner} won by ${margin}`;
 }
 
 tbody.innerHTML+=`
-
 <tr class="${isFinal?'final':''}"
 onclick="location.href='t20-world-cup-match.html?file=${match._file}&match=${match._index}'">
-
 <td>${new Date(match.info.dates[0]).toLocaleDateString("en-GB")}</td>
-
 <td>${match.info.teams.join(" vs ")}</td>
-
 <td>${match.info.venue}</td>
-
 <td>${result}</td>
-
 </tr>
-
 `;
 
 });
+
+}
+
+function renderSummary(matches){
+
+let runs={},wkts={};
+
+matches.forEach(match=>{
+
+match.innings?.forEach(inn=>{
+
+inn.overs?.forEach(over=>{
+
+over.deliveries.forEach(d=>{
+
+runs[d.batter]=(runs[d.batter]||0)+d.runs.batter;
+
+if(d.wickets)
+wkts[d.bowler]=(wkts[d.bowler]||0)+d.wickets.length;
+
+});
+
+});
+
+});
+
+});
+
+const finalMatch=matches[matches.length-1];
+
+const winner=finalMatch?.info?.outcome?.winner || "—";
+
+const topRuns=Object.entries(runs).sort((a,b)=>b[1]-a[1])[0] || ["—",0];
+const topWkts=Object.entries(wkts).sort((a,b)=>b[1]-a[1])[0] || ["—",0];
+
+summaryDiv.innerHTML=`
+
+<div class="summary-box">
+Winner
+<div class="big">${winner}</div>
+</div>
+
+<div class="summary-box">
+Most Runs
+<div class="big">${topRuns[0]} – ${topRuns[1]}</div>
+</div>
+
+<div class="summary-box">
+Most Wickets
+<div class="big">${topWkts[0]} – ${topWkts[1]}</div>
+</div>
+
+`;
 
 }
 
