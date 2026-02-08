@@ -13,25 +13,18 @@ margin:0;
 background:#f3f4f7;
 }
 
-/* HERO */
-
 .hero{
 background:linear-gradient(90deg,#6a040f,#d00000);
 color:white;
 padding:36px;
 margin:20px;
 border-radius:18px;
-display:flex;
-justify-content:space-between;
-align-items:center;
 }
 
-.hero-left h1{
+.hero h1{
 margin:0;
 font-size:42px;
 }
-
-/* TABLE */
 
 table{
 width:calc(100% - 40px);
@@ -57,12 +50,10 @@ cursor:pointer;
 <body>
 
 <div class="hero">
-<div class="hero-left">
-<h1 id="playerName">Loading...</h1>
-</div>
+<h1 id="playerName">Loading player...</h1>
 </div>
 
-<table id="matchTable">
+<table>
 
 <thead>
 <tr>
@@ -76,14 +67,11 @@ cursor:pointer;
 </tr>
 </thead>
 
-<tbody></tbody>
+<tbody id="tbody"></tbody>
 
 </table>
 
-
 <script>
-
-/* EXACT SAME PATH AS MATCHES PAGE */
 
 const MATCH_INDEX =
 "data/t20-world-cup/matches/index.json";
@@ -94,11 +82,23 @@ const MATCH_FOLDER =
 const NAME_INDEX =
 "data/t20-world-cup/players-name.json";
 
-
 let nameMap={};
-let reverseNameMap={};
+let reverseMap={};
 
 let matches=[];
+
+
+/* SAFE FETCH */
+
+async function safeFetch(url)
+{
+const res=await fetch(url);
+
+if(!res.ok)
+throw new Error("Failed to load "+url);
+
+return res.json();
+}
 
 
 /* INIT */
@@ -109,71 +109,50 @@ init();
 async function init()
 {
 
-await loadNameMap();
-
-const urlPlayer =
-new URLSearchParams(location.search)
-.get("player");
-
-if(!urlPlayer)
-return;
-
-const raw =
-reverseNameMap[urlPlayer] || urlPlayer;
-
-loadPlayer(raw);
-
-}
-
+try{
 
 /* LOAD NAME MAP */
 
-async function loadNameMap()
-{
+nameMap=await safeFetch(NAME_INDEX);
 
-nameMap =
-await fetch(NAME_INDEX)
-.then(r=>r.json());
-
-Object.entries(nameMap)
-.forEach(([raw,proper])=>
+Object.entries(nameMap).forEach(([raw,proper])=>
 {
-reverseNameMap[proper]=raw;
+reverseMap[proper]=raw;
 });
 
+
+/* GET PLAYER FROM URL */
+
+const param=
+new URLSearchParams(location.search)
+.get("player");
+
+if(!param)
+{
+playerName.innerText="No player specified";
+return;
 }
 
-
-/* DISPLAY NAME */
-
-function displayName(raw)
-{
-return nameMap[raw] || raw;
-}
-
-
-/* LOAD PLAYER */
-
-async function loadPlayer(player)
-{
+const player=
+reverseMap[param] || param;
 
 playerName.innerText=
-displayName(player);
+nameMap[player] || player;
 
-matches=[];
+
+/* LOAD MATCH INDEX */
 
 const files=
-await fetch(MATCH_INDEX)
-.then(r=>r.json());
+await safeFetch(MATCH_INDEX);
 
+
+/* LOAD MATCHES */
 
 for(const file of files)
 {
 
 const season=
-await fetch(MATCH_FOLDER+file)
-.then(r=>r.json());
-
+await safeFetch(MATCH_FOLDER+file);
 
 season.forEach((match,index)=>
 {
@@ -184,7 +163,7 @@ let balls=0;
 match.innings.forEach(raw=>
 {
 
-const inn =
+const inn=
 raw.team
 ? raw
 : Object.values(raw)[0];
@@ -215,16 +194,14 @@ balls++;
 if(balls>0)
 {
 
-const team =
+const team=
 Object.keys(match.info.players || {})
 .find(t=>
-match.info.players[t]
-.includes(player)
+match.info.players[t]?.includes(player)
 );
 
-const opponent =
-match.info.teams
-.find(t=>t!==team);
+const opponent=
+match.info.teams.find(t=>t!==team);
 
 matches.push({
 
@@ -256,20 +233,36 @@ index
 }
 
 
+/* RENDER */
+
 render();
+
+}
+catch(err)
+{
+
+playerName.innerText="Error loading player";
+
+console.error(err);
+
+}
 
 }
 
 
-/* RENDER */
+/* RENDER TABLE */
 
 function render()
 {
 
 const tbody=
-document.querySelector("#matchTable tbody");
+document.getElementById("tbody");
 
 tbody.innerHTML="";
+
+matches.sort((a,b)=>
+new Date(b.date)-new Date(a.date)
+);
 
 matches.forEach(m=>
 {
@@ -300,8 +293,7 @@ tr.innerHTML=`
 
 <td>${m.balls}</td>
 
-<td>${((m.runs/m.balls)*100)
-.toFixed(1)}</td>
+<td>${((m.runs/m.balls)*100).toFixed(1)}</td>
 
 `;
 
