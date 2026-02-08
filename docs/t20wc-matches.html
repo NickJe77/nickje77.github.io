@@ -97,45 +97,60 @@ const BASE =
 
 async function loadMatches()
 {
-    let html="";
+    let html = "";
 
     for(const file of FILES)
     {
-        const res = await fetch(BASE + file);
-
-        if(!res.ok) continue;
-
-        const data = await res.json();
-
-        if(!data.matches) continue;
-
-        data.matches.forEach((match,index)=>
+        try
         {
-            const info = match.info;
+            const res = await fetch(BASE + file);
 
-            html+=`
+            if(!res.ok) continue;
 
-            <div class="match">
+            const data = await res.json();
 
-            <a href="t20-world-cup-match.html?file=${file}&match=${index}">
-            ${info.teams[0]} vs ${info.teams[1]}
-            </a>
+            let matches = [];
 
-            <div class="meta">
-            ${info.venue}
-            </div>
+            // handle both possible structures
 
-            <div class="meta">
-            ${info.dates[0]}
-            </div>
+            if(Array.isArray(data))
+                matches = data;
 
-            </div>
+            else if(Array.isArray(data.matches))
+                matches = data.matches;
 
-            `;
-        });
+            else
+                continue;
+
+            matches.forEach((match,index)=>
+            {
+                const info = match.info;
+
+                if(!info) return;
+
+                html += `
+                <div class="match">
+
+                    <a href="t20-world-cup-match.html?file=${file}&match=${index}">
+                        ${info.teams[0]} vs ${info.teams[1]}
+                    </a>
+
+                    <div class="meta">
+                        ${info.venue}
+                    </div>
+
+                    <div class="meta">
+                        ${info.dates[0]}
+                    </div>
+
+                </div>
+                `;
+            });
+        }
+        catch(e){}
     }
 
-    document.getElementById("matches").innerHTML=html;
+    document.getElementById("matches").innerHTML = html;
 }
 
 loadMatches();
