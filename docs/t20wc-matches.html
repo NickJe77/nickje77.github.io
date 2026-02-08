@@ -118,7 +118,7 @@ body{
 
 <div class="hero">
 <h1>T20 World Cup</h1>
-<p>Complete T20 World Cup match history by edition. Click any match for full scorecard.</p>
+<p>Complete T20 World Cup match history by edition.</p>
 </div>
 
 <div class="year-grid" id="yearGrid"></div>
@@ -128,7 +128,6 @@ body{
 </div>
 
 <script>
-
 
 const YEARS = [
 2007,
@@ -146,11 +145,6 @@ const YEARS = [
 const BASE =
 "data/t20-world-cup/matches/";
 
-let activeYear = null;
-
-
-/* TOURNAMENT START DATES */
-
 const START_DATES = {
 
 2010: "2010-04-30",
@@ -160,7 +154,17 @@ const START_DATES = {
 };
 
 
-/* BUILD YEAR BUTTONS */
+function isWorldCupMatch(match)
+{
+    if(!match.info || !match.info.event)
+        return false;
+
+    const name =
+        match.info.event.name.toLowerCase();
+
+    return name.includes("world cup");
+}
+
 
 function buildYearButtons()
 {
@@ -173,7 +177,6 @@ function buildYearButtons()
             document.createElement("button");
 
         btn.className="year-btn";
-
         btn.innerText=year;
 
         btn.onclick=() =>
@@ -191,12 +194,8 @@ function buildYearButtons()
 }
 
 
-/* LOAD YEAR */
-
 async function loadYear(year)
 {
-    activeYear = year;
-
     const file =
         `t20wc_${year}_FULL.json`;
 
@@ -206,7 +205,7 @@ async function loadYear(year)
     if(!res.ok)
     {
         document.getElementById("matches")
-        .innerHTML="No data found";
+            .innerHTML="No data found";
         return;
     }
 
@@ -219,14 +218,16 @@ async function loadYear(year)
         : data.matches;
 
     if(!matches)
-    {
-        document.getElementById("matches")
-        .innerHTML="No matches found";
         return;
-    }
 
+    /* FILTER WORLD CUP ONLY */
 
-    /* APPLY TOURNAMENT DATE FILTER */
+    matches =
+        matches.filter(match =>
+        isWorldCupMatch(match)
+    );
+
+    /* APPLY DATE FILTER */
 
     if(START_DATES[year])
     {
@@ -235,12 +236,8 @@ async function loadYear(year)
 
         matches =
             matches.filter(match =>
-            {
-                const matchDate =
-                    new Date(match.info.dates[0]);
-
-                return matchDate >= cutoff;
-            });
+                new Date(match.info.dates[0]) >= cutoff
+            );
     }
 
 
@@ -248,9 +245,10 @@ async function loadYear(year)
 
     matches.forEach((match,index)=>
     {
-        const info = match.info;
+        const info =
+            match.info;
 
-        html+=`
+        html += `
 
         <div class="match">
 
@@ -274,7 +272,7 @@ async function loadYear(year)
     });
 
     document.getElementById("matches")
-    .innerHTML=html;
+        .innerHTML=html;
 }
 
 
