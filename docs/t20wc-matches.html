@@ -5,242 +5,271 @@
 <title>T20 World Cup | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<link rel="stylesheet" href="style.css">
-
 <style>
-body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
+
+body{
+    font-family:Inter,system-ui,Arial;
+    margin:0;
+    background:#f4f6f8;
+}
 
 .navbar{
-  display:flex;justify-content:center;gap:24px;
-  padding:16px 0;border-bottom:1px solid #ddd;background:#fff;font-weight:600;
+    display:flex;
+    justify-content:center;
+    gap:24px;
+    padding:16px;
+    border-bottom:1px solid #ddd;
+    background:white;
 }
-.navbar a{color:#0056d6;text-decoration:none;}
 
-.page{max-width:1200px;margin:30px auto;padding:0 20px;}
+.navbar a{
+    text-decoration:none;
+    font-weight:600;
+    color:#0056d6;
+}
+
+.page{
+    max-width:1200px;
+    margin:30px auto;
+    padding:0 20px;
+}
 
 .hero{
-  background:linear-gradient(90deg,#8b0000,#e10600);
-  color:#fff;padding:40px;border-radius:22px;margin-bottom:25px;
+    background:linear-gradient(90deg,#8b0000,#e10600);
+    color:white;
+    padding:40px;
+    border-radius:22px;
+    margin-bottom:25px;
 }
-.hero h1{margin:0;font-size:38px;}
-.hero p{margin:8px 0 0;font-size:18px;opacity:.95;}
 
-.year-grid{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:25px;}
-.year-btn{
-  background:#7a0000;color:#fff;border:none;
-  padding:12px 22px;border-radius:12px;font-size:18px;font-weight:600;cursor:pointer;
+.year-grid{
+    display:flex;
+    flex-wrap:wrap;
+    gap:14px;
+    margin-bottom:25px;
 }
-.year-btn:hover{background:#b30000;}
-.year-btn.active{background:#ff3b3b;}
+
+.year-btn{
+    background:#7a0000;
+    color:white;
+    border:none;
+    padding:12px 22px;
+    border-radius:12px;
+    font-size:18px;
+    font-weight:600;
+    cursor:pointer;
+}
+
+.year-btn.active{
+    background:#ff3b3b;
+}
 
 .match{
-  background:#fff;padding:16px;margin-bottom:12px;border-radius:14px;
-  box-shadow:0 4px 10px rgba(0,0,0,0.08);
+    background:white;
+    padding:16px;
+    margin-bottom:12px;
+    border-radius:14px;
 }
-.match a{font-weight:700;font-size:18px;text-decoration:none;color:#8b0000;}
-.match a:hover{color:#e10600;}
-.meta{margin-top:4px;color:#555;}
-.small{font-size:13px;opacity:.9;}
+
+.match a{
+    font-weight:700;
+    font-size:18px;
+    text-decoration:none;
+    color:#8b0000;
+}
+
+.meta{
+    margin-top:4px;
+    color:#555;
+}
+
 </style>
 </head>
 <body>
 
 <div class="navbar">
-  <a href="index.html">Home</a>
-  <a href="cricket.html">Cricket</a>
-  <a href="t20-world-cup.html">T20 World Cup</a>
+<a href="index.html">Home</a>
+<a href="cricket.html">Cricket</a>
+<a href="t20-world-cup.html">T20 World Cup</a>
 </div>
 
 <div class="page">
 
-  <div class="hero">
-    <h1>T20 World Cup</h1>
-    <p>Complete match history by edition. Click any match for full scorecard.</p>
-  </div>
+<div class="hero">
+<h1>T20 World Cup</h1>
+</div>
 
-  <div class="year-grid" id="yearGrid"></div>
-  <div id="matches">Loading…</div>
+<div class="year-grid" id="yearGrid"></div>
+
+<div id="matches"></div>
 
 </div>
 
 <script>
-const YEARS = [2007,2009,2010,2012,2014,2016,2021,2022,2024,2026];
-const BASE = "data/t20-world-cup/matches/";
 
-const START_DATES = {
-  2010: "2010-04-30",
-  2012: "2012-09-18",
-  2021: "2021-10-17",
-  2022: "2022-10-16"
+const YEARS =
+[2007,2009,2010,2012,2014,2016,2021,2022,2024,2026];
+
+const BASE =
+"data/t20-world-cup/matches/";
+
+const START_DATES =
+{
+2010:"2010-04-30",
+2012:"2012-09-18",
+2021:"2021-10-17",
+2022:"2022-10-16"
 };
 
-/*
-  OFFICIAL PARTICIPANTS FILTER (fixes “teams that didn’t play”)
-  2021 Men’s T20 World Cup: 16 teams (Round 1 + Super 12)
-  2022 Men’s T20 World Cup: 16 teams (Round 1 + Super 12)
-*/
-const OFFICIAL_TEAMS = {
-  2021: new Set([
-    "afghanistan","australia","bangladesh","england","india","new zealand","pakistan","south africa","sri lanka","west indies",
-    "namibia","scotland","ireland","netherlands","oman","papua new guinea"
-  ]),
-  2022: new Set([
-    "afghanistan","australia","bangladesh","england","india","new zealand","pakistan","south africa","sri lanka","west indies",
-    "zimbabwe","ireland","netherlands","namibia","scotland","united arab emirates"
-  ])
+
+/* ONLY APPLY TEAM FILTER TO 2021 AND 2022 */
+
+const OFFICIAL_TEAMS =
+{
+2021:new Set([
+"afghanistan","australia","bangladesh","england","india","new zealand","pakistan","south africa","sri lanka","west indies",
+"namibia","scotland","ireland","netherlands","oman","papua new guinea"
+]),
+
+2022:new Set([
+"afghanistan","australia","bangladesh","england","india","new zealand","pakistan","south africa","sri lanka","west indies",
+"zimbabwe","ireland","netherlands","namibia","scotland","united arab emirates"
+])
 };
 
-function normTeamName(s){
-  if(!s) return "";
-  return String(s).trim().toLowerCase()
-    .replace(/\s+/g," ")
-    .replace(/\u00A0/g," ")
-    .replace(/^uae$/,"united arab emirates")
-    .replace(/^u\.a\.e\.$/,"united arab emirates")
-    .replace(/^u\.a\.e$/,"united arab emirates");
+
+function normalize(name)
+{
+return name.toLowerCase().trim();
 }
 
-function safeDate(d){
-  const x = new Date(d);
-  return isNaN(+x) ? null : x;
+
+function buildYearButtons()
+{
+const grid=document.getElementById("yearGrid");
+
+YEARS.forEach(year=>
+{
+const btn=document.createElement("button");
+
+btn.className="year-btn";
+btn.innerText=year;
+
+btn.onclick=()=>
+{
+document.querySelectorAll(".year-btn")
+.forEach(b=>b.classList.remove("active"));
+
+btn.classList.add("active");
+
+loadYear(year);
+};
+
+grid.appendChild(btn);
+});
 }
 
-function looksLikeWorldCup(match){
-  const name = (match?.info?.event?.name || "").toLowerCase();
-  // keep broad, because some files use slightly different naming
-  return name.includes("world") && name.includes("t20");
+
+async function loadYear(year)
+{
+
+const file=`t20wc_${year}_FULL.json`;
+
+const res=await fetch(BASE+file);
+
+if(!res.ok)
+{
+document.getElementById("matches").innerHTML=
+"No data found";
+return;
 }
 
-function isWarmupOrPractice(match){
-  const stage = (match?.info?.event?.stage || "").toLowerCase();
-  return stage.includes("warm") || stage.includes("practice") || stage.includes("tour");
+const data=await res.json();
+
+let matches=
+Array.isArray(data)
+? data
+: data.matches;
+
+if(!matches)
+{
+document.getElementById("matches").innerHTML=
+"No matches found";
+return;
 }
 
-function passesEditionFilters(year, match){
-  if(!match?.info) return false;
 
-  // Basic sanity: must be T20 format in Cricsheet-style files
-  const mt = (match.info.match_type || "").toLowerCase();
-  if(mt && !mt.includes("t20")) return false;
+/* DATE FILTER */
 
-  // Event name filter helps for many files (but not relied upon alone)
-  if(match.info.event && match.info.event.name){
-    if(!looksLikeWorldCup(match)) return false;
-  }
+if(START_DATES[year])
+{
+const cutoff=new Date(START_DATES[year]);
 
-  // Always exclude warmups/practice if metadata exists
-  if(isWarmupOrPractice(match)) return false;
-
-  // Date cutoff if defined
-  if(START_DATES[year]){
-    const d = safeDate(match.info.dates && match.info.dates[0]);
-    if(!d) return false;
-    const cutoff = new Date(START_DATES[year]);
-    if(d < cutoff) return false;
-  }
-
-  // Critical fix: for 2021 & 2022 only show matches where BOTH teams are in the official 16-team list
-  if(OFFICIAL_TEAMS[year]){
-    const teams = match.info.teams || [];
-    if(teams.length < 2) return false;
-
-    const t1 = normTeamName(teams[0]);
-    const t2 = normTeamName(teams[1]);
-
-    const set = OFFICIAL_TEAMS[year];
-    if(!set.has(t1) || !set.has(t2)) return false;
-  }
-
-  return true;
+matches=
+matches.filter(match=>
+new Date(match.info.dates[0])>=cutoff
+);
 }
 
-function buildYearButtons(){
-  const grid = document.getElementById("yearGrid");
-  grid.innerHTML = "";
-  YEARS.forEach(year => {
-    const btn = document.createElement("button");
-    btn.className = "year-btn";
-    btn.textContent = year;
-    btn.onclick = () => {
-      document.querySelectorAll(".year-btn").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      loadYear(year);
-    };
-    grid.appendChild(btn);
-  });
+
+/* TEAM FILTER ONLY FOR 2021 & 2022 */
+
+if(OFFICIAL_TEAMS[year])
+{
+matches=
+matches.filter(match=>
+{
+const t1=normalize(match.info.teams[0]);
+const t2=normalize(match.info.teams[1]);
+
+return OFFICIAL_TEAMS[year].has(t1)
+&& OFFICIAL_TEAMS[year].has(t2);
+});
 }
 
-async function loadYear(year){
-  const file = `t20wc_${year}_FULL.json`;
-  const out = document.getElementById("matches");
-  out.innerHTML = "Loading…";
 
-  let res;
-  try{
-    res = await fetch(BASE + file, { cache: "no-store" });
-  }catch(e){
-    out.innerHTML = "Error loading data";
-    return;
-  }
+let html="";
 
-  if(!res.ok){
-    out.innerHTML = "No data found";
-    return;
-  }
+matches.forEach((match,index)=>
+{
+const info=match.info;
 
-  let data;
-  try{
-    data = await res.json();
-  }catch(e){
-    out.innerHTML = "Bad JSON file";
-    return;
-  }
+html+=`
 
-  const matches = Array.isArray(data) ? data : (Array.isArray(data.matches) ? data.matches : null);
-  if(!matches){
-    out.innerHTML = "No matches found";
-    return;
-  }
+<div class="match">
 
-  let html = "";
-  let kept = 0;
+<a href="t20-world-cup-match.html?file=${file}&match=${index}">
 
-  // IMPORTANT: keep the ORIGINAL index (idx) so your match page opens the right record
-  matches.forEach((match, idx) => {
-    if(!passesEditionFilters(year, match)) return;
+${info.teams[0]} vs ${info.teams[1]}
 
-    const info = match.info;
-    const teams = info.teams || [];
-    const teamA = teams[0] || "Team 1";
-    const teamB = teams[1] || "Team 2";
-    const venue = info.venue || "";
-    const date = (info.dates && info.dates[0]) ? info.dates[0] : "";
+</a>
 
-    kept++;
+<div class="meta">${info.venue}</div>
 
-    html += `
-      <div class="match">
-        <a href="t20-world-cup-match.html?file=${encodeURIComponent(file)}&match=${idx}">
-          ${teamA} vs ${teamB}
-        </a>
-        <div class="meta">${venue}</div>
-        <div class="meta">${date}</div>
-        <div class="meta small">Edition: ${year}</div>
-      </div>
-    `;
-  });
+<div class="meta">${info.dates[0]}</div>
 
-  out.innerHTML = html || "No matches after filtering";
+</div>
+
+`;
+});
+
+document.getElementById("matches").innerHTML=
+html || "No matches after filtering";
+
 }
+
 
 buildYearButtons();
 
-// default
-const defaultYear = 2024;
-loadYear(defaultYear);
-document.querySelectorAll(".year-btn").forEach(btn => {
-  if(btn.textContent === String(defaultYear)) btn.classList.add("active");
+loadYear(2024);
+
+document.querySelectorAll(".year-btn")
+.forEach(btn=>
+{
+if(btn.innerText=="2024")
+btn.classList.add("active");
 });
+
 </script>
 
 </body>
