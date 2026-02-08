@@ -2,55 +2,117 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>T20 World Cup Matches | The Sporting Almanac</title>
+<title>T20 World Cup | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="style.css">
 
 <style>
 
 body{
-    font-family:Inter,Arial;
+    font-family:Inter, system-ui, Arial;
     margin:0;
     background:#f4f6f8;
 }
+
+/* NAV */
 
 .navbar{
     display:flex;
     justify-content:center;
     gap:24px;
-    padding:16px;
+    padding:16px 0;
     border-bottom:1px solid #ddd;
     background:white;
+    font-weight:600;
 }
 
 .navbar a{
     text-decoration:none;
-    font-weight:600;
     color:#0056d6;
 }
 
+/* PAGE */
+
 .page{
-    max-width:1000px;
+    max-width:1200px;
     margin:30px auto;
-    padding:20px;
+    padding:0 20px;
 }
+
+/* HERO */
+
+.hero{
+    background:linear-gradient(90deg,#8b0000,#e10600);
+    color:white;
+    padding:40px;
+    border-radius:22px;
+    margin-bottom:25px;
+}
+
+.hero h1{
+    margin:0;
+    font-size:38px;
+}
+
+.hero p{
+    margin-top:8px;
+    font-size:18px;
+}
+
+/* YEAR BUTTONS */
+
+.year-grid{
+    display:flex;
+    flex-wrap:wrap;
+    gap:14px;
+    margin-bottom:25px;
+}
+
+.year-btn{
+
+    background:#7a0000;
+    color:white;
+    border:none;
+    padding:12px 22px;
+    border-radius:12px;
+    font-size:18px;
+    font-weight:600;
+    cursor:pointer;
+}
+
+.year-btn:hover{
+    background:#b30000;
+}
+
+.year-btn.active{
+    background:#ff3b3b;
+}
+
+/* MATCH LIST */
 
 .match{
     background:white;
     padding:16px;
     margin-bottom:12px;
-    border-radius:12px;
+    border-radius:14px;
+    box-shadow:0 4px 10px rgba(0,0,0,0.08);
 }
 
 .match a{
-    font-weight:bold;
+    font-weight:700;
     font-size:18px;
     text-decoration:none;
-    color:#003566;
+    color:#8b0000;
+}
+
+.match a:hover{
+    color:#e10600;
 }
 
 .meta{
-    color:#555;
     margin-top:4px;
+    color:#555;
 }
 
 </style>
@@ -65,95 +127,138 @@ body{
 
 <div class="page">
 
-<h1>T20 World Cup Matches</h1>
+<div class="hero">
+<h1>T20 World Cup</h1>
+<p>Complete T20 World Cup match history by season. Click any match for full scorecard.</p>
+</div>
 
-<div id="matches">Loading matches...</div>
+<div class="year-grid" id="yearGrid"></div>
+
+<div id="matches"></div>
 
 </div>
 
 <script>
 
-const FILES = [
-
-"t20wc_2007_FULL.json",
-"t20wc_2008_FULL.json",
-"t20wc_2009_FULL.json",
-"t20wc_2010_FULL.json",
-"t20wc_2012_FULL.json",
-"t20wc_2013_FULL.json",
-"t20wc_2014_FULL.json",
-"t20wc_2015_FULL.json",
-"t20wc_2016_FULL.json",
-"t20wc_2021_FULL.json",
-"t20wc_2022_FULL.json",
-"t20wc_2023_FULL.json",
-"t20wc_2024_FULL.json",
-"t20wc_2025_FULL.json"
-
+const YEARS = [
+2007,2008,2009,2010,2012,2013,2014,2015,2016,
+2021,2022,2023,2024,2025
 ];
 
 const BASE =
 "data/t20-world-cup/matches/";
 
-async function loadMatches()
+let activeYear = null;
+
+function buildYearButtons()
 {
-    let html = "";
+    const grid =
+        document.getElementById("yearGrid");
 
-    for(const file of FILES)
+    YEARS.forEach(year =>
     {
-        try
+        const btn =
+            document.createElement("button");
+
+        btn.className="year-btn";
+
+        btn.innerText=year;
+
+        btn.onclick=() =>
         {
-            const res = await fetch(BASE + file);
+            document.querySelectorAll(".year-btn")
+                .forEach(b=>b.classList.remove("active"));
 
-            if(!res.ok) continue;
+            btn.classList.add("active");
 
-            const data = await res.json();
+            loadYear(year);
+        };
 
-            let matches = [];
-
-            // handle both possible structures
-
-            if(Array.isArray(data))
-                matches = data;
-
-            else if(Array.isArray(data.matches))
-                matches = data.matches;
-
-            else
-                continue;
-
-            matches.forEach((match,index)=>
-            {
-                const info = match.info;
-
-                if(!info) return;
-
-                html += `
-                <div class="match">
-
-                    <a href="t20-world-cup-match.html?file=${file}&match=${index}">
-                        ${info.teams[0]} vs ${info.teams[1]}
-                    </a>
-
-                    <div class="meta">
-                        ${info.venue}
-                    </div>
-
-                    <div class="meta">
-                        ${info.dates[0]}
-                    </div>
-
-                </div>
-                `;
-            });
-        }
-        catch(e){}
-    }
-
-    document.getElementById("matches").innerHTML = html;
+        grid.appendChild(btn);
+    });
 }
 
-loadMatches();
+async function loadYear(year)
+{
+    activeYear = year;
+
+    const file =
+        `t20wc_${year}_FULL.json`;
+
+    const res =
+        await fetch(BASE + file);
+
+    if(!res.ok)
+    {
+        document.getElementById("matches")
+        .innerHTML="No data found";
+        return;
+    }
+
+    const data =
+        await res.json();
+
+    let matches =
+        Array.isArray(data)
+        ? data
+        : data.matches;
+
+    if(!matches)
+    {
+        document.getElementById("matches")
+        .innerHTML="No matches found";
+        return;
+    }
+
+    let html="";
+
+    matches.forEach((match,index)=>
+    {
+        const info = match.info;
+
+        html+=`
+
+        <div class="match">
+
+        <a href="t20-world-cup-match.html?file=${file}&match=${index}">
+
+        ${info.teams[0]} vs ${info.teams[1]}
+
+        </a>
+
+        <div class="meta">
+
+        ${info.venue}
+
+        </div>
+
+        <div class="meta">
+
+        ${info.dates[0]}
+
+        </div>
+
+        </div>
+
+        `;
+    });
+
+    document.getElementById("matches")
+    .innerHTML=html;
+}
+
+/* INIT */
+
+buildYearButtons();
+
+loadYear(2024);
+
+document.querySelectorAll(".year-btn")
+.forEach(btn =>
+{
+    if(btn.innerText=="2024")
+        btn.classList.add("active");
+});
 
 </script>
 
