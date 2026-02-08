@@ -14,7 +14,6 @@ body{
   background:#f4f6f8;
 }
 
-/* NAVBAR */
 .navbar{
   display:flex;
   justify-content:center;
@@ -29,14 +28,12 @@ body{
   color:#0056d6;
 }
 
-/* PAGE */
 .page{
   max-width:1200px;
   margin:30px auto;
   padding:0 20px;
 }
 
-/* HERO */
 .hero{
   background:linear-gradient(90deg,#8b0000,#e10600);
   color:#fff;
@@ -44,23 +41,14 @@ body{
   border-radius:22px;
   margin-bottom:25px;
 }
-.hero h1{
-  margin:0;
-  font-size:38px;
-}
-.hero p{
-  margin:8px 0 0;
-  font-size:18px;
-  opacity:.95;
-}
 
-/* YEAR BUTTONS */
 .year-grid{
   display:flex;
   flex-wrap:wrap;
   gap:14px;
   margin-bottom:18px;
 }
+
 .year-btn{
   background:#7a0000;
   color:#fff;
@@ -71,10 +59,11 @@ body{
   font-weight:600;
   cursor:pointer;
 }
-.year-btn:hover{ background:#b30000; }
-.year-btn.active{ background:#ff3b3b; }
 
-/* SUMMARY (IPL-style) */
+.year-btn.active{
+  background:#ff3b3b;
+}
+
 .summary-wrap{
   background:#fff;
   border-radius:16px;
@@ -82,41 +71,42 @@ body{
   box-shadow:0 4px 10px rgba(0,0,0,0.08);
   margin-bottom:20px;
 }
+
 .summary-title{
   font-size:26px;
   font-weight:800;
-  margin:0 0 12px 0;
+  margin-bottom:12px;
 }
+
 .summary-grid{
   display:grid;
   grid-template-columns:repeat(3,1fr);
   gap:16px;
 }
+
 .summary-card{
   border:1px solid #eee;
   border-radius:14px;
   padding:14px;
   background:#fff7f7;
 }
-.summary-card b{
-  display:block;
-  margin-bottom:6px;
-  font-size:16px;
-}
-.summary-card .big{
-  font-size:18px;
-  font-weight:800;
+
+.summary-card a{
+  text-decoration:none;
   color:#7a0000;
-}
-.summary-card .sub{
-  margin-top:4px;
-  color:#444;
-}
-@media(max-width:900px){
-  .summary-grid{ grid-template-columns:1fr; }
+  font-weight:800;
+  font-size:18px;
 }
 
-/* MATCH LIST */
+.summary-card a:hover{
+  color:#e10600;
+}
+
+.sub{
+  margin-top:6px;
+  color:#444;
+}
+
 .match{
   background:#fff;
   padding:16px;
@@ -124,21 +114,19 @@ body{
   border-radius:14px;
   box-shadow:0 4px 10px rgba(0,0,0,0.08);
 }
+
 .match a{
   font-weight:800;
   font-size:18px;
   text-decoration:none;
   color:#8b0000;
 }
-.match a:hover{ color:#e10600; }
+
 .meta{
   margin-top:4px;
   color:#555;
 }
-.small{
-  font-size:13px;
-  opacity:.9;
-}
+
 </style>
 </head>
 
@@ -152,217 +140,208 @@ body{
 
 <div class="page">
 
-  <div class="hero">
-    <h1>T20 World Cup</h1>
-    <p>Complete T20 World Cup match history by edition. Click any match for full scorecard.</p>
-  </div>
+<div class="hero">
+<h1>T20 World Cup</h1>
+</div>
 
-  <div class="year-grid" id="yearGrid"></div>
+<div class="year-grid" id="yearGrid"></div>
 
-  <div class="summary-wrap" id="summaryWrap" style="display:none;">
-    <div class="summary-title">Season Summary</div>
-    <div class="summary-grid" id="summaryGrid"></div>
-  </div>
+<div class="summary-wrap" id="summaryWrap" style="display:none;">
+  <div class="summary-title">Season Summary</div>
+  <div class="summary-grid" id="summaryGrid"></div>
+</div>
 
-  <div id="matches">Loading…</div>
+<div id="matches"></div>
 
 </div>
 
 <script>
-const YEARS = [2007,2009,2010,2012,2014,2016,2021,2022,2024,2026];
-const BASE = "data/t20-world-cup/matches/";
-const SUMMARY_PATH = "data/t20-world-cup/summary.json";
 
-const START_DATES = {
-  2010:"2010-04-30",
-  2012:"2012-09-18",
-  2021:"2021-10-17",
-  2022:"2022-10-16"
+const SUMMARY_PATH="data/t20-world-cup/summary.json";
+const MATCH_PATH="data/t20-world-cup/matches/";
+
+const YEARS=[2007,2009,2010,2012,2014,2016,2021,2022,2024,2026];
+
+let SUMMARY=null;
+
+
+/* URL HELPERS */
+
+function teamURL(team)
+{
+return "t20wc-team.html?team="+encodeURIComponent(team);
+}
+
+function playerURL(player)
+{
+return "t20-world-cup-player.html?player="+encodeURIComponent(player);
+}
+
+
+/* LOAD SUMMARY */
+
+async function loadSummary()
+{
+const res=await fetch(SUMMARY_PATH);
+SUMMARY=await res.json();
+}
+
+
+/* RENDER SUMMARY */
+
+function renderSummary(year)
+{
+const wrap=document.getElementById("summaryWrap");
+const grid=document.getElementById("summaryGrid");
+
+const s=SUMMARY?.[year];
+
+if(!s)
+{
+wrap.style.display="none";
+return;
+}
+
+wrap.style.display="block";
+
+grid.innerHTML=`
+
+<div class="summary-card">
+
+<b>Winner</b><br>
+
+<a href="${teamURL(s.winner)}">
+${s.winner}
+</a>
+
+</div>
+
+<div class="summary-card">
+
+<b>Most Runs</b><br>
+
+<a href="${playerURL(s.most_runs.player)}">
+${s.most_runs.player}
+</a>
+
+<div class="sub">
+${s.most_runs.value} runs
+</div>
+
+</div>
+
+<div class="summary-card">
+
+<b>Most Wickets</b><br>
+
+<a href="${playerURL(s.most_wickets.player)}">
+${s.most_wickets.player}
+</a>
+
+<div class="sub">
+${s.most_wickets.value} wickets
+</div>
+
+</div>
+
+`;
+}
+
+
+/* YEAR BUTTONS */
+
+function buildYearButtons()
+{
+const grid=document.getElementById("yearGrid");
+
+YEARS.forEach(year=>
+{
+const btn=document.createElement("button");
+
+btn.className="year-btn";
+btn.innerText=year;
+
+btn.onclick=()=>
+{
+document.querySelectorAll(".year-btn")
+.forEach(b=>b.classList.remove("active"));
+
+btn.classList.add("active");
+
+loadYear(year);
 };
 
-/* Team whitelist ONLY for 2021 & 2022 */
-const OFFICIAL_TEAMS = {
-  2021: new Set([
-    "afghanistan","australia","bangladesh","england","india","new zealand","pakistan","south africa","sri lanka","west indies",
-    "namibia","scotland","ireland","netherlands","oman","papua new guinea"
-  ]),
-  2022: new Set([
-    "afghanistan","australia","bangladesh","england","india","new zealand","pakistan","south africa","sri lanka","west indies",
-    "zimbabwe","ireland","netherlands","namibia","scotland","united arab emirates"
-  ])
-};
-
-let SUMMARY = null;
-
-function normalizeTeam(name){
-  return String(name || "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g," ")
-    .replace(/^uae$/,"united arab emirates")
-    .replace(/^u\.a\.e\.?$/,"united arab emirates");
+grid.appendChild(btn);
+});
 }
 
-async function loadSummary(){
-  try{
-    const res = await fetch(SUMMARY_PATH, { cache: "no-store" });
-    if(!res.ok) { SUMMARY = null; return; }
-    SUMMARY = await res.json();
-  }catch(e){
-    SUMMARY = null;
-  }
+
+/* LOAD MATCHES */
+
+async function loadYear(year)
+{
+
+renderSummary(year);
+
+const file=`t20wc_${year}_FULL.json`;
+
+const res=await fetch(MATCH_PATH+file);
+
+const data=await res.json();
+
+const matches=Array.isArray(data)?data:data.matches;
+
+let html="";
+
+matches.forEach((match,index)=>
+{
+
+const info=match.info;
+
+html+=`
+
+<div class="match">
+
+<a href="t20-world-cup-match.html?file=${file}&match=${index}">
+
+${info.teams[0]} vs ${info.teams[1]}
+
+</a>
+
+<div class="meta">${info.venue}</div>
+
+<div class="meta">${info.dates[0]}</div>
+
+</div>
+
+`;
+
+});
+
+document.getElementById("matches").innerHTML=html;
+
 }
 
-function renderSummary(year){
-  const wrap = document.getElementById("summaryWrap");
-  const grid = document.getElementById("summaryGrid");
 
-  if(!SUMMARY || !SUMMARY[String(year)]){
-    wrap.style.display = "none";
-    grid.innerHTML = "";
-    return;
-  }
+/* INIT */
 
-  const s = SUMMARY[String(year)];
+(async function(){
 
-  wrap.style.display = "";
-  grid.innerHTML = `
-    <div class="summary-card">
-      <b>Winner</b>
-      <div class="big">${s.winner || "-"}</div>
-    </div>
+await loadSummary();
 
-    <div class="summary-card">
-      <b>Most Runs</b>
-      <div class="big">${(s.most_runs && s.most_runs.player) ? s.most_runs.player : "-"}</div>
-      <div class="sub">${(s.most_runs && (s.most_runs.value != null)) ? (s.most_runs.value + " " + (s.most_runs.label || "")) : ""}</div>
-    </div>
+buildYearButtons();
 
-    <div class="summary-card">
-      <b>Most Wickets</b>
-      <div class="big">${(s.most_wickets && s.most_wickets.player) ? s.most_wickets.player : "-"}</div>
-      <div class="sub">${(s.most_wickets && (s.most_wickets.value != null)) ? (s.most_wickets.value + " " + (s.most_wickets.label || "")) : ""}</div>
-    </div>
-  `;
-}
+loadYear(2024);
 
-function buildYearButtons(){
-  const grid = document.getElementById("yearGrid");
-  grid.innerHTML = "";
+document.querySelectorAll(".year-btn")
+.forEach(btn=>
+{
+if(btn.innerText=="2024")
+btn.classList.add("active");
+});
 
-  YEARS.forEach(year => {
-    const btn = document.createElement("button");
-    btn.className = "year-btn";
-    btn.textContent = year;
-
-    btn.onclick = () => {
-      document.querySelectorAll(".year-btn").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      loadYear(year);
-    };
-
-    grid.appendChild(btn);
-  });
-}
-
-function applyFilters(year, matches){
-  let filtered = matches.slice();
-
-  if(START_DATES[year]){
-    const cutoff = new Date(START_DATES[year]);
-    filtered = filtered.filter(m => {
-      const d = new Date(m?.info?.dates?.[0]);
-      if(isNaN(+d)) return false;
-      return d >= cutoff;
-    });
-  }
-
-  if(OFFICIAL_TEAMS[year]){
-    const set = OFFICIAL_TEAMS[year];
-    filtered = filtered.filter(m => {
-      const t = m?.info?.teams || [];
-      if(t.length < 2) return false;
-      const t1 = normalizeTeam(t[0]);
-      const t2 = normalizeTeam(t[1]);
-      return set.has(t1) && set.has(t2);
-    });
-  }
-
-  return filtered;
-}
-
-async function loadYear(year){
-  renderSummary(year);
-
-  const file = `t20wc_${year}_FULL.json`;
-  const out = document.getElementById("matches");
-  out.innerHTML = "Loading…";
-
-  let res;
-  try{
-    res = await fetch(BASE + file, { cache: "no-store" });
-  }catch(e){
-    out.innerHTML = "Error loading matches";
-    return;
-  }
-
-  if(!res.ok){
-    out.innerHTML = "No data found";
-    return;
-  }
-
-  let data;
-  try{
-    data = await res.json();
-  }catch(e){
-    out.innerHTML = "Bad JSON file";
-    return;
-  }
-
-  const matchesRaw = Array.isArray(data) ? data : (Array.isArray(data.matches) ? data.matches : null);
-  if(!matchesRaw){
-    out.innerHTML = "No matches found";
-    return;
-  }
-
-  const matches = applyFilters(year, matchesRaw);
-
-  let html = "";
-  matchesRaw.forEach((m, idx) => {
-    if(matches.indexOf(m) === -1) return;
-
-    const info = m.info || {};
-    const teams = info.teams || [];
-    const a = teams[0] || "Team 1";
-    const b = teams[1] || "Team 2";
-    const venue = info.venue || "";
-    const date = (info.dates && info.dates[0]) ? info.dates[0] : "";
-
-    html += `
-      <div class="match">
-        <a href="t20-world-cup-match.html?file=${encodeURIComponent(file)}&match=${idx}">
-          ${a} vs ${b}
-        </a>
-        <div class="meta">${venue}</div>
-        <div class="meta">${date}</div>
-      </div>
-    `;
-  });
-
-  out.innerHTML = html || "No matches after filtering";
-}
-
-(async function init(){
-  buildYearButtons();
-  await loadSummary();
-
-  const defaultYear = 2024;
-  loadYear(defaultYear);
-
-  document.querySelectorAll(".year-btn").forEach(btn => {
-    if(btn.textContent === String(defaultYear)) btn.classList.add("active");
-  });
 })();
+
 </script>
 
 </body>
