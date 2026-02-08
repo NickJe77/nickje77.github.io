@@ -63,6 +63,11 @@ font-size:20px;
 color:#666;
 }
 
+tr:hover{
+background:#f8fbff;
+cursor:pointer;
+}
+
 </style>
 </head>
 <body>
@@ -80,6 +85,7 @@ color:#666;
 </div>
 
 <table>
+
 <thead>
 <tr>
 <th>Season</th>
@@ -91,12 +97,15 @@ color:#666;
 <th>Strike Rate</th>
 </tr>
 </thead>
+
 <tbody id="tbody">
 <tr>
 <td colspan="7" class="center">Loading...</td>
 </tr>
 </tbody>
+
 </table>
+
 
 <script>
 
@@ -105,9 +114,6 @@ const MATCH_FOLDER="data/t20-world-cup/matches/";
 const NAME_INDEX="data/t20-world-cup/matches/player-names.json";
 
 let nameMap={};
-let displayToRaw={};
-let rawToDisplay={};
-
 let matches=[];
 
 init();
@@ -117,80 +123,138 @@ async function init()
 
 try{
 
+/* LOAD NAME MAP IF EXISTS */
+
+try{
 nameMap=await fetch(NAME_INDEX).then(r=>r.json());
+}catch{}
 
-/* HANDLE BOTH MAP DIRECTIONS */
 
-Object.entries(nameMap).forEach(([a,b])=>{
+/* GET PLAYER FROM URL */
 
-rawToDisplay[a]=b;
-displayToRaw[b]=a;
+const displayName=
+new URLSearchParams(location.search)
+.get("player");
 
-/* ALSO HANDLE reverse case */
-
-rawToDisplay[b]=a;
-displayToRaw[a]=b;
-
-});
-
-const param=new URLSearchParams(location.search).get("player");
-
-if(!param){
+if(!displayName){
 showError("No player specified");
 return;
 }
 
-const player=displayToRaw[param] || param;
+playerName.innerText=displayName;
 
-playerName.innerText=param;
+
+/* BUILD ALL POSSIBLE NAME VARIANTS */
+
+let possibleNames=new Set();
+
+possibleNames.add(displayName);
+
+/* check mapping both directions */
+
+Object.entries(nameMap).forEach(([raw,full])=>{
+
+if(full===displayName)
+possibleNames.add(raw);
+
+if(raw===displayName)
+possibleNames.add(full);
+
+});
+
+
+/* LOAD INDEX */
 
 const files=await fetch(INDEX).then(r=>r.json());
 
+
+/* LOAD MATCHES */
+
 for(const file of files){
 
-const season=await fetch(MATCH_FOLDER+file).then(r=>r.json());
+const season=
+await fetch(MATCH_FOLDER+file).then(r=>r.json());
 
 season.forEach((match,index)=>{
 
 let runs=0;
 let balls=0;
-let team="";
+let playerTeam="";
 
-Object.entries(match.info.players||{}).forEach(([t,list])=>{
-if(list.includes(player)) team=t;
+/* detect team */
+
+Object.entries(match.info.players||{})
+.forEach(([team,list])=>{
+
+list.forEach(p=>{
+if(possibleNames.has(p))
+playerTeam=team;
 });
+
+});
+
 
 match.innings.forEach(innRaw=>{
 
-const inn=innRaw.team?innRaw:Object.values(innRaw)[0];
+const inn=
+innRaw.team
+?innRaw
+:Object.values(innRaw)[0];
+
+
+/* format A */
 
 if(inn.overs){
+
 inn.overs.forEach(over=>{
+
 over.deliveries.forEach(d=>{
-if(d.batter===player){
+
+if(possibleNames.has(d.batter)){
+
 runs+=d.runs.batter;
-if(!d.extras?.wides) balls++;
+
+if(!d.extras?.wides)
+balls++;
+
 }
+
 });
+
 });
+
 }
+
+
+/* format B */
 
 if(inn.deliveries){
+
 inn.deliveries.forEach(d=>{
-if(d.batter===player){
+
+if(possibleNames.has(d.batter)){
+
 runs+=d.runs.batter;
-if(!d.extras?.wides) balls++;
-}
-});
+
+if(!d.extras?.wides)
+balls++;
+
 }
 
 });
+
+}
+
+});
+
 
 if(balls>0){
 
-const opponent=match.info.teams.find(t=>t!==team);
+const opponent=
+match.info.teams.find(t=>t!==playerTeam);
 
 matches.push({
+
 season:file.match(/\d{4}/)[0],
 date:match.info.dates[0],
 opponent,
@@ -199,25 +263,28 @@ runs,
 balls,
 file,
 index
-});
-
-}
 
 });
 
 }
+
+});
+
+}
+
 
 render();
 
 }
-catch(e){
+catch(err){
 
-console.error(e);
+console.error(err);
 showError("Error loading player");
 
 }
 
 }
+
 
 function render(){
 
@@ -228,7 +295,9 @@ showError("No matches found");
 return;
 }
 
-matches.sort((a,b)=>new Date(b.date)-new Date(a.date));
+matches.sort((a,b)=>
+new Date(b.date)-new Date(a.date)
+);
 
 tbody.innerHTML="";
 
@@ -237,7 +306,8 @@ matches.forEach(m=>{
 const tr=document.createElement("tr");
 
 tr.onclick=()=>{
-location.href=`t20-world-cup-match.html?file=${m.file}&match=${m.index}`;
+location.href=
+`t20-world-cup-match.html?file=${m.file}&match=${m.index}`;
 };
 
 tr.innerHTML=`
@@ -255,6 +325,7 @@ tbody.appendChild(tr);
 });
 
 }
+
 
 function showError(msg){
 
