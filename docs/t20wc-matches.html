@@ -6,6 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
+
 body{
 font-family: Inter, system-ui, Arial, sans-serif;
 margin:0;
@@ -80,6 +81,7 @@ background:#ffe9b3 !important;
 font-weight:700;
 cursor:pointer;
 }
+
 </style>
 </head>
 
@@ -115,11 +117,6 @@ cursor:pointer;
 
 const BASE="/data/t20-world-cup/matches/";
 
-const VALID_EVENTS=[
-"ICC World Twenty20",
-"ICC Men's T20 World Cup"
-];
-
 let ALL_MATCHES=[];
 let seasons=[];
 
@@ -134,22 +131,29 @@ const files=await fetch(BASE+"index.json").then(r=>r.json());
 
 for(const file of files){
 
-const data=await fetch(BASE+file).then(r=>r.json());
+const season=await fetch(BASE+file).then(r=>r.json());
 
-data.forEach((match,i)=>{
+season.forEach((match,i)=>{
 
-const event=match.info?.event?.name || "";
+const event=(match.info?.event?.name || "").toLowerCase();
 
-if(!VALID_EVENTS.includes(event)) return;
+if(
+event.includes("world twenty20") ||
+event.includes("t20 world cup")
+){
 
 match._file=file;
 match._index=i;
 
 ALL_MATCHES.push(match);
 
+}
+
 });
 
 }
+
+/* group by year */
 
 const years=[...new Set(
 ALL_MATCHES.map(m=>m.info.dates[0].substring(0,4))
@@ -159,24 +163,22 @@ years.sort((a,b)=>b-a);
 
 years.forEach(year=>{
 
-const matches=ALL_MATCHES.filter(
-m=>m.info.dates[0].startsWith(year)
-);
-
 seasons.push({
 year,
-matches
+matches:ALL_MATCHES.filter(
+m=>m.info.dates[0].startsWith(year)
+)
 });
 
 });
 
-buildYearButtons();
+buildButtons();
 
 showSeason(0);
 
 }
 
-function buildYearButtons(){
+function buildButtons(){
 
 yearBar.innerHTML="";
 
