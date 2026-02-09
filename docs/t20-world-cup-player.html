@@ -63,6 +63,7 @@ border-radius:10px;
 max-height:300px;
 overflow:auto;
 display:none;
+box-shadow:0 4px 12px rgba(0,0,0,.2);
 }
 
 .search-results div{
@@ -70,22 +71,42 @@ padding:10px;
 cursor:pointer;
 }
 
+.search-results div:hover{
+background:#eee;
+}
+
 .controls{
 padding:0 20px;
 display:flex;
 gap:20px;
+align-items:center;
+flex-wrap:wrap;
+}
+
+select{
+padding:12px;
+font-size:18px;
+border-radius:10px;
 }
 
 .tab{
-padding:10px 20px;
+padding:10px 22px;
 background:#ddd;
 border-radius:10px;
 cursor:pointer;
+font-weight:600;
 }
 
 .tab.active{
 background:#d00000;
 color:white;
+}
+
+.section-title{
+text-align:center;
+font-weight:700;
+margin-top:20px;
+color:#666;
 }
 
 .summary{
@@ -103,7 +124,7 @@ text-align:center;
 }
 
 .big{
-font-size:24px;
+font-size:26px;
 font-weight:700;
 color:#d00000;
 }
@@ -164,10 +185,10 @@ cursor:pointer;
 
 </div>
 
-<h3 style="text-align:center">Career Summary</h3>
+<div class="section-title">Career Summary</div>
 <div id="careerSummary" class="summary"></div>
 
-<h3 style="text-align:center">Vs Selected Opposition</h3>
+<div class="section-title">Vs Selected Opposition</div>
 <div id="oppSummary" class="summary"></div>
 
 <table>
@@ -219,7 +240,7 @@ results.style.display="block";
 
 };
 
-/* LOAD PLAYERS */
+/* LOAD PLAYER LIST */
 
 (async function(){
 
@@ -349,61 +370,66 @@ render();
 batTab.onclick=()=>{currentTab="bat";batTab.classList.add("active");bowlTab.classList.remove("active");render();}
 bowlTab.onclick=()=>{currentTab="bowl";bowlTab.classList.add("active");batTab.classList.remove("active");render();}
 
+/* SHARED SUMMARY */
+
+function renderSummary(list,elementId){
+
+let runs=0,balls=0,outs=0;
+let wkts=0,bowlRuns=0,bowlBalls=0;
+let high=0;
+let bestWkts=0,bestRuns=999;
+
+list.forEach(m=>{
+
+runs+=m.runs;
+balls+=m.balls;
+wkts+=m.wkts;
+bowlRuns+=m.bowlRuns;
+bowlBalls+=m.bowlBalls;
+
+if(m.out) outs++;
+
+if(m.runs>high) high=m.runs;
+
+if(m.wkts>bestWkts||(m.wkts===bestWkts&&m.bowlRuns<bestRuns)){
+bestWkts=m.wkts;
+bestRuns=m.bowlRuns;
+}
+
+});
+
+const avg=outs?(runs/outs).toFixed(2):"-";
+const sr=balls?(runs/balls*100).toFixed(1):"-";
+const bowlAvg=wkts?(bowlRuns/wkts).toFixed(2):"-";
+const eco=bowlBalls?(bowlRuns/(bowlBalls/6)).toFixed(2):"-";
+const best=bestWkts?bestWkts+"/"+bestRuns:"-";
+
+document.getElementById(elementId).innerHTML=`
+
+<div class="box"><div class="big">${list.length}</div>Matches</div>
+<div class="box"><div class="big">${runs}</div>Runs</div>
+<div class="box"><div class="big">${avg}</div>Average</div>
+<div class="box"><div class="big">${sr}</div>Strike Rate</div>
+<div class="box"><div class="big">${high}</div>Highest</div>
+<div class="box"><div class="big">${wkts}</div>Wickets</div>
+<div class="box"><div class="big">${bowlAvg}</div>Bowl Avg</div>
+<div class="box"><div class="big">${eco}</div>Economy</div>
+<div class="box"><div class="big">${best}</div>Best</div>
+
+`;
+
+}
+
 /* RENDER */
 
 function render(){
 
 const filtered=currentOpp==="ALL"?matches:matches.filter(m=>m.opponent===currentOpp);
 
-renderCareer(matches);
-renderOpp(filtered);
+renderSummary(matches,"careerSummary");
+renderSummary(filtered,"oppSummary");
+
 renderTable(filtered);
-
-}
-
-/* CAREER SUMMARY */
-
-function renderCareer(list){
-
-let runs=0,balls=0,outs=0,wkts=0,bruns=0,bballs=0,high=0,best="0/0";
-
-list.forEach(m=>{
-runs+=m.runs;
-balls+=m.balls;
-wkts+=m.wkts;
-bruns+=m.bowlRuns;
-bballs+=m.bowlBalls;
-if(m.out) outs++;
-if(m.runs>high) high=m.runs;
-if(m.wkts>0) best=m.wkts+"/"+m.bowlRuns;
-});
-
-careerSummary.innerHTML=`
-<div class="box"><div class="big">${list.length}</div>Matches</div>
-<div class="box"><div class="big">${runs}</div>Runs</div>
-<div class="box"><div class="big">${outs?(runs/outs).toFixed(2):"-"}</div>Average</div>
-<div class="box"><div class="big">${wkts}</div>Wickets</div>
-<div class="box"><div class="big">${best}</div>Best</div>
-`;
-
-}
-
-/* OPP SUMMARY */
-
-function renderOpp(list){
-
-let runs=0,wkts=0;
-
-list.forEach(m=>{
-runs+=m.runs;
-wkts+=m.wkts;
-});
-
-oppSummary.innerHTML=`
-<div class="box"><div class="big">${list.length}</div>Matches</div>
-<div class="box"><div class="big">${runs}</div>Runs</div>
-<div class="box"><div class="big">${wkts}</div>Wickets</div>
-`;
 
 }
 
