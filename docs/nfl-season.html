@@ -54,9 +54,12 @@ th, td{
   border-bottom:1px solid #eee;
 }
 
+tr{
+  cursor:pointer;
+}
+
 tr:hover{
   background:#f1f5f9;
-  cursor:pointer;
 }
 
 .playoff{
@@ -113,7 +116,7 @@ const games = data.games.filter(g =>
 g &&
 g.game_id &&
 g.score &&
-g.score.length >= 2 &&
+g.score.length>=2 &&
 g.score[0]["Unnamed: 1"] &&
 g.score[1]["Unnamed: 1"]
 );
@@ -123,65 +126,65 @@ g.score[1]["Unnamed: 1"]
 
 const dateCounts = {};
 
-games.forEach(g => {
+games.forEach(g=>{
 
-const date = g.game_id.substring(0,8);
+const d=g.game_id.substring(0,8);
 
-dateCounts[date] = (dateCounts[date] || 0) + 1;
+dateCounts[d]=(dateCounts[d]||0)+1;
 
 });
 
 
-// find last regular season date
+// last regular season date
 
-const dates = Object.keys(dateCounts).sort();
+const dates=Object.keys(dateCounts).sort();
 
-const maxGames = Math.max(...Object.values(dateCounts));
+const maxGames=Math.max(...Object.values(dateCounts));
 
-let lastRegular = null;
+let lastRegular=null;
 
-dates.forEach(d => {
+dates.forEach(d=>{
 
-if(dateCounts[d] === maxGames)
-lastRegular = d;
+if(dateCounts[d]===maxGames)
+lastRegular=d;
 
 });
 
 
 // playoff dates
 
-const playoffDates = dates.filter(d => d > lastRegular);
+const playoffDates=dates.filter(d=>d>lastRegular);
 
 
 // cluster playoff dates
 
-const clusters = [];
+const clusters=[];
 
-let current = [];
+let current=[];
 
-playoffDates.forEach(d => {
+playoffDates.forEach(d=>{
 
-if(current.length === 0){
+if(current.length===0){
 
 current.push(d);
 
 }else{
 
-const prev = current[current.length-1];
+const prev=current[current.length-1];
 
-const diff =
-(new Date(d.substring(0,4), d.substring(4,6)-1, d.substring(6,8)) -
- new Date(prev.substring(0,4), prev.substring(4,6)-1, prev.substring(6,8)))
+const diff=
+(new Date(d.substring(0,4),d.substring(4,6)-1,d.substring(6,8))-
+ new Date(prev.substring(0,4),prev.substring(4,6)-1,prev.substring(6,8)))
 /86400000;
 
-if(diff <= 7){
+if(diff<=7){
 
 current.push(d);
 
 }else{
 
 clusters.push(current);
-current = [d];
+current=[d];
 
 }
 
@@ -192,36 +195,24 @@ current = [d];
 if(current.length) clusters.push(current);
 
 
-// assign round names by cluster position
+// assign round names properly
 
-const roundMap = {};
+const roundMap={};
 
-clusters.forEach((cluster, index) => {
+if(clusters.length===3){
 
-let name = "";
+clusters[0].forEach(d=>roundMap[d]="Divisional");
+clusters[1].forEach(d=>roundMap[d]="Conference Championship");
+clusters[2].forEach(d=>roundMap[d]="Super Bowl");
 
-if(clusters.length === 3){
+}else if(clusters.length===4){
 
-if(index === 0) name = "Divisional";
-if(index === 1) name = "Conference Championship";
-if(index === 2) name = "Super Bowl";
-
-}else if(clusters.length === 4){
-
-if(index === 0) name = "Wild Card";
-if(index === 1) name = "Divisional";
-if(index === 2) name = "Conference Championship";
-if(index === 3) name = "Super Bowl";
-
-}else{
-
-name = "Playoffs";
+clusters[0].forEach(d=>roundMap[d]="Wild Card");
+clusters[1].forEach(d=>roundMap[d]="Divisional");
+clusters[2].forEach(d=>roundMap[d]="Conference Championship");
+clusters[3].forEach(d=>roundMap[d]="Super Bowl");
 
 }
-
-cluster.forEach(d => roundMap[d] = name);
-
-});
 
 
 // render
@@ -232,7 +223,7 @@ games.sort((a,b)=>a.game_id.localeCompare(b.game_id));
 
 games.forEach(g=>{
 
-const date=g.game_id.substring(0,8);
+const d=g.game_id.substring(0,8);
 
 const team1=g.score[0]["Unnamed: 1"];
 const team2=g.score[1]["Unnamed: 1"];
@@ -240,7 +231,7 @@ const team2=g.score[1]["Unnamed: 1"];
 const s1=Number(g.score[0]["Final"]);
 const s2=Number(g.score[1]["Final"]);
 
-let winner, loser, ws, ls;
+let winner,loser,ws,ls;
 
 if(s1>s2){
 
@@ -258,17 +249,23 @@ ls=s1;
 
 }
 
-const round=roundMap[date]||"Regular Season";
+const round=roundMap[d]||"Regular Season";
 
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
-<td>${date.substring(6,8)}/${date.substring(4,6)}/${date.substring(0,4)}</td>
+<td>${d.substring(6,8)}/${d.substring(4,6)}/${d.substring(0,4)}</td>
 <td>${winner} ${ws}</td>
 <td>def</td>
 <td>${loser} ${ls}</td>
 <td class="${round!=="Regular Season"?"playoff":""}">${round}</td>
 `;
+
+// restore clicking
+
+tr.onclick=()=>{
+location.href="nfl-game.html?year="+year+"&id="+g.game_id;
+};
 
 tbody.appendChild(tr);
 
