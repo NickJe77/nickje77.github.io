@@ -55,6 +55,10 @@ th, td{
   border-bottom:1px solid #eee;
 }
 
+th{
+  background:#f8fafc;
+}
+
 tr:hover{
   background:#f1f5f9;
   cursor:pointer;
@@ -91,7 +95,9 @@ tr:hover{
 </thead>
 
 <tbody>
-<tr><td colspan="5">Loading season...</td></tr>
+<tr>
+<td colspan="5">Loading season...</td>
+</tr>
 </tbody>
 
 </table>
@@ -101,7 +107,7 @@ tr:hover{
 <script>
 
 const params = new URLSearchParams(window.location.search);
-const year = params.get("year");
+const year = parseInt(params.get("year"));
 
 const title = document.getElementById("title");
 const tbody = document.querySelector("#games tbody");
@@ -148,7 +154,9 @@ const score2 = Number(game.score[1]["Final"]);
 if(!team1 || !team2) return;
 if(isNaN(score1) || isNaN(score2)) return;
 
-// determine winner
+
+// determine winner properly
+
 let winner, loser, winnerScore, loserScore;
 
 if(score1 > score2){
@@ -167,41 +175,35 @@ loserScore = score1;
 
 }
 
-// detect playoffs
-let type="Regular Season";
 
-if(game.url){
+// date parsing
 
-if(
-game.url.includes("playoffs") ||
-game.url.includes("super") ||
-game.url.includes("champ")
-){
-type="Playoffs";
+let y = game.game_id.substring(0,4);
+let m = parseInt(game.game_id.substring(4,6));
+let d = game.game_id.substring(6,8);
+
+let displayDate = d+"/"+String(m).padStart(2,"0")+"/"+y;
+
+
+// playoff detection
+
+let type = "Regular Season";
+
+if(m == 1 || m == 2){
+type = "Playoffs";
 }
 
+if(m == 12 && parseInt(d) >= 20){
+type = "Playoffs";
 }
 
-// date
-let date="";
 
-if(game.game_id && game.game_id.length>=8){
-
-const y = game.game_id.substring(0,4);
-const m = game.game_id.substring(4,6);
-const d = game.game_id.substring(6,8);
-
-date = d+"/"+m+"/"+y;
-
-}
-
-// skip junk row
-if(!date) return;
+// render row
 
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
-<td>${date}</td>
+<td>${displayDate}</td>
 <td>${winner} ${winnerScore}</td>
 <td>def</td>
 <td>${loser} ${loserScore}</td>
@@ -227,7 +229,7 @@ tbody.innerHTML="<tr><td colspan='5'>No games found</td></tr>";
 }catch(err){
 
 console.error(err);
-tbody.innerHTML="<tr><td colspan='5'>Failed to load season</td></tr>";
+tbody.innerHTML="<tr><td colspan='5'>Error loading season</td></tr>";
 
 }
 
