@@ -37,7 +37,7 @@ body{
 }
 
 .container{
-  max-width:1200px;
+  max-width:1000px;
   margin:30px auto;
   background:white;
   padding:20px;
@@ -50,28 +50,13 @@ table{
 }
 
 th, td{
-  padding:12px 10px;
+  padding:12px;
   border-bottom:1px solid #eee;
 }
 
-th{
-  background:#f8fafc;
-  text-align:left;
-}
-
-tr:hover{
-  background:#f1f5f9;
-  cursor:pointer;
-}
-
-.round.playoff{
+.playoff{
   color:#d50a0a;
   font-weight:700;
-}
-
-.venue{
-  color:#666;
-  font-size:14px;
 }
 </style>
 </head>
@@ -95,13 +80,12 @@ tr:hover{
 <th>Winner</th>
 <th></th>
 <th>Loser</th>
-<th>Venue</th>
 <th>Round</th>
 </tr>
 </thead>
 
 <tbody>
-<tr><td colspan="6">Loading season...</td></tr>
+<tr><td colspan="5">Loading season...</td></tr>
 </tbody>
 
 </table>
@@ -110,8 +94,7 @@ tr:hover{
 
 <script>
 
-const params = new URLSearchParams(window.location.search);
-const year = parseInt(params.get("year"));
+const year = new URLSearchParams(location.search).get("year");
 
 const tbody = document.querySelector("#games tbody");
 
@@ -122,59 +105,136 @@ document.getElementById("title").innerHTML="NFL "+year;
 const res = await fetch("data/nfl/nfl_"+year+".json");
 const data = await res.json();
 
-tbody.innerHTML="";
+const games = data.games.filter(g =>
+g.game_id &&
+g.score &&
+g.score.length>=2 &&
+g.score[0]["Unnamed:1"] !== undefined
+);
 
-data.games.forEach(game=>{
+// count games per date
 
-if(!game.game_id) return;
-if(!game.score || game.score.length<2) return;
+const dateCounts={};
 
-const team1 = game.score[0]["Unnamed: 1"];
-const team2 = game.score[1]["Unnamed: 1"];
+games.forEach(g=>{
 
-const score1 = Number(game.score[0]["Final"]);
-const score2 = Number(game.score[1]["Final"]);
+const d=g.game_id.substring(0,8);
 
-if(isNaN(score1) || isNaN(score2)) return;
+dateCounts[d]=(dateCounts[d]||0)+1;
 
-let winner, loser, wScore, lScore;
+});
 
-if(score1 > score2){
+// find regular season max
 
-winner=team1;
-loser=team2;
-wScore=score1;
-lScore=score2;
+const dates=Object.keys(dateCounts).sort();
+
+const maxGames=Math.max(...Object.values(dateCounts));
+
+// find last regular season date
+
+let lastRegular=null;
+
+dates.forEach(d=>{
+if(dateCounts[d]===maxGames)
+lastRegular=d;
+});
+
+// playoff dates
+
+const playoffDates=dates.filter(d=>d>lastRegular);
+
+// cluster playoff dates
+
+const clusters=[];
+
+let current=[];
+
+playoffDates.forEach(d=>{
+
+if(current.length===0){
+
+current.push(d);
 
 }else{
 
-winner=team2;
-loser=team1;
-wScore=score2;
-lScore=score1;
+const prev=current[current.length-1];
+
+const diff=(new Date(d.substring(0,4)+"-"+d.substring(4,6)+"-"+d.substring(6,8))-
+new Date(prev.substring(0,4)+"-"+prev.substring(4,6)+"-"+prev.substring(6,8)))
+/86400000;
+
+if(diff<=2){
+
+current.push(d);
+
+}else{
+
+clusters.push(current);
+current=[d];
 
 }
 
-const rawDate = game.game_id.substring(0,8);
+}
 
-const date =
-rawDate.substring(6,8)+"/"+
-rawDate.substring(4,6)+"/"+
-rawDate.substring(0,4);
+});
 
-const venue = game.venue || game.stadium || "";
+if(current.length) clusters.push(current);
 
-const round = game.round || "Regular Season";
+// map round names
+
+const roundMap={};
+
+clusters.forEach(cluster=>{
+
+let total=0;
+
+cluster.forEach(d=>total+=dateCounts[d]);
+
+let name="Playoffs";
+
+if(total===1) name="Super Bowl";
+else if(total===2) name="Conference Championship";
+else if(total===4) name="Divisional";
+else if(total===6||total===8) name="Wild Card";
+
+cluster.forEach(d=>roundMap[d]=name);
+
+});
+
+// render table
+
+tbody.innerHTML="";
+
+games.sort((a,b)=>a.game_id.localeCompare(b.game_id));
+
+games.forEach(g=>{
+
+const d=g.game_id.substring(0,8);
+
+const team1=g.score[0]["Unnamed: 1"];
+const team2=g.score[1]["Unnamed: 1"];
+
+const s1=Number(g.score[0]["Final"]);
+const s2=Number(g.score[1]["Final"]);
+
+let winner,loser,ws,ls;
+
+if(s1>s2){
+winner=team1; loser=team2; ws=s1; ls=s2;
+}else{
+winner=team2; loser=team1; ws=s2; ls=s1;
+}
+
+const round=roundMap[d]||"Regular Season";
 
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
-<td>${date}</td>
-<td>${winner} ${wScore}</td>
+<td>${d.substring(6,8)}/${d.substring(4,6)}/${d.substring(0,4)}</td>
+<td>${winner} ${ws}</td>
 <td>def</td>
-<td>${loser} ${lScore}</td>
-<td class="venue">${venue}</td>
-<td class="round">${round}</td>
+<td>${loser} ${ls}</td>
+<td class="${round!=="Regular Season"?"playoff":""}">${round}</td>
 `;
 
 tbody.appendChild(tr);
