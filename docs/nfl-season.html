@@ -13,9 +13,6 @@ margin:0;
 background:#f3f4f7;
 }
 
-
-/* NAVBAR */
-
 .navbar{
 display:flex;
 justify-content:center;
@@ -31,9 +28,6 @@ color:#013369;
 font-weight:600;
 }
 
-
-/* HERO */
-
 .hero{
 background:linear-gradient(90deg,#013369,#d50a0a);
 color:white;
@@ -42,9 +36,6 @@ text-align:center;
 font-size:28px;
 font-weight:700;
 }
-
-
-/* YEAR TABS */
 
 .year-tabs{
 display:flex;
@@ -73,9 +64,6 @@ background:#013369;
 color:white;
 }
 
-
-/* CONTENT */
-
 .container{
 max-width:1100px;
 margin:20px auto;
@@ -83,9 +71,6 @@ background:white;
 padding:20px;
 border-radius:12px;
 }
-
-
-/* TABLE */
 
 table{
 width:100%;
@@ -117,14 +102,9 @@ font-weight:700;
 <a href="nfl.html">NFL</a>
 </div>
 
-
-<div class="hero" id="title">
-NFL Seasons
-</div>
-
+<div class="hero" id="title">NFL Seasons</div>
 
 <div class="year-tabs" id="yearTabs"></div>
-
 
 <div class="container">
 
@@ -142,7 +122,7 @@ NFL Seasons
 
 <tbody>
 <tr>
-<td colspan="5">Select a season</td>
+<td colspan="5">Loading...</td>
 </tr>
 </tbody>
 
@@ -156,7 +136,16 @@ NFL Seasons
 const startYear=1970;
 const currentYear=new Date().getFullYear();
 
-let activeYear=currentYear;
+function playoffStructure(year){
+
+if(year<=1977)return{wild:0,div:4,conf:2,sb:1};
+if(year<=1989)return{wild:4,div:4,conf:2,sb:1};
+if(year<=2001)return{wild:6,div:4,conf:2,sb:1};
+if(year<=2019)return{wild:4,div:4,conf:2,sb:1};
+
+return{wild:6,div:4,conf:2,sb:1};
+
+}
 
 
 /* BUILD YEAR TABS */
@@ -171,16 +160,12 @@ tab.className="year-tab";
 
 tab.innerText=year;
 
-tab.onclick=()=>{
-setYear(year);
-};
+tab.onclick=()=>loadSeason(year);
 
 tabs.appendChild(tab);
 
 }
 
-
-/* SET ACTIVE TAB */
 
 function highlightTab(year){
 
@@ -188,7 +173,7 @@ document.querySelectorAll(".year-tab").forEach(tab=>{
 
 tab.classList.remove("active");
 
-if(parseInt(tab.innerText)===year)
+if(parseInt(tab.innerText)==year)
 tab.classList.add("active");
 
 });
@@ -196,28 +181,9 @@ tab.classList.add("active");
 }
 
 
-/* PLAYOFF STRUCTURE */
-
-function playoffStructure(year){
-
-if(year<=1977)return{wild:0,div:4,conf:2,sb:1};
-
-if(year<=1989)return{wild:4,div:4,conf:2,sb:1};
-
-if(year<=2001)return{wild:6,div:4,conf:2,sb:1};
-
-if(year<=2019)return{wild:4,div:4,conf:2,sb:1};
-
-return{wild:6,div:4,conf:2,sb:1};
-
-}
-
-
 /* LOAD SEASON */
 
-async function setYear(year){
-
-activeYear=year;
+async function loadSeason(year){
 
 highlightTab(year);
 
@@ -233,11 +199,38 @@ const res=await fetch("data/nfl/nfl_"+year+".json");
 
 const data=await res.json();
 
+
+/* CRITICAL FIX — FILTER JUNK ROWS */
+
 const games=data.games.filter(g=>
-g&&g.game_id&&g.score&&g.score.length>=2
+
+g &&
+
+typeof g.game_id==="string" &&
+
+g.game_id.length===12 &&
+
+g.score &&
+
+g.score.length===2 &&
+
+g.score[0]["Unnamed: 1"] &&
+
+g.score[1]["Unnamed: 1"] &&
+
+!isNaN(parseInt(g.score[0]["Final"])) &&
+
+!isNaN(parseInt(g.score[1]["Final"]))
+
 );
 
+
+/* SORT */
+
 games.sort((a,b)=>a.game_id.localeCompare(b.game_id));
+
+
+/* PLAYOFF ROUND DETECTION */
 
 const structure=playoffStructure(year);
 
@@ -256,6 +249,8 @@ roundMap[games[i--].game_id]="Divisional";
 for(let x=0;x<structure.wild;x++)
 roundMap[games[i--].game_id]="Wild Card";
 
+
+/* RENDER */
 
 tbody.innerHTML="";
 
@@ -297,7 +292,7 @@ tr.innerHTML=`
 <td>${winner} ${ws}</td>
 <td>def</td>
 <td>${loser} ${ls}</td>
-<td class="${round!=="Regular Season"?"playoff":""}">${round}</td>
+<td class="${round!="Regular Season"?"playoff":""}">${round}</td>
 `;
 
 tr.onclick=()=>{
@@ -308,7 +303,7 @@ tbody.appendChild(tr);
 
 });
 
-}catch(err){
+}catch{
 
 tbody.innerHTML="<tr><td colspan='5'>Season not available</td></tr>";
 
@@ -317,12 +312,11 @@ tbody.innerHTML="<tr><td colspan='5'>Season not available</td></tr>";
 }
 
 
-/* LOAD CURRENT YEAR ON START */
+/* LOAD CURRENT YEAR */
 
-setYear(currentYear);
+loadSeason(currentYear);
 
 </script>
-
 
 </body>
 </html>
