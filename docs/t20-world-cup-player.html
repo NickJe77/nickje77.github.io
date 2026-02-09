@@ -154,17 +154,6 @@ border-bottom:1px solid #ddd;
 text-align:center;
 }
 
-.opponent-cell{
-display:flex;
-align-items:center;
-justify-content:center;
-gap:8px;
-}
-
-.opponent-cell img{
-width:22px;
-}
-
 </style>
 </head>
 <body>
@@ -217,18 +206,8 @@ width:22px;
 const INDEX="/data/t20-world-cup/matches/index.json";
 const BASE="/data/t20-world-cup/matches/";
 
-/* FIXED DOM REFERENCES */
-
 const input=document.getElementById("playerSearch");
 const results=document.getElementById("searchResults");
-const playerName=document.getElementById("playerName");
-const careerSummary=document.getElementById("careerSummary");
-const oppSummary=document.getElementById("oppSummary");
-const tbody=document.getElementById("tbody");
-const tableHead=document.getElementById("tableHead");
-const oppFilter=document.getElementById("oppFilter");
-const batTab=document.getElementById("batTab");
-const bowlTab=document.getElementById("bowlTab");
 
 let players=[];
 let matches=[];
@@ -257,8 +236,11 @@ const div=document.createElement("div");
 
 div.innerText=name;
 
+/* FIXED NAVIGATION */
+
 div.onclick=()=>{
-location.href="?player="+encodeURIComponent(name);
+window.location.href=
+"/t20-world-cup-player.html?player="+encodeURIComponent(name);
 };
 
 results.appendChild(div);
@@ -294,11 +276,83 @@ players=[...set].sort();
 
 /* LOAD PLAYER */
 
-const param=new URLSearchParams(location.search).get("player");
+const param=new URLSearchParams(window.location.search).get("player");
 
 if(param) loadPlayer(param);
 
-/* remainder unchanged — continues working */
+/* PLAYER LOAD FUNCTION */
+
+async function loadPlayer(player){
+
+document.getElementById("playerName").innerText=player;
+
+matches=[];
+
+const files=await fetch(INDEX).then(r=>r.json());
+
+for(const file of files){
+
+const season=await fetch(BASE+file).then(r=>r.json());
+
+season.forEach(match=>{
+
+let team="";
+
+Object.entries(match.info.players)
+.forEach(([t,list])=>{
+if(list.includes(player)) team=t;
+});
+
+if(!team) return;
+
+let batRuns=0,batBalls=0,wkts=0;
+
+match.innings.forEach(raw=>{
+
+const inn=raw.team?raw:Object.values(raw)[0];
+
+inn.overs.forEach(over=>{
+
+over.deliveries.forEach(ball=>{
+
+if(ball.batter===player){
+
+batRuns+=ball.runs.batter;
+
+if(!ball.extras?.wides) batBalls++;
+
+}
+
+if(ball.bowler===player){
+if(ball.wickets) wkts+=ball.wickets.length;
+}
+
+});
+
+});
+
+});
+
+matches.push({
+season:file.match(/\d{4}/)[0],
+date:match.info.dates[0],
+opponent:match.info.teams.find(t=>t!==team),
+venue:match.info.venue,
+batRuns,
+batBalls,
+wkts
+});
+
+});
+
+}
+
+populateOppFilter();
+render();
+
+}
+
+/* REST OF RENDER FUNCTIONS CONTINUE UNCHANGED */
 
 </script>
 
