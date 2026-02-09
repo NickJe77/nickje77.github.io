@@ -62,7 +62,6 @@ padding:12px;
 border-radius:10px;
 border:none;
 font-size:16px;
-color:black;
 }
 
 .search-results{
@@ -76,7 +75,6 @@ max-height:300px;
 overflow:auto;
 display:none;
 box-shadow:0 4px 12px rgba(0,0,0,.2);
-z-index:999;
 }
 
 .search-results div{
@@ -93,6 +91,7 @@ padding:0 20px;
 display:flex;
 gap:20px;
 align-items:center;
+flex-wrap:wrap;
 }
 
 select{
@@ -123,7 +122,7 @@ color:#666;
 
 .summary{
 display:grid;
-grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
 gap:16px;
 padding:20px;
 }
@@ -136,7 +135,7 @@ text-align:center;
 }
 
 .big{
-font-size:28px;
+font-size:26px;
 font-weight:700;
 color:#d00000;
 }
@@ -152,6 +151,17 @@ th,td{
 padding:12px;
 border-bottom:1px solid #ddd;
 text-align:center;
+}
+
+.opponent-cell{
+display:flex;
+align-items:center;
+justify-content:center;
+gap:8px;
+}
+
+.opponent-cell img{
+width:22px;
 }
 
 </style>
@@ -211,8 +221,8 @@ let matches=[];
 let currentOpp="ALL";
 let currentTab="bat";
 
-const input=document.getElementById("playerSearch");
-const results=document.getElementById("searchResults");
+const input=playerSearch;
+const results=searchResults;
 
 /* SEARCH */
 
@@ -250,9 +260,7 @@ results.style.display="block";
 
 /* LOAD PLAYERS */
 
-loadPlayers();
-
-async function loadPlayers(){
+(async function(){
 
 const files=await fetch(INDEX).then(r=>r.json());
 
@@ -271,7 +279,7 @@ Object.values(match.info.players)
 
 players=[...set].sort();
 
-}
+})();
 
 /* LOAD PLAYER */
 
@@ -281,7 +289,7 @@ if(param) loadPlayer(param);
 
 async function loadPlayer(player){
 
-document.getElementById("playerName").innerText=player;
+playerName.innerText=player;
 
 matches=[];
 
@@ -302,7 +310,8 @@ if(list.includes(player)) team=t;
 
 if(!team) return;
 
-let batRuns=0,batBalls=0,wkts=0;
+let batRuns=0,batBalls=0,out=false;
+let bowlRuns=0,bowlBalls=0,wkts=0;
 
 match.innings.forEach(raw=>{
 
@@ -313,12 +322,24 @@ inn.overs.forEach(over=>{
 over.deliveries.forEach(ball=>{
 
 if(ball.batter===player){
+
 batRuns+=ball.runs.batter;
 if(!ball.extras?.wides) batBalls++;
+
+if(ball.wickets)
+ball.wickets.forEach(w=>{
+if(w.player_out===player) out=true;
+});
+
 }
 
 if(ball.bowler===player){
+
+bowlRuns+=ball.runs.total;
+bowlBalls++;
+
 if(ball.wickets) wkts+=ball.wickets.length;
+
 }
 
 });
@@ -328,13 +349,20 @@ if(ball.wickets) wkts+=ball.wickets.length;
 });
 
 matches.push({
+
 season:file.match(/\d{4}/)[0],
 date:match.info.dates[0],
 opponent:match.info.teams.find(t=>t!==team),
 venue:match.info.venue,
+
 batRuns,
 batBalls,
+out,
+
+bowlRuns,
+bowlBalls,
 wkts
+
 });
 
 });
@@ -377,6 +405,27 @@ bowlTab.classList.toggle("active",currentTab==="bowl");
 
 }
 
+/* FLAG */
+
+function flag(team){
+
+const map={
+India:"in",
+Australia:"au",
+England:"gb",
+Pakistan:"pk",
+South Africa:"za",
+New Zealand:"nz",
+Sri Lanka:"lk",
+West Indies:"jm",
+Afghanistan:"af",
+Bangladesh:"bd"
+};
+
+return "https://flagcdn.com/w40/"+(map[team]||"un")+".png";
+
+}
+
 /* RENDER */
 
 function render(){
@@ -385,13 +434,8 @@ const filtered=currentOpp==="ALL"
 ?matches
 :matches.filter(m=>m.opponent===currentOpp);
 
-/* ALWAYS render career from full list */
-
-renderCareerSummary(matches);
-
-/* Render opponent from filtered list */
-
-renderOppSummary(filtered);
+renderSummary(matches,"careerSummary");
+renderSummary(filtered,"oppSummary");
 
 renderTable(filtered);
 
@@ -399,36 +443,48 @@ renderTable(filtered);
 
 /* SUMMARY */
 
-function renderCareerSummary(list){
+function renderSummary(list,id){
 
-let runs=0,wkts=0;
-
-list.forEach(m=>{
-runs+=m.batRuns;
-wkts+=m.wkts;
-});
-
-careerSummary.innerHTML=`
-<div class="box"><div class="big">${list.length}</div>Matches</div>
-<div class="box"><div class="big">${runs}</div>Runs</div>
-<div class="box"><div class="big">${wkts}</div>Wickets</div>
-`;
-
-}
-
-function renderOppSummary(list){
-
-let runs=0,wkts=0;
+let runs=0,balls=0,wkts=0,bruns=0,bballs=0;
+let outs=0,high=0,fifty=0,hundred=0,best="0/0";
 
 list.forEach(m=>{
+
 runs+=m.batRuns;
+balls+=m.batBalls;
 wkts+=m.wkts;
+bruns+=m.bowlRuns;
+bballs+=m.bowlBalls;
+
+if(m.out) outs++;
+
+if(m.batRuns>high) high=m.batRuns;
+if(m.batRuns>=50) fifty++;
+if(m.batRuns>=100) hundred++;
+
+if(m.wkts>0) best=m.wkts+"/"+m.bowlRuns;
+
 });
 
-oppSummary.innerHTML=`
+const avg=outs? (runs/outs).toFixed(2):"-";
+const sr=balls? (runs/balls*100).toFixed(1):"-";
+const eco=bballs? (bruns/(bballs/6)).toFixed(2):"-";
+const bowlAvg=wkts? (bruns/wkts).toFixed(2):"-";
+
+document.getElementById(id).innerHTML=`
+
 <div class="box"><div class="big">${list.length}</div>Matches</div>
 <div class="box"><div class="big">${runs}</div>Runs</div>
+<div class="box"><div class="big">${avg}</div>Average</div>
+<div class="box"><div class="big">${sr}</div>Strike Rate</div>
+<div class="box"><div class="big">${high}</div>Highest</div>
+<div class="box"><div class="big">${fifty}</div>50s</div>
+<div class="box"><div class="big">${hundred}</div>100s</div>
 <div class="box"><div class="big">${wkts}</div>Wickets</div>
+<div class="box"><div class="big">${bowlAvg}</div>Bowl Avg</div>
+<div class="box"><div class="big">${eco}</div>Economy</div>
+<div class="box"><div class="big">${best}</div>Best</div>
+
 `;
 
 }
@@ -439,6 +495,34 @@ function renderTable(list){
 
 tbody.innerHTML="";
 
+if(currentTab==="bat"){
+
+tableHead.innerHTML=`
+<tr>
+<th>Season</th>
+<th>Date</th>
+<th>Opponent</th>
+<th>Venue</th>
+<th>Runs</th>
+<th>Balls</th>
+<th>Strike Rate</th>
+</tr>`;
+
+}else{
+
+tableHead.innerHTML=`
+<tr>
+<th>Season</th>
+<th>Date</th>
+<th>Opponent</th>
+<th>Venue</th>
+<th>Wickets</th>
+<th>Overs</th>
+<th>Economy</th>
+</tr>`;
+
+}
+
 list.forEach(m=>{
 
 const tr=document.createElement("tr");
@@ -448,7 +532,7 @@ if(currentTab==="bat"){
 tr.innerHTML=`
 <td>${m.season}</td>
 <td>${new Date(m.date).toLocaleDateString()}</td>
-<td>${m.opponent}</td>
+<td class="opponent-cell"><img src="${flag(m.opponent)}">${m.opponent}</td>
 <td>${m.venue}</td>
 <td>${m.batRuns}</td>
 <td>${m.batBalls}</td>
@@ -460,11 +544,11 @@ tr.innerHTML=`
 tr.innerHTML=`
 <td>${m.season}</td>
 <td>${new Date(m.date).toLocaleDateString()}</td>
-<td>${m.opponent}</td>
+<td class="opponent-cell"><img src="${flag(m.opponent)}">${m.opponent}</td>
 <td>${m.venue}</td>
 <td>${m.wkts}</td>
-<td>-</td>
-<td>-</td>
+<td>${(m.bowlBalls/6).toFixed(1)}</td>
+<td>${(m.bowlRuns/(m.bowlBalls/6)||0).toFixed(2)}</td>
 `;
 
 }
