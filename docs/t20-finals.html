@@ -169,9 +169,7 @@ const FOLDER =
 "data/t20-world-cup/matches/";
 
 function flag(team){
-
 return "images/flags/" + team + ".png";
-
 }
 
 function score(match, team){
@@ -183,21 +181,39 @@ for(const inn of match.innings){
 const t = Object.keys(inn)[0];
 
 if(t === team){
-
 return inn[t].runs + "-" + inn[t].wickets;
-
 }
 
 }
 
 return "";
-
 }
 
 async function load(){
 
 const res = await fetch(INDEX);
-const files = await res.json();
+const index = await res.json();
+
+/* HANDLE ALL POSSIBLE INDEX STRUCTURES */
+
+let files = [];
+
+if(Array.isArray(index))
+files = index;
+
+else if(index.files)
+files = index.files;
+
+else if(index.matches)
+files = index.matches;
+
+else{
+document.getElementById("body").innerHTML =
+`<tr><td colspan="7" class="loading">
+index.json format not recognised
+</td></tr>`;
+return;
+}
 
 const finals = [];
 
@@ -206,9 +222,18 @@ for(const file of files){
 const r = await fetch(FOLDER + file);
 const data = await r.json();
 
-/* THIS IS THE CRITICAL FIX */
+/* HANDLE BOTH POSSIBLE STRUCTURES */
 
-const matches = data.matches;
+let matches = [];
+
+if(Array.isArray(data))
+matches = data;
+
+else if(data.matches)
+matches = data.matches;
+
+else
+matches = [data];
 
 for(const match of matches){
 
@@ -236,14 +261,10 @@ body.innerHTML = "";
 if(finals.length === 0){
 
 body.innerHTML =
-`<tr>
-<td colspan="7" class="loading">
+`<tr><td colspan="7" class="loading">
 No finals found
-</td>
-</tr>`;
-
+</td></tr>`;
 return;
-
 }
 
 finals.sort((a,b)=>
@@ -271,7 +292,6 @@ const tr =
 document.createElement("tr");
 
 tr.innerHTML = `
-
 <td>${new Date(info.dates[0]).getFullYear()}</td>
 
 <td>
@@ -295,7 +315,6 @@ ${runner}
 <td>${margin}</td>
 
 <td>${info.venue}</td>
-
 `;
 
 body.appendChild(tr);
