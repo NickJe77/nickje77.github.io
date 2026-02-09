@@ -10,92 +10,61 @@
 body{
   font-family:Inter,system-ui,Arial,sans-serif;
   margin:0;
-  background:#f3f4f7;
+  background:#f4f6f8;
 }
 
 .navbar{
   display:flex;
   justify-content:center;
-  gap:28px;
-  padding:18px;
-  background:#ffffff;
+  gap:24px;
+  padding:16px 0;
   border-bottom:1px solid #ddd;
+  background:#fff;
   font-weight:600;
 }
 
 .navbar a{
-  color:#0056d6;
   text-decoration:none;
-  font-size:18px;
+  color:#0056d6;
+}
+
+.page{
+  max-width:1200px;
+  margin:30px auto;
+  padding:0 20px;
 }
 
 .hero{
-  width:90%;
-  margin:30px auto;
-  height:260px;
-  border-radius:20px;
-  overflow:hidden;
-  position:relative;
+  background:linear-gradient(90deg,#8b0000,#e10600);
+  color:#fff;
+  padding:40px;
+  border-radius:22px;
+  margin-bottom:25px;
 }
 
-.hero img{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-}
-
-.hero-overlay{
-  position:absolute;
-  inset:0;
-  background:linear-gradient(90deg,
-    rgba(106,4,15,0.85),
-    rgba(208,0,0,0.75));
-}
-
-.hero-text{
-  position:absolute;
-  bottom:30px;
-  left:40px;
-  color:white;
-}
-
-.hero-text h1{
-  margin:0;
-  font-size:44px;
-}
-
-.container{
-  width:90%;
-  margin:30px auto;
-}
-
-.table-wrap{
-  background:white;
+.table{
+  background:#fff;
   border-radius:16px;
   overflow:hidden;
-  box-shadow:0 2px 8px rgba(0,0,0,0.08);
+  box-shadow:0 4px 10px rgba(0,0,0,0.08);
 }
 
-table{
-  width:100%;
-  border-collapse:collapse;
-}
-
-th{
-  background:linear-gradient(90deg,#6a040f,#d00000);
-  color:white;
-  padding:14px;
-  text-align:left;
-}
-
-td{
-  padding:14px;
+.row{
+  display:grid;
+  grid-template-columns:100px 1fr 1fr 220px 180px 1fr;
+  padding:16px;
   border-bottom:1px solid #eee;
+  cursor:pointer;
 }
 
-tr:hover{
-  background:#fafafa;
-  cursor:pointer;
+.row:hover{
+  background:#fff7f7;
+}
+
+.header{
+  font-weight:800;
+  background:#8b0000;
+  color:#fff;
 }
 
 .team{
@@ -107,17 +76,11 @@ tr:hover{
 .flag{
   width:26px;
   height:18px;
-  border:1px solid #ccc;
   border-radius:3px;
 }
 
 .score{
   font-weight:700;
-}
-
-.loading{
-  padding:30px;
-  text-align:center;
 }
 
 </style>
@@ -131,42 +94,24 @@ tr:hover{
 <a href="t20-world-cup.html">T20 World Cup</a>
 </div>
 
+<div class="page">
+
 <div class="hero">
-<img src="images/t20wc-hero.jpg">
-<div class="hero-overlay"></div>
-<div class="hero-text">
 <h1>T20 World Cup Finals</h1>
 </div>
+
+<div class="table" id="table">
+
+<div class="row header">
+
+<div>Year</div>
+<div>Winner</div>
+<div>Runner-Up</div>
+<div>Score</div>
+<div>Margin</div>
+<div>Venue</div>
+
 </div>
-
-<div class="container">
-
-<div class="table-wrap">
-
-<table>
-
-<thead>
-<tr>
-<th>Year</th>
-<th>Winner</th>
-<th>Runner-Up</th>
-<th>Score</th>
-<th>Margin</th>
-<th>Venue</th>
-</tr>
-</thead>
-
-<tbody id="body">
-
-<tr>
-<td colspan="6" class="loading">
-Loading finals...
-</td>
-</tr>
-
-</tbody>
-
-</table>
 
 </div>
 
@@ -174,8 +119,7 @@ Loading finals...
 
 <script>
 
-
-const FINALS = [
+const FINALS=[
 
 {year:2007,date:"2007-09-24",teams:["India","Pakistan"]},
 {year:2009,date:"2009-06-21",teams:["Pakistan","Sri Lanka"]},
@@ -189,60 +133,40 @@ const FINALS = [
 
 ];
 
+const PATH="data/t20-world-cup/matches/";
 
-const FOLDER =
-"data/t20-world-cup/matches/";
-
-
-function flag(team){
-
-return "images/flags/" + team + ".png";
-
+function flag(team)
+{
+return "images/flags/"+team+".png";
 }
 
+function score(match,team)
+{
+for(const inn of match.innings)
+{
+const name=Object.keys(inn)[0];
 
-function score(match,team){
-
-for(const inn of match.innings){
-
-const name =
-Object.keys(inn)[0];
-
-if(name===team){
-
+if(name===team)
 return inn[name].runs+"-"+inn[name].wickets;
-
 }
-
-}
-
 return "";
-
 }
 
+async function load()
+{
+const table=document.getElementById("table");
 
-async function loadFinals(){
+for(const f of FINALS)
+{
+const file=`t20wc_${f.year}_FULL.json`;
 
-const body =
-document.getElementById("body");
+const res=await fetch(PATH+file);
 
-body.innerHTML="";
+const data=await res.json();
 
+const matches=Array.isArray(data)?data:data.matches;
 
-for(const f of FINALS){
-
-const file =
-`t20wc_${f.year}_FULL.json`;
-
-const res =
-await fetch(FOLDER + file);
-
-const matches =
-await res.json();
-
-
-const final =
-matches.find(m=>
+const match=matches.find(m=>
 
 m.info.dates[0]===f.date &&
 m.info.teams.includes(f.teams[0]) &&
@@ -250,87 +174,61 @@ m.info.teams.includes(f.teams[1])
 
 );
 
+if(!match) continue;
 
-if(!final) continue;
+const index=matches.indexOf(match);
 
+const winner=match.info.outcome.winner;
 
-const matchIndex =
-matches.indexOf(final);
-
-
-const winner =
-final.info.outcome.winner;
-
-const runner =
-final.info.teams.find(t=>t!==winner);
-
-
-const winnerScore =
-score(final,winner);
-
-const runnerScore =
-score(final,runner);
-
+const runner=match.info.teams.find(t=>t!==winner);
 
 let margin="";
 
-if(final.info.outcome.by.runs)
-margin=
-final.info.outcome.by.runs+" runs";
+if(match.info.outcome.by.runs)
+margin=match.info.outcome.by.runs+" runs";
 
-else if(final.info.outcome.by.wickets)
-margin=
-final.info.outcome.by.wickets+" wickets";
+else if(match.info.outcome.by.wickets)
+margin=match.info.outcome.by.wickets+" wickets";
 
+const row=document.createElement("div");
 
-const link =
-`t20-world-cup-match.html?file=${file}&matchIndex=${matchIndex}`;
+row.className="row";
 
-
-const row =
-document.createElement("tr");
-
-row.onclick =
-()=>window.location.href=link;
-
+row.onclick=()=>
+window.location.href=
+`t20-world-cup-match.html?file=${file}&match=${index}`;
 
 row.innerHTML=`
 
-<td>${f.year}</td>
+<div>${f.year}</div>
 
-<td>
 <div class="team">
 <img class="flag" src="${flag(winner)}">
-<strong>${winner}</strong>
+${winner}
 </div>
-</td>
 
-<td>
 <div class="team">
 <img class="flag" src="${flag(runner)}">
 ${runner}
 </div>
-</td>
 
-<td class="score">
-${winner} ${winnerScore}<br>
-${runner} ${runnerScore}
-</td>
+<div class="score">
+${winner} ${score(match,winner)}<br>
+${runner} ${score(match,runner)}
+</div>
 
-<td>${margin}</td>
+<div>${margin}</div>
 
-<td>${final.info.venue}</td>
+<div>${match.info.venue}</div>
+
 `;
 
-body.appendChild(row);
+table.appendChild(row);
 
 }
-
 }
 
-
-loadFinals();
-
+load();
 
 </script>
 
