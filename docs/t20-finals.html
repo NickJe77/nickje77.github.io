@@ -8,13 +8,10 @@
 <style>
 
 body{
-  font-family:Inter, system-ui, Arial, sans-serif;
+  font-family:Inter,system-ui,Arial,sans-serif;
   margin:0;
   background:#f3f4f7;
 }
-
-
-/* NAVBAR */
 
 .navbar{
   display:flex;
@@ -31,9 +28,6 @@ body{
   text-decoration:none;
   font-size:18px;
 }
-
-
-/* HERO */
 
 .hero{
   width:90%;
@@ -69,9 +63,6 @@ body{
   margin:0;
   font-size:44px;
 }
-
-
-/* TABLE */
 
 .container{
   width:90%;
@@ -116,12 +107,12 @@ tr:hover{
 .flag{
   width:26px;
   height:18px;
-  border:1px solid #ccc;
   border-radius:3px;
+  border:1px solid #ccc;
 }
 
 .score{
-  font-weight:600;
+  font-weight:700;
 }
 
 .loading{
@@ -134,26 +125,19 @@ tr:hover{
 
 <body>
 
-
 <div class="navbar">
 <a href="index.html">Home</a>
 <a href="cricket.html">Cricket</a>
 <a href="t20-world-cup.html">T20 World Cup</a>
 </div>
 
-
 <div class="hero">
-
 <img src="images/t20wc-hero.jpg">
-
 <div class="hero-overlay"></div>
-
 <div class="hero-text">
 <h1>T20 World Cup Finals</h1>
 </div>
-
 </div>
-
 
 <div class="container">
 
@@ -173,13 +157,9 @@ tr:hover{
 </thead>
 
 <tbody id="body">
-
 <tr>
-<td colspan="6" class="loading">
-Loading finals...
-</td>
+<td colspan="6" class="loading">Loading finals...</td>
 </tr>
-
 </tbody>
 
 </table>
@@ -188,36 +168,18 @@ Loading finals...
 
 </div>
 
-
 <script>
 
 
-/*
-FINAL MATCH INDEXES
-These match the exact finals in each FULL file.
-This avoids scanning entire files and loads instantly.
-*/
-
-const FINALS = [
-
-{ year:2007, file:"t20wc_2007_FULL.json", index:26 },
-{ year:2009, file:"t20wc_2009_FULL.json", index:26 },
-{ year:2010, file:"t20wc_2010_FULL.json", index:26 },
-{ year:2012, file:"t20wc_2012_FULL.json", index:44 },
-{ year:2014, file:"t20wc_2014_FULL.json", index:34 },
-{ year:2016, file:"t20wc_2016_FULL.json", index:34 },
-{ year:2021, file:"t20wc_2021_FULL.json", index:44 },
-{ year:2022, file:"t20wc_2022_FULL.json", index:44 },
-{ year:2024, file:"t20wc_2024_FULL.json", index:54 }
-
+const YEARS = [
+2007,2009,2010,2012,2014,2016,2021,2022,2024
 ];
 
-
-const DATA_FOLDER =
+const FOLDER =
 "data/t20-world-cup/matches/";
 
 
-function getFlag(team){
+function flag(team){
 
 return "images/flags/" + team + ".png";
 
@@ -226,16 +188,14 @@ return "images/flags/" + team + ".png";
 
 function getScore(match,team){
 
-for(const innings of match.innings){
+for(const inn of match.innings){
 
-const teamName =
-Object.keys(innings)[0];
+const name =
+Object.keys(inn)[0];
 
-if(teamName===team){
+if(name===team){
 
-return innings[teamName].runs
-+ "-"
-+ innings[teamName].wickets;
+return inn[name].runs + "-" + inn[name].wickets;
 
 }
 
@@ -254,62 +214,62 @@ document.getElementById("body");
 body.innerHTML="";
 
 
-for(const final of FINALS){
+for(const year of YEARS){
+
+const file =
+`t20wc_${year}_FULL.json`;
 
 try{
 
-const response =
-await fetch(DATA_FOLDER + final.file);
+const res =
+await fetch(FOLDER + file);
 
 const matches =
-await response.json();
-
-const match =
-matches[final.index];
+await res.json();
 
 
-const info =
-match.info;
+/* find final by date (latest match) */
+
+matches.sort((a,b)=>
+new Date(b.info.dates[0]) -
+new Date(a.info.dates[0])
+);
+
+const final =
+matches[0];
+
+const matchIndex =
+matches.indexOf(final);
 
 
 const winner =
-info.outcome.winner;
-
+final.info.outcome.winner;
 
 const runner =
-info.teams.find(
-team => team!==winner
+final.info.teams.find(
+t=>t!==winner
 );
 
-
 const winnerScore =
-getScore(match,winner);
-
+getScore(final,winner);
 
 const runnerScore =
-getScore(match,runner);
+getScore(final,runner);
 
 
 let margin="";
 
+if(final.info.outcome.by.runs)
+margin=
+final.info.outcome.by.runs+" runs";
 
-if(info.outcome.by.runs){
-
-margin =
-info.outcome.by.runs + " runs";
-
-}
-
-else if(info.outcome.by.wickets){
-
-margin =
-info.outcome.by.wickets + " wickets";
-
-}
+else if(final.info.outcome.by.wickets)
+margin=
+final.info.outcome.by.wickets+" wickets";
 
 
 const link =
-`t20-world-cup-match.html?file=${final.file}&matchIndex=${final.index}`;
+`t20-world-cup-match.html?file=${file}&matchIndex=${matchIndex}`;
 
 
 const row =
@@ -317,27 +277,22 @@ document.createElement("tr");
 
 
 row.onclick =
-function(){
-
-window.location.href = link;
-
-};
+()=> window.location.href = link;
 
 
-row.innerHTML =
-
-`<td>${final.year}</td>
+row.innerHTML = `
+<td>${year}</td>
 
 <td>
 <div class="team">
-<img class="flag" src="${getFlag(winner)}">
+<img class="flag" src="${flag(winner)}">
 <strong>${winner}</strong>
 </div>
 </td>
 
 <td>
 <div class="team">
-<img class="flag" src="${getFlag(runner)}">
+<img class="flag" src="${flag(runner)}">
 ${runner}
 </div>
 </td>
@@ -349,21 +304,19 @@ ${runner} ${runnerScore}
 
 <td>${margin}</td>
 
-<td>${info.venue}</td>`;
-
+<td>${final.info.venue}</td>
+`;
 
 body.appendChild(row);
-
 
 }
 catch(e){
 
-console.log("Error loading final:", final.year);
+console.log("Missing file",year);
 
 }
 
 }
-
 
 }
 
@@ -372,7 +325,6 @@ loadFinals();
 
 
 </script>
-
 
 </body>
 </html>
