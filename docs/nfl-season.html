@@ -54,15 +54,6 @@ th, td{
   border-bottom:1px solid #eee;
 }
 
-th{
-  background:#f8fafc;
-}
-
-tr:hover{
-  background:#f1f5f9;
-  cursor:pointer;
-}
-
 .playoff{
   color:#d50a0a;
   font-weight:700;
@@ -104,12 +95,11 @@ tr:hover{
 const params = new URLSearchParams(window.location.search);
 const year = parseInt(params.get("year"));
 
-const title = document.getElementById("title");
 const tbody = document.querySelector("#games tbody");
 
 async function loadSeason(){
 
-title.innerHTML="NFL "+year;
+document.getElementById("title").innerHTML="NFL "+year;
 
 const res = await fetch("data/nfl/nfl_"+year+".json");
 const data = await res.json();
@@ -130,16 +120,44 @@ dateCounts[date] = (dateCounts[date] || 0) + 1;
 });
 
 
-// determine playoff dates
+// sort dates
 
 const dates = Object.keys(dateCounts).sort();
 
-const maxGames = Math.max(...Object.values(dateCounts));
 
-let playoffDates = dates.filter(d => dateCounts[d] < maxGames);
+// determine playoff dates (last continuous block)
+
+const playoffDates = [];
+
+let foundPlayoffs = false;
+
+for(let i = dates.length-1; i >= 0; i--){
+
+const current = dateCounts[dates[i]];
+const previous = dateCounts[dates[i-1]] || 999;
+
+if(!foundPlayoffs){
+
+playoffDates.unshift(dates[i]);
+foundPlayoffs = true;
+
+}else{
+
+// regular season has significantly more games
+if(previous > current){
+
+break;
+
+}
+
+playoffDates.unshift(dates[i]);
+
+}
+
+}
 
 
-// classify playoff rounds
+// assign playoff rounds
 
 const playoffRounds = {};
 
@@ -147,14 +165,17 @@ playoffDates.forEach(date=>{
 
 const count = dateCounts[date];
 
-if(count === 4)
-playoffRounds[date] = "Divisional";
+if(count === 1)
+playoffRounds[date] = "Super Bowl";
 
 else if(count === 2)
 playoffRounds[date] = "Conference Championship";
 
-else if(count === 1)
-playoffRounds[date] = "Super Bowl";
+else if(count === 4)
+playoffRounds[date] = "Divisional";
+
+else if(count === 6)
+playoffRounds[date] = "Wild Card";
 
 else
 playoffRounds[date] = "Playoffs";
@@ -173,8 +194,6 @@ const team2 = game.score[1]["Unnamed: 1"];
 
 const score1 = Number(game.score[0]["Final"]);
 const score2 = Number(game.score[1]["Final"]);
-
-if(!team1 || !team2) return;
 
 let winner, loser, winnerScore, loserScore;
 
@@ -196,20 +215,12 @@ loserScore = score1;
 
 const rawDate = game.game_id.substring(0,8);
 
-const y = rawDate.substring(0,4);
-const m = rawDate.substring(4,6);
-const d = rawDate.substring(6,8);
+const displayDate =
+rawDate.substring(6,8)+"/"+
+rawDate.substring(4,6)+"/"+
+rawDate.substring(0,4);
 
-const displayDate = d+"/"+m+"/"+y;
-
-
-// determine round
-
-let round = "Regular Season";
-
-if(playoffRounds[rawDate])
-round = playoffRounds[rawDate];
-
+const round = playoffRounds[rawDate] || "Regular Season";
 
 const tr=document.createElement("tr");
 
