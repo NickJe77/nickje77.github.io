@@ -54,6 +54,11 @@ th, td{
   border-bottom:1px solid #eee;
 }
 
+tr:hover{
+  background:#f1f5f9;
+  cursor:pointer;
+}
+
 .playoff{
   color:#d50a0a;
   font-weight:700;
@@ -73,7 +78,6 @@ th, td{
 <div class="container">
 
 <table id="games">
-
 <thead>
 <tr>
 <th>Date</th>
@@ -106,71 +110,75 @@ const res = await fetch("data/nfl/nfl_"+year+".json");
 const data = await res.json();
 
 const games = data.games.filter(g =>
+g &&
 g.game_id &&
 g.score &&
-g.score.length>=2 &&
-g.score[0]["Unnamed:1"] !== undefined
+g.score.length >= 2 &&
+g.score[0]["Unnamed: 1"] &&
+g.score[1]["Unnamed: 1"]
 );
+
 
 // count games per date
 
-const dateCounts={};
+const dateCounts = {};
 
-games.forEach(g=>{
+games.forEach(g => {
 
-const d=g.game_id.substring(0,8);
+const date = g.game_id.substring(0,8);
 
-dateCounts[d]=(dateCounts[d]||0)+1;
+dateCounts[date] = (dateCounts[date] || 0) + 1;
 
 });
 
-// find regular season max
 
-const dates=Object.keys(dateCounts).sort();
+// determine last regular season date
 
-const maxGames=Math.max(...Object.values(dateCounts));
+const dates = Object.keys(dateCounts).sort();
 
-// find last regular season date
+const maxGames = Math.max(...Object.values(dateCounts));
 
-let lastRegular=null;
+let lastRegular = null;
 
-dates.forEach(d=>{
-if(dateCounts[d]===maxGames)
-lastRegular=d;
+dates.forEach(d => {
+
+if(dateCounts[d] === maxGames)
+lastRegular = d;
+
 });
 
-// playoff dates
 
-const playoffDates=dates.filter(d=>d>lastRegular);
+// determine playoff clusters
 
-// cluster playoff dates
+const playoffDates = dates.filter(d => d > lastRegular);
 
-const clusters=[];
+const clusters = [];
 
-let current=[];
+let current = [];
 
-playoffDates.forEach(d=>{
+playoffDates.forEach(d => {
 
-if(current.length===0){
+if(current.length === 0){
 
 current.push(d);
 
 }else{
 
-const prev=current[current.length-1];
+const prev = current[current.length-1];
 
-const diff=(new Date(d.substring(0,4)+"-"+d.substring(4,6)+"-"+d.substring(6,8))-
-new Date(prev.substring(0,4)+"-"+prev.substring(4,6)+"-"+prev.substring(6,8)))
+const diff =
+(new Date(d.substring(0,4), d.substring(4,6)-1, d.substring(6,8)) -
+ new Date(prev.substring(0,4), prev.substring(4,6)-1, prev.substring(6,8)))
 /86400000;
 
-if(diff<=2){
+if(diff <= 7){
 
 current.push(d);
 
 }else{
 
 clusters.push(current);
-current=[d];
+current = [d];
 
 }
 
@@ -180,61 +188,73 @@ current=[d];
 
 if(current.length) clusters.push(current);
 
-// map round names
 
-const roundMap={};
+// assign round names
 
-clusters.forEach(cluster=>{
+const roundMap = {};
 
-let total=0;
+clusters.forEach(cluster => {
 
-cluster.forEach(d=>total+=dateCounts[d]);
+let total = 0;
 
-let name="Playoffs";
+cluster.forEach(d => total += dateCounts[d]);
 
-if(total===1) name="Super Bowl";
-else if(total===2) name="Conference Championship";
-else if(total===4) name="Divisional";
-else if(total===6||total===8) name="Wild Card";
+let name = "Playoffs";
 
-cluster.forEach(d=>roundMap[d]=name);
+if(total === 1) name = "Super Bowl";
+else if(total === 2) name = "Conference Championship";
+else if(total === 4) name = "Divisional";
+else if(total === 6 || total === 8) name = "Wild Card";
+
+cluster.forEach(d => roundMap[d] = name);
 
 });
 
+
 // render table
 
-tbody.innerHTML="";
+tbody.innerHTML = "";
 
-games.sort((a,b)=>a.game_id.localeCompare(b.game_id));
+games.sort((a,b) => a.game_id.localeCompare(b.game_id));
 
-games.forEach(g=>{
+games.forEach(g => {
 
-const d=g.game_id.substring(0,8);
+const date = g.game_id.substring(0,8);
 
-const team1=g.score[0]["Unnamed: 1"];
-const team2=g.score[1]["Unnamed: 1"];
+const team1 = g.score[0]["Unnamed: 1"];
+const team2 = g.score[1]["Unnamed: 1"];
 
-const s1=Number(g.score[0]["Final"]);
-const s2=Number(g.score[1]["Final"]);
+const score1 = Number(g.score[0]["Final"]);
+const score2 = Number(g.score[1]["Final"]);
 
-let winner,loser,ws,ls;
+let winner, loser, ws, ls;
 
-if(s1>s2){
-winner=team1; loser=team2; ws=s1; ls=s2;
+if(score1 > score2){
+
+winner = team1;
+loser = team2;
+ws = score1;
+ls = score2;
+
 }else{
-winner=team2; loser=team1; ws=s2; ls=s1;
+
+winner = team2;
+loser = team1;
+ws = score2;
+ls = score1;
+
 }
 
-const round=roundMap[d]||"Regular Season";
+const round = roundMap[date] || "Regular Season";
 
-const tr=document.createElement("tr");
+const tr = document.createElement("tr");
 
-tr.innerHTML=`
-<td>${d.substring(6,8)}/${d.substring(4,6)}/${d.substring(0,4)}</td>
+tr.innerHTML = `
+<td>${date.substring(6,8)}/${date.substring(4,6)}/${date.substring(0,4)}</td>
 <td>${winner} ${ws}</td>
 <td>def</td>
 <td>${loser} ${ls}</td>
-<td class="${round!=="Regular Season"?"playoff":""}">${round}</td>
+<td class="${round !== "Regular Season" ? "playoff" : ""}">${round}</td>
 `;
 
 tbody.appendChild(tr);
