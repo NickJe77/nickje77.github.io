@@ -8,7 +8,7 @@
 <style>
 
 body{
-font-family:Inter,system-ui,Arial,sans-serif;
+font-family:Inter,system-ui,Arial;
 margin:0;
 background:#f3f4f7;
 color:#111;
@@ -114,6 +114,13 @@ background:#d00000;
 color:white;
 }
 
+.section-title{
+text-align:center;
+font-weight:700;
+margin-top:20px;
+color:#666;
+}
+
 .summary{
 display:grid;
 grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
@@ -183,7 +190,11 @@ text-align:center;
 
 </div>
 
+<div class="section-title">CAREER SUMMARY</div>
 <div id="careerSummary" class="summary"></div>
+
+<div class="section-title">VS SELECTED OPPONENT</div>
+<div id="oppSummary" class="summary"></div>
 
 <table>
 <thead id="tableHead"></thead>
@@ -203,7 +214,7 @@ let currentTab="bat";
 const input=document.getElementById("playerSearch");
 const results=document.getElementById("searchResults");
 
-/* SEARCH ALWAYS ACTIVE */
+/* SEARCH */
 
 input.oninput=function(){
 
@@ -237,13 +248,11 @@ results.style.display="block";
 
 };
 
-/* LOAD PLAYERS IN BACKGROUND */
+/* LOAD PLAYERS */
 
 loadPlayers();
 
 async function loadPlayers(){
-
-try{
 
 const files=await fetch(INDEX).then(r=>r.json());
 
@@ -261,12 +270,6 @@ Object.values(match.info.players)
 }
 
 players=[...set].sort();
-
-}catch(e){
-
-console.error("Player load error:",e);
-
-}
 
 }
 
@@ -299,7 +302,7 @@ if(list.includes(player)) team=t;
 
 if(!team) return;
 
-let batRuns=0,batBalls=0,wkts=0,bowlRuns=0,bowlBalls=0;
+let batRuns=0,batBalls=0,wkts=0;
 
 match.innings.forEach(raw=>{
 
@@ -310,18 +313,12 @@ inn.overs.forEach(over=>{
 over.deliveries.forEach(ball=>{
 
 if(ball.batter===player){
-
 batRuns+=ball.runs.batter;
 if(!ball.extras?.wides) batBalls++;
-
 }
 
 if(ball.bowler===player){
-
-bowlRuns+=ball.runs.total;
-bowlBalls++;
 if(ball.wickets) wkts+=ball.wickets.length;
-
 }
 
 });
@@ -337,9 +334,7 @@ opponent:match.info.teams.find(t=>t!==team),
 venue:match.info.venue,
 batRuns,
 batBalls,
-wkts,
-bowlRuns,
-bowlBalls
+wkts
 });
 
 });
@@ -390,12 +385,21 @@ const filtered=currentOpp==="ALL"
 ?matches
 :matches.filter(m=>m.opponent===currentOpp);
 
-renderSummary(filtered);
+/* ALWAYS render career from full list */
+
+renderCareerSummary(matches);
+
+/* Render opponent from filtered list */
+
+renderOppSummary(filtered);
+
 renderTable(filtered);
 
 }
 
-function renderSummary(list){
+/* SUMMARY */
+
+function renderCareerSummary(list){
 
 let runs=0,wkts=0;
 
@@ -411,6 +415,25 @@ careerSummary.innerHTML=`
 `;
 
 }
+
+function renderOppSummary(list){
+
+let runs=0,wkts=0;
+
+list.forEach(m=>{
+runs+=m.batRuns;
+wkts+=m.wkts;
+});
+
+oppSummary.innerHTML=`
+<div class="box"><div class="big">${list.length}</div>Matches</div>
+<div class="box"><div class="big">${runs}</div>Runs</div>
+<div class="box"><div class="big">${wkts}</div>Wickets</div>
+`;
+
+}
+
+/* TABLE */
 
 function renderTable(list){
 
@@ -440,8 +463,8 @@ tr.innerHTML=`
 <td>${m.opponent}</td>
 <td>${m.venue}</td>
 <td>${m.wkts}</td>
-<td>${(m.bowlBalls/6).toFixed(1)}</td>
-<td>${(m.bowlRuns/(m.bowlBalls/6)||0).toFixed(2)}</td>
+<td>-</td>
+<td>-</td>
 `;
 
 }
