@@ -11,7 +11,6 @@ body{
 font-family:Inter,system-ui,Arial;
 margin:0;
 background:#f3f4f7;
-color:#111;
 }
 
 .navbar{
@@ -41,16 +40,6 @@ justify-content:space-between;
 align-items:center;
 }
 
-.hero-left{
-flex:1;
-text-align:center;
-}
-
-.hero-left h1{
-margin:0;
-font-size:42px;
-}
-
 .hero-search{
 width:300px;
 position:relative;
@@ -74,8 +63,6 @@ border-radius:10px;
 max-height:300px;
 overflow:auto;
 display:none;
-box-shadow:0 4px 12px rgba(0,0,0,.2);
-z-index:999;
 }
 
 .search-results div{
@@ -83,42 +70,22 @@ padding:10px;
 cursor:pointer;
 }
 
-.search-results div:hover{
-background:#eee;
-}
-
 .controls{
 padding:0 20px;
 display:flex;
 gap:20px;
-align-items:center;
-flex-wrap:wrap;
-}
-
-select{
-padding:12px;
-font-size:18px;
-border-radius:10px;
 }
 
 .tab{
-padding:10px 22px;
+padding:10px 20px;
 background:#ddd;
 border-radius:10px;
 cursor:pointer;
-font-weight:600;
 }
 
 .tab.active{
 background:#d00000;
 color:white;
-}
-
-.section-title{
-text-align:center;
-font-weight:700;
-margin-top:20px;
-color:#666;
 }
 
 .summary{
@@ -136,7 +103,7 @@ text-align:center;
 }
 
 .big{
-font-size:26px;
+font-size:24px;
 font-weight:700;
 color:#d00000;
 }
@@ -153,8 +120,6 @@ padding:12px;
 border-bottom:1px solid #ddd;
 text-align:center;
 }
-
-/* Zebra striping */
 
 tbody tr:nth-child(even){
 background:#f0f6ff;
@@ -179,9 +144,7 @@ cursor:pointer;
 
 <div class="hero">
 
-<div class="hero-left">
 <h1 id="playerName">Select Player</h1>
-</div>
 
 <div class="hero-search">
 <input id="playerSearch" placeholder="Search player...">
@@ -201,15 +164,17 @@ cursor:pointer;
 
 </div>
 
-<div class="section-title">CAREER SUMMARY</div>
+<h3 style="text-align:center">Career Summary</h3>
 <div id="careerSummary" class="summary"></div>
 
-<div class="section-title">VS SELECTED OPPONENT</div>
+<h3 style="text-align:center">Vs Selected Opposition</h3>
 <div id="oppSummary" class="summary"></div>
 
 <table>
+
 <thead id="tableHead"></thead>
 <tbody id="tbody"></tbody>
+
 </table>
 
 <script>
@@ -235,9 +200,7 @@ results.innerHTML="";
 
 if(!q) return;
 
-players
-.filter(p=>p.toLowerCase().includes(q))
-.slice(0,30)
+players.filter(p=>p.toLowerCase().includes(q)).slice(0,30)
 .forEach(name=>{
 
 const div=document.createElement("div");
@@ -281,9 +244,9 @@ players=[...set].sort();
 
 /* LOAD PLAYER */
 
-const playerParam=new URLSearchParams(window.location.search).get("player");
+const param=new URLSearchParams(window.location.search).get("player");
 
-if(playerParam) loadPlayer(playerParam);
+if(param) loadPlayer(param);
 
 async function loadPlayer(player){
 
@@ -348,23 +311,11 @@ if(ball.wickets) wkts+=ball.wickets.length;
 });
 
 matches.push({
-
 season:file.match(/\d{4}/)[0],
 date:match.info.dates[0],
 opponent:match.info.teams.find(t=>t!==team),
 venue:match.info.venue,
-
-runs,
-balls,
-out,
-
-wkts,
-bowlRuns,
-bowlBalls,
-
-file,
-index
-
+runs,balls,out,wkts,bowlRuns,bowlBalls,file,index
 });
 
 });
@@ -376,7 +327,7 @@ render();
 
 }
 
-/* FILTER, TABS, RENDER unchanged */
+/* FILTER */
 
 function populateOppFilter(){
 
@@ -384,9 +335,7 @@ const set=new Set(matches.map(m=>m.opponent));
 
 oppFilter.innerHTML='<option value="ALL">All Opponents</option>';
 
-set.forEach(o=>{
-oppFilter.innerHTML+=`<option>${o}</option>`;
-});
+set.forEach(o=>oppFilter.innerHTML+=`<option>${o}</option>`);
 
 oppFilter.onchange=e=>{
 currentOpp=e.target.value;
@@ -395,65 +344,77 @@ render();
 
 }
 
+/* TABS */
+
 batTab.onclick=()=>{currentTab="bat";batTab.classList.add("active");bowlTab.classList.remove("active");render();}
 bowlTab.onclick=()=>{currentTab="bowl";bowlTab.classList.add("active");batTab.classList.remove("active");render();}
+
+/* RENDER */
 
 function render(){
 
 const filtered=currentOpp==="ALL"?matches:matches.filter(m=>m.opponent===currentOpp);
 
-renderCareer();
+renderCareer(matches);
 renderOpp(filtered);
 renderTable(filtered);
 
 }
 
-/* SUMMARY WITH AVERAGES AND BEST */
+/* CAREER SUMMARY */
 
-function renderCareer(){
+function renderCareer(list){
 
 let runs=0,balls=0,outs=0,wkts=0,bruns=0,bballs=0,high=0,best="0/0";
 
-matches.forEach(m=>{
-
+list.forEach(m=>{
 runs+=m.runs;
 balls+=m.balls;
 wkts+=m.wkts;
 bruns+=m.bowlRuns;
 bballs+=m.bowlBalls;
-
 if(m.out) outs++;
-
 if(m.runs>high) high=m.runs;
-
 if(m.wkts>0) best=m.wkts+"/"+m.bowlRuns;
-
 });
 
 careerSummary.innerHTML=`
-<div class="box"><div class="big">${matches.length}</div>Matches</div>
+<div class="box"><div class="big">${list.length}</div>Matches</div>
 <div class="box"><div class="big">${runs}</div>Runs</div>
-<div class="box"><div class="big">${outs? (runs/outs).toFixed(2):"-"}</div>Average</div>
-<div class="box"><div class="big">${balls? (runs/balls*100).toFixed(1):"-"}</div>Strike Rate</div>
-<div class="box"><div class="big">${high}</div>Highest</div>
+<div class="box"><div class="big">${outs?(runs/outs).toFixed(2):"-"}</div>Average</div>
 <div class="box"><div class="big">${wkts}</div>Wickets</div>
-<div class="box"><div class="big">${wkts? (bruns/wkts).toFixed(2):"-"}</div>Bowl Avg</div>
-<div class="box"><div class="big">${bballs? (bruns/(bballs/6)).toFixed(2):"-"}</div>Economy</div>
 <div class="box"><div class="big">${best}</div>Best</div>
 `;
 
 }
 
-/* TABLE unchanged except zebra handled by CSS */
+/* OPP SUMMARY */
+
+function renderOpp(list){
+
+let runs=0,wkts=0;
+
+list.forEach(m=>{
+runs+=m.runs;
+wkts+=m.wkts;
+});
+
+oppSummary.innerHTML=`
+<div class="box"><div class="big">${list.length}</div>Matches</div>
+<div class="box"><div class="big">${runs}</div>Runs</div>
+<div class="box"><div class="big">${wkts}</div>Wickets</div>
+`;
+
+}
+
+/* TABLE */
 
 function renderTable(list){
 
 tbody.innerHTML="";
 
 tableHead.innerHTML=currentTab==="bat"
-
 ?`<tr><th>Season</th><th>Date</th><th>Opponent</th><th>Venue</th><th>Runs</th><th>Balls</th><th>SR</th></tr>`
-
 :`<tr><th>Season</th><th>Date</th><th>Opponent</th><th>Venue</th><th>Wkts</th><th>Overs</th><th>Eco</th></tr>`;
 
 list.forEach(m=>{
@@ -463,9 +424,7 @@ const tr=document.createElement("tr");
 tr.onclick=()=>window.location.href="/t20-world-cup-match.html?file="+m.file+"&match="+m.index;
 
 tr.innerHTML=currentTab==="bat"
-
 ?`<td>${m.season}</td><td>${new Date(m.date).toLocaleDateString()}</td><td>${m.opponent}</td><td>${m.venue}</td><td>${m.runs}</td><td>${m.balls}</td><td>${((m.runs/m.balls)*100||0).toFixed(1)}</td>`
-
 :`<td>${m.season}</td><td>${new Date(m.date).toLocaleDateString()}</td><td>${m.opponent}</td><td>${m.venue}</td><td>${m.wkts}</td><td>${(m.bowlBalls/6).toFixed(1)}</td><td>${(m.bowlRuns/(m.bowlBalls/6)||0).toFixed(2)}</td>`;
 
 tbody.appendChild(tr);
