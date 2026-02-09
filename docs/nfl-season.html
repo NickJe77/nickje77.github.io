@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>NFL Seasons | The Sporting Almanac</title>
+<title>NFL Season | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -10,66 +10,73 @@
 body{
 font-family:Inter,system-ui,Arial;
 margin:0;
-background:#f3f4f7;
+background:#f4f6f8;
 }
 
-.navbar{
-display:flex;
-justify-content:center;
-gap:24px;
-padding:16px;
-background:white;
-border-bottom:1px solid #ddd;
-}
 
-.navbar a{
-text-decoration:none;
-color:#013369;
-font-weight:600;
-}
+/* HEADER */
 
 .hero{
-background:linear-gradient(90deg,#013369,#d50a0a);
-color:white;
-padding:30px;
-text-align:center;
-font-size:28px;
+padding:20px;
+font-size:32px;
 font-weight:700;
 }
 
+
+/* YEAR TABS */
+
 .year-tabs{
 display:flex;
-overflow-x:auto;
-background:white;
-border-bottom:1px solid #ddd;
-padding:10px;
-gap:8px;
+flex-wrap:wrap;
+gap:10px;
+padding:0 20px 10px 20px;
 }
 
 .year-tab{
-padding:8px 14px;
-border-radius:6px;
+padding:10px 16px;
+background:#d9d9d9;
+border-radius:10px;
 cursor:pointer;
-white-space:nowrap;
 font-weight:600;
-color:#013369;
-}
-
-.year-tab:hover{
-background:#eef2f7;
 }
 
 .year-tab.active{
-background:#013369;
+background:#333;
 color:white;
 }
 
+
+/* ROUND TABS */
+
+.round-tabs{
+display:flex;
+flex-wrap:wrap;
+gap:10px;
+padding:0 20px 20px 20px;
+}
+
+.round-tab{
+padding:10px 16px;
+background:#d9d9d9;
+border-radius:10px;
+cursor:pointer;
+font-weight:600;
+}
+
+.round-tab.active{
+background:#333;
+color:white;
+}
+
+
+/* TABLE */
+
 .container{
 max-width:1100px;
-margin:20px auto;
+margin:0 auto;
 background:white;
-padding:20px;
 border-radius:12px;
+padding:20px;
 }
 
 table{
@@ -78,7 +85,7 @@ border-collapse:collapse;
 }
 
 th,td{
-padding:10px;
+padding:12px;
 border-bottom:1px solid #eee;
 }
 
@@ -97,14 +104,23 @@ font-weight:700;
 <body>
 
 
-<div class="navbar">
-<a href="index.html">Home</a>
-<a href="nfl.html">NFL</a>
-</div>
+<div class="hero" id="title">NFL Season</div>
 
-<div class="hero" id="title">NFL Seasons</div>
 
 <div class="year-tabs" id="yearTabs"></div>
+
+
+<div class="round-tabs" id="roundTabs">
+
+<div class="round-tab active" onclick="setRound('All')">All Rounds</div>
+<div class="round-tab" onclick="setRound('Regular Season')">Regular Season</div>
+<div class="round-tab" onclick="setRound('Wild Card')">Wild Card</div>
+<div class="round-tab" onclick="setRound('Divisional')">Divisional</div>
+<div class="round-tab" onclick="setRound('Conference Championship')">Conference Championship</div>
+<div class="round-tab" onclick="setRound('Super Bowl')">Super Bowl</div>
+
+</div>
+
 
 <div class="container">
 
@@ -120,11 +136,7 @@ font-weight:700;
 </tr>
 </thead>
 
-<tbody>
-<tr>
-<td colspan="5">Loading...</td>
-</tr>
-</tbody>
+<tbody></tbody>
 
 </table>
 
@@ -135,6 +147,68 @@ font-weight:700;
 
 const startYear=1970;
 const currentYear=new Date().getFullYear();
+
+let currentSeason=currentYear;
+let currentRound="All";
+let seasonGames=[];
+
+
+/* BUILD YEAR TABS */
+
+const yearTabs=document.getElementById("yearTabs");
+
+for(let y=startYear;y<=currentYear;y++){
+
+const tab=document.createElement("div");
+
+tab.className="year-tab";
+
+tab.innerText=y;
+
+tab.onclick=()=>loadSeason(y);
+
+yearTabs.appendChild(tab);
+
+}
+
+
+/* HIGHLIGHT YEAR */
+
+function highlightYear(year){
+
+document.querySelectorAll(".year-tab").forEach(t=>{
+
+t.classList.remove("active");
+
+if(parseInt(t.innerText)==year)
+t.classList.add("active");
+
+});
+
+}
+
+
+/* ROUND SELECT */
+
+function setRound(round){
+
+currentRound=round;
+
+document.querySelectorAll(".round-tab").forEach(t=>{
+
+t.classList.remove("active");
+
+if(t.innerText==round|| (round=="All" && t.innerText=="All Rounds"))
+t.classList.add("active");
+
+});
+
+renderGames();
+
+}
+
+
+/* PLAYOFF STRUCTURE */
 
 function playoffStructure(year){
 
@@ -148,114 +222,76 @@ return{wild:6,div:4,conf:2,sb:1};
 }
 
 
-/* BUILD YEAR TABS */
-
-const tabs=document.getElementById("yearTabs");
-
-for(let year=startYear;year<=currentYear;year++){
-
-const tab=document.createElement("div");
-
-tab.className="year-tab";
-
-tab.innerText=year;
-
-tab.onclick=()=>loadSeason(year);
-
-tabs.appendChild(tab);
-
-}
-
-
-function highlightTab(year){
-
-document.querySelectorAll(".year-tab").forEach(tab=>{
-
-tab.classList.remove("active");
-
-if(parseInt(tab.innerText)==year)
-tab.classList.add("active");
-
-});
-
-}
-
-
 /* LOAD SEASON */
 
 async function loadSeason(year){
 
-highlightTab(year);
+currentSeason=year;
+
+highlightYear(year);
 
 document.getElementById("title").innerText="NFL "+year;
-
-const tbody=document.querySelector("#games tbody");
-
-tbody.innerHTML="<tr><td colspan='5'>Loading...</td></tr>";
-
-try{
 
 const res=await fetch("data/nfl/nfl_"+year+".json");
 
 const data=await res.json();
 
 
-/* CRITICAL FIX — FILTER JUNK ROWS */
-
-const games=data.games.filter(g=>
+seasonGames=data.games.filter(g=>
 
 g &&
-
-typeof g.game_id==="string" &&
-
-g.game_id.length===12 &&
-
+g.game_id &&
 g.score &&
-
-g.score.length===2 &&
-
+g.score.length==2 &&
 g.score[0]["Unnamed: 1"] &&
-
-g.score[1]["Unnamed: 1"] &&
-
-!isNaN(parseInt(g.score[0]["Final"])) &&
-
-!isNaN(parseInt(g.score[1]["Final"]))
+g.score[1]["Unnamed: 1"]
 
 );
 
 
-/* SORT */
+seasonGames.sort((a,b)=>a.game_id.localeCompare(b.game_id));
 
-games.sort((a,b)=>a.game_id.localeCompare(b.game_id));
-
-
-/* PLAYOFF ROUND DETECTION */
 
 const structure=playoffStructure(year);
 
-const roundMap={};
+let i=seasonGames.length-1;
 
-let i=games.length-1;
-
-roundMap[games[i--].game_id]="Super Bowl";
+seasonGames[i--].round="Super Bowl";
 
 for(let x=0;x<structure.conf;x++)
-roundMap[games[i--].game_id]="Conference Championship";
+seasonGames[i--].round="Conference Championship";
 
 for(let x=0;x<structure.div;x++)
-roundMap[games[i--].game_id]="Divisional";
+seasonGames[i--].round="Divisional";
 
 for(let x=0;x<structure.wild;x++)
-roundMap[games[i--].game_id]="Wild Card";
+seasonGames[i--].round="Wild Card";
+
+seasonGames.forEach(g=>{
+
+if(!g.round)
+g.round="Regular Season";
+
+});
+
+
+renderGames();
+
+}
 
 
 /* RENDER */
 
+function renderGames(){
+
+const tbody=document.querySelector("#games tbody");
+
 tbody.innerHTML="";
 
+seasonGames.forEach(g=>{
 
-games.forEach(g=>{
+if(currentRound!="All" && g.round!=currentRound)
+return;
 
 const date=g.game_id.substring(0,8);
 
@@ -283,8 +319,6 @@ ls=s1;
 
 }
 
-const round=roundMap[g.game_id]||"Regular Season";
-
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
@@ -292,27 +326,21 @@ tr.innerHTML=`
 <td>${winner} ${ws}</td>
 <td>def</td>
 <td>${loser} ${ls}</td>
-<td class="${round!="Regular Season"?"playoff":""}">${round}</td>
+<td class="${g.round!='Regular Season'?'playoff':''}">${g.round}</td>
 `;
 
 tr.onclick=()=>{
-location.href="nfl-game.html?year="+year+"&id="+g.game_id;
+location.href="nfl-game.html?year="+currentSeason+"&id="+g.game_id;
 };
 
 tbody.appendChild(tr);
 
 });
 
-}catch{
-
-tbody.innerHTML="<tr><td colspan='5'>Season not available</td></tr>";
-
-}
-
 }
 
 
-/* LOAD CURRENT YEAR */
+/* INIT */
 
 loadSeason(currentYear);
 
