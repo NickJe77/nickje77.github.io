@@ -95,9 +95,7 @@ tr:hover{
 </thead>
 
 <tbody>
-<tr>
-<td colspan="5">Loading season...</td>
-</tr>
+<tr><td colspan="5">Loading season...</td></tr>
 </tbody>
 
 </table>
@@ -117,31 +115,36 @@ async function loadSeason(){
 try{
 
 if(!year){
-
-title.innerHTML="NFL Season";
 tbody.innerHTML="<tr><td colspan='5'>No season specified</td></tr>";
 return;
-
 }
 
 title.innerHTML="NFL "+year;
 
-const response = await fetch("data/nfl/nfl_"+year+".json");
-
-if(!response.ok){
-
-tbody.innerHTML="<tr><td colspan='5'>Season file not found</td></tr>";
-return;
-
-}
-
-const data = await response.json();
+const res = await fetch("data/nfl/nfl_"+year+".json");
+const data = await res.json();
 
 tbody.innerHTML="";
 
+
+// COUNT GAMES PER DATE
+const dateCounts = {};
+
 data.games.forEach(game=>{
 
-try{
+if(!game.game_id) return;
+
+const date = game.game_id.substring(0,8);
+
+if(!dateCounts[date]) dateCounts[date] = 0;
+
+dateCounts[date]++;
+
+});
+
+
+// RENDER GAMES
+data.games.forEach(game=>{
 
 if(!game.score || game.score.length < 2) return;
 
@@ -155,7 +158,7 @@ if(!team1 || !team2) return;
 if(isNaN(score1) || isNaN(score2)) return;
 
 
-// determine winner properly
+// determine winner
 
 let winner, loser, winnerScore, loserScore;
 
@@ -178,23 +181,23 @@ loserScore = score1;
 
 // date parsing
 
-let y = game.game_id.substring(0,4);
-let m = parseInt(game.game_id.substring(4,6));
-let d = game.game_id.substring(6,8);
+const rawDate = game.game_id.substring(0,8);
 
-let displayDate = d+"/"+String(m).padStart(2,"0")+"/"+y;
+const y = rawDate.substring(0,4);
+const m = rawDate.substring(4,6);
+const d = rawDate.substring(6,8);
+
+const displayDate = d+"/"+m+"/"+y;
 
 
-// playoff detection
+// PLAYOFF RULE: LESS THAN 8 GAMES THAT DAY
 
 let type = "Regular Season";
 
-if(m == 1 || m == 2){
-type = "Playoffs";
-}
+if(dateCounts[rawDate] < 8){
 
-if(m == 12 && parseInt(d) >= 20){
 type = "Playoffs";
+
 }
 
 
@@ -216,15 +219,8 @@ location.href="nfl-game.html?year="+year+"&id="+game.game_id;
 
 tbody.appendChild(tr);
 
-}catch(e){
-console.log("Skipping bad game row");
-}
-
 });
 
-if(tbody.innerHTML===""){
-tbody.innerHTML="<tr><td colspan='5'>No games found</td></tr>";
-}
 
 }catch(err){
 
