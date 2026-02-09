@@ -1,3 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NFL Season | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+
+body{
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:#f3f4f7;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px;
+  background:white;
+  border-bottom:1px solid #ddd;
+}
+
+.navbar a{
+  text-decoration:none;
+  color:#013369;
+  font-weight:600;
+}
+
+.hero{
+  background:linear-gradient(90deg,#013369,#d50a0a);
+  color:white;
+  padding:30px;
+  text-align:center;
+  font-size:28px;
+  font-weight:700;
+}
+
+.container{
+  max-width:1000px;
+  margin:30px auto;
+  background:white;
+  padding:20px;
+  border-radius:12px;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+th, td{
+  padding:10px;
+  border-bottom:1px solid #eee;
+  text-align:left;
+}
+
+th{
+  background:#f8fafc;
+}
+
+tr:hover{
+  background:#f1f5f9;
+  cursor:pointer;
+}
+
+.playoff{
+  color:#d50a0a;
+  font-weight:700;
+}
+
+</style>
+</head>
+<body>
+
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="nfl.html">NFL</a>
+</div>
+
+<div class="hero" id="title">
+NFL Season
+</div>
+
+<div class="container">
+
+<table id="games">
+
+<thead>
+<tr>
+<th>Date</th>
+<th>Away</th>
+<th></th>
+<th>Home</th>
+<th>Round</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td colspan="5">Loading season...</td>
+</tr>
+</tbody>
+
+</table>
+
+</div>
+
 <script>
 
 const params = new URLSearchParams(window.location.search);
@@ -9,8 +118,8 @@ const tbody = document.querySelector("#games tbody");
 if(!year){
 
 title.innerHTML="NFL Season";
-tbody.innerHTML="<tr><td colspan='5'>No season specified</td></tr>";
-throw new Error("Missing year");
+tbody.innerHTML="<tr><td colspan='5'>No season selected</td></tr>";
+throw new Error("Missing year parameter");
 
 }
 
@@ -20,15 +129,15 @@ const filePath="data/nfl/nfl_"+year+".json";
 
 fetch(filePath)
 
-.then(res=>{
+.then(response=>{
 
-if(!res.ok){
+if(!response.ok){
 
-throw new Error("File not found: "+filePath);
+throw new Error("File not found");
 
 }
 
-return res.json();
+return response.json();
 
 })
 
@@ -45,36 +154,36 @@ tbody.innerHTML="";
 
 data.games.forEach(game=>{
 
-let away="";
-let home="";
-let awayScore="";
-let homeScore="";
+const away = game.score?.[0]?.["Unnamed: 1"] || "";
+const home = game.score?.[1]?.["Unnamed: 1"] || "";
 
-if(game.score && game.score.length>=2){
+const awayScore = game.score?.[0]?.Final ?? "";
+const homeScore = game.score?.[1]?.Final ?? "";
 
-away = game.score[0]["Unnamed: 1"] || "";
-home = game.score[1]["Unnamed: 1"] || "";
+let date="";
 
-awayScore = game.score[0]["Final"] || "";
-homeScore = game.score[1]["Final"] || "";
+if(game.game_id){
+
+const month=game.game_id.substring(4,6);
+const day=game.game_id.substring(6,8);
+
+date=day+"/"+month+"/"+year;
 
 }
-
-const round="Regular Season";
 
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
-<td>${game.game_id.substring(4,6)}/${game.game_id.substring(6,8)}/${year}</td>
+<td>${date}</td>
 <td>${away} ${awayScore}</td>
 <td>def</td>
 <td>${home} ${homeScore}</td>
-<td>${round}</td>
+<td>Regular Season</td>
 `;
 
 tr.onclick=()=>{
 
-location.href=`nfl-game.html?year=${year}&id=${game.game_id}`;
+location.href="nfl-game.html?year="+year+"&id="+game.game_id;
 
 };
 
@@ -84,14 +193,14 @@ tbody.appendChild(tr);
 
 })
 
-.catch(err=>{
+.catch(error=>{
 
-console.error(err);
+console.error(error);
 
 tbody.innerHTML=`
 <tr>
 <td colspan="5">
-Error loading season<br>
+Failed to load season<br>
 ${filePath}
 </td>
 </tr>
@@ -100,3 +209,6 @@ ${filePath}
 });
 
 </script>
+
+</body>
+</html>
