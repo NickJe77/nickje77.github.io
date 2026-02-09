@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>ICC Men's T20 World Cup Finals | The Sporting Almanac</title>
+<title>T20 World Cup Finals | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet" href="style.css">
@@ -30,7 +30,6 @@ body{
 .navbar a{
     color:#0b5fff;
     text-decoration:none;
-    font-size:17px;
 }
 
 /* HERO */
@@ -67,20 +66,13 @@ body{
     margin:0;
 }
 
-.hero-text p{
-    margin-top:8px;
-    font-size:18px;
-}
-
-/* CONTENT */
+/* TABLE */
 
 .container{
     max-width:1200px;
     margin:auto;
     padding:30px 20px;
 }
-
-/* TABLE */
 
 .table-wrap{
     background:white;
@@ -98,7 +90,6 @@ th{
     background:#0b5fff;
     color:white;
     padding:14px;
-    font-size:15px;
     text-align:left;
 }
 
@@ -111,20 +102,34 @@ tr:nth-child(even){
     background:#f9fbff;
 }
 
+.team-cell{
+    display:flex;
+    align-items:center;
+    gap:10px;
+}
+
+.flag{
+    width:26px;
+    height:18px;
+    object-fit:cover;
+    border-radius:3px;
+    border:1px solid #ccc;
+}
+
+.score{
+    font-weight:600;
+    font-size:15px;
+}
+
 .score-link{
     color:#0b5fff;
     font-weight:600;
     text-decoration:none;
 }
 
-.score-link:hover{
-    text-decoration:underline;
-}
-
 .loading{
     text-align:center;
     padding:40px;
-    font-size:18px;
 }
 
 </style>
@@ -133,19 +138,18 @@ tr:nth-child(even){
 
 
 <div class="navbar">
-    <a href="index.html">Home</a>
-    <a href="t20-world-cup.html">T20 World Cup</a>
-    <a href="t20-finals.html">Finals</a>
+<a href="index.html">Home</a>
+<a href="t20-world-cup.html">T20 World Cup</a>
+<a href="t20-finals.html">Finals</a>
 </div>
 
 
 <div class="hero">
-    <img src="images/t20-world-cup-hero.jpg">
-    <div class="hero-overlay"></div>
-    <div class="hero-text">
-        <h1>T20 World Cup Finals</h1>
-        <p>Every final, result, venue and Player of the Match</p>
-    </div>
+<img src="images/t20-world-cup-hero.jpg">
+<div class="hero-overlay"></div>
+<div class="hero-text">
+<h1>T20 World Cup Finals</h1>
+</div>
 </div>
 
 
@@ -153,24 +157,27 @@ tr:nth-child(even){
 
 <div class="table-wrap">
 
-<table id="finalsTable">
+<table>
 
 <thead>
 <tr>
 <th>Year</th>
 <th>Winner</th>
+<th>Score</th>
 <th>Runner-Up</th>
+<th>Score</th>
 <th>Margin</th>
 <th>Venue</th>
-<th>Player of the Match</th>
 <th>Scorecard</th>
 </tr>
 </thead>
 
 <tbody id="finalsBody">
+
 <tr>
-<td colspan="7" class="loading">Loading finals...</td>
+<td colspan="8" class="loading">Loading finals...</td>
 </tr>
+
 </tbody>
 
 </table>
@@ -178,131 +185,3 @@ tr:nth-child(even){
 </div>
 
 </div>
-
-
-<script>
-
-const INDEX_PATH = "data/t20-world-cup/matches/index.json";
-const MATCH_FOLDER = "data/t20-world-cup/matches/";
-
-async function loadFinals(){
-
-    const indexRes = await fetch(INDEX_PATH);
-    const index = await indexRes.json();
-
-    let finals = [];
-
-    for(const file of index){
-
-        const res = await fetch(MATCH_FOLDER + file);
-        const data = await res.json();
-
-        for(const match of data){
-
-            const info = match.info;
-
-            if(
-                info.event?.match_number === "Final" ||
-                info.stage === "Final"
-            ){
-
-                finals.push(match);
-
-            }
-
-        }
-
-    }
-
-    renderFinals(finals);
-
-}
-
-
-function renderFinals(finals){
-
-    const body = document.getElementById("finalsBody");
-    body.innerHTML = "";
-
-    finals.sort((a,b)=>{
-
-        const yearA = new Date(a.info.dates[0]).getFullYear();
-        const yearB = new Date(b.info.dates[0]).getFullYear();
-
-        return yearB - yearA;
-
-    });
-
-    for(const match of finals){
-
-        const info = match.info;
-
-        const year = new Date(info.dates[0]).getFullYear();
-
-        const winner = info.outcome.winner || "—";
-
-        const teams = info.teams;
-
-        const runner = teams.find(t=>t !== winner) || "—";
-
-        let margin = "";
-
-        if(info.outcome.by){
-
-            if(info.outcome.by.runs){
-
-                margin = info.outcome.by.runs + " runs";
-
-            }
-
-            if(info.outcome.by.wickets){
-
-                margin = info.outcome.by.wickets + " wickets";
-
-            }
-
-        }
-
-        const venue = info.venue;
-
-        let pom = "—";
-
-        if(info.player_of_match){
-
-            pom = info.player_of_match[0];
-
-        }
-
-        const matchId = match.info.match_id || info.dates[0] + winner;
-
-        const row = document.createElement("tr");
-
-        row.innerHTML = `
-        <td>${year}</td>
-        <td><strong>${winner}</strong></td>
-        <td>${runner}</td>
-        <td>${margin}</td>
-        <td>${venue}</td>
-        <td>${pom}</td>
-        <td>
-            <a class="score-link"
-            href="t20-match.html?matchId=${matchId}">
-            View
-            </a>
-        </td>
-        `;
-
-        body.appendChild(row);
-
-    }
-
-}
-
-
-loadFinals();
-
-</script>
-
-
-</body>
-</html>
