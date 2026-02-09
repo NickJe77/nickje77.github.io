@@ -67,8 +67,8 @@ padding:12px;
 font-size:16px;
 border-radius:10px;
 border:none;
-color:#000;             /* FIX TEXT VISIBILITY */
-background:white;       /* FIX BACKGROUND */
+color:#000;
+background:white;
 }
 
 .search-results{
@@ -88,7 +88,6 @@ z-index:999;
 .search-results div{
 padding:10px;
 cursor:pointer;
-color:#000;            /* FIX TEXT VISIBILITY */
 }
 
 .search-results div:hover{
@@ -152,19 +151,13 @@ color:#666;
 <div class="hero">
 
 <div class="hero-left">
-
 <h1 id="playerName">Select Player</h1>
-
 <img id="flag" class="flag">
-
 </div>
 
 <div class="hero-search">
-
 <input id="playerSearch" placeholder="Search player...">
-
 <div id="searchResults" class="search-results"></div>
-
 </div>
 
 </div>
@@ -174,7 +167,6 @@ color:#666;
 
 
 <table>
-
 <thead>
 <tr>
 <th>Season</th>
@@ -186,13 +178,11 @@ color:#666;
 <th>Strike Rate</th>
 </tr>
 </thead>
-
 <tbody id="tbody">
 <tr>
-<td colspan="7" class="center">Search player above</td>
+<td colspan="7" class="center">Select player</td>
 </tr>
 </tbody>
-
 </table>
 
 
@@ -203,17 +193,13 @@ const FOLDER="/data/t20-world-cup/matches/";
 
 const input=document.getElementById("playerSearch");
 const results=document.getElementById("searchResults");
-const playerName=document.getElementById("playerName");
-const tbody=document.getElementById("tbody");
-const careerSummary=document.getElementById("careerSummary");
-const flag=document.getElementById("flag");
 
 let players=[];
 let matches=[];
 let country="";
 
 
-/* BUILD SEARCH */
+/* BUILD SEARCH — THIS WORKS */
 
 buildSearch();
 
@@ -229,7 +215,7 @@ const season=await fetch(FOLDER+file).then(r=>r.json());
 
 season.forEach(match=>{
 
-Object.values(match.info.players || {})
+Object.values(match.info.players)
 .forEach(team=>{
 team.forEach(name=>set.add(name));
 });
@@ -244,15 +230,15 @@ input.oninput=function(){
 
 const q=this.value.toLowerCase();
 
+results.innerHTML="";
+
 if(!q){
 results.style.display="none";
 return;
 }
 
-results.innerHTML="";
-
 players
-.filter(p=>p.toLowerCase().includes(q))
+.filter(name=>name.toLowerCase().includes(q))
 .slice(0,30)
 .forEach(name=>{
 
@@ -284,7 +270,7 @@ if(param) loadPlayer(decodeURIComponent(param));
 
 async function loadPlayer(player){
 
-playerName.innerText=player;
+document.getElementById("playerName").innerText=player;
 
 matches=[];
 
@@ -294,13 +280,13 @@ for(const file of files){
 
 const season=await fetch(FOLDER+file).then(r=>r.json());
 
-season.forEach((match,index)=>{
+season.forEach(match=>{
 
 let runs=0;
 let balls=0;
 let team="";
 
-Object.entries(match.info.players || {})
+Object.entries(match.info.players)
 .forEach(([t,list])=>{
 if(list.includes(player)){
 team=t;
@@ -308,31 +294,23 @@ country=t;
 }
 });
 
-match.innings.forEach(innRaw=>{
-
-const inn=innRaw.team?innRaw:Object.values(innRaw)[0];
-
-/* SUPPORT CRICSHEET FORMAT */
-
-if(inn.overs){
+match.innings.forEach(inn=>{
 
 inn.overs.forEach(over=>{
 
-over.deliveries.forEach(d=>{
+over.deliveries.forEach(ball=>{
 
-if(d.batter===player){
+if(ball.batter===player){
 
-runs+=d.runs.batter;
+runs+=ball.runs.batter;
 
-if(!d.extras?.wides) balls++;
+if(!ball.extras?.wides) balls++;
 
 }
 
 });
 
 });
-
-}
 
 });
 
@@ -355,16 +333,15 @@ balls
 
 }
 
-flag.src=`https://flagcdn.com/w80/${code(country)}.png`;
-
 renderSummary();
 
 renderTable();
 
+document.getElementById("flag").src=
+`https://flagcdn.com/w80/${code(country)}.png`;
+
 }
 
-
-/* SUMMARY */
 
 function renderSummary(){
 
@@ -375,7 +352,7 @@ runs+=m.runs;
 balls+=m.balls;
 });
 
-careerSummary.innerHTML=
+document.getElementById("careerSummary").innerHTML=
 `
 <div class="box"><div class="big">${matches.length}</div>Matches</div>
 <div class="box"><div class="big">${runs}</div>Runs</div>
@@ -385,9 +362,9 @@ careerSummary.innerHTML=
 }
 
 
-/* TABLE */
-
 function renderTable(){
+
+const tbody=document.getElementById("tbody");
 
 tbody.innerHTML="";
 
@@ -412,8 +389,6 @@ tbody.appendChild(tr);
 
 }
 
-
-/* FLAG */
 
 function code(name){
 
