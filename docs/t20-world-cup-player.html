@@ -8,13 +8,11 @@
 <style>
 
 body{
-font-family:Inter,system-ui,Arial;
+font-family:Inter,system-ui,Arial,sans-serif;
 margin:0;
 background:#f3f4f7;
 color:#111;
 }
-
-/* NAV */
 
 .navbar{
 display:flex;
@@ -31,8 +29,6 @@ color:#0056d6;
 text-decoration:none;
 font-size:18px;
 }
-
-/* HERO */
 
 .hero{
 background:linear-gradient(90deg,#6a040f,#d00000);
@@ -55,13 +51,6 @@ margin:0;
 font-size:42px;
 }
 
-.flag{
-width:70px;
-margin-top:10px;
-}
-
-/* SEARCH */
-
 .hero-search{
 width:300px;
 position:relative;
@@ -73,6 +62,7 @@ padding:12px;
 border-radius:10px;
 border:none;
 font-size:16px;
+color:black;
 }
 
 .search-results{
@@ -97,21 +87,17 @@ cursor:pointer;
 background:#eee;
 }
 
-/* CONTROLS */
-
 .controls{
 padding:0 20px;
 display:flex;
 gap:20px;
 align-items:center;
-flex-wrap:wrap;
 }
 
 select{
 padding:12px;
 font-size:18px;
 border-radius:10px;
-border:1px solid #ccc;
 }
 
 .tab{
@@ -125,15 +111,6 @@ font-weight:600;
 .tab.active{
 background:#d00000;
 color:white;
-}
-
-/* SUMMARY */
-
-.section-title{
-text-align:center;
-font-weight:700;
-margin-top:20px;
-color:#666;
 }
 
 .summary{
@@ -156,32 +133,17 @@ font-weight:700;
 color:#d00000;
 }
 
-/* TABLE */
-
 table{
 width:calc(100% - 40px);
 margin:20px;
 background:white;
 border-collapse:collapse;
-border-radius:12px;
-overflow:hidden;
 }
 
 th,td{
 padding:12px;
 border-bottom:1px solid #ddd;
 text-align:center;
-}
-
-.opponent-cell{
-display:flex;
-align-items:center;
-justify-content:center;
-gap:8px;
-}
-
-.opponent-cell img{
-width:24px;
 }
 
 </style>
@@ -200,11 +162,10 @@ width:24px;
 
 <div class="hero-left">
 <h1 id="playerName">Select Player</h1>
-<img id="flag" class="flag">
 </div>
 
 <div class="hero-search">
-<input id="playerSearch" placeholder="Search player...">
+<input id="playerSearch" placeholder="Search player..." disabled>
 <div id="searchResults" class="search-results"></div>
 </div>
 
@@ -221,10 +182,8 @@ width:24px;
 
 </div>
 
-<div class="section-title">CAREER SUMMARY</div>
 <div id="careerSummary" class="summary"></div>
 
-<div class="section-title">VS SELECTED OPPONENT</div>
 <div id="oppSummary" class="summary"></div>
 
 <table>
@@ -242,12 +201,14 @@ let matches=[];
 let currentOpp="ALL";
 let currentTab="bat";
 
-const search=document.getElementById("playerSearch");
+const input=document.getElementById("playerSearch");
 const results=document.getElementById("searchResults");
 
-initSearch();
+/* LOAD PLAYERS FIRST */
 
-async function initSearch(){
+init();
+
+async function init(){
 
 const files=await fetch(INDEX).then(r=>r.json());
 
@@ -266,11 +227,11 @@ Object.values(match.info.players)
 
 players=[...set].sort();
 
-}
+/* ENABLE SEARCH ONLY AFTER LOADED */
 
-/* SEARCH */
+input.disabled=false;
 
-search.oninput=function(){
+input.oninput=function(){
 
 const q=this.value.toLowerCase();
 
@@ -301,6 +262,8 @@ results.style.display="block";
 
 };
 
+}
+
 /* LOAD PLAYER */
 
 const param=new URLSearchParams(location.search).get("player");
@@ -330,8 +293,7 @@ if(list.includes(player)) team=t;
 
 if(!team) return;
 
-let batRuns=0,batBalls=0;
-let bowlRuns=0,bowlBalls=0,wkts=0;
+let batRuns=0,batBalls=0,wkts=0,bowlRuns=0,bowlBalls=0;
 
 match.innings.forEach(raw=>{
 
@@ -342,18 +304,14 @@ inn.overs.forEach(over=>{
 over.deliveries.forEach(ball=>{
 
 if(ball.batter===player){
-
 batRuns+=ball.runs.batter;
 if(!ball.extras?.wides) batBalls++;
-
 }
 
 if(ball.bowler===player){
-
 bowlRuns+=ball.runs.total;
 bowlBalls++;
 if(ball.wickets) wkts+=ball.wickets.length;
-
 }
 
 });
@@ -363,17 +321,15 @@ if(ball.wickets) wkts+=ball.wickets.length;
 });
 
 matches.push({
-
 season:file.match(/\d{4}/)[0],
 date:match.info.dates[0],
 opponent:match.info.teams.find(t=>t!==team),
 venue:match.info.venue,
 batRuns,
 batBalls,
+wkts,
 bowlRuns,
-bowlBalls,
-wkts
-
+bowlBalls
 });
 
 });
@@ -385,7 +341,7 @@ render();
 
 }
 
-/* FILTER */
+/* OPP FILTER */
 
 function populateOppFilter(){
 
@@ -420,58 +376,29 @@ bowlTab.classList.toggle("active",currentTab==="bowl");
 
 function render(){
 
-const filtered=currentOpp==="ALL"
+const filtered=currentOpp==="ALL
 ?matches
 :matches.filter(m=>m.opponent===currentOpp);
 
-renderCareerSummary();
-renderOppSummary(filtered);
+renderSummary(filtered);
 renderTable(filtered);
 
 }
 
-/* SUMMARY FUNCTIONS */
+function renderSummary(list){
 
-function renderCareerSummary(){
-renderSummary(matches,"careerSummary");
-}
-
-function renderOppSummary(list){
-renderSummary(list,"oppSummary");
-}
-
-function renderSummary(list,id){
-
-let runs=0,balls=0,wkts=0,bruns=0,bballs=0,high=0,fifty=0,hundred=0;
+let runs=0,balls=0,wkts=0;
 
 list.forEach(m=>{
-
 runs+=m.batRuns;
 balls+=m.batBalls;
 wkts+=m.wkts;
-bruns+=m.bowlRuns;
-bballs+=m.bowlBalls;
-
-if(m.batRuns>high) high=m.batRuns;
-if(m.batRuns>=50) fifty++;
-if(m.batRuns>=100) hundred++;
-
 });
 
-document.getElementById(id).innerHTML=`
-
+careerSummary.innerHTML=`
 <div class="box"><div class="big">${list.length}</div>Matches</div>
-
 <div class="box"><div class="big">${runs}</div>Runs</div>
-
-<div class="box"><div class="big">${high}</div>Highest</div>
-
-<div class="box"><div class="big">${fifty}</div>50s</div>
-
-<div class="box"><div class="big">${hundred}</div>100s</div>
-
 <div class="box"><div class="big">${wkts}</div>Wickets</div>
-
 `;
 
 }
@@ -480,50 +407,18 @@ document.getElementById(id).innerHTML=`
 
 function renderTable(list){
 
-if(currentTab==="bat"){
-
-tableHead.innerHTML=`
-<tr>
-<th>Season</th>
-<th>Date</th>
-<th>Opponent</th>
-<th>Venue</th>
-<th>Runs</th>
-<th>Balls</th>
-<th>Strike Rate</th>
-</tr>
-`;
-
-}else{
-
-tableHead.innerHTML=`
-<tr>
-<th>Season</th>
-<th>Date</th>
-<th>Opponent</th>
-<th>Venue</th>
-<th>Wickets</th>
-<th>Overs</th>
-<th>Economy</th>
-</tr>
-`;
-
-}
-
 tbody.innerHTML="";
 
 list.forEach(m=>{
 
 const tr=document.createElement("tr");
 
-const flag=flagURL(m.opponent);
-
 if(currentTab==="bat"){
 
 tr.innerHTML=`
 <td>${m.season}</td>
 <td>${new Date(m.date).toLocaleDateString()}</td>
-<td class="opponent-cell"><img src="${flag}">${m.opponent}</td>
+<td>${m.opponent}</td>
 <td>${m.venue}</td>
 <td>${m.batRuns}</td>
 <td>${m.batBalls}</td>
@@ -535,7 +430,7 @@ tr.innerHTML=`
 tr.innerHTML=`
 <td>${m.season}</td>
 <td>${new Date(m.date).toLocaleDateString()}</td>
-<td class="opponent-cell"><img src="${flag}">${m.opponent}</td>
+<td>${m.opponent}</td>
 <td>${m.venue}</td>
 <td>${m.wkts}</td>
 <td>${(m.bowlBalls/6).toFixed(1)}</td>
@@ -547,27 +442,6 @@ tr.innerHTML=`
 tbody.appendChild(tr);
 
 });
-
-}
-
-/* FLAGS */
-
-function flagURL(team){
-
-const map={
-India:"in",
-Australia:"au",
-England:"gbunited kingdomgb",
-Pakistan:"pk",
-South Africa:"za",
-New Zealand:"nz",
-Sri Lanka:"lk",
-West Indies:"jm",
-Afghanistan:"af",
-Bangladesh:"bd"
-};
-
-return "https://flagcdn.com/w40/"+(map[team]||"un")+".png";
 
 }
 
