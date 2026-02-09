@@ -101,15 +101,47 @@ tr:hover{
 
 <script>
 
-const year = new URLSearchParams(location.search).get("year");
+const year = parseInt(new URLSearchParams(location.search).get("year"));
 
 const tbody = document.querySelector("#games tbody");
+
+function getPlayoffStructure(year){
+
+if(year <= 1977){
+
+return { wild:0, div:4, conf:2, sb:1 };
+
+}
+
+if(year <= 1989){
+
+return { wild:4, div:4, conf:2, sb:1 };
+
+}
+
+if(year <= 2001){
+
+return { wild:6, div:4, conf:2, sb:1 };
+
+}
+
+if(year <= 2019){
+
+return { wild:4, div:4, conf:2, sb:1 };
+
+}
+
+return { wild:6, div:4, conf:2, sb:1 };
+
+}
+
 
 async function loadSeason(){
 
 document.getElementById("title").innerHTML="NFL "+year;
 
 const res = await fetch("data/nfl/nfl_"+year+".json");
+
 const data = await res.json();
 
 const games = data.games.filter(g =>
@@ -122,48 +154,46 @@ g.score[1]["Unnamed: 1"]
 );
 
 
-// sort games chronologically
+// sort games
 
 games.sort((a,b)=>a.game_id.localeCompare(b.game_id));
 
 
-// playoff count by era
-
-let playoffCount = 7;
-
-if(year >= 1978) playoffCount = 9;
-if(year >= 1990) playoffCount = 11;
-if(year >= 2002) playoffCount = 11;
-if(year >= 2020) playoffCount = 13;
-
-
-// assign rounds from end
+const structure = getPlayoffStructure(year);
 
 const roundMap = {};
 
 let index = games.length - 1;
 
+
 // Super Bowl
-roundMap[games[index--].game_id.substring(0,8)] = "Super Bowl";
 
-// Conference Championship (2)
-for(let i=0;i<2;i++){
-roundMap[games[index--].game_id.substring(0,8)] = "Conference Championship";
+roundMap[games[index--].game_id.substring(0,8)]="Super Bowl";
+
+
+// Conference Championship
+
+for(let i=0;i<structure.conf;i++){
+
+roundMap[games[index--].game_id.substring(0,8)]="Conference Championship";
+
 }
 
-// Divisional (4)
-for(let i=0;i<4;i++){
-roundMap[games[index--].game_id.substring(0,8)] = "Divisional";
+
+// Divisional
+
+for(let i=0;i<structure.div;i++){
+
+roundMap[games[index--].game_id.substring(0,8)]="Divisional";
+
 }
 
-// Wild Card if applicable
-if(playoffCount > 7){
 
-let wc = playoffCount - 7;
+// Wild Card
 
-for(let i=0;i<wc;i++){
-roundMap[games[index--].game_id.substring(0,8)] = "Wild Card";
-}
+for(let i=0;i<structure.wild;i++){
+
+roundMap[games[index--].game_id.substring(0,8)]="Wild Card";
 
 }
 
@@ -182,7 +212,7 @@ const team2=g.score[1]["Unnamed: 1"];
 const s1=Number(g.score[0]["Final"]);
 const s2=Number(g.score[1]["Final"]);
 
-let winner, loser, ws, ls;
+let winner,loser,ws,ls;
 
 if(s1>s2){
 
@@ -200,7 +230,7 @@ ls=s1;
 
 }
 
-const round = roundMap[d] || "Regular Season";
+const round=roundMap[d]||"Regular Season";
 
 const tr=document.createElement("tr");
 
