@@ -88,14 +88,13 @@ tr:hover{
 <th>Winner</th>
 <th></th>
 <th>Loser</th>
-<th>Type</th>
+<th>Round</th>
 </tr>
 </thead>
 
 <tbody>
 <tr><td colspan="5">Loading season...</td></tr>
 </tbody>
-
 </table>
 
 </div>
@@ -109,8 +108,6 @@ const title = document.getElementById("title");
 const tbody = document.querySelector("#games tbody");
 
 async function loadSeason(){
-
-try{
 
 title.innerHTML="NFL "+year;
 
@@ -126,8 +123,6 @@ const dateCounts = {};
 
 data.games.forEach(game=>{
 
-if(!game.game_id) return;
-
 const date = game.game_id.substring(0,8);
 
 dateCounts[date] = (dateCounts[date] || 0) + 1;
@@ -135,34 +130,36 @@ dateCounts[date] = (dateCounts[date] || 0) + 1;
 });
 
 
-// sort dates
+// determine playoff dates
 
 const dates = Object.keys(dateCounts).sort();
 
+const maxGames = Math.max(...Object.values(dateCounts));
 
-// find last regular season date (largest game count)
+let playoffDates = dates.filter(d => dateCounts[d] < maxGames);
 
-let maxGames = 0;
 
-dates.forEach(date=>{
-if(dateCounts[date] > maxGames){
-maxGames = dateCounts[date];
-}
+// classify playoff rounds
+
+const playoffRounds = {};
+
+playoffDates.forEach(date=>{
+
+const count = dateCounts[date];
+
+if(count === 4)
+playoffRounds[date] = "Divisional";
+
+else if(count === 2)
+playoffRounds[date] = "Conference Championship";
+
+else if(count === 1)
+playoffRounds[date] = "Super Bowl";
+
+else
+playoffRounds[date] = "Playoffs";
+
 });
-
-
-// playoff start = first date after last maxGames date
-
-let playoffStart = null;
-
-for(let i=dates.length-1; i>=0; i--){
-
-if(dateCounts[dates[i]] === maxGames){
-playoffStart = dates[i+1];
-break;
-}
-
-}
 
 
 // render games
@@ -179,21 +176,23 @@ const score2 = Number(game.score[1]["Final"]);
 
 if(!team1 || !team2) return;
 
-
 let winner, loser, winnerScore, loserScore;
 
 if(score1 > score2){
+
 winner = team1;
 loser = team2;
 winnerScore = score1;
 loserScore = score2;
+
 }else{
+
 winner = team2;
 loser = team1;
 winnerScore = score2;
 loserScore = score1;
-}
 
+}
 
 const rawDate = game.game_id.substring(0,8);
 
@@ -204,13 +203,12 @@ const d = rawDate.substring(6,8);
 const displayDate = d+"/"+m+"/"+y;
 
 
-// playoff detection
+// determine round
 
-let type = "Regular Season";
+let round = "Regular Season";
 
-if(playoffStart && rawDate >= playoffStart){
-type = "Playoffs";
-}
+if(playoffRounds[rawDate])
+round = playoffRounds[rawDate];
 
 
 const tr=document.createElement("tr");
@@ -220,7 +218,7 @@ tr.innerHTML=`
 <td>${winner} ${winnerScore}</td>
 <td>def</td>
 <td>${loser} ${loserScore}</td>
-<td class="${type==='Playoffs'?'playoff':''}">${type}</td>
+<td class="${round!=='Regular Season'?'playoff':''}">${round}</td>
 `;
 
 tr.onclick=()=>{
@@ -230,14 +228,6 @@ location.href="nfl-game.html?year="+year+"&id="+game.game_id;
 tbody.appendChild(tr);
 
 });
-
-
-}catch(err){
-
-console.error(err);
-tbody.innerHTML="<tr><td colspan='5'>Error loading season</td></tr>";
-
-}
 
 }
 
