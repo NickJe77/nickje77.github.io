@@ -1,64 +1,197 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>NFL Game</title>
+<title>NFL Game | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 
 body{
-font-family:Inter;
-background:#f4f6f8;
-margin:0;
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:#f3f4f7;
 }
 
-.header{
-background:#d50a0a;
-color:white;
-padding:20px;
-font-size:28px;
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px;
+  background:white;
+  border-bottom:1px solid #ddd;
+}
+
+.navbar a{
+  text-decoration:none;
+  color:#013369;
+  font-weight:600;
+}
+
+.hero{
+  background:linear-gradient(90deg,#013369,#d50a0a);
+  color:white;
+  padding:30px;
+  text-align:center;
+}
+
+.hero h1{
+  margin:0;
+  font-size:32px;
+}
+
+.hero h2{
+  margin:5px 0 0 0;
+  font-weight:400;
 }
 
 .container{
-max-width:1000px;
-margin:20px auto;
-background:white;
-padding:20px;
-border-radius:12px;
+  max-width:1000px;
+  margin:30px auto;
+  background:white;
+  padding:20px;
+  border-radius:12px;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-bottom:30px;
+}
+
+th, td{
+  padding:10px;
+  border-bottom:1px solid #eee;
+}
+
+th{
+  background:#f8fafc;
+}
+
+.section-title{
+  font-size:22px;
+  margin-bottom:10px;
+  color:#013369;
 }
 
 </style>
 </head>
 <body>
 
-<div class="header" id="title">
-Game
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="nfl.html">NFL</a>
 </div>
 
-<div class="container" id="content">
-Loading...
+<div class="hero">
+
+<h1 id="teams">Loading...</h1>
+
+<h2 id="gameinfo"></h2>
+
+</div>
+
+<div class="container">
+
+<div class="section-title">Score Summary</div>
+
+<table id="score">
+<thead></thead>
+<tbody></tbody>
+</table>
+
+<div class="section-title">Team Stats</div>
+
+<table id="teamstats">
+<thead></thead>
+<tbody></tbody>
+</table>
+
 </div>
 
 <script>
 
-const params=new URLSearchParams(location.search);
+const params = new URLSearchParams(location.search);
 
-const year=params.get("year");
-
-const id=params.get("id");
+const year = params.get("year");
+const id = params.get("id");
 
 fetch(`data/nfl/nfl_${year}.json`)
 .then(r=>r.json())
 .then(data=>{
 
-const game=data.games.find(g=>g.game_id===id);
+const game = data.games.find(g=>g.game_id===id);
 
-document.getElementById("title").innerHTML=id;
+if(!game){
+document.getElementById("teams").innerHTML="Game not found";
+return;
+}
 
-document.getElementById("content").innerHTML=
-`<pre>${JSON.stringify(game,null,2)}</pre>`;
+let away="";
+let home="";
+let awayScore="";
+let homeScore="";
+
+if(game.score && game.score.length>=2){
+
+away=game.score[0].Tm;
+home=game.score[1].Tm;
+
+awayScore=game.score[0].Final;
+homeScore=game.score[1].Final;
+
+}
+
+document.getElementById("teams").innerHTML =
+`${away} ${awayScore} — ${homeScore} ${home}`;
+
+document.getElementById("gameinfo").innerHTML =
+game.round ? game.round : "Regular Season";
+
+buildTable("score", game.score);
+buildTable("teamstats", game.team_stats);
 
 });
+
+function buildTable(id, data){
+
+if(!data || data.length==0) return;
+
+const table=document.getElementById(id);
+
+const thead=table.querySelector("thead");
+const tbody=table.querySelector("tbody");
+
+thead.innerHTML="";
+tbody.innerHTML="";
+
+const headers=Object.keys(data[0]);
+
+const tr=document.createElement("tr");
+
+headers.forEach(h=>{
+const th=document.createElement("th");
+th.innerHTML=h;
+tr.appendChild(th);
+});
+
+thead.appendChild(tr);
+
+data.forEach(row=>{
+
+const tr=document.createElement("tr");
+
+headers.forEach(h=>{
+const td=document.createElement("td");
+td.innerHTML=row[h];
+tr.appendChild(td);
+});
+
+tbody.appendChild(tr);
+
+});
+
+}
 
 </script>
 
