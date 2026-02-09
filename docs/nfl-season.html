@@ -6,11 +6,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
+
 body{
   font-family:Inter,system-ui,Arial;
   margin:0;
   background:#f3f4f7;
 }
+
+
+/* NAV */
 
 .navbar{
   display:flex;
@@ -27,6 +31,9 @@ body{
   font-weight:600;
 }
 
+
+/* HERO */
+
 .hero{
   background:linear-gradient(90deg,#013369,#d50a0a);
   color:white;
@@ -36,6 +43,9 @@ body{
   font-weight:700;
 }
 
+
+/* CONTAINER */
+
 .container{
   max-width:1000px;
   margin:30px auto;
@@ -43,6 +53,9 @@ body{
   padding:20px;
   border-radius:12px;
 }
+
+
+/* TABLE */
 
 table{
   width:100%;
@@ -62,25 +75,35 @@ tr:hover{
   background:#f1f5f9;
 }
 
+
+/* PLAYOFF */
+
 .playoff{
   color:#d50a0a;
   font-weight:700;
 }
+
 </style>
 </head>
 
 <body>
+
 
 <div class="navbar">
 <a href="index.html">Home</a>
 <a href="nfl.html">NFL</a>
 </div>
 
-<div class="hero" id="title">NFL Season</div>
+
+<div class="hero" id="title">
+NFL Season
+</div>
+
 
 <div class="container">
 
 <table id="games">
+
 <thead>
 <tr>
 <th>Date</th>
@@ -92,57 +115,55 @@ tr:hover{
 </thead>
 
 <tbody>
-<tr><td colspan="5">Loading season...</td></tr>
+<tr>
+<td colspan="5">Loading season...</td>
+</tr>
 </tbody>
 
 </table>
 
 </div>
 
+
+
 <script>
 
-const year = parseInt(new URLSearchParams(location.search).get("year"));
+const params = new URLSearchParams(location.search);
+
+const year = parseInt(params.get("year"));
 
 const tbody = document.querySelector("#games tbody");
 
-function getPlayoffStructure(year){
+document.getElementById("title").innerHTML="NFL "+year;
 
-if(year <= 1977){
 
-return { wild:0, div:4, conf:2, sb:1 };
+function playoffStructure(year){
 
-}
+if(year<=1977)
+return {wild:0,div:4,conf:2,sb:1};
 
-if(year <= 1989){
+if(year<=1989)
+return {wild:4,div:4,conf:2,sb:1};
 
-return { wild:4, div:4, conf:2, sb:1 };
+if(year<=2001)
+return {wild:6,div:4,conf:2,sb:1};
 
-}
+if(year<=2019)
+return {wild:4,div:4,conf:2,sb:1};
 
-if(year <= 2001){
-
-return { wild:6, div:4, conf:2, sb:1 };
-
-}
-
-if(year <= 2019){
-
-return { wild:4, div:4, conf:2, sb:1 };
-
-}
-
-return { wild:6, div:4, conf:2, sb:1 };
+return {wild:6,div:4,conf:2,sb:1};
 
 }
 
 
 async function loadSeason(){
 
-document.getElementById("title").innerHTML="NFL "+year;
+try{
 
 const res = await fetch("data/nfl/nfl_"+year+".json");
 
 const data = await res.json();
+
 
 const games = data.games.filter(g =>
 g &&
@@ -154,107 +175,119 @@ g.score[1]["Unnamed: 1"]
 );
 
 
-// sort games
+// sort games chronologically
 
 games.sort((a,b)=>a.game_id.localeCompare(b.game_id));
 
 
-const structure = getPlayoffStructure(year);
+// assign playoff rounds
 
-const roundMap = {};
+const structure = playoffStructure(year);
 
-let index = games.length - 1;
+const roundMap={};
+
+let i=games.length-1;
 
 
 // Super Bowl
 
-roundMap[games[index--].game_id.substring(0,8)]="Super Bowl";
+roundMap[games[i--].game_id]="Super Bowl";
 
 
 // Conference Championship
 
-for(let i=0;i<structure.conf;i++){
-
-roundMap[games[index--].game_id.substring(0,8)]="Conference Championship";
-
-}
+for(let x=0;x<structure.conf;x++)
+roundMap[games[i--].game_id]="Conference Championship";
 
 
 // Divisional
 
-for(let i=0;i<structure.div;i++){
-
-roundMap[games[index--].game_id.substring(0,8)]="Divisional";
-
-}
+for(let x=0;x<structure.div;x++)
+roundMap[games[i--].game_id]="Divisional";
 
 
 // Wild Card
 
-for(let i=0;i<structure.wild;i++){
-
-roundMap[games[index--].game_id.substring(0,8)]="Wild Card";
-
-}
+for(let x=0;x<structure.wild;x++)
+roundMap[games[i--].game_id]="Wild Card";
 
 
 // render
 
 tbody.innerHTML="";
 
+
 games.forEach(g=>{
 
-const d=g.game_id.substring(0,8);
+const date=g.game_id.substring(0,8);
 
 const team1=g.score[0]["Unnamed: 1"];
 const team2=g.score[1]["Unnamed: 1"];
 
-const s1=Number(g.score[0]["Final"]);
-const s2=Number(g.score[1]["Final"]);
+const score1=parseInt(g.score[0]["Final"]);
+const score2=parseInt(g.score[1]["Final"]);
 
 let winner,loser,ws,ls;
 
-if(s1>s2){
+if(score1>score2){
 
 winner=team1;
 loser=team2;
-ws=s1;
-ls=s2;
+ws=score1;
+ls=score2;
 
 }else{
 
 winner=team2;
 loser=team1;
-ws=s2;
-ls=s1;
+ws=score2;
+ls=score1;
 
 }
 
-const round=roundMap[d]||"Regular Season";
+
+const round=roundMap[g.game_id]||"Regular Season";
+
 
 const tr=document.createElement("tr");
 
+
 tr.innerHTML=`
-<td>${d.substring(6,8)}/${d.substring(4,6)}/${d.substring(0,4)}</td>
+<td>${date.substring(6,8)}/${date.substring(4,6)}/${date.substring(0,4)}</td>
 <td>${winner} ${ws}</td>
 <td>def</td>
 <td>${loser} ${ls}</td>
-<td class="${round!=="Regular Season"?"playoff":""}">${round}</td>
+<td class="${round!=="Regular Season"?"playoff":""}">
+${round}
+</td>
 `;
+
 
 tr.onclick=()=>{
 location.href="nfl-game.html?year="+year+"&id="+g.game_id;
 };
 
+
 tbody.appendChild(tr);
 
 });
 
+
+}catch(err){
+
+tbody.innerHTML="<tr><td colspan='5'>Failed to load season</td></tr>";
+
+console.error(err);
+
 }
+
+}
+
 
 loadSeason();
 
 </script>
+
 
 </body>
 </html>
