@@ -106,14 +106,136 @@ const year = params.get("year");
 const title = document.getElementById("title");
 const tbody = document.querySelector("#games tbody");
 
+async function loadSeason(){
+
+try{
+
 if(!year){
+
 title.innerHTML="NFL Season";
-tbody.innerHTML="<tr><td colspan='5'>No season selected</td></tr>";
-throw new Error("No year");
+tbody.innerHTML="<tr><td colspan='5'>No season specified</td></tr>";
+return;
+
 }
 
 title.innerHTML="NFL "+year;
 
-fetch("data/nfl/nfl_"+year+".json")
-.then(r=>r.json())
-.then(data
+const response = await fetch("data/nfl/nfl_"+year+".json");
+
+if(!response.ok){
+
+tbody.innerHTML="<tr><td colspan='5'>Season file not found</td></tr>";
+return;
+
+}
+
+const data = await response.json();
+
+tbody.innerHTML="";
+
+data.games.forEach(game=>{
+
+try{
+
+if(!game.score || game.score.length < 2) return;
+
+const team1 = game.score[0]["Unnamed: 1"];
+const team2 = game.score[1]["Unnamed: 1"];
+
+const score1 = Number(game.score[0]["Final"]);
+const score2 = Number(game.score[1]["Final"]);
+
+if(!team1 || !team2) return;
+if(isNaN(score1) || isNaN(score2)) return;
+
+// determine winner
+let winner, loser, winnerScore, loserScore;
+
+if(score1 > score2){
+
+winner = team1;
+loser = team2;
+winnerScore = score1;
+loserScore = score2;
+
+}else{
+
+winner = team2;
+loser = team1;
+winnerScore = score2;
+loserScore = score1;
+
+}
+
+// detect playoffs
+let type="Regular Season";
+
+if(game.url){
+
+if(
+game.url.includes("playoffs") ||
+game.url.includes("super") ||
+game.url.includes("champ")
+){
+type="Playoffs";
+}
+
+}
+
+// date
+let date="";
+
+if(game.game_id && game.game_id.length>=8){
+
+const y = game.game_id.substring(0,4);
+const m = game.game_id.substring(4,6);
+const d = game.game_id.substring(6,8);
+
+date = d+"/"+m+"/"+y;
+
+}
+
+// skip junk row
+if(!date) return;
+
+const tr=document.createElement("tr");
+
+tr.innerHTML=`
+<td>${date}</td>
+<td>${winner} ${winnerScore}</td>
+<td>def</td>
+<td>${loser} ${loserScore}</td>
+<td class="${type==='Playoffs'?'playoff':''}">${type}</td>
+`;
+
+tr.onclick=()=>{
+location.href="nfl-game.html?year="+year+"&id="+game.game_id;
+};
+
+tbody.appendChild(tr);
+
+}catch(e){
+console.log("Skipping bad game row");
+}
+
+});
+
+if(tbody.innerHTML===""){
+tbody.innerHTML="<tr><td colspan='5'>No games found</td></tr>";
+}
+
+}catch(err){
+
+console.error(err);
+tbody.innerHTML="<tr><td colspan='5'>Failed to load season</td></tr>";
+
+}
+
+}
+
+loadSeason();
+
+</script>
+
+</body>
+</html>
