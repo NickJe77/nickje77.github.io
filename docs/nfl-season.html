@@ -54,6 +54,10 @@ th, td{
   border-bottom:1px solid #eee;
 }
 
+th{
+  background:#f8fafc;
+}
+
 tr:hover{
   background:#f1f5f9;
   cursor:pointer;
@@ -78,7 +82,6 @@ tr:hover{
 <div class="container">
 
 <table id="games">
-
 <thead>
 <tr>
 <th>Date</th>
@@ -117,7 +120,7 @@ const data = await res.json();
 tbody.innerHTML="";
 
 
-// COUNT GAMES PER DATE
+// count games per date
 
 const dateCounts = {};
 
@@ -127,32 +130,42 @@ if(!game.game_id) return;
 
 const date = game.game_id.substring(0,8);
 
-if(!dateCounts[date]) dateCounts[date] = 0;
-
-dateCounts[date]++;
+dateCounts[date] = (dateCounts[date] || 0) + 1;
 
 });
 
 
-// FIND PLAYOFF START DATE
+// sort dates
+
+const dates = Object.keys(dateCounts).sort();
+
+
+// find last regular season date (largest game count)
+
+let maxGames = 0;
+
+dates.forEach(date=>{
+if(dateCounts[date] > maxGames){
+maxGames = dateCounts[date];
+}
+});
+
+
+// playoff start = first date after last maxGames date
 
 let playoffStart = null;
 
-Object.keys(dateCounts)
-.sort()
-.forEach(date=>{
+for(let i=dates.length-1; i>=0; i--){
 
-// playoff dates have very few games
-if(dateCounts[date] <= 8 && playoffStart === null){
-
-playoffStart = date;
+if(dateCounts[dates[i]] === maxGames){
+playoffStart = dates[i+1];
+break;
+}
 
 }
 
-});
 
-
-// RENDER GAMES
+// render games
 
 data.games.forEach(game=>{
 
@@ -167,28 +180,20 @@ const score2 = Number(game.score[1]["Final"]);
 if(!team1 || !team2) return;
 
 
-// determine winner
-
 let winner, loser, winnerScore, loserScore;
 
 if(score1 > score2){
-
 winner = team1;
 loser = team2;
 winnerScore = score1;
 loserScore = score2;
-
 }else{
-
 winner = team2;
 loser = team1;
 winnerScore = score2;
 loserScore = score1;
-
 }
 
-
-// date formatting
 
 const rawDate = game.game_id.substring(0,8);
 
@@ -199,18 +204,14 @@ const d = rawDate.substring(6,8);
 const displayDate = d+"/"+m+"/"+y;
 
 
-// type detection
+// playoff detection
 
 let type = "Regular Season";
 
 if(playoffStart && rawDate >= playoffStart){
-
 type = "Playoffs";
-
 }
 
-
-// render row
 
 const tr=document.createElement("tr");
 
