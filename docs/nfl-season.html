@@ -6,7 +6,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-
 body{
   font-family:Inter,system-ui,Arial;
   margin:0;
@@ -68,171 +67,148 @@ tr:hover{
   color:#d50a0a;
   font-weight:700;
 }
-
 </style>
 </head>
+
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="nfl.html">NFL</a>
+  <a href="index.html">Home</a>
+  <a href="nfl.html">NFL</a>
 </div>
 
 <div class="hero" id="title">NFL Season</div>
 
 <div class="container">
-
-<table id="games">
-
-<thead>
-<tr>
-<th>Date</th>
-<th>Winner</th>
-<th></th>
-<th>Loser</th>
-<th>Type</th>
-</tr>
-</thead>
-
-<tbody>
-<tr><td colspan="5">Loading season...</td></tr>
-</tbody>
-
-</table>
-
+  <table id="games">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Winner</th>
+        <th></th>
+        <th>Loser</th>
+        <th>Type</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td colspan="5">Loading season...</td></tr>
+    </tbody>
+  </table>
 </div>
 
 <script>
-
 const params = new URLSearchParams(window.location.search);
-const year = parseInt(params.get("year"));
+const yearParam = params.get("year");
+const year = yearParam ? parseInt(yearParam, 10) : null;
 
 const title = document.getElementById("title");
 const tbody = document.querySelector("#games tbody");
 
+function getTypeByDate(y, m, d){
+  // NFL practical calendar rule:
+  // - Playoffs: late Dec (20+), Jan 8+, all Feb
+  // - Regular season: everything else
+  // - Early Jan (1–7) treated as regular season to avoid mislabeling Week 17/18 games
+  if(m === 2) return "Playoffs";
+  if(m === 1) return (d >= 8 ? "Playoffs" : "Regular Season");
+  if(m === 12) return (d >= 20 ? "Playoffs" : "Regular Season");
+  return "Regular Season";
+}
+
 async function loadSeason(){
+  try{
+    if(!year){
+      title.innerHTML = "NFL Season";
+      tbody.innerHTML = "<tr><td colspan='5'>No season selected</td></tr>";
+      return;
+    }
 
-try{
+    title.innerHTML = "NFL " + year;
 
-if(!year){
-tbody.innerHTML="<tr><td colspan='5'>No season specified</td></tr>";
-return;
-}
+    const filePath = "data/nfl/nfl_" + year + ".json";
+    const res = await fetch(filePath);
 
-title.innerHTML="NFL "+year;
+    if(!res.ok){
+      tbody.innerHTML = "<tr><td colspan='5'>Season file not found: " + filePath + "</td></tr>";
+      return;
+    }
 
-const res = await fetch("data/nfl/nfl_"+year+".json");
-const data = await res.json();
+    const data = await res.json();
 
-tbody.innerHTML="";
+    if(!data.games || !Array.isArray(data.games) || data.games.length === 0){
+      tbody.innerHTML = "<tr><td colspan='5'>No games found</td></tr>";
+      return;
+    }
 
+    tbody.innerHTML = "";
 
-// COUNT GAMES PER DATE
-const dateCounts = {};
+    data.games.forEach(game=>{
+      try{
+        // Must have a proper game_id with yyyymmdd....
+        if(!game.game_id || typeof game.game_id !== "string" || game.game_id.length < 8) return;
 
-data.games.forEach(game=>{
+        const y = parseInt(game.game_id.substring(0,4), 10);
+        const m = parseInt(game.game_id.substring(4,6), 10);
+        const d = parseInt(game.game_id.substring(6,8), 10);
 
-if(!game.game_id) return;
+        if(!y || !m || !d) return;
 
-const date = game.game_id.substring(0,8);
+        const displayDate = String(d).padStart(2,"0") + "/" + String(m).padStart(2,"0") + "/" + String(y);
 
-if(!dateCounts[date]) dateCounts[date] = 0;
+        // Need score rows
+        if(!game.score || !Array.isArray(game.score) || game.score.length < 2) return;
 
-dateCounts[date]++;
+        const team1 = game.score[0]["Unnamed: 1"];
+        const team2 = game.score[1]["Unnamed: 1"];
 
-});
+        const score1 = Number(game.score[0]["Final"]);
+        const score2 = Number(game.score[1]["Final"]);
 
+        if(!team1 || !team2) return;
+        if(Number.isNaN(score1) || Number.isNaN(score2)) return;
 
-// RENDER GAMES
-data.games.forEach(game=>{
+        // Determine winner/loser correctly
+        let winner, loser, winnerScore, loserScore;
 
-if(!game.score || game.score.length < 2) return;
+        if(score1 > score2){
+          winner = team1; loser = team2; winnerScore = score1; loserScore = score2;
+        }else{
+          winner = team2; loser = team1; winnerScore = score2; loserScore = score1;
+        }
 
-const team1 = game.score[0]["Unnamed: 1"];
-const team2 = game.score[1]["Unnamed: 1"];
+        const type = getTypeByDate(y, m, d);
 
-const score1 = Number(game.score[0]["Final"]);
-const score2 = Number(game.score[1]["Final"]);
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${displayDate}</td>
+          <td>${winner} ${winnerScore}</td>
+          <td>def</td>
+          <td>${loser} ${loserScore}</td>
+          <td class="${type === "Playoffs" ? "playoff" : ""}">${type}</td>
+        `;
 
-if(!team1 || !team2) return;
-if(isNaN(score1) || isNaN(score2)) return;
+        tr.onclick = ()=>{
+          location.href = "nfl-game.html?year=" + year + "&id=" + encodeURIComponent(game.game_id);
+        };
 
+        tbody.appendChild(tr);
 
-// determine winner
+      }catch(e){
+        // skip bad rows silently
+      }
+    });
 
-let winner, loser, winnerScore, loserScore;
+    if(tbody.children.length === 0){
+      tbody.innerHTML = "<tr><td colspan='5'>No usable games found</td></tr>";
+    }
 
-if(score1 > score2){
-
-winner = team1;
-loser = team2;
-winnerScore = score1;
-loserScore = score2;
-
-}else{
-
-winner = team2;
-loser = team1;
-winnerScore = score2;
-loserScore = score1;
-
-}
-
-
-// date parsing
-
-const rawDate = game.game_id.substring(0,8);
-
-const y = rawDate.substring(0,4);
-const m = rawDate.substring(4,6);
-const d = rawDate.substring(6,8);
-
-const displayDate = d+"/"+m+"/"+y;
-
-
-// PLAYOFF RULE: LESS THAN 8 GAMES THAT DAY
-
-let type = "Regular Season";
-
-if(dateCounts[rawDate] < 8){
-
-type = "Playoffs";
-
-}
-
-
-// render row
-
-const tr=document.createElement("tr");
-
-tr.innerHTML=`
-<td>${displayDate}</td>
-<td>${winner} ${winnerScore}</td>
-<td>def</td>
-<td>${loser} ${loserScore}</td>
-<td class="${type==='Playoffs'?'playoff':''}">${type}</td>
-`;
-
-tr.onclick=()=>{
-location.href="nfl-game.html?year="+year+"&id="+game.game_id;
-};
-
-tbody.appendChild(tr);
-
-});
-
-
-}catch(err){
-
-console.error(err);
-tbody.innerHTML="<tr><td colspan='5'>Error loading season</td></tr>";
-
-}
-
+  }catch(err){
+    console.error(err);
+    tbody.innerHTML = "<tr><td colspan='5'>Error loading season</td></tr>";
+  }
 }
 
 loadSeason();
-
 </script>
 
 </body>
