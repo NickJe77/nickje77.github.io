@@ -76,6 +76,7 @@ max-height:300px;
 overflow:auto;
 display:none;
 box-shadow:0 4px 12px rgba(0,0,0,.2);
+z-index:999;
 }
 
 .search-results div{
@@ -165,7 +166,7 @@ text-align:center;
 </div>
 
 <div class="hero-search">
-<input id="playerSearch" placeholder="Search player..." disabled>
+<input id="playerSearch" placeholder="Search player...">
 <div id="searchResults" class="search-results"></div>
 </div>
 
@@ -183,8 +184,6 @@ text-align:center;
 </div>
 
 <div id="careerSummary" class="summary"></div>
-
-<div id="oppSummary" class="summary"></div>
 
 <table>
 <thead id="tableHead"></thead>
@@ -204,11 +203,47 @@ let currentTab="bat";
 const input=document.getElementById("playerSearch");
 const results=document.getElementById("searchResults");
 
-/* LOAD PLAYERS FIRST */
+/* SEARCH ALWAYS ACTIVE */
 
-init();
+input.oninput=function(){
 
-async function init(){
+const q=this.value.toLowerCase();
+
+results.innerHTML="";
+
+if(!q || players.length===0){
+results.style.display="none";
+return;
+}
+
+players
+.filter(p=>p.toLowerCase().includes(q))
+.slice(0,30)
+.forEach(name=>{
+
+const div=document.createElement("div");
+
+div.innerText=name;
+
+div.onclick=()=>{
+location.href="?player="+encodeURIComponent(name);
+};
+
+results.appendChild(div);
+
+});
+
+results.style.display="block";
+
+};
+
+/* LOAD PLAYERS IN BACKGROUND */
+
+loadPlayers();
+
+async function loadPlayers(){
+
+try{
 
 const files=await fetch(INDEX).then(r=>r.json());
 
@@ -227,40 +262,11 @@ Object.values(match.info.players)
 
 players=[...set].sort();
 
-/* ENABLE SEARCH ONLY AFTER LOADED */
+}catch(e){
 
-input.disabled=false;
+console.error("Player load error:",e);
 
-input.oninput=function(){
-
-const q=this.value.toLowerCase();
-
-results.innerHTML="";
-
-if(!q){
-results.style.display="none";
-return;
 }
-
-players
-.filter(p=>p.toLowerCase().includes(q))
-.slice(0,30)
-.forEach(name=>{
-
-const div=document.createElement("div");
-div.innerText=name;
-
-div.onclick=()=>{
-location.href="?player="+encodeURIComponent(name);
-};
-
-results.appendChild(div);
-
-});
-
-results.style.display="block";
-
-};
 
 }
 
@@ -304,14 +310,18 @@ inn.overs.forEach(over=>{
 over.deliveries.forEach(ball=>{
 
 if(ball.batter===player){
+
 batRuns+=ball.runs.batter;
 if(!ball.extras?.wides) batBalls++;
+
 }
 
 if(ball.bowler===player){
+
 bowlRuns+=ball.runs.total;
 bowlBalls++;
 if(ball.wickets) wkts+=ball.wickets.length;
+
 }
 
 });
@@ -341,7 +351,7 @@ render();
 
 }
 
-/* OPP FILTER */
+/* FILTER */
 
 function populateOppFilter(){
 
@@ -376,7 +386,7 @@ bowlTab.classList.toggle("active",currentTab==="bowl");
 
 function render(){
 
-const filtered=currentOpp==="ALL
+const filtered=currentOpp==="ALL"
 ?matches
 :matches.filter(m=>m.opponent===currentOpp);
 
@@ -387,11 +397,10 @@ renderTable(filtered);
 
 function renderSummary(list){
 
-let runs=0,balls=0,wkts=0;
+let runs=0,wkts=0;
 
 list.forEach(m=>{
 runs+=m.batRuns;
-balls+=m.batBalls;
 wkts+=m.wkts;
 });
 
@@ -402,8 +411,6 @@ careerSummary.innerHTML=`
 `;
 
 }
-
-/* TABLE */
 
 function renderTable(list){
 
