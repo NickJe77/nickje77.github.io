@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>T20 World Cup Match | The Sporting Almanac</title>
+<title>T20 World Cup Finals | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -29,46 +29,51 @@ body{
   font-size:18px;
 }
 
+.hero{
+  width:90%;
+  margin:30px auto;
+  height:260px;
+  border-radius:20px;
+  overflow:hidden;
+  position:relative;
+}
+
+.hero img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+
+.hero-overlay{
+  position:absolute;
+  inset:0;
+  background:linear-gradient(90deg,
+    rgba(106,4,15,0.85),
+    rgba(208,0,0,0.75));
+}
+
+.hero-text{
+  position:absolute;
+  bottom:30px;
+  left:40px;
+  color:white;
+}
+
+.hero-text h1{
+  margin:0;
+  font-size:44px;
+}
+
 .container{
   width:90%;
   margin:30px auto;
 }
 
-.card{
+.table-wrap{
   background:white;
-  padding:24px;
   border-radius:16px;
+  overflow:hidden;
   box-shadow:0 2px 8px rgba(0,0,0,0.08);
-}
-
-.hero{
-  background:linear-gradient(90deg,#6a040f,#d00000);
-  color:white;
-  padding:26px;
-  border-radius:16px;
-}
-
-.hero h1{
-  margin:0;
-}
-
-.score{
-  font-size:22px;
-  font-weight:700;
-  margin-top:10px;
-}
-
-.meta{
-  margin-top:6px;
-  opacity:.9;
-}
-
-.section{
-  margin-top:26px;
-}
-
-.section h2{
-  color:#6a040f;
 }
 
 table{
@@ -77,15 +82,37 @@ table{
 }
 
 th{
-  background:#6a040f;
+  background:linear-gradient(90deg,#6a040f,#d00000);
   color:white;
-  padding:10px;
+  padding:14px;
   text-align:left;
 }
 
 td{
-  padding:8px;
+  padding:14px;
   border-bottom:1px solid #eee;
+}
+
+tr:hover{
+  background:#fafafa;
+  cursor:pointer;
+}
+
+.team{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+
+.flag{
+  width:26px;
+  height:18px;
+  border:1px solid #ccc;
+  border-radius:3px;
+}
+
+.score{
+  font-weight:700;
 }
 
 .loading{
@@ -104,11 +131,42 @@ td{
 <a href="t20-world-cup.html">T20 World Cup</a>
 </div>
 
+<div class="hero">
+<img src="images/t20wc-hero.jpg">
+<div class="hero-overlay"></div>
+<div class="hero-text">
+<h1>T20 World Cup Finals</h1>
+</div>
+</div>
+
 <div class="container">
 
-<div id="content" class="card loading">
+<div class="table-wrap">
 
-Loading match...
+<table>
+
+<thead>
+<tr>
+<th>Year</th>
+<th>Winner</th>
+<th>Runner-Up</th>
+<th>Score</th>
+<th>Margin</th>
+<th>Venue</th>
+</tr>
+</thead>
+
+<tbody id="body">
+
+<tr>
+<td colspan="6" class="loading">
+Loading finals...
+</td>
+</tr>
+
+</tbody>
+
+</table>
 
 </div>
 
@@ -117,21 +175,38 @@ Loading match...
 <script>
 
 
-const params =
-new URLSearchParams(window.location.search);
+/* EXACT FINALS FROM YOUR LIST */
 
-const file =
-params.get("file");
+const FINALS = [
 
-const matchIndex =
-parseInt(params.get("matchIndex"),10);
+{year:2007,date:"2007-09-24",teams:["India","Pakistan"]},
+{year:2009,date:"2009-06-21",teams:["Pakistan","Sri Lanka"]},
+{year:2010,date:"2010-05-16",teams:["England","Australia"]},
+{year:2012,date:"2012-10-07",teams:["West Indies","Sri Lanka"]},
+{year:2014,date:"2014-04-06",teams:["Sri Lanka","India"]},
+{year:2016,date:"2016-04-03",teams:["West Indies","England"]},
+{year:2021,date:"2021-11-14",teams:["Australia","New Zealand"]},
+{year:2022,date:"2022-11-13",teams:["England","Pakistan"]},
+{year:2024,date:"2024-06-29",teams:["India","South Africa"]}
+
+];
 
 
-const folder =
+const FULL_FOLDER =
+"data/t20-world-cup/matches/";
+
+const MATCH_FOLDER =
 "data/t20-world-cup/matches/";
 
 
-function getScore(match,team){
+function flag(team){
+
+return "images/flags/" + team + ".png";
+
+}
+
+
+function score(match,team){
 
 for(const inn of match.innings){
 
@@ -140,9 +215,7 @@ Object.keys(inn)[0];
 
 if(name===team){
 
-return inn[name].runs +
-"-" +
-inn[name].wickets;
+return inn[name].runs+"-"+inn[name].wickets;
 
 }
 
@@ -153,144 +226,128 @@ return "";
 }
 
 
-function buildBatting(match,team){
+async function loadFinals(){
 
-let rows="";
+const body =
+document.getElementById("body");
 
-for(const inn of match.innings){
-
-const name=
-Object.keys(inn)[0];
-
-if(name!==team) continue;
-
-for(const over of inn[name].overs){
-
-for(const ball of over.deliveries){
-
-const batter=
-Object.keys(ball)[0];
-
-const runs=
-ball[batter].runs.batter;
-
-rows+=`
-<tr>
-<td>${batter}</td>
-<td>${runs}</td>
-</tr>`;
-
-}
-
-}
-
-}
-
-return `
-<div class="section">
-
-<h2>${team} Batting</h2>
-
-<table>
-<tr>
-<th>Batter</th>
-<th>Runs</th>
-</tr>
-
-${rows}
-
-</table>
-
-</div>
-`;
-
-}
+body.innerHTML="";
 
 
-async function loadMatch(){
+for(const f of FINALS){
 
-const content=
-document.getElementById("content");
+const fullFile =
+`t20wc_${f.year}_FULL.json`;
 
+try{
 
-if(!file || isNaN(matchIndex)){
+const res =
+await fetch(FULL_FOLDER + fullFile);
 
-content.innerHTML=
-"Invalid match link";
-
-return;
-
-}
-
-
-const res=
-await fetch(folder+file);
-
-const matches=
+const matches =
 await res.json();
 
-const match=
-matches[matchIndex];
+
+const final =
+matches.find(m=>
+
+m.info.dates[0]===f.date &&
+m.info.teams.includes(f.teams[0]) &&
+m.info.teams.includes(f.teams[1])
+
+);
 
 
-if(!match){
-
-content.innerHTML=
-"Match not found";
-
-return;
-
-}
+if(!final) continue;
 
 
-const teams=
-match.info.teams;
+/* THIS IS THE CRITICAL FIX */
 
-const winner=
-match.info.outcome.winner;
-
-const runner=
-teams.find(t=>t!==winner);
+const matchFile =
+final.info.match_id
+? final.info.match_id + ".json"
+: final.info.dates[0] + ".json";
 
 
-const winnerScore=
-getScore(match,winner);
+const winner =
+final.info.outcome.winner;
 
-const runnerScore=
-getScore(match,runner);
-
-
-content.classList.remove("loading");
+const runner =
+final.info.teams.find(t=>t!==winner);
 
 
-content.innerHTML=`
+const winnerScore =
+score(final,winner);
 
-<div class="hero">
+const runnerScore =
+score(final,runner);
 
-<h1>${teams[0]} vs ${teams[1]}</h1>
 
-<div class="score">
-${winner} ${winnerScore}
-def
+let margin="";
+
+if(final.info.outcome.by.runs)
+margin=
+final.info.outcome.by.runs+" runs";
+
+else if(final.info.outcome.by.wickets)
+margin=
+final.info.outcome.by.wickets+" wickets";
+
+
+const link =
+`t20-world-cup-match.html?file=${matchFile}`;
+
+
+const row =
+document.createElement("tr");
+
+row.onclick =
+()=>window.location.href=link;
+
+
+row.innerHTML=`
+
+<td>${f.year}</td>
+
+<td>
+<div class="team">
+<img class="flag" src="${flag(winner)}">
+<strong>${winner}</strong>
+</div>
+</td>
+
+<td>
+<div class="team">
+<img class="flag" src="${flag(runner)}">
+${runner}
+</div>
+</td>
+
+<td class="score">
+${winner} ${winnerScore}<br>
 ${runner} ${runnerScore}
-</div>
+</td>
 
-<div class="meta">
-${match.info.venue} • ${match.info.dates[0]}
-</div>
+<td>${margin}</td>
 
-</div>
-
-${buildBatting(match,teams[0])}
-
-${buildBatting(match,teams[1])}
-
+<td>${final.info.venue}</td>
 `;
 
+body.appendChild(row);
+
+}
+catch(e){
+
+console.log("Error loading",fullFile);
+
+}
+
+}
+
 }
 
 
-loadMatch();
+loadFinals();
 
 
 </script>
