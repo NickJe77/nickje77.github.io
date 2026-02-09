@@ -154,12 +154,15 @@ border-bottom:1px solid #ddd;
 text-align:center;
 }
 
-tbody tr{
-cursor:pointer;
+/* Zebra striping */
+
+tbody tr:nth-child(even){
+background:#f0f6ff;
 }
 
 tbody tr:hover{
-background:#f0f6ff;
+background:#dbeafe;
+cursor:pointer;
 }
 
 </style>
@@ -205,10 +208,8 @@ background:#f0f6ff;
 <div id="oppSummary" class="summary"></div>
 
 <table>
-
 <thead id="tableHead"></thead>
 <tbody id="tbody"></tbody>
-
 </table>
 
 <script>
@@ -307,7 +308,8 @@ if(list.includes(player)) team=t;
 
 if(!team) return;
 
-let runs=0,balls=0,wkts=0,bowlRuns=0,bowlBalls=0;
+let runs=0,balls=0,out=false;
+let wkts=0,bowlRuns=0,bowlBalls=0;
 
 match.innings.forEach(raw=>{
 
@@ -322,6 +324,11 @@ if(ball.batter===player){
 runs+=ball.runs.batter;
 
 if(!ball.extras?.wides) balls++;
+
+if(ball.wickets)
+ball.wickets.forEach(w=>{
+if(w.player_out===player) out=true;
+});
 
 }
 
@@ -349,6 +356,8 @@ venue:match.info.venue,
 
 runs,
 balls,
+out,
+
 wkts,
 bowlRuns,
 bowlBalls,
@@ -367,7 +376,7 @@ render();
 
 }
 
-/* FILTER */
+/* FILTER, TABS, RENDER unchanged */
 
 function populateOppFilter(){
 
@@ -386,29 +395,12 @@ render();
 
 }
 
-/* TABS */
-
-batTab.onclick=()=>{
-currentTab="bat";
-batTab.classList.add("active");
-bowlTab.classList.remove("active");
-render();
-};
-
-bowlTab.onclick=()=>{
-currentTab="bowl";
-bowlTab.classList.add("active");
-batTab.classList.remove("active");
-render();
-};
-
-/* RENDER */
+batTab.onclick=()=>{currentTab="bat";batTab.classList.add("active");bowlTab.classList.remove("active");render();}
+bowlTab.onclick=()=>{currentTab="bowl";bowlTab.classList.add("active");batTab.classList.remove("active");render();}
 
 function render(){
 
-const filtered=currentOpp==="ALL"
-?matches
-:matches.filter(m=>m.opponent===currentOpp);
+const filtered=currentOpp==="ALL"?matches:matches.filter(m=>m.opponent===currentOpp);
 
 renderCareer();
 renderOpp(filtered);
@@ -416,110 +408,65 @@ renderTable(filtered);
 
 }
 
+/* SUMMARY WITH AVERAGES AND BEST */
+
 function renderCareer(){
 
-let runs=0,balls=0,wkts=0;
+let runs=0,balls=0,outs=0,wkts=0,bruns=0,bballs=0,high=0,best="0/0";
 
 matches.forEach(m=>{
+
 runs+=m.runs;
 balls+=m.balls;
 wkts+=m.wkts;
+bruns+=m.bowlRuns;
+bballs+=m.bowlBalls;
+
+if(m.out) outs++;
+
+if(m.runs>high) high=m.runs;
+
+if(m.wkts>0) best=m.wkts+"/"+m.bowlRuns;
+
 });
 
 careerSummary.innerHTML=`
 <div class="box"><div class="big">${matches.length}</div>Matches</div>
 <div class="box"><div class="big">${runs}</div>Runs</div>
+<div class="box"><div class="big">${outs? (runs/outs).toFixed(2):"-"}</div>Average</div>
+<div class="box"><div class="big">${balls? (runs/balls*100).toFixed(1):"-"}</div>Strike Rate</div>
+<div class="box"><div class="big">${high}</div>Highest</div>
 <div class="box"><div class="big">${wkts}</div>Wickets</div>
+<div class="box"><div class="big">${wkts? (bruns/wkts).toFixed(2):"-"}</div>Bowl Avg</div>
+<div class="box"><div class="big">${bballs? (bruns/(bballs/6)).toFixed(2):"-"}</div>Economy</div>
+<div class="box"><div class="big">${best}</div>Best</div>
 `;
 
 }
 
-function renderOpp(list){
-
-let runs=0,wkts=0;
-
-list.forEach(m=>{
-runs+=m.runs;
-wkts+=m.wkts;
-});
-
-oppSummary.innerHTML=`
-<div class="box"><div class="big">${list.length}</div>Matches</div>
-<div class="box"><div class="big">${runs}</div>Runs</div>
-<div class="box"><div class="big">${wkts}</div>Wickets</div>
-`;
-
-}
+/* TABLE unchanged except zebra handled by CSS */
 
 function renderTable(list){
 
-const tbody=document.getElementById("tbody");
-const thead=document.getElementById("tableHead");
-
 tbody.innerHTML="";
 
-if(currentTab==="bat"){
+tableHead.innerHTML=currentTab==="bat"
 
-thead.innerHTML=`
-<tr>
-<th>Season</th>
-<th>Date</th>
-<th>Opponent</th>
-<th>Venue</th>
-<th>Runs</th>
-<th>Balls</th>
-<th>SR</th>
-</tr>`;
+?`<tr><th>Season</th><th>Date</th><th>Opponent</th><th>Venue</th><th>Runs</th><th>Balls</th><th>SR</th></tr>`
 
-}else{
-
-thead.innerHTML=`
-<tr>
-<th>Season</th>
-<th>Date</th>
-<th>Opponent</th>
-<th>Venue</th>
-<th>Wkts</th>
-<th>Overs</th>
-<th>Eco</th>
-</tr>`;
-
-}
+:`<tr><th>Season</th><th>Date</th><th>Opponent</th><th>Venue</th><th>Wkts</th><th>Overs</th><th>Eco</th></tr>`;
 
 list.forEach(m=>{
 
 const tr=document.createElement("tr");
 
-tr.onclick=()=>{
-window.location.href=
-"/t20-world-cup-match.html?file="+m.file+"&match="+m.index;
-};
+tr.onclick=()=>window.location.href="/t20-world-cup-match.html?file="+m.file+"&match="+m.index;
 
-if(currentTab==="bat"){
+tr.innerHTML=currentTab==="bat"
 
-tr.innerHTML=`
-<td>${m.season}</td>
-<td>${new Date(m.date).toLocaleDateString()}</td>
-<td>${m.opponent}</td>
-<td>${m.venue}</td>
-<td>${m.runs}</td>
-<td>${m.balls}</td>
-<td>${((m.runs/m.balls)*100||0).toFixed(1)}</td>
-`;
+?`<td>${m.season}</td><td>${new Date(m.date).toLocaleDateString()}</td><td>${m.opponent}</td><td>${m.venue}</td><td>${m.runs}</td><td>${m.balls}</td><td>${((m.runs/m.balls)*100||0).toFixed(1)}</td>`
 
-}else{
-
-tr.innerHTML=`
-<td>${m.season}</td>
-<td>${new Date(m.date).toLocaleDateString()}</td>
-<td>${m.opponent}</td>
-<td>${m.venue}</td>
-<td>${m.wkts}</td>
-<td>${(m.bowlBalls/6).toFixed(1)}</td>
-<td>${(m.bowlRuns/(m.bowlBalls/6)||0).toFixed(2)}</td>
-`;
-
-}
+:`<td>${m.season}</td><td>${new Date(m.date).toLocaleDateString()}</td><td>${m.opponent}</td><td>${m.venue}</td><td>${m.wkts}</td><td>${(m.bowlBalls/6).toFixed(1)}</td><td>${(m.bowlRuns/(m.bowlBalls/6)||0).toFixed(2)}</td>`;
 
 tbody.appendChild(tr);
 
