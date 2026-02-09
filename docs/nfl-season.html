@@ -1,111 +1,205 @@
-import json
-import os
-import time
-import requests
-import pandas as pd
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NFL Season | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-# Adjust if your NFL JSON folder is different
-NFL_FOLDER = "docs/data/nfl"
-SEASON_FILE = os.path.join(NFL_FOLDER, "nfl_2025.json")
+<style>
 
-# Super Bowl LX (for 2025 season) boxscore
-SB_URL = "https://www.pro-football-reference.com/boxscores/202602080nwe.htm"
-SB_GAME_ID = "202602080nwe"  # matches PFR slug (date + home team)
+body{
+font-family:Inter,system-ui,Arial;
+margin:0;
+background:#f3f4f7;
+}
 
+.navbar{
+display:flex;
+justify-content:center;
+gap:24px;
+padding:16px;
+background:white;
+border-bottom:1px solid #ddd;
+}
 
-def fetch_linescore(url: str):
-    """
-    Pull the linescore (quarter by quarter + final) from PFR using pandas.
-    Returns a list of two dicts matching your JSON style keys:
-      "Unnamed: 0", "Unnamed: 1", "1","2","3","4","Final"
-    """
-    html = requests.get(url, timeout=20).text
+.navbar a{
+text-decoration:none;
+color:#013369;
+font-weight:600;
+}
 
-    # PFR linescore table is consistently parseable via read_html
-    tables = pd.read_html(html)
+.hero{
+background:linear-gradient(90deg,#013369,#d50a0a);
+color:white;
+padding:30px;
+text-align:center;
+font-size:28px;
+font-weight:700;
+}
 
-    # Find the linescore table by column names
-    linescore_df = None
-    for df in tables:
-        cols = [str(c) for c in df.columns]
-        if "Final" in cols and any(c in cols for c in ["1", "Q1"]):
-            # Prefer the one that has quarter columns 1-4 and Final and a Team column
-            if "1" in cols and "2" in cols and "3" in cols and "4" in cols and "Final" in cols:
-                linescore_df = df
-                break
+.container{
+max-width:1000px;
+margin:30px auto;
+background:white;
+padding:20px;
+border-radius:12px;
+}
 
-    if linescore_df is None:
-        raise RuntimeError("Could not find linescore table on PFR page.")
+table{
+width:100%;
+border-collapse:collapse;
+}
 
-    # Determine team name column (PFR uses "Team" in many tables)
-    team_col = None
-    for c in linescore_df.columns:
-        if str(c).lower() in ["team", "tm"]:
-            team_col = c
-            break
-    if team_col is None:
-        # fallback: first column often is team
-        team_col = linescore_df.columns[0]
+th,td{
+padding:12px;
+border-bottom:1px solid #eee;
+}
 
-    # Normalize to exactly two rows
-    linescore_df = linescore_df.iloc[0:2].copy()
+tr:hover{
+background:#f1f5f9;
+cursor:pointer;
+}
 
-    # Build in your schema
-    rows = []
-    for _, r in linescore_df.iterrows():
-        team_name = str(r[team_col]).strip()
-        row = {
-            "Unnamed: 0": "",
-            "Unnamed: 1": team_name,
-            "1": int(r["1"]) if pd.notna(r["1"]) else 0,
-            "2": int(r["2"]) if pd.notna(r["2"]) else 0,
-            "3": int(r["3"]) if pd.notna(r["3"]) else 0,
-            "4": int(r["4"]) if pd.notna(r["4"]) else 0,
-            "Final": int(r["Final"]) if pd.notna(r["Final"]) else 0
-        }
-        rows.append(row)
+.playoff{
+color:#d50a0a;
+font-weight:700;
+}
 
-    return rows
+</style>
+</head>
+<body>
 
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="nfl.html">NFL</a>
+</div>
 
-def patch_season():
-    if not os.path.exists(SEASON_FILE):
-        raise FileNotFoundError(f"Season file not found: {SEASON_FILE}")
+<div class="hero" id="title">NFL Season</div>
 
-    with open(SEASON_FILE, "r", encoding="utf-8") as f:
-        data = json.load(f)
+<div class="container">
 
-    if "games" not in data or not isinstance(data["games"], list):
-        raise RuntimeError("Season JSON does not have a 'games' list.")
+<table id="games">
 
-    # Check if SB already exists
-    for g in data["games"]:
-        if g.get("game_id") == SB_GAME_ID or (g.get("url") == SB_URL):
-            print("Super Bowl already present in nfl_2025.json — no changes made.")
-            return
+<thead>
+<tr>
+<th>Date</th>
+<th>Winner</th>
+<th></th>
+<th>Loser</th>
+<th>Round</th>
+</tr>
+</thead>
 
-    print("Fetching Super Bowl linescore from PFR...")
-    score_rows = fetch_linescore(SB_URL)
+<tbody>
+<tr><td colspan="5">Loading season...</td></tr>
+</tbody>
 
-    new_game = {
-        "game_id": SB_GAME_ID,
-        "url": SB_URL,
-        "score": score_rows
-        # We are intentionally NOT adding team_stats etc here.
-        # Your season page only needs score to display.
-        # If you later want full play-by-play tables, we can extend this.
-    }
+</table>
 
-    data["games"].append(new_game)
+</div>
 
-    # Keep file tidy: sort by game_id
-    data["games"].sort(key=lambda x: str(x.get("game_id", "")))
+<script>
 
-    with open(SEASON_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+const params=new URLSearchParams(location.search);
 
-    print("Done. Super Bowl appended to:", SEASON_FILE)
+const year=parseInt(params.get("year"));
 
+document.getElementById("title").innerHTML="NFL "+year;
 
-if __name__ == "__main__":
-    patch_season()
+function playoffStructure(year){
+
+if(year<=1977)return{wild:0,div:4,conf:2,sb:1};
+if(year<=1989)return{wild:4,div:4,conf:2,sb:1};
+if(year<=2001)return{wild:6,div:4,conf:2,sb:1};
+if(year<=2019)return{wild:4,div:4,conf:2,sb:1};
+return{wild:6,div:4,conf:2,sb:1};
+
+}
+
+fetch("data/nfl/nfl_"+year+".json")
+
+.then(r=>r.json())
+
+.then(data=>{
+
+const games=data.games.filter(g=>
+g&&g.game_id&&g.score&&g.score.length>=2
+);
+
+games.sort((a,b)=>a.game_id.localeCompare(b.game_id));
+
+const structure=playoffStructure(year);
+
+const roundMap={};
+
+let i=games.length-1;
+
+roundMap[games[i--].game_id]="Super Bowl";
+
+for(let x=0;x<structure.conf;x++)
+roundMap[games[i--].game_id]="Conference Championship";
+
+for(let x=0;x<structure.div;x++)
+roundMap[games[i--].game_id]="Divisional";
+
+for(let x=0;x<structure.wild;x++)
+roundMap[games[i--].game_id]="Wild Card";
+
+const tbody=document.querySelector("#games tbody");
+
+tbody.innerHTML="";
+
+games.forEach(g=>{
+
+const date=g.game_id.substring(0,8);
+
+const team1=g.score[0]["Unnamed: 1"];
+const team2=g.score[1]["Unnamed: 1"];
+
+const s1=parseInt(g.score[0]["Final"]);
+const s2=parseInt(g.score[1]["Final"]);
+
+let winner,loser,ws,ls;
+
+if(s1>s2){
+
+winner=team1;
+loser=team2;
+ws=s1;
+ls=s2;
+
+}else{
+
+winner=team2;
+loser=team1;
+ws=s2;
+ls=s1;
+
+}
+
+const round=roundMap[g.game_id]||"Regular Season";
+
+const tr=document.createElement("tr");
+
+tr.innerHTML=`
+<td>${date.substring(6,8)}/${date.substring(4,6)}/${date.substring(0,4)}</td>
+<td>${winner} ${ws}</td>
+<td>def</td>
+<td>${loser} ${ls}</td>
+<td class="${round!=="Regular Season"?"playoff":""}">${round}</td>
+`;
+
+tr.onclick=()=>{
+location.href="nfl-game.html?year="+year+"&id="+g.game_id;
+};
+
+tbody.appendChild(tr);
+
+});
+
+});
+
+</script>
+
+</body>
+</html>
