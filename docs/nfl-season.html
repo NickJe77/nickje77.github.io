@@ -50,13 +50,35 @@ table{
 }
 
 th, td{
-  padding:10px;
+  padding:12px 10px;
   border-bottom:1px solid #eee;
 }
 
-.playoff{
-  color:#d50a0a;
+th{
+  background:#f8fafc;
+  text-align:left;
+}
+
+td:nth-child(2), td:nth-child(3), td:nth-child(4){
+  text-align:left;
+}
+
+td:nth-child(1), td:nth-child(5){
+  text-align:left;
+  white-space:nowrap;
+}
+
+tr:hover{
+  background:#f1f5f9;
+  cursor:pointer;
+}
+
+.round{
   font-weight:700;
+}
+
+.round.playoff{
+  color:#d50a0a;
 }
 </style>
 </head>
@@ -64,186 +86,221 @@ th, td{
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="nfl.html">NFL</a>
+  <a href="index.html">Home</a>
+  <a href="nfl.html">NFL</a>
 </div>
 
 <div class="hero" id="title">NFL Season</div>
 
 <div class="container">
-
-<table id="games">
-<thead>
-<tr>
-<th>Date</th>
-<th>Winner</th>
-<th></th>
-<th>Loser</th>
-<th>Round</th>
-</tr>
-</thead>
-
-<tbody>
-<tr><td colspan="5">Loading season...</td></tr>
-</tbody>
-</table>
-
+  <table id="games">
+    <thead>
+      <tr>
+        <th style="width:140px;">Date</th>
+        <th>Winner</th>
+        <th style="width:60px;">&nbsp;</th>
+        <th>Loser</th>
+        <th style="width:220px;">Round</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td colspan="5">Loading season...</td></tr>
+    </tbody>
+  </table>
 </div>
 
 <script>
-
 const params = new URLSearchParams(window.location.search);
-const year = parseInt(params.get("year"));
+const yearParam = params.get("year");
+const year = yearParam ? parseInt(yearParam, 10) : null;
 
+const title = document.getElementById("title");
 const tbody = document.querySelector("#games tbody");
 
+function isValidGame(game){
+  if(!game || typeof game !== "object") return false;
+  if(!game.game_id || typeof game.game_id !== "string") return false;
+  if(!/^\d{8}/.test(game.game_id)) return false; // must start yyyymmdd
+  if(!Array.isArray(game.score) || game.score.length < 2) return false;
+
+  const t1 = game.score[0] && game.score[0]["Unnamed: 1"];
+  const t2 = game.score[1] && game.score[1]["Unnamed: 1"];
+  const s1 = game.score[0] && game.score[0]["Final"];
+  const s2 = game.score[1] && game.score[1]["Final"];
+
+  if(!t1 || !t2) return false;
+  if(Number.isNaN(Number(s1)) || Number.isNaN(Number(s2))) return false;
+
+  return true;
+}
+
+function ymdToDateObj(ymd){
+  const y = parseInt(ymd.slice(0,4),10);
+  const m = parseInt(ymd.slice(4,6),10);
+  const d = parseInt(ymd.slice(6,8),10);
+  return new Date(y, m-1, d);
+}
+
+function dayDiff(aYmd, bYmd){
+  const a = ymdToDateObj(aYmd);
+  const b = ymdToDateObj(bYmd);
+  const ms = 24*60*60*1000;
+  return Math.round((b - a) / ms);
+}
+
+function formatDMY(ymd){
+  return ymd.slice(6,8) + "/" + ymd.slice(4,6) + "/" + ymd.slice(0,4);
+}
+
+function labelRoundByClusterTotal(totalGames){
+  // Most common totals:
+  // 1 = Super Bowl
+  // 2 = Conference Championship
+  // 4 = Divisional
+  // 6 = Wild Card (classic)
+  // 8 = Wild Card (newer)
+  if(totalGames === 1) return "Super Bowl";
+  if(totalGames === 2) return "Conference Championship";
+  if(totalGames === 4) return "Divisional";
+  if(totalGames === 6) return "Wild Card";
+  if(totalGames === 8) return "Wild Card";
+  // fallback
+  return "Playoffs";
+}
+
 async function loadSeason(){
+  try{
+    if(!year){
+      title.innerHTML = "NFL Season";
+      tbody.innerHTML = "<tr><td colspan='5'>No season selected</td></tr>";
+      return;
+    }
 
-document.getElementById("title").innerHTML="NFL "+year;
+    title.innerHTML = "NFL " + year;
 
-const res = await fetch("data/nfl/nfl_"+year+".json");
-const data = await res.json();
+    const filePath = "data/nfl/nfl_" + year + ".json";
+    const res = await fetch(filePath);
 
-tbody.innerHTML="";
+    if(!res.ok){
+      tbody.innerHTML = "<tr><td colspan='5'>Season file not found: " + filePath + "</td></tr>";
+      return;
+    }
 
+    const data = await res.json();
+    const games = (data.games || []).filter(isValidGame);
 
-// count games per date
+    if(games.length === 0){
+      tbody.innerHTML = "<tr><td colspan='5'>No usable games found</td></tr>";
+      return;
+    }
 
-const dateCounts = {};
+    // Build dateCounts from valid games only
+    const dateCounts = {};
+    for(const g of games){
+      const ymd = g.game_id.substring(0,8);
+      dateCounts[ymd] = (dateCounts[ymd] || 0) + 1;
+    }
 
-data.games.forEach(game=>{
+    const dates = Object.keys(dateCounts).sort();
 
-const date = game.game_id.substring(0,8);
+    // Find last date with maximum games (i.e. last full slate)
+    let maxGames = 0;
+    for(const d of dates) maxGames = Math.max(maxGames, dateCounts[d]);
 
-dateCounts[date] = (dateCounts[date] || 0) + 1;
+    let lastFullSlateIndex = -1;
+    for(let i=dates.length-1; i>=0; i--){
+      if(dateCounts[dates[i]] === maxGames){
+        lastFullSlateIndex = i;
+        break;
+      }
+    }
 
-});
+    // playoffStart = next date after the last full-slate date
+    const playoffStart = (lastFullSlateIndex >= 0 && lastFullSlateIndex+1 < dates.length)
+      ? dates[lastFullSlateIndex+1]
+      : null;
 
+    // Collect playoff dates (end block)
+    const playoffDates = playoffStart ? dates.filter(d => d >= playoffStart) : [];
 
-// sort dates
+    // Cluster playoff dates into rounds.
+    // If gap >= 6 days, it's a new round. (NFL rounds are usually 7 days apart.)
+    const clusters = [];
+    if(playoffDates.length){
+      let current = [playoffDates[0]];
+      for(let i=1; i<playoffDates.length; i++){
+        const prev = playoffDates[i-1];
+        const cur = playoffDates[i];
+        const gap = dayDiff(prev, cur);
 
-const dates = Object.keys(dateCounts).sort();
+        if(gap >= 6){
+          clusters.push(current);
+          current = [cur];
+        }else{
+          current.push(cur);
+        }
+      }
+      clusters.push(current);
+    }
 
+    // Map date -> round label using cluster totals
+    const roundByDate = {};
+    for(const cluster of clusters){
+      let total = 0;
+      for(const d of cluster) total += dateCounts[d] || 0;
+      const label = labelRoundByClusterTotal(total);
+      for(const d of cluster) roundByDate[d] = label;
+    }
 
-// determine playoff dates (last continuous block)
+    // Render table
+    tbody.innerHTML = "";
 
-const playoffDates = [];
+    // Keep original order (as stored) but you can sort by date if you want
+    // We'll sort by date to look clean.
+    games.sort((a,b) => a.game_id.localeCompare(b.game_id));
 
-let foundPlayoffs = false;
+    for(const game of games){
+      const ymd = game.game_id.substring(0,8);
 
-for(let i = dates.length-1; i >= 0; i--){
+      const team1 = game.score[0]["Unnamed: 1"];
+      const team2 = game.score[1]["Unnamed: 1"];
 
-const current = dateCounts[dates[i]];
-const previous = dateCounts[dates[i-1]] || 999;
+      const score1 = Number(game.score[0]["Final"]);
+      const score2 = Number(game.score[1]["Final"]);
 
-if(!foundPlayoffs){
+      let winner, loser, wScore, lScore;
+      if(score1 > score2){
+        winner = team1; loser = team2; wScore = score1; lScore = score2;
+      }else{
+        winner = team2; loser = team1; wScore = score2; lScore = score1;
+      }
 
-playoffDates.unshift(dates[i]);
-foundPlayoffs = true;
+      const round = roundByDate[ymd] || "Regular Season";
+      const isPlayoff = round !== "Regular Season";
 
-}else{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${formatDMY(ymd)}</td>
+        <td>${winner} ${wScore}</td>
+        <td>def</td>
+        <td>${loser} ${lScore}</td>
+        <td class="round ${isPlayoff ? "playoff" : ""}">${round}</td>
+      `;
 
-// regular season has significantly more games
-if(previous > current){
+      tr.onclick = () => {
+        location.href = "nfl-game.html?year=" + year + "&id=" + encodeURIComponent(game.game_id);
+      };
 
-break;
+      tbody.appendChild(tr);
+    }
 
-}
-
-playoffDates.unshift(dates[i]);
-
-}
-
-}
-
-
-// assign playoff rounds
-
-const playoffRounds = {};
-
-playoffDates.forEach(date=>{
-
-const count = dateCounts[date];
-
-if(count === 1)
-playoffRounds[date] = "Super Bowl";
-
-else if(count === 2)
-playoffRounds[date] = "Conference Championship";
-
-else if(count === 4)
-playoffRounds[date] = "Divisional";
-
-else if(count === 6)
-playoffRounds[date] = "Wild Card";
-
-else
-playoffRounds[date] = "Playoffs";
-
-});
-
-
-// render games
-
-data.games.forEach(game=>{
-
-if(!game.score || game.score.length < 2) return;
-
-const team1 = game.score[0]["Unnamed: 1"];
-const team2 = game.score[1]["Unnamed: 1"];
-
-const score1 = Number(game.score[0]["Final"]);
-const score2 = Number(game.score[1]["Final"]);
-
-let winner, loser, winnerScore, loserScore;
-
-if(score1 > score2){
-
-winner = team1;
-loser = team2;
-winnerScore = score1;
-loserScore = score2;
-
-}else{
-
-winner = team2;
-loser = team1;
-winnerScore = score2;
-loserScore = score1;
-
-}
-
-const rawDate = game.game_id.substring(0,8);
-
-const displayDate =
-rawDate.substring(6,8)+"/"+
-rawDate.substring(4,6)+"/"+
-rawDate.substring(0,4);
-
-const round = playoffRounds[rawDate] || "Regular Season";
-
-const tr=document.createElement("tr");
-
-tr.innerHTML=`
-<td>${displayDate}</td>
-<td>${winner} ${winnerScore}</td>
-<td>def</td>
-<td>${loser} ${loserScore}</td>
-<td class="${round!=='Regular Season'?'playoff':''}">${round}</td>
-`;
-
-tr.onclick=()=>{
-location.href="nfl-game.html?year="+year+"&id="+game.game_id;
-};
-
-tbody.appendChild(tr);
-
-});
-
+  }catch(err){
+    console.error(err);
+    tbody.innerHTML = "<tr><td colspan='5'>Error loading season</td></tr>";
+  }
 }
 
 loadSeason();
-
 </script>
 
 </body>
