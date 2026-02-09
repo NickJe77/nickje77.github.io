@@ -53,7 +53,7 @@ text-align:center;
 
 .hero-left h1{
 margin:0;
-font-size:42px;
+font-size:44px;
 }
 
 .flag{
@@ -106,7 +106,6 @@ display:grid;
 grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
 gap:16px;
 padding:0 20px;
-margin-top:14px;
 }
 
 .box{
@@ -149,15 +148,12 @@ color:#666;
 </head>
 <body>
 
-
 <div class="navbar">
-
 <a href="index.html">Home</a>
 <a href="t20-world-cup.html">T20 World Cup</a>
 <a href="t20wc-matches.html">Matches</a>
 <a href="t20-world-cup-player.html">Players</a>
 <a href="t20wc-teams.html">Teams</a>
-
 </div>
 
 
@@ -189,7 +185,6 @@ color:#666;
 <table>
 
 <thead>
-
 <tr>
 <th>Season</th>
 <th>Date</th>
@@ -199,17 +194,14 @@ color:#666;
 <th>Balls</th>
 <th>Strike Rate</th>
 </tr>
-
 </thead>
 
 <tbody id="tbody">
-
 <tr>
 <td colspan="7" class="center">
 Search and select a player
 </td>
 </tr>
-
 </tbody>
 
 </table>
@@ -218,39 +210,43 @@ Search and select a player
 <script>
 
 const INDEX="data/t20-world-cup/matches/index.json";
-const PLAYER_NAMES="data/t20-world-cup/players-name.json";
 const FOLDER="data/t20-world-cup/matches/";
 
-let playerMap={};
-let playerKeys=[];
+let players=new Set();
 let matches=[];
 let country="";
 
+const input=document.getElementById("playerSearch");
+const results=document.getElementById("searchResults");
+const playerName=document.getElementById("playerName");
+const flag=document.getElementById("flag");
+const tbody=document.getElementById("tbody");
+const careerSummary=document.getElementById("careerSummary");
 
-window.addEventListener("DOMContentLoaded",()=>{
+/* BUILD SEARCH FROM MATCH FILES — THIS IS THE ORIGINAL WORKING METHOD */
 
-loadSearch();
+buildSearch();
 
-const param=new URLSearchParams(location.search).get("player");
+async function buildSearch(){
 
-if(param)
-loadPlayer(decodeURIComponent(param));
+const files=await fetch(INDEX).then(r=>r.json());
+
+for(const file of files){
+
+const season=await fetch(FOLDER+file).then(r=>r.json());
+
+season.forEach(match=>{
+
+Object.values(match.info.players || {})
+.forEach(list=>{
+list.forEach(name=>players.add(name));
+});
 
 });
 
+}
 
-/* LOAD SEARCH */
-
-async function loadSearch(){
-
-const data=await fetch(PLAYER_NAMES).then(r=>r.json());
-
-playerMap=data;
-
-playerKeys=Object.keys(data).sort();
-
-const input=document.getElementById("playerSearch");
-const results=document.getElementById("searchResults");
+const arr=[...players].sort();
 
 input.oninput=function(){
 
@@ -263,17 +259,16 @@ return;
 
 results.innerHTML="";
 
-playerKeys
-.filter(raw=>raw.toLowerCase().includes(q) || playerMap[raw].toLowerCase().includes(q))
+arr.filter(name=>name.toLowerCase().includes(q))
 .slice(0,30)
-.forEach(raw=>{
+.forEach(name=>{
 
 const div=document.createElement("div");
 
-div.innerText=playerMap[raw];
+div.textContent=name;
 
 div.onclick=()=>{
-location.href=`t20-world-cup-player.html?player=${encodeURIComponent(raw)}`;
+location.href=`t20-world-cup-player.html?player=${encodeURIComponent(name)}`;
 };
 
 results.appendChild(div);
@@ -287,11 +282,17 @@ results.style.display="block";
 }
 
 
-/* LOAD PLAYER */
+/* LOAD PLAYER IF PARAM EXISTS */
+
+const param=new URLSearchParams(location.search).get("player");
+
+if(param)
+loadPlayer(decodeURIComponent(param));
+
 
 async function loadPlayer(player){
 
-playerName.innerText=playerMap[player] || player;
+playerName.innerText=player;
 
 matches=[];
 
@@ -361,8 +362,6 @@ renderTable();
 }
 
 
-/* SUMMARY */
-
 function renderSummary(){
 
 let runs=0,balls=0;
@@ -373,19 +372,13 @@ balls+=m.balls;
 });
 
 careerSummary.innerHTML=`
-
 <div class="box"><div class="big">${matches.length}</div>Matches</div>
-
 <div class="box"><div class="big">${runs}</div>Runs</div>
-
 <div class="box"><div class="big">${balls?((runs/balls)*100).toFixed(1):"-"}</div>Strike Rate</div>
-
 `;
 
 }
 
-
-/* TABLE */
 
 function renderTable(){
 
@@ -416,8 +409,6 @@ tbody.appendChild(tr);
 }
 
 
-/* COUNTRY CODE */
-
 function code(name){
 
 const map={
@@ -425,19 +416,4 @@ India:"in",
 Australia:"au",
 England:"gb",
 Pakistan:"pk",
-South Africa:"za",
-New Zealand:"nz",
-Sri Lanka:"lk",
-West Indies:"jm",
-Afghanistan:"af",
-Bangladesh:"bd"
-};
-
-return map[name]||"un";
-
-}
-
-</script>
-
-</body>
-</html>
+South Afr
