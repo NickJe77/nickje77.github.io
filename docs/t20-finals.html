@@ -8,100 +8,106 @@
 <style>
 
 body{
-font-family:Inter,system-ui,Arial,sans-serif;
-margin:0;
-background:#f3f4f7;
+  font-family:Inter,system-ui,Arial,sans-serif;
+  margin:0;
+  background:#f3f4f7;
 }
 
 .navbar{
-display:flex;
-justify-content:center;
-gap:28px;
-padding:18px;
-background:#ffffff;
-border-bottom:1px solid #ddd;
-font-weight:600;
+  display:flex;
+  justify-content:center;
+  gap:28px;
+  padding:18px;
+  background:#ffffff;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
 }
 
 .navbar a{
-color:#0056d6;
-text-decoration:none;
-font-size:18px;
+  color:#0056d6;
+  text-decoration:none;
+  font-size:18px;
 }
 
 .hero{
-width:90%;
-margin:30px auto;
-height:260px;
-border-radius:20px;
-overflow:hidden;
-position:relative;
+  width:90%;
+  margin:30px auto;
+  height:260px;
+  border-radius:20px;
+  overflow:hidden;
+  position:relative;
 }
 
 .hero img{
-width:100%;
-height:100%;
-object-fit:cover;
+  width:100%;
+  height:100%;
+  object-fit:cover;
 }
 
 .hero-overlay{
-position:absolute;
-inset:0;
-background:linear-gradient(90deg, rgba(106,4,15,0.85), rgba(208,0,0,0.75));
+  position:absolute;
+  inset:0;
+  background:linear-gradient(90deg, rgba(106,4,15,0.85), rgba(208,0,0,0.75));
 }
 
 .hero-text{
-position:absolute;
-bottom:30px;
-left:40px;
-color:white;
+  position:absolute;
+  bottom:30px;
+  left:40px;
+  color:white;
 }
 
 .hero-text h1{
-margin:0;
-font-size:44px;
+  margin:0;
+  font-size:44px;
 }
 
 .container{
-width:90%;
-margin:30px auto;
+  width:90%;
+  margin:30px auto;
 }
 
 .table-wrap{
-background:white;
-border-radius:16px;
-overflow:hidden;
-box-shadow:0 2px 8px rgba(0,0,0,0.08);
+  background:white;
+  border-radius:16px;
+  overflow:hidden;
+  box-shadow:0 2px 8px rgba(0,0,0,0.08);
 }
 
 table{
-width:100%;
-border-collapse:collapse;
+  width:100%;
+  border-collapse:collapse;
 }
 
 th{
-background:linear-gradient(90deg,#6a040f,#d00000);
-color:white;
-padding:14px;
-text-align:left;
+  background:linear-gradient(90deg,#6a040f,#d00000);
+  color:white;
+  padding:14px;
+  text-align:left;
 }
 
 td{
-padding:14px;
-border-bottom:1px solid #eee;
+  padding:14px;
+  border-bottom:1px solid #eee;
 }
 
 .team{
-display:flex;
-align-items:center;
-gap:10px;
+  display:flex;
+  align-items:center;
+  gap:10px;
 }
 
 .flag{
-width:26px;
-height:18px;
-border:1px solid #ccc;
-border-radius:3px;
+  width:26px;
+  height:18px;
+  border:1px solid #ccc;
+  border-radius:3px;
+}
+
+.loading{
+  padding:30px;
+  text-align:center;
+  font-size:18px;
 }
 
 </style>
@@ -141,7 +147,13 @@ border-radius:3px;
 </tr>
 </thead>
 
-<tbody id="body"></tbody>
+<tbody id="body">
+
+<tr>
+<td colspan="7" class="loading">Loading finals...</td>
+</tr>
+
+</tbody>
 
 </table>
 
@@ -152,31 +164,17 @@ border-radius:3px;
 
 <script>
 
-
-/* EXACT FINAL DATES */
-
-const FINALS = {
-
-2007:"2007-09-24",
-2009:"2009-06-21",
-2010:"2010-05-16",
-2012:"2012-10-07",
-2014:"2014-04-06",
-2016:"2016-04-03",
-2021:"2021-11-14",
-2022:"2022-11-13",
-2024:"2024-06-29",
-2026:"2026-??-??"
-
-};
-
+const YEARS =
+[2007,2009,2010,2012,2014,2016,2021,2022,2024];
 
 const FOLDER =
 "data/t20-world-cup/matches/";
 
 
 function flag(team){
+
 return "images/flags/" + team + ".png";
+
 }
 
 
@@ -193,64 +191,84 @@ return inn[name].runs+"-"+inn[name].wickets;
 }
 
 return "";
+
 }
 
 
 async function load(){
 
-const body =
-document.getElementById("body");
+const finals=[];
 
 
-for(const year in FINALS){
+for(const year of YEARS){
 
-const date =
-FINALS[year];
-
-const file =
-`t20wc_${year}_FULL.json`;
-
-const res =
-await fetch(FOLDER+file);
-
-const data =
-await res.json();
-
-const matches =
-data.matches;
-
-
-const final =
-matches.find(m=>
-m.info.dates[0]===date
+const res=
+await fetch(
+`${FOLDER}t20wc_${year}_FULL.json`
 );
 
-if(!final) continue;
+const matches=
+await res.json();
 
 
-const winner =
-final.info.outcome.winner;
+/* FINAL = MATCH WITH LATEST DATE */
 
-const runner =
-final.info.teams.find(t=>t!==winner);
+matches.sort((a,b)=>
 
+new Date(b.info.dates[0]) -
+new Date(a.info.dates[0])
+
+);
+
+const final=matches[0];
+
+finals.push(final);
+
+}
+
+
+render(finals);
+
+}
+
+
+function render(finals){
+
+const body=
+document.getElementById("body");
+
+body.innerHTML="";
+
+
+for(const match of finals){
+
+const info=match.info;
+
+const year=
+new Date(info.dates[0]).getFullYear();
+
+const winner=
+info.outcome.winner;
+
+const runner=
+info.teams.find(t=>t!==winner);
 
 let margin="";
 
-if(final.info.outcome.by.runs)
+if(info.outcome.by.runs)
 margin=
-final.info.outcome.by.runs+" runs";
+info.outcome.by.runs+" runs";
 
-else if(final.info.outcome.by.wickets)
+else if(info.outcome.by.wickets)
 margin=
-final.info.outcome.by.wickets+" wickets";
+info.outcome.by.wickets+" wickets";
 
 
-const row=
+const tr=
 document.createElement("tr");
 
 
-row.innerHTML=`
+tr.innerHTML=`
 
 <td>${year}</td>
 
@@ -261,7 +279,7 @@ row.innerHTML=`
 </div>
 </td>
 
-<td>${score(final,winner)}</td>
+<td>${score(match,winner)}</td>
 
 <td>
 <div class="team">
@@ -270,15 +288,15 @@ ${runner}
 </div>
 </td>
 
-<td>${score(final,runner)}</td>
+<td>${score(match,runner)}</td>
 
 <td>${margin}</td>
 
-<td>${final.info.venue}</td>
+<td>${info.venue}</td>
 
 `;
 
-body.appendChild(row);
+body.appendChild(tr);
 
 }
 
