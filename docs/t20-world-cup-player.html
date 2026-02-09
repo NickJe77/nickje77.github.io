@@ -11,6 +11,7 @@ body{
 font-family:Inter,system-ui,Arial;
 margin:0;
 background:#f3f4f7;
+color:#111;
 }
 
 .navbar{
@@ -66,12 +67,15 @@ padding:12px;
 font-size:16px;
 border-radius:10px;
 border:none;
+color:#000;             /* FIX TEXT VISIBILITY */
+background:white;       /* FIX BACKGROUND */
 }
 
 .search-results{
 position:absolute;
 top:48px;
 background:white;
+color:black;
 width:100%;
 border-radius:10px;
 box-shadow:0 4px 12px rgba(0,0,0,.2);
@@ -84,6 +88,7 @@ z-index:999;
 .search-results div{
 padding:10px;
 cursor:pointer;
+color:#000;            /* FIX TEXT VISIBILITY */
 }
 
 .search-results div:hover{
@@ -143,23 +148,33 @@ color:#666;
 <a href="/t20wc-teams.html">Teams</a>
 </div>
 
+
 <div class="hero">
 
 <div class="hero-left">
+
 <h1 id="playerName">Select Player</h1>
+
 <img id="flag" class="flag">
+
 </div>
 
 <div class="hero-search">
+
 <input id="playerSearch" placeholder="Search player...">
+
 <div id="searchResults" class="search-results"></div>
+
 </div>
 
 </div>
+
 
 <div id="careerSummary" class="summary"></div>
 
+
 <table>
+
 <thead>
 <tr>
 <th>Season</th>
@@ -171,12 +186,15 @@ color:#666;
 <th>Strike Rate</th>
 </tr>
 </thead>
+
 <tbody id="tbody">
 <tr>
 <td colspan="7" class="center">Search player above</td>
 </tr>
 </tbody>
+
 </table>
+
 
 <script>
 
@@ -185,10 +203,17 @@ const FOLDER="/data/t20-world-cup/matches/";
 
 const input=document.getElementById("playerSearch");
 const results=document.getElementById("searchResults");
+const playerName=document.getElementById("playerName");
+const tbody=document.getElementById("tbody");
+const careerSummary=document.getElementById("careerSummary");
+const flag=document.getElementById("flag");
 
 let players=[];
 let matches=[];
 let country="";
+
+
+/* BUILD SEARCH */
 
 buildSearch();
 
@@ -249,17 +274,21 @@ results.style.display="block";
 
 }
 
+
+/* LOAD PLAYER */
+
 const param=new URLSearchParams(location.search).get("player");
 
 if(param) loadPlayer(decodeURIComponent(param));
 
+
 async function loadPlayer(player){
 
-document.getElementById("playerName").innerText=player;
+playerName.innerText=player;
+
+matches=[];
 
 const files=await fetch(INDEX).then(r=>r.json());
-
-let resultsArr=[];
 
 for(const file of files){
 
@@ -267,7 +296,9 @@ const season=await fetch(FOLDER+file).then(r=>r.json());
 
 season.forEach((match,index)=>{
 
-let runs=0,balls=0,team="";
+let runs=0;
+let balls=0;
+let team="";
 
 Object.entries(match.info.players || {})
 .forEach(([t,list])=>{
@@ -281,13 +312,26 @@ match.innings.forEach(innRaw=>{
 
 const inn=innRaw.team?innRaw:Object.values(innRaw)[0];
 
-if(inn.deliveries){
-inn.deliveries.forEach(d=>{
+/* SUPPORT CRICSHEET FORMAT */
+
+if(inn.overs){
+
+inn.overs.forEach(over=>{
+
+over.deliveries.forEach(d=>{
+
 if(d.batter===player){
+
 runs+=d.runs.batter;
+
 if(!d.extras?.wides) balls++;
+
 }
+
 });
+
+});
+
 }
 
 });
@@ -296,7 +340,7 @@ if(balls>0){
 
 const opponent=match.info.teams.find(t=>t!==team);
 
-resultsArr.push({
+matches.push({
 season:file.match(/\d{4}/)[0],
 date:match.info.dates[0],
 opponent,
@@ -311,21 +355,48 @@ balls
 
 }
 
-render(resultsArr);
+flag.src=`https://flagcdn.com/w80/${code(country)}.png`;
+
+renderSummary();
+
+renderTable();
 
 }
 
-function render(list){
 
-const tbody=document.getElementById("tbody");
+/* SUMMARY */
+
+function renderSummary(){
+
+let runs=0,balls=0;
+
+matches.forEach(m=>{
+runs+=m.runs;
+balls+=m.balls;
+});
+
+careerSummary.innerHTML=
+`
+<div class="box"><div class="big">${matches.length}</div>Matches</div>
+<div class="box"><div class="big">${runs}</div>Runs</div>
+<div class="box"><div class="big">${balls?((runs/balls)*100).toFixed(1):"-"}</div>Strike Rate</div>
+`;
+
+}
+
+
+/* TABLE */
+
+function renderTable(){
 
 tbody.innerHTML="";
 
-list.forEach(m=>{
+matches.forEach(m=>{
 
 const tr=document.createElement("tr");
 
-tr.innerHTML=`
+tr.innerHTML=
+`
 <td>${m.season}</td>
 <td>${new Date(m.date).toLocaleDateString("en-GB")}</td>
 <td>${m.opponent}</td>
@@ -338,6 +409,28 @@ tr.innerHTML=`
 tbody.appendChild(tr);
 
 });
+
+}
+
+
+/* FLAG */
+
+function code(name){
+
+const map={
+India:"in",
+Australia:"au",
+England:"gb",
+Pakistan:"pk",
+South Africa:"za",
+New Zealand:"nz",
+Sri Lanka:"lk",
+West Indies:"jm",
+Afghanistan:"af",
+Bangladesh:"bd"
+};
+
+return map[name]||"un";
 
 }
 
