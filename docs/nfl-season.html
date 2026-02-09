@@ -122,95 +122,48 @@ g.score[1]["Unnamed: 1"]
 );
 
 
-// count games per date
+// sort games chronologically
 
-const dateCounts = {};
-
-games.forEach(g=>{
-
-const d=g.game_id.substring(0,8);
-
-dateCounts[d]=(dateCounts[d]||0)+1;
-
-});
+games.sort((a,b)=>a.game_id.localeCompare(b.game_id));
 
 
-// last regular season date
+// playoff count by era
 
-const dates=Object.keys(dateCounts).sort();
+let playoffCount = 7;
 
-const maxGames=Math.max(...Object.values(dateCounts));
-
-let lastRegular=null;
-
-dates.forEach(d=>{
-
-if(dateCounts[d]===maxGames)
-lastRegular=d;
-
-});
+if(year >= 1978) playoffCount = 9;
+if(year >= 1990) playoffCount = 11;
+if(year >= 2002) playoffCount = 11;
+if(year >= 2020) playoffCount = 13;
 
 
-// playoff dates
+// assign rounds from end
 
-const playoffDates=dates.filter(d=>d>lastRegular);
+const roundMap = {};
 
+let index = games.length - 1;
 
-// cluster playoff dates
+// Super Bowl
+roundMap[games[index--].game_id.substring(0,8)] = "Super Bowl";
 
-const clusters=[];
-
-let current=[];
-
-playoffDates.forEach(d=>{
-
-if(current.length===0){
-
-current.push(d);
-
-}else{
-
-const prev=current[current.length-1];
-
-const diff=
-(new Date(d.substring(0,4),d.substring(4,6)-1,d.substring(6,8))-
- new Date(prev.substring(0,4),prev.substring(4,6)-1,prev.substring(6,8)))
-/86400000;
-
-if(diff<=7){
-
-current.push(d);
-
-}else{
-
-clusters.push(current);
-current=[d];
-
+// Conference Championship (2)
+for(let i=0;i<2;i++){
+roundMap[games[index--].game_id.substring(0,8)] = "Conference Championship";
 }
 
+// Divisional (4)
+for(let i=0;i<4;i++){
+roundMap[games[index--].game_id.substring(0,8)] = "Divisional";
 }
 
-});
+// Wild Card if applicable
+if(playoffCount > 7){
 
-if(current.length) clusters.push(current);
+let wc = playoffCount - 7;
 
-
-// assign round names properly
-
-const roundMap={};
-
-if(clusters.length===3){
-
-clusters[0].forEach(d=>roundMap[d]="Divisional");
-clusters[1].forEach(d=>roundMap[d]="Conference Championship");
-clusters[2].forEach(d=>roundMap[d]="Super Bowl");
-
-}else if(clusters.length===4){
-
-clusters[0].forEach(d=>roundMap[d]="Wild Card");
-clusters[1].forEach(d=>roundMap[d]="Divisional");
-clusters[2].forEach(d=>roundMap[d]="Conference Championship");
-clusters[3].forEach(d=>roundMap[d]="Super Bowl");
+for(let i=0;i<wc;i++){
+roundMap[games[index--].game_id.substring(0,8)] = "Wild Card";
+}
 
 }
 
@@ -218,8 +171,6 @@ clusters[3].forEach(d=>roundMap[d]="Super Bowl");
 // render
 
 tbody.innerHTML="";
-
-games.sort((a,b)=>a.game_id.localeCompare(b.game_id));
 
 games.forEach(g=>{
 
@@ -231,7 +182,7 @@ const team2=g.score[1]["Unnamed: 1"];
 const s1=Number(g.score[0]["Final"]);
 const s2=Number(g.score[1]["Final"]);
 
-let winner,loser,ws,ls;
+let winner, loser, ws, ls;
 
 if(s1>s2){
 
@@ -249,7 +200,7 @@ ls=s1;
 
 }
 
-const round=roundMap[d]||"Regular Season";
+const round = roundMap[d] || "Regular Season";
 
 const tr=document.createElement("tr");
 
@@ -260,8 +211,6 @@ tr.innerHTML=`
 <td>${loser} ${ls}</td>
 <td class="${round!=="Regular Season"?"playoff":""}">${round}</td>
 `;
-
-// restore clicking
 
 tr.onclick=()=>{
 location.href="nfl-game.html?year="+year+"&id="+g.game_id;
