@@ -1,131 +1,54 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>NFL Season | The Sporting Almanac</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<style>
-
-body{
-  font-family:Inter,system-ui,Arial;
-  margin:0;
-  background:#f3f4f7;
-}
-
-.navbar{
-  display:flex;
-  justify-content:center;
-  gap:24px;
-  padding:16px;
-  background:white;
-  border-bottom:1px solid #ddd;
-}
-
-.navbar a{
-  text-decoration:none;
-  color:#013369;
-  font-weight:600;
-}
-
-.hero{
-  background:linear-gradient(90deg,#013369,#d50a0a);
-  color:white;
-  padding:30px;
-  text-align:center;
-  font-size:28px;
-  font-weight:700;
-}
-
-.container{
-  max-width:1000px;
-  margin:30px auto;
-  background:white;
-  padding:20px;
-  border-radius:12px;
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-}
-
-th, td{
-  padding:10px;
-  border-bottom:1px solid #eee;
-  text-align:left;
-}
-
-th{
-  background:#f8fafc;
-}
-
-tr:hover{
-  background:#f1f5f9;
-  cursor:pointer;
-}
-
-.playoff{
-  color:#d50a0a;
-  font-weight:700;
-}
-
-</style>
-</head>
-<body>
-
-<div class="navbar">
-<a href="index.html">Home</a>
-<a href="nfl.html">NFL</a>
-</div>
-
-<div class="hero" id="title">
-NFL Season
-</div>
-
-<div class="container">
-
-<table id="games">
-
-<thead>
-<tr>
-<th>Date</th>
-<th>Away</th>
-<th></th>
-<th>Home</th>
-<th>Round</th>
-</tr>
-</thead>
-
-<tbody>
-<tr><td colspan="5">Loading season...</td></tr>
-</tbody>
-
-</table>
-
-</div>
-
 <script>
 
-const params = new URLSearchParams(location.search);
+const params = new URLSearchParams(window.location.search);
 const year = params.get("year");
 
-document.getElementById("title").innerHTML = "NFL " + year;
+const title = document.getElementById("title");
+const tbody = document.querySelector("#games tbody");
 
-fetch("data/nfl/nfl_" + year + ".json")
-.then(r=>r.json())
+if(!year){
+
+title.innerHTML = "NFL Season";
+tbody.innerHTML = "<tr><td colspan='5'>No season specified</td></tr>";
+throw new Error("No year parameter");
+
+}
+
+title.innerHTML = "NFL " + year;
+
+const filePath = "data/nfl/nfl_" + year + ".json";
+
+fetch(filePath)
+
+.then(response=>{
+
+if(!response.ok){
+
+throw new Error("File not found: " + filePath);
+
+}
+
+return response.json();
+
+})
+
 .then(data=>{
 
-const tbody = document.querySelector("#games tbody");
+if(!data.games || data.games.length===0){
+
+tbody.innerHTML="<tr><td colspan='5'>No games found</td></tr>";
+return;
+
+}
 
 tbody.innerHTML="";
 
 data.games.forEach(game=>{
 
-let away = "";
-let home = "";
-let awayScore = "";
-let homeScore = "";
+let away="";
+let home="";
+let awayScore="";
+let homeScore="";
 
 if(game.score && game.score.length>=2){
 
@@ -137,11 +60,11 @@ homeScore = game.score[1].Final || "";
 
 }
 
-const tr = document.createElement("tr");
+const round = game.round || "Regular Season";
 
-const round = game.round ? game.round : "Regular Season";
+const tr=document.createElement("tr");
 
-tr.innerHTML = `
+tr.innerHTML=`
 <td>${game.week || ""}</td>
 <td>${away} ${awayScore}</td>
 <td>def</td>
@@ -150,16 +73,30 @@ tr.innerHTML = `
 `;
 
 tr.onclick=()=>{
+
 location.href=`nfl-game.html?year=${year}&id=${game.game_id}`;
+
 };
 
 tbody.appendChild(tr);
 
 });
 
+})
+
+.catch(error=>{
+
+console.error(error);
+
+tbody.innerHTML=`
+<tr>
+<td colspan="5">
+Error loading season<br>
+${filePath}
+</td>
+</tr>
+`;
+
 });
 
 </script>
-
-</body>
-</html>
