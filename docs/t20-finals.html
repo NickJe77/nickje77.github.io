@@ -33,7 +33,7 @@ body{
 }
 
 
-/* HERO — RED THEME */
+/* HERO */
 
 .hero{
   width:90%;
@@ -122,7 +122,7 @@ tr:nth-child(even){
 }
 
 
-/* LINK */
+/* SCORE LINK */
 
 .link{
   color:#d00000;
@@ -149,6 +149,8 @@ tr:nth-child(even){
 <body>
 
 
+<!-- NAVBAR -->
+
 <div class="navbar">
 
 <a href="index.html">Home</a>
@@ -157,6 +159,8 @@ tr:nth-child(even){
 
 </div>
 
+
+<!-- HERO -->
 
 <div class="hero">
 
@@ -171,6 +175,8 @@ tr:nth-child(even){
 </div>
 
 
+<!-- TABLE -->
+
 <div class="container">
 
 <div class="table-wrap">
@@ -178,9 +184,7 @@ tr:nth-child(even){
 <table>
 
 <thead>
-
 <tr>
-
 <th>Year</th>
 <th>Winner</th>
 <th>Score</th>
@@ -189,9 +193,7 @@ tr:nth-child(even){
 <th>Margin</th>
 <th>Venue</th>
 <th>Scorecard</th>
-
 </tr>
-
 </thead>
 
 <tbody id="body">
@@ -213,29 +215,34 @@ Data loading...
 
 <script>
 
-const INDEX =
+const INDEX_PATH =
 "data/t20-world-cup/matches/index.json";
 
-const FOLDER =
+const MATCH_FOLDER =
 "data/t20-world-cup/matches/";
 
 
-function flag(team){
+function getFlag(team){
 
 return "images/flags/" + team + ".png";
 
 }
 
 
-function score(match, team){
+function getScore(match, team){
+
+if(!match.innings) return "";
 
 for(const inn of match.innings){
 
-const t = Object.keys(inn)[0];
+const teamName =
+Object.keys(inn)[0];
 
-if(t === team){
+if(teamName === team){
 
-return inn[t].runs + "-" + inn[t].wickets;
+return inn[teamName].runs +
+"-" +
+inn[teamName].wickets;
 
 }
 
@@ -246,29 +253,35 @@ return "";
 }
 
 
-async function load(){
+async function loadFinals(){
+
+try{
 
 const res =
-await fetch(INDEX);
+await fetch(INDEX_PATH);
 
-const files =
+const index =
 await res.json();
 
 const finals = [];
 
-for(const file of files){
 
-const r =
-await fetch(FOLDER + file);
+for(const item of index){
+
+const file =
+item.file;
+
+const matchRes =
+await fetch(MATCH_FOLDER + file);
 
 const match =
-await r.json();
+await matchRes.json();
 
 
 if(
-match.info.event?.match_number === "Final"
+match.info?.event?.match_number === "Final"
 ||
-match.info.stage === "Final"
+match.info?.stage === "Final"
 ){
 
 finals.push(match);
@@ -278,17 +291,45 @@ finals.push(match);
 }
 
 
-render(finals);
+renderFinals(finals);
+
+}
+catch(error){
+
+document.getElementById("body").innerHTML =
+`<tr>
+<td colspan="8" class="loading">
+Error loading data
+</td>
+</tr>`;
+
+console.error(error);
+
+}
 
 }
 
 
-function render(finals){
+function renderFinals(finals){
 
 const body =
 document.getElementById("body");
 
 body.innerHTML = "";
+
+
+if(finals.length === 0){
+
+body.innerHTML =
+`<tr>
+<td colspan="8" class="loading">
+No finals found
+</td>
+</tr>`;
+
+return;
+
+}
 
 
 finals.sort((a,b)=>
@@ -300,10 +341,10 @@ new Date(a.info.dates[0])
 );
 
 
-for(const m of finals){
+for(const match of finals){
 
 const info =
-m.info;
+match.info;
 
 const year =
 new Date(info.dates[0])
@@ -317,11 +358,12 @@ info.teams.find(
 t=>t!==winner
 );
 
-const wScore =
-score(m,winner);
+const winnerScore =
+getScore(match,winner);
 
-const rScore =
-score(m,runner);
+const runnerScore =
+getScore(match,runner);
+
 
 let margin="";
 
@@ -336,32 +378,32 @@ info.outcome.by.wickets
 + " wickets";
 
 
-const tr =
+const row =
 document.createElement("tr");
 
-tr.innerHTML = `
+row.innerHTML = `
 
 <td>${year}</td>
 
 <td>
 <div class="team">
 <img class="flag"
-src="${flag(winner)}">
+src="${getFlag(winner)}">
 ${winner}
 </div>
 </td>
 
-<td>${wScore}</td>
+<td>${winnerScore}</td>
 
 <td>
 <div class="team">
 <img class="flag"
-src="${flag(runner)}">
+src="${getFlag(runner)}">
 ${runner}
 </div>
 </td>
 
-<td>${rScore}</td>
+<td>${runnerScore}</td>
 
 <td>${margin}</td>
 
@@ -376,14 +418,14 @@ View
 
 `;
 
-body.appendChild(tr);
+body.appendChild(row);
 
 }
 
 }
 
 
-load();
+loadFinals();
 
 </script>
 
