@@ -25,11 +25,6 @@ background:#fff;
 font-weight:600;
 }
 
-.navbar a{
-text-decoration:none;
-color:#0056d6;
-}
-
 .page{
 max-width:1100px;
 margin:30px auto;
@@ -44,15 +39,13 @@ border-radius:18px;
 margin-bottom:20px;
 }
 
-/* RED TEAM BOX */
 .team-box{
 background:#e10600;
 color:white;
-padding:12px 18px;
+padding:10px 18px;
 border-radius:10px;
-display:inline-block;
 font-weight:800;
-font-size:18px;
+display:inline-block;
 margin-bottom:10px;
 }
 
@@ -60,30 +53,25 @@ margin-bottom:10px;
 background:#fff;
 padding:20px;
 border-radius:12px;
-margin-bottom:18px;
+margin-bottom:20px;
 }
 
-.scoreline{
+.score{
 font-size:22px;
 font-weight:800;
 margin-bottom:10px;
 }
 
-.section-title{
-font-weight:800;
-margin:12px 0 8px;
-}
-
 table{
 width:100%;
 border-collapse:collapse;
-margin-bottom:14px;
+margin-bottom:15px;
 }
 
 th{
-text-align:left;
 border-bottom:2px solid #ddd;
 padding:8px;
+text-align:left;
 }
 
 td{
@@ -94,23 +82,14 @@ tbody tr:nth-child(even){
 background:#f4f8ff;
 }
 
-/* CLICKABLE PLAYER */
-.player-link{
+.player{
 color:#0056d6;
 text-decoration:none;
 font-weight:600;
 }
 
-.player-link:hover{
-text-decoration:underline;
-}
-
-.small{
-font-size:14px;
-opacity:0.9;
-}
-
 </style>
+
 </head>
 
 <body>
@@ -131,15 +110,14 @@ opacity:0.9;
 
 <script>
 
-const params=new URLSearchParams(window.location.search);
-const file=params.get("file");
+const file=new URLSearchParams(location.search).get("file");
 
 if(!file){
 
 document.getElementById("matchContainer").innerHTML=
 "<div class='hero'>Invalid match link</div>";
 
-throw new Error("Missing file");
+throw new Error();
 
 }
 
@@ -147,7 +125,7 @@ loadMatch();
 
 async function loadMatch(){
 
-const res=await fetch(file,{cache:"no-store"});
+const res=await fetch(file);
 const matches=await res.json();
 
 const match=
@@ -160,9 +138,9 @@ renderMatch(match);
 
 function renderMatch(match){
 
-const c=document.getElementById("matchContainer");
+const container=document.getElementById("matchContainer");
 
-c.innerHTML=`
+container.innerHTML=`
 <div class="hero">
 <h1>${match.info.teams.join(" vs ")}</h1>
 <div>${match.info.venue}</div>
@@ -170,36 +148,35 @@ c.innerHTML=`
 </div>
 `;
 
-match.innings.forEach(innObj=>{
+match.innings.forEach(inningsObj=>{
 
-const inn=Object.values(innObj)[0];
+const innings=Object.values(inningsObj)[0];
 
-const parsed=parseInnings(inn);
+const stats=parseInnings(innings);
 
 const div=document.createElement("div");
 div.className="card";
 
 div.innerHTML=`
 
-<div class="team-box">${parsed.team}</div>
+<div class="team-box">${innings.team}</div>
 
-<div class="scoreline">
-${parsed.runs}/${parsed.wkts} (${parsed.overs})
+<div class="score">
+${stats.runs}/${stats.wickets} (${stats.overs})
 </div>
 
-<div class="section-title">Batting</div>
-${battingTable(parsed.batting)}
+<h3>Batting</h3>
+${battingTable(stats.batting)}
 
-<div class="section-title">Fall of wickets</div>
-${fallTable(parsed.fall)}
+<h3>Fall of wickets</h3>
+${fallTable(stats.fall)}
 
-<div class="section-title">Bowling</div>
-${bowlingTable(parsed.bowling)}
+<h3>Bowling</h3>
+${bowlingTable(stats.bowling)}
 
-<div class="small"><strong>Extras:</strong> ${parsed.extras}</div>
 `;
 
-c.appendChild(div);
+container.appendChild(div);
 
 });
 
@@ -207,49 +184,47 @@ c.appendChild(div);
 
 function parseInnings(innings){
 
-const deliveries=getDeliveries(innings);
-
 let runs=0;
-let wkts=0;
+let wickets=0;
 let balls=0;
-let extras=0;
 
 const batting={};
 const bowling={};
 const fall=[];
 
-for(const d of deliveries){
+innings.overs.forEach(over=>{
+
+over.deliveries.forEach(d=>{
 
 const batter=d.batter;
 const bowler=d.bowler;
 
-const rB=d.runs?.batter||0;
-const rT=d.runs?.total||0;
-const rE=d.runs?.extras||0;
+runs+=d.runs.total;
 
-runs+=rT;
-extras+=rE;
-
-if(!isWide(d)) balls++;
+if(!d.extras?.wides) balls++;
 
 if(!batting[batter])
 batting[batter]={runs:0,balls:0};
 
-batting[batter].runs+=rB;
-if(!isWide(d)) batting[batter].balls++;
+batting[batter].runs+=d.runs.batter;
+
+if(!d.extras?.wides)
+batting[batter].balls++;
 
 if(!bowling[bowler])
-bowling[bowler]={runs:0,balls:0,wkts:0};
+bowling[bowler]={runs:0,balls:0,wickets:0};
 
-bowling[bowler].runs+=rT;
-if(!isWide(d)) bowling[bowler].balls++;
+bowling[bowler].runs+=d.runs.total;
+
+if(!d.extras?.wides)
+bowling[bowler].balls++;
 
 if(d.wickets){
 
 d.wickets.forEach(w=>{
 
-wkts++;
-bowling[bowler].wkts++;
+wickets++;
+bowling[bowler].wickets++;
 
 fall.push({
 score:runs,
@@ -260,15 +235,15 @@ player:w.player_out
 
 }
 
-}
+});
+
+});
 
 return{
 
-team:innings.team,
 runs,
-wkts,
-overs:formatOvers(balls),
-extras,
+wickets,
+overs:Math.floor(balls/6)+"."+(balls%6),
 
 batting:Object.entries(batting),
 bowling:Object.entries(bowling),
@@ -280,15 +255,15 @@ fall
 
 function battingTable(rows){
 
-let html=`<table><tr><th>Batter</th><th>R</th><th>B</th><th>SR</th></tr>`;
+let html="<table><tr><th>Batter</th><th>R</th><th>B</th><th>SR</th></tr>";
 
 rows.forEach(([name,s])=>{
 
-const sr=s.balls?((s.runs/s.balls)*100).toFixed(1):"";
+const sr=(s.runs/s.balls*100).toFixed(1);
 
 html+=`
 <tr>
-<td><a class="player-link" href="t20-player.html?name=${encodeURIComponent(name)}">${name}</a></td>
+<td><a class="player" href="t20-player.html?name=${encodeURIComponent(name)}">${name}</a></td>
 <td>${s.runs}</td>
 <td>${s.balls}</td>
 <td>${sr}</td>
@@ -297,74 +272,52 @@ html+=`
 });
 
 html+="</table>";
+
 return html;
 
 }
 
 function bowlingTable(rows){
 
-let html=`<table><tr><th>Bowler</th><th>O</th><th>R</th><th>W</th><th>Econ</th></tr>`;
+let html="<table><tr><th>Bowler</th><th>O</th><th>R</th><th>W</th></tr>";
 
 rows.forEach(([name,s])=>{
 
-const overs=formatOvers(s.balls);
-const econ=(s.runs/(s.balls/6)).toFixed(1);
-
 html+=`
 <tr>
-<td><a class="player-link" href="t20-player.html?name=${encodeURIComponent(name)}">${name}</a></td>
-<td>${overs}</td>
+<td><a class="player" href="t20-player.html?name=${encodeURIComponent(name)}">${name}</a></td>
+<td>${Math.floor(s.balls/6)+"."+(s.balls%6)}</td>
 <td>${s.runs}</td>
-<td>${s.wkts}</td>
-<td>${econ}</td>
+<td>${s.wickets}</td>
 </tr>`;
 
 });
 
 html+="</table>";
+
 return html;
 
 }
 
-function fallTable(fall){
+function fallTable(rows){
 
-if(!fall.length) return "<div class='small'>None</div>";
+if(!rows.length) return "None";
 
 let html="<table><tr><th>Score</th><th>Player</th></tr>";
 
-fall.forEach(f=>{
+rows.forEach(r=>{
 
 html+=`
 <tr>
-<td>${f.score}</td>
-<td>${f.player_out}</td>
+<td>${r.score}</td>
+<td>${r.player}</td>
 </tr>`;
 
 });
 
 html+="</table>";
+
 return html;
-
-}
-
-function getDeliveries(innings){
-
-if(innings.overs)
-return innings.overs.flatMap(o=>o.deliveries);
-
-return innings.deliveries||[];
-
-}
-
-function isWide(d){
-
-return d.extras?.wides;
-
-}
-
-function formatOvers(balls){
-
-return Math.floor(balls/6)+"."+(balls%6);
 
 }
 
