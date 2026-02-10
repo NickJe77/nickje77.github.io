@@ -8,433 +8,391 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
-
 body{
-font-family:Inter,system-ui,Arial;
-margin:0;
-background:#f4f6f8;
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:#f4f6f8;
 }
 
 .navbar{
-display:flex;
-justify-content:center;
-gap:24px;
-padding:16px 0;
-border-bottom:1px solid #ddd;
-background:#fff;
-font-weight:600;
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  background:#fff;
+  font-weight:600;
 }
 
 .navbar a{
-text-decoration:none;
-color:#0056d6;
+  text-decoration:none;
+  color:#0056d6;
 }
 
 .page{
-max-width:1000px;
-margin:30px auto;
-padding:0 20px;
+  max-width:1000px;
+  margin:30px auto;
+  padding:0 20px;
 }
 
 .hero{
-background:linear-gradient(90deg,#8b0000,#e10600);
-color:#fff;
-padding:30px;
-border-radius:18px;
-margin-bottom:20px;
+  background:linear-gradient(90deg,#8b0000,#e10600);
+  color:#fff;
+  padding:30px;
+  border-radius:18px;
+  margin-bottom:20px;
 }
 
 .hero h1{
-margin:0 0 10px 0;
+  margin:0 0 10px 0;
 }
 
 .result{
-font-weight:700;
-margin-top:4px;
+  font-weight:700;
+  margin-top:4px;
 }
 
 .card{
-background:#fff;
-padding:20px;
-border-radius:12px;
-margin-bottom:20px;
+  background:#fff;
+  padding:20px;
+  border-radius:12px;
+  margin-bottom:20px;
 }
 
 .innings-title{
-color:#e10600;
-font-size:24px;
-font-weight:800;
-margin-bottom:6px;
+  color:#e10600;
+  font-size:24px;
+  font-weight:800;
+  margin-bottom:6px;
 }
 
 .score{
-font-size:18px;
-font-weight:700;
-margin-bottom:20px;
+  font-size:18px;
+  font-weight:700;
+  margin-bottom:20px;
 }
 
 table{
-width:100%;
-border-collapse:collapse;
-margin-bottom:18px;
+  width:100%;
+  border-collapse:collapse;
+  margin-bottom:18px;
 }
 
 th{
-text-align:left;
-padding:10px;
-border-bottom:2px solid #ddd;
+  text-align:left;
+  padding:10px;
+  border-bottom:2px solid #ddd;
 }
 
 td{
-padding:10px;
-border-bottom:1px solid #eee;
+  padding:10px;
+  border-bottom:1px solid #eee;
 }
 
 tbody tr:nth-child(even){
-background:#eaf3ff;
+  background:#eaf3ff;
 }
 
 .player{
-color:#0056d6;
-text-decoration:none;
-font-weight:600;
+  color:#0056d6;
+  text-decoration:none;
+  font-weight:600;
 }
 
 .player:hover{
-text-decoration:underline;
+  text-decoration:underline;
 }
 
 .extras{
-font-weight:600;
-margin-bottom:8px;
+  font-weight:600;
+  margin-bottom:8px;
 }
 
 .fow{
-font-weight:600;
-margin-bottom:20px;
+  font-weight:600;
+  margin-bottom:20px;
 }
-
 </style>
-
 </head>
 
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="cricket.html">Cricket</a>
-<a href="t20-world-cup.html">T20 World Cup</a>
+  <a href="index.html">Home</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="t20-world-cup.html">T20 World Cup</a>
 </div>
 
 <div class="page">
-
-<div id="matchContainer">
-<div class="hero">Loading match...</div>
-</div>
-
+  <div id="matchContainer">
+    <div class="hero">Loading match...</div>
+  </div>
 </div>
 
 <script>
-
 const file = new URLSearchParams(location.search).get("file");
 
 if(!file){
-
-document.getElementById("matchContainer").innerHTML =
-"<div class='hero'>Invalid match link</div>";
-
-throw new Error();
-
+  document.getElementById("matchContainer").innerHTML =
+    "<div class='hero'>Invalid match link</div>";
+  throw new Error("Missing file parameter");
 }
 
 loadMatch();
 
 async function loadMatch(){
+  const res = await fetch(file);
+  if(!res.ok){
+    document.getElementById("matchContainer").innerHTML =
+      "<div class='hero'>Match file not found</div>";
+    return;
+  }
 
-const res = await fetch(file);
+  const matches = await res.json();
+  const match =
+    matches.find(m => m.info?.event?.stage === "Final")
+    || matches[matches.length - 1];
 
-if(!res.ok){
-
-document.getElementById("matchContainer").innerHTML =
-"<div class='hero'>Match not found</div>";
-
-return;
-
-}
-
-const matches = await res.json();
-
-const match =
-matches.find(m => m.info?.event?.stage==="Final")
-|| matches[matches.length-1];
-
-renderMatch(match);
-
+  renderMatch(match);
 }
 
 function renderMatch(match){
+  const container = document.getElementById("matchContainer");
 
-const container = document.getElementById("matchContainer");
+  let result = "";
+  if(match.info.outcome?.winner){
+    if(match.info.outcome.by?.runs != null){
+      result = `${match.info.outcome.winner} won by ${match.info.outcome.by.runs} runs`;
+    }else if(match.info.outcome.by?.wickets != null){
+      result = `${match.info.outcome.winner} won by ${match.info.outcome.by.wickets} wickets`;
+    }else if(match.info.outcome.result){
+      result = `${match.info.outcome.winner} won (${match.info.outcome.result})`;
+    }
+  }
 
-let result="";
+  const toss = match.info.toss
+    ? `${match.info.toss.winner} won the toss and chose to ${match.info.toss.decision}`
+    : "";
 
-if(match.info.outcome?.winner){
+  container.innerHTML = `
+    <div class="hero">
+      <h1>${escapeHtml(match.info.teams.join(" vs "))}</h1>
+      <div>${escapeHtml(match.info.venue || "")}</div>
+      <div>${escapeHtml((match.info.dates || []).join(", "))}</div>
+      ${toss ? `<div class="result">${escapeHtml(toss)}</div>` : ``}
+      ${result ? `<div class="result">${escapeHtml(result)}</div>` : ``}
+    </div>
+  `;
 
-if(match.info.outcome.by?.runs)
-result=`${match.info.outcome.winner} won by ${match.info.outcome.by.runs} runs`;
+  (match.innings || []).forEach(inn => {
+    const innings = inn && inn.team ? inn : (inn ? Object.values(inn)[0] : null);
+    if(!innings){
+      return;
+    }
 
-else if(match.info.outcome.by?.wickets)
-result=`${match.info.outcome.winner} won by ${match.info.outcome.by.wickets} wickets`;
+    const stats = parseInnings(innings);
 
+    const div = document.createElement("div");
+    div.className = "card";
+
+    div.innerHTML = `
+      <div class="innings-title">${escapeHtml(innings.team || "Innings")}</div>
+      <div class="score">${stats.runs}/${stats.wickets} (${stats.overs} overs)</div>
+
+      <h3>Batting</h3>
+      ${buildBatting(stats.batting)}
+
+      <div class="extras">Extras: ${stats.extras}</div>
+
+      <div class="fow">Fall of wickets: ${stats.fow.length ? stats.fow.join(", ") : "None"}</div>
+
+      <h3>Bowling</h3>
+      ${buildBowling(stats.bowling)}
+    `;
+
+    container.appendChild(div);
+  });
 }
 
-container.innerHTML = `
-<div class="hero">
-<h1>${match.info.teams.join(" vs ")}</h1>
-<div>${match.info.venue}</div>
-<div>${match.info.dates.join(", ")}</div>
-<div class="result">${result}</div>
-</div>
-`;
-
-match.innings.forEach(inn=>{
-
-const innings = inn.team ? inn : Object.values(inn)[0];
-
-const stats = parseInnings(innings);
-
-const div=document.createElement("div");
-
-div.className="card";
-
-div.innerHTML=`
-
-<div class="innings-title">
-${innings.team} Innings
-</div>
-
-<div class="score">
-${stats.runs}/${stats.wickets} (${stats.overs})
-</div>
-
-<h3>Batting</h3>
-
-${battingTable(stats.batting)}
-
-<div class="extras">
-Extras: ${stats.extras}
-</div>
-
-<div class="fow">
-Fall of wickets: ${stats.fow.length?stats.fow.join(", "):"None"}
-</div>
-
-<h3>Bowling</h3>
-
-${bowlingTable(stats.bowling)}
-
-`;
-
-container.appendChild(div);
-
-});
-
-}
-
-
-/* CRITICAL FIX — wides and no balls NOT counted as balls */
-
+/* --- Core parsing (legal balls exclude wides + no-balls) --- */
 function parseInnings(innings){
+  const deliveries =
+    innings.deliveries
+    || (innings.overs ? innings.overs.flatMap(o => o.deliveries || []) : []);
 
-const deliveries =
-innings.deliveries
-|| innings.overs.flatMap(o=>o.deliveries);
+  let runs = 0;
+  let wickets = 0;
+  let legalBalls = 0;
+  let extras = 0;
 
-let runs=0;
-let wickets=0;
-let legalBalls=0;
-let extras=0;
+  const batting = {};
+  const bowling = {};
+  const fow = [];
 
-const batting={};
-const bowling={};
-const fow=[];
+  deliveries.forEach(d => {
+    const total = num(d?.runs?.total, 0);
+    const batRuns = num(d?.runs?.batter, 0);
+    const exRuns = num(d?.runs?.extras, 0);
 
-deliveries.forEach(d=>{
+    runs += total;
+    extras += exRuns;
 
-runs += d.runs.total;
+    const isWide = !!d?.extras?.wides;
+    const isNoBall = !!d?.extras?.noballs;
 
-extras += d.runs.extras || 0;
+    if(!isWide && !isNoBall){
+      legalBalls += 1;
+    }
 
-/* Only count legal deliveries */
+    const batter = d?.batter || "";
+    const bowler = d?.bowler || "";
 
-if(!d.extras?.wides && !d.extras?.noballs)
-legalBalls++;
+    if(batter){
+      if(!batting[batter]) batting[batter] = { runs:0, balls:0, out:"not out" };
+      batting[batter].runs += batRuns;
+      if(!isWide && !isNoBall) batting[batter].balls += 1;
+    }
 
-const batter=d.batter;
-const bowler=d.bowler;
+    if(bowler){
+      if(!bowling[bowler]) bowling[bowler] = { runs:0, balls:0, wickets:0 };
+      bowling[bowler].runs += total;
+      if(!isWide && !isNoBall) bowling[bowler].balls += 1;
+    }
 
-if(!batting[batter])
-batting[batter]={runs:0,balls:0,out:"not out"};
+    if(Array.isArray(d?.wickets) && d.wickets.length){
+      d.wickets.forEach(w => {
+        wickets += 1;
+        if(bowler) bowling[bowler].wickets += 1;
 
-batting[batter].runs+=d.runs.batter;
+        const outName = w?.player_out || "";
+        if(outName && batting[outName]){
+          batting[outName].out = dismissalText(w, bowler);
+        }else if(outName){
+          // in case player gets out without facing (rare, but safe)
+          batting[outName] = batting[outName] || { runs:0, balls:0, out:"" };
+          batting[outName].out = dismissalText(w, bowler);
+        }
 
-if(!d.extras?.wides && !d.extras?.noballs)
-batting[batter].balls++;
+        fow.push(`${runs}/${wickets} (${outName || "wicket"})`);
+      });
+    }
+  });
 
-if(d.wickets){
-
-d.wickets.forEach(w=>{
-
-wickets++;
-
-batting[w.player_out].out=dismissalText(w,bowler);
-
-fow.push(`${runs}/${wickets} (${w.player_out})`);
-
-if(!bowling[bowler])
-bowling[bowler]={runs:0,balls:0,wickets:0};
-
-bowling[bowler].wickets++;
-
-});
-
+  return {
+    runs,
+    wickets,
+    overs: formatOvers(legalBalls),
+    extras,
+    batting: Object.entries(batting),
+    bowling: Object.entries(bowling),
+    fow
+  };
 }
 
-if(!bowling[bowler])
-bowling[bowler]={runs:0,balls:0,wickets:0};
+function dismissalText(w, bowler){
+  const kind = (w?.kind || "").toLowerCase();
 
-bowling[bowler].runs+=d.runs.total;
+  if(kind === "bowled") return `b ${bowler}`;
+  if(kind === "lbw") return `lbw b ${bowler}`;
 
-if(!d.extras?.wides && !d.extras?.noballs)
-bowling[bowler].balls++;
+  if(kind === "caught"){
+    const f = w?.fielders?.[0]?.name || "";
+    return `c ${f ? f + " " : ""}b ${bowler}`;
+  }
 
-});
+  if(kind === "run out") return "run out";
 
-const overs =
-Math.floor(legalBalls/6)+"."+(legalBalls%6)+" overs";
-
-return{
-
-runs,
-wickets,
-overs,
-extras,
-batting:Object.entries(batting),
-bowling:Object.entries(bowling),
-fow
-
-};
-
+  return w?.kind || "out";
 }
 
+function buildBatting(rows){
+  let html = `
+  <table>
+    <thead>
+      <tr>
+        <th>Batter</th>
+        <th>How out</th>
+        <th>R</th>
+        <th>B</th>
+        <th>SR</th>
+      </tr>
+    </thead>
+    <tbody>
+  `;
 
-function dismissalText(w,bowler){
+  rows.forEach(([name, s]) => {
+    const sr = s.balls ? ((s.runs / s.balls) * 100).toFixed(1) : "";
+    html += `
+      <tr>
+        <td>
+          <a class="player" href="t20wc-player.html?name=${encodeURIComponent(name)}">${escapeHtml(name)}</a>
+        </td>
+        <td>${escapeHtml(s.out || "")}</td>
+        <td>${s.runs}</td>
+        <td>${s.balls}</td>
+        <td>${sr}</td>
+      </tr>
+    `;
+  });
 
-if(w.kind==="bowled") return `b ${bowler}`;
-
-if(w.kind==="caught")
-return `c ${w.fielders?.[0]?.name||""} b ${bowler}`;
-
-if(w.kind==="lbw")
-return `lbw b ${bowler}`;
-
-if(w.kind==="run out")
-return "run out";
-
-return w.kind;
-
+  html += "</tbody></table>";
+  return html;
 }
 
+function buildBowling(rows){
+  let html = `
+  <table>
+    <thead>
+      <tr>
+        <th>Bowler</th>
+        <th>O</th>
+        <th>R</th>
+        <th>W</th>
+        <th>Econ</th>
+      </tr>
+    </thead>
+    <tbody>
+  `;
 
-/* PLAYER LINK FIXED */
+  rows.forEach(([name, s]) => {
+    const overs = formatOvers(s.balls);
+    const econ = s.balls ? (s.runs / (s.balls / 6)).toFixed(1) : "0.0";
+    html += `
+      <tr>
+        <td>
+          <a class="player" href="t20wc-player.html?name=${encodeURIComponent(name)}">${escapeHtml(name)}</a>
+        </td>
+        <td>${overs}</td>
+        <td>${s.runs}</td>
+        <td>${s.wickets}</td>
+        <td>${econ}</td>
+      </tr>
+    `;
+  });
 
-function battingTable(rows){
-
-let html=`
-<table>
-<thead>
-<tr>
-<th>Batter</th>
-<th>How out</th>
-<th>R</th>
-<th>B</th>
-<th>SR</th>
-</tr>
-</thead>
-<tbody>
-`;
-
-rows.forEach(([name,s])=>{
-
-const sr=s.balls?((s.runs/s.balls)*100).toFixed(1):"";
-
-html+=`
-<tr>
-<td>
-<a class="player" href="t20-world-cup-player.html?name=${encodeURIComponent(name)}">
-${name}
-</a>
-</td>
-<td>${s.out}</td>
-<td>${s.runs}</td>
-<td>${s.balls}</td>
-<td>${sr}</td>
-</tr>
-`;
-
-});
-
-html+="</tbody></table>";
-
-return html;
-
+  html += "</tbody></table>";
+  return html;
 }
 
-
-function bowlingTable(rows){
-
-let html=`
-<table>
-<thead>
-<tr>
-<th>Bowler</th>
-<th>O</th>
-<th>R</th>
-<th>W</th>
-<th>Econ</th>
-</tr>
-</thead>
-<tbody>
-`;
-
-rows.forEach(([name,s])=>{
-
-const overs=Math.floor(s.balls/6)+"."+(s.balls%6);
-
-const econ=s.balls?(s.runs/(s.balls/6)).toFixed(1):"0.0";
-
-html+=`
-<tr>
-<td>
-<a class="player" href="t20-world-cup-player.html?name=${encodeURIComponent(name)}">
-${name}
-</a>
-</td>
-<td>${overs}</td>
-<td>${s.runs}</td>
-<td>${s.wickets}</td>
-<td>${econ}</td>
-</tr>
-`;
-
-});
-
-html+="</tbody></table>";
-
-return html;
-
+function formatOvers(balls){
+  const o = Math.floor(balls / 6);
+  const b = balls % 6;
+  return `${o}.${b}`;
 }
 
+function num(v, d){
+  const n = Number(v);
+  return Number.isFinite(n) ? n : d;
+}
+
+function escapeHtml(s){
+  return String(s || "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
 </script>
 
 </body>
