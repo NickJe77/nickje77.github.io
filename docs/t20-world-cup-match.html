@@ -109,23 +109,22 @@ margin-bottom:5px;
 <div class="page">
 
 <div id="matchContainer">
-
 <div class="hero">Loading match...</div>
-
 </div>
 
 </div>
 
 <script>
 
-const file =
-new URLSearchParams(window.location.search)
-.get("file");
+const params = new URLSearchParams(window.location.search);
 
-if(!file){
+const file = params.get("file");
+const matchId = params.get("match");
 
-document.getElementById("matchContainer")
-.innerHTML="<div class='hero'>Invalid match link</div>";
+if(!file || !matchId){
+
+document.getElementById("matchContainer").innerHTML =
+"<div class='hero'>Invalid match link</div>";
 
 throw new Error();
 
@@ -135,22 +134,33 @@ loadMatch();
 
 async function loadMatch(){
 
-const res=await fetch(file);
+const res = await fetch(file);
 
 if(!res.ok){
 
-document.getElementById("matchContainer")
-.innerHTML="<div class='hero'>Match file not found</div>";
+document.getElementById("matchContainer").innerHTML =
+"<div class='hero'>Match file not found</div>";
 
 return;
 
 }
 
-/* FIX — FILE CONTAINS ARRAY */
+const matches = await res.json();
 
-const matches=await res.json();
+/* THIS IS THE FIX */
 
-const match=matches[0];
+const match = matches.find(
+m => String(m.info.match_id) === String(matchId)
+);
+
+if(!match){
+
+document.getElementById("matchContainer").innerHTML =
+"<div class='hero'>Match not found</div>";
+
+return;
+
+}
 
 renderMatch(match);
 
@@ -221,7 +231,7 @@ d.wickets.forEach(w=>{
 
 wickets++;
 
-batting[w.player_out].out=
+batting[w.player_out].out =
 dismissalText(w,bowler);
 
 bowling[bowler].wickets++;
@@ -236,7 +246,7 @@ fow.push(`${runs}/${wickets} (${w.player_out})`);
 
 });
 
-const overs=
+const overs =
 Math.floor(balls/6)+"."+(balls%6);
 
 const div=document.createElement("div");
@@ -245,9 +255,7 @@ div.className="innings";
 
 div.innerHTML=`
 
-<div class="teamHeader">
-${inn.team}
-</div>
+<div class="teamHeader">${inn.team}</div>
 
 <div class="score">
 ${runs}/${wickets} (${overs} overs)
@@ -276,17 +284,11 @@ ${Object.entries(batting).map(([name,b])=>`
 
 </table>
 
-<div class="sectionTitle">
-Fall of wickets
-</div>
+<div class="sectionTitle">Fall of wickets</div>
 
-<div>
-${fow.join(", ")||"None"}
-</div>
+<div>${fow.join(", ")||"None"}</div>
 
-<div class="sectionTitle">
-Bowling
-</div>
+<div class="sectionTitle">Bowling</div>
 
 <table>
 <tr>
