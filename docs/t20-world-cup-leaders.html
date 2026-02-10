@@ -73,24 +73,47 @@ body{
   background:#d00000;
 }
 
+/* TABLE */
+
 table{
   width:100%;
   border-collapse:collapse;
-  font-size:15px;
-}
-
-th,td{
-  border-bottom:1px solid #ddd;
-  padding:10px 12px;
+  font-size:16px;
 }
 
 th{
   background:#f3f6fb;
+  padding:12px;
+  border-bottom:2px solid #ddd;
+}
+
+td{
+  padding:12px;
+  border-bottom:1px solid #ddd;
 }
 
 tr:nth-child(even){
   background:#f8fbff;
 }
+
+/* COLUMN ALIGNMENT */
+
+.rank-col{
+  width:80px;
+  text-align:center;
+}
+
+.player-col{
+  text-align:left;
+}
+
+.stat-col{
+  width:150px;
+  text-align:right;
+  font-weight:600;
+}
+
+/* PLAYER LINK */
 
 .player-link{
   color:#6a040f;
@@ -108,9 +131,11 @@ tr:nth-child(even){
 <body>
 
 <div class="navbar">
+
 <a href="index.html">Home</a>
 <a href="cricket.html">Cricket</a>
 <a href="t20-world-cup.html">T20 World Cup</a>
+
 </div>
 
 <div class="page-wrap">
@@ -130,6 +155,10 @@ Run Scorers
 Wicket Takers
 </button>
 
+<button class="tab" onclick="showTab('sixes',this)">
+Most Sixes
+</button>
+
 <button class="tab" onclick="showTab('fielding',this)">
 Fielders
 </button>
@@ -144,9 +173,9 @@ Strike Rate (10+ matches)
 
 <thead>
 <tr>
-<th>Rank</th>
-<th>Player</th>
-<th>Stat</th>
+<th class="rank-col">Rank</th>
+<th class="player-col">Player</th>
+<th class="stat-col">Stat</th>
 </tr>
 </thead>
 
@@ -158,17 +187,19 @@ Strike Rate (10+ matches)
 
 <script>
 
+/* PATHS */
+
 const INDEX="/data/t20-world-cup/matches/index.json";
 const BASE="/data/t20-world-cup/matches/";
 const NAME_MAP="/data/t20-world-cup/matches/player-names.json";
 
-const batting={};
-const bowling={};
-const fielding={};
-const matchesPlayed={};
+/* STORAGE */
 
-let leaders={};
-let nameMap={};
+const batting={}, bowling={}, fielding={}, sixes={}, matchesPlayed={};
+
+let leaders={}, nameMap={};
+
+/* LOAD */
 
 load();
 
@@ -203,10 +234,7 @@ function processMatches(matches,file){
 
 matches.forEach((match,index)=>{
 
-/* guaranteed unique match key */
-
-const matchKey =
-file+"_"+index;
+const key=file+"_"+index;
 
 match.innings.forEach(inn=>{
 
@@ -227,33 +255,29 @@ batting[batter].runs+=d.runs.batter;
 if(!d.extras?.wides && !d.extras?.noballs)
 batting[batter].balls++;
 
-/* matches played */
+/* sixes */
 
-matchesPlayed[batter] =
-matchesPlayed[batter] || new Set();
+if(d.runs.batter===6)
+sixes[batter]=(sixes[batter]||0)+1;
 
-matchesPlayed[batter]
-.add(matchKey);
+/* matches */
 
-/* bowling */
+matchesPlayed[batter]=matchesPlayed[batter]||new Set();
+matchesPlayed[batter].add(key);
+
+/* wickets */
 
 if(d.wickets){
 
 d.wickets.forEach(w=>{
 
-if(w.kind!=="run out"){
-
-bowling[bowler] =
-(bowling[bowler]||0)+1;
-
-}
+if(w.kind!=="run out")
+bowling[bowler]=(bowling[bowler]||0)+1;
 
 if(w.kind==="caught"||w.kind==="run out"){
 
 const f=w.fielders?.[0]?.name;
-
-if(f)
-fielding[f]=(fielding[f]||0)+1;
+if(f) fielding[f]=(fielding[f]||0)+1;
 
 }
 
@@ -270,6 +294,8 @@ fielding[f]=(fielding[f]||0)+1;
 });
 
 }
+
+/* BUILD LEADERS */
 
 function buildLeaders(){
 
@@ -277,78 +303,88 @@ leaders.runs=
 Object.entries(batting)
 .sort((a,b)=>b[1].runs-a[1].runs)
 .slice(0,10)
-.map((x,i)=>[
-i+1,
-playerLink(x[0]),
-x[1].runs
-]);
+.map((x,i)=>[i+1,x[0],x[1].runs]);
 
 leaders.wickets=
 Object.entries(bowling)
 .sort((a,b)=>b[1]-a[1])
 .slice(0,10)
-.map((x,i)=>[
-i+1,
-playerLink(x[0]),
-x[1]
-]);
+.map((x,i)=>[i+1,x[0],x[1]]);
+
+leaders.sixes=
+Object.entries(sixes)
+.sort((a,b)=>b[1]-a[1])
+.slice(0,10)
+.map((x,i)=>[i+1,x[0],x[1]]);
 
 leaders.fielding=
 Object.entries(fielding)
 .sort((a,b)=>b[1]-a[1])
 .slice(0,10)
-.map((x,i)=>[
-i+1,
-playerLink(x[0]),
-x[1]
-]);
-
-/* STRIKE RATE FIX */
+.map((x,i)=>[i+1,x[0],x[1]]);
 
 leaders.sr=[];
 
-Object.keys(batting).forEach(player=>{
+Object.keys(batting).forEach(p=>{
 
-const games=
-matchesPlayed[player]?.size || 0;
+const games=matchesPlayed[p]?.size||0;
 
-if(games>=10 && batting[player].balls>0){
+if(games>=10){
 
-const sr=
-(batting[player].runs /
-batting[player].balls)*100;
+const sr=(batting[p].runs/batting[p].balls)*100;
 
-leaders.sr.push([
-player,
-sr
-]);
+leaders.sr.push([p,sr]);
 
 }
 
 });
 
-leaders.sr
-.sort((a,b)=>b[1]-a[1]);
+leaders.sr.sort((a,b)=>b[1]-a[1]);
 
 leaders.sr=
 leaders.sr.slice(0,10)
-.map((x,i)=>[
-i+1,
-playerLink(x[0]),
-x[1].toFixed(1)
-]);
+.map((x,i)=>[i+1,x[0],x[1].toFixed(1)]);
 
 }
 
-function playerLink(name){
+/* PLAYER LINK */
 
-const display=
-nameMap[name]||name;
+function playerLink(name){
 
 return `<a class="player-link"
 href="t20-world-cup-player.html?player=${encodeURIComponent(name)}">
-${display}
+${nameMap[name]||name}
 </a>`;
+
+}
+
+/* RENDER */
+
+function render(type){
+
+const tbody=document.getElementById("leaderTable");
+
+tbody.innerHTML="";
+
+leaders[type].forEach(row=>{
+
+const tr=document.createElement("tr");
+
+tr.innerHTML=`
+
+<td class="rank-col">${row[0]}</td>
+
+<td class="player-col">
+${playerLink(row[1])}
+</td>
+
+<td class="stat-col">${row[2]}</td>
+
+`;
+
+tbody.appendChild(tr);
+
+});
 
 }
 
@@ -360,27 +396,6 @@ document.querySelectorAll(".tab")
 btn.classList.add("active");
 
 render(type);
-
-}
-
-function render(type){
-
-const tbody=document.getElementById("leaderTable");
-
-tbody.innerHTML="";
-
-leaders[type].forEach(r=>{
-
-const tr=document.createElement("tr");
-
-tr.innerHTML=
-`<td>${r[0]}</td>
-<td>${r[1]}</td>
-<td>${r[2]}</td>`;
-
-tbody.appendChild(tr);
-
-});
 
 }
 
