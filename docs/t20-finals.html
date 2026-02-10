@@ -8,66 +8,66 @@
 
 <style>
 body{
-  font-family:Inter,system-ui,Arial;
-  margin:0;
-  background:#f4f6f8;
+font-family:Inter,system-ui,Arial;
+margin:0;
+background:#f4f6f8;
 }
 
 .navbar{
-  display:flex;
-  justify-content:center;
-  gap:24px;
-  padding:16px 0;
-  border-bottom:1px solid #ddd;
-  background:#fff;
-  font-weight:600;
+display:flex;
+justify-content:center;
+gap:24px;
+padding:16px 0;
+border-bottom:1px solid #ddd;
+background:#fff;
+font-weight:600;
 }
 
 .navbar a{
-  text-decoration:none;
-  color:#0056d6;
+text-decoration:none;
+color:#0056d6;
 }
 
 .page{
-  max-width:1200px;
-  margin:30px auto;
-  padding:0 20px;
+max-width:1200px;
+margin:30px auto;
+padding:0 20px;
 }
 
 .hero{
-  background:linear-gradient(90deg,#8b0000,#e10600);
-  color:#fff;
-  padding:40px;
-  border-radius:22px;
-  margin-bottom:25px;
+background:linear-gradient(90deg,#8b0000,#e10600);
+color:#fff;
+padding:40px;
+border-radius:22px;
+margin-bottom:25px;
 }
 
 table{
-  width:100%;
-  border-collapse:collapse;
-  background:#fff;
-  border-radius:12px;
-  overflow:hidden;
+width:100%;
+border-collapse:collapse;
+background:#fff;
+border-radius:12px;
+overflow:hidden;
 }
 
 th{
-  background:#e10600;
-  color:#fff;
-  padding:12px;
-  text-align:left;
+background:#e10600;
+color:#fff;
+padding:12px;
+text-align:left;
 }
 
 td{
-  padding:12px;
+padding:12px;
 }
 
 tbody tr:nth-child(even){
-  background:#eaf3ff;
+background:#eaf3ff;
 }
 
 tbody tr:hover{
-  background:#d8e8ff;
-  cursor:pointer;
+background:#d8e8ff;
+cursor:pointer;
 }
 
 .team{font-weight:700;}
@@ -79,286 +79,147 @@ tbody tr:hover{
 <body>
 
 <div class="navbar">
-  <a href="index.html">Home</a>
-  <a href="cricket.html">Cricket</a>
-  <a href="t20-world-cup.html">T20 World Cup</a>
+<a href="index.html">Home</a>
+<a href="cricket.html">Cricket</a>
+<a href="t20-world-cup.html">T20 World Cup</a>
 </div>
 
 <div class="page">
 
-  <div class="hero">
-    <h1>T20 World Cup Finals</h1>
-  </div>
+<div class="hero">
+<h1>T20 World Cup Finals</h1>
+</div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Year</th>
-        <th>Winner</th>
-        <th>Score</th>
-        <th>Runner-up</th>
-        <th>Score</th>
-        <th>Margin</th>
-        <th>Venue</th>
-      </tr>
-    </thead>
-    <tbody id="finalsTable">
-      <tr><td colspan="7">Loading finals...</td></tr>
-    </tbody>
-  </table>
+<table>
+
+<thead>
+<tr>
+<th>Year</th>
+<th>Winner</th>
+<th>Score</th>
+<th>Runner-up</th>
+<th>Score</th>
+<th>Margin</th>
+<th>Venue</th>
+</tr>
+</thead>
+
+<tbody id="finalsTable">
+<tr><td colspan="7">Loading finals...</td></tr>
+</tbody>
+
+</table>
 
 </div>
 
 <script>
-/*
-Your files are here (from your screenshot):
-docs/data/t20-world-cup/matches/t20wc_YYYY_FULL.json
 
-We only want REAL ICC Men's T20 World Cup finals:
-2007, 2009, 2010, 2012, 2014, 2016, 2021, 2022, 2024
-*/
+const YEARS=[2007,2009,2010,2012,2014,2016,2021,2022,2024];
 
-const YEARS = [2007,2009,2010,2012,2014,2016,2021,2022,2024];
-
-const FINALISTS = {
-  2007:["India","Pakistan"],
-  2009:["Pakistan","Sri Lanka"],
-  2010:["England","Australia"],
-  2012:["West Indies","Sri Lanka"],
-  2014:["Sri Lanka","India"],
-  2016:["West Indies","England"],
-  2021:["Australia","New Zealand"],
-  2022:["England","Pakistan"],
-  2024:["India","South Africa"]
+const FINALISTS={
+2007:["India","Pakistan"],
+2009:["Pakistan","Sri Lanka"],
+2010:["England","Australia"],
+2012:["West Indies","Sri Lanka"],
+2014:["Sri Lanka","India"],
+2016:["West Indies","England"],
+2021:["Australia","New Zealand"],
+2022:["England","Pakistan"],
+2024:["India","South Africa"]
 };
 
-const table = document.getElementById("finalsTable");
-table.innerHTML = "";
+const table=document.getElementById("finalsTable");
 
-(async function init(){
-  for (const year of YEARS){
-    const file = `data/t20-world-cup/matches/t20wc_${year}_FULL.json`;
+table.innerHTML="";
 
-    try{
-      const res = await fetch(file, {cache:"no-store"});
-      if(!res.ok) continue;
+loadFinals();
 
-      const matches = await res.json();
-      if(!Array.isArray(matches)) continue;
+async function loadFinals(){
 
-      const pair = FINALISTS[year];
-      const match = pickBestFinal(matches, pair[0], pair[1]);
-      if(!match) continue;
+for(const year of YEARS){
 
-      const teams = match?.info?.teams || [pair[0], pair[1]];
-      const venue = match?.info?.venue || "";
+const file=`data/t20-world-cup/matches/t20wc_${year}_FULL.json`;
 
-      const scoresMap = extractScoresMap(match);
+const res=await fetch(file);
 
-      // Winner: try outcome.winner; else parse outcome result string; else derive from runs
-      const winner = deriveWinner(match, teams, scoresMap) || teams[0];
-      const loser  = teams.find(t => t !== winner) || teams[1];
+if(!res.ok) continue;
 
-      const winnerScore = scoresMap[winner] || "";
-      const loserScore  = scoresMap[loser] || "";
+const matches=await res.json();
 
-      const margin = deriveMargin(match, winner);
+const pair=FINALISTS[year];
 
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${year}</td>
-        <td class="team">${winner}</td>
-        <td class="score">${winnerScore}</td>
-        <td class="team">${loser}</td>
-        <td class="score">${loserScore}</td>
-        <td class="margin">${margin}</td>
-        <td>${venue}</td>
-      `;
+const match=matches.find(m=>
+m.info?.teams?.includes(pair[0]) &&
+m.info?.teams?.includes(pair[1])
+);
 
-      // keep your existing navigation pattern
-      const matchId = match?.info?.match_id || "";
-      tr.onclick = () => {
-        window.location.href =
-          `t20-world-cup-match.html?file=${encodeURIComponent(file)}&match=${encodeURIComponent(String(matchId))}`;
-      };
+if(!match) continue;
 
-      table.appendChild(tr);
+const scores=extractScores(match);
 
-    }catch(e){
-      // ignore
-    }
-  }
+const winner=match.info.outcome.winner;
 
-  if(!table.children.length){
-    table.innerHTML = `<tr><td colspan="7">No finals found. Check your FULL.json paths.</td></tr>`;
-  }
-})();
+const loser=match.info.teams.find(t=>t!==winner);
 
-/* -----------------------
-   FINAL PICKING (IMPORTANT)
-   ----------------------- */
-function pickBestFinal(matches, a, b){
-  const candidates = matches.filter(m => hasBothTeams(m, a, b));
-  if(!candidates.length) return null;
+const winnerScore=scores[winner];
+const loserScore=scores[loser];
 
-  // Rank by "most likely actual final"
-  // 1) event.stage === "Final"
-  // 2) event.name contains "Final" (but not semi)
-  // 3) fallback first candidate
-  let best = null;
-  let bestScore = -1;
+const margin=formatMargin(match.info.outcome);
 
-  for(const m of candidates){
-    let s = 0;
+const venue=match.info.venue;
 
-    const stage = (m?.info?.event?.stage || "").toString().toLowerCase();
-    const name  = (m?.info?.event?.name  || "").toString().toLowerCase();
+const tr=document.createElement("tr");
 
-    if(stage === "final" || stage === "grand final") s += 100;
-    if(name.includes("final") && !name.includes("semi")) s += 30;
+tr.innerHTML=`
+<td>${year}</td>
+<td class="team">${winner}</td>
+<td class="score">${winnerScore}</td>
+<td class="team">${loser}</td>
+<td class="score">${loserScore}</td>
+<td class="margin">${margin}</td>
+<td>${venue}</td>
+`;
 
-    // Prefer matches that have outcome/by (often finals have it)
-    if(m?.info?.outcome) s += 5;
-    if(m?.info?.outcome?.by) s += 5;
+table.appendChild(tr);
 
-    // Prefer matches that have innings totals
-    const map = extractScoresMap(m);
-    if(Object.keys(map).length >= 2) s += 10;
-
-    if(s > bestScore){
-      bestScore = s;
-      best = m;
-    }
-  }
-
-  return best || candidates[0];
 }
 
-function hasBothTeams(m, a, b){
-  const teams = m?.info?.teams || [];
-  return teams.includes(a) && teams.includes(b);
 }
 
-/* -----------------------
-   SCORE EXTRACTION (ROBUST)
-   Handles BOTH:
-   - Cricsheet FULL nested keys: {"1st innings":{team,runs,wickets}}
-   - Flat objects: {team,runs,wickets}
-   - Other minor variations
-   ----------------------- */
-function extractScoresMap(match){
-  const scores = {};
-  const inningsArr = Array.isArray(match?.innings) ? match.innings : [];
+function extractScores(match){
 
-  for(const raw of inningsArr){
-    const inn = normalizeInnings(raw);
-    if(!inn) continue;
+const scores={};
 
-    const team = inn.team;
-    const runs = inn.runs;
-    const wkts = inn.wickets;
+for(const innings of match.innings){
 
-    if(!team || runs === undefined || runs === null) continue;
+const inn=Object.values(innings)[0];
 
-    // wickets sometimes missing (rare) -> show just runs
-    if(wkts === undefined || wkts === null){
-      scores[team] = `${runs}`;
-    } else {
-      scores[team] = `${runs}/${wkts}`;
-    }
-  }
+const team=inn.team;
 
-  return scores;
+const runs=inn.runs?.total ?? inn.runs;
+
+const wickets=inn.wickets;
+
+scores[team]=`${runs}/${wickets}`;
+
 }
 
-function normalizeInnings(raw){
-  if(!raw) return null;
+return scores;
 
-  // Case 1: raw is already {team,runs,wickets}
-  if(typeof raw === "object" && raw.team && (raw.runs !== undefined)){
-    return {
-      team: raw.team,
-      runs: raw.runs,
-      wickets: raw.wickets
-    };
-  }
-
-  // Case 2: raw is {"1st innings": {...}} (most common FULL format)
-  if(typeof raw === "object"){
-    const v = Object.values(raw)[0];
-    if(v && typeof v === "object"){
-      // v might be the actual innings block
-      if(v.team && (v.runs !== undefined)){
-        return { team: v.team, runs: v.runs, wickets: v.wickets };
-      }
-      // some older exports might nest again; search one level deeper
-      for(const vv of Object.values(v)){
-        if(vv && typeof vv === "object" && vv.team && (vv.runs !== undefined)){
-          return { team: vv.team, runs: vv.runs, wickets: vv.wickets };
-        }
-      }
-    }
-  }
-
-  return null;
 }
 
-/* -----------------------
-   WINNER + MARGIN (ROBUST)
-   ----------------------- */
-function deriveWinner(match, teams, scoresMap){
-  const outcome = match?.info?.outcome;
+function formatMargin(outcome){
 
-  // 1) Direct winner field
-  if(outcome?.winner) return outcome.winner;
+if(outcome.by?.runs)
+return `${outcome.winner} won by ${outcome.by.runs} runs`;
 
-  // 2) Parse outcome.result string for team name
-  const resultStr = (outcome?.result || "").toString();
-  if(resultStr){
-    // If it contains "won", pick whichever team name is inside
-    const lower = resultStr.toLowerCase();
-    if(lower.includes("won")){
-      for(const t of teams){
-        if(lower.includes(t.toLowerCase())) return t;
-      }
-    }
-  }
+if(outcome.by?.wickets)
+return `${outcome.winner} won by ${outcome.by.wickets} wickets`;
 
-  // 3) Derive by runs from innings totals
-  const a = teams[0], b = teams[1];
-  const runsA = parseRuns(scoresMap[a]);
-  const runsB = parseRuns(scoresMap[b]);
+return "";
 
-  if(runsA !== null && runsB !== null){
-    if(runsA > runsB) return a;
-    if(runsB > runsA) return b;
-  }
-
-  return null;
 }
 
-function deriveMargin(match, winner){
-  const outcome = match?.info?.outcome;
-
-  if(outcome?.by?.runs !== undefined && outcome?.by?.runs !== null){
-    return `${winner} won by ${outcome.by.runs} runs`;
-  }
-  if(outcome?.by?.wickets !== undefined && outcome?.by?.wickets !== null){
-    return `${winner} won by ${outcome.by.wickets} wickets`;
-  }
-
-  // fallback: if outcome.result exists, show it (short)
-  const r = (outcome?.result || "").toString().trim();
-  if(r) return r;
-
-  return "";
-}
-
-function parseRuns(scoreStr){
-  if(!scoreStr) return null;
-  const n = parseInt(scoreStr.split("/")[0], 10);
-  return Number.isFinite(n) ? n : null;
-}
 </script>
 
 </body>
