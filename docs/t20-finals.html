@@ -8,7 +8,6 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
-
 body{
   font-family:Inter,system-ui,Arial;
   margin:0;
@@ -83,7 +82,6 @@ tbody tr:hover{
   font-weight:700;
   color:#0a4;
 }
-
 </style>
 </head>
 
@@ -102,7 +100,6 @@ tbody tr:hover{
 </div>
 
 <table>
-
 <thead>
 <tr>
   <th>Year</th>
@@ -116,17 +113,14 @@ tbody tr:hover{
 <tbody id="finalsTable">
 <tr><td colspan="5">Loading finals...</td></tr>
 </tbody>
-
 </table>
 
 </div>
 
 <script>
 
-// REAL ICC MEN'S T20 WORLD CUP YEARS ONLY
 const YEARS = [2007,2009,2010,2012,2014,2016,2021,2022,2024];
 
-// Hardcode finalists so we never accidentally grab qualifiers / random finals
 const FINALISTS = {
   2007:["India","Pakistan"],
   2009:["Pakistan","Sri Lanka"],
@@ -152,8 +146,7 @@ try{
 
 const file = `data/t20-world-cup/matches/t20wc_${year}_FULL.json`;
 
-const res = await fetch(file);
-
+const res = await fetch(file, {cache:"no-store"});
 if(!res.ok) continue;
 
 const matches = await res.json();
@@ -168,7 +161,6 @@ m.info?.teams?.includes(pair[1])
 if(!match) continue;
 
 const venue = match.info.venue || "";
-
 const outcome = match.info.outcome || {};
 
 const winner = outcome.winner || pair[0];
@@ -186,7 +178,6 @@ tr.innerHTML = `
 <td>${venue}</td>
 `;
 
-// Keep your existing click behaviour (uses your match page)
 tr.onclick = () => {
   const matchId = match.info.match_id || "";
   window.location.href =
@@ -196,7 +187,7 @@ tr.onclick = () => {
 table.appendChild(tr);
 
 }catch(e){
-  // ignore year
+  // ignore
 }
 
 }
@@ -209,12 +200,44 @@ if(!table.children.length){
 
 function formatMargin(outcome, winner){
 
+// Normal cases
 if(outcome.by?.runs !== undefined && outcome.by?.runs !== null)
 return `${winner} won by ${outcome.by.runs} runs`;
 
 if(outcome.by?.wickets !== undefined && outcome.by?.wickets !== null)
 return `${winner} won by ${outcome.by.wickets} wickets`;
 
+// 2007-style tie + tie-break / eliminator / bowl-out fields
+const result = (outcome.result || "").toString().toLowerCase();
+
+if(result === "tie"){
+
+// Cricsheet commonly uses these names depending on era/export:
+const tieBreak =
+  outcome.bowl_out ||
+  outcome.bowlout ||
+  outcome.eliminator ||
+  outcome.super_over ||
+  outcome.superover ||
+  outcome.tie_breaker ||
+  outcome.tiebreaker ||
+  outcome.method;
+
+if(typeof tieBreak === "string" && tieBreak.trim()){
+  return `${winner} won (${tieBreak})`;
+}
+
+if(typeof tieBreak === "object" && tieBreak){
+  // if it’s an object, try to surface something meaningful
+  if(tieBreak.result) return `${winner} won (${tieBreak.result})`;
+  if(tieBreak.method) return `${winner} won (${tieBreak.method})`;
+}
+
+// Fallback for tie when winner exists
+return `${winner} won (tie-break)`;
+}
+
+// Fallback: show outcome.result if present
 const r = (outcome.result || "").toString().trim();
 return r;
 
