@@ -10,69 +10,69 @@
 <style>
 
 body{
-  font-family:Inter,system-ui,Arial;
-  margin:0;
-  background:#f4f6f8;
+font-family:Inter,system-ui,Arial;
+margin:0;
+background:#f4f6f8;
 }
 
 .navbar{
-  display:flex;
-  justify-content:center;
-  gap:24px;
-  padding:16px 0;
-  border-bottom:1px solid #ddd;
-  background:#fff;
-  font-weight:600;
+display:flex;
+justify-content:center;
+gap:24px;
+padding:16px 0;
+border-bottom:1px solid #ddd;
+background:#fff;
+font-weight:600;
 }
 
 .navbar a{
-  text-decoration:none;
-  color:#0056d6;
+text-decoration:none;
+color:#0056d6;
 }
 
 .page{
-  max-width:1200px;
-  margin:30px auto;
-  padding:0 20px;
+max-width:1200px;
+margin:30px auto;
+padding:0 20px;
 }
 
 .hero{
-  background:linear-gradient(90deg,#8b0000,#e10600);
-  color:#fff;
-  padding:40px;
-  border-radius:22px;
-  margin-bottom:25px;
+background:linear-gradient(90deg,#8b0000,#e10600);
+color:#fff;
+padding:40px;
+border-radius:22px;
+margin-bottom:25px;
 }
 
 table{
-  width:100%;
-  border-collapse:collapse;
-  background:#fff;
-  border-radius:12px;
-  overflow:hidden;
+width:100%;
+border-collapse:collapse;
+background:#fff;
+border-radius:12px;
+overflow:hidden;
 }
 
 th{
-  background:#e10600;
-  color:#fff;
-  padding:12px;
-  text-align:left;
+background:#e10600;
+color:#fff;
+padding:12px;
+text-align:left;
 }
 
 td{
-  padding:12px;
+padding:12px;
 }
 
 tbody tr:nth-child(even){
-  background:#eaf3ff;
+background:#eaf3ff;
 }
 
 tbody tr{
-  cursor:pointer;
+cursor:pointer;
 }
 
 tbody tr:hover{
-  background:#d8e8ff;
+background:#d8e8ff;
 }
 
 .team{font-weight:700;}
@@ -110,7 +110,9 @@ tbody tr:hover{
 </tr>
 </thead>
 
-<tbody id="finalsTable"></tbody>
+<tbody id="finalsTable">
+<tr><td colspan="7">Loading finals...</td></tr>
+</tbody>
 
 </table>
 
@@ -118,72 +120,101 @@ tbody tr:hover{
 
 <script>
 
-const FINALS = [
-
-{
-year:2024,
-winner:"India",
-winner_score:"176/7",
-runner:"South Africa",
-runner_score:"169/8",
-margin:"India won by 7 runs",
-venue:"Barbados",
-file:"data/t20-world-cup/matches/t20wc_2024_FULL.json",
-matchId:"1415750"
-},
-
-{
-year:2022,
-winner:"England",
-winner_score:"138/5",
-runner:"Pakistan",
-runner_score:"137/8",
-margin:"England won by 5 wickets",
-venue:"Melbourne",
-file:"data/t20-world-cup/matches/t20wc_2022_FULL.json",
-matchId:"1319677"
-},
-
-{
-year:2021,
-winner:"Australia",
-winner_score:"173/2",
-runner:"New Zealand",
-runner_score:"172/4",
-margin:"Australia won by 8 wickets",
-venue:"Dubai",
-file:"data/t20-world-cup/matches/t20wc_2021_FULL.json",
-matchId:"1273756"
-}
-
+const YEARS = [
+2007,2009,2010,2012,2014,2016,2021,2022,2023,2024
 ];
 
-const table = document.getElementById("finalsTable");
+const table=document.getElementById("finalsTable");
 
-FINALS.forEach(f=>{
+table.innerHTML="";
+
+loadFinals();
+
+async function loadFinals(){
+
+for(const year of YEARS){
+
+try{
+
+const file=`data/t20-world-cup/matches/t20wc_${year}_FULL.json`;
+
+const res=await fetch(file);
+
+if(!res.ok) continue;
+
+const matches=await res.json();
+
+const final=matches.find(m=>
+m.info &&
+m.info.event &&
+m.info.event.name &&
+m.info.event.name.toLowerCase().includes("final") &&
+!m.info.event.name.toLowerCase().includes("semi")
+);
+
+if(!final) continue;
+
+const teams=final.info.teams;
+
+const venue=final.info.venue;
+
+const winner=final.info.outcome.winner;
+
+const loser=teams.find(t=>t!==winner);
+
+const score1=getScore(final,teams[0]);
+const score2=getScore(final,teams[1]);
+
+const margin=getMargin(final.info.outcome);
 
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
-<td>${f.year}</td>
-<td class="team">${f.winner}</td>
-<td class="score">${f.winner_score}</td>
-<td class="team">${f.runner}</td>
-<td class="score">${f.runner_score}</td>
-<td class="margin">${f.margin}</td>
-<td>${f.venue}</td>
+<td>${year}</td>
+<td class="team">${winner}</td>
+<td class="score">${winner===teams[0]?score1:score2}</td>
+<td class="team">${loser}</td>
+<td class="score">${winner===teams[0]?score2:score1}</td>
+<td class="margin">${margin}</td>
+<td>${venue}</td>
 `;
 
 tr.onclick=()=>{
-
 window.location.href=
-`t20-world-cup-match.html?file=${encodeURIComponent(f.file)}&match=${f.matchId}`;
-
+`t20-world-cup-match.html?file=${file}&match=${final.info.match_id}`;
 };
 
 table.appendChild(tr);
 
-});
+}catch(e){}
+
+}
+
+}
+
+function getScore(match,team){
+
+const innings=match.innings.find(i=>Object.keys(i)[0]===team);
+
+if(!innings) return "";
+
+const data=innings[team];
+
+return `${data.runs}/${data.wickets}`;
+
+}
+
+function getMargin(outcome){
+
+if(outcome.by?.runs)
+return `${outcome.winner} won by ${outcome.by.runs} runs`;
+
+if(outcome.by?.wickets)
+return `${outcome.winner} won by ${outcome.by.wickets} wickets`;
+
+return "";
+
+}
 
 </script>
 
