@@ -64,14 +64,27 @@ table{
   border-collapse:collapse;
   margin-bottom:25px;
   font-size:14px;
+  table-layout:fixed;
 }
+
+th{
+  background:#f3f6fb;
+  text-align:left;
+}
+
 th,td{
   border-bottom:1px solid #ddd;
   padding:8px 10px;
-  text-align:left;
 }
-th{background:#f3f6fb;}
-tr:nth-child(even){background:#f8fbff;}
+
+td.num{
+  text-align:right;
+  font-variant-numeric:tabular-nums;
+}
+
+tr:nth-child(even){
+  background:#f8fbff;
+}
 </style>
 </head>
 
@@ -129,147 +142,232 @@ if(!fileParam){
   return;
 }
 
-// load name map safely, then index
 fetch(nameMapUrl)
-  .then(r => r.ok ? r.json() : {})
-  .catch(() => ({}))
-  .then(names => {
-    nameMap = names || {};
-    return fetch(indexUrl).then(r=>r.json());
-  })
-  .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
-  .then(seasons=>{
-    let match=null;
-    seasons.forEach(season=>{
-      season.forEach(m=>{
-        if(m.file===fileParam) match=m;
-      });
-    });
+.then(r => r.ok ? r.json() : {})
+.catch(() => ({}))
+.then(names => {
+nameMap = names || {};
+return fetch(indexUrl).then(r=>r.json());
+})
+.then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
+.then(seasons=>{
 
-    if(!match){
-      statusText.textContent="Match not found.";
-      return;
-    }
+let match=null;
 
-    const info = match.info;
-    statusText.textContent="Match loaded";
+seasons.forEach(season=>{
+season.forEach(m=>{
+if(m.file===fileParam) match=m;
+});
+});
 
-    dateBox.textContent = formatDate(info.dates[0]);
-    teamsBox.textContent = info.teams.map(t=>fullName(t)).join(" vs ");
-    venueBox.textContent = info.venue;
-    winnerBox.textContent = fullName(info.outcome?.winner || "—");
+if(!match){
+statusText.textContent="Match not found.";
+return;
+}
 
-    let result="—";
-    if(info.outcome?.by){
-      if(info.outcome.by.runs) result="won by "+info.outcome.by.runs+" runs";
-      if(info.outcome.by.wickets) result="won by "+info.outcome.by.wickets+" wickets";
-    }
-    resultBox.textContent=result;
+const info = match.info;
 
-    renderInnings(match.innings);
-  });
+statusText.textContent="Match loaded";
+
+dateBox.textContent = formatDate(info.dates[0]);
+teamsBox.textContent = info.teams.map(t=>fullName(t)).join(" vs ");
+venueBox.textContent = info.venue;
+winnerBox.textContent = fullName(info.outcome?.winner || "—");
+
+let result="—";
+
+if(info.outcome?.by){
+if(info.outcome.by.runs) result="won by "+info.outcome.by.runs+" runs";
+if(info.outcome.by.wickets) result="won by "+info.outcome.by.wickets+" wickets";
+}
+
+resultBox.textContent=result;
+
+renderInnings(match.innings);
+
+});
 
 function fullName(name){
-  return nameMap[name] || name;
+return nameMap[name] || name;
 }
 
 function renderInnings(innings){
-  innings.forEach(inn=>{
-    const batStats={}, bowlStats={}, dismissals={};
-    let runs=0, wickets=0, legalBalls=0;
 
-    inn.overs.forEach(over=>{
-      over.deliveries.forEach(d=>{
+innings.forEach(inn=>{
 
-        const isWide = d.extras?.wides;
-        const isNoBall = d.extras?.noballs;
+const batStats={}, bowlStats={}, dismissals={};
 
-        const batter=d.batter;
-        const bowler=d.bowler;
-        const batRuns=d.runs.batter;
+let runs=0, wickets=0, legalBalls=0;
 
-        if(!batStats[batter]) batStats[batter]={runs:0,balls:0};
-        batStats[batter].runs+=batRuns;
+inn.overs.forEach(over=>{
 
-        if(!isWide){
-          batStats[batter].balls++;
-        }
+over.deliveries.forEach(d=>{
 
-        if(!bowlStats[bowler]) bowlStats[bowler]={runs:0,balls:0,wkts:0};
-        bowlStats[bowler].runs+=d.runs.total;
+const isWide = d.extras?.wides;
+const isNoBall = d.extras?.noballs;
 
-        if(!isWide && !isNoBall){
-          bowlStats[bowler].balls++;
-          legalBalls++;
-        }
+const batter=d.batter;
+const bowler=d.bowler;
+const batRuns=d.runs.batter;
 
-        if(d.wickets){
-          d.wickets.forEach(w=>{
-            bowlStats[bowler].wkts++;
-            wickets++;
+if(!batStats[batter])
+batStats[batter]={runs:0,balls:0,fours:0,sixes:0};
 
-            let how=w.kind;
-            let fielder=w.fielders?.[0]?.name;
-            let outText="";
+batStats[batter].runs+=batRuns;
 
-            const bowlerName = fullName(bowler);
-            const fielderName = fullName(fielder);
+if(batRuns===4) batStats[batter].fours++;
+if(batRuns===6) batStats[batter].sixes++;
 
-            if(how==="caught") outText=`c ${fielderName} b ${bowlerName}`;
-            else if(how==="bowled") outText=`b ${bowlerName}`;
-            else if(how==="lbw") outText=`lbw b ${bowlerName}`;
-            else if(how==="run out") outText=`run out (${fielderName||""})`;
-            else outText=`${how} b ${bowlerName}`;
+if(!isWide){
+batStats[batter].balls++;
+}
 
-            dismissals[w.player_out]=outText;
-          });
-        }
+if(!bowlStats[bowler])
+bowlStats[bowler]={runs:0,balls:0,wkts:0};
 
-        runs+=d.runs.total;
-      });
-    });
+bowlStats[bowler].runs+=d.runs.total;
 
-    const overs=(Math.floor(legalBalls/6)+"."+(legalBalls%6));
+if(!isWide && !isNoBall){
+bowlStats[bowler].balls++;
+legalBalls++;
+}
 
-    let html=`<h2>${fullName(inn.team)} Innings</h2>
-    <p><strong>${runs}/${wickets}</strong> (${overs} overs)</p>
+if(d.wickets){
 
-    <h3>Batting</h3>
-    <table>
-    <tr><th>Batter</th><th>How out</th><th>R</th><th>B</th><th>SR</th></tr>`;
+d.wickets.forEach(w=>{
 
-    Object.entries(batStats).forEach(([p,s])=>{
-      const sr=((s.runs/s.balls)*100).toFixed(1);
-      const howOut=dismissals[p]||"not out";
-      html+=`<tr>
-        <td>${fullName(p)}</td>
-        <td>${howOut}</td>
-        <td>${s.runs}</td>
-        <td>${s.balls}</td>
-        <td>${sr}</td>
-      </tr>`;
-    });
+bowlStats[bowler].wkts++;
+wickets++;
 
-    html+=`</table><h3>Bowling</h3>
-    <table><tr><th>Bowler</th><th>O</th><th>R</th><th>W</th></tr>`;
+let how=w.kind;
+let fielder=w.fielders?.[0]?.name;
 
-    Object.entries(bowlStats).forEach(([p,s])=>{
-      const o=(Math.floor(s.balls/6)+"."+(s.balls%6));
-      html+=`<tr>
-        <td>${fullName(p)}</td>
-        <td>${o}</td>
-        <td>${s.runs}</td>
-        <td>${s.wkts}</td>
-      </tr>`;
-    });
+const bowlerName = fullName(bowler);
+const fielderName = fullName(fielder);
 
-    html+=`</table>`;
-    inningsContainer.innerHTML+=html;
-  });
+let outText="";
+
+if(how==="caught") outText=`c ${fielderName} b ${bowlerName}`;
+else if(how==="bowled") outText=`b ${bowlerName}`;
+else if(how==="lbw") outText=`lbw b ${bowlerName}`;
+else if(how==="stumped") outText=`st ${fielderName} b ${bowlerName}`;
+else if(how==="run out") outText=`run out (${fielderName||""})`;
+else outText=`${how} b ${bowlerName}`;
+
+dismissals[w.player_out]=outText;
+
+});
+
+}
+
+runs+=d.runs.total;
+
+});
+
+});
+
+const overs=(Math.floor(legalBalls/6)+"."+(legalBalls%6));
+
+let html=`<h2>${fullName(inn.team)} Innings</h2>
+
+<p><strong>${runs}/${wickets}</strong> (${overs} overs)</p>
+
+<h3>Batting</h3>
+
+<table>
+
+<colgroup>
+<col style="width:28%">
+<col style="width:30%">
+<col style="width:8%">
+<col style="width:8%">
+<col style="width:8%">
+<col style="width:8%">
+<col style="width:10%">
+</colgroup>
+
+<tr>
+<th>Batter</th>
+<th>How out</th>
+<th class="num">R</th>
+<th class="num">B</th>
+<th class="num">4s</th>
+<th class="num">6s</th>
+<th class="num">SR</th>
+</tr>`;
+
+Object.entries(batStats).forEach(([p,s])=>{
+
+const sr=s.balls?((s.runs/s.balls)*100).toFixed(1):"";
+
+const howOut=dismissals[p]||"not out";
+
+html+=`<tr>
+<td>${fullName(p)}</td>
+<td>${howOut}</td>
+<td class="num">${s.runs}</td>
+<td class="num">${s.balls}</td>
+<td class="num">${s.fours}</td>
+<td class="num">${s.sixes}</td>
+<td class="num">${sr}</td>
+</tr>`;
+
+});
+
+html+=`</table>
+
+<h3>Bowling</h3>
+
+<table>
+
+<colgroup>
+<col style="width:40%">
+<col style="width:15%">
+<col style="width:15%">
+<col style="width:15%">
+<col style="width:15%">
+</colgroup>
+
+<tr>
+<th>Bowler</th>
+<th class="num">O</th>
+<th class="num">R</th>
+<th class="num">W</th>
+<th class="num">Econ</th>
+</tr>`;
+
+Object.entries(bowlStats).forEach(([p,s])=>{
+
+const o=(Math.floor(s.balls/6)+"."+(s.balls%6));
+
+const econ=s.balls?(s.runs/(s.balls/6)).toFixed(2):"";
+
+html+=`<tr>
+<td>${fullName(p)}</td>
+<td class="num">${o}</td>
+<td class="num">${s.runs}</td>
+<td class="num">${s.wkts}</td>
+<td class="num">${econ}</td>
+</tr>`;
+
+});
+
+html+=`</table>`;
+
+inningsContainer.innerHTML+=html;
+
+});
+
 }
 
 function formatDate(d){
-  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+
+return new Date(d).toLocaleDateString("en-GB",{
+day:"2-digit",
+month:"short",
+year:"numeric"
+});
+
 }
 
 });
