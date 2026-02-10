@@ -32,6 +32,8 @@ margin:30px auto;
 padding:0 20px;
 }
 
+/* HERO */
+
 .hero{
 background:linear-gradient(90deg,#8b0000,#e10600);
 color:#fff;
@@ -64,6 +66,7 @@ overflow-y:auto;
 border-radius:8px;
 box-shadow:0 4px 12px rgba(0,0,0,0.25);
 display:none;
+z-index:999;
 }
 
 .searchItem{
@@ -73,6 +76,35 @@ cursor:pointer;
 
 .searchItem:hover{
 background:#eee;
+}
+
+/* CONTROLS */
+
+.controls{
+display:flex;
+gap:10px;
+margin-bottom:20px;
+align-items:center;
+}
+
+select,button{
+padding:8px 14px;
+border-radius:8px;
+border:1px solid #ccc;
+cursor:pointer;
+}
+
+button.active{
+background:#e10600;
+color:#fff;
+border:none;
+}
+
+/* BOXES */
+
+.summaryTitle{
+font-weight:700;
+margin:15px 0 10px;
 }
 
 .summaryGrid{
@@ -99,6 +131,8 @@ font-size:14px;
 color:#666;
 }
 
+/* TABLE */
+
 table{
 width:100%;
 border-collapse:collapse;
@@ -112,6 +146,12 @@ border-bottom:1px solid #eee;
 
 tr:nth-child(even){
 background:#f8fbff;
+}
+
+.matchLink{
+color:#0056d6;
+font-weight:600;
+text-decoration:none;
 }
 
 </style>
@@ -142,10 +182,23 @@ background:#f8fbff;
 
 </div>
 
-<div>CAREER SUMMARY</div>
+<div class="controls">
+
+<label>Opposition:</label>
+
+<select id="oppSelect">
+<option value="All">All</option>
+</select>
+
+<button id="batBtn" class="active">Batting</button>
+<button id="bowlBtn">Bowling</button>
+
+</div>
+
+<div class="summaryTitle">CAREER SUMMARY</div>
 <div id="careerBoxes" class="summaryGrid"></div>
 
-<div>VS OPPOSITION</div>
+<div class="summaryTitle">VS OPPOSITION</div>
 <div id="oppBoxes" class="summaryGrid"></div>
 
 <table>
@@ -155,9 +208,10 @@ background:#f8fbff;
 <th>Date</th>
 <th>Opponent</th>
 <th>Venue</th>
-<th>Runs</th>
-<th>Balls</th>
-<th>SR</th>
+<th id="col1"></th>
+<th id="col2"></th>
+<th id="col3"></th>
+<th id="col4"></th>
 </tr>
 </thead>
 
@@ -174,14 +228,15 @@ const folder="data/t20-world-cup/matches/";
 const params=new URLSearchParams(window.location.search);
 const player=params.get("player");
 
-document.getElementById("playerName").innerText=player;
+playerName.innerText=player;
 
 let allPlayers=[];
 let allMatches=[];
+let mode="batting";
 
 /* SEARCH */
 
-async function loadPlayerNames(){
+async function loadPlayers(){
 
 const data=await fetch(folder+"player-names.json").then(r=>r.json());
 
@@ -240,18 +295,12 @@ matches.forEach(match=>{
 let playerTeam=null;
 
 match.innings.forEach(inn=>{
-
 inn.overs.forEach(over=>{
-
 over.deliveries.forEach(d=>{
-
 if(d.batter===player||d.bowler===player)
 playerTeam=inn.team;
-
 });
-
 });
-
 });
 
 if(!playerTeam) return;
@@ -259,41 +308,84 @@ if(!playerTeam) return;
 const opponent=
 match.info.teams.find(t=>t!==playerTeam);
 
-let runs=0;
-let balls=0;
+let bat={runs:0,balls:0};
+let bowl={runs:0,balls:0,wickets:0};
 
 match.innings.forEach(inn=>{
-
 inn.overs.forEach(over=>{
-
 over.deliveries.forEach(d=>{
 
 const legal=!d.extras?.wides&&!d.extras?.noballs;
 
 if(d.batter===player){
+bat.runs+=d.runs.batter;
+if(legal) bat.balls++;
+}
 
-runs+=d.runs.batter;
-if(legal) balls++;
-
+if(d.bowler===player){
+bowl.runs+=d.runs.total;
+if(legal) bowl.balls++;
+if(d.wickets)
+d.wickets.forEach(w=>{
+if(w.kind!=="run out")
+bowl.wickets++;
+});
 }
 
 });
-
 });
-
 });
 
 allMatches.push({
 date:match.info.dates[0],
 opponent,
 venue:match.info.venue,
-runs,
-balls
+bat,
+bowl
 });
 
 });
 
 }
+
+populateOpps();
+render();
+
+}
+
+/* POPULATE OPP SELECT */
+
+function populateOpps(){
+
+const opps=[...new Set(allMatches.map(m=>m.opponent))];
+
+opps.sort().forEach(o=>{
+oppSelect.innerHTML+=`<option>${o}</option>`;
+});
+
+oppSelect.onchange=render;
+
+}
+
+/* TOGGLE */
+
+batBtn.onclick=()=>{
+mode="batting";
+batBtn.classList.add("active");
+bowlBtn.classList.remove("active");
+render();
+};
+
+bowlBtn.onclick=()=>{
+mode="bowling";
+bowlBtn.classList.add("active");
+batBtn.classList.remove("active");
+render();
+};
+
+/* RENDER */
+
+function render(){
 
 renderCareer();
 renderOpposition();
@@ -301,42 +393,84 @@ renderTable();
 
 }
 
-/* RENDER */
-
 function renderCareer(){
 
-const runs=sum(allMatches,m=>m.runs);
-const balls=sum(allMatches,m=>m.balls);
+renderBoxes(allMatches,"careerBoxes");
 
-careerBoxes.innerHTML=
-box("Matches",allMatches.length)+
+}
+
+function renderOpposition(){
+
+const opp=oppSelect.value;
+
+const matches=
+opp==="All"
+?allMatches
+:allMatches.filter(m=>m.opponent===opp);
+
+renderBoxes(matches,"oppBoxes");
+
+}
+
+function renderBoxes(matches,target){
+
+const el=document.getElementById(target);
+
+if(mode==="batting"){
+
+const runs=sum(matches,m=>m.bat.runs);
+const balls=sum(matches,m=>m.bat.balls);
+
+el.innerHTML=
+box("Matches",matches.length)+
 box("Runs",runs)+
 box("Balls",balls)+
 box("Average",runs)+
 box("Strike Rate",(runs/balls*100).toFixed(1))+
 box("50s","-");
 
+}else{
+
+const balls=sum(matches,m=>m.bowl.balls);
+const runs=sum(matches,m=>m.bowl.runs);
+const wk=sum(matches,m=>m.bowl.wickets);
+
+el.innerHTML=
+box("Matches",matches.length)+
+box("Overs",(balls/6).toFixed(1))+
+box("Wickets",wk)+
+box("Average",wk?(runs/wk).toFixed(2):"-")+
+box("Economy",(runs/(balls/6)).toFixed(2))+
+box("Best","-");
+
 }
-
-function renderOpposition(){
-
-renderCareer();
 
 }
 
 function renderTable(){
 
-allMatches.forEach(m=>{
+const opp=oppSelect.value;
+
+const matches=
+opp==="All"
+?allMatches
+:allMatches.filter(m=>m.opponent===opp);
+
+matchRows.innerHTML="";
+
+matches.forEach(m=>{
 
 matchRows.innerHTML+=`
 <tr>
 <td>${m.date}</td>
 <td>${m.opponent}</td>
 <td>${m.venue}</td>
-<td>${m.runs}</td>
-<td>${m.balls}</td>
-<td>${m.balls?(m.runs/m.balls*100).toFixed(1):""}</td>
-</tr>`;
+<td>${m.bat.runs}</td>
+<td>${m.bat.balls}</td>
+<td>${m.bat.balls?(m.bat.runs/m.bat.balls*100).toFixed(1):""}</td>
+<td></td>
+</tr>
+`;
 
 });
 
@@ -353,7 +487,9 @@ function sum(arr,fn){
 return arr.reduce((a,b)=>a+fn(b),0);
 }
 
-loadPlayerNames();
+/* INIT */
+
+loadPlayers();
 loadMatches();
 
 </script>
