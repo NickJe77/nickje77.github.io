@@ -50,7 +50,7 @@ margin:0 0 10px 0;
 
 .result{
 font-weight:700;
-margin-top:5px;
+margin-top:4px;
 }
 
 .card{
@@ -76,7 +76,7 @@ margin-bottom:20px;
 table{
 width:100%;
 border-collapse:collapse;
-margin-bottom:20px;
+margin-bottom:18px;
 }
 
 th{
@@ -143,7 +143,7 @@ if(!file){
 document.getElementById("matchContainer").innerHTML =
 "<div class='hero'>Invalid match link</div>";
 
-throw new Error("Missing file parameter");
+throw new Error();
 
 }
 
@@ -156,7 +156,7 @@ const res = await fetch(file);
 if(!res.ok){
 
 document.getElementById("matchContainer").innerHTML =
-"<div class='hero'>Match file not found</div>";
+"<div class='hero'>Match not found</div>";
 
 return;
 
@@ -165,7 +165,7 @@ return;
 const matches = await res.json();
 
 const match =
-matches.find(m => m.info?.event?.stage === "Final")
+matches.find(m => m.info?.event?.stage==="Final")
 || matches[matches.length-1];
 
 renderMatch(match);
@@ -176,69 +176,62 @@ function renderMatch(match){
 
 const container = document.getElementById("matchContainer");
 
-const toss = match.info.toss
-? `${match.info.toss.winner} won the toss and chose to ${match.info.toss.decision}`
-: "";
-
-let result = "";
+let result="";
 
 if(match.info.outcome?.winner){
 
 if(match.info.outcome.by?.runs)
-result = `${match.info.outcome.winner} won by ${match.info.outcome.by.runs} runs`;
+result=`${match.info.outcome.winner} won by ${match.info.outcome.by.runs} runs`;
 
 else if(match.info.outcome.by?.wickets)
-result = `${match.info.outcome.winner} won by ${match.info.outcome.by.wickets} wickets`;
+result=`${match.info.outcome.winner} won by ${match.info.outcome.by.wickets} wickets`;
 
 }
 
 container.innerHTML = `
-
 <div class="hero">
 <h1>${match.info.teams.join(" vs ")}</h1>
 <div>${match.info.venue}</div>
 <div>${match.info.dates.join(", ")}</div>
-<div class="result">${toss}</div>
 <div class="result">${result}</div>
 </div>
-
 `;
 
-match.innings.forEach(inn => {
+match.innings.forEach(inn=>{
 
 const innings = inn.team ? inn : Object.values(inn)[0];
 
 const stats = parseInnings(innings);
 
-const div = document.createElement("div");
+const div=document.createElement("div");
 
-div.className = "card";
+div.className="card";
 
-div.innerHTML = `
+div.innerHTML=`
 
 <div class="innings-title">
 ${innings.team} Innings
 </div>
 
 <div class="score">
-${stats.runs}/${stats.wickets} (${stats.overs} overs)
+${stats.runs}/${stats.wickets} (${stats.overs})
 </div>
 
 <h3>Batting</h3>
 
-${buildBatting(stats.batting)}
+${battingTable(stats.batting)}
 
 <div class="extras">
 Extras: ${stats.extras}
 </div>
 
 <div class="fow">
-Fall of wickets: ${stats.fow.length ? stats.fow.join(", ") : "None"}
+Fall of wickets: ${stats.fow.length?stats.fow.join(", "):"None"}
 </div>
 
 <h3>Bowling</h3>
 
-${buildBowling(stats.bowling)}
+${bowlingTable(stats.bowling)}
 
 `;
 
@@ -248,15 +241,18 @@ container.appendChild(div);
 
 }
 
+
+/* CRITICAL FIX — wides and no balls NOT counted as balls */
+
 function parseInnings(innings){
 
 const deliveries =
 innings.deliveries
-|| innings.overs.flatMap(o => o.deliveries);
+|| innings.overs.flatMap(o=>o.deliveries);
 
 let runs=0;
 let wickets=0;
-let balls=0;
+let legalBalls=0;
 let extras=0;
 
 const batting={};
@@ -269,18 +265,20 @@ runs += d.runs.total;
 
 extras += d.runs.extras || 0;
 
-if(!d.extras?.wides)
-balls++;
+/* Only count legal deliveries */
 
-const batter = d.batter;
-const bowler = d.bowler;
+if(!d.extras?.wides && !d.extras?.noballs)
+legalBalls++;
+
+const batter=d.batter;
+const bowler=d.bowler;
 
 if(!batting[batter])
-batting[batter] = {runs:0,balls:0,out:"not out"};
+batting[batter]={runs:0,balls:0,out:"not out"};
 
-batting[batter].runs += d.runs.batter;
+batting[batter].runs+=d.runs.batter;
 
-if(!d.extras?.wides)
+if(!d.extras?.wides && !d.extras?.noballs)
 batting[batter].balls++;
 
 if(d.wickets){
@@ -289,12 +287,12 @@ d.wickets.forEach(w=>{
 
 wickets++;
 
-batting[w.player_out].out = dismissalText(w,bowler);
+batting[w.player_out].out=dismissalText(w,bowler);
 
 fow.push(`${runs}/${wickets} (${w.player_out})`);
 
 if(!bowling[bowler])
-bowling[bowler] = {runs:0,balls:0,wickets:0};
+bowling[bowler]={runs:0,balls:0,wickets:0};
 
 bowling[bowler].wickets++;
 
@@ -303,22 +301,24 @@ bowling[bowler].wickets++;
 }
 
 if(!bowling[bowler])
-bowling[bowler] = {runs:0,balls:0,wickets:0};
+bowling[bowler]={runs:0,balls:0,wickets:0};
 
-bowling[bowler].runs += d.runs.total;
+bowling[bowler].runs+=d.runs.total;
 
-if(!d.extras?.wides)
+if(!d.extras?.wides && !d.extras?.noballs)
 bowling[bowler].balls++;
 
 });
 
-return {
+const overs =
+Math.floor(legalBalls/6)+"."+(legalBalls%6)+" overs";
+
+return{
 
 runs,
 wickets,
-overs: Math.floor(balls/6)+"."+(balls%6),
+overs,
 extras,
-
 batting:Object.entries(batting),
 bowling:Object.entries(bowling),
 fow
@@ -327,13 +327,13 @@ fow
 
 }
 
+
 function dismissalText(w,bowler){
 
-if(w.kind==="bowled")
-return `b ${bowler}`;
+if(w.kind==="bowled") return `b ${bowler}`;
 
 if(w.kind==="caught")
-return `c ${w.fielders?.[0]?.name || ""} b ${bowler}`;
+return `c ${w.fielders?.[0]?.name||""} b ${bowler}`;
 
 if(w.kind==="lbw")
 return `lbw b ${bowler}`;
@@ -345,9 +345,12 @@ return w.kind;
 
 }
 
-function buildBatting(rows){
 
-let html = `
+/* PLAYER LINK FIXED */
+
+function battingTable(rows){
+
+let html=`
 <table>
 <thead>
 <tr>
@@ -363,12 +366,12 @@ let html = `
 
 rows.forEach(([name,s])=>{
 
-const sr = s.balls ? ((s.runs/s.balls)*100).toFixed(1) : "";
+const sr=s.balls?((s.runs/s.balls)*100).toFixed(1):"";
 
-html += `
+html+=`
 <tr>
 <td>
-<a class="player" href="t20wc-player.html?name=${encodeURIComponent(name)}">
+<a class="player" href="t20-world-cup-player.html?name=${encodeURIComponent(name)}">
 ${name}
 </a>
 </td>
@@ -381,15 +384,16 @@ ${name}
 
 });
 
-html += "</tbody></table>";
+html+="</tbody></table>";
 
 return html;
 
 }
 
-function buildBowling(rows){
 
-let html = `
+function bowlingTable(rows){
+
+let html=`
 <table>
 <thead>
 <tr>
@@ -405,16 +409,14 @@ let html = `
 
 rows.forEach(([name,s])=>{
 
-const overs = Math.floor(s.balls/6)+"."+(s.balls%6);
+const overs=Math.floor(s.balls/6)+"."+(s.balls%6);
 
-const econ = s.balls
-? (s.runs/(s.balls/6)).toFixed(1)
-: "0.0";
+const econ=s.balls?(s.runs/(s.balls/6)).toFixed(1):"0.0";
 
-html += `
+html+=`
 <tr>
 <td>
-<a class="player" href="t20wc-player.html?name=${encodeURIComponent(name)}">
+<a class="player" href="t20-world-cup-player.html?name=${encodeURIComponent(name)}">
 ${name}
 </a>
 </td>
@@ -427,7 +429,7 @@ ${name}
 
 });
 
-html += "</tbody></table>";
+html+="</tbody></table>";
 
 return html;
 
