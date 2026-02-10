@@ -34,8 +34,6 @@ body{
   padding:30px 20px;
 }
 
-/* HERO */
-
 .hero{
   background:linear-gradient(90deg,#6a040f,#d00000);
   color:white;
@@ -53,8 +51,6 @@ body{
   margin-top:10px;
   font-size:20px;
 }
-
-/* TABS */
 
 .tabs{
   display:flex;
@@ -77,8 +73,6 @@ body{
   background:#d00000;
 }
 
-/* TABLE */
-
 table{
   width:100%;
   border-collapse:collapse;
@@ -88,7 +82,6 @@ table{
 th,td{
   border-bottom:1px solid #ddd;
   padding:10px 12px;
-  text-align:left;
 }
 
 th{
@@ -98,8 +91,6 @@ th{
 tr:nth-child(even){
   background:#f8fbff;
 }
-
-/* PLAYER LINKS */
 
 .player-link{
   color:#6a040f;
@@ -117,11 +108,9 @@ tr:nth-child(even){
 <body>
 
 <div class="navbar">
-
 <a href="index.html">Home</a>
 <a href="cricket.html">Cricket</a>
 <a href="t20-world-cup.html">T20 World Cup</a>
-
 </div>
 
 <div class="page-wrap">
@@ -169,34 +158,21 @@ Strike Rate (10+ matches)
 
 <script>
 
-/* PATHS */
+const INDEX="/data/t20-world-cup/matches/index.json";
+const BASE="/data/t20-world-cup/matches/";
+const NAME_MAP="/data/t20-world-cup/matches/player-names.json";
 
-const INDEX =
-"/data/t20-world-cup/matches/index.json";
+const batting={};
+const bowling={};
+const fielding={};
+const matchesPlayed={};
 
-const BASE =
-"/data/t20-world-cup/matches/";
+let leaders={};
+let nameMap={};
 
-const NAME_MAP =
-"/data/t20-world-cup/matches/player-names.json";
+load();
 
-/* STORAGE */
-
-const batting = {};
-const bowling = {};
-const fielding = {};
-const matchesPlayed = {};
-
-let leaders = {};
-let nameMap = {};
-
-/* LOAD */
-
-loadData();
-
-async function loadData(){
-
-try{
+async function load(){
 
 nameMap =
 await fetch(NAME_MAP)
@@ -213,7 +189,7 @@ const matches =
 await fetch(BASE+file)
 .then(r=>r.json());
 
-processMatches(matches);
+processMatches(matches,file);
 
 }
 
@@ -221,19 +197,16 @@ buildLeaders();
 
 render("runs");
 
-}catch(e){
-
-console.error(e);
-
 }
 
-}
+function processMatches(matches,file){
 
-/* PROCESS MATCHES */
+matches.forEach((match,index)=>{
 
-function processMatches(matches){
+/* guaranteed unique match key */
 
-matches.forEach(match=>{
+const matchKey =
+file+"_"+index;
 
 match.innings.forEach(inn=>{
 
@@ -241,8 +214,8 @@ inn.overs.forEach(over=>{
 
 over.deliveries.forEach(d=>{
 
-const batter = d.batter;
-const bowler = d.bowler;
+const batter=d.batter;
+const bowler=d.bowler;
 
 /* batting */
 
@@ -254,13 +227,13 @@ batting[batter].runs+=d.runs.batter;
 if(!d.extras?.wides && !d.extras?.noballs)
 batting[batter].balls++;
 
-/* matches */
+/* matches played */
 
 matchesPlayed[batter] =
 matchesPlayed[batter] || new Set();
 
 matchesPlayed[batter]
-.add(match.info.match_id);
+.add(matchKey);
 
 /* bowling */
 
@@ -275,20 +248,12 @@ bowling[bowler] =
 
 }
 
-/* fielding */
+if(w.kind==="caught"||w.kind==="run out"){
 
-if(
-w.kind==="caught"
-||
-w.kind==="run out"
-){
-
-const f =
-w.fielders?.[0]?.name;
+const f=w.fielders?.[0]?.name;
 
 if(f)
-fielding[f] =
-(fielding[f]||0)+1;
+fielding[f]=(fielding[f]||0)+1;
 
 }
 
@@ -305,12 +270,10 @@ fielding[f] =
 });
 
 }
-
-/* BUILD LEADERS */
 
 function buildLeaders(){
 
-leaders.runs =
+leaders.runs=
 Object.entries(batting)
 .sort((a,b)=>b[1].runs-a[1].runs)
 .slice(0,10)
@@ -320,7 +283,7 @@ playerLink(x[0]),
 x[1].runs
 ]);
 
-leaders.wickets =
+leaders.wickets=
 Object.entries(bowling)
 .sort((a,b)=>b[1]-a[1])
 .slice(0,10)
@@ -330,7 +293,7 @@ playerLink(x[0]),
 x[1]
 ]);
 
-leaders.fielding =
+leaders.fielding=
 Object.entries(fielding)
 .sort((a,b)=>b[1]-a[1])
 .slice(0,10)
@@ -340,21 +303,23 @@ playerLink(x[0]),
 x[1]
 ]);
 
-leaders.sr = [];
+/* STRIKE RATE FIX */
 
-Object.keys(batting).forEach(p=>{
+leaders.sr=[];
 
-const games =
-matchesPlayed[p]?.size||0;
+Object.keys(batting).forEach(player=>{
 
-if(games>=10){
+const games=
+matchesPlayed[player]?.size || 0;
 
-const sr =
-(batting[p].runs /
-batting[p].balls)*100;
+if(games>=10 && batting[player].balls>0){
+
+const sr=
+(batting[player].runs /
+batting[player].balls)*100;
 
 leaders.sr.push([
-p,
+player,
 sr
 ]);
 
@@ -365,9 +330,8 @@ sr
 leaders.sr
 .sort((a,b)=>b[1]-a[1]);
 
-leaders.sr =
-leaders.sr
-.slice(0,10)
+leaders.sr=
+leaders.sr.slice(0,10)
 .map((x,i)=>[
 i+1,
 playerLink(x[0]),
@@ -376,22 +340,17 @@ x[1].toFixed(1)
 
 }
 
-/* PLAYER LINK */
-
 function playerLink(name){
 
-const display =
-nameMap[name] || name;
+const display=
+nameMap[name]||name;
 
-return `
-<a class="player-link"
+return `<a class="player-link"
 href="t20-world-cup-player.html?player=${encodeURIComponent(name)}">
 ${display}
 </a>`;
 
 }
-
-/* TAB SWITCH */
 
 function showTab(type,btn){
 
@@ -404,21 +363,17 @@ render(type);
 
 }
 
-/* RENDER */
-
 function render(type){
 
-const tbody =
-document.getElementById("leaderTable");
+const tbody=document.getElementById("leaderTable");
 
 tbody.innerHTML="";
 
 leaders[type].forEach(r=>{
 
-const tr =
-document.createElement("tr");
+const tr=document.createElement("tr");
 
-tr.innerHTML =
+tr.innerHTML=
 `<td>${r[0]}</td>
 <td>${r[1]}</td>
 <td>${r[2]}</td>`;
