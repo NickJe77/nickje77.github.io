@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
+
 body{
 font-family:Inter,system-ui,Arial;
 margin:0;
@@ -50,9 +51,31 @@ border-radius:12px;
 margin-bottom:20px;
 }
 
-h2{
-margin:0 0 10px 0;
+.score{
+font-size:22px;
+font-weight:700;
+margin-bottom:10px;
 }
+
+table{
+width:100%;
+border-collapse:collapse;
+}
+
+th{
+text-align:left;
+border-bottom:2px solid #ddd;
+padding:8px;
+}
+
+td{
+padding:8px;
+}
+
+tbody tr:nth-child(even){
+background:#f4f8ff;
+}
+
 </style>
 
 </head>
@@ -68,11 +91,7 @@ margin:0 0 10px 0;
 <div class="page">
 
 <div id="matchContainer">
-
-<div class="hero">
-Loading match...
-</div>
-
+<div class="hero">Loading match...</div>
 </div>
 
 </div>
@@ -80,16 +99,15 @@ Loading match...
 <script>
 
 const params = new URLSearchParams(window.location.search);
-
 const file = params.get("file");
-const matchId = params.get("match"); // optional now
+const matchId = params.get("match");
 
 if(!file){
 
 document.getElementById("matchContainer").innerHTML =
 "<div class='hero'>Invalid match link</div>";
 
-throw new Error("Missing file parameter");
+throw new Error("Missing file");
 
 }
 
@@ -97,22 +115,11 @@ loadMatch();
 
 async function loadMatch(){
 
-const res = await fetch(file, {cache:"no-store"});
-
-if(!res.ok){
-
-document.getElementById("matchContainer").innerHTML =
-"<div class='hero'>Match file not found</div>";
-
-return;
-
-}
-
+const res = await fetch(file);
 const matches = await res.json();
 
 let match = null;
 
-// PRIORITY 1: use match_id if provided
 if(matchId){
 
 match = matches.find(m =>
@@ -121,7 +128,6 @@ String(m.info?.match_id) === String(matchId)
 
 }
 
-// PRIORITY 2: find FINAL automatically
 if(!match){
 
 match = matches.find(m =>
@@ -130,19 +136,9 @@ m.info?.event?.stage === "Final"
 
 }
 
-// PRIORITY 3: fallback — last match in file
-if(!match && matches.length){
-
-match = matches[matches.length - 1];
-
-}
-
 if(!match){
 
-document.getElementById("matchContainer").innerHTML =
-"<div class='hero'>Match not found</div>";
-
-return;
+match = matches[matches.length-1];
 
 }
 
@@ -155,10 +151,8 @@ function renderMatch(match){
 const container = document.getElementById("matchContainer");
 
 const teams = match.info.teams.join(" vs ");
-
-const venue = match.info.venue || "";
-
-const date = match.info.dates?.join(", ") || "";
+const venue = match.info.venue;
+const date = match.info.dates.join(", ");
 
 container.innerHTML = `
 <div class="hero">
@@ -168,31 +162,110 @@ container.innerHTML = `
 </div>
 `;
 
-for(const innings of match.innings){
+match.innings.forEach(inningsObj => {
 
-const inn = Object.values(innings)[0];
+const innings = Object.values(inningsObj)[0];
 
-const team = inn.team;
+const team = innings.team;
 
-const runs =
-typeof inn.runs === "object"
-? inn.runs.total
-: inn.runs;
-
-const wickets = inn.wickets ?? "";
+const stats = calculateInnings(innings);
 
 const div = document.createElement("div");
-
-div.className = "innings";
+div.className="innings";
 
 div.innerHTML = `
 <h2>${team}</h2>
-<div><strong>${runs}/${wickets}</strong></div>
+<div class="score">
+${stats.runs}/${stats.wickets} (${stats.overs})
+</div>
+${buildBattingTable(stats.batting)}
 `;
 
 container.appendChild(div);
 
+});
+
 }
+
+function calculateInnings(innings){
+
+let runs = 0;
+let wickets = 0;
+let balls = 0;
+
+const batting = {};
+
+innings.overs.forEach(over => {
+
+over.deliveries.forEach(delivery => {
+
+const batter = delivery.batter;
+
+if(!batting[batter])
+batting[batter] = {runs:0,balls:0};
+
+const r = delivery.runs.batter;
+
+batting[batter].runs += r;
+batting[batter].balls++;
+
+runs += delivery.runs.total;
+
+if(delivery.wickets)
+wickets += delivery.wickets.length;
+
+balls++;
+
+});
+
+});
+
+const overs = Math.floor(balls/6) + "." + (balls%6);
+
+return {
+runs,
+wickets,
+overs,
+batting:Object.entries(batting)
+};
+
+}
+
+function buildBattingTable(batting){
+
+let html = `
+<table>
+<thead>
+<tr>
+<th>Batter</th>
+<th>Runs</th>
+<th>Balls</th>
+<th>SR</th>
+</tr>
+</thead>
+<tbody>
+`;
+
+batting.forEach(([name,stats])=>{
+
+const sr = stats.balls
+? ((stats.runs/stats.balls)*100).toFixed(1)
+: "0.0";
+
+html += `
+<tr>
+<td>${name}</td>
+<td>${stats.runs}</td>
+<td>${stats.balls}</td>
+<td>${sr}</td>
+</tr>
+`;
+
+});
+
+html += "</tbody></table>";
+
+return html;
 
 }
 
