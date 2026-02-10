@@ -42,6 +42,7 @@ border-radius:18px;
 margin-bottom:20px;
 display:flex;
 justify-content:space-between;
+align-items:flex-start;
 }
 
 .heroRight{
@@ -53,6 +54,7 @@ padding:10px;
 border-radius:8px;
 border:none;
 width:260px;
+font-size:15px;
 }
 
 .searchDropdown{
@@ -60,6 +62,7 @@ position:absolute;
 top:42px;
 right:0;
 background:#fff;
+color:#000;
 width:260px;
 max-height:300px;
 overflow-y:auto;
@@ -70,12 +73,12 @@ z-index:999;
 }
 
 .searchItem{
-padding:8px;
+padding:8px 12px;
 cursor:pointer;
 }
 
 .searchItem:hover{
-background:#eee;
+background:#f1f1f1;
 }
 
 /* CONTROLS */
@@ -83,8 +86,9 @@ background:#eee;
 .controls{
 display:flex;
 gap:10px;
-margin-bottom:20px;
 align-items:center;
+margin-bottom:20px;
+flex-wrap:wrap;
 }
 
 select,button{
@@ -92,6 +96,7 @@ padding:8px 14px;
 border-radius:8px;
 border:1px solid #ccc;
 cursor:pointer;
+font-size:15px;
 }
 
 button.active{
@@ -100,25 +105,29 @@ color:#fff;
 border:none;
 }
 
-/* BOXES */
+/* SUMMARY BOXES */
 
 .summaryTitle{
 font-weight:700;
-margin:15px 0 10px;
+margin:20px 0 10px;
 }
 
 .summaryGrid{
 display:grid;
-grid-template-columns:repeat(6,1fr);
-gap:12px;
-margin-bottom:20px;
+grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+gap:14px;
+margin-bottom:25px;
 }
 
 .box{
 background:#fff;
-padding:16px;
+padding:18px 12px;
 border-radius:12px;
 text-align:center;
+min-height:80px;
+display:flex;
+flex-direction:column;
+justify-content:center;
 }
 
 .box .value{
@@ -137,11 +146,14 @@ table{
 width:100%;
 border-collapse:collapse;
 background:#fff;
+border-radius:12px;
+overflow:hidden;
 }
 
 th,td{
 padding:10px;
 border-bottom:1px solid #eee;
+text-align:left;
 }
 
 tr:nth-child(even){
@@ -152,6 +164,33 @@ background:#f8fbff;
 color:#0056d6;
 font-weight:600;
 text-decoration:none;
+}
+
+.matchLink:hover{
+text-decoration:underline;
+}
+
+/* MOBILE */
+
+@media(max-width:700px){
+
+.summaryGrid{
+grid-template-columns:repeat(2,1fr);
+}
+
+.hero{
+flex-direction:column;
+gap:15px;
+}
+
+.heroRight{
+width:100%;
+}
+
+#playerSearch{
+width:100%;
+}
+
 }
 
 </style>
@@ -208,9 +247,9 @@ text-decoration:none;
 <th>Date</th>
 <th>Opponent</th>
 <th>Venue</th>
-<th id="col1"></th>
-<th id="col2"></th>
-<th id="col3"></th>
+<th id="col1">Runs</th>
+<th id="col2">Balls</th>
+<th id="col3">SR</th>
 <th id="col4"></th>
 </tr>
 </thead>
@@ -228,13 +267,13 @@ const folder="data/t20-world-cup/matches/";
 const params=new URLSearchParams(window.location.search);
 const player=params.get("player");
 
-playerName.innerText=player;
+document.getElementById("playerName").innerText=player;
 
 let allPlayers=[];
 let allMatches=[];
 let mode="batting";
 
-/* SEARCH */
+/* PLAYER SEARCH */
 
 async function loadPlayers(){
 
@@ -253,8 +292,10 @@ const val=this.value.toLowerCase();
 searchDropdown.innerHTML="";
 
 if(!val){
+
 searchDropdown.style.display="none";
 return;
+
 }
 
 allPlayers
@@ -292,48 +333,66 @@ const matches=await fetch(folder+file).then(r=>r.json());
 
 matches.forEach(match=>{
 
+/* CORRECT TEAM DETECTION */
+
 let playerTeam=null;
 
-match.innings.forEach(inn=>{
-inn.overs.forEach(over=>{
-over.deliveries.forEach(d=>{
-if(d.batter===player||d.bowler===player)
-playerTeam=inn.team;
-});
-});
-});
+for(const team in match.info.players){
+
+if(match.info.players[team].includes(player)){
+
+playerTeam=team;
+break;
+
+}
+
+}
 
 if(!playerTeam) return;
 
 const opponent=
 match.info.teams.find(t=>t!==playerTeam);
 
+/* stats */
+
 let bat={runs:0,balls:0};
 let bowl={runs:0,balls:0,wickets:0};
 
 match.innings.forEach(inn=>{
+
 inn.overs.forEach(over=>{
+
 over.deliveries.forEach(d=>{
 
 const legal=!d.extras?.wides&&!d.extras?.noballs;
 
 if(d.batter===player){
+
 bat.runs+=d.runs.batter;
 if(legal) bat.balls++;
+
 }
 
 if(d.bowler===player){
+
 bowl.runs+=d.runs.total;
 if(legal) bowl.balls++;
-if(d.wickets)
+
+if(d.wickets){
+
 d.wickets.forEach(w=>{
 if(w.kind!=="run out")
 bowl.wickets++;
 });
+
+}
+
 }
 
 });
+
 });
+
 });
 
 allMatches.push({
@@ -353,7 +412,7 @@ render();
 
 }
 
-/* POPULATE OPP SELECT */
+/* OPP DROPDOWN */
 
 function populateOpps(){
 
@@ -387,30 +446,21 @@ render();
 
 function render(){
 
-renderCareer();
-renderOpposition();
-renderTable();
-
-}
-
-function renderCareer(){
-
 renderBoxes(allMatches,"careerBoxes");
-
-}
-
-function renderOpposition(){
 
 const opp=oppSelect.value;
 
-const matches=
+const filtered=
 opp==="All"
 ?allMatches
 :allMatches.filter(m=>m.opponent===opp);
 
-renderBoxes(matches,"oppBoxes");
+renderBoxes(filtered,"oppBoxes");
+renderTable(filtered);
 
 }
+
+/* BOX RENDER */
 
 function renderBoxes(matches,target){
 
@@ -426,7 +476,7 @@ box("Matches",matches.length)+
 box("Runs",runs)+
 box("Balls",balls)+
 box("Average",runs)+
-box("Strike Rate",(runs/balls*100).toFixed(1))+
+box("Strike Rate",balls?(runs/balls*100).toFixed(1):"-")+
 box("50s","-");
 
 }else{
@@ -440,21 +490,16 @@ box("Matches",matches.length)+
 box("Overs",(balls/6).toFixed(1))+
 box("Wickets",wk)+
 box("Average",wk?(runs/wk).toFixed(2):"-")+
-box("Economy",(runs/(balls/6)).toFixed(2))+
+box("Economy",balls?(runs/(balls/6)).toFixed(2):"-")+
 box("Best","-");
 
 }
 
 }
 
-function renderTable(){
+/* TABLE */
 
-const opp=oppSelect.value;
-
-const matches=
-opp==="All"
-?allMatches
-:allMatches.filter(m=>m.opponent===opp);
+function renderTable(matches){
 
 matchRows.innerHTML="";
 
