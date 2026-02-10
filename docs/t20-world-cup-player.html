@@ -19,14 +19,19 @@ background:#f4f6f8;
 display:flex;
 justify-content:center;
 gap:24px;
-padding:16px;
-background:#fff;
+padding:16px 0;
 border-bottom:1px solid #ddd;
+background:#fff;
 font-weight:600;
 }
 
+.navbar a{
+text-decoration:none;
+color:#0056d6;
+}
+
 .page{
-max-width:1000px;
+max-width:1200px;
 margin:30px auto;
 padding:0 20px;
 }
@@ -39,29 +44,37 @@ border-radius:18px;
 margin-bottom:20px;
 }
 
-.card{
-background:#fff;
-padding:20px;
-border-radius:12px;
-margin-bottom:20px;
-}
-
-table{
+.table{
 width:100%;
 border-collapse:collapse;
+background:#fff;
+border-radius:12px;
+overflow:hidden;
 }
 
-th,td{
+.table th{
+background:#e10600;
+color:#fff;
+padding:12px;
+text-align:left;
+}
+
+.table td{
 padding:10px;
 border-bottom:1px solid #eee;
 }
 
-tbody tr:nth-child(even){
-background:#eaf3ff;
+.table tr:nth-child(even){
+background:#eef3f9;
+}
+
+.loading{
+font-size:20px;
+padding:40px;
+text-align:center;
 }
 
 </style>
-
 </head>
 
 <body>
@@ -74,226 +87,121 @@ background:#eaf3ff;
 
 <div class="page">
 
-<div id="content">
-<div class="hero">Loading player...</div>
-</div>
+<div id="hero" class="hero">Loading player...</div>
+
+<div id="stats"></div>
 
 </div>
 
 <script>
 
-const playerName =
-decodeURIComponent(
-new URLSearchParams(location.search).get("name")
-);
+const params = new URLSearchParams(window.location.search);
+const playerName = params.get("player");
 
 if(!playerName){
 
-document.getElementById("content").innerHTML =
-"<div class='hero'>Player not specified</div>";
-
-throw new Error("No player");
+document.getElementById("hero").innerHTML="Invalid player link";
+throw new Error("Missing player");
 
 }
+
+document.getElementById("hero").innerHTML=playerName;
 
 loadPlayer();
 
 async function loadPlayer(){
 
-/* LOAD INDEX */
-const index = await fetch(
-"data/t20-world-cup/matches/index.json"
-).then(r=>r.json());
+const indexRes = await fetch("data/t20-world-cup/matches/index.json");
+const files = await indexRes.json();
 
-let matches=[];
+const filePromises = files.map(f =>
+fetch("data/t20-world-cup/matches/"+f).then(r=>r.json())
+);
 
-/* LOAD ALL MATCH FILES */
-for(const file of index){
-
-const data = await fetch(
-`data/t20-world-cup/matches/${file}`
-).then(r=>r.json());
-
-matches.push(...data);
-
-}
-
-renderPlayer(matches);
-
-}
-
-function renderPlayer(matches){
-
-const content=document.getElementById("content");
+const allData = await Promise.all(filePromises);
 
 let inningsList=[];
 
-matches.forEach(match=>{
+for(const season of allData){
 
-match.innings.forEach(inn=>{
+for(const match of season){
 
-const deliveries =
-inn.overs.flatMap(o=>o.deliveries);
+for(const innings of match.innings){
 
-let runs=0;
-let balls=0;
-let dismissal="not out";
+const team=Object.values(innings)[0];
 
-deliveries.forEach(d=>{
+if(!team.batting) continue;
 
-if(d.batter===playerName){
+for(const batter of team.batting){
 
-runs+=d.runs.batter;
-
-if(!d.extras?.wides && !d.extras?.noballs)
-balls++;
-
-}
-
-if(d.wickets){
-
-d.wickets.forEach(w=>{
-
-if(w.player_out===playerName){
-
-dismissal =
-`${w.kind} b ${d.bowler}`;
-
-}
-
-});
-
-}
-
-});
-
-if(runs>0 || balls>0){
+if(batter.batter===playerName){
 
 inningsList.push({
 
-team:inn.team,
-runs,
-balls,
-dismissal,
-venue:match.info.venue,
-date:match.info.dates[0]
+date:match.info.dates[0],
+team:team.team,
+runs:batter.runs,
+balls:batter.balls,
+dismissal:batter.dismissal||"not out",
+opposition:
+match.info.teams.find(t=>t!==team.team)
 
 });
 
 }
 
-});
+}
 
-});
+}
 
-if(inningsList.length===0){
+}
 
-content.innerHTML =
-`<div class="hero">${playerName}<br>No data found</div>`;
+}
 
+renderStats(inningsList);
+
+}
+
+function renderStats(list){
+
+if(list.length===0){
+
+document.getElementById("stats").innerHTML=
+"<div class='loading'>No data found</div>";
 return;
 
 }
 
-/* CAREER TOTALS */
-
-let totalRuns=0;
-let totalBalls=0;
-let outs=0;
-
-inningsList.forEach(i=>{
-
-totalRuns+=i.runs;
-totalBalls+=i.balls;
-
-if(i.dismissal!=="not out") outs++;
-
-});
-
-const avg =
-outs ?
-(totalRuns/outs).toFixed(2)
-:
-"-";
-
-const sr =
-totalBalls ?
-((totalRuns/totalBalls)*100).toFixed(2)
-:
-"-";
-
-/* RENDER */
-
-content.innerHTML=`
-
-<div class="hero" id="${playerName}">
-<h1>${playerName}</h1>
-Runs: ${totalRuns}<br>
-Average: ${avg}<br>
-Strike Rate: ${sr}
-</div>
-
-<div class="card">
-
-<table>
-
-<thead>
+let html=`
+<table class="table">
 <tr>
 <th>Date</th>
 <th>Team</th>
+<th>Opposition</th>
 <th>Runs</th>
 <th>Balls</th>
 <th>Dismissal</th>
-<th>Venue</th>
 </tr>
-</thead>
+`;
 
-<tbody>
+for(const i of list){
 
-${inningsList.map(i=>`
+html+=`
 <tr>
 <td>${i.date}</td>
 <td>${i.team}</td>
+<td>${i.opposition}</td>
 <td>${i.runs}</td>
 <td>${i.balls}</td>
 <td>${i.dismissal}</td>
-<td>${i.venue}</td>
 </tr>
-`).join("")}
-
-</tbody>
-
-</table>
-
-</div>
-
 `;
 
-scrollToPlayer();
-
 }
 
-function scrollToPlayer(){
+html+="</table>";
 
-const anchor =
-location.hash.substring(1);
-
-if(anchor){
-
-const el =
-document.getElementById(anchor);
-
-if(el){
-
-setTimeout(()=>{
-el.scrollIntoView({
-behavior:"smooth"
-});
-},200);
-
-}
-
-}
+document.getElementById("stats").innerHTML=html;
 
 }
 
