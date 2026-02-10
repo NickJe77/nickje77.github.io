@@ -20,15 +20,10 @@ background:#f4f6f8;
 display:flex;
 justify-content:center;
 gap:24px;
-padding:16px 0;
+padding:16px;
 border-bottom:1px solid #ddd;
 background:#fff;
 font-weight:600;
-}
-
-.navbar a{
-text-decoration:none;
-color:#0056d6;
 }
 
 .page{
@@ -74,13 +69,7 @@ border-collapse:collapse;
 margin-bottom:15px;
 }
 
-th{
-text-align:left;
-padding:8px;
-border-bottom:2px solid #ddd;
-}
-
-td{
+th,td{
 padding:8px;
 border-bottom:1px solid #eee;
 }
@@ -93,7 +82,6 @@ background:#f8fbff;
 color:#e10600;
 font-weight:600;
 text-decoration:none;
-cursor:pointer;
 }
 
 .playerLink:hover{
@@ -122,9 +110,7 @@ margin-bottom:5px;
 
 <div id="matchContainer">
 
-<div class="hero">
-Loading match...
-</div>
+<div class="hero">Loading match...</div>
 
 </div>
 
@@ -135,14 +121,13 @@ Loading match...
 const params = new URLSearchParams(window.location.search);
 
 const file = params.get("file");
-const matchId = params.get("match");
 
-if(!file || !matchId){
+if(!file){
 
 document.getElementById("matchContainer").innerHTML =
 "<div class='hero'>Invalid match link</div>";
 
-throw new Error("Missing parameters");
+throw new Error();
 
 }
 
@@ -161,20 +146,8 @@ return;
 
 }
 
-const matches = await res.json();
-
-const match = matches.find(m =>
-String(m.info.match_id) === String(matchId)
-);
-
-if(!match){
-
-document.getElementById("matchContainer").innerHTML =
-"<div class='hero'>Match not found</div>";
-
-return;
-
-}
+/* YOUR FILE CONTAINS ONE MATCH OBJECT */
+const match = await res.json();
 
 renderMatch(match);
 
@@ -184,9 +157,7 @@ function playerLink(name){
 
 return `
 <a href="t20-world-cup-player.html?player=${encodeURIComponent(name)}"
-class="playerLink">
-${name}
-</a>
+class="playerLink">${name}</a>
 `;
 
 }
@@ -195,89 +166,92 @@ function renderMatch(match){
 
 const container = document.getElementById("matchContainer");
 
-const teams = match.info.teams.join(" vs ");
-const venue = match.info.venue;
-const date = match.info.dates.join(", ");
-
 container.innerHTML = `
 <div class="hero">
-<h1>${teams}</h1>
-<div>${venue}</div>
-<div>${date}</div>
+<h1>${match.info.teams.join(" vs ")}</h1>
+<div>${match.info.venue}</div>
+<div>${match.info.dates.join(", ")}</div>
 </div>
 `;
 
-for(const innings of match.innings){
+match.innings.forEach(innings=>{
 
 const inn = Object.values(innings)[0];
 
 const team = inn.team;
 
-let runs = 0;
-let wickets = 0;
-let balls = 0;
+let runs=0;
+let wickets=0;
+let balls=0;
 
-const batting = {};
-const bowling = {};
-const fallOfWickets = [];
+const batting={};
+const bowling={};
+const fow=[];
 
-for(const over of inn.overs){
+inn.overs.forEach(over=>{
 
-for(const delivery of over.deliveries){
+over.deliveries.forEach(d=>{
 
-const batter = delivery.batter;
-const bowler = delivery.bowler;
+const batter=d.batter;
+const bowler=d.bowler;
+
+const legal=!d.extras?.wides && !d.extras?.noballs;
 
 if(!batting[batter])
-batting[batter] = {runs:0,balls:0,out:null};
+batting[batter]={runs:0,balls:0,out:null};
 
 if(!bowling[bowler])
-bowling[bowler] = {balls:0,runs:0,wickets:0};
+bowling[bowler]={runs:0,balls:0,wickets:0};
 
-const batterRuns = delivery.runs.batter;
-const extraRuns = delivery.runs.extras || 0;
+batting[batter].runs+=d.runs.batter;
 
-batting[batter].runs += batterRuns;
-batting[batter].balls += 1;
+if(legal){
+batting[batter].balls++;
+bowling[bowler].balls++;
+balls++;
+}
 
-bowling[bowler].runs += batterRuns + extraRuns;
-bowling[bowler].balls += 1;
+bowling[bowler].runs+=d.runs.total;
+runs+=d.runs.total;
 
-runs += batterRuns + extraRuns;
-balls += 1;
+if(d.wickets){
 
-if(delivery.wickets){
-
-for(const w of delivery.wickets){
+d.wickets.forEach(w=>{
 
 wickets++;
 
-batting[w.player_out].out =
-w.kind + " b " + bowler;
+batting[w.player_out].out=
+getDismissal(w,bowler);
 
 bowling[bowler].wickets++;
 
-fallOfWickets.push(
-`${runs}/${wickets} (${w.player_out})`
-);
+fow.push(`${runs}/${wickets} (${w.player_out})`);
+
+});
 
 }
 
-}
+});
 
-}
+});
 
-}
+const overs =
+Math.floor(balls/6)+"."+(balls%6);
 
-const overs = Math.floor(balls/6) + "." + (balls%6);
+const div=document.createElement("div");
 
-const div = document.createElement("div");
-div.className = "innings";
+div.className="innings";
 
-div.innerHTML += `
+div.innerHTML=`
+
 <div class="teamHeader">${team}</div>
-<div class="score">${runs}/${wickets} (${overs} overs)</div>
+
+<div class="score">
+${runs}/${wickets} (${overs} overs)
+</div>
+
 <div class="sectionTitle">Batting</div>
+
 <table>
 <tr>
 <th>Batter</th>
@@ -286,35 +260,33 @@ div.innerHTML += `
 <th>B</th>
 <th>SR</th>
 </tr>
-`;
 
-for(const name in batting){
+${Object.entries(batting).map(([name,b])=>`
 
-const b = batting[name];
-
-const sr = b.balls ? ((b.runs/b.balls)*100).toFixed(1) : "";
-
-div.innerHTML += `
 <tr>
 <td>${playerLink(name)}</td>
-<td>${b.out || "not out"}</td>
+<td>${b.out||"not out"}</td>
 <td>${b.runs}</td>
 <td>${b.balls}</td>
-<td>${sr}</td>
+<td>${b.balls?((b.runs/b.balls)*100).toFixed(1):""}</td>
 </tr>
-`;
 
-}
+`).join("")}
 
-div.innerHTML += `</table>`;
+</table>
 
-div.innerHTML += `
-<div class="sectionTitle">Fall of wickets</div>
-<div>${fallOfWickets.join(", ") || "None"}</div>
-`;
+<div class="sectionTitle">
+Fall of wickets
+</div>
 
-div.innerHTML += `
-<div class="sectionTitle">Bowling</div>
+<div>
+${fow.join(", ")||"None"}
+</div>
+
+<div class="sectionTitle">
+Bowling
+</div>
+
 <table>
 <tr>
 <th>Bowler</th>
@@ -323,33 +295,44 @@ div.innerHTML += `
 <th>W</th>
 <th>Econ</th>
 </tr>
-`;
 
-for(const name in bowling){
+${Object.entries(bowling).map(([name,b])=>`
 
-const b = bowling[name];
-
-const o = Math.floor(b.balls/6)+"."+(b.balls%6);
-
-const econ = (b.runs/(b.balls/6)).toFixed(2);
-
-div.innerHTML += `
 <tr>
 <td>${playerLink(name)}</td>
-<td>${o}</td>
+<td>${Math.floor(b.balls/6)}.${b.balls%6}</td>
 <td>${b.runs}</td>
 <td>${b.wickets}</td>
-<td>${econ}</td>
+<td>${(b.runs/(b.balls/6)).toFixed(2)}</td>
 </tr>
+
+`).join("")}
+
+</table>
+
 `;
-
-}
-
-div.innerHTML += "</table>";
 
 container.appendChild(div);
 
+});
+
 }
+
+function getDismissal(w,bowler){
+
+if(w.kind==="caught")
+return `c ${w.fielders?.[0]?.name||""} b ${bowler}`;
+
+if(w.kind==="bowled")
+return `b ${bowler}`;
+
+if(w.kind==="lbw")
+return `lbw b ${bowler}`;
+
+if(w.kind==="run out")
+return "run out";
+
+return w.kind;
 
 }
 
