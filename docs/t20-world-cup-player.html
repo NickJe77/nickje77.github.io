@@ -32,7 +32,6 @@ margin:30px auto;
 padding:0 20px;
 }
 
-/* HERO — RED */
 .hero{
 background:linear-gradient(90deg,#8b0000,#e10600);
 color:#fff;
@@ -40,8 +39,6 @@ padding:30px;
 border-radius:18px;
 margin-bottom:20px;
 }
-
-/* FILTER BAR */
 
 .controls{
 display:flex;
@@ -63,8 +60,6 @@ background:#e10600;
 color:#fff;
 border:none;
 }
-
-/* STAT BOXES */
 
 .summaryTitle{
 text-align:center;
@@ -95,8 +90,6 @@ font-weight:700;
 font-size:14px;
 color:#666;
 }
-
-/* TABLE */
 
 table{
 width:100%;
@@ -158,11 +151,9 @@ text-decoration:underline;
 </div>
 
 <div class="summaryTitle">CAREER SUMMARY</div>
-
 <div class="summaryGrid" id="careerBoxes"></div>
 
 <div class="summaryTitle">VS OPPOSITION</div>
-
 <div class="summaryGrid" id="oppBoxes"></div>
 
 <table>
@@ -209,12 +200,12 @@ const matches=await fetch(folder+file).then(r=>r.json());
 
 matches.forEach(match=>{
 
-let bat={runs:0,balls:0};
-let bowl={balls:0,runs:0,wickets:0};
-
 match.innings.forEach(inn=>{
 
 const opponent=match.info.teams.find(t=>t!==inn.team);
+
+let bat={runs:0,balls:0};
+let bowl={balls:0,runs:0,wickets:0};
 
 inn.overs.forEach(over=>{
 
@@ -271,7 +262,8 @@ id:match.info.match_id
 }
 
 populateOpps();
-render();
+renderCareer();
+renderFiltered();
 
 }
 
@@ -282,23 +274,25 @@ const opps=[...new Set(allMatches.map(m=>m.opponent))];
 const sel=document.getElementById("oppSelect");
 
 opps.sort().forEach(o=>{
-sel.innerHTML+=`<option>${o}</option>`;
+sel.innerHTML+=`<option value="${o}">${o}</option>`;
 });
 
-sel.onchange=render;
+sel.onchange=renderFiltered;
 
 }
 
 document.getElementById("batBtn").onclick=()=>{
 mode="batting";
 setActive();
-render();
+renderCareer();
+renderFiltered();
 };
 
 document.getElementById("bowlBtn").onclick=()=>{
 mode="bowling";
 setActive();
-render();
+renderCareer();
+renderFiltered();
 };
 
 function setActive(){
@@ -308,30 +302,46 @@ bowlBtn.classList.toggle("active",mode==="bowling");
 
 }
 
-function render(){
+/* CAREER SUMMARY — ALWAYS ALL MATCHES */
+
+function renderCareer(){
+
+renderBoxes(allMatches,"careerBoxes");
+
+}
+
+/* VS OPPOSITION — FILTERED */
+
+function renderFiltered(){
 
 const opp=document.getElementById("oppSelect").value;
 
-let matches=opp==="All"?allMatches:allMatches.filter(m=>m.opponent===opp);
+const matches=opp==="All"
+?allMatches
+:allMatches.filter(m=>m.opponent===opp);
 
-renderBoxes(matches);
+renderBoxes(matches,"oppBoxes");
+
 renderTable(matches);
 
 }
 
-function renderBoxes(matches){
+function renderBoxes(matches,target){
+
+const el=document.getElementById(target);
 
 if(mode==="batting"){
 
 const runs=sum(matches,m=>m.bat.runs);
 const balls=sum(matches,m=>m.bat.balls);
 
-careerBoxes.innerHTML=box("Matches",matches.length)
-+box("Runs",runs)
-+box("Balls",balls)
-+box("Average",runs)
-+box("Strike Rate",balls?(runs/balls*100).toFixed(1):"-")
-+box("50s","-");
+el.innerHTML=
+box("Matches",matches.length)+
+box("Runs",runs)+
+box("Balls",balls)+
+box("Average",runs)+
+box("Strike Rate",balls?(runs/balls*100).toFixed(1):"-")+
+box("50s","-");
 
 }else{
 
@@ -339,22 +349,22 @@ const balls=sum(matches,m=>m.bowl.balls);
 const runs=sum(matches,m=>m.bowl.runs);
 const wk=sum(matches,m=>m.bowl.wickets);
 
-careerBoxes.innerHTML=box("Matches",matches.length)
-+box("Overs",(balls/6).toFixed(1))
-+box("Wickets",wk)
-+box("Average",wk?(runs/wk).toFixed(2):"-")
-+box("Economy",balls?(runs/(balls/6)).toFixed(2):"-")
-+box("Best","-");
+el.innerHTML=
+box("Matches",matches.length)+
+box("Overs",(balls/6).toFixed(1))+
+box("Wickets",wk)+
+box("Average",wk?(runs/wk).toFixed(2):"-")+
+box("Economy",balls?(runs/(balls/6)).toFixed(2):"-")+
+box("Best","-");
 
 }
-
-oppBoxes.innerHTML=careerBoxes.innerHTML;
 
 }
 
 function renderTable(matches){
 
-matchRows.innerHTML="";
+const tbody=document.getElementById("matchRows");
+tbody.innerHTML="";
 
 if(mode==="batting"){
 
@@ -365,7 +375,7 @@ col4.innerText="";
 
 matches.forEach(m=>{
 
-matchRows.innerHTML+=`
+tbody.innerHTML+=`
 
 <tr>
 
@@ -381,11 +391,8 @@ ${m.opponent}
 <td>${m.venue}</td>
 
 <td>${m.bat.runs}</td>
-
 <td>${m.bat.balls}</td>
-
 <td>${m.bat.balls?(m.bat.runs/m.bat.balls*100).toFixed(1):""}</td>
-
 <td></td>
 
 </tr>
@@ -405,7 +412,7 @@ matches.forEach(m=>{
 
 const overs=(m.bowl.balls/6).toFixed(1);
 
-matchRows.innerHTML+=`
+tbody.innerHTML+=`
 
 <tr>
 
@@ -421,11 +428,8 @@ ${m.opponent}
 <td>${m.venue}</td>
 
 <td>${overs}</td>
-
 <td>${m.bowl.runs}</td>
-
 <td>${m.bowl.wickets}</td>
-
 <td>${m.bowl.balls?(m.bowl.runs/(m.bowl.balls/6)).toFixed(2):""}</td>
 
 </tr>
