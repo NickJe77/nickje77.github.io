@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+
 <meta charset="UTF-8">
 <title>T20 World Cup Match | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -25,8 +26,13 @@ background:#fff;
 font-weight:600;
 }
 
+.navbar a{
+text-decoration:none;
+color:#0056d6;
+}
+
 .page{
-max-width:1000px;
+max-width:1100px;
 margin:30px auto;
 padding:0 20px;
 }
@@ -39,56 +45,69 @@ border-radius:18px;
 margin-bottom:20px;
 }
 
-.card{
+.innings{
 background:#fff;
 padding:20px;
 border-radius:12px;
 margin-bottom:20px;
 }
 
-.innings-title{
-color:#e10600;
-font-size:24px;
-font-weight:800;
-margin-bottom:6px;
+.teamHeader{
+display:inline-block;
+background:#e10600;
+color:#fff;
+padding:8px 14px;
+border-radius:8px;
+font-weight:700;
+margin-bottom:10px;
 }
 
 .score{
-font-size:18px;
+font-size:22px;
 font-weight:700;
-margin-bottom:20px;
+margin-bottom:15px;
 }
 
 table{
 width:100%;
 border-collapse:collapse;
-margin-bottom:18px;
-}
-
-th,td{
-padding:10px;
-border-bottom:1px solid #eee;
+margin-bottom:15px;
 }
 
 th{
+text-align:left;
+padding:8px;
 border-bottom:2px solid #ddd;
 }
 
-tbody tr:nth-child(even){
-background:#eaf3ff;
+td{
+padding:8px;
+border-bottom:1px solid #eee;
 }
 
-.player{
-color:#0056d6;
-text-decoration:none;
+tr:nth-child(even){
+background:#f8fbff;
+}
+
+.playerLink{
+color:#e10600;
 font-weight:600;
+text-decoration:none;
+cursor:pointer;
 }
 
-.player:hover{
+.playerLink:hover{
 text-decoration:underline;
 }
 
+.sectionTitle{
+font-weight:700;
+margin-top:10px;
+margin-bottom:5px;
+}
+
 </style>
+
 </head>
 
 <body>
@@ -100,177 +119,166 @@ text-decoration:underline;
 </div>
 
 <div class="page">
+
 <div id="matchContainer">
-<div class="hero">Loading match...</div>
+
+<div class="hero">
+Loading match...
 </div>
+
+</div>
+
 </div>
 
 <script>
 
-const file=new URLSearchParams(location.search).get("file");
+const params = new URLSearchParams(window.location.search);
+
+const file = params.get("file");
+const matchId = params.get("match");
+
+if(!file || !matchId){
+
+document.getElementById("matchContainer").innerHTML =
+"<div class='hero'>Invalid match link</div>";
+
+throw new Error("Missing parameters");
+
+}
 
 loadMatch();
 
 async function loadMatch(){
 
-const res=await fetch(file);
-const matches=await res.json();
+const res = await fetch(file);
 
-const match=
-matches.find(m=>m.info?.event?.stage==="Final")
-||matches[matches.length-1];
+if(!res.ok){
+
+document.getElementById("matchContainer").innerHTML =
+"<div class='hero'>Match file not found</div>";
+
+return;
+
+}
+
+const matches = await res.json();
+
+const match = matches.find(m =>
+String(m.info.match_id) === String(matchId)
+);
+
+if(!match){
+
+document.getElementById("matchContainer").innerHTML =
+"<div class='hero'>Match not found</div>";
+
+return;
+
+}
 
 renderMatch(match);
 
 }
 
-function renderMatch(match){
+function playerLink(name){
 
-const container=document.getElementById("matchContainer");
-
-container.innerHTML=`
-<div class="hero">
-<h1>${match.info.teams.join(" vs ")}</h1>
-<div>${match.info.venue}</div>
-<div>${match.info.dates.join(", ")}</div>
-</div>
+return `
+<a href="t20-world-cup-player.html?player=${encodeURIComponent(name)}"
+class="playerLink">
+${name}
+</a>
 `;
-
-match.innings.forEach(innings=>{
-
-const stats=parseInnings(innings);
-
-const div=document.createElement("div");
-
-div.className="card";
-
-div.innerHTML=`
-
-<div class="innings-title">
-${innings.team} Innings
-</div>
-
-<div class="score">
-${stats.runs}/${stats.wickets} (${stats.overs} overs)
-</div>
-
-<h3>Batting</h3>
-
-${battingTable(stats.batting)}
-
-<h3>Bowling</h3>
-
-${bowlingTable(stats.bowling)}
-
-`;
-
-container.appendChild(div);
-
-});
 
 }
 
-function parseInnings(innings){
+function renderMatch(match){
 
-const deliveries=innings.overs.flatMap(o=>o.deliveries);
+const container = document.getElementById("matchContainer");
 
-let runs=0;
-let wickets=0;
-let legalBalls=0;
+const teams = match.info.teams.join(" vs ");
+const venue = match.info.venue;
+const date = match.info.dates.join(", ");
 
-const batting={};
-const bowling={};
+container.innerHTML = `
+<div class="hero">
+<h1>${teams}</h1>
+<div>${venue}</div>
+<div>${date}</div>
+</div>
+`;
 
-deliveries.forEach(d=>{
+for(const innings of match.innings){
 
-runs+=d.runs.total;
+const inn = Object.values(innings)[0];
 
-const legal=!d.extras?.wides && !d.extras?.noballs;
+const team = inn.team;
 
-if(legal) legalBalls++;
+let runs = 0;
+let wickets = 0;
+let balls = 0;
 
-const batter=d.batter;
-const bowler=d.bowler;
+const batting = {};
+const bowling = {};
+const fallOfWickets = [];
+
+for(const over of inn.overs){
+
+for(const delivery of over.deliveries){
+
+const batter = delivery.batter;
+const bowler = delivery.bowler;
 
 if(!batting[batter])
-batting[batter]={runs:0,balls:0,out:"not out"};
-
-batting[batter].runs+=d.runs.batter;
-
-if(legal) batting[batter].balls++;
+batting[batter] = {runs:0,balls:0,out:null};
 
 if(!bowling[bowler])
-bowling[bowler]={runs:0,balls:0,wickets:0};
+bowling[bowler] = {balls:0,runs:0,wickets:0};
 
-bowling[bowler].runs+=d.runs.total;
+const batterRuns = delivery.runs.batter;
+const extraRuns = delivery.runs.extras || 0;
 
-if(legal) bowling[bowler].balls++;
+batting[batter].runs += batterRuns;
+batting[batter].balls += 1;
 
-if(d.wickets){
+bowling[bowler].runs += batterRuns + extraRuns;
+bowling[bowler].balls += 1;
 
-d.wickets.forEach(w=>{
+runs += batterRuns + extraRuns;
+balls += 1;
+
+if(delivery.wickets){
+
+for(const w of delivery.wickets){
 
 wickets++;
 
-batting[w.player_out].out=getDismissalText(w,bowler);
+batting[w.player_out].out =
+w.kind + " b " + bowler;
 
 bowling[bowler].wickets++;
 
-});
+fallOfWickets.push(
+`${runs}/${wickets} (${w.player_out})`
+);
 
 }
 
-});
-
-return{
-
-runs,
-wickets,
-overs:`${Math.floor(legalBalls/6)}.${legalBalls%6}`,
-batting:Object.entries(batting),
-bowling:Object.entries(bowling)
-
-};
+}
 
 }
 
-/* PROPER DISMISSAL TEXT */
-
-function getDismissalText(w,bowler){
-
-const kind=w.kind;
-
-if(kind==="bowled")
-return `b ${bowler}`;
-
-if(kind==="caught")
-return `c ${w.fielders?.[0]?.name||""} b ${bowler}`;
-
-if(kind==="lbw")
-return `lbw b ${bowler}`;
-
-if(kind==="run out")
-return `run out (${w.fielders?.map(f=>f.name).join(", ")||""})`;
-
-return kind;
-
 }
 
-/* PLAYER LINK WITH DIRECT ANCHOR */
+const overs = Math.floor(balls/6) + "." + (balls%6);
 
-function playerLink(name){
+const div = document.createElement("div");
+div.className = "innings";
 
-const encoded=encodeURIComponent(name);
-
-return `t20-world-cup-player.html?name=${encoded}#${encoded}`;
-
-}
-
-function battingTable(rows){
-
-let html=`
+div.innerHTML += `
+<div class="teamHeader">${team}</div>
+<div class="score">${runs}/${wickets} (${overs} overs)</div>
+<div class="sectionTitle">Batting</div>
 <table>
-<thead>
 <tr>
 <th>Batter</th>
 <th>How out</th>
@@ -278,41 +286,36 @@ let html=`
 <th>B</th>
 <th>SR</th>
 </tr>
-</thead>
-<tbody>
 `;
 
-rows.forEach(([name,s])=>{
+for(const name in batting){
 
-const sr=s.balls?((s.runs/s.balls)*100).toFixed(1):"";
+const b = batting[name];
 
-html+=`
+const sr = b.balls ? ((b.runs/b.balls)*100).toFixed(1) : "";
+
+div.innerHTML += `
 <tr>
-<td>
-<a class="player" href="${playerLink(name)}">
-${name}
-</a>
-</td>
-<td>${s.out}</td>
-<td>${s.runs}</td>
-<td>${s.balls}</td>
+<td>${playerLink(name)}</td>
+<td>${b.out || "not out"}</td>
+<td>${b.runs}</td>
+<td>${b.balls}</td>
 <td>${sr}</td>
 </tr>
 `;
 
-});
-
-html+="</tbody></table>";
-
-return html;
-
 }
 
-function bowlingTable(rows){
+div.innerHTML += `</table>`;
 
-let html=`
+div.innerHTML += `
+<div class="sectionTitle">Fall of wickets</div>
+<div>${fallOfWickets.join(", ") || "None"}</div>
+`;
+
+div.innerHTML += `
+<div class="sectionTitle">Bowling</div>
 <table>
-<thead>
 <tr>
 <th>Bowler</th>
 <th>O</th>
@@ -320,35 +323,33 @@ let html=`
 <th>W</th>
 <th>Econ</th>
 </tr>
-</thead>
-<tbody>
 `;
 
-rows.forEach(([name,s])=>{
+for(const name in bowling){
 
-const overs=`${Math.floor(s.balls/6)}.${s.balls%6}`;
+const b = bowling[name];
 
-const econ=(s.runs/(s.balls/6)).toFixed(1);
+const o = Math.floor(b.balls/6)+"."+(b.balls%6);
 
-html+=`
+const econ = (b.runs/(b.balls/6)).toFixed(2);
+
+div.innerHTML += `
 <tr>
-<td>
-<a class="player" href="${playerLink(name)}">
-${name}
-</a>
-</td>
-<td>${overs}</td>
-<td>${s.runs}</td>
-<td>${s.wickets}</td>
+<td>${playerLink(name)}</td>
+<td>${o}</td>
+<td>${b.runs}</td>
+<td>${b.wickets}</td>
 <td>${econ}</td>
 </tr>
 `;
 
-});
+}
 
-html+="</tbody></table>";
+div.innerHTML += "</table>";
 
-return html;
+container.appendChild(div);
+
+}
 
 }
 
