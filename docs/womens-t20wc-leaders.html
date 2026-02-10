@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Women's T20 World Cup All-Time Leaders | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+
+body{
+  font-family: Inter, system-ui, Arial;
+  margin:0;
+  background:#ffffff;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+}
+
+.page{
+  max-width:1200px;
+  margin:auto;
+  padding:30px 20px;
+}
+
+/* HERO */
+
+.hero{
+  background:linear-gradient(90deg,#6a040f,#d00000);
+  color:white;
+  padding:35px;
+  border-radius:20px;
+  margin-bottom:20px;
+}
+
+.hero h1{
+  margin:0;
+  font-size:40px;
+}
+
+.hero p{
+  margin-top:8px;
+}
+
+/* TABS */
+
+.tabs{
+  display:flex;
+  gap:10px;
+  margin-bottom:20px;
+}
+
+.tab{
+  padding:10px 16px;
+  border:none;
+  border-radius:8px;
+  background:#6a040f;
+  color:white;
+  cursor:pointer;
+}
+
+.tab.active{
+  background:#d00000;
+}
+
+/* TABLE */
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+th,td{
+  padding:10px;
+  border-bottom:1px solid #ddd;
+}
+
+th{
+  background:#f3f6fb;
+}
+
+tr:nth-child(even){
+  background:#eaf3ff;
+}
+
+.rank{
+  text-align:center;
+  width:60px;
+}
+
+.stat{
+  text-align:right;
+  width:120px;
+  font-weight:700;
+}
+
+.player-link{
+  color:#6a040f;
+  font-weight:600;
+  text-decoration:none;
+}
+
+.player-link:hover{
+  text-decoration:underline;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="cricket.html">Cricket</a>
+<a href="womens-t20-world-cup.html">Women's T20 World Cup</a>
+</div>
+
+<div class="page">
+
+<div class="hero">
+<h1>Women's T20 World Cup Leaders</h1>
+<p>All-time statistical leaders</p>
+</div>
+
+<div class="tabs">
+
+<button class="tab active" onclick="showTab('runs',this)">
+Runs
+</button>
+
+<button class="tab" onclick="showTab('wickets',this)">
+Wickets
+</button>
+
+<button class="tab" onclick="showTab('sixes',this)">
+Sixes
+</button>
+
+<button class="tab" onclick="showTab('fielding',this)">
+Dismissals
+</button>
+
+<button class="tab" onclick="showTab('sr',this)">
+Strike Rate
+</button>
+
+</div>
+
+<table>
+
+<thead>
+<tr>
+<th class="rank">Rank</th>
+<th>Player</th>
+<th id="statHeader" class="stat">Runs</th>
+</tr>
+</thead>
+
+<tbody id="leaderTable"></tbody>
+
+</table>
+
+</div>
+
+<script>
+
+const BASE="data/womens-t20-world-cup/matches/";
+
+let nameMap={};
+let leaders={};
+
+const headerMap={
+runs:"Runs",
+wickets:"Wickets",
+sixes:"Sixes",
+fielding:"Dismissals",
+sr:"Strike Rate"
+};
+
+init();
+
+async function init(){
+
+nameMap=await fetch(BASE+"player-names.json").then(r=>r.json());
+
+const index=await fetch(BASE+"index.json").then(r=>r.json());
+
+const batting={},bowling={},sixes={},fielding={},matchesPlayed={};
+
+for(const file of index){
+
+const matches=await fetch(BASE+file).then(r=>r.json());
+
+matches.forEach((m,i)=>{
+
+const key=file+"_"+i;
+
+m.innings.forEach(inn=>{
+
+inn.overs.forEach(o=>{
+
+o.deliveries.forEach(d=>{
+
+const bat=d.batter;
+const bowl=d.bowler;
+
+batting[bat]=batting[bat]||{runs:0,balls:0};
+
+batting[bat].runs+=d.runs.batter;
+
+if(!d.extras?.wides&&!d.extras?.noballs)
+batting[bat].balls++;
+
+if(d.runs.batter===6)
+sixes[bat]=(sixes[bat]||0)+1;
+
+matchesPlayed[bat]=matchesPlayed[bat]||new Set();
+matchesPlayed[bat].add(key);
+
+if(d.wickets){
+
+d.wickets.forEach(w=>{
+
+if(w.kind!=="run out")
+bowling[bowl]=(bowling[bowl]||0)+1;
+
+if(w.kind==="caught"||w.kind==="run out"){
+
+const f=w.fielders?.[0]?.name;
+
+if(f) fielding[f]=(fielding[f]||0)+1;
+
+}
+
+});
+
+}
+
+});
+
+});
+
+});
+
+});
+
+}
+
+/* BUILD LEADERS */
+
+leaders.runs=
+Object.entries(batting)
+.sort((a,b)=>b[1].runs-a[1].runs)
+.slice(0,10);
+
+leaders.wickets=
+Object.entries(bowling)
+.sort((a,b)=>b[1]-a[1])
+.slice(0,10);
+
+leaders.sixes=
+Object.entries(sixes)
+.sort((a,b)=>b[1]-a[1])
+.slice(0,10);
+
+leaders.fielding=
+Object.entries(fielding)
+.sort((a,b)=>b[1]-a[1])
+.slice(0,10);
+
+leaders.sr=
+Object.entries(batting)
+.filter(x=>matchesPlayed[x[0]].size>=5)
+.map(x=>[x[0],(x[1].runs/x[1].balls*100).toFixed(1)])
+.sort((a,b)=>b[1]-a[1])
+.slice(0,10);
+
+render("runs");
+
+}
+
+/* RENDER */
+
+function render(type){
+
+document.getElementById("statHeader").innerText=
+headerMap[type];
+
+const tbody=document.getElementById("leaderTable");
+
+tbody.innerHTML="";
+
+leaders[type].forEach((row,i)=>{
+
+const player=row[0];
+const stat=row[1].runs||row[1];
+
+const tr=document.createElement("tr");
+
+tr.innerHTML=`
+
+<td class="rank">${i+1}</td>
+
+<td>
+<a class="player-link"
+href="womens-t20wc-player.html?player=${encodeURIComponent(player)}">
+${nameMap[player]||player}
+</a>
+</td>
+
+<td class="stat">${stat}</td>
+
+`;
+
+tbody.appendChild(tr);
+
+});
+
+}
+
+function showTab(type,btn){
+
+document.querySelectorAll(".tab")
+.forEach(b=>b.classList.remove("active"));
+
+btn.classList.add("active");
+
+render(type);
+
+}
+
+</script>
+
+</body>
+</html>
