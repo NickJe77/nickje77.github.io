@@ -4,84 +4,95 @@
 <meta charset="UTF-8">
 <title>T20 World Cup Finals | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <link rel="stylesheet" href="style.css">
 
 <style>
+
 body{
-font-family:Inter,system-ui,Arial;
-margin:0;
-background:#f4f6f8;
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:#f4f6f8;
 }
 
 .navbar{
-display:flex;
-justify-content:center;
-gap:24px;
-padding:16px 0;
-border-bottom:1px solid #ddd;
-background:#fff;
-font-weight:600;
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  background:#fff;
+  font-weight:600;
 }
 
 .navbar a{
-text-decoration:none;
-color:#0056d6;
+  text-decoration:none;
+  color:#0056d6;
 }
 
 .page{
-max-width:1200px;
-margin:30px auto;
-padding:0 20px;
+  max-width:1200px;
+  margin:30px auto;
+  padding:0 20px;
 }
 
 .hero{
-background:linear-gradient(90deg,#8b0000,#e10600);
-color:#fff;
-padding:40px;
-border-radius:22px;
-margin-bottom:25px;
+  background:linear-gradient(90deg,#8b0000,#e10600);
+  color:#fff;
+  padding:40px;
+  border-radius:22px;
+  margin-bottom:25px;
 }
 
 table{
-width:100%;
-border-collapse:collapse;
-background:#fff;
-border-radius:12px;
-overflow:hidden;
+  width:100%;
+  border-collapse:collapse;
+  background:#fff;
+  border-radius:12px;
+  overflow:hidden;
 }
 
 th{
-background:#e10600;
-color:#fff;
-padding:12px;
-text-align:left;
+  background:#e10600;
+  color:#fff;
+  padding:12px;
+  text-align:left;
 }
 
 td{
-padding:12px;
+  padding:12px;
 }
 
 tbody tr:nth-child(even){
-background:#eaf3ff;
+  background:#eaf3ff;
+}
+
+tbody tr{
+  cursor:pointer;
 }
 
 tbody tr:hover{
-background:#d8e8ff;
-cursor:pointer;
+  background:#d8e8ff;
 }
 
-.team{font-weight:700;}
-.score{font-weight:600;}
-.margin{font-weight:700;color:#0a4;}
+.team{
+  font-weight:700;
+}
+
+.margin{
+  font-weight:700;
+  color:#0a4;
+}
+
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="cricket.html">Cricket</a>
-<a href="t20-world-cup.html">T20 World Cup</a>
+  <a href="index.html">Home</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="t20-world-cup.html">T20 World Cup</a>
 </div>
 
 <div class="page">
@@ -94,18 +105,16 @@ cursor:pointer;
 
 <thead>
 <tr>
-<th>Year</th>
-<th>Winner</th>
-<th>Score</th>
-<th>Runner-up</th>
-<th>Score</th>
-<th>Margin</th>
-<th>Venue</th>
+  <th>Year</th>
+  <th>Winner</th>
+  <th>Runner-up</th>
+  <th>Margin</th>
+  <th>Venue</th>
 </tr>
 </thead>
 
 <tbody id="finalsTable">
-<tr><td colspan="7">Loading finals...</td></tr>
+<tr><td colspan="5">Loading finals...</td></tr>
 </tbody>
 
 </table>
@@ -114,22 +123,24 @@ cursor:pointer;
 
 <script>
 
-const YEARS=[2007,2009,2010,2012,2014,2016,2021,2022,2024];
+// REAL ICC MEN'S T20 WORLD CUP YEARS ONLY
+const YEARS = [2007,2009,2010,2012,2014,2016,2021,2022,2024];
 
-const FINALISTS={
-2007:["India","Pakistan"],
-2009:["Pakistan","Sri Lanka"],
-2010:["England","Australia"],
-2012:["West Indies","Sri Lanka"],
-2014:["Sri Lanka","India"],
-2016:["West Indies","England"],
-2021:["Australia","New Zealand"],
-2022:["England","Pakistan"],
-2024:["India","South Africa"]
+// Hardcode finalists so we never accidentally grab qualifiers / random finals
+const FINALISTS = {
+  2007:["India","Pakistan"],
+  2009:["Pakistan","Sri Lanka"],
+  2010:["England","Australia"],
+  2012:["West Indies","Sri Lanka"],
+  2014:["Sri Lanka","India"],
+  2016:["West Indies","England"],
+  2021:["Australia","New Zealand"],
+  2022:["England","Pakistan"],
+  2024:["India","South Africa"]
 };
 
-const table=document.getElementById("finalsTable");
-table.innerHTML="";
+const table = document.getElementById("finalsTable");
+table.innerHTML = "";
 
 loadFinals();
 
@@ -137,90 +148,75 @@ async function loadFinals(){
 
 for(const year of YEARS){
 
-const file=`data/t20-world-cup/matches/t20wc_${year}_FULL.json`;
+try{
 
-const res=await fetch(file);
+const file = `data/t20-world-cup/matches/t20wc_${year}_FULL.json`;
+
+const res = await fetch(file);
 
 if(!res.ok) continue;
 
-const matches=await res.json();
+const matches = await res.json();
 
-const pair=FINALISTS[year];
+const pair = FINALISTS[year];
 
-const match=matches.find(m=>
+const match = matches.find(m =>
 m.info?.teams?.includes(pair[0]) &&
 m.info?.teams?.includes(pair[1])
 );
 
 if(!match) continue;
 
-const scores=extractScores(match);
+const venue = match.info.venue || "";
 
-const winner=match.info.outcome.winner;
+const outcome = match.info.outcome || {};
 
-const loser=match.info.teams.find(t=>t!==winner);
+const winner = outcome.winner || pair[0];
+const runner = (match.info.teams || pair).find(t => t !== winner) || pair[1];
 
-const winnerScore=scores[winner] || "";
-const loserScore=scores[loser] || "";
+const margin = formatMargin(outcome, winner);
 
-const margin=formatMargin(match.info.outcome);
+const tr = document.createElement("tr");
 
-const venue=match.info.venue;
-
-const tr=document.createElement("tr");
-
-tr.innerHTML=`
+tr.innerHTML = `
 <td>${year}</td>
 <td class="team">${winner}</td>
-<td class="score">${winnerScore}</td>
-<td class="team">${loser}</td>
-<td class="score">${loserScore}</td>
+<td class="team">${runner}</td>
 <td class="margin">${margin}</td>
 <td>${venue}</td>
 `;
 
+// Keep your existing click behaviour (uses your match page)
+tr.onclick = () => {
+  const matchId = match.info.match_id || "";
+  window.location.href =
+    `t20-world-cup-match.html?file=${encodeURIComponent(file)}&match=${encodeURIComponent(String(matchId))}`;
+};
+
 table.appendChild(tr);
 
+}catch(e){
+  // ignore year
 }
 
 }
 
-function extractScores(match){
-
-const scores={};
-
-for(const innings of match.innings){
-
-const innObj=Object.values(innings)[0];
-
-const team=innObj.team;
-
-let runs=null;
-
-if(typeof innObj.runs==="object")
-runs=innObj.runs.total;
-else
-runs=innObj.runs;
-
-const wickets=innObj.wickets;
-
-scores[team]=runs+"/"+wickets;
+if(!table.children.length){
+  table.innerHTML = `<tr><td colspan="5">No finals found.</td></tr>`;
+}
 
 }
 
-return scores;
+function formatMargin(outcome, winner){
 
-}
+if(outcome.by?.runs !== undefined && outcome.by?.runs !== null)
+return `${winner} won by ${outcome.by.runs} runs`;
 
-function formatMargin(outcome){
+if(outcome.by?.wickets !== undefined && outcome.by?.wickets !== null)
+return `${winner} won by ${outcome.by.wickets} wickets`;
 
-if(outcome.by?.runs)
-return outcome.winner+" won by "+outcome.by.runs+" runs";
-
-if(outcome.by?.wickets)
-return outcome.winner+" won by "+outcome.by.wickets+" wickets";
-
-return "";
+const r = (outcome.result || "").toString().trim();
+return r;
 
 }
 
