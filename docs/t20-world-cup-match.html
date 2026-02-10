@@ -10,52 +10,53 @@
 <style>
 
 body{
-  font-family:Inter,system-ui,Arial;
-  margin:0;
-  background:#f4f6f8;
+font-family:Inter,system-ui,Arial;
+margin:0;
+background:#f4f6f8;
 }
 
 .navbar{
-  display:flex;
-  justify-content:center;
-  gap:24px;
-  padding:16px;
-  background:#fff;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
+display:flex;
+justify-content:center;
+gap:24px;
+padding:16px 0;
+border-bottom:1px solid #ddd;
+background:#fff;
+font-weight:600;
 }
 
 .navbar a{
-  text-decoration:none;
-  color:#0056d6;
+text-decoration:none;
+color:#0056d6;
 }
 
 .page{
-  max-width:1100px;
-  margin:30px auto;
-  padding:0 20px;
+max-width:1000px;
+margin:30px auto;
+padding:0 20px;
 }
 
 .hero{
-  background:linear-gradient(90deg,#8b0000,#e10600);
-  color:#fff;
-  padding:30px;
-  border-radius:18px;
-  margin-bottom:20px;
+background:linear-gradient(90deg,#8b0000,#e10600);
+color:#fff;
+padding:30px;
+border-radius:18px;
+margin-bottom:20px;
 }
 
-.section{
-  background:#fff;
-  padding:20px;
-  border-radius:12px;
+.innings{
+background:#fff;
+padding:20px;
+border-radius:12px;
+margin-bottom:20px;
 }
 
-.error{
-  color:red;
-  font-weight:700;
+h2{
+margin:0 0 10px 0;
 }
 
 </style>
+
 </head>
 
 <body>
@@ -68,83 +69,109 @@ body{
 
 <div class="page">
 
-<div id="content">Loading match...</div>
+<div id="matchContainer">
+
+<div class="hero">
+Loading match...
+</div>
+
+</div>
 
 </div>
 
 <script>
 
-// READ FILE PARAMETER
 const params = new URLSearchParams(window.location.search);
 
-let file = params.get("file") || params.get("match");
+const file = params.get("file");
+const matchId = params.get("match");
 
-// STOP IF MISSING
-if(!file){
+if(!file || !matchId){
 
-document.getElementById("content").innerHTML =
-"<div class='error'>Invalid match link</div>";
+document.getElementById("matchContainer").innerHTML =
+"<div class='hero'>Invalid match link</div>";
 
-throw "No file parameter";
+throw new Error("Missing parameters");
 
 }
 
-// DECODE URL
-file = decodeURIComponent(file);
+loadMatch();
 
-// LOAD MATCH
-loadMatch(file);
+async function loadMatch(){
 
-async function loadMatch(file){
+const res = await fetch(file);
 
-try{
+if(!res.ok){
 
-const response = await fetch(file);
+document.getElementById("matchContainer").innerHTML =
+"<div class='hero'>Match file not found</div>";
 
-if(!response.ok)
-throw "Fetch failed";
+return;
 
-const match = await response.json();
+}
+
+const matches = await res.json();
+
+const match = matches.find(m =>
+String(m.info.match_id) === String(matchId)
+);
+
+if(!match){
+
+document.getElementById("matchContainer").innerHTML =
+"<div class='hero'>Match not found</div>";
+
+return;
+
+}
 
 renderMatch(match);
 
-}catch(err){
-
-document.getElementById("content").innerHTML =
-"<div class='error'>Invalid match link</div>";
-
 }
 
-}
-
-// RENDER MATCH HEADER
 function renderMatch(match){
 
-const teams = match.info.teams || ["Team 1","Team 2"];
+const container = document.getElementById("matchContainer");
 
-const venue = match.info.venue || "";
+const teams = match.info.teams.join(" vs ");
 
-const date = match.info.dates ? match.info.dates[0] : "";
+const venue = match.info.venue;
 
-document.getElementById("content").innerHTML =
+const date = match.info.dates.join(", ");
 
-`
+container.innerHTML = `
 <div class="hero">
-
-<h1>${teams[0]} vs ${teams[1]}</h1>
-
+<h1>${teams}</h1>
 <div>${venue}</div>
-
 <div>${date}</div>
-
-</div>
-
-<div class="section">
-
-Match loaded successfully
-
 </div>
 `;
+
+for(const innings of match.innings){
+
+const inn = Object.values(innings)[0];
+
+const team = inn.team;
+
+const runs =
+typeof inn.runs === "object"
+? inn.runs.total
+: inn.runs;
+
+const wickets = inn.wickets;
+
+const div = document.createElement("div");
+
+div.className = "innings";
+
+div.innerHTML = `
+<h2>${team}</h2>
+<div><strong>${runs}/${wickets}</strong></div>
+`;
+
+container.appendChild(div);
+
+}
 
 }
 
