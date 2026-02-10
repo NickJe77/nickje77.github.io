@@ -25,11 +25,6 @@ background:#fff;
 font-weight:600;
 }
 
-.navbar a{
-text-decoration:none;
-color:#0056d6;
-}
-
 .page{
 max-width:1000px;
 margin:30px auto;
@@ -70,15 +65,13 @@ border-collapse:collapse;
 margin-bottom:18px;
 }
 
-th{
-text-align:left;
-padding:10px;
-border-bottom:2px solid #ddd;
-}
-
-td{
+th,td{
 padding:10px;
 border-bottom:1px solid #eee;
+}
+
+th{
+border-bottom:2px solid #ddd;
 }
 
 tbody tr:nth-child(even){
@@ -93,16 +86,6 @@ font-weight:600;
 
 .player:hover{
 text-decoration:underline;
-}
-
-.extras{
-font-weight:600;
-margin-bottom:8px;
-}
-
-.fow{
-font-weight:600;
-margin-bottom:20px;
 }
 
 </style>
@@ -126,15 +109,6 @@ margin-bottom:20px;
 
 const file=new URLSearchParams(location.search).get("file");
 
-if(!file){
-
-document.getElementById("matchContainer").innerHTML=
-"<div class='hero'>Invalid match link</div>";
-
-throw new Error();
-
-}
-
 loadMatch();
 
 async function loadMatch(){
@@ -142,8 +116,9 @@ async function loadMatch(){
 const res=await fetch(file);
 const matches=await res.json();
 
-const match=matches.find(m=>m.info?.event?.stage==="Final")
-|| matches[matches.length-1];
+const match=
+matches.find(m=>m.info?.event?.stage==="Final")
+||matches[matches.length-1];
 
 renderMatch(match);
 
@@ -180,17 +155,11 @@ ${stats.runs}/${stats.wickets} (${stats.overs} overs)
 </div>
 
 <h3>Batting</h3>
+
 ${battingTable(stats.batting)}
 
-<div class="extras">
-Extras: ${stats.extras}
-</div>
-
-<div class="fow">
-Fall of wickets: ${stats.fow.length ? stats.fow.join(", ") : "None"}
-</div>
-
 <h3>Bowling</h3>
+
 ${bowlingTable(stats.bowling)}
 
 `;
@@ -208,16 +177,13 @@ const deliveries=innings.overs.flatMap(o=>o.deliveries);
 let runs=0;
 let wickets=0;
 let legalBalls=0;
-let extras=0;
 
 const batting={};
 const bowling={};
-const fow=[];
 
 deliveries.forEach(d=>{
 
 runs+=d.runs.total;
-extras+=d.runs.extras||0;
 
 const legal=!d.extras?.wides && !d.extras?.noballs;
 
@@ -246,11 +212,9 @@ d.wickets.forEach(w=>{
 
 wickets++;
 
-batting[w.player_out].out=w.kind;
+batting[w.player_out].out=getDismissalText(w,bowler);
 
 bowling[bowler].wickets++;
-
-fow.push(`${runs}/${wickets} (${w.player_out})`);
 
 });
 
@@ -263,12 +227,42 @@ return{
 runs,
 wickets,
 overs:`${Math.floor(legalBalls/6)}.${legalBalls%6}`,
-extras,
 batting:Object.entries(batting),
-bowling:Object.entries(bowling),
-fow
+bowling:Object.entries(bowling)
 
 };
+
+}
+
+/* PROPER DISMISSAL TEXT */
+
+function getDismissalText(w,bowler){
+
+const kind=w.kind;
+
+if(kind==="bowled")
+return `b ${bowler}`;
+
+if(kind==="caught")
+return `c ${w.fielders?.[0]?.name||""} b ${bowler}`;
+
+if(kind==="lbw")
+return `lbw b ${bowler}`;
+
+if(kind==="run out")
+return `run out (${w.fielders?.map(f=>f.name).join(", ")||""})`;
+
+return kind;
+
+}
+
+/* PLAYER LINK WITH DIRECT ANCHOR */
+
+function playerLink(name){
+
+const encoded=encodeURIComponent(name);
+
+return `t20-world-cup-player.html?name=${encoded}#${encoded}`;
 
 }
 
@@ -295,7 +289,7 @@ const sr=s.balls?((s.runs/s.balls)*100).toFixed(1):"";
 html+=`
 <tr>
 <td>
-<a class="player" href="t20-world-cup-player.html?name=${encodeURIComponent(name)}">
+<a class="player" href="${playerLink(name)}">
 ${name}
 </a>
 </td>
@@ -339,7 +333,7 @@ const econ=(s.runs/(s.balls/6)).toFixed(1);
 html+=`
 <tr>
 <td>
-<a class="player" href="t20-world-cup-player.html?name=${encodeURIComponent(name)}">
+<a class="player" href="${playerLink(name)}">
 ${name}
 </a>
 </td>
