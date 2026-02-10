@@ -39,8 +39,14 @@ border-radius:18px;
 margin-bottom:20px;
 }
 
+.result{
+font-size:18px;
+font-weight:700;
+margin-top:10px;
+}
+
 .innings-title{
-color:#5b2ca0;
+color:#e10600;
 font-size:26px;
 font-weight:800;
 margin-bottom:5px;
@@ -62,7 +68,7 @@ margin-bottom:20px;
 table{
 width:100%;
 border-collapse:collapse;
-margin-bottom:25px;
+margin-bottom:20px;
 }
 
 th{
@@ -83,6 +89,16 @@ background:#f4f8ff;
 .player{
 color:#0056d6;
 text-decoration:none;
+font-weight:600;
+}
+
+.fow{
+margin-top:10px;
+font-size:15px;
+}
+
+.extras{
+margin-top:10px;
 font-weight:600;
 }
 
@@ -138,12 +154,29 @@ function renderMatch(match){
 
 const container=document.getElementById("matchContainer");
 
+const toss = match.info.toss
+? `${match.info.toss.winner} won the toss and chose to ${match.info.toss.decision}`
+: "";
+
+const result =
+match.info.outcome?.winner
+? `${match.info.outcome.winner} won by ${
+match.info.outcome.by?.runs
+? match.info.outcome.by.runs+" runs"
+: match.info.outcome.by?.wickets+" wickets"
+}`
+: "";
+
 container.innerHTML=`
+
 <div class="hero">
 <h1>${match.info.teams.join(" vs ")}</h1>
 <div>${match.info.venue}</div>
 <div>${match.info.dates.join(", ")}</div>
+<div class="result">${toss}</div>
+<div class="result">${result}</div>
 </div>
+
 `;
 
 match.innings.forEach(inn=>{
@@ -170,6 +203,10 @@ ${stats.runs}/${stats.wickets} (${stats.overs} overs)
 
 ${battingTable(stats.batting)}
 
+<div class="extras">Extras: ${stats.extras}</div>
+
+<div class="fow"><strong>Fall of wickets:</strong> ${stats.fow.join(", ") || "None"}</div>
+
 <h3>Bowling</h3>
 
 ${bowlingTable(stats.bowling)}
@@ -191,13 +228,16 @@ innings.deliveries
 let runs=0;
 let wickets=0;
 let balls=0;
+let extras=0;
 
 const batting={};
 const bowling={};
+const fow=[];
 
 deliveries.forEach(d=>{
 
 runs+=d.runs.total;
+extras+=d.runs.extras||0;
 
 if(!d.extras?.wides) balls++;
 
@@ -220,6 +260,8 @@ wickets++;
 
 batting[w.player_out].out=
 buildDismissal(w,bowler);
+
+fow.push(`${runs}/${wickets} (${batter})`);
 
 if(!bowling[bowler])
 bowling[bowler]={runs:0,balls:0,wickets:0};
@@ -245,9 +287,11 @@ return{
 runs,
 wickets,
 overs:Math.floor(balls/6)+"."+(balls%6),
+extras,
 
 batting:Object.entries(batting),
-bowling:Object.entries(bowling)
+bowling:Object.entries(bowling),
+fow
 
 };
 
@@ -263,6 +307,9 @@ return `c ${w.fielders?.[0]?.name || ""} b ${bowler}`;
 
 if(w.kind==="lbw")
 return `lbw b ${bowler}`;
+
+if(w.kind==="run out")
+return `run out`;
 
 return w.kind;
 
@@ -320,12 +367,16 @@ let html=`
 <th>O</th>
 <th>R</th>
 <th>W</th>
+<th>Econ</th>
 </tr>
 </thead>
 <tbody>
 `;
 
 rows.forEach(([name,s])=>{
+
+const overs=Math.floor(s.balls/6)+"."+(s.balls%6);
+const econ=(s.runs/(s.balls/6)).toFixed(1);
 
 html+=`
 <tr>
@@ -334,9 +385,10 @@ html+=`
 ${name}
 </a>
 </td>
-<td>${Math.floor(s.balls/6)+"."+(s.balls%6)}</td>
+<td>${overs}</td>
 <td>${s.runs}</td>
 <td>${s.wickets}</td>
+<td>${econ}</td>
 </tr>
 `;
 
