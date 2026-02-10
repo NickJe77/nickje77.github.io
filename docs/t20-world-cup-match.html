@@ -109,7 +109,9 @@ margin-bottom:5px;
 <div class="page">
 
 <div id="matchContainer">
+
 <div class="hero">Loading match...</div>
+
 </div>
 
 </div>
@@ -121,45 +123,27 @@ const params=new URLSearchParams(window.location.search);
 const file=params.get("file");
 const matchId=params.get("match");
 
-if(!file){
-
-document.getElementById("matchContainer").innerHTML=
-"<div class='hero'>Invalid match link</div>";
-
-throw new Error();
-
-}
-
 loadMatch();
 
 async function loadMatch(){
 
 const res=await fetch(file);
 
-if(!res.ok){
-
-document.getElementById("matchContainer").innerHTML=
-"<div class='hero'>Match file not found</div>";
-
-return;
-
-}
-
 const matches=await res.json();
 
-/* KEY FIX — supports both modes */
+/* find correct match */
 
 let match;
 
 if(matchId){
 
-match=matches.find(
-m=>String(m.info.match_id)===String(matchId)
+match=matches.find(m=>
+String(m.info.match_id)===String(matchId)
 );
 
 }
 
-/* fallback — auto find Final */
+/* fallback to Final */
 
 if(!match){
 
@@ -183,10 +167,7 @@ renderMatch(match);
 
 function playerLink(name){
 
-return `
-<a href="t20-world-cup-player.html?player=${encodeURIComponent(name)}"
-class="playerLink">${name}</a>
-`;
+return `<a href="t20-world-cup-player.html?player=${encodeURIComponent(name)}" class="playerLink">${name}</a>`;
 
 }
 
@@ -202,13 +183,13 @@ container.innerHTML=`
 </div>
 `;
 
-match.innings.forEach(innings=>{
+match.innings.forEach(inn=>{
 
-const inn=Object.values(innings)[0];
+const team=inn.team;
 
 let runs=0;
 let wickets=0;
-let balls=0;
+let legalBalls=0;
 
 const batting={};
 const bowling={};
@@ -221,7 +202,7 @@ over.deliveries.forEach(d=>{
 const batter=d.batter;
 const bowler=d.bowler;
 
-const legal=!d.extras?.wides && !d.extras?.noballs;
+const legal=!d.extras?.wides&&!d.extras?.noballs;
 
 if(!batting[batter])
 batting[batter]={runs:0,balls:0,out:null};
@@ -232,12 +213,15 @@ bowling[bowler]={runs:0,balls:0,wickets:0};
 batting[batter].runs+=d.runs.batter;
 
 if(legal){
+
 batting[batter].balls++;
 bowling[bowler].balls++;
-balls++;
+legalBalls++;
+
 }
 
 bowling[bowler].runs+=d.runs.total;
+
 runs+=d.runs.total;
 
 if(d.wickets){
@@ -262,7 +246,7 @@ fow.push(`${runs}/${wickets} (${w.player_out})`);
 });
 
 const overs=
-Math.floor(balls/6)+"."+(balls%6);
+Math.floor(legalBalls/6)+"."+(legalBalls%6);
 
 const div=document.createElement("div");
 
@@ -270,11 +254,9 @@ div.className="innings";
 
 div.innerHTML=`
 
-<div class="teamHeader">${inn.team}</div>
+<div class="teamHeader">${team}</div>
 
-<div class="score">
-${runs}/${wickets} (${overs} overs)
-</div>
+<div class="score">${runs}/${wickets} (${overs} overs)</div>
 
 <div class="sectionTitle">Batting</div>
 
@@ -322,7 +304,7 @@ ${Object.entries(bowling).map(([name,b])=>`
 <td>${Math.floor(b.balls/6)}.${b.balls%6}</td>
 <td>${b.runs}</td>
 <td>${b.wickets}</td>
-<td>${(b.runs/(b.balls/6)).toFixed(2)}</td>
+<td>${b.balls?(b.runs/(b.balls/6)).toFixed(2):""}</td>
 </tr>
 `).join("")}
 
