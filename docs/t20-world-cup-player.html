@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+
 <meta charset="UTF-8">
 <title>T20 World Cup Player | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -19,19 +20,14 @@ background:#f4f6f8;
 display:flex;
 justify-content:center;
 gap:24px;
-padding:16px 0;
+padding:16px;
 border-bottom:1px solid #ddd;
 background:#fff;
 font-weight:600;
 }
 
-.navbar a{
-text-decoration:none;
-color:#0056d6;
-}
-
 .page{
-max-width:1200px;
+max-width:1100px;
 margin:30px auto;
 padding:0 20px;
 }
@@ -44,37 +40,40 @@ border-radius:18px;
 margin-bottom:20px;
 }
 
-.table{
-width:100%;
-border-collapse:collapse;
+.statsBox{
 background:#fff;
+padding:20px;
 border-radius:12px;
-overflow:hidden;
+margin-bottom:20px;
 }
 
-.table th{
-background:#e10600;
-color:#fff;
-padding:12px;
+table{
+width:100%;
+border-collapse:collapse;
+}
+
+th,td{
+padding:10px;
+border-bottom:1px solid #eee;
 text-align:left;
 }
 
-.table td{
-padding:10px;
-border-bottom:1px solid #eee;
+tr:nth-child(even){
+background:#f8fbff;
 }
 
-.table tr:nth-child(even){
-background:#eef3f9;
+.matchLink{
+color:#0056d6;
+font-weight:600;
+text-decoration:none;
 }
 
-.loading{
-font-size:20px;
-padding:40px;
-text-align:center;
+.matchLink:hover{
+text-decoration:underline;
 }
 
 </style>
+
 </head>
 
 <body>
@@ -87,121 +86,206 @@ text-align:center;
 
 <div class="page">
 
-<div id="hero" class="hero">Loading player...</div>
+<div class="hero">
+<h1 id="playerName">Loading player...</h1>
+</div>
 
-<div id="stats"></div>
+<div id="careerStats"></div>
+
+<div class="statsBox">
+
+<h2>Match Log</h2>
+
+<table>
+
+<thead>
+<tr>
+<th>Date</th>
+<th>Match</th>
+<th>Runs</th>
+<th>Balls</th>
+<th>SR</th>
+<th>Wickets</th>
+</tr>
+</thead>
+
+<tbody id="matchTable"></tbody>
+
+</table>
+
+</div>
 
 </div>
 
 <script>
 
-const params = new URLSearchParams(window.location.search);
-const playerName = params.get("player");
+const params=new URLSearchParams(window.location.search);
+const player=params.get("player");
 
-if(!playerName){
+document.getElementById("playerName").innerText=player;
 
-document.getElementById("hero").innerHTML="Invalid player link";
-throw new Error("Missing player");
-
-}
-
-document.getElementById("hero").innerHTML=playerName;
+const indexFile="data/t20-world-cup/index.json";
 
 loadPlayer();
 
 async function loadPlayer(){
 
-const indexRes = await fetch("data/t20-world-cup/matches/index.json");
-const files = await indexRes.json();
+const indexRes=await fetch(indexFile);
+const files=await indexRes.json();
 
-const filePromises = files.map(f =>
-fetch("data/t20-world-cup/matches/"+f).then(r=>r.json())
-);
+let matchesPlayed=[];
 
-const allData = await Promise.all(filePromises);
+let totalRuns=0;
+let totalBalls=0;
+let totalWickets=0;
 
-let inningsList=[];
+for(const file of files){
 
-for(const season of allData){
+const res=await fetch("data/t20-world-cup/"+file);
+const matches=await res.json();
 
-for(const match of season){
+matches.forEach(match=>{
 
-for(const innings of match.innings){
+let runs=0;
+let balls=0;
+let wickets=0;
 
-const team=Object.values(innings)[0];
+match.innings.forEach(inn=>{
 
-if(!team.batting) continue;
+inn.overs.forEach(over=>{
 
-for(const batter of team.batting){
+over.deliveries.forEach(d=>{
 
-if(batter.batter===playerName){
+const legal=!d.extras?.wides&&!d.extras?.noballs;
 
-inningsList.push({
+if(d.batter===player){
 
-date:match.info.dates[0],
-team:team.team,
-runs:batter.runs,
-balls:batter.balls,
-dismissal:batter.dismissal||"not out",
-opposition:
-match.info.teams.find(t=>t!==team.team)
+runs+=d.runs.batter;
+
+if(legal)
+balls++;
+
+}
+
+if(d.bowler===player && d.wickets){
+
+d.wickets.forEach(w=>{
+
+if(w.kind!=="run out")
+wickets++;
 
 });
 
 }
 
-}
+});
+
+});
+
+});
+
+if(runs>0 || balls>0 || wickets>0){
+
+totalRuns+=runs;
+totalBalls+=balls;
+totalWickets+=wickets;
+
+matchesPlayed.push({
+
+date:match.info.dates[0],
+teams:match.info.teams.join(" vs "),
+runs,
+balls,
+wickets,
+file:file,
+matchId:match.info.match_id
+
+});
 
 }
 
-}
+});
 
 }
 
-renderStats(inningsList);
+renderCareer(totalRuns,totalBalls,totalWickets,matchesPlayed);
 
 }
 
-function renderStats(list){
+function renderCareer(runs,balls,wickets,matches){
 
-if(list.length===0){
+const avg=runs;
+const sr=balls?((runs/balls)*100).toFixed(1):"";
 
-document.getElementById("stats").innerHTML=
-"<div class='loading'>No data found</div>";
-return;
+document.getElementById("careerStats").innerHTML=`
 
-}
+<div class="statsBox">
 
-let html=`
-<table class="table">
+<h2>Career Stats</h2>
+
+<table>
+
 <tr>
-<th>Date</th>
-<th>Team</th>
-<th>Opposition</th>
+<th>Matches</th>
 <th>Runs</th>
 <th>Balls</th>
-<th>Dismissal</th>
+<th>Average</th>
+<th>Strike Rate</th>
+<th>Wickets</th>
 </tr>
-`;
 
-for(const i of list){
-
-html+=`
 <tr>
-<td>${i.date}</td>
-<td>${i.team}</td>
-<td>${i.opposition}</td>
-<td>${i.runs}</td>
-<td>${i.balls}</td>
-<td>${i.dismissal}</td>
+<td>${matches.length}</td>
+<td>${runs}</td>
+<td>${balls}</td>
+<td>${avg}</td>
+<td>${sr}</td>
+<td>${wickets}</td>
 </tr>
+
+</table>
+
+</div>
+
 `;
+
+renderMatches(matches);
 
 }
 
-html+="</table>";
+function renderMatches(matches){
 
-document.getElementById("stats").innerHTML=html;
+const tbody=document.getElementById("matchTable");
+
+matches.sort((a,b)=>new Date(b.date)-new Date(a.date));
+
+matches.forEach(m=>{
+
+const sr=m.balls?((m.runs/m.balls)*100).toFixed(1):"";
+
+tbody.innerHTML+=`
+
+<tr>
+
+<td>${m.date}</td>
+
+<td>
+<a class="matchLink"
+href="t20-world-cup-match.html?file=data/t20-world-cup/${m.file}&match=${m.matchId}">
+${m.teams}
+</a>
+</td>
+
+<td>${m.runs}</td>
+<td>${m.balls}</td>
+<td>${sr}</td>
+<td>${m.wickets}</td>
+
+</tr>
+
+`;
+
+});
 
 }
 
