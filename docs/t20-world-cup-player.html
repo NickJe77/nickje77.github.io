@@ -71,7 +71,7 @@ width:260px;
 max-height:300px;
 overflow-y:auto;
 border-radius:8px;
-box-shadow:0 4px 12px rgba(0,0,0,0.2);
+box-shadow:0 4px 12px rgba(0,0,0,0.25);
 display:none;
 z-index:1000;
 }
@@ -238,76 +238,94 @@ text-decoration:underline;
 
 <script>
 
+/* PLAYER FROM URL */
+
 const params=new URLSearchParams(window.location.search);
 const player=params.get("player");
 
 document.getElementById("playerName").innerText=player;
 
-const folder="data/t20-world-cup/matches/";
-
-let allMatches=[];
-let allPlayers=[];
-let mode="batting";
-
-/* LOAD EVERYTHING */
-
-loadPlayerNames();
-loadMatches();
-
 /* SEARCH SYSTEM */
 
-async function loadPlayerNames(){
+const folder="data/t20-world-cup/matches/";
 
-const res=await fetch(folder+"player-names.json");
-allPlayers=await res.json();
-
-}
+let allPlayers=[];
+let allMatches=[];
+let mode="batting";
 
 const searchInput=document.getElementById("playerSearch");
 const dropdown=document.getElementById("searchDropdown");
 
-searchInput.oninput=function(){
+/* LOAD PLAYER NAMES */
 
-const val=this.value.toLowerCase();
+async function loadPlayerNames(){
 
-if(!val){
-dropdown.style.display="none";
-return;
+const res=await fetch(folder+"player-names.json");
+const data=await res.json();
+
+if(Array.isArray(data)){
+
+allPlayers=data;
+
+}else{
+
+allPlayers=Object.keys(data);
+
 }
 
-const filtered=allPlayers.filter(p=>
-p.toLowerCase().includes(val)
-);
+allPlayers.sort();
+
+}
+
+searchInput.addEventListener("input",function(){
+
+const val=this.value.toLowerCase().trim();
 
 dropdown.innerHTML="";
 
-filtered.slice(0,50).forEach(p=>{
+if(!val){
 
-dropdown.innerHTML+=`
-<div class="searchItem">${p}</div>
-`;
+dropdown.style.display="none";
+return;
 
-});
+}
 
-dropdown.style.display="block";
+const filtered=allPlayers.filter(name=>
+name.toLowerCase().includes(val)
+);
 
-};
+if(filtered.length===0){
 
-dropdown.onclick=function(e){
+dropdown.style.display="none";
+return;
 
-if(e.target.classList.contains("searchItem")){
+}
 
-const name=e.target.innerText;
+filtered.slice(0,50).forEach(name=>{
+
+const div=document.createElement("div");
+
+div.className="searchItem";
+
+div.textContent=name;
+
+div.onclick=function(){
 
 window.location=
 "t20-world-cup-player.html?player="
 +encodeURIComponent(name);
 
-}
-
 };
 
-/* MATCH LOADING */
+dropdown.appendChild(div);
+
+});
+
+dropdown.style.display="block";
+
+});
+
+/* LOAD MATCHES */
 
 async function loadMatches(){
 
@@ -386,16 +404,7 @@ renderFiltered();
 
 }
 
-/* REMAINING FUNCTIONS SAME AS BEFORE */
-
-function populateOpps(){
-const opps=[...new Set(allMatches.map(m=>m.opponent))];
-const sel=document.getElementById("oppSelect");
-opps.sort().forEach(o=>{
-sel.innerHTML+=`<option>${o}</option>`;
-});
-sel.onchange=renderFiltered;
-}
+/* CONTROLS */
 
 batBtn.onclick=()=>{
 mode="batting";
@@ -413,8 +422,24 @@ renderCareer();
 renderFiltered();
 };
 
+function populateOpps(){
+
+const opps=[...new Set(allMatches.map(m=>m.opponent))];
+
+opps.sort().forEach(o=>{
+oppSelect.innerHTML+=`<option>${o}</option>`;
+});
+
+oppSelect.onchange=renderFiltered;
+
+}
+
+/* RENDER */
+
 function renderCareer(){
+
 renderBoxes(allMatches,"careerBoxes");
+
 }
 
 function renderFiltered(){
@@ -479,7 +504,6 @@ col4.innerText="";
 matches.forEach(m=>{
 
 matchRows.innerHTML+=`
-
 <tr>
 <td>${m.date}</td>
 <td><a class="matchLink"
@@ -504,7 +528,6 @@ col4.innerText="Econ";
 matches.forEach(m=>{
 
 matchRows.innerHTML+=`
-
 <tr>
 <td>${m.date}</td>
 <td><a class="matchLink"
@@ -533,6 +556,11 @@ return `<div class="box">
 function sum(arr,fn){
 return arr.reduce((a,b)=>a+fn(b),0);
 }
+
+/* INITIALISE */
+
+loadPlayerNames();
+loadMatches();
 
 </script>
 
