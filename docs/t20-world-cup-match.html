@@ -32,12 +32,21 @@ margin:30px auto;
 padding:0 20px;
 }
 
-.hero{
+.matchHeader{
 background:linear-gradient(90deg,#8b0000,#e10600);
 color:#fff;
-padding:30px;
-border-radius:18px;
+padding:25px;
+border-radius:16px;
 margin-bottom:20px;
+}
+
+.matchHeader h1{
+margin:0 0 8px 0;
+}
+
+.matchMeta{
+margin-top:6px;
+opacity:0.95;
 }
 
 .innings{
@@ -69,9 +78,20 @@ border-collapse:collapse;
 margin-bottom:15px;
 }
 
-th,td{
+th{
+text-align:left;
+padding:8px;
+border-bottom:2px solid #ddd;
+}
+
+td{
 padding:8px;
 border-bottom:1px solid #eee;
+}
+
+td.num{
+text-align:right;
+font-variant-numeric:tabular-nums;
 }
 
 tr:nth-child(even){
@@ -82,10 +102,6 @@ background:#f8fbff;
 color:#0056d6;
 font-weight:600;
 text-decoration:none;
-}
-
-.playerLink:hover{
-text-decoration:underline;
 }
 
 .sectionTitle{
@@ -109,9 +125,7 @@ margin-bottom:5px;
 <div class="page">
 
 <div id="matchContainer">
-
-<div class="hero">Loading match...</div>
-
+<div class="matchHeader">Loading match...</div>
 </div>
 
 </div>
@@ -130,29 +144,9 @@ async function loadMatch(){
 const res=await fetch(file);
 const matches=await res.json();
 
-let match;
+let match=matches.find(m=>String(m.info.match_id)===String(matchId));
 
-if(matchId){
-
-match=matches.find(m=>
-String(m.info.match_id)===String(matchId)
-);
-
-}
-
-if(!match){
-
-match=matches.find(m=>
-m.info.event?.stage==="Final"
-);
-
-}
-
-if(!match){
-
-match=matches[matches.length-1];
-
-}
+if(!match) match=matches[matches.length-1];
 
 renderMatch(match);
 
@@ -168,12 +162,47 @@ function renderMatch(match){
 
 const container=document.getElementById("matchContainer");
 
+const outcome=match.info.outcome;
+const toss=match.info.toss;
+
+let resultText="";
+
+if(outcome?.winner){
+
+if(outcome.by?.runs)
+resultText=`${outcome.winner} won by ${outcome.by.runs} runs`;
+
+else if(outcome.by?.wickets)
+resultText=`${outcome.winner} won by ${outcome.by.wickets} wickets`;
+
+else
+resultText=`${outcome.winner} won`;
+
+}
+
 container.innerHTML=`
-<div class="hero">
+
+<div class="matchHeader">
+
 <h1>${match.info.teams.join(" vs ")}</h1>
-<div>${match.info.venue}</div>
-<div>${match.info.dates.join(", ")}</div>
+
+<div class="matchMeta">${match.info.venue}</div>
+
+<div class="matchMeta">${match.info.dates.join(", ")}</div>
+
+<div class="matchMeta">${resultText}</div>
+
+<div class="matchMeta">
+Toss: ${toss?.winner} (${toss?.decision})
 </div>
+
+<div class="matchMeta">
+Player of the match:
+${match.info.player_of_match?.map(playerLink).join(", ") || ""}
+</div>
+
+</div>
+
 `;
 
 match.innings.forEach(inn=>{
@@ -183,6 +212,10 @@ const team=inn.team;
 let runs=0;
 let wickets=0;
 let legalBalls=0;
+
+let extrasTotal=0;
+
+const extrasBreakdown={w:0,nb:0,b:0,lb:0,p:0};
 
 const batting={};
 const bowling={};
@@ -195,51 +228,67 @@ over.deliveries.forEach(d=>{
 const batter=d.batter;
 const bowler=d.bowler;
 
-const legal=!d.extras?.wides&&!d.extras?.noballs;
+const wides=d.extras?.wides||0;
+const noballs=d.extras?.noballs||0;
+const byes=d.extras?.byes||0;
+const legbyes=d.extras?.legbyes||0;
+const penalty=d.extras?.penalty||0;
+
+extrasBreakdown.w+=wides;
+extrasBreakdown.nb+=noballs;
+extrasBreakdown.b+=byes;
+extrasBreakdown.lb+=legbyes;
+extrasBreakdown.p+=penalty;
+
+extrasTotal+=wides+noballs+byes+legbyes+penalty;
+
+const legal=!wides&&!noballs;
 
 if(!batting[batter])
-batting[batter]={runs:0,balls:0,out:null};
+batting[batter]={runs:0,balls:0,fours:0,sixes:0,out:null};
+
+batting[batter].runs+=d.runs.batter;
+
+if(d.runs.batter===4) batting[batter].fours++;
+if(d.runs.batter===6) batting[batter].sixes++;
+
+if(legal){
+batting[batter].balls++;
+legalBalls++;
+}
 
 if(!bowling[bowler])
 bowling[bowler]={runs:0,balls:0,wickets:0};
 
-batting[batter].runs+=d.runs.batter;
-
-if(legal){
-
-batting[batter].balls++;
-bowling[bowler].balls++;
-legalBalls++;
-
-}
+if(legal) bowling[bowler].balls++;
 
 bowling[bowler].runs+=d.runs.total;
 
 runs+=d.runs.total;
 
 if(d.wickets){
-
 d.wickets.forEach(w=>{
-
 wickets++;
-
-batting[w.player_out].out=
-dismissalText(w,bowler);
-
+batting[w.player_out].out=dismissalText(w,bowler);
 bowling[bowler].wickets++;
-
 fow.push(`${runs}/${wickets} (${playerLink(w.player_out)})`);
-
 });
-
 }
 
 });
 
 });
 
-const overs=
-Math.floor(legalBalls/6)+"."+(legalBalls%6);
+const overs=Math.floor(legalBalls/6)+"."+(legalBalls%6);
+
+const extrasText=
+[
+extrasBreakdown.w?`${extrasBreakdown.w}w`:"",
+extrasBreakdown.nb?`${extrasBreakdown.nb}nb`:"",
+extrasBreakdown.lb?`${extrasBreakdown.lb}lb`:"",
+extrasBreakdown.b?`${extrasBreakdown.b}b`:"",
+extrasBreakdown.p?`${extrasBreakdown.p}p`:""
+].filter(Boolean).join(", ");
 
 const div=document.createElement("div");
 
@@ -258,25 +307,42 @@ div.innerHTML=`
 <tr>
 <th>Batter</th>
 <th>How out</th>
-<th>R</th>
-<th>B</th>
-<th>SR</th>
+<th class="num">R</th>
+<th class="num">B</th>
+<th class="num">4s</th>
+<th class="num">6s</th>
+<th class="num">SR</th>
 </tr>
 
 ${Object.entries(batting).map(([name,b])=>`
 <tr>
 <td>${playerLink(name)}</td>
 <td>${b.out||"not out"}</td>
-<td>${b.runs}</td>
-<td>${b.balls}</td>
-<td>${b.balls?((b.runs/b.balls)*100).toFixed(1):""}</td>
+<td class="num">${b.runs}</td>
+<td class="num">${b.balls}</td>
+<td class="num">${b.fours}</td>
+<td class="num">${b.sixes}</td>
+<td class="num">${b.balls?((b.runs/b.balls)*100).toFixed(1):""}</td>
 </tr>
 `).join("")}
+
+<tr>
+<td><b>Extras</b></td>
+<td>${extrasText}</td>
+<td class="num"><b>${extrasTotal}</b></td>
+<td></td><td></td><td></td><td></td>
+</tr>
+
+<tr>
+<td><b>Total</b></td>
+<td></td>
+<td class="num"><b>${runs}</b></td>
+<td></td><td></td><td></td><td></td>
+</tr>
 
 </table>
 
 <div class="sectionTitle">Fall of wickets</div>
-
 <div>${fow.join(", ")||"None"}</div>
 
 <div class="sectionTitle">Bowling</div>
@@ -285,19 +351,19 @@ ${Object.entries(batting).map(([name,b])=>`
 
 <tr>
 <th>Bowler</th>
-<th>O</th>
-<th>R</th>
-<th>W</th>
-<th>Econ</th>
+<th class="num">O</th>
+<th class="num">R</th>
+<th class="num">W</th>
+<th class="num">Econ</th>
 </tr>
 
 ${Object.entries(bowling).map(([name,b])=>`
 <tr>
 <td>${playerLink(name)}</td>
-<td>${Math.floor(b.balls/6)}.${b.balls%6}</td>
-<td>${b.runs}</td>
-<td>${b.wickets}</td>
-<td>${b.balls?(b.runs/(b.balls/6)).toFixed(2):""}</td>
+<td class="num">${Math.floor(b.balls/6)}.${b.balls%6}</td>
+<td class="num">${b.runs}</td>
+<td class="num">${b.wickets}</td>
+<td class="num">${b.balls?(b.runs/(b.balls/6)).toFixed(2):""}</td>
 </tr>
 `).join("")}
 
