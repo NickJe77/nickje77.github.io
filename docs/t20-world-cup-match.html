@@ -60,6 +60,7 @@ margin-bottom:10px;
 table{
 width:100%;
 border-collapse:collapse;
+margin-bottom:15px;
 }
 
 th{
@@ -74,6 +75,11 @@ padding:8px;
 
 tbody tr:nth-child(even){
 background:#f4f8ff;
+}
+
+.section-title{
+font-weight:700;
+margin:10px 0 5px;
 }
 
 </style>
@@ -100,7 +106,6 @@ background:#f4f8ff;
 
 const params = new URLSearchParams(window.location.search);
 const file = params.get("file");
-const matchId = params.get("match");
 
 if(!file){
 
@@ -115,32 +120,12 @@ loadMatch();
 
 async function loadMatch(){
 
-const res = await fetch(file);
+const res = await fetch(file,{cache:"no-store"});
 const matches = await res.json();
 
-let match = null;
-
-if(matchId){
-
-match = matches.find(m =>
-String(m.info?.match_id) === String(matchId)
-);
-
-}
-
-if(!match){
-
-match = matches.find(m =>
-m.info?.event?.stage === "Final"
-);
-
-}
-
-if(!match){
-
-match = matches[matches.length-1];
-
-}
+let match =
+matches.find(m => m.info?.event?.stage==="Final")
+|| matches[matches.length-1];
 
 renderMatch(match);
 
@@ -148,37 +133,39 @@ renderMatch(match);
 
 function renderMatch(match){
 
-const container = document.getElementById("matchContainer");
+const container=document.getElementById("matchContainer");
 
-const teams = match.info.teams.join(" vs ");
-const venue = match.info.venue;
-const date = match.info.dates.join(", ");
-
-container.innerHTML = `
+container.innerHTML=`
 <div class="hero">
-<h1>${teams}</h1>
-<div>${venue}</div>
-<div>${date}</div>
+<h1>${match.info.teams.join(" vs ")}</h1>
+<div>${match.info.venue}</div>
+<div>${match.info.dates.join(", ")}</div>
 </div>
 `;
 
-match.innings.forEach(inningsObj => {
+match.innings.forEach(innObj=>{
 
-const innings = Object.values(inningsObj)[0];
+const innings=Object.values(innObj)[0];
 
-const team = innings.team;
+const stats=parseInnings(innings);
 
-const stats = calculateInnings(innings);
-
-const div = document.createElement("div");
+const div=document.createElement("div");
 div.className="innings";
 
-div.innerHTML = `
-<h2>${team}</h2>
+div.innerHTML=`
+<h2>${innings.team}</h2>
+
 <div class="score">
 ${stats.runs}/${stats.wickets} (${stats.overs})
 </div>
-${buildBattingTable(stats.batting)}
+
+<div class="section-title">Batting</div>
+${battingTable(stats.batting)}
+
+<div class="section-title">Bowling</div>
+${bowlingTable(stats.bowling)}
+
+<div><strong>Extras:</strong> ${stats.extras}</div>
 `;
 
 container.appendChild(div);
@@ -187,83 +174,131 @@ container.appendChild(div);
 
 }
 
-function calculateInnings(innings){
+function parseInnings(innings){
 
-let runs = 0;
-let wickets = 0;
-let balls = 0;
+let runs=0;
+let wickets=0;
+let balls=0;
+let extras=0;
 
-const batting = {};
+const batting={};
+const bowling={};
 
-innings.overs.forEach(over => {
+innings.overs.forEach(over=>{
 
-over.deliveries.forEach(delivery => {
+over.deliveries.forEach(delivery=>{
 
-const batter = delivery.batter;
+const batter=delivery.batter;
+const bowler=delivery.bowler;
 
-if(!batting[batter])
-batting[batter] = {runs:0,balls:0};
+const batterRuns=delivery.runs?.batter||0;
+const totalRuns=delivery.runs?.total||0;
+const extraRuns=delivery.runs?.extras||0;
 
-const r = delivery.runs.batter;
-
-batting[batter].runs += r;
-batting[batter].balls++;
-
-runs += delivery.runs.total;
-
-if(delivery.wickets)
-wickets += delivery.wickets.length;
-
+runs+=totalRuns;
+extras+=extraRuns;
 balls++;
 
-});
+if(!batting[batter])
+batting[batter]={runs:0,balls:0};
+
+batting[batter].runs+=batterRuns;
+batting[batter].balls++;
+
+if(!bowling[bowler])
+bowling[bowler]={runs:0,balls:0,wickets:0};
+
+bowling[bowler].runs+=totalRuns;
+bowling[bowler].balls++;
+
+if(delivery.wickets){
+
+wickets+=delivery.wickets.length;
+bowling[bowler].wickets+=delivery.wickets.length;
+
+}
 
 });
 
-const overs = Math.floor(balls/6) + "." + (balls%6);
+});
 
-return {
+const overs=Math.floor(balls/6)+"."+(balls%6);
+
+return{
 runs,
 wickets,
 overs,
-batting:Object.entries(batting)
+extras,
+batting:Object.entries(batting),
+bowling:Object.entries(bowling)
 };
 
 }
 
-function buildBattingTable(batting){
+function battingTable(batting){
 
-let html = `
+let html=`
 <table>
-<thead>
 <tr>
 <th>Batter</th>
-<th>Runs</th>
-<th>Balls</th>
+<th>R</th>
+<th>B</th>
 <th>SR</th>
 </tr>
-</thead>
-<tbody>
 `;
 
-batting.forEach(([name,stats])=>{
+batting.forEach(([name,s])=>{
 
-const sr = stats.balls
-? ((stats.runs/stats.balls)*100).toFixed(1)
-: "0.0";
+const sr=s.balls?((s.runs/s.balls)*100).toFixed(1):"0";
 
-html += `
+html+=`
 <tr>
 <td>${name}</td>
-<td>${stats.runs}</td>
-<td>${stats.balls}</td>
+<td>${s.runs}</td>
+<td>${s.balls}</td>
 <td>${sr}</td>
 </tr>
 `;
 
 });
 
-html += "</tbody></table>";
+html+="</table>";
+
+return html;
+
+}
+
+function bowlingTable(bowling){
+
+let html=`
+<table>
+<tr>
+<th>Bowler</th>
+<th>O</th>
+<th>R</th>
+<th>W</th>
+<th>Econ</th>
+</tr>
+`;
+
+bowling.forEach(([name,s])=>{
+
+const overs=(s.balls/6).toFixed(1);
+const econ=(s.runs/(s.balls/6)).toFixed(1);
+
+html+=`
+<tr>
+<td>${name}</td>
+<td>${overs}</td>
+<td>${s.runs}</td>
+<td>${s.wickets}</td>
+<td>${econ}</td>
+</tr>
+`;
+
+});
+
+html+="</table>";
 
 return html;
 
