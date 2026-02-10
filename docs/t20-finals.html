@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <title>T20 World Cup Finals | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <link rel="stylesheet" href="style.css">
 
 <style>
@@ -120,17 +119,7 @@ background:#d8e8ff;
 
 <script>
 
-const YEARS = [
-2007,
-2009,
-2010,
-2012,
-2014,
-2016,
-2021,
-2022,
-2024
-];
+const YEARS = [2007,2009,2010,2012,2014,2016,2021,2022,2024];
 
 const FINALISTS = {
 
@@ -147,6 +136,7 @@ const FINALISTS = {
 };
 
 const table=document.getElementById("finalsTable");
+
 table.innerHTML="";
 
 loadFinals();
@@ -167,7 +157,7 @@ const matches=await res.json();
 
 const finalists=FINALISTS[year];
 
-const match=matches.find(m =>
+const match=matches.find(m=>
 m.info &&
 m.info.teams &&
 m.info.teams.includes(finalists[0]) &&
@@ -178,10 +168,12 @@ if(!match) continue;
 
 const teams=match.info.teams;
 
-const scoreA=getScore(match,teams[0]);
-const scoreB=getScore(match,teams[1]);
+const innings=match.innings;
 
-const winner=getWinner(match,teams,scoreA,scoreB);
+const scoreA=formatScore(innings[0]);
+const scoreB=formatScore(innings[1]);
+
+const winner=match.info.outcome.winner;
 
 const loser=teams.find(t=>t!==winner);
 
@@ -191,24 +183,25 @@ winner===teams[0]?scoreA:scoreB;
 const loserScore=
 winner===teams[0]?scoreB:scoreA;
 
-const margin=getMargin(match);
+const margin=formatMargin(match.info.outcome);
 
-const venue=match.info.venue || "";
+const venue=match.info.venue;
 
 const tr=document.createElement("tr");
 
-tr.innerHTML=
-`<td>${year}</td>
+tr.innerHTML=`
+<td>${year}</td>
 <td class="team">${winner}</td>
 <td class="score">${winnerScore}</td>
 <td class="team">${loser}</td>
 <td class="score">${loserScore}</td>
 <td class="margin">${margin}</td>
-<td>${venue}</td>`;
+<td>${venue}</td>
+`;
 
 tr.onclick=()=>{
 window.location.href=
-`t20-world-cup-match.html?file=${file}&match=${match.info.match_id||""}`;
+`t20-world-cup-match.html?file=${file}&match=${match.info.match_id}`;
 };
 
 table.appendChild(tr);
@@ -219,61 +212,20 @@ table.appendChild(tr);
 
 }
 
-// SAFE SCORE EXTRACTION
+function formatScore(innings){
 
-function getScore(match,team){
+if(!innings) return "";
 
-if(!match.innings) return "";
-
-for(const inn of match.innings){
-
-const data=Object.values(inn)[0];
-
-if(data.team===team){
-
-return `${data.runs}/${data.wickets}`;
+return `${innings.runs}/${innings.wickets}`;
 
 }
 
-}
+function formatMargin(outcome){
 
-return "";
-
-}
-
-// SAFE WINNER EXTRACTION
-
-function getWinner(match,teams,scoreA,scoreB){
-
-// method 1
-if(match.info.outcome?.winner)
-return match.info.outcome.winner;
-
-// method 2 derive from runs
-const runsA=parseInt(scoreA);
-const runsB=parseInt(scoreB);
-
-if(!isNaN(runsA)&&!isNaN(runsB)){
-
-if(runsA>runsB) return teams[0];
-if(runsB>runsA) return teams[1];
-
-}
-
-return teams[0];
-
-}
-
-// SAFE MARGIN
-
-function getMargin(match){
-
-const outcome=match.info.outcome;
-
-if(outcome?.by?.runs)
+if(outcome.by?.runs)
 return `${outcome.winner} won by ${outcome.by.runs} runs`;
 
-if(outcome?.by?.wickets)
+if(outcome.by?.wickets)
 return `${outcome.winner} won by ${outcome.by.wickets} wickets`;
 
 return "";
