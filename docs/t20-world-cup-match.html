@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
+
 body{
 font-family:Inter,system-ui,Arial;
 margin:0;
@@ -25,7 +26,7 @@ font-weight:600;
 }
 
 .page{
-max-width:1100px;
+max-width:1000px;
 margin:30px auto;
 padding:0 20px;
 }
@@ -38,14 +39,17 @@ border-radius:18px;
 margin-bottom:20px;
 }
 
-.team-box{
-background:#e10600;
-color:white;
-padding:10px 18px;
-border-radius:10px;
+.innings-title{
+color:#5b2ca0;
+font-size:26px;
 font-weight:800;
-display:inline-block;
-margin-bottom:10px;
+margin-bottom:5px;
+}
+
+.score{
+font-size:20px;
+font-weight:700;
+margin-bottom:20px;
 }
 
 .card{
@@ -55,26 +59,21 @@ border-radius:12px;
 margin-bottom:20px;
 }
 
-.score{
-font-size:22px;
-font-weight:800;
-margin-bottom:10px;
-}
-
 table{
 width:100%;
 border-collapse:collapse;
-margin-bottom:15px;
+margin-bottom:25px;
 }
 
 th{
-border-bottom:2px solid #ddd;
-padding:8px;
 text-align:left;
+padding:10px;
+border-bottom:2px solid #ddd;
 }
 
 td{
-padding:8px;
+padding:10px;
+border-bottom:1px solid #eee;
 }
 
 tbody tr:nth-child(even){
@@ -86,7 +85,9 @@ color:#0056d6;
 text-decoration:none;
 font-weight:600;
 }
+
 </style>
+
 </head>
 
 <body>
@@ -98,9 +99,11 @@ font-weight:600;
 </div>
 
 <div class="page">
+
 <div id="matchContainer">
 <div class="hero">Loading match...</div>
 </div>
+
 </div>
 
 <script>
@@ -123,7 +126,7 @@ async function loadMatch(){
 const res=await fetch(file);
 const matches=await res.json();
 
-const match=
+const match =
 matches.find(m=>m.info?.event?.stage==="Final")
 ||matches[matches.length-1];
 
@@ -143,36 +146,32 @@ container.innerHTML=`
 </div>
 `;
 
-match.innings.forEach(innObj=>{
+match.innings.forEach(inn=>{
 
-// THIS IS THE FIX
-let innings;
-
-if(innObj.team)
-innings=innObj;
-else
-innings=Object.values(innObj)[0];
+const innings=inn.team?inn:Object.values(inn)[0];
 
 const stats=parseInnings(innings);
 
 const div=document.createElement("div");
+
 div.className="card";
 
 div.innerHTML=`
 
-<div class="team-box">${innings.team}</div>
+<div class="innings-title">
+${innings.team} Innings
+</div>
 
 <div class="score">
-${stats.runs}/${stats.wickets} (${stats.overs})
+${stats.runs}/${stats.wickets} (${stats.overs} overs)
 </div>
 
 <h3>Batting</h3>
+
 ${battingTable(stats.batting)}
 
-<h3>Fall of wickets</h3>
-${fallTable(stats.fall)}
-
 <h3>Bowling</h3>
+
 ${bowlingTable(stats.bowling)}
 
 `;
@@ -185,7 +184,9 @@ container.appendChild(div);
 
 function parseInnings(innings){
 
-const deliveries=getDeliveries(innings);
+const deliveries=
+innings.deliveries
+||innings.overs.flatMap(o=>o.deliveries);
 
 let runs=0;
 let wickets=0;
@@ -193,24 +194,41 @@ let balls=0;
 
 const batting={};
 const bowling={};
-const fall=[];
 
 deliveries.forEach(d=>{
-
-const batter=d.batter;
-const bowler=d.bowler;
 
 runs+=d.runs.total;
 
 if(!d.extras?.wides) balls++;
 
+const batter=d.batter;
+const bowler=d.bowler;
+
 if(!batting[batter])
-batting[batter]={runs:0,balls:0};
+batting[batter]={runs:0,balls:0,out:"not out"};
 
 batting[batter].runs+=d.runs.batter;
 
 if(!d.extras?.wides)
 batting[batter].balls++;
+
+if(d.wickets){
+
+d.wickets.forEach(w=>{
+
+wickets++;
+
+batting[w.player_out].out=
+buildDismissal(w,bowler);
+
+if(!bowling[bowler])
+bowling[bowler]={runs:0,balls:0,wickets:0};
+
+bowling[bowler].wickets++;
+
+});
+
+}
 
 if(!bowling[bowler])
 bowling[bowler]={runs:0,balls:0,wickets:0};
@@ -219,22 +237,6 @@ bowling[bowler].runs+=d.runs.total;
 
 if(!d.extras?.wides)
 bowling[bowler].balls++;
-
-if(d.wickets){
-
-d.wickets.forEach(w=>{
-
-wickets++;
-bowling[bowler].wickets++;
-
-fall.push({
-score:runs,
-player:w.player_out
-});
-
-});
-
-}
 
 });
 
@@ -245,28 +247,42 @@ wickets,
 overs:Math.floor(balls/6)+"."+(balls%6),
 
 batting:Object.entries(batting),
-bowling:Object.entries(bowling),
-fall
+bowling:Object.entries(bowling)
 
 };
 
 }
 
-function getDeliveries(innings){
+function buildDismissal(w,bowler){
 
-if(innings.deliveries)
-return innings.deliveries;
+if(w.kind==="bowled")
+return `b ${bowler}`;
 
-if(innings.overs)
-return innings.overs.flatMap(o=>o.deliveries);
+if(w.kind==="caught")
+return `c ${w.fielders?.[0]?.name || ""} b ${bowler}`;
 
-return[];
+if(w.kind==="lbw")
+return `lbw b ${bowler}`;
+
+return w.kind;
 
 }
 
 function battingTable(rows){
 
-let html="<table><tr><th>Batter</th><th>R</th><th>B</th><th>SR</th></tr>";
+let html=`
+<table>
+<thead>
+<tr>
+<th>Batter</th>
+<th>How out</th>
+<th>R</th>
+<th>B</th>
+<th>SR</th>
+</tr>
+</thead>
+<tbody>
+`;
 
 rows.forEach(([name,s])=>{
 
@@ -274,57 +290,60 @@ const sr=s.balls?((s.runs/s.balls)*100).toFixed(1):"";
 
 html+=`
 <tr>
-<td><a class="player" href="t20-player.html?name=${encodeURIComponent(name)}">${name}</a></td>
+<td>
+<a class="player" href="t20-player.html?name=${encodeURIComponent(name)}">
+${name}
+</a>
+</td>
+<td>${s.out}</td>
 <td>${s.runs}</td>
 <td>${s.balls}</td>
 <td>${sr}</td>
-</tr>`;
+</tr>
+`;
 
 });
 
-html+="</table>";
+html+="</tbody></table>";
+
 return html;
 
 }
 
 function bowlingTable(rows){
 
-let html="<table><tr><th>Bowler</th><th>O</th><th>R</th><th>W</th></tr>";
+let html=`
+<table>
+<thead>
+<tr>
+<th>Bowler</th>
+<th>O</th>
+<th>R</th>
+<th>W</th>
+</tr>
+</thead>
+<tbody>
+`;
 
 rows.forEach(([name,s])=>{
 
 html+=`
 <tr>
-<td><a class="player" href="t20-player.html?name=${encodeURIComponent(name)}">${name}</a></td>
+<td>
+<a class="player" href="t20-player.html?name=${encodeURIComponent(name)}">
+${name}
+</a>
+</td>
 <td>${Math.floor(s.balls/6)+"."+(s.balls%6)}</td>
 <td>${s.runs}</td>
 <td>${s.wickets}</td>
-</tr>`;
+</tr>
+`;
 
 });
 
-html+="</table>";
-return html;
+html+="</tbody></table>";
 
-}
-
-function fallTable(rows){
-
-if(!rows.length) return "None";
-
-let html="<table><tr><th>Score</th><th>Player</th></tr>";
-
-rows.forEach(r=>{
-
-html+=`
-<tr>
-<td>${r.score}</td>
-<td>${r.player}</td>
-</tr>`;
-
-});
-
-html+="</table>";
 return html;
 
 }
