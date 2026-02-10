@@ -32,13 +32,60 @@ margin:30px auto;
 padding:0 20px;
 }
 
+/* HERO */
+
 .hero{
 background:linear-gradient(90deg,#8b0000,#e10600);
 color:#fff;
 padding:30px;
 border-radius:18px;
 margin-bottom:20px;
+display:flex;
+justify-content:space-between;
+align-items:flex-start;
 }
+
+.heroLeft h1{
+margin:0;
+}
+
+.heroRight{
+position:relative;
+}
+
+#playerSearch{
+padding:10px;
+border-radius:8px;
+border:none;
+width:260px;
+font-size:15px;
+}
+
+.searchDropdown{
+position:absolute;
+top:42px;
+right:0;
+background:#fff;
+color:#000;
+width:260px;
+max-height:300px;
+overflow-y:auto;
+border-radius:8px;
+box-shadow:0 4px 12px rgba(0,0,0,0.2);
+display:none;
+z-index:1000;
+}
+
+.searchItem{
+padding:8px 12px;
+cursor:pointer;
+}
+
+.searchItem:hover{
+background:#f1f1f1;
+}
+
+/* CONTROLS */
 
 .controls{
 display:flex;
@@ -60,6 +107,8 @@ background:#e10600;
 color:#fff;
 border:none;
 }
+
+/* SUMMARY */
 
 .summaryTitle{
 text-align:center;
@@ -90,6 +139,8 @@ font-weight:700;
 font-size:14px;
 color:#666;
 }
+
+/* TABLE */
 
 table{
 width:100%;
@@ -133,8 +184,17 @@ text-decoration:underline;
 <div class="page">
 
 <div class="hero">
+
+<div class="heroLeft">
 <h1 id="playerName"></h1>
 <div>T20 World Cup batting & bowling performance</div>
+</div>
+
+<div class="heroRight">
+<input id="playerSearch" placeholder="Search player...">
+<div id="searchDropdown" class="searchDropdown"></div>
+</div>
+
 </div>
 
 <div class="controls">
@@ -186,11 +246,70 @@ document.getElementById("playerName").innerText=player;
 const folder="data/t20-world-cup/matches/";
 
 let allMatches=[];
+let allPlayers=[];
 let mode="batting";
 
-load();
+/* LOAD EVERYTHING */
 
-async function load(){
+loadPlayerNames();
+loadMatches();
+
+/* SEARCH SYSTEM */
+
+async function loadPlayerNames(){
+
+const res=await fetch(folder+"player-names.json");
+allPlayers=await res.json();
+
+}
+
+const searchInput=document.getElementById("playerSearch");
+const dropdown=document.getElementById("searchDropdown");
+
+searchInput.oninput=function(){
+
+const val=this.value.toLowerCase();
+
+if(!val){
+dropdown.style.display="none";
+return;
+}
+
+const filtered=allPlayers.filter(p=>
+p.toLowerCase().includes(val)
+);
+
+dropdown.innerHTML="";
+
+filtered.slice(0,50).forEach(p=>{
+
+dropdown.innerHTML+=`
+<div class="searchItem">${p}</div>
+`;
+
+});
+
+dropdown.style.display="block";
+
+};
+
+dropdown.onclick=function(e){
+
+if(e.target.classList.contains("searchItem")){
+
+const name=e.target.innerText;
+
+window.location=
+"t20-world-cup-player.html?player="
++encodeURIComponent(name);
+
+}
+
+};
+
+/* MATCH LOADING */
+
+async function loadMatches(){
 
 const index=await fetch(folder+"index.json").then(r=>r.json());
 
@@ -239,7 +358,7 @@ if(w.kind!=="run out") bowl.wickets++;
 
 });
 
-if(bat.runs>0||bat.balls>0||bowl.balls>0){
+if(bat.runs||bowl.balls){
 
 allMatches.push({
 
@@ -267,61 +386,46 @@ renderFiltered();
 
 }
 
+/* REMAINING FUNCTIONS SAME AS BEFORE */
+
 function populateOpps(){
-
 const opps=[...new Set(allMatches.map(m=>m.opponent))];
-
 const sel=document.getElementById("oppSelect");
-
 opps.sort().forEach(o=>{
-sel.innerHTML+=`<option value="${o}">${o}</option>`;
+sel.innerHTML+=`<option>${o}</option>`;
 });
-
 sel.onchange=renderFiltered;
-
 }
 
-document.getElementById("batBtn").onclick=()=>{
+batBtn.onclick=()=>{
 mode="batting";
-setActive();
+batBtn.classList.add("active");
+bowlBtn.classList.remove("active");
 renderCareer();
 renderFiltered();
 };
 
-document.getElementById("bowlBtn").onclick=()=>{
+bowlBtn.onclick=()=>{
 mode="bowling";
-setActive();
+bowlBtn.classList.add("active");
+batBtn.classList.remove("active");
 renderCareer();
 renderFiltered();
 };
-
-function setActive(){
-
-batBtn.classList.toggle("active",mode==="batting");
-bowlBtn.classList.toggle("active",mode==="bowling");
-
-}
-
-/* CAREER SUMMARY — ALWAYS ALL MATCHES */
 
 function renderCareer(){
-
 renderBoxes(allMatches,"careerBoxes");
-
 }
-
-/* VS OPPOSITION — FILTERED */
 
 function renderFiltered(){
 
-const opp=document.getElementById("oppSelect").value;
+const opp=oppSelect.value;
 
 const matches=opp==="All"
 ?allMatches
 :allMatches.filter(m=>m.opponent===opp);
 
 renderBoxes(matches,"oppBoxes");
-
 renderTable(matches);
 
 }
@@ -363,8 +467,7 @@ box("Best","-");
 
 function renderTable(matches){
 
-const tbody=document.getElementById("matchRows");
-tbody.innerHTML="";
+matchRows.innerHTML="";
 
 if(mode==="batting"){
 
@@ -375,29 +478,19 @@ col4.innerText="";
 
 matches.forEach(m=>{
 
-tbody.innerHTML+=`
+matchRows.innerHTML+=`
 
 <tr>
-
 <td>${m.date}</td>
-
-<td>
-<a class="matchLink"
+<td><a class="matchLink"
 href="t20-world-cup-match.html?file=${folder}${m.file}&match=${m.id}">
-${m.opponent}
-</a>
-</td>
-
+${m.opponent}</a></td>
 <td>${m.venue}</td>
-
 <td>${m.bat.runs}</td>
 <td>${m.bat.balls}</td>
 <td>${m.bat.balls?(m.bat.runs/m.bat.balls*100).toFixed(1):""}</td>
 <td></td>
-
-</tr>
-
-`;
+</tr>`;
 
 });
 
@@ -410,31 +503,19 @@ col4.innerText="Econ";
 
 matches.forEach(m=>{
 
-const overs=(m.bowl.balls/6).toFixed(1);
-
-tbody.innerHTML+=`
+matchRows.innerHTML+=`
 
 <tr>
-
 <td>${m.date}</td>
-
-<td>
-<a class="matchLink"
+<td><a class="matchLink"
 href="t20-world-cup-match.html?file=${folder}${m.file}&match=${m.id}">
-${m.opponent}
-</a>
-</td>
-
+${m.opponent}</a></td>
 <td>${m.venue}</td>
-
-<td>${overs}</td>
+<td>${(m.bowl.balls/6).toFixed(1)}</td>
 <td>${m.bowl.runs}</td>
 <td>${m.bowl.wickets}</td>
 <td>${m.bowl.balls?(m.bowl.runs/(m.bowl.balls/6)).toFixed(2):""}</td>
-
-</tr>
-
-`;
+</tr>`;
 
 });
 
@@ -443,18 +524,14 @@ ${m.opponent}
 }
 
 function box(label,value){
-
 return `<div class="box">
 <div class="value">${value}</div>
 <div class="label">${label}</div>
 </div>`;
-
 }
 
 function sum(arr,fn){
-
 return arr.reduce((a,b)=>a+fn(b),0);
-
 }
 
 </script>
