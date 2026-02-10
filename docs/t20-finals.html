@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
+
 body{
   font-family:Inter,system-ui,Arial;
   margin:0;
@@ -74,9 +75,19 @@ tbody tr:hover{
   background:#d8e8ff;
 }
 
-.team{font-weight:700;}
-.score{font-weight:600;}
-.margin{font-weight:700;color:#0a4;}
+.team{
+  font-weight:700;
+}
+
+.score{
+  font-weight:600;
+}
+
+.margin{
+  font-weight:700;
+  color:#0a4;
+}
+
 </style>
 </head>
 
@@ -90,182 +101,214 @@ tbody tr:hover{
 
 <div class="page">
 
-  <div class="hero">
-    <h1>T20 World Cup Finals</h1>
-  </div>
+<div class="hero">
+<h1>T20 World Cup Finals</h1>
+</div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Year</th>
-        <th>Winner</th>
-        <th>Score</th>
-        <th>Runner-up</th>
-        <th>Score</th>
-        <th>Margin</th>
-        <th>Venue</th>
-      </tr>
-    </thead>
-    <tbody id="finalsTable">
-      <tr><td colspan="7">Loading finals...</td></tr>
-    </tbody>
-  </table>
+<table>
+
+<thead>
+<tr>
+<th>Year</th>
+<th>Winner</th>
+<th>Score</th>
+<th>Runner-up</th>
+<th>Score</th>
+<th>Margin</th>
+<th>Venue</th>
+</tr>
+</thead>
+
+<tbody id="finalsTable">
+<tr><td colspan="7">Loading finals...</td></tr>
+</tbody>
+
+</table>
 
 </div>
 
 <script>
-// Years you have FULL files for (per your folder screenshot)
-const YEARS = [2007,2008,2009,2010,2012,2013,2014,2015,2016,2021,2022,2023,2024,2025];
 
-// Hard lock finalists for the REAL ICC Men's T20 World Cup finals.
-// This prevents accidentally grabbing a qualifier/regional "Final".
+// ONLY REAL ICC MEN'S T20 WORLD CUP YEARS
+
+const YEARS = [
+2007,
+2009,
+2010,
+2012,
+2014,
+2016,
+2021,
+2022,
+2024
+];
+
+// HARDCODE FINALISTS TO PREVENT QUALIFIER / WRONG FINALS
+
 const FINALISTS = {
-  2007: ["India","Pakistan"],
-  2009: ["Pakistan","Sri Lanka"],
-  2010: ["England","Australia"],
-  2012: ["West Indies","Sri Lanka"],
-  2014: ["Sri Lanka","India"],
-  2016: ["West Indies","England"],
-  2021: ["Australia","New Zealand"],
-  2022: ["England","Pakistan"],
-  2024: ["India","South Africa"]
+
+2007:["India","Pakistan"],
+2009:["Pakistan","Sri Lanka"],
+2010:["England","Australia"],
+2012:["West Indies","Sri Lanka"],
+2014:["Sri Lanka","India"],
+2016:["West Indies","England"],
+2021:["Australia","New Zealand"],
+2022:["England","Pakistan"],
+2024:["India","South Africa"]
+
 };
 
 const table = document.getElementById("finalsTable");
-table.innerHTML = "";
 
-(async function loadFinals(){
-  for(const year of YEARS){
-    const file = `data/t20-world-cup/matches/t20wc_${year}_FULL.json`;
+table.innerHTML="";
 
-    try{
-      const res = await fetch(file, { cache:"no-store" });
-      if(!res.ok) continue;
+loadFinals();
 
-      const matches = await res.json();
-      if(!Array.isArray(matches)) continue;
+async function loadFinals(){
 
-      const finalMatch = pickFinalForYear(matches, year);
-      if(!finalMatch) continue;
+for(const year of YEARS){
 
-      const teams = (finalMatch.info && finalMatch.info.teams) ? finalMatch.info.teams : [];
-      const venue = (finalMatch.info && finalMatch.info.venue) ? finalMatch.info.venue : "";
+try{
 
-      const outcome = finalMatch.info?.outcome || {};
-      const winner = outcome.winner || "";
-      const loser = teams.find(t => t !== winner) || "";
+const file =
+"data/t20-world-cup/matches/t20wc_" +
+year +
+"_FULL.json";
 
-      const sA = getScore(finalMatch, teams[0]);
-      const sB = getScore(finalMatch, teams[1]);
+const res = await fetch(file);
 
-      const winnerScore = (winner === teams[0]) ? sA : sB;
-      const loserScore  = (winner === teams[0]) ? sB : sA;
+if(!res.ok) continue;
 
-      const margin = getMargin(outcome);
+const matches = await res.json();
 
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${year}</td>
-        <td class="team">${winner || teams[0] || ""}</td>
-        <td class="score">${winnerScore}</td>
-        <td class="team">${loser || teams[1] || ""}</td>
-        <td class="score">${loserScore}</td>
-        <td class="margin">${margin}</td>
-        <td>${venue}</td>
-      `;
+const finalists = FINALISTS[year];
 
-      // Keep your existing match page pattern: it must load the FULL file and use match id
-      const matchId =
-        finalMatch.info?.match_id ??
-        finalMatch.info?.matchId ??
-        finalMatch.info?.match_number ??
-        finalMatch.info?.event?.match_number ??
-        "";
+const final = matches.find(m =>
 
-      tr.onclick = () => {
-        // Do NOT guess a per-match json file (you don't have them). Pass FULL file + match id.
-        window.location.href = `t20-world-cup-match.html?file=${encodeURIComponent(file)}&match=${encodeURIComponent(String(matchId))}`;
-      };
+m.info &&
+m.info.teams &&
+m.info.teams.includes(finalists[0]) &&
+m.info.teams.includes(finalists[1])
 
-      table.appendChild(tr);
+);
 
-    }catch(e){
-      // ignore year if file missing / parse error
-    }
-  }
+if(!final) continue;
 
-  if(!table.children.length){
-    table.innerHTML = `<tr><td colspan="7">No finals found (check filenames/folder path).</td></tr>`;
-  }
-})();
+const teams = final.info.teams;
 
-function pickFinalForYear(matches, year){
-  const pair = FINALISTS[year];
+const venue = final.info.venue || "";
 
-  // 1) Strict: must include both finalists
-  if(pair){
-    const hit = matches.find(m => hasBothTeams(m, pair[0], pair[1]) && isFinalStage(m));
-    if(hit) return hit;
+const winner = final.info.outcome.winner;
 
-    // Some datasets may not have event.stage perfectly — fallback to just team match
-    const hit2 = matches.find(m => hasBothTeams(m, pair[0], pair[1]));
-    if(hit2) return hit2;
-  }
+const loser = teams.find(t => t !== winner);
 
-  // 2) Generic fallback: stage is Final + event name looks like T20 WC, not qualifiers
-  const hit3 = matches.find(m => isFinalStage(m) && looksLikeWorldCup(m));
-  return hit3 || null;
+const scoreA = getScore(final, teams[0]);
+
+const scoreB = getScore(final, teams[1]);
+
+const winnerScore =
+winner === teams[0] ? scoreA : scoreB;
+
+const loserScore =
+winner === teams[0] ? scoreB : scoreA;
+
+const margin = getMargin(final.info.outcome);
+
+const tr = document.createElement("tr");
+
+tr.innerHTML =
+
+"<td>" + year + "</td>" +
+
+"<td class='team'>" + winner + "</td>" +
+
+"<td class='score'>" + winnerScore + "</td>" +
+
+"<td class='team'>" + loser + "</td>" +
+
+"<td class='score'>" + loserScore + "</td>" +
+
+"<td class='margin'>" + margin + "</td>" +
+
+"<td>" + venue + "</td>";
+
+tr.onclick = function(){
+
+window.location.href =
+
+"t20-world-cup-match.html?file=" +
+
+encodeURIComponent(file) +
+
+"&match=" +
+
+encodeURIComponent(final.info.match_id || "");
+
+};
+
+table.appendChild(tr);
+
+}catch(e){
+
+console.log("Error loading year", year);
+
 }
 
-function hasBothTeams(m, a, b){
-  const teams = m?.info?.teams || [];
-  return teams.includes(a) && teams.includes(b);
 }
 
-function isFinalStage(m){
-  const stage = (m?.info?.event?.stage || "").toString().toLowerCase();
-  // exact "final" is best, but allow slight variations
-  return stage === "final" || stage === "grand final";
-}
-
-function looksLikeWorldCup(m){
-  const name = (m?.info?.event?.name || "").toString().toLowerCase();
-  if(!name) return false;
-  if(!name.includes("t20")) return false;
-  if(!name.includes("world cup")) return false;
-  if(name.includes("qualifier")) return false;
-  if(name.includes("regional")) return false;
-  return true;
 }
 
 function getScore(match, team){
-  // Cricsheet-style: innings is array of objects; each object has a single key whose value has {team,runs,wickets,overs}
-  const innings = Array.isArray(match.innings) ? match.innings : [];
-  for(const inn of innings){
-    const k = Object.keys(inn || {})[0];
-    if(!k) continue;
-    const data = inn[k];
-    if(!data) continue;
 
-    const t = data.team || k; // prefer explicit team field
-    if(t !== team) continue;
+if(!match.innings) return "";
 
-    const runs = (data.runs ?? "").toString();
-    const wkts = data.wickets;
+for(const inn of match.innings){
 
-    if(runs === "") return "";
-    if(wkts === undefined || wkts === null) return `${runs}`;
-    return `${runs}/${wkts}`;
-  }
-  return "";
+const data = Object.values(inn)[0];
+
+if(data.team === team){
+
+return data.runs + "/" + data.wickets;
+
+}
+
+}
+
+return "";
+
 }
 
 function getMargin(outcome){
-  const winner = outcome.winner || "";
-  if(outcome.by?.runs !== undefined) return `${winner} won by ${outcome.by.runs} runs`;
-  if(outcome.by?.wickets !== undefined) return `${winner} won by ${outcome.by.wickets} wickets`;
-  return "";
+
+if(outcome.by && outcome.by.runs){
+
+return outcome.winner +
+
+" won by " +
+
+outcome.by.runs +
+
+" runs";
+
 }
+
+if(outcome.by && outcome.by.wickets){
+
+return outcome.winner +
+
+" won by " +
+
+outcome.by.wickets +
+
+" wickets";
+
+}
+
+return "";
+
+}
+
 </script>
 
 </body>
