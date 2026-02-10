@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>T20 World Cup Records | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+
+body{
+font-family:Inter,system-ui,Arial,sans-serif;
+margin:0;
+background:#ffffff;
+}
+
+.navbar{
+display:flex;
+justify-content:center;
+gap:22px;
+padding:16px 0;
+border-bottom:1px solid #ddd;
+font-weight:600;
+}
+
+.navbar a{
+color:#0056d6;
+text-decoration:none;
+font-size:18px;
+}
+
+.page-wrap{
+max-width:1200px;
+margin:0 auto;
+padding:30px 20px;
+}
+
+.hero{
+background:linear-gradient(90deg,#8b0000,#e10600);
+color:white;
+padding:40px 50px;
+border-radius:24px;
+margin-bottom:30px;
+}
+
+.hero h1{
+margin:0;
+font-size:46px;
+}
+
+.hero p{
+margin-top:10px;
+font-size:20px;
+opacity:0.95;
+}
+
+.section{
+margin-bottom:40px;
+}
+
+.section h2{
+margin-bottom:10px;
+color:#8b0000;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+font-size:14px;
+}
+
+th,td{
+border-bottom:1px solid #ddd;
+padding:8px 10px;
+text-align:left;
+}
+
+th{
+background:#f3f6fb;
+}
+
+tr:nth-child(even){
+background:#f8fbff;
+}
+
+a.player-link{
+color:#8b0000;
+font-weight:600;
+text-decoration:none;
+}
+
+a.player-link:hover{
+text-decoration:underline;
+}
+
+a.match-link{
+color:#0056d6;
+text-decoration:none;
+font-weight:600;
+}
+
+a.match-link:hover{
+text-decoration:underline;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="cricket.html">Cricket</a>
+<a href="t20-world-cup.html">T20 World Cup</a>
+</div>
+
+<div class="page-wrap">
+
+<div class="hero">
+<h1>T20 World Cup Records</h1>
+<p>All-time and tournament records.</p>
+</div>
+
+<div class="section">
+<h2>Highest Individual Score</h2>
+<table>
+<thead>
+<tr>
+<th>Player</th>
+<th>Runs</th>
+<th>Tournament</th>
+<th>Match</th>
+</tr>
+</thead>
+<tbody id="highestScoreTable"></tbody>
+</table>
+</div>
+
+<div class="section">
+<h2>Best Bowling Figures</h2>
+<table>
+<thead>
+<tr>
+<th>Player</th>
+<th>Figures</th>
+<th>Tournament</th>
+<th>Match</th>
+</tr>
+</thead>
+<tbody id="bestBowlingTable"></tbody>
+</table>
+</div>
+
+<div class="section">
+<h2>Most Runs in a Tournament</h2>
+<table>
+<thead>
+<tr>
+<th>Player</th>
+<th>Runs</th>
+<th>Tournament</th>
+</tr>
+</thead>
+<tbody id="mostRunsSeasonTable"></tbody>
+</table>
+</div>
+
+<div class="section">
+<h2>Most Wickets in a Tournament</h2>
+<table>
+<thead>
+<tr>
+<th>Player</th>
+<th>Wickets</th>
+<th>Tournament</th>
+</tr>
+</thead>
+<tbody id="mostWicketsSeasonTable"></tbody>
+</table>
+</div>
+
+</div>
+
+<script>
+
+const indexUrl="data/t20-world-cup/matches/index.json";
+const basePath="data/t20-world-cup/matches/";
+const namesUrl="data/t20-world-cup/matches/player-names.json";
+
+const highestScoreTable=document.getElementById("highestScoreTable");
+const bestBowlingTable=document.getElementById("bestBowlingTable");
+const mostRunsSeasonTable=document.getElementById("mostRunsSeasonTable");
+const mostWicketsSeasonTable=document.getElementById("mostWicketsSeasonTable");
+
+let nameMap={};
+
+function playerLink(name){
+
+return `<a class="player-link"
+href="t20-world-cup-player.html?player=${encodeURIComponent(name)}">
+${name}
+</a>`;
+
+}
+
+function matchLink(match,file){
+
+return `<a class="match-link"
+href="t20-world-cup-match.html?file=${basePath}${file}&match=${match.info.match_id}">
+${match.info.teams.join(" vs ")}
+</a>`;
+
+}
+
+Promise.all([
+fetch(namesUrl).then(r=>r.json()).catch(()=>({})),
+fetch(indexUrl).then(r=>r.json())
+])
+.then(([names,files])=>{
+
+nameMap=names;
+
+const fullFiles=files.filter(f=>f.includes("_FULL.json"));
+
+return Promise.all(
+fullFiles.map(f=>
+fetch(basePath+f).then(r=>r.json()).then(data=>({file:f,data}))
+)
+);
+
+})
+.then(seasons=>{
+
+let bestInnings=[];
+let bestBowling=[];
+let seasonRuns={};
+let seasonWickets={};
+
+seasons.forEach(seasonObj=>{
+
+const file=seasonObj.file;
+const seasonData=seasonObj.data;
+
+seasonData.forEach(match=>{
+
+const seasonYear=match.info.dates[0].slice(0,4);
+
+seasonRuns[seasonYear]=seasonRuns[seasonYear]||{};
+seasonWickets[seasonYear]=seasonWickets[seasonYear]||{};
+
+let batMap={};
+let bowlMap={};
+
+match.innings.forEach(inn=>{
+
+inn.overs?.forEach(over=>{
+
+over.deliveries?.forEach(d=>{
+
+if(d.batter){
+
+batMap[d.batter]=(batMap[d.batter]||0)+d.runs.batter;
+
+seasonRuns[seasonYear][d.batter]=
+(seasonRuns[seasonYear][d.batter]||0)+d.runs.batter;
+
+}
+
+if(d.bowler){
+
+bowlMap[d.bowler]=bowlMap[d.bowler]||{wkts:0,runs:0};
+
+if(!d.extras?.byes&&!d.extras?.legbyes){
+
+bowlMap[d.bowler].runs+=d.runs.total;
+
+}
+
+if(d.wickets){
+
+d.wickets.forEach(w=>{
+
+if(w.kind!=="run out"){
+
+bowlMap[d.bowler].wkts++;
+
+seasonWickets[seasonYear][d.bowler]=
+(seasonWickets[seasonYear][d.bowler]||0)+1;
+
+}
+
+});
+
+}
+
+}
+
+});
+
+});
+
+});
+
+Object.entries(batMap).forEach(([p,r])=>{
+
+bestInnings.push({
+player:p,
+runs:r,
+season:seasonYear,
+match,
+file
+});
+
+});
+
+Object.entries(bowlMap).forEach(([p,obj])=>{
+
+bestBowling.push({
+player:p,
+wkts:obj.wkts,
+runs:obj.runs,
+season:seasonYear,
+match,
+file
+});
+
+});
+
+});
+
+});
+
+bestInnings.sort((a,b)=>b.runs-a.runs);
+bestBowling.sort((a,b)=>b.wkts-a.wkts||a.runs-b.runs);
+
+bestInnings.slice(0,10).forEach(r=>{
+
+highestScoreTable.innerHTML+=`
+<tr>
+<td>${playerLink(r.player)}</td>
+<td>${r.runs}</td>
+<td>${r.season}</td>
+<td>${matchLink(r.match,r.file)}</td>
+</tr>`;
+
+});
+
+bestBowling.slice(0,10).forEach(r=>{
+
+bestBowlingTable.innerHTML+=`
+<tr>
+<td>${playerLink(r.player)}</td>
+<td>${r.wkts} / ${r.runs}</td>
+<td>${r.season}</td>
+<td>${matchLink(r.match,r.file)}</td>
+</tr>`;
+
+});
+
+const runsList=[];
+
+Object.entries(seasonRuns).forEach(([season,players])=>{
+
+Object.entries(players).forEach(([p,r])=>{
+
+runsList.push({player:p,runs:r,season});
+
+});
+
+});
+
+runsList.sort((a,b)=>b.runs-a.runs);
+
+runsList.slice(0,10).forEach(r=>{
+
+mostRunsSeasonTable.innerHTML+=`
+<tr>
+<td>${playerLink(r.player)}</td>
+<td>${r.runs}</td>
+<td>${r.season}</td>
+</tr>`;
+
+});
+
+const wicketList=[];
+
+Object.entries(seasonWickets).forEach(([season,players])=>{
+
+Object.entries(players).forEach(([p,w])=>{
+
+wicketList.push({player:p,wkts:w,season});
+
+});
+
+});
+
+wicketList.sort((a,b)=>b.wkts-a.wkts);
+
+wicketList.slice(0,10).forEach(r=>{
+
+mostWicketsSeasonTable.innerHTML+=`
+<tr>
+<td>${playerLink(r.player)}</td>
+<td>${r.wkts}</td>
+<td>${r.season}</td>
+</tr>`;
+
+});
+
+});
+
+</script>
+
+</body>
+</html>
