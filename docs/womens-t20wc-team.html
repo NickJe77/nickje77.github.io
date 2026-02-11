@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Women's T20 World Cup Team | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+
+body{
+font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+             "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+margin:0;
+background:#f3f4f7;
+}
+
+/* NAVBAR */
+
+.navbar{
+display:flex;
+justify-content:center;
+gap:22px;
+padding:16px 0;
+border-bottom:1px solid #ddd;
+background:white;
+font-weight:600;
+}
+
+.navbar a{
+color:#0056d6;
+text-decoration:none;
+font-size:18px;
+}
+
+/* HERO */
+
+.hero{
+background:linear-gradient(90deg,#6a1b9a,#ad1457);
+color:white;
+padding:36px;
+margin:20px;
+border-radius:18px;
+}
+
+.hero h1{
+margin:0;
+font-size:42px;
+display:flex;
+align-items:center;
+gap:12px;
+}
+
+/* FLAGS */
+
+.flag{
+width:28px;
+height:20px;
+object-fit:cover;
+border-radius:3px;
+box-shadow:0 0 2px rgba(0,0,0,.3);
+}
+
+/* SUMMARY */
+
+.summary{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+gap:16px;
+padding:0 20px 20px 20px;
+}
+
+.box{
+background:#e7e7ec;
+padding:18px;
+border-radius:14px;
+text-align:center;
+}
+
+.box .big{
+font-size:30px;
+font-weight:700;
+}
+
+/* CONTROLS */
+
+.controls{
+padding:20px;
+display:flex;
+justify-content:center;
+}
+
+select{
+padding:14px;
+font-size:18px;
+border-radius:10px;
+border:1px solid #ccc;
+width:320px;
+background:white;
+}
+
+/* TABLE */
+
+table{
+width:calc(100% - 40px);
+margin:20px;
+background:white;
+border-collapse:collapse;
+border-radius:12px;
+overflow:hidden;
+}
+
+th,td{
+padding:12px;
+border-bottom:1px solid #ddd;
+text-align:center;
+}
+
+tr:hover{
+background:#eef5ff;
+cursor:pointer;
+}
+
+.result-win{
+color:#008000;
+font-weight:700;
+}
+
+.result-loss{
+color:#c00000;
+font-weight:700;
+}
+
+.team-cell{
+display:flex;
+align-items:center;
+justify-content:center;
+gap:8px;
+}
+
+</style>
+
+</head>
+<body>
+
+<!-- NAVBAR -->
+
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="cricket.html">Cricket</a>
+<a href="womens-t20-world-cup.html">Women's T20 World Cup</a>
+<a href="womens-t20-world-cup-teams.html">Teams</a>
+<a href="womens-t20-world-cup-player.html">Players</a>
+</div>
+
+<!-- HERO -->
+
+<div class="hero">
+<h1 id="teamName"></h1>
+</div>
+
+<!-- SUMMARY -->
+
+<div id="summary" class="summary"></div>
+
+<!-- SELECT -->
+
+<div class="controls">
+<select id="teamSelect"></select>
+</div>
+
+<!-- TABLE -->
+
+<table>
+
+<thead>
+<tr>
+<th>Date</th>
+<th>Opponent</th>
+<th>Venue</th>
+<th>Result</th>
+</tr>
+</thead>
+
+<tbody id="tbody"></tbody>
+
+</table>
+
+<script>
+
+const BASE="data/womens-t20-world-cup/matches/";
+const FLAG_BASE="images/flags/";
+
+/* VALID WOMENS EVENTS */
+
+const VALID_EVENTS=[
+"ICC Women's World Twenty20",
+"ICC Women's T20 World Cup"
+];
+
+
+/* SAME FLAG MAP */
+
+const COUNTRY_CODES={
+
+"Australia":"au",
+"Bangladesh":"bd",
+"England":"gb",
+"India":"in",
+"Ireland":"ie",
+"New Zealand":"nz",
+"Pakistan":"pk",
+"Scotland":"gb",
+"South Africa":"za",
+"Sri Lanka":"lk",
+"Thailand":"th",
+"West Indies":"jm"
+
+};
+
+
+/* FLAG FUNCTION */
+
+function flagImg(team){
+
+const code=COUNTRY_CODES[team];
+
+if(!code) return "";
+
+return `<img class="flag" src="${FLAG_BASE}${code}.svg">`;
+
+}
+
+
+/* ELEMENTS */
+
+const teamName=document.getElementById("teamName");
+const teamSelect=document.getElementById("teamSelect");
+const tbody=document.getElementById("tbody");
+const summary=document.getElementById("summary");
+
+let ALL_MATCHES=[];
+
+
+/* LOAD */
+
+load();
+
+
+async function load(){
+
+const index=await fetch(BASE+"index.json").then(r=>r.json());
+
+const teamsSet=new Set();
+
+for(const file of index){
+
+const season=await fetch(BASE+file).then(r=>r.json());
+
+season.forEach((match,i)=>{
+
+const event=match.info?.event?.name || "";
+
+if(!VALID_EVENTS.includes(event)) return;
+
+match._file=file;
+match._index=i;
+
+ALL_MATCHES.push(match);
+
+match.info.teams.forEach(t=>teamsSet.add(t));
+
+});
+
+}
+
+
+const teams=[...teamsSet].sort();
+
+
+teams.forEach(team=>{
+
+teamSelect.innerHTML+=`
+<option value="${team}">
+${team}
+</option>
+`;
+
+});
+
+
+teamSelect.onchange=()=>showTeam(teamSelect.value);
+
+
+showTeam(teams[0]);
+
+}
+
+
+/* SHOW TEAM */
+
+function showTeam(team){
+
+teamName.innerHTML=`
+${flagImg(team)} ${team}
+`;
+
+tbody.innerHTML="";
+
+
+let wins=0;
+let losses=0;
+
+
+const matches=
+ALL_MATCHES
+.filter(m=>m.info.teams.includes(team))
+.sort((a,b)=>new Date(b.info.dates[0])-new Date(a.info.dates[0]));
+
+
+matches.forEach(m=>{
+
+const opponent=m.info.teams.find(t=>t!==team);
+
+let result="—";
+let cls="";
+
+
+if(m.info.outcome?.winner){
+
+const margin=
+Object.entries(m.info.outcome.by||{})
+.map(([k,v])=>`${v} ${k}`)
+.join("");
+
+
+if(m.info.outcome.winner===team){
+
+result=`Won by ${margin}`;
+cls="result-win";
+wins++;
+
+}else{
+
+result=`Lost by ${margin}`;
+cls="result-loss";
+losses++;
+
+}
+
+}
+
+
+tbody.innerHTML+=`
+
+<tr onclick="location.href='womens-t20-world-cup-match.html?file=${m._file}&match=${m._index}'">
+
+<td>
+${new Date(m.info.dates[0]).toLocaleDateString("en-GB")}
+</td>
+
+<td class="team-cell">
+${flagImg(opponent)} ${opponent}
+</td>
+
+<td>
+${m.info.venue}
+</td>
+
+<td class="${cls}">
+${result}
+</td>
+
+</tr>
+
+`;
+
+});
+
+
+const total=wins+losses;
+
+
+summary.innerHTML=`
+
+<div class="box">
+<div class="big">${total}</div>
+Matches
+</div>
+
+<div class="box">
+<div class="big">${wins}</div>
+Wins
+</div>
+
+<div class="box">
+<div class="big">${losses}</div>
+Losses
+</div>
+
+<div class="box">
+<div class="big">
+${total?((wins/total)*100).toFixed(1):"—"}%
+</div>
+Win %
+</div>
+
+`;
+
+}
+
+</script>
+
+</body>
+</html>
