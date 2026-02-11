@@ -1,92 +1,123 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<title>Baseball Game | The Sporting Almanac</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="style.css">
+<title>Baseball Game</title>
+
 <style>
-body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
-.page{max-width:1000px;margin:0 auto;padding:22px 18px;}
-.hero{background:linear-gradient(90deg,#002D72,#C8102E);color:#fff;padding:30px;border-radius:22px;}
-.hero h1{margin:0;font-size:28px;}
-.score{font-size:36px;font-weight:900;margin-top:8px;}
-.meta{margin-top:8px;opacity:0.95;}
-.card{background:#fff;border-radius:16px;padding:16px;margin-top:14px;}
-.kv{display:grid;grid-template-columns:170px 1fr;gap:10px 14px;}
-.k{font-weight:800;color:#333;}
-.v{color:#222;}
-.link{color:#0056d6;font-weight:800;cursor:pointer;text-decoration:none;}
+
+body{
+ font-family:Inter;
+ background:#f4f6f8;
+}
+
+.hero{
+ background:linear-gradient(90deg,#002D72,#C8102E);
+ color:white;
+ padding:30px;
+ border-radius:20px;
+ margin-bottom:20px;
+}
+
+table{
+ width:100%;
+ border-collapse:collapse;
+ background:white;
+}
+
+th{
+ background:#002D72;
+ color:white;
+ padding:8px;
+}
+
+td{
+ padding:8px;
+}
+
+tr:nth-child(even){
+ background:#eaf3ff;
+}
+
 </style>
+
 </head>
+
 <body>
 
-<div class="page">
-  <div class="hero">
-    <h1 id="teams">Loading...</h1>
-    <div id="score" class="score"></div>
-    <div id="meta" class="meta"></div>
-  </div>
-
-  <div class="card">
-    <div class="kv">
-      <div class="k">Date</div><div id="date" class="v"></div>
-      <div class="k">Venue</div><div id="venue" class="v"></div>
-      <div class="k">Attendance</div><div id="att" class="v"></div>
-      <div class="k">Game length</div><div id="len" class="v"></div>
-      <div class="k">Retrosheet ID</div><div id="rid" class="v"></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div style="font-weight:900;margin-bottom:8px;">Links</div>
-    <div>
-      <a class="link" id="backSeason" href="#">← Back to Season</a>
-      <span style="padding:0 10px;opacity:0.5;">|</span>
-      <a class="link" id="awayLink" href="#"></a>
-      <span style="padding:0 10px;opacity:0.5;">|</span>
-      <a class="link" id="homeLink" href="#"></a>
-    </div>
-    <div style="margin-top:10px;opacity:0.8;">
-      Box score / play-by-play from Retrosheet events is the next upgrade (we’ll wire it to the event files by retro_id).
-    </div>
-  </div>
+<div class="hero">
+<h1 id="teams"></h1>
+<h2 id="score"></h2>
 </div>
 
-<script>
-const params = new URLSearchParams(location.search);
-const year = params.get("year");
-const id = params.get("id");
+<h3>Batting</h3>
 
-function fmt(n){
-  if(n===null || n===undefined) return "—";
-  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
+<table>
+<thead>
+<tr>
+<th>Player</th>
+<th>PA</th>
+<th>H</th>
+<th>HR</th>
+<th>R</th>
+<th>SO</th>
+</tr>
+</thead>
+
+<tbody id="batting"></tbody>
+
+</table>
+
+<script>
+
+const params = new URLSearchParams(window.location.search)
+
+const year = params.get("year")
+const id = params.get("id")
 
 async function loadGame(){
-  const res = await fetch(`data/baseball/seasons/${year}.json`);
-  const games = await res.json();
-  const g = games.find(x => x.id === id);
-  if(!g){ document.getElementById("teams").textContent = "Game not found"; return; }
 
-  document.getElementById("teams").textContent = `${g.away_team} @ ${g.home_team}`;
-  document.getElementById("score").textContent = `${g.away_score} - ${g.home_score}`;
-  document.getElementById("meta").textContent = `${g.date} • ${g.venue || ""}`;
+ const season = await fetch(`data/baseball/seasons/${year}.json`)
+ const games = await season.json()
 
-  document.getElementById("date").textContent = g.date;
-  document.getElementById("venue").textContent = g.venue || "—";
-  document.getElementById("att").textContent = fmt(g.attendance);
-  document.getElementById("len").textContent = g.game_length_minutes ? `${g.game_length_minutes} minutes` : "—";
-  document.getElementById("rid").textContent = g.retro_id || "—";
+ const game = games.find(g=>g.id===id)
 
-  document.getElementById("backSeason").href = `baseball-season.html?year=${year}`;
-  document.getElementById("awayLink").textContent = g.away_team;
-  document.getElementById("homeLink").textContent = g.home_team;
-  document.getElementById("awayLink").href = `baseball-team.html?team=${g.away_code}`;
-  document.getElementById("homeLink").href = `baseball-team.html?team=${g.home_code}`;
+ document.getElementById("teams").innerText =
+ game.away_team + " @ " + game.home_team
+
+ document.getElementById("score").innerText =
+ game.away_score + " - " + game.home_score
+
+ const box = await fetch(`data/baseball/boxscores/${year}.json`)
+ const boxscores = await box.json()
+
+ const retro_id = game.retro_id
+
+ const boxscore = boxscores[retro_id]
+
+ const tbody = document.getElementById("batting")
+
+ boxscore.batting.forEach(p=>{
+
+  const tr = document.createElement("tr")
+
+  tr.innerHTML = `
+   <td>${p.player_id}</td>
+   <td>${p.PA}</td>
+   <td>${p.H}</td>
+   <td>${p.HR}</td>
+   <td>${p.R}</td>
+   <td>${p.SO}</td>
+  `
+
+  tbody.appendChild(tr)
+
+ })
+
 }
 
-loadGame();
+loadGame()
+
 </script>
 
 </body>
