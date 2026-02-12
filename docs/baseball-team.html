@@ -14,7 +14,7 @@ background:#f4f6f8;
 }
 
 .page{
-max-width:1100px;
+max-width:1200px;
 margin:auto;
 padding:20px;
 }
@@ -22,21 +22,54 @@ padding:20px;
 .hero{
 background:linear-gradient(90deg,#002D72,#C8102E);
 color:white;
-padding:28px;
-border-radius:18px;
+padding:30px;
+border-radius:20px;
 margin-bottom:18px;
 }
 
 .hero h1{
 margin:0;
-font-size:36px;
+font-size:42px;
+}
+
+.hero select{
+margin-top:12px;
+padding:8px;
+font-size:16px;
+border-radius:8px;
+border:none;
+}
+
+.cards{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+gap:14px;
+margin-bottom:18px;
 }
 
 .card{
 background:white;
-padding:18px;
+padding:16px;
 border-radius:14px;
-margin-bottom:16px;
+text-align:center;
+}
+
+.card .label{
+font-size:13px;
+color:#777;
+}
+
+.card .value{
+font-size:26px;
+font-weight:800;
+margin-top:4px;
+}
+
+.tableCard{
+background:white;
+padding:16px;
+border-radius:14px;
+margin-bottom:18px;
 }
 
 table{
@@ -45,7 +78,7 @@ border-collapse:collapse;
 }
 
 th,td{
-padding:8px;
+padding:9px;
 border-bottom:1px solid #eee;
 text-align:left;
 }
@@ -59,10 +92,20 @@ tbody tr:nth-child(even){
 background:#eaf3ff;
 }
 
+tbody tr:hover{
+background:#d6e6ff;
+}
+
 .click{
 color:#0056d6;
 font-weight:700;
 cursor:pointer;
+}
+
+.sectionTitle{
+font-weight:800;
+margin-bottom:10px;
+font-size:18px;
 }
 
 </style>
@@ -72,27 +115,80 @@ cursor:pointer;
 <div class="page">
 
 <div class="hero">
-<h1 id="teamName">Loading team...</h1>
+
+<h1 id="teamName">Loading...</h1>
+
+<select id="seasonSelect"></select>
+
+</div>
+
+<div class="cards">
+
+<div class="card">
+<div class="label">Record</div>
+<div id="record" class="value">-</div>
 </div>
 
 <div class="card">
+<div class="label">Win %</div>
+<div id="pct" class="value">-</div>
+</div>
 
-<h3>Recent Games</h3>
+<div class="card">
+<div class="label">Runs For</div>
+<div id="runsFor" class="value">-</div>
+</div>
+
+<div class="card">
+<div class="label">Runs Against</div>
+<div id="runsAgainst" class="value">-</div>
+</div>
+
+<div class="card">
+<div class="label">Run Diff</div>
+<div id="runDiff" class="value">-</div>
+</div>
+
+</div>
+
+<div class="tableCard">
+
+<div class="sectionTitle">Recent Games</div>
 
 <table>
 
 <thead>
-
 <tr>
 <th>Date</th>
 <th>Opponent</th>
 <th>Result</th>
-
+<th>Venue</th>
 </tr>
-
 </thead>
 
-<tbody id="games"></tbody>
+<tbody id="recentGames"></tbody>
+
+</table>
+
+</div>
+
+<div class="tableCard">
+
+<div class="sectionTitle">Full Season Games</div>
+
+<table>
+
+<thead>
+<tr>
+<th>Date</th>
+<th>Opponent</th>
+<th>Result</th>
+<th>Venue</th>
+<th>Attendance</th>
+</tr>
+</thead>
+
+<tbody id="allGames"></tbody>
 
 </table>
 
@@ -102,86 +198,127 @@ cursor:pointer;
 
 <script>
 
-const params = new URLSearchParams(window.location.search);
+const params=new URLSearchParams(location.search);
+const teamCode=params.get("team");
 
-const teamCode = params.get("team");
+let teamName="";
+let currentSeason="";
 
-if(!teamCode){
+async function init(){
 
-alert("Missing team code");
+const teamsRes=await fetch("data/baseball/teams.json");
+const teams=await teamsRes.json();
 
-throw new Error("Missing team code");
+const team=teams.find(t=>t.code===teamCode);
+
+teamName=team.name;
+
+document.getElementById("teamName").textContent=teamName;
+
+const indexRes=await fetch("data/baseball/index.json");
+const seasons=await indexRes.json();
+
+const select=document.getElementById("seasonSelect");
+
+seasons.sort((a,b)=>b-a);
+
+seasons.forEach(year=>{
+
+const opt=document.createElement("option");
+
+opt.value=year;
+opt.textContent=year;
+
+select.appendChild(opt);
+
+});
+
+currentSeason=seasons[0];
+
+select.value=currentSeason;
+
+select.onchange=()=>{
+
+currentSeason=select.value;
+
+loadSeason();
+
+};
+
+loadSeason();
 
 }
 
-async function loadTeam(){
+function format(n){
 
-/* load team info */
-
-const teamsRes =
-await fetch("data/baseball/teams.json");
-
-const teams =
-await teamsRes.json();
-
-const team =
-teams.find(t => t.code === teamCode);
-
-if(!team){
-
-document.getElementById("teamName").textContent =
-"Team not found";
-
-return;
+return n.toLocaleString();
 
 }
 
-document.getElementById("teamName").textContent =
-team.name;
+async function loadSeason(){
 
-/* load recent games from latest season */
+const res=
+await fetch(`data/baseball/seasons/${currentSeason}.json`);
 
-const indexRes =
-await fetch("data/baseball/index.json");
+const games=await res.json();
 
-const seasons =
-await indexRes.json();
-
-const latest =
-Math.max(...seasons);
-
-const gamesRes =
-await fetch(`data/baseball/seasons/${latest}.json`);
-
-const games =
-await gamesRes.json();
-
-const teamGames =
-games.filter(g =>
-g.home_code === teamCode ||
-g.away_code === teamCode
+const teamGames=
+games.filter(g=>
+g.home_code===teamCode ||
+g.away_code===teamCode
 );
 
-const tbody =
-document.getElementById("games");
+let wins=0;
+let losses=0;
+let runsFor=0;
+let runsAgainst=0;
 
-tbody.innerHTML="";
+teamGames.forEach(g=>{
 
-teamGames.slice(-20).reverse().forEach(g=>{
+const isHome=g.home_code===teamCode;
 
-const isHome =
-g.home_code === teamCode;
+const scored=isHome?g.home_score:g.away_score;
+const allowed=isHome?g.away_score:g.home_score;
 
-const opponent =
-isHome ? g.away_team : g.home_team;
+runsFor+=scored;
+runsAgainst+=allowed;
 
-const result =
-isHome
-? `${g.home_score} - ${g.away_score}`
-: `${g.away_score} - ${g.home_score}`;
+if(scored>allowed) wins++;
+else losses++;
 
-const tr =
-document.createElement("tr");
+});
+
+const pct=(wins/(wins+losses)).toFixed(3);
+
+document.getElementById("record").textContent=`${wins}-${losses}`;
+document.getElementById("pct").textContent=pct;
+document.getElementById("runsFor").textContent=format(runsFor);
+document.getElementById("runsAgainst").textContent=format(runsAgainst);
+document.getElementById("runDiff").textContent=format(runsFor-runsAgainst);
+
+renderRecent(teamGames);
+renderAll(teamGames);
+
+}
+
+function renderRecent(games){
+
+const body=document.getElementById("recentGames");
+
+body.innerHTML="";
+
+games.slice(-10).reverse().forEach(g=>{
+
+const isHome=g.home_code===teamCode;
+
+const opponent=isHome?g.away_team:g.home_team;
+const opponentCode=isHome?g.away_code:g.home_code;
+
+const result=isHome
+?`${g.home_score}-${g.away_score}`
+:`${g.away_score}-${g.home_score}`;
+
+const tr=document.createElement("tr");
 
 tr.innerHTML=`
 
@@ -189,7 +326,7 @@ tr.innerHTML=`
 
 <td>
 <span class="click"
-onclick="location.href='baseball-team.html?team=${isHome ? g.away_code : g.home_code}'">
+onclick="location.href='baseball-team.html?team=${opponentCode}'">
 ${opponent}
 </span>
 </td>
@@ -201,15 +338,66 @@ ${result}
 </span>
 </td>
 
+<td>${g.venue||""}</td>
+
 `;
 
-tbody.appendChild(tr);
+body.appendChild(tr);
 
 });
 
 }
 
-loadTeam();
+function renderAll(games){
+
+const body=document.getElementById("allGames");
+
+body.innerHTML="";
+
+games.forEach(g=>{
+
+const isHome=g.home_code===teamCode;
+
+const opponent=isHome?g.away_team:g.home_team;
+const opponentCode=isHome?g.away_code:g.home_code;
+
+const result=isHome
+?`${g.home_score}-${g.away_score}`
+:`${g.away_score}-${g.home_score}`;
+
+const tr=document.createElement("tr");
+
+tr.innerHTML=`
+
+<td>${g.date}</td>
+
+<td>
+<span class="click"
+onclick="location.href='baseball-team.html?team=${opponentCode}'">
+${opponent}
+</span>
+</td>
+
+<td>
+<span class="click"
+onclick="location.href='baseball-game.html?id=${g.id}'">
+${result}
+</span>
+</td>
+
+<td>${g.venue||""}</td>
+
+<td>${g.attendance?.toLocaleString()||""}</td>
+
+`;
+
+body.appendChild(tr);
+
+});
+
+}
+
+init();
 
 </script>
 
