@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Baseball Team | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+
+body{
+font-family:Inter,system-ui,Arial;
+margin:0;
+background:#f4f6f8;
+}
+
+.page{
+max-width:1100px;
+margin:auto;
+padding:20px;
+}
+
+.hero{
+background:linear-gradient(90deg,#002D72,#C8102E);
+color:white;
+padding:28px;
+border-radius:18px;
+margin-bottom:18px;
+}
+
+.hero h1{
+margin:0;
+font-size:36px;
+}
+
+.card{
+background:white;
+padding:18px;
+border-radius:14px;
+margin-bottom:16px;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+}
+
+th,td{
+padding:8px;
+border-bottom:1px solid #eee;
+text-align:left;
+}
+
+th{
+background:#002D72;
+color:white;
+}
+
+tbody tr:nth-child(even){
+background:#eaf3ff;
+}
+
+.click{
+color:#0056d6;
+font-weight:700;
+cursor:pointer;
+}
+
+</style>
+</head>
+<body>
+
+<div class="page">
+
+<div class="hero">
+<h1 id="teamName">Loading team...</h1>
+</div>
+
+<div class="card">
+
+<h3>Recent Games</h3>
+
+<table>
+
+<thead>
+
+<tr>
+<th>Date</th>
+<th>Opponent</th>
+<th>Result</th>
+
+</tr>
+
+</thead>
+
+<tbody id="games"></tbody>
+
+</table>
+
+</div>
+
+</div>
+
+<script>
+
+const params = new URLSearchParams(window.location.search);
+
+const teamCode = params.get("team");
+
+if(!teamCode){
+
+alert("Missing team code");
+
+throw new Error("Missing team code");
+
+}
+
+async function loadTeam(){
+
+/* load team info */
+
+const teamsRes =
+await fetch("data/baseball/teams.json");
+
+const teams =
+await teamsRes.json();
+
+const team =
+teams.find(t => t.code === teamCode);
+
+if(!team){
+
+document.getElementById("teamName").textContent =
+"Team not found";
+
+return;
+
+}
+
+document.getElementById("teamName").textContent =
+team.name;
+
+/* load recent games from latest season */
+
+const indexRes =
+await fetch("data/baseball/index.json");
+
+const seasons =
+await indexRes.json();
+
+const latest =
+Math.max(...seasons);
+
+const gamesRes =
+await fetch(`data/baseball/seasons/${latest}.json`);
+
+const games =
+await gamesRes.json();
+
+const teamGames =
+games.filter(g =>
+g.home_code === teamCode ||
+g.away_code === teamCode
+);
+
+const tbody =
+document.getElementById("games");
+
+tbody.innerHTML="";
+
+teamGames.slice(-20).reverse().forEach(g=>{
+
+const isHome =
+g.home_code === teamCode;
+
+const opponent =
+isHome ? g.away_team : g.home_team;
+
+const result =
+isHome
+? `${g.home_score} - ${g.away_score}`
+: `${g.away_score} - ${g.home_score}`;
+
+const tr =
+document.createElement("tr");
+
+tr.innerHTML=`
+
+<td>${g.date}</td>
+
+<td>
+<span class="click"
+onclick="location.href='baseball-team.html?team=${isHome ? g.away_code : g.home_code}'">
+${opponent}
+</span>
+</td>
+
+<td>
+<span class="click"
+onclick="location.href='baseball-game.html?id=${g.id}'">
+${result}
+</span>
+</td>
+
+`;
+
+tbody.appendChild(tr);
+
+});
+
+}
+
+loadTeam();
+
+</script>
+
+</body>
+</html>
