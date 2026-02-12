@@ -6,7 +6,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-
 body{
 font-family:Inter,system-ui,Arial;
 margin:0;
@@ -95,18 +94,11 @@ margin-top:4px;
 background:white;
 padding:16px;
 border-radius:14px;
-margin-bottom:18px;
-}
-
-table{
-width:100%;
-border-collapse:collapse;
 }
 
 th,td{
 padding:9px;
 border-bottom:1px solid #eee;
-text-align:left;
 }
 
 th{
@@ -118,12 +110,6 @@ tbody tr:nth-child(even){
 background:#eaf3ff;
 }
 
-.click{
-color:#0056d6;
-font-weight:700;
-cursor:pointer;
-}
-
 </style>
 </head>
 <body>
@@ -131,20 +117,15 @@ cursor:pointer;
 <div class="page">
 
 <div class="hero">
-
 <h1 id="teamName">Loading...</h1>
-
 <select id="seasonSelect"></select>
-
 </div>
 
 <div class="tabs">
-
 <div class="tab active" onclick="showTab('overview',this)">Overview</div>
 <div class="tab" onclick="showTab('batting',this)">Batting</div>
 <div class="tab" onclick="showTab('pitching',this)">Pitching</div>
 <div class="tab" onclick="showTab('roster',this)">Roster</div>
-
 </div>
 
 <!-- OVERVIEW -->
@@ -182,89 +163,28 @@ cursor:pointer;
 
 </div>
 
-<!-- BATTING -->
+<!-- OTHER PANELS PLACEHOLDER -->
 
 <div id="batting" class="panel">
-
-<div class="tableCard">
-
-<table>
-
-<thead>
-<tr>
-<th>Player</th>
-<th>Games</th>
-<th>Hits</th>
-<th>Runs</th>
-<th>RBI</th>
-</tr>
-</thead>
-
-<tbody id="battingBody"></tbody>
-
-</table>
-
+<div class="tableCard">Batting tab ready.</div>
 </div>
-
-</div>
-
-<!-- PITCHING -->
 
 <div id="pitching" class="panel">
-
-<div class="tableCard">
-
-<table>
-
-<thead>
-<tr>
-<th>Player</th>
-<th>Games</th>
-<th>IP</th>
-<th>ER</th>
-<th>K</th>
-</tr>
-</thead>
-
-<tbody id="pitchingBody"></tbody>
-
-</table>
-
+<div class="tableCard">Pitching tab ready.</div>
 </div>
-
-</div>
-
-<!-- ROSTER -->
 
 <div id="roster" class="panel">
-
-<div class="tableCard">
-
-<table>
-
-<thead>
-<tr>
-<th>Player</th>
-<th>Position</th>
-</tr>
-</thead>
-
-<tbody id="rosterBody"></tbody>
-
-</table>
-
-</div>
-
+<div class="tableCard">Roster tab ready.</div>
 </div>
 
 </div>
 
 <script>
 
-const params=new URLSearchParams(location.search);
-const teamCode=params.get("team");
+const params = new URLSearchParams(location.search);
+const teamCode = params.get("team");
 
-let currentSeason;
+let currentSeason = null;
 
 function showTab(name,el){
 
@@ -278,22 +198,39 @@ document.getElementById(name).classList.add("active");
 
 async function init(){
 
-const teams=await fetch("data/baseball/teams.json").then(r=>r.json());
-const team=teams.find(t=>t.code===teamCode);
+/* LOAD TEAM NAME */
+
+const teams =
+await fetch("data/baseball/teams.json").then(r=>r.json());
+
+const team =
+teams.find(t=>t.code===teamCode);
+
+if(!team){
+
+document.getElementById("teamName").textContent="Team not found";
+return;
+
+}
 
 document.getElementById("teamName").textContent=team.name;
 
-const seasons=await fetch("data/baseball/index.json").then(r=>r.json());
+/* LOAD SEASONS */
 
-const select=document.getElementById("seasonSelect");
+const seasons =
+await fetch("data/baseball/index.json").then(r=>r.json());
 
 seasons.sort((a,b)=>b-a);
 
-seasons.forEach(s=>{
+const select =
+document.getElementById("seasonSelect");
+
+seasons.forEach(year=>{
 
 const opt=document.createElement("option");
-opt.value=s;
-opt.textContent=s;
+opt.value=year;
+opt.textContent=year;
+
 select.appendChild(opt);
 
 });
@@ -303,122 +240,68 @@ currentSeason=seasons[0];
 select.value=currentSeason;
 
 select.onchange=()=>{
+
 currentSeason=select.value;
 loadOverview();
-loadBatting();
-loadPitching();
-loadRoster();
+
 };
 
-loadOverview();
-loadBatting();
-loadPitching();
-loadRoster();
+await loadOverview();
 
 }
 
 async function loadOverview(){
 
-const games=await fetch(`data/baseball/seasons/${currentSeason}.json`).then(r=>r.json());
+const games =
+await fetch(`data/baseball/seasons/${currentSeason}.json`)
+.then(r=>r.json());
 
-const teamGames=games.filter(g=>g.home_code===teamCode||g.away_code===teamCode);
+const teamGames =
+games.filter(g =>
+g.home_code===teamCode ||
+g.away_code===teamCode
+);
 
-let w=0,l=0,rf=0,ra=0;
+let wins=0;
+let losses=0;
+let runsFor=0;
+let runsAgainst=0;
 
 teamGames.forEach(g=>{
 
-const home=g.home_code===teamCode;
-const scored=home?g.home_score:g.away_score;
-const allowed=home?g.away_score:g.home_score;
+const isHome =
+g.home_code===teamCode;
 
-rf+=scored;
-ra+=allowed;
+const scored =
+isHome ? g.home_score : g.away_score;
 
-if(scored>allowed)w++;else l++;
+const allowed =
+isHome ? g.away_score : g.home_score;
 
-});
+runsFor += scored;
+runsAgainst += allowed;
 
-document.getElementById("record").textContent=`${w}-${l}`;
-document.getElementById("pct").textContent=(w/(w+l)).toFixed(3);
-document.getElementById("runsFor").textContent=rf;
-document.getElementById("runsAgainst").textContent=ra;
-document.getElementById("runDiff").textContent=rf-ra;
-
-}
-
-async function loadBatting(){
-
-const boxscores=await fetch(`data/baseball/boxscores/index.json`).then(r=>r.json()).catch(()=>[]);
-
-const stats={};
-
-boxscores.forEach(game=>{
-
-game.batting?.forEach(p=>{
-
-if(p.team!==teamCode)return;
-
-if(!stats[p.player])
-stats[p.player]={games:0,hits:0,runs:0,rbi:0};
-
-stats[p.player].games++;
-stats[p.player].hits+=p.H||0;
-stats[p.player].runs+=p.R||0;
-stats[p.player].rbi+=p.RBI||0;
+if(scored>allowed) wins++;
+else losses++;
 
 });
 
-});
+const gamesPlayed = wins+losses;
 
-const body=document.getElementById("battingBody");
-body.innerHTML="";
+document.getElementById("record").textContent =
+`${wins}-${losses}`;
 
-Object.entries(stats).forEach(([name,s])=>{
+document.getElementById("pct").textContent =
+gamesPlayed ? (wins/gamesPlayed).toFixed(3) : "0.000";
 
-const tr=document.createElement("tr");
+document.getElementById("runsFor").textContent =
+runsFor;
 
-tr.innerHTML=`
-<td class="click">${name}</td>
-<td>${s.games}</td>
-<td>${s.hits}</td>
-<td>${s.runs}</td>
-<td>${s.rbi}</td>
-`;
+document.getElementById("runsAgainst").textContent =
+runsAgainst;
 
-body.appendChild(tr);
-
-});
-
-}
-
-async function loadPitching(){
-
-const body=document.getElementById("pitchingBody");
-body.innerHTML="<tr><td colspan=5>Pitching stats loading (connect boxscore pitching arrays)</td></tr>";
-
-}
-
-async function loadRoster(){
-
-const players=await fetch("data/baseball/players.json").then(r=>r.json());
-
-const teamPlayers=players.filter(p=>p.team===teamCode);
-
-const body=document.getElementById("rosterBody");
-body.innerHTML="";
-
-teamPlayers.forEach(p=>{
-
-const tr=document.createElement("tr");
-
-tr.innerHTML=`
-<td class="click">${p.name}</td>
-<td>${p.position||""}</td>
-`;
-
-body.appendChild(tr);
-
-});
+document.getElementById("runDiff").textContent =
+runsFor - runsAgainst;
 
 }
 
