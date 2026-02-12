@@ -19,6 +19,8 @@ margin:auto;
 padding:20px;
 }
 
+/* HERO */
+
 .hero{
 background:linear-gradient(90deg,#002D72,#C8102E);
 color:white;
@@ -35,14 +37,14 @@ font-size:36px;
 .meta{
 margin-top:10px;
 font-size:15px;
-opacity:.95;
 }
 
 .meta span{
-display:inline-block;
 margin-right:16px;
 font-weight:600;
 }
+
+/* CARDS */
 
 .card{
 background:white;
@@ -55,6 +57,8 @@ margin-bottom:16px;
 margin:0 0 12px;
 }
 
+/* TABLE */
+
 table{
 width:100%;
 border-collapse:collapse;
@@ -63,7 +67,6 @@ border-collapse:collapse;
 th,td{
 padding:8px;
 border-bottom:1px solid #eee;
-text-align:left;
 }
 
 th{
@@ -97,7 +100,7 @@ text-align:center;
 
 <div class="hero">
 
-<h1 id="title">Loading...</h1>
+<h1 id="title">Loading game...</h1>
 
 <div class="meta" id="meta"></div>
 
@@ -108,28 +111,9 @@ text-align:center;
 <h3>Linescore</h3>
 
 <table>
+
 <thead id="linescoreHead"></thead>
 <tbody id="linescoreBody"></tbody>
-</table>
-
-</div>
-
-<div class="card">
-
-<h3>Team Totals</h3>
-
-<table>
-
-<thead>
-<tr>
-<th>Team</th>
-<th class="right">R</th>
-<th class="right">H</th>
-<th class="right">E</th>
-</tr>
-</thead>
-
-<tbody id="totalsBody"></tbody>
 
 </table>
 
@@ -185,14 +169,28 @@ text-align:center;
 
 <script>
 
+/* GET GAME ID */
+
 const params=new URLSearchParams(location.search);
+
 const id=params.get("id");
+
+if(!id){
+
+alert("Missing game ID");
+
+throw new Error("Missing ID");
+
+}
+
+/* LOAD BALLPARKS */
 
 let PARKS={};
 
-async function loadParks(){
+async function loadBallparks(){
 
 const res=await fetch("data/baseball/ballparks.csv");
+
 const text=await res.text();
 
 const rows=text.split("\n");
@@ -208,11 +206,9 @@ rows.slice(1).forEach(r=>{
 
 const cols=r.split(",");
 
-const pid=cols[parkIndex];
+if(!cols[parkIndex])return;
 
-if(!pid)return;
-
-PARKS[pid]={
+PARKS[cols[parkIndex]]={
 
 name:cols[nameIndex],
 city:cols[cityIndex],
@@ -224,20 +220,25 @@ state:cols[stateIndex]
 
 }
 
-function parkFull(id){
+function parkFull(code){
 
-if(!PARKS[id])return id;
+if(!PARKS[code])return code;
 
-return `${PARKS[id].name} (${PARKS[id].city}, ${PARKS[id].state})`;
+return `${PARKS[code].name} (${PARKS[code].city}, ${PARKS[code].state})`;
 
 }
 
+/* LOAD GAME */
+
 async function loadGame(){
 
-await loadParks();
+await loadBallparks();
 
-const game=await fetch(`data/baseball/boxscores/${id}.json`)
-.then(r=>r.json());
+const game=await fetch(
+`data/baseball/boxscores/${id}.json`
+).then(r=>r.json());
+
+/* TITLE */
 
 document.getElementById("title").innerHTML=`
 
@@ -247,7 +248,9 @@ ${game.away_team}
 </span>
 
 ${game.away_score}
+
 –
+
 ${game.home_score}
 
 <span class="click"
@@ -257,15 +260,19 @@ ${game.home_team}
 
 `;
 
+/* META */
+
 document.getElementById("meta").innerHTML=`
 
-<span>${game.date}</span>
+<span>${game.date||""}</span>
+
 <span>${parkFull(game.venue)}</span>
+
 <span>Attendance: ${game.attendance?.toLocaleString()||""}</span>
 
 `;
 
-/* linescore */
+/* LINESCORE */
 
 if(game.linescore){
 
@@ -282,20 +289,34 @@ document.getElementById("linescoreHead").innerHTML=head;
 let body="";
 
 body+=`<tr><td>${game.away_team}</td>`;
-game.linescore.innings.forEach(i=>body+=`<td class='center'>${i.away}</td>`);
-body+=`<td class='center'>${game.away_score}</td></tr>`;
+
+game.linescore.innings.forEach(i=>{
+
+body+=`<td class="center">${i.away}</td>`;
+
+});
+
+body+=`<td class="center">${game.away_score}</td></tr>`;
 
 body+=`<tr><td>${game.home_team}</td>`;
-game.linescore.innings.forEach(i=>body+=`<td class='center'>${i.home}</td>`);
-body+=`<td class='center'>${game.home_score}</td></tr>`;
+
+game.linescore.innings.forEach(i=>{
+
+body+=`<td class="center">${i.home}</td>`;
+
+});
+
+body+=`<td class="center">${game.home_score}</td></tr>`;
 
 document.getElementById("linescoreBody").innerHTML=body;
 
 }
 
-/* batting */
+/* BATTING */
 
 const bat=document.getElementById("battingBody");
+
+bat.innerHTML="";
 
 game.batting.forEach(p=>{
 
@@ -308,11 +329,17 @@ onclick="location.href='baseball-player.html?player=${encodeURIComponent(p.playe
 ${p.player}
 </td>
 
-<td>${p.team}</td>
+<td class="click"
+onclick="location.href='baseball-team.html?team=${p.team}'">
+${p.team}
+</td>
 
 <td class="right">${p.AB||0}</td>
+
 <td class="right">${p.H||0}</td>
+
 <td class="right">${p.RBI||0}</td>
+
 <td class="right">${p.HR||0}</td>
 
 </tr>
@@ -321,9 +348,11 @@ ${p.player}
 
 });
 
-/* pitching */
+/* PITCHING */
 
 const pit=document.getElementById("pitchingBody");
+
+pit.innerHTML="";
 
 game.pitching.forEach(p=>{
 
@@ -336,11 +365,17 @@ onclick="location.href='baseball-player.html?player=${encodeURIComponent(p.playe
 ${p.player}
 </td>
 
-<td>${p.team}</td>
+<td class="click"
+onclick="location.href='baseball-team.html?team=${p.team}'">
+${p.team}
+</td>
 
 <td class="right">${p.IP||0}</td>
+
 <td class="right">${p.ER||0}</td>
+
 <td class="right">${p.K||0}</td>
+
 <td class="right">${p.BB||0}</td>
 
 </tr>
