@@ -13,8 +13,6 @@ margin:0;
 background:#f4f6f8;
 }
 
-/* NAVBAR */
-
 .navbar{
 display:flex;
 justify-content:center;
@@ -30,19 +28,11 @@ text-decoration:none;
 color:#0056d6;
 }
 
-.navbar a:hover{
-text-decoration:underline;
-}
-
-/* PAGE */
-
 .page{
 max-width:1200px;
 margin:auto;
 padding:20px;
 }
-
-/* HERO */
 
 .hero{
 background:linear-gradient(90deg,#002D72,#C8102E);
@@ -51,8 +41,6 @@ padding:30px;
 border-radius:20px;
 margin-bottom:16px;
 }
-
-/* SUMMARY */
 
 .summaryRow{
 display:grid;
@@ -68,56 +56,10 @@ border-radius:12px;
 font-weight:700;
 }
 
-/* FILTER */
-
-.filterBar{
-display:flex;
-gap:10px;
-margin-bottom:12px;
-}
-
-.filterBtn{
-background:white;
-padding:8px 14px;
-border-radius:8px;
-cursor:pointer;
-font-weight:700;
-}
-
-.filterBtn.active{
-background:#002D72;
-color:white;
-}
-
-/* TABS */
-
-.tabs{
-display:flex;
-gap:10px;
-margin-bottom:12px;
-}
-
-.tab{
-background:white;
-padding:10px 18px;
-border-radius:10px;
-cursor:pointer;
-font-weight:700;
-}
-
-.tab.active{
-background:#002D72;
-color:white;
-}
-
-.section{display:none;}
-.section.active{display:block;}
-
 .tableCard{
 background:white;
 padding:16px;
 border-radius:12px;
-margin-bottom:16px;
 }
 
 table{
@@ -145,13 +87,9 @@ font-weight:700;
 cursor:pointer;
 }
 
-.right{text-align:right;}
-
 </style>
 </head>
 <body>
-
-<!-- NAVBAR -->
 
 <div class="navbar">
 
@@ -165,7 +103,7 @@ cursor:pointer;
 <div class="page">
 
 <div class="hero">
-<h1 id="title">Loading...</h1>
+<h1 id="title"></h1>
 </div>
 
 <div class="summaryRow">
@@ -187,24 +125,6 @@ National League Champion
 
 </div>
 
-<div class="tabs">
-
-<div class="tab active" onclick="showTab('games',this)">Games</div>
-<div class="tab" onclick="showTab('standings',this)">Standings</div>
-<div class="tab" onclick="showTab('playoffs',this)">Playoffs</div>
-
-</div>
-
-<div id="games" class="section active">
-
-<div class="filterBar">
-
-<div class="filterBtn active" onclick="setFilter('all',this)">All Games</div>
-<div class="filterBtn" onclick="setFilter('regular',this)">Regular Season</div>
-<div class="filterBtn" onclick="setFilter('playoffs',this)">Playoffs</div>
-
-</div>
-
 <div class="tableCard">
 
 <table>
@@ -213,9 +133,8 @@ National League Champion
 <tr>
 <th>Date</th>
 <th>Away</th>
-<th class="right">Score</th>
+<th>Score</th>
 <th>Home</th>
-<th>Venue</th>
 </tr>
 </thead>
 
@@ -227,166 +146,76 @@ National League Champion
 
 </div>
 
-<div id="standings" class="section">
-
-<div id="standingsContainer"></div>
-
-</div>
-
-<div id="playoffs" class="section">
-
-<div class="tableCard">
-
-<table>
-<thead>
-<tr>
-<th>Round</th>
-<th>Winner</th>
-</tr>
-</thead>
-
-<tbody id="playoffsBody"></tbody>
-
-</table>
-
-</div>
-
-</div>
-
-</div>
-
 <script>
-
-/* TEAM LEAGUES */
-
-const AL=["BAL","BOS","NYY","TB","TOR","CWS","CLE","DET","KC","MIN","HOU","LAA","OAK","SEA","TEX"];
-
-const NL=["ATL","MIA","NYM","PHI","WSH","CHC","CIN","MIL","PIT","STL","ARI","COL","LAD","SD","SF"];
-
-function league(code){
-
-if(AL.includes(code)) return "AL";
-if(NL.includes(code)) return "NL";
-
-}
-
-/* GLOBAL */
 
 const year=new URLSearchParams(location.search).get("year");
 
 title.textContent=year+" MLB Season";
 
+const AL=["BAL","BOS","NYY","TB","TOR","CWS","CLE","DET","KC","MIN","HOU","LAA","OAK","SEA","TEX"];
+
+function league(code){
+return AL.includes(code)?"AL":"NL";
+}
+
 let ALL_GAMES=[];
-let PLAYOFF_START=0;
-let FILTER="all";
 
-/* FIND PLAYOFF START */
+/* LOAD SEASON */
 
-function findPlayoffs(games){
+async function loadSeason(){
 
-for(let i=games.length-1;i>=0;i--){
+/* load regular season */
 
-const g=games[i];
+const regular=await fetch(
+`data/baseball/seasons/${year}.json`
+).then(r=>r.json());
 
-if(league(g.away_code)!=league(g.home_code))
-return i;
+ALL_GAMES=[...regular];
 
-}
+/* load playoffs from boxscores */
 
-return games.length;
+for(const g of regular){
 
-}
+const id=`${g.date}_${g.away_code}_${g.home_code}`;
 
-/* CHAMPIONS */
+try{
 
-function detectChampions(games){
+const box=await fetch(
+`data/baseball/boxscores/${id}.json`
+).then(r=>r.json());
 
-const wsGame=games[games.length-1];
+if(box.date.startsWith(year+"-10") ||
+box.date.startsWith(year+"-11")){
 
-const wsWinnerTeam =
-wsGame.away_score>wsGame.home_score
-?wsGame.away_team
-:wsGame.home_team;
-
-wsWinner.textContent=wsWinnerTeam;
-
-/* Find ALCS winner */
-
-for(let i=PLAYOFF_START;i<games.length;i++){
-
-const g=games[i];
-
-if(league(g.away_code)=="AL" &&
-league(g.home_code)=="AL"){
-
-alWinner.textContent =
-g.away_score>g.home_score
-?g.away_team
-:g.home_team;
+ALL_GAMES.push(box);
 
 }
 
-}
-
-/* Find NLCS winner */
-
-for(let i=PLAYOFF_START;i<games.length;i++){
-
-const g=games[i];
-
-if(league(g.away_code)=="NL" &&
-league(g.home_code)=="NL"){
-
-nlWinner.textContent =
-g.away_score>g.home_score
-?g.away_team
-:g.home_team;
+}catch{}
 
 }
 
-}
+/* sort */
+
+ALL_GAMES.sort((a,b)=>a.date.localeCompare(b.date));
+
+render();
+
+detectChampions();
 
 }
 
-/* FILTER */
-
-function setFilter(type,el){
-
-FILTER=type;
-
-document.querySelectorAll(".filterBtn")
-.forEach(b=>b.classList.remove("active"));
-
-el.classList.add("active");
-
-renderGames();
-
-}
-
-/* RENDER GAMES FAST */
-
-function renderGames(){
+function render(){
 
 gamesBody.innerHTML="";
 
-let games=ALL_GAMES;
+ALL_GAMES.forEach(g=>{
 
-if(FILTER=="regular")
-games=ALL_GAMES.slice(0,PLAYOFF_START);
+const id=`${g.date}_${g.away_code}_${g.home_code}`;
 
-if(FILTER=="playoffs")
-games=ALL_GAMES.slice(PLAYOFF_START);
+gamesBody.innerHTML+=`
 
-const frag=document.createDocumentFragment();
-
-games.forEach(g=>{
-
-const tr=document.createElement("tr");
-
-const id=
-`${g.date}_${g.away_code}_${g.home_code}`;
-
-tr.innerHTML=`
+<tr>
 
 <td>${g.date}</td>
 
@@ -395,7 +224,7 @@ onclick="location.href='baseball-team.html?team=${g.away_code}'">
 ${g.away_team}
 </td>
 
-<td class="click right"
+<td class="click"
 onclick="location.href='baseball-game.html?id=${id}'">
 ${g.away_score}-${g.home_score}
 </td>
@@ -405,35 +234,59 @@ onclick="location.href='baseball-team.html?team=${g.home_code}'">
 ${g.home_team}
 </td>
 
-<td>${g.venue||""}</td>
+</tr>
 
 `;
 
-frag.appendChild(tr);
-
 });
 
-gamesBody.appendChild(frag);
+}
+
+function detectChampions(){
+
+const ws=ALL_GAMES[ALL_GAMES.length-1];
+
+wsWinner.textContent=
+ws.away_score>ws.home_score?
+ws.away_team:ws.home_team;
+
+for(let i=ALL_GAMES.length-1;i>=0;i--){
+
+const g=ALL_GAMES[i];
+
+if(league(g.away_code)=="AL" &&
+league(g.home_code)=="AL"){
+
+alWinner.textContent=
+g.away_score>g.home_score?
+g.away_team:g.home_team;
+
+break;
 
 }
 
-/* LOAD */
+}
 
-async function load(){
+for(let i=ALL_GAMES.length-1;i>=0;i--){
 
-ALL_GAMES=await fetch(
-`data/baseball/seasons/${year}.json`
-).then(r=>r.json());
+const g=ALL_GAMES[i];
 
-PLAYOFF_START=findPlayoffs(ALL_GAMES);
+if(league(g.away_code)=="NL" &&
+league(g.home_code)=="NL"){
 
-detectChampions(ALL_GAMES);
+nlWinner.textContent=
+g.away_score>g.home_score?
+g.away_team:g.home_team;
 
-renderGames();
+break;
 
 }
 
-load();
+}
+
+}
+
+loadSeason();
 
 </script>
 
