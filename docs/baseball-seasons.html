@@ -8,9 +8,10 @@
 <style>
 
 body{
- font-family:Inter,system-ui,Arial;
+ font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,Arial;
  margin:0;
  background:#f4f6f8;
+ color:#111;
 }
 
 /* NAVBAR */
@@ -40,68 +41,94 @@ body{
 .hero{
  background:linear-gradient(90deg,#002D72,#BA0C2F);
  color:white;
- padding:50px 40px;
+ padding:60px 20px;
  text-align:center;
+ box-shadow:0 3px 10px rgba(0,0,0,0.15);
 }
 
 .hero h1{
  margin:0;
- font-size:48px;
+ font-size:52px;
  font-weight:800;
+ letter-spacing:-0.5px;
 }
 
 .hero p{
- margin-top:10px;
+ margin-top:12px;
  font-size:20px;
- opacity:0.9;
+ opacity:0.95;
 }
 
-/* CONTENT */
+/* CONTAINER */
 
 .container{
  max-width:1200px;
  margin:auto;
- padding:40px 20px;
+ padding:40px 20px 60px;
 }
 
 /* GRID */
 
 .grid{
  display:grid;
- grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
- gap:22px;
+ grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
+ gap:20px;
 }
 
 /* TILE */
 
 .tile{
- background:linear-gradient(145deg,#ffffff,#dfe3e8);
+ background:linear-gradient(180deg,#ffffff,#e6ebf1);
  border-radius:14px;
- padding:22px 0;
+ padding:24px 0;
  text-align:center;
- font-size:22px;
+ font-size:24px;
  font-weight:700;
  cursor:pointer;
 
  box-shadow:
- 0 4px 10px rgba(0,0,0,0.15),
+ 0 4px 10px rgba(0,0,0,0.12),
  inset 0 1px 0 rgba(255,255,255,0.7);
 
- transition:all 0.2s ease;
+ transition:all 0.18s ease;
+ user-select:none;
 }
 
 .tile:hover{
- transform:translateY(-4px);
- background:linear-gradient(145deg,#002D72,#BA0C2F);
+ transform:translateY(-5px);
+ background:linear-gradient(90deg,#002D72,#BA0C2F);
  color:white;
- box-shadow:0 10px 20px rgba(0,0,0,0.25);
+ box-shadow:0 12px 24px rgba(0,0,0,0.25);
 }
+
+/* LOADING */
+
+.loading{
+ text-align:center;
+ font-size:22px;
+ color:#666;
+ padding:40px;
+}
+
+/* ERROR */
+
+.error{
+ text-align:center;
+ font-size:22px;
+ color:#c62828;
+ padding:40px;
+ font-weight:600;
+}
+
+/* FOOTER */
 
 .footer{
  text-align:center;
  padding:30px;
  color:#777;
  font-size:14px;
+ border-top:1px solid #ddd;
+ background:white;
 }
 
 </style>
@@ -118,13 +145,13 @@ body{
 
 <div class="hero">
  <h1>MLB Seasons</h1>
- <p>Complete archive of Major League Baseball seasons</p>
+ <p>Complete archive of Major League Baseball seasons since 1947</p>
 </div>
 
 <div class="container">
 
  <div id="grid" class="grid">
- Loading seasons...
+  <div class="loading">Loading seasons...</div>
  </div>
 
 </div>
@@ -141,18 +168,32 @@ async function loadSeasons(){
 
  try{
 
-  /* FIXED PATH — removed leading slash */
-
-  const res =
+  const response =
    await fetch("data/baseball/index.json?cache=" + Date.now());
 
-  const years = await res.json();
+  const data = await response.json();
 
-  grid.innerHTML="";
+  /* SUPPORT BOTH FORMATS */
 
-  years.sort((a,b)=>b-a);
+  let seasons = [];
 
-  years.forEach(year=>{
+  if(Array.isArray(data))
+   seasons = data;
+
+  else if(data.seasons)
+   seasons = data.seasons;
+
+  else
+   throw "Invalid index.json format";
+
+  seasons = seasons
+   .map(Number)
+   .filter(year => year >= 1947)
+   .sort((a,b)=>b-a);
+
+  grid.innerHTML = "";
+
+  seasons.forEach(year=>{
 
    const tile=document.createElement("div");
 
@@ -161,8 +202,6 @@ async function loadSeasons(){
    tile.textContent=year;
 
    tile.onclick=function(){
-
-    /* FIXED LINK — removed leading slash */
 
     window.location.href =
      "baseball-season.html?year=" + year;
@@ -176,8 +215,10 @@ async function loadSeasons(){
  }
  catch(err){
 
+  console.error(err);
+
   grid.innerHTML =
-   "<div style='color:red;font-size:22px'>Failed to load seasons</div>";
+   "<div class='error'>Failed to load seasons</div>";
 
  }
 
