@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<h2>Building player list...</h2>
+
+<button onclick="download()">Download player-index.json</button>
+
+<script>
+
+let players=new Set();
+
+async function build(){
+
+const seasons=await fetch("data/baseball/index.json").then(r=>r.json());
+
+for(const season of seasons){
+
+const games=await fetch(`data/baseball/seasons/${season}.json`)
+.then(r=>r.json());
+
+for(const g of games){
+
+const id=`${g.date}_${g.away_code}_${g.home_code}`;
+
+try{
+
+const box=await fetch(`data/baseball/boxscores/${id}.json`)
+.then(r=>r.json());
+
+(box.batting||[]).forEach(p=>players.add(p.player));
+(box.pitching||[]).forEach(p=>players.add(p.player));
+
+}catch{}
+
+}
+
+}
+
+players=[...players].sort();
+
+alert("Done. Click button to download.");
+
+}
+
+function download(){
+
+const blob=new Blob(
+[JSON.stringify(players,null,2)],
+{type:"application/json"}
+);
+
+const a=document.createElement("a");
+
+a.href=URL.createObjectURL(blob);
+a.download="player-index.json";
+a.click();
+
+}
+
+build();
+
+</script>
+
+</body>
+</html>
