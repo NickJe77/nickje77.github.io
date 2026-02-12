@@ -56,6 +56,11 @@ border-radius:12px;
 font-weight:700;
 }
 
+.summaryCard div{
+margin-top:6px;
+font-weight:400;
+}
+
 .tableCard{
 background:white;
 padding:16px;
@@ -87,6 +92,12 @@ font-weight:700;
 cursor:pointer;
 }
 
+.error{
+color:red;
+font-weight:700;
+padding:20px;
+}
+
 </style>
 </head>
 <body>
@@ -103,24 +114,24 @@ cursor:pointer;
 <div class="page">
 
 <div class="hero">
-<h1 id="title"></h1>
+<h1 id="title">Loading...</h1>
 </div>
 
 <div class="summaryRow">
 
 <div class="summaryCard">
 World Series Champion
-<div id="wsWinner"></div>
+<div id="wsWinner">—</div>
 </div>
 
 <div class="summaryCard">
 American League Champion
-<div id="alWinner"></div>
+<div id="alWinner">—</div>
 </div>
 
 <div class="summaryCard">
 National League Champion
-<div id="nlWinner"></div>
+<div id="nlWinner">—</div>
 </div>
 
 </div>
@@ -138,7 +149,9 @@ National League Champion
 </tr>
 </thead>
 
-<tbody id="gamesBody"></tbody>
+<tbody id="gamesBody">
+<tr><td colspan="4">Loading games...</td></tr>
+</tbody>
 
 </table>
 
@@ -148,44 +161,81 @@ National League Champion
 
 <script>
 
-const year=new URLSearchParams(location.search).get("year");
+const params = new URLSearchParams(location.search);
 
-title.textContent=year+" MLB Season";
+const year =
+params.get("year") ||
+params.get("season");
 
-const AL=["BAL","BOS","NYY","TB","TOR","CWS","CLE","DET","KC","MIN","HOU","LAA","OAK","SEA","TEX"];
+const title = document.getElementById("title");
+const gamesBody = document.getElementById("gamesBody");
+const wsWinner = document.getElementById("wsWinner");
+const alWinner = document.getElementById("alWinner");
+const nlWinner = document.getElementById("nlWinner");
 
-function league(code){
-return AL.includes(code)?"AL":"NL";
+if(!year){
+
+title.textContent="Season not specified";
+
+gamesBody.innerHTML=
+"<tr><td colspan='4' class='error'>Missing season parameter</td></tr>";
+
+throw new Error("Missing year parameter");
+
 }
 
-let ALL_GAMES=[];
+title.textContent = year + " MLB Season";
 
-/* LOAD SEASON */
+const AL=[
+"BAL","BOS","NYY","TB","TOR",
+"CWS","CLE","DET","KC","MIN",
+"HOU","LAA","OAK","SEA","TEX"
+];
+
+function league(code){
+
+return AL.includes(code) ? "AL" : "NL";
+
+}
+
+let ALL_GAMES = [];
 
 async function loadSeason(){
 
-/* load regular season */
+try{
 
-const regular=await fetch(
+const regularResponse = await fetch(
 `data/baseball/seasons/${year}.json`
-).then(r=>r.json());
+);
 
-ALL_GAMES=[...regular];
+if(!regularResponse.ok)
+throw new Error("Season file missing");
 
-/* load playoffs from boxscores */
+const regular = await regularResponse.json();
+
+ALL_GAMES = [...regular];
+
+/* load playoff boxscores */
 
 for(const g of regular){
 
-const id=`${g.date}_${g.away_code}_${g.home_code}`;
+const id =
+`${g.date}_${g.away_code}_${g.home_code}`;
 
 try{
 
-const box=await fetch(
+const boxResponse = await fetch(
 `data/baseball/boxscores/${id}.json`
-).then(r=>r.json());
+);
 
-if(box.date.startsWith(year+"-10") ||
-box.date.startsWith(year+"-11")){
+if(!boxResponse.ok) continue;
+
+const box = await boxResponse.json();
+
+if(
+box.date.startsWith(year+"-10") ||
+box.date.startsWith(year+"-11")
+){
 
 ALL_GAMES.push(box);
 
@@ -197,21 +247,33 @@ ALL_GAMES.push(box);
 
 /* sort */
 
-ALL_GAMES.sort((a,b)=>a.date.localeCompare(b.date));
+ALL_GAMES.sort(
+(a,b)=>a.date.localeCompare(b.date)
+);
 
-render();
+renderGames();
 
 detectChampions();
 
+}catch(err){
+
+console.error(err);
+
+gamesBody.innerHTML=
+"<tr><td colspan='4' class='error'>Failed to load season</td></tr>";
+
 }
 
-function render(){
+}
+
+function renderGames(){
 
 gamesBody.innerHTML="";
 
 ALL_GAMES.forEach(g=>{
 
-const id=`${g.date}_${g.away_code}_${g.home_code}`;
+const id =
+`${g.date}_${g.away_code}_${g.home_code}`;
 
 gamesBody.innerHTML+=`
 
@@ -244,22 +306,32 @@ ${g.home_team}
 
 function detectChampions(){
 
-const ws=ALL_GAMES[ALL_GAMES.length-1];
+if(ALL_GAMES.length===0) return;
 
-wsWinner.textContent=
-ws.away_score>ws.home_score?
-ws.away_team:ws.home_team;
+/* World Series winner */
+
+const ws = ALL_GAMES[ALL_GAMES.length-1];
+
+wsWinner.textContent =
+ws.away_score > ws.home_score
+? ws.away_team
+: ws.home_team;
+
+/* AL winner */
 
 for(let i=ALL_GAMES.length-1;i>=0;i--){
 
-const g=ALL_GAMES[i];
+const g = ALL_GAMES[i];
 
-if(league(g.away_code)=="AL" &&
-league(g.home_code)=="AL"){
+if(
+league(g.away_code)==="AL" &&
+league(g.home_code)==="AL"
+){
 
-alWinner.textContent=
-g.away_score>g.home_score?
-g.away_team:g.home_team;
+alWinner.textContent =
+g.away_score>g.home_score
+? g.away_team
+: g.home_team;
 
 break;
 
@@ -267,16 +339,21 @@ break;
 
 }
 
+/* NL winner */
+
 for(let i=ALL_GAMES.length-1;i>=0;i--){
 
-const g=ALL_GAMES[i];
+const g = ALL_GAMES[i];
 
-if(league(g.away_code)=="NL" &&
-league(g.home_code)=="NL"){
+if(
+league(g.away_code)==="NL" &&
+league(g.home_code)==="NL"
+){
 
-nlWinner.textContent=
-g.away_score>g.home_score?
-g.away_team:g.home_team;
+nlWinner.textContent =
+g.away_score>g.home_score
+? g.away_team
+: g.home_team;
 
 break;
 
