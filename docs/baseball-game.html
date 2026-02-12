@@ -8,9 +8,10 @@
 <style>
 
 body{
-font-family:Inter,system-ui,Arial;
+font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,Arial;
 margin:0;
 background:#f4f6f8;
+color:#111;
 }
 
 .page{
@@ -27,6 +28,7 @@ color:white;
 padding:28px;
 border-radius:20px;
 margin-bottom:16px;
+box-shadow:0 3px 10px rgba(0,0,0,0.15);
 }
 
 .hero h1{
@@ -44,13 +46,14 @@ margin-right:16px;
 font-weight:600;
 }
 
-/* CARDS */
+/* CARD */
 
 .card{
 background:white;
 padding:16px;
 border-radius:14px;
 margin-bottom:16px;
+box-shadow:0 2px 8px rgba(0,0,0,0.08);
 }
 
 .card h3{
@@ -84,12 +87,18 @@ font-weight:700;
 cursor:pointer;
 }
 
-.right{
-text-align:right;
+.right{text-align:right;}
+.center{text-align:center;}
+
+.loading{
+font-size:18px;
+color:#666;
 }
 
-.center{
-text-align:center;
+.error{
+font-size:18px;
+color:red;
+font-weight:700;
 }
 
 </style>
@@ -100,7 +109,7 @@ text-align:center;
 
 <div class="hero">
 
-<h1 id="title">Loading game...</h1>
+<h1 id="title" class="loading">Loading game...</h1>
 
 <div class="meta" id="meta"></div>
 
@@ -111,10 +120,8 @@ text-align:center;
 <h3>Linescore</h3>
 
 <table>
-
 <thead id="linescoreHead"></thead>
 <tbody id="linescoreBody"></tbody>
-
 </table>
 
 </div>
@@ -171,25 +178,26 @@ text-align:center;
 
 /* GET GAME ID */
 
-const params=new URLSearchParams(location.search);
-
-const id=params.get("id");
+const params = new URLSearchParams(location.search);
+const id = params.get("id");
 
 if(!id){
 
-alert("Missing game ID");
-
+document.getElementById("title").className="error";
+document.getElementById("title").textContent="Invalid Game ID";
 throw new Error("Missing ID");
 
 }
 
-/* LOAD BALLPARKS */
+/* BALLPARKS */
 
 let PARKS={};
 
 async function loadBallparks(){
 
-const res=await fetch("data/baseball/ballparks.csv");
+try{
+
+const res=await fetch("data/baseball/ballparks.csv?cache="+Date.now());
 
 const text=await res.text();
 
@@ -209,22 +217,32 @@ const cols=r.split(",");
 if(!cols[parkIndex])return;
 
 PARKS[cols[parkIndex]]={
-
 name:cols[nameIndex],
 city:cols[cityIndex],
 state:cols[stateIndex]
-
 };
 
 });
+
+}catch{}
 
 }
 
 function parkFull(code){
 
-if(!PARKS[code])return code;
+if(!PARKS[code]) return code || "";
 
-return `${PARKS[code].name} (${PARKS[code].city}, ${PARKS[code].state})`;
+const p=PARKS[code];
+
+return `${p.name} (${p.city}, ${p.state})`;
+
+}
+
+/* SAFE VALUE */
+
+function safe(v){
+
+return v===undefined||v===null?"":v;
 
 }
 
@@ -234,9 +252,21 @@ async function loadGame(){
 
 await loadBallparks();
 
-const game=await fetch(
-`data/baseball/boxscores/${id}.json`
+let game;
+
+try{
+
+game=await fetch(
+`data/baseball/boxscores/${id}.json?cache=`+Date.now()
 ).then(r=>r.json());
+
+}catch{
+
+document.getElementById("title").className="error";
+document.getElementById("title").textContent="Game not found";
+return;
+
+}
 
 /* TITLE */
 
@@ -247,11 +277,11 @@ onclick="location.href='baseball-team.html?team=${game.away_code}'">
 ${game.away_team}
 </span>
 
-${game.away_score}
+${safe(game.away_score)}
 
 –
 
-${game.home_score}
+${safe(game.home_score)}
 
 <span class="click"
 onclick="location.href='baseball-team.html?team=${game.home_code}'">
@@ -264,17 +294,17 @@ ${game.home_team}
 
 document.getElementById("meta").innerHTML=`
 
-<span>${game.date||""}</span>
+<span>${safe(game.date)}</span>
 
 <span>${parkFull(game.venue)}</span>
 
-<span>Attendance: ${game.attendance?.toLocaleString()||""}</span>
+<span>Attendance: ${game.attendance?game.attendance.toLocaleString():""}</span>
 
 `;
 
 /* LINESCORE */
 
-if(game.linescore){
+if(game.linescore && game.linescore.innings){
 
 let head="<tr><th>Team</th>";
 
@@ -284,31 +314,27 @@ head+=`<th class="center">${i+1}</th>`;
 
 head+="<th class='center'>R</th></tr>";
 
-document.getElementById("linescoreHead").innerHTML=head;
+linescoreHead.innerHTML=head;
 
 let body="";
 
 body+=`<tr><td>${game.away_team}</td>`;
 
 game.linescore.innings.forEach(i=>{
-
-body+=`<td class="center">${i.away}</td>`;
-
+body+=`<td class="center">${safe(i.away)}</td>`;
 });
 
-body+=`<td class="center">${game.away_score}</td></tr>`;
+body+=`<td class="center">${safe(game.away_score)}</td></tr>`;
 
 body+=`<tr><td>${game.home_team}</td>`;
 
 game.linescore.innings.forEach(i=>{
-
-body+=`<td class="center">${i.home}</td>`;
-
+body+=`<td class="center">${safe(i.home)}</td>`;
 });
 
-body+=`<td class="center">${game.home_score}</td></tr>`;
+body+=`<td class="center">${safe(game.home_score)}</td></tr>`;
 
-document.getElementById("linescoreBody").innerHTML=body;
+linescoreBody.innerHTML=body;
 
 }
 
@@ -318,7 +344,7 @@ const bat=document.getElementById("battingBody");
 
 bat.innerHTML="";
 
-game.batting.forEach(p=>{
+(game.batting||[]).forEach(p=>{
 
 bat.innerHTML+=`
 
@@ -326,21 +352,18 @@ bat.innerHTML+=`
 
 <td class="click"
 onclick="location.href='baseball-player.html?player=${encodeURIComponent(p.player)}'">
-${p.player}
+${safe(p.player)}
 </td>
 
 <td class="click"
-onclick="location.href='baseball-team.html?team=${p.team}'">
-${p.team}
+onclick="location.href='baseball-team.html?team=${safe(p.team)}'">
+${safe(p.team)}
 </td>
 
-<td class="right">${p.AB||0}</td>
-
-<td class="right">${p.H||0}</td>
-
-<td class="right">${p.RBI||0}</td>
-
-<td class="right">${p.HR||0}</td>
+<td class="right">${safe(p.AB)}</td>
+<td class="right">${safe(p.H)}</td>
+<td class="right">${safe(p.RBI)}</td>
+<td class="right">${safe(p.HR)}</td>
 
 </tr>
 
@@ -354,7 +377,7 @@ const pit=document.getElementById("pitchingBody");
 
 pit.innerHTML="";
 
-game.pitching.forEach(p=>{
+(game.pitching||[]).forEach(p=>{
 
 pit.innerHTML+=`
 
@@ -362,21 +385,18 @@ pit.innerHTML+=`
 
 <td class="click"
 onclick="location.href='baseball-player.html?player=${encodeURIComponent(p.player)}'">
-${p.player}
+${safe(p.player)}
 </td>
 
 <td class="click"
-onclick="location.href='baseball-team.html?team=${p.team}'">
-${p.team}
+onclick="location.href='baseball-team.html?team=${safe(p.team)}'">
+${safe(p.team)}
 </td>
 
-<td class="right">${p.IP||0}</td>
-
-<td class="right">${p.ER||0}</td>
-
-<td class="right">${p.K||0}</td>
-
-<td class="right">${p.BB||0}</td>
+<td class="right">${safe(p.IP)}</td>
+<td class="right">${safe(p.ER)}</td>
+<td class="right">${safe(p.K)}</td>
+<td class="right">${safe(p.BB)}</td>
 
 </tr>
 
