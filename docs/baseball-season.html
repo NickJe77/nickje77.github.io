@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Baseball Season | The Sporting Almanac</title>
+<title>MLB Season | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -13,11 +13,36 @@ margin:0;
 background:#f4f6f8;
 }
 
+/* NAVBAR */
+
+.navbar{
+display:flex;
+justify-content:center;
+gap:24px;
+padding:16px 0;
+background:white;
+border-bottom:1px solid #ddd;
+font-weight:600;
+}
+
+.navbar a{
+text-decoration:none;
+color:#0056d6;
+}
+
+.navbar a:hover{
+text-decoration:underline;
+}
+
+/* PAGE */
+
 .page{
 max-width:1200px;
 margin:auto;
 padding:20px;
 }
+
+/* HERO */
 
 .hero{
 background:linear-gradient(90deg,#002D72,#C8102E);
@@ -26,6 +51,8 @@ padding:30px;
 border-radius:20px;
 margin-bottom:16px;
 }
+
+/* SUMMARY */
 
 .summaryRow{
 display:grid;
@@ -118,29 +145,27 @@ font-weight:700;
 cursor:pointer;
 }
 
-.leagueTitle{
-font-size:22px;
-font-weight:800;
-margin-top:20px;
-}
-
-.divisionTitle{
-font-size:18px;
-font-weight:800;
-margin-top:10px;
-color:#002D72;
-}
-
 .right{text-align:right;}
 
 </style>
 </head>
 <body>
 
+<!-- NAVBAR -->
+
+<div class="navbar">
+
+<a href="index.html">Home</a>
+<a href="baseball.html">Baseball</a>
+<a href="baseball-seasons.html">Seasons</a>
+<a href="baseball-players.html">Players</a>
+
+</div>
+
 <div class="page">
 
 <div class="hero">
-<h1 id="title"></h1>
+<h1 id="title">Loading...</h1>
 </div>
 
 <div class="summaryRow">
@@ -173,14 +198,17 @@ National League Champion
 <div id="games" class="section active">
 
 <div class="filterBar">
+
 <div class="filterBtn active" onclick="setFilter('all',this)">All Games</div>
 <div class="filterBtn" onclick="setFilter('regular',this)">Regular Season</div>
 <div class="filterBtn" onclick="setFilter('playoffs',this)">Playoffs</div>
+
 </div>
 
 <div class="tableCard">
 
 <table>
+
 <thead>
 <tr>
 <th>Date</th>
@@ -200,7 +228,9 @@ National League Champion
 </div>
 
 <div id="standings" class="section">
+
 <div id="standingsContainer"></div>
+
 </div>
 
 <div id="playoffs" class="section">
@@ -227,43 +257,20 @@ National League Champion
 
 <script>
 
-/* TEAM STRUCTURE */
+/* TEAM LEAGUES */
 
-const STRUCTURE={
+const AL=["BAL","BOS","NYY","TB","TOR","CWS","CLE","DET","KC","MIN","HOU","LAA","OAK","SEA","TEX"];
 
-AL:{
-East:["BAL","BOS","NYY","TB","TOR"],
-Central:["CWS","CLE","DET","KC","MIN"],
-West:["HOU","LAA","OAK","SEA","TEX"]
-},
+const NL=["ATL","MIA","NYM","PHI","WSH","CHC","CIN","MIL","PIT","STL","ARI","COL","LAD","SD","SF"];
 
-NL:{
-East:["ATL","MIA","NYM","PHI","WSH"],
-Central:["CHC","CIN","MIL","PIT","STL"],
-West:["ARI","COL","LAD","SD","SF"]
-}
+function league(code){
 
-};
-
-function leagueOf(code){
-
-for(const l in STRUCTURE)
-for(const d in STRUCTURE[l])
-if(STRUCTURE[l][d].includes(code))
-return l;
+if(AL.includes(code)) return "AL";
+if(NL.includes(code)) return "NL";
 
 }
 
-function divisionOf(code){
-
-for(const l in STRUCTURE)
-for(const d in STRUCTURE[l])
-if(STRUCTURE[l][d].includes(code))
-return d;
-
-}
-
-/* PAGE */
+/* GLOBAL */
 
 const year=new URLSearchParams(location.search).get("year");
 
@@ -273,19 +280,71 @@ let ALL_GAMES=[];
 let PLAYOFF_START=0;
 let FILTER="all";
 
-/* TABS */
+/* FIND PLAYOFF START */
 
-function showTab(name,el){
+function findPlayoffs(games){
 
-document.querySelectorAll(".section")
-.forEach(s=>s.classList.remove("active"));
+for(let i=games.length-1;i>=0;i--){
 
-document.querySelectorAll(".tab")
-.forEach(t=>t.classList.remove("active"));
+const g=games[i];
 
-document.getElementById(name).classList.add("active");
+if(league(g.away_code)!=league(g.home_code))
+return i;
 
-el.classList.add("active");
+}
+
+return games.length;
+
+}
+
+/* CHAMPIONS */
+
+function detectChampions(games){
+
+const wsGame=games[games.length-1];
+
+const wsWinnerTeam =
+wsGame.away_score>wsGame.home_score
+?wsGame.away_team
+:wsGame.home_team;
+
+wsWinner.textContent=wsWinnerTeam;
+
+/* Find ALCS winner */
+
+for(let i=PLAYOFF_START;i<games.length;i++){
+
+const g=games[i];
+
+if(league(g.away_code)=="AL" &&
+league(g.home_code)=="AL"){
+
+alWinner.textContent =
+g.away_score>g.home_score
+?g.away_team
+:g.home_team;
+
+}
+
+}
+
+/* Find NLCS winner */
+
+for(let i=PLAYOFF_START;i<games.length;i++){
+
+const g=games[i];
+
+if(league(g.away_code)=="NL" &&
+league(g.home_code)=="NL"){
+
+nlWinner.textContent =
+g.away_score>g.home_score
+?g.away_team
+:g.home_team;
+
+}
+
+}
 
 }
 
@@ -304,138 +363,7 @@ renderGames();
 
 }
 
-/* WINNER */
-
-function winner(g){
-
-return g.away_score>g.home_score
-?g.away_team:g.home_team;
-
-}
-
-/* FIND PLAYOFF START */
-
-function findPlayoffStart(games){
-
-for(let i=games.length-1;i>=0;i--){
-
-if(leagueOf(games[i].away_code)!=leagueOf(games[i].home_code))
-return i;
-
-}
-
-return games.length;
-
-}
-
-/* CHAMPIONS */
-
-function detectChampions(games){
-
-const ws=winner(games[games.length-1]);
-
-let al,nl;
-
-games.slice(PLAYOFF_START).forEach(g=>{
-
-if(leagueOf(g.away_code)=="AL" && leagueOf(g.home_code)=="AL")
-al=winner(g);
-
-if(leagueOf(g.away_code)=="NL" && leagueOf(g.home_code)=="NL")
-nl=winner(g);
-
-});
-
-wsWinner.textContent=ws;
-alWinner.textContent=al;
-nlWinner.textContent=nl;
-
-playoffsBody.innerHTML=`
-<tr><td>American League Champion</td><td>${al}</td></tr>
-<tr><td>National League Champion</td><td>${nl}</td></tr>
-<tr><td>World Series Champion</td><td>${ws}</td></tr>
-`;
-
-}
-
-/* FAST STANDINGS */
-
-function buildStandings(games){
-
-const stats={};
-
-games.forEach(g=>{
-
-if(!stats[g.away_code])
-stats[g.away_code]={team:g.away_team,w:0,l:0};
-
-if(!stats[g.home_code])
-stats[g.home_code]={team:g.home_team,w:0,l:0};
-
-if(g.away_score>g.home_score){
-stats[g.away_code].w++;
-stats[g.home_code].l++;
-}else{
-stats[g.home_code].w++;
-stats[g.away_code].l++;
-}
-
-});
-
-const container=document.getElementById("standingsContainer");
-
-container.innerHTML="";
-
-for(const league in STRUCTURE){
-
-container.innerHTML+=`<div class="leagueTitle">${league} League</div>`;
-
-for(const div in STRUCTURE[league]){
-
-const teams=STRUCTURE[league][div]
-.map(code=>stats[code])
-.filter(Boolean)
-.sort((a,b)=>(b.w/(b.w+b.l))-(a.w/(a.w+a.l)));
-
-container.innerHTML+=`
-<div class="divisionTitle">${div}</div>
-
-<div class="tableCard">
-
-<table>
-<thead>
-<tr>
-<th>Team</th>
-<th>W</th>
-<th>L</th>
-<th>%</th>
-</tr>
-</thead>
-
-<tbody>
-
-${teams.map(t=>`
-<tr>
-<td>${t.team}</td>
-<td>${t.w}</td>
-<td>${t.l}</td>
-<td>${(t.w/(t.w+t.l)).toFixed(3)}</td>
-</tr>
-`).join("")}
-
-</tbody>
-</table>
-
-</div>
-`;
-
-}
-
-}
-
-}
-
-/* FAST GAME RENDER */
+/* RENDER GAMES FAST */
 
 function renderGames(){
 
@@ -449,41 +377,43 @@ games=ALL_GAMES.slice(0,PLAYOFF_START);
 if(FILTER=="playoffs")
 games=ALL_GAMES.slice(PLAYOFF_START);
 
-let i=0;
-const batch=200;
-
-function draw(){
-
 const frag=document.createDocumentFragment();
 
-for(let c=0;c<batch && i<games.length;c++,i++){
-
-const g=games[i];
-
-const id=`${g.date}_${g.away_code}_${g.home_code}`;
+games.forEach(g=>{
 
 const tr=document.createElement("tr");
 
+const id=
+`${g.date}_${g.away_code}_${g.home_code}`;
+
 tr.innerHTML=`
+
 <td>${g.date}</td>
-<td class="click" onclick="location.href='baseball-team.html?team=${g.away_code}'">${g.away_team}</td>
-<td class="click right" onclick="location.href='baseball-game.html?id=${id}'">${g.away_score}-${g.home_score}</td>
-<td class="click" onclick="location.href='baseball-team.html?team=${g.home_code}'">${g.home_team}</td>
+
+<td class="click"
+onclick="location.href='baseball-team.html?team=${g.away_code}'">
+${g.away_team}
+</td>
+
+<td class="click right"
+onclick="location.href='baseball-game.html?id=${id}'">
+${g.away_score}-${g.home_score}
+</td>
+
+<td class="click"
+onclick="location.href='baseball-team.html?team=${g.home_code}'">
+${g.home_team}
+</td>
+
 <td>${g.venue||""}</td>
+
 `;
 
 frag.appendChild(tr);
 
-}
+});
 
 gamesBody.appendChild(frag);
-
-if(i<games.length)
-requestAnimationFrame(draw);
-
-}
-
-draw();
 
 }
 
@@ -495,11 +425,9 @@ ALL_GAMES=await fetch(
 `data/baseball/seasons/${year}.json`
 ).then(r=>r.json());
 
-PLAYOFF_START=findPlayoffStart(ALL_GAMES);
+PLAYOFF_START=findPlayoffs(ALL_GAMES);
 
 detectChampions(ALL_GAMES);
-
-buildStandings(ALL_GAMES);
 
 renderGames();
 
