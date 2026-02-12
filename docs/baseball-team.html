@@ -40,6 +40,32 @@ border-radius:8px;
 border:none;
 }
 
+.tabs{
+display:flex;
+gap:10px;
+margin-bottom:14px;
+}
+
+.tab{
+background:white;
+padding:10px 14px;
+border-radius:12px;
+font-weight:700;
+cursor:pointer;
+}
+
+.tab.active{
+background:#eaf3ff;
+}
+
+.panel{
+display:none;
+}
+
+.panel.active{
+display:block;
+}
+
 .cards{
 display:grid;
 grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
@@ -92,20 +118,10 @@ tbody tr:nth-child(even){
 background:#eaf3ff;
 }
 
-tbody tr:hover{
-background:#d6e6ff;
-}
-
 .click{
 color:#0056d6;
 font-weight:700;
 cursor:pointer;
-}
-
-.sectionTitle{
-font-weight:800;
-margin-bottom:10px;
-font-size:18px;
 }
 
 </style>
@@ -121,6 +137,19 @@ font-size:18px;
 <select id="seasonSelect"></select>
 
 </div>
+
+<div class="tabs">
+
+<div class="tab active" onclick="showTab('overview',this)">Overview</div>
+<div class="tab" onclick="showTab('batting',this)">Batting</div>
+<div class="tab" onclick="showTab('pitching',this)">Pitching</div>
+<div class="tab" onclick="showTab('roster',this)">Roster</div>
+
+</div>
+
+<!-- OVERVIEW -->
+
+<div id="overview" class="panel active">
 
 <div class="cards">
 
@@ -151,46 +180,80 @@ font-size:18px;
 
 </div>
 
-<div class="tableCard">
+</div>
 
-<div class="sectionTitle">Recent Games</div>
+<!-- BATTING -->
+
+<div id="batting" class="panel">
+
+<div class="tableCard">
 
 <table>
 
 <thead>
 <tr>
-<th>Date</th>
-<th>Opponent</th>
-<th>Result</th>
-<th>Venue</th>
+<th>Player</th>
+<th>Games</th>
+<th>Hits</th>
+<th>Runs</th>
+<th>RBI</th>
 </tr>
 </thead>
 
-<tbody id="recentGames"></tbody>
+<tbody id="battingBody"></tbody>
 
 </table>
 
 </div>
 
-<div class="tableCard">
+</div>
 
-<div class="sectionTitle">Full Season Games</div>
+<!-- PITCHING -->
+
+<div id="pitching" class="panel">
+
+<div class="tableCard">
 
 <table>
 
 <thead>
 <tr>
-<th>Date</th>
-<th>Opponent</th>
-<th>Result</th>
-<th>Venue</th>
-<th>Attendance</th>
+<th>Player</th>
+<th>Games</th>
+<th>IP</th>
+<th>ER</th>
+<th>K</th>
 </tr>
 </thead>
 
-<tbody id="allGames"></tbody>
+<tbody id="pitchingBody"></tbody>
 
 </table>
+
+</div>
+
+</div>
+
+<!-- ROSTER -->
+
+<div id="roster" class="panel">
+
+<div class="tableCard">
+
+<table>
+
+<thead>
+<tr>
+<th>Player</th>
+<th>Position</th>
+</tr>
+</thead>
+
+<tbody id="rosterBody"></tbody>
+
+</table>
+
+</div>
 
 </div>
 
@@ -201,34 +264,36 @@ font-size:18px;
 const params=new URLSearchParams(location.search);
 const teamCode=params.get("team");
 
-let teamName="";
-let currentSeason="";
+let currentSeason;
+
+function showTab(name,el){
+
+document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+el.classList.add("active");
+
+document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
+document.getElementById(name).classList.add("active");
+
+}
 
 async function init(){
 
-const teamsRes=await fetch("data/baseball/teams.json");
-const teams=await teamsRes.json();
-
+const teams=await fetch("data/baseball/teams.json").then(r=>r.json());
 const team=teams.find(t=>t.code===teamCode);
 
-teamName=team.name;
+document.getElementById("teamName").textContent=team.name;
 
-document.getElementById("teamName").textContent=teamName;
-
-const indexRes=await fetch("data/baseball/index.json");
-const seasons=await indexRes.json();
+const seasons=await fetch("data/baseball/index.json").then(r=>r.json());
 
 const select=document.getElementById("seasonSelect");
 
 seasons.sort((a,b)=>b-a);
 
-seasons.forEach(year=>{
+seasons.forEach(s=>{
 
 const opt=document.createElement("option");
-
-opt.value=year;
-opt.textContent=year;
-
+opt.value=s;
+opt.textContent=s;
 select.appendChild(opt);
 
 });
@@ -238,108 +303,86 @@ currentSeason=seasons[0];
 select.value=currentSeason;
 
 select.onchange=()=>{
-
 currentSeason=select.value;
-
-loadSeason();
-
+loadOverview();
+loadBatting();
+loadPitching();
+loadRoster();
 };
 
-loadSeason();
+loadOverview();
+loadBatting();
+loadPitching();
+loadRoster();
 
 }
 
-function format(n){
+async function loadOverview(){
 
-return n.toLocaleString();
+const games=await fetch(`data/baseball/seasons/${currentSeason}.json`).then(r=>r.json());
 
-}
+const teamGames=games.filter(g=>g.home_code===teamCode||g.away_code===teamCode);
 
-async function loadSeason(){
-
-const res=
-await fetch(`data/baseball/seasons/${currentSeason}.json`);
-
-const games=await res.json();
-
-const teamGames=
-games.filter(g=>
-g.home_code===teamCode ||
-g.away_code===teamCode
-);
-
-let wins=0;
-let losses=0;
-let runsFor=0;
-let runsAgainst=0;
+let w=0,l=0,rf=0,ra=0;
 
 teamGames.forEach(g=>{
 
-const isHome=g.home_code===teamCode;
+const home=g.home_code===teamCode;
+const scored=home?g.home_score:g.away_score;
+const allowed=home?g.away_score:g.home_score;
 
-const scored=isHome?g.home_score:g.away_score;
-const allowed=isHome?g.away_score:g.home_score;
+rf+=scored;
+ra+=allowed;
 
-runsFor+=scored;
-runsAgainst+=allowed;
-
-if(scored>allowed) wins++;
-else losses++;
+if(scored>allowed)w++;else l++;
 
 });
 
-const pct=(wins/(wins+losses)).toFixed(3);
-
-document.getElementById("record").textContent=`${wins}-${losses}`;
-document.getElementById("pct").textContent=pct;
-document.getElementById("runsFor").textContent=format(runsFor);
-document.getElementById("runsAgainst").textContent=format(runsAgainst);
-document.getElementById("runDiff").textContent=format(runsFor-runsAgainst);
-
-renderRecent(teamGames);
-renderAll(teamGames);
+document.getElementById("record").textContent=`${w}-${l}`;
+document.getElementById("pct").textContent=(w/(w+l)).toFixed(3);
+document.getElementById("runsFor").textContent=rf;
+document.getElementById("runsAgainst").textContent=ra;
+document.getElementById("runDiff").textContent=rf-ra;
 
 }
 
-function renderRecent(games){
+async function loadBatting(){
 
-const body=document.getElementById("recentGames");
+const boxscores=await fetch(`data/baseball/boxscores/index.json`).then(r=>r.json()).catch(()=>[]);
 
+const stats={};
+
+boxscores.forEach(game=>{
+
+game.batting?.forEach(p=>{
+
+if(p.team!==teamCode)return;
+
+if(!stats[p.player])
+stats[p.player]={games:0,hits:0,runs:0,rbi:0};
+
+stats[p.player].games++;
+stats[p.player].hits+=p.H||0;
+stats[p.player].runs+=p.R||0;
+stats[p.player].rbi+=p.RBI||0;
+
+});
+
+});
+
+const body=document.getElementById("battingBody");
 body.innerHTML="";
 
-games.slice(-10).reverse().forEach(g=>{
-
-const isHome=g.home_code===teamCode;
-
-const opponent=isHome?g.away_team:g.home_team;
-const opponentCode=isHome?g.away_code:g.home_code;
-
-const result=isHome
-?`${g.home_score}-${g.away_score}`
-:`${g.away_score}-${g.home_score}`;
+Object.entries(stats).forEach(([name,s])=>{
 
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
-
-<td>${g.date}</td>
-
-<td>
-<span class="click"
-onclick="location.href='baseball-team.html?team=${opponentCode}'">
-${opponent}
-</span>
-</td>
-
-<td>
-<span class="click"
-onclick="location.href='baseball-game.html?id=${g.id}'">
-${result}
-</span>
-</td>
-
-<td>${g.venue||""}</td>
-
+<td class="click">${name}</td>
+<td>${s.games}</td>
+<td>${s.hits}</td>
+<td>${s.runs}</td>
+<td>${s.rbi}</td>
 `;
 
 body.appendChild(tr);
@@ -348,47 +391,29 @@ body.appendChild(tr);
 
 }
 
-function renderAll(games){
+async function loadPitching(){
 
-const body=document.getElementById("allGames");
+const body=document.getElementById("pitchingBody");
+body.innerHTML="<tr><td colspan=5>Pitching stats loading (connect boxscore pitching arrays)</td></tr>";
 
+}
+
+async function loadRoster(){
+
+const players=await fetch("data/baseball/players.json").then(r=>r.json());
+
+const teamPlayers=players.filter(p=>p.team===teamCode);
+
+const body=document.getElementById("rosterBody");
 body.innerHTML="";
 
-games.forEach(g=>{
-
-const isHome=g.home_code===teamCode;
-
-const opponent=isHome?g.away_team:g.home_team;
-const opponentCode=isHome?g.away_code:g.home_code;
-
-const result=isHome
-?`${g.home_score}-${g.away_score}`
-:`${g.away_score}-${g.home_score}`;
+teamPlayers.forEach(p=>{
 
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
-
-<td>${g.date}</td>
-
-<td>
-<span class="click"
-onclick="location.href='baseball-team.html?team=${opponentCode}'">
-${opponent}
-</span>
-</td>
-
-<td>
-<span class="click"
-onclick="location.href='baseball-game.html?id=${g.id}'">
-${result}
-</span>
-</td>
-
-<td>${g.venue||""}</td>
-
-<td>${g.attendance?.toLocaleString()||""}</td>
-
+<td class="click">${p.name}</td>
+<td>${p.position||""}</td>
 `;
 
 body.appendChild(tr);
