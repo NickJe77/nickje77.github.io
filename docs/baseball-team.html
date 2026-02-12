@@ -94,6 +94,7 @@ margin-top:4px;
 background:white;
 padding:16px;
 border-radius:14px;
+margin-bottom:18px;
 }
 
 th,td{
@@ -108,6 +109,21 @@ color:white;
 
 tbody tr:nth-child(even){
 background:#eaf3ff;
+}
+
+tbody tr:hover{
+background:#d6e6ff;
+}
+
+.click{
+color:#0056d6;
+font-weight:700;
+cursor:pointer;
+}
+
+.sectionTitle{
+font-weight:800;
+margin-bottom:10px;
 }
 
 </style>
@@ -161,9 +177,48 @@ background:#eaf3ff;
 
 </div>
 
+<div class="tableCard">
+
+<div class="sectionTitle">Recent Games</div>
+
+<table>
+<thead>
+<tr>
+<th>Date</th>
+<th>Opponent</th>
+<th>Result</th>
+<th>Venue</th>
+</tr>
+</thead>
+
+<tbody id="recentGames"></tbody>
+
+</table>
+
 </div>
 
-<!-- OTHER PANELS PLACEHOLDER -->
+<div class="tableCard">
+
+<div class="sectionTitle">Full Season Games</div>
+
+<table>
+<thead>
+<tr>
+<th>Date</th>
+<th>Opponent</th>
+<th>Result</th>
+<th>Venue</th>
+<th>Attendance</th>
+</tr>
+</thead>
+
+<tbody id="allGames"></tbody>
+
+</table>
+
+</div>
+
+</div>
 
 <div id="batting" class="panel">
 <div class="tableCard">Batting tab ready.</div>
@@ -184,7 +239,7 @@ background:#eaf3ff;
 const params = new URLSearchParams(location.search);
 const teamCode = params.get("team");
 
-let currentSeason = null;
+let currentSeason;
 
 function showTab(name,el){
 
@@ -198,24 +253,13 @@ document.getElementById(name).classList.add("active");
 
 async function init(){
 
-/* LOAD TEAM NAME */
-
 const teams =
 await fetch("data/baseball/teams.json").then(r=>r.json());
 
 const team =
 teams.find(t=>t.code===teamCode);
 
-if(!team){
-
-document.getElementById("teamName").textContent="Team not found";
-return;
-
-}
-
 document.getElementById("teamName").textContent=team.name;
-
-/* LOAD SEASONS */
 
 const seasons =
 await fetch("data/baseball/index.json").then(r=>r.json());
@@ -242,15 +286,15 @@ select.value=currentSeason;
 select.onchange=()=>{
 
 currentSeason=select.value;
-loadOverview();
+loadSeason();
 
 };
 
-await loadOverview();
+loadSeason();
 
 }
 
-async function loadOverview(){
+async function loadSeason(){
 
 const games =
 await fetch(`data/baseball/seasons/${currentSeason}.json`)
@@ -262,46 +306,119 @@ g.home_code===teamCode ||
 g.away_code===teamCode
 );
 
-let wins=0;
-let losses=0;
-let runsFor=0;
-let runsAgainst=0;
+/* OVERVIEW */
+
+let w=0,l=0,rf=0,ra=0;
 
 teamGames.forEach(g=>{
 
-const isHome =
-g.home_code===teamCode;
+const home=g.home_code===teamCode;
 
-const scored =
-isHome ? g.home_score : g.away_score;
+const scored=home?g.home_score:g.away_score;
+const allowed=home?g.away_score:g.home_score;
 
-const allowed =
-isHome ? g.away_score : g.home_score;
+rf+=scored;
+ra+=allowed;
 
-runsFor += scored;
-runsAgainst += allowed;
-
-if(scored>allowed) wins++;
-else losses++;
+if(scored>allowed) w++; else l++;
 
 });
 
-const gamesPlayed = wins+losses;
+document.getElementById("record").textContent=`${w}-${l}`;
+document.getElementById("pct").textContent=(w/(w+l)).toFixed(3);
+document.getElementById("runsFor").textContent=rf;
+document.getElementById("runsAgainst").textContent=ra;
+document.getElementById("runDiff").textContent=rf-ra;
 
-document.getElementById("record").textContent =
-`${wins}-${losses}`;
+/* RECENT GAMES */
 
-document.getElementById("pct").textContent =
-gamesPlayed ? (wins/gamesPlayed).toFixed(3) : "0.000";
+const recentBody=document.getElementById("recentGames");
+recentBody.innerHTML="";
 
-document.getElementById("runsFor").textContent =
-runsFor;
+teamGames.slice(-10).reverse().forEach(g=>{
 
-document.getElementById("runsAgainst").textContent =
-runsAgainst;
+const home=g.home_code===teamCode;
 
-document.getElementById("runDiff").textContent =
-runsFor - runsAgainst;
+const opp=home?g.away_team:g.home_team;
+const oppCode=home?g.away_code:g.home_code;
+
+const result=home
+?`${g.home_score}-${g.away_score}`
+:`${g.away_score}-${g.home_score}`;
+
+const tr=document.createElement("tr");
+
+tr.innerHTML=`
+
+<td>${g.date}</td>
+
+<td>
+<span class="click"
+onclick="location.href='baseball-team.html?team=${oppCode}'">
+${opp}
+</span>
+</td>
+
+<td>
+<span class="click"
+onclick="location.href='baseball-game.html?id=${g.id}'">
+${result}
+</span>
+</td>
+
+<td>${g.venue||""}</td>
+
+`;
+
+recentBody.appendChild(tr);
+
+});
+
+/* FULL GAMES */
+
+const allBody=document.getElementById("allGames");
+allBody.innerHTML="";
+
+teamGames.forEach(g=>{
+
+const home=g.home_code===teamCode;
+
+const opp=home?g.away_team:g.home_team;
+const oppCode=home?g.away_code:g.home_code;
+
+const result=home
+?`${g.home_score}-${g.away_score}`
+:`${g.away_score}-${g.home_score}`;
+
+const tr=document.createElement("tr");
+
+tr.innerHTML=`
+
+<td>${g.date}</td>
+
+<td>
+<span class="click"
+onclick="location.href='baseball-team.html?team=${oppCode}'">
+${opp}
+</span>
+</td>
+
+<td>
+<span class="click"
+onclick="location.href='baseball-game.html?id=${g.id}'">
+${result}
+</span>
+</td>
+
+<td>${g.venue||""}</td>
+
+<td>${g.attendance?.toLocaleString()||""}</td>
+
+`;
+
+allBody.appendChild(tr);
+
+});
 
 }
 
