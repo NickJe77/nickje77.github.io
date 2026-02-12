@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>NHL Team | The Sporting Almanac</title>
+
+<link rel="stylesheet" href="style.css">
+
+<style>
+
+body{
+font-family:Inter,system-ui;
+margin:0;
+background:#f4f6f8;
+}
+
+.page{
+max-width:1200px;
+margin:auto;
+padding:20px;
+}
+
+.hero{
+background:linear-gradient(135deg,#041E42,#0072CE);
+color:white;
+padding:30px;
+border-radius:20px;
+margin-bottom:20px;
+}
+
+.hero h1{
+margin:0;
+font-size:40px;
+}
+
+.stats{
+display:flex;
+gap:20px;
+margin-top:15px;
+}
+
+.stat-box{
+background:white;
+padding:15px;
+border-radius:12px;
+flex:1;
+text-align:center;
+box-shadow:0 2px 6px rgba(0,0,0,0.1);
+}
+
+.stat-value{
+font-size:26px;
+font-weight:bold;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+background:white;
+}
+
+th{
+background:#041E42;
+color:white;
+padding:10px;
+}
+
+td{
+padding:8px;
+}
+
+tr:nth-child(even){
+background:#e9f2ff;
+}
+
+tr:hover{
+background:#cfe2ff;
+cursor:pointer;
+}
+
+</style>
+</head>
+<body>
+
+<div class="page">
+
+<div id="hero" class="hero"></div>
+
+<div class="stats">
+
+<div class="stat-box">
+<div>Games</div>
+<div id="games" class="stat-value">0</div>
+</div>
+
+<div class="stat-box">
+<div>Wins</div>
+<div id="wins" class="stat-value">0</div>
+</div>
+
+<div class="stat-box">
+<div>Losses</div>
+<div id="losses" class="stat-value">0</div>
+</div>
+
+<div class="stat-box">
+<div>Goals For</div>
+<div id="gf" class="stat-value">0</div>
+</div>
+
+<div class="stat-box">
+<div>Goals Against</div>
+<div id="ga" class="stat-value">0</div>
+</div>
+
+</div>
+
+<br>
+
+<table>
+
+<thead>
+<tr>
+<th>Date</th>
+<th>Opponent</th>
+<th>Result</th>
+</tr>
+</thead>
+
+<tbody id="gamesTable"></tbody>
+
+</table>
+
+</div>
+
+<script>
+
+function getTeam(){
+
+const url=new URLSearchParams(window.location.search);
+
+return url.get("team");
+
+}
+
+async function loadTeam(){
+
+const team=getTeam();
+
+document.getElementById("hero").innerHTML=`<h1>${team}</h1>`;
+
+const indexRes=await fetch("data/nhl/index.json");
+
+const seasons=await indexRes.json();
+
+let allGames=[];
+
+for(const season of seasons){
+
+const res=await fetch(`data/nhl/seasons/${season.season}.json`);
+
+const data=await res.json();
+
+data.games.forEach(g=>{
+
+if(g.home==team || g.away==team){
+
+allGames.push(g);
+
+}
+
+});
+
+}
+
+let wins=0;
+let losses=0;
+let gf=0;
+let ga=0;
+
+const tbody=document.getElementById("gamesTable");
+
+allGames.sort((a,b)=>a.date.localeCompare(b.date));
+
+allGames.forEach(g=>{
+
+let isHome=g.home==team;
+
+let goalsFor=isHome?g.homeScore:g.awayScore;
+let goalsAgainst=isHome?g.awayScore:g.homeScore;
+
+gf+=goalsFor;
+ga+=goalsAgainst;
+
+let result=goalsFor>goalsAgainst?"W":"L";
+
+if(result=="W") wins++;
+else losses++;
+
+const tr=document.createElement("tr");
+
+tr.innerHTML=`
+
+<td>${g.date}</td>
+<td>${isHome?g.away:g.home}</td>
+<td>${goalsFor}-${goalsAgainst}</td>
+
+`;
+
+tbody.appendChild(tr);
+
+});
+
+document.getElementById("games").innerText=allGames.length;
+document.getElementById("wins").innerText=wins;
+document.getElementById("losses").innerText=losses;
+document.getElementById("gf").innerText=gf;
+document.getElementById("ga").innerText=ga;
+
+}
+
+loadTeam();
+
+</script>
+
+</body>
+</html>
