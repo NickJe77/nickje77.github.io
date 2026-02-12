@@ -11,7 +11,6 @@ body{
 font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,Arial;
 margin:0;
 background:#f4f6f8;
-color:#111;
 }
 
 /* NAVBAR */
@@ -30,10 +29,6 @@ font-weight:600;
 text-decoration:none;
 color:#0056d6;
 font-size:18px;
-}
-
-.navbar a:hover{
-text-decoration:underline;
 }
 
 /* PAGE */
@@ -59,7 +54,7 @@ margin:0;
 font-size:42px;
 }
 
-/* SUMMARY BOXES */
+/* SUMMARY */
 
 .summaryRow{
 display:grid;
@@ -72,20 +67,38 @@ margin-bottom:18px;
 background:white;
 padding:16px;
 border-radius:14px;
-box-shadow:0 2px 8px rgba(0,0,0,0.08);
 }
 
 .summaryLabel{
-font-size:13px;
+font-size:12px;
 font-weight:800;
 color:#666;
-text-transform:uppercase;
 }
 
 .summaryValue{
 font-size:20px;
 font-weight:800;
-margin-top:4px;
+}
+
+/* TABS */
+
+.tabs{
+display:flex;
+gap:8px;
+margin-bottom:12px;
+}
+
+.tab{
+padding:10px 18px;
+background:white;
+border-radius:10px;
+cursor:pointer;
+font-weight:700;
+}
+
+.tab.active{
+background:#002D72;
+color:white;
 }
 
 /* TABLE */
@@ -115,10 +128,6 @@ tbody tr:nth-child(even){
 background:#eaf3ff;
 }
 
-tbody tr:hover{
-background:#d6e6ff;
-}
-
 .click{
 color:#0056d6;
 font-weight:700;
@@ -129,6 +138,14 @@ cursor:pointer;
 text-align:right;
 }
 
+.section{
+display:none;
+}
+
+.section.active{
+display:block;
+}
+
 </style>
 </head>
 <body>
@@ -137,7 +154,6 @@ text-align:right;
 <a href="index.html">Home</a>
 <a href="baseball.html">Baseball</a>
 <a href="baseball-seasons.html">Seasons</a>
-<a href="baseball-player.html">Players</a>
 </div>
 
 <div class="page">
@@ -150,25 +166,33 @@ text-align:right;
 
 <div class="summaryCard">
 <div class="summaryLabel">World Series Champion</div>
-<div class="summaryValue" id="wsWinner">Loading...</div>
+<div class="summaryValue" id="wsWinner"></div>
 </div>
 
 <div class="summaryCard">
 <div class="summaryLabel">American League Champion</div>
-<div class="summaryValue" id="alWinner">Loading...</div>
+<div class="summaryValue" id="alWinner"></div>
 </div>
 
 <div class="summaryCard">
 <div class="summaryLabel">National League Champion</div>
-<div class="summaryValue" id="nlWinner">Loading...</div>
+<div class="summaryValue" id="nlWinner"></div>
 </div>
 
 </div>
 
+<div class="tabs">
+
+<div class="tab active" onclick="showTab('games')">Games</div>
+<div class="tab" onclick="showTab('standings')">Standings</div>
+<div class="tab" onclick="showTab('playoffs')">Playoffs</div>
+
+</div>
+
+<div id="games" class="section active">
 <div class="tableCard">
 
 <table>
-
 <thead>
 <tr>
 <th>Date</th>
@@ -185,24 +209,75 @@ text-align:right;
 </table>
 
 </div>
+</div>
+
+<div id="standings" class="section">
+<div class="tableCard">
+
+<table>
+<thead>
+<tr>
+<th>Team</th>
+<th class="right">W</th>
+<th class="right">L</th>
+<th class="right">%</th>
+</tr>
+</thead>
+
+<tbody id="standingsBody"></tbody>
+
+</table>
+
+</div>
+</div>
+
+<div id="playoffs" class="section">
+<div class="tableCard">
+
+<table>
+<thead>
+<tr>
+<th>Round</th>
+<th>Winner</th>
+<th>Loser</th>
+<th>Score</th>
+</tr>
+</thead>
+
+<tbody id="playoffsBody"></tbody>
+
+</table>
+
+</div>
+</div>
 
 </div>
 
 <script>
 
-/* TEAM LEAGUES */
+const LEAGUE={
+ARI:"NL",ATL:"NL",CHC:"NL",CIN:"NL",COL:"NL",
+LAD:"NL",MIA:"NL",MIL:"NL",NYM:"NL",PHI:"NL",
+PIT:"NL",SD:"NL",SF:"NL",STL:"NL",WSH:"NL",
 
-const LEAGUE = {
-
-ARI:"NL", ATL:"NL", CHC:"NL", CIN:"NL", COL:"NL",
-LAD:"NL", MIA:"NL", MIL:"NL", NYM:"NL", PHI:"NL",
-PIT:"NL", SD:"NL", SF:"NL", STL:"NL", WSH:"NL",
-
-BAL:"AL", BOS:"AL", CWS:"AL", CLE:"AL", DET:"AL",
-HOU:"AL", KC:"AL", LAA:"AL", MIN:"AL", NYY:"AL",
-OAK:"AL", SEA:"AL", TB:"AL", TEX:"AL", TOR:"AL"
-
+BAL:"AL",BOS:"AL",CWS:"AL",CLE:"AL",DET:"AL",
+HOU:"AL",KC:"AL",LAA:"AL",MIN:"AL",NYY:"AL",
+OAK:"AL",SEA:"AL",TB:"AL",TEX:"AL",TOR:"AL"
 };
+
+function showTab(name){
+
+document.querySelectorAll(".section")
+.forEach(s=>s.classList.remove("active"));
+
+document.querySelectorAll(".tab")
+.forEach(t=>t.classList.remove("active"));
+
+document.getElementById(name).classList.add("active");
+
+event.target.classList.add("active");
+
+}
 
 const params=new URLSearchParams(location.search);
 
@@ -213,28 +288,17 @@ document.getElementById("title").textContent=
 
 let PARKS={};
 
-/* LOAD BALLPARKS */
-
 async function loadBallparks(){
 
 const res=await fetch("data/baseball/ballparks.csv");
 
 const text=await res.text();
 
-const rows=text.split("\n");
-
-const headers=rows[0].split(",");
-
-const parkIndex=headers.indexOf("PARKID");
-const nameIndex=headers.indexOf("NAME");
-
-rows.slice(1).forEach(r=>{
+text.split("\n").slice(1).forEach(r=>{
 
 const cols=r.split(",");
 
-if(!cols[parkIndex])return;
-
-PARKS[cols[parkIndex]]=cols[nameIndex];
+PARKS[cols[0]]=cols[1];
 
 });
 
@@ -246,98 +310,99 @@ return PARKS[code]||code;
 
 }
 
-/* WINNER */
-
 function getWinner(g){
 
-return Number(g.away_score) > Number(g.home_score)
-? g.away_team
-: g.home_team;
+return Number(g.away_score)>Number(g.home_score)
+?g.away_team:g.home_team;
 
 }
 
-/* DETECT CHAMPIONS */
-
 function detectChampions(games){
 
-let ws="";
-let al="";
-let nl="";
+let ws="",al="",nl="";
 
 games.forEach(g=>{
 
-const awayLeague=LEAGUE[g.away_code];
-const homeLeague=LEAGUE[g.home_code];
-
-if(awayLeague==="AL" && homeLeague==="AL")
+if(LEAGUE[g.away_code]==="AL" &&
+LEAGUE[g.home_code]==="AL")
 al=getWinner(g);
 
-if(awayLeague==="NL" && homeLeague==="NL")
+if(LEAGUE[g.away_code]==="NL" &&
+LEAGUE[g.home_code]==="NL")
 nl=getWinner(g);
 
 });
 
-/* LAST GAME = WORLD SERIES */
-
 ws=getWinner(games[games.length-1]);
 
-document.getElementById("wsWinner").textContent=ws;
-document.getElementById("alWinner").textContent=al;
-document.getElementById("nlWinner").textContent=nl;
+wsWinner.textContent=ws;
+alWinner.textContent=al;
+nlWinner.textContent=nl;
 
 }
-
-/* LOAD SEASON */
 
 async function loadSeason(){
 
 await loadBallparks();
 
-const games=await fetch(
+const data=await fetch(
 `data/baseball/seasons/${year}.json`
 ).then(r=>r.json());
 
+const games=Array.isArray(data)?data:data.games||[];
+
 detectChampions(games);
 
-const body=document.getElementById("gamesBody");
-
-body.innerHTML="";
+/* GAMES */
 
 games.forEach(g=>{
-
-const gameId=
-`${g.date}_${g.away_code}_${g.home_code}`;
 
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
-
 <td>${g.date}</td>
-
-<td class="click"
-onclick="location.href='baseball-team.html?team=${g.away_code}'">
-${g.away_team}
-</td>
-
-<td class="right click"
-onclick="location.href='baseball-game.html?id=${gameId}'">
-${g.away_score} – ${g.home_score}
-</td>
-
-<td class="click"
-onclick="location.href='baseball-team.html?team=${g.home_code}'">
-${g.home_team}
-</td>
-
+<td class="click">${g.away_team}</td>
+<td class="right">${g.away_score}-${g.home_score}</td>
+<td class="click">${g.home_team}</td>
 <td>${parkName(g.venue)}</td>
-
-<td class="right">
-${g.attendance?.toLocaleString()||""}
-</td>
-
+<td class="right">${g.attendance||""}</td>
 `;
 
-body.appendChild(tr);
+gamesBody.appendChild(tr);
+
+});
+
+/* STANDINGS */
+
+(data.standings||[]).forEach(s=>{
+
+const tr=document.createElement("tr");
+
+tr.innerHTML=`
+<td>${s.team}</td>
+<td class="right">${s.wins}</td>
+<td class="right">${s.losses}</td>
+<td class="right">${s.pct}</td>
+`;
+
+standingsBody.appendChild(tr);
+
+});
+
+/* PLAYOFFS */
+
+(data.playoffs||[]).forEach(p=>{
+
+const tr=document.createElement("tr");
+
+tr.innerHTML=`
+<td>${p.round}</td>
+<td>${p.winner}</td>
+<td>${p.loser}</td>
+<td>${p.score}</td>
+`;
+
+playoffsBody.appendChild(tr);
 
 });
 
