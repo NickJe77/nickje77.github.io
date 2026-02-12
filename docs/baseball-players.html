@@ -59,6 +59,12 @@ background:#eaf3ff;
 color:#0056d6;
 }
 
+.team{
+font-size:13px;
+color:#777;
+margin-left:8px;
+}
+
 </style>
 </head>
 <body>
@@ -91,21 +97,36 @@ let ALL_PLAYERS=[];
 
 async function loadPlayers(){
 
-try{
-
-ALL_PLAYERS = await fetch(
+const data = await fetch(
 "data/baseball/players.json"
 ).then(r=>r.json());
 
-ALL_PLAYERS.sort();
+/* convert objects to usable format */
+
+ALL_PLAYERS = data.map(p=>({
+
+name: p.player,
+team: p.team
+
+}));
+
+/* remove duplicates */
+
+const unique = {};
+
+ALL_PLAYERS.forEach(p=>{
+unique[p.name]=p;
+});
+
+ALL_PLAYERS = Object.values(unique);
+
+/* sort */
+
+ALL_PLAYERS.sort((a,b)=>
+a.name.localeCompare(b.name)
+);
 
 renderPlayers(ALL_PLAYERS);
-
-}catch(e){
-
-playersList.innerHTML="Failed to load players";
-
-}
 
 }
 
@@ -113,18 +134,21 @@ function renderPlayers(list){
 
 playersList.innerHTML="";
 
-list.forEach(name=>{
+list.forEach(p=>{
 
 const div=document.createElement("div");
 
 div.className="player";
 
-div.textContent=name;
+div.innerHTML=`
+${p.name}
+<span class="team">${p.team}</span>
+`;
 
 div.onclick=()=>{
 
 location.href=
-`baseball-player.html?player=${encodeURIComponent(name)}`;
+`baseball-player.html?player=${encodeURIComponent(p.name)}`;
 
 };
 
@@ -139,7 +163,7 @@ function filterPlayers(){
 const q=search.value.toLowerCase();
 
 const filtered=ALL_PLAYERS.filter(p=>
-p.toLowerCase().includes(q)
+p.name.toLowerCase().includes(q)
 );
 
 renderPlayers(filtered);
