@@ -96,6 +96,7 @@ cursor:pointer;
 color:red;
 font-weight:700;
 padding:20px;
+text-align:center;
 }
 
 </style>
@@ -103,12 +104,10 @@ padding:20px;
 <body>
 
 <div class="navbar">
-
 <a href="index.html">Home</a>
 <a href="baseball.html">Baseball</a>
 <a href="baseball-seasons.html">Seasons</a>
-<a href="baseball-players.html">Players</a>
-
+<a href="baseball-player.html">Players</a>
 </div>
 
 <div class="page">
@@ -169,9 +168,6 @@ params.get("season");
 
 const title = document.getElementById("title");
 const gamesBody = document.getElementById("gamesBody");
-const wsWinner = document.getElementById("wsWinner");
-const alWinner = document.getElementById("alWinner");
-const nlWinner = document.getElementById("nlWinner");
 
 if(!year){
 
@@ -186,91 +182,37 @@ throw new Error("Missing year parameter");
 
 title.textContent = year + " MLB Season";
 
-const AL=[
-"BAL","BOS","NYY","TB","TOR",
-"CWS","CLE","DET","KC","MIN",
-"HOU","LAA","OAK","SEA","TEX"
-];
-
-function league(code){
-
-return AL.includes(code) ? "AL" : "NL";
-
-}
-
-let ALL_GAMES = [];
-
 async function loadSeason(){
 
 try{
 
-const regularResponse = await fetch(
-`data/baseball/seasons/${year}.json`
-);
+const res =
+await fetch("data/baseball/seasons/" + year + ".json");
 
-if(!regularResponse.ok)
-throw new Error("Season file missing");
+if(!res.ok)
+throw new Error("Season file not found");
 
-const regular = await regularResponse.json();
+const games =
+await res.json();
 
-ALL_GAMES = [...regular];
-
-/* load playoff boxscores */
-
-for(const g of regular){
-
-const id =
-`${g.date}_${g.away_code}_${g.home_code}`;
-
-try{
-
-const boxResponse = await fetch(
-`data/baseball/boxscores/${id}.json`
-);
-
-if(!boxResponse.ok) continue;
-
-const box = await boxResponse.json();
-
-if(
-box.date.startsWith(year+"-10") ||
-box.date.startsWith(year+"-11")
-){
-
-ALL_GAMES.push(box);
-
-}
-
-}catch{}
-
-}
-
-/* sort */
-
-ALL_GAMES.sort(
-(a,b)=>a.date.localeCompare(b.date)
-);
-
-renderGames();
-
-detectChampions();
+renderGames(games);
 
 }catch(err){
 
 console.error(err);
 
-gamesBody.innerHTML=
+gamesBody.innerHTML =
 "<tr><td colspan='4' class='error'>Failed to load season</td></tr>";
 
 }
 
 }
 
-function renderGames(){
+function renderGames(games){
 
 gamesBody.innerHTML="";
 
-ALL_GAMES.forEach(g=>{
+games.forEach(g=>{
 
 const id =
 `${g.date}_${g.away_code}_${g.home_code}`;
@@ -301,65 +243,6 @@ ${g.home_team}
 `;
 
 });
-
-}
-
-function detectChampions(){
-
-if(ALL_GAMES.length===0) return;
-
-/* World Series winner */
-
-const ws = ALL_GAMES[ALL_GAMES.length-1];
-
-wsWinner.textContent =
-ws.away_score > ws.home_score
-? ws.away_team
-: ws.home_team;
-
-/* AL winner */
-
-for(let i=ALL_GAMES.length-1;i>=0;i--){
-
-const g = ALL_GAMES[i];
-
-if(
-league(g.away_code)==="AL" &&
-league(g.home_code)==="AL"
-){
-
-alWinner.textContent =
-g.away_score>g.home_score
-? g.away_team
-: g.home_team;
-
-break;
-
-}
-
-}
-
-/* NL winner */
-
-for(let i=ALL_GAMES.length-1;i>=0;i--){
-
-const g = ALL_GAMES[i];
-
-if(
-league(g.away_code)==="NL" &&
-league(g.home_code)==="NL"
-){
-
-nlWinner.textContent =
-g.away_score>g.home_score
-? g.away_team
-: g.home_team;
-
-break;
-
-}
-
-}
 
 }
 
