@@ -2,209 +2,271 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Game | The Sporting Almanac</title>
+<title>Baseball Game | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-
-body{
-font-family:Inter,system-ui,Arial;
-margin:0;
-background:#f4f6f8;
-}
-
-.page{
-max-width:1100px;
-margin:auto;
-padding:20px;
-}
+body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
+.page{max-width:1200px;margin:auto;padding:20px;}
 
 .hero{
-background:linear-gradient(90deg,#002D72,#C8102E);
-color:white;
-padding:28px;
-border-radius:18px;
-margin-bottom:18px;
+  background:linear-gradient(90deg,#002D72,#C8102E);
+  color:white;
+  padding:28px;
+  border-radius:20px;
+  margin-bottom:16px;
 }
-
-.hero h1{
-margin:0;
-font-size:32px;
+.hero h1{margin:0;font-size:34px;}
+.hero .meta{margin-top:10px;opacity:.95;font-size:14px;line-height:1.35;}
+.pill{
+  display:inline-block;
+  background:rgba(255,255,255,0.18);
+  border:1px solid rgba(255,255,255,0.25);
+  padding:6px 10px;
+  border-radius:999px;
+  font-weight:800;
+  margin-right:8px;
+  margin-top:8px;
 }
 
 .card{
-background:white;
-padding:18px;
-border-radius:14px;
-margin-bottom:16px;
+  background:white;
+  padding:16px;
+  border-radius:14px;
+  margin-bottom:16px;
 }
+.card h3{margin:0 0 10px;font-size:18px;}
 
-table{
-width:100%;
-border-collapse:collapse;
-}
+table{width:100%;border-collapse:collapse;}
+th,td{padding:9px;border-bottom:1px solid #eee;text-align:left;white-space:nowrap;}
+th{background:#002D72;color:white;position:sticky;top:0;}
+tbody tr:nth-child(even){background:#eaf3ff;}
+tbody tr:hover{background:#d6e6ff;}
 
-th,td{
-padding:8px;
-border-bottom:1px solid #eee;
-text-align:left;
-}
-
-th{
-background:#002D72;
-color:white;
-}
-
-tbody tr:nth-child(even){
-background:#eaf3ff;
-}
-
+.right{text-align:right;}
+.small{font-size:12px;color:#666;margin-top:6px;}
 </style>
 </head>
 <body>
 
 <div class="page">
 
-<div class="hero">
-<h1 id="title">Loading game...</h1>
-</div>
+  <div class="hero">
+    <h1 id="title">Loading game…</h1>
+    <div class="meta" id="meta"></div>
+    <div id="pills"></div>
+  </div>
 
-<div class="card">
+  <div class="card">
+    <h3>Batting</h3>
+    <div style="overflow:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Team</th>
+            <th class="right">AB</th>
+            <th class="right">R</th>
+            <th class="right">H</th>
+            <th class="right">RBI</th>
+            <th class="right">BB</th>
+            <th class="right">SO</th>
+            <th class="right">HR</th>
+          </tr>
+        </thead>
+        <tbody id="battingBody"></tbody>
+      </table>
+    </div>
+    <div class="small">* Columns shown depend on what exists in your boxscore JSON.</div>
+  </div>
 
-<h3>Batting</h3>
-
-<table>
-
-<thead>
-
-<tr>
-<th>Player</th>
-<th>Team</th>
-<th>AB</th>
-<th>R</th>
-<th>H</th>
-<th>RBI</th>
-</tr>
-
-</thead>
-
-<tbody id="batting"></tbody>
-
-</table>
-
-</div>
-
-<div class="card">
-
-<h3>Pitching</h3>
-
-<table>
-
-<thead>
-
-<tr>
-<th>Player</th>
-<th>Team</th>
-<th>IP</th>
-<th>H</th>
-<th>ER</th>
-<th>K</th>
-</tr>
-
-</thead>
-
-<tbody id="pitching"></tbody>
-
-</table>
-
-</div>
+  <div class="card">
+    <h3>Pitching</h3>
+    <div style="overflow:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Pitcher</th>
+            <th>Team</th>
+            <th class="right">IP</th>
+            <th class="right">H</th>
+            <th class="right">R</th>
+            <th class="right">ER</th>
+            <th class="right">BB</th>
+            <th class="right">SO</th>
+            <th class="right">HR</th>
+          </tr>
+        </thead>
+        <tbody id="pitchingBody"></tbody>
+      </table>
+    </div>
+  </div>
 
 </div>
 
 <script>
-
-const params = new URLSearchParams(window.location.search);
-
+const params = new URLSearchParams(location.search);
 const id = params.get("id");
 
 if(!id){
+  alert("Missing game id");
+  throw new Error("Missing game id");
+}
 
-alert("Missing game id");
+let BALLPARKS = {};
 
-throw new Error("Missing game id");
+/* Load ballparks.csv (your format) */
+async function loadBallparks(){
+  const res = await fetch("data/baseball/ballpark.csv");
+  const text = await res.text();
+  const rows = text.split("\n").filter(r => r.trim().length);
 
+  const headers = rows[0].trim().split(",");
+  const idx = (h)=>headers.indexOf(h);
+
+  const iPark = idx("PARKID");
+  const iName = idx("NAME");
+  const iCity = idx("CITY");
+  const iState = idx("STATE");
+  const iAKA = idx("AKA");
+  const iStart = idx("START");
+  const iEnd = idx("END");
+
+  rows.slice(1).forEach(line=>{
+    const cols = line.split(",");
+    const parkId = (cols[iPark] || "").trim();
+    if(!parkId) return;
+
+    BALLPARKS[parkId] = {
+      id: parkId,
+      name: (cols[iName] || "").trim(),
+      aka: (cols[iAKA] || "").trim(),
+      city: (cols[iCity] || "").trim(),
+      state: (cols[iState] || "").trim(),
+      start: (cols[iStart] || "").trim(),
+      end: (cols[iEnd] || "").trim()
+    };
+  });
+}
+
+function stadiumName(code){
+  if(!code) return "";
+  return BALLPARKS[code]?.name || code;
+}
+
+function stadiumLine(code){
+  if(!code) return "";
+  const p = BALLPARKS[code];
+  if(!p) return code;
+  const loc = (p.city && p.state) ? `${p.city}, ${p.state}` : "";
+  return loc ? `${p_toggle(p.name)} • ${loc}` : p.name;
+}
+function p_toggle(s){ return s || ""; } // helper
+
+function fmt(n){
+  if(n===null || n===undefined || n==="") return "";
+  const num = Number(n);
+  if(Number.isFinite(num)) return num.toLocaleString();
+  return String(n);
+}
+
+function safe(v){ return (v===null || v===undefined) ? "" : v; }
+
+/* Render tables */
+function renderBatting(batting){
+  const body = document.getElementById("battingBody");
+  body.innerHTML = "";
+
+  (batting || []).forEach(p=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${safe(p.player || p.name || p.Player || "")}</td>
+      <td>${safe(p.team || p.team_code || p.Team || "")}</td>
+      <td class="right">${fmt(p.AB)}</td>
+      <td class="right">${fmt(p.R)}</td>
+      <td class="right">${fmt(p.H)}</td>
+      <td class="right">${fmt(p.RBI)}</td>
+      <td class="right">${fmt(p.BB)}</td>
+      <td class="right">${fmt(p.SO ?? p.K)}</td>
+      <td class="right">${fmt(p.HR)}</td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
+function renderPitching(pitching){
+  const body = document.getElementById("pitchingBody");
+  body.innerHTML = "";
+
+  (pitching || []).forEach(p=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${safe(p.player || p.name || p.Pitcher || "")}</td>
+      <td>${safe(p.team || p.team_code || p.Team || "")}</td>
+      <td class="right">${fmt(p.IP)}</td>
+      <td class="right">${fmt(p.H)}</td>
+      <td class="right">${fmt(p.R)}</td>
+      <td class="right">${fmt(p.ER)}</td>
+      <td class="right">${fmt(p.BB)}</td>
+      <td class="right">${fmt(p.SO ?? p.K)}</td>
+      <td class="right">${fmt(p.HR)}</td>
+    `;
+    body.appendChild(tr);
+  });
 }
 
 async function loadGame(){
+  await loadBallparks();
 
-const res =
-await fetch(`data/baseball/boxscores/${id}.json?cache=${Date.now()}`);
+  const res = await fetch(`data/baseball/boxscores/${id}.json?cache=${Date.now()}`);
+  if(!res.ok){
+    document.getElementById("title").textContent = "Game not found";
+    document.getElementById("meta").textContent = `Missing file: data/baseball/boxscores/${id}.json`;
+    return;
+  }
 
-if(!res.ok){
+  const game = await res.json();
 
-alert("Game file not found: "+id);
+  // Try common fields — won’t break if your keys differ
+  const awayTeam = game.away_team || game.away || game.awayName || "";
+  const homeTeam = game.home_team || game.home || game.homeName || "";
+  const awayScore = (game.away_score ?? game.awayRuns ?? game.away_score_final ?? "");
+  const homeScore = (game.home_score ?? game.homeRuns ?? game.home_score_final ?? "");
+  const date = game.date || game.game_date || "";
+  const venueCode = game.venue || game.park || game.park_id || game.PARKID || "";
+  const attendance = game.attendance ?? game.Attendance ?? "";
 
-return;
+  const title = `${awayTeam} ${awayScore} – ${homeScore} ${homeTeam}`;
+  document.getElementById("title").textContent = title;
 
-}
+  const venueName = stadiumName(venueCode);
+  const p = BALLPARKS[venueCode];
 
-const game = await res.json();
+  let meta = [];
+  if(date) meta.push(`<div class="pill">${date}</div>`);
+  if(venueCode) meta.push(`<div class="pill">${venueName}</div>`);
+  if(p && p.city && p.state) meta.push(`<div class="pill">${p.city}, ${p.state}</div>`);
+  if(attendance) meta.push(`<div class="pill">Attendance: ${fmt(attendance)}</div>`);
 
-document.getElementById("title").textContent =
-`${game.away_team} ${game.away_score} - ${game.home_score} ${game.home_team}`;
+  document.getElementById("pills").innerHTML = meta.join("");
 
-const battingBody =
-document.getElementById("batting");
+  // Extra stadium info
+  let metaText = "";
+  if(venueCode){
+    if(p){
+      const years = (p.start || p.end) ? ` (${p.start || "?"}–${p.end || "present"})` : "";
+      metaText = `${p.name}${years}${p.aka ? " • AKA: " + p.aka : ""}`;
+    } else {
+      metaText = venueCode;
+    }
+  }
+  document.getElementById("meta").innerHTML = metaText ? metaText : "";
 
-battingBody.innerHTML="";
-
-game.batting.forEach(p=>{
-
-const tr=document.createElement("tr");
-
-tr.innerHTML=`
-
-<td>${p.player}</td>
-<td>${p.team}</td>
-<td>${p.AB}</td>
-<td>${p.R}</td>
-<td>${p.H}</td>
-<td>${p.RBI}</td>
-
-`;
-
-battingBody.appendChild(tr);
-
-});
-
-const pitchingBody =
-document.getElementById("pitching");
-
-pitchingBody.innerHTML="";
-
-game.pitching.forEach(p=>{
-
-const tr=document.createElement("tr");
-
-tr.innerHTML=`
-
-<td>${p.player}</td>
-<td>${p.team}</td>
-<td>${p.IP}</td>
-<td>${p.H}</td>
-<td>${p.ER}</td>
-<td>${p.K}</td>
-
-`;
-
-pitchingBody.appendChild(tr);
-
-});
-
+  renderBatting(game.batting || []);
+  renderPitching(game.pitching || []);
 }
 
 loadGame();
-
 </script>
 
 </body>
