@@ -1,195 +1,209 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>MLB Boxscore</title>
+<title>Game | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 
 body{
- font-family:Inter;
- background:#f4f6f8;
- margin:0;
+font-family:Inter,system-ui,Arial;
+margin:0;
+background:#f4f6f8;
 }
 
-.container{
- max-width:1200px;
- margin:auto;
- padding:20px;
+.page{
+max-width:1100px;
+margin:auto;
+padding:20px;
 }
 
 .hero{
- background:linear-gradient(90deg,#002D72,#C8102E);
- color:white;
- padding:30px;
- border-radius:20px;
+background:linear-gradient(90deg,#002D72,#C8102E);
+color:white;
+padding:28px;
+border-radius:18px;
+margin-bottom:18px;
 }
 
-.linescore{
- margin-top:20px;
- background:white;
- border-radius:10px;
- padding:15px;
+.hero h1{
+margin:0;
+font-size:32px;
+}
+
+.card{
+background:white;
+padding:18px;
+border-radius:14px;
+margin-bottom:16px;
 }
 
 table{
- width:100%;
- border-collapse:collapse;
- margin-top:15px;
+width:100%;
+border-collapse:collapse;
+}
+
+th,td{
+padding:8px;
+border-bottom:1px solid #eee;
+text-align:left;
 }
 
 th{
- background:#002D72;
- color:white;
- padding:8px;
+background:#002D72;
+color:white;
 }
 
-td{
- padding:8px;
-}
-
-tr:nth-child(even){
- background:#eaf3ff;
-}
-
-.section{
- background:white;
- margin-top:20px;
- padding:15px;
- border-radius:10px;
+tbody tr:nth-child(even){
+background:#eaf3ff;
 }
 
 </style>
-
 </head>
-
 <body>
 
-<div class="container">
+<div class="page">
 
 <div class="hero">
-<h1 id="teams"></h1>
-<h2 id="score"></h2>
+<h1 id="title">Loading game...</h1>
 </div>
 
-<div class="linescore">
-<h3>Linescore</h3>
-<table id="linescore"></table>
-</div>
+<div class="card">
 
-<div class="section">
 <h3>Batting</h3>
+
 <table>
+
 <thead>
+
 <tr>
 <th>Player</th>
-<th>PA</th>
+<th>Team</th>
+<th>AB</th>
+<th>R</th>
 <th>H</th>
-<th>HR</th>
-<th>BB</th>
-<th>SO</th>
+<th>RBI</th>
 </tr>
+
 </thead>
+
 <tbody id="batting"></tbody>
+
 </table>
+
 </div>
 
-<div class="section">
+<div class="card">
+
 <h3>Pitching</h3>
+
 <table>
+
 <thead>
+
 <tr>
-<th>Pitcher</th>
+<th>Player</th>
+<th>Team</th>
 <th>IP</th>
 <th>H</th>
-<th>R</th>
-<th>BB</th>
-<th>SO</th>
+<th>ER</th>
+<th>K</th>
 </tr>
+
 </thead>
+
 <tbody id="pitching"></tbody>
+
 </table>
+
 </div>
 
 </div>
 
 <script>
 
-const params = new URLSearchParams(window.location.search)
+const params = new URLSearchParams(window.location.search);
 
-const year = params.get("year")
-const id = params.get("id")
+const id = params.get("id");
 
-async function load(){
+if(!id){
 
- const season = await fetch(`data/baseball/seasons/${year}.json`)
- const games = await season.json()
+alert("Missing game id");
 
- const game = games.find(g=>g.id===id)
-
- document.getElementById("teams").innerText =
- game.away_team + " @ " + game.home_team
-
- document.getElementById("score").innerText =
- game.away_score + " - " + game.home_score
-
- const box = await fetch(`data/baseball/boxscores/${year}.json`)
- const boxscores = await box.json()
-
- const boxscore = boxscores[game.retro_id]
-
- buildBatting(boxscore)
- buildPitching(boxscore)
+throw new Error("Missing game id");
 
 }
 
-function buildBatting(box){
+async function loadGame(){
 
- const tbody = document.getElementById("batting")
+const res =
+await fetch(`data/baseball/boxscores/${id}.json?cache=${Date.now()}`);
 
- box.batting.forEach(p=>{
+if(!res.ok){
 
-  const tr = document.createElement("tr")
+alert("Game file not found: "+id);
 
-  tr.innerHTML = `
-   <td>${p.player}</td>
-   <td>${p.PA}</td>
-   <td>${p.H}</td>
-   <td>${p.HR}</td>
-   <td>${p.BB}</td>
-   <td>${p.SO}</td>
-  `
-
-  tbody.appendChild(tr)
-
- })
+return;
 
 }
 
-function buildPitching(box){
+const game = await res.json();
 
- const tbody = document.getElementById("pitching")
+document.getElementById("title").textContent =
+`${game.away_team} ${game.away_score} - ${game.home_score} ${game.home_team}`;
 
- box.pitching.forEach(p=>{
+const battingBody =
+document.getElementById("batting");
 
-  const tr = document.createElement("tr")
+battingBody.innerHTML="";
 
-  tr.innerHTML = `
-   <td>${p.player}</td>
-   <td>${p.IP}</td>
-   <td>${p.H}</td>
-   <td>${p.R}</td>
-   <td>${p.BB}</td>
-   <td>${p.SO}</td>
-  `
+game.batting.forEach(p=>{
 
-  tbody.appendChild(tr)
+const tr=document.createElement("tr");
 
- })
+tr.innerHTML=`
+
+<td>${p.player}</td>
+<td>${p.team}</td>
+<td>${p.AB}</td>
+<td>${p.R}</td>
+<td>${p.H}</td>
+<td>${p.RBI}</td>
+
+`;
+
+battingBody.appendChild(tr);
+
+});
+
+const pitchingBody =
+document.getElementById("pitching");
+
+pitchingBody.innerHTML="";
+
+game.pitching.forEach(p=>{
+
+const tr=document.createElement("tr");
+
+tr.innerHTML=`
+
+<td>${p.player}</td>
+<td>${p.team}</td>
+<td>${p.IP}</td>
+<td>${p.H}</td>
+<td>${p.ER}</td>
+<td>${p.K}</td>
+
+`;
+
+pitchingBody.appendChild(tr);
+
+});
 
 }
 
-load()
+loadGame();
 
 </script>
 
