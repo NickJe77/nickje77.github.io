@@ -38,6 +38,7 @@ margin-bottom:16px;
 background:white;
 padding:16px;
 border-radius:12px;
+font-weight:700;
 }
 
 .tabs{
@@ -66,6 +67,7 @@ color:white;
 background:white;
 padding:16px;
 border-radius:12px;
+margin-bottom:16px;
 }
 
 table{
@@ -85,6 +87,12 @@ color:white;
 
 tbody tr:nth-child(even){
 background:#eaf3ff;
+}
+
+.leagueTitle{
+font-size:20px;
+font-weight:800;
+margin-bottom:8px;
 }
 
 </style>
@@ -141,7 +149,9 @@ National League Champion
 </div>
 
 <div id="standings" class="section">
+
 <div class="tableCard">
+<div class="leagueTitle">American League</div>
 <table>
 <thead>
 <tr>
@@ -151,9 +161,25 @@ National League Champion
 <th>%</th>
 </tr>
 </thead>
-<tbody id="standingsBody"></tbody>
+<tbody id="alStandings"></tbody>
 </table>
 </div>
+
+<div class="tableCard">
+<div class="leagueTitle">National League</div>
+<table>
+<thead>
+<tr>
+<th>Team</th>
+<th>W</th>
+<th>L</th>
+<th>%</th>
+</tr>
+</thead>
+<tbody id="nlStandings"></tbody>
+</table>
+</div>
+
 </div>
 
 <div id="playoffs" class="section">
@@ -174,6 +200,8 @@ National League Champion
 
 <script>
 
+/* LEAGUE MAP */
+
 const LEAGUE={
 ARI:"NL",ATL:"NL",CHC:"NL",CIN:"NL",COL:"NL",
 LAD:"NL",MIA:"NL",MIL:"NL",NYM:"NL",PHI:"NL",
@@ -184,6 +212,8 @@ HOU:"AL",KC:"AL",LAA:"AL",MIN:"AL",NYY:"AL",
 OAK:"AL",SEA:"AL",TB:"AL",TEX:"AL",TOR:"AL"
 };
 
+/* TABS */
+
 function showTab(name,el){
 
 document.querySelectorAll(".section")
@@ -193,6 +223,7 @@ document.querySelectorAll(".tab")
 .forEach(t=>t.classList.remove("active"));
 
 document.getElementById(name).classList.add("active");
+
 el.classList.add("active");
 
 }
@@ -201,9 +232,14 @@ const year=new URLSearchParams(location.search).get("year");
 
 title.textContent=year+" MLB Season";
 
+/* WINNER */
+
 function winner(g){
-return g.away_score>g.home_score?g.away_team:g.home_team;
+return g.away_score>g.home_score
+?g.away_team:g.home_team;
 }
+
+/* CHAMPIONS */
 
 function detectChampions(games){
 
@@ -233,39 +269,49 @@ playoffsBody.innerHTML=`
 
 }
 
+/* BUILD STANDINGS */
+
 function buildStandings(games){
 
-const table={};
+const stats={};
 
 games.forEach(g=>{
 
-table[g.away_team]??={w:0,l:0};
-table[g.home_team]??={w:0,l:0};
+stats[g.away_team]??={w:0,l:0,league:LEAGUE[g.away_code]};
+stats[g.home_team]??={w:0,l:0,league:LEAGUE[g.home_code]};
 
 if(g.away_score>g.home_score){
-table[g.away_team].w++;
-table[g.home_team].l++;
+stats[g.away_team].w++;
+stats[g.home_team].l++;
 }else{
-table[g.home_team].w++;
-table[g.away_team].l++;
+stats[g.home_team].w++;
+stats[g.away_team].l++;
 }
 
 });
 
-const arr=Object.entries(table)
-.map(([team,r])=>({
+const AL=[];
+const NL=[];
 
+Object.entries(stats).forEach(([team,s])=>{
+
+const rec={
 team,
-w:r.w,
-l:r.l,
-pct:(r.w/(r.w+r.l)).toFixed(3)
+w:s.w,
+l:s.l,
+pct:(s.w/(s.w+s.l)).toFixed(3)
+};
 
-}))
-.sort((a,b)=>b.pct-a.pct);
+if(s.league=="AL") AL.push(rec);
+else NL.push(rec);
 
-arr.forEach(t=>{
+});
 
-standingsBody.innerHTML+=`
+AL.sort((a,b)=>b.pct-a.pct);
+NL.sort((a,b)=>b.pct-a.pct);
+
+AL.forEach(t=>{
+alStandings.innerHTML+=`
 <tr>
 <td>${t.team}</td>
 <td>${t.w}</td>
@@ -273,10 +319,22 @@ standingsBody.innerHTML+=`
 <td>${t.pct}</td>
 </tr>
 `;
+});
 
+NL.forEach(t=>{
+nlStandings.innerHTML+=`
+<tr>
+<td>${t.team}</td>
+<td>${t.w}</td>
+<td>${t.l}</td>
+<td>${t.pct}</td>
+</tr>
+`;
 });
 
 }
+
+/* LOAD */
 
 async function load(){
 
