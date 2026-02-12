@@ -19,8 +19,6 @@ margin:auto;
 padding:20px;
 }
 
-/* HERO */
-
 .hero{
 background:linear-gradient(90deg,#002D72,#C8102E);
 color:white;
@@ -46,8 +44,6 @@ margin-right:16px;
 font-weight:600;
 }
 
-/* CARDS */
-
 .card{
 background:white;
 padding:16px;
@@ -58,8 +54,6 @@ margin-bottom:16px;
 .card h3{
 margin:0 0 12px;
 }
-
-/* TABLES */
 
 table{
 width:100%;
@@ -81,18 +75,18 @@ tbody tr:nth-child(even){
 background:#eaf3ff;
 }
 
+.click{
+color:#0056d6;
+font-weight:700;
+cursor:pointer;
+}
+
 .right{
 text-align:right;
 }
 
 .center{
 text-align:center;
-}
-
-.click{
-color:#0056d6;
-font-weight:700;
-cursor:pointer;
 }
 
 </style>
@@ -109,22 +103,16 @@ cursor:pointer;
 
 </div>
 
-<!-- LINESCORE -->
-
 <div class="card">
 
 <h3>Linescore</h3>
 
 <table>
-
 <thead id="linescoreHead"></thead>
 <tbody id="linescoreBody"></tbody>
-
 </table>
 
 </div>
-
-<!-- TEAM TOTALS -->
 
 <div class="card">
 
@@ -147,8 +135,6 @@ cursor:pointer;
 
 </div>
 
-<!-- BATTING -->
-
 <div class="card">
 
 <h3>Batting</h3>
@@ -160,7 +146,6 @@ cursor:pointer;
 <th>Player</th>
 <th>Team</th>
 <th class="right">AB</th>
-<th class="right">R</th>
 <th class="right">H</th>
 <th class="right">RBI</th>
 <th class="right">HR</th>
@@ -172,8 +157,6 @@ cursor:pointer;
 </table>
 
 </div>
-
-<!-- PITCHING -->
 
 <div class="card">
 
@@ -207,11 +190,9 @@ const id=params.get("id");
 
 let PARKS={};
 
-/* LOAD BALLPARK CSV */
-
 async function loadParks(){
 
-const res=await fetch("data/baseball/ballpark.csv");
+const res=await fetch("data/baseball/ballparks.csv");
 const text=await res.text();
 
 const rows=text.split("\n");
@@ -227,11 +208,11 @@ rows.slice(1).forEach(r=>{
 
 const cols=r.split(",");
 
-const id=cols[parkIndex];
+const pid=cols[parkIndex];
 
-if(!id)return;
+if(!pid)return;
 
-PARKS[id]={
+PARKS[pid]={
 
 name:cols[nameIndex],
 city:cols[cityIndex],
@@ -243,15 +224,6 @@ state:cols[stateIndex]
 
 }
 
-function parkName(id){
-
-if(PARKS[id])
-return PARKS[id].name;
-
-return id;
-
-}
-
 function parkFull(id){
 
 if(!PARKS[id])return id;
@@ -260,8 +232,6 @@ return `${PARKS[id].name} (${PARKS[id].city}, ${PARKS[id].state})`;
 
 }
 
-/* LOAD GAME */
-
 async function loadGame(){
 
 await loadParks();
@@ -269,35 +239,39 @@ await loadParks();
 const game=await fetch(`data/baseball/boxscores/${id}.json`)
 .then(r=>r.json());
 
-const away=game.away_team;
-const home=game.home_team;
-
-const awayScore=game.away_score;
-const homeScore=game.home_score;
-
 document.getElementById("title").innerHTML=`
-<span class="click" onclick="location.href='baseball-team.html?team=${game.away_code}'">${away}</span>
-${awayScore}
+
+<span class="click"
+onclick="location.href='baseball-team.html?team=${game.away_code}'">
+${game.away_team}
+</span>
+
+${game.away_score}
 –
-${homeScore}
-<span class="click" onclick="location.href='baseball-team.html?team=${game.home_code}'">${home}</span>
+${game.home_score}
+
+<span class="click"
+onclick="location.href='baseball-team.html?team=${game.home_code}'">
+${game.home_team}
+</span>
+
 `;
 
 document.getElementById("meta").innerHTML=`
+
 <span>${game.date}</span>
 <span>${parkFull(game.venue)}</span>
 <span>Attendance: ${game.attendance?.toLocaleString()||""}</span>
+
 `;
 
-/* LINESCORE */
+/* linescore */
 
 if(game.linescore){
 
-const innings=game.linescore.innings;
-
 let head="<tr><th>Team</th>";
 
-innings.forEach((_,i)=>{
+game.linescore.innings.forEach((_,i)=>{
 head+=`<th class="center">${i+1}</th>`;
 });
 
@@ -307,54 +281,21 @@ document.getElementById("linescoreHead").innerHTML=head;
 
 let body="";
 
-body+=`<tr><td>${away}</td>`;
-innings.forEach(i=>body+=`<td class='center'>${i.away}</td>`);
-body+=`<td class='center'>${awayScore}</td></tr>`;
+body+=`<tr><td>${game.away_team}</td>`;
+game.linescore.innings.forEach(i=>body+=`<td class='center'>${i.away}</td>`);
+body+=`<td class='center'>${game.away_score}</td></tr>`;
 
-body+=`<tr><td>${home}</td>`;
-innings.forEach(i=>body+=`<td class='center'>${i.home}</td>`);
-body+=`<td class='center'>${homeScore}</td></tr>`;
+body+=`<tr><td>${game.home_team}</td>`;
+game.linescore.innings.forEach(i=>body+=`<td class='center'>${i.home}</td>`);
+body+=`<td class='center'>${game.home_score}</td></tr>`;
 
 document.getElementById("linescoreBody").innerHTML=body;
 
 }
 
-/* TEAM TOTALS */
-
-let awayH=0,homeH=0;
-
-game.batting.forEach(p=>{
-
-if(p.team==game.away_code)
-awayH+=p.H||0;
-
-if(p.team==game.home_code)
-homeH+=p.H||0;
-
-});
-
-document.getElementById("totalsBody").innerHTML=`
-
-<tr>
-<td>${away}</td>
-<td class="right">${awayScore}</td>
-<td class="right">${awayH}</td>
-<td class="right">0</td>
-</tr>
-
-<tr>
-<td>${home}</td>
-<td class="right">${homeScore}</td>
-<td class="right">${homeH}</td>
-<td class="right">0</td>
-</tr>
-
-`;
-
-/* BATTING */
+/* batting */
 
 const bat=document.getElementById("battingBody");
-bat.innerHTML="";
 
 game.batting.forEach(p=>{
 
@@ -370,7 +311,6 @@ ${p.player}
 <td>${p.team}</td>
 
 <td class="right">${p.AB||0}</td>
-<td class="right">${p.R||0}</td>
 <td class="right">${p.H||0}</td>
 <td class="right">${p.RBI||0}</td>
 <td class="right">${p.HR||0}</td>
@@ -381,10 +321,9 @@ ${p.player}
 
 });
 
-/* PITCHING */
+/* pitching */
 
 const pit=document.getElementById("pitchingBody");
-pit.innerHTML="";
 
 game.pitching.forEach(p=>{
 
