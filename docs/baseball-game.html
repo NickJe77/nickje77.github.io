@@ -3,29 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <title>MLB Game | The Sporting Almanac</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 
 body{
-font-family:Inter,system-ui,Arial;
-margin:0;
+font-family:Inter,system-ui;
 background:#f4f6f8;
-}
-
-.navbar{
-display:flex;
-justify-content:center;
-gap:24px;
-padding:16px 0;
-background:white;
-border-bottom:1px solid #ddd;
-font-weight:600;
-}
-
-.navbar a{
-text-decoration:none;
-color:#0056d6;
+margin:0;
 }
 
 .page{
@@ -38,29 +22,20 @@ padding:20px;
 background:linear-gradient(90deg,#002D72,#C8102E);
 color:white;
 padding:30px;
-border-radius:20px;
-margin-bottom:16px;
+border-radius:16px;
 text-align:center;
 }
 
 .score{
 font-size:42px;
 font-weight:800;
-margin-top:10px;
-}
-
-.details{
-background:white;
-padding:20px;
-border-radius:12px;
-margin-top:16px;
 }
 
 .error{
 color:red;
-font-weight:700;
 text-align:center;
 padding:20px;
+font-weight:700;
 }
 
 </style>
@@ -68,84 +43,106 @@ padding:20px;
 </head>
 <body>
 
-<div class="navbar">
-<a href="index.html">Home</a>
-<a href="baseball.html">Baseball</a>
-<a href="baseball-seasons.html">Seasons</a>
-<a href="baseball-player.html">Players</a>
-</div>
-
 <div class="page">
 
 <div class="hero">
-<div id="teams">Loading...</div>
-<div id="score" class="score"></div>
-</div>
 
-<div id="details" class="details"></div>
+<div id="teams">Loading...</div>
+
+<div id="score" class="score"></div>
+
+</div>
 
 </div>
 
 <script>
 
-/* get raw ID exactly as passed */
-const params = new URLSearchParams(location.search);
+const params =
+new URLSearchParams(location.search);
 
-let gameId = params.get("id");
+const id =
+params.get("id");
 
-/* decode just in case */
-gameId = decodeURIComponent(gameId);
+const teams =
+document.getElementById("teams");
 
-const teams = document.getElementById("teams");
-const score = document.getElementById("score");
-const details = document.getElementById("details");
+const score =
+document.getElementById("score");
 
-if(!gameId){
+if(!id){
 
 teams.innerHTML =
 "<div class='error'>Game ID missing</div>";
 
-throw new Error("Missing ID");
+throw new Error();
 
 }
+
+/* split ID */
+
+const parts =
+id.split("_");
+
+const date =
+parts[0];
+
+const away =
+parts[1];
+
+const home =
+parts[2];
+
+/* open home team file */
+
+const teamFile =
+"data/baseball/boxscores/0" + home + ".json";
 
 async function loadGame(){
 
-try{
+const res =
+await fetch(teamFile);
 
-const path =
-"data/baseball/boxscores/" + gameId + ".json";
+if(!res.ok){
 
-console.log("Loading:", path);
+teams.innerHTML =
+"<div class='error'>Team file not found</div>";
 
-const res = await fetch(path);
-
-if(!res.ok)
-throw new Error("File not found: " + path);
-
-const game = await res.json();
-
-/* display */
-
-teams.textContent =
-game.away_team + " @ " + game.home_team;
-
-score.textContent =
-game.away_score + " - " + game.home_score;
-
-details.innerHTML =
-"Date: " + game.date +
-"<br>Venue: " + (game.venue || "Unknown");
+return;
 
 }
-catch(e){
+
+const games =
+await res.json();
+
+/* find matching game */
+
+const game =
+games.find(g =>
+g.date === date &&
+g.away_code === away &&
+g.home_code === home
+);
+
+if(!game){
 
 teams.innerHTML =
 "<div class='error'>Game not found</div>";
 
-console.error(e);
+return;
 
 }
+
+/* display */
+
+teams.textContent =
+game.away_team +
+" @ " +
+game.home_team;
+
+score.textContent =
+game.away_score +
+" - " +
+game.home_score;
 
 }
 
