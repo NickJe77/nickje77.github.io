@@ -1,195 +1,152 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>MLB Boxscore</title>
+<title>MLB Game | The Sporting Almanac</title>
 
 <style>
 
 body{
- font-family:Inter;
- background:#f4f6f8;
- margin:0;
+font-family:Inter,system-ui;
+background:#f4f6f8;
+margin:0;
 }
 
-.container{
- max-width:1200px;
- margin:auto;
- padding:20px;
+.page{
+max-width:1000px;
+margin:auto;
+padding:20px;
 }
 
 .hero{
- background:linear-gradient(90deg,#002D72,#C8102E);
- color:white;
- padding:30px;
- border-radius:20px;
+background:linear-gradient(90deg,#002D72,#C8102E);
+color:white;
+padding:30px;
+border-radius:16px;
+text-align:center;
 }
 
-.linescore{
- margin-top:20px;
- background:white;
- border-radius:10px;
- padding:15px;
+.score{
+font-size:42px;
+font-weight:800;
 }
 
-table{
- width:100%;
- border-collapse:collapse;
- margin-top:15px;
-}
-
-th{
- background:#002D72;
- color:white;
- padding:8px;
-}
-
-td{
- padding:8px;
-}
-
-tr:nth-child(even){
- background:#eaf3ff;
-}
-
-.section{
- background:white;
- margin-top:20px;
- padding:15px;
- border-radius:10px;
+.error{
+color:red;
+text-align:center;
+padding:20px;
+font-weight:700;
 }
 
 </style>
 
 </head>
-
 <body>
 
-<div class="container">
+<div class="page">
 
 <div class="hero">
-<h1 id="teams"></h1>
-<h2 id="score"></h2>
-</div>
 
-<div class="linescore">
-<h3>Linescore</h3>
-<table id="linescore"></table>
-</div>
+<div id="teams">Loading...</div>
 
-<div class="section">
-<h3>Batting</h3>
-<table>
-<thead>
-<tr>
-<th>Player</th>
-<th>PA</th>
-<th>H</th>
-<th>HR</th>
-<th>BB</th>
-<th>SO</th>
-</tr>
-</thead>
-<tbody id="batting"></tbody>
-</table>
-</div>
+<div id="score" class="score"></div>
 
-<div class="section">
-<h3>Pitching</h3>
-<table>
-<thead>
-<tr>
-<th>Pitcher</th>
-<th>IP</th>
-<th>H</th>
-<th>R</th>
-<th>BB</th>
-<th>SO</th>
-</tr>
-</thead>
-<tbody id="pitching"></tbody>
-</table>
 </div>
 
 </div>
 
 <script>
 
-const params = new URLSearchParams(window.location.search)
+const params =
+new URLSearchParams(location.search);
 
-const year = params.get("year")
-const id = params.get("id")
+const id =
+params.get("id");
 
-async function load(){
+const teams =
+document.getElementById("teams");
 
- const season = await fetch(`data/baseball/seasons/${year}.json`)
- const games = await season.json()
+const score =
+document.getElementById("score");
 
- const game = games.find(g=>g.id===id)
+if(!id){
 
- document.getElementById("teams").innerText =
- game.away_team + " @ " + game.home_team
+teams.innerHTML =
+"<div class='error'>Game ID missing</div>";
 
- document.getElementById("score").innerText =
- game.away_score + " - " + game.home_score
-
- const box = await fetch(`data/baseball/boxscores/${year}.json`)
- const boxscores = await box.json()
-
- const boxscore = boxscores[game.retro_id]
-
- buildBatting(boxscore)
- buildPitching(boxscore)
+throw new Error();
 
 }
 
-function buildBatting(box){
+/* split ID */
 
- const tbody = document.getElementById("batting")
+const parts =
+id.split("_");
 
- box.batting.forEach(p=>{
+const date =
+parts[0];
 
-  const tr = document.createElement("tr")
+const away =
+parts[1];
 
-  tr.innerHTML = `
-   <td>${p.player}</td>
-   <td>${p.PA}</td>
-   <td>${p.H}</td>
-   <td>${p.HR}</td>
-   <td>${p.BB}</td>
-   <td>${p.SO}</td>
-  `
+const home =
+parts[2];
 
-  tbody.appendChild(tr)
+/* open home team file */
 
- })
+const teamFile =
+"data/baseball/boxscores/0" + home + ".json";
 
-}
+async function loadGame(){
 
-function buildPitching(box){
+const res =
+await fetch(teamFile);
 
- const tbody = document.getElementById("pitching")
+if(!res.ok){
 
- box.pitching.forEach(p=>{
+teams.innerHTML =
+"<div class='error'>Team file not found</div>";
 
-  const tr = document.createElement("tr")
-
-  tr.innerHTML = `
-   <td>${p.player}</td>
-   <td>${p.IP}</td>
-   <td>${p.H}</td>
-   <td>${p.R}</td>
-   <td>${p.BB}</td>
-   <td>${p.SO}</td>
-  `
-
-  tbody.appendChild(tr)
-
- })
+return;
 
 }
 
-load()
+const games =
+await res.json();
+
+/* find matching game */
+
+const game =
+games.find(g =>
+g.date === date &&
+g.away_code === away &&
+g.home_code === home
+);
+
+if(!game){
+
+teams.innerHTML =
+"<div class='error'>Game not found</div>";
+
+return;
+
+}
+
+/* display */
+
+teams.textContent =
+game.away_team +
+" @ " +
+game.home_team;
+
+score.textContent =
+game.away_score +
+" - " +
+game.home_score;
+
+}
+
+loadGame();
 
 </script>
 

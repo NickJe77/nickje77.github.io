@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Team | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+
+body{
+font-family:Inter,system-ui,Arial;
+margin:0;
+background:#f4f6f8;
+}
+
+.page{
+max-width:1200px;
+margin:auto;
+padding:20px;
+}
+
+.hero{
+background:linear-gradient(90deg,#002D72,#C8102E);
+color:white;
+padding:28px;
+border-radius:20px;
+margin-bottom:16px;
+}
+
+.hero h1{
+margin:0;
+font-size:40px;
+}
+
+.hero select{
+margin-top:10px;
+padding:8px;
+border-radius:8px;
+border:none;
+font-size:16px;
+}
+
+.tabs{
+display:flex;
+gap:10px;
+margin-bottom:16px;
+}
+
+.tab{
+background:white;
+padding:10px 14px;
+border-radius:12px;
+font-weight:700;
+cursor:pointer;
+}
+
+.tab.active{
+background:#eaf3ff;
+}
+
+.card{
+background:white;
+padding:16px;
+border-radius:14px;
+margin-bottom:16px;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+}
+
+th,td{
+padding:8px;
+border-bottom:1px solid #eee;
+}
+
+th{
+background:#002D72;
+color:white;
+}
+
+tbody tr:nth-child(even){
+background:#eaf3ff;
+}
+
+.click{
+color:#0056d6;
+font-weight:700;
+cursor:pointer;
+}
+
+.right{text-align:right;}
+
+.panel{display:none;}
+.panel.active{display:block;}
+
+</style>
+</head>
+<body>
+
+<div class="page">
+
+<div class="hero">
+
+<h1 id="teamName">Loading...</h1>
+
+<select id="seasonSelect"></select>
+
+</div>
+
+<div class="tabs">
+
+<div class="tab active" onclick="showTab('overview',this)">Overview</div>
+<div class="tab" onclick="showTab('batting',this)">Batting</div>
+<div class="tab" onclick="showTab('pitching',this)">Pitching</div>
+
+</div>
+
+<div id="overview" class="panel active">
+<div class="card">
+<table>
+<thead>
+<tr>
+<th>Date</th>
+<th>Opponent</th>
+<th class="right">Result</th>
+<th>Venue</th>
+</tr>
+</thead>
+<tbody id="gamesBody"></tbody>
+</table>
+</div>
+</div>
+
+<div id="batting" class="panel">
+<div class="card">
+<table>
+<thead>
+<tr>
+<th>Player</th>
+<th class="right">G</th>
+<th class="right">AB</th>
+<th class="right">H</th>
+<th class="right">HR</th>
+<th class="right">RBI</th>
+<th class="right">AVG</th>
+</tr>
+</thead>
+<tbody id="battingBody"></tbody>
+</table>
+</div>
+</div>
+
+<div id="pitching" class="panel">
+<div class="card">
+<table>
+<thead>
+<tr>
+<th>Pitcher</th>
+<th class="right">G</th>
+<th class="right">IP</th>
+<th class="right">ER</th>
+<th class="right">K</th>
+<th class="right">ERA</th>
+</tr>
+</thead>
+<tbody id="pitchingBody"></tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+<script>
+
+const teamCode=new URLSearchParams(location.search).get("team");
+
+let currentSeason;
+
+let ALL_GAMES=[];
+let TEAM_GAMES=[];
+
+let PARKS={};
+
+function showTab(name,el){
+
+document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+el.classList.add("active");
+
+document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
+document.getElementById(name).classList.add("active");
+
+}
+
+async function loadBallparks(){
+
+const text=await fetch("data/baseball/ballparks.csv").then(r=>r.text());
+
+text.split("\n").slice(1).forEach(r=>{
+
+const cols=r.split(",");
+PARKS[cols[0]]=cols[1];
+
+});
+
+}
+
+function parkName(code){
+return PARKS[code]||code;
+}
+
+async function init(){
+
+await loadBallparks();
+
+const teams=await fetch("data/baseball/teams.json").then(r=>r.json());
+
+const team=teams.find(t=>t.code==teamCode);
+
+teamName.textContent=team.name;
+
+const seasons=await fetch("data/baseball/index.json").then(r=>r.json());
+
+seasons.sort((a,b)=>b-a);
+
+seasonSelect.innerHTML=seasons.map(s=>`<option>${s}</option>`).join("");
+
+currentSeason=seasons[0];
+
+seasonSelect.value=currentSeason;
+
+seasonSelect.onchange=()=>{
+currentSeason=seasonSelect.value;
+loadSeason();
+};
+
+loadSeason();
+
+}
+
+async function loadSeason(){
+
+ALL_GAMES=await fetch(
+`data/baseball/seasons/${currentSeason}.json`
+).then(r=>r.json());
+
+TEAM_GAMES=ALL_GAMES.filter(g=>
+g.home_code==teamCode||g.away_code==teamCode);
+
+renderGames();
+
+loadBatting();
+loadPitching();
+
+}
+
+function renderGames(){
+
+gamesBody.innerHTML="";
+
+TEAM_GAMES.forEach(g=>{
+
+const id=`${g.date}_${g.away_code}_${g.home_code}`;
+
+const opp=g.home_code==teamCode?g.away_team:g.home_team;
+
+const scored=g.home_code==teamCode?g.home_score:g.away_score;
+
+const allowed=g.home_code==teamCode?g.away_score:g.home_score;
+
+gamesBody.innerHTML+=`
+
+<tr>
+
+<td>${g.date}</td>
+
+<td>${opp}</td>
+
+<td class="click right"
+onclick="location.href='baseball-game.html?id=${id}'">
+${scored}-${allowed}
+</td>
+
+<td>${parkName(g.venue)}</td>
+
+</tr>
+
+`;
+
+});
+
+}
+
+async function loadBatting(){
+
+const stats={};
+
+const boxes=await Promise.all(
+TEAM_GAMES.map(g=>
+fetch(`data/baseball/boxscores/${g.date}_${g.away_code}_${g.home_code}.json`)
+.then(r=>r.json())
+)
+);
+
+boxes.forEach(box=>{
+
+(box.batting||[]).forEach(p=>{
+
+if(p.team!=teamCode)return;
+
+if(!stats[p.player])
+stats[p.player]={g:0,ab:0,h:0,hr:0,rbi:0};
+
+stats[p.player].g++;
+stats[p.player].ab+=p.AB||0;
+stats[p.player].h+=p.H||0;
+stats[p.player].hr+=p.HR||0;
+stats[p.player].rbi+=p.RBI||0;
+
+});
+
+});
+
+battingBody.innerHTML="";
+
+Object.entries(stats).forEach(([name,s])=>{
+
+const avg=s.ab? (s.h/s.ab):0;
+
+battingBody.innerHTML+=`
+
+<tr>
+
+<td class="click"
+onclick="location.href='baseball-player.html?player=${encodeURIComponent(name)}'">
+${name}
+</td>
+
+<td class="right">${s.g}</td>
+<td class="right">${s.ab}</td>
+<td class="right">${s.h}</td>
+<td class="right">${s.hr}</td>
+<td class="right">${s.rbi}</td>
+<td class="right">${avg.toFixed(3)}</td>
+
+</tr>
+
+`;
+
+});
+
+}
+
+async function loadPitching(){
+
+const stats={};
+
+const boxes=await Promise.all(
+TEAM_GAMES.map(g=>
+fetch(`data/baseball/boxscores/${g.date}_${g.away_code}_${g.home_code}.json`)
+.then(r=>r.json())
+)
+);
+
+boxes.forEach(box=>{
+
+(box.pitching||[]).forEach(p=>{
+
+if(p.team!=teamCode)return;
+
+if(!stats[p.player])
+stats[p.player]={g:0,ip:0,er:0,k:0};
+
+stats[p.player].g++;
+stats[p.player].ip+=parseFloat(p.IP)||0;
+stats[p.player].er+=p.ER||0;
+stats[p.player].k+=p.K||0;
+
+});
+
+});
+
+pitchingBody.innerHTML="";
+
+Object.entries(stats).forEach(([name,s])=>{
+
+const era=s.ip? (s.er*9/s.ip):0;
+
+pitchingBody.innerHTML+=`
+
+<tr>
+
+<td class="click"
+onclick="location.href='baseball-player.html?player=${encodeURIComponent(name)}'">
+${name}
+</td>
+
+<td class="right">${s.g}</td>
+<td class="right">${s.ip.toFixed(1)}</td>
+<td class="right">${s.er}</td>
+<td class="right">${s.k}</td>
+<td class="right">${era.toFixed(2)}</td>
+
+</tr>
+
+`;
+
+});
+
+}
+
+init();
+
+</script>
+
+</body>
+</html>
