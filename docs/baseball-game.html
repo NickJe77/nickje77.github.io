@@ -2,407 +2,146 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Game | The Sporting Almanac</title>
+<title>MLB Game | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 
 body{
-font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,Arial;
+font-family:Inter,system-ui,Arial;
 margin:0;
 background:#f4f6f8;
-color:#111;
+}
+
+.navbar{
+display:flex;
+justify-content:center;
+gap:24px;
+padding:16px 0;
+background:white;
+border-bottom:1px solid #ddd;
+font-weight:600;
+}
+
+.navbar a{
+text-decoration:none;
+color:#0056d6;
 }
 
 .page{
-max-width:1200px;
+max-width:1000px;
 margin:auto;
 padding:20px;
 }
 
-/* HERO */
-
 .hero{
 background:linear-gradient(90deg,#002D72,#C8102E);
 color:white;
-padding:28px;
+padding:30px;
 border-radius:20px;
 margin-bottom:16px;
-box-shadow:0 3px 10px rgba(0,0,0,0.15);
+text-align:center;
 }
 
-.hero h1{
-margin:0;
-font-size:36px;
-}
-
-.meta{
+.score{
+font-size:42px;
+font-weight:800;
 margin-top:10px;
-font-size:15px;
 }
 
-.meta span{
-margin-right:16px;
-font-weight:600;
-}
-
-/* CARD */
-
-.card{
+.details{
 background:white;
-padding:16px;
-border-radius:14px;
-margin-bottom:16px;
-box-shadow:0 2px 8px rgba(0,0,0,0.08);
-}
-
-.card h3{
-margin:0 0 12px;
-}
-
-/* TABLE */
-
-table{
-width:100%;
-border-collapse:collapse;
-}
-
-th,td{
-padding:8px;
-border-bottom:1px solid #eee;
-}
-
-th{
-background:#002D72;
-color:white;
-}
-
-tbody tr:nth-child(even){
-background:#eaf3ff;
-}
-
-.click{
-color:#0056d6;
-font-weight:700;
-cursor:pointer;
-}
-
-.right{text-align:right;}
-.center{text-align:center;}
-
-.loading{
-font-size:18px;
-color:#666;
+padding:20px;
+border-radius:12px;
+margin-top:16px;
 }
 
 .error{
-font-size:18px;
 color:red;
 font-weight:700;
+text-align:center;
+padding:20px;
 }
 
 </style>
+
 </head>
 <body>
+
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="baseball.html">Baseball</a>
+<a href="baseball-seasons.html">Seasons</a>
+<a href="baseball-player.html">Players</a>
+</div>
 
 <div class="page">
 
 <div class="hero">
 
-<h1 id="title" class="loading">Loading game...</h1>
+<div id="teams">Loading...</div>
 
-<div class="meta" id="meta"></div>
-
-</div>
-
-<div class="card">
-
-<h3>Linescore</h3>
-
-<table>
-<thead id="linescoreHead"></thead>
-<tbody id="linescoreBody"></tbody>
-</table>
+<div id="score" class="score"></div>
 
 </div>
 
-<div class="card">
-
-<h3>Batting</h3>
-
-<table>
-
-<thead>
-<tr>
-<th>Player</th>
-<th>Team</th>
-<th class="right">AB</th>
-<th class="right">H</th>
-<th class="right">RBI</th>
-<th class="right">HR</th>
-</tr>
-</thead>
-
-<tbody id="battingBody"></tbody>
-
-</table>
-
-</div>
-
-<div class="card">
-
-<h3>Pitching</h3>
-
-<table>
-
-<thead>
-<tr>
-<th>Pitcher</th>
-<th>Team</th>
-<th class="right">IP</th>
-<th class="right">ER</th>
-<th class="right">K</th>
-<th class="right">BB</th>
-</tr>
-</thead>
-
-<tbody id="pitchingBody"></tbody>
-
-</table>
-
-</div>
+<div id="details" class="details"></div>
 
 </div>
 
 <script>
 
-/* GET GAME ID */
-
 const params = new URLSearchParams(location.search);
-const id = params.get("id");
 
-if(!id){
+const gameId = params.get("id");
 
-document.getElementById("title").className="error";
-document.getElementById("title").textContent="Invalid Game ID";
+const teams = document.getElementById("teams");
+const score = document.getElementById("score");
+const details = document.getElementById("details");
+
+if(!gameId){
+
+teams.innerHTML =
+"<div class='error'>Game ID missing</div>";
+
 throw new Error("Missing ID");
 
 }
 
-/* BALLPARKS */
-
-let PARKS={};
-
-async function loadBallparks(){
-
-try{
-
-const res=await fetch("data/baseball/ballparks.csv?cache="+Date.now());
-
-const text=await res.text();
-
-const rows=text.split("\n");
-
-const headers=rows[0].split(",");
-
-const parkIndex=headers.indexOf("PARKID");
-const nameIndex=headers.indexOf("NAME");
-const cityIndex=headers.indexOf("CITY");
-const stateIndex=headers.indexOf("STATE");
-
-rows.slice(1).forEach(r=>{
-
-const cols=r.split(",");
-
-if(!cols[parkIndex])return;
-
-PARKS[cols[parkIndex]]={
-name:cols[nameIndex],
-city:cols[cityIndex],
-state:cols[stateIndex]
-};
-
-});
-
-}catch{}
-
-}
-
-function parkFull(code){
-
-if(!PARKS[code]) return code || "";
-
-const p=PARKS[code];
-
-return `${p.name} (${p.city}, ${p.state})`;
-
-}
-
-/* SAFE VALUE */
-
-function safe(v){
-
-return v===undefined||v===null?"":v;
-
-}
-
-/* LOAD GAME */
-
 async function loadGame(){
 
-await loadBallparks();
-
-let game;
-
 try{
 
-game=await fetch(
-`data/baseball/boxscores/${id}.json?cache=`+Date.now()
-).then(r=>r.json());
+const res =
+await fetch("data/baseball/boxscores/" + gameId + ".json");
 
-}catch{
+if(!res.ok)
+throw new Error("File not found");
 
-document.getElementById("title").className="error";
-document.getElementById("title").textContent="Game not found";
-return;
+const game =
+await res.json();
 
-}
+/* display */
 
-/* TITLE */
+teams.textContent =
+game.away_team + " @ " + game.home_team;
 
-document.getElementById("title").innerHTML=`
+score.textContent =
+game.away_score + " - " + game.home_score;
 
-<span class="click"
-onclick="location.href='baseball-team.html?team=${game.away_code}'">
-${game.away_team}
-</span>
-
-${safe(game.away_score)}
-
-–
-
-${safe(game.home_score)}
-
-<span class="click"
-onclick="location.href='baseball-team.html?team=${game.home_code}'">
-${game.home_team}
-</span>
-
-`;
-
-/* META */
-
-document.getElementById("meta").innerHTML=`
-
-<span>${safe(game.date)}</span>
-
-<span>${parkFull(game.venue)}</span>
-
-<span>Attendance: ${game.attendance?game.attendance.toLocaleString():""}</span>
-
-`;
-
-/* LINESCORE */
-
-if(game.linescore && game.linescore.innings){
-
-let head="<tr><th>Team</th>";
-
-game.linescore.innings.forEach((_,i)=>{
-head+=`<th class="center">${i+1}</th>`;
-});
-
-head+="<th class='center'>R</th></tr>";
-
-linescoreHead.innerHTML=head;
-
-let body="";
-
-body+=`<tr><td>${game.away_team}</td>`;
-
-game.linescore.innings.forEach(i=>{
-body+=`<td class="center">${safe(i.away)}</td>`;
-});
-
-body+=`<td class="center">${safe(game.away_score)}</td></tr>`;
-
-body+=`<tr><td>${game.home_team}</td>`;
-
-game.linescore.innings.forEach(i=>{
-body+=`<td class="center">${safe(i.home)}</td>`;
-});
-
-body+=`<td class="center">${safe(game.home_score)}</td></tr>`;
-
-linescoreBody.innerHTML=body;
+details.innerHTML =
+"Date: " + game.date +
+"<br>Venue: " + (game.venue || "Unknown");
 
 }
+catch(e){
 
-/* BATTING */
+teams.innerHTML =
+"<div class='error'>Game not found</div>";
 
-const bat=document.getElementById("battingBody");
+console.error(e);
 
-bat.innerHTML="";
-
-(game.batting||[]).forEach(p=>{
-
-bat.innerHTML+=`
-
-<tr>
-
-<td class="click"
-onclick="location.href='baseball-player.html?player=${encodeURIComponent(p.player)}'">
-${safe(p.player)}
-</td>
-
-<td class="click"
-onclick="location.href='baseball-team.html?team=${safe(p.team)}'">
-${safe(p.team)}
-</td>
-
-<td class="right">${safe(p.AB)}</td>
-<td class="right">${safe(p.H)}</td>
-<td class="right">${safe(p.RBI)}</td>
-<td class="right">${safe(p.HR)}</td>
-
-</tr>
-
-`;
-
-});
-
-/* PITCHING */
-
-const pit=document.getElementById("pitchingBody");
-
-pit.innerHTML="";
-
-(game.pitching||[]).forEach(p=>{
-
-pit.innerHTML+=`
-
-<tr>
-
-<td class="click"
-onclick="location.href='baseball-player.html?player=${encodeURIComponent(p.player)}'">
-${safe(p.player)}
-</td>
-
-<td class="click"
-onclick="location.href='baseball-team.html?team=${safe(p.team)}'">
-${safe(p.team)}
-</td>
-
-<td class="right">${safe(p.IP)}</td>
-<td class="right">${safe(p.ER)}</td>
-<td class="right">${safe(p.K)}</td>
-<td class="right">${safe(p.BB)}</td>
-
-</tr>
-
-`;
-
-});
+}
 
 }
 
