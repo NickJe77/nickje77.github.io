@@ -109,75 +109,51 @@ cursor:pointer;
 
 <script>
 
-async function loadSeason(){
+const params=new URLSearchParams(window.location.search);
 
-const params=new URLSearchParams(location.search);
-
-let season=params.get("season");
+const season=params.get("season");
 
 if(!season){
 
-alert("Missing season parameter.\nOpen like:\nbaseball-season.html?season=2022");
+alert("Open season using: baseball-season.html?season=1946");
 
-return;
+throw new Error("Missing season");
 
 }
 
 document.getElementById("title").textContent=season+" Season";
 
-// load season file list
-const indexUrl=`data/baseball/boxscores/${season}/index.json`;
-
-let fileList;
-
-try{
-
-const res=await fetch(indexUrl);
-
-fileList=await res.json();
-
-}catch{
-
-alert("Missing index.json in:\n"+indexUrl);
-
-return;
-
-}
+fetch(`data/baseball/seasons/${season}.json`)
+.then(res=>res.json())
+.then(games=>{
 
 const tbody=document.getElementById("tbody");
 
-for(const filename of fileList){
+games.forEach(game=>{
 
-const gameId=filename.replace(".json","");
-
-const res=await fetch(`data/baseball/boxscores/${season}/${filename}`);
-
-const game=await res.json();
+// THIS IS THE REAL ID — already matches filename
+const gameId = `${game.date}_${game.away_code}_${game.home_code}`;
 
 const tr=document.createElement("tr");
 
 tr.onclick=()=>{
 
-location.href=`baseball-game.html?id=${gameId}`;
+window.location.href=`baseball-game.html?id=${gameId}`;
 
 };
 
 tr.innerHTML=`
-
 <td>${game.date}</td>
 <td>${game.away_team}</td>
 <td>${game.home_team}</td>
 <td>${game.away_score} - ${game.home_score}</td>
-
 `;
 
 tbody.appendChild(tr);
 
-}
+});
 
-}
-
-loadSeason();
+});
 
 </script>
 
