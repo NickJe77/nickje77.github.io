@@ -43,20 +43,20 @@ margin-bottom:18px;
 text-align:center;
 }
 
-.hero .matchup{
+.matchup{
 font-size:42px;
 font-weight:900;
 }
 
-.hero .score{
+.score{
 font-size:72px;
-margin-top:8px;
 font-weight:900;
+margin-top:8px;
 }
 
-.hero .date{
-margin-top:6px;
+.date{
 font-size:18px;
+margin-top:6px;
 font-weight:700;
 }
 
@@ -68,25 +68,20 @@ box-shadow:0 4px 14px rgba(0,0,0,0.12);
 margin-bottom:18px;
 }
 
-.card h3{
-margin-top:0;
-}
-
 table{
 width:100%;
 border-collapse:collapse;
-margin-top:10px;
 }
 
 th{
 background:#002D72;
 color:#fff;
 padding:8px;
-text-align:left;
+text-align:center;
 }
 
 td{
-padding:6px;
+padding:8px;
 border-bottom:1px solid #eee;
 }
 
@@ -96,6 +91,16 @@ background:#f0f6ff;
 
 .linescore td{
 text-align:center;
+font-weight:600;
+}
+
+.linescore td:first-child{
+text-align:left;
+font-weight:700;
+}
+
+.player-table td{
+text-align:left;
 }
 
 </style>
@@ -133,34 +138,42 @@ text-align:center;
 </div>
 
 <div class="card">
-<h3 id="awayBattingTitle"></h3>
-<table>
-<thead><tr><th>Player</th></tr></thead>
-<tbody id="awayBatting"></tbody>
+<h3 id="awayBatTitle"></h3>
+<table class="player-table">
+<thead>
+<tr><th style="text-align:left">Player</th></tr>
+</thead>
+<tbody id="awayBat"></tbody>
 </table>
 </div>
 
 <div class="card">
-<h3 id="homeBattingTitle"></h3>
-<table>
-<thead><tr><th>Player</th></tr></thead>
-<tbody id="homeBatting"></tbody>
+<h3 id="homeBatTitle"></h3>
+<table class="player-table">
+<thead>
+<tr><th style="text-align:left">Player</th></tr>
+</thead>
+<tbody id="homeBat"></tbody>
 </table>
 </div>
 
 <div class="card">
 <h3 id="awayPitchTitle"></h3>
-<table>
-<thead><tr><th>Pitcher</th></tr></thead>
-<tbody id="awayPitching"></tbody>
+<table class="player-table">
+<thead>
+<tr><th style="text-align:left">Pitcher</th></tr>
+</thead>
+<tbody id="awayPitch"></tbody>
 </table>
 </div>
 
 <div class="card">
 <h3 id="homePitchTitle"></h3>
-<table>
-<thead><tr><th>Pitcher</th></tr></thead>
-<tbody id="homePitching"></tbody>
+<table class="player-table">
+<thead>
+<tr><th style="text-align:left">Pitcher</th></tr>
+</thead>
+<tbody id="homePitch"></tbody>
 </table>
 </div>
 
@@ -173,11 +186,24 @@ NYA:"New York Yankees",
 BOS:"Boston Red Sox"
 };
 
-function getName(code){
+function teamName(code){
 return TEAM_NAMES[code]||code;
 }
 
-function calculateLinescore(events){
+
+function playerName(id){
+
+const last=id.substring(0,5);
+const num=id.substring(5);
+
+return last.charAt(0).toUpperCase()
++last.slice(1)
++" #"+num;
+
+}
+
+
+function extractLinescore(events){
 
 const innings=[];
 let awayTotal=0;
@@ -191,51 +217,87 @@ const inning=parseInt(e[1]);
 const half=parseInt(e[2]);
 const desc=e[6]||"";
 
-const runs=(desc.match(/\.[123]-H/g)||[]).length
+const runs=
+(desc.match(/\.[123]-H/g)||[]).length
 +(desc.includes("HR")?1:0);
 
-if(!innings[inning]) innings[inning]={away:0,home:0};
+if(!innings[inning])
+innings[inning]={away:0,home:0};
 
 if(half===0){
+
 innings[inning].away+=runs;
 awayTotal+=runs;
-}
-else{
+
+}else{
+
 innings[inning].home+=runs;
 homeTotal+=runs;
-}
 
 }
 
-return {innings,awayTotal,homeTotal};
+}
+
+return{innings,awayTotal,homeTotal};
 
 }
+
 
 function extractPlayers(events){
 
 const awayBat=new Set();
 const homeBat=new Set();
 
+const awayPitch=new Set();
+const homePitch=new Set();
+
+let currentPitcher=null;
+
 for(const e of events){
 
-if(e[0]!=="play") continue;
+if(e[0]==="play"){
 
 const half=parseInt(e[2]);
-const player=e[3];
+const batter=e[3];
 
-if(half===0) awayBat.add(player);
-else homeBat.add(player);
+if(half===0)
+awayBat.add(playerName(batter));
+else
+homeBat.add(playerName(batter));
+
+}
+
+if(e[0]==="sub"){
+
+const player=e[3];
+const pos=e[4];
+
+if(pos==="1"){
+
+const team=e[2];
+
+if(team==="0")
+awayPitch.add(playerName(player));
+else
+homePitch.add(playerName(player));
+
+}
+
+}
 
 }
 
 return{
+
 awayBat:[...awayBat],
 homeBat:[...homeBat],
-awayPitch:["Multiple"],
-homePitch:["Multiple"]
+awayPitch:[...awayPitch],
+homePitch:[...homePitch]
+
 };
 
 }
+
 
 function extractInfo(events){
 
@@ -243,8 +305,7 @@ const info={};
 
 for(const e of events){
 
-if(e[0]!=="info") continue;
-
+if(e[0]==="info")
 info[e[1]]=e[2];
 
 }
@@ -253,59 +314,6 @@ return info;
 
 }
 
-async function loadGame(){
-
-const params=new URLSearchParams(location.search);
-const id=params.get("id");
-const year=id.substring(0,4);
-
-const res=await fetch(`data/baseball/boxscores/${year}/${id}.json`);
-const game=await res.json();
-
-const awayName=getName(game.away_code);
-const homeName=getName(game.home_code);
-
-const linescore=calculateLinescore(game.events);
-
-document.getElementById("matchup").textContent=
-`${awayName} @ ${homeName}`;
-
-document.getElementById("score").textContent=
-`${linescore.awayTotal} - ${linescore.homeTotal}`;
-
-document.getElementById("date").textContent=game.date;
-
-const info=extractInfo(game.events);
-
-document.getElementById("venue").textContent=
-"Venue: "+(info.site||"");
-
-document.getElementById("attendance").textContent=
-"Attendance: "+(info.attendance||"");
-
-buildLinescore(linescore,awayName,homeName);
-
-const players=extractPlayers(game.events);
-
-fillList("awayBatting",players.awayBat);
-fillList("homeBatting",players.homeBat);
-
-fillList("awayPitching",players.awayPitch);
-fillList("homePitching",players.homePitch);
-
-document.getElementById("awayBattingTitle").textContent=
-awayName+" Batting";
-
-document.getElementById("homeBattingTitle").textContent=
-homeName+" Batting";
-
-document.getElementById("awayPitchTitle").textContent=
-awayName+" Pitching";
-
-document.getElementById("homePitchTitle").textContent=
-homeName+" Pitching";
-
-}
 
 function buildLinescore(ls,away,home){
 
@@ -336,15 +344,73 @@ awayRow+homeRow;
 
 }
 
-function fillList(id,list){
 
-const tbody=document.getElementById(id);
+function fill(id,list){
+
+const el=document.getElementById(id);
 
 list.forEach(p=>{
-tbody.innerHTML+=`<tr><td>${p}</td></tr>`;
+el.innerHTML+=`<tr><td>${p}</td></tr>`;
 });
 
 }
+
+
+async function loadGame(){
+
+const params=new URLSearchParams(location.search);
+const id=params.get("id");
+const year=id.substring(0,4);
+
+const res=await fetch(`data/baseball/boxscores/${year}/${id}.json`);
+const game=await res.json();
+
+const away=teamName(game.away_code);
+const home=teamName(game.home_code);
+
+const ls=extractLinescore(game.events);
+
+document.getElementById("matchup").textContent=
+away+" @ "+home;
+
+document.getElementById("score").textContent=
+ls.awayTotal+" - "+ls.homeTotal;
+
+document.getElementById("date").textContent=
+game.date;
+
+const info=extractInfo(game.events);
+
+document.getElementById("venue").textContent=
+"Venue: "+(info.site||"");
+
+document.getElementById("attendance").textContent=
+"Attendance: "+(info.attendance||"");
+
+buildLinescore(ls,away,home);
+
+const players=extractPlayers(game.events);
+
+fill("awayBat",players.awayBat);
+fill("homeBat",players.homeBat);
+
+fill("awayPitch",players.awayPitch);
+fill("homePitch",players.homePitch);
+
+document.getElementById("awayBatTitle").textContent=
+away+" Batting";
+
+document.getElementById("homeBatTitle").textContent=
+home+" Batting";
+
+document.getElementById("awayPitchTitle").textContent=
+away+" Pitching";
+
+document.getElementById("homePitchTitle").textContent=
+home+" Pitching";
+
+}
+
 
 loadGame();
 
