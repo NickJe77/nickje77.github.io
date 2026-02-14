@@ -11,7 +11,6 @@ body{
 font-family:Inter,system-ui,Arial;
 margin:0;
 background:#f4f6f8;
-color:#111;
 }
 
 .navbar{
@@ -31,17 +30,15 @@ font-size:18px;
 }
 
 .page{
-max-width:1100px;
+max-width:1200px;
 margin:auto;
-padding:30px 20px;
+padding:25px;
 }
-
-/* HERO */
 
 .hero{
 background:linear-gradient(90deg,#002D72,#BA0C2F);
 color:white;
-padding:40px;
+padding:35px;
 border-radius:18px;
 text-align:center;
 box-shadow:0 4px 14px rgba(0,0,0,0.2);
@@ -64,8 +61,6 @@ margin-top:10px;
 opacity:0.9;
 }
 
-/* CARDS */
-
 .card{
 background:white;
 padding:18px;
@@ -77,8 +72,6 @@ box-shadow:0 2px 8px rgba(0,0,0,0.1);
 .card h2{
 margin-top:0;
 }
-
-/* TABLE */
 
 table{
 width:100%;
@@ -100,7 +93,11 @@ tbody tr:nth-child(even){
 background:#eaf3ff;
 }
 
-/* ERROR */
+.sectionTitle{
+font-size:22px;
+font-weight:700;
+margin-bottom:10px;
+}
 
 .error{
 background:white;
@@ -110,6 +107,12 @@ text-align:center;
 color:#c62828;
 font-size:22px;
 font-weight:700;
+}
+
+.grid2{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:20px;
 }
 
 </style>
@@ -129,24 +132,26 @@ font-weight:700;
 <div id="content">
 
 <div class="hero">
-
 <div id="teams" class="teams"></div>
-
 <div id="score" class="score"></div>
-
 <div id="date" class="date"></div>
-
 </div>
 
 <div id="linescoreCard" class="card"></div>
 
-<div id="battingAwayCard" class="card"></div>
+<div class="grid2">
 
-<div id="battingHomeCard" class="card"></div>
+<div id="awayBattingCard" class="card"></div>
+<div id="homeBattingCard" class="card"></div>
 
-<div id="pitchingAwayCard" class="card"></div>
+</div>
 
-<div id="pitchingHomeCard" class="card"></div>
+<div class="grid2">
+
+<div id="awayPitchingCard" class="card"></div>
+<div id="homePitchingCard" class="card"></div>
+
+</div>
 
 </div>
 
@@ -154,73 +159,36 @@ font-weight:700;
 
 <script>
 
-/* GET GAME ID */
-
 const params = new URLSearchParams(location.search);
-const gameId = params.get("id");
-
-if(!gameId){
-
-document.getElementById("content").innerHTML =
-"<div class='error'>Missing Game ID</div>";
-
-throw new Error();
-
-}
-
-/* ELEMENTS */
+const id = params.get("id");
 
 const teamsEl = document.getElementById("teams");
 const scoreEl = document.getElementById("score");
 const dateEl = document.getElementById("date");
 
-const linescoreCard = document.getElementById("linescoreCard");
+if(!id){
 
-const battingAwayCard = document.getElementById("battingAwayCard");
-const battingHomeCard = document.getElementById("battingHomeCard");
+document.getElementById("content").innerHTML =
+"<div class='error'>Game ID missing</div>";
 
-const pitchingAwayCard = document.getElementById("pitchingAwayCard");
-const pitchingHomeCard = document.getElementById("pitchingHomeCard");
-
-/* TEAM MAP */
-
-let teamMap = {};
-
-async function loadTeams(){
-
-const res = await fetch("/data/baseball/teams.json");
-
-const teams = await res.json();
-
-teams.forEach(t=>{
-teamMap[t.code] = t.name;
-});
+throw new Error();
 
 }
-
-/* LOAD GAME */
 
 async function loadGame(){
 
 try{
 
-await loadTeams();
+const year = id.substring(0,4);
 
-const year = gameId.substring(0,4);
+const res =
+await fetch(`/data/baseball/boxscores/${year}/${id}.json`);
 
-const path =
-"/data/baseball/boxscores/" +
-year + "/" +
-gameId + ".json";
-
-const res = await fetch(path);
-
-if(!res.ok)
-throw new Error();
+if(!res.ok) throw new Error();
 
 const game = await res.json();
 
-renderGame(game);
+render(game);
 
 }catch{
 
@@ -231,20 +199,10 @@ document.getElementById("content").innerHTML =
 
 }
 
-/* RENDER */
-
-function renderGame(game){
-
-const awayName =
-teamMap[game.away_code] || game.away_code;
-
-const homeName =
-teamMap[game.home_code] || game.home_code;
-
-/* HERO */
+function render(game){
 
 teamsEl.textContent =
-awayName + " @ " + homeName;
+game.away_team + " @ " + game.home_team;
 
 scoreEl.textContent =
 game.away_score + " - " + game.home_score;
@@ -252,134 +210,130 @@ game.away_score + " - " + game.home_score;
 dateEl.textContent =
 game.date;
 
-/* LINE SCORE */
+/* LINESCORE */
 
-if(game.linescore){
+if(game.innings){
 
 let html =
-"<h2>Line Score</h2><table>";
+"<div class='sectionTitle'>Linescore</div>";
 
-html += "<tr><th></th>";
+html += "<table><tr><th>Team</th>";
 
-game.linescore.away.forEach((_,i)=>{
-html += "<th>" + (i+1) + "</th>";
+game.innings.forEach((_,i)=>{
+html += "<th>"+(i+1)+"</th>";
 });
 
 html += "<th>R</th></tr>";
 
-html += "<tr><td>"+awayName+"</td>";
+html += "<tr><td>"+game.away_team+"</td>";
 
-game.linescore.away.forEach(v=>{
-html += "<td>"+v+"</td>";
+game.innings.forEach(i=>{
+html += "<td>"+i.away+"</td>";
 });
 
 html += "<td>"+game.away_score+"</td></tr>";
 
-html += "<tr><td>"+homeName+"</td>";
+html += "<tr><td>"+game.home_team+"</td>";
 
-game.linescore.home.forEach(v=>{
-html += "<td>"+v+"</td>";
+game.innings.forEach(i=>{
+html += "<td>"+i.home+"</td>";
 });
 
 html += "<td>"+game.home_score+"</td></tr>";
 
 html += "</table>";
 
-linescoreCard.innerHTML = html;
+document.getElementById("linescoreCard").innerHTML = html;
 
 }
 
-/* BATTING */
+/* SPLIT BATTING */
 
-renderBatting(
-battingAwayCard,
-awayName,
-game.batting_away
-);
+if(game.batters){
 
-renderBatting(
-battingHomeCard,
-homeName,
-game.batting_home
-);
+const away =
+game.batters.filter(p=>p.team===game.away_code);
 
-/* PITCHING */
+const home =
+game.batters.filter(p=>p.team===game.home_code);
 
-renderPitching(
-pitchingAwayCard,
-awayName,
-game.pitching_away
-);
+renderBatting("awayBattingCard",game.away_team,away);
 
-renderPitching(
-pitchingHomeCard,
-homeName,
-game.pitching_home
-);
+renderBatting("homeBattingCard",game.home_team,home);
 
 }
 
-/* BATTING TABLE */
+/* SPLIT PITCHING */
 
-function renderBatting(card, team, data){
+if(game.pitchers){
 
-if(!data) return;
+const away =
+game.pitchers.filter(p=>p.team===game.away_code);
+
+const home =
+game.pitchers.filter(p=>p.team===game.home_code);
+
+renderPitching("awayPitchingCard",game.away_team,away);
+
+renderPitching("homePitchingCard",game.home_team,home);
+
+}
+
+}
+
+function renderBatting(id,title,data){
 
 let html =
-"<h2>"+team+" Batting</h2><table>";
+"<div class='sectionTitle'>"+title+" Batting</div>";
+
+html += "<table>";
 
 html +=
-"<tr><th>Player</th><th>AB</th><th>R</th><th>H</th><th>RBI</th></tr>";
+"<tr><th>Player</th><th>AB</th><th>H</th><th>RBI</th></tr>";
 
 data.forEach(p=>{
 
-html += "<tr>";
-
-html += "<td>"+p.player+"</td>";
-html += "<td>"+p.ab+"</td>";
-html += "<td>"+p.r+"</td>";
-html += "<td>"+p.h+"</td>";
-html += "<td>"+p.rbi+"</td>";
-
-html += "</tr>";
+html +=
+"<tr>"+
+"<td>"+p.name+"</td>"+
+"<td>"+(p.ab||"")+"</td>"+
+"<td>"+(p.h||"")+"</td>"+
+"<td>"+(p.rbi||"")+"</td>"+
+"</tr>";
 
 });
 
 html += "</table>";
 
-card.innerHTML = html;
+document.getElementById(id).innerHTML = html;
 
 }
 
-/* PITCHING TABLE */
-
-function renderPitching(card, team, data){
-
-if(!data) return;
+function renderPitching(id,title,data){
 
 let html =
-"<h2>"+team+" Pitching</h2><table>";
+"<div class='sectionTitle'>"+title+" Pitching</div>";
+
+html += "<table>";
 
 html +=
-"<tr><th>Pitcher</th><th>IP</th><th>H</th><th>R</th><th>SO</th></tr>";
+"<tr><th>Pitcher</th><th>IP</th><th>H</th><th>R</th></tr>";
 
 data.forEach(p=>{
 
-html += "<tr>";
-
-html += "<td>"+p.pitcher+"</td>";
-html += "<td>"+p.ip+"</td>";
-html += "<td>"+p.h+"</td>";
-html += "<td>"+p.r+"</td>";
-html += "<td>"+p.so+"</td>";
-
-html += "</tr>";
+html +=
+"<tr>"+
+"<td>"+p.name+"</td>"+
+"<td>"+(p.ip||"")+"</td>"+
+"<td>"+(p.h||"")+"</td>"+
+"<td>"+(p.r||"")+"</td>"+
+"</tr>";
 
 });
 
 html += "</table>";
 
-card.innerHTML = html;
+document.getElementById(id).innerHTML = html;
 
 }
 
