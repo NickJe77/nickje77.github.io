@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>MLB Seasons | The Sporting Almanac</title>
+<title>MLB Season | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -42,25 +42,33 @@ border-radius:20px;
 margin-bottom:20px;
 }
 
-.grid{
-display:grid;
-grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
-gap:12px;
-}
-
-.tile{
+table{
+width:100%;
+border-collapse:collapse;
 background:#fff;
-border-radius:14px;
-padding:18px;
-text-align:center;
-font-weight:700;
-font-size:18px;
-cursor:pointer;
-box-shadow:0 4px 12px rgba(0,0,0,0.1);
+border-radius:16px;
+overflow:hidden;
 }
 
-.tile:hover{
+th{
+background:#002D72;
+color:#fff;
+padding:12px;
+text-align:left;
+}
+
+td{
+padding:10px;
+border-bottom:1px solid #eee;
+}
+
+tr:nth-child(even){
+background:#f0f6ff;
+}
+
+tr:hover{
 background:#e3efff;
+cursor:pointer;
 }
 
 </style>
@@ -78,10 +86,24 @@ background:#e3efff;
 <div class="page">
 
 <div class="hero">
-<h1>MLB Seasons</h1>
+<h1 id="title">Loading Season...</h1>
 </div>
 
-<div id="grid" class="grid"></div>
+<table>
+
+<thead>
+<tr>
+<th>Date</th>
+<th>Away</th>
+<th>Home</th>
+<th>Score</th>
+</tr>
+</thead>
+
+<tbody id="tbody">
+</tbody>
+
+</table>
 
 </div>
 
@@ -91,44 +113,82 @@ const owner="nickje77";
 const repo="nickje77.github.io";
 const branch="main";
 
-async function loadSeasons(){
+async function loadSeason(){
+
+const params=new URLSearchParams(window.location.search);
+const season=params.get("season");
+
+if(!season){
+alert("Missing season parameter");
+return;
+}
+
+document.getElementById("title").textContent=season+" Season";
 
 const api=
-`https://api.github.com/repos/${owner}/${repo}/contents/docs/data/baseball/boxscores?ref=${branch}`;
+`https://api.github.com/repos/${owner}/${repo}/contents/docs/data/baseball/boxscores/${season}?ref=${branch}`;
 
 const res=await fetch(api);
 
-const folders=await res.json();
+if(!res.ok){
+alert("Season folder not found");
+return;
+}
 
-const grid=document.getElementById("grid");
+const files=await res.json();
 
-folders
-.filter(f=>f.type==="dir")
-.sort((a,b)=>b.name-a.name)
-.forEach(folder=>{
+const tbody=document.getElementById("tbody");
 
-const season=folder.name;
+for(const file of files){
 
-const div=document.createElement("div");
+if(!file.name.endsWith(".json")) continue;
 
-div.className="tile";
+const id=file.name.replace(".json","");
 
-div.textContent=season;
+const gameRes=await fetch(file.download_url);
 
-div.onclick=()=>{
+const game=await gameRes.json();
 
+// FULL TEAM NAMES
+const awayName=game.away_team || game.visiting_team || game.away || "";
+const homeName=game.home_team || game.home || "";
+
+// SCORES
+const awayScore=
+game.away_score ??
+game.visitor_score ??
+game.runs_away ??
+game.away_runs ??
+"";
+
+const homeScore=
+game.home_score ??
+game.home_score ??
+game.runs_home ??
+game.home_runs ??
+"";
+
+const tr=document.createElement("tr");
+
+tr.onclick=()=>{
 window.location.href=
-`https://thesportingalmanac.com/baseball-season.html?season=${season}`;
-
+`baseball-game.html?id=${id}`;
 };
 
-grid.appendChild(div);
+tr.innerHTML=`
+<td>${game.date}</td>
+<td>${awayName}</td>
+<td>${homeName}</td>
+<td>${awayScore} - ${homeScore}</td>
+`;
 
-});
+tbody.appendChild(tr);
 
 }
 
-loadSeasons();
+}
+
+loadSeason();
 
 </script>
 
