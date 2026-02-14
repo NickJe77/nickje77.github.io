@@ -8,67 +8,67 @@
 <style>
 
 body{
-font-family:Inter,system-ui,Arial;
-margin:0;
-background:#f4f6f8;
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:#f4f6f8;
 }
 
 .navbar{
-display:flex;
-justify-content:center;
-gap:24px;
-padding:16px;
-background:#fff;
-border-bottom:1px solid #ddd;
-font-weight:700;
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px;
+  background:#fff;
+  border-bottom:1px solid #ddd;
+  font-weight:700;
 }
 
 .navbar a{
-text-decoration:none;
-color:#0056d6;
+  text-decoration:none;
+  color:#0056d6;
 }
 
 .page{
-max-width:1200px;
-margin:auto;
-padding:20px;
+  max-width:1200px;
+  margin:auto;
+  padding:20px;
 }
 
 .hero{
-background:linear-gradient(90deg,#002D72,#C8102E);
-color:#fff;
-padding:30px;
-border-radius:20px;
-margin-bottom:20px;
+  background:linear-gradient(90deg,#002D72,#C8102E);
+  color:#fff;
+  padding:30px;
+  border-radius:20px;
+  margin-bottom:20px;
 }
 
 table{
-width:100%;
-border-collapse:collapse;
-background:#fff;
-border-radius:16px;
-overflow:hidden;
+  width:100%;
+  border-collapse:collapse;
+  background:#fff;
+  border-radius:16px;
+  overflow:hidden;
 }
 
 th{
-background:#002D72;
-color:#fff;
-padding:12px;
-text-align:left;
+  background:#002D72;
+  color:#fff;
+  padding:12px;
+  text-align:left;
 }
 
 td{
-padding:10px;
-border-bottom:1px solid #eee;
+  padding:10px;
+  border-bottom:1px solid #eee;
 }
 
 tr:nth-child(even){
-background:#f0f6ff;
+  background:#f0f6ff;
 }
 
 tr:hover{
-background:#e3efff;
-cursor:pointer;
+  background:#e3efff;
+  cursor:pointer;
 }
 
 </style>
@@ -77,16 +77,16 @@ cursor:pointer;
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="baseball.html">Baseball</a>
-<a href="baseball-seasons.html">Seasons</a>
-<a href="baseball-player.html">Players</a>
+  <a href="index.html">Home</a>
+  <a href="baseball.html">Baseball</a>
+  <a href="baseball-seasons.html">Seasons</a>
+  <a href="baseball-player.html">Players</a>
 </div>
 
 <div class="page">
 
 <div class="hero">
-<h1 id="title">Loading Season...</h1>
+  <h1 id="title">Loading Season...</h1>
 </div>
 
 <table>
@@ -113,78 +113,106 @@ const owner="nickje77";
 const repo="nickje77.github.io";
 const branch="main";
 
+function getAwayName(game){
+  return game.away_team ||
+         game.awayTeam ||
+         game.away?.name ||
+         game.teams?.away?.name ||
+         game.visitor?.name ||
+         game.visitor_team ||
+         game.away ||
+         "";
+}
+
+function getHomeName(game){
+  return game.home_team ||
+         game.homeTeam ||
+         game.home?.name ||
+         game.teams?.home?.name ||
+         game.home?.team ||
+         game.home ||
+         "";
+}
+
+function getAwayScore(game){
+  return game.away_score ??
+         game.awayScore ??
+         game.visitor_score ??
+         game.visitorScore ??
+         game.runs_away ??
+         game.away_runs ??
+         game.linescore?.teams?.away?.runs ??
+         "";
+}
+
+function getHomeScore(game){
+  return game.home_score ??
+         game.homeScore ??
+         game.runs_home ??
+         game.home_runs ??
+         game.linescore?.teams?.home?.runs ??
+         "";
+}
+
 async function loadSeason(){
 
-const params=new URLSearchParams(window.location.search);
-const season=params.get("season");
+  const params=new URLSearchParams(window.location.search);
+  const season=params.get("season");
 
-if(!season){
-alert("Missing season parameter");
-return;
-}
+  if(!season){
+    alert("Missing season parameter");
+    return;
+  }
 
-document.getElementById("title").textContent=season+" Season";
+  document.getElementById("title").textContent=season+" Season";
 
-const api=
-`https://api.github.com/repos/${owner}/${repo}/contents/docs/data/baseball/boxscores/${season}?ref=${branch}`;
+  const api=
+  `https://api.github.com/repos/${owner}/${repo}/contents/docs/data/baseball/boxscores/${season}?ref=${branch}`;
 
-const res=await fetch(api);
+  const res=await fetch(api);
 
-if(!res.ok){
-alert("Season folder not found");
-return;
-}
+  if(!res.ok){
+    alert("Season not found");
+    return;
+  }
 
-const files=await res.json();
+  const files=await res.json();
 
-const tbody=document.getElementById("tbody");
+  files.sort((a,b)=>a.name.localeCompare(b.name));
 
-for(const file of files){
+  const tbody=document.getElementById("tbody");
 
-if(!file.name.endsWith(".json")) continue;
+  for(const file of files){
 
-const id=file.name.replace(".json","");
+    if(!file.name.endsWith(".json")) continue;
 
-const gameRes=await fetch(file.download_url);
+    const id=file.name.replace(".json","");
 
-const game=await gameRes.json();
+    const gameRes=await fetch(file.download_url);
+    const game=await gameRes.json();
 
-// FULL TEAM NAMES
-const awayName=game.away_team || game.visiting_team || game.away || "";
-const homeName=game.home_team || game.home || "";
+    const awayName=getAwayName(game);
+    const homeName=getHomeName(game);
 
-// SCORES
-const awayScore=
-game.away_score ??
-game.visitor_score ??
-game.runs_away ??
-game.away_runs ??
-"";
+    const awayScore=getAwayScore(game);
+    const homeScore=getHomeScore(game);
 
-const homeScore=
-game.home_score ??
-game.home_score ??
-game.runs_home ??
-game.home_runs ??
-"";
+    const tr=document.createElement("tr");
 
-const tr=document.createElement("tr");
+    tr.onclick=()=>{
+      window.location.href=`baseball-game.html?id=${id}`;
+    };
 
-tr.onclick=()=>{
-window.location.href=
-`baseball-game.html?id=${id}`;
-};
+    tr.innerHTML=`
+      <td>${game.date || ""}</td>
+      <td>${awayName}</td>
+      <td>${homeName}</td>
+      <td>${awayScore} - ${homeScore}</td>
+    `;
 
-tr.innerHTML=`
-<td>${game.date}</td>
-<td>${awayName}</td>
-<td>${homeName}</td>
-<td>${awayScore} - ${homeScore}</td>
-`;
+    tbody.appendChild(tr);
 
-tbody.appendChild(tr);
-
-}
+  }
 
 }
 
