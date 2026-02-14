@@ -84,7 +84,7 @@ tr:hover{
 <div class="page">
 
 <div class="hero">
-<h1 id="title">Loading Season...</h1>
+<h1 id="title">Season</h1>
 </div>
 
 <table>
@@ -107,104 +107,50 @@ tr:hover{
 
 <script>
 
-const owner="nickje77";
-const repo="nickje77.github.io";
-const branch="main";
-
-// TEAM CODE → FULL NAME MAP
-const TEAM_NAMES = {
-  "HOM":"Homestead Grays",
-  "NY6":"New York Giants",
-  "CCR":"Cleveland Buckeyes",
-  "KCM":"Kansas City Monarchs",
-  "BRO":"Brooklyn Dodgers",
-  "BSN":"Boston Braves",
-  "NYA":"New York Yankees",
-  "BOS":"Boston Red Sox",
-  "CHN":"Chicago Cubs",
-  "CHA":"Chicago White Sox",
-  "SLN":"St Louis Cardinals",
-  "SLA":"St Louis Browns",
-  "DET":"Detroit Tigers",
-  "CLE":"Cleveland Indians",
-  "PHA":"Philadelphia Athletics",
-  "PHI":"Philadelphia Phillies",
-  "PIT":"Pittsburgh Pirates",
-  "CIN":"Cincinnati Reds",
-  "LAN":"Los Angeles Dodgers",
-  "SFN":"San Francisco Giants",
-  "NYN":"New York Mets",
-  "ATL":"Atlanta Braves"
-};
-
-function getTeamName(code){
-  return TEAM_NAMES[code] || code;
-}
-
 async function loadSeason(){
 
-  const params=new URLSearchParams(window.location.search);
-  const season=params.get("season");
+const params=new URLSearchParams(window.location.search);
+const season=params.get("season");
 
-  if(!season){
-    alert("Missing season parameter");
-    return;
-  }
+if(!season){
+alert("Missing season parameter");
+return;
+}
 
-  document.getElementById("title").textContent=season+" Season";
+document.getElementById("title").textContent=season+" Season";
 
-  const api=
-  `https://api.github.com/repos/${owner}/${repo}/contents/docs/data/baseball/boxscores/${season}?ref=${branch}`;
+// THIS IS YOUR ORIGINAL WORKING FILE
+const res=await fetch(`data/baseball/seasons/${season}.json`);
 
-  const res=await fetch(api);
+if(!res.ok){
+alert("Season file not found: data/baseball/seasons/"+season+".json");
+return;
+}
 
-  const files=await res.json();
+const games=await res.json();
 
-  files.sort((a,b)=>a.name.localeCompare(b.name));
+const tbody=document.getElementById("tbody");
 
-  const tbody=document.getElementById("tbody");
+games.forEach(game=>{
 
-  for(const file of files){
+const id=`${game.date}_${game.away_code}_${game.home_code}`;
 
-    if(!file.name.endsWith(".json")) continue;
+const tr=document.createElement("tr");
 
-    const id=file.name.replace(".json","");
+tr.onclick=()=>{
+window.location.href=`baseball-game.html?id=${id}`;
+};
 
-    const gameRes=await fetch(file.download_url);
-    const game=await gameRes.json();
+tr.innerHTML=`
+<td>${game.date}</td>
+<td>${game.away_team}</td>
+<td>${game.home_team}</td>
+<td>${game.away_score} - ${game.home_score}</td>
+`;
 
-    const awayCode=game.away_code;
-    const homeCode=game.home_code;
+tbody.appendChild(tr);
 
-    const awayName=getTeamName(awayCode);
-    const homeName=getTeamName(homeCode);
-
-    const awayScore=
-      game.away_score ??
-      game.linescore?.away ??
-      "";
-
-    const homeScore=
-      game.home_score ??
-      game.linescore?.home ??
-      "";
-
-    const tr=document.createElement("tr");
-
-    tr.onclick=()=>{
-      window.location.href=`baseball-game.html?id=${id}`;
-    };
-
-    tr.innerHTML=`
-      <td>${game.date}</td>
-      <td>${awayName}</td>
-      <td>${homeName}</td>
-      <td>${awayScore} - ${homeScore}</td>
-    `;
-
-    tbody.appendChild(tr);
-
-  }
+});
 
 }
 
