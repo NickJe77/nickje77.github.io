@@ -107,38 +107,56 @@ cursor:pointer;
 
 <script>
 
+async function loadSeason(){
+
 const params=new URLSearchParams(window.location.search);
 
 const season=params.get("season");
 
 if(!season){
 
-alert("Missing season parameter.\nExample:\nbaseball-season.html?season=1946");
+alert("Open with: baseball-season.html?season=1946");
 
-throw new Error("Missing season");
+return;
 
 }
 
 document.getElementById("title").textContent=season+" Season";
 
-fetch(`data/baseball/seasons/${season}.json`)
-.then(res=>res.json())
-.then(games=>{
+// THIS FILE MUST EXIST — list of filenames
+const indexUrl=`data/baseball/boxscores/${season}/index.json`;
+
+let fileList;
+
+try{
+
+const res=await fetch(indexUrl);
+
+fileList=await res.json();
+
+}catch{
+
+alert("Missing index.json in "+indexUrl);
+
+return;
+
+}
 
 const tbody=document.getElementById("tbody");
 
-games.forEach(game=>{
+for(const file of fileList){
 
-// CORRECT ORDER — AWAY FIRST, HOME SECOND
-const gameId=
-game.date+"_"+game.away_code+"_"+game.home_code;
+const id=file.replace(".json","");
+
+const res=await fetch(`data/baseball/boxscores/${season}/${file}`);
+
+const game=await res.json();
 
 const tr=document.createElement("tr");
 
 tr.onclick=()=>{
 
-window.location.href=
-"baseball-game.html?id="+gameId;
+window.location.href=`baseball-game.html?id=${id}`;
 
 };
 
@@ -151,9 +169,11 @@ tr.innerHTML=`
 
 tbody.appendChild(tr);
 
-});
+}
 
-});
+}
+
+loadSeason();
 
 </script>
 
