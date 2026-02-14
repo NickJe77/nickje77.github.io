@@ -14,13 +14,11 @@ background:#f4f6f8;
 color:#111;
 }
 
-/* NAV */
-
 .navbar{
 display:flex;
 justify-content:center;
 gap:28px;
-padding:18px 0;
+padding:18px;
 background:white;
 border-bottom:1px solid #ddd;
 font-weight:600;
@@ -32,10 +30,8 @@ color:#0056d6;
 font-size:18px;
 }
 
-/* PAGE */
-
 .page{
-max-width:1000px;
+max-width:1100px;
 margin:auto;
 padding:30px 20px;
 }
@@ -46,38 +42,65 @@ padding:30px 20px;
 background:linear-gradient(90deg,#002D72,#BA0C2F);
 color:white;
 padding:40px;
-border-radius:20px;
+border-radius:18px;
 text-align:center;
 box-shadow:0 4px 14px rgba(0,0,0,0.2);
 }
 
-.teams{
+.hero .teams{
 font-size:34px;
 font-weight:700;
 }
 
-.score{
+.hero .score{
 font-size:64px;
 font-weight:800;
 margin-top:10px;
 }
 
-.subtitle{
+.hero .date{
 font-size:18px;
-opacity:0.9;
 margin-top:10px;
+opacity:0.9;
 }
 
-/* META */
+/* CARDS */
 
-.meta{
+.card{
 background:white;
-padding:20px;
+padding:18px;
 border-radius:14px;
 margin-top:20px;
-font-size:18px;
-box-shadow:0 2px 8px rgba(0,0,0,0.12);
+box-shadow:0 2px 8px rgba(0,0,0,0.1);
 }
+
+.card h2{
+margin-top:0;
+}
+
+/* TABLE */
+
+table{
+width:100%;
+border-collapse:collapse;
+}
+
+th,td{
+padding:8px;
+border-bottom:1px solid #eee;
+text-align:left;
+}
+
+th{
+background:#002D72;
+color:white;
+}
+
+tbody tr:nth-child(even){
+background:#eaf3ff;
+}
+
+/* ERROR */
 
 .error{
 background:white;
@@ -107,15 +130,23 @@ font-weight:700;
 
 <div class="hero">
 
-<div id="teams" class="teams">Loading...</div>
+<div id="teams" class="teams"></div>
 
 <div id="score" class="score"></div>
 
-<div id="subtitle" class="subtitle"></div>
+<div id="date" class="date"></div>
 
 </div>
 
-<div id="meta" class="meta"></div>
+<div id="linescoreCard" class="card"></div>
+
+<div id="battingAwayCard" class="card"></div>
+
+<div id="battingHomeCard" class="card"></div>
+
+<div id="pitchingAwayCard" class="card"></div>
+
+<div id="pitchingHomeCard" class="card"></div>
 
 </div>
 
@@ -123,46 +154,47 @@ font-weight:700;
 
 <script>
 
-/* ELEMENTS */
-
-const teamsEl = document.getElementById("teams");
-const scoreEl = document.getElementById("score");
-const subtitleEl = document.getElementById("subtitle");
-const metaEl = document.getElementById("meta");
-const content = document.getElementById("content");
-
 /* GET GAME ID */
 
 const params = new URLSearchParams(location.search);
-
 const gameId = params.get("id");
 
 if(!gameId){
 
-content.innerHTML =
-"<div class='error'>Missing game ID</div>";
+document.getElementById("content").innerHTML =
+"<div class='error'>Missing Game ID</div>";
 
 throw new Error();
 
 }
 
-/* LOAD TEAM NAMES */
+/* ELEMENTS */
+
+const teamsEl = document.getElementById("teams");
+const scoreEl = document.getElementById("score");
+const dateEl = document.getElementById("date");
+
+const linescoreCard = document.getElementById("linescoreCard");
+
+const battingAwayCard = document.getElementById("battingAwayCard");
+const battingHomeCard = document.getElementById("battingHomeCard");
+
+const pitchingAwayCard = document.getElementById("pitchingAwayCard");
+const pitchingHomeCard = document.getElementById("pitchingHomeCard");
+
+/* TEAM MAP */
+
+let teamMap = {};
 
 async function loadTeams(){
 
-const res =
-await fetch("/data/baseball/teams.json");
+const res = await fetch("/data/baseball/teams.json");
 
-const teams =
-await res.json();
-
-const map = {};
+const teams = await res.json();
 
 teams.forEach(t=>{
-map[t.code] = t.name;
+teamMap[t.code] = t.name;
 });
-
-return map;
 
 }
 
@@ -172,6 +204,8 @@ async function loadGame(){
 
 try{
 
+await loadTeams();
+
 const year = gameId.substring(0,4);
 
 const path =
@@ -179,25 +213,35 @@ const path =
 year + "/" +
 gameId + ".json";
 
-const res =
-await fetch(path);
+const res = await fetch(path);
 
 if(!res.ok)
 throw new Error();
 
-const game =
-await res.json();
+const game = await res.json();
 
-const teamMap =
-await loadTeams();
+renderGame(game);
+
+}catch{
+
+document.getElementById("content").innerHTML =
+"<div class='error'>Game not found</div>";
+
+}
+
+}
+
+/* RENDER */
+
+function renderGame(game){
 
 const awayName =
-teamMap[game.away_code] || game.away_team;
+teamMap[game.away_code] || game.away_code;
 
 const homeName =
-teamMap[game.home_code] || game.home_team;
+teamMap[game.home_code] || game.home_code;
 
-/* DISPLAY */
+/* HERO */
 
 teamsEl.textContent =
 awayName + " @ " + homeName;
@@ -205,21 +249,137 @@ awayName + " @ " + homeName;
 scoreEl.textContent =
 game.away_score + " - " + game.home_score;
 
-subtitleEl.textContent =
+dateEl.textContent =
 game.date;
 
-metaEl.innerHTML =
-"<b>Date:</b> " + game.date +
-"<br><b>Season:</b> " + game.season +
-"<br><b>Venue:</b> " + (game.venue || "Unknown");
+/* LINE SCORE */
+
+if(game.linescore){
+
+let html =
+"<h2>Line Score</h2><table>";
+
+html += "<tr><th></th>";
+
+game.linescore.away.forEach((_,i)=>{
+html += "<th>" + (i+1) + "</th>";
+});
+
+html += "<th>R</th></tr>";
+
+html += "<tr><td>"+awayName+"</td>";
+
+game.linescore.away.forEach(v=>{
+html += "<td>"+v+"</td>";
+});
+
+html += "<td>"+game.away_score+"</td></tr>";
+
+html += "<tr><td>"+homeName+"</td>";
+
+game.linescore.home.forEach(v=>{
+html += "<td>"+v+"</td>";
+});
+
+html += "<td>"+game.home_score+"</td></tr>";
+
+html += "</table>";
+
+linescoreCard.innerHTML = html;
 
 }
-catch{
 
-content.innerHTML =
-"<div class='error'>Game not found</div>";
+/* BATTING */
+
+renderBatting(
+battingAwayCard,
+awayName,
+game.batting_away
+);
+
+renderBatting(
+battingHomeCard,
+homeName,
+game.batting_home
+);
+
+/* PITCHING */
+
+renderPitching(
+pitchingAwayCard,
+awayName,
+game.pitching_away
+);
+
+renderPitching(
+pitchingHomeCard,
+homeName,
+game.pitching_home
+);
 
 }
+
+/* BATTING TABLE */
+
+function renderBatting(card, team, data){
+
+if(!data) return;
+
+let html =
+"<h2>"+team+" Batting</h2><table>";
+
+html +=
+"<tr><th>Player</th><th>AB</th><th>R</th><th>H</th><th>RBI</th></tr>";
+
+data.forEach(p=>{
+
+html += "<tr>";
+
+html += "<td>"+p.player+"</td>";
+html += "<td>"+p.ab+"</td>";
+html += "<td>"+p.r+"</td>";
+html += "<td>"+p.h+"</td>";
+html += "<td>"+p.rbi+"</td>";
+
+html += "</tr>";
+
+});
+
+html += "</table>";
+
+card.innerHTML = html;
+
+}
+
+/* PITCHING TABLE */
+
+function renderPitching(card, team, data){
+
+if(!data) return;
+
+let html =
+"<h2>"+team+" Pitching</h2><table>";
+
+html +=
+"<tr><th>Pitcher</th><th>IP</th><th>H</th><th>R</th><th>SO</th></tr>";
+
+data.forEach(p=>{
+
+html += "<tr>";
+
+html += "<td>"+p.pitcher+"</td>";
+html += "<td>"+p.ip+"</td>";
+html += "<td>"+p.h+"</td>";
+html += "<td>"+p.r+"</td>";
+html += "<td>"+p.so+"</td>";
+
+html += "</tr>";
+
+});
+
+html += "</table>";
+
+card.innerHTML = html;
 
 }
 
