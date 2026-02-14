@@ -2,73 +2,112 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>MLB Season | The Sporting Almanac</title>
+<title>MLB Game | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 
 body{
-font-family:Inter,system-ui,Arial;
-margin:0;
-background:#f4f6f8;
+  font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,Arial;
+  margin:0;
+  background:#f4f6f8;
+  color:#111;
 }
 
 .navbar{
-display:flex;
-justify-content:center;
-gap:24px;
-padding:16px;
-background:#fff;
-border-bottom:1px solid #ddd;
-font-weight:700;
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px 0;
+  background:#fff;
+  border-bottom:1px solid #ddd;
+  font-weight:700;
 }
 
 .navbar a{
-text-decoration:none;
-color:#0056d6;
+  text-decoration:none;
+  color:#0056d6;
+}
+
+.navbar a:hover{
+  text-decoration:underline;
 }
 
 .page{
-max-width:1200px;
-margin:auto;
-padding:20px;
+  max-width:1200px;
+  margin:22px auto;
+  padding:0 18px 40px;
 }
 
 .hero{
-background:linear-gradient(90deg,#002D72,#C8102E);
-color:#fff;
-padding:30px;
-border-radius:20px;
-margin-bottom:20px;
+  background:linear-gradient(90deg,#002D72,#C8102E);
+  color:#fff;
+  padding:34px 26px;
+  border-radius:22px;
+  box-shadow:0 10px 26px rgba(0,0,0,0.18);
+  margin-bottom:16px;
+  text-align:center;
 }
 
-table{
-width:100%;
-border-collapse:collapse;
-background:#fff;
-border-radius:16px;
-overflow:hidden;
+.matchup{
+  font-size:44px;
+  font-weight:900;
 }
 
-th{
-background:#002D72;
-color:#fff;
-padding:12px;
-text-align:left;
+.score{
+  font-size:78px;
+  font-weight:900;
+  margin-top:10px;
 }
 
-td{
-padding:10px;
-border-bottom:1px solid #eee;
+.date{
+  margin-top:8px;
+  font-size:20px;
+  font-weight:700;
 }
 
-tr:nth-child(even){
-background:#f0f6ff;
+.grid{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:14px;
 }
 
-tr:hover{
-background:#e3efff;
-cursor:pointer;
+.card{
+  background:#fff;
+  border-radius:18px;
+  padding:16px;
+  box-shadow:0 6px 18px rgba(0,0,0,0.10);
+}
+
+.card h3{
+  margin-top:0;
+}
+
+.kv{
+  display:grid;
+  grid-template-columns:140px 1fr;
+  gap:8px;
+}
+
+.errorBox{
+  background:#fff;
+  padding:20px;
+  border-radius:18px;
+  border:2px solid #e53935;
+  font-weight:900;
+  text-align:center;
+  margin-top:20px;
+}
+
+.debug{
+  margin-top:12px;
+  font-family:monospace;
+  font-size:12px;
+  background:#0b1020;
+  color:#d7e3ff;
+  padding:12px;
+  border-radius:12px;
+  white-space:pre-wrap;
 }
 
 </style>
@@ -77,92 +116,225 @@ cursor:pointer;
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="baseball.html">Baseball</a>
-<a href="baseball-seasons.html">Seasons</a>
-<a href="baseball-player.html">Players</a>
+  <a href="index.html">Home</a>
+  <a href="baseball.html">Baseball</a>
+  <a href="baseball-seasons.html">Seasons</a>
+  <a href="baseball-player.html">Players</a>
 </div>
 
 <div class="page">
 
 <div class="hero">
-<h1 id="title">Loading season...</h1>
+  <div class="matchup" id="matchup">Loading game...</div>
+  <div class="score" id="score">—</div>
+  <div class="date" id="dateLine"></div>
 </div>
 
-<table>
+<div id="content" class="grid" style="display:none;">
 
-<thead>
-<tr>
-<th>Date</th>
-<th>Away</th>
-<th>Home</th>
-<th>Score</th>
-</tr>
-</thead>
+<div class="card">
 
-<tbody id="tbody">
-</tbody>
+<h3>Game Info</h3>
 
-</table>
+<div class="kv">
+<div>Date</div><div id="infoDate"></div>
+<div>Season</div><div id="infoSeason"></div>
+<div>Venue</div><div id="infoVenue"></div>
+<div>Attendance</div><div id="infoAtt"></div>
+<div>Length</div><div id="infoLen"></div>
+</div>
+
+</div>
+
+<div class="card">
+
+<h3>Teams</h3>
+
+<div class="kv">
+<div>Away</div><div id="awayTeam"></div>
+<div>Home</div><div id="homeTeam"></div>
+<div>Away Code</div><div id="awayCode"></div>
+<div>Home Code</div><div id="homeCode"></div>
+</div>
+
+</div>
+
+<div class="card" style="grid-column:1/-1;">
+<h3>Debug</h3>
+<div class="debug" id="debug"></div>
+</div>
+
+</div>
+
+<div id="error"></div>
 
 </div>
 
 <script>
 
-async function load(){
+const params = new URLSearchParams(location.search);
+const id = params.get("id");
 
-let params=new URLSearchParams(location.search);
+const el = x=>document.getElementById(x);
 
-let season=params.get("season");
+function showError(message, debug){
 
-// DEFAULT if missing
-if(!season){
+el("content").style.display="none";
 
-const res=await fetch("data/baseball/seasons/index.json");
+el("error").innerHTML=
+`<div class="errorBox">${message}</div>
+<div class="debug">${debug}</div>`;
 
-const list=await res.json();
-
-season=list[list.length-1];
-
-}
-
-document.getElementById("title").textContent=season+" Season";
-
-const res=await fetch(`data/baseball/seasons/${season}.json`);
-
-const games=await res.json();
-
-const tbody=document.getElementById("tbody");
-
-games.forEach(game=>{
-
-const id=
-`${game.date}_${game.away_code}_${game.home_code}`;
-
-const tr=document.createElement("tr");
-
-tr.onclick=()=>{
-
-location.href=`baseball-game.html?id=${id}`;
-
-};
-
-tr.innerHTML=`
-
-<td>${game.date}</td>
-<td>${game.away_team}</td>
-<td>${game.home_team}</td>
-<td>${game.away_score} - ${game.home_score}</td>
-
-`;
-
-tbody.appendChild(tr);
-
-});
+el("matchup").textContent="Game not found";
+el("score").textContent="—";
+el("dateLine").textContent="";
 
 }
 
-load();
+async function loadGame(){
+
+if(!id){
+
+showError("Missing game id","No id parameter provided");
+
+return;
+
+}
+
+const yearMatch=id.match(/(19|20)\d{2}/);
+
+if(!yearMatch){
+
+showError("Invalid id format",id);
+
+return;
+
+}
+
+const year=yearMatch[0];
+
+const paths=[
+
+`data/baseball/boxscores/${year}/${id}.json`,
+`data/baseball/boxscores/${id}.json`,
+`data/baseball/games/${year}/${id}.json`,
+`data/baseball/games/${id}.json`
+
+];
+
+let game=null;
+
+let debug="Trying paths:\n\n";
+
+for(const path of paths){
+
+try{
+
+debug+=path+"\n";
+
+const response=await fetch(path);
+
+if(response.ok){
+
+game=await response.json();
+
+debug+="FOUND\n";
+
+break;
+
+}else{
+
+debug+="404\n";
+
+}
+
+}catch(e){
+
+debug+="ERROR\n";
+
+}
+
+}
+
+if(!game){
+
+showError("Game not found",debug);
+
+return;
+
+}
+
+const away=
+game.away_team ||
+game.away ||
+game.visitor ||
+"Unknown";
+
+const home=
+game.home_team ||
+game.home ||
+"Unknown";
+
+const awayScore=
+game.away_score ??
+game.runs_away ??
+game.visitor_score ??
+"";
+
+const homeScore=
+game.home_score ??
+game.runs_home ??
+"";
+
+el("matchup").textContent=`${away} @ ${home}`;
+
+el("score").textContent=
+awayScore!=="" && homeScore!==""
+? `${awayScore} - ${homeScore}`
+: "—";
+
+el("dateLine").textContent=
+game.date || "";
+
+el("infoDate").textContent=
+game.date || "";
+
+el("infoSeason").textContent=
+game.season || year;
+
+el("infoVenue").textContent=
+game.venue ||
+game.park ||
+"";
+
+el("infoAtt").textContent=
+game.attendance || "";
+
+el("infoLen").textContent=
+game.game_length_minutes
+? game.game_length_minutes+" min"
+: "";
+
+el("awayTeam").textContent=away;
+el("homeTeam").textContent=home;
+
+el("awayCode").textContent=
+game.away_code ||
+"";
+
+el("homeCode").textContent=
+game.home_code ||
+"";
+
+el("debug").textContent=debug;
+
+el("content").style.display="grid";
+
+el("error").innerHTML="";
+
+}
+
+loadGame();
 
 </script>
 
