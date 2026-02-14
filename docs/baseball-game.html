@@ -3,54 +3,115 @@
 <head>
 <meta charset="UTF-8">
 <title>MLB Game | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 
 body{
-font-family:Inter,system-ui;
-background:#f4f6f8;
+font-family:Inter,system-ui,Arial;
 margin:0;
+background:#f4f6f8;
+color:#111;
 }
+
+/* NAVBAR */
+
+.navbar{
+display:flex;
+justify-content:center;
+gap:28px;
+padding:18px 0;
+background:white;
+border-bottom:1px solid #ddd;
+font-weight:600;
+}
+
+.navbar a{
+text-decoration:none;
+color:#0056d6;
+font-size:18px;
+}
+
+.navbar a:hover{
+text-decoration:underline;
+}
+
+/* PAGE */
 
 .page{
 max-width:1000px;
 margin:auto;
-padding:20px;
+padding:30px 20px;
 }
 
+/* HERO */
+
 .hero{
-background:linear-gradient(90deg,#002D72,#C8102E);
+background:linear-gradient(90deg,#002D72,#BA0C2F);
 color:white;
-padding:30px;
-border-radius:16px;
+padding:40px;
+border-radius:20px;
 text-align:center;
+box-shadow:0 4px 14px rgba(0,0,0,0.2);
+}
+
+.teams{
+font-size:32px;
+font-weight:700;
 }
 
 .score{
-font-size:48px;
+font-size:56px;
 font-weight:800;
 margin-top:10px;
 }
 
+/* META */
+
+.meta{
+background:white;
+padding:20px;
+border-radius:14px;
+margin-top:20px;
+font-size:18px;
+box-shadow:0 2px 8px rgba(0,0,0,0.12);
+}
+
+/* ERROR */
+
 .error{
-color:red;
-text-align:center;
+background:white;
 padding:40px;
+border-radius:14px;
+text-align:center;
+color:#c62828;
+font-size:22px;
 font-weight:700;
+box-shadow:0 2px 8px rgba(0,0,0,0.12);
 }
 
 </style>
-
 </head>
+
 <body>
+
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="baseball.html">Baseball</a>
+<a href="baseball-seasons.html">Seasons</a>
+<a href="baseball-player.html">Players</a>
+</div>
 
 <div class="page">
 
+<div id="content">
+
 <div class="hero">
-
-<div id="teams">Loading...</div>
-
+<div id="teams" class="teams">Loading game...</div>
 <div id="score" class="score"></div>
+</div>
+
+<div id="meta" class="meta"></div>
 
 </div>
 
@@ -58,51 +119,74 @@ font-weight:700;
 
 <script>
 
+/* GET GAME ID */
+
 const params = new URLSearchParams(location.search);
 
 const gameId = params.get("id");
 
+/* ELEMENTS */
+
+const teamsEl = document.getElementById("teams");
+const scoreEl = document.getElementById("score");
+const metaEl = document.getElementById("meta");
+const content = document.getElementById("content");
+
+/* VALIDATE */
+
 if(!gameId){
 
-document.body.innerHTML =
-"<div class='error'>Missing game ID</div>";
+content.innerHTML =
+"<div class='error'>Game ID missing</div>";
 
-throw new Error();
+throw new Error("Missing game ID");
 
 }
+
+/* LOAD GAME */
 
 async function loadGame(){
 
 try{
 
-/* absolute path — THIS FIXES IT */
+const year = gameId.substring(0,4);
+
 const path =
-"/data/baseball/boxscores/" + gameId + ".json";
+"/data/baseball/boxscores/" +
+year + "/" +
+gameId + ".json";
 
 console.log("Loading:", path);
 
-const res =
-await fetch(path);
+const res = await fetch(path);
 
 if(!res.ok)
-throw new Error("Not found");
+throw new Error("File not found");
 
-const game =
-await res.json();
+const game = await res.json();
 
-document.getElementById("teams").textContent =
+/* DISPLAY */
+
+teamsEl.textContent =
 game.away_team + " @ " + game.home_team;
 
-document.getElementById("score").textContent =
+scoreEl.textContent =
 game.away_score + " - " + game.home_score;
 
+metaEl.innerHTML =
+"<b>Date:</b> " + game.date +
+"<br><b>Season:</b> " + game.season +
+"<br><b>Away:</b> " + game.away_team +
+"<br><b>Home:</b> " + game.home_team +
+"<br><b>Venue:</b> " + (game.venue || "Unknown");
+
 }
-catch(e){
+catch(err){
 
-document.body.innerHTML =
+console.error(err);
+
+content.innerHTML =
 "<div class='error'>Game not found<br>"+gameId+"</div>";
-
-console.error(e);
 
 }
 
