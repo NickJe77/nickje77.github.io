@@ -38,7 +38,44 @@ body{
   color:#fff;
   padding:30px;
   border-radius:20px;
-  margin-bottom:20px;
+  margin-bottom:14px;
+}
+
+.controls{
+  background:#fff;
+  border-radius:16px;
+  padding:14px;
+  margin-bottom:14px;
+  display:flex;
+  gap:12px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+.controls label{
+  font-weight:700;
+}
+
+.controls input{
+  padding:8px 10px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  font-size:14px;
+  min-width:200px;
+}
+
+.controls button{
+  padding:8px 14px;
+  border-radius:8px;
+  border:none;
+  background:#0056d6;
+  color:#fff;
+  font-weight:700;
+  cursor:pointer;
+}
+
+.controls button:hover{
+  background:#003ea3;
 }
 
 table{
@@ -87,6 +124,19 @@ tr:hover{
 <h1 id="title">Season</h1>
 </div>
 
+<div class="controls">
+<label>Team 1:</label>
+<input list="teamList" id="team1" placeholder="Select team">
+
+<label>Team 2:</label>
+<input list="teamList" id="team2" placeholder="Select team">
+
+<button onclick="applyFilter()">Search</button>
+<button onclick="clearFilter()">Clear</button>
+
+<datalist id="teamList"></datalist>
+</div>
+
 <table>
 
 <thead>
@@ -107,6 +157,8 @@ tr:hover{
 
 <script>
 
+let allGames = [];
+
 async function loadSeason(){
 
 const params=new URLSearchParams(window.location.search);
@@ -119,17 +171,44 @@ return;
 
 document.getElementById("title").textContent=season+" Season";
 
-// THIS IS YOUR ORIGINAL WORKING FILE
 const res=await fetch(`data/baseball/seasons/${season}.json`);
 
 if(!res.ok){
-alert("Season file not found: data/baseball/seasons/"+season+".json");
+alert("Season file not found");
 return;
 }
 
-const games=await res.json();
+allGames=await res.json();
+
+populateTeams(allGames);
+renderGames(allGames);
+
+}
+
+function populateTeams(games){
+
+const set=new Set();
+
+games.forEach(g=>{
+set.add(g.away_team);
+set.add(g.home_team);
+});
+
+const list=document.getElementById("teamList");
+list.innerHTML="";
+
+[...set].sort().forEach(team=>{
+const option=document.createElement("option");
+option.value=team;
+list.appendChild(option);
+});
+
+}
+
+function renderGames(games){
 
 const tbody=document.getElementById("tbody");
+tbody.innerHTML="";
 
 games.forEach(game=>{
 
@@ -151,6 +230,40 @@ tr.innerHTML=`
 tbody.appendChild(tr);
 
 });
+
+}
+
+function applyFilter(){
+
+const t1=document.getElementById("team1").value;
+const t2=document.getElementById("team2").value;
+
+const filtered=allGames.filter(g=>{
+
+if(t1 && t2){
+return (
+(g.away_team===t1 && g.home_team===t2) ||
+(g.away_team===t2 && g.home_team===t1)
+);
+}
+
+if(t1){
+return g.away_team===t1 || g.home_team===t1;
+}
+
+return true;
+
+});
+
+renderGames(filtered);
+
+}
+
+function clearFilter(){
+
+document.getElementById("team1").value="";
+document.getElementById("team2").value="";
+renderGames(allGames);
 
 }
 
