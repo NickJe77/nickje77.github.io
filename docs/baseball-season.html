@@ -73,6 +73,7 @@ cursor:pointer;
 
 </style>
 </head>
+
 <body>
 
 <div class="navbar">
@@ -107,60 +108,55 @@ cursor:pointer;
 
 <script>
 
+const owner = "nickje77";
+const repo = "nickje77.github.io";
+const branch = "main";
+
 async function loadSeason(){
 
-const params=new URLSearchParams(window.location.search);
-
-const season=params.get("season");
+const params = new URLSearchParams(window.location.search);
+const season = params.get("season");
 
 if(!season){
-
 alert("Open with: baseball-season.html?season=1946");
-
 return;
-
 }
 
-document.getElementById("title").textContent=season+" Season";
+document.getElementById("title").textContent = season + " Season";
 
-// THIS FILE MUST EXIST — list of filenames
-const indexUrl=`data/baseball/boxscores/${season}/index.json`;
+// get file list from GitHub API
+const apiUrl =
+`https://api.github.com/repos/${owner}/${repo}/contents/docs/data/baseball/boxscores/${season}?ref=${branch}`;
 
-let fileList;
+const fileRes = await fetch(apiUrl);
 
-try{
-
-const res=await fetch(indexUrl);
-
-fileList=await res.json();
-
-}catch{
-
-alert("Missing index.json in "+indexUrl);
-
+if(!fileRes.ok){
+alert("Season folder not found: " + season);
 return;
-
 }
 
-const tbody=document.getElementById("tbody");
+const files = await fileRes.json();
 
-for(const file of fileList){
+const tbody = document.getElementById("tbody");
 
-const id=file.replace(".json","");
+for(const file of files){
 
-const res=await fetch(`data/baseball/boxscores/${season}/${file}`);
+if(!file.name.endsWith(".json")) continue;
 
-const game=await res.json();
+const id = file.name.replace(".json","");
 
-const tr=document.createElement("tr");
+const gameRes = await fetch(file.download_url);
 
-tr.onclick=()=>{
+const game = await gameRes.json();
 
-window.location.href=`baseball-game.html?id=${id}`;
+const tr = document.createElement("tr");
 
+tr.onclick = () => {
+window.location.href =
+`baseball-game.html?id=${id}`;
 };
 
-tr.innerHTML=`
+tr.innerHTML = `
 <td>${game.date}</td>
 <td>${game.away_team}</td>
 <td>${game.home_team}</td>
