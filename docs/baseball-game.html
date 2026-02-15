@@ -8,32 +8,22 @@
 <style>
 body{font-family:Inter,Arial;margin:0;background:#eef2f7}
 .page{max-width:1200px;margin:auto;padding:20px}
-
 .hero{
 background:linear-gradient(90deg,#0b2a6f,#c8102e);
 color:white;padding:30px;border-radius:16px;text-align:center;margin-bottom:20px
 }
-
 .score{font-size:48px;font-weight:bold}
-
-.meta{
-margin-top:10px;
-font-weight:600;
-opacity:.9
-}
-
+.meta{margin-top:6px;font-weight:600}
 .card{
 background:white;padding:16px;margin-bottom:20px;border-radius:12px;
 box-shadow:0 2px 6px rgba(0,0,0,.1)
 }
-
-table{width:100%;border-collapse:collapse}
-
-th{background:#123a7a;color:white;padding:8px}
-
-td{padding:8px}
-
-tr:nth-child(even){background:#eef3fb}
+.error{
+background:#ffdddd;
+padding:15px;
+border-radius:10px;
+font-weight:bold
+}
 </style>
 
 </head>
@@ -45,58 +35,51 @@ tr:nth-child(even){background:#eef3fb}
 
 <script>
 
-let players={};
+let players = {};
 
-const TEAM_NAMES={
+function showError(msg){
+document.getElementById("content").innerHTML =
+"<div class='error'>" + msg + "</div>";
+}
 
-"NYA":"New York Yankees",
-"NYN":"New York Giants",
-"NY6":"New York Giants",
+async function loadPlayers(){
 
-"BOS":"Boston Red Sox",
-"BSN":"Boston Braves",
+try{
 
-"HOM":"Homestead Grays",
+const res = await fetch("data/baseball/players.json");
 
-"PHA":"Philadelphia Athletics",
-"PHI":"Philadelphia Phillies",
+if(!res.ok) throw "players.json not found";
 
-"BRO":"Brooklyn Dodgers",
+players = await res.json();
 
-"CHC":"Chicago Cubs",
-"CHA":"Chicago White Sox",
+}catch(e){
 
-"DET":"Detroit Tigers",
-"CLE":"Cleveland Indians",
+console.log(e);
+players = {};
 
-"SLN":"St Louis Cardinals",
-"SLB":"St Louis Browns"
-
-};
-
-function teamName(code){
-
-return TEAM_NAMES[code]||code;
+}
 
 }
 
 function playerName(id){
 
-return players[id]?.name||players[id]?.full_name||id;
+if(players[id]){
+
+if(typeof players[id]=="string") return players[id];
+
+if(players[id].name) return players[id].name;
+
+if(players[id].full_name) return players[id].full_name;
 
 }
 
-async function loadPlayers(){
-
-const res=await fetch("data/baseball/players.json");
-
-players=await res.json();
+return id;
 
 }
 
 function getFile(){
 
-const p=new URLSearchParams(location.search);
+const p = new URLSearchParams(location.search);
 
 return p.get("file");
 
@@ -104,120 +87,113 @@ return p.get("file");
 
 async function loadGame(){
 
+try{
+
 await loadPlayers();
 
-const file=getFile();
+const file = getFile();
 
-const year=file.substring(0,4);
+if(!file) throw "Missing file parameter";
 
-const res=await fetch("data/baseball/boxscores/"+year+"/"+file+".json");
+const year = file.substring(0,4);
 
-const game=await res.json();
+const path = "data/baseball/boxscores/" + year + "/" + file + ".json";
+
+const res = await fetch(path);
+
+if(!res.ok) throw "Game file not found: " + path;
+
+const game = await res.json();
 
 render(game);
+
+}catch(e){
+
+showError(e);
+
+}
 
 }
 
 function render(game){
 
-const batting={home:{},away:{}};
+let score = {home:0, away:0};
 
-const pitchers={home:new Set(),away:new Set()};
+let batting = {home:{}, away:{}};
 
-let score={home:0,away:0};
+for(const e of game.events || []){
 
-for(const e of game.events){
+if(e[0]!="play") continue;
 
-if(e[0]!="play")continue;
+const side = e[2]=="0"?"away":"home";
 
-const side=e[2]=="0"?"away":"home";
+const batter = e[3];
 
-const batter=e[3];
+const result = e[6] || "";
 
-const pitcher=e[5];
+if(!batting[side][batter]){
 
-const result=e[6];
+batting[side][batter]={
 
-if(!batting[side][batter])
-batting[side][batter]={Player:playerName(batter),AB:0,H:0,BB:0,SO:0};
+Player:playerName(batter),
+AB:0,
+H:0
 
-const s=batting[side][batter];
+};
 
-s.AB++;
+}
 
-if(result.startsWith("S")||result.startsWith("D")||result.startsWith("T")||result.startsWith("HR"))
-s.H++;
+batting[side][batter].AB++;
 
-if(result.startsWith("W"))
-s.BB++;
-
-if(result.startsWith("K"))
-s.SO++;
+if(result.startsWith("S") ||
+result.startsWith("D") ||
+result.startsWith("T") ||
+result.startsWith("HR"))
+batting[side][batter].H++;
 
 if(result.includes("-H"))
 score[side]++;
 
-if(pitcher) pitchers[side=="home"?"away":"home"].add(playerName(pitcher));
+}
+
+let html = "<div class='hero'>" +
+"<h1>" + (game.away_team || game.away_code) +
+" @ " +
+(game.home_team || game.home_code) +
+"</h1>" +
+"<div class='score'>" +
+score.away + " - " + score.home +
+"</div>" +
+"<div class='meta'>" + game.date + "</div>" +
+"<div class='meta'>Venue: " + (game.venue || "Unknown") + "</div>" +
+"</div>";
+
+html += buildTable("Away Batting", batting.away);
+html += buildTable("Home Batting", batting.home);
+
+document.getElementById("content").innerHTML = html;
 
 }
 
-let html=`
-<div class="hero">
-<h1>${teamName(game.away_code)} @ ${teamName(game.home_code)}</h1>
-<div class="score">${score.away} - ${score.home}</div>
-<div class="meta">${game.date}</div>
-<div class="meta">Venue: ${game.venue||"Unknown"}</div>
-<div class="meta">Attendance: ${game.attendance||"—"}</div>
-</div>
-`;
+function buildTable(title, data){
 
-html+=table("Away Batting",Object.values(batting.away));
+let html = "<div class='card'><h3>" + title + "</h3><table>";
 
-html+=table("Home Batting",Object.values(batting.home));
+html += "<tr><th>Player</th><th>AB</th><th>H</th></tr>";
 
-html+=pitchTable("Away Pitchers",Array.from(pitchers.away));
+for(const p in data){
 
-html+=pitchTable("Home Pitchers",Array.from(pitchers.home));
+const r = data[p];
 
-content.innerHTML=html;
+html += "<tr>" +
+"<td>" + r.Player + "</td>" +
+"<td>" + r.AB + "</td>" +
+"<td>" + r.H + "</td>" +
+"</tr>";
 
 }
 
-function table(title,data){
-
-let html=`<div class="card"><h3>${title}</h3><table>
-<tr><th>Player</th><th>AB</th><th>H</th><th>BB</th><th>SO</th></tr>`;
-
-for(const r of data){
-
-html+=`<tr>
-<td>${r.Player}</td>
-<td>${r.AB}</td>
-<td>${r.H}</td>
-<td>${r.BB}</td>
-<td>${r.SO}</td>
-</tr>`;
-
-}
-
-html+="</table></div>";
-
-return html;
-
-}
-
-function pitchTable(title,data){
-
-let html=`<div class="card"><h3>${title}</h3><table>
-<tr><th>Pitcher</th></tr>`;
-
-for(const p of data){
-
-html+=`<tr><td>${p}</td></tr>`;
-
-}
-
-html+="</table></div>";
+html += "</table></div>";
 
 return html;
 
