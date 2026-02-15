@@ -6,11 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{
-font-family:Inter,system-ui,Arial;
-margin:0;
-background:#f4f6f8;
-}
+body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
 
 .navbar{
 display:flex;
@@ -160,63 +156,22 @@ margin-top:6px;
 
 </div>
 
-
-<div class="section">
-
-<h2>Pitching</h2>
-
-<div class="split">
-
-<div>
-<div id="awayPitchTitle" class="teamTitle"></div>
-<table>
-<thead>
-<tr>
-<th>Pitcher</th>
-<th>IP</th>
-<th>H</th>
-<th>BB</th>
-<th>SO</th>
-</tr>
-</thead>
-<tbody id="awayPitch"></tbody>
-</table>
-</div>
-
-<div>
-<div id="homePitchTitle" class="teamTitle"></div>
-<table>
-<thead>
-<tr>
-<th>Pitcher</th>
-<th>IP</th>
-<th>H</th>
-<th>BB</th>
-<th>SO</th>
-</tr>
-</thead>
-<tbody id="homePitch"></tbody>
-</table>
-</div>
-
-</div>
-
-</div>
-
-
 </div>
 
 <script>
 
 const params=new URLSearchParams(location.search)
 const id=params.get("id")
-const year=id.substring(0,4)
 
+if(!id){
+document.body.innerHTML="<h2>Missing game id</h2>"
+throw ""
+}
+
+const year=id.substring(0,4)
 const GAME_PATH=`data/baseball/boxscores/${year}/${id}.json`
 
-let players={}
-let teams={}
-let parks={}
+let players={},teams={},parks={}
 
 async function loadLookups(){
 
@@ -226,12 +181,8 @@ teams=await fetch("data/baseball/teams.json").then(r=>r.json())
 const csv=await fetch("data/baseball/ballparks.csv").then(r=>r.text())
 
 csv.split("\n").forEach(line=>{
-
-const parts=line.split(",")
-
-if(parts.length>1)
-parks[parts[0]]=parts[1]
-
+const p=line.split(",")
+if(p.length>1) parks[p[0]]=p[1]
 })
 
 }
@@ -245,7 +196,7 @@ if(!p) return id
 if(typeof p==="string") return p
 if(p.name) return p.name
 if(p.full_name) return p.full_name
-if(p.nameFirst&&p.nameLast) return p.nameFirst+" "+p.nameLast
+if(p.nameFirst) return p.nameFirst+" "+p.nameLast
 
 return id
 
@@ -266,15 +217,7 @@ return code
 }
 
 function plink(id){
-
 return `<a class="playerLink" href="baseball-player.html?id=${id}">${pname(id)}</a>`
-
-}
-
-function ip(outs){
-
-return Math.floor(outs/3)+"."+(outs%3)
-
 }
 
 async function loadGame(){
@@ -292,42 +235,10 @@ document.getElementById("date").textContent=game.date
 document.getElementById("awayName").textContent=away
 document.getElementById("homeName").textContent=home
 
-document.getElementById("awayPitchTitle").textContent=away
-document.getElementById("homePitchTitle").textContent=home
-
-/* venue from game_id */
-
 const parkCode=game.game_id.substring(0,3)
-
-document.getElementById("venue").textContent=
-"Venue: "+(parks[parkCode]||parkCode)
-
-
-/* batting */
+document.getElementById("venue").textContent="Venue: "+(parks[parkCode]||parkCode)
 
 const awayBat={},homeBat={}
-
-/* pitching */
-
-const awayPitch={},homePitch={}
-
-let awayPitcher=null
-let homePitcher=null
-
-
-/* detect starting pitchers */
-
-game.events.forEach(e=>{
-
-if(e[0]==="start" && e[5]==="1"){
-
-if(e[3]==="0") awayPitcher=e[1]
-else homePitcher=e[1]
-
-}
-
-})
-
 
 game.events.forEach(e=>{
 
@@ -335,7 +246,7 @@ if(e[0]!=="play") return
 
 const team=e[2]
 const batter=e[3]
-const ev=e[6]
+const ev=e[6]||""
 
 const bat=team==="0"?awayBat:homeBat
 
@@ -344,36 +255,25 @@ bat[batter]={pa:0,h:0,bb:0,so:0,hr:0}
 
 bat[batter].pa++
 
-if(/^S|^D|^T|^HR/.test(ev)) bat[batter].h++
-if(/^W/.test(ev)) bat[batter].bb++
-if(/^K/.test(ev)) bat[batter].so++
-if(/^HR/.test(ev)) bat[batter].hr++
+if(ev.startsWith("S")||ev.startsWith("D")||ev.startsWith("T")||ev.startsWith("HR"))
+bat[batter].h++
 
+if(ev.startsWith("W"))
+bat[batter].bb++
 
-/* pitching stats */
+if(ev.startsWith("K"))
+bat[batter].so++
 
-const pid=team==="0"?homePitcher:awayPitcher
-
-if(!pid) return
-
-const pitch=team==="0"?homePitch:awayPitch
-
-if(!pitch[pid])
-pitch[pid]={outs:0,h:0,bb:0,so:0}
-
-if(/^S|^D|^T|^HR/.test(ev)) pitch[pid].h++
-else if(/^W/.test(ev)) pitch[pid].bb++
-else if(/^K/.test(ev)){ pitch[pid].so++; pitch[pid].outs++ }
-else pitch[pid].outs++
+if(ev.startsWith("HR"))
+bat[batter].hr++
 
 })
 
-
-/* render batting */
-
-function renderBat(id,data){
+function render(id,data){
 
 const tbody=document.getElementById(id)
+
+tbody.innerHTML=""
 
 Object.entries(data).forEach(([pid,s])=>{
 
@@ -392,35 +292,8 @@ tbody.innerHTML+=`
 
 }
 
-
-/* render pitching */
-
-function renderPitch(id,data){
-
-const tbody=document.getElementById(id)
-
-Object.entries(data).forEach(([pid,s])=>{
-
-tbody.innerHTML+=`
-<tr>
-<td>${plink(pid)}</td>
-<td>${ip(s.outs)}</td>
-<td>${s.h}</td>
-<td>${s.bb}</td>
-<td>${s.so}</td>
-</tr>
-`
-
-})
-
-}
-
-
-renderBat("awayBat",awayBat)
-renderBat("homeBat",homeBat)
-
-renderPitch("awayPitch",awayPitch)
-renderPitch("homePitch",homePitch)
+render("awayBat",awayBat)
+render("homeBat",homeBat)
 
 }
 
