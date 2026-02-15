@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
+
 body{
 font-family:Inter,system-ui,Arial;
 margin:0;
@@ -62,9 +63,11 @@ color:red;
 text-align:center;
 padding:40px;
 }
+
 </style>
 
 </head>
+
 <body>
 
 <div class="page">
@@ -73,17 +76,17 @@ padding:40px;
 
 <script>
 
-function getFileName(){
+function getFile(){
 
-const params=new URLSearchParams(location.search);
+const p=new URLSearchParams(location.search);
 
-return params.get("file") || params.get("id") || params.get("game");
+return p.get("file") || p.get("id") || p.get("game");
 
 }
 
 async function load(){
 
-const file=getFileName();
+const file=getFile();
 
 if(!file){
 
@@ -97,11 +100,9 @@ const year=file.substring(0,4);
 
 const path="data/baseball/boxscores/"+year+"/"+file+".json";
 
-try{
+const res=await fetch(path);
 
-const response=await fetch(path);
-
-if(!response.ok){
+if(!res.ok){
 
 showError("Game not found");
 
@@ -109,37 +110,51 @@ return;
 
 }
 
-const game=await response.json();
+const game=await res.json();
 
 render(game);
-
-}catch{
-
-showError("Failed to load game");
-
-}
 
 }
 
 function render(game){
 
+const away=game.away_code;
+const home=game.home_code;
+
+let awayScore="";
+let homeScore="";
+
+if(game.linescore){
+
+awayScore=game.linescore.away ?? "";
+homeScore=game.linescore.home ?? "";
+
+}
+
+else if(game.score){
+
+awayScore=game.score.away ?? "";
+homeScore=game.score.home ?? "";
+
+}
+
 let html=`
 <div class="hero">
-<h1>${game.away_code} ${game.away_score} - ${game.home_score} ${game.home_code}</h1>
+<h1>${away} ${awayScore} - ${homeScore} ${home}</h1>
 <div>${game.date}</div>
 </div>
 `;
 
-html+=renderTable(game.awayBatTitle,game.awayBatting);
-html+=renderTable(game.homeBatTitle,game.homeBatting);
-html+=renderTable(game.awayPitchTitle,game.awayPitching);
-html+=renderTable(game.homePitchTitle,game.homePitching);
+html+=table(game.awayBatTitle,game.awayBatting);
+html+=table(game.homeBatTitle,game.homeBatting);
+html+=table(game.awayPitchTitle,game.awayPitching);
+html+=table(game.homePitchTitle,game.homePitching);
 
 content.innerHTML=html;
 
 }
 
-function renderTable(title,data){
+function table(title,data){
 
 if(!data)return "";
 
@@ -147,7 +162,7 @@ const cols=Object.keys(data[0]);
 
 let html=`<div class="section"><h2>${title}</h2><table><tr>`;
 
-cols.forEach(col=>html+="<th>"+col+"</th>");
+cols.forEach(c=>html+="<th>"+c+"</th>");
 
 html+="</tr>";
 
@@ -155,7 +170,7 @@ data.forEach(row=>{
 
 html+="<tr>";
 
-cols.forEach(col=>html+="<td>"+row[col]+"</td>");
+cols.forEach(c=>html+="<td>"+row[c]+"</td>");
 
 html+="</tr>";
 
