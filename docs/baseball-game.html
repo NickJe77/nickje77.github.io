@@ -9,11 +9,10 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
-
 body{
 font-family:Inter,system-ui,Arial;
 margin:0;
-background:#f4f6f8;
+background:#eef2f7;
 }
 
 .page{
@@ -26,16 +25,33 @@ padding:20px;
 background:linear-gradient(90deg,#0b2a6f,#c8102e);
 color:white;
 padding:30px;
-border-radius:16px;
-margin-bottom:20px;
+border-radius:18px;
 text-align:center;
+margin-bottom:20px;
 }
 
-.section{
+.hero .teams{
+font-size:34px;
+font-weight:700;
+}
+
+.hero .score{
+font-size:64px;
+font-weight:800;
+margin-top:8px;
+}
+
+.hero .date{
+margin-top:6px;
+opacity:.9;
+}
+
+.card{
 background:white;
-padding:16px;
 border-radius:14px;
+padding:18px;
 margin-bottom:20px;
+box-shadow:0 2px 6px rgba(0,0,0,.08);
 }
 
 table{
@@ -46,28 +62,26 @@ border-collapse:collapse;
 th{
 background:#123a7a;
 color:white;
-padding:8px;
+padding:10px;
+text-align:left;
 }
 
 td{
-padding:8px;
+padding:10px;
 }
 
 tr:nth-child(even){
-background:#eef3fb;
+background:#f3f7fd;
 }
 
-.error{
-font-size:22px;
-color:red;
-text-align:center;
-padding:40px;
+.player{
+color:#0056d6;
+font-weight:600;
+text-decoration:none;
 }
-
 </style>
 
 </head>
-
 <body>
 
 <div class="page">
@@ -77,23 +91,17 @@ padding:40px;
 <script>
 
 function getFile(){
-
 const p=new URLSearchParams(location.search);
-
 return p.get("file") || p.get("id") || p.get("game");
-
 }
 
-async function load(){
+async function loadGame(){
 
 const file=getFile();
 
 if(!file){
-
-showError("Invalid game link");
-
+content.innerHTML="Invalid game link";
 return;
-
 }
 
 const year=file.substring(0,4);
@@ -103,11 +111,8 @@ const path="data/baseball/boxscores/"+year+"/"+file+".json";
 const res=await fetch(path);
 
 if(!res.ok){
-
-showError("Game not found");
-
+content.innerHTML="Game not found";
 return;
-
 }
 
 const game=await res.json();
@@ -118,62 +123,77 @@ render(game);
 
 function render(game){
 
-const away=game.away_code;
-const home=game.home_code;
-
-let awayScore="";
-let homeScore="";
-
-if(game.linescore){
-
-awayScore=game.linescore.away ?? "";
-homeScore=game.linescore.home ?? "";
-
-}
-
-else if(game.score){
-
-awayScore=game.score.away ?? "";
-homeScore=game.score.home ?? "";
-
-}
-
 let html=`
+
 <div class="hero">
-<h1>${away} ${awayScore} - ${homeScore} ${home}</h1>
-<div>${game.date}</div>
+<div class="teams">${game.away_name} @ ${game.home_name}</div>
+<div class="score">${game.linescore.away} - ${game.linescore.home}</div>
+<div class="date">${game.date}</div>
 </div>
+
+<div class="card">
+<b>Venue:</b> ${game.venue ?? "Unknown"} &nbsp;&nbsp;
+<b>Attendance:</b> ${game.attendance ?? "—"}
+</div>
+
+<div class="card">
+<h3>Linescore</h3>
+${renderLinescore(game.linescore)}
+</div>
+
 `;
 
-html+=table(game.awayBatTitle,game.awayBatting);
-html+=table(game.homeBatTitle,game.homeBatting);
-html+=table(game.awayPitchTitle,game.awayPitching);
-html+=table(game.homePitchTitle,game.homePitching);
+html+=renderTable(game.awayBatTitle,game.awayBatting);
+html+=renderTable(game.homeBatTitle,game.homeBatting);
+html+=renderTable(game.awayPitchTitle,game.awayPitching);
+html+=renderTable(game.homePitchTitle,game.homePitching);
 
 content.innerHTML=html;
 
 }
 
-function table(title,data){
+function renderLinescore(linescore){
+
+let html="<table><tr>";
+
+Object.keys(linescore).forEach(k=>{
+html+="<th>"+k+"</th>";
+});
+
+html+="</tr><tr>";
+
+Object.values(linescore).forEach(v=>{
+html+="<td>"+v+"</td>";
+});
+
+html+="</tr></table>";
+
+return html;
+
+}
+
+function renderTable(title,data){
 
 if(!data)return "";
 
+let html=`<div class="card"><h3>${title}</h3><table><tr>`;
+
 const cols=Object.keys(data[0]);
 
-let html=`<div class="section"><h2>${title}</h2><table><tr>`;
-
-cols.forEach(c=>html+="<th>"+c+"</th>");
+cols.forEach(c=>{
+html+="<th>"+c+"</th>";
+});
 
 html+="</tr>";
 
 data.forEach(row=>{
-
 html+="<tr>";
 
-cols.forEach(c=>html+="<td>"+row[c]+"</td>");
+cols.forEach(c=>{
+html+="<td>"+row[c]+"</td>";
+});
 
 html+="</tr>";
-
 });
 
 html+="</table></div>";
@@ -182,13 +202,7 @@ return html;
 
 }
 
-function showError(msg){
-
-content.innerHTML='<div class="error">'+msg+"</div>";
-
-}
-
-load();
+loadGame();
 
 </script>
 
