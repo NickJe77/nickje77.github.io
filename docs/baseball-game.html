@@ -6,19 +6,19 @@
 <title>Baseball Game</title>
 
 <style>
-body{font-family:Arial;margin:20px;background:#eef2f7}
+body{font-family:Inter,Arial;margin:0;background:#eef2f7}
+.page{max-width:1200px;margin:auto;padding:20px}
 .hero{
 background:linear-gradient(90deg,#0b2a6f,#c8102e);
-color:white;padding:30px;border-radius:16px;text-align:center;
+color:white;padding:30px;border-radius:16px;text-align:center;margin-bottom:20px
 }
 .score{font-size:48px;font-weight:bold}
-.debug{font-size:12px;color:#666;margin-top:10px}
 .card{
-background:white;margin-top:20px;padding:15px;border-radius:12px;
+background:white;padding:16px;margin-bottom:20px;border-radius:12px;
 box-shadow:0 2px 6px rgba(0,0,0,.1)
 }
 table{width:100%;border-collapse:collapse}
-th{background:#123a7a;color:white;padding:8px;text-align:left}
+th{background:#123a7a;color:white;padding:8px}
 td{padding:8px}
 tr:nth-child(even){background:#eef3fb}
 </style>
@@ -26,11 +26,11 @@ tr:nth-child(even){background:#eef3fb}
 </head>
 <body>
 
+<div class="page">
 <div id="content">Loading game...</div>
+</div>
 
 <script>
-
-const content=document.getElementById("content");
 
 function getFile(){
 
@@ -46,7 +46,7 @@ const file=getFile();
 
 if(!file){
 
-content.innerHTML="Invalid game link";
+content.innerHTML="Invalid link";
 
 return;
 
@@ -60,66 +60,60 @@ const res=await fetch(path);
 
 const game=await res.json();
 
-render(game,path);
+render(game);
 
 }
 
-function teamAway(g){
+function render(game){
 
-return g.away_name
-|| g.away_team
-|| g.away
-|| g.teams?.away?.name
-|| "";
+const home=game.home_team;
+const away=game.away_team;
 
-}
+const batting={
+home:{},
+away:{}
+};
 
-function teamHome(g){
+let score={home:0,away:0};
 
-return g.home_name
-|| g.home_team
-|| g.home
-|| g.teams?.home?.name
-|| "";
+for(const e of game.events){
 
-}
+if(e[0]!=="play")continue;
 
-function scoreAway(g){
+const side=e[2]=="0"?"away":"home";
+const batter=e[3];
+const result=e[6];
 
-return g.linescore?.away
-|| g.score?.away
-|| g.away_score
-|| "";
+if(!batting[side][batter]){
+
+batting[side][batter]={Player:batter,AB:0,H:0,BB:0,SO:0};
 
 }
 
-function scoreHome(g){
+const s=batting[side][batter];
 
-return g.linescore?.home
-|| g.score?.home
-|| g.home_score
-|| "";
+s.AB++;
+
+if(result.startsWith("S")||result.startsWith("D")||result.startsWith("T")||result.startsWith("HR")) s.H++;
+
+if(result.startsWith("W")) s.BB++;
+
+if(result.startsWith("K")) s.SO++;
+
+if(result.includes("-H")) score[side]++;
 
 }
 
-function render(g,path){
-
-let html="";
-
-html+=`
+let html=`
 <div class="hero">
-<h1>${teamAway(g)} @ ${teamHome(g)}</h1>
-<div class="score">${scoreAway(g)} - ${scoreHome(g)}</div>
-<div>${g.date}</div>
+<h1>${away} @ ${home}</h1>
+<div class="score">${score.away} - ${score.home}</div>
+<div>${game.date}</div>
 </div>
 `;
 
-html+=`<div class="debug">Loaded: ${path}</div>`;
-
-html+=table(g.awayBatTitle,g.awayBatting);
-html+=table(g.homeBatTitle,g.homeBatting);
-html+=table(g.awayPitchTitle,g.awayPitching);
-html+=table(g.homePitchTitle,g.homePitching);
+html+=table("Away Batting",Object.values(batting.away));
+html+=table("Home Batting",Object.values(batting.home));
 
 content.innerHTML=html;
 
@@ -127,25 +121,20 @@ content.innerHTML=html;
 
 function table(title,data){
 
-if(!data)return "";
+let html=`<div class="card"><h3>${title}</h3><table>
+<tr><th>Player</th><th>AB</th><th>H</th><th>BB</th><th>SO</th></tr>`;
 
-let cols=Object.keys(data[0]);
+for(const r of data){
 
-let html=`<div class="card"><h3>${title}</h3><table><tr>`;
+html+=`<tr>
+<td>${r.Player}</td>
+<td>${r.AB}</td>
+<td>${r.H}</td>
+<td>${r.BB}</td>
+<td>${r.SO}</td>
+</tr>`;
 
-cols.forEach(c=>html+="<th>"+c+"</th>");
-
-html+="</tr>";
-
-data.forEach(r=>{
-
-html+="<tr>";
-
-cols.forEach(c=>html+="<td>"+(r[c]??"")+"</td>");
-
-html+="</tr>";
-
-});
+}
 
 html+="</table></div>";
 
