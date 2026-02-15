@@ -7,22 +7,56 @@
 
 <style>
 body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
-.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:#fff;border-bottom:1px solid #ddd;font-weight:700;}
-.navbar a{text-decoration:none;color:#0056d6;}
 
-.page{max-width:1200px;margin:24px auto;padding:0 16px;}
+.navbar{
+display:flex;
+justify-content:center;
+gap:24px;
+padding:16px;
+background:#fff;
+border-bottom:1px solid #ddd;
+font-weight:700;
+}
+
+.navbar a{
+text-decoration:none;
+color:#0056d6;
+}
+
+.page{
+max-width:1200px;
+margin:24px auto;
+padding:0 16px;
+}
 
 .hero{
 background:linear-gradient(90deg,#002D72,#C8102E);
-color:#fff;padding:28px;border-radius:16px;text-align:center;margin-bottom:16px;
+color:#fff;
+padding:28px;
+border-radius:16px;
+text-align:center;
+margin-bottom:16px;
 }
 
-.matchup{font-size:34px;font-weight:900;}
-.score{font-size:64px;font-weight:900;margin-top:4px;}
-.date{font-size:18px;margin-top:4px;}
+.matchup{
+font-size:34px;
+font-weight:900;
+}
+
+.score{
+font-size:64px;
+font-weight:900;
+}
+
+.date{
+font-size:18px;
+}
 
 .card{
-background:#fff;border-radius:14px;padding:16px;margin-bottom:16px;
+background:#fff;
+border-radius:14px;
+padding:16px;
+margin-bottom:16px;
 box-shadow:0 4px 12px rgba(0,0,0,.12);
 }
 
@@ -36,14 +70,21 @@ margin-right:8px;
 font-weight:800;
 }
 
-table{width:100%;border-collapse:collapse;}
+table{
+width:100%;
+border-collapse:collapse;
+}
+
 thead th{
 background:#002D72;
 color:#fff;
 padding:10px;
 text-align:center;
 }
-thead th:first-child{text-align:left;}
+
+thead th:first-child{
+text-align:left;
+}
 
 tbody td{
 padding:8px;
@@ -51,17 +92,22 @@ text-align:center;
 border-bottom:1px solid #eee;
 font-weight:700;
 }
-tbody td:first-child{text-align:left;}
-tbody tr:nth-child(even){background:#f0f6ff;}
 
-.player-link{
+tbody td:first-child{
+text-align:left;
+}
+
+tbody tr:nth-child(even){
+background:#f0f6ff;
+}
+
+.player{
 color:#0056d6;
 font-weight:900;
 text-decoration:none;
 }
-.player-link:hover{text-decoration:underline;}
-
 </style>
+
 </head>
 <body>
 
@@ -113,101 +159,75 @@ text-decoration:none;
 </div>
 
 <script>
+
 (async function(){
 
-const params = new URLSearchParams(location.search);
-const id = params.get("id");
+const params=new URLSearchParams(location.search);
+const id=params.get("id");
+const year=id.substring(0,4);
 
-const year = id.substring(0,4);
-
-const game =
+const game=
 await fetch(`data/baseball/boxscores/${year}/${id}.json`)
 .then(r=>r.json());
 
-const players =
+const players=
 await fetch(`data/baseball/players.json`)
 .then(r=>r.json());
 
-function playerName(id){
-const p = players[id];
-if(!p) return id;
-return p.name || p.full_name || (p.first_name+" "+p.last_name);
+function name(id){
+if(players[id]) return players[id].name;
+return id;
 }
-
-function playerLink(id){
-return `<a class="player-link" href="baseball-player.html?id=${id}">${playerName(id)}</a>`;
-}
-
-const away = game.away_code;
-const home = game.home_code;
-
-document.getElementById("matchup").innerHTML =
-`${game.away_team} @ ${game.home_team}`;
-
-document.getElementById("date").innerHTML =
-game.date;
 
 let venue="Unknown";
 let attendance="—";
 
-const batAway={};
-const batHome={};
+const awayBat={};
+const homeBat={};
 
-const pitchAway={};
-const pitchHome={};
+const awayPitch={};
+const homePitch={};
 
-let curPitchAway=null;
-let curPitchHome=null;
+let awayPitcher=null;
+let homePitcher=null;
 
 const lines={};
 
 let awayRuns=0;
 let homeRuns=0;
 
-/* parse events */
-
 for(const e of game.events){
 
 if(e[0]=="info"){
 
-if(e[1]=="site")
-venue=e[2];
-
-if(e[1]=="attendance")
-attendance=e[2];
+if(e[1]=="site") venue=e[2];
+if(e[1]=="attendance") attendance=e[2];
 
 }
 
-if((e[0]=="start"||e[0]=="sub") && e[4]=="1"){
+if(e[0]=="start" && e[4]=="1"){
 
-if(e[2]=="0")
-curPitchAway=e[1];
-
-else
-curPitchHome=e[1];
+if(e[2]=="0") awayPitcher=e[1];
+if(e[2]=="1") homePitcher=e[1];
 
 }
 
 if(e[0]!="play") continue;
 
 const inning=parseInt(e[1]);
-const batting=e[2];
+const team=e[2];
 const batter=e[3];
 const desc=e[6];
 
 let bat;
 let pit;
 
-if(batting=="0"){
-
-bat = batAway;
-pit = pitchHome;
-
+if(team=="0"){
+bat=awayBat;
+pit=homePitch;
 }else{
-
-bat = batHome;
-pit = pitchAway;
-
+bat=homeBat;
+pit=awayPitch;
 }
 
 if(!bat[batter])
@@ -215,17 +235,8 @@ bat[batter]={AB:0,H:0,RBI:0,BB:0,SO:0,HR:0};
 
 bat[batter].AB++;
 
-if(desc.startsWith("K")){
-bat[batter].SO++;
-if(curPitchHome && batting=="0"){
-if(!pitchHome[curPitchHome])
-pitchHome[curPitchHome]={IP:0,H:0,R:0,BB:0,SO:0,HR:0};
-pitchHome[curPitchHome].SO++;
-}
-}
-
-if(desc.startsWith("W")){
-bat[batter].BB++;
+if(desc.startsWith("S")||desc.startsWith("D")||desc.startsWith("T")){
+bat[batter].H++;
 }
 
 if(desc.includes("HR")){
@@ -233,10 +244,13 @@ bat[batter].H++;
 bat[batter].HR++;
 }
 
-if(desc.startsWith("S")||
-desc.startsWith("D")||
-desc.startsWith("T"))
-bat[batter].H++;
+if(desc.startsWith("K")){
+bat[batter].SO++;
+}
+
+if(desc.startsWith("W")){
+bat[batter].BB++;
+}
 
 const runs=(desc.match(/\.H/g)||[]).length;
 
@@ -247,7 +261,7 @@ bat[batter].RBI+=runs;
 if(!lines[inning])
 lines[inning]={away:0,home:0};
 
-if(batting=="0"){
+if(team=="0"){
 lines[inning].away+=runs;
 awayRuns+=runs;
 }else{
@@ -259,7 +273,13 @@ homeRuns+=runs;
 
 }
 
-/* display venue */
+document.getElementById("matchup").innerHTML=
+`${game.away_code} @ ${game.home_code}`;
+
+document.getElementById("date").innerHTML=game.date;
+
+document.getElementById("score").innerHTML=
+`${awayRuns} - ${homeRuns}`;
 
 document.getElementById("venue").innerHTML=
 `Venue: ${venue}`;
@@ -267,12 +287,7 @@ document.getElementById("venue").innerHTML=
 document.getElementById("attendance").innerHTML=
 `Attendance: ${attendance}`;
 
-document.getElementById("score").innerHTML=
-`${awayRuns} - ${homeRuns}`;
-
-/* batting tables */
-
-function renderBat(id,title,data){
+function renderBat(div,title,data){
 
 document.getElementById(title).innerHTML=title;
 
@@ -285,7 +300,7 @@ for(const p in data){
 const s=data[p];
 
 html+="<tr>";
-html+=`<td>${playerLink(p)}</td>`;
+html+=`<td class="player">${name(p)}</td>`;
 html+=`<td>${s.AB}</td>`;
 html+=`<td>${s.H}</td>`;
 html+=`<td>${s.RBI}</td>`;
@@ -298,47 +313,37 @@ html+="</tr>";
 
 html+="</tbody></table>";
 
-document.getElementById(id).innerHTML=html;
+document.getElementById(div).innerHTML=html;
 
 }
 
-renderBat("awayBat","awayBatTitle",batAway);
-renderBat("homeBat","homeBatTitle",batHome);
+renderBat("awayBat","awayBatTitle",awayBat);
+renderBat("homeBat","homeBatTitle",homeBat);
 
-/* pitching tables */
-
-function renderPitch(id,title,data){
+function renderPitch(div,title,pitcher){
 
 document.getElementById(title).innerHTML=title;
 
-let html="<table><thead><tr>";
-html+="<th>Pitcher</th><th>IP</th><th>H</th><th>R</th><th>BB</th><th>SO</th><th>HR</th>";
-html+="</tr></thead><tbody>";
+if(!pitcher){
 
-for(const p in data){
-
-const s=data[p];
-
-html+="<tr>";
-html+=`<td>${playerLink(p)}</td>`;
-html+=`<td>${s.IP||0}</td>`;
-html+=`<td>${s.H||0}</td>`;
-html+=`<td>${s.R||0}</td>`;
-html+=`<td>${s.BB||0}</td>`;
-html+=`<td>${s.SO||0}</td>`;
-html+=`<td>${s.HR||0}</td>`;
-html+="</tr>";
+document.getElementById(div).innerHTML="No pitcher data";
+return;
 
 }
+
+let html="<table><thead><tr>";
+html+="<th>Pitcher</th></tr></thead><tbody>";
+
+html+=`<tr><td class="player">${name(pitcher)}</td></tr>`;
 
 html+="</tbody></table>";
 
-document.getElementById(id).innerHTML=html;
+document.getElementById(div).innerHTML=html;
 
 }
 
-renderPitch("awayPitch","awayPitchTitle",pitchAway);
-renderPitch("homePitch","homePitchTitle",pitchHome);
+renderPitch("awayPitch","awayPitchTitle",awayPitcher);
+renderPitch("homePitch","homePitchTitle",homePitcher);
 
 })();
 </script>
