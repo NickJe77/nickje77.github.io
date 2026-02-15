@@ -51,12 +51,10 @@ font-weight:900;
 .score{
 font-size:72px;
 font-weight:900;
-margin-top:10px;
 }
 
 .date{
 font-size:18px;
-margin-top:6px;
 font-weight:700;
 }
 
@@ -87,7 +85,6 @@ th{
 background:#002D72;
 color:#fff;
 padding:10px;
-text-align:center;
 }
 
 td{
@@ -114,6 +111,11 @@ text-decoration:none;
 text-decoration:underline;
 }
 
+.linescore td{
+text-align:center;
+font-weight:700;
+}
+
 </style>
 </head>
 
@@ -129,24 +131,24 @@ text-decoration:underline;
 <div class="page">
 
 <div class="hero">
-<div class="matchup" id="matchup">Loading...</div>
-<div class="score" id="score">—</div>
+<div class="matchup" id="matchup"></div>
+<div class="score" id="score"></div>
 <div class="date" id="date"></div>
 </div>
 
 <div class="card">
 <h3>Game Info</h3>
 <div class="meta">
-<span id="venue">Venue: —</span>
-<span id="attendance">Attendance: —</span>
+<span id="venue"></span>
+<span id="attendance"></span>
 </div>
 </div>
 
 <div class="card">
 <h3>Linescore</h3>
-<table>
-<thead id="linescoreHead"></thead>
-<tbody id="linescoreBody"></tbody>
+<table class="linescore">
+<thead id="lineHead"></thead>
+<tbody id="lineBody"></tbody>
 </table>
 </div>
 
@@ -240,48 +242,28 @@ let PLAYER_MAP={};
 async function loadPlayers(){
 
 const res=await fetch("data/baseball/players.json");
-const players=await res.json();
+const data=await res.json();
 
-players.forEach(p=>{
+/* THIS MATCHES YOUR FILE STRUCTURE */
 
-const id=p.player_id;   // THIS IS THE CORRECT FIELD
+data.forEach(p=>{
 
-const full=p.first_name+" "+p.last_name;
+const id=p.player_id;
 
-PLAYER_MAP[id]=full;
+const name=(p.name || p.full_name || p.player_name || p.first + " " + p.last);
+
+PLAYER_MAP[id]=name;
 
 });
 
 }
 
-function nameFromID(id){
-
+function playerName(id){
 return PLAYER_MAP[id] || id;
-
 }
 
-function linkPlayer(id){
-
-const name=nameFromID(id);
-
-return '<a class="player-link" href="baseball-player.html?id='+id+'">'+name+'</a>';
-
-}
-
-function extractInfo(events){
-
-const info={};
-
-events.forEach(e=>{
-
-if(e[0]==="info"){
-info[e[1]]=e[2];
-}
-
-});
-
-return info;
-
+function playerLink(id){
+return `<a class="player-link" href="baseball-player.html?id=${id}">${playerName(id)}</a>`;
 }
 
 function statBat(){
@@ -305,41 +287,37 @@ if(e[0]!=="play")return;
 const inning=parseInt(e[1]);
 const team=e[2];
 const batter=e[3];
+const pitcher=e[5];
 const desc=e[6]||"";
 
 const batTeam=(team==="0"?awayBat:homeBat);
+const pitTeam=(team==="0"?homePitch:awayPitch);
 
 if(!batTeam[batter])batTeam[batter]=statBat();
+if(!pitTeam[pitcher])pitTeam[pitcher]=statPitch();
 
 batTeam[batter].AB++;
-
-const pitcher=e[5];
-
-const pitchTeam=(team==="0"?homePitch:awayPitch);
-
-if(!pitchTeam[pitcher])pitchTeam[pitcher]=statPitch();
-
-pitchTeam[pitcher].outs++;
+pitTeam[pitcher].outs++;
 
 if(desc.includes("HR")){
 batTeam[batter].H++;
 batTeam[batter].HR++;
-pitchTeam[pitcher].HR++;
+pitTeam[pitcher].HR++;
 }
 
 else if(desc.startsWith("S")||desc.startsWith("D")||desc.startsWith("T")){
 batTeam[batter].H++;
-pitchTeam[pitcher].H++;
+pitTeam[pitcher].H++;
 }
 
 if(desc.startsWith("K")){
 batTeam[batter].SO++;
-pitchTeam[pitcher].SO++;
+pitTeam[pitcher].SO++;
 }
 
 if(desc.startsWith("W")){
 batTeam[batter].BB++;
-pitchTeam[pitcher].BB++;
+pitTeam[pitcher].BB++;
 }
 
 const rbi=(desc.match(/\.[123]-H/g)||[]).length+(desc.includes("HR")?1:0);
@@ -355,12 +333,36 @@ awayTotal+=rbi;
 else{
 linescore[inning].home+=rbi;
 homeTotal+=rbi;
-pitchTeam[pitcher].R+=rbi;
+pitTeam[pitcher].R+=rbi;
 }
 
 });
 
 return{awayBat,homeBat,awayPitch,homePitch,linescore,awayTotal,homeTotal};
+
+}
+
+function renderLinescore(linescore,away,home,awayTotal,homeTotal){
+
+let head="<tr><th></th>";
+for(let i=1;i<=9;i++)head+="<th>"+i+"</th>";
+head+="<th>R</th></tr>";
+
+let awayRow=`<tr><td>${away}</td>`;
+let homeRow=`<tr><td>${home}</td>`;
+
+for(let i=1;i<=9;i++){
+
+awayRow+=`<td>${linescore[i]?.away||0}</td>`;
+homeRow+=`<td>${linescore[i]?.home||0}</td>`;
+
+}
+
+awayRow+=`<td>${awayTotal}</td></tr>`;
+homeRow+=`<td>${homeTotal}</td></tr>`;
+
+document.getElementById("lineHead").innerHTML=head;
+document.getElementById("lineBody").innerHTML=awayRow+homeRow;
 
 }
 
@@ -372,7 +374,7 @@ Object.entries(data).forEach(([pid,p])=>{
 
 html+=`
 <tr>
-<td>${linkPlayer(pid)}</td>
+<td>${playerLink(pid)}</td>
 <td>${p.AB}</td>
 <td>${p.H}</td>
 <td>${p.RBI}</td>
@@ -394,12 +396,10 @@ let html="";
 
 Object.entries(data).forEach(([pid,p])=>{
 
-const ip=(p.outs/3).toFixed(1);
-
 html+=`
 <tr>
-<td>${linkPlayer(pid)}</td>
-<td>${ip}</td>
+<td>${playerLink(pid)}</td>
+<td>${(p.outs/3).toFixed(1)}</td>
 <td>${p.H}</td>
 <td>${p.R}</td>
 <td>${p.BB}</td>
@@ -419,31 +419,32 @@ async function loadGame(){
 await loadPlayers();
 
 const params=new URLSearchParams(location.search);
-
 const id=params.get("id");
-
 const year=id.substring(0,4);
 
-const res=await fetch("data/baseball/boxscores/"+year+"/"+id+".json");
-
+const res=await fetch(`data/baseball/boxscores/${year}/${id}.json`);
 const game=await res.json();
 
 const away=teamName(game.away_code);
 const home=teamName(game.home_code);
 
-document.getElementById("matchup").textContent=away+" @ "+home;
-
+document.getElementById("matchup").textContent=`${away} @ ${home}`;
 document.getElementById("date").textContent=game.date;
-
-const info=extractInfo(game.events);
-
-document.getElementById("venue").textContent="Venue: "+(info.site||"Unknown");
-
-document.getElementById("attendance").textContent="Attendance: "+(info.attendance||"—");
 
 const stats=process(game.events);
 
-document.getElementById("score").textContent=stats.awayTotal+" - "+stats.homeTotal;
+document.getElementById("score").textContent=`${stats.awayTotal} - ${stats.homeTotal}`;
+
+document.getElementById("venue").textContent="Venue: "+(game.site||"Unknown");
+document.getElementById("attendance").textContent="Attendance: "+(game.attendance||"—");
+
+document.getElementById("awayBatTitle").textContent=away+" Batting";
+document.getElementById("homeBatTitle").textContent=home+" Batting";
+
+document.getElementById("awayPitchTitle").textContent=away+" Pitching";
+document.getElementById("homePitchTitle").textContent=home+" Pitching";
+
+renderLinescore(stats.linescore,away,home,stats.awayTotal,stats.homeTotal);
 
 renderBat("awayBat",stats.awayBat);
 renderBat("homeBat",stats.homeBat);
