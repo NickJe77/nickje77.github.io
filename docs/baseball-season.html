@@ -42,43 +42,6 @@ body{
   margin-bottom:14px;
 }
 
-.controls{
-  background:#fff;
-  border-radius:16px;
-  padding:14px;
-  margin-bottom:14px;
-  display:flex;
-  gap:12px;
-  align-items:center;
-  flex-wrap:wrap;
-}
-
-.controls label{
-  font-weight:700;
-}
-
-.controls input{
-  padding:8px 10px;
-  border-radius:8px;
-  border:1px solid #ccc;
-  font-size:14px;
-  min-width:200px;
-}
-
-.controls button{
-  padding:8px 14px;
-  border-radius:8px;
-  border:none;
-  background:#0056d6;
-  color:#fff;
-  font-weight:700;
-  cursor:pointer;
-}
-
-.controls button:hover{
-  background:#003ea3;
-}
-
 table{
   width:100%;
   border-collapse:collapse;
@@ -91,7 +54,6 @@ th{
   background:#002D72;
   color:#fff;
   padding:12px;
-  text-align:left;
 }
 
 td{
@@ -126,18 +88,6 @@ tr:hover{
 <h1 id="title">Season</h1>
 </div>
 
-<div class="controls">
-
-<label>Team 1:</label> <input list="teamList" id="team1" placeholder="Select team">
-
-<label>Team 2:</label> <input list="teamList" id="team2" placeholder="Select team">
-
-<button onclick="applyFilter()">Search</button> <button onclick="clearFilter()">Clear</button>
-
-<datalist id="teamList"></datalist>
-
-</div>
-
 <table>
 
 <thead>
@@ -149,7 +99,13 @@ tr:hover{
 </tr>
 </thead>
 
-<tbody id="tbody"></tbody>
+<tbody id="gamesBody">
+
+<tr>
+<td colspan="4">Loading games...</td>
+</tr>
+
+</tbody>
 
 </table>
 
@@ -157,92 +113,78 @@ tr:hover{
 
 <script>
 
-let allGames = [];
-
-const EXCLUDE_TEAMS = new Set(["ALS","MLS"]);
-
 async function loadSeason(){
 
-  const params = new URLSearchParams(window.location.search);
-  const season = params.get("season");
+try{
 
-  if(!season){
-    alert("Missing season parameter");
-    return;
-  }
+const params = new URLSearchParams(window.location.search);
+const season = params.get("season");
 
-  document.getElementById("title").textContent =
-    season + " Season";
+if(!season)
+throw "Missing season parameter";
 
-  const res = await fetch(
-    `data/baseball/seasons/${season}.json`
-  );
+document.getElementById("title").textContent =
+season + " Season";
 
-  if(!res.ok){
-    alert("Season file not found");
-    return;
-  }
+const res = await fetch(
+`data/baseball/seasons/${season}.json`
+);
 
-  allGames = await res.json();
+if(!res.ok)
+throw "Season file not found";
 
-  populateTeams(allGames);
-  renderGames(allGames);
+const games = await res.json();
+
+renderGames(games);
 
 }
+catch(err){
 
-function populateTeams(games){
+document.getElementById("gamesBody").innerHTML =
+`<tr><td colspan="4">${err}</td></tr>`;
 
-  const set = new Set();
-
-  games.forEach(g => {
-
-    if(g.away_team && !EXCLUDE_TEAMS.has(g.away_team))
-      set.add(g.away_team);
-
-    if(g.home_team && !EXCLUDE_TEAMS.has(g.home_team))
-      set.add(g.home_team);
-
-  });
-
-  const list = document.getElementById("teamList");
-
-  list.innerHTML = "";
-
-  [...set].sort().forEach(team => {
-
-    const option = document.createElement("option");
-
-    option.value = team;
-
-    list.appendChild(option);
-
-  });
+}
 
 }
 
 function renderGames(games){
 
-  const tbody =
-    document.getElementById("tbody");
+const body =
+document.getElementById("gamesBody");
 
-  tbody.innerHTML = "";
+body.innerHTML = "";
 
-  games.forEach(game => {
+games.forEach(game => {
 
-    const gameId =
-      `${game.date}_${game.away_code}_${game.home_code}`;
+const id =
+`${game.date}_${game.away_code}_${game.home_code}`;
 
-    const tr = document.createElement("tr");
+const tr =
+document.createElement("tr");
 
-    tr.onclick = () => {
+tr.onclick = () => {
 
-      window.location.href =
-        `baseball-game.html?id=${gameId}`;
+window.location.href =
+`baseball-game.html?id=${id}`;
 
-    };
+};
 
-    tr.innerHTML = `
+tr.innerHTML = `
 <td>${game.date || ""}</td>
 <td>${game.away_team || ""}</td>
 <td>${game.home_team || ""}</td>
-<td>${game.away_score ?? ""} - ${game.home_score ?? ""}</td
+<td>${game.away_score ?? ""} - ${game.home_score ?? ""}</td>
+`;
+
+body.appendChild(tr);
+
+});
+
+}
+
+loadSeason();
+
+</script>
+
+</body>
+</html>
