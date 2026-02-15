@@ -1,178 +1,105 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<title>Baseball Game | The Sporting Almanac</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<link rel="stylesheet" href="style.css">
 
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Baseball Game</title>
 <style>
-  body{font-family:Inter,system-ui,Arial;margin:0;background:#eef2f7;}
-  .page{max-width:1200px;margin:auto;padding:20px;}
-  .hero{
-    background:linear-gradient(90deg,#0b2a6f,#c8102e);
-    color:#fff;padding:30px;border-radius:18px;text-align:center;margin-bottom:20px;
-  }
-  .hero .teams{font-size:34px;font-weight:800;}
-  .hero .score{font-size:64px;font-weight:900;margin-top:8px;}
-  .hero .date{margin-top:6px;opacity:.9;font-weight:700;}
-  .card{
-    background:#fff;border-radius:14px;padding:18px;margin-bottom:20px;
-    box-shadow:0 2px 6px rgba(0,0,0,.08);
-  }
-  .meta{display:flex;gap:12px;flex-wrap:wrap;}
-  .pill{background:#eef3fb;padding:8px 12px;border-radius:10px;font-weight:700;}
-  table{width:100%;border-collapse:collapse;}
-  th{background:#123a7a;color:#fff;padding:10px;text-align:left;}
-  td{padding:10px;border-bottom:1px solid #e9eef5;}
-  tr:nth-child(even){background:#f3f7fd;}
-  .error{color:#c00;font-weight:800;font-size:20px;}
-  .small{font-size:12px;opacity:.8;word-break:break-all;margin-top:8px;}
+body{font-family:Arial;margin:20px}
+.hero{
+background:linear-gradient(90deg,#0b2a6f,#c8102e);
+color:white;padding:20px;border-radius:12px;text-align:center;
+}
+.error{color:red;font-weight:bold;margin-top:20px}
+.debug{font-size:12px;color:#666;margin-top:10px}
 </style>
 </head>
-
 <body>
-  <div class="page">
-    <div id="content" class="card">Loading game...</div>
-  </div>
+
+<div id="content">Loading game...</div>
 
 <script>
-(function(){
 
-  const el = document.getElementById("content");
+const content = document.getElementById("content");
 
-  function qp(name){
-    return new URLSearchParams(location.search).get(name);
-  }
+function getFile(){
 
-  function normalizeFile(raw){
-    if(!raw) return "";
+const params = new URLSearchParams(window.location.search);
 
-    // if they passed "2012-04-20_NYA_BOS" already
-    if (/^\d{4}-\d{2}-\d{2}_.+_.+$/.test(raw)) return raw;
+return params.get("file") || params.get("id") || params.get("game");
 
-    // if they passed "20120420_NYA_BOS"
-    if (/^\d{8}_.+_.+$/.test(raw)){
-      const y = raw.slice(0,4);
-      const m = raw.slice(4,6);
-      const d = raw.slice(6,8);
-      return `${y}-${m}-${d}${raw.slice(8)}`;
-    }
+}
 
-    // if they passed with .json, strip it
-    if (raw.endsWith(".json")) return raw.replace(/\.json$/,"");
+async function load(){
 
-    return raw; // last resort
-  }
+const file = getFile();
 
-  async function fetchJson(url){
-    // hard fail instead of hanging forever
-    const controller = new AbortController();
-    const t = setTimeout(()=>controller.abort(), 12000);
+if(!file){
 
-    try{
-      const res = await fetch(url, { signal: controller.signal, cache: "no-store" });
-      clearTimeout(t);
-      if(!res.ok) throw new Error("HTTP " + res.status);
-      return await res.json();
-    }catch(err){
-      clearTimeout(t);
-      throw err;
-    }
-  }
+content.innerHTML = "<div class='error'>No file parameter</div>";
 
-  function getScores(game){
-    // your boxscores appear to store scores in linescore.{away,home}
-    const away = game?.linescore?.away ?? game?.score?.away ?? game?.away_score ?? "";
-    const home = game?.linescore?.home ?? game?.score?.home ?? game?.home_score ?? "";
-    return { away, home };
-  }
+return;
 
-  function renderTable(title, data){
-    if(!data || !Array.isArray(data) || data.length === 0) return "";
+}
 
-    const cols = Object.keys(data[0]);
-    let html = `<div class="card"><h2 style="margin:0 0 12px 0;">${title || ""}</h2><table><tr>`;
-    cols.forEach(c => html += `<th>${c}</th>`);
-    html += `</tr>`;
+const year = file.substring(0,4);
 
-    data.forEach(row=>{
-      html += `<tr>`;
-      cols.forEach(c => html += `<td>${row[c] ?? ""}</td>`);
-      html += `</tr>`;
-    });
+const path = "data/baseball/boxscores/" + year + "/" + file + ".json";
 
-    html += `</table></div>`;
-    return html;
-  }
+content.innerHTML =
+"Loading game...<div class='debug'>Trying: " + path + "</div>";
 
-  async function main(){
-    // accept all known params
-    const raw = qp("file") || qp("id") || qp("game");
-    const file = normalizeFile(raw);
+try{
 
-    if(!file){
-      el.innerHTML = `<div class="error">Invalid game link</div>
-                      <div class="small">No ?file=, ?id=, or ?game= parameter found.</div>`;
-      return;
-    }
+const response = await fetch(path);
 
-    const year = file.slice(0,4);
-    // your confirmed structure:
-    // docs/data/baseball/boxscores/YYYY/YYYY-MM-DD_AWAY_HOME.json
-    const rel = `data/baseball/boxscores/${year}/${file}.json`;
+if(!response.ok){
 
-    // Make the actual absolute URL we are requesting (for transparency)
-    const absoluteUrl = new URL(rel, location.href).toString();
+content.innerHTML =
+"<div class='error'>File not found</div>" +
+"<div class='debug'>" + path + "</div>";
 
-    // show what we’re attempting immediately (no more “does nothing”)
-    el.innerHTML = `Loading game...
-      <div class="small"><b>Trying:</b> ${absoluteUrl}</div>`;
+return;
 
-    let game;
-    try{
-      game = await fetchJson(rel);
-    }catch(err){
-      el.innerHTML = `<div class="error">Game not found</div>
-        <div class="small"><b>Tried:</b> ${absoluteUrl}</div>
-        <div class="small"><b>Param received:</b> ${raw || ""}</div>`;
-      return;
-    }
+}
 
-    const awayName = game.away_name || game.away_team || game.away_code || "Away";
-    const homeName = game.home_name || game.home_team || game.home_code || "Home";
-    const { away, home } = getScores(game);
+const game = await response.json();
 
-    let html = `
-      <div class="hero">
-        <div class="teams">${awayName} @ ${homeName}</div>
-        <div class="score">${away} - ${home}</div>
-        <div class="date">${game.date || ""}</div>
-      </div>
+render(game,path);
 
-      <div class="card">
-        <h2 style="margin:0 0 12px 0;">Game Info</h2>
-        <div class="meta">
-          <div class="pill">Venue: ${game.venue ?? "Unknown"}</div>
-          <div class="pill">Attendance: ${game.attendance ?? "—"}</div>
-        </div>
-        <div class="small"><b>Loaded:</b> ${absoluteUrl}</div>
-      </div>
-    `;
+}
+catch(err){
 
-    // These are the exact fields you showed earlier
-    html += renderTable("Linescore", Array.isArray(game.linescore) ? game.linescore : null);
-    html += renderTable(game.awayBatTitle, game.awayBatting);
-    html += renderTable(game.homeBatTitle, game.homeBatting);
-    html += renderTable(game.awayPitchTitle, game.awayPitching);
-    html += renderTable(game.homePitchTitle, game.homePitching);
+content.innerHTML =
+"<div class='error'>Fetch failed</div>" +
+"<div class='debug'>" + path + "</div>";
 
-    el.outerHTML = `<div id="content">${html}</div>`;
-  }
+}
 
-  main();
+}
 
-})();
+function render(game,path){
+
+const away = game.away_name;
+const home = game.home_name;
+
+const awayScore = game.linescore?.away ?? "";
+const homeScore = game.linescore?.home ?? "";
+
+content.innerHTML =
+
+"<div class='hero'>" +
+"<h2>" + away + " @ " + home + "</h2>" +
+"<div style='font-size:40px'>" + awayScore + " - " + homeScore + "</div>" +
+"<div>" + game.date + "</div>" +
+"</div>" +
+
+"<div class='debug'>Loaded: " + path + "</div>";
+
+}
+
+load();
+
 </script>
 
 </body>
