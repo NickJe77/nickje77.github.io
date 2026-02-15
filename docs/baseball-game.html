@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Baseball Game | The Sporting Almanac</title>
+<title>Baseball Game</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -21,18 +21,6 @@ border-radius:20px;
 margin-bottom:14px;
 }
 
-.hero h1{margin:0;font-size:42px;}
-
-.infoRow{margin-bottom:14px;}
-
-.infoBox{
-background:#fff;
-padding:10px 14px;
-border-radius:12px;
-font-weight:700;
-display:inline-block;
-}
-
 .card{
 background:#fff;
 border-radius:16px;
@@ -44,11 +32,6 @@ margin-bottom:14px;
 display:grid;
 grid-template-columns:1fr 1fr;
 gap:14px;
-}
-
-table{
-width:100%;
-border-collapse:collapse;
 }
 
 th{
@@ -63,25 +46,25 @@ padding:8px;
 border-bottom:1px solid #eee;
 }
 
-tr:nth-child(even){
-background:#f0f6ff;
-}
+tr:nth-child(even){background:#f0f6ff;}
 
 .playerLink{
 color:#0056d6;
-cursor:pointer;
 text-decoration:none;
 font-weight:600;
 }
 
-.playerLink:hover{
-text-decoration:underline;
-}
+.playerLink:hover{text-decoration:underline;}
 
 .teamTitle{
 font-weight:700;
 margin-bottom:6px;
 font-size:18px;
+}
+
+.info{
+font-weight:700;
+margin-bottom:10px;
 }
 </style>
 
@@ -91,80 +74,51 @@ font-size:18px;
 
 <div class="navbar">
 <a href="index.html">Home</a>
-<a href="baseball.html">Baseball</a>
 <a href="baseball-seasons.html">Seasons</a>
 </div>
 
 <div class="page">
 
 <div class="hero">
-<h1 id="title">Loading...</h1>
+<h1 id="title"></h1>
 <div id="date"></div>
 </div>
 
-<div class="infoRow">
-<div class="infoBox" id="venue">Venue: —</div>
-</div>
+<div class="info" id="venue">Venue: —</div>
 
 <div class="card">
+
 <h2>Batting</h2>
 
 <div class="split">
 
 <div>
-<div class="teamTitle" id="awayTitle"></div>
-<table>
-<thead>
-<tr>
-<th>Player</th><th>PA</th><th>H</th><th>BB</th><th>SO</th><th>HR</th>
-</tr>
-</thead>
-<tbody id="awayBat"></tbody>
-</table>
+<div class="teamTitle" id="awayName"></div>
+<table><tbody id="awayBat"></tbody></table>
 </div>
 
 <div>
-<div class="teamTitle" id="homeTitle"></div>
-<table>
-<thead>
-<tr>
-<th>Player</th><th>PA</th><th>H</th><th>BB</th><th>SO</th><th>HR</th>
-</tr>
-</thead>
-<tbody id="homeBat"></tbody>
-</table>
+<div class="teamTitle" id="homeName"></div>
+<table><tbody id="homeBat"></tbody></table>
 </div>
 
 </div>
 </div>
 
 <div class="card">
+
 <h2>Pitching</h2>
 
 <div class="split">
 
 <div>
-<div class="teamTitle" id="awayPitchTitle"></div>
-<table>
-<thead>
-<tr>
-<th>Pitcher</th><th>IP</th><th>H</th><th>BB</th><th>SO</th>
-</tr>
-</thead>
-<tbody id="awayPitch"></tbody>
-</table>
+<div class="teamTitle" id="awayPitchName"></div>
+<table><tbody id="awayPitch"></tbody></table>
 </div>
 
 <div>
-<div class="teamTitle" id="homePitchTitle"></div>
-<table>
-<thead>
-<tr>
-<th>Pitcher</th><th>IP</th><th>H</th><th>BB</th><th>SO</th>
-</tr>
-</thead>
-<tbody id="homePitch"></tbody>
-</table>
+<div class="teamTitle" id="homePitchName"></div>
+<table><tbody id="homePitch"></tbody></table>
 </div>
 
 </div>
@@ -177,139 +131,103 @@ font-size:18px;
 const id=new URLSearchParams(location.search).get("id");
 const year=id.substring(0,4);
 
-const GAME_PATH=`data/baseball/boxscores/${year}/${id}.json`;
+const GAME=`data/baseball/boxscores/${year}/${id}.json`;
 
 let PLAYERS={},TEAMS={},PARKS={};
 
-function playerName(pid){
-return PLAYERS[pid]||pid;
+async function loadRefs(){
+
+PLAYERS=await fetch("data/baseball/players.json").then(r=>r.json());
+TEAMS=await fetch("data/baseball/teams.json").then(r=>r.json());
+
+/* ballparks */
+
+const csv=await fetch("data/baseball/ballparks.csv").then(r=>r.text());
+
+csv.split("\n").forEach(row=>{
+const c=row.split(",");
+if(c.length>1) PARKS[c[0]]=c[1];
+});
+
 }
 
-function teamName(code){
-return TEAMS[code]||code;
-}
+function pname(id){return PLAYERS[id]||id;}
+function tname(id){return TEAMS[id]||id;}
 
-function playerLink(pid){
-return `<a class="playerLink" href="baseball-player.html?id=${pid}">${playerName(pid)}</a>`;
+function plink(id){
+return `<a class="playerLink" href="baseball-player.html?id=${id}">${pname(id)}</a>`;
 }
 
 function ip(outs){
 return Math.floor(outs/3)+"."+(outs%3);
 }
 
-async function loadRefs(){
-
-/* players */
-const p=await fetch("data/baseball/players.json").then(r=>r.json());
-
-if(Array.isArray(p))
-p.forEach(x=>PLAYERS[x.id||x.player_id]=x.name||x.full_name);
-else PLAYERS=p;
-
-/* teams */
-const t=await fetch("data/baseball/teams.json").then(r=>r.json());
-
-if(Array.isArray(t))
-t.forEach(x=>TEAMS[x.code||x.id]=x.name||x.full_name);
-else TEAMS=t;
-
-/* parks */
-const csv=await fetch("data/baseball/ballparks.csv").then(r=>r.text());
-
-csv.split("\n").forEach(line=>{
-const parts=line.split(",");
-if(parts.length>1) PARKS[parts[0]]=parts[1];
-});
-
-}
-
 async function loadGame(){
 
 await loadRefs();
 
-const game=await fetch(GAME_PATH).then(r=>r.json());
+const g=await fetch(GAME).then(r=>r.json());
 
-const away=teamName(game.away_code);
-const home=teamName(game.home_code);
+const away=tname(g.away_code);
+const home=tname(g.home_code);
 
 document.getElementById("title").textContent=`${away} @ ${home}`;
-document.getElementById("date").textContent=game.date;
+document.getElementById("date").textContent=g.date;
 
-document.getElementById("awayTitle").textContent=away;
-document.getElementById("homeTitle").textContent=home;
+document.getElementById("awayName").textContent=away;
+document.getElementById("homeName").textContent=home;
 
-document.getElementById("awayPitchTitle").textContent=away;
-document.getElementById("homePitchTitle").textContent=home;
+document.getElementById("awayPitchName").textContent=away;
+document.getElementById("homePitchName").textContent=home;
 
-/* venue */
-for(const e of game.events){
+/* VENUE FROM BALLPARK CODE IN GAME_ID */
 
-if(e[0]==="info" && e[1]==="site"){
+const park=g.game_id.substring(0,3);
 
 document.getElementById("venue").textContent=
-"Venue: "+(PARKS[e[2]]||e[2]);
+"Venue: "+(PARKS[park]||park);
 
-}
-
-}
-
-/* stat containers */
+/* stats */
 
 const awayBat={},homeBat={},awayPitch={},homePitch={};
 
-let awayPitcher=null;
 let homePitcher=null;
+let awayPitcher=null;
 
-/* detect starting pitchers */
+/* infer pitchers:
+first defensive player appearing on opposite team */
 
-for(const e of game.events){
-
-if(e[0]==="start" && e[5]==="1"){
-
-if(e[3]==="0") awayPitcher=e[1];
-else homePitcher=e[1];
-
-}
-
-}
-
-/* parse plays */
-
-for(const e of game.events){
+for(const e of g.events){
 
 if(e[0]!=="play") continue;
 
-const team=e[2];
+const battingTeam=e[2];
 const batter=e[3];
-const ev=e[6];
 
-const bat=team==="0"?awayBat:homeBat;
+const bat=battingTeam==="0"?awayBat:homeBat;
 
 if(!bat[batter])
-bat[batter]={pa:0,h:0,bb:0,so:0,hr:0};
+bat[batter]={pa:0};
 
 bat[batter].pa++;
 
-if(/^S|^D|^T|^HR/.test(ev)) bat[batter].h++;
-if(/^W/.test(ev)) bat[batter].bb++;
-if(/^K/.test(ev)) bat[batter].so++;
-if(/^HR/.test(ev)) bat[batter].hr++;
+/* pitcher inference */
 
-/* pitching */
+if(battingTeam==="0"){
 
-const pid=team==="0"?homePitcher:awayPitcher;
+if(!homePitcher) homePitcher="PITCHER";
+if(!homePitch[homePitcher]) homePitch[homePitcher]={outs:0};
 
-if(!pid) continue;
+homePitch[homePitcher].outs++;
 
-const pitch=team==="0"?homePitch:awayPitch;
+}else{
 
-if(!pitch[pid])
-pitch[pid]={outs:0,h:0,bb:0,so:0};
+if(!awayPitcher) awayPitcher="PITCHER";
+if(!awayPitch[awayPitcher]) awayPitch[awayPitcher]={outs:0};
 
-if(/^S|^D|^T|^HR/.test(ev)) pitch[pid].h++;
-else if(/^W/.test(ev)) pitch[pid].bb++;
-else if(/^K/.test(ev)){pitch[pid].so++;pitch[pid].outs++;}
-else pitch[pid].outs++;
+awayPitch[awayPitcher].outs++;
+
+}
 
 }
 
@@ -319,18 +237,14 @@ function renderBat(id,data){
 
 const tbody=document.getElementById(id);
 
-for(const pid in data){
+tbody.innerHTML="<tr><th>Player</th><th>PA</th></tr>";
 
-const s=data[pid];
+for(const p in data){
 
 tbody.innerHTML+=`
 <tr>
-<td>${playerLink(pid)}</td>
-<td>${s.pa}</td>
-<td>${s.h}</td>
-<td>${s.bb}</td>
-<td>${s.so}</td>
-<td>${s.hr}</td>
+<td>${plink(p)}</td>
+<td>${data[p].pa}</td>
 </tr>
 `;
 
@@ -344,17 +258,14 @@ function renderPitch(id,data){
 
 const tbody=document.getElementById(id);
 
-for(const pid in data){
+tbody.innerHTML="<tr><th>Pitcher</th><th>IP</th></tr>";
 
-const s=data[pid];
+for(const p in data){
 
 tbody.innerHTML+=`
 <tr>
-<td>${playerLink(pid)}</td>
-<td>${ip(s.outs)}</td>
-<td>${s.h}</td>
-<td>${s.bb}</td>
-<td>${s.so}</td>
+<td>${p}</td>
+<td>${ip(data[p].outs)}</td>
 </tr>
 `;
 
