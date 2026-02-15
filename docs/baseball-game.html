@@ -8,18 +8,31 @@
 <style>
 body{font-family:Inter,Arial;margin:0;background:#eef2f7}
 .page{max-width:1200px;margin:auto;padding:20px}
+
 .hero{
 background:linear-gradient(90deg,#0b2a6f,#c8102e);
 color:white;padding:30px;border-radius:16px;text-align:center;margin-bottom:20px
 }
+
 .score{font-size:48px;font-weight:bold}
+
+.meta{
+margin-top:10px;
+font-weight:600;
+opacity:.9
+}
+
 .card{
 background:white;padding:16px;margin-bottom:20px;border-radius:12px;
 box-shadow:0 2px 6px rgba(0,0,0,.1)
 }
+
 table{width:100%;border-collapse:collapse}
+
 th{background:#123a7a;color:white;padding:8px}
+
 td{padding:8px}
+
 tr:nth-child(even){background:#eef3fb}
 </style>
 
@@ -32,31 +45,72 @@ tr:nth-child(even){background:#eef3fb}
 
 <script>
 
+let players={};
+
+const TEAM_NAMES={
+
+"NYA":"New York Yankees",
+"NYN":"New York Giants",
+"NY6":"New York Giants",
+
+"BOS":"Boston Red Sox",
+"BSN":"Boston Braves",
+
+"HOM":"Homestead Grays",
+
+"PHA":"Philadelphia Athletics",
+"PHI":"Philadelphia Phillies",
+
+"BRO":"Brooklyn Dodgers",
+
+"CHC":"Chicago Cubs",
+"CHA":"Chicago White Sox",
+
+"DET":"Detroit Tigers",
+"CLE":"Cleveland Indians",
+
+"SLN":"St Louis Cardinals",
+"SLB":"St Louis Browns"
+
+};
+
+function teamName(code){
+
+return TEAM_NAMES[code]||code;
+
+}
+
+function playerName(id){
+
+return players[id]?.name||players[id]?.full_name||id;
+
+}
+
+async function loadPlayers(){
+
+const res=await fetch("data/baseball/players.json");
+
+players=await res.json();
+
+}
+
 function getFile(){
 
 const p=new URLSearchParams(location.search);
 
-return p.get("file")||p.get("id")||p.get("game");
+return p.get("file");
 
 }
 
-async function load(){
+async function loadGame(){
+
+await loadPlayers();
 
 const file=getFile();
 
-if(!file){
-
-content.innerHTML="Invalid link";
-
-return;
-
-}
-
 const year=file.substring(0,4);
 
-const path="data/baseball/boxscores/"+year+"/"+file+".json";
-
-const res=await fetch(path);
+const res=await fetch("data/baseball/boxscores/"+year+"/"+file+".json");
 
 const game=await res.json();
 
@@ -66,54 +120,64 @@ render(game);
 
 function render(game){
 
-const home=game.home_team;
-const away=game.away_team;
+const batting={home:{},away:{}};
 
-const batting={
-home:{},
-away:{}
-};
+const pitchers={home:new Set(),away:new Set()};
 
 let score={home:0,away:0};
 
 for(const e of game.events){
 
-if(e[0]!=="play")continue;
+if(e[0]!="play")continue;
 
 const side=e[2]=="0"?"away":"home";
+
 const batter=e[3];
+
+const pitcher=e[5];
+
 const result=e[6];
 
-if(!batting[side][batter]){
-
-batting[side][batter]={Player:batter,AB:0,H:0,BB:0,SO:0};
-
-}
+if(!batting[side][batter])
+batting[side][batter]={Player:playerName(batter),AB:0,H:0,BB:0,SO:0};
 
 const s=batting[side][batter];
 
 s.AB++;
 
-if(result.startsWith("S")||result.startsWith("D")||result.startsWith("T")||result.startsWith("HR")) s.H++;
+if(result.startsWith("S")||result.startsWith("D")||result.startsWith("T")||result.startsWith("HR"))
+s.H++;
 
-if(result.startsWith("W")) s.BB++;
+if(result.startsWith("W"))
+s.BB++;
 
-if(result.startsWith("K")) s.SO++;
+if(result.startsWith("K"))
+s.SO++;
 
-if(result.includes("-H")) score[side]++;
+if(result.includes("-H"))
+score[side]++;
+
+if(pitcher) pitchers[side=="home"?"away":"home"].add(playerName(pitcher));
 
 }
 
 let html=`
 <div class="hero">
-<h1>${away} @ ${home}</h1>
+<h1>${teamName(game.away_code)} @ ${teamName(game.home_code)}</h1>
 <div class="score">${score.away} - ${score.home}</div>
-<div>${game.date}</div>
+<div class="meta">${game.date}</div>
+<div class="meta">Venue: ${game.venue||"Unknown"}</div>
+<div class="meta">Attendance: ${game.attendance||"—"}</div>
 </div>
 `;
 
 html+=table("Away Batting",Object.values(batting.away));
+
 html+=table("Home Batting",Object.values(batting.home));
+
+html+=pitchTable("Away Pitchers",Array.from(pitchers.away));
+
+html+=pitchTable("Home Pitchers",Array.from(pitchers.home));
 
 content.innerHTML=html;
 
@@ -142,7 +206,24 @@ return html;
 
 }
 
-load();
+function pitchTable(title,data){
+
+let html=`<div class="card"><h3>${title}</h3><table>
+<tr><th>Pitcher</th></tr>`;
+
+for(const p of data){
+
+html+=`<tr><td>${p}</td></tr>`;
+
+}
+
+html+="</table></div>";
+
+return html;
+
+}
+
+loadGame();
 
 </script>
 
