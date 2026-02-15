@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -107,6 +108,7 @@ tr:hover{
   cursor:pointer;
 }
 </style>
+
 </head>
 
 <body>
@@ -125,16 +127,15 @@ tr:hover{
 </div>
 
 <div class="controls">
-<label>Team 1:</label>
-<input list="teamList" id="team1" placeholder="Select team">
 
-<label>Team 2:</label>
-<input list="teamList" id="team2" placeholder="Select team">
+<label>Team 1:</label> <input list="teamList" id="team1" placeholder="Select team">
 
-<button onclick="applyFilter()">Search</button>
-<button onclick="clearFilter()">Clear</button>
+<label>Team 2:</label> <input list="teamList" id="team2" placeholder="Select team">
+
+<button onclick="applyFilter()">Search</button> <button onclick="clearFilter()">Clear</button>
 
 <datalist id="teamList"></datalist>
+
 </div>
 
 <table>
@@ -148,8 +149,7 @@ tr:hover{
 </tr>
 </thead>
 
-<tbody id="tbody">
-</tbody>
+<tbody id="tbody"></tbody>
 
 </table>
 
@@ -159,120 +159,90 @@ tr:hover{
 
 let allGames = [];
 
-// TEAMS TO EXCLUDE FROM SEARCH
 const EXCLUDE_TEAMS = new Set(["ALS","MLS"]);
 
 async function loadSeason(){
 
-const params=new URLSearchParams(window.location.search);
-const season=params.get("season");
+  const params = new URLSearchParams(window.location.search);
+  const season = params.get("season");
 
-if(!season){
-alert("Missing season parameter");
-return;
-}
+  if(!season){
+    alert("Missing season parameter");
+    return;
+  }
 
-document.getElementById("title").textContent=season+" Season";
+  document.getElementById("title").textContent =
+    season + " Season";
 
-const res=await fetch(`data/baseball/seasons/${season}.json`);
+  const res = await fetch(
+    `data/baseball/seasons/${season}.json`
+  );
 
-if(!res.ok){
-alert("Season file not found");
-return;
-}
+  if(!res.ok){
+    alert("Season file not found");
+    return;
+  }
 
-allGames=await res.json();
+  allGames = await res.json();
 
-populateTeams(allGames);
-renderGames(allGames);
+  populateTeams(allGames);
+  renderGames(allGames);
 
 }
 
 function populateTeams(games){
 
-const set=new Set();
+  const set = new Set();
 
-games.forEach(g=>{
-if(!EXCLUDE_TEAMS.has(g.away_team)) set.add(g.away_team);
-if(!EXCLUDE_TEAMS.has(g.home_team)) set.add(g.home_team);
-});
+  games.forEach(g => {
 
-const list=document.getElementById("teamList");
-list.innerHTML="";
+    if(g.away_team && !EXCLUDE_TEAMS.has(g.away_team))
+      set.add(g.away_team);
 
-[...set].sort().forEach(team=>{
-const option=document.createElement("option");
-option.value=team;
-list.appendChild(option);
-});
+    if(g.home_team && !EXCLUDE_TEAMS.has(g.home_team))
+      set.add(g.home_team);
+
+  });
+
+  const list = document.getElementById("teamList");
+
+  list.innerHTML = "";
+
+  [...set].sort().forEach(team => {
+
+    const option = document.createElement("option");
+
+    option.value = team;
+
+    list.appendChild(option);
+
+  });
 
 }
 
 function renderGames(games){
 
-const tbody=document.getElementById("tbody");
-tbody.innerHTML="";
+  const tbody =
+    document.getElementById("tbody");
 
-games.forEach(game=>{
+  tbody.innerHTML = "";
 
-const id=`${game.date}_${game.away_code}_${game.home_code}`;
+  games.forEach(game => {
 
-const tr=document.createElement("tr");
+    const gameId =
+      `${game.date}_${game.away_code}_${game.home_code}`;
 
-tr.onclick=()=>{
-window.location.href=`baseball-game.html?id=${id}`;
-};
+    const tr = document.createElement("tr");
 
-tr.innerHTML=`
-<td>${game.date}</td>
-<td>${game.away_team}</td>
-<td>${game.home_team}</td>
-<td>${game.away_score} - ${game.home_score}</td>
-`;
+    tr.onclick = () => {
 
-tbody.appendChild(tr);
+      window.location.href =
+        `baseball-game.html?id=${gameId}`;
 
-});
+    };
 
-}
-
-function applyFilter(){
-
-const t1=document.getElementById("team1").value;
-const t2=document.getElementById("team2").value;
-
-const filtered=allGames.filter(g=>{
-
-if(t1 && t2){
-return (
-(g.away_team===t1 && g.home_team===t2) ||
-(g.away_team===t2 && g.home_team===t1)
-);
-}
-
-if(t1){
-return g.away_team===t1 || g.home_team===t1;
-}
-
-return true;
-
-});
-
-renderGames(filtered);
-
-}
-
-function clearFilter(){
-
-document.getElementById("team1").value="";
-document.getElementById("team2").value="";
-renderGames(allGames);
-
-}
-
-loadSeason();
-
-</script>
-
-</body>
-</html>
+    tr.innerHTML = `
+<td>${game.date || ""}</td>
+<td>${game.away_team || ""}</td>
+<td>${game.home_team || ""}</td>
+<td>${game.away_score ?? ""} - ${game.home_score ?? ""}</td
