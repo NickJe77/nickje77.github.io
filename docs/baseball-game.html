@@ -1,82 +1,27 @@
 <!DOCTYPE html>
 
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<title>Baseball Game | The Sporting Almanac</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Baseball Game</title>
 
 <style>
-
-body{
-font-family:Inter,system-ui,Arial;
-margin:0;
-background:#eef2f7;
-}
-
-.page{
-max-width:1200px;
-margin:auto;
-padding:20px;
-}
-
+body{font-family:Inter,Arial;margin:0;background:#eef2f7}
+.page{max-width:1200px;margin:auto;padding:20px}
 .hero{
 background:linear-gradient(90deg,#0b2a6f,#c8102e);
-color:white;
-padding:30px;
-border-radius:18px;
-text-align:center;
-margin-bottom:20px;
+color:white;padding:30px;border-radius:18px;text-align:center;margin-bottom:20px
 }
-
-.score{
-font-size:56px;
-font-weight:700;
-margin-top:8px;
-}
-
-.meta{
-margin-top:6px;
-font-weight:600;
-opacity:.95;
-}
-
+.score{font-size:56px;font-weight:bold}
 .card{
-background:white;
-padding:18px;
-margin-bottom:18px;
-border-radius:14px;
-box-shadow:0 2px 6px rgba(0,0,0,.08);
+background:white;padding:18px;margin-bottom:18px;border-radius:14px;
+box-shadow:0 2px 6px rgba(0,0,0,.08)
 }
-
-table{
-width:100%;
-border-collapse:collapse;
-}
-
-th{
-background:#123a7a;
-color:white;
-padding:10px;
-text-align:left;
-}
-
-td{
-padding:10px;
-}
-
-tr:nth-child(even){
-background:#eef3fb;
-}
-
-.error{
-background:#ffdede;
-padding:15px;
-border-radius:10px;
-font-weight:700;
-color:#900;
-}
-
+table{width:100%;border-collapse:collapse}
+th{background:#123a7a;color:white;padding:10px;text-align:left}
+td{padding:10px}
+tr:nth-child(even){background:#eef3fb}
+.error{background:#ffdede;padding:15px;border-radius:10px;font-weight:bold}
 </style>
 
 </head>
@@ -88,57 +33,32 @@ color:#900;
 
 <script>
 
-let PLAYERS = {};
+let PLAYERS={};
 
 function getGameId(){
 
-const p = new URLSearchParams(location.search);
+const p=new URLSearchParams(location.search);
 
-if(p.get("id")) return p.get("id");
-
-if(p.get("file")) return p.get("file");
-
-if(p.get("game")) return p.get("game");
-
-if(p.get("path")){
-const parts = p.get("path").split("/");
-return parts[parts.length-1].replace(".json","");
-}
-
-if(location.hash)
-return location.hash.replace("#","");
-
-return null;
+return p.get("id")||p.get("file")||p.get("game");
 
 }
 
 async function loadPlayers(){
 
 try{
-
-const res = await fetch("data/baseball/players.json");
-
-if(res.ok)
-PLAYERS = await res.json();
-
-}catch(e){
-
-PLAYERS = {};
+const r=await fetch("data/baseball/players.json");
+if(r.ok) PLAYERS=await r.json();
+}catch{}
 
 }
 
-}
+function nameOf(id){
 
-function playerName(id){
+if(typeof PLAYERS[id]=="string") return PLAYERS[id];
 
-if(typeof PLAYERS[id] === "string")
-return PLAYERS[id];
+if(PLAYERS[id]?.name) return PLAYERS[id].name;
 
-if(PLAYERS[id]?.name)
-return PLAYERS[id].name;
-
-if(PLAYERS[id]?.full_name)
-return PLAYERS[id].full_name;
+if(PLAYERS[id]?.full_name) return PLAYERS[id].full_name;
 
 return id;
 
@@ -150,28 +70,25 @@ try{
 
 await loadPlayers();
 
-const gameId = getGameId();
+const id=getGameId();
 
-if(!gameId)
-throw "Missing game id";
+if(!id) throw "Missing id";
 
-const year = gameId.substring(0,4);
+const year=id.substring(0,4);
 
-const path = "data/baseball/boxscores/" + year + "/" + gameId + ".json";
+const path="data/baseball/boxscores/"+year+"/"+id+".json";
 
-const res = await fetch(path);
+const r=await fetch(path);
 
-if(!res.ok)
-throw "Game file not found: " + path;
+if(!r.ok) throw "File not found";
 
-const game = await res.json();
+const game=await r.json();
 
 render(game);
 
-}catch(err){
+}catch(e){
 
-document.getElementById("content").innerHTML =
-"<div class='error'>" + err + "</div>";
+content.innerHTML="<div class='error'>"+e+"</div>";
 
 }
 
@@ -179,135 +96,113 @@ document.getElementById("content").innerHTML =
 
 function render(game){
 
-let score = {home:0,away:0};
+let batting={home:{},away:{}};
+let pitching={home:{},away:{}};
 
-let batting = {home:{},away:{}};
+let score={home:0,away:0};
 
-let pitchers = {home:new Set(),away:new Set()};
+for(const e of game.events){
 
-for(const e of game.events || []){
+if(e[0]!="play") continue;
 
-if(e[0] !== "play") continue;
+const inning=e[1];
+const side=e[2]=="0"?"away":"home";
 
-const side = e[2] === "0" ? "away" : "home";
+const batter=e[3];
+const pitcher=e[5];
+const result=e[6];
 
-const batter = e[3];
+if(!batting[side][batter])
+batting[side][batter]={name:nameOf(batter),AB:0,H:0,BB:0,SO:0};
 
-const pitcher = e[5];
+const b=batting[side][batter];
 
-const result = e[6] || "";
+if(!result.startsWith("W"))
+b.AB++;
 
-if(!batting[side][batter]){
-
-batting[side][batter] = {
-name:playerName(batter),
-AB:0,
-H:0,
-BB:0,
-SO:0
-};
-
-}
-
-const s = batting[side][batter];
-
-s.AB++;
-
-if(result.startsWith("S") ||
-result.startsWith("D") ||
-result.startsWith("T") ||
-result.startsWith("HR"))
-s.H++;
+if(result.startsWith("S")||result.startsWith("D")||result.startsWith("T")||result.startsWith("HR"))
+b.H++;
 
 if(result.startsWith("W"))
-s.BB++;
+b.BB++;
 
 if(result.startsWith("K"))
-s.SO++;
+b.SO++;
 
 if(result.includes("-H"))
 score[side]++;
 
-if(pitcher)
-pitchers[side === "home" ? "away" : "home"]
-.add(playerName(pitcher));
+if(pitcher){
+
+const pside=side=="home"?"away":"home";
+
+if(!pitching[pside][pitcher])
+pitching[pside][pitcher]={name:nameOf(pitcher),BF:0};
+
+pitching[pside][pitcher].BF++;
 
 }
 
-let html =
-"<div class='hero'>" +
-"<h1>" + (game.away_team || game.away_code) +
-" @ " +
-(game.home_team || game.home_code) +
-"</h1>" +
-"<div class='score'>" +
-score.away + " - " + score.home +
-"</div>" +
-"<div class='meta'>" + game.date + "</div>" +
-"<div class='meta'>Venue: " +
-(game.venue || "Unknown") +
-"</div>" +
-"</div>";
+}
 
-html += buildBatting("Away Batting", batting.away);
+let html="<div class='hero'>";
+html+="<h1>"+game.away_team+" @ "+game.home_team+"</h1>";
+html+="<div class='score'>"+score.away+" - "+score.home+"</div>";
+html+="<div>"+game.date+"</div>";
+html+="</div>";
 
-html += buildBatting("Home Batting", batting.home);
+html+=table("Away Batting",batting.away);
+html+=table("Home Batting",batting.home);
 
-html += buildPitching("Away Pitchers", pitchers.away);
+html+=pitchTable("Away Pitching",pitching.away);
+html+=pitchTable("Home Pitching",pitching.home);
 
-html += buildPitching("Home Pitchers", pitchers.home);
-
-document.getElementById("content").innerHTML = html;
+content.innerHTML=html;
 
 }
 
-function buildBatting(title,data){
+function table(title,data){
 
-let html =
-"<div class='card'>" +
-"<h3>" + title + "</h3>" +
-"<table>" +
-"<tr>" +
-"<th>Player</th>" +
-"<th>AB</th>" +
-"<th>H</th>" +
-"<th>BB</th>" +
-"<th>SO</th>" +
-"</tr>";
+let html="<div class='card'><h3>"+title+"</h3><table>";
+html+="<tr><th>Player</th><th>AB</th><th>H</th><th>BB</th><th>SO</th></tr>";
 
 for(const k in data){
 
-const r = data[k];
+const r=data[k];
 
-html +=
-"<tr>" +
-"<td>" + r.name + "</td>" +
-"<td>" + r.AB + "</td>" +
-"<td>" + r.H + "</td>" +
-"<td>" + r.BB + "</td>" +
-"<td>" + r.SO + "</td>" +
-"</tr>";
+html+="<tr>";
+html+="<td>"+r.name+"</td>";
+html+="<td>"+r.AB+"</td>";
+html+="<td>"+r.H+"</td>";
+html+="<td>"+r.BB+"</td>";
+html+="<td>"+r.SO+"</td>";
+html+="</tr>";
 
 }
 
-html += "</table></div>";
+html+="</table></div>";
 
 return html;
 
 }
 
-function buildPitching(title,set){
+function pitchTable(title,data){
 
-let html =
-"<div class='card'>" +
-"<h3>" + title + "</h3>" +
-"<table>" +
-"<tr><th>Pitcher</th></tr>";
+let html="<div class='card'><h3>"+title+"</h3><table>";
+html+="<tr><th>Pitcher</th><th>BF</th></tr>";
 
-for(const p of set)
-html += "<tr><td>" + p + "</td></tr>";
+for(const k in data){
 
-html += "</table></div>";
+const r=data[k];
+
+html+="<tr>";
+html+="<td>"+r.name+"</td>";
+html+="<td>"+r.BF+"</td>";
+html+="</tr>";
+
+}
+
+html+="</table></div>";
 
 return html;
 
