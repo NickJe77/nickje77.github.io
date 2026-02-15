@@ -104,6 +104,13 @@ padding:8px;
 tr:nth-child(even){
 background:#eef3fb;
 }
+
+.error{
+font-size:22px;
+color:red;
+text-align:center;
+padding:40px;
+}
 </style>
 
 </head>
@@ -124,8 +131,8 @@ Loading game...
 <script>
 
 function getGameID(){
-const params=new URLSearchParams(location.search);
-return params.get("id"); // THIS MATCHES YOUR EXISTING SITE
+const p=new URLSearchParams(location.search);
+return p.get("id")||p.get("game")||p.get("gid");
 }
 
 async function loadGame(){
@@ -133,22 +140,41 @@ async function loadGame(){
 const id=getGameID();
 
 if(!id){
-content.innerHTML="Invalid game link";
+showError("Invalid game link");
 return;
 }
 
 const year=id.substring(0,4);
 
-const path="data/baseball/games/"+year+"/"+id+".json";
+const possiblePaths=[
 
-const res=await fetch(path);
+"data/baseball/games/"+year+"/"+id+".json",
+"./data/baseball/games/"+year+"/"+id+".json",
+"data/baseball/"+year+"/"+id+".json",
+"./data/baseball/"+year+"/"+id+".json",
+"data/baseball/games/"+id+".json",
+"./data/baseball/games/"+id+".json"
 
-if(!res.ok){
-content.innerHTML="Game not found";
-return;
+];
+
+let game=null;
+
+for(const path of possiblePaths){
+
+try{
+const r=await fetch(path);
+if(r.ok){
+game=await r.json();
+break;
+}
+}catch{}
+
 }
 
-const game=await res.json();
+if(!game){
+showError("Game file not found");
+return;
+}
 
 render(game);
 
@@ -156,25 +182,31 @@ render(game);
 
 function render(game){
 
-let html=`
+const away=game.away_code||game.away||game.away_team||"";
+const home=game.home_code||game.home||game.home_team||"";
 
+const awayScore=game.away_score??game.awayScore??"";
+const homeScore=game.home_score??game.homeScore??"";
+
+const date=game.date||game.game_date||"";
+
+let html=`
 <div class="hero">
-<div class="match">${game.away_code} @ ${game.home_code}</div>
-<div class="score">${game.away_score} - ${game.home_score}</div>
-<div class="date">${game.date}</div>
+<div class="match">${away} @ ${home}</div>
+<div class="score">${awayScore} - ${homeScore}</div>
+<div class="date">${date}</div>
 </div>
 
 <div class="meta">
-<div>Venue: ${game.venue ?? "Unknown"}</div>
-<div>Attendance: ${game.attendance ?? "-"}</div>
+<div>Venue: ${game.venue??"Unknown"}</div>
+<div>Attendance: ${game.attendance??"-"}</div>
 </div>
-
 `;
 
-html+=renderTable(game.awayBatTitle,game.awayBatting);
-html+=renderTable(game.homeBatTitle,game.homeBatting);
-html+=renderTable(game.awayPitchTitle,game.awayPitching);
-html+=renderTable(game.homePitchTitle,game.homePitching);
+html+=renderTable(game.awayBatTitle||"Away Batting",game.awayBatting);
+html+=renderTable(game.homeBatTitle||"Home Batting",game.homeBatting);
+html+=renderTable(game.awayPitchTitle||"Away Pitching",game.awayPitching);
+html+=renderTable(game.homePitchTitle||"Home Pitching",game.homePitching);
 
 content.innerHTML=html;
 
@@ -182,25 +214,20 @@ content.innerHTML=html;
 
 function renderTable(title,data){
 
-if(!data || data.length===0)
+if(!data||!data.length)
 return `<div class="section"><h2>${title}</h2>No data</div>`;
 
 const cols=Object.keys(data[0]);
 
-let html=`
-<div class="section">
-<h2>${title}</h2>
-<table>
-<tr>
-${cols.map(c=>`<th>${c}</th>`).join("")}
-</tr>
-`;
+let html=`<div class="section"><h2>${title}</h2><table><tr>`;
 
-data.forEach(row=>{
+cols.forEach(c=>html+="<th>"+c+"</th>");
+
+html+="</tr>";
+
+data.forEach(r=>{
 html+="<tr>";
-cols.forEach(c=>{
-html+=`<td>${row[c]??""}</td>`;
-});
+cols.forEach(c=>html+="<td>"+(r[c]??"")+"</td>");
 html+="</tr>";
 });
 
@@ -208,6 +235,10 @@ html+="</table></div>";
 
 return html;
 
+}
+
+function showError(msg){
+content.innerHTML='<div class="error">'+msg+"</div>";
 }
 
 loadGame();
