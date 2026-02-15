@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -7,7 +6,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-
 body{
 font-family:Inter,system-ui,Arial;
 margin:0;
@@ -43,13 +41,16 @@ border-radius:20px;
 margin-bottom:20px;
 }
 
+.section{
+background:#fff;
+padding:16px;
+border-radius:16px;
+margin-bottom:16px;
+}
+
 table{
 width:100%;
 border-collapse:collapse;
-background:#fff;
-margin-bottom:20px;
-border-radius:12px;
-overflow:hidden;
 }
 
 th{
@@ -67,15 +68,7 @@ border-bottom:1px solid #eee;
 tr:nth-child(even){
 background:#f0f6ff;
 }
-
-.section{
-font-weight:700;
-font-size:20px;
-margin:20px 0 10px;
-}
-
 </style>
-
 </head>
 
 <body>
@@ -89,132 +82,184 @@ margin:20px 0 10px;
 <div class="page">
 
 <div class="hero">
-<h1 id="title">Loading...</h1>
+<h1 id="title">Loading game...</h1>
 <div id="date"></div>
+<div id="venue"></div>
 </div>
 
-<div class="section">Batting</div>
+<div class="section">
+<h2>Batting</h2>
 <table>
 <thead>
 <tr>
 <th>Player</th>
 <th>PA</th>
+<th>H</th>
+<th>BB</th>
+<th>SO</th>
 </tr>
 </thead>
 <tbody id="batting"></tbody>
 </table>
+</div>
+
+<div class="section">
+<h2>Pitching</h2>
+<table>
+<thead>
+<tr>
+<th>Pitcher</th>
+<th>Outs</th>
+<th>H</th>
+<th>BB</th>
+<th>SO</th>
+</tr>
+</thead>
+<tbody id="pitching"></tbody>
+</table>
+</div>
 
 </div>
 
 <script>
 
-let players = {};
+let PLAYERS={}
+let TEAMS={}
+let PARKS={}
 
-async function loadPlayers(){
-
-const res =
-await fetch("data/baseball/players.json");
-
-if(res.ok)
-players = await res.json();
-
+function getParam(name){
+return new URLSearchParams(location.search).get(name)
 }
 
-function getPlayerName(id){
+async function loadPlayers(){
+const r=await fetch("data/baseball/players.json")
+const j=await r.json()
 
-return players[id] || id;
+if(Array.isArray(j)){
+j.forEach(p=>PLAYERS[p.id]=p.name)
+}else{
+PLAYERS=j
+}
+}
 
+async function loadTeams(){
+const r=await fetch("data/baseball/teams.json")
+TEAMS=await r.json()
+}
+
+async function loadParks(){
+const r=await fetch("data/baseball/ballparks.csv")
+const t=await r.text()
+
+t.split("\n").forEach(line=>{
+const parts=line.split(",")
+PARKS[parts[0]]=parts[1]
+})
+}
+
+function nameOf(id){
+return PLAYERS[id] || id
+}
+
+function teamName(code){
+return TEAMS[code] || code
+}
+
+function parseBatting(events){
+
+const stats={}
+
+events.forEach(e=>{
+
+if(e[0]!=="play") return
+
+const player=e[3]
+const result=e[6]
+
+if(!stats[player]){
+stats[player]={pa:0,h:0,bb:0,so:0}
+}
+
+stats[player].pa++
+
+if(result.startsWith("S") || result.startsWith("D") || result.startsWith("T") || result.startsWith("HR"))
+stats[player].h++
+
+if(result.startsWith("W"))
+stats[player].bb++
+
+if(result.startsWith("K"))
+stats[player].so++
+
+})
+
+return stats
+}
+
+function renderBatting(stats){
+
+const tbody=document.getElementById("batting")
+
+Object.entries(stats).forEach(([id,s])=>{
+
+const tr=document.createElement("tr")
+
+tr.innerHTML=`
+<td>${nameOf(id)}</td>
+<td>${s.pa}</td>
+<td>${s.h}</td>
+<td>${s.bb}</td>
+<td>${s.so}</td>
+`
+
+tbody.appendChild(tr)
+
+})
 }
 
 async function loadGame(){
 
-const params = new URLSearchParams(window.location.search);
-
-const id = params.get("id");
+const id=getParam("id")
 
 if(!id){
-
-document.getElementById("title").textContent =
-"Missing game id";
-
-return;
-
+document.getElementById("title").textContent="Missing game id"
+return
 }
 
-const year = id.substring(0,4);
+const year=id.substring(0,4)
 
-const path =
-`data/baseball/boxscores/${year}/${id}.json`;
+const path=`data/baseball/boxscores/${year}/${id}.json`
 
-const res = await fetch(path);
+const r=await fetch(path)
 
-if(!res.ok){
-
-document.getElementById("title").textContent =
-"Game file not found";
-
-return;
-
+if(!r.ok){
+document.getElementById("title").textContent="Game file not found"
+return
 }
 
-const game = await res.json();
+const game=await r.json()
 
-document.getElementById("title").textContent =
-game.away_code + " @ " + game.home_code;
+document.getElementById("title").textContent=
+teamName(game.away_code)+" @ "+teamName(game.home_code)
 
-document.getElementById("date").textContent =
-game.date;
+document.getElementById("date").textContent=game.date
 
-renderBatting(game);
+const stats=parseBatting(game.events)
 
-}
-
-function renderBatting(game){
-
-const stats = {};
-
-game.events.forEach(e=>{
-
-if(e[0] !== "play") return;
-
-const player = e[3];
-
-if(!stats[player])
-stats[player] = 0;
-
-stats[player]++;
-
-});
-
-const tbody =
-document.getElementById("batting");
-
-tbody.innerHTML = "";
-
-Object.entries(stats)
-.forEach(([player,pa])=>{
-
-const tr = document.createElement("tr");
-
-tr.innerHTML =
-"<td>"+getPlayerName(player)+"</td>"+
-"<td>"+pa+"</td>";
-
-tbody.appendChild(tr);
-
-});
+renderBatting(stats)
 
 }
 
 async function init(){
 
-await loadPlayers();
-
-await loadGame();
+await loadPlayers()
+await loadTeams()
+await loadParks()
+await loadGame()
 
 }
 
-init();
+init()
 
 </script>
 
