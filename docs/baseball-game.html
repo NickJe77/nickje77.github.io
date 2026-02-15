@@ -20,7 +20,6 @@ table{width:100%;border-collapse:collapse;}
 th{background:#002D72;color:#fff;padding:10px;text-align:left;}
 td{padding:8px;border-bottom:1px solid #eee;}
 tr:nth-child(even){background:#f0f6ff;}
-.error{background:#ffd6d6;color:#8a0000;padding:12px;border-radius:10px;margin-bottom:12px;font-weight:800;}
 </style>
 </head>
 
@@ -30,12 +29,9 @@ tr:nth-child(even){background:#f0f6ff;}
 <a href="index.html">Home</a>
 <a href="baseball.html">Baseball</a>
 <a href="baseball-seasons.html">Seasons</a>
-<a href="baseball-player.html">Players</a>
 </div>
 
 <div class="page">
-
-<div id="error" class="error" style="display:none;"></div>
 
 <div class="hero">
 <h1 id="title">Loading...</h1>
@@ -44,12 +40,12 @@ tr:nth-child(even){background:#f0f6ff;}
 
 <div class="infoRow">
 <div class="infoBox" id="venue">Venue: —</div>
-<div class="infoBox" id="attendance">Attendance: —</div>
 </div>
 
 <div class="card">
 <h2>Batting</h2>
 <div class="split">
+
 <div>
 <h3>Away</h3>
 <table>
@@ -59,6 +55,7 @@ tr:nth-child(even){background:#f0f6ff;}
 <tbody id="awayBat"></tbody>
 </table>
 </div>
+
 <div>
 <h3>Home</h3>
 <table>
@@ -68,17 +65,21 @@ tr:nth-child(even){background:#f0f6ff;}
 <tbody id="homeBat"></tbody>
 </table>
 </div>
+
 </div>
 </div>
 
+
 <div class="card">
 <h2>Pitching</h2>
+
 <div class="split">
+
 <div>
 <h3>Away Pitching</h3>
 <table>
 <thead>
-<tr><th>Pitcher</th><th>IP</th><th>H</th><th>BB</th><th>SO</th><th>HR</th></tr>
+<tr><th>Pitcher</th><th>IP</th><th>H</th><th>BB</th><th>SO</th></tr>
 </thead>
 <tbody id="awayPitch"></tbody>
 </table>
@@ -88,132 +89,109 @@ tr:nth-child(even){background:#f0f6ff;}
 <h3>Home Pitching</h3>
 <table>
 <thead>
-<tr><th>Pitcher</th><th>IP</th><th>H</th><th>BB</th><th>SO</th><th>HR</th></tr>
+<tr><th>Pitcher</th><th>IP</th><th>H</th><th>BB</th><th>SO</th></tr>
 </thead>
 <tbody id="homePitch"></tbody>
 </table>
 </div>
-</div>
+
 </div>
 
 </div>
+
+</div>
+
 
 <script>
 
-const id = new URLSearchParams(location.search).get("id");
-const year = id.substring(0,4);
+const id=new URLSearchParams(location.search).get("id");
+const year=id.substring(0,4);
 
-const gamePath = `data/baseball/boxscores/${year}/${id}.json`;
+const GAME_PATH=`data/baseball/boxscores/${year}/${id}.json`;
 
-let PLAYER_MAP={};
-let TEAM_MAP={};
-let PARK_MAP={};
+let PLAYERS={};
+let TEAMS={};
+let PARKS={};
 
-function showError(msg){
-document.getElementById("error").style.display="block";
-document.getElementById("error").textContent=msg;
+function pname(id){return PLAYERS[id]||id;}
+function tname(id){return TEAMS[id]||id;}
+
+function ip(outs){
+return Math.floor(outs/3)+"."+(outs%3);
 }
 
-function ipFromOuts(outs){
-const innings=Math.floor(outs/3);
-const remainder=outs%3;
-return innings+"."+remainder;
-}
+async function loadRefs(){
 
-function pname(id){return PLAYER_MAP[id]||id;}
-function tname(id){return TEAM_MAP[id]||id;}
-
-function ensure(map,id){
-if(!map[id]) map[id]={pa:0,h:0,bb:0,so:0,hr:0,outs:0};
-return map[id];
-}
-
-function isHit(ev){return ev.startsWith("S")||ev.startsWith("D")||ev.startsWith("T")||ev.startsWith("HR");}
-function isHR(ev){return ev.startsWith("HR");}
-function isBB(ev){return ev.startsWith("W");}
-function isSO(ev){return ev.startsWith("K");}
-
-function outs(ev){
-if(isHit(ev)||isBB(ev)) return 0;
-return 1;
-}
-
-async function load(){
-
-try{
+/* PLAYERS */
 
 const players=await fetch("data/baseball/players.json").then(r=>r.json());
-const teams=await fetch("data/baseball/teams.json").then(r=>r.json());
-const parks=await fetch("data/baseball/ballparks.csv").then(r=>r.text());
 
-/* PLAYER MAP */
 if(Array.isArray(players)){
 players.forEach(p=>{
 const id=p.id||p.player_id||p.playerID;
 const name=p.name||p.full_name||(p.nameFirst+" "+p.nameLast);
-if(id&&name) PLAYER_MAP[id]=name;
+if(id&&name) PLAYERS[id]=name;
 });
 }else{
-Object.assign(PLAYER_MAP,players);
+Object.assign(PLAYERS,players);
 }
 
-/* TEAM MAP */
+/* TEAMS */
+
+const teams=await fetch("data/baseball/teams.json").then(r=>r.json());
+
 if(Array.isArray(teams)){
 teams.forEach(t=>{
-const code=t.code||t.team_code||t.id;
+const code=t.code||t.id||t.team_code;
 const name=t.name||t.full_name||t.team_name;
-if(code&&name) TEAM_MAP[code]=name;
+if(code&&name) TEAMS[code]=name;
 });
 }else{
-Object.assign(TEAM_MAP,teams);
+Object.assign(TEAMS,teams);
 }
 
-/* PARK MAP */
-parks.split("\n").forEach(line=>{
+/* BALLPARKS */
+
+const csv=await fetch("data/baseball/ballparks.csv").then(r=>r.text());
+
+csv.split("\n").forEach(line=>{
 const parts=line.split(",");
-if(parts.length>=2) PARK_MAP[parts[0]]=parts[1];
+if(parts.length>=2) PARKS[parts[0]]=parts[1];
 });
 
-/* LOAD GAME */
+}
 
-const game=await fetch(gamePath).then(r=>{
-if(!r.ok) throw new Error("Game file not found");
-return r.json();
-});
+async function loadGame(){
 
-/* HEADER */
+await loadRefs();
+
+const game=await fetch(GAME_PATH).then(r=>r.json());
 
 document.getElementById("title").textContent=
 tname(game.away_code)+" @ "+tname(game.home_code);
 
 document.getElementById("date").textContent=game.date;
 
-/* STATS */
 
-const awayBat={};
-const homeBat={};
+/* venue */
 
-const awayPitch={};
-const homePitch={};
+game.events.forEach(e=>{
+if(e[0]==="info"&&e[1]==="site"){
+document.getElementById("venue").textContent=
+"Venue: "+(PARKS[e[2]]||e[2]);
+}
+});
+
+
+const awayBat={},homeBat={};
+const awayPitch={},homePitch={};
 
 let awayPitcher=null;
 let homePitcher=null;
 
+/* detect pitchers properly */
+
 game.events.forEach(e=>{
-
-if(e[0]==="info"){
-
-if(e[1]==="site"){
-document.getElementById("venue").textContent="Venue: "+(PARK_MAP[e[2]]||e[2]);
-}
-
-if(e[1]==="attendance"){
-document.getElementById("attendance").textContent="Attendance: "+e[2];
-}
-
-}
-
-/* detect pitchers */
 
 if(e[0]==="start"||e[0]==="sub"){
 
@@ -240,40 +218,56 @@ const ev=e[6];
 
 if(team==="0"){
 
-const b=ensure(awayBat,batter);
+if(!awayBat[batter]) awayBat[batter]={pa:0,h:0,bb:0,so:0,hr:0};
+const b=awayBat[batter];
 
 b.pa++;
-if(isHit(ev)) b.h++;
-if(isBB(ev)) b.bb++;
-if(isSO(ev)) b.so++;
-if(isHR(ev)) b.hr++;
+
+if(ev.startsWith("S")||ev.startsWith("D")||ev.startsWith("T")||ev.startsWith("HR")) b.h++;
+if(ev.startsWith("W")) b.bb++;
+if(ev.startsWith("K")) b.so++;
+if(ev.startsWith("HR")) b.hr++;
 
 if(homePitcher){
-const p=ensure(homePitch,homePitcher);
-p.outs+=outs(ev);
-if(isHit(ev)) p.h++;
-if(isBB(ev)) p.bb++;
-if(isSO(ev)) p.so++;
-if(isHR(ev)) p.hr++;
+
+if(!homePitch[homePitcher]) homePitch[homePitcher]={outs:0,h:0,bb:0,so:0};
+
+const p=homePitch[homePitcher];
+
+if(!ev.startsWith("S")&&!ev.startsWith("D")&&!ev.startsWith("T")&&!ev.startsWith("HR")&&!ev.startsWith("W"))
+p.outs++;
+
+if(ev.startsWith("S")||ev.startsWith("D")||ev.startsWith("T")||ev.startsWith("HR")) p.h++;
+if(ev.startsWith("W")) p.bb++;
+if(ev.startsWith("K")) p.so++;
+
 }
 
 }else{
 
-const b=ensure(homeBat,batter);
+if(!homeBat[batter]) homeBat[batter]={pa:0,h:0,bb:0,so:0,hr:0};
+const b=homeBat[batter];
 
 b.pa++;
-if(isHit(ev)) b.h++;
-if(isBB(ev)) b.bb++;
-if(isSO(ev)) b.so++;
-if(isHR(ev)) b.hr++;
+
+if(ev.startsWith("S")||ev.startsWith("D")||ev.startsWith("T")||ev.startsWith("HR")) b.h++;
+if(ev.startsWith("W")) b.bb++;
+if(ev.startsWith("K")) b.so++;
+if(ev.startsWith("HR")) b.hr++;
 
 if(awayPitcher){
-const p=ensure(awayPitch,awayPitcher);
-p.outs+=outs(ev);
-if(isHit(ev)) p.h++;
-if(isBB(ev)) p.bb++;
-if(isSO(ev)) p.so++;
-if(isHR(ev)) p.hr++;
+
+if(!awayPitch[awayPitcher]) awayPitch[awayPitcher]={outs:0,h:0,bb:0,so:0};
+
+const p=awayPitch[awayPitcher];
+
+if(!ev.startsWith("S")&&!ev.startsWith("D")&&!ev.startsWith("T")&&!ev.startsWith("HR")&&!ev.startsWith("W"))
+p.outs++;
+
+if(ev.startsWith("S")||ev.startsWith("D")||ev.startsWith("T")||ev.startsWith("HR")) p.h++;
+if(ev.startsWith("W")) p.bb++;
+if(ev.startsWith("K")) p.so++;
+
 }
 
 }
@@ -282,13 +276,12 @@ if(isHR(ev)) p.hr++;
 
 });
 
-/* render batting */
 
-function renderBat(id,map){
+function renderBat(id,data){
 
 const tbody=document.getElementById(id);
 
-Object.entries(map).forEach(([pid,s])=>{
+Object.entries(data).forEach(([pid,s])=>{
 
 const tr=document.createElement("tr");
 
@@ -307,26 +300,20 @@ tbody.appendChild(tr);
 
 }
 
-renderBat("awayBat",awayBat);
-renderBat("homeBat",homeBat);
-
-/* render pitching */
-
-function renderPitch(id,map){
+function renderPitch(id,data){
 
 const tbody=document.getElementById(id);
 
-Object.entries(map).forEach(([pid,s])=>{
+Object.entries(data).forEach(([pid,s])=>{
 
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
 <td>${pname(pid)}</td>
-<td>${ipFromOuts(s.outs)}</td>
+<td>${ip(s.outs)}</td>
 <td>${s.h}</td>
 <td>${s.bb}</td>
 <td>${s.so}</td>
-<td>${s.hr}</td>
 `;
 
 tbody.appendChild(tr);
@@ -335,16 +322,15 @@ tbody.appendChild(tr);
 
 }
 
+renderBat("awayBat",awayBat);
+renderBat("homeBat",homeBat);
+
 renderPitch("awayPitch",awayPitch);
 renderPitch("homePitch",homePitch);
 
-}catch(err){
-showError(err.message);
 }
 
-}
-
-load();
+loadGame();
 
 </script>
 
