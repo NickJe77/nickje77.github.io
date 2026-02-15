@@ -6,6 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
+
 body{
 font-family:Inter,system-ui,Arial;
 margin:0;
@@ -42,22 +43,9 @@ text-align:center;
 margin-bottom:20px;
 }
 
-.matchup{
-font-size:42px;
-font-weight:900;
-}
-
-.score{
-font-size:72px;
-font-weight:900;
-margin-top:10px;
-}
-
-.date{
-font-size:18px;
-margin-top:6px;
-font-weight:700;
-}
+.matchup{font-size:42px;font-weight:900;}
+.score{font-size:72px;font-weight:900;margin-top:10px;}
+.date{font-size:18px;margin-top:6px;font-weight:700;}
 
 .card{
 background:#fff;
@@ -65,16 +53,6 @@ padding:18px;
 border-radius:16px;
 box-shadow:0 4px 14px rgba(0,0,0,0.12);
 margin-bottom:18px;
-}
-
-.meta span{
-display:inline-block;
-background:#eef4ff;
-border:1px solid #d6e4ff;
-padding:8px 14px;
-border-radius:12px;
-margin-right:10px;
-font-weight:700;
 }
 
 table{
@@ -92,26 +70,18 @@ text-align:center;
 td{
 padding:10px;
 border-bottom:1px solid #eee;
+text-align:center;
 }
 
 tr:nth-child(even){
 background:#f0f6ff;
 }
 
-.linescore td{
-text-align:center;
-font-weight:600;
+td:first-child{
+text-align:left;
+font-weight:700;
 }
 
-.linescore td:first-child{
-text-align:left;
-font-weight:800;
-}
-
-.player-table th,
-.player-table td{
-text-align:left;
-}
 </style>
 </head>
 
@@ -127,22 +97,14 @@ text-align:left;
 <div class="page">
 
 <div class="hero">
-<div class="matchup" id="matchup">Loading…</div>
-<div class="score" id="score">—</div>
+<div class="matchup" id="matchup"></div>
+<div class="score" id="score"></div>
 <div class="date" id="date"></div>
 </div>
 
 <div class="card">
-<h3>Game Info</h3>
-<div class="meta">
-<span id="venue">Venue: —</span>
-<span id="attendance">Attendance: —</span>
-</div>
-</div>
-
-<div class="card">
 <h3>Linescore</h3>
-<table class="linescore">
+<table>
 <thead id="linescoreHead"></thead>
 <tbody id="linescoreBody"></tbody>
 </table>
@@ -150,32 +112,74 @@ text-align:left;
 
 <div class="card">
 <h3 id="awayBatTitle"></h3>
-<table class="player-table">
-<thead><tr><th>Player</th></tr></thead>
+<table>
+<thead>
+<tr>
+<th>Player</th>
+<th>AB</th>
+<th>H</th>
+<th>R</th>
+<th>RBI</th>
+<th>BB</th>
+<th>SO</th>
+<th>HR</th>
+</tr>
+</thead>
 <tbody id="awayBat"></tbody>
 </table>
 </div>
 
 <div class="card">
 <h3 id="homeBatTitle"></h3>
-<table class="player-table">
-<thead><tr><th>Player</th></tr></thead>
+<table>
+<thead>
+<tr>
+<th>Player</th>
+<th>AB</th>
+<th>H</th>
+<th>R</th>
+<th>RBI</th>
+<th>BB</th>
+<th>SO</th>
+<th>HR</th>
+</tr>
+</thead>
 <tbody id="homeBat"></tbody>
 </table>
 </div>
 
 <div class="card">
 <h3 id="awayPitchTitle"></h3>
-<table class="player-table">
-<thead><tr><th>Pitcher</th></tr></thead>
+<table>
+<thead>
+<tr>
+<th>Pitcher</th>
+<th>IP</th>
+<th>H</th>
+<th>R</th>
+<th>BB</th>
+<th>SO</th>
+<th>HR</th>
+</tr>
+</thead>
 <tbody id="awayPitch"></tbody>
 </table>
 </div>
 
 <div class="card">
 <h3 id="homePitchTitle"></h3>
-<table class="player-table">
-<thead><tr><th>Pitcher</th></tr></thead>
+<table>
+<thead>
+<tr>
+<th>Pitcher</th>
+<th>IP</th>
+<th>H</th>
+<th>R</th>
+<th>BB</th>
+<th>SO</th>
+<th>HR</th>
+</tr>
+</thead>
 <tbody id="homePitch"></tbody>
 </table>
 </div>
@@ -184,26 +188,9 @@ text-align:left;
 
 <script>
 
-const TEAM_NAMES={
-NYA:"New York Yankees",
-BOS:"Boston Red Sox",
-LAN:"Los Angeles Dodgers",
-SFN:"San Francisco Giants",
-CHN:"Chicago Cubs",
-SLN:"St Louis Cardinals",
-ATL:"Atlanta Braves",
-NYN:"New York Mets"
-};
-
-function teamName(code){
-return TEAM_NAMES[code]||code;
-}
-
-async function loadPlayerMap(){
+async function loadPlayers(){
 
 const res=await fetch("data/baseball/players.json");
-
-if(!res.ok)return new Map();
 
 const data=await res.json();
 
@@ -211,80 +198,150 @@ const map=new Map();
 
 for(const p of data){
 
-const id=p.retrosheet_id||p.player_id||p.id;
-
-const name=
-p.name||
-p.full_name||
-p.fullName||
-p.player_name||
-(p.first_name&&p.last_name?p.first_name+" "+p.last_name:null);
-
-if(id&&name)
-map.set(id,name);
+map.set(
+p.retrosheet_id,
+p.name||p.full_name||p.player_name
+);
 
 }
 
 return map;
+
 }
 
-function extractInfo(events){
+function statObj(){
 
-const info={};
+return{
+AB:0,H:0,R:0,RBI:0,BB:0,SO:0,HR:0
+};
 
-for(const e of events)
-if(e[0]=="info")
-info[e[1]]=e[2];
-
-return info;
 }
 
-function calcLinescore(events){
+function pitchObj(){
 
-const innings=[];
+return{
+IP:0,H:0,R:0,BB:0,SO:0,HR:0
+};
+
+}
+
+function process(events,map){
+
+const awayBat={};
+const homeBat={};
+
+const awayPitch={};
+const homePitch={};
+
+let awayPitcher=null;
+let homePitcher=null;
+
+let inningOuts=0;
+
+let linescore={};
+
 let awayTotal=0;
 let homeTotal=0;
 
 for(const e of events){
 
+if(e[0]=="start"){
+
+const team=e[2];
+const pos=e[4];
+
+if(pos=="1"){
+
+if(team=="0")awayPitcher=e[1];
+else homePitcher=e[1];
+
+}
+
+}
+
 if(e[0]!="play")continue;
 
 const inning=parseInt(e[1]);
-const half=parseInt(e[2]);
-const desc=e[6]||"";
+const team=e[2];
+const batter=e[3];
+const desc=e[6];
+
+const batTeam=team=="0"?awayBat:homeBat;
+const pitchTeam=team=="0"?homePitch:awayPitch;
+
+if(!batTeam[batter])batTeam[batter]=statObj();
+
+const b=batTeam[batter];
+
+b.AB++;
+
+if(desc.includes("S")||desc.includes("D")||desc.includes("T")||desc.includes("HR"))b.H++;
+
+if(desc.includes("HR"))b.HR++;
+
+if(desc.includes("W"))b.BB++;
+
+if(desc.includes("K"))b.SO++;
 
 const runs=(desc.match(/\.[123]-H/g)||[]).length+(desc.includes("HR")?1:0);
 
-if(!innings[inning])innings[inning]={away:0,home:0};
+b.RBI+=runs;
 
-if(half==0){
-innings[inning].away+=runs;
-awayTotal+=runs;
-}
-else{
-innings[inning].home+=runs;
-homeTotal+=runs;
-}
+if(team=="0")awayTotal+=runs;
+else homeTotal+=runs;
 
-}
+if(!linescore[inning])linescore[inning]={away:0,home:0};
 
-let max=9;
+if(team=="0")linescore[inning].away+=runs;
+else linescore[inning].home+=runs;
 
-for(let i=innings.length-1;i>=1;i--)
-if(innings[i]){
-max=Math.max(9,i);
-break;
 }
 
-return{innings,max,awayTotal,homeTotal};
+return{
+awayBat,
+homeBat,
+awayPitch,
+homePitch,
+linescore,
+awayTotal,
+homeTotal
+};
+
 }
 
-function buildLinescore(ls,away,home){
+function renderBat(id,data,map){
+
+const el=document.getElementById(id);
+
+el.innerHTML="";
+
+for(const pid in data){
+
+const p=data[pid];
+
+el.innerHTML+=`
+<tr>
+<td>${map.get(pid)||pid}</td>
+<td>${p.AB}</td>
+<td>${p.H}</td>
+<td>${p.R}</td>
+<td>${p.RBI}</td>
+<td>${p.BB}</td>
+<td>${p.SO}</td>
+<td>${p.HR}</td>
+</tr>`;
+
+}
+
+}
+
+function renderLinescore(ls,away,home){
 
 let head="<tr><th></th>";
 
-for(let i=1;i<=ls.max;i++)
-head+="<th>"+i+"</th>";
+const max=Math.max(...Object.keys(ls).map(Number),9);
+
+for(let i=1;i<=max;i++)head+="<th>"+i+"</th>";
 
 head+="<th>R</th></tr>";
 
@@ -293,71 +350,27 @@ document.getElementById("linescoreHead").innerHTML=head;
 let awayRow="<tr><td>"+away+"</td>";
 let homeRow="<tr><td>"+home+"</td>";
 
-for(let i=1;i<=ls.max;i++){
+let awayTotal=0;
+let homeTotal=0;
 
-awayRow+="<td>"+(ls.innings[i]?.away||0)+"</td>";
-homeRow+="<td>"+(ls.innings[i]?.home||0)+"</td>";
+for(let i=1;i<=max;i++){
+
+const a=ls[i]?.away||0;
+const h=ls[i]?.home||0;
+
+awayRow+="<td>"+a+"</td>";
+homeRow+="<td>"+h+"</td>";
+
+awayTotal+=a;
+homeTotal+=h;
 
 }
 
-awayRow+="<td>"+ls.awayTotal+"</td></tr>";
-homeRow+="<td>"+ls.homeTotal+"</td></tr>";
+awayRow+="<td>"+awayTotal+"</td></tr>";
+homeRow+="<td>"+homeTotal+"</td></tr>";
 
 document.getElementById("linescoreBody").innerHTML=awayRow+homeRow;
-}
 
-function extractPlayers(events,nameMap){
-
-const awayBat=new Set();
-const homeBat=new Set();
-
-const awayPitch=new Set();
-const homePitch=new Set();
-
-for(const e of events){
-
-if(e[0]=="play"){
-
-const team=e[2];
-const id=e[3];
-
-const name=nameMap.get(id)||id;
-
-if(team=="0")awayBat.add(name);
-else homeBat.add(name);
-}
-
-if(e[0]=="start"||e[0]=="sub"){
-
-const id=e[1];
-const team=e[2];
-const pos=e[4];
-
-if(pos=="1"){
-
-const name=nameMap.get(id)||id;
-
-if(team=="0")awayPitch.add(name);
-else homePitch.add(name);
-}
-}
-}
-
-return{
-awayBat:[...awayBat],
-homeBat:[...homeBat],
-awayPitch:[...awayPitch],
-homePitch:[...homePitch]
-};
-}
-
-function fill(id,list){
-
-const el=document.getElementById(id);
-el.innerHTML="";
-
-for(const p of list)
-el.innerHTML+="<tr><td>"+p+"</td></tr>";
 }
 
 async function loadGame(){
@@ -365,45 +378,31 @@ async function loadGame(){
 const params=new URLSearchParams(location.search);
 const id=params.get("id");
 
-if(!id)return;
-
 const year=id.substring(0,4);
 
 const res=await fetch("data/baseball/boxscores/"+year+"/"+id+".json");
 
 const game=await res.json();
 
-const playerMap=await loadPlayerMap();
+const map=await loadPlayers();
 
-const away=teamName(game.away_code);
-const home=teamName(game.home_code);
+document.getElementById("matchup").textContent=
+map.get(game.away_code)||game.away_code
++" @ "+
+map.get(game.home_code)||game.home_code;
 
-document.getElementById("matchup").textContent=away+" @ "+home;
 document.getElementById("date").textContent=game.date;
 
-const info=extractInfo(game.events||[]);
+const stats=process(game.events,map);
 
-document.getElementById("venue").textContent="Venue: "+(info.site||"—");
-document.getElementById("attendance").textContent="Attendance: "+(info.attendance||"—");
+renderLinescore(stats.linescore,game.away_code,game.home_code);
 
-const ls=calcLinescore(game.events||[]);
+renderBat("awayBat",stats.awayBat,map);
+renderBat("homeBat",stats.homeBat,map);
 
 document.getElementById("score").textContent=
-ls.awayTotal+" - "+ls.homeTotal;
+stats.awayTotal+" - "+stats.homeTotal;
 
-buildLinescore(ls,away,home);
-
-const ppl=extractPlayers(game.events||[],playerMap);
-
-fill("awayBat",ppl.awayBat);
-fill("homeBat",ppl.homeBat);
-fill("awayPitch",ppl.awayPitch);
-fill("homePitch",ppl.homePitch);
-
-document.getElementById("awayBatTitle").textContent=away+" Batting";
-document.getElementById("homeBatTitle").textContent=home+" Batting";
-document.getElementById("awayPitchTitle").textContent=away+" Pitching";
-document.getElementById("homePitchTitle").textContent=home+" Pitching";
 }
 
 loadGame();
