@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -8,97 +9,101 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
-
 body{
-  font-family:Inter,system-ui,Arial;
-  margin:0;
-  background:#f4f6f8;
+font-family:Inter,system-ui,Arial;
+margin:0;
+background:#f4f6f8;
 }
 
 .navbar{
-  display:flex;
-  justify-content:center;
-  gap:24px;
-  padding:16px;
-  background:#fff;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
+display:flex;
+justify-content:center;
+gap:24px;
+padding:16px;
+background:#fff;
+border-bottom:1px solid #ddd;
+font-weight:600;
 }
 
 .navbar a{
-  text-decoration:none;
-  color:#0056d6;
+text-decoration:none;
+color:#0056d6;
 }
 
 .page{
-  max-width:1200px;
-  margin:auto;
-  padding:20px;
+max-width:1200px;
+margin:auto;
+padding:20px;
 }
 
 .hero{
-  background:linear-gradient(90deg,#0b2a6f,#c8102e);
-  color:white;
-  padding:30px;
-  border-radius:16px;
-  margin-bottom:20px;
-  text-align:center;
+background:linear-gradient(90deg,#0b2a6f,#c8102e);
+color:white;
+padding:30px;
+border-radius:16px;
+margin-bottom:20px;
+text-align:center;
 }
 
-.hero h1{
-  margin:0;
-  font-size:32px;
+.hero .match{
+font-size:28px;
+font-weight:700;
 }
 
 .hero .score{
-  font-size:48px;
-  font-weight:700;
+font-size:48px;
+font-weight:800;
+margin-top:4px;
+}
+
+.hero .date{
+margin-top:6px;
+opacity:0.9;
 }
 
 .meta{
-  display:flex;
-  gap:20px;
-  margin-bottom:20px;
+display:flex;
+gap:20px;
+margin-bottom:20px;
 }
 
 .meta div{
-  background:#e9eef5;
-  padding:10px 14px;
-  border-radius:10px;
-  font-weight:600;
+background:#e9eef5;
+padding:10px 14px;
+border-radius:10px;
+font-weight:600;
 }
 
 .section{
-  background:white;
-  padding:16px;
-  border-radius:14px;
-  margin-bottom:20px;
+background:white;
+padding:16px;
+border-radius:14px;
+margin-bottom:20px;
 }
 
 .section h2{
-  margin-top:0;
+margin-top:0;
 }
 
 table{
-  width:100%;
-  border-collapse:collapse;
+width:100%;
+border-collapse:collapse;
 }
 
 th{
-  background:#123a7a;
-  color:white;
-  padding:8px;
-  text-align:left;
+background:#123a7a;
+color:white;
+padding:8px;
+text-align:left;
 }
 
 td{
-  padding:8px;
+padding:8px;
 }
 
 tr:nth-child(even){
-  background:#eef3fb;
+background:#eef3fb;
 }
-
 </style>
 
 </head>
@@ -118,110 +123,91 @@ Loading game...
 
 <script>
 
-function param(name)
-{
-  return new URLSearchParams(location.search).get(name);
+function getGameID(){
+const params=new URLSearchParams(location.search);
+return params.get("id"); // THIS MATCHES YOUR EXISTING SITE
 }
 
-async function loadGame()
-{
-  const id = param("game");
+async function loadGame(){
 
-  if(!id)
-  {
-    content.innerHTML="Invalid game link";
-    return;
-  }
+const id=getGameID();
 
-  const year=id.substring(0,4);
-
-  const path=`data/baseball/games/${year}/${id}.json`;
-
-  const r=await fetch(path);
-
-  const game=await r.json();
-
-  render(game);
+if(!id){
+content.innerHTML="Invalid game link";
+return;
 }
 
-function render(game)
-{
-  const away=game.away_code || game.away || "";
-  const home=game.home_code || game.home || "";
+const year=id.substring(0,4);
 
-  const awayScore=game.away_score ?? "";
-  const homeScore=game.home_score ?? "";
+const path="data/baseball/games/"+year+"/"+id+".json";
 
-  const date=game.date || "";
+const res=await fetch(path);
 
-  const venue=game.venue || "Unknown";
-  const attendance=game.attendance || "-";
+if(!res.ok){
+content.innerHTML="Game not found";
+return;
+}
 
-  let html=`
+const game=await res.json();
+
+render(game);
+
+}
+
+function render(game){
+
+let html=`
 
 <div class="hero">
-<h1>${away} @ ${home}</h1>
-<div class="score">${awayScore} - ${homeScore}</div>
-<div>${date}</div>
+<div class="match">${game.away_code} @ ${game.home_code}</div>
+<div class="score">${game.away_score} - ${game.home_score}</div>
+<div class="date">${game.date}</div>
 </div>
 
 <div class="meta">
-<div>Venue: ${venue}</div>
-<div>Attendance: ${attendance}</div>
+<div>Venue: ${game.venue ?? "Unknown"}</div>
+<div>Attendance: ${game.attendance ?? "-"}</div>
 </div>
 
 `;
 
-  if(game.linescore)
-  {
-    html+=renderTable("Linescore",game.linescore);
-  }
+html+=renderTable(game.awayBatTitle,game.awayBatting);
+html+=renderTable(game.homeBatTitle,game.homeBatting);
+html+=renderTable(game.awayPitchTitle,game.awayPitching);
+html+=renderTable(game.homePitchTitle,game.homePitching);
 
-  if(game.awayBatting)
-  {
-    html+=renderTable(game.awayBatTitle || "Away Batting",game.awayBatting);
-  }
+content.innerHTML=html;
 
-  if(game.homeBatting)
-  {
-    html+=renderTable(game.homeBatTitle || "Home Batting",game.homeBatting);
-  }
-
-  if(game.awayPitching)
-  {
-    html+=renderTable(game.awayPitchTitle || "Away Pitching",game.awayPitching);
-  }
-
-  if(game.homePitching)
-  {
-    html+=renderTable(game.homePitchTitle || "Home Pitching",game.homePitching);
-  }
-
-  content.innerHTML=html;
 }
 
-function renderTable(title,data)
-{
-  if(!data || data.length===0)
-  return `<div class="section"><h2>${title}</h2>No data</div>`;
+function renderTable(title,data){
 
-  const cols=Object.keys(data[0]);
+if(!data || data.length===0)
+return `<div class="section"><h2>${title}</h2>No data</div>`;
 
-  let html=`<div class="section"><h2>${title}</h2><table><tr>`;
+const cols=Object.keys(data[0]);
 
-  cols.forEach(c=>html+=`<th>${c}</th>`);
+let html=`
+<div class="section">
+<h2>${title}</h2>
+<table>
+<tr>
+${cols.map(c=>`<th>${c}</th>`).join("")}
+</tr>
+`;
 
-  html+="</tr>";
+data.forEach(row=>{
+html+="<tr>";
+cols.forEach(c=>{
+html+=`<td>${row[c]??""}</td>`;
+});
+html+="</tr>";
+});
 
-  data.forEach(row=>{
-    html+="<tr>";
-    cols.forEach(c=>html+=`<td>${row[c]}</td>`);
-    html+="</tr>";
-  });
+html+="</table></div>";
 
-  html+="</table></div>";
+return html;
 
-  return html;
 }
 
 loadGame();
