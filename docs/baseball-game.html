@@ -4,15 +4,25 @@
 <head>
 <meta charset="UTF-8">
 <title>Baseball Game</title>
+
 <style>
-body{font-family:Arial;margin:20px}
+body{font-family:Arial;margin:20px;background:#eef2f7}
 .hero{
 background:linear-gradient(90deg,#0b2a6f,#c8102e);
-color:white;padding:20px;border-radius:12px;text-align:center;
+color:white;padding:30px;border-radius:16px;text-align:center;
 }
-.error{color:red;font-weight:bold;margin-top:20px}
+.score{font-size:48px;font-weight:bold}
 .debug{font-size:12px;color:#666;margin-top:10px}
+.card{
+background:white;margin-top:20px;padding:15px;border-radius:12px;
+box-shadow:0 2px 6px rgba(0,0,0,.1)
+}
+table{width:100%;border-collapse:collapse}
+th{background:#123a7a;color:white;padding:8px;text-align:left}
+td{padding:8px}
+tr:nth-child(even){background:#eef3fb}
 </style>
+
 </head>
 <body>
 
@@ -20,81 +30,126 @@ color:white;padding:20px;border-radius:12px;text-align:center;
 
 <script>
 
-const content = document.getElementById("content");
+const content=document.getElementById("content");
 
 function getFile(){
 
-const params = new URLSearchParams(window.location.search);
+const p=new URLSearchParams(location.search);
 
-return params.get("file") || params.get("id") || params.get("game");
+return p.get("file")||p.get("id")||p.get("game");
 
 }
 
 async function load(){
 
-const file = getFile();
+const file=getFile();
 
 if(!file){
 
-content.innerHTML = "<div class='error'>No file parameter</div>";
+content.innerHTML="Invalid game link";
 
 return;
 
 }
 
-const year = file.substring(0,4);
+const year=file.substring(0,4);
 
-const path = "data/baseball/boxscores/" + year + "/" + file + ".json";
+const path="data/baseball/boxscores/"+year+"/"+file+".json";
 
-content.innerHTML =
-"Loading game...<div class='debug'>Trying: " + path + "</div>";
+const res=await fetch(path);
 
-try{
-
-const response = await fetch(path);
-
-if(!response.ok){
-
-content.innerHTML =
-"<div class='error'>File not found</div>" +
-"<div class='debug'>" + path + "</div>";
-
-return;
-
-}
-
-const game = await response.json();
+const game=await res.json();
 
 render(game,path);
 
 }
-catch(err){
 
-content.innerHTML =
-"<div class='error'>Fetch failed</div>" +
-"<div class='debug'>" + path + "</div>";
+function teamAway(g){
+
+return g.away_name
+|| g.away_team
+|| g.away
+|| g.teams?.away?.name
+|| "";
 
 }
 
+function teamHome(g){
+
+return g.home_name
+|| g.home_team
+|| g.home
+|| g.teams?.home?.name
+|| "";
+
 }
 
-function render(game,path){
+function scoreAway(g){
 
-const away = game.away_name;
-const home = game.home_name;
+return g.linescore?.away
+|| g.score?.away
+|| g.away_score
+|| "";
 
-const awayScore = game.linescore?.away ?? "";
-const homeScore = game.linescore?.home ?? "";
+}
 
-content.innerHTML =
+function scoreHome(g){
 
-"<div class='hero'>" +
-"<h2>" + away + " @ " + home + "</h2>" +
-"<div style='font-size:40px'>" + awayScore + " - " + homeScore + "</div>" +
-"<div>" + game.date + "</div>" +
-"</div>" +
+return g.linescore?.home
+|| g.score?.home
+|| g.home_score
+|| "";
 
-"<div class='debug'>Loaded: " + path + "</div>";
+}
+
+function render(g,path){
+
+let html="";
+
+html+=`
+<div class="hero">
+<h1>${teamAway(g)} @ ${teamHome(g)}</h1>
+<div class="score">${scoreAway(g)} - ${scoreHome(g)}</div>
+<div>${g.date}</div>
+</div>
+`;
+
+html+=`<div class="debug">Loaded: ${path}</div>`;
+
+html+=table(g.awayBatTitle,g.awayBatting);
+html+=table(g.homeBatTitle,g.homeBatting);
+html+=table(g.awayPitchTitle,g.awayPitching);
+html+=table(g.homePitchTitle,g.homePitching);
+
+content.innerHTML=html;
+
+}
+
+function table(title,data){
+
+if(!data)return "";
+
+let cols=Object.keys(data[0]);
+
+let html=`<div class="card"><h3>${title}</h3><table><tr>`;
+
+cols.forEach(c=>html+="<th>"+c+"</th>");
+
+html+="</tr>";
+
+data.forEach(r=>{
+
+html+="<tr>";
+
+cols.forEach(c=>html+="<td>"+(r[c]??"")+"</td>");
+
+html+="</tr>";
+
+});
+
+html+="</table></div>";
+
+return html;
 
 }
 
