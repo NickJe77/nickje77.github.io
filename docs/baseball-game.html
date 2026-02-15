@@ -61,11 +61,6 @@ font-weight:700;
 margin-bottom:6px;
 font-size:18px;
 }
-
-.info{
-font-weight:700;
-margin-bottom:10px;
-}
 </style>
 
 </head>
@@ -84,8 +79,6 @@ margin-bottom:10px;
 <div id="date"></div>
 </div>
 
-<div class="info" id="venue">Venue: —</div>
-
 <div class="card">
 
 <h2>Batting</h2>
@@ -103,25 +96,7 @@ margin-bottom:10px;
 </div>
 
 </div>
-</div>
 
-<div class="card">
-
-<h2>Pitching</h2>
-
-<div class="split">
-
-<div>
-<div class="teamTitle" id="awayPitchName"></div>
-<table><tbody id="awayPitch"></tbody></table>
-</div>
-
-<div>
-<div class="teamTitle" id="homePitchName"></div>
-<table><tbody id="homePitch"></tbody></table>
-</div>
-
-</div>
 </div>
 
 </div>
@@ -133,21 +108,12 @@ const year=id.substring(0,4);
 
 const GAME=`data/baseball/boxscores/${year}/${id}.json`;
 
-let PLAYERS={},TEAMS={},PARKS={};
+let PLAYERS={},TEAMS={};
 
 async function loadRefs(){
 
 PLAYERS=await fetch("data/baseball/players.json").then(r=>r.json());
 TEAMS=await fetch("data/baseball/teams.json").then(r=>r.json());
-
-/* ballparks */
-
-const csv=await fetch("data/baseball/ballparks.csv").then(r=>r.text());
-
-csv.split("\n").forEach(row=>{
-const c=row.split(",");
-if(c.length>1) PARKS[c[0]]=c[1];
-});
 
 }
 
@@ -156,10 +122,6 @@ function tname(id){return TEAMS[id]||id;}
 
 function plink(id){
 return `<a class="playerLink" href="baseball-player.html?id=${id}">${pname(id)}</a>`;
-}
-
-function ip(outs){
-return Math.floor(outs/3)+"."+(outs%3);
 }
 
 async function loadGame(){
@@ -177,63 +139,24 @@ document.getElementById("date").textContent=g.date;
 document.getElementById("awayName").textContent=away;
 document.getElementById("homeName").textContent=home;
 
-document.getElementById("awayPitchName").textContent=away;
-document.getElementById("homePitchName").textContent=home;
-
-/* VENUE FROM BALLPARK CODE IN GAME_ID */
-
-const park=g.game_id.substring(0,3);
-
-document.getElementById("venue").textContent=
-"Venue: "+(PARKS[park]||park);
-
-/* stats */
-
-const awayBat={},homeBat={},awayPitch={},homePitch={};
-
-let homePitcher=null;
-let awayPitcher=null;
-
-/* infer pitchers:
-first defensive player appearing on opposite team */
+const awayBat={},homeBat={};
 
 for(const e of g.events){
 
 if(e[0]!=="play") continue;
 
-const battingTeam=e[2];
+const team=e[2];
 const batter=e[3];
 
-const bat=battingTeam==="0"?awayBat:homeBat;
+const bat=team==="0"?awayBat:homeBat;
 
-if(!bat[batter])
-bat[batter]={pa:0};
+if(!bat[batter]) bat[batter]={pa:0};
 
 bat[batter].pa++;
 
-/* pitcher inference */
-
-if(battingTeam==="0"){
-
-if(!homePitcher) homePitcher="PITCHER";
-if(!homePitch[homePitcher]) homePitch[homePitcher]={outs:0};
-
-homePitch[homePitcher].outs++;
-
-}else{
-
-if(!awayPitcher) awayPitcher="PITCHER";
-if(!awayPitch[awayPitcher]) awayPitch[awayPitcher]={outs:0};
-
-awayPitch[awayPitcher].outs++;
-
 }
 
-}
-
-/* render batting */
-
-function renderBat(id,data){
+function render(id,data){
 
 const tbody=document.getElementById(id);
 
@@ -252,32 +175,8 @@ tbody.innerHTML+=`
 
 }
 
-/* render pitching */
-
-function renderPitch(id,data){
-
-const tbody=document.getElementById(id);
-
-tbody.innerHTML="<tr><th>Pitcher</th><th>IP</th></tr>";
-
-for(const p in data){
-
-tbody.innerHTML+=`
-<tr>
-<td>${p}</td>
-<td>${ip(data[p].outs)}</td>
-</tr>
-`;
-
-}
-
-}
-
-renderBat("awayBat",awayBat);
-renderBat("homeBat",homeBat);
-
-renderPitch("awayPitch",awayPitch);
-renderPitch("homePitch",homePitch);
+render("awayBat",awayBat);
+render("homeBat",homeBat);
 
 }
 
