@@ -20,6 +20,7 @@ table{width:100%;border-collapse:collapse;}
 th{background:#002D72;color:#fff;padding:10px;text-align:left;}
 td{padding:8px;border-bottom:1px solid #eee;}
 tr:nth-child(even){background:#f0f6ff;}
+.teamTitle{font-weight:700;margin-bottom:6px;}
 </style>
 </head>
 
@@ -44,10 +45,11 @@ tr:nth-child(even){background:#f0f6ff;}
 
 <div class="card">
 <h2>Batting</h2>
+
 <div class="split">
 
 <div>
-<h3>Away</h3>
+<div class="teamTitle" id="awayName"></div>
 <table>
 <thead>
 <tr><th>Player</th><th>PA</th><th>H</th><th>BB</th><th>SO</th><th>HR</th></tr>
@@ -57,7 +59,7 @@ tr:nth-child(even){background:#f0f6ff;}
 </div>
 
 <div>
-<h3>Home</h3>
+<div class="teamTitle" id="homeName"></div>
 <table>
 <thead>
 <tr><th>Player</th><th>PA</th><th>H</th><th>BB</th><th>SO</th><th>HR</th></tr>
@@ -69,14 +71,13 @@ tr:nth-child(even){background:#f0f6ff;}
 </div>
 </div>
 
-
 <div class="card">
 <h2>Pitching</h2>
 
 <div class="split">
 
 <div>
-<h3>Away Pitching</h3>
+<div class="teamTitle" id="awayPitchTitle"></div>
 <table>
 <thead>
 <tr><th>Pitcher</th><th>IP</th><th>H</th><th>BB</th><th>SO</th></tr>
@@ -86,7 +87,7 @@ tr:nth-child(even){background:#f0f6ff;}
 </div>
 
 <div>
-<h3>Home Pitching</h3>
+<div class="teamTitle" id="homePitchTitle"></div>
 <table>
 <thead>
 <tr><th>Pitcher</th><th>IP</th><th>H</th><th>BB</th><th>SO</th></tr>
@@ -101,7 +102,6 @@ tr:nth-child(even){background:#f0f6ff;}
 
 </div>
 
-
 <script>
 
 const id=new URLSearchParams(location.search).get("id");
@@ -109,9 +109,7 @@ const year=id.substring(0,4);
 
 const GAME_PATH=`data/baseball/boxscores/${year}/${id}.json`;
 
-let PLAYERS={};
-let TEAMS={};
-let PARKS={};
+let PLAYERS={},TEAMS={},PARKS={};
 
 function pname(id){return PLAYERS[id]||id;}
 function tname(id){return TEAMS[id]||id;}
@@ -122,41 +120,33 @@ return Math.floor(outs/3)+"."+(outs%3);
 
 async function loadRefs(){
 
-/* PLAYERS */
+/* players */
 
 const players=await fetch("data/baseball/players.json").then(r=>r.json());
 
 if(Array.isArray(players)){
 players.forEach(p=>{
-const id=p.id||p.player_id||p.playerID;
-const name=p.name||p.full_name||(p.nameFirst+" "+p.nameLast);
-if(id&&name) PLAYERS[id]=name;
+PLAYERS[p.id||p.player_id]=p.name||p.full_name;
 });
-}else{
-Object.assign(PLAYERS,players);
-}
+}else PLAYERS=players;
 
-/* TEAMS */
+/* teams */
 
 const teams=await fetch("data/baseball/teams.json").then(r=>r.json());
 
 if(Array.isArray(teams)){
 teams.forEach(t=>{
-const code=t.code||t.id||t.team_code;
-const name=t.name||t.full_name||t.team_name;
-if(code&&name) TEAMS[code]=name;
+TEAMS[t.code||t.id]=t.name||t.full_name;
 });
-}else{
-Object.assign(TEAMS,teams);
-}
+}else TEAMS=teams;
 
-/* BALLPARKS */
+/* ballparks */
 
 const csv=await fetch("data/baseball/ballparks.csv").then(r=>r.text());
 
 csv.split("\n").forEach(line=>{
 const parts=line.split(",");
-if(parts.length>=2) PARKS[parts[0]]=parts[1];
+if(parts.length>1) PARKS[parts[0]]=parts[1];
 });
 
 }
@@ -167,136 +157,128 @@ await loadRefs();
 
 const game=await fetch(GAME_PATH).then(r=>r.json());
 
+const awayTeam=tname(game.away_code);
+const homeTeam=tname(game.home_code);
+
 document.getElementById("title").textContent=
-tname(game.away_code)+" @ "+tname(game.home_code);
+awayTeam+" @ "+homeTeam;
 
 document.getElementById("date").textContent=game.date;
+
+document.getElementById("awayName").textContent=awayTeam;
+document.getElementById("homeName").textContent=homeTeam;
+
+document.getElementById("awayPitchTitle").textContent=awayTeam;
+document.getElementById("homePitchTitle").textContent=homeTeam;
 
 
 /* venue */
 
-game.events.forEach(e=>{
-if(e[0]==="info"&&e[1]==="site"){
+for(const e of game.events){
+
+if(e[0]==="info" && e[1]==="site"){
+
 document.getElementById("venue").textContent=
 "Venue: "+(PARKS[e[2]]||e[2]);
+
 }
-});
 
+}
 
-const awayBat={},homeBat={};
-const awayPitch={},homePitch={};
+/* stat containers */
+
+const awayBat={},homeBat={},awayPitch={},homePitch={};
+
+/* find pitchers via info records */
 
 let awayPitcher=null;
 let homePitcher=null;
 
-/* detect pitchers properly */
+for(const e of game.events){
 
-game.events.forEach(e=>{
+if(e[0]==="info" && e[1]==="wp") homePitcher=e[2];
+if(e[0]==="info" && e[1]==="lp") awayPitcher=e[2];
 
-if(e[0]==="start"||e[0]==="sub"){
+}
 
-const player=e[1];
-const team=e[3];
-const pos=e[5];
+/* fallback pitcher detection */
 
-if(pos==="1"){
+for(const e of game.events){
 
-if(team==="0") awayPitcher=player;
-else homePitcher=player;
+if(e[0]==="sub"||e[0]==="start"){
+
+if(e[5]==="1"){
+
+if(e[3]==="0") awayPitcher=e[1];
+else homePitcher=e[1];
 
 }
 
 }
 
-/* plays */
+}
 
-if(e[0]==="play"){
+/* parse plays */
+
+for(const e of game.events){
+
+if(e[0]!=="play") continue;
 
 const team=e[2];
 const batter=e[3];
 const ev=e[6];
 
-if(team==="0"){
+const bat=team==="0"?awayBat:homeBat;
 
-if(!awayBat[batter]) awayBat[batter]={pa:0,h:0,bb:0,so:0,hr:0};
-const b=awayBat[batter];
+if(!bat[batter])
+bat[batter]={pa:0,h:0,bb:0,so:0,hr:0};
 
-b.pa++;
+bat[batter].pa++;
 
-if(ev.startsWith("S")||ev.startsWith("D")||ev.startsWith("T")||ev.startsWith("HR")) b.h++;
-if(ev.startsWith("W")) b.bb++;
-if(ev.startsWith("K")) b.so++;
-if(ev.startsWith("HR")) b.hr++;
+if(/^S|^D|^T|^HR/.test(ev)) bat[batter].h++;
+if(/^W/.test(ev)) bat[batter].bb++;
+if(/^K/.test(ev)) bat[batter].so++;
+if(/^HR/.test(ev)) bat[batter].hr++;
 
-if(homePitcher){
+/* pitching */
 
-if(!homePitch[homePitcher]) homePitch[homePitcher]={outs:0,h:0,bb:0,so:0};
+const pid=team==="0"?homePitcher:awayPitcher;
+const pitch=team==="0"?homePitch:awayPitch;
 
-const p=homePitch[homePitcher];
+if(!pid) continue;
 
-if(!ev.startsWith("S")&&!ev.startsWith("D")&&!ev.startsWith("T")&&!ev.startsWith("HR")&&!ev.startsWith("W"))
-p.outs++;
+if(!pitch[pid])
+pitch[pid]={outs:0,h:0,bb:0,so:0};
 
-if(ev.startsWith("S")||ev.startsWith("D")||ev.startsWith("T")||ev.startsWith("HR")) p.h++;
-if(ev.startsWith("W")) p.bb++;
-if(ev.startsWith("K")) p.so++;
-
-}
-
-}else{
-
-if(!homeBat[batter]) homeBat[batter]={pa:0,h:0,bb:0,so:0,hr:0};
-const b=homeBat[batter];
-
-b.pa++;
-
-if(ev.startsWith("S")||ev.startsWith("D")||ev.startsWith("T")||ev.startsWith("HR")) b.h++;
-if(ev.startsWith("W")) b.bb++;
-if(ev.startsWith("K")) b.so++;
-if(ev.startsWith("HR")) b.hr++;
-
-if(awayPitcher){
-
-if(!awayPitch[awayPitcher]) awayPitch[awayPitcher]={outs:0,h:0,bb:0,so:0};
-
-const p=awayPitch[awayPitcher];
-
-if(!ev.startsWith("S")&&!ev.startsWith("D")&&!ev.startsWith("T")&&!ev.startsWith("HR")&&!ev.startsWith("W"))
-p.outs++;
-
-if(ev.startsWith("S")||ev.startsWith("D")||ev.startsWith("T")||ev.startsWith("HR")) p.h++;
-if(ev.startsWith("W")) p.bb++;
-if(ev.startsWith("K")) p.so++;
+if(/^S|^D|^T|^HR/.test(ev)) pitch[pid].h++;
+else if(/^W/.test(ev)) pitch[pid].bb++;
+else if(/^K/.test(ev)){ pitch[pid].so++; pitch[pid].outs++; }
+else pitch[pid].outs++;
 
 }
 
-}
-
-}
-
-});
-
+/* render */
 
 function renderBat(id,data){
 
 const tbody=document.getElementById(id);
 
-Object.entries(data).forEach(([pid,s])=>{
+for(const pid in data){
 
-const tr=document.createElement("tr");
+const s=data[pid];
 
-tr.innerHTML=`
+tbody.innerHTML+=`
+<tr>
 <td>${pname(pid)}</td>
 <td>${s.pa}</td>
 <td>${s.h}</td>
 <td>${s.bb}</td>
 <td>${s.so}</td>
 <td>${s.hr}</td>
+</tr>
 `;
 
-tbody.appendChild(tr);
-
-});
+}
 
 }
 
@@ -304,21 +286,21 @@ function renderPitch(id,data){
 
 const tbody=document.getElementById(id);
 
-Object.entries(data).forEach(([pid,s])=>{
+for(const pid in data){
 
-const tr=document.createElement("tr");
+const s=data[pid];
 
-tr.innerHTML=`
+tbody.innerHTML+=`
+<tr>
 <td>${pname(pid)}</td>
 <td>${ip(s.outs)}</td>
 <td>${s.h}</td>
 <td>${s.bb}</td>
 <td>${s.so}</td>
+</tr>
 `;
 
-tbody.appendChild(tr);
-
-});
+}
 
 }
 
