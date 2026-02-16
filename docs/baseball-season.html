@@ -35,7 +35,7 @@ padding:20px;
 }
 
 .hero{
-background:linear-gradient(90deg,#002D72,#C8102Eी8102E);
+background:linear-gradient(90deg,#002D72,#C8102E);
 color:#fff;
 padding:30px;
 border-radius:20px;
@@ -108,30 +108,69 @@ cursor:pointer;
 
 <script>
 
-let TEAMS = {};
+let TEAM_MAP = {}; // code -> full name
 
-async function loadTeams(){
-
-const res = await fetch("data/baseball/teams.json");
-
-if(res.ok){
-
-TEAMS = await res.json();
-
+async function tryFetchJson(paths){
+  for(const p of paths){
+    try{
+      const r = await fetch(p, { cache: "no-store" });
+      if(r.ok){
+        return await r.json();
+      }
+    }catch(e){}
+  }
+  return null;
 }
 
+function buildTeamMap(data){
+  const map = {};
+
+  if(!data) return map;
+
+  // Case 1: { "NYA": { name: "New York Yankees" }, ... } OR { "NYA":"New York Yankees" }
+  if(typeof data === "object" && !Array.isArray(data)){
+    for(const [k,v] of Object.entries(data)){
+      if(v && typeof v === "object"){
+        const name = v.name || v.full_name || v.team_name || v.fullName || v.display || v.long_name;
+        if(name) map[k] = name;
+      }else if(typeof v === "string"){
+        map[k] = v;
+      }
+    }
+    return map;
+  }
+
+  // Case 2: [ { code:"NYA", name:"New York Yankees" }, ... ]
+  if(Array.isArray(data)){
+    data.forEach(t=>{
+      if(!t || typeof t !== "object") return;
+      const code =
+        t.code || t.team_code || t.abbr || t.abbrev || t.abbreviation || t.id || t.short || t.short_code;
+      const name =
+        t.name || t.full_name || t.team_name || t.fullName || t.long_name || t.display;
+      if(code && name) map[code] = name;
+    });
+  }
+
+  return map;
 }
 
 function teamName(code){
-
-if(TEAMS[code] && TEAMS[code].name){
-
-return TEAMS[code].name;
-
+  if(!code) return "";
+  return TEAM_MAP[code] || TEAM_MAP[String(code).toUpperCase()] || code;
 }
 
-return code;
+async function loadTeams(){
+  // Try a few common locations WITHOUT changing your season data path.
+  // (If teams.json exists at the first path, it will use it immediately.)
+  const data = await tryFetchJson([
+    "data/baseball/teams.json",
+    "data/baseball/teams_index.json",
+    "data/baseball/teams-map.json",
+    "data/baseball/teams/teams.json"
+  ]);
 
+  TEAM_MAP = buildTeamMap(data);
 }
 
 async function loadSeason(){
@@ -150,9 +189,10 @@ return;
 
 document.getElementById("title").textContent=season+" Season";
 
+// Load teams first (safe even if file missing)
 await loadTeams();
 
-const res=await fetch(`data/baseball/seasons/${season}.json`);
+const res=await fetch(`data/baseball/seasons/${season}.json`, { cache: "no-store" });
 
 if(!res.ok){
 
@@ -176,6 +216,7 @@ tbody.innerHTML="";
 
 games.forEach(game=>{
 
+// THIS IS THE CORRECT ID FIELD
 const id = game.game_id;
 
 const tr=document.createElement("tr");
