@@ -103,8 +103,7 @@ return TEAM_MAP[code] || code;
 
 async function loadTeams(){
 
-const res = await fetch("/data/baseball/teams.json");
-
+const res = await fetch("/data/baseball/teams.json",{cache:"no-store"});
 const teams = await res.json();
 
 teams.forEach(team=>{
@@ -113,34 +112,22 @@ TEAM_MAP[team.code] = team.name;
 
 }
 
-function resolveGameId(game){
-
-return (
-game.game_id ||
-game.gameId ||
-game.game ||
-game.id ||
-game.file ||
-game.filename ||
-game.boxscore ||
-null
-);
-
-}
-
 async function loadSeason(){
 
-const params=new URLSearchParams(window.location.search);
+const params = new URLSearchParams(window.location.search);
+const season = params.get("season");
 
-const season=params.get("season");
+if(!season){
+alert("Missing season");
+return;
+}
 
-document.getElementById("title").textContent=season+" Season";
+document.getElementById("title").textContent = season+" Season";
 
 await loadTeams();
 
-const res=await fetch("/data/baseball/seasons/"+season+".json");
-
-const games=await res.json();
+const res = await fetch("/data/baseball/seasons/"+season+".json",{cache:"no-store"});
+const games = await res.json();
 
 renderGames(games);
 
@@ -148,26 +135,21 @@ renderGames(games);
 
 function renderGames(games){
 
-const tbody=document.getElementById("tbody");
-
-tbody.innerHTML="";
+const tbody = document.getElementById("tbody");
+tbody.innerHTML = "";
 
 games.forEach(game=>{
 
-const gameId = resolveGameId(game);
+// THIS is the correct field from your data
+const gameId = game.game_id || game.game;
 
-if(!gameId){
-console.error("Missing game ID:", game);
-return;
-}
+const tr = document.createElement("tr");
 
-const tr=document.createElement("tr");
-
-tr.onclick=()=>{
+tr.onclick = ()=>{
 window.location.href="/baseball-game.html?game="+gameId;
 };
 
-tr.innerHTML=`
+tr.innerHTML = `
 <td>${game.date}</td>
 <td>${teamName(game.away_code)}</td>
 <td>${teamName(game.home_code)}</td>
