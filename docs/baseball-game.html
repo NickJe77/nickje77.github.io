@@ -45,12 +45,6 @@ a:hover{text-decoration:underline;}
     <div class="pillrow" id="heroPills"></div>
   </div>
 
-  <div class="section">
-    <h2>Score</h2>
-    <div id="scoreLine" style="font-size:18px;font-weight:800;">-</div>
-    <div class="note" id="scoreNote"></div>
-  </div>
-
   <div class="section" id="linescoreSection" style="display:none;">
     <h2>Linescore</h2>
     <div id="linescoreWrap"></div>
@@ -79,50 +73,20 @@ a:hover{text-decoration:underline;}
       <div id="homePitchingWrap"></div>
     </div>
   </div>
-
-  <div class="section">
-    <h2>Game Details</h2>
-    <table>
-      <tbody id="detailsBody"></tbody>
-    </table>
-  </div>
 </div>
 
 <script>
-/* -------------------- DATA LOOKUPS -------------------- */
+/* -------------------- LOOKUPS -------------------- */
 let PLAYERS = {};
 let TEAMS = {};
 let PARKS = {}; // park_id -> {name, city, state}
 
-function getParam(name){
-  return new URLSearchParams(window.location.search).get(name);
-}
+function getParam(name){ return new URLSearchParams(window.location.search).get(name); }
+function getSeasonFromGameId(gameId){ return (gameId || "").substring(3,7); }
+function safeText(v){ return (v === null || v === undefined) ? "" : String(v); }
 
-function getSeasonFromGameId(gameId){
-  // game_id like BOS194604200 -> season is chars 3..6
-  return (gameId || "").substring(3,7);
-}
-
-function safeText(v){
-  return (v === null || v === undefined) ? "" : String(v);
-}
-
-function isNum(x){
-  return typeof x === "number" && isFinite(x);
-}
-
-function toInt(x){
-  const n = Number(x);
-  return isFinite(n) ? n : 0;
-}
-
-function playerName(id){
-  return PLAYERS[id] || id || "";
-}
-
-function teamName(code){
-  return TEAMS[code] || code || "";
-}
+function playerName(id){ return PLAYERS[id] || id || ""; }
+function teamName(code){ return TEAMS[code] || code || ""; }
 
 function parkLabel(parkId){
   if(!parkId) return "";
@@ -134,9 +98,13 @@ function parkLabel(parkId){
   return bits.join(" — ");
 }
 
-/* -------------------- CSV PARSER (ballparks.csv) -------------------- */
+function makePlayerCell(player_id){
+  const name = playerName(player_id);
+  return `<a href="/player.html?player=${encodeURIComponent(player_id)}">${name}</a>`;
+}
+
+/* -------------------- CSV PARSER -------------------- */
 function parseCSV(text){
-  // Minimal, robust CSV parser with quote support
   const rows = [];
   let row = [];
   let field = "";
@@ -147,45 +115,26 @@ function parseCSV(text){
     const next = text[i+1];
 
     if(inQuotes){
-      if(c === '"' && next === '"'){
-        field += '"';
-        i++;
-      }else if(c === '"'){
-        inQuotes = false;
-      }else{
-        field += c;
-      }
+      if(c === '"' && next === '"'){ field += '"'; i++; }
+      else if(c === '"'){ inQuotes = false; }
+      else{ field += c; }
     }else{
-      if(c === '"'){
-        inQuotes = true;
-      }else if(c === ","){
-        row.push(field);
-        field = "";
-      }else if(c === "\n"){
-        row.push(field);
-        rows.push(row);
-        row = [];
-        field = "";
-      }else if(c === "\r"){
-        // ignore
-      }else{
-        field += c;
-      }
+      if(c === '"'){ inQuotes = true; }
+      else if(c === ","){ row.push(field); field = ""; }
+      else if(c === "\n"){ row.push(field); rows.push(row); row = []; field = ""; }
+      else if(c === "\r"){ /* ignore */ }
+      else{ field += c; }
     }
   }
-  // last field
-  if(field.length || row.length){
-    row.push(field);
-    rows.push(row);
-  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
   return rows;
 }
 
+/* -------------------- LOADERS -------------------- */
 async function loadPlayers(){
   const res = await fetch("/data/baseball/players.json", {cache:"no-store"});
   if(!res.ok) return;
   const arr = await res.json();
-  // supports [{player_id,name,...}] or [{id,name}]
   arr.forEach(p=>{
     const id = p.player_id || p.id;
     const name = p.name || p.full_name || p.player_name;
@@ -238,7 +187,6 @@ async function loadBallparks(){
   }
 }
 
-/* -------------------- GAME LOADING (supports optional boxscores/) -------------------- */
 async function fetchJSON(path){
   try{
     const res = await fetch(path, {cache:"no-store"});
@@ -253,33 +201,60 @@ async function loadGameData(gameId){
   const season = getSeasonFromGameId(gameId);
   const gamePath = `/data/baseball/games/${season}/${gameId}.json`;
   const boxPath  = `/data/baseball/boxscores/${season}/${gameId}.json`;
-
   const [game, box] = await Promise.all([fetchJSON(gamePath), fetchJSON(boxPath)]);
   if(!game && !box) return {game:null, box:null, season, gamePath, boxPath};
   return {game: game || {}, box: box || null, season, gamePath, boxPath};
 }
 
-/* -------------------- RENDER HELPERS -------------------- */
-function addDetailRow(label, value){
-  if(value === null || value === undefined || value === "") return;
-  const tr = document.createElement("tr");
-  tr.innerHTML = `<td style="width:220px;"><strong>${label}</strong></td><td>${value}</td>`;
-  document.getElementById("detailsBody").appendChild(tr);
+/* -------------------- HERO -------------------- */
+function setHero(title, subLines, pills){
+  document.getElementById("heroTitle").textContent = title;
+  document.getElementById("heroSub").innerHTML = subLines.filter(Boolean).join("<br>");
+  const pillWrap = document.getElementById("heroPills");
+  pillWrap.innerHTML = "";
+  pills.filter(Boolean).forEach(t=>{
+    const div = document.createElement("div");
+    div.className = "pill";
+    div.textContent = t;
+    pillWrap.appendChild(div);
+  });
 }
 
-function makePlayerCell(player_id){
-  const name = playerName(player_id);
-  return `<a href="/player.html?player=${encodeURIComponent(player_id)}">${name}</a>`;
+/* -------------------- TOTALS FIXES -------------------- */
+/* Baseball IP: "7.2" means 7 and 2/3, not 7.2 */
+function ipToOuts(ip){
+  if(ip === null || ip === undefined || ip === "") return 0;
+  const s = String(ip).trim();
+  if(!s) return 0;
+  const parts = s.split(".");
+  const inn = parseInt(parts[0] || "0", 10);
+  const frac = parseInt(parts[1] || "0", 10); // 0,1,2 represent outs
+  const outs = (inn * 3) + (isFinite(frac) ? frac : 0);
+  return isFinite(outs) ? outs : 0;
 }
 
-function makeTeamCell(code){
-  const name = teamName(code);
-  // team page will be created next; link anyway
-  return `<a href="/baseball-team.html?team=${encodeURIComponent(code)}">${name}</a>`;
+function outsToIP(outs){
+  const inn = Math.floor(outs / 3);
+  const rem = outs % 3;
+  return rem === 0 ? String(inn) : `${inn}.${rem}`;
 }
+
+function isFiniteNumberLike(v){
+  if(v === null || v === undefined) return false;
+  if(typeof v === "number") return isFinite(v);
+  if(typeof v === "string"){
+    const t = v.trim();
+    if(!t) return false;
+    return isFinite(Number(t));
+  }
+  return false;
+}
+
+/* Only sum these columns for batting/pitching */
+const BATTING_SUM_COLS = new Set(["AB","R","H","RBI","BB","SO","SB","CS","2B","3B","HR","GIDP","SF","HBP"]);
+const PITCHING_SUM_COLS = new Set(["H","R","ER","BB","SO","HR","BF","P","S","HBP","IBB","WP","BK"]); // IP handled separately
 
 function detectColumns(rows, preferredOrder){
-  // Build column list from preferredOrder that exist + any extra numeric keys
   const keys = new Set();
   rows.forEach(r=>{
     Object.keys(r || {}).forEach(k=>{
@@ -288,20 +263,14 @@ function detectColumns(rows, preferredOrder){
   });
 
   const cols = [];
-  preferredOrder.forEach(k=>{
-    if(keys.has(k)) cols.push(k);
-  });
+  preferredOrder.forEach(k=>{ if(keys.has(k)) cols.push(k); });
 
-  // add remaining keys (numeric only) in stable alphabetical order
   const extras = [...keys].filter(k=>!cols.includes(k)).sort((a,b)=>a.localeCompare(b));
   extras.forEach(k=>{
-    // only include if at least one value is number-like
+    // keep only if numeric-like at least once
     let ok = false;
     for(const r of rows){
-      const v = r?.[k];
-      if(typeof v === "number" || (typeof v === "string" && v.trim() !== "" && !isNaN(Number(v)))){
-        ok = true; break;
-      }
+      if(isFiniteNumberLike(r?.[k])) { ok = true; break; }
     }
     if(ok) cols.push(k);
   });
@@ -309,73 +278,110 @@ function detectColumns(rows, preferredOrder){
   return cols;
 }
 
-function buildStatTable(containerId, rows, preferredCols, titleLabel){
+function buildBattingTable(containerId, rows){
   const wrap = document.getElementById(containerId);
   wrap.innerHTML = "";
+  if(!rows || !rows.length){ wrap.innerHTML = `<div class="small">No data.</div>`; return; }
 
-  if(!rows || !rows.length){
-    wrap.innerHTML = `<div class="small">No data.</div>`;
-    return;
-  }
-
-  const cols = detectColumns(rows, preferredCols);
-
-  const table = document.createElement("table");
-  const thead = document.createElement("thead");
-  const tbody = document.createElement("tbody");
-  const tfoot = document.createElement("tfoot");
-
-  thead.innerHTML = `
-    <tr>
-      <th>${titleLabel}</th>
-      ${cols.map(c=>`<th>${c}</th>`).join("")}
-    </tr>
-  `;
-
-  // totals
+  const cols = detectColumns(rows, ["AB","R","H","RBI","BB","SO","SB","CS","2B","3B","HR","GIDP","SF","HBP"]);
   const totals = {};
   cols.forEach(c=>totals[c]=0);
 
+  const table = document.createElement("table");
+  table.innerHTML = `
+    <thead><tr><th>Player</th>${cols.map(c=>`<th>${c}</th>`).join("")}</tr></thead>
+    <tbody></tbody>
+    <tfoot><tr><td><strong>Totals</strong></td>${cols.map(c=>`<td id="tot_${containerId}_${c}"></td>`).join("")}</tr></tfoot>
+  `;
+
+  const tbody = table.querySelector("tbody");
+
   rows.forEach(r=>{
     const tr = document.createElement("tr");
-    const pid = r.player_id || "";
     tr.innerHTML = `
-      <td>${pid ? makePlayerCell(pid) : ""}</td>
+      <td>${r.player_id ? makePlayerCell(r.player_id) : ""}</td>
       ${cols.map(c=>{
         const v = r[c];
         const show = (v === null || v === undefined) ? "" : v;
-        // totals for numeric
-        const n = Number(v);
-        if(isFinite(n)) totals[c] += n;
+        if(BATTING_SUM_COLS.has(c) && isFiniteNumberLike(v)){
+          totals[c] += Number(v);
+        }
         return `<td>${show}</td>`;
       }).join("")}
     `;
     tbody.appendChild(tr);
   });
 
-  // totals row only if at least one total > 0
-  const anyTotal = cols.some(c=>totals[c] !== 0);
-  if(anyTotal){
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td><strong>Totals</strong></td>
-      ${cols.map(c=>`<td>${totals[c] ? totals[c] : ""}</td>`).join("")}
-    `;
-    tfoot.appendChild(tr);
-  }
-
-  table.appendChild(thead);
-  table.appendChild(tbody);
-  if(anyTotal) table.appendChild(tfoot);
+  // totals display (blank for non-summed cols)
+  cols.forEach(c=>{
+    const cell = table.querySelector(`#tot_${containerId}_${CSS.escape(c)}`);
+    if(!cell) return;
+    cell.textContent = BATTING_SUM_COLS.has(c) ? (totals[c] ? totals[c] : "") : "";
+  });
 
   wrap.appendChild(table);
 }
 
+function buildPitchingTable(containerId, rows){
+  const wrap = document.getElementById(containerId);
+  wrap.innerHTML = "";
+  if(!rows || !rows.length){ wrap.innerHTML = `<div class="small">No data.</div>`; return; }
+
+  const cols = detectColumns(rows, ["IP","H","R","ER","BB","SO","HR","BF","P","S","ERA","HBP","IBB","WP","BK"]);
+
+  // totals
+  const totals = {};
+  cols.forEach(c=>totals[c]=0);
+  let outsTotal = 0;
+
+  const table = document.createElement("table");
+  table.innerHTML = `
+    <thead><tr><th>Player</th>${cols.map(c=>`<th>${c}</th>`).join("")}</tr></thead>
+    <tbody></tbody>
+    <tfoot><tr><td><strong>Totals</strong></td>${cols.map(c=>`<td id="tot_${containerId}_${c}"></td>`).join("")}</tr></tfoot>
+  `;
+
+  const tbody = table.querySelector("tbody");
+
+  rows.forEach(r=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${r.player_id ? makePlayerCell(r.player_id) : ""}</td>
+      ${cols.map(c=>{
+        const v = r[c];
+        const show = (v === null || v === undefined) ? "" : v;
+
+        if(c === "IP"){
+          outsTotal += ipToOuts(v);
+        }else if(PITCHING_SUM_COLS.has(c) && isFiniteNumberLike(v)){
+          totals[c] += Number(v);
+        }
+        // DO NOT sum rate stats like ERA
+        return `<td>${show}</td>`;
+      }).join("")}
+    `;
+    tbody.appendChild(tr);
+  });
+
+  cols.forEach(c=>{
+    const cell = table.querySelector(`#tot_${containerId}_${CSS.escape(c)}`);
+    if(!cell) return;
+
+    if(c === "IP"){
+      cell.textContent = outsTotal ? outsToIP(outsTotal) : "";
+    }else if(PITCHING_SUM_COLS.has(c)){
+      cell.textContent = totals[c] ? totals[c] : "";
+    }else{
+      // leave blank for ERA and anything else not meant to sum
+      cell.textContent = "";
+    }
+  });
+
+  wrap.appendChild(table);
+}
+
+/* -------------------- LINESCORE -------------------- */
 function renderLinescore(linescore){
-  // Supports a few possible shapes:
-  // 1) { away: [..], home: [..], away_total, home_total, away_hits, home_hits, away_errors, home_errors }
-  // 2) { innings: [{inning:1, away:0, home:1}, ...] }
-  // 3) { away_innings:[], home_innings:[] }
   if(!linescore) return false;
 
   let awayIn = null, homeIn = null;
@@ -406,17 +412,19 @@ function renderLinescore(linescore){
   for(let i=1;i<=inningsCount;i++) cols.push(i);
 
   const table = document.createElement("table");
-  const thead = document.createElement("thead");
-  thead.innerHTML = `
-    <tr>
-      <th>Team</th>
-      ${cols.map(n=>`<th>${n}</th>`).join("")}
-      <th>R</th><th>H</th><th>E</th>
-    </tr>
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Team</th>
+        ${cols.map(n=>`<th>${n}</th>`).join("")}
+        <th>R</th><th>H</th><th>E</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
   `;
-  const tbody = document.createElement("tbody");
 
-  function row(teamLabel, arr, R, H, E){
+  const tbody = table.querySelector("tbody");
+  function addRow(teamLabel, arr, R, H, E){
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td><strong>${teamLabel}</strong></td>
@@ -428,32 +436,16 @@ function renderLinescore(linescore){
     tbody.appendChild(tr);
   }
 
-  table.appendChild(thead);
-  table.appendChild(tbody);
-  document.getElementById("linescoreWrap").innerHTML = "";
-  document.getElementById("linescoreWrap").appendChild(table);
+  addRow("Away", awayIn, awayR, awayH, awayE);
+  addRow("Home", homeIn, homeR, homeH, homeE);
+
+  const wrap = document.getElementById("linescoreWrap");
+  wrap.innerHTML = "";
+  wrap.appendChild(table);
   return true;
 }
 
-/* -------------------- MAIN RENDER -------------------- */
-function setHero(title, subLines, pills){
-  document.getElementById("heroTitle").textContent = title;
-  document.getElementById("heroSub").innerHTML = subLines.filter(Boolean).join("<br>");
-  const pillWrap = document.getElementById("heroPills");
-  pillWrap.innerHTML = "";
-  pills.filter(Boolean).forEach(t=>{
-    const div = document.createElement("div");
-    div.className = "pill";
-    div.textContent = t;
-    pillWrap.appendChild(div);
-  });
-}
-
-function setScoreLine(text, note){
-  document.getElementById("scoreLine").textContent = text || "-";
-  document.getElementById("scoreNote").textContent = note || "";
-}
-
+/* -------------------- MAIN -------------------- */
 async function init(){
   const gameId = getParam("game");
   if(!gameId){
@@ -463,106 +455,63 @@ async function init(){
 
   await Promise.all([loadPlayers(), loadTeams(), loadBallparks()]);
 
-  const {game, box, season, gamePath, boxPath} = await loadGameData(gameId);
-
+  const {game, box, season, gamePath} = await loadGameData(gameId);
   if(!game || Object.keys(game).length === 0){
-    setHero("Game not found", [`${gamePath}`], []);
+    setHero("Game not found", [gamePath], []);
     return;
   }
 
-  // Team codes / names
   const awayCode = game.away_code || box?.away_code || "";
   const homeCode = game.home_code || box?.home_code || "";
   const awayName = teamName(awayCode);
   const homeName = teamName(homeCode);
 
-  // Date / meta
   const date = game.date || box?.date || "";
   const venueId = game.venue || box?.venue || game.park_id || box?.park_id || "";
   const attendance = game.attendance ?? box?.attendance ?? "";
   const minutes = game.game_length_minutes ?? box?.game_length_minutes ?? "";
 
-  // Hero
-  const title = `${awayName || awayCode} @ ${homeName || homeCode}`;
-  const sub = [
-    date ? `<strong>${date}</strong>` : "",
-    venueId ? `${parkLabel(venueId)}` : ""
-  ];
-
-  const pills = [
-    gameId ? `Game ID: ${gameId}` : "",
-    attendance ? `Attendance: ${Number(attendance).toLocaleString()}` : "",
-    minutes ? `Length: ${minutes} min` : "",
-    season ? `Season: ${season}` : ""
-  ];
-
-  setHero(title, sub, pills);
-
-  // Details
-  document.getElementById("detailsBody").innerHTML = "";
-  addDetailRow("Game ID", safeText(game.game_id || gameId));
-  addDetailRow("Season", safeText(game.season || season));
-  addDetailRow("Date", safeText(date));
-  addDetailRow("Away", awayCode ? `${makeTeamCell(awayCode)} (${awayCode})` : "");
-  addDetailRow("Home", homeCode ? `${makeTeamCell(homeCode)} (${homeCode})` : "");
-  addDetailRow("Venue", venueId ? parkLabel(venueId) : "");
-  addDetailRow("Attendance", attendance ? Number(attendance).toLocaleString() : "");
-  addDetailRow("Game length", minutes ? `${minutes} minutes` : "");
-
-  // Score: prefer explicit fields if present in either game or boxscore
+  // score
   const awayScore = game.away_score ?? box?.away_score ?? box?.away_runs ?? null;
   const homeScore = game.home_score ?? box?.home_score ?? box?.home_runs ?? null;
 
-  if(awayScore !== null && awayScore !== undefined && homeScore !== null && homeScore !== undefined){
-    setScoreLine(`${awayName || awayCode} ${awayScore} — ${homeName || homeCode} ${homeScore}`, "");
-  }else{
-    setScoreLine("-", "Score not available in this JSON (no away_score/home_score found).");
-  }
+  const scoreLine = (awayScore !== null && homeScore !== null)
+    ? `${awayName || awayCode} ${awayScore} — ${homeName || homeCode} ${homeScore}`
+    : "";
 
-  // Linescore: if exists
+  const venueLine = venueId ? parkLabel(venueId) : "";
+
+  // HERO: (title teams) + (score/date/venue under it)
+  setHero(
+    `${awayName || awayCode} @ ${homeName || homeCode}`,
+    [
+      scoreLine ? `<strong>${scoreLine}</strong>` : "",
+      date ? `${date}` : "",
+      venueLine ? `${venueLine}` : ""
+    ],
+    [
+      attendance ? `Attendance: ${Number(attendance).toLocaleString()}` : "",
+      minutes ? `Length: ${minutes} min` : "",
+      season ? `Season: ${season}` : ""
+    ]
+  );
+
+  // Linescore
   const lines = game.linescore || box?.linescore || game.innings || box?.innings || null;
   let rendered = false;
-
-  // normalize if innings provided as array of objects
   if(Array.isArray(lines)){
-    // try interpret as [{inning, away, home}]
-    const maybe = {innings: lines};
-    rendered = renderLinescore(maybe);
+    rendered = renderLinescore({innings: lines});
   }else{
     rendered = renderLinescore(lines);
   }
-
   document.getElementById("linescoreSection").style.display = rendered ? "block" : "none";
 
-  // Batting tables
-  buildStatTable(
-    "awayBattingWrap",
-    game.batters_away || box?.batters_away || [],
-    ["AB","R","H","RBI","BB","SO","SB","CS","2B","3B","HR","GIDP","SF","HBP"],
-    "Player"
-  );
+  // Tables
+  buildBattingTable("awayBattingWrap", game.batters_away || box?.batters_away || []);
+  buildBattingTable("homeBattingWrap", game.batters_home || box?.batters_home || []);
 
-  buildStatTable(
-    "homeBattingWrap",
-    game.batters_home || box?.batters_home || [],
-    ["AB","R","H","RBI","BB","SO","SB","CS","2B","3B","HR","GIDP","SF","HBP"],
-    "Player"
-  );
-
-  // Pitching tables
-  buildStatTable(
-    "awayPitchingWrap",
-    game.pitchers_away || box?.pitchers_away || [],
-    ["IP","H","R","ER","BB","SO","HR","BF","P","S","ERA","HBP","IBB","WP","BK"],
-    "Player"
-  );
-
-  buildStatTable(
-    "homePitchingWrap",
-    game.pitchers_home || box?.pitchers_home || [],
-    ["IP","H","R","ER","BB","SO","HR","BF","P","S","ERA","HBP","IBB","WP","BK"],
-    "Player"
-  );
+  buildPitchingTable("awayPitchingWrap", game.pitchers_away || box?.pitchers_away || []);
+  buildPitchingTable("homePitchingWrap", game.pitchers_home || box?.pitchers_home || []);
 }
 
 init();
