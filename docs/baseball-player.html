@@ -42,11 +42,16 @@ border-radius:20px;
 margin-bottom:20px;
 }
 
+.hero h1{
+margin:0;
+font-size:36px;
+}
+
 .section{
 background:white;
-padding:20px;
+padding:18px;
 border-radius:16px;
-margin-bottom:20px;
+margin-bottom:16px;
 }
 
 table{
@@ -54,15 +59,26 @@ width:100%;
 border-collapse:collapse;
 }
 
-th,td{
-padding:8px;
-border-bottom:1px solid #eee;
-text-align:left;
-}
-
 th{
 background:#002D72;
 color:white;
+padding:10px;
+text-align:left;
+}
+
+td{
+padding:8px;
+border-bottom:1px solid #eee;
+}
+
+tr:nth-child(even){
+background:#f0f6ff;
+}
+
+a{
+color:#0056d6;
+text-decoration:none;
+font-weight:700;
 }
 
 </style>
@@ -85,181 +101,259 @@ color:white;
 </div>
 
 <div class="section">
-<h2>Career Totals</h2>
-<table>
-<thead>
-<tr>
-<th>Games</th>
-<th>AB</th>
-<th>H</th>
-<th>BB</th>
-<th>SO</th>
-</tr>
-</thead>
-<tbody id="careerTotals"></tbody>
-</table>
+<h2>Career Batting Totals</h2>
+<div id="battingTotals"></div>
+</div>
+
+<div class="section">
+<h2>Career Pitching Totals</h2>
+<div id="pitchingTotals"></div>
 </div>
 
 <div class="section">
 <h2>Game Log</h2>
-<table>
-<thead>
-<tr>
-<th>Date</th>
-<th>Game</th>
-<th>AB</th>
-<th>H</th>
-<th>BB</th>
-<th>SO</th>
-</tr>
-</thead>
-<tbody id="gameLog"></tbody>
-</table>
+<div id="gameLog"></div>
 </div>
 
 </div>
 
 <script>
 
-let PLAYER_ID;
-let PLAYER_INFO={};
+/* GLOBAL DATA */
 
-function getPlayerId(){
+let PLAYER_ID=null
+let PLAYER_NAME=""
+let ALL_GAMES=[]
 
-return new URLSearchParams(window.location.search).get("player");
+/* HELPERS */
+
+function param(name){
+
+return new URLSearchParams(location.search).get(name)
+
+}
+
+function seasonFromGameId(id){
+
+return id.substring(3,7)
 
 }
 
-async function loadPlayerInfo(){
+/* LOAD PLAYER NAME */
 
-const res=await fetch("/data/baseball/players.json");
+async function loadPlayer(){
 
-const players=await res.json();
+PLAYER_ID=param("player")
 
-players.forEach(p=>{
+const res=await fetch("/data/baseball/players.json")
 
-PLAYER_INFO[p.player_id]=p;
+const players=await res.json()
 
-});
+const player=players.find(p=>p.player_id===PLAYER_ID)
+
+PLAYER_NAME=player?.name || PLAYER_ID
+
+document.getElementById("playerName").textContent=PLAYER_NAME
+
+document.getElementById("playerMeta").textContent=
+"Player ID: "+PLAYER_ID
 
 }
+
+/* LOAD ALL GAMES */
 
 async function loadAllGames(){
 
-const res=await fetch("/data/baseball/index.json");
+const res=await fetch("/data/baseball/index.json")
 
-return await res.json();
+const seasons=await res.json()
 
-}
+for(const season of seasons){
 
-async function loadGame(gameId){
+const res2=await fetch(`/data/baseball/seasons/${season}.json`)
 
-const season=gameId.substring(3,7);
+const games=await res2.json()
 
-const res=await fetch(`/data/baseball/games/${season}/${gameId}.json`);
-
-return await res.json();
-
-}
-
-async function build(){
-
-PLAYER_ID=getPlayerId();
-
-await loadPlayerInfo();
-
-const info=PLAYER_INFO[PLAYER_ID];
-
-document.getElementById("playerName").textContent=info.name;
-
-let totals={
-games:0,
-AB:0,
-H:0,
-BB:0,
-SO:0
-};
-
-const gameIndex=await loadAllGames();
-
-for(const g of gameIndex){
-
-const game=await loadGame(g.game_id);
-
-let found=false;
-let stats=null;
-
-if(game.batters_home){
-
-stats=game.batters_home.find(p=>p.player_id===PLAYER_ID);
-
-if(stats) found=true;
-
-}
-
-if(!found && game.batters_away){
-
-stats=game.batters_away.find(p=>p.player_id===PLAYER_ID);
-
-if(stats) found=true;
-
-}
-
-if(found){
-
-totals.games++;
-
-totals.AB+=stats.AB||0;
-totals.H+=stats.H||0;
-totals.BB+=stats.BB||0;
-totals.SO+=stats.SO||0;
-
-addGameLog(game,stats);
+ALL_GAMES.push(...games)
 
 }
 
 }
 
-renderTotals(totals);
+/* LOAD PLAYER GAME DATA */
+
+async function loadPlayerGames(){
+
+let battingTotals={}
+let pitchingTotals={}
+
+let log=[]
+
+for(const game of ALL_GAMES){
+
+const id=game.game_id
+
+const season=seasonFromGameId(id)
+
+const res=await fetch(`/data/baseball/games/${season}/${id}.json`)
+
+if(!res.ok) continue
+
+const data=await res.json()
+
+/* batting */
+
+data.batters_home?.forEach(p=>{
+if(p.player_id===PLAYER_ID){
+
+addStats(battingTotals,p)
+
+log.push({
+game:id,
+team:data.home_code,
+type:"Batting",
+stats:p
+})
+
+}
+})
+
+data.batters_away?.forEach(p=>{
+if(p.player_id===PLAYER_ID){
+
+addStats(battingTotals,p)
+
+log.push({
+game:id,
+team:data.away_code,
+type:"Batting",
+stats:p
+})
+
+}
+})
+
+/* pitching */
+
+data.pitchers_home?.forEach(p=>{
+if(p.player_id===PLAYER_ID){
+
+addStats(pitchingTotals,p)
+
+log.push({
+game:id,
+team:data.home_code,
+type:"Pitching",
+stats:p
+})
+
+}
+})
+
+data.pitchers_away?.forEach(p=>{
+if(p.player_id===PLAYER_ID){
+
+addStats(pitchingTotals,p)
+
+log.push({
+game:id,
+team:data.away_code,
+type:"Pitching",
+stats:p
+})
+
+}
+})
 
 }
 
-function renderTotals(t){
+renderTotals("battingTotals",battingTotals)
+renderTotals("pitchingTotals",pitchingTotals)
+renderLog(log)
 
-document.getElementById("careerTotals").innerHTML=`
+}
+
+/* ADD STATS */
+
+function addStats(total,stats){
+
+for(const k in stats){
+
+if(k==="player_id") continue
+
+if(!isNaN(stats[k])){
+
+total[k]=(total[k]||0)+Number(stats[k])
+
+}
+
+}
+
+}
+
+/* RENDER TOTALS */
+
+function renderTotals(id,stats){
+
+const table=document.createElement("table")
+
+table.innerHTML=
+`
 <tr>
-<td>${t.games}</td>
-<td>${t.AB}</td>
-<td>${t.H}</td>
-<td>${t.BB}</td>
-<td>${t.SO}</td>
+${Object.keys(stats).map(k=>`<th>${k}</th>`).join("")}
 </tr>
-`;
+<tr>
+${Object.values(stats).map(v=>`<td>${v}</td>`).join("")}
+</tr>
+`
+
+document.getElementById(id).appendChild(table)
 
 }
 
-function addGameLog(game,stats){
+/* RENDER LOG */
 
-const tr=document.createElement("tr");
+function renderLog(log){
 
-tr.innerHTML=`
-<td>${game.date||""}</td>
+const table=document.createElement("table")
+
+table.innerHTML=
+`
+<tr>
+<th>Game</th>
+<th>Team</th>
+<th>Type</th>
+</tr>
+${log.map(g=>`
+<tr>
 <td>
-<a href="/baseball-game.html?game=${game.game_id}">
-${game.away_code} @ ${game.home_code}
+<a href="/baseball-game.html?game=${g.game}">
+${g.game}
 </a>
 </td>
-<td>${stats.AB||0}</td>
-<td>${stats.H||0}</td>
-<td>${stats.BB||0}</td>
-<td>${stats.SO||0}</td>
-`;
+<td>${g.team}</td>
+<td>${g.type}</td>
+</tr>
+`).join("")}
+`
 
-document.getElementById("gameLog").appendChild(tr);
+document.getElementById("gameLog").appendChild(table)
 
 }
 
-build();
+/* INIT */
+
+async function init(){
+
+await loadPlayer()
+
+await loadAllGames()
+
+await loadPlayerGames()
+
+}
+
+init()
 
 </script>
 
