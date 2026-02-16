@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Baseball Game | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="style.css">
+
+<style>
+
+body{
+  font-family: Inter, system-ui, Arial;
+  margin:0;
+  background:#f4f6f8;
+}
+
+.page{
+  max-width:1200px;
+  margin:auto;
+  padding:20px;
+}
+
+.header{
+  background:linear-gradient(90deg,#002D72,#C8102E);
+  color:white;
+  padding:20px;
+  border-radius:16px;
+  margin-bottom:20px;
+}
+
+.header h1{
+  margin:0;
+  font-size:32px;
+}
+
+.section{
+  background:white;
+  border-radius:14px;
+  padding:16px;
+  margin-bottom:20px;
+}
+
+.section h2{
+  margin-top:0;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+th, td{
+  padding:8px;
+  border-bottom:1px solid #ddd;
+  text-align:left;
+}
+
+th{
+  background:#f0f0f0;
+}
+
+.loading{
+  text-align:center;
+  padding:40px;
+  font-size:20px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="page">
+
+<div class="header">
+<h1 id="title">Loading game...</h1>
+</div>
+
+<div id="content" class="loading">Loading box score...</div>
+
+</div>
+
+<script>
+
+function getParam(name){
+
+  const params = new URLSearchParams(window.location.search);
+  return params.get(name);
+
+}
+
+async function loadGame(){
+
+  const game_id = getParam("game");
+
+  if(!game_id){
+
+    document.getElementById("content").innerHTML = "Invalid game link";
+    return;
+
+  }
+
+  const season = game_id.substring(3,7);
+
+  const path = `data/baseball/games/${season}/${game_id}.json`;
+
+  try{
+
+    const res = await fetch(path);
+
+    if(!res.ok) throw new Error();
+
+    const game = await res.json();
+
+    renderGame(game);
+
+  }
+  catch{
+
+    document.getElementById("content").innerHTML = "Game file not found";
+
+  }
+
+}
+
+function renderBatters(title, players){
+
+  let html = `<div class="section"><h2>${title}</h2>`;
+
+  html += `
+  <table>
+  <tr>
+  <th>Player</th>
+  <th>AB</th>
+  <th>H</th>
+  <th>BB</th>
+  <th>SO</th>
+  </tr>
+  `;
+
+  players.forEach(p=>{
+
+    html += `
+    <tr>
+    <td>${p.player_id}</td>
+    <td>${p.AB}</td>
+    <td>${p.H}</td>
+    <td>${p.BB}</td>
+    <td>${p.SO}</td>
+    </tr>
+    `;
+
+  });
+
+  html += "</table></div>";
+
+  return html;
+
+}
+
+function renderPitchers(title, players){
+
+  let html = `<div class="section"><h2>${title}</h2>`;
+
+  html += `
+  <table>
+  <tr>
+  <th>Player</th>
+  <th>IP</th>
+  <th>H</th>
+  <th>BB</th>
+  <th>SO</th>
+  </tr>
+  `;
+
+  players.forEach(p=>{
+
+    html += `
+    <tr>
+    <td>${p.player_id}</td>
+    <td>${p.IP}</td>
+    <td>${p.H}</td>
+    <td>${p.BB}</td>
+    <td>${p.SO}</td>
+    </tr>
+    `;
+
+  });
+
+  html += "</table></div>";
+
+  return html;
+
+}
+
+function renderGame(game){
+
+  document.getElementById("title").innerText =
+    `${game.away_code} @ ${game.home_code} (${game.season})`;
+
+  let html = "";
+
+  html += renderBatters(`${game.home_code} Batting`, game.batters_home);
+  html += renderBatters(`${game.away_code} Batting`, game.batters_away);
+
+  html += renderPitchers(`${game.home_code} Pitching`, game.pitchers_home);
+  html += renderPitchers(`${game.away_code} Pitching`, game.pitchers_away);
+
+  document.getElementById("content").innerHTML = html;
+
+}
+
+loadGame();
+
+</script>
+
+</body>
+</html>
