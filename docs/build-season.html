@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Build Baseball Seasons</title>
+</head>
+<body>
+
+<h1>Building seasons...</h1>
+<pre id="log"></pre>
+
+<script>
+
+const log = msg => document.getElementById("log").textContent += msg + "\n";
+
+async function buildSeason(year){
+
+log("Season " + year);
+
+const folder = `/data/baseball/games/${year}/`;
+
+let index = [];
+
+for(let i=0;i<2000;i++){
+
+// Try possible filenames using common team prefixes
+// We'll fetch directory listing via guessing
+
+const prefixes = [
+"ANA","ARI","ATL","BAL","BOS","CHA","CHN","CIN","CLE",
+"COL","DET","HOU","KCA","LAN","MIA","MIL","MIN","NYA",
+"NYN","OAK","PHI","PIT","SDN","SEA","SFN","SLN","TBA",
+"TEX","TOR","WAS"
+];
+
+for(const p of prefixes){
+
+const id = `${p}${year}${String(i).padStart(4,"0")}`;
+
+try{
+
+const res = await fetch(folder + id + ".json");
+
+if(res.ok){
+
+const game = await res.json();
+
+index.push({
+game_id: id,
+date: game.date,
+season: game.season,
+away_team: game.away_team,
+home_team: game.home_team,
+away_code: game.away_code,
+home_code: game.home_code,
+away_score: game.away_score,
+home_score: game.home_score,
+venue: game.venue,
+attendance: game.attendance
+});
+
+log("Found " + id);
+
+}
+
+}catch{}
+
+}
+
+}
+
+download(year,index);
+
+}
+
+function download(year,data){
+
+const blob = new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+
+const a = document.createElement("a");
+
+a.href = URL.createObjectURL(blob);
+
+a.download = year + ".json";
+
+a.click();
+
+log("Downloaded " + year);
+
+}
+
+(async()=>{
+
+for(let year=1947;year<=2025;year++){
+
+await buildSeason(year);
+
+}
+
+log("DONE");
+
+})();
+
+</script>
+
+</body>
+</html>
