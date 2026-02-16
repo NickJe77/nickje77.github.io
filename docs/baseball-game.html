@@ -76,7 +76,7 @@ margin-bottom:16px;
 
 <script>
 
-function getGameId(){
+function getGameParam(){
 const params=new URLSearchParams(window.location.search);
 return params.get("game");
 }
@@ -85,31 +85,71 @@ function getSeason(gameId){
 return gameId.substring(3,7);
 }
 
-async function loadGame(){
-
-const gameId=getGameId();
-
-if(!gameId){
-document.getElementById("title").textContent="Game not found";
-return;
-}
+async function fetchGame(gameId){
 
 const season=getSeason(gameId);
 
-// ABSOLUTE PATH FIX
-const path="/data/baseball/games/"+season+"/"+gameId+".json";
+const base="/data/baseball/games/"+season+"/";
 
-const res=await fetch(path,{cache:"no-store"});
+const attempts=[
+gameId+".json",
+gameId.slice(0,-1)+"0.json",
+gameId.slice(0,-1)+"1.json",
+gameId.slice(0,-1)+"2.json",
+gameId.slice(0,-1)+"3.json"
+];
 
-if(!res.ok){
-document.getElementById("title").textContent="Game not found";
-document.getElementById("meta").textContent=path;
-return;
+for(const file of attempts){
+
+const path=base+file;
+
+const res=await fetch(path);
+
+if(res.ok){
+
+return await res.json();
+
 }
 
-const game=await res.json();
+}
+
+return null;
+
+}
+
+async function loadGame(){
+
+const gameId=getGameParam();
+
+if(!gameId){
+
+showError("Missing game id");
+return;
+
+}
+
+const game=await fetchGame(gameId);
+
+if(!game){
+
+showError(gameId);
+return;
+
+}
 
 renderGame(game);
+
+}
+
+function showError(gameId){
+
+const season=gameId?.substring(3,7)||"????";
+
+const path="/data/baseball/games/"+season+"/"+gameId+".json";
+
+document.getElementById("title").textContent="Game not found";
+
+document.getElementById("meta").textContent=path;
 
 }
 
@@ -127,10 +167,6 @@ document.getElementById("meta").textContent=
 document.getElementById("score").textContent=
 (game.away_score??"")+" - "+(game.home_score??"");
 
-const tbody=document.getElementById("details");
-
-tbody.innerHTML="";
-
 addRow("Game ID",game.game_id);
 addRow("Date",game.date);
 addRow("Venue",game.venue);
@@ -139,10 +175,15 @@ addRow("Attendance",game.attendance);
 }
 
 function addRow(label,value){
+
 if(!value)return;
+
 const tr=document.createElement("tr");
+
 tr.innerHTML="<td><strong>"+label+"</strong></td><td>"+value+"</td>";
+
 document.getElementById("details").appendChild(tr);
+
 }
 
 loadGame();
