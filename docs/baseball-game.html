@@ -9,7 +9,6 @@
 body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
 .page{max-width:1200px;margin:auto;padding:20px;}
 .hero{background:linear-gradient(90deg,#1e3a8a,#dc2626);color:white;padding:30px;border-radius:18px;margin-bottom:20px;}
-.hero h1{margin:0;font-size:34px;}
 .meta-bar{display:flex;gap:12px;margin-bottom:20px;}
 .meta-pill{background:white;padding:10px 16px;border-radius:12px;font-weight:600;}
 .section{background:white;padding:20px;border-radius:16px;margin-bottom:20px;}
@@ -65,7 +64,7 @@ td{padding:8px;border-bottom:1px solid #ddd;}
 <script>
 
 function qs(name){
- return new URLSearchParams(location.search).get(name);
+ return new URLSearchParams(window.location.search).get(name);
 }
 
 function safe(v){
@@ -130,12 +129,12 @@ function renderPitching(id,data){
 
 async function lookupSeasonMeta(game){
 
- const season=game.season;
- if(!season) return;
-
  try{
 
-  const res=await fetch(`../data/baseball/seasons/${season}.json`);
+  const res=await fetch(`../data/baseball/seasons/${game.season}.json`);
+
+  if(!res.ok) return;
+
   const list=await res.json();
 
   const match=list.find(g=>
@@ -156,37 +155,58 @@ async function lookupSeasonMeta(game){
 
 async function loadGame(){
 
- const path=qs("game");
- if(!path) return;
+ const file=qs("game");
 
- const res=await fetch(path);
- const game=await res.json();
+ if(!file){
 
- document.getElementById("hero").innerHTML=
- `<h1>${game.away_team} @ ${game.home_team}</h1>
-  <div>${game.date}</div>`;
+  document.getElementById("hero").innerHTML="Missing game parameter";
+  return;
 
- document.getElementById("away-name").innerText=game.away_team;
- document.getElementById("home-name").innerText=game.home_team;
+ }
 
- document.getElementById("away-pitch-name").innerText=game.away_team;
- document.getElementById("home-pitch-name").innerText=game.home_team;
+ try{
 
- // venue from game first
- if(game.venue)
-  document.getElementById("venue").innerText="Venue: "+game.venue;
+  const res=await fetch(file);
 
- if(game.attendance)
-  document.getElementById("attendance").innerText="Attendance: "+game.attendance;
+  if(!res.ok){
 
- // fallback to season file
- await lookupSeasonMeta(game);
+   document.getElementById("hero").innerHTML="Game file not found:<br>"+file;
+   return;
 
- renderBatting("away-batting",game.away_batting);
- renderBatting("home-batting",game.home_batting);
+  }
 
- renderPitching("away-pitching",game.away_pitching);
- renderPitching("home-pitching",game.home_pitching);
+  const game=await res.json();
+
+  document.getElementById("hero").innerHTML=
+  `<h1>${game.away_team} @ ${game.home_team}</h1>
+   <div>${game.date}</div>`;
+
+  document.getElementById("away-name").innerText=game.away_team;
+  document.getElementById("home-name").innerText=game.home_team;
+
+  document.getElementById("away-pitch-name").innerText=game.away_team;
+  document.getElementById("home-pitch-name").innerText=game.home_team;
+
+  if(game.venue)
+   document.getElementById("venue").innerText="Venue: "+game.venue;
+
+  if(game.attendance)
+   document.getElementById("attendance").innerText="Attendance: "+game.attendance;
+
+  await lookupSeasonMeta(game);
+
+  renderBatting("away-batting",game.away_batting);
+  renderBatting("home-batting",game.home_batting);
+
+  renderPitching("away-pitching",game.away_pitching);
+  renderPitching("home-pitching",game.home_pitching);
+
+ }
+ catch(err){
+
+  document.getElementById("hero").innerHTML="Error loading game";
+
+ }
 
 }
 
