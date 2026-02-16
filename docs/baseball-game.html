@@ -99,7 +99,7 @@ background:#f0f6ff;
 <div class="page">
 
 <div class="hero">
-<h1 id="title">Game</h1>
+<h1 id="title">Loading game...</h1>
 <div class="meta" id="meta"></div>
 </div>
 
@@ -119,32 +119,40 @@ background:#f0f6ff;
 
 <script>
 
-async function loadGame(){
+function getGameId(){
 
 const params = new URLSearchParams(window.location.search);
 
-const gameId = params.get("game");
+let gameId = params.get("game");
 
-// Extract season from game ID automatically
-// Example: BOS194604200 → 1946
-let season = null;
-
-if(gameId && gameId.length >= 7){
-
-season = gameId.substring(3,7);
-
-}
-
-if(!gameId || !season){
+if(!gameId){
 
 document.getElementById("title").textContent = "Game not found";
-document.getElementById("meta").textContent = "Missing game id";
+document.getElementById("meta").textContent = "Missing game id parameter";
 
-return;
+return null;
 
 }
 
-// Correct path based on your GitHub folder structure
+return gameId;
+
+}
+
+function getSeasonFromGameId(gameId){
+
+// BOS194604200 → 1946
+return gameId.substring(3,7);
+
+}
+
+async function loadGame(){
+
+const gameId = getGameId();
+
+if(!gameId) return;
+
+const season = getSeasonFromGameId(gameId);
+
 const path = "data/baseball/games/" + season + "/" + gameId + ".json";
 
 try{
@@ -175,39 +183,35 @@ document.getElementById("meta").textContent = err.message;
 
 function renderGame(game){
 
-// Title
 const away = game.away_team || game.away_code || "";
 const home = game.home_team || game.home_code || "";
 
 document.getElementById("title").textContent =
 away + " @ " + home;
 
-// Meta
 document.getElementById("meta").textContent =
 (game.date || "") +
 (game.venue ? " • " + game.venue : "") +
-(game.attendance ? " • Attendance: " + game.attendance.toLocaleString() : "");
+(game.attendance ? " • Attendance: " + Number(game.attendance).toLocaleString() : "");
 
-// Score
 document.getElementById("score").textContent =
 (game.away_score ?? "") + " - " + (game.home_score ?? "");
 
-// Details table
-const details = document.getElementById("details");
+const tbody = document.getElementById("details");
 
-details.innerHTML = "";
+tbody.innerHTML = "";
 
-addDetail("Season", game.season);
-addDetail("Game ID", game.game_id);
-addDetail("Date", game.date);
-addDetail("Away Team", game.away_team || game.away_code);
-addDetail("Home Team", game.home_team || game.home_code);
-addDetail("Venue", game.venue);
-addDetail("Attendance", game.attendance);
+addRow("Game ID", game.game_id || "");
+addRow("Season", game.season || "");
+addRow("Date", game.date || "");
+addRow("Away Team", game.away_team || game.away_code || "");
+addRow("Home Team", game.home_team || game.home_code || "");
+addRow("Venue", game.venue || "");
+addRow("Attendance", game.attendance || "");
 
 }
 
-function addDetail(label, value){
+function addRow(label, value){
 
 if(!value) return;
 
