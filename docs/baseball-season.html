@@ -107,27 +107,63 @@ cursor:pointer;
 
 <script>
 
-let TEAMS = {};
+let TEAM_MAP = {};
+
+function buildTeamMap(data){
+
+TEAM_MAP = {};
+
+if(Array.isArray(data)){
+
+data.forEach(team=>{
+const code = team.code || team.team_code || team.abbreviation;
+const name = team.name || team.full_name || team.team_name;
+if(code && name){
+TEAM_MAP[code] = name;
+}
+});
+
+}else{
+
+Object.keys(data).forEach(code=>{
+const team = data[code];
+TEAM_MAP[code] = team.name || team.full_name || code;
+});
+
+}
+
+}
 
 function teamName(code){
-return TEAMS[code]?.name || code;
+return TEAM_MAP[code] || code;
 }
 
 async function loadTeams(){
+
 const res = await fetch("data/baseball/teams.json",{cache:"no-store"});
+
 if(res.ok){
-TEAMS = await res.json();
+
+const data = await res.json();
+
+buildTeamMap(data);
+
 }
+
 }
 
 async function loadSeason(){
 
 const params=new URLSearchParams(window.location.search);
+
 const season=params.get("season");
 
 if(!season){
+
 alert("Missing season");
+
 return;
+
 }
 
 document.getElementById("title").textContent=season+" Season";
@@ -137,8 +173,11 @@ await loadTeams();
 const res=await fetch("data/baseball/seasons/"+season+".json",{cache:"no-store"});
 
 if(!res.ok){
+
 alert("Season file missing");
+
 return;
+
 }
 
 const games=await res.json();
@@ -150,6 +189,7 @@ renderGames(games);
 function renderGames(games){
 
 const tbody=document.getElementById("tbody");
+
 tbody.innerHTML="";
 
 games.forEach(game=>{
