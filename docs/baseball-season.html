@@ -96,6 +96,7 @@ cursor:pointer;
 <script>
 
 let TEAM_MAP = {};
+let GAME_COUNTER = {};
 
 function teamName(code){
 return TEAM_MAP[code] || code;
@@ -103,36 +104,42 @@ return TEAM_MAP[code] || code;
 
 function buildGameId(game){
 
-// Convert date to YYYYMMDD
 const date = game.date.replaceAll("-","");
+const key = game.home_code + "_" + date;
 
-// Build exact filename used in your games folder
-return game.home_code + date + "0";
+if(!GAME_COUNTER[key]) GAME_COUNTER[key] = 0;
+
+const num = GAME_COUNTER[key]++;
+
+return game.home_code + date + num;
 
 }
 
 async function loadTeams(){
 
-const res = await fetch("/data/baseball/teams.json",{cache:"no-store"});
+const res = await fetch("/data/baseball/teams.json");
 const teams = await res.json();
 
-teams.forEach(team=>{
-TEAM_MAP[team.code] = team.name;
+teams.forEach(t=>{
+TEAM_MAP[t.code] = t.name;
 });
 
 }
 
 async function loadSeason(){
 
-const params = new URLSearchParams(window.location.search);
-const season = params.get("season");
+const params=new URLSearchParams(window.location.search);
+const season=params.get("season");
 
-document.getElementById("title").textContent = season+" Season";
+document.getElementById("title").textContent=season+" Season";
 
 await loadTeams();
 
-const res = await fetch("/data/baseball/seasons/"+season+".json",{cache:"no-store"});
-const games = await res.json();
+const res=await fetch("/data/baseball/seasons/"+season+".json");
+const games=await res.json();
+
+// IMPORTANT: sort chronologically first
+games.sort((a,b)=> new Date(a.date)-new Date(b.date));
 
 renderGames(games);
 
@@ -140,20 +147,20 @@ renderGames(games);
 
 function renderGames(games){
 
-const tbody = document.getElementById("tbody");
-tbody.innerHTML = "";
+const tbody=document.getElementById("tbody");
+tbody.innerHTML="";
 
 games.forEach(game=>{
 
 const gameId = buildGameId(game);
 
-const tr = document.createElement("tr");
+const tr=document.createElement("tr");
 
-tr.onclick = ()=>{
+tr.onclick=()=>{
 window.location.href="/baseball-game.html?game="+gameId;
 };
 
-tr.innerHTML = `
+tr.innerHTML=`
 <td>${game.date}</td>
 <td>${teamName(game.away_code)}</td>
 <td>${teamName(game.home_code)}</td>
