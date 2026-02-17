@@ -6,7 +6,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-
 body{
 font-family:Inter,system-ui,Arial;
 margin:0;
@@ -80,7 +79,6 @@ color:#0056d6;
 text-decoration:none;
 font-weight:700;
 }
-
 </style>
 
 </head>
@@ -96,23 +94,23 @@ font-weight:700;
 <div class="page">
 
 <div class="hero">
-<h1 id="name">Loading...</h1>
-<div id="meta"></div>
+<h1 id="playerName">Loading...</h1>
+<div id="playerMeta"></div>
 </div>
 
 <div class="section">
 <h2>Career Batting Totals</h2>
-<div id="batting"></div>
+<div id="battingTotals"></div>
 </div>
 
 <div class="section">
 <h2>Career Pitching Totals</h2>
-<div id="pitching"></div>
+<div id="pitchingTotals"></div>
 </div>
 
 <div class="section">
 <h2>Game Log</h2>
-<div id="games"></div>
+<div id="gameLog"></div>
 </div>
 
 </div>
@@ -122,47 +120,51 @@ font-weight:700;
 const playerId =
 new URLSearchParams(location.search).get("player")
 
-let playerName=""
+let PLAYER_NAME = ""
 
-/* LOAD PLAYER NAME */
+let battingTotals = {}
+let pitchingTotals = {}
+
+let gameLog = []
 
 async function loadPlayerName(){
 
-const res=
+const players =
 await fetch("./data/baseball/players.json")
+.then(r=>r.json())
 
-const players=
-await res.json()
-
-const p=
+const p =
 players.find(x=>x.player_id===playerId)
 
-playerName=
-p?.name || playerId
+PLAYER_NAME = p?.name || playerId
 
-document.getElementById("name").textContent=
-playerName
+document.getElementById("playerName").textContent =
+PLAYER_NAME
 
-document.getElementById("meta").textContent=
-"Player ID: "+playerId
+document.getElementById("playerMeta").textContent =
+"Player ID: " + playerId
 
 }
 
-/* LOAD ALL SEASONS */
+async function loadAllSeasons(){
 
-async function loadAllGames(){
-
-const index=
+const seasons =
 await fetch("./data/baseball/index.json")
 .then(r=>r.json())
 
-let battingTotals={}
-let pitchingTotals={}
-let games=[]
+for(const season of seasons){
 
-for(const season of index){
+await loadSeason(season)
 
-const seasonGames=
+}
+
+render()
+
+}
+
+async function loadSeason(season){
+
+const seasonGames =
 await fetch(`./data/baseball/seasons/${season}.json`)
 .then(r=>r.json())
 
@@ -173,72 +175,13 @@ g.home_code +
 g.date.replaceAll("-","") +
 "0"
 
-const year =
-g.date.substring(0,4)
-
 try{
 
-const game=
-await fetch(`./data/baseball/games/${year}/${gameId}.json`)
+const game =
+await fetch(`./data/baseball/games/${season}/${gameId}.json`)
 .then(r=>r.json())
 
-/* BATTING */
-
-const batters=[
-...(game.batters_home||[]),
-...(game.batters_away||[])
-]
-
-for(const b of batters){
-
-if(b.player_id===playerId){
-
-for(const stat in b){
-
-if(stat==="player_id") continue
-
-battingTotals[stat] =
-(battingTotals[stat]||0) +
-(b[stat]||0)
-
-}
-
-games.push({
-date:g.date,
-team:g.home_code===game.home_code ?
-g.home_code :
-g.away_code,
-gameId
-})
-
-}
-
-}
-
-/* PITCHING */
-
-const pitchers=[
-...(game.pitchers_home||[]),
-...(game.pitchers_away||[])
-]
-
-for(const p of pitchers){
-
-if(p.player_id===playerId){
-
-for(const stat in p){
-
-if(stat==="player_id") continue
-
-pitchingTotals[stat] =
-(pitchingTotals[stat]||0) +
-(p[stat]||0)
-
-}
-
-}
-
-}
+processGame(game)
 
 }catch{}
 
@@ -246,97 +189,157 @@ pitchingTotals[stat] =
 
 }
 
-renderTotals("batting",battingTotals)
-renderTotals("pitching",pitchingTotals)
-renderGames(games)
+function processGame(game){
+
+const batters = [
+...(game.batters_home||[]),
+...(game.batters_away||[])
+]
+
+const pitchers = [
+...(game.pitchers_home||[]),
+...(game.pitchers_away||[])
+]
+
+let played = false
+
+for(const b of batters){
+
+if(b.player_id===playerId){
+
+played = true
+
+for(const stat in b){
+
+if(stat==="player_id") continue
+
+battingTotals[stat] =
+(battingTotals[stat]||0) + (b[stat]||0)
 
 }
 
-/* RENDER TOTALS */
+}
 
-function renderTotals(id,totals){
+}
 
-if(Object.keys(totals).length===0){
+for(const p of pitchers){
 
-document.getElementById(id).textContent=
+if(p.player_id===playerId){
+
+played = true
+
+for(const stat in p){
+
+if(stat==="player_id") continue
+
+pitchingTotals[stat] =
+(pitchingTotals[stat]||0) + (p[stat]||0)
+
+}
+
+}
+
+}
+
+if(played){
+
+gameLog.push({
+game_id: game.game_id,
+season: game.season
+})
+
+}
+
+}
+
+function render(){
+
+renderTotals("battingTotals", battingTotals)
+
+renderTotals("pitchingTotals", pitchingTotals)
+
+renderGameLog()
+
+}
+
+function renderTotals(elementId, totals){
+
+const keys = Object.keys(totals)
+
+if(keys.length===0){
+
+document.getElementById(elementId).textContent =
 "No data"
 
 return
 
 }
 
-let html="<table><thead><tr>"
+let html =
+"<table><thead><tr>"
 
-for(const stat in totals){
+for(const k of keys){
 
-html+=`<th>${stat}</th>`
-
-}
-
-html+="</tr></thead><tbody><tr>"
-
-for(const stat in totals){
-
-html+=`<td>${totals[stat]}</td>`
+html += `<th>${k}</th>`
 
 }
 
-html+="</tr></tbody></table>"
+html += "</tr></thead><tbody><tr>"
 
-document.getElementById(id).innerHTML=
-html
+for(const k of keys){
+
+html += `<td>${totals[k]}</td>`
 
 }
 
-/* GAME LOG */
+html += "</tr></tbody></table>"
 
-function renderGames(games){
+document.getElementById(elementId).innerHTML = html
 
-if(games.length===0){
+}
 
-document.getElementById("games").textContent=
-"No games found"
+function renderGameLog(){
+
+if(gameLog.length===0){
+
+document.getElementById("gameLog").textContent =
+"No games"
 
 return
 
 }
 
-let html=
+let html =
 "<table><thead><tr>"+
-"<th>Date</th>"+
-"<th>Team</th>"+
+"<th>Game</th>"+
+"<th>Season</th>"+
 "</tr></thead><tbody>"
 
-games
-.sort((a,b)=>b.date.localeCompare(a.date))
-.forEach(g=>{
+gameLog.forEach(g=>{
 
-html+=
+html +=
 `<tr>
 <td>
-<a href="./baseball-game.html?game=${g.gameId}">
-${g.date}
+<a href="./baseball-game.html?game=${g.game_id}">
+${g.game_id}
 </a>
 </td>
-<td>${g.team}</td>
+<td>${g.season}</td>
 </tr>`
 
 })
 
-html+="</tbody></table>"
+html += "</tbody></table>"
 
-document.getElementById("games").innerHTML=
-html
+document.getElementById("gameLog").innerHTML = html
 
 }
-
-/* INIT */
 
 async function init(){
 
 await loadPlayerName()
 
-await loadAllGames()
+await loadAllSeasons()
 
 }
 
