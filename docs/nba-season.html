@@ -13,7 +13,7 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:#fff;}
 h1{text-align:center;margin-bottom:10px;}
 select{padding:8px 12px;font-size:15px;}
 table{width:100%;border-collapse:collapse;margin-top:20px;}
-th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:center;}
+th,td{border-bottom:1px solid #ddd;padding:8px 10px;textanding:center;}
 th{background:#f0f0f0;position:sticky;top:0;}
 tr:nth-child(even){background:#f6f9ff;}
 tr:hover{background:#e9f0ff;}
@@ -39,19 +39,17 @@ Season:
 <select id="seasonSelect"></select>
 Game Type:
 <select id="typeFilter">
-  <option value="all">All</option>
-  <option value="regular">Regular Season</option>
-  <option value="playoffs">Playoffs</option>
+<option value="all">All</option>
 </select>
 </div>
 
 <table>
 <thead>
 <tr>
-  <th>Date</th>
-  <th>Game</th>
-  <th>Winner</th>
-  <th>Score</th>
+<th>Date</th>
+<th>Game</th>
+<th>Winner</th>
+<th>Score</th>
 </tr>
 </thead>
 <tbody id="gamesTable"></tbody>
@@ -62,9 +60,9 @@ Game Type:
 <table>
 <thead>
 <tr>
-  <th>Team</th>
-  <th>Wins</th>
-  <th>Losses</th>
+<th>Team</th>
+<th>Wins</th>
+<th>Losses</th>
 </tr>
 </thead>
 <tbody id="standingsTable"></tbody>
@@ -74,162 +72,136 @@ Game Type:
 </div>
 
 <script>
-const BASE_PATH = "data/nba/";
 
-const monthMap = {
-  "t":"Oct",
-  "v":"Nov",
-  "c":"Dec",
-  "Jan":"Jan","Feb":"Feb","Mar":"Mar","Apr":"Apr",
-  "May":"May","Jun":"Jun","Jul":"Jul","Aug":"Aug","Sep":"Sep"
-};
+const BASE = "/docs/data/nba/games/";
 
 const seasonSelect = document.getElementById("seasonSelect");
 const gamesTable = document.getElementById("gamesTable");
 const standingsTable = document.getElementById("standingsTable");
 const titleEl = document.getElementById("title");
-const typeFilter = document.getElementById("typeFilter");
 
-const params = new URLSearchParams(window.location.search);
-let seasonParam = params.get("season");
+let currentSeason = null;
 
-function seasonToFile(season){
-  return BASE_PATH + "nba_season_" + season.replace("-","_") + ".json";
+function populateSeasonDropdown(){
+
+    const seasons = [];
+
+    for(let y=1976; y<=2026; y++){
+        seasons.push(y.toString());
+    }
+
+    seasons.reverse().forEach(season => {
+
+        const opt = document.createElement("option");
+        opt.value = season;
+        opt.textContent = season;
+        seasonSelect.appendChild(opt);
+
+    });
+
 }
 
-async function detectSeasons(){
-  const years=[];
-  for(let y=1976;y<=2030;y++){
-    years.push(`${y}-${String(y+1).slice(2)}`);
-  }
-
-  const checks = years.map(season =>
-    fetch(seasonToFile(season))
-      .then(r=>r.ok?season:null)
-      .catch(()=>null)
-  );
-
-  const results = await Promise.all(checks);
-  return results.filter(Boolean).sort((a,b)=>b.localeCompare(a));
-}
-
-seasonSelect.addEventListener("change",()=>{
-  location.href="nba-season.html?season="+seasonSelect.value;
+seasonSelect.addEventListener("change", ()=>{
+    loadSeason(seasonSelect.value);
 });
-
-typeFilter.addEventListener("change",()=>{
-  loadSeason(seasonSelect.value);
-});
-
-init();
-
-async function init(){
-  const seasonFiles=await detectSeasons();
-
-  if(!seasonFiles.length){
-    gamesTable.innerHTML=`<tr><td colspan="4">No season files found</td></tr>`;
-    return;
-  }
-
-  seasonFiles.forEach(s=>{
-    const opt=document.createElement("option");
-    opt.value=s;
-    opt.textContent=s;
-    seasonSelect.appendChild(opt);
-  });
-
-  if(!seasonParam||!seasonFiles.includes(seasonParam)){
-    seasonParam=seasonFiles[0];
-  }
-
-  seasonSelect.value=seasonParam;
-  loadSeason(seasonParam);
-}
-
-/* CORRECT DATE PARSER */
-function parseGameDate(raw, season){
-  if(!raw) return new Date(0);
-
-  const clean = raw.replace(",","").trim().split(" ");
-  let m = monthMap[clean[0]] || clean[0];
-  let d = clean[1];
-
-  const [startYear] = season.split("-");
-  const endYear = parseInt(startYear) + 1;
-
-  const winterMonths = ["Jan","Feb","Mar","Apr","May","Jun"];
-  const year = winterMonths.includes(m) ? endYear : startYear;
-
-  return new Date(`${m} ${d} ${year}`);
-}
-
-function formatNice(raw){
-  if(!raw) return "";
-  const clean = raw.replace(",","").trim().split(" ");
-  let m = monthMap[clean[0]] || clean[0];
-  return `${m} ${clean[1]} ${clean[2]}`;
-}
 
 async function loadSeason(season){
-  const file=seasonToFile(season);
-  titleEl.textContent="NBA Season "+season;
-  gamesTable.innerHTML="";
-  standingsTable.innerHTML="";
 
-  try{
-    const res=await fetch(file);
-    const data=await res.json();
+    currentSeason = season;
 
-    const standings={};
+    titleEl.textContent = "NBA Season " + season;
 
-    const games=(data.games||[]).slice().sort((a,b)=>{
-      return parseGameDate(a.date,season) - parseGameDate(b.date,season);
-    });
+    gamesTable.innerHTML = "Loading...";
+    standingsTable.innerHTML = "";
 
-    games.forEach(g=>{
-      const isPlayoff=g.is_playoffs||false;
-      if(typeFilter.value==="playoffs"&&!isPlayoff)return;
-      if(typeFilter.value==="regular"&&isPlayoff)return;
+    try{
 
-      const winner=g.home_points>g.away_points?g.home_team:g.away_team;
-      const loser=g.home_points>g.away_points?g.away_team:g.home_team;
+        const response = await fetch(BASE + season + "/");
+        const text = await response.text();
 
-      standings[winner]=standings[winner]||{w:0,l:0};
-      standings[loser]=standings[loser]||{w:0,l:0};
-      standings[winner].w++;
-      standings[loser].l++;
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(text,"text/html");
 
-      const tr=document.createElement("tr");
-      tr.innerHTML=`
-        <td>${formatNice(g.date)}</td>
-        <td>
-          <a href="nba-team.html?team=${encodeURIComponent(g.home_team)}">${g.home_team}</a>
-          vs
-          <a href="nba-team.html?team=${encodeURIComponent(g.away_team)}">${g.away_team}</a>
-        </td>
-        <td>${winner}</td>
-        <td>${g.home_points} – ${g.away_points}</td>
-      `;
+        const files = [...doc.querySelectorAll("a")]
+            .map(a=>a.getAttribute("href"))
+            .filter(f=>f && f.endsWith(".json"));
 
-      tr.onclick=()=>location.href=
-        "nba-game.html?season="+encodeURIComponent(season)+
-        "&game="+encodeURIComponent(g.home_team+" vs "+g.away_team);
+        if(files.length === 0){
+            gamesTable.innerHTML =
+            "<tr><td colspan='4'>No season files found</td></tr>";
+            return;
+        }
 
-      gamesTable.appendChild(tr);
-    });
+        gamesTable.innerHTML = "";
 
-    Object.entries(standings)
-      .sort((a,b)=>b[1].w-a[1].w)
-      .forEach(([team,rec])=>{
-        const tr=document.createElement("tr");
-        tr.innerHTML=`<td>${team}</td><td>${rec.w}</td><td>${rec.l}</td>`;
-        standingsTable.appendChild(tr);
-      });
+        const standings = {};
 
-  }catch(e){
-    gamesTable.innerHTML=`<tr><td colspan="4">Could not load ${file}</td></tr>`;
-  }
+        for(const file of files){
+
+            const game =
+            await fetch(BASE + season + "/" + file)
+            .then(r=>r.json());
+
+            const winner =
+            game.home_score > game.away_score
+            ? game.home_team
+            : game.away_team;
+
+            const loser =
+            game.home_score > game.away_score
+            ? game.away_team
+            : game.home_team;
+
+            standings[winner] = standings[winner] || {w:0,l:0};
+            standings[loser] = standings[loser] || {w:0,l:0};
+
+            standings[winner].w++;
+            standings[loser].l++;
+
+            const tr = document.createElement("tr");
+
+            tr.innerHTML = `
+                <td>${game.date || ""}</td>
+                <td>
+                    <a href="nba-game.html?season=${season}&game=${game.game_id}">
+                    ${game.away_team} @ ${game.home_team}
+                    </a>
+                </td>
+                <td>${winner}</td>
+                <td>${game.away_score} - ${game.home_score}</td>
+            `;
+
+            gamesTable.appendChild(tr);
+
+        }
+
+        Object.entries(standings)
+        .sort((a,b)=>b[1].w - a[1].w)
+        .forEach(([team,rec])=>{
+
+            const tr = document.createElement("tr");
+
+            tr.innerHTML =
+            `<td>${team}</td><td>${rec.w}</td><td>${rec.l}</td>`;
+
+            standingsTable.appendChild(tr);
+
+        });
+
+    }
+    catch(err){
+
+        gamesTable.innerHTML =
+        "<tr><td colspan='4'>Failed to load season</td></tr>";
+
+    }
+
 }
+
+populateSeasonDropdown();
+
+loadSeason("2023");
+
 </script>
 
 </body>
