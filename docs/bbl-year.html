@@ -17,7 +17,7 @@ background:#f4f8fc;
 display:flex;
 justify-content:center;
 gap:24px;
-padding:16px 0;
+padding:16px;
 background:#fff;
 border-bottom:1px solid #ddd;
 font-weight:600;
@@ -40,7 +40,7 @@ padding:30px 20px 60px;
 .hero{
 background:linear-gradient(135deg,#003566,#0077b6);
 color:white;
-padding:42px;
+padding:40px;
 border-radius:26px;
 margin-bottom:26px;
 }
@@ -56,13 +56,13 @@ font-size:18px;
 opacity:.95;
 }
 
-/* SEASON GRID */
+/* SEASON BUTTONS */
 
 .season-grid{
 display:flex;
 flex-wrap:wrap;
 gap:14px;
-margin-top:10px;
+margin-bottom:26px;
 }
 
 .season-btn{
@@ -70,25 +70,60 @@ margin-top:10px;
 background:linear-gradient(135deg,#003566,#0077b6);
 color:white;
 
-padding:14px 26px;
+padding:12px 22px;
 border-radius:12px;
 
 font-weight:700;
 font-size:18px;
 
 cursor:pointer;
-
 transition:.2s;
 
 }
 
 .season-btn:hover{
 transform:translateY(-2px);
-box-shadow:0 6px 18px rgba(0,0,0,.15);
 }
 
-.season-btn.current{
+.season-btn.active{
 background:linear-gradient(135deg,#3a86ff,#00bbf9);
+}
+
+/* MATCH TABLE */
+
+.table-wrap{
+background:#fff;
+border-radius:14px;
+overflow:hidden;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+}
+
+th{
+background:linear-gradient(135deg,#003566,#0077b6);
+color:#fff;
+padding:12px;
+text-align:left;
+}
+
+td{
+padding:12px;
+border-bottom:1px solid #eee;
+}
+
+tr:nth-child(even){
+background:#f4f8fc;
+}
+
+tr.game-row{
+cursor:pointer;
+}
+
+tr.game-row:hover{
+background:#dbeafe;
 }
 
 </style>
@@ -107,16 +142,30 @@ background:linear-gradient(135deg,#3a86ff,#00bbf9);
 <div class="hero">
 
 <h1>Big Bash League</h1>
-
-<p>
-Complete BBL match history by season. Click any season to view matches and full scorecards.
-</p>
+<p>Complete BBL match history by season. Click a season to view matches.</p>
 
 </div>
 
-<div id="seasonGrid" class="season-grid">
+<div id="seasonGrid" class="season-grid"></div>
 
-Loading seasons...
+<div class="table-wrap">
+
+<table>
+
+<thead>
+<tr>
+<th>Date</th>
+<th>Match</th>
+<th>Venue</th>
+<th>Winner</th>
+</tr>
+</thead>
+
+<tbody id="matchTable">
+<tr><td colspan="4">Select a season above</td></tr>
+</tbody>
+
+</table>
 
 </div>
 
@@ -124,56 +173,107 @@ Loading seasons...
 
 <script>
 
-(async function(){
+let seasonData={};
+let currentSeason=null;
 
-const grid=document.getElementById("seasonGrid");
+(async function(){
 
 /* LOAD INDEX */
 
 const index=await fetch("/data/bbl/index.json")
 .then(r=>r.json());
 
-/* EXTRACT SEASONS */
+/* LOAD FILES */
 
-let seasons=new Set();
+await Promise.all(
 
-index.forEach(file=>{
+index.map(async file=>{
 
-const year=parseInt(file.match(/\d+/)[0]);
+const season=parseInt(file.match(/\d+/)[0]);
 
-seasons.add(year);
+const data=await fetch("/data/bbl/"+file)
+.then(r=>r.json());
 
-});
+seasonData[season]=data;
 
-/* SORT */
+})
 
-seasons=[...seasons].sort((a,b)=>a-b);
+);
 
-/* BUILD BUTTONS */
+/* BUILD SEASON BUTTONS */
 
-grid.innerHTML="";
+const grid=document.getElementById("seasonGrid");
+
+const seasons=Object.keys(seasonData)
+.map(Number)
+.sort((a,b)=>a-b);
 
 seasons.forEach(season=>{
 
 const nextYear=(season+1).toString().slice(-2);
 
-const div=document.createElement("div");
+const btn=document.createElement("div");
 
-div.className="season-btn";
+btn.className="season-btn";
 
-div.textContent=season+" / "+nextYear;
+btn.textContent=season+" / "+nextYear;
 
-div.onclick=()=>{
+btn.onclick=()=>selectSeason(season,btn);
 
-location.href="/bbl-season-view.html?season="+season;
-
-};
-
-grid.appendChild(div);
+grid.appendChild(btn);
 
 });
 
+/* AUTO LOAD LATEST SEASON */
+
+const latest=Math.max(...seasons);
+
+selectSeason(latest,grid.lastChild);
+
 })();
+
+/* SELECT SEASON */
+
+function selectSeason(season,btn){
+
+currentSeason=season;
+
+/* BUTTON ACTIVE STATE */
+
+document.querySelectorAll(".season-btn")
+.forEach(b=>b.classList.remove("active"));
+
+btn.classList.add("active");
+
+/* RENDER MATCHES */
+
+const matches=seasonData[season];
+
+const tbody=document.getElementById("matchTable");
+
+tbody.innerHTML=matches.map((m,i)=>`
+
+<tr class="game-row"
+onclick="location.href='/bbl-match.html?file=bbl_${season}.json&match=${i}'">
+
+<td>${new Date(m.info.dates[0]).toDateString()}</td>
+
+<td>
+${m.info.teams[0]}
+vs
+${m.info.teams[1]}
+</td>
+
+<td>${m.info.venue}</td>
+
+<td>${m.info.outcome?.winner||"—"}</td>
+
+</tr>
+
+`).join("");
+
+}
+
 </script>
 
 </body>
