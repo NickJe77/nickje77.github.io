@@ -41,11 +41,6 @@ border-radius:20px;
 margin-bottom:20px;
 }
 
-.hero h1{
-margin:0;
-font-size:36px;
-}
-
 .section{
 background:white;
 padding:18px;
@@ -80,7 +75,6 @@ text-decoration:none;
 font-weight:700;
 }
 </style>
-
 </head>
 
 <body>
@@ -95,22 +89,22 @@ font-weight:700;
 
 <div class="hero">
 <h1 id="playerName">Loading...</h1>
-<div id="playerMeta"></div>
+<div id="meta"></div>
 </div>
 
 <div class="section">
 <h2>Career Batting Totals</h2>
-<div id="battingTotals"></div>
+<div id="batting"></div>
 </div>
 
 <div class="section">
 <h2>Career Pitching Totals</h2>
-<div id="pitchingTotals"></div>
+<div id="pitching"></div>
 </div>
 
 <div class="section">
 <h2>Game Log</h2>
-<div id="gameLog"></div>
+<div id="games"></div>
 </div>
 
 </div>
@@ -135,19 +129,17 @@ await fetch("./data/baseball/players.json")
 const p =
 players.find(x=>x.player_id===playerId)
 
-PLAYER_NAME = p?.name || playerId
+PLAYER_NAME=p?.name||playerId
 
-document.getElementById("playerName").textContent =
-PLAYER_NAME
+document.getElementById("playerName").textContent=PLAYER_NAME
 
-document.getElementById("playerMeta").textContent =
-"Player ID: " + playerId
+document.getElementById("meta").textContent="Player ID: "+playerId
 
 }
 
 async function loadAllSeasons(){
 
-const seasons =
+const seasons=
 await fetch("./data/baseball/index.json")
 .then(r=>r.json())
 
@@ -163,26 +155,26 @@ render()
 
 async function loadSeason(season){
 
-const seasonGames =
+const seasonGames=
 await fetch(`./data/baseball/seasons/${season}.json`)
 .then(r=>r.json())
 
 for(const g of seasonGames){
 
-const gameId =
-g.home_code +
-g.date.replaceAll("-","") +
+const gameId=
+g.home_code+
+g.date.replaceAll("-","")+
 "0"
 
 try{
 
-const game =
+const game=
 await fetch(`./data/baseball/games/${season}/${gameId}.json`)
 .then(r=>r.json())
 
 processGame(game)
 
-}catch{}
+}catch(e){}
 
 }
 
@@ -205,10 +197,9 @@ played=true
 
 for(const stat in b){
 
-if(stat==="player_id") continue
+if(stat==="player_id")continue
 
-battingTotals[stat] =
-(battingTotals[stat]||0) + (b[stat]||0)
+battingTotals[stat]=(battingTotals[stat]||0)+(b[stat]||0)
 
 }
 
@@ -229,10 +220,9 @@ played=true
 
 for(const stat in p){
 
-if(stat==="player_id") continue
+if(stat==="player_id")continue
 
-pitchingTotals[stat] =
-(pitchingTotals[stat]||0) + (p[stat]||0)
+pitchingTotals[stat]=(pitchingTotals[stat]||0)+(p[stat]||0)
 
 }
 
@@ -242,10 +232,7 @@ pitchingTotals[stat] =
 
 if(played){
 
-gameLog.push({
-game_id:game.game_id,
-season:game.season
-})
+gameLog.push(game.game_id)
 
 }
 
@@ -253,22 +240,19 @@ season:game.season
 
 function render(){
 
-renderTotals("battingTotals", battingTotals)
+renderTotals("batting",battingTotals)
 
-renderTotals("pitchingTotals", pitchingTotals)
+renderTotals("pitching",pitchingTotals)
 
 renderGameLog()
 
 }
 
-function renderTotals(elementId, totals){
+function renderTotals(id,data){
 
-const keys = Object.keys(totals)
+if(Object.keys(data).length===0){
 
-if(keys.length===0){
-
-document.getElementById(elementId).textContent =
-"No data"
+document.getElementById(id).textContent="No data"
 
 return
 
@@ -276,23 +260,23 @@ return
 
 let html="<table><thead><tr>"
 
-for(const k of keys){
+for(const stat in data){
 
-html+=`<th>${k}</th>`
+html+=`<th>${stat}</th>`
 
 }
 
 html+="</tr></thead><tbody><tr>"
 
-for(const k of keys){
+for(const stat in data){
 
-html+=`<td>${totals[k]}</td>`
+html+=`<td>${data[stat]}</td>`
 
 }
 
 html+="</tr></tbody></table>"
 
-document.getElementById(elementId).innerHTML=html
+document.getElementById(id).innerHTML=html
 
 }
 
@@ -300,36 +284,29 @@ function renderGameLog(){
 
 if(gameLog.length===0){
 
-document.getElementById("gameLog").textContent =
-"No games found"
+document.getElementById("games").textContent="No games found"
 
 return
 
 }
 
-let html=
-"<table><thead><tr>"+
-"<th>Game ID</th>"+
-"<th>Season</th>"+
-"</tr></thead><tbody>"
+let html="<table><thead><tr><th>Game</th></tr></thead><tbody>"
 
-gameLog.forEach(g=>{
+gameLog.forEach(id=>{
 
-html+=
-`<tr>
+html+=`<tr>
 <td>
-<a href="./baseball-game.html?game=${g.game_id}">
-${g.game_id}
+<a href="./baseball-game.html?game=${id}">
+${id}
 </a>
 </td>
-<td>${g.season}</td>
 </tr>`
 
 })
 
 html+="</tbody></table>"
 
-document.getElementById("gameLog").innerHTML=html
+document.getElementById("games").innerHTML=html
 
 }
 
