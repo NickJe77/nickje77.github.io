@@ -16,11 +16,11 @@ background:#f4f8fc;
 .navbar{
 display:flex;
 justify-content:center;
-gap:22px;
+gap:24px;
 padding:16px 0;
+background:#fff;
 border-bottom:1px solid #ddd;
 font-weight:600;
-background:#fff;
 }
 
 .navbar a{
@@ -29,8 +29,8 @@ text-decoration:none;
 font-size:18px;
 }
 
-.page-wrap{
-max-width:900px;
+.page{
+max-width:1200px;
 margin:auto;
 padding:30px 20px 60px;
 }
@@ -38,11 +38,11 @@ padding:30px 20px 60px;
 /* HERO */
 
 .hero{
-background:linear-gradient(90deg,#003566,#0077b6);
+background:linear-gradient(135deg,#003566,#0077b6);
 color:white;
-padding:36px 40px;
-border-radius:24px;
-margin-bottom:20px;
+padding:42px;
+border-radius:26px;
+margin-bottom:26px;
 }
 
 .hero h1{
@@ -50,46 +50,48 @@ margin:0;
 font-size:42px;
 }
 
-/* TABLE */
-
-.table-wrap{
-background:#fff;
-border-radius:14px;
-overflow:hidden;
+.hero p{
+margin-top:10px;
+font-size:18px;
+opacity:.95;
 }
 
-table{
-width:100%;
-border-collapse:collapse;
-font-size:16px;
+/* SEASON GRID */
+
+.season-grid{
+display:flex;
+flex-wrap:wrap;
+gap:14px;
+margin-top:10px;
 }
 
-th{
-background:linear-gradient(90deg,#003566,#0077b6);
-color:#fff;
-padding:14px;
-text-align:left;
-}
+.season-btn{
 
-td{
-padding:14px;
-border-bottom:1px solid #e2e8f0;
-}
+background:linear-gradient(135deg,#003566,#0077b6);
+color:white;
 
-tr:nth-child(even){
-background:#f8fbff;
-}
+padding:14px 26px;
+border-radius:12px;
 
-tr.season-row{
+font-weight:700;
+font-size:18px;
+
 cursor:pointer;
+
+transition:.2s;
+
 }
 
-tr.season-row:hover{
-background:#dbeafe;
+.season-btn:hover{
+transform:translateY(-2px);
+box-shadow:0 6px 18px rgba(0,0,0,.15);
+}
+
+.season-btn.current{
+background:linear-gradient(135deg,#3a86ff,#00bbf9);
 }
 
 </style>
-
 </head>
 
 <body>
@@ -100,27 +102,21 @@ background:#dbeafe;
 <a href="/bbl.html">BBL</a>
 </div>
 
-<div class="page-wrap">
+<div class="page">
 
 <div class="hero">
-<h1>Big Bash League Seasons</h1>
+
+<h1>Big Bash League</h1>
+
+<p>
+Complete BBL match history by season. Click any season to view matches and full scorecards.
+</p>
+
 </div>
 
-<div class="table-wrap">
+<div id="seasonGrid" class="season-grid">
 
-<table id="tbl">
-
-<thead>
-<tr>
-<th>Season</th>
-<th>Matches</th>
-<th>Years</th>
-</tr>
-</thead>
-
-<tbody></tbody>
-
-</table>
+Loading seasons...
 
 </div>
 
@@ -130,79 +126,54 @@ background:#dbeafe;
 
 (async function(){
 
-const tbody=document.querySelector("#tbl tbody");
+const grid=document.getElementById("seasonGrid");
 
 /* LOAD INDEX */
 
-const index=await fetch("/data/bbl/index.json").then(r=>r.json());
+const index=await fetch("/data/bbl/index.json")
+.then(r=>r.json());
 
-/* LOAD FILES */
+/* EXTRACT SEASONS */
 
-const files=await Promise.all(
-index.map(file=>
-fetch("/data/bbl/"+file)
-.then(r=>r.json())
-.then(data=>({file,data}))
-)
-);
+let seasons=new Set();
 
-/* BUILD SEASON LIST */
+index.forEach(file=>{
 
-let seasons={};
+const year=parseInt(file.match(/\d+/)[0]);
 
-files.forEach(({file,data})=>{
+seasons.add(year);
 
-data.forEach(match=>{
+});
 
-const season=match.info.season;
+/* SORT */
 
-if(!seasons[season]){
+seasons=[...seasons].sort((a,b)=>a-b);
 
-seasons[season]={
-season,
-matches:0,
-file
+/* BUILD BUTTONS */
+
+grid.innerHTML="";
+
+seasons.forEach(season=>{
+
+const nextYear=(season+1).toString().slice(-2);
+
+const div=document.createElement("div");
+
+div.className="season-btn";
+
+div.textContent=season+" / "+nextYear;
+
+div.onclick=()=>{
+
+location.href="/bbl-season-view.html?season="+season;
+
 };
 
-}
-
-seasons[season].matches++;
+grid.appendChild(div);
 
 });
-
-});
-
-/* CONVERT TO ARRAY */
-
-let seasonList=Object.values(seasons);
-
-/* SORT NEWEST FIRST */
-
-seasonList.sort((a,b)=>b.season-a.season);
-
-/* RENDER */
-
-tbody.innerHTML=seasonList.map(s=>{
-
-const nextYear=(s.season+1).toString().slice(-2);
-
-return `
-
-<tr class="season-row"
-onclick="location.href='/bbl-season-view.html?season=${s.season}'">
-
-<td><strong>${s.season}/${nextYear}</strong></td>
-<td>${s.matches}</td>
-<td>${s.season}–${s.season+1}</td>
-
-</tr>
-
-`;
-
-}).join("");
 
 })();
-
 </script>
 
 </body>
