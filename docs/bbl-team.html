@@ -48,23 +48,57 @@ margin:0;
 font-size:40px;
 }
 
-/* CONTROLS */
 .controls{
-margin-bottom:16px;
 display:flex;
-align-items:center;
-gap:10px;
+gap:14px;
 flex-wrap:wrap;
+margin-bottom:18px;
+align-items:center;
 }
 
 select{
-padding:8px 14px;
+padding:8px 12px;
 border-radius:8px;
 border:1px solid #ccc;
 font-size:15px;
 }
 
+/* STAT BOXES */
+
+.section-title{
+margin:22px 0 8px;
+font-weight:700;
+color:#003566;
+text-align:center;
+}
+
+.stats{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+gap:14px;
+margin-bottom:20px;
+}
+
+.stat{
+background:#fff;
+padding:18px;
+border-radius:14px;
+text-align:center;
+}
+
+.stat h3{
+margin:0;
+font-size:28px;
+color:#003566;
+}
+
+.stat span{
+font-size:14px;
+color:#666;
+}
+
 /* TABLE */
+
 .table-wrap{
 background:#fff;
 border-radius:14px;
@@ -122,9 +156,27 @@ background:#dbeafe;
 </div>
 
 <div class="controls">
+
 Opposition:
 <select id="oppSelect"></select>
+
+Season:
+<select id="seasonSelect"></select>
+
+Venue:
+<select id="venueSelect">
+<option value="All">All</option>
+<option value="Home">Home</option>
+<option value="Away">Away</option>
+</select>
+
 </div>
+
+<div class="section-title">CAREER RECORD</div>
+<div class="stats" id="careerStats"></div>
+
+<div class="section-title">FILTERED RECORD</div>
+<div class="stats" id="filterStats"></div>
 
 <div class="table-wrap">
 
@@ -156,14 +208,17 @@ Opposition:
 const params=new URLSearchParams(location.search);
 const team=params.get("team");
 
-if(!team){
-document.getElementById("teamName").textContent="Team not specified";
-return;
-}
+if(!team)return;
 
 document.getElementById("teamName").textContent=team;
 
-const oppSelect=document.getElementById("oppSelect");
+const oppSel=document.getElementById("oppSelect");
+const seasonSel=document.getElementById("seasonSelect");
+const venueSel=document.getElementById("venueSelect");
+
+const careerStats=document.getElementById("careerStats");
+const filterStats=document.getElementById("filterStats");
+const gamesTable=document.getElementById("gamesTable");
 
 const index=await fetch("/data/bbl/index.json").then(r=>r.json());
 
@@ -182,7 +237,6 @@ files.forEach(({file,data})=>{
 data.forEach(match=>{
 
 const info=match.info;
-
 const home=info.teams[0];
 const away=info.teams[1];
 
@@ -195,8 +249,8 @@ match.innings.forEach(inn=>{
 
 let runs=0;
 
-inn.overs.forEach(over=>{
-over.deliveries.forEach(d=>{
+inn.overs.forEach(o=>{
+o.deliveries.forEach(d=>{
 runs+=d.runs.total;
 });
 });
@@ -210,51 +264,114 @@ oppRuns=runs;
 
 let result="";
 
-if(info.outcome?.winner){
-result = info.outcome.winner===team ? "Won" : "Lost";
-}else if(info.outcome?.result){
-result = info.outcome.result;
-}
+if(info.outcome?.winner)
+result=info.outcome.winner===team?"Won":"Lost";
+else
+result="NR";
 
 allGames.push({
+
 file,
 season:info.season,
 opp:home===team?away:home,
 venue:info.venue,
+isHome:home===team,
 runs:teamRuns,
 oppRuns,
 result
-});
 
 });
 
 });
 
-/* SORT */
+});
+
 allGames.sort((a,b)=>b.season-a.season);
 
-/* BUILD OPPONENT DROPDOWN */
-const oppSet=new Set(["All"]);
+/* BUILD DROPDOWNS */
 
-allGames.forEach(g=>oppSet.add(g.opp));
+const oppSet=new Set(["All"]);
+const seasonSet=new Set(["All"]);
+
+allGames.forEach(g=>{
+oppSet.add(g.opp);
+seasonSet.add(g.season);
+});
 
 oppSet.forEach(o=>{
 const opt=document.createElement("option");
 opt.value=o;
 opt.textContent=o;
-oppSelect.appendChild(opt);
+oppSel.appendChild(opt);
 });
 
-/* RENDER FUNCTION */
+seasonSet.forEach(s=>{
+const opt=document.createElement("option");
+opt.value=s;
+opt.textContent=s;
+seasonSel.appendChild(opt);
+});
+
+/* STAT FUNCTION */
+
+function calcStats(list){
+
+const matches=list.length;
+const wins=list.filter(g=>g.result==="Won").length;
+const losses=list.filter(g=>g.result==="Lost").length;
+const winPct=matches?((wins/matches)*100).toFixed(1):"0.0";
+
+return {matches,wins,losses,winPct};
+
+}
+
+/* RENDER */
+
 function render(){
 
-const opp=oppSelect.value;
+const opp=oppSel.value;
+const season=seasonSel.value;
+const venue=venueSel.value;
 
-const games = opp==="All"
-? allGames
-: allGames.filter(g=>g.opp===opp);
+let filtered=allGames;
 
-gamesTable.innerHTML=games.map(g=>`
+if(opp!=="All")
+filtered=filtered.filter(g=>g.opp===opp);
+
+if(season!=="All")
+filtered=filtered.filter(g=>g.season==season);
+
+if(venue==="Home")
+filtered=filtered.filter(g=>g.isHome);
+
+if(venue==="Away")
+filtered=filtered.filter(g=>!g.isHome);
+
+/* CAREER STATS */
+
+const career=calcStats(allGames);
+
+careerStats.innerHTML=`
+<div class="stat"><h3>${career.matches}</h3><span>Matches</span></div>
+<div class="stat"><h3>${career.wins}</h3><span>Wins</span></div>
+<div class="stat"><h3>${career.losses}</h3><span>Losses</span></div>
+<div class="stat"><h3>${career.winPct}%</h3><span>Win %</span></div>
+`;
+
+/* FILTER STATS */
+
+const filt=calcStats(filtered);
+
+filterStats.innerHTML=`
+<div class="stat"><h3>${filt.matches}</h3><span>Matches</span></div>
+<div class="stat"><h3>${filt.wins}</h3><span>Wins</span></div>
+<div class="stat"><h3>${filt.losses}</h3><span>Losses</span></div>
+<div class="stat"><h3>${filt.winPct}%</h3><span>Win %</span></div>
+`;
+
+/* TABLE */
+
+gamesTable.innerHTML=filtered.map(g=>`
 <tr class="game-row"
 onclick="location.href='/bbl-match.html?file=${g.file}'">
 
@@ -270,7 +387,9 @@ onclick="location.href='/bbl-match.html?file=${g.file}'">
 
 }
 
-oppSelect.onchange=render;
+oppSel.onchange=render;
+seasonSel.onchange=render;
+venueSel.onchange=render;
 
 render();
 
