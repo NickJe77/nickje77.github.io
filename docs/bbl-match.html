@@ -10,7 +10,7 @@
 body{
 font-family:Inter,system-ui,Arial,sans-serif;
 margin:0;
-background:#ffffff;
+background:#fff;
 }
 
 .navbar{
@@ -30,12 +30,12 @@ font-size:18px;
 
 .page{
 max-width:1200px;
-margin:0 auto;
+margin:auto;
 padding:30px 20px 60px;
 }
 
 .hero{
-background:linear-gradient(90deg,#003366,#00a3cc);
+background:linear-gradient(90deg,#003566,#0077b6);
 color:#fff;
 padding:34px 40px;
 border-radius:24px;
@@ -62,103 +62,55 @@ border-radius:12px;
 font-weight:700;
 }
 
-/* INNINGS TITLE MATCH HERO */
 .innings{
 margin-bottom:36px;
 }
 
 .innings h2{
-margin:0 0 10px;
-font-size:28px;
-font-weight:800;
-background:linear-gradient(90deg,#003366,#00a3cc);
--webkit-background-clip:text;
--webkit-text-fill-color:transparent;
+margin:0 0 6px;
+color:#003566;
+font-size:26px;
 }
 
 .total{
 font-weight:700;
 margin-bottom:10px;
-font-size:16px;
 }
 
-/* TABLE */
 table{
 width:100%;
 border-collapse:collapse;
-font-size:15px;
-background:#ffffff;
-border-radius:14px;
-overflow:hidden;
-margin-top:8px;
-}
-
-/* HEADER */
-th{
-background:linear-gradient(90deg,#003366,#00a3cc);
-color:#ffffff;
-padding:10px 12px;
-font-weight:700;
-text-align:left;
-}
-
-/* NUMERIC HEADERS */
-th.num{
-text-align:right;
-}
-
-/* CELLS */
-td{
-padding:10px 12px;
-border-bottom:1px solid #e5e7eb;
-}
-
-/* NUMERIC CELLS */
-td.num{
-text-align:right;
-font-variant-numeric:tabular-nums;
-}
-
-/* ZEBRA STRIPES */
-tr:nth-child(even){
-background:#f4f8fc;
-}
-
-/* PLAYER LINKS */
-a.player{
-color:#4b0082;
-font-weight:700;
-text-decoration:none;
-}
-
-a.player:hover{
-text-decoration:underline;
-}
-
-.meta-line{
-margin-top:8px;
 font-size:14px;
 }
 
-.superover{
-margin:30px 0;
-padding:14px;
-text-align:center;
-font-weight:900;
-letter-spacing:1px;
-background:#0b2a55;
-color:#fff;
-border-radius:14px;
+th,td{
+padding:8px 10px;
+border-bottom:1px solid #e5e7eb;
+}
+
+th{
+background:#f6f7fb;
+text-align:left;
+font-weight:800;
+}
+
+td.num{
+text-align:right;
+}
+
+tr:nth-child(even){
+background:#fbfcff;
 }
 
 </style>
 </head>
+
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="cricket.html">Cricket</a>
-<a href="bbl-season.html">BBL Seasons</a>
+<a href="/index.html">Home</a>
+<a href="/cricket.html">Cricket</a>
+<a href="/bbl.html">BBL</a>
 </div>
 
 <div class="page">
@@ -173,13 +125,12 @@ border-radius:14px;
 </div>
 
 <script>
+
 (function(){
 
 const title=document.getElementById("title");
 const meta=document.getElementById("meta");
 const out=document.getElementById("content");
-
-let PLAYER_NAMES={};
 
 function fail(msg){
 title.textContent="ERROR";
@@ -188,119 +139,48 @@ throw new Error(msg);
 }
 
 const params=new URLSearchParams(location.search);
+
 const file=params.get("file");
+const matchIndex=parseInt(params.get("match")||"0");
 
-if(!file) fail("Missing ?file parameter");
+if(!file) fail("Missing file parameter");
 
-Promise.all([
+fetch("/data/bbl/"+file)
 
-fetch("data/bbl/"+file).then(r=>{
+.then(r=>{
 if(!r.ok) fail("Failed loading "+file);
-return r.json();
-}),
-
-fetch("data/bbl/player-names.json").then(r=>{
-if(!r.ok) return {};
 return r.json();
 })
 
-])
+.then(data=>{
 
-.then(([data,names])=>{
+if(!Array.isArray(data))
+fail("Invalid match file");
 
-PLAYER_NAMES=names||{};
+if(matchIndex<0 || matchIndex>=data.length)
+fail("Match index out of range");
 
-let match=Array.isArray(data)?data[0]:data;
+const match=data[matchIndex];
 
-function full(n){
-return PLAYER_NAMES[n]||n;
-}
+if(!match.info)
+fail("Match info missing");
 
-function pl(n){
-return `<a class="player" href="bbl-player.html?player=${encodeURIComponent(n)}">${full(n)}</a>`;
-}
-
-function legal(d){
-return !(d.extras&&(d.extras.wides||d.extras.noballs));
-}
-
-function overs(b){
-return Math.floor(b/6)+"."+(b%6);
-}
-
-function dismiss(w,bowler){
-
-const f=w.fielders?.map(x=>full(x.name)).join(", ");
-
-switch(w.kind){
-
-case "caught":return`c ${f} b ${full(bowler)}`;
-case "bowled":return`b ${full(bowler)}`;
-case "lbw":return`lbw b ${full(bowler)}`;
-case "stumped":return`st ${f} b ${full(bowler)}`;
-case "run out":return`run out (${f})`;
-case "caught and bowled":return`c & b ${full(bowler)}`;
-default:return w.kind;
-
-}
-}
-
-function inningsTotal(inn){
-
-let runs=0,wkts=0;
-
-inn.overs.forEach(o=>{
-o.deliveries.forEach(d=>{
-runs+=d.runs.total;
-if(d.wickets) wkts+=d.wickets.length;
-});
-});
-
-return{runs,wkts};
-
-}
-
-let totals=match.innings.map(inn=>{
-const t=inningsTotal(inn);
-return{team:inn.team,runs:t.runs,wkts:t.wkts};
-});
-
-let resultLine="";
-
-if(match.info.outcome?.winner){
-
-const winner=match.info.outcome.winner;
-const loser=match.info.teams.find(t=>t!==winner);
-
-const w=totals.find(x=>x.team===winner);
-const l=totals.find(x=>x.team===loser);
-
-resultLine=`${winner} ${w.runs}/${w.wkts} defeated ${loser} ${l.runs}/${l.wkts}`;
-
-}else{
-
-resultLine=totals.map(x=>`${x.team} ${x.runs}/${x.wkts}`).join(" vs ");
-
-}
-
-title.textContent=resultLine;
+title.textContent=match.info.teams.join(" vs ");
 
 meta.textContent=
-match.info.venue+
-" • "+
-new Date(match.info.dates[0]).toDateString();
+match.info.venue+" • "+
+new Date(match.info.dates[0]).toDateString()+" • Winner: "+
+(match.info.outcome?.winner || "—");
 
 let html="";
 
-match.innings.forEach((inn,i)=>{
+match.innings.forEach(inn=>{
 
-let bat={},bowl={},fall=[];
-let runs=0,wkts=0,balls=0;
-let ex={b:0,lb:0,w:0,nb:0,p:0};
+let runs=0, wkts=0, balls=0;
+
+let bat={};
 
 inn.overs.forEach(o=>{
-
-let bi=0;
 
 o.deliveries.forEach(d=>{
 
@@ -308,53 +188,20 @@ runs+=d.runs.total;
 
 if(d.batter){
 
-bat[d.batter]??={R:0,B:0,F4:0,F6:0,out:"not out"};
+bat[d.batter] ??= {R:0,B:0};
 
 bat[d.batter].R+=d.runs.batter;
 
-if(d.runs.batter===4)bat[d.batter].F4++;
-if(d.runs.batter===6)bat[d.batter].F6++;
-
-if(legal(d))bat[d.batter].B++;
+if(!(d.extras?.wides))
+bat[d.batter].B++;
 
 }
 
-if(d.extras){
+if(!(d.extras?.wides))
+balls++;
 
-ex.b+=d.extras.byes||0;
-ex.lb+=d.extras.legbyes||0;
-ex.w+=d.extras.wides||0;
-ex.nb+=d.extras.noballs||0;
-
-}
-
-if(d.bowler){
-
-bowl[d.bowler]??={balls:0,R:0,W:0};
-
-if(legal(d))bowl[d.bowler].balls++;
-
-bowl[d.bowler].R+=d.runs.total-
-((d.extras?.byes||0)+(d.extras?.legbyes||0));
-
-}
-
-if(legal(d)){balls++;bi++;}
-
-if(d.wickets){
-
-d.wickets.forEach(w=>{
-
-wkts++;
-
-bat[w.player_out].out=dismiss(w,d.bowler);
-bowl[d.bowler].W++;
-
-fall.push(`${runs}/${wkts} (${full(w.player_out)}, ${o.over}.${bi})`);
-
-});
-
-}
+if(d.wickets)
+wkts+=d.wickets.length;
 
 });
 
@@ -367,76 +214,30 @@ html+=`
 <h2>${inn.team} Innings</h2>
 
 <div class="total">
-Total: ${runs}/${wkts} (${overs(balls)} ov)
+${runs}/${wkts} (${Math.floor(balls/6)}.${balls%6} ov)
 </div>
 
 <table>
 
 <tr>
 <th>Batter</th>
-<th>How out</th>
 <th class="num">R</th>
 <th class="num">B</th>
-<th class="num">4s</th>
-<th class="num">6s</th>
-<th class="num">SR</th>
 </tr>
 
-${Object.entries(bat).map(([p,s])=>{
-
-const sr=s.B?((s.R/s.B)*100).toFixed(1):"—";
-
-return`<tr>
-<td>${pl(p)}</td>
-<td>${s.out}</td>
+${Object.entries(bat).map(([p,s])=>`
+<tr>
+<td>${p}</td>
 <td class="num">${s.R}</td>
 <td class="num">${s.B}</td>
-<td class="num">${s.F4}</td>
-<td class="num">${s.F6}</td>
-<td class="num">${sr}</td>
-</tr>`;
-
-}).join("")}
-
-</table>
-
-<div class="meta-line">
-Extras: ${ex.b+ex.lb+ex.w+ex.nb}
-</div>
-
-<div class="meta-line">
-Fall of wickets: ${fall.join(", ")}
-</div>
-
-<h3 style="margin-top:18px">Bowling vs ${inn.team}</h3>
-
-<table>
-
-<tr>
-<th>Bowler</th>
-<th class="num">O</th>
-<th class="num">R</th>
-<th class="num">W</th>
-<th class="num">Econ</th>
 </tr>
-
-${Object.entries(bowl).map(([p,s])=>{
-
-const econ=s.balls?(s.R/(s.balls/6)).toFixed(2):"—";
-
-return`<tr>
-<td>${pl(p)}</td>
-<td class="num">${overs(s.balls)}</td>
-<td class="num">${s.R}</td>
-<td class="num">${s.W}</td>
-<td class="num">${econ}</td>
-</tr>`;
-
-}).join("")}
+`).join("")}
 
 </table>
 
-</div>`;
+</div>
+
+`;
 
 });
 
@@ -444,9 +245,12 @@ out.innerHTML=html;
 
 })
 
-.catch(e=>fail(e.message));
+.catch(e=>{
+fail(e.message);
+});
 
 })();
+
 </script>
 
 </body>
