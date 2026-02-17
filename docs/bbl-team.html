@@ -48,6 +48,23 @@ margin:0;
 font-size:40px;
 }
 
+/* CONTROLS */
+.controls{
+margin-bottom:16px;
+display:flex;
+align-items:center;
+gap:10px;
+flex-wrap:wrap;
+}
+
+select{
+padding:8px 14px;
+border-radius:8px;
+border:1px solid #ccc;
+font-size:15px;
+}
+
+/* TABLE */
 .table-wrap{
 background:#fff;
 border-radius:14px;
@@ -104,6 +121,11 @@ background:#dbeafe;
 <h1 id="teamName">Loading…</h1>
 </div>
 
+<div class="controls">
+Opposition:
+<select id="oppSelect"></select>
+</div>
+
 <div class="table-wrap">
 
 <table>
@@ -135,13 +157,13 @@ const params=new URLSearchParams(location.search);
 const team=params.get("team");
 
 if(!team){
-
 document.getElementById("teamName").textContent="Team not specified";
 return;
-
 }
 
 document.getElementById("teamName").textContent=team;
+
+const oppSelect=document.getElementById("oppSelect");
 
 const index=await fetch("/data/bbl/index.json").then(r=>r.json());
 
@@ -153,7 +175,7 @@ fetch("/data/bbl/"+file)
 )
 );
 
-let games=[];
+let allGames=[];
 
 files.forEach(({file,data})=>{
 
@@ -174,11 +196,9 @@ match.innings.forEach(inn=>{
 let runs=0;
 
 inn.overs.forEach(over=>{
-
 over.deliveries.forEach(d=>{
 runs+=d.runs.total;
 });
-
 });
 
 if(inn.team===team)
@@ -191,20 +211,12 @@ oppRuns=runs;
 let result="";
 
 if(info.outcome?.winner){
-
-if(info.outcome.winner===team)
-result="Won";
-else
-result="Lost";
-
+result = info.outcome.winner===team ? "Won" : "Lost";
 }else if(info.outcome?.result){
-
-result=info.outcome.result;
-
+result = info.outcome.result;
 }
 
-games.push({
-
+allGames.push({
 file,
 season:info.season,
 opp:home===team?away:home,
@@ -212,22 +224,37 @@ venue:info.venue,
 runs:teamRuns,
 oppRuns,
 result
-
 });
 
 });
 
 });
 
-/* SORT NEWEST FIRST */
+/* SORT */
+allGames.sort((a,b)=>b.season-a.season);
 
-games.sort((a,b)=>b.season-a.season);
+/* BUILD OPPONENT DROPDOWN */
+const oppSet=new Set(["All"]);
 
-/* RENDER */
+allGames.forEach(g=>oppSet.add(g.opp));
 
-const tbody=document.getElementById("gamesTable");
+oppSet.forEach(o=>{
+const opt=document.createElement("option");
+opt.value=o;
+opt.textContent=o;
+oppSelect.appendChild(opt);
+});
 
-tbody.innerHTML=games.map(g=>`
+/* RENDER FUNCTION */
+function render(){
+
+const opp=oppSelect.value;
+
+const games = opp==="All"
+? allGames
+: allGames.filter(g=>g.opp===opp);
+
+gamesTable.innerHTML=games.map(g=>`
 <tr class="game-row"
 onclick="location.href='/bbl-match.html?file=${g.file}'">
 
@@ -241,8 +268,13 @@ onclick="location.href='/bbl-match.html?file=${g.file}'">
 </tr>
 `).join("");
 
-})();
+}
 
+oppSelect.onchange=render;
+
+render();
+
+})();
 </script>
 
 </body>
