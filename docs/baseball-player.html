@@ -51,7 +51,7 @@ font-size:36px;
 background:white;
 padding:18px;
 border-radius:16px;
-margin-bottom:16px;
+margin-bottom:20px;
 }
 
 table{
@@ -88,256 +88,245 @@ font-weight:700;
 <body>
 
 <div class="navbar">
-<a href="/index.html">Home</a>
-<a href="/baseball.html">Baseball</a>
-<a href="/baseball-seasons.html">Seasons</a>
+<a href="./index.html">Home</a>
+<a href="./baseball.html">Baseball</a>
+<a href="./baseball-seasons.html">Seasons</a>
 </div>
 
 <div class="page">
 
 <div class="hero">
-<h1 id="playerName">Loading...</h1>
-<div id="playerMeta"></div>
+<h1 id="name">Loading...</h1>
+<div id="meta"></div>
 </div>
 
 <div class="section">
 <h2>Career Batting Totals</h2>
-<div id="battingTotals"></div>
+<div id="batting"></div>
 </div>
 
 <div class="section">
 <h2>Career Pitching Totals</h2>
-<div id="pitchingTotals"></div>
+<div id="pitching"></div>
 </div>
 
 <div class="section">
 <h2>Game Log</h2>
-<div id="gameLog"></div>
+<div id="games"></div>
 </div>
 
 </div>
 
 <script>
 
-/* GLOBAL DATA */
+const playerId =
+new URLSearchParams(location.search).get("player")
 
-let PLAYER_ID=null
-let PLAYER_NAME=""
-let ALL_GAMES=[]
-
-/* HELPERS */
-
-function param(name){
-
-return new URLSearchParams(location.search).get(name)
-
-}
-
-function seasonFromGameId(id){
-
-return id.substring(3,7)
-
-}
+let playerName=""
 
 /* LOAD PLAYER NAME */
 
-async function loadPlayer(){
+async function loadPlayerName(){
 
-PLAYER_ID=param("player")
+const res=
+await fetch("./data/baseball/players.json")
 
-const res=await fetch("/data/baseball/players.json")
+const players=
+await res.json()
 
-const players=await res.json()
+const p=
+players.find(x=>x.player_id===playerId)
 
-const player=players.find(p=>p.player_id===PLAYER_ID)
+playerName=
+p?.name || playerId
 
-PLAYER_NAME=player?.name || PLAYER_ID
+document.getElementById("name").textContent=
+playerName
 
-document.getElementById("playerName").textContent=PLAYER_NAME
-
-document.getElementById("playerMeta").textContent=
-"Player ID: "+PLAYER_ID
+document.getElementById("meta").textContent=
+"Player ID: "+playerId
 
 }
 
-/* LOAD ALL GAMES */
+/* LOAD ALL SEASONS */
 
 async function loadAllGames(){
 
-const res=await fetch("/data/baseball/index.json")
-
-const seasons=await res.json()
-
-for(const season of seasons){
-
-const res2=await fetch(`/data/baseball/seasons/${season}.json`)
-
-const games=await res2.json()
-
-ALL_GAMES.push(...games)
-
-}
-
-}
-
-/* LOAD PLAYER GAME DATA */
-
-async function loadPlayerGames(){
+const index=
+await fetch("./data/baseball/index.json")
+.then(r=>r.json())
 
 let battingTotals={}
 let pitchingTotals={}
+let games=[]
 
-let log=[]
+for(const season of index){
 
-for(const game of ALL_GAMES){
+const seasonGames=
+await fetch(`./data/baseball/seasons/${season}.json`)
+.then(r=>r.json())
 
-const id=game.game_id
+for(const g of seasonGames){
 
-const season=seasonFromGameId(id)
+const gameId =
+g.home_code +
+g.date.replaceAll("-","") +
+"0"
 
-const res=await fetch(`/data/baseball/games/${season}/${id}.json`)
+const year =
+g.date.substring(0,4)
 
-if(!res.ok) continue
+try{
 
-const data=await res.json()
+const game=
+await fetch(`./data/baseball/games/${year}/${gameId}.json`)
+.then(r=>r.json())
 
-/* batting */
+/* BATTING */
 
-data.batters_home?.forEach(p=>{
-if(p.player_id===PLAYER_ID){
+const batters=[
+...(game.batters_home||[]),
+...(game.batters_away||[])
+]
 
-addStats(battingTotals,p)
+for(const b of batters){
 
-log.push({
-game:id,
-team:data.home_code,
-type:"Batting",
-stats:p
-})
+if(b.player_id===playerId){
 
-}
-})
+for(const stat in b){
 
-data.batters_away?.forEach(p=>{
-if(p.player_id===PLAYER_ID){
+if(stat==="player_id") continue
 
-addStats(battingTotals,p)
-
-log.push({
-game:id,
-team:data.away_code,
-type:"Batting",
-stats:p
-})
-
-}
-})
-
-/* pitching */
-
-data.pitchers_home?.forEach(p=>{
-if(p.player_id===PLAYER_ID){
-
-addStats(pitchingTotals,p)
-
-log.push({
-game:id,
-team:data.home_code,
-type:"Pitching",
-stats:p
-})
+battingTotals[stat] =
+(battingTotals[stat]||0) +
+(b[stat]||0)
 
 }
-})
 
-data.pitchers_away?.forEach(p=>{
-if(p.player_id===PLAYER_ID){
-
-addStats(pitchingTotals,p)
-
-log.push({
-game:id,
-team:data.away_code,
-type:"Pitching",
-stats:p
-})
-
-}
+games.push({
+date:g.date,
+team:g.home_code===game.home_code ?
+g.home_code :
+g.away_code,
+gameId
 })
 
 }
 
-renderTotals("battingTotals",battingTotals)
-renderTotals("pitchingTotals",pitchingTotals)
-renderLog(log)
+}
+
+/* PITCHING */
+
+const pitchers=[
+...(game.pitchers_home||[]),
+...(game.pitchers_away||[])
+]
+
+for(const p of pitchers){
+
+if(p.player_id===playerId){
+
+for(const stat in p){
+
+if(stat==="player_id") continue
+
+pitchingTotals[stat] =
+(pitchingTotals[stat]||0) +
+(p[stat]||0)
 
 }
 
-/* ADD STATS */
+}
 
-function addStats(total,stats){
+}
 
-for(const k in stats){
-
-if(k==="player_id") continue
-
-if(!isNaN(stats[k])){
-
-total[k]=(total[k]||0)+Number(stats[k])
+}catch{}
 
 }
 
 }
+
+renderTotals("batting",battingTotals)
+renderTotals("pitching",pitchingTotals)
+renderGames(games)
 
 }
 
 /* RENDER TOTALS */
 
-function renderTotals(id,stats){
+function renderTotals(id,totals){
 
-const table=document.createElement("table")
+if(Object.keys(totals).length===0){
 
-table.innerHTML=
-`
-<tr>
-${Object.keys(stats).map(k=>`<th>${k}</th>`).join("")}
-</tr>
-<tr>
-${Object.values(stats).map(v=>`<td>${v}</td>`).join("")}
-</tr>
-`
+document.getElementById(id).textContent=
+"No data"
 
-document.getElementById(id).appendChild(table)
+return
 
 }
 
-/* RENDER LOG */
+let html="<table><thead><tr>"
 
-function renderLog(log){
+for(const stat in totals){
 
-const table=document.createElement("table")
+html+=`<th>${stat}</th>`
 
-table.innerHTML=
-`
-<tr>
-<th>Game</th>
-<th>Team</th>
-<th>Type</th>
-</tr>
-${log.map(g=>`
-<tr>
+}
+
+html+="</tr></thead><tbody><tr>"
+
+for(const stat in totals){
+
+html+=`<td>${totals[stat]}</td>`
+
+}
+
+html+="</tr></tbody></table>"
+
+document.getElementById(id).innerHTML=
+html
+
+}
+
+/* GAME LOG */
+
+function renderGames(games){
+
+if(games.length===0){
+
+document.getElementById("games").textContent=
+"No games found"
+
+return
+
+}
+
+let html=
+"<table><thead><tr>"+
+"<th>Date</th>"+
+"<th>Team</th>"+
+"</tr></thead><tbody>"
+
+games
+.sort((a,b)=>b.date.localeCompare(a.date))
+.forEach(g=>{
+
+html+=
+`<tr>
 <td>
-<a href="/baseball-game.html?game=${g.game}">
-${g.game}
+<a href="./baseball-game.html?game=${g.gameId}">
+${g.date}
 </a>
 </td>
 <td>${g.team}</td>
-<td>${g.type}</td>
-</tr>
-`).join("")}
-`
+</tr>`
 
-document.getElementById("gameLog").appendChild(table)
+})
+
+html+="</tbody></table>"
+
+document.getElementById("games").innerHTML=
+html
 
 }
 
@@ -345,11 +334,9 @@ document.getElementById("gameLog").appendChild(table)
 
 async function init(){
 
-await loadPlayer()
+await loadPlayerName()
 
 await loadAllGames()
-
-await loadPlayerGames()
 
 }
 
