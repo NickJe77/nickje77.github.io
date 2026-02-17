@@ -6,270 +6,243 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
+
 body{
-  font-family: Inter, system-ui, Arial, sans-serif;
-  margin:0;
-  background:#ffffff;
+font-family:Inter,system-ui,Arial,sans-serif;
+margin:0;
+background:#f4f8fc;
 }
 
 .navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px 0;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
+display:flex;
+justify-content:center;
+gap:24px;
+padding:16px;
+background:#fff;
+border-bottom:1px solid #ddd;
+font-weight:600;
 }
-.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 
-.page-wrap{
-  max-width:1200px;
-  margin:0 auto;
-  padding:30px 20px;
+.navbar a{
+color:#0056d6;
+text-decoration:none;
+font-size:18px;
+}
+
+.page{
+max-width:1200px;
+margin:auto;
+padding:24px;
 }
 
 .hero{
-  background:linear-gradient(90deg,#003566,#0077b6);
-  color:white;
-  padding:40px 50px;
-  border-radius:24px;
-  margin-bottom:25px;
+background:linear-gradient(90deg,#003566,#0077b6);
+color:#fff;
+padding:40px;
+border-radius:22px;
+margin-bottom:20px;
 }
-.hero h1{margin:0;font-size:46px;}
-.hero p{margin-top:10px;font-size:20px;opacity:0.95;}
 
-.year-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(110px,1fr));
-  gap:12px;
-  margin-bottom:25px;
+.hero h1{
+margin:0;
+font-size:40px;
 }
-.year-btn{
-  background:#003566;
-  color:white;
-  border:none;
-  padding:12px 0;
-  border-radius:10px;
-  font-size:15px;
-  cursor:pointer;
+
+.table-wrap{
+background:#fff;
+border-radius:14px;
+overflow:hidden;
 }
-.year-btn:hover{background:#00509d;}
-.year-btn.active{background:#00b4d8;}
 
 table{
-  width:100%;
-  border-collapse:collapse;
-  font-size:14px;
-  margin-bottom:30px;
+width:100%;
+border-collapse:collapse;
 }
 
-th,td{
-  border-bottom:1px solid #ddd;
-  padding:10px 12px;
-  text-align:left;
+th{
+background:linear-gradient(90deg,#003566,#0077b6);
+color:#fff;
+padding:12px;
+text-align:left;
 }
 
-th{background:#f3f6fb;}
-tr:nth-child(even){background:#f8fbff;}
-tr:hover{background:#eef4ff;}
+td{
+padding:12px;
+border-bottom:1px solid #eee;
+}
+
+td.num{
+text-align:right;
+}
+
+tr:nth-child(even){
+background:#f4f8fc;
+}
+
+tr.game-row{
+cursor:pointer;
+}
+
+tr.game-row:hover{
+background:#dbeafe;
+}
+
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-  <a href="index.html">Home</a>
-  <a href="racing.html">Racing</a>
-  <a href="afl.html">AFL</a>
-  <a href="football.html">Football</a>
-  <a href="cricket.html">Cricket</a>
+<a href="/index.html">Home</a>
+<a href="/cricket.html">Cricket</a>
+<a href="/bbl.html">BBL</a>
 </div>
 
-<div class="page-wrap">
+<div class="page">
 
 <div class="hero">
-  <h1 id="teamName">BBL Team</h1>
-  <p>Season-by-season performance.</p>
+<h1 id="teamName">Loading…</h1>
 </div>
 
-<div id="yearGrid" class="year-grid"></div>
+<div class="table-wrap">
 
-<h2>Matches</h2>
 <table>
+
 <thead>
 <tr>
-  <th>Date</th>
-  <th>Match</th>
-  <th>Venue</th>
-  <th>Result</th>
+<th>Season</th>
+<th>Opponent</th>
+<th>Venue</th>
+<th class="num">Runs</th>
+<th class="num">Opp Runs</th>
+<th>Result</th>
 </tr>
 </thead>
-<tbody id="matchesTable"></tbody>
+
+<tbody id="gamesTable"></tbody>
+
 </table>
 
 </div>
 
+</div>
+
 <script>
-const params = new URLSearchParams(window.location.search);
-const teamParam = params.get("team") ? params.get("team").trim() : null;
 
-const indexUrl = "data/bbl/index.json";
-const basePath = "data/bbl/";
+(async function(){
 
-const yearGrid = document.getElementById("yearGrid");
-const tableBody = document.getElementById("matchesTable");
-const teamNameEl = document.getElementById("teamName");
+const params=new URLSearchParams(location.search);
+const team=params.get("team");
 
-let allMatches = [];
-let seasons = [];
+if(!team){
 
-if(!teamParam){
-  teamNameEl.textContent = "BBL Team";
-  tableBody.innerHTML = "<tr><td colspan='4'>No team specified.</td></tr>";
-  throw new Error("Missing team parameter");
+document.getElementById("teamName").textContent="Team not specified";
+return;
+
 }
 
-teamNameEl.textContent = teamParam;
+document.getElementById("teamName").textContent=team;
 
-init();
+const index=await fetch("/data/bbl/index.json").then(r=>r.json());
 
-async function init(){
-  let raw;
-  try{
-    const r = await fetch(indexUrl);
-    raw = await r.json();
-  }catch(e){
-    console.error("Failed to load index.json", e);
-    return;
-  }
+const files=await Promise.all(
+index.map(file=>
+fetch("/data/bbl/"+file)
+.then(r=>r.json())
+.then(data=>({file,data}))
+)
+);
 
-  let files = [];
-  if(Array.isArray(raw)){
-    files = raw;
-  }else if(typeof raw === "string"){
-    files = raw.split(",").map(s=>s.trim());
-  }else if(raw && Array.isArray(raw.files)){
-    files = raw.files;
-  }else{
-    console.error("Unrecognised index.json format", raw);
-    return;
-  }
+let games=[];
 
-  for(const f of files){
-    try{
-      const r = await fetch(basePath + f);
-      const data = await r.json();
-      if(Array.isArray(data)){
-        data.forEach(m=>{
-          if(m && m.info && m.info.dates && m.info.teams){
-            m.file = m.file || f;
-            allMatches.push(m);
-          }
-        });
-      }
-    }catch(e){
-      console.warn("Failed to load season file", f, e);
-    }
-  }
+files.forEach(({file,data})=>{
 
-  buildSeasons();
-  buildButtons();
+data.forEach(match=>{
 
-  if(seasons.length){
-    showSeason(seasons[seasons.length - 1]);
-  }
+const info=match.info;
+
+const home=info.teams[0];
+const away=info.teams[1];
+
+if(home!==team && away!==team)return;
+
+let teamRuns=0;
+let oppRuns=0;
+
+match.innings.forEach(inn=>{
+
+let runs=0;
+
+inn.overs.forEach(over=>{
+
+over.deliveries.forEach(d=>{
+runs+=d.runs.total;
+});
+
+});
+
+if(inn.team===team)
+teamRuns=runs;
+else
+oppRuns=runs;
+
+});
+
+let result="";
+
+if(info.outcome?.winner){
+
+if(info.outcome.winner===team)
+result="Won";
+else
+result="Lost";
+
+}else if(info.outcome?.result){
+
+result=info.outcome.result;
+
 }
 
-function parseDate(match){
-  const d = match.info.dates;
-  if(Array.isArray(d) && d.length) return new Date(d[0]);
-  if(typeof d === "string") return new Date(d);
-  return null;
-}
+games.push({
 
-function buildSeasons(){
-  const teamMatches = allMatches.filter(m=>m.info.teams.includes(teamParam));
-  const dated = teamMatches.map(m=>({m,d:parseDate(m)})).filter(x=>x.d && !isNaN(x.d));
+file,
+season:info.season,
+opp:home===team?away:home,
+venue:info.venue,
+runs:teamRuns,
+oppRuns,
+result
 
-  if(!dated.length) return;
+});
 
-  const years = dated.map(x=>x.d.getFullYear());
-  const minYear = Math.min(...years);
-  const maxYear = Math.max(...years);
+});
 
-  for(let y=minYear; y<=maxYear; y++){
-    const start = new Date(y,10,1);          // Nov 1
-    const end   = new Date(y+1,2,31,23,59); // Mar 31
+});
 
-    const matches = dated
-      .filter(x=>x.d>=start && x.d<=end)
-      .map(x=>x.m);
+/* SORT NEWEST FIRST */
 
-    if(matches.length){
-      seasons.push({
-        label:`${y}–${String(y+1).slice(-2)}`,
-        matches
-      });
-    }
-  }
-}
+games.sort((a,b)=>b.season-a.season);
 
-function buildButtons(){
-  yearGrid.innerHTML="";
+/* RENDER */
 
-  seasons.forEach((s,i)=>{
-    const b=document.createElement("button");
-    b.className="year-btn";
-    b.textContent=s.label;
-    b.onclick=()=>{
-      document.querySelectorAll(".year-btn").forEach(x=>x.classList.remove("active"));
-      b.classList.add("active");
-      showSeason(s);
-    };
-    yearGrid.appendChild(b);
-    if(i===seasons.length-1) b.classList.add("active");
-  });
+const tbody=document.getElementById("gamesTable");
 
-  const all=document.createElement("button");
-  all.className="year-btn";
-  all.textContent="ALL";
-  all.onclick=()=>{
-    document.querySelectorAll(".year-btn").forEach(x=>x.classList.remove("active"));
-    all.classList.add("active");
-    render(allMatches.filter(m=>m.info.teams.includes(teamParam)));
-  };
-  yearGrid.appendChild(all);
-}
+tbody.innerHTML=games.map(g=>`
+<tr class="game-row"
+onclick="location.href='/bbl-match.html?file=${g.file}'">
 
-function showSeason(season){
-  render(season.matches);
-}
+<td>${g.season}</td>
+<td>${g.opp}</td>
+<td>${g.venue}</td>
+<td class="num">${g.runs}</td>
+<td class="num">${g.oppRuns}</td>
+<td>${g.result}</td>
 
-function render(matches){
-  tableBody.innerHTML="";
-  matches
-    .map(m=>({m,d:parseDate(m)}))
-    .sort((a,b)=>a.d-b.d)
-    .forEach(({m,d})=>{
-      let result="—";
-      if(m.info.outcome?.winner){
-        if(m.info.outcome.by?.runs){
-          result=`${m.info.outcome.winner} won by ${m.info.outcome.by.runs} runs`;
-        }else if(m.info.outcome.by?.wickets){
-          result=`${m.info.outcome.winner} won by ${m.info.outcome.by.wickets} wickets`;
-        }
-      }
+</tr>
+`).join("");
 
-      const tr=document.createElement("tr");
-      tr.innerHTML=`
-        <td>${d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}</td>
-        <td><a href="bbl-match.html?file=${encodeURIComponent(m.file)}">${m.info.teams.join(" vs ")}</a></td>
-        <td>${m.info.venue||"—"}</td>
-        <td>${result}</td>
-      `;
-      tableBody.appendChild(tr);
-    });
-}
+})();
+
 </script>
 
 </body>
