@@ -6,69 +6,203 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;}
-.navbar{
-  display:flex;justify-content:center;gap:22px;
-  padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;
-}
-.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 
-.page-wrap{max-width:1100px;margin:0 auto;padding:30px 20px 60px;}
+body{
+font-family:Inter,system-ui,Arial,sans-serif;
+margin:0;
+background:#f4f8fc;
+}
+
+.navbar{
+display:flex;
+justify-content:center;
+gap:22px;
+padding:16px 0;
+border-bottom:1px solid #ddd;
+font-weight:600;
+background:#fff;
+}
+
+.navbar a{
+color:#0056d6;
+text-decoration:none;
+font-size:18px;
+}
+
+.page-wrap{
+max-width:900px;
+margin:auto;
+padding:30px 20px 60px;
+}
+
+/* HERO */
 
 .hero{
-  background:linear-gradient(90deg,#003366,#00a3cc);
-  color:white;padding:36px 40px;border-radius:24px;margin-bottom:20px;
+background:linear-gradient(90deg,#003566,#0077b6);
+color:white;
+padding:36px 40px;
+border-radius:24px;
+margin-bottom:20px;
 }
-.hero h1{margin:0;font-size:42px;}
 
-table{width:100%;border-collapse:collapse;font-size:14px;}
-th,td{padding:10px;border-bottom:1px solid #e2e8f0;}
-th{background:#f3f6fb;font-weight:800;}
-tr:nth-child(even){background:#f8fbff;}
+.hero h1{
+margin:0;
+font-size:42px;
+}
 
-a.view{color:#003366;font-weight:800;text-decoration:none;}
-a.view:hover{text-decoration:underline;}
+/* TABLE */
+
+.table-wrap{
+background:#fff;
+border-radius:14px;
+overflow:hidden;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+font-size:16px;
+}
+
+th{
+background:linear-gradient(90deg,#003566,#0077b6);
+color:#fff;
+padding:14px;
+text-align:left;
+}
+
+td{
+padding:14px;
+border-bottom:1px solid #e2e8f0;
+}
+
+tr:nth-child(even){
+background:#f8fbff;
+}
+
+tr.season-row{
+cursor:pointer;
+}
+
+tr.season-row:hover{
+background:#dbeafe;
+}
+
 </style>
+
 </head>
 
 <body>
 
 <div class="navbar">
-  <a href="index.html">Home</a>
-  <a href="cricket.html">Cricket</a>
-  <a href="bbl-season.html">BBL Seasons</a>
+<a href="/index.html">Home</a>
+<a href="/cricket.html">Cricket</a>
+<a href="/bbl.html">BBL</a>
 </div>
 
 <div class="page-wrap">
-  <div class="hero">
-    <h1>Big Bash League</h1>
-  </div>
 
-  <table id="tbl">
-    <tr><th>Date</th><th>Match</th><th>Venue</th><th>Winner</th><th></th></tr>
-  </table>
+<div class="hero">
+<h1>Big Bash League Seasons</h1>
+</div>
+
+<div class="table-wrap">
+
+<table id="tbl">
+
+<thead>
+<tr>
+<th>Season</th>
+<th>Matches</th>
+<th>Years</th>
+</tr>
+</thead>
+
+<tbody></tbody>
+
+</table>
+
+</div>
+
 </div>
 
 <script>
-fetch("data/bbl/bbl_2013.json")
-.then(r=>r.json())
-.then(data=>{
-  const matches = Array.isArray(data)?data:[];
-  const tbl=document.getElementById("tbl");
 
-  matches.forEach((m,i)=>{
-    const info=m.info;
-    const tr=document.createElement("tr");
-    tr.innerHTML=`
-      <td>${new Date(info.dates[0]).toDateString()}</td>
-      <td>${info.teams.join(" vs ")}</td>
-      <td>${info.venue}</td>
-      <td>${info.outcome?.winner||"—"}</td>
-      <td><a class="view" href="bbl-match.html?file=bbl_2013.json&match=${i}">View</a></td>
-    `;
-    tbl.appendChild(tr);
-  });
+(async function(){
+
+const tbody=document.querySelector("#tbl tbody");
+
+/* LOAD INDEX */
+
+const index=await fetch("/data/bbl/index.json").then(r=>r.json());
+
+/* LOAD FILES */
+
+const files=await Promise.all(
+index.map(file=>
+fetch("/data/bbl/"+file)
+.then(r=>r.json())
+.then(data=>({file,data}))
+)
+);
+
+/* BUILD SEASON LIST */
+
+let seasons={};
+
+files.forEach(({file,data})=>{
+
+data.forEach(match=>{
+
+const season=match.info.season;
+
+if(!seasons[season]){
+
+seasons[season]={
+season,
+matches:0,
+file
+};
+
+}
+
+seasons[season].matches++;
+
 });
+
+});
+
+/* CONVERT TO ARRAY */
+
+let seasonList=Object.values(seasons);
+
+/* SORT NEWEST FIRST */
+
+seasonList.sort((a,b)=>b.season-a.season);
+
+/* RENDER */
+
+tbody.innerHTML=seasonList.map(s=>{
+
+const nextYear=(s.season+1).toString().slice(-2);
+
+return `
+
+<tr class="season-row"
+onclick="location.href='/bbl-season-view.html?season=${s.season}'">
+
+<td><strong>${s.season}/${nextYear}</strong></td>
+<td>${s.matches}</td>
+<td>${s.season}–${s.season+1}</td>
+
+</tr>
+
+`;
+
+}).join("");
+
+})();
+
 </script>
 
 </body>
