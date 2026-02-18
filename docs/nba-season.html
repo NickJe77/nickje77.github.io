@@ -6,144 +6,62 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{
-  font-family:Inter,system-ui,Arial;
-  margin:0;
-  background:#fff;
-}
-
-.navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px 0;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
-}
-
-.navbar a{
-  color:#0056d6;
-  text-decoration:none;
-  font-size:18px;
-}
-
-.page-wrap{
-  max-width:1200px;
-  margin:0 auto;
-  padding:30px 20px 60px;
-}
-
-h1{
-  text-align:center;
-  margin-bottom:10px;
-}
-
-select{
-  padding:8px 12px;
-  font-size:15px;
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-  margin-top:20px;
-}
-
-th,td{
-  border-bottom:1px solid #ddd;
-  padding:8px 10px;
-  text-align:center;
-}
-
-th{
-  background:#f0f0f0;
-  position:sticky;
-  top:0;
-}
-
-tr:nth-child(even){
-  background:#f6f9ff;
-}
-
-tr:hover{
-  background:#e9f0ff;
-}
-
-.filter-bar{
-  text-align:center;
-  margin-bottom:15px;
-}
-
-.standings{
-  margin-top:40px;
-}
+body{font-family:Inter,system-ui,Arial;margin:0;background:#fff;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px 60px;}
+h1{text-align:center;margin-bottom:10px;}
+select{padding:8px 12px;font-size:15px;}
+table{width:100%;border-collapse:collapse;margin-top:20px;}
+th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:center;}
+th{background:#f0f0f0;}
+tr:nth-child(even){background:#f6f9ff;}
+tr:hover{background:#e9f0ff;}
+.standings{margin-top:40px;}
 </style>
-
 </head>
 
 <body>
 
 <div class="navbar">
-  <a href="index.html">Home</a>
-  <a href="nba.html">NBA</a>
-  <a href="nba-season.html">Seasons</a>
+<a href="index.html">Home</a>
+<a href="nba.html">NBA</a>
+<a href="nba-season.html">Seasons</a>
 </div>
 
 <div class="page-wrap">
 
 <h1 id="title">NBA Season</h1>
 
-<div class="filter-bar">
-
+<div style="text-align:center;">
 Season:
-
 <select id="seasonSelect"></select>
-
 </div>
 
 <table>
-
 <thead>
-
 <tr>
 <th>Date</th>
 <th>Game</th>
 <th>Winner</th>
 <th>Score</th>
 </tr>
-
 </thead>
-
-<tbody id="gamesTable">
-
-<tr>
-<td colspan="4">Loading...</td>
-</tr>
-
-</tbody>
-
+<tbody id="gamesTable"></tbody>
 </table>
 
 <div class="standings">
-
 <h2>Standings</h2>
-
 <table>
-
 <thead>
-
 <tr>
 <th>Team</th>
 <th>Wins</th>
 <th>Losses</th>
 </tr>
-
 </thead>
-
 <tbody id="standingsTable"></tbody>
-
 </table>
-
 </div>
 
 </div>
@@ -165,16 +83,14 @@ const titleEl =
 document.getElementById("title");
 
 
-function populateSeasonDropdown(){
+function populateSeasons(){
 
-for(let year=2026; year>=1976; year--){
+for(let y=2026;y>=1976;y--){
 
-const opt =
-document.createElement("option");
+const opt=document.createElement("option");
 
-opt.value = year;
-
-opt.textContent = year;
+opt.value=y;
+opt.textContent=y;
 
 seasonSelect.appendChild(opt);
 
@@ -183,61 +99,62 @@ seasonSelect.appendChild(opt);
 }
 
 
-seasonSelect.addEventListener("change", function(){
+seasonSelect.addEventListener("change",()=>{
 
-loadSeason(this.value);
+loadSeason(seasonSelect.value);
 
 });
 
 
 async function loadSeason(season){
 
-titleEl.textContent =
-"NBA Season " + season;
+titleEl.textContent="NBA Season "+season;
 
-gamesTable.innerHTML =
-"<tr><td colspan='4'>Loading games...</td></tr>";
+gamesTable.innerHTML="<tr><td colspan='4'>Loading...</td></tr>";
 
-standingsTable.innerHTML = "";
+standingsTable.innerHTML="";
 
 try{
 
-const indexResponse =
-await fetch(BASE + season + "/index.json");
-
-if(!indexResponse.ok){
-
-throw new Error("Index not found");
-
-}
+const indexRaw =
+await fetch(BASE+season+"/index.json");
 
 const indexData =
-await indexResponse.json();
+await indexRaw.json();
 
-gamesTable.innerHTML = "";
+/* SUPPORT BOTH INDEX FORMATS */
+const gameIds =
+Array.isArray(indexData)
+? indexData
+: indexData.games || [];
 
-const standings = {};
 
-for(const gameId of indexData.games){
+gamesTable.innerHTML="";
 
-const gameResponse =
-await fetch(BASE + season + "/" + gameId + ".json");
+const standings={};
 
-if(!gameResponse.ok)
-continue;
 
-const game =
-await gameResponse.json();
+for(const id of gameIds){
+
+const res =
+await fetch(BASE+season+"/"+id+".json");
+
+if(!res.ok) continue;
+
+const g =
+await res.json();
+
 
 const winner =
-game.home_score > game.away_score
-? game.home_team
-: game.away_team;
+g.home_score>g.away_score
+?g.home_team
+:g.away_team;
 
 const loser =
-game.home_score > game.away_score
-? game.away_team
-: game.home_team;
+g.home_score>g.away_score
+?g.away_team
+:g.home_team;
+
 
 if(!standings[winner])
 standings[winner]={w:0,l:0};
@@ -245,25 +162,26 @@ standings[winner]={w:0,l:0};
 if(!standings[loser])
 standings[loser]={w:0,l:0};
 
+
 standings[winner].w++;
 standings[loser].l++;
 
-const tr =
-document.createElement("tr");
 
-tr.innerHTML =
+const tr=document.createElement("tr");
+
+tr.innerHTML=
 `
-<td>${game.date || ""}</td>
+<td>${g.date||""}</td>
 
 <td>
-<a href="nba-game.html?season=${season}&game=${game.game_id}">
-${game.away_team} @ ${game.home_team}
+<a href="nba-game.html?season=${season}&game=${g.game_id}">
+${g.away_team} @ ${g.home_team}
 </a>
 </td>
 
 <td>${winner}</td>
 
-<td>${game.away_score} - ${game.home_score}</td>
+<td>${g.away_score}-${g.home_score}</td>
 `;
 
 gamesTable.appendChild(tr);
@@ -271,28 +189,25 @@ gamesTable.appendChild(tr);
 }
 
 
+/* BUILD STANDINGS */
+
 Object.entries(standings)
 .sort((a,b)=>b[1].w-a[1].w)
 .forEach(([team,rec])=>{
 
-const tr =
-document.createElement("tr");
+const tr=document.createElement("tr");
 
-tr.innerHTML =
-`
-<td>${team}</td>
-<td>${rec.w}</td>
-<td>${rec.l}</td>
-`;
+tr.innerHTML=
+`<td>${team}</td><td>${rec.w}</td><td>${rec.l}</td>`;
 
 standingsTable.appendChild(tr);
 
 });
 
-}
-catch(err){
 
-gamesTable.innerHTML =
+}catch{
+
+gamesTable.innerHTML=
 "<tr><td colspan='4'>No season files found</td></tr>";
 
 }
@@ -300,9 +215,9 @@ gamesTable.innerHTML =
 }
 
 
-populateSeasonDropdown();
+populateSeasons();
 
-loadSeason("1976");
+loadSeason(1976);
 
 </script>
 
