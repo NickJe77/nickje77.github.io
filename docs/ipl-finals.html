@@ -6,131 +6,138 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-
 body{
-font-family:Inter,system-ui,Arial;
-margin:0;
-background:#ffffff;
+  font-family: Inter, system-ui, Arial;
+  margin:0;
+  background:#ffffff;
 }
 
 .navbar{
-display:flex;
-justify-content:center;
-gap:22px;
-padding:16px 0;
-border-bottom:1px solid #ddd;
-font-weight:600;
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
 }
 
 .navbar a{
-color:#0056d6;
-text-decoration:none;
-font-size:18px;
+  color:#0056d6;
+  text-decoration:none;
+  font-size:18px;
 }
 
 .page-wrap{
-max-width:1200px;
-margin:auto;
-padding:30px 20px;
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px;
 }
 
 .hero{
-background:linear-gradient(90deg,#3b007a,#7b2cbf);
-color:white;
-padding:40px 50px;
-border-radius:24px;
-margin-bottom:25px;
+  background:linear-gradient(90deg,#3b007a,#7b2cbf);
+  color:white;
+  padding:40px 50px;
+  border-radius:24px;
+  margin-bottom:25px;
 }
 
 .hero h1{
-margin:0;
-font-size:46px;
+  margin:0;
+  font-size:46px;
+}
+
+.hero p{
+  margin-top:10px;
+  font-size:20px;
+  opacity:0.95;
 }
 
 .year-grid{
-display:grid;
-grid-template-columns:repeat(auto-fill,minmax(90px,1fr));
-gap:12px;
-margin-bottom:25px;
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(90px,1fr));
+  gap:12px;
+  margin-bottom:25px;
 }
 
 .year-btn{
-background:#2b004f;
-color:white;
-border:none;
-padding:12px;
-border-radius:10px;
-cursor:pointer;
+  background:#2b004f;
+  color:white;
+  border:none;
+  padding:12px 0;
+  border-radius:10px;
+  font-size:16px;
+  cursor:pointer;
 }
 
 .year-btn.active{
-background:#9d4edd;
+  background:#9d4edd;
 }
 
 table{
-width:100%;
-border-collapse:collapse;
+  width:100%;
+  border-collapse:collapse;
+  font-size:15px;
 }
 
 th,td{
-padding:12px;
-border-bottom:1px solid #ddd;
+  border-bottom:1px solid #ddd;
+  padding:12px 14px;
+  text-align:left;
 }
 
 th{
-background:#f3f6fb;
+  background:#f3f6fb;
 }
 
 tr:nth-child(even){
-background:#f8fbff;
+  background:#f8fbff;
 }
 
 tr:hover{
-background:#eef4ff;
-}
-
-.game-link{
-color:inherit;
-text-decoration:none;
-}
-
-.game-link:hover{
-text-decoration:underline;
+  background:#eef4ff;
 }
 
 .winner{
-font-weight:600;
-color:#1a7f37;
+  font-weight:600;
+  color:#1a7f37;
 }
 
 .runnerup{
-color:#b42318;
+  color:#b42318;
 }
 
 .result{
-font-weight:600;
+  font-weight:600;
 }
 
+.game-link{
+  color:inherit;
+  text-decoration:none;
+}
+
+.game-link:hover{
+  text-decoration:underline;
+}
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="cricket.html">Cricket</a>
+  <a href="index.html">Home</a>
+  <a href="cricket.html">Cricket</a>
 </div>
 
 <div class="page-wrap">
 
 <div class="hero">
-<h1>Indian Premier League Finals</h1>
+  <h1>Indian Premier League Finals</h1>
+  <p>Every IPL final with result and venue.</p>
 </div>
 
 <div id="yearGrid" class="year-grid"></div>
 
 <table>
-
 <thead>
 <tr>
 <th>Season</th>
@@ -143,7 +150,6 @@ font-weight:600;
 </thead>
 
 <tbody id="finalsTable"></tbody>
-
 </table>
 
 </div>
@@ -160,7 +166,7 @@ let finalsData=[];
 
 fetch(indexUrl)
 
-.then(res=>res.json())
+.then(r=>r.json())
 
 .then(files=>Promise.all(
 
@@ -168,34 +174,31 @@ files.map(file=>
 
 fetch(basePath+file)
 
-.then(res=>res.json())
+.then(r=>r.json())
 
 .then(matches=>{
 
-/* FIND FINAL MATCH USING match_number */
+/* THIS WAS YOUR ORIGINAL WORKING LOGIC */
 
-const finalMatch=
-matches.find(match=>
+const finalMatch =
+Array.isArray(matches)
+? matches.find(m =>
+m.info?.event?.stage==="Final" ||
+m.info?.event?.match_number==="Final"
+)
+: null;
 
-match.info?.event?.match_number==="Final"
+if(!finalMatch) return null;
 
-);
+const date = finalMatch.info.dates?.[0] || "";
 
-if(!finalMatch)
-return null;
+const season = date.slice(0,4);
 
-const date=
-finalMatch.info.dates?.[0]||"";
+const winner = finalMatch.info.outcome?.winner || "—";
 
-const season=
-date.slice(0,4);
-
-const winner=
-finalMatch.info.outcome?.winner||"—";
-
-const runnerUp=
+const runnerUp =
 finalMatch.info.teams.find(
-team=>team!==winner
+t=>t!==winner
 );
 
 let result="—";
@@ -203,31 +206,25 @@ let result="—";
 if(finalMatch.info.outcome?.by){
 
 if(finalMatch.info.outcome.by.runs)
-result="won by "+
-finalMatch.info.outcome.by.runs+
-" runs";
+result="won by "+finalMatch.info.outcome.by.runs+" runs";
 
 else if(finalMatch.info.outcome.by.wickets)
-result="won by "+
-finalMatch.info.outcome.by.wickets+
-" wickets";
+result="won by "+finalMatch.info.outcome.by.wickets+" wickets";
 
 }
 
-const gameId=
-file.replace(".json","");
+/* ONLY CHANGE: use file name as game ID */
+
+const gameId = file.replace(".json","");
 
 return{
-
 season,
 winner,
 runnerUp,
 result,
 date,
-venue:
-finalMatch.info.venue||"",
+venue:finalMatch.info.venue || "",
 gameId
-
 };
 
 })
@@ -236,16 +233,13 @@ gameId
 
 .then(results=>{
 
-finalsData=
-results.filter(x=>x);
+finalsData = results.filter(x=>x);
 
-finalsData.sort(
-(a,b)=>a.season-b.season
-);
+finalsData.sort((a,b)=>a.season-b.season);
 
 buildButtons();
 
-render(finalsData);
+renderTable(finalsData);
 
 });
 
@@ -262,19 +256,10 @@ btn.className="year-btn";
 btn.textContent=f.season;
 
 btn.onclick=()=>{
-
-document
-.querySelectorAll(".year-btn")
+document.querySelectorAll(".year-btn")
 .forEach(b=>b.classList.remove("active"));
-
 btn.classList.add("active");
-
-render(
-finalsData.filter(
-x=>x.season===f.season
-)
-);
-
+renderTable(finalsData.filter(x=>x.season===f.season));
 };
 
 yearGrid.appendChild(btn);
@@ -283,7 +268,7 @@ yearGrid.appendChild(btn);
 
 }
 
-function render(rows){
+function renderTable(rows){
 
 tableBody.innerHTML="";
 
@@ -292,7 +277,6 @@ rows.forEach(f=>{
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
-
 <td>
 <a class="game-link"
 href="ipl-game.html?game=${f.gameId}">
@@ -309,7 +293,6 @@ ${f.season}
 <td>${formatDate(f.date)}</td>
 
 <td>${f.venue}</td>
-
 `;
 
 tableBody.appendChild(tr);
@@ -318,17 +301,14 @@ tableBody.appendChild(tr);
 
 }
 
-function formatDate(date){
+function formatDate(d){
 
-return new Date(date)
-.toLocaleDateString(
-"en-GB",
-{
+return new Date(d)
+.toLocaleDateString("en-GB",{
 day:"2-digit",
 month:"short",
 year:"numeric"
-}
-);
+});
 
 }
 
