@@ -7,10 +7,9 @@
 
 <style>
 body{
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
-               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: Inter, system-ui, Arial;
   margin:0;
-  background:#ffffff;
+  background:#fff;
 }
 
 .navbar{
@@ -21,6 +20,7 @@ body{
   border-bottom:1px solid #ddd;
   font-weight:600;
 }
+
 .navbar a{
   color:#0056d6;
   text-decoration:none;
@@ -29,25 +29,21 @@ body{
 
 .page-wrap{
   max-width:1200px;
-  margin:0 auto;
+  margin:auto;
   padding:30px 20px;
 }
 
 .hero{
   background:linear-gradient(90deg,#3b007a,#7b2cbf);
   color:white;
-  padding:40px 50px;
+  padding:40px;
   border-radius:24px;
   margin-bottom:25px;
 }
+
 .hero h1{
   margin:0;
   font-size:46px;
-}
-.hero p{
-  margin-top:10px;
-  font-size:20px;
-  opacity:0.95;
 }
 
 .year-grid{
@@ -61,14 +57,9 @@ body{
   background:#2b004f;
   color:white;
   border:none;
-  padding:12px 0;
+  padding:12px;
   border-radius:10px;
-  font-size:16px;
   cursor:pointer;
-}
-
-.year-btn:hover{
-  background:#4b0082;
 }
 
 .year-btn.active{
@@ -78,13 +69,11 @@ body{
 table{
   width:100%;
   border-collapse:collapse;
-  font-size:15px;
 }
 
 th,td{
+  padding:12px;
   border-bottom:1px solid #ddd;
-  padding:12px 14px;
-  text-align:left;
 }
 
 th{
@@ -99,6 +88,15 @@ tr:hover{
   background:#eef4ff;
 }
 
+.game-link{
+  color:inherit;
+  text-decoration:none;
+}
+
+.game-link:hover{
+  text-decoration:underline;
+}
+
 .winner{
   font-weight:600;
   color:#1a7f37;
@@ -108,36 +106,20 @@ tr:hover{
   color:#b42318;
 }
 
-.result{
-  font-weight:600;
-}
-
-.game-link{
-  color:inherit;
-  text-decoration:none;
-}
-
-.game-link:hover{
-  text-decoration:underline;
-}
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-  <a href="index.html">Home</a>
-  <a href="racing.html">Racing</a>
-  <a href="afl.html">AFL</a>
-  <a href="football.html">Football</a>
-  <a href="cricket.html">Cricket</a>
+<a href="index.html">Home</a>
+<a href="cricket.html">Cricket</a>
 </div>
 
 <div class="page-wrap">
 
 <div class="hero">
-  <h1>Indian Premier League Finals</h1>
-  <p>Every IPL final with result and venue.</p>
+<h1>Indian Premier League Finals</h1>
 </div>
 
 <div id="yearGrid" class="year-grid"></div>
@@ -145,12 +127,12 @@ tr:hover{
 <table>
 <thead>
 <tr>
-  <th>Season</th>
-  <th>Winner</th>
-  <th>Runner-up</th>
-  <th>Result</th>
-  <th>Date</th>
-  <th>Venue</th>
+<th>Season</th>
+<th>Winner</th>
+<th>Runner-up</th>
+<th>Result</th>
+<th>Date</th>
+<th>Venue</th>
 </tr>
 </thead>
 
@@ -162,233 +144,183 @@ tr:hover{
 
 <script>
 
-const indexUrl = "data/ipl/index.json";
-const basePath = "data/ipl/";
+const indexUrl="data/ipl/index.json";
+const basePath="data/ipl/";
 
-const yearGrid = document.getElementById("yearGrid");
-const tableBody = document.getElementById("finalsTable");
+const yearGrid=document.getElementById("yearGrid");
+const tableBody=document.getElementById("finalsTable");
 
-const teamMap = {
-  "Royal Challengers Bangalore": "Royal Challengers Bengaluru",
-  "Delhi Daredevils": "Delhi Capitals",
-  "Rising Pune Supergiants": "Rising Pune Supergiant",
-  "Kings XI Punjab": "Punjab Kings"
-};
-
-function normalizeTeam(name){
-  return teamMap[name] || name;
-}
-
-let finalsData = [];
+let finalsData=[];
 
 fetch(indexUrl)
+
 .then(r=>r.json())
+
 .then(files=>Promise.all(
-  files.map(file =>
-    fetch(basePath + file).then(r=>r.json())
-  )
+
+files.map(file=>
+
+fetch(basePath+file)
+
+.then(r=>r.json())
+
+.then(matches=>{
+
+const finalMatch=matches.find(m=>
+
+m.info?.event?.stage==="Final"
+
+);
+
+if(!finalMatch) return null;
+
+const date=finalMatch.info.dates?.[0]||"";
+
+const season=date.slice(0,4);
+
+const winner=finalMatch.info.outcome?.winner||"—";
+
+const runnerUp=finalMatch.info.teams?.find(
+
+t=>t!==winner
+
+)||"—";
+
+let result="—";
+
+if(finalMatch.info.outcome?.by){
+
+if(finalMatch.info.outcome.by.runs)
+
+result="won by "+finalMatch.info.outcome.by.runs+" runs";
+
+if(finalMatch.info.outcome.by.wickets)
+
+result="won by "+finalMatch.info.outcome.by.wickets+" wickets";
+
+}
+
+/* USE FILENAME AS GAME ID */
+
+const gameId=file.replace(".json","");
+
+return{
+
+season,
+
+winner,
+
+runnerUp,
+
+result,
+
+date,
+
+venue:finalMatch.info.venue||"",
+
+gameId
+
+};
+
+})
+
 ))
-.then(seasons=>{
 
-  seasons.forEach(matches=>{
+.then(results=>{
 
-    const finalMatch = matches.find(m =>
-      m.info?.event?.stage === "Final"
-    );
+finalsData=results.filter(x=>x);
 
-    if(!finalMatch) return;
+finalsData.sort((a,b)=>a.season-b.season);
 
-    const date = finalMatch.info.dates?.[0] || "";
-    const season = date.slice(0,4);
+buildButtons();
 
-    const rawWinner =
-      finalMatch.info.outcome?.winner || "—";
-
-    const rawRunnerUp =
-      finalMatch.info.teams?.find(
-        t => t !== rawWinner
-      ) || "—";
-
-    const winner = normalizeTeam(rawWinner);
-    const runnerUp = normalizeTeam(rawRunnerUp);
-
-    let result = "—";
-
-    if(finalMatch.info.outcome?.by){
-
-      if(finalMatch.info.outcome.by.runs){
-        result =
-          "won by "
-          + finalMatch.info.outcome.by.runs
-          + " runs";
-      }
-
-      else if(finalMatch.info.outcome.by.wickets){
-        result =
-          "won by "
-          + finalMatch.info.outcome.by.wickets
-          + " wickets";
-      }
-
-    }
-
-    /* CRITICAL — USE REAL MATCH ID */
-    const gameId =
-      finalMatch.meta?.match_id;
-
-    if(!gameId){
-      console.warn(
-        "Missing match_id for season:",
-        season
-      );
-      return;
-    }
-
-    finalsData.push({
-
-      season,
-      winner,
-      runnerUp,
-      result,
-      date,
-      venue:
-        finalMatch.info.venue || "",
-      gameId
-
-    });
-
-  });
-
-  finalsData.sort(
-    (a,b)=>a.season-b.season
-  );
-
-  buildYearButtons();
-
-  renderTable(finalsData);
+render(finalsData);
 
 });
 
-function buildYearButtons(){
+function buildButtons(){
 
-  yearGrid.innerHTML = "";
+yearGrid.innerHTML="";
 
-  finalsData.forEach((f,i)=>{
+finalsData.forEach(f=>{
 
-    const btn =
-      document.createElement("button");
+const btn=document.createElement("button");
 
-    btn.className = "year-btn";
+btn.className="year-btn";
 
-    btn.textContent = f.season;
+btn.textContent=f.season;
 
-    btn.onclick = () => {
+btn.onclick=()=>{
 
-      document
-      .querySelectorAll(".year-btn")
-      .forEach(b=>b.classList.remove("active"));
+document.querySelectorAll(".year-btn")
 
-      btn.classList.add("active");
+.forEach(b=>b.classList.remove("active"));
 
-      renderTable(
-        finalsData.filter(
-          x => x.season === f.season
-        )
-      );
+btn.classList.add("active");
 
-    };
+render(finalsData.filter(x=>x.season===f.season));
 
-    yearGrid.appendChild(btn);
+};
 
-    if(i === finalsData.length - 1){
-      btn.classList.add("active");
-    }
+yearGrid.appendChild(btn);
 
-  });
-
-  const allBtn =
-    document.createElement("button");
-
-  allBtn.className = "year-btn";
-
-  allBtn.textContent = "ALL";
-
-  allBtn.onclick = () => {
-
-    document
-    .querySelectorAll(".year-btn")
-    .forEach(b=>b.classList.remove("active"));
-
-    allBtn.classList.add("active");
-
-    renderTable(finalsData);
-
-  };
-
-  yearGrid.appendChild(allBtn);
+});
 
 }
 
-function renderTable(rows){
+function render(rows){
 
-  tableBody.innerHTML = "";
+tableBody.innerHTML="";
 
-  rows.forEach(f=>{
+rows.forEach(f=>{
 
-    const tr =
-      document.createElement("tr");
+const tr=document.createElement("tr");
 
-    tr.innerHTML = `
+tr.innerHTML=`
 
-      <td>
-        <a
-          class="game-link"
-          href="ipl-game.html?game=${f.gameId}">
-          ${f.season}
-        </a>
-      </td>
+<td>
 
-      <td class="winner">
-        ${f.winner}
-      </td>
+<a class="game-link"
 
-      <td class="runnerup">
-        ${f.runnerUp}
-      </td>
+href="ipl-game.html?game=${f.gameId}">
 
-      <td class="result">
-        ${f.result}
-      </td>
+${f.season}
 
-      <td>
-        ${formatDate(f.date)}
-      </td>
+</a>
 
-      <td>
-        ${f.venue}
-      </td>
+</td>
 
-    `;
+<td class="winner">${f.winner}</td>
 
-    tableBody.appendChild(tr);
+<td class="runnerup">${f.runnerUp}</td>
 
-  });
+<td>${f.result}</td>
+
+<td>${formatDate(f.date)}</td>
+
+<td>${f.venue}</td>
+
+`;
+
+tableBody.appendChild(tr);
+
+});
 
 }
 
 function formatDate(d){
 
-  if(!d) return "";
+return new Date(d)
 
-  return new Date(d)
-  .toLocaleDateString(
-    "en-GB",
-    {
-      day:"2-digit",
-      month:"short",
-      year:"numeric"
-    }
-  );
+.toLocaleDateString("en-GB",{
+
+day:"2-digit",
+
+month:"short",
+
+year:"numeric"
+
+});
 
 }
 
