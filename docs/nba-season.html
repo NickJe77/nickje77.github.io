@@ -39,6 +39,7 @@ Season:
 </div>
 
 <table>
+
 <thead>
 <tr>
 <th>Date</th>
@@ -59,6 +60,7 @@ Season:
 <h2>Standings</h2>
 
 <table>
+
 <thead>
 <tr>
 <th>Team</th>
@@ -98,10 +100,20 @@ seasonSelect.appendChild(opt);
 
 }
 
-
 seasonSelect.addEventListener("change",()=>{
 loadSeason(seasonSelect.value);
 });
+
+
+function getField(obj,names){
+
+for(let n of names){
+if(obj[n]!=undefined)return obj[n];
+}
+
+return "";
+
+}
 
 
 async function loadSeason(season){
@@ -114,38 +126,34 @@ standingsTable.innerHTML="";
 try{
 
 let indexRes=await fetch(BASE+season+"/index.json");
-
-if(!indexRes.ok){
-gamesTable.innerHTML="<tr><td colspan='4'>Season not found</td></tr>";
-return;
-}
-
 let index=await indexRes.json();
 
-let gameIds=index.games;
+let ids=index.games;
 
 gamesTable.innerHTML="";
-
 let standings={};
 
-for(let id of gameIds){
-
-try{
+for(let id of ids){
 
 let res=await fetch(BASE+season+"/"+id+".json");
 
-if(!res.ok) continue;
+if(!res.ok)continue;
 
 let g=await res.json();
 
-let home=g.home_team||"";
-let away=g.away_team||"";
 
-let homeScore=parseInt(g.home_score)||0;
-let awayScore=parseInt(g.away_score)||0;
+let home=getField(g,["home_team","home","homeTeam","home_name"]);
+let away=getField(g,["away_team","away","awayTeam","away_name"]);
+
+let homeScore=parseInt(getField(g,["home_score","homeScore","home_points"]))||0;
+let awayScore=parseInt(getField(g,["away_score","awayScore","away_points"]))||0;
+
+let date=getField(g,["date","game_date"]);
+
 
 let winner=homeScore>awayScore?home:away;
 let loser=homeScore>awayScore?away:home;
+
 
 if(!standings[winner])standings[winner]={w:0,l:0};
 if(!standings[loser])standings[loser]={w:0,l:0};
@@ -153,24 +161,24 @@ if(!standings[loser])standings[loser]={w:0,l:0};
 standings[winner].w++;
 standings[loser].l++;
 
+
 let tr=document.createElement("tr");
 
-let date=(g.date||"").split(" ")[0];
-
 tr.innerHTML=`
-<td>${date}</td>
+<td>${date.split(" ")[0]||""}</td>
+
 <td>
 <a href="nba-game.html?season=${season}&game=${id}">
 ${away} @ ${home}
 </a>
 </td>
+
 <td>${winner}</td>
+
 <td>${awayScore}-${homeScore}</td>
 `;
 
 gamesTable.appendChild(tr);
-
-}catch{}
 
 }
 
@@ -199,9 +207,7 @@ gamesTable.innerHTML="<tr><td colspan='4'>Failed loading season</td></tr>";
 
 }
 
-
 populateSeasons();
-
 loadSeason(1976);
 
 </script>
