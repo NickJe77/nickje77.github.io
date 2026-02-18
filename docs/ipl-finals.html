@@ -75,11 +75,11 @@ tr:hover{background:#eef4ff;}
 .runnerup{color:#b42318;}
 .result{font-weight:600;}
 
-.team-link{
+.game-link{
   color:inherit;
   text-decoration:none;
 }
-.team-link:hover{text-decoration:underline;}
+.game-link:hover{text-decoration:underline;}
 </style>
 </head>
 
@@ -124,7 +124,6 @@ const basePath = "data/ipl/";
 const yearGrid = document.getElementById("yearGrid");
 const tableBody = document.getElementById("finalsTable");
 
-/* 🔧 TEAM NAME FIXES */
 const teamMap = {
   "Royal Challengers Bangalore": "Royal Challengers Bengaluru",
   "Delhi Daredevils": "Delhi Capitals",
@@ -142,7 +141,9 @@ fetch(indexUrl)
   .then(r=>r.json())
   .then(files=>Promise.all(files.map(f=>fetch(basePath+f).then(r=>r.json()))))
   .then(seasons=>{
+
     seasons.forEach(matches=>{
+
       const finalMatch = matches.find(m =>
         m.info?.event?.stage === "Final"
       );
@@ -167,74 +168,109 @@ fetch(indexUrl)
         }
       }
 
+      /* CRITICAL FIX — capture match id */
+      const gameId =
+        finalMatch.info.match_id ||
+        finalMatch.match_id ||
+        finalMatch.meta?.match_id ||
+        season + "_" + winner.replace(/\s/g,"");
+
       finalsData.push({
         season,
         winner,
         runnerUp,
         result,
         date,
-        venue: finalMatch.info.venue || ""
+        venue: finalMatch.info.venue || "",
+        gameId
       });
+
     });
 
     finalsData.sort((a,b)=>a.season-b.season);
     buildYearButtons();
     renderTable(finalsData);
+
   });
 
 function buildYearButtons(){
-  yearGrid.innerHTML = "";
+
+  yearGrid.innerHTML="";
 
   finalsData.forEach((f,i)=>{
+
     const btn=document.createElement("button");
     btn.className="year-btn";
     btn.textContent=f.season;
+
     btn.onclick=()=>{
       document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
       btn.classList.add("active");
       renderTable(finalsData.filter(x=>x.season===f.season));
     };
+
     yearGrid.appendChild(btn);
 
     if(i===finalsData.length-1){
       btn.classList.add("active");
     }
+
   });
 
-  // ✅ ADD ALL BUTTON
-  const allBtn = document.createElement("button");
-  allBtn.className = "year-btn";
-  allBtn.textContent = "ALL";
-  allBtn.onclick = () => {
+  const allBtn=document.createElement("button");
+  allBtn.className="year-btn";
+  allBtn.textContent="ALL";
+
+  allBtn.onclick=()=>{
     document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
     allBtn.classList.add("active");
     renderTable(finalsData);
   };
+
   yearGrid.appendChild(allBtn);
 }
 
 function renderTable(rows){
+
   tableBody.innerHTML="";
+
   rows.forEach(f=>{
+
     const tr=document.createElement("tr");
+
     tr.innerHTML=`
-      <td>${f.season}</td>
-      <td class="winner">
-        <a class="team-link" href="ipl-team.html?team=${encodeURIComponent(f.winner)}">${f.winner}</a>
+
+      <td>
+        <a class="game-link" href="ipl-game.html?game=${encodeURIComponent(f.gameId)}">
+          ${f.season}
+        </a>
       </td>
-      <td class="runnerup">
-        <a class="team-link" href="ipl-team.html?team=${encodeURIComponent(f.runnerUp)}">${f.runnerUp}</a>
-      </td>
+
+      <td class="winner">${f.winner}</td>
+
+      <td class="runnerup">${f.runnerUp}</td>
+
       <td class="result">${f.result}</td>
+
       <td>${formatDate(f.date)}</td>
+
       <td>${f.venue}</td>
+
     `;
+
     tableBody.appendChild(tr);
+
   });
+
 }
 
 function formatDate(d){
-  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+
+  return new Date(d).toLocaleDateString(
+    "en-GB",
+    {day:"2-digit",month:"short",year:"numeric"}
+  );
+
 }
 </script>
 
