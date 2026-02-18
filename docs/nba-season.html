@@ -47,7 +47,9 @@ Season:
 <th>Score</th>
 </tr>
 </thead>
-<tbody id="gamesTable"></tbody>
+<tbody id="gamesTable">
+<tr><td colspan="4">Loading...</td></tr>
+</tbody>
 </table>
 
 <div class="standings">
@@ -68,119 +70,70 @@ Season:
 
 <script>
 
-const BASE = "/docs/data/nba/";
+const BASE = "data/nba/";
 
-const seasonSelect =
-document.getElementById("seasonSelect");
-
-const gamesTable =
-document.getElementById("gamesTable");
-
-const standingsTable =
-document.getElementById("standingsTable");
-
-const titleEl =
-document.getElementById("title");
-
+const seasonSelect=document.getElementById("seasonSelect");
+const gamesTable=document.getElementById("gamesTable");
+const standingsTable=document.getElementById("standingsTable");
+const titleEl=document.getElementById("title");
 
 function populateSeasons(){
 
 for(let y=2026;y>=1976;y--){
 
-const opt=document.createElement("option");
-
+let opt=document.createElement("option");
 opt.value=y;
 opt.textContent=y;
-
 seasonSelect.appendChild(opt);
 
 }
 
 }
 
-
 seasonSelect.addEventListener("change",()=>{
-
 loadSeason(seasonSelect.value);
-
 });
-
 
 async function loadSeason(season){
 
 titleEl.textContent="NBA Season "+season;
-
 gamesTable.innerHTML="<tr><td colspan='4'>Loading...</td></tr>";
-
 standingsTable.innerHTML="";
 
 try{
 
-const indexRaw =
-await fetch(BASE+season+"/index.json");
+let res=await fetch(BASE+season+"/index.json");
+let index=await res.json();
 
-const indexData =
-await indexRaw.json();
-
-/* SUPPORT BOTH INDEX FORMATS */
-const gameIds =
-Array.isArray(indexData)
-? indexData
-: indexData.games || [];
-
+let ids=index.games;
 
 gamesTable.innerHTML="";
+let standings={};
 
-const standings={};
+for(let id of ids){
 
+let gRes=await fetch(BASE+season+"/"+id+".json");
+let g=await gRes.json();
 
-for(const id of gameIds){
+let winner=g.home_score>g.away_score?g.home_team:g.away_team;
+let loser=g.home_score>g.away_score?g.away_team:g.home_team;
 
-const res =
-await fetch(BASE+season+"/"+id+".json");
-
-if(!res.ok) continue;
-
-const g =
-await res.json();
-
-
-const winner =
-g.home_score>g.away_score
-?g.home_team
-:g.away_team;
-
-const loser =
-g.home_score>g.away_score
-?g.away_team
-:g.home_team;
-
-
-if(!standings[winner])
-standings[winner]={w:0,l:0};
-
-if(!standings[loser])
-standings[loser]={w:0,l:0};
-
+if(!standings[winner])standings[winner]={w:0,l:0};
+if(!standings[loser])standings[loser]={w:0,l:0};
 
 standings[winner].w++;
 standings[loser].l++;
 
+let tr=document.createElement("tr");
 
-const tr=document.createElement("tr");
-
-tr.innerHTML=
-`
+tr.innerHTML=`
 <td>${g.date||""}</td>
-
 <td>
 <a href="nba-game.html?season=${season}&game=${g.game_id}">
 ${g.away_team} @ ${g.home_team}
 </a>
 </td>
-
 <td>${winner}</td>
-
 <td>${g.away_score}-${g.home_score}</td>
 `;
 
@@ -188,35 +141,25 @@ gamesTable.appendChild(tr);
 
 }
 
-
-/* BUILD STANDINGS */
-
 Object.entries(standings)
 .sort((a,b)=>b[1].w-a[1].w)
 .forEach(([team,rec])=>{
 
-const tr=document.createElement("tr");
-
-tr.innerHTML=
-`<td>${team}</td><td>${rec.w}</td><td>${rec.l}</td>`;
-
+let tr=document.createElement("tr");
+tr.innerHTML=`<td>${team}</td><td>${rec.w}</td><td>${rec.l}</td>`;
 standingsTable.appendChild(tr);
 
 });
 
-
 }catch{
 
-gamesTable.innerHTML=
-"<tr><td colspan='4'>No season files found</td></tr>";
+gamesTable.innerHTML="<tr><td colspan='4'>No season files found</td></tr>";
 
 }
 
 }
-
 
 populateSeasons();
-
 loadSeason(1976);
 
 </script>
