@@ -39,7 +39,6 @@ Season:
 </div>
 
 <table>
-
 <thead>
 <tr>
 <th>Date</th>
@@ -60,7 +59,6 @@ Season:
 <h2>Standings</h2>
 
 <table>
-
 <thead>
 <tr>
 <th>Team</th>
@@ -86,7 +84,6 @@ const gamesTable=document.getElementById("gamesTable");
 const standingsTable=document.getElementById("standingsTable");
 const title=document.getElementById("title");
 
-
 function populateSeasons(){
 
 for(let y=2026;y>=1976;y--){
@@ -104,18 +101,6 @@ seasonSelect.addEventListener("change",()=>{
 loadSeason(seasonSelect.value);
 });
 
-
-function getField(obj,names){
-
-for(let n of names){
-if(obj[n]!=undefined)return obj[n];
-}
-
-return "";
-
-}
-
-
 async function loadSeason(season){
 
 title.textContent="NBA Season "+season;
@@ -128,12 +113,11 @@ try{
 let indexRes=await fetch(BASE+season+"/index.json");
 let index=await indexRes.json();
 
-let ids=index.games;
-
 gamesTable.innerHTML="";
+
 let standings={};
 
-for(let id of ids){
+for(let id of index.games){
 
 let res=await fetch(BASE+season+"/"+id+".json");
 
@@ -141,19 +125,34 @@ if(!res.ok)continue;
 
 let g=await res.json();
 
+/* MATCH YOUR REAL DATA FIELDS */
 
-let home=getField(g,["home_team","home","homeTeam","home_name"]);
-let away=getField(g,["away_team","away","awayTeam","away_name"]);
+let home =
+g.home_team_name ||
+g.home_team ||
+g.team_name_home ||
+g.home;
 
-let homeScore=parseInt(getField(g,["home_score","homeScore","home_points"]))||0;
-let awayScore=parseInt(getField(g,["away_score","awayScore","away_points"]))||0;
+let away =
+g.away_team_name ||
+g.away_team ||
+g.team_name_away ||
+g.away;
 
-let date=getField(g,["date","game_date"]);
+let homeScore =
+parseInt(g.pts_home || g.home_score || g.home_points || 0);
+
+let awayScore =
+parseInt(g.pts_away || g.away_score || g.away_points || 0);
+
+let date =
+(g.game_date || g.date || "").split(" ")[0];
 
 
-let winner=homeScore>awayScore?home:away;
-let loser=homeScore>awayScore?away:home;
+if(!home || !away)continue;
 
+let winner = homeScore>awayScore?home:away;
+let loser  = homeScore>awayScore?away:home;
 
 if(!standings[winner])standings[winner]={w:0,l:0};
 if(!standings[loser])standings[loser]={w:0,l:0};
@@ -161,27 +160,22 @@ if(!standings[loser])standings[loser]={w:0,l:0};
 standings[winner].w++;
 standings[loser].l++;
 
-
 let tr=document.createElement("tr");
 
 tr.innerHTML=`
-<td>${date.split(" ")[0]||""}</td>
-
+<td>${date}</td>
 <td>
 <a href="nba-game.html?season=${season}&game=${id}">
 ${away} @ ${home}
 </a>
 </td>
-
 <td>${winner}</td>
-
 <td>${awayScore}-${homeScore}</td>
 `;
 
 gamesTable.appendChild(tr);
 
 }
-
 
 Object.entries(standings)
 .sort((a,b)=>b[1].w-a[1].w)
@@ -201,7 +195,7 @@ standingsTable.appendChild(tr);
 
 }catch{
 
-gamesTable.innerHTML="<tr><td colspan='4'>Failed loading season</td></tr>";
+gamesTable.innerHTML="<tr><td colspan='4'>Season failed to load</td></tr>";
 
 }
 
