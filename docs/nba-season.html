@@ -6,11 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{
-font-family:Inter,system-ui,Arial;
-margin:0;
-background:#fff;
-}
+body{font-family:Inter,system-ui,Arial;margin:0;background:#fff;}
 
 .navbar{
 display:flex;
@@ -52,22 +48,16 @@ padding:8px 10px;
 text-align:center;
 }
 
-th{
-background:#f0f0f0;
-}
+th{background:#f0f0f0;}
 
-tr:nth-child(even){
-background:#f6f9ff;
-}
+tr:nth-child(even){background:#f6f9ff;}
 
 tr:hover{
 background:#e9f0ff;
 cursor:pointer;
 }
 
-.standings{
-margin-top:40px;
-}
+.standings{margin-top:40px;}
 </style>
 </head>
 
@@ -91,15 +81,14 @@ Season:
 
 Game Type:
 
-<select id="typeFilter">
-<option value="all">All</option>
-<option value="regular">Regular</option>
-<option value="playoffs">Playoffs</option>
+<select>
+<option>All</option>
 </select>
 
 </div>
 
 <table>
+
 <thead>
 <tr>
 <th>Date</th>
@@ -120,13 +109,11 @@ Game Type:
 <table>
 
 <thead>
-
 <tr>
 <th>Team</th>
 <th>Wins</th>
 <th>Losses</th>
 </tr>
-
 </thead>
 
 <tbody id="standingsTable"></tbody>
@@ -148,7 +135,7 @@ const title=document.getElementById("title");
 
 const params=new URLSearchParams(location.search);
 
-let season=params.get("season")||"1976";
+let season=params.get("season")||"2025";
 
 function folder(season){
 
@@ -184,11 +171,11 @@ loadSeason(season);
 
 }
 
-function getValue(obj,keys){
+function pick(obj,...keys){
 
 for(const k of keys){
 
-if(obj[k]!=null) return obj[k];
+if(obj[k]!=null && obj[k]!="") return obj[k];
 
 }
 
@@ -201,88 +188,61 @@ async function loadSeason(season){
 title.textContent="NBA Season "+season;
 
 gamesTable.innerHTML="";
-
 standingsTable.innerHTML="";
 
 let standings={};
 
 try{
 
-const res=await fetch(folder(season)+"/index.json");
+const indexRes=await fetch(folder(season)+"/index.json");
 
-const index=await res.json();
+const index=await indexRes.json();
 
 for(const id of index.games){
 
-const gameRes=await fetch(folder(season)+"/"+id+".json");
+const res=await fetch(folder(season)+"/"+id+".json");
 
-if(!gameRes.ok) continue;
+if(!res.ok) continue;
 
-const g=await gameRes.json();
+const g=await res.json();
 
-const home=getValue(g,[
+/* SUPPORT ALL NBA FORMATS */
 
+const home=pick(g,
 "home_team",
+"HOME_TEAM_NAME",
+"TEAM_NAME_HOME"
+);
 
-"homeTeam",
-
-"TEAM_NAME_HOME",
-
-"HOME_TEAM_NAME"
-
-]);
-
-const away=getValue(g,[
-
+const away=pick(g,
 "away_team",
+"VISITOR_TEAM_NAME",
+"TEAM_NAME_AWAY"
+);
 
-"awayTeam",
-
-"TEAM_NAME_AWAY",
-
-"VISITOR_TEAM_NAME"
-
-]);
-
-const homeScore=Number(getValue(g,[
-
+const homeScore=parseInt(pick(g,
 "home_score",
-
-"homeScore",
-
-"home_points",
-
 "PTS_HOME",
-
 "HOME_PTS"
+))||0;
 
-]))||0;
-
-const awayScore=Number(getValue(g,[
-
+const awayScore=parseInt(pick(g,
 "away_score",
-
-"awayScore",
-
-"away_points",
-
 "PTS_AWAY",
-
 "VISITOR_PTS"
+))||0;
 
-]))||0;
-
-const date=getValue(g,[
-
+const rawDate=pick(g,
 "date",
+"GAME_DATE_EST",
+"game_date"
+);
 
-"game_date",
-
-"GAME_DATE_EST"
-
-]);
+const date=rawDate.split(" ")[0];
 
 const winner=homeScore>awayScore?home:away;
+
+/* standings */
 
 if(!standings[home]) standings[home]={w:0,l:0};
 if(!standings[away]) standings[away]={w:0,l:0};
@@ -299,31 +259,25 @@ standings[home].l++;
 
 }
 
+/* table row */
+
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
-
-<td>${date.split(" ")[0]}</td>
-
+<td>${date}</td>
 <td>
-
 <a href="nba-team.html?team=${encodeURIComponent(home)}">${home}</a>
-
 vs
-
 <a href="nba-team.html?team=${encodeURIComponent(away)}">${away}</a>
-
 </td>
-
 <td>${winner}</td>
-
 <td>${homeScore} – ${awayScore}</td>
-
 `;
 
 tr.onclick=()=>{
 
-location.href="nba-game.html?season="+season+
+location.href=
+"nba-game.html?season="+season+
 "&game="+encodeURIComponent(home+" vs "+away);
 
 };
@@ -331,6 +285,8 @@ location.href="nba-game.html?season="+season+
 gamesTable.appendChild(tr);
 
 }
+
+/* standings table */
 
 Object.entries(standings)
 
@@ -341,13 +297,9 @@ Object.entries(standings)
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
-
 <td>${team}</td>
-
 <td>${rec.w}</td>
-
 <td>${rec.l}</td>
-
 `;
 
 standingsTable.appendChild(tr);
@@ -356,7 +308,8 @@ standingsTable.appendChild(tr);
 
 }catch{
 
-gamesTable.innerHTML="<tr><td colspan=4>No season files found</td></tr>";
+gamesTable.innerHTML=
+"<tr><td colspan=4>No season files found</td></tr>";
 
 }
 
