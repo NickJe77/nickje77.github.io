@@ -7,7 +7,7 @@
 
 <style>
 body{
-  font-family:Inter,system-ui,Arial;
+  font-family: Inter, system-ui, Arial;
   margin:0;
   background:#ffffff;
 }
@@ -29,7 +29,7 @@ body{
 
 .page-wrap{
   max-width:1200px;
-  margin:auto;
+  margin:0 auto;
   padding:30px 20px;
 }
 
@@ -44,26 +44,6 @@ body{
 .hero h1{
   margin:0;
   font-size:46px;
-}
-
-.year-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(90px,1fr));
-  gap:12px;
-  margin-bottom:25px;
-}
-
-.year-btn{
-  background:#2b004f;
-  color:white;
-  border:none;
-  padding:12px;
-  border-radius:10px;
-  cursor:pointer;
-}
-
-.year-btn.active{
-  background:#9d4edd;
 }
 
 table{
@@ -88,19 +68,6 @@ tr:hover{
   background:#eef4ff;
 }
 
-.winner{
-  font-weight:600;
-  color:#1a7f37;
-}
-
-.runnerup{
-  color:#b42318;
-}
-
-.result{
-  font-weight:600;
-}
-
 .game-link{
   color:inherit;
   text-decoration:none;
@@ -108,6 +75,15 @@ tr:hover{
 
 .game-link:hover{
   text-decoration:underline;
+}
+
+.winner{
+  font-weight:600;
+  color:#1a7f37;
+}
+
+.runnerup{
+  color:#b42318;
 }
 </style>
 </head>
@@ -124,8 +100,6 @@ tr:hover{
 <div class="hero">
 <h1>Indian Premier League Finals</h1>
 </div>
-
-<div id="yearGrid" class="year-grid"></div>
 
 <table>
 
@@ -151,122 +125,90 @@ tr:hover{
 const indexUrl="data/ipl/index.json";
 const basePath="data/ipl/";
 
-const yearGrid=document.getElementById("yearGrid");
 const tableBody=document.getElementById("finalsTable");
 
 let finalsData=[];
 
 fetch(indexUrl)
+.then(r=>r.json())
 
-.then(res=>res.json())
+.then(files=>{
 
-.then(files=>Promise.all(
-
-files.map(file=>
+files.forEach(file=>{
 
 fetch(basePath+file)
 
-.then(res=>res.json())
+.then(r=>r.json())
 
 .then(matches=>{
 
-if(!Array.isArray(matches)) return null;
-
-/* FIND FINAL — this is your original working logic */
-const finalMatch = matches.find(match =>
-match.info &&
-match.info.event &&
-(
-match.info.event.stage==="Final" ||
-match.info.event.match_number==="Final"
-)
+/* THIS IS YOUR ORIGINAL WORKING LINE */
+const finalMatch =
+matches.find(m =>
+m.info?.event?.stage==="Final"
 );
 
-if(!finalMatch) return null;
+if(!finalMatch) return;
 
-const date = finalMatch.info.dates?.[0] || "";
-const season = date.slice(0,4);
+const date =
+finalMatch.info.dates?.[0] || "";
+
+const season =
+date.slice(0,4);
 
 const winner =
 finalMatch.info.outcome?.winner || "—";
 
 const runnerUp =
-finalMatch.info.teams.find(t=>t!==winner);
+finalMatch.info.teams.find(
+t=>t!==winner
+);
 
 let result="—";
 
 if(finalMatch.info.outcome?.by){
 
 if(finalMatch.info.outcome.by.runs)
-result="won by "+finalMatch.info.outcome.by.runs+" runs";
+result="won by "+
+finalMatch.info.outcome.by.runs+" runs";
 
 else if(finalMatch.info.outcome.by.wickets)
-result="won by "+finalMatch.info.outcome.by.wickets+" wickets";
+result="won by "+
+finalMatch.info.outcome.by.wickets+" wickets";
 
 }
 
-/* ONLY CHANGE — use file name as game ID */
-const gameId = file.replace(".json","");
+/* ONLY CHANGE — use filename for game link */
+const gameId =
+file.replace(".json","");
 
-return{
+finalsData.push({
 season,
 winner,
 runnerUp,
 result,
 date,
-venue:finalMatch.info.venue || "",
+venue:finalMatch.info.venue,
 gameId
-};
+});
 
-})
-
-))
-
-.then(results=>{
-
-finalsData = results.filter(x=>x);
-
-finalsData.sort((a,b)=>a.season-b.season);
-
-buildButtons();
-renderTable(finalsData);
+render();
 
 });
 
-function buildButtons(){
+});
 
-yearGrid.innerHTML="";
+});
 
-finalsData.forEach(f=>{
+function render(){
 
-const btn=document.createElement("button");
-
-btn.className="year-btn";
-btn.textContent=f.season;
-
-btn.onclick=()=>{
-document.querySelectorAll(".year-btn")
-.forEach(b=>b.classList.remove("active"));
-
-btn.classList.add("active");
-
-renderTable(
-finalsData.filter(x=>x.season===f.season)
+finalsData.sort(
+(a,b)=>a.season-b.season
 );
-
-};
-
-yearGrid.appendChild(btn);
-
-});
-
-}
-
-function renderTable(rows){
 
 tableBody.innerHTML="";
 
-rows.forEach(f=>{
+finalsData.forEach(f=>{
 
 const tr=document.createElement("tr");
 
@@ -279,15 +221,25 @@ ${f.season}
 </a>
 </td>
 
-<td class="winner">${f.winner}</td>
+<td class="winner">
+${f.winner}
+</td>
 
-<td class="runnerup">${f.runnerUp}</td>
+<td class="runnerup">
+${f.runnerUp}
+</td>
 
-<td class="result">${f.result}</td>
+<td>
+${f.result}
+</td>
 
-<td>${formatDate(f.date)}</td>
+<td>
+${formatDate(f.date)}
+</td>
 
-<td>${f.venue}</td>
+<td>
+${f.venue}
+</td>
 
 `;
 
@@ -297,9 +249,9 @@ tableBody.appendChild(tr);
 
 }
 
-function formatDate(date){
+function formatDate(d){
 
-return new Date(date)
+return new Date(d)
 .toLocaleDateString("en-GB",{
 day:"2-digit",
 month:"short",
