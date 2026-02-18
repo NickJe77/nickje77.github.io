@@ -6,20 +6,79 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{font-family:Inter,system-ui,Arial;margin:0;background:#fff;}
-.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
-.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px 60px;}
-h1{text-align:center;margin-bottom:10px;}
-select{padding:8px 12px;font-size:15px;}
-table{width:100%;border-collapse:collapse;margin-top:20px;}
-th,td{border-bottom:1px solid #ddd;padding:8px 10px;textanding:center;}
-th{background:#f0f0f0;position:sticky;top:0;}
-tr:nth-child(even){background:#f6f9ff;}
-tr:hover{background:#e9f0ff;}
-.filter-bar{text-align:center;margin-bottom:15px;}
-.standings{margin-top:40px;}
+body{
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:#fff;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+  font-size:18px;
+}
+
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px 60px;
+}
+
+h1{
+  text-align:center;
+  margin-bottom:10px;
+}
+
+select{
+  padding:8px 12px;
+  font-size:15px;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:20px;
+}
+
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:center;
+}
+
+th{
+  background:#f0f0f0;
+  position:sticky;
+  top:0;
+}
+
+tr:nth-child(even){
+  background:#f6f9ff;
+}
+
+tr:hover{
+  background:#e9f0ff;
+}
+
+.filter-bar{
+  text-align:center;
+  margin-bottom:15px;
+}
+
+.standings{
+  margin-top:40px;
+}
 </style>
+
 </head>
 
 <body>
@@ -35,38 +94,56 @@ tr:hover{background:#e9f0ff;}
 <h1 id="title">NBA Season</h1>
 
 <div class="filter-bar">
+
 Season:
+
 <select id="seasonSelect"></select>
-Game Type:
-<select id="typeFilter">
-<option value="all">All</option>
-</select>
+
 </div>
 
 <table>
+
 <thead>
+
 <tr>
 <th>Date</th>
 <th>Game</th>
 <th>Winner</th>
 <th>Score</th>
 </tr>
+
 </thead>
-<tbody id="gamesTable"></tbody>
+
+<tbody id="gamesTable">
+
+<tr>
+<td colspan="4">Loading...</td>
+</tr>
+
+</tbody>
+
 </table>
 
 <div class="standings">
+
 <h2>Standings</h2>
+
 <table>
+
 <thead>
+
 <tr>
 <th>Team</th>
 <th>Wins</th>
 <th>Losses</th>
 </tr>
+
 </thead>
+
 <tbody id="standingsTable"></tbody>
+
 </table>
+
 </div>
 
 </div>
@@ -75,128 +152,179 @@ Game Type:
 
 const BASE = "/docs/data/nba/games/";
 
-const seasonSelect = document.getElementById("seasonSelect");
-const gamesTable = document.getElementById("gamesTable");
-const standingsTable = document.getElementById("standingsTable");
-const titleEl = document.getElementById("title");
+const seasonSelect =
+document.getElementById("seasonSelect");
 
-let currentSeason = null;
+const gamesTable =
+document.getElementById("gamesTable");
+
+const standingsTable =
+document.getElementById("standingsTable");
+
+const titleEl =
+document.getElementById("title");
+
 
 function populateSeasonDropdown(){
 
-    const seasons = [];
+for(let year=2026; year>=1976; year--){
 
-    for(let y=1976; y<=2026; y++){
-        seasons.push(y.toString());
-    }
+const opt =
+document.createElement("option");
 
-    seasons.reverse().forEach(season => {
+opt.value = year;
 
-        const opt = document.createElement("option");
-        opt.value = season;
-        opt.textContent = season;
-        seasonSelect.appendChild(opt);
+opt.textContent = year;
 
-    });
+seasonSelect.appendChild(opt);
 
 }
 
-seasonSelect.addEventListener("change", ()=>{
-    loadSeason(seasonSelect.value);
+}
+
+
+seasonSelect.addEventListener("change", function(){
+
+loadSeason(this.value);
+
 });
+
 
 async function loadSeason(season){
 
-    currentSeason = season;
+titleEl.textContent =
+"NBA Season " + season;
 
-    titleEl.textContent = "NBA Season " + season;
+gamesTable.innerHTML =
+"<tr><td colspan='4'>Loading games...</td></tr>";
 
-    gamesTable.innerHTML = "Loading...";
-    standingsTable.innerHTML = "";
+standingsTable.innerHTML = "";
 
-    try{
+try{
 
-        const response = await fetch(BASE + season + "/");
-        const text = await response.text();
+const indexResponse =
+await fetch(BASE + season + "/index.json");
 
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(text,"text/html");
+if(!indexResponse.ok){
 
-        const files = [...doc.querySelectorAll("a")]
-            .map(a=>a.getAttribute("href"))
-            .filter(f=>f && f.endsWith(".json"));
-
-        if(files.length === 0){
-            gamesTable.innerHTML =
-            "<tr><td colspan='4'>No season files found</td></tr>";
-            return;
-        }
-
-        gamesTable.innerHTML = "";
-
-        const standings = {};
-
-        for(const file of files){
-
-            const game =
-            await fetch(BASE + season + "/" + file)
-            .then(r=>r.json());
-
-            const winner =
-            game.home_score > game.away_score
-            ? game.home_team
-            : game.away_team;
-
-            const loser =
-            game.home_score > game.away_score
-            ? game.away_team
-            : game.home_team;
-
-            standings[winner] = standings[winner] || {w:0,l:0};
-            standings[loser] = standings[loser] || {w:0,l:0};
-
-            standings[winner].w++;
-            standings[loser].l++;
-
-            const tr = document.createElement("tr");
-
-            tr.innerHTML = `
-                <td>${game.date || ""}</td>
-                <td>
-                    <a href="nba-game.html?season=${season}&game=${game.game_id}">
-                    ${game.away_team} @ ${game.home_team}
-                    </a>
-                </td>
-                <td>${winner}</td>
-                <td>${game.away_score} - ${game.home_score}</td>
-            `;
-
-            gamesTable.appendChild(tr);
-
-        }
-
-        Object.entries(standings)
-        .sort((a,b)=>b[1].w - a[1].w)
-        .forEach(([team,rec])=>{
-
-            const tr = document.createElement("tr");
-
-            tr.innerHTML =
-            `<td>${team}</td><td>${rec.w}</td><td>${rec.l}</td>`;
-
-            standingsTable.appendChild(tr);
-
-        });
-
-    }
-    catch(err){
-
-        gamesTable.innerHTML =
-        "<tr><td colspan='4'>Failed to load season</td></tr>";
-
-    }
+throw new Error("Index not found");
 
 }
+
+const indexData =
+await indexResponse.json();
+
+gamesTable.innerHTML = "";
+
+const standings = {};
+
+
+for(const gameId of indexData.games){
+
+const gameResponse =
+await fetch(BASE + season + "/" + gameId + ".json");
+
+if(!gameResponse.ok)
+continue;
+
+const game =
+await gameResponse.json();
+
+
+const winner =
+game.home_score > game.away_score
+? game.home_team
+: game.away_team;
+
+
+const loser =
+game.home_score > game.away_score
+? game.away_team
+: game.home_team;
+
+
+if(!standings[winner]){
+
+standings[winner] = {w:0,l:0};
+
+}
+
+if(!standings[loser]){
+
+standings[loser] = {w:0,l:0};
+
+}
+
+
+standings[winner].w++;
+
+standings[loser].l++;
+
+
+const tr =
+document.createElement("tr");
+
+
+tr.innerHTML =
+`
+<td>${game.date || ""}</td>
+
+<td>
+<a href="nba-game.html?season=${season}&game=${game.game_id}">
+${game.away_team} @ ${game.home_team}
+</a>
+</td>
+
+<td>${winner}</td>
+
+<td>${game.away_score} - ${game.home_score}</td>
+`;
+
+
+gamesTable.appendChild(tr);
+
+}
+
+
+Object.entries(standings)
+
+.sort(function(a,b){
+
+return b[1].w - a[1].w;
+
+})
+
+.forEach(function(entry){
+
+const team = entry[0];
+
+const rec = entry[1];
+
+const tr =
+document.createElement("tr");
+
+tr.innerHTML =
+`
+<td>${team}</td>
+<td>${rec.w}</td>
+<td>${rec.l}</td>
+`;
+
+standingsTable.appendChild(tr);
+
+});
+
+
+}
+catch(err){
+
+gamesTable.innerHTML =
+"<tr><td colspan='4'>Season failed to load.</td></tr>";
+
+}
+
+}
+
 
 populateSeasonDropdown();
 
@@ -205,4 +333,5 @@ loadSeason("2023");
 </script>
 
 </body>
+
 </html>
