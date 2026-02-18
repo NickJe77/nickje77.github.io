@@ -77,6 +77,7 @@ const gamesTable=document.getElementById("gamesTable");
 const standingsTable=document.getElementById("standingsTable");
 const titleEl=document.getElementById("title");
 
+
 function populateSeasons(){
 
 for(let y=2026;y>=1976;y--){
@@ -94,9 +95,11 @@ seasonSelect.addEventListener("change",()=>{
 loadSeason(seasonSelect.value);
 });
 
+
 async function loadSeason(season){
 
 titleEl.textContent="NBA Season "+season;
+
 gamesTable.innerHTML="<tr><td colspan='4'>Loading...</td></tr>";
 standingsTable.innerHTML="";
 
@@ -115,8 +118,18 @@ for(let id of ids){
 let gRes=await fetch(BASE+season+"/"+id+".json");
 let g=await gRes.json();
 
-let winner=g.home_score>g.away_score?g.home_team:g.away_team;
-let loser=g.home_score>g.away_score?g.away_team:g.home_team;
+
+/* FIXED FIELD NAMES */
+
+let home=g.home_team;
+let away=g.away_team;
+
+let homeScore=parseInt(g.home_score);
+let awayScore=parseInt(g.away_score);
+
+let winner=homeScore>awayScore?home:away;
+let loser=homeScore>awayScore?away:home;
+
 
 if(!standings[winner])standings[winner]={w:0,l:0};
 if(!standings[loser])standings[loser]={w:0,l:0};
@@ -124,32 +137,41 @@ if(!standings[loser])standings[loser]={w:0,l:0};
 standings[winner].w++;
 standings[loser].l++;
 
+
 let tr=document.createElement("tr");
 
 tr.innerHTML=`
-<td>${g.date||""}</td>
+<td>${g.date.split(" ")[0]}</td>
 <td>
 <a href="nba-game.html?season=${season}&game=${g.game_id}">
-${g.away_team} @ ${g.home_team}
+${away} @ ${home}
 </a>
 </td>
 <td>${winner}</td>
-<td>${g.away_score}-${g.home_score}</td>
+<td>${awayScore}-${homeScore}</td>
 `;
 
 gamesTable.appendChild(tr);
 
 }
 
+
 Object.entries(standings)
 .sort((a,b)=>b[1].w-a[1].w)
 .forEach(([team,rec])=>{
 
 let tr=document.createElement("tr");
-tr.innerHTML=`<td>${team}</td><td>${rec.w}</td><td>${rec.l}</td>`;
+
+tr.innerHTML=`
+<td>${team}</td>
+<td>${rec.w}</td>
+<td>${rec.l}</td>
+`;
+
 standingsTable.appendChild(tr);
 
 });
+
 
 }catch{
 
@@ -158,6 +180,7 @@ gamesTable.innerHTML="<tr><td colspan='4'>No season files found</td></tr>";
 }
 
 }
+
 
 populateSeasons();
 loadSeason(1976);
