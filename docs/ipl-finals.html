@@ -6,10 +6,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
+
 body{
-  font-family: Inter, system-ui, Arial;
+  font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,
+  "Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   margin:0;
-  background:#fff;
+  background:#ffffff;
 }
 
 .navbar{
@@ -36,7 +38,7 @@ body{
 .hero{
   background:linear-gradient(90deg,#3b007a,#7b2cbf);
   color:white;
-  padding:40px;
+  padding:40px 50px;
   border-radius:24px;
   margin-bottom:25px;
 }
@@ -44,6 +46,12 @@ body{
 .hero h1{
   margin:0;
   font-size:46px;
+}
+
+.hero p{
+  margin-top:10px;
+  font-size:20px;
+  opacity:0.95;
 }
 
 .year-grid{
@@ -57,9 +65,14 @@ body{
   background:#2b004f;
   color:white;
   border:none;
-  padding:12px;
+  padding:12px 0;
   border-radius:10px;
+  font-size:16px;
   cursor:pointer;
+}
+
+.year-btn:hover{
+  background:#4b0082;
 }
 
 .year-btn.active{
@@ -69,11 +82,13 @@ body{
 table{
   width:100%;
   border-collapse:collapse;
+  font-size:15px;
 }
 
 th,td{
-  padding:12px;
   border-bottom:1px solid #ddd;
+  padding:12px 14px;
+  text-align:left;
 }
 
 th{
@@ -88,15 +103,6 @@ tr:hover{
   background:#eef4ff;
 }
 
-.game-link{
-  color:inherit;
-  text-decoration:none;
-}
-
-.game-link:hover{
-  text-decoration:underline;
-}
-
 .winner{
   font-weight:600;
   color:#1a7f37;
@@ -106,25 +112,43 @@ tr:hover{
   color:#b42318;
 }
 
+.result{
+  font-weight:600;
+}
+
+.game-link{
+  color:inherit;
+  text-decoration:none;
+}
+
+.game-link:hover{
+  text-decoration:underline;
+}
+
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="cricket.html">Cricket</a>
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
 </div>
 
 <div class="page-wrap">
 
 <div class="hero">
-<h1>Indian Premier League Finals</h1>
+  <h1>Indian Premier League Finals</h1>
+  <p>Every IPL final with result and venue.</p>
 </div>
 
 <div id="yearGrid" class="year-grid"></div>
 
 <table>
+
 <thead>
 <tr>
 <th>Season</th>
@@ -154,7 +178,7 @@ let finalsData=[];
 
 fetch(indexUrl)
 
-.then(r=>r.json())
+.then(response=>response.json())
 
 .then(files=>Promise.all(
 
@@ -162,62 +186,57 @@ files.map(file=>
 
 fetch(basePath+file)
 
-.then(r=>r.json())
+.then(response=>response.json())
 
-.then(matches=>{
+.then(match=>{
 
-const finalMatch=matches.find(m=>
+/* IPL FILES ARE SINGLE MATCH OBJECTS */
 
-m.info?.event?.stage==="Final"
+if(match.info?.event?.stage!=="Final")
+return null;
 
-);
+const date=
+match.info.dates?.[0]||"";
 
-if(!finalMatch) return null;
+const season=
+date.slice(0,4);
 
-const date=finalMatch.info.dates?.[0]||"";
+const winner=
+match.info.outcome?.winner||"—";
 
-const season=date.slice(0,4);
-
-const winner=finalMatch.info.outcome?.winner||"—";
-
-const runnerUp=finalMatch.info.teams?.find(
-
-t=>t!==winner
-
+const runnerUp=
+match.info.teams?.find(
+team=>team!==winner
 )||"—";
 
 let result="—";
 
-if(finalMatch.info.outcome?.by){
+if(match.info.outcome?.by){
 
-if(finalMatch.info.outcome.by.runs)
+if(match.info.outcome.by.runs)
+result="won by "+
+match.info.outcome.by.runs+
+" runs";
 
-result="won by "+finalMatch.info.outcome.by.runs+" runs";
-
-if(finalMatch.info.outcome.by.wickets)
-
-result="won by "+finalMatch.info.outcome.by.wickets+" wickets";
+else if(match.info.outcome.by.wickets)
+result="won by "+
+match.info.outcome.by.wickets+
+" wickets";
 
 }
 
-/* USE FILENAME AS GAME ID */
-
-const gameId=file.replace(".json","");
+const gameId=
+file.replace(".json","");
 
 return{
 
 season,
-
 winner,
-
 runnerUp,
-
 result,
-
 date,
-
-venue:finalMatch.info.venue||"",
-
+venue:
+match.info.venue||"",
 gameId
 
 };
@@ -228,23 +247,27 @@ gameId
 
 .then(results=>{
 
-finalsData=results.filter(x=>x);
+finalsData=
+results.filter(x=>x!==null);
 
-finalsData.sort((a,b)=>a.season-b.season);
+finalsData.sort(
+(a,b)=>a.season-b.season
+);
 
-buildButtons();
+buildYearButtons();
 
-render(finalsData);
+renderTable(finalsData);
 
 });
 
-function buildButtons(){
+function buildYearButtons(){
 
 yearGrid.innerHTML="";
 
-finalsData.forEach(f=>{
+finalsData.forEach((f,i)=>{
 
-const btn=document.createElement("button");
+const btn=
+document.createElement("button");
 
 btn.className="year-btn";
 
@@ -252,36 +275,64 @@ btn.textContent=f.season;
 
 btn.onclick=()=>{
 
-document.querySelectorAll(".year-btn")
-
+document
+.querySelectorAll(".year-btn")
 .forEach(b=>b.classList.remove("active"));
 
 btn.classList.add("active");
 
-render(finalsData.filter(x=>x.season===f.season));
+renderTable(
+finalsData.filter(
+x=>x.season===f.season
+)
+);
 
 };
 
 yearGrid.appendChild(btn);
 
+if(i===finalsData.length-1)
+btn.classList.add("active");
+
 });
+
+const allBtn=
+document.createElement("button");
+
+allBtn.className="year-btn";
+
+allBtn.textContent="ALL";
+
+allBtn.onclick=()=>{
+
+document
+.querySelectorAll(".year-btn")
+.forEach(b=>b.classList.remove("active"));
+
+allBtn.classList.add("active");
+
+renderTable(finalsData);
+
+};
+
+yearGrid.appendChild(allBtn);
 
 }
 
-function render(rows){
+function renderTable(rows){
 
 tableBody.innerHTML="";
 
 rows.forEach(f=>{
 
-const tr=document.createElement("tr");
+const tr=
+document.createElement("tr");
 
 tr.innerHTML=`
 
 <td>
 
 <a class="game-link"
-
 href="ipl-game.html?game=${f.gameId}">
 
 ${f.season}
@@ -290,15 +341,25 @@ ${f.season}
 
 </td>
 
-<td class="winner">${f.winner}</td>
+<td class="winner">
+${f.winner}
+</td>
 
-<td class="runnerup">${f.runnerUp}</td>
+<td class="runnerup">
+${f.runnerUp}
+</td>
 
-<td>${f.result}</td>
+<td class="result">
+${f.result}
+</td>
 
-<td>${formatDate(f.date)}</td>
+<td>
+${formatDate(f.date)}
+</td>
 
-<td>${f.venue}</td>
+<td>
+${f.venue}
+</td>
 
 `;
 
@@ -308,19 +369,20 @@ tableBody.appendChild(tr);
 
 }
 
-function formatDate(d){
+function formatDate(dateString){
 
-return new Date(d)
+if(!dateString)
+return "";
 
-.toLocaleDateString("en-GB",{
-
+return new Date(dateString)
+.toLocaleDateString(
+"en-GB",
+{
 day:"2-digit",
-
 month:"short",
-
 year:"numeric"
-
-});
+}
+);
 
 }
 
