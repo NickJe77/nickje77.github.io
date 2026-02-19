@@ -25,7 +25,7 @@
 
     .filters {
       max-width: 1200px;
-      margin: 40px auto 30px;
+      margin: 40px auto 10px;
       padding: 0 24px;
       display: grid;
       grid-template-columns: repeat(5, 1fr);
@@ -47,7 +47,25 @@
       padding: 8px 12px;
       font-size: 14px;
       border-radius: 10px;
+      border: 1px solid #ccc;
       box-sizing: border-box;
+      background: #ffffff;
+      color: #111;
+      font-weight: 600;
+    }
+
+    .filters select option {
+      background: #ffffff;
+      color: #111;
+    }
+
+    #resultCounter {
+      max-width: 1200px;
+      margin: 0 auto 20px;
+      padding: 0 24px;
+      font-weight: 700;
+      font-size: 14px;
+      color: #444;
     }
 
     .archive-table {
@@ -85,14 +103,12 @@
       background: #f4f8ff;
     }
 
-    /* Narrow Year */
     .archive-table th:nth-child(1),
     .archive-table td:nth-child(1) {
       width: 70px;
       white-space: nowrap;
     }
 
-    /* Narrow Country */
     .archive-table th:nth-child(7),
     .archive-table td:nth-child(7) {
       width: 60px;
@@ -152,6 +168,8 @@
     </div>
   </div>
 
+  <div id="resultCounter">Showing 0 results</div>
+
   <div class="archive-table">
     <table>
       <thead>
@@ -165,11 +183,77 @@
           <th>Country</th>
         </tr>
       </thead>
-      <tbody></tbody>
+      <tbody id="tableBody"></tbody>
     </table>
   </div>
 
-  <script src="g1-results.js" defer></script>
+  <script>
+    let fullData = [];
+
+    fetch("g1-results.json")
+      .then(res => res.json())
+      .then(data => {
+        fullData = data.sort((a,b) => b.year - a.year);
+        populateFilters(fullData);
+        applyFilters();
+      });
+
+    function populateFilters(data) {
+      const years = [...new Set(data.map(d => d.year))].sort((a,b)=>b-a);
+      const yearSelect = document.getElementById("yearFilter");
+
+      years.forEach(y=>{
+        const opt = document.createElement("option");
+        opt.value = y;
+        opt.textContent = y;
+        yearSelect.appendChild(opt);
+      });
+    }
+
+    function applyFilters() {
+      const year = document.getElementById("yearFilter").value;
+      const race = document.getElementById("raceFilter").value.toLowerCase();
+      const winner = document.getElementById("winnerFilter").value.toLowerCase();
+      const jockey = document.getElementById("jockeyFilter").value.toLowerCase();
+      const country = document.getElementById("countryFilter").value.toLowerCase();
+
+      let filtered = fullData.filter(row =>
+        (!year || row.year == year) &&
+        (!race || row.race.toLowerCase().includes(race)) &&
+        (!winner || row.winner.toLowerCase().includes(winner)) &&
+        (!jockey || row.jockey.toLowerCase().includes(jockey)) &&
+        (!country || row.country.toLowerCase().includes(country))
+      );
+
+      renderTable(filtered);
+
+      document.getElementById("resultCounter").textContent =
+        "Showing " + filtered.length + " result" +
+        (filtered.length !== 1 ? "s" : "");
+    }
+
+    function renderTable(data) {
+      const tbody = document.getElementById("tableBody");
+      tbody.innerHTML = "";
+
+      data.forEach(row=>{
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${row.year}</td>
+          <td>${row.race}</td>
+          <td>${row.track}</td>
+          <td>${row.winner}</td>
+          <td>${row.trainer}</td>
+          <td>${row.jockey}</td>
+          <td>${row.country}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.querySelectorAll(".filters input, .filters select")
+      .forEach(el => el.addEventListener("input", applyFilters));
+  </script>
 
 </body>
 </html>
