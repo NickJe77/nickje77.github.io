@@ -1,92 +1,78 @@
-// g1-results.js
+document.addEventListener("DOMContentLoaded", function() {
 
-const yearFilter = document.getElementById("yearFilter");
-const raceFilter = document.getElementById("raceFilter");
-const winnerFilter = document.getElementById("winnerFilter");
-const jockeyFilter = document.getElementById("jockeyFilter");
-const countryFilter = document.getElementById("countryFilter");
+  const yearFilter = document.getElementById("yearFilter");
+  const raceFilter = document.getElementById("raceFilter");
+  const winnerFilter = document.getElementById("winnerFilter");
+  const jockeyFilter = document.getElementById("jockeyFilter");
+  const countryFilter = document.getElementById("countryFilter");
+  const tableBody = document.getElementById("g1Body");
+  const resultCounter = document.getElementById("resultCounter");
 
-const raceList = document.getElementById("raceList");
-const winnerList = document.getElementById("winnerList");
-const jockeyList = document.getElementById("jockeyList");
-const countryList = document.getElementById("countryList");
+  let allData = [];
 
-const tableBody = document.querySelector("tbody");
-const resultCounter = document.getElementById("resultCounter");
+  fetch("data/g1-results.json")
+    .then(res => res.json())
+    .then(data => {
+      allData = data;
+      populateYears();
+      applyFilters();
+    })
+    .catch(err => {
+      console.error("JSON load error:", err);
+    });
 
-let allData = [];
+  function populateYears() {
+    const years = [...new Set(allData.map(d => Number(d.YEAR)))]
+      .sort((a,b) => b - a);
 
-fetch("https://nickje77.github.io/docs/data/g1-results.json")
-  .then(res => res.json())
-  .then(data => {
-    allData = data;
-    populateFilters();
-    applyFilters();
-  });
+    yearFilter.innerHTML = '<option value="">All</option>';
+    years.forEach(y => {
+      if (!isNaN(y)) {
+        const opt = document.createElement("option");
+        opt.value = y;
+        opt.textContent = y;
+        yearFilter.appendChild(opt);
+      }
+    });
+  }
 
-function populateFilters() {
-  const years = [...new Set(allData.map(d => d.YEAR))]
-    .sort((a,b) => b - a);
+  function applyFilters() {
+    const y = yearFilter.value;
+    const r = raceFilter.value.toLowerCase();
+    const w = winnerFilter.value.toLowerCase();
+    const j = jockeyFilter.value.toLowerCase();
+    const c = countryFilter.value.toLowerCase();
 
-  yearFilter.innerHTML = '<option value="">All</option>';
-  years.forEach(y => {
-    const opt = document.createElement("option");
-    opt.value = y;
-    opt.textContent = y;
-    yearFilter.appendChild(opt);
-  });
+    const filtered = allData.filter(row =>
+      (!y || row.YEAR == y) &&
+      (!r || (row.RACE || "").toLowerCase().includes(r)) &&
+      (!w || (row.WINNER || "").toLowerCase().includes(w)) &&
+      (!j || (row.JOCKEY || "").toLowerCase().includes(j)) &&
+      (!c || (row.COUNTRY || "").toLowerCase().includes(c))
+    );
 
-  fillDatalist(raceList, allData.map(d => d.RACE));
-  fillDatalist(winnerList, allData.map(d => d.WINNER));
-  fillDatalist(jockeyList, allData.map(d => d.JOCKEY));
-  fillDatalist(countryList, allData.map(d => d.COUNTRY));
-}
+    renderTable(filtered);
 
-function fillDatalist(dl, arr) {
-  const values = [...new Set(arr.filter(v => v && v !== ""))].sort();
-  dl.innerHTML = "";
-  values.forEach(v => {
-    const opt = document.createElement("option");
-    opt.value = v;
-    dl.appendChild(opt);
-  });
-}
+    resultCounter.textContent =
+      "Showing " + filtered.length + " result" +
+      (filtered.length !== 1 ? "s" : "");
+  }
 
-function applyFilters() {
-  const y = yearFilter.value;
-  const r = raceFilter.value.toLowerCase();
-  const w = winnerFilter.value.toLowerCase();
-  const j = jockeyFilter.value.toLowerCase();
-  const c = countryFilter.value.toLowerCase();
+  function renderTable(rows) {
+    tableBody.innerHTML = rows.map(row => `
+      <tr>
+        <td>${row.YEAR || ""}</td>
+        <td>${row.RACE || ""}</td>
+        <td>${row.TRACK || ""}</td>
+        <td>${row.WINNER || ""}</td>
+        <td>${row.TRAINER || ""}</td>
+        <td>${row.JOCKEY || ""}</td>
+        <td>${row.COUNTRY || ""}</td>
+      </tr>
+    `).join("");
+  }
 
-  const filtered = allData.filter(row =>
-    (!y || row.YEAR == y) &&
-    (!r || row.RACE.toLowerCase().includes(r)) &&
-    (!w || row.WINNER.toLowerCase().includes(w)) &&
-    (!j || row.JOCKEY.toLowerCase().includes(j)) &&
-    (!c || row.COUNTRY.toLowerCase().includes(c))
-  );
+  [yearFilter, raceFilter, winnerFilter, jockeyFilter, countryFilter]
+    .forEach(el => el.addEventListener("input", applyFilters));
 
-  renderTable(filtered);
-
-  resultCounter.textContent =
-    "Showing " + filtered.length + " result" +
-    (filtered.length !== 1 ? "s" : "");
-}
-
-function renderTable(rows) {
-  tableBody.innerHTML = rows.map(row => `
-    <tr>
-      <td>${row.YEAR || ""}</td>
-      <td>${row.RACE || ""}</td>
-      <td>${row.TRACK || ""}</td>
-      <td>${row.WINNER || ""}</td>
-      <td>${row.TRAINER || ""}</td>
-      <td>${row.JOCKEY || ""}</td>
-      <td>${row.COUNTRY || ""}</td>
-    </tr>
-  `).join("");
-}
-
-[yearFilter, raceFilter, winnerFilter, jockeyFilter, countryFilter]
-  .forEach(el => el.addEventListener("input", applyFilters));
+});
