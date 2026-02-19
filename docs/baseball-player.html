@@ -6,77 +6,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{
-font-family:Inter,system-ui,Arial;
-margin:0;
-background:#f4f6f8;
-}
-
-.navbar{
-display:flex;
-justify-content:center;
-gap:24px;
-padding:16px;
-background:#fff;
-border-bottom:1px solid #ddd;
-font-weight:700;
-}
-
-.navbar a{
-text-decoration:none;
-color:#0056d6;
-}
-
-.page{
-max-width:1200px;
-margin:auto;
-padding:20px;
-}
-
-.hero{
-background:linear-gradient(90deg,#002D72,#C8102E);
-color:white;
-padding:30px;
-border-radius:20px;
-margin-bottom:20px;
-}
-
-.section{
-background:white;
-padding:18px;
-border-radius:16px;
-margin-bottom:20px;
-}
-
-table{
-width:100%;
-border-collapse:collapse;
-}
-
-th{
-background:#002D72;
-color:white;
-padding:10px;
-text-align:left;
-}
-
-td{
-padding:8px;
-border-bottom:1px solid #eee;
-}
-
-tr:nth-child(even){
-background:#f0f6ff;
-}
-
-a{
-color:#0056d6;
-text-decoration:none;
-font-weight:700;
-}
+body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:#fff;border-bottom:1px solid #ddd;font-weight:700;}
+.navbar a{text-decoration:none;color:#0056d6;}
+.page{max-width:1200px;margin:auto;padding:20px;}
+.hero{background:linear-gradient(90deg,#002D72,#C8102E);color:white;padding:30px;border-radius:20px;margin-bottom:20px;}
+.section{background:white;padding:18px;border-radius:16px;margin-bottom:20px;}
+table{width:100%;border-collapse:collapse;}
+th{background:#002D72;color:white;padding:10px;text-align:left;}
+td{padding:8px;border-bottom:1px solid #eee;}
+tr:nth-child(even){background:#f0f6ff;}
 </style>
 </head>
-
 <body>
 
 <div class="navbar">
@@ -98,11 +39,6 @@ font-weight:700;
 </div>
 
 <div class="section">
-<h2>Career Pitching Totals</h2>
-<div id="pitching"></div>
-</div>
-
-<div class="section">
 <h2>Game Log</h2>
 <div id="games"></div>
 </div>
@@ -111,178 +47,131 @@ font-weight:700;
 
 <script>
 
-const playerId =
-new URLSearchParams(location.search).get("player")
+const playerId = new URLSearchParams(location.search).get("player")
 
-let PLAYER_NAME=""
-let battingTotals={}
-let pitchingTotals={}
-let gameLog=[]
+let totals = {
+PA:0, AB:0, H:0, "2B":0, "3B":0, HR:0, BB:0, SO:0
+}
+
+let gameLog = []
 
 async function loadPlayerName(){
+const players = await fetch("./data/baseball/players.json").then(r=>r.json())
+const p = players.find(x=>x.player_id===playerId)
+document.getElementById("playerName").textContent = p?.name || playerId
+document.getElementById("meta").textContent = "Player ID: " + playerId
+}
 
-const players =
-await fetch("./data/baseball/players.json")
-.then(r=>r.json())
+function processEvent(result){
 
-const p =
-players.find(x=>x.player_id===playerId)
+totals.PA++
 
-PLAYER_NAME=p?.name||playerId
+if(result.includes("W")){
+totals.BB++
+return
+}
 
-document.getElementById("playerName").textContent=PLAYER_NAME
-document.getElementById("meta").textContent="Player ID: "+playerId
+if(result.includes("K")){
+totals.SO++
+totals.AB++
+return
+}
 
+if(result.startsWith("HR")){
+totals.H++
+totals.HR++
+totals.AB++
+return
+}
+
+if(result.startsWith("T")){
+totals.H++
+totals["3B"]++
+totals.AB++
+return
+}
+
+if(result.startsWith("D")){
+totals.H++
+totals["2B"]++
+totals.AB++
+return
+}
+
+if(result.startsWith("S")){
+totals.H++
+totals.AB++
+return
+}
+
+totals.AB++
 }
 
 async function loadAllSeasons(){
 
-const seasons=
-await fetch("./data/baseball/index.json")
-.then(r=>r.json())
+const seasons = await fetch("./data/baseball/index.json").then(r=>r.json())
 
 for(const season of seasons){
-await loadSeason(season)
+
+const seasonGames = await fetch(`./data/baseball/seasons/${season}.json`).then(r=>r.json())
+
+for(const g of seasonGames){
+
+const gameId = g.home_code + g.date.replaceAll("-","") + "0"
+
+try{
+
+const game = await fetch(`./data/baseball/games/${season}/${gameId}.json`).then(r=>r.json())
+
+let played = false
+
+for(const e of game.events || []){
+if(e[0]==="play" && e[3]===playerId){
+played = true
+processEvent(e[6])
+}
+}
+
+if(played){
+gameLog.push(gameId)
+}
+
+}catch(e){}
+
+}
+
 }
 
 render()
 
 }
 
-async function loadSeason(season){
-
-const seasonGames=
-await fetch(`./data/baseball/seasons/${season}.json`)
-.then(r=>r.json())
-
-for(const g of seasonGames){
-
-if(!g.game_id) continue
-
-try{
-
-const game=
-await fetch(`./data/baseball/games/${season}/${g.game_id}.json`)
-.then(r=>{
-if(!r.ok) throw new Error("Missing game")
-return r.json()
-})
-
-processGame(game)
-
-}catch(e){
-console.warn("Missing game file:", season, g.game_id)
-}
-
-}
-
-}
-
-function processGame(game){
-
-let played=false
-
-const batters=[
-...(game.batters_home||[]),
-...(game.batters_away||[])
-]
-
-for(const b of batters){
-
-if(b.player_id===playerId){
-
-played=true
-
-for(const stat in b){
-if(stat==="player_id") continue
-battingTotals[stat]=(battingTotals[stat]||0)+(b[stat]||0)
-}
-
-}
-
-}
-
-const pitchers=[
-...(game.pitchers_home||[]),
-...(game.pitchers_away||[])
-]
-
-for(const p of pitchers){
-
-if(p.player_id===playerId){
-
-played=true
-
-for(const stat in p){
-if(stat==="player_id") continue
-pitchingTotals[stat]=(pitchingTotals[stat]||0)+(p[stat]||0)
-}
-
-}
-
-}
-
-if(played){
-gameLog.push(game.game_id)
-}
-
-}
-
 function render(){
 
-renderTotals("batting",battingTotals)
-renderTotals("pitching",pitchingTotals)
-renderGameLog()
-
-}
-
-function renderTotals(id,data){
-
-if(Object.keys(data).length===0){
-document.getElementById(id).textContent="No data"
-return
-}
-
-let html="<table><thead><tr>"
-
-for(const stat in data){
+let html = "<table><thead><tr>"
+for(const stat in totals){
 html+=`<th>${stat}</th>`
 }
-
 html+="</tr></thead><tbody><tr>"
-
-for(const stat in data){
-html+=`<td>${data[stat]}</td>`
+for(const stat in totals){
+html+=`<td>${totals[stat]}</td>`
 }
-
 html+="</tr></tbody></table>"
 
-document.getElementById(id).innerHTML=html
-
-}
-
-function renderGameLog(){
+document.getElementById("batting").innerHTML = html
 
 if(gameLog.length===0){
-document.getElementById("games").textContent="No games found"
+document.getElementById("games").textContent = "No games found"
 return
 }
 
-let html="<table><thead><tr><th>Game</th></tr></thead><tbody>"
-
+let ghtml="<table><thead><tr><th>Game</th></tr></thead><tbody>"
 gameLog.forEach(id=>{
-html+=`<tr>
-<td>
-<a href="./baseball-game.html?game=${id}">
-${id}
-</a>
-</td>
-</tr>`
+ghtml+=`<tr><td><a href="./baseball-game.html?game=${id}">${id}</a></td></tr>`
 })
+ghtml+="</tbody></table>"
 
-html+="</tbody></table>"
-
-document.getElementById("games").innerHTML=html
+document.getElementById("games").innerHTML = ghtml
 
 }
 
@@ -294,6 +183,5 @@ await loadAllSeasons()
 init()
 
 </script>
-
 </body>
 </html>
