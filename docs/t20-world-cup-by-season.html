@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <title>T20 World Cup | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <link rel="stylesheet" href="style.css">
 
 <style>
@@ -126,7 +125,6 @@ body{
   margin-top:4px;
   color:#555;
 }
-
 </style>
 </head>
 
@@ -159,7 +157,6 @@ body{
 
 const SUMMARY_PATH="data/t20-world-cup/summary.json";
 const MATCH_PATH="data/t20-world-cup/matches/";
-
 const YEARS=[2007,2009,2010,2012,2014,2016,2021,2022,2024,2026];
 
 let SUMMARY=null;
@@ -167,161 +164,130 @@ let SUMMARY=null;
 
 /* URL HELPERS */
 
-function teamURL(team)
-{
-return "t20wc-team.html?team="+encodeURIComponent(team);
+function teamURL(team){
+  return "t20wc-team.html?team="+encodeURIComponent(team);
 }
 
-function playerURL(player)
-{
-return "t20-world-cup-player.html?player="+encodeURIComponent(player);
+function playerURL(player){
+  return "t20-world-cup-player.html?player="+encodeURIComponent(player);
 }
 
 
 /* LOAD SUMMARY */
 
-async function loadSummary()
-{
-const res=await fetch(SUMMARY_PATH);
-SUMMARY=await res.json();
+async function loadSummary(){
+  const res=await fetch(SUMMARY_PATH);
+  SUMMARY=await res.json();
 }
 
 
 /* RENDER SUMMARY */
 
-function renderSummary(year)
-{
-const wrap=document.getElementById("summaryWrap");
-const grid=document.getElementById("summaryGrid");
+function renderSummary(year){
 
-const s=SUMMARY?.[year];
+  const wrap=document.getElementById("summaryWrap");
+  const grid=document.getElementById("summaryGrid");
 
-if(!s)
-{
-wrap.style.display="none";
-return;
-}
+  const s=SUMMARY?.[year];
 
-wrap.style.display="block";
+  if(!s){
+    wrap.style.display="none";
+    return;
+  }
 
-grid.innerHTML=`
+  wrap.style.display="block";
 
-<div class="summary-card">
+  grid.innerHTML=`
+  <div class="summary-card">
+    <b>Winner</b><br>
+    <a href="${teamURL(s.winner)}">${s.winner}</a>
+  </div>
 
-<b>Winner</b><br>
+  <div class="summary-card">
+    <b>Most Runs</b><br>
+    <a href="${playerURL(s.most_runs.player)}">${s.most_runs.player}</a>
+    <div class="sub">${s.most_runs.value} runs</div>
+  </div>
 
-<a href="${teamURL(s.winner)}">
-${s.winner}
-</a>
-
-</div>
-
-<div class="summary-card">
-
-<b>Most Runs</b><br>
-
-<a href="${playerURL(s.most_runs.player)}">
-${s.most_runs.player}
-</a>
-
-<div class="sub">
-${s.most_runs.value} runs
-</div>
-
-</div>
-
-<div class="summary-card">
-
-<b>Most Wickets</b><br>
-
-<a href="${playerURL(s.most_wickets.player)}">
-${s.most_wickets.player}
-</a>
-
-<div class="sub">
-${s.most_wickets.value} wickets
-</div>
-
-</div>
-
-`;
+  <div class="summary-card">
+    <b>Most Wickets</b><br>
+    <a href="${playerURL(s.most_wickets.player)}">${s.most_wickets.player}</a>
+    <div class="sub">${s.most_wickets.value} wickets</div>
+  </div>
+  `;
 }
 
 
 /* YEAR BUTTONS */
 
-function buildYearButtons()
-{
-const grid=document.getElementById("yearGrid");
+function buildYearButtons(){
 
-YEARS.forEach(year=>
-{
-const btn=document.createElement("button");
+  const grid=document.getElementById("yearGrid");
 
-btn.className="year-btn";
-btn.innerText=year;
+  YEARS.forEach(year=>{
+    const btn=document.createElement("button");
+    btn.className="year-btn";
+    btn.innerText=year;
 
-btn.onclick=()=>
-{
-document.querySelectorAll(".year-btn")
-.forEach(b=>b.classList.remove("active"));
+    btn.onclick=()=>{
+      document.querySelectorAll(".year-btn")
+      .forEach(b=>b.classList.remove("active"));
 
-btn.classList.add("active");
+      btn.classList.add("active");
+      loadYear(year);
+    };
 
-loadYear(year);
-};
+    grid.appendChild(btn);
+  });
+}
 
-grid.appendChild(btn);
-});
+
+/* SAFE MATCH ID */
+
+function getMatchId(match,index){
+  const info=match.info || {};
+  return (
+    info.event?.match_number ||
+    info.match_type_number ||
+    info.match_number ||
+    index
+  );
 }
 
 
 /* LOAD MATCHES */
 
-async function loadYear(year)
-{
+async function loadYear(year){
 
-renderSummary(year);
+  renderSummary(year);
 
-const file=`t20wc_${year}_FULL.json`;
+  const file=`t20wc_${year}_FULL.json`;
+  const fullPath=MATCH_PATH+file;
 
-const fullPath=MATCH_PATH+file;
+  const res=await fetch(fullPath);
+  const data=await res.json();
 
-const res=await fetch(fullPath);
+  const matches=Array.isArray(data)?data:data.matches;
 
-const data=await res.json();
+  let html="";
 
-const matches=Array.isArray(data)?data:data.matches;
+  matches.forEach((match,index)=>{
 
-let html="";
+    const info=match.info || {};
+    const matchId=getMatchId(match,index);
 
-matches.forEach((match,index)=>
-{
+    html+=`
+    <div class="match">
+      <a href="t20-world-cup-match.html?file=${encodeURIComponent(fullPath)}&id=${matchId}">
+        ${info.teams?.[0] || ""} vs ${info.teams?.[1] || ""}
+      </a>
+      <div class="meta">${info.venue || ""}</div>
+      <div class="meta">${info.dates?.[0] || ""}</div>
+    </div>
+    `;
+  });
 
-const info=match.info;
-
-html+=`
-
-<div class="match">
-
-<a href="t20-world-cup-match.html?file=${fullPath}&match=${index}">
-
-${info.teams[0]} vs ${info.teams[1]}
-
-</a>
-
-<div class="meta">${info.venue}</div>
-
-<div class="meta">${info.dates[0]}</div>
-
-</div>
-
-`;
-
-});
-
-document.getElementById("matches").innerHTML=html;
-
+  document.getElementById("matches").innerHTML=html;
 }
 
 
@@ -329,18 +295,15 @@ document.getElementById("matches").innerHTML=html;
 
 (async function(){
 
-await loadSummary();
+  await loadSummary();
+  buildYearButtons();
+  loadYear(2024);
 
-buildYearButtons();
-
-loadYear(2024);
-
-document.querySelectorAll(".year-btn")
-.forEach(btn=>
-{
-if(btn.innerText=="2024")
-btn.classList.add("active");
-});
+  document.querySelectorAll(".year-btn")
+  .forEach(btn=>{
+    if(btn.innerText=="2024")
+    btn.classList.add("active");
+  });
 
 })();
 
