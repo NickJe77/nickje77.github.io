@@ -4,6 +4,7 @@ document.addEventListener("DOMContentLoaded", function() {
   const raceFilter = document.getElementById("raceFilter");
   const winnerFilter = document.getElementById("winnerFilter");
   const jockeyFilter = document.getElementById("jockeyFilter");
+  const trainerFilter = document.getElementById("trainerFilter"); // NEW
   const countryFilter = document.getElementById("countryFilter");
   const tableBody = document.getElementById("g1Body");
   const resultCounter = document.getElementById("resultCounter");
@@ -41,6 +42,7 @@ document.addEventListener("DOMContentLoaded", function() {
     const r = raceFilter.value.toLowerCase();
     const w = winnerFilter.value.toLowerCase();
     const j = jockeyFilter.value.toLowerCase();
+    const t = trainerFilter ? trainerFilter.value.toLowerCase() : ""; // NEW
     const c = countryFilter.value.toLowerCase();
 
     const filtered = allData.filter(row =>
@@ -48,6 +50,7 @@ document.addEventListener("DOMContentLoaded", function() {
       (!r || (row.RACE || "").toLowerCase().includes(r)) &&
       (!w || (row.WINNER || "").toLowerCase().includes(w)) &&
       (!j || (row.JOCKEY || "").toLowerCase().includes(j)) &&
+      (!t || (row.TRAINER || "").toLowerCase().includes(t)) && // NEW
       (!c || (row.COUNTRY || "").toLowerCase().includes(c))
     );
 
@@ -72,7 +75,10 @@ document.addEventListener("DOMContentLoaded", function() {
     `).join("");
   }
 
-  [yearFilter, raceFilter, winnerFilter, jockeyFilter, countryFilter]
-    .forEach(el => el.addEventListener("input", applyFilters));
+  // Attach listeners
+  [yearFilter, raceFilter, winnerFilter, jockeyFilter, trainerFilter, countryFilter]
+    .forEach(el => {
+      if (el) el.addEventListener("input", applyFilters);
+    });
 
 });
