@@ -7,66 +7,24 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
-body{
-font-family:Inter,system-ui,Arial;
-margin:0;
-background:#f4f6f8;
-}
-.navbar{
-display:flex;
-justify-content:center;
-gap:24px;
-padding:16px;
-border-bottom:1px solid #ddd;
-background:#fff;
-font-weight:600;
-}
-.navbar a{
-text-decoration:none;
-color:#0056d6;
-}
-.page{
-max-width:1100px;
-margin:30px auto;
-padding:0 20px;
-}
-.matchHeader{
-background:linear-gradient(90deg,#8b0000,#e10600);
-color:#fff;
-padding:25px;
-border-radius:16px;
-margin-bottom:20px;
-}
-.matchMeta{
-margin-top:4px;
-opacity:0.95;
-}
-.innings{
-background:#fff;
-padding:20px;
-border-radius:12px;
-margin-bottom:20px;
-}
-.teamHeader{
-display:inline-block;
-background:#e10600;
-color:#fff;
-padding:6px 12px;
-border-radius:6px;
-font-weight:700;
-margin-bottom:10px;
-}
-.score{
-font-size:22px;
-font-weight:700;
-margin-bottom:12px;
-}
-.playerLink{
-color:#0056d6;
-font-weight:600;
-text-decoration:none;
-}
-.playerLink:hover{ text-decoration:underline; }
+body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px;border-bottom:1px solid #ddd;background:#fff;font-weight:600;}
+.navbar a{text-decoration:none;color:#0056d6;}
+.page{max-width:1100px;margin:30px auto;padding:0 20px;}
+.matchHeader{background:linear-gradient(90deg,#8b0000,#e10600);color:#fff;padding:25px;border-radius:16px;margin-bottom:20px;}
+.matchMeta{margin-top:4px;opacity:0.95;}
+.innings{background:#fff;padding:20px;border-radius:12px;margin-bottom:20px;}
+.teamHeader{display:inline-block;background:#e10600;color:#fff;padding:6px 12px;border-radius:6px;font-weight:700;margin-bottom:10px;}
+.score{font-size:22px;font-weight:700;margin-bottom:12px;}
+table{width:100%;border-collapse:collapse;margin-bottom:15px;}
+th{padding:8px;border-bottom:2px solid #ddd;font-weight:700;}
+td{padding:8px;border-bottom:1px solid #eee;}
+.left{text-align:left;}
+.num{text-align:right;font-variant-numeric:tabular-nums;}
+tr:nth-child(even){background:#f8fbff;}
+.playerLink{color:#0056d6;font-weight:600;text-decoration:none;}
+.playerLink:hover{text-decoration:underline;}
+.sectionTitle{font-weight:700;margin-top:10px;margin-bottom:6px;}
 </style>
 </head>
 
@@ -104,10 +62,8 @@ return;
 }
 
 const file=`${MATCH_PATH}t20wc_${season}_FULL.json`;
-
 const res=await fetch(file);
 const data=await res.json();
-
 const matches=Array.isArray(data)?data:data.matches;
 
 const match=matches.find(m=>String(m.info.match_type_number)===String(id));
@@ -120,14 +76,16 @@ return;
 renderMatch(match);
 }
 
+function playerLink(name){
+return `<a href="t20-world-cup-player.html?player=${encodeURIComponent(name)}" class="playerLink">${name}</a>`;
+}
+
 function renderMatch(match){
 
 const container=document.getElementById("matchContainer");
 const info=match.info;
 
-// ✅ Derive teams correctly from players object
 const teams=Object.keys(info.players || {});
-
 document.title=`${teams.join(" vs ")} (${season}) | The Sporting Almanac`;
 
 let resultText="";
@@ -136,8 +94,7 @@ if(info.outcome.by?.runs)
 resultText=`${info.outcome.winner} won by ${info.outcome.by.runs} runs`;
 else if(info.outcome.by?.wickets)
 resultText=`${info.outcome.winner} won by ${info.outcome.by.wickets} wickets`;
-else
-resultText=`${info.outcome.winner} won`;
+else resultText=`${info.outcome.winner} won`;
 }
 
 container.innerHTML=`
@@ -148,6 +105,88 @@ container.innerHTML=`
 <div class="matchMeta">${resultText}</div>
 </div>
 `;
+
+match.innings.forEach((inn,i)=>{
+
+let runs=0;
+let wickets=0;
+let legalBalls=0;
+let batting={};
+let bowling={};
+let fow=[];
+
+inn.overs.forEach(over=>{
+over.deliveries.forEach(d=>{
+
+const batter=d.batter;
+const bowler=d.bowler;
+
+if(!batting[batter]) batting[batter]={runs:0,balls:0};
+if(!bowling[bowler]) bowling[bowler]={runs:0,balls:0,wickets:0};
+
+batting[batter].runs+=d.runs.batter;
+bowling[bowler].runs+=d.runs.total;
+
+if(!d.extras?.wides && !d.extras?.noballs){
+batting[batter].balls++;
+bowling[bowler].balls++;
+legalBalls++;
+}
+
+runs+=d.runs.total;
+
+if(d.wickets){
+d.wickets.forEach(w=>{
+wickets++;
+bowling[bowler].wickets++;
+fow.push(`${runs}/${wickets} (${playerLink(w.player_out)})`);
+});
+}
+
+});
+});
+
+const overs=Math.floor(legalBalls/6)+"."+(legalBalls%6);
+
+const div=document.createElement("div");
+div.className="innings";
+
+div.innerHTML=`
+<div class="teamHeader">${inn.team}${i>1?" (Super Over)":""}</div>
+<div class="score">${runs}/${wickets} (${overs} overs)</div>
+
+<div class="sectionTitle">Batting</div>
+<table>
+<tr><th class="left">Batter</th><th class="num">R</th><th class="num">B</th></tr>
+${Object.entries(batting).map(([n,b])=>`
+<tr>
+<td class="left">${playerLink(n)}</td>
+<td class="num">${b.runs}</td>
+<td class="num">${b.balls}</td>
+</tr>
+`).join("")}
+</table>
+
+<div class="sectionTitle">Bowling</div>
+<table>
+<tr><th class="left">Bowler</th><th class="num">O</th><th class="num">R</th><th class="num">W</th></tr>
+${Object.entries(bowling).map(([n,b])=>`
+<tr>
+<td class="left">${playerLink(n)}</td>
+<td class="num">${Math.floor(b.balls/6)}.${b.balls%6}</td>
+<td class="num">${b.runs}</td>
+<td class="num">${b.wickets}</td>
+</tr>
+`).join("")}
+</table>
+
+<div class="sectionTitle">Fall of wickets</div>
+<div>${fow.join(", ") || "None"}</div>
+`;
+
+container.appendChild(div);
+
+});
 
 }
 
