@@ -11,11 +11,16 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
 .navbar a{text-decoration:none;color:#0056d6;}
 .page{max-width:1200px;margin:auto;padding:20px;}
 .hero{background:linear-gradient(90deg,#002D72,#C8102E);color:white;padding:30px;border-radius:20px;margin-bottom:20px;}
-.section{background:white;padding:18px;border-radius:16px;margin-bottom:20px;}
+.section{background:white;padding:20px;border-radius:16px;margin-bottom:20px;}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;}
+.card{background:#eef3fb;padding:16px;border-radius:14px;text-align:center;}
+.card h3{margin:0;font-size:28px;}
+.card p{margin:4px 0 0;font-size:13px;color:#555;}
+select{padding:8px;border-radius:8px;border:1px solid #ccc;}
 table{width:100%;border-collapse:collapse;}
 th{background:#002D72;color:white;padding:10px;text-align:left;}
 td{padding:8px;border-bottom:1px solid #eee;}
-tr:nth-child(even){background:#f0f6ff;}
+tr:nth-child(even){background:#f7faff;}
 </style>
 </head>
 
@@ -35,96 +40,155 @@ tr:nth-child(even){background:#f0f6ff;}
 </div>
 
 <div class="section">
-<h2>Career Batting Totals</h2>
-<div id="batting">Loading...</div>
+<h2>Career Summary</h2>
+<div class="cards" id="careerCards"></div>
+</div>
+
+<div class="section">
+<h2>By Team</h2>
+<select id="teamFilter"></select>
+<div class="cards" id="teamCards"></div>
+</div>
+
+<div class="section">
+<h2>Season Breakdown</h2>
+<div id="seasonTable"></div>
 </div>
 
 </div>
 
 <script>
 
-const playerId = new URLSearchParams(window.location.search).get("player")
+const playerId = new URLSearchParams(location.search).get("player")
 
-let totals = {
-games:0,
-plate_appearances:0,
-at_bats:0,
-hits:0,
-home_runs:0,
-walks:0,
-strikeouts:0
+let seasonsList = []
+let playerSeasons = []
+let career = {
+games:0, plate_appearances:0, at_bats:0,
+hits:0, home_runs:0, walks:0, strikeouts:0
 }
 
-async function loadPlayer(){
+async function loadData(){
 
 if(!playerId){
 document.getElementById("playerName").textContent="No player selected"
 return
 }
 
-document.getElementById("meta").textContent = "Player ID: " + playerId
+document.getElementById("meta").textContent="Player ID: "+playerId
+
+seasonsList = await fetch("./data/baseball/index.json").then(r=>r.json())
+
+for(const season of seasonsList){
 
 try{
-
-const seasons = await fetch("./data/baseball/index.json").then(r=>r.json())
-
-for(const season of seasons){
-
-try{
-
-const seasonData = await fetch(`./data/baseball/players/${season}.json`).then(r=>r.json())
-
-const player = seasonData.find(p=>p.player_id===playerId)
-
+const data = await fetch(`./data/baseball/players/${season}.json`).then(r=>r.json())
+const player = data.find(p=>p.player_id===playerId)
 if(player){
+player.season = season
+playerSeasons.push(player)
 
-totals.games += player.games || 0
-totals.plate_appearances += player.plate_appearances || 0
-totals.at_bats += player.at_bats || 0
-totals.hits += player.hits || 0
-totals.home_runs += player.home_runs || 0
-totals.walks += player.walks || 0
-totals.strikeouts += player.strikeouts || 0
+career.games += player.games || 0
+career.plate_appearances += player.plate_appearances || 0
+career.at_bats += player.at_bats || 0
+career.hits += player.hits || 0
+career.home_runs += player.home_runs || 0
+career.walks += player.walks || 0
+career.strikeouts += player.strikeouts || 0
 
 if(document.getElementById("playerName").textContent==="Loading..."){
 document.getElementById("playerName").textContent = player.player_name || playerId
 }
-
 }
-
 }catch(e){}
-
 }
 
-render()
-
-}catch(err){
-document.getElementById("batting").innerHTML="Failed to load player data."
+renderCareer()
+renderSeasonTable()
+renderTeamSection()
 }
 
+function renderCareer(){
+
+const avg = career.at_bats ? (career.hits/career.at_bats).toFixed(3) : ".000"
+
+document.getElementById("careerCards").innerHTML = `
+<div class="card"><h3>${career.games}</h3><p>Games</p></div>
+<div class="card"><h3>${career.plate_appearances}</h3><p>Plate Appearances</p></div>
+<div class="card"><h3>${career.hits}</h3><p>Hits</p></div>
+<div class="card"><h3>${career.home_runs}</h3><p>Home Runs</p></div>
+<div class="card"><h3>${avg}</h3><p>Batting Avg</p></div>
+`
 }
 
-function render(){
+function renderSeasonTable(){
 
-let html="<table><thead><tr>"
+let html = `<table><thead>
+<tr>
+<th>Season</th>
+<th>Team</th>
+<th>G</th>
+<th>PA</th>
+<th>AB</th>
+<th>H</th>
+<th>HR</th>
+<th>BB</th>
+<th>SO</th>
+</tr></thead><tbody>`
 
-for(const stat in totals){
-html+=`<th>${stat.replaceAll("_"," ").toUpperCase()}</th>`
+playerSeasons.sort((a,b)=>a.season-b.season)
+
+for(const s of playerSeasons){
+html+=`
+<tr>
+<td>${s.season}</td>
+<td>${s.team}</td>
+<td>${s.games}</td>
+<td>${s.plate_appearances}</td>
+<td>${s.at_bats}</td>
+<td>${s.hits}</td>
+<td>${s.home_runs}</td>
+<td>${s.walks}</td>
+<td>${s.strikeouts}</td>
+</tr>`
 }
 
-html+="</tr></thead><tbody><tr>"
-
-for(const stat in totals){
-html+=`<td>${totals[stat]}</td>`
+html+="</tbody></table>"
+document.getElementById("seasonTable").innerHTML=html
 }
 
-html+="</tr></tbody></table>"
+function renderTeamSection(){
 
-document.getElementById("batting").innerHTML = html
+const teams = [...new Set(playerSeasons.map(s=>s.team))]
+const filter = document.getElementById("teamFilter")
 
+filter.innerHTML = teams.map(t=>`<option value="${t}">${t}</option>`).join("")
+filter.addEventListener("change", updateTeamStats)
+
+updateTeamStats()
 }
 
-loadPlayer()
+function updateTeamStats(){
+
+const team = document.getElementById("teamFilter").value
+const teamData = playerSeasons.filter(s=>s.team===team)
+
+let totals = {games:0, hits:0, home_runs:0}
+
+for(const s of teamData){
+totals.games+=s.games
+totals.hits+=s.hits
+totals.home_runs+=s.home_runs
+}
+
+document.getElementById("teamCards").innerHTML=`
+<div class="card"><h3>${totals.games}</h3><p>Games</p></div>
+<div class="card"><h3>${totals.hits}</h3><p>Hits</p></div>
+<div class="card"><h3>${totals.home_runs}</h3><p>Home Runs</p></div>
+`
+}
+
+loadData()
 
 </script>
 
