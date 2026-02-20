@@ -1,104 +1,53 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Player | The Sporting Almanac</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
-.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:#fff;border-bottom:1px solid #ddd;font-weight:700;}
-.navbar a{text-decoration:none;color:#0056d6;}
-.page{max-width:1200px;margin:auto;padding:20px;}
-.hero{background:linear-gradient(90deg,#002D72,#C8102E);color:white;padding:30px;border-radius:20px;margin-bottom:20px;}
-.section{background:white;padding:18px;border-radius:16px;margin-bottom:20px;}
-table{width:100%;border-collapse:collapse;}
-th{background:#002D72;color:white;padding:10px;text-align:left;}
-td{padding:8px;border-bottom:1px solid #eee;}
-tr:nth-child(even){background:#f0f6ff;}
-</style>
-</head>
-<body>
-
-<div class="navbar">
-<a href="./index.html">Home</a>
-<a href="./baseball.html">Baseball</a>
-<a href="./baseball-seasons.html">Seasons</a>
-</div>
-
-<div class="page">
-<div class="hero">
-<h1 id="playerName">Loading...</h1>
-<div id="meta"></div>
-</div>
-
-<div class="section">
-<h2>Career Batting Totals</h2>
-<div id="batting">Loading...</div>
-</div>
-
-<div class="section">
-<h2>Game Log</h2>
-<div id="games"></div>
-</div>
-</div>
-
 <script>
 
 const playerId = new URLSearchParams(location.search).get("player")
 
-let totals = {PA:0, AB:0, H:0, "2B":0, "3B":0, HR:0, BB:0, SO:0}
-let gameLog = []
+let totals = {
+games:0,
+plate_appearances:0,
+at_bats:0,
+hits:0,
+home_runs:0,
+walks:0,
+strikeouts:0
+}
 
-async function loadPlayerName(){
-const players = await fetch("./data/baseball/players.json").then(r=>r.json())
-const p = players.find(x=>x.player_id===playerId)
-document.getElementById("playerName").textContent = p?.name || playerId
+async function loadPlayer(){
+
+if(!playerId){
+document.getElementById("playerName").textContent="No player selected"
+return
+}
+
 document.getElementById("meta").textContent = "Player ID: " + playerId
-}
-
-function processEvent(result){
-totals.PA++
-if(result.includes("W")){totals.BB++;return}
-if(result.includes("K")){totals.SO++;totals.AB++;return}
-if(result.startsWith("HR")){totals.H++;totals.HR++;totals.AB++;return}
-if(result.startsWith("T")){totals.H++;totals["3B"]++;totals.AB++;return}
-if(result.startsWith("D")){totals.H++;totals["2B"]++;totals.AB++;return}
-if(result.startsWith("S")){totals.H++;totals.AB++;return}
-totals.AB++
-}
-
-async function loadSeasons(){
 
 const seasons = await fetch("./data/baseball/index.json").then(r=>r.json())
 
 for(const season of seasons){
 
-const seasonGames = await fetch(`./data/baseball/seasons/${season}.json`).then(r=>r.json())
-
-for(const g of seasonGames){
-
-const gameId = g.home_code + g.date.replaceAll("-","") + "0"
-
 try{
 
-const game = await fetch(`./data/baseball/games/${season}/${gameId}.json`).then(r=>r.json())
+const seasonData = await fetch(`./data/baseball/players/${season}.json`).then(r=>r.json())
 
-let played = false
+const player = seasonData.find(p=>p.player_id===playerId)
 
-for(const e of game.events || []){
-if(e[0]==="play" && e[3]===playerId){
-played = true
-processEvent(e[6])
+if(player){
+
+totals.games += player.games || 0
+totals.plate_appearances += player.plate_appearances || 0
+totals.at_bats += player.at_bats || 0
+totals.hits += player.hits || 0
+totals.home_runs += player.home_runs || 0
+totals.walks += player.walks || 0
+totals.strikeouts += player.strikeouts || 0
+
+if(!document.getElementById("playerName").textContent || document.getElementById("playerName").textContent==="Loading..."){
+document.getElementById("playerName").textContent = player.player_name || playerId
 }
-}
 
-if(played){
-gameLog.push(gameId)
 }
 
 }catch(e){}
-
-}
 
 }
 
@@ -108,31 +57,21 @@ render()
 
 function render(){
 
-let html = "<table><thead><tr>"
-for(const stat in totals){ html+=`<th>${stat}</th>` }
+let html="<table><thead><tr>"
+for(const stat in totals){
+html+=`<th>${stat.replaceAll("_"," ").toUpperCase()}</th>`
+}
 html+="</tr></thead><tbody><tr>"
-for(const stat in totals){ html+=`<td>${totals[stat]}</td>` }
+for(const stat in totals){
+html+=`<td>${totals[stat]}</td>`
+}
 html+="</tr></tbody></table>"
 
 document.getElementById("batting").innerHTML = html
-
-let ghtml="<table><thead><tr><th>Game</th></tr></thead><tbody>"
-gameLog.forEach(id=>{
-ghtml+=`<tr><td><a href="./baseball-game.html?game=${id}">${id}</a></td></tr>`
-})
-ghtml+="</tbody></table>"
-
-document.getElementById("games").innerHTML = ghtml
+document.getElementById("games").innerHTML = "<p>Game logs removed for performance. Add later if needed.</p>"
 
 }
 
-async function init(){
-await loadPlayerName()
-await loadSeasons()
-}
-
-init()
+loadPlayer()
 
 </script>
-</body>
-</html>
