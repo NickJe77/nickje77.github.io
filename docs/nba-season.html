@@ -76,11 +76,9 @@ cursor:pointer;
 <div style="text-align:center">
 
 Season:
-
 <select id="seasonSelect"></select>
 
 Game Type:
-
 <select>
 <option>All</option>
 </select>
@@ -88,7 +86,6 @@ Game Type:
 </div>
 
 <table>
-
 <thead>
 <tr>
 <th>Date</th>
@@ -97,17 +94,13 @@ Game Type:
 <th>Score</th>
 </tr>
 </thead>
-
 <tbody id="gamesTable"></tbody>
-
 </table>
 
 <div class="standings">
-
 <h2>Standings</h2>
 
 <table>
-
 <thead>
 <tr>
 <th>Team</th>
@@ -115,13 +108,10 @@ Game Type:
 <th>Losses</th>
 </tr>
 </thead>
-
 <tbody id="standingsTable"></tbody>
-
 </table>
 
 </div>
-
 </div>
 
 <script>
@@ -134,58 +124,42 @@ const seasonSelect=document.getElementById("seasonSelect");
 const title=document.getElementById("title");
 
 const params=new URLSearchParams(location.search);
-
-let season=params.get("season")||"2025";
+let season=params.get("season") || "2025";
 
 function folder(season){
-
-return BASE+season;
-
+return BASE + season;
 }
 
 seasonSelect.onchange=()=>{
-
 location.href="nba-season.html?season="+seasonSelect.value;
-
 };
 
 init();
 
 async function init(){
 
-for(let y=1976;y<=2026;y++){
-
+for(let y=1976;y<=2025;y++){
 const opt=document.createElement("option");
-
 opt.value=y;
-
 opt.textContent=y;
-
 seasonSelect.appendChild(opt);
-
 }
 
 seasonSelect.value=season;
-
 loadSeason(season);
 
 }
 
 function pick(obj,...keys){
-
 for(const k of keys){
-
 if(obj[k]!=null && obj[k]!="") return obj[k];
-
 }
-
 return "";
-
 }
 
 async function loadSeason(season){
 
-title.textContent="NBA Season "+season;
+title.textContent="NBA Season " + season;
 
 gamesTable.innerHTML="";
 standingsTable.innerHTML="";
@@ -195,71 +169,44 @@ let standings={};
 try{
 
 const indexRes=await fetch(folder(season)+"/index.json");
+if(!indexRes.ok) throw new Error("No index");
 
 const index=await indexRes.json();
 
 for(const id of index.games){
 
 const res=await fetch(folder(season)+"/"+id+".json");
-
 if(!res.ok) continue;
 
 const g=await res.json();
 
-/* SUPPORT ALL NBA FORMATS */
+/* Handle multiple historical formats */
 
-const home=pick(g,
-"home_team",
-"HOME_TEAM_NAME",
-"TEAM_NAME_HOME"
-);
+const home=pick(g,"home_team","HOME_TEAM_NAME","TEAM_NAME_HOME");
+const away=pick(g,"away_team","VISITOR_TEAM_NAME","TEAM_NAME_AWAY");
 
-const away=pick(g,
-"away_team",
-"VISITOR_TEAM_NAME",
-"TEAM_NAME_AWAY"
-);
+const homeScore=parseInt(pick(g,"home_score","PTS_HOME","HOME_PTS"))||0;
+const awayScore=parseInt(pick(g,"away_score","PTS_AWAY","VISITOR_PTS"))||0;
 
-const homeScore=parseInt(pick(g,
-"home_score",
-"PTS_HOME",
-"HOME_PTS"
-))||0;
-
-const awayScore=parseInt(pick(g,
-"away_score",
-"PTS_AWAY",
-"VISITOR_PTS"
-))||0;
-
-const rawDate=pick(g,
-"date",
-"GAME_DATE_EST",
-"game_date"
-);
-
-const date=rawDate.split(" ")[0];
+const rawDate=pick(g,"date","GAME_DATE_EST","game_date");
+const date=rawDate ? rawDate.split(" ")[0] : "";
 
 const winner=homeScore>awayScore?home:away;
 
-/* standings */
+/* Build standings */
 
 if(!standings[home]) standings[home]={w:0,l:0};
 if(!standings[away]) standings[away]={w:0,l:0};
 
 if(homeScore>awayScore){
-
 standings[home].w++;
 standings[away].l++;
-
 }else{
-
 standings[away].w++;
 standings[home].l++;
-
 }
 
-/* table row */
+/* Build row */
 
 const tr=document.createElement("tr");
 
@@ -275,23 +222,19 @@ vs
 `;
 
 tr.onclick=()=>{
-
 location.href=
 "nba-game.html?season="+season+
-"&game="+encodeURIComponent(home+" vs "+away);
-
+"&game="+id;
 };
 
 gamesTable.appendChild(tr);
 
 }
 
-/* standings table */
+/* Render standings */
 
 Object.entries(standings)
-
 .sort((a,b)=>b[1].w-a[1].w)
-
 .forEach(([team,rec])=>{
 
 const tr=document.createElement("tr");
@@ -306,10 +249,10 @@ standingsTable.appendChild(tr);
 
 });
 
-}catch{
+}catch(e){
 
 gamesTable.innerHTML=
-"<tr><td colspan=4>No season files found</td></tr>";
+"<tr><td colspan='4'>No season files found</td></tr>";
 
 }
 
