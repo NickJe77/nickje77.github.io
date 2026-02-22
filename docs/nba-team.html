@@ -90,13 +90,10 @@ Season:
 
 <script>
 
-// THIS GUARANTEES SAME-ORIGIN FETCH
-const BASE = window.location.pathname.includes("/docs/")
-  ? "/docs/data/nba/"
-  : "/data/nba/";
-
+const BASE = "data/nba/";
 const params = new URLSearchParams(window.location.search);
-const team = decodeURIComponent(params.get("team") || "").trim();
+const teamParam = params.get("team") || "";
+const team = decodeURIComponent(teamParam).trim();
 
 document.getElementById("teamName").textContent =
 team || "Team not specified";
@@ -107,6 +104,13 @@ const errorBox = document.getElementById("errorBox");
 let seasonStats = {};
 let games = [];
 let seasonsSet = new Set();
+
+const clean = str =>
+String(str || "")
+.replace(/\s+/g," ")
+.replace(/\*/g,"")
+.trim()
+.toLowerCase();
 
 async function loadTeam(){
 
@@ -120,7 +124,7 @@ let seasonList = [];
 try{
 const res = await fetch(BASE + "seasons.json");
 if(!res.ok){
-errorBox.textContent = "seasons.json not found at " + BASE;
+errorBox.textContent = "seasons.json not found.";
 return;
 }
 seasonList = await res.json();
@@ -145,12 +149,18 @@ const gameRes = await fetch(BASE + season + "/" + id + ".json");
 if(!gameRes.ok) continue;
 
 const g = await gameRes.json();
+if(!g.home_team || !g.away_team) continue;
 
 if(g.game_type === "Preseason") continue;
 if(g.game_type === "All-Star") continue;
-if(g.home_team !== team && g.away_team !== team) continue;
 
-const isHome = g.home_team === team;
+const homeClean = clean(g.home_team);
+const awayClean = clean(g.away_team);
+const teamClean = clean(team);
+
+if(homeClean !== teamClean && awayClean !== teamClean) continue;
+
+const isHome = homeClean === teamClean;
 const teamScore = isHome ? Number(g.home_score) : Number(g.away_score);
 const oppScore = isHome ? Number(g.away_score) : Number(g.home_score);
 const opponent = isHome ? g.away_team : g.home_team;
@@ -183,6 +193,10 @@ score: teamScore + " – " + oppScore
 continue;
 }
 
+}
+
+if(games.length === 0){
+errorBox.textContent = "No games found for '" + team + "'";
 }
 
 populateFilter();
