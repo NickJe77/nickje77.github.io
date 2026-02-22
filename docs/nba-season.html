@@ -7,56 +7,16 @@
 
 <style>
 body{font-family:Inter,system-ui,Arial;margin:0;background:#fff;}
-
-.navbar{
-display:flex;
-justify-content:center;
-gap:22px;
-padding:16px 0;
-border-bottom:1px solid #ddd;
-font-weight:600;
-}
-
-.navbar a{
-color:#0056d6;
-text-decoration:none;
-font-size:18px;
-}
-
-.page-wrap{
-max-width:1200px;
-margin:auto;
-padding:30px 20px 60px;
-}
-
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+.page-wrap{max-width:1200px;margin:auto;padding:30px 20px 60px;}
 h1{text-align:center;}
-
-select{
-padding:8px 12px;
-font-size:15px;
-}
-
-table{
-width:100%;
-border-collapse:collapse;
-margin-top:20px;
-}
-
-th,td{
-border-bottom:1px solid #ddd;
-padding:8px 10px;
-text-align:center;
-}
-
+select{padding:8px 12px;font-size:15px;}
+table{width:100%;border-collapse:collapse;margin-top:20px;}
+th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:center;}
 th{background:#f0f0f0;}
-
 tr:nth-child(even){background:#f6f9ff;}
-
-tr:hover{
-background:#e9f0ff;
-cursor:pointer;
-}
-
+tr:hover{background:#e9f0ff;cursor:pointer;}
 .standings{margin-top:40px;}
 </style>
 </head>
@@ -74,15 +34,8 @@ cursor:pointer;
 <h1 id="title">NBA Season</h1>
 
 <div style="text-align:center">
-
 Season:
 <select id="seasonSelect"></select>
-
-Game Type:
-<select>
-<option>Regular + Playoffs Only</option>
-</select>
-
 </div>
 
 <table>
@@ -99,7 +52,6 @@ Game Type:
 
 <div class="standings">
 <h2>Standings</h2>
-
 <table>
 <thead>
 <tr>
@@ -126,19 +78,13 @@ const title=document.getElementById("title");
 const params=new URLSearchParams(location.search);
 let season=params.get("season") || "2025";
 
-function folder(season){
-return BASE + season;
-}
-
 seasonSelect.onchange=()=>{
 location.href="nba-season.html?season="+seasonSelect.value;
 };
 
-init();
-
 async function init(){
 
-for(let y=1976;y<=2025;y++){
+for(let y=1976;y<=2026;y++){
 const opt=document.createElement("option");
 opt.value=y;
 opt.textContent=y;
@@ -146,21 +92,15 @@ seasonSelect.appendChild(opt);
 }
 
 seasonSelect.value=season;
-loadSeason(season);
+await loadSeason(season);
 
-}
-
-function pick(obj,...keys){
-for(const k of keys){
-if(obj[k]!=null && obj[k]!="") return obj[k];
-}
-return "";
 }
 
 async function loadSeason(season){
 
 title.textContent="NBA Season " + season;
 
+/* HARD RESET TABLES */
 gamesTable.innerHTML="";
 standingsTable.innerHTML="";
 
@@ -168,35 +108,29 @@ let standings={};
 
 try{
 
-const indexRes=await fetch(folder(season)+"/index.json");
+const indexRes=await fetch(BASE+season+"/index.json");
 if(!indexRes.ok) throw new Error("No index");
 
 const index=await indexRes.json();
 
-for(const id of index.games){
+/* LOAD ALL GAMES IN PARALLEL */
+const gameFiles=index.games.map(id =>
+fetch(BASE+season+"/"+id+".json").then(r=>r.json())
+);
 
-const res=await fetch(folder(season)+"/"+id+".json");
-if(!res.ok) continue;
+const games=await Promise.all(gameFiles);
 
-const g=await res.json();
+games.forEach(g=>{
 
-/* 🔥 EXCLUDE PRESEASON */
-if(g.game_type && g.game_type === "Preseason"){
-continue;
-}
+if(g.game_type==="Preseason") return;
 
-const home=pick(g,"home_team","HOME_TEAM_NAME","TEAM_NAME_HOME");
-const away=pick(g,"away_team","VISITOR_TEAM_NAME","TEAM_NAME_AWAY");
+const home=g.home_team;
+const away=g.away_team;
 
-const homeScore=parseInt(pick(g,"home_score","PTS_HOME","HOME_PTS"))||0;
-const awayScore=parseInt(pick(g,"away_score","PTS_AWAY","VISITOR_PTS"))||0;
-
-const rawDate=pick(g,"date","GAME_DATE_EST","game_date");
-const date=rawDate ? rawDate.split(" ")[0] : "";
+const homeScore=g.home_score||0;
+const awayScore=g.away_score||0;
 
 const winner=homeScore>awayScore?home:away;
-
-/* Build standings */
 
 if(!standings[home]) standings[home]={w:0,l:0};
 if(!standings[away]) standings[away]={w:0,l:0};
@@ -209,33 +143,28 @@ standings[away].w++;
 standings[home].l++;
 }
 
-/* Build row */
-
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
-<td>${date}</td>
+<td>${g.date}</td>
 <td>
-<a href="nba-team.html?season=${season}&team=${encodeURIComponent(home)}">${home}</a>
+<a href="nba-team.html?team=${encodeURIComponent(home)}">${home}</a>
 vs
-<a href="nba-team.html?season=${season}&team=${encodeURIComponent(away)}">${away}</a>
+<a href="nba-team.html?team=${encodeURIComponent(away)}">${away}</a>
 </td>
 <td>${winner}</td>
 <td>${homeScore} – ${awayScore}</td>
 `;
 
 tr.onclick=()=>{
-location.href=
-"nba-game.html?season="+season+
-"&game="+id;
+location.href="nba-game.html?season="+season+"&game="+g.game_id;
 };
 
 gamesTable.appendChild(tr);
 
-}
+});
 
-/* Render standings */
-
+/* RENDER STANDINGS */
 Object.entries(standings)
 .sort((a,b)=>b[1].w-a[1].w)
 .forEach(([team,rec])=>{
@@ -254,17 +183,17 @@ standingsTable.appendChild(tr);
 
 }catch(e){
 
-gamesTable.innerHTML=
-"<tr><td colspan='4'>No season files found</td></tr>";
+gamesTable.innerHTML="<tr><td colspan='4'>No season files found</td></tr>";
 
 }
 
 }
 
-/* 🔥 FIX BACK BUTTON ISSUE */
-window.addEventListener("pageshow", function() {
-  loadSeason(season);
+window.addEventListener("pageshow",()=>{
+loadSeason(season);
 });
+
+init();
 
 </script>
 
