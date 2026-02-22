@@ -2,136 +2,36 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>NBA Team | The Sporting Almanac</title>
+<title>NBA Team Debug</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <style>
-body{font-family:Inter,system-ui,Arial;margin:0;background:#fff;}
-.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
-.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px 60px;}
-h1{text-align:center;margin-bottom:6px;}
-.subtitle{text-align:center;color:#666;margin-bottom:20px;}
-.stats{display:flex;gap:20px;justify-content:center;margin-bottom:20px;flex-wrap:wrap;}
-.stat{background:#f4f6fb;padding:12px 18px;border-radius:10px;text-align:center;min-width:120px;}
-.stat b{display:block;font-size:18px;}
-.filters{text-align:center;margin-bottom:20px;}
-select{padding:8px 14px;font-size:15px;}
-table{width:100%;border-collapse:collapse;margin-bottom:40px;}
-th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:center;}
-th{background:#f0f0f0;}
-tr:nth-child(even){background:#f6f9ff;}
-tr:hover{background:#e9f0ff;}
-.error{color:#b00020;text-align:center;margin-top:20px;font-weight:600;}
+body{font-family:Arial;margin:40px;}
+h1{margin-bottom:20px;}
 </style>
 </head>
-
 <body>
 
-<div class="navbar">
-<a href="index.html">Home</a>
-<a href="nba.html">NBA</a>
-<a href="nba-season.html">Seasons</a>
-</div>
-
-<div class="page-wrap">
-
-<h1 id="teamName"></h1>
-<div class="subtitle">Franchise History (Regular Season + Playoffs)</div>
-
-<div class="filters">
-Season:
-<select id="seasonFilter">
-<option value="">All Seasons</option>
-</select>
-</div>
-
-<div class="stats">
-<div class="stat"><b id="seasons">0</b>Seasons</div>
-<div class="stat"><b id="games">0</b>Games</div>
-<div class="stat"><b id="wins">0</b>Wins</div>
-<div class="stat"><b id="losses">0</b>Losses</div>
-<div class="stat"><b id="pf">0</b>Points For</div>
-<div class="stat"><b id="pa">0</b>Points Against</div>
-</div>
-
-<div id="errorBox" class="error"></div>
-
-<h2>Season Summary</h2>
-<table>
-<thead>
-<tr>
-<th>Season</th>
-<th>Games</th>
-<th>Wins</th>
-<th>Losses</th>
-<th>PF</th>
-<th>PA</th>
-</tr>
-</thead>
-<tbody id="seasonTable"></tbody>
-</table>
-
-<h2>Games</h2>
-<table>
-<thead>
-<tr>
-<th>Season</th>
-<th>Date</th>
-<th>Opponent</th>
-<th>Result</th>
-<th>Score</th>
-</tr>
-</thead>
-<tbody id="gamesTable"></tbody>
-</table>
-
-</div>
+<h1>NBA Debug Loader</h1>
+<div id="output">Loading...</div>
 
 <script>
 
 const BASE = "data/nba/";
-const params = new URLSearchParams(window.location.search);
-const teamParam = params.get("team") || "";
-const team = decodeURIComponent(teamParam).trim();
+const output = document.getElementById("output");
 
-document.getElementById("teamName").textContent =
-team || "Team not specified";
-
-const seasonFilter = document.getElementById("seasonFilter");
-const errorBox = document.getElementById("errorBox");
-
-let seasonStats = {};
-let games = [];
-let seasonsSet = new Set();
-
-const clean = str =>
-String(str || "")
-.replace(/\s+/g," ")
-.replace(/\*/g,"")
-.trim()
-.toLowerCase();
-
-async function loadTeam(){
-
-if(!team){
-errorBox.textContent = "No team specified in URL.";
-return;
-}
+async function run(){
 
 let seasonList = [];
 
 try{
 const res = await fetch(BASE + "seasons.json");
-if(!res.ok){
-errorBox.textContent = "seasons.json not found.";
-return;
-}
 seasonList = await res.json();
 }catch(e){
-errorBox.textContent = "Error loading seasons.json";
+output.textContent = "Failed loading seasons.json";
 return;
 }
+
+let totalGames = 0;
 
 for(const season of seasonList){
 
@@ -141,51 +41,15 @@ const indexRes = await fetch(BASE + season + "/index.json");
 if(!indexRes.ok) continue;
 
 const index = await indexRes.json();
-if(!index.games || !Array.isArray(index.games)) continue;
+if(!index.games) continue;
 
 for(const id of index.games){
 
 const gameRes = await fetch(BASE + season + "/" + id + ".json");
 if(!gameRes.ok) continue;
 
-const g = await gameRes.json();
-if(!g.home_team || !g.away_team) continue;
-
-if(g.game_type === "Preseason") continue;
-if(g.game_type === "All-Star") continue;
-
-const homeClean = clean(g.home_team);
-const awayClean = clean(g.away_team);
-const teamClean = clean(team);
-
-if(homeClean !== teamClean && awayClean !== teamClean) continue;
-
-const isHome = homeClean === teamClean;
-const teamScore = isHome ? Number(g.home_score) : Number(g.away_score);
-const oppScore = isHome ? Number(g.away_score) : Number(g.home_score);
-const opponent = isHome ? g.away_team : g.home_team;
-const result = teamScore > oppScore ? "W" : "L";
-
-seasonsSet.add(season);
-
-if(!seasonStats[season]){
-seasonStats[season] = {games:0,wins:0,losses:0,pf:0,pa:0};
-}
-
-seasonStats[season].games++;
-seasonStats[season].pf += teamScore;
-seasonStats[season].pa += oppScore;
-
-if(result === "W") seasonStats[season].wins++;
-else seasonStats[season].losses++;
-
-games.push({
-season,
-date: g.date || "",
-opponent,
-result,
-score: teamScore + " – " + oppScore
-});
+await gameRes.json();
+totalGames++;
 
 }
 
@@ -195,89 +59,11 @@ continue;
 
 }
 
-if(games.length === 0){
-errorBox.textContent = "No games found for '" + team + "'";
-}
-
-populateFilter();
-render();
-}
-
-function populateFilter(){
-Array.from(seasonsSet)
-.sort((a,b)=>b-a)
-.forEach(s=>{
-const opt = document.createElement("option");
-opt.value = s;
-opt.textContent = s;
-seasonFilter.appendChild(opt);
-});
-}
-
-function render(){
-
-const seasonVal = seasonFilter.value;
-
-let totalGames=0,wins=0,losses=0,pf=0,pa=0;
-
-Object.entries(seasonStats).forEach(([s,v])=>{
-if(seasonVal && s != seasonVal) return;
-totalGames += v.games;
-wins += v.wins;
-losses += v.losses;
-pf += v.pf;
-pa += v.pa;
-});
-
-document.getElementById("seasons").textContent =
-seasonVal ? 1 : seasonsSet.size;
-
-document.getElementById("games").textContent = totalGames;
-document.getElementById("wins").textContent = wins;
-document.getElementById("losses").textContent = losses;
-document.getElementById("pf").textContent = pf;
-document.getElementById("pa").textContent = pa;
-
-const seasonBody = document.getElementById("seasonTable");
-seasonBody.innerHTML = "";
-
-Object.entries(seasonStats)
-.sort((a,b)=>b[0]-a[0])
-.forEach(([s,v])=>{
-if(seasonVal && s != seasonVal) return;
-seasonBody.innerHTML += `
-<tr>
-<td>${s}</td>
-<td>${v.games}</td>
-<td>${v.wins}</td>
-<td>${v.losses}</td>
-<td>${v.pf}</td>
-<td>${v.pa}</td>
-</tr>`;
-});
-
-const gamesBody = document.getElementById("gamesTable");
-gamesBody.innerHTML = "";
-
-games
-.filter(g => !seasonVal || g.season == seasonVal)
-.sort((a,b)=>new Date(b.date) - new Date(a.date))
-.forEach(g=>{
-gamesBody.innerHTML += `
-<tr>
-<td>${g.season}</td>
-<td>${g.date}</td>
-<td>${g.opponent}</td>
-<td>${g.result}</td>
-<td>${g.score}</td>
-</tr>`;
-});
+output.textContent = "Total games successfully loaded: " + totalGames;
 
 }
 
-seasonFilter.addEventListener("change",render);
-
-loadTeam();
+run();
 
 </script>
 
