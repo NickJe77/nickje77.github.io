@@ -90,7 +90,7 @@ Season:
 
 <script>
 
-const BASE = window.location.origin + "/data/nba/";
+const BASE = "./data/nba/";
 const params = new URLSearchParams(window.location.search);
 const team = decodeURIComponent(params.get("team") || "").trim();
 
@@ -114,23 +114,22 @@ return;
 let seasonList = [];
 
 try{
-const yearsRes = await fetch(BASE + "years.json", {mode:"same-origin"});
-if(yearsRes.ok){
-seasonList = await yearsRes.json();
+const res = await fetch(BASE + "seasons.json");
+if(!res.ok){
+errorBox.textContent = "seasons.json not found.";
+return;
 }
-}catch(e){}
-
-if(seasonList.length === 0){
-for(let y=1947; y<=2026; y++){
-seasonList.push(y);
-}
+seasonList = await res.json();
+}catch(e){
+errorBox.textContent = "Error loading seasons.json";
+return;
 }
 
 for(const season of seasonList){
 
 try{
 
-const indexRes = await fetch(BASE + season + "/index.json", {mode:"same-origin"});
+const indexRes = await fetch(BASE + season + "/index.json");
 if(!indexRes.ok) continue;
 
 const index = await indexRes.json();
@@ -138,15 +137,13 @@ if(!index.games || !Array.isArray(index.games)) continue;
 
 for(const id of index.games){
 
-const gameRes = await fetch(BASE + season + "/" + id + ".json", {mode:"same-origin"});
+const gameRes = await fetch(BASE + season + "/" + id + ".json");
 if(!gameRes.ok) continue;
 
 const g = await gameRes.json();
-if(!g.home_team || !g.away_team) continue;
 
 if(g.game_type === "Preseason") continue;
 if(g.game_type === "All-Star") continue;
-
 if(g.home_team !== team && g.away_team !== team) continue;
 
 const isHome = g.home_team === team;
@@ -185,7 +182,7 @@ continue;
 }
 
 if(games.length === 0){
-errorBox.textContent = "No games found for '" + team + "'. Check exact team spelling.";
+errorBox.textContent = "No games found for '" + team + "'";
 }
 
 populateFilter();
