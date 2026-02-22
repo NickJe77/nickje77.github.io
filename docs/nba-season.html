@@ -105,6 +105,7 @@ Team:
 <th>W</th>
 <th>L</th>
 <th>Win %</th>
+<th>GB</th>
 </tr>
 </thead>
 <tbody id="eastTable"></tbody>
@@ -118,6 +119,7 @@ Team:
 <th>W</th>
 <th>L</th>
 <th>Win %</th>
+<th>GB</th>
 </tr>
 </thead>
 <tbody id="westTable"></tbody>
@@ -142,39 +144,19 @@ let allGames=[];
 
 /* TEAM COLOURS */
 const teamColours={
-"Boston Celtics":"#007A33",
-"Los Angeles Lakers":"#552583",
-"Chicago Bulls":"#CE1141",
-"Golden State Warriors":"#1D428A",
-"Miami Heat":"#98002E",
-"New York Knicks":"#F58426",
-"Dallas Mavericks":"#00538C",
-"Phoenix Suns":"#E56020",
-"Denver Nuggets":"#0E2240",
-"Milwaukee Bucks":"#00471B",
-"Philadelphia 76ers":"#006BB6",
-"Brooklyn Nets":"#000000",
-"Toronto Raptors":"#CE1141",
-"Atlanta Hawks":"#E03A3E",
-"Charlotte Hornets":"#1D1160",
-"Detroit Pistons":"#C8102E",
-"Indiana Pacers":"#002D62",
-"Cleveland Cavaliers":"#860038",
-"Orlando Magic":"#0077C0",
-"Washington Wizards":"#002B5C",
-"Minnesota Timberwolves":"#0C2340",
-"Oklahoma City Thunder":"#007AC1",
-"Portland Trail Blazers":"#E03A3E",
-"Utah Jazz":"#002B5C",
-"LA Clippers":"#C8102E",
-"Sacramento Kings":"#5A2D81",
-"Houston Rockets":"#CE1141",
-"Memphis Grizzlies":"#5D76A9",
-"New Orleans Pelicans":"#0C2340",
-"San Antonio Spurs":"#C4CED4"
+"Boston Celtics":"#007A33","Los Angeles Lakers":"#552583","Chicago Bulls":"#CE1141",
+"Golden State Warriors":"#1D428A","Miami Heat":"#98002E","New York Knicks":"#F58426",
+"Dallas Mavericks":"#00538C","Phoenix Suns":"#E56020","Denver Nuggets":"#0E2240",
+"Milwaukee Bucks":"#00471B","Philadelphia 76ers":"#006BB6","Brooklyn Nets":"#000000",
+"Toronto Raptors":"#CE1141","Atlanta Hawks":"#E03A3E","Charlotte Hornets":"#1D1160",
+"Detroit Pistons":"#C8102E","Indiana Pacers":"#002D62","Cleveland Cavaliers":"#860038",
+"Orlando Magic":"#0077C0","Washington Wizards":"#002B5C","Minnesota Timberwolves":"#0C2340",
+"Oklahoma City Thunder":"#007AC1","Portland Trail Blazers":"#E03A3E","Utah Jazz":"#002B5C",
+"LA Clippers":"#C8102E","Sacramento Kings":"#5A2D81","Houston Rockets":"#CE1141",
+"Memphis Grizzlies":"#5D76A9","New Orleans Pelicans":"#0C2340","San Antonio Spurs":"#C4CED4"
 };
 
-const conferenceMap={ /* same as before */
+const conferenceMap={
 "Boston Celtics":"East","Brooklyn Nets":"East","New York Knicks":"East","Philadelphia 76ers":"East","Toronto Raptors":"East",
 "Chicago Bulls":"East","Cleveland Cavaliers":"East","Detroit Pistons":"East","Indiana Pacers":"East","Milwaukee Bucks":"East",
 "Atlanta Hawks":"East","Charlotte Hornets":"East","Miami Heat":"East","Orlando Magic":"East","Washington Wizards":"East",
@@ -207,9 +189,7 @@ await loadSeason(season);
 async function loadSeason(season){
 
 title.textContent="NBA Season " + season;
-eastTable.innerHTML="";
-westTable.innerHTML="";
-gamesTable.innerHTML="";
+eastTable.innerHTML=""; westTable.innerHTML=""; gamesTable.innerHTML="";
 teamSelect.innerHTML='<option value="All">All Teams</option>';
 
 let standings={}, teams=new Set();
@@ -245,13 +225,26 @@ renderGames();
 
 function renderStandings(standings){
 
-Object.entries(standings)
-.sort((a,b)=>b[1].w-a[1].w)
-.forEach(([team,rec])=>{
+let east=[], west=[];
 
+Object.entries(standings).forEach(([team,rec])=>{
+if(conferenceMap[team]==="East") east.push([team,rec]);
+else west.push([team,rec]);
+});
+
+east.sort((a,b)=>b[1].w-a[1].w);
+west.sort((a,b)=>b[1].w-a[1].w);
+
+function buildTable(list, table){
+let leader=list[0][1];
+
+list.forEach(([team,rec])=>{
 let total=rec.w+rec.l;
 let pct=total?(rec.w/total):0;
 let pctText=total?(rec.w/total).toFixed(3):"0.000";
+
+let gb=((leader.w-rec.w)+(rec.l-leader.l))/2;
+let gbText=gb===0?"0.0":gb.toFixed(1);
 
 let winClass=pct>=0.6?"win-good":pct<=0.4?"win-bad":"win-mid";
 
@@ -266,12 +259,14 @@ ${team}
 <td>${rec.w}</td>
 <td>${rec.l}</td>
 <td class="${winClass}">${pctText}</td>
+<td>${gbText}</td>
 `;
-
-if(conferenceMap[team]==="East") eastTable.appendChild(tr);
-else westTable.appendChild(tr);
-
+table.appendChild(tr);
 });
+}
+
+buildTable(east,eastTable);
+buildTable(west,westTable);
 }
 
 function renderGames(){
