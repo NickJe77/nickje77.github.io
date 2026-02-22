@@ -22,6 +22,7 @@ th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:center;}
 th{background:#f0f0f0;}
 tr:nth-child(even){background:#f6f9ff;}
 tr:hover{background:#e9f0ff;}
+.error{color:#b00020;text-align:center;margin-top:20px;font-weight:600;}
 </style>
 </head>
 
@@ -53,6 +54,8 @@ Season:
 <div class="stat"><b id="pf">0</b>Points For</div>
 <div class="stat"><b id="pa">0</b>Points Against</div>
 </div>
+
+<div id="errorBox" class="error"></div>
 
 <h2>Season Summary</h2>
 <table>
@@ -88,13 +91,14 @@ Season:
 <script>
 
 const BASE = "data/nba/";
-const params = new URLSearchParams(location.search);
-const team = params.get("team") || "";
+const params = new URLSearchParams(window.location.search);
+const team = decodeURIComponent(params.get("team") || "").trim();
 
 document.getElementById("teamName").textContent =
     team ? team : "Team not specified";
 
 const seasonFilter = document.getElementById("seasonFilter");
+const errorBox = document.getElementById("errorBox");
 
 let seasonStats = {};
 let games = [];
@@ -102,9 +106,27 @@ let seasonsSet = new Set();
 
 async function loadTeam(){
 
-if(!team) return;
+if(!team){
+errorBox.textContent = "No team specified in URL.";
+return;
+}
 
-for(let season = 1976; season <= 2026; season++){
+let seasonList = [];
+
+try{
+const yearsRes = await fetch(BASE + "years.json");
+if(yearsRes.ok){
+seasonList = await yearsRes.json();
+}
+}catch(e){}
+
+if(seasonList.length === 0){
+for(let y=1947; y<=2026; y++){
+seasonList.push(y);
+}
+}
+
+for(const season of seasonList){
 
 try{
 
@@ -112,6 +134,7 @@ const indexRes = await fetch(BASE + season + "/index.json");
 if(!indexRes.ok) continue;
 
 const index = await indexRes.json();
+if(!index.games || !Array.isArray(index.games)) continue;
 
 for(const id of index.games){
 
@@ -119,6 +142,7 @@ const gameRes = await fetch(BASE + season + "/" + id + ".json");
 if(!gameRes.ok) continue;
 
 const g = await gameRes.json();
+if(!g.home_team || !g.away_team) continue;
 
 if(g.game_type === "Preseason") continue;
 if(g.game_type === "All-Star") continue;
@@ -126,8 +150,8 @@ if(g.game_type === "All-Star") continue;
 if(g.home_team !== team && g.away_team !== team) continue;
 
 const isHome = g.home_team === team;
-const teamScore = isHome ? g.home_score : g.away_score;
-const oppScore = isHome ? g.away_score : g.home_score;
+const teamScore = isHome ? Number(g.home_score) : Number(g.away_score);
+const oppScore = isHome ? Number(g.away_score) : Number(g.home_score);
 const opponent = isHome ? g.away_team : g.home_team;
 const result = teamScore > oppScore ? "W" : "L";
 
@@ -154,8 +178,14 @@ score: teamScore + " – " + oppScore
 
 }
 
-}catch(e){}
+}catch(e){
+continue;
+}
 
+}
+
+if(games.length === 0){
+errorBox.textContent = "No games found for '" + team + "'. Check exact team name in JSON.";
 }
 
 populateFilter();
@@ -189,7 +219,7 @@ pa += v.pa;
 });
 
 document.getElementById("seasons").textContent =
-    seasonVal ? 1 : seasonsSet.size;
+seasonVal ? 1 : seasonsSet.size;
 
 document.getElementById("games").textContent = totalGames;
 document.getElementById("wins").textContent = wins;
