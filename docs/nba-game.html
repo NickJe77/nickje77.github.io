@@ -18,8 +18,10 @@ h1{text-align:center;margin:0 0 6px;}
 .team-title{text-align:center;margin:30px 0 8px;font-size:20px;font-weight:700;}
 table{width:100%;border-collapse:collapse;margin-bottom:20px;}
 th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:center;}
-th{background:#f0f0f0;}
+th{background:#f0f0f0;cursor:pointer;}
+th:hover{background:#e5ecff;}
 tr:nth-child(even){background:#f6f9ff;}
+tr:hover{background:#e9f0ff;cursor:pointer;}
 .player-link{color:#0056d6;text-decoration:none;font-weight:600;}
 .bad{background:#fff3f3;border:1px solid #ffd0d0;color:#a40000;padding:10px;border-radius:10px;max-width:900px;margin:0 auto 18px;}
 </style>
@@ -48,35 +50,35 @@ Final Score
 </div>
 
 <h2 class="team-title" id="homeTitle"></h2>
-<table>
+<table id="homeTable">
 <thead>
 <tr>
-<th>Player</th>
-<th>MIN</th>
-<th>PTS</th>
-<th>REB</th>
-<th>AST</th>
-<th>STL</th>
-<th>BLK</th>
+<th data-key="player_name">Player</th>
+<th data-key="minutes">MIN</th>
+<th data-key="points">PTS</th>
+<th data-key="rebounds">REB</th>
+<th data-key="assists">AST</th>
+<th data-key="steals">STL</th>
+<th data-key="blocks">BLK</th>
 </tr>
 </thead>
-<tbody id="homeBody"></tbody>
+<tbody></tbody>
 </table>
 
 <h2 class="team-title" id="awayTitle"></h2>
-<table>
+<table id="awayTable">
 <thead>
 <tr>
-<th>Player</th>
-<th>MIN</th>
-<th>PTS</th>
-<th>REB</th>
-<th>AST</th>
-<th>STL</th>
-<th>BLK</th>
+<th data-key="player_name">Player</th>
+<th data-key="minutes">MIN</th>
+<th data-key="points">PTS</th>
+<th data-key="rebounds">REB</th>
+<th data-key="assists">AST</th>
+<th data-key="steals">STL</th>
+<th data-key="blocks">BLK</th>
 </tr>
 </thead>
-<tbody id="awayBody"></tbody>
+<tbody></tbody>
 </table>
 
 </div>
@@ -89,6 +91,9 @@ const params = new URLSearchParams(window.location.search);
 const season = params.get("season");
 const gameId = params.get("game");
 
+let homePlayers = [];
+let awayPlayers = [];
+
 const titleEl = document.getElementById("title");
 const subtitleEl = document.getElementById("subtitle");
 const errorBox = document.getElementById("errorBox");
@@ -96,28 +101,72 @@ const summaryEl = document.getElementById("summary");
 const scoreLine = document.getElementById("scoreLine");
 const homeTitle = document.getElementById("homeTitle");
 const awayTitle = document.getElementById("awayTitle");
-const homeBody = document.getElementById("homeBody");
-const awayBody = document.getElementById("awayBody");
 
 function showError(msg){
 errorBox.style.display="block";
 errorBox.textContent=msg;
 }
 
-function renderPlayers(players, teamName, tbody){
-const teamPlayers = players.filter(p=>p.team===teamName);
-teamPlayers.forEach(p=>{
+function renderTable(players, tableId){
+
+const tbody = document.querySelector(`#${tableId} tbody`);
+tbody.innerHTML="";
+
+players.forEach(p=>{
+
 const tr=document.createElement("tr");
+
 tr.innerHTML=`
-<td><a class="player-link" href="nba-player.html?player=${encodeURIComponent(p.player_name)}">${p.player_name}</a></td>
-<td>${p.minutes||""}</td>
-<td>${p.points||0}</td>
-<td>${p.rebounds||0}</td>
-<td>${p.assists||0}</td>
-<td>${p.steals||0}</td>
-<td>${p.blocks||0}</td>
+<td>${p.player_name}</td>
+<td>${p.minutes || 0}</td>
+<td>${p.points || 0}</td>
+<td>${p.rebounds || 0}</td>
+<td>${p.assists || 0}</td>
+<td>${p.steals || 0}</td>
+<td>${p.blocks || 0}</td>
 `;
+
+tr.addEventListener("click", ()=>{
+location.href="nba-player.html?player=" + encodeURIComponent(p.player_name);
+});
+
 tbody.appendChild(tr);
+
+});
+}
+
+function sortTable(players, key, tableId, headerEl){
+
+let asc = headerEl.classList.toggle("asc");
+headerEl.classList.toggle("desc", !asc);
+
+document.querySelectorAll(`#${tableId} th`).forEach(th=>{
+if(th!==headerEl){
+th.classList.remove("asc","desc");
+}
+});
+
+players.sort((a,b)=>{
+if(key==="player_name"){
+return asc 
+? a[key].localeCompare(b[key])
+: b[key].localeCompare(a[key]);
+}
+return asc 
+? (a[key]||0)-(b[key]||0)
+: (b[key]||0)-(a[key]||0);
+});
+
+renderTable(players, tableId);
+}
+
+function enableSorting(tableId, players){
+
+document.querySelectorAll(`#${tableId} th`).forEach(th=>{
+th.addEventListener("click",()=>{
+const key = th.dataset.key;
+sortTable(players, key, tableId, th);
+});
 });
 }
 
@@ -157,11 +206,14 @@ summaryEl.style.display="flex";
 homeTitle.textContent = game.home_team;
 awayTitle.textContent = game.away_team;
 
-homeBody.innerHTML="";
-awayBody.innerHTML="";
+homePlayers = (game.players || []).filter(p=>p.team===game.home_team);
+awayPlayers = (game.players || []).filter(p=>p.team===game.away_team);
 
-renderPlayers(game.players || [], game.home_team, homeBody);
-renderPlayers(game.players || [], game.away_team, awayBody);
+renderTable(homePlayers, "homeTable");
+renderTable(awayPlayers, "awayTable");
+
+enableSorting("homeTable", homePlayers);
+enableSorting("awayTable", awayPlayers);
 
 }
 catch(err){
@@ -170,10 +222,7 @@ showError("Could not load game file");
 
 }
 
-window.addEventListener("pageshow",()=>{
-loadGame();
-});
-
+window.addEventListener("pageshow", loadGame);
 loadGame();
 
 </script>
