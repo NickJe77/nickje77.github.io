@@ -2,47 +2,87 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>NBA Team Raw Test</title>
+<title>NBA Team Full Diagnostic</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{font-family:Arial;margin:40px}
+pre{background:#f4f4f4;padding:20px;white-space:pre-wrap}
+</style>
 </head>
 <body>
 
-<h1>Raw Team Names Test</h1>
+<h1>NBA Team Diagnostic</h1>
 <pre id="out">Loading...</pre>
 
 <script>
 
-const BASE="data/nba/";
-const out=document.getElementById("out");
+const BASE = "data/nba/";
+const out = document.getElementById("out");
 
 async function fetchJSON(url){
 try{
-const r=await fetch(url);
-if(!r.ok)return null;
+const r = await fetch(url,{cache:"no-store"});
+if(!r.ok) return null;
 return await r.json();
-}catch{return null;}
+}catch{
+return null;
+}
 }
 
 async function run(){
 
-let text="";
+let report = "";
 
-const index=await fetchJSON(BASE+"1976/index.json");
-if(!index){ out.textContent="Index failed"; return; }
+// ----- URL PARAM TEST -----
 
-let count=0;
+const params = new URLSearchParams(window.location.search);
+const rawTeam = params.get("team") || "";
+const decodedTeam = decodeURIComponent(rawTeam);
+
+report += "RAW PARAM: [" + rawTeam + "]\n";
+report += "DECODED: [" + decodedTeam + "]\n";
+report += "LENGTH: " + decodedTeam.length + "\n\n";
+
+const teamLower = decodedTeam.trim().toLowerCase();
+
+// ----- LOAD ONE SEASON ONLY (1976) -----
+
+const index = await fetchJSON(BASE + "1976/index.json");
+if(!index){
+out.textContent = "Failed loading 1976 index.json";
+return;
+}
+
+let matches = 0;
+let scanned = 0;
 
 for(const id of index.games){
 
-if(count>50) break;
-
-const g=await fetchJSON(BASE+"1976/"+id+".json");
+const g = await fetchJSON(BASE + "1976/" + id + ".json");
 if(!g) continue;
 
-text+=g.home_team+"  |  "+g.away_team+"\n";
-count++;
+scanned++;
+
+const home = (g.home_team || "").trim().toLowerCase();
+const away = (g.away_team || "").trim().toLowerCase();
+
+if(home === teamLower || away === teamLower){
+
+matches++;
+
+report += "MATCH FOUND:\n";
+report += "Home: [" + g.home_team + "]\n";
+report += "Away: [" + g.away_team + "]\n";
+report += "Score: " + g.home_score + "-" + g.away_score + "\n\n";
+
 }
 
-out.textContent=text;
+}
+
+report += "Total games scanned (1976): " + scanned + "\n";
+report += "Total matches found: " + matches + "\n";
+
+out.textContent = report;
 
 }
 
