@@ -19,7 +19,7 @@ h1{text-align:center;margin-bottom:6px;}
 select{padding:8px 14px;font-size:15px;}
 table{width:100%;border-collapse:collapse;margin-bottom:40px;}
 th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:center;}
-th{background:#f0f0f0;position:sticky;top:0;}
+th{background:#f0f0f0;}
 tr:nth-child(even){background:#f6f9ff;}
 tr:hover{background:#e9f0ff;}
 a{color:#0056d6;text-decoration:none;font-weight:600;}
@@ -88,68 +88,80 @@ Season:
 
 <script>
 
-const BASE="/data/nba/";
-const params=new URLSearchParams(location.search);
-const team=params.get("team")||"";
+const BASE = "data/nba/";
+const params = new URLSearchParams(location.search);
+const team = params.get("team") || "";
 
-document.getElementById("teamName").textContent=team||"Team not specified";
+const teamNameEl = document.getElementById("teamName");
+teamNameEl.textContent = team || "Team not specified";
 
-const seasonFilter=document.getElementById("seasonFilter");
+const seasonFilter = document.getElementById("seasonFilter");
 
-let seasonStats={};
-let games=[];
-let seasonsSet=new Set();
+let seasonStats = {};
+let games = [];
+let seasonsSet = new Set();
+let loaded = false;
 
 async function loadTeam(){
 
+if(loaded) return;
+loaded = true;
+
 if(!team) return;
 
-const seasonsRes=await fetch(BASE+"seasons.json");
-const seasons=await seasonsRes.json();
+try{
+
+const seasonsRes = await fetch(BASE + "seasons.json");
+if(!seasonsRes.ok) return;
+
+const seasons = await seasonsRes.json();
 
 for(const season of seasons){
 
 try{
 
-const indexRes=await fetch(BASE+season+"/index.json");
+const indexRes = await fetch(BASE + season + "/index.json");
 if(!indexRes.ok) continue;
-const index=await indexRes.json();
+
+const index = await indexRes.json();
 
 for(const id of index.games){
 
-const res=await fetch(BASE+season+"/"+id+".json");
-if(!res.ok) continue;
-const g=await res.json();
+const gameRes = await fetch(BASE + season + "/" + id + ".json");
+if(!gameRes.ok) continue;
 
-if(g.game_type==="Preseason") continue;
-if(g.game_type==="All-Star") continue;
+const g = await gameRes.json();
 
-if(g.home_team!==team && g.away_team!==team) continue;
+if(g.game_type === "Preseason") continue;
+if(g.game_type === "All-Star") continue;
 
-const isHome=g.home_team===team;
-const teamScore=isHome?g.home_score:g.away_score;
-const oppScore=isHome?g.away_score:g.home_score;
-const opponent=isHome?g.away_team:g.home_team;
-const result=teamScore>oppScore?"W":"L";
+if(g.home_team !== team && g.away_team !== team) continue;
+
+const isHome = g.home_team === team;
+const teamScore = isHome ? g.home_score : g.away_score;
+const oppScore = isHome ? g.away_score : g.home_score;
+const opponent = isHome ? g.away_team : g.home_team;
+const result = teamScore > oppScore ? "W" : "L";
 
 seasonsSet.add(season);
 
 if(!seasonStats[season]){
-seasonStats[season]={games:0,wins:0,losses:0,pf:0,pa:0};
+seasonStats[season] = {games:0,wins:0,losses:0,pf:0,pa:0};
 }
 
 seasonStats[season].games++;
-seasonStats[season].pf+=teamScore;
-seasonStats[season].pa+=oppScore;
-if(result==="W") seasonStats[season].wins++;
+seasonStats[season].pf += teamScore;
+seasonStats[season].pa += oppScore;
+
+if(result === "W") seasonStats[season].wins++;
 else seasonStats[season].losses++;
 
 games.push({
 season,
-date:g.date||"",
+date: g.date || "",
 opponent,
 result,
-score:teamScore+" – "+oppScore
+score: teamScore + " – " + oppScore
 });
 
 }
@@ -160,20 +172,24 @@ score:teamScore+" – "+oppScore
 
 populateFilter();
 render();
+
+}catch(e){}
+
 }
 
 function populateFilter(){
-seasonsSet.forEach(s=>{
-const opt=document.createElement("option");
-opt.value=s;
-opt.textContent=s;
+const sorted = Array.from(seasonsSet).sort((a,b)=>b-a);
+for(const s of sorted){
+const opt = document.createElement("option");
+opt.value = s;
+opt.textContent = s;
 seasonFilter.appendChild(opt);
-});
+}
 }
 
 function render(){
 
-const seasonVal=seasonFilter.value;
+const seasonVal = seasonFilter.value;
 
 let totalGames=0,wins=0,losses=0,pf=0,pa=0;
 
@@ -186,21 +202,22 @@ pf+=v.pf;
 pa+=v.pa;
 });
 
-document.getElementById("seasons").textContent=seasonVal?1:seasonsSet.size;
-document.getElementById("games").textContent=totalGames;
-document.getElementById("wins").textContent=wins;
-document.getElementById("losses").textContent=losses;
-document.getElementById("pf").textContent=pf;
-document.getElementById("pa").textContent=pa;
+document.getElementById("seasons").textContent = seasonVal?1:seasonsSet.size;
+document.getElementById("games").textContent = totalGames;
+document.getElementById("wins").textContent = wins;
+document.getElementById("losses").textContent = losses;
+document.getElementById("pf").textContent = pf;
+document.getElementById("pa").textContent = pa;
 
-const seasonBody=document.getElementById("seasonTable");
-seasonBody.innerHTML="";
+const seasonBody = document.getElementById("seasonTable");
+seasonBody.innerHTML = "";
+
 Object.entries(seasonStats)
 .sort((a,b)=>b[0]-a[0])
 .forEach(([s,v])=>{
 if(seasonVal && s!=seasonVal) return;
-const tr=document.createElement("tr");
-tr.innerHTML=`
+const tr = document.createElement("tr");
+tr.innerHTML = `
 <td>${s}</td>
 <td>${v.games}</td>
 <td>${v.wins}</td>
@@ -211,14 +228,15 @@ tr.innerHTML=`
 seasonBody.appendChild(tr);
 });
 
-const gamesBody=document.getElementById("gamesTable");
-gamesBody.innerHTML="";
+const gamesBody = document.getElementById("gamesTable");
+gamesBody.innerHTML = "";
+
 games
 .filter(g=>!seasonVal || g.season==seasonVal)
 .sort((a,b)=>new Date(b.date)-new Date(a.date))
 .forEach(g=>{
 const tr=document.createElement("tr");
-tr.innerHTML=`
+tr.innerHTML = `
 <td>${g.season}</td>
 <td>${g.date}</td>
 <td>${g.opponent}</td>
