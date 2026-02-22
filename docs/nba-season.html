@@ -18,7 +18,7 @@ th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:center;}
 th{background:#f0f0f0;}
 tr:nth-child(even){background:#f6f9ff;}
 tr:hover{background:#e9f0ff;cursor:pointer;}
-.standings{margin-top:40px;}
+.section-title{margin-top:40px;font-size:20px;font-weight:700;}
 </style>
 </head>
 
@@ -64,19 +64,31 @@ Team:
 <tbody id="gamesTable"></tbody>
 </table>
 
-<div class="standings">
-<h2>Regular Season Standings</h2>
+<div class="section-title">Eastern Conference</div>
 <table>
 <thead>
 <tr>
 <th>Team</th>
-<th>Wins</th>
-<th>Losses</th>
+<th>W</th>
+<th>L</th>
+<th>Win %</th>
 </tr>
 </thead>
-<tbody id="standingsTable"></tbody>
+<tbody id="eastTable"></tbody>
 </table>
-</div>
+
+<div class="section-title">Western Conference</div>
+<table>
+<thead>
+<tr>
+<th>Team</th>
+<th>W</th>
+<th>L</th>
+<th>Win %</th>
+</tr>
+</thead>
+<tbody id="westTable"></tbody>
+</table>
 
 </div>
 
@@ -84,44 +96,69 @@ Team:
 
 const BASE="data/nba/";
 
-const gamesTable=document.getElementById("gamesTable");
-const standingsTable=document.getElementById("standingsTable");
 const seasonSelect=document.getElementById("seasonSelect");
 const typeSelect=document.getElementById("typeSelect");
 const teamSelect=document.getElementById("teamSelect");
+const gamesTable=document.getElementById("gamesTable");
+const eastTable=document.getElementById("eastTable");
+const westTable=document.getElementById("westTable");
 const title=document.getElementById("title");
 
 const params=new URLSearchParams(location.search);
 let season=params.get("season") || "2025";
-
 let allGames=[];
+
+/* Conference Map */
+const conferenceMap={
+"Boston Celtics":"East",
+"Brooklyn Nets":"East",
+"New York Knicks":"East",
+"Philadelphia 76ers":"East",
+"Toronto Raptors":"East",
+"Chicago Bulls":"East",
+"Cleveland Cavaliers":"East",
+"Detroit Pistons":"East",
+"Indiana Pacers":"East",
+"Milwaukee Bucks":"East",
+"Atlanta Hawks":"East",
+"Charlotte Hornets":"East",
+"Miami Heat":"East",
+"Orlando Magic":"East",
+"Washington Wizards":"East",
+
+"Denver Nuggets":"West",
+"Minnesota Timberwolves":"West",
+"Oklahoma City Thunder":"West",
+"Portland Trail Blazers":"West",
+"Utah Jazz":"West",
+"Golden State Warriors":"West",
+"LA Clippers":"West",
+"Los Angeles Lakers":"West",
+"Phoenix Suns":"West",
+"Sacramento Kings":"West",
+"Dallas Mavericks":"West",
+"Houston Rockets":"West",
+"Memphis Grizzlies":"West",
+"New Orleans Pelicans":"West",
+"San Antonio Spurs":"West"
+};
+
+function isExcludedGame(g){
+if(!g || !g.game_type) return false;
+const type=g.game_type.toLowerCase();
+return type.includes("preseason") || type.includes("all");
+}
 
 seasonSelect.onchange=()=>{
 location.href="nba-season.html?season="+seasonSelect.value;
 };
-
 typeSelect.onchange=renderGames;
 teamSelect.onchange=renderGames;
-
-/* FILTER OUT PRESEASON + ALL STAR */
-function isExcludedGame(game){
-
-if(!game) return true;
-
-if(!game.game_type) return false;
-
-const type = game.game_type.toLowerCase();
-
-if(type.includes("preseason")) return true;
-if(type.includes("all")) return true;
-
-return false;
-}
 
 async function init(){
 
 for(let y=1976;y<=2026;y++){
-const opt=document.createElement("option");
+let opt=document.createElement("option");
 opt.value=y;
 opt.textContent=y;
 seasonSelect.appendChild(opt);
@@ -136,17 +173,14 @@ async function loadSeason(season){
 
 title.textContent="NBA Season " + season;
 gamesTable.innerHTML="";
-standingsTable.innerHTML="";
+eastTable.innerHTML="";
+westTable.innerHTML="";
 teamSelect.innerHTML='<option value="All">All Teams</option>';
 
 let standings={};
 let teams=new Set();
 
-try{
-
 const indexRes=await fetch(BASE+season+"/index.json");
-if(!indexRes.ok) throw new Error("No index");
-
 const index=await indexRes.json();
 
 const gameFiles=index.games.map(id =>
@@ -154,66 +188,72 @@ fetch(BASE+season+"/"+id+".json").then(r=>r.json())
 );
 
 allGames=await Promise.all(gameFiles);
-
-/* REMOVE PRESEASON + ALL STAR */
-allGames = allGames.filter(g => !isExcludedGame(g));
+allGames=allGames.filter(g=>!isExcludedGame(g));
 
 allGames.forEach(g=>{
 
 teams.add(g.home_team);
 teams.add(g.away_team);
 
-/* Standings = Regular Season ONLY */
-if(g.game_type === "Regular Season"){
+if(g.game_type==="Regular Season"){
 
 if(!standings[g.home_team]) standings[g.home_team]={w:0,l:0};
 if(!standings[g.away_team]) standings[g.away_team]={w:0,l:0};
 
-if(g.home_score > g.away_score){
+if(g.home_score>g.away_score){
 standings[g.home_team].w++;
 standings[g.away_team].l++;
 }else{
 standings[g.away_team].w++;
 standings[g.home_team].l++;
 }
-
 }
 
 });
 
-/* Populate team dropdown */
 Array.from(teams).sort().forEach(team=>{
-const opt=document.createElement("option");
+let opt=document.createElement("option");
 opt.value=team;
 opt.textContent=team;
 teamSelect.appendChild(opt);
 });
 
-/* Render standings */
+renderStandings(standings);
+renderGames();
+}
+
+function renderStandings(standings){
+
+eastTable.innerHTML="";
+westTable.innerHTML="";
+
 Object.entries(standings)
 .sort((a,b)=>b[1].w-a[1].w)
 .forEach(([team,rec])=>{
-const tr=document.createElement("tr");
+
+let total=rec.w+rec.l;
+let winPct=total? (rec.w/total).toFixed(3):"0.000";
+
+let tr=document.createElement("tr");
 tr.innerHTML=`
 <td>${team}</td>
 <td>${rec.w}</td>
 <td>${rec.l}</td>
+<td>${winPct}</td>
 `;
-standingsTable.appendChild(tr);
-});
 
-renderGames();
-
-}catch(e){
-gamesTable.innerHTML="<tr><td colspan='5'>No season files found</td></tr>";
+if(conferenceMap[team]==="East"){
+eastTable.appendChild(tr);
+}else{
+westTable.appendChild(tr);
 }
 
+});
 }
 
 function renderGames(){
 
 gamesTable.innerHTML="";
-
 const typeFilter=typeSelect.value;
 const teamFilter=teamSelect.value;
 
@@ -224,15 +264,10 @@ if(teamFilter!=="All" && g.home_team!==teamFilter && g.away_team!==teamFilter) r
 
 const winner=g.home_score>g.away_score?g.home_team:g.away_team;
 
-const tr=document.createElement("tr");
-
+let tr=document.createElement("tr");
 tr.innerHTML=`
 <td>${g.date}</td>
-<td>
-<a href="nba-team.html?team=${encodeURIComponent(g.home_team)}">${g.home_team}</a>
-vs
-<a href="nba-team.html?team=${encodeURIComponent(g.away_team)}">${g.away_team}</a>
-</td>
+<td>${g.home_team} vs ${g.away_team}</td>
 <td>${g.game_type}</td>
 <td>${winner}</td>
 <td>${g.home_score} – ${g.away_score}</td>
@@ -245,12 +280,7 @@ location.href="nba-game.html?season="+season+"&game="+g.game_id;
 gamesTable.appendChild(tr);
 
 });
-
 }
-
-window.addEventListener("pageshow",()=>{
-loadSeason(season);
-});
 
 init();
 
