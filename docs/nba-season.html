@@ -103,6 +103,22 @@ location.href="nba-season.html?season="+seasonSelect.value;
 typeSelect.onchange=renderGames;
 teamSelect.onchange=renderGames;
 
+function isAllStarGame(game){
+if(!game) return false;
+
+/* Catch All-Star by type */
+if(game.game_type && game.game_type.toLowerCase().includes("all")) return true;
+
+/* Catch East vs West All-Star naming */
+if(game.home_team && game.home_team.toLowerCase().includes("all"))
+return true;
+
+if(game.away_team && game.away_team.toLowerCase().includes("all"))
+return true;
+
+return false;
+}
+
 async function init(){
 
 for(let y=1976;y<=2026;y++){
@@ -140,26 +156,28 @@ fetch(BASE+season+"/"+id+".json").then(r=>r.json())
 
 allGames=await Promise.all(gameFiles);
 
-/* Collect teams */
+/* REMOVE ALL-STAR GAMES */
+allGames = allGames.filter(g => !isAllStarGame(g));
+
 allGames.forEach(g=>{
+
 teams.add(g.home_team);
 teams.add(g.away_team);
 
 if(g.game_type==="Regular Season"){
-const home=g.home_team;
-const away=g.away_team;
 
-if(!standings[home]) standings[home]={w:0,l:0};
-if(!standings[away]) standings[away]={w:0,l:0};
+if(!standings[g.home_team]) standings[g.home_team]={w:0,l:0};
+if(!standings[g.away_team]) standings[g.away_team]={w:0,l:0};
 
 if(g.home_score>g.away_score){
-standings[home].w++;
-standings[away].l++;
+standings[g.home_team].w++;
+standings[g.away_team].l++;
 }else{
-standings[away].w++;
-standings[home].l++;
+standings[g.away_team].w++;
+standings[g.home_team].l++;
 }
 }
+
 });
 
 /* Populate team dropdown */
@@ -201,7 +219,6 @@ const teamFilter=teamSelect.value;
 allGames.forEach(g=>{
 
 if(typeFilter!=="All" && g.game_type!==typeFilter) return;
-
 if(teamFilter!=="All" && g.home_team!==teamFilter && g.away_team!==teamFilter) return;
 
 const winner=g.home_score>g.away_score?g.home_team:g.away_team;
