@@ -103,18 +103,17 @@ location.href="nba-season.html?season="+seasonSelect.value;
 typeSelect.onchange=renderGames;
 teamSelect.onchange=renderGames;
 
-function isAllStarGame(game){
-if(!game) return false;
+/* FILTER OUT PRESEASON + ALL STAR */
+function isExcludedGame(game){
 
-/* Catch All-Star by type */
-if(game.game_type && game.game_type.toLowerCase().includes("all")) return true;
+if(!game) return true;
 
-/* Catch East vs West All-Star naming */
-if(game.home_team && game.home_team.toLowerCase().includes("all"))
-return true;
+if(!game.game_type) return false;
 
-if(game.away_team && game.away_team.toLowerCase().includes("all"))
-return true;
+const type = game.game_type.toLowerCase();
+
+if(type.includes("preseason")) return true;
+if(type.includes("all")) return true;
 
 return false;
 }
@@ -156,26 +155,28 @@ fetch(BASE+season+"/"+id+".json").then(r=>r.json())
 
 allGames=await Promise.all(gameFiles);
 
-/* REMOVE ALL-STAR GAMES */
-allGames = allGames.filter(g => !isAllStarGame(g));
+/* REMOVE PRESEASON + ALL STAR */
+allGames = allGames.filter(g => !isExcludedGame(g));
 
 allGames.forEach(g=>{
 
 teams.add(g.home_team);
 teams.add(g.away_team);
 
-if(g.game_type==="Regular Season"){
+/* Standings = Regular Season ONLY */
+if(g.game_type === "Regular Season"){
 
 if(!standings[g.home_team]) standings[g.home_team]={w:0,l:0};
 if(!standings[g.away_team]) standings[g.away_team]={w:0,l:0};
 
-if(g.home_score>g.away_score){
+if(g.home_score > g.away_score){
 standings[g.home_team].w++;
 standings[g.away_team].l++;
 }else{
 standings[g.away_team].w++;
 standings[g.home_team].l++;
 }
+
 }
 
 });
