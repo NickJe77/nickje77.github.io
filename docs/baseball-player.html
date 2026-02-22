@@ -45,7 +45,7 @@
   .hero{
     background:linear-gradient(90deg,var(--blue), #3a256e, var(--red));
     color:white;
-    padding:28px 30px;
+    padding:26px 28px;
     border-radius:20px;
     margin-bottom:16px;
     display:flex;
@@ -55,13 +55,18 @@
   }
 
   .hero h1{
-    margin:0;
+    margin:0 0 6px 0;
     font-size:38px;
     letter-spacing:-0.5px;
   }
 
+  .hero .meta{
+    font-size:14px;
+    opacity:0.92;
+  }
+
   .hero-right{
-    min-width:340px;
+    min-width:360px;
     display:flex;
     flex-direction:column;
     gap:10px;
@@ -87,7 +92,7 @@
     background:rgba(255,255,255,0.10);
     color:white;
   }
-  .search::placeholder{ color:rgba(255,255,255,0.8); }
+  .search::placeholder{ color:rgba(255,255,255,0.85); }
 
   .btn{
     padding:12px 14px;
@@ -101,25 +106,70 @@
   }
   .btn:hover{ background:rgba(255,255,255,0.18); }
 
-  .meta-line{
+  .status{
     font-size:13px;
     opacity:0.92;
     text-align:right;
-    min-height:16px;
   }
 
   .section{
     background:var(--card);
-    padding:18px;
     border-radius:18px;
     margin-bottom:16px;
     box-shadow:0 1px 0 rgba(15,23,42,0.04);
+    overflow:hidden;
+    border:1px solid rgba(2,45,114,0.06);
   }
 
-  .section h2{
-    margin:0 0 14px 0;
-    font-size:22px;
+  /* Header bar like your AFL pages */
+  .section-bar{
+    background:var(--blue);
+    color:white;
+    padding:12px 16px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+  }
+
+  .section-bar h2{
+    margin:0;
+    font-size:18px;
     letter-spacing:-0.2px;
+  }
+
+  .section-body{
+    padding:16px;
+  }
+
+  .controls{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    flex-wrap:wrap;
+    justify-content:flex-end;
+  }
+
+  select{
+    padding:9px 10px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:#fff;
+    font-size:13px;
+    outline:none;
+    min-width:220px;
+  }
+
+  .pill{
+    display:inline-block;
+    padding:5px 10px;
+    border-radius:999px;
+    background:rgba(255,255,255,0.14);
+    border:1px solid rgba(255,255,255,0.22);
+    font-size:12px;
+    color:white;
+    font-weight:800;
+    white-space:nowrap;
   }
 
   .cards{
@@ -146,35 +196,10 @@
     font-size:12px;
     color:#4b5563;
     letter-spacing:0.2px;
+    text-transform:none;
   }
 
-  .controls{
-    display:flex;
-    align-items:center;
-    gap:10px;
-    margin-bottom:12px;
-    flex-wrap:wrap;
-  }
-
-  select{
-    padding:8px 10px;
-    border-radius:10px;
-    border:1px solid var(--line);
-    background:#fff;
-    font-size:13px;
-    outline:none;
-  }
-
-  .pill{
-    display:inline-block;
-    padding:4px 10px;
-    border-radius:999px;
-    background:var(--chip);
-    border:1px solid #e2e8ff;
-    font-size:12px;
-    color:#334155;
-    font-weight:800;
-  }
+  .muted{ color:var(--muted); font-size:13px; }
 
   table{
     width:100%;
@@ -198,7 +223,7 @@
     white-space:nowrap;
   }
 
-  thead th:hover{ filter:brightness(1.07); }
+  thead th.sortable:hover{ filter:brightness(1.08); }
 
   tbody td{
     padding:10px 10px;
@@ -210,15 +235,21 @@
   tbody tr:nth-child(even){ background:#f7fbff; }
   tbody tr:last-child td{ border-bottom:none; }
 
-  .muted{ color:var(--muted); font-size:13px; }
-  .note{ margin-top:10px; font-size:12px; color:var(--muted); line-height:1.35; }
+  .right{ text-align:right; }
+  .small-note{
+    margin-top:10px;
+    font-size:12px;
+    color:var(--muted);
+    line-height:1.35;
+  }
 
   @media (max-width: 980px){
     .cards{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .hero{ flex-direction:column; align-items:flex-start; }
     .hero-right{ align-items:flex-start; min-width:unset; width:100%; }
     .search-wrap{ max-width:520px; justify-content:flex-start; }
-    .meta-line{ text-align:left; }
+    .controls{ justify-content:flex-start; }
+    select{ min-width:unset; width:100%; }
   }
 </style>
 </head>
@@ -236,72 +267,91 @@
   <div class="hero">
     <div>
       <h1 id="playerName">Loading…</h1>
+      <div class="meta" id="playerMeta">Loading player…</div>
     </div>
 
     <div class="hero-right">
       <div class="search-wrap">
-        <input id="playerSearch" class="search" list="playerNameHints" placeholder="Search player name (e.g. Shohei Ohtani)..." />
-        <datalist id="playerNameHints"></datalist>
+        <input id="playerSearch" class="search" placeholder="Search player name (e.g. Jackie Robinson)..." list="playerDatalist" />
+        <datalist id="playerDatalist"></datalist>
         <button id="goBtn" class="btn">Go</button>
       </div>
-      <div class="meta-line" id="statusLine"></div>
+      <div class="status" id="statusLine"></div>
     </div>
   </div>
 
-  <!-- 1) CAREER -->
+  <!-- CAREER -->
   <div class="section">
-    <h2>Career Summary</h2>
-    <div class="cards" id="careerCards"></div>
-  </div>
-
-  <!-- 2) BY TEAM -->
-  <div class="section">
-    <h2>By Team</h2>
-    <div class="controls">
-      <select id="teamSelect"></select>
-      <span class="pill" id="teamHint">Loading…</span>
-      <span class="muted" id="teamSubHint"></span>
+    <div class="section-bar">
+      <h2>Career</h2>
+      <span class="pill" id="careerHint">Totals</span>
     </div>
-    <div class="cards" id="teamCards"></div>
-  </div>
-
-  <!-- 3) VS OPPONENT -->
-  <div class="section">
-    <h2>Vs Selected Opponent</h2>
-    <div class="controls">
-      <select id="oppSelect"></select>
-      <span class="pill" id="oppHint">Loading…</span>
-      <span class="muted" id="oppSubHint"></span>
-    </div>
-    <div class="cards" id="oppCards"></div>
-    <div class="note" id="oppNote">
-      Opponent stats are built from your <b>boxscores</b>. First load may take a while. After that it’s cached in your browser for this player.
+    <div class="section-body">
+      <div class="cards" id="careerCards"></div>
+      <div class="small-note" id="careerNote"></div>
     </div>
   </div>
 
-  <!-- SEASON TABLE -->
+  <!-- BY TEAM -->
   <div class="section">
-    <h2>Season Breakdown</h2>
-    <div class="muted" id="seasonCount"></div>
+    <div class="section-bar">
+      <h2>By Team</h2>
+      <div class="controls">
+        <select id="teamSelect"></select>
+        <span class="pill" id="teamHint">Loading…</span>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="cards" id="teamCards"></div>
+      <div class="small-note" id="teamNote"></div>
+    </div>
+  </div>
 
-    <div style="margin-top:12px; overflow:auto;">
-      <table id="seasonTable">
-        <thead>
-          <tr>
-            <th data-key="season">Season</th>
-            <th data-key="team">Team</th>
-            <th data-key="games">G</th>
-            <th data-key="plate_appearances">PA</th>
-            <th data-key="at_bats">AB</th>
-            <th data-key="hits">H</th>
-            <th data-key="home_runs">HR</th>
-            <th data-key="walks">BB</th>
-            <th data-key="strikeouts">SO</th>
-            <th data-key="avg">AVG</th>
-          </tr>
-        </thead>
-        <tbody id="seasonBody"></tbody>
-      </table>
+  <!-- VS OPPONENT -->
+  <div class="section">
+    <div class="section-bar">
+      <h2>Vs Opponent</h2>
+      <div class="controls">
+        <select id="oppSelect"></select>
+        <span class="pill" id="oppHint">Loading…</span>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="cards" id="oppCards"></div>
+      <div class="small-note" id="oppNote"></div>
+    </div>
+  </div>
+
+  <!-- SEASON BREAKDOWN -->
+  <div class="section">
+    <div class="section-bar">
+      <h2>Season Breakdown</h2>
+      <span class="pill" id="seasonHint">Sortable</span>
+    </div>
+    <div class="section-body">
+      <div class="muted" id="seasonCount"></div>
+      <div style="margin-top:12px; overflow:auto;">
+        <table id="seasonTable">
+          <thead>
+            <tr>
+              <th class="sortable" data-key="season">Season</th>
+              <th class="sortable" data-key="team">Team</th>
+              <th class="sortable right" data-key="games">G</th>
+              <th class="sortable right" data-key="plate_appearances">PA</th>
+              <th class="sortable right" data-key="at_bats">AB</th>
+              <th class="sortable right" data-key="hits">H</th>
+              <th class="sortable right" data-key="home_runs">HR</th>
+              <th class="sortable right" data-key="walks">BB</th>
+              <th class="sortable right" data-key="strikeouts">SO</th>
+              <th class="sortable right" data-key="avg">AVG</th>
+            </tr>
+          </thead>
+          <tbody id="seasonBody"></tbody>
+        </table>
+      </div>
+      <div class="small-note">
+        Team names display from <b>./data/baseball/teams.json</b> if it exists (code → full name). If that file doesn’t exist yet, you’ll see abbreviations.
+      </div>
     </div>
   </div>
 
@@ -309,115 +359,56 @@
 
 <script>
 (function(){
-  // =========================
-  // TEAM CODE -> FULL NAME
-  // (Retrosheet-ish codes + modern)
-  // =========================
-  const TEAM_NAME = {
-    // Modern / common
-    "ANA":"Los Angeles Angels",
-    "ARI":"Arizona Diamondbacks",
-    "ATL":"Atlanta Braves",
-    "BAL":"Baltimore Orioles",
-    "BOS":"Boston Red Sox",
-    "CHA":"Chicago White Sox",
-    "CHN":"Chicago Cubs",
-    "CIN":"Cincinnati Reds",
-    "CLE":"Cleveland Guardians",
-    "COL":"Colorado Rockies",
-    "DET":"Detroit Tigers",
-    "HOU":"Houston Astros",
-    "KCA":"Kansas City Royals",
-    "LAN":"Los Angeles Dodgers",
-    "MIA":"Miami Marlins",
-    "MIL":"Milwaukee Brewers",
-    "MIN":"Minnesota Twins",
-    "NYA":"New York Yankees",
-    "NYN":"New York Mets",
-    "OAK":"Oakland Athletics",
-    "PHI":"Philadelphia Phillies",
-    "PIT":"Pittsburgh Pirates",
-    "SDN":"San Diego Padres",
-    "SEA":"Seattle Mariners",
-    "SFN":"San Francisco Giants",
-    "SLN":"St. Louis Cardinals",
-    "TBA":"Tampa Bay Rays",
-    "TEX":"Texas Rangers",
-    "TOR":"Toronto Blue Jays",
-    "WAS":"Washington Nationals",
-
-    // Older / Retrosheet-like
-    "BRO":"Brooklyn Dodgers",
-    "BSN":"Boston Braves",
-    "NY1":"New York Giants",
-    "NY2":"New York Yankees",
-    "NY3":"New York Mets",
-    "PHA":"Philadelphia Athletics",
-    "PHN":"Philadelphia Phillies",
-    "SL4":"St. Louis Browns",
-    "SL5":"St. Louis Cardinals",
-    "WS1":"Washington Senators",
-    "WS2":"Washington Senators",
-    "WSH":"Washington Nationals",
-    "CAL":"California Angels",
-    "MON":"Montreal Expos",
-    "FLO":"Florida Marlins",
-    "TBD":"Tampa Bay Rays",
-
-    // You may have other 3-char codes in your datasets; they’ll fall back to code itself.
-  };
-
-  function fullTeamName(code){
-    const c = (code===undefined || code===null) ? "" : String(code).trim();
-    if(!c) return "—";
-    return TEAM_NAME[c] || c;
-  }
-
-  // =========================
-  // DOM
-  // =========================
   const qs = new URLSearchParams(location.search);
-  let playerId = (qs.get("player") || "").trim();
+  const playerId = (qs.get("player") || "").trim();
 
   const elName = document.getElementById("playerName");
+  const elMeta = document.getElementById("playerMeta");
   const elStatus = document.getElementById("statusLine");
 
   const elCareerCards = document.getElementById("careerCards");
+  const elCareerHint  = document.getElementById("careerHint");
+  const elCareerNote  = document.getElementById("careerNote");
 
   const elTeamCards = document.getElementById("teamCards");
   const elTeamSelect = document.getElementById("teamSelect");
   const elTeamHint = document.getElementById("teamHint");
-  const elTeamSubHint = document.getElementById("teamSubHint");
+  const elTeamNote = document.getElementById("teamNote");
 
   const elOppCards = document.getElementById("oppCards");
   const elOppSelect = document.getElementById("oppSelect");
   const elOppHint = document.getElementById("oppHint");
-  const elOppSubHint = document.getElementById("oppSubHint");
+  const elOppNote = document.getElementById("oppNote");
 
   const elSeasonBody = document.getElementById("seasonBody");
   const elSeasonCount = document.getElementById("seasonCount");
 
   const elSearch = document.getElementById("playerSearch");
   const elGo = document.getElementById("goBtn");
-  const elHints = document.getElementById("playerNameHints");
+  const elDatalist = document.getElementById("playerDatalist");
 
-  // =========================
-  // STATE
-  // =========================
-  let seasonsList = [];
-  let seasonRows = []; // per season stats row
-  let teamAgg = new Map(); // team -> totals
-  let oppAgg = new Map();  // oppTeam -> totals
+  // Sorting state
+  let sortKey = "season";
+  let sortDir = "desc"; // newest first
 
+  // Team name map (optional)
+  let teamNameMap = {}; // { "SEA": "Seattle Mariners", ... }
+
+  // Data
+  let seasonsAll = [];          // from ./data/baseball/index.json
+  let playedSeasons = [];       // seasons where player has row (games>0 or PA>0)
+  let seasonRows = [];          // rows for season breakdown
+  let teamAgg = new Map();      // teamCode -> totals
   let career = { games:0, plate_appearances:0, at_bats:0, hits:0, home_runs:0, walks:0, strikeouts:0 };
 
-  // Sorting
-  let sortKey = "season";
-  let sortDir = "desc";
+  let oppAgg = new Map();       // oppCode -> totals vs opponent (same stat set)
+  let oppReady = false;
 
-  // =========================
-  // HELPERS
-  // =========================
+  // Player search index (name -> id)
+  // Stored in localStorage so it only has to build once
+  let playerIndex = [];         // [{id, name}]
+  let playerIndexReady = false;
+
   function setStatus(msg){ elStatus.textContent = msg || ""; }
 
   function fmtInt(n){
@@ -431,24 +422,152 @@
     return (H/AB).toFixed(3);
   }
 
+  function safeText(s){
+    return String(s ?? "").replace(/[&<>"']/g, m => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[m]));
+  }
+
+  function teamFull(code){
+    const c = String(code ?? "").trim();
+    if(!c) return "—";
+    return teamNameMap[c] || c;
+  }
+
   function renderCards(container, cards){
     container.innerHTML = cards.map(c => `
       <div class="card">
-        <div class="value">${c.value}</div>
-        <div class="label">${c.label}</div>
+        <div class="value">${safeText(c.value)}</div>
+        <div class="label">${safeText(c.label)}</div>
       </div>
     `).join("");
   }
 
-  function safeNum(x){
-    const n = Number(x || 0);
-    return isFinite(n) ? n : 0;
+  function renderCareer(){
+    const avg = fmtAvg(career.hits, career.at_bats);
+    renderCards(elCareerCards, [
+      { label:"Games", value: fmtInt(career.games) },
+      { label:"Plate Appearances", value: fmtInt(career.plate_appearances) },
+      { label:"Hits", value: fmtInt(career.hits) },
+      { label:"Home Runs", value: fmtInt(career.home_runs) },
+      { label:"Batting Avg", value: avg }
+    ]);
+    elCareerHint.textContent = "Totals";
   }
 
-  async function safeFetchJson(url){
-    const res = await fetch(url, { cache: "no-store" });
-    if(!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
-    return await res.json();
+  function renderTeam(teamKey){
+    const t = teamAgg.get(teamKey);
+    elTeamHint.textContent = teamFull(teamKey);
+
+    if(!t){
+      renderCards(elTeamCards, [
+        { label:"Games", value:"0" },
+        { label:"Plate Appearances", value:"0" },
+        { label:"Hits", value:"0" },
+        { label:"Home Runs", value:"0" },
+        { label:"Batting Avg", value:"0.000" }
+      ]);
+      return;
+    }
+
+    const avg = fmtAvg(t.hits, t.at_bats);
+
+    renderCards(elTeamCards, [
+      { label:"Games", value: fmtInt(t.games) },
+      { label:"Plate Appearances", value: fmtInt(t.plate_appearances) },
+      { label:"Hits", value: fmtInt(t.hits) },
+      { label:"Home Runs", value: fmtInt(t.home_runs) },
+      { label:"Batting Avg", value: avg }
+    ]);
+  }
+
+  function renderOpponent(oppKey){
+    const o = oppAgg.get(oppKey);
+    elOppHint.textContent = teamFull(oppKey);
+
+    if(!o){
+      renderCards(elOppCards, [
+        { label:"Games Found", value:"0" },
+        { label:"Plate Appearances", value:"0" },
+        { label:"Hits", value:"0" },
+        { label:"Home Runs", value:"0" },
+        { label:"Batting Avg", value:"0.000" }
+      ]);
+      return;
+    }
+
+    const avg = fmtAvg(o.hits, o.at_bats);
+
+    renderCards(elOppCards, [
+      { label:"Games Found", value: fmtInt(o.games_found) },
+      { label:"Plate Appearances", value: fmtInt(o.plate_appearances) },
+      { label:"Hits", value: fmtInt(o.hits) },
+      { label:"Home Runs", value: fmtInt(o.home_runs) },
+      { label:"Batting Avg", value: avg }
+    ]);
+  }
+
+  function sortRows(rows){
+    const dir = (sortDir === "asc") ? 1 : -1;
+
+    return rows.slice().sort((a,b) => {
+      let av = a[sortKey];
+      let bv = b[sortKey];
+
+      if(sortKey === "season"){
+        av = Number(av||0); bv = Number(bv||0);
+        return (av - bv) * dir;
+      }
+
+      if(sortKey === "team"){
+        av = teamFull(av); bv = teamFull(bv);
+        return av.localeCompare(bv) * dir;
+      }
+
+      if(sortKey === "avg"){
+        av = Number(av||0); bv = Number(bv||0);
+        return (av - bv) * dir;
+      }
+
+      av = Number(av||0); bv = Number(bv||0);
+      return (av - bv) * dir;
+    });
+  }
+
+  function renderSeasonTable(){
+    const sorted = sortRows(seasonRows);
+    elSeasonCount.textContent = `${sorted.length.toLocaleString("en-US")} seasons found`;
+
+    elSeasonBody.innerHTML = sorted.map(r => `
+      <tr>
+        <td><b>${safeText(r.season)}</b></td>
+        <td>${safeText(teamFull(r.team))}</td>
+        <td class="right">${fmtInt(r.games)}</td>
+        <td class="right">${fmtInt(r.plate_appearances)}</td>
+        <td class="right">${fmtInt(r.at_bats)}</td>
+        <td class="right">${fmtInt(r.hits)}</td>
+        <td class="right">${fmtInt(r.home_runs)}</td>
+        <td class="right">${fmtInt(r.walks)}</td>
+        <td class="right">${fmtInt(r.strikeouts)}</td>
+        <td class="right">${(Number(r.avg||0)).toFixed(3)}</td>
+      </tr>
+    `).join("");
+  }
+
+  function wireSorting(){
+    const ths = document.querySelectorAll("#seasonTable thead th.sortable");
+    ths.forEach(th => {
+      th.addEventListener("click", () => {
+        const key = th.getAttribute("data-key");
+        if(!key) return;
+
+        if(sortKey === key){
+          sortDir = (sortDir === "asc") ? "desc" : "asc";
+        }else{
+          sortKey = key;
+          sortDir = (key === "season") ? "desc" : "desc";
+        }
+        renderSeasonTable();
+      });
+    });
   }
 
   async function mapLimit(items, limit, worker){
@@ -470,515 +589,563 @@
     return results;
   }
 
-  function addToCareer(row){
-    career.games += safeNum(row.games);
-    career.plate_appearances += safeNum(row.plate_appearances);
-    career.at_bats += safeNum(row.at_bats);
-    career.hits += safeNum(row.hits);
-    career.home_runs += safeNum(row.home_runs);
-    career.walks += safeNum(row.walks);
-    career.strikeouts += safeNum(row.strikeouts);
+  async function safeFetchJson(url){
+    const res = await fetch(url, { cache: "no-store" });
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
   }
 
-  function addToAgg(map, key, row){
-    const k = (key===undefined || key===null) ? "" : String(key).trim();
-    if(!map.has(k)){
-      map.set(k, { games:0, plate_appearances:0, at_bats:0, hits:0, home_runs:0, walks:0, strikeouts:0 });
+  function addAgg(target, row){
+    target.games += Number(row.games || 0);
+    target.plate_appearances += Number(row.plate_appearances || 0);
+    target.at_bats += Number(row.at_bats || 0);
+    target.hits += Number(row.hits || 0);
+    target.home_runs += Number(row.home_runs || 0);
+    target.walks += Number(row.walks || 0);
+    target.strikeouts += Number(row.strikeouts || 0);
+  }
+
+  function ensureTeamAgg(teamCode){
+    const key = String(teamCode ?? "");
+    if(!teamAgg.has(key)){
+      teamAgg.set(key, { games:0, plate_appearances:0, at_bats:0, hits:0, home_runs:0, walks:0, strikeouts:0 });
     }
-    const t = map.get(k);
-    t.games += safeNum(row.games);
-    t.plate_appearances += safeNum(row.plate_appearances);
-    t.at_bats += safeNum(row.at_bats);
-    t.hits += safeNum(row.hits);
-    t.home_runs += safeNum(row.home_runs);
-    t.walks += safeNum(row.walks);
-    t.strikeouts += safeNum(row.strikeouts);
+    return teamAgg.get(key);
   }
 
-  // =========================
-  // RENDER
-  // =========================
-  function renderCareer(){
-    const avg = fmtAvg(career.hits, career.at_bats);
-    renderCards(elCareerCards, [
-      { label:"Games", value: fmtInt(career.games) },
-      { label:"Plate Appearances", value: fmtInt(career.plate_appearances) },
-      { label:"Hits", value: fmtInt(career.hits) },
-      { label:"Home Runs", value: fmtInt(career.home_runs) },
-      { label:"Batting Avg", value: avg }
-    ]);
+  function ensureOppAgg(oppCode){
+    const key = String(oppCode ?? "");
+    if(!oppAgg.has(key)){
+      oppAgg.set(key, { games_found:0, plate_appearances:0, at_bats:0, hits:0, home_runs:0, walks:0, strikeouts:0 });
+    }
+    return oppAgg.get(key);
   }
 
-  function renderTeam(teamKey){
-    const t = teamAgg.get(teamKey);
-    elTeamHint.textContent = fullTeamName(teamKey);
-    elTeamSubHint.textContent = t ? "" : "No data";
-    renderCards(elTeamCards, [
-      { label:"Games", value: fmtInt(t ? t.games : 0) },
-      { label:"Hits", value: fmtInt(t ? t.hits : 0) },
-      { label:"Home Runs", value: fmtInt(t ? t.home_runs : 0) },
-      { label:"Walks", value: fmtInt(t ? t.walks : 0) },
-      { label:"Strikeouts", value: fmtInt(t ? t.strikeouts : 0) }
-    ]);
+  // Retrosheet-style play result parsing (good enough for totals)
+  function applyPlayResultToAgg(agg, result){
+    // result examples you have: "S8", "S9.1-3", "K", "W.1-2", "D", "T", "HR", etc.
+    const r = String(result || "").trim();
+    if(!r) return;
+
+    agg.plate_appearances += 1;
+
+    // Walk (W, IW)
+    if(r.startsWith("W") || r.startsWith("IW")){
+      agg.walks += 1;
+      return;
+    }
+
+    // Strikeout (K, K+...)
+    if(r.startsWith("K")){
+      agg.strikeouts += 1;
+      agg.at_bats += 1;
+      return;
+    }
+
+    // Hit by pitch often "HP" in your files
+    if(r.startsWith("HP")){
+      return;
+    }
+
+    // Sacrifice, NP, etc.
+    if(r.startsWith("NP") || r.startsWith("SH") || r.startsWith("SF")){
+      return;
+    }
+
+    // Home run
+    if(r.startsWith("HR")){
+      agg.hits += 1;
+      agg.home_runs += 1;
+      agg.at_bats += 1;
+      return;
+    }
+
+    // Triple (often starts with "T")
+    if(r.startsWith("T")){
+      agg.hits += 1;
+      agg.at_bats += 1;
+      return;
+    }
+
+    // Double (often starts with "D")
+    if(r.startsWith("D")){
+      agg.hits += 1;
+      agg.at_bats += 1;
+      return;
+    }
+
+    // Single (often starts with "S")
+    if(r.startsWith("S")){
+      agg.hits += 1;
+      agg.at_bats += 1;
+      return;
+    }
+
+    // Reached on error etc. count AB
+    agg.at_bats += 1;
   }
 
-  function renderOpponent(oppKey){
-    const t = oppAgg.get(oppKey);
-    elOppHint.textContent = fullTeamName(oppKey);
-    elOppSubHint.textContent = t ? "" : "No data";
-    renderCards(elOppCards, [
-      { label:"Games", value: fmtInt(t ? t.games : 0) },
-      { label:"Hits", value: fmtInt(t ? t.hits : 0) },
-      { label:"Home Runs", value: fmtInt(t ? t.home_runs : 0) },
-      { label:"Walks", value: fmtInt(t ? t.walks : 0) },
-      { label:"Strikeouts", value: fmtInt(t ? t.strikeouts : 0) }
-    ]);
-  }
-
-  function sortRows(rows){
-    const dir = (sortDir === "asc") ? 1 : -1;
-    return rows.slice().sort((a,b) => {
-      let av = a[sortKey];
-      let bv = b[sortKey];
-
-      if(sortKey === "team"){
-        av = fullTeamName(av);
-        bv = fullTeamName(bv);
-        return av.localeCompare(bv) * dir;
-      }
-
-      if(sortKey === "season"){
-        av = Number(av||0); bv = Number(bv||0);
-        return (av - bv) * dir;
-      }
-
-      if(sortKey === "avg"){
-        av = Number(av||0); bv = Number(bv||0);
-        return (av - bv) * dir;
-      }
-
-      av = Number(av||0); bv = Number(bv||0);
-      return (av - bv) * dir;
-    });
-  }
-
-  function renderSeasonTable(){
-    const sorted = sortRows(seasonRows);
-    elSeasonCount.textContent = `${sorted.length.toLocaleString("en-US")} seasons found`;
-
-    elSeasonBody.innerHTML = sorted.map(r => `
-      <tr>
-        <td><b>${r.season}</b></td>
-        <td>${fullTeamName(r.team)}</td>
-        <td>${fmtInt(r.games)}</td>
-        <td>${fmtInt(r.plate_appearances)}</td>
-        <td>${fmtInt(r.at_bats)}</td>
-        <td>${fmtInt(r.hits)}</td>
-        <td>${fmtInt(r.home_runs)}</td>
-        <td>${fmtInt(r.walks)}</td>
-        <td>${fmtInt(r.strikeouts)}</td>
-        <td>${Number(r.avg||0).toFixed(3)}</td>
-      </tr>
-    `).join("");
-  }
-
-  function wireSorting(){
-    const ths = document.querySelectorAll("#seasonTable thead th");
-    ths.forEach(th => {
-      th.addEventListener("click", () => {
-        const key = th.getAttribute("data-key");
-        if(!key) return;
-
-        if(sortKey === key){
-          sortDir = (sortDir === "asc") ? "desc" : "asc";
-        }else{
-          sortKey = key;
-          sortDir = (key === "season") ? "desc" : "desc";
-        }
-        renderSeasonTable();
-      });
-    });
-  }
-
-  // =========================
-  // SEARCH BY NAME (find player_id)
-  // =========================
-  async function buildHints(){
-    // Lightweight autocomplete from latest season only (fast)
+  async function loadTeamMap(){
+    // Optional: if you have this file, it will convert codes to full team names everywhere.
+    // Example file format accepted:
+    // { "SEA":"Seattle Mariners", "BRO":"Brooklyn Dodgers", ... }
     try{
-      const latest = seasonsList[0];
-      const arr = await safeFetchJson(`./data/baseball/players/${latest}.json`);
-      const top = (arr || []).slice(0, 800); // keep light
-      elHints.innerHTML = top
-        .filter(x => x && x.player_name)
-        .map(x => `<option value="${String(x.player_name).replace(/"/g,'&quot;')}"></option>`)
-        .join("");
+      const m = await safeFetchJson("./data/baseball/teams.json");
+      if(m && typeof m === "object") teamNameMap = m;
     }catch(e){
-      // ignore
+      teamNameMap = {};
     }
   }
 
-  async function resolvePlayerIdFromName(name){
-    const target = String(name || "").trim().toLowerCase();
-    if(!target) return null;
-
-    // If they typed an ID, allow it
-    if(/^[a-z0-9]{5,10}$/i.test(target) && !target.includes(" ")){
-      return String(name).trim();
+  async function loadSeasonsIndex(){
+    try{
+      const seasons = await safeFetchJson("./data/baseball/index.json");
+      seasonsAll = (seasons || []).map(s => String(s)).filter(Boolean);
+    }catch(e){
+      seasonsAll = [];
     }
-
-    setStatus("Searching name…");
-
-    let found = null;
-
-    // Scan seasons (newest -> oldest) until we find the name
-    await mapLimit(seasonsList, 6, async (seasonStr, idx) => {
-      if(found) return;
-
-      let arr;
-      try{
-        arr = await safeFetchJson(`./data/baseball/players/${seasonStr}.json`);
-      }catch(e){
-        return;
-      }
-
-      const hit = (arr || []).find(p => (p && p.player_name && String(p.player_name).trim().toLowerCase() === target));
-      if(hit && hit.player_id){
-        found = String(hit.player_id).trim();
-      }
-
-      if(idx % 12 === 0){
-        setStatus(`Searching name… (${idx+1}/${seasonsList.length})`);
-      }
-    });
-
-    return found;
   }
 
-  function wireSearch(){
-    if(playerId) elSearch.value = "";
-
-    async function go(){
-      const q = (elSearch.value || "").trim();
-      if(!q) return;
-
-      const resolved = await resolvePlayerIdFromName(q);
-      if(!resolved){
-        setStatus("Name not found (check spelling)");
-        return;
-      }
-      location.href = `./player.html?player=${encodeURIComponent(resolved)}`;
-    }
-
-    elGo.addEventListener("click", go);
-    elSearch.addEventListener("keydown", (e) => {
-      if(e.key === "Enter") go();
-    });
-  }
-
-  // =========================
-  // LOAD SEASON TOTALS (fast path)
-  // =========================
-  async function loadSeasonTotals(){
+  async function loadPlayerFromSeasonFilesAndBuildTotals(){
     if(!playerId){
-      setStatus("Missing ?player= in the URL");
       elName.textContent = "Unknown Player";
-      return;
-    }
-
-    setStatus("Loading seasons…");
-    seasonsList = [];
-    try{
-      seasonsList = await safeFetchJson("./data/baseball/index.json");
-    }catch(e){
-      setStatus("Could not load ./data/baseball/index.json");
-      return;
-    }
-
-    seasonsList = (seasonsList || []).map(s => String(s)).filter(Boolean);
-    // newest first for hints + nice UX
-    seasonsList.sort((a,b) => Number(b) - Number(a));
-
-    await buildHints();
-
-    // reset state
-    seasonRows = [];
-    teamAgg = new Map();
-    career = { games:0, plate_appearances:0, at_bats:0, hits:0, home_runs:0, walks:0, strikeouts:0 };
-
-    setStatus(`Scanning ${seasonsList.length} seasons…`);
-
-    let firstPlayerName = null;
-
-    await mapLimit(seasonsList, 6, async (seasonStr, idx) => {
-      let arr;
-      try{
-        arr = await safeFetchJson(`./data/baseball/players/${seasonStr}.json`);
-      }catch(e){
-        return;
-      }
-
-      const row = (arr || []).find(x => x && String(x.player_id) === String(playerId));
-      if(!row) return;
-
-      if(!firstPlayerName && row.player_name) firstPlayerName = String(row.player_name);
-
-      const out = {
-        season: Number(seasonStr) || seasonStr,
-        team: (row.team !== undefined ? row.team : ""),
-        games: safeNum(row.games),
-        plate_appearances: safeNum(row.plate_appearances),
-        at_bats: safeNum(row.at_bats),
-        hits: safeNum(row.hits),
-        home_runs: safeNum(row.home_runs),
-        walks: safeNum(row.walks),
-        strikeouts: safeNum(row.strikeouts),
-        avg: Number(fmtAvg(row.hits, row.at_bats))
-      };
-
-      seasonRows.push(out);
-      addToCareer(out);
-      addToAgg(teamAgg, out.team, out);
-
-      if(idx % 10 === 0){
-        setStatus(`Scanning… (${idx+1}/${seasonsList.length})`);
-      }
-    });
-
-    // name display
-    elName.textContent = firstPlayerName || playerId;
-
-    // render
-    renderCareer();
-    renderSeasonTable();
-
-    // team selector
-    const teams = Array.from(teamAgg.keys()).sort((a,b) => fullTeamName(a).localeCompare(fullTeamName(b)));
-    elTeamSelect.innerHTML = teams.map(t => `<option value="${String(t).replace(/"/g,'&quot;')}">${fullTeamName(t)}</option>`).join("");
-    const firstTeam = teams[0] || "";
-    elTeamSelect.value = firstTeam;
-    renderTeam(firstTeam);
-
-    elTeamSelect.addEventListener("change", () => renderTeam(elTeamSelect.value));
-
-    setStatus("Loading opponent breakdown…");
-  }
-
-  // =========================
-  // OPPONENT TOTALS (slow path)
-  // Uses boxscores + season schedules
-  // Caches in localStorage per player_id
-  // =========================
-  function cacheKeyOpp(pid){ return `tsa_oppAgg_${pid}`; }
-
-  function tryLoadOppCache(){
-    try{
-      const raw = localStorage.getItem(cacheKeyOpp(playerId));
-      if(!raw) return false;
-      const parsed = JSON.parse(raw);
-      if(!parsed || typeof parsed !== "object") return false;
-
-      oppAgg = new Map();
-      Object.keys(parsed).forEach(k => oppAgg.set(k, parsed[k]));
-      return oppAgg.size > 0;
-    }catch(e){
-      return false;
-    }
-  }
-
-  function saveOppCache(){
-    try{
-      const obj = {};
-      for(const [k,v] of oppAgg.entries()) obj[k] = v;
-      localStorage.setItem(cacheKeyOpp(playerId), JSON.stringify(obj));
-    }catch(e){}
-  }
-
-  function extractPlayerBatLine(box, pid){
-    // Look through any arrays of objects that have player_id and batting fields.
-    const wanted = String(pid);
-
-    function looksLikeBatLine(o){
-      if(!o || typeof o !== "object") return false;
-      if(String(o.player_id || "") !== wanted) return false;
-
-      const keys = Object.keys(o);
-      // must have at least one of these
-      return keys.includes("at_bats") || keys.includes("hits") || keys.includes("home_runs") || keys.includes("walks") || keys.includes("strikeouts") || keys.includes("plate_appearances");
-    }
-
-    // direct common keys first
-    const commonKeys = ["batters_home", "batters_away", "batting_home", "batting_away", "batting", "home_batting", "away_batting"];
-    for(const k of commonKeys){
-      const v = box[k];
-      if(Array.isArray(v)){
-        const hit = v.find(looksLikeBatLine);
-        if(hit) return hit;
-      }
-    }
-
-    // generic scan
-    for(const k of Object.keys(box)){
-      const v = box[k];
-      if(Array.isArray(v) && v.length && typeof v[0] === "object"){
-        const hit = v.find(looksLikeBatLine);
-        if(hit) return hit;
-      }
-      if(v && typeof v === "object" && !Array.isArray(v)){
-        // check nested one level
-        for(const kk of Object.keys(v)){
-          const vv = v[kk];
-          if(Array.isArray(vv) && vv.length && typeof vv[0] === "object"){
-            const hit = vv.find(looksLikeBatLine);
-            if(hit) return hit;
-          }
-        }
-      }
-    }
-
-    return null;
-  }
-
-  async function fetchBoxscore(season, date, away, home){
-    // try both filename orders
-    const a = `./data/baseball/boxscores/${season}/${date}_${away}_${home}.json`;
-    const b = `./data/baseball/boxscores/${season}/${date}_${home}_${away}.json`;
-    try{
-      return await safeFetchJson(a);
-    }catch(e1){
-      return await safeFetchJson(b);
-    }
-  }
-
-  async function buildOpponentTotals(){
-    if(!playerId) return;
-
-    // cached?
-    if(tryLoadOppCache()){
-      // build selector + render instantly
-      const opps = Array.from(oppAgg.keys()).sort((a,b) => fullTeamName(a).localeCompare(fullTeamName(b)));
-      elOppSelect.innerHTML = opps.map(o => `<option value="${String(o).replace(/"/g,'&quot;')}">${fullTeamName(o)}</option>`).join("");
-      const firstOpp = opps[0] || "";
-      elOppSelect.value = firstOpp;
-      renderOpponent(firstOpp);
-      elOppSelect.addEventListener("change", () => renderOpponent(elOppSelect.value));
-      setStatus("Done.");
-      return;
-    }
-
-    // Only scan seasons where the player exists (from seasonRows)
-    const seasonsToScan = seasonRows.map(r => String(r.season)).filter(Boolean).sort((a,b) => Number(b) - Number(a));
-
-    oppAgg = new Map();
-
-    // For progress
-    let seasonsDone = 0;
-
-    await mapLimit(seasonsToScan, 2, async (seasonStr) => {
-      // load season schedule to know game dates + teams
-      let schedule;
-      try{
-        schedule = await safeFetchJson(`./data/baseball/seasons/${seasonStr}.json`);
-      }catch(e){
-        seasonsDone++;
-        setStatus(`Opponent scan… (${seasonsDone}/${seasonsToScan.length})`);
-        return;
-      }
-
-      const games = Array.isArray(schedule) ? schedule : [];
-      let scanned = 0;
-
-      // Scan games with moderate concurrency
-      await mapLimit(games, 6, async (g) => {
-        const date = String(g.date || "").trim();
-        const home = String(g.home_code || "").trim();
-        const away = String(g.away_code || "").trim();
-        if(!date || !home || !away) return;
-
-        let box;
-        try{
-          box = await fetchBoxscore(seasonStr, date, away, home);
-        }catch(e){
-          return;
-        }
-
-        const line = extractPlayerBatLine(box, playerId);
-        if(!line) return;
-
-        // Determine opponent: if player on home, opponent is away (best-effort: compare line.team if exists)
-        let playerTeam = (line.team !== undefined && line.team !== null) ? String(line.team).trim() : "";
-
-        // If no team on line, infer by checking which side array he appears in
-        // (still best-effort; if your schema is different, this will still often work)
-        let opponent = "";
-        if(playerTeam){
-          opponent = (playerTeam === home) ? away : (playerTeam === away ? home : (home && away ? (home === playerTeam ? away : home) : ""));
-        }else{
-          opponent = away; // fallback
-          playerTeam = home; // fallback
-        }
-
-        const row = {
-          games: safeNum(line.games || 1),
-          plate_appearances: safeNum(line.plate_appearances),
-          at_bats: safeNum(line.at_bats),
-          hits: safeNum(line.hits),
-          home_runs: safeNum(line.home_runs),
-          walks: safeNum(line.walks),
-          strikeouts: safeNum(line.strikeouts)
-        };
-
-        addToAgg(oppAgg, opponent, row);
-
-        scanned++;
-        if(scanned % 60 === 0){
-          setStatus(`Opponent scan ${seasonStr}… ${scanned}/${games.length}`);
-        }
-      });
-
-      seasonsDone++;
-      setStatus(`Opponent scan… (${seasonsDone}/${seasonsToScan.length})`);
-    });
-
-    // Save cache
-    saveOppCache();
-
-    // Build opponent selector
-    const opps = Array.from(oppAgg.keys()).sort((a,b) => fullTeamName(a).localeCompare(fullTeamName(b)));
-    elOppSelect.innerHTML = opps.map(o => `<option value="${String(o).replace(/"/g,'&quot;')}">${fullTeamName(o)}</option>`).join("");
-    const firstOpp = opps[0] || "";
-    elOppSelect.value = firstOpp;
-    renderOpponent(firstOpp);
-
-    elOppSelect.addEventListener("change", () => renderOpponent(elOppSelect.value));
-
-    setStatus("Done.");
-  }
-
-  // =========================
-  // INIT
-  // =========================
-  async function init(){
-    wireSorting();
-    wireSearch();
-
-    if(!playerId){
-      elName.textContent = "Player";
+      elMeta.textContent = "Missing ?player= in the URL";
       setStatus("Missing ?player=");
       return;
     }
 
-    // Make sure we have seasons list early for search hints
-    try{
-      seasonsList = await safeFetchJson("./data/baseball/index.json");
-      seasonsList = (seasonsList || []).map(s => String(s)).filter(Boolean).sort((a,b) => Number(b) - Number(a));
-      await buildHints();
-    }catch(e){
-      // ignore
+    setStatus("Loading seasons…");
+    await loadTeamMap();
+    await loadSeasonsIndex();
+
+    if(!seasonsAll.length){
+      elName.textContent = playerId;
+      elMeta.textContent = "Could not load ./data/baseball/index.json";
+      setStatus("No season index found");
+      return;
     }
 
-    await loadSeasonTotals();
-    await buildOpponentTotals();
+    // reset
+    seasonRows = [];
+    teamAgg = new Map();
+    career = { games:0, plate_appearances:0, at_bats:0, hits:0, home_runs:0, walks:0, strikeouts:0 };
+    playedSeasons = [];
+
+    let firstSeenName = "";
+    let firstSeason = null;
+    let lastSeason = null;
+
+    setStatus(`Scanning ${seasonsAll.length} seasons (career)…`);
+
+    // Pull per-season totals from players/{season}.json
+    await mapLimit(seasonsAll, 8, async (seasonStr, idx) => {
+      const url = `./data/baseball/players/${seasonStr}.json`;
+      let arr;
+      try{
+        arr = await safeFetchJson(url);
+      }catch(e){
+        return;
+      }
+
+      const row = (arr || []).find(x => String(x.player_id) === String(playerId));
+      if(!row) return;
+
+      // capture a usable name
+      if(!firstSeenName){
+        firstSeenName = (row.player_name || row.name || "").trim();
+      }
+
+      const out = {
+        season: Number(seasonStr) || seasonStr,
+        team: (row.team !== undefined ? row.team : ""),
+        games: Number(row.games || 0),
+        plate_appearances: Number(row.plate_appearances || 0),
+        at_bats: Number(row.at_bats || 0),
+        hits: Number(row.hits || 0),
+        home_runs: Number(row.home_runs || 0),
+        walks: Number(row.walks || 0),
+        strikeouts: Number(row.strikeouts || 0),
+        avg: Number(fmtAvg(row.hits, row.at_bats))
+      };
+
+      seasonRows.push(out);
+
+      addAgg(career, out);
+
+      const t = ensureTeamAgg(out.team);
+      addAgg(t, out);
+
+      // played seasons (for opponent scan)
+      if(out.games > 0 || out.plate_appearances > 0){
+        playedSeasons.push(String(seasonStr));
+        const sNum = Number(seasonStr);
+        if(isFinite(sNum)){
+          if(firstSeason === null || sNum < firstSeason) firstSeason = sNum;
+          if(lastSeason === null || sNum > lastSeason) lastSeason = sNum;
+        }
+      }
+
+      if(idx % 10 === 0){
+        setStatus(`Scanning career… (${idx+1}/${seasonsAll.length})`);
+      }
+    });
+
+    // Set header
+    elName.textContent = firstSeenName || playerId;
+
+    let metaBits = [];
+    if(firstSeason !== null && lastSeason !== null){
+      metaBits.push(`Seasons: ${firstSeason}–${lastSeason}`);
+    }else{
+      metaBits.push(`Seasons: (unknown range)`);
+    }
+    metaBits.push(`Player page`);
+    elMeta.textContent = metaBits.join(" • ");
+
+    // Render career/team/season
+    renderCareer();
+
+    // Team dropdown
+    const teams = Array.from(teamAgg.keys()).filter(k => String(k).trim() !== "").sort((a,b) => teamFull(a).localeCompare(teamFull(b)));
+    elTeamSelect.innerHTML = teams.map(t => `<option value="${safeText(t)}">${safeText(teamFull(t))}</option>`).join("");
+
+    const defaultTeam = teams[0] || "";
+    elTeamSelect.value = defaultTeam;
+    renderTeam(defaultTeam);
+
+    elTeamSelect.addEventListener("change", () => renderTeam(elTeamSelect.value));
+
+    renderSeasonTable();
+
+    // Notes
+    elCareerNote.textContent = playedSeasons.length
+      ? `Career totals aggregated from your per-season player files.`
+      : `No per-season player rows found for this player ID in ./data/baseball/players/{season}.json`;
+
+    elTeamNote.textContent = `Select a team to see splits (from your season player files).`;
+
+    setStatus("Career loaded. Building opponents…");
+
+    // Kick off opponent scan
+    await buildOpponentSplitsFromGames();
+  }
+
+  function buildOpponentDropdown(){
+    const opps = Array.from(oppAgg.keys()).filter(k => String(k).trim() !== "").sort((a,b) => teamFull(a).localeCompare(teamFull(b)));
+    // include "All" at top
+    elOppSelect.innerHTML = [`<option value="__ALL__">All Opponents</option>`]
+      .concat(opps.map(o => `<option value="${safeText(o)}">${safeText(teamFull(o))}</option>`))
+      .join("");
+
+    elOppSelect.value = "__ALL__";
+  }
+
+  function renderOppAll(){
+    // aggregate all opponents into one display
+    const all = { games_found:0, plate_appearances:0, at_bats:0, hits:0, home_runs:0, walks:0, strikeouts:0 };
+    for(const v of oppAgg.values()){
+      all.games_found += Number(v.games_found||0);
+      all.plate_appearances += Number(v.plate_appearances||0);
+      all.at_bats += Number(v.at_bats||0);
+      all.hits += Number(v.hits||0);
+      all.home_runs += Number(v.home_runs||0);
+      all.walks += Number(v.walks||0);
+      all.strikeouts += Number(v.strikeouts||0);
+    }
+    const avg = fmtAvg(all.hits, all.at_bats);
+
+    elOppHint.textContent = "All Opponents";
+    renderCards(elOppCards, [
+      { label:"Games Found", value: fmtInt(all.games_found) },
+      { label:"Plate Appearances", value: fmtInt(all.plate_appearances) },
+      { label:"Hits", value: fmtInt(all.hits) },
+      { label:"Home Runs", value: fmtInt(all.home_runs) },
+      { label:"Batting Avg", value: avg }
+    ]);
+  }
+
+  async function buildOpponentSplitsFromGames(){
+    // This builds opponent totals by scanning game event files.
+    // Key rule (your schema):
+    // event[2] half inning: "0" => away batting, "1" => home batting
+    // So for this player's play event:
+    // half "0": playerTeam = away_code, opponent = home_code
+    // half "1": playerTeam = home_code, opponent = away_code
+
+    oppAgg = new Map();
+    oppReady = false;
+
+    if(!playedSeasons.length){
+      elOppNote.textContent = "No played seasons detected for this player, so opponent splits cannot be built.";
+      elOppHint.textContent = "No data";
+      renderOppAll();
+      setStatus("Done.");
+      return;
+    }
+
+    // de-dupe and sort played seasons
+    playedSeasons = Array.from(new Set(playedSeasons)).sort((a,b) => Number(a) - Number(b));
+
+    elOppNote.textContent = "Building opponent splits from your game event files (this can take a bit the first time).";
+
+    // We'll scan only seasons the player actually appears in (from players/{season}.json),
+    // then for each season we read seasons/{season}.json to get the game list,
+    // then fetch each game json and look for playerId in play events.
+
+    let gamesChecked = 0;
+    let gamesFound = 0;
+
+    // helper to make a Retrosheet-like game id you use in filenames
+    // from your earlier setup: gameId = home_code + yyyymmdd + "0"
+    function buildGameIdFromRow(g){
+      const home = String(g.home_code || g.home || g.homeTeam || "").trim();
+      const date = String(g.date || "").trim(); // "YYYY-MM-DD"
+      if(!home || !date) return "";
+      const ymd = date.replaceAll("-","");
+      return home + ymd + "0";
+    }
+
+    // scan seasons sequentially, but inside each season do limited concurrency
+    for(let sIdx=0; sIdx<playedSeasons.length; sIdx++){
+      const seasonStr = playedSeasons[sIdx];
+
+      setStatus(`Opponents: loading season ${seasonStr} (${sIdx+1}/${playedSeasons.length})…`);
+
+      let seasonGames = [];
+      try{
+        seasonGames = await safeFetchJson(`./data/baseball/seasons/${seasonStr}.json`);
+      }catch(e){
+        continue;
+      }
+
+      if(!Array.isArray(seasonGames) || !seasonGames.length) continue;
+
+      // Build list of gameIds
+      const gameIds = seasonGames.map(buildGameIdFromRow).filter(Boolean);
+
+      await mapLimit(gameIds, 5, async (gameId, idx) => {
+        gamesChecked++;
+
+        // progress
+        if(gamesChecked % 120 === 0){
+          setStatus(`Opponents: checked ${gamesChecked.toLocaleString("en-US")} games…`);
+        }
+
+        let box;
+        try{
+          box = await safeFetchJson(`./data/baseball/games/${seasonStr}/${gameId}.json`);
+        }catch(e){
+          return;
+        }
+
+        const home = String(box.home_code || "").trim();
+        const away = String(box.away_code || "").trim();
+        const events = Array.isArray(box.events) ? box.events : [];
+
+        if(!home || !away || !events.length) return;
+
+        let appearedInGame = false;
+
+        for(const e of events){
+          // ["play", inning, half, batterId, ... , result]
+          if(!Array.isArray(e)) continue;
+          if(e[0] !== "play") continue;
+          if(String(e[3]) !== String(playerId)) continue;
+
+          const half = String(e[2]); // "0" top (away bats), "1" bottom (home bats)
+          let opponent = "";
+          if(half === "0"){
+            opponent = home;
+          }else if(half === "1"){
+            opponent = away;
+          }else{
+            // unknown, skip
+            continue;
+          }
+
+          const agg = ensureOppAgg(opponent);
+          const result = e[6] ?? "";
+          applyPlayResultToAgg(agg, result);
+
+          appearedInGame = true;
+        }
+
+        if(appearedInGame){
+          gamesFound++;
+          // Count this game once per opponent bucket:
+          // If player appears in a game, we increment games_found for the opponent they faced.
+          // But the player could have both halves? No. So we can derive opponent once by first match:
+          // We'll compute again: scan for first matching play and use that opponent.
+          let firstOpp = "";
+          for(const e of events){
+            if(Array.isArray(e) && e[0]==="play" && String(e[3])===String(playerId)){
+              const half = String(e[2]);
+              firstOpp = (half==="0") ? home : (half==="1") ? away : "";
+              break;
+            }
+          }
+          if(firstOpp){
+            const agg = ensureOppAgg(firstOpp);
+            agg.games_found += 1;
+          }
+        }
+      });
+    }
+
+    oppReady = true;
+
+    // Build dropdown + render
+    buildOpponentDropdown();
+    renderOppAll();
+
+    elOppSelect.addEventListener("change", () => {
+      const v = elOppSelect.value;
+      if(v === "__ALL__"){
+        renderOppAll();
+      }else{
+        renderOpponent(v);
+      }
+    });
+
+    elOppNote.textContent = `Opponent splits built from game event files. Games checked: ${gamesChecked.toLocaleString("en-US")}. Games with this player found: ${gamesFound.toLocaleString("en-US")}.`;
+    setStatus("Done.");
+  }
+
+  // -------- Player search by NAME (not id) --------
+  // Strategy:
+  // 1) Try to load a prebuilt master list if it exists: ./data/baseball/players.json
+  // 2) If not found, build an index by scanning seasonsAll players files once,
+  //    de-duping by player_id and caching to localStorage.
+  async function loadPlayerSearchIndex(){
+    // Try cached
+    try{
+      const cached = localStorage.getItem("tsa_baseball_player_index_v1");
+      if(cached){
+        const parsed = JSON.parse(cached);
+        if(Array.isArray(parsed) && parsed.length){
+          playerIndex = parsed;
+          playerIndexReady = true;
+          fillDatalist(playerIndex);
+          return;
+        }
+      }
+    }catch(e){}
+
+    // Try master file
+    try{
+      const master = await safeFetchJson("./data/baseball/players.json");
+      if(Array.isArray(master) && master.length){
+        playerIndex = master.map(p => ({
+          id: String(p.player_id || p.id || "").trim(),
+          name: String(p.player_name || p.name || "").trim()
+        })).filter(x => x.id && x.name);
+
+        playerIndexReady = true;
+        fillDatalist(playerIndex);
+
+        try{ localStorage.setItem("tsa_baseball_player_index_v1", JSON.stringify(playerIndex)); }catch(e){}
+        return;
+      }
+    }catch(e){
+      // continue to build
+    }
+
+    // Build from season files (heavy once, then cached)
+    if(!seasonsAll.length){
+      // seasons index might not be loaded yet; load it
+      await loadSeasonsIndex();
+    }
+    if(!seasonsAll.length) return;
+
+    setStatus("Building player search (one-time)…");
+
+    const map = new Map(); // id -> name
+    await mapLimit(seasonsAll, 6, async (seasonStr, idx) => {
+      let arr;
+      try{
+        arr = await safeFetchJson(`./data/baseball/players/${seasonStr}.json`);
+      }catch(e){
+        return;
+      }
+      for(const r of (arr || [])){
+        const id = String(r.player_id || "").trim();
+        const nm = String(r.player_name || r.name || "").trim();
+        if(id && nm && !map.has(id)){
+          map.set(id, nm);
+        }
+      }
+      if(idx % 10 === 0){
+        setStatus(`Building player search… (${idx+1}/${seasonsAll.length})`);
+      }
+    });
+
+    playerIndex = Array.from(map.entries()).map(([id,name]) => ({id,name}))
+      .sort((a,b) => a.name.localeCompare(b.name));
+
+    playerIndexReady = true;
+    fillDatalist(playerIndex);
+
+    try{ localStorage.setItem("tsa_baseball_player_index_v1", JSON.stringify(playerIndex)); }catch(e){}
+
+    setStatus("Player search ready.");
+  }
+
+  function fillDatalist(list){
+    // limit datalist size for browser performance (still searchable by typing)
+    // if you want EVERYTHING, set this higher — but this keeps Safari happy
+    const max = 5000;
+    const slice = list.slice(0, max);
+    elDatalist.innerHTML = slice.map(p => `<option value="${safeText(p.name)}"></option>`).join("");
+  }
+
+  function findPlayerIdByName(name){
+    const q = String(name || "").trim().toLowerCase();
+    if(!q) return "";
+
+    // exact match first
+    for(const p of playerIndex){
+      if(String(p.name).trim().toLowerCase() === q) return p.id;
+    }
+
+    // contains match fallback
+    for(const p of playerIndex){
+      if(String(p.name).trim().toLowerCase().includes(q)) return p.id;
+    }
+
+    return "";
+  }
+
+  function wireSearch(){
+    // Default input display:
+    // If we can resolve to a name later, we'll overwrite the input with name.
+    if(playerId) elSearch.value = "";
+
+    function go(){
+      const v = (elSearch.value || "").trim();
+      if(!v) return;
+
+      if(!playerIndexReady){
+        // fallback: allow direct id entry anyway
+        location.href = `./player.html?player=${encodeURIComponent(v)}`;
+        return;
+      }
+
+      const id = findPlayerIdByName(v) || v; // if user typed id, still works
+      location.href = `./player.html?player=${encodeURIComponent(id)}`;
+    }
+
+    elGo.addEventListener("click", go);
+    elSearch.addEventListener("keydown", (e) => { if(e.key === "Enter") go(); });
+  }
+
+  async function init(){
+    wireSorting();
+    wireSearch();
+
+    await loadSeasonsIndex();         // needed for search building and player totals
+    loadPlayerSearchIndex();          // don’t await (it can build in background)
+
+    await loadPlayerFromSeasonFilesAndBuildTotals();
   }
 
   init();
