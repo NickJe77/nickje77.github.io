@@ -142,7 +142,7 @@ tr:hover{
   </select>
 </div>
 
-<div class="section-title">Games</div>
+<div class="section-title">Regular Season Games</div>
 <div class="card">
   <table>
     <thead>
@@ -165,28 +165,31 @@ const params=new URLSearchParams(window.location.search);
 const team=(params.get("team")||"").trim();
 document.getElementById("teamName").textContent=team;
 
-const clean=s=>(s||"").toString().toLowerCase().trim();
+const clean=s=>(s||"").toLowerCase().trim();
 
 function safeSeason(dateStr){
-  if(!dateStr||typeof dateStr!=="string")return null;
-
+  if(!dateStr)return null;
   const cleaned=dateStr.trim().split(" ")[0];
   const parts=cleaned.split("/");
-
   if(parts.length<3)return null;
-
   const month=parseInt(parts[1]);
   const year=parseInt(parts[2]);
-
   if(isNaN(month)||isNaN(year))return null;
-
   return month>=10?year:year-1;
 }
 
 function seasonLabel(start){
-  if(!start)return "";
   const next=String((start+1)%100).padStart(2,"0");
   return `${start}-${next}`;
+}
+
+function isRegularGame(home,away){
+  if(!home||!away)return false;
+  if(home.toLowerCase().includes("nan"))return false;
+  if(away.toLowerCase().includes("nan"))return false;
+  if(home.toLowerCase().includes("all"))return false;
+  if(away.toLowerCase().includes("all"))return false;
+  return true;
 }
 
 let allGames=[];
@@ -199,10 +202,11 @@ fetch("/data/nba/nba_games_master.json")
   const t=clean(team);
 
   data.forEach(game=>{
-
     try{
       const home=clean(game.home_team);
       const away=clean(game.away_team);
+
+      if(!isRegularGame(home,away))return;
 
       if(home===t||away===t){
 
@@ -223,16 +227,12 @@ fetch("/data/nba/nba_games_master.json")
           score:`${teamScore} - ${oppScore}`
         });
       }
-    }catch(e){
-      // skip broken records safely
-    }
-
+    }catch(e){}
   });
 
   buildSelector();
   render("all");
-})
-.catch(()=>{});
+});
 
 function buildSelector(){
   const select=document.getElementById("seasonSelect");
@@ -251,7 +251,6 @@ function buildSelector(){
 }
 
 function render(season){
-
   const gamesBody=document.getElementById("gamesBody");
   gamesBody.innerHTML="";
 
