@@ -57,39 +57,22 @@ const tb = document.getElementById("tb");
 const title = document.getElementById("title");
 const errorBox = document.getElementById("error");
 
-let games = [];
-
 async function init(){
   try {
 
     const res = await fetch("/data/baseball/index.json");
-    if(!res.ok) throw new Error("index.json not found");
-    games = await res.json();
+    const seasons = await res.json();
 
-    // Extract unique team codes from games
     const teamSet = new Set();
 
-    games.forEach(g=>{
-      teamSet.add(g.home_code);
-      teamSet.add(g.away_code);
-    });
-
-    const teamList = Array.from(teamSet).sort();
-
-    teamList.forEach(code=>{
-      const opt = document.createElement("option");
-      opt.value = code;
-      opt.textContent = code;
-      teamSelect.appendChild(opt);
-    });
-
-    if(teamList.length){
-      loadTeam(teamList[0]);
+    for(const year of seasons){
+      const boxIndex = await fetch(`/data/baseball/boxscores/${year}/`);
+      // GitHub pages does not allow folder listing
+      // So instead we derive teams dynamically while loading games later
     }
 
-    teamSelect.onchange = ()=>{
-      loadTeam(teamSelect.value);
-    };
+    // Instead, derive teams dynamically while building first season
+    await buildTeams(seasons);
 
   } catch(err){
     errorBox.textContent = "Failed to load data.";
@@ -97,52 +80,102 @@ async function init(){
   }
 }
 
-function loadTeam(code){
+async function buildTeams(seasons){
+
+  const teamSet = new Set();
+
+  for(const year of seasons){
+    const seasonFiles = await fetch(`/data/baseball/boxscores/${year}/index.json`).catch(()=>null);
+    if(!seasonFiles || !seasonFiles.ok) continue;
+
+    const files = await seasonFiles.json();
+
+    for(const file of files){
+      const gameRes = await fetch(`/data/baseball/boxscores/${year}/${file}`);
+      const game = await gameRes.json();
+      teamSet.add(game.home_code);
+      teamSet.add(game.away_code);
+    }
+  }
+
+  const teams = Array.from(teamSet).sort();
+
+  teams.forEach(code=>{
+    const opt = document.createElement("option");
+    opt.value = code;
+    opt.textContent = code;
+    teamSelect.appendChild(opt);
+  });
+
+  if(teams.length){
+    loadTeam(teams[0], seasons);
+  }
+
+  teamSelect.onchange = ()=>{
+    loadTeam(teamSelect.value, seasons);
+  };
+}
+
+async function loadTeam(code, seasons){
 
   title.textContent = `Franchise History – ${code}`;
   tb.innerHTML = "";
 
-  const seasonMap = {};
+  for(const year of seasons){
 
-  games.forEach(g=>{
+    let W=0, L=0, RS=0, RA=0;
 
-    if(g.home_code !== code && g.away_code !== code) return;
+    const seasonIndexRes = await fetch(`/data/baseball/boxscores/${year}/index.json`).catch(()=>null);
+    if(!seasonIndexRes || !seasonIndexRes.ok) continue;
 
-    if(!seasonMap[g.season]){
-      seasonMap[g.season] = { W:0, L:0, RS:0, RA:0 };
+    const files = await seasonIndexRes.json();
+
+    for(const file of files){
+
+      const gameRes = await fetch(`/data/baseball/boxscores/${year}/${file}`);
+      const game = await gameRes.json();
+
+      if(game.home_code !== code && game.away_code !== code) continue;
+
+      let homeRuns = 0;
+      let awayRuns = 0;
+
+      game.events.forEach(e=>{
+        const result = e[6] || "";
+        const runs = (result.match(/-H/g) || []).length;
+
+        if(e[2] === "0") homeRuns += runs;
+        else awayRuns += runs;
+      });
+
+      const isHome = game.home_code === code;
+      const teamRuns = isHome ? homeRuns : awayRuns;
+      const oppRuns  = isHome ? awayRuns : homeRuns;
+
+      RS += teamRuns;
+      RA += oppRuns;
+
+      if(teamRuns > oppRuns) W++;
+      else L++;
     }
 
-    const isHome = g.home_code === code;
-    const teamScore = isHome ? g.home_score : g.away_score;
-    const oppScore  = isHome ? g.away_score : g.home_score;
+    if(W+L === 0) continue;
 
-    seasonMap[g.season].RS += teamScore;
-    seasonMap[g.season].RA += oppScore;
+    const pct = (W/(W+L)).toFixed(3);
+    const diff = RS - RA;
 
-    if(teamScore > oppScore) seasonMap[g.season].W++;
-    else seasonMap[g.season].L++;
-  });
-
-  Object.keys(seasonMap)
-    .sort((a,b)=>b - a)
-    .forEach(season=>{
-      const s = seasonMap[season];
-      const gp = s.W + s.L;
-      const pct = gp ? (s.W/gp).toFixed(3) : ".000";
-      const diff = s.RS - s.RA;
-
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${season}</td>
-        <td>${s.W}</td>
-        <td>${s.L}</td>
-        <td>${pct}</td>
-        <td>${s.RS}</td>
-        <td>${s.RA}</td>
-        <td>${diff}</td>
-      `;
-      tb.appendChild(tr);
-    });
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${year}</td>
+      <td>${W}</td>
+      <td>${L}</td>
+      <td>${pct}</td>
+      <td>${RS}</td>
+      <td>${RA}</td>
+      <td>${diff}</td>
+    `;
+    tb.appendChild(tr);
+  }
 }
 
 init();
