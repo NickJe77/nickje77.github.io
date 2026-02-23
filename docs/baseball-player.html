@@ -241,16 +241,16 @@ tr:nth-child(even){background:#f7fbff;}
   <table id="seasonTable">
     <thead>
       <tr>
-        <th data-key="season">Season</th>
-        <th data-key="team">Team</th>
-        <th data-key="games">G</th>
-        <th data-key="plate_appearances">PA</th>
-        <th data-key="at_bats">AB</th>
-        <th data-key="hits">H</th>
-        <th data-key="home_runs">HR</th>
-        <th data-key="walks">BB</th>
-        <th data-key="strikeouts">SO</th>
-        <th data-key="avg">AVG</th>
+        <th>Season</th>
+        <th>Team</th>
+        <th>G</th>
+        <th>PA</th>
+        <th>AB</th>
+        <th>H</th>
+        <th>HR</th>
+        <th>BB</th>
+        <th>SO</th>
+        <th>AVG</th>
       </tr>
     </thead>
     <tbody id="seasonBody"></tbody>
@@ -262,8 +262,13 @@ tr:nth-child(even){background:#f7fbff;}
 <script>
 (function(){
 
-const qs=new URLSearchParams(location.search);
-const playerId=qs.get("player");
+const qs = new URLSearchParams(location.search);
+const playerId = qs.get("player");
+
+if(!playerId){
+  document.getElementById("playerName").textContent = "Player Not Found";
+  return;
+}
 
 const TEAM_NAMES={
 "SEA":"Seattle Mariners","SFN":"San Francisco Giants",
@@ -273,7 +278,6 @@ const TEAM_NAMES={
 };
 
 function teamFull(c){return TEAM_NAMES[c]||c;}
-
 function fmt(n){return Number(n||0).toLocaleString();}
 function avg(h,ab){return ab? (h/ab).toFixed(3):"0.000";}
 
@@ -282,104 +286,154 @@ let teamAgg=new Map();
 let oppAgg=new Map();
 let career={games:0,plate_appearances:0,at_bats:0,hits:0,home_runs:0,walks:0,strikeouts:0};
 
+async function safeFetch(url){
+  const r = await fetch(url);
+  if(!r.ok) return null;
+  return await r.json();
+}
+
 async function loadPlayersIndex(){
-const arr=await fetch("./data/baseball/players.json").then(r=>r.json());
-const list=document.getElementById("playerList");
-list.innerHTML=arr.map(p=>`<option value="${p.player_name}"></option>`).join("");
-window.playersIndex=arr;
+  const arr = await safeFetch("./data/baseball/players.json");
+  if(!arr) return;
+
+  const list=document.getElementById("playerList");
+  list.innerHTML=arr.map(p=>`<option value="${p.player_name}"></option>`).join("");
+  window.playersIndex=arr;
+
+  const match = arr.find(p=>p.player_id===playerId);
+  if(match){
+    document.getElementById("playerName").textContent = match.player_name;
+  }
 }
 
 function findPlayerIdByName(name){
-name=name.toLowerCase();
-const hit=window.playersIndex.find(p=>p.player_name.toLowerCase()===name);
-return hit?hit.player_id:"";
+  name=name.toLowerCase();
+  const hit=window.playersIndex.find(p=>p.player_name.toLowerCase()===name);
+  return hit?hit.player_id:"";
 }
 
 document.getElementById("goBtn").onclick=()=>{
-const name=document.getElementById("playerSearch").value.trim();
-const id=findPlayerIdByName(name);
-if(id) location.href=`player.html?player=${id}`;
+  const name=document.getElementById("playerSearch").value.trim();
+  const id=findPlayerIdByName(name);
+  if(id) location.href=`player.html?player=${id}`;
 };
 
 async function loadSeasons(){
-const seasons=await fetch("./data/baseball/index.json").then(r=>r.json());
-for(const s of seasons){
-try{
-const data=await fetch(`./data/baseball/players/${s}.json`).then(r=>r.json());
-const row=data.find(p=>p.player_id===playerId);
-if(!row) continue;
-seasonRows.push({...row,season:s});
-career.games+=row.games;
-career.plate_appearances+=row.plate_appearances;
-career.at_bats+=row.at_bats;
-career.hits+=row.hits;
-career.home_runs+=row.home_runs;
-career.walks+=row.walks;
-career.strikeouts+=row.strikeouts;
-if(!teamAgg.has(row.team)) teamAgg.set(row.team,{...row});
-}catch{}
-}
-renderCareer();
-renderSeason();
-buildTeamSelector();
+  const seasons = await safeFetch("./data/baseball/index.json");
+  if(!seasons) return;
+
+  for(const s of seasons){
+    const data = await safeFetch(`./data/baseball/players/${s}.json`);
+    if(!data) continue;
+
+    const row = data.find(p=>p.player_id===playerId);
+    if(!row) continue;
+
+    seasonRows.push({...row,season:s});
+
+    career.games+=row.games||0;
+    career.plate_appearances+=row.plate_appearances||0;
+    career.at_bats+=row.at_bats||0;
+    career.hits+=row.hits||0;
+    career.home_runs+=row.home_runs||0;
+    career.walks+=row.walks||0;
+    career.strikeouts+=row.strikeouts||0;
+
+    if(!teamAgg.has(row.team)){
+      teamAgg.set(row.team,{
+        games:0,plate_appearances:0,at_bats:0,
+        hits:0,home_runs:0,walks:0,strikeouts:0
+      });
+    }
+
+    const t = teamAgg.get(row.team);
+    t.games+=row.games||0;
+    t.plate_appearances+=row.plate_appearances||0;
+    t.at_bats+=row.at_bats||0;
+    t.hits+=row.hits||0;
+    t.home_runs+=row.home_runs||0;
+    t.walks+=row.walks||0;
+    t.strikeouts+=row.strikeouts||0;
+  }
+
+  renderCareer();
+  renderSeason();
+  buildTeamSelector();
 }
 
 function renderCareer(){
-document.getElementById("careerCards").innerHTML=`
-<div class="card"><div class="value">${fmt(career.games)}</div><div class="label">Games</div></div>
-<div class="card"><div class="value">${fmt(career.plate_appearances)}</div><div class="label">PA</div></div>
-<div class="card"><div class="value">${fmt(career.hits)}</div><div class="label">Hits</div></div>
-<div class="card"><div class="value">${fmt(career.home_runs)}</div><div class="label">HR</div></div>
-<div class="card"><div class="value">${avg(career.hits,career.at_bats)}</div><div class="label">AVG</div></div>
-`;
+  document.getElementById("careerCards").innerHTML=`
+  <div class="card"><div class="value">${fmt(career.games)}</div><div class="label">Games</div></div>
+  <div class="card"><div class="value">${fmt(career.plate_appearances)}</div><div class="label">PA</div></div>
+  <div class="card"><div class="value">${fmt(career.hits)}</div><div class="label">Hits</div></div>
+  <div class="card"><div class="value">${fmt(career.home_runs)}</div><div class="label">HR</div></div>
+  <div class="card"><div class="value">${avg(career.hits,career.at_bats)}</div><div class="label">AVG</div></div>
+  `;
 }
 
 function renderSeason(){
-document.getElementById("seasonBody").innerHTML=seasonRows.map(r=>`
-<tr>
-<td>${r.season}</td>
-<td>${teamFull(r.team)}</td>
-<td>${r.games}</td>
-<td>${r.plate_appearances}</td>
-<td>${r.at_bats}</td>
-<td>${r.hits}</td>
-<td>${r.home_runs}</td>
-<td>${r.walks}</td>
-<td>${r.strikeouts}</td>
-<td>${avg(r.hits,r.at_bats)}</td>
-</tr>`).join("");
+  document.getElementById("seasonBody").innerHTML=seasonRows.map(r=>`
+  <tr>
+  <td>${r.season}</td>
+  <td>${teamFull(r.team)}</td>
+  <td>${r.games}</td>
+  <td>${r.plate_appearances}</td>
+  <td>${r.at_bats}</td>
+  <td>${r.hits}</td>
+  <td>${r.home_runs}</td>
+  <td>${r.walks}</td>
+  <td>${r.strikeouts}</td>
+  <td>${avg(r.hits,r.at_bats)}</td>
+  </tr>`).join("");
 }
 
 function buildTeamSelector(){
-const sel=document.getElementById("teamSelect");
-sel.innerHTML=[...teamAgg.keys()].map(t=>`<option value="${t}">${teamFull(t)}</option>`).join("");
+  const sel=document.getElementById("teamSelect");
+  sel.innerHTML=[...teamAgg.keys()].map(t=>`<option value="${t}">${teamFull(t)}</option>`).join("");
+
+  sel.onchange=()=>{
+    const t = teamAgg.get(sel.value);
+    if(!t) return;
+    document.getElementById("teamCards").innerHTML=`
+    <div class="card"><div class="value">${fmt(t.games)}</div><div class="label">Games</div></div>
+    <div class="card"><div class="value">${fmt(t.hits)}</div><div class="label">Hits</div></div>
+    <div class="card"><div class="value">${fmt(t.home_runs)}</div><div class="label">HR</div></div>
+    <div class="card"><div class="value">${fmt(t.walks)}</div><div class="label">BB</div></div>
+    <div class="card"><div class="value">${avg(t.hits,t.at_bats)}</div><div class="label">AVG</div></div>
+    `;
+  };
+
+  if(sel.value) sel.onchange();
 }
 
 async function loadOpponents(){
-const data=await fetch(`./data/baseball/opponents/${playerId}.json`).then(r=>r.json());
-data.forEach(o=>oppAgg.set(o.opponent,o));
-const sel=document.getElementById("oppSelect");
-sel.innerHTML=data.map(o=>`<option value="${o.opponent}">${teamFull(o.opponent)}</option>`).join("");
-renderOpponent(sel.value);
-sel.onchange=()=>renderOpponent(sel.value);
+  const data = await safeFetch(`./data/baseball/opponents/${playerId}.json`);
+  if(!data) return;
+
+  data.forEach(o=>oppAgg.set(o.opponent,o));
+  const sel=document.getElementById("oppSelect");
+  sel.innerHTML=data.map(o=>`<option value="${o.opponent}">${teamFull(o.opponent)}</option>`).join("");
+
+  sel.onchange=()=>renderOpponent(sel.value);
+  if(sel.value) sel.onchange();
 }
 
 function renderOpponent(o){
-const d=oppAgg.get(o);
-if(!d) return;
-document.getElementById("oppCards").innerHTML=`
-<div class="card"><div class="value">${fmt(d.games)}</div><div class="label">Games</div></div>
-<div class="card"><div class="value">${fmt(d.hits)}</div><div class="label">Hits</div></div>
-<div class="card"><div class="value">${fmt(d.home_runs)}</div><div class="label">HR</div></div>
-<div class="card"><div class="value">${fmt(d.walks)}</div><div class="label">BB</div></div>
-<div class="card"><div class="value">${avg(d.hits,d.at_bats)}</div><div class="label">AVG</div></div>
-`;
+  const d=oppAgg.get(o);
+  if(!d) return;
+  document.getElementById("oppCards").innerHTML=`
+  <div class="card"><div class="value">${fmt(d.games)}</div><div class="label">Games</div></div>
+  <div class="card"><div class="value">${fmt(d.hits)}</div><div class="label">Hits</div></div>
+  <div class="card"><div class="value">${fmt(d.home_runs)}</div><div class="label">HR</div></div>
+  <div class="card"><div class="value">${fmt(d.walks)}</div><div class="label">BB</div></div>
+  <div class="card"><div class="value">${avg(d.hits,d.at_bats)}</div><div class="label">AVG</div></div>
+  `;
 }
 
 async function init(){
-await loadPlayersIndex();
-await loadSeasons();
-await loadOpponents();
+  await loadPlayersIndex();
+  await loadSeasons();
+  await loadOpponents();
 }
 
 init();
