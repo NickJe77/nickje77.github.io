@@ -7,92 +7,29 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
-body{
-  font-family:Inter,system-ui,Arial;
-  margin:0;
-  background:#f4f6f8;
-}
-
-.page{
-  max-width:1200px;
-  margin:0 auto;
-  padding:22px 18px;
-}
-
-.hero{
-  background:linear-gradient(90deg,#002D72,#C8102E);
-  color:#fff;
-  padding:30px;
-  border-radius:22px;
-  margin-bottom:18px;
-}
-
-.hero h1{
-  margin:0 0 10px 0;
-  font-size:36px;
-}
-
-select{
-  padding:10px 14px;
-  font-size:16px;
-  border-radius:8px;
-  border:none;
-  font-weight:700;
-}
-
-.card{
-  background:#fff;
-  border-radius:16px;
-  padding:14px;
-  margin-bottom:12px;
-  font-weight:800;
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-  background:#fff;
-  border-radius:16px;
-  overflow:hidden;
-}
-
-th,td{
-  padding:10px;
-  text-align:left;
-  border-bottom:1px solid #f1f1f1;
-}
-
-th{
-  background:#002D72;
-  color:#fff;
-}
-
-tbody tr:nth-child(even){
-  background:#eaf3ff;
-}
-
-tbody tr:hover{
-  background:#d6e6ff;
-}
-
-.link{
-  color:#0056d6;
-  font-weight:800;
-  cursor:pointer;
-}
+body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
+.page{max-width:1200px;margin:0 auto;padding:22px 18px;}
+.hero{background:linear-gradient(90deg,#002D72,#C8102E);color:#fff;padding:30px;border-radius:22px;margin-bottom:18px;}
+.hero h1{margin:0 0 10px 0;font-size:36px;}
+select{padding:10px 14px;font-size:16px;border-radius:8px;border:none;font-weight:700;}
+.card{background:#fff;border-radius:16px;padding:14px;margin-bottom:12px;font-weight:800;}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:16px;overflow:hidden;}
+th,td{padding:10px;text-align:left;border-bottom:1px solid #f1f1f1;}
+th{background:#002D72;color:#fff;}
+tbody tr:nth-child(even){background:#eaf3ff;}
+tbody tr:hover{background:#d6e6ff;}
 </style>
 </head>
 <body>
 
 <div class="page">
-
   <div class="hero">
     <h1 id="title">Select Franchise</h1>
     <select id="teamSelect"></select>
   </div>
 
   <div class="card">
-    <a class="link" href="baseball.html">← Back to Baseball</a>
+    <a href="baseball.html">← Back to Baseball</a>
   </div>
 
   <table>
@@ -109,7 +46,6 @@ tbody tr:hover{
     </thead>
     <tbody id="tb"></tbody>
   </table>
-
 </div>
 
 <script>
@@ -122,8 +58,7 @@ let games = [];
 
 async function init(){
 
-  // Load teams list
-  const teamsRes = await fetch("data/baseball/teams.json");
+  const teamsRes = await fetch("docs/data/baseball/teams.json");
   const teams = await teamsRes.json();
 
   teams.sort((a,b)=>a.name.localeCompare(b.name));
@@ -135,11 +70,9 @@ async function init(){
     teamSelect.appendChild(opt);
   });
 
-  // Load full game index
-  const gamesRes = await fetch("data/baseball/index.json");
+  const gamesRes = await fetch("docs/data/baseball/index.json");
   games = await gamesRes.json();
 
-  // Auto-load first team
   if(teams.length){
     loadTeam(teams[0].code, teams[0].name);
   }
@@ -160,25 +93,19 @@ function loadTeam(code, name){
 
     if(g.home_code !== code && g.away_code !== code) return;
 
-    const season = g.season;
-    if(!seasonMap[season]){
-      seasonMap[season] = {
-        W:0,
-        L:0,
-        RS:0,
-        RA:0
-      };
+    if(!seasonMap[g.season]){
+      seasonMap[g.season] = { W:0, L:0, RS:0, RA:0 };
     }
 
     const isHome = g.home_code === code;
     const teamScore = isHome ? g.home_score : g.away_score;
     const oppScore  = isHome ? g.away_score : g.home_score;
 
-    seasonMap[season].RS += teamScore;
-    seasonMap[season].RA += oppScore;
+    seasonMap[g.season].RS += teamScore;
+    seasonMap[g.season].RA += oppScore;
 
-    if(teamScore > oppScore) seasonMap[season].W++;
-    else seasonMap[season].L++;
+    if(teamScore > oppScore) seasonMap[g.season].W++;
+    else seasonMap[g.season].L++;
   });
 
   tb.innerHTML = "";
@@ -186,10 +113,9 @@ function loadTeam(code, name){
   Object.keys(seasonMap)
     .sort((a,b)=>b - a)
     .forEach(season=>{
-
       const s = seasonMap[season];
-      const gamesPlayed = s.W + s.L;
-      const pct = gamesPlayed ? (s.W / gamesPlayed).toFixed(3) : ".000";
+      const gp = s.W + s.L;
+      const pct = gp ? (s.W/gp).toFixed(3) : ".000";
       const diff = s.RS - s.RA;
 
       const tr = document.createElement("tr");
