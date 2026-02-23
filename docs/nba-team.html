@@ -183,31 +183,32 @@ async function loadTeamGames(){
 
     if(home===t||away===t){
 
-      // 🔥 fetch individual game file
-      const gameRes = await fetch(`/data/nba/${game.season}/${game.game_id}.json`)
-        .catch(()=>null);
+      if(!game.season) continue;
 
-      if(!gameRes) continue;
+      try{
+        const gameRes = await fetch(`/data/nba/${game.season}/${game.game_id}.json`);
+        const fullGame = await gameRes.json();
 
-      const fullGame = await gameRes.json().catch(()=>null);
-      if(!fullGame) continue;
+        if(fullGame.game_type !== "Regular Season") continue;
 
-      if(fullGame.game_type!=="Regular Season") continue;
+        seasons.add(fullGame.season);
 
-      seasons.add(fullGame.season);
+        const isHome=home===t;
+        const teamScore=isHome?game.home_score:game.away_score;
+        const oppScore=isHome?game.away_score:game.home_score;
 
-      const isHome=home===t;
-      const teamScore=isHome?game.home_score:game.away_score;
-      const oppScore=isHome?game.away_score:game.home_score;
+        allGames.push({
+          id:game.game_id,
+          date:fullGame.date,
+          season:fullGame.season,
+          opponent:isHome?game.away_team:game.home_team,
+          result:teamScore>oppScore?"W":"L",
+          score:`${teamScore} - ${oppScore}`
+        });
 
-      allGames.push({
-        id:game.game_id,
-        date:fullGame.date,
-        season:fullGame.season,
-        opponent:isHome?game.away_team:game.home_team,
-        result:teamScore>oppScore?"W":"L",
-        score:`${teamScore} - ${oppScore}`
-      });
+      }catch(e){
+        continue;
+      }
     }
   }
 
