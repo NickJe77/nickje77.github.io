@@ -110,7 +110,7 @@ td{
 <div class="page">
 
 <h1 id="teamName"></h1>
-<div class="subtitle">Franchise History (Regular Season Only)</div>
+<div class="subtitle">Franchise History</div>
 
 <div style="text-align:center;margin-bottom:20px;">
   Season:
@@ -165,7 +165,6 @@ const MASTER_URL = "data/nba/nba_games_master.json";
 
 const params = new URLSearchParams(window.location.search);
 const team = decodeURIComponent(params.get("team") || "");
-
 document.getElementById("teamName").textContent = team;
 
 async function loadTeam(){
@@ -173,11 +172,17 @@ async function loadTeam(){
   const res = await fetch(MASTER_URL);
   const games = await res.json();
 
-  // FILTER TEAM GAMES (regular season only)
-  const teamGames = games.filter(g =>
-    g.season &&
-    g.game_type === "Regular Season" &&
-    (g.home_team === team || g.away_team === team)
+  // REMOVE EMPTY / NULL ROWS
+  const cleanGames = games.filter(g =>
+    g.home_team && g.away_team &&
+    g.home_score != null &&
+    g.away_score != null &&
+    g.season != null
+  );
+
+  // FILTER TEAM GAMES
+  const teamGames = cleanGames.filter(g =>
+    g.home_team === team || g.away_team === team
   );
 
   if(teamGames.length === 0){
@@ -185,11 +190,9 @@ async function loadTeam(){
     return;
   }
 
-  // Populate seasons dropdown
   const seasons = [...new Set(teamGames.map(g => g.season))].sort((a,b)=>b-a);
 
   const seasonFilter = document.getElementById("seasonFilter");
-
   seasons.forEach(season=>{
     const opt = document.createElement("option");
     opt.value = season;
@@ -203,17 +206,14 @@ async function loadTeam(){
       ? teamGames
       : teamGames.filter(g=>g.season==selectedSeason);
 
-    // Summary totals
     let wins=0, losses=0, pf=0, pa=0;
 
     filtered.forEach(g=>{
       const isHome = g.home_team===team;
       const teamScore = isHome ? g.home_score : g.away_score;
       const oppScore = isHome ? g.away_score : g.home_score;
-
       pf+=teamScore;
       pa+=oppScore;
-
       if(teamScore>oppScore) wins++;
       else losses++;
     });
@@ -227,12 +227,10 @@ async function loadTeam(){
     document.getElementById("pfTotal").textContent = pf;
     document.getElementById("paTotal").textContent = pa;
 
-    // Season Summary Table
     const seasonBody = document.getElementById("seasonSummaryBody");
     seasonBody.innerHTML="";
 
     const grouped = {};
-
     filtered.forEach(g=>{
       if(!grouped[g.season]) grouped[g.season]=[];
       grouped[g.season].push(g);
@@ -263,7 +261,6 @@ async function loadTeam(){
       `;
     });
 
-    // Recent Games (sorted newest first)
     const gamesBody=document.getElementById("gamesBody");
     gamesBody.innerHTML="";
 
