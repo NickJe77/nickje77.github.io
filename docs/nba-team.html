@@ -7,7 +7,7 @@
 
 <style>
 body{
-  font-family: Inter, system-ui, Arial, sans-serif;
+  font-family: Inter, system-ui, Arial;
   margin:0;
   background:#f4f6f8;
 }
@@ -30,59 +30,35 @@ body{
 .page{
   max-width:1200px;
   margin:auto;
-  padding:30px 20px;
+  padding:20px;
 }
 
-h1{
-  text-align:center;
-  margin-bottom:5px;
-}
-
-.subtitle{
-  text-align:center;
-  color:#666;
+.hero{
+  background:linear-gradient(90deg,#002D72,#C8102E);
+  color:#fff;
+  padding:30px;
+  border-radius:20px;
   margin-bottom:20px;
 }
 
-select{
-  padding:8px 12px;
-  font-size:16px;
-  border-radius:6px;
-}
-
-.summary-grid{
-  display:grid;
-  grid-template-columns:repeat(6,1fr);
-  gap:15px;
-  margin:25px 0;
-}
-
-.card{
-  background:#e9edf3;
-  padding:18px;
-  border-radius:10px;
-  text-align:center;
-}
-
-.card h2{
-  margin:0;
-  font-size:22px;
-}
-
-.card span{
-  font-size:14px;
-  color:#555;
+.stats{
+  display:flex;
+  gap:30px;
+  font-size:18px;
+  margin-bottom:20px;
 }
 
 table{
   width:100%;
   border-collapse:collapse;
   background:#fff;
-  margin-top:15px;
+  border-radius:16px;
+  overflow:hidden;
 }
 
 th{
-  background:#ddd;
+  background:#002D72;
+  color:#fff;
   padding:10px;
   text-align:left;
 }
@@ -92,209 +68,201 @@ td{
   border-bottom:1px solid #eee;
 }
 
-.section-title{
-  margin-top:40px;
-  font-size:22px;
+tr:hover{
+  background:#f0f6ff;
+}
+
+.no-data{
+  text-align:center;
+  padding:30px;
+  font-weight:600;
+  background:#fff;
+  border-radius:16px;
 }
 </style>
 </head>
-
 <body>
 
 <div class="navbar">
-  <a href="/">Home</a>
-  <a href="/nba.html">NBA</a>
-  <a href="/nba-seasons.html">Seasons</a>
+  <a href="index.html">Home</a>
+  <a href="nba.html">NBA</a>
 </div>
 
 <div class="page">
 
-<h1 id="teamName"></h1>
-<div class="subtitle">Franchise History</div>
-
-<div style="text-align:center;margin-bottom:20px;">
-  Season:
-  <select id="seasonFilter">
-    <option value="all">All Seasons</option>
-  </select>
+<div class="hero">
+  <h1 id="teamName"></h1>
 </div>
 
-<div class="summary-grid">
-  <div class="card"><h2 id="seasonCount">0</h2><span>Seasons</span></div>
-  <div class="card"><h2 id="gameCount">0</h2><span>Games</span></div>
-  <div class="card"><h2 id="winCount">0</h2><span>Wins</span></div>
-  <div class="card"><h2 id="lossCount">0</h2><span>Losses</span></div>
-  <div class="card"><h2 id="pfTotal">0</h2><span>Points For</span></div>
-  <div class="card"><h2 id="paTotal">0</h2><span>Points Against</span></div>
+<div class="stats">
+  <div>Total Games: <strong id="totalGames">0</strong></div>
+  <div>Wins: <strong id="wins">0</strong></div>
+  <div>Losses: <strong id="losses">0</strong></div>
 </div>
 
-<div class="section-title">Season Summary</div>
-<table>
+<h2>Season Summary</h2>
+<table id="seasonTable">
   <thead>
     <tr>
       <th>Season</th>
       <th>Games</th>
       <th>Wins</th>
       <th>Losses</th>
-      <th>PF</th>
-      <th>PA</th>
     </tr>
   </thead>
-  <tbody id="seasonSummaryBody"></tbody>
+  <tbody></tbody>
 </table>
 
-<div class="section-title">Recent Games</div>
-<table>
+<h2 style="margin-top:30px;">Games</h2>
+<table id="gamesTable">
   <thead>
     <tr>
-      <th>Season</th>
       <th>Date</th>
+      <th>Season</th>
       <th>Opponent</th>
       <th>Result</th>
       <th>Score</th>
     </tr>
   </thead>
-  <tbody id="gamesBody"></tbody>
+  <tbody></tbody>
 </table>
+
+<div id="noData" class="no-data" style="display:none;">
+  No games found for this team.
+</div>
 
 </div>
 
 <script>
 
-const MASTER_URL = "data/nba/nba_games_master.json";
-
 const params = new URLSearchParams(window.location.search);
-const team = decodeURIComponent(params.get("team") || "");
+const team = params.get("team");
+
 document.getElementById("teamName").textContent = team;
 
-async function loadTeam(){
+const clean = str => str ? str.toLowerCase().trim() : "";
 
-  const res = await fetch(MASTER_URL);
-  const games = await res.json();
+let allGames = [];
+let seasonStats = {};
 
-  // REMOVE EMPTY / NULL ROWS
-  const cleanGames = games.filter(g =>
-    g.home_team && g.away_team &&
-    g.home_score != null &&
-    g.away_score != null &&
-    g.season != null
-  );
+async function loadAllSeasons(){
 
-  // FILTER TEAM GAMES
-  const teamGames = cleanGames.filter(g =>
-    g.home_team === team || g.away_team === team
-  );
+  const seasons = [];
 
-  if(teamGames.length === 0){
-    alert("No games found for this team.");
+  for(let y = 1947; y <= 2025; y++){
+    seasons.push(y);
+  }
+
+  for(const season of seasons){
+
+    try{
+      const res = await fetch(`data/nba/games/${season}.json`);
+      if(!res.ok) continue;
+
+      const games = await res.json();
+
+      games.forEach(game => {
+
+        if(
+          clean(game.home_team) === clean(team) ||
+          clean(game.away_team) === clean(team)
+        ){
+
+          allGames.push(game);
+
+          const isHome = clean(game.home_team) === clean(team);
+          const teamScore = isHome ? game.home_score : game.away_score;
+          const oppScore = isHome ? game.away_score : game.home_score;
+          const opponent = isHome ? game.away_team : game.home_team;
+
+          if(!seasonStats[game.season]){
+            seasonStats[game.season] = {games:0,wins:0,losses:0};
+          }
+
+          seasonStats[game.season].games++;
+
+          if(teamScore > oppScore){
+            seasonStats[game.season].wins++;
+          } else {
+            seasonStats[game.season].losses++;
+          }
+
+          game._opponent = opponent;
+          game._result = teamScore > oppScore ? "W" : "L";
+          game._score = `${teamScore} - ${oppScore}`;
+
+        }
+
+      });
+
+    } catch(e){
+      continue;
+    }
+
+  }
+
+  render();
+}
+
+function render(){
+
+  if(allGames.length === 0){
+    document.getElementById("noData").style.display = "block";
+    document.getElementById("seasonTable").style.display = "none";
+    document.getElementById("gamesTable").style.display = "none";
     return;
   }
 
-  const seasons = [...new Set(teamGames.map(g => g.season))].sort((a,b)=>b-a);
+  document.getElementById("totalGames").textContent = allGames.length;
 
-  const seasonFilter = document.getElementById("seasonFilter");
-  seasons.forEach(season=>{
-    const opt = document.createElement("option");
-    opt.value = season;
-    opt.textContent = season;
-    seasonFilter.appendChild(opt);
-  });
+  let totalWins = 0;
+  let totalLosses = 0;
 
-  function render(selectedSeason){
+  const seasonBody = document.querySelector("#seasonTable tbody");
+  seasonBody.innerHTML = "";
 
-    let filtered = selectedSeason==="all"
-      ? teamGames
-      : teamGames.filter(g=>g.season==selectedSeason);
+  Object.keys(seasonStats)
+    .sort((a,b) => b - a)
+    .forEach(season => {
 
-    let wins=0, losses=0, pf=0, pa=0;
+      const s = seasonStats[season];
+      totalWins += s.wins;
+      totalLosses += s.losses;
 
-    filtered.forEach(g=>{
-      const isHome = g.home_team===team;
-      const teamScore = isHome ? g.home_score : g.away_score;
-      const oppScore = isHome ? g.away_score : g.home_score;
-      pf+=teamScore;
-      pa+=oppScore;
-      if(teamScore>oppScore) wins++;
-      else losses++;
-    });
-
-    document.getElementById("seasonCount").textContent =
-      selectedSeason==="all" ? seasons.length : 1;
-
-    document.getElementById("gameCount").textContent = filtered.length;
-    document.getElementById("winCount").textContent = wins;
-    document.getElementById("lossCount").textContent = losses;
-    document.getElementById("pfTotal").textContent = pf;
-    document.getElementById("paTotal").textContent = pa;
-
-    const seasonBody = document.getElementById("seasonSummaryBody");
-    seasonBody.innerHTML="";
-
-    const grouped = {};
-    filtered.forEach(g=>{
-      if(!grouped[g.season]) grouped[g.season]=[];
-      grouped[g.season].push(g);
-    });
-
-    Object.keys(grouped).sort((a,b)=>b-a).forEach(season=>{
-      const games = grouped[season];
-      let w=0,l=0,pf=0,pa=0;
-
-      games.forEach(g=>{
-        const isHome = g.home_team===team;
-        const teamScore = isHome ? g.home_score : g.away_score;
-        const oppScore = isHome ? g.away_score : g.home_score;
-        pf+=teamScore;
-        pa+=oppScore;
-        if(teamScore>oppScore) w++; else l++;
-      });
-
-      seasonBody.innerHTML+=`
+      seasonBody.innerHTML += `
         <tr>
           <td>${season}</td>
-          <td>${games.length}</td>
-          <td>${w}</td>
-          <td>${l}</td>
-          <td>${pf}</td>
-          <td>${pa}</td>
+          <td>${s.games}</td>
+          <td>${s.wins}</td>
+          <td>${s.losses}</td>
         </tr>
       `;
     });
 
-    const gamesBody=document.getElementById("gamesBody");
-    gamesBody.innerHTML="";
+  document.getElementById("wins").textContent = totalWins;
+  document.getElementById("losses").textContent = totalLosses;
 
-    filtered
-      .sort((a,b)=> new Date(b.date)-new Date(a.date))
-      .slice(0,50)
-      .forEach(g=>{
-        const isHome = g.home_team===team;
-        const opponent = isHome ? g.away_team : g.home_team;
-        const teamScore = isHome ? g.home_score : g.away_score;
-        const oppScore = isHome ? g.away_score : g.home_score;
-        const result = teamScore>oppScore ? "W" : "L";
+  const gamesBody = document.querySelector("#gamesTable tbody");
+  gamesBody.innerHTML = "";
 
-        gamesBody.innerHTML+=`
-          <tr>
-            <td>${g.season}</td>
-            <td>${g.date}</td>
-            <td>${opponent}</td>
-            <td>${result}</td>
-            <td>${teamScore} – ${oppScore}</td>
-          </tr>
-        `;
-      });
-  }
+  allGames
+    .sort((a,b) => new Date(b.date) - new Date(a.date))
+    .forEach(game => {
 
-  render("all");
-
-  seasonFilter.addEventListener("change",()=>{
-    render(seasonFilter.value);
-  });
+      gamesBody.innerHTML += `
+        <tr>
+          <td>${game.date}</td>
+          <td>${game.season}</td>
+          <td>${game._opponent}</td>
+          <td>${game._result}</td>
+          <td>${game._score}</td>
+        </tr>
+      `;
+    });
 
 }
 
-loadTeam();
+loadAllSeasons();
 
 </script>
 
