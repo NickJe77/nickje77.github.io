@@ -62,8 +62,23 @@ body{
 .stats{
   display:flex;
   gap:40px;
-  margin-bottom:30px;
+  margin-bottom:20px;
   font-size:18px;
+}
+
+.season-box{
+  background:var(--card);
+  padding:20px;
+  border-radius:18px;
+  box-shadow:0 2px 6px rgba(0,0,0,0.05);
+  margin-bottom:25px;
+}
+
+.season-box select{
+  padding:10px 14px;
+  border-radius:10px;
+  border:1px solid var(--line);
+  font-size:16px;
 }
 
 .card{
@@ -115,6 +130,13 @@ tr:hover{
   <div>Losses: <strong id="losses">0</strong></div>
 </div>
 
+<div class="season-box">
+  <strong>Select Season:</strong>
+  <select id="seasonSelect">
+    <option value="all">All Seasons</option>
+  </select>
+</div>
+
 <div class="card">
   <table>
     <thead>
@@ -144,12 +166,10 @@ function normaliseDate(dateStr){
 
   const cleaned=dateStr.trim().split(" ")[0];
 
-  // YYYY-MM-DD
   if(cleaned.includes("-")){
     return cleaned;
   }
 
-  // DD/MM/YYYY
   if(cleaned.includes("/")){
     const parts=cleaned.split("/");
     const day=parts[0].padStart(2,"0");
@@ -167,6 +187,7 @@ function seasonLabel(start){
 }
 
 let allGames=[];
+let seasons=new Set();
 
 fetch("/data/nba/nba_games_master.json")
 .then(r=>r.json())
@@ -189,7 +210,7 @@ fetch("/data/nba/nba_games_master.json")
 
       const month=dateObj.getMonth()+1;
 
-      // Regular season only (exclude May & June)
+      // Regular season only
       if(month>=5 && month<=6) continue;
 
       const year=dateObj.getFullYear();
@@ -198,6 +219,8 @@ fetch("/data/nba/nba_games_master.json")
       const isHome=home===t;
       const teamScore=Number(isHome?game.home_score:game.away_score)||0;
       const oppScore=Number(isHome?game.away_score:game.home_score)||0;
+
+      seasons.add(season);
 
       allGames.push({
         id:game.game_id,
@@ -210,21 +233,42 @@ fetch("/data/nba/nba_games_master.json")
     }
   }
 
-  render();
+  buildSelector();
+  render("all");
 });
 
-function render(){
+function buildSelector(){
+  const select=document.getElementById("seasonSelect");
+
+  Array.from(seasons)
+    .sort((a,b)=>b-a)
+    .forEach(s=>{
+      const opt=document.createElement("option");
+      opt.value=s;
+      opt.textContent=seasonLabel(s);
+      select.appendChild(opt);
+    });
+
+  select.addEventListener("change",e=>{
+    render(e.target.value);
+  });
+}
+
+function render(selectedSeason){
 
   const gamesBody=document.getElementById("gamesBody");
+  gamesBody.innerHTML="";
 
-  allGames.sort((a,b)=>{
-    return new Date(b.displayDate)-new Date(a.displayDate);
-  });
+  const filtered = selectedSeason==="all"
+    ? allGames
+    : allGames.filter(g=>g.season==selectedSeason);
+
+  filtered.sort((a,b)=>new Date(b.displayDate)-new Date(a.displayDate));
 
   let wins=0,losses=0;
   let rows="";
 
-  for(const g of allGames){
+  for(const g of filtered){
 
     if(g.result==="W")wins++;else losses++;
 
@@ -239,7 +283,7 @@ function render(){
   }
 
   gamesBody.innerHTML=rows;
-  document.getElementById("totalGames").textContent=allGames.length;
+  document.getElementById("totalGames").textContent=filtered.length;
   document.getElementById("wins").textContent=wins;
   document.getElementById("losses").textContent=losses;
 }
