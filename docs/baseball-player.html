@@ -197,45 +197,72 @@ tr:nth-child(even){background:#f7fbff;}
 (function(){
 
 const TEAM_NAMES = {
-"ANA":"Los Angeles Angels","LAA":"Los Angeles Angels","CAL":"California Angels",
-"ARI":"Arizona Diamondbacks",
-"ATL":"Atlanta Braves","BSN":"Boston Braves","MLN":"Milwaukee Braves",
-"BAL":"Baltimore Orioles","SLB":"St. Louis Browns",
-"BOS":"Boston Red Sox",
-"BRO":"Brooklyn Dodgers",
-"CHC":"Chicago Cubs","CHN":"Chicago Cubs",
-"CHW":"Chicago White Sox","CHA":"Chicago White Sox",
-"CIN":"Cincinnati Reds",
-"CLE":"Cleveland Guardians","CLV":"Cleveland Indians",
-"COL":"Colorado Rockies",
-"DET":"Detroit Tigers",
-"HOU":"Houston Astros",
-"KCA":"Kansas City Royals","KC":"Kansas City Royals",
-"LAD":"Los Angeles Dodgers","LAN":"Los Angeles Dodgers",
-"MIA":"Miami Marlins","FLO":"Florida Marlins",
-"MIL":"Milwaukee Brewers",
-"MIN":"Minnesota Twins",
-"MON":"Montreal Expos",
-"NYA":"New York Yankees","NYY":"New York Yankees",
-"NYN":"New York Mets","NYM":"New York Mets",
-"OAK":"Oakland Athletics",
-"PHI":"Philadelphia Phillies",
-"PIT":"Pittsburgh Pirates",
-"SDN":"San Diego Padres",
-"SEA":"Seattle Mariners",
-"SFN":"San Francisco Giants",
+"LAN":"Los Angeles Dodgers","LAD":"Los Angeles Dodgers",
 "SLN":"St. Louis Cardinals","STL":"St. Louis Cardinals",
-"TBA":"Tampa Bay Rays","TB":"Tampa Bay Rays",
-"TEX":"Texas Rangers",
-"TOR":"Toronto Blue Jays",
-"WAS":"Washington Nationals","WSH":"Washington Nationals"
+"SDN":"San Diego Padres",
+"NYA":"New York Yankees",
+"SFN":"San Francisco Giants",
+"CHN":"Chicago Cubs",
+"CHA":"Chicago White Sox",
+"TBA":"Tampa Bay Rays",
+"SEA":"Seattle Mariners",
+"ATL":"Atlanta Braves",
+"BOS":"Boston Red Sox"
 };
 
 function teamFull(code){
   return TEAM_NAMES[String(code).trim()] || code;
 }
 
-/* rest of your working JS unchanged below */
+function fmt(n){return Number(n||0).toLocaleString();}
+function avg(h,ab){return ab?(h/ab).toFixed(3):"0.000";}
+
+async function safeFetch(url){
+  const r = await fetch(url);
+  if(!r.ok) return null;
+  return r.json();
+}
+
+const qs = new URLSearchParams(location.search);
+const playerId = qs.get("player");
+
+let playersIndex = [];
+
+function getId(p){ return p.player_id ?? p.id ?? ""; }
+function getName(p){ return p.player_name ?? p.name ?? ""; }
+
+function handleSearch(){
+  const input = document.getElementById("playerSearch").value.trim().toLowerCase();
+  if(!input) return;
+
+  const match = playersIndex.find(p => getName(p).toLowerCase() === input);
+  if(match){
+    window.location.href = `/baseball-player.html?player=${encodeURIComponent(getId(match))}`;
+  }
+}
+
+async function init(){
+
+  const players = await safeFetch("/data/baseball/players.json");
+  if(players){
+    playersIndex = players;
+    document.getElementById("playerList").innerHTML =
+      players.map(p=>`<option value="${getName(p)}"></option>`).join("");
+
+    const match = players.find(p=>String(getId(p))===String(playerId));
+    if(match){
+      document.getElementById("playerName").textContent = getName(match);
+    }
+  }
+
+  document.getElementById("goBtn").addEventListener("click", handleSearch);
+  document.getElementById("playerSearch").addEventListener("keydown", e=>{
+    if(e.key==="Enter") handleSearch();
+  });
+
+}
+
+init();
 
 })();
 </script>
