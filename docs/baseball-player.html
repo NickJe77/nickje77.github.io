@@ -61,7 +61,6 @@ body{
   font-size:40px;
 }
 
-/* resized properly */
 .search-wrap{
   display:flex;
   gap:10px;
@@ -117,7 +116,6 @@ body{
   font-weight:900;
 }
 
-/* team & opponent dropdown resized */
 select{
   padding:14px 16px;
   border-radius:12px;
@@ -208,31 +206,43 @@ td{
 <script>
 (function(){
 
-const qs = new URLSearchParams(location.search);
-const playerId = qs.get("player");
+const TEAM_NAMES = {
+"ANA":"Los Angeles Angels","ARI":"Arizona Diamondbacks",
+"ATL":"Atlanta Braves","BAL":"Baltimore Orioles",
+"BOS":"Boston Red Sox","BRO":"Brooklyn Dodgers",
+"CHN":"Chicago Cubs","CHA":"Chicago White Sox",
+"CIN":"Cincinnati Reds","CLE":"Cleveland Guardians",
+"COL":"Colorado Rockies","DET":"Detroit Tigers",
+"HOU":"Houston Astros","KCA":"Kansas City Royals",
+"LAN":"Los Angeles Dodgers","MIA":"Miami Marlins",
+"MIL":"Milwaukee Brewers","MIN":"Minnesota Twins",
+"NYA":"New York Yankees","NYN":"New York Mets",
+"OAK":"Oakland Athletics","PHI":"Philadelphia Phillies",
+"PIT":"Pittsburgh Pirates","SDN":"San Diego Padres",
+"SEA":"Seattle Mariners","SFN":"San Francisco Giants",
+"SLN":"St. Louis Cardinals","TBA":"Tampa Bay Rays",
+"TEX":"Texas Rangers","TOR":"Toronto Blue Jays",
+"WAS":"Washington Nationals"
+};
 
-if(!playerId){
-  document.getElementById("playerName").textContent="Player Not Found";
-  return;
+function teamFull(code){
+  return TEAM_NAMES[code] || code;
 }
 
 function fmt(n){return Number(n||0).toLocaleString();}
 function avg(h,ab){return ab?(h/ab).toFixed(3):"0.000";}
 
+const qs = new URLSearchParams(location.search);
+const playerId = qs.get("player");
+if(!playerId){
+  document.getElementById("playerName").textContent="Player Not Found";
+  return;
+}
+
 async function safeFetch(url){
   const r=await fetch(url);
   if(!r.ok) return null;
   return r.json();
-}
-
-function resolvePlayerName(players,id){
-  return players.find(p =>
-    String(p.player_id)===String(id) ||
-    String(p.playerId)===String(id) ||
-    String(p.id)===String(id) ||
-    String(p.bbref_id)===String(id) ||
-    String(p.key)===String(id)
-  );
 }
 
 async function init(){
@@ -242,10 +252,10 @@ if(players){
   const list=document.getElementById("playerList");
   list.innerHTML=players.map(p=>`<option value="${p.player_name||p.name}"></option>`).join("");
 
-  const match=resolvePlayerName(players,playerId);
+  const match=players.find(p=>String(p.player_id||p.id)===String(playerId));
   if(match){
     document.getElementById("playerName").textContent =
-      match.player_name || match.name || match.full_name || "Unknown Player";
+      match.player_name || match.name;
   }
 }
 
@@ -260,11 +270,7 @@ for(const s of seasons){
   const data=await safeFetch(`./data/baseball/players/${s}.json`);
   if(!data) continue;
 
-  const row=data.find(p =>
-    String(p.player_id)===String(playerId) ||
-    String(p.playerId)===String(playerId) ||
-    String(p.id)===String(playerId)
-  );
+  const row=data.find(p=>String(p.player_id||p.id)===String(playerId));
   if(!row) continue;
 
   seasonRows.push({...row,season:s});
@@ -292,7 +298,10 @@ document.getElementById("careerCards").innerHTML=`
 `;
 
 const teamSelect=document.getElementById("teamSelect");
-teamSelect.innerHTML=[...teamAgg.keys()].map(t=>`<option value="${t}">${t}</option>`).join("");
+teamSelect.innerHTML=[...teamAgg.keys()].map(t=>
+  `<option value="${t}">${teamFull(t)}</option>`
+).join("");
+
 teamSelect.onchange=()=>{
   const t=teamAgg.get(teamSelect.value);
   if(!t) return;
@@ -308,7 +317,7 @@ if(teamSelect.value) teamSelect.onchange();
 document.getElementById("seasonBody").innerHTML=seasonRows.map(r=>`
 <tr>
 <td>${r.season}</td>
-<td>${r.team}</td>
+<td>${teamFull(r.team)}</td>
 <td>${r.games}</td>
 <td>${r.plate_appearances}</td>
 <td>${r.at_bats}</td>
@@ -322,7 +331,10 @@ document.getElementById("seasonBody").innerHTML=seasonRows.map(r=>`
 const oppData=await safeFetch(`./data/baseball/opponents/${playerId}.json`);
 if(oppData){
   const sel=document.getElementById("oppSelect");
-  sel.innerHTML=oppData.map(o=>`<option value="${o.opponent}">${o.opponent}</option>`).join("");
+  sel.innerHTML=oppData.map(o=>
+    `<option value="${o.opponent}">${teamFull(o.opponent)}</option>`
+  ).join("");
+
   sel.onchange=()=>{
     const d=oppData.find(o=>o.opponent===sel.value);
     if(!d) return;
