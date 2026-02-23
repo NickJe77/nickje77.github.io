@@ -98,6 +98,7 @@ td{
 
 tr:hover{
   background:#eef2ff;
+  cursor:pointer;
 }
 
 .season-box{
@@ -183,12 +184,10 @@ function seasonLabel(start){
   return `${start}-${next}`;
 }
 
-function isRegularGame(home,away){
+function isRegular(home,away){
   if(!home||!away)return false;
-  if(home.toLowerCase().includes("nan"))return false;
-  if(away.toLowerCase().includes("nan"))return false;
-  if(home.toLowerCase().includes("all"))return false;
-  if(away.toLowerCase().includes("all"))return false;
+  if(home.includes("nan")||away.includes("nan"))return false;
+  if(home.includes("all")||away.includes("all"))return false;
   return true;
 }
 
@@ -201,34 +200,34 @@ fetch("/data/nba/nba_games_master.json")
 
   const t=clean(team);
 
-  data.forEach(game=>{
-    try{
-      const home=clean(game.home_team);
-      const away=clean(game.away_team);
+  for(const game of data){
 
-      if(!isRegularGame(home,away))return;
+    const home=clean(game.home_team);
+    const away=clean(game.away_team);
 
-      if(home===t||away===t){
+    if(!isRegular(home,away))continue;
 
-        const season=safeSeason(game.date);
-        if(!season)return;
+    if(home===t||away===t){
 
-        seasons.add(season);
+      const season=safeSeason(game.date);
+      if(!season)continue;
 
-        const isHome=home===t;
-        const teamScore=Number(isHome?game.home_score:game.away_score)||0;
-        const oppScore=Number(isHome?game.away_score:game.home_score)||0;
+      seasons.add(season);
 
-        allGames.push({
-          date:(game.date||"").trim(),
-          season,
-          opponent:isHome?game.away_team:game.home_team,
-          result:teamScore>oppScore?"W":"L",
-          score:`${teamScore} - ${oppScore}`
-        });
-      }
-    }catch(e){}
-  });
+      const isHome=home===t;
+      const teamScore=Number(isHome?game.home_score:game.away_score)||0;
+      const oppScore=Number(isHome?game.away_score:game.home_score)||0;
+
+      allGames.push({
+        id:game.game_id,
+        date:(game.date||"").trim(),
+        season,
+        opponent:isHome?game.away_team:game.home_team,
+        result:teamScore>oppScore?"W":"L",
+        score:`${teamScore} - ${oppScore}`
+      });
+    }
+  }
 
   buildSelector();
   render("all");
@@ -251,6 +250,7 @@ function buildSelector(){
 }
 
 function render(season){
+
   const gamesBody=document.getElementById("gamesBody");
   gamesBody.innerHTML="";
 
@@ -262,23 +262,31 @@ function render(season){
 
   let wins=0,losses=0;
 
-  filtered
-  .sort((a,b)=>{
-    const da=a.date.split("/").reverse().join("-");
-    const db=b.date.split("/").reverse().join("-");
+  filtered.sort((a,b)=>{
+    const da=a.date.split(" ")[0].split("/").reverse().join("-");
+    const db=b.date.split(" ")[0].split("/").reverse().join("-");
     return new Date(db)-new Date(da);
-  })
-  .forEach(g=>{
+  });
+
+  let rows="";
+
+  for(const g of filtered){
+
     if(g.result==="W")wins++;else losses++;
-    gamesBody.innerHTML+=`
-      <tr>
-        <td>${g.date}</td>
+
+    const displayDate=g.date.split(" ")[0];
+
+    rows+=`
+      <tr onclick="location.href='nba-game.html?game=${g.id}'">
+        <td>${displayDate}</td>
         <td>${seasonLabel(g.season)}</td>
         <td>${g.opponent}</td>
         <td>${g.result}</td>
         <td>${g.score}</td>
       </tr>`;
-  });
+  }
+
+  gamesBody.innerHTML=rows;
 
   document.getElementById("wins").textContent=wins;
   document.getElementById("losses").textContent=losses;
