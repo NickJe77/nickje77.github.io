@@ -51,7 +51,6 @@ body{
   border-radius:22px;
   margin-bottom:24px;
   position:relative;
-  overflow:hidden;
 }
 
 .hero::after{
@@ -118,6 +117,7 @@ tr:hover{
   text-align:center;
   border-radius:18px;
   font-weight:600;
+  margin-top:20px;
 }
 </style>
 </head>
@@ -184,14 +184,18 @@ document.getElementById("teamName").textContent = team;
 
 const clean = s => (s ?? "").toLowerCase().trim();
 
-function seasonStartFromDate(dateStr){
+function deriveSeasonStart(dateStr){
   if(!dateStr) return null;
-  const [year,month] = dateStr.split("-").map(Number);
+  const parts = dateStr.split("-");
+  if(parts.length < 2) return null;
+  const year = parseInt(parts[0]);
+  const month = parseInt(parts[1]);
   if(month >= 10) return year;
   return year - 1;
 }
 
 function seasonLabel(start){
+  if(!start) return "";
   const next = String((start+1)%100).padStart(2,"0");
   return `${start}-${next}`;
 }
@@ -199,42 +203,45 @@ function seasonLabel(start){
 let seasonStats = {};
 let teamGames = [];
 
-fetch("data/nba/nba_games_master.json")
-.then(res=>res.json())
-.then(data=>{
+fetch("/data/nba/nba_games_master.json")
+.then(res => res.json())
+.then(data => {
 
   const t = clean(team);
 
-  data.forEach(game=>{
+  data.forEach(game => {
 
     const home = clean(game.home_team);
     const away = clean(game.away_team);
 
-    if(home===t || away===t){
+    if(home === t || away === t){
 
-      const start = game.season || seasonStartFromDate(game.date);
+      const start = game.season || deriveSeasonStart(game.date);
       if(!start) return;
 
-      const isHome = home===t;
-      const teamScore = isHome?game.home_score:game.away_score;
-      const oppScore = isHome?game.away_score:game.home_score;
-      const opponent = isHome?game.away_team:game.home_team;
+      const isHome = home === t;
+      const teamScore = isHome ? Number(game.home_score) : Number(game.away_score);
+      const oppScore = isHome ? Number(game.away_score) : Number(game.home_score);
+      const opponent = isHome ? game.away_team : game.home_team;
 
       if(!seasonStats[start]){
-        seasonStats[start]={games:0,wins:0,losses:0};
+        seasonStats[start] = {games:0,wins:0,losses:0};
       }
 
       seasonStats[start].games++;
-      if(teamScore>oppScore){seasonStats[start].wins++;}
-      else{seasonStats[start].losses++;}
+
+      if(teamScore > oppScore){
+        seasonStats[start].wins++;
+      } else {
+        seasonStats[start].losses++;
+      }
 
       teamGames.push({
-        ...game,
-        _season:start,
-        _seasonLabel:seasonLabel(start),
-        _opponent:opponent,
-        _result:teamScore>oppScore?"W":"L",
-        _score:`${teamScore} - ${oppScore}`
+        date:game.date,
+        season:start,
+        opponent:opponent,
+        result:teamScore > oppScore ? "W" : "L",
+        score:`${teamScore} - ${oppScore}`
       });
     }
 
@@ -242,19 +249,21 @@ fetch("data/nba/nba_games_master.json")
 
   render();
 
+})
+.catch(()=>{
+  document.getElementById("noData").style.display="block";
 });
 
 function render(){
 
-  if(teamGames.length===0){
+  if(teamGames.length === 0){
     document.getElementById("noData").style.display="block";
     return;
   }
 
-  document.getElementById("totalGames").textContent=teamGames.length;
+  document.getElementById("totalGames").textContent = teamGames.length;
 
   let totalW=0,totalL=0;
-
   const seasonBody=document.querySelector("#seasonTable tbody");
   seasonBody.innerHTML="";
 
@@ -289,14 +298,13 @@ function render(){
     gamesBody.innerHTML+=`
       <tr>
         <td>${g.date}</td>
-        <td>${g._seasonLabel}</td>
-        <td>${g._opponent}</td>
-        <td>${g._result}</td>
-        <td>${g._score}</td>
+        <td>${seasonLabel(g.season)}</td>
+        <td>${g.opponent}</td>
+        <td>${g.result}</td>
+        <td>${g.score}</td>
       </tr>
     `;
   });
-
 }
 </script>
 
