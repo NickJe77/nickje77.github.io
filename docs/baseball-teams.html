@@ -29,11 +29,7 @@ body{
 
 .hero h1{
   margin:0 0 10px 0;
-  font-size:38px;
-}
-
-.selector-wrap{
-  margin-top:12px;
+  font-size:36px;
 }
 
 select{
@@ -92,9 +88,7 @@ tbody tr:hover{
 
   <div class="hero">
     <h1 id="title">Select Franchise</h1>
-    <div class="selector-wrap">
-      <select id="teamSelect"></select>
-    </div>
+    <select id="teamSelect"></select>
   </div>
 
   <div class="card">
@@ -104,14 +98,13 @@ tbody tr:hover{
   <table>
     <thead>
       <tr>
-        <th style="width:90px;">Season</th>
-        <th style="width:70px;">W</th>
-        <th style="width:70px;">L</th>
-        <th style="width:90px;">PCT</th>
-        <th style="width:90px;">RS</th>
-        <th style="width:90px;">RA</th>
-        <th style="width:90px;">DIFF</th>
-        <th style="width:140px;">Open</th>
+        <th>Season</th>
+        <th>W</th>
+        <th>L</th>
+        <th>PCT</th>
+        <th>RS</th>
+        <th>RA</th>
+        <th>DIFF</th>
       </tr>
     </thead>
     <tbody id="tb"></tbody>
@@ -125,69 +118,90 @@ const teamSelect = document.getElementById("teamSelect");
 const tb = document.getElementById("tb");
 const title = document.getElementById("title");
 
-let allTeams = {};
+let games = [];
 
 async function init(){
 
-  // Load franchise index file
-  // This file should contain:
-  // [
-  //   { "team_code": "NYA", "team_name": "New York Yankees" },
-  //   { "team_code": "BOS", "team_name": "Boston Red Sox" }
-  // ]
+  // Load teams list
+  const teamsRes = await fetch("data/baseball/teams.json");
+  const teams = await teamsRes.json();
 
-  const res = await fetch("data/baseball/teams/index.json");
-  const teams = await res.json();
-
-  teams.sort((a,b)=>a.team_name.localeCompare(b.team_name));
+  teams.sort((a,b)=>a.name.localeCompare(b.name));
 
   teams.forEach(t=>{
     const opt = document.createElement("option");
-    opt.value = t.team_code;
-    opt.textContent = t.team_name;
+    opt.value = t.code;
+    opt.textContent = t.name;
     teamSelect.appendChild(opt);
   });
 
+  // Load full game index
+  const gamesRes = await fetch("data/baseball/index.json");
+  games = await gamesRes.json();
+
+  // Auto-load first team
   if(teams.length){
-    loadTeam(teams[0].team_code);
+    loadTeam(teams[0].code, teams[0].name);
   }
 
   teamSelect.onchange = ()=>{
-    loadTeam(teamSelect.value);
+    const selected = teams.find(t=>t.code === teamSelect.value);
+    loadTeam(selected.code, selected.name);
   };
 }
 
-async function loadTeam(teamCode){
+function loadTeam(code, name){
 
-  const res = await fetch(`data/baseball/teams/${teamCode}.json`);
-  const data = await res.json();
+  title.textContent = `${name} (${code})`;
 
-  title.textContent = `${data.team_name} (${data.team_code})`;
+  const seasonMap = {};
+
+  games.forEach(g=>{
+
+    if(g.home_code !== code && g.away_code !== code) return;
+
+    const season = g.season;
+    if(!seasonMap[season]){
+      seasonMap[season] = {
+        W:0,
+        L:0,
+        RS:0,
+        RA:0
+      };
+    }
+
+    const isHome = g.home_code === code;
+    const teamScore = isHome ? g.home_score : g.away_score;
+    const oppScore  = isHome ? g.away_score : g.home_score;
+
+    seasonMap[season].RS += teamScore;
+    seasonMap[season].RA += oppScore;
+
+    if(teamScore > oppScore) seasonMap[season].W++;
+    else seasonMap[season].L++;
+  });
 
   tb.innerHTML = "";
 
-  data.seasons
-    .slice()
-    .sort((a,b)=>b.season - a.season)
-    .forEach(s=>{
+  Object.keys(seasonMap)
+    .sort((a,b)=>b - a)
+    .forEach(season=>{
 
-      const diff = (s.RS ?? 0) - (s.RA ?? 0);
+      const s = seasonMap[season];
+      const gamesPlayed = s.W + s.L;
+      const pct = gamesPlayed ? (s.W / gamesPlayed).toFixed(3) : ".000";
+      const diff = s.RS - s.RA;
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${s.season}</td>
+        <td>${season}</td>
         <td>${s.W}</td>
         <td>${s.L}</td>
-        <td>${Number(s.PCT).toFixed(3)}</td>
+        <td>${pct}</td>
         <td>${s.RS}</td>
         <td>${s.RA}</td>
         <td>${diff}</td>
-        <td><span class="link" data-year="${s.season}">View Season</span></td>
       `;
-
-      tr.querySelector("[data-year]").onclick =
-        ()=> location.href=`baseball-season.html?year=${s.season}&team=${teamCode}`;
-
       tb.appendChild(tr);
     });
 }
