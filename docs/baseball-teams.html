@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Baseball Team | The Sporting Almanac</title>
+<title>Baseball Franchises | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="style.css">
 
@@ -24,12 +24,24 @@ body{
   color:#fff;
   padding:30px;
   border-radius:22px;
-  margin-bottom:14px;
+  margin-bottom:18px;
 }
 
 .hero h1{
-  margin:0;
-  font-size:40px;
+  margin:0 0 10px 0;
+  font-size:38px;
+}
+
+.selector-wrap{
+  margin-top:12px;
+}
+
+select{
+  padding:10px 14px;
+  font-size:16px;
+  border-radius:8px;
+  border:none;
+  font-weight:700;
 }
 
 .card{
@@ -49,7 +61,7 @@ table{
 }
 
 th,td{
-  padding:10px 10px;
+  padding:10px;
   text-align:left;
   border-bottom:1px solid #f1f1f1;
 }
@@ -72,29 +84,22 @@ tbody tr:hover{
   font-weight:800;
   cursor:pointer;
 }
-
-.error{
-  background:#fff3f3;
-  color:#b00020;
-  padding:14px;
-  border-radius:12px;
-  font-weight:700;
-  margin-bottom:12px;
-}
 </style>
 </head>
 <body>
 
 <div class="page">
+
   <div class="hero">
-    <h1 id="title">Loading...</h1>
+    <h1 id="title">Select Franchise</h1>
+    <div class="selector-wrap">
+      <select id="teamSelect"></select>
+    </div>
   </div>
 
   <div class="card">
     <a class="link" href="baseball.html">← Back to Baseball</a>
   </div>
-
-  <div id="errorBox"></div>
 
   <table>
     <thead>
@@ -111,78 +116,80 @@ tbody tr:hover{
     </thead>
     <tbody id="tb"></tbody>
   </table>
+
 </div>
 
 <script>
 
-const params = new URLSearchParams(location.search);
-const team = params.get("team");
-const errorBox = document.getElementById("errorBox");
+const teamSelect = document.getElementById("teamSelect");
+const tb = document.getElementById("tb");
+const title = document.getElementById("title");
+
+let allTeams = {};
 
 async function init(){
 
-  if(!team){
-    showError("No team parameter found in URL.");
-    return;
+  // Load franchise index file
+  // This file should contain:
+  // [
+  //   { "team_code": "NYA", "team_name": "New York Yankees" },
+  //   { "team_code": "BOS", "team_name": "Boston Red Sox" }
+  // ]
+
+  const res = await fetch("data/baseball/teams/index.json");
+  const teams = await res.json();
+
+  teams.sort((a,b)=>a.team_name.localeCompare(b.team_name));
+
+  teams.forEach(t=>{
+    const opt = document.createElement("option");
+    opt.value = t.team_code;
+    opt.textContent = t.team_name;
+    teamSelect.appendChild(opt);
+  });
+
+  if(teams.length){
+    loadTeam(teams[0].team_code);
   }
 
-  const filePath = `data/baseball/teams/${team}.json`;
-  console.log("Loading file:", filePath);
-
-  try{
-
-    const response = await fetch(filePath);
-
-    if(!response.ok){
-      throw new Error("File not found (404)");
-    }
-
-    const data = await response.json();
-
-    if(!data || !data.seasons){
-      throw new Error("Invalid JSON structure. 'seasons' array missing.");
-    }
-
-    document.getElementById("title").textContent =
-      `${data.team_name} (${data.team_code})`;
-
-    const tb = document.getElementById("tb");
-    tb.innerHTML = "";
-
-    data.seasons
-      .slice()
-      .sort((a,b)=>b.season - a.season)
-      .forEach(s=>{
-
-        const tr = document.createElement("tr");
-
-        const diff = (s.RS ?? 0) - (s.RA ?? 0);
-
-        tr.innerHTML = `
-          <td>${s.season}</td>
-          <td>${s.W}</td>
-          <td>${s.L}</td>
-          <td>${Number(s.PCT).toFixed(3)}</td>
-          <td>${s.RS}</td>
-          <td>${s.RA}</td>
-          <td>${diff}</td>
-          <td><span class="link" data-year="${s.season}">View Season</span></td>
-        `;
-
-        tr.querySelector("[data-year]").onclick =
-          ()=> location.href=`baseball-season.html?year=${s.season}&team=${team}`;
-
-        tb.appendChild(tr);
-      });
-
-  }catch(err){
-    showError(`Failed to load team data.<br>${err.message}`);
-    console.error(err);
-  }
+  teamSelect.onchange = ()=>{
+    loadTeam(teamSelect.value);
+  };
 }
 
-function showError(msg){
-  errorBox.innerHTML = `<div class="error">${msg}</div>`;
+async function loadTeam(teamCode){
+
+  const res = await fetch(`data/baseball/teams/${teamCode}.json`);
+  const data = await res.json();
+
+  title.textContent = `${data.team_name} (${data.team_code})`;
+
+  tb.innerHTML = "";
+
+  data.seasons
+    .slice()
+    .sort((a,b)=>b.season - a.season)
+    .forEach(s=>{
+
+      const diff = (s.RS ?? 0) - (s.RA ?? 0);
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${s.season}</td>
+        <td>${s.W}</td>
+        <td>${s.L}</td>
+        <td>${Number(s.PCT).toFixed(3)}</td>
+        <td>${s.RS}</td>
+        <td>${s.RA}</td>
+        <td>${diff}</td>
+        <td><span class="link" data-year="${s.season}">View Season</span></td>
+      `;
+
+      tr.querySelector("[data-year]").onclick =
+        ()=> location.href=`baseball-season.html?year=${s.season}&team=${teamCode}`;
+
+      tb.appendChild(tr);
+    });
 }
 
 init();
