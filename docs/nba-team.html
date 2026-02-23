@@ -161,25 +161,6 @@ document.getElementById("teamName").textContent=team;
 
 const clean=s=>(s||"").toLowerCase().trim();
 
-function normaliseDate(dateStr){
-  if(!dateStr) return null;
-  const cleaned=dateStr.trim().split(" ")[0];
-
-  if(cleaned.includes("-")){
-    return cleaned;
-  }
-
-  if(cleaned.includes("/")){
-    const parts=cleaned.split("/");
-    const day=parts[0].padStart(2,"0");
-    const month=parts[1].padStart(2,"0");
-    const year=parts[2];
-    return `${year}-${month}-${day}`;
-  }
-
-  return null;
-}
-
 function seasonLabel(start){
   const next=String((start+1)%100).padStart(2,"0");
   return `${start}-${next}`;
@@ -188,48 +169,41 @@ function seasonLabel(start){
 let allGames=[];
 let seasons=new Set();
 
-fetch("/data/nba/nba_games_master.json")
-.then(r=>r.json())
-.then(data=>{
+async function loadTeamGames(){
 
-  const t=clean(team);
+  const res = await fetch("/data/nba/nba_games_master.json");
+  const master = await res.json();
 
-  for(const game of data){
+  const t = clean(team);
+
+  for(const game of master){
 
     const home=clean(game.home_team);
     const away=clean(game.away_team);
 
     if(home===t||away===t){
 
-      const isoDate=normaliseDate(game.date);
-      if(!isoDate) continue;
+      // 🔥 fetch individual game file
+      const gameRes = await fetch(`/data/nba/${game.season}/${game.game_id}.json`)
+        .catch(()=>null);
 
-      const dateObj=new Date(isoDate);
-      if(isNaN(dateObj)) continue;
+      if(!gameRes) continue;
 
-      const day=dateObj.getDate();
-      const month=dateObj.getMonth()+1;
+      const fullGame = await gameRes.json().catch(()=>null);
+      if(!fullGame) continue;
 
-      // 🔥 Exclude playoffs (mid-April onward, May, June)
-      if(
-        month===5 ||
-        month===6 ||
-        (month===4 && day>15)
-      ) continue;
+      if(fullGame.game_type!=="Regular Season") continue;
 
-      const year=dateObj.getFullYear();
-      const season = month>=10 ? year : year-1;
+      seasons.add(fullGame.season);
 
       const isHome=home===t;
-      const teamScore=Number(isHome?game.home_score:game.away_score)||0;
-      const oppScore=Number(isHome?game.away_score:game.home_score)||0;
-
-      seasons.add(season);
+      const teamScore=isHome?game.home_score:game.away_score;
+      const oppScore=isHome?game.away_score:game.home_score;
 
       allGames.push({
         id:game.game_id,
-        displayDate:isoDate,
-        season,
+        date:fullGame.date,
+        season:fullGame.season,
         opponent:isHome?game.away_team:game.home_team,
         result:teamScore>oppScore?"W":"L",
         score:`${teamScore} - ${oppScore}`
@@ -239,7 +213,7 @@ fetch("/data/nba/nba_games_master.json")
 
   buildSelector();
   render("all");
-});
+}
 
 function buildSelector(){
   const select=document.getElementById("seasonSelect");
@@ -266,7 +240,7 @@ function render(selectedSeason){
     ? allGames
     : allGames.filter(g=>g.season==selectedSeason);
 
-  filtered.sort((a,b)=>new Date(b.displayDate)-new Date(a.displayDate));
+  filtered.sort((a,b)=>new Date(b.date)-new Date(a.date));
 
   let wins=0,losses=0;
   let rows="";
@@ -277,7 +251,7 @@ function render(selectedSeason){
 
     rows+=`
       <tr onclick="location.href='nba-game.html?game=${g.id}'">
-        <td>${g.displayDate}</td>
+        <td>${g.date}</td>
         <td>${seasonLabel(g.season)}</td>
         <td>${g.opponent}</td>
         <td>${g.result}</td>
@@ -290,6 +264,8 @@ function render(selectedSeason){
   document.getElementById("wins").textContent=wins;
   document.getElementById("losses").textContent=losses;
 }
+
+loadTeamGames();
 </script>
 
 </body>
