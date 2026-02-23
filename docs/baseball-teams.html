@@ -5,30 +5,96 @@
 <title>Baseball Team | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="style.css">
+
 <style>
-body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
-.page{max-width:1200px;margin:0 auto;padding:22px 18px;}
-.hero{background:linear-gradient(90deg,#002D72,#C8102E);color:#fff;padding:30px;border-radius:22px;margin-bottom:14px;}
-.hero h1{margin:0;font-size:40px;}
-.card{background:#fff;border-radius:16px;padding:14px;margin-bottom:12px;}
-table{width:100%;border-collapse:collapse;background:#fff;border-radius:16px;overflow:hidden;}
-th,td{padding:10px 10px;text-align:left;border-bottom:1px solid #f1f1f1;}
-th{background:#002D72;color:#fff;}
-tbody tr:nth-child(even){background:#eaf3ff;}
-tbody tr:hover{background:#d6e6ff;}
-.link{color:#0056d6;font-weight:800;cursor:pointer;}
+body{
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:#f4f6f8;
+}
+
+.page{
+  max-width:1200px;
+  margin:0 auto;
+  padding:22px 18px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#002D72,#C8102E);
+  color:#fff;
+  padding:30px;
+  border-radius:22px;
+  margin-bottom:14px;
+}
+
+.hero h1{
+  margin:0;
+  font-size:40px;
+}
+
+.card{
+  background:#fff;
+  border-radius:16px;
+  padding:14px;
+  margin-bottom:12px;
+  font-weight:800;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  background:#fff;
+  border-radius:16px;
+  overflow:hidden;
+}
+
+th,td{
+  padding:10px 10px;
+  text-align:left;
+  border-bottom:1px solid #f1f1f1;
+}
+
+th{
+  background:#002D72;
+  color:#fff;
+}
+
+tbody tr:nth-child(even){
+  background:#eaf3ff;
+}
+
+tbody tr:hover{
+  background:#d6e6ff;
+}
+
+.link{
+  color:#0056d6;
+  font-weight:800;
+  cursor:pointer;
+}
+
+.error{
+  background:#fff3f3;
+  color:#b00020;
+  padding:14px;
+  border-radius:12px;
+  font-weight:700;
+  margin-bottom:12px;
+}
 </style>
 </head>
 <body>
 
 <div class="page">
   <div class="hero">
-    <h1 id="title">Team</h1>
+    <h1 id="title">Loading...</h1>
   </div>
 
-  <div class="card" style="font-weight:800;">
+  <div class="card">
     <a class="link" href="baseball.html">← Back to Baseball</a>
   </div>
+
+  <div id="errorBox"></div>
 
   <table>
     <thead>
@@ -48,34 +114,79 @@ tbody tr:hover{background:#d6e6ff;}
 </div>
 
 <script>
+
 const params = new URLSearchParams(location.search);
 const team = params.get("team");
+const errorBox = document.getElementById("errorBox");
 
 async function init(){
-  const data = await (await fetch(`data/baseball/teams/${team}.json`)).json();
-  document.getElementById("title").textContent = `${data.team_name} (${data.team_code})`;
 
-  const tb = document.getElementById("tb");
-  tb.innerHTML = "";
+  if(!team){
+    showError("No team parameter found in URL.");
+    return;
+  }
 
-  data.seasons.slice().reverse().forEach(s=>{
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${s.season}</td>
-      <td>${s.W}</td>
-      <td>${s.L}</td>
-      <td>${s.PCT}</td>
-      <td>${s.RS}</td>
-      <td>${s.RA}</td>
-      <td>${s.DIFF}</td>
-      <td><span class="link" data-year="${s.season}">View Season</span></td>
-    `;
-    tr.querySelector("[data-year]").onclick = ()=> location.href=`baseball-season.html?year=${s.season}`;
-    tb.appendChild(tr);
-  });
+  const filePath = `data/baseball/teams/${team}.json`;
+  console.log("Loading file:", filePath);
+
+  try{
+
+    const response = await fetch(filePath);
+
+    if(!response.ok){
+      throw new Error("File not found (404)");
+    }
+
+    const data = await response.json();
+
+    if(!data || !data.seasons){
+      throw new Error("Invalid JSON structure. 'seasons' array missing.");
+    }
+
+    document.getElementById("title").textContent =
+      `${data.team_name} (${data.team_code})`;
+
+    const tb = document.getElementById("tb");
+    tb.innerHTML = "";
+
+    data.seasons
+      .slice()
+      .sort((a,b)=>b.season - a.season)
+      .forEach(s=>{
+
+        const tr = document.createElement("tr");
+
+        const diff = (s.RS ?? 0) - (s.RA ?? 0);
+
+        tr.innerHTML = `
+          <td>${s.season}</td>
+          <td>${s.W}</td>
+          <td>${s.L}</td>
+          <td>${Number(s.PCT).toFixed(3)}</td>
+          <td>${s.RS}</td>
+          <td>${s.RA}</td>
+          <td>${diff}</td>
+          <td><span class="link" data-year="${s.season}">View Season</span></td>
+        `;
+
+        tr.querySelector("[data-year]").onclick =
+          ()=> location.href=`baseball-season.html?year=${s.season}&team=${team}`;
+
+        tb.appendChild(tr);
+      });
+
+  }catch(err){
+    showError(`Failed to load team data.<br>${err.message}`);
+    console.error(err);
+  }
+}
+
+function showError(msg){
+  errorBox.innerHTML = `<div class="error">${msg}</div>`;
 }
 
 init();
+
 </script>
 
 </body>
