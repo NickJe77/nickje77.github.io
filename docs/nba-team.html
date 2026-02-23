@@ -66,12 +66,6 @@ body{
   font-size:18px;
 }
 
-.section-title{
-  font-size:22px;
-  font-weight:700;
-  margin:30px 0 15px 0;
-}
-
 .card{
   background:var(--card);
   border-radius:18px;
@@ -121,7 +115,6 @@ tr:hover{
   <div>Losses: <strong id="losses">0</strong></div>
 </div>
 
-<div class="section-title">Regular Season Games</div>
 <div class="card">
   <table>
     <thead>
@@ -146,6 +139,28 @@ document.getElementById("teamName").textContent=team;
 
 const clean=s=>(s||"").toLowerCase().trim();
 
+function normaliseDate(dateStr){
+  if(!dateStr) return null;
+
+  const cleaned=dateStr.trim().split(" ")[0];
+
+  // YYYY-MM-DD
+  if(cleaned.includes("-")){
+    return cleaned;
+  }
+
+  // DD/MM/YYYY
+  if(cleaned.includes("/")){
+    const parts=cleaned.split("/");
+    const day=parts[0].padStart(2,"0");
+    const month=parts[1].padStart(2,"0");
+    const year=parts[2];
+    return `${year}-${month}-${day}`;
+  }
+
+  return null;
+}
+
 function seasonLabel(start){
   const next=String((start+1)%100).padStart(2,"0");
   return `${start}-${next}`;
@@ -161,14 +176,24 @@ fetch("/data/nba/nba_games_master.json")
 
   for(const game of data){
 
-    if(game.game_type!=="Regular Season")continue;
-
     const home=clean(game.home_team);
     const away=clean(game.away_team);
 
     if(home===t||away===t){
 
-      const season=game.season;
+      const isoDate=normaliseDate(game.date);
+      if(!isoDate) continue;
+
+      const dateObj=new Date(isoDate);
+      if(isNaN(dateObj)) continue;
+
+      const month=dateObj.getMonth()+1;
+
+      // Regular season only (exclude May & June)
+      if(month>=5 && month<=6) continue;
+
+      const year=dateObj.getFullYear();
+      const season = month>=10 ? year : year-1;
 
       const isHome=home===t;
       const teamScore=Number(isHome?game.home_score:game.away_score)||0;
@@ -176,7 +201,7 @@ fetch("/data/nba/nba_games_master.json")
 
       allGames.push({
         id:game.game_id,
-        date:game.date.split(" ")[0],
+        displayDate:isoDate,
         season,
         opponent:isHome?game.away_team:game.home_team,
         result:teamScore>oppScore?"W":"L",
@@ -193,7 +218,7 @@ function render(){
   const gamesBody=document.getElementById("gamesBody");
 
   allGames.sort((a,b)=>{
-    return new Date(b.date)-new Date(a.date);
+    return new Date(b.displayDate)-new Date(a.displayDate);
   });
 
   let wins=0,losses=0;
@@ -205,7 +230,7 @@ function render(){
 
     rows+=`
       <tr onclick="location.href='nba-game.html?game=${g.id}'">
-        <td>${g.date}</td>
+        <td>${g.displayDate}</td>
         <td>${seasonLabel(g.season)}</td>
         <td>${g.opponent}</td>
         <td>${g.result}</td>
