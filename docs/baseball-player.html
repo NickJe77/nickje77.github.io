@@ -12,7 +12,6 @@
   --bg:#f4f6f8;
   --card:#ffffff;
   --text:#0b1220;
-  --muted:#667085;
   --line:#e6e8ee;
   --soft:#f0f6ff;
 }
@@ -37,7 +36,6 @@ body{
   text-decoration:none;
   color:#0056d6;
 }
-.navbar a:hover{ text-decoration:underline; }
 
 .page{
   max-width:1200px;
@@ -53,44 +51,31 @@ body{
   margin-bottom:18px;
   display:flex;
   justify-content:space-between;
-  align-items:flex-start;
-  gap:20px;
   flex-wrap:wrap;
 }
 
 .hero h1{
   margin:0;
   font-size:40px;
-  letter-spacing:-0.5px;
-}
-
-.hero-right{
-  flex:1;
-  min-width:260px;
-  max-width:560px;
 }
 
 .search-wrap{
   display:flex;
   gap:12px;
+  min-width:320px;
 }
 
-/* Enlarged for mobile usability */
+/* enlarged for mobile */
 .search{
   width:100%;
   padding:22px 24px;
   border-radius:18px;
   border:2px solid rgba(255,255,255,0.45);
-  outline:none;
   font-size:22px;
   background:rgba(255,255,255,0.15);
   color:white;
   font-weight:700;
   min-height:64px;
-}
-
-.search::placeholder{
-  color:rgba(255,255,255,0.9);
 }
 
 .btn{
@@ -99,10 +84,10 @@ body{
   border:2px solid rgba(255,255,255,0.45);
   background:rgba(255,255,255,0.18);
   color:white;
-  font-weight:900;
+  font-weight:800;
   font-size:18px;
-  cursor:pointer;
   min-height:64px;
+  cursor:pointer;
 }
 
 .section{
@@ -110,28 +95,6 @@ body{
   padding:20px;
   border-radius:18px;
   margin-bottom:18px;
-}
-
-.section h2{
-  margin:0 0 14px 0;
-  font-size:22px;
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  flex-wrap:wrap;
-  gap:10px;
-}
-
-.controls{
-  display:flex;
-  gap:10px;
-}
-
-select{
-  padding:10px 12px;
-  border-radius:12px;
-  border:1px solid var(--line);
-  font-weight:700;
 }
 
 .cards{
@@ -145,7 +108,6 @@ select{
   border-radius:14px;
   padding:16px;
   text-align:center;
-  border:1px solid #e8efff;
 }
 
 .card .value{
@@ -153,37 +115,20 @@ select{
   font-weight:900;
 }
 
-.card .label{
-  margin-top:6px;
-  font-size:12px;
-  color:#555;
-}
-
 table{
   width:100%;
   border-collapse:collapse;
-  border:1px solid var(--line);
-  border-radius:14px;
-  overflow:hidden;
 }
 
 th{
   background:var(--blue);
   color:white;
   padding:10px;
-  text-align:left;
-  font-size:13px;
 }
 
 td{
   padding:8px;
   border-bottom:1px solid #eee;
-}
-
-tr:nth-child(even){background:#f7fbff;}
-
-@media(max-width:900px){
-  .cards{grid-template-columns:repeat(2,1fr);}
 }
 </style>
 </head>
@@ -199,15 +144,11 @@ tr:nth-child(even){background:#f7fbff;}
 <div class="page">
 
 <div class="hero">
-  <div>
-    <h1 id="playerName">Loading...</h1>
-  </div>
-  <div class="hero-right">
-    <div class="search-wrap">
-      <input id="playerSearch" class="search" list="playerList" placeholder="Search player name..." />
-      <datalist id="playerList"></datalist>
-      <button id="goBtn" class="btn">Go</button>
-    </div>
+  <h1 id="playerName">Loading...</h1>
+  <div class="search-wrap">
+    <input id="playerSearch" class="search" list="playerList" placeholder="Search player name..." />
+    <datalist id="playerList"></datalist>
+    <button id="goBtn" class="btn">Go</button>
   </div>
 </div>
 
@@ -217,22 +158,14 @@ tr:nth-child(even){background:#f7fbff;}
 </div>
 
 <div class="section">
-  <h2>
-    <span>By Team</span>
-    <span class="controls">
-      <select id="teamSelect"></select>
-    </span>
-  </h2>
+  <h2>By Team</h2>
+  <select id="teamSelect"></select>
   <div class="cards" id="teamCards"></div>
 </div>
 
 <div class="section">
-  <h2>
-    <span>Vs Opponent</span>
-    <span class="controls">
-      <select id="oppSelect"></select>
-    </span>
-  </h2>
+  <h2>Vs Opponent</h2>
+  <select id="oppSelect"></select>
   <div class="cards" id="oppCards"></div>
 </div>
 
@@ -264,7 +197,6 @@ tr:nth-child(even){background:#f7fbff;}
 
 const qs = new URLSearchParams(location.search);
 const playerId = qs.get("player");
-
 if(!playerId){
   document.getElementById("playerName").textContent="Player Not Found";
   return;
@@ -285,8 +217,6 @@ const players=await safeFetch("./data/baseball/players.json");
 if(players){
   const list=document.getElementById("playerList");
   list.innerHTML=players.map(p=>`<option value="${p.player_name}"></option>`).join("");
-
-  // FIXED string-safe ID comparison
   const match=players.find(p=>String(p.player_id)===String(playerId));
   if(match) document.getElementById("playerName").textContent=match.player_name;
 }
@@ -295,25 +225,20 @@ const seasons=await safeFetch("./data/baseball/index.json");
 if(!seasons) return;
 
 let career={games:0,plate_appearances:0,at_bats:0,hits:0,home_runs:0,walks:0,strikeouts:0};
-let rows=[];
 let teamAgg=new Map();
+let seasonRows=[];
 
 for(const s of seasons){
   const data=await safeFetch(`./data/baseball/players/${s}.json`);
   if(!data) continue;
-
   const row=data.find(p=>String(p.player_id)===String(playerId));
   if(!row) continue;
 
-  rows.push({...row,season:s});
+  seasonRows.push({...row,season:s});
 
-  career.games+=row.games||0;
-  career.plate_appearances+=row.plate_appearances||0;
-  career.at_bats+=row.at_bats||0;
-  career.hits+=row.hits||0;
-  career.home_runs+=row.home_runs||0;
-  career.walks+=row.walks||0;
-  career.strikeouts+=row.strikeouts||0;
+  for(const k in career){
+    career[k]+=row[k]||0;
+  }
 
   if(!teamAgg.has(row.team)){
     teamAgg.set(row.team,{games:0,hits:0,home_runs:0,walks:0,at_bats:0});
@@ -327,13 +252,27 @@ for(const s of seasons){
 }
 
 document.getElementById("careerCards").innerHTML=`
-<div class="card"><div class="value">${fmt(career.games)}</div><div class="label">Games</div></div>
-<div class="card"><div class="value">${fmt(career.hits)}</div><div class="label">Hits</div></div>
-<div class="card"><div class="value">${fmt(career.home_runs)}</div><div class="label">HR</div></div>
-<div class="card"><div class="value">${avg(career.hits,career.at_bats)}</div><div class="label">AVG</div></div>
+<div class="card"><div class="value">${fmt(career.games)}</div><div>Games</div></div>
+<div class="card"><div class="value">${fmt(career.hits)}</div><div>Hits</div></div>
+<div class="card"><div class="value">${fmt(career.home_runs)}</div><div>HR</div></div>
+<div class="card"><div class="value">${avg(career.hits,career.at_bats)}</div><div>AVG</div></div>
 `;
 
-document.getElementById("seasonBody").innerHTML=rows.map(r=>`
+const teamSelect=document.getElementById("teamSelect");
+teamSelect.innerHTML=[...teamAgg.keys()].map(t=>`<option value="${t}">${t}</option>`).join("");
+teamSelect.onchange=()=>{
+  const t=teamAgg.get(teamSelect.value);
+  if(!t) return;
+  document.getElementById("teamCards").innerHTML=`
+  <div class="card"><div class="value">${fmt(t.games)}</div><div>Games</div></div>
+  <div class="card"><div class="value">${fmt(t.hits)}</div><div>Hits</div></div>
+  <div class="card"><div class="value">${fmt(t.home_runs)}</div><div>HR</div></div>
+  <div class="card"><div class="value">${avg(t.hits,t.at_bats)}</div><div>AVG</div></div>
+  `;
+};
+if(teamSelect.value) teamSelect.onchange();
+
+document.getElementById("seasonBody").innerHTML=seasonRows.map(r=>`
 <tr>
 <td>${r.season}</td>
 <td>${r.team}</td>
@@ -346,6 +285,23 @@ document.getElementById("seasonBody").innerHTML=rows.map(r=>`
 <td>${r.strikeouts}</td>
 <td>${avg(r.hits,r.at_bats)}</td>
 </tr>`).join("");
+
+const oppData=await safeFetch(`./data/baseball/opponents/${playerId}.json`);
+if(oppData){
+  const sel=document.getElementById("oppSelect");
+  sel.innerHTML=oppData.map(o=>`<option value="${o.opponent}">${o.opponent}</option>`).join("");
+  sel.onchange=()=>{
+    const d=oppData.find(o=>o.opponent===sel.value);
+    if(!d) return;
+    document.getElementById("oppCards").innerHTML=`
+    <div class="card"><div class="value">${fmt(d.games)}</div><div>Games</div></div>
+    <div class="card"><div class="value">${fmt(d.hits)}</div><div>Hits</div></div>
+    <div class="card"><div class="value">${fmt(d.home_runs)}</div><div>HR</div></div>
+    <div class="card"><div class="value">${avg(d.hits,d.at_bats)}</div><div>AVG</div></div>
+    `;
+  };
+  if(sel.value) sel.onchange();
+}
 
 }
 
