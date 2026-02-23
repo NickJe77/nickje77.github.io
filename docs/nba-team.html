@@ -100,21 +100,6 @@ tr:hover{
   background:#eef2ff;
   cursor:pointer;
 }
-
-.season-box{
-  background:var(--card);
-  padding:20px;
-  border-radius:18px;
-  box-shadow:0 2px 6px rgba(0,0,0,0.05);
-  margin-bottom:30px;
-}
-
-.season-box select{
-  padding:10px 14px;
-  border-radius:10px;
-  border:1px solid var(--line);
-  font-size:16px;
-}
 </style>
 </head>
 <body>
@@ -134,13 +119,6 @@ tr:hover{
   <div>Total Games: <strong id="totalGames">0</strong></div>
   <div>Wins: <strong id="wins">0</strong></div>
   <div>Losses: <strong id="losses">0</strong></div>
-</div>
-
-<div class="season-box">
-  <strong>Select Season:</strong>
-  <select id="seasonSelect">
-    <option value="all">All Seasons</option>
-  </select>
 </div>
 
 <div class="section-title">Regular Season Games</div>
@@ -168,31 +146,12 @@ document.getElementById("teamName").textContent=team;
 
 const clean=s=>(s||"").toLowerCase().trim();
 
-function safeSeason(dateStr){
-  if(!dateStr)return null;
-  const cleaned=dateStr.trim().split(" ")[0];
-  const parts=cleaned.split("/");
-  if(parts.length<3)return null;
-  const month=parseInt(parts[1]);
-  const year=parseInt(parts[2]);
-  if(isNaN(month)||isNaN(year))return null;
-  return month>=10?year:year-1;
-}
-
 function seasonLabel(start){
   const next=String((start+1)%100).padStart(2,"0");
   return `${start}-${next}`;
 }
 
-function isRegular(home,away){
-  if(!home||!away)return false;
-  if(home.includes("nan")||away.includes("nan"))return false;
-  if(home.includes("all")||away.includes("all"))return false;
-  return true;
-}
-
 let allGames=[];
-let seasons=new Set();
 
 fetch("/data/nba/nba_games_master.json")
 .then(r=>r.json())
@@ -202,17 +161,14 @@ fetch("/data/nba/nba_games_master.json")
 
   for(const game of data){
 
+    if(game.game_type!=="Regular Season")continue;
+
     const home=clean(game.home_team);
     const away=clean(game.away_team);
 
-    if(!isRegular(home,away))continue;
-
     if(home===t||away===t){
 
-      const season=safeSeason(game.date);
-      if(!season)continue;
-
-      seasons.add(season);
+      const season=game.season;
 
       const isHome=home===t;
       const teamScore=Number(isHome?game.home_score:game.away_score)||0;
@@ -220,7 +176,7 @@ fetch("/data/nba/nba_games_master.json")
 
       allGames.push({
         id:game.game_id,
-        date:(game.date||"").trim(),
+        date:game.date.split(" ")[0],
         season,
         opponent:isHome?game.away_team:game.home_team,
         result:teamScore>oppScore?"W":"L",
@@ -229,56 +185,27 @@ fetch("/data/nba/nba_games_master.json")
     }
   }
 
-  buildSelector();
-  render("all");
+  render();
 });
 
-function buildSelector(){
-  const select=document.getElementById("seasonSelect");
-  Array.from(seasons)
-    .sort((a,b)=>b-a)
-    .forEach(s=>{
-      const opt=document.createElement("option");
-      opt.value=s;
-      opt.textContent=seasonLabel(s);
-      select.appendChild(opt);
-    });
-
-  select.addEventListener("change",e=>{
-    render(e.target.value);
-  });
-}
-
-function render(season){
+function render(){
 
   const gamesBody=document.getElementById("gamesBody");
-  gamesBody.innerHTML="";
 
-  const filtered=season==="all"
-    ?allGames
-    :allGames.filter(g=>g.season==season);
-
-  document.getElementById("totalGames").textContent=filtered.length;
-
-  let wins=0,losses=0;
-
-  filtered.sort((a,b)=>{
-    const da=a.date.split(" ")[0].split("/").reverse().join("-");
-    const db=b.date.split(" ")[0].split("/").reverse().join("-");
-    return new Date(db)-new Date(da);
+  allGames.sort((a,b)=>{
+    return new Date(b.date)-new Date(a.date);
   });
 
+  let wins=0,losses=0;
   let rows="";
 
-  for(const g of filtered){
+  for(const g of allGames){
 
     if(g.result==="W")wins++;else losses++;
 
-    const displayDate=g.date.split(" ")[0];
-
     rows+=`
       <tr onclick="location.href='nba-game.html?game=${g.id}'">
-        <td>${displayDate}</td>
+        <td>${g.date}</td>
         <td>${seasonLabel(g.season)}</td>
         <td>${g.opponent}</td>
         <td>${g.result}</td>
@@ -287,7 +214,7 @@ function render(season){
   }
 
   gamesBody.innerHTML=rows;
-
+  document.getElementById("totalGames").textContent=allGames.length;
   document.getElementById("wins").textContent=wins;
   document.getElementById("losses").textContent=losses;
 }
