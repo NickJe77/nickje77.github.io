@@ -2,36 +2,95 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Baseball Franchises | The Sporting Almanac</title>
+<title>Baseball Franchise | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="style.css">
 
 <style>
-body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
-.page{max-width:1200px;margin:0 auto;padding:22px 18px;}
-.hero{background:linear-gradient(90deg,#002D72,#C8102E);color:#fff;padding:30px;border-radius:22px;margin-bottom:18px;}
-.hero h1{margin:0 0 12px 0;font-size:36px;}
-select{padding:10px 14px;font-size:16px;border-radius:8px;border:none;font-weight:700;}
-.card{background:#fff;border-radius:16px;padding:14px;margin-bottom:12px;font-weight:800;}
-table{width:100%;border-collapse:collapse;background:#fff;border-radius:16px;overflow:hidden;}
-th,td{padding:10px;text-align:left;border-bottom:1px solid #f1f1f1;}
-th{background:#002D72;color:#fff;}
-tbody tr:nth-child(even){background:#eaf3ff;}
-tbody tr:hover{background:#d6e6ff;}
-.error{color:#b00020;font-weight:700;margin-top:10px;}
+body{
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:#f4f6f8;
+}
+
+.page{
+  max-width:1200px;
+  margin:0 auto;
+  padding:24px 18px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#002D72,#C8102E);
+  color:#fff;
+  padding:36px;
+  border-radius:22px;
+  margin-bottom:16px;
+}
+
+.hero h1{
+  margin:0 0 16px 0;
+  font-size:38px;
+}
+
+select{
+  padding:10px 14px;
+  font-size:16px;
+  border-radius:10px;
+  border:none;
+}
+
+.card{
+  background:#fff;
+  border-radius:16px;
+  padding:14px;
+  margin-bottom:16px;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  background:#fff;
+  border-radius:16px;
+  overflow:hidden;
+}
+
+th,td{
+  padding:12px 10px;
+  text-align:left;
+  border-bottom:1px solid #eee;
+}
+
+th{
+  background:#002D72;
+  color:#fff;
+}
+
+tbody tr:nth-child(even){
+  background:#eef5ff;
+}
+
+tbody tr:hover{
+  background:#dce9ff;
+}
+
+.back{
+  font-weight:700;
+  color:#0056d6;
+  text-decoration:none;
+}
 </style>
 </head>
 <body>
 
 <div class="page">
+
   <div class="hero">
-    <h1 id="title">Select Franchise</h1>
+    <h1 id="title">Franchise History</h1>
     <select id="teamSelect"></select>
-    <div id="error" class="error"></div>
   </div>
 
   <div class="card">
-    <a href="baseball.html">← Back to Baseball</a>
+    <a class="back" href="baseball.html">← Back to Baseball</a>
   </div>
 
   <table>
@@ -48,6 +107,7 @@ tbody tr:hover{background:#d6e6ff;}
     </thead>
     <tbody id="tb"></tbody>
   </table>
+
 </div>
 
 <script>
@@ -55,127 +115,82 @@ tbody tr:hover{background:#d6e6ff;}
 const teamSelect = document.getElementById("teamSelect");
 const tb = document.getElementById("tb");
 const title = document.getElementById("title");
-const errorBox = document.getElementById("error");
+
+let years = [];
+let teams = [];
 
 async function init(){
-  try {
 
-    const res = await fetch("/data/baseball/index.json");
-    const seasons = await res.json();
+  // Load seasons index
+  years = await (await fetch("/data/baseball/index.json")).json();
 
-    const teamSet = new Set();
+  // Load teams list
+  teams = await (await fetch("/data/baseball/teams.json")).json();
 
-    for(const year of seasons){
-      const boxIndex = await fetch(`/data/baseball/boxscores/${year}/`);
-      // GitHub pages does not allow folder listing
-      // So instead we derive teams dynamically while loading games later
-    }
+  teamSelect.innerHTML = '<option value="">Select Franchise</option>';
 
-    // Instead, derive teams dynamically while building first season
-    await buildTeams(seasons);
-
-  } catch(err){
-    errorBox.textContent = "Failed to load data.";
-    console.error(err);
-  }
-}
-
-async function buildTeams(seasons){
-
-  const teamSet = new Set();
-
-  for(const year of seasons){
-    const seasonFiles = await fetch(`/data/baseball/boxscores/${year}/index.json`).catch(()=>null);
-    if(!seasonFiles || !seasonFiles.ok) continue;
-
-    const files = await seasonFiles.json();
-
-    for(const file of files){
-      const gameRes = await fetch(`/data/baseball/boxscores/${year}/${file}`);
-      const game = await gameRes.json();
-      teamSet.add(game.home_code);
-      teamSet.add(game.away_code);
-    }
-  }
-
-  const teams = Array.from(teamSet).sort();
-
-  teams.forEach(code=>{
+  teams.forEach(t=>{
     const opt = document.createElement("option");
-    opt.value = code;
-    opt.textContent = code;
+    opt.value = t.code;
+    opt.textContent = t.name;
     teamSelect.appendChild(opt);
   });
 
-  if(teams.length){
-    loadTeam(teams[0], seasons);
-  }
+  teamSelect.addEventListener("change", buildFranchise);
 
-  teamSelect.onchange = ()=>{
-    loadTeam(teamSelect.value, seasons);
-  };
 }
 
-async function loadTeam(code, seasons){
+async function buildFranchise(){
 
-  title.textContent = `Franchise History – ${code}`;
+  const code = teamSelect.value;
+  if(!code){
+    tb.innerHTML = "";
+    title.textContent = "Franchise History";
+    return;
+  }
+
+  const teamName = teams.find(t=>t.code === code)?.name || code;
+  title.textContent = `Franchise History – ${teamName}`;
+
   tb.innerHTML = "";
 
-  for(const year of seasons){
+  for(const year of years){
 
-    let W=0, L=0, RS=0, RA=0;
+    try{
 
-    const seasonIndexRes = await fetch(`/data/baseball/boxscores/${year}/index.json`).catch(()=>null);
-    if(!seasonIndexRes || !seasonIndexRes.ok) continue;
+      const seasonData = await (await fetch(`/data/baseball/team_seasons/${year}.json`)).json();
 
-    const files = await seasonIndexRes.json();
+      if(!seasonData[code]) continue;
 
-    for(const file of files){
+      const data = seasonData[code];
 
-      const gameRes = await fetch(`/data/baseball/boxscores/${year}/${file}`);
-      const game = await gameRes.json();
+      const W = data.W;
+      const L = data.L;
+      const RS = data.RS;
+      const RA = data.RA;
 
-      if(game.home_code !== code && game.away_code !== code) continue;
+      const PCT = (W + L) > 0 ? (W / (W + L)).toFixed(3) : "0.000";
+      const DIFF = RS - RA;
 
-      let homeRuns = 0;
-      let awayRuns = 0;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${year}</td>
+        <td>${W}</td>
+        <td>${L}</td>
+        <td>${PCT}</td>
+        <td>${RS}</td>
+        <td>${RA}</td>
+        <td>${DIFF}</td>
+      `;
 
-      game.events.forEach(e=>{
-        const result = e[6] || "";
-        const runs = (result.match(/-H/g) || []).length;
+      tb.appendChild(tr);
 
-        if(e[2] === "0") homeRuns += runs;
-        else awayRuns += runs;
-      });
-
-      const isHome = game.home_code === code;
-      const teamRuns = isHome ? homeRuns : awayRuns;
-      const oppRuns  = isHome ? awayRuns : homeRuns;
-
-      RS += teamRuns;
-      RA += oppRuns;
-
-      if(teamRuns > oppRuns) W++;
-      else L++;
+    }catch(e){
+      // ignore missing years
     }
 
-    if(W+L === 0) continue;
-
-    const pct = (W/(W+L)).toFixed(3);
-    const diff = RS - RA;
-
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${year}</td>
-      <td>${W}</td>
-      <td>${L}</td>
-      <td>${pct}</td>
-      <td>${RS}</td>
-      <td>${RA}</td>
-      <td>${diff}</td>
-    `;
-    tb.appendChild(tr);
   }
+
 }
 
 init();
