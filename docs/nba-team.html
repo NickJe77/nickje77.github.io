@@ -1,29 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NBA Team | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{font-family:Inter,system-ui,Arial;margin:0;background:#fff;color:#111;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px 60px;}
+h1{text-align:center;margin:0 0 6px;}
+.subtitle{text-align:center;color:#666;margin:0 0 18px;}
+.status{text-align:center;margin:10px 0 20px;font-size:14px;}
+.status.err{color:#b00020;font-weight:700;}
+.status.ok{color:#1b5e20;font-weight:700;}
+.filters{text-align:center;margin:15px 0;}
+select{padding:8px 14px;font-size:15px;border-radius:8px;border:1px solid #ccc;}
+.stats{display:flex;gap:18px;justify-content:center;margin:20px 0 25px;flex-wrap:wrap;}
+.stat{background:#f4f6fb;padding:14px 20px;border-radius:14px;text-align:center;min-width:130px;}
+.stat b{display:block;font-size:20px;margin-bottom:2px;}
+h2{margin:28px 0 10px;}
+table{width:100%;border-collapse:collapse;margin-bottom:30px;}
+th,td{border-bottom:1px solid #e2e2e2;padding:10px;text-align:center;}
+th{background:#f0f0f0;font-weight:800;}
+tr:nth-child(even){background:#f6f9ff;}
+td.left{text-align:left;}
+.pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:800;}
+.pill.w{background:#e8f5e9;color:#1b5e20;}
+.pill.l{background:#ffebee;color:#b71c1c;}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="nba.html">NBA</a>
+<a href="nba-season.html">Seasons</a>
+</div>
+
+<div class="page-wrap">
+
+<h1 id="teamName">NBA Team</h1>
+<div class="subtitle">Franchise History (Regular Season Only)</div>
+
+<div class="filters">
+Season:
+<select id="seasonFilter">
+<option value="">All Seasons</option>
+</select>
+</div>
+
+<div id="status" class="status">Loading...</div>
+
+<div class="stats">
+<div class="stat"><b id="seasonCount">0</b>Seasons</div>
+<div class="stat"><b id="gamesCount">0</b>Games</div>
+<div class="stat"><b id="winsCount">0</b>Wins</div>
+<div class="stat"><b id="lossesCount">0</b>Losses</div>
+<div class="stat"><b id="pfCount">0</b>Points For</div>
+<div class="stat"><b id="paCount">0</b>Points Against</div>
+</div>
+
+<h2>Season Summary</h2>
+<table>
+<thead>
+<tr>
+<th>Season</th>
+<th>Games</th>
+<th>Wins</th>
+<th>Losses</th>
+<th>PF</th>
+<th>PA</th>
+</tr>
+</thead>
+<tbody id="seasonTable"></tbody>
+</table>
+
+<h2>Most Recent Games</h2>
+<table>
+<thead>
+<tr>
+<th>Season</th>
+<th>Date</th>
+<th>Opponent</th>
+<th>Result</th>
+<th>Score</th>
+</tr>
+</thead>
+<tbody id="gamesTable"></tbody>
+</table>
+
+</div>
+
 <script>
 
-const MASTER_URL = "PUT YOUR OLD WORKING JSON PATH HERE EXACTLY";
+const MASTER_URL = "data/nba/nba_games_master_FIXED.json";
 
 const params = new URLSearchParams(location.search);
 const team = decodeURIComponent(params.get("team") || "").trim();
 
 document.getElementById("teamName").textContent = team;
 
-function norm(s){return String(s||"").trim().toLowerCase();}
-
-function deriveSeason(game){
-  if(game.season && Number(game.season)) return Number(game.season);
-
-  const id = String(game.game_id||"");
-  if(id.length < 3) return null;
-  const yy = parseInt(id.slice(1,3));
-  if(!yy && yy!==0) return null;
-
-  return yy >= 46 ? 1900+yy : 2000+yy;
-}
-
-function parseDate(d){
-  if(!d) return 0;
-  const t = Date.parse(String(d).trim());
-  return isNaN(t) ? 0 : t;
+function norm(v){
+  return String(v || "").trim().toLowerCase();
 }
 
 async function load(){
@@ -34,14 +115,14 @@ async function load(){
   try{
     res = await fetch(MASTER_URL);
   }catch(e){
-    status.textContent="Could not fetch master JSON.";
-    status.className="status err";
+    status.textContent = "Failed to fetch JSON.";
+    status.className = "status err";
     return;
   }
 
   if(!res.ok){
-    status.textContent="Master JSON not found (404).";
-    status.className="status err";
+    status.textContent = "JSON returned " + res.status;
+    status.className = "status err";
     return;
   }
 
@@ -51,90 +132,89 @@ async function load(){
 
   for(const g of data){
 
-    const home = g.home_team || "";
-    const away = g.away_team || "";
+    if(!g) continue;
 
-    if(norm(home)!==norm(team) && norm(away)!==norm(team)) continue;
+    if(g.game_type !== "Regular Season") continue;
 
-    const isHome = norm(home)===norm(team);
+    const home = norm(g.home_team);
+    const away = norm(g.away_team);
 
-    const teamScore = isHome ? Number(g.home_score) : Number(g.away_score);
-    const oppScore  = isHome ? Number(g.away_score) : Number(g.home_score);
+    if(home !== norm(team) && away !== norm(team)) continue;
+
+    const isHome = home === norm(team);
+
+    const teamScore = Number(isHome ? g.home_score : g.away_score);
+    const oppScore  = Number(isHome ? g.away_score : g.home_score);
 
     if(!Number.isFinite(teamScore) || !Number.isFinite(oppScore)) continue;
 
-    const season = deriveSeason(g);
-
     games.push({
-      season,
-      date:g.date||"",
-      sortDate:parseDate(g.date),
-      opponent:isHome?away:home,
-      result:teamScore>oppScore?"W":"L",
-      pf:teamScore,
-      pa:oppScore
+      season: Number(g.season),
+      date: g.date,
+      opponent: isHome ? g.away_team : g.home_team,
+      result: teamScore > oppScore ? "W" : "L",
+      pf: teamScore,
+      pa: oppScore,
+      sortDate: Date.parse(g.date)
     });
   }
 
-  if(games.length===0){
-    status.textContent="No games found.";
-    status.className="status err";
+  if(games.length === 0){
+    status.textContent = "No regular season games found.";
+    status.className = "status err";
     return;
   }
 
-  status.textContent=`Loaded ${games.length.toLocaleString()} games.`;
-  status.className="status ok";
+  status.textContent = "Loaded " + games.length.toLocaleString() + " games.";
+  status.className = "status ok";
 
-  const seasonAgg={};
+  const seasonAgg = {};
 
   for(const g of games){
-
     if(!seasonAgg[g.season]){
-      seasonAgg[g.season]={games:0,wins:0,losses:0,pf:0,pa:0};
+      seasonAgg[g.season] = {games:0,wins:0,losses:0,pf:0,pa:0};
     }
-
     seasonAgg[g.season].games++;
-    seasonAgg[g.season].pf+=g.pf;
-    seasonAgg[g.season].pa+=g.pa;
-    if(g.result==="W") seasonAgg[g.season].wins++;
+    seasonAgg[g.season].pf += g.pf;
+    seasonAgg[g.season].pa += g.pa;
+    if(g.result === "W") seasonAgg[g.season].wins++;
     else seasonAgg[g.season].losses++;
   }
 
-  const seasons=Object.keys(seasonAgg).map(Number).sort((a,b)=>b-a);
+  const seasons = Object.keys(seasonAgg).map(Number).sort((a,b)=>b-a);
 
-  const seasonFilter=document.getElementById("seasonFilter");
-  seasonFilter.innerHTML='<option value="">All Seasons</option>';
+  const seasonFilter = document.getElementById("seasonFilter");
 
   for(const s of seasons){
-    const opt=document.createElement("option");
-    opt.value=s;
-    opt.textContent=s;
+    const opt = document.createElement("option");
+    opt.value = s;
+    opt.textContent = s;
     seasonFilter.appendChild(opt);
   }
 
   function render(){
 
-    const selected=Number(seasonFilter.value)||null;
+    const selected = Number(seasonFilter.value) || null;
 
     let totalGames=0,wins=0,losses=0,pf=0,pa=0;
 
-    const seasonTable=document.getElementById("seasonTable");
-    seasonTable.innerHTML="";
+    const seasonTable = document.getElementById("seasonTable");
+    seasonTable.innerHTML = "";
 
     for(const s of seasons){
 
-      if(selected && s!==selected) continue;
+      if(selected && s !== selected) continue;
 
-      const row=seasonAgg[s];
+      const row = seasonAgg[s];
 
-      totalGames+=row.games;
-      wins+=row.wins;
-      losses+=row.losses;
-      pf+=row.pf;
-      pa+=row.pa;
+      totalGames += row.games;
+      wins += row.wins;
+      losses += row.losses;
+      pf += row.pf;
+      pa += row.pa;
 
-      const tr=document.createElement("tr");
-      tr.innerHTML=`
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
         <td>${s}</td>
         <td>${row.games}</td>
         <td>${row.wins}</td>
@@ -145,28 +225,28 @@ async function load(){
       seasonTable.appendChild(tr);
     }
 
-    document.getElementById("seasonCount").textContent=selected?1:seasons.length;
-    document.getElementById("gamesCount").textContent=totalGames;
-    document.getElementById("winsCount").textContent=wins;
-    document.getElementById("lossesCount").textContent=losses;
-    document.getElementById("pfCount").textContent=pf;
-    document.getElementById("paCount").textContent=pa;
+    document.getElementById("seasonCount").textContent = selected ? 1 : seasons.length;
+    document.getElementById("gamesCount").textContent = totalGames;
+    document.getElementById("winsCount").textContent = wins;
+    document.getElementById("lossesCount").textContent = losses;
+    document.getElementById("pfCount").textContent = pf;
+    document.getElementById("paCount").textContent = pa;
 
-    const gamesTable=document.getElementById("gamesTable");
-    gamesTable.innerHTML="";
+    const gamesTable = document.getElementById("gamesTable");
+    gamesTable.innerHTML = "";
 
-    const filtered=games
-      .filter(g=>!selected||g.season===selected)
-      .sort((a,b)=>b.sortDate-a.sortDate)
+    const filtered = games
+      .filter(g => !selected || g.season === selected)
+      .sort((a,b)=>b.sortDate - a.sortDate)
       .slice(0,200);
 
     for(const g of filtered){
-      const tr=document.createElement("tr");
-      tr.innerHTML=`
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
         <td>${g.season}</td>
         <td>${g.date}</td>
-        <td>${g.opponent}</td>
-        <td>${g.result}</td>
+        <td class="left">${g.opponent}</td>
+        <td><span class="pill ${g.result==="W"?"w":"l"}">${g.result}</span></td>
         <td>${g.pf} – ${g.pa}</td>
       `;
       gamesTable.appendChild(tr);
@@ -180,3 +260,6 @@ async function load(){
 load();
 
 </script>
+
+</body>
+</html>
