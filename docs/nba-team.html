@@ -1,93 +1,281 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>NBA Team Full Diagnostic</title>
+<title>NBA Team | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <style>
-body{font-family:Arial;margin:40px}
-pre{background:#f4f4f4;padding:20px;white-space:pre-wrap}
+body{font-family:Inter,system-ui,Arial;margin:0;background:#fff;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px 60px;}
+h1{text-align:center;margin-bottom:6px;}
+.subtitle{text-align:center;color:#666;margin-bottom:20px;}
+.stats{display:flex;gap:20px;justify-content:center;margin-bottom:20px;flex-wrap:wrap;}
+.stat{background:#f4f6fb;padding:12px 18px;border-radius:10px;text-align:center;min-width:120px;}
+.stat b{display:block;font-size:18px;}
+.filters{text-align:center;margin-bottom:20px;}
+select{padding:8px 14px;font-size:15px;}
+table{width:100%;border-collapse:collapse;margin-bottom:40px;}
+th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:center;}
+th{background:#f0f0f0;}
+tr:nth-child(even){background:#f6f9ff;}
+tr:hover{background:#e9f0ff;}
+.note{color:#666;text-align:center;margin:8px 0 0;font-size:13px;}
+.err{color:#b00020;text-align:center;font-weight:700;margin-top:10px;}
 </style>
 </head>
+
 <body>
 
-<h1>NBA Team Diagnostic</h1>
-<pre id="out">Loading...</pre>
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="nba.html">NBA</a>
+<a href="nba-season.html">Seasons</a>
+</div>
+
+<div class="page-wrap">
+
+<h1 id="teamName">NBA Team</h1>
+<div class="subtitle">Franchise History (Regular Season + Playoffs)</div>
+
+<div class="filters">
+Season:
+<select id="seasonFilter">
+<option value="">All Seasons</option>
+</select>
+<div class="note" id="loadedNote">Loading master file…</div>
+<div class="err" id="errorBox"></div>
+</div>
+
+<div class="stats">
+<div class="stat"><b id="seasons">0</b>Seasons</div>
+<div class="stat"><b id="games">0</b>Games</div>
+<div class="stat"><b id="wins">0</b>Wins</div>
+<div class="stat"><b id="losses">0</b>Losses</div>
+<div class="stat"><b id="pf">0</b>Points For</div>
+<div class="stat"><b id="pa">0</b>Points Against</div>
+</div>
+
+<h2>Season Summary</h2>
+<table>
+<thead>
+<tr>
+<th>Season</th>
+<th>Games</th>
+<th>Wins</th>
+<th>Losses</th>
+<th>PF</th>
+<th>PA</th>
+</tr>
+</thead>
+<tbody id="seasonTable"></tbody>
+</table>
+
+<h2>Games</h2>
+<table>
+<thead>
+<tr>
+<th>Season</th>
+<th>Date</th>
+<th>Opponent</th>
+<th>Result</th>
+<th>Score</th>
+</tr>
+</thead>
+<tbody id="gamesTable"></tbody>
+</table>
+
+</div>
 
 <script>
-
-const BASE = "data/nba/";
-const out = document.getElementById("out");
-
-async function fetchJSON(url){
-try{
-const r = await fetch(url,{cache:"no-store"});
-if(!r.ok) return null;
-return await r.json();
-}catch{
-return null;
-}
-}
-
-async function run(){
-
-let report = "";
-
-// ----- URL PARAM TEST -----
+const MASTER_URL = "data/nba/nba_games_master.json";
 
 const params = new URLSearchParams(window.location.search);
-const rawTeam = params.get("team") || "";
-const decodedTeam = decodeURIComponent(rawTeam);
+const teamParam = params.get("team") || "";
+const team = decodeURIComponent(teamParam.replace(/\+/g," ")).trim();
 
-report += "RAW PARAM: [" + rawTeam + "]\n";
-report += "DECODED: [" + decodedTeam + "]\n";
-report += "LENGTH: " + decodedTeam.length + "\n\n";
+const teamNameEl = document.getElementById("teamName");
+const seasonFilter = document.getElementById("seasonFilter");
+const seasonBody = document.getElementById("seasonTable");
+const gamesBody  = document.getElementById("gamesTable");
+const loadedNote = document.getElementById("loadedNote");
+const errorBox   = document.getElementById("errorBox");
 
-const teamLower = decodedTeam.trim().toLowerCase();
-
-// ----- LOAD ONE SEASON ONLY (1976) -----
-
-const index = await fetchJSON(BASE + "1976/index.json");
-if(!index){
-out.textContent = "Failed loading 1976 index.json";
-return;
+function norm(s){
+  return String(s || "")
+    .replace(/\s+/g," ")
+    .trim()
+    .toLowerCase();
 }
 
-let matches = 0;
-let scanned = 0;
-
-for(const id of index.games){
-
-const g = await fetchJSON(BASE + "1976/" + id + ".json");
-if(!g) continue;
-
-scanned++;
-
-const home = (g.home_team || "").trim().toLowerCase();
-const away = (g.away_team || "").trim().toLowerCase();
-
-if(home === teamLower || away === teamLower){
-
-matches++;
-
-report += "MATCH FOUND:\n";
-report += "Home: [" + g.home_team + "]\n";
-report += "Away: [" + g.away_team + "]\n";
-report += "Score: " + g.home_score + "-" + g.away_score + "\n\n";
-
+function safeNum(n){
+  const x = Number(n);
+  return Number.isFinite(x) ? x : 0;
 }
 
+function fmtDate(d){
+  // keep as YYYY-MM-DD if already
+  return (d || "").slice(0,10);
 }
 
-report += "Total games scanned (1976): " + scanned + "\n";
-report += "Total matches found: " + matches + "\n";
+let allGames = [];
+let teamGames = [];
+let seasonStats = {}; // {season:{games,wins,losses,pf,pa}}
+let seasonsSet = new Set();
 
-out.textContent = report;
+teamNameEl.textContent = team || "Team not specified";
 
+async function loadMaster(){
+  if(!team){
+    errorBox.textContent = "No team specified. Add ?team=Los%20Angeles%20Lakers";
+    loadedNote.textContent = "";
+    return;
+  }
+
+  try{
+    const res = await fetch(MASTER_URL, { cache:"no-store" });
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    allGames = await res.json();
+  }catch(e){
+    errorBox.textContent = "Could not load " + MASTER_URL + " (" + String(e) + ")";
+    loadedNote.textContent = "";
+    return;
+  }
+
+  loadedNote.textContent = "Loaded " + allGames.length.toLocaleString() + " games.";
+
+  buildTeam();
+  populateSeasonFilter();
+  render();
 }
 
-run();
+function buildTeam(){
+  const t = norm(team);
 
+  teamGames = allGames.filter(g => {
+    return norm(g.home_team) === t || norm(g.away_team) === t;
+  });
+
+  seasonStats = {};
+  seasonsSet = new Set();
+
+  for(const g of teamGames){
+    const season = Number(g.season);
+    if(!Number.isFinite(season)) continue;
+
+    const home = norm(g.home_team);
+    const away = norm(g.away_team);
+    const isHome = home === norm(team);
+
+    const teamScore = safeNum(isHome ? g.home_score : g.away_score);
+    const oppScore  = safeNum(isHome ? g.away_score : g.home_score);
+
+    const win = teamScore > oppScore;
+
+    seasonsSet.add(season);
+
+    if(!seasonStats[season]){
+      seasonStats[season] = {games:0,wins:0,losses:0,pf:0,pa:0};
+    }
+
+    seasonStats[season].games += 1;
+    seasonStats[season].pf += teamScore;
+    seasonStats[season].pa += oppScore;
+    if(win) seasonStats[season].wins += 1;
+    else seasonStats[season].losses += 1;
+  }
+
+  if(teamGames.length === 0){
+    errorBox.textContent = "No games found for '" + team + "' in master file.";
+  }else{
+    errorBox.textContent = "";
+  }
+}
+
+function populateSeasonFilter(){
+  seasonFilter.innerHTML = '<option value="">All Seasons</option>';
+
+  Array.from(seasonsSet)
+    .sort((a,b)=>b-a)
+    .forEach(y=>{
+      const opt = document.createElement("option");
+      opt.value = String(y);
+      opt.textContent = String(y);
+      seasonFilter.appendChild(opt);
+    });
+}
+
+function render(){
+  const seasonVal = seasonFilter.value ? Number(seasonFilter.value) : null;
+
+  // Totals
+  let totalGames=0,wins=0,losses=0,pf=0,pa=0;
+  let seasonCount = 0;
+
+  Object.entries(seasonStats).forEach(([s,v])=>{
+    const yr = Number(s);
+    if(seasonVal && yr !== seasonVal) return;
+    totalGames += v.games;
+    wins += v.wins;
+    losses += v.losses;
+    pf += v.pf;
+    pa += v.pa;
+    seasonCount += 1;
+  });
+
+  document.getElementById("seasons").textContent = seasonVal ? 1 : seasonsSet.size;
+  document.getElementById("games").textContent   = totalGames;
+  document.getElementById("wins").textContent    = wins;
+  document.getElementById("losses").textContent  = losses;
+  document.getElementById("pf").textContent      = pf;
+  document.getElementById("pa").textContent      = pa;
+
+  // Season table
+  seasonBody.innerHTML = "";
+  Object.entries(seasonStats)
+    .map(([s,v])=>({season:Number(s),...v}))
+    .sort((a,b)=>b.season-a.season)
+    .forEach(row=>{
+      if(seasonVal && row.season !== seasonVal) return;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${row.season}</td>
+        <td>${row.games}</td>
+        <td>${row.wins}</td>
+        <td>${row.losses}</td>
+        <td>${row.pf}</td>
+        <td>${row.pa}</td>
+      `;
+      seasonBody.appendChild(tr);
+    });
+
+  // Games table (sorted newest -> oldest)
+  gamesBody.innerHTML = "";
+  teamGames
+    .filter(g => !seasonVal || Number(g.season) === seasonVal)
+    .sort((a,b)=> new Date(b.date) - new Date(a.date))
+    .forEach(g=>{
+      const isHome = norm(g.home_team) === norm(team);
+      const opponent = isHome ? g.away_team : g.home_team;
+      const teamScore = safeNum(isHome ? g.home_score : g.away_score);
+      const oppScore  = safeNum(isHome ? g.away_score : g.home_score);
+      const result = teamScore > oppScore ? "W" : "L";
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${g.season}</td>
+        <td>${fmtDate(g.date)}</td>
+        <td>${opponent}</td>
+        <td>${result}</td>
+        <td>${teamScore} – ${oppScore}</td>
+      `;
+      gamesBody.appendChild(tr);
+    });
+}
+
+seasonFilter.addEventListener("change", render);
+loadMaster();
 </script>
 
 </body>
