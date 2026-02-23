@@ -52,8 +52,8 @@ body{
   margin-bottom:18px;
   display:flex;
   justify-content:space-between;
+  align-items:center;
   flex-wrap:wrap;
-  gap:20px;
 }
 
 .hero h1{
@@ -61,33 +61,35 @@ body{
   font-size:40px;
 }
 
+/* Match search height visually to header block */
 .search-wrap{
   display:flex;
   gap:10px;
-  min-width:300px;
+  min-width:420px;
+  align-items:center;
 }
 
 .search{
   width:100%;
-  padding:16px 18px;
-  border-radius:14px;
+  padding:18px 22px;
+  border-radius:16px;
   border:2px solid rgba(255,255,255,0.45);
-  font-size:18px;
+  font-size:20px;
   background:rgba(255,255,255,0.15);
   color:white;
   font-weight:600;
-  height:52px;
+  height:56px;
 }
 
 .btn{
-  padding:0 20px;
-  border-radius:14px;
+  padding:0 22px;
+  border-radius:16px;
   border:2px solid rgba(255,255,255,0.45);
   background:rgba(255,255,255,0.18);
   color:white;
   font-weight:800;
   font-size:16px;
-  height:52px;
+  height:56px;
   cursor:pointer;
 }
 
@@ -114,6 +116,12 @@ body{
 .card .value{
   font-size:26px;
   font-weight:900;
+}
+
+.card .label{
+  margin-top:6px;
+  font-size:12px;
+  color:#555;
 }
 
 select{
@@ -207,22 +215,13 @@ td{
 (function(){
 
 const TEAM_NAMES = {
-"ANA":"Los Angeles Angels","ARI":"Arizona Diamondbacks",
-"ATL":"Atlanta Braves","BAL":"Baltimore Orioles",
-"BOS":"Boston Red Sox","BRO":"Brooklyn Dodgers",
-"CHN":"Chicago Cubs","CHA":"Chicago White Sox",
-"CIN":"Cincinnati Reds","CLE":"Cleveland Guardians",
-"COL":"Colorado Rockies","DET":"Detroit Tigers",
-"HOU":"Houston Astros","KCA":"Kansas City Royals",
-"LAN":"Los Angeles Dodgers","MIA":"Miami Marlins",
-"MIL":"Milwaukee Brewers","MIN":"Minnesota Twins",
-"NYA":"New York Yankees","NYN":"New York Mets",
-"OAK":"Oakland Athletics","PHI":"Philadelphia Phillies",
-"PIT":"Pittsburgh Pirates","SDN":"San Diego Padres",
-"SEA":"Seattle Mariners","SFN":"San Francisco Giants",
-"SLN":"St. Louis Cardinals","TBA":"Tampa Bay Rays",
-"TEX":"Texas Rangers","TOR":"Toronto Blue Jays",
-"WAS":"Washington Nationals"
+"LAN":"Los Angeles Dodgers",
+"SLN":"St. Louis Cardinals",
+"SDN":"San Diego Padres",
+"NYA":"New York Yankees",
+"SFN":"San Francisco Giants",
+"CHN":"Chicago Cubs",
+"TBA":"Tampa Bay Rays"
 };
 
 function teamFull(code){
@@ -291,10 +290,11 @@ for(const s of seasons){
 }
 
 document.getElementById("careerCards").innerHTML=`
-<div class="card"><div class="value">${fmt(career.games)}</div><div>Games</div></div>
-<div class="card"><div class="value">${fmt(career.hits)}</div><div>Hits</div></div>
-<div class="card"><div class="value">${fmt(career.home_runs)}</div><div>HR</div></div>
-<div class="card"><div class="value">${avg(career.hits,career.at_bats)}</div><div>AVG</div></div>
+<div class="card"><div class="value">${fmt(career.games)}</div><div class="label">Games</div></div>
+<div class="card"><div class="value">${fmt(career.at_bats)}</div><div class="label">AB</div></div>
+<div class="card"><div class="value">${fmt(career.hits)}</div><div class="label">Hits</div></div>
+<div class="card"><div class="value">${fmt(career.home_runs)}</div><div class="label">HR</div></div>
+<div class="card"><div class="value">${avg(career.hits,career.at_bats)}</div><div class="label">AVG</div></div>
 `;
 
 const teamSelect=document.getElementById("teamSelect");
@@ -306,13 +306,35 @@ teamSelect.onchange=()=>{
   const t=teamAgg.get(teamSelect.value);
   if(!t) return;
   document.getElementById("teamCards").innerHTML=`
-  <div class="card"><div class="value">${fmt(t.games)}</div><div>Games</div></div>
-  <div class="card"><div class="value">${fmt(t.hits)}</div><div>Hits</div></div>
-  <div class="card"><div class="value">${fmt(t.home_runs)}</div><div>HR</div></div>
-  <div class="card"><div class="value">${avg(t.hits,t.at_bats)}</div><div>AVG</div></div>
+  <div class="card"><div class="value">${fmt(t.games)}</div><div class="label">Games</div></div>
+  <div class="card"><div class="value">${fmt(t.at_bats)}</div><div class="label">AB</div></div>
+  <div class="card"><div class="value">${fmt(t.hits)}</div><div class="label">Hits</div></div>
+  <div class="card"><div class="value">${fmt(t.home_runs)}</div><div class="label">HR</div></div>
+  <div class="card"><div class="value">${avg(t.hits,t.at_bats)}</div><div class="label">AVG</div></div>
   `;
 };
 if(teamSelect.value) teamSelect.onchange();
+
+const oppData=await safeFetch(`./data/baseball/opponents/${playerId}.json`);
+if(oppData){
+  const sel=document.getElementById("oppSelect");
+  sel.innerHTML=oppData.map(o=>
+    `<option value="${o.opponent}">${teamFull(o.opponent)}</option>`
+  ).join("");
+
+  sel.onchange=()=>{
+    const d=oppData.find(o=>o.opponent===sel.value);
+    if(!d) return;
+    document.getElementById("oppCards").innerHTML=`
+    <div class="card"><div class="value">${fmt(d.games)}</div><div class="label">Games</div></div>
+    <div class="card"><div class="value">${fmt(d.at_bats)}</div><div class="label">AB</div></div>
+    <div class="card"><div class="value">${fmt(d.hits)}</div><div class="label">Hits</div></div>
+    <div class="card"><div class="value">${fmt(d.home_runs)}</div><div class="label">HR</div></div>
+    <div class="card"><div class="value">${avg(d.hits,d.at_bats)}</div><div class="label">AVG</div></div>
+    `;
+  };
+  if(sel.value) sel.onchange();
+}
 
 document.getElementById("seasonBody").innerHTML=seasonRows.map(r=>`
 <tr>
@@ -327,26 +349,6 @@ document.getElementById("seasonBody").innerHTML=seasonRows.map(r=>`
 <td>${r.strikeouts}</td>
 <td>${avg(r.hits,r.at_bats)}</td>
 </tr>`).join("");
-
-const oppData=await safeFetch(`./data/baseball/opponents/${playerId}.json`);
-if(oppData){
-  const sel=document.getElementById("oppSelect");
-  sel.innerHTML=oppData.map(o=>
-    `<option value="${o.opponent}">${teamFull(o.opponent)}</option>`
-  ).join("");
-
-  sel.onchange=()=>{
-    const d=oppData.find(o=>o.opponent===sel.value);
-    if(!d) return;
-    document.getElementById("oppCards").innerHTML=`
-    <div class="card"><div class="value">${fmt(d.games)}</div><div>Games</div></div>
-    <div class="card"><div class="value">${fmt(d.hits)}</div><div>Hits</div></div>
-    <div class="card"><div class="value">${fmt(d.home_runs)}</div><div>HR</div></div>
-    <div class="card"><div class="value">${avg(d.hits,d.at_bats)}</div><div>AVG</div></div>
-    `;
-  };
-  if(sel.value) sel.onchange();
-}
 
 }
 
