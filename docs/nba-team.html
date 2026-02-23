@@ -43,7 +43,6 @@ body{
   padding:30px 20px;
 }
 
-/* 🔥 Fading Gradient Header */
 .hero{
   background:linear-gradient(270deg,#17408B,#C9082A,#17408B);
   background-size:400% 400%;
@@ -65,26 +64,6 @@ body{
   gap:40px;
   margin-bottom:30px;
   font-size:18px;
-}
-
-.stats strong{
-  font-size:22px;
-}
-
-/* Season Selector Box */
-.season-box{
-  background:var(--card);
-  padding:20px;
-  border-radius:18px;
-  box-shadow:0 2px 6px rgba(0,0,0,0.05);
-  margin-bottom:30px;
-}
-
-.season-box select{
-  padding:10px 14px;
-  border-radius:10px;
-  border:1px solid var(--line);
-  font-size:16px;
 }
 
 .section-title{
@@ -121,29 +100,19 @@ tr:hover{
   background:#eef2ff;
 }
 
-.leaders{
-  display:grid;
-  grid-template-columns:repeat(4,1fr);
-  gap:20px;
-  margin-top:20px;
-}
-
-.leader-card{
+.season-box{
   background:var(--card);
   padding:20px;
-  border-radius:16px;
+  border-radius:18px;
   box-shadow:0 2px 6px rgba(0,0,0,0.05);
-  text-align:center;
+  margin-bottom:30px;
 }
 
-.leader-card h3{
-  margin:0 0 8px 0;
+.season-box select{
+  padding:10px 14px;
+  border-radius:10px;
+  border:1px solid var(--line);
   font-size:16px;
-  color:var(--nba-primary);
-}
-
-.leader-card strong{
-  font-size:18px;
 }
 </style>
 </head>
@@ -156,120 +125,118 @@ tr:hover{
 
 <div class="page">
 
-  <div class="hero">
-    <h1 id="teamName"></h1>
-  </div>
+<div class="hero">
+  <h1 id="teamName"></h1>
+</div>
 
-  <div class="stats">
-    <div>Total Games: <strong id="totalGames">0</strong></div>
-    <div>Wins: <strong id="wins">0</strong></div>
-    <div>Losses: <strong id="losses">0</strong></div>
-  </div>
+<div class="stats">
+  <div>Total Games: <strong id="totalGames">0</strong></div>
+  <div>Wins: <strong id="wins">0</strong></div>
+  <div>Losses: <strong id="losses">0</strong></div>
+</div>
 
-  <div class="season-box">
-    <label><strong>Select Season:</strong></label>
-    <select id="seasonSelect">
-      <option value="all">All Seasons</option>
-    </select>
-  </div>
+<div class="season-box">
+  <strong>Select Season:</strong>
+  <select id="seasonSelect">
+    <option value="all">All Seasons</option>
+  </select>
+</div>
 
-  <div class="leaders" id="leaders" style="display:none;">
-    <div class="leader-card">
-      <h3>Most Points</h3>
-      <strong id="leaderPoints">-</strong>
-    </div>
-    <div class="leader-card">
-      <h3>Most Assists</h3>
-      <strong id="leaderAssists">-</strong>
-    </div>
-    <div class="leader-card">
-      <h3>Most Rebounds</h3>
-      <strong id="leaderRebounds">-</strong>
-    </div>
-    <div class="leader-card">
-      <h3>Most Blocks</h3>
-      <strong id="leaderBlocks">-</strong>
-    </div>
-  </div>
-
-  <div class="section-title">Games</div>
-  <div class="card">
-    <table>
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Season</th>
-          <th>Opponent</th>
-          <th>Result</th>
-          <th>Score</th>
-        </tr>
-      </thead>
-      <tbody id="gamesBody"></tbody>
-    </table>
-  </div>
+<div class="section-title">Games</div>
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Season</th>
+        <th>Opponent</th>
+        <th>Result</th>
+        <th>Score</th>
+      </tr>
+    </thead>
+    <tbody id="gamesBody"></tbody>
+  </table>
+</div>
 
 </div>
 
 <script>
 const params=new URLSearchParams(window.location.search);
-const team=params.get("team")||"";
+const team=(params.get("team")||"").trim();
 document.getElementById("teamName").textContent=team;
 
-const clean=s=>(s??"").toLowerCase().trim();
+const clean=s=>(s||"").toString().toLowerCase().trim();
 
-function deriveSeason(dateStr){
-  if(!dateStr)return null;
-  const parts=dateStr.trim().split("/");
+function safeSeason(dateStr){
+  if(!dateStr||typeof dateStr!=="string")return null;
+
+  const cleaned=dateStr.trim().split(" ")[0];
+  const parts=cleaned.split("/");
+
+  if(parts.length<3)return null;
+
   const month=parseInt(parts[1]);
   const year=parseInt(parts[2]);
-  if(month>=10)return year;
-  return year-1;
+
+  if(isNaN(month)||isNaN(year))return null;
+
+  return month>=10?year:year-1;
 }
 
 function seasonLabel(start){
+  if(!start)return "";
   const next=String((start+1)%100).padStart(2,"0");
   return `${start}-${next}`;
 }
 
 let allGames=[];
-let seasonSet=new Set();
+let seasons=new Set();
 
 fetch("/data/nba/nba_games_master.json")
 .then(r=>r.json())
 .then(data=>{
+
   const t=clean(team);
 
   data.forEach(game=>{
-    const home=clean(game.home_team);
-    const away=clean(game.away_team);
 
-    if(home===t||away===t){
-      const season=deriveSeason(game.date);
-      if(!season)return;
+    try{
+      const home=clean(game.home_team);
+      const away=clean(game.away_team);
 
-      seasonSet.add(season);
+      if(home===t||away===t){
 
-      const isHome=home===t;
-      const teamScore=isHome?game.home_score:game.away_score;
-      const oppScore=isHome?game.away_score:game.home_score;
+        const season=safeSeason(game.date);
+        if(!season)return;
 
-      allGames.push({
-        ...game,
-        season,
-        opponent:isHome?game.away_team:game.home_team,
-        result:teamScore>oppScore?"W":"L",
-        score:`${teamScore} - ${oppScore}`
-      });
+        seasons.add(season);
+
+        const isHome=home===t;
+        const teamScore=Number(isHome?game.home_score:game.away_score)||0;
+        const oppScore=Number(isHome?game.away_score:game.home_score)||0;
+
+        allGames.push({
+          date:(game.date||"").trim(),
+          season,
+          opponent:isHome?game.away_team:game.home_team,
+          result:teamScore>oppScore?"W":"L",
+          score:`${teamScore} - ${oppScore}`
+        });
+      }
+    }catch(e){
+      // skip broken records safely
     }
+
   });
 
-  buildSeasonSelector();
+  buildSelector();
   render("all");
-});
+})
+.catch(()=>{});
 
-function buildSeasonSelector(){
+function buildSelector(){
   const select=document.getElementById("seasonSelect");
-  Array.from(seasonSet)
+  Array.from(seasons)
     .sort((a,b)=>b-a)
     .forEach(s=>{
       const opt=document.createElement("option");
@@ -283,24 +250,30 @@ function buildSeasonSelector(){
   });
 }
 
-function render(selectedSeason){
+function render(season){
 
   const gamesBody=document.getElementById("gamesBody");
   gamesBody.innerHTML="";
 
-  const filtered=selectedSeason==="all"
+  const filtered=season==="all"
     ?allGames
-    :allGames.filter(g=>g.season==selectedSeason);
+    :allGames.filter(g=>g.season==season);
 
   document.getElementById("totalGames").textContent=filtered.length;
 
   let wins=0,losses=0;
 
-  filtered.forEach(g=>{
+  filtered
+  .sort((a,b)=>{
+    const da=a.date.split("/").reverse().join("-");
+    const db=b.date.split("/").reverse().join("-");
+    return new Date(db)-new Date(da);
+  })
+  .forEach(g=>{
     if(g.result==="W")wins++;else losses++;
     gamesBody.innerHTML+=`
       <tr>
-        <td>${g.date.trim()}</td>
+        <td>${g.date}</td>
         <td>${seasonLabel(g.season)}</td>
         <td>${g.opponent}</td>
         <td>${g.result}</td>
@@ -310,35 +283,6 @@ function render(selectedSeason){
 
   document.getElementById("wins").textContent=wins;
   document.getElementById("losses").textContent=losses;
-
-  if(selectedSeason!=="all"){
-    calculateLeaders(filtered);
-  }else{
-    document.getElementById("leaders").style.display="none";
-  }
-}
-
-function calculateLeaders(games){
-  let points=0,assists=0,rebounds=0,blocks=0;
-  let pName="",aName="",rName="",bName="";
-
-  games.forEach(game=>{
-    if(!game.players)return;
-
-    game.players.forEach(player=>{
-      if(player.points>points){points=player.points;pName=player.player_name;}
-      if(player.assists>assists){assists=player.assists;aName=player.player_name;}
-      if(player.rebounds>rebounds){rebounds=player.rebounds;rName=player.player_name;}
-      if(player.blocks>blocks){blocks=player.blocks;bName=player.player_name;}
-    });
-  });
-
-  document.getElementById("leaderPoints").textContent=`${pName} (${points})`;
-  document.getElementById("leaderAssists").textContent=`${aName} (${assists})`;
-  document.getElementById("leaderRebounds").textContent=`${rName} (${rebounds})`;
-  document.getElementById("leaderBlocks").textContent=`${bName} (${blocks})`;
-
-  document.getElementById("leaders").style.display="grid";
 }
 </script>
 
