@@ -32,6 +32,7 @@ body{
   border-bottom:1px solid #ddd;
   font-weight:700;
 }
+
 .navbar a{
   text-decoration:none;
   color:#0056d6;
@@ -52,6 +53,7 @@ body{
   display:flex;
   justify-content:space-between;
   flex-wrap:wrap;
+  gap:20px;
 }
 
 .hero h1{
@@ -59,34 +61,34 @@ body{
   font-size:40px;
 }
 
+/* resized properly */
 .search-wrap{
   display:flex;
-  gap:12px;
-  min-width:320px;
+  gap:10px;
+  min-width:300px;
 }
 
-/* enlarged for mobile */
 .search{
   width:100%;
-  padding:22px 24px;
-  border-radius:18px;
+  padding:16px 18px;
+  border-radius:14px;
   border:2px solid rgba(255,255,255,0.45);
-  font-size:22px;
+  font-size:18px;
   background:rgba(255,255,255,0.15);
   color:white;
-  font-weight:700;
-  min-height:64px;
+  font-weight:600;
+  height:52px;
 }
 
 .btn{
-  padding:22px 26px;
-  border-radius:18px;
+  padding:0 20px;
+  border-radius:14px;
   border:2px solid rgba(255,255,255,0.45);
   background:rgba(255,255,255,0.18);
   color:white;
   font-weight:800;
-  font-size:18px;
-  min-height:64px;
+  font-size:16px;
+  height:52px;
   cursor:pointer;
 }
 
@@ -111,8 +113,19 @@ body{
 }
 
 .card .value{
-  font-size:28px;
+  font-size:26px;
   font-weight:900;
+}
+
+/* team & opponent dropdown resized */
+select{
+  padding:14px 16px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  font-weight:700;
+  font-size:16px;
+  height:48px;
+  margin-bottom:14px;
 }
 
 table{
@@ -197,6 +210,7 @@ td{
 
 const qs = new URLSearchParams(location.search);
 const playerId = qs.get("player");
+
 if(!playerId){
   document.getElementById("playerName").textContent="Player Not Found";
   return;
@@ -211,14 +225,28 @@ async function safeFetch(url){
   return r.json();
 }
 
+function resolvePlayerName(players,id){
+  return players.find(p =>
+    String(p.player_id)===String(id) ||
+    String(p.playerId)===String(id) ||
+    String(p.id)===String(id) ||
+    String(p.bbref_id)===String(id) ||
+    String(p.key)===String(id)
+  );
+}
+
 async function init(){
 
 const players=await safeFetch("./data/baseball/players.json");
 if(players){
   const list=document.getElementById("playerList");
-  list.innerHTML=players.map(p=>`<option value="${p.player_name}"></option>`).join("");
-  const match=players.find(p=>String(p.player_id)===String(playerId));
-  if(match) document.getElementById("playerName").textContent=match.player_name;
+  list.innerHTML=players.map(p=>`<option value="${p.player_name||p.name}"></option>`).join("");
+
+  const match=resolvePlayerName(players,playerId);
+  if(match){
+    document.getElementById("playerName").textContent =
+      match.player_name || match.name || match.full_name || "Unknown Player";
+  }
 }
 
 const seasons=await safeFetch("./data/baseball/index.json");
@@ -231,7 +259,12 @@ let seasonRows=[];
 for(const s of seasons){
   const data=await safeFetch(`./data/baseball/players/${s}.json`);
   if(!data) continue;
-  const row=data.find(p=>String(p.player_id)===String(playerId));
+
+  const row=data.find(p =>
+    String(p.player_id)===String(playerId) ||
+    String(p.playerId)===String(playerId) ||
+    String(p.id)===String(playerId)
+  );
   if(!row) continue;
 
   seasonRows.push({...row,season:s});
