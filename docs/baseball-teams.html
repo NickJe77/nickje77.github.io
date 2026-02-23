@@ -7,85 +7,23 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
-body{
-  font-family:Inter,system-ui,Arial;
-  margin:0;
-  background:#f4f6f8;
-}
-
-.page{
-  max-width:1200px;
-  margin:0 auto;
-  padding:22px 18px;
-}
-
-.hero{
-  background:linear-gradient(90deg,#002D72,#C8102E);
-  color:#fff;
-  padding:30px;
-  border-radius:22px;
-  margin-bottom:18px;
-}
-
-.hero h1{
-  margin:0 0 12px 0;
-  font-size:36px;
-}
-
-select{
-  padding:10px 14px;
-  font-size:16px;
-  border-radius:8px;
-  border:none;
-  font-weight:700;
-}
-
-.card{
-  background:#fff;
-  border-radius:16px;
-  padding:14px;
-  margin-bottom:12px;
-  font-weight:800;
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-  background:#fff;
-  border-radius:16px;
-  overflow:hidden;
-}
-
-th,td{
-  padding:10px;
-  text-align:left;
-  border-bottom:1px solid #f1f1f1;
-}
-
-th{
-  background:#002D72;
-  color:#fff;
-}
-
-tbody tr:nth-child(even){
-  background:#eaf3ff;
-}
-
-tbody tr:hover{
-  background:#d6e6ff;
-}
-
-.error{
-  color:#b00020;
-  font-weight:700;
-  margin-top:10px;
-}
+body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
+.page{max-width:1200px;margin:0 auto;padding:22px 18px;}
+.hero{background:linear-gradient(90deg,#002D72,#C8102E);color:#fff;padding:30px;border-radius:22px;margin-bottom:18px;}
+.hero h1{margin:0 0 12px 0;font-size:36px;}
+select{padding:10px 14px;font-size:16px;border-radius:8px;border:none;font-weight:700;}
+.card{background:#fff;border-radius:16px;padding:14px;margin-bottom:12px;font-weight:800;}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:16px;overflow:hidden;}
+th,td{padding:10px;text-align:left;border-bottom:1px solid #f1f1f1;}
+th{background:#002D72;color:#fff;}
+tbody tr:nth-child(even){background:#eaf3ff;}
+tbody tr:hover{background:#d6e6ff;}
+.error{color:#b00020;font-weight:700;margin-top:10px;}
 </style>
 </head>
 <body>
 
 <div class="page">
-
   <div class="hero">
     <h1 id="title">Select Franchise</h1>
     <select id="teamSelect"></select>
@@ -110,7 +48,6 @@ tbody tr:hover{
     </thead>
     <tbody id="tb"></tbody>
   </table>
-
 </div>
 
 <script>
@@ -121,47 +58,48 @@ const title = document.getElementById("title");
 const errorBox = document.getElementById("error");
 
 let games = [];
-let teams = [];
 
 async function init(){
   try {
 
-    // CORRECT LIVE PATHS (Docs folder is site root)
-    const teamsRes = await fetch("/data/baseball/teams.json");
-    if(!teamsRes.ok) throw new Error("teams.json not found");
-    teams = await teamsRes.json();
+    const res = await fetch("/data/baseball/index.json");
+    if(!res.ok) throw new Error("index.json not found");
+    games = await res.json();
 
-    teams.sort((a,b)=>a.name.localeCompare(b.name));
+    // Extract unique team codes from games
+    const teamSet = new Set();
 
-    teams.forEach(t=>{
+    games.forEach(g=>{
+      teamSet.add(g.home_code);
+      teamSet.add(g.away_code);
+    });
+
+    const teamList = Array.from(teamSet).sort();
+
+    teamList.forEach(code=>{
       const opt = document.createElement("option");
-      opt.value = t.code;
-      opt.textContent = t.name;
+      opt.value = code;
+      opt.textContent = code;
       teamSelect.appendChild(opt);
     });
 
-    const gamesRes = await fetch("/data/baseball/index.json");
-    if(!gamesRes.ok) throw new Error("index.json not found");
-    games = await gamesRes.json();
-
-    if(teams.length){
-      loadTeam(teams[0].code, teams[0].name);
+    if(teamList.length){
+      loadTeam(teamList[0]);
     }
 
     teamSelect.onchange = ()=>{
-      const selected = teams.find(t=>t.code === teamSelect.value);
-      loadTeam(selected.code, selected.name);
+      loadTeam(teamSelect.value);
     };
 
   } catch(err){
-    errorBox.textContent = "Data failed to load. Check file paths.";
+    errorBox.textContent = "Failed to load data.";
     console.error(err);
   }
 }
 
-function loadTeam(code, name){
+function loadTeam(code){
 
-  title.textContent = `${name} (${code})`;
+  title.textContent = `Franchise History – ${code}`;
   tb.innerHTML = "";
 
   const seasonMap = {};
