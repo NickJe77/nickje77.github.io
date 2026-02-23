@@ -43,7 +43,7 @@ body{
 
 .stats{
   display:flex;
-  gap:30px;
+  gap:40px;
   font-size:18px;
   margin-bottom:20px;
 }
@@ -102,33 +102,33 @@ tr:hover{
 
 <h2>Season Summary</h2>
 <table id="seasonTable">
-  <thead>
-    <tr>
-      <th>Season</th>
-      <th>Games</th>
-      <th>Wins</th>
-      <th>Losses</th>
-    </tr>
-  </thead>
-  <tbody></tbody>
+<thead>
+<tr>
+<th>Season</th>
+<th>Games</th>
+<th>Wins</th>
+<th>Losses</th>
+</tr>
+</thead>
+<tbody></tbody>
 </table>
 
-<h2 style="margin-top:30px;">Games</h2>
+<h2 style="margin-top:30px;">Recent Games</h2>
 <table id="gamesTable">
-  <thead>
-    <tr>
-      <th>Date</th>
-      <th>Season</th>
-      <th>Opponent</th>
-      <th>Result</th>
-      <th>Score</th>
-    </tr>
-  </thead>
-  <tbody></tbody>
+<thead>
+<tr>
+<th>Date</th>
+<th>Season</th>
+<th>Opponent</th>
+<th>Result</th>
+<th>Score</th>
+</tr>
+</thead>
+<tbody></tbody>
 </table>
 
 <div id="noData" class="no-data" style="display:none;">
-  No games found for this team.
+No games found for this team.
 </div>
 
 </div>
@@ -142,84 +142,65 @@ document.getElementById("teamName").textContent = team;
 
 const clean = str => str ? str.toLowerCase().trim() : "";
 
-let allGames = [];
 let seasonStats = {};
+let teamGames = [];
 
-async function loadAllSeasons(){
+fetch("data/nba/nba_games_master.json")
+.then(res => res.json())
+.then(data => {
 
-  const seasons = [];
+  data.forEach(game => {
 
-  for(let y = 1947; y <= 2025; y++){
-    seasons.push(y);
-  }
+    if(
+      clean(game.home_team) === clean(team) ||
+      clean(game.away_team) === clean(team)
+    ){
 
-  for(const season of seasons){
+      teamGames.push(game);
 
-    try{
-      const res = await fetch(`data/nba/games/${season}.json`);
-      if(!res.ok) continue;
+      const isHome = clean(game.home_team) === clean(team);
+      const teamScore = isHome ? game.home_score : game.away_score;
+      const oppScore = isHome ? game.away_score : game.home_score;
+      const opponent = isHome ? game.away_team : game.home_team;
 
-      const games = await res.json();
+      if(!seasonStats[game.season]){
+        seasonStats[game.season] = {games:0,wins:0,losses:0};
+      }
 
-      games.forEach(game => {
+      seasonStats[game.season].games++;
 
-        if(
-          clean(game.home_team) === clean(team) ||
-          clean(game.away_team) === clean(team)
-        ){
+      if(teamScore > oppScore){
+        seasonStats[game.season].wins++;
+      } else {
+        seasonStats[game.season].losses++;
+      }
 
-          allGames.push(game);
-
-          const isHome = clean(game.home_team) === clean(team);
-          const teamScore = isHome ? game.home_score : game.away_score;
-          const oppScore = isHome ? game.away_score : game.home_score;
-          const opponent = isHome ? game.away_team : game.home_team;
-
-          if(!seasonStats[game.season]){
-            seasonStats[game.season] = {games:0,wins:0,losses:0};
-          }
-
-          seasonStats[game.season].games++;
-
-          if(teamScore > oppScore){
-            seasonStats[game.season].wins++;
-          } else {
-            seasonStats[game.season].losses++;
-          }
-
-          game._opponent = opponent;
-          game._result = teamScore > oppScore ? "W" : "L";
-          game._score = `${teamScore} - ${oppScore}`;
-
-        }
-
-      });
-
-    } catch(e){
-      continue;
+      game._opponent = opponent;
+      game._result = teamScore > oppScore ? "W" : "L";
+      game._score = `${teamScore} - ${oppScore}`;
     }
 
-  }
+  });
 
   render();
-}
+
+});
 
 function render(){
 
-  if(allGames.length === 0){
+  if(teamGames.length === 0){
     document.getElementById("noData").style.display = "block";
     document.getElementById("seasonTable").style.display = "none";
     document.getElementById("gamesTable").style.display = "none";
     return;
   }
 
-  document.getElementById("totalGames").textContent = allGames.length;
+  document.getElementById("totalGames").textContent = teamGames.length;
 
   let totalWins = 0;
   let totalLosses = 0;
 
   const seasonBody = document.querySelector("#seasonTable tbody");
-  seasonBody.innerHTML = "";
 
   Object.keys(seasonStats)
     .sort((a,b) => b - a)
@@ -243,10 +224,10 @@ function render(){
   document.getElementById("losses").textContent = totalLosses;
 
   const gamesBody = document.querySelector("#gamesTable tbody");
-  gamesBody.innerHTML = "";
 
-  allGames
+  teamGames
     .sort((a,b) => new Date(b.date) - new Date(a.date))
+    .slice(0,50)
     .forEach(game => {
 
       gamesBody.innerHTML += `
@@ -261,8 +242,6 @@ function render(){
     });
 
 }
-
-loadAllSeasons();
 
 </script>
 
