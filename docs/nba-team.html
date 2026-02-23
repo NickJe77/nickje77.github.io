@@ -1,104 +1,6 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>NBA Team | The Sporting Almanac</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<style>
-body{font-family:Inter,system-ui,Arial;margin:0;background:#fff;color:#111;}
-.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
-.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px 60px;}
-h1{text-align:center;margin:0 0 6px;}
-.subtitle{text-align:center;color:#666;margin:0 0 18px;}
-.status{text-align:center;color:#666;margin:8px 0 18px;font-size:14px;}
-.status.err{color:#b00020;font-weight:700;}
-.status.ok{color:#1b5e20;font-weight:700;}
-.filters{text-align:center;margin:10px 0 18px;}
-select{padding:8px 14px;font-size:15px;border:1px solid #ccc;border-radius:10px;}
-.stats{display:flex;gap:18px;justify-content:center;margin:16px 0 22px;flex-wrap:wrap;}
-.stat{background:#f4f6fb;padding:12px 18px;border-radius:14px;text-align:center;min-width:140px;}
-.stat b{display:block;font-size:20px;margin-bottom:2px;}
-h2{margin:28px 0 10px;}
-table{width:100%;border-collapse:collapse;margin-bottom:26px;border-radius:14px;overflow:hidden;}
-th,td{border-bottom:1px solid #e2e2e2;padding:10px;text-align:center;}
-th{background:#f0f0f0;font-weight:800;}
-tr:nth-child(even){background:#f6f9ff;}
-td.left{text-align:left;}
-.pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:800;}
-.pill.w{background:#e8f5e9;color:#1b5e20;}
-.pill.l{background:#ffebee;color:#b71c1c;}
-.smallnote{color:#666;font-size:13px;margin-top:-12px;margin-bottom:10px;}
-</style>
-</head>
-
-<body>
-
-<div class="navbar">
-<a href="index.html">Home</a>
-<a href="nba.html">NBA</a>
-<a href="nba-season.html">Seasons</a>
-</div>
-
-<div class="page-wrap">
-
-<h1 id="teamName">NBA Team</h1>
-<div class="subtitle">Franchise History (Regular Season Only)</div>
-
-<div class="filters">
-Season:
-<select id="seasonFilter">
-<option value="">All Seasons</option>
-</select>
-</div>
-
-<div id="status" class="status">Loading...</div>
-
-<div class="stats">
-<div class="stat"><b id="seasonCount">0</b>Seasons</div>
-<div class="stat"><b id="gamesCount">0</b>Games</div>
-<div class="stat"><b id="winsCount">0</b>Wins</div>
-<div class="stat"><b id="lossesCount">0</b>Losses</div>
-<div class="stat"><b id="pfCount">0</b>Points For</div>
-<div class="stat"><b id="paCount">0</b>Points Against</div>
-</div>
-
-<h2>Season Summary (Regular Season)</h2>
-<table>
-<thead>
-<tr>
-<th>Season</th>
-<th>Games</th>
-<th>Wins</th>
-<th>Losses</th>
-<th>PF</th>
-<th>PA</th>
-</tr>
-</thead>
-<tbody id="seasonTable"></tbody>
-</table>
-
-<h2>Most Recent Games</h2>
-<div class="smallnote" id="gamesNote"></div>
-<table>
-<thead>
-<tr>
-<th>Season</th>
-<th>Date</th>
-<th>Opponent</th>
-<th>Result</th>
-<th>Score</th>
-</tr>
-</thead>
-<tbody id="gamesTable"></tbody>
-</table>
-
-</div>
-
 <script>
 
-const MASTER_URL = "data/nba/nba_games_master_FIXED.json";
+const MASTER_URL = "PUT YOUR OLD WORKING JSON PATH HERE EXACTLY";
 
 const params = new URLSearchParams(location.search);
 const team = decodeURIComponent(params.get("team") || "").trim();
@@ -120,8 +22,7 @@ function deriveSeason(game){
 
 function parseDate(d){
   if(!d) return 0;
-  const clean = String(d).replace(/\s+\d$/,"").trim(); // remove trailing duplicate digits
-  const t = Date.parse(clean);
+  const t = Date.parse(String(d).trim());
   return isNaN(t) ? 0 : t;
 }
 
@@ -134,6 +35,12 @@ async function load(){
     res = await fetch(MASTER_URL);
   }catch(e){
     status.textContent="Could not fetch master JSON.";
+    status.className="status err";
+    return;
+  }
+
+  if(!res.ok){
+    status.textContent="Master JSON not found (404).";
     status.className="status err";
     return;
   }
@@ -157,12 +64,11 @@ async function load(){
     if(!Number.isFinite(teamScore) || !Number.isFinite(oppScore)) continue;
 
     const season = deriveSeason(g);
-    const dateClean = String(g.date||"").replace(/\s+\d$/,"").trim();
 
     games.push({
       season,
-      date:dateClean,
-      sortDate:parseDate(dateClean),
+      date:g.date||"",
+      sortDate:parseDate(g.date),
       opponent:isHome?away:home,
       result:teamScore>oppScore?"W":"L",
       pf:teamScore,
@@ -176,7 +82,7 @@ async function load(){
     return;
   }
 
-  status.textContent=`Loaded ${games.length.toLocaleString()} regular season games.`;
+  status.textContent=`Loaded ${games.length.toLocaleString()} games.`;
   status.className="status ok";
 
   const seasonAgg={};
@@ -197,6 +103,8 @@ async function load(){
   const seasons=Object.keys(seasonAgg).map(Number).sort((a,b)=>b-a);
 
   const seasonFilter=document.getElementById("seasonFilter");
+  seasonFilter.innerHTML='<option value="">All Seasons</option>';
+
   for(const s of seasons){
     const opt=document.createElement("option");
     opt.value=s;
@@ -257,8 +165,8 @@ async function load(){
       tr.innerHTML=`
         <td>${g.season}</td>
         <td>${g.date}</td>
-        <td class="left">${g.opponent}</td>
-        <td><span class="pill ${g.result==="W"?"w":"l"}">${g.result}</span></td>
+        <td>${g.opponent}</td>
+        <td>${g.result}</td>
         <td>${g.pf} – ${g.pa}</td>
       `;
       gamesTable.appendChild(tr);
@@ -272,6 +180,3 @@ async function load(){
 load();
 
 </script>
-
-</body>
-</html>
