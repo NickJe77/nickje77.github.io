@@ -18,6 +18,7 @@ th,td{padding:10px;text-align:left;border-bottom:1px solid #f1f1f1;}
 th{background:#002D72;color:#fff;}
 tbody tr:nth-child(even){background:#eaf3ff;}
 tbody tr:hover{background:#d6e6ff;}
+.error{color:#b00020;font-weight:700;margin-top:10px;}
 </style>
 </head>
 <body>
@@ -26,6 +27,7 @@ tbody tr:hover{background:#d6e6ff;}
   <div class="hero">
     <h1 id="title">Select Franchise</h1>
     <select id="teamSelect"></select>
+    <div id="error" class="error"></div>
   </div>
 
   <div class="card">
@@ -53,44 +55,53 @@ tbody tr:hover{background:#d6e6ff;}
 const teamSelect = document.getElementById("teamSelect");
 const tb = document.getElementById("tb");
 const title = document.getElementById("title");
+const errorBox = document.getElementById("error");
 
 let games = [];
+let teams = [];
 
 async function init(){
+  try {
 
-  const teamsRes = await fetch("docs/data/baseball/teams.json");
-  const teams = await teamsRes.json();
+    // Adjust this line ONLY if needed
+    const teamsRes = await fetch("data/baseball/teams.json");
+    teams = await teamsRes.json();
 
-  teams.sort((a,b)=>a.name.localeCompare(b.name));
+    teams.sort((a,b)=>a.name.localeCompare(b.name));
 
-  teams.forEach(t=>{
-    const opt = document.createElement("option");
-    opt.value = t.code;
-    opt.textContent = t.name;
-    teamSelect.appendChild(opt);
-  });
+    teams.forEach(t=>{
+      const opt = document.createElement("option");
+      opt.value = t.code;
+      opt.textContent = t.name;
+      teamSelect.appendChild(opt);
+    });
 
-  const gamesRes = await fetch("docs/data/baseball/index.json");
-  games = await gamesRes.json();
+    const gamesRes = await fetch("data/baseball/index.json");
+    games = await gamesRes.json();
 
-  if(teams.length){
-    loadTeam(teams[0].code, teams[0].name);
+    if(teams.length){
+      loadTeam(teams[0].code, teams[0].name);
+    }
+
+    teamSelect.onchange = ()=>{
+      const selected = teams.find(t=>t.code === teamSelect.value);
+      loadTeam(selected.code, selected.name);
+    };
+
+  } catch(err){
+    errorBox.textContent = "Failed to load data. Check file paths.";
+    console.error(err);
   }
-
-  teamSelect.onchange = ()=>{
-    const selected = teams.find(t=>t.code === teamSelect.value);
-    loadTeam(selected.code, selected.name);
-  };
 }
 
 function loadTeam(code, name){
 
   title.textContent = `${name} (${code})`;
+  tb.innerHTML = "";
 
   const seasonMap = {};
 
   games.forEach(g=>{
-
     if(g.home_code !== code && g.away_code !== code) return;
 
     if(!seasonMap[g.season]){
@@ -107,8 +118,6 @@ function loadTeam(code, name){
     if(teamScore > oppScore) seasonMap[g.season].W++;
     else seasonMap[g.season].L++;
   });
-
-  tb.innerHTML = "";
 
   Object.keys(seasonMap)
     .sort((a,b)=>b - a)
