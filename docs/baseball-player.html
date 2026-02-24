@@ -162,7 +162,6 @@ tr:nth-child(even){background:#f7fbff;}
 
 function fmt(n){return Number(n||0).toLocaleString();}
 function avg(h,ab){return ab?(h/ab).toFixed(3):"0.000";}
-function obp(h,bb,pa){return pa?((h+bb)/pa).toFixed(3):"0.000";}
 
 async function safeFetch(url){
   try{
@@ -176,21 +175,26 @@ async function safeFetch(url){
 
 const qs = new URLSearchParams(location.search);
 const playerId = qs.get("player");
+
 if(!playerId){
   document.getElementById("playerName").textContent="Player not found";
   return;
 }
 
 const playersIndex = await safeFetch("/data/baseball/players.json");
-if(!playersIndex) return;
+if(!playersIndex){
+  document.getElementById("playerName").textContent="Players file not found";
+  return;
+}
 
 const playerMeta = playersIndex.find(p=>String(p.player_id)===String(playerId));
+
 if(!playerMeta){
   document.getElementById("playerName").textContent="Player not found";
   return;
 }
 
-document.getElementById("playerName").textContent = playerMeta.player_name;
+document.getElementById("playerName").textContent = playerMeta.name;
 
 const seasons = await safeFetch("/data/baseball/index.json");
 if(!seasons) return;
@@ -223,8 +227,6 @@ for(const s of seasons){
   t.hits+=row.hits||0;
   t.home_runs+=row.home_runs||0;
 
-  /* GAME LEVEL OPPONENT SPLITS */
-
   const games = await safeFetch(`/data/baseball/games/${s}.json`);
   if(!games) continue;
 
@@ -236,7 +238,7 @@ for(const s of seasons){
     const playerLine = box.players?.find(p=>String(p.player_id)===String(playerId));
     if(!playerLine) continue;
 
-    let opponent = null;
+    let opponent=null;
 
     if(g.home_code===row.team) opponent=g.away_code;
     else if(g.away_code===row.team) opponent=g.home_code;
@@ -265,11 +267,26 @@ document.getElementById("careerCards").innerHTML=`
   <div class="card"><div class="value">${avg(career.hits,career.at_bats)}</div><div class="label">AVG</div></div>
 `;
 
-/* OPPONENT DROPDOWN */
+/* TEAM SPLITS */
+const teamSelect=document.getElementById("teamSelect");
+teamSelect.innerHTML=[...teamAgg.keys()].map(t=>`<option value="${t}">${t}</option>`).join("");
+
+teamSelect.onchange=()=>{
+  const t=teamAgg.get(teamSelect.value);
+  if(!t) return;
+  document.getElementById("teamCards").innerHTML=`
+    <div class="card"><div class="value">${fmt(t.games)}</div><div class="label">Games</div></div>
+    <div class="card"><div class="value">${fmt(t.at_bats)}</div><div class="label">AB</div></div>
+    <div class="card"><div class="value">${fmt(t.hits)}</div><div class="label">Hits</div></div>
+    <div class="card"><div class="value">${fmt(t.home_runs)}</div><div class="label">HR</div></div>
+    <div class="card"><div class="value">${avg(t.hits,t.at_bats)}</div><div class="label">AVG</div></div>
+  `;
+};
+if(teamSelect.value) teamSelect.onchange();
+
+/* OPP SPLITS */
 const oppSelect=document.getElementById("oppSelect");
-oppSelect.innerHTML=[...oppAgg.keys()].sort().map(o=>
-  `<option value="${o}">${o}</option>`
-).join("");
+oppSelect.innerHTML=[...oppAgg.keys()].sort().map(o=>`<option value="${o}">${o}</option>`).join("");
 
 oppSelect.onchange=()=>{
   const d=oppAgg.get(oppSelect.value);
