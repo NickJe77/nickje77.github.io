@@ -1,93 +1,209 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>MLB Season</title>
+<title>MLB Season | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
-.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:#fff;border-bottom:1px solid #ddd;font-weight:700;}
-.navbar a{text-decoration:none;color:#0056d6;}
-.page{max-width:1200px;margin:auto;padding:20px;}
-.hero{background:linear-gradient(90deg,#002D72,#C8102E);color:#fff;padding:30px;border-radius:20px;margin-bottom:20px;}
-table{width:100%;border-collapse:collapse;background:#fff;border-radius:16px;overflow:hidden;}
-th{background:#002D72;color:#fff;padding:12px;text-align:left;}
-td{padding:12px;border-bottom:1px solid #eee;}
-tbody tr:nth-child(even){background:#fafafa;}
-a{color:#0056d6;text-decoration:none;font-weight:700;}
-a:hover{text-decoration:underline;}
+:root{
+  --blue:#002D72;
+  --red:#C8102E;
+  --bg:#f4f6f8;
+  --card:#ffffff;
+  --text:#0b1220;
+  --muted:#667085;
+  --line:#e6e8ee;
+}
+
+body{
+  font-family:Inter,system-ui,Arial,sans-serif;
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px;
+  background:#fff;
+  border-bottom:1px solid #ddd;
+  font-weight:700;
+}
+
+.navbar a{
+  text-decoration:none;
+  color:#0056d6;
+  font-size:17px;
+}
+
+.navbar a:hover{
+  text-decoration:underline;
+}
+
+.page{
+  max-width:1200px;
+  margin:auto;
+  padding:20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,var(--blue),var(--red));
+  color:#fff;
+  padding:30px;
+  border-radius:20px;
+  margin-bottom:20px;
+}
+
+.hero h1{
+  margin:0;
+  font-size:28px;
+}
+
+.table-wrap{
+  background:var(--card);
+  border-radius:16px;
+  overflow:hidden;
+  border:1px solid var(--line);
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+th{
+  background:var(--blue);
+  color:#fff;
+  padding:12px;
+  text-align:left;
+  font-size:14px;
+}
+
+td{
+  padding:12px;
+  border-bottom:1px solid #eee;
+  font-size:14px;
+}
+
+tbody tr:nth-child(even){
+  background:#fafafa;
+}
+
+.score{
+  font-weight:700;
+}
+
+.game-link{
+  color:#0056d6;
+  font-weight:700;
+  text-decoration:none;
+}
+
+.game-link:hover{
+  text-decoration:underline;
+}
+
+.error{
+  padding:20px;
+  background:#fff3f3;
+  border:1px solid #ffb3b3;
+  border-radius:12px;
+  color:#a10000;
+  font-weight:700;
+}
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="baseball.html">Baseball</a>
-<a href="mlb.html">MLB</a>
+  <a href="index.html">Home</a>
+  <a href="baseball.html">Baseball</a>
+  <a href="mlb.html">MLB</a>
 </div>
 
 <div class="page">
-<div class="hero">
-<h1 id="title"></h1>
-</div>
 
-<table>
-<thead>
-<tr>
-<th>Date</th>
-<th>Away</th>
-<th>Home</th>
-<th>Score</th>
-<th>Game</th>
-</tr>
-</thead>
-<tbody id="gamesBody"></tbody>
-</table>
+  <div class="hero">
+    <h1 id="seasonTitle">MLB Season</h1>
+  </div>
+
+  <div id="errorBox"></div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Away</th>
+          <th>Home</th>
+          <th>Score</th>
+          <th>Venue</th>
+          <th>Attendance</th>
+          <th>Game</th>
+        </tr>
+      </thead>
+      <tbody id="gamesBody"></tbody>
+    </table>
+  </div>
+
 </div>
 
 <script>
+
 const params = new URLSearchParams(window.location.search);
 const season = params.get("season");
 
-document.getElementById("title").textContent = "MLB Season " + season;
+document.getElementById("seasonTitle").textContent =
+  "MLB Season " + season;
 
 fetch(`docs/data/baseball/seasons/${season}.json`)
-.then(res => res.json())
+.then(res => {
+  if(!res.ok) throw new Error("Season file not found");
+  return res.json();
+})
 .then(data => {
 
-const tbody = document.getElementById("gamesBody");
-tbody.innerHTML = "";
+  const tbody = document.getElementById("gamesBody");
+  tbody.innerHTML = "";
 
-data.forEach(game => {
+  data.forEach(game => {
 
-const ymd = game.date.replaceAll("-", "");
-const gameId = game.home_code + ymd + "0";
+    // Generate game ID from your real naming convention
+    const ymd = game.date.replace(/-/g,"");
+    const gameId = game.home_code + ymd + "0";
 
-const link =
-`baseball-game.html?season=${season}&game=${gameId}`;
+    const link =
+      `baseball-game.html?season=${season}&game=${gameId}`;
 
-const score =
-`${game.away_score ?? ""}-${game.home_score ?? ""}`;
+    const score =
+      (game.away_score !== undefined && game.home_score !== undefined)
+        ? `${game.away_score}-${game.home_score}`
+        : "";
 
-tbody.innerHTML += `
-<tr>
-<td>${game.date}</td>
-<td>${game.away_code}</td>
-<td>${game.home_code}</td>
-<td>${score}</td>
-<td><a href="${link}">${gameId}</a></td>
-</tr>
-`;
+    tbody.innerHTML += `
+      <tr>
+        <td>${game.date}</td>
+        <td>${game.away_code}</td>
+        <td>${game.home_code}</td>
+        <td class="score">${score}</td>
+        <td>${game.venue || ""}</td>
+        <td>${game.attendance ? Number(game.attendance).toLocaleString() : ""}</td>
+        <td><a class="game-link" href="${link}">${gameId}</a></td>
+      </tr>
+    `;
 
-});
+  });
 
 })
-.catch(() => {
-document.getElementById("gamesBody").innerHTML =
-"<tr><td colspan='5'>Season file not found</td></tr>";
+.catch(err => {
+  document.getElementById("errorBox").innerHTML =
+    `<div class="error">Could not load season file for ${season}</div>`;
 });
+
 </script>
 
 </body>
