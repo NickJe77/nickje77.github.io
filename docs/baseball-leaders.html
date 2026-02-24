@@ -78,7 +78,7 @@ border-collapse:collapse;
 background:#fff;
 border-radius:16px;
 overflow:hidden;
-margin-bottom:30px;
+margin-bottom:35px;
 }
 
 th,td{
@@ -96,8 +96,10 @@ tbody tr:nth-child(even){
 background:#eaf3ff;
 }
 
-tbody tr:hover{
-background:#d6e6ff;
+.playerLink{
+color:#0056d6;
+font-weight:700;
+cursor:pointer;
 }
 </style>
 </head>
@@ -128,17 +130,28 @@ background:#d6e6ff;
 
 <script>
 
+let TEAM_MAP = {};
+
 async function init(){
 
+// Load team master
+const franchises =
+await fetch("data/baseball/teams.json").then(r=>r.json());
+
+franchises.forEach(f=>{
+f.codes.forEach(code=>{
+TEAM_MAP[code] = f.name;
+});
+});
+
+// Load seasons
 const years =
-await fetch("data/baseball/index.json")
-.then(r=>r.json());
+await fetch("data/baseball/index.json").then(r=>r.json());
 
 years.sort((a,b)=>b-a);
 
 const sel=document.getElementById("yearSel");
 sel.innerHTML = years.map(y=>`<option>${y}</option>`).join("");
-
 sel.onchange = ()=> loadYear(parseInt(sel.value));
 
 loadYear(years[0]);
@@ -150,18 +163,22 @@ const players =
 await fetch(`data/baseball/players/${year}.json`)
 .then(r=>r.json());
 
-renderLeaders(players, year);
+renderLeaders(players);
 }
 
-function renderLeaders(players, year){
+function renderLeaders(players){
 
 const container=document.getElementById("leadersContainer");
 container.innerHTML="";
 
-/* Helper to build a leaderboard */
-function buildTable(title, data, valueField, formatter=null){
+/* Determine games played for qualification */
+const maxGames = Math.max(...players.map(p=>p.games||0));
+const minPA = Math.ceil(maxGames * 3.1);
+const minIP = maxGames;
 
-if(!data || data.length===0) return;
+function table(title, data, stat){
+
+if(!data.length) return;
 
 let html = `
 <div class="sectionTitle">${title}</div>
@@ -171,79 +188,154 @@ let html = `
 <th>Rank</th>
 <th>Player</th>
 <th>Team</th>
-<th>${valueField.toUpperCase()}</th>
+<th>${stat}</th>
 </tr>
 </thead>
 <tbody>
 `;
 
 data.forEach((p,i)=>{
-html += `
+html+=`
 <tr>
 <td>${i+1}</td>
-<td>${p.player_name}</td>
-<td>${p.team}</td>
-<td>${formatter ? formatter(p[valueField]) : p[valueField]}</td>
+<td class="playerLink"
+onclick="location.href='baseball-player.html?player=${encodeURIComponent(p.player_name)}'">
+${p.player_name}
+</td>
+<td>${TEAM_MAP[p.team] || p.team}</td>
+<td>${p.display}</td>
 </tr>
 `;
 });
 
-html += `</tbody></table>`;
-
-container.innerHTML += html;
+html+=`</tbody></table>`;
+container.innerHTML+=html;
 }
 
-/* Sort helpers */
-const top10 = (arr, field, filter=null, format=null) => {
-let list = filter ? arr.filter(filter) : [...arr];
-list.sort((a,b)=>(b[field]||0)-(a[field]||0));
+function top(arr, calc, qualify=null){
+
+let list = qualify ? arr.filter(qualify) : [...arr];
+list = list.map(calc);
+list.sort((a,b)=>b.value-a.value);
 return list.slice(0,10);
-};
-
-/* Leaders */
-
-buildTable(
-"Batting Average",
-top10(players, "hits", p=>p.at_bats>=100)
-.map(p=>{
-p.batting_avg = (p.hits/p.at_bats).toFixed(3);
-return p;
-})
-.sort((a,b)=>b.batting_avg - a.batting_avg)
-.slice(0,10),
-"batting_avg"
-);
-
-buildTable(
-"Home Runs",
-top10(players,"home_runs"),
-"home_runs"
-);
-
-buildTable(
-"Hits",
-top10(players,"hits"),
-"hits"
-);
-
-if(players[0]?.rbis !== undefined){
-buildTable(
-"RBIs",
-top10(players,"rbis"),
-"rbis"
-);
 }
 
-buildTable(
-"Strikeouts",
-top10(players,"strikeouts"),
-"strikeouts"
+/* ---------- BATTING ---------- */
+
+table("Batting Average",
+top(players,
+p=>{
+const avg = p.hits/p.at_bats;
+return {...p, value:avg, display:avg.toFixed(3)};
+},
+p=>p.plate_appearances>=minPA && p.at_bats>0),
+"AVG"
 );
 
-buildTable(
-"Walks",
-top10(players,"walks"),
-"walks"
+table("Home Runs",
+top(players,p=>({...p,value:p.home_runs||0,display:p.home_runs||0})),
+"HR"
+);
+
+table("RBIs",
+top(players,p=>({...p,value:p.rbis||0,display:p.rbis||0})),
+"RBI"
+);
+
+table("Hits",
+top(players,p=>({...p,value:p.hits||0,display:p.hits||0})),
+"H"
+);
+
+table("Walks",
+top(players,p=>({...p,value:p.walks||0,display:p.walks||0})),
+"BB"
+);
+
+table("Strikeouts",
+top(players,p=>({...p,value:p.strikeouts||0,display:p.strikeouts||0})),
+"SO"
+);
+
+/* OBP */
+
+table("On-Base %",
+top(players,
+p=>{
+if(!p.plate_appearances) return {...p,value:0,display:"0.000"};
+const obp=(p.hits+p.walks)/p.plate_appearances;
+return {...p,value:obp,display:obp.toFixed(3)};
+},
+p=>p.plate_appearances>=minPA),
+"OBP"
+);
+
+/* SLG */
+
+table("Slugging %",
+top(players,
+p=>{
+if(!p.at_bats) return {...p,value:0,display:"0.000"};
+const slg=(p.total_bases||0)/p.at_bats;
+return {...p,value:slg,display:slg.toFixed(3)};
+},
+p=>p.plate_appearances>=minPA),
+"SLG"
+);
+
+/* OPS */
+
+table("OPS",
+top(players,
+p=>{
+if(!p.plate_appearances || !p.at_bats) return {...p,value:0,display:"0.000"};
+const obp=(p.hits+p.walks)/p.plate_appearances;
+const slg=(p.total_bases||0)/p.at_bats;
+const ops=obp+slg;
+return {...p,value:ops,display:ops.toFixed(3)};
+},
+p=>p.plate_appearances>=minPA),
+"OPS"
+);
+
+/* ---------- PITCHING ---------- */
+
+table("Wins",
+top(players,p=>({...p,value:p.wins||0,display:p.wins||0})),
+"W"
+);
+
+table("ERA",
+top(players,
+p=>{
+if(!p.innings_pitched || p.innings_pitched===0)
+return {...p,value:999,display:"-"};
+const era=(p.earned_runs*9)/p.innings_pitched;
+return {...p,value:-era,display:era.toFixed(2)};
+},
+p=>p.innings_pitched>=minIP),
+"ERA"
+);
+
+table("Strikeouts (Pitching)",
+top(players,p=>({...p,value:p.pitcher_strikeouts||0,display:p.pitcher_strikeouts||0})),
+"SO"
+);
+
+table("Saves",
+top(players,p=>({...p,value:p.saves||0,display:p.saves||0})),
+"SV"
+);
+
+table("WHIP",
+top(players,
+p=>{
+if(!p.innings_pitched) return {...p,value:999,display:"-"};
+const whip=(p.walks_allowed+p.hits_allowed)/p.innings_pitched;
+return {...p,value:-whip,display:whip.toFixed(2)};
+},
+p=>p.innings_pitched>=minIP),
+"WHIP"
 );
 
 }
