@@ -21,6 +21,7 @@ body{
   font-family:Inter,system-ui,Arial,sans-serif;
   margin:0;
   background:var(--bg);
+  color:var(--text);
 }
 
 .navbar{
@@ -36,6 +37,7 @@ body{
 .navbar a{
   text-decoration:none;
   color:#0056d6;
+  font-size:17px;
 }
 
 .page{
@@ -52,8 +54,13 @@ body{
   margin-bottom:20px;
 }
 
+.hero h1{
+  margin:0;
+  font-size:30px;
+}
+
 .table-wrap{
-  background:#fff;
+  background:var(--card);
   border-radius:16px;
   overflow:hidden;
   border:1px solid var(--line);
@@ -84,10 +91,24 @@ tbody tr:nth-child(even){
 
 tbody tr:hover{
   background:var(--hover);
-  cursor:pointer;
+}
+
+tbody tr.disabled{
+  opacity:0.4;
+  cursor:default;
+}
+
+.error{
+  padding:20px;
+  background:#fff3f3;
+  border:1px solid #ffb3b3;
+  border-radius:12px;
+  color:#a10000;
+  font-weight:700;
 }
 </style>
 </head>
+
 <body>
 
 <div class="navbar">
@@ -97,9 +118,12 @@ tbody tr:hover{
 </div>
 
 <div class="page">
+
   <div class="hero">
     <h1 id="seasonTitle">MLB Season</h1>
   </div>
+
+  <div id="errorBox"></div>
 
   <div class="table-wrap">
     <table>
@@ -116,53 +140,71 @@ tbody tr:hover{
       <tbody id="gamesBody"></tbody>
     </table>
   </div>
+
 </div>
 
 <script>
 const params = new URLSearchParams(window.location.search);
 const season = params.get("season");
-document.getElementById("seasonTitle").textContent = "MLB Season " + season;
+
+if(!season){
+  document.getElementById("errorBox").innerHTML =
+    `<div class="error">No season specified</div>`;
+  throw new Error("No season parameter");
+}
+
+document.getElementById("seasonTitle").textContent =
+  "MLB Season " + season;
 
 fetch(`/data/baseball/seasons/${season}.json`)
-.then(r => r.json())
+.then(r=>{
+  if(!r.ok) throw new Error("Season file not found");
+  return r.json();
+})
 .then(seasonData => {
 
   const tbody = document.getElementById("gamesBody");
+  tbody.innerHTML = "";
 
   seasonData.forEach(game => {
 
     const ymd = game.date.replace(/-/g, "");
-    const baseId = game.home_code + ymd;
+    const gameId = game.home_code + ymd + "0";
+    const filePath = `/data/baseball/games/${season}/${gameId}.json`;
 
-    // Try standard + possible alternates
-    const possibleIds = [
-      baseId + "0",
-      baseId + "1",
-      baseId + "2",
-      baseId + "3"
-    ];
+    fetch(filePath, { method: "HEAD" })
+    .then(res => {
 
-    const link =
-      `baseball-game.html?season=${season}&game=${possibleIds[0]}`;
+      const tr = document.createElement("tr");
 
-    const tr = document.createElement("tr");
+      if(res.ok){
+        tr.onclick = () => {
+          window.location.href =
+            `baseball-game.html?season=${season}&game=${gameId}`;
+        };
+      } else {
+        tr.classList.add("disabled");
+      }
 
-    tr.onclick = () => {
-      window.location.href = link;
-    };
+      tr.innerHTML = `
+        <td>${game.date}</td>
+        <td>${game.away_team}</td>
+        <td>${game.home_team}</td>
+        <td>${game.away_score ?? ""} - ${game.home_score ?? ""}</td>
+        <td>${game.venue ?? ""}</td>
+        <td>${game.attendance ? Number(game.attendance).toLocaleString() : ""}</td>
+      `;
 
-    tr.innerHTML = `
-      <td>${game.date}</td>
-      <td>${game.away_team}</td>
-      <td>${game.home_team}</td>
-      <td>${game.away_score} - ${game.home_score}</td>
-      <td>${game.venue}</td>
-      <td>${game.attendance ? Number(game.attendance).toLocaleString() : ""}</td>
-    `;
+      tbody.appendChild(tr);
 
-    tbody.appendChild(tr);
+    });
+
   });
 
+})
+.catch(()=>{
+  document.getElementById("errorBox").innerHTML =
+    `<div class="error">Could not load season file</div>`;
 });
 </script>
 
