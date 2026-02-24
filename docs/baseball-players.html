@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Players | The Sporting Almanac</title>
+<title>Player | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -13,7 +13,7 @@ background:#f4f6f8;
 }
 
 .page{
-max-width:900px;
+max-width:1000px;
 margin:auto;
 padding:20px;
 }
@@ -23,165 +23,146 @@ background:linear-gradient(90deg,#002D72,#C8102E);
 color:white;
 padding:30px;
 border-radius:20px;
-margin-bottom:16px;
+margin-bottom:20px;
 }
 
 .hero h1{
 margin:0;
-font-size:40px;
+font-size:42px;
 }
 
-.search{
-width:100%;
-padding:12px;
+.team{
+margin-top:6px;
 font-size:18px;
-border-radius:10px;
-border:none;
-margin-top:12px;
+opacity:.9;
 }
 
 .card{
 background:white;
-padding:16px;
-border-radius:14px;
+padding:20px;
+border-radius:16px;
+box-shadow:0 2px 6px rgba(0,0,0,.05);
 }
 
-.player{
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:10px;
+}
+
+th,td{
 padding:10px;
 border-bottom:1px solid #eee;
-cursor:pointer;
+text-align:left;
+}
+
+th{
+background:#002D72;
+color:white;
+}
+
+.back{
+display:inline-block;
+margin-bottom:14px;
+text-decoration:none;
+color:#0056d6;
 font-weight:600;
 }
-
-.player:hover{
-background:#eaf3ff;
-color:#0056d6;
-}
-
-.team{
-font-size:13px;
-color:#777;
-margin-left:8px;
-}
+.back:hover{text-decoration:underline;}
 </style>
 </head>
 <body>
 
 <div class="page">
 
-<div class="hero">
+<a href="baseball-players.html" class="back">← Back to Players</a>
 
-<h1>Players</h1>
-
-<input
-type="text"
-id="search"
-class="search"
-placeholder="Search player..."
-oninput="filterPlayers()"
-/>
-
-</div>
-
-<div class="card" id="playersList">
-Loading players...
+<div id="content">
+Loading player...
 </div>
 
 </div>
 
 <script>
 
-let ALL_PLAYERS=[];
-let TEAM_MAP={};
+const params = new URLSearchParams(window.location.search);
+const playerName = params.get("player");
 
-async function loadTeams(){
+if(!playerName){
+document.getElementById("content").innerHTML="<h1>Player not found</h1>";
+throw new Error("No player parameter provided");
+}
 
-const res = await fetch("data/baseball/teams.json");
-const franchises = await res.json();
+init();
 
-// Map every historical code to franchise name
+async function init(){
+
+try{
+
+const decodedName = decodeURIComponent(playerName);
+
+// Load teams
+const teamsRes = await fetch("data/baseball/teams.json");
+const franchises = await teamsRes.json();
+
+let TEAM_MAP = {};
 franchises.forEach(franchise=>{
-  franchise.codes.forEach(code=>{
-    TEAM_MAP[code] = franchise.name;
-  });
+franchise.codes.forEach(code=>{
+TEAM_MAP[code] = franchise.name;
 });
+});
+
+// Load players
+const playersRes = await fetch("data/baseball/players.json");
+const players = await playersRes.json();
+
+const player = players.find(p => p.player === decodedName);
+
+if(!player){
+document.getElementById("content").innerHTML="<h1>Player not found</h1>";
+return;
+}
+
+renderPlayer(player, TEAM_MAP);
+
+}catch(err){
+console.error(err);
+document.getElementById("content").innerHTML="<h1>Error loading player</h1>";
+}
 
 }
 
-async function loadPlayers(){
+function renderPlayer(player, TEAM_MAP){
 
-await loadTeams();
+const teamName = TEAM_MAP[player.team] || player.team || "N/A";
 
-const data = await fetch(
-"data/baseball/players.json"
-).then(r=>r.json());
+document.getElementById("content").innerHTML = `
 
-ALL_PLAYERS = data.map(p=>({
+<div class="hero">
+<h1>${player.player}</h1>
+<div class="team">${teamName}</div>
+</div>
 
-name: p.player,
-team: TEAM_MAP[p.team] || p.team
+<div class="card">
 
-}));
+<table>
+<tr><th>Stat</th><th>Value</th></tr>
 
-// Remove duplicates (by name)
-const unique = {};
+<tr><td>Games</td><td>${player.games ?? "-"}</td></tr>
+<tr><td>At Bats</td><td>${player.at_bats ?? "-"}</td></tr>
+<tr><td>Runs</td><td>${player.runs ?? "-"}</td></tr>
+<tr><td>Hits</td><td>${player.hits ?? "-"}</td></tr>
+<tr><td>Home Runs</td><td>${player.home_runs ?? "-"}</td></tr>
+<tr><td>RBIs</td><td>${player.rbis ?? "-"}</td></tr>
+<tr><td>Batting Average</td><td>${player.batting_average ?? "-"}</td></tr>
 
-ALL_PLAYERS.forEach(p=>{
-unique[p.name]=p;
-});
+</table>
 
-ALL_PLAYERS = Object.values(unique);
+</div>
 
-// Sort alphabetically
-ALL_PLAYERS.sort((a,b)=>
-a.name.localeCompare(b.name)
-);
-
-renderPlayers(ALL_PLAYERS);
-
-}
-
-function renderPlayers(list){
-
-playersList.innerHTML="";
-
-list.forEach(p=>{
-
-const div=document.createElement("div");
-
-div.className="player";
-
-div.innerHTML=`
-${p.name}
-<span class="team">${p.team}</span>
 `;
 
-div.onclick=()=>{
-
-location.href=
-`baseball-player.html?player=${encodeURIComponent(p.name)}`;
-
-};
-
-playersList.appendChild(div);
-
-});
-
 }
-
-function filterPlayers(){
-
-const q=search.value.toLowerCase();
-
-const filtered=ALL_PLAYERS.filter(p=>
-p.name.toLowerCase().includes(q)
-);
-
-renderPlayers(filtered);
-
-}
-
-loadPlayers();
 
 </script>
 
