@@ -144,19 +144,22 @@ Promise.all([
     if(!r.ok) throw new Error("Season file not found");
     return r.json();
   }),
-  fetch(`data/baseball/team-names.json`).then(r=>r.json()),
-  fetch(`data/baseball/ballpark.csv`).then(r=>r.text())
+  fetch(`data/baseball/teams.json`).then(r=>r.json()),
+  fetch(`data/baseball/ballparks.csv`).then(r=>r.text())
 ])
-.then(([seasonData, teamNames, ballparkCSV]) => {
+.then(([seasonData, teamsData, ballparkCSV]) => {
 
   const parkMap = {};
-  const lines = ballparkCSV.split("\n");
-
-  lines.forEach(line=>{
+  ballparkCSV.split("\n").forEach(line=>{
     const parts = line.split(",");
     if(parts.length >= 2){
       parkMap[parts[0].trim()] = parts[1].trim();
     }
+  });
+
+  const teamMap = {};
+  teamsData.forEach(team=>{
+    teamMap[team.code] = team.name;
   });
 
   const tbody = document.getElementById("gamesBody");
@@ -166,15 +169,14 @@ Promise.all([
 
     const ymd = game.date.replace(/-/g,"");
     const gameId = game.home_code + ymd + "0";
-
     const link =
       `baseball-game.html?season=${season}&game=${gameId}`;
 
     const awayName =
-      teamNames[game.away_code] || game.away_team || game.away_code;
+      teamMap[game.away_code] || game.away_team || game.away_code;
 
     const homeName =
-      teamNames[game.home_code] || game.home_team || game.home_code;
+      teamMap[game.home_code] || game.home_team || game.home_code;
 
     const venueName =
       parkMap[game.venue] || game.venue || "";
@@ -203,7 +205,7 @@ Promise.all([
 })
 .catch(()=>{
   document.getElementById("errorBox").innerHTML =
-    `<div class="error">Could not load season file for ${season}</div>`;
+    `<div class="error">Could not load data for ${season}</div>`;
 });
 </script>
 
