@@ -31,34 +31,11 @@ margin:0;
 font-size:42px;
 }
 
-.team{
-margin-top:6px;
-font-size:18px;
-opacity:.9;
-}
-
 .card{
 background:white;
 padding:20px;
 border-radius:16px;
 box-shadow:0 2px 6px rgba(0,0,0,.05);
-}
-
-table{
-width:100%;
-border-collapse:collapse;
-margin-top:10px;
-}
-
-th,td{
-padding:10px;
-border-bottom:1px solid #eee;
-text-align:left;
-}
-
-th{
-background:#002D72;
-color:white;
 }
 
 .back{
@@ -86,11 +63,11 @@ Loading player...
 <script>
 
 const params = new URLSearchParams(window.location.search);
-const playerName = params.get("player");
+const playerId = params.get("player");
 
-if(!playerName){
+if(!playerId){
 document.getElementById("content").innerHTML="<h1>Player not found</h1>";
-throw new Error("No player parameter provided");
+throw new Error("Missing player id");
 }
 
 init();
@@ -99,31 +76,17 @@ async function init(){
 
 try{
 
-const decodedName = decodeURIComponent(playerName);
+const res = await fetch("data/baseball/players.json");
+const players = await res.json();
 
-// Load teams
-const teamsRes = await fetch("data/baseball/teams.json");
-const franchises = await teamsRes.json();
-
-let TEAM_MAP = {};
-franchises.forEach(franchise=>{
-franchise.codes.forEach(code=>{
-TEAM_MAP[code] = franchise.name;
-});
-});
-
-// Load players
-const playersRes = await fetch("data/baseball/players.json");
-const players = await playersRes.json();
-
-const player = players.find(p => p.player === decodedName);
+const player = players.find(p => p.player_id === playerId);
 
 if(!player){
 document.getElementById("content").innerHTML="<h1>Player not found</h1>";
 return;
 }
 
-renderPlayer(player, TEAM_MAP);
+renderPlayer(player);
 
 }catch(err){
 console.error(err);
@@ -132,32 +95,18 @@ document.getElementById("content").innerHTML="<h1>Error loading player</h1>";
 
 }
 
-function renderPlayer(player, TEAM_MAP){
-
-const teamName = TEAM_MAP[player.team] || player.team || "N/A";
+function renderPlayer(player){
 
 document.getElementById("content").innerHTML = `
 
 <div class="hero">
-<h1>${player.player}</h1>
-<div class="team">${teamName}</div>
+<h1>${player.name}</h1>
 </div>
 
 <div class="card">
-
-<table>
-<tr><th>Stat</th><th>Value</th></tr>
-
-<tr><td>Games</td><td>${player.games ?? "-"}</td></tr>
-<tr><td>At Bats</td><td>${player.at_bats ?? "-"}</td></tr>
-<tr><td>Runs</td><td>${player.runs ?? "-"}</td></tr>
-<tr><td>Hits</td><td>${player.hits ?? "-"}</td></tr>
-<tr><td>Home Runs</td><td>${player.home_runs ?? "-"}</td></tr>
-<tr><td>RBIs</td><td>${player.rbis ?? "-"}</td></tr>
-<tr><td>Batting Average</td><td>${player.batting_average ?? "-"}</td></tr>
-
-</table>
-
+<p><strong>Player ID:</strong> ${player.player_id}</p>
+<p><strong>First:</strong> ${player.first}</p>
+<p><strong>Last:</strong> ${player.last}</p>
 </div>
 
 `;
