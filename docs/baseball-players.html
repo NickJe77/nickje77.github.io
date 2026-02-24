@@ -13,7 +13,7 @@ background:#f4f6f8;
 }
 
 .page{
-max-width:1000px;
+max-width:1200px;
 margin:auto;
 padding:20px;
 }
@@ -31,11 +31,36 @@ margin:0;
 font-size:42px;
 }
 
+.sub{
+margin-top:6px;
+font-size:18px;
+opacity:.9;
+}
+
 .card{
 background:white;
 padding:20px;
 border-radius:16px;
 box-shadow:0 2px 6px rgba(0,0,0,.05);
+margin-bottom:20px;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:10px;
+}
+
+th,td{
+padding:10px;
+border-bottom:1px solid #eee;
+text-align:left;
+}
+
+th{
+background:#002D72;
+color:white;
+cursor:pointer;
 }
 
 .back{
@@ -46,6 +71,11 @@ color:#0056d6;
 font-weight:600;
 }
 .back:hover{text-decoration:underline;}
+
+.loading{
+font-size:20px;
+font-weight:600;
+}
 </style>
 </head>
 <body>
@@ -54,7 +84,7 @@ font-weight:600;
 
 <a href="baseball-players.html" class="back">← Back to Players</a>
 
-<div id="content">
+<div id="content" class="loading">
 Loading player...
 </div>
 
@@ -76,17 +106,65 @@ async function init(){
 
 try{
 
-const res = await fetch("data/baseball/players.json");
-const players = await res.json();
+// Load master player index
+const indexRes = await fetch("data/baseball/players.json");
+const masterPlayers = await indexRes.json();
 
-const player = players.find(p => p.player_id === playerId);
+const playerInfo = masterPlayers.find(p => p.player_id === playerId);
 
-if(!player){
+if(!playerInfo){
 document.getElementById("content").innerHTML="<h1>Player not found</h1>";
 return;
 }
 
-renderPlayer(player);
+// Load teams
+const teamsRes = await fetch("data/baseball/teams.json");
+const franchises = await teamsRes.json();
+
+let TEAM_MAP = {};
+franchises.forEach(franchise=>{
+franchise.codes.forEach(code=>{
+TEAM_MAP[code] = franchise.name;
+});
+});
+
+// Discover season files
+// ⚠️ You must maintain this list manually or generate it server-side.
+const seasons = [
+1947,1948,1949,1950,1951,1952,1953,1954,1955,
+1956,1957,1958,1959,1960,1961,1962,1963,1964,
+1965,1966,1967,1968,1969,1970,1971,1972,1973,
+1974,1975,1976,1977,1978,1979,1980,1981,1982,
+1983,1984,1985,1986,1987,1988,1989,1990,
+1991,1992,1993,1994,1995,1996,1997,1998,
+1999,2000,2001,2002,2003,2004,2005,2006,
+2007,2008,2009,2010,2011,2012,2013,2014,
+2015,2016,2017,2018,2019,2020,2021,2022,
+2023,2024,2025
+];
+
+let seasonStats = [];
+
+for(const year of seasons){
+
+try{
+const res = await fetch(`data/baseball/players/${year}.json`);
+if(!res.ok) continue;
+
+const data = await res.json();
+const found = data.find(p => p.player_id === playerId);
+
+if(found){
+seasonStats.push({season:year, ...found});
+}
+
+}catch(err){
+continue;
+}
+
+}
+
+renderPlayer(playerInfo, seasonStats, TEAM_MAP);
 
 }catch(err){
 console.error(err);
@@ -95,18 +173,81 @@ document.getElementById("content").innerHTML="<h1>Error loading player</h1>";
 
 }
 
-function renderPlayer(player){
+function renderPlayer(info, stats, TEAM_MAP){
+
+let totals = {
+games:0,
+plate_appearances:0,
+at_bats:0,
+hits:0,
+home_runs:0,
+walks:0,
+strikeouts:0
+};
+
+stats.forEach(s=>{
+totals.games += s.games || 0;
+totals.plate_appearances += s.plate_appearances || 0;
+totals.at_bats += s.at_bats || 0;
+totals.hits += s.hits || 0;
+totals.home_runs += s.home_runs || 0;
+totals.walks += s.walks || 0;
+totals.strikeouts += s.strikeouts || 0;
+});
 
 document.getElementById("content").innerHTML = `
 
 <div class="hero">
-<h1>${player.name}</h1>
+<h1>${info.name}</h1>
+<div class="sub">Career Overview</div>
 </div>
 
 <div class="card">
-<p><strong>Player ID:</strong> ${player.player_id}</p>
-<p><strong>First:</strong> ${player.first}</p>
-<p><strong>Last:</strong> ${player.last}</p>
+<h2>Career Totals</h2>
+<table>
+<tr><th>Games</th><th>PA</th><th>AB</th><th>Hits</th><th>HR</th><th>Walks</th><th>SO</th></tr>
+<tr>
+<td>${totals.games}</td>
+<td>${totals.plate_appearances}</td>
+<td>${totals.at_bats}</td>
+<td>${totals.hits}</td>
+<td>${totals.home_runs}</td>
+<td>${totals.walks}</td>
+<td>${totals.strikeouts}</td>
+</tr>
+</table>
+</div>
+
+<div class="card">
+<h2>Season Stats</h2>
+<table>
+<tr>
+<th>Season</th>
+<th>Team</th>
+<th>Games</th>
+<th>PA</th>
+<th>AB</th>
+<th>Hits</th>
+<th>HR</th>
+<th>Walks</th>
+<th>SO</th>
+</tr>
+
+${stats.map(s=>`
+<tr>
+<td>${s.season}</td>
+<td>${TEAM_MAP[s.team] || s.team}</td>
+<td>${s.games ?? "-"}</td>
+<td>${s.plate_appearances ?? "-"}</td>
+<td>${s.at_bats ?? "-"}</td>
+<td>${s.hits ?? "-"}</td>
+<td>${s.home_runs ?? "-"}</td>
+<td>${s.walks ?? "-"}</td>
+<td>${s.strikeouts ?? "-"}</td>
+</tr>
+`).join("")}
+
+</table>
 </div>
 
 `;
