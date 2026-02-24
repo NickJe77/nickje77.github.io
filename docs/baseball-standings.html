@@ -4,17 +4,13 @@
 <meta charset="UTF-8">
 <title>Baseball Standings | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="style.css">
 
 <style>
-
 body{
 font-family:Inter,system-ui,Arial;
 margin:0;
 background:#f4f6f8;
 }
-
-/* NAVBAR */
 
 .navbar{
 display:flex;
@@ -31,26 +27,18 @@ text-decoration:none;
 color:#0056d6;
 }
 
-.navbar a:hover{
-text-decoration:underline;
-}
-
-/* PAGE */
-
 .page{
 max-width:1200px;
-margin:0 auto;
-padding:22px 18px;
+margin:auto;
+padding:20px;
 }
-
-/* HERO */
 
 .hero{
 background:linear-gradient(90deg,#002D72,#C8102E);
-color:#fff;
+color:white;
 padding:30px;
 border-radius:22px;
-margin-bottom:14px;
+margin-bottom:16px;
 }
 
 .hero h1{
@@ -58,19 +46,12 @@ margin:0;
 font-size:40px;
 }
 
-/* CONTROLS */
-
 .controls{
-display:flex;
-gap:12px;
-align-items:center;
 background:#fff;
-border-radius:16px;
 padding:12px;
-margin-bottom:16px;
+border-radius:16px;
+margin-bottom:20px;
 }
-
-/* TABLE */
 
 table{
 width:100%;
@@ -78,13 +59,12 @@ border-collapse:collapse;
 background:#fff;
 border-radius:16px;
 overflow:hidden;
-margin-bottom:20px;
+margin-bottom:30px;
 }
 
 th,td{
 padding:10px;
-text-align:left;
-border-bottom:1px solid #f1f1f1;
+border-bottom:1px solid #eee;
 }
 
 th{
@@ -96,36 +76,21 @@ tbody tr:nth-child(even){
 background:#eaf3ff;
 }
 
-tbody tr:hover{
-background:#d6e6ff;
-}
-
-.link{
-color:#0056d6;
-font-weight:800;
-cursor:pointer;
-}
-
-/* LEAGUE HEADERS */
-
 .leagueTitle{
 font-size:26px;
 font-weight:900;
-margin:18px 0 8px;
+margin:20px 0 10px;
 }
-
 </style>
 </head>
 <body>
 
 <div class="navbar">
-
 <a href="index.html">Home</a>
 <a href="baseball.html">Baseball</a>
 <a href="baseball-seasons.html">Seasons</a>
 <a href="baseball-players.html">Players</a>
 <a href="baseball-standings.html">Standings</a>
-
 </div>
 
 <div class="page">
@@ -135,12 +100,10 @@ margin:18px 0 8px;
 </div>
 
 <div class="controls">
-<div style="font-weight:900;">Season</div>
 <select id="yearSel"></select>
 </div>
 
 <div class="leagueTitle">American League</div>
-
 <table>
 <thead>
 <tr>
@@ -157,7 +120,6 @@ margin:18px 0 8px;
 </table>
 
 <div class="leagueTitle">National League</div>
-
 <table>
 <thead>
 <tr>
@@ -177,12 +139,12 @@ margin:18px 0 8px;
 
 <script>
 
-/* LEAGUE MAP */
-
-const AL=[
+/* MODIFY THIS LIST FOR HISTORICAL LEAGUE ALIGNMENT */
+const AL = [
 "BAL","BOS","NYY","TB","TOR",
 "CWS","CLE","DET","KC","MIN",
-"HOU","LAA","OAK","SEA","TEX"
+"HOU","LAA","OAK","SEA","TEX",
+"CHA","SLA","WSA","PHA"
 ];
 
 function league(code){
@@ -195,24 +157,55 @@ const years =
 await fetch("data/baseball/index.json")
 .then(r=>r.json());
 
-const sel=document.getElementById("yearSel");
-
 years.sort((a,b)=>b-a);
 
-sel.innerHTML=
-years.map(y=>`<option>${y}</option>`).join("");
+const sel=document.getElementById("yearSel");
+sel.innerHTML = years.map(y=>`<option>${y}</option>`).join("");
 
-sel.onchange=()=>loadYear(sel.value);
+sel.onchange = ()=> loadYear(sel.value);
 
 loadYear(years[0]);
-
 }
 
-async function loadYear(y){
+async function loadYear(year){
 
-const rows =
-await fetch(`data/baseball/standings/${y}.json`)
+const games =
+await fetch(`data/baseball/seasons/${year}.json`)
 .then(r=>r.json());
+
+let standings = {};
+
+games.forEach(g=>{
+
+const home = g.home_code;
+const away = g.away_code;
+
+if(!standings[home])
+standings[home] = {W:0,L:0,RS:0,RA:0};
+
+if(!standings[away])
+standings[away] = {W:0,L:0,RS:0,RA:0};
+
+standings[home].RS += g.home_score;
+standings[home].RA += g.away_score;
+
+standings[away].RS += g.away_score;
+standings[away].RA += g.home_score;
+
+if(g.home_score > g.away_score){
+standings[home].W++;
+standings[away].L++;
+}else{
+standings[away].W++;
+standings[home].L++;
+}
+
+});
+
+renderStandings(standings);
+}
+
+function renderStandings(data){
 
 const tbAL=document.getElementById("tbAL");
 const tbNL=document.getElementById("tbNL");
@@ -220,38 +213,38 @@ const tbNL=document.getElementById("tbNL");
 tbAL.innerHTML="";
 tbNL.innerHTML="";
 
-rows.forEach(r=>{
+let teams = Object.keys(data);
+
+teams.sort((a,b)=>{
+const pctA = data[a].W / (data[a].W + data[a].L);
+const pctB = data[b].W / (data[b].W + data[b].L);
+return pctB - pctA;
+});
+
+teams.forEach(team=>{
+
+const s = data[team];
+const pct = (s.W / (s.W + s.L)).toFixed(3);
+const diff = s.RS - s.RA;
 
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
-
-<td>
-<span class="link" data-team="${r.team_code}">
-${r.team_name}
-</span>
-</td>
-
-<td>${r.W}</td>
-<td>${r.L}</td>
-<td>${r.PCT}</td>
-<td>${r.RS}</td>
-<td>${r.RA}</td>
-<td>${r.DIFF}</td>
-
+<td>${team}</td>
+<td>${s.W}</td>
+<td>${s.L}</td>
+<td>${pct}</td>
+<td>${s.RS}</td>
+<td>${s.RA}</td>
+<td>${diff}</td>
 `;
 
-tr.querySelector("[data-team]").onclick=
-()=>location.href=
-`baseball-team.html?team=${r.team_code}`;
-
-if(league(r.team_code)=="AL")
+if(league(team)==="AL")
 tbAL.appendChild(tr);
 else
 tbNL.appendChild(tr);
 
 });
-
 }
 
 init();
