@@ -106,7 +106,13 @@ a.game-link:hover{
 <script>
 
 const params = new URLSearchParams(window.location.search);
-const season = params.get("season") || new Date().getFullYear();
+const season = params.get("season");
+
+if (!season) {
+  document.getElementById("gamesBody").innerHTML =
+    "<tr><td colspan='5'>Season missing from URL</td></tr>";
+  throw new Error("Season missing");
+}
 
 document.getElementById("title").textContent = "MLB Season " + season;
 
@@ -119,27 +125,18 @@ fetch(`docs/data/baseball/seasons/${season}.json`)
 
     data.forEach(game => {
 
-      let gameId = null;
-
-      // PRIMARY: use game_id if it exists
-      if (game.game_id && game.game_id !== "undefined") {
-        gameId = game.game_id;
-      }
-
-      // FALLBACK: reconstruct safely if needed
-      if (!gameId && game.home_code && game.date) {
-        const ymd = game.date.replaceAll("-", "");
-        gameId = game.home_code + ymd + "0";
-      }
+      // THIS IS THE ONLY FIELD WE TRUST
+      const gameId = game.game_id;
 
       if (!gameId) {
-        console.error("Missing game_id for:", game);
+        console.error("Missing game_id in season file:", game);
         return;
       }
 
-      const link = `baseball-game.html?game=${gameId}&season=${season}`;
+      const link = `baseball-game.html?season=${season}&game=${gameId}`;
 
-      const score = (game.away_score !== undefined && game.home_score !== undefined)
+      const score =
+        (game.away_score !== undefined && game.home_score !== undefined)
         ? `${game.away_score}-${game.home_score}`
         : "";
 
@@ -156,10 +153,11 @@ fetch(`docs/data/baseball/seasons/${season}.json`)
 
   })
   .catch(err => {
-    console.error("Season load error:", err);
+    document.getElementById("gamesBody").innerHTML =
+      "<tr><td colspan='5'>Could not load season file</td></tr>";
   });
 
 </script>
 
 </body>
-</html> 
+</html>
