@@ -139,18 +139,6 @@ margin:20px 0 10px;
 
 <script>
 
-/* MODIFY THIS LIST FOR HISTORICAL LEAGUE ALIGNMENT */
-const AL = [
-"BAL","BOS","NYY","TB","TOR",
-"CWS","CLE","DET","KC","MIN",
-"HOU","LAA","OAK","SEA","TEX",
-"CHA","SLA","WSA","PHA"
-];
-
-function league(code){
-return AL.includes(code) ? "AL" : "NL";
-}
-
 async function init(){
 
 const years =
@@ -162,7 +150,7 @@ years.sort((a,b)=>b-a);
 const sel=document.getElementById("yearSel");
 sel.innerHTML = years.map(y=>`<option>${y}</option>`).join("");
 
-sel.onchange = ()=> loadYear(sel.value);
+sel.onchange = ()=> loadYear(parseInt(sel.value));
 
 loadYear(years[0]);
 }
@@ -202,10 +190,10 @@ standings[home].L++;
 
 });
 
-renderStandings(standings);
+renderStandings(standings, year);
 }
 
-function renderStandings(data){
+function renderStandings(data, year){
 
 const tbAL=document.getElementById("tbAL");
 const tbNL=document.getElementById("tbNL");
@@ -221,7 +209,22 @@ const pctB = data[b].W / (data[b].W + data[b].L);
 return pctB - pctA;
 });
 
-teams.forEach(team=>{
+/* HISTORICAL LEAGUE SPLIT LOGIC */
+
+let alCount;
+
+if(year >= 2013) alCount = 15;
+else if(year >= 1998) alCount = 14;
+else if(year >= 1977) alCount = 14;
+else if(year >= 1969) alCount = 12;
+else alCount = teams.length / 2;
+
+const ALteams = teams.slice(0, alCount);
+const NLteams = teams.slice(alCount);
+
+function addRows(teamList, tbody){
+
+teamList.forEach(team=>{
 
 const s = data[team];
 const pct = (s.W / (s.W + s.L)).toFixed(3);
@@ -239,12 +242,15 @@ tr.innerHTML=`
 <td>${diff}</td>
 `;
 
-if(league(team)==="AL")
-tbAL.appendChild(tr);
-else
-tbNL.appendChild(tr);
+tbody.appendChild(tr);
 
 });
+
+}
+
+addRows(ALteams, tbAL);
+addRows(NLteams, tbNL);
+
 }
 
 init();
