@@ -64,6 +64,12 @@ th,td{
 th{
   background:#002D72;
   color:#fff;
+  cursor:pointer;
+  user-select:none;
+}
+
+th:hover{
+  background:#001f4f;
 }
 
 tbody tr:nth-child(even){
@@ -103,13 +109,13 @@ tbody tr:hover{
   <table>
     <thead>
       <tr>
-        <th>Season</th>
-        <th>W</th>
-        <th>L</th>
-        <th>PCT</th>
-        <th>RS</th>
-        <th>RA</th>
-        <th>DIFF</th>
+        <th data-col="season">Season</th>
+        <th data-col="W">W</th>
+        <th data-col="L">L</th>
+        <th data-col="PCT">PCT</th>
+        <th data-col="RS">RS</th>
+        <th data-col="RA">RA</th>
+        <th data-col="DIFF">DIFF</th>
       </tr>
     </thead>
     <tbody id="tb"></tbody>
@@ -125,6 +131,8 @@ const title = document.getElementById("title");
 
 let years = [];
 let franchises = [];
+let tableData = [];
+let sortState = {};
 
 async function init(){
 
@@ -141,6 +149,13 @@ async function init(){
   });
 
   teamSelect.addEventListener("change", buildFranchise);
+
+  document.querySelectorAll("th").forEach(th=>{
+    th.addEventListener("click", ()=>{
+      const col = th.dataset.col;
+      sortTable(col);
+    });
+  });
 }
 
 async function buildFranchise(){
@@ -150,13 +165,14 @@ async function buildFranchise(){
   if(!franchiseId){
     tb.innerHTML = "";
     title.textContent = "Franchise History";
+    tableData = [];
     return;
   }
 
   const franchise = franchises.find(f=>f.id === franchiseId);
   title.textContent = `Franchise History – ${franchise.name}`;
 
-  tb.innerHTML = "";
+  tableData = [];
 
   for(const year of years){
 
@@ -164,46 +180,67 @@ async function buildFranchise(){
 
       const seasonData = await (await fetch(`/data/baseball/team_seasons/${year}.json`)).json();
 
-      let W = 0;
-      let L = 0;
-      let RS = 0;
-      let RA = 0;
-      let played = false;
+      let W=0,L=0,RS=0,RA=0;
+      let played=false;
 
       franchise.codes.forEach(code=>{
         if(seasonData[code]){
           const data = seasonData[code];
-          W += data.W;
-          L += data.L;
-          RS += data.RS;
-          RA += data.RA;
-          played = true;
+          W+=data.W;
+          L+=data.L;
+          RS+=data.RS;
+          RA+=data.RA;
+          played=true;
         }
       });
 
       if(!played) continue;
 
-      const PCT = (W + L) > 0 ? (W / (W + L)).toFixed(3) : "0.000";
-      const DIFF = RS - RA;
+      const PCT = (W+L)>0 ? +(W/(W+L)).toFixed(3) : 0;
+      const DIFF = RS-RA;
 
-      const tr = document.createElement("tr");
+      tableData.push({season:+year,W,L,PCT,RS,RA,DIFF});
 
-      tr.innerHTML = `
-        <td><a class="season-link" href="baseball-season.html?year=${year}">${year}</a></td>
-        <td>${W}</td>
-        <td>${L}</td>
-        <td>${PCT}</td>
-        <td>${RS}</td>
-        <td>${RA}</td>
-        <td>${DIFF}</td>
-      `;
-
-      tb.appendChild(tr);
-
-    }catch(e){
-      // ignore missing season files
-    }
+    }catch(e){}
   }
+
+  renderTable();
+}
+
+function renderTable(){
+  tb.innerHTML="";
+  tableData.forEach(row=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td><a class="season-link" href="baseball-season.html?year=${row.season}">${row.season}</a></td>
+      <td>${row.W}</td>
+      <td>${row.L}</td>
+      <td>${row.PCT.toFixed(3)}</td>
+      <td>${row.RS}</td>
+      <td>${row.RA}</td>
+      <td>${row.DIFF}</td>
+    `;
+    tb.appendChild(tr);
+  });
+}
+
+function sortTable(col){
+
+  if(!sortState[col]){
+    sortState[col]="desc";
+  }else{
+    sortState[col]=sortState[col]==="desc"?"asc":"desc";
+  }
+
+  tableData.sort((a,b)=>{
+    if(sortState[col]==="desc"){
+      return b[col]-a[col];
+    }else{
+      return a[col]-b[col];
+    }
+  });
+
+  renderTable();
 }
 
 init();
