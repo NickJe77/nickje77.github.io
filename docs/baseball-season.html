@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>MLB Season | The Sporting Almanac</title>
+<title>MLB Season</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -105,56 +105,60 @@ a:hover{
 </div>
 
 <script>
-
 const params = new URLSearchParams(window.location.search);
-const season = params.get("season");
-
-if(!season){
-  document.getElementById("gamesBody").innerHTML =
-    "<tr><td colspan='5'>Season missing</td></tr>";
-  throw new Error("Season missing");
-}
-
+const season = params.get("season") || "";
 document.getElementById("title").textContent = "MLB Season " + season;
 
+function makeGameIdFromRow(game){
+  // Prefer explicit game_id if present
+  if (game && game.game_id) return String(game.game_id);
+
+  // Fallback: derive from home_code + date (YYYYMMDD) + "0"
+  // (This matches the naming pattern you showed: ANA + 20250404 + 0)
+  const home = game && game.home_code ? String(game.home_code) : "";
+  const date = game && game.date ? String(game.date) : "";
+  if (!home || !date) return "";
+
+  const ymd = date.replaceAll("-", "");
+  return home + ymd + "0";
+}
+
 fetch(`docs/data/baseball/seasons/${season}.json`)
-.then(res => res.json())
-.then(data => {
+  .then(res => res.json())
+  .then(data => {
 
-  const tbody = document.getElementById("gamesBody");
-  tbody.innerHTML = "";
+    const tbody = document.getElementById("gamesBody");
+    tbody.innerHTML = "";
 
-  data.forEach(game => {
+    data.forEach(game => {
+      const gameId = makeGameIdFromRow(game);
 
-    if(!game.game_id){
-      return; // skip bad entries
-    }
+      const score =
+        (game.away_score !== undefined && game.home_score !== undefined)
+          ? `${game.away_score}-${game.home_score}`
+          : "";
 
-    const link =
-      `baseball-game.html?season=${season}&game=${game.game_id}`;
+      // Never create undefined links
+      const gameCell = gameId
+        ? `<a href="baseball-game.html?season=${encodeURIComponent(season)}&game=${encodeURIComponent(gameId)}">${gameId}</a>`
+        : "";
 
-    const score =
-      (game.away_score !== undefined && game.home_score !== undefined)
-      ? `${game.away_score}-${game.home_score}`
-      : "";
+      tbody.innerHTML += `
+        <tr>
+          <td>${game.date || ""}</td>
+          <td>${game.away_code || ""}</td>
+          <td>${game.home_code || ""}</td>
+          <td>${score}</td>
+          <td>${gameCell}</td>
+        </tr>
+      `;
+    });
 
-    tbody.innerHTML += `
-      <tr>
-        <td>${game.date || ""}</td>
-        <td>${game.away_code || ""}</td>
-        <td>${game.home_code || ""}</td>
-        <td>${score}</td>
-        <td><a href="${link}">${game.game_id}</a></td>
-      </tr>
-    `;
+  })
+  .catch(() => {
+    document.getElementById("gamesBody").innerHTML =
+      "<tr><td colspan='5'>Season file not found</td></tr>";
   });
-
-})
-.catch(() => {
-  document.getElementById("gamesBody").innerHTML =
-    "<tr><td colspan='5'>Could not load season file</td></tr>";
-});
-
 </script>
 
 </body>
