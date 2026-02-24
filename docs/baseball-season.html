@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>MLB Game | The Sporting Almanac</title>
+<title>MLB Season | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
 <style>
@@ -25,7 +25,7 @@ body{
   color:#0056d6;
 }
 .page{
-  max-width:1100px;
+  max-width:1200px;
   margin:auto;
   padding:20px;
 }
@@ -38,11 +38,7 @@ body{
 }
 .hero h1{
   margin:0;
-  font-size:32px;
-}
-.meta{
-  margin-top:8px;
-  opacity:.9;
+  font-size:36px;
 }
 table{
   width:100%;
@@ -63,6 +59,14 @@ td{
 tr:nth-child(even){
   background:#f7fbff;
 }
+a{
+  color:#0056d6;
+  text-decoration:none;
+  font-weight:600;
+}
+a:hover{
+  text-decoration:underline;
+}
 </style>
 </head>
 
@@ -77,18 +81,19 @@ tr:nth-child(even){
 <div class="page">
 
 <div class="hero">
-  <h1 id="gameTitle">Loading...</h1>
-  <div class="meta" id="gameMeta"></div>
+  <h1 id="seasonTitle">Loading...</h1>
 </div>
 
 <table>
 <thead>
 <tr>
-  <th>Stat</th>
-  <th>Value</th>
+  <th>Date</th>
+  <th>Away</th>
+  <th>Home</th>
+  <th>Score</th>
 </tr>
 </thead>
-<tbody id="gameBody"></tbody>
+<tbody id="seasonBody"></tbody>
 </table>
 
 </div>
@@ -108,35 +113,33 @@ async function safeFetch(url){
 
 const qs = new URLSearchParams(location.search);
 const season = qs.get("season");
-const file = qs.get("file");
 
-if(!season || !file){
-  document.getElementById("gameTitle").textContent="Game Not Found";
+if(!season){
+  document.getElementById("seasonTitle").textContent="Season Not Found";
   return;
 }
 
-const data = await safeFetch(`/data/baseball/games/${season}/${file}`);
+document.getElementById("seasonTitle").textContent = season + " Season";
+
+const data = await safeFetch(`/data/baseball/seasons/${season}.json`);
 
 if(!data){
-  document.getElementById("gameTitle").textContent="Game Not Found";
+  document.getElementById("seasonTitle").textContent="Season Not Found";
   return;
 }
 
-/* If your game file is a single object */
-const game = Array.isArray(data) ? data[0] : data;
-
-document.getElementById("gameTitle").textContent =
-  game.away_team + " at " + game.home_team;
-
-document.getElementById("gameMeta").textContent =
-  game.date + " • " + game.venue + " • Attendance: " +
-  Number(game.attendance || 0).toLocaleString();
-
-document.getElementById("gameBody").innerHTML = `
-<tr><td>Away Score</td><td>${game.away_score}</td></tr>
-<tr><td>Home Score</td><td>${game.home_score}</td></tr>
-<tr><td>Game Length (min)</td><td>${game.game_length_minutes}</td></tr>
-`;
+document.getElementById("seasonBody").innerHTML = data.map(game => `
+  <tr>
+    <td>${game.date}</td>
+    <td>${game.away_team}</td>
+    <td>${game.home_team}</td>
+    <td>
+      <a href="/baseball-game.html?season=${season}&date=${game.date}">
+        ${game.away_score} - ${game.home_score}
+      </a>
+    </td>
+  </tr>
+`).join("");
 
 })();
 </script>
