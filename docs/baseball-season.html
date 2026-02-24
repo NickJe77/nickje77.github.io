@@ -86,23 +86,13 @@ td{
 tbody tr:nth-child(even){
   background:#fafafa;
 }
-<<<<<<< HEAD
+
 tbody tr{
   cursor:pointer;
 }
+
 tbody tr:hover{
   background:#eef2ff;
-=======
-
-.score{
-  font-weight:700;
-}
-
-.game-link{
-  color:#0056d6;
-  font-weight:700;
-  text-decoration:none;
->>>>>>> parent of 82968977ffd (Update baseball-season.html)
 }
 
 .error{
@@ -153,39 +143,37 @@ tbody tr:hover{
 <script>
 const params = new URLSearchParams(window.location.search);
 const season = params.get("season");
-document.getElementById("seasonTitle").textContent = "MLB Season " + season;
+
+if(!season){
+  document.getElementById("errorBox").innerHTML =
+    `<div class="error">No season specified</div>`;
+  throw new Error("No season parameter");
+}
+
+document.getElementById("seasonTitle").textContent =
+  "MLB Season " + season;
 
 Promise.all([
-  fetch(`data/baseball/seasons/${season}.json`).then(r=>r.json()),
+  fetch(`data/baseball/seasons/${season}.json`).then(r=>{
+    if(!r.ok) throw new Error("Season file not found");
+    return r.json();
+  }),
   fetch(`data/baseball/team-names.json`).then(r=>r.json()),
   fetch(`data/baseball/ballpark.csv`).then(r=>r.text())
 ])
 .then(([seasonData, teamNames, ballparkCSV]) => {
 
-<<<<<<< HEAD
   const parkMap = {};
+
   const lines = ballparkCSV.split("\n");
   lines.forEach(line=>{
     const parts = line.split(",");
     if(parts.length >= 2){
-      parkMap[parts[0].trim()] = parts[1].trim();
+      const code = parts[0].trim();
+      const name = parts[1].trim();
+      if(code) parkMap[code] = name;
     }
   });
-=======
-// Absolute URL built from actual domain origin
-const seasonURL =
-  window.location.origin +
-  "/docs/data/baseball/seasons/" +
-  season +
-  ".json";
-
-fetch(seasonURL)
-.then(res => {
-  if(!res.ok) throw new Error("Season file not found");
-  return res.json();
-})
-.then(data => {
->>>>>>> parent of 82968977ffd (Update baseball-season.html)
 
   const tbody = document.getElementById("gamesBody");
   tbody.innerHTML = "";
@@ -195,21 +183,29 @@ fetch(seasonURL)
     const ymd = game.date.replace(/-/g,"");
     const gameId = game.home_code + ymd + "0";
 
-    const link = `baseball-game.html?season=${season}&game=${gameId}`;
+    const link =
+      `baseball-game.html?season=${season}&game=${gameId}`;
 
-    const awayName = teamNames[game.away_code] || game.away_code;
-    const homeName = teamNames[game.home_code] || game.home_code;
+    const awayName =
+      teamNames[game.away_code] || game.away_team || game.away_code;
 
-    const venueName = parkMap[game.venue] || game.venue || "";
+    const homeName =
+      teamNames[game.home_code] || game.home_team || game.home_code;
+
+    const venueName =
+      parkMap[game.venue] || game.venue || "";
 
     const score =
-      (game.away_score !== undefined && game.home_score !== undefined)
+      (game.away_score !== undefined &&
+       game.home_score !== undefined)
         ? game.away_score + "-" + game.home_score
         : "";
 
-<<<<<<< HEAD
     const tr = document.createElement("tr");
-    tr.onclick = () => window.location.href = link;
+
+    tr.onclick = () => {
+      window.location.href = link;
+    };
 
     tr.innerHTML = `
       <td>${game.date}</td>
@@ -218,18 +214,6 @@ fetch(seasonURL)
       <td>${score}</td>
       <td>${venueName}</td>
       <td>${game.attendance ? Number(game.attendance).toLocaleString() : ""}</td>
-=======
-    tbody.innerHTML += `
-      <tr>
-        <td>${game.date}</td>
-        <td>${game.away_code}</td>
-        <td>${game.home_code}</td>
-        <td class="score">${score}</td>
-        <td>${game.venue || ""}</td>
-        <td>${game.attendance ? Number(game.attendance).toLocaleString() : ""}</td>
-        <td><a class="game-link" href="${link}">${gameId}</a></td>
-      </tr>
->>>>>>> parent of 82968977ffd (Update baseball-season.html)
     `;
 
     tbody.appendChild(tr);
