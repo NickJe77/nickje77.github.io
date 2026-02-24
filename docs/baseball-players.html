@@ -6,7 +6,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-
 body{
 font-family:Inter,system-ui,Arial;
 margin:0;
@@ -64,7 +63,6 @@ font-size:13px;
 color:#777;
 margin-left:8px;
 }
-
 </style>
 </head>
 <body>
@@ -94,24 +92,38 @@ Loading players...
 <script>
 
 let ALL_PLAYERS=[];
+let TEAM_MAP={};
+
+async function loadTeams(){
+
+const res = await fetch("data/baseball/teams.json");
+const franchises = await res.json();
+
+// Map every historical code to franchise name
+franchises.forEach(franchise=>{
+  franchise.codes.forEach(code=>{
+    TEAM_MAP[code] = franchise.name;
+  });
+});
+
+}
 
 async function loadPlayers(){
+
+await loadTeams();
 
 const data = await fetch(
 "data/baseball/players.json"
 ).then(r=>r.json());
 
-/* convert objects to usable format */
-
 ALL_PLAYERS = data.map(p=>({
 
 name: p.player,
-team: p.team
+team: TEAM_MAP[p.team] || p.team
 
 }));
 
-/* remove duplicates */
-
+// Remove duplicates (by name)
 const unique = {};
 
 ALL_PLAYERS.forEach(p=>{
@@ -120,8 +132,7 @@ unique[p.name]=p;
 
 ALL_PLAYERS = Object.values(unique);
 
-/* sort */
-
+// Sort alphabetically
 ALL_PLAYERS.sort((a,b)=>
 a.name.localeCompare(b.name)
 );
