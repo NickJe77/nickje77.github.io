@@ -37,6 +37,7 @@ select{
   font-size:16px;
   border-radius:10px;
   border:none;
+  font-weight:600;
 }
 
 .card{
@@ -71,11 +72,18 @@ tbody tr:nth-child(even){
 
 tbody tr:hover{
   background:#dce9ff;
+  cursor:pointer;
 }
 
 .back{
   font-weight:700;
   color:#0056d6;
+  text-decoration:none;
+}
+
+.season-link{
+  color:#0056d6;
+  font-weight:700;
   text-decoration:none;
 }
 </style>
@@ -117,40 +125,37 @@ const tb = document.getElementById("tb");
 const title = document.getElementById("title");
 
 let years = [];
-let teams = [];
+let franchises = [];
 
 async function init(){
 
-  // Load seasons index
   years = await (await fetch("/data/baseball/index.json")).json();
-
-  // Load teams list
-  teams = await (await fetch("/data/baseball/teams.json")).json();
+  franchises = await (await fetch("/data/baseball/teams.json")).json();
 
   teamSelect.innerHTML = '<option value="">Select Franchise</option>';
 
-  teams.forEach(t=>{
+  franchises.forEach(franchise=>{
     const opt = document.createElement("option");
-    opt.value = t.code;
-    opt.textContent = t.name;
+    opt.value = franchise.id;
+    opt.textContent = franchise.name;
     teamSelect.appendChild(opt);
   });
 
   teamSelect.addEventListener("change", buildFranchise);
-
 }
 
 async function buildFranchise(){
 
-  const code = teamSelect.value;
-  if(!code){
+  const franchiseId = teamSelect.value;
+
+  if(!franchiseId){
     tb.innerHTML = "";
     title.textContent = "Franchise History";
     return;
   }
 
-  const teamName = teams.find(t=>t.code === code)?.name || code;
-  title.textContent = `Franchise History – ${teamName}`;
+  const franchise = franchises.find(f=>f.id === franchiseId);
+  title.textContent = `Franchise History – ${franchise.name}`;
 
   tb.innerHTML = "";
 
@@ -160,21 +165,32 @@ async function buildFranchise(){
 
       const seasonData = await (await fetch(`/data/baseball/team_seasons/${year}.json`)).json();
 
-      if(!seasonData[code]) continue;
+      let W = 0;
+      let L = 0;
+      let RS = 0;
+      let RA = 0;
+      let played = false;
 
-      const data = seasonData[code];
+      franchise.codes.forEach(code=>{
+        if(seasonData[code]){
+          const data = seasonData[code];
+          W += data.W;
+          L += data.L;
+          RS += data.RS;
+          RA += data.RA;
+          played = true;
+        }
+      });
 
-      const W = data.W;
-      const L = data.L;
-      const RS = data.RS;
-      const RA = data.RA;
+      if(!played) continue;
 
       const PCT = (W + L) > 0 ? (W / (W + L)).toFixed(3) : "0.000";
       const DIFF = RS - RA;
 
       const tr = document.createElement("tr");
+
       tr.innerHTML = `
-        <td>${year}</td>
+        <td><a class="season-link" href="baseball-season.html?year=${year}&franchise=${franchiseId}">${year}</a></td>
         <td>${W}</td>
         <td>${L}</td>
         <td>${PCT}</td>
@@ -186,11 +202,9 @@ async function buildFranchise(){
       tb.appendChild(tr);
 
     }catch(e){
-      // ignore missing years
+      // ignore missing seasons
     }
-
   }
-
 }
 
 init();
