@@ -6,159 +6,88 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{
-  font-family:Inter,system-ui,Arial;
-  margin:0;
-  background:#f4f6f8;
-}
-
-.navbar{
-  display:flex;
-  justify-content:center;
-  gap:24px;
-  padding:16px;
-  background:#fff;
-  border-bottom:1px solid #ddd;
-  font-weight:700;
-}
-
-.navbar a{
-  text-decoration:none;
-  color:#0056d6;
-}
-
-.page{
-  max-width:1200px;
-  margin:auto;
-  padding:20px;
-}
-
-.hero{
-  background:linear-gradient(90deg,#002D72,#C8102E);
-  color:#fff;
-  padding:30px;
-  border-radius:20px;
-  margin-bottom:20px;
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-  background:#fff;
-  border-radius:16px;
-  overflow:hidden;
-}
-
-th{
-  background:#002D72;
-  color:#fff;
-  padding:12px;
-  text-align:left;
-}
-
-td{
-  padding:12px;
-  border-bottom:1px solid #eee;
-}
-
-tbody tr:nth-child(even){
-  background:#fafafa;
-}
-
-a{
-  color:#0056d6;
-  text-decoration:none;
-  font-weight:700;
-}
-
-a:hover{
-  text-decoration:underline;
-}
+body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:#fff;border-bottom:1px solid #ddd;font-weight:700;}
+.navbar a{text-decoration:none;color:#0056d6;}
+.page{max-width:1200px;margin:auto;padding:20px;}
+.hero{background:linear-gradient(90deg,#002D72,#C8102E);color:#fff;padding:30px;border-radius:20px;margin-bottom:20px;}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:16px;overflow:hidden;}
+th{background:#002D72;color:#fff;padding:12px;text-align:left;}
+td{padding:12px;border-bottom:1px solid #eee;}
+tbody tr:nth-child(even){background:#fafafa;}
+a{color:#0056d6;text-decoration:none;font-weight:700;}
+a:hover{text-decoration:underline;}
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-  <a href="index.html">Home</a>
-  <a href="baseball.html">Baseball</a>
-  <a href="mlb.html">MLB</a>
+<a href="index.html">Home</a>
+<a href="baseball.html">Baseball</a>
+<a href="mlb.html">MLB</a>
 </div>
 
 <div class="page">
-  <div class="hero">
-    <h1 id="title">MLB Season</h1>
-  </div>
+<div class="hero">
+<h1 id="title"></h1>
+</div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Date</th>
-        <th>Away</th>
-        <th>Home</th>
-        <th>Score</th>
-        <th>Game</th>
-      </tr>
-    </thead>
-    <tbody id="gamesBody"></tbody>
-  </table>
+<table>
+<thead>
+<tr>
+<th>Date</th>
+<th>Away</th>
+<th>Home</th>
+<th>Score</th>
+<th>Game</th>
+</tr>
+</thead>
+<tbody id="gamesBody"></tbody>
+</table>
 </div>
 
 <script>
 const params = new URLSearchParams(window.location.search);
-const season = params.get("season") || "";
+const season = params.get("season");
+
 document.getElementById("title").textContent = "MLB Season " + season;
 
-function makeGameIdFromRow(game){
-  // Prefer explicit game_id if present
-  if (game && game.game_id) return String(game.game_id);
-
-  // Fallback: derive from home_code + date (YYYYMMDD) + "0"
-  // (This matches the naming pattern you showed: ANA + 20250404 + 0)
-  const home = game && game.home_code ? String(game.home_code) : "";
-  const date = game && game.date ? String(game.date) : "";
-  if (!home || !date) return "";
-
-  const ymd = date.replaceAll("-", "");
-  return home + ymd + "0";
-}
-
 fetch(`docs/data/baseball/seasons/${season}.json`)
-  .then(res => res.json())
-  .then(data => {
+.then(res => res.json())
+.then(data => {
 
-    const tbody = document.getElementById("gamesBody");
-    tbody.innerHTML = "";
+const tbody = document.getElementById("gamesBody");
+tbody.innerHTML = "";
 
-    data.forEach(game => {
-      const gameId = makeGameIdFromRow(game);
+data.forEach(game => {
 
-      const score =
-        (game.away_score !== undefined && game.home_score !== undefined)
-          ? `${game.away_score}-${game.home_score}`
-          : "";
+const ymd = game.date.replaceAll("-", "");
+const gameId = game.home_code + ymd + "0";
 
-      // Never create undefined links
-      const gameCell = gameId
-        ? `<a href="baseball-game.html?season=${encodeURIComponent(season)}&game=${encodeURIComponent(gameId)}">${gameId}</a>`
-        : "";
+const link =
+`baseball-game.html?season=${season}&game=${gameId}`;
 
-      tbody.innerHTML += `
-        <tr>
-          <td>${game.date || ""}</td>
-          <td>${game.away_code || ""}</td>
-          <td>${game.home_code || ""}</td>
-          <td>${score}</td>
-          <td>${gameCell}</td>
-        </tr>
-      `;
-    });
+const score =
+`${game.away_score ?? ""}-${game.home_score ?? ""}`;
 
-  })
-  .catch(() => {
-    document.getElementById("gamesBody").innerHTML =
-      "<tr><td colspan='5'>Season file not found</td></tr>";
-  });
+tbody.innerHTML += `
+<tr>
+<td>${game.date}</td>
+<td>${game.away_code}</td>
+<td>${game.home_code}</td>
+<td>${score}</td>
+<td><a href="${link}">${gameId}</a></td>
+</tr>
+`;
+
+});
+
+})
+.catch(() => {
+document.getElementById("gamesBody").innerHTML =
+"<tr><td colspan='5'>Season file not found</td></tr>";
+});
 </script>
 
 </body>
