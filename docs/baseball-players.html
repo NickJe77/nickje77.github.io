@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Player | The Sporting Almanac</title>
+<title>Players | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -13,7 +13,7 @@ background:#f4f6f8;
 }
 
 .page{
-max-width:1200px;
+max-width:900px;
 margin:auto;
 padding:20px;
 }
@@ -23,58 +23,39 @@ background:linear-gradient(90deg,#002D72,#C8102E);
 color:white;
 padding:30px;
 border-radius:20px;
-margin-bottom:20px;
+margin-bottom:16px;
 }
 
 .hero h1{
 margin:0;
-font-size:42px;
+font-size:40px;
 }
 
-.sub{
-margin-top:6px;
+.search{
+width:100%;
+padding:12px;
 font-size:18px;
-opacity:.9;
+border-radius:10px;
+border:none;
+margin-top:12px;
 }
 
 .card{
 background:white;
-padding:20px;
-border-radius:16px;
-box-shadow:0 2px 6px rgba(0,0,0,.05);
-margin-bottom:20px;
+padding:16px;
+border-radius:14px;
 }
 
-table{
-width:100%;
-border-collapse:collapse;
-margin-top:10px;
-}
-
-th,td{
+.player{
 padding:10px;
 border-bottom:1px solid #eee;
-text-align:left;
-}
-
-th{
-background:#002D72;
-color:white;
 cursor:pointer;
+font-weight:600;
 }
 
-.back{
-display:inline-block;
-margin-bottom:14px;
-text-decoration:none;
+.player:hover{
+background:#eaf3ff;
 color:#0056d6;
-font-weight:600;
-}
-.back:hover{text-decoration:underline;}
-
-.loading{
-font-size:20px;
-font-weight:600;
 }
 </style>
 </head>
@@ -82,177 +63,77 @@ font-weight:600;
 
 <div class="page">
 
-<a href="baseball-players.html" class="back">← Back to Players</a>
+<div class="hero">
+<h1>Players</h1>
 
-<div id="content" class="loading">
-Loading player...
+<input
+type="text"
+id="search"
+class="search"
+placeholder="Search player..."
+oninput="filterPlayers()"
+/>
+
+</div>
+
+<div class="card" id="playersList">
+Loading players...
 </div>
 
 </div>
 
 <script>
 
-const params = new URLSearchParams(window.location.search);
-const playerId = params.get("player");
+let ALL_PLAYERS=[];
 
-if(!playerId){
-document.getElementById("content").innerHTML="<h1>Player not found</h1>";
-throw new Error("Missing player id");
-}
+async function loadPlayers(){
 
-init();
+const data = await fetch("data/baseball/players.json")
+.then(r=>r.json());
 
-async function init(){
+ALL_PLAYERS = data.sort((a,b)=>
+a.name.localeCompare(b.name)
+);
 
-try{
-
-// Load master player index
-const indexRes = await fetch("data/baseball/players.json");
-const masterPlayers = await indexRes.json();
-
-const playerInfo = masterPlayers.find(p => p.player_id === playerId);
-
-if(!playerInfo){
-document.getElementById("content").innerHTML="<h1>Player not found</h1>";
-return;
-}
-
-// Load teams
-const teamsRes = await fetch("data/baseball/teams.json");
-const franchises = await teamsRes.json();
-
-let TEAM_MAP = {};
-franchises.forEach(franchise=>{
-franchise.codes.forEach(code=>{
-TEAM_MAP[code] = franchise.name;
-});
-});
-
-// Discover season files
-// ⚠️ You must maintain this list manually or generate it server-side.
-const seasons = [
-1947,1948,1949,1950,1951,1952,1953,1954,1955,
-1956,1957,1958,1959,1960,1961,1962,1963,1964,
-1965,1966,1967,1968,1969,1970,1971,1972,1973,
-1974,1975,1976,1977,1978,1979,1980,1981,1982,
-1983,1984,1985,1986,1987,1988,1989,1990,
-1991,1992,1993,1994,1995,1996,1997,1998,
-1999,2000,2001,2002,2003,2004,2005,2006,
-2007,2008,2009,2010,2011,2012,2013,2014,
-2015,2016,2017,2018,2019,2020,2021,2022,
-2023,2024,2025
-];
-
-let seasonStats = [];
-
-for(const year of seasons){
-
-try{
-const res = await fetch(`data/baseball/players/${year}.json`);
-if(!res.ok) continue;
-
-const data = await res.json();
-const found = data.find(p => p.player_id === playerId);
-
-if(found){
-seasonStats.push({season:year, ...found});
-}
-
-}catch(err){
-continue;
-}
+renderPlayers(ALL_PLAYERS);
 
 }
 
-renderPlayer(playerInfo, seasonStats, TEAM_MAP);
+function renderPlayers(list){
 
-}catch(err){
-console.error(err);
-document.getElementById("content").innerHTML="<h1>Error loading player</h1>";
-}
+playersList.innerHTML="";
 
-}
+list.forEach(p=>{
 
-function renderPlayer(info, stats, TEAM_MAP){
+const div=document.createElement("div");
+div.className="player";
 
-let totals = {
-games:0,
-plate_appearances:0,
-at_bats:0,
-hits:0,
-home_runs:0,
-walks:0,
-strikeouts:0
+div.textContent = p.name;
+
+div.onclick=()=>{
+location.href=
+`baseball-player.html?player=${p.player_id}`;
 };
 
-stats.forEach(s=>{
-totals.games += s.games || 0;
-totals.plate_appearances += s.plate_appearances || 0;
-totals.at_bats += s.at_bats || 0;
-totals.hits += s.hits || 0;
-totals.home_runs += s.home_runs || 0;
-totals.walks += s.walks || 0;
-totals.strikeouts += s.strikeouts || 0;
+playersList.appendChild(div);
+
 });
 
-document.getElementById("content").innerHTML = `
+}
 
-<div class="hero">
-<h1>${info.name}</h1>
-<div class="sub">Career Overview</div>
-</div>
+function filterPlayers(){
 
-<div class="card">
-<h2>Career Totals</h2>
-<table>
-<tr><th>Games</th><th>PA</th><th>AB</th><th>Hits</th><th>HR</th><th>Walks</th><th>SO</th></tr>
-<tr>
-<td>${totals.games}</td>
-<td>${totals.plate_appearances}</td>
-<td>${totals.at_bats}</td>
-<td>${totals.hits}</td>
-<td>${totals.home_runs}</td>
-<td>${totals.walks}</td>
-<td>${totals.strikeouts}</td>
-</tr>
-</table>
-</div>
+const q=search.value.toLowerCase();
 
-<div class="card">
-<h2>Season Stats</h2>
-<table>
-<tr>
-<th>Season</th>
-<th>Team</th>
-<th>Games</th>
-<th>PA</th>
-<th>AB</th>
-<th>Hits</th>
-<th>HR</th>
-<th>Walks</th>
-<th>SO</th>
-</tr>
+const filtered=ALL_PLAYERS.filter(p=>
+p.name.toLowerCase().includes(q)
+);
 
-${stats.map(s=>`
-<tr>
-<td>${s.season}</td>
-<td>${TEAM_MAP[s.team] || s.team}</td>
-<td>${s.games ?? "-"}</td>
-<td>${s.plate_appearances ?? "-"}</td>
-<td>${s.at_bats ?? "-"}</td>
-<td>${s.hits ?? "-"}</td>
-<td>${s.home_runs ?? "-"}</td>
-<td>${s.walks ?? "-"}</td>
-<td>${s.strikeouts ?? "-"}</td>
-</tr>
-`).join("")}
-
-</table>
-</div>
-
-`;
+renderPlayers(filtered);
 
 }
+
+loadPlayers();
 
 </script>
 
