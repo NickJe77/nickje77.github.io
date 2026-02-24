@@ -129,12 +129,6 @@ tr:nth-child(even){background:#f7fbff;}
 </div>
 
 <div class="section">
-  <h2>Vs Opponent</h2>
-  <select id="oppSelect"></select>
-  <div class="cards" id="oppCards"></div>
-</div>
-
-<div class="section">
   <h2>Season Breakdown</h2>
   <table>
     <thead>
@@ -188,7 +182,6 @@ if(!playersIndex){
 }
 
 const playerMeta = playersIndex.find(p=>String(p.player_id)===String(playerId));
-
 if(!playerMeta){
   document.getElementById("playerName").textContent="Player not found";
   return;
@@ -202,7 +195,6 @@ if(!seasons) return;
 let career={games:0,plate_appearances:0,at_bats:0,hits:0,home_runs:0,walks:0,strikeouts:0};
 let teamAgg=new Map();
 let seasonRows=[];
-let oppAgg=new Map();
 
 for(const s of seasons){
 
@@ -226,39 +218,8 @@ for(const s of seasons){
   t.at_bats+=row.at_bats||0;
   t.hits+=row.hits||0;
   t.home_runs+=row.home_runs||0;
-
-  const games = await safeFetch(`/data/baseball/games/${s}.json`);
-  if(!games) continue;
-
-  for(const g of games){
-
-    const box = await safeFetch(`/data/baseball/games/${s}/${g.game_id}.json`);
-    if(!box) continue;
-
-    const playerLine = box.players?.find(p=>String(p.player_id)===String(playerId));
-    if(!playerLine) continue;
-
-    let opponent=null;
-
-    if(g.home_code===row.team) opponent=g.away_code;
-    else if(g.away_code===row.team) opponent=g.home_code;
-
-    if(!opponent) continue;
-
-    if(!oppAgg.has(opponent)){
-      oppAgg.set(opponent,{games:0,at_bats:0,hits:0,home_runs:0,walks:0});
-    }
-
-    const o=oppAgg.get(opponent);
-    o.games++;
-    o.at_bats+=playerLine.at_bats||0;
-    o.hits+=playerLine.hits||0;
-    o.home_runs+=playerLine.home_runs||0;
-    o.walks+=playerLine.walks||0;
-  }
 }
 
-/* CAREER */
 document.getElementById("careerCards").innerHTML=`
   <div class="card"><div class="value">${fmt(career.games)}</div><div class="label">Games</div></div>
   <div class="card"><div class="value">${fmt(career.at_bats)}</div><div class="label">AB</div></div>
@@ -267,7 +228,6 @@ document.getElementById("careerCards").innerHTML=`
   <div class="card"><div class="value">${avg(career.hits,career.at_bats)}</div><div class="label">AVG</div></div>
 `;
 
-/* TEAM SPLITS */
 const teamSelect=document.getElementById("teamSelect");
 teamSelect.innerHTML=[...teamAgg.keys()].map(t=>`<option value="${t}">${t}</option>`).join("");
 
@@ -284,24 +244,6 @@ teamSelect.onchange=()=>{
 };
 if(teamSelect.value) teamSelect.onchange();
 
-/* OPP SPLITS */
-const oppSelect=document.getElementById("oppSelect");
-oppSelect.innerHTML=[...oppAgg.keys()].sort().map(o=>`<option value="${o}">${o}</option>`).join("");
-
-oppSelect.onchange=()=>{
-  const d=oppAgg.get(oppSelect.value);
-  if(!d) return;
-  document.getElementById("oppCards").innerHTML=`
-    <div class="card"><div class="value">${fmt(d.games)}</div><div class="label">Games</div></div>
-    <div class="card"><div class="value">${fmt(d.at_bats)}</div><div class="label">AB</div></div>
-    <div class="card"><div class="value">${fmt(d.hits)}</div><div class="label">Hits</div></div>
-    <div class="card"><div class="value">${fmt(d.home_runs)}</div><div class="label">HR</div></div>
-    <div class="card"><div class="value">${avg(d.hits,d.at_bats)}</div><div class="label">AVG</div></div>
-  `;
-};
-if(oppSelect.value) oppSelect.onchange();
-
-/* SEASONS */
 document.getElementById("seasonBody").innerHTML=seasonRows.map(r=>`
   <tr>
     <td>${r.season}</td>
