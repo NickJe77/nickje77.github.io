@@ -23,9 +23,9 @@ a{color:#0056d6;font-weight:700;text-decoration:none;}
 <body>
 
 <div class="navbar">
-<a href="./index.html">Home</a>
-<a href="./baseball.html">Baseball</a>
-<a href="./baseball-seasons.html">Seasons</a>
+<a href="/index.html">Home</a>
+<a href="/baseball.html">Baseball</a>
+<a href="/baseball-seasons.html">Seasons</a>
 </div>
 
 <div class="page">
@@ -50,38 +50,48 @@ a{color:#0056d6;font-weight:700;text-decoration:none;}
 
 <script>
 
+let TEAMS = {}
+
 function param(name){
 return new URLSearchParams(location.search).get(name)
 }
 
+async function loadTeams(){
+const res = await fetch("/data/baseball/teams.json")
+const data = await res.json()
+data.forEach(t=>{
+TEAMS[t.code] = t.name
+})
+}
+
 async function loadSeason(){
 
-const season=param("season")
+const season = param("season")
 
 if(!season){
-document.getElementById("seasonTitle").textContent="Season Not Found"
+document.getElementById("seasonTitle").textContent = "Season Not Found"
 return
 }
 
-document.getElementById("seasonTitle").textContent=`${season} Season`
+document.getElementById("seasonTitle").textContent = `${season} Season`
 
-const res=await fetch(`./data/baseball/seasons/${season}.json`)
+const res = await fetch(`/data/baseball/seasons/${season}.json`)
 
 if(!res.ok){
-document.getElementById("seasonTitle").textContent="Season Not Found"
+document.getElementById("seasonTitle").textContent = "Season Not Found"
 return
 }
 
-const games=await res.json()
+const games = await res.json()
 
-document.getElementById("seasonBody").innerHTML=
-games.map(g=>`
+document.getElementById("seasonBody").innerHTML =
+games.map(g => `
 <tr>
 <td>${g.date}</td>
-<td>${g.away_team}</td>
-<td>${g.home_team}</td>
+<td>${TEAMS[g.away_code] || g.away_team || g.away_code}</td>
+<td>${TEAMS[g.home_code] || g.home_team || g.home_code}</td>
 <td>
-<a href="./baseball-game.html?game=${g.game_id}">
+<a href="/baseball-game.html?season=${season}&game=${g.game_id}">
 ${g.away_score} - ${g.home_score}
 </a>
 </td>
@@ -90,7 +100,12 @@ ${g.away_score} - ${g.home_score}
 
 }
 
-loadSeason()
+async function init(){
+await loadTeams()
+await loadSeason()
+}
+
+init()
 
 </script>
 
