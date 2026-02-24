@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Baseball Leaders | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+font-family:Inter,system-ui,Arial;
+margin:0;
+background:#f4f6f8;
+}
+
+.navbar{
+display:flex;
+justify-content:center;
+gap:24px;
+padding:16px 0;
+background:white;
+border-bottom:1px solid #ddd;
+font-weight:600;
+}
+
+.navbar a{
+text-decoration:none;
+color:#0056d6;
+}
+
+.page{
+max-width:1200px;
+margin:auto;
+padding:20px;
+}
+
+.hero{
+background:linear-gradient(90deg,#002D72,#C8102E);
+color:white;
+padding:30px;
+border-radius:22px;
+margin-bottom:20px;
+}
+
+.hero h1{
+margin:0;
+font-size:40px;
+}
+
+.controls{
+background:#fff;
+padding:18px;
+border-radius:16px;
+margin-bottom:28px;
+display:flex;
+justify-content:center;
+}
+
+.controls select{
+font-size:18px;
+padding:10px 20px;
+border-radius:12px;
+border:1px solid #ddd;
+font-weight:700;
+min-width:160px;
+cursor:pointer;
+}
+
+.sectionTitle{
+font-size:24px;
+font-weight:900;
+margin:30px 0 12px;
+text-align:center;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+background:#fff;
+border-radius:16px;
+overflow:hidden;
+margin-bottom:30px;
+}
+
+th,td{
+padding:12px;
+border-bottom:1px solid #eee;
+text-align:center;
+}
+
+th{
+background:#002D72;
+color:#fff;
+}
+
+tbody tr:nth-child(even){
+background:#eaf3ff;
+}
+
+tbody tr:hover{
+background:#d6e6ff;
+}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="baseball.html">Baseball</a>
+<a href="baseball-seasons.html">Seasons</a>
+<a href="baseball-players.html">Players</a>
+<a href="baseball-standings.html">Standings</a>
+<a href="baseball-leaders.html">Leaders</a>
+</div>
+
+<div class="page">
+
+<div class="hero">
+<h1>Yearly Leaders</h1>
+</div>
+
+<div class="controls">
+<select id="yearSel"></select>
+</div>
+
+<div id="leadersContainer"></div>
+
+</div>
+
+<script>
+
+async function init(){
+
+const years =
+await fetch("data/baseball/index.json")
+.then(r=>r.json());
+
+years.sort((a,b)=>b-a);
+
+const sel=document.getElementById("yearSel");
+sel.innerHTML = years.map(y=>`<option>${y}</option>`).join("");
+
+sel.onchange = ()=> loadYear(parseInt(sel.value));
+
+loadYear(years[0]);
+}
+
+async function loadYear(year){
+
+const players =
+await fetch(`data/baseball/players/${year}.json`)
+.then(r=>r.json());
+
+renderLeaders(players, year);
+}
+
+function renderLeaders(players, year){
+
+const container=document.getElementById("leadersContainer");
+container.innerHTML="";
+
+/* Helper to build a leaderboard */
+function buildTable(title, data, valueField, formatter=null){
+
+if(!data || data.length===0) return;
+
+let html = `
+<div class="sectionTitle">${title}</div>
+<table>
+<thead>
+<tr>
+<th>Rank</th>
+<th>Player</th>
+<th>Team</th>
+<th>${valueField.toUpperCase()}</th>
+</tr>
+</thead>
+<tbody>
+`;
+
+data.forEach((p,i)=>{
+html += `
+<tr>
+<td>${i+1}</td>
+<td>${p.player_name}</td>
+<td>${p.team}</td>
+<td>${formatter ? formatter(p[valueField]) : p[valueField]}</td>
+</tr>
+`;
+});
+
+html += `</tbody></table>`;
+
+container.innerHTML += html;
+}
+
+/* Sort helpers */
+const top10 = (arr, field, filter=null, format=null) => {
+let list = filter ? arr.filter(filter) : [...arr];
+list.sort((a,b)=>(b[field]||0)-(a[field]||0));
+return list.slice(0,10);
+};
+
+/* Leaders */
+
+buildTable(
+"Batting Average",
+top10(players, "hits", p=>p.at_bats>=100)
+.map(p=>{
+p.batting_avg = (p.hits/p.at_bats).toFixed(3);
+return p;
+})
+.sort((a,b)=>b.batting_avg - a.batting_avg)
+.slice(0,10),
+"batting_avg"
+);
+
+buildTable(
+"Home Runs",
+top10(players,"home_runs"),
+"home_runs"
+);
+
+buildTable(
+"Hits",
+top10(players,"hits"),
+"hits"
+);
+
+if(players[0]?.rbis !== undefined){
+buildTable(
+"RBIs",
+top10(players,"rbis"),
+"rbis"
+);
+}
+
+buildTable(
+"Strikeouts",
+top10(players,"strikeouts"),
+"strikeouts"
+);
+
+buildTable(
+"Walks",
+top10(players,"walks"),
+"walks"
+);
+
+}
+
+init();
+
+</script>
+
+</body>
+</html>
