@@ -55,33 +55,6 @@ body{
   margin:0;
   font-size:40px;
 }
-.search-wrap{
-  display:flex;
-  gap:10px;
-  min-width:420px;
-}
-.search{
-  width:100%;
-  padding:18px 22px;
-  border-radius:16px;
-  border:2px solid rgba(255,255,255,0.45);
-  font-size:20px;
-  background:rgba(255,255,255,0.15);
-  color:white;
-  font-weight:600;
-  height:56px;
-}
-.btn{
-  padding:0 22px;
-  border-radius:16px;
-  border:2px solid rgba(255,255,255,0.45);
-  background:rgba(255,255,255,0.18);
-  color:white;
-  font-weight:800;
-  font-size:16px;
-  height:56px;
-  cursor:pointer;
-}
 .section{
   background:var(--card);
   padding:20px;
@@ -140,17 +113,13 @@ tr:nth-child(even){background:#f7fbff;}
   <a href="/index.html">Home</a>
   <a href="/baseball.html">Baseball</a>
   <a href="/baseball-seasons.html">Seasons</a>
+  <a href="/baseball-leaders.html">Leaders</a>
 </div>
 
 <div class="page">
 
 <div class="hero">
   <h1 id="playerName">Loading...</h1>
-  <div class="search-wrap">
-    <input id="playerSearch" class="search" list="playerList" placeholder="Search player name..." />
-    <datalist id="playerList"></datalist>
-    <button id="goBtn" class="btn">Go</button>
-  </div>
 </div>
 
 <div class="section">
@@ -194,206 +163,162 @@ tr:nth-child(even){background:#f7fbff;}
 </div>
 
 <script>
-(function(){
-
-const TEAM_NAMES = {
-
-  /* Modern MLB */
-  "ARI":"Arizona Diamondbacks",
-  "ATL":"Atlanta Braves",
-  "BAL":"Baltimore Orioles",
-  "BOS":"Boston Red Sox",
-  "CHC":"Chicago Cubs","CHN":"Chicago Cubs",
-  "CHW":"Chicago White Sox","CHA":"Chicago White Sox",
-  "CIN":"Cincinnati Reds",
-  "CLE":"Cleveland Guardians","CLV":"Cleveland Indians",
-  "COL":"Colorado Rockies",
-  "DET":"Detroit Tigers",
-  "HOU":"Houston Astros",
-  "KC":"Kansas City Royals","KCA":"Kansas City Royals",
-  "LAA":"Los Angeles Angels","ANA":"Los Angeles Angels","CAL":"California Angels",
-  "LAD":"Los Angeles Dodgers","LAN":"Los Angeles Dodgers",
-  "MIA":"Miami Marlins","FLO":"Florida Marlins",
-  "MIL":"Milwaukee Brewers",
-  "MIN":"Minnesota Twins",
-  "NYM":"New York Mets","NYN":"New York Mets",
-  "NYY":"New York Yankees","NYA":"New York Yankees",
-  "OAK":"Oakland Athletics",
-  "PHI":"Philadelphia Phillies",
-  "PIT":"Pittsburgh Pirates",
-  "SD":"San Diego Padres","SDN":"San Diego Padres",
-  "SEA":"Seattle Mariners",
-  "SF":"San Francisco Giants","SFN":"San Francisco Giants",
-  "STL":"St. Louis Cardinals","SLN":"St. Louis Cardinals",
-  "TB":"Tampa Bay Rays","TBA":"Tampa Bay Rays",
-  "TEX":"Texas Rangers",
-  "TOR":"Toronto Blue Jays",
-  "WAS":"Washington Nationals","WSH":"Washington Nationals",
-
-  /* Historical */
-  "BRO":"Brooklyn Dodgers",
-  "MON":"Montreal Expos",
-  "SLB":"St. Louis Browns",
-  "BSN":"Boston Braves",
-  "MLN":"Milwaukee Braves",
-  "WSA":"Washington Senators",
-  "PHA":"Philadelphia Athletics",
-  "SEP":"Seattle Pilots",
-
-  /* Retrosheet Numbered Codes */
-  "NY1":"New York Giants",
-  "NY2":"New York Yankees",
-  "NY3":"New York Mets",
-  "BS1":"Boston Braves",
-  "BS2":"Boston Red Sox",
-  "PH1":"Philadelphia Phillies",
-  "SL1":"St. Louis Cardinals"
-};
-
-function teamFull(code){
-  if(!code) return "";
-  const clean = String(code).trim().toUpperCase();
-  return TEAM_NAMES[clean] || clean;
-}
+(async function(){
 
 function fmt(n){return Number(n||0).toLocaleString();}
 function avg(h,ab){return ab?(h/ab).toFixed(3):"0.000";}
 
 async function safeFetch(url){
-  const r = await fetch(url);
-  if(!r.ok) return null;
-  return r.json();
+  try{
+    const r = await fetch(url);
+    if(!r.ok) return null;
+    return r.json();
+  }catch{
+    return null;
+  }
 }
 
 const qs = new URLSearchParams(location.search);
 const playerId = qs.get("player");
-
-let playersIndex = [];
-
-function getId(p){ return p.player_id ?? p.id ?? ""; }
-function getName(p){ return p.player_name ?? p.name ?? ""; }
-
-function handleSearch(){
-  const input = document.getElementById("playerSearch").value.trim().toLowerCase();
-  if(!input) return;
-  const match = playersIndex.find(p => getName(p).toLowerCase() === input);
-  if(match){
-    window.location.href = `/baseball-player.html?player=${encodeURIComponent(getId(match))}`;
-  }
+if(!playerId){
+  document.getElementById("playerName").textContent="Player not found";
+  return;
 }
 
-async function init(){
+const playersIndex = await safeFetch("/data/baseball/players.json");
+if(!playersIndex) return;
 
-  const players = await safeFetch("/data/baseball/players.json");
-  if(players){
-    playersIndex = players;
-    document.getElementById("playerList").innerHTML =
-      players.map(p=>`<option value="${getName(p)}"></option>`).join("");
-    const match = players.find(p=>String(getId(p))===String(playerId));
-    if(match){
-      document.getElementById("playerName").textContent = getName(match);
-    }
+const playerMeta = playersIndex.find(p=>String(p.player_id)===String(playerId));
+if(!playerMeta){
+  document.getElementById("playerName").textContent="Player not found";
+  return;
+}
+
+document.getElementById("playerName").textContent = playerMeta.player_name;
+
+const seasons = await safeFetch("/data/baseball/index.json");
+if(!seasons) return;
+
+let career={games:0,plate_appearances:0,at_bats:0,hits:0,home_runs:0,walks:0,strikeouts:0};
+let teamAgg=new Map();
+let seasonRows=[];
+
+for(const s of seasons){
+
+  const data=await safeFetch(`/data/baseball/players/${s}.json`);
+  if(!data) continue;
+
+  const row=data.find(p=>String(p.player_id)===String(playerId));
+  if(!row) continue;
+
+  seasonRows.push({...row,season:s});
+
+  for(const k in career){
+    career[k]+=row[k]||0;
   }
 
-  document.getElementById("goBtn").addEventListener("click", handleSearch);
-  document.getElementById("playerSearch").addEventListener("keydown", e=>{
-    if(e.key==="Enter") handleSearch();
-  });
-
-  const seasons = await safeFetch("/data/baseball/index.json");
-  if(!seasons) return;
-
-  let career={games:0,plate_appearances:0,at_bats:0,hits:0,home_runs:0,walks:0,strikeouts:0};
-  let teamAgg=new Map();
-  let seasonRows=[];
-
-  for(const s of seasons){
-    const data=await safeFetch(`/data/baseball/players/${s}.json`);
-    if(!data) continue;
-    const row=data.find(p=>String(getId(p))===String(playerId));
-    if(!row) continue;
-
-    seasonRows.push({...row,season:s});
-    for(const k in career){
-      career[k]+=row[k]||0;
-    }
-
-    if(!teamAgg.has(row.team)){
-      teamAgg.set(row.team,{games:0,at_bats:0,hits:0,home_runs:0,walks:0});
-    }
-    const t=teamAgg.get(row.team);
-    t.games+=row.games||0;
-    t.at_bats+=row.at_bats||0;
-    t.hits+=row.hits||0;
-    t.home_runs+=row.home_runs||0;
-    t.walks+=row.walks||0;
+  if(!teamAgg.has(row.team)){
+    teamAgg.set(row.team,{games:0,at_bats:0,hits:0,home_runs:0});
   }
+  const t=teamAgg.get(row.team);
+  t.games+=row.games||0;
+  t.at_bats+=row.at_bats||0;
+  t.hits+=row.hits||0;
+  t.home_runs+=row.home_runs||0;
+}
 
-  document.getElementById("careerCards").innerHTML=`
-    <div class="card"><div class="value">${fmt(career.games)}</div><div class="label">Games</div></div>
-    <div class="card"><div class="value">${fmt(career.at_bats)}</div><div class="label">AB</div></div>
-    <div class="card"><div class="value">${fmt(career.hits)}</div><div class="label">Hits</div></div>
-    <div class="card"><div class="value">${fmt(career.home_runs)}</div><div class="label">HR</div></div>
-    <div class="card"><div class="value">${avg(career.hits,career.at_bats)}</div><div class="label">AVG</div></div>
+document.getElementById("careerCards").innerHTML=`
+  <div class="card"><div class="value">${fmt(career.games)}</div><div class="label">Games</div></div>
+  <div class="card"><div class="value">${fmt(career.at_bats)}</div><div class="label">AB</div></div>
+  <div class="card"><div class="value">${fmt(career.hits)}</div><div class="label">Hits</div></div>
+  <div class="card"><div class="value">${fmt(career.home_runs)}</div><div class="label">HR</div></div>
+  <div class="card"><div class="value">${avg(career.hits,career.at_bats)}</div><div class="label">AVG</div></div>
+`;
+
+const teamSelect=document.getElementById("teamSelect");
+teamSelect.innerHTML=[...teamAgg.keys()].map(t=>
+  `<option value="${t}">${t}</option>`
+).join("");
+
+teamSelect.onchange=()=>{
+  const t=teamAgg.get(teamSelect.value);
+  if(!t) return;
+  document.getElementById("teamCards").innerHTML=`
+    <div class="card"><div class="value">${fmt(t.games)}</div><div class="label">Games</div></div>
+    <div class="card"><div class="value">${fmt(t.at_bats)}</div><div class="label">AB</div></div>
+    <div class="card"><div class="value">${fmt(t.hits)}</div><div class="label">Hits</div></div>
+    <div class="card"><div class="value">${fmt(t.home_runs)}</div><div class="label">HR</div></div>
+    <div class="card"><div class="value">${avg(t.hits,t.at_bats)}</div><div class="label">AVG</div></div>
   `;
+};
+if(teamSelect.value) teamSelect.onchange();
 
-  const teamSelect=document.getElementById("teamSelect");
-  teamSelect.innerHTML=[...teamAgg.keys()].map(t=>
-    `<option value="${t}">${teamFull(t)}</option>`
-  ).join("");
+document.getElementById("seasonBody").innerHTML=seasonRows.map(r=>`
+  <tr>
+    <td>${r.season}</td>
+    <td>${r.team}</td>
+    <td>${r.games}</td>
+    <td>${r.plate_appearances}</td>
+    <td>${r.at_bats}</td>
+    <td>${r.hits}</td>
+    <td>${r.home_runs}</td>
+    <td>${r.walks}</td>
+    <td>${r.strikeouts}</td>
+    <td>${avg(r.hits,r.at_bats)}</td>
+  </tr>
+`).join("");
 
-  teamSelect.onchange=()=>{
-    const t=teamAgg.get(teamSelect.value);
-    if(!t) return;
-    document.getElementById("teamCards").innerHTML=`
-      <div class="card"><div class="value">${fmt(t.games)}</div><div class="label">Games</div></div>
-      <div class="card"><div class="value">${fmt(t.at_bats)}</div><div class="label">AB</div></div>
-      <div class="card"><div class="value">${fmt(t.hits)}</div><div class="label">Hits</div></div>
-      <div class="card"><div class="value">${fmt(t.home_runs)}</div><div class="label">HR</div></div>
-      <div class="card"><div class="value">${avg(t.hits,t.at_bats)}</div><div class="label">AVG</div></div>
-    `;
-  };
-  if(teamSelect.value) teamSelect.onchange();
+/* -------- DYNAMIC OPPONENT SPLITS -------- */
 
-  document.getElementById("seasonBody").innerHTML=seasonRows.map(r=>`
-    <tr>
-      <td>${r.season}</td>
-      <td>${teamFull(r.team)}</td>
-      <td>${r.games}</td>
-      <td>${r.plate_appearances}</td>
-      <td>${r.at_bats}</td>
-      <td>${r.hits}</td>
-      <td>${r.home_runs}</td>
-      <td>${r.walks}</td>
-      <td>${r.strikeouts}</td>
-      <td>${avg(r.hits,r.at_bats)}</td>
-    </tr>
-  `).join("");
+let oppAgg = new Map();
 
-  const oppData=await safeFetch(`/data/baseball/opponents/${playerId}.json`);
-  if(oppData){
-    const sel=document.getElementById("oppSelect");
-    sel.innerHTML=oppData.map(o=>
-      `<option value="${o.opponent}">${teamFull(o.opponent)}</option>`
-    ).join("");
+for(const r of seasonRows){
 
-    sel.onchange=()=>{
-      const d=oppData.find(o=>o.opponent===sel.value);
-      if(!d) return;
-      document.getElementById("oppCards").innerHTML=`
-        <div class="card"><div class="value">${fmt(d.games)}</div><div class="label">Games</div></div>
-        <div class="card"><div class="value">${fmt(d.at_bats)}</div><div class="label">AB</div></div>
-        <div class="card"><div class="value">${fmt(d.hits)}</div><div class="label">Hits</div></div>
-        <div class="card"><div class="value">${fmt(d.home_runs)}</div><div class="label">HR</div></div>
-        <div class="card"><div class="value">${avg(d.hits,d.at_bats)}</div><div class="label">AVG</div></div>
-      `;
-    };
-    if(sel.value) sel.onchange();
+  const games = await safeFetch(`/data/baseball/seasons/${r.season}.json`);
+  if(!games) continue;
+
+  for(const g of games){
+
+    let opponent=null;
+    let win=false;
+
+    if(g.home_code===r.team){
+      opponent=g.away_code;
+      win=g.home_score>g.away_score;
+    }
+    else if(g.away_code===r.team){
+      opponent=g.home_code;
+      win=g.away_score>g.home_score;
+    }
+
+    if(!opponent) continue;
+
+    if(!oppAgg.has(opponent)){
+      oppAgg.set(opponent,{games:0,wins:0,losses:0});
+    }
+
+    const o=oppAgg.get(opponent);
+    o.games++;
+    if(win) o.wins++; else o.losses++;
   }
-
 }
 
-init();
+const oppSelect=document.getElementById("oppSelect");
+oppSelect.innerHTML=[...oppAgg.keys()].sort().map(o=>
+  `<option value="${o}">${o}</option>`
+).join("");
+
+oppSelect.onchange=()=>{
+  const d=oppAgg.get(oppSelect.value);
+  if(!d) return;
+  document.getElementById("oppCards").innerHTML=`
+    <div class="card"><div class="value">${fmt(d.games)}</div><div class="label">Games</div></div>
+    <div class="card"><div class="value">${fmt(d.wins)}</div><div class="label">Wins</div></div>
+    <div class="card"><div class="value">${fmt(d.losses)}</div><div class="label">Losses</div></div>
+    <div class="card"><div class="value">${(d.wins/d.games).toFixed(3)}</div><div class="label">Win %</div></div>
+  `;
+};
+if(oppSelect.value) oppSelect.onchange();
 
 })();
 </script>
