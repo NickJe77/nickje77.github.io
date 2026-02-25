@@ -22,6 +22,8 @@ tr:nth-child(even){background:#f0f6ff;}
 a{color:#0056d6;text-decoration:none;font-weight:700;}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
 @media(max-width:900px){.grid{grid-template-columns:1fr;}}
+.scoreline{font-size:20px;font-weight:700;margin-top:8px;}
+.meta-line{margin-top:6px;}
 </style>
 </head>
 
@@ -39,7 +41,10 @@ a{color:#0056d6;text-decoration:none;font-weight:700;}
 
 <div class="hero">
 <h1 id="title">Loading...</h1>
-<div class="sub" id="subtitle"></div>
+<div id="scoreline" class="scoreline"></div>
+<div id="subtitle" class="sub"></div>
+<div id="venueLine" class="meta-line"></div>
+<div id="crowdLine" class="meta-line"></div>
 </div>
 
 <div class="section">
@@ -48,82 +53,62 @@ a{color:#0056d6;text-decoration:none;font-weight:700;}
 </div>
 
 <div class="grid">
-<div class="section">
-<h2>Away Batting</h2>
-<div id="awayBatting"></div>
-</div>
-
-<div class="section">
-<h2>Home Batting</h2>
-<div id="homeBatting"></div>
-</div>
-
-<div class="section">
-<h2>Away Pitching</h2>
-<div id="awayPitching"></div>
-</div>
-
-<div class="section">
-<h2>Home Pitching</h2>
-<div id="homePitching"></div>
-</div>
+<div class="section"><h2>Away Batting</h2><div id="awayBatting"></div></div>
+<div class="section"><h2>Home Batting</h2><div id="homeBatting"></div></div>
+<div class="section"><h2>Away Pitching</h2><div id="awayPitching"></div></div>
+<div class="section"><h2>Home Pitching</h2><div id="homePitching"></div></div>
 </div>
 
 </div>
 
 <script>
 
-let PLAYERS = {}
-let TEAMS = {}
+let PLAYERS={}
+let TEAMS={}
+let PARKS={}
 
-function param(name){
-return new URLSearchParams(window.location.search).get(name)
-}
-
-function seasonFromGameId(id){
-const m=id.match(/(\d{4})/)
-return m?m[1]:""
-}
-
-function playerName(id){
-return PLAYERS[id] || id
-}
-
-function teamName(code){
-return TEAMS[code] || code
-}
+function param(name){return new URLSearchParams(window.location.search).get(name)}
+function seasonFromGameId(id){const m=id.match(/(\d{4})/);return m?m[1]:""}
+function playerName(id){return PLAYERS[id]||id}
+function teamName(code){return TEAMS[code]||code}
+function parkName(code){return PARKS[code]||code}
 
 async function loadLookups(){
 
-// Players lookup
+// players
 try{
-const res = await fetch("/data/baseball/players.json")
+const res=await fetch("/data/baseball/players.json")
 if(res.ok){
-const data = await res.json()
-if(Array.isArray(data)){
-data.forEach(p=>{
-if(p.player_id && p.name){
-PLAYERS[p.player_id] = p.name
-}
-})
-}
+const data=await res.json()
+data.forEach(p=>{PLAYERS[p.player_id]=p.name})
 }
 }catch(e){}
 
-// Teams lookup (map each code)
+// teams
 try{
-const res = await fetch("/data/baseball/teams.json")
+const res=await fetch("/data/baseball/teams.json")
 if(res.ok){
-const data = await res.json()
-if(Array.isArray(data)){
-data.forEach(team=>{
-if(Array.isArray(team.codes)){
-team.codes.forEach(code=>{
-TEAMS[code] = team.name
+const data=await res.json()
+data.forEach(t=>{
+t.codes.forEach(code=>{
+TEAMS[code]=t.name
+})
 })
 }
-})
+}catch(e){}
+
+// ballparks
+try{
+const res=await fetch("/data/baseball/ballparks.csv")
+if(res.ok){
+const text=await res.text()
+const lines=text.split("\n").slice(1)
+lines.forEach(l=>{
+const parts=l.split(",")
+if(parts.length>1){
+PARKS[parts[0].trim()]=parts[1].trim()
 }
+})
 }
 }catch(e){}
 
@@ -131,35 +116,47 @@ TEAMS[code] = team.name
 
 async function loadGame(){
 
-const id = param("game")
-if(!id) return
+const id=param("game")
+if(!id)return
 
-const season = seasonFromGameId(id)
+const season=seasonFromGameId(id)
 
-const res = await fetch(`/data/baseball/games/${season}/${id}.json`)
+// load boxscore
+const gameRes=await fetch(`/data/baseball/games/${season}/${id}.json`)
+if(!gameRes.ok){return}
+const game=await gameRes.json()
 
-if(!res.ok){
-document.getElementById("meta").innerHTML="<b>Game file not found.</b>"
-return
+// load season metadata
+const seasonRes=await fetch(`/data/baseball/seasons/${season}.json`)
+let metaData=null
+if(seasonRes.ok){
+const seasonData=await seasonRes.json()
+metaData=seasonData.find(g=>g.game_id===id)
 }
 
-const game = await res.json()
-
-render(game)
+render(game,metaData)
 
 }
 
-function render(game){
+function render(game,metaData){
 
-const homeFull = teamName(game.home_code)
-const awayFull = teamName(game.away_code)
+const homeFull=teamName(game.home_code)
+const awayFull=teamName(game.away_code)
 
-document.getElementById("title").innerText = `${awayFull} @ ${homeFull}`
-document.getElementById("subtitle").innerText = `Season ${game.season}`
+document.getElementById("title").innerText=`${awayFull} @ ${homeFull}`
 
-document.getElementById("meta").innerHTML = `
-<b>Game ID:</b> ${game.game_id}
-`
+if(metaData){
+document.getElementById("scoreline").innerText=
+`${awayFull} ${metaData.away_score} – ${homeFull} ${metaData.home_score}`
+
+document.getElementById("subtitle").innerText=`${metaData.date}`
+
+document.getElementById("venueLine").innerText=
+`Venue: ${parkName(metaData.venue)}`
+
+document.getElementById("crowdLine").innerText=
+metaData.attendance?`Attendance: ${metaData.attendance.toLocaleString()}`:""
+}
 
 renderTable("awayBatting",game.batters_away)
 renderTable("homeBatting",game.batters_home)
@@ -169,35 +166,25 @@ renderTable("homePitching",game.pitchers_home)
 }
 
 function renderTable(id,data){
-
-if(!data || data.length===0){
+if(!data||data.length===0){
 document.getElementById(id).innerHTML="No data available."
 return
 }
-
-const keys = Object.keys(data[0]).filter(k=>k!=="player_id")
-
+const keys=Object.keys(data[0]).filter(k=>k!=="player_id")
 let html="<table><thead><tr><th>Player</th>"
-
 keys.forEach(k=>html+=`<th>${k}</th>`)
-
 html+="</tr></thead><tbody>"
-
 data.forEach(p=>{
 html+=`<tr>
 <td><a href="./baseball-player.html?player=${p.player_id}">${playerName(p.player_id)}</a></td>`
 keys.forEach(k=>html+=`<td>${p[k]}</td>`)
 html+="</tr>"
 })
-
 html+="</tbody></table>"
-
 document.getElementById(id).innerHTML=html
-
 }
 
 async function init(){
-await loadGame()
 await loadLookups()
 await loadGame()
 }
