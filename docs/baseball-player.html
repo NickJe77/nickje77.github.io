@@ -15,89 +15,21 @@
   --line:#e6e8ee;
   --soft:#f0f6ff;
 }
-body{
-  font-family: Inter, system-ui, Arial, sans-serif;
-  margin:0;
-  background:var(--bg);
-  color:var(--text);
-}
-.navbar{
-  display:flex;
-  justify-content:center;
-  gap:24px;
-  padding:16px;
-  background:#fff;
-  border-bottom:1px solid #ddd;
-  font-weight:700;
-}
-.navbar a{
-  text-decoration:none;
-  color:#0056d6;
-}
-.page{
-  max-width:1200px;
-  margin:auto;
-  padding:20px;
-}
-.hero{
-  background:linear-gradient(90deg,var(--blue), #3a256e, var(--red));
-  color:white;
-  padding:30px;
-  border-radius:20px;
-  margin-bottom:18px;
-}
-.hero h1{
-  margin:0;
-  font-size:40px;
-}
-.section{
-  background:var(--card);
-  padding:20px;
-  border-radius:18px;
-  margin-bottom:18px;
-}
-.cards{
-  display:grid;
-  grid-template-columns:repeat(5,1fr);
-  gap:14px;
-}
-.card{
-  background:var(--soft);
-  border-radius:14px;
-  padding:16px;
-  text-align:center;
-}
-.card .value{
-  font-size:26px;
-  font-weight:900;
-}
-.card .label{
-  margin-top:6px;
-  font-size:12px;
-  color:#555;
-}
-select{
-  padding:14px 16px;
-  border-radius:12px;
-  border:1px solid var(--line);
-  font-weight:700;
-  font-size:16px;
-  height:48px;
-  margin-bottom:14px;
-}
-table{
-  width:100%;
-  border-collapse:collapse;
-}
-th{
-  background:var(--blue);
-  color:white;
-  padding:10px;
-}
-td{
-  padding:8px;
-  border-bottom:1px solid #eee;
-}
+body{font-family:Inter,system-ui,Arial;margin:0;background:var(--bg);color:var(--text);}
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:#fff;border-bottom:1px solid #ddd;font-weight:700;}
+.navbar a{text-decoration:none;color:#0056d6;}
+.page{max-width:1200px;margin:auto;padding:20px;}
+.hero{background:linear-gradient(90deg,var(--blue), #3a256e, var(--red));color:white;padding:30px;border-radius:20px;margin-bottom:18px;}
+.hero h1{margin:0;font-size:40px;}
+.section{background:var(--card);padding:20px;border-radius:18px;margin-bottom:18px;}
+.cards{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;}
+.card{background:var(--soft);border-radius:14px;padding:16px;text-align:center;}
+.card .value{font-size:26px;font-weight:900;}
+.card .label{margin-top:6px;font-size:12px;color:#555;}
+select{padding:14px 16px;border-radius:12px;border:1px solid var(--line);font-weight:700;font-size:16px;height:48px;margin-bottom:14px;}
+table{width:100%;border-collapse:collapse;}
+th{background:var(--blue);color:white;padding:10px;}
+td{padding:8px;border-bottom:1px solid #eee;}
 tr:nth-child(even){background:#f7fbff;}
 </style>
 </head>
@@ -189,6 +121,26 @@ if(!playerMeta){
 
 document.getElementById("playerName").textContent = playerMeta.name;
 
+/* ---- LOAD TEAM LOOKUP ---- */
+
+const teamsData = await safeFetch("/data/baseball/teams.json");
+let TEAM_LOOKUP = {};
+if(teamsData){
+  teamsData.forEach(t=>{
+    if(Array.isArray(t.codes)){
+      t.codes.forEach(code=>{
+        TEAM_LOOKUP[code] = t.name;
+      });
+    }
+  });
+}
+
+function teamName(code){
+  return TEAM_LOOKUP[code] || code;
+}
+
+/* ---- LOAD SEASONS ---- */
+
 const seasons = await safeFetch("/data/baseball/index.json");
 if(!seasons) return;
 
@@ -210,15 +162,20 @@ for(const s of seasons){
     career[k]+=row[k]||0;
   }
 
-  if(!teamAgg.has(row.team)){
-    teamAgg.set(row.team,{games:0,at_bats:0,hits:0,home_runs:0});
+  const teamFull = teamName(row.team);
+
+  if(!teamAgg.has(teamFull)){
+    teamAgg.set(teamFull,{games:0,at_bats:0,hits:0,home_runs:0});
   }
-  const t=teamAgg.get(row.team);
+
+  const t=teamAgg.get(teamFull);
   t.games+=row.games||0;
   t.at_bats+=row.at_bats||0;
   t.hits+=row.hits||0;
   t.home_runs+=row.home_runs||0;
 }
+
+/* ---- CAREER ---- */
 
 document.getElementById("careerCards").innerHTML=`
   <div class="card"><div class="value">${fmt(career.games)}</div><div class="label">Games</div></div>
@@ -227,6 +184,8 @@ document.getElementById("careerCards").innerHTML=`
   <div class="card"><div class="value">${fmt(career.home_runs)}</div><div class="label">HR</div></div>
   <div class="card"><div class="value">${avg(career.hits,career.at_bats)}</div><div class="label">AVG</div></div>
 `;
+
+/* ---- BY TEAM ---- */
 
 const teamSelect=document.getElementById("teamSelect");
 teamSelect.innerHTML=[...teamAgg.keys()].map(t=>`<option value="${t}">${t}</option>`).join("");
@@ -244,10 +203,14 @@ teamSelect.onchange=()=>{
 };
 if(teamSelect.value) teamSelect.onchange();
 
-document.getElementById("seasonBody").innerHTML=seasonRows.map(r=>`
+/* ---- SEASON TABLE ---- */
+
+document.getElementById("seasonBody").innerHTML=seasonRows
+.sort((a,b)=>b.season-a.season)
+.map(r=>`
   <tr>
     <td>${r.season}</td>
-    <td>${r.team}</td>
+    <td>${teamName(r.team)}</td>
     <td>${r.games}</td>
     <td>${r.plate_appearances}</td>
     <td>${r.at_bats}</td>
