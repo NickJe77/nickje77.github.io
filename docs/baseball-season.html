@@ -11,7 +11,6 @@
   --red:#C8102E;
   --bg:#f4f6f8;
   --card:#ffffff;
-  --text:#0b1220;
   --line:#e6e8ee;
   --zebra:#f0f6ff;
   --hover:#e0ecff;
@@ -21,7 +20,6 @@ body{
   font-family:Inter,system-ui,Arial;
   margin:0;
   background:var(--bg);
-  color:var(--text);
 }
 
 .navbar{
@@ -29,7 +27,7 @@ body{
   justify-content:center;
   gap:22px;
   padding:16px 0;
-  background:#fff;
+  background:#ffffff;
   border-bottom:1px solid #ddd;
   font-weight:600;
 }
@@ -38,36 +36,28 @@ body{
   text-decoration:none;
   font-size:18px;
 }
-.navbar a:hover{text-decoration:underline;}
 
 .page{
   max-width:1200px;
   margin:auto;
-  padding:22px 20px 40px;
+  padding:25px 20px 40px;
 }
 
 .hero{
   background:linear-gradient(90deg,var(--blue),var(--red));
-  color:#fff;
+  color:white;
+  padding:32px;
   border-radius:18px;
-  padding:28px 26px;
-  margin:18px 0 16px;
-  box-shadow:0 8px 24px rgba(0,0,0,0.10);
+  margin-bottom:20px;
 }
 .hero h1{
   margin:0;
   font-size:42px;
-  letter-spacing:0.2px;
-}
-.hero .sub{
-  margin-top:8px;
-  opacity:0.92;
-  font-weight:600;
 }
 
 .card{
   background:var(--card);
-  border-radius:16px;
+  border-radius:14px;
   border:1px solid var(--line);
   overflow:hidden;
 }
@@ -75,19 +65,17 @@ body{
 table{
   width:100%;
   border-collapse:collapse;
-  background:#fff;
 }
 
 th, td{
-  padding:12px 12px;
+  padding:12px;
   border-bottom:1px solid var(--line);
-  text-align:left;
   font-size:14px;
 }
 
 th{
   background:#f0f3f7;
-  font-weight:800;
+  font-weight:700;
 }
 
 tbody tr:nth-child(even){
@@ -102,29 +90,16 @@ tbody tr:hover{
   background:var(--hover);
 }
 
-.score{font-weight:800;}
+.score{
+  font-weight:700;
+}
 
 .error{
-  background:#f8d7da;
-  padding:14px 14px;
-  border-radius:12px;
-  margin:14px 0 14px;
-  font-weight:700;
-  border:1px solid rgba(0,0,0,0.08);
-}
-
-.debug{
-  margin-top:10px;
+  background:#ffe5e5;
+  padding:14px;
+  border-radius:8px;
+  margin-bottom:15px;
   font-weight:600;
-  white-space:pre-wrap;
-  font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size:12px;
-  opacity:0.95;
-}
-
-.small{
-  font-size:12px;
-  opacity:0.9;
 }
 </style>
 </head>
@@ -140,203 +115,120 @@ tbody tr:hover{
 
 <div class="hero">
   <h1 id="seasonTitle">MLB Season</h1>
-  <div class="sub" id="seasonSub">Regular season games</div>
 </div>
 
 <div id="errorBox"></div>
 
 <div class="card">
-  <table>
-    <thead>
-      <tr>
-        <th style="width:120px;">Date</th>
-        <th>Away</th>
-        <th>Home</th>
-        <th style="width:90px;">Score</th>
-        <th>Venue</th>
-        <th style="width:130px;">Attendance</th>
-      </tr>
-    </thead>
-    <tbody id="gamesBody"></tbody>
-  </table>
+<table>
+<thead>
+<tr>
+  <th>Date</th>
+  <th>Away</th>
+  <th>Home</th>
+  <th>Score</th>
+  <th>Venue</th>
+  <th>Attendance</th>
+</tr>
+</thead>
+<tbody id="gamesBody"></tbody>
+</table>
 </div>
 
 </div>
 
 <script>
-(function(){
-
 const params = new URLSearchParams(window.location.search);
 const season = params.get("season");
-const errorBox = document.getElementById("errorBox");
-const tbody = document.getElementById("gamesBody");
-
-function showError(msg, debugLines){
-  const debug = (debugLines && debugLines.length)
-    ? `<div class="debug">${debugLines.join("\n")}</div>`
-    : "";
-  errorBox.innerHTML = `<div class="error">${msg}${debug}</div>`;
-}
-
-function cacheBust(url){
-  const sep = url.includes("?") ? "&" : "?";
-  return url + sep + "v=" + Date.now();
-}
-
-async function fetchFirstOk(urls, as){
-  // as: "json" | "text"
-  const tries = [];
-  for(const u of urls){
-    const url = cacheBust(u);
-    try{
-      const res = await fetch(url, { cache: "no-store" });
-      tries.push(`${res.ok ? "✅" : "❌"} ${u}  (${res.status})`);
-      if(!res.ok) continue;
-
-      if(as === "json") return { ok:true, data: await res.json(), tries };
-      return { ok:true, data: await res.text(), tries };
-
-    }catch(e){
-      tries.push(`❌ ${u}  (network error)`);
-    }
-  }
-  return { ok:false, data:null, tries };
-}
-
-function buildParkMap(csvText){
-  const map = {};
-  if(!csvText) return map;
-  const lines = csvText.trim().split(/\r?\n/);
-  for(const line of lines){
-    if(!line.trim()) continue;
-    const parts = line.split(",");
-    if(parts.length < 2) continue;
-    const code = parts[0].trim();
-    const name = parts[1].trim();
-    if(code) map[code] = name;
-  }
-  return map;
-}
-
-function resolveGameId(game){
-  // Prefer explicit id fields if present
-  if(game.game_id) return String(game.game_id);
-  if(game.gameId) return String(game.gameId);
-  if(game.id) return String(game.id);
-
-  // Fallback to constructed pattern only if we have the pieces
-  if(game.home_code && game.date){
-    const ymd = String(game.date).replace(/-/g,"");
-    return String(game.home_code) + ymd + "0";
-  }
-  return "";
-}
 
 if(!season){
-  showError("No season specified");
-  return;
-}
+  document.getElementById("errorBox").innerHTML =
+    `<div class="error">No season specified</div>`;
+}else{
 
-document.getElementById("seasonTitle").textContent = "MLB Season " + season;
+document.getElementById("seasonTitle").textContent =
+  "MLB Season " + season;
 
-(async function main(){
+Promise.all([
+  fetch("data/baseball/seasons/" + season + ".json").then(r=>{
+    if(!r.ok) throw new Error();
+    return r.json();
+  }),
+  fetch("data/baseball/team-names.json").then(r=>r.json()),
+  fetch("data/baseball/ballpark.csv").then(r=>r.text())
+])
+.then(([seasonData, teamNames, ballparkCSV])=>{
 
-  // Try multiple plausible paths (relative + absolute + docs-prefixed)
-  const seasonUrls = [
-    `data/baseball/seasons/${season}.json`,
-    `./data/baseball/seasons/${season}.json`,
-    `/data/baseball/seasons/${season}.json`,
-    `docs/data/baseball/seasons/${season}.json`,
-    `./docs/data/baseball/seasons/${season}.json`,
-    `/docs/data/baseball/seasons/${season}.json`
-  ];
+  const parkMap = {};
+  const lines = ballparkCSV.trim().split("\n");
+  lines.forEach(line=>{
+    const parts = line.split(",");
+    if(parts.length >= 2){
+      parkMap[parts[0].trim()] = parts[1].trim();
+    }
+  });
 
-  const teamUrls = [
-    `data/baseball/team-names.json`,
-    `./data/baseball/team-names.json`,
-    `/data/baseball/team-names.json`,
-    `docs/data/baseball/team-names.json`,
-    `./docs/data/baseball/team-names.json`,
-    `/docs/data/baseball/team-names.json`
-  ];
-
-  const parkUrls = [
-    `data/baseball/ballpark.csv`,
-    `./data/baseball/ballpark.csv`,
-    `/data/baseball/ballpark.csv`,
-    `docs/data/baseball/ballpark.csv`,
-    `./docs/data/baseball/ballpark.csv`,
-    `/docs/data/baseball/ballpark.csv`
-  ];
-
-  const seasonRes = await fetchFirstOk(seasonUrls, "json");
-  if(!seasonRes.ok){
-    showError(`Could not load season file for ${season}`, [
-      "Tried:",
-      ...seasonRes.tries
-    ]);
-    return;
-  }
-
-  // team names + ballparks are “best effort”
-  const teamRes = await fetchFirstOk(teamUrls, "json");
-  const parkRes = await fetchFirstOk(parkUrls, "text");
-
-  const teamNames = teamRes.ok ? teamRes.data : {};
-  const parkMap = parkRes.ok ? buildParkMap(parkRes.data) : {};
-
-  const debugLines = [];
-  if(!teamRes.ok){
-    debugLines.push("Team names failed. Tried:");
-    debugLines.push(...teamRes.tries);
-  }
-  if(!parkRes.ok){
-    debugLines.push("Ballparks failed. Tried:");
-    debugLines.push(...parkRes.tries);
-  }
-  if(debugLines.length){
-    showError("Loaded season data, but some supporting files failed (names/parks).", debugLines);
-  }else{
-    errorBox.innerHTML = "";
-  }
-
-  const seasonData = Array.isArray(seasonRes.data) ? seasonRes.data : [];
+  const tbody = document.getElementById("gamesBody");
   tbody.innerHTML = "";
 
-  seasonData.forEach(game => {
-    const gameId = resolveGameId(game);
-    const link = gameId ? (`baseball-game.html?season=${encodeURIComponent(season)}&game=${encodeURIComponent(gameId)}`) : "";
+  seasonData.forEach(game=>{
 
-    const awayName = teamNames[game.away_code] || game.away_team || game.away_code || "";
-    const homeName = teamNames[game.home_code] || game.home_team || game.home_code || "";
+    const gameId = game.game_id || "";
 
-    const score = (game.away_score !== undefined && game.home_score !== undefined)
-      ? `${game.away_score}-${game.home_score}`
-      : "";
+    const link =
+      "baseball-game.html?season=" +
+      season +
+      "&game=" +
+      gameId;
 
-    const venueName = parkMap[game.venue] || game.venue || "";
-    const att = (game.attendance !== undefined && game.attendance !== null && game.attendance !== "")
-      ? Number(game.attendance).toLocaleString()
-      : "";
+    const awayName =
+      teamNames[game.away_code] ||
+      game.away_team ||
+      game.away_code;
+
+    const homeName =
+      teamNames[game.home_code] ||
+      game.home_team ||
+      game.home_code;
+
+    const venueName =
+      parkMap[game.venue] ||
+      game.venue ||
+      "";
+
+    const score =
+      (game.away_score !== undefined &&
+       game.home_score !== undefined)
+        ? game.away_score + "-" + game.home_score
+        : "";
 
     const tr = document.createElement("tr");
-    tr.onclick = () => { if(link) window.location.href = link; };
+    tr.onclick = () => {
+      if(gameId){
+        window.location.href = link;
+      }
+    };
 
     tr.innerHTML = `
-      <td>${game.date || ""}</td>
+      <td>${game.date}</td>
       <td>${awayName}</td>
       <td>${homeName}</td>
       <td class="score">${score}</td>
       <td>${venueName}</td>
-      <td>${att}</td>
+      <td>${game.attendance ? Number(game.attendance).toLocaleString() : ""}</td>
     `;
 
     tbody.appendChild(tr);
+
   });
 
-})();
+})
+.catch(()=>{
+  document.getElementById("errorBox").innerHTML =
+    `<div class="error">Could not load season file for ${season}</div>`;
+});
 
-})();
+}
 </script>
 
 </body>
