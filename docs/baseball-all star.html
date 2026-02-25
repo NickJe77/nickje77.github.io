@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MLB All-Star Game | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+:root{
+  --blue:#002D72;
+  --red:#C8102E;
+  --bg:#f4f6f8;
+  --line:#e6e8ee;
+}
+
+body{
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:var(--bg);
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px;
+  background:#fff;
+  border-bottom:1px solid #ddd;
+  font-weight:700;
+}
+
+.navbar a{
+  text-decoration:none;
+  color:#0056d6;
+}
+
+.page{
+  max-width:1000px;
+  margin:auto;
+  padding:30px;
+}
+
+.hero{
+  background:linear-gradient(90deg,var(--blue),var(--red));
+  color:#fff;
+  padding:30px;
+  border-radius:20px;
+  margin-bottom:25px;
+}
+
+.hero h1{margin:0;font-size:32px;}
+
+.year-select{
+  padding:10px 14px;
+  font-size:16px;
+  border-radius:10px;
+  border:1px solid var(--line);
+  font-weight:600;
+  margin-bottom:20px;
+}
+
+.game-card{
+  background:#fff;
+  padding:20px;
+  border-radius:16px;
+  border:1px solid var(--line);
+  cursor:pointer;
+  transition:.2s;
+}
+
+.game-card:hover{
+  background:#eaf3ff;
+  transform:translateY(-2px);
+}
+
+.scoreline{
+  font-size:20px;
+  font-weight:700;
+  margin:10px 0;
+}
+
+.meta{
+  font-size:14px;
+  color:#555;
+}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="baseball.html">Baseball</a>
+<a href="baseball-seasons.html">Seasons</a>
+<a href="baseball-world-series.html">World Series</a>
+</div>
+
+<div class="page">
+
+<div class="hero">
+<h1>MLB All-Star Game</h1>
+</div>
+
+<select id="yearSelect" class="year-select"></select>
+
+<div id="gameContainer"></div>
+
+</div>
+
+<script>
+
+async function fetchJSON(url){
+  const r = await fetch(url);
+  if(!r.ok) return null;
+  return await r.json();
+}
+
+(async function(){
+
+  const teams = await fetchJSON("/data/baseball/teams.json");
+  const parksCSV = await fetch("/data/baseball/ballparks.csv");
+  let PARKS={};
+
+  if(parksCSV.ok){
+    const text = await parksCSV.text();
+    text.split("\n").slice(1).forEach(l=>{
+      const parts=l.split(",");
+      if(parts.length>1) PARKS[parts[0].trim()] = parts[1].trim();
+    });
+  }
+
+  function parkName(code){ return PARKS[code] || code; }
+
+  const yearSelect=document.getElementById("yearSelect");
+  const gameContainer=document.getElementById("gameContainer");
+
+  // Build year list dynamically from seasons folder index
+  const seasonIndex = await fetchJSON("/data/baseball/seasons/index.json");
+
+  const years = seasonIndex.sort((a,b)=>b-a);
+
+  years.forEach(y=>{
+    const opt=document.createElement("option");
+    opt.value=y;
+    opt.textContent=y;
+    yearSelect.appendChild(opt);
+  });
+
+  yearSelect.value = years[0];
+
+  async function renderYear(year){
+
+    gameContainer.innerHTML="";
+
+    const seasonData = await fetchJSON(`/data/baseball/seasons/${year}.json`);
+    if(!seasonData) return;
+
+    const allStar = seasonData.find(g =>
+      g.home_code==="ALS" || g.home_code==="NLS"
+    );
+
+    if(!allStar){
+      gameContainer.innerHTML="<p>No All-Star Game data available.</p>";
+      return;
+    }
+
+    const winner =
+      allStar.away_score > allStar.home_score
+        ? allStar.away_team
+        : allStar.home_team;
+
+    const div=document.createElement("div");
+    div.className="game-card";
+
+    div.innerHTML=`
+      <div><strong>${year} All-Star Game</strong></div>
+      <div class="scoreline">
+        ${allStar.away_team} ${allStar.away_score}
+        –
+        ${allStar.home_team} ${allStar.home_score}
+      </div>
+      <div class="meta">
+        Date: ${allStar.date}<br>
+        Venue: ${parkName(allStar.venue)}<br>
+        Attendance: ${allStar.attendance.toLocaleString()}<br>
+        Winner: ${winner}
+      </div>
+    `;
+
+    div.addEventListener("click",()=>{
+      window.location.href =
+        `baseball-game.html?season=${year}&date=${allStar.date}&home=${allStar.home_code}&away=${allStar.away_code}`;
+    });
+
+    gameContainer.appendChild(div);
+  }
+
+  renderYear(years[0]);
+
+  yearSelect.addEventListener("change",()=>{
+    renderYear(yearSelect.value);
+  });
+
+})();
+</script>
+
+</body>
+</html>
