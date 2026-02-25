@@ -99,33 +99,30 @@ if(parts.length>1) PARKS[parts[0].trim()]=parts[1].trim()
 
 async function loadGame(){
 
-let id=param("game")
-let season=param("season")
-let date=param("date")
-let home=param("home")
-let away=param("away")
+const id=param("game")
 
-let game=null
-let meta=null
-
-// --- CASE 1: standard ?game=GAME_ID ---
+// ---------------------------
+// NORMAL REGULAR-SEASON PATH
+// ---------------------------
 if(id){
 
-season=id.match(/(\d{4})/)[1]
+const season=id.match(/(\d{4})/)[1]
 
 const gameRes=await fetch(`/data/baseball/games/${season}/${id}.json`)
 if(!gameRes.ok){
 document.getElementById("title").innerText="Game not found"
 return
 }
-game=await gameRes.json()
+const game=await gameRes.json()
 
 const seasonRes=await fetch(`/data/baseball/seasons/${season}.json`)
+let meta=null
+
 if(seasonRes.ok){
 const seasonData=await seasonRes.json()
-const gameDate=id.match(/(\d{4})(\d{2})(\d{2})/)
-if(gameDate){
-const formatted=`${gameDate[1]}-${gameDate[2]}-${gameDate[3]}`
+const m=id.match(/(\d{4})(\d{2})(\d{2})/)
+if(m){
+const formatted=`${m[1]}-${m[2]}-${m[3]}`
 meta=seasonData.find(g=>
 g.home_code===game.home_code &&
 g.date===formatted
@@ -133,19 +130,28 @@ g.date===formatted
 }
 }
 
+render(game,meta)
+return
 }
 
-// --- CASE 2: postseason link ---
-else if(season && date && home && away){
+// ---------------------------
+// POSTSEASON FALLBACK
+// ---------------------------
+const season=param("season")
+const date=param("date")
+const home=param("home")
+const away=param("away")
+
+if(season && date && home && away){
 
 const seasonRes=await fetch(`/data/baseball/seasons/${season}.json`)
 if(!seasonRes.ok){
 document.getElementById("title").innerText="Game not found"
 return
 }
-const seasonData=await seasonRes.json()
 
-meta=seasonData.find(g=>
+const seasonData=await seasonRes.json()
+const meta=seasonData.find(g=>
 g.date===date &&
 g.home_code===home &&
 g.away_code===away
@@ -156,25 +162,19 @@ document.getElementById("title").innerText="Game not found"
 return
 }
 
-// We don't have individual game JSON for postseason yet
-// So render using season meta only
-game={
+render({
 home_code:meta.home_code,
 away_code:meta.away_code,
 batters_home:[],
 batters_away:[],
 pitchers_home:[],
 pitchers_away:[]
-}
+},meta)
 
-}
-
-if(!game){
-document.getElementById("title").innerText="Game not found"
 return
 }
 
-render(game,meta)
+document.getElementById("title").innerText="Game not found"
 
 }
 
