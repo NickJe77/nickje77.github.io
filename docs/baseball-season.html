@@ -9,7 +9,7 @@
 body{
   font-family:Inter,system-ui,Arial;
   margin:0;
-  background:#fafafa;
+  background:#f4f6f8;
 }
 
 .navbar{
@@ -17,8 +17,8 @@ body{
   justify-content:center;
   gap:22px;
   padding:16px 0;
+  background:#ffffff;
   border-bottom:1px solid #ddd;
-  background:#fff;
   font-weight:600;
 }
 
@@ -42,12 +42,12 @@ h1{
 table{
   width:100%;
   border-collapse:collapse;
-  background:#fff;
+  background:#ffffff;
 }
 
 th, td{
   padding:10px;
-  border-bottom:1px solid #eee;
+  border-bottom:1px solid #e6e8ee;
   text-align:left;
   font-size:14px;
 }
@@ -74,10 +74,10 @@ tbody tr:hover{
 }
 
 .error{
-  background:#f8d7da;
-  padding:14px;
-  border-radius:6px;
-  margin-bottom:15px;
+  background:#ffe5e5;
+  padding:15px;
+  border-radius:8px;
+  margin-bottom:20px;
   font-weight:600;
 }
 </style>
@@ -123,57 +123,85 @@ if (!season) {
   document.getElementById("seasonTitle").textContent =
     "MLB Season " + season;
 
-  fetch(`data/baseball/seasons/${season}.json`)
-    .then(res => {
-      if (!res.ok) throw new Error("Season file not found");
-      return res.json();
-    })
-    .then(data => {
+  Promise.all([
+    fetch(`data/baseball/seasons/${season}.json`).then(r=>{
+      if(!r.ok) throw new Error("Season file not found");
+      return r.json();
+    }),
+    fetch(`data/baseball/team-names.json`).then(r=>r.json()),
+    fetch(`data/baseball/ballpark.csv`).then(r=>r.text())
+  ])
+  .then(([seasonData, teamNames, ballparkCSV])=>{
 
-      const tbody = document.getElementById("gamesBody");
-      tbody.innerHTML = "";
+    // Build ballpark map
+    const parkMap = {};
+    const lines = ballparkCSV.trim().split("\n");
 
-      data.forEach(game => {
-
-        const gameId = game.game_id || "";
-
-        const link =
-          "baseball-game.html?season=" +
-          season +
-          "&game=" +
-          gameId;
-
-        const score =
-          (game.away_score !== undefined &&
-           game.home_score !== undefined)
-            ? game.away_score + "-" + game.home_score
-            : "";
-
-        const tr = document.createElement("tr");
-
-        tr.onclick = () => {
-          if (gameId) {
-            window.location.href = link;
-          }
-        };
-
-        tr.innerHTML = `
-          <td>${game.date || ""}</td>
-          <td>${game.away_team || game.away_code || ""}</td>
-          <td>${game.home_team || game.home_code || ""}</td>
-          <td class="score">${score}</td>
-          <td>${game.venue || ""}</td>
-          <td>${game.attendance ? Number(game.attendance).toLocaleString() : ""}</td>
-        `;
-
-        tbody.appendChild(tr);
-      });
-
-    })
-    .catch(() => {
-      document.getElementById("errorBox").innerHTML =
-        `<div class="error">Could not load season file for ${season}</div>`;
+    lines.forEach(line=>{
+      const parts = line.split(",");
+      if(parts.length >= 2){
+        parkMap[parts[0].trim()] = parts[1].trim();
+      }
     });
+
+    const tbody = document.getElementById("gamesBody");
+    tbody.innerHTML = "";
+
+    seasonData.forEach(game=>{
+
+      // Use real game_id if present
+      const gameId = game.game_id
+        ? game.game_id
+        : (game.home_code + game.date.replace(/-/g,"") + "0");
+
+      const link =
+        "baseball-game.html?season=" +
+        season +
+        "&game=" +
+        gameId;
+
+      const awayName =
+        teamNames[game.away_code] ||
+        game.away_team ||
+        game.away_code;
+
+      const homeName =
+        teamNames[game.home_code] ||
+        game.home_team ||
+        game.home_code;
+
+      const venueName =
+        parkMap[game.venue] ||
+        game.venue ||
+        "";
+
+      const score =
+        (game.away_score !== undefined &&
+         game.home_score !== undefined)
+          ? game.away_score + "-" + game.home_score
+          : "";
+
+      const tr = document.createElement("tr");
+      tr.onclick = () => window.location.href = link;
+
+      tr.innerHTML = `
+        <td>${game.date}</td>
+        <td>${awayName}</td>
+        <td>${homeName}</td>
+        <td class="score">${score}</td>
+        <td>${venueName}</td>
+        <td>${game.attendance ? Number(game.attendance).toLocaleString() : ""}</td>
+      `;
+
+      tbody.appendChild(tr);
+
+    });
+
+  })
+  .catch(()=>{
+    document.getElementById("errorBox").innerHTML =
+      `<div class="error">Could not load season file for ${season}</div>`;
+  });
 
 }
 </script>
