@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MLB Postseason | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+:root{
+  --blue:#002D72;
+  --red:#C8102E;
+  --bg:#f4f6f8;
+  --card:#ffffff;
+  --text:#0b1220;
+  --line:#e6e8ee;
+}
+
+body{
+  font-family:Inter,system-ui,Arial,sans-serif;
+  margin:0;
+  background:var(--bg);
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px;
+  background:#fff;
+  border-bottom:1px solid #ddd;
+  font-weight:700;
+}
+
+.navbar a{
+  text-decoration:none;
+  color:#0056d6;
+}
+
+.page{
+  max-width:1300px;
+  margin:auto;
+  padding:20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,var(--blue),var(--red));
+  color:#fff;
+  padding:30px;
+  border-radius:20px;
+  margin-bottom:20px;
+}
+
+.year-select{
+  padding:10px 14px;
+  font-size:16px;
+  border-radius:10px;
+  border:1px solid var(--line);
+  font-weight:600;
+  margin-bottom:25px;
+}
+
+.bracket{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:20px;
+}
+
+.round{
+  background:#fff;
+  padding:16px;
+  border-radius:16px;
+  border:1px solid var(--line);
+}
+
+.round h3{
+  margin:0 0 12px 0;
+  font-size:15px;
+  text-transform:uppercase;
+  letter-spacing:.5px;
+  color:#444;
+}
+
+.series{
+  background:#f7f9fc;
+  padding:10px;
+  border-radius:10px;
+  margin-bottom:10px;
+  cursor:pointer;
+  transition:.2s;
+}
+
+.series:hover{
+  background:#e8f0ff;
+  transform:translateY(-2px);
+}
+
+.team{
+  font-weight:700;
+}
+
+.result{
+  font-size:13px;
+  color:#555;
+}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="baseball.html">Baseball</a>
+  <a href="baseball-seasons.html">Seasons</a>
+  <a href="baseball-world-series.html">World Series</a>
+</div>
+
+<div class="page">
+
+  <div class="hero">
+    <h1>MLB Postseason</h1>
+  </div>
+
+  <select id="yearSelect" class="year-select"></select>
+
+  <div id="bracketContainer" class="bracket"></div>
+
+</div>
+
+<script>
+
+async function fetchJSON(url){
+  const r = await fetch(url);
+  if(!r.ok) return null;
+  return await r.json();
+}
+
+(async function(){
+
+  const postseason = await fetchJSON("/data/baseball/postseason.json");
+  const teams = await fetchJSON("/data/baseball/teams.json");
+
+  if(!postseason || !teams){
+    document.getElementById("bracketContainer").innerHTML =
+      "<p>Postseason data unavailable.</p>";
+    return;
+  }
+
+  function getTeamName(code){
+    const t = teams.find(x => x.codes.includes(code));
+    return t ? t.name : code;
+  }
+
+  const roundOrder = ["WC","DS","CS","WS"];
+  const roundNames = {
+    WC:"Wild Card",
+    DS:"Division Series",
+    CS:"League Championship Series",
+    WS:"World Series"
+  };
+
+  const yearSelect = document.getElementById("yearSelect");
+  const bracketContainer = document.getElementById("bracketContainer");
+
+  const years = [...new Set(postseason.map(d=>d.year))]
+    .sort((a,b)=>b-a);
+
+  years.forEach(y=>{
+    const opt=document.createElement("option");
+    opt.value=y;
+    opt.textContent=y;
+    yearSelect.appendChild(opt);
+  });
+
+  yearSelect.value = years[0];
+
+  function renderBracket(year){
+
+    bracketContainer.innerHTML="";
+
+    roundOrder.forEach(r=>{
+      const roundData = postseason.filter(d=>d.year===year && d.round===r);
+      if(roundData.length===0) return;
+
+      const roundDiv=document.createElement("div");
+      roundDiv.className="round";
+      roundDiv.innerHTML=`<h3>${roundNames[r]}</h3>`;
+
+      roundData.forEach(s=>{
+        const seriesDiv=document.createElement("div");
+        seriesDiv.className="series";
+
+        seriesDiv.innerHTML=`
+          <div class="team">${getTeamName(s.champion_code)}</div>
+          <div>${getTeamName(s.runner_up_code)}</div>
+          <div class="result">${s.result}</div>
+        `;
+
+        seriesDiv.addEventListener("click",()=>{
+          window.location.href =
+            `baseball-series.html?year=${year}&round=${r}&team1=${s.champion_code}&team2=${s.runner_up_code}`;
+        });
+
+        roundDiv.appendChild(seriesDiv);
+      });
+
+      bracketContainer.appendChild(roundDiv);
+    });
+  }
+
+  renderBracket(years[0]);
+
+  yearSelect.addEventListener("change",()=>{
+    renderBracket(yearSelect.value);
+  });
+
+})();
+</script>
+
+</body>
+</html>
