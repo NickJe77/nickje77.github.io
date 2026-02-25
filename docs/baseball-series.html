@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MLB Series | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:#f4f6f8;
+}
+
+.page{
+  max-width:1000px;
+  margin:auto;
+  padding:30px;
+}
+
+h1{
+  margin-bottom:20px;
+}
+
+.game{
+  background:white;
+  padding:16px;
+  border-radius:14px;
+  margin-bottom:12px;
+  cursor:pointer;
+  border:1px solid #e6e8ee;
+  transition:.2s;
+}
+
+.game:hover{
+  background:#eaf3ff;
+  transform:translateY(-2px);
+}
+
+.date{
+  font-weight:700;
+}
+
+.score{
+  margin-top:6px;
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <h1 id="seriesTitle"></h1>
+  <div id="gamesContainer"></div>
+</div>
+
+<script>
+
+function getParam(name){
+  const url = new URL(window.location.href);
+  return url.searchParams.get(name);
+}
+
+(async function(){
+
+  const year = getParam("year");
+  const team1 = getParam("team1");
+  const team2 = getParam("team2");
+
+  const seasonData = await fetch(`/data/baseball/seasons/${year}.json`)
+    .then(r=>r.json());
+
+  const gamesContainer = document.getElementById("gamesContainer");
+  const title = document.getElementById("seriesTitle");
+
+  title.textContent = `${team1} vs ${team2} (${year})`;
+
+  const seriesGames = seasonData.filter(g =>
+    (
+      (g.home_code === team1 && g.away_code === team2) ||
+      (g.home_code === team2 && g.away_code === team1)
+    )
+    &&
+    g.date.includes(year + "-10")  // October filter (postseason)
+  );
+
+  seriesGames
+    .sort((a,b)=> new Date(a.date) - new Date(b.date))
+    .forEach(game=>{
+
+      const div = document.createElement("div");
+      div.className = "game";
+
+      div.innerHTML = `
+        <div class="date">${game.date}</div>
+        <div class="score">
+          ${game.away_team} ${game.away_score}
+          -
+          ${game.home_score} ${game.home_team}
+        </div>
+      `;
+
+      div.addEventListener("click",()=>{
+        window.location.href =
+          `baseball-game.html?season=${year}&date=${game.date}&home=${game.home_code}&away=${game.away_code}`;
+      });
+
+      gamesContainer.appendChild(div);
+
+    });
+
+})();
+</script>
+
+</body>
+</html>
