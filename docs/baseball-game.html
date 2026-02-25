@@ -13,6 +13,8 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
 .hero{background:linear-gradient(90deg,#002D72,#C8102E);color:white;padding:30px;border-radius:20px;margin-bottom:20px;}
 .hero h1{margin:0;font-size:36px;}
 .hero .sub{margin-top:10px;font-size:18px;opacity:.95;}
+.scoreline{font-size:20px;font-weight:700;margin-top:8px;}
+.meta-line{margin-top:6px;}
 .section{background:white;padding:18px;border-radius:16px;margin-bottom:20px;}
 .section h2{margin:0 0 12px 0;}
 table{width:100%;border-collapse:collapse;}
@@ -22,8 +24,6 @@ tr:nth-child(even){background:#f0f6ff;}
 a{color:#0056d6;text-decoration:none;font-weight:700;}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
 @media(max-width:900px){.grid{grid-template-columns:1fr;}}
-.scoreline{font-size:20px;font-weight:700;margin-top:8px;}
-.meta-line{margin-top:6px;}
 </style>
 </head>
 
@@ -63,12 +63,14 @@ a{color:#0056d6;text-decoration:none;font-weight:700;}
 
 <script>
 
-let PLAYERS={}
-let TEAMS={}
-let PARKS={}
+let PLAYERS={}, TEAMS={}, PARKS={}
 
-function param(name){return new URLSearchParams(window.location.search).get(name)}
-function seasonFromGameId(id){const m=id.match(/(\d{4})/);return m?m[1]:""}
+function param(n){return new URLSearchParams(window.location.search).get(n)}
+function seasonFromGameId(id){return id.match(/(\d{4})/)[1]}
+function extractDate(id){
+const m=id.match(/(\d{4})(\d{2})(\d{2})/)
+return `${m[1]}-${m[2]}-${m[3]}`
+}
 function playerName(id){return PLAYERS[id]||id}
 function teamName(code){return TEAMS[code]||code}
 function parkName(code){return PARKS[code]||code}
@@ -76,41 +78,30 @@ function parkName(code){return PARKS[code]||code}
 async function loadLookups(){
 
 // players
-try{
-const res=await fetch("/data/baseball/players.json")
-if(res.ok){
-const data=await res.json()
-data.forEach(p=>{PLAYERS[p.player_id]=p.name})
+const p=await fetch("/data/baseball/players.json")
+if(p.ok){
+const d=await p.json()
+d.forEach(pl=>PLAYERS[pl.player_id]=pl.name)
 }
-}catch(e){}
 
 // teams
-try{
-const res=await fetch("/data/baseball/teams.json")
-if(res.ok){
-const data=await res.json()
-data.forEach(t=>{
-t.codes.forEach(code=>{
-TEAMS[code]=t.name
-})
+const t=await fetch("/data/baseball/teams.json")
+if(t.ok){
+const d=await t.json()
+d.forEach(team=>{
+team.codes.forEach(c=>TEAMS[c]=team.name)
 })
 }
-}catch(e){}
 
-// ballparks
-try{
-const res=await fetch("/data/baseball/ballparks.csv")
-if(res.ok){
-const text=await res.text()
-const lines=text.split("\n").slice(1)
-lines.forEach(l=>{
+// parks
+const b=await fetch("/data/baseball/ballparks.csv")
+if(b.ok){
+const text=await b.text()
+text.split("\n").slice(1).forEach(l=>{
 const parts=l.split(",")
-if(parts.length>1){
-PARKS[parts[0].trim()]=parts[1].trim()
-}
+if(parts.length>1) PARKS[parts[0].trim()]=parts[1].trim()
 })
 }
-}catch(e){}
 
 }
 
@@ -120,42 +111,42 @@ const id=param("game")
 if(!id)return
 
 const season=seasonFromGameId(id)
-
-// load boxscore
 const gameRes=await fetch(`/data/baseball/games/${season}/${id}.json`)
-if(!gameRes.ok){return}
+if(!gameRes.ok)return
 const game=await gameRes.json()
 
-// load season metadata
+// load season file
 const seasonRes=await fetch(`/data/baseball/seasons/${season}.json`)
-let metaData=null
+let meta=null
+
 if(seasonRes.ok){
 const seasonData=await seasonRes.json()
-metaData=seasonData.find(g=>g.game_id===id)
+const date=extractDate(id)
+meta=seasonData.find(g=>
+g.home_code===game.home_code &&
+g.date===date
+)
 }
 
-render(game,metaData)
+render(game,meta)
 
 }
 
-function render(game,metaData){
+function render(game,meta){
 
 const homeFull=teamName(game.home_code)
 const awayFull=teamName(game.away_code)
 
 document.getElementById("title").innerText=`${awayFull} @ ${homeFull}`
 
-if(metaData){
+if(meta){
 document.getElementById("scoreline").innerText=
-`${awayFull} ${metaData.away_score} – ${homeFull} ${metaData.home_score}`
+`${awayFull} ${meta.away_score} – ${homeFull} ${meta.home_score}`
 
-document.getElementById("subtitle").innerText=`${metaData.date}`
-
-document.getElementById("venueLine").innerText=
-`Venue: ${parkName(metaData.venue)}`
-
+document.getElementById("subtitle").innerText=meta.date
+document.getElementById("venueLine").innerText=`Venue: ${parkName(meta.venue)}`
 document.getElementById("crowdLine").innerText=
-metaData.attendance?`Attendance: ${metaData.attendance.toLocaleString()}`:""
+meta.attendance?`Attendance: ${meta.attendance.toLocaleString()}`:""
 }
 
 renderTable("awayBatting",game.batters_away)
