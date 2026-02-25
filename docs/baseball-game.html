@@ -73,8 +73,8 @@ a{color:#0056d6;text-decoration:none;font-weight:700;}
 
 <script>
 
-let PLAYERS={}
-let TEAMS={}
+let PLAYERS = {}
+let TEAMS = {}
 
 function param(name){
 return new URLSearchParams(window.location.search).get(name)
@@ -85,39 +85,43 @@ const m=id.match(/(\d{4})/)
 return m?m[1]:""
 }
 
-async function loadLookups(){
-
-const playersRes=await fetch("/data/baseball/players.json")
-PLAYERS=await playersRes.json()
-
-const teamsRes=await fetch("/data/baseball/team-names.json")
-TEAMS=await teamsRes.json()
-
-}
-
 function playerName(id){
-return PLAYERS[id]||id
+return PLAYERS[id] || id
 }
 
 function teamName(code){
-return TEAMS[code]||code
+return TEAMS[code] || code
+}
+
+async function loadLookups(){
+
+try{
+const pRes = await fetch("/data/baseball/players.json")
+if(pRes.ok) PLAYERS = await pRes.json()
+}catch(e){}
+
+try{
+const tRes = await fetch("/data/baseball/teams.json")
+if(tRes.ok) TEAMS = await tRes.json()
+}catch(e){}
+
 }
 
 async function loadGame(){
 
-const id=param("game")
-if(!id)return
+const id = param("game")
+if(!id) return
 
-const season=seasonFromGameId(id)
+const season = seasonFromGameId(id)
 
-const res=await fetch(`/data/baseball/games/${season}/${id}.json`)
+const res = await fetch(`/data/baseball/games/${season}/${id}.json`)
 
 if(!res.ok){
 document.getElementById("meta").innerHTML="<b>Game file not found.</b>"
 return
 }
 
-const game=await res.json()
+const game = await res.json()
 
 render(game)
 
@@ -125,13 +129,13 @@ render(game)
 
 function render(game){
 
-const homeFull=teamName(game.home_code)
-const awayFull=teamName(game.away_code)
+const homeFull = teamName(game.home_code)
+const awayFull = teamName(game.away_code)
 
-document.getElementById("title").innerText=`${awayFull} @ ${homeFull}`
-document.getElementById("subtitle").innerText=`Season ${game.season}`
+document.getElementById("title").innerText = `${awayFull} @ ${homeFull}`
+document.getElementById("subtitle").innerText = `Season ${game.season}`
 
-document.getElementById("meta").innerHTML=`
+document.getElementById("meta").innerHTML = `
 <b>Game ID:</b> ${game.game_id}
 `
 
@@ -144,12 +148,12 @@ renderTable("homePitching",game.pitchers_home)
 
 function renderTable(id,data){
 
-if(!data||data.length===0){
+if(!data || data.length===0){
 document.getElementById(id).innerHTML="No data available."
 return
 }
 
-const keys=Object.keys(data[0]).filter(k=>k!=="player_id")
+const keys = Object.keys(data[0]).filter(k=>k!=="player_id")
 
 let html="<table><thead><tr><th>Player</th>"
 
@@ -171,6 +175,7 @@ document.getElementById(id).innerHTML=html
 }
 
 async function init(){
+await loadGame()
 await loadLookups()
 await loadGame()
 }
