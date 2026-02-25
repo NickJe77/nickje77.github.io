@@ -51,29 +51,28 @@ body{
   margin-bottom:20px;
 }
 
-.year-block{
-  background:#fff;
-  border-radius:18px;
-  padding:20px;
+.year-select-wrap{
   margin-bottom:20px;
-  border:1px solid var(--line);
 }
 
-.year-title{
-  font-size:28px;
-  font-weight:900;
-  margin-bottom:14px;
+.year-select{
+  padding:10px 14px;
+  font-size:16px;
+  border-radius:10px;
+  border:1px solid var(--line);
+  font-weight:600;
 }
 
 .round{
-  margin-bottom:12px;
-  padding:12px;
-  border-radius:12px;
-  background:var(--alt);
+  margin-bottom:14px;
+  padding:14px;
+  border-radius:14px;
+  background:#fff;
+  border:1px solid var(--line);
 }
 
 .round h3{
-  margin:0 0 6px 0;
+  margin:0 0 8px 0;
   font-size:16px;
   text-transform:uppercase;
   letter-spacing:.5px;
@@ -81,7 +80,7 @@ body{
 
 .series{
   font-size:15px;
-  margin:4px 0;
+  margin:6px 0;
 }
 
 .series span{
@@ -104,36 +103,26 @@ body{
     <h1>MLB Postseason</h1>
   </div>
 
+  <div class="year-select-wrap">
+    <select id="yearSelect" class="year-select"></select>
+  </div>
+
   <div id="postseasonContainer"></div>
 
 </div>
 
 <script>
-async function safeFetch(url){
-  try{
-    const r = await fetch(url);
-    if(!r.ok) return null;
-    return await r.json();
-  }catch{
-    return null;
-  }
+
+async function loadData(){
+  const res = await fetch("/data/baseball/postseason.json");
+  return await res.json();
 }
 
 (async function(){
 
-  const data = await safeFetch("/data/baseball/postseason.json");
-  const teams = await safeFetch("/data/baseball/teams.json");
-
-  if(!data || !teams){
-    document.getElementById("postseasonContainer").innerHTML =
-      "<p>Postseason data not available.</p>";
-    return;
-  }
-
-  function getTeamName(code){
-    const t = teams.find(x => x.codes.includes(code));
-    return t ? t.name : code;
-  }
+  const data = await loadData();
+  const container = document.getElementById("postseasonContainer");
+  const yearSelect = document.getElementById("yearSelect");
 
   const roundOrder = ["WC","DS","CS","WS"];
   const roundNames = {
@@ -143,54 +132,58 @@ async function safeFetch(url){
     WS: "World Series"
   };
 
-  // Group by year
-  const byYear = {};
-  data.forEach(row=>{
-    if(!byYear[row.year]) byYear[row.year] = [];
-    byYear[row.year].push(row);
+  // Extract unique years
+  const years = [...new Set(data.map(d => d.year))]
+    .sort((a,b) => b - a);
+
+  // Populate dropdown
+  years.forEach(y=>{
+    const opt = document.createElement("option");
+    opt.value = y;
+    opt.textContent = y;
+    yearSelect.appendChild(opt);
   });
 
-  const container = document.getElementById("postseasonContainer");
+  // Default to most recent
+  yearSelect.value = years[0];
 
-  Object.keys(byYear)
-    .sort((a,b)=>b-a)
-    .forEach(year=>{
+  function renderYear(selectedYear){
 
-      const block = document.createElement("div");
-      block.className = "year-block";
+    container.innerHTML = "";
 
-      block.innerHTML = `
-        <div class="year-title">${year}</div>
-      `;
+    roundOrder.forEach(r=>{
+      const series = data.filter(d => d.year === selectedYear && d.round === r);
+      if(series.length === 0) return;
 
-      roundOrder.forEach(r=>{
-        const series = byYear[year].filter(x=>x.round===r);
-        if(series.length===0) return;
+      const roundDiv = document.createElement("div");
+      roundDiv.className = "round";
+      roundDiv.innerHTML = `<h3>${roundNames[r]}</h3>`;
 
-        const roundDiv = document.createElement("div");
-        roundDiv.className = "round";
-
-        roundDiv.innerHTML = `<h3>${roundNames[r]}</h3>`;
-
-        series.forEach(s=>{
-          const line = document.createElement("div");
-          line.className = "series";
-          line.innerHTML = `
-            <span>${getTeamName(s.champion_code)}</span>
-            defeated
-            ${getTeamName(s.runner_up_code)}
-            (${s.result})
-          `;
-          roundDiv.appendChild(line);
-        });
-
-        block.appendChild(roundDiv);
+      series.forEach(s=>{
+        const line = document.createElement("div");
+        line.className = "series";
+        line.innerHTML = `
+          <span>${s.champion_code}</span>
+          defeated
+          ${s.runner_up_code}
+          (${s.result})
+        `;
+        roundDiv.appendChild(line);
       });
 
-      container.appendChild(block);
+      container.appendChild(roundDiv);
     });
 
+  }
+
+  renderYear(years[0]);
+
+  yearSelect.addEventListener("change", ()=>{
+    renderYear(yearSelect.value);
+  });
+
 })();
+
 </script>
 
 </body>
