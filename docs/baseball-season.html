@@ -24,6 +24,7 @@ body{
 .navbar a{
   color:#0056d6;
   text-decoration:none;
+  font-size:18px;
 }
 
 .page{
@@ -55,12 +56,16 @@ th{
   font-weight:700;
 }
 
+tbody tr:nth-child(even){
+  background:#f0f6ff;
+}
+
 tbody tr{
   cursor:pointer;
 }
 
 tbody tr:hover{
-  background:#eaf3ff;
+  background:#e0ecff;
 }
 
 .score{
@@ -95,6 +100,8 @@ tbody tr:hover{
   <th>Away</th>
   <th>Home</th>
   <th>Score</th>
+  <th>Venue</th>
+  <th>Attendance</th>
 </tr>
 </thead>
 <tbody id="gamesBody"></tbody>
@@ -115,26 +122,35 @@ if(!season){
 document.getElementById("seasonTitle").textContent =
   "MLB Season " + season;
 
-fetch(`data/baseball/seasons/${season}.json`)
-.then(res=>{
-  if(!res.ok) throw new Error("Season file not found");
-  return res.json();
-})
-.then(data=>{
+Promise.all([
+  fetch(`data/baseball/seasons/${season}.json`).then(r=>{
+    if(!r.ok) throw new Error("Season file not found");
+    return r.json();
+  }),
+  fetch(`data/baseball/team-names.json`).then(r=>r.json())
+])
+.then(([seasonData, teamNames])=>{
 
-  const tbody = document.getElementById("gamesBody");
+  const tbody=document.getElementById("gamesBody");
   tbody.innerHTML="";
 
-  data.forEach(game=>{
+  seasonData.forEach(game=>{
 
     const ymd = game.date.replace(/-/g,"");
-    const gameId = game.home_code + ymd + "0";
+
+    // Use real game_id if it exists
+    const gameId = game.game_id
+      ? game.game_id
+      : game.home_code + ymd + "0";
 
     const link =
       "baseball-game.html?season=" +
       season +
       "&game=" +
       gameId;
+
+    const awayName = teamNames[game.away_code] || game.away_team || game.away_code;
+    const homeName = teamNames[game.home_code] || game.home_team || game.home_code;
 
     const score =
       (game.away_score!==undefined && game.home_score!==undefined)
@@ -146,9 +162,11 @@ fetch(`data/baseball/seasons/${season}.json`)
 
     tr.innerHTML=`
       <td>${game.date}</td>
-      <td>${game.away_code}</td>
-      <td>${game.home_code}</td>
+      <td>${awayName}</td>
+      <td>${homeName}</td>
       <td class="score">${score}</td>
+      <td>${game.venue || ""}</td>
+      <td>${game.attendance ? Number(game.attendance).toLocaleString() : ""}</td>
     `;
 
     tbody.appendChild(tr);
