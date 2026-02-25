@@ -73,6 +73,9 @@ a{color:#0056d6;text-decoration:none;font-weight:700;}
 
 <script>
 
+let PLAYERS={}
+let TEAMS={}
+
 function param(name){
 return new URLSearchParams(window.location.search).get(name)
 }
@@ -82,6 +85,24 @@ const m=id.match(/(\d{4})/)
 return m?m[1]:""
 }
 
+async function loadLookups(){
+
+const playersRes=await fetch("/data/baseball/players.json")
+PLAYERS=await playersRes.json()
+
+const teamsRes=await fetch("/data/baseball/team-names.json")
+TEAMS=await teamsRes.json()
+
+}
+
+function playerName(id){
+return PLAYERS[id]||id
+}
+
+function teamName(code){
+return TEAMS[code]||code
+}
+
 async function loadGame(){
 
 const id=param("game")
@@ -89,9 +110,7 @@ if(!id)return
 
 const season=seasonFromGameId(id)
 
-const url=`/data/baseball/games/${season}/${id}.json`
-
-const res=await fetch(url)
+const res=await fetch(`/data/baseball/games/${season}/${id}.json`)
 
 if(!res.ok){
 document.getElementById("meta").innerHTML="<b>Game file not found.</b>"
@@ -106,10 +125,10 @@ render(game)
 
 function render(game){
 
-const home=game.home_code
-const away=game.away_code
+const homeFull=teamName(game.home_code)
+const awayFull=teamName(game.away_code)
 
-document.getElementById("title").innerText=`${away} @ ${home}`
+document.getElementById("title").innerText=`${awayFull} @ ${homeFull}`
 document.getElementById("subtitle").innerText=`Season ${game.season}`
 
 document.getElementById("meta").innerHTML=`
@@ -140,7 +159,7 @@ html+="</tr></thead><tbody>"
 
 data.forEach(p=>{
 html+=`<tr>
-<td><a href="./baseball-player.html?player=${p.player_id}">${p.player_id}</a></td>`
+<td><a href="./baseball-player.html?player=${p.player_id}">${playerName(p.player_id)}</a></td>`
 keys.forEach(k=>html+=`<td>${p[k]}</td>`)
 html+="</tr>"
 })
@@ -151,7 +170,12 @@ document.getElementById(id).innerHTML=html
 
 }
 
-loadGame()
+async function init(){
+await loadLookups()
+await loadGame()
+}
+
+init()
 
 </script>
 
