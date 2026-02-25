@@ -13,7 +13,6 @@
   --card:#ffffff;
   --text:#0b1220;
   --line:#e6e8ee;
-  --alt:#dbe8ff;
 }
 
 body{
@@ -38,7 +37,7 @@ body{
 }
 
 .page{
-  max-width:1200px;
+  max-width:1300px;
   margin:auto;
   padding:20px;
 }
@@ -51,40 +50,57 @@ body{
   margin-bottom:20px;
 }
 
-.year-select-wrap{
-  margin-bottom:20px;
-}
-
 .year-select{
   padding:10px 14px;
   font-size:16px;
   border-radius:10px;
   border:1px solid var(--line);
   font-weight:600;
+  margin-bottom:25px;
+}
+
+.bracket{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:20px;
 }
 
 .round{
-  margin-bottom:14px;
-  padding:14px;
-  border-radius:14px;
   background:#fff;
+  padding:16px;
+  border-radius:16px;
   border:1px solid var(--line);
 }
 
 .round h3{
-  margin:0 0 8px 0;
-  font-size:16px;
+  margin:0 0 12px 0;
+  font-size:15px;
   text-transform:uppercase;
   letter-spacing:.5px;
+  color:#444;
 }
 
 .series{
-  font-size:15px;
-  margin:6px 0;
+  background:#f7f9fc;
+  padding:10px;
+  border-radius:10px;
+  margin-bottom:10px;
+  cursor:pointer;
+  transition:.2s;
 }
 
-.series span{
+.series:hover{
+  background:#e8f0ff;
+  transform:translateY(-2px);
+}
+
+.team{
   font-weight:700;
+}
+
+.result{
+  font-size:13px;
+  color:#555;
 }
 </style>
 </head>
@@ -103,87 +119,100 @@ body{
     <h1>MLB Postseason</h1>
   </div>
 
-  <div class="year-select-wrap">
-    <select id="yearSelect" class="year-select"></select>
-  </div>
+  <select id="yearSelect" class="year-select"></select>
 
-  <div id="postseasonContainer"></div>
+  <div id="bracketContainer" class="bracket"></div>
 
 </div>
 
 <script>
 
-async function loadData(){
-  const res = await fetch("/data/baseball/postseason.json");
-  return await res.json();
+async function fetchJSON(url){
+  const r = await fetch(url);
+  if(!r.ok) return null;
+  return await r.json();
 }
 
 (async function(){
 
-  const data = await loadData();
-  const container = document.getElementById("postseasonContainer");
-  const yearSelect = document.getElementById("yearSelect");
+  const postseason = await fetchJSON("/data/baseball/postseason.json");
+  const teams = await fetchJSON("/data/baseball/teams.json");
+
+  if(!postseason || !teams){
+    document.getElementById("bracketContainer").innerHTML =
+      "<p>Postseason data unavailable.</p>";
+    return;
+  }
+
+  function getTeamName(code){
+    const t = teams.find(x => x.codes.includes(code));
+    return t ? t.name : code;
+  }
 
   const roundOrder = ["WC","DS","CS","WS"];
   const roundNames = {
-    WC: "Wild Card",
-    DS: "Division Series",
-    CS: "League Championship Series",
-    WS: "World Series"
+    WC:"Wild Card",
+    DS:"Division Series",
+    CS:"League Championship Series",
+    WS:"World Series"
   };
 
-  // Extract unique years
-  const years = [...new Set(data.map(d => d.year))]
-    .sort((a,b) => b - a);
+  const yearSelect = document.getElementById("yearSelect");
+  const bracketContainer = document.getElementById("bracketContainer");
 
-  // Populate dropdown
+  const years = [...new Set(postseason.map(d=>d.year))]
+    .sort((a,b)=>b-a);
+
   years.forEach(y=>{
-    const opt = document.createElement("option");
-    opt.value = y;
-    opt.textContent = y;
+    const opt=document.createElement("option");
+    opt.value=y;
+    opt.textContent=y;
     yearSelect.appendChild(opt);
   });
 
-  // Default to most recent
   yearSelect.value = years[0];
 
-  function renderYear(selectedYear){
+  function renderBracket(year){
 
-    container.innerHTML = "";
+    bracketContainer.innerHTML="";
 
     roundOrder.forEach(r=>{
-      const series = data.filter(d => d.year === selectedYear && d.round === r);
-      if(series.length === 0) return;
+      const roundData = postseason.filter(d=>d.year===year && d.round===r);
+      if(roundData.length===0) return;
 
-      const roundDiv = document.createElement("div");
-      roundDiv.className = "round";
-      roundDiv.innerHTML = `<h3>${roundNames[r]}</h3>`;
+      const roundDiv=document.createElement("div");
+      roundDiv.className="round";
+      roundDiv.innerHTML=`<h3>${roundNames[r]}</h3>`;
 
-      series.forEach(s=>{
-        const line = document.createElement("div");
-        line.className = "series";
-        line.innerHTML = `
-          <span>${s.champion_code}</span>
-          defeated
-          ${s.runner_up_code}
-          (${s.result})
+      roundData.forEach(s=>{
+        const seriesDiv=document.createElement("div");
+        seriesDiv.className="series";
+
+        seriesDiv.innerHTML=`
+          <div class="team">${getTeamName(s.champion_code)}</div>
+          <div>${getTeamName(s.runner_up_code)}</div>
+          <div class="result">${s.result}</div>
         `;
-        roundDiv.appendChild(line);
+
+        seriesDiv.addEventListener("click",()=>{
+          window.location.href =
+            `baseball-series.html?year=${year}&round=${r}&team1=${s.champion_code}&team2=${s.runner_up_code}`;
+        });
+
+        roundDiv.appendChild(seriesDiv);
       });
 
-      container.appendChild(roundDiv);
+      bracketContainer.appendChild(roundDiv);
     });
-
   }
 
-  renderYear(years[0]);
+  renderBracket(years[0]);
 
-  yearSelect.addEventListener("change", ()=>{
-    renderYear(yearSelect.value);
+  yearSelect.addEventListener("change",()=>{
+    renderBracket(yearSelect.value);
   });
 
 })();
-
 </script>
 
 </body>
