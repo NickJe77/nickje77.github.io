@@ -1,1 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MLB Postseason | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+<style>
+:root{
+  --blue:#002D72;
+  --red:#C8102E;
+  --bg:#f4f6f8;
+  --card:#ffffff;
+  --text:#0b1220;
+  --line:#e6e8ee;
+  --alt:#dbe8ff;
+}
+
+body{
+  font-family:Inter,system-ui,Arial,sans-serif;
+  margin:0;
+  background:var(--bg);
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px;
+  background:#fff;
+  border-bottom:1px solid #ddd;
+  font-weight:700;
+}
+
+.navbar a{
+  text-decoration:none;
+  color:#0056d6;
+}
+
+.page{
+  max-width:1200px;
+  margin:auto;
+  padding:20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,var(--blue),var(--red));
+  color:#fff;
+  padding:30px;
+  border-radius:20px;
+  margin-bottom:20px;
+}
+
+.year-block{
+  background:#fff;
+  border-radius:18px;
+  padding:20px;
+  margin-bottom:20px;
+  border:1px solid var(--line);
+}
+
+.year-title{
+  font-size:28px;
+  font-weight:900;
+  margin-bottom:14px;
+}
+
+.round{
+  margin-bottom:12px;
+  padding:12px;
+  border-radius:12px;
+  background:var(--alt);
+}
+
+.round h3{
+  margin:0 0 6px 0;
+  font-size:16px;
+  text-transform:uppercase;
+  letter-spacing:.5px;
+}
+
+.series{
+  font-size:15px;
+  margin:4px 0;
+}
+
+.series span{
+  font-weight:700;
+}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="baseball.html">Baseball</a>
+  <a href="baseball-seasons.html">Seasons</a>
+  <a href="baseball-world-series.html">World Series</a>
+</div>
+
+<div class="page">
+
+  <div class="hero">
+    <h1>MLB Postseason</h1>
+  </div>
+
+  <div id="postseasonContainer"></div>
+
+</div>
+
+<script>
+async function safeFetch(url){
+  try{
+    const r = await fetch(url);
+    if(!r.ok) return null;
+    return await r.json();
+  }catch{
+    return null;
+  }
+}
+
+(async function(){
+
+  const data = await safeFetch("/data/baseball/postseason.json");
+  const teams = await safeFetch("/data/baseball/teams.json");
+
+  if(!data || !teams){
+    document.getElementById("postseasonContainer").innerHTML =
+      "<p>Postseason data not available.</p>";
+    return;
+  }
+
+  function getTeamName(code){
+    const t = teams.find(x => x.codes.includes(code));
+    return t ? t.name : code;
+  }
+
+  const roundOrder = ["WC","DS","CS","WS"];
+  const roundNames = {
+    WC: "Wild Card",
+    DS: "Division Series",
+    CS: "League Championship Series",
+    WS: "World Series"
+  };
+
+  // Group by year
+  const byYear = {};
+  data.forEach(row=>{
+    if(!byYear[row.year]) byYear[row.year] = [];
+    byYear[row.year].push(row);
+  });
+
+  const container = document.getElementById("postseasonContainer");
+
+  Object.keys(byYear)
+    .sort((a,b)=>b-a)
+    .forEach(year=>{
+
+      const block = document.createElement("div");
+      block.className = "year-block";
+
+      block.innerHTML = `
+        <div class="year-title">${year}</div>
+      `;
+
+      roundOrder.forEach(r=>{
+        const series = byYear[year].filter(x=>x.round===r);
+        if(series.length===0) return;
+
+        const roundDiv = document.createElement("div");
+        roundDiv.className = "round";
+
+        roundDiv.innerHTML = `<h3>${roundNames[r]}</h3>`;
+
+        series.forEach(s=>{
+          const line = document.createElement("div");
+          line.className = "series";
+          line.innerHTML = `
+            <span>${getTeamName(s.champion_code)}</span>
+            defeated
+            ${getTeamName(s.runner_up_code)}
+            (${s.result})
+          `;
+          roundDiv.appendChild(line);
+        });
+
+        block.appendChild(roundDiv);
+      });
+
+      container.appendChild(block);
+    });
+
+})();
+</script>
+
+</body>
+</html>
