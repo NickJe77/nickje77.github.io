@@ -6,29 +6,87 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
+:root{
+  --blue:#002D72;
+  --red:#C8102E;
+  --bg:#f4f6f8;
+  --card:#ffffff;
+  --line:#e6e8ee;
+}
+
 body{
   font-family:Inter,system-ui,Arial;
   margin:0;
-  background:#f4f6f8;
+  background:var(--bg);
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px;
+  background:#fff;
+  border-bottom:1px solid #ddd;
+  font-weight:700;
+}
+
+.navbar a{
+  text-decoration:none;
+  color:#0056d6;
 }
 
 .page{
-  max-width:1000px;
+  max-width:1100px;
   margin:auto;
   padding:30px;
 }
 
-h1{
-  margin-bottom:20px;
+.hero{
+  background:linear-gradient(90deg,var(--blue),var(--red));
+  color:#fff;
+  padding:30px;
+  border-radius:20px;
+  margin-bottom:25px;
+}
+
+.hero h1{
+  margin:0;
+  font-size:32px;
+}
+
+.hero .subtitle{
+  margin-top:6px;
+  opacity:.9;
+}
+
+.series-summary{
+  display:flex;
+  justify-content:center;
+  gap:40px;
+  margin-bottom:30px;
+  font-size:20px;
+  font-weight:700;
+}
+
+.series-summary div{
+  background:#fff;
+  padding:14px 24px;
+  border-radius:14px;
+  border:1px solid var(--line);
+}
+
+.games{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
 }
 
 .game{
-  background:white;
-  padding:16px;
-  border-radius:14px;
-  margin-bottom:12px;
+  background:#fff;
+  padding:18px;
+  border-radius:16px;
+  border:1px solid var(--line);
   cursor:pointer;
-  border:1px solid #e6e8ee;
   transition:.2s;
 }
 
@@ -37,20 +95,44 @@ h1{
   transform:translateY(-2px);
 }
 
-.date{
-  font-weight:700;
+.game-header{
+  font-size:13px;
+  color:#555;
+  margin-bottom:8px;
 }
 
-.score{
-  margin-top:6px;
+.score-row{
+  display:flex;
+  justify-content:space-between;
+  font-weight:600;
+  font-size:16px;
+}
+
+.winner{
+  font-weight:900;
 }
 </style>
 </head>
 <body>
 
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="baseball.html">Baseball</a>
+  <a href="baseball-seasons.html">Seasons</a>
+  <a href="baseball-world-series.html">World Series</a>
+</div>
+
 <div class="page">
-  <h1 id="seriesTitle"></h1>
-  <div id="gamesContainer"></div>
+
+  <div class="hero">
+    <h1 id="seriesTitle"></h1>
+    <div class="subtitle" id="seriesSubtitle"></div>
+  </div>
+
+  <div class="series-summary" id="seriesSummary"></div>
+
+  <div class="games" id="gamesContainer"></div>
+
 </div>
 
 <script>
@@ -60,19 +142,60 @@ function getParam(name){
   return url.searchParams.get(name);
 }
 
+async function fetchJSON(url){
+  const r = await fetch(url);
+  if(!r.ok) return null;
+  return await r.json();
+}
+
 (async function(){
 
   const year = getParam("year");
+  const round = getParam("round");
   const team1 = getParam("team1");
   const team2 = getParam("team2");
 
-  const seasonData = await fetch(`/data/baseball/seasons/${year}.json`)
-    .then(r=>r.json());
+  const postseason = await fetchJSON("/data/baseball/postseason.json");
+  const teams = await fetchJSON("/data/baseball/teams.json");
+  const seasonData = await fetchJSON(`/data/baseball/seasons/${year}.json`);
 
-  const gamesContainer = document.getElementById("gamesContainer");
-  const title = document.getElementById("seriesTitle");
+  function getTeamName(code){
+    const t = teams.find(x => x.codes.includes(code));
+    return t ? t.name : code;
+  }
 
-  title.textContent = `${team1} vs ${team2} (${year})`;
+  const team1Name = getTeamName(team1);
+  const team2Name = getTeamName(team2);
+
+  const roundNames = {
+    WC:"Wild Card",
+    DS:"Division Series",
+    CS:"League Championship Series",
+    WS:"World Series"
+  };
+
+  document.getElementById("seriesTitle").textContent =
+    `${team1Name} vs ${team2Name}`;
+
+  document.getElementById("seriesSubtitle").textContent =
+    `${roundNames[round]} • ${year}`;
+
+  const seriesMeta = postseason.find(d =>
+    d.year === year &&
+    d.round === round &&
+    (
+      (d.champion_code === team1 && d.runner_up_code === team2) ||
+      (d.champion_code === team2 && d.runner_up_code === team1)
+    )
+  );
+
+  if(seriesMeta){
+    document.getElementById("seriesSummary").innerHTML = `
+      <div>${getTeamName(seriesMeta.champion_code)}</div>
+      <div>${seriesMeta.result}</div>
+      <div>${getTeamName(seriesMeta.runner_up_code)}</div>
+    `;
+  }
 
   const seriesGames = seasonData.filter(g =>
     (
@@ -80,22 +203,33 @@ function getParam(name){
       (g.home_code === team2 && g.away_code === team1)
     )
     &&
-    g.date.includes(year + "-10")  // October filter (postseason)
+    g.date.includes(year + "-10")
   );
 
   seriesGames
     .sort((a,b)=> new Date(a.date) - new Date(b.date))
-    .forEach(game=>{
+    .forEach((game,index)=>{
+
+      const winner =
+        game.away_score > game.home_score
+          ? game.away_code
+          : game.home_code;
 
       const div = document.createElement("div");
       div.className = "game";
 
       div.innerHTML = `
-        <div class="date">${game.date}</div>
-        <div class="score">
-          ${game.away_team} ${game.away_score}
-          -
-          ${game.home_score} ${game.home_team}
+        <div class="game-header">
+          Game ${index+1} • ${game.date}
+        </div>
+        <div class="score-row">
+          <span class="${winner===game.away_code ? 'winner':''}">
+            ${game.away_team} ${game.away_score}
+          </span>
+          <span>@</span>
+          <span class="${winner===game.home_code ? 'winner':''}">
+            ${game.home_team} ${game.home_score}
+          </span>
         </div>
       `;
 
@@ -104,7 +238,7 @@ function getParam(name){
           `baseball-game.html?season=${year}&date=${game.date}&home=${game.home_code}&away=${game.away_code}`;
       });
 
-      gamesContainer.appendChild(div);
+      document.getElementById("gamesContainer").appendChild(div);
 
     });
 
