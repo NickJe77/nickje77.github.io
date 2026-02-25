@@ -11,433 +11,167 @@
   --red:#C8102E;
   --bg:#f4f6f8;
   --card:#ffffff;
-  --text:#0b1220;
   --line:#e6e8ee;
-  --soft:#f0f6ff;
+  --alt:#dbe8ff;
 }
 
-body{font-family:Inter,system-ui,Arial;margin:0;background:var(--bg);color:var(--text);}
+body{font-family:Inter,system-ui,Arial;margin:0;background:var(--bg);}
 .navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:#fff;border-bottom:1px solid #ddd;font-weight:700;}
 .navbar a{text-decoration:none;color:#0056d6;}
 .page{max-width:1200px;margin:auto;padding:20px;}
 
 .hero{
   background:linear-gradient(90deg,var(--blue),var(--red));
-  color:white;
+  color:#fff;
   padding:30px;
   border-radius:20px;
-  margin-bottom:16px;
+  margin-bottom:20px;
 }
-.hero h1{margin:0;font-size:40px;}
-.hero .sub{margin-top:10px;font-size:18px;opacity:.95;line-height:1.4;}
 
-.controls{
-  display:flex;
-  gap:12px;
-  align-items:center;
-  flex-wrap:wrap;
-  margin:14px 0 18px 0;
-}
-.select, .btn{
+.section{
   background:#fff;
+  border-radius:16px;
+  padding:20px;
+  margin-bottom:20px;
   border:1px solid var(--line);
-  border-radius:12px;
-  padding:10px 12px;
-  font-size:16px;
 }
-.btn{
-  cursor:pointer;
-  font-weight:800;
-}
-.btn:hover{background:#f7fbff;}
-
-.section{background:var(--card);padding:18px;border-radius:16px;margin-bottom:20px;}
-.section h2{margin:0 0 12px 0;}
 
 table{width:100%;border-collapse:collapse;}
-th{background:var(--blue);color:white;padding:10px;text-align:left;}
-td{padding:10px;border-bottom:1px solid #eee;}
-tr:nth-child(even){background:var(--soft);}
-.rowlink{cursor:pointer;}
-.rowlink:hover{background:#eaf3ff;}
+th{background:var(--blue);color:#fff;padding:12px;text-align:left;}
+td{padding:12px;border-bottom:1px solid #eee;}
+tbody tr:nth-child(even){background:var(--alt);}
+tbody tr:hover{background:#c5dbff;cursor:pointer;}
 
-.badge{
-  display:inline-block;
-  padding:4px 10px;
-  border-radius:999px;
-  background:#0b1220;
-  color:#fff;
-  font-weight:800;
-  font-size:13px;
+.games{
+  margin-top:15px;
+  border-top:1px solid var(--line);
+  padding-top:15px;
 }
 
-.small{color:#666;font-size:13px;margin-top:8px;line-height:1.4;}
-.muted{color:#666;}
-.kv{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;}
-.kv div{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;}
-.kv b{display:block;}
+.game{
+  padding:8px 0;
+}
 
-.gamesGrid{
-  display:grid;
-  grid-template-columns:1fr;
-  gap:10px;
+.game a{
+  color:#0056d6;
+  font-weight:700;
+  text-decoration:none;
 }
-.gameCard{
-  border:1px solid var(--line);
-  border-radius:14px;
-  padding:12px;
-  background:#fff;
-}
-.gameTop{
-  display:flex;
-  justify-content:space-between;
-  gap:12px;
-  flex-wrap:wrap;
-  font-weight:900;
-}
-.gameMeta{color:#555;font-weight:700;margin-top:4px;}
-.gameLink a{color:#0056d6;text-decoration:none;font-weight:900;}
-.gameLink a:hover{text-decoration:underline;}
-
-.error{color:#b00020;font-weight:900;}
-.loading{color:#555;font-weight:800;}
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-  <a href="./index.html">Home</a>
-  <a href="./baseball.html">Baseball</a>
-  <a href="./baseball-seasons.html">Seasons</a>
-  <a href="./baseball-teams.html">Teams</a>
-  <a href="./baseball-players.html">Players</a>
+  <a href="index.html">Home</a>
+  <a href="baseball.html">Baseball</a>
+  <a href="baseball-seasons.html">Seasons</a>
 </div>
 
 <div class="page">
 
-  <div class="hero">
-    <h1>World Series</h1>
-    <div class="sub">Champions, matchups, and World Series game links by season.</div>
-  </div>
-
-  <div class="controls">
-    <select id="yearSelect" class="select">
-      <option value="">All Years</option>
-    </select>
-    <button id="clearBtn" class="btn">Clear</button>
-    <span id="count" class="muted"></span>
-  </div>
-
-  <div class="section">
-    <h2>Champions</h2>
-    <div id="tableWrap" class="loading">Loading…</div>
-    <div class="small muted">
-      Click a year row to open the game list for that World Series.
-    </div>
-  </div>
-
-  <div class="section" id="detailSection" style="display:none;">
-    <h2 id="detailTitle">Series Details</h2>
-    <div id="detailSummary" class="kv"></div>
-    <div id="detailGames" class="gamesGrid" style="margin-top:14px;"></div>
-  </div>
-
+<div class="hero">
+  <h1>World Series</h1>
 </div>
 
-<script>
-/* -----------------------------
-   Lookups (your structures)
------------------------------ */
-let TEAMS = {};     // code -> full name
-let YEARS = [];     // from /data/baseball/index.json
-let SERIES_BY_YEAR = {}; // year -> {year, games[], teams, wins, champion, runnerup, seriesScore}
-
-/* -----------------------------
-   Helpers
------------------------------ */
-function qs(id){ return document.getElementById(id); }
-
-function teamName(code){
-  return TEAMS[code] || code;
-}
-
-function ymdFromGameId(gameId){
-  // e.g. CHN202104010 -> 2021-04-01
-  const m = String(gameId || "").match(/(\d{4})(\d{2})(\d{2})/);
-  return m ? `${m[1]}-${m[2]}-${m[3]}` : "";
-}
-
-function makeGameIdFromSeasonRow(row){
-  // Your game page expects: HOME + YYYYMMDD + "0"
-  const home = String(row.home_code || "").trim();
-  const date = String(row.date || "").trim(); // YYYY-MM-DD
-  if(!home || !date || date.length < 10) return "";
-  const yyyymmdd = date.replaceAll("-","");
-  return `${home}${yyyymmdd}0`;
-}
-
-function getRoundText(g){
-  return String(
-    g.round ?? g.series ?? g.stage ?? g.postseason_round ?? g.game_type ?? g.type ?? ""
-  );
-}
-
-function isWorldSeriesGame(g){
-  const r = getRoundText(g).toLowerCase();
-  // Accept common labels
-  if(r.includes("world series")) return true;
-  if(r === "ws") return true;
-  if(r.includes(" ws ")) return true;
-  if(r.endsWith(" ws")) return true;
-  if(r.startsWith("ws ")) return true;
-  // Some datasets use "final" but that’s ambiguous; we do NOT assume final = WS.
-  return false;
-}
-
-function winnerCodeFromGame(g){
-  const as = Number(g.away_score);
-  const hs = Number(g.home_score);
-  if(Number.isFinite(as) && Number.isFinite(hs)){
-    if(as > hs) return g.away_code;
-    if(hs > as) return g.home_code;
-  }
-  return "";
-}
-
-/* -----------------------------
-   Load teams.json (codes[])
------------------------------ */
-async function loadTeams(){
-  const res = await fetch("/data/baseball/teams.json", {cache:"no-store"});
-  if(!res.ok) throw new Error("teams.json not found");
-  const arr = await res.json();
-  const map = {};
-  if(Array.isArray(arr)){
-    arr.forEach(t=>{
-      if(Array.isArray(t.codes)){
-        t.codes.forEach(c=>{ map[c] = t.name; });
-      }
-    });
-  }
-  TEAMS = map;
-}
-
-/* -----------------------------
-   Load index.json for years
------------------------------ */
-async function loadIndex(){
-  const res = await fetch("/data/baseball/index.json", {cache:"no-store"});
-  if(!res.ok) throw new Error("index.json not found");
-  const data = await res.json();
-
-  // Accept either [2025,2024,...] OR { seasons:[...] } OR { years:[...] }
-  let years = [];
-  if(Array.isArray(data)) years = data;
-  else if(data && Array.isArray(data.seasons)) years = data.seasons;
-  else if(data && Array.isArray(data.years)) years = data.years;
-
-  YEARS = years.map(Number).filter(n=>Number.isFinite(n)).sort((a,b)=>b-a);
-}
-
-/* -----------------------------
-   Build World Series per year
------------------------------ */
-async function buildWorldSeries(){
-  SERIES_BY_YEAR = {};
-  for(const y of YEARS){
-    const res = await fetch(`/data/baseball/seasons/${y}.json`, {cache:"no-store"});
-    if(!res.ok) continue;
-    const seasonGames = await res.json();
-    if(!Array.isArray(seasonGames)) continue;
-
-    const wsGames = seasonGames.filter(isWorldSeriesGame);
-
-    if(wsGames.length === 0) continue;
-
-    // Determine teams involved + wins
-    const wins = {};
-    const teamsSet = new Set();
-    wsGames.forEach(g=>{
-      if(g.home_code) teamsSet.add(g.home_code);
-      if(g.away_code) teamsSet.add(g.away_code);
-      const w = winnerCodeFromGame(g);
-      if(w){
-        wins[w] = (wins[w] || 0) + 1;
-      }
-    });
-
-    const teams = [...teamsSet];
-
-    // Champion/runner-up by wins
-    const ranked = teams
-      .map(c=>({code:c, wins:(wins[c]||0)}))
-      .sort((a,b)=>b.wins - a.wins);
-
-    const champion = ranked[0]?.code || "";
-    const runnerup = ranked[1]?.code || "";
-
-    const seriesScore = champion && runnerup
-      ? `${(wins[champion]||0)}–${(wins[runnerup]||0)}`
-      : "";
-
-    SERIES_BY_YEAR[y] = {
-      year: y,
-      games: wsGames,
-      teams,
-      wins,
-      champion,
-      runnerup,
-      seriesScore
-    };
-  }
-}
-
-/* -----------------------------
-   UI
------------------------------ */
-function populateYearSelect(){
-  const sel = qs("yearSelect");
-  sel.innerHTML = `<option value="">All Years</option>` +
-    Object.keys(SERIES_BY_YEAR)
-      .map(Number)
-      .sort((a,b)=>b-a)
-      .map(y=>`<option value="${y}">${y}</option>`)
-      .join("");
-}
-
-function renderChampions(){
-  const filterYear = qs("yearSelect").value;
-
-  const years = Object.keys(SERIES_BY_YEAR).map(Number).sort((a,b)=>b-a)
-    .filter(y=>!filterYear || String(y)===String(filterYear));
-
-  qs("count").textContent = years.length ? `Results: ${years.length}` : "";
-
-  if(years.length === 0){
-    qs("tableWrap").innerHTML = `<div class="error">No World Series games detected in your seasons files.</div>
-      <div class="small muted">This page only shows games that are explicitly marked as “World Series” (round/series/stage/game_type/type).</div>`;
-    qs("detailSection").style.display = "none";
-    return;
-  }
-
-  let html = `<table>
+<div class="section">
+  <table>
     <thead>
       <tr>
         <th>Year</th>
         <th>Champion</th>
         <th>Runner-up</th>
         <th>Result</th>
-        <th>Games</th>
       </tr>
     </thead>
-    <tbody>`;
+    <tbody id="wsBody"></tbody>
+  </table>
+</div>
 
-  years.forEach(y=>{
-    const s = SERIES_BY_YEAR[y];
-    html += `<tr class="rowlink" data-year="${y}">
-      <td><span class="badge">${y}</span></td>
-      <td>${escapeHtml(teamName(s.champion))}</td>
-      <td>${escapeHtml(teamName(s.runnerup))}</td>
-      <td>${escapeHtml(s.seriesScore || "")}</td>
-      <td>${s.games.length}</td>
-    </tr>`;
-  });
+<div class="section" id="seriesDetail" style="display:none;">
+  <h2 id="detailTitle"></h2>
+  <div id="gamesList" class="games"></div>
+</div>
 
-  html += `</tbody></table>`;
-  qs("tableWrap").innerHTML = html;
+</div>
 
-  // click rows for details
-  qs("tableWrap").querySelectorAll("tr[data-year]").forEach(tr=>{
-    tr.addEventListener("click", ()=>{
-      const y = tr.getAttribute("data-year");
-      openDetail(y);
+<script>
+
+let TEAM_LOOKUP = {};
+
+async function loadTeams(){
+  const res = await fetch("/data/baseball/teams.json");
+  const data = await res.json();
+
+  data.forEach(team=>{
+    team.codes.forEach(code=>{
+      TEAM_LOOKUP[code] = team.name;
     });
   });
 }
 
-function openDetail(year){
-  const y = Number(year);
-  const s = SERIES_BY_YEAR[y];
-  if(!s) return;
+function teamName(code){
+  return TEAM_LOOKUP[code] || code;
+}
 
-  qs("detailSection").style.display = "block";
-  qs("detailTitle").textContent = `World Series ${y}`;
+async function init(){
 
-  const champ = teamName(s.champion);
-  const run = teamName(s.runnerup);
+  await loadTeams();
 
-  qs("detailSummary").innerHTML = `
-    <div><b>Champion</b>${escapeHtml(champ)}</div>
-    <div><b>Runner-up</b>${escapeHtml(run)}</div>
-    <div><b>Result</b>${escapeHtml(s.seriesScore || "")}</div>
-    <div><b>Games</b>${s.games.length}</div>
-  `;
+  const res = await fetch("/data/baseball/world_series.json");
+  const wsData = await res.json();
 
-  // Sort games by date (ascending)
-  const games = [...s.games].sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  const tbody = document.getElementById("wsBody");
 
-  qs("detailGames").innerHTML = games.map(g=>{
-    const away = teamName(g.away_code);
-    const home = teamName(g.home_code);
-    const as = g.away_score;
-    const hs = g.home_score;
-    const date = g.date || ymdFromGameId(g.game_id || "");
-    const gid = g.game_id ? String(g.game_id) : makeGameIdFromSeasonRow(g);
-    const link = gid ? `./baseball-game.html?game=${encodeURIComponent(gid)}` : "";
+  wsData.forEach(series=>{
+
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td>${series.year}</td>
+      <td>${teamName(series.champion_code)}</td>
+      <td>${teamName(series.runner_up_code)}</td>
+      <td>${series.series_score}</td>
+    `;
+
+    tr.onclick = ()=>{
+      showSeries(series);
+    };
+
+    tbody.appendChild(tr);
+
+  });
+
+}
+
+function showSeries(series){
+
+  const detail = document.getElementById("seriesDetail");
+  const title = document.getElementById("detailTitle");
+  const gamesDiv = document.getElementById("gamesList");
+
+  title.textContent = `World Series ${series.year} — ${teamName(series.champion_code)} defeated ${teamName(series.runner_up_code)} ${series.series_score}`;
+
+  gamesDiv.innerHTML = series.games.map(g=>{
+
+    const score = `${g.away_score} - ${g.home_score}`;
+    const matchup = `${teamName(g.away_code)} @ ${teamName(g.home_code)}`;
 
     return `
-      <div class="gameCard">
-        <div class="gameTop">
-          <div>${escapeHtml(away)} @ ${escapeHtml(home)}</div>
-          <div>${(as!=null && hs!=null) ? `${escapeHtml(as)}–${escapeHtml(hs)}` : ""}</div>
-        </div>
-        <div class="gameMeta">Date: ${escapeHtml(date)}</div>
-        <div class="gameLink">${link ? `<a href="${link}">Open game</a>` : `<span class="muted">Game link unavailable</span>`}</div>
+      <div class="game">
+        <a href="baseball-game.html?game=${g.game_id}">
+          ${g.date} — ${matchup} — ${score}
+        </a>
       </div>
     `;
   }).join("");
-  window.scrollTo({top: qs("detailSection").offsetTop - 10, behavior:"smooth"});
+
+  detail.style.display = "block";
+  window.scrollTo({top: detail.offsetTop - 10, behavior:"smooth"});
 }
-
-function escapeHtml(s){
-  return String(s ?? "")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-}
-
-/* -----------------------------
-   Init
------------------------------ */
-async function init(){
-  try{
-    qs("tableWrap").textContent = "Loading…";
-    await loadTeams();
-    await loadIndex();
-    await buildWorldSeries();
-    populateYearSelect();
-    renderChampions();
-  }catch(e){
-    qs("tableWrap").innerHTML = `<div class="error">Failed to load World Series data.</div>
-      <div class="small muted">${escapeHtml(e.message || String(e))}</div>`;
-  }
-}
-
-qs("yearSelect").addEventListener("change", ()=>{
-  qs("detailSection").style.display = "none";
-  renderChampions();
-});
-
-qs("clearBtn").addEventListener("click", ()=>{
-  qs("yearSelect").value = "";
-  qs("detailSection").style.display = "none";
-  renderChampions();
-});
 
 init();
+
 </script>
 
 </body>
