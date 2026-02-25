@@ -66,25 +66,19 @@ a{color:#0056d6;text-decoration:none;font-weight:700;}
 let PLAYERS={}, TEAMS={}, PARKS={}
 
 function param(n){return new URLSearchParams(window.location.search).get(n)}
-function seasonFromGameId(id){return id.match(/(\d{4})/)[1]}
-function extractDate(id){
-const m=id.match(/(\d{4})(\d{2})(\d{2})/)
-return `${m[1]}-${m[2]}-${m[3]}`
-}
+
 function playerName(id){return PLAYERS[id]||id}
 function teamName(code){return TEAMS[code]||code}
 function parkName(code){return PARKS[code]||code}
 
 async function loadLookups(){
 
-// players
 const p=await fetch("/data/baseball/players.json")
 if(p.ok){
 const d=await p.json()
 d.forEach(pl=>PLAYERS[pl.player_id]=pl.name)
 }
 
-// teams
 const t=await fetch("/data/baseball/teams.json")
 if(t.ok){
 const d=await t.json()
@@ -93,7 +87,6 @@ team.codes.forEach(c=>TEAMS[c]=team.name)
 })
 }
 
-// parks
 const b=await fetch("/data/baseball/ballparks.csv")
 if(b.ok){
 const text=await b.text()
@@ -102,30 +95,83 @@ const parts=l.split(",")
 if(parts.length>1) PARKS[parts[0].trim()]=parts[1].trim()
 })
 }
-
 }
 
 async function loadGame(){
 
-const id=param("game")
-if(!id)return
+let id=param("game")
+let season=param("season")
+let date=param("date")
+let home=param("home")
+let away=param("away")
 
-const season=seasonFromGameId(id)
-const gameRes=await fetch(`/data/baseball/games/${season}/${id}.json`)
-if(!gameRes.ok)return
-const game=await gameRes.json()
-
-// load season file
-const seasonRes=await fetch(`/data/baseball/seasons/${season}.json`)
+let game=null
 let meta=null
 
+// --- CASE 1: standard ?game=GAME_ID ---
+if(id){
+
+season=id.match(/(\d{4})/)[1]
+
+const gameRes=await fetch(`/data/baseball/games/${season}/${id}.json`)
+if(!gameRes.ok){
+document.getElementById("title").innerText="Game not found"
+return
+}
+game=await gameRes.json()
+
+const seasonRes=await fetch(`/data/baseball/seasons/${season}.json`)
 if(seasonRes.ok){
 const seasonData=await seasonRes.json()
-const date=extractDate(id)
+const gameDate=id.match(/(\d{4})(\d{2})(\d{2})/)
+if(gameDate){
+const formatted=`${gameDate[1]}-${gameDate[2]}-${gameDate[3]}`
 meta=seasonData.find(g=>
 g.home_code===game.home_code &&
-g.date===date
+g.date===formatted
 )
+}
+}
+
+}
+
+// --- CASE 2: postseason link ---
+else if(season && date && home && away){
+
+const seasonRes=await fetch(`/data/baseball/seasons/${season}.json`)
+if(!seasonRes.ok){
+document.getElementById("title").innerText="Game not found"
+return
+}
+const seasonData=await seasonRes.json()
+
+meta=seasonData.find(g=>
+g.date===date &&
+g.home_code===home &&
+g.away_code===away
+)
+
+if(!meta){
+document.getElementById("title").innerText="Game not found"
+return
+}
+
+// We don't have individual game JSON for postseason yet
+// So render using season meta only
+game={
+home_code:meta.home_code,
+away_code:meta.away_code,
+batters_home:[],
+batters_away:[],
+pitchers_home:[],
+pitchers_away:[]
+}
+
+}
+
+if(!game){
+document.getElementById("title").innerText="Game not found"
+return
 }
 
 render(game,meta)
@@ -158,7 +204,7 @@ renderTable("homePitching",game.pitchers_home)
 
 function renderTable(id,data){
 if(!data||data.length===0){
-document.getElementById(id).innerHTML="No data available."
+document.getElementById(id).innerHTML="No detailed data available."
 return
 }
 const keys=Object.keys(data[0]).filter(k=>k!=="player_id")
