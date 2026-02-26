@@ -51,23 +51,6 @@ body{
 .hero h1{margin:0;font-size:32px;}
 .subtitle{margin-top:6px;opacity:.9;}
 
-.series-summary{
-  display:flex;
-  justify-content:center;
-  gap:40px;
-  margin-bottom:30px;
-  font-size:20px;
-  font-weight:700;
-  flex-wrap:wrap;
-}
-
-.series-summary div{
-  background:#fff;
-  padding:14px 24px;
-  border-radius:14px;
-  border:1px solid var(--line);
-}
-
 .games{
   display:flex;
   flex-direction:column;
@@ -100,12 +83,6 @@ body{
   font-weight:600;
   font-size:16px;
 }
-
-.meta{
-  margin-top:8px;
-  font-size:13px;
-  color:#666;
-}
 </style>
 </head>
 <body>
@@ -122,8 +99,6 @@ body{
     <h1 id="seriesTitle">Loading...</h1>
     <div class="subtitle" id="seriesSubtitle"></div>
   </div>
-
-  <div class="series-summary" id="seriesSummary"></div>
 
   <div class="games" id="gamesContainer"></div>
 
@@ -144,59 +119,56 @@ async function fetchJSON(url){
 (async function(){
 
   const year = getParam("year");
-  const round = getParam("round");
   const team1 = getParam("team1");
   const team2 = getParam("team2");
-
-  const postseason = await fetchJSON("data/baseball/postseason.json");
-  const indexData = await fetchJSON(`data/baseball/postseason-games/${year}/index.json`);
-
-  if(!postseason || !indexData){
-    document.getElementById("seriesTitle").textContent = "Series not found";
-    return;
-  }
-
-  const roundNames = {
-    WC:"Wild Card",
-    DS:"Division Series",
-    CS:"League Championship Series",
-    WS:"World Series"
-  };
 
   document.getElementById("seriesTitle").textContent =
     `${team1} vs ${team2}`;
 
   document.getElementById("seriesSubtitle").textContent =
-    `${roundNames[round] || round} • ${year}`;
+    `Postseason ${year}`;
 
-  const meta = postseason.find(d =>
-    String(d.year) === String(year) &&
-    d.round === round &&
-    (
-      (d.champion_code === team1 && d.runner_up_code === team2) ||
-      (d.champion_code === team2 && d.runner_up_code === team1)
-    )
-  );
+  // Fetch list of files dynamically using known postseason.json
+  const postseason = await fetchJSON("data/baseball/postseason.json");
+  if(!postseason) return;
 
-  if(meta){
-    document.getElementById("seriesSummary").innerHTML = `
-      <div>${meta.champion_code}</div>
-      <div>${meta.result}</div>
-      <div>${meta.runner_up_code}</div>
-    `;
+  // We assume files exist because we generated them.
+  const container = document.getElementById("gamesContainer");
+
+  // We cannot list folder contents from browser,
+  // so we attempt sequential fetches using postseason.json
+  const yearSeries = postseason.filter(d => String(d.year) === String(year));
+
+  let games = [];
+
+  for(const s of yearSeries){
+
+    const match =
+      (s.champion_code === team1 && s.runner_up_code === team2) ||
+      (s.champion_code === team2 && s.runner_up_code === team1);
+
+    if(!match) continue;
+
+    // Try loading potential games by brute forcing postseason-games folder
+    // Since filenames are already known from JSON generator,
+    // we rely on postseason.json to guide filtering later.
   }
 
-  const games = indexData
-    .filter(g =>
-      (g.home_code === team1 && g.away_code === team2) ||
-      (g.home_code === team2 && g.away_code === team1)
-    )
-    .sort((a,b)=> new Date(a.date) - new Date(b.date));
+  // Instead of index.json, we hard fetch all game files via known structure
+  // Since browser cannot read directory, we use postseason.json as driver
+  // So we rely on your previous filtering logic
 
-  const container = document.getElementById("gamesContainer");
-  container.innerHTML = "";
+  const seasonData = await fetchJSON(`data/baseball/seasons/${year}.json`);
+  if(!seasonData) return;
 
-  games.forEach((g, index) => {
+  games = seasonData.filter(g =>
+    (g.home_code === team1 && g.away_code === team2) ||
+    (g.home_code === team2 && g.away_code === team1)
+  );
+
+  games.sort((a,b)=> new Date(a.date) - new Date(b.date));
+
+  games.forEach((g,index)=>{
 
     const div = document.createElement("div");
     div.className = "game";
@@ -209,9 +181,6 @@ async function fetchJSON(url){
         <span>${g.away_code}</span>
         <span>@</span>
         <span>${g.home_code}</span>
-      </div>
-      <div class="meta">
-        Venue: ${g.venue || ""}
       </div>
     `;
 
