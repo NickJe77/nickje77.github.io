@@ -12,13 +12,11 @@
   --bg:#f4f6f8;
   --line:#e6e8ee;
 }
-
 body{
   font-family:Inter,system-ui,Arial;
   margin:0;
   background:var(--bg);
 }
-
 .navbar{
   display:flex;
   justify-content:center;
@@ -28,18 +26,15 @@ body{
   border-bottom:1px solid #ddd;
   font-weight:700;
 }
-
 .navbar a{
   text-decoration:none;
   color:#0056d6;
 }
-
 .page{
   max-width:1100px;
   margin:auto;
   padding:30px;
 }
-
 .hero{
   background:linear-gradient(90deg,var(--blue),var(--red));
   color:#fff;
@@ -47,12 +42,7 @@ body{
   border-radius:20px;
   margin-bottom:25px;
 }
-
-.hero h1{
-  margin:0;
-  font-size:32px;
-}
-
+.hero h1{margin:0;font-size:32px;}
 .year-select{
   padding:10px 14px;
   font-size:16px;
@@ -61,7 +51,6 @@ body{
   font-weight:600;
   margin-bottom:20px;
 }
-
 .game-card{
   background:#fff;
   padding:20px;
@@ -69,30 +58,25 @@ body{
   border:1px solid var(--line);
   margin-bottom:30px;
 }
-
 .scoreline{
   font-size:22px;
   font-weight:700;
   margin:10px 0;
 }
-
 .meta{
   font-size:14px;
   color:#555;
 }
-
 .section-title{
   font-size:20px;
   font-weight:700;
   margin:25px 0 10px;
 }
-
 .player-table{
   width:100%;
   border-collapse:collapse;
   margin-bottom:30px;
 }
-
 .player-table th{
   text-align:left;
   padding:8px;
@@ -100,13 +84,11 @@ body{
   border-bottom:2px solid var(--line);
   font-size:14px;
 }
-
 .player-table td{
   padding:8px;
   border-bottom:1px solid var(--line);
   font-size:14px;
 }
-
 .player-table tr:hover{
   background:#f9fbff;
 }
@@ -123,15 +105,12 @@ body{
 </div>
 
 <div class="page">
-
   <div class="hero">
     <h1>MLB All-Star Game</h1>
   </div>
 
   <select id="yearSelect" class="year-select"></select>
-
   <div id="content"></div>
-
 </div>
 
 <script>
@@ -153,7 +132,7 @@ async function fetchJSON(url){
     return;
   }
 
-  const years = allStarData.map(g => g.year).sort((a,b)=>b-a);
+  const years = allStarData.map(g=>g.year).sort((a,b)=>b-a);
 
   years.forEach(y=>{
     const opt=document.createElement("option");
@@ -171,10 +150,8 @@ async function fetchJSON(url){
   }
 
   function buildTable(players){
-
-    let rows = "";
-
-    if(players && players.length > 0){
+    let rows="";
+    if(players && players.length){
       rows = players.map(p=>`
         <tr>
           <td>${p.name || ""}</td>
@@ -187,7 +164,7 @@ async function fetchJSON(url){
     } else {
       rows = `
         <tr>
-          <td colspan="5" style="text-align:center; color:#888;">
+          <td colspan="5" style="text-align:center;color:#888;">
             No batting data available
           </td>
         </tr>
@@ -224,8 +201,11 @@ async function fetchJSON(url){
       return;
     }
 
-    const homeName = leagueName(summary.home_code);
-    const awayName = leagueName(summary.away_code);
+    const homeLeague = summary.home_code;
+    const awayLeague = summary.away_code;
+
+    const homeName = leagueName(homeLeague);
+    const awayName = leagueName(awayLeague);
 
     const homeScore = summary.home_score ?? "–";
     const awayScore = summary.away_score ?? "–";
@@ -234,6 +214,18 @@ async function fetchJSON(url){
     if(summary.home_score!=null && summary.away_score!=null){
       if(summary.home_score>summary.away_score) winner=homeName;
       if(summary.away_score>summary.home_score) winner=awayName;
+    }
+
+    // CRITICAL FIX:
+    // Match league to correct batting array dynamically
+    let AL_batters, NL_batters;
+
+    if(homeLeague==="AL"){
+      AL_batters = box.batters_home;
+      NL_batters = box.batters_away;
+    } else {
+      AL_batters = box.batters_away;
+      NL_batters = box.batters_home;
     }
 
     let html = `
@@ -251,11 +243,11 @@ async function fetchJSON(url){
       </div>
     `;
 
-    html += `<div class="section-title">${awayName} Batters</div>`;
-    html += buildTable(box.batters_away);
+    html += `<div class="section-title">American League Batters</div>`;
+    html += buildTable(AL_batters);
 
-    html += `<div class="section-title">${homeName} Batters</div>`;
-    html += buildTable(box.batters_home);
+    html += `<div class="section-title">National League Batters</div>`;
+    html += buildTable(NL_batters);
 
     content.innerHTML = html;
   }
