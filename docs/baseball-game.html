@@ -66,20 +66,19 @@ a{color:#0056d6;text-decoration:none;font-weight:700;}
 let PLAYERS={}, TEAMS={}, PARKS={}
 
 function param(n){return new URLSearchParams(window.location.search).get(n)}
-
 function playerName(id){return PLAYERS[id]||id}
 function teamName(code){return TEAMS[code]||code}
 function parkName(code){return PARKS[code]||code}
 
 async function loadLookups(){
 
-const p=await fetch("data/baseball/players.json")
+const p=await fetch("docs/data/baseball/players.json")
 if(p.ok){
 const d=await p.json()
 d.forEach(pl=>PLAYERS[pl.player_id]=pl.name)
 }
 
-const t=await fetch("data/baseball/teams.json")
+const t=await fetch("docs/data/baseball/teams.json")
 if(t.ok){
 const d=await t.json()
 d.forEach(team=>{
@@ -87,7 +86,7 @@ team.codes.forEach(c=>TEAMS[c]=team.name)
 })
 }
 
-const b=await fetch("data/baseball/ballparks.csv")
+const b=await fetch("docs/data/baseball/ballparks.csv")
 if(b.ok){
 const text=await b.text()
 text.split("\n").slice(1).forEach(l=>{
@@ -100,19 +99,18 @@ if(parts.length>1) PARKS[parts[0].trim()]=parts[1].trim()
 async function loadGame(){
 
 const id=param("game")
-
 if(id){
 
 const season=id.match(/(\d{4})/)[1]
 
-const gameRes=await fetch(`data/baseball/games/${season}/${id}.json`)
+const gameRes=await fetch(`docs/data/baseball/games/${season}/${id}.json`)
 if(!gameRes.ok){
 document.getElementById("title").innerText="Game not found"
 return
 }
 const game=await gameRes.json()
 
-const seasonRes=await fetch(`data/baseball/seasons/${season}.json`)
+const seasonRes=await fetch(`docs/data/baseball/seasons/${season}.json`)
 let meta=null
 
 if(seasonRes.ok){
@@ -131,45 +129,7 @@ render(game,meta)
 return
 }
 
-const season=param("season")
-const date=param("date")
-const home=param("home")
-const away=param("away")
-
-if(season && date && home && away){
-
-const seasonRes=await fetch(`data/baseball/seasons/${season}.json`)
-if(!seasonRes.ok){
 document.getElementById("title").innerText="Game not found"
-return
-}
-
-const seasonData=await seasonRes.json()
-const meta=seasonData.find(g=>
-g.date===date &&
-g.home_code===home &&
-g.away_code===away
-)
-
-if(!meta){
-document.getElementById("title").innerText="Game not found"
-return
-}
-
-render({
-home_code:meta.home_code,
-away_code:meta.away_code,
-batters_home:[],
-batters_away:[],
-pitchers_home:[],
-pitchers_away:[]
-},meta)
-
-return
-}
-
-document.getElementById("title").innerText="Game not found"
-
 }
 
 function render(game,meta){
@@ -182,7 +142,6 @@ document.getElementById("title").innerText=`${awayFull} @ ${homeFull}`
 if(meta){
 document.getElementById("scoreline").innerText=
 `${awayFull} ${meta.away_score} – ${homeFull} ${meta.home_score}`
-
 document.getElementById("subtitle").innerText=meta.date
 document.getElementById("venueLine").innerText=`Venue: ${parkName(meta.venue)}`
 document.getElementById("crowdLine").innerText=
@@ -193,7 +152,6 @@ renderTable("awayBatting",game.batters_away)
 renderTable("homeBatting",game.batters_home)
 renderTable("awayPitching",game.pitchers_away)
 renderTable("homePitching",game.pitchers_home)
-
 }
 
 function renderTable(id,data){
