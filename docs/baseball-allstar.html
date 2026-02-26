@@ -48,7 +48,10 @@ body{
   margin-bottom:25px;
 }
 
-.hero h1{margin:0;font-size:32px;}
+.hero h1{
+  margin:0;
+  font-size:32px;
+}
 
 .year-select{
   padding:10px 14px;
@@ -89,21 +92,21 @@ body{
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="baseball.html">Baseball</a>
-<a href="baseball-seasons.html">Seasons</a>
-<a href="baseball-world-series.html">World Series</a>
+  <a href="index.html">Home</a>
+  <a href="baseball.html">Baseball</a>
+  <a href="baseball-seasons.html">Seasons</a>
+  <a href="baseball-world-series.html">World Series</a>
 </div>
 
 <div class="page">
 
-<div class="hero">
-<h1>MLB All-Star Game</h1>
-</div>
+  <div class="hero">
+    <h1>MLB All-Star Game</h1>
+  </div>
 
-<select id="yearSelect" class="year-select"></select>
+  <select id="yearSelect" class="year-select"></select>
 
-<div id="gameContainer"></div>
+  <div id="gameContainer"></div>
 
 </div>
 
@@ -117,15 +120,18 @@ async function fetchJSON(url){
 
 (async function(){
 
-  const yearSelect=document.getElementById("yearSelect");
-  const gameContainer=document.getElementById("gameContainer");
+  const yearSelect = document.getElementById("yearSelect");
+  const gameContainer = document.getElementById("gameContainer");
 
-  /* -----------------------------
-     LOAD YEARS FROM INDEX
-  ----------------------------- */
+  /* =============================
+     LOAD YEARS
+  ============================= */
 
   const yearIndex = await fetchJSON("/data/baseball/index.json");
-  if(!yearIndex) return;
+  if(!yearIndex || !Array.isArray(yearIndex)){
+    gameContainer.innerHTML = "<p>Year index not found.</p>";
+    return;
+  }
 
   const years = yearIndex.sort((a,b)=>b-a);
 
@@ -138,64 +144,92 @@ async function fetchJSON(url){
 
   yearSelect.value = years[0];
 
-  /* -----------------------------
+  /* =============================
+     LOAD TEAM NAMES
+  ============================= */
+
+  const teamData = await fetchJSON("/data/baseball/teams.json");
+  let TEAM_NAMES = {};
+
+  if(Array.isArray(teamData)){
+    teamData.forEach(t=>{
+      if(t.code && t.name){
+        TEAM_NAMES[t.code] = t.name;
+      }
+    });
+  }
+
+  function teamName(code){
+    return TEAM_NAMES[code] || code || "Unknown";
+  }
+
+  /* =============================
      LOAD BALLPARKS
-  ----------------------------- */
+  ============================= */
 
   const parksCSV = await fetch("/data/baseball/ballparks.csv");
-  let PARKS={};
+  let PARKS = {};
 
   if(parksCSV.ok){
     const text = await parksCSV.text();
-    text.split("\n").slice(1).forEach(l=>{
-      const parts=l.split(",");
-      if(parts.length>1) PARKS[parts[0].trim()] = parts[1].trim();
+    text.split("\n").slice(1).forEach(line=>{
+      const parts = line.split(",");
+      if(parts.length > 1){
+        PARKS[parts[0].trim()] = parts[1].trim();
+      }
     });
   }
 
   function parkName(code){
-    return PARKS[code] || code;
+    return PARKS[code] || code || "Unknown";
   }
 
-  /* -----------------------------
+  /* =============================
      RENDER YEAR
-  ----------------------------- */
+  ============================= */
 
   async function renderYear(year){
 
-    gameContainer.innerHTML="Loading...";
+    gameContainer.innerHTML = "Loading...";
 
     const filePath = `/data/baseball/games/${year}/AS${year}.json`;
-    const allStar = await fetchJSON(filePath);
+    const game = await fetchJSON(filePath);
 
-    if(!allStar){
-      gameContainer.innerHTML="<p>No All-Star Game data available.</p>";
+    if(!game){
+      gameContainer.innerHTML = "<p>No All-Star Game data available.</p>";
       return;
     }
 
-    const winner =
-      allStar.away_score > allStar.home_score
-        ? allStar.away_team
-        : allStar.home_score > allStar.away_score
-          ? allStar.home_team
-          : "Tie";
+    const homeName = teamName(game.home_code);
+    const awayName = teamName(game.away_code);
 
-    const div=document.createElement("div");
-    div.className="game-card";
+    const homeScore = game.home_score ?? 0;
+    const awayScore = game.away_score ?? 0;
 
-    div.innerHTML=`
+    let winner = "Tie";
+
+    if(awayScore > homeScore){
+      winner = awayName;
+    } else if(homeScore > awayScore){
+      winner = homeName;
+    }
+
+    const div = document.createElement("div");
+    div.className = "game-card";
+
+    div.innerHTML = `
       <div><strong>${year} All-Star Game</strong></div>
       <div class="scoreline">
-        ${allStar.away_team} ${allStar.away_score}
+        ${awayName} ${awayScore}
         –
-        ${allStar.home_team} ${allStar.home_score}
+        ${homeName} ${homeScore}
       </div>
       <div class="meta">
-        Date: ${allStar.date}<br>
-        Venue: ${parkName(allStar.venue)}<br>
+        Date: ${game.date || "N/A"}<br>
+        Venue: ${parkName(game.venue)}<br>
         Attendance: ${
-          allStar.attendance
-            ? Number(allStar.attendance).toLocaleString()
+          game.attendance
+            ? Number(game.attendance).toLocaleString()
             : "N/A"
         }<br>
         Winner: ${winner}
@@ -207,9 +241,13 @@ async function fetchJSON(url){
         `baseball-game.html?season=${year}&game=AS${year}`;
     });
 
-    gameContainer.innerHTML="";
+    gameContainer.innerHTML = "";
     gameContainer.appendChild(div);
   }
+
+  /* =============================
+     INIT
+  ============================= */
 
   renderYear(years[0]);
 
