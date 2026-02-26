@@ -30,11 +30,7 @@ h1{font-size:38px;margin:0;}
 .stat-box{background:linear-gradient(180deg,#f9fbff,#eef3fb);border-radius:12px;padding:16px 10px;text-align:center;box-shadow:inset 0 0 0 1px #dde3ec;}
 .stat-box strong{display:block;font-size:26px;margin-bottom:4px;}
 .stat-box span{font-size:14px;color:#555;}
-.stat-box .sub{
-  margin-top:6px;
-  font-size:12px;
-  color:#666;
-}
+.stat-box .sub{margin-top:6px;font-size:12px;color:#666;}
 
 table{border-collapse:collapse;width:100%;background:white;border-radius:10px;overflow:hidden;box-shadow:0 3px 10px rgba(0,0,0,.06);}
 th,td{border:1px solid #ddd;padding:8px;text-align:center;}
@@ -107,27 +103,6 @@ document.getElementById("playerName").textContent=playerName||"Select a player";
 
 let allGames=[], currentGames=[], sortDir=-1, sortKey=null;
 
-const teamStripes={
-  "Carlton":"linear-gradient(90deg,#001A3D 0 25%,#ffffff 25% 50%,#001A3D 50% 75%,#ffffff 75% 100%)",
-  "Collingwood":"linear-gradient(90deg,#000000 0 25%,#ffffff 25% 50%,#000000 50% 75%,#ffffff 75% 100%)",
-  "Geelong":"linear-gradient(90deg,#1C3C63 0 25%,#ffffff 25% 50%,#1C3C63 50% 75%,#ffffff 75% 100%)",
-  "Sydney":"linear-gradient(90deg,#ED171F 0 25%,#ffffff 25% 50%,#ED171F 50% 75%,#ffffff 75% 100%)",
-  "Hawthorn":"linear-gradient(90deg,#4D2004 0 25%,#FFD200 25% 50%,#4D2004 50% 75%,#FFD200 75% 100%)",
-  "North Melbourne":"linear-gradient(90deg,#0A2E8A 0 25%,#ffffff 25% 50%,#0A2E8A 50% 75%,#ffffff 75% 100%)",
-  "Richmond":"repeating-linear-gradient(90deg,#FFD200 0 24px,#000 24px 48px,#FFD200 48px 72px)",
-  "Essendon":"repeating-linear-gradient(90deg,#CC2031 0 24px,#000 24px 48px,#CC2031 48px 72px)",
-  "West Coast":"repeating-linear-gradient(90deg,#002B5C 0 24px,#FFD200 24px 48px,#002B5C 48px 72px)",
-  "Adelaide":"repeating-linear-gradient(90deg,#002B5C 0 24px,#FFD200 24px 48px,#CC2031 48px 72px)",
-  "Port Adelaide":"repeating-linear-gradient(90deg,#1C1C1C 0 24px,#00B2A9 24px 48px,#ffffff 48px 72px)",
-  "Brisbane":"repeating-linear-gradient(90deg,#7C003E 0 24px,#FFD200 24px 48px,#005BAC 48px 72px)",
-  "Melbourne":"repeating-linear-gradient(90deg,#002B5C 0 24px,#ED171F 24px 48px,#002B5C 48px 72px)",
-  "Western Bulldogs":"repeating-linear-gradient(90deg,#1E3A8A 0 24px,#ED171F 24px 48px,#ffffff 48px 72px)",
-  "Gold Coast":"repeating-linear-gradient(90deg,#B90A32 0 24px,#FFD200 24px 48px,#B90A32 48px 72px)",
-  "GWS":"repeating-linear-gradient(90deg,#F47920 0 24px,#000 24px 48px,#ffffff 48px 72px)",
-  "St Kilda":"repeating-linear-gradient(90deg,#000 0 24px,#ED171F 24px 48px,#ffffff 48px 72px)",
-  "Fremantle":"repeating-linear-gradient(90deg,#2B004F 0 24px,#ffffff 24px 48px,#2B004F 48px 72px)"
-};
-
 const years=[];
 for(let y=1990;y<=new Date().getFullYear();y++) years.push(y);
 
@@ -146,9 +121,6 @@ Promise.all(years.map(y=>fetch(`/data/afl/afl_${y}.json`).then(r=>r.json()).catc
   currentGames=allGames.filter(p=>p.player===playerName);
 
   if(currentGames.length){
-    const latest=currentGames.reduce((a,b)=>a.season>b.season?a:b);
-    teamStripe.style.background=teamStripes[latest.played_for] || "#999";
-
     setupOpponents(currentGames);
     renderCareer(currentGames);
     renderOpponent([]);
@@ -186,24 +158,10 @@ function renderStats(g,id){
   const bestD=Math.max(...g.map(x=>+x.D||0));
   const bestG=Math.max(...g.map(x=>+x.G||0));
 
-  const bestDCount=g.filter(x=>(+x.D||0)===bestD).length;
-  const bestGCount=g.filter(x=>(+x.G||0)===bestG).length;
-
   document.getElementById(id).innerHTML=`
     <div class="stat-box"><strong>${games}</strong><span>Games</span></div>
-
-    <div class="stat-box">
-      <strong>${bestD}</strong>
-      <span>Best Disposals</span>
-      <div class="sub">${bestDCount>1?`(${bestDCount} times)`:""}</div>
-    </div>
-
-    <div class="stat-box">
-      <strong>${bestG}</strong>
-      <span>Best Goals</span>
-      <div class="sub">${bestGCount>1?`(${bestGCount} times)`:""}</div>
-    </div>
-
+    <div class="stat-box"><strong>${bestD}</strong><span>Best Disposals</span></div>
+    <div class="stat-box"><strong>${bestG}</strong><span>Best Goals</span></div>
     <div class="stat-box"><strong>${(dTotal/games).toFixed(1)}</strong><span>Avg Disposals</span></div>
     <div class="stat-box"><strong>${(gTotal/games).toFixed(2)}</strong><span>Avg Goals</span></div>
   `;
@@ -213,8 +171,11 @@ function renderTable(g){
   rows.innerHTML="";
   g.forEach(p=>{
     const tr=document.createElement("tr");
+
+    // ✅ FIX: Pass game_id instead of season/round/team/opp
     tr.onclick=()=>location.href=
-      `afl-game.html?season=${p.season}&round=${encodeURIComponent(p.round)}&team=${encodeURIComponent(p.played_for)}&opp=${encodeURIComponent(p.played_against)}`;
+      `afl-game.html?game=${encodeURIComponent(p.game_id)}`;
+
     tr.innerHTML=`
       <td>${p.season}</td>
       <td>${p.round}</td>
