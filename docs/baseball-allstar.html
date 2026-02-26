@@ -84,7 +84,7 @@ body{
 .section-title{
   font-size:20px;
   font-weight:700;
-  margin:20px 0 10px;
+  margin:25px 0 10px;
 }
 
 .player-table{
@@ -148,7 +148,10 @@ async function fetchJSON(url){
   const content = document.getElementById("content");
 
   const allStarData = await fetchJSON("/data/baseball/allstar.json");
-  if(!allStarData) return;
+  if(!allStarData || !Array.isArray(allStarData)){
+    content.innerHTML="<p>All-Star data not found.</p>";
+    return;
+  }
 
   const years = allStarData.map(g => g.year).sort((a,b)=>b-a);
 
@@ -164,7 +167,49 @@ async function fetchJSON(url){
   function leagueName(code){
     if(code==="AL") return "American League";
     if(code==="NL") return "National League";
-    return code;
+    return code || "Unknown";
+  }
+
+  function buildTable(players){
+
+    let rows = "";
+
+    if(players && players.length > 0){
+      rows = players.map(p=>`
+        <tr>
+          <td>${p.name || ""}</td>
+          <td>${p.AB ?? 0}</td>
+          <td>${p.R ?? 0}</td>
+          <td>${p.H ?? 0}</td>
+          <td>${p.RBI ?? 0}</td>
+        </tr>
+      `).join("");
+    } else {
+      rows = `
+        <tr>
+          <td colspan="5" style="text-align:center; color:#888;">
+            No batting data available
+          </td>
+        </tr>
+      `;
+    }
+
+    return `
+      <table class="player-table">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>AB</th>
+            <th>R</th>
+            <th>H</th>
+            <th>RBI</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+    `;
   }
 
   async function renderYear(year){
@@ -205,37 +250,6 @@ async function fetchJSON(url){
         </div>
       </div>
     `;
-
-    function buildTable(players){
-      if(!players || players.length===0) return "<p>No batting data.</p>";
-
-      let rows = players.map(p=>`
-        <tr>
-          <td>${p.name}</td>
-          <td>${p.AB ?? 0}</td>
-          <td>${p.R ?? 0}</td>
-          <td>${p.H ?? 0}</td>
-          <td>${p.RBI ?? 0}</td>
-        </tr>
-      `).join("");
-
-      return `
-        <table class="player-table">
-          <thead>
-            <tr>
-              <th>Player</th>
-              <th>AB</th>
-              <th>R</th>
-              <th>H</th>
-              <th>RBI</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows}
-          </tbody>
-        </table>
-      `;
-    }
 
     html += `<div class="section-title">${awayName} Batters</div>`;
     html += buildTable(box.batters_away);
