@@ -124,16 +124,23 @@ async function fetchJSON(url){
   const gameContainer = document.getElementById("gameContainer");
 
   /* =============================
-     LOAD YEARS
+     LOAD ALLSTAR MASTER FILE
   ============================= */
 
-  const yearIndex = await fetchJSON("/data/baseball/index.json");
-  if(!yearIndex || !Array.isArray(yearIndex)){
-    gameContainer.innerHTML = "<p>Year index not found.</p>";
+  const allStarData = await fetchJSON("/data/baseball/allstar.json");
+
+  if(!allStarData || !Array.isArray(allStarData)){
+    gameContainer.innerHTML = "<p>All-Star data not found.</p>";
     return;
   }
 
-  const years = yearIndex.sort((a,b)=>b-a);
+  /* =============================
+     BUILD YEAR DROPDOWN
+  ============================= */
+
+  const years = allStarData
+    .map(g => g.year)
+    .sort((a,b)=>b-a);
 
   years.forEach(y=>{
     const opt=document.createElement("option");
@@ -153,9 +160,7 @@ async function fetchJSON(url){
 
   if(Array.isArray(teamData)){
     teamData.forEach(t=>{
-      if(t.code && t.name){
-        TEAM_NAMES[t.code] = t.name;
-      }
+      TEAM_NAMES[t.code] = t.name;
     });
   }
 
@@ -188,30 +193,29 @@ async function fetchJSON(url){
      RENDER YEAR
   ============================= */
 
-  async function renderYear(year){
+  function renderYear(year){
 
-    gameContainer.innerHTML = "Loading...";
-
-    const filePath = `/data/baseball/games/${year}/AS${year}.json`;
-    const game = await fetchJSON(filePath);
+    const game = allStarData.find(g => g.year == year);
 
     if(!game){
-      gameContainer.innerHTML = "<p>No All-Star Game data available.</p>";
+      gameContainer.innerHTML = "<p>No data available.</p>";
       return;
     }
 
     const homeName = teamName(game.home_code);
     const awayName = teamName(game.away_code);
 
-    const homeScore = game.home_score ?? 0;
-    const awayScore = game.away_score ?? 0;
+    const homeScore = game.home_score ?? "–";
+    const awayScore = game.away_score ?? "–";
 
     let winner = "Tie";
 
-    if(awayScore > homeScore){
-      winner = awayName;
-    } else if(homeScore > awayScore){
-      winner = homeName;
+    if(game.home_score !== null && game.away_score !== null){
+      if(game.away_score > game.home_score){
+        winner = awayName;
+      } else if(game.home_score > game.away_score){
+        winner = homeName;
+      }
     }
 
     const div = document.createElement("div");
@@ -244,10 +248,6 @@ async function fetchJSON(url){
     gameContainer.innerHTML = "";
     gameContainer.appendChild(div);
   }
-
-  /* =============================
-     INIT
-  ============================= */
 
   renderYear(years[0]);
 
