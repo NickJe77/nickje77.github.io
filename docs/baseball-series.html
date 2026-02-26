@@ -19,6 +19,21 @@ body{
   background:var(--bg);
 }
 
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px;
+  background:#fff;
+  border-bottom:1px solid #ddd;
+  font-weight:700;
+}
+
+.navbar a{
+  text-decoration:none;
+  color:#0056d6;
+}
+
 .page{
   max-width:1100px;
   margin:auto;
@@ -43,6 +58,7 @@ body{
   margin-bottom:30px;
   font-size:20px;
   font-weight:700;
+  flex-wrap:wrap;
 }
 
 .series-summary div{
@@ -90,18 +106,20 @@ body{
   font-size:13px;
   color:#666;
 }
-
-.winner{
-  font-weight:900;
-}
 </style>
 </head>
 <body>
 
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="baseball.html">Baseball</a>
+  <a href="baseball-postseason.html">Postseason</a>
+</div>
+
 <div class="page">
 
   <div class="hero">
-    <h1 id="seriesTitle"></h1>
+    <h1 id="seriesTitle">Loading...</h1>
     <div class="subtitle" id="seriesSubtitle"></div>
   </div>
 
@@ -114,8 +132,7 @@ body{
 <script>
 
 function getParam(name){
-  const url = new URL(window.location.href);
-  return url.searchParams.get(name);
+  return new URLSearchParams(window.location.search).get(name);
 }
 
 async function fetchJSON(url){
@@ -131,23 +148,13 @@ async function fetchJSON(url){
   const team1 = getParam("team1");
   const team2 = getParam("team2");
 
-  const postseason = await fetchJSON("/data/baseball/postseason.json");
-  const teams = await fetchJSON("/data/baseball/teams.json");
-  const seasonData = await fetchJSON(`/data/baseball/seasons/${year}.json`);
+  const postseason = await fetchJSON("data/baseball/postseason.json");
+  const indexData = await fetchJSON(`data/baseball/postseason-games/${year}/index.json`);
 
-  if(!postseason || !teams || !seasonData){
-    document.getElementById("gamesContainer").innerHTML =
-      "<p>Series data unavailable.</p>";
+  if(!postseason || !indexData){
+    document.getElementById("seriesTitle").textContent = "Series not found";
     return;
   }
-
-  function getTeamName(code){
-    const t = teams.find(x => x.codes.includes(code));
-    return t ? t.name : code;
-  }
-
-  const team1Name = getTeamName(team1);
-  const team2Name = getTeamName(team2);
 
   const roundNames = {
     WC:"Wild Card",
@@ -157,13 +164,13 @@ async function fetchJSON(url){
   };
 
   document.getElementById("seriesTitle").textContent =
-    `${team1Name} vs ${team2Name}`;
+    `${team1} vs ${team2}`;
 
   document.getElementById("seriesSubtitle").textContent =
-    `${roundNames[round]} • ${year}`;
+    `${roundNames[round] || round} • ${year}`;
 
-  const seriesMeta = postseason.find(d =>
-    d.year == year &&
+  const meta = postseason.find(d =>
+    String(d.year) === String(year) &&
     d.round === round &&
     (
       (d.champion_code === team1 && d.runner_up_code === team2) ||
@@ -171,65 +178,50 @@ async function fetchJSON(url){
     )
   );
 
-  if(seriesMeta){
+  if(meta){
     document.getElementById("seriesSummary").innerHTML = `
-      <div>${getTeamName(seriesMeta.champion_code)}</div>
-      <div>${seriesMeta.result}</div>
-      <div>${getTeamName(seriesMeta.runner_up_code)}</div>
+      <div>${meta.champion_code}</div>
+      <div>${meta.result}</div>
+      <div>${meta.runner_up_code}</div>
     `;
   }
 
-  // Filter postseason games between these two teams
-  const seriesGames = seasonData.filter(g =>
-    (
+  const games = indexData
+    .filter(g =>
       (g.home_code === team1 && g.away_code === team2) ||
       (g.home_code === team2 && g.away_code === team1)
     )
-    &&
-    g.date.startsWith(year + "-10")
-  );
+    .sort((a,b)=> new Date(a.date) - new Date(b.date));
 
-  seriesGames
-    .sort((a,b)=> new Date(a.date) - new Date(b.date))
-    .forEach((game,index)=>{
+  const container = document.getElementById("gamesContainer");
+  container.innerHTML = "";
 
-      const winner =
-        game.away_score > game.home_score
-          ? game.away_code
-          : game.home_code;
+  games.forEach((g, index) => {
 
-      const div = document.createElement("div");
-      div.className = "game";
+    const div = document.createElement("div");
+    div.className = "game";
 
-      div.innerHTML = `
-        <div class="game-header">
-          Game ${index+1} • ${game.date}
-        </div>
-        <div class="score-row">
-          <span class="${winner===game.away_code ? 'winner':''}">
-            ${game.away_team} ${game.away_score}
-          </span>
-          <span>@</span>
-          <span class="${winner===game.home_code ? 'winner':''}">
-            ${game.home_team} ${game.home_score}
-          </span>
-        </div>
-        <div class="meta">
-          Venue: ${game.venue} • Attendance: ${game.attendance ? game.attendance.toLocaleString() : ""}
-        </div>
-      `;
+    div.innerHTML = `
+      <div class="game-header">
+        Game ${index+1} • ${g.date}
+      </div>
+      <div class="score-row">
+        <span>${g.away_code}</span>
+        <span>@</span>
+        <span>${g.home_code}</span>
+      </div>
+      <div class="meta">
+        Venue: ${g.venue || ""}
+      </div>
+    `;
 
-      // FIXED NAVIGATION
-      div.addEventListener("click",()=>{
-        const ymd = game.date.replace(/-/g,"");
-        const gameId = game.home_code + ymd + "0";
-        window.location.href =
-          `baseball-game.html?game=${gameId}`;
-      });
-
-      document.getElementById("gamesContainer").appendChild(div);
-
+    div.addEventListener("click",()=>{
+      window.location.href = `postseason-game.html?game=${g.game_id}`;
     });
+
+    container.appendChild(div);
+
+  });
 
 })();
 </script>
