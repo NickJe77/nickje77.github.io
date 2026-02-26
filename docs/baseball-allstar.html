@@ -35,7 +35,7 @@ body{
 }
 
 .page{
-  max-width:1000px;
+  max-width:1100px;
   margin:auto;
   padding:30px;
 }
@@ -67,17 +67,11 @@ body{
   padding:20px;
   border-radius:16px;
   border:1px solid var(--line);
-  cursor:pointer;
-  transition:.2s;
-}
-
-.game-card:hover{
-  background:#eaf3ff;
-  transform:translateY(-2px);
+  margin-bottom:30px;
 }
 
 .scoreline{
-  font-size:20px;
+  font-size:22px;
   font-weight:700;
   margin:10px 0;
 }
@@ -85,6 +79,36 @@ body{
 .meta{
   font-size:14px;
   color:#555;
+}
+
+.section-title{
+  font-size:20px;
+  font-weight:700;
+  margin:20px 0 10px;
+}
+
+.player-table{
+  width:100%;
+  border-collapse:collapse;
+  margin-bottom:30px;
+}
+
+.player-table th{
+  text-align:left;
+  padding:8px;
+  background:#f0f2f5;
+  border-bottom:2px solid var(--line);
+  font-size:14px;
+}
+
+.player-table td{
+  padding:8px;
+  border-bottom:1px solid var(--line);
+  font-size:14px;
+}
+
+.player-table tr:hover{
+  background:#f9fbff;
 }
 </style>
 </head>
@@ -106,7 +130,7 @@ body{
 
   <select id="yearSelect" class="year-select"></select>
 
-  <div id="gameContainer"></div>
+  <div id="content"></div>
 
 </div>
 
@@ -121,26 +145,12 @@ async function fetchJSON(url){
 (async function(){
 
   const yearSelect = document.getElementById("yearSelect");
-  const gameContainer = document.getElementById("gameContainer");
-
-  /* =============================
-     LOAD ALLSTAR MASTER FILE
-  ============================= */
+  const content = document.getElementById("content");
 
   const allStarData = await fetchJSON("/data/baseball/allstar.json");
+  if(!allStarData) return;
 
-  if(!allStarData || !Array.isArray(allStarData)){
-    gameContainer.innerHTML = "<p>All-Star data not found.</p>";
-    return;
-  }
-
-  /* =============================
-     BUILD YEAR DROPDOWN
-  ============================= */
-
-  const years = allStarData
-    .map(g => g.year)
-    .sort((a,b)=>b-a);
+  const years = allStarData.map(g => g.year).sort((a,b)=>b-a);
 
   years.forEach(y=>{
     const opt=document.createElement("option");
@@ -151,102 +161,89 @@ async function fetchJSON(url){
 
   yearSelect.value = years[0];
 
-  /* =============================
-     LOAD TEAM NAMES
-  ============================= */
-
-  const teamData = await fetchJSON("/data/baseball/teams.json");
-  let TEAM_NAMES = {};
-
-  if(Array.isArray(teamData)){
-    teamData.forEach(t=>{
-      TEAM_NAMES[t.code] = t.name;
-    });
+  function leagueName(code){
+    if(code==="AL") return "American League";
+    if(code==="NL") return "National League";
+    return code;
   }
 
-  function teamName(code){
-    return TEAM_NAMES[code] || code || "Unknown";
-  }
+  async function renderYear(year){
 
-  /* =============================
-     LOAD BALLPARKS
-  ============================= */
+    content.innerHTML="Loading...";
 
-  const parksCSV = await fetch("/data/baseball/ballparks.csv");
-  let PARKS = {};
+    const summary = allStarData.find(g=>g.year==year);
+    const box = await fetchJSON(`/data/baseball/games/${year}/AS${year}.json`);
 
-  if(parksCSV.ok){
-    const text = await parksCSV.text();
-    text.split("\n").slice(1).forEach(line=>{
-      const parts = line.split(",");
-      if(parts.length > 1){
-        PARKS[parts[0].trim()] = parts[1].trim();
-      }
-    });
-  }
-
-  function parkName(code){
-    return PARKS[code] || code || "Unknown";
-  }
-
-  /* =============================
-     RENDER YEAR
-  ============================= */
-
-  function renderYear(year){
-
-    const game = allStarData.find(g => g.year == year);
-
-    if(!game){
-      gameContainer.innerHTML = "<p>No data available.</p>";
+    if(!summary || !box){
+      content.innerHTML="<p>No data available.</p>";
       return;
     }
 
-    const homeName = teamName(game.home_code);
-    const awayName = teamName(game.away_code);
+    const homeName = leagueName(summary.home_code);
+    const awayName = leagueName(summary.away_code);
 
-    const homeScore = game.home_score ?? "–";
-    const awayScore = game.away_score ?? "–";
+    const homeScore = summary.home_score ?? "–";
+    const awayScore = summary.away_score ?? "–";
 
-    let winner = "Tie";
-
-    if(game.home_score !== null && game.away_score !== null){
-      if(game.away_score > game.home_score){
-        winner = awayName;
-      } else if(game.home_score > game.away_score){
-        winner = homeName;
-      }
+    let winner="Tie";
+    if(summary.home_score!=null && summary.away_score!=null){
+      if(summary.home_score>summary.away_score) winner=homeName;
+      if(summary.away_score>summary.home_score) winner=awayName;
     }
 
-    const div = document.createElement("div");
-    div.className = "game-card";
-
-    div.innerHTML = `
-      <div><strong>${year} All-Star Game</strong></div>
-      <div class="scoreline">
-        ${awayName} ${awayScore}
-        –
-        ${homeName} ${homeScore}
-      </div>
-      <div class="meta">
-        Date: ${game.date || "N/A"}<br>
-        Venue: ${parkName(game.venue)}<br>
-        Attendance: ${
-          game.attendance
-            ? Number(game.attendance).toLocaleString()
-            : "N/A"
-        }<br>
-        Winner: ${winner}
+    let html = `
+      <div class="game-card">
+        <div><strong>${year} All-Star Game</strong></div>
+        <div class="scoreline">
+          ${awayName} ${awayScore} – ${homeName} ${homeScore}
+        </div>
+        <div class="meta">
+          Date: ${summary.date || "N/A"}<br>
+          Venue: ${summary.venue || "N/A"}<br>
+          Attendance: ${summary.attendance ? Number(summary.attendance).toLocaleString() : "N/A"}<br>
+          Winner: ${winner}
+        </div>
       </div>
     `;
 
-    div.addEventListener("click",()=>{
-      window.location.href =
-        `baseball-game.html?season=${year}&game=AS${year}`;
-    });
+    function buildTable(players){
+      if(!players || players.length===0) return "<p>No batting data.</p>";
 
-    gameContainer.innerHTML = "";
-    gameContainer.appendChild(div);
+      let rows = players.map(p=>`
+        <tr>
+          <td>${p.name}</td>
+          <td>${p.AB ?? 0}</td>
+          <td>${p.R ?? 0}</td>
+          <td>${p.H ?? 0}</td>
+          <td>${p.RBI ?? 0}</td>
+        </tr>
+      `).join("");
+
+      return `
+        <table class="player-table">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>AB</th>
+              <th>R</th>
+              <th>H</th>
+              <th>RBI</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      `;
+    }
+
+    html += `<div class="section-title">${awayName} Batters</div>`;
+    html += buildTable(box.batters_away);
+
+    html += `<div class="section-title">${homeName} Batters</div>`;
+    html += buildTable(box.batters_home);
+
+    content.innerHTML = html;
   }
 
   renderYear(years[0]);
