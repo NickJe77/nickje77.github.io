@@ -117,7 +117,31 @@ async function fetchJSON(url){
 
 (async function(){
 
-  const teams = await fetchJSON("/data/baseball/teams.json");
+  const yearSelect=document.getElementById("yearSelect");
+  const gameContainer=document.getElementById("gameContainer");
+
+  /* -----------------------------
+     LOAD YEARS FROM INDEX
+  ----------------------------- */
+
+  const yearIndex = await fetchJSON("/data/baseball/index.json");
+  if(!yearIndex) return;
+
+  const years = yearIndex.sort((a,b)=>b-a);
+
+  years.forEach(y=>{
+    const opt=document.createElement("option");
+    opt.value=y;
+    opt.textContent=y;
+    yearSelect.appendChild(opt);
+  });
+
+  yearSelect.value = years[0];
+
+  /* -----------------------------
+     LOAD BALLPARKS
+  ----------------------------- */
+
   const parksCSV = await fetch("/data/baseball/ballparks.csv");
   let PARKS={};
 
@@ -129,35 +153,20 @@ async function fetchJSON(url){
     });
   }
 
-  function parkName(code){ return PARKS[code] || code; }
+  function parkName(code){
+    return PARKS[code] || code;
+  }
 
-  const yearSelect=document.getElementById("yearSelect");
-  const gameContainer=document.getElementById("gameContainer");
-
-  // Build year list dynamically from seasons folder index
-  const seasonIndex = await fetchJSON("/data/baseball/seasons/index.json");
-
-  const years = seasonIndex.sort((a,b)=>b-a);
-
-  years.forEach(y=>{
-    const opt=document.createElement("option");
-    opt.value=y;
-    opt.textContent=y;
-    yearSelect.appendChild(opt);
-  });
-
-  yearSelect.value = years[0];
+  /* -----------------------------
+     RENDER YEAR
+  ----------------------------- */
 
   async function renderYear(year){
 
-    gameContainer.innerHTML="";
+    gameContainer.innerHTML="Loading...";
 
-    const seasonData = await fetchJSON(`/data/baseball/seasons/${year}.json`);
-    if(!seasonData) return;
-
-    const allStar = seasonData.find(g =>
-      g.home_code==="ALS" || g.home_code==="NLS"
-    );
+    const filePath = `/data/baseball/games/${year}/AS${year}.json`;
+    const allStar = await fetchJSON(filePath);
 
     if(!allStar){
       gameContainer.innerHTML="<p>No All-Star Game data available.</p>";
@@ -167,7 +176,9 @@ async function fetchJSON(url){
     const winner =
       allStar.away_score > allStar.home_score
         ? allStar.away_team
-        : allStar.home_team;
+        : allStar.home_score > allStar.away_score
+          ? allStar.home_team
+          : "Tie";
 
     const div=document.createElement("div");
     div.className="game-card";
@@ -182,16 +193,21 @@ async function fetchJSON(url){
       <div class="meta">
         Date: ${allStar.date}<br>
         Venue: ${parkName(allStar.venue)}<br>
-        Attendance: ${allStar.attendance.toLocaleString()}<br>
+        Attendance: ${
+          allStar.attendance
+            ? Number(allStar.attendance).toLocaleString()
+            : "N/A"
+        }<br>
         Winner: ${winner}
       </div>
     `;
 
     div.addEventListener("click",()=>{
       window.location.href =
-        `baseball-game.html?season=${year}&date=${allStar.date}&home=${allStar.home_code}&away=${allStar.away_code}`;
+        `baseball-game.html?season=${year}&game=AS${year}`;
     });
 
+    gameContainer.innerHTML="";
     gameContainer.appendChild(div);
   }
 
