@@ -135,6 +135,12 @@ async function fetchJSON(url){
   const teams = await fetchJSON("/data/baseball/teams.json");
   const seasonData = await fetchJSON(`/data/baseball/seasons/${year}.json`);
 
+  if(!postseason || !teams || !seasonData){
+    document.getElementById("gamesContainer").innerHTML =
+      "<p>Series data unavailable.</p>";
+    return;
+  }
+
   function getTeamName(code){
     const t = teams.find(x => x.codes.includes(code));
     return t ? t.name : code;
@@ -157,7 +163,7 @@ async function fetchJSON(url){
     `${roundNames[round]} • ${year}`;
 
   const seriesMeta = postseason.find(d =>
-    d.year === year &&
+    d.year == year &&
     d.round === round &&
     (
       (d.champion_code === team1 && d.runner_up_code === team2) ||
@@ -173,13 +179,14 @@ async function fetchJSON(url){
     `;
   }
 
+  // Filter postseason games between these two teams
   const seriesGames = seasonData.filter(g =>
     (
       (g.home_code === team1 && g.away_code === team2) ||
       (g.home_code === team2 && g.away_code === team1)
     )
     &&
-    g.date.includes(year + "-10")
+    g.date.startsWith(year + "-10")
   );
 
   seriesGames
@@ -208,13 +215,16 @@ async function fetchJSON(url){
           </span>
         </div>
         <div class="meta">
-          Venue: ${game.venue} • Attendance: ${game.attendance.toLocaleString()}
+          Venue: ${game.venue} • Attendance: ${game.attendance ? game.attendance.toLocaleString() : ""}
         </div>
       `;
 
+      // FIXED NAVIGATION
       div.addEventListener("click",()=>{
+        const ymd = game.date.replace(/-/g,"");
+        const gameId = game.home_code + ymd + "0";
         window.location.href =
-          `baseball-game.html?season=${year}&date=${game.date}&home=${game.home_code}&away=${game.away_code}`;
+          `baseball-game.html?game=${gameId}`;
       });
 
       document.getElementById("gamesContainer").appendChild(div);
