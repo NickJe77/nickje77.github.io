@@ -127,10 +127,7 @@ async function fetchJSON(url){
   const content = document.getElementById("content");
 
   const allStarData = await fetchJSON("/data/baseball/allstar.json");
-  if(!allStarData || !Array.isArray(allStarData)){
-    content.innerHTML="<p>All-Star data not found.</p>";
-    return;
-  }
+  if(!allStarData) return;
 
   const years = allStarData.map(g=>g.year).sort((a,b)=>b-a);
 
@@ -146,12 +143,28 @@ async function fetchJSON(url){
   function leagueName(code){
     if(code==="AL") return "American League";
     if(code==="NL") return "National League";
-    return code || "Unknown";
+    return code;
+  }
+
+  function getBatters(box, type){
+    // Try every possible naming pattern
+    const possibilities = [
+      box[`batters_${type}`],
+      box[`batters${type.charAt(0).toUpperCase()+type.slice(1)}`],
+      box[`${type}_batters`],
+      box[`${type}Batters`]
+    ];
+
+    for(let p of possibilities){
+      if(Array.isArray(p)) return p;
+    }
+
+    return [];
   }
 
   function buildTable(players){
     let rows="";
-    if(players && players.length){
+    if(players.length){
       rows = players.map(p=>`
         <tr>
           <td>${p.name || ""}</td>
@@ -207,38 +220,22 @@ async function fetchJSON(url){
     const homeName = leagueName(homeLeague);
     const awayName = leagueName(awayLeague);
 
-    const homeScore = summary.home_score ?? "–";
-    const awayScore = summary.away_score ?? "–";
-
-    let winner="Tie";
-    if(summary.home_score!=null && summary.away_score!=null){
-      if(summary.home_score>summary.away_score) winner=homeName;
-      if(summary.away_score>summary.home_score) winner=awayName;
-    }
-
-    // CRITICAL FIX:
-    // Match league to correct batting array dynamically
-    let AL_batters, NL_batters;
+    let AL_batters=[], NL_batters=[];
 
     if(homeLeague==="AL"){
-      AL_batters = box.batters_home;
-      NL_batters = box.batters_away;
+      AL_batters = getBatters(box,"home");
+      NL_batters = getBatters(box,"away");
     } else {
-      AL_batters = box.batters_away;
-      NL_batters = box.batters_home;
+      AL_batters = getBatters(box,"away");
+      NL_batters = getBatters(box,"home");
     }
 
     let html = `
       <div class="game-card">
         <div><strong>${year} All-Star Game</strong></div>
         <div class="scoreline">
-          ${awayName} ${awayScore} – ${homeName} ${homeScore}
-        </div>
-        <div class="meta">
-          Date: ${summary.date || "N/A"}<br>
-          Venue: ${summary.venue || "N/A"}<br>
-          Attendance: ${summary.attendance ? Number(summary.attendance).toLocaleString() : "N/A"}<br>
-          Winner: ${winner}
+          ${awayName} ${summary.away_score ?? "–"} –
+          ${homeName} ${summary.home_score ?? "–"}
         </div>
       </div>
     `;
