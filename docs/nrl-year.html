@@ -97,8 +97,11 @@ h1{margin-bottom:20px;}
 
 let allMatches=[];
 
-fetch("data/nrl/index.json")
-.then(r=>r.json())
+fetch("/data/nrl/index.json")
+.then(r=>{
+  if(!r.ok) throw new Error("Index not found");
+  return r.json();
+})
 .then(index=>{
 
   const yearBar=document.getElementById("years");
@@ -112,7 +115,9 @@ fetch("data/nrl/index.json")
   });
 
   loadSeason(index.seasons[0]);
-});
+
+})
+.catch(err=>console.error("INDEX ERROR:",err));
 
 function loadSeason(year){
 
@@ -120,13 +125,18 @@ function loadSeason(year){
     b.classList.toggle("active",b.textContent==year);
   });
 
-  fetch("data/nrl/seasons/"+year+".json")
-  .then(r=>r.json())
+  fetch("/data/nrl/seasons/"+year+".json")
+  .then(r=>{
+    if(!r.ok) throw new Error("Season file missing: "+year);
+    return r.json();
+  })
   .then(data=>{
+    console.log("Loaded season",year,data.length,"matches");
     allMatches=data;
     buildLadder(data);
     buildMatches(data);
-  });
+  })
+  .catch(err=>console.error("SEASON ERROR:",err));
 }
 
 function buildMatches(matches){
@@ -134,9 +144,7 @@ function buildMatches(matches){
   const container=document.getElementById("matches");
   container.innerHTML="";
 
-  // IMPORTANT: loop matches directly
   matches.forEach(m=>{
-
     container.innerHTML+=`
       <div class="match">
         ${m.home_team} ${m.home_points} - ${m.away_points} ${m.away_team}
@@ -144,7 +152,6 @@ function buildMatches(matches){
         <small>${m.date_iso} • ${m.venue}</small>
       </div>
     `;
-
   });
 }
 
