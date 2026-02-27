@@ -8,53 +8,15 @@
 <style>
 body{font-family:Inter,Arial;margin:0;background:#f4f6f8;}
 
-.navbar{
-  display:flex;
-  justify-content:center;
-  gap:24px;
-  padding:16px;
-  background:white;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
-}
-.navbar a{text-decoration:none;color:#0056d6;}
-
 .page{max-width:1200px;margin:auto;padding:30px;}
 
-.header{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  margin-bottom:20px;
-}
-
-h1{margin:0;font-size:42px;}
-
-.search{
-  padding:10px;
-  border-radius:10px;
-  border:1px solid #ddd;
-  width:260px;
-}
-
-select{
-  padding:8px;
-  border-radius:8px;
-  margin:10px 0;
-}
-
-.section-title{
-  font-size:14px;
-  letter-spacing:1px;
-  font-weight:700;
-  margin:25px 0 10px;
-  color:#666;
-}
+h1{margin:0 0 20px;font-size:40px;}
 
 .cards{
   display:flex;
   gap:20px;
   flex-wrap:wrap;
+  margin-bottom:30px;
 }
 
 .card{
@@ -71,10 +33,6 @@ select{
   font-size:30px;
 }
 
-.table-wrap{
-  margin-top:30px;
-}
-
 table{
   width:100%;
   border-collapse:collapse;
@@ -83,69 +41,35 @@ table{
 th,td{
   padding:12px;
   border-bottom:1px solid #ddd;
-  text-align:left;
 }
 
-th{
-  background:#e2e6ec;
-  cursor:pointer;
-}
-button{
-  margin:10px 0;
-  padding:8px 14px;
-  border-radius:8px;
-  border:1px solid #aaa;
-  background:white;
-  cursor:pointer;
-}
+th{background:#e2e6ec;}
 </style>
 </head>
 <body>
 
-<nav class="navbar">
-  <a href="index.html">Home</a>
-  <a href="nrl.html">NRL</a>
-</nav>
-
 <div class="page">
 
-<div class="header">
-  <h1 id="playerName">Loading...</h1>
-  <input class="search" id="playerSearch" placeholder="Search player...">
-</div>
+<h1 id="playerName">Loading...</h1>
 
-<select id="teamFilter"></select>
+<div class="cards" id="summary"></div>
 
-<div class="section-title">CAREER SUMMARY</div>
-<div class="cards" id="careerCards"></div>
-
-<div class="section-title">VS SELECTED OPPONENT</div>
-<div class="cards" id="oppCards"></div>
-
-<button onclick="resetSort()">Reset Sort</button>
-
-<div class="table-wrap">
-<table id="gamesTable">
+<table>
 <thead>
 <tr>
-<th onclick="sortTable(0)">Season</th>
-<th onclick="sortTable(1)">Round</th>
-<th onclick="sortTable(2)">Team</th>
-<th onclick="sortTable(3)">Opponent</th>
-<th onclick="sortTable(4)">Points</th>
-<th onclick="sortTable(5)">Tries</th>
+<th>Season</th>
+<th>Team</th>
+<th>Opponent</th>
+<th>Points</th>
+<th>Tries</th>
 </tr>
 </thead>
-<tbody></tbody>
+<tbody id="games"></tbody>
 </table>
-</div>
 
 </div>
 
 <script>
-
-let allRows=[];
-let currentRows=[];
 
 const params=new URLSearchParams(window.location.search);
 const player=params.get("player");
@@ -164,110 +88,67 @@ fetch("data/nrl/index.json")
     fetch("data/nrl/seasons/"+s+".json").then(r=>r.json())
   );
 
-  Promise.all(fetches).then(results=>{
-    results.forEach(season=>{
-      season.forEach(row=>{
-        if(row.player===player){
-          allRows.push(row);
+  Promise.all(fetches).then(seasons=>{
+
+    let games=[];
+
+    seasons.forEach(matches=>{
+      matches.forEach(match=>{
+        if(match.players){
+          match.players.forEach(p=>{
+            if(p.player === player){
+              games.push({
+                season: match.season,
+                team: p.played_for || match.home_team,
+                opponent: (match.home_team===p.played_for)
+                  ? match.away_team
+                  : match.home_team,
+                points: p.points || 0,
+                tries: p.tries || 0
+              });
+            }
+          });
         }
       });
     });
 
-    currentRows=[...allRows];
-
-    buildTeamFilter();
-    buildCareerCards(allRows);
-    buildOpponentCards(allRows);
-    buildTable(allRows);
+    buildPage(games);
   });
-
 });
 }
 
-function buildCareerCards(rows){
+function buildPage(games){
 
-  const games=rows.length;
-  const bestPoints=Math.max(...rows.map(r=>r.points||0),0);
-  const bestTries=Math.max(...rows.map(r=>r.tries||0),0);
-  const avgPoints=(rows.reduce((a,b)=>a+(b.points||0),0)/games||0).toFixed(1);
-  const avgTries=(rows.reduce((a,b)=>a+(b.tries||0),0)/games||0).toFixed(2);
+  const totalGames=games.length;
+  const totalPoints=games.reduce((a,b)=>a+b.points,0);
+  const totalTries=games.reduce((a,b)=>a+b.tries,0);
+  const avgPoints=(totalPoints/totalGames||0).toFixed(1);
+  const avgTries=(totalTries/totalGames||0).toFixed(2);
+  const bestPoints=Math.max(...games.map(g=>g.points),0);
+  const bestTries=Math.max(...games.map(g=>g.tries),0);
 
-  document.getElementById("careerCards").innerHTML=`
-    <div class="card"><h2>${games}</h2>Games</div>
+  document.getElementById("summary").innerHTML=`
+    <div class="card"><h2>${totalGames}</h2>Games</div>
     <div class="card"><h2>${bestPoints}</h2>Best Points</div>
     <div class="card"><h2>${bestTries}</h2>Best Tries</div>
     <div class="card"><h2>${avgPoints}</h2>Avg Points</div>
     <div class="card"><h2>${avgTries}</h2>Avg Tries</div>
   `;
-}
 
-function buildOpponentCards(rows){
-
-  const oppSelect=document.getElementById("teamFilter").value;
-  const filtered=oppSelect?rows.filter(r=>r.played_against===oppSelect):rows;
-
-  const games=filtered.length;
-  const bestPoints=Math.max(...filtered.map(r=>r.points||0),0);
-  const bestTries=Math.max(...filtered.map(r=>r.tries||0),0);
-  const avgPoints=(filtered.reduce((a,b)=>a+(b.points||0),0)/games||0).toFixed(1);
-  const avgTries=(filtered.reduce((a,b)=>a+(b.tries||0),0)/games||0).toFixed(2);
-
-  document.getElementById("oppCards").innerHTML=`
-    <div class="card"><h2>${games}</h2>Games</div>
-    <div class="card"><h2>${bestPoints}</h2>Best Points</div>
-    <div class="card"><h2>${bestTries}</h2>Best Tries</div>
-    <div class="card"><h2>${avgPoints}</h2>Avg Points</div>
-    <div class="card"><h2>${avgTries}</h2>Avg Tries</div>
-  `;
-}
-
-function buildTeamFilter(){
-
-  const teams=[...new Set(allRows.map(r=>r.played_against))].sort();
-  const select=document.getElementById("teamFilter");
-
-  select.innerHTML="<option value=''>All Opponents</option>";
-
-  teams.forEach(t=>{
-    const opt=document.createElement("option");
-    opt.value=t;
-    opt.textContent=t;
-    select.appendChild(opt);
-  });
-
-  select.onchange=()=>{
-    buildOpponentCards(allRows);
-  };
-}
-
-function buildTable(rows){
-
-  const tbody=document.querySelector("#gamesTable tbody");
+  const tbody=document.getElementById("games");
   tbody.innerHTML="";
 
-  rows.forEach(r=>{
+  games.forEach(g=>{
     tbody.innerHTML+=`
       <tr>
-        <td>${r.season}</td>
-        <td>${r.round}</td>
-        <td>${r.played_for}</td>
-        <td>${r.played_against}</td>
-        <td>${r.points||0}</td>
-        <td>${r.tries||0}</td>
+        <td>${g.season}</td>
+        <td>${g.team}</td>
+        <td>${g.opponent}</td>
+        <td>${g.points}</td>
+        <td>${g.tries}</td>
       </tr>
     `;
   });
-}
-
-function sortTable(n){
-  const table=document.getElementById("gamesTable");
-  const rows=[...table.rows].slice(1);
-  rows.sort((a,b)=>a.cells[n].innerText.localeCompare(b.cells[n].innerText));
-  rows.forEach(r=>table.appendChild(r));
-}
-
-function resetSort(){
-  buildTable(currentRows);
 }
 
 </script>
