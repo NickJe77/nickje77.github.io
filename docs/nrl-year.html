@@ -1,148 +1,38 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>NRL Season</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<style>
-body{font-family:Inter,Arial;margin:0;background:#f4f6f8;}
-.page{max-width:1200px;margin:auto;padding:30px;}
-h1{margin-bottom:20px;}
-
-.year-bar{
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
-  margin-bottom:20px;
-}
-
-.year-btn{
-  padding:8px 14px;
-  background:#ddd;
-  border-radius:8px;
-  cursor:pointer;
-  font-weight:600;
-}
-
-.year-btn.active{
-  background:#222;
-  color:white;
-}
-
-.content{
-  display:flex;
-  gap:30px;
-}
-
-.ladder{
-  width:35%;
-  background:white;
-  border-radius:10px;
-  padding:10px;
-}
-
-.ladder table{
-  width:100%;
-  border-collapse:collapse;
-}
-
-.ladder th,.ladder td{
-  border:1px solid #eee;
-  padding:6px;
-  text-align:center;
-}
-
-.matches{
-  width:65%;
-}
-
-.match{
-  background:white;
-  padding:12px;
-  border-radius:8px;
-  margin-bottom:10px;
-}
-</style>
-</head>
-<body>
-
-<div class="page">
-
-<h1>NRL Season</h1>
-
-<div class="year-bar" id="years"></div>
-
-<div class="content">
-  <div class="ladder">
-    <table>
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Team</th>
-          <th>W</th>
-          <th>L</th>
-        </tr>
-      </thead>
-      <tbody id="ladderBody"></tbody>
-    </table>
-  </div>
-
-  <div class="matches" id="matches"></div>
-</div>
-
-</div>
-
 <script>
 
 let allMatches = [];
 
 fetch("data/nrl/index.json")
-.then(function(response){
-  if(!response.ok){
-    throw new Error("Index file not found");
-  }
-  return response.json();
-})
-.then(function(index){
+.then(r => r.json())
+.then(index => {
 
   const yearBar = document.getElementById("years");
 
-  index.seasons.forEach(function(y){
+  for(let y = index.first_season; y <= index.last_season; y++){
     const btn = document.createElement("div");
     btn.className = "year-btn";
     btn.textContent = y;
     btn.onclick = function(){ loadSeason(y); };
     yearBar.appendChild(btn);
-  });
+  }
 
-  loadSeason(index.seasons[0]);
-})
-.catch(function(error){
-  console.error("INDEX ERROR:", error);
+  loadSeason(index.first_season);
 });
 
 function loadSeason(year){
 
-  document.querySelectorAll(".year-btn").forEach(function(b){
+  document.querySelectorAll(".year-btn").forEach(b=>{
     b.classList.toggle("active", b.textContent == year);
   });
 
   fetch("data/nrl/seasons/" + year + ".json")
-  .then(function(response){
-    if(!response.ok){
-      throw new Error("Season file not found: " + year);
-    }
-    return response.json();
-  })
-  .then(function(data){
+  .then(r => r.json())
+  .then(data => {
     allMatches = data;
     buildLadder(data);
     buildMatches(data);
   })
-  .catch(function(error){
-    console.error("SEASON ERROR:", error);
-  });
+  .catch(err => console.error("SEASON ERROR:", err));
 }
 
 function buildMatches(matches){
@@ -150,20 +40,14 @@ function buildMatches(matches){
   const container = document.getElementById("matches");
   container.innerHTML = "";
 
-  matches.forEach(function(m){
-
-    container.innerHTML +=
-      '<div class="match">' +
-        m.home_team + " " + m.home_points +
-        " - " +
-        m.away_points + " " + m.away_team +
-        '<br><small>' +
-        (m.date_iso || "") +
-        " • " +
-        (m.venue || "") +
-        '</small>' +
-      '</div>';
-
+  matches.forEach(m => {
+    container.innerHTML += `
+      <div class="match">
+        ${m.home_team} ${m.home_points} - ${m.away_points} ${m.away_team}
+        <br>
+        <small>${m.date_iso || ""} • ${m.venue || ""}</small>
+      </div>
+    `;
   });
 }
 
@@ -171,7 +55,7 @@ function buildLadder(matches){
 
   const ladder = {};
 
-  matches.forEach(function(m){
+  matches.forEach(m => {
 
     if(!ladder[m.home_team]) ladder[m.home_team] = {W:0,L:0};
     if(!ladder[m.away_team]) ladder[m.away_team] = {W:0,L:0};
@@ -179,8 +63,7 @@ function buildLadder(matches){
     if(m.home_points > m.away_points){
       ladder[m.home_team].W++;
       ladder[m.away_team].L++;
-    }
-    else if(m.away_points > m.home_points){
+    } else if(m.away_points > m.home_points){
       ladder[m.away_team].W++;
       ladder[m.home_team].L++;
     }
@@ -188,25 +71,21 @@ function buildLadder(matches){
   });
 
   const sorted = Object.entries(ladder)
-    .sort(function(a,b){
-      return b[1].W - a[1].W;
-    });
+    .sort((a,b) => b[1].W - a[1].W);
 
   const body = document.getElementById("ladderBody");
   body.innerHTML = "";
 
-  sorted.forEach(function(t,i){
-    body.innerHTML +=
-      "<tr>" +
-        "<td>" + (i+1) + "</td>" +
-        "<td>" + t[0] + "</td>" +
-        "<td>" + t[1].W + "</td>" +
-        "<td>" + t[1].L + "</td>" +
-      "</tr>";
+  sorted.forEach((t,i) => {
+    body.innerHTML += `
+      <tr>
+        <td>${i+1}</td>
+        <td>${t[0]}</td>
+        <td>${t[1].W}</td>
+        <td>${t[1].L}</td>
+      </tr>
+    `;
   });
 }
 
 </script>
-
-</body>
-</html>
