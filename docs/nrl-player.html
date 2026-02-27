@@ -4,89 +4,273 @@
 <meta charset="UTF-8">
 <title>NRL Player</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <style>
 body{font-family:Inter,Arial;margin:0;background:#f4f6f8;}
-.page{max-width:1100px;margin:auto;padding:30px;}
-.hero{background:linear-gradient(90deg,#0055A4,#00A651);color:white;padding:30px;border-radius:20px;margin-bottom:20px;}
-.stats{display:flex;gap:20px;margin-bottom:20px;}
-.stat{background:white;padding:20px;border-radius:12px;flex:1;text-align:center;}
-.stat h2{margin:0;font-size:28px;}
-.row{background:white;padding:10px;border-radius:8px;margin-bottom:6px;}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px;
+  background:white;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{text-decoration:none;color:#0056d6;}
+
+.page{max-width:1200px;margin:auto;padding:30px;}
+
+.header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:20px;
+}
+
+h1{margin:0;font-size:42px;}
+
+.search{
+  padding:10px;
+  border-radius:10px;
+  border:1px solid #ddd;
+  width:260px;
+}
+
+select{
+  padding:8px;
+  border-radius:8px;
+  margin:10px 0;
+}
+
+.section-title{
+  font-size:14px;
+  letter-spacing:1px;
+  font-weight:700;
+  margin:25px 0 10px;
+  color:#666;
+}
+
+.cards{
+  display:flex;
+  gap:20px;
+  flex-wrap:wrap;
+}
+
+.card{
+  flex:1;
+  min-width:160px;
+  background:#e9edf3;
+  border-radius:14px;
+  padding:20px;
+  text-align:center;
+}
+
+.card h2{
+  margin:0;
+  font-size:30px;
+}
+
+.table-wrap{
+  margin-top:30px;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+th,td{
+  padding:12px;
+  border-bottom:1px solid #ddd;
+  text-align:left;
+}
+
+th{
+  background:#e2e6ec;
+  cursor:pointer;
+}
+button{
+  margin:10px 0;
+  padding:8px 14px;
+  border-radius:8px;
+  border:1px solid #aaa;
+  background:white;
+  cursor:pointer;
+}
 </style>
 </head>
 <body>
+
+<nav class="navbar">
+  <a href="index.html">Home</a>
+  <a href="nrl.html">NRL</a>
+</nav>
+
 <div class="page">
-<div class="hero">
+
+<div class="header">
   <h1 id="playerName">Loading...</h1>
+  <input class="search" id="playerSearch" placeholder="Search player...">
 </div>
 
-<div class="stats">
-  <div class="stat">
-    <h2 id="games">0</h2>
-    <div>Games</div>
-  </div>
-  <div class="stat">
-    <h2 id="points">0</h2>
-    <div>Total Points</div>
-  </div>
+<select id="teamFilter"></select>
+
+<div class="section-title">CAREER SUMMARY</div>
+<div class="cards" id="careerCards"></div>
+
+<div class="section-title">VS SELECTED OPPONENT</div>
+<div class="cards" id="oppCards"></div>
+
+<button onclick="resetSort()">Reset Sort</button>
+
+<div class="table-wrap">
+<table id="gamesTable">
+<thead>
+<tr>
+<th onclick="sortTable(0)">Season</th>
+<th onclick="sortTable(1)">Round</th>
+<th onclick="sortTable(2)">Team</th>
+<th onclick="sortTable(3)">Opponent</th>
+<th onclick="sortTable(4)">Points</th>
+<th onclick="sortTable(5)">Tries</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
 </div>
 
-<div id="matches"></div>
 </div>
 
 <script>
+
+let allRows=[];
+let currentRows=[];
+
 const params=new URLSearchParams(window.location.search);
 const player=params.get("player");
 
 if(!player){
   document.getElementById("playerName").textContent="No player selected";
 }else{
-  document.getElementById("playerName").textContent=player;
 
-  fetch("data/nrl/index.json")
-  .then(r=>r.json())
-  .then(index=>{
+document.getElementById("playerName").textContent=player;
 
-    const seasons=index.seasons;
-    let allRows=[];
+fetch("data/nrl/index.json")
+.then(r=>r.json())
+.then(index=>{
 
-    const fetches=seasons.map(season=>
-      fetch("data/nrl/seasons/"+season+".json")
-      .then(r=>r.json())
-    );
+  const fetches=index.seasons.map(s=>
+    fetch("data/nrl/seasons/"+s+".json").then(r=>r.json())
+  );
 
-    Promise.all(fetches).then(results=>{
-
-      results.forEach(seasonData=>{
-        seasonData.forEach(row=>{
-          if(row.player===player){
-            allRows.push(row);
-          }
-        });
+  Promise.all(fetches).then(results=>{
+    results.forEach(season=>{
+      season.forEach(row=>{
+        if(row.player===player){
+          allRows.push(row);
+        }
       });
-
-      document.getElementById("games").textContent=allRows.length;
-
-      const totalPoints=allRows.reduce((sum,r)=>sum+(r.points||0),0);
-      document.getElementById("points").textContent=totalPoints;
-
-      const container=document.getElementById("matches");
-
-      allRows.forEach(r=>{
-        const div=document.createElement("div");
-        div.className="row";
-        div.textContent=
-          r.season+" - "+
-          r.played_for+" vs "+
-          r.played_against+" - "+
-          (r.points||0)+" pts";
-        container.appendChild(div);
-      });
-
     });
 
+    currentRows=[...allRows];
+
+    buildTeamFilter();
+    buildCareerCards(allRows);
+    buildOpponentCards(allRows);
+    buildTable(allRows);
+  });
+
+});
+}
+
+function buildCareerCards(rows){
+
+  const games=rows.length;
+  const bestPoints=Math.max(...rows.map(r=>r.points||0),0);
+  const bestTries=Math.max(...rows.map(r=>r.tries||0),0);
+  const avgPoints=(rows.reduce((a,b)=>a+(b.points||0),0)/games||0).toFixed(1);
+  const avgTries=(rows.reduce((a,b)=>a+(b.tries||0),0)/games||0).toFixed(2);
+
+  document.getElementById("careerCards").innerHTML=`
+    <div class="card"><h2>${games}</h2>Games</div>
+    <div class="card"><h2>${bestPoints}</h2>Best Points</div>
+    <div class="card"><h2>${bestTries}</h2>Best Tries</div>
+    <div class="card"><h2>${avgPoints}</h2>Avg Points</div>
+    <div class="card"><h2>${avgTries}</h2>Avg Tries</div>
+  `;
+}
+
+function buildOpponentCards(rows){
+
+  const oppSelect=document.getElementById("teamFilter").value;
+  const filtered=oppSelect?rows.filter(r=>r.played_against===oppSelect):rows;
+
+  const games=filtered.length;
+  const bestPoints=Math.max(...filtered.map(r=>r.points||0),0);
+  const bestTries=Math.max(...filtered.map(r=>r.tries||0),0);
+  const avgPoints=(filtered.reduce((a,b)=>a+(b.points||0),0)/games||0).toFixed(1);
+  const avgTries=(filtered.reduce((a,b)=>a+(b.tries||0),0)/games||0).toFixed(2);
+
+  document.getElementById("oppCards").innerHTML=`
+    <div class="card"><h2>${games}</h2>Games</div>
+    <div class="card"><h2>${bestPoints}</h2>Best Points</div>
+    <div class="card"><h2>${bestTries}</h2>Best Tries</div>
+    <div class="card"><h2>${avgPoints}</h2>Avg Points</div>
+    <div class="card"><h2>${avgTries}</h2>Avg Tries</div>
+  `;
+}
+
+function buildTeamFilter(){
+
+  const teams=[...new Set(allRows.map(r=>r.played_against))].sort();
+  const select=document.getElementById("teamFilter");
+
+  select.innerHTML="<option value=''>All Opponents</option>";
+
+  teams.forEach(t=>{
+    const opt=document.createElement("option");
+    opt.value=t;
+    opt.textContent=t;
+    select.appendChild(opt);
+  });
+
+  select.onchange=()=>{
+    buildOpponentCards(allRows);
+  };
+}
+
+function buildTable(rows){
+
+  const tbody=document.querySelector("#gamesTable tbody");
+  tbody.innerHTML="";
+
+  rows.forEach(r=>{
+    tbody.innerHTML+=`
+      <tr>
+        <td>${r.season}</td>
+        <td>${r.round}</td>
+        <td>${r.played_for}</td>
+        <td>${r.played_against}</td>
+        <td>${r.points||0}</td>
+        <td>${r.tries||0}</td>
+      </tr>
+    `;
   });
 }
+
+function sortTable(n){
+  const table=document.getElementById("gamesTable");
+  const rows=[...table.rows].slice(1);
+  rows.sort((a,b)=>a.cells[n].innerText.localeCompare(b.cells[n].innerText));
+  rows.forEach(r=>table.appendChild(r));
+}
+
+function resetSort(){
+  buildTable(currentRows);
+}
+
 </script>
+
 </body>
 </html>
