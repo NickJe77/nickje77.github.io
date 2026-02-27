@@ -1,10 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>NRL Season</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{font-family:Inter,Arial;margin:0;background:#f4f6f8;}
+.page{max-width:1200px;margin:auto;padding:30px;}
+h1{margin-bottom:20px;}
+
+.year-bar{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-bottom:20px;
+}
+
+.year-btn{
+  padding:8px 14px;
+  background:#ddd;
+  border-radius:8px;
+  cursor:pointer;
+  font-weight:600;
+}
+
+.year-btn.active{
+  background:#222;
+  color:white;
+}
+
+.content{
+  display:flex;
+  gap:30px;
+}
+
+.ladder{
+  width:35%;
+  background:white;
+  border-radius:10px;
+  padding:10px;
+}
+
+.ladder table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+.ladder th,.ladder td{
+  border:1px solid #eee;
+  padding:6px;
+  text-align:center;
+}
+
+.matches{
+  width:65%;
+}
+
+.match{
+  background:white;
+  padding:12px;
+  border-radius:8px;
+  margin-bottom:10px;
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+
+<h1>NRL Season</h1>
+
+<div class="year-bar" id="years"></div>
+
+<div class="content">
+  <div class="ladder">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Team</th>
+          <th>W</th>
+          <th>L</th>
+        </tr>
+      </thead>
+      <tbody id="ladderBody"></tbody>
+    </table>
+  </div>
+
+  <div class="matches" id="matches"></div>
+</div>
+
+</div>
+
 <script>
 
 let allMatches = [];
 
 fetch("data/nrl/index.json")
-.then(r => r.json())
+.then(response => response.json())
 .then(index => {
+
+  if(!index.first_season || !index.last_season){
+    console.error("Index structure incorrect:", index);
+    return;
+  }
 
   const yearBar = document.getElementById("years");
 
@@ -12,12 +112,13 @@ fetch("data/nrl/index.json")
     const btn = document.createElement("div");
     btn.className = "year-btn";
     btn.textContent = y;
-    btn.onclick = function(){ loadSeason(y); };
+    btn.onclick = () => loadSeason(y);
     yearBar.appendChild(btn);
   }
 
   loadSeason(index.first_season);
-});
+})
+.catch(err => console.error("INDEX LOAD ERROR:", err));
 
 function loadSeason(year){
 
@@ -26,13 +127,19 @@ function loadSeason(year){
   });
 
   fetch("data/nrl/seasons/" + year + ".json")
-  .then(r => r.json())
+  .then(response => response.json())
   .then(data => {
+
+    if(!Array.isArray(data)){
+      console.error("Season data invalid:", data);
+      return;
+    }
+
     allMatches = data;
     buildLadder(data);
     buildMatches(data);
   })
-  .catch(err => console.error("SEASON ERROR:", err));
+  .catch(err => console.error("SEASON LOAD ERROR:", err));
 }
 
 function buildMatches(matches){
@@ -41,6 +148,7 @@ function buildMatches(matches){
   container.innerHTML = "";
 
   matches.forEach(m => {
+
     container.innerHTML += `
       <div class="match">
         ${m.home_team} ${m.home_points} - ${m.away_points} ${m.away_team}
@@ -48,6 +156,7 @@ function buildMatches(matches){
         <small>${m.date_iso || ""} • ${m.venue || ""}</small>
       </div>
     `;
+
   });
 }
 
@@ -63,7 +172,8 @@ function buildLadder(matches){
     if(m.home_points > m.away_points){
       ladder[m.home_team].W++;
       ladder[m.away_team].L++;
-    } else if(m.away_points > m.home_points){
+    }
+    else if(m.away_points > m.home_points){
       ladder[m.away_team].W++;
       ladder[m.home_team].L++;
     }
@@ -89,3 +199,6 @@ function buildLadder(matches){
 }
 
 </script>
+
+</body>
+</html>
