@@ -95,100 +95,114 @@ h1{margin-bottom:20px;}
 
 <script>
 
-let allMatches=[];
+let allMatches = [];
 
-fetch("/data/nrl/index.json")
-.then(r=>{
-  if(!r.ok) throw new Error("Index not found");
-  return r.json();
+fetch("data/nrl/index.json")
+.then(function(response){
+  if(!response.ok){
+    throw new Error("Index file not found");
+  }
+  return response.json();
 })
-.then(index=>{
+.then(function(index){
 
-  const yearBar=document.getElementById("years");
+  const yearBar = document.getElementById("years");
 
-  index.seasons.forEach(y=>{
-    const btn=document.createElement("div");
-    btn.className="year-btn";
-    btn.textContent=y;
-    btn.onclick=()=>loadSeason(y);
+  index.seasons.forEach(function(y){
+    const btn = document.createElement("div");
+    btn.className = "year-btn";
+    btn.textContent = y;
+    btn.onclick = function(){ loadSeason(y); };
     yearBar.appendChild(btn);
   });
 
   loadSeason(index.seasons[0]);
-
 })
-.catch(err=>console.error("INDEX ERROR:",err));
+.catch(function(error){
+  console.error("INDEX ERROR:", error);
+});
 
 function loadSeason(year){
 
-  document.querySelectorAll(".year-btn").forEach(b=>{
-    b.classList.toggle("active",b.textContent==year);
+  document.querySelectorAll(".year-btn").forEach(function(b){
+    b.classList.toggle("active", b.textContent == year);
   });
 
-  fetch("/data/nrl/seasons/"+year+".json")
-  .then(r=>{
-    if(!r.ok) throw new Error("Season file missing: "+year);
-    return r.json();
+  fetch("data/nrl/seasons/" + year + ".json")
+  .then(function(response){
+    if(!response.ok){
+      throw new Error("Season file not found: " + year);
+    }
+    return response.json();
   })
-  .then(data=>{
-    console.log("Loaded season",year,data.length,"matches");
-    allMatches=data;
+  .then(function(data){
+    allMatches = data;
     buildLadder(data);
     buildMatches(data);
   })
-  .catch(err=>console.error("SEASON ERROR:",err));
+  .catch(function(error){
+    console.error("SEASON ERROR:", error);
+  });
 }
 
 function buildMatches(matches){
 
-  const container=document.getElementById("matches");
-  container.innerHTML="";
+  const container = document.getElementById("matches");
+  container.innerHTML = "";
 
-  matches.forEach(m=>{
-    container.innerHTML+=`
-      <div class="match">
-        ${m.home_team} ${m.home_points} - ${m.away_points} ${m.away_team}
-        <br>
-        <small>${m.date_iso} • ${m.venue}</small>
-      </div>
-    `;
+  matches.forEach(function(m){
+
+    container.innerHTML +=
+      '<div class="match">' +
+        m.home_team + " " + m.home_points +
+        " - " +
+        m.away_points + " " + m.away_team +
+        '<br><small>' +
+        (m.date_iso || "") +
+        " • " +
+        (m.venue || "") +
+        '</small>' +
+      '</div>';
+
   });
 }
 
 function buildLadder(matches){
 
-  const ladder={};
+  const ladder = {};
 
-  matches.forEach(m=>{
+  matches.forEach(function(m){
 
-    if(!ladder[m.home_team]) ladder[m.home_team]={W:0,L:0};
-    if(!ladder[m.away_team]) ladder[m.away_team]={W:0,L:0};
+    if(!ladder[m.home_team]) ladder[m.home_team] = {W:0,L:0};
+    if(!ladder[m.away_team]) ladder[m.away_team] = {W:0,L:0};
 
     if(m.home_points > m.away_points){
       ladder[m.home_team].W++;
       ladder[m.away_team].L++;
-    } else if(m.away_points > m.home_points){
+    }
+    else if(m.away_points > m.home_points){
       ladder[m.away_team].W++;
       ladder[m.home_team].L++;
     }
 
   });
 
-  const sorted=Object.entries(ladder)
-    .sort((a,b)=>b[1].W - a[1].W);
+  const sorted = Object.entries(ladder)
+    .sort(function(a,b){
+      return b[1].W - a[1].W;
+    });
 
-  const body=document.getElementById("ladderBody");
-  body.innerHTML="";
+  const body = document.getElementById("ladderBody");
+  body.innerHTML = "";
 
-  sorted.forEach((t,i)=>{
-    body.innerHTML+=`
-      <tr>
-        <td>${i+1}</td>
-        <td>${t[0]}</td>
-        <td>${t[1].W}</td>
-        <td>${t[1].L}</td>
-      </tr>
-    `;
+  sorted.forEach(function(t,i){
+    body.innerHTML +=
+      "<tr>" +
+        "<td>" + (i+1) + "</td>" +
+        "<td>" + t[0] + "</td>" +
+        "<td>" + t[1].W + "</td>" +
+        "<td>" + t[1].L + "</td>" +
+      "</tr>";
   });
 }
 
