@@ -2,35 +2,284 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>NRL Seasons</title>
+<title>NRL Season</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 body{font-family:Inter,Arial;margin:0;background:#f4f6f8;}
-.page{max-width:1000px;margin:auto;padding:30px;}
-.hero{background:linear-gradient(90deg,#0055A4,#00A651);color:white;padding:30px;border-radius:20px;margin-bottom:20px;}
-.year{background:white;padding:14px;border-radius:12px;margin-bottom:10px;font-weight:600;cursor:pointer;}
-.year:hover{background:#eaf3ff;}
+
+.page{max-width:1200px;margin:auto;padding:30px;}
+
+h1{margin:0 0 20px;}
+
+.year-bar{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-bottom:20px;
+}
+
+.year-btn{
+  padding:8px 14px;
+  background:#ddd;
+  border-radius:8px;
+  cursor:pointer;
+  font-weight:600;
+}
+
+.year-btn.active{
+  background:#222;
+  color:white;
+}
+
+.filters{
+  margin-bottom:20px;
+}
+
+select{
+  padding:8px;
+  border-radius:6px;
+}
+
+.round-bar{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin:20px 0;
+}
+
+.round-btn{
+  padding:6px 12px;
+  background:#ddd;
+  border-radius:8px;
+  cursor:pointer;
+  font-size:14px;
+}
+
+.round-btn.active{
+  background:#222;
+  color:white;
+}
+
+.content{
+  display:flex;
+  gap:30px;
+}
+
+.ladder{
+  width:35%;
+  background:white;
+  border-radius:10px;
+  padding:10px;
+}
+
+.ladder table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:14px;
+}
+
+.ladder th,.ladder td{
+  border:1px solid #eee;
+  padding:6px;
+  text-align:center;
+}
+
+.matches{
+  width:65%;
+}
+
+.match{
+  background:white;
+  padding:10px;
+  border-radius:8px;
+  margin-bottom:8px;
+}
 </style>
 </head>
 <body>
+
 <div class="page">
-<div class="hero"><h1>NRL Seasons</h1></div>
-<div id="list"></div>
+
+<h1>NRL Season</h1>
+
+<div class="year-bar" id="years"></div>
+
+<div class="filters">
+<select id="teamFilter">
+<option value="">All Teams</option>
+</select>
+</div>
+
+<div class="round-bar" id="rounds"></div>
+
+<div class="content">
+  <div class="ladder">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Team</th>
+          <th>W</th>
+          <th>L</th>
+        </tr>
+      </thead>
+      <tbody id="ladderBody"></tbody>
+    </table>
+  </div>
+
+  <div class="matches" id="matches"></div>
+</div>
+
 </div>
 
 <script>
+
+let currentSeason=null;
+let allData=[];
+
 fetch("data/nrl/index.json")
 .then(r=>r.json())
-.then(d=>{
-  const list=document.getElementById("list");
-  d.seasons.reverse().forEach(y=>{
-    const div=document.createElement("div");
-    div.className="year";
-    div.textContent=y;
-    div.onclick=()=>window.location="nrl-match.html?season="+y;
-    list.appendChild(div);
+.then(index=>{
+
+  const yearBar=document.getElementById("years");
+
+  index.seasons.forEach(y=>{
+    const btn=document.createElement("div");
+    btn.className="year-btn";
+    btn.textContent=y;
+    btn.onclick=()=>loadSeason(y);
+    yearBar.appendChild(btn);
   });
+
+  loadSeason(index.seasons[0]);
+
 });
+
+function loadSeason(year){
+
+  currentSeason=year;
+
+  document.querySelectorAll(".year-btn").forEach(b=>{
+    b.classList.toggle("active",b.textContent==year);
+  });
+
+  fetch("data/nrl/seasons/"+year+".json")
+  .then(r=>r.json())
+  .then(data=>{
+
+    allData=data;
+
+    buildRounds(data);
+    buildMatches(data);
+    buildLadder(data);
+    buildTeams(data);
+
+  });
+}
+
+function buildRounds(data){
+
+  const rounds=[...new Set(data.map(d=>d.round))];
+
+  const container=document.getElementById("rounds");
+  container.innerHTML="";
+
+  const allBtn=document.createElement("div");
+  allBtn.className="round-btn active";
+  allBtn.textContent="All Rounds";
+  allBtn.onclick=()=>filterRound("");
+  container.appendChild(allBtn);
+
+  rounds.forEach(r=>{
+    const btn=document.createElement("div");
+    btn.className="round-btn";
+    btn.textContent=r;
+    btn.onclick=()=>filterRound(r);
+    container.appendChild(btn);
+  });
+}
+
+function filterRound(round){
+  document.querySelectorAll(".round-btn").forEach(b=>{
+    b.classList.toggle("active",b.textContent===round||(!round&&b.textContent==="All Rounds"));
+  });
+
+  const filtered=round?allData.filter(d=>d.round===round):allData;
+  buildMatches(filtered);
+}
+
+function buildMatches(data){
+  const container=document.getElementById("matches");
+  container.innerHTML="";
+
+  const games=[...new Set(data.map(d=>d.match_id))];
+
+  games.forEach(id=>{
+    const rows=data.filter(d=>d.match_id===id);
+    const first=rows[0];
+
+    const div=document.createElement("div");
+    div.className="match";
+    div.textContent=
+      first.round+" : "+
+      first.home_team+" vs "+
+      first.away_team;
+
+    container.appendChild(div);
+  });
+}
+
+function buildLadder(data){
+
+  const teams={};
+
+  data.forEach(d=>{
+    if(!teams[d.played_for]){
+      teams[d.played_for]={W:0,L:0};
+    }
+    if(d.result==="W") teams[d.played_for].W++;
+    if(d.result==="L") teams[d.played_for].L++;
+  });
+
+  const sorted=Object.entries(teams).sort((a,b)=>b[1].W-a[1].W);
+
+  const body=document.getElementById("ladderBody");
+  body.innerHTML="";
+
+  sorted.forEach((t,i)=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=
+      "<td>"+(i+1)+"</td>"+
+      "<td>"+t[0]+"</td>"+
+      "<td>"+t[1].W+"</td>"+
+      "<td>"+t[1].L+"</td>";
+    body.appendChild(tr);
+  });
+
+}
+
+function buildTeams(data){
+
+  const teams=[...new Set(data.map(d=>d.played_for))];
+  const select=document.getElementById("teamFilter");
+
+  select.innerHTML="<option value=''>All Teams</option>";
+
+  teams.forEach(t=>{
+    const opt=document.createElement("option");
+    opt.value=t;
+    opt.textContent=t;
+    select.appendChild(opt);
+  });
+
+  select.onchange=()=>{
+    const val=select.value;
+    const filtered=val?allData.filter(d=>d.played_for===val):allData;
+    buildMatches(filtered);
+  };
+}
+
 </script>
+
 </body>
 </html>
