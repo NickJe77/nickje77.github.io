@@ -7,10 +7,8 @@
 
 <style>
 body{font-family:Inter,Arial;margin:0;background:#f4f6f8;}
-
 .page{max-width:1200px;margin:auto;padding:30px;}
-
-h1{margin:0 0 20px;}
+h1{margin-bottom:20px;}
 
 .year-bar{
   display:flex;
@@ -32,15 +30,6 @@ h1{margin:0 0 20px;}
   color:white;
 }
 
-.filters{
-  margin-bottom:20px;
-}
-
-select{
-  padding:8px;
-  border-radius:6px;
-}
-
 .content{
   display:flex;
   gap:30px;
@@ -56,7 +45,6 @@ select{
 .ladder table{
   width:100%;
   border-collapse:collapse;
-  font-size:14px;
 }
 
 .ladder th,.ladder td{
@@ -85,12 +73,6 @@ select{
 
 <div class="year-bar" id="years"></div>
 
-<div class="filters">
-<select id="teamFilter">
-<option value="">All Teams</option>
-</select>
-</div>
-
 <div class="content">
   <div class="ladder">
     <table>
@@ -114,7 +96,6 @@ select{
 <script>
 
 let allMatches=[];
-let currentSeason=null;
 
 fetch("data/nrl/index.json")
 .then(r=>r.json())
@@ -135,8 +116,6 @@ fetch("data/nrl/index.json")
 
 function loadSeason(year){
 
-  currentSeason=year;
-
   document.querySelectorAll(".year-btn").forEach(b=>{
     b.classList.toggle("active",b.textContent==year);
   });
@@ -147,7 +126,25 @@ function loadSeason(year){
     allMatches=data;
     buildLadder(data);
     buildMatches(data);
-    buildTeamFilter(data);
+  });
+}
+
+function buildMatches(matches){
+
+  const container=document.getElementById("matches");
+  container.innerHTML="";
+
+  // IMPORTANT: loop matches directly
+  matches.forEach(m=>{
+
+    container.innerHTML+=`
+      <div class="match">
+        ${m.home_team} ${m.home_points} - ${m.away_points} ${m.away_team}
+        <br>
+        <small>${m.date_iso} • ${m.venue}</small>
+      </div>
+    `;
+
   });
 }
 
@@ -186,49 +183,6 @@ function buildLadder(matches){
       </tr>
     `;
   });
-}
-
-function buildMatches(matches){
-
-  const container=document.getElementById("matches");
-  container.innerHTML="";
-
-  matches.forEach(m=>{
-    container.innerHTML+=`
-      <div class="match">
-        ${m.home_team} ${m.home_points} - ${m.away_points} ${m.away_team}
-      </div>
-    `;
-  });
-}
-
-function buildTeamFilter(matches){
-
-  const teams=[...new Set(
-    matches.flatMap(m=>[m.home_team,m.away_team])
-  )].sort();
-
-  const select=document.getElementById("teamFilter");
-
-  select.innerHTML="<option value=''>All Teams</option>";
-
-  teams.forEach(t=>{
-    select.innerHTML+=`<option value="${t}">${t}</option>`;
-  });
-
-  select.onchange=()=>{
-    const val=select.value;
-    if(!val){
-      buildMatches(allMatches);
-      return;
-    }
-
-    const filtered=allMatches.filter(m=>
-      m.home_team===val || m.away_team===val
-    );
-
-    buildMatches(filtered);
-  };
 }
 
 </script>
