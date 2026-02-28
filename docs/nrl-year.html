@@ -4,64 +4,63 @@
 <meta charset="UTF-8">
 <title>NRL Season</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <style>
-body{font-family:Inter,Arial;margin:0;background:#f4f6f8;}
-.page{max-width:1200px;margin:auto;padding:30px;}
-h1{margin-bottom:20px;}
-
-.year-bar{
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
+body{
+  font-family:Inter,Arial;
+  margin:0;
+  background:#f4f6f8;
+}
+.page{
+  max-width:1200px;
+  margin:auto;
+  padding:30px;
+}
+h1{
   margin-bottom:20px;
 }
-
+.years{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin-bottom:20px;
+}
 .year-btn{
   padding:8px 14px;
+  border-radius:10px;
   background:#ddd;
-  border-radius:8px;
   cursor:pointer;
   font-weight:600;
 }
-
 .year-btn.active{
   background:#222;
   color:white;
 }
-
-.content{
-  display:flex;
-  gap:30px;
+.layout{
+  display:grid;
+  grid-template-columns:350px 1fr;
+  gap:20px;
 }
-
-.ladder{
-  width:35%;
+.table-card{
   background:white;
-  border-radius:10px;
-  padding:10px;
+  padding:14px;
+  border-radius:14px;
 }
-
-.ladder table{
+table{
   width:100%;
   border-collapse:collapse;
 }
-
-.ladder th,.ladder td{
-  border:1px solid #eee;
+th,td{
   padding:6px;
-  text-align:center;
+  text-align:left;
 }
-
-.matches{
-  width:65%;
+th{
+  background:#f0f0f0;
 }
-
 .match{
   background:white;
-  padding:12px;
-  border-radius:8px;
-  margin-bottom:10px;
+  padding:10px;
+  border-radius:10px;
+  margin-bottom:8px;
 }
 </style>
 </head>
@@ -71,10 +70,10 @@ h1{margin-bottom:20px;}
 
 <h1>NRL Season</h1>
 
-<div class="year-bar" id="years"></div>
+<div id="years" class="years"></div>
 
-<div class="content">
-  <div class="ladder">
+<div class="layout">
+  <div class="table-card">
     <table>
       <thead>
         <tr>
@@ -84,118 +83,104 @@ h1{margin-bottom:20px;}
           <th>L</th>
         </tr>
       </thead>
-      <tbody id="ladderBody"></tbody>
+      <tbody id="ladder"></tbody>
     </table>
   </div>
 
-  <div class="matches" id="matches"></div>
+  <div id="matches"></div>
 </div>
 
 </div>
 
 <script>
 
-let allMatches = [];
+let currentSeason = null
 
+// Load available seasons
 fetch("data/nrl/index.json")
-.then(response => response.json())
-.then(index => {
+.then(r=>r.json())
+.then(index=>{
+  const container=document.getElementById("years")
 
-  if(!index.first_season || !index.last_season){
-    console.error("Index structure incorrect:", index);
-    return;
-  }
+  index.seasons.sort((a,b)=>a-b).forEach(year=>{
+    const btn=document.createElement("div")
+    btn.className="year-btn"
+    btn.textContent=year
+    btn.onclick=()=>loadSeason(year)
+    container.appendChild(btn)
+  })
 
-  const yearBar = document.getElementById("years");
-
-  for(let y = index.first_season; y <= index.last_season; y++){
-    const btn = document.createElement("div");
-    btn.className = "year-btn";
-    btn.textContent = y;
-    btn.onclick = () => loadSeason(y);
-    yearBar.appendChild(btn);
-  }
-
-  loadSeason(index.first_season);
+  // Auto load first season
+  loadSeason(index.seasons[0])
 })
-.catch(err => console.error("INDEX LOAD ERROR:", err));
 
 function loadSeason(year){
 
+  currentSeason = year
+
+  // Highlight active button
   document.querySelectorAll(".year-btn").forEach(b=>{
-    b.classList.toggle("active", b.textContent == year);
-  });
-
-  fetch("data/nrl/seasons/" + year + ".json")
-  .then(response => response.json())
-  .then(data => {
-
-    if(!Array.isArray(data)){
-      console.error("Season data invalid:", data);
-      return;
-    }
-
-    allMatches = data;
-    buildLadder(data);
-    buildMatches(data);
+    b.classList.remove("active")
+    if(b.textContent==year) b.classList.add("active")
   })
-  .catch(err => console.error("SEASON LOAD ERROR:", err));
-}
 
-function buildMatches(matches){
+  fetch("data/nrl/seasons/"+year+".json")
+  .then(r=>{
+    if(!r.ok) throw new Error("Season file not found")
+    return r.json()
+  })
+  .then(data=>{
 
-  const container = document.getElementById("matches");
-  container.innerHTML = "";
+    // ===== LADDER BUILD =====
+    const ladderMap = {}
 
-  matches.forEach(m => {
+    data.forEach(game=>{
+      if(!ladderMap[game.home_team]) ladderMap[game.home_team]={team:game.home_team,w:0,l:0}
+      if(!ladderMap[game.away_team]) ladderMap[game.away_team]={team:game.away_team,w:0,l:0}
 
-    container.innerHTML += `
-      <div class="match">
-        ${m.home_team} ${m.home_points} - ${m.away_points} ${m.away_team}
-        <br>
-        <small>${m.date_iso || ""} • ${m.venue || ""}</small>
-      </div>
-    `;
+      if(game.home_points > game.away_points){
+        ladderMap[game.home_team].w++
+        ladderMap[game.away_team].l++
+      } else {
+        ladderMap[game.away_team].w++
+        ladderMap[game.home_team].l++
+      }
+    })
 
-  });
-}
+    const ladderArr = Object.values(ladderMap)
+    ladderArr.sort((a,b)=>b.w-a.w)
 
-function buildLadder(matches){
+    const ladderBody=document.getElementById("ladder")
+    ladderBody.innerHTML=""
 
-  const ladder = {};
+    ladderArr.forEach((team,i)=>{
+      ladderBody.innerHTML+=`
+        <tr>
+          <td>${i+1}</td>
+          <td>${team.team}</td>
+          <td>${team.w}</td>
+          <td>${team.l}</td>
+        </tr>
+      `
+    })
 
-  matches.forEach(m => {
+    // ===== MATCH LIST =====
+    const matchesDiv=document.getElementById("matches")
+    matchesDiv.innerHTML=""
 
-    if(!ladder[m.home_team]) ladder[m.home_team] = {W:0,L:0};
-    if(!ladder[m.away_team]) ladder[m.away_team] = {W:0,L:0};
+    data.forEach(game=>{
+      matchesDiv.innerHTML+=`
+        <div class="match">
+          ${game.date_iso} — ${game.home_team} ${game.home_points}
+          def ${game.away_team} ${game.away_points}
+        </div>
+      `
+    })
 
-    if(m.home_points > m.away_points){
-      ladder[m.home_team].W++;
-      ladder[m.away_team].L++;
-    }
-    else if(m.away_points > m.home_points){
-      ladder[m.away_team].W++;
-      ladder[m.home_team].L++;
-    }
-
-  });
-
-  const sorted = Object.entries(ladder)
-    .sort((a,b) => b[1].W - a[1].W);
-
-  const body = document.getElementById("ladderBody");
-  body.innerHTML = "";
-
-  sorted.forEach((t,i) => {
-    body.innerHTML += `
-      <tr>
-        <td>${i+1}</td>
-        <td>${t[0]}</td>
-        <td>${t[1].W}</td>
-        <td>${t[1].L}</td>
-      </tr>
-    `;
-  });
+  })
+  .catch(err=>{
+    console.error("SEASON ERROR:",err)
+  })
 }
 
 </script>
