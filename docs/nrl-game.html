@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>NRL Game</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{font-family:Inter,Arial;margin:0;background:#f4f6f8;}
+.page{max-width:1100px;margin:auto;padding:30px;}
+.hero{
+  background:linear-gradient(90deg,#0055A4,#00A651);
+  color:white;
+  padding:30px;
+  border-radius:20px;
+  margin-bottom:20px;
+}
+.score{
+  font-size:28px;
+  font-weight:800;
+  margin-top:10px;
+}
+.meta{
+  margin-top:6px;
+  font-size:14px;
+  opacity:.9;
+}
+.section-title{
+  font-weight:800;
+  margin:30px 0 12px;
+}
+.player-row{
+  background:white;
+  padding:10px;
+  border-radius:10px;
+  margin-bottom:6px;
+  display:flex;
+  justify-content:space-between;
+}
+.team-name{
+  font-weight:700;
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+
+<div class="hero">
+  <div id="title"></div>
+  <div class="score" id="score"></div>
+  <div class="meta" id="meta"></div>
+</div>
+
+<div class="section-title">Players</div>
+<div id="players"></div>
+
+</div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const season = params.get("season");
+const matchId = params.get("match");
+
+if(!season || !matchId){
+  document.body.innerHTML = "Missing season or match ID";
+  throw new Error("Missing params");
+}
+
+fetch("data/nrl/seasons/" + season + ".json")
+.then(r=>r.json())
+.then(rows=>{
+
+  // Find all rows for this match
+  const matchRows = rows.filter(r => String(r.match_id) === String(matchId));
+
+  if(!matchRows.length){
+    document.body.innerHTML = "Match not found.";
+    return;
+  }
+
+  // Use first row for match metadata
+  const game = matchRows[0];
+
+  document.getElementById("title").textContent =
+    game.home_team + " vs " + game.away_team;
+
+  document.getElementById("score").textContent =
+    game.home_points + " - " + game.away_points;
+
+  document.getElementById("meta").textContent =
+    (game.date_iso || "") + " • " + (game.venue || "");
+
+  const playersDiv = document.getElementById("players");
+
+  // If your JSON contains player rows inside the season file
+  if(matchRows[0].player){
+    matchRows.forEach(p=>{
+      const div=document.createElement("div");
+      div.className="player-row";
+      div.innerHTML = `
+        <span><strong>${p.player}</strong> (${p.played_for})</span>
+        <span>${p.points || 0} pts</span>
+      `;
+      playersDiv.appendChild(div);
+    });
+  } else if(Array.isArray(game.players)){
+    // If your JSON stores players inside a match object
+    game.players.forEach(p=>{
+      const div=document.createElement("div");
+      div.className="player-row";
+      div.innerHTML = `
+        <span><strong>${p.player}</strong></span>
+        <span>${p.points || 0} pts</span>
+      `;
+      playersDiv.appendChild(div);
+    });
+  } else {
+    playersDiv.innerHTML = "No player data available.";
+  }
+
+})
+.catch(err=>{
+  document.body.innerHTML = "Error loading match.";
+  console.error(err);
+});
+</script>
+
+</body>
+</html>
