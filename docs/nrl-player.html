@@ -12,14 +12,12 @@
   --bg:#f4f6f8;
   --card:#ffffff;
   --text:#111;
-  --line:#e6e8ee;
 }
 
 body{
   font-family:Inter,system-ui,Arial;
   margin:0;
   background:var(--bg);
-  color:var(--text);
 }
 
 .navbar{
@@ -68,6 +66,7 @@ h1{
   border-radius:8px;
   border:1px solid #ccc;
   font-size:15px;
+  margin-top:10px;
 }
 
 .section-title{
@@ -190,13 +189,30 @@ tr:hover{
 </div>
 
 <script>
+
 const params = new URLSearchParams(window.location.search);
 const player = params.get("player");
-document.getElementById("playerName").textContent = player;
+
+if(!player){
+  document.getElementById("playerName").textContent = "Player Not Found";
+}else{
+  document.getElementById("playerName").textContent = player;
+}
 
 let games = [];
+let allPlayers = new Set();
 let currentSort = null;
 let sortAsc = false;
+
+/* SEARCH FUNCTION */
+document.getElementById("searchBox").addEventListener("keydown", function(e){
+  if(e.key === "Enter"){
+    const name = this.value.trim();
+    if(name){
+      window.location = "nrl-player.html?player=" + encodeURIComponent(name);
+    }
+  }
+});
 
 fetch("data/nrl/index.json")
 .then(r=>r.json())
@@ -209,6 +225,8 @@ fetch("data/nrl/index.json")
       .then(r=>r.json())
       .then(rows=>{
         rows.forEach(row=>{
+          allPlayers.add(row.player);
+
           if(row.player === player){
             games.push({
               season:y,
@@ -283,18 +301,15 @@ function renderOpp(filtered){
   const bestPoints = Math.max(...filtered.map(g=>g.points),0);
   const totalPoints = filtered.reduce((a,b)=>a+b.points,0);
   const avgPoints = gamesCount ? (totalPoints/gamesCount).toFixed(2) : 0;
-  const totalTries = filtered.reduce((a,b)=>a+b.tries,0);
 
   oppCards.innerHTML = `
   <div class="card"><h2>${gamesCount}</h2><div>Games</div></div>
   <div class="card"><h2>${bestPoints}</h2><div>Best Points</div></div>
   <div class="card"><h2>${avgPoints}</h2><div>Avg Points</div></div>
-  <div class="card"><h2>${totalTries}</h2><div>Total Tries</div></div>
   `;
 }
 
 function renderTable(data){
-
   gameTable.innerHTML = data.map(g=>`
   <tr>
     <td>${g.season}</td>
@@ -309,7 +324,6 @@ function renderTable(data){
 }
 
 function sortTable(key){
-
   sortAsc = currentSort === key ? !sortAsc : false;
   currentSort = key;
 
