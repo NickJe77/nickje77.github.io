@@ -17,14 +17,27 @@ h1{margin:0 0 18px;}
 .status{margin:10px 0 18px;color:#444;font-weight:600;}
 
 .content{display:grid;grid-template-columns:360px 1fr;gap:20px;align-items:start;}
+
 .card{background:#fff;border-radius:14px;padding:14px;box-shadow:0 3px 10px rgba(0,0,0,0.05);}
 
 table{width:100%;border-collapse:collapse;font-size:14px;}
 th,td{border-bottom:1px solid #eee;padding:8px;text-align:center;}
-th{text-align:center;background:#f3f5f7;}
+th{background:#f3f5f7;}
 td.team{text-align:left;font-weight:700;}
 
-.match{background:#fff;border-radius:12px;padding:12px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,0.04);}
+.match{
+  background:#fff;
+  border-radius:12px;
+  padding:12px;
+  margin-bottom:10px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.04);
+  cursor:pointer;
+  transition:all .15s ease;
+}
+.match:hover{
+  transform:translateY(-2px);
+  box-shadow:0 4px 14px rgba(0,0,0,0.08);
+}
 .match .line1{font-weight:800;}
 .match .line2{color:#666;font-size:13px;margin-top:4px;}
 .small{font-size:12px;color:#777;}
@@ -42,7 +55,12 @@ td.team{text-align:left;font-weight:700;}
     <div class="card">
       <table>
         <thead>
-          <tr><th style="width:42px;">#</th><th>Team</th><th style="width:60px;">W</th><th style="width:60px;">L</th></tr>
+          <tr>
+            <th style="width:42px;">#</th>
+            <th>Team</th>
+            <th style="width:60px;">W</th>
+            <th style="width:60px;">L</th>
+          </tr>
         </thead>
         <tbody id="ladderBody"></tbody>
       </table>
@@ -54,31 +72,29 @@ td.team{text-align:left;font-weight:700;}
 
 <script>
 let currentYear = null;
-let loadToken = 0; // increments each click so old loads are ignored
+let loadToken = 0;
 
-// helper: safely convert to number
 function toNum(v){
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
 
-// Build year buttons from index.json
 fetch("data/nrl/index.json")
 .then(r=>r.json())
 .then(index=>{
   const yearsDiv = document.getElementById("years");
   const status = document.getElementById("status");
 
-  // Supports BOTH index styles:
-  // A) { seasons:[1998,...] }
-  // B) { first_season:1998, last_season:2025 }
   let years = [];
+
   if(Array.isArray(index.seasons) && index.seasons.length){
     years = index.seasons.slice().sort((a,b)=>a-b);
   } else if(index.first_season && index.last_season){
-    for(let y=index.first_season; y<=index.last_season; y++) years.push(y);
+    for(let y=index.first_season; y<=index.last_season; y++){
+      years.push(y);
+    }
   } else {
-    status.textContent = "Index.json missing seasons list.";
+    status.textContent = "Index.json missing seasons.";
     return;
   }
 
@@ -104,10 +120,9 @@ function setActiveYear(y){
   });
 }
 
-// Load a season file and render summary (fast)
 function loadSeason(year){
   currentYear = year;
-  const myToken = ++loadToken; // any previous loads become stale
+  const myToken = ++loadToken;
   setActiveYear(year);
 
   document.getElementById("status").textContent = "Loading " + year + "…";
@@ -116,11 +131,10 @@ function loadSeason(year){
 
   fetch("data/nrl/seasons/" + year + ".json")
   .then(r=>{
-    if(!r.ok) throw new Error("Season file not found: " + year);
+    if(!r.ok) throw new Error("Season file not found");
     return r.json();
   })
   .then(rows=>{
-    // If user clicked another year while loading, stop.
     if(myToken !== loadToken) return;
 
     if(!Array.isArray(rows) || !rows.length){
@@ -128,91 +142,67 @@ function loadSeason(year){
       return;
     }
 
-    // Detect structure:
-    // 1) MATCH-BASED: each row has home_team/away_team/home_points/away_points
-    // 2) PLAYER-ROW: each row has match_id + played_for/played_against + maybe home/away points repeated
-    const isMatchBased = !!rows[0].home_team && !!rows[0].away_team && ("home_points" in rows[0]);
-
-    // Build match summaries:
-    // - If match-based: rows already matches
-    // - If player-row: group by match_id and take first row's metadata as the match
     const matchMap = new Map();
 
-    if(isMatchBased){
-      rows.forEach(m=>{
-        const id = String(m.match_id || (m.date_iso + "|" + m.home_team + "|" + m.away_team));
-        if(!matchMap.has(id)) matchMap.set(id, {
-          match_id: m.match_id,
-          date_iso: m.date_iso || "",
-          venue: m.venue || "",
-          home_team: m.home_team || "",
-          away_team: m.away_team || "",
-          home_points: toNum(m.home_points),
-          away_points: toNum(m.away_points)
+    rows.forEach(r=>{
+      const id = String(r.match_id || "");
+      if(!id) return;
+
+      if(!matchMap.has(id)){
+        matchMap.set(id,{
+          match_id:id,
+          date_iso:r.date_iso || "",
+          venue:r.venue || "",
+          home_team:r.home_team || "",
+          away_team:r.away_team || "",
+          home_points:toNum(r.home_points),
+          away_points:toNum(r.away_points)
         });
-      });
-    } else {
-      rows.forEach(r=>{
-        const id = String(r.match_id || "");
-        if(!id) return;
-        if(!matchMap.has(id)){
-          // best-effort: some player-row files still include home_team/away_team
-          const home = r.home_team || r.home || r.played_for || "";
-          const away = r.away_team || r.away || r.played_against || "";
-          matchMap.set(id, {
-            match_id: id,
-            date_iso: r.date_iso || r.date || "",
-            venue: r.venue || "",
-            home_team: home,
-            away_team: away,
-            home_points: toNum(r.home_points),
-            away_points: toNum(r.away_points)
-          });
-        }
-      });
-    }
+      }
+    });
 
     const matches = Array.from(matchMap.values());
 
-    // Ladder from matches
+    // Ladder
     const ladder = {};
     matches.forEach(m=>{
-      const ht = m.home_team;
-      const at = m.away_team;
-      if(!ht || !at) return;
+      if(!m.home_team || !m.away_team) return;
 
-      if(!ladder[ht]) ladder[ht] = {team:ht,W:0,L:0};
-      if(!ladder[at]) ladder[at] = {team:at,W:0,L:0};
+      if(!ladder[m.home_team]) ladder[m.home_team]={team:m.home_team,W:0,L:0};
+      if(!ladder[m.away_team]) ladder[m.away_team]={team:m.away_team,W:0,L:0};
 
       if(m.home_points > m.away_points){
-        ladder[ht].W++; ladder[at].L++;
+        ladder[m.home_team].W++;
+        ladder[m.away_team].L++;
       } else if(m.away_points > m.home_points){
-        ladder[at].W++; ladder[ht].L++;
+        ladder[m.away_team].W++;
+        ladder[m.home_team].L++;
       }
     });
 
     const ladderArr = Object.values(ladder).sort((a,b)=>b.W-a.W);
 
-    const ladderBody = document.getElementById("ladderBody");
-    ladderBody.innerHTML = ladderArr.map((t,i)=>`
-      <tr>
-        <td>${i+1}</td>
-        <td class="team">${t.team}</td>
-        <td>${t.W}</td>
-        <td>${t.L}</td>
-      </tr>
-    `).join("");
+    document.getElementById("ladderBody").innerHTML =
+      ladderArr.map((t,i)=>`
+        <tr>
+          <td>${i+1}</td>
+          <td class="team">${t.team}</td>
+          <td>${t.W}</td>
+          <td>${t.L}</td>
+        </tr>
+      `).join("");
 
-    // Render matches (ONLY ONE CARD PER MATCH)
     const matchesDiv = document.getElementById("matches");
+
     matchesDiv.innerHTML = matches.map(m=>{
-      const winnerLine = `${m.home_team} ${m.home_points} - ${m.away_points} ${m.away_team}`;
-      const meta = `${m.date_iso || ""}${m.venue ? " • " + m.venue : ""}`;
+      const line1 = `${m.home_team} ${m.home_points} - ${m.away_points} ${m.away_team}`;
+      const meta = `${m.date_iso}${m.venue ? " • " + m.venue : ""}`;
+
       return `
-        <div class="match">
-          <div class="line1">${winnerLine}</div>
+        <div class="match"
+             onclick="window.location.href='nrl-match.html?season=${year}&match=${m.match_id}'">
+          <div class="line1">${line1}</div>
           <div class="line2">${meta}</div>
-          ${m.match_id ? `<div class="small">Match ID: ${m.match_id}</div>` : ``}
         </div>
       `;
     }).join("");
@@ -222,8 +212,8 @@ function loadSeason(year){
   })
   .catch(err=>{
     if(myToken !== loadToken) return;
-    document.getElementById("status").textContent = "Load error for " + year;
-    console.error("SEASON ERROR:", err);
+    document.getElementById("status").textContent = "Load error.";
+    console.error(err);
   });
 }
 </script>
