@@ -7,150 +7,166 @@
 
 <style>
 body{font-family:Inter,Arial;margin:0;background:#f4f6f8;}
+.page{max-width:1100px;margin:auto;padding:30px;}
 
-.page{max-width:1200px;margin:auto;padding:30px;}
+.top-nav{
+  text-align:center;
+  margin-bottom:20px;
+}
+.top-nav a{
+  text-decoration:none;
+  color:#0056d6;
+  font-weight:600;
+  margin:0 10px;
+}
 
-h1{margin:0 0 20px;font-size:40px;}
-
-.cards{
-  display:flex;
-  gap:20px;
-  flex-wrap:wrap;
+.hero{
+  background:linear-gradient(90deg,#0055A4,#00A651);
+  color:white;
+  padding:30px;
+  border-radius:20px;
   margin-bottom:30px;
 }
 
-.card{
-  flex:1;
-  min-width:160px;
-  background:#e9edf3;
-  border-radius:14px;
-  padding:20px;
+.stats{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:15px;
+  margin-top:20px;
+}
+
+.stat{
+  background:white;
+  padding:15px;
+  border-radius:12px;
   text-align:center;
+  box-shadow:0 3px 10px rgba(0,0,0,0.05);
 }
 
-.card h2{
+.stat h2{
   margin:0;
-  font-size:30px;
+  font-size:22px;
 }
 
-table{
-  width:100%;
-  border-collapse:collapse;
+.stat span{
+  color:#666;
+  font-size:13px;
 }
 
-th,td{
-  padding:12px;
-  border-bottom:1px solid #ddd;
+.section-title{
+  font-weight:800;
+  margin:30px 0 10px;
 }
 
-th{background:#e2e6ec;}
+.game-row{
+  background:white;
+  padding:10px;
+  border-radius:10px;
+  margin-bottom:6px;
+  display:flex;
+  justify-content:space-between;
+  font-size:14px;
+}
 </style>
 </head>
 <body>
 
 <div class="page">
 
-<h1 id="playerName">Loading...</h1>
+<div class="top-nav">
+  <a href="index.html">Home</a>
+  <a href="nrl.html">NRL</a>
+</div>
 
-<div class="cards" id="summary"></div>
+<div class="hero">
+  <h1 id="playerName"></h1>
+  <div id="careerStats" class="stats"></div>
+</div>
 
-<table>
-<thead>
-<tr>
-<th>Season</th>
-<th>Team</th>
-<th>Opponent</th>
-<th>Points</th>
-<th>Tries</th>
-</tr>
-</thead>
-<tbody id="games"></tbody>
-</table>
+<div class="section-title">Games</div>
+<div id="games"></div>
 
 </div>
 
 <script>
+const params = new URLSearchParams(window.location.search);
+const playerName = params.get("player");
 
-const params=new URLSearchParams(window.location.search);
-const player=params.get("player");
+if(!playerName){
+  document.body.innerHTML = "No player selected.";
+}
 
-if(!player){
-  document.getElementById("playerName").textContent="No player selected";
-}else{
+document.getElementById("playerName").textContent = playerName;
 
-document.getElementById("playerName").textContent=player;
+let totalGames = 0;
+let totalTries = 0;
+let totalGoals = 0;
+let totalPoints = 0;
+let allGames = [];
 
 fetch("data/nrl/index.json")
 .then(r=>r.json())
 .then(index=>{
+  const seasons = index.seasons || [];
 
-  const fetches=index.seasons.map(s=>
-    fetch("data/nrl/seasons/"+s+".json").then(r=>r.json())
+  const seasonPromises = seasons.map(season =>
+    fetch("data/nrl/seasons/" + season + ".json")
+      .then(r=>r.json())
+      .then(rows=>{
+        rows.forEach(row=>{
+          if(row.player === playerName){
+            totalGames++;
+            totalTries += row.tries || 0;
+            totalGoals += row.goals_made || 0;
+            totalPoints += row.points || 0;
+
+            allGames.push({
+              season: season,
+              match_id: row.match_id,
+              team: row.played_for,
+              opponent: row.played_against,
+              tries: row.tries || 0,
+              goals: row.goals_made || 0,
+              points: row.points || 0
+            });
+          }
+        });
+      })
   );
 
-  Promise.all(fetches).then(seasons=>{
+  return Promise.all(seasonPromises);
+})
+.then(()=>{
 
-    let games=[];
-
-    seasons.forEach(matches=>{
-      matches.forEach(match=>{
-        if(match.players){
-          match.players.forEach(p=>{
-            if(p.player === player){
-              games.push({
-                season: match.season,
-                team: p.played_for || match.home_team,
-                opponent: (match.home_team===p.played_for)
-                  ? match.away_team
-                  : match.home_team,
-                points: p.points || 0,
-                tries: p.tries || 0
-              });
-            }
-          });
-        }
-      });
-    });
-
-    buildPage(games);
-  });
-});
-}
-
-function buildPage(games){
-
-  const totalGames=games.length;
-  const totalPoints=games.reduce((a,b)=>a+b.points,0);
-  const totalTries=games.reduce((a,b)=>a+b.tries,0);
-  const avgPoints=(totalPoints/totalGames||0).toFixed(1);
-  const avgTries=(totalTries/totalGames||0).toFixed(2);
-  const bestPoints=Math.max(...games.map(g=>g.points),0);
-  const bestTries=Math.max(...games.map(g=>g.tries),0);
-
-  document.getElementById("summary").innerHTML=`
-    <div class="card"><h2>${totalGames}</h2>Games</div>
-    <div class="card"><h2>${bestPoints}</h2>Best Points</div>
-    <div class="card"><h2>${bestTries}</h2>Best Tries</div>
-    <div class="card"><h2>${avgPoints}</h2>Avg Points</div>
-    <div class="card"><h2>${avgTries}</h2>Avg Tries</div>
+  document.getElementById("careerStats").innerHTML = `
+    <div class="stat"><h2>${totalGames}</h2><span>Games</span></div>
+    <div class="stat"><h2>${totalTries}</h2><span>Total Tries</span></div>
+    <div class="stat"><h2>${totalGoals}</h2><span>Total Goals</span></div>
+    <div class="stat"><h2>${totalPoints}</h2><span>Total Points</span></div>
   `;
 
-  const tbody=document.getElementById("games");
-  tbody.innerHTML="";
+  const gamesDiv = document.getElementById("games");
 
-  games.forEach(g=>{
-    tbody.innerHTML+=`
-      <tr>
-        <td>${g.season}</td>
-        <td>${g.team}</td>
-        <td>${g.opponent}</td>
-        <td>${g.points}</td>
-        <td>${g.tries}</td>
-      </tr>
+  allGames.sort((a,b)=>b.season - a.season);
+
+  allGames.forEach(g=>{
+    gamesDiv.innerHTML += `
+      <div class="game-row">
+        <div>
+          ${g.season} – ${g.team} vs ${g.opponent}
+        </div>
+        <div>
+          ${g.points} pts
+        </div>
+      </div>
     `;
   });
-}
 
+})
+.catch(err=>{
+  document.body.innerHTML = "Error loading player data.";
+  console.error(err);
+});
 </script>
 
 </body>
