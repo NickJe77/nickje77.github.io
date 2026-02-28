@@ -114,6 +114,13 @@ tr:hover{
   padding:40px;
   font-size:18px;
 }
+
+.error{
+  color:red;
+  font-weight:600;
+  padding:30px;
+  text-align:center;
+}
 </style>
 </head>
 
@@ -172,45 +179,62 @@ let allPerformances = [];
 
 async function loadAllSeasons(){
 
-  let files = [];
-  for(let y=startYear; y<=currentYear; y++){
-    files.push(`docs/data/nrl/seasons/${y}.json`);
-  }
+  try {
 
-  const responses = await Promise.all(
-    files.map(file =>
-      fetch(file).then(res => res.ok ? res.json() : null)
-    )
-  );
+    let files = [];
+    for(let y = startYear; y <= currentYear; y++){
+      files.push(`data/nrl/seasons/${y}.json`);
+    }
 
-  responses.forEach(seasonData => {
-    if(!seasonData) return;
+    const responses = await Promise.all(
+      files.map(file =>
+        fetch(file)
+          .then(res => res.ok ? res.json() : null)
+          .catch(() => null)
+      )
+    );
 
-    seasonData.forEach(match => {
+    responses.forEach(seasonData => {
+      if(!seasonData) return;
 
-      match.players.forEach(player => {
+      seasonData.forEach(match => {
 
-        allPerformances.push({
-          season: match.season,
-          date: match.date_iso,
-          match_id: match.match_id,
-          player: player.player,
-          team: player.played_for,
-          opponent: player.played_for === match.home_team
-                    ? match.away_team
-                    : match.home_team,
-          tries: player.tries,
-          goals: player.goals_made,
-          field_goals: player.field_goals,
-          points: player.points
+        if(!match.players) return;
+
+        match.players.forEach(player => {
+
+          allPerformances.push({
+            season: match.season,
+            date: match.date_iso,
+            match_id: match.match_id,
+            player: player.player,
+            team: player.played_for,
+            opponent: player.played_for === match.home_team
+                      ? match.away_team
+                      : match.home_team,
+            tries: player.tries || 0,
+            goals: player.goals_made || 0,
+            field_goals: player.field_goals || 0,
+            points: player.points || 0
+          });
+
         });
 
       });
-
     });
-  });
 
-  sortPerformances("points_desc");
+    if(allPerformances.length === 0){
+      document.getElementById("gamesTable").innerHTML =
+        `<tr><td colspan="9" class="error">No data found. Check JSON path.</td></tr>`;
+      return;
+    }
+
+    sortPerformances("points_desc");
+
+  } catch(err){
+    document.getElementById("gamesTable").innerHTML =
+      `<tr><td colspan="9" class="error">Error loading data.</td></tr>`;
+  }
 }
 
 function sortPerformances(type){
@@ -265,7 +289,6 @@ function renderTable(){
 
   document.getElementById("resultsCount").innerText =
     `Showing top ${Math.min(200, allPerformances.length)} of ${allPerformances.length} performances`;
-
 }
 
 document.getElementById("sortSelect").addEventListener("change", e=>{
