@@ -1,172 +1,332 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>NRL Player</title>
+<title>NRL Player | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{font-family:Inter,Arial;margin:0;background:#f4f6f8;}
-.page{max-width:1100px;margin:auto;padding:30px;}
-
-.top-nav{
-  text-align:center;
-  margin-bottom:20px;
-}
-.top-nav a{
-  text-decoration:none;
-  color:#0056d6;
-  font-weight:600;
-  margin:0 10px;
+:root{
+  --blue:#0055A4;
+  --green:#00A651;
+  --bg:#f4f6f8;
+  --card:#ffffff;
+  --text:#111;
+  --line:#e6e8ee;
 }
 
-.hero{
-  background:linear-gradient(90deg,#0055A4,#00A651);
-  color:white;
-  padding:30px;
-  border-radius:20px;
-  margin-bottom:30px;
-}
-
-.stats{
-  display:grid;
-  grid-template-columns:repeat(4,1fr);
-  gap:15px;
-  margin-top:20px;
-}
-
-.stat{
-  background:white;
-  padding:15px;
-  border-radius:12px;
-  text-align:center;
-  box-shadow:0 3px 10px rgba(0,0,0,0.05);
-}
-
-.stat h2{
+body{
+  font-family:Inter,system-ui,Arial;
   margin:0;
-  font-size:22px;
+  background:var(--bg);
+  color:var(--text);
 }
 
-.stat span{
-  color:#666;
-  font-size:13px;
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+}
+
+.page{
+  max-width:1200px;
+  margin:auto;
+  padding:30px 20px 60px;
+}
+
+.top-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:20px;
+}
+
+h1{
+  margin:0;
+  font-size:40px;
+}
+
+.search{
+  padding:10px 14px;
+  border-radius:10px;
+  border:1px solid #ccc;
+  font-size:16px;
+  width:260px;
+}
+
+.select{
+  padding:8px 12px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  font-size:15px;
 }
 
 .section-title{
-  font-weight:800;
-  margin:30px 0 10px;
+  margin-top:30px;
+  margin-bottom:12px;
+  font-weight:700;
+  font-size:14px;
+  letter-spacing:1px;
+  color:#666;
 }
 
-.game-row{
-  background:white;
-  padding:10px;
-  border-radius:10px;
-  margin-bottom:6px;
-  display:flex;
-  justify-content:space-between;
+.cards{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:18px;
+}
+
+.card{
+  background:#fff;
+  padding:24px;
+  border-radius:16px;
+  text-align:center;
+  box-shadow:0 4px 14px rgba(0,0,0,0.05);
+}
+
+.card h2{
+  margin:0;
+  font-size:30px;
+}
+
+.card div{
+  margin-top:6px;
   font-size:14px;
+  color:#666;
+}
+
+.reset{
+  margin-top:20px;
+  padding:6px 12px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  background:#eee;
+  cursor:pointer;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:20px;
+  background:white;
+  border-radius:14px;
+  overflow:hidden;
+}
+
+th{
+  background:#eef1f6;
+  padding:10px;
+  font-weight:700;
+  cursor:pointer;
+}
+
+td{
+  padding:8px;
+  border-bottom:1px solid #eee;
+  text-align:center;
+}
+
+td:first-child,
+td:nth-child(2),
+td:nth-child(3),
+td:nth-child(4){
+  text-align:left;
+}
+
+tr:hover{
+  background:#f9fbff;
 }
 </style>
 </head>
 <body>
 
-<div class="page">
-
-<div class="top-nav">
+<div class="navbar">
   <a href="index.html">Home</a>
   <a href="nrl.html">NRL</a>
 </div>
 
-<div class="hero">
+<div class="page">
+
+<div class="top-row">
   <h1 id="playerName"></h1>
-  <div id="careerStats" class="stats"></div>
+  <input type="text" class="search" placeholder="Search player..." id="searchBox">
 </div>
 
-<div class="section-title">Games</div>
-<div id="games"></div>
+<select id="teamSelect" class="select"></select>
+
+<div class="section-title">CAREER SUMMARY</div>
+<div class="cards" id="careerCards"></div>
+
+<div class="section-title">VS SELECTED OPPONENT</div>
+<select id="oppSelect" class="select"></select>
+<div class="cards" id="oppCards"></div>
+
+<button class="reset" onclick="resetSort()">Reset Sort</button>
+
+<table>
+<thead>
+<tr>
+<th onclick="sortTable('season')">Season</th>
+<th onclick="sortTable('round')">Round</th>
+<th onclick="sortTable('team')">Team</th>
+<th onclick="sortTable('opp')">Opponent</th>
+<th onclick="sortTable('tries')">Tries</th>
+<th onclick="sortTable('goals')">Goals</th>
+<th onclick="sortTable('points')">Points</th>
+</tr>
+</thead>
+<tbody id="gameTable"></tbody>
+</table>
 
 </div>
 
 <script>
 const params = new URLSearchParams(window.location.search);
-const playerName = params.get("player");
+const player = params.get("player");
+document.getElementById("playerName").textContent = player;
 
-if(!playerName){
-  document.body.innerHTML = "No player selected.";
-}
-
-document.getElementById("playerName").textContent = playerName;
-
-let totalGames = 0;
-let totalTries = 0;
-let totalGoals = 0;
-let totalPoints = 0;
-let allGames = [];
+let games = [];
+let currentSort = null;
+let sortAsc = false;
 
 fetch("data/nrl/index.json")
 .then(r=>r.json())
 .then(index=>{
-  const seasons = index.seasons || [];
+  const seasons = index.seasons;
 
-  const seasonPromises = seasons.map(season =>
-    fetch("data/nrl/seasons/" + season + ".json")
+  return Promise.all(
+    seasons.map(y=>
+      fetch("data/nrl/seasons/"+y+".json")
       .then(r=>r.json())
       .then(rows=>{
         rows.forEach(row=>{
-          if(row.player === playerName){
-            totalGames++;
-            totalTries += row.tries || 0;
-            totalGoals += row.goals_made || 0;
-            totalPoints += row.points || 0;
-
-            allGames.push({
-              season: season,
-              match_id: row.match_id,
-              team: row.played_for,
-              opponent: row.played_against,
-              tries: row.tries || 0,
-              goals: row.goals_made || 0,
-              points: row.points || 0
+          if(row.player === player){
+            games.push({
+              season:y,
+              round:row.round || "",
+              team:row.played_for,
+              opp:row.played_against,
+              tries:row.tries || 0,
+              goals:row.goals_made || 0,
+              points:row.points || 0
             });
           }
         });
       })
+    )
   );
-
-  return Promise.all(seasonPromises);
 })
-.then(()=>{
+.then(initPage);
 
-  document.getElementById("careerStats").innerHTML = `
-    <div class="stat"><h2>${totalGames}</h2><span>Games</span></div>
-    <div class="stat"><h2>${totalTries}</h2><span>Total Tries</span></div>
-    <div class="stat"><h2>${totalGoals}</h2><span>Total Goals</span></div>
-    <div class="stat"><h2>${totalPoints}</h2><span>Total Points</span></div>
+function initPage(){
+
+  const teams = [...new Set(games.map(g=>g.team))];
+  const opps = [...new Set(games.map(g=>g.opp))];
+
+  teamSelect.innerHTML = `<option value="all">All Teams</option>` +
+    teams.map(t=>`<option>${t}</option>`).join("");
+
+  oppSelect.innerHTML = `<option value="all">All Opponents</option>` +
+    opps.map(o=>`<option>${o}</option>`).join("");
+
+  teamSelect.onchange = render;
+  oppSelect.onchange = render;
+
+  render();
+}
+
+function render(){
+
+  let filtered = games;
+
+  if(teamSelect.value !== "all")
+    filtered = filtered.filter(g=>g.team===teamSelect.value);
+
+  if(oppSelect.value !== "all")
+    filtered = filtered.filter(g=>g.opp===oppSelect.value);
+
+  renderCareer();
+  renderOpp(filtered);
+  renderTable(filtered);
+}
+
+function renderCareer(){
+
+  const totalGames = games.length;
+  const totalTries = games.reduce((a,b)=>a+b.tries,0);
+  const totalGoals = games.reduce((a,b)=>a+b.goals,0);
+  const totalPoints = games.reduce((a,b)=>a+b.points,0);
+  const avgPoints = totalGames ? (totalPoints/totalGames).toFixed(2) : 0;
+  const bestPoints = Math.max(...games.map(g=>g.points),0);
+
+  careerCards.innerHTML = `
+  <div class="card"><h2>${totalGames}</h2><div>Games</div></div>
+  <div class="card"><h2>${bestPoints}</h2><div>Best Points</div></div>
+  <div class="card"><h2>${totalTries}</h2><div>Total Tries</div></div>
+  <div class="card"><h2>${totalGoals}</h2><div>Total Goals</div></div>
+  <div class="card"><h2>${avgPoints}</h2><div>Avg Points</div></div>
   `;
+}
 
-  const gamesDiv = document.getElementById("games");
+function renderOpp(filtered){
 
-  allGames.sort((a,b)=>b.season - a.season);
+  const gamesCount = filtered.length;
+  const bestPoints = Math.max(...filtered.map(g=>g.points),0);
+  const totalPoints = filtered.reduce((a,b)=>a+b.points,0);
+  const avgPoints = gamesCount ? (totalPoints/gamesCount).toFixed(2) : 0;
+  const totalTries = filtered.reduce((a,b)=>a+b.tries,0);
 
-  allGames.forEach(g=>{
-    gamesDiv.innerHTML += `
-      <div class="game-row">
-        <div>
-          ${g.season} – ${g.team} vs ${g.opponent}
-        </div>
-        <div>
-          ${g.points} pts
-        </div>
-      </div>
-    `;
+  oppCards.innerHTML = `
+  <div class="card"><h2>${gamesCount}</h2><div>Games</div></div>
+  <div class="card"><h2>${bestPoints}</h2><div>Best Points</div></div>
+  <div class="card"><h2>${avgPoints}</h2><div>Avg Points</div></div>
+  <div class="card"><h2>${totalTries}</h2><div>Total Tries</div></div>
+  `;
+}
+
+function renderTable(data){
+
+  gameTable.innerHTML = data.map(g=>`
+  <tr>
+    <td>${g.season}</td>
+    <td>${g.round}</td>
+    <td>${g.team}</td>
+    <td>${g.opp}</td>
+    <td>${g.tries}</td>
+    <td>${g.goals}</td>
+    <td>${g.points}</td>
+  </tr>
+  `).join("");
+}
+
+function sortTable(key){
+
+  sortAsc = currentSort === key ? !sortAsc : false;
+  currentSort = key;
+
+  games.sort((a,b)=>{
+    if(a[key] < b[key]) return sortAsc ? -1 : 1;
+    if(a[key] > b[key]) return sortAsc ? 1 : -1;
+    return 0;
   });
 
-})
-.catch(err=>{
-  document.body.innerHTML = "Error loading player data.";
-  console.error(err);
-});
+  render();
+}
+
+function resetSort(){
+  currentSort = null;
+  sortAsc = false;
+  render();
+}
 </script>
 
 </body>
