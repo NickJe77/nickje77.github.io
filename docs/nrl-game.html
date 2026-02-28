@@ -1,213 +1,297 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>NRL Game</title>
+<title>NRL Game | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{font-family:Inter,Arial;margin:0;background:#f4f6f8;}
-.page{max-width:1200px;margin:auto;padding:30px;}
-
-.top-nav{
-  text-align:center;
-  margin-bottom:20px;
+:root{
+  --bg:#f4f6f8;
+  --card:#ffffff;
+  --line:#e5e7eb;
 }
-.top-nav a{
+
+body{
+  margin:0;
+  font-family:Inter,system-ui,Arial;
+  background:var(--bg);
+  color:#111;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px;
+  background:#fff;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+
+.navbar a{
   text-decoration:none;
   color:#0056d6;
-  font-weight:600;
-  margin:0 10px;
 }
 
-.header{
+.page{
+  max-width:1300px;
+  margin:auto;
+  padding:30px 20px 60px;
+}
+
+.game-header{
   text-align:center;
-  margin-bottom:30px;
+  margin-bottom:40px;
 }
-.header h1{
-  margin:0;
-  font-size:32px;
+
+.game-header h1{
+  margin:0 0 10px 0;
+  font-size:40px;
 }
-.meta{
+
+.game-header .meta{
   color:#666;
-  margin-top:6px;
+  margin-bottom:10px;
 }
-.score{
-  font-size:26px;
-  font-weight:800;
+
+.scoreline{
+  font-size:34px;
+  font-weight:700;
   margin-top:10px;
 }
 
 .teams{
   display:grid;
   grid-template-columns:1fr 1fr;
-  gap:20px;
+  gap:30px;
 }
 
 .team-card{
-  background:#fff;
-  border-radius:16px;
-  padding:16px;
-  box-shadow:0 3px 10px rgba(0,0,0,0.05);
+  background:var(--card);
+  border-radius:18px;
+  padding:24px;
+  box-shadow:0 6px 20px rgba(0,0,0,.05);
 }
 
-.team-name{
-  font-weight:800;
-  font-size:20px;
-  margin-bottom:10px;
+.team-card h2{
+  margin:0 0 10px 0;
+  font-size:26px;
 }
 
-.stripe{
+.team-bar{
   height:10px;
   border-radius:6px;
-  margin-bottom:12px;
+  margin-bottom:20px;
 }
 
 table{
   width:100%;
   border-collapse:collapse;
+}
+
+th, td{
+  padding:10px;
+  border-bottom:1px solid var(--line);
   font-size:14px;
 }
 
-th,td{
-  padding:6px;
-  border-bottom:1px solid #eee;
+th{
+  text-align:left;
+  font-weight:700;
+}
+
+.numeric{
   text-align:center;
 }
 
-th:first-child, td:first-child{
-  text-align:left;
+.sortable{
+  cursor:pointer;
+  user-select:none;
 }
 
-.player-link{
-  text-decoration:none;
-  color:#000;
-  font-weight:600;
+.sortable:hover{
+  text-decoration:underline;
 }
 
-.player-link:hover{
-  color:#0056d6;
+tr:hover{
+  background:#f0f6ff;
+}
+
+.loading{
+  text-align:center;
+  padding:60px;
+  font-size:18px;
 }
 </style>
 </head>
+
 <body>
+
+<nav class="navbar">
+  <a href="index.html">Home</a>
+  <a href="nrl.html">NRL</a>
+</nav>
 
 <div class="page">
 
-<div class="top-nav">
-  <a href="index.html">Home</a>
-  <a href="nrl.html">NRL</a>
-</div>
-
-<div class="header">
-  <h1 id="title"></h1>
-  <div class="meta" id="meta"></div>
-  <div class="score" id="score"></div>
-</div>
-
-<div class="teams">
-  <div class="team-card">
-    <div class="team-name" id="homeName"></div>
-    <div class="stripe" id="homeStripe"></div>
-    <table>
-      <thead>
-        <tr>
-          <th>Player</th>
-          <th>Tries</th>
-          <th>Goals</th>
-          <th>Points</th>
-        </tr>
-      </thead>
-      <tbody id="homePlayers"></tbody>
-    </table>
+  <div class="game-header">
+    <h1 id="gameTitle">Loading...</h1>
+    <div class="meta" id="gameMeta"></div>
+    <div class="scoreline" id="scoreline"></div>
   </div>
 
-  <div class="team-card">
-    <div class="team-name" id="awayName"></div>
-    <div class="stripe" id="awayStripe"></div>
-    <table>
-      <thead>
-        <tr>
-          <th>Player</th>
-          <th>Tries</th>
-          <th>Goals</th>
-          <th>Points</th>
-        </tr>
-      </thead>
-      <tbody id="awayPlayers"></tbody>
-    </table>
+  <div class="teams">
+
+    <div class="team-card">
+      <h2 id="homeName"></h2>
+      <div class="team-bar" id="homeBar"></div>
+      <table id="homeTable">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th class="numeric sortable" data-team="home" data-sort="tries">Tries</th>
+            <th class="numeric sortable" data-team="home" data-sort="goals_made">Goals</th>
+            <th class="numeric sortable" data-team="home" data-sort="points">Points</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="team-card">
+      <h2 id="awayName"></h2>
+      <div class="team-bar" id="awayBar"></div>
+      <table id="awayTable">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th class="numeric sortable" data-team="away" data-sort="tries">Tries</th>
+            <th class="numeric sortable" data-team="away" data-sort="goals_made">Goals</th>
+            <th class="numeric sortable" data-team="away" data-sort="points">Points</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
   </div>
-</div>
 
 </div>
 
 <script>
+
+const teamColours = {
+  "Canberra":"#0054A6",
+  "Penrith":"#000000",
+  "Brisbane":"#6F2C91",
+  "Melbourne":"#5A2D81",
+  "Souths":"#00643C",
+  "Sydney":"#002B5C",
+  "Manly":"#800000",
+  "Parramatta":"#003DA5",
+  "Canterbury":"#0033A0",
+  "Cronulla":"#00A3E0",
+  "Warriors":"#111111",
+  "Gold Coast":"#FFDD00",
+  "North Queensland":"#00205B",
+  "Newcastle":"#003E7E",
+  "Wests":"#F04E23",
+  "Dragons":"#E2231A"
+};
+
+let homePlayers = [];
+let awayPlayers = [];
+let sortState = {};
+
 const params = new URLSearchParams(window.location.search);
 const season = params.get("season");
 const matchId = params.get("match");
 
-fetch("data/nrl/seasons/" + season + ".json")
-.then(r=>r.json())
-.then(rows=>{
+async function loadGame(){
 
-  const matchRows = rows.filter(r => String(r.match_id) === String(matchId));
-  if(!matchRows.length){
-    document.body.innerHTML = "Match not found.";
+  const res = await fetch(`/data/nrl/seasons/${season}.json`);
+  const data = await res.json();
+
+  const gameRows = data.filter(r => r.match_id === matchId);
+
+  if(gameRows.length === 0){
+    document.getElementById("gameTitle").innerText = "Game Not Found";
     return;
   }
 
-  const game = matchRows[0];
+  const game = gameRows[0];
 
-  document.getElementById("title").textContent =
-    season + " – " + (game.round || "") + ": " +
-    game.home_team + " vs " + game.away_team;
+  const homeTeam = game.home_team;
+  const awayTeam = game.away_team;
 
-  document.getElementById("meta").textContent =
-    "Venue: " + (game.venue || "") +
-    (game.crowd ? " • Crowd: " + game.crowd.toLocaleString() : "");
+  document.getElementById("gameTitle").innerText =
+    `${season} – ${homeTeam} vs ${awayTeam}`;
 
-  document.getElementById("score").textContent =
-    game.home_team + " " + game.home_points +
-    " – " +
-    game.away_points + " " + game.away_team;
+  document.getElementById("gameMeta").innerText =
+    `Venue: ${game.venue} • Crowd: ${game.crowd.toLocaleString()}`;
 
-  document.getElementById("homeName").textContent = game.home_team;
-  document.getElementById("awayName").textContent = game.away_team;
+  document.getElementById("scoreline").innerText =
+    `${homeTeam} ${game.home_points} – ${game.away_points} ${awayTeam}`;
 
-  // Simple colour bars (can later connect to team-colours JSON)
-  document.getElementById("homeStripe").style.background = "#0055A4";
-  document.getElementById("awayStripe").style.background = "#00A651";
+  document.getElementById("homeName").innerText = homeTeam;
+  document.getElementById("awayName").innerText = awayTeam;
 
-  const homeDiv = document.getElementById("homePlayers");
-  const awayDiv = document.getElementById("awayPlayers");
+  document.getElementById("homeBar").style.background =
+    teamColours[homeTeam] || "#333";
 
-  matchRows.forEach(p=>{
-    const row = `
-      <tr>
-        <td>
-          <a class="player-link"
-             href="nrl-player.html?player=${encodeURIComponent(p.player)}">
-             ${p.player}
-          </a>
-        </td>
-        <td>${p.tries || 0}</td>
-        <td>${p.goals_made || 0}</td>
-        <td>${p.points || 0}</td>
-      </tr>
+  document.getElementById("awayBar").style.background =
+    teamColours[awayTeam] || "#333";
+
+  homePlayers = gameRows.filter(r=>r.played_for === homeTeam);
+  awayPlayers = gameRows.filter(r=>r.played_for === awayTeam);
+
+  renderTable("home");
+  renderTable("away");
+}
+
+function renderTable(team){
+
+  const players = team === "home" ? homePlayers : awayPlayers;
+  const tbody = document.querySelector(`#${team}Table tbody`);
+  tbody.innerHTML = "";
+
+  players.forEach(p=>{
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${p.player}</td>
+      <td class="numeric">${p.tries}</td>
+      <td class="numeric">${p.goals_made}</td>
+      <td class="numeric"><strong>${p.points}</strong></td>
     `;
+    tbody.appendChild(row);
+  });
+}
 
-    if(p.played_for === game.home_team){
-      homeDiv.innerHTML += row;
-    } else {
-      awayDiv.innerHTML += row;
-    }
+function sortTeam(team, key){
+
+  const players = team === "home" ? homePlayers : awayPlayers;
+
+  if(!sortState[team]) sortState[team] = {};
+  sortState[team][key] = !sortState[team][key];
+
+  players.sort((a,b)=>{
+    return sortState[team][key]
+      ? b[key] - a[key]
+      : a[key] - b[key];
   });
 
-})
-.catch(err=>{
-  document.body.innerHTML = "Error loading match.";
-  console.error(err);
+  renderTable(team);
+}
+
+document.querySelectorAll(".sortable").forEach(th=>{
+  th.addEventListener("click", ()=>{
+    sortTeam(th.dataset.team, th.dataset.sort);
+  });
 });
+
+loadGame();
+
 </script>
 
 </body>
