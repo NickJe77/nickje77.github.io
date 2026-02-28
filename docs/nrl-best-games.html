@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>NRL Best Games | The Sporting Almanac</title>
+<title>NRL Best Individual Games | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -127,16 +127,17 @@ tr:hover{
 <div class="page">
 
   <div class="hero">
-    <h1>NRL Best Games</h1>
-    <div class="subtitle">Highest scoring classics & closest finishes in NRL history</div>
+    <h1>NRL Best Individual Games</h1>
+    <div class="subtitle">Greatest single-game performances in NRL history</div>
   </div>
 
   <div class="controls">
     <div class="results-count" id="resultsCount">Loading...</div>
     <select id="sortSelect">
-      <option value="total_desc">Highest Total Points</option>
-      <option value="margin_asc">Closest Margin</option>
-      <option value="margin_desc">Biggest Blowout</option>
+      <option value="points_desc">Most Points</option>
+      <option value="tries_desc">Most Tries</option>
+      <option value="goals_desc">Most Goals</option>
+      <option value="field_desc">Most Field Goals</option>
     </select>
   </div>
 
@@ -145,16 +146,18 @@ tr:hover{
       <thead>
         <tr>
           <th>Season</th>
-          <th>Round</th>
-          <th>Match</th>
-          <th>Venue</th>
-          <th>Score</th>
-          <th>Margin</th>
-          <th>Total</th>
+          <th>Date</th>
+          <th>Player</th>
+          <th>Team</th>
+          <th>Opponent</th>
+          <th>Tries</th>
+          <th>Goals</th>
+          <th>FG</th>
+          <th>Points</th>
         </tr>
       </thead>
       <tbody id="gamesTable">
-        <tr><td colspan="7" class="loading">Loading games...</td></tr>
+        <tr><td colspan="9" class="loading">Loading performances...</td></tr>
       </tbody>
     </table>
   </div>
@@ -165,99 +168,108 @@ tr:hover{
 
 const startYear = 1998;
 const currentYear = new Date().getFullYear();
-
-let allGames = [];
+let allPerformances = [];
 
 async function loadAllSeasons(){
-  let seasonFiles = [];
 
-  for(let y = startYear; y <= currentYear; y++){
-    seasonFiles.push(`docs/data/nrl/seasons/${y}.json`);
+  let files = [];
+  for(let y=startYear; y<=currentYear; y++){
+    files.push(`docs/data/nrl/seasons/${y}.json`);
   }
 
   const responses = await Promise.all(
-    seasonFiles.map(file =>
+    files.map(file =>
       fetch(file).then(res => res.ok ? res.json() : null)
     )
   );
 
-  const matchMap = {};
-
   responses.forEach(seasonData => {
     if(!seasonData) return;
 
-    seasonData.forEach(row => {
-      const key = row.match_id;
+    seasonData.forEach(match => {
 
-      if(!matchMap[key]){
-        matchMap[key] = {
-          season: row.season,
-          round: row.round,
-          match_id: row.match_id,
-          home_team: row.home_team,
-          away_team: row.away_team,
-          venue: row.venue,
-          home_points: row.home_points,
-          away_points: row.away_points,
-          margin: Math.abs(row.home_points - row.away_points),
-          total_points: row.total_points
-        };
-      }
+      match.players.forEach(player => {
+
+        allPerformances.push({
+          season: match.season,
+          date: match.date_iso,
+          match_id: match.match_id,
+          player: player.player,
+          team: player.played_for,
+          opponent: player.played_for === match.home_team
+                    ? match.away_team
+                    : match.home_team,
+          tries: player.tries,
+          goals: player.goals_made,
+          field_goals: player.field_goals,
+          points: player.points
+        });
+
+      });
+
     });
   });
 
-  allGames = Object.values(matchMap);
-  sortGames("total_desc");
+  sortPerformances("points_desc");
 }
 
-function sortGames(type){
+function sortPerformances(type){
 
-  if(type === "total_desc"){
-    allGames.sort((a,b)=>b.total_points - a.total_points);
+  if(type === "points_desc"){
+    allPerformances.sort((a,b)=>b.points - a.points);
   }
 
-  if(type === "margin_asc"){
-    allGames.sort((a,b)=>a.margin - b.margin);
+  if(type === "tries_desc"){
+    allPerformances.sort((a,b)=>b.tries - a.tries);
   }
 
-  if(type === "margin_desc"){
-    allGames.sort((a,b)=>b.margin - a.margin);
+  if(type === "goals_desc"){
+    allPerformances.sort((a,b)=>b.goals - a.goals);
+  }
+
+  if(type === "field_desc"){
+    allPerformances.sort((a,b)=>b.field_goals - a.field_goals);
   }
 
   renderTable();
 }
 
 function renderTable(){
+
   const tbody = document.getElementById("gamesTable");
   tbody.innerHTML = "";
 
-  allGames.slice(0,200).forEach(game => {
+  allPerformances.slice(0,200).forEach(p => {
 
     const tr = document.createElement("tr");
 
     tr.innerHTML = `
-      <td>${game.season}</td>
-      <td>${game.round}</td>
-      <td>${game.home_team} v ${game.away_team}</td>
-      <td>${game.venue}</td>
-      <td>${game.home_points} - ${game.away_points}</td>
-      <td>${game.margin}</td>
-      <td>${game.total_points}</td>
+      <td>${p.season}</td>
+      <td>${p.date}</td>
+      <td>${p.player}</td>
+      <td>${p.team}</td>
+      <td>${p.opponent}</td>
+      <td>${p.tries}</td>
+      <td>${p.goals}</td>
+      <td>${p.field_goals}</td>
+      <td><strong>${p.points}</strong></td>
     `;
 
     tr.onclick = () => {
-      window.location.href = `nrl-game.html?season=${game.season}&match=${game.match_id}`;
+      window.location.href =
+        `nrl-game.html?season=${p.season}&match=${p.match_id}`;
     };
 
     tbody.appendChild(tr);
   });
 
   document.getElementById("resultsCount").innerText =
-    `Showing top ${Math.min(200, allGames.length)} of ${allGames.length} games`;
+    `Showing top ${Math.min(200, allPerformances.length)} of ${allPerformances.length} performances`;
+
 }
 
-document.getElementById("sortSelect").addEventListener("change", e => {
-  sortGames(e.target.value);
+document.getElementById("sortSelect").addEventListener("change", e=>{
+  sortPerformances(e.target.value);
 });
 
 loadAllSeasons();
