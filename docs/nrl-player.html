@@ -9,6 +9,7 @@
 :root{
   --bg:#f4f6f8;
   --card:#ffffff;
+  --line:#e6e8ee;
 }
 
 body{
@@ -41,8 +42,8 @@ body{
   display:flex;
   justify-content:space-between;
   align-items:center;
-  gap:20px;
   flex-wrap:wrap;
+  gap:20px;
 }
 
 h1{
@@ -91,9 +92,18 @@ h1{
   background:#eef1f6;
 }
 
+.select{
+  padding:8px 12px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  font-size:15px;
+  margin-top:10px;
+  margin-right:10px;
+}
+
 .section-title{
-  margin-top:20px;
-  margin-bottom:10px;
+  margin-top:25px;
+  margin-bottom:12px;
   font-weight:700;
   font-size:14px;
   letter-spacing:1px;
@@ -125,6 +135,15 @@ h1{
   color:#666;
 }
 
+.reset{
+  margin-top:20px;
+  padding:6px 12px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  background:#eee;
+  cursor:pointer;
+}
+
 table{
   width:100%;
   border-collapse:collapse;
@@ -138,6 +157,7 @@ th{
   background:#eef1f6;
   padding:10px;
   font-weight:700;
+  cursor:pointer;
 }
 
 td{
@@ -178,19 +198,29 @@ tr:hover{
 
 <div class="team-bar" id="teamBar"></div>
 
+<div>
+  <select id="teamSelect" class="select"></select>
+  <select id="oppSelect" class="select"></select>
+</div>
+
 <div class="section-title">CAREER SUMMARY</div>
 <div class="cards" id="careerCards"></div>
+
+<div class="section-title">VS SELECTED OPPONENT</div>
+<div class="cards" id="oppCards"></div>
+
+<button class="reset" onclick="resetSort()">Reset Sort</button>
 
 <table>
 <thead>
 <tr>
-<th>Season</th>
-<th>Round</th>
-<th>Team</th>
-<th>Opponent</th>
-<th>Tries</th>
-<th>Goals</th>
-<th>Points</th>
+<th onclick="sortTable('season')">Season</th>
+<th onclick="sortTable('round')">Round</th>
+<th onclick="sortTable('team')">Team</th>
+<th onclick="sortTable('opp')">Opponent</th>
+<th onclick="sortTable('tries')">Tries</th>
+<th onclick="sortTable('goals')">Goals</th>
+<th onclick="sortTable('points')">Points</th>
 </tr>
 </thead>
 <tbody id="gameTable"></tbody>
@@ -204,11 +234,15 @@ const params = new URLSearchParams(window.location.search);
 const player = params.get("player");
 const playerNameEl = document.getElementById("playerName");
 const teamBar = document.getElementById("teamBar");
-const searchBox = document.getElementById("searchBox");
-const suggestionsBox = document.getElementById("suggestions");
 
 let games = [];
 let allPlayers = new Set();
+let currentSort = null;
+let sortAsc = false;
+
+if(player){
+  playerNameEl.textContent = player;
+}
 
 /* TEAM COLOUR MAP */
 const teamColours = {
@@ -224,22 +258,17 @@ const teamColours = {
   "Sharks":"linear-gradient(90deg,#008C95,#000000)"
 };
 
-if(player){
-  playerNameEl.textContent = player;
-}
-
 fetch("data/nrl/index.json")
 .then(r=>r.json())
 .then(index=>{
-  const seasons = index.seasons;
-
   return Promise.all(
-    seasons.map(y=>
+    index.seasons.map(y=>
       fetch("data/nrl/seasons/"+y+".json")
       .then(r=>r.json())
       .then(rows=>{
         rows.forEach(row=>{
           allPlayers.add(row.player);
+
           if(row.player === player){
             games.push({
               season:y,
@@ -267,16 +296,27 @@ function initPage(){
     }
   }
 
-  renderCareer();
-  renderTable(games);
+  const teams = [...new Set(games.map(g=>g.team))];
+  const opps = [...new Set(games.map(g=>g.opp))];
+
+  teamSelect.innerHTML = `<option value="all">All Teams</option>` +
+    teams.map(t=>`<option>${t}</option>`).join("");
+
+  oppSelect.innerHTML = `<option value="all">All Opponents</option>` +
+    opps.map(o=>`<option>${o}</option>`).join("");
+
+  teamSelect.onchange = render;
+  oppSelect.onchange = render;
+
+  render();
 
   /* SEARCH AUTOCOMPLETE */
   searchBox.addEventListener("input", function(){
     const value = this.value.toLowerCase();
-    suggestionsBox.innerHTML = "";
+    suggestions.innerHTML = "";
 
     if(value.length < 2){
-      suggestionsBox.style.display = "none";
+      suggestions.style.display = "none";
       return;
     }
 
@@ -291,10 +331,10 @@ function initPage(){
       div.onclick=()=>{
         window.location = "nrl-player.html?player=" + encodeURIComponent(name);
       };
-      suggestionsBox.appendChild(div);
+      suggestions.appendChild(div);
     });
 
-    suggestionsBox.style.display = matches.length ? "block" : "none";
+    suggestions.style.display = matches.length ? "block" : "none";
   });
 
   searchBox.addEventListener("keydown", function(e){
@@ -302,20 +342,51 @@ function initPage(){
       window.location = "nrl-player.html?player=" + encodeURIComponent(this.value.trim());
     }
   });
-
 }
 
-function renderCareer(){
-  const totalGames = games.length;
-  const totalTries = games.reduce((a,b)=>a+b.tries,0);
-  const totalGoals = games.reduce((a,b)=>a+b.goals,0);
-  const totalPoints = games.reduce((a,b)=>a+b.points,0);
+function render(){
+
+  let filtered = games;
+
+  if(teamSelect.value !== "all")
+    filtered = filtered.filter(g=>g.team===teamSelect.value);
+
+  if(oppSelect.value !== "all")
+    filtered = filtered.filter(g=>g.opp===oppSelect.value);
+
+  renderCareer(filtered);
+  renderOpp(filtered);
+  renderTable(filtered);
+}
+
+function renderCareer(data){
+
+  const totalGames = data.length;
+  const totalTries = data.reduce((a,b)=>a+b.tries,0);
+  const totalGoals = data.reduce((a,b)=>a+b.goals,0);
+  const totalPoints = data.reduce((a,b)=>a+b.points,0);
+  const avgPoints = totalGames ? (totalPoints/totalGames).toFixed(2) : 0;
 
   careerCards.innerHTML = `
   <div class="card"><h2>${totalGames}</h2><div>Games</div></div>
   <div class="card"><h2>${totalTries}</h2><div>Total Tries</div></div>
   <div class="card"><h2>${totalGoals}</h2><div>Total Goals</div></div>
   <div class="card"><h2>${totalPoints}</h2><div>Total Points</div></div>
+  <div class="card"><h2>${avgPoints}</h2><div>Avg Points</div></div>
+  `;
+}
+
+function renderOpp(data){
+
+  const gamesCount = data.length;
+  const bestPoints = Math.max(...data.map(g=>g.points),0);
+  const totalPoints = data.reduce((a,b)=>a+b.points,0);
+  const avgPoints = gamesCount ? (totalPoints/gamesCount).toFixed(2) : 0;
+
+  oppCards.innerHTML = `
+  <div class="card"><h2>${gamesCount}</h2><div>Games</div></div>
+  <div class="card"><h2>${bestPoints}</h2><div>Best Points</div></div>
+  <div class="card"><h2>${avgPoints}</h2><div>Avg Points</div></div>
   `;
 }
 
@@ -333,6 +404,24 @@ function renderTable(data){
   `).join("");
 }
 
+function sortTable(key){
+  sortAsc = currentSort === key ? !sortAsc : false;
+  currentSort = key;
+
+  games.sort((a,b)=>{
+    if(a[key] < b[key]) return sortAsc ? -1 : 1;
+    if(a[key] > b[key]) return sortAsc ? 1 : -1;
+    return 0;
+  });
+
+  render();
+}
+
+function resetSort(){
+  currentSort = null;
+  sortAsc = false;
+  render();
+}
 </script>
 
 </body>
