@@ -7,11 +7,8 @@
 
 <style>
 :root{
-  --blue:#0055A4;
-  --green:#00A651;
   --bg:#f4f6f8;
   --card:#ffffff;
-  --text:#111;
 }
 
 body{
@@ -44,13 +41,24 @@ body{
   display:flex;
   justify-content:space-between;
   align-items:center;
-  flex-wrap:wrap;
   gap:20px;
+  flex-wrap:wrap;
 }
 
 h1{
   margin:0;
   font-size:40px;
+}
+
+.team-bar{
+  height:14px;
+  border-radius:8px;
+  margin:15px 0 25px 0;
+  background:#ddd;
+}
+
+.search-wrap{
+  position:relative;
 }
 
 .search{
@@ -61,17 +69,31 @@ h1{
   width:260px;
 }
 
-.select{
-  padding:8px 12px;
+.suggestions{
+  position:absolute;
+  top:42px;
+  width:100%;
+  background:white;
+  border:1px solid #ddd;
   border-radius:8px;
-  border:1px solid #ccc;
-  font-size:15px;
-  margin-top:10px;
+  max-height:220px;
+  overflow-y:auto;
+  display:none;
+  z-index:999;
+}
+
+.suggestion{
+  padding:8px 12px;
+  cursor:pointer;
+}
+
+.suggestion:hover{
+  background:#eef1f6;
 }
 
 .section-title{
-  margin-top:30px;
-  margin-bottom:12px;
+  margin-top:20px;
+  margin-bottom:10px;
   font-weight:700;
   font-size:14px;
   letter-spacing:1px;
@@ -103,15 +125,6 @@ h1{
   color:#666;
 }
 
-.reset{
-  margin-top:20px;
-  padding:6px 12px;
-  border-radius:8px;
-  border:1px solid #ccc;
-  background:#eee;
-  cursor:pointer;
-}
-
 table{
   width:100%;
   border-collapse:collapse;
@@ -125,7 +138,6 @@ th{
   background:#eef1f6;
   padding:10px;
   font-weight:700;
-  cursor:pointer;
 }
 
 td{
@@ -157,30 +169,28 @@ tr:hover{
 
 <div class="top-row">
   <h1 id="playerName"></h1>
-  <input type="text" class="search" placeholder="Search player..." id="searchBox">
+
+  <div class="search-wrap">
+    <input type="text" class="search" placeholder="Search player..." id="searchBox">
+    <div class="suggestions" id="suggestions"></div>
+  </div>
 </div>
 
-<select id="teamSelect" class="select"></select>
+<div class="team-bar" id="teamBar"></div>
 
 <div class="section-title">CAREER SUMMARY</div>
 <div class="cards" id="careerCards"></div>
 
-<div class="section-title">VS SELECTED OPPONENT</div>
-<select id="oppSelect" class="select"></select>
-<div class="cards" id="oppCards"></div>
-
-<button class="reset" onclick="resetSort()">Reset Sort</button>
-
 <table>
 <thead>
 <tr>
-<th onclick="sortTable('season')">Season</th>
-<th onclick="sortTable('round')">Round</th>
-<th onclick="sortTable('team')">Team</th>
-<th onclick="sortTable('opp')">Opponent</th>
-<th onclick="sortTable('tries')">Tries</th>
-<th onclick="sortTable('goals')">Goals</th>
-<th onclick="sortTable('points')">Points</th>
+<th>Season</th>
+<th>Round</th>
+<th>Team</th>
+<th>Opponent</th>
+<th>Tries</th>
+<th>Goals</th>
+<th>Points</th>
 </tr>
 </thead>
 <tbody id="gameTable"></tbody>
@@ -192,27 +202,31 @@ tr:hover{
 
 const params = new URLSearchParams(window.location.search);
 const player = params.get("player");
-
-if(!player){
-  document.getElementById("playerName").textContent = "Player Not Found";
-}else{
-  document.getElementById("playerName").textContent = player;
-}
+const playerNameEl = document.getElementById("playerName");
+const teamBar = document.getElementById("teamBar");
+const searchBox = document.getElementById("searchBox");
+const suggestionsBox = document.getElementById("suggestions");
 
 let games = [];
 let allPlayers = new Set();
-let currentSort = null;
-let sortAsc = false;
 
-/* SEARCH FUNCTION */
-document.getElementById("searchBox").addEventListener("keydown", function(e){
-  if(e.key === "Enter"){
-    const name = this.value.trim();
-    if(name){
-      window.location = "nrl-player.html?player=" + encodeURIComponent(name);
-    }
-  }
-});
+/* TEAM COLOUR MAP */
+const teamColours = {
+  "Brisbane":"linear-gradient(90deg,#6F2C91,#FDBB30)",
+  "Canberra":"linear-gradient(90deg,#00A651,#00471B)",
+  "Souths":"linear-gradient(90deg,#006341,#D50032)",
+  "Roosters":"linear-gradient(90deg,#00205B,#C8102E)",
+  "Bulldogs":"linear-gradient(90deg,#003DA5,#FFFFFF)",
+  "Storm":"linear-gradient(90deg,#4B2E83,#FFD100)",
+  "Eels":"linear-gradient(90deg,#0033A0,#FDBB30)",
+  "Cowboys":"linear-gradient(90deg,#00205B,#A6192E)",
+  "Warriors":"linear-gradient(90deg,#000000,#FFFFFF)",
+  "Sharks":"linear-gradient(90deg,#008C95,#000000)"
+};
+
+if(player){
+  playerNameEl.textContent = player;
+}
 
 fetch("data/nrl/index.json")
 .then(r=>r.json())
@@ -226,7 +240,6 @@ fetch("data/nrl/index.json")
       .then(rows=>{
         rows.forEach(row=>{
           allPlayers.add(row.player);
-
           if(row.player === player){
             games.push({
               season:y,
@@ -247,65 +260,62 @@ fetch("data/nrl/index.json")
 
 function initPage(){
 
-  const teams = [...new Set(games.map(g=>g.team))];
-  const opps = [...new Set(games.map(g=>g.opp))];
-
-  teamSelect.innerHTML = `<option value="all">All Teams</option>` +
-    teams.map(t=>`<option>${t}</option>`).join("");
-
-  oppSelect.innerHTML = `<option value="all">All Opponents</option>` +
-    opps.map(o=>`<option>${o}</option>`).join("");
-
-  teamSelect.onchange = render;
-  oppSelect.onchange = render;
-
-  render();
-}
-
-function render(){
-
-  let filtered = games;
-
-  if(teamSelect.value !== "all")
-    filtered = filtered.filter(g=>g.team===teamSelect.value);
-
-  if(oppSelect.value !== "all")
-    filtered = filtered.filter(g=>g.opp===oppSelect.value);
+  if(games.length){
+    const team = games[0].team;
+    if(teamColours[team]){
+      teamBar.style.background = teamColours[team];
+    }
+  }
 
   renderCareer();
-  renderOpp(filtered);
-  renderTable(filtered);
+  renderTable(games);
+
+  /* SEARCH AUTOCOMPLETE */
+  searchBox.addEventListener("input", function(){
+    const value = this.value.toLowerCase();
+    suggestionsBox.innerHTML = "";
+
+    if(value.length < 2){
+      suggestionsBox.style.display = "none";
+      return;
+    }
+
+    const matches = [...allPlayers]
+      .filter(p=>p.toLowerCase().includes(value))
+      .slice(0,8);
+
+    matches.forEach(name=>{
+      const div = document.createElement("div");
+      div.className="suggestion";
+      div.textContent=name;
+      div.onclick=()=>{
+        window.location = "nrl-player.html?player=" + encodeURIComponent(name);
+      };
+      suggestionsBox.appendChild(div);
+    });
+
+    suggestionsBox.style.display = matches.length ? "block" : "none";
+  });
+
+  searchBox.addEventListener("keydown", function(e){
+    if(e.key==="Enter"){
+      window.location = "nrl-player.html?player=" + encodeURIComponent(this.value.trim());
+    }
+  });
+
 }
 
 function renderCareer(){
-
   const totalGames = games.length;
   const totalTries = games.reduce((a,b)=>a+b.tries,0);
   const totalGoals = games.reduce((a,b)=>a+b.goals,0);
   const totalPoints = games.reduce((a,b)=>a+b.points,0);
-  const avgPoints = totalGames ? (totalPoints/totalGames).toFixed(2) : 0;
-  const bestPoints = Math.max(...games.map(g=>g.points),0);
 
   careerCards.innerHTML = `
   <div class="card"><h2>${totalGames}</h2><div>Games</div></div>
-  <div class="card"><h2>${bestPoints}</h2><div>Best Points</div></div>
   <div class="card"><h2>${totalTries}</h2><div>Total Tries</div></div>
   <div class="card"><h2>${totalGoals}</h2><div>Total Goals</div></div>
-  <div class="card"><h2>${avgPoints}</h2><div>Avg Points</div></div>
-  `;
-}
-
-function renderOpp(filtered){
-
-  const gamesCount = filtered.length;
-  const bestPoints = Math.max(...filtered.map(g=>g.points),0);
-  const totalPoints = filtered.reduce((a,b)=>a+b.points,0);
-  const avgPoints = gamesCount ? (totalPoints/gamesCount).toFixed(2) : 0;
-
-  oppCards.innerHTML = `
-  <div class="card"><h2>${gamesCount}</h2><div>Games</div></div>
-  <div class="card"><h2>${bestPoints}</h2><div>Best Points</div></div>
-  <div class="card"><h2>${avgPoints}</h2><div>Avg Points</div></div>
+  <div class="card"><h2>${totalPoints}</h2><div>Total Points</div></div>
   `;
 }
 
@@ -323,24 +333,6 @@ function renderTable(data){
   `).join("");
 }
 
-function sortTable(key){
-  sortAsc = currentSort === key ? !sortAsc : false;
-  currentSort = key;
-
-  games.sort((a,b)=>{
-    if(a[key] < b[key]) return sortAsc ? -1 : 1;
-    if(a[key] > b[key]) return sortAsc ? 1 : -1;
-    return 0;
-  });
-
-  render();
-}
-
-function resetSort(){
-  currentSort = null;
-  sortAsc = false;
-  render();
-}
 </script>
 
 </body>
