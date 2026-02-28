@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NRL Best Games | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+:root{
+  --nrl-green:#00543C;
+  --nrl-dark:#002f26;
+  --bg:#f4f6f8;
+  --card:#ffffff;
+  --text:#111;
+  --line:#e5e7eb;
+}
+
+body{
+  margin:0;
+  font-family:Inter,system-ui,Arial;
+  background:var(--bg);
+  color:var(--text);
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px;
+  background:#fff;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+
+.navbar a{
+  text-decoration:none;
+  color:#0056d6;
+}
+
+.page{
+  max-width:1200px;
+  margin:auto;
+  padding:20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,var(--nrl-dark),var(--nrl-green));
+  color:white;
+  padding:40px;
+  border-radius:18px;
+  margin-bottom:20px;
+}
+
+.hero h1{
+  margin:0;
+  font-size:42px;
+}
+
+.subtitle{
+  opacity:.85;
+  margin-top:6px;
+}
+
+.controls{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:14px;
+}
+
+select{
+  padding:10px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  font-size:14px;
+}
+
+.results-count{
+  font-weight:600;
+  color:#444;
+}
+
+.table-wrap{
+  background:var(--card);
+  border-radius:14px;
+  overflow:hidden;
+  box-shadow:0 4px 18px rgba(0,0,0,.05);
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+th, td{
+  padding:14px;
+  text-align:left;
+  border-bottom:1px solid var(--line);
+  font-size:14px;
+}
+
+th{
+  background:#fafafa;
+  font-weight:700;
+}
+
+tr:hover{
+  background:#f0f9f6;
+  cursor:pointer;
+}
+
+.loading{
+  text-align:center;
+  padding:40px;
+  font-size:18px;
+}
+</style>
+</head>
+
+<body>
+
+<nav class="navbar">
+  <a href="index.html">Home</a>
+  <a href="nrl.html">NRL</a>
+</nav>
+
+<div class="page">
+
+  <div class="hero">
+    <h1>NRL Best Games</h1>
+    <div class="subtitle">Highest scoring classics & closest finishes in NRL history</div>
+  </div>
+
+  <div class="controls">
+    <div class="results-count" id="resultsCount">Loading...</div>
+    <select id="sortSelect">
+      <option value="total_desc">Highest Total Points</option>
+      <option value="margin_asc">Closest Margin</option>
+      <option value="margin_desc">Biggest Blowout</option>
+    </select>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Season</th>
+          <th>Round</th>
+          <th>Match</th>
+          <th>Venue</th>
+          <th>Score</th>
+          <th>Margin</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody id="gamesTable">
+        <tr><td colspan="7" class="loading">Loading games...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+
+const startYear = 1998;
+const currentYear = new Date().getFullYear();
+
+let allGames = [];
+
+async function loadAllSeasons(){
+  let seasonFiles = [];
+
+  for(let y = startYear; y <= currentYear; y++){
+    seasonFiles.push(`docs/data/nrl/seasons/${y}.json`);
+  }
+
+  const responses = await Promise.all(
+    seasonFiles.map(file =>
+      fetch(file).then(res => res.ok ? res.json() : null)
+    )
+  );
+
+  const matchMap = {};
+
+  responses.forEach(seasonData => {
+    if(!seasonData) return;
+
+    seasonData.forEach(row => {
+      const key = row.match_id;
+
+      if(!matchMap[key]){
+        matchMap[key] = {
+          season: row.season,
+          round: row.round,
+          match_id: row.match_id,
+          home_team: row.home_team,
+          away_team: row.away_team,
+          venue: row.venue,
+          home_points: row.home_points,
+          away_points: row.away_points,
+          margin: Math.abs(row.home_points - row.away_points),
+          total_points: row.total_points
+        };
+      }
+    });
+  });
+
+  allGames = Object.values(matchMap);
+  sortGames("total_desc");
+}
+
+function sortGames(type){
+
+  if(type === "total_desc"){
+    allGames.sort((a,b)=>b.total_points - a.total_points);
+  }
+
+  if(type === "margin_asc"){
+    allGames.sort((a,b)=>a.margin - b.margin);
+  }
+
+  if(type === "margin_desc"){
+    allGames.sort((a,b)=>b.margin - a.margin);
+  }
+
+  renderTable();
+}
+
+function renderTable(){
+  const tbody = document.getElementById("gamesTable");
+  tbody.innerHTML = "";
+
+  allGames.slice(0,200).forEach(game => {
+
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td>${game.season}</td>
+      <td>${game.round}</td>
+      <td>${game.home_team} v ${game.away_team}</td>
+      <td>${game.venue}</td>
+      <td>${game.home_points} - ${game.away_points}</td>
+      <td>${game.margin}</td>
+      <td>${game.total_points}</td>
+    `;
+
+    tr.onclick = () => {
+      window.location.href = `nrl-game.html?season=${game.season}&match=${game.match_id}`;
+    };
+
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById("resultsCount").innerText =
+    `Showing top ${Math.min(200, allGames.length)} of ${allGames.length} games`;
+}
+
+document.getElementById("sortSelect").addEventListener("change", e => {
+  sortGames(e.target.value);
+});
+
+loadAllSeasons();
+
+</script>
+
+</body>
+</html>
