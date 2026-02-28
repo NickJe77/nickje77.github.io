@@ -4,185 +4,228 @@
 <meta charset="UTF-8">
 <title>NRL Season</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <style>
-body{
-  font-family:Inter,Arial;
-  margin:0;
-  background:#f4f6f8;
-}
-.page{
-  max-width:1200px;
-  margin:auto;
-  padding:30px;
-}
-h1{
-  margin-bottom:20px;
-}
-.years{
-  display:flex;
-  flex-wrap:wrap;
-  gap:10px;
-  margin-bottom:20px;
-}
-.year-btn{
-  padding:8px 14px;
-  border-radius:10px;
-  background:#ddd;
-  cursor:pointer;
-  font-weight:600;
-}
-.year-btn.active{
-  background:#222;
-  color:white;
-}
-.layout{
-  display:grid;
-  grid-template-columns:350px 1fr;
-  gap:20px;
-}
-.table-card{
-  background:white;
-  padding:14px;
-  border-radius:14px;
-}
-table{
-  width:100%;
-  border-collapse:collapse;
-}
-th,td{
-  padding:6px;
-  text-align:left;
-}
-th{
-  background:#f0f0f0;
-}
-.match{
-  background:white;
-  padding:10px;
-  border-radius:10px;
-  margin-bottom:8px;
-}
+body{font-family:Inter,Arial;margin:0;background:#f4f6f8;}
+.page{max-width:1200px;margin:auto;padding:30px;}
+h1{margin:0 0 18px;}
+
+.year-bar{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px;}
+.year-btn{padding:8px 14px;border-radius:10px;background:#ddd;cursor:pointer;font-weight:700;user-select:none;}
+.year-btn.active{background:#222;color:#fff;}
+
+.status{margin:10px 0 18px;color:#444;font-weight:600;}
+
+.content{display:grid;grid-template-columns:360px 1fr;gap:20px;align-items:start;}
+.card{background:#fff;border-radius:14px;padding:14px;box-shadow:0 3px 10px rgba(0,0,0,0.05);}
+
+table{width:100%;border-collapse:collapse;font-size:14px;}
+th,td{border-bottom:1px solid #eee;padding:8px;text-align:center;}
+th{text-align:center;background:#f3f5f7;}
+td.team{text-align:left;font-weight:700;}
+
+.match{background:#fff;border-radius:12px;padding:12px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,0.04);}
+.match .line1{font-weight:800;}
+.match .line2{color:#666;font-size:13px;margin-top:4px;}
+.small{font-size:12px;color:#777;}
 </style>
 </head>
 <body>
 
 <div class="page">
+  <h1>NRL Season</h1>
 
-<h1>NRL Season</h1>
+  <div class="year-bar" id="years"></div>
+  <div class="status" id="status">Loading seasons…</div>
 
-<div id="years" class="years"></div>
+  <div class="content">
+    <div class="card">
+      <table>
+        <thead>
+          <tr><th style="width:42px;">#</th><th>Team</th><th style="width:60px;">W</th><th style="width:60px;">L</th></tr>
+        </thead>
+        <tbody id="ladderBody"></tbody>
+      </table>
+    </div>
 
-<div class="layout">
-  <div class="table-card">
-    <table>
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Team</th>
-          <th>W</th>
-          <th>L</th>
-        </tr>
-      </thead>
-      <tbody id="ladder"></tbody>
-    </table>
+    <div id="matches"></div>
   </div>
-
-  <div id="matches"></div>
-</div>
-
 </div>
 
 <script>
+let currentYear = null;
+let loadToken = 0; // increments each click so old loads are ignored
 
-let currentSeason = null
+// helper: safely convert to number
+function toNum(v){
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
 
-// Load available seasons
+// Build year buttons from index.json
 fetch("data/nrl/index.json")
 .then(r=>r.json())
 .then(index=>{
-  const container=document.getElementById("years")
+  const yearsDiv = document.getElementById("years");
+  const status = document.getElementById("status");
 
-  index.seasons.sort((a,b)=>a-b).forEach(year=>{
-    const btn=document.createElement("div")
-    btn.className="year-btn"
-    btn.textContent=year
-    btn.onclick=()=>loadSeason(year)
-    container.appendChild(btn)
-  })
+  // Supports BOTH index styles:
+  // A) { seasons:[1998,...] }
+  // B) { first_season:1998, last_season:2025 }
+  let years = [];
+  if(Array.isArray(index.seasons) && index.seasons.length){
+    years = index.seasons.slice().sort((a,b)=>a-b);
+  } else if(index.first_season && index.last_season){
+    for(let y=index.first_season; y<=index.last_season; y++) years.push(y);
+  } else {
+    status.textContent = "Index.json missing seasons list.";
+    return;
+  }
 
-  // Auto load first season
-  loadSeason(index.seasons[0])
+  years.forEach(y=>{
+    const btn=document.createElement("div");
+    btn.className="year-btn";
+    btn.textContent=String(y);
+    btn.onclick=()=>loadSeason(y);
+    yearsDiv.appendChild(btn);
+  });
+
+  status.textContent = "Select a season.";
+  loadSeason(years[0]);
 })
+.catch(err=>{
+  document.getElementById("status").textContent = "Index load failed.";
+  console.error(err);
+});
 
-function loadSeason(year){
-
-  currentSeason = year
-
-  // Highlight active button
+function setActiveYear(y){
   document.querySelectorAll(".year-btn").forEach(b=>{
-    b.classList.remove("active")
-    if(b.textContent==year) b.classList.add("active")
-  })
-
-  fetch("data/nrl/seasons/"+year+".json")
-  .then(r=>{
-    if(!r.ok) throw new Error("Season file not found")
-    return r.json()
-  })
-  .then(data=>{
-
-    // ===== LADDER BUILD =====
-    const ladderMap = {}
-
-    data.forEach(game=>{
-      if(!ladderMap[game.home_team]) ladderMap[game.home_team]={team:game.home_team,w:0,l:0}
-      if(!ladderMap[game.away_team]) ladderMap[game.away_team]={team:game.away_team,w:0,l:0}
-
-      if(game.home_points > game.away_points){
-        ladderMap[game.home_team].w++
-        ladderMap[game.away_team].l++
-      } else {
-        ladderMap[game.away_team].w++
-        ladderMap[game.home_team].l++
-      }
-    })
-
-    const ladderArr = Object.values(ladderMap)
-    ladderArr.sort((a,b)=>b.w-a.w)
-
-    const ladderBody=document.getElementById("ladder")
-    ladderBody.innerHTML=""
-
-    ladderArr.forEach((team,i)=>{
-      ladderBody.innerHTML+=`
-        <tr>
-          <td>${i+1}</td>
-          <td>${team.team}</td>
-          <td>${team.w}</td>
-          <td>${team.l}</td>
-        </tr>
-      `
-    })
-
-    // ===== MATCH LIST =====
-    const matchesDiv=document.getElementById("matches")
-    matchesDiv.innerHTML=""
-
-    data.forEach(game=>{
-      matchesDiv.innerHTML+=`
-        <div class="match">
-          ${game.date_iso} — ${game.home_team} ${game.home_points}
-          def ${game.away_team} ${game.away_points}
-        </div>
-      `
-    })
-
-  })
-  .catch(err=>{
-    console.error("SEASON ERROR:",err)
-  })
+    b.classList.toggle("active", b.textContent == String(y));
+  });
 }
 
+// Load a season file and render summary (fast)
+function loadSeason(year){
+  currentYear = year;
+  const myToken = ++loadToken; // any previous loads become stale
+  setActiveYear(year);
+
+  document.getElementById("status").textContent = "Loading " + year + "…";
+  document.getElementById("ladderBody").innerHTML = "";
+  document.getElementById("matches").innerHTML = "";
+
+  fetch("data/nrl/seasons/" + year + ".json")
+  .then(r=>{
+    if(!r.ok) throw new Error("Season file not found: " + year);
+    return r.json();
+  })
+  .then(rows=>{
+    // If user clicked another year while loading, stop.
+    if(myToken !== loadToken) return;
+
+    if(!Array.isArray(rows) || !rows.length){
+      document.getElementById("status").textContent = "No data for " + year;
+      return;
+    }
+
+    // Detect structure:
+    // 1) MATCH-BASED: each row has home_team/away_team/home_points/away_points
+    // 2) PLAYER-ROW: each row has match_id + played_for/played_against + maybe home/away points repeated
+    const isMatchBased = !!rows[0].home_team && !!rows[0].away_team && ("home_points" in rows[0]);
+
+    // Build match summaries:
+    // - If match-based: rows already matches
+    // - If player-row: group by match_id and take first row's metadata as the match
+    const matchMap = new Map();
+
+    if(isMatchBased){
+      rows.forEach(m=>{
+        const id = String(m.match_id || (m.date_iso + "|" + m.home_team + "|" + m.away_team));
+        if(!matchMap.has(id)) matchMap.set(id, {
+          match_id: m.match_id,
+          date_iso: m.date_iso || "",
+          venue: m.venue || "",
+          home_team: m.home_team || "",
+          away_team: m.away_team || "",
+          home_points: toNum(m.home_points),
+          away_points: toNum(m.away_points)
+        });
+      });
+    } else {
+      rows.forEach(r=>{
+        const id = String(r.match_id || "");
+        if(!id) return;
+        if(!matchMap.has(id)){
+          // best-effort: some player-row files still include home_team/away_team
+          const home = r.home_team || r.home || r.played_for || "";
+          const away = r.away_team || r.away || r.played_against || "";
+          matchMap.set(id, {
+            match_id: id,
+            date_iso: r.date_iso || r.date || "",
+            venue: r.venue || "",
+            home_team: home,
+            away_team: away,
+            home_points: toNum(r.home_points),
+            away_points: toNum(r.away_points)
+          });
+        }
+      });
+    }
+
+    const matches = Array.from(matchMap.values());
+
+    // Ladder from matches
+    const ladder = {};
+    matches.forEach(m=>{
+      const ht = m.home_team;
+      const at = m.away_team;
+      if(!ht || !at) return;
+
+      if(!ladder[ht]) ladder[ht] = {team:ht,W:0,L:0};
+      if(!ladder[at]) ladder[at] = {team:at,W:0,L:0};
+
+      if(m.home_points > m.away_points){
+        ladder[ht].W++; ladder[at].L++;
+      } else if(m.away_points > m.home_points){
+        ladder[at].W++; ladder[ht].L++;
+      }
+    });
+
+    const ladderArr = Object.values(ladder).sort((a,b)=>b.W-a.W);
+
+    const ladderBody = document.getElementById("ladderBody");
+    ladderBody.innerHTML = ladderArr.map((t,i)=>`
+      <tr>
+        <td>${i+1}</td>
+        <td class="team">${t.team}</td>
+        <td>${t.W}</td>
+        <td>${t.L}</td>
+      </tr>
+    `).join("");
+
+    // Render matches (ONLY ONE CARD PER MATCH)
+    const matchesDiv = document.getElementById("matches");
+    matchesDiv.innerHTML = matches.map(m=>{
+      const winnerLine = `${m.home_team} ${m.home_points} - ${m.away_points} ${m.away_team}`;
+      const meta = `${m.date_iso || ""}${m.venue ? " • " + m.venue : ""}`;
+      return `
+        <div class="match">
+          <div class="line1">${winnerLine}</div>
+          <div class="line2">${meta}</div>
+          ${m.match_id ? `<div class="small">Match ID: ${m.match_id}</div>` : ``}
+        </div>
+      `;
+    }).join("");
+
+    document.getElementById("status").textContent =
+      year + " loaded: " + matches.length + " matches";
+  })
+  .catch(err=>{
+    if(myToken !== loadToken) return;
+    document.getElementById("status").textContent = "Load error for " + year;
+    console.error("SEASON ERROR:", err);
+  });
+}
 </script>
 
 </body>
