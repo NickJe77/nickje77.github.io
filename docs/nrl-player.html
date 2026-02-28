@@ -21,19 +21,17 @@ body{
 
 .navbar{
   display:flex;
-  justify-content:space-between;
-  align-items:center;
-  padding:16px 20px;
+  justify-content:center;
+  gap:24px;
+  padding:16px;
   background:#fff;
   border-bottom:1px solid #ddd;
-  gap:20px;
-  flex-wrap:wrap;
+  font-weight:600;
 }
 
 .navbar a{
   text-decoration:none;
   color:#0056d6;
-  font-weight:600;
 }
 
 .page{
@@ -42,9 +40,53 @@ body{
   padding:30px 20px 60px;
 }
 
+.player-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:20px;
+}
+
 h1{
   margin:0;
   font-size:40px;
+  line-height:1.1;
+}
+
+.search-container{
+  position:relative;
+}
+
+#searchBox{
+  padding:8px 12px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  font-size:14px;
+  width:220px;
+}
+
+.suggestions{
+  position:absolute;
+  top:40px;
+  left:0;
+  right:0;
+  background:#fff;
+  border:1px solid #ddd;
+  border-radius:8px;
+  max-height:200px;
+  overflow-y:auto;
+  display:none;
+  z-index:100;
+}
+
+.suggestions div{
+  padding:8px;
+  cursor:pointer;
+}
+
+.suggestions div:hover{
+  background:#eef1f6;
 }
 
 .team-bar{
@@ -135,15 +177,20 @@ tbody tr:hover{
 <body>
 
 <nav class="navbar">
-  <div>
-    <a href="index.html">Home</a>
-    <a href="nrl.html">NRL</a>
-  </div>
+  <a href="index.html">Home</a>
+  <a href="nrl.html">NRL</a>
 </nav>
 
 <div class="page">
 
-<h1 id="playerName"></h1>
+<div class="player-header">
+  <h1 id="playerName"></h1>
+  <div class="search-container">
+    <input type="text" id="searchBox" placeholder="Search player...">
+    <div id="suggestions" class="suggestions"></div>
+  </div>
+</div>
+
 <div class="team-bar" id="teamBar"></div>
 
 <div>
@@ -179,14 +226,18 @@ tbody tr:hover{
 
 const params = new URLSearchParams(window.location.search);
 const player = params.get("player");
+
 const playerNameEl = document.getElementById("playerName");
 const teamBar = document.getElementById("teamBar");
 const teamSelect = document.getElementById("teamSelect");
 const oppSelect = document.getElementById("oppSelect");
 const careerCards = document.getElementById("careerCards");
 const oppCards = document.getElementById("oppCards");
+const searchBox = document.getElementById("searchBox");
+const suggestions = document.getElementById("suggestions");
 
 let games = [];
+let allPlayers = new Set();
 let currentSort = null;
 let sortAsc = false;
 
@@ -194,7 +245,6 @@ if(player){
   playerNameEl.textContent = player;
 }
 
-/* TEAM COLOUR MAP */
 const teamColours = {
   "Canberra":"#0054A6",
   "Penrith":"#000000",
@@ -217,13 +267,13 @@ const teamColours = {
 fetch("data/nrl/index.json")
 .then(r=>r.json())
 .then(index=>{
-
   return Promise.all(
     index.seasons.map(y=>
       fetch("data/nrl/seasons/"+y+".json")
       .then(r=>r.json())
       .then(rows=>{
         rows.forEach(row=>{
+          allPlayers.add(row.player);
           if(row.player === player){
             games.push({
               season:y,
@@ -243,7 +293,6 @@ fetch("data/nrl/index.json")
 
   if(!games.length) return;
 
-  // APPLY TEAM COLOUR
   const teamCount = {};
   games.forEach(g=>{
     teamCount[g.team] = (teamCount[g.team] || 0) + 1;
@@ -272,7 +321,6 @@ fetch("data/nrl/index.json")
 });
 
 function render(){
-
   let filtered = games;
 
   if(teamSelect.value !== "all")
@@ -287,7 +335,6 @@ function render(){
 }
 
 function renderCareer(data){
-
   const totalGames = data.length;
   const totalTries = data.reduce((a,b)=>a+b.tries,0);
   const totalGoals = data.reduce((a,b)=>a+b.goals,0);
@@ -304,7 +351,6 @@ function renderCareer(data){
 }
 
 function renderOpp(data){
-
   const gamesCount = data.length;
   const bestPoints = Math.max(...data.map(g=>g.points),0);
   const totalPoints = data.reduce((a,b)=>a+b.points,0);
@@ -350,6 +396,40 @@ function resetSort(){
   render();
 }
 
+/* SEARCH */
+searchBox.addEventListener("input", function(){
+  const value = this.value.toLowerCase();
+  suggestions.innerHTML = "";
+
+  if(value.length < 2){
+    suggestions.style.display = "none";
+    return;
+  }
+
+  const matches = [...allPlayers]
+    .filter(name => name.toLowerCase().includes(value))
+    .slice(0,10);
+
+  matches.forEach(name=>{
+    const div = document.createElement("div");
+    div.textContent = name;
+    div.onclick = ()=>{
+      window.location =
+        "nrl-player.html?player=" + encodeURIComponent(name);
+    };
+    suggestions.appendChild(div);
+  });
+
+  suggestions.style.display = matches.length ? "block" : "none";
+});
+
+searchBox.addEventListener("keydown", function(e){
+  if(e.key === "Enter"){
+    window.location =
+      "nrl-player.html?player=" +
+      encodeURIComponent(this.value.trim());
+  }
+});
 </script>
 
 </body>
