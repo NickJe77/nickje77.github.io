@@ -179,13 +179,7 @@ tr:hover{
 
     <div class="leaders-card">
       <h2>All-Time Franchise Leaders</h2>
-      <div class="leaders-grid" id="leadersGrid">
-        <div class="leader-box">
-          <div class="leader-label">Status</div>
-          <div class="leader-player" style="font-weight:800;">Loading…</div>
-          <div class="leader-total" style="opacity:.75;">Leaders will appear after games load</div>
-        </div>
-      </div>
+      <div class="leaders-grid" id="leadersGrid"></div>
     </div>
 
   </div>
@@ -203,6 +197,7 @@ tr:hover{
         <tr>
           <th>Date</th>
           <th>Season</th>
+          <th>Type</th>
           <th>Opponent</th>
           <th>Result</th>
           <th>Score</th>
@@ -230,25 +225,22 @@ function seasonLabel(start){
 
 let allGames = [];
 let seasons = new Set();
-let totalsByPlayer = {};
 
 async function loadData(){
+
   const masterRes = await fetch("data/nba/nba_games_master.json");
-  if(!masterRes.ok){
-    document.getElementById("gamesBody").innerHTML =
-      "<tr><td colspan='5'>Failed to load master file</td></tr>";
-    document.getElementById("leadersGrid").innerHTML =
-      "<div class='leader-box'><div class='leader-label'>Status</div><div class='leader-player' style='font-weight:800;'>Failed to load master</div><div class='leader-total' style='opacity:.75;'>data/nba/nba_games_master.json</div></div>";
-    return;
-  }
+  if(!masterRes.ok) return;
 
   const master = await masterRes.json();
   const team = normalize(teamRaw);
 
-  // 1) Build games list FIRST (fast, no boxscore dependency)
   for(const game of master){
+
+    if(game.game_type !== "Regular Season" && game.game_type !== "Playoffs") continue;
+
     const home = normalize(game.home_team);
     const away = normalize(game.away_team);
+
     if(home !== team && away !== team) continue;
 
     seasons.add(game.season);
@@ -261,22 +253,19 @@ async function loadData(){
       id: game.game_id,
       date: game.date,
       season: game.season,
+      type: game.game_type,
       opponent: isHome ? game.away_team : game.home_team,
       result: teamScore > oppScore ? "W" : "L",
       score: `${teamScore} - ${oppScore}`
     });
   }
 
-  buildPage(); // renders games + totals immediately
-
-  // 2) Load leaders AFTER page is visible (non-blocking)
-  loadLeaders(master, team);
+  buildPage();
 }
 
 function buildPage(){
-  const select = document.getElementById("seasonSelect");
 
-  // rebuild select cleanly (avoid duplicates if reloaded)
+  const select = document.getElementById("seasonSelect");
   select.innerHTML = "<option value='all'>All Seasons</option>";
 
   Array.from(seasons).sort((a,b)=>b-a).forEach(s=>{
@@ -290,6 +279,7 @@ function buildPage(){
 }
 
 function renderGames(season){
+
   const body = document.getElementById("gamesBody");
   body.innerHTML = "";
 
@@ -297,7 +287,6 @@ function renderGames(season){
     ? allGames
     : allGames.filter(g => g.season == season);
 
-  // newest first
   filtered.sort((a,b)=> (b.date || "").localeCompare(a.date || ""));
 
   let wins = 0;
@@ -311,6 +300,7 @@ function renderGames(season){
     tr.innerHTML = `
       <td>${g.date}</td>
       <td>${seasonLabel(g.season)}</td>
+      <td>${g.type}</td>
       <td>${g.opponent}</td>
       <td>${g.result}</td>
       <td>${g.score}</td>
@@ -323,80 +313,8 @@ function renderGames(season){
   document.getElementById("losses").textContent = losses;
 }
 
-async function loadLeaders(master, team){
-  // Show status immediately
-  document.getElementById("leadersGrid").innerHTML =
-    "<div class='leader-box'><div class='leader-label'>Status</div><div class='leader-player' style='font-weight:800;'>Computing…</div><div class='leader-total' style='opacity:.75;'>This may take a moment</div></div>";
-
-  // IMPORTANT: this used to block the whole page. Now it doesn't.
-  for(const game of master){
-    const home = normalize(game.home_team);
-    const away = normalize(game.away_team);
-    if(home !== team && away !== team) continue;
-
-    try{
-      const boxRes = await fetch(`data/nba/${game.season}/${game.game_id}.json`);
-      if(!boxRes.ok) continue;
-      const full = await boxRes.json();
-
-      for(const p of (full.players || [])){
-        if(normalize(p.team) !== team) continue;
-
-        const name = (p.player_name || "").trim();
-        if(!name) continue;
-
-        if(!totalsByPlayer[name]){
-          totalsByPlayer[name] = {points:0,rebounds:0,assists:0,steals:0};
-        }
-
-        totalsByPlayer[name].points   += Number(p.points   || 0);
-        totalsByPlayer[name].rebounds += Number(p.rebounds || 0);
-        totalsByPlayer[name].assists  += Number(p.assists  || 0);
-        totalsByPlayer[name].steals   += Number(p.steals   || 0);
-      }
-    }catch(e){
-      continue;
-    }
-  }
-
-  renderLeaders();
-}
-
-function renderLeaders(){
-  const grid = document.getElementById("leadersGrid");
-
-  const entries = Object.entries(totalsByPlayer);
-  if(!entries.length){
-    grid.innerHTML =
-      "<div class='leader-box'><div class='leader-label'>Status</div><div class='leader-player' style='font-weight:800;'>No player stats found</div><div class='leader-total' style='opacity:.75;'>Boxscore files missing / blocked</div></div>";
-    return;
-  }
-
-  function leader(stat){
-    return entries.sort((a,b)=>(b[1][stat]||0)-(a[1][stat]||0))[0];
-  }
-
-  const stats = ["points","rebounds","assists","steals"];
-  const labels = ["Points","Rebounds","Assists","Steals"];
-
-  grid.innerHTML = stats.map((s,i)=>{
-    const top = leader(s);
-    const name = top?.[0] || "-";
-    const val = top?.[1]?.[s] || 0;
-
-    return `
-      <div class="leader-box">
-        <div class="leader-label">${labels[i]}</div>
-        <div class="leader-player">
-          <a href="nba-player.html?player=${encodeURIComponent(name)}">${name}</a>
-        </div>
-        <div class="leader-total">${Number(val).toLocaleString()}</div>
-      </div>`;
-  }).join("");
-}
-
 document.getElementById("seasonSelect")
-  .addEventListener("change", e => renderGames(e.target.value));
+  .addEventListener("change",e=>renderGames(e.target.value));
 
 loadData();
 </script>
