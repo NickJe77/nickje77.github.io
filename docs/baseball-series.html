@@ -118,63 +118,47 @@ async function fetchJSON(url){
 
   const container = document.getElementById("gamesContainer");
 
+  if(!year || !team1 || !team2){
+    document.getElementById("seriesTitle").textContent = "Series Not Found";
+    return;
+  }
+
   document.getElementById("seriesTitle").textContent =
     `${team1} vs ${team2}`;
 
   document.getElementById("seriesSubtitle").textContent =
     `Postseason ${year}`;
 
-  let games = [];
-
-  // Attempt up to 50 postseason games for that year
-  // (more than enough for any year)
-  for(let i = 0; i < 50; i++){
-
-    // We don’t know exact IDs, so we brute test by scanning known patterns
-    // Instead we fetch every file that matches year by scanning alphabetically
-
-    // Since filenames are not enumerable, we attempt fetch by year prefix
-    // by trying every team prefix found in postseason.json
-
+  const postseason = await fetchJSON("data/baseball/postseason.json");
+  if(!postseason){
+    document.getElementById("seriesTitle").textContent = "Postseason data missing";
+    return;
   }
 
-  // Instead: brute load all possible game files for year by
-  // fetching every postseason game file once using a known list
+  // Find exact series
+  const series = postseason.find(s =>
+    String(s.year) === String(year) &&
+    (
+      (s.team1 === team1 && s.team2 === team2) ||
+      (s.team1 === team2 && s.team2 === team1)
+    )
+  );
 
-  // Safer approach: load postseason.json to get teams involved
+  if(!series){
+    document.getElementById("seriesTitle").textContent = "Series Not Found";
+    return;
+  }
 
-  const postseason = await fetchJSON("data/baseball/postseason.json");
-  if(!postseason) return;
+  if(!series.games || !series.games.length){
+    container.innerHTML = "<div>No games found.</div>";
+    return;
+  }
 
-  const yearSeries = postseason.filter(s => String(s.year) === String(year));
+  const games = [];
 
-  // Load all postseason game files for this year
-  // We do this by testing game_id patterns from 000 to 999
-
-  for(let day = 1; day <= 31; day++){
-    for(let month = 9; month <= 11; month++){
-
-      const mm = String(month).padStart(2,"0");
-      const dd = String(day).padStart(2,"0");
-
-      const possibleId1 = `${team1}${year}${mm}${dd}0`;
-      const possibleId2 = `${team2}${year}${mm}${dd}0`;
-
-      const g1 = await fetchJSON(`data/baseball/postseason-games/${possibleId1}.json`);
-      if(g1 &&
-        ((g1.home === team1 && g1.away === team2) ||
-         (g1.home === team2 && g1.away === team1))){
-        games.push(g1);
-      }
-
-      const g2 = await fetchJSON(`data/baseball/postseason-games/${possibleId2}.json`);
-      if(g2 &&
-        ((g2.home === team1 && g2.away === team2) ||
-         (g2.home === team2 && g2.away === team1))){
-        games.push(g2);
-      }
-
-    }
+  for(const gameId of series.games){
+    const g = await fetchJSON(`data/baseball/postseason-games/${gameId}.json`);
+    if(g) games.push(g);
   }
 
   games.sort((a,b)=> new Date(a.date) - new Date(b.date));
@@ -189,12 +173,12 @@ async function fetchJSON(url){
         Game ${index+1} • ${g.date || ""}
       </div>
       <div class="score-row">
-        <span>${g.away}</span>
-        <span></span>
+        <span>${g.away_team}</span>
+        <span>${g.away_score ?? ""}</span>
       </div>
       <div class="score-row">
-        <span>${g.home}</span>
-        <span></span>
+        <span>${g.home_team}</span>
+        <span>${g.home_score ?? ""}</span>
       </div>
     `;
 
