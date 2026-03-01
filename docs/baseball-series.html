@@ -6,11 +6,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
+:root{
+  --blue:#002D72;
+  --red:#C8102E;
+  --bg:#f4f6f8;
+  --line:#e6e8ee;
+}
+
 body{
   font-family:Inter,system-ui,Arial;
   margin:0;
-  background:#f4f6f8;
+  background:var(--bg);
 }
+
 .navbar{
   display:flex;
   justify-content:center;
@@ -20,41 +28,63 @@ body{
   border-bottom:1px solid #ddd;
   font-weight:700;
 }
+
 .navbar a{
   text-decoration:none;
   color:#0056d6;
 }
+
 .page{
   max-width:1100px;
   margin:auto;
   padding:30px;
 }
+
 .hero{
-  background:linear-gradient(90deg,#002D72,#C8102E);
+  background:linear-gradient(90deg,var(--blue),var(--red));
   color:#fff;
   padding:30px;
   border-radius:20px;
   margin-bottom:25px;
 }
+
 .games{
   display:flex;
   flex-direction:column;
   gap:14px;
 }
+
 .game{
   background:#fff;
   padding:18px;
   border-radius:16px;
-  border:1px solid #e6e8ee;
+  border:1px solid var(--line);
   cursor:pointer;
+  transition:.2s;
 }
-.debug{
-  background:#000;
-  color:#0f0;
-  padding:10px;
+
+.game:hover{
+  background:#eaf3ff;
+  transform:translateY(-2px);
+}
+
+.game-header{
   font-size:13px;
-  margin-bottom:20px;
-  border-radius:8px;
+  color:#555;
+  margin-bottom:8px;
+}
+
+.score-row{
+  display:flex;
+  justify-content:space-between;
+  font-weight:600;
+  font-size:16px;
+}
+
+.meta{
+  font-size:12px;
+  color:#777;
+  margin-top:6px;
 }
 </style>
 </head>
@@ -67,18 +97,14 @@ body{
 </div>
 
 <div class="page">
-  <div id="debug" class="debug">Loading debug...</div>
-
   <div class="hero">
     <h1 id="seriesTitle">Loading...</h1>
     <div id="seriesSubtitle"></div>
   </div>
-
   <div class="games" id="gamesContainer"></div>
 </div>
 
 <script>
-
 function getParam(name){
   return new URLSearchParams(window.location.search).get(name);
 }
@@ -89,74 +115,101 @@ async function fetchJSON(url){
   return await r.json();
 }
 
+// Handles both schemas:
+// - new: home_code / away_code / season / date
+// - old: home / away and no season/date
+function normalizeGame(raw, gameIdFallback){
+  const gid = raw?.game_id || gameIdFallback || "";
+
+  const home = raw?.home_code || raw?.home || "";
+  const away = raw?.away_code || raw?.away || "";
+
+  // season: prefer explicit, else derive from game_id (TEAMYYYYMMDDN)
+  const season = (raw?.season != null) ? String(raw.season) :
+                 (gid.length >= 7 ? gid.substring(3,7) : "");
+
+  // date: prefer explicit, else derive YYYY-MM-DD from game_id if possible
+  let date = raw?.date || "";
+  if(!date && gid.length >= 11){
+    const yyyy = gid.substring(3,7);
+    const mm = gid.substring(7,9);
+    const dd = gid.substring(9,11);
+    if(/^\d{4}$/.test(yyyy) && /^\d{2}$/.test(mm) && /^\d{2}$/.test(dd)){
+      date = `${yyyy}-${mm}-${dd}`;
+    }
+  }
+
+  return { gid, home, away, season, date };
+}
+
 (async function(){
 
   const year  = getParam("year");
   const team1 = getParam("team1");
   const team2 = getParam("team2");
 
-  const debug = document.getElementById("debug");
   const title = document.getElementById("seriesTitle");
   const sub   = document.getElementById("seriesSubtitle");
   const container = document.getElementById("gamesContainer");
-
-  debug.innerHTML =
-    "URL VALUES → year=" + year +
-    " | team1=" + team1 +
-    " | team2=" + team2;
 
   if(!year || !team1 || !team2){
     title.textContent = "Series Not Found";
     return;
   }
 
-  title.textContent = team1 + " vs " + team2;
-  sub.textContent   = "Postseason " + year;
+  title.textContent = `${team1} vs ${team2}`;
+  sub.textContent   = `Postseason ${year}`;
 
+  // Load index
   const index = await fetchJSON("data/baseball/postseason-games/index.json");
-
-  if(!index){
-    debug.innerHTML += "<br>Index failed to load.";
+  if(!index || !Array.isArray(index)){
+    container.innerHTML = "<div>Game index missing.</div>";
     return;
   }
 
-  debug.innerHTML += "<br>Total index entries: " + index.length;
+  // Filter by year BEFORE fetching files (critical)
+  const yearIds = index.filter(id => typeof id === "string" && id.substring(3,7) === String(year));
 
   const games = [];
 
-  for(const gameId of index){
+  for(const gameId of yearIds){
+    const raw = await fetchJSON(`data/baseball/postseason-games/${gameId}.json`);
+    if(!raw) continue;
 
-    const g = await fetchJSON("data/baseball/postseason-games/" + gameId + ".json");
-    if(!g) continue;
+    const g = normalizeGame(raw, gameId);
 
     if(
       String(g.season) === String(year) &&
       (
-        (g.home_code === team1 && g.away_code === team2) ||
-        (g.home_code === team2 && g.away_code === team1)
+        (g.home === team1 && g.away === team2) ||
+        (g.home === team2 && g.away === team1)
       )
     ){
       games.push(g);
     }
   }
 
-  debug.innerHTML += "<br>Matched games: " + games.length;
-
   if(!games.length){
     container.innerHTML = "<div>No games found.</div>";
     return;
   }
 
-  games.sort((a,b)=> a.date.localeCompare(b.date));
+  games.sort((a,b)=> (a.date || a.gid).localeCompare(b.date || b.gid));
 
-  games.forEach((g,index)=>{
-
+  games.forEach((g, idx) => {
     const div = document.createElement("div");
     div.className = "game";
-    div.innerHTML =
-      "<div>Game " + (index+1) + "</div>" +
-      "<div>" + g.away_code + " @ " + g.home_code + "</div>" +
-      "<div>" + g.date + "</div>";
+
+    div.innerHTML = `
+      <div class="game-header">Game ${idx+1}</div>
+      <div class="score-row"><span>${g.away}</span><span></span></div>
+      <div class="score-row"><span>${g.home}</span><span></span></div>
+      <div class="meta">${g.date ? g.date : ""}</div>
+    `;
+
+    div.onclick = () => {
+      window.location.href = `postseason-game.html?game=${encodeURIComponent(g.gid)}`;
+    };
 
     container.appendChild(div);
   });
