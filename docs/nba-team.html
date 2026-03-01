@@ -59,7 +59,14 @@ body{
   100%{background-position:0% 50%;}
 }
 
-.leaders{
+.stats{
+  display:flex;
+  gap:40px;
+  margin-bottom:20px;
+  font-size:18px;
+}
+
+.season-box{
   background:var(--card);
   padding:20px;
   border-radius:18px;
@@ -67,27 +74,33 @@ body{
   margin-bottom:25px;
 }
 
-.leader-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
-  gap:20px;
-}
-
-.leader-box{
-  background:#eef2ff;
-  padding:18px;
-  border-radius:14px;
-}
-
-.leader-box h3{
-  margin:0 0 8px 0;
-}
-
 .card{
   background:var(--card);
   border-radius:18px;
   overflow:hidden;
   box-shadow:0 2px 6px rgba(0,0,0,0.05);
+  margin-bottom:25px;
+}
+
+.leaders{
+  padding:20px;
+}
+
+.leaders h2{
+  margin-top:0;
+}
+
+.leader-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:15px;
+}
+
+.leader-box{
+  background:#eef2ff;
+  padding:15px;
+  border-radius:12px;
+  font-weight:600;
 }
 
 table{
@@ -107,8 +120,12 @@ td{
   border-bottom:1px solid var(--line);
 }
 
+tr:nth-child(even){
+  background:#f6f9ff;
+}
+
 tr:hover{
-  background:#eef2ff;
+  background:#e8f0ff;
   cursor:pointer;
 }
 </style>
@@ -126,26 +143,37 @@ tr:hover{
   <h1 id="teamName"></h1>
 </div>
 
-<div class="leaders">
+<div class="card leaders">
   <h2>All-Time Franchise Leaders</h2>
-  <div class="leader-grid" id="leadersGrid">
-    Loading leaders...
-  </div>
+  <div id="leadersBox">Loading leaders…</div>
+</div>
+
+<div class="stats">
+  <div>Total Games: <strong id="totalGames">0</strong></div>
+  <div>Wins: <strong id="wins">0</strong></div>
+  <div>Losses: <strong id="losses">0</strong></div>
+</div>
+
+<div class="season-box">
+  <strong>Select Season:</strong>
+  <select id="seasonSelect">
+    <option value="all">All Seasons</option>
+  </select>
 </div>
 
 <div class="card">
-  <table>
-    <thead>
-      <tr>
-        <th>Date</th>
-        <th>Season</th>
-        <th>Opponent</th>
-        <th>Result</th>
-        <th>Score</th>
-      </tr>
-    </thead>
-    <tbody id="gamesBody"></tbody>
-  </table>
+<table>
+<thead>
+<tr>
+<th>Date</th>
+<th>Season</th>
+<th>Opponent</th>
+<th>Result</th>
+<th>Score</th>
+</tr>
+</thead>
+<tbody id="gamesBody"></tbody>
+</table>
 </div>
 
 </div>
@@ -157,99 +185,131 @@ document.getElementById("teamName").textContent=team;
 
 const clean=s=>(s||"").toLowerCase().trim();
 
-let playerTotals={};
+function seasonLabel(start){
+  const next=String((start+1)%100).padStart(2,"0");
+  return `${start}-${next}`;
+}
+
 let allGames=[];
+let seasons=new Set();
 
-async function load(){
+async function loadData(){
 
-  const master=await fetch("/data/nba/nba_games_master.json").then(r=>r.json());
+  const res = await fetch("/data/nba/nba_games_master.json");
+  const master = await res.json();
 
-  const t=clean(team);
+  const t = clean(team);
+  const totals={};
 
   for(const game of master){
 
-    if(clean(game.home_team)!==t && clean(game.away_team)!==t) continue;
+    if(game.game_type!=="Regular Season") continue;
 
-    try{
-      const full=await fetch(`/data/nba/${game.season}/${game.game_id}.json`).then(r=>r.json());
+    const home=clean(game.home_team);
+    const away=clean(game.away_team);
 
-      if(full.game_type!=="Regular Season" && full.game_type!=="Playoffs") continue;
+    if(home!==t && away!==t) continue;
 
-      const isHome=clean(game.home_team)===t;
-      const teamScore=isHome?game.home_score:game.away_score;
-      const oppScore=isHome?game.away_score:game.home_score;
+    seasons.add(game.season);
 
-      allGames.push({
-        id:game.game_id,
-        date:full.date,
-        season:full.season,
-        opponent:isHome?game.away_team:game.home_team,
-        result:teamScore>oppScore?"W":"L",
-        score:`${teamScore} - ${oppScore}`
-      });
+    const isHome=home===t;
+    const teamScore=isHome?game.home_score:game.away_score;
+    const oppScore=isHome?game.away_score:game.home_score;
 
-      for(const p of full.players||[]){
-        if(clean(p.team)!==t) continue;
+    allGames.push({
+      id:game.game_id,
+      date:game.date,
+      season:game.season,
+      opponent:isHome?game.away_team:game.home_team,
+      result:teamScore>oppScore?"W":"L",
+      score:`${teamScore} - ${oppScore}`
+    });
 
-        if(!playerTotals[p.player_name]){
-          playerTotals[p.player_name]={points:0,rebounds:0,assists:0,steals:0};
-        }
+    for(const p of (game.players||[])){
+      if(clean(p.team)!==t) continue;
 
-        playerTotals[p.player_name].points+=p.points||0;
-        playerTotals[p.player_name].rebounds+=p.rebounds||0;
-        playerTotals[p.player_name].assists+=p.assists||0;
-        playerTotals[p.player_name].steals+=p.steals||0;
+      if(!totals[p.player_name]){
+        totals[p.player_name]={points:0,assists:0,rebounds:0,steals:0};
       }
 
-    }catch{}
-  }
-
-  renderLeaders();
-  renderGames();
-}
-
-function renderLeaders(){
-
-  const stats=["points","rebounds","assists","steals"];
-  const grid=document.getElementById("leadersGrid");
-  grid.innerHTML="";
-
-  for(const stat of stats){
-
-    let leader="";
-    let high=0;
-
-    for(const player in playerTotals){
-      if(playerTotals[player][stat]>high){
-        high=playerTotals[player][stat];
-        leader=player;
-      }
+      totals[p.player_name].points+=p.points||0;
+      totals[p.player_name].assists+=p.assists||0;
+      totals[p.player_name].rebounds+=p.rebounds||0;
+      totals[p.player_name].steals+=p.steals||0;
     }
-
-    grid.innerHTML+=`
-      <div class="leader-box">
-        <h3>${stat.toUpperCase()}</h3>
-        <strong>${leader||"N/A"}</strong><br>
-        ${high}
-      </div>`;
   }
+
+  buildLeaders(totals);
+  buildSelector();
+  render("all");
 }
 
-function renderGames(){
-  const body=document.getElementById("gamesBody");
-  allGames.sort((a,b)=>new Date(b.date)-new Date(a.date));
-  body.innerHTML=allGames.map(g=>`
-    <tr onclick="location.href='nba-game.html?game=${g.id}'">
-      <td>${g.date}</td>
-      <td>${g.season}</td>
-      <td>${g.opponent}</td>
-      <td>${g.result}</td>
-      <td>${g.score}</td>
-    </tr>
-  `).join("");
+function buildLeaders(totals){
+
+  function leader(stat){
+    return Object.entries(totals)
+      .sort((a,b)=>b[1][stat]-a[1][stat])[0];
+  }
+
+  const pts=leader("points");
+  const ast=leader("assists");
+  const reb=leader("rebounds");
+  const stl=leader("steals");
+
+  document.getElementById("leadersBox").innerHTML=`
+    <div class="leader-grid">
+      <div class="leader-box">Points<br>${pts?.[0]||"-"} (${pts?.[1].points||0})</div>
+      <div class="leader-box">Assists<br>${ast?.[0]||"-"} (${ast?.[1].assists||0})</div>
+      <div class="leader-box">Rebounds<br>${reb?.[0]||"-"} (${reb?.[1].rebounds||0})</div>
+      <div class="leader-box">Steals<br>${stl?.[0]||"-"} (${stl?.[1].steals||0})</div>
+    </div>
+  `;
 }
 
-load();
+function buildSelector(){
+  const select=document.getElementById("seasonSelect");
+  Array.from(seasons).sort((a,b)=>b-a).forEach(s=>{
+    const opt=document.createElement("option");
+    opt.value=s;
+    opt.textContent=seasonLabel(s);
+    select.appendChild(opt);
+  });
+  select.addEventListener("change",e=>render(e.target.value));
+}
+
+function render(selectedSeason){
+
+  const gamesBody=document.getElementById("gamesBody");
+  gamesBody.innerHTML="";
+
+  const filtered = selectedSeason==="all"
+    ? allGames
+    : allGames.filter(g=>g.season==selectedSeason);
+
+  filtered.sort((a,b)=>new Date(b.date)-new Date(a.date));
+
+  let wins=0,losses=0;
+
+  for(const g of filtered){
+
+    if(g.result==="W")wins++;else losses++;
+
+    gamesBody.innerHTML+=`
+      <tr onclick="location.href='nba-game.html?game=${g.id}'">
+        <td>${g.date}</td>
+        <td>${seasonLabel(g.season)}</td>
+        <td>${g.opponent}</td>
+        <td>${g.result}</td>
+        <td>${g.score}</td>
+      </tr>`;
+  }
+
+  document.getElementById("totalGames").textContent=filtered.length;
+  document.getElementById("wins").textContent=wins;
+  document.getElementById("losses").textContent=losses;
+}
+
+loadData();
 </script>
 
 </body>
