@@ -209,8 +209,12 @@ tr:hover{
 
 <script>
 const params = new URLSearchParams(window.location.search);
-const team = (params.get("team") || "").trim();
-document.getElementById("teamName").textContent = team;
+const teamRaw = (params.get("team") || "").trim();
+document.getElementById("teamName").textContent = teamRaw;
+
+function normalize(s){
+  return (s || "").toLowerCase().trim();
+}
 
 function seasonLabel(start){
   const next = String((start+1)%100).padStart(2,"0");
@@ -227,11 +231,12 @@ async function loadData(){
   if(!masterRes.ok) return;
 
   const master = await masterRes.json();
+  const team = normalize(teamRaw);
 
   for(const game of master){
 
-    const home = game.home_team;
-    const away = game.away_team;
+    const home = normalize(game.home_team);
+    const away = normalize(game.away_team);
 
     if(home !== team && away !== team) continue;
 
@@ -250,13 +255,13 @@ async function loadData(){
       score: `${teamScore} - ${oppScore}`
     });
 
-    try {
+    try{
       const boxRes = await fetch(`data/nba/${game.season}/${game.game_id}.json`);
       if(!boxRes.ok) continue;
       const full = await boxRes.json();
 
       for(const p of (full.players || [])){
-        if(p.team !== team) continue;
+        if(normalize(p.team) !== team) continue;
 
         const name = p.player_name;
         if(!totalsByPlayer[name]){
@@ -269,7 +274,7 @@ async function loadData(){
         totalsByPlayer[name].steals   += p.steals   || 0;
       }
 
-    } catch(e){
+    }catch(e){
       continue;
     }
   }
