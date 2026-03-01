@@ -60,7 +60,7 @@ body{
   100%{background-position:0% 50%;}
 }
 
-/* ✅ STACKED ROW (stats then leaders) */
+/* STACK */
 .top-stack{
   display:flex;
   flex-direction:column;
@@ -68,33 +68,26 @@ body{
   margin-bottom:16px;
 }
 
-/* ✅ compact stats (ONE LINE) */
+/* 🔥 Bigger first line */
 .stats{
   width:100%;
   background:var(--card);
-  padding:14px 18px;
+  padding:16px 20px;
   border-radius:16px;
   box-shadow:0 2px 6px rgba(0,0,0,0.05);
   display:flex;
   align-items:center;
-  gap:18px;
-  font-size:15px;
+  gap:24px;
+  font-size:18px;          /* ⬅ bigger */
+  font-weight:600;
   white-space:nowrap;
-  flex-wrap:nowrap;
-  overflow:auto;
-}
-
-.stats > div{
-  display:flex;
-  align-items:baseline;
-  gap:6px;
 }
 
 .stats strong{
-  font-size:16px;
+  font-size:20px;          /* ⬅ bigger numbers */
 }
 
-/* ✅ compact leaders (stacked, smaller) */
+/* Leaders */
 .leaders-card{
   width:100%;
   background:var(--card);
@@ -122,7 +115,6 @@ body{
   display:flex;
   gap:8px;
   align-items:center;
-  flex-wrap:wrap;
 }
 
 .btn{
@@ -134,10 +126,6 @@ body{
   cursor:pointer;
   font-weight:700;
   font-size:12px;
-}
-.btn:disabled{
-  opacity:.6;
-  cursor:not-allowed;
 }
 .btn.secondary{
   background:#e9edf7;
@@ -170,7 +158,17 @@ body{
 .leader-player{
   margin-top:4px;
   font-weight:800;
-  font-size:14px;
+  font-size:15px;
+}
+
+/* 🔥 clickable leader names */
+.leader-player a{
+  text-decoration:none;
+  color:var(--nba-primary);
+}
+
+.leader-player a:hover{
+  text-decoration:underline;
 }
 
 .leader-total{
@@ -209,8 +207,6 @@ body{
   font-weight:700;
   display:flex;
   justify-content:space-between;
-  gap:12px;
-  flex-wrap:wrap;
 }
 
 .season-box{
@@ -276,8 +272,8 @@ tr:hover{
     <h1 id="teamName"></h1>
   </div>
 
-  <!-- ✅ Stats first (one line), Leaders below -->
   <div class="top-stack">
+
     <div class="stats">
       <div>Total Games: <strong id="totalGames">0</strong></div>
       <div>Wins: <strong id="wins">0</strong></div>
@@ -289,7 +285,7 @@ tr:hover{
         <h2>All-Time Franchise Leaders</h2>
         <div class="leaders-actions">
           <button class="btn" id="btnLoadLeaders">Load Leaders</button>
-          <button class="btn secondary" id="btnClearCache" title="Clear saved leaders for this team">Clear Cache</button>
+          <button class="btn secondary" id="btnClearCache">Clear Cache</button>
         </div>
       </div>
 
@@ -311,6 +307,7 @@ tr:hover{
         </div>
       </div>
     </div>
+
   </div>
 
   <div class="season-box">
@@ -344,48 +341,16 @@ document.getElementById("teamName").textContent = team;
 
 const clean = s => (s || "").toLowerCase().trim();
 
-function seasonLabel(start){
-  const next = String((start+1)%100).padStart(2,"0");
-  return `${start}-${next}`;
-}
-
-let allGames = [];
-let seasons = new Set();
-let masterGamesForTeam = []; // {season, game_id, home_team, away_team, home_score, away_score, date?, game_type}
-
-const gamesBody = document.getElementById("gamesBody");
-const seasonSelect = document.getElementById("seasonSelect");
-
-const btnLoadLeaders = document.getElementById("btnLoadLeaders");
-const btnClearCache = document.getElementById("btnClearCache");
-const leadersGrid = document.getElementById("leadersGrid");
-const leadersStatus = document.getElementById("leadersStatus");
-
-const progressWrap = document.getElementById("progressWrap");
-const progressFill = document.getElementById("progressFill");
-const progressLeft = document.getElementById("progressLeft");
-const progressRight = document.getElementById("progressRight");
-
-function setProgress(show, leftText, pct){
-  progressWrap.style.display = show ? "block" : "none";
-  if(leftText != null) progressLeft.textContent = leftText;
-  if(pct != null){
-    const p = Math.max(0, Math.min(100, pct));
-    progressFill.style.width = p + "%";
-    progressRight.textContent = p.toFixed(0) + "%";
-  }
-}
-
-function cacheKeyForTeam(){
-  // bump version if you change logic
-  return `tsa_nba_leaders_v2__${team}`;
-}
-
+/* 🔥 Updated renderLeaders to make names clickable */
 function renderLeaders(leaders){
   const box = (label, obj) => `
     <div class="leader-box">
       <div class="leader-label">${label}</div>
-      <div class="leader-player">${obj?.player || "-"}</div>
+      <div class="leader-player">
+        <a href="nba-player.html?player=${encodeURIComponent(obj?.player || "")}">
+          ${obj?.player || "-"}
+        </a>
+      </div>
       <div class="leader-total">${(obj?.total ?? 0).toLocaleString()}</div>
     </div>
   `;
@@ -396,252 +361,7 @@ function renderLeaders(leaders){
     ${box("Assists", leaders.assists)}
     ${box("Steals", leaders.steals)}
   `;
-  leadersStatus.textContent = "Loaded";
 }
-
-function renderLeadersStatus(msg){
-  leadersGrid.innerHTML = `
-    <div class="leader-box">
-      <div class="leader-label">Status</div>
-      <div class="leader-player">${msg}</div>
-      <div class="leader-total" style="opacity:.75;"> </div>
-    </div>
-  `;
-  leadersStatus.textContent = msg;
-}
-
-async function loadMasterAndRenderGames(){
-  // IMPORTANT: relative path (no leading slash)
-  const res = await fetch("data/nba/nba_games_master.json");
-  if(!res.ok) throw new Error("nba_games_master.json not found");
-  const master = await res.json();
-
-  const t = clean(team);
-
-  for(const game of master){
-    const gt = game.game_type || "Regular Season";
-    if(gt !== "Regular Season" && gt !== "Playoffs") continue;
-
-    const home = clean(game.home_team);
-    const away = clean(game.away_team);
-    if(home !== t && away !== t) continue;
-
-    masterGamesForTeam.push(game);
-    seasons.add(game.season);
-
-    const isHome = home === t;
-    const teamScore = isHome ? game.home_score : game.away_score;
-    const oppScore  = isHome ? game.away_score : game.home_score;
-
-    allGames.push({
-      id: game.game_id,
-      date: game.date || "",
-      season: game.season,
-      opponent: isHome ? game.away_team : game.home_team,
-      result: teamScore > oppScore ? "W" : "L",
-      score: `${teamScore} - ${oppScore}`
-    });
-  }
-
-  // build selector
-  Array.from(seasons).sort((a,b)=>b-a).forEach(s=>{
-    const opt = document.createElement("option");
-    opt.value = s;
-    opt.textContent = seasonLabel(s);
-    seasonSelect.appendChild(opt);
-  });
-
-  seasonSelect.addEventListener("change", e => renderGames(e.target.value));
-  renderGames("all");
-
-  // if cached leaders exist, show them instantly
-  try{
-    const cached = localStorage.getItem(cacheKeyForTeam());
-    if(cached){
-      const leaders = JSON.parse(cached);
-      renderLeaders(leaders);
-    }
-  }catch(e){}
-}
-
-function renderGames(selectedSeason){
-  gamesBody.innerHTML = "";
-
-  const filtered = selectedSeason === "all"
-    ? allGames
-    : allGames.filter(g => String(g.season) === String(selectedSeason));
-
-  // sort newest first if date exists, otherwise keep order
-  filtered.sort((a,b)=>{
-    const da = Date.parse(a.date || "");
-    const db = Date.parse(b.date || "");
-    if(!isNaN(da) && !isNaN(db)) return db - da;
-    return 0;
-  });
-
-  let wins = 0, losses = 0;
-
-  for(const g of filtered){
-    if(g.result === "W") wins++; else losses++;
-
-    const tr = document.createElement("tr");
-    tr.onclick = () => location.href = `nba-game.html?game=${g.id}`;
-    tr.innerHTML = `
-      <td>${g.date || ""}</td>
-      <td>${seasonLabel(Number(g.season))}</td>
-      <td>${g.opponent}</td>
-      <td>${g.result}</td>
-      <td>${g.score}</td>
-    `;
-    gamesBody.appendChild(tr);
-  }
-
-  document.getElementById("totalGames").textContent = filtered.length;
-  document.getElementById("wins").textContent = wins;
-  document.getElementById("losses").textContent = losses;
-}
-
-function pickLeader(totalsByPlayer, statKey){
-  let bestName = "";
-  let bestVal = -1;
-  for(const [name, stats] of Object.entries(totalsByPlayer)){
-    const v = stats[statKey] || 0;
-    if(v > bestVal){
-      bestVal = v;
-      bestName = name;
-    }
-  }
-  return { player: bestName, total: Math.max(0, bestVal) };
-}
-
-// concurrency pool
-async function poolMap(items, concurrency, mapper, onProgress){
-  let i = 0;
-  let done = 0;
-  const results = new Array(items.length);
-
-  async function worker(){
-    while(true){
-      const idx = i++;
-      if(idx >= items.length) break;
-      results[idx] = await mapper(items[idx], idx);
-      done++;
-      if(onProgress) onProgress(done, items.length);
-    }
-  }
-
-  const workers = Array.from({length: Math.min(concurrency, items.length)}, () => worker());
-  await Promise.all(workers);
-  return results;
-}
-
-async function computeLeadersForTeam(){
-  if(!masterGamesForTeam.length){
-    renderLeadersStatus("No games found for team");
-    return;
-  }
-
-  btnLoadLeaders.disabled = true;
-  btnClearCache.disabled = true;
-
-  renderLeadersStatus("Loading…");
-  setProgress(true, "Preparing game list…", 0);
-
-  const t = clean(team);
-
-  const gamesToFetch = masterGamesForTeam
-    .filter(g => (g.game_type === "Regular Season" || g.game_type === "Playoffs"))
-    .map(g => ({ season: g.season, game_id: g.game_id }));
-
-  const totalsByPlayer = {}; // name -> {points, rebounds, assists, steals}
-
-  const CONCURRENCY = 24;
-
-  let lastPct = -1;
-
-  await poolMap(
-    gamesToFetch,
-    CONCURRENCY,
-    async (g) => {
-      const url = `data/nba/${g.season}/${g.game_id}.json`;
-      try{
-        const r = await fetch(url);
-        if(!r.ok) return null;
-        const full = await r.json();
-
-        const gt = full.game_type;
-        if(gt !== "Regular Season" && gt !== "Playoffs") return null;
-
-        const players = full.players || [];
-        for(const p of players){
-          const pTeam = p.team;
-          if(clean(pTeam) !== t) continue;
-
-          const name = (p.player_name || p.player || "").trim();
-          if(!name) continue;
-
-          if(!totalsByPlayer[name]){
-            totalsByPlayer[name] = {points:0, rebounds:0, assists:0, steals:0};
-          }
-
-          totalsByPlayer[name].points   += Number(p.points   ?? p.pts ?? 0) || 0;
-          totalsByPlayer[name].rebounds += Number(p.rebounds ?? p.reb ?? 0) || 0;
-          totalsByPlayer[name].assists  += Number(p.assists  ?? p.ast ?? 0) || 0;
-          totalsByPlayer[name].steals   += Number(p.steals   ?? p.stl ?? 0) || 0;
-        }
-
-        return true;
-      }catch(e){
-        return null;
-      }
-    },
-    (done, total) => {
-      const pct = total ? (done/total)*100 : 0;
-      const pctInt = Math.floor(pct);
-      if(pctInt !== lastPct){
-        lastPct = pctInt;
-        setProgress(true, `Computing leaders… ${done.toLocaleString()} / ${total.toLocaleString()} games`, pct);
-      }
-    }
-  );
-
-  if(!Object.keys(totalsByPlayer).length){
-    setProgress(false);
-    renderLeadersStatus("No player stats found for this team");
-    btnLoadLeaders.disabled = false;
-    btnClearCache.disabled = false;
-    return;
-  }
-
-  const leaders = {
-    points:   pickLeader(totalsByPlayer, "points"),
-    rebounds: pickLeader(totalsByPlayer, "rebounds"),
-    assists:  pickLeader(totalsByPlayer, "assists"),
-    steals:   pickLeader(totalsByPlayer, "steals")
-  };
-
-  try{
-    localStorage.setItem(cacheKeyForTeam(), JSON.stringify(leaders));
-  }catch(e){}
-
-  setProgress(false);
-  renderLeaders(leaders);
-
-  btnLoadLeaders.disabled = false;
-  btnClearCache.disabled = false;
-}
-
-btnLoadLeaders.addEventListener("click", computeLeadersForTeam);
-
-btnClearCache.addEventListener("click", ()=>{
-  try{ localStorage.removeItem(cacheKeyForTeam()); }catch(e){}
-  renderLeadersStatus("Cache cleared (click Load Leaders)");
-});
-
-loadMasterAndRenderGames().catch(()=>{
-  gamesBody.innerHTML = "<tr><td colspan='5'>Failed to load team data</td></tr>";
-  renderLeadersStatus("Failed to load master");
-});
 </script>
 
 </body>
