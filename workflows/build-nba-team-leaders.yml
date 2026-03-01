@@ -2,13 +2,14 @@ name: Build NBA Team Leaders
 
 on:
   workflow_dispatch:
-
-permissions:
-  contents: write
+  push:
+    paths:
+      - "docs/data/nba/**"
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -16,64 +17,75 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.x"
 
-      - name: Build nba_player_team_totals.json
+      - name: Build team totals
         run: |
-          python - <<'PY'
-          import os, json
+          python <<EOF
+          import json
           from collections import defaultdict
+          from pathlib import Path
 
-          BASE_DIR = os.path.join("docs","data","nba")
-          OUTPUT_FILE = os.path.join(BASE_DIR, "nba_player_team_totals.json")
+          master_path = Path("docs/data/nba/nba_games_master.json")
+          if not master_path.exists():
+              raise FileNotFoundError("nba_games_master.json not found")
 
-          team_totals = defaultdict(lambda: defaultdict(lambda: {"points":0,"rebounds":0,"assists":0,"steals":0}))
+          master = json.loads(master_path.read_text())
 
-          seasons = [d for d in os.listdir(BASE_DIR) if d.isdigit() and os.path.isdir(os.path.join(BASE_DIR,d))]
-          seasons.sort()
+          team_totals = defaultdict(lambda: defaultdict(lambda: {
+              "points": 0,
+              "rebounds": 0,
+              "assists": 0,
+              "steals": 0,
+              "games": 0
+          }))
 
-          for season in seasons:
-            season_path = os.path.join(BASE_DIR, season)
-            for fn in os.listdir(season_path):
-              if not fn.endswith(".json"):
-                continue
-              fp = os.path.join(season_path, fn)
-              try:
-                with open(fp, "r", encoding="utf-8") as f:
-                  game = json.load(f)
-              except Exception:
-                continue
+          for game in master:
+              season = game.get("season")
+              game_id = game.get("game_id")
 
-              if game.get("game_type") != "Regular Season":
-                continue
-
-              players = game.get("players", [])
-              for p in players:
-                player = p.get("player_name")
-                team = p.get("team")
-                if not player or not team:
+              if not season or not game_id:
                   continue
-                team_totals[team][player]["points"] += int(p.get("points", 0) or 0)
-                team_totals[team][player]["rebounds"] += int(p.get("rebounds", 0) or 0)
-                team_totals[team][player]["assists"] += int(p.get("assists", 0) or 0)
-                team_totals[team][player]["steals"] += int(p.get("steals", 0) or 0)
 
-          final = {}
+              game_file = Path(f"docs/data/nba/{season}/{game_id}.json")
+              if not game_file.exists():
+                  continue
+
+              full = json.loads(game_file.read_text())
+
+              if full.get("game_type") != "Regular Season":
+                  continue
+
+              for p in full.get("players", []):
+                  team = p.get("team")
+                  name = p.get("player_name")
+
+                  if not team or not name:
+                      continue
+
+                  stats = team_totals[team][name]
+                  stats["points"] += p.get("points", 0)
+                  stats["rebounds"] += p.get("rebounds", 0)
+                  stats["assists"] += p.get("assists", 0)
+                  stats["steals"] += p.get("steals", 0)
+                  stats["games"] += 1
+
+          output = {}
+
           for team, players in team_totals.items():
-            final[team] = {}
-            for stat in ["points","rebounds","assists","steals"]:
-              sorted_players = sorted(players.items(), key=lambda x: x[1][stat], reverse=True)
-              final[team][stat] = [{"player": n, "total": s[stat]} for n, s in sorted_players[:20]]
+              output[team] = list(players.items())
 
-          with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-            json.dump(final, f, indent=2)
-          print("Wrote", OUTPUT_FILE)
-          PY
+          Path("docs/data/nba/nba_player_team_totals.json").write_text(
+              json.dumps(output)
+          )
 
-      - name: Commit and push output
+          print("NBA team totals built.")
+          EOF
+
+      - name: Commit file
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
           git add docs/data/nba/nba_player_team_totals.json
-          git commit -m "Build NBA franchise leaders (team totals)" || echo "No changes"
+          git commit -m "Update NBA team leader totals" || echo "No changes"
           git push
