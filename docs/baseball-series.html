@@ -122,49 +122,38 @@ async function fetchJSON(url){
   const team1 = getParam("team1");
   const team2 = getParam("team2");
 
-  document.getElementById("seriesTitle").textContent =
-    `${team1} vs ${team2}`;
-
-  document.getElementById("seriesSubtitle").textContent =
-    `Postseason ${year}`;
-
-  // Fetch list of files dynamically using known postseason.json
-  const postseason = await fetchJSON("data/baseball/postseason.json");
-  if(!postseason) return;
-
-  // We assume files exist because we generated them.
+  const title = document.getElementById("seriesTitle");
+  const subtitle = document.getElementById("seriesSubtitle");
   const container = document.getElementById("gamesContainer");
 
-  // We cannot list folder contents from browser,
-  // so we attempt sequential fetches using postseason.json
-  const yearSeries = postseason.filter(d => String(d.year) === String(year));
-
-  let games = [];
-
-  for(const s of yearSeries){
-
-    const match =
-      (s.champion_code === team1 && s.runner_up_code === team2) ||
-      (s.champion_code === team2 && s.runner_up_code === team1);
-
-    if(!match) continue;
-
-    // Try loading potential games by brute forcing postseason-games folder
-    // Since filenames are already known from JSON generator,
-    // we rely on postseason.json to guide filtering later.
+  if(!year || !team1 || !team2){
+    title.textContent = "Series Not Found";
+    return;
   }
 
-  // Instead of index.json, we hard fetch all game files via known structure
-  // Since browser cannot read directory, we use postseason.json as driver
-  // So we rely on your previous filtering logic
+  title.textContent = `${team1} vs ${team2}`;
+  subtitle.textContent = `Postseason ${year}`;
 
-  const seasonData = await fetchJSON(`data/baseball/seasons/${year}.json`);
-  if(!seasonData) return;
-
-  games = seasonData.filter(g =>
-    (g.home_code === team1 && g.away_code === team2) ||
-    (g.home_code === team2 && g.away_code === team1)
+  // Load postseason index for that year
+  const index = await fetchJSON(
+    `data/baseball/postseason-games/index-${year}.json`
   );
+
+  if(!index){
+    container.innerHTML = "<p>No games found.</p>";
+    return;
+  }
+
+  // Filter only games for this matchup
+  const games = index.filter(g =>
+    (g.home === team1 && g.away === team2) ||
+    (g.home === team2 && g.away === team1)
+  );
+
+  if(games.length === 0){
+    container.innerHTML = "<p>No games found for this series.</p>";
+    return;
+  }
 
   games.sort((a,b)=> new Date(a.date) - new Date(b.date));
 
@@ -178,14 +167,18 @@ async function fetchJSON(url){
         Game ${index+1} • ${g.date}
       </div>
       <div class="score-row">
-        <span>${g.away_code}</span>
-        <span>@</span>
-        <span>${g.home_code}</span>
+        <span>${g.away}</span>
+        <span>${g.away_score ?? ""}</span>
+      </div>
+      <div class="score-row">
+        <span>${g.home}</span>
+        <span>${g.home_score ?? ""}</span>
       </div>
     `;
 
     div.addEventListener("click",()=>{
-      window.location.href = `postseason-game.html?game=${g.game_id}`;
+      window.location.href =
+        `postseason-game.html?game=${g.game_id}`;
     });
 
     container.appendChild(div);
