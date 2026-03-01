@@ -1,0 +1,79 @@
+name: Build NBA Team Leaders
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build nba_player_team_totals.json
+        run: |
+          python - <<'PY'
+          import os, json
+          from collections import defaultdict
+
+          BASE_DIR = os.path.join("docs","data","nba")
+          OUTPUT_FILE = os.path.join(BASE_DIR, "nba_player_team_totals.json")
+
+          team_totals = defaultdict(lambda: defaultdict(lambda: {"points":0,"rebounds":0,"assists":0,"steals":0}))
+
+          seasons = [d for d in os.listdir(BASE_DIR) if d.isdigit() and os.path.isdir(os.path.join(BASE_DIR,d))]
+          seasons.sort()
+
+          for season in seasons:
+            season_path = os.path.join(BASE_DIR, season)
+            for fn in os.listdir(season_path):
+              if not fn.endswith(".json"):
+                continue
+              fp = os.path.join(season_path, fn)
+              try:
+                with open(fp, "r", encoding="utf-8") as f:
+                  game = json.load(f)
+              except Exception:
+                continue
+
+              if game.get("game_type") != "Regular Season":
+                continue
+
+              players = game.get("players", [])
+              for p in players:
+                player = p.get("player_name")
+                team = p.get("team")
+                if not player or not team:
+                  continue
+                team_totals[team][player]["points"] += int(p.get("points", 0) or 0)
+                team_totals[team][player]["rebounds"] += int(p.get("rebounds", 0) or 0)
+                team_totals[team][player]["assists"] += int(p.get("assists", 0) or 0)
+                team_totals[team][player]["steals"] += int(p.get("steals", 0) or 0)
+
+          final = {}
+          for team, players in team_totals.items():
+            final[team] = {}
+            for stat in ["points","rebounds","assists","steals"]:
+              sorted_players = sorted(players.items(), key=lambda x: x[1][stat], reverse=True)
+              final[team][stat] = [{"player": n, "total": s[stat]} for n, s in sorted_players[:20]]
+
+          with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+            json.dump(final, f, indent=2)
+          print("Wrote", OUTPUT_FILE)
+          PY
+
+      - name: Commit and push output
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/data/nba/nba_player_team_totals.json
+          git commit -m "Build NBA franchise leaders (team totals)" || echo "No changes"
+          git push
