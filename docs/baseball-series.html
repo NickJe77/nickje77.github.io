@@ -48,9 +48,6 @@ body{
   margin-bottom:25px;
 }
 
-.hero h1{margin:0;font-size:32px;}
-.subtitle{margin-top:6px;opacity:.9;}
-
 .games{
   display:flex;
   flex-direction:column;
@@ -94,14 +91,11 @@ body{
 </div>
 
 <div class="page">
-
   <div class="hero">
     <h1 id="seriesTitle">Loading...</h1>
-    <div class="subtitle" id="seriesSubtitle"></div>
+    <div id="seriesSubtitle"></div>
   </div>
-
   <div class="games" id="gamesContainer"></div>
-
 </div>
 
 <script>
@@ -122,44 +116,65 @@ async function fetchJSON(url){
   const team1 = getParam("team1");
   const team2 = getParam("team2");
 
-  const title = document.getElementById("seriesTitle");
-  const subtitle = document.getElementById("seriesSubtitle");
   const container = document.getElementById("gamesContainer");
 
-  if(!year || !team1 || !team2){
-    title.textContent = "Series Not Found";
-    return;
+  document.getElementById("seriesTitle").textContent =
+    `${team1} vs ${team2}`;
+
+  document.getElementById("seriesSubtitle").textContent =
+    `Postseason ${year}`;
+
+  let games = [];
+
+  // Attempt up to 50 postseason games for that year
+  // (more than enough for any year)
+  for(let i = 0; i < 50; i++){
+
+    // We don’t know exact IDs, so we brute test by scanning known patterns
+    // Instead we fetch every file that matches year by scanning alphabetically
+
+    // Since filenames are not enumerable, we attempt fetch by year prefix
+    // by trying every team prefix found in postseason.json
+
   }
 
-  title.textContent = `${team1} vs ${team2}`;
-  subtitle.textContent = `Postseason ${year}`;
+  // Instead: brute load all possible game files for year by
+  // fetching every postseason game file once using a known list
+
+  // Safer approach: load postseason.json to get teams involved
 
   const postseason = await fetchJSON("data/baseball/postseason.json");
-  if(!postseason){
-    container.innerHTML = "<p>Postseason data unavailable.</p>";
-    return;
-  }
+  if(!postseason) return;
 
-  // Filter for this series in this year
-  const series = postseason.filter(s =>
-    String(s.year) === String(year) &&
-    (
-      (s.champion_code === team1 && s.runner_up_code === team2) ||
-      (s.champion_code === team2 && s.runner_up_code === team1)
-    )
-  );
+  const yearSeries = postseason.filter(s => String(s.year) === String(year));
 
-  if(series.length === 0){
-    container.innerHTML = "<p>No games found for this series.</p>";
-    return;
-  }
+  // Load all postseason game files for this year
+  // We do this by testing game_id patterns from 000 to 999
 
-  // Each series entry should contain its games array
-  const games = series[0].games || [];
+  for(let day = 1; day <= 31; day++){
+    for(let month = 9; month <= 11; month++){
 
-  if(games.length === 0){
-    container.innerHTML = "<p>No game data available.</p>";
-    return;
+      const mm = String(month).padStart(2,"0");
+      const dd = String(day).padStart(2,"0");
+
+      const possibleId1 = `${team1}${year}${mm}${dd}0`;
+      const possibleId2 = `${team2}${year}${mm}${dd}0`;
+
+      const g1 = await fetchJSON(`data/baseball/postseason-games/${possibleId1}.json`);
+      if(g1 &&
+        ((g1.home === team1 && g1.away === team2) ||
+         (g1.home === team2 && g1.away === team1))){
+        games.push(g1);
+      }
+
+      const g2 = await fetchJSON(`data/baseball/postseason-games/${possibleId2}.json`);
+      if(g2 &&
+        ((g2.home === team1 && g2.away === team2) ||
+         (g2.home === team2 && g2.away === team1))){
+        games.push(g2);
+      }
+
+    }
   }
 
   games.sort((a,b)=> new Date(a.date) - new Date(b.date));
@@ -171,15 +186,15 @@ async function fetchJSON(url){
 
     div.innerHTML = `
       <div class="game-header">
-        Game ${index+1} • ${g.date}
+        Game ${index+1} • ${g.date || ""}
       </div>
       <div class="score-row">
-        <span>${g.away_code}</span>
-        <span>${g.away_score}</span>
+        <span>${g.away}</span>
+        <span></span>
       </div>
       <div class="score-row">
-        <span>${g.home_code}</span>
-        <span>${g.home_score}</span>
+        <span>${g.home}</span>
+        <span></span>
       </div>
     `;
 
