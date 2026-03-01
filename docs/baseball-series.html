@@ -139,23 +139,27 @@ async function fetchCSV(url){
 
   if(!index) return;
 
+  // teams.json assumed to be OBJECT:
+  // { "ARI": "Arizona Diamondbacks", ... }
+
   const parkMap = {};
   if(parks){
     parks.slice(1).forEach(r=>{
-      parkMap[r[0]] = r[1];
+      const teamCode = r[2];   // adjust if your csv uses different column
+      const parkName = r[1];
+      parkMap[teamCode] = parkName;
     });
   }
 
   const games = [];
-
   const yearIds = index.filter(id=>id.substring(3,7)===year);
 
   for(const id of yearIds){
     const raw = await fetchJSON(base + "postseason-games/" + id + ".json");
     if(!raw) continue;
 
-    const home = raw.home_code || raw.home;
-    const away = raw.away_code || raw.away;
+    const home = raw.home;
+    const away = raw.away;
 
     if(
       (home===team1 && away===team2) ||
@@ -172,8 +176,9 @@ async function fetchCSV(url){
   games.forEach(g=>{
 
     const raw = g.raw;
-    const home = raw.home_code || raw.home;
-    const away = raw.away_code || raw.away;
+
+    const home = raw.home;
+    const away = raw.away;
 
     const homeName = teams?.[home] || home;
     const awayName = teams?.[away] || away;
@@ -183,10 +188,7 @@ async function fetchCSV(url){
       ? `${raw.away_score} – ${raw.home_score}`
       : "";
 
-    const venue =
-      raw.venue && parkMap[raw.venue]
-      ? parkMap[raw.venue]
-      : "";
+    const venue = parkMap[home] || "";
 
     const date =
       raw.date ||
