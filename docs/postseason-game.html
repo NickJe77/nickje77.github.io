@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Postseason Game | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+:root{
+  --blue:#002D72;
+  --red:#C8102E;
+  --bg:#f4f6f8;
+  --line:#e6e8ee;
+}
+
+body{
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:var(--bg);
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px;
+  background:#fff;
+  border-bottom:1px solid #ddd;
+  font-weight:700;
+}
+
+.navbar a{
+  text-decoration:none;
+  color:#0056d6;
+}
+
+.page{
+  max-width:1100px;
+  margin:auto;
+  padding:30px;
+}
+
+.hero{
+  background:linear-gradient(90deg,var(--blue),var(--red));
+  color:#fff;
+  padding:30px;
+  border-radius:20px;
+  margin-bottom:25px;
+}
+
+.score{
+  font-size:28px;
+  font-weight:800;
+  margin-top:10px;
+}
+
+.section{
+  background:#fff;
+  padding:20px;
+  border-radius:16px;
+  border:1px solid var(--line);
+  margin-bottom:20px;
+}
+
+h2{
+  margin-top:0;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:14px;
+}
+
+th,td{
+  padding:8px;
+  border-bottom:1px solid #eee;
+  text-align:left;
+}
+
+th{
+  background:#f3f4f6;
+}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="baseball.html">Baseball</a>
+  <a href="baseball-postseason.html">Postseason</a>
+</div>
+
+<div class="page">
+
+  <div class="hero">
+    <h1 id="gameTitle">Loading...</h1>
+    <div id="gameMeta"></div>
+    <div id="scoreLine" class="score"></div>
+  </div>
+
+  <div id="battingSection" class="section"></div>
+  <div id="pitchingSection" class="section"></div>
+
+</div>
+
+<script>
+function getParam(name){
+  return new URLSearchParams(window.location.search).get(name);
+}
+
+async function fetchJSON(url){
+  const r = await fetch(url);
+  if(!r.ok) return null;
+  return await r.json();
+}
+
+async function fetchCSV(url){
+  const r = await fetch(url);
+  if(!r.ok) return null;
+  const text = await r.text();
+  return text.split("\n").map(row => row.split(","));
+}
+
+(async function(){
+
+  const gameId = getParam("game");
+  if(!gameId){
+    document.getElementById("gameTitle").textContent = "Game Not Found";
+    return;
+  }
+
+  const raw = await fetchJSON(`data/baseball/postseason-games/${gameId}.json`);
+  if(!raw){
+    document.getElementById("gameTitle").textContent = "Game Not Found";
+    return;
+  }
+
+  const teams = await fetchJSON("data/baseball/team-names.json");
+  const parks = await fetchCSV("data/baseball/ballparks.csv");
+
+  const teamMap = {};
+  if(teams){
+    teams.forEach(t => teamMap[t.code] = t.name);
+  }
+
+  const parkMap = {};
+  if(parks){
+    parks.slice(1).forEach(row => {
+      parkMap[row[0]] = row[1];
+    });
+  }
+
+  const home = raw.home_code || raw.home || "";
+  const away = raw.away_code || raw.away || "";
+
+  const homeName = teamMap[home] || home;
+  const awayName = teamMap[away] || away;
+
+  const date = raw.date || (gameId.length >= 11
+    ? `${gameId.substring(3,7)}-${gameId.substring(7,9)}-${gameId.substring(9,11)}`
+    : "");
+
+  const homeScore = raw.home_score ?? raw.home_runs ?? null;
+  const awayScore = raw.away_score ?? raw.away_runs ?? null;
+
+  const venue = raw.venue || raw.venue_code || null;
+  const venueName = venue && parkMap[venue] ? parkMap[venue] : "";
+
+  document.getElementById("gameTitle").textContent =
+    `${awayName} @ ${homeName}`;
+
+  document.getElementById("gameMeta").textContent =
+    `${date}${venueName ? " • " + venueName : ""}`;
+
+  if(homeScore != null && awayScore != null){
+    document.getElementById("scoreLine").textContent =
+      `${awayScore} – ${homeScore}`;
+  }
+
+  // Batting
+  const battingDiv = document.getElementById("battingSection");
+  if(raw.batting){
+    battingDiv.innerHTML = "<h2>Batting</h2>";
+    const table = document.createElement("table");
+    const header = document.createElement("tr");
+    header.innerHTML = "<th>Player</th><th>AB</th><th>H</th><th>BB</th><th>K</th>";
+    table.appendChild(header);
+
+    for(const player in raw.batting){
+      const stats = raw.batting[player];
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${player}</td>
+        <td>${stats.AB ?? ""}</td>
+        <td>${stats.H ?? ""}</td>
+        <td>${stats.BB ?? ""}</td>
+        <td>${stats.K ?? ""}</td>
+      `;
+      table.appendChild(row);
+    }
+
+    battingDiv.appendChild(table);
+  }
+
+  // Pitching
+  const pitchingDiv = document.getElementById("pitchingSection");
+  if(raw.pitching){
+    pitchingDiv.innerHTML = "<h2>Pitching</h2>";
+    const table = document.createElement("table");
+    const header = document.createElement("tr");
+    header.innerHTML = "<th>Player</th><th>ER</th>";
+    table.appendChild(header);
+
+    for(const player in raw.pitching){
+      const stats = raw.pitching[player];
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${player}</td>
+        <td>${stats.ER ?? ""}</td>
+      `;
+      table.appendChild(row);
+    }
+
+    pitchingDiv.appendChild(table);
+  }
+
+})();
+</script>
+
+</body>
+</html>
