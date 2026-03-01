@@ -3,8 +3,93 @@ name: Build NBA Team Leaders
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  test:
+  build:
     runs-on: ubuntu-latest
+
     steps:
-      - run: echo "Workflow is working"
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build Team Leaders
+        run: |
+          import os
+          import json
+          from collections import defaultdict
+
+          base_path = "docs/data/nba"
+          team_totals = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
+
+          for root, dirs, files in os.walk(base_path):
+              for file in files:
+                  if not file.endswith(".json"):
+                      continue
+
+                  if file == "team-leaders.json" or file == "nba_games_master.json":
+                      continue
+
+                  full_path = os.path.join(root, file)
+
+                  try:
+                      with open(full_path, "r", encoding="utf-8") as f:
+                          game = json.load(f)
+                  except:
+                      continue
+
+                  game_type = game.get("game_type", "")
+                  if game_type not in ["Regular Season", "Playoffs"]:
+                      continue
+
+                  players = game.get("players", [])
+                  for p in players:
+                      team = p.get("team")
+                      name = p.get("player_name")
+                      if not team or not name:
+                          continue
+
+                      team_totals[team][name]["points"] += p.get("points", 0)
+                      team_totals[team][name]["rebounds"] += p.get("rebounds", 0)
+                      team_totals[team][name]["assists"] += p.get("assists", 0)
+                      team_totals[team][name]["steals"] += p.get("steals", 0)
+
+          final_output = {}
+
+          for team, players in team_totals.items():
+              leaders = {}
+
+              for stat in ["points", "rebounds", "assists", "steals"]:
+                  leader = None
+                  high = 0
+
+                  for player, stats in players.items():
+                      value = stats.get(stat, 0)
+                      if value > high:
+                          high = value
+                          leader = player
+
+                  leaders[stat] = {
+                      "player": leader,
+                      "total": high
+                  }
+
+              final_output[team] = leaders
+
+          output_path = "docs/data/nba/team-leaders.json"
+          with open(output_path, "w", encoding="utf-8") as f:
+              json.dump(final_output, f, indent=2)
+
+      - name: Commit and Push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add docs/data/nba/team-leaders.json
+          git commit -m "Update NBA team leaders" || echo "No changes"
+          git push
