@@ -14,100 +14,57 @@
   --line:#e6e8ee;
 }
 
-body{
-  font-family:Inter,system-ui,Arial;
-  margin:0;
-  background:var(--bg);
-}
+body{font-family:Inter,system-ui,Arial;margin:0;background:var(--bg);}
 
 .navbar{
-  display:flex;
-  justify-content:center;
-  gap:24px;
-  padding:16px;
-  background:#fff;
-  border-bottom:1px solid var(--line);
+  display:flex;justify-content:center;gap:24px;
+  padding:16px;background:#fff;border-bottom:1px solid var(--line);
   font-weight:700;
 }
 
-.navbar a{
-  text-decoration:none;
-  color:#0056d6;
-}
+.navbar a{ text-decoration:none;color:#0056d6; }
 
-.page{
-  max-width:1000px;
-  margin:auto;
-  padding:30px 20px;
-}
+.page{ max-width:1000px;margin:auto;padding:30px 20px; }
 
 .hero{
   background:linear-gradient(90deg,var(--blue),var(--red));
-  color:#fff;
-  padding:30px;
-  border-radius:20px;
-  margin-bottom:25px;
+  color:#fff;padding:30px;border-radius:20px;margin-bottom:25px;
 }
 
-.hero h1{
-  margin:0;
-  font-size:40px;
-}
+.hero h1{ margin:0;font-size:40px; }
 
-.hero .sub{
-  margin-top:8px;
-  font-weight:700;
-  opacity:.9;
-}
+.hero .sub{ margin-top:8px;font-weight:700;opacity:.9; }
 
 .series-games{
-  display:flex;
-  flex-direction:column;
-  gap:16px;
+  display:flex;flex-direction:column;gap:16px;
 }
 
 .game-card{
-  background:var(--card);
-  border:1px solid var(--line);
-  border-radius:16px;
-  padding:20px;
-  cursor:pointer;
-  transition:.2s;
+  background:var(--card);border:1px solid var(--line);
+  border-radius:16px;padding:20px;cursor:pointer;transition:.2s;
 }
 
-.game-card:hover{
-  transform:translateY(-3px);
-  background:#eef5ff;
-}
+.game-card:hover{ transform:translateY(-3px);background:#eef5ff; }
 
-.topline{
-  display:flex;
-  justify-content:space-between;
-  margin-bottom:10px;
-}
+.topline{ display:flex;justify-content:space-between;margin-bottom:10px; }
 
 .badge{
-  font-size:12px;
-  font-weight:900;
-  background:#eef2ff;
-  padding:4px 10px;
-  border-radius:999px;
+  font-size:12px;font-weight:900;
+  background:#eef2ff;padding:4px 10px;border-radius:999px;
 }
 
-.meta{
-  font-size:13px;
-  color:#666;
-}
+.meta{ font-size:13px;color:#666; }
 
 .row{
-  display:flex;
-  justify-content:space-between;
-  font-weight:800;
-  font-size:18px;
-  line-height:1.4;
+  display:flex;justify-content:space-between;
+  font-weight:800;font-size:18px;line-height:1.4;
 }
 
-.score{
+.score{ font-weight:900; }
+
+.series-score{
+  margin-top:12px;
+  font-size:18px;
   font-weight:900;
 }
 </style>
@@ -124,6 +81,7 @@ body{
   <div class="hero">
     <h1 id="seriesTitle">Loading...</h1>
     <div class="sub" id="seriesSubtitle"></div>
+    <div class="series-score" id="seriesScore"></div>
   </div>
 
   <div id="games" class="series-games"></div>
@@ -180,18 +138,22 @@ function buildParkMap(csvText){
   return map;
 }
 
+function roundLabel(code){
+  const map = {
+    "WC": "Wild Card",
+    "DS": "Division Series",
+    "CS": "Championship Series",
+    "WS": "World Series"
+  };
+  return map[code] || code;
+}
+
 (async function(){
 
   const year  = getParam("year");
   const team1 = getParam("team1");
   const team2 = getParam("team2");
   const round = getParam("round") || "";
-
-  document.getElementById("seriesTitle").textContent =
-    `${team1} vs ${team2}`;
-
-  document.getElementById("seriesSubtitle").textContent =
-    `Postseason ${year}${round ? " • " + round : ""}`;
 
   const base = await pickBase();
 
@@ -201,17 +163,20 @@ function buildParkMap(csvText){
     fetchText(base + "ballparks.csv")
   ]);
 
-  const container = document.getElementById("games");
-  container.innerHTML = "";
-
-  if(!meta){
-    container.innerHTML =
-      "<div class='game-card'>postseason_meta.json missing.</div>";
-    return;
-  }
-
   const teamMap = buildTeamMap(teamsRaw);
   const parkMap = buildParkMap(parksCSV);
+
+  const team1Name = teamMap[team1] || team1;
+  const team2Name = teamMap[team2] || team2;
+
+  document.getElementById("seriesTitle").textContent =
+    `${team1Name} vs ${team2Name}`;
+
+  document.getElementById("seriesSubtitle").textContent =
+    `Postseason ${year} • ${roundLabel(round)}`;
+
+  const container = document.getElementById("games");
+  container.innerHTML = "";
 
   const seriesGames = meta.filter(g =>
     String(g.season) === String(year) &&
@@ -229,6 +194,24 @@ function buildParkMap(csvText){
 
   seriesGames.sort((a,b)=> (a.date||"").localeCompare(b.date||""));
 
+  // Calculate series score
+  let team1Wins = 0;
+  let team2Wins = 0;
+
+  seriesGames.forEach(g=>{
+    if(g.home_score > g.away_score){
+      if(g.home === team1) team1Wins++;
+      if(g.home === team2) team2Wins++;
+    } else {
+      if(g.away === team1) team1Wins++;
+      if(g.away === team2) team2Wins++;
+    }
+  });
+
+  document.getElementById("seriesScore").textContent =
+    `${team1Name} ${team1Wins} – ${team2Wins} ${team2Name}`;
+
+  // Render games
   seriesGames.forEach((g,idx)=>{
 
     const homeName = teamMap[g.home] || g.home;
