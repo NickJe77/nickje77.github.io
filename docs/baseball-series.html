@@ -105,13 +105,12 @@ async function fetchJSON(url){
   const year  = getParam("year");
   const team1 = getParam("team1");
   const team2 = getParam("team2");
-  const gamesParam = getParam("games");
 
   const title = document.getElementById("seriesTitle");
   const sub   = document.getElementById("seriesSubtitle");
   const container = document.getElementById("gamesContainer");
 
-  if(!year || !team1 || !team2 || !gamesParam){
+  if(!year || !team1 || !team2){
     title.textContent = "Series Not Found";
     return;
   }
@@ -119,20 +118,68 @@ async function fetchJSON(url){
   title.textContent = `${team1} vs ${team2}`;
   sub.textContent   = `Postseason ${year}`;
 
-  const gameIds = gamesParam.split(",");
+  // Confirm series exists in postseason.json
+  const postseason = await fetchJSON("data/baseball/postseason.json");
+  if(!postseason){
+    title.textContent = "Postseason data missing";
+    return;
+  }
 
-  for(let i = 0; i < gameIds.length; i++){
+  const seriesExists = postseason.find(s =>
+    s.year === year &&
+    (
+      (s.champion_code === team1 && s.runner_up_code === team2) ||
+      (s.champion_code === team2 && s.runner_up_code === team1)
+    )
+  );
 
-    const gameId = gameIds[i];
+  if(!seriesExists){
+    title.textContent = "Series Not Found";
+    return;
+  }
+
+  // Load index file
+  const index = await fetchJSON("data/baseball/postseason-games/index.json");
+  if(!index){
+    container.innerHTML = "<div>Game index missing.</div>";
+    return;
+  }
+
+  const games = [];
+
+  for(const gameId of index){
+
+    // Extract year from filename
+    const gameYear = gameId.substring(3,7);
+    if(gameYear !== year) continue;
+
     const g = await fetchJSON(`data/baseball/postseason-games/${gameId}.json`);
     if(!g) continue;
+
+    if(
+      (g.home === team1 && g.away === team2) ||
+      (g.home === team2 && g.away === team1)
+    ){
+      games.push(g);
+    }
+  }
+
+  if(!games.length){
+    container.innerHTML = "<div>No games found.</div>";
+    return;
+  }
+
+  // Sort chronologically by game_id
+  games.sort((a,b)=> a.game_id.localeCompare(b.game_id));
+
+  games.forEach((g,index)=>{
 
     const div = document.createElement("div");
     div.className = "game";
 
     div.innerHTML = `
       <div class="game-header">
-        Game ${i+1}
+        Game ${index+1}
       </div>
       <div class="score-row">
         <span>${g.away}</span>
@@ -151,7 +198,7 @@ async function fetchJSON(url){
 
     container.appendChild(div);
 
-  }
+  });
 
 })();
 </script>
