@@ -134,24 +134,31 @@ async function fetchJSON(url){
   title.textContent = `${team1} vs ${team2}`;
   subtitle.textContent = `Postseason ${year}`;
 
-  // Load postseason index for that year
-  const index = await fetchJSON(
-    `data/baseball/postseason-games/index-${year}.json`
-  );
-
-  if(!index){
-    container.innerHTML = "<p>No games found.</p>";
+  const postseason = await fetchJSON("data/baseball/postseason.json");
+  if(!postseason){
+    container.innerHTML = "<p>Postseason data unavailable.</p>";
     return;
   }
 
-  // Filter only games for this matchup
-  const games = index.filter(g =>
-    (g.home === team1 && g.away === team2) ||
-    (g.home === team2 && g.away === team1)
+  // Filter for this series in this year
+  const series = postseason.filter(s =>
+    String(s.year) === String(year) &&
+    (
+      (s.champion_code === team1 && s.runner_up_code === team2) ||
+      (s.champion_code === team2 && s.runner_up_code === team1)
+    )
   );
 
-  if(games.length === 0){
+  if(series.length === 0){
     container.innerHTML = "<p>No games found for this series.</p>";
+    return;
+  }
+
+  // Each series entry should contain its games array
+  const games = series[0].games || [];
+
+  if(games.length === 0){
+    container.innerHTML = "<p>No game data available.</p>";
     return;
   }
 
@@ -167,12 +174,12 @@ async function fetchJSON(url){
         Game ${index+1} • ${g.date}
       </div>
       <div class="score-row">
-        <span>${g.away}</span>
-        <span>${g.away_score ?? ""}</span>
+        <span>${g.away_code}</span>
+        <span>${g.away_score}</span>
       </div>
       <div class="score-row">
-        <span>${g.home}</span>
-        <span>${g.home_score ?? ""}</span>
+        <span>${g.home_code}</span>
+        <span>${g.home_score}</span>
       </div>
     `;
 
