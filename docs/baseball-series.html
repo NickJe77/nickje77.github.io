@@ -122,7 +122,6 @@ async function fetchJSON(url){
   title.textContent = `${team1} vs ${team2}`;
   sub.textContent   = `Postseason ${year}`;
 
-  // Confirm series exists
   const postseason = await fetchJSON("data/baseball/postseason.json");
   if(!postseason){
     title.textContent = "Postseason data missing";
@@ -130,7 +129,7 @@ async function fetchJSON(url){
   }
 
   const seriesExists = postseason.find(s =>
-    s.year === year &&
+    String(s.year) === String(year) &&
     (
       (s.champion_code === team1 && s.runner_up_code === team2) ||
       (s.champion_code === team2 && s.runner_up_code === team1)
@@ -142,7 +141,6 @@ async function fetchJSON(url){
     return;
   }
 
-  // Load index
   const index = await fetchJSON("data/baseball/postseason-games/index.json");
   if(!index){
     container.innerHTML = "<div>Game index missing.</div>";
@@ -153,15 +151,15 @@ async function fetchJSON(url){
 
   for(const gameId of index){
 
-    const gameYear = gameId.substring(3,7);
-    if(gameYear !== year) continue;
-
     const g = await fetchJSON(`data/baseball/postseason-games/${gameId}.json`);
     if(!g) continue;
 
     if(
-      (g.home_code === team1 && g.away_code === team2) ||
-      (g.home_code === team2 && g.away_code === team1)
+      String(g.season) === String(year) &&
+      (
+        (g.home_code === team1 && g.away_code === team2) ||
+        (g.home_code === team2 && g.away_code === team1)
+      )
     ){
       games.push(g);
     }
@@ -172,7 +170,7 @@ async function fetchJSON(url){
     return;
   }
 
-  games.sort((a,b)=> a.game_id.localeCompare(b.game_id));
+  games.sort((a,b)=> a.date.localeCompare(b.date));
 
   games.forEach((g,index)=>{
 
