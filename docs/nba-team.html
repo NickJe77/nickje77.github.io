@@ -11,7 +11,6 @@
   --nba-secondary:#C9082A;
   --bg:#f4f6f8;
   --card:#ffffff;
-  --text:#0b1220;
   --line:#e6e8ee;
   --soft:#eef2ff;
 }
@@ -20,7 +19,6 @@ body{
   font-family:Inter,system-ui,Arial;
   margin:0;
   background:var(--bg);
-  color:var(--text);
 }
 
 .navbar{
@@ -71,7 +69,6 @@ body{
   background:var(--card);
   padding:16px 20px;
   border-radius:16px;
-  box-shadow:0 2px 6px rgba(0,0,0,0.05);
   display:flex;
   gap:30px;
   font-size:19px;
@@ -86,11 +83,6 @@ body{
   background:var(--card);
   padding:16px 18px;
   border-radius:16px;
-  box-shadow:0 2px 6px rgba(0,0,0,0.05);
-}
-
-.leaders-head{
-  margin-bottom:10px;
 }
 
 .leaders-grid{
@@ -131,15 +123,13 @@ body{
   background:var(--card);
   padding:16px;
   border-radius:16px;
-  box-shadow:0 2px 6px rgba(0,0,0,0.05);
   margin-bottom:16px;
 }
 
 .card{
   background:var(--card);
-  border-radius:18px;
+  border-radius:16px;
   overflow:hidden;
-  box-shadow:0 2px 6px rgba(0,0,0,0.05);
 }
 
 table{
@@ -187,9 +177,7 @@ tr:hover{
     </div>
 
     <div class="leaders-card">
-      <div class="leaders-head">
-        <h2>All-Time Franchise Leaders</h2>
-      </div>
+      <h2>All-Time Franchise Leaders</h2>
       <div class="leaders-grid" id="leadersGrid"></div>
     </div>
 
@@ -237,64 +225,58 @@ let totalsByPlayer = {};
 
 async function loadData(){
 
-  try {
+  const masterRes = await fetch("data/nba/nba_games_master.json");
+  if(!masterRes.ok) return;
 
-    const masterRes = await fetch("data/nba/nba_games_master.json");
-    if(!masterRes.ok) return;
-    const master = await masterRes.json();
+  const master = await masterRes.json();
+  const t = clean(team);
 
-    const t = clean(team);
+  for(const game of master){
 
-    for(const game of master){
+    const home = clean(game.home_team);
+    const away = clean(game.away_team);
+    if(home !== t && away !== t) continue;
 
-      const home = clean(game.home_team);
-      const away = clean(game.away_team);
-      if(home !== t && away !== t) continue;
+    seasons.add(game.season);
 
-      seasons.add(game.season);
+    const isHome = home === t;
+    const teamScore = isHome ? game.home_score : game.away_score;
+    const oppScore  = isHome ? game.away_score : game.home_score;
 
-      const isHome = home === t;
-      const teamScore = isHome ? game.home_score : game.away_score;
-      const oppScore  = isHome ? game.away_score : game.home_score;
+    allGames.push({
+      id: game.game_id,
+      date: game.date,
+      season: game.season,
+      opponent: isHome ? game.away_team : game.home_team,
+      result: teamScore > oppScore ? "W" : "L",
+      score: `${teamScore} - ${oppScore}`
+    });
 
-      allGames.push({
-        id: game.game_id,
-        date: game.date,
-        season: game.season,
-        opponent: isHome ? game.away_team : game.home_team,
-        result: teamScore > oppScore ? "W" : "L",
-        score: `${teamScore} - ${oppScore}`
-      });
+    try {
+      const boxRes = await fetch(`data/nba/${game.season}/${game.game_id}.json`);
+      if(!boxRes.ok) continue;
+      const full = await boxRes.json();
 
-      try {
-        const boxRes = await fetch(`data/nba/${game.season}/${game.game_id}.json`);
-        if(!boxRes.ok) continue;
-        const full = await boxRes.json();
+      for(const p of (full.players || [])){
+        if(clean(p.team) !== t) continue;
 
-        for(const p of (full.players || [])){
-          if(clean(p.team) !== t) continue;
-
-          const name = p.player_name;
-          if(!totalsByPlayer[name]){
-            totalsByPlayer[name] = {points:0,rebounds:0,assists:0,steals:0};
-          }
-
-          totalsByPlayer[name].points   += p.points   || 0;
-          totalsByPlayer[name].rebounds += p.rebounds || 0;
-          totalsByPlayer[name].assists  += p.assists  || 0;
-          totalsByPlayer[name].steals   += p.steals   || 0;
+        const name = p.player_name;
+        if(!totalsByPlayer[name]){
+          totalsByPlayer[name] = {points:0,rebounds:0,assists:0,steals:0};
         }
 
-      } catch(e){
-        continue;
+        totalsByPlayer[name].points   += p.points   || 0;
+        totalsByPlayer[name].rebounds += p.rebounds || 0;
+        totalsByPlayer[name].assists  += p.assists  || 0;
+        totalsByPlayer[name].steals   += p.steals   || 0;
       }
+
+    } catch(e){
+      continue;
     }
-
-    buildPage();
-
-  } catch(e){
-    console.error(e);
   }
+
+  buildPage();
 }
 
 function buildPage(){
