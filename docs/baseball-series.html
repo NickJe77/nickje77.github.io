@@ -14,37 +14,102 @@
   --line:#e6e8ee;
 }
 
-body{font-family:Inter,system-ui,Arial;margin:0;background:var(--bg);}
+body{
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:var(--bg);
+}
 
 .navbar{
-  display:flex;justify-content:center;gap:24px;padding:16px;background:#fff;
-  border-bottom:1px solid var(--line);font-weight:700;
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px;
+  background:#fff;
+  border-bottom:1px solid var(--line);
+  font-weight:700;
 }
-.navbar a{text-decoration:none;color:#0056d6;}
 
-.page{max-width:1000px;margin:auto;padding:30px 20px;}
+.navbar a{
+  text-decoration:none;
+  color:#0056d6;
+}
+
+.page{
+  max-width:1000px;
+  margin:auto;
+  padding:30px 20px;
+}
 
 .hero{
   background:linear-gradient(90deg,var(--blue),var(--red));
-  color:#fff;padding:30px;border-radius:20px;margin-bottom:20px;
+  color:#fff;
+  padding:30px;
+  border-radius:20px;
+  margin-bottom:25px;
 }
-.hero h1{margin:0;font-size:40px}
-.hero .sub{margin-top:8px;opacity:.95;font-weight:700}
 
-.series-games{display:flex;flex-direction:column;gap:14px;}
+.hero h1{
+  margin:0;
+  font-size:40px;
+}
+
+.hero .sub{
+  margin-top:8px;
+  font-weight:700;
+  opacity:.9;
+}
+
+.series-games{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
 
 .game-card{
-  background:var(--card);border:1px solid var(--line);border-radius:16px;
-  padding:18px;cursor:pointer;transition:.2s;
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:20px;
+  cursor:pointer;
+  transition:.2s;
 }
-.game-card:hover{transform:translateY(-2px);background:#eef5ff;}
 
-.topline{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
-.badge{font-size:12px;font-weight:900;background:#f1f5ff;color:#0b2b6b;padding:5px 10px;border-radius:999px}
-.meta{font-size:13px;color:#666}
+.game-card:hover{
+  transform:translateY(-3px);
+  background:#eef5ff;
+}
 
-.row{display:flex;justify-content:space-between;font-weight:800;font-size:18px;line-height:1.4}
-.score{font-weight:900}
+.topline{
+  display:flex;
+  justify-content:space-between;
+  margin-bottom:10px;
+}
+
+.badge{
+  font-size:12px;
+  font-weight:900;
+  background:#eef2ff;
+  padding:4px 10px;
+  border-radius:999px;
+}
+
+.meta{
+  font-size:13px;
+  color:#666;
+}
+
+.row{
+  display:flex;
+  justify-content:space-between;
+  font-weight:800;
+  font-size:18px;
+  line-height:1.4;
+}
+
+.score{
+  font-weight:900;
+}
 </style>
 </head>
 <body>
@@ -65,7 +130,9 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:var(--bg);}
 </div>
 
 <script>
-function getParam(name){ return new URLSearchParams(window.location.search).get(name); }
+function getParam(name){
+  return new URLSearchParams(window.location.search).get(name);
+}
 
 async function fetchJSON(url){
   const r = await fetch(url,{cache:"no-store"});
@@ -80,75 +147,71 @@ async function fetchText(url){
 }
 
 async function pickBase(){
-  const ok = await fetch("data/baseball/teams.json",{cache:"no-store"}).then(r=>r.ok).catch(()=>false);
+  const ok = await fetch("data/baseball/teams.json",{cache:"no-store"})
+    .then(r=>r.ok)
+    .catch(()=>false);
   return ok ? "data/baseball/" : "docs/data/baseball/";
 }
 
-function buildTeamMap(teams){
-  // Supports:
-  // 1) object: {"CHN":"Chicago Cubs"}
-  // 2) array:  [{code:"CHN", name:"Chicago Cubs"}] OR {abbr/code/...}
+function buildTeamMap(teamsArray){
   const map = {};
-  if(!teams) return map;
-
-  if(Array.isArray(teams)){
-    for(const t of teams){
-      if(!t || typeof t !== "object") continue;
-      const code = t.code || t.abbr || t.team_code || t.team || t.id;
-      const name = t.name || t.full_name || t.team_name || t.nickname;
-      if(code) map[String(code)] = name || String(code);
-    }
-  }else{
-    for(const k of Object.keys(teams)){
-      map[String(k)] = String(teams[k]);
+  for(const team of teamsArray){
+    if(!team.codes) continue;
+    for(const code of team.codes){
+      map[code] = team.name;
     }
   }
   return map;
 }
 
-function parseBallparksCSV(csvText){
-  // ballparks.csv format you’re using: first column = park_id, second column = park_name
+function buildParkMap(csvText){
   const map = {};
   if(!csvText) return map;
+
   const lines = csvText.split(/\r?\n/);
   for(let i=1;i<lines.length;i++){
     const line = lines[i].trim();
     if(!line) continue;
     const parts = line.split(",");
-    const parkId = (parts[0]||"").trim();
-    const parkName = (parts[1]||"").trim();
+    const parkId = parts[0]?.trim();
+    const parkName = parts[1]?.trim();
     if(parkId) map[parkId] = parkName || parkId;
   }
   return map;
 }
 
 (async function(){
+
   const year  = getParam("year");
   const team1 = getParam("team1");
   const team2 = getParam("team2");
   const round = getParam("round") || "";
 
-  document.getElementById("seriesTitle").textContent = `${team1} vs ${team2}`;
-  document.getElementById("seriesSubtitle").textContent = `Postseason ${year}${round ? " • " + round : ""}`;
+  document.getElementById("seriesTitle").textContent =
+    `${team1} vs ${team2}`;
+
+  document.getElementById("seriesSubtitle").textContent =
+    `Postseason ${year}${round ? " • " + round : ""}`;
 
   const base = await pickBase();
 
-  const [meta, teamsRaw, ballparksText] = await Promise.all([
+  const [meta, teamsRaw, parksCSV] = await Promise.all([
     fetchJSON(base + "postseason_meta.json"),
     fetchJSON(base + "teams.json"),
     fetchText(base + "ballparks.csv")
   ]);
 
-  const teamMap = buildTeamMap(teamsRaw);
-  const parkMap = parseBallparksCSV(ballparksText);
-
   const container = document.getElementById("games");
   container.innerHTML = "";
 
   if(!meta){
-    container.innerHTML = "<div class='game-card'>postseason_meta.json not found.</div>";
+    container.innerHTML =
+      "<div class='game-card'>postseason_meta.json missing.</div>";
     return;
   }
+
+  const teamMap = buildTeamMap(teamsRaw);
+  const parkMap = buildParkMap(parksCSV);
 
   const seriesGames = meta.filter(g =>
     String(g.season) === String(year) &&
@@ -159,18 +222,18 @@ function parseBallparksCSV(csvText){
   );
 
   if(!seriesGames.length){
-    container.innerHTML = "<div class='game-card'>No games found.</div>";
+    container.innerHTML =
+      "<div class='game-card'>No games found.</div>";
     return;
   }
 
   seriesGames.sort((a,b)=> (a.date||"").localeCompare(b.date||""));
 
   seriesGames.forEach((g,idx)=>{
+
     const homeName = teamMap[g.home] || g.home;
     const awayName = teamMap[g.away] || g.away;
-
     const venueName = parkMap[g.venue] || g.venue || "";
-    const scoreText = `${g.away_score} – ${g.home_score}`;
 
     const card = document.createElement("div");
     card.className = "game-card";
@@ -178,18 +241,30 @@ function parseBallparksCSV(csvText){
     card.innerHTML = `
       <div class="topline">
         <span class="badge">Game ${idx+1}</span>
-        <span class="meta">${g.date || ""}${venueName ? " • " + venueName : ""}</span>
+        <span class="meta">
+          ${g.date || ""}${venueName ? " • " + venueName : ""}
+        </span>
       </div>
-      <div class="row"><span>${awayName}</span><span class="score">${g.away_score}</span></div>
-      <div class="row"><span>${homeName}</span><span class="score">${g.home_score}</span></div>
+
+      <div class="row">
+        <span>${awayName}</span>
+        <span class="score">${g.away_score}</span>
+      </div>
+
+      <div class="row">
+        <span>${homeName}</span>
+        <span class="score">${g.home_score}</span>
+      </div>
     `;
 
-    card.onclick = ()=> {
-      window.location.href = `postseason-game.html?game=${encodeURIComponent(g.game_id)}`;
+    card.onclick = ()=>{
+      window.location.href =
+        "postseason-game.html?game=" + g.game_id;
     };
 
     container.appendChild(card);
   });
+
 })();
 </script>
 
