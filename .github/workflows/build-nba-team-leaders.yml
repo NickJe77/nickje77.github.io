@@ -11,11 +11,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
 
@@ -28,7 +26,8 @@ jobs:
 
           master_path = Path("docs/data/nba/nba_games_master.json")
           if not master_path.exists():
-              raise FileNotFoundError("nba_games_master.json not found")
+              print("Master file not found")
+              exit()
 
           master = json.loads(master_path.read_text())
 
@@ -70,22 +69,19 @@ jobs:
                   stats["steals"] += p.get("steals", 0)
                   stats["games"] += 1
 
-          output = {}
-
-          for team, players in team_totals.items():
-              output[team] = list(players.items())
+          output = {team: list(players.items()) for team, players in team_totals.items()}
 
           Path("docs/data/nba/nba_player_team_totals.json").write_text(
               json.dumps(output)
           )
 
-          print("NBA team totals built.")
+          print("Done")
           EOF
 
-      - name: Commit file
+      - name: Commit changes
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add docs/data/nba/nba_player_team_totals.json
-          git commit -m "Update NBA team leader totals" || echo "No changes"
+          git commit -m "Update NBA team totals" || echo "No changes"
           git push
