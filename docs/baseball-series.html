@@ -12,13 +12,11 @@
   --bg:#f4f6f8;
   --line:#e6e8ee;
 }
-
 body{
   font-family:Inter,system-ui,Arial;
   margin:0;
   background:var(--bg);
 }
-
 .navbar{
   display:flex;
   justify-content:center;
@@ -28,18 +26,15 @@ body{
   border-bottom:1px solid #ddd;
   font-weight:700;
 }
-
 .navbar a{
   text-decoration:none;
   color:#0056d6;
 }
-
 .page{
   max-width:1100px;
   margin:auto;
   padding:30px;
 }
-
 .hero{
   background:linear-gradient(90deg,var(--blue),var(--red));
   color:#fff;
@@ -47,44 +42,33 @@ body{
   border-radius:20px;
   margin-bottom:25px;
 }
-
 .games{
   display:flex;
   flex-direction:column;
   gap:14px;
 }
-
 .game{
   background:#fff;
-  padding:18px;
+  padding:20px;
   border-radius:16px;
   border:1px solid var(--line);
   cursor:pointer;
   transition:.2s;
 }
-
 .game:hover{
   background:#eaf3ff;
   transform:translateY(-2px);
 }
-
-.game-header{
-  font-size:13px;
-  color:#555;
-  margin-bottom:8px;
-}
-
-.score-row{
+.team-row{
   display:flex;
   justify-content:space-between;
-  font-weight:600;
-  font-size:16px;
+  font-weight:700;
+  font-size:18px;
 }
-
 .meta{
-  font-size:12px;
-  color:#777;
-  margin-top:6px;
+  font-size:13px;
+  color:#666;
+  margin-top:8px;
 }
 </style>
 </head>
@@ -115,31 +99,36 @@ async function fetchJSON(url){
   return await r.json();
 }
 
-// Handles both schemas:
-// - new: home_code / away_code / season / date
-// - old: home / away and no season/date
+async function fetchCSV(url){
+  const r = await fetch(url);
+  if(!r.ok) return null;
+  const text = await r.text();
+  return text.split("\n").map(row => row.split(","));
+}
+
 function normalizeGame(raw, gameIdFallback){
   const gid = raw?.game_id || gameIdFallback || "";
 
   const home = raw?.home_code || raw?.home || "";
   const away = raw?.away_code || raw?.away || "";
 
-  // season: prefer explicit, else derive from game_id (TEAMYYYYMMDDN)
-  const season = (raw?.season != null) ? String(raw.season) :
-                 (gid.length >= 7 ? gid.substring(3,7) : "");
+  const season = raw?.season != null ? String(raw.season)
+                 : gid.substring(3,7);
 
-  // date: prefer explicit, else derive YYYY-MM-DD from game_id if possible
   let date = raw?.date || "";
   if(!date && gid.length >= 11){
     const yyyy = gid.substring(3,7);
     const mm = gid.substring(7,9);
     const dd = gid.substring(9,11);
-    if(/^\d{4}$/.test(yyyy) && /^\d{2}$/.test(mm) && /^\d{2}$/.test(dd)){
-      date = `${yyyy}-${mm}-${dd}`;
-    }
+    date = `${yyyy}-${mm}-${dd}`;
   }
 
-  return { gid, home, away, season, date };
+  const homeScore = raw?.home_score ?? raw?.home_runs ?? null;
+  const awayScore = raw?.away_score ?? raw?.away_runs ?? null;
+
+  const venueCode = raw?.venue ?? raw?.venue_code ?? null;
+
+  return { gid, home, away, season, date, homeScore, awayScore, venueCode };
 }
 
 (async function(){
@@ -152,23 +141,28 @@ function normalizeGame(raw, gameIdFallback){
   const sub   = document.getElementById("seriesSubtitle");
   const container = document.getElementById("gamesContainer");
 
-  if(!year || !team1 || !team2){
-    title.textContent = "Series Not Found";
-    return;
-  }
-
   title.textContent = `${team1} vs ${team2}`;
   sub.textContent   = `Postseason ${year}`;
 
-  // Load index
-  const index = await fetchJSON("data/baseball/postseason-games/index.json");
-  if(!index || !Array.isArray(index)){
-    container.innerHTML = "<div>Game index missing.</div>";
-    return;
+  const [index, teams, parks] = await Promise.all([
+    fetchJSON("data/baseball/postseason-games/index.json"),
+    fetchJSON("data/baseball/team-names.json"),
+    fetchCSV("data/baseball/ballparks.csv")
+  ]);
+
+  const teamMap = {};
+  if(teams){
+    teams.forEach(t => teamMap[t.code] = t.name);
   }
 
-  // Filter by year BEFORE fetching files (critical)
-  const yearIds = index.filter(id => typeof id === "string" && id.substring(3,7) === String(year));
+  const parkMap = {};
+  if(parks){
+    parks.slice(1).forEach(row => {
+      parkMap[row[0]] = row[1];
+    });
+  }
+
+  const yearIds = index.filter(id => id.substring(3,7) === String(year));
 
   const games = [];
 
@@ -179,11 +173,8 @@ function normalizeGame(raw, gameIdFallback){
     const g = normalizeGame(raw, gameId);
 
     if(
-      String(g.season) === String(year) &&
-      (
-        (g.home === team1 && g.away === team2) ||
-        (g.home === team2 && g.away === team1)
-      )
+      (g.home === team1 && g.away === team2) ||
+      (g.home === team2 && g.away === team1)
     ){
       games.push(g);
     }
@@ -194,21 +185,43 @@ function normalizeGame(raw, gameIdFallback){
     return;
   }
 
-  games.sort((a,b)=> (a.date || a.gid).localeCompare(b.date || b.gid));
+  games.sort((a,b)=> a.date.localeCompare(b.date));
 
   games.forEach((g, idx) => {
+
+    const homeName = teamMap[g.home] || g.home;
+    const awayName = teamMap[g.away] || g.away;
+
+    const scoreText =
+      g.homeScore != null && g.awayScore != null
+      ? `${g.awayScore} – ${g.homeScore}`
+      : "";
+
+    const venueText =
+      g.venueCode && parkMap[g.venueCode]
+      ? parkMap[g.venueCode]
+      : "";
+
     const div = document.createElement("div");
     div.className = "game";
 
     div.innerHTML = `
-      <div class="game-header">Game ${idx+1}</div>
-      <div class="score-row"><span>${g.away}</span><span></span></div>
-      <div class="score-row"><span>${g.home}</span><span></span></div>
-      <div class="meta">${g.date ? g.date : ""}</div>
+      <div class="team-row">
+        <span>${awayName}</span>
+        <span>${scoreText}</span>
+      </div>
+      <div class="team-row">
+        <span>${homeName}</span>
+        <span></span>
+      </div>
+      <div class="meta">
+        ${g.date} ${venueText ? "• " + venueText : ""}
+      </div>
     `;
 
     div.onclick = () => {
-      window.location.href = `postseason-game.html?game=${encodeURIComponent(g.gid)}`;
+      window.location.href =
+        `postseason-game.html?game=${g.gid}`;
     };
 
     container.appendChild(div);
