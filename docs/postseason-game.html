@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Baseball Game | The Sporting Almanac</title>
+<title>Postseason Game | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -11,6 +11,7 @@
   --red:#C8102E;
   --bg:#f4f6f8;
   --line:#e6e8ee;
+  --soft:#f0f6ff;
 }
 body{
   font-family:Inter,system-ui,Arial;
@@ -37,7 +38,7 @@ body{
 }
 .hero{
   background:linear-gradient(90deg,var(--blue),var(--red));
-  color:white;
+  color:#fff;
   padding:30px;
   border-radius:20px;
   margin-bottom:20px;
@@ -55,7 +56,7 @@ body{
   margin-top:6px;
 }
 .section{
-  background:white;
+  background:#fff;
   padding:18px;
   border-radius:16px;
   border:1px solid var(--line);
@@ -68,13 +69,18 @@ table{
   width:100%;
   border-collapse:collapse;
 }
-th,td{
-  padding:8px;
-  border-bottom:1px solid #eee;
+th{
+  background:var(--blue);
+  color:white;
+  padding:10px;
   text-align:left;
 }
-th{
-  background:#f3f4f6;
+td{
+  padding:8px;
+  border-bottom:1px solid #eee;
+}
+tr:nth-child(even){
+  background:var(--soft);
 }
 </style>
 </head>
@@ -109,48 +115,65 @@ th{
 
 <script>
 function param(n){return new URLSearchParams(window.location.search).get(n)}
-async function fetchJSON(url){const r=await fetch(url);if(!r.ok)return null;return await r.json()}
-async function fetchCSV(url){const r=await fetch(url);if(!r.ok)return null;const t=await r.text();return t.split("\n").map(l=>l.split(","))}
+async function fetchJSON(u){const r=await fetch(u);if(!r.ok)return null;return await r.json()}
+async function fetchCSV(u){const r=await fetch(u);if(!r.ok)return null;const t=await r.text();return t.split("\n").map(l=>l.split(","))}
 
 function renderObjectTable(container,obj){
-  if(!obj){document.getElementById(container).innerHTML="No data available.";return;}
-  const players=Object.keys(obj);
-  if(players.length===0){document.getElementById(container).innerHTML="No data available.";return;}
-  const statKeys=new Set();
-  players.forEach(p=>Object.keys(obj[p]).forEach(k=>statKeys.add(k)));
-  const keys=Array.from(statKeys);
+  if(!obj){
+    document.getElementById(container).innerHTML="No data available.";
+    return;
+  }
+
+  const players = Object.keys(obj);
+  if(players.length===0){
+    document.getElementById(container).innerHTML="No data available.";
+    return;
+  }
+
+  const statKeys = new Set();
+  players.forEach(p=>{
+    Object.keys(obj[p]).forEach(k=>statKeys.add(k));
+  });
+
+  const keys = Array.from(statKeys);
+
   let html="<table><thead><tr><th>Player</th>";
   keys.forEach(k=>html+=`<th>${k}</th>`);
   html+="</tr></thead><tbody>";
+
   players.forEach(p=>{
     html+=`<tr><td>${p}</td>`;
-    keys.forEach(k=>html+=`<td>${obj[p][k]??""}</td>`);
+    keys.forEach(k=>{
+      html+=`<td>${obj[p][k] ?? ""}</td>`;
+    });
     html+="</tr>";
   });
+
   html+="</tbody></table>";
+
   document.getElementById(container).innerHTML=html;
 }
 
 (async function(){
 
-  const gameId=param("game");
+  const gameId = param("game");
   if(!gameId){
     document.getElementById("title").innerText="Game Not Found";
     return;
   }
 
-  const box=await fetchJSON(`data/baseball/postseason-games/${gameId}.json`);
-  const metaAll=await fetchJSON(`data/baseball/postseason_meta.json`);
+  const box = await fetchJSON(`/data/baseball/postseason-games/${gameId}.json`);
+  const metaAll = await fetchJSON(`/data/baseball/postseason_meta.json`);
 
   if(!box || !metaAll){
     document.getElementById("title").innerText="Game Not Found";
     return;
   }
 
-  const meta=metaAll.find(g=>g.game_id===gameId);
+  const meta = metaAll.find(g=>g.game_id===gameId);
 
-  const teams=await fetchJSON("data/baseball/team-names.json");
-  const parks=await fetchCSV("data/baseball/ballparks.csv");
+  const teams = await fetchJSON(`/data/baseball/team-names.json`);
+  const parks = await fetchCSV(`/data/baseball/ballparks.csv`);
 
   const teamMap={};
   if(teams){teams.forEach(t=>teamMap[t.code]=t.name);}
@@ -158,25 +181,28 @@ function renderObjectTable(container,obj){
   const parkMap={};
   if(parks){parks.slice(1).forEach(r=>parkMap[r[0]]=r[1]);}
 
-  const home=meta?.home||box.home||"";
-  const away=meta?.away||box.away||"";
+  const home = meta?.home || box.home || "";
+  const away = meta?.away || box.away || "";
 
-  const homeName=teamMap[home]||home;
-  const awayName=teamMap[away]||away;
+  const homeName = teamMap[home] || home;
+  const awayName = teamMap[away] || away;
 
-  document.getElementById("title").innerText=`${awayName} @ ${homeName}`;
+  document.getElementById("title").innerText =
+    `${awayName} @ ${homeName}`;
 
   if(meta){
-    document.getElementById("scoreline").innerText=
+    document.getElementById("scoreline").innerText =
       `${awayName} ${meta.away_score} – ${homeName} ${meta.home_score}`;
-    document.getElementById("subtitle").innerText=meta.date;
-    const venueName=parkMap[meta.venue]||"";
-    document.getElementById("venueLine").innerText=
-      venueName?`Venue: ${venueName}`:"";
+
+    document.getElementById("subtitle").innerText = meta.date || "";
+
+    const venueName = parkMap[meta.venue] || "";
+    document.getElementById("venueLine").innerText =
+      venueName ? `Venue: ${venueName}` : "";
   }
 
-  renderObjectTable("battingTable",box.batting);
-  renderObjectTable("pitchingTable",box.pitching);
+  renderObjectTable("battingTable", box.batting);
+  renderObjectTable("pitchingTable", box.pitching);
 
 })();
 </script>
