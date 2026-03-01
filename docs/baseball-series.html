@@ -13,74 +13,16 @@
   --card:#ffffff;
   --line:#e6e8ee;
 }
-
-body{
-  font-family:Inter,system-ui,Arial;
-  margin:0;
-  background:var(--bg);
-}
-
-.navbar{
-  display:flex;
-  justify-content:center;
-  gap:24px;
-  padding:16px;
-  background:#fff;
-  border-bottom:1px solid var(--line);
-  font-weight:700;
-}
-
-.navbar a{
-  text-decoration:none;
-  color:#0056d6;
-}
-
-.page{
-  max-width:1000px;
-  margin:auto;
-  padding:30px 20px;
-}
-
-.hero{
-  background:linear-gradient(90deg,var(--blue),var(--red));
-  color:#fff;
-  padding:30px;
-  border-radius:20px;
-  margin-bottom:25px;
-}
-
-.series-games{
-  display:flex;
-  flex-direction:column;
-  gap:16px;
-}
-
-.game-card{
-  background:var(--card);
-  border:1px solid var(--line);
-  border-radius:16px;
-  padding:20px;
-  cursor:pointer;
-  transition:.2s;
-}
-
-.game-card:hover{
-  transform:translateY(-3px);
-  background:#eef5ff;
-}
-
-.matchup{
-  display:flex;
-  justify-content:space-between;
-  font-weight:700;
-  font-size:18px;
-}
-
-.meta{
-  font-size:13px;
-  color:#666;
-  margin-top:8px;
-}
+body{font-family:Inter,system-ui,Arial;margin:0;background:var(--bg);}
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:#fff;border-bottom:1px solid var(--line);font-weight:700;}
+.navbar a{text-decoration:none;color:#0056d6;}
+.page{max-width:1000px;margin:auto;padding:30px 20px;}
+.hero{background:linear-gradient(90deg,var(--blue),var(--red));color:#fff;padding:30px;border-radius:20px;margin-bottom:25px;}
+.series-games{display:flex;flex-direction:column;gap:16px;}
+.game-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;cursor:pointer;transition:.2s;}
+.game-card:hover{transform:translateY(-3px);background:#eef5ff;}
+.matchup{display:flex;justify-content:space-between;font-weight:800;font-size:18px;}
+.meta{font-size:13px;color:#666;margin-top:8px;}
 </style>
 </head>
 <body>
@@ -105,16 +47,15 @@ function getParam(name){
 }
 
 async function fetchJSON(url){
-  const r = await fetch(url);
+  const r = await fetch(url,{cache:"no-store"});
   if(!r.ok) return null;
   return await r.json();
 }
 
-async function fetchCSV(url){
-  const r = await fetch(url);
-  if(!r.ok) return null;
-  const text = await r.text();
-  return text.split("\n").map(r=>r.split(","));
+async function pickBase(){
+  const try1 = await fetch("data/baseball/teams.json").then(r=>r.ok).catch(()=>false);
+  if(try1) return "data/baseball/";
+  return "docs/data/baseball/";
 }
 
 (async function(){
@@ -125,74 +66,37 @@ async function fetchCSV(url){
 
   document.getElementById("seriesTitle").textContent =
     `${team1} vs ${team2}`;
-
   document.getElementById("seriesSubtitle").textContent =
     `Postseason ${year}`;
 
-  const base = window.location.pathname.includes("/docs/")
-    ? "/docs/data/baseball/"
-    : "/data/baseball/";
+  const base = await pickBase();
 
-  const index = await fetchJSON(base + "postseason-games/index.json");
   const teams = await fetchJSON(base + "teams.json");
-  const parks = await fetchCSV(base + "ballparks.csv");
+  const seasonGames = await fetchJSON(base + "seasons/" + year + ".json");
 
-  if(!index) return;
-
-  // teams.json assumed to be OBJECT:
-  // { "ARI": "Arizona Diamondbacks", ... }
-
-  const parkMap = {};
-  if(parks){
-    parks.slice(1).forEach(r=>{
-      const teamCode = r[2];   // adjust if your csv uses different column
-      const parkName = r[1];
-      parkMap[teamCode] = parkName;
-    });
+  if(!seasonGames){
+    document.getElementById("games").innerHTML =
+      "<div class='game-card'>Season file missing.</div>";
+    return;
   }
-
-  const games = [];
-  const yearIds = index.filter(id=>id.substring(3,7)===year);
-
-  for(const id of yearIds){
-    const raw = await fetchJSON(base + "postseason-games/" + id + ".json");
-    if(!raw) continue;
-
-    const home = raw.home;
-    const away = raw.away;
-
-    if(
-      (home===team1 && away===team2) ||
-      (home===team2 && away===team1)
-    ){
-      games.push({id, raw});
-    }
-  }
-
-  games.sort((a,b)=>a.id.localeCompare(b.id));
 
   const container = document.getElementById("games");
 
-  games.forEach(g=>{
+  const seriesGames = seasonGames.filter(g =>
+    g.game_id &&
+    (
+      (g.home_code===team1 && g.away_code===team2) ||
+      (g.home_code===team2 && g.away_code===team1)
+    )
+    && g.postseason === true
+  );
 
-    const raw = g.raw;
+  seriesGames.sort((a,b)=>a.date.localeCompare(b.date));
 
-    const home = raw.home;
-    const away = raw.away;
+  seriesGames.forEach((g,idx)=>{
 
-    const homeName = teams?.[home] || home;
-    const awayName = teams?.[away] || away;
-
-    const score =
-      raw.home_score!=null && raw.away_score!=null
-      ? `${raw.away_score} – ${raw.home_score}`
-      : "";
-
-    const venue = parkMap[home] || "";
-
-    const date =
-      raw.date ||
-      `${g.id.substring(3,7)}-${g.id.substring(7,9)}-${g.id.substring(9,11)}`;
+    const homeName = teams[g.home_code] || g.home_code;
+    const awayName = teams[g.away_code] || g.away_code;
 
     const card = document.createElement("div");
     card.className = "game-card";
@@ -200,20 +104,20 @@ async function fetchCSV(url){
     card.innerHTML = `
       <div class="matchup">
         <span>${awayName}</span>
-        <span>${score}</span>
+        <span>${g.away_score} – ${g.home_score}</span>
       </div>
       <div class="matchup">
         <span>${homeName}</span>
         <span></span>
       </div>
       <div class="meta">
-        ${date}${venue ? " • " + venue : ""}
+        ${g.date} • ${g.venue}
       </div>
     `;
 
     card.onclick = ()=>{
       window.location.href =
-        "postseason-game.html?game=" + g.id;
+        "postseason-game.html?game=" + g.game_id;
     };
 
     container.appendChild(card);
