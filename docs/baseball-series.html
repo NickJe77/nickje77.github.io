@@ -12,13 +12,11 @@
   --bg:#f4f6f8;
   --line:#e6e8ee;
 }
-
 body{
   font-family:Inter,system-ui,Arial;
   margin:0;
   background:var(--bg);
 }
-
 .navbar{
   display:flex;
   justify-content:center;
@@ -28,18 +26,15 @@ body{
   border-bottom:1px solid #ddd;
   font-weight:700;
 }
-
 .navbar a{
   text-decoration:none;
   color:#0056d6;
 }
-
 .page{
   max-width:1100px;
   margin:auto;
   padding:30px;
 }
-
 .hero{
   background:linear-gradient(90deg,var(--blue),var(--red));
   color:#fff;
@@ -47,13 +42,11 @@ body{
   border-radius:20px;
   margin-bottom:25px;
 }
-
 .games{
   display:flex;
   flex-direction:column;
   gap:14px;
 }
-
 .game{
   background:#fff;
   padding:18px;
@@ -62,18 +55,15 @@ body{
   cursor:pointer;
   transition:.2s;
 }
-
 .game:hover{
   background:#eaf3ff;
   transform:translateY(-2px);
 }
-
 .game-header{
   font-size:13px;
   color:#555;
   margin-bottom:8px;
 }
-
 .score-row{
   display:flex;
   justify-content:space-between;
@@ -112,84 +102,56 @@ async function fetchJSON(url){
 
 (async function(){
 
-  const year = getParam("year");
+  const year  = getParam("year");
   const team1 = getParam("team1");
   const team2 = getParam("team2");
+  const gamesParam = getParam("games");
 
+  const title = document.getElementById("seriesTitle");
+  const sub   = document.getElementById("seriesSubtitle");
   const container = document.getElementById("gamesContainer");
 
-  if(!year || !team1 || !team2){
-    document.getElementById("seriesTitle").textContent = "Series Not Found";
+  if(!year || !team1 || !team2 || !gamesParam){
+    title.textContent = "Series Not Found";
     return;
   }
 
-  document.getElementById("seriesTitle").textContent =
-    `${team1} vs ${team2}`;
+  title.textContent = `${team1} vs ${team2}`;
+  sub.textContent   = `Postseason ${year}`;
 
-  document.getElementById("seriesSubtitle").textContent =
-    `Postseason ${year}`;
+  const gameIds = gamesParam.split(",");
 
-  const postseason = await fetchJSON("data/baseball/postseason.json");
-  if(!postseason){
-    document.getElementById("seriesTitle").textContent = "Postseason data missing";
-    return;
-  }
+  for(let i = 0; i < gameIds.length; i++){
 
-  // Find exact series
-  const series = postseason.find(s =>
-    String(s.year) === String(year) &&
-    (
-      (s.team1 === team1 && s.team2 === team2) ||
-      (s.team1 === team2 && s.team2 === team1)
-    )
-  );
-
-  if(!series){
-    document.getElementById("seriesTitle").textContent = "Series Not Found";
-    return;
-  }
-
-  if(!series.games || !series.games.length){
-    container.innerHTML = "<div>No games found.</div>";
-    return;
-  }
-
-  const games = [];
-
-  for(const gameId of series.games){
+    const gameId = gameIds[i];
     const g = await fetchJSON(`data/baseball/postseason-games/${gameId}.json`);
-    if(g) games.push(g);
-  }
-
-  games.sort((a,b)=> new Date(a.date) - new Date(b.date));
-
-  games.forEach((g,index)=>{
+    if(!g) continue;
 
     const div = document.createElement("div");
     div.className = "game";
 
     div.innerHTML = `
       <div class="game-header">
-        Game ${index+1} • ${g.date || ""}
+        Game ${i+1}
       </div>
       <div class="score-row">
-        <span>${g.away_team}</span>
-        <span>${g.away_score ?? ""}</span>
+        <span>${g.away}</span>
+        <span></span>
       </div>
       <div class="score-row">
-        <span>${g.home_team}</span>
-        <span>${g.home_score ?? ""}</span>
+        <span>${g.home}</span>
+        <span></span>
       </div>
     `;
 
-    div.addEventListener("click",()=>{
+    div.onclick = () => {
       window.location.href =
         `postseason-game.html?game=${g.game_id}`;
-    });
+    };
 
     container.appendChild(div);
 
-  });
+  }
 
 })();
 </script>
