@@ -7,7 +7,7 @@
 
 <style>
 body{
-  font-family: Inter, system-ui, Arial, sans-serif;
+  font-family:Inter,system-ui,Arial,sans-serif;
   margin:0;
   background:#ffffff;
 }
@@ -42,7 +42,7 @@ table{
 }
 th,td{
   border-bottom:1px solid #ddd;
-  padding:10px 12px;
+  padding:12px;
   text-align:left;
 }
 th{background:#f0f0f0;}
@@ -74,7 +74,7 @@ tr:nth-child(even){background:#f6f9ff;}
 
 <div class="page-wrap">
 <h1>NBA Teams</h1>
-<p>Franchise list from your NBA season data.</p>
+<p>All franchises extracted from master game file.</p>
 
 <table>
 <thead>
@@ -93,33 +93,15 @@ const tableBody = document.getElementById("teamTable");
 
 async function loadTeams(){
   try{
-    const seasonsRes = await fetch("data/nba/seasons.json");
-    if(!seasonsRes.ok) throw new Error("seasons.json not found");
+    const res = await fetch("data/nba/nba_games_master.json");
+    if(!res.ok) throw new Error("nba_games_master.json not found");
 
-    const seasons = await seasonsRes.json();
+    const games = await res.json();
     const teamSet = new Set();
 
-    // BUILD ALL FILE URLS
-    const seasonFiles = seasons.map(season =>
-      "data/nba/nba_season_" + season.replace("-","_") + ".json"
-    );
-
-    // FETCH THEM ALL AT ONCE (FAST)
-    const responses = await Promise.all(
-      seasonFiles.map(f => fetch(f))
-    );
-
-    const jsons = await Promise.all(
-      responses.filter(r => r.ok).map(r => r.json())
-    );
-
-    // EXTRACT TEAMS
-    jsons.forEach(data=>{
-      if(!data.games) return;
-      data.games.forEach(game=>{
-        teamSet.add(game.home_team);
-        teamSet.add(game.away_team);
-      });
+    games.forEach(game=>{
+      if(game.home_team) teamSet.add(game.home_team);
+      if(game.away_team) teamSet.add(game.away_team);
     });
 
     const teams = Array.from(teamSet).sort();
@@ -146,7 +128,8 @@ async function loadTeams(){
 
   }catch(err){
     console.error(err);
-    tableBody.innerHTML = "<tr><td class='bad'>Could not load seasons.json</td></tr>";
+    tableBody.innerHTML =
+      "<tr><td class='bad'>Could not load nba_games_master.json</td></tr>";
   }
 }
 
