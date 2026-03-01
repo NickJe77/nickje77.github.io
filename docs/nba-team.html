@@ -59,14 +59,7 @@ body{
   100%{background-position:0% 50%;}
 }
 
-.stats{
-  display:flex;
-  gap:40px;
-  margin-bottom:20px;
-  font-size:18px;
-}
-
-.season-box{
+.leaders{
   background:var(--card);
   padding:20px;
   border-radius:18px;
@@ -74,11 +67,20 @@ body{
   margin-bottom:25px;
 }
 
-.season-box select{
-  padding:10px 14px;
-  border-radius:10px;
-  border:1px solid var(--line);
-  font-size:16px;
+.leader-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:20px;
+}
+
+.leader-box{
+  background:#eef2ff;
+  padding:18px;
+  border-radius:14px;
+}
+
+.leader-box h3{
+  margin:0 0 8px 0;
 }
 
 .card{
@@ -124,17 +126,11 @@ tr:hover{
   <h1 id="teamName"></h1>
 </div>
 
-<div class="stats">
-  <div>Total Games: <strong id="totalGames">0</strong></div>
-  <div>Wins: <strong id="wins">0</strong></div>
-  <div>Losses: <strong id="losses">0</strong></div>
-</div>
-
-<div class="season-box">
-  <strong>Select Season:</strong>
-  <select id="seasonSelect">
-    <option value="all">All Seasons</option>
-  </select>
+<div class="leaders">
+  <h2>All-Time Franchise Leaders</h2>
+  <div class="leader-grid" id="leadersGrid">
+    Loading leaders...
+  </div>
 </div>
 
 <div class="card">
@@ -161,102 +157,99 @@ document.getElementById("teamName").textContent=team;
 
 const clean=s=>(s||"").toLowerCase().trim();
 
-function seasonLabel(start){
-  const next=String((start+1)%100).padStart(2,"0");
-  return `${start}-${next}`;
-}
-
+let playerTotals={};
 let allGames=[];
-let seasons=new Set();
 
-async function loadTeamGames(){
+async function load(){
 
-  const res = await fetch("/data/nba/nba_games_master.json");
-  const master = await res.json();
+  const master=await fetch("/data/nba/nba_games_master.json").then(r=>r.json());
 
-  const t = clean(team);
+  const t=clean(team);
 
   for(const game of master){
 
-    if(game.game_type !== "Regular Season") continue;
+    if(clean(game.home_team)!==t && clean(game.away_team)!==t) continue;
 
-    const home=clean(game.home_team);
-    const away=clean(game.away_team);
+    try{
+      const full=await fetch(`/data/nba/${game.season}/${game.game_id}.json`).then(r=>r.json());
 
-    if(home===t||away===t){
+      if(full.game_type!=="Regular Season" && full.game_type!=="Playoffs") continue;
 
-      seasons.add(game.season);
-
-      const isHome=home===t;
+      const isHome=clean(game.home_team)===t;
       const teamScore=isHome?game.home_score:game.away_score;
       const oppScore=isHome?game.away_score:game.home_score;
 
       allGames.push({
         id:game.game_id,
-        date:game.date,
-        season:game.season,
+        date:full.date,
+        season:full.season,
         opponent:isHome?game.away_team:game.home_team,
         result:teamScore>oppScore?"W":"L",
         score:`${teamScore} - ${oppScore}`
       });
+
+      for(const p of full.players||[]){
+        if(clean(p.team)!==t) continue;
+
+        if(!playerTotals[p.player_name]){
+          playerTotals[p.player_name]={points:0,rebounds:0,assists:0,steals:0};
+        }
+
+        playerTotals[p.player_name].points+=p.points||0;
+        playerTotals[p.player_name].rebounds+=p.rebounds||0;
+        playerTotals[p.player_name].assists+=p.assists||0;
+        playerTotals[p.player_name].steals+=p.steals||0;
+      }
+
+    }catch{}
+  }
+
+  renderLeaders();
+  renderGames();
+}
+
+function renderLeaders(){
+
+  const stats=["points","rebounds","assists","steals"];
+  const grid=document.getElementById("leadersGrid");
+  grid.innerHTML="";
+
+  for(const stat of stats){
+
+    let leader="";
+    let high=0;
+
+    for(const player in playerTotals){
+      if(playerTotals[player][stat]>high){
+        high=playerTotals[player][stat];
+        leader=player;
+      }
     }
+
+    grid.innerHTML+=`
+      <div class="leader-box">
+        <h3>${stat.toUpperCase()}</h3>
+        <strong>${leader||"N/A"}</strong><br>
+        ${high}
+      </div>`;
   }
-
-  buildSelector();
-  render("all");
 }
 
-function buildSelector(){
-  const select=document.getElementById("seasonSelect");
-  Array.from(seasons)
-    .sort((a,b)=>b-a)
-    .forEach(s=>{
-      const opt=document.createElement("option");
-      opt.value=s;
-      opt.textContent=seasonLabel(s);
-      select.appendChild(opt);
-    });
-
-  select.addEventListener("change",e=>{
-    render(e.target.value);
-  });
+function renderGames(){
+  const body=document.getElementById("gamesBody");
+  allGames.sort((a,b)=>new Date(b.date)-new Date(a.date));
+  body.innerHTML=allGames.map(g=>`
+    <tr onclick="location.href='nba-game.html?game=${g.id}'">
+      <td>${g.date}</td>
+      <td>${g.season}</td>
+      <td>${g.opponent}</td>
+      <td>${g.result}</td>
+      <td>${g.score}</td>
+    </tr>
+  `).join("");
 }
 
-function render(selectedSeason){
-
-  const gamesBody=document.getElementById("gamesBody");
-  gamesBody.innerHTML="";
-
-  const filtered = selectedSeason==="all"
-    ? allGames
-    : allGames.filter(g=>g.season==selectedSeason);
-
-  filtered.sort((a,b)=>new Date(b.date)-new Date(a.date));
-
-  let wins=0,losses=0;
-  let rows="";
-
-  for(const g of filtered){
-
-    if(g.result==="W")wins++;else losses++;
-
-    rows+=`
-      <tr onclick="location.href='nba-game.html?game=${g.id}'">
-        <td>${g.date}</td>
-        <td>${seasonLabel(g.season)}</td>
-        <td>${g.opponent}</td>
-        <td>${g.result}</td>
-        <td>${g.score}</td>
-      </tr>`;
-  }
-
-  gamesBody.innerHTML=rows;
-  document.getElementById("totalGames").textContent=filtered.length;
-  document.getElementById("wins").textContent=wins;
-  document.getElementById("losses").textContent=losses;
-}
-
-loadTeamGames();
+load();
 </script>
 
 </body>
