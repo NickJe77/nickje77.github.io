@@ -73,6 +73,7 @@ body{
   gap:30px;
   font-size:19px;
   font-weight:600;
+  flex-wrap:wrap;
 }
 
 .stats strong{
@@ -178,7 +179,13 @@ tr:hover{
 
     <div class="leaders-card">
       <h2>All-Time Franchise Leaders</h2>
-      <div class="leaders-grid" id="leadersGrid"></div>
+      <div class="leaders-grid" id="leadersGrid">
+        <div class="leader-box">
+          <div class="leader-label">Status</div>
+          <div class="leader-player" style="font-weight:800;">Loading…</div>
+          <div class="leader-total" style="opacity:.75;">Leaders will appear after games load</div>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -226,18 +233,22 @@ let seasons = new Set();
 let totalsByPlayer = {};
 
 async function loadData(){
-
   const masterRes = await fetch("data/nba/nba_games_master.json");
-  if(!masterRes.ok) return;
+  if(!masterRes.ok){
+    document.getElementById("gamesBody").innerHTML =
+      "<tr><td colspan='5'>Failed to load master file</td></tr>";
+    document.getElementById("leadersGrid").innerHTML =
+      "<div class='leader-box'><div class='leader-label'>Status</div><div class='leader-player' style='font-weight:800;'>Failed to load master</div><div class='leader-total' style='opacity:.75;'>data/nba/nba_games_master.json</div></div>";
+    return;
+  }
 
   const master = await masterRes.json();
   const team = normalize(teamRaw);
 
+  // 1) Build games list FIRST (fast, no boxscore dependency)
   for(const game of master){
-
     const home = normalize(game.home_team);
     const away = normalize(game.away_team);
-
     if(home !== team && away !== team) continue;
 
     seasons.add(game.season);
@@ -254,37 +265,19 @@ async function loadData(){
       result: teamScore > oppScore ? "W" : "L",
       score: `${teamScore} - ${oppScore}`
     });
-
-    try{
-      const boxRes = await fetch(`data/nba/${game.season}/${game.game_id}.json`);
-      if(!boxRes.ok) continue;
-      const full = await boxRes.json();
-
-      for(const p of (full.players || [])){
-        if(normalize(p.team) !== team) continue;
-
-        const name = p.player_name;
-        if(!totalsByPlayer[name]){
-          totalsByPlayer[name] = {points:0,rebounds:0,assists:0,steals:0};
-        }
-
-        totalsByPlayer[name].points   += p.points   || 0;
-        totalsByPlayer[name].rebounds += p.rebounds || 0;
-        totalsByPlayer[name].assists  += p.assists  || 0;
-        totalsByPlayer[name].steals   += p.steals   || 0;
-      }
-
-    }catch(e){
-      continue;
-    }
   }
 
-  buildPage();
+  buildPage(); // renders games + totals immediately
+
+  // 2) Load leaders AFTER page is visible (non-blocking)
+  loadLeaders(master, team);
 }
 
 function buildPage(){
-
   const select = document.getElementById("seasonSelect");
+
+  // rebuild select cleanly (avoid duplicates if reloaded)
+  select.innerHTML = "<option value='all'>All Seasons</option>";
 
   Array.from(seasons).sort((a,b)=>b-a).forEach(s=>{
     const opt = document.createElement("option");
@@ -294,11 +287,9 @@ function buildPage(){
   });
 
   renderGames("all");
-  renderLeaders();
 }
 
 function renderGames(season){
-
   const body = document.getElementById("gamesBody");
   body.innerHTML = "";
 
@@ -306,34 +297,83 @@ function renderGames(season){
     ? allGames
     : allGames.filter(g => g.season == season);
 
+  // newest first
+  filtered.sort((a,b)=> (b.date || "").localeCompare(a.date || ""));
+
   let wins = 0;
   let losses = 0;
 
-  filtered.forEach(g=>{
+  for(const g of filtered){
     if(g.result === "W") wins++; else losses++;
 
-    body.innerHTML += `
-      <tr onclick="location.href='nba-game.html?game=${g.id}'">
-        <td>${g.date}</td>
-        <td>${seasonLabel(g.season)}</td>
-        <td>${g.opponent}</td>
-        <td>${g.result}</td>
-        <td>${g.score}</td>
-      </tr>`;
-  });
+    const tr = document.createElement("tr");
+    tr.onclick = () => location.href = `nba-game.html?game=${g.id}`;
+    tr.innerHTML = `
+      <td>${g.date}</td>
+      <td>${seasonLabel(g.season)}</td>
+      <td>${g.opponent}</td>
+      <td>${g.result}</td>
+      <td>${g.score}</td>
+    `;
+    body.appendChild(tr);
+  }
 
   document.getElementById("totalGames").textContent = filtered.length;
   document.getElementById("wins").textContent = wins;
   document.getElementById("losses").textContent = losses;
 }
 
-function renderLeaders(){
+async function loadLeaders(master, team){
+  // Show status immediately
+  document.getElementById("leadersGrid").innerHTML =
+    "<div class='leader-box'><div class='leader-label'>Status</div><div class='leader-player' style='font-weight:800;'>Computing…</div><div class='leader-total' style='opacity:.75;'>This may take a moment</div></div>";
 
+  // IMPORTANT: this used to block the whole page. Now it doesn't.
+  for(const game of master){
+    const home = normalize(game.home_team);
+    const away = normalize(game.away_team);
+    if(home !== team && away !== team) continue;
+
+    try{
+      const boxRes = await fetch(`data/nba/${game.season}/${game.game_id}.json`);
+      if(!boxRes.ok) continue;
+      const full = await boxRes.json();
+
+      for(const p of (full.players || [])){
+        if(normalize(p.team) !== team) continue;
+
+        const name = (p.player_name || "").trim();
+        if(!name) continue;
+
+        if(!totalsByPlayer[name]){
+          totalsByPlayer[name] = {points:0,rebounds:0,assists:0,steals:0};
+        }
+
+        totalsByPlayer[name].points   += Number(p.points   || 0);
+        totalsByPlayer[name].rebounds += Number(p.rebounds || 0);
+        totalsByPlayer[name].assists  += Number(p.assists  || 0);
+        totalsByPlayer[name].steals   += Number(p.steals   || 0);
+      }
+    }catch(e){
+      continue;
+    }
+  }
+
+  renderLeaders();
+}
+
+function renderLeaders(){
   const grid = document.getElementById("leadersGrid");
 
+  const entries = Object.entries(totalsByPlayer);
+  if(!entries.length){
+    grid.innerHTML =
+      "<div class='leader-box'><div class='leader-label'>Status</div><div class='leader-player' style='font-weight:800;'>No player stats found</div><div class='leader-total' style='opacity:.75;'>Boxscore files missing / blocked</div></div>";
+    return;
+  }
+
   function leader(stat){
-    return Object.entries(totalsByPlayer)
-      .sort((a,b)=>b[1][stat]-a[1][stat])[0];
+    return entries.sort((a,b)=>(b[1][stat]||0)-(a[1][stat]||0))[0];
   }
 
   const stats = ["points","rebounds","assists","steals"];
@@ -341,22 +381,22 @@ function renderLeaders(){
 
   grid.innerHTML = stats.map((s,i)=>{
     const top = leader(s);
-    if(!top) return "";
+    const name = top?.[0] || "-";
+    const val = top?.[1]?.[s] || 0;
+
     return `
       <div class="leader-box">
         <div class="leader-label">${labels[i]}</div>
         <div class="leader-player">
-          <a href="nba-player.html?player=${encodeURIComponent(top[0])}">
-            ${top[0]}
-          </a>
+          <a href="nba-player.html?player=${encodeURIComponent(name)}">${name}</a>
         </div>
-        <div class="leader-total">${top[1][s]}</div>
+        <div class="leader-total">${Number(val).toLocaleString()}</div>
       </div>`;
   }).join("");
 }
 
 document.getElementById("seasonSelect")
-  .addEventListener("change",e=>renderGames(e.target.value));
+  .addEventListener("change", e => renderGames(e.target.value));
 
 loadData();
 </script>
