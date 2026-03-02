@@ -104,7 +104,7 @@ tr:nth-child(even){background:#f7fbff;}
 (async function(){
 
 function avg(h,ab){return ab?(h/ab).toFixed(3):"0.000";}
-function iso(d){return d.replace(/\//g,"-");}
+function iso(d){return String(d||"").replace(/\//g,"-");}
 async function safeFetch(u){
   try{
     const r=await fetch(u);
@@ -128,16 +128,17 @@ if(!playersIndex){
   return;
 }
 
+/* SUPPORT ID OR NAME */
 let meta=playersIndex.find(p=>String(p.player_id)===String(param));
 if(!meta){
-  meta=playersIndex.find(p=>p.name.toLowerCase()===param.toLowerCase());
+  meta=playersIndex.find(p=>String(p.name||"").toLowerCase()===String(param).toLowerCase());
 }
 if(!meta){
   document.getElementById("playerName").textContent="Player not found";
   return;
 }
 
-const playerId=meta.player_id;
+const playerId=String(meta.player_id);
 document.getElementById("playerName").textContent=meta.name;
 
 /* TEAM LOOKUP */
@@ -145,9 +146,7 @@ const teamsData=await safeFetch("/data/baseball/teams.json");
 const TEAM_LOOKUP={};
 if(teamsData){
   teamsData.forEach(t=>{
-    if(t.codes){
-      t.codes.forEach(c=>TEAM_LOOKUP[c]=t.name);
-    }
+    (t.codes||[]).forEach(c=>TEAM_LOOKUP[c]=t.name);
   });
 }
 function teamName(c){return TEAM_LOOKUP[c]||c;}
@@ -165,22 +164,20 @@ if(seasons){
 
 let games=[];
 
-/* REGULAR SEASON */
+/* REGULAR SEASON (ARRAY FORMAT) */
 if(seasons){
   const seasonResults=await Promise.all(
-    seasons.filter(y=>y>=1947)
-           .map(y=>safeFetch(`/data/baseball/seasons/${y}.json`))
+    seasons.filter(y=>y>=1947).map(y=>safeFetch(`/data/baseball/seasons/${y}.json`))
   );
 
   seasonResults.forEach(data=>{
     if(!data) return;
-
     data.forEach(g=>{
       const homeBat=g[9]||[];
       const awayBat=g[10]||[];
 
-      const homePlayer=homeBat.find(p=>p[0]===playerId);
-      const awayPlayer=awayBat.find(p=>p[0]===playerId);
+      const homePlayer=homeBat.find(p=>String(p[0])===playerId);
+      const awayPlayer=awayBat.find(p=>String(p[0])===playerId);
       if(!homePlayer && !awayPlayer) return;
 
       const isHome=!!homePlayer;
@@ -192,50 +189,58 @@ if(seasons){
         type:"Regular",
         team:isHome?g[3]:g[4],
         opponent:isHome?g[4]:g[3],
-        AB:p[1]||0,
-        H:p[2]||0,
-        HR:p[3]||0
+        AB:Number(p[1])||0,
+        H:Number(p[2])||0,
+        HR:Number(p[3])||0
       });
     });
   });
 }
 
-/* POSTSEASON — MATCHES YOUR STRUCTURE */
+/* POSTSEASON (OBJECT-KEYED BATTING MAP) */
 const postMeta=await safeFetch("/data/baseball/postseason_meta.json");
 
 if(postMeta){
 
-  const postBoxes=await Promise.all(
-    postMeta.map(g=>
-      safeFetch(`/data/baseball/postseason-games/${g.game_id}.json`)
-    )
-  );
+  for(const metaGame of postMeta){
 
-  postBoxes.forEach(box=>{
-    if(!box) return;
+    const gid = metaGame.game_id || metaGame.gameId || metaGame.id;
+    if(!gid) continue;
 
-    const homeBat=box.batters_home||[];
-    const awayBat=box.batters_away||[];
+    const box = await safeFetch(`/data/baseball/postseason-games/${gid}.json`);
+    if(!box || !box.batting) continue;
 
-    const homePlayer=homeBat.find(p=>p.player_id===playerId);
-    const awayPlayer=awayBat.find(p=>p.player_id===playerId);
+    const pstats = box.batting[playerId];
+    if(!pstats) continue;
 
-    if(!homePlayer && !awayPlayer) return;
+    const homeCode = box.home || box.home_code || metaGame.home || metaGame.home_code || metaGame.home_team || metaGame.hometeam;
+    const awayCode = box.away || box.away_code || metaGame.away || metaGame.away_code || metaGame.away_team || metaGame.visteam;
 
-    const isHome=!!homePlayer;
-    const p=homePlayer||awayPlayer;
+    const seasonYear = box.season || (box.date ? String(box.date).slice(0,4) : "") || (metaGame.date ? String(metaGame.date).slice(0,4) : "");
+
+    /* Determine player's team: prefer any regular-season record from same season */
+    let playerTeam = null;
+    const reg = games.find(g => g.type==="Regular" && String(g.season)==String(seasonYear));
+    if(reg) playerTeam = reg.team;
+
+    /* Fallback: if we at least have home/away, choose home (can't infer without roster) */
+    if(!playerTeam) playerTeam = homeCode || awayCode || "";
+
+    const opponent = (playerTeam && homeCode && awayCode)
+      ? (playerTeam===homeCode ? awayCode : homeCode)
+      : (awayCode || homeCode || "");
 
     games.push({
-      date:box.date,
-      season:box.season,
-      type:"Postseason",
-      team:isHome?box.home_code:box.away_code,
-      opponent:isHome?box.away_code:box.home_code,
-      AB:p.AB||0,
-      H:p.H||0,
-      HR:p.HR||0
+      date: box.date || metaGame.date || "",
+      season: seasonYear,
+      type: "Postseason",
+      team: playerTeam,
+      opponent: opponent,
+      AB: Number(pstats.AB) || 0,
+      H: Number(pstats.H) || 0,
+      HR: Number(pstats.HR) || 0
     });
-  });
+  }
 }
 
 /* RENDER */
