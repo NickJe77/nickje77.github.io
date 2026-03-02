@@ -122,9 +122,16 @@ if(!meta){document.getElementById("playerName").textContent="Player not found";r
 const playerId=meta.player_id;
 document.getElementById("playerName").textContent=meta.name;
 
+const teamsData=await safeFetch("/data/baseball/teams.json");
+const TEAM_LOOKUP={};
+teamsData.forEach(t=>t.codes.forEach(c=>TEAM_LOOKUP[c]=t.name));
+function teamName(c){return TEAM_LOOKUP[c]||c;}
+
 const seasons=await safeFetch("/data/baseball/index.json");
 const seasonSel=document.getElementById("seasonSel");
-seasons.sort((a,b)=>b-a).forEach(y=>{if(y>=1947)seasonSel.innerHTML+=`<option value="${y}">${y}</option>`;});
+seasons.sort((a,b)=>b-a).forEach(y=>{
+  if(y>=1947) seasonSel.innerHTML+=`<option value="${y}">${y}</option>`;
+});
 
 let games=[];
 
@@ -132,6 +139,7 @@ let games=[];
 const seasonResults=await Promise.all(
   seasons.filter(y=>y>=1947).map(y=>safeFetch(`/data/baseball/seasons/${y}.json`))
 );
+
 seasonResults.forEach(data=>{
   if(!data) return;
   data.forEach(g=>{
@@ -157,28 +165,27 @@ seasonResults.forEach(data=>{
 
 /* POSTSEASON */
 const postMeta=await safeFetch("/data/baseball/postseason_meta.json");
-if(postMeta){
-  const postBoxes=await Promise.all(
-    postMeta.map(m=>safeFetch(`/data/baseball/postseason-games/${m.game_id}.json`))
-  );
-  postBoxes.forEach(box=>{
-    if(!box||!box.batting)return;
-    const pstats=box.batting[playerId];
-    if(!pstats)return;
-    games.push({
-      date:box.date,
-      season:box.season,
-      type:"Postseason",
-      team:box.home,
-      opponent:box.away,
-      AB:Number(pstats.AB)||0,
-      H:Number(pstats.H)||0,
-      HR:Number(pstats.HR)||0
-    });
+const postBoxes=await Promise.all(
+  postMeta.map(m=>safeFetch(`/data/baseball/postseason-games/${m.game_id}.json`))
+);
+postBoxes.forEach(box=>{
+  if(!box||!box.batting)return;
+  const pstats=box.batting[playerId];
+  if(!pstats)return;
+  games.push({
+    date:box.date,
+    season:box.season,
+    type:"Postseason",
+    team:box.home,
+    opponent:box.away,
+    AB:Number(pstats.AB)||0,
+    H:Number(pstats.H)||0,
+    HR:Number(pstats.HR)||0
   });
-}
+});
 
 function render(){
+
   const type=document.getElementById("typeSel").value;
   const season=document.getElementById("seasonSel").value;
 
@@ -189,11 +196,10 @@ function render(){
   });
 
   let career={g:0,ab:0,h:0,hr:0};
-  const oppStats={};
+  let oppStats={};
 
   filtered.forEach(g=>{
     career.g++;career.ab+=g.AB;career.h+=g.H;career.hr+=g.HR;
-
     if(!oppStats[g.opponent])oppStats[g.opponent]={g:0,ab:0,h:0,hr:0};
     oppStats[g.opponent].g++;
     oppStats[g.opponent].ab+=g.AB;
@@ -212,7 +218,7 @@ function render(){
   document.getElementById("oppBody").innerHTML=
   Object.entries(oppStats).map(([opp,s])=>`
   <tr>
-    <td>${opp}</td>
+    <td>${teamName(opp)}</td>
     <td>${s.g}</td>
     <td>${s.ab}</td>
     <td>${s.h}</td>
@@ -222,13 +228,14 @@ function render(){
   `).join("");
 
   filtered.sort((a,b)=>new Date(b.date)-new Date(a.date));
+
   document.getElementById("gameBody").innerHTML=
   filtered.map(g=>`
   <tr class="${g.type==='Postseason'?'postseason-row':''}">
     <td>${g.date}</td>
     <td>${g.type}</td>
-    <td>${g.team}</td>
-    <td>${g.opponent}</td>
+    <td>${teamName(g.team)}</td>
+    <td>${teamName(g.opponent)}</td>
     <td>${g.AB}</td>
     <td>${g.H}</td>
     <td>${g.HR}</td>
