@@ -4,107 +4,191 @@
 <meta charset="UTF-8">
 <title>MLB Season | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <style>
-:root{--blue:#002D72;--red:#C8102E;--bg:#f4f6f8;--card:#ffffff;--line:#e6e8ee;--zebra:#f0f6ff;--hover:#e0ecff;}
-body{font-family:Inter,system-ui,Arial;margin:0;background:var(--bg);}
-.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;background:#fff;border-bottom:1px solid #ddd;font-weight:600;}
-.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-.page{max-width:1200px;margin:auto;padding:25px 20px 40px;}
-.hero{background:linear-gradient(90deg,var(--blue),var(--red));color:white;padding:32px;border-radius:18px;margin-bottom:20px;}
-.hero h1{margin:0;font-size:42px;}
-.card{background:var(--card);border-radius:14px;border:1px solid var(--line);overflow:hidden;}
-table{width:100%;border-collapse:collapse;}
-th,td{padding:12px;border-bottom:1px solid var(--line);font-size:14px;}
-th{background:#f0f3f7;font-weight:700;}
-tbody tr:nth-child(even){background:var(--zebra);}
-tbody tr:hover{background:var(--hover);}
-.score{font-weight:700;}
-a.game-link{display:block;color:inherit;text-decoration:none;}
+:root{
+  --blue:#002D72;
+  --red:#C8102E;
+  --bg:#f4f6f8;
+  --card:#ffffff;
+  --line:#e6e8ee;
+  --zebra:#f0f6ff;
+  --hover:#e0ecff;
+}
+body{
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:var(--bg);
+}
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  background:#fff;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+  font-size:18px;
+}
+.page{
+  max-width:1200px;
+  margin:auto;
+  padding:25px 20px 40px;
+}
+.hero{
+  background:linear-gradient(90deg,var(--blue),var(--red));
+  color:white;
+  padding:32px;
+  border-radius:18px;
+  margin-bottom:20px;
+}
+.hero h1{
+  margin:0;
+  font-size:42px;
+}
+.card{
+  background:var(--card);
+  border-radius:14px;
+  border:1px solid var(--line);
+  overflow:hidden;
+}
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+th,td{
+  padding:12px;
+  border-bottom:1px solid var(--line);
+  font-size:14px;
+  text-align:center;
+}
+th{
+  background:#f0f3f7;
+  font-weight:700;
+}
+tbody tr:nth-child(even){
+  background:var(--zebra);
+}
+tbody tr:hover{
+  background:var(--hover);
+}
+.score{
+  font-weight:700;
+}
+a.game-link{
+  display:block;
+  color:inherit;
+  text-decoration:none;
+}
 </style>
 </head>
+
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="baseball.html">Baseball</a>
+  <a href="index.html">Home</a>
+  <a href="baseball.html">Baseball</a>
 </div>
 
 <div class="page">
-<div class="hero">
-<h1 id="seasonTitle">MLB Season</h1>
-</div>
 
-<div class="card">
-<table>
-<thead>
-<tr>
-<th>Date</th>
-<th>Away</th>
-<th>Home</th>
-<th>Score</th>
-<th>Venue</th>
-<th>Attendance</th>
-</tr>
-</thead>
-<tbody id="gamesBody"></tbody>
-</table>
-</div>
+  <div class="hero">
+    <h1 id="seasonTitle">MLB Season</h1>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Away</th>
+          <th>Home</th>
+          <th>Score</th>
+          <th>Venue</th>
+          <th>Attendance</th>
+        </tr>
+      </thead>
+      <tbody id="gamesBody"></tbody>
+    </table>
+  </div>
+
 </div>
 
 <script>
-const params=new URLSearchParams(window.location.search);
-const season=params.get("season");
-document.getElementById("seasonTitle").textContent="MLB Season "+season;
+
+const params = new URLSearchParams(window.location.search);
+const season = params.get("season");
+
+if(!season){
+  document.getElementById("seasonTitle").textContent = "Season Not Found";
+}else{
+  document.getElementById("seasonTitle").textContent = "MLB Season " + season;
+}
 
 Promise.all([
-fetch("data/baseball/seasons/"+season+".json").then(r=>r.json()),
-fetch("data/baseball/teams.json").then(r=>r.json()),
-fetch("data/baseball/ballparks.csv").then(r=>r.text())
-]).then(([seasonData,teamNames,ballparkCSV])=>{
+  fetch("data/baseball/seasons/" + season + ".json").then(r => r.json()),
+  fetch("data/baseball/teams.json").then(r => r.json()),
+  fetch("data/baseball/ballparks.csv").then(r => r.text())
+]).then(([seasonData, teamNames, ballparkCSV]) => {
 
-const parkMap={};
-ballparkCSV.trim().split("\n").forEach(l=>{
-const p=l.split(",");
-if(p.length>=2) parkMap[p[0].trim()]=p[1].trim();
+  const parkMap = {};
+  ballparkCSV.trim().split("\n").forEach(line=>{
+    const parts = line.split(",");
+    if(parts.length >= 2){
+      parkMap[parts[0].trim()] = parts[1].trim();
+    }
+  });
+
+  function teamName(code){
+    const t = teamNames.find(t => t.codes.includes(code));
+    return t ? t.name : code;
+  }
+
+  const tbody = document.getElementById("gamesBody");
+  tbody.innerHTML = "";
+
+  // Sort by date ascending
+  seasonData.sort((a,b)=> new Date(a[1].replace(/\//g,"-")) - new Date(b[1].replace(/\//g,"-")));
+
+  seasonData.forEach(g => {
+
+    const gameId = g[0];
+    const date = g[1];
+    const home = g[3];
+    const away = g[4];
+    const venueCode = g[5];
+    const attendance = g[6];
+    const awayScore = g[7];
+    const homeScore = g[8];
+
+    const link = "baseball-game.html?game=" + gameId;
+
+    const venueName = parkMap[venueCode] || venueCode || "";
+    const score = (awayScore !== null && homeScore !== null)
+      ? awayScore + "-" + homeScore
+      : "";
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><a class="game-link" href="${link}">${date}</a></td>
+      <td>${teamName(away)}</td>
+      <td>${teamName(home)}</td>
+      <td class="score">${score}</td>
+      <td>${venueName}</td>
+      <td>${attendance ? Number(attendance).toLocaleString() : ""}</td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+
+}).catch(err=>{
+  console.error(err);
 });
 
-const tbody=document.getElementById("gamesBody");
-tbody.innerHTML="";
-
-seasonData.forEach(game=>{
-
-// REMOVE POSTSEASON (only April–September)
-const month=parseInt(game.date.split("-")[1]);
-if(month>9) return;
-
-const ymd=game.date.replace(/-/g,"");
-const gameId=game.home_code+ymd+"0";
-const link="baseball-game.html?game="+gameId;
-
-const awayTeam=teamNames.find(t=>t.codes.includes(game.away_code));
-const homeTeam=teamNames.find(t=>t.codes.includes(game.home_code));
-
-const awayName=awayTeam?awayTeam.name:game.away_code;
-const homeName=homeTeam?homeTeam.name:game.home_code;
-
-const venueName=parkMap[game.venue]||game.venue||"";
-const score=(game.away_score!==undefined&&game.home_score!==undefined)
-?game.away_score+"-"+game.home_score:"";
-
-const tr=document.createElement("tr");
-tr.innerHTML=`
-<td><a class="game-link" href="${link}">${game.date}</a></td>
-<td>${awayName}</td>
-<td>${homeName}</td>
-<td class="score">${score}</td>
-<td>${venueName}</td>
-<td>${game.attendance?Number(game.attendance).toLocaleString():""}</td>
-`;
-tbody.appendChild(tr);
-
-});
-
-});
 </script>
 
 </body>
