@@ -73,7 +73,7 @@ tr:nth-child(even){background:#f7fbff;}
   <table>
     <thead>
       <tr>
-        <th>Season</th>
+        <th>Season / Date</th>
         <th>Team</th>
         <th>G</th>
         <th>AB</th>
@@ -93,6 +93,12 @@ tr:nth-child(even){background:#f7fbff;}
 
 function fmt(n){return Number(n||0).toLocaleString();}
 function avg(h,ab){return ab?(h/ab).toFixed(3):"0.000";}
+function formatDate(d){
+  if(!d) return "";
+  const dt = new Date(d);
+  if(isNaN(dt)) return d;
+  return dt.toLocaleDateString("en-AU",{year:"numeric",month:"short",day:"numeric"});
+}
 async function safeFetch(url){
   try{
     const r=await fetch(url);
@@ -155,8 +161,9 @@ await Promise.all((seasons||[]).map(async s=>{
   t.home_runs+=row.home_runs||0;
 }));
 
-/* LOAD POSTSEASON (FAST — NO DELAY) */
+/* LOAD POSTSEASON WITH GAME DATES */
 const postMeta=await safeFetch("/data/baseball/postseason_meta.json");
+
 if(postMeta){
   await Promise.all(postMeta.map(async g=>{
     const box=await safeFetch(`/data/baseball/postseason-games/${g.game_id}.json`);
@@ -165,8 +172,8 @@ if(postMeta){
     const stats=box.batting[playerId];
 
     seasonRows.push({
-      season:"Postseason",
-      team:g.home||"",
+      season: formatDate(g.date),
+      team: g.home || "",
       games:1,
       at_bats:stats.AB||0,
       hits:stats.H||0,
@@ -212,7 +219,7 @@ function renderTable(){
   const rows=seasonRows.filter(r=>filter==="All"||r.type===filter);
 
   document.getElementById("seasonBody").innerHTML=rows
-  .sort((a,b)=>b.season-a.season)
+  .sort((a,b)=>b.season.localeCompare(a.season))
   .map(r=>`
   <tr class="${r.type==="Postseason"?"postseason-row":""}">
     <td>${r.season}</td>
