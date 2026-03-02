@@ -210,12 +210,16 @@ tr:hover{
 </div>
 
 <script>
+
 const params = new URLSearchParams(window.location.search);
 const teamRaw = (params.get("team") || "").trim();
 document.getElementById("teamName").textContent = teamRaw;
 
+/* Aggressive normalize */
 function normalize(s){
-  return (s || "").toLowerCase().trim();
+  return (s || "")
+    .toLowerCase()
+    .replace(/[^a-z]/g,"");
 }
 
 function seasonLabel(start){
@@ -331,61 +335,50 @@ async function loadLeaders(){
     if(normalize(row.played_for) !== team) continue;
 
     if(!totals[row.player]){
-      totals[row.player] = {
-        points:0,
-        rebounds:0,
-        assists:0,
-        steals:0,
-        blocks:0
-      };
+      totals[row.player] = {points:0,rebounds:0,assists:0,steals:0,blocks:0};
     }
 
-    totals[row.player].points   += Number(row.points) || 0;
-    totals[row.player].rebounds += Number(row.rebounds) || 0;
-    totals[row.player].assists  += Number(row.assists) || 0;
-    totals[row.player].steals   += Number(row.steals) || 0;
-    totals[row.player].blocks   += Number(row.blocks) || 0;
-  }
-
-  function findLeader(stat){
-    let leader = null;
-    let max = 0;
-
-    for(const player in totals){
-      if(totals[player][stat] > max){
-        max = totals[player][stat];
-        leader = player;
-      }
-    }
-
-    return {player:leader,total:max};
+    totals[row.player].points   += Number(row.points ?? row.PTS ?? 0);
+    totals[row.player].rebounds += Number(row.rebounds ?? row.REB ?? 0);
+    totals[row.player].assists  += Number(row.assists ?? row.AST ?? 0);
+    totals[row.player].steals   += Number(row.steals ?? row.STL ?? 0);
+    totals[row.player].blocks   += Number(row.blocks ?? row.BLK ?? 0);
   }
 
   const categories = [
-    {label:"Points", key:"points"},
-    {label:"Rebounds", key:"rebounds"},
-    {label:"Assists", key:"assists"},
-    {label:"Steals", key:"steals"},
-    {label:"Blocks", key:"blocks"}
+    ["Points","points"],
+    ["Rebounds","rebounds"],
+    ["Assists","assists"],
+    ["Steals","steals"],
+    ["Blocks","blocks"]
   ];
 
   const grid = document.getElementById("leadersGrid");
   grid.innerHTML = "";
 
-  categories.forEach(cat=>{
-    const leader = findLeader(cat.key);
-    if(!leader.player) return;
+  categories.forEach(([label,key])=>{
+    let bestPlayer = null;
+    let bestTotal = 0;
+
+    for(const player in totals){
+      if(totals[player][key] > bestTotal){
+        bestTotal = totals[player][key];
+        bestPlayer = player;
+      }
+    }
+
+    if(!bestPlayer) return;
 
     const box = document.createElement("div");
     box.className = "leader-box";
     box.innerHTML = `
-      <div class="leader-label">${cat.label}</div>
+      <div class="leader-label">${label}</div>
       <div class="leader-player">
-        <a href="nba-player.html?player=${encodeURIComponent(leader.player)}">
-          ${leader.player}
+        <a href="nba-player.html?player=${encodeURIComponent(bestPlayer)}">
+          ${bestPlayer}
         </a>
       </div>
-      <div class="leader-total">${leader.total}</div>
+      <div class="leader-total">${bestTotal}</div>
     `;
     grid.appendChild(box);
   });
@@ -395,6 +388,7 @@ document.getElementById("seasonSelect")
   .addEventListener("change",e=>renderGames(e.target.value));
 
 loadData();
+
 </script>
 
 </body>
