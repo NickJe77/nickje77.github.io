@@ -246,7 +246,6 @@ if(player){
   playerNameEl.textContent = player;
 }
 
-/* GRADIENT TEAM COLOURS */
 const teamColours = {
   "Brisbane":"linear-gradient(90deg,#6F2C91,#FDBB30)",
   "Melbourne":"linear-gradient(90deg,#5A2D81,#002B5C)",
@@ -397,40 +396,73 @@ function resetSort(){
   render();
 }
 
-/* SEARCH */
+/* =========================
+   IMPROVED PREDICTIVE SEARCH
+========================= */
+
+let searchTimeout = null;
+
 searchBox.addEventListener("input", function(){
-  const value = this.value.toLowerCase();
-  suggestions.innerHTML = "";
 
-  if(value.length < 2){
-    suggestions.style.display = "none";
-    return;
-  }
+  clearTimeout(searchTimeout);
 
-  const matches = [...allPlayers]
-    .filter(name => name.toLowerCase().includes(value))
-    .slice(0,10);
+  searchTimeout = setTimeout(()=>{
 
-  matches.forEach(name=>{
-    const div = document.createElement("div");
-    div.textContent = name;
-    div.onclick = ()=>{
-      window.location =
-        "nrl-player.html?player=" + encodeURIComponent(name);
-    };
-    suggestions.appendChild(div);
-  });
+    const value = this.value.trim().toLowerCase();
+    suggestions.innerHTML = "";
 
-  suggestions.style.display = matches.length ? "block" : "none";
+    if(value.length < 2){
+      suggestions.style.display = "none";
+      return;
+    }
+
+    const all = [...allPlayers];
+
+    const startsWith = all.filter(name =>
+      name.toLowerCase().startsWith(value)
+    );
+
+    const contains = all.filter(name =>
+      !name.toLowerCase().startsWith(value) &&
+      name.toLowerCase().includes(value)
+    );
+
+    const matches = [...startsWith, ...contains]
+      .slice(0,10);
+
+    matches.forEach(name=>{
+      const div = document.createElement("div");
+      div.textContent = name;
+      div.onclick = ()=>{
+        window.location =
+          "nrl-player.html?player=" +
+          encodeURIComponent(name);
+      };
+      suggestions.appendChild(div);
+    });
+
+    suggestions.style.display =
+      matches.length ? "block" : "none";
+
+  }, 120);
 });
 
 searchBox.addEventListener("keydown", function(e){
   if(e.key === "Enter"){
+    const value = this.value.trim();
+    if(!value) return;
     window.location =
       "nrl-player.html?player=" +
-      encodeURIComponent(this.value.trim());
+      encodeURIComponent(value);
   }
 });
+
+document.addEventListener("click", function(e){
+  if(!e.target.closest(".search-container")){
+    suggestions.style.display = "none";
+  }
+});
+
 </script>
 
 </body>
