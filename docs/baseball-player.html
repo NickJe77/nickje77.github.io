@@ -105,70 +105,110 @@ tr:nth-child(even){background:#f7fbff;}
 
 function avg(h,ab){return ab?(h/ab).toFixed(3):"0.000";}
 function iso(d){return d.replace(/\//g,"-");}
-async function safeFetch(u){const r=await fetch(u);if(!r.ok)return null;return r.json();}
+async function safeFetch(u){
+  try{
+    const r=await fetch(u);
+    if(!r.ok) return null;
+    return await r.json();
+  }catch(e){
+    return null;
+  }
+}
 
 const qs=new URLSearchParams(location.search);
 const param=qs.get("player");
-if(!param){document.getElementById("playerName").textContent="Player not found";return;}
+if(!param){
+  document.getElementById("playerName").textContent="Player not found";
+  return;
+}
 
 const playersIndex=await safeFetch("/data/baseball/players.json");
-const meta=playersIndex.find(p=>String(p.player_id)===String(param) || p.name.toLowerCase()===param.toLowerCase());
-if(!meta){document.getElementById("playerName").textContent="Player not found";return;}
+if(!playersIndex){
+  document.getElementById("playerName").textContent="Player data missing";
+  return;
+}
+
+let meta=playersIndex.find(p=>String(p.player_id)===String(param));
+if(!meta){
+  meta=playersIndex.find(p=>p.name.toLowerCase()===param.toLowerCase());
+}
+if(!meta){
+  document.getElementById("playerName").textContent="Player not found";
+  return;
+}
 
 const playerId=meta.player_id;
 document.getElementById("playerName").textContent=meta.name;
 
+/* TEAM LOOKUP */
 const teamsData=await safeFetch("/data/baseball/teams.json");
 const TEAM_LOOKUP={};
-teamsData.forEach(t=>t.codes.forEach(c=>TEAM_LOOKUP[c]=t.name));
+if(teamsData){
+  teamsData.forEach(t=>{
+    if(t.codes){
+      t.codes.forEach(c=>TEAM_LOOKUP[c]=t.name);
+    }
+  });
+}
 function teamName(c){return TEAM_LOOKUP[c]||c;}
 
+/* LOAD SEASONS */
 const seasons=await safeFetch("/data/baseball/index.json");
 const seasonSel=document.getElementById("seasonSel");
-seasons.sort((a,b)=>b-a).forEach(y=>{
-  if(y>=1947) seasonSel.innerHTML+=`<option value="${y}">${y}</option>`;
-});
+if(seasons){
+  seasons.sort((a,b)=>b-a).forEach(y=>{
+    if(y>=1947){
+      seasonSel.innerHTML+=`<option value="${y}">${y}</option>`;
+    }
+  });
+}
 
 let games=[];
 
-/* REGULAR SEASON (ARRAY FORMAT) */
-const seasonResults=await Promise.all(
-  seasons.filter(y=>y>=1947).map(y=>safeFetch(`/data/baseball/seasons/${y}.json`))
-);
+/* REGULAR SEASON */
+if(seasons){
+  const seasonResults=await Promise.all(
+    seasons.filter(y=>y>=1947)
+           .map(y=>safeFetch(`/data/baseball/seasons/${y}.json`))
+  );
 
-seasonResults.forEach(data=>{
-  if(!data) return;
-  data.forEach(g=>{
-    const homeBat=g[9]||[];
-    const awayBat=g[10]||[];
+  seasonResults.forEach(data=>{
+    if(!data) return;
 
-    const homePlayer=homeBat.find(p=>p[0]===playerId);
-    const awayPlayer=awayBat.find(p=>p[0]===playerId);
-    if(!homePlayer && !awayPlayer) return;
+    data.forEach(g=>{
+      const homeBat=g[9]||[];
+      const awayBat=g[10]||[];
 
-    const isHome=!!homePlayer;
-    const p=homePlayer||awayPlayer;
+      const homePlayer=homeBat.find(p=>p[0]===playerId);
+      const awayPlayer=awayBat.find(p=>p[0]===playerId);
+      if(!homePlayer && !awayPlayer) return;
 
-    games.push({
-      date:g[1],
-      season:g[2],
-      type:"Regular",
-      team:isHome?g[3]:g[4],
-      opponent:isHome?g[4]:g[3],
-      AB:p[1]||0,
-      H:p[2]||0,
-      HR:p[3]||0
+      const isHome=!!homePlayer;
+      const p=homePlayer||awayPlayer;
+
+      games.push({
+        date:g[1],
+        season:g[2],
+        type:"Regular",
+        team:isHome?g[3]:g[4],
+        opponent:isHome?g[4]:g[3],
+        AB:p[1]||0,
+        H:p[2]||0,
+        HR:p[3]||0
+      });
     });
   });
-});
+}
 
-/* POSTSEASON (OBJECT FORMAT) */
+/* POSTSEASON — MATCHES YOUR STRUCTURE */
 const postMeta=await safeFetch("/data/baseball/postseason_meta.json");
 
 if(postMeta){
 
   const postBoxes=await Promise.all(
-    postMeta.map(g=>safeFetch(`/data/baseball/postseason-games/${g.game_id}.json`))
+    postMeta.map(g=>
+      safeFetch(`/data/baseball/postseason-games/${g.game_id}.json`)
+    )
   );
 
   postBoxes.forEach(box=>{
@@ -179,6 +219,7 @@ if(postMeta){
 
     const homePlayer=homeBat.find(p=>p.player_id===playerId);
     const awayPlayer=awayBat.find(p=>p.player_id===playerId);
+
     if(!homePlayer && !awayPlayer) return;
 
     const isHome=!!homePlayer;
