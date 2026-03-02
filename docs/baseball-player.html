@@ -80,11 +80,14 @@ tr:nth-child(even){background:#f7fbff;}
   font-weight:800;
   margin-left:6px;
 }
-.small-note{
+
+.note{
   font-size:12px;
   color:#666;
-  margin-top:8px;
+  margin-top:10px;
+  line-height:1.35;
 }
+.note b{color:#111;}
 </style>
 </head>
 
@@ -139,7 +142,7 @@ tr:nth-child(even){background:#f7fbff;}
       <tbody id="gameBody"></tbody>
     </table>
 
-    <div class="small-note" id="loadNote"></div>
+    <div class="note" id="statusNote">Loading games…</div>
   </div>
 
 </div>
@@ -155,125 +158,169 @@ function formatDate(d){
 }
 async function safeFetch(url){
   try{
-    const r=await fetch(url);
+    const r=await fetch(url, {cache:"no-store"});
     if(!r.ok) return null;
     return await r.json();
   }catch{return null;}
 }
-function dedupeGames(list){
-  const seen=new Set();
-  const out=[];
-  for(const g of list){
-    const key = `${g.game_id||""}|${g.playerId||""}|${g.type||""}`;
-    if(seen.has(key)) continue;
-    seen.add(key);
-    out.push(g);
-  }
-  return out;
+function teamNameFactory(teamsData){
+  const map={};
+  (teamsData||[]).forEach(t=>t.codes?.forEach(c=>map[c]=t.name));
+  return (code)=>map[code]||code||"";
 }
+
+/* Retrosheet-ish play result parsing (best-effort) */
+function isAB(res){
+  if(!res) return false;
+  return !(
+    res.startsWith("W")  ||  // BB, IBB often "W"/"IW"
+    res.startsWith("IW") ||
+    res.startsWith("HP") ||  // HBP
+    res.startsWith("SH") ||  // sacrifice hit/bunt
+    res.startsWith("SF")     // sacrifice fly
+  );
+}
+function isHit(res){
+  if(!res) return false;
+  return res.startsWith("S") || res.startsWith("D") || res.startsWith("T") || res.startsWith("HR");
+}
+function isHR(res){
+  if(!res) return false;
+  return res.startsWith("HR");
+}
+
+const statusNote=document.getElementById("statusNote");
 
 const qs=new URLSearchParams(location.search);
 const playerId=qs.get("player");
 if(!playerId){
   document.getElementById("playerName").textContent="Player not found";
+  statusNote.textContent="Missing ?player= in the URL.";
   return;
 }
 
+/* Player name */
 const playersIndex=await safeFetch("/data/baseball/players.json");
 const playerMeta=playersIndex?.find(p=>String(p.player_id)===String(playerId));
 if(!playerMeta){
   document.getElementById("playerName").textContent="Player not found";
+  statusNote.textContent="This player_id was not found in /data/baseball/players.json.";
   return;
 }
 document.getElementById("playerName").textContent=playerMeta.name;
 
 /* Team map */
 const teamsData=await safeFetch("/data/baseball/teams.json");
-let TEAM_LOOKUP={};
-teamsData?.forEach(t=>t.codes?.forEach(code=>TEAM_LOOKUP[code]=t.name));
-function teamName(code){return TEAM_LOOKUP[code]||code||"";}
+const teamName = teamNameFactory(teamsData);
 
-/* Optional team bar: keep simple and stable */
-document.getElementById("teamBar").style.background="linear-gradient(90deg,#002D72,#C8102E)";
-
+/* Page data */
 let games=[];
 let career={games:0,at_bats:0,hits:0,home_runs:0};
 
-const loadNote=document.getElementById("loadNote");
-loadNote.textContent="Loading games...";
+/* Seasons list */
+const seasons=await safeFetch("/data/baseball/index.json") || [];
+seasons.sort((a,b)=>b-a);
 
-/* ---------- REGULAR SEASON GAME LOGS (ARRAY-BASED) ---------- */
-/* Assumes: /data/baseball/seasons/{year}.json exists and each game has:
-   - game_id, date, home_code, away_code
-   - batters_home[], batters_away[] with {player_id, AB, H, HR, ...}
-*/
-const seasons=await safeFetch("/data/baseball/index.json");
+/* Helper: get a season file index (filenames) */
+async function getBoxscoreIndex(year){
+  // Primary expected index
+  let idx = await safeFetch(`/data/baseball/boxscores/${year}/index.json`);
+  if(Array.isArray(idx)) return idx;
 
-if(seasons && seasons.length){
-  await Promise.all(seasons.map(async year=>{
-    const seasonGames=await safeFetch(`/data/baseball/seasons/${year}.json`);
-    if(!seasonGames) return;
+  // Fallback guesses (won’t hurt)
+  idx = await safeFetch(`/data/baseball/boxscores/index-${year}.json`);
+  if(Array.isArray(idx)) return idx;
 
-    for(const g of seasonGames){
+  idx = await safeFetch(`/data/baseball/boxscores_${year}_index.json`);
+  if(Array.isArray(idx)) return idx;
 
-      const inHome = g.batters_home?.some(p => String(p.player_id) === String(playerId));
-      const inAway = g.batters_away?.some(p => String(p.player_id) === String(playerId));
-
-      if(!inHome && !inAway) continue;
-
-      const player =
-        g.batters_home?.find(p => String(p.player_id) === String(playerId)) ||
-        g.batters_away?.find(p => String(p.player_id) === String(playerId));
-
-      if(!player) continue;
-
-      const teamCode = inHome ? g.home_code : g.away_code;
-      const oppCode  = teamCode === g.home_code ? g.away_code : g.home_code;
-
-      const AB = player.AB || 0;
-      const H  = player.H  || 0;
-      const HR = player.HR || 0;
-
-      games.push({
-        playerId,
-        date: g.date,
-        season: year,
-        team: teamCode,
-        opponent: oppCode,
-        AB, H, HR,
-        type: "Regular",
-        game_id: g.game_id
-      });
-
-      career.games += 1;
-      career.at_bats += AB;
-      career.hits += H;
-      career.home_runs += HR;
-    }
-  }));
+  return null;
 }
 
-/* ---------- POSTSEASON (GAME FILES ALREADY WORKING) ---------- */
-const postMeta=await safeFetch("/data/baseball/postseason_meta.json");
-if(postMeta){
+/* ---------- REGULAR SEASON (FROM BOXSCORES EVENTS) ---------- */
+let regularFound = 0;
+let regularYearsIndexed = 0;
+
+for(const year of seasons){
+  const fileList = await getBoxscoreIndex(year);
+  if(!fileList) continue;
+
+  regularYearsIndexed += 1;
+
+  for(const fileName of fileList){
+    const game = await safeFetch(`/data/baseball/boxscores/${year}/${fileName}`);
+    if(!game || !Array.isArray(game.events)) continue;
+
+    let AB=0, H=0, HR=0;
+    let teamCode=null, oppCode=null;
+    let appeared=false;
+
+    for(const e of game.events){
+      if(!Array.isArray(e)) continue;
+      if(e[0] !== "play") continue;
+      if(String(e[3]) !== String(playerId)) continue;
+
+      appeared = true;
+
+      // Based on your file: e[2] is batting flag: "0" away, "1" home
+      const battingFlag = e[2];
+      const res = e[6] || "";
+
+      if(battingFlag === "0"){
+        teamCode = game.away_code;
+        oppCode  = game.home_code;
+      }else{
+        teamCode = game.home_code;
+        oppCode  = game.away_code;
+      }
+
+      if(isAB(res)) AB += 1;
+      if(isHit(res)) H += 1;
+      if(isHR(res)) HR += 1;
+    }
+
+    if(!appeared) continue;
+
+    games.push({
+      date: game.date,
+      season: game.season || year,
+      team: teamCode || game.home_code || "",
+      opponent: oppCode || game.away_code || "",
+      AB, H, HR,
+      type:"Regular",
+      game_id: game.game_id || game.gameId || ""
+    });
+
+    career.games += 1;
+    career.at_bats += AB;
+    career.hits += H;
+    career.home_runs += HR;
+
+    regularFound += 1;
+  }
+}
+
+/* ---------- POSTSEASON (EXISTING FILES) ---------- */
+let postFound = 0;
+const postMeta = await safeFetch("/data/baseball/postseason_meta.json");
+
+if(Array.isArray(postMeta)){
   await Promise.all(postMeta.map(async g=>{
-    const box=await safeFetch(`/data/baseball/postseason-games/${g.game_id}.json`);
+    const box = await safeFetch(`/data/baseball/postseason-games/${g.game_id}.json`);
     if(!box || !box.batting || !box.batting[playerId]) return;
 
-    const stats=box.batting[playerId];
-
+    const stats = box.batting[playerId];
     const AB = stats.AB || 0;
     const H  = stats.H  || 0;
     const HR = stats.HR || 0;
 
     games.push({
-      playerId,
       date: g.date,
-      season: (g.date ? new Date(g.date).getFullYear() : ""),
+      season: g.date ? new Date(g.date).getFullYear() : (g.season || ""),
       team: g.home,
       opponent: g.away,
       AB, H, HR,
-      type: "Postseason",
+      type:"Postseason",
       game_id: g.game_id,
       round: g.round
     });
@@ -282,18 +329,17 @@ if(postMeta){
     career.at_bats += AB;
     career.hits += H;
     career.home_runs += HR;
+
+    postFound += 1;
   }));
 }
 
-/* Deduplicate just in case */
-games = dedupeGames(games);
-
 /* Career cards */
 document.getElementById("careerCards").innerHTML=`
-  <div class="card"><div class="value">${career.games}</div><div class="label">Games</div></div>
-  <div class="card"><div class="value">${career.at_bats}</div><div class="label">AB</div></div>
-  <div class="card"><div class="value">${career.hits}</div><div class="label">Hits</div></div>
-  <div class="card"><div class="value">${career.home_runs}</div><div class="label">HR</div></div>
+  <div class="card"><div class="value">${career.games.toLocaleString()}</div><div class="label">Games</div></div>
+  <div class="card"><div class="value">${career.at_bats.toLocaleString()}</div><div class="label">AB</div></div>
+  <div class="card"><div class="value">${career.hits.toLocaleString()}</div><div class="label">Hits</div></div>
+  <div class="card"><div class="value">${career.home_runs.toLocaleString()}</div><div class="label">HR</div></div>
   <div class="card"><div class="value">${avg(career.hits,career.at_bats)}</div><div class="label">AVG</div></div>
 `;
 
@@ -309,28 +355,32 @@ function render(){
   const type=document.getElementById("typeFilter").value;
   const season=document.getElementById("seasonFilter").value;
 
-  let filtered=games.filter(g=>
+  let filtered = games.filter(g =>
     (type==="All" || g.type===type) &&
     (season==="All" || String(g.season)===String(season))
   );
 
   filtered.sort((a,b)=>new Date(b.date)-new Date(a.date));
 
-  document.getElementById("gameBody").innerHTML =
-    filtered.map(g=>`
-      <tr class="${g.type==="Postseason" ? "postseason-row" : "game-row"}"
-          onclick="location.href='/baseball-game.html?game=${encodeURIComponent(g.game_id)}'">
-        <td>${formatDate(g.date)}${g.round ? ` <span class="round-badge">${g.round}</span>` : ""}</td>
-        <td>${teamName(g.team)}</td>
-        <td>${teamName(g.opponent)}</td>
-        <td>${g.AB}</td>
-        <td>${g.H}</td>
-        <td>${g.HR}</td>
-        <td>${avg(g.H,g.AB)}</td>
-      </tr>
-    `).join("");
+  document.getElementById("gameBody").innerHTML = filtered.map(g=>`
+    <tr class="${g.type==="Postseason" ? "postseason-row" : "game-row"}"
+        onclick="location.href='/baseball-game.html?game=${encodeURIComponent(g.game_id)}'">
+      <td>${formatDate(g.date)}${g.round ? ` <span class="round-badge">${g.round}</span>` : ""}</td>
+      <td>${teamName(g.team)}</td>
+      <td>${teamName(g.opponent)}</td>
+      <td>${g.AB}</td>
+      <td>${g.H}</td>
+      <td>${g.HR}</td>
+      <td>${avg(g.H,g.AB)}</td>
+    </tr>
+  `).join("");
 
-  loadNote.textContent = `${filtered.length.toLocaleString()} games shown • ${games.length.toLocaleString()} total found`;
+  statusNote.innerHTML =
+    `<b>${filtered.length.toLocaleString()}</b> shown • <b>${games.length.toLocaleString()}</b> total found ` +
+    `• Regular: <b>${regularFound.toLocaleString()}</b> • Postseason: <b>${postFound.toLocaleString()}</b>` +
+    (regularYearsIndexed===0
+      ? `<br><b>Note:</b> No regular-season boxscore index found. This page expects <b>/data/baseball/boxscores/{year}/index.json</b> containing filenames.`
+      : ``);
 }
 
 document.getElementById("typeFilter").onchange=render;
