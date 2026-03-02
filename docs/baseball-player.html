@@ -135,11 +135,12 @@ const years=seasons.filter(y=>y>=1947);
 const seasonPromises=years.map(y=>safeFetch(`/data/baseball/seasons/${y}.json`));
 const seasonResults=await Promise.all(seasonPromises);
 
-seasonResults.forEach((data,i)=>{
+seasonResults.forEach(data=>{
   if(!data) return;
   data.forEach(g=>{
     const homeBat=g[9];
     const awayBat=g[10];
+
     const homePlayer=homeBat.find(p=>p[0]===playerId);
     const awayPlayer=awayBat.find(p=>p[0]===playerId);
     if(!homePlayer && !awayPlayer) return;
@@ -162,26 +163,50 @@ seasonResults.forEach((data,i)=>{
   });
 });
 
-/* LOAD POSTSEASON */
+/* POSTSEASON LOAD WITH CORRECT TEAM/Opp */
 const postMeta=await safeFetch("/data/baseball/postseason_meta.json");
+
 if(postMeta){
-  const postPromises=postMeta.map(g=>safeFetch(`/data/baseball/postseason-games/${g.game_id}.json`));
+
+  const postPromises=postMeta.map(g=>
+    safeFetch(`/data/baseball/postseason-games/${g.game_id}.json`)
+  );
+
   const postBoxes=await Promise.all(postPromises);
 
   postBoxes.forEach((box,i)=>{
+
     if(!box||!box.batting||!box.batting[playerId]) return;
-    const s=box.batting[playerId];
+
     const metaGame=postMeta[i];
+    const stats=box.batting[playerId];
+
+    const home=metaGame.home_code;
+    const away=metaGame.away_code;
+
+    // determine side by checking which batting side contains player
+    let playerTeam="";
+    let opponentTeam="";
+
+    if(box.home_batting && box.home_batting[playerId]){
+      playerTeam=home;
+      opponentTeam=away;
+    }else{
+      playerTeam=away;
+      opponentTeam=home;
+    }
+
     games.push({
       date:metaGame.date,
       season:metaGame.date.slice(0,4),
       type:"Postseason",
-      team:s.team||"",
-      opponent:"",
-      AB:s.AB||0,
-      H:s.H||0,
-      HR:s.HR||0
+      team:playerTeam,
+      opponent:opponentTeam,
+      AB:stats.AB||0,
+      H:stats.H||0,
+      HR:stats.HR||0
     });
+
   });
 }
 
