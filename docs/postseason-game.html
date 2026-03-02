@@ -13,20 +13,78 @@
   --line:#e6e8ee;
   --soft:#f0f6ff;
 }
-body{font-family:Inter,system-ui,Arial;margin:0;background:var(--bg);}
-.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:#fff;border-bottom:1px solid #ddd;font-weight:700;}
-.navbar a{text-decoration:none;color:#0056d6;}
-.page{max-width:1200px;margin:auto;padding:20px;}
-.hero{background:linear-gradient(90deg,var(--blue),var(--red));color:#fff;padding:30px;border-radius:20px;margin-bottom:20px;}
-.hero h1{margin:0;font-size:36px;}
-.scoreline{font-size:22px;font-weight:700;margin-top:10px;}
-.meta-line{margin-top:6px;}
-.section{background:#fff;padding:18px;border-radius:16px;border:1px solid var(--line);margin-bottom:20px;}
-.section h2{margin:0 0 12px 0;}
-table{width:100%;border-collapse:collapse;}
-th{background:var(--blue);color:white;padding:10px;text-align:left;}
-td{padding:8px;border-bottom:1px solid #eee;}
-tr:nth-child(even){background:var(--soft);}
+body{
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:var(--bg);
+}
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px;
+  background:#fff;
+  border-bottom:1px solid #ddd;
+  font-weight:700;
+}
+.navbar a{
+  text-decoration:none;
+  color:#0056d6;
+}
+.page{
+  max-width:1200px;
+  margin:auto;
+  padding:20px;
+}
+.hero{
+  background:linear-gradient(90deg,var(--blue),var(--red));
+  color:#fff;
+  padding:30px;
+  border-radius:20px;
+  margin-bottom:20px;
+}
+.hero h1{
+  margin:0;
+  font-size:36px;
+}
+.scoreline{
+  font-size:22px;
+  font-weight:700;
+  margin-top:10px;
+}
+.meta-line{
+  margin-top:6px;
+}
+.section{
+  background:#fff;
+  padding:18px;
+  border-radius:16px;
+  border:1px solid var(--line);
+  margin-bottom:20px;
+}
+.section h2{
+  margin:0 0 12px 0;
+}
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+th{
+  background:var(--blue);
+  color:white;
+  padding:10px;
+  text-align:left;
+}
+td{
+  padding:8px;
+  border-bottom:1px solid #eee;
+}
+tr:nth-child(even){
+  background:var(--soft);
+}
+h3{
+  margin:0 0 8px 0;
+}
 </style>
 </head>
 <body>
@@ -63,62 +121,105 @@ function param(n){return new URLSearchParams(window.location.search).get(n)}
 async function fetchJSON(u){const r=await fetch(u);if(!r.ok)return null;return await r.json()}
 async function fetchCSV(u){const r=await fetch(u);if(!r.ok)return null;const t=await r.text();return t.split("\n").map(l=>l.split(","))}
 
-function renderTable(container,obj){
-  if(!obj){document.getElementById(container).innerHTML="No data available.";return;}
-  const players=Object.keys(obj);
+function buildTable(title, players, nameMap){
+  if(!players.length) return "<p>No data available.</p>";
+
   const statKeys=new Set();
-  players.forEach(p=>Object.keys(obj[p]).forEach(k=>statKeys.add(k)));
+  players.forEach(p=>Object.keys(p.stats).forEach(k=>statKeys.add(k)));
   const keys=[...statKeys];
 
-  let html="<table><thead><tr><th>Player</th>";
+  let html=`<h3>${title}</h3>`;
+  html+="<table><thead><tr><th>Player</th>";
   keys.forEach(k=>html+=`<th>${k}</th>`);
   html+="</tr></thead><tbody>";
 
   players.forEach(p=>{
-    html+=`<tr><td>${p}</td>`;
-    keys.forEach(k=>html+=`<td>${obj[p][k]??""}</td>`);
+    const name=nameMap[p.id]||p.id;
+    html+=`<tr><td>${name}</td>`;
+    keys.forEach(k=>html+=`<td>${p.stats[k]??""}</td>`);
     html+="</tr>";
   });
 
   html+="</tbody></table>";
-  document.getElementById(container).innerHTML=html;
+  return html;
 }
 
 (async function(){
 
 const gameId=param("game");
-if(!gameId){document.getElementById("title").innerText="Game Not Found";return;}
+if(!gameId){
+  document.getElementById("title").innerText="Game Not Found";
+  return;
+}
 
 const box=await fetchJSON(`/data/baseball/postseason-games/${gameId}.json`);
 const metaAll=await fetchJSON(`/data/baseball/postseason_meta.json`);
-if(!box||!metaAll){document.getElementById("title").innerText="Game Not Found";return;}
+if(!box||!metaAll){
+  document.getElementById("title").innerText="Game Not Found";
+  return;
+}
 
 const meta=metaAll.find(g=>g.game_id===gameId);
+if(!meta){
+  document.getElementById("title").innerText="Game Not Found";
+  return;
+}
 
+const playersList=await fetchJSON(`/data/baseball/players.json`);
 const teams=await fetchJSON(`/data/baseball/team-names.json`);
 const parks=await fetchCSV(`/data/baseball/ballparks.csv`);
 
-const teamMap={}; if(teams){teams.forEach(t=>teamMap[t.code]=t.name);}
-const parkMap={}; if(parks){parks.slice(1).forEach(r=>parkMap[r[0]]=r[1]);}
+const nameMap={};
+if(playersList){
+  playersList.forEach(p=>nameMap[p.player_id]=p.name);
+}
 
-const home=meta?.home||box.home||"";
-const away=meta?.away||box.away||"";
+const teamMap={};
+if(teams){
+  teams.forEach(t=>teamMap[t.code]=t.name);
+}
+
+const parkMap={};
+if(parks){
+  parks.slice(1).forEach(r=>parkMap[r[0]]=r[1]);
+}
+
+const home=meta.home;
+const away=meta.away;
 
 const homeName=teamMap[home]||home;
 const awayName=teamMap[away]||away;
 
 document.getElementById("title").innerText=`${awayName} @ ${homeName}`;
-
-if(meta){
 document.getElementById("scoreline").innerText=
 `${awayName} ${meta.away_score} – ${homeName} ${meta.home_score}`;
 document.getElementById("subtitle").innerText=meta.date||"";
 document.getElementById("venueLine").innerText=
 meta.venue&&parkMap[meta.venue]?`Venue: ${parkMap[meta.venue]}`:"";
-}
 
-renderTable("batting",box.batting);
-renderTable("pitching",box.pitching);
+/* Split batting by order (Retrosheet lists away first) */
+const battingItems=Object.entries(box.batting||{});
+const midB=Math.floor(battingItems.length/2);
+
+const awayBat=battingItems.slice(0,midB).map(([id,stats])=>({id,stats}));
+const homeBat=battingItems.slice(midB).map(([id,stats])=>({id,stats}));
+
+/* Split pitching */
+const pitchingItems=Object.entries(box.pitching||{});
+const midP=Math.floor(pitchingItems.length/2);
+
+const awayPit=pitchingItems.slice(0,midP).map(([id,stats])=>({id,stats}));
+const homePit=pitchingItems.slice(midP).map(([id,stats])=>({id,stats}));
+
+document.getElementById("batting").innerHTML =
+buildTable(`${awayName} Batting`, awayBat, nameMap) +
+"<br>" +
+buildTable(`${homeName} Batting`, homeBat, nameMap);
+
+document.getElementById("pitching").innerHTML =
+buildTable(`${awayName} Pitching`, awayPit, nameMap) +
+"<br>" +
+buildTable(`${homeName} Pitching`, homePit, nameMap);
 
 })();
 </script>
