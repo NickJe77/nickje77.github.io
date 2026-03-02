@@ -114,6 +114,7 @@ if(!param){document.getElementById("playerName").textContent="Player not found";
 const playersIndex=await safeFetch("/data/baseball/players.json");
 const meta=playersIndex.find(p=>String(p.player_id)===String(param) || p.name.toLowerCase()===param.toLowerCase());
 if(!meta){document.getElementById("playerName").textContent="Player not found";return;}
+
 const playerId=meta.player_id;
 document.getElementById("playerName").textContent=meta.name;
 
@@ -130,7 +131,7 @@ seasons.sort((a,b)=>b-a).forEach(y=>{
 
 let games=[];
 
-/* REGULAR SEASON */
+/* REGULAR SEASON (ARRAY FORMAT) */
 const seasonResults=await Promise.all(
   seasons.filter(y=>y>=1947).map(y=>safeFetch(`/data/baseball/seasons/${y}.json`))
 );
@@ -140,6 +141,7 @@ seasonResults.forEach(data=>{
   data.forEach(g=>{
     const homeBat=g[9]||[];
     const awayBat=g[10]||[];
+
     const homePlayer=homeBat.find(p=>p[0]===playerId);
     const awayPlayer=awayBat.find(p=>p[0]===playerId);
     if(!homePlayer && !awayPlayer) return;
@@ -160,7 +162,7 @@ seasonResults.forEach(data=>{
   });
 });
 
-/* POSTSEASON — CORRECT STRUCTURE */
+/* POSTSEASON (OBJECT FORMAT) */
 const postMeta=await safeFetch("/data/baseball/postseason_meta.json");
 
 if(postMeta){
@@ -172,14 +174,11 @@ if(postMeta){
   postBoxes.forEach(box=>{
     if(!box) return;
 
-    const homeCode=box.home_code;
-    const awayCode=box.away_code;
-
     const homeBat=box.batters_home||[];
     const awayBat=box.batters_away||[];
 
-    const homePlayer=homeBat.find(p=>p[0]===playerId);
-    const awayPlayer=awayBat.find(p=>p[0]===playerId);
+    const homePlayer=homeBat.find(p=>p.player_id===playerId);
+    const awayPlayer=awayBat.find(p=>p.player_id===playerId);
     if(!homePlayer && !awayPlayer) return;
 
     const isHome=!!homePlayer;
@@ -189,13 +188,12 @@ if(postMeta){
       date:box.date,
       season:box.season,
       type:"Postseason",
-      team:isHome?homeCode:awayCode,
-      opponent:isHome?awayCode:homeCode,
-      AB:p[1]||0,
-      H:p[2]||0,
-      HR:p[3]||0
+      team:isHome?box.home_code:box.away_code,
+      opponent:isHome?box.away_code:box.home_code,
+      AB:p.AB||0,
+      H:p.H||0,
+      HR:p.HR||0
     });
-
   });
 }
 
