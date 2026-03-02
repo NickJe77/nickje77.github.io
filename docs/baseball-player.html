@@ -94,8 +94,7 @@ tr:nth-child(even){background:#f7fbff;}
 function fmt(n){return Number(n||0).toLocaleString();}
 function avg(h,ab){return ab?(h/ab).toFixed(3):"0.000";}
 function formatDate(d){
-  if(!d) return "";
-  const dt = new Date(d);
+  const dt=new Date(d);
   if(isNaN(dt)) return d;
   return dt.toLocaleDateString("en-AU",{year:"numeric",month:"short",day:"numeric"});
 }
@@ -130,7 +129,7 @@ teamsData?.forEach(t=>{
 });
 function teamName(code){return TEAM_LOOKUP[code]||code;}
 
-/* LOAD REGULAR SEASON */
+/* LOAD REGULAR */
 const seasons=await safeFetch("/data/baseball/index.json");
 let career={games:0,at_bats:0,hits:0,home_runs:0};
 let teamAgg=new Map();
@@ -143,7 +142,16 @@ await Promise.all((seasons||[]).map(async s=>{
   const row=data.find(p=>String(p.player_id)===String(playerId));
   if(!row) return;
 
-  seasonRows.push({...row,season:s,type:"Regular"});
+  seasonRows.push({
+    sortKey: s,
+    display: s,
+    team: row.team,
+    games: row.games||0,
+    at_bats: row.at_bats||0,
+    hits: row.hits||0,
+    home_runs: row.home_runs||0,
+    type:"Regular"
+  });
 
   career.games+=row.games||0;
   career.at_bats+=row.at_bats||0;
@@ -161,9 +169,8 @@ await Promise.all((seasons||[]).map(async s=>{
   t.home_runs+=row.home_runs||0;
 }));
 
-/* LOAD POSTSEASON WITH GAME DATES */
+/* LOAD POSTSEASON */
 const postMeta=await safeFetch("/data/baseball/postseason_meta.json");
-
 if(postMeta){
   await Promise.all(postMeta.map(async g=>{
     const box=await safeFetch(`/data/baseball/postseason-games/${g.game_id}.json`);
@@ -172,8 +179,9 @@ if(postMeta){
     const stats=box.batting[playerId];
 
     seasonRows.push({
-      season: formatDate(g.date),
-      team: g.home || "",
+      sortKey: g.date,
+      display: formatDate(g.date),
+      team: g.home,
       games:1,
       at_bats:stats.AB||0,
       hits:stats.H||0,
@@ -188,7 +196,7 @@ if(postMeta){
   }));
 }
 
-/* CAREER */
+/* CAREER CARDS */
 document.getElementById("careerCards").innerHTML=`
   <div class="card"><div class="value">${fmt(career.games)}</div><div class="label">Games</div></div>
   <div class="card"><div class="value">${fmt(career.at_bats)}</div><div class="label">AB</div></div>
@@ -197,7 +205,7 @@ document.getElementById("careerCards").innerHTML=`
   <div class="card"><div class="value">${avg(career.hits,career.at_bats)}</div><div class="label">AVG</div></div>
 `;
 
-/* TEAM DROPDOWN */
+/* TEAM SELECT */
 const teamSelect=document.getElementById("teamSelect");
 teamSelect.innerHTML=[...teamAgg.keys()].sort().map(t=>`<option value="${t}">${t}</option>`).join("");
 teamSelect.onchange=()=>{
@@ -213,16 +221,16 @@ teamSelect.onchange=()=>{
 };
 if(teamSelect.value) teamSelect.onchange();
 
-/* TABLE RENDER */
+/* RENDER TABLE */
 function renderTable(){
   const filter=document.getElementById("typeFilter").value;
-  const rows=seasonRows.filter(r=>filter==="All"||r.type===filter);
+  const rows=seasonRows
+    .filter(r=>filter==="All"||r.type===filter)
+    .sort((a,b)=>b.sortKey > a.sortKey ? 1 : -1);
 
-  document.getElementById("seasonBody").innerHTML=rows
-  .sort((a,b)=>b.season.localeCompare(a.season))
-  .map(r=>`
+  document.getElementById("seasonBody").innerHTML=rows.map(r=>`
   <tr class="${r.type==="Postseason"?"postseason-row":""}">
-    <td>${r.season}</td>
+    <td>${r.display}</td>
     <td>${teamName(r.team)}</td>
     <td>${r.games}</td>
     <td>${r.at_bats}</td>
