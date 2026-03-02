@@ -34,6 +34,7 @@ tr:nth-child(even){background:#f7fbff;}
 .postseason-row{background:#fff4e6;font-weight:700;}
 </style>
 </head>
+
 <body>
 
 <div class="navbar">
@@ -56,19 +57,12 @@ tr:nth-child(even){background:#f7fbff;}
 
 <div class="section">
   <h2>By Opponent</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Opponent</th>
-        <th>G</th>
-        <th>AB</th>
-        <th>H</th>
-        <th>HR</th>
-        <th>AVG</th>
-      </tr>
-    </thead>
-    <tbody id="oppBody"></tbody>
-  </table>
+  <div class="controls">
+    <select id="oppSelect">
+      <option value="All">Select Opponent</option>
+    </select>
+  </div>
+  <div class="cards" id="oppCards"></div>
 </div>
 
 <div class="section">
@@ -139,7 +133,6 @@ let games=[];
 const seasonResults=await Promise.all(
   seasons.filter(y=>y>=1947).map(y=>safeFetch(`/data/baseball/seasons/${y}.json`))
 );
-
 seasonResults.forEach(data=>{
   if(!data) return;
   data.forEach(g=>{
@@ -215,17 +208,25 @@ function render(){
   <div class="card"><div class="value">${avg(career.h,career.ab)}</div><div class="label">AVG</div></div>
   `;
 
-  document.getElementById("oppBody").innerHTML=
-  Object.entries(oppStats).map(([opp,s])=>`
-  <tr>
-    <td>${teamName(opp)}</td>
-    <td>${s.g}</td>
-    <td>${s.ab}</td>
-    <td>${s.h}</td>
-    <td>${s.hr}</td>
-    <td>${avg(s.h,s.ab)}</td>
-  </tr>
-  `).join("");
+  const oppSelect=document.getElementById("oppSelect");
+  oppSelect.innerHTML='<option value="All">Select Opponent</option>';
+  Object.keys(oppStats).sort((a,b)=>teamName(a).localeCompare(teamName(b))).forEach(opp=>{
+    oppSelect.innerHTML+=`<option value="${opp}">${teamName(opp)}</option>`;
+  });
+
+  oppSelect.onchange=function(){
+    const val=this.value;
+    const container=document.getElementById("oppCards");
+    if(val==="All"){container.innerHTML="";return;}
+    const s=oppStats[val];
+    container.innerHTML=`
+      <div class="card"><div class="value">${s.g}</div><div class="label">Games</div></div>
+      <div class="card"><div class="value">${s.ab}</div><div class="label">AB</div></div>
+      <div class="card"><div class="value">${s.h}</div><div class="label">Hits</div></div>
+      <div class="card"><div class="value">${s.hr}</div><div class="label">HR</div></div>
+      <div class="card"><div class="value">${avg(s.h,s.ab)}</div><div class="label">AVG</div></div>
+    `;
+  };
 
   filtered.sort((a,b)=>new Date(b.date)-new Date(a.date));
 
