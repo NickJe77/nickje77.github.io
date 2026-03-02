@@ -132,12 +132,6 @@ tbody tr:hover{
 .player-link:hover{
   text-decoration:underline;
 }
-
-.loading{
-  text-align:center;
-  padding:60px;
-  font-size:18px;
-}
 </style>
 </head>
 
@@ -212,7 +206,7 @@ const teamColours = {
   "North Queensland":"#00205B",
   "Newcastle":"#003E7E",
   "Wests":"#F04E23",
-  "Dragons":"#E2231A"
+  "St George Illawarra":"#E2231A"
 };
 
 let homePlayers = [];
@@ -228,14 +222,13 @@ async function loadGame(){
   const res = await fetch(`/data/nrl/seasons/${season}.json`);
   const data = await res.json();
 
-  const gameRows = data.filter(r => r.match_id === matchId);
+  const game = data.find(r => r.match_id === matchId);
 
-  if(gameRows.length === 0){
+  if(!game){
     document.getElementById("gameTitle").innerText = "Game Not Found";
     return;
   }
 
-  const game = gameRows[0];
   const homeTeam = game.home_team;
   const awayTeam = game.away_team;
 
@@ -243,7 +236,7 @@ async function loadGame(){
     `${season} – ${homeTeam} vs ${awayTeam}`;
 
   document.getElementById("gameMeta").innerText =
-    `Venue: ${game.venue} • Crowd: ${game.crowd.toLocaleString()}`;
+    `Venue: ${game.venue} • Crowd: ${Number(game.crowd).toLocaleString()}`;
 
   document.getElementById("scoreline").innerText =
     `${homeTeam} ${game.home_points} – ${game.away_points} ${awayTeam}`;
@@ -257,8 +250,10 @@ async function loadGame(){
   document.getElementById("awayBar").style.background =
     teamColours[awayTeam] || "#333";
 
-  homePlayers = gameRows.filter(r=>r.played_for === homeTeam);
-  awayPlayers = gameRows.filter(r=>r.played_for === awayTeam);
+  const allPlayers = game.players || [];
+
+  homePlayers = allPlayers.filter(p => p.played_for === homeTeam);
+  awayPlayers = allPlayers.filter(p => p.played_for === awayTeam);
 
   renderTable("home");
   renderTable("away");
