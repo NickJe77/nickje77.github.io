@@ -24,7 +24,8 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:var(--bg);color:var(-
   background:linear-gradient(90deg,var(--blue), #3a256e, var(--red));
   color:white;
   padding:30px;
-  border-radius:20px 20px 0 0;
+  border-radius:20px;
+  margin-bottom:18px;
 }
 .hero h1{margin:0;font-size:40px;}
 
@@ -35,8 +36,26 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:var(--bg);color:var(-
 .card .value{font-size:26px;font-weight:900;}
 .card .label{margin-top:6px;font-size:12px;color:#555;}
 
-.controls{display:flex;gap:14px;margin-bottom:14px;}
-select{padding:10px 14px;border-radius:10px;border:1px solid var(--line);font-weight:700;font-size:14px;}
+.controls{
+  display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+  align-items:center;
+  margin-bottom:14px;
+}
+select{
+  padding:10px 14px;
+  border-radius:10px;
+  border:1px solid var(--line);
+  font-weight:800;
+  font-size:14px;
+  background:#fff;
+}
+.small{
+  font-size:12px;
+  color:#667085;
+  font-weight:700;
+}
 
 table{width:100%;border-collapse:collapse;}
 th{background:var(--blue);color:white;padding:10px;}
@@ -44,6 +63,29 @@ td{padding:8px;border-bottom:1px solid #eee;text-align:center;}
 tr:nth-child(even){background:#f7fbff;}
 .game-row{cursor:pointer;}
 .game-row:hover{background:#eaf3ff;}
+.postseason-row{background:#fff4e6;font-weight:800;}
+.postseason-row:hover{background:#ffe2b3;}
+
+.badge{
+  display:inline-block;
+  padding:3px 7px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:900;
+  color:#fff;
+  background:var(--red);
+  margin-left:6px;
+}
+
+.split{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:18px;
+}
+@media (max-width: 980px){
+  .cards{grid-template-columns:repeat(2,1fr);}
+  .split{grid-template-columns:1fr;}
+}
 </style>
 </head>
 
@@ -58,173 +100,420 @@ tr:nth-child(even){background:#f7fbff;}
 
 <div class="page">
 
-<div class="hero">
-  <h1 id="playerName">Loading...</h1>
-</div>
-
-<div class="section">
-  <h2>Career</h2>
-  <div class="cards" id="careerCards"></div>
-</div>
-
-<div class="section">
-  <h2>Games</h2>
-
-  <div class="controls">
-    <select id="seasonSelect">
-      <option value="all">All Seasons</option>
-    </select>
+  <div class="hero">
+    <h1 id="playerName">Loading...</h1>
   </div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Date</th>
-        <th>Team</th>
-        <th>Opponent</th>
-        <th>AB</th>
-        <th>H</th>
-        <th>HR</th>
-        <th>AVG</th>
-      </tr>
-    </thead>
-    <tbody id="gameBody"></tbody>
-  </table>
-</div>
+  <div class="section">
+    <h2>Career</h2>
+    <div class="cards" id="careerCards"></div>
+  </div>
+
+  <div class="section">
+    <h2>Filters</h2>
+    <div class="controls">
+      <select id="gameTypeSel">
+        <option value="All">All Games</option>
+        <option value="Regular">Regular Season</option>
+        <option value="Postseason">Postseason</option>
+      </select>
+
+      <select id="seasonSel">
+        <option value="All">All Seasons</option>
+      </select>
+
+      <span class="small" id="statusText"></span>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Splits</h2>
+
+    <div class="split">
+      <div>
+        <h3 style="margin-top:0;">By Team</h3>
+        <select id="teamSelect" style="width:100%;margin-bottom:12px;"></select>
+        <div class="cards" id="teamCards"></div>
+      </div>
+
+      <div>
+        <h3 style="margin-top:0;">By Opponent</h3>
+        <select id="oppSelect" style="width:100%;margin-bottom:12px;"></select>
+        <div class="cards" id="oppCards"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Games</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Type</th>
+          <th>Team</th>
+          <th>Opponent</th>
+          <th>AB</th>
+          <th>H</th>
+          <th>HR</th>
+          <th>AVG</th>
+        </tr>
+      </thead>
+      <tbody id="gameBody"></tbody>
+    </table>
+  </div>
 
 </div>
 
 <script>
 (async function(){
 
-function avg(h,ab){return ab?(h/ab).toFixed(3):"0.000";}
+/* ---------------- Helpers ---------------- */
+function fmt(n){return Number(n||0).toLocaleString();}
+function avg(h,ab){return ab ? (h/ab).toFixed(3) : "0.000";}
+function toISODateFromYMDslash(d){
+  // input like "2025/03/27" -> "2025-03-27"
+  if(!d) return "";
+  if(d.includes("/")){
+    const p=d.split("/");
+    if(p.length===3) return `${p[0]}-${p[1].padStart(2,"0")}-${p[2].padStart(2,"0")}`;
+  }
+  return d;
+}
 function formatDate(d){
-  const dt=new Date(d);
-  if(isNaN(dt)) return d;
+  const iso=toISODateFromYMDslash(d);
+  const dt=new Date(iso);
+  if(isNaN(dt)) return d || "";
   return dt.toLocaleDateString("en-AU",{year:"numeric",month:"short",day:"numeric"});
 }
 async function safeFetch(url){
-  const r=await fetch(url);
-  if(!r.ok) return null;
-  return await r.json();
+  try{
+    const r=await fetch(url);
+    if(!r.ok) return null;
+    return await r.json();
+  }catch{
+    return null;
+  }
 }
 
+/* ---------------- Query / identity ---------------- */
 const qs=new URLSearchParams(location.search);
 const playerId=qs.get("player");
+const playerNameEl=document.getElementById("playerName");
+const statusText=document.getElementById("statusText");
+
 if(!playerId){
-  document.getElementById("playerName").textContent="Player not found";
+  playerNameEl.textContent="Player not found";
+  statusText.textContent="Missing ?player=";
   return;
 }
 
+/* ---------------- Lookups ---------------- */
 const playersIndex=await safeFetch("/data/baseball/players.json");
-const playerMeta=playersIndex.find(p=>String(p.player_id)===String(playerId));
-if(!playerMeta){
-  document.getElementById("playerName").textContent="Player not found";
+if(!playersIndex){
+  playerNameEl.textContent="Player not found";
+  statusText.textContent="Could not load /data/baseball/players.json";
   return;
 }
-document.getElementById("playerName").textContent=playerMeta.name;
+const playerMeta=playersIndex.find(p=>String(p.player_id)===String(playerId));
+if(!playerMeta){
+  playerNameEl.textContent="Player not found";
+  statusText.textContent="player_id not found in players.json";
+  return;
+}
+playerNameEl.textContent=playerMeta.name;
 
 const teamsData=await safeFetch("/data/baseball/teams.json");
 let TEAM_LOOKUP={};
-teamsData.forEach(t=>t.codes.forEach(c=>TEAM_LOOKUP[c]=t.name));
-function teamName(code){return TEAM_LOOKUP[code]||code;}
+(teamsData||[]).forEach(t=>{
+  (t.codes||[]).forEach(code=>TEAM_LOOKUP[code]=t.name);
+});
+function teamName(code){return TEAM_LOOKUP[code]||code||"";}
 
-const seasons=await safeFetch("/data/baseball/index.json");
-const seasonSelect=document.getElementById("seasonSelect");
+/* ---------------- Controls ---------------- */
+const gameTypeSel=document.getElementById("gameTypeSel");
+const seasonSel=document.getElementById("seasonSel");
 
-seasons.sort((a,b)=>b-a).forEach(y=>{
-  seasonSelect.innerHTML+=`<option value="${y}">${y}</option>`;
+/* Seasons index */
+const seasonsIndex=await safeFetch("/data/baseball/index.json") || [];
+seasonsIndex.sort((a,b)=>b-a);
+seasonsIndex.forEach(y=>{
+  seasonSel.insertAdjacentHTML("beforeend", `<option value="${y}">${y}</option>`);
 });
 
-let games=[];
-let career={games:0,ab:0,h:0,hr:0};
+/* ---------------- Data stores ---------------- */
+const seasonCache = new Map(); // year -> parsed games list
+let postseasonCache = null;    // parsed postseason games list
 
-async function loadSeason(year){
+// Normalized game object for UI:
+/// {date, season, type, round, team, opponent, AB,H,HR, game_id}
+let allGames = [];
 
-  const data=await safeFetch(`/data/baseball/seasons/${year}.json`);
-  if(!data) return;
+/* ---------------- Loaders ---------------- */
+async function loadRegularSeasonYear(year){
+  if(seasonCache.has(year)) return seasonCache.get(year);
 
-  data.forEach(g=>{
-    let player =
-      g[5].find(p=>p[0]===playerId) ||
-      g[6].find(p=>p[0]===playerId);
+  const raw = await safeFetch(`/data/baseball/seasons/${year}.json`);
+  if(!raw){
+    seasonCache.set(year, []);
+    return [];
+  }
 
-    if(!player) return;
+  // Your compact structure per game:
+  // g[0]=game_id, g[1]=date, g[2]=season, g[3]=home, g[4]=away, g[5]=homeBatters, g[6]=awayBatters
+  // batter line: [player_id, AB, H, HR]
+  const out = [];
 
-    const teamCode =
-      g[5].some(p=>p[0]===playerId)
-      ? g[3]
-      : g[4];
+  for(const g of raw){
+    if(!Array.isArray(g) || g.length < 7) continue;
 
-    const oppCode =
-      teamCode===g[3] ? g[4] : g[3];
+    const homeBat = Array.isArray(g[5]) ? g[5] : [];
+    const awayBat = Array.isArray(g[6]) ? g[6] : [];
 
-    games.push({
-      date:g[1],
-      season:g[2],
-      team:teamCode,
-      opponent:oppCode,
-      AB:player[1],
-      H:player[2],
-      HR:player[3]
+    const inHome = homeBat.find(p=>p && p[0]===playerId);
+    const inAway = awayBat.find(p=>p && p[0]===playerId);
+
+    if(!inHome && !inAway) continue;
+
+    const isHome = !!inHome;
+    const pl = inHome || inAway;
+
+    const teamCode = isHome ? g[3] : g[4];
+    const oppCode  = isHome ? g[4] : g[3];
+
+    out.push({
+      date: g[1],
+      season: Number(g[2]) || Number(year),
+      type: "Regular",
+      round: "",
+      team: teamCode,
+      opponent: oppCode,
+      AB: Number(pl[1]||0),
+      H:  Number(pl[2]||0),
+      HR: Number(pl[3]||0),
+      game_id: g[0]
     });
-
-    career.games++;
-    career.ab+=player[1];
-    career.h+=player[2];
-    career.hr+=player[3];
-  });
-}
-
-async function loadAllSeasons(){
-  games=[];
-  career={games:0,ab:0,h:0,hr:0};
-
-  for(const y of seasons){
-    await loadSeason(y);
   }
-  render();
+
+  seasonCache.set(year, out);
+  return out;
 }
 
-function render(){
+async function loadPostseason(){
+  if(postseasonCache) return postseasonCache;
 
+  const postMeta = await safeFetch("/data/baseball/postseason_meta.json");
+  if(!Array.isArray(postMeta)){
+    postseasonCache = [];
+    return postseasonCache;
+  }
+
+  const out = [];
+
+  // Use existing structure from your working page:
+  // /postseason-games/{game_id}.json with box.batting[playerId] stats
+  for(const g of postMeta){
+    const box = await safeFetch(`/data/baseball/postseason-games/${g.game_id}.json`);
+    if(!box || !box.batting || !box.batting[playerId]) continue;
+
+    const stats = box.batting[playerId];
+
+    // Determine player team/opponent as robustly as possible
+    let teamCode = null;
+    let oppCode = null;
+
+    // Common possibilities in your data:
+    if(stats.team) teamCode = stats.team;
+    if(stats.team_code) teamCode = stats.team_code;
+    if(stats.club) teamCode = stats.club;
+
+    // If we can infer from home/away codes in box
+    const homeCode = box.home_code || box.home || g.home;
+    const awayCode = box.away_code || box.away || g.away;
+
+    if(!teamCode){
+      // If batting_home/batting_away exists, try it
+      const bh = box.batting_home || box.batters_home;
+      const ba = box.batting_away || box.batters_away;
+      const inH = Array.isArray(bh) && bh.some(p => (p.player_id||p[0]) === playerId);
+      const inA = Array.isArray(ba) && ba.some(p => (p.player_id||p[0]) === playerId);
+      if(inH) teamCode = homeCode;
+      if(inA) teamCode = awayCode;
+    }
+
+    if(teamCode && homeCode && awayCode){
+      oppCode = (teamCode === homeCode) ? awayCode : homeCode;
+    }else{
+      // fallback: use meta home/away
+      teamCode = teamCode || g.home || homeCode || "";
+      oppCode  = oppCode  || g.away || awayCode || "";
+    }
+
+    out.push({
+      date: g.date || "",
+      season: (g.date ? Number(String(g.date).slice(0,4)) : (g.season||"")),
+      type: "Postseason",
+      round: g.round || "",
+      team: teamCode,
+      opponent: oppCode,
+      AB: Number(stats.AB||0),
+      H:  Number(stats.H||0),
+      HR: Number(stats.HR||0),
+      game_id: g.game_id
+    });
+  }
+
+  postseasonCache = out;
+  return postseasonCache;
+}
+
+/* ---------------- Aggregation / render ---------------- */
+function computeAggregations(games){
+  const career = {games:0, AB:0, H:0, HR:0};
+
+  const byTeam = new Map();      // code -> totals
+  const byOpp  = new Map();      // code -> totals
+
+  for(const g of games){
+    career.games += 1;
+    career.AB += g.AB;
+    career.H  += g.H;
+    career.HR += g.HR;
+
+    if(!byTeam.has(g.team)) byTeam.set(g.team, {games:0, AB:0, H:0, HR:0});
+    const t = byTeam.get(g.team);
+    t.games += 1; t.AB += g.AB; t.H += g.H; t.HR += g.HR;
+
+    if(!byOpp.has(g.opponent)) byOpp.set(g.opponent, {games:0, AB:0, H:0, HR:0});
+    const o = byOpp.get(g.opponent);
+    o.games += 1; o.AB += g.AB; o.H += g.H; o.HR += g.HR;
+  }
+
+  return {career, byTeam, byOpp};
+}
+
+function renderCareer(career){
   document.getElementById("careerCards").innerHTML=`
-  <div class="card"><div class="value">${career.games}</div><div class="label">Games</div></div>
-  <div class="card"><div class="value">${career.ab}</div><div class="label">AB</div></div>
-  <div class="card"><div class="value">${career.h}</div><div class="label">Hits</div></div>
-  <div class="card"><div class="value">${career.hr}</div><div class="label">HR</div></div>
-  <div class="card"><div class="value">${avg(career.h,career.ab)}</div><div class="label">AVG</div></div>
+    <div class="card"><div class="value">${fmt(career.games)}</div><div class="label">Games</div></div>
+    <div class="card"><div class="value">${fmt(career.AB)}</div><div class="label">AB</div></div>
+    <div class="card"><div class="value">${fmt(career.H)}</div><div class="label">Hits</div></div>
+    <div class="card"><div class="value">${fmt(career.HR)}</div><div class="label">HR</div></div>
+    <div class="card"><div class="value">${avg(career.H,career.AB)}</div><div class="label">AVG</div></div>
   `;
-
-  games.sort((a,b)=>new Date(b.date)-new Date(a.date));
-
-  document.getElementById("gameBody").innerHTML=
-    games.map(g=>`
-    <tr class="game-row">
-      <td>${formatDate(g.date)}</td>
-      <td>${teamName(g.team)}</td>
-      <td>${teamName(g.opponent)}</td>
-      <td>${g.AB}</td>
-      <td>${g.H}</td>
-      <td>${g.HR}</td>
-      <td>${avg(g.H,g.AB)}</td>
-    </tr>`).join("");
 }
 
-seasonSelect.onchange=async()=>{
-  const val=seasonSelect.value;
-  games=[];
-  career={games:0,ab:0,h:0,hr:0};
+function setSplitSelect(selectEl, map){
+  const keys=[...map.keys()];
+  keys.sort((a,b)=> teamName(a).localeCompare(teamName(b)));
+  selectEl.innerHTML = keys.map(k=>`<option value="${k}">${teamName(k)}</option>`).join("");
+}
 
-  if(val==="all"){
-    await loadAllSeasons();
-  }else{
-    await loadSeason(val);
-    render();
+function renderSplitCards(el, totals){
+  if(!totals){
+    el.innerHTML="";
+    return;
   }
-};
+  el.innerHTML=`
+    <div class="card"><div class="value">${fmt(totals.games)}</div><div class="label">Games</div></div>
+    <div class="card"><div class="value">${fmt(totals.AB)}</div><div class="label">AB</div></div>
+    <div class="card"><div class="value">${fmt(totals.H)}</div><div class="label">Hits</div></div>
+    <div class="card"><div class="value">${fmt(totals.HR)}</div><div class="label">HR</div></div>
+    <div class="card"><div class="value">${avg(totals.H,totals.AB)}</div><div class="label">AVG</div></div>
+  `;
+}
 
-await loadAllSeasons();
+function renderGamesTable(games){
+  const body=document.getElementById("gameBody");
+  const sorted=[...games].sort((a,b)=> new Date(toISODateFromYMDslash(b.date)) - new Date(toISODateFromYMDslash(a.date)));
+
+  body.innerHTML = sorted.map(g=>{
+    const rowClass = (g.type==="Postseason") ? "postseason-row game-row" : "game-row";
+    const typeLabel = g.type === "Postseason"
+      ? `Postseason${g.round ? ` <span class="badge">${g.round}</span>` : ""}`
+      : "Regular";
+
+    const href = `/baseball-game.html?game=${encodeURIComponent(g.game_id)}`;
+
+    return `
+      <tr class="${rowClass}" onclick="location.href='${href}'">
+        <td>${formatDate(g.date)}</td>
+        <td>${typeLabel}</td>
+        <td>${teamName(g.team)}</td>
+        <td>${teamName(g.opponent)}</td>
+        <td>${g.AB}</td>
+        <td>${g.H}</td>
+        <td>${g.HR}</td>
+        <td>${avg(g.H,g.AB)}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+async function refreshView(){
+  const type = gameTypeSel.value;   // All/Regular/Postseason
+  const season = seasonSel.value;   // All or year
+
+  statusText.textContent = "Loading…";
+
+  // Build full list for current filter
+  let current = [];
+
+  // Regular season
+  if(type==="All" || type==="Regular"){
+    if(season==="All"){
+      // load all seasons (cached)
+      for(const y of seasonsIndex){
+        const part = await loadRegularSeasonYear(y);
+        current.push(...part);
+      }
+    }else{
+      const part = await loadRegularSeasonYear(season);
+      current.push(...part);
+    }
+  }
+
+  // Postseason
+  if(type==="All" || type==="Postseason"){
+    const post = await loadPostseason();
+    if(season==="All"){
+      current.push(...post);
+    }else{
+      current.push(...post.filter(g => String(g.season)===String(season)));
+    }
+  }
+
+  // Update status
+  statusText.textContent = `${fmt(current.length)} games`;
+
+  // Aggregations for CURRENT filtered view
+  const {career, byTeam, byOpp} = computeAggregations(current);
+
+  renderCareer(career);
+
+  const teamSelect=document.getElementById("teamSelect");
+  const oppSelect=document.getElementById("oppSelect");
+
+  setSplitSelect(teamSelect, byTeam);
+  setSplitSelect(oppSelect, byOpp);
+
+  // Render default split cards
+  renderSplitCards(document.getElementById("teamCards"), byTeam.get(teamSelect.value));
+  renderSplitCards(document.getElementById("oppCards"), byOpp.get(oppSelect.value));
+
+  teamSelect.onchange=()=> renderSplitCards(document.getElementById("teamCards"), byTeam.get(teamSelect.value));
+  oppSelect.onchange =()=> renderSplitCards(document.getElementById("oppCards"), byOpp.get(oppSelect.value));
+
+  renderGamesTable(current);
+
+  allGames = current;
+}
+
+/* ---------------- Init ---------------- */
+gameTypeSel.onchange = refreshView;
+seasonSel.onchange   = refreshView;
+
+// Start: All games + All seasons (as you asked for)
+await refreshView();
 
 })();
 </script>
