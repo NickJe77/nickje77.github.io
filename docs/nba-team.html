@@ -90,18 +90,6 @@ body{
   border:1px solid #dfe6ff;
 }
 
-.leader-label{
-  font-size:11px;
-  font-weight:800;
-  text-transform:uppercase;
-}
-
-.leader-player a{
-  text-decoration:none;
-  color:var(--nba-primary);
-  font-weight:800;
-}
-
 .season-box{
   background:var(--card);
   padding:16px;
@@ -207,61 +195,55 @@ let leaders = {};
 
 async function loadData(){
 
-  try {
+  const masterRes = await fetch("/data/nba/nba_games_master.json");
+  const master = await masterRes.json();
 
-    const masterRes = await fetch("/docs/data/nba/nba_games_master.json");
-    const master = await masterRes.json();
+  const team = normalize(teamRaw);
 
-    const team = normalize(teamRaw);
+  for(const game of master){
 
-    for(const game of master){
+    if(game.game_type !== "Regular Season" && game.game_type !== "Playoffs") continue;
 
-      if(game.game_type !== "Regular Season" && game.game_type !== "Playoffs") continue;
+    const home = normalize(game.home_team);
+    const away = normalize(game.away_team);
 
-      const home = normalize(game.home_team);
-      const away = normalize(game.away_team);
+    if(home !== team && away !== team) continue;
 
-      if(home !== team && away !== team) continue;
+    seasons.add(game.season);
 
-      seasons.add(game.season);
+    const isHome = home === team;
+    const teamScore = isHome ? game.home_score : game.away_score;
+    const oppScore  = isHome ? game.away_score : game.home_score;
 
-      const isHome = home === team;
-      const teamScore = isHome ? game.home_score : game.away_score;
-      const oppScore  = isHome ? game.away_score : game.home_score;
+    allGames.push({
+      id: game.game_id,
+      date: game.date,
+      season: game.season,
+      type: game.game_type,
+      opponent: isHome ? game.away_team : game.home_team,
+      result: teamScore > oppScore ? "W" : "L",
+      score: `${teamScore} - ${oppScore}`
+    });
 
-      allGames.push({
-        id: game.game_id,
-        date: game.date,
-        season: game.season,
-        type: game.game_type,
-        opponent: isHome ? game.away_team : game.home_team,
-        result: teamScore > oppScore ? "W" : "L",
-        score: `${teamScore} - ${oppScore}`
-      });
+    const gameFile = await fetch(`/data/nba/${game.season}/${game.game_id}.json`);
+    if(!gameFile.ok) continue;
 
-      const gameFile = await fetch(`/docs/data/nba/${game.season}/${game.game_id}.json`);
-      if(!gameFile.ok) continue;
+    const gameData = await gameFile.json();
 
-      const gameData = await gameFile.json();
+    for(const p of gameData.players){
+      if(normalize(p.team) !== team) continue;
 
-      for(const p of gameData.players){
-        if(normalize(p.team) !== team) continue;
-
-        if(!leaders[p.player_name]){
-          leaders[p.player_name] = { points:0, rebounds:0, assists:0 };
-        }
-
-        leaders[p.player_name].points += p.points || 0;
-        leaders[p.player_name].rebounds += p.rebounds || 0;
-        leaders[p.player_name].assists += p.assists || 0;
+      if(!leaders[p.player_name]){
+        leaders[p.player_name] = { points:0, rebounds:0, assists:0 };
       }
+
+      leaders[p.player_name].points += p.points || 0;
+      leaders[p.player_name].rebounds += p.rebounds || 0;
+      leaders[p.player_name].assists += p.assists || 0;
     }
-
-    buildPage();
-
-  } catch(e){
-    console.error("LOAD ERROR:", e);
   }
+
+  buildPage();
 }
 
 function buildPage(){
@@ -332,21 +314,15 @@ function renderLeaders(){
     return {name:best, total:max};
   }
 
-  const categories = ["points","rebounds","assists"];
-
-  categories.forEach(cat=>{
+  ["points","rebounds","assists"].forEach(cat=>{
     const top = topStat(cat);
     if(!top.name) return;
 
     grid.innerHTML += `
       <div class="leader-box">
-        <div class="leader-label">${cat}</div>
-        <div class="leader-player">
-          <a href="nba-player.html?player=${encodeURIComponent(top.name)}">
-            ${top.name}
-          </a>
-        </div>
-        <div>${top.total}</div>
+        <strong>${cat.toUpperCase()}</strong><br>
+        ${top.name}<br>
+        ${top.total}
       </div>
     `;
   });
