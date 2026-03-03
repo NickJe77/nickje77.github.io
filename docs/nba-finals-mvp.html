@@ -48,21 +48,20 @@ tr:nth-child(even){background:#f6f9ff;}
 <tr>
 <th>Season</th>
 <th>Finals MVP</th>
-<th class="small">Champion</th>
-<th class="small">Runner-up</th>
-<th class="small">Series</th>
+<th>Champion</th>
 </tr>
 </thead>
 <tbody id="rows">
-<tr><td colspan="5">Loading...</td></tr>
+<tr><td colspan="3">Loading...</td></tr>
 </tbody>
 </table>
 
 </div>
 
 <script>
+
 const START_YEAR = 1976;
-const END_YEAR = 2025; // keep as you had it
+const END_YEAR = new Date().getFullYear();
 const rows = document.getElementById("rows");
 const q = document.getElementById("q");
 
@@ -119,147 +118,86 @@ const finalsMVP = {
 "2024-25":"Shai Gilgeous-Alexander"
 };
 
-function getGameDate(g){
-  const d = g?.date || g?.date_iso || g?.game_date || g?.gameDate || "";
-  const dt = new Date(d);
-  return isNaN(dt.getTime()) ? null : dt;
-}
-
 let master = [];
 
 async function loadData(){
-  rows.innerHTML = "";
-  master = [];
+rows.innerHTML="";
+master=[];
 
-  for(let year=END_YEAR;year>=START_YEAR;year--){
-    try{
-      const indexRes=await fetch(`data/nba/${year}/index.json`);
-      if(!indexRes.ok) continue;
+for(let year=END_YEAR;year>=START_YEAR;year--){
+try{
 
-      const index=await indexRes.json();
-      if(!index.games?.length) continue;
+const indexRes=await fetch(`data/nba/${year}/index.json`);
+if(!indexRes.ok) continue;
 
-      const games=(await Promise.all(
-        index.games.map(id=>fetch(`data/nba/${year}/${id}.json`)
-          .then(r=>r.ok?r.json():null))
-      )).filter(Boolean);
+const index=await indexRes.json();
+if(!index.games?.length) continue;
 
-      const playoffGames=games.filter(g=>g.game_type==="Playoffs");
-      if(!playoffGames.length) continue;
+const games=(await Promise.all(
+index.games.map(id=>fetch(`data/nba/${year}/${id}.json`)
+.then(r=>r.ok?r.json():null))
+)).filter(Boolean);
 
-      const seriesMap={};
-      playoffGames.forEach(g=>{
-        const a=g.home_team||"", b=g.away_team||"";
-        if(!a||!b) return;
-        const key=[a,b].sort().join("|");
-        if(!seriesMap[key]) seriesMap[key]=[];
-        seriesMap[key].push(g);
-      });
+const playoffGames=games.filter(g=>g.game_type==="Playoffs");
+if(!playoffGames.length) continue;
 
-      const allSeries=Object.values(seriesMap);
-      if(!allSeries.length) continue;
+/* Determine champion by total playoff wins */
+const winCount={};
+playoffGames.forEach(g=>{
+if(g.winner){
+winCount[g.winner]=(winCount[g.winner]||0)+1;
+}
+});
 
-      // ✅ Finals = series with the latest ending date
-      let finalsSeries=null;
-      let finalsEnd=null;
+const champion=Object.keys(winCount)
+.sort((a,b)=>winCount[b]-winCount[a])[0];
 
-      for(const series of allSeries){
-        const dated = series
-          .map(x => ({ g:x, dt:getGameDate(x) }))
-          .filter(x => x.dt);
+if(!champion) continue;
 
-        if(!dated.length) continue;
+const seasonLabel=`${year}-${String(year+1).slice(2)}`;
 
-        dated.sort((x,y)=>x.dt - y.dt);
-        const endDt = dated[dated.length-1].dt;
+master.push({
+season:seasonLabel,
+mvp:finalsMVP[seasonLabel]||"",
+champion
+});
 
-        if(!finalsEnd || endDt > finalsEnd){
-          finalsEnd = endDt;
-          finalsSeries = dated.map(x=>x.g);
-        } else if(finalsEnd && endDt.getTime() === finalsEnd.getTime()){
-          // tie-breaker: prefer longer series
-          if(finalsSeries && series.length > finalsSeries.length){
-            finalsSeries = dated.map(x=>x.g);
-          }
-        }
-      }
+}catch(e){continue;}
+}
 
-      if(!finalsSeries || !finalsSeries.length) continue;
-
-      finalsSeries.sort((a,b)=>{
-        const da=getGameDate(a), db=getGameDate(b);
-        if(!da && !db) return 0;
-        if(!da) return 1;
-        if(!db) return -1;
-        return da - db;
-      });
-
-      const t1 = finalsSeries[0].home_team;
-      const t2 = finalsSeries[0].away_team;
-
-      const wins = {};
-      wins[t1]=0; wins[t2]=0;
-
-      finalsSeries.forEach(g=>{
-        if(g.winner===t1) wins[t1]+=1;
-        else if(g.winner===t2) wins[t2]+=1;
-      });
-
-      let champion=t1, runnerUp=t2, seriesResult="-";
-      if(wins[t1] !== wins[t2]){
-        champion = wins[t1] > wins[t2] ? t1 : t2;
-        runnerUp = champion===t1 ? t2 : t1;
-        seriesResult = `${wins[champion]}-${wins[runnerUp]}`;
-      }
-
-      const seasonLabel=`${year}-${String(year+1).slice(2)}`;
-
-      master.push({
-        season:seasonLabel,
-        mvp:finalsMVP[seasonLabel]||"",
-        champion,
-        runnerUp,
-        series:seriesResult
-      });
-
-    }catch(e){
-      continue;
-    }
-  }
-
-  render(master);
+render(master);
 }
 
 function render(data){
-  const needle=(q.value||"").toLowerCase().trim();
-  rows.innerHTML="";
 
-  data.forEach(f=>{
-    const hay=[f.season,f.mvp,f.champion,f.runnerUp,f.series].join(" ").toLowerCase();
-    if(needle && !hay.includes(needle)) return;
+const needle=(q.value||"").toLowerCase().trim();
+rows.innerHTML="";
 
-    const link=f.mvp
-      ? `<a class="player-link" href="nba-player.html?player=${encodeURIComponent(f.mvp)}">${f.mvp}</a>`
-      : "";
+data.forEach(f=>{
+const hay=[f.season,f.mvp,f.champion].join(" ").toLowerCase();
+if(needle && !hay.includes(needle)) return;
 
-    const tr=document.createElement("tr");
-    tr.innerHTML=`
-      <td>${f.season}</td>
-      <td>${link}</td>
-      <td class="small">${f.champion}</td>
-      <td class="small">${f.runnerUp}</td>
-      <td class="small">${f.series}</td>
-    `;
-    rows.appendChild(tr);
-  });
+const link=f.mvp
+? `<a class="player-link" href="nba-player.html?player=${encodeURIComponent(f.mvp)}">${f.mvp}</a>`
+: "";
 
-  if(!rows.children.length){
-    rows.innerHTML="<tr><td colspan='5'>No matches.</td></tr>";
-  }
+const tr=document.createElement("tr");
+tr.innerHTML=`
+<td>${f.season}</td>
+<td>${link}</td>
+<td>${f.champion}</td>
+`;
+rows.appendChild(tr);
+});
+
+if(!rows.children.length){
+rows.innerHTML="<tr><td colspan='3'>No matches.</td></tr>";
+}
 }
 
 q.addEventListener("input",()=>render(master));
 loadData();
+
 </script>
 
 </body>
