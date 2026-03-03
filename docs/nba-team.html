@@ -27,6 +27,7 @@ tr:hover{background:#eef2ff;cursor:pointer;}
 .loading{background:#fff;padding:10px;border:1px solid #e5e7eb;border-radius:12px;margin-bottom:16px;}
 </style>
 </head>
+
 <body>
 
 <div class="navbar">
@@ -116,35 +117,50 @@ wizards:"Washington Wizards"
 };
 
 function norm(s){return (s||"").toLowerCase().replace(/[^a-z]/g,"");}
+function fullName(raw){return FULL_TEAM_NAMES[norm(raw)]||raw;}
 
-function fullName(raw){
-return FULL_TEAM_NAMES[norm(raw)] || raw;
-}
-
+// Explicit date parser (no Date() guessing)
 function computeSeasonFromDate(dateStr){
-if(!dateStr) return null;
-const d = new Date(dateStr);
-if(isNaN(d)) return null;
-const y = d.getFullYear();
-const m = d.getMonth()+1;
-return m >= 10 ? y : y-1;
+  if(!dateStr) return null;
+
+  // YYYY-MM-DD
+  if(dateStr.includes("-")){
+    const parts=dateStr.split("-");
+    const y=Number(parts[0]);
+    const m=Number(parts[1]);
+    if(!y||!m)return null;
+    return m>=10?y:y-1;
+  }
+
+  // DD/MM/YYYY or YYYY/MM/DD
+  if(dateStr.includes("/")){
+    const parts=dateStr.split("/");
+    if(parts[0].length===4){
+      const y=Number(parts[0]);
+      const m=Number(parts[1]);
+      return m>=10?y:y-1;
+    }else{
+      const y=Number(parts[2]);
+      const m=Number(parts[1]);
+      return m>=10?y:y-1;
+    }
+  }
+
+  return null;
 }
 
 function seasonLabel(start){
-const n = String((start+1)%100).padStart(2,"0");
+const n=String((start+1)%100).padStart(2,"0");
 return `${start}-${n}`;
 }
 
 function typeBucket(t){
-if(!t) return "regular";
+if(!t)return "regular";
 t=t.toLowerCase();
-if(t.includes("regular")) return "regular";
+if(t.includes("regular"))return "regular";
 return "playoffs";
 }
-
-function typeLabel(t){
-return typeBucket(t)==="regular"?"Regular Season":"Playoffs";
-}
+function typeLabel(t){return typeBucket(t)==="regular"?"Regular Season":"Playoffs";}
 
 const elTeamName=document.getElementById("teamName");
 const elSubTitle=document.getElementById("subTitle");
@@ -211,8 +227,8 @@ const isHome=home.includes(teamKey);
 const teamScore=isHome?g.home_score:g.away_score;
 const oppScore=isHome?g.away_score:g.home_score;
 
-const seasonStart = computeSeasonFromDate(g.date);
-if(!seasonStart) continue;
+const seasonStart=computeSeasonFromDate(g.date);
+if(!seasonStart)continue;
 
 seasons.add(seasonStart);
 
