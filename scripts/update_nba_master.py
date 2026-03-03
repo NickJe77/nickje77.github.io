@@ -2,7 +2,6 @@
 
 import requests
 import json
-import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -21,16 +20,24 @@ HEADERS = {
 def fetch_scoreboard(date):
     date_str = date.strftime("%Y%m%d")
     url = f"https://cdn.nba.com/static/json/liveData/scoreboard/scoreboard_{date_str}.json"
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=10)
-        if r.status_code == 200:
-            return r.json()
-        else:
-            print(f"{date_str} - blocked ({r.status_code})")
-            return None
-    except Exception as e:
-        print(f"{date_str} - error: {e}")
+
+    r = requests.get(url, headers=HEADERS, timeout=10)
+
+    if r.status_code != 200:
+        print(f"{date_str} - blocked ({r.status_code})")
         return None
+
+    print(f"{date_str} - OK")
+
+    data = r.json()
+
+    # DEBUG: show keys
+    print("Top level keys:", data.keys())
+
+    if "scoreboard" in data:
+        print("Scoreboard keys:", data["scoreboard"].keys())
+
+    return data
 
 def save_game(game):
     game_id = game["gameId"]
@@ -47,12 +54,19 @@ def main():
 
     while current_date <= END_DATE:
         data = fetch_scoreboard(current_date)
+
         if data and "scoreboard" in data:
             games = data["scoreboard"].get("games", [])
+
+            print("Games found:", len(games))
+
             for game in games:
+                print("Status:", game.get("gameStatusText"))
+
                 if game.get("gameStatusText") == "Final":
                     if save_game(game):
                         new_games += 1
+
         current_date += timedelta(days=1)
 
     print(f"Done. New games written: {new_games}")
