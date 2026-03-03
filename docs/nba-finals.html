@@ -30,32 +30,32 @@ tr:hover{background:#e6f0ff;}
 <body>
 
 <div class="navbar">
-  <a href="index.html">Home</a>
-  <a href="nba.html">NBA</a>
+<a href="index.html">Home</a>
+<a href="nba.html">NBA</a>
 </div>
 
 <div class="page-wrap">
 
 <div class="hero">
-  <h1>NBA Finals</h1>
-  <p>Championship series history from 1976–77 to present.</p>
+<h1>NBA Finals</h1>
+<p>Championship series history from 1976–77 to present.</p>
 </div>
 
 <div class="card">
-  <table>
-    <thead>
-      <tr>
-        <th>Season</th>
-        <th>Champion</th>
-        <th>Runner-up</th>
-        <th>Series</th>
-        <th>Games</th>
-      </tr>
-    </thead>
-    <tbody id="finalsTable">
-      <tr><td colspan="5">Loading...</td></tr>
-    </tbody>
-  </table>
+<table>
+<thead>
+<tr>
+<th>Season</th>
+<th>Champion</th>
+<th>Runner-up</th>
+<th>Series</th>
+<th>Games</th>
+</tr>
+</thead>
+<tbody id="finalsTable">
+<tr><td colspan="5">Loading...</td></tr>
+</tbody>
+</table>
 </div>
 
 </div>
@@ -63,6 +63,10 @@ tr:hover{background:#e6f0ff;}
 <script>
 
 const tableBody = document.getElementById("finalsTable");
+
+function norm(s){
+  return (s||"").toLowerCase().replace(/[^a-z]/g,"");
+}
 
 function getWinner(g){
   const hs = Number(g.home_score);
@@ -73,115 +77,111 @@ function getWinner(g){
 
 async function loadFinals(){
 
-  tableBody.innerHTML = "";
+tableBody.innerHTML = "";
 
-  // ✅ READ ACTUAL SEASONS FROM FILE
-  const seasons = await fetch("/data/nba/seasons.json")
-    .then(r => r.ok ? r.json() : [])
-    .catch(()=>[]);
+const seasons = await fetch("/data/nba/seasons.json")
+  .then(r=>r.ok?r.json():[])
+  .catch(()=>[]);
 
-  seasons.sort((a,b)=>b-a);
+seasons.sort((a,b)=>b-a);
 
-  for(const year of seasons){
+for(const year of seasons){
 
-    try{
+  try{
 
-      const indexRes = await fetch(`/data/nba/${year}/index.json`);
-      if(!indexRes.ok) continue;
+    const indexRes = await fetch(`/data/nba/${year}/index.json`);
+    if(!indexRes.ok) continue;
 
-      const index = await indexRes.json();
-      if(!index.games?.length) continue;
+    const index = await indexRes.json();
+    if(!index.games?.length) continue;
 
-      const games = (await Promise.all(
-        index.games.map(id =>
-          fetch(`/data/nba/${year}/${id}.json`)
-            .then(r => r.ok ? r.json() : null)
-        )
-      )).filter(Boolean);
+    const playoffGames = [];
 
-      const playoffGames = games.filter(g=>{
-        const gt = (g.game_type||"").toLowerCase();
-        return gt.includes("play");
-      });
+    // 🔥 SEQUENTIAL loading (prevents 503)
+    for(const id of index.games){
 
-      if(!playoffGames.length) continue;
+      const res = await fetch(`/data/nba/${year}/${id}.json`);
+      if(!res.ok) continue;
 
-      const seriesMap = {};
+      const g = await res.json();
+      const gt = (g.game_type||"").toLowerCase();
 
-      playoffGames.forEach(g=>{
-        const key = [g.home_team, g.away_team].sort().join("|");
-        if(!seriesMap[key]) seriesMap[key] = [];
-        seriesMap[key].push(g);
-      });
-
-      let finalsSeries = null;
-      let champion = null;
-      let runnerUp = null;
-
-      for(const series of Object.values(seriesMap)){
-
-        const wins = {};
-
-        series.forEach(g=>{
-          const w = getWinner(g);
-          if(!w) return;
-          if(!wins[w]) wins[w] = 0;
-          wins[w]++;
-        });
-
-        const teams = Object.keys(wins);
-        const winnerTeam = teams.find(t => wins[t] === 4);
-        if(!winnerTeam) continue;
-
-        const playsElsewhere = playoffGames.some(g=>{
-          if(series.includes(g)) return false;
-          return g.home_team === winnerTeam || g.away_team === winnerTeam;
-        });
-
-        if(!playsElsewhere){
-          finalsSeries = series;
-          champion = winnerTeam;
-          runnerUp = teams.find(t => t !== winnerTeam);
-          break;
-        }
+      if(gt.includes("play")){
+        playoffGames.push(g);
       }
-
-      if(!finalsSeries) continue;
-
-      finalsSeries.sort((a,b)=> new Date(a.date) - new Date(b.date));
-
-      const champWins = finalsSeries.filter(g => getWinner(g) === champion).length;
-      const runnerWins = finalsSeries.length - champWins;
-      const seriesScore = `${champWins}-${runnerWins}`;
-
-      const gamesLinks = finalsSeries.map((g,i)=>
-        `<a class="link" href="/nba-game.html?season=${year}&game=${g.game_id}">G${i+1}</a>`
-      ).join(" ");
-
-      const tr = document.createElement("tr");
-
-      tr.innerHTML = `
-        <td>${year}-${String(year+1).slice(2)}</td>
-        <td class="champ">
-          <a class="link" href="/nba-team.html?team=${encodeURIComponent(champion)}">${champion}</a>
-        </td>
-        <td>
-          <a class="link" href="/nba-team.html?team=${encodeURIComponent(runnerUp)}">${runnerUp}</a>
-        </td>
-        <td class="series">${seriesScore}</td>
-        <td class="games">${gamesLinks}</td>
-      `;
-
-      tableBody.appendChild(tr);
-
-    }catch(e){
-      continue;
     }
-  }
 
-  if(!tableBody.children.length){
-    tableBody.innerHTML = "<tr><td colspan='5'>No Finals data found.</td></tr>";
+    if(!playoffGames.length) continue;
+
+    const seriesMap = {};
+
+    playoffGames.forEach(g=>{
+      const key = [norm(g.home_team), norm(g.away_team)].sort().join("|");
+      if(!seriesMap[key]) seriesMap[key]=[];
+      seriesMap[key].push(g);
+    });
+
+    let finalsSeries=null;
+    let champion=null;
+    let runnerUp=null;
+
+    for(const series of Object.values(seriesMap)){
+
+      const wins={};
+
+      series.forEach(g=>{
+        const w=getWinner(g);
+        if(!w) return;
+        if(!wins[w]) wins[w]=0;
+        wins[w]++;
+      });
+
+      const teams=Object.keys(wins);
+      const winnerTeam=teams.find(t=>wins[t]===4);
+      if(!winnerTeam) continue;
+
+      finalsSeries=series;
+      champion=winnerTeam;
+      runnerUp=teams.find(t=>t!==winnerTeam);
+      break;
+    }
+
+    if(!finalsSeries) continue;
+
+    finalsSeries.sort((a,b)=>new Date(a.date)-new Date(b.date));
+
+    const champWins = finalsSeries.filter(g=>getWinner(g)===champion).length;
+    const runnerWins = finalsSeries.length - champWins;
+
+    const gamesLinks = finalsSeries.map((g,i)=>
+      `<a class="link" href="/nba-game.html?season=${year}&game=${g.game_id}">G${i+1}</a>`
+    ).join(" ");
+
+    const tr=document.createElement("tr");
+
+    tr.innerHTML=`
+      <td>${year}-${String(year+1).slice(2)}</td>
+      <td class="champ">
+        <a class="link" href="/nba-team.html?team=${encodeURIComponent(champion)}">${champion}</a>
+      </td>
+      <td>
+        <a class="link" href="/nba-team.html?team=${encodeURIComponent(runnerUp)}">${runnerUp}</a>
+      </td>
+      <td class="series">${champWins}-${runnerWins}</td>
+      <td class="games">${gamesLinks}</td>
+    `;
+
+    tableBody.appendChild(tr);
+
+  }catch(e){
+    continue;
   }
+}
+
+if(!tableBody.children.length){
+  tableBody.innerHTML="<tr><td colspan='5'>No Finals data found.</td></tr>";
+}
+
 }
 
 loadFinals();
