@@ -4,15 +4,15 @@
 <meta charset="UTF-8">
 <title>NBA Finals | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="style.css">
 
 <style>
 body{
   font-family:Inter,system-ui,Arial,sans-serif;
   margin:0;
-  background:#ffffff;
+  background:#f4f6f8;
 }
 
+/* NAV */
 .navbar{
   display:flex;
   justify-content:center;
@@ -20,6 +20,7 @@ body{
   padding:16px 0;
   border-bottom:1px solid #ddd;
   font-weight:600;
+  background:#fff;
 }
 .navbar a{
   color:#0056d6;
@@ -27,61 +28,77 @@ body{
   font-size:18px;
 }
 
+/* PAGE */
 .page-wrap{
   max-width:1100px;
   margin:0 auto;
   padding:30px 20px 60px;
 }
 
+/* HERO */
 .hero{
   background:linear-gradient(90deg,#1D428A,#C8102E);
   color:white;
-  padding:26px 30px;
-  border-radius:14px;
-  margin-bottom:30px;
+  padding:28px 34px;
+  border-radius:18px;
+  margin-bottom:25px;
 }
-
 .hero h1{
   margin:0 0 6px;
-  font-size:28px;
+  font-size:30px;
+  font-weight:800;
 }
-
 .hero p{
   margin:0;
   opacity:.9;
   font-size:14px;
 }
 
+/* CARD */
+.card{
+  background:#ffffff;
+  border-radius:18px;
+  padding:20px;
+  box-shadow:0 4px 12px rgba(0,0,0,0.05);
+}
+
+/* TABLE */
 table{
   width:100%;
   border-collapse:collapse;
+  font-size:14px;
 }
-
 th,td{
-  border-bottom:1px solid #ddd;
-  padding:10px 12px;
+  padding:12px 12px;
+  border-bottom:1px solid #eee;
   text-align:left;
 }
-
 th{
-  background:#f0f0f0;
+  background:#eef3ff;
   font-weight:700;
 }
-
 tr:nth-child(even){
-  background:#f6f9ff;
+  background:#f8faff;
 }
-
+tr:hover{
+  background:#e6f0ff;
+}
+.champ{
+  font-weight:800;
+  color:#111;
+}
+.series{
+  font-weight:700;
+  color:#1D428A;
+}
 .link{
   color:#0056d6;
   text-decoration:none;
   font-weight:600;
 }
-
 .link:hover{
   text-decoration:underline;
 }
-
 .games a{
   margin-right:6px;
 }
@@ -102,20 +119,22 @@ tr:nth-child(even){
   <p>Championship series history from 1976–77 to present.</p>
 </div>
 
-<table>
-<thead>
-<tr>
-<th>Season</th>
-<th>Champion</th>
-<th>Runner-up</th>
-<th>Series</th>
-<th>Games</th>
-</tr>
-</thead>
-<tbody id="finalsTable">
-<tr><td colspan="5">Loading...</td></tr>
-</tbody>
-</table>
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Season</th>
+        <th>Champion</th>
+        <th>Runner-up</th>
+        <th>Series</th>
+        <th>Games</th>
+      </tr>
+    </thead>
+    <tbody id="finalsTable">
+      <tr><td colspan="5">Loading...</td></tr>
+    </tbody>
+  </table>
+</div>
 
 </div>
 
@@ -124,11 +143,64 @@ const START_YEAR = 1976;
 const END_YEAR = new Date().getFullYear();
 const tableBody = document.getElementById("finalsTable");
 
-function getGameDate(g){
-  // prefer g.date but support common alternates
-  const d = g?.date || g?.date_iso || g?.game_date || g?.gameDate || "";
-  const dt = new Date(d);
+/* ---- Robust date parsing ---- */
+function parseDateFlexible(d){
+  if(!d || typeof d !== "string") return null;
+
+  // Trim and normalize
+  const s = d.trim();
+
+  // YYYY-MM-DD
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m){
+    const y = Number(m[1]), mo = Number(m[2]) - 1, da = Number(m[3]);
+    const dt = new Date(Date.UTC(y, mo, da, 12, 0, 0)); // midday UTC to avoid TZ edge cases
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+
+  // YYYY/MM/DD
+  m = s.match(/^(\d{4})\/(\d{2})\/(\d{2})/);
+  if(m){
+    const y = Number(m[1]), mo = Number(m[2]) - 1, da = Number(m[3]);
+    const dt = new Date(Date.UTC(y, mo, da, 12, 0, 0));
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+
+  // Fallback to native parser
+  const dt = new Date(s);
   return isNaN(dt.getTime()) ? null : dt;
+}
+
+function getGameDate(g){
+  const d = g?.date || g?.date_iso || g?.game_date || g?.gameDate || "";
+  return parseDateFlexible(d);
+}
+
+/* ---- Robust winner detection (FIX for 2019/20 + 2020/21) ---- */
+function getWinnerTeamName(g){
+  const home = g?.home_team || "";
+  const away = g?.away_team || "";
+  if(!home || !away) return "";
+
+  const wRaw = (g?.winner || g?.winning_team || g?.win_team || "").toString().trim();
+
+  // If winner is already a full team name
+  if(wRaw && (wRaw === home || wRaw === away)) return wRaw;
+
+  // If winner is a code and we have home_code/away_code
+  const homeCode = (g?.home_code || g?.homeCode || "").toString().trim();
+  const awayCode = (g?.away_code || g?.awayCode || "").toString().trim();
+  if(wRaw && homeCode && wRaw === homeCode) return home;
+  if(wRaw && awayCode && wRaw === awayCode) return away;
+
+  // Fallback to scores (most reliable if present)
+  const hs = Number(g?.home_score ?? g?.homeScore ?? g?.home_points ?? g?.homePoints);
+  const as = Number(g?.away_score ?? g?.awayScore ?? g?.away_points ?? g?.awayPoints);
+  if(Number.isFinite(hs) && Number.isFinite(as) && hs !== as){
+    return hs > as ? home : away;
+  }
+
+  return "";
 }
 
 async function loadFinals(){
@@ -152,7 +224,7 @@ async function loadFinals(){
       const playoffGames = games.filter(g => g.game_type === "Playoffs");
       if(!playoffGames.length) continue;
 
-      // Group by matchup (series)
+      // Group by matchup
       const seriesMap = {};
       playoffGames.forEach(g=>{
         const a = g.home_team || "";
@@ -166,12 +238,11 @@ async function loadFinals(){
       const allSeries = Object.values(seriesMap);
       if(!allSeries.length) continue;
 
-      // ✅ FINALS = series with latest ending date in the entire playoffs
+      // Finals = series with latest ending date
       let finalsSeries = null;
       let finalsEnd = null;
 
       for(const series of allSeries){
-        // sort by date so we can get end date reliably
         const dated = series
           .map(g => ({ g, dt: getGameDate(g) }))
           .filter(x => x.dt);
@@ -192,7 +263,7 @@ async function loadFinals(){
         }
       }
 
-      if(!finalsSeries || !finalsSeries.length) continue;
+      if(!finalsSeries?.length) continue;
 
       finalsSeries.sort((a,b)=>{
         const da = getGameDate(a), db = getGameDate(b);
@@ -202,27 +273,26 @@ async function loadFinals(){
         return da - db;
       });
 
-      // Determine the two finals teams from matchup
+      // Finals teams
       const t1 = finalsSeries[0].home_team;
       const t2 = finalsSeries[0].away_team;
 
-      // Count wins in finals series (only count winners that match either finals team)
+      // Count wins using robust winner detection
       const wins = {};
       wins[t1] = 0;
       wins[t2] = 0;
 
       finalsSeries.forEach(g=>{
-        const w = g.winner;
+        const w = getWinnerTeamName(g);
         if(w === t1) wins[t1] += 1;
         else if(w === t2) wins[t2] += 1;
       });
 
-      // If winners missing, we can’t determine series score reliably
-      // but we’ll still show teams and link games
       let champion = t1;
       let runnerUp = t2;
       let seriesResult = "-";
 
+      // If still tied (missing winners/scores), keep neutral
       if(wins[t1] !== wins[t2]){
         champion = wins[t1] > wins[t2] ? t1 : t2;
         runnerUp = champion === t1 ? t2 : t1;
@@ -236,12 +306,15 @@ async function loadFinals(){
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${year}-${String(year+1).slice(2)}</td>
-        <td>${champion}</td>
-        <td>${runnerUp}</td>
-        <td>${seriesResult}</td>
+        <td class="champ">
+          <a class="link" href="nba-team.html?team=${encodeURIComponent(champion)}">${champion}</a>
+        </td>
+        <td>
+          <a class="link" href="nba-team.html?team=${encodeURIComponent(runnerUp)}">${runnerUp}</a>
+        </td>
+        <td class="series">${seriesResult}</td>
         <td class="games">${gamesLinks}</td>
       `;
-
       tableBody.appendChild(tr);
 
     }catch(e){
