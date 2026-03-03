@@ -85,7 +85,8 @@ Final Score
 
 <script>
 
-const BASE = "data/nba/";
+/* ✅ ABSOLUTE PATH */
+const BASE = "/data/nba/";
 
 const params = new URLSearchParams(window.location.search);
 const season = params.get("season");
@@ -103,123 +104,115 @@ const homeTitle = document.getElementById("homeTitle");
 const awayTitle = document.getElementById("awayTitle");
 
 function showError(msg){
-errorBox.style.display="block";
-errorBox.textContent=msg;
+  errorBox.style.display="block";
+  errorBox.textContent=msg;
 }
 
 function renderTable(players, tableId){
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  tbody.innerHTML="";
 
-const tbody = document.querySelector(`#${tableId} tbody`);
-tbody.innerHTML="";
+  players.forEach(p=>{
+    const tr=document.createElement("tr");
 
-players.forEach(p=>{
+    tr.innerHTML=`
+      <td>${p.player_name}</td>
+      <td>${p.minutes || 0}</td>
+      <td>${p.points || 0}</td>
+      <td>${p.rebounds || 0}</td>
+      <td>${p.assists || 0}</td>
+      <td>${p.steals || 0}</td>
+      <td>${p.blocks || 0}</td>
+    `;
 
-const tr=document.createElement("tr");
+    tr.addEventListener("click", ()=>{
+      location.href="nba-player.html?player=" + encodeURIComponent(p.player_name);
+    });
 
-tr.innerHTML=`
-<td>${p.player_name}</td>
-<td>${p.minutes || 0}</td>
-<td>${p.points || 0}</td>
-<td>${p.rebounds || 0}</td>
-<td>${p.assists || 0}</td>
-<td>${p.steals || 0}</td>
-<td>${p.blocks || 0}</td>
-`;
-
-tr.addEventListener("click", ()=>{
-location.href="nba-player.html?player=" + encodeURIComponent(p.player_name);
-});
-
-tbody.appendChild(tr);
-
-});
+    tbody.appendChild(tr);
+  });
 }
 
 function sortTable(players, key, tableId, headerEl){
+  let asc = headerEl.classList.toggle("asc");
+  headerEl.classList.toggle("desc", !asc);
 
-let asc = headerEl.classList.toggle("asc");
-headerEl.classList.toggle("desc", !asc);
+  document.querySelectorAll(`#${tableId} th`).forEach(th=>{
+    if(th!==headerEl) th.classList.remove("asc","desc");
+  });
 
-document.querySelectorAll(`#${tableId} th`).forEach(th=>{
-if(th!==headerEl){
-th.classList.remove("asc","desc");
-}
-});
+  players.sort((a,b)=>{
+    if(key==="player_name"){
+      return asc 
+        ? a[key].localeCompare(b[key])
+        : b[key].localeCompare(a[key]);
+    }
+    return asc 
+      ? (a[key]||0)-(b[key]||0)
+      : (b[key]||0)-(a[key]||0);
+  });
 
-players.sort((a,b)=>{
-if(key==="player_name"){
-return asc 
-? a[key].localeCompare(b[key])
-: b[key].localeCompare(a[key]);
-}
-return asc 
-? (a[key]||0)-(b[key]||0)
-: (b[key]||0)-(a[key]||0);
-});
-
-renderTable(players, tableId);
+  renderTable(players, tableId);
 }
 
 function enableSorting(tableId, players){
-
-document.querySelectorAll(`#${tableId} th`).forEach(th=>{
-th.addEventListener("click",()=>{
-const key = th.dataset.key;
-sortTable(players, key, tableId, th);
-});
-});
+  document.querySelectorAll(`#${tableId} th`).forEach(th=>{
+    th.addEventListener("click",()=>{
+      const key = th.dataset.key;
+      sortTable(players, key, tableId, th);
+    });
+  });
 }
 
 async function loadGame(){
 
-if(!season || !gameId){
-showError("Missing season or game id");
-return;
-}
+  if(!season || !gameId){
+    showError("Missing season or game id");
+    return;
+  }
 
-try{
+  try{
 
-const res = await fetch(BASE + season + "/" + gameId + ".json");
+    const res = await fetch(BASE + season + "/" + gameId + ".json");
 
-if(!res.ok){
-showError("Game file not found (404)");
-return;
-}
+    if(!res.ok){
+      showError("Game file not found (404)");
+      return;
+    }
 
-const game = await res.json();
+    const game = await res.json();
 
-if(game.game_type === "Preseason"){
-showError("Preseason games are not included in official records.");
-return;
-}
+    if((game.game_type||"").toLowerCase().includes("pre")){
+      showError("Preseason games are not included in official records.");
+      return;
+    }
 
-titleEl.textContent = game.away_team + " @ " + game.home_team;
-subtitleEl.textContent = "Season " + season + " — " + (game.date || "");
+    titleEl.textContent = game.away_team + " @ " + game.home_team;
+    subtitleEl.textContent = "Season " + season + " — " + (game.date || "");
 
-scoreLine.textContent =
-game.home_team + " " + game.home_score +
-" – " +
-game.away_score + " " + game.away_team;
+    scoreLine.textContent =
+      game.home_team + " " + game.home_score +
+      " – " +
+      game.away_score + " " + game.away_team;
 
-summaryEl.style.display="flex";
+    summaryEl.style.display="flex";
 
-homeTitle.textContent = game.home_team;
-awayTitle.textContent = game.away_team;
+    homeTitle.textContent = game.home_team;
+    awayTitle.textContent = game.away_team;
 
-homePlayers = (game.players || []).filter(p=>p.team===game.home_team);
-awayPlayers = (game.players || []).filter(p=>p.team===game.away_team);
+    homePlayers = (game.players || []).filter(p=>p.team===game.home_team);
+    awayPlayers = (game.players || []).filter(p=>p.team===game.away_team);
 
-renderTable(homePlayers, "homeTable");
-renderTable(awayPlayers, "awayTable");
+    renderTable(homePlayers, "homeTable");
+    renderTable(awayPlayers, "awayTable");
 
-enableSorting("homeTable", homePlayers);
-enableSorting("awayTable", awayPlayers);
+    enableSorting("homeTable", homePlayers);
+    enableSorting("awayTable", awayPlayers);
 
-}
-catch(err){
-showError("Could not load game file");
-}
-
+  }
+  catch(err){
+    showError("Could not load game file");
+  }
 }
 
 window.addEventListener("pageshow", loadGame);
