@@ -1,24 +1,109 @@
-def main():
-    # Hard start date (your last saved game)
-    start_date = date(2025, 2, 15)
+import json
+import requests
+import time
+from pathlib import Path
+from datetime import date, timedelta
 
+# =========================
+# CONFIG
+# =========================
+
+SEASON = 2025
+START_DATE = date(2025, 2, 15)
+
+OUT_DIR = Path("docs/data/nba/2025")
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+SCOREBOARD_URL = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_{date}.json"
+BOXSCORE_URL = "https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{gameId}.json"
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
+
+
+# =========================
+# HELPERS
+# =========================
+
+def get_json(url):
+    r = requests.get(url, headers=HEADERS, timeout=10)
+    r.raise_for_status()
+    return r.json()
+
+
+def filename_from_gameid(game_id):
+    return f"{game_id}.json"
+
+
+def build_game(box):
+    game = box["game"]
+
+    home = game["homeTeam"]
+    away = game["awayTeam"]
+
+    players = []
+
+    for team in [home, away]:
+        team_name = team["teamName"]
+        for p in team.get("players", []):
+            players.append({
+                "player_id": p.get("personId"),
+                "player_name": p.get("name"),
+                "team": team_name,
+                "minutes": p.get("statistics", {}).get("minutes"),
+                "points": p.get("statistics", {}).get("points"),
+                "rebounds": p.get("statistics", {}).get("reboundsTotal"),
+                "assists": p.get("statistics", {}).get("assists"),
+                "steals": p.get("statistics", {}).get("steals"),
+                "blocks": p.get("statistics", {}).get("blocks"),
+                "turnovers": p.get("statistics", {}).get("turnovers"),
+                "fouls": p.get("statistics", {}).get("foulsPersonal")
+            })
+
+    return {
+        "game_id": game["gameId"],
+        "season": SEASON,
+        "date": game["gameDate"],
+        "home_team": home["teamName"],
+        "away_team": away["teamName"],
+        "home_score": home["score"],
+        "away_score": away["score"],
+        "winner": home["teamName"] if int(home["score"]) > int(away["score"]) else away["teamName"],
+        "game_type": game.get("gameStatusText"),
+        "arena": {
+            "arenaName": game.get("arena", {}).get("arenaName"),
+            "arenaCity": game.get("arena", {}).get("arenaCity"),
+            "arenaState": game.get("arena", {}).get("arenaState")
+        },
+        "attendance": game.get("attendance"),
+        "players": players
+    }
+
+
+# =========================
+# MAIN
+# =========================
+
+def main():
     today = date.today()
+    day = START_DATE
     written = 0
 
-    day = start_date
-
     while day <= today:
-        url = SCOREBOARD_URL.format(date=day.strftime("%Y%m%d"))
+        formatted = day.strftime("%Y%m%d")
+        url = SCOREBOARD_URL.format(date=formatted)
 
         try:
             scoreboard = get_json(url)
-        except:
+        except Exception:
             day += timedelta(days=1)
             continue
 
         games = scoreboard.get("scoreboard", {}).get("games", [])
 
         for g in games:
+            # Only completed games
             if g.get("gameStatus") != 3:
                 continue
 
@@ -46,3 +131,7 @@ def main():
         day += timedelta(days=1)
 
     print("Done. New games written:", written)
+
+
+if __name__ == "__main__":
+    main()
