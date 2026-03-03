@@ -122,18 +122,8 @@ tr:nth-child(even){
 <script>
 
 const START_YEAR = 1976;
-const END_YEAR = 2025;
+const END_YEAR = new Date().getFullYear();
 const tableBody = document.getElementById("finalsTable");
-
-const conferenceMap = {
-"Boston Celtics":"East","Brooklyn Nets":"East","New York Knicks":"East","Philadelphia 76ers":"East","Toronto Raptors":"East",
-"Chicago Bulls":"East","Cleveland Cavaliers":"East","Detroit Pistons":"East","Indiana Pacers":"East","Milwaukee Bucks":"East",
-"Atlanta Hawks":"East","Charlotte Hornets":"East","Miami Heat":"East","Orlando Magic":"East","Washington Wizards":"East",
-"Denver Nuggets":"West","Minnesota Timberwolves":"West","Oklahoma City Thunder":"West","Portland Trail Blazers":"West",
-"Utah Jazz":"West","Golden State Warriors":"West","LA Clippers":"West","Los Angeles Lakers":"West","Phoenix Suns":"West",
-"Sacramento Kings":"West","Dallas Mavericks":"West","Houston Rockets":"West","Memphis Grizzlies":"West",
-"New Orleans Pelicans":"West","San Antonio Spurs":"West"
-};
 
 async function loadFinals(){
 
@@ -157,7 +147,6 @@ fetch(`data/nba/${year}/${id}.json`)
 )).filter(Boolean);
 
 const playoffGames = games.filter(g => g.game_type === "Playoffs");
-
 if(!playoffGames.length) continue;
 
 const seriesMap = {};
@@ -171,35 +160,56 @@ seriesMap[key].push(g);
 const allSeries = Object.values(seriesMap);
 if(!allSeries.length) continue;
 
-// 1️⃣ Sort by number of games (longest first)
-allSeries.sort((a,b)=>b.length - a.length);
+/* ===========================
+   NEW BULLETPROOF FINALS LOGIC
+   =========================== */
 
-let finalsSeries = allSeries[0];
-
-// 2️⃣ Ensure East vs West matchup
-const teamA = finalsSeries[0].home_team;
-const teamB = finalsSeries[0].away_team;
-
-const confA = conferenceMap[teamA];
-const confB = conferenceMap[teamB];
-
-if(confA === confB){
-for(const series of allSeries){
-const tA = series[0].home_team;
-const tB = series[0].away_team;
-if(conferenceMap[tA] && conferenceMap[tB] && conferenceMap[tA] !== conferenceMap[tB]){
-finalsSeries = series;
-break;
+// Count total playoff wins
+const winCount = {};
+playoffGames.forEach(g=>{
+if(g.winner){
+winCount[g.winner] = (winCount[g.winner] || 0) + 1;
 }
+});
+
+// Champion = most playoff wins
+const champion = Object.keys(winCount)
+.sort((a,b)=>winCount[b]-winCount[a])[0];
+
+if(!champion) continue;
+
+// Find latest series champion played in
+let finalsSeries = null;
+let latestDate = null;
+
+for(const series of allSeries){
+
+const teamsInSeries = new Set();
+series.forEach(g=>{
+teamsInSeries.add(g.home_team);
+teamsInSeries.add(g.away_team);
+});
+
+if(teamsInSeries.has(champion)){
+
+series.sort((a,b)=>new Date(a.date)-new Date(b.date));
+const seriesEnd = new Date(series[series.length-1].date);
+
+if(!latestDate || seriesEnd > latestDate){
+latestDate = seriesEnd;
+finalsSeries = series;
+}
+
 }
 }
 
 if(!finalsSeries) continue;
 
+/* =========================== */
+
 finalsSeries.sort((a,b)=> new Date(a.date) - new Date(b.date));
 
 const wins = {};
-
 finalsSeries.forEach(g=>{
 if(g.winner)
 wins[g.winner] = (wins[g.winner] || 0) + 1;
@@ -208,9 +218,9 @@ wins[g.winner] = (wins[g.winner] || 0) + 1;
 const teams = Object.keys(wins);
 if(teams.length < 2) continue;
 
-const champion = teams.sort((a,b)=>wins[b]-wins[a])[0];
-const runnerUp = teams.find(t=>t!==champion);
-const seriesResult = `${wins[champion]}-${wins[runnerUp]}`;
+const finalChampion = teams.sort((a,b)=>wins[b]-wins[a])[0];
+const runnerUp = teams.find(t=>t!==finalChampion);
+const seriesResult = `${wins[finalChampion]}-${wins[runnerUp]}`;
 
 const gamesLinks = finalsSeries.map((g,i)=>
 `<a class="link" href="nba-game.html?season=${year}&game=${g.game_id}">G${i+1}</a>`
@@ -219,7 +229,7 @@ const gamesLinks = finalsSeries.map((g,i)=>
 const tr = document.createElement("tr");
 tr.innerHTML = `
 <td>${year}-${String(year+1).slice(2)}</td>
-<td>${champion}</td>
+<td>${finalChampion}</td>
 <td>${runnerUp}</td>
 <td>${seriesResult}</td>
 <td class="games">${gamesLinks}</td>
