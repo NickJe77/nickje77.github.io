@@ -21,20 +21,24 @@ th,td{padding:6px 8px;border-bottom:1px solid #ddd;text-align:center;}
 th{background:#eef3ff;}
 tr:nth-child(even){background:#f6f9ff;}
 .bad{background:#ffe1e1;color:#900;padding:10px;text-align:center;border-radius:6px;margin-top:12px;}
+.loading{background:#eef3ff;color:#003a99;padding:10px;text-align:center;border-radius:6px;margin-top:12px;}
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-<a href="../index.html">Home</a>
-<a href="../nba.html">NBA</a>
-<a href="../nba-seasons.html">Seasons</a>
+<a href="index.html">Home</a>
+<a href="nba.html">NBA</a>
+<a href="nba-season.html">Seasons</a>
 </div>
 
 <div class="page-wrap">
 
 <h1 id="title">Player</h1>
+
+<div id="loadingBox" class="loading">Loading player data...</div>
+<div id="errorBox" class="bad" style="display:none;"></div>
 
 <div class="stats-row" id="totalsBoxes"></div>
 <div class="stats-row" id="averagesBoxes"></div>
@@ -46,8 +50,6 @@ Opposition:
 <option value="ALL">All teams</option>
 </select>
 </div>
-
-<div id="errorBox" class="bad" style="display:none;"></div>
 
 <table>
 <thead>
@@ -77,6 +79,7 @@ const totalsBoxes=document.getElementById("totalsBoxes");
 const averagesBoxes=document.getElementById("averagesBoxes");
 const highsBoxes=document.getElementById("highsBoxes");
 const errorBox=document.getElementById("errorBox");
+const loadingBox=document.getElementById("loadingBox");
 const gamesBody=document.getElementById("gamesBody");
 const oppFilter=document.getElementById("oppFilter");
 
@@ -89,6 +92,7 @@ const END_SEASON=new Date().getFullYear();
 async function loadPlayer(){
 
 if(!playerName){
+loadingBox.style.display="none";
 errorBox.style.display="block";
 errorBox.textContent="Missing ?player=";
 return;
@@ -99,7 +103,7 @@ titleEl.textContent=playerName;
 for(let season=START_SEASON;season<=END_SEASON;season++){
 
 try{
-const indexRes=await fetch(`../data/nba/${season}/index.json`);
+const indexRes=await fetch(`data/nba/${season}/index.json`);
 if(!indexRes.ok) continue;
 
 const index=await indexRes.json();
@@ -107,7 +111,7 @@ const index=await indexRes.json();
 for(const id of index.games){
 
 try{
-const gameRes=await fetch(`../data/nba/${season}/${id}.json`);
+const gameRes=await fetch(`data/nba/${season}/${id}.json`);
 if(!gameRes.ok) continue;
 
 const game=await gameRes.json();
@@ -116,11 +120,7 @@ if(game.game_type!=="Regular Season" && game.game_type!=="Playoffs") continue;
 
 for(const p of game.players||[]){
 
-const name =
-p.player_name ||
-p.player ||
-p.name ||
-"";
+const name = p.player_name || p.player || p.name || "";
 
 if(name.toLowerCase().trim()===playerName.toLowerCase().trim()){
 
@@ -146,6 +146,8 @@ blk:p.blocks||0
 
 }catch(e){}
 }
+
+loadingBox.style.display="none";
 
 if(!rows.length){
 errorBox.style.display="block";
