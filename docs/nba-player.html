@@ -21,24 +21,20 @@ th,td{padding:6px 8px;border-bottom:1px solid #ddd;text-align:center;}
 th{background:#eef3ff;}
 tr:nth-child(even){background:#f6f9ff;}
 .bad{background:#ffe1e1;color:#900;padding:10px;text-align:center;border-radius:6px;margin-top:12px;}
-.loading{background:#eef3ff;color:#003a99;padding:10px;text-align:center;border-radius:6px;margin-top:12px;}
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="nba.html">NBA</a>
-<a href="nba-season.html">Seasons</a>
+<a href="../index.html">Home</a>
+<a href="../nba.html">NBA</a>
+<a href="../nba-seasons.html">Seasons</a>
 </div>
 
 <div class="page-wrap">
 
 <h1 id="title">Player</h1>
-
-<div id="loadingBox" class="loading">Loading player data...</div>
-<div id="errorBox" class="bad" style="display:none;"></div>
 
 <div class="stats-row" id="totalsBoxes"></div>
 <div class="stats-row" id="averagesBoxes"></div>
@@ -50,6 +46,8 @@ Opposition:
 <option value="ALL">All teams</option>
 </select>
 </div>
+
+<div id="errorBox" class="bad" style="display:none;"></div>
 
 <table>
 <thead>
@@ -71,6 +69,7 @@ Opposition:
 </div>
 
 <script>
+
 const params=new URLSearchParams(window.location.search);
 const playerName=decodeURIComponent(params.get("player")||"");
 
@@ -79,7 +78,6 @@ const totalsBoxes=document.getElementById("totalsBoxes");
 const averagesBoxes=document.getElementById("averagesBoxes");
 const highsBoxes=document.getElementById("highsBoxes");
 const errorBox=document.getElementById("errorBox");
-const loadingBox=document.getElementById("loadingBox");
 const gamesBody=document.getElementById("gamesBody");
 const oppFilter=document.getElementById("oppFilter");
 
@@ -87,12 +85,15 @@ let rows=[];
 let filteredRows=[];
 
 const START_SEASON=1976;
-const END_SEASON=new Date().getFullYear();
+const END_SEASON=2025; // fixed ceiling
+
+function clean(s){
+return (s||"").toLowerCase().trim();
+}
 
 async function loadPlayer(){
 
 if(!playerName){
-loadingBox.style.display="none";
 errorBox.style.display="block";
 errorBox.textContent="Missing ?player=";
 return;
@@ -100,29 +101,40 @@ return;
 
 titleEl.textContent=playerName;
 
-for(let season=START_SEASON;season<=END_SEASON;season++){
-
 try{
-const indexRes=await fetch(`data/nba/${season}/index.json`);
-if(!indexRes.ok) continue;
 
-const index=await indexRes.json();
+/* Load all season indexes in parallel */
+const seasonIndexes = await Promise.all(
+Array.from({length:END_SEASON-START_SEASON+1},(_,i)=>START_SEASON+i)
+.map(season =>
+fetch(`../data/nba/${season}/index.json`)
+.then(r=>r.ok? r.json():null)
+.then(index=>({season,index}))
+)
+);
 
-for(const id of index.games){
+for(const s of seasonIndexes){
 
-try{
-const gameRes=await fetch(`data/nba/${season}/${id}.json`);
-if(!gameRes.ok) continue;
+if(!s.index?.games) continue;
 
-const game=await gameRes.json();
+/* Load all games for season in parallel */
+const games = await Promise.all(
+s.index.games.map(id =>
+fetch(`../data/nba/${s.season}/${id}.json`)
+.then(r=>r.ok? r.json():null)
+)
+);
 
+for(const game of games){
+
+if(!game) continue;
 if(game.game_type!=="Regular Season" && game.game_type!=="Playoffs") continue;
 
 for(const p of game.players||[]){
 
 const name = p.player_name || p.player || p.name || "";
 
-if(name.toLowerCase().trim()===playerName.toLowerCase().trim()){
+if(clean(name)===clean(playerName)){
 
 const isHome=game.home_team===p.team;
 const opp=isHome?game.away_team:game.home_team;
@@ -140,14 +152,14 @@ blk:p.blocks||0
 });
 }
 }
-
-}catch(e){}
+}
 }
 
-}catch(e){}
+}catch(e){
+errorBox.style.display="block";
+errorBox.textContent="Error loading data.";
+return;
 }
-
-loadingBox.style.display="none";
 
 if(!rows.length){
 errorBox.style.display="block";
@@ -235,6 +247,7 @@ highsBoxes.innerHTML=`
 }
 
 loadPlayer();
+
 </script>
 
 </body>
