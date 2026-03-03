@@ -6,107 +6,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{
-  font-family:Inter,system-ui,Arial,sans-serif;
-  margin:0;
-  background:#f4f6f8;
-}
-
-.navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px 0;
-  background:#fff;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
-}
-.navbar a{
-  color:#0056d6;
-  text-decoration:none;
-  font-size:18px;
-}
-
-.page-wrap{
-  max-width:1100px;
-  margin:0 auto;
-  padding:30px 20px 60px;
-}
-
-.hero{
-  background:linear-gradient(90deg,#1D428A,#C8102E);
-  color:white;
-  padding:28px 34px;
-  border-radius:18px;
-  margin-bottom:25px;
-}
-
-.hero h1{
-  margin:0 0 6px;
-  font-size:30px;
-  font-weight:800;
-}
-
-.hero p{
-  margin:0;
-  opacity:.9;
-  font-size:14px;
-}
-
-.card{
-  background:#ffffff;
-  border-radius:18px;
-  padding:20px;
-  box-shadow:0 4px 12px rgba(0,0,0,0.05);
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-  font-size:14px;
-}
-
-th,td{
-  padding:12px 12px;
-  border-bottom:1px solid #eee;
-  text-align:left;
-}
-
-th{
-  background:#eef3ff;
-  font-weight:700;
-}
-
-tr:nth-child(even){
-  background:#f8faff;
-}
-
-tr:hover{
-  background:#e6f0ff;
-}
-
-.champ{
-  font-weight:800;
-}
-
-.series{
-  font-weight:700;
-  color:#1D428A;
-}
-
-.link{
-  color:#0056d6;
-  text-decoration:none;
-  font-weight:600;
-}
-
-.link:hover{
-  text-decoration:underline;
-}
-
-.games a{
-  margin-right:6px;
-}
+body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;background:#fff;border-bottom:1px solid #ddd;font-weight:600;}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+.page-wrap{max-width:1100px;margin:0 auto;padding:30px 20px 60px;}
+.hero{background:linear-gradient(90deg,#1D428A,#C8102E);color:white;padding:28px 34px;border-radius:18px;margin-bottom:25px;}
+.hero h1{margin:0 0 6px;font-size:30px;font-weight:800;}
+.hero p{margin:0;opacity:.9;font-size:14px;}
+.card{background:#ffffff;border-radius:18px;padding:20px;box-shadow:0 4px 12px rgba(0,0,0,0.05);}
+table{width:100%;border-collapse:collapse;font-size:14px;}
+th,td{padding:12px;border-bottom:1px solid #eee;text-align:left;}
+th{background:#eef3ff;font-weight:700;}
+tr:nth-child(even){background:#f8faff;}
+tr:hover{background:#e6f0ff;}
+.champ{font-weight:800;}
+.series{font-weight:700;color:#1D428A;}
+.link{color:#0056d6;text-decoration:none;font-weight:600;}
+.link:hover{text-decoration:underline;}
+.games a{margin-right:6px;}
 </style>
 </head>
 
@@ -145,8 +62,6 @@ tr:hover{
 
 <script>
 
-const START_YEAR = 1976;
-const END_YEAR = new Date().getFullYear();
 const tableBody = document.getElementById("finalsTable");
 
 function getWinner(g){
@@ -160,7 +75,14 @@ async function loadFinals(){
 
   tableBody.innerHTML = "";
 
-  for(let year = END_YEAR; year >= START_YEAR; year--){
+  // ✅ READ ACTUAL SEASONS FROM FILE
+  const seasons = await fetch("/data/nba/seasons.json")
+    .then(r => r.ok ? r.json() : [])
+    .catch(()=>[]);
+
+  seasons.sort((a,b)=>b-a);
+
+  for(const year of seasons){
 
     try{
 
@@ -177,7 +99,6 @@ async function loadFinals(){
         )
       )).filter(Boolean);
 
-      // Only playoff games
       const playoffGames = games.filter(g=>{
         const gt = (g.game_type||"").toLowerCase();
         return gt.includes("play");
@@ -185,7 +106,6 @@ async function loadFinals(){
 
       if(!playoffGames.length) continue;
 
-      // Group by matchup
       const seriesMap = {};
 
       playoffGames.forEach(g=>{
@@ -198,7 +118,6 @@ async function loadFinals(){
       let champion = null;
       let runnerUp = null;
 
-      // Identify Finals series
       for(const series of Object.values(seriesMap)){
 
         const wins = {};
@@ -211,11 +130,9 @@ async function loadFinals(){
         });
 
         const teams = Object.keys(wins);
-
         const winnerTeam = teams.find(t => wins[t] === 4);
         if(!winnerTeam) continue;
 
-        // Ensure champion does not play elsewhere in playoffs
         const playsElsewhere = playoffGames.some(g=>{
           if(series.includes(g)) return false;
           return g.home_team === winnerTeam || g.away_team === winnerTeam;
