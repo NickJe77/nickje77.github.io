@@ -19,17 +19,16 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:var(--bg);}
 .navbar a{text-decoration:none;color:var(--nba-primary);}
 .page{max-width:1200px;margin:auto;padding:30px 20px;}
 .hero{background:linear-gradient(270deg,#17408B,#C9082A,#17408B);color:#fff;padding:34px;border-radius:22px;margin-bottom:16px;}
-.stats{background:var(--card);padding:16px 20px;border-radius:16px;display:flex;gap:30px;font-size:19px;font-weight:600;flex-wrap:wrap;}
-.leaders-card{background:var(--card);padding:16px 18px;border-radius:16px;margin-top:16px;}
+.stats{background:var(--card);padding:16px;border-radius:16px;display:flex;gap:30px;font-weight:600;}
+.leaders-card{background:var(--card);padding:16px;border-radius:16px;margin-top:16px;}
 .leaders-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;}
 .leader-box{background:var(--soft);padding:10px;border-radius:12px;}
-.leader-label{font-size:11px;font-weight:800;text-transform:uppercase;}
-.leader-total{font-size:13px;font-weight:700;}
-.card{background:var(--card);border-radius:16px;overflow:hidden;margin-top:20px;}
+.card{background:var(--card);border-radius:16px;margin-top:20px;}
 table{width:100%;border-collapse:collapse;}
 th{background:var(--nba-primary);color:#fff;padding:12px;}
 td{padding:12px;border-bottom:1px solid var(--line);}
 tr:hover{background:#eef2ff;cursor:pointer;}
+select{padding:8px;border-radius:8px;margin:10px 0;}
 </style>
 </head>
 <body>
@@ -40,9 +39,7 @@ tr:hover{background:#eef2ff;cursor:pointer;}
 </div>
 
 <div class="page">
-<div class="hero">
-<h1 id="teamName"></h1>
-</div>
+<div class="hero"><h1 id="teamName"></h1></div>
 
 <div class="stats">
 <div>Total Games: <strong id="totalGames">0</strong></div>
@@ -53,6 +50,13 @@ tr:hover{background:#eef2ff;cursor:pointer;}
 <div class="leaders-card">
 <h2>All-Time Franchise Leaders</h2>
 <div class="leaders-grid" id="leadersGrid"></div>
+</div>
+
+<div>
+<strong>Select Season:</strong>
+<select id="seasonSelect">
+<option value="all">All Seasons</option>
+</select>
 </div>
 
 <div class="card">
@@ -83,13 +87,14 @@ function normalize(s){return (s||"").toLowerCase().trim();}
 
 let allGames=[];
 let playerTotals={};
+let seasons=new Set();
 
 async function loadData(){
 
-const res=await fetch("data/nba/nba_games_master.json");
-if(!res.ok) return;
+const masterRes=await fetch("data/nba/nba_games_master.json");
+if(!masterRes.ok) return;
 
-const master=await res.json();
+const master=await masterRes.json();
 const team=normalize(teamRaw);
 
 for(const game of master){
@@ -100,22 +105,20 @@ const home=normalize(game.home_team);
 const away=normalize(game.away_team);
 if(home!==team && away!==team) continue;
 
+seasons.add(game.season);
+
 const isHome=home===team;
 const teamScore=isHome?game.home_score:game.away_score;
 const oppScore=isHome?game.away_score:game.home_score;
 
-allGames.push({
-id:game.game_id,
-date:game.date,
-season:game.season,
-type:game.game_type,
-opponent:isHome?game.away_team:game.home_team,
-result:teamScore>oppScore?"W":"L",
-score:`${teamScore} - ${oppScore}`
-});
+allGames.push(game);
 
-if(game.players){
-for(const p of game.players){
+const gameFile=await fetch(`data/nba/${game.season}/${game.game_id}.json`);
+if(!gameFile.ok) continue;
+
+const fullGame=await gameFile.json();
+
+for(const p of fullGame.players){
 if(normalize(p.team)!==team) continue;
 
 if(!playerTotals[p.player_name]){
@@ -130,71 +133,88 @@ playerTotals[p.player_name].blocks+=p.blocks||0;
 }
 }
 
-}
-
 buildPage();
 }
 
 function buildPage(){
 
+const select=document.getElementById("seasonSelect");
+
+Array.from(seasons).sort((a,b)=>b-a).forEach(s=>{
+const opt=document.createElement("option");
+opt.value=s;
+opt.textContent=s;
+select.appendChild(opt);
+});
+
+renderGames("all");
+renderLeaders();
+}
+
+function renderGames(season){
+
+const body=document.getElementById("gamesBody");
+body.innerHTML="";
+
 let wins=0;
 let losses=0;
-const body=document.getElementById("gamesBody");
 
-allGames.sort((a,b)=> (b.date||"").localeCompare(a.date||""));
+const filtered=season==="all"?allGames:allGames.filter(g=>g.season==season);
 
-for(const g of allGames){
-if(g.result==="W") wins++; else losses++;
+for(const game of filtered){
+
+const isHome=normalize(game.home_team)===normalize(teamRaw);
+const teamScore=isHome?game.home_score:game.away_score;
+const oppScore=isHome?game.away_score:game.home_score;
+const result=teamScore>oppScore?"W":"L";
+
+if(result==="W") wins++; else losses++;
+
 const tr=document.createElement("tr");
-tr.onclick=()=>location.href=`nba-game.html?game=${g.id}`;
+tr.onclick=()=>location.href=`nba-game.html?game=${game.game_id}`;
 tr.innerHTML=`
-<td>${g.date}</td>
-<td>${g.season}</td>
-<td>${g.type}</td>
-<td>${g.opponent}</td>
-<td>${g.result}</td>
-<td>${g.score}</td>
+<td>${game.date}</td>
+<td>${game.season}</td>
+<td>${game.game_type}</td>
+<td>${isHome?game.away_team:game.home_team}</td>
+<td>${result}</td>
+<td>${teamScore} - ${oppScore}</td>
 `;
 body.appendChild(tr);
 }
 
-document.getElementById("totalGames").textContent=allGames.length;
+document.getElementById("totalGames").textContent=filtered.length;
 document.getElementById("wins").textContent=wins;
 document.getElementById("losses").textContent=losses;
-
-renderLeaders();
 }
 
-function getLeader(stat){
+function renderLeaders(){
+
+const grid=document.getElementById("leadersGrid");
+grid.innerHTML="";
+
+["points","rebounds","assists","steals","blocks"].forEach(stat=>{
 let leader=null;
 let max=0;
+
 for(const [name,stats] of Object.entries(playerTotals)){
 if(stats[stat]>max){
 max=stats[stat];
 leader=name;
 }
 }
-return {leader,max};
-}
 
-function renderLeaders(){
-const grid=document.getElementById("leadersGrid");
-grid.innerHTML="";
-
-["points","rebounds","assists","steals","blocks"].forEach(stat=>{
-const {leader,max}=getLeader(stat);
 if(!leader) return;
 
 const div=document.createElement("div");
 div.className="leader-box";
-div.innerHTML=`
-<div class="leader-label">${stat.toUpperCase()}</div>
-<div><strong>${leader}</strong></div>
-<div class="leader-total">${max}</div>
-`;
+div.innerHTML=`<strong>${leader}</strong><br>${stat.toUpperCase()}: ${max}`;
 grid.appendChild(div);
 });
 }
+
+document.getElementById("seasonSelect")
+.addEventListener("change",e=>renderGames(e.target.value));
 
 loadData();
 
