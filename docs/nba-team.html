@@ -1,26 +1,51 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
+<meta charset="UTF-8">
 <title>NBA Team | The Sporting Almanac</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <style>
-:root{--nba-primary:#17408B;--bg:#f4f6f8;--card:#fff;--line:#e6e8ee;}
+:root{
+  --nba-primary:#17408B;
+  --bg:#f4f6f8;
+  --card:#ffffff;
+  --line:#e6e8ee;
+}
 body{font-family:Inter,Arial;margin:0;background:var(--bg);}
-.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:#fff;border-bottom:1px solid var(--line);font-weight:700;}
+.navbar{
+  display:flex;justify-content:center;gap:24px;
+  padding:16px;background:#fff;
+  border-bottom:1px solid var(--line);font-weight:700;
+}
 .navbar a{text-decoration:none;color:var(--nba-primary);}
 .page{max-width:1200px;margin:auto;padding:30px 20px 60px;}
-.hero{background:linear-gradient(270deg,#17408B,#C9082A,#17408B);color:#fff;padding:34px;border-radius:22px;margin-bottom:20px;}
-.stats{background:var(--card);padding:16px;border-radius:16px;display:flex;gap:30px;margin-bottom:16px;}
-.filter-box{background:var(--card);padding:16px;border-radius:16px;margin-bottom:16px;display:flex;gap:16px;flex-wrap:wrap;}
+.hero{
+  background:linear-gradient(270deg,#17408B,#C9082A,#17408B);
+  color:#fff;padding:34px;border-radius:22px;margin-bottom:20px;
+}
+.stats{
+  background:var(--card);
+  padding:16px;border-radius:16px;
+  display:flex;gap:30px;margin-bottom:16px;flex-wrap:wrap;
+}
+.filter-box{
+  background:var(--card);
+  padding:16px;border-radius:16px;
+  margin-bottom:16px;display:flex;gap:16px;flex-wrap:wrap;
+}
 .card{background:var(--card);border-radius:16px;overflow:hidden;}
 table{width:100%;border-collapse:collapse;}
 th{background:var(--nba-primary);color:#fff;padding:12px;text-align:left;}
 td{padding:12px;border-bottom:1px solid var(--line);}
 tr:hover{background:#eef2ff;cursor:pointer;}
-.loading{background:#fff;padding:10px;border:1px solid #e5e7eb;border-radius:12px;margin-bottom:16px;}
+.loading{
+  background:#fff;padding:10px;
+  border:1px solid #e5e7eb;border-radius:12px;margin-bottom:16px;
+}
 </style>
 </head>
+
 <body>
 
 <div class="navbar">
@@ -29,6 +54,7 @@ tr:hover{background:#eef2ff;cursor:pointer;}
 </div>
 
 <div class="page">
+
 <div class="hero">
 <h1 id="teamName">Loading…</h1>
 </div>
@@ -44,9 +70,11 @@ tr:hover{background:#eef2ff;cursor:pointer;}
 <div class="filter-box">
 Season:
 <select id="seasonSelect"></select>
+
 Type:
 <select id="typeSelect">
 <option value="all">All</option>
+<option value="preseason">Preseason</option>
 <option value="regular">Regular Season</option>
 <option value="playoffs">Playoffs</option>
 </select>
@@ -67,6 +95,7 @@ Type:
 <tbody id="gamesBody"></tbody>
 </table>
 </div>
+
 </div>
 
 <script>
@@ -78,12 +107,13 @@ function seasonLabel(start){
   const next = String((Number(start)+1)%100).padStart(2,"0");
   return `${start}-${next}`;
 }
+
 function typeBucket(t){
   if(!t) return "regular";
-  return t.toLowerCase().includes("regular") ? "regular" : "playoffs";
-}
-function typeLabel(t){
-  return typeBucket(t)==="regular"?"Regular Season":"Playoffs";
+  const s = t.toLowerCase();
+  if(s.includes("pre")) return "preseason";
+  if(s.includes("regular")) return "regular";
+  return "playoffs";
 }
 
 const elTeamName=document.getElementById("teamName");
@@ -102,7 +132,7 @@ function render(){
   let filtered=allGames;
 
   if(elType.value!=="all"){
-    filtered=filtered.filter(g=>g.typeBucket===elType.value);
+    filtered=filtered.filter(g=>g.type===elType.value);
   }
 
   filtered.sort((a,b)=>(b.date||"").localeCompare(a.date||""));
@@ -134,34 +164,50 @@ async function loadSeason(season){
   allGames=[];
   elLoading.style.display="block";
 
-  const indexRaw=await fetch(`/data/nba/${season}/index.json`).then(r=>r.json());
-  const gameIds=indexRaw.games || [];
+  try{
+    const indexRaw=await fetch(`/data/nba/${season}/index.json`).then(r=>r.json());
+    const gameIds=indexRaw.games || [];
 
-  const teamKey=norm(teamRaw);
+    const teamKey=norm(teamRaw);
 
-  for(const id of gameIds){
-    const g=await fetch(`/data/nba/${season}/${id}.json`).then(r=>r.json());
+    // PARALLEL LOAD
+    const games=await Promise.all(
+      gameIds.map(id=>
+        fetch(`/data/nba/${season}/${id}.json`)
+        .then(r=>r.json())
+        .catch(()=>null)
+      )
+    );
 
-    const home=norm(g.home_team);
-    const away=norm(g.away_team);
-    if(!home.includes(teamKey)&&!away.includes(teamKey))continue;
+    for(const g of games){
+      if(!g) continue;
 
-    const isHome=home.includes(teamKey);
-    const teamScore=isHome?g.home_score:g.away_score;
-    const oppScore=isHome?g.away_score:g.home_score;
+      const home=norm(g.home_team);
+      const away=norm(g.away_team);
+      if(!home.includes(teamKey)&&!away.includes(teamKey))continue;
 
-    allGames.push({
-      id:g.game_id,
-      date:g.date,
-      typeBucket:typeBucket(g.game_type),
-      typeLabel:typeLabel(g.game_type),
-      opponent:isHome?g.away_team:g.home_team,
-      result:Number(teamScore)>Number(oppScore)?"W":"L",
-      score:`${teamScore} - ${oppScore}`
-    });
+      const isHome=home.includes(teamKey);
+      const teamScore=isHome?g.home_score:g.away_score;
+      const oppScore=isHome?g.away_score:g.home_score;
+
+      const bucket=typeBucket(g.game_type);
+
+      allGames.push({
+        id:g.game_id,
+        date:g.date,
+        type:bucket,
+        typeLabel:g.game_type,
+        opponent:isHome?g.away_team:g.home_team,
+        result:Number(teamScore)>Number(oppScore)?"W":"L",
+        score:`${teamScore} - ${oppScore}`
+      });
+    }
+
+    render();
+  }catch(e){
+    console.error(e);
   }
 
-  render();
   elLoading.style.display="none";
 }
 
