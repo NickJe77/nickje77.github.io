@@ -74,7 +74,6 @@ Season:
 Type:
 <select id="typeSelect">
 <option value="all">All</option>
-<option value="preseason">Preseason</option>
 <option value="regular">Regular Season</option>
 <option value="playoffs">Playoffs</option>
 </select>
@@ -107,11 +106,9 @@ function seasonLabel(start){
   const next = String((Number(start)+1)%100).padStart(2,"0");
   return `${start}-${next}`;
 }
-
 function typeBucket(t){
   if(!t) return "regular";
   const s = t.toLowerCase();
-  if(s.includes("pre")) return "preseason";
   if(s.includes("regular")) return "regular";
   return "playoffs";
 }
@@ -170,7 +167,6 @@ async function loadSeason(season){
 
     const teamKey=norm(teamRaw);
 
-    // PARALLEL LOAD
     const games=await Promise.all(
       gameIds.map(id=>
         fetch(`/data/nba/${season}/${id}.json`)
@@ -186,11 +182,14 @@ async function loadSeason(season){
       const away=norm(g.away_team);
       if(!home.includes(teamKey)&&!away.includes(teamKey))continue;
 
+      const bucket=typeBucket(g.game_type);
+
+      // REMOVE PRESEASON COMPLETELY
+      if(g.game_type && g.game_type.toLowerCase().includes("pre")) continue;
+
       const isHome=home.includes(teamKey);
       const teamScore=isHome?g.home_score:g.away_score;
       const oppScore=isHome?g.away_score:g.home_score;
-
-      const bucket=typeBucket(g.game_type);
 
       allGames.push({
         id:g.game_id,
