@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>NBA Player Career</title>
+<title>NBA Player Career | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -89,7 +89,6 @@ th,td{
 
 th{
   background:#eef3ff;
-  cursor:pointer;
 }
 
 tr:nth-child(even){background:#f6f9ff;}
@@ -164,8 +163,6 @@ const oppFilter = document.getElementById("oppFilter");
 let rows = [];
 let filteredRows = [];
 
-function clean(s){ return (s||"").toLowerCase().trim(); }
-
 async function loadPlayer(){
 
   if(!playerName){
@@ -176,37 +173,28 @@ async function loadPlayer(){
 
   titleEl.textContent = playerName;
 
-  const masterRes = await fetch("../data/nba/nba_games_master.json");
-  const master = await masterRes.json();
+  try{
+    const res = await fetch("../data/nba/nba_games_master.json");
+    const master = await res.json();
 
-  for(const game of master){
+    rows = master
+      .filter(r => r.player_name === playerName)
+      .map(r => ({
+        season: r.season,
+        date: r.date,
+        team: r.team,
+        opp: r.opponent,
+        pts: r.points || 0,
+        reb: r.rebounds || 0,
+        ast: r.assists || 0,
+        stl: r.steals || 0,
+        blk: r.blocks || 0
+      }));
 
-    try{
-      const full = await fetch(`../data/nba/${game.season}/${game.game_id}.json`).then(r=>r.json());
-
-      if(full.game_type !== "Regular Season" && full.game_type !== "Playoffs") continue;
-
-      for(const p of full.players || []){
-        if(p.player_name === playerName){
-
-          const isHome = clean(full.home_team) === clean(p.team);
-          const opp = isHome ? full.away_team : full.home_team;
-
-          rows.push({
-            season: full.season,
-            date: full.date,
-            team: p.team,
-            opp,
-            pts: p.points || 0,
-            reb: p.rebounds || 0,
-            ast: p.assists || 0,
-            stl: p.steals || 0,
-            blk: p.blocks || 0
-          });
-        }
-      }
-
-    }catch(e){}
+  }catch(e){
+    errorBox.style.display="block";
+    errorBox.textContent="Error loading data.";
+    return;
   }
 
   if(!rows.length){
@@ -216,6 +204,7 @@ async function loadPlayer(){
   }
 
   buildOppFilter();
+  filteredRows = rows;
   render();
 }
 
@@ -236,8 +225,6 @@ oppFilter.addEventListener("change",()=>{
 });
 
 function render(){
-
-  filteredRows = filteredRows.length ? filteredRows : rows;
 
   gamesBody.innerHTML="";
 
@@ -297,5 +284,6 @@ function render(){
 
 loadPlayer();
 </script>
+
 </body>
 </html>
