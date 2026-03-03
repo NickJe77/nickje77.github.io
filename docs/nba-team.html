@@ -12,32 +12,87 @@
   --card:#ffffff;
   --line:#e6e8ee;
 }
-body{font-family:Inter,Arial;margin:0;background:var(--bg);}
-.navbar{
-  display:flex;justify-content:center;gap:24px;
-  padding:16px;background:#fff;
-  border-bottom:1px solid var(--line);font-weight:700;
+body{
+  font-family:Inter,Arial;
+  margin:0;
+  background:var(--bg);
 }
-.navbar a{text-decoration:none;color:var(--nba-primary);}
-.page{max-width:1200px;margin:auto;padding:30px 20px 60px;}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px;
+  background:#fff;
+  border-bottom:1px solid var(--line);
+  font-weight:700;
+}
+.navbar a{
+  text-decoration:none;
+  color:var(--nba-primary);
+}
+
+.page{
+  max-width:1200px;
+  margin:auto;
+  padding:30px 20px 60px;
+}
+
 .hero{
   background:linear-gradient(270deg,#17408B,#C9082A,#17408B);
-  color:#fff;padding:34px;border-radius:22px;margin-bottom:20px;
+  color:#fff;
+  padding:34px;
+  border-radius:22px;
+  margin-bottom:20px;
 }
+
 .filter-box{
   background:var(--card);
-  padding:16px;border-radius:16px;
-  margin-bottom:16px;display:flex;gap:20px;flex-wrap:wrap;align-items:center;
+  padding:16px;
+  border-radius:16px;
+  margin-bottom:16px;
+  display:flex;
+  gap:20px;
+  flex-wrap:wrap;
+  align-items:center;
 }
-.card{background:var(--card);border-radius:16px;overflow:hidden;}
-table{width:100%;border-collapse:collapse;}
-th{background:var(--nba-primary);color:#fff;padding:12px;text-align:left;}
-td{padding:12px;border-bottom:1px solid var(--line);}
-tr:hover{background:#eef2ff;cursor:pointer;}
+
+.card{
+  background:var(--card);
+  border-radius:16px;
+  overflow:hidden;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+th{
+  background:var(--nba-primary);
+  color:#fff;
+  padding:12px;
+  text-align:left;
+}
+
+td{
+  padding:12px;
+  border-bottom:1px solid var(--line);
+}
+
+tr:hover{
+  background:#eef2ff;
+  cursor:pointer;
+}
+
 .loading{
-  background:#fff;padding:10px;
-  border:1px solid #e5e7eb;border-radius:12px;margin-bottom:16px;
+  background:#fff;
+  padding:10px;
+  border:1px solid #e5e7eb;
+  border-radius:12px;
+  margin-bottom:16px;
 }
+
 select,input{
   padding:8px 10px;
   border:1px solid #cfd6e3;
@@ -45,10 +100,12 @@ select,input{
   font-size:14px;
   background:#fff;
 }
+
 .search-wrapper{
   position:relative;
   margin-left:auto;
 }
+
 .search-results{
   position:absolute;
   top:38px;
@@ -62,12 +119,13 @@ select,input{
   display:none;
   z-index:1000;
 }
+
 .search-item{
   padding:8px 12px;
   cursor:pointer;
 }
-.search-item:hover,
-.search-item.active{
+
+.search-item:hover{
   background:#eef2ff;
 }
 </style>
@@ -156,10 +214,10 @@ const elSearchResults=document.getElementById("searchResults");
 let allGames=[];
 let currentSeason=null;
 let allTeams=new Set();
-let selectedIndex=-1;
 
 function render(){
   let filtered=allGames;
+
   if(elType.value!=="all"){
     filtered=filtered.filter(g=>g.type===elType.value);
   }
@@ -167,11 +225,15 @@ function render(){
   filtered.sort((a,b)=>(b.date||"").localeCompare(a.date||""));
 
   elBody.innerHTML="";
+
   for(const g of filtered){
     const tr=document.createElement("tr");
 
-    /* ✅ FIXED CLICK LINK */
-    tr.onclick=()=>location.href=`nba-game.html?season=${currentSeason}&game=${g.id}`;
+    /* ✅ FIXED — USE game_id */
+    tr.onclick=()=>{
+      if(!g.id) return;
+      location.href=`nba-game.html?season=${currentSeason}&game=${g.id}`;
+    };
 
     tr.innerHTML=`
       <td>${g.date}</td>
@@ -180,6 +242,7 @@ function render(){
       <td>${g.opponent}</td>
       <td>${g.result}</td>
       <td>${g.score}</td>`;
+
     elBody.appendChild(tr);
   }
 }
@@ -203,13 +266,16 @@ async function loadSeason(season){
 
   for(const g of games){
     if(!g) continue;
-    if(g.game_type && g.game_type.toLowerCase().includes("pre")) continue;
+
+    // Remove preseason
+    if((g.game_type||"").toLowerCase().includes("pre")) continue;
 
     allTeams.add(g.home_team);
     allTeams.add(g.away_team);
 
     const home=norm(g.home_team);
     const away=norm(g.away_team);
+
     if(!home.includes(teamKey)&&!away.includes(teamKey))continue;
 
     const isHome=home.includes(teamKey);
@@ -217,7 +283,7 @@ async function loadSeason(season){
     const oppScore=isHome?g.away_score:g.home_score;
 
     allGames.push({
-      id:g.game_id,
+      id:g.game_id,   /* IMPORTANT */
       date:g.date,
       type:typeBucket(g.game_type),
       typeLabel:g.game_type,
@@ -234,8 +300,6 @@ async function loadSeason(season){
 function buildSearchResults(query){
   const q=norm(query);
   elSearchResults.innerHTML="";
-  selectedIndex=-1;
-
   if(!q){
     elSearchResults.style.display="none";
     return;
