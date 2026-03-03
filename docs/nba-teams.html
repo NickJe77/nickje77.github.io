@@ -25,9 +25,7 @@ body{
   text-decoration:none;
   font-size:18px;
 }
-.navbar a:hover{
-  text-decoration:underline;
-}
+.navbar a:hover{text-decoration:underline;}
 
 .page-wrap{
   max-width:1100px;
@@ -53,9 +51,8 @@ table{
 
 th,td{
   border-bottom:1px solid #ddd;
-  padding:12px;
-  text-align:left;
-  font-size:15px;
+  padding:14px;
+  font-size:16px;
 }
 
 th{
@@ -71,17 +68,24 @@ tr:nth-child(even){
   color:#0056d6;
   text-decoration:none;
   font-weight:600;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
 }
 
 .team-link:hover{
   text-decoration:underline;
 }
 
-.bad{
-  background:#ffe1e1;
-  color:#900;
-  padding:10px;
-  border-radius:6px;
+.colour-bars{
+  display:flex;
+  gap:4px;
+}
+
+.bar{
+  width:14px;
+  height:20px;
+  border-radius:3px;
 }
 </style>
 </head>
@@ -96,7 +100,7 @@ tr:nth-child(even){
 
 <div class="page-wrap">
   <h1>NBA Teams</h1>
-  <p>All NBA franchises extracted from regular season games.</p>
+  <p>All NBA franchises with official team colours.</p>
 
   <table>
     <thead>
@@ -104,61 +108,63 @@ tr:nth-child(even){
         <th>Team</th>
       </tr>
     </thead>
-    <tbody id="teamTable">
-      <tr><td>Loading teams…</td></tr>
-    </tbody>
+    <tbody id="teamTable"></tbody>
   </table>
 </div>
 
 <script>
+
+const teams = [
+  { name:"Atlanta Hawks", colors:["#E03A3E","#C1D32F","#26282A"] },
+  { name:"Boston Celtics", colors:["#007A33","#BA9653","#000000"] },
+  { name:"Brooklyn Nets", colors:["#000000","#FFFFFF"] },
+  { name:"Charlotte Hornets", colors:["#1D1160","#00788C","#A1A1A4"] },
+  { name:"Chicago Bulls", colors:["#CE1141","#000000"] },
+  { name:"Cleveland Cavaliers", colors:["#860038","#FDBB30","#041E42"] },
+  { name:"Dallas Mavericks", colors:["#00538C","#002B5E","#B8C4CA"] },
+  { name:"Denver Nuggets", colors:["#0E2240","#FEC524","#8B2131"] },
+  { name:"Detroit Pistons", colors:["#C8102E","#1D42BA"] },
+  { name:"Golden State Warriors", colors:["#1D428A","#FFC72C"] },
+  { name:"Houston Rockets", colors:["#CE1141","#000000"] },
+  { name:"Indiana Pacers", colors:["#002D62","#FDBB30"] },
+  { name:"LA Clippers", colors:["#C8102E","#1D428A","#BEC0C2"] },
+  { name:"Los Angeles Lakers", colors:["#552583","#FDB927","#000000"] },
+  { name:"Memphis Grizzlies", colors:["#5D76A9","#12173F","#F5B112"] },
+  { name:"Miami Heat", colors:["#98002E","#F9A01B","#000000"] },
+  { name:"Milwaukee Bucks", colors:["#00471B","#EEE1C6","#0077C0"] },
+  { name:"Minnesota Timberwolves", colors:["#0C2340","#236192","#9EA2A2"] },
+  { name:"New Orleans Pelicans", colors:["#0C2340","#C8102E","#85714D"] },
+  { name:"New York Knicks", colors:["#F58426","#006BB6"] },
+  { name:"Oklahoma City Thunder", colors:["#007AC1","#EF3B24","#002D62"] },
+  { name:"Orlando Magic", colors:["#0077C0","#C4CED4","#000000"] },
+  { name:"Philadelphia 76ers", colors:["#006BB6","#ED174C","#002B5C"] },
+  { name:"Phoenix Suns", colors:["#1D1160","#E56020","#000000"] },
+  { name:"Portland Trail Blazers", colors:["#E03A3E","#000000"] },
+  { name:"Sacramento Kings", colors:["#5A2D81","#63727A","#000000"] },
+  { name:"San Antonio Spurs", colors:["#C4CED4","#000000"] },
+  { name:"Toronto Raptors", colors:["#CE1141","#000000","#A1A1A4"] },
+  { name:"Utah Jazz", colors:["#002B5C","#00471B","#F9A01B"] },
+  { name:"Washington Wizards", colors:["#002B5C","#E31837","#C4CED4"] }
+];
+
 const tableBody = document.getElementById("teamTable");
 
-async function loadTeams(){
-  try{
-    const res = await fetch("data/nba/nba_games_master.json");
-    if(!res.ok) throw new Error("nba_games_master.json not found");
+teams.sort((a,b)=>a.name.localeCompare(b.name));
 
-    const games = await res.json();
-    const teamSet = new Set();
+teams.forEach(team=>{
+  const tr = document.createElement("tr");
+  const bars = team.colors.map(c=>`<span class="bar" style="background:${c}"></span>`).join("");
+  tr.innerHTML = `
+    <td>
+      <a class="team-link" href="nba-team.html?team=${encodeURIComponent(team.name)}">
+        <span>${team.name}</span>
+        <span class="colour-bars">${bars}</span>
+      </a>
+    </td>
+  `;
+  tableBody.appendChild(tr);
+});
 
-    // ONLY include Regular Season teams
-    games.forEach(game=>{
-      if(game.game_type !== "Regular Season") return;
-
-      if(game.home_team) teamSet.add(game.home_team);
-      if(game.away_team) teamSet.add(game.away_team);
-    });
-
-    const teams = Array.from(teamSet).sort();
-
-    tableBody.innerHTML = "";
-
-    if(!teams.length){
-      tableBody.innerHTML = "<tr><td>No teams found.</td></tr>";
-      return;
-    }
-
-    teams.forEach(team=>{
-      const urlTeam = encodeURIComponent(team);
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>
-          <a class="team-link" href="nba-team.html?team=${urlTeam}">
-            ${team}
-          </a>
-        </td>
-      `;
-      tableBody.appendChild(tr);
-    });
-
-  }catch(err){
-    console.error(err);
-    tableBody.innerHTML =
-      "<tr><td class='bad'>Could not load nba_games_master.json</td></tr>";
-  }
-}
-
-loadTeams();
 </script>
 
 </body>
