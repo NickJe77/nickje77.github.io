@@ -4,27 +4,15 @@ import time
 from pathlib import Path
 from datetime import date, timedelta
 
-# =========================
-# CONFIG
-# =========================
-
-SEASON = 2025
 START_DATE = date(2025, 2, 15)
 
-OUT_DIR = Path("docs/data/nba/2025")
-OUT_DIR.mkdir(parents=True, exist_ok=True)
-
-# ✅ CORRECT historical scoreboard endpoint
 SCOREBOARD_URL = "https://cdn.nba.com/static/json/liveData/scoreboard/scoreboard_{date}.json"
 BOXSCORE_URL = "https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{gameId}.json"
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-# =========================
-# HELPERS
-# =========================
+BASE_DIR = Path("docs/data/nba")
+
 
 def get_json(url):
     r = requests.get(url, headers=HEADERS, timeout=15)
@@ -32,8 +20,15 @@ def get_json(url):
     return r.json()
 
 
-def filename_from_gameid(game_id):
-    return f"{game_id}.json"
+def determine_season(game_date_str):
+    year = int(game_date_str[:4])
+    month = int(game_date_str[5:7])
+
+    # NBA season starts in October
+    if month >= 10:
+        return year
+    else:
+        return year - 1
 
 
 def build_game(box):
@@ -64,9 +59,9 @@ def build_game(box):
                 "fouls": stats.get("foulsPersonal")
             })
 
-    return {
+    return game, {
         "game_id": game["gameId"],
-        "season": SEASON,
+        "season": determine_season(game["gameDate"]),
         "date": game["gameDate"],
         "home_team": home["teamName"],
         "away_team": away["teamName"],
@@ -83,9 +78,6 @@ def build_game(box):
         "players": players
     }
 
-# =========================
-# MAIN
-# =========================
 
 def main():
     today = date.today()
@@ -98,7 +90,7 @@ def main():
 
         try:
             scoreboard = get_json(url)
-        except Exception:
+        except:
             day += timedelta(days=1)
             continue
 
@@ -109,25 +101,26 @@ def main():
                 continue
 
             game_id = g["gameId"]
-            filename = filename_from_gameid(game_id)
-            path = OUT_DIR / filename
+
+            time.sleep(0.4)
+            box = get_json(BOXSCORE_URL.format(gameId=game_id))
+
+            game_meta, game_data = build_game(box)
+
+            season = determine_season(game_meta["gameDate"])
+            season_dir = BASE_DIR / str(season)
+            season_dir.mkdir(parents=True, exist_ok=True)
+
+            path = season_dir / f"{game_id}.json"
 
             if path.exists():
                 continue
 
-            try:
-                time.sleep(0.4)
-                box = get_json(BOXSCORE_URL.format(gameId=game_id))
-                game_data = build_game(box)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(game_data, f, indent=2)
 
-                with open(path, "w", encoding="utf-8") as f:
-                    json.dump(game_data, f, indent=2)
-
-                print("Created:", filename)
-                written += 1
-
-            except Exception as e:
-                print("Failed:", game_id, e)
+            print("Created:", path)
+            written += 1
 
         day += timedelta(days=1)
 
