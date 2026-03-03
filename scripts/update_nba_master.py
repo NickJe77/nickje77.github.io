@@ -18,7 +18,7 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 SCOREBOARD_URL = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_{date}.json"
 BOXSCORE_URL = "https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{gameId}.json"
 
-DAYS_TO_CHECK = 7  # number of days to scan each run
+DAYS_TO_CHECK = 60  # number of days to scan each run
 
 
 # ==============================
