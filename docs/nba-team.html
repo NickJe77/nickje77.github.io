@@ -92,6 +92,7 @@ body{
   color:var(--nba-primary);
   font-weight:800;
 }
+.leader-player a:hover{text-decoration:underline;}
 .leader-total{
   font-size:13px;
   font-weight:700;
@@ -133,6 +134,7 @@ td{
   font-size:14px;
 }
 tr:hover{background:#eef2ff;cursor:pointer;}
+.muted{color:#6b7280;font-size:13px;}
 .badge{
   display:inline-block;
   padding:4px 10px;
@@ -149,6 +151,18 @@ tr:hover{background:#eef2ff;cursor:pointer;}
   border-radius:12px;
   margin:12px 0;
 }
+.debug{
+  background:#fff3f3;
+  border:1px solid #ffd1d1;
+  color:#7a1c1c;
+  padding:10px 12px;
+  border-radius:12px;
+  margin:12px 0;
+  display:none;
+  white-space:pre-wrap;
+  font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size:12px;
+}
 </style>
 </head>
 
@@ -162,11 +176,12 @@ tr:hover{background:#eef2ff;cursor:pointer;}
 <div class="page">
 
   <div class="hero">
-    <h1 id="teamName">Loading…</h1>
-    <div id="subTitle" style="margin-top:8px;color:rgba(255,255,255,.9);"></div>
+    <h1 id="teamName" style="margin:0;">Loading…</h1>
+    <div class="muted" id="subTitle" style="margin-top:8px;color:rgba(255,255,255,.9);"></div>
   </div>
 
   <div class="loading" id="loadingBox">Loading team data…</div>
+  <div class="debug" id="debugBox"></div>
 
   <div class="top-stack">
 
@@ -180,6 +195,7 @@ tr:hover{background:#eef2ff;cursor:pointer;}
     <div class="leaders-card">
       <h2 style="margin:0 0 10px 0;">All-Time Franchise Leaders</h2>
       <div class="leaders-grid" id="leadersGrid"></div>
+      <div class="muted" id="leadersNote" style="margin-top:10px;"></div>
     </div>
 
   </div>
@@ -189,18 +205,19 @@ tr:hover{background:#eef2ff;cursor:pointer;}
     <select id="seasonSelect">
       <option value="all">All Seasons</option>
     </select>
+    <span class="muted" id="seasonHint"></span>
   </div>
 
   <div class="card">
     <table>
       <thead>
         <tr>
-          <th>Date</th>
-          <th>Season</th>
-          <th>Type</th>
+          <th style="width:120px;">Date</th>
+          <th style="width:110px;">Season</th>
+          <th style="width:140px;">Type</th>
           <th>Opponent</th>
-          <th>Result</th>
-          <th>Score</th>
+          <th style="width:80px;">Result</th>
+          <th style="width:110px;">Score</th>
         </tr>
       </thead>
       <tbody id="gamesBody"></tbody>
@@ -213,127 +230,295 @@ tr:hover{background:#eef2ff;cursor:pointer;}
 const params = new URLSearchParams(window.location.search);
 const teamRaw = (params.get("team") || "").trim();
 
-const PATH_MASTER  = "/data/nba/nba_games_master.json";
-const PATH_LEADERS = "/data/nba/team_leaders.json";
-
 const elTeamName = document.getElementById("teamName");
 const elSubTitle = document.getElementById("subTitle");
-const elLoading  = document.getElementById("loadingBox");
-const elBadge    = document.getElementById("loadBadge");
-const elTotal    = document.getElementById("totalGames");
-const elWins     = document.getElementById("wins");
-const elLoss     = document.getElementById("losses");
-const elGrid     = document.getElementById("leadersGrid");
-const elSeason   = document.getElementById("seasonSelect");
-const elBody     = document.getElementById("gamesBody");
+const elDebug = document.getElementById("debugBox");
+const elLoading = document.getElementById("loadingBox");
+const elBadge = document.getElementById("loadBadge");
+
+const elTotal = document.getElementById("totalGames");
+const elWins  = document.getElementById("wins");
+const elLoss  = document.getElementById("losses");
+
+const elLeadersGrid = document.getElementById("leadersGrid");
+const elLeadersNote = document.getElementById("leadersNote");
+
+const elSeasonSelect = document.getElementById("seasonSelect");
+const elSeasonHint = document.getElementById("seasonHint");
+
+const PATH_MASTER  = "/data/nba/nba_games_master.json";
+const PATH_LEADERS = "/data/nba/team_leaders.json";
 
 function seasonLabel(start){
   const next = String((Number(start)+1)%100).padStart(2,"0");
   return `${start}-${next}`;
 }
-function norm(s){
-  return (s||"").toLowerCase().replace(/[^a-z]/g,"");
+function normLetters(s){
+  return (s || "").toLowerCase().replace(/[^a-z]/g,"").trim();
 }
-async function fetchJson(url){
-  const r = await fetch(url,{cache:"no-store"});
-  if(!r.ok) throw new Error("Fetch failed: "+url);
-  return r.json();
+function showDebug(msg){
+  elDebug.style.display = "block";
+  elDebug.textContent = msg;
+}
+function setBadge(txt){
+  elBadge.textContent = txt;
+}
+function hideLoading(){
+  elLoading.style.display = "none";
 }
 
 let allGames = [];
 let seasons = new Set();
 
+async function fetchJson(url){
+  const r = await fetch(url, { cache: "no-store" });
+  if(!r.ok) throw new Error(`Fetch failed ${r.status} for ${url}`);
+  return await r.json();
+}
+
+/* ---- LEADERS: SHAPE-AGNOSTIC EXTRACTORS ---- */
+function coerceToArray(x){
+  if(Array.isArray(x)) return x;
+  if(x && Array.isArray(x.teams)) return x.teams;
+  if(x && Array.isArray(x.data)) return x.data;
+  if(x && Array.isArray(x.items)) return x.items;
+  return null;
+}
+
+function tryFindTeamEntry(leadersJson, teamKey){
+  // 1) If it’s an array (or wrapper containing an array)
+  const arr = coerceToArray(leadersJson);
+  if(arr){
+    // Common field names: team / name / franchise
+    const hit = arr.find(t => normLetters(t?.team || t?.name || t?.franchise) === teamKey);
+    return hit || null;
+  }
+
+  // 2) If it’s a keyed map { "Boston Celtics": {...}, ... }
+  if(leadersJson && typeof leadersJson === "object"){
+    const keys = Object.keys(leadersJson);
+    for(const k of keys){
+      if(normLetters(k) === teamKey) return leadersJson[k];
+    }
+  }
+
+  return null;
+}
+
+function normalizeStatsObject(entry){
+  // We accept a few possibilities:
+  // A) entry.stats = { points:{player,total}, ... }
+  // B) entry = { points:{player,total}, ... } (stats at root)
+  // C) entry.leaders = { ... }
+  if(!entry || typeof entry !== "object") return null;
+  if(entry.stats && typeof entry.stats === "object") return entry.stats;
+  if(entry.leaders && typeof entry.leaders === "object") return entry.leaders;
+
+  // if it looks like stats at root (has points/rebounds keys etc.)
+  const rootKeys = Object.keys(entry);
+  const hasAny = ["points","rebounds","assists","steals","blocks"].some(k => rootKeys.includes(k));
+  if(hasAny) return entry;
+
+  return null;
+}
+
+function addLeaderBox(stat, player, total){
+  const div = document.createElement("div");
+  div.className = "leader-box";
+  div.innerHTML = `
+    <div class="leader-label">${stat.toUpperCase()}</div>
+    <div class="leader-player">
+      <a href="nba-player.html?player=${encodeURIComponent(player)}">${player}</a>
+    </div>
+    <div class="leader-total">${Number(total || 0).toLocaleString()}</div>
+  `;
+  elLeadersGrid.appendChild(div);
+}
+
+function renderLeaders(leadersJson){
+  elLeadersGrid.innerHTML = "";
+  elLeadersNote.textContent = "";
+
+  const teamKey = normLetters(teamRaw);
+  const entry = tryFindTeamEntry(leadersJson, teamKey);
+
+  if(!entry){
+    elLeadersNote.textContent = "Leaders not found for this team (team name mismatch in team_leaders.json).";
+    return;
+  }
+
+  const statsObj = normalizeStatsObject(entry);
+  if(!statsObj){
+    elLeadersNote.textContent = "Leaders file loaded, but format wasn’t recognized (stats keys missing).";
+    return;
+  }
+
+  const order = ["points","rebounds","assists","steals","blocks"];
+  let shown = 0;
+
+  for(const stat of order){
+    const v = statsObj[stat];
+    // v could be {player,total} OR {name,value} OR string/number combos
+    if(!v) continue;
+
+    const player = (v.player || v.name || v.leader || v.player_name || "").trim();
+    const total = (v.total ?? v.value ?? v.stat_total ?? v.count ?? 0);
+
+    if(player){
+      addLeaderBox(stat, player, total);
+      shown++;
+    }
+  }
+
+  if(!shown){
+    // fallback: show any entries in statsObj if structure is different
+    for(const [stat, v] of Object.entries(statsObj)){
+      if(!v || typeof v !== "object") continue;
+      const player = (v.player || v.name || v.leader || v.player_name || "").trim();
+      const total = (v.total ?? v.value ?? v.stat_total ?? v.count ?? 0);
+      if(player){
+        addLeaderBox(stat, player, total);
+        shown++;
+      }
+    }
+  }
+
+  if(!shown){
+    elLeadersNote.textContent = "Leaders entry found, but couldn’t extract player/total fields.";
+  }else{
+    elLeadersNote.textContent = "Loaded from team_leaders.json";
+  }
+}
+
+/* ---- GAMES ---- */
 function renderGames(season){
-  elBody.innerHTML="";
-  const list = season==="all" ? allGames : allGames.filter(g=>String(g.season)===season);
-  let w=0,l=0;
+  const body = document.getElementById("gamesBody");
+  body.innerHTML = "";
 
-  list.sort((a,b)=> (b.date||"").localeCompare(a.date||""));
+  const filtered = season === "all" ? allGames : allGames.filter(g => String(g.season) === String(season));
+  filtered.sort((a,b)=> (b.date || "").localeCompare(a.date || ""));
 
-  for(const g of list){
-    if(g.result==="W") w++; else l++;
-    const tr=document.createElement("tr");
-    tr.onclick=()=>location.href=`nba-game.html?game=${g.id}`;
-    tr.innerHTML=`<td>${g.date}</td>
-                  <td>${seasonLabel(g.season)}</td>
-                  <td>${g.type}</td>
-                  <td>${g.opponent}</td>
-                  <td>${g.result}</td>
-                  <td>${g.score}</td>`;
-    elBody.appendChild(tr);
+  let wins = 0, losses = 0;
+
+  for(const g of filtered){
+    if(g.result === "W") wins++; else losses++;
+
+    const tr = document.createElement("tr");
+    tr.onclick = () => location.href = `nba-game.html?game=${encodeURIComponent(g.id)}`;
+    tr.innerHTML = `
+      <td>${g.date || ""}</td>
+      <td>${seasonLabel(g.season)}</td>
+      <td>${g.type || ""}</td>
+      <td>${g.opponent || ""}</td>
+      <td>${g.result || ""}</td>
+      <td>${g.score || ""}</td>
+    `;
+    body.appendChild(tr);
   }
-  elTotal.textContent=list.length;
-  elWins.textContent=w;
-  elLoss.textContent=l;
+
+  elTotal.textContent = filtered.length;
+  elWins.textContent = wins;
+  elLoss.textContent = losses;
 }
 
-function renderLeaders(data){
-  elGrid.innerHTML="";
-  const teamKey = norm(teamRaw);
-  const team = data.find(t=>norm(t.team)===teamKey);
-  if(!team) return;
+function fillSeasonSelect(){
+  elSeasonSelect.innerHTML = "<option value='all'>All Seasons</option>";
+  Array.from(seasons).sort((a,b)=>Number(b)-Number(a)).forEach(s=>{
+    const opt = document.createElement("option");
+    opt.value = s;
+    opt.textContent = seasonLabel(s);
+    elSeasonSelect.appendChild(opt);
+  });
+  elSeasonHint.textContent = `${seasons.size} seasons found`;
+}
 
-  for(const [stat,obj] of Object.entries(team.stats)){
-    const div=document.createElement("div");
-    div.className="leader-box";
-    div.innerHTML=`
-      <div class="leader-label">${stat.toUpperCase()}</div>
-      <div class="leader-player">
-        <a href="nba-player.html?player=${encodeURIComponent(obj.player)}">${obj.player}</a>
-      </div>
-      <div class="leader-total">${obj.total.toLocaleString()}</div>`;
-    elGrid.appendChild(div);
+async function loadData(){
+  elTeamName.textContent = teamRaw || "Team";
+  elSubTitle.textContent = "Loading…";
+  setBadge("LOADING");
+
+  try{
+    const [masterAny, leadersJson] = await Promise.all([
+      fetchJson(PATH_MASTER),
+      fetchJson(PATH_LEADERS)
+    ]);
+
+    const master = Array.isArray(masterAny)
+      ? masterAny
+      : (Array.isArray(masterAny.games) ? masterAny.games
+        : (Array.isArray(masterAny.data) ? masterAny.data : []));
+
+    if(!master.length){
+      showDebug(
+        `Loaded master JSON but found 0 games in it.\n` +
+        `Master shape keys: ${Object.keys(masterAny || {}).join(", ")}`
+      );
+      setBadge("MASTER=0");
+      hideLoading();
+      return;
+    }
+
+    const teamKey = normLetters(teamRaw);
+
+    const teamGames = [];
+    for(const g of master){
+      if(!g) continue;
+
+      const home = normLetters(g.home_team);
+      const away = normLetters(g.away_team);
+
+      if(!home.includes(teamKey) && !away.includes(teamKey)) continue;
+
+      const season = g.season;
+      const gameId = g.game_id;
+      if(!season || !gameId) continue;
+
+      const isHome = home.includes(teamKey);
+      const teamScore = isHome ? g.home_score : g.away_score;
+      const oppScore  = isHome ? g.away_score : g.home_score;
+
+      seasons.add(season);
+
+      teamGames.push({
+        id: String(gameId),
+        date: g.date || "",
+        season: season,
+        type: g.game_type || "",
+        opponent: isHome ? (g.away_team || "") : (g.home_team || ""),
+        result: (Number(teamScore) > Number(oppScore)) ? "W" : "L",
+        score: `${teamScore} - ${oppScore}`
+      });
+    }
+
+    allGames = teamGames;
+
+    fillSeasonSelect();
+    renderGames("all");
+
+    // Leaders rendering is now robust and will not crash the page.
+    try{
+      renderLeaders(leadersJson);
+    }catch(e){
+      elLeadersNote.textContent = "Leaders file loaded but could not be rendered (format mismatch).";
+      showDebug("Leaders render error:\n" + String(e && e.stack ? e.stack : e));
+    }
+
+    elSubTitle.textContent = `Games: ${allGames.length.toLocaleString()}`;
+    setBadge("OK");
+    hideLoading();
+
+  }catch(e){
+    showDebug(String(e && e.stack ? e.stack : e));
+    setBadge("ERROR");
+    hideLoading();
   }
 }
 
-async function load(){
-  elTeamName.textContent=teamRaw;
-  elBadge.textContent="LOADING";
+elSeasonSelect.addEventListener("change", (e)=> {
+  renderGames(e.target.value);
+});
 
-  const master = await fetchJson(PATH_MASTER);
-  const leaders = await fetchJson(PATH_LEADERS);
-
-  const teamKey = norm(teamRaw);
-
-  for(const g of master){
-    const home=norm(g.home_team);
-    const away=norm(g.away_team);
-    if(!home.includes(teamKey)&&!away.includes(teamKey)) continue;
-
-    const isHome=home.includes(teamKey);
-    const teamScore=isHome?g.home_score:g.away_score;
-    const oppScore=isHome?g.away_score:g.home_score;
-
-    seasons.add(g.season);
-
-    allGames.push({
-      id:g.game_id,
-      date:g.date,
-      season:g.season,
-      type:g.game_type||"",
-      opponent:isHome?g.away_team:g.home_team,
-      result:Number(teamScore)>Number(oppScore)?"W":"L",
-      score:`${teamScore} - ${oppScore}`
-    });
-  }
-
-  for(const s of Array.from(seasons).sort((a,b)=>b-a)){
-    const opt=document.createElement("option");
-    opt.value=s;
-    opt.textContent=seasonLabel(s);
-    elSeason.appendChild(opt);
-  }
-
-  renderGames("all");
-  renderLeaders(leaders);
-
-  elSubTitle.textContent=`${allGames.length} games loaded`;
-  elBadge.textContent="OK";
-  elLoading.style.display="none";
-}
-
-elSeason.addEventListener("change",e=>renderGames(e.target.value));
-load();
+loadData();
 </script>
 
 </body>
