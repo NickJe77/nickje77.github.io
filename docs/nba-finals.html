@@ -4,52 +4,22 @@
 <meta charset="UTF-8">
 <title>NBA Finals | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <link rel="stylesheet" href="style.css">
 
 <style>
-body{
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
-  "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  margin:0;
-  background:#fff;
-}
-
-.navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px 0;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
-}
+body{font-family:Inter,system-ui,Arial;margin:0;background:#fff;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-.navbar a:hover{text-decoration:underline;}
-
-.page-wrap{
-  max-width:1100px;
-  margin:0 auto;
-  padding:30px 20px 60px;
-}
-
+.page-wrap{max-width:1100px;margin:0 auto;padding:30px 20px 60px;}
 h1{text-align:center;margin-bottom:10px;}
 p{text-align:center;color:#555;margin-bottom:30px;}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-}
-th,td{
-  border-bottom:1px solid #ddd;
-  padding:10px 12px;
-  text-align:left;
-}
-th{
-  background:#f0f0f0;
-}
-tr:nth-child(even){
-  background:#f6f9ff;
-}
+table{width:100%;border-collapse:collapse;}
+th,td{border-bottom:1px solid #ddd;padding:10px 12px;text-align:left;}
+th{background:#f0f0f0;}
+tr:nth-child(even){background:#f6f9ff;}
+.link{color:#0056d6;text-decoration:none;font-weight:600;}
+.link:hover{text-decoration:underline;}
+.games a{margin-right:6px;}
 </style>
 </head>
 
@@ -57,62 +27,112 @@ tr:nth-child(even){
 
 <div class="navbar">
   <a href="index.html">Home</a>
-  <a href="racing.html">Racing</a>
-  <a href="afl.html">AFL</a>
-  <a href="football.html">Football</a>
-  <a href="cricket.html">Cricket</a>
-  <a href="f1.html">F1</a>
   <a href="nba.html">NBA</a>
 </div>
 
 <div class="page-wrap">
 
 <h1>NBA Finals</h1>
-<p>Championship series from 1976–77 to the present day.</p>
+<p>Championship series derived automatically from playoff data.</p>
 
 <table>
-  <thead>
-    <tr>
-      <th>Season</th>
-      <th>Champion</th>
-      <th>Runner-up</th>
-      <th>Series</th>
-      <th>Finals MVP</th>
-    </tr>
-  </thead>
-  <tbody id="finalsTable"></tbody>
+<thead>
+<tr>
+<th>Season</th>
+<th>Champion</th>
+<th>Runner-up</th>
+<th>Series</th>
+<th>Games</th>
+</tr>
+</thead>
+<tbody id="finalsTable"></tbody>
 </table>
 
 </div>
 
 <script>
+const START_YEAR = 1976;
+const END_YEAR = 2025;
 const tableBody = document.getElementById("finalsTable");
 
-fetch("data/nba/finals.json")
-  .then(r => r.json())
-  .then(data => {
+async function loadFinals(){
 
-    const filtered = data.filter(f => {
-      if(!f.season) return false;
-      const startYear = parseInt(f.season.split("-")[0]);
-      return startYear >= 1976;
-    });
+  for(let year = END_YEAR; year >= START_YEAR; year--){
 
-    filtered.forEach(finals => {
+    try{
+      const res = await fetch(`data/nba/seasons/${year}.json`);
+      if(!res.ok) continue;
+
+      const games = await res.json();
+
+      const playoffGames = games
+        .filter(g => g.game_type === "Playoffs")
+        .sort((a,b)=> new Date(a.date) - new Date(b.date));
+
+      if(!playoffGames.length) continue;
+
+      // Group by matchup
+      const seriesMap = {};
+
+      playoffGames.forEach(g=>{
+        const teams = [g.home_team, g.away_team].sort().join(" vs ");
+        if(!seriesMap[teams]) seriesMap[teams] = [];
+        seriesMap[teams].push(g);
+      });
+
+      // Identify finals = matchup with latest game date
+      let finalsSeries = null;
+      let latestDate = 0;
+
+      Object.values(seriesMap).forEach(series=>{
+        const lastGame = series[series.length-1];
+        const lastDate = new Date(lastGame.date).getTime();
+
+        if(lastDate > latestDate){
+          latestDate = lastDate;
+          finalsSeries = series;
+        }
+      });
+
+      if(!finalsSeries) continue;
+
+      // Count wins
+      const wins = {};
+      finalsSeries.forEach(g=>{
+        wins[g.winner] = (wins[g.winner] || 0) + 1;
+      });
+
+      const teams = Object.keys(wins);
+      if(teams.length < 2) continue;
+
+      const champion = teams.sort((a,b)=>wins[b]-wins[a])[0];
+      const runnerUp = teams.find(t=>t!==champion);
+
+      const seriesResult = `${wins[champion]}-${wins[runnerUp]}`;
+
+      // Build games links
+      const gamesLinks = finalsSeries.map((g,i)=>
+        `<a class="link" href="nba-game.html?game_id=${g.game_id}">G${i+1}</a>`
+      ).join(" ");
+
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${finals.season}</td>
-        <td>${finals.champion || ""}</td>
-        <td>${finals.runner_up || ""}</td>
-        <td>${finals.series || ""}</td>
-        <td>${finals.finals_mvp || ""}</td>
+        <td>${year}-${String(year+1).slice(2)}</td>
+        <td>${champion}</td>
+        <td>${runnerUp}</td>
+        <td>${seriesResult}</td>
+        <td class="games">${gamesLinks}</td>
       `;
+
       tableBody.appendChild(tr);
-    });
-  })
-  .catch(() => {
-    tableBody.innerHTML = "<tr><td colspan='5'>No data available.</td></tr>";
-  });
+
+    }catch(e){
+      continue;
+    }
+  }
+}
+
+loadFinals();
 </script>
 
 </body>
