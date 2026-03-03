@@ -14,20 +14,20 @@ START_DATE = date(2025, 2, 15)
 OUT_DIR = Path("docs/data/nba/2025")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-SCOREBOARD_URL = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_{date}.json"
+# ✅ CORRECT historical scoreboard endpoint
+SCOREBOARD_URL = "https://cdn.nba.com/static/json/liveData/scoreboard/scoreboard_{date}.json"
 BOXSCORE_URL = "https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{gameId}.json"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0"
 }
 
-
 # =========================
 # HELPERS
 # =========================
 
 def get_json(url):
-    r = requests.get(url, headers=HEADERS, timeout=10)
+    r = requests.get(url, headers=HEADERS, timeout=15)
     r.raise_for_status()
     return r.json()
 
@@ -46,19 +46,22 @@ def build_game(box):
 
     for team in [home, away]:
         team_name = team["teamName"]
+
         for p in team.get("players", []):
+            stats = p.get("statistics", {})
+
             players.append({
                 "player_id": p.get("personId"),
                 "player_name": p.get("name"),
                 "team": team_name,
-                "minutes": p.get("statistics", {}).get("minutes"),
-                "points": p.get("statistics", {}).get("points"),
-                "rebounds": p.get("statistics", {}).get("reboundsTotal"),
-                "assists": p.get("statistics", {}).get("assists"),
-                "steals": p.get("statistics", {}).get("steals"),
-                "blocks": p.get("statistics", {}).get("blocks"),
-                "turnovers": p.get("statistics", {}).get("turnovers"),
-                "fouls": p.get("statistics", {}).get("foulsPersonal")
+                "minutes": stats.get("minutes"),
+                "points": stats.get("points"),
+                "rebounds": stats.get("reboundsTotal"),
+                "assists": stats.get("assists"),
+                "steals": stats.get("steals"),
+                "blocks": stats.get("blocks"),
+                "turnovers": stats.get("turnovers"),
+                "fouls": stats.get("foulsPersonal")
             })
 
     return {
@@ -79,7 +82,6 @@ def build_game(box):
         "attendance": game.get("attendance"),
         "players": players
     }
-
 
 # =========================
 # MAIN
@@ -103,7 +105,6 @@ def main():
         games = scoreboard.get("scoreboard", {}).get("games", [])
 
         for g in games:
-            # Only completed games
             if g.get("gameStatus") != 3:
                 continue
 
