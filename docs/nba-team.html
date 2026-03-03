@@ -24,11 +24,6 @@ body{font-family:Inter,Arial;margin:0;background:var(--bg);}
   background:linear-gradient(270deg,#17408B,#C9082A,#17408B);
   color:#fff;padding:34px;border-radius:22px;margin-bottom:20px;
 }
-.stats{
-  background:var(--card);
-  padding:16px;border-radius:16px;
-  display:flex;gap:30px;margin-bottom:16px;flex-wrap:wrap;
-}
 .filter-box{
   background:var(--card);
   padding:16px;border-radius:16px;
@@ -60,12 +55,6 @@ tr:hover{background:#eef2ff;cursor:pointer;}
 </div>
 
 <div class="loading" id="loadingBox">Loading games…</div>
-
-<div class="stats">
-<div>Total Games: <strong id="totalGames">0</strong></div>
-<div>Wins: <strong id="wins">0</strong></div>
-<div>Losses: <strong id="losses">0</strong></div>
-</div>
 
 <div class="filter-box">
 Season:
@@ -115,9 +104,6 @@ function typeBucket(t){
 
 const elTeamName=document.getElementById("teamName");
 const elLoading=document.getElementById("loadingBox");
-const elTotal=document.getElementById("totalGames");
-const elWins=document.getElementById("wins");
-const elLoss=document.getElementById("losses");
 const elSeason=document.getElementById("seasonSelect");
 const elType=document.getElementById("typeSelect");
 const elBody=document.getElementById("gamesBody");
@@ -135,10 +121,8 @@ function render(){
   filtered.sort((a,b)=>(b.date||"").localeCompare(a.date||""));
 
   elBody.innerHTML="";
-  let w=0,l=0;
 
   for(const g of filtered){
-    if(g.result==="W")w++;else l++;
     const tr=document.createElement("tr");
     tr.onclick=()=>location.href=`nba-game.html?game=${g.id}`;
     tr.innerHTML=`
@@ -150,10 +134,6 @@ function render(){
       <td>${g.score}</td>`;
     elBody.appendChild(tr);
   }
-
-  elTotal.textContent=filtered.length;
-  elWins.textContent=w;
-  elLoss.textContent=l;
 }
 
 async function loadSeason(season){
@@ -164,7 +144,6 @@ async function loadSeason(season){
   try{
     const indexRaw=await fetch(`/data/nba/${season}/index.json`).then(r=>r.json());
     const gameIds=indexRaw.games || [];
-
     const teamKey=norm(teamRaw);
 
     const games=await Promise.all(
@@ -178,14 +157,11 @@ async function loadSeason(season){
     for(const g of games){
       if(!g) continue;
 
+      if(g.game_type && g.game_type.toLowerCase().includes("pre")) continue;
+
       const home=norm(g.home_team);
       const away=norm(g.away_team);
       if(!home.includes(teamKey)&&!away.includes(teamKey))continue;
-
-      const bucket=typeBucket(g.game_type);
-
-      // REMOVE PRESEASON COMPLETELY
-      if(g.game_type && g.game_type.toLowerCase().includes("pre")) continue;
 
       const isHome=home.includes(teamKey);
       const teamScore=isHome?g.home_score:g.away_score;
@@ -194,7 +170,7 @@ async function loadSeason(season){
       allGames.push({
         id:g.game_id,
         date:g.date,
-        type:bucket,
+        type:typeBucket(g.game_type),
         typeLabel:g.game_type,
         opponent:isHome?g.away_team:g.home_team,
         result:Number(teamScore)>Number(oppScore)?"W":"L",
