@@ -1,131 +1,61 @@
-import json
+#!/usr/bin/env python3
+
 import requests
-import time
+import json
+import os
+from datetime import datetime, timedelta
 from pathlib import Path
-from datetime import date, timedelta
 
-START_DATE = date(2025, 2, 15)
+BASE_DIR = Path("docs/data/nba/2025")
+BASE_DIR.mkdir(parents=True, exist_ok=True)
 
-SCOREBOARD_URL = "https://cdn.nba.com/static/json/liveData/scoreboard/scoreboard_{date}.json"
-BOXSCORE_URL = "https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{gameId}.json"
+START_DATE = datetime(2025, 2, 15)
+END_DATE = datetime.today()
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Referer": "https://www.nba.com/",
+    "Accept": "application/json"
+}
 
-BASE_DIR = Path("docs/data/nba")
+def fetch_scoreboard(date):
+    date_str = date.strftime("%Y%m%d")
+    url = f"https://cdn.nba.com/static/json/liveData/scoreboard/scoreboard_{date_str}.json"
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=10)
+        if r.status_code == 200:
+            return r.json()
+        else:
+            print(f"{date_str} - blocked ({r.status_code})")
+            return None
+    except Exception as e:
+        print(f"{date_str} - error: {e}")
+        return None
 
-
-def get_json(url):
-    r = requests.get(url, headers=HEADERS, timeout=15)
-    r.raise_for_status()
-    return r.json()
-
-
-def determine_season(game_date_str):
-    year = int(game_date_str[:4])
-    month = int(game_date_str[5:7])
-
-    # NBA season starts in October
-    if month >= 10:
-        return year
-    else:
-        return year - 1
-
-
-def build_game(box):
-    game = box["game"]
-
-    home = game["homeTeam"]
-    away = game["awayTeam"]
-
-    players = []
-
-    for team in [home, away]:
-        team_name = team["teamName"]
-
-        for p in team.get("players", []):
-            stats = p.get("statistics", {})
-
-            players.append({
-                "player_id": p.get("personId"),
-                "player_name": p.get("name"),
-                "team": team_name,
-                "minutes": stats.get("minutes"),
-                "points": stats.get("points"),
-                "rebounds": stats.get("reboundsTotal"),
-                "assists": stats.get("assists"),
-                "steals": stats.get("steals"),
-                "blocks": stats.get("blocks"),
-                "turnovers": stats.get("turnovers"),
-                "fouls": stats.get("foulsPersonal")
-            })
-
-    return game, {
-        "game_id": game["gameId"],
-        "season": determine_season(game["gameDate"]),
-        "date": game["gameDate"],
-        "home_team": home["teamName"],
-        "away_team": away["teamName"],
-        "home_score": home["score"],
-        "away_score": away["score"],
-        "winner": home["teamName"] if int(home["score"]) > int(away["score"]) else away["teamName"],
-        "game_type": game.get("gameStatusText"),
-        "arena": {
-            "arenaName": game.get("arena", {}).get("arenaName"),
-            "arenaCity": game.get("arena", {}).get("arenaCity"),
-            "arenaState": game.get("arena", {}).get("arenaState")
-        },
-        "attendance": game.get("attendance"),
-        "players": players
-    }
-
+def save_game(game):
+    game_id = game["gameId"]
+    file_path = BASE_DIR / f"{game_id}.json"
+    if file_path.exists():
+        return False
+    with open(file_path, "w") as f:
+        json.dump(game, f, indent=2)
+    return True
 
 def main():
-    today = date.today()
-    day = START_DATE
-    written = 0
+    current_date = START_DATE
+    new_games = 0
 
-    while day <= today:
-        formatted = day.strftime("%Y%m%d")
-        url = SCOREBOARD_URL.format(date=formatted)
+    while current_date <= END_DATE:
+        data = fetch_scoreboard(current_date)
+        if data and "scoreboard" in data:
+            games = data["scoreboard"].get("games", [])
+            for game in games:
+                if game.get("gameStatusText") == "Final":
+                    if save_game(game):
+                        new_games += 1
+        current_date += timedelta(days=1)
 
-        try:
-            scoreboard = get_json(url)
-        except:
-            day += timedelta(days=1)
-            continue
-
-        games = scoreboard.get("scoreboard", {}).get("games", [])
-
-        for g in games:
-            if g.get("gameStatus") != 3:
-                continue
-
-            game_id = g["gameId"]
-
-            time.sleep(0.4)
-            box = get_json(BOXSCORE_URL.format(gameId=game_id))
-
-            game_meta, game_data = build_game(box)
-
-            season = determine_season(game_meta["gameDate"])
-            season_dir = BASE_DIR / str(season)
-            season_dir.mkdir(parents=True, exist_ok=True)
-
-            path = season_dir / f"{game_id}.json"
-
-            if path.exists():
-                continue
-
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(game_data, f, indent=2)
-
-            print("Created:", path)
-            written += 1
-
-        day += timedelta(days=1)
-
-    print("Done. New games written:", written)
-
+    print(f"Done. New games written: {new_games}")
 
 if __name__ == "__main__":
     main()
