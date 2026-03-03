@@ -5,24 +5,67 @@
 <title>NBA Draft | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="style.css">
+
 <style>
-body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#fff;}
-.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
-.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px 60px;}
+body{
+  font-family:Inter,system-ui,Arial,sans-serif;
+  margin:0;
+  background:#fff;
+}
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+  font-size:18px;
+}
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:30px 20px 60px;
+}
 h1{text-align:center;margin:0 0 10px;}
 p{text-align:center;color:#555;margin:0 0 18px;}
-.controls{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin:0 0 18px;}
-select,input{padding:8px 12px;border-radius:8px;border:1px solid #ccc;font-size:14px;}
-table{width:100%;border-collapse:collapse;}
-th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:left;}
+.controls{
+  display:flex;
+  justify-content:center;
+  gap:10px;
+  flex-wrap:wrap;
+  margin:0 0 18px;
+}
+select,input{
+  padding:8px 12px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  font-size:14px;
+}
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+th,td{
+  border-bottom:1px solid #ddd;
+  padding:8px 10px;
+  text-align:left;
+}
 th{background:#f0f0f0;}
 tr:nth-child(even){background:#f6f9ff;}
-.player-link{color:#0056d6;text-decoration:none;font-weight:600;}
+.player-link{
+  color:#0056d6;
+  text-decoration:none;
+  font-weight:600;
+}
 .player-link:hover{text-decoration:underline;}
 .small{color:#666;font-size:13px;}
 </style>
 </head>
+
 <body>
 
 <div class="navbar">
@@ -32,7 +75,7 @@ tr:nth-child(even){background:#f6f9ff;}
 
 <div class="page-wrap">
   <h1>NBA Draft</h1>
-  <p>Draft picks by year (buildable over time).</p>
+  <p>Complete draft history by year.</p>
 
   <div class="controls">
     <select id="yearSelect"></select>
@@ -54,61 +97,87 @@ tr:nth-child(even){background:#f6f9ff;}
 </div>
 
 <script>
-let draft=[];
-const yearSelect=document.getElementById("yearSelect");
-const q=document.getElementById("q");
-const rows=document.getElementById("rows");
+const yearSelect = document.getElementById("yearSelect");
+const q = document.getElementById("q");
+const rows = document.getElementById("rows");
 
-fetch("data/nba/draft.json")
-  .then(r=>r.json())
-  .then(d=>{
-    draft=d||[];
-    const years = draft.map(x=>x.year).sort((a,b)=>a-b);
-    years.forEach((y,i)=>{
-      const o=document.createElement("option");
-      o.value=y; o.textContent=y;
-      if(i===years.length-1) o.selected=true;
-      yearSelect.appendChild(o);
-    });
-    render();
-  })
-  .catch(()=>{ rows.innerHTML="<tr><td colspan='5'>No data available.</td></tr>"; });
+let currentData = [];
 
-yearSelect.addEventListener("change", render);
+/* ---------- YEARS YOU HAVE ---------- */
+/* Adjust this range if needed */
+const START_YEAR = 1976;
+const END_YEAR = new Date().getFullYear();
+
+/* Build dropdown (newest first) */
+for(let y = END_YEAR; y >= START_YEAR; y--){
+  const opt = document.createElement("option");
+  opt.value = y;
+  opt.textContent = y;
+  if(y === END_YEAR) opt.selected = true;
+  yearSelect.appendChild(opt);
+}
+
+yearSelect.addEventListener("change", loadYear);
 q.addEventListener("input", render);
 
-function render(){
-  const year=parseInt(yearSelect.value,10);
-  const needle=(q.value||"").toLowerCase().trim();
-  rows.innerHTML="";
+loadYear();
 
-  const row=draft.find(x=>x.year===year);
-  if(!row || !row.picks){
-    rows.innerHTML="<tr><td colspan='5'>No data for this year.</td></tr>";
+function loadYear(){
+  const year = yearSelect.value;
+  rows.innerHTML = "<tr><td colspan='5'>Loading...</td></tr>";
+
+  fetch(`data/nba/draft/${year}.json`)
+    .then(r=>{
+      if(!r.ok) throw new Error();
+      return r.json();
+    })
+    .then(data=>{
+      currentData = Array.isArray(data) ? data : [];
+      render();
+    })
+    .catch(()=>{
+      currentData = [];
+      rows.innerHTML = "<tr><td colspan='5'>No data for this year.</td></tr>";
+    });
+}
+
+function render(){
+  const needle = (q.value || "").toLowerCase().trim();
+  rows.innerHTML = "";
+
+  if(!currentData.length){
+    rows.innerHTML = "<tr><td colspan='5'>No data.</td></tr>";
     return;
   }
 
-  row.picks.forEach(p=>{
-    const hay=[p.player,p.team,p.college,p.from].join(" ").toLowerCase();
-    if(needle && !hay.includes(needle)) return;
+  currentData.forEach(pick=>{
+    const haystack = [
+      pick.player,
+      pick.team,
+      pick.college,
+      pick.from
+    ].join(" ").toLowerCase();
 
-    const link = p.player
-      ? `<a class="player-link" href="nba-player.html?player=${encodeURIComponent(p.player)}">${p.player}</a>`
+    if(needle && !haystack.includes(needle)) return;
+
+    const playerCell = pick.player
+      ? `<a class="player-link" href="nba-player.html?player=${encodeURIComponent(pick.player)}">${pick.player}</a>`
       : "";
 
-    const tr=document.createElement("tr");
-    tr.innerHTML=`
-      <td>${p.pick ?? ""}</td>
-      <td>${p.round ?? ""}</td>
-      <td>${link}</td>
-      <td class="small">${p.team || ""}</td>
-      <td class="small">${p.college || p.from || ""}</td>
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${pick.pick ?? ""}</td>
+      <td>${pick.round ?? ""}</td>
+      <td>${playerCell}</td>
+      <td class="small">${pick.team ?? ""}</td>
+      <td class="small">${pick.college ?? pick.from ?? ""}</td>
     `;
+
     rows.appendChild(tr);
   });
 
   if(!rows.children.length){
-    rows.innerHTML="<tr><td colspan='5'>No matches.</td></tr>";
+    rows.innerHTML = "<tr><td colspan='5'>No matches.</td></tr>";
   }
 }
 </script>
