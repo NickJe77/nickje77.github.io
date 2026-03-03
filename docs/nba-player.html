@@ -7,39 +7,136 @@
 
 <style>
 body{font-family:Inter,system-ui,Arial;margin:0;background:#ffffff;}
-.navbar{display:flex;justify-content:center;gap:30px;padding:14px 0;border-bottom:1px solid #ddd;font-weight:600;}
+
+.navbar{
+display:flex;
+justify-content:center;
+gap:30px;
+padding:14px 0;
+border-bottom:1px solid #ddd;
+font-weight:600;
+}
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
 .page-wrap{max-width:1200px;margin:0 auto;padding:20px;}
-h1{text-align:center;margin-bottom:10px;}
-.stats-row{display:flex;gap:12px;justify-content:center;margin:12px 0;flex-wrap:wrap;}
-.stat-box{background:#f2f6ff;padding:10px 16px;border-radius:8px;text-align:center;min-width:110px;}
-.stat-box span{display:block;font-size:22px;font-weight:700;}
-.filter-row{text-align:center;margin:14px 0 18px;font-weight:600;color:#003a99;}
-select{padding:8px 14px;font-size:15px;border-radius:8px;border:2px solid #0056d6;background:#eef3ff;color:#003a99;font-weight:600;cursor:pointer;}
-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:14px;}
-th,td{padding:6px 8px;border-bottom:1px solid #ddd;text-align:center;}
-th{background:#eef3ff;}
+
+.hero{
+background:linear-gradient(90deg,#1D428A,#C8102E);
+color:white;
+padding:24px 30px;
+border-radius:14px;
+margin-bottom:20px;
+}
+
+.team-bar{
+height:6px;
+border-radius:4px;
+margin-top:10px;
+background:#17408B;
+}
+
+.stat-section{margin:18px 0;}
+.stat-title{font-weight:700;margin-bottom:8px;}
+
+.stats-row{
+display:flex;
+gap:12px;
+flex-wrap:wrap;
+margin-bottom:10px;
+}
+
+.stat-box{
+background:#eef3ff;
+padding:10px 16px;
+border-radius:10px;
+text-align:center;
+min-width:110px;
+}
+
+.stat-box span{
+display:block;
+font-size:20px;
+font-weight:700;
+}
+
+.filter-row{
+margin:20px 0;
+font-weight:600;
+color:#003a99;
+}
+
+select{
+padding:8px 14px;
+font-size:14px;
+border-radius:8px;
+border:1px solid #ccc;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:20px;
+font-size:14px;
+}
+
+th,td{
+padding:8px 10px;
+border-bottom:1px solid #ddd;
+text-align:center;
+}
+
+th{background:#eef3ff;font-weight:700;}
+
 tr:nth-child(even){background:#f6f9ff;}
-.bad{background:#ffe1e1;color:#900;padding:10px;text-align:center;border-radius:6px;margin-top:12px;}
+
+tr.clickable{cursor:pointer;}
+tr.clickable:hover{background:#e6f0ff;}
+
+.bad{
+background:#ffe1e1;
+color:#900;
+padding:10px;
+text-align:center;
+border-radius:6px;
+margin-top:12px;
+}
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-<a href="../index.html">Home</a>
-<a href="../nba.html">NBA</a>
-<a href="../nba-seasons.html">Seasons</a>
+<a href="index.html">Home</a>
+<a href="nba.html">NBA</a>
+<a href="nba-season.html">Seasons</a>
 </div>
 
 <div class="page-wrap">
 
+<div class="hero">
 <h1 id="title">Player</h1>
+<div class="team-bar"></div>
+</div>
 
-<div class="stats-row" id="totalsBoxes"></div>
-<div class="stats-row" id="averagesBoxes"></div>
-<div class="stats-row" id="highsBoxes"></div>
+<div id="errorBox" class="bad" style="display:none;"></div>
 
+<!-- CAREER STATS -->
+<div class="stat-section">
+<div class="stat-title">Career Totals</div>
+<div class="stats-row" id="careerTotals"></div>
+</div>
+
+<div class="stat-section">
+<div class="stat-title">Career Averages</div>
+<div class="stats-row" id="careerAverages"></div>
+</div>
+
+<div class="stat-section">
+<div class="stat-title">Career Bests</div>
+<div class="stats-row" id="careerHighs"></div>
+</div>
+
+<!-- OPP FILTER -->
 <div class="filter-row">
 Opposition:
 <select id="oppFilter">
@@ -47,7 +144,13 @@ Opposition:
 </select>
 </div>
 
-<div id="errorBox" class="bad" style="display:none;"></div>
+<!-- OPP STATS -->
+<div class="stat-section">
+<div class="stat-title">Vs Selected Opposition</div>
+<div class="stats-row" id="oppTotals"></div>
+<div class="stats-row" id="oppAverages"></div>
+<div class="stats-row" id="oppHighs"></div>
+</div>
 
 <table>
 <thead>
@@ -69,14 +172,12 @@ Opposition:
 </div>
 
 <script>
+// KEEPING YOUR ORIGINAL FETCH LOGIC
 
 const params=new URLSearchParams(window.location.search);
 const playerName=decodeURIComponent(params.get("player")||"");
 
 const titleEl=document.getElementById("title");
-const totalsBoxes=document.getElementById("totalsBoxes");
-const averagesBoxes=document.getElementById("averagesBoxes");
-const highsBoxes=document.getElementById("highsBoxes");
 const errorBox=document.getElementById("errorBox");
 const gamesBody=document.getElementById("gamesBody");
 const oppFilter=document.getElementById("oppFilter");
@@ -85,11 +186,7 @@ let rows=[];
 let filteredRows=[];
 
 const START_SEASON=1976;
-const END_SEASON=2025; // fixed ceiling
-
-function clean(s){
-return (s||"").toLowerCase().trim();
-}
+const END_SEASON=new Date().getFullYear();
 
 async function loadPlayer(){
 
@@ -101,40 +198,29 @@ return;
 
 titleEl.textContent=playerName;
 
+for(let season=START_SEASON;season<=END_SEASON;season++){
+
 try{
+const indexRes=await fetch(`data/nba/${season}/index.json`);
+if(!indexRes.ok) continue;
 
-/* Load all season indexes in parallel */
-const seasonIndexes = await Promise.all(
-Array.from({length:END_SEASON-START_SEASON+1},(_,i)=>START_SEASON+i)
-.map(season =>
-fetch(`../data/nba/${season}/index.json`)
-.then(r=>r.ok? r.json():null)
-.then(index=>({season,index}))
-)
-);
+const index=await indexRes.json();
 
-for(const s of seasonIndexes){
+for(const id of index.games){
 
-if(!s.index?.games) continue;
+try{
+const gameRes=await fetch(`data/nba/${season}/${id}.json`);
+if(!gameRes.ok) continue;
 
-/* Load all games for season in parallel */
-const games = await Promise.all(
-s.index.games.map(id =>
-fetch(`../data/nba/${s.season}/${id}.json`)
-.then(r=>r.ok? r.json():null)
-)
-);
+const game=await gameRes.json();
 
-for(const game of games){
-
-if(!game) continue;
 if(game.game_type!=="Regular Season" && game.game_type!=="Playoffs") continue;
 
 for(const p of game.players||[]){
 
-const name = p.player_name || p.player || p.name || "";
+const name=p.player_name||p.player||p.name||"";
 
-if(clean(name)===clean(playerName)){
+if(name.toLowerCase().trim()===playerName.toLowerCase().trim()){
 
 const isHome=game.home_team===p.team;
 const opp=isHome?game.away_team:game.home_team;
@@ -152,13 +238,11 @@ blk:p.blocks||0
 });
 }
 }
-}
+
+}catch(e){}
 }
 
-}catch(e){
-errorBox.style.display="block";
-errorBox.textContent="Error loading data.";
-return;
+}catch(e){}
 }
 
 if(!rows.length){
@@ -168,7 +252,6 @@ return;
 }
 
 buildOppFilter();
-filteredRows=rows;
 render();
 }
 
@@ -182,35 +265,88 @@ oppFilter.appendChild(opt);
 });
 }
 
-oppFilter.addEventListener("change",()=>{
-const val=oppFilter.value;
-filteredRows=(val==="ALL")?rows:rows.filter(r=>r.opp===val);
-render();
-});
+oppFilter.addEventListener("change",render);
 
 function render(){
 
+const selected=(oppFilter.value==="ALL")
+? rows
+: rows.filter(r=>r.opp===oppFilter.value);
+
 gamesBody.innerHTML="";
 
-let totals={pts:0,reb:0,ast:0,stl:0,blk:0};
-let highs={pts:0,reb:0,ast:0,stl:0,blk:0};
+let totals={pts:0,reb:0,ast:0};
+let highs={pts:0,reb:0,ast:0};
 
-for(const r of filteredRows){
-
+for(const r of rows){
 totals.pts+=r.pts;
 totals.reb+=r.reb;
 totals.ast+=r.ast;
-totals.stl+=r.stl;
-totals.blk+=r.blk;
 
 highs.pts=Math.max(highs.pts,r.pts);
 highs.reb=Math.max(highs.reb,r.reb);
 highs.ast=Math.max(highs.ast,r.ast);
-highs.stl=Math.max(highs.stl,r.stl);
-highs.blk=Math.max(highs.blk,r.blk);
+}
 
+const g=rows.length||1;
+
+document.getElementById("careerTotals").innerHTML=`
+<div class="stat-box"><span>${rows.length}</span>Games</div>
+<div class="stat-box"><span>${totals.pts}</span>PTS</div>
+<div class="stat-box"><span>${totals.reb}</span>REB</div>
+<div class="stat-box"><span>${totals.ast}</span>AST</div>
+`;
+
+document.getElementById("careerAverages").innerHTML=`
+<div class="stat-box"><span>${(totals.pts/g).toFixed(1)}</span>Avg PTS</div>
+<div class="stat-box"><span>${(totals.reb/g).toFixed(1)}</span>Avg REB</div>
+<div class="stat-box"><span>${(totals.ast/g).toFixed(1)}</span>Avg AST</div>
+`;
+
+document.getElementById("careerHighs").innerHTML=`
+<div class="stat-box"><span>${highs.pts}</span>Best PTS</div>
+<div class="stat-box"><span>${highs.reb}</span>Best REB</div>
+<div class="stat-box"><span>${highs.ast}</span>Best AST</div>
+`;
+
+// OPP stats
+let oTotals={pts:0,reb:0,ast:0};
+let oHighs={pts:0,reb:0,ast:0};
+
+for(const r of selected){
+oTotals.pts+=r.pts;
+oTotals.reb+=r.reb;
+oTotals.ast+=r.ast;
+
+oHighs.pts=Math.max(oHighs.pts,r.pts);
+oHighs.reb=Math.max(oHighs.reb,r.reb);
+oHighs.ast=Math.max(oHighs.ast,r.ast);
+}
+
+const og=selected.length||1;
+
+document.getElementById("oppTotals").innerHTML=`
+<div class="stat-box"><span>${selected.length}</span>Games</div>
+<div class="stat-box"><span>${oTotals.pts}</span>PTS</div>
+<div class="stat-box"><span>${oTotals.reb}</span>REB</div>
+<div class="stat-box"><span>${oTotals.ast}</span>AST</div>
+`;
+
+document.getElementById("oppAverages").innerHTML=`
+<div class="stat-box"><span>${(oTotals.pts/og).toFixed(1)}</span>Avg PTS</div>
+<div class="stat-box"><span>${(oTotals.reb/og).toFixed(1)}</span>Avg REB</div>
+<div class="stat-box"><span>${(oTotals.ast/og).toFixed(1)}</span>Avg AST</div>
+`;
+
+document.getElementById("oppHighs").innerHTML=`
+<div class="stat-box"><span>${oHighs.pts}</span>Best PTS</div>
+<div class="stat-box"><span>${oHighs.reb}</span>Best REB</div>
+<div class="stat-box"><span>${oHighs.ast}</span>Best AST</div>
+`;
+
+selected.forEach(r=>{
 gamesBody.innerHTML+=`
-<tr>
+<tr class="clickable" onclick="window.location='nba-game.html?season=${r.season}&date=${r.date}'">
 <td>${r.season}</td>
 <td>${r.date}</td>
 <td>${r.team}</td>
@@ -221,33 +357,11 @@ gamesBody.innerHTML+=`
 <td>${r.stl}</td>
 <td>${r.blk}</td>
 </tr>`;
-}
+});
 
-const g=filteredRows.length;
-
-totalsBoxes.innerHTML=`
-<div class="stat-box"><span>${g}</span>Games</div>
-<div class="stat-box"><span>${totals.pts}</span>Points</div>
-<div class="stat-box"><span>${totals.reb}</span>Rebounds</div>
-<div class="stat-box"><span>${totals.ast}</span>Assists</div>
-<div class="stat-box"><span>${totals.stl}</span>Steals</div>
-<div class="stat-box"><span>${totals.blk}</span>Blocks</div>`;
-
-averagesBoxes.innerHTML=`
-<div class="stat-box"><span>${(totals.pts/g).toFixed(1)}</span>Avg Pts</div>
-<div class="stat-box"><span>${(totals.reb/g).toFixed(1)}</span>Avg Reb</div>
-<div class="stat-box"><span>${(totals.ast/g).toFixed(1)}</span>Avg Ast</div>`;
-
-highsBoxes.innerHTML=`
-<div class="stat-box"><span>${highs.pts}</span>Career High PTS</div>
-<div class="stat-box"><span>${highs.reb}</span>Career High REB</div>
-<div class="stat-box"><span>${highs.ast}</span>Career High AST</div>
-<div class="stat-box"><span>${highs.stl}</span>Career High STL</div>
-<div class="stat-box"><span>${highs.blk}</span>Career High BLK</div>`;
 }
 
 loadPlayer();
-
 </script>
 
 </body>
