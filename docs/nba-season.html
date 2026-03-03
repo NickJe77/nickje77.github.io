@@ -18,14 +18,6 @@ th,td{border-bottom:1px solid #eee;padding:10px;text-align:center;}
 th{background:#f0f0f0;font-weight:700;}
 tr:nth-child(even){background:#f9fbff;}
 tr:hover{background:#eef4ff;cursor:pointer;}
-.section-title{margin-top:40px;font-size:22px;font-weight:700;padding:10px;border-radius:8px;color:#fff;}
-.east-header{background:linear-gradient(90deg,#003366,#0056d6);}
-.west-header{background:linear-gradient(90deg,#8b0000,#d00000);}
-.team-link{text-decoration:none;font-weight:700;color:#111;display:flex;align-items:center;gap:8px;}
-.team-stripe{width:6px;height:18px;border-radius:3px;display:inline-block;}
-.win-good{color:#008000;font-weight:700;}
-.win-mid{color:#333;font-weight:700;}
-.win-bad{color:#c00000;font-weight:700;}
 </style>
 </head>
 
@@ -71,45 +63,16 @@ Team:
 <tbody id="gamesTable"></tbody>
 </table>
 
-<div class="section-title east-header">Eastern Conference</div>
-<table>
-<thead>
-<tr>
-<th>Team</th>
-<th>W</th>
-<th>L</th>
-<th>Win %</th>
-<th>GB</th>
-</tr>
-</thead>
-<tbody id="eastTable"></tbody>
-</table>
-
-<div class="section-title west-header">Western Conference</div>
-<table>
-<thead>
-<tr>
-<th>Team</th>
-<th>W</th>
-<th>L</th>
-<th>Win %</th>
-<th>GB</th>
-</tr>
-</thead>
-<tbody id="westTable"></tbody>
-</table>
-
 </div>
 
 <script>
 
-const BASE="data/nba/";
+const BASE="/data/nba/";
+
 const seasonSelect=document.getElementById("seasonSelect");
 const typeSelect=document.getElementById("typeSelect");
 const teamSelect=document.getElementById("teamSelect");
 const gamesTable=document.getElementById("gamesTable");
-const eastTable=document.getElementById("eastTable");
-const westTable=document.getElementById("westTable");
 const title=document.getElementById("title");
 
 const params=new URLSearchParams(location.search);
@@ -121,11 +84,14 @@ typeSelect.onchange=renderGames;
 teamSelect.onchange=renderGames;
 
 async function init(){
+
 for(let y=1976;y<=2026;y++){
-let opt=document.createElement("option");
-opt.value=y; opt.textContent=y;
-seasonSelect.appendChild(opt);
+  let opt=document.createElement("option");
+  opt.value=y;
+  opt.textContent=y;
+  seasonSelect.appendChild(opt);
 }
+
 seasonSelect.value=season;
 await loadSeason(season);
 }
@@ -133,84 +99,73 @@ await loadSeason(season);
 async function loadSeason(season){
 
 title.textContent="NBA Season " + season;
-eastTable.innerHTML=""; westTable.innerHTML=""; gamesTable.innerHTML="";
+gamesTable.innerHTML="";
 teamSelect.innerHTML='<option value="All">All Teams</option>';
 
-const index=await fetch(BASE+season+"/index.json").then(r=>r.json());
-const gameFiles=index.games.map(id=>fetch(BASE+season+"/"+id+".json").then(r=>r.json()));
+try{
 
-allGames = (await Promise.all(gameFiles))
-.filter(g =>
-g &&
-(
-(
-g.game_type === "Regular Season" &&
-(!g.game_subtype || g.game_subtype === "")
-)
-||
-g.game_type === "Playoffs"
-)
+const indexRes = await fetch(BASE+season+"/index.json");
+if(!indexRes.ok){
+  gamesTable.innerHTML="<tr><td colspan='5'>Season not found.</td></tr>";
+  return;
+}
+
+const index=await indexRes.json();
+
+const gameFiles=index.games.map(id =>
+  fetch(BASE+season+"/"+id+".json")
+  .then(r=>r.ok?r.json():null)
 );
 
-let standings={}, teams=new Set();
+allGames = (await Promise.all(gameFiles)).filter(g=>{
+  if(!g) return false;
+  const gt=(g.game_type||"").toLowerCase();
+  return gt.includes("regular") || gt.includes("play");
+});
+
+let teams=new Set();
 
 allGames.forEach(g=>{
-teams.add(g.home_team); teams.add(g.away_team);
-
-if(g.game_type==="Regular Season"){
-if(!standings[g.home_team]) standings[g.home_team]={w:0,l:0};
-if(!standings[g.away_team]) standings[g.away_team]={w:0,l:0};
-
-if(g.home_score>g.away_score){
-standings[g.home_team].w++; standings[g.away_team].l++;
-}else{
-standings[g.away_team].w++; standings[g.home_team].l++;
-}
-}
+  teams.add(g.home_team);
+  teams.add(g.away_team);
 });
 
 Array.from(teams).sort().forEach(t=>{
-let opt=document.createElement("option");
-opt.value=t; opt.textContent=t;
-teamSelect.appendChild(opt);
+  let opt=document.createElement("option");
+  opt.value=t;
+  opt.textContent=t;
+  teamSelect.appendChild(opt);
 });
 
-renderStandings(standings);
 renderGames();
+
+}catch(err){
+gamesTable.innerHTML="<tr><td colspan='5'>Error loading season.</td></tr>";
 }
-
-function renderStandings(standings){
-
-let east=[], west=[];
-
-Object.entries(standings).forEach(([team,rec])=>{
-if(team && rec){
-if(team.includes("")){}
-}
-});
-
-Object.entries(standings).forEach(([team,rec])=>{
-if(team && rec){}
-});
-
-Object.entries(standings).forEach(([team,rec])=>{
-if(team && rec){}
-});
 
 }
 
 function renderGames(){
+
 gamesTable.innerHTML="";
 const typeFilter=typeSelect.value;
 const teamFilter=teamSelect.value;
 
 allGames.forEach(g=>{
+
 if(typeFilter!=="All" && g.game_type!==typeFilter) return;
 if(teamFilter!=="All" && g.home_team!==teamFilter && g.away_team!==teamFilter) return;
 
 let winner=g.home_score>g.away_score?g.home_team:g.away_team;
 
 let tr=document.createElement("tr");
+
+/* 🔥 GUARANTEED WORKING LINK */
+tr.onclick=()=>{
+  if(!g.game_id) return;
+  window.location.href = `/nba-game.html?season=${season}&game=${g.game_id}`;
+};
+
 tr.innerHTML=`
 <td>${g.date}</td>
 <td>${g.home_team} vs ${g.away_team}</td>
@@ -219,9 +174,10 @@ tr.innerHTML=`
 <td>${g.home_score} – ${g.away_score}</td>
 `;
 
-tr.onclick=()=>location.href="nba-game.html?season="+season+"&game="+g.game_id;
 gamesTable.appendChild(tr);
+
 });
+
 }
 
 init();
