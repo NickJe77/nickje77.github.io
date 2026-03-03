@@ -1,13 +1,3 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>Generate Finals</title>
-</head>
-<body>
-<h2>Generating finals.json...</h2>
-<pre id="log"></pre>
-
 <script>
 
 const log = msg => document.getElementById("log").textContent += msg + "\n";
@@ -25,35 +15,40 @@ function getWinner(g){
 
 async function run(){
 
-log("Loading seasons...");
-
-const seasons = await fetch("/data/nba/seasons.json")
-  .then(r=>r.json());
+const START = 1976;
+const END = new Date().getFullYear();
 
 const finals = [];
 
-for(const year of seasons){
+for(let year = START; year <= END; year++){
 
 log("Processing " + year);
 
-const index = await fetch(`/data/nba/${year}/index.json`)
-  .then(r=>r.ok?r.json():null);
+let index;
+
+try{
+index = await fetch(`/data/nba/${year}/index.json`).then(r=>r.ok?r.json():null);
+}catch{
+continue;
+}
 
 if(!index || !index.games) continue;
 
-const playoffGames = [];
+const playoffGames=[];
 
 for(const id of index.games){
 
 const g = await fetch(`/data/nba/${year}/${id}.json`)
-  .then(r=>r.ok?r.json():null);
+.then(r=>r.ok?r.json():null);
 
 if(!g) continue;
 
 const gt=(g.game_type||"").toLowerCase();
-if(!gt.includes("regular")&&!gt.includes("pre")){
+
+if(!gt.includes("regular") && !gt.includes("pre")){
 playoffGames.push(g);
 }
+
 }
 
 if(!playoffGames.length) continue;
@@ -75,12 +70,14 @@ const valid=series.filter(g=>g.date);
 if(!valid.length) continue;
 
 valid.sort((a,b)=>new Date(a.date)-new Date(b.date));
+
 const end=new Date(valid[valid.length-1].date);
 
-if(!latestEnd||end>latestEnd){
+if(!latestEnd || end>latestEnd){
 latestEnd=end;
 finalsSeries=valid;
 }
+
 }
 
 if(!finalsSeries) continue;
@@ -95,10 +92,10 @@ wins[w]++;
 });
 
 const maxWins=Math.max(...Object.values(wins));
-if(maxWins<4) continue;
+if(maxWins < 4) continue;
 
-const champion=Object.keys(wins).sort((a,b)=>wins[b]-wins[a])[0];
-const runnerUp=Object.keys(wins).find(t=>t!==champion);
+const champion = Object.keys(wins).sort((a,b)=>wins[b]-wins[a])[0];
+const runnerUp = Object.keys(wins).find(t=>t!==champion);
 
 finals.push({
 season:year,
@@ -110,7 +107,7 @@ games:finalsSeries.map(g=>g.game_id)
 
 }
 
-log("Done. Downloading finals.json");
+log("DONE — downloading finals.json");
 
 const blob=new Blob([JSON.stringify(finals,null,2)],{type:"application/json"});
 const a=document.createElement("a");
@@ -123,5 +120,3 @@ a.click();
 run();
 
 </script>
-</body>
-</html>
