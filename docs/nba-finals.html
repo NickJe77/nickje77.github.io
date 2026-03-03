@@ -8,9 +8,9 @@
 
 <style>
 body{
-  font-family:Inter,system-ui,Arial;
+  font-family:Inter,system-ui,Arial,sans-serif;
   margin:0;
-  background:#fff;
+  background:#ffffff;
 }
 
 .navbar{
@@ -33,20 +33,23 @@ body{
   padding:30px 20px 60px;
 }
 
-/* HERO HEADER */
 .hero{
-  background:linear-gradient(90deg,#17408B,#C9082A);
-  color:#fff;
-  padding:36px 40px;
-  border-radius:18px;
+  background:linear-gradient(90deg,#1D428A,#C8102E);
+  color:white;
+  padding:26px 30px;
+  border-radius:14px;
   margin-bottom:30px;
 }
 
 .hero h1{
+  margin:0 0 6px;
+  font-size:28px;
+}
+
+.hero p{
   margin:0;
-  font-size:34px;
-  letter-spacing:.5px;
-  font-weight:700;
+  opacity:.9;
+  font-size:14px;
 }
 
 table{
@@ -62,6 +65,7 @@ th,td{
 
 th{
   background:#f0f0f0;
+  font-weight:700;
 }
 
 tr:nth-child(even){
@@ -73,6 +77,7 @@ tr:nth-child(even){
   text-decoration:none;
   font-weight:600;
 }
+
 .link:hover{
   text-decoration:underline;
 }
@@ -86,14 +91,15 @@ tr:nth-child(even){
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="nba.html">NBA</a>
+  <a href="index.html">Home</a>
+  <a href="nba.html">NBA</a>
 </div>
 
 <div class="page-wrap">
 
 <div class="hero">
   <h1>NBA Finals</h1>
+  <p>Championship series history from 1976–77 to present.</p>
 </div>
 
 <table>
@@ -106,7 +112,9 @@ tr:nth-child(even){
 <th>Games</th>
 </tr>
 </thead>
-<tbody id="finalsTable"></tbody>
+<tbody id="finalsTable">
+<tr><td colspan="5">Loading...</td></tr>
+</tbody>
 </table>
 
 </div>
@@ -117,7 +125,19 @@ const START_YEAR = 1976;
 const END_YEAR = 2025;
 const tableBody = document.getElementById("finalsTable");
 
+const conferenceMap = {
+"Boston Celtics":"East","Brooklyn Nets":"East","New York Knicks":"East","Philadelphia 76ers":"East","Toronto Raptors":"East",
+"Chicago Bulls":"East","Cleveland Cavaliers":"East","Detroit Pistons":"East","Indiana Pacers":"East","Milwaukee Bucks":"East",
+"Atlanta Hawks":"East","Charlotte Hornets":"East","Miami Heat":"East","Orlando Magic":"East","Washington Wizards":"East",
+"Denver Nuggets":"West","Minnesota Timberwolves":"West","Oklahoma City Thunder":"West","Portland Trail Blazers":"West",
+"Utah Jazz":"West","Golden State Warriors":"West","LA Clippers":"West","Los Angeles Lakers":"West","Phoenix Suns":"West",
+"Sacramento Kings":"West","Dallas Mavericks":"West","Houston Rockets":"West","Memphis Grizzlies":"West",
+"New Orleans Pelicans":"West","San Antonio Spurs":"West"
+};
+
 async function loadFinals(){
+
+tableBody.innerHTML = "";
 
 for(let year = END_YEAR; year >= START_YEAR; year--){
 
@@ -127,17 +147,16 @@ const indexRes = await fetch(`data/nba/${year}/index.json`);
 if(!indexRes.ok) continue;
 
 const index = await indexRes.json();
-if(!index.games || !index.games.length) continue;
+if(!index.games?.length) continue;
 
-const gamePromises = index.games.map(id =>
-fetch(`data/nba/${year}/${id}.json`).then(r => r.ok ? r.json() : null)
-);
+const games = (await Promise.all(
+index.games.map(id =>
+fetch(`data/nba/${year}/${id}.json`)
+.then(r => r.ok ? r.json() : null)
+)
+)).filter(Boolean);
 
-const games = (await Promise.all(gamePromises)).filter(Boolean);
-
-const playoffGames = games
-.filter(g => g.game_type === "Playoffs")
-.sort((a,b)=> new Date(a.date) - new Date(b.date));
+const playoffGames = games.filter(g => g.game_type === "Playoffs");
 
 if(!playoffGames.length) continue;
 
@@ -149,23 +168,40 @@ if(!seriesMap[key]) seriesMap[key] = [];
 seriesMap[key].push(g);
 });
 
-let finalsSeries = null;
-let latestDate = 0;
+const allSeries = Object.values(seriesMap);
+if(!allSeries.length) continue;
 
-Object.values(seriesMap).forEach(series=>{
-const lastGame = series[series.length-1];
-const lastDate = new Date(lastGame.date).getTime();
+// 1️⃣ Sort by number of games (longest first)
+allSeries.sort((a,b)=>b.length - a.length);
 
-if(lastDate > latestDate){
-latestDate = lastDate;
+let finalsSeries = allSeries[0];
+
+// 2️⃣ Ensure East vs West matchup
+const teamA = finalsSeries[0].home_team;
+const teamB = finalsSeries[0].away_team;
+
+const confA = conferenceMap[teamA];
+const confB = conferenceMap[teamB];
+
+if(confA === confB){
+for(const series of allSeries){
+const tA = series[0].home_team;
+const tB = series[0].away_team;
+if(conferenceMap[tA] && conferenceMap[tB] && conferenceMap[tA] !== conferenceMap[tB]){
 finalsSeries = series;
+break;
 }
-});
+}
+}
 
 if(!finalsSeries) continue;
 
+finalsSeries.sort((a,b)=> new Date(a.date) - new Date(b.date));
+
 const wins = {};
+
 finalsSeries.forEach(g=>{
+if(g.winner)
 wins[g.winner] = (wins[g.winner] || 0) + 1;
 });
 
