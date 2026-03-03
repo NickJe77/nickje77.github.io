@@ -27,7 +27,6 @@ tr:hover{background:#eef2ff;cursor:pointer;}
 .loading{background:#fff;padding:10px;border:1px solid #e5e7eb;border-radius:12px;margin-bottom:16px;}
 </style>
 </head>
-
 <body>
 
 <div class="navbar">
@@ -118,42 +117,10 @@ wizards:"Washington Wizards"
 
 function norm(s){return (s||"").toLowerCase().replace(/[^a-z]/g,"");}
 function fullName(raw){return FULL_TEAM_NAMES[norm(raw)]||raw;}
-
-// Explicit date parser (no Date() guessing)
-function computeSeasonFromDate(dateStr){
-  if(!dateStr) return null;
-
-  // YYYY-MM-DD
-  if(dateStr.includes("-")){
-    const parts=dateStr.split("-");
-    const y=Number(parts[0]);
-    const m=Number(parts[1]);
-    if(!y||!m)return null;
-    return m>=10?y:y-1;
-  }
-
-  // DD/MM/YYYY or YYYY/MM/DD
-  if(dateStr.includes("/")){
-    const parts=dateStr.split("/");
-    if(parts[0].length===4){
-      const y=Number(parts[0]);
-      const m=Number(parts[1]);
-      return m>=10?y:y-1;
-    }else{
-      const y=Number(parts[2]);
-      const m=Number(parts[1]);
-      return m>=10?y:y-1;
-    }
-  }
-
-  return null;
-}
-
 function seasonLabel(start){
-const n=String((start+1)%100).padStart(2,"0");
+const n=String((Number(start)+1)%100).padStart(2,"0");
 return `${start}-${n}`;
 }
-
 function typeBucket(t){
 if(!t)return "regular";
 t=t.toLowerCase();
@@ -179,7 +146,7 @@ function render(){
 let filtered=allGames;
 
 if(elSeason.value!=="all"){
-filtered=filtered.filter(g=>String(g.seasonStart)===elSeason.value);
+filtered=filtered.filter(g=>String(g.season)===elSeason.value);
 }
 if(elType.value!=="all"){
 filtered=filtered.filter(g=>g.typeBucket===elType.value);
@@ -196,7 +163,7 @@ const tr=document.createElement("tr");
 tr.onclick=()=>location.href=`nba-game.html?game=${g.id}`;
 tr.innerHTML=`
 <td>${g.date}</td>
-<td>${g.seasonLabel}</td>
+<td>${seasonLabel(g.season)}</td>
 <td>${g.typeLabel}</td>
 <td>${g.opponentFull}</td>
 <td>${g.result}</td>
@@ -227,16 +194,12 @@ const isHome=home.includes(teamKey);
 const teamScore=isHome?g.home_score:g.away_score;
 const oppScore=isHome?g.away_score:g.home_score;
 
-const seasonStart=computeSeasonFromDate(g.date);
-if(!seasonStart)continue;
-
-seasons.add(seasonStart);
+seasons.add(g.season);
 
 allGames.push({
 id:g.game_id,
 date:g.date,
-seasonStart:seasonStart,
-seasonLabel:seasonLabel(seasonStart),
+season:g.season,
 typeBucket:typeBucket(g.game_type),
 typeLabel:typeLabel(g.game_type),
 opponentFull:fullName(isHome?g.away_team:g.home_team),
