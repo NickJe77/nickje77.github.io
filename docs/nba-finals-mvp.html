@@ -40,7 +40,7 @@ tr:nth-child(even){background:#f6f9ff;}
 </div>
 
 <div class="controls">
-<input id="q" placeholder="Search player…">
+<input id="q" placeholder="Search player or team…">
 </div>
 
 <table>
@@ -48,11 +48,12 @@ tr:nth-child(even){background:#f6f9ff;}
 <tr>
 <th>Season</th>
 <th>Finals MVP</th>
+<th>Champion</th>
 </tr>
 </thead>
 
 <tbody id="rows">
-<tr><td colspan="2">Loading...</td></tr>
+<tr><td colspan="3">Loading...</td></tr>
 </tbody>
 </table>
 
@@ -115,19 +116,35 @@ const finalsMVP = {
 "2024-25":"Shai Gilgeous-Alexander"
 };
 
-let master=[];
+let master = [];
 
-function build(){
+async function build(){
 
 rows.innerHTML="";
 master=[];
 
+let finalsData=[];
+
+try{
+finalsData = await fetch("/data/nba/finals.json").then(r=>r.json());
+}catch(e){
+finalsData=[];
+}
+
+const championMap={};
+
+finalsData.forEach(f=>{
+const season=f.season;
+championMap[season]=f.champion || f.winner || "";
+});
+
 master = Object.entries(finalsMVP)
 .map(([season,mvp])=>{
-return {
+return{
 season,
 mvp,
-startYear:parseInt(season)
+champion: championMap[season] || "",
+startYear: parseInt(season)
 };
 })
 .sort((a,b)=>b.startYear-a.startYear);
@@ -143,7 +160,7 @@ rows.innerHTML="";
 
 data.forEach(f=>{
 
-const hay=[f.season,f.mvp].join(" ").toLowerCase();
+const hay=[f.season,f.mvp,f.champion].join(" ").toLowerCase();
 if(needle && !hay.includes(needle)) return;
 
 const tr=document.createElement("tr");
@@ -151,6 +168,7 @@ const tr=document.createElement("tr");
 tr.innerHTML=`
 <td>${f.season}</td>
 <td><a class="player-link" href="nba-player.html?player=${encodeURIComponent(f.mvp)}">${f.mvp}</a></td>
+<td>${f.champion}</td>
 `;
 
 rows.appendChild(tr);
@@ -158,7 +176,7 @@ rows.appendChild(tr);
 });
 
 if(!rows.children.length){
-rows.innerHTML="<tr><td colspan='2'>No matches.</td></tr>";
+rows.innerHTML="<tr><td colspan='3'>No matches.</td></tr>";
 }
 
 }
