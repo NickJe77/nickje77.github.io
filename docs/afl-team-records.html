@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AFL Team Records | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+
+body{
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:#f4f6f8;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px;
+  background:#fff;
+  border-bottom:1px solid #ddd;
+  font-weight:700;
+}
+
+.navbar a{
+  text-decoration:none;
+  color:#0056d6;
+}
+
+.page{
+  max-width:1200px;
+  margin:auto;
+  padding:30px 20px 60px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#002b5c,#0061c2);
+  color:white;
+  padding:30px;
+  border-radius:20px;
+  margin-bottom:25px;
+}
+
+.controls{
+  margin-bottom:20px;
+}
+
+select{
+  padding:8px 10px;
+  border-radius:6px;
+  border:1px solid #ccc;
+}
+
+button{
+  padding:8px 14px;
+  border:none;
+  background:#0056d6;
+  color:white;
+  border-radius:6px;
+  cursor:pointer;
+  margin-left:10px;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  background:white;
+}
+
+th{
+  background:#003366;
+  color:white;
+  padding:10px;
+}
+
+td{
+  padding:8px;
+  border-bottom:1px solid #eee;
+}
+
+tr:nth-child(even){
+  background:#f0f6ff;
+}
+
+@media print{
+
+.navbar,
+.controls,
+button{
+display:none;
+}
+
+body{
+background:white;
+}
+
+}
+
+</style>
+</head>
+
+
+<body>
+
+<nav class="navbar">
+<a href="/">Home</a>
+<a href="/afl.html">AFL</a>
+</nav>
+
+<div class="page">
+
+<div class="hero">
+<h1 id="teamTitle">Team Records</h1>
+<p>Single game career highs for each player</p>
+</div>
+
+<div class="controls">
+
+Opponent:
+<select id="opponentFilter">
+<option value="all">All Opponents</option>
+<option>Adelaide</option>
+<option>Brisbane</option>
+<option>Carlton</option>
+<option>Collingwood</option>
+<option>Essendon</option>
+<option>Fremantle</option>
+<option>Geelong</option>
+<option>Gold Coast</option>
+<option>GWS</option>
+<option>Hawthorn</option>
+<option>Melbourne</option>
+<option>North Melbourne</option>
+<option>Port Adelaide</option>
+<option>Richmond</option>
+<option>St Kilda</option>
+<option>Sydney</option>
+<option>West Coast</option>
+<option>Western Bulldogs</option>
+</select>
+
+<button onclick="window.print()">Save / Print</button>
+
+</div>
+
+<table id="recordsTable">
+
+<thead>
+<tr>
+<th>Player</th>
+<th>Best Goals</th>
+<th>Opponent</th>
+<th>Season</th>
+<th>Best Disposals</th>
+<th>Opponent</th>
+<th>Season</th>
+</tr>
+</thead>
+
+<tbody></tbody>
+
+</table>
+
+</div>
+
+
+<script>
+
+function getParam(name){
+
+const params = new URLSearchParams(window.location.search)
+return params.get(name)
+
+}
+
+const team = getParam("team")
+
+document.getElementById("teamTitle").innerText = team + " Player Records"
+
+const opponentFilter = document.getElementById("opponentFilter")
+
+let roster = []
+let allGames = {}
+
+
+async function loadTeam(){
+
+const rosterRes = await fetch(`/data/afl/teams/${team}.json`)
+roster = await rosterRes.json()
+
+for(const player of roster.players){
+
+const file = player.toLowerCase().replace(/ /g,"-")
+
+try{
+
+const res = await fetch(`/data/afl/players/${file}.json`)
+const games = await res.json()
+
+allGames[player] = games
+
+}catch{}
+
+}
+
+renderTable()
+
+}
+
+
+function bestStat(games, stat, opponent){
+
+let best = 0
+let bestGame = null
+
+games.forEach(g=>{
+
+if(opponent !== "all" && g.played_against !== opponent) return
+
+if(g[stat] > best){
+
+best = g[stat]
+bestGame = g
+
+}
+
+})
+
+if(!bestGame) return null
+
+return {
+
+value:best,
+opponent:bestGame.played_against,
+season:bestGame.season
+
+}
+
+}
+
+
+function renderTable(){
+
+const tbody = document.querySelector("#recordsTable tbody")
+
+tbody.innerHTML = ""
+
+const opponent = opponentFilter.value
+
+roster.players.forEach(player=>{
+
+const games = allGames[player]
+
+if(!games) return
+
+const goals = bestStat(games,"G",opponent)
+const disposals = bestStat(games,"D",opponent)
+
+const tr = document.createElement("tr")
+
+tr.innerHTML = `
+
+<td>${player}</td>
+
+<td>${goals?.value ?? "-"}</td>
+<td>${goals?.opponent ?? "-"}</td>
+<td>${goals?.season ?? "-"}</td>
+
+<td>${disposals?.value ?? "-"}</td>
+<td>${disposals?.opponent ?? "-"}</td>
+<td>${disposals?.season ?? "-"}</td>
+
+`
+
+tbody.appendChild(tr)
+
+})
+
+}
+
+opponentFilter.addEventListener("change",renderTable)
+
+loadTeam()
+
+</script>
+
+</body>
+</html>
