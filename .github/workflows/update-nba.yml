@@ -1,39 +1,44 @@
 name: Update NBA Data
 
 on:
-  schedule:
-    - cron: "0 */6 * * *"
   workflow_dispatch:
-
-permissions:
-  contents: write
+  schedule:
+    - cron: "0 12 * * *"
 
 jobs:
   update:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Install Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install Dependencies
-        run: |
-          pip install requests
+      - name: Install Kaggle
+        run: pip install kaggle pandas
 
-      - name: Run NBA Update Script
+      - name: Configure Kaggle
         run: |
-          python scripts/update_nba_master.py
+          mkdir ~/.kaggle
+          echo "{\"username\":\"${{ secrets.KAGGLE_USERNAME }}\",\"key\":\"${{ secrets.KAGGLE_KEY }}\"}" > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
 
-      - name: Commit Changes
+      - name: Download NBA Dataset
         run: |
-          git config user.name "NBA Auto Bot"
-          git config user.email "bot@users.noreply.github.com"
-          git add docs/data/nba/2025/*.json
-          git commit -m "Auto NBA update" || echo "No changes to commit"
-          git pull --rebase origin main
+          kaggle datasets download -d eoinamoore/historical-nba-data-and-player-box-scores
+          unzip historical-nba-data-and-player-box-scores.zip -d data
+
+      - name: Run NBA Builder
+        run: python scripts/build_nba_games.py
+
+      - name: Commit updates
+        run: |
+          git config --global user.name "nba-bot"
+          git config --global user.email "bot@github.com"
+          git add .
+          git commit -m "NBA data update" || echo "No changes"
           git push
