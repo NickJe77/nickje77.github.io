@@ -2,8 +2,6 @@ name: Update NBA Data
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 12 * * *"
 
 jobs:
   update:
@@ -13,12 +11,12 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Install Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install Kaggle
+      - name: Install packages
         run: pip install kaggle pandas
 
       - name: Configure Kaggle
@@ -27,18 +25,19 @@ jobs:
           echo "{\"username\":\"${{ secrets.KAGGLE_USERNAME }}\",\"key\":\"${{ secrets.KAGGLE_KEY }}\"}" > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
 
-      - name: Download NBA Dataset
+      - name: Download dataset
         run: |
           kaggle datasets download -d eoinamoore/historical-nba-data-and-player-box-scores
           unzip historical-nba-data-and-player-box-scores.zip -d data
+          ls -R data
 
-      - name: Run NBA Builder
+      - name: Run builder
         run: python scripts/build_nba_games.py
 
-      - name: Commit updates
+      - name: Commit files
         run: |
           git config --global user.name "nba-bot"
           git config --global user.email "bot@github.com"
           git add .
-          git commit -m "NBA data update" || echo "No changes"
+          git commit -m "Update NBA data" || echo "No changes"
           git push
