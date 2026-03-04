@@ -4,36 +4,35 @@ import pandas as pd
 import json
 from pathlib import Path
 
-DATASET_DIR = Path("data/kaggle_nba")
-OUTPUT_DIR = Path("docs/data/nba")
+DATA = Path("data/kaggle_nba")
+OUT = Path("docs/data/nba")
 
-# find csv files automatically
-csv_files = list(DATASET_DIR.rglob("*.csv"))
+csvs = list(DATA.rglob("*.csv"))
 
-if not csv_files:
-    raise Exception("No CSV files found")
+if not csvs:
+    raise Exception("No CSV files found in dataset")
 
-games_csv = None
-players_csv = None
+games_file = None
+players_file = None
 
-for f in csv_files:
-    name = f.name.lower()
-    if "game" in name:
-        games_csv = f
-    if "player" in name or "box" in name:
-        players_csv = f
+for f in csvs:
+    n = f.name.lower()
+    if "game" in n:
+        games_file = f
+    if "player" in n or "box" in n:
+        players_file = f
 
-if not games_csv or not players_csv:
-    raise Exception("Could not find game or player CSV")
+if games_file is None or players_file is None:
+    raise Exception("Could not locate games or player csv")
 
-print("Games file:", games_csv)
-print("Players file:", players_csv)
+print("Using:", games_file)
+print("Using:", players_file)
 
-games = pd.read_csv(games_csv)
-players = pd.read_csv(players_csv)
+games = pd.read_csv(games_file)
+players = pd.read_csv(players_file)
 
-games.columns = [c.lower() for c in games.columns]
-players.columns = [c.lower() for c in players.columns]
+games.columns = games.columns.str.lower()
+players.columns = players.columns.str.lower()
 
 for _, g in games.iterrows():
 
@@ -41,36 +40,35 @@ for _, g in games.iterrows():
     if not game_id:
         continue
 
-    date = str(g.get("game_date") or g.get("date") or "")
-
-    season = int(g.get("season") or 0)
-
+    season = int(g.get("season",0))
     if season < 1976:
         continue
 
-    home = g.get("home_team") or g.get("home_team_name")
-    away = g.get("away_team") or g.get("visitor_team_name")
+    date = str(g.get("game_date") or g.get("date") or "")
 
-    home_score = int(g.get("pts_home") or g.get("home_score") or 0)
-    away_score = int(g.get("pts_away") or g.get("away_score") or 0)
+    home = g.get("home_team") or g.get("home_team_name")
+    away = g.get("visitor_team_name") or g.get("away_team")
+
+    home_score = int(g.get("pts_home",0))
+    away_score = int(g.get("pts_away",0))
 
     winner = home if home_score > away_score else away
 
-    game_players = players[players["game_id"] == int(game_id)]
+    p = players[players["game_id"] == int(game_id)]
 
     plist = []
 
-    for _, p in game_players.iterrows():
+    for _, row in p.iterrows():
         plist.append({
-            "player_id": str(p.get("player_id","")),
-            "player_name": p.get("player_name",""),
-            "team": p.get("team_abbreviation",""),
-            "points": int(p.get("pts",0)),
-            "rebounds": int(p.get("reb",0)),
-            "assists": int(p.get("ast",0))
+            "player_id": str(row.get("player_id","")),
+            "player_name": row.get("player_name",""),
+            "team": row.get("team_abbreviation",""),
+            "points": int(row.get("pts",0)),
+            "rebounds": int(row.get("reb",0)),
+            "assists": int(row.get("ast",0))
         })
 
-    season_dir = OUTPUT_DIR / str(season)
+    season_dir = OUT / str(season)
     season_dir.mkdir(parents=True, exist_ok=True)
 
     game_json = {
