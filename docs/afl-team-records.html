@@ -6,6 +6,10 @@
 
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+
 <style>
 
 body{
@@ -55,6 +59,20 @@ border-radius:10px;
 border:1px solid #ccc;
 font-size:16px;
 background:white;
+}
+
+button{
+padding:10px 14px;
+border:none;
+border-radius:8px;
+background:#0056d6;
+color:white;
+font-weight:600;
+cursor:pointer;
+}
+
+button:hover{
+background:#003f9a;
 }
 
 table{
@@ -115,20 +133,19 @@ Opponent:
 </select>
 </label>
 
+<button onclick="exportExcel()">Export Excel</button>
+<button onclick="exportPDF()">Export PDF</button>
+
 </div>
 
-<table>
+<table id="recordsTable">
 
 <thead>
 
 <tr>
-
 <th rowspan="2">Player</th>
-
 <th colspan="6">Career Best</th>
-
 <th colspan="6">Vs Opponent</th>
-
 </tr>
 
 <tr>
@@ -255,19 +272,32 @@ renderTable()
 
 function bestGame(games,stat){
 
-let best=null
 let max=0
+let bestGames=[]
 
 games.forEach(g=>{
-if(g[stat]>max){
-max=g[stat]
-best=g
+
+const val=Number(g[stat]||0)
+
+if(val>max){
+max=val
+bestGames=[g]
 }
+else if(val===max && val!==0){
+bestGames.push(g)
+}
+
 })
 
-if(!best) return [0,"",""]
+if(max===0) return ["0","",""]
 
-return [max,best.round,best.season]
+if(bestGames.length>1){
+return [`${max} (x${bestGames.length})`,"",""]
+}
+
+const g=bestGames[0]
+
+return [max,g.round,g.season]
 
 }
 
@@ -320,6 +350,33 @@ tr.innerHTML=`
 rows.appendChild(tr)
 
 })
+
+}
+
+function exportExcel(){
+
+const table=document.getElementById("recordsTable")
+const wb=XLSX.utils.table_to_book(table,{sheet:"AFL Records"})
+XLSX.writeFile(wb,"afl_squad_records.xlsx")
+
+}
+
+function exportPDF(){
+
+const {jsPDF}=window.jspdf
+
+const doc=new jsPDF()
+
+doc.text("AFL Squad Records",14,15)
+
+doc.autoTable({
+html:"#recordsTable",
+startY:20,
+theme:"grid",
+styles:{fontSize:8}
+})
+
+doc.save("afl_squad_records.pdf")
 
 }
 
