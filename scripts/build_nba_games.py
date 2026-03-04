@@ -2,11 +2,12 @@ import pandas as pd
 import json
 import os
 
-# Load Kaggle dataset files
-box = pd.read_csv("data/player_box_score.csv")
-games = pd.read_csv("data/game.csv")
+# Kaggle dataset folder
+DATA_PATH = "data/historical-nba-data-and-player-box-scores"
 
-# Merge player stats with game info
+box = pd.read_csv(f"{DATA_PATH}/player_box_score.csv")
+games = pd.read_csv(f"{DATA_PATH}/game.csv")
+
 merged = box.merge(games, on="game_id")
 
 output = {}
@@ -28,6 +29,7 @@ for gid, g in merged.groupby("game_id"):
     }
 
     for _, r in g.iterrows():
+
         player = {
             "player": r["player_name"],
             "team": r["team_abbreviation"],
@@ -37,13 +39,7 @@ for gid, g in merged.groupby("game_id"):
             "assists": int(r["ast"]) if not pd.isna(r["ast"]) else 0,
             "steals": int(r["stl"]) if not pd.isna(r["stl"]) else 0,
             "blocks": int(r["blk"]) if not pd.isna(r["blk"]) else 0,
-            "turnovers": int(r["tov"]) if not pd.isna(r["tov"]) else 0,
-            "fgm": int(r["fgm"]) if not pd.isna(r["fgm"]) else 0,
-            "fga": int(r["fga"]) if not pd.isna(r["fga"]) else 0,
-            "tpm": int(r["fg3m"]) if not pd.isna(r["fg3m"]) else 0,
-            "tpa": int(r["fg3a"]) if not pd.isna(r["fg3a"]) else 0,
-            "ftm": int(r["ftm"]) if not pd.isna(r["ftm"]) else 0,
-            "fta": int(r["fta"]) if not pd.isna(r["fta"]) else 0
+            "turnovers": int(r["tov"]) if not pd.isna(r["tov"]) else 0
         }
 
         game["players"].append(player)
@@ -55,17 +51,14 @@ for gid, g in merged.groupby("game_id"):
 
     output[season].append(game)
 
-# Output directory used by your website
-base = "docs/data/nba/seasons"
+# Output folder used by your website
+BASE = "docs/data/nba/seasons"
 
-os.makedirs(base, exist_ok=True)
+os.makedirs(BASE, exist_ok=True)
 
-# Write season files
 for season, games in output.items():
 
-    path = f"{base}/{season}.json"
-
-    with open(path, "w") as f:
+    with open(f"{BASE}/{season}.json", "w") as f:
         json.dump(games, f)
 
 print("NBA season files built successfully")
