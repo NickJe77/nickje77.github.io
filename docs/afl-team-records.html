@@ -3,7 +3,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>AFL Team Squads</title>
+<title>AFL Squad Records</title>
 
 <style>
 
@@ -35,13 +35,11 @@ margin:0 auto;
 padding:25px;
 }
 
-h1{
-margin:0 0 14px 0;
-font-size:36px;
-}
-
 .controls{
-margin-bottom:18px;
+display:flex;
+gap:20px;
+margin-bottom:20px;
+flex-wrap:wrap;
 }
 
 select{
@@ -92,13 +90,22 @@ background:#f2f7ff;
 
 <div class="page">
 
-<h1 id="title"></h1>
+<h1>AFL Squad Records</h1>
 
 <div class="controls">
+
+<label>
+Team:
+<select id="teamSelect"></select>
+</label>
+
+<label>
 Opponent:
 <select id="opponentSelect">
 <option value="all">All Opponents</option>
 </select>
+</label>
+
 </div>
 
 <table>
@@ -137,27 +144,20 @@ Opponent:
 
 <script>
 
-const params=new URLSearchParams(location.search)
-const team=params.get("team")||""
-
-document.getElementById("title").textContent=team+" Squad Records"
-
 let allGames=[]
-let roster=[]
 let playerIndex={}
+let roster=[]
+let csvData=[]
 
 const years=[]
 for(let y=1990;y<=new Date().getFullYear();y++) years.push(y)
 
 Promise.all(
-years.map(y=>fetch(`/data/afl/afl_${y}.json`)
-.then(r=>r.json())
-.catch(()=>[]))
+years.map(y=>fetch(`/data/afl/afl_${y}.json`).then(r=>r.json()).catch(()=>[]))
 ).then(data=>{
 
 allGames=data.flat()
 
-/* build fast player index */
 allGames.forEach(g=>{
 if(!playerIndex[g.player]) playerIndex[g.player]=[]
 playerIndex[g.player].push(g)
@@ -175,17 +175,30 @@ const text=await res.text()
 const rows=text.trim().split("\n")
 rows.shift()
 
-const data=rows.map(r=>{
+csvData=rows.map(r=>{
 const v=r.split(",")
 return {player:v[0],team:v[1]}
 })
 
-roster=data
-.filter(r=>r.team===team)
-.map(r=>r.player)
-
+buildTeams()
 buildOpponents()
-renderTable()
+
+}
+
+function buildTeams(){
+
+const teams=[...new Set(csvData.map(r=>r.team))].sort()
+
+teams.forEach(t=>{
+const opt=document.createElement("option")
+opt.value=t
+opt.textContent=t
+teamSelect.appendChild(opt)
+})
+
+teamSelect.onchange=loadTeam
+
+loadTeam()
 
 }
 
@@ -201,6 +214,18 @@ opponentSelect.appendChild(opt)
 })
 
 opponentSelect.onchange=renderTable
+
+}
+
+function loadTeam(){
+
+const team=teamSelect.value
+
+roster=csvData
+.filter(r=>r.team===team)
+.map(r=>r.player)
+
+renderTable()
 
 }
 
