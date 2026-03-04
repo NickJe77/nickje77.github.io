@@ -1,287 +1,266 @@
 <!DOCTYPE html>
-<html lang="en">
+
+<html>
 <head>
 <meta charset="UTF-8">
-<title>AFL Team Records | The Sporting Almanac</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AFL Team Squad Records</title>
 
 <style>
 
-body{
-  font-family:Inter,system-ui,Arial;
-  margin:0;
-  background:#f4f6f8;
-}
+body{font-family:system-ui,Arial;margin:0;background:#f4f6f8;}
 
 .navbar{
-  display:flex;
-  justify-content:center;
-  gap:24px;
-  padding:16px;
-  background:#fff;
-  border-bottom:1px solid #ddd;
-  font-weight:700;
+display:flex;
+justify-content:center;
+gap:22px;
+padding:14px 0;
+background:#fff;
+border-bottom:1px solid #ddd;
+font-weight:600;
 }
 
 .navbar a{
-  text-decoration:none;
-  color:#0056d6;
+color:#0056d6;
+text-decoration:none;
+font-size:17px;
 }
 
 .page{
-  max-width:1200px;
-  margin:auto;
-  padding:30px 20px 60px;
+max-width:1300px;
+margin:0 auto;
+padding:25px;
 }
 
-.hero{
-  background:linear-gradient(90deg,#002b5c,#0061c2);
-  color:white;
-  padding:30px;
-  border-radius:20px;
-  margin-bottom:25px;
+h1{
+margin:0 0 14px 0;
+font-size:36px;
 }
 
 .controls{
-  margin-bottom:20px;
+margin-bottom:18px;
 }
 
 select{
-  padding:8px 10px;
-  border-radius:6px;
-  border:1px solid #ccc;
-}
-
-button{
-  padding:8px 14px;
-  border:none;
-  background:#0056d6;
-  color:white;
-  border-radius:6px;
-  cursor:pointer;
-  margin-left:10px;
+padding:8px 12px;
+border-radius:8px;
+border:1px solid #ccc;
+font-size:15px;
 }
 
 table{
-  width:100%;
-  border-collapse:collapse;
-  background:white;
+border-collapse:collapse;
+width:100%;
+background:white;
+border-radius:10px;
+overflow:hidden;
+box-shadow:0 3px 10px rgba(0,0,0,.06);
+}
+
+th,td{
+border:1px solid #ddd;
+padding:8px;
+text-align:center;
 }
 
 th{
-  background:#003366;
-  color:white;
-  padding:10px;
+background:#eef3fb;
 }
 
-td{
-  padding:8px;
-  border-bottom:1px solid #eee;
+td.left{
+text-align:left;
+font-weight:600;
 }
 
-tr:nth-child(even){
-  background:#f0f6ff;
+.section{
+background:#dfe7fb;
+font-weight:700;
 }
 
-@media print{
-
-.navbar,
-.controls,
-button{
-display:none;
-}
-
-body{
-background:white;
-}
-
+tbody tr:nth-child(even){
+background:#f2f7ff;
 }
 
 </style>
-</head>
 
+</head>
 
 <body>
 
-<nav class="navbar">
-<a href="/">Home</a>
+<div class="navbar">
+<a href="/index.html">Home</a>
 <a href="/afl.html">AFL</a>
-</nav>
+</div>
 
 <div class="page">
 
-<div class="hero">
-<h1 id="teamTitle">Team Records</h1>
-<p>Single game career highs for each player</p>
-</div>
+<h1 id="title"></h1>
 
 <div class="controls">
-
 Opponent:
-<select id="opponentFilter">
+<select id="opponentSelect">
 <option value="all">All Opponents</option>
-<option>Adelaide</option>
-<option>Brisbane</option>
-<option>Carlton</option>
-<option>Collingwood</option>
-<option>Essendon</option>
-<option>Fremantle</option>
-<option>Geelong</option>
-<option>Gold Coast</option>
-<option>GWS</option>
-<option>Hawthorn</option>
-<option>Melbourne</option>
-<option>North Melbourne</option>
-<option>Port Adelaide</option>
-<option>Richmond</option>
-<option>St Kilda</option>
-<option>Sydney</option>
-<option>West Coast</option>
-<option>Western Bulldogs</option>
 </select>
-
-<button onclick="window.print()">Save / Print</button>
-
 </div>
 
-<table id="recordsTable">
+<table>
 
 <thead>
+
 <tr>
-<th>Player</th>
-<th>Best Goals</th>
-<th>Opponent</th>
-<th>Season</th>
-<th>Best Disposals</th>
-<th>Opponent</th>
-<th>Season</th>
+<th rowspan="2">Player</th>
+
+<th colspan="3">Career Best Disposals</th>
+<th colspan="3">Career Best Goals</th>
+
+<th colspan="3">Vs Opponent Disposals</th>
+<th colspan="3">Vs Opponent Goals</th>
 </tr>
+
+<tr>
+
+<th>D</th><th>Rnd</th><th>Yr</th>
+<th>G</th><th>Rnd</th><th>Yr</th>
+
+<th>D</th><th>Rnd</th><th>Yr</th>
+<th>G</th><th>Rnd</th><th>Yr</th>
+
+</tr>
+
 </thead>
 
-<tbody></tbody>
+<tbody id="rows"></tbody>
 
 </table>
 
 </div>
 
-
 <script>
 
-function getParam(name){
+const params=new URLSearchParams(location.search)
+const team=params.get("team")||""
 
-const params = new URLSearchParams(window.location.search)
-return params.get(name)
+document.getElementById("title").textContent=team+" Squad Records"
 
-}
+let allGames=[]
+let roster=[]
 
-const team = getParam("team")
+const years=[]
+for(let y=1990;y<=new Date().getFullYear();y++) years.push(y)
 
-document.getElementById("teamTitle").innerText = team + " Player Records"
+Promise.all(years.map(y=>fetch(`/data/afl/afl_${y}.json`).then(r=>r.json()).catch(()=>[])))
+.then(data=>{
 
-const opponentFilter = document.getElementById("opponentFilter")
+allGames=data.flat()
 
-let roster = []
-let allGames = {}
+loadRoster()
 
+})
 
-async function loadTeam(){
+async function loadRoster(){
 
-const rosterRes = await fetch(`/data/afl/teams/${team}.json`)
-roster = await rosterRes.json()
+const res=await fetch("/docs/data/afl/afl-team-lists.csv")
+const text=await res.text()
 
-for(const player of roster.players){
+const rows=text.trim().split("\n")
+const headers=rows.shift().split(",")
 
-const file = player.toLowerCase().replace(/ /g,"-")
+const data=rows.map(r=>{
+const v=r.split(",")
+return {player:v[0],team:v[1]}
+})
 
-try{
+roster=data.filter(r=>r.team===team).map(r=>r.player)
 
-const res = await fetch(`/data/afl/players/${file}.json`)
-const games = await res.json()
-
-allGames[player] = games
-
-}catch{}
-
-}
-
+buildOpponents()
 renderTable()
 
 }
 
+function buildOpponents(){
 
-function bestStat(games, stat, opponent){
+const opp=[...new Set(allGames.map(g=>g.played_against))].sort()
 
-let best = 0
-let bestGame = null
-
-games.forEach(g=>{
-
-if(opponent !== "all" && g.played_against !== opponent) return
-
-if(g[stat] > best){
-
-best = g[stat]
-bestGame = g
-
-}
-
+opp.forEach(o=>{
+const opt=document.createElement("option")
+opt.value=o
+opt.textContent=o
+opponentSelect.appendChild(opt)
 })
 
-if(!bestGame) return null
-
-return {
-
-value:best,
-opponent:bestGame.played_against,
-season:bestGame.season
+opponentSelect.onchange=renderTable
 
 }
 
-}
+function bestGame(games,stat){
 
+let best=null
+let max=0
+
+games.forEach(g=>{
+if(g[stat]>max){
+max=g[stat]
+best=g
+}
+})
+
+if(!best) return ["","",""]
+
+return [max,best.round,best.season]
+
+}
 
 function renderTable(){
 
-const tbody = document.querySelector("#recordsTable tbody")
+rows.innerHTML=""
 
-tbody.innerHTML = ""
+const opp=opponentSelect.value
 
-const opponent = opponentFilter.value
+roster.forEach(player=>{
 
-roster.players.forEach(player=>{
+const playerGames=allGames.filter(g=>g.player===player)
 
-const games = allGames[player]
+if(!playerGames.length) return
 
-if(!games) return
+const bestD=bestGame(playerGames,"D")
+const bestG=bestGame(playerGames,"G")
 
-const goals = bestStat(games,"G",opponent)
-const disposals = bestStat(games,"D",opponent)
+let vsGames=playerGames
 
-const tr = document.createElement("tr")
+if(opp!=="all")
+vsGames=playerGames.filter(g=>g.played_against===opp)
 
-tr.innerHTML = `
+const oppD=bestGame(vsGames,"D")
+const oppG=bestGame(vsGames,"G")
 
-<td>${player}</td>
+const tr=document.createElement("tr")
 
-<td>${goals?.value ?? "-"}</td>
-<td>${goals?.opponent ?? "-"}</td>
-<td>${goals?.season ?? "-"}</td>
+tr.innerHTML=`
 
-<td>${disposals?.value ?? "-"}</td>
-<td>${disposals?.opponent ?? "-"}</td>
-<td>${disposals?.season ?? "-"}</td>
+<td class="left">${player}</td>
+
+<td>${bestD[0]}</td>
+<td>${bestD[1]}</td>
+<td>${bestD[2]}</td>
+
+<td>${bestG[0]}</td>
+<td>${bestG[1]}</td>
+<td>${bestG[2]}</td>
+
+<td>${oppD[0]}</td>
+<td>${oppD[1]}</td>
+<td>${oppD[2]}</td>
+
+<td>${oppG[0]}</td>
+<td>${oppG[1]}</td>
+<td>${oppG[2]}</td>
 
 `
 
-tbody.appendChild(tr)
+rows.appendChild(tr)
 
 })
 
 }
-
-opponentFilter.addEventListener("change",renderTable)
-
-loadTeam()
 
 </script>
 
