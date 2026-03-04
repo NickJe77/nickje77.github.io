@@ -60,7 +60,6 @@ tr:nth-child(even){background:#f6f9ff;}
 </div>
 
 <script>
-
 const rows = document.getElementById("rows");
 const q = document.getElementById("q");
 
@@ -116,78 +115,82 @@ const finalsMVP = {
 "2024-25":"Shai Gilgeous-Alexander"
 };
 
-let master=[];
+let master = [];
 
-async function build(){
-
-rows.innerHTML="";
-master=[];
-
-let finalsData=[];
-
-try{
-finalsData = await fetch("/data/nba/finals.json").then(r=>r.json());
-}catch(e){
-finalsData=[];
+function seasonLabelFromStartYear(y){
+  return `${y}-${String(y+1).slice(2)}`;
+}
+function seasonLabelFromEndYear(y){
+  return `${y-1}-${String(y).slice(2)}`;
 }
 
-const championMap={};
+async function build(){
+  rows.innerHTML = "";
+  master = [];
 
-finalsData.forEach(f=>{
+  let finalsData = [];
+  try{
+    finalsData = await fetch("/data/nba/finals.json").then(r=>r.ok?r.json():[]);
+  }catch(e){
+    finalsData = [];
+  }
 
-const seasonLabel = `${f.season}-${String(f.season + 1).slice(2)}`;
+  // Build two possible champion maps
+  const mapStart = {};
+  const mapEnd = {};
 
-championMap[seasonLabel] = f.champion;
+  finalsData.forEach(f=>{
+    const y = Number(f.season);
+    const champ = (f.champion || f.winner || "").trim();
+    if(!y || !champ) return;
 
-});
+    mapStart[seasonLabelFromStartYear(y)] = champ;
+    mapEnd[seasonLabelFromEndYear(y)] = champ;
+  });
 
-master = Object.entries(finalsMVP)
-.map(([season,mvp])=>{
-return{
-season,
-mvp,
-champion: championMap[season] || "",
-startYear: parseInt(season)
-};
-})
-.sort((a,b)=>b.startYear-a.startYear);
+  // Pick the map that matches more MVP seasons
+  const mvpSeasons = Object.keys(finalsMVP);
+  const startMatches = mvpSeasons.reduce((n,s)=>n + (mapStart[s]?1:0), 0);
+  const endMatches   = mvpSeasons.reduce((n,s)=>n + (mapEnd[s]?1:0), 0);
 
-render(master);
+  const championMap = (endMatches > startMatches) ? mapEnd : mapStart;
 
+  master = Object.entries(finalsMVP)
+    .map(([season,mvp])=>({
+      season,
+      mvp,
+      champion: championMap[season] || "",
+      startYear: parseInt(season,10)
+    }))
+    .sort((a,b)=>b.startYear-a.startYear);
+
+  render(master);
 }
 
 function render(data){
+  const needle = (q.value||"").toLowerCase().trim();
+  rows.innerHTML = "";
 
-const needle=(q.value||"").toLowerCase().trim();
-rows.innerHTML="";
+  data.forEach(f=>{
+    const hay = [f.season,f.mvp,f.champion].join(" ").toLowerCase();
+    if(needle && !hay.includes(needle)) return;
 
-data.forEach(f=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${f.season}</td>
+      <td><a class="player-link" href="nba-player.html?player=${encodeURIComponent(f.mvp)}">${f.mvp}</a></td>
+      <td>${f.champion || ""}</td>
+    `;
+    rows.appendChild(tr);
+  });
 
-const hay=[f.season,f.mvp,f.champion].join(" ").toLowerCase();
-if(needle && !hay.includes(needle)) return;
-
-const tr=document.createElement("tr");
-
-tr.innerHTML=`
-<td>${f.season}</td>
-<td><a class="player-link" href="nba-player.html?player=${encodeURIComponent(f.mvp)}">${f.mvp}</a></td>
-<td>${f.champion}</td>
-`;
-
-rows.appendChild(tr);
-
-});
-
-if(!rows.children.length){
-rows.innerHTML="<tr><td colspan='3'>No matches.</td></tr>";
+  if(!rows.children.length){
+    rows.innerHTML = "<tr><td colspan='3'>No matches.</td></tr>";
+  }
 }
 
-}
-
-q.addEventListener("input",()=>render(master));
-
+q.addEventListener("input", ()=>render(master));
 build();
-
 </script>
 
 </body>
