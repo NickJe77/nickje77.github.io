@@ -25,6 +25,7 @@ tr:nth-child(even){background:#f6f9ff;}
 .small{color:#666;font-size:13px;}
 </style>
 </head>
+
 <body>
 
 <div class="navbar">
@@ -40,7 +41,7 @@ tr:nth-child(even){background:#f6f9ff;}
 </div>
 
 <div class="controls">
-<input id="q" placeholder="Search player or team…">
+<input id="q" placeholder="Search player…">
 </div>
 
 <table>
@@ -51,6 +52,7 @@ tr:nth-child(even){background:#f6f9ff;}
 <th>Champion</th>
 </tr>
 </thead>
+
 <tbody id="rows">
 <tr><td colspan="3">Loading...</td></tr>
 </tbody>
@@ -60,12 +62,9 @@ tr:nth-child(even){background:#f6f9ff;}
 
 <script>
 
-const START_YEAR = 1976;
-const END_YEAR = new Date().getFullYear();
 const rows = document.getElementById("rows");
 const q = document.getElementById("q");
 
-/* MVP lookup */
 const finalsMVP = {
 "1976-77":"Bill Walton",
 "1977-78":"Wes Unseld",
@@ -118,54 +117,26 @@ const finalsMVP = {
 "2024-25":"Shai Gilgeous-Alexander"
 };
 
-let master = [];
+let master=[];
 
-async function loadData(){
+function build(){
+
 rows.innerHTML="";
 master=[];
 
-for(let year=END_YEAR;year>=START_YEAR;year--){
-try{
-
-const indexRes=await fetch(`data/nba/${year}/index.json`);
-if(!indexRes.ok) continue;
-
-const index=await indexRes.json();
-if(!index.games?.length) continue;
-
-const games=(await Promise.all(
-index.games.map(id=>fetch(`data/nba/${year}/${id}.json`)
-.then(r=>r.ok?r.json():null))
-)).filter(Boolean);
-
-const playoffGames=games.filter(g=>g.game_type==="Playoffs");
-if(!playoffGames.length) continue;
-
-/* Determine champion by total playoff wins */
-const winCount={};
-playoffGames.forEach(g=>{
-if(g.winner){
-winCount[g.winner]=(winCount[g.winner]||0)+1;
-}
-});
-
-const champion=Object.keys(winCount)
-.sort((a,b)=>winCount[b]-winCount[a])[0];
-
-if(!champion) continue;
-
-const seasonLabel=`${year}-${String(year+1).slice(2)}`;
+Object.keys(finalsMVP)
+.sort((a,b)=>b.localeCompare(a))
+.forEach(season=>{
 
 master.push({
-season:seasonLabel,
-mvp:finalsMVP[seasonLabel]||"",
-champion
+season,
+mvp:finalsMVP[season]
 });
 
-}catch(e){continue;}
-}
+});
 
 render(master);
+
 }
 
 function render(data){
@@ -174,29 +145,31 @@ const needle=(q.value||"").toLowerCase().trim();
 rows.innerHTML="";
 
 data.forEach(f=>{
-const hay=[f.season,f.mvp,f.champion].join(" ").toLowerCase();
+
+const hay=[f.season,f.mvp].join(" ").toLowerCase();
 if(needle && !hay.includes(needle)) return;
 
-const link=f.mvp
-? `<a class="player-link" href="nba-player.html?player=${encodeURIComponent(f.mvp)}">${f.mvp}</a>`
-: "";
-
 const tr=document.createElement("tr");
+
 tr.innerHTML=`
 <td>${f.season}</td>
-<td>${link}</td>
-<td>${f.champion}</td>
+<td><a class="player-link" href="nba-player.html?player=${encodeURIComponent(f.mvp)}">${f.mvp}</a></td>
+<td></td>
 `;
+
 rows.appendChild(tr);
+
 });
 
 if(!rows.children.length){
 rows.innerHTML="<tr><td colspan='3'>No matches.</td></tr>";
 }
+
 }
 
 q.addEventListener("input",()=>render(master));
-loadData();
+
+build();
 
 </script>
 
