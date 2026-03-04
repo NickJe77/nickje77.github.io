@@ -13,7 +13,7 @@ players = pd.read_csv(DATA / "Players.csv", low_memory=False)
 games.columns = games.columns.str.lower()
 players.columns = players.columns.str.lower()
 
-count = 0
+written = 0
 
 for _, g in games.iterrows():
 
@@ -21,7 +21,7 @@ for _, g in games.iterrows():
 
     date = pd.to_datetime(g["date"])
 
-    # determine NBA season from date
+    # derive season from date
     season = date.year
     if date.month >= 10:
         season += 1
@@ -42,7 +42,6 @@ for _, g in games.iterrows():
     plist = []
 
     for _, p in game_players.iterrows():
-
         plist.append({
             "player_name": p["player"],
             "team": p["team"],
@@ -68,6 +67,6 @@ for _, g in games.iterrows():
             "players": plist
         }, f, indent=2)
 
-    count += 1
+    written += 1
 
-print("Games written:", count)
+print("Games written:", written)
