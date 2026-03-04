@@ -1,6 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Generate Finals</title>
+<style>
+body{font-family:Arial;padding:20px;}
+</style>
+</head>
+
+<body>
+
+<h2>Generating finals.json…</h2>
+<pre id="log"></pre>
+
 <script>
 
-const log = msg => document.getElementById("log").textContent += msg + "\n";
+const log = (msg) => {
+  document.getElementById("log").textContent += msg + "\n";
+};
 
 function norm(s){
   return (s||"").toLowerCase().replace(/[^a-z]/g,"");
@@ -9,27 +26,27 @@ function norm(s){
 function getWinner(g){
   const hs = Number(g.home_score);
   const as = Number(g.away_score);
-  if(isNaN(hs)||isNaN(as)) return null;
-  return hs>as?g.home_team:g.away_team;
+  if(isNaN(hs) || isNaN(as)) return null;
+  return hs > as ? g.home_team : g.away_team;
 }
 
 async function run(){
 
-const START = 1976;
-const END = new Date().getFullYear();
+log("Starting...");
 
 const finals = [];
 
-for(let year = START; year <= END; year++){
+for(let year=1976; year<=2025; year++){
 
 log("Processing " + year);
 
 let index;
 
 try{
-index = await fetch(`/data/nba/${year}/index.json`).then(r=>r.ok?r.json():null);
+  index = await fetch("/data/nba/"+year+"/index.json").then(r=>r.ok?r.json():null);
 }catch{
-continue;
+  log("No season "+year);
+  continue;
 }
 
 if(!index || !index.games) continue;
@@ -38,8 +55,13 @@ const playoffGames=[];
 
 for(const id of index.games){
 
-const g = await fetch(`/data/nba/${year}/${id}.json`)
-.then(r=>r.ok?r.json():null);
+let g;
+
+try{
+  g = await fetch("/data/nba/"+year+"/"+id+".json").then(r=>r.ok?r.json():null);
+}catch{
+  continue;
+}
 
 if(!g) continue;
 
@@ -92,16 +114,16 @@ wins[w]++;
 });
 
 const maxWins=Math.max(...Object.values(wins));
-if(maxWins < 4) continue;
+if(maxWins<4) continue;
 
-const champion = Object.keys(wins).sort((a,b)=>wins[b]-wins[a])[0];
-const runnerUp = Object.keys(wins).find(t=>t!==champion);
+const champion=Object.keys(wins).sort((a,b)=>wins[b]-wins[a])[0];
+const runnerUp=Object.keys(wins).find(t=>t!==champion);
 
 finals.push({
 season:year,
 champion,
 runner_up:runnerUp,
-series:`${wins[champion]}-${wins[runnerUp]}`,
+series:wins[champion]+"-"+wins[runnerUp],
 games:finalsSeries.map(g=>g.game_id)
 });
 
@@ -120,3 +142,6 @@ a.click();
 run();
 
 </script>
+
+</body>
+</html>
