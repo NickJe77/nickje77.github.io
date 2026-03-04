@@ -7,15 +7,14 @@ from pathlib import Path
 DATA = Path("data/kaggle_nba")
 OUT = Path("docs/data/nba")
 
-games_file = DATA / "Games.csv"
-
-games = pd.read_csv(games_file, low_memory=False)
+games = pd.read_csv(DATA / "Games.csv", low_memory=False)
+players = pd.read_csv(DATA / "GamePlayerStats.csv", low_memory=False)
 
 games.columns = games.columns.str.lower()
-
-print("Games columns:", list(games.columns))
+players.columns = players.columns.str.lower()
 
 written = 0
+skipped = 0
 
 for _, g in games.iterrows():
 
@@ -24,7 +23,6 @@ for _, g in games.iterrows():
 
     date = pd.to_datetime(g["gamedatetimeest"])
 
-    # ONLY games from Feb 15 2026 onwards
     if date < pd.Timestamp("2026-02-15"):
         continue
 
@@ -34,6 +32,15 @@ for _, g in games.iterrows():
 
     game_id = str(g["gameid"])
 
+    season_dir = OUT / str(season)
+    season_dir.mkdir(parents=True, exist_ok=True)
+
+    file_path = season_dir / f"{game_id}.json"
+
+    if file_path.exists():
+        skipped += 1
+        continue
+
     home = f"{g['hometeamcity']} {g['hometeamname']}"
     away = f"{g['awayteamcity']} {g['awayteamname']}"
 
@@ -42,12 +49,33 @@ for _, g in games.iterrows():
 
     winner = home if home_score > away_score else away
 
-    arena = g.get("arenaname","")
+    arena = g.get("arenaname", "")
 
-    season_dir = OUT / str(season)
-    season_dir.mkdir(parents=True, exist_ok=True)
+    game_players = players[players["gameid"] == g["gameid"]]
 
-    with open(season_dir / f"{game_id}.json","w") as f:
+    plist = []
+
+    for _, p in game_players.iterrows():
+
+        plist.append({
+            "player_id": int(p["personid"]),
+            "team_id": int(p["teamid"]),
+            "minutes": p.get("minutes",""),
+            "points": int(p.get("points",0)),
+            "rebounds": int(p.get("rebounds",0)),
+            "assists": int(p.get("assists",0)),
+            "steals": int(p.get("steals",0)),
+            "blocks": int(p.get("blocks",0)),
+            "turnovers": int(p.get("turnovers",0)),
+            "fgm": int(p.get("fgm",0)),
+            "fga": int(p.get("fga",0)),
+            "tpm": int(p.get("tpm",0)),
+            "tpa": int(p.get("tpa",0)),
+            "ftm": int(p.get("ftm",0)),
+            "fta": int(p.get("fta",0))
+        })
+
+    with open(file_path, "w") as f:
 
         json.dump({
             "game_id": game_id,
@@ -58,9 +86,11 @@ for _, g in games.iterrows():
             "home_score": home_score,
             "away_score": away_score,
             "winner": winner,
-            "arena": arena
+            "arena": arena,
+            "players": plist
         }, f, indent=2)
 
     written += 1
 
-print("Games written:", written)
+print("New games written:", written)
+print("Existing games skipped:", skipped)
