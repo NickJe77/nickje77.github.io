@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <title>NBA Finals MVP | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
 
 <style>
 body{font-family:Inter,system-ui,Arial;margin:0;background:#fff;}
@@ -11,13 +12,16 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:#fff;}
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 .page-wrap{max-width:1100px;margin:0 auto;padding:30px 20px 60px;}
 .hero{background:linear-gradient(90deg,#1D428A,#C8102E);color:white;padding:24px 30px;border-radius:12px;margin-bottom:25px;}
-.controls{text-align:center;margin-bottom:18px;}
+.hero h1{margin:0 0 6px;}
+.hero p{margin:0;font-size:14px;opacity:.9;}
+.controls{text-align:center;margin:0 0 18px;}
 input{padding:8px 12px;border-radius:8px;border:1px solid #ccc;font-size:14px;min-width:260px;}
 table{width:100%;border-collapse:collapse;}
 th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:left;}
 th{background:#f0f0f0;}
 tr:nth-child(even){background:#f6f9ff;}
 .player-link{color:#0056d6;text-decoration:none;font-weight:600;}
+.player-link:hover{text-decoration:underline;}
 </style>
 </head>
 
@@ -47,7 +51,6 @@ tr:nth-child(even){background:#f6f9ff;}
 <th>Champion</th>
 </tr>
 </thead>
-
 <tbody id="rows">
 <tr><td colspan="3">Loading...</td></tr>
 </tbody>
@@ -56,7 +59,6 @@ tr:nth-child(even){background:#f6f9ff;}
 </div>
 
 <script>
-
 const rows = document.getElementById("rows");
 const q = document.getElementById("q");
 
@@ -112,73 +114,84 @@ const finalsMVP = {
 "2024-25":"Shai Gilgeous-Alexander"
 };
 
-let master=[];
+function seasonLabelFromStartYear(y){
+  return `${y}-${String(y+1).slice(2)}`;  // 2024 -> 2024-25
+}
+function seasonLabelFromEndYear(y){
+  return `${y-1}-${String(y).slice(2)}`;  // 2024 -> 2023-24
+}
+function possibleSeasonLabels(seasonValue){
+  if(typeof seasonValue === "string" && seasonValue.includes("-")) return [seasonValue.trim()];
 
-async function build(){
-
-rows.innerHTML="";
-master=[];
-
-let finals=[];
-
-try{
-finals = await fetch("/data/nba/finals.json").then(r=>r.json());
-}catch(e){
-finals=[];
+  const y = Number(seasonValue);
+  if(!y || isNaN(y)) return [];
+  return [seasonLabelFromEndYear(y), seasonLabelFromStartYear(y)];
 }
 
-const championMap={};
+let master = [];
 
-finals.forEach(f=>{
-const seasonLabel=`${f.season-1}-${String(f.season).slice(2)}`;
-championMap[seasonLabel]=f.champion;
-});
+async function build(){
+  rows.innerHTML = "";
+  master = [];
 
-master=Object.entries(finalsMVP)
-.map(([season,mvp])=>({
-season,
-mvp,
-champion:championMap[season]||"",
-startYear:parseInt(season)
-}))
-.sort((a,b)=>b.startYear-a.startYear);
+  let finals = [];
+  try{
+    const r = await fetch("/data/nba/finals.json");
+    finals = r.ok ? await r.json() : [];
+  }catch(e){
+    finals = [];
+  }
 
-render(master);
+  // Build champion map that supports BOTH conventions
+  const championMap = {};
 
+  finals.forEach(f=>{
+    const champ = (f.champion || f.winner || "").trim();
+    if(!champ) return;
+
+    const labels = possibleSeasonLabels(f.season);
+    labels.forEach(lbl => {
+      // only set if empty so we don't overwrite a correct mapping
+      if(!championMap[lbl]) championMap[lbl] = champ;
+    });
+  });
+
+  master = Object.entries(finalsMVP)
+    .map(([season,mvp])=>({
+      season,
+      mvp,
+      champion: championMap[season] || "",
+      startYear: parseInt(season,10)
+    }))
+    .sort((a,b)=>b.startYear-a.startYear);
+
+  render(master);
 }
 
 function render(data){
+  const needle = (q.value||"").toLowerCase().trim();
+  rows.innerHTML = "";
 
-const needle=(q.value||"").toLowerCase().trim();
-rows.innerHTML="";
+  data.forEach(f=>{
+    const hay = [f.season,f.mvp,f.champion].join(" ").toLowerCase();
+    if(needle && !hay.includes(needle)) return;
 
-data.forEach(f=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${f.season}</td>
+      <td><a class="player-link" href="nba-player.html?player=${encodeURIComponent(f.mvp)}">${f.mvp}</a></td>
+      <td>${f.champion || ""}</td>
+    `;
+    rows.appendChild(tr);
+  });
 
-const hay=[f.season,f.mvp,f.champion].join(" ").toLowerCase();
-if(needle && !hay.includes(needle)) return;
-
-const tr=document.createElement("tr");
-
-tr.innerHTML=`
-<td>${f.season}</td>
-<td><a class="player-link" href="nba-player.html?player=${encodeURIComponent(f.mvp)}">${f.mvp}</a></td>
-<td>${f.champion}</td>
-`;
-
-rows.appendChild(tr);
-
-});
-
-if(!rows.children.length){
-rows.innerHTML="<tr><td colspan='3'>No matches.</td></tr>";
+  if(!rows.children.length){
+    rows.innerHTML = "<tr><td colspan='3'>No matches.</td></tr>";
+  }
 }
 
-}
-
-q.addEventListener("input",()=>render(master));
-
+q.addEventListener("input", ()=>render(master));
 build();
-
 </script>
 
 </body>
