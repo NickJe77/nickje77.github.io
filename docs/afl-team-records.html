@@ -3,11 +3,15 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>AFL Team Squad Records</title>
+<title>AFL Team Squads</title>
 
 <style>
 
-body{font-family:system-ui,Arial;margin:0;background:#f4f6f8;}
+body{
+font-family:system-ui,Arial,sans-serif;
+margin:0;
+background:#f4f6f8;
+}
 
 .navbar{
 display:flex;
@@ -71,11 +75,6 @@ text-align:left;
 font-weight:600;
 }
 
-.section{
-background:#dfe7fb;
-font-weight:700;
-}
-
 tbody tr:nth-child(even){
 background:#f2f7ff;
 }
@@ -107,6 +106,7 @@ Opponent:
 <thead>
 
 <tr>
+
 <th rowspan="2">Player</th>
 
 <th colspan="3">Career Best Disposals</th>
@@ -114,6 +114,7 @@ Opponent:
 
 <th colspan="3">Vs Opponent Disposals</th>
 <th colspan="3">Vs Opponent Goals</th>
+
 </tr>
 
 <tr>
@@ -143,14 +144,24 @@ document.getElementById("title").textContent=team+" Squad Records"
 
 let allGames=[]
 let roster=[]
+let playerIndex={}
 
 const years=[]
 for(let y=1990;y<=new Date().getFullYear();y++) years.push(y)
 
-Promise.all(years.map(y=>fetch(`/data/afl/afl_${y}.json`).then(r=>r.json()).catch(()=>[])))
-.then(data=>{
+Promise.all(
+years.map(y=>fetch(`/data/afl/afl_${y}.json`)
+.then(r=>r.json())
+.catch(()=>[]))
+).then(data=>{
 
 allGames=data.flat()
+
+/* build fast player index */
+allGames.forEach(g=>{
+if(!playerIndex[g.player]) playerIndex[g.player]=[]
+playerIndex[g.player].push(g)
+})
 
 loadRoster()
 
@@ -162,14 +173,16 @@ const res=await fetch("/docs/data/afl/afl-team-lists.csv")
 const text=await res.text()
 
 const rows=text.trim().split("\n")
-const headers=rows.shift().split(",")
+rows.shift()
 
 const data=rows.map(r=>{
 const v=r.split(",")
 return {player:v[0],team:v[1]}
 })
 
-roster=data.filter(r=>r.team===team).map(r=>r.player)
+roster=data
+.filter(r=>r.team===team)
+.map(r=>r.player)
 
 buildOpponents()
 renderTable()
@@ -217,7 +230,7 @@ const opp=opponentSelect.value
 
 roster.forEach(player=>{
 
-const playerGames=allGames.filter(g=>g.player===player)
+const playerGames=playerIndex[player]||[]
 
 if(!playerGames.length) return
 
