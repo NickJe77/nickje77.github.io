@@ -11,392 +11,404 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
 
 <style>
-
 body{
-font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-margin:0;
-background:#f4f6f8;
+  font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  margin:0;
+  background:#f4f6f8;
 }
-
 .navbar{
-display:flex;
-justify-content:center;
-gap:22px;
-padding:14px 0;
-background:#fff;
-border-bottom:1px solid #ddd;
-font-weight:600;
+  display:flex;justify-content:center;gap:22px;
+  padding:14px 0;background:#fff;border-bottom:1px solid #ddd;
+  font-weight:600;
 }
+.navbar a{color:#0056d6;text-decoration:none;font-size:17px;}
+.navbar a:hover{text-decoration:underline;}
 
-.navbar a{
-color:#0056d6;
-text-decoration:none;
-font-size:17px;
-}
-
-.page{
-max-width:1300px;
-margin:0 auto;
-padding:25px;
-}
-
-h1{
-margin:0 0 18px 0;
-font-size:34px;
-}
+.page{max-width:1400px;margin:0 auto;padding:25px;}
+h1{margin:0 0 18px 0;font-size:34px;}
 
 .controls{
-display:flex;
-gap:20px;
-margin-bottom:22px;
-flex-wrap:wrap;
-align-items:center;
+  display:flex;gap:20px;margin-bottom:22px;
+  flex-wrap:wrap;align-items:center;
 }
-
 select{
-padding:10px 14px;
-border-radius:10px;
-border:1px solid #ccc;
-font-size:16px;
-background:white;
+  padding:10px 14px;border-radius:10px;border:1px solid #ccc;
+  font-size:16px;background:white;
 }
-
 button{
-padding:10px 14px;
-border:none;
-border-radius:8px;
-background:#0056d6;
-color:white;
-font-weight:600;
-cursor:pointer;
+  padding:10px 14px;border:none;border-radius:8px;
+  background:#0056d6;color:white;font-weight:600;cursor:pointer;
 }
-
-button:hover{
-background:#003f9a;
-}
+button:hover{background:#003f9a;}
 
 table{
-border-collapse:collapse;
-width:100%;
-background:white;
-border-radius:12px;
-overflow:hidden;
-box-shadow:0 3px 10px rgba(0,0,0,.06);
+  border-collapse:collapse;width:100%;
+  background:white;border-radius:12px;overflow:hidden;
+  box-shadow:0 3px 10px rgba(0,0,0,.06);
 }
+th,td{border:1px solid #ddd;padding:9px;text-align:center;}
+th{background:#eef3fb;font-weight:600;}
+td.left{text-align:left;font-weight:600;}
+tbody tr:nth-child(even){background:#f2f7ff;}
 
-th,td{
-border:1px solid #ddd;
-padding:9px;
-text-align:center;
-}
-
-th{
-background:#eef3fb;
-font-weight:600;
-}
-
-td.left{
-text-align:left;
-font-weight:600;
-}
-
-tbody tr:nth-child(even){
-background:#f2f7ff;
-}
-
+.smallnote{font-size:13px;color:#5c6f8c;margin-top:10px;}
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-<a href="/index.html">Home</a>
-<a href="/afl.html">AFL</a>
+  <a href="/index.html">Home</a>
+  <a href="/afl.html">AFL</a>
 </div>
 
 <div class="page">
 
-<h1>AFL Squad Records</h1>
+  <h1>AFL Squad Records</h1>
 
-<div class="controls">
+  <div class="controls">
+    <label>
+      Team:
+      <select id="teamSelect"></select>
+    </label>
 
-<label>
-Team:
-<select id="teamSelect"></select>
-</label>
+    <label>
+      Opponent:
+      <select id="opponentSelect">
+        <option value="all">All Opponents</option>
+      </select>
+    </label>
 
-<label>
-Opponent:
-<select id="opponentSelect">
-<option value="all">All Opponents</option>
-</select>
-</label>
+    <button onclick="exportExcel()">Export Excel</button>
+    <button onclick="exportPDF()">Export PDF</button>
+  </div>
 
-<button onclick="exportExcel()">Export Excel</button>
-<button onclick="exportPDF()">Export PDF</button>
+  <table id="recordsTable">
+    <thead>
+      <tr>
+        <th rowspan="2">Player</th>
 
-</div>
+        <th colspan="8">Career Best</th>
+        <th colspan="6">Vs Opponent</th>
+      </tr>
 
-<table id="recordsTable">
+      <tr>
+        <!-- Career best disposals -->
+        <th>D</th><th>Opp</th><th>Rnd</th><th>Yr</th>
+        <!-- Career best goals -->
+        <th>G</th><th>Opp</th><th>Rnd</th><th>Yr</th>
 
-<thead>
+        <!-- Vs opponent disposals -->
+        <th>D</th><th>Rnd</th><th>Yr</th>
+        <!-- Vs opponent goals -->
+        <th>G</th><th>Rnd</th><th>Yr</th>
+      </tr>
+    </thead>
 
-<tr>
-<th rowspan="2">Player</th>
-<th colspan="6">Career Best</th>
-<th colspan="6">Vs Opponent</th>
-</tr>
+    <tbody id="rows"></tbody>
+  </table>
 
-<tr>
-<th>D</th><th>Rnd</th><th>Yr</th>
-<th>G</th><th>Rnd</th><th>Yr</th>
-
-<th>D</th><th>Rnd</th><th>Yr</th>
-<th>G</th><th>Rnd</th><th>Yr</th>
-</tr>
-
-</thead>
-
-<tbody id="rows"></tbody>
-
-</table>
+  <div class="smallnote">
+    If a career-best occurs multiple times, it shows like <b>32 (x2)</b> and Opp/Rnd/Yr are left blank.
+  </div>
 
 </div>
 
 <script>
+let allGames = [];
+let playerIndex = {};   // key -> [gameRows]
+let roster = [];
+let csvData = [];
 
-let allGames=[]
-let playerIndex={}
-let roster=[]
-let csvData=[]
+const teamSelect = document.getElementById("teamSelect");
+const opponentSelect = document.getElementById("opponentSelect");
+const rows = document.getElementById("rows");
 
-/* NAME NORMALISER */
-function normalizeName(name){
-
-return name
-.toLowerCase()
-.replace(/-/g," ")
-.replace(/\./g,"")
-.replace(/\b[a-z]\b/g,"")
-.replace(/\s+/g," ")
-.trim()
-
+/* ---------- NAME MATCHING ---------- */
+/* Build multiple keys so:
+   "Alex N-Bullen" and "Alex Neal-Bullen" both share "alex bullen"
+*/
+function tokenizeName(name){
+  return String(name || "")
+    .toLowerCase()
+    .replace(/['’]/g, "")     // o'brien -> obrien
+    .replace(/\./g, "")
+    .replace(/-/g, " ")       // hyphen -> space
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
 }
 
-const years=[]
-for(let y=1990;y<=new Date().getFullYear();y++) years.push(y)
+function nameKeys(name){
+  const toksRaw = tokenizeName(name);
+
+  // Remove single-letter initials (n, j, etc)
+  const toks = toksRaw.filter(t => t.length > 1);
+
+  if(toks.length === 0) return new Set();
+
+  const first = toks[0];
+  const last = toks[toks.length - 1];
+
+  const keys = new Set();
+
+  // Full tokens key (for exact/full names)
+  keys.add(toks.join(" "));
+
+  // First + last (handles Neal-Bullen vs N-Bullen)
+  keys.add(`${first} ${last}`);
+
+  // First + last two (handles multi-part last names sometimes)
+  if(toks.length >= 3){
+    const last2 = toks[toks.length - 2];
+    keys.add(`${first} ${last2} ${last}`);
+  }
+
+  // Also add "last" only (rarely helpful but can rescue odd formats)
+  keys.add(last);
+
+  return keys;
+}
+
+function gameDedupKey(g){
+  // Best-effort stable dedupe key
+  const id = g.match_id || g.game_id || g.id || "";
+  if(id) return String(id);
+
+  return [
+    g.season ?? "",
+    g.round ?? "",
+    g.played_against ?? "",
+    g.player ?? "",
+    g.D ?? "",
+    g.G ?? ""
+  ].join("|");
+}
+
+/* ---------- LOAD AFL GAME DATA ---------- */
+const years = [];
+for(let y = 1990; y <= new Date().getFullYear(); y++) years.push(y);
 
 Promise.all(
-years.map(y=>fetch(`/data/afl/afl_${y}.json`)
-.then(r=>r.json())
-.catch(()=>[]))
-).then(data=>{
+  years.map(y =>
+    fetch(`/data/afl/afl_${y}.json`)
+      .then(r => r.json())
+      .catch(() => [])
+  )
+).then(data => {
+  allGames = data.flat();
 
-allGames=data.flat()
+  // Build index under multiple keys
+  playerIndex = {};
 
-allGames.forEach(g=>{
+  allGames.forEach(g => {
+    const keys = nameKeys(g.player);
+    keys.forEach(k => {
+      if(!playerIndex[k]) playerIndex[k] = [];
+      playerIndex[k].push(g);
+    });
+  });
 
-const key=normalizeName(g.player)
+  loadRoster();
+});
 
-if(!playerIndex[key]) playerIndex[key]=[]
-
-playerIndex[key].push(g)
-
-})
-
-loadRoster()
-
-})
-
+/* ---------- LOAD ROSTER CSV ---------- */
 async function loadRoster(){
+  const res = await fetch("/data/afl/afl-team-lists.csv");
+  const text = await res.text();
 
-const res=await fetch("/data/afl/afl-team-lists.csv")
-const text=await res.text()
+  const lines = text.trim().split(/\r?\n/);
+  csvData = [];
 
-const lines=text.trim().split(/\r?\n/)
+  lines.forEach(line => {
+    const parts = line.split(",");
+    if(parts.length < 2) return;
 
-csvData=[]
+    const player = parts[0].replace(/"/g,"").trim();
+    const team = parts[1].replace(/"/g,"").trim();
 
-lines.forEach(line=>{
+    if(player.toLowerCase() === "player") return;
+    if(player && team) csvData.push({player, team});
+  });
 
-const parts=line.split(",")
-
-if(parts.length<2) return
-
-const player=parts[0].replace(/"/g,"").trim()
-const team=parts[1].replace(/"/g,"").trim()
-
-if(player.toLowerCase()==="player") return
-
-if(player && team){
-csvData.push({player,team})
+  buildTeams();
+  buildOpponents();
 }
 
-})
-
-buildTeams()
-buildOpponents()
-
-}
-
+/* ---------- BUILD CONTROLS ---------- */
 function buildTeams(){
+  teamSelect.innerHTML = "";
+  const teams = [...new Set(csvData.map(r => r.team))].sort();
 
-teamSelect.innerHTML=""
+  teams.forEach(t => {
+    const opt = document.createElement("option");
+    opt.value = t;
+    opt.textContent = t;
+    teamSelect.appendChild(opt);
+  });
 
-const teams=[...new Set(csvData.map(r=>r.team))].sort()
-
-teams.forEach(t=>{
-const opt=document.createElement("option")
-opt.value=t
-opt.textContent=t
-teamSelect.appendChild(opt)
-})
-
-teamSelect.onchange=loadTeam
-
-loadTeam()
-
+  teamSelect.onchange = loadTeam;
+  loadTeam();
 }
 
 function buildOpponents(){
+  // keep "all"
+  const keepAll = opponentSelect.querySelector('option[value="all"]');
+  opponentSelect.innerHTML = "";
+  opponentSelect.appendChild(keepAll);
 
-const opp=[...new Set(allGames.map(g=>g.played_against))].sort()
+  const opp = [...new Set(allGames.map(g => g.played_against).filter(Boolean))].sort();
+  opp.forEach(o => {
+    const opt = document.createElement("option");
+    opt.value = o;
+    opt.textContent = o;
+    opponentSelect.appendChild(opt);
+  });
 
-opp.forEach(o=>{
-const opt=document.createElement("option")
-opt.value=o
-opt.textContent=o
-opponentSelect.appendChild(opt)
-})
-
-opponentSelect.onchange=renderTable
-
+  opponentSelect.onchange = renderTable;
 }
 
 function loadTeam(){
-
-const team=teamSelect.value
-
-roster=csvData
-.filter(r=>r.team===team)
-.map(r=>r.player)
-
-renderTable()
-
+  const team = teamSelect.value;
+  roster = csvData.filter(r => r.team === team).map(r => r.player);
+  renderTable();
 }
 
-function bestGame(games,stat){
+/* ---------- STATS ---------- */
+function bestGameWithOpponent(games, stat){
+  // returns [valueText, opp, rnd, yr]
+  let max = 0;
+  let bestGames = [];
 
-let max=0
-let bestGames=[]
+  games.forEach(g => {
+    const val = Number(g[stat] || 0);
 
-games.forEach(g=>{
+    if(val > max){
+      max = val;
+      bestGames = [g];
+    } else if(val === max && val !== 0){
+      bestGames.push(g);
+    }
+  });
 
-const val=Number(g[stat]||0)
+  if(max === 0) return ["0", "", "", ""];
 
-if(val>max){
-max=val
-bestGames=[g]
+  if(bestGames.length > 1){
+    // show (xN), blank opp/rnd/yr
+    return [`${max} (x${bestGames.length})`, "", "", ""];
+  }
+
+  const g = bestGames[0];
+  return [
+    String(max),
+    g.played_against ?? "",
+    g.round ?? "",
+    g.season ?? ""
+  ];
 }
-else if(val===max && val!==0){
-bestGames.push(g)
+
+function bestGameSimple(games, stat){
+  // returns [valueText, rnd, yr] (used for vs selected opponent sections)
+  let max = 0;
+  let bestGames = [];
+
+  games.forEach(g => {
+    const val = Number(g[stat] || 0);
+
+    if(val > max){
+      max = val;
+      bestGames = [g];
+    } else if(val === max && val !== 0){
+      bestGames.push(g);
+    }
+  });
+
+  if(max === 0) return ["0", "", ""];
+
+  if(bestGames.length > 1){
+    return [`${max} (x${bestGames.length})`, "", ""];
+  }
+
+  const g = bestGames[0];
+  return [String(max), g.round ?? "", g.season ?? ""];
 }
 
-})
+function gamesForRosterName(player){
+  // merge games across all keys, dedupe
+  const keys = nameKeys(player);
+  const seen = new Set();
+  const out = [];
 
-if(max===0) return ["0","",""]
+  keys.forEach(k => {
+    const list = playerIndex[k] || [];
+    list.forEach(g => {
+      const dk = gameDedupKey(g);
+      if(seen.has(dk)) return;
+      seen.add(dk);
+      out.push(g);
+    });
+  });
 
-if(bestGames.length>1){
-return [`${max} (x${bestGames.length})`,"",""]
+  return out;
 }
 
-const g=bestGames[0]
-
-return [max,g.round,g.season]
-
-}
-
+/* ---------- RENDER ---------- */
 function renderTable(){
+  rows.innerHTML = "";
 
-rows.innerHTML=""
+  const opp = opponentSelect.value;
 
-const opp=opponentSelect.value
+  roster.forEach(player => {
+    const playerGames = gamesForRosterName(player);
 
-roster.forEach(player=>{
+    const bestD = bestGameWithOpponent(playerGames, "D");
+    const bestG = bestGameWithOpponent(playerGames, "G");
 
-const key=normalizeName(player)
+    let vsGames = [];
+    if(opp !== "all"){
+      vsGames = playerGames.filter(g => g.played_against === opp);
+    }
 
-const playerGames=playerIndex[key]||[]
+    const oppD = bestGameSimple(vsGames, "D");
+    const oppG = bestGameSimple(vsGames, "G");
 
-const bestD=bestGame(playerGames,"D")
-const bestG=bestGame(playerGames,"G")
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="left">${player}</td>
 
-let vsGames=[]
+      <td>${bestD[0]}</td><td>${bestD[1]}</td><td>${bestD[2]}</td><td>${bestD[3]}</td>
+      <td>${bestG[0]}</td><td>${bestG[1]}</td><td>${bestG[2]}</td><td>${bestG[3]}</td>
 
-if(opp!=="all"){
-vsGames=playerGames.filter(g=>g.played_against===opp)
+      <td>${oppD[0]}</td><td>${oppD[1]}</td><td>${oppD[2]}</td>
+      <td>${oppG[0]}</td><td>${oppG[1]}</td><td>${oppG[2]}</td>
+    `;
+    rows.appendChild(tr);
+  });
 }
 
-const oppD=bestGame(vsGames,"D")
-const oppG=bestGame(vsGames,"G")
-
-const tr=document.createElement("tr")
-
-tr.innerHTML=`
-
-<td class="left">${player}</td>
-
-<td>${bestD[0]}</td>
-<td>${bestD[1]}</td>
-<td>${bestD[2]}</td>
-
-<td>${bestG[0]}</td>
-<td>${bestG[1]}</td>
-<td>${bestG[2]}</td>
-
-<td>${oppD[0]}</td>
-<td>${oppD[1]}</td>
-<td>${oppD[2]}</td>
-
-<td>${oppG[0]}</td>
-<td>${oppG[1]}</td>
-<td>${oppG[2]}</td>
-
-`
-
-rows.appendChild(tr)
-
-})
-
-}
-
+/* ---------- EXPORTS ---------- */
 function exportExcel(){
-
-const table=document.getElementById("recordsTable")
-const wb=XLSX.utils.table_to_book(table,{sheet:"AFL Records"})
-XLSX.writeFile(wb,"afl_squad_records.xlsx")
-
+  const table = document.getElementById("recordsTable");
+  const wb = XLSX.utils.table_to_book(table, { sheet: "AFL Records" });
+  XLSX.writeFile(wb, "afl_squad_records.xlsx");
 }
 
 function exportPDF(){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: "landscape" });
 
-const {jsPDF}=window.jspdf
+  doc.text("AFL Squad Records", 14, 15);
 
-const doc=new jsPDF()
+  doc.autoTable({
+    html: "#recordsTable",
+    startY: 20,
+    theme: "grid",
+    styles: { fontSize: 7, cellPadding: 2 }
+  });
 
-doc.text("AFL Squad Records",14,15)
-
-doc.autoTable({
-html:"#recordsTable",
-startY:20,
-theme:"grid",
-styles:{fontSize:8}
-})
-
-doc.save("afl_squad_records.pdf")
-
+  doc.save("afl_squad_records.pdf");
 }
-
 </script>
 
 </body>
