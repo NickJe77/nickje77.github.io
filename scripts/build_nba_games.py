@@ -18,7 +18,13 @@ count = 0
 for _, g in games.iterrows():
 
     game_id = str(g["gameid"])
-    season = int(g["season"])
+
+    date = pd.to_datetime(g["date"])
+
+    # determine NBA season from date
+    season = date.year
+    if date.month >= 10:
+        season += 1
 
     if season < 1976:
         continue
@@ -31,13 +37,12 @@ for _, g in games.iterrows():
 
     winner = home if home_score > away_score else away
 
-    date = g["date"]
-
     game_players = players[players["gameid"] == g["gameid"]]
 
     plist = []
 
     for _, p in game_players.iterrows():
+
         plist.append({
             "player_name": p["player"],
             "team": p["team"],
@@ -54,7 +59,7 @@ for _, g in games.iterrows():
         json.dump({
             "game_id": game_id,
             "season": season,
-            "date": date,
+            "date": str(date.date()),
             "home_team": home,
             "away_team": away,
             "home_score": home_score,
