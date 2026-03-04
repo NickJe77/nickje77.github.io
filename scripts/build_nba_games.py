@@ -19,22 +19,23 @@ written = 0
 
 for _, g in games.iterrows():
 
-    if pd.isna(g["date"]):
+    if pd.isna(g["gamedatetimeest"]):
         continue
 
-    date = pd.to_datetime(g["date"])
+    date = pd.to_datetime(g["gamedatetimeest"])
+
+    # ONLY games from Feb 15 2026 onwards
+    if date < pd.Timestamp("2026-02-15"):
+        continue
 
     season = date.year
     if date.month >= 10:
         season += 1
 
-    if season < 1976:
-        continue
-
     game_id = str(g["gameid"])
 
-    home = g["hometeam"]
-    away = g["awayteam"]
+    home = f"{g['hometeamcity']} {g['hometeamname']}"
+    away = f"{g['awayteamcity']} {g['awayteamname']}"
 
     home_score = int(g["homescore"])
     away_score = int(g["awayscore"])
