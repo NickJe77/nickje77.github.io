@@ -24,12 +24,12 @@ for _, g in games.iterrows():
 
     date = g["gamedatetimeest"]
 
-    if date < pd.Timestamp("2026-02-15"):
-        continue
-
     season = date.year
     if date.month >= 10:
         season += 1
+
+    if season < 1976:
+        continue
 
     game_id = str(g["gameid"])
 
