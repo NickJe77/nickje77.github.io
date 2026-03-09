@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html>
 <head>
 <meta charset="UTF-8">
@@ -15,26 +14,12 @@ body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f4f6f8;}
 .name-wrap{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
 .team-stripes{height:22px;width:140px;border-radius:6px;border:1px solid #ccc;}
 #playerSearch{padding:10px 14px;border-radius:10px;border:1px solid #ccc;font-size:17px;width:320px;max-width:100%;}
-@media (max-width:700px){#playerSearch{width:100%;font-size:18px;padding:12px 16px;}}
 .opponent-select{padding:8px 12px;border-radius:8px;border:1px solid #ccc;font-size:15px;width:240px;}
 h1{font-size:38px;margin:0;}
-#summary{background:white;border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.08);padding:25px 30px;margin-bottom:20px;}
-.section-title{margin-top:16px;margin-bottom:6px;font-weight:700;color:#666;text-transform:uppercase;font-size:13px;letter-spacing:.6px;}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;}
-.stat-box{background:linear-gradient(180deg,#f9fbff,#eef3fb);border-radius:12px;padding:16px 10px;text-align:center;box-shadow:inset 0 0 0 1px #dde3ec;}
-.stat-box strong{display:block;font-size:26px;margin-bottom:4px;}
-.stat-box span{font-size:14px;color:#555;}
-.stat-box .sub{margin-top:6px;font-size:12px;color:#666;}
-table{border-collapse:collapse;width:100%;background:white;border-radius:10px;overflow:hidden;box-shadow:0 3px 10px rgba(0,0,0,.06);}
+table{border-collapse:collapse;width:100%;background:white;}
 th,td{border:1px solid #ddd;padding:8px;text-align:center;}
-th{cursor:pointer;background:#eef3fb;}
 td.left{text-align:left;font-weight:600;}
-tbody tr:nth-child(even){background:#f2f7ff;}
-tbody tr{cursor:pointer;}
-tbody tr:hover{background:#e8f0ff;}
-.reset-sort{margin-top:10px;padding:6px 12px;border-radius:6px;border:1px solid #aaa;cursor:pointer;}
 </style>
-
 </head>
 
 <body>
@@ -47,43 +32,21 @@ tbody tr:hover{background:#e8f0ff;}
 <div class="page">
 
 <div class="top-bar">
-<div class="name-wrap">
 <h1 id="playerName"></h1>
-<div id="teamStripe" class="team-stripes"></div>
-</div>
-
-<div>
 <input id="playerSearch" list="playerList" placeholder="Search player...">
 <datalist id="playerList"></datalist>
 </div>
-</div>
-
-<div id="summary">
-
-<select id="opponentSelect" class="opponent-select">
-<option value="all">All Opponents</option>
-</select>
-
-<div class="section-title">Career Summary</div>
-<div class="stats" id="careerStats"></div>
-
-<div class="section-title">Vs Selected Opponent</div>
-<div class="stats" id="opponentStats"></div>
-
-</div>
-
-<button class="reset-sort" onclick="resetSort()">Reset Sort</button>
 
 <table>
 <thead>
 <tr>
-<th onclick="sortTable('season')">Season</th>
-<th onclick="sortTable('round')">Round</th>
+<th>Season</th>
+<th>Round</th>
 <th>Team</th>
 <th>Opponent</th>
-<th onclick="sortTable('D')">D</th>
-<th onclick="sortTable('G')">G</th>
-<th onclick="sortTable('B')">B</th>
+<th>D</th>
+<th>G</th>
+<th>B</th>
 </tr>
 </thead>
 <tbody id="rows"></tbody>
@@ -95,19 +58,16 @@ tbody tr:hover{background:#e8f0ff;}
 
 const params=new URLSearchParams(location.search);
 const playerName=params.get("name")||"";
-document.getElementById("playerName").textContent=playerName||"Select a player";
+document.getElementById("playerName").textContent=playerName;
 
-let allGames=[], currentGames=[], sortDir=-1, sortKey=null;
+let allGames=[];
 
 const years=[];
-
-/* force loading through 2026 */
-for(let y=1990;y<=2026;y++) years.push(y);
+for(let y=1990;y<=2026;y++) years.push(y);   // only change
 
 Promise.all(
 years.map(y=>fetch(`/data/afl/afl_${y}.json`).then(r=>r.json()).catch(()=>[]))
-)
-.then(data=>{
+).then(data=>{
 
 allGames=data.flat();
 
@@ -120,138 +80,30 @@ o.value=n;
 playerList.appendChild(o);
 });
 
-currentGames=allGames.filter(p=>p.player===playerName);
+const games=allGames.filter(p=>p.player===playerName);
 
-if(currentGames.length){
-
-setupOpponents(currentGames);
-renderCareer(currentGames);
-renderOpponent([]);
-renderTable(currentGames);
-
-}
+renderTable(games);
 
 });
 
-function setupOpponents(games){
-
-opponentSelect.innerHTML=`<option value="all">All Opponents</option>`;
-
-[...new Set(games.map(g=>g.played_against))].sort().forEach(o=>{
-const opt=document.createElement("option");
-opt.value=o;
-opt.textContent=o;
-opponentSelect.appendChild(opt);
-});
-
-opponentSelect.onchange=()=>{
-let f=games;
-
-if(opponentSelect.value!=="all")
-f=games.filter(g=>g.played_against===opponentSelect.value);
-
-renderOpponent(f);
-renderTable(f);
-};
-
-}
-
-function renderCareer(g){ renderStats(g,"careerStats"); }
-function renderOpponent(g){ renderStats(g,"opponentStats"); }
-
-function renderStats(g,id){
-
-if(!g.length){
-document.getElementById(id).innerHTML="";
-return;
-}
-
-const games=g.length;
-
-const dTotal=g.reduce((a,x)=>a+(+x.D||0),0);
-const gTotal=g.reduce((a,x)=>a+(+x.G||0),0);
-
-const bestD=Math.max(...g.map(x=>+x.D||0));
-const bestG=Math.max(...g.map(x=>+x.G||0));
-
-const bestDCount=g.filter(x=>(+x.D||0)===bestD).length;
-const bestGCount=g.filter(x=>(+x.G||0)===bestG).length;
-
-document.getElementById(id).innerHTML=`
-
-<div class="stat-box">
-<strong>${games}</strong>
-<span>Games</span>
-</div>
-
-<div class="stat-box">
-<strong>${bestD}</strong>
-<span>Best Disposals</span>
-${bestDCount>1?`<div class="sub">(${bestDCount} times)</div>`:""}
-</div>
-
-<div class="stat-box">
-<strong>${bestG}</strong>
-<span>Best Goals</span>
-${bestGCount>1?`<div class="sub">(${bestGCount} times)</div>`:""}
-</div>
-
-<div class="stat-box">
-<strong>${(dTotal/games).toFixed(1)}</strong>
-<span>Avg Disposals</span>
-</div>
-
-<div class="stat-box">
-<strong>${(gTotal/games).toFixed(2)}</strong>
-<span>Avg Goals</span>
-</div>
-
-`;
-
-}
-
-function renderTable(g){
+function renderTable(games){
 
 rows.innerHTML="";
 
-g.forEach(p=>{
+games.forEach(p=>{
 
-const tr=document.createElement("tr");
-
-tr.onclick=()=>location.href=
-`afl-game.html?match=${encodeURIComponent(p.match_id)}`;
-
-tr.innerHTML=`
+rows.innerHTML+=`
+<tr>
 <td>${p.season}</td>
 <td>${p.round}</td>
 <td class="left">${p.played_for}</td>
 <td>${p.played_against}</td>
 <td>${p.D||0}</td>
 <td>${p.G||0}</td>
-<td>${p.B||0}</td>`;
-
-rows.appendChild(tr);
+<td>${p.B||0}</td>
+</tr>`;
 
 });
-
-}
-
-function sortTable(key){
-
-if(sortKey===key) sortDir*=-1;
-else{sortKey=key; sortDir=-1;}
-
-currentGames.sort((a,b)=>((a[key]||0)-(b[key]||0))*sortDir);
-
-renderTable(currentGames);
-
-}
-
-function resetSort(){
-
-currentGames=allGames.filter(p=>p.player===playerName);
-
-renderTable(currentGames);
 
 }
 
