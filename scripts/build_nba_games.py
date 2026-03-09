@@ -13,7 +13,12 @@ players = pd.read_csv(DATA / "PlayerStatistics.csv", low_memory=False)
 games.columns = games.columns.str.lower()
 players.columns = players.columns.str.lower()
 
-games["gamedatetimeest"] = pd.to_datetime(games["gamedatetimeest"])
+games["gamedatetimeest"] = pd.to_datetime(games["gamedatetimeest"], errors="coerce")
+
+def safe_int(v):
+    if pd.isna(v):
+        return 0
+    return int(v)
 
 seasons = {}
 
@@ -36,8 +41,8 @@ for _, g in games.iterrows():
     home = f"{g['hometeamcity']} {g['hometeamname']}"
     away = f"{g['awayteamcity']} {g['awayteamname']}"
 
-    home_score = int(g.get("homescore", 0) or 0)
-    away_score = int(g.get("awayscore", 0) or 0)
+    home_score = safe_int(g.get("homescore"))
+    away_score = safe_int(g.get("awayscore"))
 
     arena = g.get("arenaname", "")
 
@@ -50,21 +55,21 @@ for _, g in games.iterrows():
     for _, p in game_players.iterrows():
 
         plist.append({
-            "player_id": int(p.get("personid", 0) or 0),
-            "team_id": int(p.get("teamid", 0) or 0),
-            "minutes": p.get("minutes", ""),
-            "points": int(p.get("points", 0) or 0),
-            "rebounds": int(p.get("rebounds", 0) or 0),
-            "assists": int(p.get("assists", 0) or 0),
-            "steals": int(p.get("steals", 0) or 0),
-            "blocks": int(p.get("blocks", 0) or 0),
-            "turnovers": int(p.get("turnovers", 0) or 0),
-            "fgm": int(p.get("fgm", 0) or 0),
-            "fga": int(p.get("fga", 0) or 0),
-            "tpm": int(p.get("tpm", 0) or 0),
-            "tpa": int(p.get("tpa", 0) or 0),
-            "ftm": int(p.get("ftm", 0) or 0),
-            "fta": int(p.get("fta", 0) or 0)
+            "player_id": safe_int(p.get("personid")),
+            "team_id": safe_int(p.get("teamid")),
+            "minutes": p.get("minutes",""),
+            "points": safe_int(p.get("points")),
+            "rebounds": safe_int(p.get("rebounds")),
+            "assists": safe_int(p.get("assists")),
+            "steals": safe_int(p.get("steals")),
+            "blocks": safe_int(p.get("blocks")),
+            "turnovers": safe_int(p.get("turnovers")),
+            "fgm": safe_int(p.get("fgm")),
+            "fga": safe_int(p.get("fga")),
+            "tpm": safe_int(p.get("tpm")),
+            "tpa": safe_int(p.get("tpa")),
+            "ftm": safe_int(p.get("ftm")),
+            "fta": safe_int(p.get("fta"))
         })
 
     game_obj = {
