@@ -1,91 +1,71 @@
 import requests
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 
-START_DATE = datetime(2026,2,16)
-TODAY = datetime.utcnow()
+print("NBA updater starting")
 
 OUTPUT_DIR = "docs/data/nba/2026"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-print("NBA updater starting")
+# NBA official games endpoint
+SCHEDULE_URL = "https://cdn.nba.com/static/json/staticData/scheduleLeagueV2.json"
 
-def get_games(date):
+r = requests.get(SCHEDULE_URL)
 
-    ds = date.strftime("%Y%m%d")
+if r.status_code != 200:
+    print("Failed to load schedule")
+    exit()
 
-    url = f"https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_{ds}.json"
+data = r.json()
 
-    r = requests.get(url)
+games = data["leagueSchedule"]["gameDates"]
 
-    if r.status_code != 200:
-        print("No scoreboard:", ds)
-        return []
+games_found = 0
+games_saved = 0
 
-    data = r.json()
+for date in games:
 
-    games = data["scoreboard"]["games"]
+    for game in date["games"]:
 
-    print("Checking",ds,"games:",len(games))
+        game_id = game["gameId"]
 
-    return games
-
-
-def get_boxscore(game_id):
-
-    url = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
-
-    r = requests.get(url)
-
-    if r.status_code != 200:
-        print("Boxscore missing:",game_id)
-        return None
-
-    return r.json()
-
-
-date = START_DATE
-
-while date <= TODAY:
-
-    games = get_games(date)
-
-    for g in games:
-
-        game_id = g["gameId"]
-
+        # skip if file already exists
         file_path = f"{OUTPUT_DIR}/{game_id}.json"
-
         if os.path.exists(file_path):
             continue
 
-        box = get_boxscore(game_id)
+        games_found += 1
 
-        if not box:
+        box_url = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
+
+        box = requests.get(box_url)
+
+        if box.status_code != 200:
             continue
 
-        game = box["game"]
+        box = box.json()
+
+        g = box["game"]
 
         output = {
             "game_id": game_id,
-            "season": 2026,
-            "date": game["gameTimeUTC"],
-            "home_team": game["homeTeam"]["teamName"],
-            "away_team": game["awayTeam"]["teamName"],
-            "home_score": game["homeTeam"]["score"],
-            "away_score": game["awayTeam"]["score"],
-            "arena": game["arena"]["arenaName"],
-            "players":[]
+            "date": g["gameTimeUTC"],
+            "home_team": g["homeTeam"]["teamName"],
+            "away_team": g["awayTeam"]["teamName"],
+            "home_score": g["homeTeam"]["score"],
+            "away_score": g["awayTeam"]["score"],
+            "arena": g["arena"]["arenaName"],
+            "players": []
         }
 
         for team in ["homeTeam","awayTeam"]:
 
-            team_name = game[team]["teamName"]
+            team_name = g[team]["teamName"]
 
-            for p in game[team]["players"]:
+            for p in g[team]["players"]:
 
-                stats = p.get("statistics",{})
+                stats = p.get("statistics", {})
 
                 output["players"].append({
                     "player": p["name"],
@@ -99,8 +79,9 @@ while date <= TODAY:
         with open(file_path,"w") as f:
             json.dump(output,f,indent=2)
 
-        print("Saved:",file_path)
+        games_saved += 1
+        print("Saved", file_path)
 
-    date += timedelta(days=1)
-
+print("Games checked:", games_found)
+print("Games saved:", games_saved)
 print("NBA update finished")
