@@ -23,6 +23,7 @@ for _, g in games.iterrows():
 
     date = pd.to_datetime(g["gamedatetimeest"])
 
+    # only process games after Feb 15 2026
     if date < pd.Timestamp("2026-02-15"):
         continue
 
@@ -58,8 +59,8 @@ for _, g in games.iterrows():
     for _, p in game_players.iterrows():
 
         plist.append({
-            "player_id": int(p["playerid"]),
-            "team_id": int(p["teamid"]),
+            "player_id": int(p.get("personid", 0) or 0),
+            "team_id": int(p.get("teamid", 0) or 0),
             "minutes": p.get("minutes", ""),
             "points": int(p.get("points", 0) or 0),
             "rebounds": int(p.get("rebounds", 0) or 0),
