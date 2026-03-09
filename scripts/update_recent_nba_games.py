@@ -9,18 +9,28 @@ TODAY = datetime.utcnow()
 OUTPUT_DIR = "docs/data/nba/2026"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+print("Starting NBA updater")
+print("Output folder:", OUTPUT_DIR)
+
 def get_games(date):
 
     ds = date.strftime("%Y%m%d")
+
     url = f"https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_{ds}.json"
 
     r = requests.get(url)
 
     if r.status_code != 200:
+        print("No scoreboard:", ds)
         return []
 
     data = r.json()
-    return data["scoreboard"]["games"]
+
+    games = data.get("scoreboard", {}).get("games", [])
+
+    print("Games found:", len(games), "on", ds)
+
+    return games
 
 
 def get_boxscore(game_id):
@@ -30,6 +40,7 @@ def get_boxscore(game_id):
     r = requests.get(url)
 
     if r.status_code != 200:
+        print("Boxscore failed:", game_id)
         return None
 
     return r.json()
@@ -48,6 +59,7 @@ while date <= TODAY:
         file_path = f"{OUTPUT_DIR}/{game_id}.json"
 
         if os.path.exists(file_path):
+            print("Already exists:", game_id)
             continue
 
         box = get_boxscore(game_id)
@@ -69,24 +81,29 @@ while date <= TODAY:
             "players": []
         }
 
-        for team in ["homeTeam","awayTeam"]:
+        for team in ["homeTeam", "awayTeam"]:
 
             for p in game[team]["players"]:
 
-                stats = p.get("statistics",{})
+                stats = p.get("statistics", {})
 
                 out["players"].append({
                     "player": p["name"],
                     "team": game[team]["teamName"],
-                    "points": stats.get("points",0),
-                    "rebounds": stats.get("reboundsTotal",0),
-                    "assists": stats.get("assists",0),
-                    "minutes": stats.get("minutes","0")
+                    "minutes": stats.get("minutes", "0"),
+                    "points": stats.get("points", 0),
+                    "rebounds": stats.get("reboundsTotal", 0),
+                    "assists": stats.get("assists", 0),
+                    "steals": stats.get("steals", 0),
+                    "blocks": stats.get("blocks", 0),
+                    "turnovers": stats.get("turnovers", 0)
                 })
 
-        with open(file_path,"w") as f:
-            json.dump(out,f,indent=2)
+        with open(file_path, "w") as f:
+            json.dump(out, f, indent=2)
 
-        print("Saved",game_id)
+        print("Saved:", file_path)
 
     date += timedelta(days=1)
+
+print("NBA update finished")
