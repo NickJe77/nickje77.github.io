@@ -113,83 +113,75 @@ const teamColours={
 "Western Bulldogs":"#003087,#c8102e"
 };
 
-const playerList = document.getElementById("playerList");
-const opponentSelect = document.getElementById("opponentSelect");
-const rows = document.getElementById("rows");
+const playerList=document.getElementById("playerList");
+const opponentSelect=document.getElementById("opponentSelect");
+const rows=document.getElementById("rows");
 
 const params=new URLSearchParams(location.search);
 const playerName=params.get("name")||"";
 document.getElementById("playerName").textContent=playerName||"Select a player";
 
-let allGames=[], currentGames=[], sortDir=-1, sortKey=null;
+let allGames=[],currentGames=[],sortDir=-1,sortKey=null;
 
 const years=[];
 for(let y=1990;y<=2026;y++) years.push(y);
 
 Promise.all(
-  years.map(y=>fetch(`/data/afl/players_${y}.json`).then(r=>r.json()).catch(()=>[]))
+years.map(y=>fetch(`/data/afl/afl_${y}.json`).then(r=>r.json()).catch(()=>[]))
 ).then(data=>{
 
-  allGames=data.flat();
+allGames=data.flat();
 
-  const names=[...new Set(allGames.map(p=>p.player).filter(Boolean))].sort();
+const names=[...new Set(allGames.map(p=>p.player))].sort();
 
-  playerList.innerHTML="";
-  names.forEach(n=>{
-    const o=document.createElement("option");
-    o.value=n;
-    playerList.appendChild(o);
-  });
+playerList.innerHTML="";
+names.forEach(n=>{
+const o=document.createElement("option");
+o.value=n;
+playerList.appendChild(o);
+});
 
-  currentGames=allGames.filter(p=>p.player===playerName);
+currentGames=allGames.filter(p=>p.player===playerName);
 
-  if(currentGames.length){
+if(currentGames.length){
 
-    const team=currentGames[0].played_for;
+const team=currentGames[0].played_for;
 
-    if(teamColours[team]){
-      const c=teamColours[team].split(",");
-      document.getElementById("teamStripe").style.background=
-      `linear-gradient(90deg,${c[0]} 50%,${c[1]} 50%)`;
-    } else {
-      document.getElementById("teamStripe").style.background="#eee";
-    }
+if(teamColours[team]){
+const c=teamColours[team].split(",");
+document.getElementById("teamStripe").style.background=
+`linear-gradient(90deg,${c[0]} 50%,${c[1]} 50%)`;
+}
 
-    setupOpponents(currentGames);
-    renderCareer(currentGames);
-    renderOpponent([]);
-    renderTable(currentGames);
+setupOpponents(currentGames);
+renderCareer(currentGames);
+renderOpponent([]);
+renderTable(currentGames);
 
-  } else {
-    document.getElementById("careerStats").innerHTML="";
-    document.getElementById("opponentStats").innerHTML="";
-    rows.innerHTML="";
-  }
+}
 
 });
 
 function setupOpponents(games){
 
-  opponentSelect.innerHTML=`<option value="all">All Opponents</option>`;
+opponentSelect.innerHTML=`<option value="all">All Opponents</option>`;
 
-  [...new Set(games.map(g=>g.played_against).filter(Boolean))].sort().forEach(o=>{
-    const opt=document.createElement("option");
-    opt.value=o;
-    opt.textContent=o;
-    opponentSelect.appendChild(opt);
-  });
+[...new Set(games.map(g=>g.played_against))].sort().forEach(o=>{
+const opt=document.createElement("option");
+opt.value=o;
+opt.textContent=o;
+opponentSelect.appendChild(opt);
+});
 
-  opponentSelect.onchange=()=>{
-    let f=games;
+opponentSelect.onchange=()=>{
+let f=games;
 
-    if(opponentSelect.value!=="all"){
-      f=games.filter(g=>g.played_against===opponentSelect.value);
-    }
+if(opponentSelect.value!=="all")
+f=games.filter(g=>g.played_against===opponentSelect.value);
 
-    currentGames = f.slice();
-    renderOpponent(f);
-    renderTable(f);
-  };
+renderOpponent(f);
+renderTable(f);
+};
 
 }
 
@@ -198,118 +190,101 @@ function renderOpponent(g){ renderStats(g,"opponentStats"); }
 
 function renderStats(g,id){
 
-  if(!g.length){
-    document.getElementById(id).innerHTML="";
-    return;
-  }
+if(!g.length){
+document.getElementById(id).innerHTML="";
+return;
+}
 
-  const games=g.length;
+const games=g.length;
 
-  const dTotal=g.reduce((a,x)=>a+(+x.D||0),0);
-  const gTotal=g.reduce((a,x)=>a+(+x.G||0),0);
+const dTotal=g.reduce((a,x)=>a+(+x.D||0),0);
+const gTotal=g.reduce((a,x)=>a+(+x.G||0),0);
 
-  const bestD=Math.max(...g.map(x=>+x.D||0));
-  const bestG=Math.max(...g.map(x=>+x.G||0));
+const bestD=Math.max(...g.map(x=>+x.D||0));
+const bestG=Math.max(...g.map(x=>+x.G||0));
 
-  const bestDCount=g.filter(x=>(+x.D||0)===bestD).length;
-  const bestGCount=g.filter(x=>(+x.G||0)===bestG).length;
+const bestDCount=g.filter(x=>(+x.D||0)===bestD).length;
+const bestGCount=g.filter(x=>(+x.G||0)===bestG).length;
 
-  document.getElementById(id).innerHTML=`
+document.getElementById(id).innerHTML=`
 
-  <div class="stat-box">
-  <strong>${games}</strong>
-  <span>Games</span>
-  </div>
+<div class="stat-box">
+<strong>${games}</strong>
+<span>Games</span>
+</div>
 
-  <div class="stat-box">
-  <strong>${bestD}</strong>
-  <span>Best Disposals</span>
-  ${bestDCount>1?`<div class="sub">(${bestDCount} times)</div>`:""}
-  </div>
+<div class="stat-box">
+<strong>${bestD}</strong>
+<span>Best Disposals</span>
+${bestDCount>1?`<div class="sub">(${bestDCount} times)</div>`:""}
+</div>
 
-  <div class="stat-box">
-  <strong>${bestG}</strong>
-  <span>Best Goals</span>
-  ${bestGCount>1?`<div class="sub">(${bestGCount} times)</div>`:""}
-  </div>
+<div class="stat-box">
+<strong>${bestG}</strong>
+<span>Best Goals</span>
+${bestGCount>1?`<div class="sub">(${bestGCount} times)</div>`:""}
+</div>
 
-  <div class="stat-box">
-  <strong>${(dTotal/games).toFixed(1)}</strong>
-  <span>Avg Disposals</span>
-  </div>
+<div class="stat-box">
+<strong>${(dTotal/games).toFixed(1)}</strong>
+<span>Avg Disposals</span>
+</div>
 
-  <div class="stat-box">
-  <strong>${(gTotal/games).toFixed(2)}</strong>
-  <span>Avg Goals</span>
-  </div>
+<div class="stat-box">
+<strong>${(gTotal/games).toFixed(2)}</strong>
+<span>Avg Goals</span>
+</div>
 
-  `;
+`;
 
 }
 
 function renderTable(g){
 
-  rows.innerHTML="";
+rows.innerHTML="";
 
-  g.forEach(p=>{
+g.forEach(p=>{
 
-    const tr=document.createElement("tr");
+const tr=document.createElement("tr");
 
-    tr.onclick=()=>location.href=
-    `afl-game.html?match=${encodeURIComponent(p.match_id)}`;
+tr.onclick=()=>location.href=
+`afl-game.html?match=${encodeURIComponent(p.match_id)}`;
 
-    tr.innerHTML=`
-    <td>${p.season}</td>
-    <td>${p.round}</td>
-    <td class="left">${p.played_for}</td>
-    <td>${p.played_against}</td>
-    <td>${p.D||0}</td>
-    <td>${p.G||0}</td>
-    <td>${p.B||0}</td>`;
+tr.innerHTML=`
+<td>${p.season}</td>
+<td>${p.round}</td>
+<td class="left">${p.played_for}</td>
+<td>${p.played_against}</td>
+<td>${p.D||0}</td>
+<td>${p.G||0}</td>
+<td>${p.B||0}</td>`;
 
-    rows.appendChild(tr);
+rows.appendChild(tr);
 
-  });
+});
 
 }
 
 function sortTable(key){
 
-  if(sortKey===key) sortDir*=-1;
-  else{sortKey=key; sortDir=-1;}
+if(sortKey===key) sortDir*=-1;
+else{sortKey=key; sortDir=-1;}
 
-  currentGames.sort((a,b)=>{
-    const av = a[key] ?? 0;
-    const bv = b[key] ?? 0;
+currentGames.sort((a,b)=>((a[key]||0)-(b[key]||0))*sortDir);
 
-    if(key==="round"){
-      const an = parseInt(String(av).match(/\d+/)?.[0] || "999", 10);
-      const bn = parseInt(String(bv).match(/\d+/)?.[0] || "999", 10);
-      return (an-bn)*sortDir;
-    }
-
-    if(key==="season" || key==="D" || key==="G" || key==="B"){
-      return ((+av||0)-(+bv||0))*sortDir;
-    }
-
-    return String(av).localeCompare(String(bv))*sortDir;
-  });
-
-  renderTable(currentGames);
+renderTable(currentGames);
 
 }
 
 function resetSort(){
 
-  currentGames=allGames.filter(p=>p.player===playerName);
-  opponentSelect.value="all";
-  renderOpponent([]);
-  renderTable(currentGames);
+currentGames=allGames.filter(p=>p.player===playerName);
+renderTable(currentGames);
 
 }
 
-document.getElementById("playerSearch").onchange=e=>{
-  location.href="afl-player.html?name="+encodeURIComponent(e.target.value);
+playerSearch.onchange=e=>{
+location.href="afl-player.html?name="+encodeURIComponent(e.target.value);
 };
 
 </script>
