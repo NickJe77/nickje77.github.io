@@ -1,146 +1,92 @@
-#!/usr/bin/env python3
-
 import requests
 import json
-from pathlib import Path
+import os
 from datetime import datetime, timedelta
 
-OUT = Path("docs/data/nba/2026.json")
+START_DATE = datetime(2026, 2, 16)
+TODAY = datetime.utcnow()
 
-HEADERS = {
-    "User-Agent":"Mozilla/5.0",
-    "Referer":"https://www.nba.com"
-}
+OUTPUT_DIR = "docs/data/nba/2026"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-START_DATE = datetime(2026,2,16)
+def get_games(date):
 
-def load_existing():
+    ds = date.strftime("%Y%m%d")
+    url = f"https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_{ds}.json"
 
-    if not OUT.exists():
-        return {"season":2026,"games":[]}
+    r = requests.get(url)
 
-    with open(OUT) as f:
-        return json.load(f)
+    if r.status_code != 200:
+        return []
 
-def save(data):
+    data = r.json()
+    return data["scoreboard"]["games"]
 
-    OUT.parent.mkdir(parents=True,exist_ok=True)
 
-    with open(OUT,"w") as f:
-        json.dump(data,f,indent=2)
+def get_boxscore(game_id):
 
-def fetch_games(date):
+    url = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
 
-    d = date.strftime("%m/%d/%Y")
+    r = requests.get(url)
 
-    url=f"https://stats.nba.com/stats/scoreboardv2?GameDate={d}&LeagueID=00&DayOffset=0"
+    if r.status_code != 200:
+        return None
 
-    r=requests.get(url,headers=HEADERS)
+    return r.json()
 
-    j=r.json()
 
-    headers=j["resultSets"][0]["headers"]
-    rows=j["resultSets"][0]["rowSet"]
+date = START_DATE
 
-    games=[]
+while date <= TODAY:
 
-    for r in rows:
+    games = get_games(date)
 
-        g=dict(zip(headers,r))
+    for g in games:
 
-        games.append(g)
+        game_id = g["gameId"]
 
-    return games
+        file_path = f"{OUTPUT_DIR}/{game_id}.json"
 
-def fetch_box(game_id):
+        if os.path.exists(file_path):
+            continue
 
-    url=f"https://stats.nba.com/stats/boxscoretraditionalv2?GameID={game_id}&StartPeriod=0&EndPeriod=0&StartRange=0&EndRange=0&RangeType=0"
+        box = get_boxscore(game_id)
 
-    r=requests.get(url,headers=HEADERS)
+        if not box:
+            continue
 
-    j=r.json()
+        game = box["game"]
 
-    headers=j["resultSets"][0]["headers"]
-    rows=j["resultSets"][0]["rowSet"]
+        out = {
+            "game_id": game_id,
+            "season": 2026,
+            "date": game["gameTimeUTC"],
+            "home_team": game["homeTeam"]["teamName"],
+            "away_team": game["awayTeam"]["teamName"],
+            "home_score": game["homeTeam"]["score"],
+            "away_score": game["awayTeam"]["score"],
+            "arena": game["arena"]["arenaName"],
+            "players": []
+        }
 
-    players=[]
+        for team in ["homeTeam","awayTeam"]:
 
-    for r in rows:
+            for p in game[team]["players"]:
 
-        p=dict(zip(headers,r))
+                stats = p.get("statistics",{})
 
-        players.append({
-            "player_id":p["PLAYER_ID"],
-            "team_id":p["TEAM_ID"],
-            "minutes":p["MIN"],
-            "points":p["PTS"],
-            "rebounds":p["REB"],
-            "assists":p["AST"],
-            "steals":p["STL"],
-            "blocks":p["BLK"],
-            "turnovers":p["TO"],
-            "fgm":p["FGM"],
-            "fga":p["FGA"],
-            "tpm":p["FG3M"],
-            "tpa":p["FG3A"],
-            "ftm":p["FTM"],
-            "fta":p["FTA"]
-        })
+                out["players"].append({
+                    "player": p["name"],
+                    "team": game[team]["teamName"],
+                    "points": stats.get("points",0),
+                    "rebounds": stats.get("reboundsTotal",0),
+                    "assists": stats.get("assists",0),
+                    "minutes": stats.get("minutes","0")
+                })
 
-    return players
+        with open(file_path,"w") as f:
+            json.dump(out,f,indent=2)
 
-data = load_existing()
+        print("Saved",game_id)
 
-existing_ids=set(g["game_id"] for g in data["games"])
-
-today=datetime.utcnow()
-
-d=START_DATE
-
-added=0
-
-while d<=today:
-
-    try:
-
-        games=fetch_games(d)
-
-        for g in games:
-
-            gid=str(g["GAME_ID"])
-
-            if gid in existing_ids:
-                continue
-
-            players=fetch_box(gid)
-
-            game={
-                "game_id":gid,
-                "date":g["GAME_DATE_EST"][:10],
-                "game_type":"Regular Season",
-                "home_team":g["HOME_TEAM_NAME"],
-                "away_team":g["VISITOR_TEAM_NAME"],
-                "home_score":g["PTS_HOME"],
-                "away_score":g["PTS_AWAY"],
-                "arena":g["ARENA_NAME"],
-                "players":players
-            }
-
-            data["games"].append(game)
-
-            existing_ids.add(gid)
-
-            added+=1
-
-            print("Added game",gid)
-
-    except:
-        pass
-
-    d+=timedelta(days=1)
-
-data["games"]=sorted(data["games"],key=lambda x:x["date"])
-
-save(data)
-
-print("New games added:",added)
+    date += timedelta(days=1)
