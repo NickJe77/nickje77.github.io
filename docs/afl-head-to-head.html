@@ -26,16 +26,16 @@ th{background:#f4f6f8;}
 <body>
 
 <div class="navbar">
-  <a href="index.html">Home</a>
-  <a href="afl.html">AFL</a>
+<a href="index.html">Home</a>
+<a href="afl.html">AFL</a>
 </div>
 
 <div class="page-wrap">
 <h1>AFL Head to Head</h1>
 
 <div class="selector-grid">
-  <div class="selector-box"><select id="team1"></select></div>
-  <div class="selector-box"><select id="team2"></select></div>
+<div class="selector-box"><select id="team1"></select></div>
+<div class="selector-box"><select id="team2"></select></div>
 </div>
 
 <button class="compare-btn" onclick="compare()">Compare</button>
@@ -44,140 +44,180 @@ th{background:#f4f6f8;}
 </div>
 
 <script>
-let allMatches = [];
+
+let allMatches=[];
 
 function norm(s){ return (s||"").trim().toLowerCase(); }
 function displayName(s){ return s.replace(/\b\w/g,c=>c.toUpperCase()); }
 
 async function loadAllSeasons(){
-  const LAST_YEAR = 2025;
-  const startYear = LAST_YEAR - 5;
 
-  const teamSet = new Set();
-  allMatches = [];
+const LAST_YEAR = new Date().getFullYear();
+const startYear = LAST_YEAR - 5;
 
-  for(let y=startYear; y<=LAST_YEAR; y++){
-    try{
-      const res = await fetch(`./data/afl/afl_${y}.json`);
-      if(!res.ok) continue;
+const teamSet=new Set();
+allMatches=[];
 
-      const raw = await res.json();
-      if(!Array.isArray(raw)) continue;
+for(let y=startYear;y<=LAST_YEAR;y++){
 
-      const matchMap = {};
+try{
 
-      raw.forEach(r=>{
-        if(!r.match_id) return;
+const res=await fetch(`./data/afl/afl_${y}.json`);
+if(!res.ok) continue;
 
-        if(!matchMap[r.match_id]){
-          matchMap[r.match_id] = {
-            season: r.season,
-            round: r.round,
-            venue: r.venue,
-            home: r.home_team,
-            away: r.away_team,
-            hp: Number(r.home_points),
-            ap: Number(r.away_points)
-          };
-        }
-      });
+const raw=await res.json();
+if(!Array.isArray(raw)) continue;
 
-      Object.values(matchMap).forEach(m=>{
-        const home = norm(m.home);
-        const away = norm(m.away);
+const matchMap={};
 
-        allMatches.push({
-          season: m.season,
-          round: m.round,
-          venue: m.venue,
-          home,
-          away,
-          hp: m.hp,
-          ap: m.ap,
-          total: m.hp + m.ap,
-          margin: Math.abs(m.hp - m.ap)
-        });
+raw.forEach(r=>{
 
-        teamSet.add(home);
-        teamSet.add(away);
-      });
+if(!r.match_id) return;
 
-    }catch(e){
-      console.log("Failed year", y, e);
-    }
-  }
+if(!matchMap[r.match_id]){
 
-  const teams=[...teamSet].sort();
-  team1.innerHTML = `<option value="">Select team</option>`;
-  team2.innerHTML = `<option value="">Select team</option>`;
+matchMap[r.match_id]={
 
-  teams.forEach(t=>{
-    team1.innerHTML+=`<option value="${t}">${displayName(t)}</option>`;
-    team2.innerHTML+=`<option value="${t}">${displayName(t)}</option>`;
-  });
+season:r.season,
+round:r.round,
+venue:r.venue,
+home:r.home_team,
+away:r.away_team,
+hp:Number(r.home_points),
+ap:Number(r.away_points)
 
-  results.innerHTML = "Select two teams and click Compare.";
+};
+
+}
+
+});
+
+Object.values(matchMap).forEach(m=>{
+
+const home=norm(m.home);
+const away=norm(m.away);
+
+allMatches.push({
+
+season:m.season,
+round:m.round,
+venue:m.venue,
+home,
+away,
+hp:m.hp,
+ap:m.ap,
+total:m.hp+m.ap,
+margin:Math.abs(m.hp-m.ap)
+
+});
+
+teamSet.add(home);
+teamSet.add(away);
+
+});
+
+}catch(e){
+
+console.log("Failed year",y,e);
+
+}
+
+}
+
+const teams=[...teamSet].sort();
+
+team1.innerHTML=`<option value="">Select team</option>`;
+team2.innerHTML=`<option value="">Select team</option>`;
+
+teams.forEach(t=>{
+
+team1.innerHTML+=`<option value="${t}">${displayName(t)}</option>`;
+team2.innerHTML+=`<option value="${t}">${displayName(t)}</option>`;
+
+});
+
+results.innerHTML="Select two teams and click Compare.";
+
 }
 
 loadAllSeasons();
 
 function compare(){
-  const a=team1.value;
-  const b=team2.value;
-  if(!a||!b) return;
 
-  const games = allMatches.filter(g =>
-    (g.home===a && g.away===b) ||
-    (g.home===b && g.away===a)
-  ).sort((x,y)=>y.season-x.season);
+const a=team1.value;
+const b=team2.value;
 
-  let aWins=0,bWins=0;
-  games.forEach(g=>{
-    if((g.home===a && g.hp>g.ap) || (g.away===a && g.ap>g.hp)) aWins++;
-    else if(g.hp!==g.ap) bWins++;
-  });
+if(!a||!b) return;
 
-  // ✅ average of last 10 games
-  const lastN = Math.min(10, games.length);
-  const lastGames = games.slice(0, lastN);
-  const avgPoints = lastN
-    ? (lastGames.reduce((s,g)=>s+g.total,0) / lastN).toFixed(1)
-    : "0.0";
+const games=allMatches.filter(g=>
 
-  let html=`
-    <h3>${displayName(a)} vs ${displayName(b)}</h3>
-    <p>
-      Games: ${games.length} |
-      ${displayName(a)} wins: ${aWins} |
-      ${displayName(b)} wins: ${bWins}
-    </p>
-    <p><b>Last ${lastN} games average total points:</b> ${avgPoints}</p>
+(g.home===a&&g.away===b)||
+(g.home===b&&g.away===a)
 
-    <table>
-    <tr>
-      <th>Season</th>
-      <th>Round</th>
-      <th>Venue</th>
-      <th>Match</th>
-      <th>Score</th>
-    </tr>
-  `;
+).sort((x,y)=>y.season-x.season);
 
-  games.forEach(g=>{
-    html+=`
-      <tr>
-        <td>${g.season}</td>
-        <td>${g.round}</td>
-        <td>${g.venue}</td>
-        <td>${displayName(g.home)} v ${displayName(g.away)}</td>
-        <td>${g.hp} - ${g.ap}</td>
-      </tr>
-    `;
-  });
+let aWins=0,bWins=0;
 
-  html+="</table>";
-  results.innerHTML=html;
+games.forEach(g=>{
+
+if((g.home===a&&g.hp>g.ap)||(g.away===a&&g.ap>g.hp)) aWins++;
+else if(g.hp!==g.ap) bWins++;
+
+});
+
+const lastN=Math.min(10,games.length);
+const lastGames=games.slice(0,lastN);
+
+const avgPoints=lastN
+? (lastGames.reduce((s,g)=>s+g.total,0)/lastN).toFixed(1)
+: "0.0";
+
+let html=`
+
+<h3>${displayName(a)} vs ${displayName(b)}</h3>
+
+<p>
+Games: ${games.length} |
+${displayName(a)} wins: ${aWins} |
+${displayName(b)} wins: ${bWins}
+</p>
+
+<p><b>Last ${lastN} games average total points:</b> ${avgPoints}</p>
+
+<table>
+
+<tr>
+<th>Season</th>
+<th>Round</th>
+<th>Venue</th>
+<th>Match</th>
+<th>Score</th>
+</tr>
+
+`;
+
+games.forEach(g=>{
+
+html+=`
+
+<tr>
+<td>${g.season}</td>
+<td>${g.round}</td>
+<td>${g.venue}</td>
+<td>${displayName(g.home)} v ${displayName(g.away)}</td>
+<td>${g.hp} - ${g.ap}</td>
+</tr>
+
+`;
+
+});
+
+html+="</table>";
+
+results.innerHTML=html;
+
 }
+
 </script>
 
 </body>
