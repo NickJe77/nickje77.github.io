@@ -7,6 +7,8 @@ from pathlib import Path
 DATA = Path("data/kaggle_nba")
 OUT = Path("docs/data/nba")
 
+print("Loading CSV files...")
+
 games = pd.read_csv(DATA / "Games.csv", low_memory=False)
 players = pd.read_csv(DATA / "PlayerStatistics.csv", low_memory=False)
 
@@ -15,7 +17,9 @@ players.columns = players.columns.str.lower()
 
 games["gamedatetimeest"] = pd.to_datetime(games["gamedatetimeest"], errors="coerce")
 
-def safe_int(v):
+OUT.mkdir(parents=True, exist_ok=True)
+
+def safe(v):
     if pd.isna(v):
         return 0
     return int(v)
@@ -27,9 +31,7 @@ for _, g in games.iterrows():
     if pd.isna(g["gamedatetimeest"]):
         continue
 
-    date = g["gamedatetimeest"]
-
-    season = safe_int(g.get("season"))
+    season = safe(g.get("season"))
 
     if season < 1976:
         continue
@@ -39,12 +41,12 @@ for _, g in games.iterrows():
     home = f"{g['hometeamcity']} {g['hometeamname']}"
     away = f"{g['awayteamcity']} {g['awayteamname']}"
 
-    home_score = safe_int(g.get("homescore"))
-    away_score = safe_int(g.get("awayscore"))
+    home_score = safe(g.get("homescore"))
+    away_score = safe(g.get("awayscore"))
 
-    arena = g.get("arenaname", "")
+    arena = g.get("arenaname","")
 
-    game_type = g.get("gametype", "Regular Season")
+    game_type = g.get("gametype","Regular Season")
 
     game_players = players[players["gameid"] == g["gameid"]]
 
@@ -53,27 +55,27 @@ for _, g in games.iterrows():
     for _, p in game_players.iterrows():
 
         plist.append({
-            "player_id": safe_int(p.get("personid")),
-            "team_id": safe_int(p.get("teamid")),
+            "player_id": safe(p.get("personid")),
+            "team_id": safe(p.get("teamid")),
             "minutes": p.get("minutes",""),
-            "points": safe_int(p.get("points")),
-            "rebounds": safe_int(p.get("rebounds")),
-            "assists": safe_int(p.get("assists")),
-            "steals": safe_int(p.get("steals")),
-            "blocks": safe_int(p.get("blocks")),
-            "turnovers": safe_int(p.get("turnovers")),
-            "fgm": safe_int(p.get("fgm")),
-            "fga": safe_int(p.get("fga")),
-            "tpm": safe_int(p.get("tpm")),
-            "tpa": safe_int(p.get("tpa")),
-            "ftm": safe_int(p.get("ftm")),
-            "fta": safe_int(p.get("fta"))
+            "points": safe(p.get("points")),
+            "rebounds": safe(p.get("rebounds")),
+            "assists": safe(p.get("assists")),
+            "steals": safe(p.get("steals")),
+            "blocks": safe(p.get("blocks")),
+            "turnovers": safe(p.get("turnovers")),
+            "fgm": safe(p.get("fgm")),
+            "fga": safe(p.get("fga")),
+            "tpm": safe(p.get("tpm")),
+            "tpa": safe(p.get("tpa")),
+            "ftm": safe(p.get("ftm")),
+            "fta": safe(p.get("fta"))
         })
 
-    game_obj = {
+    game = {
         "game_id": game_id,
+        "date": str(g["gamedatetimeest"].date()),
         "season": season,
-        "date": str(date.date()),
         "game_type": game_type,
         "home_team": home,
         "away_team": away,
@@ -86,19 +88,21 @@ for _, g in games.iterrows():
     if season not in seasons:
         seasons[season] = []
 
-    seasons[season].append(game_obj)
+    seasons[season].append(game)
 
-OUT.mkdir(parents=True, exist_ok=True)
+print("Writing season files...")
 
-for season, games_list in seasons.items():
+for season, games in seasons.items():
 
-    file_path = OUT / f"{season}.json"
+    path = OUT / f"{season}.json"
 
-    with open(file_path, "w") as f:
+    with open(path,"w") as f:
 
         json.dump({
             "season": season,
-            "games": games_list
+            "games": games
         }, f, indent=2)
 
-print("Seasons written:", len(seasons))
+    print("Saved",season,"(",len(games),"games )")
+
+print("Done.")
