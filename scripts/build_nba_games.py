@@ -36,10 +36,12 @@ for _, g in games.iterrows():
     home = f"{g['hometeamcity']} {g['hometeamname']}"
     away = f"{g['awayteamcity']} {g['awayteamname']}"
 
-    home_score = int(g.get("homescore",0) or 0)
-    away_score = int(g.get("awayscore",0) or 0)
+    home_score = int(g.get("homescore", 0) or 0)
+    away_score = int(g.get("awayscore", 0) or 0)
 
-    arena = g.get("arenaname","")
+    arena = g.get("arenaname", "")
+
+    game_type = g.get("gametype", "Regular Season")
 
     game_players = players[players["gameid"] == g["gameid"]]
 
@@ -48,26 +50,27 @@ for _, g in games.iterrows():
     for _, p in game_players.iterrows():
 
         plist.append({
-            "player_id": int(p.get("personid",0) or 0),
-            "team_id": int(p.get("teamid",0) or 0),
-            "minutes": p.get("minutes",""),
-            "points": int(p.get("points",0) or 0),
-            "rebounds": int(p.get("rebounds",0) or 0),
-            "assists": int(p.get("assists",0) or 0),
-            "steals": int(p.get("steals",0) or 0),
-            "blocks": int(p.get("blocks",0) or 0),
-            "turnovers": int(p.get("turnovers",0) or 0),
-            "fgm": int(p.get("fgm",0) or 0),
-            "fga": int(p.get("fga",0) or 0),
-            "tpm": int(p.get("tpm",0) or 0),
-            "tpa": int(p.get("tpa",0) or 0),
-            "ftm": int(p.get("ftm",0) or 0),
-            "fta": int(p.get("fta",0) or 0)
+            "player_id": int(p.get("personid", 0) or 0),
+            "team_id": int(p.get("teamid", 0) or 0),
+            "minutes": p.get("minutes", ""),
+            "points": int(p.get("points", 0) or 0),
+            "rebounds": int(p.get("rebounds", 0) or 0),
+            "assists": int(p.get("assists", 0) or 0),
+            "steals": int(p.get("steals", 0) or 0),
+            "blocks": int(p.get("blocks", 0) or 0),
+            "turnovers": int(p.get("turnovers", 0) or 0),
+            "fgm": int(p.get("fgm", 0) or 0),
+            "fga": int(p.get("fga", 0) or 0),
+            "tpm": int(p.get("tpm", 0) or 0),
+            "tpa": int(p.get("tpa", 0) or 0),
+            "ftm": int(p.get("ftm", 0) or 0),
+            "fta": int(p.get("fta", 0) or 0)
         })
 
     game_obj = {
         "game_id": game_id,
         "date": str(date.date()),
+        "game_type": game_type,
         "home_team": home,
         "away_team": away,
         "home_score": home_score,
@@ -87,11 +90,11 @@ for season, games_list in seasons.items():
 
     file_path = OUT / f"{season}.json"
 
-    with open(file_path,"w") as f:
+    with open(file_path, "w") as f:
 
         json.dump({
-            "season":season,
-            "games":games_list
-        },f,indent=2)
+            "season": season,
+            "games": games_list
+        }, f, indent=2)
 
-print("Seasons written:",len(seasons))
+print("Seasons written:", len(seasons))
