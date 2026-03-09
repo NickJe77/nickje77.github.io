@@ -86,22 +86,40 @@ matchMap[r.match_id]={
 season:Number(r.season)||y,
 round:r.round,
 venue:r.venue,
-teamA:r.played_for,
-teamB:r.played_against
+teams:{}
 
 };
 
 }
 
+const team=r.played_for;
+if(!team) return;
+
+if(!matchMap[r.match_id].teams[team]){
+matchMap[r.match_id].teams[team]={G:0,B:0};
+}
+
+matchMap[r.match_id].teams[team].G+=Number(r.G||0);
+matchMap[r.match_id].teams[team].B+=Number(r.B||0);
+
 });
 
 Object.values(matchMap).forEach(m=>{
 
-const a=norm(m.teamA);
-const b=norm(m.teamB);
+const teams=Object.keys(m.teams);
+if(teams.length!==2) return;
 
-teamMap[a]=m.teamA;
-teamMap[b]=m.teamB;
+const t1=teams[0];
+const t2=teams[1];
+
+const p1=(m.teams[t1].G*6)+m.teams[t1].B;
+const p2=(m.teams[t2].G*6)+m.teams[t2].B;
+
+const a=norm(t1);
+const b=norm(t2);
+
+teamMap[a]=t1;
+teamMap[b]=t2;
 
 allMatches.push({
 
@@ -109,7 +127,11 @@ season:m.season,
 round:m.round,
 venue:m.venue,
 home:a,
-away:b
+away:b,
+hp:p1,
+ap:p2,
+total:p1+p2,
+margin:Math.abs(p1-p2)
 
 });
 
@@ -144,7 +166,6 @@ function compare(){
 
 const a=team1.value;
 const b=team2.value;
-
 if(!a||!b) return;
 
 const games=allMatches.filter(g=>
@@ -152,10 +173,30 @@ const games=allMatches.filter(g=>
 (g.home===b&&g.away===a)
 ).sort((x,y)=>y.season-x.season);
 
+let aWins=0,bWins=0;
+
+games.forEach(g=>{
+if((g.home===a&&g.hp>g.ap)||(g.away===a&&g.ap>g.hp)) aWins++;
+else if(g.hp!==g.ap) bWins++;
+});
+
+const lastN=Math.min(10,games.length);
+const lastGames=games.slice(0,lastN);
+
+const avgPoints=lastN
+? (lastGames.reduce((s,g)=>s+g.total,0)/lastN).toFixed(1)
+: "0.0";
+
 let html=`
 <h3>${displayName(a)} vs ${displayName(b)}</h3>
 
-<p>Total games: ${games.length}</p>
+<p>
+Games: ${games.length} |
+${displayName(a)} wins: ${aWins} |
+${displayName(b)} wins: ${bWins}
+</p>
+
+<p><b>Last ${lastN} games average total points:</b> ${avgPoints}</p>
 
 <table>
 <tr>
@@ -163,6 +204,7 @@ let html=`
 <th>Round</th>
 <th>Venue</th>
 <th>Match</th>
+<th>Score</th>
 </tr>
 `;
 
@@ -173,6 +215,7 @@ html+=`
 <td>${g.round}</td>
 <td>${g.venue}</td>
 <td>${displayName(g.home)} v ${displayName(g.away)}</td>
+<td>${g.hp} - ${g.ap}</td>
 </tr>
 `;
 });
