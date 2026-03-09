@@ -13,15 +13,16 @@ players = pd.read_csv(DATA / "PlayerStatistics.csv", low_memory=False)
 games.columns = games.columns.str.lower()
 players.columns = players.columns.str.lower()
 
-written = 0
-skipped = 0
+games["gamedatetimeest"] = pd.to_datetime(games["gamedatetimeest"])
+
+seasons = {}
 
 for _, g in games.iterrows():
 
     if pd.isna(g["gamedatetimeest"]):
         continue
 
-    date = pd.to_datetime(g["gamedatetimeest"])
+    date = g["gamedatetimeest"]
 
     if date < pd.Timestamp("2026-02-15"):
         continue
@@ -32,26 +33,14 @@ for _, g in games.iterrows():
 
     game_id = str(g["gameid"])
 
-    season_dir = OUT / str(season)
-    season_dir.mkdir(parents=True, exist_ok=True)
-
-    file_path = season_dir / f"{game_id}.json"
-
-    if file_path.exists():
-        skipped += 1
-        continue
-
     home = f"{g['hometeamcity']} {g['hometeamname']}"
     away = f"{g['awayteamcity']} {g['awayteamname']}"
 
-    home_score = int(g.get("homescore", 0) or 0)
-    away_score = int(g.get("awayscore", 0) or 0)
+    home_score = int(g.get("homescore",0) or 0)
+    away_score = int(g.get("awayscore",0) or 0)
 
-    winner = home if home_score > away_score else away
+    arena = g.get("arenaname","")
 
-    arena = g.get("arenaname", "")
-
-    # correct join column
     game_players = players[players["gameid"] == g["gameid"]]
 
     plist = []
@@ -76,22 +65,33 @@ for _, g in games.iterrows():
             "fta": int(p.get("fta",0) or 0)
         })
 
+    game_obj = {
+        "game_id": game_id,
+        "date": str(date.date()),
+        "home_team": home,
+        "away_team": away,
+        "home_score": home_score,
+        "away_score": away_score,
+        "arena": arena,
+        "players": plist
+    }
+
+    if season not in seasons:
+        seasons[season] = []
+
+    seasons[season].append(game_obj)
+
+OUT.mkdir(parents=True, exist_ok=True)
+
+for season, games_list in seasons.items():
+
+    file_path = OUT / f"{season}.json"
+
     with open(file_path,"w") as f:
 
         json.dump({
-            "game_id": game_id,
-            "season": season,
-            "date": str(date.date()),
-            "home_team": home,
-            "away_team": away,
-            "home_score": home_score,
-            "away_score": away_score,
-            "winner": winner,
-            "arena": arena,
-            "players": plist
+            "season":season,
+            "games":games_list
         },f,indent=2)
 
-    written += 1
-
-print("New games written:",written)
-print("Existing games skipped:",skipped)
+print("Seasons written:",len(seasons))
