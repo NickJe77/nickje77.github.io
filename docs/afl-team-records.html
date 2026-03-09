@@ -64,59 +64,58 @@ tbody tr:nth-child(even){background:#f2f7ff;}
 
 <div class="page">
 
-  <h1>AFL Squad Records</h1>
+<h1>AFL Squad Records</h1>
 
-  <div class="controls">
-    <label>
-      Team:
-      <select id="teamSelect"></select>
-    </label>
+<div class="controls">
+<label>
+Team:
+<select id="teamSelect"></select>
+</label>
 
-    <label>
-      Opponent:
-      <select id="opponentSelect">
-        <option value="all">All Opponents</option>
-      </select>
-    </label>
+<label>
+Opponent:
+<select id="opponentSelect">
+<option value="all">All Opponents</option>
+</select>
+</label>
 
-    <button onclick="exportExcel()">Export Excel</button>
-    <button onclick="exportPDF()">Export PDF</button>
-  </div>
+<button onclick="exportExcel()">Export Excel</button>
+<button onclick="exportPDF()">Export PDF</button>
+</div>
 
-  <table id="recordsTable">
-    <thead>
-      <tr>
-        <th rowspan="2">Player</th>
+<table id="recordsTable">
 
-        <th colspan="8">Career Best</th>
-        <th colspan="6">Vs Opponent</th>
-      </tr>
+<thead>
+<tr>
+<th rowspan="2">Player</th>
+<th colspan="8">Career Best</th>
+<th colspan="6">Vs Opponent</th>
+</tr>
 
-      <tr>
-        <!-- Career best disposals -->
-        <th>D</th><th>Opp</th><th>Rnd</th><th>Yr</th>
-        <!-- Career best goals -->
-        <th>G</th><th>Opp</th><th>Rnd</th><th>Yr</th>
+<tr>
 
-        <!-- Vs opponent disposals -->
-        <th>D</th><th>Rnd</th><th>Yr</th>
-        <!-- Vs opponent goals -->
-        <th>G</th><th>Rnd</th><th>Yr</th>
-      </tr>
-    </thead>
+<th>D</th><th>Opp</th><th>Rnd</th><th>Yr</th>
+<th>G</th><th>Opp</th><th>Rnd</th><th>Yr</th>
 
-    <tbody id="rows"></tbody>
-  </table>
+<th>D</th><th>Rnd</th><th>Yr</th>
+<th>G</th><th>Rnd</th><th>Yr</th>
 
-  <div class="smallnote">
-    If a career-best occurs multiple times, it shows like <b>32 (x2)</b> and Opp/Rnd/Yr are left blank.
-  </div>
+</tr>
+</thead>
+
+<tbody id="rows"></tbody>
+</table>
+
+<div class="smallnote">
+If a career-best occurs multiple times it shows like <b>32 (x2)</b> and Opp/Rnd/Yr are left blank.
+</div>
 
 </div>
 
 <script>
+
 let allGames = [];
-let playerIndex = {};   // key -> [gameRows]
+let playerIndex = {};
 let roster = [];
 let csvData = [];
 
@@ -124,291 +123,359 @@ const teamSelect = document.getElementById("teamSelect");
 const opponentSelect = document.getElementById("opponentSelect");
 const rows = document.getElementById("rows");
 
-/* ---------- NAME MATCHING ---------- */
-/* Build multiple keys so:
-   "Alex N-Bullen" and "Alex Neal-Bullen" both share "alex bullen"
-*/
 function tokenizeName(name){
-  return String(name || "")
-    .toLowerCase()
-    .replace(/['’]/g, "")     // o'brien -> obrien
-    .replace(/\./g, "")
-    .replace(/-/g, " ")       // hyphen -> space
-    .replace(/\s+/g, " ")
-    .trim()
-    .split(" ")
-    .filter(Boolean);
+return String(name || "")
+.toLowerCase()
+.replace(/['’]/g,"")
+.replace(/\./g,"")
+.replace(/-/g," ")
+.replace(/\s+/g," ")
+.trim()
+.split(" ")
+.filter(Boolean);
 }
 
 function nameKeys(name){
-  const toksRaw = tokenizeName(name);
 
-  // Remove single-letter initials (n, j, etc)
-  const toks = toksRaw.filter(t => t.length > 1);
+const toksRaw = tokenizeName(name);
+const toks = toksRaw.filter(t => t.length > 1);
 
-  if(toks.length === 0) return new Set();
+if(toks.length === 0) return new Set();
 
-  const first = toks[0];
-  const last = toks[toks.length - 1];
+const first = toks[0];
+const last = toks[toks.length-1];
 
-  const keys = new Set();
+const keys = new Set();
 
-  // Full tokens key (for exact/full names)
-  keys.add(toks.join(" "));
+keys.add(toks.join(" "));
+keys.add(`${first} ${last}`);
 
-  // First + last (handles Neal-Bullen vs N-Bullen)
-  keys.add(`${first} ${last}`);
+if(toks.length >= 3){
+const last2 = toks[toks.length-2];
+keys.add(`${first} ${last2} ${last}`);
+}
 
-  // First + last two (handles multi-part last names sometimes)
-  if(toks.length >= 3){
-    const last2 = toks[toks.length - 2];
-    keys.add(`${first} ${last2} ${last}`);
-  }
-
-  // Also add "last" only (rarely helpful but can rescue odd formats)
-  keys.add(last);
-
-  return keys;
+return keys;
 }
 
 function gameDedupKey(g){
-  // Best-effort stable dedupe key
-  const id = g.match_id || g.game_id || g.id || "";
-  if(id) return String(id);
 
-  return [
-    g.season ?? "",
-    g.round ?? "",
-    g.played_against ?? "",
-    g.player ?? "",
-    g.D ?? "",
-    g.G ?? ""
-  ].join("|");
+const id = g.match_id || g.game_id || g.id || "";
+if(id) return String(id);
+
+return [
+g.season ?? "",
+g.round ?? "",
+g.played_against ?? "",
+g.player ?? "",
+g.D ?? "",
+g.G ?? ""
+].join("|");
+
 }
 
-/* ---------- LOAD AFL GAME DATA ---------- */
+function cleanRound(r){
+return String(r || "")
+.replace(/round/i,"")
+.replace(/r/i,"")
+.trim();
+}
+
 const years = [];
 for(let y = 1990; y <= new Date().getFullYear(); y++) years.push(y);
 
 Promise.all(
-  years.map(y =>
-    fetch(`/data/afl/afl_${y}.json`)
-      .then(r => r.json())
-      .catch(() => [])
-  )
+
+years.map(y =>
+fetch(`/data/afl/afl_${y}.json`)
+.then(r => r.json())
+.catch(() => [])
+)
+
 ).then(data => {
-  allGames = data.flat();
 
-  // Build index under multiple keys
-  playerIndex = {};
+allGames = data.flat();
 
-  allGames.forEach(g => {
-    const keys = nameKeys(g.player);
-    keys.forEach(k => {
-      if(!playerIndex[k]) playerIndex[k] = [];
-      playerIndex[k].push(g);
-    });
-  });
+playerIndex = {};
 
-  loadRoster();
+allGames.forEach(g => {
+
+const keys = nameKeys(g.player);
+
+keys.forEach(k => {
+
+if(!playerIndex[k]) playerIndex[k] = [];
+playerIndex[k].push(g);
+
 });
 
-/* ---------- LOAD ROSTER CSV ---------- */
+});
+
+loadRoster();
+
+});
+
 async function loadRoster(){
-  const res = await fetch("/data/afl/afl-team-lists.csv");
-  const text = await res.text();
 
-  const lines = text.trim().split(/\r?\n/);
-  csvData = [];
+const res = await fetch("/data/afl/afl-team-lists.csv");
+const text = await res.text();
 
-  lines.forEach(line => {
-    const parts = line.split(",");
-    if(parts.length < 2) return;
+const lines = text.trim().split(/\r?\n/);
 
-    const player = parts[0].replace(/"/g,"").trim();
-    const team = parts[1].replace(/"/g,"").trim();
+csvData = [];
 
-    if(player.toLowerCase() === "player") return;
-    if(player && team) csvData.push({player, team});
-  });
+lines.forEach(line => {
 
-  buildTeams();
-  buildOpponents();
+const parts = line.split(",");
+if(parts.length < 2) return;
+
+const player = parts[0].replace(/"/g,"").trim();
+const team = parts[1].replace(/"/g,"").trim();
+
+if(player.toLowerCase() === "player") return;
+
+if(player && team){
+csvData.push({player,team});
 }
 
-/* ---------- BUILD CONTROLS ---------- */
+});
+
+buildTeams();
+buildOpponents();
+
+}
+
 function buildTeams(){
-  teamSelect.innerHTML = "";
-  const teams = [...new Set(csvData.map(r => r.team))].sort();
 
-  teams.forEach(t => {
-    const opt = document.createElement("option");
-    opt.value = t;
-    opt.textContent = t;
-    teamSelect.appendChild(opt);
-  });
+teamSelect.innerHTML="";
 
-  teamSelect.onchange = loadTeam;
-  loadTeam();
+const teams = [...new Set(csvData.map(r=>r.team))].sort();
+
+teams.forEach(t=>{
+
+const opt=document.createElement("option");
+opt.value=t;
+opt.textContent=t;
+
+teamSelect.appendChild(opt);
+
+});
+
+teamSelect.onchange=loadTeam;
+
+loadTeam();
+
 }
 
 function buildOpponents(){
-  // keep "all"
-  const keepAll = opponentSelect.querySelector('option[value="all"]');
-  opponentSelect.innerHTML = "";
-  opponentSelect.appendChild(keepAll);
 
-  const opp = [...new Set(allGames.map(g => g.played_against).filter(Boolean))].sort();
-  opp.forEach(o => {
-    const opt = document.createElement("option");
-    opt.value = o;
-    opt.textContent = o;
-    opponentSelect.appendChild(opt);
-  });
+const keepAll = opponentSelect.querySelector('option[value="all"]');
 
-  opponentSelect.onchange = renderTable;
+opponentSelect.innerHTML="";
+opponentSelect.appendChild(keepAll);
+
+const opp = [...new Set(allGames.map(g=>g.played_against).filter(Boolean))].sort();
+
+opp.forEach(o=>{
+
+const opt=document.createElement("option");
+opt.value=o;
+opt.textContent=o;
+
+opponentSelect.appendChild(opt);
+
+});
+
+opponentSelect.onchange=renderTable;
+
 }
 
 function loadTeam(){
-  const team = teamSelect.value;
-  roster = csvData.filter(r => r.team === team).map(r => r.player);
-  renderTable();
+
+const team = teamSelect.value;
+
+roster = csvData
+.filter(r=>r.team===team)
+.map(r=>r.player);
+
+renderTable();
+
 }
 
-/* ---------- STATS ---------- */
-function bestGameWithOpponent(games, stat){
-  // returns [valueText, opp, rnd, yr]
-  let max = 0;
-  let bestGames = [];
+function bestGameWithOpponent(games,stat){
 
-  games.forEach(g => {
-    const val = Number(g[stat] || 0);
+let max=0;
+let bestGames=[];
 
-    if(val > max){
-      max = val;
-      bestGames = [g];
-    } else if(val === max && val !== 0){
-      bestGames.push(g);
-    }
-  });
+games.forEach(g=>{
 
-  if(max === 0) return ["0", "", "", ""];
+const val=Number(g[stat]||0);
 
-  if(bestGames.length > 1){
-    // show (xN), blank opp/rnd/yr
-    return [`${max} (x${bestGames.length})`, "", "", ""];
-  }
-
-  const g = bestGames[0];
-  return [
-    String(max),
-    g.played_against ?? "",
-    g.round ?? "",
-    g.season ?? ""
-  ];
+if(val>max){
+max=val;
+bestGames=[g];
 }
 
-function bestGameSimple(games, stat){
-  // returns [valueText, rnd, yr] (used for vs selected opponent sections)
-  let max = 0;
-  let bestGames = [];
+else if(val===max && val!==0){
+bestGames.push(g);
+}
 
-  games.forEach(g => {
-    const val = Number(g[stat] || 0);
+});
 
-    if(val > max){
-      max = val;
-      bestGames = [g];
-    } else if(val === max && val !== 0){
-      bestGames.push(g);
-    }
-  });
+if(max===0) return ["0","","",""];
 
-  if(max === 0) return ["0", "", ""];
+if(bestGames.length>1){
 
-  if(bestGames.length > 1){
-    return [`${max} (x${bestGames.length})`, "", ""];
-  }
+return [`${max} (x${bestGames.length})`,"","",""];
 
-  const g = bestGames[0];
-  return [String(max), g.round ?? "", g.season ?? ""];
+}
+
+const g=bestGames[0];
+
+return [
+String(max),
+g.played_against ?? "",
+cleanRound(g.round),
+g.season ?? ""
+];
+
+}
+
+function bestGameSimple(games,stat){
+
+let max=0;
+let bestGames=[];
+
+games.forEach(g=>{
+
+const val=Number(g[stat]||0);
+
+if(val>max){
+max=val;
+bestGames=[g];
+}
+
+else if(val===max && val!==0){
+bestGames.push(g);
+}
+
+});
+
+if(max===0) return ["0","",""];
+
+if(bestGames.length>1){
+
+return [`${max} (x${bestGames.length})`,"",""];
+
+}
+
+const g=bestGames[0];
+
+return [
+String(max),
+cleanRound(g.round),
+g.season ?? ""
+];
+
 }
 
 function gamesForRosterName(player){
-  // merge games across all keys, dedupe
-  const keys = nameKeys(player);
-  const seen = new Set();
-  const out = [];
 
-  keys.forEach(k => {
-    const list = playerIndex[k] || [];
-    list.forEach(g => {
-      const dk = gameDedupKey(g);
-      if(seen.has(dk)) return;
-      seen.add(dk);
-      out.push(g);
-    });
-  });
+const keys=nameKeys(player);
 
-  return out;
+const seen=new Set();
+const out=[];
+
+keys.forEach(k=>{
+
+const list=playerIndex[k] || [];
+
+list.forEach(g=>{
+
+const dk=gameDedupKey(g);
+
+if(seen.has(dk)) return;
+
+seen.add(dk);
+
+out.push(g);
+
+});
+
+});
+
+return out;
+
 }
 
-/* ---------- RENDER ---------- */
 function renderTable(){
-  rows.innerHTML = "";
 
-  const opp = opponentSelect.value;
+rows.innerHTML="";
 
-  roster.forEach(player => {
-    const playerGames = gamesForRosterName(player);
+const opp=opponentSelect.value;
 
-    const bestD = bestGameWithOpponent(playerGames, "D");
-    const bestG = bestGameWithOpponent(playerGames, "G");
+roster.forEach(player=>{
 
-    let vsGames = [];
-    if(opp !== "all"){
-      vsGames = playerGames.filter(g => g.played_against === opp);
-    }
+const playerGames=gamesForRosterName(player);
 
-    const oppD = bestGameSimple(vsGames, "D");
-    const oppG = bestGameSimple(vsGames, "G");
+const bestD=bestGameWithOpponent(playerGames,"D");
+const bestG=bestGameWithOpponent(playerGames,"G");
 
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="left">${player}</td>
+let vsGames;
 
-      <td>${bestD[0]}</td><td>${bestD[1]}</td><td>${bestD[2]}</td><td>${bestD[3]}</td>
-      <td>${bestG[0]}</td><td>${bestG[1]}</td><td>${bestG[2]}</td><td>${bestG[3]}</td>
+if(opp==="all") vsGames=playerGames;
+else vsGames=playerGames.filter(g=>g.played_against===opp);
 
-      <td>${oppD[0]}</td><td>${oppD[1]}</td><td>${oppD[2]}</td>
-      <td>${oppG[0]}</td><td>${oppG[1]}</td><td>${oppG[2]}</td>
-    `;
-    rows.appendChild(tr);
-  });
+const oppD=bestGameSimple(vsGames,"D");
+const oppG=bestGameSimple(vsGames,"G");
+
+const tr=document.createElement("tr");
+
+tr.innerHTML=`
+<td class="left">${player}</td>
+
+<td>${bestD[0]}</td><td>${bestD[1]}</td><td>${bestD[2]}</td><td>${bestD[3]}</td>
+<td>${bestG[0]}</td><td>${bestG[1]}</td><td>${bestG[2]}</td><td>${bestG[3]}</td>
+
+<td>${oppD[0]}</td><td>${oppD[1]}</td><td>${oppD[2]}</td>
+<td>${oppG[0]}</td><td>${oppG[1]}</td><td>${oppG[2]}</td>
+`;
+
+rows.appendChild(tr);
+
+});
+
 }
 
-/* ---------- EXPORTS ---------- */
 function exportExcel(){
-  const table = document.getElementById("recordsTable");
-  const wb = XLSX.utils.table_to_book(table, { sheet: "AFL Records" });
-  XLSX.writeFile(wb, "afl_squad_records.xlsx");
+
+const table=document.getElementById("recordsTable");
+
+const wb=XLSX.utils.table_to_book(table,{sheet:"AFL Records"});
+
+XLSX.writeFile(wb,"afl_squad_records.xlsx");
+
 }
 
 function exportPDF(){
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: "landscape" });
 
-  doc.text("AFL Squad Records", 14, 15);
+const {jsPDF}=window.jspdf;
 
-  doc.autoTable({
-    html: "#recordsTable",
-    startY: 20,
-    theme: "grid",
-    styles: { fontSize: 7, cellPadding: 2 }
-  });
+const doc=new jsPDF({orientation:"landscape"});
 
-  doc.save("afl_squad_records.pdf");
+doc.text("AFL Squad Records",14,15);
+
+doc.autoTable({
+html:"#recordsTable",
+startY:20,
+theme:"grid",
+styles:{fontSize:7,cellPadding:2}
+});
+
+doc.save("afl_squad_records.pdf");
+
 }
+
 </script>
 
 </body>
