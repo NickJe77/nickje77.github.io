@@ -7,7 +7,7 @@ from pathlib import Path
 DATA = Path("data/kaggle_nba")
 OUT = Path("docs/data/nba")
 
-games = pd.read_csv(DATA / "Game.csv", low_memory=False)
+games = pd.read_csv(DATA / "Games.csv", low_memory=False)
 players = pd.read_csv(DATA / "GamePlayerStats.csv", low_memory=False)
 
 games.columns = games.columns.str.lower()
