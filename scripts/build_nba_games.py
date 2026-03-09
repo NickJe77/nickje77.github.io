@@ -29,9 +29,7 @@ for _, g in games.iterrows():
 
     date = g["gamedatetimeest"]
 
-    season = date.year
-    if date.month >= 10:
-        season += 1
+    season = safe_int(g.get("season"))
 
     if season < 1976:
         continue
@@ -74,6 +72,7 @@ for _, g in games.iterrows():
 
     game_obj = {
         "game_id": game_id,
+        "season": season,
         "date": str(date.date()),
         "game_type": game_type,
         "home_team": home,
