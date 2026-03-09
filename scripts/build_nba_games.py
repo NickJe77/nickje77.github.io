@@ -8,7 +8,7 @@ DATA = Path("data/kaggle_nba")
 OUT = Path("docs/data/nba")
 
 games = pd.read_csv(DATA / "Games.csv", low_memory=False)
-players = pd.read_csv(DATA / "PlayerGameStats.csv", low_memory=False)
+players = pd.read_csv(DATA / "GamePlayerStats.csv", low_memory=False)
 
 games.columns = games.columns.str.lower()
 players.columns = players.columns.str.lower()
