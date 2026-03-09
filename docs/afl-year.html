@@ -80,7 +80,6 @@ td.team { text-align:left; font-weight:600; white-space:nowrap; width:190px; }
 
 <script>
 
-/* force seasons through 2026 */
 const startYear = 1990;
 const endYear = 2026;
 
@@ -104,8 +103,6 @@ for (let y = startYear; y <= endYear; y++) {
   yearBar.appendChild(btn);
 }
 loadYear(startYear);
-
-/* everything else unchanged */
 
 function canonicalRound(r) {
   const t=(r??"").toLowerCase();
@@ -134,7 +131,104 @@ function loadYear(year){
     });
 }
 
-/* rest of script unchanged */
+function buildMatchesFromPlayers(){
+  const map={};
+
+  rawData.forEach(p=>{
+    const key=p.match_id+"|"+canonicalRound(p.round);
+    if(!map[key]){
+      map[key]={
+        match_id:p.match_id,
+        round:canonicalRound(p.round),
+        teams:{},
+        players:[],
+        date:p.date_iso||"",
+        venue:p.venue||"",
+        crowd:p.crowd||""
+      };
+    }
+
+    const pts=(+p.G||0)*6+(+p.B||0);
+    if(!map[key].teams[p.played_for])map[key].teams[p.played_for]=0;
+    map[key].teams[p.played_for]+=pts;
+    if(p.played_against&&!map[key].teams[p.played_against])map[key].teams[p.played_against]=0;
+    map[key].players.push(p);
+  });
+
+  matches=Object.values(map).map(m=>{
+    const t=Object.keys(m.teams);
+    return {
+      match_id:m.match_id,
+      round:m.round,
+      home_team:t[0],
+      away_team:t[1],
+      home_points:m.teams[t[0]],
+      away_points:m.teams[t[1]],
+      players:m.players,
+      date:m.date,
+      venue:m.venue,
+      crowd:m.crowd
+    };
+  });
+}
+
+function buildTeamSelector(){
+  const teams=new Set();
+  matches.forEach(m=>{teams.add(m.home_team);teams.add(m.away_team);});
+  teamSelect.innerHTML=`<option value="ALL">All teams</option>`;
+  [...teams].sort().forEach(t=>{
+    const o=document.createElement("option");
+    o.value=t;o.textContent=t;teamSelect.appendChild(o);
+  });
+}
+
+function buildRoundButtons(){
+  roundBar.innerHTML="";
+  const rounds=[...new Set(matches.map(r=>canonicalRound(r.round)))];
+  const numeric=rounds.filter(r=>/^Round\s*\d+/i.test(r))
+    .map(r=>({label:r,num:+r.match(/\d+/)[0]}))
+    .sort((a,b)=>a.num-b.num);
+
+  addRoundButton("All Rounds",true);
+  numeric.forEach(r=>addRoundButton(r.label));
+  finalsRounds.forEach(r=>addRoundButton(r));
+}
+
+function addRoundButton(label,active=false){
+  const b=document.createElement("button");
+  b.textContent=label;
+  b.className="round-btn"+(active?" active":"");
+  b.onclick=()=>{
+    currentRound=label==="All Rounds"?"ALL":label;
+    document.querySelectorAll(".round-btn").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    renderMatches();
+  };
+  roundBar.appendChild(b);
+}
+
+teamSelect.onchange=renderMatches;
+
+function renderMatches(){
+  matchesDiv.innerHTML="";
+  ladderDiv.innerHTML="";
+
+  let rows=matches;
+  if(teamSelect.value!=="ALL")rows=rows.filter(r=>r.home_team===teamSelect.value||r.away_team===teamSelect.value);
+  if(currentRound!=="ALL")rows=rows.filter(r=>canonicalRound(r.round)===currentRound);
+
+  rows.forEach(g=>{
+    const line=g.home_points>g.away_points
+      ?`${g.home_team} ${g.home_points} def ${g.away_team} ${g.away_points}`
+      :`${g.away_team} ${g.away_points} def ${g.home_team} ${g.home_points}`;
+
+    matchesDiv.innerHTML+=`
+      <div class="match">
+        <strong>${g.round}</strong>: ${line}
+        <div class="meta">${[g.date,g.venue,g.crowd&&`Crowd: ${g.crowd}`].filter(Boolean).join(" · ")}</div>
+      </div>`;
+  });
+}
 </script>
 </body>
 </html>
