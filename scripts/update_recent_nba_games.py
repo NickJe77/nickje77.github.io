@@ -11,79 +11,95 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 print("NBA updater starting")
 
-date = START_DATE
-
-while date <= TODAY:
+def get_games(date):
 
     ds = date.strftime("%Y%m%d")
 
-    url = f"https://cdn.nba.com/static/json/staticData/scheduleLeagueV2_{ds}.json"
+    url = f"https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_{ds}.json"
 
     r = requests.get(url)
 
     if r.status_code != 200:
-        print("No schedule:", ds)
-        date += timedelta(days=1)
-        continue
+        print("No scoreboard:", ds)
+        return []
 
     data = r.json()
 
-    games = data.get("leagueSchedule",{}).get("gameDates",[])
+    games = data["scoreboard"]["games"]
 
-    for d in games:
+    print("Checking",ds,"games:",len(games))
 
-        for g in d.get("games",[]):
+    return games
 
-            game_id = g["gameId"]
 
-            file_path = f"{OUTPUT_DIR}/{game_id}.json"
+def get_boxscore(game_id):
 
-            if os.path.exists(file_path):
-                continue
+    url = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
 
-            box_url = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
+    r = requests.get(url)
 
-            b = requests.get(box_url)
+    if r.status_code != 200:
+        print("Boxscore missing:",game_id)
+        return None
 
-            if b.status_code != 200:
-                print("Boxscore missing:", game_id)
-                continue
+    return r.json()
 
-            box = b.json()["game"]
 
-            output = {
-                "game_id": game_id,
-                "season": 2026,
-                "date": box["gameTimeUTC"],
-                "home_team": box["homeTeam"]["teamName"],
-                "away_team": box["awayTeam"]["teamName"],
-                "home_score": box["homeTeam"]["score"],
-                "away_score": box["awayTeam"]["score"],
-                "arena": box["arena"]["arenaName"],
-                "players":[]
-            }
+date = START_DATE
 
-            for team in ["homeTeam","awayTeam"]:
+while date <= TODAY:
 
-                team_name = box[team]["teamName"]
+    games = get_games(date)
 
-                for p in box[team]["players"]:
+    for g in games:
 
-                    stats = p.get("statistics",{})
+        game_id = g["gameId"]
 
-                    output["players"].append({
-                        "player": p["name"],
-                        "team": team_name,
-                        "points": stats.get("points",0),
-                        "rebounds": stats.get("reboundsTotal",0),
-                        "assists": stats.get("assists",0),
-                        "minutes": stats.get("minutes","0")
-                    })
+        file_path = f"{OUTPUT_DIR}/{game_id}.json"
 
-            with open(file_path,"w") as f:
-                json.dump(output,f,indent=2)
+        if os.path.exists(file_path):
+            continue
 
-            print("Saved:",file_path)
+        box = get_boxscore(game_id)
+
+        if not box:
+            continue
+
+        game = box["game"]
+
+        output = {
+            "game_id": game_id,
+            "season": 2026,
+            "date": game["gameTimeUTC"],
+            "home_team": game["homeTeam"]["teamName"],
+            "away_team": game["awayTeam"]["teamName"],
+            "home_score": game["homeTeam"]["score"],
+            "away_score": game["awayTeam"]["score"],
+            "arena": game["arena"]["arenaName"],
+            "players":[]
+        }
+
+        for team in ["homeTeam","awayTeam"]:
+
+            team_name = game[team]["teamName"]
+
+            for p in game[team]["players"]:
+
+                stats = p.get("statistics",{})
+
+                output["players"].append({
+                    "player": p["name"],
+                    "team": team_name,
+                    "points": stats.get("points",0),
+                    "rebounds": stats.get("reboundsTotal",0),
+                    "assists": stats.get("assists",0),
+                    "minutes": stats.get("minutes","0")
+                })
+
+        with open(file_path,"w") as f:
+            json.dump(output,f,indent=2)
+
+        print("Saved:",file_path)
 
     date += timedelta(days=1)
 
