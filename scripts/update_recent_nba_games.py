@@ -7,39 +7,42 @@ print("NBA updater starting")
 BASE_DIR = "docs/data/nba"
 os.makedirs(BASE_DIR, exist_ok=True)
 
-SCHEDULE_URL = "https://cdn.nba.com/static/json/staticData/scheduleLeagueV2.json"
+schedule_url = "https://cdn.nba.com/static/json/staticData/scheduleLeagueV2.json"
 
-r = requests.get(SCHEDULE_URL)
+r = requests.get(schedule_url)
 
 if r.status_code != 200:
-    print("Failed to download schedule")
+    print("Schedule download failed")
     exit()
 
 data = r.json()
+
 game_dates = data["leagueSchedule"]["gameDates"]
 
 games_saved = 0
 
-for d in game_dates:
+for date_block in game_dates:
 
-    for g in d["games"]:
+    for g in date_block["games"]:
 
         game_id = g["gameId"]
 
+        # season detection
         game_date = g["gameDateEst"]
-        year = int(game_date[:4])
+        year = int(game_date[0:4])
         month = int(game_date[5:7])
 
-        season = year
         if month >= 10:
             season = year + 1
+        else:
+            season = year
 
         season_dir = f"{BASE_DIR}/{season}"
         os.makedirs(season_dir, exist_ok=True)
 
-        file_path = f"{season_dir}/{game_id}.json"
+        game_file = f"{season_dir}/{game_id}.json"
 
-        if os.path.exists(file_path):
+        if os.path.exists(game_file):
             continue
 
         box_url = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
@@ -49,10 +52,9 @@ for d in game_dates:
         if box.status_code != 200:
             continue
 
-        box = box.json()
-        game = box["game"]
+        game = box.json()["game"]
 
-        prefix = game_id[:3]
+        prefix = game_id[0:3]
 
         if prefix == "001":
             game_type = "Preseason"
@@ -92,18 +94,15 @@ for d in game_dates:
                     "minutes": stats.get("minutes","0")
                 })
 
-        with open(file_path,"w") as f:
+        with open(game_file,"w") as f:
             json.dump(output,f,indent=2)
 
-        print("Saved", file_path)
-
+        # update index
         index_path = f"{season_dir}/index.json"
 
         if os.path.exists(index_path):
-
             with open(index_path) as f:
                 index = json.load(f)
-
         else:
             index = {"games":[]}
 
@@ -114,6 +113,7 @@ for d in game_dates:
             json.dump(index,f,indent=2)
 
         games_saved += 1
+        print("Saved", game_file)
 
-print("Games saved:", games_saved)
-print("NBA update finished")
+print("Games saved:",games_saved)
+print("NBA updater finished")
