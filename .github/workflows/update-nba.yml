@@ -35,7 +35,7 @@ steps:
         echo "Missing secret: KAGGLE_API_TOKEN"
         exit 1
       fi
-      echo "Kaggle token configured."
+      echo "Kaggle token detected."
 
   - name: Download dataset
     env:
@@ -44,11 +44,16 @@ steps:
       rm -rf data/kaggle_nba
       mkdir -p data/kaggle_nba
 
+      echo "Downloading dataset..."
       kaggle datasets download \
         -d eoinamoore/historical-nba-data-and-player-box-scores \
         -p data/kaggle_nba
 
-      unzip -j -o data/kaggle_nba/*.zip -d data/kaggle_nba
+      echo "Extracting dataset..."
+      unzip -o data/kaggle_nba/*.zip -d data/kaggle_nba
+
+      echo "Moving CSV files to root..."
+      find data/kaggle_nba -type f -name "*.csv" -exec mv {} data/kaggle_nba/ \;
 
       echo "Dataset contents:"
       ls -la data/kaggle_nba
@@ -58,7 +63,8 @@ steps:
       python scripts/build_nba_games.py \
         --dataset data/kaggle_nba \
         --out docs/data/nba \
-        --start-date 2026-02-15
+        --start 1976 \
+        --end 2025
 
   - name: Commit updates
     run: |
@@ -72,6 +78,6 @@ steps:
         exit 0
       fi
 
-      git commit -m "Update NBA game JSONs since Feb 15"
+      git commit -m "Update NBA game JSONs from Kaggle dataset"
       git push
 ```
