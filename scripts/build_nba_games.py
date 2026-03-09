@@ -8,7 +8,7 @@ DATA = Path("data/kaggle_nba")
 OUT = Path("docs/data/nba")
 
 games = pd.read_csv(DATA / "Games.csv", low_memory=False)
-players = pd.read_csv(DATA / "GamePlayerStatistics.csv", low_memory=False)
+players = pd.read_csv(DATA / "PlayerStatistics.csv", low_memory=False)
 
 games.columns = games.columns.str.lower()
 players.columns = players.columns.str.lower()
@@ -58,7 +58,7 @@ for _, g in games.iterrows():
     for _, p in game_players.iterrows():
 
         plist.append({
-            "player_id": int(p["personid"]),
+            "player_id": int(p["playerid"]),
             "team_id": int(p["teamid"]),
             "minutes": p.get("minutes", ""),
             "points": int(p.get("points", 0) or 0),
