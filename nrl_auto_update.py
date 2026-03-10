@@ -3,23 +3,34 @@ import requests
 from pathlib import Path
 
 FILE = Path("docs/data/nrl/matches/2026.json")
-
 URL = "https://www.nrl.com/draw/data?competition=111&season=2026"
 
 with open(FILE) as f:
     data = json.load(f)
 
-existing = set()
-for r in data:
-    existing.add(r["match_id"])
+existing = {r["match_id"] for r in data}
 
-res = requests.get(URL)
-draw = res.json()
+try:
+    res = requests.get(URL, timeout=20)
+
+    if res.status_code != 200:
+        print("NRL site failed:", res.status_code)
+        exit()
+
+    try:
+        draw = res.json()
+    except:
+        print("NRL did not return JSON")
+        exit()
+
+except:
+    print("Failed to download draw")
+    exit()
 
 added = 0
 
-for rnd in draw["rounds"]:
-    for game in rnd["matches"]:
+for rnd in draw.get("rounds", []):
+    for game in rnd.get("matches", []):
 
         match_id = str(game["matchId"])
 
@@ -53,4 +64,4 @@ for rnd in draw["rounds"]:
 with open(FILE, "w") as f:
     json.dump(data, f, indent=2)
 
-print("Added matches:", added)
+print("Matches added:", added)
