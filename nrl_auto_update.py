@@ -1,38 +1,60 @@
 import json
+import requests
 from pathlib import Path
 
-DATA_DIR = Path("docs/data/nrl/matches")
+URL = "https://www.nrl.com/draw/data?competition=111&season=2026"
 
-if not DATA_DIR.exists():
-    print("Folder not found:", DATA_DIR)
+DATA_FILE = Path("docs/data/nrl/matches/2026.json")
+
+if not DATA_FILE.exists():
+    print("Data file not found")
     exit()
 
-files = list(DATA_DIR.glob("*.json"))
+with open(DATA_FILE) as f:
+    data = json.load(f)
 
-if not files:
-    print("No match files found")
-    exit()
+existing = {row["match_id"] for row in data}
 
-for file in files:
+res = requests.get(URL)
+draw = res.json()
 
-    with open(file) as f:
-        data = json.load(f)
+for round in draw["rounds"]:
+    for game in round["matches"]:
 
-    seen = set()
-    cleaned = []
+        match_id = str(game["matchId"])
 
-    for row in data:
+        if match_id in existing:
+            continue
 
-        match_id = row.get("match_id")
-        player = row.get("player")
+        home = game["homeTeam"]["nickName"]
+        away = game["awayTeam"]["nickName"]
 
-        key = (match_id, player)
+        row = {
+            "season": 2026,
+            "match_id": match_id,
+            "venue": game["venue"]["name"],
+            "crowd": None,
+            "date_iso": game["utcKickOffTime"][:10],
+            "home_team": home,
+            "away_team": away,
+            "home_points": game.get("homeScore"),
+            "away_points": game.get("awayScore"),
+            "margin": None,
+            "total_points": None,
+            "player": "",
+            "played_for": "",
+            "tries": 0,
+            "goals_made": 0,
+            "goals_attempted": 0,
+            "field_goals": 0,
+            "points": 0
+        }
 
-        if key not in seen:
-            seen.add(key)
-            cleaned.append(row)
+        data.append(row)
 
-    with open(file, "w") as f:
-        json.dump(cleaned, f, indent=2)
+        print("Added match", match_id)
 
-print("NRL files processed")
+with open(DATA_FILE, "w") as f:
+    json.dump(data, f, indent=2)
+
+print("NRL update complete")
