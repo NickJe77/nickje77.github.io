@@ -60,6 +60,7 @@ Team:
 <script>
 
 const BASE="/data/nba/";
+
 const seasonSelect=document.getElementById("seasonSelect");
 const teamSelect=document.getElementById("teamSelect");
 const gamesTable=document.getElementById("gamesTable");
@@ -87,6 +88,28 @@ await loadSeason(season);
 
 }
 
+async function fetchGame(id){
+
+let urls=[
+BASE+season+"/"+id+".json",
+BASE+season+"/00"+id+".json"
+];
+
+for(let u of urls){
+
+try{
+let r=await fetch(u+"?"+Date.now());
+if(r.ok){
+return await r.json();
+}
+}catch{}
+
+}
+
+return null;
+
+}
+
 async function loadSeason(season){
 
 title.textContent="NBA Season "+season;
@@ -98,15 +121,11 @@ try{
 const res=await fetch(BASE+season+"/index.json?"+Date.now());
 const index=await res.json();
 
-const requests=index.games.map(id=>{
-return fetch(BASE+season+"/"+id+".json?"+Date.now())
-.then(r=>r.ok?r.json():null)
-.catch(()=>null);
-});
+const requests=index.games.map(id=>fetchGame(id));
 
 let raw=await Promise.all(requests);
 
-/* keep only regular season + playoffs */
+/* keep regular season + playoffs */
 
 allGames=raw.filter(g=>
 g &&
@@ -118,7 +137,7 @@ g.date &&
 
 allGames.sort((a,b)=>new Date(b.date)-new Date(a.date));
 
-/* team list */
+/* teams */
 
 let teams=new Set();
 
