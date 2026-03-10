@@ -34,14 +34,13 @@ tr:hover{background:#eef4ff;cursor:pointer;}
 <h1 id="title">NBA Season</h1>
 
 <div class="filters">
-
 Season:
 <select id="seasonSelect"></select>
 
 Game Type:
 <select id="typeSelect">
 <option value="All">All</option>
-<option value="Regular Season">Regular Season</option>
+<option value="Regular">Regular Season</option>
 <option value="Playoffs">Playoffs</option>
 </select>
 
@@ -49,7 +48,6 @@ Team:
 <select id="teamSelect">
 <option value="All">All Teams</option>
 </select>
-
 </div>
 
 <table>
@@ -103,17 +101,26 @@ await loadSeason(season);
 async function loadSeason(season){
 
 title.textContent="NBA Season "+season;
+gamesTable.innerHTML="";
+teamSelect.innerHTML='<option value="All">All Teams</option>';
 
 try{
 
-const res=await fetch(BASE+season+"/games.json");
+const indexRes = await fetch(BASE+season+"/index.json");
 
-if(!res.ok){
-gamesTable.innerHTML="<tr><td colspan='5'>Season not found</td></tr>";
+if(!indexRes.ok){
+gamesTable.innerHTML="<tr><td colspan='5'>Season not found.</td></tr>";
 return;
 }
 
-allGames=await res.json();
+const index=await indexRes.json();
+
+const gameFiles=index.games.map(id =>
+fetch(BASE+season+"/"+id+".json")
+.then(r=>r.ok?r.json():null)
+);
+
+allGames=(await Promise.all(gameFiles)).filter(g=>g);
 
 let teams=new Set();
 
@@ -121,8 +128,6 @@ allGames.forEach(g=>{
 teams.add(g.home_team);
 teams.add(g.away_team);
 });
-
-teamSelect.innerHTML='<option value="All">All Teams</option>';
 
 Array.from(teams).sort().forEach(t=>{
 let opt=document.createElement("option");
@@ -133,9 +138,9 @@ teamSelect.appendChild(opt);
 
 renderGames();
 
-}catch(e){
+}catch(err){
 
-gamesTable.innerHTML="<tr><td colspan='5'>Error loading season</td></tr>";
+gamesTable.innerHTML="<tr><td colspan='5'>Error loading season.</td></tr>";
 
 }
 
@@ -150,7 +155,11 @@ const teamFilter=teamSelect.value;
 
 allGames.forEach(g=>{
 
-if(typeFilter!=="All" && g.game_type!==typeFilter) return;
+let gt=(g.game_type||"").toLowerCase();
+
+if(typeFilter==="Regular" && !gt.includes("regular")) return;
+if(typeFilter==="Playoffs" && !gt.includes("play")) return;
+
 if(teamFilter!=="All" && g.home_team!==teamFilter && g.away_team!==teamFilter) return;
 
 let winner=g.home_score>g.away_score?g.home_team:g.away_team;
