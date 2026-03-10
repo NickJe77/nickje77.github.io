@@ -1,54 +1,72 @@
 import json
-import requests
 from pathlib import Path
+from urllib.request import Request, urlopen
 
 FILE = Path("docs/data/nrl/matches/2026.json")
-URL = "https://www.nrl.com/draw/data?competition=111&season=2026"
+BASE = "https://site.api.espn.com/apis/site/v2/sports/rugby-league/3/scoreboard"
 
-with open(FILE) as f:
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
+
+def fetch_json(url: str):
+    req = Request(url, headers=HEADERS)
+    with urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+if not FILE.exists():
+    raise FileNotFoundError(f"Missing file: {FILE}")
+
+with open(FILE, "r", encoding="utf-8") as f:
     data = json.load(f)
 
-existing = {r["match_id"] for r in data}
+existing = {str(row.get("match_id", "")) for row in data}
 
-try:
-    res = requests.get(URL, timeout=20)
-
-    if res.status_code != 200:
-        print("NRL site failed:", res.status_code)
-        exit()
-
-    try:
-        draw = res.json()
-    except:
-        print("NRL did not return JSON")
-        exit()
-
-except:
-    print("Failed to download draw")
-    exit()
+base = fetch_json(BASE)
+calendar = base.get("leagues", [{}])[0].get("calendar", [])
 
 added = 0
 
-for rnd in draw.get("rounds", []):
-    for game in rnd.get("matches", []):
+for iso_date in calendar:
+    yyyymmdd = iso_date[:10].replace("-", "")
+    day = fetch_json(f"{BASE}?dates={yyyymmdd}")
 
-        match_id = str(game["matchId"])
+    for event in day.get("events", []):
+        match_id = str(event.get("id", ""))
 
-        if match_id in existing:
+        if not match_id or match_id in existing:
             continue
+
+        comp = (event.get("competitions") or [{}])[0]
+        status = (((comp.get("status") or {}).get("type") or {}))
+        if not status.get("completed", False):
+            continue
+
+        competitors = comp.get("competitors") or []
+        home = next((c for c in competitors if c.get("homeAway") == "home"), {})
+        away = next((c for c in competitors if c.get("homeAway") == "away"), {})
+
+        home_team = ((home.get("team") or {}).get("displayName")) or ((home.get("team") or {}).get("name")) or ""
+        away_team = ((away.get("team") or {}).get("displayName")) or ((away.get("team") or {}).get("name")) or ""
+
+        home_points = int(home.get("score") or 0)
+        away_points = int(away.get("score") or 0)
+
+        venue = (comp.get("venue") or {}).get("fullName", "")
+        attendance = comp.get("attendance")
 
         row = {
             "season": 2026,
             "match_id": match_id,
-            "venue": game["venue"]["name"],
-            "crowd": None,
-            "date_iso": game["utcKickOffTime"][:10],
-            "home_team": game["homeTeam"]["nickName"],
-            "away_team": game["awayTeam"]["nickName"],
-            "home_points": game.get("homeScore"),
-            "away_points": game.get("awayScore"),
-            "margin": None,
-            "total_points": None,
+            "venue": venue,
+            "crowd": attendance,
+            "date_iso": (event.get("date") or "")[:10],
+            "home_team": home_team,
+            "away_team": away_team,
+            "home_points": home_points,
+            "away_points": away_points,
+            "margin": abs(home_points - away_points),
+            "total_points": home_points + away_points,
             "player": "",
             "played_for": "",
             "tries": 0,
@@ -59,9 +77,10 @@ for rnd in draw.get("rounds", []):
         }
 
         data.append(row)
+        existing.add(match_id)
         added += 1
 
-with open(FILE, "w") as f:
+with open(FILE, "w", encoding="utf-8") as f:
     json.dump(data, f, indent=2)
 
-print("Matches added:", added)
+print(f"Added matches: {added}")
