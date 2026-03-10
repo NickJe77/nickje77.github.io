@@ -4,26 +4,30 @@ from pathlib import Path
 
 FILE = Path("docs/data/nrl/matches/2026.json")
 
-URL = "https://site.api.espn.com/apis/site/v2/sports/rugby-league/nrl/scoreboard"
+SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/rugby-league/nrl/scoreboard"
+
+HEADERS = {"User-Agent":"Mozilla/5.0"}
 
 with open(FILE) as f:
     data = json.load(f)
 
-existing = set()
+existing = {str(r["match_id"])+r["player"] for r in data}
 
-for r in data:
-    key = str(r["match_id"]) + str(r["player"])
-    existing.add(key)
-
-res = requests.get(URL)
-
-games = res.json().get("events", [])
+games = requests.get(SCOREBOARD,headers=HEADERS).json().get("events",[])
 
 added = 0
 
 for game in games:
 
     match_id = game["id"]
+
+    summary = requests.get(
+        f"https://www.nrl.com/match-centre/{match_id}/player-stats",
+        headers=HEADERS
+    ).text
+
+    if "playerStats" not in summary:
+        continue
 
     comp = game["competitions"][0]
 
@@ -39,58 +43,49 @@ for game in games:
     venue = comp.get("venue",{}).get("fullName","")
     date = game["date"][:10]
 
-    summary = requests.get(
-        f"https://site.web.api.espn.com/apis/v2/sports/rugby-league/nrl/summary?event={match_id}"
-    ).json()
+    stats = json.loads(summary.split("playerStats=")[1].split(";")[0])
 
-    if "boxscore" not in summary:
-        continue
+    for team in stats:
 
-    for team in summary["boxscore"]["players"]:
+        played_for = team["teamName"]
 
-        played_for = team["team"]["displayName"]
+        for p in team["players"]:
 
-        for stat_group in team["statistics"]:
+            name = p["fullName"]
 
-            for athlete in stat_group["athletes"]:
+            key = str(match_id)+name
 
-                name = athlete["athlete"]["displayName"]
+            if key in existing:
+                continue
 
-                key = str(match_id) + name
+            tries = p.get("tries",0)
+            goals = p.get("goals",0)
+            field = p.get("fieldGoals",0)
+            points = p.get("points",0)
 
-                if key in existing:
-                    continue
+            row = {
+                "season":2026,
+                "match_id":match_id,
+                "venue":venue,
+                "crowd":None,
+                "date_iso":date,
+                "home_team":home_team,
+                "away_team":away_team,
+                "home_points":home_score,
+                "away_points":away_score,
+                "margin":abs(home_score-away_score),
+                "total_points":home_score+away_score,
+                "player":name,
+                "played_for":played_for,
+                "tries":tries,
+                "goals_made":goals,
+                "goals_attempted":goals,
+                "field_goals":field,
+                "points":points
+            }
 
-                stats = athlete.get("stats",[])
-
-                tries = int(stats[0]) if len(stats) > 0 else 0
-                goals = int(stats[1]) if len(stats) > 1 else 0
-                field_goals = int(stats[2]) if len(stats) > 2 else 0
-                points = int(stats[3]) if len(stats) > 3 else 0
-
-                row = {
-                    "season": 2026,
-                    "match_id": match_id,
-                    "venue": venue,
-                    "crowd": None,
-                    "date_iso": date,
-                    "home_team": home_team,
-                    "away_team": away_team,
-                    "home_points": home_score,
-                    "away_points": away_score,
-                    "margin": abs(home_score-away_score),
-                    "total_points": home_score+away_score,
-                    "player": name,
-                    "played_for": played_for,
-                    "tries": tries,
-                    "goals_made": goals,
-                    "goals_attempted": goals,
-                    "field_goals": field_goals,
-                    "points": points
-                }
-
-                data.append(row)
-                added += 1
+            data.append(row)
+            added+=1
 
 with open(FILE,"w") as f:
     json.dump(data,f,indent=2)
