@@ -110,33 +110,28 @@ gamesTable.innerHTML="<tr><td colspan='5'>Loading games...</td></tr>";
 
 teamSelect.innerHTML='<option value="All">All Teams</option>';
 
-try{
+let requests=[];
 
-const indexRes=await fetch(BASE+season+"/index.json");
+/* NBA game ids run roughly 00001 → 01500 */
 
-if(!indexRes.ok){
+for(let i=1;i<=1500;i++){
 
-gamesTable.innerHTML="<tr><td colspan='5'>Season not found.</td></tr>";
-return;
+let id=season.toString().slice(2)+String(i).padStart(5,"0");
 
-}
-
-const index=await indexRes.json();
-
-/* LOAD ALL GAME FILES */
-
-const gameFiles=index.games.map(id =>
+requests.push(
 fetch(BASE+season+"/"+id+".json")
 .then(r=>r.ok?r.json():null)
 );
 
-allGames=(await Promise.all(gameFiles)).filter(g=>g);
+}
 
-/* SORT BY DATE */
+allGames=(await Promise.all(requests)).filter(g=>g);
 
-allGames.sort((a,b)=> new Date(a.date)-new Date(b.date));
+/* SORT */
 
-/* BUILD TEAM LIST */
+allGames.sort((a,b)=>new Date(a.date)-new Date(b.date));
+
+/* TEAMS */
 
 let teams=new Set();
 
@@ -156,12 +151,6 @@ teamSelect.appendChild(opt);
 });
 
 renderGames();
-
-}catch(e){
-
-gamesTable.innerHTML="<tr><td colspan='5'>Error loading games.</td></tr>";
-
-}
 
 }
 
@@ -198,9 +187,9 @@ window.location.href=`/nba-game.html?season=${season}&game=${g.game_id}`;
 };
 
 tr.innerHTML=`
-<td>${g.date.substring(0,10)}</td>
+<td>${g.date?.substring(0,10) || ""}</td>
 <td>${g.home_team} vs ${g.away_team}</td>
-<td>${g.game_type}</td>
+<td>${g.game_type || ""}</td>
 <td>${winner}</td>
 <td>${g.home_score} – ${g.away_score}</td>
 `;
