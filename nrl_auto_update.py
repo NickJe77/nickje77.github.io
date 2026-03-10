@@ -5,21 +5,21 @@ from pathlib import Path
 SEASON = 2026
 FILE = Path("docs/data/nrl/matches/2026.json")
 
-URL = "https://site.api.espn.com/apis/site/v2/sports/rugby-league/nrl/scoreboard?limit=1000"
+URL = "https://site.api.espn.com/apis/site/v2/sports/rugby-league/nrl/scoreboard?league=nrl&limit=200"
 
 headers = {
     "User-Agent": "Mozilla/5.0"
 }
 
-print("Downloading scoreboard")
+print("Downloading NRL scoreboard")
 
 res = requests.get(URL, headers=headers, timeout=30)
-
 data = res.json()
+
 events = data.get("events", [])
 
 if not events:
-    print("No games returned from ESPN")
+    print("No NRL games returned")
     exit()
 
 with open(FILE) as f:
