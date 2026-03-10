@@ -1,20 +1,26 @@
 import json
 import requests
-import re
+from bs4 import BeautifulSoup
 from pathlib import Path
 
 FILE = Path("docs/data/nrl/matches/2026.json")
 
 URL = "https://www.rugbyleagueproject.org/seasons/nrl-2026/results.html"
 
-print("Downloading RugbyLeagueProject results")
+print("Downloading RugbyLeagueProject results page")
 
 html = requests.get(URL).text
 
-matches = re.findall(
-    r'/seasons/nrl-2026/round-[0-9]+/[^"]+/summary.html',
-    html
-)
+soup = BeautifulSoup(html, "html.parser")
+
+links = soup.find_all("a")
+
+matches = []
+
+for link in links:
+    href = link.get("href")
+    if href and "/seasons/nrl-2026/" in href and "summary.html" in href:
+        matches.append(href)
 
 print("Matches found:", len(matches))
 
