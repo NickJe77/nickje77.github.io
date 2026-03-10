@@ -7,46 +7,58 @@ from pathlib import Path
 DATA = Path("data/kaggle_nba")
 OUT = Path("docs/data/nba")
 
-print("Loading CSV files...")
-
-games = pd.read_csv(DATA / "Games.csv", low_memory=False)
-players = pd.read_csv(DATA / "PlayerStatistics.csv", low_memory=False)
+games = pd.read_csv(DATA / "Game.csv", low_memory=False)
+players = pd.read_csv(DATA / "GamePlayerStats.csv", low_memory=False)
 
 games.columns = games.columns.str.lower()
 players.columns = players.columns.str.lower()
 
-games["gamedatetimeest"] = pd.to_datetime(games["gamedatetimeest"], errors="coerce")
-
-OUT.mkdir(parents=True, exist_ok=True)
-
-def safe(v):
-    if pd.isna(v):
-        return 0
-    return int(v)
-
-seasons = {}
+written = 0
+skipped = 0
 
 for _, g in games.iterrows():
 
     if pd.isna(g["gamedatetimeest"]):
         continue
 
-    season = safe(g.get("season"))
+    date = pd.to_datetime(g["gamedatetimeest"])
 
-    if season < 1976:
-        continue
+    season = date.year
+    if date.month >= 10:
+        season += 1
 
     game_id = str(g["gameid"])
+
+    # skip preseason
+    if game_id.startswith("001"):
+        continue
+
+    # determine game type
+    if game_id.startswith("002"):
+        game_type = "Regular Season"
+    elif game_id.startswith("004"):
+        game_type = "Playoffs"
+    else:
+        game_type = "Other"
+
+    season_dir = OUT / str(season)
+    season_dir.mkdir(parents=True, exist_ok=True)
+
+    file_path = season_dir / f"{game_id}.json"
+
+    if file_path.exists():
+        skipped += 1
+        continue
 
     home = f"{g['hometeamcity']} {g['hometeamname']}"
     away = f"{g['awayteamcity']} {g['awayteamname']}"
 
-    home_score = safe(g.get("homescore"))
-    away_score = safe(g.get("awayscore"))
+    home_score = int(g.get("homescore", 0) or 0)
+    away_score = int(g.get("awayscore", 0) or 0)
 
-    arena = g.get("arenaname","")
+    winner = home if home_score > away_score else away
 
-    game_type = g.get("gametype","Regular Season")
+    arena = g.get("arenaname", "")
 
     game_players = players[players["gameid"] == g["gameid"]]
 
@@ -55,54 +67,74 @@ for _, g in games.iterrows():
     for _, p in game_players.iterrows():
 
         plist.append({
-            "player_id": safe(p.get("personid")),
-            "team_id": safe(p.get("teamid")),
+            "player": p.get("name",""),
+            "team": p.get("teamname",""),
             "minutes": p.get("minutes",""),
-            "points": safe(p.get("points")),
-            "rebounds": safe(p.get("rebounds")),
-            "assists": safe(p.get("assists")),
-            "steals": safe(p.get("steals")),
-            "blocks": safe(p.get("blocks")),
-            "turnovers": safe(p.get("turnovers")),
-            "fgm": safe(p.get("fgm")),
-            "fga": safe(p.get("fga")),
-            "tpm": safe(p.get("tpm")),
-            "tpa": safe(p.get("tpa")),
-            "ftm": safe(p.get("ftm")),
-            "fta": safe(p.get("fta"))
+            "points": int(p.get("points",0) or 0),
+            "rebounds": int(p.get("rebounds",0) or 0),
+            "assists": int(p.get("assists",0) or 0),
+            "steals": int(p.get("steals",0) or 0),
+            "blocks": int(p.get("blocks",0) or 0),
+            "turnovers": int(p.get("turnovers",0) or 0)
         })
 
-    game = {
+    game_data = {
         "game_id": game_id,
-        "date": str(g["gamedatetimeest"].date()),
-        "season": season,
-        "game_type": game_type,
+        "date": str(date),
         "home_team": home,
         "away_team": away,
         "home_score": home_score,
         "away_score": away_score,
+        "winner": winner,
         "arena": arena,
+        "game_type": game_type,
         "players": plist
     }
 
-    if season not in seasons:
-        seasons[season] = []
+    with open(file_path, "w") as f:
+        json.dump(game_data, f, indent=2)
 
-    seasons[season].append(game)
+    # -------- update index.json --------
 
-print("Writing season files...")
+    index_path = season_dir / "index.json"
 
-for season, games in seasons.items():
+    if index_path.exists():
+        with open(index_path) as f:
+            index = json.load(f)
+    else:
+        index = {"games": []}
 
-    path = OUT / f"{season}.json"
+    if game_id not in index["games"]:
+        index["games"].append(game_id)
 
-    with open(path,"w") as f:
+    with open(index_path, "w") as f:
+        json.dump(index, f, indent=2)
 
-        json.dump({
-            "season": season,
-            "games": games
-        }, f, indent=2)
+    # -------- update games.json --------
 
-    print("Saved",season,"(",len(games),"games )")
+    games_path = season_dir / "games.json"
 
-print("Done.")
+    if games_path.exists():
+        with open(games_path) as f:
+            games_list = json.load(f)
+    else:
+        games_list = []
+
+    games_list.append({
+        "game_id": game_id,
+        "date": str(date),
+        "home_team": home,
+        "away_team": away,
+        "home_score": home_score,
+        "away_score": away_score,
+        "game_type": game_type
+    })
+
+    with open(games_path, "w") as f:
+        json.dump(games_list, f, indent=2)
+
+    written += 1
+
+
+print("New games written:", written)
+print("Existing games skipped:", skipped)
