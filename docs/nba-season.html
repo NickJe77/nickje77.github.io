@@ -67,6 +67,7 @@ const gamesTable=document.getElementById("gamesTable");
 const title=document.getElementById("title");
 
 const params=new URLSearchParams(location.search);
+
 let season=params.get("season") || "2025";
 let allGames=[];
 
@@ -84,48 +85,28 @@ seasonSelect.appendChild(opt);
 
 seasonSelect.value=season;
 
-await loadSeason(season);
+await loadSeason();
 
 }
 
-async function fetchGame(id){
-
-let urls=[
-BASE+season+"/"+id+".json",
-BASE+season+"/00"+id+".json"
-];
-
-for(let u of urls){
-
-try{
-let r=await fetch(u+"?"+Date.now());
-if(r.ok){
-return await r.json();
-}
-}catch{}
-
-}
-
-return null;
-
-}
-
-async function loadSeason(season){
+async function loadSeason(){
 
 title.textContent="NBA Season "+season;
 gamesTable.innerHTML="<tr><td colspan='4'>Loading games...</td></tr>";
+
 teamSelect.innerHTML='<option value="All">All Teams</option>';
 
 try{
 
-const res=await fetch(BASE+season+"/index.json?"+Date.now());
-const index=await res.json();
+const index=await fetch(BASE+season+"/index.json?"+Date.now()).then(r=>r.json());
 
-const requests=index.games.map(id=>fetchGame(id));
+const requests=index.games.map(id=>
+fetch(BASE+season+"/"+id+".json?"+Date.now())
+.then(r=>r.ok?r.json():null)
+.catch(()=>null)
+);
 
 let raw=await Promise.all(requests);
-
-/* keep regular season + playoffs */
 
 allGames=raw.filter(g=>
 g &&
@@ -133,11 +114,7 @@ g.date &&
 (g.game_id.startsWith("002") || g.game_id.startsWith("004"))
 );
 
-/* sort newest first */
-
 allGames.sort((a,b)=>new Date(b.date)-new Date(a.date));
-
-/* teams */
 
 let teams=new Set();
 
@@ -155,7 +132,7 @@ teamSelect.appendChild(opt);
 
 renderGames();
 
-}catch(e){
+}catch(err){
 
 gamesTable.innerHTML="<tr><td colspan='4'>Error loading games</td></tr>";
 
@@ -167,10 +144,10 @@ function renderGames(){
 
 gamesTable.innerHTML="";
 
-const teamFilter=teamSelect.value;
+let team=teamSelect.value;
 
 let filtered=allGames.filter(g=>{
-if(teamFilter!=="All" && g.home_team!==teamFilter && g.away_team!==teamFilter) return false;
+if(team!=="All" && g.home_team!==team && g.away_team!==team) return false;
 return true;
 });
 
