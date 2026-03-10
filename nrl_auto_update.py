@@ -4,30 +4,34 @@ from pathlib import Path
 
 URL = "https://www.nrl.com/draw/data?competition=111&season=2026"
 
-DATA_FILE = Path("docs/data/nrl/matches/2026.json")
+FILE = Path("docs/data/nrl/matches/2026.json")
 
-if not DATA_FILE.exists():
-    print("Data file not found")
-    exit()
+if not FILE.exists():
+    print("File missing:", FILE)
+    exit(1)
 
-with open(DATA_FILE) as f:
+with open(FILE) as f:
     data = json.load(f)
 
 existing = {row["match_id"] for row in data}
 
 res = requests.get(URL)
+
+if res.status_code != 200:
+    print("NRL API failed")
+    exit(1)
+
 draw = res.json()
 
-for round in draw["rounds"]:
-    for game in round["matches"]:
+added = 0
+
+for rnd in draw["rounds"]:
+    for game in rnd["matches"]:
 
         match_id = str(game["matchId"])
 
         if match_id in existing:
             continue
-
-        home = game["homeTeam"]["nickName"]
-        away = game["awayTeam"]["nickName"]
 
         row = {
             "season": 2026,
@@ -35,8 +39,8 @@ for round in draw["rounds"]:
             "venue": game["venue"]["name"],
             "crowd": None,
             "date_iso": game["utcKickOffTime"][:10],
-            "home_team": home,
-            "away_team": away,
+            "home_team": game["homeTeam"]["nickName"],
+            "away_team": game["awayTeam"]["nickName"],
             "home_points": game.get("homeScore"),
             "away_points": game.get("awayScore"),
             "margin": None,
@@ -51,10 +55,9 @@ for round in draw["rounds"]:
         }
 
         data.append(row)
+        added += 1
 
-        print("Added match", match_id)
-
-with open(DATA_FILE, "w") as f:
+with open(FILE, "w") as f:
     json.dump(data, f, indent=2)
 
-print("NRL update complete")
+print("Added", added, "matches")
