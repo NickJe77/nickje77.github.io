@@ -1,6 +1,7 @@
 name: Rebuild NBA indexes
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - 'docs/data/nba/**/*.json'
@@ -10,9 +11,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repo
+        uses: actions/checkout@v3
 
-      - name: rebuild indexes
+      - name: Rebuild all NBA index.json files
         run: |
 
           for dir in docs/data/nba/*; do
@@ -22,6 +24,7 @@ jobs:
 
               cd "$dir"
 
+              # list game files (exclude index.json)
               ls *.json 2>/dev/null | grep -v index.json | sed 's/.json//' | sort > games.txt
 
               echo '{' > index.json
@@ -30,6 +33,7 @@ jobs:
 
               awk '{printf "    \"%s\",\n", $0}' games.txt >> index.json
 
+              # remove trailing comma
               sed -i '$ s/,$//' index.json
 
               echo '  ]' >> index.json
@@ -42,10 +46,10 @@ jobs:
             fi
           done
 
-      - name: commit changes
+      - name: Commit updated indexes
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add docs/data/nba/**/index.json
-          git commit -m "Rebuild NBA indexes"
+          git commit -m "Auto rebuild NBA indexes" || echo "No changes to commit"
           git push
