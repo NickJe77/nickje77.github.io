@@ -5,31 +5,38 @@ from datetime import datetime, timedelta
 
 FILE = Path("docs/data/nrl/matches/2026.json")
 
-BASE = "https://site.api.espn.com/apis/site/v2/sports/rugby-league/nrl/scoreboard"
-
-with open(FILE) as f:
-    data = json.load(f)
-
-existing = {r["match_id"] for r in data}
+API = "https://site.api.espn.com/apis/site/v2/sports/rugby-league/nrl/scoreboard"
 
 start = datetime(2026,3,1)
 today = datetime.utcnow()
 
-added = 0
+# load existing rows
+with open(FILE) as f:
+    rows = json.load(f)
 
+existing = {r["match_id"] for r in rows}
+
+added = 0
 date = start
 
 while date <= today:
 
-    datestr = date.strftime("%Y%m%d")
+    d = date.strftime("%Y%m%d")
+    url = f"{API}?dates={d}"
 
-    url = f"{BASE}?dates={datestr}"
+    r = requests.get(url,timeout=30)
 
-    res = requests.get(url)
+    if r.status_code != 200:
+        date += timedelta(days=1)
+        continue
 
-    games = res.json().get("events",[])
+    data = r.json()
 
-    for g in games:
+    if "events" not in data:
+        date += timedelta(days=1)
+        continue
+
+    for g in data["events"]:
 
         match_id = g["id"]
 
@@ -37,9 +44,10 @@ while date <= today:
             continue
 
         comp = g["competitions"][0]
+        teams = comp["competitors"]
 
-        home = comp["competitors"][0]
-        away = comp["competitors"][1]
+        home = next(t for t in teams if t["homeAway"]=="home")
+        away = next(t for t in teams if t["homeAway"]=="away")
 
         home_team = home["team"]["displayName"]
         away_team = away["team"]["displayName"]
@@ -48,14 +56,12 @@ while date <= today:
         away_score = int(away.get("score",0))
 
         venue = comp.get("venue",{}).get("fullName","")
-        date_iso = g["date"][:10]
 
         row = {
             "season":2026,
             "match_id":match_id,
+            "date_iso":g["date"][:10],
             "venue":venue,
-            "crowd":None,
-            "date_iso":date_iso,
             "home_team":home_team,
             "away_team":away_team,
             "home_points":home_score,
@@ -71,12 +77,12 @@ while date <= today:
             "points":0
         }
 
-        data.append(row)
+        rows.append(row)
         added += 1
 
     date += timedelta(days=1)
 
 with open(FILE,"w") as f:
-    json.dump(data,f,indent=2)
+    json.dump(rows,f,indent=2)
 
 print("Matches added:",added)
