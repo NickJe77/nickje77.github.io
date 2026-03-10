@@ -2,182 +2,76 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>NBA Season | The Sporting Almanac</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NBA Season</title>
 
 <style>
-body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
-.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;background:#fff;border-bottom:1px solid #ddd;font-weight:600;}
-.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-.page-wrap{max-width:1250px;margin:auto;padding:30px 20px 60px;}
-h1{text-align:center;margin-bottom:20px;}
-.filters{text-align:center;margin-bottom:20px;}
-select{padding:8px 12px;font-size:15px;margin:0 6px;}
-table{width:100%;border-collapse:collapse;margin-top:15px;background:#fff;border-radius:12px;overflow:hidden;}
-th,td{border-bottom:1px solid #eee;padding:10px;text-align:center;}
-th{background:#f0f0f0;font-weight:700;}
-tr:nth-child(even){background:#f9fbff;}
-tr:hover{background:#eef4ff;cursor:pointer;}
+body{font-family:Arial;margin:40px;background:#f4f6f8;}
+table{width:100%;border-collapse:collapse;background:white}
+th,td{padding:8px;border-bottom:1px solid #ddd;text-align:center}
 </style>
 </head>
 
 <body>
 
-<div class="navbar">
-<a href="index.html">Home</a>
-<a href="nba.html">NBA</a>
-<a href="nba-season.html">Seasons</a>
-</div>
-
-<div class="page-wrap">
-
-<h1 id="title">NBA Season</h1>
-
-<div class="filters">
-Season:
-<select id="seasonSelect"></select>
-
-Team:
-<select id="teamSelect">
-<option value="All">All Teams</option>
-</select>
-</div>
+<h1 id="title"></h1>
 
 <table>
 <thead>
 <tr>
 <th>Date</th>
 <th>Game</th>
-<th>Winner</th>
 <th>Score</th>
 </tr>
 </thead>
-<tbody id="gamesTable"></tbody>
+<tbody id="games"></tbody>
 </table>
-
-</div>
 
 <script>
 
-const BASE="/data/nba/";
+const season="2025";
+const base="/data/nba/"+season+"/";
 
-const seasonSelect=document.getElementById("seasonSelect");
-const teamSelect=document.getElementById("teamSelect");
-const gamesTable=document.getElementById("gamesTable");
+const table=document.getElementById("games");
 const title=document.getElementById("title");
 
-const params=new URLSearchParams(location.search);
+title.textContent="NBA "+season;
 
-let season=params.get("season") || "2025";
-let allGames=[];
+async function load(){
 
-seasonSelect.onchange=()=>location.href="nba-season.html?season="+seasonSelect.value;
-teamSelect.onchange=renderGames;
+const index=await fetch(base+"index.json?"+Date.now()).then(r=>r.json());
 
-async function init(){
-
-for(let y=1976;y<=2025;y++){
-let opt=document.createElement("option");
-opt.value=y;
-opt.textContent=y;
-seasonSelect.appendChild(opt);
-}
-
-seasonSelect.value=season;
-
-await loadSeason();
-
-}
-
-async function loadSeason(){
-
-title.textContent="NBA Season "+season;
-gamesTable.innerHTML="<tr><td colspan='4'>Loading games...</td></tr>";
-
-teamSelect.innerHTML='<option value="All">All Teams</option>';
-
-try{
-
-const index=await fetch(BASE+season+"/index.json?"+Date.now()).then(r=>r.json());
-
-const requests=index.games.map(id=>
-fetch(BASE+season+"/"+id+".json?"+Date.now())
+const games=await Promise.all(
+index.games.map(id=>
+fetch(base+id+".json?"+Date.now())
 .then(r=>r.ok?r.json():null)
-.catch(()=>null)
+)
 );
 
-let raw=await Promise.all(requests);
-
-allGames=raw.filter(g=>
+let valid=games.filter(g=>
 g &&
-g.date &&
+g.game_id &&
 (g.game_id.startsWith("002") || g.game_id.startsWith("004"))
 );
 
-allGames.sort((a,b)=>new Date(b.date)-new Date(a.date));
+valid.sort((a,b)=>new Date(b.date)-new Date(a.date));
 
-let teams=new Set();
-
-allGames.forEach(g=>{
-teams.add(g.home_team);
-teams.add(g.away_team);
-});
-
-Array.from(teams).sort().forEach(t=>{
-let opt=document.createElement("option");
-opt.value=t;
-opt.textContent=t;
-teamSelect.appendChild(opt);
-});
-
-renderGames();
-
-}catch(err){
-
-gamesTable.innerHTML="<tr><td colspan='4'>Error loading games</td></tr>";
-
-}
-
-}
-
-function renderGames(){
-
-gamesTable.innerHTML="";
-
-let team=teamSelect.value;
-
-let filtered=allGames.filter(g=>{
-if(team!=="All" && g.home_team!==team && g.away_team!==team) return false;
-return true;
-});
-
-filtered.forEach(g=>{
-
-let winner="";
-if(g.home_score!=null && g.away_score!=null){
-winner=g.home_score>g.away_score?g.home_team:g.away_team;
-}
+valid.forEach(g=>{
 
 let tr=document.createElement("tr");
 
-tr.onclick=()=>{
-window.location.href=`/nba-game.html?season=${season}&game=${g.game_id}`;
-};
-
 tr.innerHTML=`
-<td>${g.date.substring(0,10)}</td>
+<td>${g.date.slice(0,10)}</td>
 <td>${g.home_team} vs ${g.away_team}</td>
-<td>${winner}</td>
-<td>${g.home_score} – ${g.away_score}</td>
+<td>${g.home_score} - ${g.away_score}</td>
 `;
 
-gamesTable.appendChild(tr);
+table.appendChild(tr);
 
 });
 
 }
 
-init();
+load();
 
 </script>
 
