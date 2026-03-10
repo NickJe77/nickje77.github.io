@@ -10,19 +10,24 @@ with open(FILE) as f:
     data = json.load(f)
 
 existing = set()
-
 for r in data:
     existing.add(str(r["match_id"]) + str(r["player"]))
 
 res = requests.get(SCOREBOARD)
 
-games = res.json()["events"]
+try:
+    games = res.json().get("events", [])
+except:
+    print("Failed to read ESPN data")
+    exit()
 
 added = 0
 
 for game in games:
 
-    match_id = game["id"]
+    match_id = game.get("id")
+    if not match_id:
+        continue
 
     comp = game["competitions"][0]
 
@@ -35,8 +40,8 @@ for game in games:
     home_score = int(home.get("score", 0))
     away_score = int(away.get("score", 0))
 
-    venue = comp["venue"]["fullName"]
-    date = game["date"][:10]
+    venue = comp.get("venue", {}).get("fullName", "")
+    date = game.get("date", "")[:10]
 
     summary = requests.get(
         f"https://site.web.api.espn.com/apis/v2/sports/rugby-league/nrl/summary?event={match_id}"
@@ -60,7 +65,7 @@ for game in games:
                 if key in existing:
                     continue
 
-                stats = athlete["stats"]
+                stats = athlete.get("stats", [])
 
                 tries = int(stats[0]) if len(stats) > 0 else 0
                 goals = int(stats[1]) if len(stats) > 1 else 0
