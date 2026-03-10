@@ -9,22 +9,19 @@ os.makedirs(BASE_DIR, exist_ok=True)
 
 schedule_url = "https://cdn.nba.com/static/json/staticData/scheduleLeagueV2.json"
 
-r = requests.get(schedule_url)
+r = requests.get(schedule_url, timeout=30)
 
 if r.status_code != 200:
     print("Schedule download failed")
-    exit()
+    raise SystemExit(1)
 
 data = r.json()
-
 game_dates = data["leagueSchedule"]["gameDates"]
 
 games_saved = 0
 
 for d in game_dates:
-
     for g in d["games"]:
-
         game_id = g["gameId"]
 
         game_date = g["gameDateEst"]
@@ -45,8 +42,7 @@ for d in game_dates:
             continue
 
         box_url = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
-
-        box = requests.get(box_url)
+        box = requests.get(box_url, timeout=30)
 
         if box.status_code != 200:
             continue
@@ -54,7 +50,6 @@ for d in game_dates:
         game = box.json()["game"]
 
         prefix = game_id[:3]
-
         if prefix == "001":
             game_type = "Preseason"
         elif prefix == "002":
@@ -73,45 +68,42 @@ for d in game_dates:
             "home_score": game["homeTeam"]["score"],
             "away_score": game["awayTeam"]["score"],
             "arena": game["arena"]["arenaName"],
-            "players":[]
+            "players": []
         }
 
-        for team in ["homeTeam","awayTeam"]:
-
+        for team in ["homeTeam", "awayTeam"]:
             team_name = game[team]["teamName"]
 
             for p in game[team]["players"]:
-
-                stats = p.get("statistics",{})
+                stats = p.get("statistics", {})
 
                 output["players"].append({
                     "player": p["name"],
                     "team": team_name,
-                    "points": stats.get("points",0),
-                    "rebounds": stats.get("reboundsTotal",0),
-                    "assists": stats.get("assists",0),
-                    "minutes": stats.get("minutes","0")
+                    "points": stats.get("points", 0),
+                    "rebounds": stats.get("reboundsTotal", 0),
+                    "assists": stats.get("assists", 0),
+                    "minutes": stats.get("minutes", "0")
                 })
 
-        with open(game_file,"w") as f:
-            json.dump(output,f,indent=2)
+        with open(game_file, "w", encoding="utf-8") as f:
+            json.dump(output, f, indent=2)
 
         index_path = f"{season_dir}/index.json"
-
         if os.path.exists(index_path):
-            with open(index_path) as f:
+            with open(index_path, "r", encoding="utf-8") as f:
                 index = json.load(f)
         else:
-            index = {"games":[]}
+            index = {"games": []}
 
         if game_id not in index["games"]:
             index["games"].append(game_id)
 
-        with open(index_path,"w") as f:
-            json.dump(index,f,indent=2)
+        with open(index_path, "w", encoding="utf-8") as f:
+            json.dump(index, f, indent=2)
 
         games_saved += 1
         print("Saved", game_file)
 
-print("Games saved:",games_saved)
+print("Games saved:", games_saved)
 print("NBA updater finished")
