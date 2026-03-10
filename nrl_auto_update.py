@@ -5,13 +5,16 @@ from pathlib import Path
 
 FILE = Path("docs/data/nrl/matches/2026.json")
 
-URL = "https://www.rugbyleagueproject.org/seasons/nrl-2026/results.html"
+URL = "https://www.rugbyleagueproject.org/competitions/nrl-2026/summary.html"
 
-print("Downloading Rugby League Project results")
+print("Downloading RugbyLeagueProject summary")
 
 html = requests.get(URL).text
 
-matches = re.findall(r'/seasons/nrl-2026/round-[0-9]+/.+?/summary.html', html)
+matches = re.findall(
+    r'/competitions/nrl-2026/round-[0-9]+/[^"]+/summary.html',
+    html
+)
 
 print("Matches found:", len(matches))
 
@@ -52,7 +55,7 @@ for m in matches:
     rows.append(row)
     added += 1
 
-with open(FILE,"w") as f:
-    json.dump(rows,f,indent=2)
+with open(FILE, "w") as f:
+    json.dump(rows, f, indent=2)
 
-print("Matches added:",added)
+print("Matches added:", added)
