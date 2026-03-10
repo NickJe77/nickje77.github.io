@@ -3,19 +3,21 @@ import requests
 from pathlib import Path
 
 SEASON = 2026
+
 FILE = Path("docs/data/nrl/matches/2026.json")
 
-URL = "https://www.nrl.com/fixtures/?competition=111&season=2026&round=all&format=json"
+API = "https://site.api.espn.com/apis/site/v2/sports/rugby-league/nrl/scoreboard?limit=1000"
 
-print("Downloading fixtures...")
+print("Downloading scoreboard")
 
-res = requests.get(URL, timeout=30)
-
-if res.status_code != 200:
-    print("Fixture download failed")
-    exit()
-
+res = requests.get(API, timeout=30)
 data = res.json()
+
+events = data.get("events", [])
+
+if not events:
+    print("No games returned from ESPN")
+    exit()
 
 with open(FILE) as f:
     rows = json.load(f)
@@ -24,30 +26,37 @@ existing = {r["match_id"] for r in rows}
 
 added = 0
 
-for match in data["matches"]:
+for g in events:
 
-    match_id = str(match["id"])
+    match_id = g["id"]
 
     if match_id in existing:
         continue
 
-    home = match["homeTeam"]["name"]
-    away = match["awayTeam"]["name"]
+    comp = g["competitions"][0]
 
-    home_score = match.get("homeScore", 0)
-    away_score = match.get("awayScore", 0)
+    home = next(t for t in comp["competitors"] if t["homeAway"] == "home")
+    away = next(t for t in comp["competitors"] if t["homeAway"] == "away")
+
+    home_team = home["team"]["displayName"]
+    away_team = away["team"]["displayName"]
+
+    home_score = int(home.get("score",0))
+    away_score = int(away.get("score",0))
+
+    venue = comp.get("venue",{}).get("fullName","")
 
     row = {
-        "season": SEASON,
-        "match_id": match_id,
-        "date_iso": match["date"][:10],
-        "venue": match["venue"]["name"],
-        "home_team": home,
-        "away_team": away,
-        "home_points": home_score,
-        "away_points": away_score,
-        "margin": abs(home_score-away_score),
-        "total_points": home_score+away_score,
+        "season":SEASON,
+        "match_id":match_id,
+        "date_iso":g["date"][:10],
+        "venue":venue,
+        "home_team":home_team,
+        "away_team":away_team,
+        "home_points":home_score,
+        "away_points":away_score,
+        "margin":abs(home_score-away_score),
+        "total_points":home_score+away_score,
         "player":"",
         "played_for":"",
         "tries":0,
