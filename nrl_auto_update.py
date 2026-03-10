@@ -2,25 +2,17 @@ import json
 import requests
 from pathlib import Path
 
-SEASON = 2026
 FILE = Path("docs/data/nrl/matches/2026.json")
 
-URL = "https://site.api.espn.com/apis/site/v2/sports/rugby-league/nrl/scoreboard?league=nrl&limit=200"
+MATCH_IDS = [
+    "4nbRzaBG"   # Dolphins v Rabbitohs (example)
+]
+
+API = "https://d.flashscore.com/x/feed/d_mh_"
 
 headers = {
     "User-Agent": "Mozilla/5.0"
 }
-
-print("Downloading NRL scoreboard")
-
-res = requests.get(URL, headers=headers, timeout=30)
-data = res.json()
-
-events = data.get("events", [])
-
-if not events:
-    print("No NRL games returned")
-    exit()
 
 with open(FILE) as f:
     rows = json.load(f)
@@ -29,37 +21,30 @@ existing = {r["match_id"] for r in rows}
 
 added = 0
 
-for g in events:
+for mid in MATCH_IDS:
 
-    match_id = g["id"]
-
-    if match_id in existing:
+    if mid in existing:
         continue
 
-    comp = g["competitions"][0]
+    url = API + mid
 
-    home = next(t for t in comp["competitors"] if t["homeAway"] == "home")
-    away = next(t for t in comp["competitors"] if t["homeAway"] == "away")
+    r = requests.get(url, headers=headers)
+    text = r.text
 
-    home_team = home["team"]["displayName"]
-    away_team = away["team"]["displayName"]
-
-    home_score = int(home.get("score", 0))
-    away_score = int(away.get("score", 0))
-
-    venue = comp.get("venue", {}).get("fullName", "")
+    if not text:
+        continue
 
     row = {
-        "season": SEASON,
-        "match_id": match_id,
-        "date_iso": g["date"][:10],
-        "venue": venue,
-        "home_team": home_team,
-        "away_team": away_team,
-        "home_points": home_score,
-        "away_points": away_score,
-        "margin": abs(home_score - away_score),
-        "total_points": home_score + away_score,
+        "season": 2026,
+        "match_id": mid,
+        "date_iso": "",
+        "venue": "",
+        "home_team": "",
+        "away_team": "",
+        "home_points": 0,
+        "away_points": 0,
+        "margin": 0,
+        "total_points": 0,
         "player": "",
         "played_for": "",
         "tries": 0,
