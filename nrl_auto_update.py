@@ -1,31 +1,24 @@
 import json
 import requests
+import re
 from pathlib import Path
 
 FILE = Path("docs/data/nrl/matches/2026.json")
 
-URL = "https://d.flashscore.com/x/feed/f_1_111_1"
+URL = "https://www.flashscore.com.au/rugby-league/australia/nrl/"
 
 headers = {
-    "User-Agent": "Mozilla/5.0",
-    "X-Fsign": "SW9D1eZo"
+    "User-Agent": "Mozilla/5.0"
 }
 
-print("Downloading Flashscore feed")
+print("Downloading Flashscore NRL page")
 
-res = requests.get(URL, headers=headers)
+html = requests.get(URL, headers=headers).text
 
-text = res.text
+# Flashscore embeds match ids in the page JSON
+match_ids = re.findall(r'"id":"([A-Za-z0-9]{8})"', html)
 
-matches = []
-
-for line in text.splitlines():
-    if line.startswith("AA"):
-        parts = line.split("¬")
-        match_id = parts[0][2:]
-        matches.append(match_id)
-
-print("Match IDs found:", len(matches))
+print("Match IDs found:", len(match_ids))
 
 with open(FILE) as f:
     rows = json.load(f)
@@ -34,7 +27,7 @@ existing = {r["match_id"] for r in rows}
 
 added = 0
 
-for mid in matches:
+for mid in match_ids:
 
     if mid in existing:
         continue
