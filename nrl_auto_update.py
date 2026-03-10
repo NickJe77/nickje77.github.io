@@ -3,9 +3,11 @@ import requests
 from bs4 import BeautifulSoup
 from pathlib import Path
 
+SEASON = "nrl-2026"
+
 FILE = Path("docs/data/nrl/matches/2026.json")
 
-URL = "https://www.rugbyleagueproject.org/seasons/nrl-2026/results.html"
+URL = f"https://www.rugbyleagueproject.org/seasons/{SEASON}/results.html"
 
 print("Downloading RugbyLeagueProject results page")
 
@@ -18,9 +20,19 @@ links = soup.find_all("a")
 matches = []
 
 for link in links:
+
     href = link.get("href")
-    if href and "/seasons/nrl-2026/" in href and "summary.html" in href:
-        matches.append(href)
+
+    if not href:
+        continue
+
+    if f"/seasons/{SEASON}/" not in href:
+        continue
+
+    if "summary.html" not in href:
+        continue
+
+    matches.append(href)
 
 print("Matches found:", len(matches))
 
