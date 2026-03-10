@@ -3,7 +3,17 @@ from pathlib import Path
 
 DATA_DIR = Path("docs/data/nrl/matches")
 
-for file in DATA_DIR.glob("*.json"):
+if not DATA_DIR.exists():
+    print("Folder not found:", DATA_DIR)
+    exit()
+
+files = list(DATA_DIR.glob("*.json"))
+
+if not files:
+    print("No match files found")
+    exit()
+
+for file in files:
 
     with open(file) as f:
         data = json.load(f)
@@ -12,7 +22,11 @@ for file in DATA_DIR.glob("*.json"):
     cleaned = []
 
     for row in data:
-        key = (row["match_id"], row["player"])
+
+        match_id = row.get("match_id")
+        player = row.get("player")
+
+        key = (match_id, player)
 
         if key not in seen:
             seen.add(key)
@@ -21,4 +35,4 @@ for file in DATA_DIR.glob("*.json"):
     with open(file, "w") as f:
         json.dump(cleaned, f, indent=2)
 
-print("NRL files checked")
+print("NRL files processed")
