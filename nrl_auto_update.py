@@ -4,99 +4,61 @@ from pathlib import Path
 
 FILE = Path("docs/data/nrl/matches/2026.json")
 
-SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/rugby-league/nrl/scoreboard"
+URL = "https://www.nrl.com/draw/data?competition=111&season=2026"
 
 with open(FILE) as f:
     data = json.load(f)
 
 existing = set()
+
 for r in data:
-    existing.add(str(r["match_id"]) + str(r["player"]))
+    existing.add(r["match_id"])
 
-res = requests.get(SCOREBOARD)
+res = requests.get(URL)
 
-try:
-    games = res.json().get("events", [])
-except:
-    print("Failed to read ESPN data")
-    exit()
+draw = res.json()
 
 added = 0
 
-for game in games:
+for rnd in draw["rounds"]:
+    for game in rnd["matches"]:
 
-    match_id = game.get("id")
-    if not match_id:
-        continue
+        match_id = str(game["matchId"])
 
-    comp = game["competitions"][0]
+        if match_id in existing:
+            continue
 
-    home = comp["competitors"][0]
-    away = comp["competitors"][1]
+        home = game["homeTeam"]["nickName"]
+        away = game["awayTeam"]["nickName"]
 
-    home_team = home["team"]["displayName"]
-    away_team = away["team"]["displayName"]
+        home_score = game.get("homeScore", 0)
+        away_score = game.get("awayScore", 0)
 
-    home_score = int(home.get("score", 0))
-    away_score = int(away.get("score", 0))
+        row = {
+            "season": 2026,
+            "match_id": match_id,
+            "venue": game["venue"]["name"],
+            "crowd": None,
+            "date_iso": game["utcKickOffTime"][:10],
+            "home_team": home,
+            "away_team": away,
+            "home_points": home_score,
+            "away_points": away_score,
+            "margin": abs(home_score-away_score),
+            "total_points": home_score+away_score,
+            "player": "",
+            "played_for": "",
+            "tries": 0,
+            "goals_made": 0,
+            "goals_attempted": 0,
+            "field_goals": 0,
+            "points": 0
+        }
 
-    venue = comp.get("venue", {}).get("fullName", "")
-    date = game.get("date", "")[:10]
+        data.append(row)
+        added += 1
 
-    summary = requests.get(
-        f"https://site.web.api.espn.com/apis/v2/sports/rugby-league/nrl/summary?event={match_id}"
-    ).json()
+with open(FILE,"w") as f:
+    json.dump(data,f,indent=2)
 
-    if "boxscore" not in summary:
-        continue
-
-    for team in summary["boxscore"]["players"]:
-
-        played_for = team["team"]["displayName"]
-
-        for stat_group in team["statistics"]:
-
-            for athlete in stat_group["athletes"]:
-
-                name = athlete["athlete"]["displayName"]
-
-                key = str(match_id) + name
-
-                if key in existing:
-                    continue
-
-                stats = athlete.get("stats", [])
-
-                tries = int(stats[0]) if len(stats) > 0 else 0
-                goals = int(stats[1]) if len(stats) > 1 else 0
-                field_goals = int(stats[2]) if len(stats) > 2 else 0
-                points = int(stats[3]) if len(stats) > 3 else 0
-
-                row = {
-                    "season": 2026,
-                    "match_id": match_id,
-                    "venue": venue,
-                    "crowd": None,
-                    "date_iso": date,
-                    "home_team": home_team,
-                    "away_team": away_team,
-                    "home_points": home_score,
-                    "away_points": away_score,
-                    "margin": abs(home_score - away_score),
-                    "total_points": home_score + away_score,
-                    "player": name,
-                    "played_for": played_for,
-                    "tries": tries,
-                    "goals_made": goals,
-                    "goals_attempted": goals,
-                    "field_goals": field_goals,
-                    "points": points
-                }
-
-                data.append(row)
-                added += 1
-
-with open(FILE, "w") as f:
-    json.dump(data, f, indent=2)
-
-print("Rows added:", added)
+print("Matches added:",added)
