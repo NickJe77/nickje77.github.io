@@ -6,29 +6,20 @@ FILE = Path("docs/data/nrl/matches/2026.json")
 
 URL = "https://www.nrl.com/draw/data?competition=111&season=2026"
 
-if not FILE.exists():
-    print("Missing:", FILE)
-    exit()
-
 with open(FILE) as f:
     data = json.load(f)
 
 existing = set()
-
 for r in data:
     existing.add(r["match_id"])
 
-try:
-    res = requests.get(URL, timeout=20)
-    draw = res.json()
-except:
-    print("Failed to download NRL data")
-    exit()
+res = requests.get(URL)
+draw = res.json()
 
 added = 0
 
-for rnd in draw.get("rounds", []):
-    for game in rnd.get("matches", []):
+for rnd in draw["rounds"]:
+    for game in rnd["matches"]:
 
         match_id = str(game["matchId"])
 
