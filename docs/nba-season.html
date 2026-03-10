@@ -34,6 +34,7 @@ tr:hover{background:#eef4ff;cursor:pointer;}
 <h1 id="title">NBA Season</h1>
 
 <div class="filters">
+
 Season:
 <select id="seasonSelect"></select>
 
@@ -48,6 +49,7 @@ Team:
 <select id="teamSelect">
 <option value="All">All Teams</option>
 </select>
+
 </div>
 
 <table>
@@ -76,7 +78,7 @@ const gamesTable=document.getElementById("gamesTable");
 const title=document.getElementById("title");
 
 const params=new URLSearchParams(location.search);
-let season=params.get("season") || "2025";
+let season=params.get("season") || "2026";
 let allGames=[];
 
 seasonSelect.onchange=()=>location.href="nba-season.html?season="+seasonSelect.value;
@@ -86,62 +88,55 @@ teamSelect.onchange=renderGames;
 async function init(){
 
 for(let y=1976;y<=2026;y++){
-  let opt=document.createElement("option");
-  opt.value=y;
-  opt.textContent=y;
-  seasonSelect.appendChild(opt);
+let opt=document.createElement("option");
+opt.value=y;
+opt.textContent=y;
+seasonSelect.appendChild(opt);
 }
 
 seasonSelect.value=season;
+
 await loadSeason(season);
+
 }
 
 async function loadSeason(season){
 
-title.textContent="NBA Season " + season;
-gamesTable.innerHTML="";
-teamSelect.innerHTML='<option value="All">All Teams</option>';
+title.textContent="NBA Season "+season;
 
 try{
 
-const indexRes = await fetch(BASE+season+"/index.json");
+const res=await fetch(BASE+season+"/games.json");
 
-if(!indexRes.ok){
-  gamesTable.innerHTML="<tr><td colspan='5'>Season not found.</td></tr>";
-  return;
+if(!res.ok){
+gamesTable.innerHTML="<tr><td colspan='5'>Season not found</td></tr>";
+return;
 }
 
-const index=await indexRes.json();
-
-/* Remove preseason games by ID prefix */
-
-const regularGames=index.games.filter(id=>!id.startsWith("001"));
-
-const gameFiles=regularGames.map(id =>
-  fetch(BASE+season+"/"+id+".json")
-  .then(r=>r.ok?r.json():null)
-);
-
-allGames=(await Promise.all(gameFiles)).filter(g=>g);
+allGames=await res.json();
 
 let teams=new Set();
 
 allGames.forEach(g=>{
-  teams.add(g.home_team);
-  teams.add(g.away_team);
+teams.add(g.home_team);
+teams.add(g.away_team);
 });
 
+teamSelect.innerHTML='<option value="All">All Teams</option>';
+
 Array.from(teams).sort().forEach(t=>{
-  let opt=document.createElement("option");
-  opt.value=t;
-  opt.textContent=t;
-  teamSelect.appendChild(opt);
+let opt=document.createElement("option");
+opt.value=t;
+opt.textContent=t;
+teamSelect.appendChild(opt);
 });
 
 renderGames();
 
-}catch(err){
-gamesTable.innerHTML="<tr><td colspan='5'>Error loading season.</td></tr>";
+}catch(e){
+
+gamesTable.innerHTML="<tr><td colspan='5'>Error loading season</td></tr>";
+
 }
 
 }
@@ -149,6 +144,7 @@ gamesTable.innerHTML="<tr><td colspan='5'>Error loading season.</td></tr>";
 function renderGames(){
 
 gamesTable.innerHTML="";
+
 const typeFilter=typeSelect.value;
 const teamFilter=teamSelect.value;
 
@@ -162,7 +158,7 @@ let winner=g.home_score>g.away_score?g.home_team:g.away_team;
 let tr=document.createElement("tr");
 
 tr.onclick=()=>{
-  window.location.href=`/nba-game.html?season=${season}&game=${g.game_id}`;
+window.location.href=`/nba-game.html?season=${season}&game=${g.game_id}`;
 };
 
 tr.innerHTML=`
