@@ -26,8 +26,6 @@ color:#0056d6;
 
 .page{max-width:1200px;margin:auto;padding:30px;}
 
-h1{margin:0 0 18px;}
-
 .controls{
 display:flex;
 gap:14px;
@@ -43,7 +41,6 @@ border:1px solid #bbb;
 font-size:16px;
 font-weight:600;
 min-width:260px;
-background:#fff;
 }
 
 .year-bar{
@@ -72,7 +69,6 @@ color:#fff;
 display:grid;
 grid-template-columns:360px 1fr;
 gap:20px;
-align-items:start;
 }
 
 .card{
@@ -142,7 +138,6 @@ box-shadow:0 4px 14px rgba(0,0,0,0.08);
 <div class="card">
 
 <table>
-
 <thead>
 <tr>
 <th>#</th>
@@ -194,15 +189,11 @@ loadSeason(years[years.length-1])
 
 })
 
-
 function setActiveYear(y){
-
 document.querySelectorAll(".year-btn").forEach(b=>{
 b.classList.toggle("active",b.textContent==y)
 })
-
 }
-
 
 function loadSeason(year){
 
@@ -211,20 +202,13 @@ setActiveYear(year)
 
 document.getElementById("status").textContent="Loading "+year+"..."
 
-fetch("data/nrl/matches/"+year+"/")
-.then(r=>r.text())
-.then(html=>{
+fetch("data/nrl/matches/"+year+"/index.json")
+.then(r=>r.json())
+.then(index=>{
 
-const files=[...html.matchAll(/href="([^"]+\.json)"/g)]
-.map(m=>m[1])
-
-if(!files.length){
-document.getElementById("status").textContent="No matches found"
-return
-}
-
-const promises=files.map(f =>
-fetch("data/nrl/matches/"+year+"/"+f).then(r=>r.json())
+const promises=index.matches.map(id=>
+fetch("data/nrl/matches/"+year+"/"+id+".json")
+.then(r=>r.json())
 )
 
 Promise.all(promises).then(data=>{
@@ -240,11 +224,9 @@ render()
 
 }
 
-
 function buildTeamSelector(){
 
 const sel=document.getElementById("teamFilter")
-
 const teams=new Set()
 
 seasonRows.forEach(r=>{
@@ -264,7 +246,6 @@ sel.appendChild(opt)
 sel.onchange=render
 
 }
-
 
 function render(){
 
@@ -301,11 +282,9 @@ matches.sort((a,b)=>a.match_id.localeCompare(b.match_id))
 renderMatches(matches)
 renderLadder(matches)
 
-document.getElementById("status").textContent=
-currentSeason+" loaded: "+matches.length+" matches"
+document.getElementById("status").textContent=currentSeason+" loaded: "+matches.length+" matches"
 
 }
-
 
 function renderMatches(matches){
 
@@ -314,23 +293,19 @@ const div=document.getElementById("matches")
 div.innerHTML=matches.map(m=>{
 
 const line1=`${m.home_team} ${m.home_points} - ${m.away_points} ${m.away_team}`
-
 const meta=`${m.date_iso}${m.venue?" • "+m.venue:""}`
 
 return `
 <div class="match"
 onclick="window.location.href='nrl-game.html?season=${currentSeason}&match=${m.match_id}'">
-
 <div class="line1">${line1}</div>
 <div class="line2">${meta}</div>
-
 </div>
 `
 
 }).join("")
 
 }
-
 
 function renderLadder(matches){
 
@@ -342,15 +317,11 @@ if(!ladder[m.home_team]) ladder[m.home_team]={team:m.home_team,W:0,L:0}
 if(!ladder[m.away_team]) ladder[m.away_team]={team:m.away_team,W:0,L:0}
 
 if(m.home_points>m.away_points){
-
 ladder[m.home_team].W++
 ladder[m.away_team].L++
-
 }else if(m.away_points>m.home_points){
-
 ladder[m.away_team].W++
 ladder[m.home_team].L++
-
 }
 
 })
