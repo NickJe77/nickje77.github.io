@@ -7,24 +7,24 @@ SEASON = 2026
 
 INDEX = Path("docs/data/nrl/index.json")
 MATCH_DIR = Path(f"docs/data/nrl/matches/{SEASON}")
-
 MATCH_DIR.mkdir(parents=True, exist_ok=True)
 
-URL = "https://www.rugbyleagueproject.org/competitions/nrl/2026.html"
+URL = f"https://www.rugbyleagueproject.org/seasons/nrl-{SEASON}/results.html"
 
 print("Downloading results page...")
 
 headers = {"User-Agent": "Mozilla/5.0"}
 
 r = requests.get(URL, headers=headers, timeout=30)
-
 soup = BeautifulSoup(r.text, "html.parser")
 
 games = []
 
-for row in soup.select("table tr"):
+rows = soup.select("table tbody tr")
 
-    cols = [c.text.strip() for c in row.find_all("td")]
+for row in rows:
+
+    cols = [c.get_text(strip=True) for c in row.find_all("td")]
 
     if len(cols) < 6:
         continue
@@ -61,6 +61,7 @@ for row in soup.select("table tr"):
 
 print("Games detected:", len(games))
 
+
 # load index
 if INDEX.exists():
     with open(INDEX) as f:
@@ -68,12 +69,12 @@ if INDEX.exists():
 else:
     index = {"season": SEASON, "games": []}
 
+
 new_games = 0
 
 for g in games:
 
     game_id = g["game_id"]
-
     file = MATCH_DIR / f"{game_id}.json"
 
     if not file.exists():
@@ -81,9 +82,11 @@ for g in games:
         with open(file, "w") as f:
             json.dump(g, f, indent=2)
 
-        index["games"].append(game_id)
+        if game_id not in index["games"]:
+            index["games"].append(game_id)
 
         new_games += 1
+
 
 index["games"] = sorted(index["games"])
 
