@@ -19,13 +19,13 @@ print("Downloading NRL matches...")
 
 headers = {"User-Agent": "Mozilla/5.0"}
 
-response = requests.get(URL, headers=headers, timeout=30)
+r = requests.get(URL, headers=headers, timeout=30)
 
-if response.status_code != 200:
-    print("Download failed:", response.status_code)
+if r.status_code != 200:
+    print("Download failed:", r.status_code)
     raise SystemExit(1)
 
-data = response.json()
+data = r.json()
 
 fixtures = data.get("fixtures", [])
 
@@ -106,5 +106,6 @@ with open(INDEX_FILE, "w") as f:
     json.dump(index, f, indent=2)
 
 print("Index updated")
+
 print("Matches written:", len(rows))
 print("Update complete")
