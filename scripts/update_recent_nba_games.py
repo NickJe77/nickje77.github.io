@@ -19,7 +19,7 @@ data = r.json()
 game_dates = data["leagueSchedule"]["gameDates"]
 
 games_saved = 0
-games_skipped = 0
+
 
 def convert_minutes(raw):
     if not raw:
@@ -27,7 +27,7 @@ def convert_minutes(raw):
 
     if raw.startswith("PT"):
         try:
-            m = raw.replace("PT","").replace("S","").split("M")
+            m = raw.replace("PT", "").replace("S", "").split("M")
             minutes = int(m[0])
             seconds = int(float(m[1]))
             return f"{minutes}:{seconds:02d}"
@@ -36,12 +36,13 @@ def convert_minutes(raw):
 
     return raw
 
+
 for d in game_dates:
     for g in d["games"]:
 
         game_id = str(g["gameId"])
 
-        # Skip preseason
+        # skip preseason
         if game_id.startswith("001"):
             continue
 
@@ -49,7 +50,7 @@ for d in game_dates:
         year = int(game_date[:4])
         month = int(game_date[5:7])
 
-        # NBA season logic
+        # NBA season folder
         if month >= 10:
             season = year
         else:
@@ -60,10 +61,6 @@ for d in game_dates:
 
         game_file = f"{season_dir}/{game_id}.json"
 
-        if os.path.exists(game_file):
-            games_skipped += 1
-            continue
-
         box_url = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
         box = requests.get(box_url, timeout=30)
 
@@ -73,7 +70,6 @@ for d in game_dates:
 
         game = box.json()["game"]
 
-        # FULL TEAM NAMES
         home = game["homeTeam"]
         away = game["awayTeam"]
 
@@ -100,6 +96,7 @@ for d in game_dates:
         }
 
         for team_key in ["homeTeam", "awayTeam"]:
+
             team = game.get(team_key, {})
             team_name = f'{team.get("teamCity","")} {team.get("teamName","")}'.strip()
 
@@ -148,30 +145,8 @@ for d in game_dates:
         with open(index_path, "w", encoding="utf-8") as f:
             json.dump(index, f, indent=2)
 
-        games_path = f"{season_dir}/games.json"
-
-        if os.path.exists(games_path):
-            with open(games_path, "r", encoding="utf-8") as f:
-                games_list = json.load(f)
-        else:
-            games_list = []
-
-        games_list.append({
-            "game_id": game_id,
-            "date": output["date"],
-            "game_type": game_type,
-            "home_team": output["home_team"],
-            "away_team": output["away_team"],
-            "home_score": output["home_score"],
-            "away_score": output["away_score"]
-        })
-
-        with open(games_path, "w", encoding="utf-8") as f:
-            json.dump(games_list, f, indent=2)
-
         games_saved += 1
         print("Saved", game_file)
 
 print("Games saved:", games_saved)
-print("Games skipped:", games_skipped)
 print("NBA updater finished")
