@@ -14,6 +14,7 @@ MATCH_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
+
 def fetch_json(url):
     try:
         r = requests.get(url, headers=HEADERS, timeout=30)
@@ -49,22 +50,28 @@ print("Fixtures detected:", len(fixtures))
 
 
 # -----------------------------
-# Extract match IDs properly
+# Extract match IDs correctly
 # -----------------------------
 
 dedup = {}
 
 for m in fixtures:
 
-    mid = (
-        m.get("matchId")
-        or m.get("match_id")
-        or m.get("fixtureId")
-        or m.get("id")
-    )
+    mid = None
+
+    # possible locations
+    if "matchId" in m:
+        mid = m["matchId"]
+
+    elif "match" in m and isinstance(m["match"], dict):
+        mid = m["match"].get("matchId")
+
+    elif "id" in m:
+        mid = m["id"]
 
     if mid:
         dedup[str(mid)] = m
+
 
 fixtures = list(dedup.values())
 
@@ -94,4 +101,97 @@ def fetch_stats(match_id):
 
     url = f"https://www.nrl.com/match-centre/{match_id}/statistics"
 
-    return fetc
+    return fetch_json(url)
+
+
+rows = existing.copy()
+
+added = 0
+
+for m in fixtures:
+
+    match_id = None
+
+    if "matchId" in m:
+        match_id = str(m["matchId"])
+
+    elif "match" in m and isinstance(m["match"], dict):
+        match_id = str(m["match"].get("matchId"))
+
+    elif "id" in m:
+        match_id = str(m["id"])
+
+    if not match_id:
+        continue
+
+    if match_id in existing_ids:
+        continue
+
+    stats = fetch_stats(match_id)
+
+    if not stats:
+        continue
+
+    players = []
+
+    teams = stats.get("teams", [])
+
+    for t in teams:
+
+        team_name = t.get("teamNickName")
+
+        for p in t.get("players", []):
+
+            players.append({
+                "player": p.get("displayName"),
+                "played_for": team_name,
+                "tries": p.get("tries", 0),
+                "goals_made": p.get("goals", 0),
+                "goals_attempted": p.get("goalAttempts", 0),
+                "field_goals": p.get("fieldGoals", 0),
+                "points": p.get("points", 0)
+            })
+
+    if not players:
+        continue
+
+    kickoff = m.get("clock", {}).get("kickOffTimeLong", "")
+
+    home_score = m.get("homeScore", 0)
+    away_score = m.get("awayScore", 0)
+
+    row = {
+        "season": SEASON,
+        "match_id": match_id,
+        "venue": m.get("venue"),
+        "date_iso": kickoff[:10],
+        "home_team": m.get("homeTeam", {}).get("nickName"),
+        "away_team": m.get("awayTeam", {}).get("nickName"),
+        "home_points": home_score,
+        "away_points": away_score,
+        "margin": abs(home_score - away_score),
+        "total_points": home_score + away_score,
+        "players": players
+    }
+
+    rows.append(row)
+
+    added += 1
+
+    print("Added match", match_id, "players:", len(players))
+
+
+if added == 0:
+
+    print("No new matches found")
+
+else:
+
+    rows.sort(key=lambda x: x["date_iso"])
+
+    with open(MATCH_FILE, "w") as f:
+        json.dump(rows, f, indent=2)
+
+    print("Matches added:", added)
+
+print("Updater complete")
