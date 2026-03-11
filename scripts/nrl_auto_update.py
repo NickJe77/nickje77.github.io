@@ -5,15 +5,14 @@ from pathlib import Path
 SEASON = 2026
 
 BASE = Path("docs/data/nrl")
-
-INDEX_FILE = BASE / "index.json"
 MATCH_DIR = BASE / "matches" / str(SEASON)
 SEASON_FILE = BASE / "seasons" / f"{SEASON}.json"
+INDEX_FILE = BASE / "index.json"
 
 MATCH_DIR.mkdir(parents=True, exist_ok=True)
 SEASON_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-URL = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}&round=all"
+URL = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}"
 
 print("Downloading NRL matches...")
 
@@ -23,7 +22,7 @@ r = requests.get(URL, headers=headers, timeout=30)
 
 if r.status_code != 200:
     print("Download failed:", r.status_code)
-    raise SystemExit(1)
+    exit(1)
 
 data = r.json()
 
@@ -106,6 +105,5 @@ with open(INDEX_FILE, "w") as f:
     json.dump(index, f, indent=2)
 
 print("Index updated")
-
 print("Matches written:", len(rows))
 print("Update complete")
