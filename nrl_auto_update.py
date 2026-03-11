@@ -2,7 +2,7 @@ import json
 import requests
 from pathlib import Path
 
-print("NRL UPDATE WITH PLAYER STATS")
+print("NRL UPDATE WITH FULL PLAYER STATS")
 
 SEASON = 2026
 
@@ -10,27 +10,25 @@ BASE = Path("docs/data/nrl")
 SEASON_FILE = BASE / "seasons" / f"{SEASON}.json"
 INDEX_FILE = BASE / "index.json"
 
-SEASON_FILE.parent.mkdir(parents=True, exist_ok=True)
-
 headers = {"User-Agent": "Mozilla/5.0"}
+
+BASE.mkdir(parents=True, exist_ok=True)
+SEASON_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 def get_round(round_name):
 
     url = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}&round={round_name}"
 
-    r = requests.get(url, headers=headers, timeout=30)
+    r = requests.get(url, headers=headers)
 
     if r.status_code != 200:
         return []
 
-    data = r.json()
+    return r.json().get("fixtures", [])
 
-    return data.get("fixtures", [])
-
-print("Downloading fixtures...")
+print("Downloading fixtures")
 
 fixtures = []
-
 fixtures += get_round("opening")
 fixtures += get_round("all")
 
@@ -40,33 +38,28 @@ games = []
 
 for m in fixtures:
 
-    home = m.get("homeTeam", {}).get("nickName")
-    away = m.get("awayTeam", {}).get("nickName")
+    home = m["homeTeam"]["nickName"]
+    away = m["awayTeam"]["nickName"]
 
-    if not home or not away:
-        continue
+    match_id = m["matchId"]
 
-    round_title = m.get("roundTitle", "")
+    round_title = m["roundTitle"]
 
     if "Opening" in round_title:
         round_num = 1
-    elif round_title.startswith("Round"):
-        round_num = int(round_title.split()[1])
     else:
-        round_num = 0
+        round_num = int(round_title.split()[1])
 
-    kickoff = m.get("clock", {}).get("kickOffTimeLong", "")
-    date_iso = kickoff[:10] if kickoff else ""
+    kickoff = m["clock"]["kickOffTimeLong"]
+    date_iso = kickoff[:10]
 
-    venue = m.get("venue", "")
+    venue = m["venue"]
 
     home_pts = m.get("homeScore", 0)
     away_pts = m.get("awayScore", 0)
 
-    game_id = m.get("matchId")
-
-    match = {
-        "match_id": game_id,
+    game = {
+        "match_id": match_id,
         "season": SEASON,
         "round": round_num,
         "date_iso": date_iso,
@@ -78,59 +71,67 @@ for m in fixtures:
         "players": []
     }
 
-    if game_id:
+    # PLAYER STATS
+    try:
 
-        try:
+        stats_url = f"https://stats.nrl.com/api/match/{match_id}"
 
-            stats_url = f"https://www.nrl.com/match-centre/data/{game_id}"
+        s = requests.get(stats_url, headers=headers)
 
-            s = requests.get(stats_url, headers=headers, timeout=30)
+        if s.status_code == 200:
 
-            if s.status_code == 200:
+            stats = s.json()
 
-                stats = s.json()
+            for team in stats["teams"]:
 
-                for team in stats.get("teams", []):
+                team_name = team["nickName"]
 
-                    for p in team.get("players", []):
+                for p in team["players"]:
 
-                        match["players"].append({
-                            "name": p.get("fullName"),
-                            "team": team.get("nickName"),
-                            "tries": p.get("tries", 0),
-                            "tackles": p.get("tackles", 0),
-                            "run_metres": p.get("runMetres", 0)
-                        })
+                    game["players"].append({
 
-        except:
-            pass
+                        "name": p["fullName"],
+                        "team": team_name,
+                        "position": p.get("position"),
+                        "tries": p.get("tries",0),
+                        "tackles": p.get("tackles",0),
+                        "run_metres": p.get("runMetres",0),
+                        "line_breaks": p.get("lineBreaks",0)
 
-    games.append(match)
+                    })
 
-games.sort(key=lambda x: (x["date_iso"], x["round"]))
+    except:
+        pass
 
-with open(SEASON_FILE, "w") as f:
-    json.dump(games, f, indent=2)
+    games.append(game)
 
-print("Season file written:", SEASON_FILE)
+games.sort(key=lambda x:(x["round"],x["date_iso"]))
 
+with open(SEASON_FILE,"w") as f:
+    json.dump(games,f,indent=2)
+
+print("Season written")
+
+# UPDATE INDEX
 if INDEX_FILE.exists():
+
     with open(INDEX_FILE) as f:
-        index = json.load(f)
+        index=json.load(f)
+
 else:
-    index = {}
+
+    index={}
 
 if "seasons" not in index:
-    index["seasons"] = []
+    index["seasons"]=[]
 
 if SEASON not in index["seasons"]:
     index["seasons"].append(SEASON)
 
-index["seasons"] = sorted(index["seasons"])
+index["seasons"]=sorted(index["seasons"])
 
-with open(INDEX_FILE, "w") as f:
-    json.dump(index, f, indent=2)
+with open(INDEX_FILE,"w") as f:
+    json.dump(index,f,indent=2)
 
 print("Index updated")
-print("Games written:", len(games))
-print("Update complete")
+print("Games written:",len(games))
