@@ -2,9 +2,11 @@ import requests
 import json
 import os
 
-print("Rebuilding NBA game files")
+print("Repairing recent NBA games")
 
 BASE_DIR = "docs/data/nba"
+
+START_ID = 22500900   # first broken game
 
 
 def convert_minutes(raw):
@@ -60,14 +62,19 @@ for season in os.listdir(BASE_DIR):
 
         game_id = file.replace(".json","")
 
-        box_url = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
+        numeric = int(game_id[2:])
 
-        box = requests.get(box_url, timeout=30)
-
-        if box.status_code != 200:
+        if numeric < START_ID:
             continue
 
-        game = box.json()["game"]
+        box_url = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
+
+        r = requests.get(box_url,timeout=30)
+
+        if r.status_code != 200:
+            continue
+
+        game = r.json()["game"]
 
         home = game["homeTeam"]
         away = game["awayTeam"]
@@ -75,23 +82,16 @@ for season in os.listdir(BASE_DIR):
         home_team = f'{home.get("teamCity","")} {home.get("teamName","")}'.strip()
         away_team = f'{away.get("teamCity","")} {away.get("teamName","")}'.strip()
 
-        if game_id.startswith("002"):
-            game_type = "Regular Season"
-        elif game_id.startswith("004"):
-            game_type = "Playoffs"
-        else:
-            game_type = "Other"
-
         output = {
             "game_id": game_id,
             "date": game.get("gameTimeUTC",""),
-            "game_type": game_type,
+            "game_type": "Regular Season",
             "home_team": home_team,
             "away_team": away_team,
             "home_score": home.get("score",0),
             "away_score": away.get("score",0),
             "arena": game.get("arena",{}).get("arenaName",""),
-            "players": []
+            "players":[]
         }
 
         for team_key in ["homeTeam","awayTeam"]:
@@ -104,16 +104,12 @@ for season in os.listdir(BASE_DIR):
                 stats = p.get("statistics",{})
 
                 output["players"].append({
-
                     "player": clean_name(p),
                     "team": team_name,
                     "minutes": convert_minutes(stats.get("minutes")),
                     "points": stats.get("points",0),
                     "rebounds": stats.get("reboundsTotal",0),
-                    "assists": stats.get("assists",0),
-                    "steals": stats.get("steals",0),
-                    "blocks": stats.get("blocks",0),
-                    "turnovers": stats.get("turnovers",0)
+                    "assists": stats.get("assists",0)
                 })
 
         file_path = f"{season_path}/{file}"
@@ -124,6 +120,4 @@ for season in os.listdir(BASE_DIR):
         games_fixed += 1
         print("Fixed",file_path)
 
-
-print("Games rebuilt:",games_fixed)
-print("Rebuild complete")
+print("Games repaired:",games_fixed)
