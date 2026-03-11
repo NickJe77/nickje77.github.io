@@ -1,4 +1,5 @@
 import json
+import re
 import requests
 from bs4 import BeautifulSoup
 from pathlib import Path
@@ -14,9 +15,7 @@ URL = f"https://www.rugbyleagueproject.org/seasons/nrl-{SEASON}/results.html"
 
 print("Downloading results page...")
 
-headers = {
-    "User-Agent": "Mozilla/5.0"
-}
+headers = {"User-Agent": "Mozilla/5.0"}
 
 r = requests.get(URL, headers=headers, timeout=30)
 
@@ -28,16 +27,21 @@ soup = BeautifulSoup(r.text, "html.parser")
 
 games = []
 
-rows = soup.select("table tr")
+rows = soup.find_all("tr")
 
 for row in rows:
 
-    cols = [c.get_text(strip=True) for c in row.find_all("td")]
+    text = row.get_text(" ", strip=True)
 
-    if len(cols) < 5:
+    # detect score pattern like 24-18
+    score_match = re.search(r"\b\d+\-\d+\b", text)
+
+    if not score_match:
         continue
 
     try:
+
+        cols = [c.get_text(strip=True) for c in row.find_all("td")]
 
         date = cols[0]
         home = cols[1]
@@ -45,11 +49,8 @@ for row in rows:
         away = cols[3]
 
         venue = ""
-        if len(cols) >= 6:
+        if len(cols) > 5:
             venue = cols[5]
-
-        if "-" not in score:
-            continue
 
         home_score, away_score = score.split("-")
 
@@ -71,6 +72,7 @@ for row in rows:
     except:
         continue
 
+
 print("Games detected:", len(games))
 
 
@@ -80,10 +82,7 @@ if INDEX.exists():
     with open(INDEX) as f:
         index = json.load(f)
 else:
-    index = {
-        "season": SEASON,
-        "games": []
-    }
+    index = {"season": SEASON, "games": []}
 
 
 # ADD NEW GAMES
@@ -93,7 +92,6 @@ new_games = 0
 for g in games:
 
     game_id = g["game_id"]
-
     match_file = MATCH_DIR / f"{game_id}.json"
 
     if not match_file.exists():
@@ -107,12 +105,8 @@ for g in games:
         new_games += 1
 
 
-# SORT INDEX
-
 index["games"] = sorted(index["games"])
 
-
-# SAVE INDEX
 
 with open(INDEX, "w") as f:
     json.dump(index, f, indent=2)
