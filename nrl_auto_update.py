@@ -2,7 +2,7 @@ import json
 import requests
 from pathlib import Path
 
-print("NRL AUTO UPDATE MARKER: V2026-OPENING-ROUND-FIX")
+print("=== NEW ROOT NRL UPDATE SCRIPT IS RUNNING ===")
 
 SEASON = 2026
 
