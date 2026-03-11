@@ -8,10 +8,9 @@ SEASON = 2026
 
 INDEX = Path("docs/data/nrl/index.json")
 MATCH_DIR = Path(f"docs/data/nrl/matches/{SEASON}")
-
 MATCH_DIR.mkdir(parents=True, exist_ok=True)
 
-URL = f"https://www.rugbyleagueproject.org/seasons/nrl-{SEASON}/results.html"
+URL = "https://www.rugbyleagueproject.org/competitions/nrl/summary.html"
 
 print("Downloading results page...")
 
@@ -31,28 +30,26 @@ rows = soup.find_all("tr")
 
 for row in rows:
 
-    text = row.get_text(" ", strip=True)
+    cols = [c.get_text(strip=True) for c in row.find_all("td")]
 
-    # detect score pattern like 24-18
-    score_match = re.search(r"\b\d+\-\d+\b", text)
-
-    if not score_match:
+    if len(cols) < 5:
         continue
 
     try:
-
-        cols = [c.get_text(strip=True) for c in row.find_all("td")]
 
         date = cols[0]
         home = cols[1]
         score = cols[2]
         away = cols[3]
 
+        if "-" not in score:
+            continue
+
+        home_score, away_score = score.split("-")
+
         venue = ""
         if len(cols) > 5:
             venue = cols[5]
-
-        home_score, away_score = score.split("-")
 
         game_id = f"{date}-{home[:3]}-{away[:3]}".replace(" ", "")
 
@@ -72,7 +69,6 @@ for row in rows:
     except:
         continue
 
-
 print("Games detected:", len(games))
 
 
@@ -84,8 +80,6 @@ if INDEX.exists():
 else:
     index = {"season": SEASON, "games": []}
 
-
-# ADD NEW GAMES
 
 new_games = 0
 
@@ -107,10 +101,8 @@ for g in games:
 
 index["games"] = sorted(index["games"])
 
-
 with open(INDEX, "w") as f:
     json.dump(index, f, indent=2)
-
 
 print("New games added:", new_games)
 print("Update complete")
