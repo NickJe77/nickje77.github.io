@@ -4,9 +4,10 @@ from pathlib import Path
 
 SEASON = 2026
 
-NRL_INDEX = Path("docs/data/nrl/index.json")
-MATCH_DIR = Path(f"docs/data/nrl/matches/{SEASON}")
-SEASON_FILE = Path(f"docs/data/nrl/seasons/{SEASON}.json")
+BASE = Path("docs/data/nrl")
+MATCH_DIR = BASE / "matches" / str(SEASON)
+SEASON_FILE = BASE / "seasons" / f"{SEASON}.json"
+INDEX_FILE = BASE / "index.json"
 
 MATCH_DIR.mkdir(parents=True, exist_ok=True)
 SEASON_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -21,97 +22,88 @@ r = requests.get(URL, headers=headers, timeout=30)
 
 if r.status_code != 200:
     print("Download failed:", r.status_code)
-    raise SystemExit(1)
+    exit(1)
 
 data = r.json()
 
 fixtures = data.get("fixtures", [])
+
 print("Fixtures detected:", len(fixtures))
 
-all_rows = []
-match_ids = []
+rows = []
 
 for m in fixtures:
 
-    home_team = m.get("homeTeam", {}).get("nickName", "")
-    away_team = m.get("awayTeam", {}).get("nickName", "")
+    home = m.get("homeTeam", {}).get("nickName")
+    away = m.get("awayTeam", {}).get("nickName")
 
-    if not home_team or not away_team:
+    if not home or not away:
         continue
 
     round_title = m.get("roundTitle", "")
 
-    if round_title == "Opening Round":
+    if "Opening" in round_title:
         round_num = 1
-    elif round_title.startswith("Round "):
+    elif round_title.startswith("Round"):
         try:
-            round_num = int(round_title.replace("Round ", "").strip())
+            round_num = int(round_title.split()[1])
         except:
             round_num = 0
     else:
         round_num = 0
 
-    date_iso = ""
-    kick = m.get("clock", {}).get("kickOffTimeLong", "")
-    if kick:
-        date_iso = kick[:10]
+    kickoff = m.get("clock", {}).get("kickOffTimeLong", "")
+    date_iso = kickoff[:10] if kickoff else ""
 
-    venue = m.get("venue", "") or ""
+    venue = m.get("venue", "")
 
-    home_points = m.get("homeScore", 0)
-    away_points = m.get("awayScore", 0)
+    home_pts = m.get("homeScore", 0)
+    away_pts = m.get("awayScore", 0)
 
-    game_id = f"{SEASON}R{round_num:02d}{home_team[:3]}{away_team[:3]}".upper()
-
-    match_ids.append(game_id)
+    match_id = f"{SEASON}R{round_num:02d}{home[:3]}{away[:3]}".upper()
 
     row = {
         "season": SEASON,
-        "match_id": game_id,
+        "match_id": match_id,
         "date_iso": date_iso,
         "venue": venue,
-        "home_team": home_team,
-        "away_team": away_team,
-        "home_points": home_points,
-        "away_points": away_points
+        "home_team": home,
+        "away_team": away,
+        "home_points": home_pts,
+        "away_points": away_pts
     }
 
-    all_rows.append(row)
+    rows.append(row)
 
-    match_file = MATCH_DIR / f"{game_id}.json"
+    match_file = MATCH_DIR / f"{match_id}.json"
 
     with open(match_file, "w", encoding="utf-8") as f:
-        json.dump([row], f, indent=2, ensure_ascii=False)
+        json.dump([row], f, indent=2)
 
-# rebuild the season file every run
-all_rows.sort(key=lambda x: (x.get("date_iso", ""), x.get("match_id", "")))
+rows.sort(key=lambda x: (x["date_iso"], x["match_id"]))
 
 with open(SEASON_FILE, "w", encoding="utf-8") as f:
-    json.dump(all_rows, f, indent=2, ensure_ascii=False)
+    json.dump(rows, f, indent=2)
 
 print("Season file rebuilt:", SEASON_FILE)
 
-# update main NRL index.json
-if NRL_INDEX.exists():
-    try:
-        with open(NRL_INDEX, "r", encoding="utf-8") as f:
-            index = json.load(f)
-    except:
-        index = {}
+if INDEX_FILE.exists():
+    with open(INDEX_FILE) as f:
+        index = json.load(f)
 else:
     index = {}
 
-if "seasons" not in index or not isinstance(index["seasons"], list):
+if "seasons" not in index:
     index["seasons"] = []
 
 if SEASON not in index["seasons"]:
     index["seasons"].append(SEASON)
 
-index["seasons"] = sorted(set(index["seasons"]))
+index["seasons"] = sorted(index["seasons"])
 
-with open(NRL_INDEX, "w", encoding="utf-8") as f:
-    json.dump(index, f, indent=2, ensure_ascii=False)
+with open(INDEX_FILE, "w") as f:
+    json.dump(index, f, indent=2)
 
-print("Index updated:", NRL_INDEX)
-print("Match files written:", len(match_ids))
+print("Index updated")
+print("Matches written:", len(rows))
 print("Update complete")
