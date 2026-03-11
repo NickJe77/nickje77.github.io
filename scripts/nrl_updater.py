@@ -25,23 +25,56 @@ def fetch_json(url):
         return None
 
 
-print("Discovering matches")
+def get_round(round_name):
 
-# ---------------------------------------------------
-# Match-centre index endpoint (contains real match IDs)
-# ---------------------------------------------------
+    url = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}&round={round_name}"
 
-index_url = f"https://www.nrl.com/match-centre/data?season={SEASON}"
+    data = fetch_json(url)
 
-data = fetch_json(index_url)
+    if not data:
+        return []
 
-if not data:
-    print("Failed to load match index")
-    raise SystemExit()
+    return data.get("fixtures", [])
 
-matches = data.get("matches", [])
 
-print("Matches discovered:", len(matches))
+print("Discovering fixtures")
+
+fixtures = []
+
+fixtures.extend(get_round("opening"))
+
+for r in range(1, 30):
+    fixtures.extend(get_round(f"round-{r}"))
+
+print("Fixtures detected:", len(fixtures))
+
+
+# -----------------------------
+# Extract match IDs
+# -----------------------------
+
+dedup = {}
+
+for f in fixtures:
+
+    match_id = None
+
+    if "match" in f and isinstance(f["match"], dict):
+        match_id = f["match"].get("matchId")
+
+    if not match_id:
+        match_id = f.get("matchId")
+
+    if not match_id:
+        match_id = f.get("id")
+
+    if match_id:
+        dedup[str(match_id)] = f
+
+
+fixtures = list(dedup.values())
+
+print("Unique matches:", len(fixtures))
 
 
 # -----------------------------
@@ -70,9 +103,15 @@ rows = existing.copy()
 
 added = 0
 
-for m in matches:
+for f in fixtures:
 
-    match_id = str(m.get("matchId"))
+    match_id = None
+
+    if "match" in f and isinstance(f["match"], dict):
+        match_id = str(f["match"].get("matchId"))
+
+    if not match_id:
+        match_id = str(f.get("matchId") or f.get("id"))
 
     if not match_id:
         continue
@@ -106,17 +145,22 @@ for m in matches:
     if not players:
         continue
 
+    kickoff = f.get("clock", {}).get("kickOffTimeLong", "")
+
+    home_score = f.get("homeScore", 0)
+    away_score = f.get("awayScore", 0)
+
     row = {
         "season": SEASON,
         "match_id": match_id,
-        "venue": m.get("venue"),
-        "date_iso": m.get("date", "")[:10],
-        "home_team": m.get("homeTeam", {}).get("nickName"),
-        "away_team": m.get("awayTeam", {}).get("nickName"),
-        "home_points": m.get("homeScore", 0),
-        "away_points": m.get("awayScore", 0),
-        "margin": abs(m.get("homeScore", 0) - m.get("awayScore", 0)),
-        "total_points": m.get("homeScore", 0) + m.get("awayScore", 0),
+        "venue": f.get("venue"),
+        "date_iso": kickoff[:10],
+        "home_team": f.get("homeTeam", {}).get("nickName"),
+        "away_team": f.get("awayTeam", {}).get("nickName"),
+        "home_points": home_score,
+        "away_points": away_score,
+        "margin": abs(home_score - away_score),
+        "total_points": home_score + away_score,
         "players": players
     }
 
