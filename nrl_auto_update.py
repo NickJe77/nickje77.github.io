@@ -22,7 +22,10 @@ MATCH_DIR.mkdir(parents=True, exist_ok=True)
 
 match_file = MATCH_DIR / f"{game_id}.json"
 
-# create match file if missing
+# ----------------------------
+# CREATE MATCH FILE
+# ----------------------------
+
 if not match_file.exists():
 
     with open(match_file, "w") as f:
@@ -33,26 +36,52 @@ if not match_file.exists():
 else:
     print("Match already exists")
 
-# ensure index.json exists
+
+# ----------------------------
+# LOAD INDEX
+# ----------------------------
+
 if INDEX.exists():
 
-    with open(INDEX) as f:
-        index = json.load(f)
+    try:
+        with open(INDEX) as f:
+            index = json.load(f)
+    except:
+        index = {}
 
 else:
     index = {}
 
-# ensure games list exists
-if "games" not in index:
+# ----------------------------
+# ENSURE STRUCTURE
+# ----------------------------
+
+if "season" not in index:
     index["season"] = 2026
+
+if "games" not in index:
     index["games"] = []
 
-# add game to index
+# ----------------------------
+# ADD GAME
+# ----------------------------
+
 if game_id not in index["games"]:
+
     index["games"].append(game_id)
+
+    # keep games sorted
+    index["games"] = sorted(index["games"])
+
     print("Game added to index")
+
 else:
     print("Game already in index")
+
+
+# ----------------------------
+# SAVE INDEX
+# ----------------------------
 
 with open(INDEX, "w") as f:
     json.dump(index, f, indent=2)
