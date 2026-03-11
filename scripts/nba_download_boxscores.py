@@ -4,22 +4,33 @@ import os
 from datetime import datetime, timezone
 
 BASE_DIR = "docs/data/nba"
+SEASON = "2025"
 
-print("NBA download boxscores starting")
+print("Downloading NBA boxscores for season", SEASON)
 
 today = datetime.now(timezone.utc)
 
+season_path = os.path.join(BASE_DIR, SEASON)
+
+index_path = os.path.join(season_path, "index.json")
+
+with open(index_path) as f:
+    index = json.load(f)
+
+games_saved = 0
+games_skipped = 0
+
 
 def convert_minutes(raw):
+
     if not raw:
         return "0:00"
 
-    if isinstance(raw, str) and raw.startswith("PT"):
+    if isinstance(raw,str) and raw.startswith("PT"):
         try:
-            cleaned = raw.replace("PT", "").replace("S", "")
-            parts = cleaned.split("M")
-            mins = int(parts[0] or "0")
-            secs = int(float(parts[1] or "0"))
+            m = raw.replace("PT","").replace("S","").split("M")
+            mins = int(m[0])
+            secs = int(float(m[1]))
             return f"{mins}:{secs:02d}"
         except:
             return "0:00"
@@ -27,112 +38,95 @@ def convert_minutes(raw):
     return str(raw)
 
 
-def clean_name(player):
-    first = player.get("firstName", "")
-    last = player.get("familyName", "")
+def clean_name(p):
+
+    first = p.get("firstName","")
+    last = p.get("familyName","")
 
     if first or last:
         return f"{first} {last}".strip()
 
-    if player.get("name"):
-        return player["name"]
+    if p.get("name"):
+        return p["name"]
 
-    if player.get("nameI"):
-        return player["nameI"]
+    if p.get("nameI"):
+        return p["nameI"]
 
     return "Unknown"
 
 
-games_saved = 0
-games_skipped = 0
+for game_id in index["games"]:
 
-for season in os.listdir(BASE_DIR):
-
-    season_path = os.path.join(BASE_DIR, season)
-
-    if not season.isdigit():
+    if game_id.startswith("001"):
         continue
 
-    index_path = os.path.join(season_path, "index.json")
+    box_url=f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
 
-    if not os.path.exists(index_path):
+    r=requests.get(box_url,timeout=30)
+
+    if r.status_code!=200:
+        games_skipped+=1
         continue
 
-    with open(index_path) as f:
-        index = json.load(f)
+    game=r.json()["game"]
 
-    for game_id in index["games"]:
+    game_time=game.get("gameTimeUTC")
 
-        if game_id.startswith("001"):
-            continue
+    if game_time:
+        try:
+            dt=datetime.fromisoformat(game_time.replace("Z","+00:00"))
+            if dt>today:
+                continue
+        except:
+            pass
 
-        box_url = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
+    home=game["homeTeam"]
+    away=game["awayTeam"]
 
-        r = requests.get(box_url, timeout=30)
+    home_team=f'{home.get("teamCity","")} {home.get("teamName","")}'.strip()
+    away_team=f'{away.get("teamCity","")} {away.get("teamName","")}'.strip()
 
-        if r.status_code != 200:
-            games_skipped += 1
-            continue
+    output={
+        "game_id":game_id,
+        "date":game_time,
+        "game_type":"Regular Season",
+        "home_team":home_team,
+        "away_team":away_team,
+        "home_score":home.get("score",0),
+        "away_score":away.get("score",0),
+        "arena":game.get("arena",{}).get("arenaName",""),
+        "players":[]
+    }
 
-        game = r.json()["game"]
+    for team_key in ["homeTeam","awayTeam"]:
 
-        game_time = game.get("gameTimeUTC")
+        team=game.get(team_key,{})
+        team_name=f'{team.get("teamCity","")} {team.get("teamName","")}'.strip()
 
-        if game_time:
-            try:
-                game_dt = datetime.fromisoformat(game_time.replace("Z","+00:00"))
-                if game_dt > today:
-                    continue
-            except:
-                pass
+        for p in team.get("players",[]):
 
-        home = game["homeTeam"]
-        away = game["awayTeam"]
+            stats=p.get("statistics",{})
 
-        home_team = f'{home.get("teamCity","")} {home.get("teamName","")}'.strip()
-        away_team = f'{away.get("teamCity","")} {away.get("teamName","")}'.strip()
+            output["players"].append({
+                "player":clean_name(p),
+                "team":team_name,
+                "minutes":convert_minutes(stats.get("minutes")),
+                "points":stats.get("points",0),
+                "rebounds":stats.get("reboundsTotal",0),
+                "assists":stats.get("assists",0),
+                "steals":stats.get("steals",0),
+                "blocks":stats.get("blocks",0),
+                "turnovers":stats.get("turnovers",0)
+            })
 
-        output = {
-            "game_id": game_id,
-            "date": game_time,
-            "game_type": "Regular Season",
-            "home_team": home_team,
-            "away_team": away_team,
-            "home_score": home.get("score",0),
-            "away_score": away.get("score",0),
-            "arena": game.get("arena",{}).get("arenaName",""),
-            "players":[]
-        }
+    game_file=os.path.join(season_path,f"{game_id}.json")
 
-        for team_key in ["homeTeam","awayTeam"]:
+    with open(game_file,"w") as f:
+        json.dump(output,f,indent=2)
 
-            team = game.get(team_key,{})
-            team_name = f'{team.get("teamCity","")} {team.get("teamName","")}'.strip()
+    games_saved+=1
+    print("Saved",game_file)
 
-            for p in team.get("players",[]):
-
-                stats = p.get("statistics",{})
-
-                output["players"].append({
-                    "player": clean_name(p),
-                    "team": team_name,
-                    "minutes": convert_minutes(stats.get("minutes")),
-                    "points": stats.get("points",0),
-                    "rebounds": stats.get("reboundsTotal",0),
-                    "assists": stats.get("assists",0),
-                    "steals": stats.get("steals",0),
-                    "blocks": stats.get("blocks",0),
-                    "turnovers": stats.get("turnovers",0)
-                })
-
-        game_file = os.path.join(season_path, f"{game_id}.json")
-
-        with open(game_file,"w") as f:
-            json.dump(output,f,indent=2)
-
-        games_saved += 1
-        print("Saved",game_file)
 
 print("Games saved:",games_saved)
 print("Games skipped:",games_skipped)
-print("NBA download boxscores finished")
