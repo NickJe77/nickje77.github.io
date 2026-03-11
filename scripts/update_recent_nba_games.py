@@ -1,23 +1,10 @@
 import requests
 import json
 import os
-from datetime import datetime
 
-print("NBA updater starting")
+print("Rebuilding NBA game files")
 
 BASE_DIR = "docs/data/nba"
-os.makedirs(BASE_DIR, exist_ok=True)
-
-schedule_url = "https://cdn.nba.com/static/json/staticData/scheduleLeagueV2.json"
-
-r = requests.get(schedule_url, timeout=30)
-
-if r.status_code != 200:
-    print("Schedule download failed")
-    raise SystemExit(1)
-
-data = r.json()
-game_dates = data["leagueSchedule"]["gameDates"]
 
 
 def convert_minutes(raw):
@@ -54,33 +41,24 @@ def clean_name(p):
     return "Unknown"
 
 
-games_saved = 0
+games_fixed = 0
 
-for d in game_dates:
+for season in os.listdir(BASE_DIR):
 
-    for g in d["games"]:
+    season_path = f"{BASE_DIR}/{season}"
 
-        game_id = str(g["gameId"])
+    if not os.path.isdir(season_path):
+        continue
 
-        if game_id.startswith("001"):
+    for file in os.listdir(season_path):
+
+        if not file.endswith(".json"):
             continue
 
-        game_date = g["gameDateEst"]
+        if file == "index.json":
+            continue
 
-        dt = datetime.fromisoformat(game_date.replace("Z",""))
-
-        year = dt.year
-        month = dt.month
-
-        if month >= 10:
-            season = year
-        else:
-            season = year - 1
-
-        season_dir = f"{BASE_DIR}/{season}"
-        os.makedirs(season_dir, exist_ok=True)
-
-        game_file = f"{season_dir}/{game_id}.json"
+        game_id = file.replace(".json","")
 
         box_url = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
 
@@ -135,34 +113,17 @@ for d in game_dates:
                     "assists": stats.get("assists",0),
                     "steals": stats.get("steals",0),
                     "blocks": stats.get("blocks",0),
-                    "turnovers": stats.get("turnovers",0),
-                    "fgm": stats.get("fieldGoalsMade",0),
-                    "fga": stats.get("fieldGoalsAttempted",0),
-                    "tpm": stats.get("threePointersMade",0),
-                    "tpa": stats.get("threePointersAttempted",0),
-                    "ftm": stats.get("freeThrowsMade",0),
-                    "fta": stats.get("freeThrowsAttempted",0)
+                    "turnovers": stats.get("turnovers",0)
                 })
 
-        with open(game_file,"w",encoding="utf-8") as f:
+        file_path = f"{season_path}/{file}"
+
+        with open(file_path,"w",encoding="utf-8") as f:
             json.dump(output,f,indent=2)
 
-        index_path = f"{season_dir}/index.json"
+        games_fixed += 1
+        print("Fixed",file_path)
 
-        if os.path.exists(index_path):
-            with open(index_path,"r") as f:
-                index=json.load(f)
-        else:
-            index={"games":[]}
 
-        if game_id not in index["games"]:
-            index["games"].append(game_id)
-
-        with open(index_path,"w") as f:
-            json.dump(index,f,indent=2)
-
-        games_saved += 1
-        print("Saved",game_file)
-
-print("Games rebuilt:",games_saved)
-print("NBA updater finished")
+print("Games rebuilt:",games_fixed)
+print("Rebuild complete")
