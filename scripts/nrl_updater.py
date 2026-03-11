@@ -1,7 +1,7 @@
 import json
 import requests
-from bs4 import BeautifulSoup
 from pathlib import Path
+from bs4 import BeautifulSoup
 
 print("NRL FULL UPDATER")
 
@@ -16,7 +16,7 @@ MATCH_FILE.parent.mkdir(parents=True, exist_ok=True)
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
-def get_season_matches():
+def get_match_ids():
 
     url = f"https://www.rugbyleagueproject.org/seasons/nrl-{SEASON}/results.html"
 
@@ -28,25 +28,25 @@ def get_season_matches():
 
     soup = BeautifulSoup(r.text, "html.parser")
 
-    matches = []
+    ids = []
 
-    for a in soup.select("a[href*='/matches/']"):
+    for link in soup.select("a[href*='/matches/']"):
 
-        href = a.get("href")
+        href = link.get("href")
 
         if "/matches/" not in href:
             continue
 
-        match_id = href.split("/")[-1].replace(".html","")
+        mid = href.split("/")[-1].replace(".html","")
 
-        matches.append(match_id)
+        ids.append(mid)
 
-    return list(set(matches))
+    return sorted(list(set(ids)))
 
 
 print("Discovering matches")
 
-match_ids = get_season_matches()
+match_ids = get_match_ids()
 
 print("Matches detected:", len(match_ids))
 
@@ -54,7 +54,6 @@ print("Matches detected:", len(match_ids))
 existing = []
 
 if MATCH_FILE.exists():
-
     with open(MATCH_FILE) as f:
         existing = json.load(f)
 
@@ -63,12 +62,7 @@ existing_ids = {m["match_id"] for m in existing}
 print("Existing matches:", len(existing_ids))
 
 
-rows = existing.copy()
-
-added = 0
-
-
-def get_match(match_id):
+def scrape_match(match_id):
 
     url = f"https://www.rugbyleagueproject.org/matches/{match_id}.html"
 
@@ -77,7 +71,7 @@ def get_match(match_id):
     if r.status_code != 200:
         return None
 
-    soup = BeautifulSoup(r.text,"html.parser")
+    soup = BeautifulSoup(r.text, "html.parser")
 
     teams = soup.select(".team")
 
@@ -89,22 +83,36 @@ def get_match(match_id):
 
     players = []
 
-    for row in soup.select("table.players tr"):
+    tables = soup.select("table")
 
-        cols = [c.text.strip() for c in row.select("td")]
+    for table in tables:
 
-        if len(cols) < 6:
-            continue
+        rows = table.select("tr")
 
-        players.append({
-            "player": cols[0],
-            "played_for": cols[1],
-            "tries": int(cols[2] or 0),
-            "goals_made": int(cols[3] or 0),
-            "goals_attempted": int(cols[4] or 0),
-            "field_goals": int(cols[5] or 0),
-            "points": int(cols[6] or 0)
-        })
+        for row in rows:
+
+            cols = [c.text.strip() for c in row.select("td")]
+
+            if len(cols) < 7:
+                continue
+
+            name = cols[0]
+
+            if not name or name == "Player":
+                continue
+
+            try:
+                players.append({
+                    "player": name,
+                    "played_for": cols[1],
+                    "tries": int(cols[2] or 0),
+                    "goals_made": int(cols[3] or 0),
+                    "goals_attempted": int(cols[4] or 0),
+                    "field_goals": int(cols[5] or 0),
+                    "points": int(cols[6] or 0)
+                })
+            except:
+                continue
 
     if not players:
         return None
@@ -118,12 +126,16 @@ def get_match(match_id):
     }
 
 
+rows = existing.copy()
+
+added = 0
+
 for match_id in match_ids:
 
     if match_id in existing_ids:
         continue
 
-    data = get_match(match_id)
+    data = scrape_match(match_id)
 
     if not data:
         continue
