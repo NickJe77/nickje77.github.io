@@ -40,7 +40,7 @@ Season:
 Game Type:
 <select id="typeSelect">
 <option value="All">All</option>
-<option value="Regular Season">Regular Season</option>
+<option value="Regular">Regular Season</option>
 <option value="Playoffs">Playoffs</option>
 </select>
 
@@ -113,11 +113,20 @@ fetch(BASE+season+"/"+id+".json?"+Date.now())
 .then(r=>r.ok?r.json():null)
 );
 
-allGames=(await Promise.all(gameFiles)).filter(g=>
-g &&
-g.game_type &&
-(g.game_type==="Regular Season" || g.game_type==="Playoffs")
-);
+let rawGames=await Promise.all(gameFiles);
+
+allGames=rawGames.filter(g=>{
+
+if(!g || !g.game_type) return false;
+
+let t=g.game_type.toLowerCase();
+
+if(t.includes("preseason")) return false;
+if(t.includes("all")) return false;
+
+return true;
+
+});
 
 allGames.sort((a,b)=>new Date(b.date)-new Date(a.date));
 
@@ -154,7 +163,10 @@ const teamFilter=teamSelect.value;
 
 allGames.forEach(g=>{
 
-if(typeFilter!=="All" && g.game_type!==typeFilter) return;
+let type=g.game_type.toLowerCase();
+
+if(typeFilter==="Regular" && !type.includes("regular")) return;
+if(typeFilter==="Playoffs" && !(type.includes("playoff") || type.includes("post"))) return;
 
 if(teamFilter!=="All" && g.home_team!==teamFilter && g.away_team!==teamFilter) return;
 
