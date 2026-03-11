@@ -19,17 +19,18 @@ if r.status_code != 200:
 data = r.json()
 game_dates = data["leagueSchedule"]["gameDates"]
 
-def clean_minutes(raw):
+
+def convert_minutes(raw):
 
     if not raw:
         return "0:00"
 
-    if raw.startswith("PT"):
+    if isinstance(raw,str) and raw.startswith("PT"):
         try:
             m = raw.replace("PT","").replace("S","").split("M")
-            mins = int(m[0])
-            secs = int(float(m[1]))
-            return f"{mins}:{secs:02d}"
+            minutes = int(m[0])
+            seconds = int(float(m[1]))
+            return f"{minutes}:{seconds:02d}"
         except:
             return "0:00"
 
@@ -38,8 +39,11 @@ def clean_minutes(raw):
 
 def clean_name(p):
 
-    if p.get("firstName") or p.get("familyName"):
-        return f'{p.get("firstName","")} {p.get("familyName","")}'.strip()
+    first = p.get("firstName","")
+    last = p.get("familyName","")
+
+    if first or last:
+        return f"{first} {last}".strip()
 
     if p.get("name"):
         return p["name"]
@@ -49,6 +53,8 @@ def clean_name(p):
 
     return "Unknown"
 
+
+games_saved = 0
 
 for d in game_dates:
 
@@ -60,6 +66,7 @@ for d in game_dates:
             continue
 
         game_date = g["gameDateEst"]
+
         dt = datetime.fromisoformat(game_date.replace("Z",""))
 
         year = dt.year
@@ -90,10 +97,17 @@ for d in game_dates:
         home_team = f'{home.get("teamCity","")} {home.get("teamName","")}'.strip()
         away_team = f'{away.get("teamCity","")} {away.get("teamName","")}'.strip()
 
+        if game_id.startswith("002"):
+            game_type = "Regular Season"
+        elif game_id.startswith("004"):
+            game_type = "Playoffs"
+        else:
+            game_type = "Other"
+
         output = {
             "game_id": game_id,
             "date": game.get("gameTimeUTC",""),
-            "game_type": "Regular Season" if game_id.startswith("002") else "Playoffs",
+            "game_type": game_type,
             "home_team": home_team,
             "away_team": away_team,
             "home_score": home.get("score",0),
@@ -115,15 +129,13 @@ for d in game_dates:
 
                     "player": clean_name(p),
                     "team": team_name,
-                    "minutes": clean_minutes(stats.get("minutes")),
-
+                    "minutes": convert_minutes(stats.get("minutes")),
                     "points": stats.get("points",0),
                     "rebounds": stats.get("reboundsTotal",0),
                     "assists": stats.get("assists",0),
                     "steals": stats.get("steals",0),
                     "blocks": stats.get("blocks",0),
                     "turnovers": stats.get("turnovers",0),
-
                     "fgm": stats.get("fieldGoalsMade",0),
                     "fga": stats.get("fieldGoalsAttempted",0),
                     "tpm": stats.get("threePointersMade",0),
@@ -135,20 +147,22 @@ for d in game_dates:
         with open(game_file,"w",encoding="utf-8") as f:
             json.dump(output,f,indent=2)
 
-        index_file = f"{season_dir}/index.json"
+        index_path = f"{season_dir}/index.json"
 
-        if os.path.exists(index_file):
-            with open(index_file) as f:
-                index = json.load(f)
+        if os.path.exists(index_path):
+            with open(index_path,"r") as f:
+                index=json.load(f)
         else:
-            index = {"games":[]}
+            index={"games":[]}
 
         if game_id not in index["games"]:
             index["games"].append(game_id)
 
-        with open(index_file,"w") as f:
+        with open(index_path,"w") as f:
             json.dump(index,f,indent=2)
 
+        games_saved += 1
         print("Saved",game_file)
 
+print("Games rebuilt:",games_saved)
 print("NBA updater finished")
