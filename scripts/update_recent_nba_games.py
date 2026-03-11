@@ -21,6 +21,21 @@ game_dates = data["leagueSchedule"]["gameDates"]
 games_saved = 0
 games_skipped = 0
 
+def convert_minutes(raw):
+    if not raw:
+        return "0:00"
+
+    if raw.startswith("PT"):
+        try:
+            m = raw.replace("PT","").replace("S","").split("M")
+            minutes = int(m[0])
+            seconds = int(float(m[1]))
+            return f"{minutes}:{seconds:02d}"
+        except:
+            return "0:00"
+
+    return raw
+
 for d in game_dates:
     for g in d["games"]:
 
@@ -34,8 +49,7 @@ for d in game_dates:
         year = int(game_date[:4])
         month = int(game_date[5:7])
 
-        # FIXED NBA season logic
-        # NBA season = year the season started
+        # NBA season logic
         if month >= 10:
             season = year
         else:
@@ -59,6 +73,13 @@ for d in game_dates:
 
         game = box.json()["game"]
 
+        # FULL TEAM NAMES
+        home = game["homeTeam"]
+        away = game["awayTeam"]
+
+        home_team = f'{home.get("teamCity","")} {home.get("teamName","")}'.strip()
+        away_team = f'{away.get("teamCity","")} {away.get("teamName","")}'.strip()
+
         if game_id.startswith("002"):
             game_type = "Regular Season"
         elif game_id.startswith("004"):
@@ -70,25 +91,32 @@ for d in game_dates:
             "game_id": game_id,
             "date": game.get("gameTimeUTC", ""),
             "game_type": game_type,
-            "home_team": game["homeTeam"].get("teamName", ""),
-            "away_team": game["awayTeam"].get("teamName", ""),
-            "home_score": game["homeTeam"].get("score", 0),
-            "away_score": game["awayTeam"].get("score", 0),
+            "home_team": home_team,
+            "away_team": away_team,
+            "home_score": home.get("score", 0),
+            "away_score": away.get("score", 0),
             "arena": game.get("arena", {}).get("arenaName", ""),
             "players": []
         }
 
         for team_key in ["homeTeam", "awayTeam"]:
             team = game.get(team_key, {})
-            team_name = team.get("teamName", "")
+            team_name = f'{team.get("teamCity","")} {team.get("teamName","")}'.strip()
 
             for p in team.get("players", []):
+
                 stats = p.get("statistics", {})
 
+                first = p.get("firstName", "")
+                last = p.get("familyName", "")
+                player_name = f"{first} {last}".strip()
+
+                minutes = convert_minutes(stats.get("minutes"))
+
                 output["players"].append({
-                    "player": p.get("name", ""),
+                    "player": player_name,
                     "team": team_name,
-                    "minutes": stats.get("minutes", "0"),
+                    "minutes": minutes,
                     "points": stats.get("points", 0),
                     "rebounds": stats.get("reboundsTotal", 0),
                     "assists": stats.get("assists", 0),
