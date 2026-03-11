@@ -32,6 +32,7 @@ all_rows = []
 match_ids = []
 
 for m in fixtures:
+
     home_team = m.get("homeTeam", {}).get("nickName", "")
     away_team = m.get("awayTeam", {}).get("nickName", "")
 
@@ -39,12 +40,16 @@ for m in fixtures:
         continue
 
     round_title = m.get("roundTitle", "")
-    round_num = 0
-    if round_title.startswith("Round "):
+
+    if round_title == "Opening Round":
+        round_num = 1
+    elif round_title.startswith("Round "):
         try:
             round_num = int(round_title.replace("Round ", "").strip())
         except:
             round_num = 0
+    else:
+        round_num = 0
 
     date_iso = ""
     kick = m.get("clock", {}).get("kickOffTimeLong", "")
@@ -74,10 +79,11 @@ for m in fixtures:
     all_rows.append(row)
 
     match_file = MATCH_DIR / f"{game_id}.json"
+
     with open(match_file, "w", encoding="utf-8") as f:
         json.dump([row], f, indent=2, ensure_ascii=False)
 
-# rebuild season file every run
+# rebuild the season file every run
 all_rows.sort(key=lambda x: (x.get("date_iso", ""), x.get("match_id", "")))
 
 with open(SEASON_FILE, "w", encoding="utf-8") as f:
@@ -85,7 +91,7 @@ with open(SEASON_FILE, "w", encoding="utf-8") as f:
 
 print("Season file rebuilt:", SEASON_FILE)
 
-# update main NRL index.json so season page buttons work
+# update main NRL index.json
 if NRL_INDEX.exists():
     try:
         with open(NRL_INDEX, "r", encoding="utf-8") as f:
