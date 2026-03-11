@@ -1,137 +1,111 @@
-import requests
 import json
+import requests
 from pathlib import Path
-from bs4 import BeautifulSoup
 
-BASE = "https://www.rugbyleagueproject.org"
 SEASON = 2026
 
-OUTPUT = Path(f"docs/data/nrl/seasons/{SEASON}.json")
-OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+NRL_INDEX = Path("docs/data/nrl/index.json")
+MATCH_DIR = Path(f"docs/data/nrl/matches/{SEASON}")
+SEASON_FILE = Path(f"docs/data/nrl/seasons/{SEASON}.json")
+
+MATCH_DIR.mkdir(parents=True, exist_ok=True)
+SEASON_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+URL = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}"
+
+print("Downloading NRL matches...")
 
 headers = {"User-Agent": "Mozilla/5.0"}
 
-print(f"Building NRL season {SEASON}")
+r = requests.get(URL, headers=headers, timeout=30)
 
-season_url = f"{BASE}/seasons/nrl-{SEASON}/results.html"
+if r.status_code != 200:
+    print("Download failed:", r.status_code)
+    raise SystemExit(1)
 
-r = requests.get(season_url, headers=headers)
-soup = BeautifulSoup(r.text, "html.parser")
+data = r.json()
 
-match_links = []
+fixtures = data.get("fixtures", [])
+print("Fixtures detected:", len(fixtures))
 
-for a in soup.select("a"):
-    href = a.get("href","")
-    if f"/seasons/nrl-{SEASON}/" in href and "round-" in href and href.endswith(".html"):
-        match_links.append(BASE + href)
+all_rows = []
+match_ids = []
 
-match_links = sorted(list(set(match_links)))
+for m in fixtures:
+    home_team = m.get("homeTeam", {}).get("nickName", "")
+    away_team = m.get("awayTeam", {}).get("nickName", "")
 
-print("Matches discovered:", len(match_links))
-
-rows = []
-match_counter = 1
-
-for url in match_links:
-
-    r = requests.get(url, headers=headers)
-    soup = BeautifulSoup(r.text, "html.parser")
-
-    try:
-        score = soup.find("h1").text.strip()
-        home_points, away_points = score.split("-")
-    except:
+    if not home_team or not away_team:
         continue
 
-    teams = soup.select("h2")
+    round_title = m.get("roundTitle", "")
+    round_num = 0
+    if round_title.startswith("Round "):
+        try:
+            round_num = int(round_title.replace("Round ", "").strip())
+        except:
+            round_num = 0
 
-    if len(teams) < 2:
-        continue
-
-    home_team = teams[0].text.strip()
-    away_team = teams[1].text.strip()
-
-    venue = ""
-    crowd = None
     date_iso = ""
+    kick = m.get("clock", {}).get("kickOffTimeLong", "")
+    if kick:
+        date_iso = kick[:10]
 
-    for p in soup.select("p"):
+    venue = m.get("venue", "") or ""
 
-        txt = p.text
+    home_points = m.get("homeScore", 0)
+    away_points = m.get("awayScore", 0)
 
-        if "Venue:" in txt:
-            venue = txt.split("Venue:")[1].split(",")[0].strip()
+    game_id = f"{SEASON}R{round_num:02d}{home_team[:3]}{away_team[:3]}".upper()
 
-        if "Crowd:" in txt:
-            try:
-                crowd = int(txt.split("Crowd:")[1].split(",")[0].strip())
-            except:
-                pass
+    match_ids.append(game_id)
 
-        if "Date:" in txt:
-            date_iso = txt.split("Date:")[1].split(",")[0].strip()
+    row = {
+        "season": SEASON,
+        "match_id": game_id,
+        "date_iso": date_iso,
+        "venue": venue,
+        "home_team": home_team,
+        "away_team": away_team,
+        "home_points": home_points,
+        "away_points": away_points
+    }
 
-    tables = soup.select("table")
+    all_rows.append(row)
 
-    for table in tables:
+    match_file = MATCH_DIR / f"{game_id}.json"
+    with open(match_file, "w", encoding="utf-8") as f:
+        json.dump([row], f, indent=2, ensure_ascii=False)
 
-        team_header = table.find_previous("h3")
+# rebuild season file every run
+all_rows.sort(key=lambda x: (x.get("date_iso", ""), x.get("match_id", "")))
 
-        if not team_header:
-            continue
+with open(SEASON_FILE, "w", encoding="utf-8") as f:
+    json.dump(all_rows, f, indent=2, ensure_ascii=False)
 
-        played_for = team_header.text.strip()
+print("Season file rebuilt:", SEASON_FILE)
 
-        for tr in table.select("tr")[1:]:
+# update main NRL index.json so season page buttons work
+if NRL_INDEX.exists():
+    try:
+        with open(NRL_INDEX, "r", encoding="utf-8") as f:
+            index = json.load(f)
+    except:
+        index = {}
+else:
+    index = {}
 
-            cols = [c.text.strip() for c in tr.select("td")]
+if "seasons" not in index or not isinstance(index["seasons"], list):
+    index["seasons"] = []
 
-            if len(cols) < 5:
-                continue
+if SEASON not in index["seasons"]:
+    index["seasons"].append(SEASON)
 
-            player = cols[0]
+index["seasons"] = sorted(set(index["seasons"]))
 
-            tries = int(cols[1]) if cols[1].isdigit() else 0
+with open(NRL_INDEX, "w", encoding="utf-8") as f:
+    json.dump(index, f, indent=2, ensure_ascii=False)
 
-            goals_made = 0
-            goals_attempted = 0
-
-            if "/" in cols[2]:
-                gm, ga = cols[2].split("/")
-                goals_made = int(gm)
-                goals_attempted = int(ga)
-
-            field_goals = int(cols[3]) if cols[3].isdigit() else 0
-            points = int(cols[4]) if cols[4].isdigit() else 0
-
-            row = {
-                "season": SEASON,
-                "match_id": f"{SEASON}{match_counter:04}",
-                "venue": venue,
-                "crowd": crowd,
-                "date_iso": date_iso,
-                "home_team": home_team,
-                "away_team": away_team,
-                "home_points": int(home_points),
-                "away_points": int(away_points),
-                "margin": abs(int(home_points)-int(away_points)),
-                "total_points": int(home_points)+int(away_points),
-
-                "player": player,
-                "played_for": played_for,
-
-                "tries": tries,
-                "goals_made": goals_made,
-                "goals_attempted": goals_attempted,
-                "field_goals": field_goals,
-                "points": points
-            }
-
-            rows.append(row)
-
-    match_counter += 1
-
-with open(OUTPUT,"w") as f:
-    json.dump(rows,f,indent=2)
-
-print("Season written:", OUTPUT)
+print("Index updated:", NRL_INDEX)
+print("Match files written:", len(match_ids))
+print("Update complete")
