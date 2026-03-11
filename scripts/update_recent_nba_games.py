@@ -1,7 +1,7 @@
 import requests
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 
 print("NBA updater starting")
 
@@ -39,10 +39,6 @@ def convert_minutes(raw):
     return raw
 
 
-today = datetime.now()
-cutoff = today - timedelta(days=7)
-
-
 for d in game_dates:
 
     for g in d["games"]:
@@ -60,7 +56,7 @@ for d in game_dates:
         year = game_dt.year
         month = game_dt.month
 
-        # NBA season logic
+        # NBA season folder
         if month >= 10:
             season = year
         else:
@@ -70,10 +66,6 @@ for d in game_dates:
         os.makedirs(season_dir, exist_ok=True)
 
         game_file = f"{season_dir}/{game_id}.json"
-
-        # rebuild if recent OR missing
-        if os.path.exists(game_file) and game_dt < cutoff:
-            continue
 
         box_url = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
 
