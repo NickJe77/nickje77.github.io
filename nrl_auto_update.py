@@ -2,102 +2,107 @@ import json
 import requests
 from pathlib import Path
 
+print("NRL AUTO UPDATE MARKER: V2026-OPENING-ROUND-FIX")
+
 SEASON = 2026
 
-INDEX = Path("docs/data/nrl/index.json")
-MATCH_DIR = Path(f"docs/data/nrl/matches/{SEASON}")
+BASE = Path("docs/data/nrl")
+MATCH_DIR = BASE / "matches" / str(SEASON)
+SEASON_FILE = BASE / "seasons" / f"{SEASON}.json"
+INDEX_FILE = BASE / "index.json"
 
 MATCH_DIR.mkdir(parents=True, exist_ok=True)
+SEASON_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-URL = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}"
+URL = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}&round=all"
 
 print("Downloading NRL matches...")
 
 headers = {"User-Agent": "Mozilla/5.0"}
 
-r = requests.get(URL, headers=headers, timeout=30)
+response = requests.get(URL, headers=headers, timeout=30)
 
-if r.status_code != 200:
-    print("Download failed:", r.status_code)
-    exit()
+if response.status_code != 200:
+    print("Download failed:", response.status_code)
+    raise SystemExit(1)
 
-data = r.json()
+data = response.json()
+fixtures = data.get("fixtures", [])
 
-games = []
+print("Fixtures detected:", len(fixtures))
 
-for m in data["fixtures"]:
+rows = []
 
-    home = m["homeTeam"]["nickName"]
-    away = m["awayTeam"]["nickName"]
+for m in fixtures:
+    home = m.get("homeTeam", {}).get("nickName")
+    away = m.get("awayTeam", {}).get("nickName")
 
-    date = m["clock"]["kickOffTimeLong"][:10]
+    if not home or not away:
+        continue
 
-    round_title = m["roundTitle"]
-    round_num = int(round_title.replace("Round ", ""))
+    round_title = m.get("roundTitle", "")
 
-    venue = m["venue"]
+    if "Opening" in round_title:
+        round_num = 1
+    elif round_title.startswith("Round"):
+        try:
+            round_num = int(round_title.split()[1])
+        except Exception:
+            round_num = 0
+    else:
+        round_num = 0
 
-    # scores may not exist yet
-    home_score = m.get("homeScore")
-    away_score = m.get("awayScore")
+    kickoff = m.get("clock", {}).get("kickOffTimeLong", "")
+    date_iso = kickoff[:10] if kickoff else ""
 
-    game_id = f"{SEASON}R{round_num:02d}{home[:3]}{away[:3]}".upper()
+    venue = m.get("venue", "")
 
-    game = {
-        "game_id": game_id,
+    home_pts = m.get("homeScore", 0)
+    away_pts = m.get("awayScore", 0)
+
+    match_id = f"{SEASON}R{round_num:02d}{home[:3]}{away[:3]}".upper()
+
+    row = {
         "season": SEASON,
-        "round": round_num,
-        "date": date,
+        "match_id": match_id,
+        "date_iso": date_iso,
         "venue": venue,
         "home_team": home,
         "away_team": away,
-        "home_score": home_score,
-        "away_score": away_score,
-        "players": []
+        "home_points": home_pts,
+        "away_points": away_pts
     }
 
-    games.append(game)
+    rows.append(row)
 
-print("Fixtures detected:", len(games))
+    match_file = MATCH_DIR / f"{match_id}.json"
+    with open(match_file, "w", encoding="utf-8") as f:
+        json.dump([row], f, indent=2)
 
+rows.sort(key=lambda x: (x["date_iso"], x["match_id"]))
 
-# LOAD INDEX
+with open(SEASON_FILE, "w", encoding="utf-8") as f:
+    json.dump(rows, f, indent=2)
 
-if INDEX.exists():
-    with open(INDEX) as f:
+print("Season file rebuilt:", SEASON_FILE)
+
+if INDEX_FILE.exists():
+    with open(INDEX_FILE, "r", encoding="utf-8") as f:
         index = json.load(f)
 else:
-    index = {"season": SEASON, "games": []}
+    index = {}
 
+if "seasons" not in index or not isinstance(index["seasons"], list):
+    index["seasons"] = []
 
-new_games = 0
+if SEASON not in index["seasons"]:
+    index["seasons"].append(SEASON)
 
-for g in games:
+index["seasons"] = sorted(index["seasons"])
 
-    game_id = g["game_id"]
-    match_file = MATCH_DIR / f"{game_id}.json"
-
-    if not match_file.exists():
-
-        with open(match_file, "w") as f:
-            json.dump(g, f, indent=2)
-
-        index["games"].append(game_id)
-        new_games += 1
-
-    else:
-        # update scores if they appear later
-        with open(match_file) as f:
-            existing = json.load(f)
-
-        if existing.get("home_score") != g["home_score"]:
-            with open(match_file, "w") as f:
-                json.dump(g, f, indent=2)
-
-index["games"] = sorted(index["games"])
-
-with open(INDEX, "w") as f:
+with open(INDEX_FILE, "w", encoding="utf-8") as f:
     json.dump(index, f, indent=2)
 
-print("New games added:", new_games)
+print("Index updated")
+print("Matches written:", len(rows))
 print("Update complete")
