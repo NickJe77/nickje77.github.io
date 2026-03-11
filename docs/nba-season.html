@@ -98,32 +98,6 @@ await loadSeason();
 
 }
 
-async function fetchGameFlexible(id){
-
-const possibilities=[
-id,
-"2"+id.slice(1),
-"1"+id.slice(1)
-];
-
-for(const gid of possibilities){
-
-try{
-
-const res=await fetch(BASE+season+"/"+gid+".json");
-
-if(res.ok){
-return await res.json();
-}
-
-}catch{}
-
-}
-
-return null;
-
-}
-
 async function loadSeason(){
 
 title.textContent="NBA Season "+season;
@@ -134,16 +108,21 @@ try{
 
 const index = await fetch(BASE+season+"/index.json?"+Date.now()).then(r=>r.json());
 
-const games=await Promise.all(index.games.map(fetchGameFlexible));
+const gameFiles=index.games.map(id =>
+fetch(BASE+season+"/"+id+".json?"+Date.now())
+.then(r=>r.ok?r.json():null)
+);
 
-allGames=games.filter(g=>{
+let rawGames=await Promise.all(gameFiles);
+
+allGames=rawGames.filter(g=>{
 
 if(!g || !g.game_id) return false;
 
-let prefix=g.game_id.substring(0,3);
+let prefix=g.game_id.charAt(0);
 
-if(prefix==="001") return false;
-if(prefix==="003") return false;
+if(prefix==="1") return false; // preseason
+if(prefix==="3") return false; // all-star
 
 return true;
 
@@ -184,10 +163,10 @@ const teamFilter=teamSelect.value;
 
 allGames.forEach(g=>{
 
-let prefix=g.game_id.substring(0,3);
+let prefix=g.game_id.charAt(0);
 
-if(typeFilter==="Regular" && prefix!=="002") return;
-if(typeFilter==="Playoffs" && prefix!=="004") return;
+if(typeFilter==="Regular" && prefix!=="2") return;
+if(typeFilter==="Playoffs" && prefix!=="4") return;
 
 if(teamFilter!=="All" && g.home_team!==teamFilter && g.away_team!==teamFilter) return;
 
@@ -195,9 +174,9 @@ let winner=g.home_score>g.away_score?g.home_team:g.away_team;
 
 let type="Regular Season";
 
-if(prefix==="004") type="Playoffs";
-if(prefix==="005") type="Play-In";
-if(prefix==="006") type="NBA Cup";
+if(prefix==="4") type="Playoffs";
+if(prefix==="5") type="Play-In";
+if(prefix==="6") type="NBA Cup";
 
 let tr=document.createElement("tr");
 
