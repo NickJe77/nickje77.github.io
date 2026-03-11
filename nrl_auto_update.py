@@ -1,23 +1,65 @@
 import json
 import requests
+from bs4 import BeautifulSoup
 from pathlib import Path
 
 SEASON = 2026
 
 INDEX = Path("docs/data/nrl/index.json")
 MATCH_DIR = Path(f"docs/data/nrl/matches/{SEASON}")
+
 MATCH_DIR.mkdir(parents=True, exist_ok=True)
 
-URL = f"https://www.nrl.com/api/matches?competition=111&season={SEASON}"
+URL = "https://www.rugbyleagueproject.org/competitions/nrl/2026.html"
 
-print("Downloading NRL matches...")
+print("Downloading results page...")
 
-r = requests.get(URL, timeout=30)
-data = r.json()
+headers = {"User-Agent": "Mozilla/5.0"}
 
-matches = data.get("matches", [])
+r = requests.get(URL, headers=headers, timeout=30)
 
-print("Matches returned:", len(matches))
+soup = BeautifulSoup(r.text, "html.parser")
+
+games = []
+
+for row in soup.select("table tr"):
+
+    cols = [c.text.strip() for c in row.find_all("td")]
+
+    if len(cols) < 6:
+        continue
+
+    try:
+        date = cols[0]
+        home = cols[1]
+        score = cols[2]
+        away = cols[3]
+        venue = cols[5]
+
+        if "-" not in score:
+            continue
+
+        home_score, away_score = score.split("-")
+
+        game_id = f"{date}-{home[:3]}-{away[:3]}".replace(" ", "")
+
+        game = {
+            "game_id": game_id,
+            "date": date,
+            "venue": venue,
+            "home_team": home,
+            "away_team": away,
+            "home_score": int(home_score),
+            "away_score": int(away_score),
+            "players": []
+        }
+
+        games.append(game)
+
+    except:
+        continue
+
+print("Games detected:", len(games))
 
 # load index
 if INDEX.exists():
@@ -28,34 +70,18 @@ else:
 
 new_games = 0
 
-for m in matches:
+for g in games:
 
-    if m["matchState"] != "played":
-        continue
-
-    game_id = str(m["matchId"])
-
-    game = {
-        "game_id": game_id,
-        "date": m["scheduledStartTime"][:10],
-        "round": m["roundNumber"],
-        "venue": m["venue"]["name"],
-        "home_team": m["homeTeam"]["nickName"],
-        "away_team": m["awayTeam"]["nickName"],
-        "home_score": m["homeTeam"]["score"],
-        "away_score": m["awayTeam"]["score"],
-        "players": []
-    }
+    game_id = g["game_id"]
 
     file = MATCH_DIR / f"{game_id}.json"
 
     if not file.exists():
 
         with open(file, "w") as f:
-            json.dump(game, f, indent=2)
+            json.dump(g, f, indent=2)
 
-        if game_id not in index["games"]:
-            index["games"].append(game_id)
+        index["games"].append(game_id)
 
         new_games += 1
 
