@@ -76,7 +76,10 @@ const gamesTable=document.getElementById("gamesTable");
 const title=document.getElementById("title");
 
 const params=new URLSearchParams(location.search);
-let season=params.get("season") || "2025";
+
+/* DEFAULT TO 2026 SO NEW GAMES LOAD */
+let season=params.get("season") || "2026";
+
 let allGames=[];
 
 seasonSelect.onchange=()=>location.href="nba-season.html?season="+seasonSelect.value;
@@ -85,7 +88,7 @@ teamSelect.onchange=renderGames;
 
 async function init(){
 
-for(let y=1976;y<=2025;y++){
+for(let y=1976;y<=2026;y++){
 let opt=document.createElement("option");
 opt.value=y;
 opt.textContent=y;
@@ -101,19 +104,23 @@ await loadSeason();
 async function loadSeason(){
 
 title.textContent="NBA Season "+season;
-gamesTable.innerHTML="";
+
+gamesTable.innerHTML="<tr><td colspan='5'>Loading games...</td></tr>";
+
 teamSelect.innerHTML='<option value="All">All Teams</option>';
 
 try{
 
-const index = await fetch(BASE+season+"/index.json?"+Date.now()).then(r=>r.json());
+const index=await fetch(BASE+season+"/index.json?"+Date.now()).then(r=>r.json());
 
-const gameFiles=index.games.map(id =>
+const requests=index.games.map(id =>
 fetch(BASE+season+"/"+id+".json?"+Date.now())
 .then(r=>r.ok?r.json():null)
 );
 
-let rawGames=await Promise.all(gameFiles);
+let rawGames=await Promise.all(requests);
+
+/* FILTER OUT PRESEASON AND ALL-STAR */
 
 allGames=rawGames.filter(g=>{
 
@@ -121,8 +128,8 @@ if(!g || !g.game_id) return false;
 
 let prefix=g.game_id.charAt(0);
 
-if(prefix==="1") return false; // preseason
-if(prefix==="3") return false; // all-star
+if(prefix==="1") return false;
+if(prefix==="3") return false;
 
 return true;
 
@@ -185,7 +192,7 @@ window.location.href=`/nba-game.html?season=${season}&game=${g.game_id}`;
 };
 
 tr.innerHTML=`
-<td>${g.date}</td>
+<td>${g.date.substring(0,10)}</td>
 <td>${g.home_team} vs ${g.away_team}</td>
 <td>${type}</td>
 <td>${winner}</td>
