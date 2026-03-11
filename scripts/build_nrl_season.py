@@ -1,13 +1,10 @@
 import requests
 import json
-import sys
 from pathlib import Path
 from bs4 import BeautifulSoup
 
 BASE = "https://www.rugbyleagueproject.org"
-
-# season passed from command line or default
-SEASON = int(sys.argv[1]) if len(sys.argv) > 1 else 2026
+SEASON = 2026
 
 OUTPUT = Path(f"docs/data/nrl/seasons/{SEASON}.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
@@ -17,8 +14,6 @@ headers = {"User-Agent": "Mozilla/5.0"}
 print(f"Building NRL season {SEASON}")
 
 season_url = f"{BASE}/seasons/nrl-{SEASON}/results.html"
-
-print("Downloading season results page...")
 
 r = requests.get(season_url, headers=headers)
 soup = BeautifulSoup(r.text, "html.parser")
@@ -38,8 +33,6 @@ rows = []
 match_counter = 1
 
 for url in match_links:
-
-    print("Processing match:", url)
 
     r = requests.get(url, headers=headers)
     soup = BeautifulSoup(r.text, "html.parser")
@@ -63,6 +56,7 @@ for url in match_links:
     date_iso = ""
 
     for p in soup.select("p"):
+
         txt = p.text
 
         if "Venue:" in txt:
@@ -82,6 +76,7 @@ for url in match_links:
     for table in tables:
 
         team_header = table.find_previous("h3")
+
         if not team_header:
             continue
 
@@ -96,33 +91,18 @@ for url in match_links:
 
             player = cols[0]
 
-            try:
-                tries = int(cols[1])
-            except:
-                tries = 0
+            tries = int(cols[1]) if cols[1].isdigit() else 0
 
             goals_made = 0
             goals_attempted = 0
 
-            goals = cols[2]
+            if "/" in cols[2]:
+                gm, ga = cols[2].split("/")
+                goals_made = int(gm)
+                goals_attempted = int(ga)
 
-            if "/" in goals:
-                gm, ga = goals.split("/")
-                try:
-                    goals_made = int(gm)
-                    goals_attempted = int(ga)
-                except:
-                    pass
-
-            try:
-                field_goals = int(cols[3])
-            except:
-                field_goals = 0
-
-            try:
-                points = int(cols[4])
-            except:
-                points = 0
+            field_goals = int(cols[3]) if cols[3].isdigit() else 0
+            points = int(cols[4]) if cols[4].isdigit() else 0
 
             row = {
                 "season": SEASON,
@@ -134,8 +114,8 @@ for url in match_links:
                 "away_team": away_team,
                 "home_points": int(home_points),
                 "away_points": int(away_points),
-                "margin": abs(int(home_points) - int(away_points)),
-                "total_points": int(home_points) + int(away_points),
+                "margin": abs(int(home_points)-int(away_points)),
+                "total_points": int(home_points)+int(away_points),
 
                 "player": player,
                 "played_for": played_for,
@@ -151,9 +131,7 @@ for url in match_links:
 
     match_counter += 1
 
-print("Player rows collected:", len(rows))
+with open(OUTPUT,"w") as f:
+    json.dump(rows,f,indent=2)
 
-with open(OUTPUT, "w") as f:
-    json.dump(rows, f, indent=2)
-
-print("Season written to:", OUTPUT)
+print("Season written:", OUTPUT)
