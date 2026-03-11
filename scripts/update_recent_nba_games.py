@@ -5,7 +5,6 @@ import os
 print("Repairing recent NBA games")
 
 BASE_DIR = "docs/data/nba"
-
 START_ID = 22500900   # first broken game
 
 
@@ -14,7 +13,7 @@ def convert_minutes(raw):
     if not raw:
         return "0:00"
 
-    if isinstance(raw,str) and raw.startswith("PT"):
+    if isinstance(raw, str) and raw.startswith("PT"):
         try:
             m = raw.replace("PT","").replace("S","").split("M")
             minutes = int(m[0])
@@ -49,6 +48,10 @@ for season in os.listdir(BASE_DIR):
 
     season_path = f"{BASE_DIR}/{season}"
 
+    # skip non-season folders
+    if not season.isdigit():
+        continue
+
     if not os.path.isdir(season_path):
         continue
 
@@ -62,7 +65,14 @@ for season in os.listdir(BASE_DIR):
 
         game_id = file.replace(".json","")
 
-        numeric = int(game_id[2:])
+        # ensure valid NBA game id
+        if not game_id.startswith(("002","004")):
+            continue
+
+        try:
+            numeric = int(game_id[2:])
+        except:
+            continue
 
         if numeric < START_ID:
             continue
@@ -109,7 +119,10 @@ for season in os.listdir(BASE_DIR):
                     "minutes": convert_minutes(stats.get("minutes")),
                     "points": stats.get("points",0),
                     "rebounds": stats.get("reboundsTotal",0),
-                    "assists": stats.get("assists",0)
+                    "assists": stats.get("assists",0),
+                    "steals": stats.get("steals",0),
+                    "blocks": stats.get("blocks",0),
+                    "turnovers": stats.get("turnovers",0)
                 })
 
         file_path = f"{season_path}/{file}"
@@ -119,5 +132,6 @@ for season in os.listdir(BASE_DIR):
 
         games_fixed += 1
         print("Fixed",file_path)
+
 
 print("Games repaired:",games_fixed)
