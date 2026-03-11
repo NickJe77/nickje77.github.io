@@ -26,9 +26,7 @@ def fetch_json(url):
 
 
 def get_round(round_name):
-
     url = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}&round={round_name}"
-
     data = fetch_json(url)
 
     if not data:
@@ -50,27 +48,30 @@ print("Fixtures detected:", len(fixtures))
 
 
 # -----------------------------
-# Extract match IDs correctly
+# Extract match IDs
 # -----------------------------
 
 dedup = {}
 
-for m in fixtures:
+for f in fixtures:
 
     mid = None
 
-    # possible locations
-    if "matchId" in m:
-        mid = m["matchId"]
+    # modern NRL draw format
+    match_obj = f.get("match")
 
-    elif "match" in m and isinstance(m["match"], dict):
-        mid = m["match"].get("matchId")
+    if isinstance(match_obj, dict):
+        mid = match_obj.get("matchId")
 
-    elif "id" in m:
-        mid = m["id"]
+    # fallback possibilities
+    if not mid:
+        mid = f.get("matchId")
+
+    if not mid:
+        mid = f.get("id")
 
     if mid:
-        dedup[str(mid)] = m
+        dedup[str(mid)] = f
 
 
 fixtures = list(dedup.values())
@@ -93,10 +94,6 @@ existing_ids = {m["match_id"] for m in existing}
 print("Existing matches:", len(existing_ids))
 
 
-# -----------------------------
-# Fetch match statistics
-# -----------------------------
-
 def fetch_stats(match_id):
 
     url = f"https://www.nrl.com/match-centre/{match_id}/statistics"
@@ -108,18 +105,14 @@ rows = existing.copy()
 
 added = 0
 
-for m in fixtures:
+for f in fixtures:
 
-    match_id = None
+    match_obj = f.get("match")
 
-    if "matchId" in m:
-        match_id = str(m["matchId"])
-
-    elif "match" in m and isinstance(m["match"], dict):
-        match_id = str(m["match"].get("matchId"))
-
-    elif "id" in m:
-        match_id = str(m["id"])
+    if isinstance(match_obj, dict):
+        match_id = str(match_obj.get("matchId"))
+    else:
+        match_id = str(f.get("matchId") or f.get("id"))
 
     if not match_id:
         continue
@@ -155,18 +148,18 @@ for m in fixtures:
     if not players:
         continue
 
-    kickoff = m.get("clock", {}).get("kickOffTimeLong", "")
+    kickoff = f.get("clock", {}).get("kickOffTimeLong", "")
 
-    home_score = m.get("homeScore", 0)
-    away_score = m.get("awayScore", 0)
+    home_score = f.get("homeScore", 0)
+    away_score = f.get("awayScore", 0)
 
     row = {
         "season": SEASON,
         "match_id": match_id,
-        "venue": m.get("venue"),
+        "venue": f.get("venue"),
         "date_iso": kickoff[:10],
-        "home_team": m.get("homeTeam", {}).get("nickName"),
-        "away_team": m.get("awayTeam", {}).get("nickName"),
+        "home_team": f.get("homeTeam", {}).get("nickName"),
+        "away_team": f.get("awayTeam", {}).get("nickName"),
         "home_points": home_score,
         "away_points": away_score,
         "margin": abs(home_score - away_score),
