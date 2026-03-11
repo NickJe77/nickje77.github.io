@@ -3,10 +3,9 @@ import requests
 from bs4 import BeautifulSoup
 from pathlib import Path
 
-BASE = "https://www.rugbyleagueproject.org"
 URL = "https://www.rugbyleagueproject.org/seasons/nrl-2026/results.html"
 
-FILE = Path("docs/data/nrl/matches/2026.json")
+OUT = Path("docs/data/nrl/matches/2026.json")
 
 print("Downloading RugbyLeagueProject results page")
 
@@ -15,55 +14,60 @@ soup = BeautifulSoup(html, "html.parser")
 
 rows = []
 
-table = soup.find("table")
+tables = soup.find_all("table")
 
-trs = table.find_all("tr")
+for table in tables:
 
-for tr in trs:
+    trs = table.find_all("tr")
 
-    tds = tr.find_all("td")
+    for tr in trs:
 
-    if len(tds) < 5:
-        continue
+        cols = [c.text.strip() for c in tr.find_all("td")]
 
-    date = tds[0].text.strip()
-    home = tds[1].text.strip()
-    score = tds[2].text.strip()
-    away = tds[3].text.strip()
-    venue = tds[4].text.strip()
+        if len(cols) < 5:
+            continue
 
-    if "-" not in score:
-        continue
+        date = cols[0]
+        home = cols[1]
+        score = cols[2]
+        away = cols[3]
+        venue = cols[4]
 
-    home_points, away_points = score.split("-")
+        if "-" not in score:
+            continue
 
-    row = {
-        "season": 2026,
-        "match_id": f"{date}-{home}-{away}",
-        "date_iso": "",
-        "venue": venue,
-        "home_team": home,
-        "away_team": away,
-        "home_points": int(home_points),
-        "away_points": int(away_points),
-        "margin": abs(int(home_points) - int(away_points)),
-        "total_points": int(home_points) + int(away_points),
-        "player": "",
-        "played_for": "",
-        "tries": 0,
-        "goals_made": 0,
-        "goals_attempted": 0,
-        "field_goals": 0,
-        "points": 0
-    }
+        try:
+            h, a = score.split("-")
+            h = int(h)
+            a = int(a)
+        except:
+            continue
 
-    rows.append(row)
+        rows.append({
+            "season": 2026,
+            "match_id": f"{date}-{home}-{away}",
+            "date_iso": "",
+            "venue": venue,
+            "home_team": home,
+            "away_team": away,
+            "home_points": h,
+            "away_points": a,
+            "margin": abs(h-a),
+            "total_points": h+a,
+            "player": "",
+            "played_for": "",
+            "tries": 0,
+            "goals_made": 0,
+            "goals_attempted": 0,
+            "field_goals": 0,
+            "points": 0
+        })
 
 print("Matches collected:", len(rows))
 
-FILE.parent.mkdir(parents=True, exist_ok=True)
+OUT.parent.mkdir(parents=True, exist_ok=True)
 
-with open(FILE, "w") as f:
+with open(OUT, "w") as f:
     json.dump(rows, f, indent=2)
 
 print("2026 season rebuilt successfully")
