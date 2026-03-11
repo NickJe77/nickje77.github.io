@@ -6,10 +6,9 @@ SEASON = 2026
 
 INDEX = Path("docs/data/nrl/index.json")
 MATCH_DIR = Path(f"docs/data/nrl/matches/{SEASON}")
-
 MATCH_DIR.mkdir(parents=True, exist_ok=True)
 
-URL = f"https://statsapi.nrl.com/api/sports-tables/matches?competition=111&season={SEASON}"
+URL = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}"
 
 print("Downloading NRL matches...")
 
@@ -20,48 +19,46 @@ headers = {
 r = requests.get(URL, headers=headers, timeout=30)
 
 if r.status_code != 200:
-    print("Failed to download:", r.status_code)
+    print("Failed:", r.status_code)
     exit()
 
 data = r.json()
 
-matches = data.get("matches", [])
-
 games = []
 
-for m in matches:
+for round_data in data["rounds"]:
 
-    # skip games not played yet
-    if m.get("matchState") != "played":
-        continue
+    round_num = round_data["roundNumber"]
 
-    game_id = str(m["matchId"])
+    for m in round_data["matches"]:
 
-    game = {
-        "game_id": game_id,
-        "season": SEASON,
-        "date": m["scheduledStartTime"][:10],
-        "round": m["roundNumber"],
-        "venue": m["venue"]["name"],
-        "home_team": m["homeTeam"]["nickName"],
-        "away_team": m["awayTeam"]["nickName"],
-        "home_score": m["homeTeam"]["score"],
-        "away_score": m["awayTeam"]["score"],
-        "players": []
-    }
+        if m["matchState"] != "played":
+            continue
 
-    games.append(game)
+        game_id = str(m["matchId"])
+
+        game = {
+            "game_id": game_id,
+            "season": SEASON,
+            "round": round_num,
+            "date": m["scheduledStartTime"][:10],
+            "venue": m["venue"]["name"],
+            "home_team": m["homeTeam"]["nickName"],
+            "away_team": m["awayTeam"]["nickName"],
+            "home_score": m["homeTeam"]["score"],
+            "away_score": m["awayTeam"]["score"],
+            "players": []
+        }
+
+        games.append(game)
 
 print("Games detected:", len(games))
 
-
-# LOAD INDEX
 if INDEX.exists():
     with open(INDEX) as f:
         index = json.load(f)
 else:
     index = {"season": SEASON, "games": []}
-
 
 new_games = 0
 
@@ -80,12 +77,10 @@ for g in games:
 
         new_games += 1
 
-
 index["games"] = sorted(index["games"])
 
 with open(INDEX, "w") as f:
     json.dump(index, f, indent=2)
-
 
 print("New games added:", new_games)
 print("Update complete")
