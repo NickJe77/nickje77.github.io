@@ -4,12 +4,21 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 
 URL = "https://www.rugbyleagueproject.org/seasons/nrl-2026/results.html"
-
 OUT = Path("docs/data/nrl/matches/2026.json")
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36"
+}
 
 print("Downloading RugbyLeagueProject results page")
 
-html = requests.get(URL).text
+res = requests.get(URL, headers=HEADERS)
+
+if res.status_code != 200:
+    print("Page request failed:", res.status_code)
+    exit()
+
+html = res.text
 soup = BeautifulSoup(html, "html.parser")
 
 rows = []
