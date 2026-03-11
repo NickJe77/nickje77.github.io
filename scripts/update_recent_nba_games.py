@@ -26,7 +26,7 @@ for d in game_dates:
 
         game_id = str(g["gameId"])
 
-        # skip preseason
+        # Skip preseason
         if game_id.startswith("001"):
             continue
 
@@ -34,10 +34,12 @@ for d in game_dates:
         year = int(game_date[:4])
         month = int(game_date[5:7])
 
+        # FIXED NBA season logic
+        # NBA season = year the season started
         if month >= 10:
-            season = year + 1
-        else:
             season = year
+        else:
+            season = year - 1
 
         season_dir = f"{BASE_DIR}/{season}"
         os.makedirs(season_dir, exist_ok=True)
@@ -105,6 +107,7 @@ for d in game_dates:
             json.dump(output, f, indent=2)
 
         index_path = f"{season_dir}/index.json"
+
         if os.path.exists(index_path):
             with open(index_path, "r", encoding="utf-8") as f:
                 index = json.load(f)
@@ -118,6 +121,7 @@ for d in game_dates:
             json.dump(index, f, indent=2)
 
         games_path = f"{season_dir}/games.json"
+
         if os.path.exists(games_path):
             with open(games_path, "r", encoding="utf-8") as f:
                 games_list = json.load(f)
