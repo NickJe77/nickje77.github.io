@@ -1,62 +1,42 @@
 import json
-import requests
-import csv
 from pathlib import Path
-from io import StringIO
 
-URL = "https://www.rugbyleagueproject.org/seasons/nrl-2026/results.csv"
+INDEX = Path("docs/data/nrl/index.json")
+MATCH_DIR = Path("docs/data/nrl/matches/2026")
 
-OUT = Path("docs/data/nrl/matches/2026.json")
+new_game = {
+    "game_id": "2026R02G01",
+    "date": "2026-03-15",
+    "round": 2,
+    "venue": "Suncorp Stadium",
+    "home_team": "Brisbane Broncos",
+    "away_team": "North Queensland Cowboys",
+    "home_score": 24,
+    "away_score": 18,
+    "players": []
+}
 
-print("Downloading NRL results CSV")
+game_id = new_game["game_id"]
 
-r = requests.get(URL)
+match_file = MATCH_DIR / f"{game_id}.json"
 
-if r.status_code != 200:
-    print("Download failed:", r.status_code)
-    exit()
+if not match_file.exists():
 
-data = list(csv.DictReader(StringIO(r.text)))
+    MATCH_DIR.mkdir(parents=True, exist_ok=True)
 
-rows = []
+    with open(match_file,"w") as f:
+        json.dump(new_game,f,indent=2)
 
-for g in data:
+    with open(INDEX) as f:
+        index=json.load(f)
 
-    try:
-        home = g["Home Team"]
-        away = g["Away Team"]
-        home_points = int(g["Home Score"])
-        away_points = int(g["Away Score"])
-        venue = g["Venue"]
-        date = g["Date"]
-    except:
-        continue
+    if game_id not in index["games"]:
+        index["games"].append(game_id)
 
-    rows.append({
-        "season": 2026,
-        "match_id": f"{date}-{home}-{away}",
-        "date_iso": "",
-        "venue": venue,
-        "home_team": home,
-        "away_team": away,
-        "home_points": home_points,
-        "away_points": away_points,
-        "margin": abs(home_points - away_points),
-        "total_points": home_points + away_points,
-        "player": "",
-        "played_for": "",
-        "tries": 0,
-        "goals_made": 0,
-        "goals_attempted": 0,
-        "field_goals": 0,
-        "points": 0
-    })
+    with open(INDEX,"w") as f:
+        json.dump(index,f,indent=2)
 
-print("Matches collected:", len(rows))
+    print("Game added")
 
-OUT.parent.mkdir(parents=True, exist_ok=True)
-
-with open(OUT, "w") as f:
-    json.dump(rows, f, indent=2)
-
-print("NRL data rebuilt successfully")
+else:
+    print("Game already exists")
