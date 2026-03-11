@@ -1,5 +1,6 @@
 import json
 import requests
+from bs4 import BeautifulSoup
 from pathlib import Path
 
 print("NRL FULL UPDATER")
@@ -15,75 +16,45 @@ MATCH_FILE.parent.mkdir(parents=True, exist_ok=True)
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
-def fetch_json(url):
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=30)
-        if r.status_code != 200:
-            return None
-        return r.json()
-    except:
-        return None
+def get_season_matches():
 
+    url = f"https://www.rugbyleagueproject.org/seasons/nrl-{SEASON}/results.html"
 
-def get_round(round_name):
+    r = requests.get(url, headers=HEADERS)
 
-    url = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}&round={round_name}"
-
-    data = fetch_json(url)
-
-    if not data:
+    if r.status_code != 200:
+        print("Failed to load season page")
         return []
 
-    return data.get("fixtures", [])
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    matches = []
+
+    for a in soup.select("a[href*='/matches/']"):
+
+        href = a.get("href")
+
+        if "/matches/" not in href:
+            continue
+
+        match_id = href.split("/")[-1].replace(".html","")
+
+        matches.append(match_id)
+
+    return list(set(matches))
 
 
-print("Discovering fixtures")
+print("Discovering matches")
 
-fixtures = []
+match_ids = get_season_matches()
 
-fixtures.extend(get_round("opening"))
+print("Matches detected:", len(match_ids))
 
-for r in range(1, 30):
-    fixtures.extend(get_round(f"round-{r}"))
-
-print("Fixtures detected:", len(fixtures))
-
-
-# -----------------------------
-# Extract match IDs
-# -----------------------------
-
-dedup = {}
-
-for f in fixtures:
-
-    match_id = None
-
-    if "match" in f and isinstance(f["match"], dict):
-        match_id = f["match"].get("matchId")
-
-    if not match_id:
-        match_id = f.get("matchId")
-
-    if not match_id:
-        match_id = f.get("id")
-
-    if match_id:
-        dedup[str(match_id)] = f
-
-
-fixtures = list(dedup.values())
-
-print("Unique matches:", len(fixtures))
-
-
-# -----------------------------
-# Load existing matches
-# -----------------------------
 
 existing = []
 
 if MATCH_FILE.exists():
+
     with open(MATCH_FILE) as f:
         existing = json.load(f)
 
@@ -92,83 +63,76 @@ existing_ids = {m["match_id"] for m in existing}
 print("Existing matches:", len(existing_ids))
 
 
-def fetch_stats(match_id):
-
-    url = f"https://www.nrl.com/match-centre/{match_id}/statistics"
-
-    return fetch_json(url)
-
-
 rows = existing.copy()
 
 added = 0
 
-for f in fixtures:
 
-    match_id = None
+def get_match(match_id):
 
-    if "match" in f and isinstance(f["match"], dict):
-        match_id = str(f["match"].get("matchId"))
+    url = f"https://www.rugbyleagueproject.org/matches/{match_id}.html"
 
-    if not match_id:
-        match_id = str(f.get("matchId") or f.get("id"))
+    r = requests.get(url, headers=HEADERS)
 
-    if not match_id:
-        continue
+    if r.status_code != 200:
+        return None
+
+    soup = BeautifulSoup(r.text,"html.parser")
+
+    teams = soup.select(".team")
+
+    if len(teams) < 2:
+        return None
+
+    home = teams[0].text.strip()
+    away = teams[1].text.strip()
+
+    players = []
+
+    for row in soup.select("table.players tr"):
+
+        cols = [c.text.strip() for c in row.select("td")]
+
+        if len(cols) < 6:
+            continue
+
+        players.append({
+            "player": cols[0],
+            "played_for": cols[1],
+            "tries": int(cols[2] or 0),
+            "goals_made": int(cols[3] or 0),
+            "goals_attempted": int(cols[4] or 0),
+            "field_goals": int(cols[5] or 0),
+            "points": int(cols[6] or 0)
+        })
+
+    if not players:
+        return None
+
+    return {
+        "season": SEASON,
+        "match_id": match_id,
+        "home_team": home,
+        "away_team": away,
+        "players": players
+    }
+
+
+for match_id in match_ids:
 
     if match_id in existing_ids:
         continue
 
-    stats = fetch_stats(match_id)
+    data = get_match(match_id)
 
-    if not stats:
+    if not data:
         continue
 
-    players = []
-
-    for t in stats.get("teams", []):
-
-        team_name = t.get("teamNickName")
-
-        for p in t.get("players", []):
-
-            players.append({
-                "player": p.get("displayName"),
-                "played_for": team_name,
-                "tries": p.get("tries", 0),
-                "goals_made": p.get("goals", 0),
-                "goals_attempted": p.get("goalAttempts", 0),
-                "field_goals": p.get("fieldGoals", 0),
-                "points": p.get("points", 0)
-            })
-
-    if not players:
-        continue
-
-    kickoff = f.get("clock", {}).get("kickOffTimeLong", "")
-
-    home_score = f.get("homeScore", 0)
-    away_score = f.get("awayScore", 0)
-
-    row = {
-        "season": SEASON,
-        "match_id": match_id,
-        "venue": f.get("venue"),
-        "date_iso": kickoff[:10],
-        "home_team": f.get("homeTeam", {}).get("nickName"),
-        "away_team": f.get("awayTeam", {}).get("nickName"),
-        "home_points": home_score,
-        "away_points": away_score,
-        "margin": abs(home_score - away_score),
-        "total_points": home_score + away_score,
-        "players": players
-    }
-
-    rows.append(row)
+    rows.append(data)
 
     added += 1
 
-    print("Added match", match_id, "players:", len(players))
+    print("Added match", match_id)
 
 
 if added == 0:
@@ -177,11 +141,10 @@ if added == 0:
 
 else:
 
-    rows.sort(key=lambda x: x["date_iso"])
-
-    with open(MATCH_FILE, "w") as f:
-        json.dump(rows, f, indent=2)
+    with open(MATCH_FILE,"w") as f:
+        json.dump(rows,f,indent=2)
 
     print("Matches added:", added)
+
 
 print("Updater complete")
