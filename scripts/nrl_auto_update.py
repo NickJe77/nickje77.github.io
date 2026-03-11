@@ -2,6 +2,8 @@ import json
 import requests
 from pathlib import Path
 
+print("NRL AUTO UPDATE MARKER: V2026-OPENING-ROUND-FIX")
+
 SEASON = 2026
 
 BASE = Path("docs/data/nrl")
@@ -12,20 +14,19 @@ INDEX_FILE = BASE / "index.json"
 MATCH_DIR.mkdir(parents=True, exist_ok=True)
 SEASON_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-URL = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}"
+URL = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}&round=all"
 
 print("Downloading NRL matches...")
 
 headers = {"User-Agent": "Mozilla/5.0"}
 
-r = requests.get(URL, headers=headers, timeout=30)
+response = requests.get(URL, headers=headers, timeout=30)
 
-if r.status_code != 200:
-    print("Download failed:", r.status_code)
-    exit(1)
+if response.status_code != 200:
+    print("Download failed:", response.status_code)
+    raise SystemExit(1)
 
-data = r.json()
-
+data = response.json()
 fixtures = data.get("fixtures", [])
 
 print("Fixtures detected:", len(fixtures))
@@ -33,7 +34,6 @@ print("Fixtures detected:", len(fixtures))
 rows = []
 
 for m in fixtures:
-
     home = m.get("homeTeam", {}).get("nickName")
     away = m.get("awayTeam", {}).get("nickName")
 
@@ -47,7 +47,7 @@ for m in fixtures:
     elif round_title.startswith("Round"):
         try:
             round_num = int(round_title.split()[1])
-        except:
+        except Exception:
             round_num = 0
     else:
         round_num = 0
@@ -76,7 +76,6 @@ for m in fixtures:
     rows.append(row)
 
     match_file = MATCH_DIR / f"{match_id}.json"
-
     with open(match_file, "w", encoding="utf-8") as f:
         json.dump([row], f, indent=2)
 
@@ -88,12 +87,12 @@ with open(SEASON_FILE, "w", encoding="utf-8") as f:
 print("Season file rebuilt:", SEASON_FILE)
 
 if INDEX_FILE.exists():
-    with open(INDEX_FILE) as f:
+    with open(INDEX_FILE, "r", encoding="utf-8") as f:
         index = json.load(f)
 else:
     index = {}
 
-if "seasons" not in index:
+if "seasons" not in index or not isinstance(index["seasons"], list):
     index["seasons"] = []
 
 if SEASON not in index["seasons"]:
@@ -101,7 +100,7 @@ if SEASON not in index["seasons"]:
 
 index["seasons"] = sorted(index["seasons"])
 
-with open(INDEX_FILE, "w") as f:
+with open(INDEX_FILE, "w", encoding="utf-8") as f:
     json.dump(index, f, indent=2)
 
 print("Index updated")
