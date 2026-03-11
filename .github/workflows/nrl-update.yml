@@ -1,48 +1,43 @@
-name: NRL UPDATE TEST
+name: NRL Auto Update
 
 on:
+  schedule:
+    - cron: "0 */6 * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  update-nrl:
+  update:
     runs-on: ubuntu-latest
 
     steps:
-      - name: CHECKOUT REPO
+
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: SETUP PYTHON
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: INSTALL REQUESTS
+      - name: Install requests
         run: pip install requests
 
-      - name: SHOW LIVE FILE LIST
-        run: |
-          echo "PWD:"
-          pwd
-          echo ""
-          echo "FILES:"
-          find . -maxdepth 3 -type f | sort
+      - name: Run updater
+        run: python scripts/nrl_updater.py
 
-      - name: SHOW LIVE SCRIPT CONTENT
+      - name: Commit changes
         run: |
-          echo "===== START OF ROOT nrl_auto_update.py ====="
-          nl -ba nrl_auto_update.py | sed -n '1,220p'
-          echo "===== END OF ROOT nrl_auto_update.py ====="
-
-      - name: RUN ROOT NRL UPDATER
-        run: python ./nrl_auto_update.py
-
-      - name: COMMIT UPDATED FILES
-        run: |
-          git config --global user.name "github-actions"
+          git config --global user.name "NRL Bot"
           git config --global user.email "actions@github.com"
+
           git add docs/data/nrl/
-          git commit -m "Automatic NRL update" || echo "No changes"
-          git push
+
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "NRL auto update"
+            git push
+          fi
