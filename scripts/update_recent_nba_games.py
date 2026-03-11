@@ -50,7 +50,7 @@ for d in game_dates:
         year = int(game_date[:4])
         month = int(game_date[5:7])
 
-        # NBA season folder
+        # NBA season logic
         if month >= 10:
             season = year
         else:
@@ -104,9 +104,13 @@ for d in game_dates:
 
                 stats = p.get("statistics", {})
 
-                first = p.get("firstName", "")
-                last = p.get("familyName", "")
-                player_name = f"{first} {last}".strip()
+                # PLAYER NAME FIX (works for old + new NBA API formats)
+                player_name = (
+                    f"{p.get('firstName','')} {p.get('familyName','')}".strip()
+                    or p.get("name")
+                    or p.get("nameI")
+                    or "Unknown"
+                )
 
                 minutes = convert_minutes(stats.get("minutes"))
 
