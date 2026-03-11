@@ -21,6 +21,7 @@ game_dates = data["leagueSchedule"]["gameDates"]
 
 games_saved = 0
 
+
 def convert_minutes(raw):
 
     if not raw:
@@ -38,7 +39,7 @@ def convert_minutes(raw):
     return raw
 
 
-today = datetime.utcnow()
+today = datetime.now()
 cutoff = today - timedelta(days=7)
 
 
@@ -48,15 +49,18 @@ for d in game_dates:
 
         game_id = str(g["gameId"])
 
+        # skip preseason
         if game_id.startswith("001"):
             continue
 
         game_date = g["gameDateEst"]
-        game_dt = datetime.fromisoformat(game_date)
+
+        game_dt = datetime.fromisoformat(game_date.replace("Z",""))
 
         year = game_dt.year
         month = game_dt.month
 
+        # NBA season logic
         if month >= 10:
             season = year
         else:
@@ -67,7 +71,7 @@ for d in game_dates:
 
         game_file = f"{season_dir}/{game_id}.json"
 
-        # Only rebuild if recent OR missing
+        # rebuild if recent OR missing
         if os.path.exists(game_file) and game_dt < cutoff:
             continue
 
@@ -133,7 +137,13 @@ for d in game_dates:
                     "assists": stats.get("assists",0),
                     "steals": stats.get("steals",0),
                     "blocks": stats.get("blocks",0),
-                    "turnovers": stats.get("turnovers",0)
+                    "turnovers": stats.get("turnovers",0),
+                    "fgm": stats.get("fieldGoalsMade",0),
+                    "fga": stats.get("fieldGoalsAttempted",0),
+                    "tpm": stats.get("threePointersMade",0),
+                    "tpa": stats.get("threePointersAttempted",0),
+                    "ftm": stats.get("freeThrowsMade",0),
+                    "fta": stats.get("freeThrowsAttempted",0)
                 })
 
         with open(game_file,"w",encoding="utf-8") as f:
