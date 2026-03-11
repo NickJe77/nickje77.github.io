@@ -15,6 +15,7 @@ MATCH_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
+
 def get_match_ids():
 
     url = f"https://www.rugbyleagueproject.org/seasons/nrl-{SEASON}/results.html"
@@ -32,11 +33,13 @@ def get_match_ids():
 
     return sorted(list(set(ids)))
 
+
 print("Discovering matches")
 
 match_ids = get_match_ids()
 
 print("Matches detected:", len(match_ids))
+
 
 existing = []
 
@@ -59,34 +62,32 @@ def scrape_match(match_id):
 
     players = []
 
-    tables = soup.select("table")
+    for li in soup.select("li"):
 
-    for table in tables:
+        text = li.text.strip()
 
-        headers = [h.text.strip() for h in table.select("th")]
-
-        if "Player" not in headers:
+        if "(" not in text:
             continue
 
-        for tr in table.select("tr")[1:]:
+        name = text.split("(")[0].strip()
 
-            cols = [td.text.strip() for td in tr.select("td")]
+        try:
 
-            if len(cols) < 7:
-                continue
+            tries = text.count("try")
 
-            try:
-                players.append({
-                    "player": cols[0],
-                    "played_for": cols[1],
-                    "tries": int(cols[2] or 0),
-                    "goals_made": int(cols[3] or 0),
-                    "goals_attempted": int(cols[4] or 0),
-                    "field_goals": int(cols[5] or 0),
-                    "points": int(cols[6] or 0)
-                })
-            except:
-                continue
+            goals = text.count("goal")
+
+            players.append({
+                "player": name,
+                "tries": tries,
+                "goals_made": goals,
+                "goals_attempted": goals,
+                "field_goals": 0,
+                "points": tries*4 + goals*2
+            })
+
+        except:
+            continue
 
     if not players:
         return None
@@ -99,6 +100,7 @@ def scrape_match(match_id):
 
 
 rows = existing.copy()
+
 added = 0
 
 for match_id in match_ids:
@@ -112,9 +114,11 @@ for match_id in match_ids:
         continue
 
     rows.append(data)
+
     added += 1
 
     print("Added match", match_id)
+
 
 if added == 0:
 
@@ -126,5 +130,6 @@ else:
         json.dump(rows,f,indent=2)
 
     print("Matches added:", added)
+
 
 print("Updater complete")
