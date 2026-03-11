@@ -66,174 +66,208 @@ td.team{text-align:left;font-weight:700;}
 <body>
 
 <div class="page">
-  <h1>NRL Season</h1>
+<h1>NRL Season</h1>
 
-  <div class="year-bar" id="years"></div>
-  <div class="status" id="status">Loading seasons…</div>
+<div class="year-bar" id="years"></div>
+<div class="status" id="status">Loading seasons…</div>
 
-  <div class="content">
-    <div class="card">
-      <table>
-        <thead>
-          <tr>
-            <th style="width:42px;">#</th>
-            <th>Team</th>
-            <th style="width:60px;">W</th>
-            <th style="width:60px;">L</th>
-          </tr>
-        </thead>
-        <tbody id="ladderBody"></tbody>
-      </table>
-    </div>
+<div class="content">
 
-    <div id="matches"></div>
-  </div>
+<div class="card">
+<table>
+<thead>
+<tr>
+<th style="width:42px;">#</th>
+<th>Team</th>
+<th style="width:60px;">W</th>
+<th style="width:60px;">L</th>
+</tr>
+</thead>
+<tbody id="ladderBody"></tbody>
+</table>
+</div>
+
+<div id="matches"></div>
+
+</div>
 </div>
 
 <script>
+
 let loadToken = 0;
 
 function toNum(v){
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
+const n = Number(v);
+return Number.isFinite(n) ? n : 0;
 }
 
 fetch("data/nrl/index.json")
 .then(r=>r.json())
 .then(index=>{
-  const yearsDiv = document.getElementById("years");
-  const status = document.getElementById("status");
 
-  let years = [];
+const yearsDiv=document.getElementById("years");
+const status=document.getElementById("status");
 
-  if(Array.isArray(index.seasons) && index.seasons.length){
-    years = index.seasons.slice().sort((a,b)=>a-b);
-  } else if(index.first_season && index.last_season){
-    for(let y=index.first_season; y<=index.last_season; y++){
-      years.push(y);
-    }
-  } else {
-    status.textContent = "Index.json missing seasons.";
-    return;
-  }
+let years=[];
 
-  years.forEach(y=>{
-    const btn=document.createElement("div");
-    btn.className="year-btn";
-    btn.textContent=String(y);
-    btn.onclick=()=>loadSeason(y);
-    yearsDiv.appendChild(btn);
-  });
+if(Array.isArray(index.seasons)){
+years=index.seasons.slice().sort((a,b)=>a-b);
+}else{
+status.textContent="Index.json missing seasons.";
+return;
+}
 
-  status.textContent = "Select a season.";
-  loadSeason(years[0]);
-})
-.catch(err=>{
-  document.getElementById("status").textContent = "Index load failed.";
-  console.error(err);
+years.forEach(y=>{
+const btn=document.createElement("div");
+btn.className="year-btn";
+btn.textContent=y;
+btn.onclick=()=>loadSeason(y);
+yearsDiv.appendChild(btn);
 });
 
+status.textContent="Select a season.";
+loadSeason(years[0]);
+
+})
+.catch(err=>{
+document.getElementById("status").textContent="Index load failed.";
+console.error(err);
+});
+
+
 function setActiveYear(y){
-  document.querySelectorAll(".year-btn").forEach(b=>{
-    b.classList.toggle("active", b.textContent == String(y));
-  });
+document.querySelectorAll(".year-btn").forEach(b=>{
+b.classList.toggle("active", b.textContent==y);
+});
 }
+
 
 function loadSeason(year){
-  const myToken = ++loadToken;
-  setActiveYear(year);
 
-  document.getElementById("status").textContent = "Loading " + year + "…";
-  document.getElementById("ladderBody").innerHTML = "";
-  document.getElementById("matches").innerHTML = "";
+const myToken=++loadToken;
 
-  fetch("data/nrl/seasons/" + year + ".json")
-  .then(r=>{
-    if(!r.ok) throw new Error("Season file not found");
-    return r.json();
-  })
-  .then(rows=>{
-    if(myToken !== loadToken) return;
+setActiveYear(year);
 
-    if(!Array.isArray(rows) || !rows.length){
-      document.getElementById("status").textContent = "No data for " + year;
-      return;
-    }
+document.getElementById("status").textContent="Loading "+year+"…";
+document.getElementById("ladderBody").innerHTML="";
+document.getElementById("matches").innerHTML="";
 
-    const matchMap = new Map();
+fetch("data/nrl/seasons/"+year+".json")
 
-    rows.forEach(r=>{
-      const id = String(r.match_id || "");
-      if(!id) return;
+.then(r=>{
+if(!r.ok) throw new Error("Season missing");
+return r.json();
+})
 
-      if(!matchMap.has(id)){
-        matchMap.set(id,{
-          match_id:id,
-          date_iso:r.date_iso || "",
-          venue:r.venue || "",
-          home_team:r.home_team || "",
-          away_team:r.away_team || "",
-          home_points:toNum(r.home_points),
-          away_points:toNum(r.away_points)
-        });
-      }
-    });
+.then(rows=>{
 
-    const matches = Array.from(matchMap.values());
+if(myToken!==loadToken) return;
 
-    // Ladder calculation
-    const ladder = {};
-    matches.forEach(m=>{
-      if(!m.home_team || !m.away_team) return;
-
-      if(!ladder[m.home_team]) ladder[m.home_team]={team:m.home_team,W:0,L:0};
-      if(!ladder[m.away_team]) ladder[m.away_team]={team:m.away_team,W:0,L:0};
-
-      if(m.home_points > m.away_points){
-        ladder[m.home_team].W++;
-        ladder[m.away_team].L++;
-      } else if(m.away_points > m.home_points){
-        ladder[m.away_team].W++;
-        ladder[m.home_team].L++;
-      }
-    });
-
-    const ladderArr = Object.values(ladder).sort((a,b)=>b.W-a.W);
-
-    document.getElementById("ladderBody").innerHTML =
-      ladderArr.map((t,i)=>`
-        <tr>
-          <td>${i+1}</td>
-          <td class="team">${t.team}</td>
-          <td>${t.W}</td>
-          <td>${t.L}</td>
-        </tr>
-      `).join("");
-
-    const matchesDiv = document.getElementById("matches");
-
-    matchesDiv.innerHTML = matches.map(m=>{
-      const line1 = `${m.home_team} ${m.home_points} - ${m.away_points} ${m.away_team}`;
-      const meta = `${m.date_iso}${m.venue ? " • " + m.venue : ""}`;
-
-      return `
-        <div class="match"
-             onclick="window.location.href='nrl-game.html?season=${year}&match=${m.match_id}'">
-          <div class="line1">${line1}</div>
-          <div class="line2">${meta}</div>
-        </div>
-      `;
-    }).join("");
-
-    document.getElementById("status").textContent =
-      year + " loaded: " + matches.length + " matches";
-  })
-  .catch(err=>{
-    if(myToken !== loadToken) return;
-    document.getElementById("status").textContent = "Load error.";
-    console.error(err);
-  });
+if(!rows || !rows.length){
+document.getElementById("status").textContent="No data";
+return;
 }
+
+const matchMap=new Map();
+
+rows.forEach(r=>{
+
+const id=r.match_id;
+if(!id) return;
+
+if(!matchMap.has(id)){
+
+matchMap.set(id,{
+match_id:id,
+date_iso:r.date_iso || "",
+venue:r.venue || "",
+home_team:r.home_team || "",
+away_team:r.away_team || "",
+home_points:toNum(r.home_points),
+away_points:toNum(r.away_points)
+});
+
+}
+
+});
+
+const matches=Array.from(matchMap.values());
+
+matches.sort((a,b)=>a.match_id.localeCompare(b.match_id));
+
+
+const ladder={};
+
+matches.forEach(m=>{
+
+if(!m.home_team || !m.away_team) return;
+
+if(!ladder[m.home_team])
+ladder[m.home_team]={team:m.home_team,W:0,L:0};
+
+if(!ladder[m.away_team])
+ladder[m.away_team]={team:m.away_team,W:0,L:0};
+
+if(m.home_points>m.away_points){
+
+ladder[m.home_team].W++;
+ladder[m.away_team].L++;
+
+}else if(m.away_points>m.home_points){
+
+ladder[m.away_team].W++;
+ladder[m.home_team].L++;
+
+}
+
+});
+
+const ladderArr=Object.values(ladder).sort((a,b)=>b.W-a.W);
+
+document.getElementById("ladderBody").innerHTML=
+ladderArr.map((t,i)=>`
+<tr>
+<td>${i+1}</td>
+<td class="team">${t.team}</td>
+<td>${t.W}</td>
+<td>${t.L}</td>
+</tr>
+`).join("");
+
+
+const matchesDiv=document.getElementById("matches");
+
+matchesDiv.innerHTML=matches.map(m=>{
+
+const line1=`${m.home_team} ${m.home_points} - ${m.away_points} ${m.away_team}`;
+
+const meta=`${m.date_iso}${m.venue ? " • "+m.venue : ""}`;
+
+return `
+<div class="match"
+onclick="window.location.href='nrl-game.html?season=${year}&match=${m.match_id}'">
+
+<div class="line1">${line1}</div>
+<div class="line2">${meta}</div>
+
+</div>
+`;
+
+}).join("");
+
+document.getElementById("status").textContent=
+year+" loaded: "+matches.length+" matches";
+
+})
+
+.catch(err=>{
+if(myToken!==loadToken) return;
+document.getElementById("status").textContent="Load error.";
+console.error(err);
+});
+
+}
+
 </script>
 
 </body>
