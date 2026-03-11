@@ -1,79 +1,61 @@
 import json
-import re
 import requests
-from bs4 import BeautifulSoup
 from pathlib import Path
 
 SEASON = 2026
 
 INDEX = Path("docs/data/nrl/index.json")
 MATCH_DIR = Path(f"docs/data/nrl/matches/{SEASON}")
+
 MATCH_DIR.mkdir(parents=True, exist_ok=True)
 
-URL = "https://www.rugbyleagueproject.org/competitions/nrl/summary.html"
+URL = f"https://statsapi.nrl.com/api/sports-tables/matches?competition=111&season={SEASON}"
 
-print("Downloading results page...")
+print("Downloading NRL matches...")
 
-headers = {"User-Agent": "Mozilla/5.0"}
+headers = {
+    "User-Agent": "Mozilla/5.0"
+}
 
 r = requests.get(URL, headers=headers, timeout=30)
 
 if r.status_code != 200:
-    print("Failed to download page:", r.status_code)
+    print("Failed to download:", r.status_code)
     exit()
 
-soup = BeautifulSoup(r.text, "html.parser")
+data = r.json()
+
+matches = data.get("matches", [])
 
 games = []
 
-rows = soup.find_all("tr")
+for m in matches:
 
-for row in rows:
-
-    cols = [c.get_text(strip=True) for c in row.find_all("td")]
-
-    if len(cols) < 5:
+    # skip games not played yet
+    if m.get("matchState") != "played":
         continue
 
-    try:
+    game_id = str(m["matchId"])
 
-        date = cols[0]
-        home = cols[1]
-        score = cols[2]
-        away = cols[3]
+    game = {
+        "game_id": game_id,
+        "season": SEASON,
+        "date": m["scheduledStartTime"][:10],
+        "round": m["roundNumber"],
+        "venue": m["venue"]["name"],
+        "home_team": m["homeTeam"]["nickName"],
+        "away_team": m["awayTeam"]["nickName"],
+        "home_score": m["homeTeam"]["score"],
+        "away_score": m["awayTeam"]["score"],
+        "players": []
+    }
 
-        if "-" not in score:
-            continue
-
-        home_score, away_score = score.split("-")
-
-        venue = ""
-        if len(cols) > 5:
-            venue = cols[5]
-
-        game_id = f"{date}-{home[:3]}-{away[:3]}".replace(" ", "")
-
-        game = {
-            "game_id": game_id,
-            "date": date,
-            "venue": venue,
-            "home_team": home,
-            "away_team": away,
-            "home_score": int(home_score),
-            "away_score": int(away_score),
-            "players": []
-        }
-
-        games.append(game)
-
-    except:
-        continue
+    games.append(game)
 
 print("Games detected:", len(games))
 
 
 # LOAD INDEX
-
 if INDEX.exists():
     with open(INDEX) as f:
         index = json.load(f)
@@ -103,6 +85,7 @@ index["games"] = sorted(index["games"])
 
 with open(INDEX, "w") as f:
     json.dump(index, f, indent=2)
+
 
 print("New games added:", new_games)
 print("Update complete")
