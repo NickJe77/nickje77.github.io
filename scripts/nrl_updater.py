@@ -30,16 +30,15 @@ def get_match_ids():
 
     ids = []
 
-    for link in soup.select("a[href*='/matches/']"):
+    for a in soup.select("a"):
 
-        href = link.get("href")
+        href = a.get("href","")
 
-        if "/matches/" not in href:
-            continue
+        if "/matches/" in href:
 
-        mid = href.split("/")[-1].replace(".html","")
+            match_id = href.split("/")[-1].replace(".html","")
 
-        ids.append(mid)
+            ids.append(match_id)
 
     return sorted(list(set(ids)))
 
@@ -73,46 +72,32 @@ def scrape_match(match_id):
 
     soup = BeautifulSoup(r.text, "html.parser")
 
-    teams = soup.select(".team")
-
-    if len(teams) < 2:
-        return None
-
-    home = teams[0].text.strip()
-    away = teams[1].text.strip()
-
     players = []
 
-    tables = soup.select("table")
+    for tr in soup.select("tr"):
 
-    for table in tables:
+        cols = [c.text.strip() for c in tr.select("td")]
 
-        rows = table.select("tr")
+        if len(cols) < 7:
+            continue
 
-        for row in rows:
+        name = cols[0]
 
-            cols = [c.text.strip() for c in row.select("td")]
+        if not name or name == "Player":
+            continue
 
-            if len(cols) < 7:
-                continue
-
-            name = cols[0]
-
-            if not name or name == "Player":
-                continue
-
-            try:
-                players.append({
-                    "player": name,
-                    "played_for": cols[1],
-                    "tries": int(cols[2] or 0),
-                    "goals_made": int(cols[3] or 0),
-                    "goals_attempted": int(cols[4] or 0),
-                    "field_goals": int(cols[5] or 0),
-                    "points": int(cols[6] or 0)
-                })
-            except:
-                continue
+        try:
+            players.append({
+                "player": name,
+                "played_for": cols[1],
+                "tries": int(cols[2] or 0),
+                "goals_made": int(cols[3] or 0),
+                "goals_attempted": int(cols[4] or 0),
+                "field_goals": int(cols[5] or 0),
+                "points": int(cols[6] or 0)
+            })
+        except:
+            continue
 
     if not players:
         return None
@@ -120,8 +105,6 @@ def scrape_match(match_id):
     return {
         "season": SEASON,
         "match_id": match_id,
-        "home_team": home,
-        "away_team": away,
         "players": players
     }
 
