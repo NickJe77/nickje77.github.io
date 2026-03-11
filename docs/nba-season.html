@@ -66,9 +66,7 @@ Team:
 </div>
 
 <script>
-
 const BASE="/data/nba/";
-
 const seasonSelect=document.getElementById("seasonSelect");
 const typeSelect=document.getElementById("typeSelect");
 const teamSelect=document.getElementById("teamSelect");
@@ -76,10 +74,7 @@ const gamesTable=document.getElementById("gamesTable");
 const title=document.getElementById("title");
 
 const params=new URLSearchParams(location.search);
-
-/* DEFAULT TO 2026 SO NEW GAMES LOAD */
-let season=params.get("season") || "2026";
-
+let season=params.get("season") || "2025";
 let allGames=[];
 
 seasonSelect.onchange=()=>location.href="nba-season.html?season="+seasonSelect.value;
@@ -87,126 +82,94 @@ typeSelect.onchange=renderGames;
 teamSelect.onchange=renderGames;
 
 async function init(){
+  for(let y=1976;y<=2026;y++){
+    const opt=document.createElement("option");
+    opt.value=y;
+    opt.textContent=y;
+    seasonSelect.appendChild(opt);
+  }
 
-for(let y=1976;y<=2026;y++){
-let opt=document.createElement("option");
-opt.value=y;
-opt.textContent=y;
-seasonSelect.appendChild(opt);
-}
-
-seasonSelect.value=season;
-
-await loadSeason();
-
+  seasonSelect.value=season;
+  await loadSeason();
 }
 
 async function loadSeason(){
+  title.textContent="NBA Season "+season;
+  gamesTable.innerHTML="<tr><td colspan='5'>Loading games...</td></tr>";
+  teamSelect.innerHTML='<option value="All">All Teams</option>';
 
-title.textContent="NBA Season "+season;
+  try{
+    const games=await fetch(BASE+season+"/games.json?"+Date.now()).then(r=>r.json());
 
-gamesTable.innerHTML="<tr><td colspan='5'>Loading games...</td></tr>";
+    allGames=games.filter(g=>{
+      if(!g || !g.game_type) return false;
+      if(g.game_type==="Preseason" || g.game_type==="All-Star") return false;
+      return true;
+    });
 
-teamSelect.innerHTML='<option value="All">All Teams</option>';
+    const teams=new Set();
+    allGames.forEach(g=>{
+      teams.add(g.home_team);
+      teams.add(g.away_team);
+    });
 
-try{
+    Array.from(teams).sort().forEach(t=>{
+      const opt=document.createElement("option");
+      opt.value=t;
+      opt.textContent=t;
+      teamSelect.appendChild(opt);
+    });
 
-const index=await fetch(BASE+season+"/index.json?"+Date.now()).then(r=>r.json());
-
-const requests=index.games.map(id =>
-fetch(BASE+season+"/"+id+".json?"+Date.now())
-.then(r=>r.ok?r.json():null)
-);
-
-let rawGames=await Promise.all(requests);
-
-/* FILTER OUT PRESEASON AND ALL-STAR */
-
-allGames=rawGames.filter(g=>{
-
-if(!g || !g.game_id) return false;
-
-let prefix=g.game_id.charAt(0);
-
-if(prefix==="1") return false;
-if(prefix==="3") return false;
-
-return true;
-
-});
-
-allGames.sort((a,b)=>new Date(b.date)-new Date(a.date));
-
-let teams=new Set();
-
-allGames.forEach(g=>{
-teams.add(g.home_team);
-teams.add(g.away_team);
-});
-
-Array.from(teams).sort().forEach(t=>{
-let opt=document.createElement("option");
-opt.value=t;
-opt.textContent=t;
-teamSelect.appendChild(opt);
-});
-
-renderGames();
-
-}catch(err){
-
-gamesTable.innerHTML="<tr><td colspan='5'>Error loading season.</td></tr>";
-
-}
-
+    renderGames();
+  }catch(err){
+    gamesTable.innerHTML="<tr><td colspan='5'>Error loading season.</td></tr>";
+  }
 }
 
 function renderGames(){
+  gamesTable.innerHTML="";
 
-gamesTable.innerHTML="";
+  const typeFilter=typeSelect.value;
+  const teamFilter=teamSelect.value;
 
-const typeFilter=typeSelect.value;
-const teamFilter=teamSelect.value;
+  const filtered=allGames.filter(g=>{
+    const type=(g.game_type || "").toLowerCase();
 
-allGames.forEach(g=>{
+    if(typeFilter==="Regular" && !type.includes("regular")) return false;
+    if(typeFilter==="Playoffs" && !type.includes("playoff")) return false;
+    if(teamFilter!=="All" && g.home_team!==teamFilter && g.away_team!==teamFilter) return false;
 
-let prefix=g.game_id.charAt(0);
+    return true;
+  });
 
-if(typeFilter==="Regular" && prefix!=="2") return;
-if(typeFilter==="Playoffs" && prefix!=="4") return;
+  if(!filtered.length){
+    gamesTable.innerHTML="<tr><td colspan='5'>No games found.</td></tr>";
+    return;
+  }
 
-if(teamFilter!=="All" && g.home_team!==teamFilter && g.away_team!==teamFilter) return;
+  filtered.forEach(g=>{
+    let winner="";
+    if(g.home_score>g.away_score) winner=g.home_team;
+    else if(g.away_score>g.home_score) winner=g.away_team;
 
-let winner=g.home_score>g.away_score?g.home_team:g.away_team;
+    const tr=document.createElement("tr");
+    tr.onclick=()=>{
+      window.location.href=`/nba-game.html?season=${season}&game=${g.game_id}`;
+    };
 
-let type="Regular Season";
+    tr.innerHTML=`
+      <td>${(g.date || "").substring(0,10)}</td>
+      <td>${g.home_team} vs ${g.away_team}</td>
+      <td>${g.game_type}</td>
+      <td>${winner}</td>
+      <td>${g.home_score} – ${g.away_score}</td>
+    `;
 
-if(prefix==="4") type="Playoffs";
-if(prefix==="5") type="Play-In";
-if(prefix==="6") type="NBA Cup";
-
-let tr=document.createElement("tr");
-
-tr.onclick=()=>{
-window.location.href=`/nba-game.html?season=${season}&game=${g.game_id}`;
-};
-
-tr.innerHTML=`
-<td>${g.date.substring(0,10)}</td>
-<td>${g.home_team} vs ${g.away_team}</td>
-<td>${type}</td>
-<td>${winner}</td>
-<td>${g.home_score} – ${g.away_score}</td>
-`;
-
-gamesTable.appendChild(tr);
-
-});
-
+    gamesTable.appendChild(tr);
+  });
 }
 
 init();
-
 </script>
 
 </body>
