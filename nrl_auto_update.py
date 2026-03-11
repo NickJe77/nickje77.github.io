@@ -18,25 +18,43 @@ new_game = {
 
 game_id = new_game["game_id"]
 
+MATCH_DIR.mkdir(parents=True, exist_ok=True)
+
 match_file = MATCH_DIR / f"{game_id}.json"
 
+# create match file if missing
 if not match_file.exists():
 
-    MATCH_DIR.mkdir(parents=True, exist_ok=True)
+    with open(match_file, "w") as f:
+        json.dump(new_game, f, indent=2)
 
-    with open(match_file,"w") as f:
-        json.dump(new_game,f,indent=2)
-
-    with open(INDEX) as f:
-        index=json.load(f)
-
-    if game_id not in index["games"]:
-        index["games"].append(game_id)
-
-    with open(INDEX,"w") as f:
-        json.dump(index,f,indent=2)
-
-    print("Game added")
+    print("Match file created")
 
 else:
-    print("Game already exists")
+    print("Match already exists")
+
+# ensure index.json exists
+if INDEX.exists():
+
+    with open(INDEX) as f:
+        index = json.load(f)
+
+else:
+    index = {}
+
+# ensure games list exists
+if "games" not in index:
+    index["season"] = 2026
+    index["games"] = []
+
+# add game to index
+if game_id not in index["games"]:
+    index["games"].append(game_id)
+    print("Game added to index")
+else:
+    print("Game already in index")
+
+with open(INDEX, "w") as f:
+    json.dump(index, f, indent=2)
+
+print("Update complete")
