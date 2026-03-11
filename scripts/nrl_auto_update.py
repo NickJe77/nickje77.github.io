@@ -13,19 +13,19 @@ SEASON_FILE = BASE / "seasons" / f"{SEASON}.json"
 MATCH_DIR.mkdir(parents=True, exist_ok=True)
 SEASON_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-URL = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}"
+URL = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}&round=all"
 
 print("Downloading NRL matches...")
 
 headers = {"User-Agent": "Mozilla/5.0"}
 
-r = requests.get(URL, headers=headers, timeout=30)
+response = requests.get(URL, headers=headers, timeout=30)
 
-if r.status_code != 200:
-    print("Download failed:", r.status_code)
+if response.status_code != 200:
+    print("Download failed:", response.status_code)
     raise SystemExit(1)
 
-data = r.json()
+data = response.json()
 
 fixtures = data.get("fixtures", [])
 
@@ -43,18 +43,18 @@ for m in fixtures:
 
     round_title = m.get("roundTitle", "")
 
-    if round_title == "Opening Round":
+    if "Opening" in round_title:
         round_num = 1
-    elif round_title.startswith("Round "):
+    elif round_title.startswith("Round"):
         try:
-            round_num = int(round_title.replace("Round ", ""))
+            round_num = int(round_title.split()[1])
         except:
             round_num = 0
     else:
         round_num = 0
 
-    kick = m.get("clock", {}).get("kickOffTimeLong", "")
-    date_iso = kick[:10] if kick else ""
+    kickoff = m.get("clock", {}).get("kickOffTimeLong", "")
+    date_iso = kickoff[:10] if kickoff else ""
 
     venue = m.get("venue", "")
 
@@ -106,6 +106,5 @@ with open(INDEX_FILE, "w") as f:
     json.dump(index, f, indent=2)
 
 print("Index updated")
-
 print("Matches written:", len(rows))
 print("Update complete")
