@@ -6,6 +6,7 @@ SEASON = 2026
 
 INDEX = Path("docs/data/nrl/index.json")
 MATCH_DIR = Path(f"docs/data/nrl/matches/{SEASON}")
+
 MATCH_DIR.mkdir(parents=True, exist_ok=True)
 
 URL = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}"
@@ -26,15 +27,8 @@ games = []
 
 for m in data["fixtures"]:
 
-    # skip unplayed games
-    if m["matchState"] != "Played":
-        continue
-
     home = m["homeTeam"]["nickName"]
     away = m["awayTeam"]["nickName"]
-
-    home_score = m.get("homeScore", 0)
-    away_score = m.get("awayScore", 0)
 
     date = m["clock"]["kickOffTimeLong"][:10]
 
@@ -42,6 +36,10 @@ for m in data["fixtures"]:
     round_num = int(round_title.replace("Round ", ""))
 
     venue = m["venue"]
+
+    # scores may not exist yet
+    home_score = m.get("homeScore")
+    away_score = m.get("awayScore")
 
     game_id = f"{SEASON}R{round_num:02d}{home[:3]}{away[:3]}".upper()
 
@@ -60,7 +58,7 @@ for m in data["fixtures"]:
 
     games.append(game)
 
-print("Games detected:", len(games))
+print("Fixtures detected:", len(games))
 
 
 # LOAD INDEX
@@ -84,17 +82,22 @@ for g in games:
         with open(match_file, "w") as f:
             json.dump(g, f, indent=2)
 
-        if game_id not in index["games"]:
-            index["games"].append(game_id)
-
+        index["games"].append(game_id)
         new_games += 1
 
+    else:
+        # update scores if they appear later
+        with open(match_file) as f:
+            existing = json.load(f)
+
+        if existing.get("home_score") != g["home_score"]:
+            with open(match_file, "w") as f:
+                json.dump(g, f, indent=2)
 
 index["games"] = sorted(index["games"])
 
 with open(INDEX, "w") as f:
     json.dump(index, f, indent=2)
-
 
 print("New games added:", new_games)
 print("Update complete")
