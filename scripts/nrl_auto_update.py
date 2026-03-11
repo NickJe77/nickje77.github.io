@@ -81,8 +81,6 @@ for m in fixtures:
     with open(match_file, "w", encoding="utf-8") as f:
         json.dump([row], f, indent=2)
 
-# rebuild season file
-
 rows.sort(key=lambda x: (x["date_iso"], x["match_id"]))
 
 with open(SEASON_FILE, "w", encoding="utf-8") as f:
@@ -90,10 +88,8 @@ with open(SEASON_FILE, "w", encoding="utf-8") as f:
 
 print("Season file rebuilt:", SEASON_FILE)
 
-# update index.json correctly
-
 if INDEX_FILE.exists():
-    with open(INDEX_FILE, "r") as f:
+    with open(INDEX_FILE) as f:
         index = json.load(f)
 else:
     index = {}
