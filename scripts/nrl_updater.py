@@ -12,16 +12,22 @@ MATCH_FILE = BASE / "matches" / f"{SEASON}.json"
 BASE.mkdir(parents=True, exist_ok=True)
 MATCH_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json",
+    "Referer": "https://www.nrl.com/draw/"
+}
 
 
 def fetch_json(url):
     try:
         r = requests.get(url, headers=HEADERS, timeout=30)
         if r.status_code != 200:
+            print("Request failed:", r.status_code)
             return None
         return r.json()
-    except:
+    except Exception as e:
+        print("Request error:", e)
         return None
 
 
@@ -33,9 +39,9 @@ data = fetch_json(url)
 
 fixtures = []
 
-if data:
-    for round_block in data.get("rounds", []):
-        fixtures.extend(round_block.get("fixtures", []))
+if data and "rounds" in data:
+    for r in data["rounds"]:
+        fixtures.extend(r.get("fixtures", []))
 
 print("Fixtures detected:", len(fixtures))
 
@@ -122,7 +128,6 @@ for match_id in match_ids:
 
 
 if rows:
-
     with open(MATCH_FILE, "w") as f:
         json.dump(rows, f, indent=2)
 
