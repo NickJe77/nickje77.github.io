@@ -1,9 +1,10 @@
 import json
 import requests
+import re
 from pathlib import Path
 from bs4 import BeautifulSoup
 
-print("NRL AFLTABLES UPDATER")
+print("NRL FULL PLAYER STATS UPDATER")
 
 SEASON = 2026
 
@@ -13,53 +14,24 @@ MATCH_FILE = BASE / "matches" / f"{SEASON}.json"
 BASE.mkdir(parents=True, exist_ok=True)
 MATCH_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-URL = f"https://afltables.com/rl/seas/{SEASON}.html"
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-print("Downloading season page")
+season_url = f"https://afltables.com/rl/seas/{SEASON}.html"
 
-html = requests.get(URL, headers={"User-Agent": "Mozilla/5.0"}).text
+print("Downloading AFLTables season page")
+
+html = requests.get(season_url, headers=HEADERS).text
 soup = BeautifulSoup(html, "html.parser")
 
-rows = soup.find_all("tr")
+links = []
 
-matches = []
-i = 0
+for a in soup.find_all("a", href=True):
+    if "/rl/games/" in a["href"]:
+        links.append("https://afltables.com" + a["href"])
 
-while i < len(rows):
+links = sorted(set(links))
 
-    cols = rows[i].find_all("td")
-
-    if len(cols) >= 3:
-
-        team1 = cols[0].get_text(strip=True)
-        score1 = cols[2].get_text(strip=True)
-
-        # check if score column is numeric
-        if score1.isdigit():
-
-            cols2 = rows[i+1].find_all("td")
-
-            if len(cols2) >= 3:
-
-                team2 = cols2[0].get_text(strip=True)
-                score2 = cols2[2].get_text(strip=True)
-
-                if score2.isdigit():
-
-                    matches.append({
-                        "season": SEASON,
-                        "home_team": team1,
-                        "away_team": team2,
-                        "home_score": int(score1),
-                        "away_score": int(score2)
-                    })
-
-                    i += 2
-                    continue
-
-    i += 1
-
-print("Matches detected:", len(matches))
+print("Game links found:", len(links))
 
 existing = []
 
@@ -67,24 +39,89 @@ if MATCH_FILE.exists():
     with open(MATCH_FILE) as f:
         existing = json.load(f)
 
-existing_keys = {(m["home_team"], m["away_team"]) for m in existing}
+existing_ids = {m["match_id"] for m in existing}
 
-rows_out = existing.copy()
+rows = existing.copy()
 added = 0
 
-for m in matches:
 
-    key = (m["home_team"], m["away_team"])
+for link in links:
 
-    if key in existing_keys:
+    match_id = link.split("/")[-1].replace(".html","")
+
+    if match_id in existing_ids:
         continue
 
-    rows_out.append(m)
+    print("Processing", match_id)
+
+    game_html = requests.get(link, headers=HEADERS).text
+    game_soup = BeautifulSoup(game_html, "html.parser")
+
+    tables = game_soup.find_all("table")
+
+    players = []
+
+    for table in tables:
+
+        rows_html = table.find_all("tr")
+
+        for r in rows_html:
+
+            cols = [c.get_text(strip=True) for c in r.find_all("td")]
+
+            if len(cols) < 5:
+                continue
+
+            name = cols[0]
+
+            if name.lower() == "player":
+                continue
+
+            try:
+                tries = int(cols[1])
+            except:
+                tries = 0
+
+            try:
+                goals = int(cols[2])
+            except:
+                goals = 0
+
+            try:
+                field_goals = int(cols[3])
+            except:
+                field_goals = 0
+
+            try:
+                points = int(cols[4])
+            except:
+                points = 0
+
+            players.append({
+                "player": name,
+                "tries": tries,
+                "goals": goals,
+                "field_goals": field_goals,
+                "points": points
+            })
+
+    if not players:
+        continue
+
+    rows.append({
+        "season": SEASON,
+        "match_id": match_id,
+        "players": players
+    })
+
     added += 1
-    print("Added", m["home_team"], "vs", m["away_team"])
+
+    print("Added", match_id)
+
 
 with open(MATCH_FILE, "w") as f:
-    json.dump(rows_out, f, indent=2)
+    json.dump(rows, f, indent=2)
+
 
 print("Matches added:", added)
 print("Updater complete")
