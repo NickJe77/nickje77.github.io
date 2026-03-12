@@ -15,6 +15,8 @@ def slug(name):
     s = re.sub(r"\s+", "-", s)
     return s
 
+print("Building NBA player files...")
+
 for season_dir in DATA.iterdir():
 
     if not season_dir.is_dir():
@@ -22,7 +24,7 @@ for season_dir in DATA.iterdir():
 
     for game_file in season_dir.glob("*.json"):
 
-        if game_file.name in ["index.json","games.json"]:
+        if game_file.name in ["index.json", "games.json"]:
             continue
 
         try:
@@ -36,7 +38,7 @@ for season_dir in DATA.iterdir():
         home = game.get("home_team")
         away = game.get("away_team")
 
-        for p in game.get("players",[]):
+        for p in game.get("players", []):
 
             name = p.get("player_name") or p.get("name") or p.get("player")
 
@@ -48,39 +50,73 @@ for season_dir in DATA.iterdir():
             if key not in players:
                 players[key] = {
                     "name": name,
-                    "games":[]
+                    "teams": {},
+                    "games": []
                 }
 
             team = p.get("team")
+
+            if not team:
+                continue
+
             opp = away if team == home else home
 
+            pts = p.get("points", 0)
+            reb = p.get("rebounds", 0)
+            ast = p.get("assists", 0)
+            stl = p.get("steals", 0)
+            blk = p.get("blocks", 0)
+
+            # Add game log
             players[key]["games"].append({
                 "season": game.get("season"),
                 "game_id": game.get("game_id"),
                 "date": game.get("date"),
                 "team": team,
                 "opp": opp,
-                "pts": p.get("points",0),
-                "reb": p.get("rebounds",0),
-                "ast": p.get("assists",0),
-                "stl": p.get("steals",0),
-                "blk": p.get("blocks",0)
+                "pts": pts,
+                "reb": reb,
+                "ast": ast,
+                "stl": stl,
+                "blk": blk
             })
 
+            # Build team totals
+            if team not in players[key]["teams"]:
+                players[key]["teams"][team] = {
+                    "games": 0,
+                    "pts": 0,
+                    "reb": 0,
+                    "ast": 0,
+                    "stl": 0,
+                    "blk": 0
+                }
 
-# write player files
+            t = players[key]["teams"][team]
+
+            t["games"] += 1
+            t["pts"] += pts
+            t["reb"] += reb
+            t["ast"] += ast
+            t["stl"] += stl
+            t["blk"] += blk
+
+
+print("Writing player files...")
+
 index = []
 
-for key,data in players.items():
+for key, data in players.items():
 
     file = OUT / f"{key}.json"
-    file.write_text(json.dumps(data,indent=2))
+    file.write_text(json.dumps(data, indent=2))
 
     index.append({
         "name": data["name"],
         "slug": key
     })
 
-(OUT / "index.json").write_text(json.dumps(index,indent=2))
+# player search index
+(OUT / "index.json").write_text(json.dumps(index, indent=2))
 
-print("player files built successfully")
+print("NBA player database built successfully")
