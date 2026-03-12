@@ -7,11 +7,7 @@
 
 <style>
 
-body{
-font-family:Inter,system-ui,Arial;
-margin:0;
-background:#f4f6f8;
-}
+body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
 
 .navbar{
 display:flex;
@@ -23,17 +19,9 @@ font-weight:600;
 background:#fff;
 }
 
-.navbar a{
-color:#0056d6;
-text-decoration:none;
-font-size:18px;
-}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 
-.page-wrap{
-max-width:1200px;
-margin:0 auto;
-padding:25px 20px 60px;
-}
+.page-wrap{max-width:1200px;margin:auto;padding:25px 20px 60px;}
 
 .header-row{
 display:flex;
@@ -44,18 +32,9 @@ flex-wrap:wrap;
 gap:15px;
 }
 
-.name-wrap{
-display:flex;
-align-items:center;
-gap:14px;
-flex-wrap:wrap;
-}
+.name-wrap{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
 
-#title{
-font-size:40px;
-font-weight:800;
-margin:0;
-}
+#title{font-size:40px;font-weight:800;margin:0;}
 
 .team-stripe{
 height:22px;
@@ -73,10 +52,10 @@ width:260px;
 }
 
 .summary-container{
-background:#ffffff;
+background:#fff;
 border-radius:18px;
 padding:22px;
-box-shadow:0 4px 12px rgba(0,0,0,0.05);
+box-shadow:0 4px 12px rgba(0,0,0,.05);
 margin-bottom:25px;
 }
 
@@ -98,7 +77,7 @@ margin-bottom:16px;
 .stat-box{
 background:#eef3ff;
 border-radius:14px;
-padding:16px 20px;
+padding:16px;
 text-align:center;
 }
 
@@ -106,7 +85,6 @@ text-align:center;
 display:block;
 font-size:28px;
 font-weight:800;
-margin-bottom:4px;
 }
 
 .filter-row{
@@ -138,31 +116,13 @@ border-bottom:1px solid #eee;
 text-align:center;
 }
 
-th{
-background:#eef3ff;
-font-weight:700;
-}
+th{background:#eef3ff;font-weight:700;}
 
-tr:nth-child(even){
-background:#f8faff;
-}
+tr:nth-child(even){background:#f8faff;}
 
-tr.clickable{
-cursor:pointer;
-}
+tr.clickable{cursor:pointer;}
 
-tr.clickable:hover{
-background:#e6f0ff;
-}
-
-.bad{
-background:#ffe1e1;
-color:#900;
-padding:10px;
-text-align:center;
-border-radius:6px;
-margin-top:12px;
-}
+tr.clickable:hover{background:#e6f0ff;}
 
 </style>
 </head>
@@ -184,11 +144,10 @@ margin-top:12px;
 <div id="teamStripe" class="team-stripe"></div>
 </div>
 
-<input type="text" class="search-box" placeholder="Search player...">
+<input id="playerSearch" list="playerList" class="search-box" placeholder="Search player...">
+<datalist id="playerList"></datalist>
 
 </div>
-
-<div id="errorBox" class="bad" style="display:none;"></div>
 
 <div class="summary-container">
 <div class="section-title">CAREER SUMMARY</div>
@@ -197,32 +156,7 @@ margin-top:12px;
 <div class="stats-grid" id="careerHighs"></div>
 </div>
 
-<div class="summary-container">
-
-<div class="filter-row">
-
-Team:
-<select id="teamFilter">
-<option value="ALL">All teams</option>
-</select>
-
-Opposition:
-<select id="oppFilter">
-<option value="ALL">All teams</option>
-</select>
-
-</div>
-
-<div class="section-title">FILTERED RESULTS</div>
-
-<div class="stats-grid" id="oppTotals"></div>
-<div class="stats-grid" id="oppAverages"></div>
-<div class="stats-grid" id="oppHighs"></div>
-
-</div>
-
 <table>
-
 <thead>
 <tr>
 <th>Season</th>
@@ -236,62 +170,53 @@ Opposition:
 <th>BLK</th>
 </tr>
 </thead>
-
 <tbody id="gamesBody"></tbody>
-
 </table>
 
 </div>
 
 <script>
 
+const TEAM_COLORS={
+"Dallas Mavericks":["#00538C","#002B5E","#B8C4CA"],
+"Los Angeles Lakers":["#552583","#FDB927","#000000"],
+"Golden State Warriors":["#1D428A","#FFC72C","#FFFFFF"],
+"Boston Celtics":["#007A33","#BA9653","#FFFFFF"],
+"Chicago Bulls":["#CE1141","#000000","#FFFFFF"]
+};
+
 const params=new URLSearchParams(window.location.search);
-const playerName=decodeURIComponent(params.get("player")||"");
+let playerName=decodeURIComponent(params.get("player")||"");
 
 const titleEl=document.getElementById("title");
-const errorBox=document.getElementById("errorBox");
+const stripe=document.getElementById("teamStripe");
 const gamesBody=document.getElementById("gamesBody");
-const oppFilter=document.getElementById("oppFilter");
-const teamFilter=document.getElementById("teamFilter");
 
 let rows=[];
 
-/* FULL NBA TEAM COLOURS */
+/* PLAYER SEARCH */
 
-const TEAM_COLORS={
+async function loadPlayerList(){
 
-"Atlanta Hawks":["#E03A3E","#C1D32F","#000000"],
-"Boston Celtics":["#007A33","#BA9653","#FFFFFF"],
-"Brooklyn Nets":["#000000","#FFFFFF","#777777"],
-"Charlotte Hornets":["#1D1160","#00788C","#A1A1A4"],
-"Chicago Bulls":["#CE1141","#000000","#FFFFFF"],
-"Cleveland Cavaliers":["#6F263D","#FFB81C","#041E42"],
-"Dallas Mavericks":["#00538C","#002B5E","#B8C4CA"],
-"Denver Nuggets":["#0E2240","#FEC524","#8B2131"],
-"Detroit Pistons":["#C8102E","#1D42BA","#BEC0C2"],
-"Golden State Warriors":["#1D428A","#FFC72C","#FFFFFF"],
-"Houston Rockets":["#CE1141","#000000","#C4CED4"],
-"Indiana Pacers":["#002D62","#FDBB30","#BEC0C2"],
-"Los Angeles Clippers":["#C8102E","#1D428A","#FFFFFF"],
-"Los Angeles Lakers":["#552583","#FDB927","#000000"],
-"Memphis Grizzlies":["#5D76A9","#12173F","#F5B112"],
-"Miami Heat":["#98002E","#F9A01B","#000000"],
-"Milwaukee Bucks":["#00471B","#EEE1C6","#0077C0"],
-"Minnesota Timberwolves":["#0C2340","#236192","#9EA2A2"],
-"New Orleans Pelicans":["#0C2340","#C8102E","#85714D"],
-"New York Knicks":["#006BB6","#F58426","#BEC0C2"],
-"Oklahoma City Thunder":["#007AC1","#EF3B24","#FDBB30"],
-"Orlando Magic":["#0077C0","#C4CED4","#000000"],
-"Philadelphia 76ers":["#006BB6","#ED174C","#FFFFFF"],
-"Phoenix Suns":["#1D1160","#E56020","#000000"],
-"Portland Trail Blazers":["#E03A3E","#000000","#FFFFFF"],
-"Sacramento Kings":["#5A2D81","#63727A","#000000"],
-"San Antonio Spurs":["#000000","#C4CED4","#FFFFFF"],
-"Toronto Raptors":["#CE1141","#000000","#A1A1A4"],
-"Utah Jazz":["#002B5C","#00471B","#F9A01B"],
-"Washington Wizards":["#002B5C","#E31837","#FFFFFF"]
+const res=await fetch("/data/nba/players/index.json");
+const list=await res.json();
 
-};
+const dl=document.getElementById("playerList");
+
+list.forEach(p=>{
+const o=document.createElement("option");
+o.value=p;
+dl.appendChild(o);
+});
+
+}
+
+document.getElementById("playerSearch").addEventListener("change",e=>{
+const name=e.target.value;
+window.location="?player="+encodeURIComponent(name);
+});
+
+/* SLUG */
 
 function slug(name){
 return name
@@ -302,42 +227,51 @@ return name
 .replace(/\s+/g,"-");
 }
 
+/* LOAD PLAYER */
+
 async function loadPlayer(){
+
+if(!playerName)return;
 
 titleEl.textContent=playerName;
 
 const res=await fetch(`/data/nba/players/${slug(playerName)}.json`);
-
 const data=await res.json();
 
 rows=data.games||[];
 
 setTeamStripe();
-buildTeamFilter();
-buildOppFilter();
 renderCareer();
-render();
+renderGames();
 
 }
+
+/* CURRENT TEAM */
 
 function setTeamStripe(){
 
-let latestSeason=Math.max(...rows.map(r=>Number(r.season)));
+let latest=rows.reduce((a,b)=>{
 
-let latestGame=rows
-.filter(r=>Number(r.season)===latestSeason)
-.sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+let da=new Date(a.date);
+let db=new Date(b.date);
 
-const team=latestGame.team;
+return db>da?b:a;
 
-const c=TEAM_COLORS[team];
+});
 
-if(!c)return;
+const colors=TEAM_COLORS[latest.team];
 
-document.getElementById("teamStripe").style.background=
-`linear-gradient(90deg,${c[0]} 33%,${c[1]} 33% 66%,${c[2]} 66%)`;
+if(!colors)return;
+
+stripe.style.background=
+`linear-gradient(90deg,
+${colors[0]} 33%,
+${colors[1]} 33% 66%,
+${colors[2]} 66%)`;
 
 }
+
+/* CAREER STATS */
 
 function renderCareer(){
 
@@ -389,46 +323,15 @@ document.getElementById("careerHighs").innerHTML=`
 
 }
 
-function buildTeamFilter(){
-const teams=[...new Set(rows.map(r=>r.team))].sort();
-teams.forEach(t=>{
-const opt=document.createElement("option");
-opt.value=t;
-opt.textContent=t;
-teamFilter.appendChild(opt);
-});
-}
+/* GAME TABLE */
 
-function buildOppFilter(){
-const teams=[...new Set(rows.map(r=>r.opp))].sort();
-teams.forEach(t=>{
-const opt=document.createElement("option");
-opt.value=t;
-opt.textContent=t;
-oppFilter.appendChild(opt);
-});
-}
-
-teamFilter.addEventListener("change",render);
-oppFilter.addEventListener("change",render);
-
-function render(){
-
-let filtered=rows;
-
-if(teamFilter.value!=="ALL"){
-filtered=filtered.filter(r=>r.team===teamFilter.value);
-}
-
-if(oppFilter.value!=="ALL"){
-filtered=filtered.filter(r=>r.opp===oppFilter.value);
-}
+function renderGames(){
 
 gamesBody.innerHTML="";
 
-filtered.forEach(r=>{
+rows.forEach(r=>{
 gamesBody.innerHTML+=`
-<tr class="clickable" onclick="window.location='nba-game.html?season=${r.season}&game=${r.game_id}'">
+<tr class="clickable">
 <td>${r.season}</td>
 <td>${r.date}</td>
 <td>${r.team}</td>
@@ -443,6 +346,9 @@ gamesBody.innerHTML+=`
 
 }
 
+/* INIT */
+
+loadPlayerList();
 loadPlayer();
 
 </script>
