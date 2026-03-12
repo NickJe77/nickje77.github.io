@@ -25,9 +25,11 @@ soup = BeautifulSoup(html, "html.parser")
 links = []
 
 for a in soup.find_all("a", href=True):
-    if "games" in a["href"] and a["href"].endswith(".html"):
-        if "/rl/games/" in a["href"]:
-            links.append("https://afltables.com" + a["href"])
+    if "Match details" in a.text:
+        href = a["href"]
+        if not href.startswith("http"):
+            href = "https://afltables.com/rl/" + href.replace("../","")
+        links.append(href)
 
 links = sorted(set(links))
 
