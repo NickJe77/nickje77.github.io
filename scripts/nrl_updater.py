@@ -67,12 +67,18 @@ match_ids = sorted(list(set(match_ids)))
 print("Unique matches:", len(match_ids))
 
 
+# SAFE JSON LOADER
 existing = []
 
 if MATCH_FILE.exists():
 
-    with open(MATCH_FILE) as f:
-        existing = json.load(f)
+    try:
+        with open(MATCH_FILE) as f:
+            content = f.read().strip()
+            if content:
+                existing = json.loads(content)
+    except:
+        existing = []
 
 existing_ids = {m["match_id"] for m in existing}
 
