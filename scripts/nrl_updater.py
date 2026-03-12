@@ -50,10 +50,10 @@ match_ids = []
 
 for f in fixtures:
 
-    match = f.get("match")
+    mid = f.get("matchId")
 
-    if match and match.get("matchId"):
-        match_ids.append(str(match.get("matchId")))
+    if mid:
+        match_ids.append(str(mid))
 
 
 match_ids = sorted(set(match_ids))
@@ -69,6 +69,7 @@ if MATCH_FILE.exists():
             existing = json.load(f)
     except:
         existing = []
+
 
 existing_ids = {m["match_id"] for m in existing}
 
