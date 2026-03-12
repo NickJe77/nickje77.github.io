@@ -1,7 +1,6 @@
 import json
 import requests
 from pathlib import Path
-from bs4 import BeautifulSoup
 
 print("NRL FULL UPDATER")
 
@@ -15,53 +14,51 @@ MATCH_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-def fetch(url):
+
+def fetch_json(url):
     try:
         r = requests.get(url, headers=HEADERS, timeout=30)
         if r.status_code != 200:
             return None
-        return r.text
+        return r.json()
     except:
         return None
 
 
-print("Discovering matches")
+print("Discovering fixtures")
 
-season_url = f"https://www.rugbyleagueproject.org/competitions/nrl-{SEASON}/results.html"
+fixtures = []
 
-html = fetch(season_url)
+for r in range(0, 30):
 
-if not html:
-    print("Failed to load season page")
-    raise SystemExit()
+    round_name = "opening" if r == 0 else f"round-{r}"
 
-soup = BeautifulSoup(html, "html.parser")
+    url = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}&round={round_name}"
 
-rows = soup.select("table tr")
+    data = fetch_json(url)
+
+    if not data:
+        continue
+
+    fixtures.extend(data.get("fixtures", []))
+
+
+print("Fixtures detected:", len(fixtures))
+
 
 match_ids = []
 
-for r in rows:
+for f in fixtures:
 
-    link = r.select_one("a[href*='match']")
+    mid = f.get("matchId")
 
-    if not link:
-        continue
+    if mid:
+        match_ids.append(str(mid))
 
-    href = link.get("href")
-
-    parts = href.split("/")
-
-    if len(parts) < 3:
-        continue
-
-    match_id = parts[-1].replace(".html", "")
-
-    match_ids.append(match_id)
 
 match_ids = sorted(list(set(match_ids)))
 
-print("Matches detected:", len(match_ids))
+print("Unique matches:", len(match_ids))
 
 
 existing = []
@@ -73,23 +70,14 @@ if MATCH_FILE.exists():
     except:
         existing = []
 
+
 existing_ids = {m["match_id"] for m in existing}
 
 print("Existing matches:", len(existing_ids))
 
 
-rows_out = existing.copy()
+rows = existing.copy()
 added = 0
-
-
-def fetch_json(url):
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=30)
-        if r.status_code != 200:
-            return None
-        return r.json()
-    except:
-        return None
 
 
 for match_id in match_ids:
@@ -113,6 +101,7 @@ for match_id in match_ids:
         for p in team.get("players", []):
 
             players.append({
+
                 "player": p.get("displayName"),
                 "played_for": team_name,
                 "tries": p.get("tries", 0),
@@ -125,25 +114,29 @@ for match_id in match_ids:
                 "tackles": p.get("tacklesMade", 0),
                 "missed_tackles": p.get("missedTackles", 0),
                 "offloads": p.get("offloads", 0)
+
             })
 
     if not players:
         continue
 
-    rows_out.append({
+    rows.append({
+
         "season": SEASON,
         "match_id": match_id,
         "players": players
+
     })
 
     added += 1
     print("Added match", match_id)
 
 
-if rows_out:
+if rows:
 
     with open(MATCH_FILE, "w") as f:
-        json.dump(rows_out, f, indent=2)
+        json.dump(rows, f, indent=2)
+
 
 print("Matches added:", added)
 print("Updater complete")
