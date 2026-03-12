@@ -65,8 +65,11 @@ print("Matches detected:", len(matches))
 existing = []
 
 if MATCH_FILE.exists():
-    with open(MATCH_FILE) as f:
-        existing = json.load(f)
+    try:
+        with open(MATCH_FILE) as f:
+            existing = json.load(f)
+    except:
+        existing = []
 
 updated = 0
 
@@ -90,7 +93,7 @@ for m in matches:
         updated += 1
 
 with open(MATCH_FILE, "w") as f:
-    json.dump(existing, f, indent=2)
+    json.dump(existing, f, indent=2, sort_keys=True)
 
 print("Matches updated:", updated)
 print("Updater complete")
