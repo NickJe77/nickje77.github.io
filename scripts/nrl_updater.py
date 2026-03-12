@@ -37,23 +37,25 @@ if not html:
 
 soup = BeautifulSoup(html, "html.parser")
 
-links = soup.select("a[href*='/matches/']")
+rows = soup.select("table tr")
 
 match_ids = []
 
-for a in links:
+for r in rows:
 
-    href = a.get("href")
+    link = r.select_one("a[href*='match']")
 
-    if "/matches/" not in href:
+    if not link:
         continue
+
+    href = link.get("href")
 
     parts = href.split("/")
 
-    if len(parts) < 5:
+    if len(parts) < 3:
         continue
 
-    match_id = parts[-1].replace(".html","")
+    match_id = parts[-1].replace(".html", "")
 
     match_ids.append(match_id)
 
@@ -76,12 +78,11 @@ existing_ids = {m["match_id"] for m in existing}
 print("Existing matches:", len(existing_ids))
 
 
-rows = existing.copy()
+rows_out = existing.copy()
 added = 0
 
 
 def fetch_json(url):
-
     try:
         r = requests.get(url, headers=HEADERS, timeout=30)
         if r.status_code != 200:
@@ -112,7 +113,6 @@ for match_id in match_ids:
         for p in team.get("players", []):
 
             players.append({
-
                 "player": p.get("displayName"),
                 "played_for": team_name,
                 "tries": p.get("tries", 0),
@@ -125,30 +125,25 @@ for match_id in match_ids:
                 "tackles": p.get("tacklesMade", 0),
                 "missed_tackles": p.get("missedTackles", 0),
                 "offloads": p.get("offloads", 0)
-
             })
 
     if not players:
         continue
 
-    rows.append({
-
+    rows_out.append({
         "season": SEASON,
         "match_id": match_id,
         "players": players
-
     })
 
     added += 1
-
     print("Added match", match_id)
 
 
-if rows:
+if rows_out:
 
     with open(MATCH_FILE, "w") as f:
-        json.dump(rows, f, indent=2)
-
+        json.dump(rows_out, f, indent=2)
 
 print("Matches added:", added)
 print("Updater complete")
