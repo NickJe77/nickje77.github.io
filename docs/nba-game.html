@@ -103,142 +103,191 @@ const homeTitle=document.getElementById("homeTitle");
 const awayTitle=document.getElementById("awayTitle");
 
 function showError(msg){
-errorBox.style.display="block";
-errorBox.textContent=msg;
+  errorBox.style.display="block";
+  errorBox.textContent=msg;
 }
 
 function getName(p){
-return p.player_name || p.name || p.player || p.full_name || p.playerName || "";
+  return p.player_name || p.name || p.player || p.full_name || p.playerName || "";
+}
+
+function getMinutesValue(p){
+  const m = p.minutes ?? p.min ?? p.mins ?? 0;
+  if(typeof m === "number") return m;
+  const s = String(m).trim();
+  if(!s) return 0;
+  if(s.includes(":")){
+    const parts=s.split(":");
+    const mins=parseInt(parts[0],10);
+    return isNaN(mins) ? 0 : mins;
+  }
+  const n=parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+function statValue(p, keys){
+  for(const key of keys){
+    if(p[key] !== undefined && p[key] !== null && p[key] !== "") return p[key];
+  }
+  return 0;
 }
 
 function renderTable(players,tableId){
+  const tbody=document.querySelector(`#${tableId} tbody`);
+  tbody.innerHTML="";
 
-const tbody=document.querySelector(`#${tableId} tbody`);
-tbody.innerHTML="";
+  players.forEach(p=>{
+    const name=getName(p);
 
-players.forEach(p=>{
+    const minutes=statValue(p,["minutes","min","mins"]);
+    const points=statValue(p,["points","pts"]);
+    const rebounds=statValue(p,["rebounds","reb","total_rebounds"]);
+    const assists=statValue(p,["assists","ast"]);
+    const steals=statValue(p,["steals","stl"]);
+    const blocks=statValue(p,["blocks","blk"]);
 
-const name=getName(p);
+    const tr=document.createElement("tr");
 
-const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${name}</td>
+      <td>${minutes}</td>
+      <td>${points}</td>
+      <td>${rebounds}</td>
+      <td>${assists}</td>
+      <td>${steals}</td>
+      <td>${blocks}</td>
+    `;
 
-tr.innerHTML=`
-<td>${name}</td>
-<td>${p.minutes ?? 0}</td>
-<td>${p.points ?? 0}</td>
-<td>${p.rebounds ?? 0}</td>
-<td>${p.assists ?? 0}</td>
-<td>${p.steals ?? 0}</td>
-<td>${p.blocks ?? 0}</td>
-`;
+    tr.addEventListener("click",()=>{
+      location.href="nba-player.html?player="+encodeURIComponent(name);
+    });
 
-tr.addEventListener("click",()=>{
-location.href="nba-player.html?player="+encodeURIComponent(name);
-});
-
-tbody.appendChild(tr);
-
-});
-
+    tbody.appendChild(tr);
+  });
 }
 
 function sortTable(players,key,tableId,headerEl){
+  let asc=headerEl.classList.toggle("asc");
+  headerEl.classList.toggle("desc",!asc);
 
-let asc=headerEl.classList.toggle("asc");
-headerEl.classList.toggle("desc",!asc);
+  document.querySelectorAll(`#${tableId} th`).forEach(th=>{
+    if(th!==headerEl) th.classList.remove("asc","desc");
+  });
 
-document.querySelectorAll(`#${tableId} th`).forEach(th=>{
-if(th!==headerEl) th.classList.remove("asc","desc");
-});
+  players.sort((a,b)=>{
+    if(key==="player_name"){
+      const A=getName(a);
+      const B=getName(b);
+      return asc ? A.localeCompare(B) : B.localeCompare(A);
+    }
 
-players.sort((a,b)=>{
+    if(key==="minutes"){
+      const A=getMinutesValue(a);
+      const B=getMinutesValue(b);
+      return asc ? A-B : B-A;
+    }
 
-if(key==="player_name"){
-const A=getName(a);
-const B=getName(b);
-return asc ? A.localeCompare(B) : B.localeCompare(A);
-}
+    const map={
+      points:["points","pts"],
+      rebounds:["rebounds","reb","total_rebounds"],
+      assists:["assists","ast"],
+      steals:["steals","stl"],
+      blocks:["blocks","blk"]
+    };
 
-return asc
-? (a[key]||0)-(b[key]||0)
-: (b[key]||0)-(a[key]||0);
+    const A=Number(statValue(a,map[key] || [key])) || 0;
+    const B=Number(statValue(b,map[key] || [key])) || 0;
 
-});
+    return asc ? A-B : B-A;
+  });
 
-renderTable(players,tableId);
-
+  renderTable(players,tableId);
 }
 
 function enableSorting(tableId,players){
+  document.querySelectorAll(`#${tableId} th`).forEach(th=>{
+    th.addEventListener("click",()=>{
+      const key=th.dataset.key;
+      sortTable(players,key,tableId,th);
+    });
+  });
+}
 
-document.querySelectorAll(`#${tableId} th`).forEach(th=>{
-th.addEventListener("click",()=>{
-const key=th.dataset.key;
-sortTable(players,key,tableId,th);
-});
-});
+function filterPlayedPlayers(players){
+  return (players || []).filter(p=>getMinutesValue(p)>0);
+}
 
+function extractPlayers(game){
+  let hp=[];
+  let ap=[];
+
+  if(Array.isArray(game.home_players) || Array.isArray(game.away_players)){
+    hp = Array.isArray(game.home_players) ? game.home_players : [];
+    ap = Array.isArray(game.away_players) ? game.away_players : [];
+  }
+  else if(game.boxscore){
+    hp = Array.isArray(game.boxscore.home?.players) ? game.boxscore.home.players : [];
+    ap = Array.isArray(game.boxscore.away?.players) ? game.boxscore.away.players : [];
+  }
+  else if(Array.isArray(game.players)){
+    hp = game.players.filter(p=>p.team===game.home_team);
+    ap = game.players.filter(p=>p.team===game.away_team);
+  }
+
+  return {
+    home: filterPlayedPlayers(hp),
+    away: filterPlayedPlayers(ap)
+  };
 }
 
 async function loadGame(){
 
-if(!season || !gameId){
-showError("Missing season or game id");
-return;
-}
+  if(!season || !gameId){
+    showError("Missing season or game id");
+    return;
+  }
 
-try{
+  try{
+    const res=await fetch(BASE+season+"/"+gameId+".json");
 
-const res=await fetch(BASE+season+"/"+gameId+".json");
+    if(!res.ok){
+      showError("Game file not found (404)");
+      return;
+    }
 
-if(!res.ok){
-showError("Game file not found (404)");
-return;
-}
+    const game=await res.json();
 
-const game=await res.json();
+    if((game.game_type||"").toLowerCase().includes("pre")){
+      showError("Preseason games are not included in official records.");
+      return;
+    }
 
-if((game.game_type||"").toLowerCase().includes("pre")){
-showError("Preseason games are not included in official records.");
-return;
-}
+    titleEl.textContent=(game.away_team || "")+" @ "+(game.home_team || "");
+    subtitleEl.textContent="Season "+season+" — "+(game.date || "");
 
-titleEl.textContent=game.away_team+" @ "+game.home_team;
+    scoreLine.textContent=
+      (game.home_team || "")+" "+(game.home_score ?? "")+
+      " – "+
+      (game.away_score ?? "")+" "+(game.away_team || "");
 
-subtitleEl.textContent="Season "+season+" — "+(game.date||"");
+    summaryEl.style.display="flex";
 
-scoreLine.textContent=
-game.home_team+" "+game.home_score+
-" – "+
-game.away_score+" "+game.away_team;
+    homeTitle.textContent=game.home_team || "Home";
+    awayTitle.textContent=game.away_team || "Away";
 
-summaryEl.style.display="flex";
+    const extracted=extractPlayers(game);
+    homePlayers=extracted.home;
+    awayPlayers=extracted.away;
 
-homeTitle.textContent=game.home_team;
-awayTitle.textContent=game.away_team;
+    renderTable(homePlayers,"homeTable");
+    renderTable(awayPlayers,"awayTable");
 
-/* REMOVE PLAYERS WITH 0 MINUTES */
+    enableSorting("homeTable",homePlayers);
+    enableSorting("awayTable",awayPlayers);
 
-homePlayers=(game.players||[])
-.filter(p=>p.team===game.home_team)
-.filter(p=>Number(p.minutes)>0);
-
-awayPlayers=(game.players||[])
-.filter(p=>p.team===game.away_team)
-.filter(p=>Number(p.minutes)>0);
-
-renderTable(homePlayers,"homeTable");
-renderTable(awayPlayers,"awayTable");
-
-enableSorting("homeTable",homePlayers);
-enableSorting("awayTable",awayPlayers);
-
-}
-
-catch(err){
-showError("Could not load game file");
-}
-
+  }catch(err){
+    showError("Could not load game file");
+  }
 }
 
 window.addEventListener("pageshow",loadGame);
