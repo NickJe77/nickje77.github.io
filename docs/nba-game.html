@@ -85,137 +85,168 @@ Final Score
 
 <script>
 
-/* ✅ ABSOLUTE PATH */
-const BASE = "/data/nba/";
+const BASE="/data/nba/";
 
-const params = new URLSearchParams(window.location.search);
-const season = params.get("season");
-const gameId = params.get("game");
+const params=new URLSearchParams(window.location.search);
+const season=params.get("season");
+const gameId=params.get("game");
 
-let homePlayers = [];
-let awayPlayers = [];
+let homePlayers=[];
+let awayPlayers=[];
 
-const titleEl = document.getElementById("title");
-const subtitleEl = document.getElementById("subtitle");
-const errorBox = document.getElementById("errorBox");
-const summaryEl = document.getElementById("summary");
-const scoreLine = document.getElementById("scoreLine");
-const homeTitle = document.getElementById("homeTitle");
-const awayTitle = document.getElementById("awayTitle");
+const titleEl=document.getElementById("title");
+const subtitleEl=document.getElementById("subtitle");
+const errorBox=document.getElementById("errorBox");
+const summaryEl=document.getElementById("summary");
+const scoreLine=document.getElementById("scoreLine");
+const homeTitle=document.getElementById("homeTitle");
+const awayTitle=document.getElementById("awayTitle");
 
 function showError(msg){
-  errorBox.style.display="block";
-  errorBox.textContent=msg;
+errorBox.style.display="block";
+errorBox.textContent=msg;
 }
 
-function renderTable(players, tableId){
-  const tbody = document.querySelector(`#${tableId} tbody`);
-  tbody.innerHTML="";
+/* SAFE PLAYER NAME HANDLER */
 
-  players.forEach(p=>{
-    const tr=document.createElement("tr");
-
-    tr.innerHTML=`
-      <td>${p.player_name}</td>
-      <td>${p.minutes || 0}</td>
-      <td>${p.points || 0}</td>
-      <td>${p.rebounds || 0}</td>
-      <td>${p.assists || 0}</td>
-      <td>${p.steals || 0}</td>
-      <td>${p.blocks || 0}</td>
-    `;
-
-    tr.addEventListener("click", ()=>{
-      location.href="nba-player.html?player=" + encodeURIComponent(p.player_name);
-    });
-
-    tbody.appendChild(tr);
-  });
+function getName(p){
+return p.player_name || p.name || p.player || p.full_name || p.playerName || "";
 }
 
-function sortTable(players, key, tableId, headerEl){
-  let asc = headerEl.classList.toggle("asc");
-  headerEl.classList.toggle("desc", !asc);
+function renderTable(players,tableId){
 
-  document.querySelectorAll(`#${tableId} th`).forEach(th=>{
-    if(th!==headerEl) th.classList.remove("asc","desc");
-  });
+const tbody=document.querySelector(`#${tableId} tbody`);
+tbody.innerHTML="";
 
-  players.sort((a,b)=>{
-    if(key==="player_name"){
-      return asc 
-        ? a[key].localeCompare(b[key])
-        : b[key].localeCompare(a[key]);
-    }
-    return asc 
-      ? (a[key]||0)-(b[key]||0)
-      : (b[key]||0)-(a[key]||0);
-  });
+players.forEach(p=>{
 
-  renderTable(players, tableId);
+const name=getName(p);
+
+const tr=document.createElement("tr");
+
+tr.innerHTML=`
+<td>${name}</td>
+<td>${p.minutes ?? 0}</td>
+<td>${p.points ?? 0}</td>
+<td>${p.rebounds ?? 0}</td>
+<td>${p.assists ?? 0}</td>
+<td>${p.steals ?? 0}</td>
+<td>${p.blocks ?? 0}</td>
+`;
+
+tr.addEventListener("click",()=>{
+location.href="nba-player.html?player="+encodeURIComponent(name);
+});
+
+tbody.appendChild(tr);
+
+});
+
 }
 
-function enableSorting(tableId, players){
-  document.querySelectorAll(`#${tableId} th`).forEach(th=>{
-    th.addEventListener("click",()=>{
-      const key = th.dataset.key;
-      sortTable(players, key, tableId, th);
-    });
-  });
+function sortTable(players,key,tableId,headerEl){
+
+let asc=headerEl.classList.toggle("asc");
+headerEl.classList.toggle("desc",!asc);
+
+document.querySelectorAll(`#${tableId} th`).forEach(th=>{
+if(th!==headerEl) th.classList.remove("asc","desc");
+});
+
+players.sort((a,b)=>{
+
+if(key==="player_name"){
+
+const A=getName(a);
+const B=getName(b);
+
+return asc ? A.localeCompare(B) : B.localeCompare(A);
+
+}
+
+return asc
+? (a[key]||0)-(b[key]||0)
+: (b[key]||0)-(a[key]||0);
+
+});
+
+renderTable(players,tableId);
+
+}
+
+function enableSorting(tableId,players){
+
+document.querySelectorAll(`#${tableId} th`).forEach(th=>{
+
+th.addEventListener("click",()=>{
+
+const key=th.dataset.key;
+
+sortTable(players,key,tableId,th);
+
+});
+
+});
+
 }
 
 async function loadGame(){
 
-  if(!season || !gameId){
-    showError("Missing season or game id");
-    return;
-  }
-
-  try{
-
-    const res = await fetch(BASE + season + "/" + gameId + ".json");
-
-    if(!res.ok){
-      showError("Game file not found (404)");
-      return;
-    }
-
-    const game = await res.json();
-
-    if((game.game_type||"").toLowerCase().includes("pre")){
-      showError("Preseason games are not included in official records.");
-      return;
-    }
-
-    titleEl.textContent = game.away_team + " @ " + game.home_team;
-    subtitleEl.textContent = "Season " + season + " — " + (game.date || "");
-
-    scoreLine.textContent =
-      game.home_team + " " + game.home_score +
-      " – " +
-      game.away_score + " " + game.away_team;
-
-    summaryEl.style.display="flex";
-
-    homeTitle.textContent = game.home_team;
-    awayTitle.textContent = game.away_team;
-
-    homePlayers = (game.players || []).filter(p=>p.team===game.home_team);
-    awayPlayers = (game.players || []).filter(p=>p.team===game.away_team);
-
-    renderTable(homePlayers, "homeTable");
-    renderTable(awayPlayers, "awayTable");
-
-    enableSorting("homeTable", homePlayers);
-    enableSorting("awayTable", awayPlayers);
-
-  }
-  catch(err){
-    showError("Could not load game file");
-  }
+if(!season || !gameId){
+showError("Missing season or game id");
+return;
 }
 
-window.addEventListener("pageshow", loadGame);
+try{
+
+const res=await fetch(BASE+season+"/"+gameId+".json");
+
+if(!res.ok){
+showError("Game file not found (404)");
+return;
+}
+
+const game=await res.json();
+
+if((game.game_type||"").toLowerCase().includes("pre")){
+showError("Preseason games are not included in official records.");
+return;
+}
+
+titleEl.textContent=game.away_team+" @ "+game.home_team;
+
+subtitleEl.textContent="Season "+season+" — "+(game.date||"");
+
+scoreLine.textContent=
+game.home_team+" "+game.home_score+
+" – "+
+game.away_score+" "+game.away_team;
+
+summaryEl.style.display="flex";
+
+homeTitle.textContent=game.home_team;
+awayTitle.textContent=game.away_team;
+
+homePlayers=(game.players||[]).filter(p=>p.team===game.home_team);
+awayPlayers=(game.players||[]).filter(p=>p.team===game.away_team);
+
+renderTable(homePlayers,"homeTable");
+renderTable(awayPlayers,"awayTable");
+
+enableSorting("homeTable",homePlayers);
+enableSorting("awayTable",awayPlayers);
+
+}
+
+catch(err){
+
+showError("Could not load game file");
+
+}
+
+}
+
+window.addEventListener("pageshow",loadGame);
 loadGame();
 
 </script>
