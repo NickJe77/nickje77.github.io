@@ -50,15 +50,10 @@ match_ids = []
 
 for f in fixtures:
 
-    url = f.get("matchCentreUrl")
+    mid = f.get("id")
 
-    if not url:
-        continue
-
-    match_id = url.split("/")[-1]
-
-    if match_id.isdigit():
-        match_ids.append(match_id)
+    if mid:
+        match_ids.append(str(mid))
 
 
 match_ids = sorted(set(match_ids))
