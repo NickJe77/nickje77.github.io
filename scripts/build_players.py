@@ -2,14 +2,13 @@ import json
 from pathlib import Path
 
 DATA = Path("docs/data/nba")
+
 players = {}
 
 for season_dir in DATA.iterdir():
 
     if not season_dir.is_dir():
         continue
-
-    season = season_dir.name
 
     for game_file in season_dir.glob("*.json"):
 
@@ -21,27 +20,32 @@ for season_dir in DATA.iterdir():
         except:
             continue
 
-        players_list=[]
+        # skip files that are lists
+        if not isinstance(game, dict):
+            continue
 
-        if isinstance(game,dict):
-            players_list=game.get("players",[])
+        home=game.get("home_team")
+        away=game.get("away_team")
 
-        elif isinstance(game,list):
-            players_list=game
+        if not home or not away:
+            continue
 
-        for p in players_list:
+        for p in game.get("players",[]):
 
             name=p.get("player_name") or p.get("name") or p.get("player")
 
             if not name:
                 continue
 
-            if name not in players:
-                players[name]={"games":[]}
-
             team=p.get("team")
 
-            opp=game["away_team"] if team==game.get("home_team") else game.get("home_team")
+            if not team:
+                continue
+
+            opp = away if team==home else home
+
+            if name not in players:
+                players[name]={"games":[]}
 
             players[name]["games"].append({
                 "season":game.get("season"),
@@ -57,6 +61,7 @@ for season_dir in DATA.iterdir():
             })
 
 out=DATA/"players.json"
+
 out.write_text(json.dumps(players,indent=2))
 
-print("players.json rebuilt with game logs")
+print("players.json rebuilt successfully")
