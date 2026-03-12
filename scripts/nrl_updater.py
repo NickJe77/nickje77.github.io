@@ -22,18 +22,18 @@ print("Downloading season page")
 html = requests.get(season_url, headers=HEADERS).text
 soup = BeautifulSoup(html, "html.parser")
 
-links = []
+match_links = []
 
 for a in soup.find_all("a", href=True):
     if "Match details" in a.text:
         href = a["href"]
         if not href.startswith("http"):
             href = "https://afltables.com/rl/" + href.replace("../","")
-        links.append(href)
+        match_links.append(href)
 
-links = sorted(set(links))
+match_links = sorted(set(match_links))
 
-print("Match pages found:", len(links))
+print("Match pages found:", len(match_links))
 
 existing = []
 
@@ -50,7 +50,7 @@ existing_ids = {m.get("match_id") for m in existing}
 
 added = 0
 
-for link in links:
+for link in match_links:
 
     match_id = link.split("/")[-1].replace(".html","")
 
@@ -59,9 +59,9 @@ for link in links:
     game_html = requests.get(link, headers=HEADERS).text
     game_soup = BeautifulSoup(game_html, "html.parser")
 
-    tables = game_soup.find_all("table")
-
     players = []
+
+    tables = game_soup.find_all("table")
 
     for table in tables:
 
@@ -69,33 +69,52 @@ for link in links:
 
         for r in rows_html:
 
-            cols = [c.get_text(strip=True) for c in r.find_all("td")]
+            cols = r.find_all("td")
 
             if len(cols) < 5:
                 continue
 
-            name = cols[0]
+            name_cell = cols[0]
 
-            if name.lower() == "player":
-                continue
+            name = name_cell.get_text(strip=True)
+
+            # try to get full name if player page exists
+            a = name_cell.find("a")
+            if a and a.get("href"):
+
+                player_url = a["href"]
+
+                if not player_url.startswith("http"):
+                    player_url = "https://afltables.com/rl/" + player_url.replace("../","")
+
+                try:
+                    p_html = requests.get(player_url, headers=HEADERS).text
+                    p_soup = BeautifulSoup(p_html, "html.parser")
+
+                    h1 = p_soup.find("h1")
+                    if h1:
+                        name = h1.get_text(strip=True)
+
+                except:
+                    pass
 
             try:
-                tries = int(cols[1])
+                tries = int(cols[1].get_text(strip=True))
             except:
                 tries = 0
 
             try:
-                goals = int(cols[2])
+                goals = int(cols[2].get_text(strip=True))
             except:
                 goals = 0
 
             try:
-                field_goals = int(cols[3])
+                field_goals = int(cols[3].get_text(strip=True))
             except:
                 field_goals = 0
 
             try:
-                points = int(cols[4])
+                points = int(cols[4].get_text(strip=True))
             except:
                 points = 0
 
@@ -131,6 +150,6 @@ for link in links:
 with open(MATCH_FILE, "w") as f:
     json.dump(rows, f, indent=2, sort_keys=True)
 
-print("Matches processed:", len(links))
+print("Matches processed:", len(match_links))
 print("Matches added:", added)
 print("Updater complete")
