@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 
 DATA = Path("docs/data/nba")
-
 players = {}
 
 for season_dir in DATA.iterdir():
@@ -10,76 +9,54 @@ for season_dir in DATA.iterdir():
     if not season_dir.is_dir():
         continue
 
+    season = season_dir.name
+
     for game_file in season_dir.glob("*.json"):
 
         if game_file.name in ["index.json","games.json"]:
             continue
 
         try:
-            game = json.loads(game_file.read_text())
+            game=json.loads(game_file.read_text())
         except:
             continue
 
+        players_list=[]
 
-        # -----------------------------------------
-        # determine where player data is
-        # -----------------------------------------
+        if isinstance(game,dict):
+            players_list=game.get("players",[])
 
-        player_list = []
+        elif isinstance(game,list):
+            players_list=game
 
-        if isinstance(game, dict):
-            player_list = game.get("players", [])
+        for p in players_list:
 
-        elif isinstance(game, list):
-            player_list = game
-
-
-        # -----------------------------------------
-        # process players
-        # -----------------------------------------
-
-        for p in player_list:
-
-            name = (
-                p.get("player_name")
-                or p.get("name")
-                or p.get("player")
-                or p.get("full_name")
-                or ""
-            )
+            name=p.get("player_name") or p.get("name") or p.get("player")
 
             if not name:
                 continue
 
             if name not in players:
-                players[name] = {
-                    "games":0,
-                    "points":0,
-                    "rebounds":0,
-                    "assists":0,
-                    "teams":set()
-                }
+                players[name]={"games":[]}
 
-            rec = players[name]
+            team=p.get("team")
 
-            rec["games"] += 1
-            rec["points"] += p.get("points",0)
-            rec["rebounds"] += p.get("rebounds",0)
-            rec["assists"] += p.get("assists",0)
+            opp=game["away_team"] if team==game.get("home_team") else game.get("home_team")
 
-            team = p.get("team")
-            if team:
-                rec["teams"].add(team)
+            players[name]["games"].append({
+                "season":game.get("season"),
+                "game_id":game.get("game_id"),
+                "date":game.get("date"),
+                "team":team,
+                "opp":opp,
+                "pts":p.get("points",0),
+                "reb":p.get("rebounds",0),
+                "ast":p.get("assists",0),
+                "stl":p.get("steals",0),
+                "blk":p.get("blocks",0)
+            })
 
-
-# convert sets → lists
-for p in players.values():
-    p["teams"] = list(p["teams"])
-
-
-# output file
-out = DATA / "players.json"
-
+out=DATA/"players.json"
 out.write_text(json.dumps(players,indent=2))
 
-print("players.json built successfully")
+print("players.json rebuilt with game logs")
