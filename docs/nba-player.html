@@ -15,13 +15,21 @@ justify-content:center;
 gap:30px;
 padding:14px 0;
 border-bottom:1px solid #ddd;
-font-weight:600;
 background:#fff;
+font-weight:600;
 }
 
-.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+.navbar a{
+color:#0056d6;
+text-decoration:none;
+font-size:18px;
+}
 
-.page-wrap{max-width:1200px;margin:auto;padding:25px 20px 60px;}
+.page-wrap{
+max-width:1200px;
+margin:auto;
+padding:25px 20px 60px;
+}
 
 .header-row{
 display:flex;
@@ -32,9 +40,17 @@ flex-wrap:wrap;
 gap:15px;
 }
 
-.name-wrap{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.name-wrap{
+display:flex;
+align-items:center;
+gap:14px;
+}
 
-#title{font-size:40px;font-weight:800;margin:0;}
+#title{
+font-size:40px;
+font-weight:800;
+margin:0;
+}
 
 .team-stripe{
 height:22px;
@@ -88,14 +104,13 @@ font-weight:800;
 }
 
 .filter-row{
-margin:10px 0 18px;
+margin-bottom:20px;
 font-weight:700;
 color:#003a99;
 }
 
 select{
 padding:8px 14px;
-font-size:14px;
 border-radius:8px;
 border:1px solid #ccc;
 margin-right:10px;
@@ -116,13 +131,18 @@ border-bottom:1px solid #eee;
 text-align:center;
 }
 
-th{background:#eef3ff;font-weight:700;}
+th{
+background:#eef3ff;
+}
 
-tr:nth-child(even){background:#f8faff;}
+tr:nth-child(even){
+background:#f8faff;
+}
 
-tr.clickable{cursor:pointer;}
-
-tr.clickable:hover{background:#e6f0ff;}
+tr.clickable:hover{
+background:#e6f0ff;
+cursor:pointer;
+}
 
 </style>
 </head>
@@ -150,13 +170,35 @@ tr.clickable:hover{background:#e6f0ff;}
 </div>
 
 <div class="summary-container">
+
 <div class="section-title">CAREER SUMMARY</div>
+
 <div class="stats-grid" id="careerTotals"></div>
 <div class="stats-grid" id="careerAverages"></div>
 <div class="stats-grid" id="careerHighs"></div>
+
+</div>
+
+<div class="summary-container">
+
+<div class="filter-row">
+
+Team:
+<select id="teamFilter">
+<option value="ALL">All teams</option>
+</select>
+
+Opposition:
+<select id="oppFilter">
+<option value="ALL">All teams</option>
+</select>
+
+</div>
+
 </div>
 
 <table>
+
 <thead>
 <tr>
 <th>Season</th>
@@ -170,7 +212,9 @@ tr.clickable:hover{background:#e6f0ff;}
 <th>BLK</th>
 </tr>
 </thead>
+
 <tbody id="gamesBody"></tbody>
+
 </table>
 
 </div>
@@ -186,37 +230,16 @@ const TEAM_COLORS={
 };
 
 const params=new URLSearchParams(window.location.search);
-let playerName=decodeURIComponent(params.get("player")||"");
+const playerName=decodeURIComponent(params.get("player")||"");
 
 const titleEl=document.getElementById("title");
 const stripe=document.getElementById("teamStripe");
 const gamesBody=document.getElementById("gamesBody");
 
+const teamFilter=document.getElementById("teamFilter");
+const oppFilter=document.getElementById("oppFilter");
+
 let rows=[];
-
-/* PLAYER SEARCH */
-
-async function loadPlayerList(){
-
-const res=await fetch("/data/nba/players/index.json");
-const list=await res.json();
-
-const dl=document.getElementById("playerList");
-
-list.forEach(p=>{
-const o=document.createElement("option");
-o.value=p;
-dl.appendChild(o);
-});
-
-}
-
-document.getElementById("playerSearch").addEventListener("change",e=>{
-const name=e.target.value;
-window.location="?player="+encodeURIComponent(name);
-});
-
-/* SLUG */
 
 function slug(name){
 return name
@@ -227,7 +250,24 @@ return name
 .replace(/\s+/g,"-");
 }
 
-/* LOAD PLAYER */
+async function loadPlayers(){
+
+const res=await fetch("/data/nba/players/index.json");
+const list=await res.json();
+
+const dl=document.getElementById("playerList");
+
+list.forEach(name=>{
+const opt=document.createElement("option");
+opt.value=name;
+dl.appendChild(opt);
+});
+
+}
+
+document.getElementById("playerSearch").addEventListener("change",e=>{
+window.location="?player="+encodeURIComponent(e.target.value);
+});
 
 async function loadPlayer(){
 
@@ -240,38 +280,36 @@ const data=await res.json();
 
 rows=data.games||[];
 
-setTeamStripe();
+buildFilters();
 renderCareer();
 renderGames();
+setStripe();
 
 }
 
-/* CURRENT TEAM */
+function buildFilters(){
 
-function setTeamStripe(){
+const teams=[...new Set(rows.map(r=>r.team))].sort();
+const opps=[...new Set(rows.map(r=>r.opp))].sort();
 
-let latest=rows.reduce((a,b)=>{
-
-let da=new Date(a.date);
-let db=new Date(b.date);
-
-return db>da?b:a;
-
+teams.forEach(t=>{
+let o=document.createElement("option");
+o.value=t;
+o.textContent=t;
+teamFilter.appendChild(o);
 });
 
-const colors=TEAM_COLORS[latest.team];
-
-if(!colors)return;
-
-stripe.style.background=
-`linear-gradient(90deg,
-${colors[0]} 33%,
-${colors[1]} 33% 66%,
-${colors[2]} 66%)`;
+opps.forEach(t=>{
+let o=document.createElement("option");
+o.value=t;
+o.textContent=t;
+oppFilter.appendChild(o);
+});
 
 }
 
-/* CAREER STATS */
+teamFilter.addEventListener("change",renderGames);
+oppFilter.addEventListener("change",renderGames);
 
 function renderCareer(){
 
@@ -323,13 +361,21 @@ document.getElementById("careerHighs").innerHTML=`
 
 }
 
-/* GAME TABLE */
-
 function renderGames(){
 
 gamesBody.innerHTML="";
 
-rows.forEach(r=>{
+let filtered=rows;
+
+if(teamFilter.value!=="ALL"){
+filtered=filtered.filter(r=>r.team===teamFilter.value);
+}
+
+if(oppFilter.value!=="ALL"){
+filtered=filtered.filter(r=>r.opp===oppFilter.value);
+}
+
+filtered.forEach(r=>{
 gamesBody.innerHTML+=`
 <tr class="clickable">
 <td>${r.season}</td>
@@ -346,9 +392,21 @@ gamesBody.innerHTML+=`
 
 }
 
-/* INIT */
+function setStripe(){
 
-loadPlayerList();
+let latest=rows.reduce((a,b)=>{
+return new Date(b.date)>new Date(a.date)?b:a;
+});
+
+let c=TEAM_COLORS[latest.team];
+
+if(!c)return;
+
+stripe.style.background=`linear-gradient(90deg,${c[0]} 33%,${c[1]} 33% 66%,${c[2]} 66%)`;
+
+}
+
+loadPlayers();
 loadPlayer();
 
 </script>
