@@ -35,20 +35,7 @@ match_links = sorted(set(match_links))
 
 print("Match pages found:", len(match_links))
 
-existing = []
-
-if MATCH_FILE.exists():
-    try:
-        with open(MATCH_FILE) as f:
-            existing = json.load(f)
-    except:
-        existing = []
-
-rows = existing.copy()
-
-existing_ids = {m.get("match_id") for m in existing}
-
-added = 0
+rows = []
 
 for link in match_links:
 
@@ -74,29 +61,7 @@ for link in match_links:
             if len(cols) < 5:
                 continue
 
-            name_cell = cols[0]
-
-            name = name_cell.get_text(strip=True)
-
-            # try to get full name if player page exists
-            a = name_cell.find("a")
-            if a and a.get("href"):
-
-                player_url = a["href"]
-
-                if not player_url.startswith("http"):
-                    player_url = "https://afltables.com/rl/" + player_url.replace("../","")
-
-                try:
-                    p_html = requests.get(player_url, headers=HEADERS).text
-                    p_soup = BeautifulSoup(p_html, "html.parser")
-
-                    h1 = p_soup.find("h1")
-                    if h1:
-                        name = h1.get_text(strip=True)
-
-                except:
-                    pass
+            name = cols[0].get_text(strip=True)
 
             try:
                 tries = int(cols[1].get_text(strip=True))
@@ -126,30 +91,14 @@ for link in match_links:
                 "points": points
             })
 
-    if not players:
-        continue
-
-    game = {
-        "season": SEASON,
+    rows.append({
         "match_id": match_id,
+        "season": SEASON,
         "players": players
-    }
-
-    found = False
-
-    for e in rows:
-        if e.get("match_id") == match_id:
-            e.update(game)
-            found = True
-            break
-
-    if not found:
-        rows.append(game)
-        added += 1
+    })
 
 with open(MATCH_FILE, "w") as f:
     json.dump(rows, f, indent=2, sort_keys=True)
 
-print("Matches processed:", len(match_links))
-print("Matches added:", added)
+print("Matches processed:", len(rows))
 print("Updater complete")
