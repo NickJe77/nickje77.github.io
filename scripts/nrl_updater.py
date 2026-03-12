@@ -7,23 +7,27 @@ print("NRL FULL PLAYER STATS UPDATER")
 
 SEASON = 2026
 BASE = "https://afltables.com/rl/"
-
-OUTPUT = Path("docs/data/nrl/2026.json")
-
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-def get_full_name(url):
+OUTPUT = Path("docs/data/nrl/2026.json")
+OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+
+name_cache = {}
+
+def get_full_name(player_url):
+
+    if player_url in name_cache:
+        return name_cache[player_url]
 
     try:
-
-        html = requests.get(url, headers=HEADERS, timeout=10).text
+        html = requests.get(player_url, headers=HEADERS, timeout=10).text
         soup = BeautifulSoup(html, "html.parser")
 
         title = soup.find("title").text
+        full_name = title.split(" - ")[0]
 
-        name = title.split(" - ")[0]
-
-        return name
+        name_cache[player_url] = full_name
+        return full_name
 
     except:
         return None
@@ -34,7 +38,7 @@ print("Downloading season page")
 season_html = requests.get(f"{BASE}seas/{SEASON}.html", headers=HEADERS).text
 season_soup = BeautifulSoup(season_html, "html.parser")
 
-links = []
+match_links = []
 
 for a in season_soup.find_all("a", href=True):
 
@@ -45,15 +49,15 @@ for a in season_soup.find_all("a", href=True):
         if not href.startswith("http"):
             href = BASE + href.replace("../","")
 
-        links.append(href)
+        match_links.append(href)
 
-links = sorted(set(links))
+match_links = sorted(set(match_links))
 
-print("Match pages found:", len(links))
+print("Match pages found:", len(match_links))
 
 games = []
 
-for link in links:
+for link in match_links:
 
     match_id = link.split("/")[-1].replace(".html","")
 
@@ -73,7 +77,7 @@ for link in links:
 
         name_cell = cols[0]
 
-        player = name_cell.get_text(strip=True)
+        player_name = name_cell.get_text(strip=True)
 
         a = name_cell.find("a")
 
@@ -87,7 +91,7 @@ for link in links:
             full = get_full_name(url)
 
             if full:
-                player = full
+                player_name = full
 
         try:
             tries = int(cols[1].text.strip())
@@ -110,7 +114,7 @@ for link in links:
             pts = 0
 
         players.append({
-            "player": player,
+            "player": player_name,
             "tries": tries,
             "goals": goals,
             "field_goals": fg,
@@ -123,11 +127,8 @@ for link in links:
         "players": players
     })
 
-OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-
 with open(OUTPUT, "w") as f:
     json.dump(games, f, indent=2)
 
 print("Matches processed:", len(games))
-print("File written:", OUTPUT)
 print("Updater complete")
