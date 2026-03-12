@@ -29,11 +29,10 @@ print("Discovering fixtures")
 
 fixtures = []
 
-for r in range(0, 30):
+# NRL season max rounds
+for r in range(1, 31):
 
-    round_name = "opening" if r == 0 else f"round-{r}"
-
-    url = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}&round={round_name}"
+    url = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}&round={r}"
 
     data = fetch_json(url)
 
@@ -85,7 +84,7 @@ for match_id in match_ids:
     if match_id in existing_ids:
         continue
 
-    stats_url = f"https://www.nrl.com/match-centre/{match_id}/statistics"
+    stats_url = f"https://www.nrl.com/match-centre/data/{match_id}/playerstats"
 
     stats = fetch_json(stats_url)
 
