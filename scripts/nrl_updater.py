@@ -38,7 +38,8 @@ for r in range(1, 31):
     if not data:
         continue
 
-    fixtures.extend(data.get("fixtures", []))
+    for round_block in data.get("rounds", []):
+        fixtures.extend(round_block.get("fixtures", []))
 
 
 print("Fixtures detected:", len(fixtures))
@@ -48,7 +49,7 @@ match_ids = []
 
 for f in fixtures:
 
-    mid = f.get("fixtureId")
+    mid = f.get("matchId")
 
     if mid:
         match_ids.append(str(mid))
