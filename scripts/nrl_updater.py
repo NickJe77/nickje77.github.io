@@ -29,7 +29,6 @@ print("Discovering fixtures")
 
 fixtures = []
 
-# NRL season max rounds
 for r in range(1, 31):
 
     url = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}&round={r}"
@@ -49,7 +48,7 @@ match_ids = []
 
 for f in fixtures:
 
-    mid = f.get("id")
+    mid = f.get("matchId")
 
     if mid:
         match_ids.append(str(mid))
