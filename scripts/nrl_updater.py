@@ -48,7 +48,7 @@ match_ids = []
 
 for f in fixtures:
 
-    mid = f.get("matchId")
+    mid = f.get("match_id")
 
     if mid:
         match_ids.append(str(mid))
