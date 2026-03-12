@@ -7,13 +7,7 @@
 
 <style>
 
-body{
-font-family:Inter,system-ui,Arial;
-margin:0;
-background:#f4f6f8;
-}
-
-/* NAVBAR */
+body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
 
 .navbar{
 display:flex;
@@ -31,15 +25,11 @@ text-decoration:none;
 font-size:18px;
 }
 
-/* PAGE */
-
 .page-wrap{
 max-width:1200px;
 margin:0 auto;
 padding:25px 20px 60px;
 }
-
-/* HEADER */
 
 .header-row{
 display:flex;
@@ -70,8 +60,6 @@ border-radius:6px;
 border:1px solid #ccc;
 }
 
-/* SEARCH */
-
 .search-box{
 padding:10px 14px;
 border-radius:10px;
@@ -79,8 +67,6 @@ border:1px solid #ccc;
 font-size:14px;
 width:260px;
 }
-
-/* CARDS */
 
 .summary-container{
 background:#ffffff;
@@ -90,8 +76,6 @@ box-shadow:0 4px 12px rgba(0,0,0,0.05);
 margin-bottom:25px;
 }
 
-/* TITLES */
-
 .section-title{
 font-size:13px;
 font-weight:700;
@@ -99,8 +83,6 @@ letter-spacing:1px;
 color:#666;
 margin-bottom:15px;
 }
-
-/* STAT GRID */
 
 .stats-grid{
 display:grid;
@@ -123,8 +105,6 @@ font-weight:800;
 margin-bottom:4px;
 }
 
-/* FILTERS */
-
 .filter-row{
 margin:10px 0 18px;
 font-weight:700;
@@ -138,8 +118,6 @@ border-radius:8px;
 border:1px solid #ccc;
 margin-right:10px;
 }
-
-/* TABLE */
 
 table{
 width:100%;
@@ -172,8 +150,6 @@ cursor:pointer;
 tr.clickable:hover{
 background:#e6f0ff;
 }
-
-/* ERROR */
 
 .bad{
 background:#ffe1e1;
@@ -211,13 +187,10 @@ margin-top:12px;
 <div id="errorBox" class="bad" style="display:none;"></div>
 
 <div class="summary-container">
-
 <div class="section-title">CAREER SUMMARY</div>
-
 <div class="stats-grid" id="careerTotals"></div>
 <div class="stats-grid" id="careerAverages"></div>
 <div class="stats-grid" id="careerHighs"></div>
-
 </div>
 
 <div class="summary-container">
@@ -245,7 +218,6 @@ Opposition:
 </div>
 
 <table>
-
 <thead>
 <tr>
 <th>Season</th>
@@ -259,9 +231,7 @@ Opposition:
 <th>BLK</th>
 </tr>
 </thead>
-
 <tbody id="gamesBody"></tbody>
-
 </table>
 
 </div>
@@ -278,8 +248,6 @@ const oppFilter=document.getElementById("oppFilter");
 const teamFilter=document.getElementById("teamFilter");
 
 let rows=[];
-
-/* NBA TEAM COLOURS (3 EACH) */
 
 const TEAM_COLORS={
 
@@ -316,29 +284,21 @@ const TEAM_COLORS={
 
 };
 
-/* SLUG */
-
 function slug(name){
-
 return name
 .toLowerCase()
 .normalize("NFD")
 .replace(/[\u0300-\u036f]/g,"")
 .replace(/[^\w\s-]/g,"")
 .replace(/\s+/g,"-");
-
 }
-
-/* LOAD PLAYER */
 
 async function loadPlayer(){
 
 if(!playerName){
-
 errorBox.style.display="block";
 errorBox.textContent="Missing ?player=";
 return;
-
 }
 
 titleEl.textContent=playerName;
@@ -348,11 +308,9 @@ try{
 const res=await fetch(`/data/nba/players/${slug(playerName)}.json`);
 
 if(!res.ok){
-
 errorBox.style.display="block";
 errorBox.textContent="Player file not found.";
 return;
-
 }
 
 const data=await res.json();
@@ -375,15 +333,21 @@ errorBox.textContent="Could not load player data";
 
 }
 
-/* TEAM STRIPE */
+/* FIND CURRENT TEAM */
 
 function setTeamStripe(){
 
 if(rows.length===0)return;
 
-const latestTeam=rows[rows.length-1].team;
+let latestSeason=Math.max(...rows.map(r=>Number(r.season)));
 
-const c=TEAM_COLORS[latestTeam];
+let latestGame=rows
+.filter(r=>Number(r.season)===latestSeason)
+.sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+
+const team=latestGame.team;
+
+const c=TEAM_COLORS[team];
 
 if(!c)return;
 
@@ -394,8 +358,6 @@ ${c[1]} 33% 66%,
 ${c[2]} 66%)`;
 
 }
-
-/* FILTERS */
 
 function buildTeamFilter(){
 
@@ -426,8 +388,6 @@ oppFilter.appendChild(opt);
 teamFilter.addEventListener("change",render);
 oppFilter.addEventListener("change",render);
 
-/* RENDER */
-
 function render(){
 
 let filtered=rows;
@@ -441,42 +401,6 @@ filtered=filtered.filter(r=>r.opp===oppFilter.value);
 }
 
 gamesBody.innerHTML="";
-
-let totals={pts:0,reb:0,ast:0};
-let highs={pts:0,reb:0,ast:0};
-
-for(const r of filtered){
-
-totals.pts+=r.pts;
-totals.reb+=r.reb;
-totals.ast+=r.ast;
-
-highs.pts=Math.max(highs.pts,r.pts);
-highs.reb=Math.max(highs.reb,r.reb);
-highs.ast=Math.max(highs.ast,r.ast);
-
-}
-
-const g=filtered.length||1;
-
-document.getElementById("oppTotals").innerHTML=`
-<div class="stat-box"><span>${filtered.length}</span>Games</div>
-<div class="stat-box"><span>${totals.pts}</span>PTS</div>
-<div class="stat-box"><span>${totals.reb}</span>REB</div>
-<div class="stat-box"><span>${totals.ast}</span>AST</div>
-`;
-
-document.getElementById("oppAverages").innerHTML=`
-<div class="stat-box"><span>${(totals.pts/g).toFixed(1)}</span>Avg PTS</div>
-<div class="stat-box"><span>${(totals.reb/g).toFixed(1)}</span>Avg REB</div>
-<div class="stat-box"><span>${(totals.ast/g).toFixed(1)}</span>Avg AST</div>
-`;
-
-document.getElementById("oppHighs").innerHTML=`
-<div class="stat-box"><span>${highs.pts}</span>Best PTS</div>
-<div class="stat-box"><span>${highs.reb}</span>Best REB</div>
-<div class="stat-box"><span>${highs.ast}</span>Best AST</div>
-`;
 
 filtered.forEach(r=>{
 gamesBody.innerHTML+=`
