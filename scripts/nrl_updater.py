@@ -1,8 +1,9 @@
 import json
 import requests
 from pathlib import Path
+from bs4 import BeautifulSoup
 
-print("NRL FULL UPDATER")
+print("NRL AFLTABLES UPDATER")
 
 SEASON = 2026
 
@@ -12,52 +13,48 @@ MATCH_FILE = BASE / "matches" / f"{SEASON}.json"
 BASE.mkdir(parents=True, exist_ok=True)
 MATCH_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0",
-    "Accept": "application/json",
-    "Referer": "https://www.nrl.com/draw/"
-}
+URL = f"https://afltables.com/rl/seas/{SEASON}.html"
 
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-def fetch_json(url):
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=30)
-        if r.status_code != 200:
-            print("Request failed:", r.status_code)
-            return None
-        return r.json()
-    except Exception as e:
-        print("Request error:", e)
-        return None
+print("Downloading season page")
 
+html = requests.get(URL, headers=HEADERS).text
 
-print("Downloading season draw")
+soup = BeautifulSoup(html, "html.parser")
 
-url = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}"
+tables = soup.find_all("table")
 
-data = fetch_json(url)
+matches = []
 
-fixtures = []
+for table in tables:
 
-if data and "rounds" in data:
-    for r in data["rounds"]:
-        fixtures.extend(r.get("fixtures", []))
+    rows = table.find_all("tr")
 
-print("Fixtures detected:", len(fixtures))
+    for r in rows:
 
+        cols = [c.get_text(strip=True) for c in r.find_all("td")]
 
-match_ids = []
+        if len(cols) < 4:
+            continue
 
-for f in fixtures:
+        team1 = cols[0]
+        score1 = cols[1]
+        team2 = cols[2]
+        score2 = cols[3]
 
-    mid = f.get("matchId")
+        if not score1.isdigit() or not score2.isdigit():
+            continue
 
-    if mid:
-        match_ids.append(str(mid))
+        matches.append({
+            "season": SEASON,
+            "home_team": team1,
+            "home_score": int(score1),
+            "away_team": team2,
+            "away_score": int(score2)
+        })
 
-match_ids = sorted(set(match_ids))
-
-print("Unique matches:", len(match_ids))
+print("Matches detected:", len(matches))
 
 
 existing = []
@@ -70,66 +67,31 @@ if MATCH_FILE.exists():
         existing = []
 
 
-existing_ids = {m["match_id"] for m in existing}
-
-print("Existing matches:", len(existing_ids))
-
+existing_set = {
+    (m["home_team"], m["away_team"], m["home_score"], m["away_score"])
+    for m in existing
+}
 
 rows = existing.copy()
 added = 0
 
 
-for match_id in match_ids:
+for m in matches:
 
-    if match_id in existing_ids:
+    key = (m["home_team"], m["away_team"], m["home_score"], m["away_score"])
+
+    if key in existing_set:
         continue
 
-    stats_url = f"https://www.nrl.com/match-centre/data/{match_id}/playerstats"
-
-    stats = fetch_json(stats_url)
-
-    if not stats:
-        continue
-
-    players = []
-
-    for team in stats.get("teams", []):
-
-        team_name = team.get("teamNickName")
-
-        for p in team.get("players", []):
-
-            players.append({
-                "player": p.get("displayName"),
-                "played_for": team_name,
-                "tries": p.get("tries", 0),
-                "goals_made": p.get("goals", 0),
-                "goals_attempted": p.get("goalAttempts", 0),
-                "field_goals": p.get("fieldGoals", 0),
-                "points": p.get("points", 0),
-                "runs": p.get("runs", 0),
-                "metres": p.get("runMetres", 0),
-                "tackles": p.get("tacklesMade", 0),
-                "missed_tackles": p.get("missedTackles", 0),
-                "offloads": p.get("offloads", 0)
-            })
-
-    if not players:
-        continue
-
-    rows.append({
-        "season": SEASON,
-        "match_id": match_id,
-        "players": players
-    })
+    rows.append(m)
 
     added += 1
-    print("Added match", match_id)
+
+    print("Added", m["home_team"], "vs", m["away_team"])
 
 
-if rows:
-    with open(MATCH_FILE, "w") as f:
-        json.dump(rows, f, indent=2)
+with open(MATCH_FILE, "w") as f:
+    json.dump(rows, f, indent=2)
 
 
 print("Matches added:", added)
