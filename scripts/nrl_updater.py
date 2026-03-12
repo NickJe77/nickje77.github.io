@@ -15,84 +15,76 @@ MATCH_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 URL = f"https://afltables.com/rl/seas/{SEASON}.html"
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
-
 print("Downloading season page")
 
-html = requests.get(URL, headers=HEADERS).text
-
+html = requests.get(URL, headers={"User-Agent": "Mozilla/5.0"}).text
 soup = BeautifulSoup(html, "html.parser")
 
-tables = soup.find_all("table")
+rows = soup.find_all("tr")
 
 matches = []
+i = 0
 
-for table in tables:
+while i < len(rows):
 
-    rows = table.find_all("tr")
+    cols = rows[i].find_all("td")
 
-    for r in rows:
+    if len(cols) >= 3:
 
-        cols = [c.get_text(strip=True) for c in r.find_all("td")]
+        team1 = cols[0].get_text(strip=True)
+        score1 = cols[2].get_text(strip=True)
 
-        if len(cols) < 4:
-            continue
+        # check if score column is numeric
+        if score1.isdigit():
 
-        team1 = cols[0]
-        score1 = cols[1]
-        team2 = cols[2]
-        score2 = cols[3]
+            cols2 = rows[i+1].find_all("td")
 
-        if not score1.isdigit() or not score2.isdigit():
-            continue
+            if len(cols2) >= 3:
 
-        matches.append({
-            "season": SEASON,
-            "home_team": team1,
-            "home_score": int(score1),
-            "away_team": team2,
-            "away_score": int(score2)
-        })
+                team2 = cols2[0].get_text(strip=True)
+                score2 = cols2[2].get_text(strip=True)
+
+                if score2.isdigit():
+
+                    matches.append({
+                        "season": SEASON,
+                        "home_team": team1,
+                        "away_team": team2,
+                        "home_score": int(score1),
+                        "away_score": int(score2)
+                    })
+
+                    i += 2
+                    continue
+
+    i += 1
 
 print("Matches detected:", len(matches))
-
 
 existing = []
 
 if MATCH_FILE.exists():
-    try:
-        with open(MATCH_FILE) as f:
-            existing = json.load(f)
-    except:
-        existing = []
+    with open(MATCH_FILE) as f:
+        existing = json.load(f)
 
+existing_keys = {(m["home_team"], m["away_team"]) for m in existing}
 
-existing_set = {
-    (m["home_team"], m["away_team"], m["home_score"], m["away_score"])
-    for m in existing
-}
-
-rows = existing.copy()
+rows_out = existing.copy()
 added = 0
-
 
 for m in matches:
 
-    key = (m["home_team"], m["away_team"], m["home_score"], m["away_score"])
+    key = (m["home_team"], m["away_team"])
 
-    if key in existing_set:
+    if key in existing_keys:
         continue
 
-    rows.append(m)
-
+    rows_out.append(m)
     added += 1
-
     print("Added", m["home_team"], "vs", m["away_team"])
 
-
 with open(MATCH_FILE, "w") as f:
-    json.dump(rows, f, indent=2)
-
+    json.dump(rows_out, f, indent=2)
 
 print("Matches added:", added)
 print("Updater complete")
