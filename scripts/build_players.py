@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 DATA = Path("docs/data/nba")
+
 players = {}
 
 for season_dir in DATA.iterdir():
@@ -19,12 +20,31 @@ for season_dir in DATA.iterdir():
         except:
             continue
 
-        for p in game.get("players",[]):
+
+        # -----------------------------------------
+        # determine where player data is
+        # -----------------------------------------
+
+        player_list = []
+
+        if isinstance(game, dict):
+            player_list = game.get("players", [])
+
+        elif isinstance(game, list):
+            player_list = game
+
+
+        # -----------------------------------------
+        # process players
+        # -----------------------------------------
+
+        for p in player_list:
 
             name = (
                 p.get("player_name")
                 or p.get("name")
                 or p.get("player")
+                or p.get("full_name")
                 or ""
             )
 
@@ -47,13 +67,19 @@ for season_dir in DATA.iterdir():
             rec["rebounds"] += p.get("rebounds",0)
             rec["assists"] += p.get("assists",0)
 
-            if "team" in p:
-                rec["teams"].add(p["team"])
+            team = p.get("team")
+            if team:
+                rec["teams"].add(team)
 
+
+# convert sets → lists
 for p in players.values():
     p["teams"] = list(p["teams"])
 
+
+# output file
 out = DATA / "players.json"
+
 out.write_text(json.dumps(players,indent=2))
 
-print("players.json built")
+print("players.json built successfully")
