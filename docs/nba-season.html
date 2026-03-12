@@ -89,7 +89,6 @@ location.href="nba-season.html?season="+seasonSelect.value;
 typeSelect.onchange=renderGames;
 teamSelect.onchange=renderGames;
 
-
 async function init(){
 
 for(let y=1976;y<=2026;y++){
@@ -105,8 +104,6 @@ await loadSeason();
 
 }
 
-
-
 async function loadSeason(){
 
 title.textContent="NBA Season "+season;
@@ -117,10 +114,17 @@ teamSelect.innerHTML='<option value="All">All Teams</option>';
 
 try{
 
-const res=await fetch(`${BASE}${season}/games.json?${Date.now()}`);
-const data=await res.json();
+const index=await fetch(`${BASE}${season}/index.json`).then(r=>r.json());
 
-allGames=data.filter(g=>{
+const gameIDs=index.games || [];
+
+const games=await Promise.all(
+gameIDs.map(id =>
+fetch(`${BASE}${season}/${id}.json`).then(r=>r.json())
+)
+);
+
+allGames=games.filter(g=>{
 
 if(!g) return false;
 
@@ -133,36 +137,30 @@ return true;
 
 });
 
-
 const teams=new Set();
 
 allGames.forEach(g=>{
-if(g.home_team) teams.add(g.home_team);
-if(g.away_team) teams.add(g.away_team);
+teams.add(g.home_team);
+teams.add(g.away_team);
 });
 
 Array.from(teams).sort().forEach(t=>{
-
 const opt=document.createElement("option");
 opt.value=t;
 opt.textContent=t;
-
 teamSelect.appendChild(opt);
-
 });
 
 renderGames();
 
 }
-catch(e){
+catch(err){
 
 gamesTable.innerHTML="<tr><td colspan='5'>Error loading season.</td></tr>";
 
 }
 
 }
-
-
 
 function renderGames(){
 
@@ -176,7 +174,6 @@ const filtered=allGames.filter(g=>{
 const type=(g.game_type || "").toLowerCase();
 
 if(typeFilter==="Regular" && !type.includes("regular")) return false;
-
 if(typeFilter==="Playoffs" && !type.includes("playoff")) return false;
 
 if(teamFilter!=="All" && g.home_team!==teamFilter && g.away_team!==teamFilter) return false;
@@ -185,15 +182,10 @@ return true;
 
 });
 
-
 if(!filtered.length){
-
 gamesTable.innerHTML="<tr><td colspan='5'>No games found.</td></tr>";
-
 return;
-
 }
-
 
 filtered.forEach(g=>{
 
@@ -210,10 +202,10 @@ window.location.href=`/nba-game.html?season=${season}&game=${g.game_id}`;
 
 tr.innerHTML=`
 <td>${(g.date || "").substring(0,10)}</td>
-<td>${g.home_team || ""} vs ${g.away_team || ""}</td>
-<td>${g.game_type || ""}</td>
+<td>${g.home_team} vs ${g.away_team}</td>
+<td>${g.game_type}</td>
 <td>${winner}</td>
-<td>${g.home_score ?? ""} – ${g.away_score ?? ""}</td>
+<td>${g.home_score} – ${g.away_score}</td>
 `;
 
 gamesTable.appendChild(tr);
@@ -221,7 +213,6 @@ gamesTable.appendChild(tr);
 });
 
 }
-
 
 init();
 
