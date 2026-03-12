@@ -25,43 +25,23 @@ def fetch(url):
         return None
 
 
-def get_fixtures():
+print("Discovering matches")
 
-    fixtures = []
+index_url = f"https://www.nrl.com/match-centre/data/competitions/111/seasons/{SEASON}/matches"
 
-    for r in range(0, 30):
+data = fetch(index_url)
 
-        round_name = "opening" if r == 0 else f"round-{r}"
-
-        url = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}&round={round_name}"
-
-        data = fetch(url)
-
-        if not data:
-            continue
-
-        fixtures.extend(data.get("fixtures", []))
-
-    return fixtures
+if not data:
+    print("Failed to load match index")
+    raise SystemExit()
 
 
-print("Discovering fixtures")
+matches = data.get("matches", [])
 
-fixtures = get_fixtures()
-
-print("Fixtures detected:", len(fixtures))
+print("Matches detected:", len(matches))
 
 
-match_ids = []
-
-for f in fixtures:
-
-    match = f.get("match")
-
-    if match and match.get("matchId"):
-
-        match_ids.append(str(match.get("matchId")))
-
+match_ids = [str(m.get("matchId")) for m in matches if m.get("matchId")]
 
 match_ids = sorted(list(set(match_ids)))
 
@@ -109,4 +89,43 @@ for match_id in match_ids:
 
     for team in stats.get("teams", []):
 
-        team_name = tea_
+        team_name = team.get("teamNickName")
+
+        for p in team.get("players", []):
+
+            players.append({
+                "player": p.get("displayName"),
+                "played_for": team_name,
+                "tries": p.get("tries", 0),
+                "goals_made": p.get("goals", 0),
+                "goals_attempted": p.get("goalAttempts", 0),
+                "field_goals": p.get("fieldGoals", 0),
+                "points": p.get("points", 0),
+                "runs": p.get("runs", 0),
+                "metres": p.get("runMetres", 0),
+                "tackles": p.get("tacklesMade", 0),
+                "missed_tackles": p.get("missedTackles", 0),
+                "offloads": p.get("offloads", 0)
+            })
+
+    if not players:
+        continue
+
+    rows.append({
+        "season": SEASON,
+        "match_id": match_id,
+        "players": players
+    })
+
+    added += 1
+
+    print("Added match", match_id)
+
+
+if rows:
+
+    with open(MATCH_FILE, "w") as f:
+        json.dump(rows, f, indent=2)
+
+print("Matches added:", added)
+print("Updater complete")
