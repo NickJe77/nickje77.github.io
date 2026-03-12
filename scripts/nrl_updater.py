@@ -16,12 +16,9 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
 def fetch(url):
-
     r = requests.get(url, headers=HEADERS, timeout=30)
-
     if r.status_code != 200:
         return None
-
     return r.json()
 
 
@@ -50,14 +47,15 @@ fixtures = get_fixtures()
 print("Fixtures detected:", len(fixtures))
 
 
+# FIX: extract correct ID
 match_ids = []
 
 for f in fixtures:
 
-    match = f.get("match")
+    mid = f.get("fixtureId")
 
-    if match:
-        match_ids.append(str(match.get("matchId")))
+    if mid:
+        match_ids.append(str(mid))
 
 
 match_ids = sorted(list(set(match_ids)))
@@ -78,7 +76,6 @@ print("Existing matches:", len(existing_ids))
 
 
 rows = existing.copy()
-
 added = 0
 
 
