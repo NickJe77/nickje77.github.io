@@ -6,30 +6,28 @@ from pathlib import Path
 print("NRL FULL PLAYER STATS UPDATER")
 
 SEASON = 2026
+BASE = "https://afltables.com/rl/"
 
-BASE_URL = "https://afltables.com/rl/"
-SEASON_URL = f"{BASE_URL}seas/{SEASON}.html"
-
-DATA_PATH = Path("docs/data/nrl/matches")
-DATA_PATH.mkdir(parents=True, exist_ok=True)
-
-OUT_FILE = DATA_PATH / f"{SEASON}.json"
+# FORCE correct repo path
+OUTPUT_FILE = Path("docs/data/nrl/2026.json")
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
+season_url = f"{BASE}seas/{SEASON}.html"
+
 print("Downloading season page")
 
-season_html = requests.get(SEASON_URL, headers=HEADERS).text
-season_soup = BeautifulSoup(season_html, "html.parser")
+html = requests.get(season_url, headers=HEADERS).text
+soup = BeautifulSoup(html, "html.parser")
 
 match_links = []
 
-for a in season_soup.find_all("a"):
+for a in soup.find_all("a", href=True):
     if a.text.strip() == "Match details":
-        href = a.get("href")
+        href = a["href"]
 
         if not href.startswith("http"):
-            href = BASE_URL + href.replace("../","")
+            href = BASE + href.replace("../","")
 
         match_links.append(href)
 
@@ -45,15 +43,14 @@ for link in match_links:
 
     print("Processing", match_id)
 
-    html = requests.get(link, headers=HEADERS).text
-    soup = BeautifulSoup(html, "html.parser")
+    game_html = requests.get(link, headers=HEADERS).text
+    game_soup = BeautifulSoup(game_html, "html.parser")
 
     players = []
 
-    tables = soup.find_all("table")
+    tables = game_soup.find_all("table")
 
     for table in tables:
-
         for row in table.find_all("tr"):
 
             cols = row.find_all("td")
@@ -61,29 +58,7 @@ for link in match_links:
             if len(cols) < 5:
                 continue
 
-            name_cell = cols[0]
-            name = name_cell.get_text(strip=True)
-
-            player_link = name_cell.find("a")
-
-            if player_link:
-
-                url = player_link["href"]
-
-                if not url.startswith("http"):
-                    url = BASE_URL + url.replace("../","")
-
-                try:
-                    p_html = requests.get(url, headers=HEADERS).text
-                    p_soup = BeautifulSoup(p_html, "html.parser")
-
-                    h1 = p_soup.find("h1")
-
-                    if h1:
-                        name = h1.get_text(strip=True)
-
-                except:
-                    pass
+            name = cols[0].get_text(strip=True)
 
             try:
                 tries = int(cols[1].text.strip())
@@ -119,8 +94,12 @@ for link in match_links:
         "players": players
     })
 
-with open(OUT_FILE, "w") as f:
+# WRITE DIRECTLY TO REPO
+OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+with open(OUTPUT_FILE, "w") as f:
     json.dump(games, f, indent=2)
 
 print("Matches processed:", len(games))
+print("File written:", OUTPUT_FILE)
 print("Updater complete")
