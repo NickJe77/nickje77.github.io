@@ -27,7 +27,7 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
 
 .filter-row{margin:20px 0 10px;font-weight:700;color:#003a99;}
 
-select{padding:8px 14px;font-size:14px;border-radius:8px;border:1px solid #ccc;}
+select{padding:8px 14px;font-size:14px;border-radius:8px;border:1px solid #ccc;margin-right:10px;}
 
 table{width:100%;border-collapse:collapse;font-size:14px;background:#fff;border-radius:14px;overflow:hidden;}
 th,td{padding:10px;border-bottom:1px solid #eee;text-align:center;}
@@ -58,24 +58,35 @@ tr.clickable:hover{background:#e6f0ff;}
 <div id="errorBox" class="bad" style="display:none;"></div>
 
 <div class="summary-container">
+
 <div class="section-title">CAREER SUMMARY</div>
+
 <div class="stats-row" id="careerTotals"></div>
 <div class="stats-row" id="careerAverages"></div>
 <div class="stats-row" id="careerHighs"></div>
+
 </div>
 
 <div class="summary-container">
+
 <div class="filter-row">
+Team:
+<select id="teamFilter">
+<option value="ALL">All teams</option>
+</select>
+
 Opposition:
 <select id="oppFilter">
 <option value="ALL">All teams</option>
 </select>
 </div>
 
-<div class="section-title">VS SELECTED OPPONENT</div>
+<div class="section-title">FILTERED RESULTS</div>
+
 <div class="stats-row" id="oppTotals"></div>
 <div class="stats-row" id="oppAverages"></div>
 <div class="stats-row" id="oppHighs"></div>
+
 </div>
 
 <table>
@@ -106,14 +117,12 @@ const titleEl=document.getElementById("title");
 const errorBox=document.getElementById("errorBox");
 const gamesBody=document.getElementById("gamesBody");
 const oppFilter=document.getElementById("oppFilter");
+const teamFilter=document.getElementById("teamFilter");
 
 let rows=[];
 
 function slug(name){
-return name
-.toLowerCase()
-.replace(/[^\w\s-]/g,"")
-.replace(/\s+/g,"-");
+return name.toLowerCase().replace(/[^\w\s-]/g,"").replace(/\s+/g,"-");
 }
 
 async function loadPlayer(){
@@ -140,6 +149,11 @@ const data=await res.json();
 
 rows=data.games || [];
 
+buildTeamFilter();
+buildOppFilter();
+
+render();
+
 }catch(e){
 
 errorBox.style.display="block";
@@ -147,8 +161,18 @@ errorBox.textContent="Could not load player data";
 
 }
 
-buildOppFilter();
-render();
+}
+
+function buildTeamFilter(){
+
+const teams=[...new Set(rows.map(r=>r.team))].sort();
+
+teams.forEach(t=>{
+const opt=document.createElement("option");
+opt.value=t;
+opt.textContent=t;
+teamFilter.appendChild(opt);
+});
 
 }
 
@@ -165,20 +189,27 @@ oppFilter.appendChild(opt);
 
 }
 
+teamFilter.addEventListener("change",render);
 oppFilter.addEventListener("change",render);
 
 function render(){
 
-const selected=(oppFilter.value==="ALL")
-? rows
-: rows.filter(r=>r.opp===oppFilter.value);
+let filtered=rows;
+
+if(teamFilter.value!=="ALL"){
+filtered=filtered.filter(r=>r.team===teamFilter.value);
+}
+
+if(oppFilter.value!=="ALL"){
+filtered=filtered.filter(r=>r.opp===oppFilter.value);
+}
 
 gamesBody.innerHTML="";
 
 let totals={pts:0,reb:0,ast:0};
 let highs={pts:0,reb:0,ast:0};
 
-for(const r of rows){
+for(const r of filtered){
 
 totals.pts+=r.pts;
 totals.reb+=r.reb;
@@ -190,28 +221,28 @@ highs.ast=Math.max(highs.ast,r.ast);
 
 }
 
-const g=rows.length||1;
+const g=filtered.length||1;
 
-document.getElementById("careerTotals").innerHTML=`
-<div class="stat-box"><span>${rows.length}</span>Games</div>
+document.getElementById("oppTotals").innerHTML=`
+<div class="stat-box"><span>${filtered.length}</span>Games</div>
 <div class="stat-box"><span>${totals.pts}</span>PTS</div>
 <div class="stat-box"><span>${totals.reb}</span>REB</div>
 <div class="stat-box"><span>${totals.ast}</span>AST</div>
 `;
 
-document.getElementById("careerAverages").innerHTML=`
+document.getElementById("oppAverages").innerHTML=`
 <div class="stat-box"><span>${(totals.pts/g).toFixed(1)}</span>Avg PTS</div>
 <div class="stat-box"><span>${(totals.reb/g).toFixed(1)}</span>Avg REB</div>
 <div class="stat-box"><span>${(totals.ast/g).toFixed(1)}</span>Avg AST</div>
 `;
 
-document.getElementById("careerHighs").innerHTML=`
+document.getElementById("oppHighs").innerHTML=`
 <div class="stat-box"><span>${highs.pts}</span>Best PTS</div>
 <div class="stat-box"><span>${highs.reb}</span>Best REB</div>
 <div class="stat-box"><span>${highs.ast}</span>Best AST</div>
 `;
 
-selected.forEach(r=>{
+filtered.forEach(r=>{
 gamesBody.innerHTML+=`
 <tr class="clickable" onclick="window.location='nba-game.html?season=${r.season}&game=${r.game_id}'">
 <td>${r.season}</td>
