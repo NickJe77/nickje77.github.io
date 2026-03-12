@@ -50,13 +50,13 @@ match_ids = []
 
 for f in fixtures:
 
-    mid = f.get("matchId")
+    match = f.get("match")
 
-    if mid:
-        match_ids.append(str(mid))
+    if match and match.get("matchId"):
+        match_ids.append(str(match.get("matchId")))
 
 
-match_ids = sorted(list(set(match_ids)))
+match_ids = sorted(set(match_ids))
 
 print("Unique matches:", len(match_ids))
 
@@ -69,7 +69,6 @@ if MATCH_FILE.exists():
             existing = json.load(f)
     except:
         existing = []
-
 
 existing_ids = {m["match_id"] for m in existing}
 
@@ -101,7 +100,6 @@ for match_id in match_ids:
         for p in team.get("players", []):
 
             players.append({
-
                 "player": p.get("displayName"),
                 "played_for": team_name,
                 "tries": p.get("tries", 0),
@@ -114,18 +112,15 @@ for match_id in match_ids:
                 "tackles": p.get("tacklesMade", 0),
                 "missed_tackles": p.get("missedTackles", 0),
                 "offloads": p.get("offloads", 0)
-
             })
 
     if not players:
         continue
 
     rows.append({
-
         "season": SEASON,
         "match_id": match_id,
         "players": players
-
     })
 
     added += 1
