@@ -56,10 +56,11 @@ match_ids = []
 
 for f in fixtures:
 
-    mid = f.get("fixtureId")
+    match = f.get("match")
 
-    if mid:
-        match_ids.append(str(mid))
+    if match and match.get("matchId"):
+
+        match_ids.append(str(match.get("matchId")))
 
 
 match_ids = sorted(list(set(match_ids)))
@@ -67,11 +68,9 @@ match_ids = sorted(list(set(match_ids)))
 print("Unique matches:", len(match_ids))
 
 
-# SAFE JSON LOADER
 existing = []
 
 if MATCH_FILE.exists():
-
     try:
         with open(MATCH_FILE) as f:
             content = f.read().strip()
@@ -110,43 +109,4 @@ for match_id in match_ids:
 
     for team in stats.get("teams", []):
 
-        team_name = team.get("teamNickName")
-
-        for p in team.get("players", []):
-
-            players.append({
-                "player": p.get("displayName"),
-                "played_for": team_name,
-                "tries": p.get("tries", 0),
-                "goals_made": p.get("goals", 0),
-                "goals_attempted": p.get("goalAttempts", 0),
-                "field_goals": p.get("fieldGoals", 0),
-                "points": p.get("points", 0),
-                "runs": p.get("runs", 0),
-                "metres": p.get("runMetres", 0),
-                "tackles": p.get("tacklesMade", 0),
-                "missed_tackles": p.get("missedTackles", 0),
-                "offloads": p.get("offloads", 0)
-            })
-
-    if not players:
-        continue
-
-    rows.append({
-        "season": SEASON,
-        "match_id": match_id,
-        "players": players
-    })
-
-    added += 1
-
-    print("Added match", match_id)
-
-
-if rows:
-
-    with open(MATCH_FILE, "w") as f:
-        json.dump(rows, f, indent=2)
-
-print("Matches added:", added)
-print("Updater complete")
+        team_name = tea_
