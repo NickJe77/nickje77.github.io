@@ -8,7 +8,6 @@ print("NRL FULL PLAYER STATS UPDATER")
 SEASON = 2026
 BASE = "https://afltables.com/rl/"
 
-# FORCE correct repo path
 OUTPUT_FILE = Path("docs/data/nrl/2026.json")
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -27,7 +26,7 @@ for a in soup.find_all("a", href=True):
         href = a["href"]
 
         if not href.startswith("http"):
-            href = BASE + href.replace("../","")
+            href = BASE + href.replace("../", "")
 
         match_links.append(href)
 
@@ -58,7 +57,29 @@ for link in match_links:
             if len(cols) < 5:
                 continue
 
-            name = cols[0].get_text(strip=True)
+            name_cell = cols[0]
+            player_name = name_cell.get_text(strip=True)
+
+            link_tag = name_cell.find("a")
+
+            if link_tag and link_tag.get("href"):
+
+                player_url = link_tag["href"]
+
+                if not player_url.startswith("http"):
+                    player_url = BASE + player_url.replace("../","")
+
+                try:
+                    p_html = requests.get(player_url, headers=HEADERS).text
+                    p_soup = BeautifulSoup(p_html, "html.parser")
+
+                    h1 = p_soup.find("h1")
+
+                    if h1:
+                        player_name = h1.get_text(strip=True)
+
+                except:
+                    pass
 
             try:
                 tries = int(cols[1].text.strip())
@@ -81,7 +102,7 @@ for link in match_links:
                 points = 0
 
             players.append({
-                "player": name,
+                "player": player_name,
                 "tries": tries,
                 "goals": goals,
                 "field_goals": fg,
@@ -94,7 +115,6 @@ for link in match_links:
         "players": players
     })
 
-# WRITE DIRECTLY TO REPO
 OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 with open(OUTPUT_FILE, "w") as f:
