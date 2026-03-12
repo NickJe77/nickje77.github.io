@@ -3,7 +3,7 @@ import requests
 from pathlib import Path
 from bs4 import BeautifulSoup
 
-print("NRL PLAYER STATS UPDATER")
+print("NRL FULL PLAYER STATS UPDATER")
 
 SEASON = 2026
 
@@ -27,8 +27,10 @@ match_links = []
 for a in soup.find_all("a", href=True):
     if "Match details" in a.text:
         href = a["href"]
+
         if not href.startswith("http"):
             href = "https://afltables.com/rl/" + href.replace("../","")
+
         match_links.append(href)
 
 match_links = sorted(set(match_links))
@@ -52,16 +54,39 @@ for link in match_links:
 
     for table in tables:
 
-        rows_html = table.find_all("tr")
+        trs = table.find_all("tr")
 
-        for r in rows_html:
+        for tr in trs:
 
-            cols = r.find_all("td")
+            cols = tr.find_all("td")
 
             if len(cols) < 5:
                 continue
 
-            name = cols[0].get_text(strip=True)
+            name_cell = cols[0]
+
+            player_name = name_cell.get_text(strip=True)
+
+            link_tag = name_cell.find("a")
+
+            if link_tag and link_tag.get("href"):
+
+                player_url = link_tag["href"]
+
+                if not player_url.startswith("http"):
+                    player_url = "https://afltables.com/rl/" + player_url.replace("../","")
+
+                try:
+                    p_html = requests.get(player_url, headers=HEADERS).text
+                    p_soup = BeautifulSoup(p_html, "html.parser")
+
+                    h1 = p_soup.find("h1")
+
+                    if h1:
+                        player_name = h1.get_text(strip=True)
+
+                except:
+                    pass
 
             try:
                 tries = int(cols[1].get_text(strip=True))
@@ -74,9 +99,9 @@ for link in match_links:
                 goals = 0
 
             try:
-                field_goals = int(cols[3].get_text(strip=True))
+                fg = int(cols[3].get_text(strip=True))
             except:
-                field_goals = 0
+                fg = 0
 
             try:
                 points = int(cols[4].get_text(strip=True))
@@ -84,10 +109,10 @@ for link in match_links:
                 points = 0
 
             players.append({
-                "player": name,
+                "player": player_name,
                 "tries": tries,
                 "goals": goals,
-                "field_goals": field_goals,
+                "field_goals": fg,
                 "points": points
             })
 
@@ -98,7 +123,7 @@ for link in match_links:
     })
 
 with open(MATCH_FILE, "w") as f:
-    json.dump(rows, f, indent=2, sort_keys=True)
+    json.dump(rows, f, indent=2)
 
 print("Matches processed:", len(rows))
 print("Updater complete")
