@@ -16,19 +16,24 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
 def fetch(url):
-    r = requests.get(url, headers=HEADERS, timeout=30)
-    if r.status_code != 200:
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=30)
+        if r.status_code != 200:
+            return None
+        return r.json()
+    except:
         return None
-    return r.json()
 
 
 def get_fixtures():
 
     fixtures = []
 
-    for r in range(1, 30):
+    for r in range(0, 30):
 
-        url = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}&round=round-{r}"
+        round_name = "opening" if r == 0 else f"round-{r}"
+
+        url = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}&round={round_name}"
 
         data = fetch(url)
 
@@ -47,7 +52,6 @@ fixtures = get_fixtures()
 print("Fixtures detected:", len(fixtures))
 
 
-# FIX: extract correct ID
 match_ids = []
 
 for f in fixtures:
@@ -133,16 +137,10 @@ for match_id in match_ids:
     print("Added match", match_id)
 
 
-if added:
+if rows:
 
     with open(MATCH_FILE, "w") as f:
         json.dump(rows, f, indent=2)
 
-    print("Matches added:", added)
-
-else:
-
-    print("No new matches found")
-
-
+print("Matches added:", added)
 print("Updater complete")
