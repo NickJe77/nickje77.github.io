@@ -82,10 +82,7 @@ let season=params.get("season") || "2025";
 
 let allGames=[];
 
-seasonSelect.onchange=()=>{
-location.href="nba-season.html?season="+seasonSelect.value;
-};
-
+seasonSelect.onchange=()=>location.href="nba-season.html?season="+seasonSelect.value;
 typeSelect.onchange=renderGames;
 teamSelect.onchange=renderGames;
 
@@ -109,10 +106,22 @@ async function loadSeason(){
 title.textContent="NBA Season "+season;
 
 gamesTable.innerHTML="<tr><td colspan='5'>Loading games...</td></tr>";
-
 teamSelect.innerHTML='<option value="All">All Teams</option>';
 
 try{
+
+/* TRY MODERN FORMAT FIRST (games.json) */
+
+let res=await fetch(`${BASE}${season}/games.json?${Date.now()}`);
+
+if(res.ok){
+
+const games=await res.json();
+allGames=games;
+
+}else{
+
+/* FALLBACK TO OLD FORMAT (index.json) */
 
 const index=await fetch(`${BASE}${season}/index.json`).then(r=>r.json());
 
@@ -124,24 +133,26 @@ fetch(`${BASE}${season}/${id}.json`).then(r=>r.json())
 )
 );
 
-allGames=games.filter(g=>{
+allGames=games;
 
-if(!g) return false;
+}
 
+/* REMOVE PRESEASON + ALL STAR */
+
+allGames=allGames.filter(g=>{
 const type=(g.game_type || "").toLowerCase();
-
 if(type.includes("preseason")) return false;
 if(type.includes("all-star")) return false;
-
 return true;
-
 });
+
+/* BUILD TEAM LIST */
 
 const teams=new Set();
 
 allGames.forEach(g=>{
-teams.add(g.home_team);
-teams.add(g.away_team);
+if(g.home_team) teams.add(g.home_team);
+if(g.away_team) teams.add(g.away_team);
 });
 
 Array.from(teams).sort().forEach(t=>{
@@ -153,8 +164,7 @@ teamSelect.appendChild(opt);
 
 renderGames();
 
-}
-catch(err){
+}catch(err){
 
 gamesTable.innerHTML="<tr><td colspan='5'>Error loading season.</td></tr>";
 
@@ -190,7 +200,6 @@ return;
 filtered.forEach(g=>{
 
 let winner="";
-
 if(g.home_score>g.away_score) winner=g.home_team;
 else if(g.away_score>g.home_score) winner=g.away_team;
 
@@ -202,10 +211,10 @@ window.location.href=`/nba-game.html?season=${season}&game=${g.game_id}`;
 
 tr.innerHTML=`
 <td>${(g.date || "").substring(0,10)}</td>
-<td>${g.home_team} vs ${g.away_team}</td>
-<td>${g.game_type}</td>
+<td>${g.home_team || ""} vs ${g.away_team || ""}</td>
+<td>${g.game_type || ""}</td>
 <td>${winner}</td>
-<td>${g.home_score} – ${g.away_score}</td>
+<td>${g.home_score ?? ""} – ${g.away_score ?? ""}</td>
 `;
 
 gamesTable.appendChild(tr);
