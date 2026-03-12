@@ -1,6 +1,8 @@
-name: NRL Auto Update
+name: NRL Updater
 
 on:
+  schedule:
+    - cron: "0 */6 * * *"
   workflow_dispatch:
 
 permissions:
@@ -14,6 +16,8 @@ jobs:
 
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -25,18 +29,20 @@ jobs:
           pip install requests beautifulsoup4
 
       - name: Run updater
-        run: python scripts/nrl_updater.py
+        run: |
+          python scripts/nrl_updater.py
 
       - name: Commit changes
         run: |
-          git config --global user.name "NRL Bot"
-          git config --global user.email "actions@github.com"
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
 
-          git add .
+          git pull --rebase
 
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "NRL auto update"
-            git push
-          fi
+          git add docs/data/nrl/
+
+          git diff --cached --quiet && echo "No changes" && exit 0
+
+          git commit -m "NRL auto update"
+
+          git push
