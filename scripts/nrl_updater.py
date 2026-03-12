@@ -65,40 +65,32 @@ print("Matches detected:", len(matches))
 existing = []
 
 if MATCH_FILE.exists():
-    try:
-        with open(MATCH_FILE) as f:
-            existing = json.load(f)
-    except:
-        existing = []
+    with open(MATCH_FILE) as f:
+        existing = json.load(f)
 
-rows_out = existing.copy()
-
-added = 0
+updated = 0
 
 for m in matches:
 
-    exists = False
+    found = False
 
     for e in existing:
 
         if (
             e.get("home_team") == m["home_team"]
             and e.get("away_team") == m["away_team"]
-            and e.get("home_score") == m["home_score"]
-            and e.get("away_score") == m["away_score"]
         ):
-            exists = True
+            e.update(m)
+            found = True
+            updated += 1
             break
 
-    if exists:
-        continue
-
-    rows_out.append(m)
-    added += 1
-    print("Added", m["home_team"], "vs", m["away_team"])
+    if not found:
+        existing.append(m)
+        updated += 1
 
 with open(MATCH_FILE, "w") as f:
-    json.dump(rows_out, f, indent=2)
+    json.dump(existing, f, indent=2)
 
-print("Matches added:", added)
+print("Matches updated:", updated)
 print("Updater complete")
