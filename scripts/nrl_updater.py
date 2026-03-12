@@ -25,22 +25,17 @@ def fetch_json(url):
         return None
 
 
-print("Discovering fixtures")
+print("Downloading season draw")
+
+url = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}"
+
+data = fetch_json(url)
 
 fixtures = []
 
-for r in range(1, 31):
-
-    url = f"https://www.nrl.com/draw/data?competition=111&season={SEASON}&round={r}"
-
-    data = fetch_json(url)
-
-    if not data:
-        continue
-
+if data:
     for round_block in data.get("rounds", []):
         fixtures.extend(round_block.get("fixtures", []))
-
 
 print("Fixtures detected:", len(fixtures))
 
@@ -53,7 +48,6 @@ for f in fixtures:
 
     if mid:
         match_ids.append(str(mid))
-
 
 match_ids = sorted(set(match_ids))
 
