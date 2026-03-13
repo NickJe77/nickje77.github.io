@@ -228,7 +228,17 @@ Opposition: <select id="oppFilter">
 
 <script>
 
-/* TEAM COLOURS */
+const params=new URLSearchParams(window.location.search);
+const playerName=decodeURIComponent(params.get("player")||"");
+
+const titleEl=document.getElementById("title");
+const gamesBody=document.getElementById("gamesBody");
+const teamFilter=document.getElementById("teamFilter");
+const oppFilter=document.getElementById("oppFilter");
+
+let rows=[];
+
+/* NBA TEAM COLOURS */
 
 const TEAM_COLORS={
 "Atlanta Hawks":["#E03A3E","#C1D32F","#000000"],
@@ -263,16 +273,6 @@ const TEAM_COLORS={
 "Washington Wizards":["#002B5C","#E31837","#FFFFFF"]
 };
 
-const params=new URLSearchParams(window.location.search);
-const playerName=decodeURIComponent(params.get("player")||"");
-
-const titleEl=document.getElementById("title");
-const gamesBody=document.getElementById("gamesBody");
-const teamFilter=document.getElementById("teamFilter");
-const oppFilter=document.getElementById("oppFilter");
-
-let rows=[];
-
 function slug(name){
 return name
 .toLowerCase()
@@ -282,7 +282,27 @@ return name
 .replace(/\s+/g,"-");
 }
 
-/* PLAYER SEARCH */
+/* TEAM STRIPE */
+
+function setStripe(){
+
+if(rows.length===0) return;
+
+let latest=rows[0];
+
+for(const r of rows){
+if(new Date(r.date)>new Date(latest.date)){
+latest=r;
+}
+}
+
+const colors=TEAM_COLORS[latest.team];
+if(!colors) return;
+
+document.getElementById("teamStripe").style.background=
+`linear-gradient(90deg,${colors[0]} 33%,${colors[1]} 33% 66%,${colors[2]} 66%)`;
+
+}
 
 async function loadPlayers(){
 const res=await fetch("/data/nba/players/index.json");
@@ -302,8 +322,6 @@ document.getElementById("playerSearch").addEventListener("change",e=>{
 window.location="nba-player.html?player="+encodeURIComponent(e.target.value);
 });
 
-/* LOAD PLAYER */
-
 async function loadPlayer(){
 
 titleEl.textContent=playerName;
@@ -322,68 +340,7 @@ setStripe();
 
 }
 
-/* TEAM STRIPE */
-
-function setStripe(){
-
-if(rows.length===0) return;
-
-let latest=rows[0];
-
-for(const r of rows){
-
-const a=new Date(latest.date);
-const b=new Date(r.date);
-
-if(b>a) latest=r;
-
-}
-
-const colors=TEAM_COLORS[latest.team];
-
-if(!colors) return;
-
-const stripe=document.getElementById("teamStripe");
-
-stripe.style.background=
-`linear-gradient(90deg,${colors[0]} 33%,${colors[1]} 33% 66%,${colors[2]} 66%)`;
-
-}
-
-/* FILTERS + STATS */
-
-function buildFilters(){
-
-const teams=[...new Set(rows.map(r=>r.team))].sort();
-const opps=[...new Set(rows.map(r=>r.opp))].sort();
-
-teams.forEach(t=>{
-let o=document.createElement("option");
-o.value=t;
-o.textContent=t;
-teamFilter.appendChild(o);
-});
-
-opps.forEach(t=>{
-let o=document.createElement("option");
-o.value=t;
-o.textContent=t;
-oppFilter.appendChild(o);
-});
-
-}
-
-teamFilter.addEventListener("change",()=>{
-renderFiltered();
-renderGames();
-});
-
-oppFilter.addEventListener("change",()=>{
-renderFiltered();
-renderGames();
-});
-
-/* (rest of your stats + table code unchanged) */
+/* YOUR EXISTING FUNCTIONS BELOW (UNCHANGED) */
 
 loadPlayers();
 loadPlayer();
