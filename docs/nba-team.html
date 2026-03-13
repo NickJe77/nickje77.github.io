@@ -92,28 +92,6 @@ body{
   text-decoration:underline;
 }
 
-/* summary */
-
-.summary{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
-  gap:14px;
-  margin-bottom:20px;
-}
-
-.stat-box{
-  background:#fff;
-  border-radius:14px;
-  padding:16px;
-  text-align:center;
-}
-
-.stat-box span{
-  display:block;
-  font-size:26px;
-  font-weight:700;
-}
-
 /* filters */
 
 .filter-box{
@@ -225,8 +203,6 @@ tr:hover{
     </table>
   </div>
 
-  <div class="summary" id="summaryBox"></div>
-
   <div class="loading" id="loadingBox">Loading games…</div>
 
   <div class="filter-box">
@@ -292,36 +268,7 @@ function typeBucket(t){
 }
 
 const teamColours = {
-  "Atlanta Hawks":["#E03A3E","#C1D32F"],
-  "Boston Celtics":["#007A33","#BA9653"],
-  "Brooklyn Nets":["#000000","#6C6C6C"],
-  "Charlotte Hornets":["#1D1160","#00788C"],
-  "Chicago Bulls":["#CE1141","#000000"],
-  "Cleveland Cavaliers":["#860038","#FDBB30"],
-  "Dallas Mavericks":["#00538C","#002B5E"],
-  "Denver Nuggets":["#0E2240","#FEC524"],
-  "Detroit Pistons":["#C8102E","#1D42BA"],
-  "Golden State Warriors":["#1D428A","#FFC72C"],
-  "Houston Rockets":["#CE1141","#000000"],
-  "Indiana Pacers":["#002D62","#FDBB30"],
-  "Los Angeles Clippers":["#C8102E","#1D428A"],
-  "Los Angeles Lakers":["#552583","#FDB927"],
-  "Memphis Grizzlies":["#5D76A9","#12173F"],
-  "Miami Heat":["#98002E","#F9A01B"],
-  "Milwaukee Bucks":["#00471B","#EEE1C6"],
-  "Minnesota Timberwolves":["#0C2340","#236192"],
-  "New Orleans Pelicans":["#0C2340","#C8102E"],
-  "New York Knicks":["#006BB6","#F58426"],
-  "Oklahoma City Thunder":["#007AC1","#EF3B24"],
-  "Orlando Magic":["#0077C0","#C4CED4"],
-  "Philadelphia 76ers":["#006BB6","#ED174C"],
-  "Phoenix Suns":["#1D1160","#E56020"],
-  "Portland Trail Blazers":["#E03A3E","#000000"],
-  "Sacramento Kings":["#5A2D81","#63727A"],
-  "San Antonio Spurs":["#C4CED4","#000000"],
-  "Toronto Raptors":["#CE1141","#000000"],
-  "Utah Jazz":["#002B5C","#F9A01B"],
-  "Washington Wizards":["#002B5C","#E31837"]
+  "Chicago Bulls":["#CE1141","#000000"]
 };
 
 const elTeamName = document.getElementById("teamName");
@@ -330,7 +277,6 @@ const elLoading = document.getElementById("loadingBox");
 const elSeason = document.getElementById("seasonSelect");
 const elType = document.getElementById("typeSelect");
 const elBody = document.getElementById("gamesBody");
-const elSummary = document.getElementById("summaryBox");
 const elSearch = document.getElementById("teamSearch");
 const elSearchResults = document.getElementById("searchResults");
 const elLeaders = document.getElementById("leadersBody");
@@ -346,92 +292,12 @@ function setHeroColours(team){
   }
 }
 
-function renderLeaders(data){
-  if(!data){
-    elLeaders.innerHTML = "<tr><td colspan='3'>No leaders available.</td></tr>";
-    return;
-  }
-
-  const rows = [
-    ["Points","pts"],
-    ["Rebounds","reb"],
-    ["Assists","ast"],
-    ["Steals","stl"],
-    ["Blocks","blk"]
-  ];
-
-  let html = "";
-
-  for(const [label,key] of rows){
-    const item = data[key];
-    html += `
-      <tr>
-        <td>${label}</td>
-        <td>${item && item.player ? `<a href="nba-player.html?player=${encodeURIComponent(item.player)}">${item.player}</a>` : ""}</td>
-        <td>${item && item.value != null ? Number(item.value).toLocaleString() : ""}</td>
-      </tr>
-    `;
-  }
-
-  elLeaders.innerHTML = html;
-}
-
-async function loadLeaders(){
-  try{
-    const res = await fetch(PATH_LEADERS);
-    if(!res.ok){
-      elLeaders.innerHTML = "<tr><td colspan='3'>No leaders available.</td></tr>";
-      return;
-    }
-
-    const leaders = await res.json();
-    const teamKey = norm(teamRaw);
-
-    let match = null;
-
-    for(const team in leaders){
-      if(norm(team) === teamKey){
-        match = leaders[team];
-        break;
-      }
-    }
-
-    renderLeaders(match);
-  }catch(e){
-    elLeaders.innerHTML = "<tr><td colspan='3'>No leaders available.</td></tr>";
-  }
-}
-
 function render(){
   let filtered = allGames;
 
   if(elType.value !== "all"){
     filtered = filtered.filter(g => g.type === elType.value);
   }
-
-  let wins = 0;
-  let losses = 0;
-  let ptsFor = 0;
-  let ptsAgainst = 0;
-
-  for(const g of filtered){
-    if(g.result === "W") wins++;
-    else losses++;
-    ptsFor += g.teamScore;
-    ptsAgainst += g.oppScore;
-  }
-
-  const games = wins + losses;
-  const winPct = games ? (wins / games).toFixed(3) : "0.000";
-
-  elSummary.innerHTML = `
-    <div class="stat-box"><span>${games}</span>Games</div>
-    <div class="stat-box"><span>${wins}</span>Wins</div>
-    <div class="stat-box"><span>${losses}</span>Losses</div>
-    <div class="stat-box"><span>${winPct}</span>Win %</div>
-    <div class="stat-box"><span>${ptsFor}</span>Points For</div>
-    <div class="stat-box"><span>${ptsAgainst}</span>Points Against</div>
-  `;
 
   filtered.sort((a,b)=>(b.date||"").localeCompare(a.date||""));
 
@@ -459,116 +325,6 @@ function render(){
   if(!filtered.length){
     elBody.innerHTML = "<tr><td colspan='6'>No games found.</td></tr>";
   }
-}
-
-async function loadSeason(season){
-  currentSeason = Number(season);
-  allGames = [];
-  elLoading.style.display = "block";
-
-  const indexRaw = await fetch(`/data/nba/${season}/index.json`).then(r=>r.json());
-  const gameIds = indexRaw.games || [];
-  const teamKey = norm(teamRaw);
-
-  const games = await Promise.all(
-    gameIds.map(id =>
-      fetch(`/data/nba/${season}/${id}.json`)
-        .then(r=>r.json())
-        .catch(()=>null)
-    )
-  );
-
-  for(const g of games){
-    if(!g) continue;
-
-    /* remove preseason */
-    if((g.game_type || "").toLowerCase().includes("pre")) continue;
-
-    allTeams.add(g.home_team);
-    allTeams.add(g.away_team);
-
-    const home = norm(g.home_team);
-    const away = norm(g.away_team);
-
-    if(!home.includes(teamKey) && !away.includes(teamKey)) continue;
-
-    const isHome = home.includes(teamKey);
-    const teamScore = Number(isHome ? g.home_score : g.away_score);
-    const oppScore = Number(isHome ? g.away_score : g.home_score);
-
-    allGames.push({
-      id:g.game_id,
-      date:g.date,
-      type:typeBucket(g.game_type),
-      typeLabel:g.game_type,
-      opponent:isHome ? g.away_team : g.home_team,
-      result:teamScore > oppScore ? "W" : "L",
-      score:`${teamScore} - ${oppScore}`,
-      teamScore,
-      oppScore
-    });
-  }
-
-  render();
-  elLoading.style.display = "none";
-}
-
-function buildSearchResults(query){
-  const q = norm(query);
-  elSearchResults.innerHTML = "";
-
-  if(!q){
-    elSearchResults.style.display = "none";
-    return;
-  }
-
-  const matches = [...allTeams]
-    .filter(t => norm(t).includes(q))
-    .sort();
-
-  for(const team of matches){
-    const div = document.createElement("div");
-    div.className = "search-item";
-    div.textContent = team;
-    div.onclick = ()=>location.href=`nba-team.html?team=${encodeURIComponent(team)}`;
-    elSearchResults.appendChild(div);
-  }
-
-  elSearchResults.style.display = matches.length ? "block" : "none";
-}
-
-elSearch.addEventListener("input",e=>{
-  buildSearchResults(e.target.value);
-});
-
-document.addEventListener("click",e=>{
-  if(!e.target.closest(".search-wrapper")){
-    elSearchResults.style.display = "none";
-  }
-});
-
-async function init(){
-  elTeamName.textContent = teamRaw;
-  setHeroColours(teamRaw);
-
-  const seasons = await fetch(PATH_SEASONS).then(r=>r.json());
-  seasons.sort((a,b)=>b-a);
-
-  for(const s of seasons){
-    const opt = document.createElement("option");
-    opt.value = s;
-    opt.textContent = seasonLabel(s);
-    elSeason.appendChild(opt);
-  }
-
-  elSeason.addEventListener("change",()=>loadSeason(elSeason.value));
-  elType.addEventListener("change",render);
-
-  if(seasons.length){
-    loadSeason(seasons[0]);
-  }
-
-  loadLeaders();
 }
 
 init();
