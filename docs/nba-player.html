@@ -141,6 +141,7 @@ background:#f8faff;
 }
 
 </style>
+
 </head>
 
 <body>
@@ -222,7 +223,7 @@ Opposition: <select id="oppFilter">
 <script>
 
 const params=new URLSearchParams(window.location.search);
-const playerName=params.get("player");
+const playerParam=params.get("player");
 
 const titleEl=document.getElementById("title");
 const gamesBody=document.getElementById("gamesBody");
@@ -268,36 +269,31 @@ const teamColours={
 "Washington Wizards":["#002B5C","#E31837"]
 };
 
-function setStripe(team){
-
-if(!teamColours[team]) return;
-
-stripe.style.background=
-`linear-gradient(90deg, ${teamColours[team][0]}, ${teamColours[team][1]})`;
-
-}
-
-function getLatestTeam(){
-
-let latest=rows[0];
-
-rows.forEach(g=>{
-if(Number(g.season) > Number(latest.season)){
-latest=g;
-}
-});
-
-return latest.team;
-
+function cleanName(name){
+return name.normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 }
 
 function slug(name){
-return name
+return cleanName(name)
 .toLowerCase()
-.normalize("NFD")
-.replace(/[\u0300-\u036f]/g,"")
 .replace(/[^\w\s-]/g,"")
 .replace(/\s+/g,"-");
+}
+
+function setStripe(team){
+if(teamColours[team]){
+stripe.style.background=`linear-gradient(90deg, ${teamColours[team][0]}, ${teamColours[team][1]})`;
+}
+}
+
+function getLatestTeam(){
+let latest=rows[0];
+rows.forEach(g=>{
+if(Number(g.season)>Number(latest.season)){
+latest=g;
+}
+});
+return latest.team;
 }
 
 async function loadPlayers(){
@@ -321,11 +317,15 @@ window.location="nba-player.html?player="+encodeURIComponent(e.target.value);
 
 async function loadPlayer(){
 
-if(!playerName) return;
+if(!playerParam) return;
 
-titleEl.textContent=decodeURIComponent(playerName);
+const displayName=cleanName(decodeURIComponent(playerParam));
 
-const res=await fetch(`/data/nba/players/${slug(playerName)}.json`);
+titleEl.textContent=displayName;
+
+document.getElementById("playerSearch").value="";
+
+const res=await fetch(`/data/nba/players/${slug(displayName)}.json`);
 const data=await res.json();
 
 rows=data.games||[];
