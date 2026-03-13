@@ -27,7 +27,6 @@ def normalise_round(game_type):
 
 
 def load_games():
-
     with open(PLAYOFF_FILE) as f:
         return json.load(f)
 
@@ -58,7 +57,17 @@ def build_series(games):
 
         for g in games:
 
-            winner = g["winner"]
+            home = g["home_team"]
+            away = g["away_team"]
+
+            hs = int(g["home_score"])
+            as_ = int(g["away_score"])
+
+            if hs > as_:
+                winner = home
+            else:
+                winner = away
+
             if winner in wins:
                 wins[winner] += 1
 
@@ -68,10 +77,7 @@ def build_series(games):
         w1 = wins[team1]
         w2 = wins[team2]
 
-        if w1 > w2:
-            winner = team1
-        else:
-            winner = team2
+        winner = team1 if w1 > w2 else team2
 
         series_list.append({
 
