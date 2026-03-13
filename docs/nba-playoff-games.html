@@ -24,6 +24,7 @@ tr:nth-child(even){background:#f6f9ff;}
 .link:hover{text-decoration:underline;}
 </style>
 </head>
+
 <body>
 
 <div class="navbar">
@@ -40,68 +41,78 @@ tr:nth-child(even){background:#f6f9ff;}
 
 <script>
 
-const START_YEAR = 1976;
-const END_YEAR = 2025;
 const out = document.getElementById("out");
+
+function seasonLabel(year){
+return `${year}-${String(year+1).slice(2)}`;
+}
 
 async function loadPlayoffs(){
 
-out.innerHTML = "";
+const res = await fetch("/data/nba/playoff-games.json");
 
-for(let year = END_YEAR; year >= START_YEAR; year--){
+if(!res.ok){
+out.innerHTML = "<p>Playoff data not available.</p>";
+return;
+}
 
-try{
+const games = await res.json();
 
-const indexRes = await fetch(`data/nba/${year}/index.json`);
-if(!indexRes.ok) continue;
+const seasons = {};
 
-const index = await indexRes.json();
-if(!index.games || !index.games.length) continue;
+games.forEach(g=>{
 
-const gamePromises = index.games.map(id =>
-fetch(`data/nba/${year}/${id}.json`)
-.then(r => r.ok ? r.json() : null)
-);
+if(!seasons[g.season]) seasons[g.season] = [];
 
-const games = (await Promise.all(gamePromises)).filter(Boolean);
+seasons[g.season].push(g);
 
-const playoffGames = games
-.filter(g => g.game_type === "Playoffs")
-.sort((a,b)=> new Date(a.date) - new Date(b.date));
-
-if(!playoffGames.length) continue;
-
-// group by matchup
-const seriesMap = {};
-
-playoffGames.forEach(g=>{
-const key = [g.home_team, g.away_team].sort().join("|");
-if(!seriesMap[key]) seriesMap[key] = [];
-seriesMap[key].push(g);
 });
 
+out.innerHTML = "";
+
+Object.keys(seasons)
+.sort((a,b)=>b-a)
+.forEach(season=>{
+
+const seasonGames = seasons[season];
+
 const seasonBlock = document.createElement("details");
-seasonBlock.open = false;
 
 const summary = document.createElement("summary");
-summary.textContent = `${year}-${String(year+1).slice(2)}`;
+summary.textContent = seasonLabel(season);
+
 seasonBlock.appendChild(summary);
+
+const seriesMap = {};
+
+seasonGames.forEach(g=>{
+
+const key = [g.home_team,g.away_team].sort().join("|");
+
+if(!seriesMap[key]) seriesMap[key] = [];
+
+seriesMap[key].push(g);
+
+});
 
 Object.values(seriesMap).forEach(series=>{
 
 series.sort((a,b)=> new Date(a.date) - new Date(b.date));
 
 const title = document.createElement("div");
-title.className = "series-title";
-title.textContent = `${series[0].home_team} vs ${series[0].away_team}`;
+title.className="series-title";
+title.textContent=`${series[0].home_team} vs ${series[0].away_team}`;
+
 seasonBlock.appendChild(title);
 
 const table = document.createElement("table");
-table.innerHTML = `
+
+table.innerHTML=`
 <thead>
 <tr>
 <th>Date</th>
-<th>Result</th>
+<th>Round</th>
+<th>Score</th>
 <th>Game</th>
 </tr>
 </thead>
@@ -111,13 +122,18 @@ table.innerHTML = `
 const tbody = table.querySelector("tbody");
 
 series.forEach((g,i)=>{
+
 const tr = document.createElement("tr");
-tr.innerHTML = `
+
+tr.innerHTML=`
 <td>${g.date}</td>
-<td>${g.winner} ${g.home_score}–${g.away_score}</td>
-<td><a class="link" href="nba-game.html?season=${year}&game=${g.game_id}">G${i+1}</a></td>
+<td>${g.game_type}</td>
+<td>${g.home_team} ${g.home_score} – ${g.away_score} ${g.away_team}</td>
+<td><a class="link" href="nba-game.html?season=${season}&game=${g.game_id}">G${i+1}</a></td>
 `;
+
 tbody.appendChild(tr);
+
 });
 
 seasonBlock.appendChild(table);
@@ -126,14 +142,7 @@ seasonBlock.appendChild(table);
 
 out.appendChild(seasonBlock);
 
-}catch(e){
-continue;
-}
-}
-
-if(!out.children.length){
-out.innerHTML = "<p>No playoff data found.</p>";
-}
+});
 
 }
 
