@@ -52,12 +52,20 @@ font-weight:800;
 margin:0;
 }
 
-.team-stripe{
+/* TEAM BAR */
+
+.team-bar{
+display:flex;
 height:22px;
-width:140px;
 border-radius:6px;
+overflow:hidden;
 border:1px solid #ccc;
-background:#ddd;
+width:180px;
+}
+
+.team-segment{
+height:100%;
+flex:1;
 }
 
 .search-box{
@@ -158,7 +166,7 @@ background:#f8faff;
 
 <div class="name-wrap">
 <h1 id="title">Player</h1>
-<div id="teamStripe" class="team-stripe"></div>
+<div id="teamBar" class="team-bar"></div>
 </div>
 
 <input id="playerSearch" list="playerList" class="search-box" placeholder="Search player...">
@@ -229,12 +237,10 @@ const titleEl=document.getElementById("title");
 const gamesBody=document.getElementById("gamesBody");
 const teamFilter=document.getElementById("teamFilter");
 const oppFilter=document.getElementById("oppFilter");
-const stripe=document.getElementById("teamStripe");
 
 let rows=[];
-let currentTeam="";
 
-/* TEAM COLOURS */
+/* NBA TEAM COLOURS */
 
 const teamColours={
 "Atlanta Hawks":["#E03A3E","#C1D32F"],
@@ -280,20 +286,36 @@ return cleanName(name)
 .replace(/\s+/g,"-");
 }
 
-function setStripe(team){
-if(teamColours[team]){
-stripe.style.background=`linear-gradient(90deg, ${teamColours[team][0]}, ${teamColours[team][1]})`;
-}
-}
+/* BUILD TEAM BAR */
 
-function getLatestTeam(){
-let latest=rows[0];
+function buildTeamBar(){
+
+const bar=document.getElementById("teamBar");
+bar.innerHTML="";
+
+let teams=[];
+
 rows.forEach(g=>{
-if(Number(g.season)>Number(latest.season)){
-latest=g;
+if(!teams.includes(g.team)){
+teams.push(g.team);
 }
 });
-return latest.team;
+
+teams.forEach(team=>{
+
+if(!teamColours[team]) return;
+
+const seg=document.createElement("div");
+seg.className="team-segment";
+seg.title=team;
+
+seg.style.background=
+`linear-gradient(90deg, ${teamColours[team][0]}, ${teamColours[team][1]})`;
+
+bar.appendChild(seg);
+
+});
+
 }
 
 async function loadPlayers(){
@@ -330,9 +352,7 @@ const data=await res.json();
 
 rows=data.games||[];
 
-currentTeam=getLatestTeam();
-
-setStripe(currentTeam);
+buildTeamBar();
 
 buildFilters();
 renderCareer();
@@ -340,24 +360,6 @@ renderFiltered();
 renderGames();
 
 }
-
-teamFilter.addEventListener("change",()=>{
-
-if(teamFilter.value==="ALL"){
-setStripe(currentTeam);
-}else{
-setStripe(teamFilter.value);
-}
-
-renderFiltered();
-renderGames();
-
-});
-
-oppFilter.addEventListener("change",()=>{
-renderFiltered();
-renderGames();
-});
 
 function buildFilters(){
 
@@ -379,6 +381,16 @@ oppFilter.appendChild(o);
 });
 
 }
+
+teamFilter.addEventListener("change",()=>{
+renderFiltered();
+renderGames();
+});
+
+oppFilter.addEventListener("change",()=>{
+renderFiltered();
+renderGames();
+});
 
 function calcStats(data){
 
