@@ -40,12 +40,13 @@ margin:auto;
 padding:30px 20px 60px;
 }
 
+/* HERO */
+
 .hero{
 padding:34px;
 border-radius:22px;
 margin-bottom:20px;
 color:#fff;
-font-weight:700;
 }
 
 .hero h1{
@@ -83,6 +84,8 @@ text-align:right;
 font-weight:700;
 }
 
+/* SUMMARY */
+
 .summary{
 display:grid;
 grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
@@ -103,6 +106,8 @@ display:block;
 font-size:26px;
 font-weight:700;
 }
+
+/* TABLE */
 
 .card{
 background:var(--card);
@@ -140,13 +145,6 @@ border-radius:12px;
 margin-bottom:16px;
 }
 
-select{
-padding:8px 10px;
-border:1px solid #cfd6e3;
-border-radius:10px;
-font-size:14px;
-}
-
 </style>
 </head>
 
@@ -176,7 +174,6 @@ font-size:14px;
 
 <div class="card">
 <table>
-
 <thead>
 <tr>
 <th>Date</th>
@@ -187,9 +184,7 @@ font-size:14px;
 <th>Score</th>
 </tr>
 </thead>
-
 <tbody id="gamesBody"></tbody>
-
 </table>
 </div>
 
@@ -197,179 +192,113 @@ font-size:14px;
 
 <script>
 
+/* TEAM COLOURS */
+
+const teamColours={
+"Los Angeles Lakers":["#552583","#FDB927"],
+"Boston Celtics":["#007A33","#BA9653"],
+"Chicago Bulls":["#CE1141","#000"],
+"Golden State Warriors":["#1D428A","#FFC72C"],
+"Dallas Mavericks":["#00538C","#002B5E"],
+"Miami Heat":["#98002E","#F9A01B"]
+};
+
+/* PAGE ELEMENTS */
+
 const teamRaw=new URLSearchParams(window.location.search).get("team")||"";
 
-const PATH_LEADERS="/data/nba/team-leaders.json";
+const hero=document.getElementById("heroBox");
+const teamName=document.getElementById("teamName");
+const leadersBody=document.getElementById("leadersBody");
+const gamesBody=document.getElementById("gamesBody");
+const summaryBox=document.getElementById("summaryBox");
+
 const PATH_SEASONS="/data/nba/seasons.json";
+const PLAYERS_INDEX="/data/nba/players/index.json";
 
-const elTeamName=document.getElementById("teamName");
-const elBody=document.getElementById("gamesBody");
-const elSummary=document.getElementById("summaryBox");
-const elLoading=document.getElementById("loadingBox");
+/* HERO COLOUR */
 
-let allGames=[];
-let currentSeason=null;
+function setHero(team){
 
-function norm(s){
-return (s||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+if(teamColours[team]){
+
+const c=teamColours[team];
+
+hero.style.background=
+`linear-gradient(270deg,${c[0]},${c[1]},${c[0]})`;
+
+}else{
+
+hero.style.background="#17408B";
+
 }
 
-/* LOAD LEADERS */
+}
+
+/* NAME NORMALISE */
+
+function slug(name){
+
+return name
+.toLowerCase()
+.normalize("NFD")
+.replace(/[\u0300-\u036f]/g,"")
+.replace(/[^\w\s-]/g,"")
+.replace(/\s+/g,"-");
+
+}
+
+/* LOAD FRANCHISE LEADERS */
 
 async function loadLeaders(){
 
+const players=await fetch(PLAYERS_INDEX).then(r=>r.json());
+
+let leaders={
+pts:{player:"",value:0},
+reb:{player:"",value:0},
+ast:{player:"",value:0},
+stl:{player:"",value:0},
+blk:{player:"",value:0}
+};
+
+for(const name of players){
+
 try{
 
-const leadersData=await fetch(PATH_LEADERS).then(r=>r.json());
+const p=await fetch(`/data/nba/players/${slug(name)}.json`).then(r=>r.json());
 
-const teamKey=norm(teamRaw);
+if(!p.teams) continue;
 
-let leaders=null;
+const t=p.teams[teamRaw];
 
-for(const team in leadersData){
-if(norm(team)===teamKey){
-leaders=leadersData[team];
-break;
-}
-}
+if(!t) continue;
 
-const body=document.getElementById("leadersBody");
+if(t.pts>leaders.pts.value) leaders.pts={player:name,value:t.pts};
+if(t.reb>leaders.reb.value) leaders.reb={player:name,value:t.reb};
+if(t.ast>leaders.ast.value) leaders.ast={player:name,value:t.ast};
+if(t.stl>leaders.stl.value) leaders.stl={player:name,value:t.stl};
+if(t.blk>leaders.blk.value) leaders.blk={player:name,value:t.blk};
 
-if(!leaders){
-body.innerHTML="<tr><td colspan='3'>No leaders found.</td></tr>";
-return;
-}
-
-const rows=[
-["Points","pts"],
-["Rebounds","reb"],
-["Assists","ast"],
-["Steals","stl"],
-["Blocks","blk"]
-];
-
-for(const r of rows){
-
-const stat=leaders[r[1]];
-if(!stat) continue;
-
-body.innerHTML+=`
-<tr>
-<td>${r[0]}</td>
-<td>${stat.player}</td>
-<td>${Number(stat.value).toLocaleString()}</td>
-</tr>`;
+}catch(e){}
 
 }
 
-}catch(e){
-
-document.getElementById("leadersBody").innerHTML=
-"<tr><td colspan='3'>leaders file not found</td></tr>";
-
-}
+leadersBody.innerHTML=`
+<tr><td>Points</td><td>${leaders.pts.player}</td><td>${leaders.pts.value.toLocaleString()}</td></tr>
+<tr><td>Rebounds</td><td>${leaders.reb.player}</td><td>${leaders.reb.value.toLocaleString()}</td></tr>
+<tr><td>Assists</td><td>${leaders.ast.player}</td><td>${leaders.ast.value.toLocaleString()}</td></tr>
+<tr><td>Steals</td><td>${leaders.stl.player}</td><td>${leaders.stl.value.toLocaleString()}</td></tr>
+<tr><td>Blocks</td><td>${leaders.blk.player}</td><td>${leaders.blk.value.toLocaleString()}</td></tr>
+`;
 
 }
 
 /* REMOVE PRESEASON */
 
 function isPreseason(type){
+
 return (type||"").toLowerCase().includes("pre");
-}
-
-/* LOAD SEASON */
-
-async function loadSeason(season){
-
-currentSeason=Number(season);
-
-allGames=[];
-
-const indexRaw=await fetch(`/data/nba/${season}/index.json`).then(r=>r.json());
-
-const games=await Promise.all(
-(indexRaw.games||[]).map(id=>
-fetch(`/data/nba/${season}/${id}.json`).then(r=>r.json()).catch(()=>null)
-)
-);
-
-const teamKey=norm(teamRaw);
-
-for(const g of games){
-
-if(!g) continue;
-if(isPreseason(g.game_type)) continue;
-
-const home=norm(g.home_team);
-const away=norm(g.away_team);
-
-if(!home.includes(teamKey)&&!away.includes(teamKey)) continue;
-
-const isHome=home.includes(teamKey);
-
-const teamScore=isHome?g.home_score:g.away_score;
-const oppScore=isHome?g.away_score:g.home_score;
-
-allGames.push({
-id:g.game_id,
-date:g.date,
-typeLabel:g.game_type,
-opponent:isHome?g.away_team:g.home_team,
-result:Number(teamScore)>Number(oppScore)?"W":"L",
-score:`${teamScore} - ${oppScore}`,
-teamScore:Number(teamScore),
-oppScore:Number(oppScore)
-});
-
-}
-
-render();
-
-}
-
-/* RENDER */
-
-function render(){
-
-let wins=0,losses=0,ptsFor=0,ptsAgainst=0;
-
-for(const g of allGames){
-
-if(g.result==="W")wins++; else losses++;
-
-ptsFor+=g.teamScore;
-ptsAgainst+=g.oppScore;
-
-}
-
-const games=wins+losses;
-
-elSummary.innerHTML=`
-<div class="stat-box"><span>${games}</span>Games</div>
-<div class="stat-box"><span>${wins}</span>Wins</div>
-<div class="stat-box"><span>${losses}</span>Losses</div>
-<div class="stat-box"><span>${games?(wins/games).toFixed(3):"0.000"}</span>Win %</div>
-`;
-
-elBody.innerHTML="";
-
-for(const g of allGames){
-
-const tr=document.createElement("tr");
-
-tr.onclick=()=>location.href=`nba-game.html?season=${currentSeason}&game=${g.id}`;
-
-tr.innerHTML=`
-<td>${g.date}</td>
-<td>${currentSeason}</td>
-<td>${g.typeLabel}</td>
-<td>${g.opponent}</td>
-<td>${g.result}</td>
-<td>${g.score}</td>`;
-
-elBody.appendChild(tr);
-
-}
 
 }
 
@@ -377,17 +306,11 @@ elBody.appendChild(tr);
 
 async function init(){
 
-elTeamName.textContent=teamRaw;
+teamName.textContent=teamRaw;
+
+setHero(teamRaw);
 
 await loadLeaders();
-
-const seasons=await fetch(PATH_SEASONS).then(r=>r.json());
-
-seasons.sort((a,b)=>b-a);
-
-if(seasons.length){
-loadSeason(seasons[0]);
-}
 
 }
 
