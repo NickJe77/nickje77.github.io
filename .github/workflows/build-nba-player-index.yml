@@ -1,0 +1,49 @@
+name: Build NBA Player Index
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-index:
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Build player index
+      run: |
+        python <<EOF
+        import json
+        from pathlib import Path
+
+        players_dir = Path("docs/data/nba/players")
+        names = []
+
+        for f in players_dir.glob("*.json"):
+            with open(f) as file:
+                data = json.load(file)
+            if "name" in data:
+                names.append(data["name"])
+
+        names = sorted(set(names))
+
+        with open(players_dir / "index.json", "w") as f:
+            json.dump(names, f, indent=2)
+
+        print("index.json created with", len(names), "players")
+        EOF
+
+    - name: Commit index
+      run: |
+        git config user.name "github-actions"
+        git config user.email "actions@github.com"
+        git add docs/data/nba/players/index.json
+        git commit -m "Update player index" || echo "No changes"
+        git push
