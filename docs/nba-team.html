@@ -42,11 +42,11 @@ padding:30px 20px 60px;
 }
 
 .hero{
-background:linear-gradient(270deg,#17408B,#C9082A,#17408B);
-color:#fff;
 padding:34px;
 border-radius:22px;
 margin-bottom:20px;
+color:#fff;
+background:linear-gradient(270deg,#17408B,#C9082A,#17408B);
 }
 
 .hero h1{
@@ -150,14 +150,16 @@ margin-bottom:16px;
 
 <div class="page">
 
-<div class="hero">
+<div class="hero" id="heroBox">
 <h1 id="teamName">Loading…</h1>
 </div>
 
 <div class="leaders-card">
 <h3>Franchise Leaders</h3>
 <table class="leaders-table">
-<tbody id="leadersBody"></tbody>
+<tbody id="leadersBody">
+<tr><td colspan="3">Loading…</td></tr>
+</tbody>
 </table>
 </div>
 
@@ -205,18 +207,38 @@ Type:
 
 <script>
 
-const teamRaw=new URLSearchParams(window.location.search).get("team")||"";
+const teamRaw = new URLSearchParams(window.location.search).get("team") || "";
 
 const PATH_SEASONS="/data/nba/seasons.json";
 
 const elTeamName=document.getElementById("teamName");
-const elLoading=document.getElementById("loadingBox");
 const elSeason=document.getElementById("seasonSelect");
 const elType=document.getElementById("typeSelect");
 const elBody=document.getElementById("gamesBody");
+const elLoading=document.getElementById("loadingBox");
 
 let allGames=[];
 let currentSeason=null;
+
+/* TEAM COLOURS */
+
+const teamColours={
+"Los Angeles Lakers":["#552583","#FDB927"],
+"Boston Celtics":["#007A33","#BA9653"],
+"Chicago Bulls":["#CE1141","#000"],
+"Golden State Warriors":["#1D428A","#FFC72C"],
+"Miami Heat":["#98002E","#F9A01B"],
+"Dallas Mavericks":["#00538C","#002B5E"]
+};
+
+if(teamColours[teamRaw]){
+
+const c=teamColours[teamRaw];
+
+document.getElementById("heroBox").style.background=
+`linear-gradient(270deg,${c[0]},${c[1]},${c[0]})`;
+
+}
 
 /* helpers */
 
@@ -234,62 +256,7 @@ if(s.includes("regular")) return "regular";
 return "playoffs";
 }
 
-/* franchise leaders */
-
-async function loadLeaders(){
-
-try{
-
-const players=await fetch("/data/nba/players/index.json").then(r=>r.json());
-
-let leaders={
-pts:{player:"",value:0},
-reb:{player:"",value:0},
-ast:{player:"",value:0},
-stl:{player:"",value:0},
-blk:{player:"",value:0}
-};
-
-for(const name of players){
-
-const slug=name
-.toLowerCase()
-.normalize("NFD")
-.replace(/[\u0300-\u036f]/g,"")
-.replace(/[^\w\s-]/g,"")
-.replace(/\s+/g,"-");
-
-const p=await fetch(`/data/nba/players/${slug}.json`).then(r=>r.json());
-
-if(!p.teams) continue;
-
-const t=p.teams[teamRaw];
-
-if(!t) continue;
-
-if(t.pts>leaders.pts.value) leaders.pts={player:name,value:t.pts};
-if(t.reb>leaders.reb.value) leaders.reb={player:name,value:t.reb};
-if(t.ast>leaders.ast.value) leaders.ast={player:name,value:t.ast};
-if(t.stl>leaders.stl.value) leaders.stl={player:name,value:t.stl};
-if(t.blk>leaders.blk.value) leaders.blk={player:name,value:t.blk};
-
-}
-
-document.getElementById("leadersBody").innerHTML=`
-<tr><td>Points</td><td>${leaders.pts.player}</td><td>${leaders.pts.value}</td></tr>
-<tr><td>Rebounds</td><td>${leaders.reb.player}</td><td>${leaders.reb.value}</td></tr>
-<tr><td>Assists</td><td>${leaders.ast.player}</td><td>${leaders.ast.value}</td></tr>
-<tr><td>Steals</td><td>${leaders.stl.player}</td><td>${leaders.stl.value}</td></tr>
-<tr><td>Blocks</td><td>${leaders.blk.player}</td><td>${leaders.blk.value}</td></tr>
-`;
-
-}catch(e){
-console.log("leaders failed",e);
-}
-
-}
-
-/* render */
+/* RENDER */
 
 function render(){
 
@@ -307,7 +274,9 @@ for(const g of filtered){
 
 const tr=document.createElement("tr");
 
-tr.onclick=()=>location.href=`nba-game.html?season=${currentSeason}&game=${g.id}`;
+tr.onclick=()=>{
+location.href=`nba-game.html?season=${currentSeason}&game=${g.id}`;
+};
 
 tr.innerHTML=`
 <td>${g.date}</td>
@@ -323,7 +292,7 @@ elBody.appendChild(tr);
 
 }
 
-/* load season */
+/* LOAD SEASON */
 
 async function loadSeason(season){
 
@@ -375,7 +344,50 @@ elLoading.style.display="none";
 
 }
 
-/* init */
+/* SAFE LEADERS LOADER */
+
+async function loadLeaders(){
+
+try{
+
+const index=await fetch("/data/nba/players/index.json").then(r=>r.json());
+
+let leaders={pts:{player:"",value:0},reb:{player:"",value:0},ast:{player:"",value:0},stl:{player:"",value:0},blk:{player:"",value:0}};
+
+for(const name of index){
+
+const slug=name.toLowerCase().replace(/[^\w\s-]/g,"").replace(/\s+/g,"-");
+
+const p=await fetch(`/data/nba/players/${slug}.json`).then(r=>r.json());
+
+if(!p.teams) continue;
+
+const t=p.teams[teamRaw];
+if(!t) continue;
+
+if(t.pts>leaders.pts.value) leaders.pts={player:name,value:t.pts};
+if(t.reb>leaders.reb.value) leaders.reb={player:name,value:t.reb};
+if(t.ast>leaders.ast.value) leaders.ast={player:name,value:t.ast};
+if(t.stl>leaders.stl.value) leaders.stl={player:name,value:t.stl};
+if(t.blk>leaders.blk.value) leaders.blk={player:name,value:t.blk};
+
+}
+
+document.getElementById("leadersBody").innerHTML=`
+<tr><td>Points</td><td>${leaders.pts.player}</td><td>${leaders.pts.value}</td></tr>
+<tr><td>Rebounds</td><td>${leaders.reb.player}</td><td>${leaders.reb.value}</td></tr>
+<tr><td>Assists</td><td>${leaders.ast.player}</td><td>${leaders.ast.value}</td></tr>
+<tr><td>Steals</td><td>${leaders.stl.player}</td><td>${leaders.stl.value}</td></tr>
+<tr><td>Blocks</td><td>${leaders.blk.player}</td><td>${leaders.blk.value}</td></tr>
+`;
+
+}catch(e){
+document.getElementById("leadersBody").innerHTML="<tr><td colspan='3'>Leaders unavailable</td></tr>";
+}
+
+}
+
+/* INIT */
 
 async function init(){
 
