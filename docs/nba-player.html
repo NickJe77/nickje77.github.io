@@ -52,12 +52,20 @@ font-weight:800;
 margin:0;
 }
 
-.team-stripe{
+/* TEAM BAR */
+
+.team-bar{
+display:flex;
 height:22px;
-width:160px;
 border-radius:6px;
+overflow:hidden;
 border:1px solid #ccc;
-background:#ddd;
+width:180px;
+}
+
+.team-segment{
+height:100%;
+flex:1;
 }
 
 .search-box{
@@ -104,6 +112,19 @@ font-size:28px;
 font-weight:800;
 }
 
+.filter-row{
+margin-bottom:20px;
+font-weight:700;
+color:#003a99;
+}
+
+select{
+padding:8px 14px;
+border-radius:8px;
+border:1px solid #ccc;
+margin-right:10px;
+}
+
 table{
 width:100%;
 border-collapse:collapse;
@@ -127,19 +148,6 @@ tr:nth-child(even){
 background:#f8faff;
 }
 
-.filter-row{
-margin-bottom:20px;
-font-weight:700;
-color:#003a99;
-}
-
-select{
-padding:8px 14px;
-border-radius:8px;
-border:1px solid #ccc;
-margin-right:10px;
-}
-
 </style>
 
 </head>
@@ -158,7 +166,7 @@ margin-right:10px;
 
 <div class="name-wrap">
 <h1 id="title">Player</h1>
-<div id="teamStripe" class="team-stripe"></div>
+<div id="teamBar" class="team-bar"></div>
 </div>
 
 <input id="playerSearch" list="playerList" class="search-box" placeholder="Search player...">
@@ -173,28 +181,6 @@ margin-right:10px;
 <div class="stats-grid" id="careerTotals"></div>
 <div class="stats-grid" id="careerAverages"></div>
 <div class="stats-grid" id="careerHighs"></div>
-
-</div>
-
-<div class="summary-container">
-
-<div class="section-title">CAREER BY TEAM</div>
-
-<table>
-<thead>
-<tr>
-<th>Team</th>
-<th>Games</th>
-<th>PTS</th>
-<th>REB</th>
-<th>AST</th>
-<th>PPG</th>
-</tr>
-</thead>
-
-<tbody id="teamTable"></tbody>
-
-</table>
 
 </div>
 
@@ -251,7 +237,6 @@ const titleEl=document.getElementById("title");
 const gamesBody=document.getElementById("gamesBody");
 const teamFilter=document.getElementById("teamFilter");
 const oppFilter=document.getElementById("oppFilter");
-const stripe=document.getElementById("teamStripe");
 
 let rows=[];
 
@@ -301,60 +286,33 @@ return cleanName(name)
 .replace(/\s+/g,"-");
 }
 
-function getCurrentTeam(){
-let latest=rows[0];
+/* BUILD TEAM BAR */
+
+function buildTeamBar(){
+
+const bar=document.getElementById("teamBar");
+bar.innerHTML="";
+
+let teams=[];
+
 rows.forEach(g=>{
-if(Number(g.season)>Number(latest.season)){
-latest=g;
+if(!teams.includes(g.team)){
+teams.push(g.team);
 }
 });
-return latest.team;
-}
 
-function setStripe(team){
-if(teamColours[team]){
-stripe.style.background=
+teams.forEach(team=>{
+
+if(!teamColours[team]) return;
+
+const seg=document.createElement("div");
+seg.className="team-segment";
+seg.title=team;
+
+seg.style.background=
 `linear-gradient(90deg, ${teamColours[team][0]}, ${teamColours[team][1]})`;
-}
-}
 
-/* CAREER BY TEAM TABLE */
-
-function renderTeamTable(){
-
-let teams={};
-
-rows.forEach(r=>{
-
-if(!teams[r.team]){
-teams[r.team]={g:0,pts:0,reb:0,ast:0};
-}
-
-teams[r.team].g++;
-teams[r.team].pts+=r.pts;
-teams[r.team].reb+=r.reb;
-teams[r.team].ast+=r.ast;
-
-});
-
-const body=document.getElementById("teamTable");
-body.innerHTML="";
-
-Object.keys(teams).forEach(team=>{
-
-let t=teams[team];
-let ppg=(t.pts/t.g).toFixed(1);
-
-body.innerHTML+=`
-<tr>
-<td>${team}</td>
-<td>${t.g}</td>
-<td>${t.pts}</td>
-<td>${t.reb}</td>
-<td>${t.ast}</td>
-<td>${ppg}</td>
-</tr>
-`;
+bar.appendChild(seg);
 
 });
 
@@ -394,9 +352,7 @@ const data=await res.json();
 
 rows=data.games||[];
 
-setStripe(getCurrentTeam());
-
-renderTeamTable();
+buildTeamBar();
 
 buildFilters();
 renderCareer();
@@ -405,7 +361,163 @@ renderGames();
 
 }
 
-/* existing stat functions unchanged */
+function buildFilters(){
+
+const teams=[...new Set(rows.map(r=>r.team))].sort();
+const opps=[...new Set(rows.map(r=>r.opp))].sort();
+
+teams.forEach(t=>{
+let o=document.createElement("option");
+o.value=t;
+o.textContent=t;
+teamFilter.appendChild(o);
+});
+
+opps.forEach(t=>{
+let o=document.createElement("option");
+o.value=t;
+o.textContent=t;
+oppFilter.appendChild(o);
+});
+
+}
+
+teamFilter.addEventListener("change",()=>{
+renderFiltered();
+renderGames();
+});
+
+oppFilter.addEventListener("change",()=>{
+renderFiltered();
+renderGames();
+});
+
+function calcStats(data){
+
+let totals={pts:0,reb:0,ast:0};
+let highs={pts:0,reb:0,ast:0,ptsOpp:"",rebOpp:"",astOpp:""};
+let triple=0;
+
+data.forEach(r=>{
+
+totals.pts+=r.pts;
+totals.reb+=r.reb;
+totals.ast+=r.ast;
+
+if(r.pts>highs.pts){highs.pts=r.pts;highs.ptsOpp=r.opp;}
+if(r.reb>highs.reb){highs.reb=r.reb;highs.rebOpp=r.opp;}
+if(r.ast>highs.ast){highs.ast=r.ast;highs.astOpp=r.opp;}
+
+let cats=0;
+
+if(r.pts>=10)cats++;
+if(r.reb>=10)cats++;
+if(r.ast>=10)cats++;
+
+if(cats>=3)triple++;
+
+});
+
+return {totals,highs,triple};
+
+}
+
+function renderCareer(){
+
+const {totals,highs,triple}=calcStats(rows);
+
+const g=rows.length||1;
+
+document.getElementById("careerTotals").innerHTML=`
+<div class="stat-box"><span>${rows.length}</span>Games</div>
+<div class="stat-box"><span>${totals.pts}</span>PTS</div>
+<div class="stat-box"><span>${totals.reb}</span>REB</div>
+<div class="stat-box"><span>${totals.ast}</span>AST</div>
+<div class="stat-box"><span>${triple}</span>Triple Doubles</div>
+`;
+
+document.getElementById("careerAverages").innerHTML=`
+<div class="stat-box"><span>${(totals.pts/g).toFixed(1)}</span>Avg PTS</div>
+<div class="stat-box"><span>${(totals.reb/g).toFixed(1)}</span>Avg REB</div>
+<div class="stat-box"><span>${(totals.ast/g).toFixed(1)}</span>Avg AST</div>
+`;
+
+document.getElementById("careerHighs").innerHTML=`
+<div class="stat-box"><span>${highs.pts}</span>Best PTS<br><small>vs ${highs.ptsOpp}</small></div>
+<div class="stat-box"><span>${highs.reb}</span>Best REB<br><small>vs ${highs.rebOpp}</small></div>
+<div class="stat-box"><span>${highs.ast}</span>Best AST<br><small>vs ${highs.astOpp}</small></div>
+`;
+
+}
+
+function renderFiltered(){
+
+let filtered=rows;
+
+if(teamFilter.value!=="ALL"){
+filtered=filtered.filter(r=>r.team===teamFilter.value);
+}
+
+if(oppFilter.value!=="ALL"){
+filtered=filtered.filter(r=>r.opp===oppFilter.value);
+}
+
+const {totals,highs,triple}=calcStats(filtered);
+
+const g=filtered.length||1;
+
+document.getElementById("oppTotals").innerHTML=`
+<div class="stat-box"><span>${filtered.length}</span>Games</div>
+<div class="stat-box"><span>${totals.pts}</span>PTS</div>
+<div class="stat-box"><span>${totals.reb}</span>REB</div>
+<div class="stat-box"><span>${totals.ast}</span>AST</div>
+<div class="stat-box"><span>${triple}</span>Triple Doubles</div>
+`;
+
+document.getElementById("oppAverages").innerHTML=`
+<div class="stat-box"><span>${(totals.pts/g).toFixed(1)}</span>Avg PTS</div>
+<div class="stat-box"><span>${(totals.reb/g).toFixed(1)}</span>Avg REB</div>
+<div class="stat-box"><span>${(totals.ast/g).toFixed(1)}</span>Avg AST</div>
+`;
+
+document.getElementById("oppHighs").innerHTML=`
+<div class="stat-box"><span>${highs.pts}</span>Best PTS<br><small>vs ${highs.ptsOpp}</small></div>
+<div class="stat-box"><span>${highs.reb}</span>Best REB<br><small>vs ${highs.rebOpp}</small></div>
+<div class="stat-box"><span>${highs.ast}</span>Best AST<br><small>vs ${highs.astOpp}</small></div>
+`;
+
+}
+
+function renderGames(){
+
+gamesBody.innerHTML="";
+
+let filtered=rows;
+
+if(teamFilter.value!=="ALL"){
+filtered=filtered.filter(r=>r.team===teamFilter.value);
+}
+
+if(oppFilter.value!=="ALL"){
+filtered=filtered.filter(r=>r.opp===oppFilter.value);
+}
+
+filtered.forEach(r=>{
+gamesBody.innerHTML+=`
+<tr>
+<td>${r.season}</td>
+<td>${r.date}</td>
+<td>${r.team}</td>
+<td>${r.opp}</td>
+<td>${r.pts}</td>
+<td>${r.reb}</td>
+<td>${r.ast}</td>
+<td>${r.stl}</td>
+<td>${r.blk}</td>
+</tr>`;
+});
+
+}
 
 loadPlayers();
 loadPlayer();
