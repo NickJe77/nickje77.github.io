@@ -2,22 +2,28 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>NBA Finals MVP | The Sporting Almanac</title>
+<title>NBA Playoff Games | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
 
 <style>
 body{font-family:Inter,system-ui,Arial;margin:0;background:#fff;}
 .navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-.page-wrap{max-width:1100px;margin:auto;padding:30px 20px 60px;}
-.hero{background:linear-gradient(90deg,#1D428A,#C8102E);color:white;padding:24px 30px;border-radius:12px;margin-bottom:25px;}
-.controls{text-align:center;margin-bottom:18px;}
-input{padding:8px 12px;border-radius:8px;border:1px solid #ccc;font-size:14px;min-width:260px;}
-table{width:100%;border-collapse:collapse;}
+.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px 60px;}
+h1{text-align:center;margin:0 0 10px;}
+p{text-align:center;color:#555;margin:0 0 20px;}
+details{border:1px solid #ddd;border-radius:8px;padding:10px;margin:0 0 14px;}
+summary{font-weight:800;font-size:18px;cursor:pointer;}
+.round-title{font-weight:800;margin:14px 0 6px;}
+.series-title{font-weight:700;margin:10px 0 6px;}
+table{width:100%;border-collapse:collapse;margin-bottom:10px;}
 th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:left;}
 th{background:#f0f0f0;}
 tr:nth-child(even){background:#f6f9ff;}
-.player-link{color:#0056d6;text-decoration:none;font-weight:600;}
+tr:hover{background:#eef2ff;cursor:pointer;}
+.link{color:#0056d6;text-decoration:none;font-weight:600;}
+.link:hover{text-decoration:underline;}
 </style>
 </head>
 
@@ -29,152 +35,155 @@ tr:nth-child(even){background:#f6f9ff;}
 </div>
 
 <div class="page-wrap">
+<h1>NBA Playoff Games</h1>
+<p>All playoff games by season.</p>
 
-<div class="hero">
-<h1>NBA Finals MVP</h1>
-<p>Finals MVP winners from 1976–present.</p>
-</div>
-
-<div class="controls">
-<input id="q" placeholder="Search player or team…">
-</div>
-
-<table>
-<thead>
-<tr>
-<th>Season</th>
-<th>Finals MVP</th>
-<th>Champion</th>
-</tr>
-</thead>
-
-<tbody id="rows">
-<tr><td colspan="3">Loading...</td></tr>
-</tbody>
-</table>
-
+<div id="out">Loading...</div>
 </div>
 
 <script>
 
-const rows=document.getElementById("rows");
-const q=document.getElementById("q");
+const out = document.getElementById("out");
 
-const finalsMVP={
-"1976-77":"Bill Walton",
-"1977-78":"Wes Unseld",
-"1978-79":"Dennis Johnson",
-"1979-80":"Magic Johnson",
-"1980-81":"Cedric Maxwell",
-"1981-82":"Magic Johnson",
-"1982-83":"Moses Malone",
-"1983-84":"Larry Bird",
-"1984-85":"Kareem Abdul-Jabbar",
-"1985-86":"Larry Bird",
-"1986-87":"Magic Johnson",
-"1987-88":"James Worthy",
-"1988-89":"Joe Dumars",
-"1989-90":"Isiah Thomas",
-"1990-91":"Michael Jordan",
-"1991-92":"Michael Jordan",
-"1992-93":"Michael Jordan",
-"1993-94":"Hakeem Olajuwon",
-"1994-95":"Hakeem Olajuwon",
-"1995-96":"Michael Jordan",
-"1996-97":"Michael Jordan",
-"1997-98":"Michael Jordan",
-"1998-99":"Tim Duncan",
-"1999-00":"Shaquille O'Neal",
-"2000-01":"Shaquille O'Neal",
-"2001-02":"Shaquille O'Neal",
-"2002-03":"Tim Duncan",
-"2003-04":"Chauncey Billups",
-"2004-05":"Tim Duncan",
-"2005-06":"Dwyane Wade",
-"2006-07":"Tony Parker",
-"2007-08":"Paul Pierce",
-"2008-09":"Kobe Bryant",
-"2009-10":"Kobe Bryant",
-"2010-11":"Dirk Nowitzki",
-"2011-12":"LeBron James",
-"2012-13":"LeBron James",
-"2013-14":"Kawhi Leonard",
-"2014-15":"Andre Iguodala",
-"2015-16":"LeBron James",
-"2016-17":"Kevin Durant",
-"2017-18":"Kevin Durant",
-"2018-19":"Kawhi Leonard",
-"2019-20":"LeBron James",
-"2020-21":"Giannis Antetokounmpo",
-"2021-22":"Stephen Curry",
-"2022-23":"Nikola Jokić",
-"2023-24":"Jaylen Brown",
-"2024-25":"Shai Gilgeous-Alexander"
-};
+function seasonLabel(year){
+year = Number(year);
+const next = String((year + 1) % 100).padStart(2,"0");
+return `${year}-${next}`;
+}
 
-async function build(){
+function normaliseRound(type){
 
-let finals=[];
+type = type.toLowerCase();
 
-try{
-finals=await fetch("/data/nba/finals.json").then(r=>r.json());
-}catch(e){}
+if(type.includes("finals") && !type.includes("conference")) return "NBA Finals";
+if(type.includes("conference finals")) return "Conference Finals";
+if(type.includes("semifinals")) return "Conference Semifinals";
+if(type.includes("first")) return "First Round";
 
-const championMap={};
-
-finals.forEach(f=>{
-
-const start = Number(f.season);
-const next = String((start+1)%100).padStart(2,"0");
-
-const seasonA = `${start}-${next}`;
-const seasonB = `${start-1}-${String(start%100).padStart(2,"0")}`;
-
-championMap[seasonA] = f.champion;
-championMap[seasonB] = f.champion;
-
-});
-
-const data=Object.entries(finalsMVP)
-.map(([season,mvp])=>({
-season,
-mvp,
-champion:championMap[season]||"",
-year:parseInt(season)
-}))
-.sort((a,b)=>b.year-a.year);
-
-render(data);
+return type;
 
 }
 
-function render(data){
+async function loadPlayoffs(){
 
-const needle=(q.value||"").toLowerCase();
-rows.innerHTML="";
+const res = await fetch("/data/nba/playoff-games.json");
 
-data.forEach(d=>{
+if(!res.ok){
+out.innerHTML = "<p>Playoff data not available.</p>";
+return;
+}
 
-const text=(d.season+d.mvp+d.champion).toLowerCase();
-if(needle && !text.includes(needle)) return;
+const games = await res.json();
 
-const tr=document.createElement("tr");
+const seasons = {};
 
-tr.innerHTML=`
-<td>${d.season}</td>
-<td><a class="player-link" href="nba-player.html?player=${encodeURIComponent(d.mvp)}">${d.mvp}</a></td>
-<td>${d.champion}</td>
+games.forEach(g=>{
+if(!seasons[g.season]) seasons[g.season] = [];
+seasons[g.season].push(g);
+});
+
+out.innerHTML = "";
+
+Object.keys(seasons)
+.sort((a,b)=>b-a)
+.forEach(season=>{
+
+const seasonGames = seasons[season];
+
+const seasonBlock = document.createElement("details");
+
+const summary = document.createElement("summary");
+summary.textContent = seasonLabel(season);
+
+seasonBlock.appendChild(summary);
+
+const rounds = {};
+
+seasonGames.forEach(g=>{
+
+const round = normaliseRound(g.game_type);
+
+if(!rounds[round]) rounds[round] = [];
+rounds[round].push(g);
+
+});
+
+Object.keys(rounds).forEach(round=>{
+
+const roundTitle = document.createElement("div");
+roundTitle.className="round-title";
+roundTitle.textContent=round;
+
+seasonBlock.appendChild(roundTitle);
+
+const seriesMap = {};
+
+rounds[round].forEach(g=>{
+
+const key = [g.home_team,g.away_team].sort().join("|");
+
+if(!seriesMap[key]) seriesMap[key] = [];
+
+seriesMap[key].push(g);
+
+});
+
+Object.values(seriesMap).forEach(series=>{
+
+series.sort((a,b)=> new Date(a.date) - new Date(b.date));
+
+const title = document.createElement("div");
+title.className="series-title";
+title.textContent=`${series[0].home_team} vs ${series[0].away_team}`;
+
+seasonBlock.appendChild(title);
+
+const table = document.createElement("table");
+
+table.innerHTML=`
+<thead>
+<tr>
+<th>Date</th>
+<th>Score</th>
+<th>Game</th>
+</tr>
+</thead>
+<tbody></tbody>
 `;
 
-rows.appendChild(tr);
+const tbody = table.querySelector("tbody");
+
+series.forEach((g,i)=>{
+
+const tr = document.createElement("tr");
+
+tr.onclick = ()=>{
+location.href=`nba-game.html?season=${season}&game=${g.game_id}`;
+};
+
+tr.innerHTML=`
+<td>${g.date}</td>
+<td>${g.home_team} ${g.home_score} – ${g.away_score} ${g.away_team}</td>
+<td>Game ${i+1}</td>
+`;
+
+tbody.appendChild(tr);
+
+});
+
+seasonBlock.appendChild(table);
+
+});
+
+});
+
+out.appendChild(seasonBlock);
 
 });
 
 }
 
-q.addEventListener("input",build);
-
-build();
+loadPlayoffs();
 
 </script>
 
