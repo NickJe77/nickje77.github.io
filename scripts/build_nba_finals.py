@@ -36,17 +36,18 @@ def load_games(season_path):
                 g = json.load(f)
                 games.append(g)
         except:
-            pass
+            continue
 
     return games
 
 
 def detect_finals(games):
 
-    playoff_games = [
-        g for g in games
-        if is_playoff(g.get("game_type"))
-    ]
+    playoff_games = []
+
+    for g in games:
+        if is_playoff(g.get("game_type")):
+            playoff_games.append(g)
 
     if not playoff_games:
         return None
@@ -69,7 +70,8 @@ def detect_finals(games):
             series[key] = {
                 "teams": [home, away],
                 "wins": defaultdict(int),
-                "games": []
+                "games": [],
+                "last_date": ""
             }
 
         home_score = int(g.get("home_score", 0))
@@ -78,46 +80,53 @@ def detect_finals(games):
         winner = home if home_score > away_score else away
 
         series[key]["wins"][winner] += 1
-        series[key]["games"].append(g["game_id"])
+        series[key]["games"].append(g.get("game_id"))
 
-    finals_series = None
-    last_game = ""
+        date = g.get("date", "")
+        if date > series[key]["last_date"]:
+            series[key]["last_date"] = date
 
-    for key, data in series.items():
+    finals = None
+    latest_date = ""
 
-        for team, wins in data["wins"].items():
+    for data in series.values():
+
+        for team in list(data["wins"].keys()):
+
+            wins = data["wins"][team]
 
             if wins == 4:
 
-                latest = max(data["games"])
+                runner = [t for t in data["teams"] if t != team][0]
+                runner_wins = data["wins"].get(runner, 0)
 
-                if latest > last_game:
+                if data["last_date"] > latest_date:
 
-                    runner = [t for t in data["teams"] if t != team][0]
-                    runner_wins = data["wins"][runner]
-
-                    finals_series = {
+                    finals = {
                         "champion": team,
                         "runner_up": runner,
                         "series": f"4-{runner_wins}",
                         "games": data["games"]
                     }
 
-                    last_game = latest
+                    latest_date = data["last_date"]
 
-    return finals_series
+    return finals
 
 
 def main():
 
-    seasons = sorted(
-        [p for p in BASE.iterdir() if p.is_dir() and p.name.isdigit()],
-        key=lambda x: int(x.name)
-    )
+    season_dirs = []
 
-    finals_data = []
+    for p in BASE.iterdir():
+        if p.is_dir() and p.name.isdigit():
+            season_dirs.append(p)
 
-    for season_path in seasons:
+    season_dirs.sort(key=lambda p: int(p.name))
+
+    finals_output = []
+
+    for season_path in season_dirs:
 
         season = int(season_path.name)
 
@@ -129,7 +138,7 @@ def main():
 
         if finals:
 
-            finals_data.append({
+            finals_output.append({
                 "season": season,
                 "champion": finals["champion"],
                 "runner_up": finals["runner_up"],
@@ -138,7 +147,7 @@ def main():
             })
 
     with open(OUTPUT, "w") as f:
-        json.dump(finals_data, f, indent=2)
+        json.dump(finals_output, f, indent=2)
 
     print("Finals file written:", OUTPUT)
 
