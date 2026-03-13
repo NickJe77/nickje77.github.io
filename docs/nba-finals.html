@@ -8,7 +8,7 @@
 <style>
 
 body{
-font-family:Inter,system-ui,Arial;
+font-family:Inter,Arial;
 margin:0;
 background:#f4f6f8;
 }
@@ -16,73 +16,69 @@ background:#f4f6f8;
 .navbar{
 display:flex;
 justify-content:center;
-gap:22px;
-padding:16px 0;
+gap:24px;
+padding:16px;
 background:#fff;
 border-bottom:1px solid #ddd;
-font-weight:600;
+font-weight:700;
 }
 
 .navbar a{
-color:#0056d6;
 text-decoration:none;
-font-size:18px;
+color:#17408B;
 }
 
-.page-wrap{
+.page{
 max-width:1100px;
-margin:0 auto;
+margin:auto;
 padding:30px 20px 60px;
 }
 
 .hero{
-background:linear-gradient(90deg,#1D428A,#C8102E);
-color:white;
-padding:28px 34px;
-border-radius:18px;
+background:linear-gradient(270deg,#17408B,#C9082A,#17408B);
+color:#fff;
+padding:34px;
+border-radius:22px;
 margin-bottom:25px;
 }
 
 .hero h1{
-margin:0 0 6px;
-font-size:30px;
+margin:0;
+font-size:34px;
 }
 
 .card{
 background:#fff;
-border-radius:18px;
-padding:20px;
-box-shadow:0 4px 12px rgba(0,0,0,0.05);
+border-radius:16px;
+overflow:hidden;
+box-shadow:0 4px 10px rgba(0,0,0,.08);
 }
 
 table{
 width:100%;
 border-collapse:collapse;
-font-size:14px;
-}
-
-th,td{
-padding:12px;
-border-bottom:1px solid #eee;
-text-align:left;
 }
 
 th{
-background:#eef3ff;
-font-weight:700;
+background:#17408B;
+color:#fff;
+padding:12px;
+text-align:left;
 }
 
-tr:nth-child(even){
-background:#f8faff;
+td{
+padding:12px;
+border-bottom:1px solid #e6e8ee;
 }
 
-.champ{
-font-weight:700;
+tr:hover{
+background:#eef2ff;
+cursor:pointer;
 }
 
-.series{
-font-weight:700;
-color:#1D428A;
+.loading{
+padding:20px;
+text-align:center;
 }
 
 </style>
@@ -95,11 +91,10 @@ color:#1D428A;
 <a href="nba.html">NBA</a>
 </div>
 
-<div class="page-wrap">
+<div class="page">
 
 <div class="hero">
 <h1>NBA Finals</h1>
-<p>Championship series history.</p>
 </div>
 
 <div class="card">
@@ -110,13 +105,13 @@ color:#1D428A;
 <tr>
 <th>Season</th>
 <th>Champion</th>
-<th>Runner-up</th>
+<th>Runner Up</th>
 <th>Series</th>
 </tr>
 </thead>
 
-<tbody id="rows">
-<tr><td colspan="4">Loading...</td></tr>
+<tbody id="finalsBody">
+<tr><td colspan="4" class="loading">Loading finals…</td></tr>
 </tbody>
 
 </table>
@@ -127,45 +122,46 @@ color:#1D428A;
 
 <script>
 
-const rows = document.getElementById("rows");
+function seasonLabel(start){
+const next = String((Number(start)+1)%100).padStart(2,"0");
+return `${start}-${next}`;
+}
 
 async function loadFinals(){
 
-rows.innerHTML="";
+const res = await fetch("/data/nba/finals.json");
 
-let finals=[];
-
-try{
-
-finals = await fetch("/data/nba/finals.json")
-.then(r=>r.ok ? r.json() : []);
-
-}catch(e){
-
-rows.innerHTML="<tr><td colspan='4'>Unable to load finals.json</td></tr>";
+if(!res.ok){
+document.getElementById("finalsBody").innerHTML =
+"<tr><td colspan='4'>Finals data not available.</td></tr>";
 return;
-
 }
 
-finals
-.sort((a,b)=>b.season-a.season)
-.forEach(f=>{
+const data = await res.json();
 
-const seasonLabel =
-`${f.season-1}-${String(f.season).slice(2)}`;
+data.sort((a,b)=>b.season-a.season);
 
-const tr=document.createElement("tr");
+const body = document.getElementById("finalsBody");
 
-tr.innerHTML=`
-<td>${seasonLabel}</td>
-<td class="champ">${f.champion || ""}</td>
-<td>${f.runner_up || ""}</td>
-<td class="series">${f.series || ""}</td>
+body.innerHTML = "";
+
+for(const row of data){
+
+const tr = document.createElement("tr");
+
+tr.onclick = ()=>{
+location.href=`nba-season.html?season=${row.season}`;
+};
+
+tr.innerHTML = `
+<td>${seasonLabel(row.season)}</td>
+<td>${row.champion}</td>
+<td>${row.runner_up}</td>
+<td>${row.series}</td>
 `;
 
-rows.appendChild(tr);
-
-});
+body.appendChild(tr);
+}
 
 }
 
