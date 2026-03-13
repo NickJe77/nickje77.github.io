@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -7,7 +6,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-
 body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
 
 .navbar{
@@ -45,6 +43,7 @@ gap:15px;
 display:flex;
 align-items:center;
 gap:14px;
+flex-wrap:wrap;
 }
 
 #title{
@@ -102,6 +101,14 @@ text-align:center;
 display:block;
 font-size:28px;
 font-weight:800;
+margin-bottom:4px;
+}
+
+.stat-box small{
+display:block;
+font-size:12px;
+line-height:1.25;
+color:#333;
 }
 
 .filter-row{
@@ -145,8 +152,16 @@ background:#e6f0ff;
 cursor:pointer;
 }
 
+.bad{
+background:#ffe1e1;
+color:#900;
+padding:10px;
+text-align:center;
+border-radius:6px;
+margin-bottom:20px;
+display:none;
+}
 </style>
-
 </head>
 
 <body>
@@ -160,7 +175,6 @@ cursor:pointer;
 <div class="page-wrap">
 
 <div class="header-row">
-
 <div class="name-wrap">
 <h1 id="title">Player</h1>
 <div id="teamStripe" class="team-stripe"></div>
@@ -168,39 +182,32 @@ cursor:pointer;
 
 <input id="playerSearch" list="playerList" class="search-box" placeholder="Search player...">
 <datalist id="playerList"></datalist>
-
 </div>
 
+<div id="errorBox" class="bad"></div>
+
 <div class="summary-container">
-
 <div class="section-title">CAREER SUMMARY</div>
-
 <div class="stats-grid" id="careerTotals"></div>
 <div class="stats-grid" id="careerAverages"></div>
 <div class="stats-grid" id="careerHighs"></div>
-
 </div>
 
 <div class="summary-container">
-
 <div class="filter-row">
-
-Team: <select id="teamFilter">
-
+Team:
+<select id="teamFilter">
 <option value="ALL">All teams</option>
 </select>
 
-Opposition: <select id="oppFilter">
-
+Opposition:
+<select id="oppFilter">
 <option value="ALL">All teams</option>
 </select>
-
 </div>
-
 </div>
 
 <table>
-
 <thead>
 <tr>
 <th>Season</th>
@@ -214,26 +221,264 @@ Opposition: <select id="oppFilter">
 <th>BLK</th>
 </tr>
 </thead>
-
 <tbody id="gamesBody"></tbody>
-
 </table>
 
 </div>
 
 <script>
-
-/* TEAM COLOURS */
-
 const TEAM_COLORS={
-"Dallas Mavericks":["#00538C","#002B5E","#B8C4CA"],
-"Los Angeles Lakers":["#552583","#FDB927","#000000"],
-"Golden State Warriors":["#1D428A","#FFC72C","#FFFFFF"],
+"Atlanta Hawks":["#E03A3E","#C1D32F","#000000"],
 "Boston Celtics":["#007A33","#BA9653","#FFFFFF"],
-"Chicago Bulls":["#CE1141","#000000","#FFFFFF"]
+"Brooklyn Nets":["#000000","#FFFFFF","#777777"],
+"Charlotte Hornets":["#1D1160","#00788C","#A1A1A4"],
+"Chicago Bulls":["#CE1141","#000000","#FFFFFF"],
+"Cleveland Cavaliers":["#6F263D","#FFB81C","#041E42"],
+"Dallas Mavericks":["#00538C","#002B5E","#B8C4CA"],
+"Denver Nuggets":["#0E2240","#FEC524","#8B2131"],
+"Detroit Pistons":["#C8102E","#1D42BA","#BEC0C2"],
+"Golden State Warriors":["#1D428A","#FFC72C","#FFFFFF"],
+"Houston Rockets":["#CE1141","#000000","#C4CED4"],
+"Indiana Pacers":["#002D62","#FDBB30","#BEC0C2"],
+"Los Angeles Clippers":["#C8102E","#1D428A","#FFFFFF"],
+"Los Angeles Lakers":["#552583","#FDB927","#000000"],
+"Memphis Grizzlies":["#5D76A9","#12173F","#F5B112"],
+"Miami Heat":["#98002E","#F9A01B","#000000"],
+"Milwaukee Bucks":["#00471B","#EEE1C6","#0077C0"],
+"Minnesota Timberwolves":["#0C2340","#236192","#9EA2A2"],
+"New Orleans Pelicans":["#0C2340","#C8102E","#85714D"],
+"New York Knicks":["#006BB6","#F58426","#BEC0C2"],
+"Oklahoma City Thunder":["#007AC1","#EF3B24","#FDBB30"],
+"Orlando Magic":["#0077C0","#C4CED4","#000000"],
+"Philadelphia 76ers":["#006BB6","#ED174C","#FFFFFF"],
+"Phoenix Suns":["#1D1160","#E56020","#000000"],
+"Portland Trail Blazers":["#E03A3E","#000000","#FFFFFF"],
+"Sacramento Kings":["#5A2D81","#63727A","#000000"],
+"San Antonio Spurs":["#000000","#C4CED4","#FFFFFF"],
+"Toronto Raptors":["#CE1141","#000000","#A1A1A4"],
+"Utah Jazz":["#002B5C","#00471B","#F9A01B"],
+"Washington Wizards":["#002B5C","#E31837","#FFFFFF"]
 };
 
-const params=new URLSearchParams(window.location.search);
-const playerName=decodeURIComponent(params.get("player")||"");
+const params = new URLSearchParams(window.location.search);
+const playerName = decodeURIComponent(params.get("player") || "");
 
-const titleEl=document.getElementById("title");
+const titleEl = document.getElementById("title");
+const stripe = document.getElementById("teamStripe");
+const gamesBody = document.getElementById("gamesBody");
+const teamFilter = document.getElementById("teamFilter");
+const oppFilter = document.getElementById("oppFilter");
+const errorBox = document.getElementById("errorBox");
+
+let rows = [];
+
+function slug(name){
+return name
+.toLowerCase()
+.normalize("NFD")
+.replace(/[\u0300-\u036f]/g,"")
+.replace(/[^\w\s-]/g,"")
+.replace(/\s+/g,"-");
+}
+
+function showError(msg){
+errorBox.style.display = "block";
+errorBox.textContent = msg;
+}
+
+function clearError(){
+errorBox.style.display = "none";
+errorBox.textContent = "";
+}
+
+async function loadPlayers(){
+try{
+const res = await fetch("/data/nba/players/index.json");
+if(!res.ok) return;
+
+const list = await res.json();
+const dl = document.getElementById("playerList");
+dl.innerHTML = "";
+
+list.forEach(name=>{
+const opt = document.createElement("option");
+opt.value = name;
+dl.appendChild(opt);
+});
+}catch(e){
+console.log("Player list failed to load");
+}
+}
+
+document.getElementById("playerSearch").addEventListener("change", e=>{
+const name = e.target.value.trim();
+if(name){
+window.location = `${window.location.pathname}?player=${encodeURIComponent(name)}`;
+}
+});
+
+async function loadPlayer(){
+if(!playerName){
+showError("Missing ?player=");
+return;
+}
+
+clearError();
+titleEl.textContent = playerName;
+
+try{
+const res = await fetch(`/data/nba/players/${slug(playerName)}.json`);
+if(!res.ok){
+showError("Player file not found.");
+return;
+}
+
+const data = await res.json();
+rows = Array.isArray(data.games) ? data.games : [];
+
+if(!rows.length){
+showError("No games found for this player.");
+renderStats([]);
+gamesBody.innerHTML = "";
+return;
+}
+
+buildFilters();
+renderGames();
+setStripe();
+}catch(e){
+showError("Could not load player data.");
+}
+}
+
+function buildFilters(){
+teamFilter.innerHTML = `<option value="ALL">All teams</option>`;
+oppFilter.innerHTML = `<option value="ALL">All teams</option>`;
+
+const teams = [...new Set(rows.map(r=>r.team).filter(Boolean))].sort();
+const opps = [...new Set(rows.map(r=>r.opp).filter(Boolean))].sort();
+
+teams.forEach(t=>{
+const o = document.createElement("option");
+o.value = t;
+o.textContent = t;
+teamFilter.appendChild(o);
+});
+
+opps.forEach(t=>{
+const o = document.createElement("option");
+o.value = t;
+o.textContent = t;
+oppFilter.appendChild(o);
+});
+}
+
+teamFilter.addEventListener("change", renderGames);
+oppFilter.addEventListener("change", renderGames);
+
+function renderStats(data){
+let totals = {pts:0, reb:0, ast:0};
+let highs = {pts:0, reb:0, ast:0, ptsOpp:"", rebOpp:"", astOpp:""};
+let triple = 0;
+
+data.forEach(r=>{
+const pts = Number(r.pts || 0);
+const reb = Number(r.reb || 0);
+const ast = Number(r.ast || 0);
+const stl = Number(r.stl || 0);
+const blk = Number(r.blk || 0);
+
+totals.pts += pts;
+totals.reb += reb;
+totals.ast += ast;
+
+if(pts > highs.pts){ highs.pts = pts; highs.ptsOpp = r.opp || ""; }
+if(reb > highs.reb){ highs.reb = reb; highs.rebOpp = r.opp || ""; }
+if(ast > highs.ast){ highs.ast = ast; highs.astOpp = r.opp || ""; }
+
+let cats = 0;
+if(pts >= 10) cats++;
+if(reb >= 10) cats++;
+if(ast >= 10) cats++;
+if(stl >= 10) cats++;
+if(blk >= 10) cats++;
+if(cats >= 3) triple++;
+});
+
+const g = data.length || 1;
+
+document.getElementById("careerTotals").innerHTML = `
+<div class="stat-box"><span>${data.length}</span>Games</div>
+<div class="stat-box"><span>${totals.pts}</span>PTS</div>
+<div class="stat-box"><span>${totals.reb}</span>REB</div>
+<div class="stat-box"><span>${totals.ast}</span>AST</div>
+<div class="stat-box"><span>${triple}</span>Triple Doubles</div>
+`;
+
+document.getElementById("careerAverages").innerHTML = `
+<div class="stat-box"><span>${(totals.pts/g).toFixed(1)}</span>Avg PTS</div>
+<div class="stat-box"><span>${(totals.reb/g).toFixed(1)}</span>Avg REB</div>
+<div class="stat-box"><span>${(totals.ast/g).toFixed(1)}</span>Avg AST</div>
+`;
+
+document.getElementById("careerHighs").innerHTML = `
+<div class="stat-box"><span>${highs.pts}</span>Best PTS<small>${highs.ptsOpp ? `vs ${highs.ptsOpp}` : ""}</small></div>
+<div class="stat-box"><span>${highs.reb}</span>Best REB<small>${highs.rebOpp ? `vs ${highs.rebOpp}` : ""}</small></div>
+<div class="stat-box"><span>${highs.ast}</span>Best AST<small>${highs.astOpp ? `vs ${highs.astOpp}` : ""}</small></div>
+`;
+}
+
+function renderGames(){
+gamesBody.innerHTML = "";
+
+let filtered = rows.slice();
+
+if(teamFilter.value !== "ALL"){
+filtered = filtered.filter(r => r.team === teamFilter.value);
+}
+
+if(oppFilter.value !== "ALL"){
+filtered = filtered.filter(r => r.opp === oppFilter.value);
+}
+
+renderStats(filtered);
+
+filtered.forEach(r=>{
+gamesBody.innerHTML += `
+<tr class="clickable">
+<td>${r.season ?? ""}</td>
+<td>${r.date ?? ""}</td>
+<td>${r.team ?? ""}</td>
+<td>${r.opp ?? ""}</td>
+<td>${r.pts ?? 0}</td>
+<td>${r.reb ?? 0}</td>
+<td>${r.ast ?? 0}</td>
+<td>${r.stl ?? 0}</td>
+<td>${r.blk ?? 0}</td>
+</tr>`;
+});
+}
+
+function setStripe(){
+if(!rows.length) return;
+
+let latest = rows[0];
+
+for(const row of rows){
+const a = new Date(latest.date || "1900-01-01");
+const b = new Date(row.date || "1900-01-01");
+if(b > a) latest = row;
+}
+
+const colors = TEAM_COLORS[latest.team];
+if(!colors) return;
+
+stripe.style.background = `linear-gradient(90deg,${colors[0]} 33%,${colors[1]} 33% 66%,${colors[2]} 66%)`;
+}
+
+loadPlayers();
+loadPlayer();
+</script>
+
+</body>
+</html>
