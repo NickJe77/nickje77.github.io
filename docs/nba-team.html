@@ -180,34 +180,6 @@ select,input{
   background:#fff;
 }
 
-.search-wrapper{
-  position:relative;
-  margin-left:auto;
-}
-
-.search-results{
-  position:absolute;
-  top:38px;
-  left:0;
-  right:0;
-  background:#fff;
-  border:1px solid #ddd;
-  border-radius:10px;
-  max-height:220px;
-  overflow-y:auto;
-  display:none;
-  z-index:1000;
-}
-
-.search-item{
-  padding:8px 12px;
-  cursor:pointer;
-}
-
-.search-item:hover{
-  background:#eef2ff;
-}
-
 </style>
 </head>
 
@@ -255,11 +227,6 @@ Type:
 </select>
 </label>
 
-<div class="search-wrapper">
-<input type="text" id="teamSearch" placeholder="Search team…">
-<div class="search-results" id="searchResults"></div>
-</div>
-
 </div>
 
 <div class="card">
@@ -302,7 +269,9 @@ const elLoading=document.getElementById("loadingBox");
 let allGames=[];
 let currentSeason=null;
 
-function norm(s){return (s||"").toLowerCase().replace(/[^a-z0-9]/g,"");}
+function norm(s){
+return (s||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+}
 
 function seasonLabel(start){
 const next=String((Number(start)+1)%100).padStart(2,"0");
@@ -315,11 +284,20 @@ async function loadLeaders(){
 
 const leadersData=await fetch(PATH_LEADERS).then(r=>r.json()).catch(()=>null);
 
-if(!leadersData)return;
+if(!leadersData) return;
 
-const l=leadersData[teamRaw];
+const teamKey=norm(teamRaw);
 
-if(!l)return;
+let l=null;
+
+for(const team in leadersData){
+if(norm(team)===teamKey){
+l=leadersData[team];
+break;
+}
+}
+
+if(!l) return;
 
 const rows=[
 ["Points","pts"],
@@ -331,17 +309,19 @@ const rows=[
 
 const body=document.getElementById("leadersBody");
 
+body.innerHTML="";
+
 for(const r of rows){
 
 const key=r[1];
 
-if(!l[key])continue;
+if(!l[key]) continue;
 
 body.innerHTML+=`
 <tr>
 <td>${r[0]}</td>
 <td><a href="nba-player.html?player=${encodeURIComponent(l[key].player)}">${l[key].player}</a></td>
-<td>${l[key].value.toLocaleString()}</td>
+<td>${Number(l[key].value).toLocaleString()}</td>
 </tr>
 `;
 
@@ -393,9 +373,7 @@ for(const g of filtered){
 const tr=document.createElement("tr");
 
 tr.onclick=()=>{
-
 location.href=`nba-game.html?season=${currentSeason}&game=${g.id}`;
-
 };
 
 tr.innerHTML=`
@@ -425,23 +403,24 @@ elLoading.style.display="block";
 const indexRaw=await fetch(`/data/nba/${season}/index.json`).then(r=>r.json());
 
 const games=await Promise.all(
-
 (indexRaw.games||[]).map(id=>
 fetch(`/data/nba/${season}/${id}.json`).then(r=>r.json()).catch(()=>null)
 )
-
 );
 
 const teamKey=norm(teamRaw);
 
 for(const g of games){
 
-if(!g)continue;
+if(!g) continue;
+
+/* REMOVE PRESEASON */
+if((g.game_type||"").toLowerCase().includes("pre")) continue;
 
 const home=norm(g.home_team);
 const away=norm(g.away_team);
 
-if(!home.includes(teamKey)&&!away.includes(teamKey))continue;
+if(!home.includes(teamKey)&&!away.includes(teamKey)) continue;
 
 const isHome=home.includes(teamKey);
 
@@ -493,7 +472,6 @@ elSeason.appendChild(opt);
 }
 
 elSeason.addEventListener("change",()=>loadSeason(elSeason.value));
-
 elType.addEventListener("change",render);
 
 if(seasons.length){
