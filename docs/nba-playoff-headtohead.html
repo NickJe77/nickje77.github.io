@@ -10,17 +10,49 @@
 body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#fff;}
 .navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+
 .page-wrap{max-width:1100px;margin:0 auto;padding:30px 20px 60px;}
+
 h1{text-align:center;margin:0 0 10px;}
 p{text-align:center;color:#555;margin:0 0 18px;}
-.controls{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin:0 0 18px;}
-select{padding:8px 12px;border-radius:8px;border:1px solid #ccc;font-size:14px;}
-.summary{max-width:900px;margin:0 auto 14px;text-align:center;color:#333;font-weight:700;}
+
+.controls{
+display:flex;
+justify-content:center;
+gap:10px;
+flex-wrap:wrap;
+margin:0 0 18px;
+}
+
+select{
+padding:8px 12px;
+border-radius:8px;
+border:1px solid #ccc;
+font-size:14px;
+}
+
+.summary{
+max-width:900px;
+margin:0 auto 14px;
+text-align:center;
+color:#333;
+font-weight:700;
+}
+
 table{width:100%;border-collapse:collapse;}
-th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:left;}
+
+th,td{
+border-bottom:1px solid #ddd;
+padding:8px 10px;
+text-align:left;
+}
+
 th{background:#f0f0f0;}
+
 tr:nth-child(even){background:#f6f9ff;}
+
 .small{color:#666;font-size:13px;}
+
 </style>
 </head>
 
@@ -41,7 +73,7 @@ tr:nth-child(even){background:#f6f9ff;}
 <select id="teamB"></select>
 </div>
 
-<div class="summary" id="summary">Select two teams.</div>
+<div class="summary" id="summary">Loading data...</div>
 
 <table>
 
@@ -64,41 +96,24 @@ tr:nth-child(even){background:#f6f9ff;}
 <script>
 
 let data=[];
+
 const teamA=document.getElementById("teamA");
 const teamB=document.getElementById("teamB");
 const summary=document.getElementById("summary");
 const rows=document.getElementById("rows");
 
-fetch("data/nba/playoff-h2h.json")
-.then(r=>r.json())
-.then(d=>{
+fetch("data/nba/finals.json")
 
-data=(d||[])
+.then(res=>res.json())
 
-/* CLEAN SEASONS */
+.then(json=>{
 
-.map(x=>{
+data=json||[];
 
-let yr=parseInt(x.season);
-
-/* fix bad seasons like 42022 */
-if(yr>3000){
-yr=parseInt(String(yr).slice(-4));
-}
-
-x.season=yr;
-
-return x;
-
-})
-
-/* remove pre-merger seasons */
-
-.filter(x=>x.season>=1976);
-
-const teams=Array.from(new Set(data.flatMap(x=>[x.team1,x.team2]))).sort();
+const teams=[...new Set(data.flatMap(d=>[d.team1,d.team2]))].sort();
 
 teams.forEach(t=>{
+
 const o1=document.createElement("option");
 o1.value=t;
 o1.textContent=t;
@@ -108,19 +123,24 @@ const o2=document.createElement("option");
 o2.value=t;
 o2.textContent=t;
 teamB.appendChild(o2);
+
 });
 
 if(teams.length){
+
 teamA.value=teams[0];
 teamB.value=teams.length>1?teams[1]:teams[0];
+
 }
 
 render();
 
 })
 
-.catch(()=>{
+.catch(err=>{
+
 summary.textContent="Could not load data.";
+
 });
 
 teamA.addEventListener("change",render);
@@ -134,23 +154,29 @@ const b=teamB.value;
 rows.innerHTML="";
 
 if(!a||!b){
+
 summary.textContent="Select two teams.";
+
 return;
+
 }
 
 if(a===b){
+
 summary.textContent="Pick two different teams.";
+
 return;
+
 }
 
-const match=data
+const match=data.filter(x=>
 
-.filter(x=>
 (x.team1===a&&x.team2===b)||
 (x.team1===b&&x.team2===a)
+
 )
 
-.sort((x,y)=>y.season-x.season);
+.sort((x,y)=>Number(y.season)-Number(x.season));
 
 if(!match.length){
 
@@ -177,11 +203,13 @@ match.forEach(s=>{
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
-<td>${s.season}</td>
+
+<td>${s.season||""}</td>
 <td>${s.round||""}</td>
 <td>${s.team1} vs ${s.team2}</td>
 <td>${s.result||""}</td>
 <td class="small">${s.winner||""}</td>
+
 `;
 
 rows.appendChild(tr);
