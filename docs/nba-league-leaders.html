@@ -9,44 +9,81 @@
 
 <style>
 body{
-  font-family: Inter, system-ui, Arial, sans-serif;
-  margin:0;
+font-family:Inter,system-ui,Arial,sans-serif;
+margin:0;
 }
 
 .navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px 0;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
+display:flex;
+justify-content:center;
+gap:22px;
+padding:16px 0;
+border-bottom:1px solid #ddd;
+font-weight:600;
 }
-.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
 
-.page-wrap{max-width:1100px;margin:0 auto;padding:30px 20px;}
+.navbar a{
+color:#0056d6;
+text-decoration:none;
+font-size:18px;
+}
+
+.page-wrap{
+max-width:1100px;
+margin:0 auto;
+padding:30px 20px;
+}
 
 .controls{
-  display:flex;
-  justify-content:center;
-  gap:10px;
-  flex-wrap:wrap;
-  margin-bottom:15px;
+display:flex;
+justify-content:center;
+gap:10px;
+flex-wrap:wrap;
+margin-bottom:15px;
 }
-.controls select,.controls button,input{
-  padding:8px 12px;
-  border-radius:8px;
-  border:1px solid #ccc;
-  font-size:14px;
+
+.controls select,
+.controls button,
+input{
+padding:8px 12px;
+border-radius:8px;
+border:1px solid #ccc;
+font-size:14px;
 }
-.controls button.active{background:#222;color:white;}
 
-table{width:100%;border-collapse:collapse;}
-th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:left;}
-th{background:#f0f0f0;}
-tr:nth-child(even){background:#f6f9ff;}
+.controls button.active{
+background:#222;
+color:white;
+}
 
-.player-link{color:#0056d6;text-decoration:none;font-weight:600;}
-.player-link:hover{text-decoration:underline;}
+table{
+width:100%;
+border-collapse:collapse;
+}
+
+th,td{
+border-bottom:1px solid #ddd;
+padding:8px 10px;
+text-align:left;
+}
+
+th{
+background:#f0f0f0;
+}
+
+tr:nth-child(even){
+background:#f6f9ff;
+}
+
+.player-link{
+color:#0056d6;
+text-decoration:none;
+font-weight:600;
+}
+
+.player-link:hover{
+text-decoration:underline;
+}
 </style>
 </head>
 
@@ -58,70 +95,153 @@ tr:nth-child(even){background:#f6f9ff;}
 </div>
 
 <div class="page-wrap">
+
 <h1>NBA League Leaders</h1>
 
 <div class="controls">
+
 <select id="seasonSelect"></select>
-<input type="text" id="playerSearch" placeholder="Search player…">
+
+<input
+type="text"
+id="playerSearch"
+placeholder="Search player…"
+>
+
 <button data-stat="points" class="active">Points</button>
 <button data-stat="rebounds">Rebounds</button>
 <button data-stat="assists">Assists</button>
 <button data-stat="steals">Steals</button>
 <button data-stat="blocks">Blocks</button>
+
 </div>
 
 <table>
+
 <thead>
-<tr><th>#</th><th>Player</th><th>Team</th><th id="statHeader">Value</th></tr>
+<tr>
+<th>#</th>
+<th>Player</th>
+<th>Team</th>
+<th id="statHeader">Value</th>
+</tr>
 </thead>
+
 <tbody id="leaderTable"></tbody>
+
 </table>
+
 </div>
 
 <script>
-let leadersData=[],currentStat="points";
+
+let leadersData=[];
+let currentStat="points";
+
 const seasonSelect=document.getElementById("seasonSelect");
 const tableBody=document.getElementById("leaderTable");
 const statHeader=document.getElementById("statHeader");
-const buttons=document.querySelectorAll("button");
+const buttons=document.querySelectorAll(".controls button");
 const searchInput=document.getElementById("playerSearch");
 
-fetch("data/nba/leaders.json").then(r=>r.json()).then(data=>{
-leadersData=data;
-data.forEach((s,i)=>{
-let o=document.createElement("option");
-o.value=s.season;o.textContent=s.season;
-if(i===data.length-1)o.selected=true;
-seasonSelect.appendChild(o);
-});
-render();
+async function init(){
+
+try{
+
+const data=await fetch("data/nba/leaders.json").then(r=>r.json());
+
+leadersData=data.sort((a,b)=>b.season-a.season);
+
+leadersData.forEach((s,i)=>{
+
+const option=document.createElement("option");
+option.value=s.season;
+option.textContent=s.season;
+
+if(i===0) option.selected=true;
+
+seasonSelect.appendChild(option);
+
 });
 
-seasonSelect.onchange=render;
-searchInput.oninput=render;
-buttons.forEach(b=>b.onclick=()=>{
-buttons.forEach(x=>x.classList.remove("active"));
-b.classList.add("active");
-currentStat=b.dataset.stat;
 render();
+
+}catch(e){
+
+tableBody.innerHTML="<tr><td colspan='4'>Unable to load data</td></tr>";
+
+}
+
+}
+
+seasonSelect.onchange=render;
+
+searchInput.oninput=render;
+
+buttons.forEach(button=>{
+
+button.onclick=()=>{
+
+buttons.forEach(b=>b.classList.remove("active"));
+
+button.classList.add("active");
+
+currentStat=button.dataset.stat;
+
+render();
+
+};
+
 });
 
 function render(){
+
 const season=seasonSelect.value;
+
 const filter=searchInput.value.toLowerCase();
-const seasonData=leadersData.find(s=>s.season===season);
+
+const seasonData=leadersData.find(s=>String(s.season)===String(season));
+
 tableBody.innerHTML="";
-if(!seasonData)return;
-statHeader.textContent=currentStat.toUpperCase();
-seasonData[currentStat].filter(r=>r.player.toLowerCase().includes(filter)).slice(0,10).forEach((r,i)=>{
-const tr=document.createElement("tr");
-tr.innerHTML=`<td>${i+1}</td>
-<td><a class="player-link" href="nba-player.html?player=${encodeURIComponent(r.player)}">${r.player}</a></td>
-<td>${r.team||""}</td>
-<td>${r.value}</td>`;
-tableBody.appendChild(tr);
-});
+
+if(!seasonData){
+
+tableBody.innerHTML="<tr><td colspan='4'>No data available</td></tr>";
+
+return;
+
 }
+
+statHeader.textContent=currentStat.toUpperCase();
+
+seasonData[currentStat]
+.filter(r=>r.player.toLowerCase().includes(filter))
+.slice(0,10)
+.forEach((row,i)=>{
+
+const tr=document.createElement("tr");
+
+tr.innerHTML=`
+<td>${i+1}</td>
+<td>
+<a class="player-link"
+href="nba-player.html?player=${encodeURIComponent(row.player)}">
+${row.player}
+</a>
+</td>
+<td>${row.team||""}</td>
+<td>${row.value}</td>
+`;
+
+tableBody.appendChild(tr);
+
+});
+
+}
+
+init();
+
 </script>
+
 </body>
 </html>
