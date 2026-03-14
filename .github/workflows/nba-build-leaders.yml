@@ -58,7 +58,7 @@ jobs:
               try:
                   with open(file) as f:
                       data=json.load(f)
-              except Exception as e:
+              except Exception:
                   print(f"Skipping {file.name} due to JSON error")
                   continue
 
@@ -72,18 +72,35 @@ jobs:
 
               for game in data.get("games",[]):
 
-                  for p in game.get("players",[]):
+                  teams=[]
 
-                      name=p.get("player")
+                  if "home" in game:
+                      teams.append(game["home"])
 
-                      if not name:
-                          continue
+                  if "away" in game:
+                      teams.append(game["away"])
 
-                      players[name]["points"]+=p.get("points",0)
-                      players[name]["rebounds"]+=p.get("rebounds",0)
-                      players[name]["assists"]+=p.get("assists",0)
-                      players[name]["steals"]+=p.get("steals",0)
-                      players[name]["blocks"]+=p.get("blocks",0)
+                  if "teams" in game:
+                      teams.extend(game["teams"])
+
+                  for team in teams:
+
+                      for p in team.get("players",[]):
+
+                          name=p.get("player") or p.get("name")
+
+                          if not name:
+                              continue
+
+                          players[name]["points"]+=p.get("points",0)
+                          players[name]["rebounds"]+=p.get("rebounds",0)
+                          players[name]["assists"]+=p.get("assists",0)
+                          players[name]["steals"]+=p.get("steals",0)
+                          players[name]["blocks"]+=p.get("blocks",0)
+
+              if not players:
+                  print(f"No players found in {season}")
+                  continue
 
               leaders.append({
                   "season":season,
