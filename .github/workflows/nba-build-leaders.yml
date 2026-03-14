@@ -35,29 +35,24 @@ jobs:
 
           leaders=[]
 
-          def leader(players, stat):
-
-              best_player=None
-              best_value=-1
-
+          def season_leader(players, stat):
+              best_name=None
+              best_val=-1
               for name,stats in players.items():
-
                   val=stats.get(stat,0)
-
-                  if val>best_value:
-                      best_value=val
-                      best_player=name
-
-              return {"player":best_player,"value":best_value}
+                  if val>best_val:
+                      best_val=val
+                      best_name=name
+              return {"player":best_name,"value":best_val}
 
           for season_dir in base.iterdir():
 
               if not season_dir.is_dir():
                   continue
 
-              season=season_dir.name
+              season = season_dir.name
 
-              players=defaultdict(lambda:{
+              players = defaultdict(lambda:{
                   "points":0,
                   "rebounds":0,
                   "assists":0,
@@ -68,46 +63,56 @@ jobs:
               for game_file in season_dir.glob("*.json"):
 
                   try:
-                      data=json.loads(game_file.read_text())
+                      data = json.loads(game_file.read_text())
                   except:
                       continue
 
+                  # normalize game container
                   games = data if isinstance(data,list) else [data]
 
                   for g in games:
 
-                      plist=g.get("players",[])
+                      if not isinstance(g,dict):
+                          continue
 
-                      # handle dict or list
+                      plist = g.get("players")
+
+                      if not plist:
+                          continue
+
+                      # normalize player container
                       if isinstance(plist,dict):
-                          plist=plist.values()
+                          plist = list(plist.values())
+
+                      if not isinstance(plist,list):
+                          continue
 
                       for p in plist:
 
                           if not isinstance(p,dict):
                               continue
 
-                          name=p.get("player") or p.get("name")
+                          name = p.get("player") or p.get("name")
 
                           if not name:
                               continue
 
-                          players[name]["points"]+=p.get("points",0)
-                          players[name]["rebounds"]+=p.get("rebounds",0)
-                          players[name]["assists"]+=p.get("assists",0)
-                          players[name]["steals"]+=p.get("steals",0)
-                          players[name]["blocks"]+=p.get("blocks",0)
+                          players[name]["points"] += p.get("points",0)
+                          players[name]["rebounds"] += p.get("rebounds",0)
+                          players[name]["assists"] += p.get("assists",0)
+                          players[name]["steals"] += p.get("steals",0)
+                          players[name]["blocks"] += p.get("blocks",0)
 
               if not players:
                   continue
 
               leaders.append({
                   "season":season,
-                  "points":leader(players,"points"),
-                  "rebounds":leader(players,"rebounds"),
-                  "assists":leader(players,"assists"),
-                  "steals":leader(players,"steals"),
-                  "blocks":leader(players,"blocks")
+                  "points":season_leader(players,"points"),
+                  "rebounds":season_leader(players,"rebounds"),
+                  "assists":season_leader(players,"assists"),
+                  "steals":season_leader(players,"steals"),
+                  "blocks":season_leader(players,"blocks")
               })
 
           leaders.sort(key=lambda x:x["season"], reverse=True)
