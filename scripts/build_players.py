@@ -66,6 +66,17 @@ for season_dir in DATA.iterdir():
             ast = p.get("assists", 0)
             stl = p.get("steals", 0)
             blk = p.get("blocks", 0)
+            mins = p.get("minutes", 0)
+
+            # Convert MM:SS format if necessary
+            if isinstance(mins, str) and ":" in mins:
+                m, s = mins.split(":")
+                mins = int(m) + int(s) / 60
+            elif isinstance(mins, str):
+                try:
+                    mins = float(mins)
+                except:
+                    mins = 0
 
             # Add game log
             players[key]["games"].append({
@@ -74,6 +85,7 @@ for season_dir in DATA.iterdir():
                 "date": game.get("date"),
                 "team": team,
                 "opp": opp,
+                "minutes": mins,
                 "pts": pts,
                 "reb": reb,
                 "ast": ast,
@@ -85,6 +97,7 @@ for season_dir in DATA.iterdir():
             if team not in players[key]["teams"]:
                 players[key]["teams"][team] = {
                     "games": 0,
+                    "minutes": 0,
                     "pts": 0,
                     "reb": 0,
                     "ast": 0,
@@ -95,6 +108,7 @@ for season_dir in DATA.iterdir():
             t = players[key]["teams"][team]
 
             t["games"] += 1
+            t["minutes"] += mins
             t["pts"] += pts
             t["reb"] += reb
             t["ast"] += ast
