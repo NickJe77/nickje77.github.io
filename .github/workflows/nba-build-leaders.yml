@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout repo
         uses: actions/checkout@v4
 
@@ -34,22 +35,32 @@ jobs:
 
           leaders=[]
 
-          def leader(players,stat):
-              best=None
-              best_val=-1
+          def leader(players, stat):
+              best_player=None
+              best_value=-1
+
               for p,stats in players.items():
-                  v=stats.get(stat,0)
-                  if v>best_val:
-                      best_val=v
-                      best=p
-              return {"player":best,"value":best_val}
+                  val=stats.get(stat,0)
 
-          for f in sorted(seasons_dir.glob("*.json")):
+                  if val>best_value:
+                      best_value=val
+                      best_player=p
 
-              season=f.stem
+              return {
+                  "player":best_player,
+                  "value":best_value
+              }
 
-              with open(f) as file:
-                  data=json.load(file)
+          for file in sorted(seasons_dir.glob("*.json")):
+
+              season=file.stem
+
+              try:
+                  with open(file) as f:
+                      data=json.load(f)
+              except Exception as e:
+                  print(f"Skipping {file.name} due to JSON error")
+                  continue
 
               players=defaultdict(lambda:{
                   "points":0,
@@ -59,11 +70,14 @@ jobs:
                   "blocks":0
               })
 
-              for g in data.get("games",[]):
+              for game in data.get("games",[]):
 
-                  for p in g.get("players",[]):
+                  for p in game.get("players",[]):
 
                       name=p.get("player")
+
+                      if not name:
+                          continue
 
                       players[name]["points"]+=p.get("points",0)
                       players[name]["rebounds"]+=p.get("rebounds",0)
@@ -80,20 +94,21 @@ jobs:
                   "blocks":leader(players,"blocks")
               })
 
-          leaders.sort(key=lambda x:x["season"],reverse=True)
+          leaders.sort(key=lambda x:x["season"], reverse=True)
 
-          output.parent.mkdir(parents=True,exist_ok=True)
+          output.parent.mkdir(parents=True, exist_ok=True)
 
           with open(output,"w") as f:
               json.dump(leaders,f,indent=2)
 
-          print("leaders.json built")
+          print("leaders.json built successfully")
           EOF
 
       - name: Commit leaders.json
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
+
           git add docs/data/nba/leaders.json
           git commit -m "Update NBA leaders" || echo "No changes"
           git push
