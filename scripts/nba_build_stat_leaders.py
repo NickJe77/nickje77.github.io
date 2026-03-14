@@ -1,11 +1,14 @@
 import json
 from pathlib import Path
 
-players_dir = Path("docs/data/nba/players")
+players_file = Path("docs/data/nba/players.json")
 output_file = Path("docs/data/nba/stat_leaders.json")
 
 MIN_GAMES = 100
 TOP = 15
+
+with open(players_file) as f:
+    players = json.load(f)
 
 pts_tot=[]
 reb_tot=[]
@@ -21,66 +24,59 @@ stl_pg=[]
 blk_pg=[]
 
 
-for f in players_dir.glob("*.json"):
+for name, p in players.items():
 
-    try:
-        with open(f) as file:
-            p=json.load(file)
+    g = p.get("games",0)
+    pts = p.get("points",0)
+    reb = p.get("rebounds",0)
+    ast = p.get("assists",0)
+    stl = p.get("steals",0)
+    blk = p.get("blocks",0)
+    td  = p.get("triple_doubles",0)
 
-        name=p.get("name")
-        g=p.get("games",0)
-        pts=p.get("points",0)
-        reb=p.get("rebounds",0)
-        ast=p.get("assists",0)
-        stl=p.get("steals",0)
-        blk=p.get("blocks",0)
-        td=p.get("triple_doubles",0)
+    if g == 0:
+        continue
 
-        if not name or g == 0:
-            continue
+
+    if pts > 0:
+        pts_tot.append({"player":name,"value":pts})
+
+    if reb > 0:
+        reb_tot.append({"player":name,"value":reb})
+
+    if ast > 0:
+        ast_tot.append({"player":name,"value":ast})
+
+    if stl > 0:
+        stl_tot.append({"player":name,"value":stl})
+
+    if blk > 0:
+        blk_tot.append({"player":name,"value":blk})
+
+    if td > 0:
+        td_tot.append({"player":name,"value":td})
+
+
+    if g >= MIN_GAMES:
 
         if pts > 0:
-            pts_tot.append({"player":name,"value":pts})
+            pts_pg.append({"player":name,"value":round(pts/g,2)})
 
         if reb > 0:
-            reb_tot.append({"player":name,"value":reb})
+            reb_pg.append({"player":name,"value":round(reb/g,2)})
 
         if ast > 0:
-            ast_tot.append({"player":name,"value":ast})
+            ast_pg.append({"player":name,"value":round(ast/g,2)})
 
         if stl > 0:
-            stl_tot.append({"player":name,"value":stl})
+            stl_pg.append({"player":name,"value":round(stl/g,2)})
 
         if blk > 0:
-            blk_tot.append({"player":name,"value":blk})
-
-        if td > 0:
-            td_tot.append({"player":name,"value":td})
-
-
-        if g >= MIN_GAMES:
-
-            if pts > 0:
-                pts_pg.append({"player":name,"value":round(pts/g,2)})
-
-            if reb > 0:
-                reb_pg.append({"player":name,"value":round(reb/g,2)})
-
-            if ast > 0:
-                ast_pg.append({"player":name,"value":round(ast/g,2)})
-
-            if stl > 0:
-                stl_pg.append({"player":name,"value":round(stl/g,2)})
-
-            if blk > 0:
-                blk_pg.append({"player":name,"value":round(blk/g,2)})
-
-    except:
-        pass
+            blk_pg.append({"player":name,"value":round(blk/g,2)})
 
 
 def top(lst):
-    return sorted(lst, key=lambda x: x["value"], reverse=True)[:TOP]
+    return sorted(lst, key=lambda x:x["value"], reverse=True)[:TOP]
 
 
 output = {
@@ -108,4 +104,4 @@ output = {
 with open(output_file,"w") as f:
     json.dump(output,f,indent=2)
 
-print("Stat leaders created:", output_file)
+print("Created stat leaders:", output_file)
