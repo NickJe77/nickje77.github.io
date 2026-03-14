@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Generate leaders.json
+      - name: Build leaders.json
         run: |
           python << 'EOF'
           import json
@@ -69,39 +69,23 @@ jobs:
                   except:
                       continue
 
-                  games = data if isinstance(data,list) else [data]
+                  plist=data.get("players",[])
 
-                  for g in games:
+                  if isinstance(plist,dict):
+                      plist=list(plist.values())
 
-                      if not isinstance(g,dict):
+                  for p in plist:
+
+                      name=p.get("playerName") or p.get("name") or p.get("player")
+
+                      if not name:
                           continue
 
-                      plist=g.get("players")
-
-                      if not plist:
-                          continue
-
-                      if isinstance(plist,dict):
-                          plist=list(plist.values())
-
-                      if not isinstance(plist,list):
-                          continue
-
-                      for p in plist:
-
-                          if not isinstance(p,dict):
-                              continue
-
-                          name=p.get("player") or p.get("name")
-
-                          if not name:
-                              continue
-
-                          players[name]["points"]+=p.get("points",0)
-                          players[name]["rebounds"]+=p.get("rebounds",0)
-                          players[name]["assists"]+=p.get("assists",0)
-                          players[name]["steals"]+=p.get("steals",0)
-                          players[name]["blocks"]+=p.get("blocks",0)
+                      players[name]["points"]+=p.get("points",0)
+                      players[name]["rebounds"]+=p.get("reboundsTotal",0)
+                      players[name]["assists"]+=p.get("assists",0)
+                      players[name]["steals"]+=p.get("steals",0)
+                      players[name]["blocks"]+=p.get("blocks",0)
 
               if not players:
                   continue
@@ -115,9 +99,9 @@ jobs:
                   "blocks":get_leader(players,"blocks")
               })
 
-          leaders.sort(key=lambda x:x["season"], reverse=True)
+          leaders.sort(key=lambda x:int(x["season"]), reverse=True)
 
-          output.write_text(json.dumps(leaders, indent=2))
+          output.write_text(json.dumps(leaders,indent=2))
 
           print("leaders.json rebuilt with",len(leaders),"seasons")
           EOF
@@ -128,5 +112,5 @@ jobs:
           git config user.email "actions@github.com"
 
           git add docs/data/nba/leaders.json
-          git diff --quiet && git diff --staged --quiet || git commit -m "Rebuild NBA leaders"
+          git commit -m "Update NBA leaders" || echo "No changes"
           git push
