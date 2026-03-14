@@ -31,26 +31,23 @@ jobs:
           from collections import defaultdict
 
           base = Path("docs/data/nba")
-          output = Path("docs/data/nba/leaders.json")
+          output = base / "leaders.json"
 
           leaders=[]
 
           def leader(players, stat):
-
               best_player=None
               best_value=-1
 
               for p,stats in players.items():
                   v=stats.get(stat,0)
-
                   if v>best_value:
                       best_value=v
                       best_player=p
 
               return {"player":best_player,"value":best_value}
 
-          # loop seasons
-          for season_dir in sorted(base.iterdir()):
+          for season_dir in base.iterdir():
 
               if not season_dir.is_dir():
                   continue
@@ -65,7 +62,6 @@ jobs:
                   "blocks":0
               })
 
-              # loop game files
               for game_file in season_dir.glob("*.json"):
 
                   try:
@@ -73,18 +69,23 @@ jobs:
                   except:
                       continue
 
-                  for p in data.get("players",[]):
+                  # handle both formats
+                  games = data if isinstance(data,list) else [data]
 
-                      name=p.get("player") or p.get("name")
+                  for g in games:
 
-                      if not name:
-                          continue
+                      for p in g.get("players",[]):
 
-                      players[name]["points"]+=p.get("points",0)
-                      players[name]["rebounds"]+=p.get("rebounds",0)
-                      players[name]["assists"]+=p.get("assists",0)
-                      players[name]["steals"]+=p.get("steals",0)
-                      players[name]["blocks"]+=p.get("blocks",0)
+                          name=p.get("player") or p.get("name")
+
+                          if not name:
+                              continue
+
+                          players[name]["points"]+=p.get("points",0)
+                          players[name]["rebounds"]+=p.get("rebounds",0)
+                          players[name]["assists"]+=p.get("assists",0)
+                          players[name]["steals"]+=p.get("steals",0)
+                          players[name]["blocks"]+=p.get("blocks",0)
 
               if not players:
                   continue
@@ -102,7 +103,7 @@ jobs:
 
           output.write_text(json.dumps(leaders,indent=2))
 
-          print("leaders.json built")
+          print("leaders.json built successfully")
           EOF
 
       - name: Commit leaders.json
