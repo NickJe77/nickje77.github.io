@@ -15,28 +15,36 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install requests
+
+      - name: Install dependencies
         run: pip install requests
+
 
       - name: Discover games
         run: python scripts/nba_discover_games.py
 
+
       - name: Download boxscores
         run: python scripts/nba_download_boxscores.py
+
 
       - name: Build season summaries
         run: python scripts/nba_build_season_summaries.py
 
+
       - name: Build NBA finals file
         run: python scripts/build_nba_finals.py
 
+
       - name: Build playoff games
         run: python scripts/build_nba_playoff_games.py
+
 
       - name: Build playoff series
         run: python scripts/build_nba_playoff_series.py
@@ -127,98 +135,7 @@ jobs:
 
 
       - name: Build statistical leaders
-        run: |
-          python <<EOF
-          import json
-          from pathlib import Path
-
-          players_dir = Path("docs/data/nba/players")
-          output_file = Path("docs/data/nba/stat_leaders.json")
-
-          MIN_GAMES = 100
-          TOP = 15
-
-          pts_tot=[]
-          reb_tot=[]
-          ast_tot=[]
-          stl_tot=[]
-          blk_tot=[]
-          td_tot=[]
-
-          pts_pg=[]
-          reb_pg=[]
-          ast_pg=[]
-          stl_pg=[]
-          blk_pg=[]
-
-          for f in players_dir.glob("*.json"):
-
-              try:
-                  with open(f) as file:
-                      p=json.load(file)
-
-                  name=p.get("name")
-                  g=p.get("games",0)
-                  pts=p.get("points",0)
-                  reb=p.get("rebounds",0)
-                  ast=p.get("assists",0)
-                  stl=p.get("steals",0)
-                  blk=p.get("blocks",0)
-                  td=p.get("triple_doubles",0)
-
-                  if not name or g==0:
-                      continue
-
-                  pts_tot.append({"player":name,"value":pts})
-                  reb_tot.append({"player":name,"value":reb})
-                  ast_tot.append({"player":name,"value":ast})
-                  stl_tot.append({"player":name,"value":stl})
-                  blk_tot.append({"player":name,"value":blk})
-                  td_tot.append({"player":name,"value":td})
-
-                  if g>=MIN_GAMES:
-
-                      pts_pg.append({"player":name,"value":round(pts/g,2)})
-                      reb_pg.append({"player":name,"value":round(reb/g,2)})
-                      ast_pg.append({"player":name,"value":round(ast/g,2)})
-                      stl_pg.append({"player":name,"value":round(stl/g,2)})
-                      blk_pg.append({"player":name,"value":round(blk/g,2)})
-
-              except:
-                  pass
-
-
-          def top(lst):
-              return sorted(lst,key=lambda x:x["value"],reverse=True)[:TOP]
-
-
-          output={
-
-              "totals":{
-                  "points":top(pts_tot),
-                  "rebounds":top(reb_tot),
-                  "assists":top(ast_tot),
-                  "steals":top(stl_tot),
-                  "blocks":top(blk_tot),
-                  "triple_doubles":top(td_tot)
-              },
-
-              "per_game":{
-                  "points":top(pts_pg),
-                  "rebounds":top(reb_pg),
-                  "assists":top(ast_pg),
-                  "steals":top(stl_pg),
-                  "blocks":top(blk_pg)
-              }
-
-          }
-
-
-          with open(output_file,"w") as f:
-              json.dump(output,f,indent=2)
-
-          print("Created NBA stat leaders")
-          EOF
+        run: python scripts/nba_build_stat_leaders.py
 
 
       - name: Commit changes
@@ -227,6 +144,7 @@ jobs:
           git config user.email "bot@example.com"
           git add docs/data/nba
           git diff --cached --quiet || git commit -m "NBA auto update"
+
 
       - name: Push changes
         run: git push
