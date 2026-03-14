@@ -41,6 +41,7 @@ jobs:
       - name: Build playoff series
         run: python scripts/build_nba_playoff_series.py
 
+
       - name: Build player search index
         run: |
           python <<EOF
@@ -131,63 +132,92 @@ jobs:
           import json
           from pathlib import Path
 
-          players_file = Path("docs/data/nba/players.json")
+          players_dir = Path("docs/data/nba/players")
           output_file = Path("docs/data/nba/stat_leaders.json")
 
           MIN_GAMES = 100
           TOP = 15
 
-          with open(players_file) as f:
-              players = json.load(f)
-
           pts_tot=[]
           reb_tot=[]
           ast_tot=[]
+          stl_tot=[]
+          blk_tot=[]
+          td_tot=[]
 
           pts_pg=[]
           reb_pg=[]
           ast_pg=[]
+          stl_pg=[]
+          blk_pg=[]
 
-          for name,p in players.items():
+          for f in players_dir.glob("*.json"):
 
-              g=p.get("games",0)
-              pts=p.get("points",0)
-              reb=p.get("rebounds",0)
-              ast=p.get("assists",0)
+              try:
+                  with open(f) as file:
+                      p=json.load(file)
 
-              if g==0:
-                  continue
+                  name=p.get("name")
+                  g=p.get("games",0)
+                  pts=p.get("points",0)
+                  reb=p.get("rebounds",0)
+                  ast=p.get("assists",0)
+                  stl=p.get("steals",0)
+                  blk=p.get("blocks",0)
+                  td=p.get("triple_doubles",0)
 
-              pts_tot.append({"player":name,"value":pts})
-              reb_tot.append({"player":name,"value":reb})
-              ast_tot.append({"player":name,"value":ast})
+                  if not name or g==0:
+                      continue
 
-              if g>=MIN_GAMES:
+                  pts_tot.append({"player":name,"value":pts})
+                  reb_tot.append({"player":name,"value":reb})
+                  ast_tot.append({"player":name,"value":ast})
+                  stl_tot.append({"player":name,"value":stl})
+                  blk_tot.append({"player":name,"value":blk})
+                  td_tot.append({"player":name,"value":td})
 
-                  pts_pg.append({"player":name,"value":round(pts/g,2)})
-                  reb_pg.append({"player":name,"value":round(reb/g,2)})
-                  ast_pg.append({"player":name,"value":round(ast/g,2)})
+                  if g>=MIN_GAMES:
+
+                      pts_pg.append({"player":name,"value":round(pts/g,2)})
+                      reb_pg.append({"player":name,"value":round(reb/g,2)})
+                      ast_pg.append({"player":name,"value":round(ast/g,2)})
+                      stl_pg.append({"player":name,"value":round(stl/g,2)})
+                      blk_pg.append({"player":name,"value":round(blk/g,2)})
+
+              except:
+                  pass
+
 
           def top(lst):
               return sorted(lst,key=lambda x:x["value"],reverse=True)[:TOP]
 
+
           output={
+
               "totals":{
                   "points":top(pts_tot),
                   "rebounds":top(reb_tot),
-                  "assists":top(ast_tot)
+                  "assists":top(ast_tot),
+                  "steals":top(stl_tot),
+                  "blocks":top(blk_tot),
+                  "triple_doubles":top(td_tot)
               },
+
               "per_game":{
                   "points":top(pts_pg),
                   "rebounds":top(reb_pg),
-                  "assists":top(ast_pg)
+                  "assists":top(ast_pg),
+                  "steals":top(stl_pg),
+                  "blocks":top(blk_pg)
               }
+
           }
+
 
           with open(output_file,"w") as f:
               json.dump(output,f,indent=2)
 
-          print("Created statistical leaders")
+          print("Created NBA stat leaders")
           EOF
 
 
