@@ -43,6 +43,12 @@ jobs:
                       "blocks":0
                   })
 
+          def stat(p, keys):
+              for k in keys:
+                  if k in p and isinstance(p[k], (int,float)):
+                      return p[k]
+              return 0
+
           for file in base.rglob("*.json"):
 
               if file.name == "leaders.json":
@@ -63,8 +69,7 @@ jobs:
 
               season=str(season)
 
-              # fix broken season values
-              if len(season)==5:
+              if len(season)==5:   # fixes 42022 / 32022
                   season=season[1:]
 
               ensure(season)
@@ -76,16 +81,23 @@ jobs:
 
               for p in players:
 
-                  name=p.get("player")
+                  if not isinstance(p,dict):
+                      continue
+
+                  name = (
+                      p.get("player")
+                      or p.get("name")
+                      or p.get("player_name")
+                  )
 
                   if not name:
                       continue
 
-                  seasons[season][name]["points"]+=p.get("points",0)
-                  seasons[season][name]["rebounds"]+=p.get("rebounds",0)
-                  seasons[season][name]["assists"]+=p.get("assists",0)
-                  seasons[season][name]["steals"]+=p.get("steals",0)
-                  seasons[season][name]["blocks"]+=p.get("blocks",0)
+                  seasons[season][name]["points"]  += stat(p,["points","pts"])
+                  seasons[season][name]["rebounds"]+= stat(p,["rebounds","reb","reboundsTotal"])
+                  seasons[season][name]["assists"] += stat(p,["assists","ast"])
+                  seasons[season][name]["steals"]  += stat(p,["steals","stl"])
+                  seasons[season][name]["blocks"]  += stat(p,["blocks","blk"])
 
           leaders=[]
 
@@ -119,11 +131,11 @@ jobs:
 
           output.write_text(json.dumps(leaders,indent=2))
 
-          print("Built leaders.json for",len(leaders),"seasons")
+          print("leaders built:",len(leaders))
 
           EOF
 
-      - name: Commit
+      - name: Commit leaders.json
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
