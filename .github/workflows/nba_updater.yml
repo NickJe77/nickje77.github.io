@@ -68,6 +68,7 @@ jobs:
           print("Created player index with", len(names), "players")
           EOF
 
+
       - name: Build franchise leaders
         run: |
           python <<EOF
@@ -122,6 +123,73 @@ jobs:
 
           print("Created franchise leaders for", len(leaders), "teams")
           EOF
+
+
+      - name: Build statistical leaders
+        run: |
+          python <<EOF
+          import json
+          from pathlib import Path
+
+          players_file = Path("docs/data/nba/players.json")
+          output_file = Path("docs/data/nba/stat_leaders.json")
+
+          MIN_GAMES = 100
+          TOP = 15
+
+          with open(players_file) as f:
+              players = json.load(f)
+
+          pts_tot=[]
+          reb_tot=[]
+          ast_tot=[]
+
+          pts_pg=[]
+          reb_pg=[]
+          ast_pg=[]
+
+          for name,p in players.items():
+
+              g=p.get("games",0)
+              pts=p.get("points",0)
+              reb=p.get("rebounds",0)
+              ast=p.get("assists",0)
+
+              if g==0:
+                  continue
+
+              pts_tot.append({"player":name,"value":pts})
+              reb_tot.append({"player":name,"value":reb})
+              ast_tot.append({"player":name,"value":ast})
+
+              if g>=MIN_GAMES:
+
+                  pts_pg.append({"player":name,"value":round(pts/g,2)})
+                  reb_pg.append({"player":name,"value":round(reb/g,2)})
+                  ast_pg.append({"player":name,"value":round(ast/g,2)})
+
+          def top(lst):
+              return sorted(lst,key=lambda x:x["value"],reverse=True)[:TOP]
+
+          output={
+              "totals":{
+                  "points":top(pts_tot),
+                  "rebounds":top(reb_tot),
+                  "assists":top(ast_tot)
+              },
+              "per_game":{
+                  "points":top(pts_pg),
+                  "rebounds":top(reb_pg),
+                  "assists":top(ast_pg)
+              }
+          }
+
+          with open(output_file,"w") as f:
+              json.dump(output,f,indent=2)
+
+          print("Created statistical leaders")
+          EOF
+
 
       - name: Commit changes
         run: |
