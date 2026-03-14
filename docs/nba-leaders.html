@@ -6,12 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-
-body{
-font-family:Inter,system-ui,Arial,sans-serif;
-margin:0;
-background:#fff;
-}
+body{font-family:Inter,system-ui,Arial;margin:0;background:#fff;}
 
 .navbar{
 display:flex;
@@ -34,15 +29,9 @@ margin:auto;
 padding:30px 20px 60px;
 }
 
-h1{
-text-align:center;
-margin-bottom:20px;
-}
+h1{text-align:center;margin-bottom:20px;}
 
-.controls{
-text-align:center;
-margin-bottom:18px;
-}
+.controls{text-align:center;margin-bottom:18px;}
 
 input{
 padding:8px 12px;
@@ -52,10 +41,7 @@ font-size:14px;
 min-width:260px;
 }
 
-table{
-width:100%;
-border-collapse:collapse;
-}
+table{width:100%;border-collapse:collapse;}
 
 th,td{
 border-bottom:1px solid #ddd;
@@ -63,13 +49,9 @@ padding:8px 10px;
 text-align:left;
 }
 
-th{
-background:#f0f0f0;
-}
+th{background:#f0f0f0;}
 
-tr:nth-child(even){
-background:#f6f9ff;
-}
+tr:nth-child(even){background:#f6f9ff;}
 
 .player-link{
 color:#0056d6;
@@ -77,14 +59,7 @@ text-decoration:none;
 font-weight:600;
 }
 
-.player-link:hover{
-text-decoration:underline;
-}
-
-.stat{
-white-space:nowrap;
-}
-
+.stat{white-space:nowrap;}
 </style>
 </head>
 
@@ -104,7 +79,6 @@ white-space:nowrap;
 </div>
 
 <table>
-
 <thead>
 <tr>
 <th>Season</th>
@@ -113,13 +87,11 @@ white-space:nowrap;
 <th>Assists</th>
 <th>Steals</th>
 <th>Blocks</th>
-<th>3PT</th>
-<th>FT</th>
 </tr>
 </thead>
 
 <tbody id="rows">
-<tr><td colspan="8">Loading data...</td></tr>
+<tr><td colspan="6">Loading...</td></tr>
 </tbody>
 
 </table>
@@ -131,37 +103,72 @@ white-space:nowrap;
 const rows=document.getElementById("rows");
 const search=document.getElementById("search");
 
-let data=[];
+let seasons=[];
 
 async function load(){
 
-try{
+const index=await fetch("/data/nba/seasons/index.json").then(r=>r.json());
 
-const res = await fetch("/data/nba/leaders.json");
+for(const season of index.seasons){
 
-if(!res.ok){
-throw new Error("JSON not found at /data/nba/leaders.json");
+const data=await fetch(`/data/nba/seasons/${season}.json`).then(r=>r.json());
+
+const players={};
+
+data.games.forEach(g=>{
+
+g.players.forEach(p=>{
+
+if(!players[p.player]) players[p.player]={pts:0,reb:0,ast:0,stl:0,blk:0};
+
+players[p.player].pts+=p.points||0;
+players[p.player].reb+=p.rebounds||0;
+players[p.player].ast+=p.assists||0;
+players[p.player].stl+=p.steals||0;
+players[p.player].blk+=p.blocks||0;
+
+});
+
+});
+
+function leader(stat){
+
+let bestPlayer="";
+let best=0;
+
+Object.entries(players).forEach(([name,stats])=>{
+
+if(stats[stat]>best){
+
+best=stats[stat];
+bestPlayer=name;
+
 }
 
-data = await res.json();
+});
 
-data.sort((a,b)=>b.season.localeCompare(a.season));
+return {player:bestPlayer,value:best};
+
+}
+
+seasons.push({
+season,
+points:leader("pts"),
+rebounds:leader("reb"),
+assists:leader("ast"),
+steals:leader("stl"),
+blocks:leader("blk")
+});
+
+}
+
+seasons.sort((a,b)=>b.season-a.season);
 
 render();
-
-}catch(err){
-
-rows.innerHTML=`<tr>
-<td colspan="8">Data load error: ${err.message}</td>
-</tr>`;
-
-}
 
 }
 
 function playerCell(stat){
-
-if(!stat) return "";
 
 return `
 <a class="player-link"
@@ -178,23 +185,21 @@ const needle=(search.value||"").toLowerCase();
 
 rows.innerHTML="";
 
-data.forEach(season=>{
+seasons.forEach(s=>{
 
-const text=JSON.stringify(season).toLowerCase();
+const text=JSON.stringify(s).toLowerCase();
 
 if(needle && !text.includes(needle)) return;
 
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
-<td>${season.season}</td>
-<td class="stat">${playerCell(season.points)}</td>
-<td class="stat">${playerCell(season.rebounds)}</td>
-<td class="stat">${playerCell(season.assists)}</td>
-<td class="stat">${playerCell(season.steals)}</td>
-<td class="stat">${playerCell(season.blocks)}</td>
-<td class="stat">${playerCell(season.threes)}</td>
-<td class="stat">${playerCell(season.ft)}</td>
+<td>${s.season}</td>
+<td class="stat">${playerCell(s.points)}</td>
+<td class="stat">${playerCell(s.rebounds)}</td>
+<td class="stat">${playerCell(s.assists)}</td>
+<td class="stat">${playerCell(s.steals)}</td>
+<td class="stat">${playerCell(s.blocks)}</td>
 `;
 
 rows.appendChild(tr);
