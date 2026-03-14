@@ -79,6 +79,7 @@ font-weight:600;
 </div>
 
 <table>
+
 <thead>
 <tr>
 <th>Season</th>
@@ -107,57 +108,40 @@ let seasons=[];
 
 async function load(){
 
+try{
+
 const index=await fetch("/data/nba/seasons/index.json").then(r=>r.json());
 
 for(const season of index.seasons){
 
 const data=await fetch(`/data/nba/seasons/${season}.json`).then(r=>r.json());
 
-const players={};
-
-data.games.forEach(g=>{
-
-g.players.forEach(p=>{
-
-if(!players[p.player]) players[p.player]={pts:0,reb:0,ast:0,stl:0,blk:0};
-
-players[p.player].pts+=p.points||0;
-players[p.player].reb+=p.rebounds||0;
-players[p.player].ast+=p.assists||0;
-players[p.player].stl+=p.steals||0;
-players[p.player].blk+=p.blocks||0;
-
-});
-
-});
+if(!data.players) continue;
 
 function leader(stat){
 
-let bestPlayer="";
-let best=0;
+let best=null;
 
-Object.entries(players).forEach(([name,stats])=>{
+data.players.forEach(p=>{
 
-if(stats[stat]>best){
-
-best=stats[stat];
-bestPlayer=name;
-
-}
+if(!best || (p[stat]||0) > (best[stat]||0)) best=p;
 
 });
 
-return {player:bestPlayer,value:best};
+return best;
 
 }
 
 seasons.push({
+
 season,
-points:leader("pts"),
-rebounds:leader("reb"),
-assists:leader("ast"),
-steals:leader("stl"),
-blocks:leader("blk")
+
+points:leader("points"),
+rebounds:leader("rebounds"),
+assists:leader("assists"),
+steals:leader("steals"),
+blocks:leader("blocks")
+
 });
 
 }
@@ -166,15 +150,23 @@ seasons.sort((a,b)=>b.season-a.season);
 
 render();
 
+}catch(e){
+
+rows.innerHTML="<tr><td colspan='6'>Unable to load data</td></tr>";
+
 }
 
-function playerCell(stat){
+}
+
+function playerCell(p,stat){
+
+if(!p) return "";
 
 return `
 <a class="player-link"
-href="nba-player.html?player=${encodeURIComponent(stat.player)}">
-${stat.player}
-</a> (${stat.value})
+href="nba-player.html?player=${encodeURIComponent(p.name)}">
+${p.name}
+</a> (${p[stat]})
 `;
 
 }
@@ -194,12 +186,19 @@ if(needle && !text.includes(needle)) return;
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
+
 <td>${s.season}</td>
-<td class="stat">${playerCell(s.points)}</td>
-<td class="stat">${playerCell(s.rebounds)}</td>
-<td class="stat">${playerCell(s.assists)}</td>
-<td class="stat">${playerCell(s.steals)}</td>
-<td class="stat">${playerCell(s.blocks)}</td>
+
+<td class="stat">${playerCell(s.points,"points")}</td>
+
+<td class="stat">${playerCell(s.rebounds,"rebounds")}</td>
+
+<td class="stat">${playerCell(s.assists,"assists")}</td>
+
+<td class="stat">${playerCell(s.steals,"steals")}</td>
+
+<td class="stat">${playerCell(s.blocks,"blocks")}</td>
+
 `;
 
 rows.appendChild(tr);
