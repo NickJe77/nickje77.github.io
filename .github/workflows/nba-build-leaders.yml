@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Build leaders.json
+      - name: Generate leaders.json
         run: |
           python << 'EOF'
           import json
@@ -31,67 +31,30 @@ jobs:
           from collections import defaultdict
 
           base = Path("docs/data/nba")
-          season_files = base / "seasons"
           output = base / "leaders.json"
 
-          leaders=[]
+          leaders = []
 
-          def season_leader(players, stat):
-
-              best=None
+          def get_leader(players, stat):
+              best_name=None
               best_val=-1
 
               for name,stats in players.items():
                   val=stats.get(stat,0)
-
                   if val>best_val:
                       best_val=val
-                      best=name
+                      best_name=name
 
-              return {"player":best,"value":best_val}
+              return {"player":best_name,"value":best_val}
 
-          def process_game(g,players):
-
-              plist=g.get("players")
-
-              if not plist:
-                  return
-
-              if isinstance(plist,dict):
-                  plist=list(plist.values())
-
-              if not isinstance(plist,list):
-                  return
-
-              for p in plist:
-
-                  if not isinstance(p,dict):
-                      continue
-
-                  name=p.get("player") or p.get("name")
-
-                  if not name:
-                      continue
-
-                  players[name]["points"]+=p.get("points",0)
-                  players[name]["rebounds"]+=p.get("rebounds",0)
-                  players[name]["assists"]+=p.get("assists",0)
-                  players[name]["steals"]+=p.get("steals",0)
-                  players[name]["blocks"]+=p.get("blocks",0)
-
-
-          # READ MODERN SEASON FOLDERS
           for season_dir in base.iterdir():
 
               if not season_dir.is_dir():
                   continue
 
-              if season_dir.name == "seasons":
-                  continue
+              season = season_dir.name
 
-              season=season_dir.name
-
-              players=defaultdict(lambda:{
+              players = defaultdict(lambda:{
                   "points":0,
                   "rebounds":0,
                   "assists":0,
@@ -106,67 +69,57 @@ jobs:
                   except:
                       continue
 
-                  games=data if isinstance(data,list) else [data]
+                  games = data if isinstance(data,list) else [data]
 
                   for g in games:
 
-                      if isinstance(g,dict):
-                          process_game(g,players)
+                      if not isinstance(g,dict):
+                          continue
 
-              if players:
+                      plist=g.get("players")
 
-                  leaders.append({
-                      "season":season,
-                      "points":season_leader(players,"points"),
-                      "rebounds":season_leader(players,"rebounds"),
-                      "assists":season_leader(players,"assists"),
-                      "steals":season_leader(players,"steals"),
-                      "blocks":season_leader(players,"blocks")
-                  })
+                      if not plist:
+                          continue
 
+                      if isinstance(plist,dict):
+                          plist=list(plist.values())
 
-          # READ OLDER SEASON FILES
-          if season_files.exists():
+                      if not isinstance(plist,list):
+                          continue
 
-              for f in season_files.glob("*.json"):
+                      for p in plist:
 
-                  season=f.stem
+                          if not isinstance(p,dict):
+                              continue
 
-                  try:
-                      data=json.loads(f.read_text())
-                  except:
-                      continue
+                          name=p.get("player") or p.get("name")
 
-                  players=defaultdict(lambda:{
-                      "points":0,
-                      "rebounds":0,
-                      "assists":0,
-                      "steals":0,
-                      "blocks":0
-                  })
+                          if not name:
+                              continue
 
-                  for g in data.get("games",[]):
+                          players[name]["points"]+=p.get("points",0)
+                          players[name]["rebounds"]+=p.get("rebounds",0)
+                          players[name]["assists"]+=p.get("assists",0)
+                          players[name]["steals"]+=p.get("steals",0)
+                          players[name]["blocks"]+=p.get("blocks",0)
 
-                      if isinstance(g,dict):
-                          process_game(g,players)
+              if not players:
+                  continue
 
-                  if players:
+              leaders.append({
+                  "season":season,
+                  "points":get_leader(players,"points"),
+                  "rebounds":get_leader(players,"rebounds"),
+                  "assists":get_leader(players,"assists"),
+                  "steals":get_leader(players,"steals"),
+                  "blocks":get_leader(players,"blocks")
+              })
 
-                      leaders.append({
-                          "season":season,
-                          "points":season_leader(players,"points"),
-                          "rebounds":season_leader(players,"rebounds"),
-                          "assists":season_leader(players,"assists"),
-                          "steals":season_leader(players,"steals"),
-                          "blocks":season_leader(players,"blocks")
-                      })
+          leaders.sort(key=lambda x:x["season"], reverse=True)
 
+          output.write_text(json.dumps(leaders, indent=2))
 
-          leaders.sort(key=lambda x:x["season"],reverse=True)
-
-          output.write_text(json.dumps(leaders,indent=2))
-
-          print("leaders.json built successfully")
+          print("leaders.json rebuilt with",len(leaders),"seasons")
           EOF
 
       - name: Commit leaders.json
@@ -175,5 +128,5 @@ jobs:
           git config user.email "actions@github.com"
 
           git add docs/data/nba/leaders.json
-          git commit -m "Update NBA leaders" || echo "No changes"
+          git diff --quiet && git diff --staged --quiet || git commit -m "Rebuild NBA leaders"
           git push
