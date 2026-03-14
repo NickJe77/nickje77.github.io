@@ -33,28 +33,29 @@ jobs:
           base = Path("docs/data/nba")
           output = base / "leaders.json"
 
-          leaders = []
+          leaders=[]
 
-          def get_leader(players, stat):
-              best_name=None
-              best_val=-1
+          def leader(players, stat):
+              best_player=None
+              best_value=-1
 
-              for name,stats in players.items():
+              for p,stats in players.items():
                   val=stats.get(stat,0)
-                  if val>best_val:
-                      best_val=val
-                      best_name=name
 
-              return {"player":best_name,"value":best_val}
+                  if val>best_value:
+                      best_value=val
+                      best_player=p
+
+              return {"player":best_player,"value":best_value}
 
           for season_dir in base.iterdir():
 
               if not season_dir.is_dir():
                   continue
 
-              season = season_dir.name
+              season=season_dir.name
 
-              players = defaultdict(lambda:{
+              players=defaultdict(lambda:{
                   "points":0,
                   "rebounds":0,
                   "assists":0,
@@ -65,38 +66,52 @@ jobs:
               for game_file in season_dir.glob("*.json"):
 
                   try:
-                      data=json.loads(game_file.read_text())
+                      raw=json.loads(game_file.read_text())
                   except:
                       continue
 
-                  plist=data.get("players",[])
+                  # normalize structure
+                  games = raw if isinstance(raw,list) else [raw]
 
-                  if isinstance(plist,dict):
-                      plist=list(plist.values())
+                  for data in games:
 
-                  for p in plist:
-
-                      name=p.get("playerName") or p.get("name") or p.get("player")
-
-                      if not name:
+                      if not isinstance(data,dict):
                           continue
 
-                      players[name]["points"]+=p.get("points",0)
-                      players[name]["rebounds"]+=p.get("reboundsTotal",0)
-                      players[name]["assists"]+=p.get("assists",0)
-                      players[name]["steals"]+=p.get("steals",0)
-                      players[name]["blocks"]+=p.get("blocks",0)
+                      plist=data.get("players")
+
+                      if not plist:
+                          continue
+
+                      if isinstance(plist,dict):
+                          plist=list(plist.values())
+
+                      for p in plist:
+
+                          if not isinstance(p,dict):
+                              continue
+
+                          name=p.get("playerName") or p.get("name") or p.get("player")
+
+                          if not name:
+                              continue
+
+                          players[name]["points"]+=p.get("points",0)
+                          players[name]["rebounds"]+=p.get("reboundsTotal",0)
+                          players[name]["assists"]+=p.get("assists",0)
+                          players[name]["steals"]+=p.get("steals",0)
+                          players[name]["blocks"]+=p.get("blocks",0)
 
               if not players:
                   continue
 
               leaders.append({
                   "season":season,
-                  "points":get_leader(players,"points"),
-                  "rebounds":get_leader(players,"rebounds"),
-                  "assists":get_leader(players,"assists"),
-                  "steals":get_leader(players,"steals"),
-                  "blocks":get_leader(players,"blocks")
+                  "points":leader(players,"points"),
+                  "rebounds":leader(players,"rebounds"),
+                  "assists":leader(players,"assists"),
+                  "steals":leader(players,"steals"),
+                  "blocks":leader(players,"blocks")
               })
 
           leaders.sort(key=lambda x:int(x["season"]), reverse=True)
