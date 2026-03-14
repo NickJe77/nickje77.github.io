@@ -66,12 +66,17 @@ for season_dir in DATA.iterdir():
             ast = p.get("assists", 0)
             stl = p.get("steals", 0)
             blk = p.get("blocks", 0)
-            mins = p.get("minutes", 0)
 
-            # Convert MM:SS format if necessary
+            # minutes field can vary in feeds
+            mins = p.get("min") or p.get("minutes") or p.get("mp") or 0
+
+            # convert MM:SS to decimal
             if isinstance(mins, str) and ":" in mins:
-                m, s = mins.split(":")
-                mins = int(m) + int(s) / 60
+                try:
+                    m, s = mins.split(":")
+                    mins = int(m) + int(s) / 60
+                except:
+                    mins = 0
             elif isinstance(mins, str):
                 try:
                     mins = float(mins)
@@ -93,7 +98,7 @@ for season_dir in DATA.iterdir():
                 "blk": blk
             })
 
-            # Build team totals
+            # Team totals
             if team not in players[key]["teams"]:
                 players[key]["teams"][team] = {
                     "games": 0,
@@ -130,7 +135,6 @@ for key, data in players.items():
         "slug": key
     })
 
-# player search index
 (OUT / "index.json").write_text(json.dumps(index, indent=2))
 
 print("NBA player database built successfully")
