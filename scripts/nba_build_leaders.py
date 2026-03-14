@@ -6,38 +6,41 @@ OUT_FILE = Path("docs/data/nba/leaders.json")
 
 leaders = []
 
-for file in sorted(SEASONS_DIR.glob("*.json")):
+def stat(p, names):
+    for n in names:
+        if n in p:
+            return p.get(n,0)
+    return 0
 
-    season = file.stem
+for season_file in sorted(SEASONS_DIR.glob("*.json")):
+
+    season = season_file.stem
 
     try:
-        with open(file) as f:
-            data = json.load(f)
+        data = json.loads(season_file.read_text())
     except:
         continue
 
     totals = {}
 
-    games = data.get("games", [])
-
-    for g in games:
+    for game in data.get("games",[]):
 
         teams = []
 
-        if "home" in g:
-            teams.append(g["home"])
+        if "teams" in game:
+            teams = game["teams"]
 
-        if "away" in g:
-            teams.append(g["away"])
+        if "home" in game:
+            teams.append(game["home"])
 
-        if "teams" in g:
-            teams = g["teams"]
+        if "away" in game:
+            teams.append(game["away"])
 
         for team in teams:
 
-            for p in team.get("players", []):
+            for p in team.get("players",[]):
 
-                name = p.get("name")
+                name = p.get("name") or p.get("player")
 
                 if not name:
                     continue
@@ -51,22 +54,23 @@ for file in sorted(SEASONS_DIR.glob("*.json")):
                         "blocks":0
                     }
 
-                totals[name]["points"] += p.get("points",0)
-                totals[name]["rebounds"] += p.get("rebounds",0)
-                totals[name]["assists"] += p.get("assists",0)
-                totals[name]["steals"] += p.get("steals",0)
-                totals[name]["blocks"] += p.get("blocks",0)
+                totals[name]["points"] += stat(p,["points","pts"])
+                totals[name]["rebounds"] += stat(p,["rebounds","reb","trb"])
+                totals[name]["assists"] += stat(p,["assists","ast"])
+                totals[name]["steals"] += stat(p,["steals","stl"])
+                totals[name]["blocks"] += stat(p,["blocks","blk"])
 
     if not totals:
+        print("No players found in",season)
         continue
 
-    def leader(stat):
+    def leader(stat_name):
 
-        player = max(totals, key=lambda p: totals[p][stat])
+        player = max(totals, key=lambda x: totals[x][stat_name])
 
         return {
             "player": player,
-            "value": totals[player][stat]
+            "value": totals[player][stat_name]
         }
 
     leaders.append({
@@ -82,7 +86,6 @@ leaders.sort(key=lambda x: x["season"], reverse=True)
 
 OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-with open(OUT_FILE,"w") as f:
-    json.dump(leaders,f,indent=2)
+OUT_FILE.write_text(json.dumps(leaders,indent=2))
 
-print("leaders.json built with",len(leaders),"seasons")
+print("Leaders built:",len(leaders),"seasons")
