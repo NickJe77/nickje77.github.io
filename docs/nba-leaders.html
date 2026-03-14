@@ -136,10 +136,44 @@ async function load(){
 try{
 
 const res=await fetch("/data/nba/leaders.json");
-
 leaders=await res.json();
 
-leaders.sort((a,b)=>b.season.localeCompare(a.season));
+/* CLEAN BAD DATA */
+
+leaders = leaders
+.map(s=>{
+
+let yr=parseInt(s.season);
+
+/* fix seasons like 42022 or 32022 */
+if(yr>3000){
+yr=parseInt(String(yr).slice(-4));
+}
+
+s.season=yr;
+
+return s;
+
+})
+.filter(s=>{
+
+/* remove pre-merger seasons */
+if(s.season < 1976) return false;
+
+/* remove empty rows */
+if(!s.points?.player &&
+   !s.rebounds?.player &&
+   !s.assists?.player &&
+   !s.steals?.player &&
+   !s.blocks?.player) return false;
+
+return true;
+
+});
+
+/* correct numeric sort */
+
+leaders.sort((a,b)=>b.season-a.season);
 
 render();
 
