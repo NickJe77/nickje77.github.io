@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - "docs/data/nba/seasons/**"
+      - "docs/data/nba/**"
 
 permissions:
   contents: write
@@ -30,31 +30,32 @@ jobs:
           from pathlib import Path
           from collections import defaultdict
 
-          seasons_dir = Path("docs/data/nba/seasons")
+          base = Path("docs/data/nba")
           output = Path("docs/data/nba/leaders.json")
 
           leaders=[]
 
           def leader(players, stat):
+
               best_player=None
               best_value=-1
 
-              for name,stats in players.items():
-                  val=stats.get(stat,0)
-                  if val>best_value:
-                      best_value=val
-                      best_player=name
+              for p,stats in players.items():
+                  v=stats.get(stat,0)
+
+                  if v>best_value:
+                      best_value=v
+                      best_player=p
 
               return {"player":best_player,"value":best_value}
 
-          for file in sorted(seasons_dir.glob("*.json")):
+          # loop seasons
+          for season_dir in sorted(base.iterdir()):
 
-              season=file.stem
-
-              try:
-                  data=json.loads(file.read_text())
-              except:
+              if not season_dir.is_dir():
                   continue
+
+              season=season_dir.name
 
               players=defaultdict(lambda:{
                   "points":0,
@@ -64,12 +65,15 @@ jobs:
                   "blocks":0
               })
 
-              for game in data.get("games",[]):
+              # loop game files
+              for game_file in season_dir.glob("*.json"):
 
-                  # PLAYER LIST
-                  plist=game.get("players",[])
+                  try:
+                      data=json.loads(game_file.read_text())
+                  except:
+                      continue
 
-                  for p in plist:
+                  for p in data.get("players",[]):
 
                       name=p.get("player") or p.get("name")
 
@@ -96,7 +100,6 @@ jobs:
 
           leaders.sort(key=lambda x:x["season"], reverse=True)
 
-          output.parent.mkdir(parents=True, exist_ok=True)
           output.write_text(json.dumps(leaders,indent=2))
 
           print("leaders.json built")
