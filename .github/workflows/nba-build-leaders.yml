@@ -35,7 +35,7 @@ jobs:
 
           seasons = {}
 
-          def ensure_season(season):
+          def ensure(season):
               if season not in seasons:
                   seasons[season] = defaultdict(lambda:{
                       "points":0,
@@ -60,37 +60,27 @@ jobs:
 
               season=data.get("season")
 
-              if not season:
+              if not isinstance(season,int):
                   continue
 
               season=str(season)
 
-              # FIX BAD SEASON FORMAT (32022 → 2022)
-              if len(season)==5:
-                  season=season[1:]
+              ensure(season)
 
-              ensure_season(season)
-
-              players=data.get("players")
-
-              if not isinstance(players,list):
-                  continue
+              players=data.get("players",[])
 
               for p in players:
 
-                  if not isinstance(p,dict):
-                      continue
-
-                  name=p.get("name")
+                  name=p.get("player_name")
 
                   if not name:
                       continue
 
-                  seasons[season][name]["points"]+=p.get("points",0)
-                  seasons[season][name]["rebounds"]+=p.get("reboundsTotal",0)
-                  seasons[season][name]["assists"]+=p.get("assists",0)
-                  seasons[season][name]["steals"]+=p.get("steals",0)
-                  seasons[season][name]["blocks"]+=p.get("blocks",0)
+                  seasons[season][name]["points"] += p.get("points",0)
+                  seasons[season][name]["rebounds"] += p.get("rebounds",0)
+                  seasons[season][name]["assists"] += p.get("assists",0)
+                  seasons[season][name]["steals"] += p.get("steals",0)
+                  seasons[season][name]["blocks"] += p.get("blocks",0)
 
           leaders=[]
 
@@ -98,7 +88,7 @@ jobs:
 
               def leader(stat):
 
-                  best=None
+                  best_player=None
                   best_val=-1
 
                   for name,stats in players.items():
@@ -107,9 +97,9 @@ jobs:
 
                       if val>best_val:
                           best_val=val
-                          best=name
+                          best_player=name
 
-                  return {"player":best,"value":best_val}
+                  return {"player":best_player,"value":best_val}
 
               leaders.append({
                   "season":season,
@@ -124,7 +114,8 @@ jobs:
 
           output.write_text(json.dumps(leaders,indent=2))
 
-          print("leaders.json built with",len(leaders),"seasons")
+          print("Built leaders.json for",len(leaders),"seasons")
+
           EOF
 
       - name: Commit leaders.json
