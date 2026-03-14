@@ -39,27 +39,21 @@ jobs:
               best_player=None
               best_value=-1
 
-              for p,stats in players.items():
+              for name,stats in players.items():
                   val=stats.get(stat,0)
-
                   if val>best_value:
                       best_value=val
-                      best_player=p
+                      best_player=name
 
-              return {
-                  "player":best_player,
-                  "value":best_value
-              }
+              return {"player":best_player,"value":best_value}
 
           for file in sorted(seasons_dir.glob("*.json")):
 
               season=file.stem
 
               try:
-                  with open(file) as f:
-                      data=json.load(f)
-              except Exception:
-                  print(f"Skipping {file.name} due to JSON error")
+                  data=json.loads(file.read_text())
+              except:
                   continue
 
               players=defaultdict(lambda:{
@@ -72,34 +66,23 @@ jobs:
 
               for game in data.get("games",[]):
 
-                  teams=[]
+                  # PLAYER LIST
+                  plist=game.get("players",[])
 
-                  if "home" in game:
-                      teams.append(game["home"])
+                  for p in plist:
 
-                  if "away" in game:
-                      teams.append(game["away"])
+                      name=p.get("player") or p.get("name")
 
-                  if "teams" in game:
-                      teams.extend(game["teams"])
+                      if not name:
+                          continue
 
-                  for team in teams:
-
-                      for p in team.get("players",[]):
-
-                          name=p.get("player") or p.get("name")
-
-                          if not name:
-                              continue
-
-                          players[name]["points"]+=p.get("points",0)
-                          players[name]["rebounds"]+=p.get("rebounds",0)
-                          players[name]["assists"]+=p.get("assists",0)
-                          players[name]["steals"]+=p.get("steals",0)
-                          players[name]["blocks"]+=p.get("blocks",0)
+                      players[name]["points"]+=p.get("points",0)
+                      players[name]["rebounds"]+=p.get("rebounds",0)
+                      players[name]["assists"]+=p.get("assists",0)
+                      players[name]["steals"]+=p.get("steals",0)
+                      players[name]["blocks"]+=p.get("blocks",0)
 
               if not players:
-                  print(f"No players found in {season}")
                   continue
 
               leaders.append({
@@ -114,11 +97,9 @@ jobs:
           leaders.sort(key=lambda x:x["season"], reverse=True)
 
           output.parent.mkdir(parents=True, exist_ok=True)
+          output.write_text(json.dumps(leaders,indent=2))
 
-          with open(output,"w") as f:
-              json.dump(leaders,f,indent=2)
-
-          print("leaders.json built successfully")
+          print("leaders.json built")
           EOF
 
       - name: Commit leaders.json
