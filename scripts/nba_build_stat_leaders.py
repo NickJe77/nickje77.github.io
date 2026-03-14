@@ -57,29 +57,30 @@ for f in players_dir.glob("*.json"):
         if td > 0:
             td_tot.append({"player":name,"value":td})
 
+
         if g >= MIN_GAMES:
 
             if pts > 0:
-                pts_pg.append({"player":name,"value":round(pts/g,2)}
+                pts_pg.append({"player":name,"value":round(pts/g,2)})
 
             if reb > 0:
-                reb_pg.append({"player":name,"value":round(reb/g,2)}
+                reb_pg.append({"player":name,"value":round(reb/g,2)})
 
             if ast > 0:
-                ast_pg.append({"player":name,"value":round(ast/g,2)}
+                ast_pg.append({"player":name,"value":round(ast/g,2)})
 
             if stl > 0:
-                stl_pg.append({"player":name,"value":round(stl/g,2)}
+                stl_pg.append({"player":name,"value":round(stl/g,2)})
 
             if blk > 0:
-                blk_pg.append({"player":name,"value":round(blk/g,2)}
+                blk_pg.append({"player":name,"value":round(blk/g,2)})
 
     except:
         pass
 
 
 def top(lst):
-    return sorted(lst,key=lambda x:x["value"],reverse=True)[:TOP]
+    return sorted(lst, key=lambda x: x["value"], reverse=True)[:TOP]
 
 
 output = {
