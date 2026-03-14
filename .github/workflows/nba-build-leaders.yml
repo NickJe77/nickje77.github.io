@@ -15,11 +15,9 @@ jobs:
 
     steps:
 
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
@@ -60,27 +58,34 @@ jobs:
 
               season=data.get("season")
 
-              if not isinstance(season,int):
+              if not season:
                   continue
 
               season=str(season)
+
+              # fix broken season values
+              if len(season)==5:
+                  season=season[1:]
 
               ensure(season)
 
               players=data.get("players",[])
 
+              if not isinstance(players,list):
+                  continue
+
               for p in players:
 
-                  name=p.get("player_name")
+                  name=p.get("player")
 
                   if not name:
                       continue
 
-                  seasons[season][name]["points"] += p.get("points",0)
-                  seasons[season][name]["rebounds"] += p.get("rebounds",0)
-                  seasons[season][name]["assists"] += p.get("assists",0)
-                  seasons[season][name]["steals"] += p.get("steals",0)
-                  seasons[season][name]["blocks"] += p.get("blocks",0)
+                  seasons[season][name]["points"]+=p.get("points",0)
+                  seasons[season][name]["rebounds"]+=p.get("rebounds",0)
+                  seasons[season][name]["assists"]+=p.get("assists",0)
+                  seasons[season][name]["steals"]+=p.get("steals",0)
+                  seasons[season][name]["blocks"]+=p.get("blocks",0)
 
           leaders=[]
 
@@ -88,7 +93,7 @@ jobs:
 
               def leader(stat):
 
-                  best_player=None
+                  best=None
                   best_val=-1
 
                   for name,stats in players.items():
@@ -97,9 +102,9 @@ jobs:
 
                       if val>best_val:
                           best_val=val
-                          best_player=name
+                          best=name
 
-                  return {"player":best_player,"value":best_val}
+                  return {"player":best,"value":best_val}
 
               leaders.append({
                   "season":season,
@@ -118,7 +123,7 @@ jobs:
 
           EOF
 
-      - name: Commit leaders.json
+      - name: Commit
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
