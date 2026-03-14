@@ -2,15 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>NBA League Leaders | The Sporting Almanac</title>
+<title>NBA Season Leaders | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<link rel="stylesheet" href="style.css">
-
 <style>
+
 body{
 font-family:Inter,system-ui,Arial,sans-serif;
 margin:0;
+background:#fff;
 }
 
 .navbar{
@@ -29,31 +29,27 @@ font-size:18px;
 }
 
 .page-wrap{
-max-width:1100px;
-margin:0 auto;
-padding:30px 20px;
+max-width:1200px;
+margin:auto;
+padding:30px 20px 60px;
+}
+
+h1{
+text-align:center;
+margin-bottom:20px;
 }
 
 .controls{
-display:flex;
-justify-content:center;
-gap:10px;
-flex-wrap:wrap;
-margin-bottom:15px;
+text-align:center;
+margin-bottom:18px;
 }
 
-.controls select,
-.controls button,
 input{
 padding:8px 12px;
 border-radius:8px;
 border:1px solid #ccc;
 font-size:14px;
-}
-
-.controls button.active{
-background:#222;
-color:white;
+min-width:260px;
 }
 
 table{
@@ -84,6 +80,11 @@ font-weight:600;
 .player-link:hover{
 text-decoration:underline;
 }
+
+.stat{
+white-space:nowrap;
+}
+
 </style>
 </head>
 
@@ -96,38 +97,30 @@ text-decoration:underline;
 
 <div class="page-wrap">
 
-<h1>NBA League Leaders</h1>
+<h1>NBA Season Leaders</h1>
 
 <div class="controls">
-
-<select id="seasonSelect"></select>
-
-<input
-type="text"
-id="playerSearch"
-placeholder="Search player…"
->
-
-<button data-stat="points" class="active">Points</button>
-<button data-stat="rebounds">Rebounds</button>
-<button data-stat="assists">Assists</button>
-<button data-stat="steals">Steals</button>
-<button data-stat="blocks">Blocks</button>
-
+<input id="search" placeholder="Search player or season">
 </div>
 
 <table>
 
 <thead>
 <tr>
-<th>#</th>
-<th>Player</th>
-<th>Team</th>
-<th id="statHeader">Value</th>
+<th>Season</th>
+<th>Points</th>
+<th>Rebounds</th>
+<th>Assists</th>
+<th>Steals</th>
+<th>Blocks</th>
+<th>3PT</th>
+<th>FT</th>
 </tr>
 </thead>
 
-<tbody id="leaderTable"></tbody>
+<tbody id="rows">
+<tr><td colspan="8">Loading...</td></tr>
+</tbody>
 
 </table>
 
@@ -135,111 +128,86 @@ placeholder="Search player…"
 
 <script>
 
-let leadersData=[];
-let currentStat="points";
+const rows=document.getElementById("rows");
+const search=document.getElementById("search");
 
-const seasonSelect=document.getElementById("seasonSelect");
-const tableBody=document.getElementById("leaderTable");
-const statHeader=document.getElementById("statHeader");
-const buttons=document.querySelectorAll(".controls button");
-const searchInput=document.getElementById("playerSearch");
+let data=[];
 
-async function init(){
+async function load(){
 
 try{
 
-const data=await fetch("data/nba/leaders.json").then(r=>r.json());
+data=await fetch("data/nba/leaders.json").then(r=>r.json());
 
-leadersData=data.sort((a,b)=>b.season-a.season);
-
-leadersData.forEach((s,i)=>{
-
-const option=document.createElement("option");
-option.value=s.season;
-option.textContent=s.season;
-
-if(i===0) option.selected=true;
-
-seasonSelect.appendChild(option);
-
-});
+data.sort((a,b)=>b.season.localeCompare(a.season));
 
 render();
 
 }catch(e){
 
-tableBody.innerHTML="<tr><td colspan='4'>Unable to load data</td></tr>";
+rows.innerHTML="<tr><td colspan='8'>Unable to load data</td></tr>";
 
 }
 
 }
 
-seasonSelect.onchange=render;
+function playerCell(stat){
 
-searchInput.oninput=render;
+if(!stat)return "";
 
-buttons.forEach(button=>{
+return `
+<a class="player-link"
+href="nba-player.html?player=${encodeURIComponent(stat.player)}">
+${stat.player}
+</a>
+ (${stat.value})
+`;
 
-button.onclick=()=>{
-
-buttons.forEach(b=>b.classList.remove("active"));
-
-button.classList.add("active");
-
-currentStat=button.dataset.stat;
-
-render();
-
-};
-
-});
+}
 
 function render(){
 
-const season=seasonSelect.value;
+const needle=(search.value||"").toLowerCase();
 
-const filter=searchInput.value.toLowerCase();
+rows.innerHTML="";
 
-const seasonData=leadersData.find(s=>String(s.season)===String(season));
+data.forEach(season=>{
 
-tableBody.innerHTML="";
+const text=JSON.stringify(season).toLowerCase();
 
-if(!seasonData){
-
-tableBody.innerHTML="<tr><td colspan='4'>No data available</td></tr>";
-
-return;
-
-}
-
-statHeader.textContent=currentStat.toUpperCase();
-
-seasonData[currentStat]
-.filter(r=>r.player.toLowerCase().includes(filter))
-.slice(0,10)
-.forEach((row,i)=>{
+if(needle && !text.includes(needle)) return;
 
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
-<td>${i+1}</td>
-<td>
-<a class="player-link"
-href="nba-player.html?player=${encodeURIComponent(row.player)}">
-${row.player}
-</a>
-</td>
-<td>${row.team||""}</td>
-<td>${row.value}</td>
+
+<td>${season.season}</td>
+
+<td class="stat">${playerCell(season.points)}</td>
+
+<td class="stat">${playerCell(season.rebounds)}</td>
+
+<td class="stat">${playerCell(season.assists)}</td>
+
+<td class="stat">${playerCell(season.steals)}</td>
+
+<td class="stat">${playerCell(season.blocks)}</td>
+
+<td class="stat">${playerCell(season.threes)}</td>
+
+<td class="stat">${playerCell(season.ft)}</td>
+
 `;
 
-tableBody.appendChild(tr);
+rows.appendChild(tr);
 
 });
 
 }
 
-init();
+search.addEventListener("input",render);
+
+load();
 
 </script>
 
