@@ -1,0 +1,99 @@
+name: Build NBA Leaders
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "docs/data/nba/seasons/**"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build leaders.json
+        run: |
+          python << 'EOF'
+          import json
+          from pathlib import Path
+          from collections import defaultdict
+
+          seasons_dir = Path("docs/data/nba/seasons")
+          output = Path("docs/data/nba/leaders.json")
+
+          leaders=[]
+
+          def leader(players,stat):
+              best=None
+              best_val=-1
+              for p,stats in players.items():
+                  v=stats.get(stat,0)
+                  if v>best_val:
+                      best_val=v
+                      best=p
+              return {"player":best,"value":best_val}
+
+          for f in sorted(seasons_dir.glob("*.json")):
+
+              season=f.stem
+
+              with open(f) as file:
+                  data=json.load(file)
+
+              players=defaultdict(lambda:{
+                  "points":0,
+                  "rebounds":0,
+                  "assists":0,
+                  "steals":0,
+                  "blocks":0
+              })
+
+              for g in data.get("games",[]):
+
+                  for p in g.get("players",[]):
+
+                      name=p.get("player")
+
+                      players[name]["points"]+=p.get("points",0)
+                      players[name]["rebounds"]+=p.get("rebounds",0)
+                      players[name]["assists"]+=p.get("assists",0)
+                      players[name]["steals"]+=p.get("steals",0)
+                      players[name]["blocks"]+=p.get("blocks",0)
+
+              leaders.append({
+                  "season":season,
+                  "points":leader(players,"points"),
+                  "rebounds":leader(players,"rebounds"),
+                  "assists":leader(players,"assists"),
+                  "steals":leader(players,"steals"),
+                  "blocks":leader(players,"blocks")
+              })
+
+          leaders.sort(key=lambda x:x["season"],reverse=True)
+
+          output.parent.mkdir(parents=True,exist_ok=True)
+
+          with open(output,"w") as f:
+              json.dump(leaders,f,indent=2)
+
+          print("leaders.json built")
+          EOF
+
+      - name: Commit leaders.json
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add docs/data/nba/leaders.json
+          git commit -m "Update NBA leaders" || echo "No changes"
+          git push
