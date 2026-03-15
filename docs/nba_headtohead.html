@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NBA Head-to-Head | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+
+body{
+font-family:Inter,system-ui,Arial;
+margin:0;
+background:#fff;
+}
+
+.navbar{
+display:flex;
+justify-content:center;
+gap:22px;
+padding:16px 0;
+border-bottom:1px solid #ddd;
+font-weight:600;
+}
+
+.navbar a{
+color:#0056d6;
+text-decoration:none;
+font-size:18px;
+}
+
+.page{
+max-width:1100px;
+margin:auto;
+padding:30px 20px 60px;
+}
+
+.hero{
+background:linear-gradient(90deg,#17408B,#C9082A);
+color:white;
+padding:26px 30px;
+border-radius:14px;
+margin-bottom:28px;
+text-align:center;
+}
+
+.controls{
+text-align:center;
+margin-bottom:25px;
+}
+
+select{
+padding:10px 14px;
+border-radius:10px;
+border:1px solid #ccc;
+font-size:16px;
+margin:0 10px;
+}
+
+button{
+padding:10px 18px;
+border:none;
+background:#17408B;
+color:white;
+border-radius:10px;
+cursor:pointer;
+font-weight:600;
+}
+
+button:hover{opacity:.9;}
+
+.summary{
+text-align:center;
+margin-bottom:25px;
+font-size:18px;
+font-weight:600;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+font-size:15px;
+}
+
+th{
+background:#17408B;
+color:white;
+padding:10px;
+text-align:left;
+}
+
+td{
+padding:10px;
+border-bottom:1px solid #ddd;
+}
+
+tr:nth-child(even){background:#f5f7fb;}
+
+a.game-link{
+color:#0056d6;
+text-decoration:none;
+font-weight:600;
+}
+
+a.game-link:hover{text-decoration:underline;}
+
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="nba.html">NBA</a>
+</div>
+
+<div class="page">
+
+<div class="hero">
+<h1>NBA Head-to-Head</h1>
+<p>Compare every game played between two franchises</p>
+</div>
+
+<div class="controls">
+<select id="team1"></select>
+<select id="team2"></select>
+<button onclick="run()">Compare</button>
+</div>
+
+<div class="summary" id="summary"></div>
+
+<table id="gamesTable">
+<thead>
+<tr>
+<th>Date</th>
+<th>Game</th>
+<th>Winner</th>
+<th>Score</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+
+</div>
+
+<script>
+
+let games=[]
+let teams=new Set()
+
+async function load(){
+
+const seasons = await fetch("docs/data/nba/index.json").then(r=>r.json())
+
+for(const season of seasons){
+
+const seasonData = await fetch(`docs/data/nba/${season}/index.json`).then(r=>r.json())
+
+for(const gameID of seasonData.games){
+
+try{
+
+const game = await fetch(`docs/data/nba/${season}/${gameID}.json`).then(r=>r.json())
+
+games.push(game)
+
+teams.add(game.home_team)
+teams.add(game.away_team)
+
+}catch(e){}
+
+}
+
+}
+
+buildTeamSelectors()
+
+}
+
+function buildTeamSelectors(){
+
+const team1=document.getElementById("team1")
+const team2=document.getElementById("team2")
+
+const sorted=[...teams].sort()
+
+sorted.forEach(t=>{
+
+const o1=document.createElement("option")
+o1.value=t
+o1.textContent=t
+team1.appendChild(o1)
+
+const o2=document.createElement("option")
+o2.value=t
+o2.textContent=t
+team2.appendChild(o2)
+
+})
+
+}
+
+function run(){
+
+const t1=document.getElementById("team1").value
+const t2=document.getElementById("team2").value
+
+if(t1===t2){
+alert("Pick two different teams")
+return
+}
+
+const matchGames=games.filter(g=>{
+
+return(
+(g.home_team===t1 && g.away_team===t2) ||
+(g.home_team===t2 && g.away_team===t1)
+)
+
+})
+
+let t1wins=0
+let t2wins=0
+
+matchGames.forEach(g=>{
+
+if(g.home_score>g.away_score){
+
+if(g.home_team===t1)t1wins++
+else t2wins++
+
+}else{
+
+if(g.away_team===t1)t1wins++
+else t2wins++
+
+}
+
+})
+
+document.getElementById("summary").innerHTML=
+`${t1} ${t1wins} — ${t2wins} ${t2}<br>${matchGames.length} games`
+
+renderGames(matchGames)
+
+}
+
+function renderGames(list){
+
+const tbody=document.querySelector("#gamesTable tbody")
+tbody.innerHTML=""
+
+list.sort((a,b)=>new Date(b.date)-new Date(a.date))
+
+list.forEach(g=>{
+
+const tr=document.createElement("tr")
+
+let winner =
+g.home_score>g.away_score
+? g.home_team
+: g.away_team
+
+tr.innerHTML=`
+
+<td>${g.date}</td>
+
+<td>
+<a class="game-link" href="nba-game.html?game=${g.game_id}">
+${g.away_team} @ ${g.home_team}
+</a>
+</td>
+
+<td>${winner}</td>
+
+<td>${g.away_score}-${g.home_score}</td>
+
+`
+
+tbody.appendChild(tr)
+
+})
+
+}
+
+load()
+
+</script>
+
+</body>
+</html>
