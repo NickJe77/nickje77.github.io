@@ -39,7 +39,7 @@ background:linear-gradient(90deg,#17408B,#C9082A);
 color:white;
 padding:26px 30px;
 border-radius:14px;
-margin-bottom:28px;
+margin-bottom:30px;
 text-align:center;
 }
 
@@ -66,8 +66,6 @@ cursor:pointer;
 font-weight:600;
 }
 
-button:hover{opacity:.9;}
-
 .summary{
 text-align:center;
 margin-bottom:25px;
@@ -78,7 +76,6 @@ font-weight:600;
 table{
 width:100%;
 border-collapse:collapse;
-font-size:15px;
 }
 
 th{
@@ -93,15 +90,15 @@ padding:10px;
 border-bottom:1px solid #ddd;
 }
 
-tr:nth-child(even){background:#f5f7fb;}
+tr:nth-child(even){
+background:#f5f7fb;
+}
 
 a.game-link{
 color:#0056d6;
 text-decoration:none;
 font-weight:600;
 }
-
-a.game-link:hover{text-decoration:underline;}
 
 </style>
 </head>
@@ -117,7 +114,7 @@ a.game-link:hover{text-decoration:underline;}
 
 <div class="hero">
 <h1>NBA Head-to-Head</h1>
-<p>Compare every game played between two franchises</p>
+<p>Compare every game between two franchises</p>
 </div>
 
 <div class="controls">
@@ -128,7 +125,7 @@ a.game-link:hover{text-decoration:underline;}
 
 <div class="summary" id="summary"></div>
 
-<table id="gamesTable">
+<table>
 <thead>
 <tr>
 <th>Date</th>
@@ -137,7 +134,7 @@ a.game-link:hover{text-decoration:underline;}
 <th>Score</th>
 </tr>
 </thead>
-<tbody></tbody>
+<tbody id="games"></tbody>
 </table>
 
 </div>
@@ -149,51 +146,59 @@ let teams=new Set()
 
 async function load(){
 
-const seasons = await fetch("docs/data/nba/index.json").then(r=>r.json())
-
-for(const season of seasons){
-
-const seasonData = await fetch(`docs/data/nba/${season}/index.json`).then(r=>r.json())
-
-for(const gameID of seasonData.games){
+for(let season=1947;season<=2026;season++){
 
 try{
 
-const game = await fetch(`docs/data/nba/${season}/${gameID}.json`).then(r=>r.json())
+let index=await fetch(`docs/data/nba/${season}/index.json`)
+if(!index.ok) continue
+
+let seasonData=await index.json()
+
+for(let id of seasonData.games){
+
+try{
+
+let g=await fetch(`docs/data/nba/${season}/${id}.json`)
+if(!g.ok) continue
+
+let game=await g.json()
 
 games.push(game)
 
 teams.add(game.home_team)
 teams.add(game.away_team)
 
-}catch(e){}
+}catch{}
 
 }
 
-}
-
-buildTeamSelectors()
+}catch{}
 
 }
 
-function buildTeamSelectors(){
+buildTeams()
 
-const team1=document.getElementById("team1")
-const team2=document.getElementById("team2")
+}
 
-const sorted=[...teams].sort()
+function buildTeams(){
 
-sorted.forEach(t=>{
+let list=[...teams].sort()
 
-const o1=document.createElement("option")
-o1.value=t
-o1.textContent=t
-team1.appendChild(o1)
+let t1=document.getElementById("team1")
+let t2=document.getElementById("team2")
 
-const o2=document.createElement("option")
-o2.value=t
-o2.textContent=t
-team2.appendChild(o2)
+list.forEach(team=>{
+
+let o1=document.createElement("option")
+o1.value=team
+o1.textContent=team
+t1.appendChild(o1)
+
+let o2=document.createElement("option")
+o2.value=team
+o2.textContent=team
+t2.appendChild(o2)
 
 })
 
@@ -201,64 +206,57 @@ team2.appendChild(o2)
 
 function run(){
 
-const t1=document.getElementById("team1").value
-const t2=document.getElementById("team2").value
+let t1=document.getElementById("team1").value
+let t2=document.getElementById("team2").value
 
 if(t1===t2){
 alert("Pick two different teams")
 return
 }
 
-const matchGames=games.filter(g=>{
-
-return(
+let matchGames=games.filter(g=>
 (g.home_team===t1 && g.away_team===t2) ||
 (g.home_team===t2 && g.away_team===t1)
 )
 
-})
-
-let t1wins=0
-let t2wins=0
+let w1=0
+let w2=0
 
 matchGames.forEach(g=>{
 
 if(g.home_score>g.away_score){
 
-if(g.home_team===t1)t1wins++
-else t2wins++
+if(g.home_team===t1) w1++
+else w2++
 
 }else{
 
-if(g.away_team===t1)t1wins++
-else t2wins++
+if(g.away_team===t1) w1++
+else w2++
 
 }
 
 })
 
 document.getElementById("summary").innerHTML=
-`${t1} ${t1wins} — ${t2wins} ${t2}<br>${matchGames.length} games`
+`${t1} ${w1} – ${w2} ${t2}<br>${matchGames.length} games`
 
-renderGames(matchGames)
+render(matchGames)
 
 }
 
-function renderGames(list){
+function render(list){
 
-const tbody=document.querySelector("#gamesTable tbody")
+let tbody=document.getElementById("games")
 tbody.innerHTML=""
 
 list.sort((a,b)=>new Date(b.date)-new Date(a.date))
 
 list.forEach(g=>{
 
-const tr=document.createElement("tr")
+let winner = g.home_score>g.away_score ? g.home_team : g.away_team
 
-let winner =
-g.home_score>g.away_score
-? g.home_team
-: g.away_team
+let tr=document.createElement("tr")
 
 tr.innerHTML=`
 
