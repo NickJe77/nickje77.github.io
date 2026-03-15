@@ -1,175 +1,149 @@
 import json
+import re
 from pathlib import Path
 
-players_dir = Path("docs/data/nba/players")
-output_file = Path("docs/data/nba/stat_leaders.json")
+DATA = Path("docs/data/nba")
+OUT = DATA / "players"
 
-TOP = 15
-MIN_GAMES = 100
+OUT.mkdir(exist_ok=True)
 
+players = {}
 
-pts_tot=[]
-reb_tot=[]
-ast_tot=[]
-stl_tot=[]
-blk_tot=[]
-td_tot=[]
-qd_tot=[]
+def slug(name):
+    s = name.lower()
+    s = re.sub(r"[^\w\s-]", "", s)
+    s = re.sub(r"\s+", "-", s)
+    return s
 
-pts_pg=[]
-reb_pg=[]
-ast_pg=[]
-stl_pg=[]
-blk_pg=[]
+print("Building NBA player files...")
 
-pts_p36=[]
-reb_p36=[]
-ast_p36=[]
-stl_p36=[]
-blk_p36=[]
+for season_dir in DATA.iterdir():
 
-
-print("Building stat leaders...")
-
-
-for f in players_dir.glob("*.json"):
-
-    if f.name == "index.json":
+    if not season_dir.is_dir():
         continue
 
-    try:
-        p=json.loads(f.read_text())
-    except:
-        continue
+    for game_file in season_dir.glob("*.json"):
+
+        if game_file.name in ["index.json", "games.json"]:
+            continue
+
+        try:
+            game = json.loads(game_file.read_text())
+        except:
+            continue
+
+        if not isinstance(game, dict):
+            continue
+
+        home = game.get("home_team")
+        away = game.get("away_team")
+
+        for p in game.get("players", []):
+
+            name = p.get("player_name") or p.get("name") or p.get("player")
+
+            if not name:
+                continue
+
+            key = slug(name)
+
+            if key not in players:
+                players[key] = {
+                    "name": name,
+                    "teams": {},
+                    "games": []
+                }
+
+            team = p.get("team")
+
+            if not team:
+                continue
+
+            opp = away if team == home else home
+
+            pts = p.get("points", 0)
+            reb = p.get("rebounds", 0)
+            ast = p.get("assists", 0)
+
+            # safely handle missing steals / blocks
+            stl = p.get("steals")
+            blk = p.get("blocks")
+
+            if stl is None:
+                stl = 0
+
+            if blk is None:
+                blk = 0
+
+            # minutes field may vary
+            mins = p.get("min") or p.get("minutes") or p.get("mp") or 0
+
+            # convert MM:SS format
+            if isinstance(mins, str) and ":" in mins:
+                try:
+                    m, s = mins.split(":")
+                    mins = int(m) + int(s) / 60
+                except:
+                    mins = 0
+            elif isinstance(mins, str):
+                try:
+                    mins = float(mins)
+                except:
+                    mins = 0
+
+            # add game log
+            players[key]["games"].append({
+                "season": game.get("season"),
+                "game_id": game.get("game_id"),
+                "date": game.get("date"),
+                "team": team,
+                "opp": opp,
+                "minutes": mins,
+                "pts": pts,
+                "reb": reb,
+                "ast": ast,
+                "stl": stl,
+                "blk": blk
+            })
+
+            # team totals
+            if team not in players[key]["teams"]:
+                players[key]["teams"][team] = {
+                    "games": 0,
+                    "minutes": 0,
+                    "pts": 0,
+                    "reb": 0,
+                    "ast": 0,
+                    "stl": 0,
+                    "blk": 0
+                }
+
+            t = players[key]["teams"][team]
+
+            t["games"] += 1
+            t["minutes"] += mins
+            t["pts"] += pts
+            t["reb"] += reb
+            t["ast"] += ast
+            t["stl"] += stl
+            t["blk"] += blk
 
 
-    name=p.get("name")
-    teams=p.get("teams",{})
+print("Writing player files...")
 
-    g=0
-    mins=0
-    pts=0
-    reb=0
-    ast=0
-    stl=0
-    blk=0
+index = []
 
-    td=0
-    qd=0
+for key, data in players.items():
 
+    file = OUT / f"{key}.json"
+    file.write_text(json.dumps(data, indent=2))
 
-    for t in teams.values():
+    index.append({
+        "name": data["name"],
+        "slug": key
+    })
 
-        g+=t.get("games",0)
-        mins+=t.get("minutes",0)
+# player search index
+(OUT / "index.json").write_text(json.dumps(index, indent=2))
 
-        pts+=t.get("pts",0)
-        reb+=t.get("reb",0)
-        ast+=t.get("ast",0)
-        stl+=t.get("stl",0)
-        blk+=t.get("blk",0)
-
-
-    # Detect triple/quadruple doubles
-
-    for game in p.get("games",[]):
-
-        pts_g=game.get("pts",0)
-        reb_g=game.get("reb",0)
-        ast_g=game.get("ast",0)
-        stl_g=game.get("stl",0)
-        blk_g=game.get("blk",0)
-
-        categories=0
-
-        if pts_g>=10:
-            categories+=1
-        if reb_g>=10:
-            categories+=1
-        if ast_g>=10:
-            categories+=1
-        if stl_g>=10:
-            categories+=1
-        if blk_g>=10:
-            categories+=1
-
-
-        if categories>=3:
-            td+=1
-
-        if categories>=4:
-            qd+=1
-
-
-    if g < MIN_GAMES:
-        continue
-
-
-    pts_tot.append({"player":name,"value":pts})
-    reb_tot.append({"player":name,"value":reb})
-    ast_tot.append({"player":name,"value":ast})
-    stl_tot.append({"player":name,"value":stl})
-    blk_tot.append({"player":name,"value":blk})
-
-    if td>0:
-        td_tot.append({"player":name,"value":td})
-
-    if qd>0:
-        qd_tot.append({"player":name,"value":qd})
-
-
-    pts_pg.append({"player":name,"value":round(pts/g,2)})
-    reb_pg.append({"player":name,"value":round(reb/g,2)})
-    ast_pg.append({"player":name,"value":round(ast/g,2)})
-    stl_pg.append({"player":name,"value":round(stl/g,2)})
-    blk_pg.append({"player":name,"value":round(blk/g,2)})
-
-
-    if mins>0:
-
-        pts_p36.append({"player":name,"value":round((pts/mins)*36,2)})
-        reb_p36.append({"player":name,"value":round((reb/mins)*36,2)})
-        ast_p36.append({"player":name,"value":round((ast/mins)*36,2)})
-        stl_p36.append({"player":name,"value":round((stl/mins)*36,2)})
-        blk_p36.append({"player":name,"value":round((blk/mins)*36,2)})
-
-
-
-def top(lst):
-    return sorted(lst,key=lambda x:x["value"],reverse=True)[:TOP]
-
-
-output={
-
-"totals":{
-"points":top(pts_tot),
-"rebounds":top(reb_tot),
-"assists":top(ast_tot),
-"steals":top(stl_tot),
-"blocks":top(blk_tot),
-"triple_doubles":top(td_tot),
-"quadruple_doubles":top(qd_tot)
-},
-
-"per_game":{
-"points":top(pts_pg),
-"rebounds":top(reb_pg),
-"assists":top(ast_pg),
-"steals":top(stl_pg),
-"blocks":top(blk_pg)
-},
-
-"per_36":{
-"points":top(pts_p36),
-"rebounds":top(reb_p36),
-"assists":top(ast_p36),
-"steals":top(stl_p36),
-"blocks":top(blk_p36)
-}
-
-}
-
-
-output_file.write_text(json.dumps(output,indent=2))
-
-print("Stat leaders created successfully")
+print("NBA player database built successfully")
