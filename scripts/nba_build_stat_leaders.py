@@ -17,116 +17,109 @@ def slug(name):
 
 print("Building NBA player files...")
 
-for season_dir in DATA.iterdir():
+for game_file in DATA.rglob("*.json"):
 
-    if not season_dir.is_dir():
+    if "players" in str(game_file):
         continue
 
-    for game_file in season_dir.glob("*.json"):
+    if game_file.name in ["index.json", "games.json"]:
+        continue
 
-        if game_file.name in ["index.json", "games.json"]:
+    try:
+        game = json.loads(game_file.read_text())
+    except:
+        continue
+
+    if not isinstance(game, dict):
+        continue
+
+    home = game.get("home_team")
+    away = game.get("away_team")
+
+    for p in game.get("players", []):
+
+        name = p.get("player_name") or p.get("name") or p.get("player")
+
+        if not name:
             continue
 
-        try:
-            game = json.loads(game_file.read_text())
-        except:
+        key = slug(name)
+
+        if key not in players:
+            players[key] = {
+                "name": name,
+                "teams": {},
+                "games": []
+            }
+
+        team = p.get("team")
+
+        if not team:
             continue
 
-        if not isinstance(game, dict):
-            continue
+        opp = away if team == home else home
 
-        home = game.get("home_team")
-        away = game.get("away_team")
+        pts = p.get("points", 0)
+        reb = p.get("rebounds", 0)
+        ast = p.get("assists", 0)
 
-        for p in game.get("players", []):
+        stl = p.get("steals")
+        blk = p.get("blocks")
 
-            name = p.get("player_name") or p.get("name") or p.get("player")
+        if stl is None:
+            stl = 0
 
-            if not name:
-                continue
+        if blk is None:
+            blk = 0
 
-            key = slug(name)
+        mins = p.get("min") or p.get("minutes") or p.get("mp") or 0
 
-            if key not in players:
-                players[key] = {
-                    "name": name,
-                    "teams": {},
-                    "games": []
-                }
+        if isinstance(mins, str) and ":" in mins:
+            try:
+                m, s = mins.split(":")
+                mins = int(m) + int(s) / 60
+            except:
+                mins = 0
+        elif isinstance(mins, str):
+            try:
+                mins = float(mins)
+            except:
+                mins = 0
 
-            team = p.get("team")
+        players[key]["games"].append({
+            "season": game.get("season"),
+            "game_id": game.get("game_id"),
+            "date": game.get("date"),
+            "team": team,
+            "opp": opp,
+            "minutes": mins,
+            "pts": pts,
+            "reb": reb,
+            "ast": ast,
+            "stl": stl,
+            "blk": blk
+        })
 
-            if not team:
-                continue
+        if team not in players[key]["teams"]:
+            players[key]["teams"][team] = {
+                "games": 0,
+                "minutes": 0,
+                "pts": 0,
+                "reb": 0,
+                "ast": 0,
+                "stl": 0,
+                "blk": 0
+            }
 
-            opp = away if team == home else home
+        t = players[key]["teams"][team]
 
-            pts = p.get("points", 0)
-            reb = p.get("rebounds", 0)
-            ast = p.get("assists", 0)
-
-            # safely handle missing steals / blocks
-            stl = p.get("steals")
-            blk = p.get("blocks")
-
-            if stl is None:
-                stl = 0
-
-            if blk is None:
-                blk = 0
-
-            # minutes field may vary
-            mins = p.get("min") or p.get("minutes") or p.get("mp") or 0
-
-            # convert MM:SS format
-            if isinstance(mins, str) and ":" in mins:
-                try:
-                    m, s = mins.split(":")
-                    mins = int(m) + int(s) / 60
-                except:
-                    mins = 0
-            elif isinstance(mins, str):
-                try:
-                    mins = float(mins)
-                except:
-                    mins = 0
-
-            # add game log
-            players[key]["games"].append({
-                "season": game.get("season"),
-                "game_id": game.get("game_id"),
-                "date": game.get("date"),
-                "team": team,
-                "opp": opp,
-                "minutes": mins,
-                "pts": pts,
-                "reb": reb,
-                "ast": ast,
-                "stl": stl,
-                "blk": blk
-            })
-
-            # team totals
-            if team not in players[key]["teams"]:
-                players[key]["teams"][team] = {
-                    "games": 0,
-                    "minutes": 0,
-                    "pts": 0,
-                    "reb": 0,
-                    "ast": 0,
-                    "stl": 0,
-                    "blk": 0
-                }
-
-            t = players[key]["teams"][team]
-
-            t["games"] += 1
-            t["minutes"] += mins
-            t["pts"] += pts
-            t["reb"] += reb
-            t["ast"] += ast
-            t["stl"] += stl
-            t["blk"] += blk
+        t["games"] += 1
+        t["minutes"] += mins
+        t["pts"] += pts
+        t["reb"] += reb
+        t["ast"] += ast
+        t["stl"] += stl
+        t["blk"] += blk
 
 
 print("Writing player files...")
@@ -143,7 +136,6 @@ for key, data in players.items():
         "slug": key
     })
 
-# player search index
 (OUT / "index.json").write_text(json.dumps(index, indent=2))
 
 print("NBA player database built successfully")
