@@ -32,9 +32,7 @@ color:#0056d6;
 font-size:18px;
 }
 
-.navbar a:hover{
-text-decoration:underline;
-}
+.navbar a:hover{text-decoration:underline}
 
 /* PAGE */
 
@@ -89,16 +87,40 @@ font-size:14px;
 font-weight:700;
 }
 
-td{
-font-size:15px;
-}
-
 tr:nth-child(even){
 background:#f8faff;
 }
 
-tr:hover{
+.final-row{
+cursor:pointer;
+}
+
+.final-row:hover{
 background:#e9f0ff;
+}
+
+/* SERIES TABLE */
+
+.series{
+background:#f9fbff;
+}
+
+.series td{
+padding:0;
+}
+
+.series-table{
+width:100%;
+border-collapse:collapse;
+}
+
+.series-table td{
+padding:10px 12px;
+border-bottom:1px solid #eee;
+}
+
+.series-table tr:hover{
+background:#eef3ff;
 cursor:pointer;
 }
 
@@ -168,16 +190,12 @@ const data = await res.json();
 data.sort((a,b)=>b.season-a.season);
 
 const body = document.getElementById("finalsBody");
-
 body.innerHTML = "";
 
 for(const row of data){
 
 const tr = document.createElement("tr");
-
-tr.onclick = ()=>{
-location.href=`nba-season.html?season=${row.season}`;
-};
+tr.className="final-row";
 
 tr.innerHTML = `
 <td>${seasonLabel(row.season)}</td>
@@ -187,7 +205,67 @@ tr.innerHTML = `
 `;
 
 body.appendChild(tr);
+
+if(row.games){
+
+const seriesRow=document.createElement("tr");
+seriesRow.className="series";
+seriesRow.style.display="none";
+
+seriesRow.innerHTML=`
+<td colspan="4">
+<table class="series-table" id="series-${row.season}">
+<tr><td>Loading games…</td></tr>
+</table>
+</td>
+`;
+
+body.appendChild(seriesRow);
+
+tr.onclick=()=>toggleSeries(row,seriesRow);
+
 }
+
+}
+
+}
+
+async function toggleSeries(row,seriesRow){
+
+if(seriesRow.style.display==="table-row"){
+seriesRow.style.display="none";
+return;
+}
+
+seriesRow.style.display="table-row";
+
+const table = document.getElementById(`series-${row.season}`);
+
+if(table.dataset.loaded) return;
+
+table.innerHTML="";
+
+for(const id of row.games){
+
+const res = await fetch(`/data/nba/${row.season}/${id}.json`);
+const g = await res.json();
+
+const tr=document.createElement("tr");
+
+tr.onclick=()=>{
+location.href=`nba-game.html?season=${row.season}&game=${id}`;
+};
+
+tr.innerHTML=`
+<td>${g.date}</td>
+<td>${g.away_team} ${g.away_score} @ ${g.home_team} ${g.home_score}</td>
+`;
+
+table.appendChild(tr);
+
+}
+
+table.dataset.loaded=true;
 
 }
 
