@@ -53,8 +53,6 @@ margin:0;
 font-size:36px;
 }
 
-/* leaders */
-
 .leaders-card{
 background:#fff;
 border-radius:16px;
@@ -86,8 +84,6 @@ text-align:right;
 font-weight:700;
 }
 
-/* filters */
-
 .filter-box{
 background:var(--card);
 padding:16px;
@@ -106,8 +102,6 @@ border-radius:10px;
 font-size:14px;
 background:#fff;
 }
-
-/* table */
 
 .card{
 background:var(--card);
@@ -216,10 +210,10 @@ Type:
 
 <script>
 
-const teamRaw=new URLSearchParams(window.location.search).get("team")||"";
+const teamRaw = new URLSearchParams(window.location.search).get("team") || "";
 
-const PATH_SEASONS="data/nba/seasons.json";
-const PATH_LEADERS="data/nba/team-leaders.json";
+const PATH_SEASONS = "data/nba/seasons.json";
+const PATH_LEADERS = "data/nba/team-leaders.json";
 
 function norm(s){
 return (s||"").toLowerCase().replace(/[^a-z0-9]/g,"");
@@ -228,6 +222,10 @@ return (s||"").toLowerCase().replace(/[^a-z0-9]/g,"");
 function seasonLabel(start){
 const next=String((Number(start)+1)%100).padStart(2,"0");
 return `${start}-${next}`;
+}
+
+function seasonFile(season){
+return String(season).slice(0,4);
 }
 
 function typeBucket(t){
@@ -284,12 +282,14 @@ elBody.appendChild(tr);
 
 async function loadSeason(season){
 
-currentSeason=Number(season);
+currentSeason=seasonFile(season);
 allGames=[];
 
 elLoading.style.display="block";
 
-const data=await fetch(`data/nba/${season}.json`).then(r=>r.json());
+try{
+
+const data=await fetch(`data/nba/${currentSeason}.json`).then(r=>r.json());
 
 const games=data.games||[];
 
@@ -325,6 +325,13 @@ render();
 
 elLoading.style.display="none";
 
+}catch{
+
+elLoading.textContent="Unable to load games.";
+elBody.innerHTML="<tr><td colspan='6'>Unable to load season data.</td></tr>";
+
+}
+
 }
 
 async function loadLeaders(){
@@ -350,7 +357,7 @@ elLeaders.innerHTML=`
 <tr><td>Blocks</td><td>${row.blocks_player}</td><td>${row.blocks}</td></tr>
 `;
 
-}catch(err){
+}catch{
 
 elLeaders.innerHTML="<tr><td colspan='3'>Leader data unavailable</td></tr>";
 
@@ -364,7 +371,9 @@ elTeamName.textContent=teamRaw;
 
 loadLeaders();
 
-const seasons=await fetch(PATH_SEASONS).then(r=>r.json());
+let seasons=await fetch(PATH_SEASONS).then(r=>r.json());
+
+if(seasons.seasons)seasons=seasons.seasons;
 
 seasons.sort((a,b)=>b-a);
 
