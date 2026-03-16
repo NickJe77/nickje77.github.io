@@ -91,7 +91,7 @@ flex-wrap:wrap;
 align-items:center;
 }
 
-select,input{
+select{
 padding:8px 10px;
 border:1px solid #cfd6e3;
 border-radius:10px;
@@ -206,43 +206,43 @@ Type:
 
 <script>
 
-const teamRaw=new URLSearchParams(window.location.search).get("team")||"";
+const teamRaw = new URLSearchParams(window.location.search).get("team") || "";
 
-const PATH_SEASONS="docs/data/nba/seasons.json";
-const PATH_LEADERS="docs/data/nba/team-leaders.json";
+const PATH_SEASONS = "docs/data/nba/seasons.json";
+const PATH_LEADERS = "docs/data/nba/team-leaders.json";
+
+const elTeamName = document.getElementById("teamName");
+const elSeason = document.getElementById("seasonSelect");
+const elType = document.getElementById("typeSelect");
+const elBody = document.getElementById("gamesBody");
+const elLoading = document.getElementById("loadingBox");
+const elLeaders = document.getElementById("leadersBody");
+
+let allGames = [];
+let currentSeason = null;
 
 function norm(s){
-return (s||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+return (s || "").toLowerCase().replace(/[^a-z0-9]/g,"");
 }
 
 function seasonLabel(start){
-const next=String((Number(start)+1)%100).padStart(2,"0");
+const next = String((Number(start)+1)%100).padStart(2,"0");
 return `${start}-${next}`;
 }
 
 function typeBucket(t){
-if(!t)return"regular";
+if(!t) return "regular";
 const s=t.toLowerCase();
-if(s.includes("regular"))return"regular";
-return"playoffs";
+if(s.includes("regular")) return "regular";
+return "playoffs";
 }
-
-const elTeamName=document.getElementById("teamName");
-const elSeason=document.getElementById("seasonSelect");
-const elType=document.getElementById("typeSelect");
-const elBody=document.getElementById("gamesBody");
-const elLoading=document.getElementById("loadingBox");
-const elLeaders=document.getElementById("leadersBody");
-
-let allGames=[];
-let currentSeason=null;
 
 function render(){
 
-let filtered=allGames;
+let filtered = allGames;
 
-if(elType.value!=="all"){
-filtered=filtered.filter(g=>g.type===elType.value);
+if(elType.value !== "all"){
+filtered = filtered.filter(g => g.type === elType.value);
 }
 
 filtered.sort((a,b)=>(b.date||"").localeCompare(a.date||""));
@@ -274,30 +274,28 @@ elBody.appendChild(tr);
 
 async function loadSeason(season){
 
-currentSeason=Number(season);
-allGames=[];
+currentSeason = Number(season);
+allGames = [];
 
-elLoading.style.display="block";
+try{
 
-const data=await fetch(`docs/data/nba/seasons/${season}.json`).then(r=>r.json());
+const data = await fetch(`docs/data/nba/seasons/${season}.json`).then(r=>r.json());
 
-const games=data.games||[];
+const games = data.games || [];
 
-const teamKey=norm(teamRaw);
+const teamKey = norm(teamRaw);
 
 for(const g of games){
 
-if((g.game_type||"").toLowerCase().includes("pre"))continue;
+const home = norm(g.home_team);
+const away = norm(g.away_team);
 
-const home=norm(g.home_team);
-const away=norm(g.away_team);
+if(home !== teamKey && away !== teamKey) continue;
 
-if(home!==teamKey && away!==teamKey)continue;
+const isHome = home === teamKey;
 
-const isHome=home===teamKey;
-
-const teamScore=Number(isHome?g.home_score:g.away_score);
-const oppScore=Number(isHome?g.away_score:g.home_score);
+const teamScore = Number(isHome ? g.home_score : g.away_score);
+const oppScore = Number(isHome ? g.away_score : g.home_score);
 
 allGames.push({
 id:g.game_id,
@@ -315,15 +313,24 @@ render();
 
 elLoading.style.display="none";
 
+}catch{
+
+elLoading.textContent="Unable to load games.";
+elBody.innerHTML="<tr><td colspan='6'>Unable to load season data.</td></tr>";
+
+}
+
 }
 
 async function loadLeaders(){
 
-const data=await fetch(PATH_LEADERS).then(r=>r.json());
+try{
 
-const teamKey=norm(teamRaw);
+const data = await fetch(PATH_LEADERS).then(r=>r.json());
 
-const row=data.find(t=>norm(t.team)===teamKey);
+const teamKey = norm(teamRaw);
+
+const row = data.find(t => norm(t.team) === teamKey);
 
 if(!row){
 elLeaders.innerHTML="<tr><td colspan='3'>No data</td></tr>";
@@ -338,15 +345,23 @@ elLeaders.innerHTML=`
 <tr><td>Blocks</td><td>${row.blocks_player}</td><td>${row.blocks}</td></tr>
 `;
 
+}catch{
+
+elLeaders.innerHTML="<tr><td colspan='3'>Leader data unavailable</td></tr>";
+
+}
+
 }
 
 async function init(){
 
-elTeamName.textContent=teamRaw;
+elTeamName.textContent = teamRaw;
 
 loadLeaders();
 
-const seasons=await fetch(PATH_SEASONS).then(r=>r.json());
+let seasons = await fetch(PATH_SEASONS).then(r=>r.json());
+
+if(seasons.seasons) seasons = seasons.seasons;
 
 seasons.sort((a,b)=>b-a);
 
