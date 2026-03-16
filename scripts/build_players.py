@@ -1,5 +1,6 @@
 import json
 import re
+import unicodedata
 from pathlib import Path
 
 DATA = Path("docs/data/nba")
@@ -10,10 +11,17 @@ OUT.mkdir(exist_ok=True)
 players = {}
 
 def slug(name):
-    s = name.lower()
+
+    # Remove accents (Dončić → Doncic)
+    s = unicodedata.normalize("NFD", name)
+    s = s.encode("ascii", "ignore").decode("utf-8")
+
+    s = s.lower()
     s = re.sub(r"[^\w\s-]", "", s)
     s = re.sub(r"\s+", "-", s)
+
     return s
+
 
 def num(v):
     try:
@@ -23,6 +31,7 @@ def num(v):
             return float(v)
         except:
             return 0
+
 
 print("Building NBA player files...")
 
@@ -130,7 +139,7 @@ for season_dir in DATA.iterdir():
 print("Sorting game logs...")
 
 for player in players.values():
-    player["games"].sort(key=lambda g: g.get("date",""))
+    player["games"].sort(key=lambda g: g.get("date", ""))
 
 
 print("Writing player files...")
