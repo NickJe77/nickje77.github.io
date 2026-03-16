@@ -7,36 +7,119 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
-/* YOUR CSS UNCHANGED */
-body{
-  font-family:Inter,system-ui,Arial,sans-serif;
-  margin:0;
-  background:#f4f6f8;
-  color:#111;
-}
+body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#f4f6f8;color:#111;}
+
 .navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px 0;
-  border-bottom:1px solid #ddd;
-  background:#fff;
-  font-weight:600;
+display:flex;
+justify-content:center;
+gap:22px;
+padding:16px 0;
+border-bottom:1px solid #ddd;
+background:#fff;
+font-weight:600;
 }
+
 .navbar a{
-  color:#0056d6;
-  text-decoration:none;
-  font-size:18px;
+color:#0056d6;
+text-decoration:none;
+font-size:18px;
 }
-.navbar a:hover{ text-decoration:underline; }
+
 .page-wrap{
-  max-width:1200px;
-  margin:0 auto;
-  padding:28px 20px 60px;
+max-width:1200px;
+margin:0 auto;
+padding:28px 20px 60px;
 }
-/* rest of CSS unchanged */
+
+.hero{
+background:linear-gradient(90deg,#1D428A,#C8102E);
+color:#fff;
+border-radius:18px;
+padding:28px 30px;
+margin-bottom:24px;
+}
+
+#title{margin:0;font-size:42px;font-weight:800;}
+
+.search-box{
+padding:12px 14px;
+border-radius:10px;
+border:none;
+font-size:14px;
+width:280px;
+}
+
+.section-card{
+background:#fff;
+border-radius:18px;
+padding:22px;
+margin-bottom:24px;
+}
+
+.stats-grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+gap:14px;
+}
+
+.stat-box{
+background:#eef3ff;
+border-radius:14px;
+padding:16px;
+text-align:center;
+}
+
+.stat-box span{
+display:block;
+font-size:28px;
+font-weight:800;
+color:#0b3ea9;
+}
+
+.filters-bar{
+display:flex;
+gap:18px;
+margin-bottom:18px;
+}
+
+.table-wrap{
+background:#fff;
+border-radius:18px;
+overflow:hidden;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+font-size:14px;
+}
+
+th,td{
+padding:12px 10px;
+border-bottom:1px solid #eee;
+text-align:center;
+}
+
+th{
+background:#eef3ff;
+color:#003a99;
+font-weight:800;
+}
+
+tbody tr:nth-child(even){background:#f8faff;}
+tbody tr:hover{background:#eaf2ff;}
+
+.clickable-row{cursor:pointer;}
+
+.empty-state{
+padding:24px;
+text-align:center;
+color:#666;
+font-weight:600;
+}
 </style>
 </head>
+
 <body>
 
 <div class="navbar">
@@ -47,60 +130,42 @@ body{
 
 <div class="page-wrap">
 
-<!-- HERO -->
 <div class="hero">
-<div class="hero-top">
-<div class="hero-title-wrap">
-<div class="eyebrow">NBA Player Career</div>
 <h1 id="title">Player</h1>
-<div class="hero-sub" id="heroSub">Career game log, totals, averages and highs</div>
-<div id="teamStripe" class="team-stripe"></div>
-</div>
+<div>Career game log, totals, averages and highs</div>
 
-<div class="hero-search">
 <input id="playerSearch" list="playerList" class="search-box" placeholder="Search player...">
 <datalist id="playerList"></datalist>
 </div>
-</div>
-</div>
 
 <div class="section-card">
-<div class="section-title">Career Summary</div>
 <div class="stats-grid" id="careerTotals"></div>
-<div class="stats-grid" id="careerAverages"></div>
-<div class="stats-grid" id="careerHighs"></div>
 </div>
 
 <div class="section-card">
+
 <div class="filters-bar">
 
-<div class="filter-group">
-<label for="teamFilter">Team:</label>
+<div>
+<label>Team:</label>
 <select id="teamFilter">
 <option value="ALL">All teams</option>
 </select>
 </div>
 
-<div class="filter-group">
-<label for="oppFilter">Opposition:</label>
+<div>
+<label>Opposition:</label>
 <select id="oppFilter">
 <option value="ALL">All teams</option>
 </select>
 </div>
 
-<div class="name-note" id="filterNote">Filtered breakdown</div>
-
 </div>
 
-<div class="section-title">Filtered Results</div>
-<div class="stats-grid" id="oppTotals"></div>
-<div class="stats-grid" id="oppAverages"></div>
-<div class="stats-grid" id="oppHighs"></div>
 </div>
 
 <div class="table-wrap">
-<div class="table-header">Game Log</div>
-<div class="table-scroll">
+
 <table>
 <thead>
 <tr>
@@ -115,17 +180,31 @@ body{
 <th>BLK</th>
 </tr>
 </thead>
+
 <tbody id="gamesBody"></tbody>
+
 </table>
+
+<div id="emptyState" class="empty-state" style="display:none;">
+No games found.
 </div>
-<div id="emptyState" class="empty-state" style="display:none;">No games found.</div>
+
 </div>
 
 </div>
 
 <script>
 
-/* ORIGINAL FUNCTIONS RESTORED */
+const params = new URLSearchParams(window.location.search);
+const playerParam = params.get("player");
+
+const titleEl = document.getElementById("title");
+const gamesBody = document.getElementById("gamesBody");
+const teamFilter = document.getElementById("teamFilter");
+const oppFilter = document.getElementById("oppFilter");
+const emptyState = document.getElementById("emptyState");
+
+let rows = [];
 
 function parseNum(v){
 const n = Number(v);
@@ -136,31 +215,87 @@ function cleanDate(d){
 return (d || "").split("T")[0];
 }
 
+function slug(name){
+return name.toLowerCase().replace(/[^\w\s-]/g,"").replace(/\s+/g,"-");
+}
+
 function normaliseDateValue(r){
 return cleanDate(r.date || r.game_date || "");
 }
 
-/* FIXED SORT — ONLY CHANGE */
-
 function sortRowsLatestFirst(data){
 return [...data].sort((a,b)=>{
-
 const da = new Date(normaliseDateValue(a));
 const db = new Date(normaliseDateValue(b));
-
-if(!isNaN(da) && !isNaN(db)){
 return db - da;
-}
-
-const sa = parseNum(a.season);
-const sb = parseNum(b.season);
-
-return sb - sa;
-
 });
 }
 
-/* rest of your script works exactly the same */
+function getFilteredRows(){
+
+let filtered=[...rows];
+
+if(teamFilter.value!=="ALL")
+filtered=filtered.filter(r=>r.team===teamFilter.value);
+
+if(oppFilter.value!=="ALL")
+filtered=filtered.filter(r=>r.opp===oppFilter.value);
+
+return filtered;
+}
+
+function renderGames(){
+
+gamesBody.innerHTML="";
+
+const filtered=sortRowsLatestFirst(getFilteredRows());
+
+emptyState.style.display = filtered.length ? "none" : "block";
+
+filtered.forEach(r=>{
+
+const row=document.createElement("tr");
+
+row.innerHTML=`
+<td>${r.season||""}</td>
+<td>${cleanDate(r.date)}</td>
+<td>${r.team}</td>
+<td>${r.opp}</td>
+<td>${parseNum(r.pts)}</td>
+<td>${parseNum(r.reb)}</td>
+<td>${parseNum(r.ast)}</td>
+<td>${parseNum(r.stl)}</td>
+<td>${parseNum(r.blk)}</td>
+`;
+
+gamesBody.appendChild(row);
+
+});
+
+}
+
+async function loadPlayer(){
+
+if(!playerParam) return;
+
+const name=decodeURIComponent(playerParam);
+
+titleEl.textContent=name;
+
+const res=await fetch(`data/nba/players/${slug(name)}.json`);
+
+const data=await res.json();
+
+rows=data.games || [];
+
+renderGames();
+
+}
+
+teamFilter.addEventListener("change",renderGames);
+oppFilter.addEventListener("change",renderGames);
+
+loadPlayer();
 
 </script>
 
