@@ -247,6 +247,7 @@ tr:hover{
 </div>
 
 <script>
+
 const teamRaw = new URLSearchParams(window.location.search).get("team") || "";
 const PATH_SEASONS = "/data/nba/seasons.json";
 const PATH_LEADERS = "/data/nba/team-leaders.json";
@@ -256,13 +257,19 @@ function norm(s){
 }
 
 function seasonLabel(start){
-  const next = String((Number(start)+1)%100).padStart(2,"0");
-  return `${start}-${next}`;
+  const year = Number(String(start).match(/\d{4}/)?.[0] || start);
+  const next = String((year + 1) % 100).padStart(2,"0");
+  return `${year}-${next}`;
+}
+
+function seasonFileKey(season){
+  const match = String(season).match(/\d{4}/);
+  return match ? match[0] : String(season);
 }
 
 function typeBucket(t){
   if(!t) return "regular";
-  const s = t.toLowerCase();
+  const s = String(t).toLowerCase();
   if(s.includes("regular")) return "regular";
   return "playoffs";
 }
@@ -281,17 +288,56 @@ let allGames = [];
 let currentSeason = null;
 let allTeams = new Set();
 
+async function loadLeaders(){
+
+  try{
+
+    const data = await fetch(PATH_LEADERS).then(r=>r.json());
+    const teamKey = norm(teamRaw);
+
+    const row = data.find(t =>
+      norm(t.team) === teamKey ||
+      norm(t.team).includes(teamKey) ||
+      teamKey.includes(norm(t.team))
+    );
+
+    if(!row){
+      elLeaders.innerHTML = "<tr><td colspan='3'>No data</td></tr>";
+      return;
+    }
+
+    elLeaders.innerHTML = `
+<tr><td>Points</td><td>${row.points_player || "-"}</td><td>${row.points ?? "-"}</td></tr>
+<tr><td>Rebounds</td><td>${row.rebounds_player || "-"}</td><td>${row.rebounds ?? "-"}</td></tr>
+<tr><td>Assists</td><td>${row.assists_player || "-"}</td><td>${row.assists ?? "-"}</td></tr>
+<tr><td>Steals</td><td>${row.steals_player || "-"}</td><td>${row.steals ?? "-"}</td></tr>
+<tr><td>Blocks</td><td>${row.blocks_player || "-"}</td><td>${row.blocks ?? "-"}</td></tr>
+`;
+
+  }catch(err){
+
+    elLeaders.innerHTML = "<tr><td colspan='3'>Leader data unavailable</td></tr>";
+
+  }
+
+}
+
 function render(){
 
-  let filtered = allGames;
+  let filtered = allGames.slice();
 
   if(elType.value !== "all"){
     filtered = filtered.filter(g => g.type === elType.value);
   }
 
-  filtered.sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  filtered.sort((a,b)=>(b.date || "").localeCompare(a.date || ""));
 
   elBody.innerHTML = "";
+
+  if(!filtered.length){
+    elBody.innerHTML = "<tr><td colspan='6'>No games found.</td></tr>";
+    return;
+  }
 
   for(const g of filtered){
 
@@ -303,12 +349,12 @@ function render(){
     };
 
     tr.innerHTML = `
-      <td>${g.date}</td>
+      <td>${g.date || ""}</td>
       <td>${seasonLabel(currentSeason)}</td>
-      <td>${g.typeLabel}</td>
-      <td>${g.opponent}</td>
-      <td>${g.result}</td>
-      <td>${g.score}</td>`;
+      <td>${g.typeLabel || ""}</td>
+      <td>${g.opponent || ""}</td>
+      <td>${g.result || ""}</td>
+      <td>${g.score || ""}</td>`;
 
     elBody.appendChild(tr);
   }
@@ -317,60 +363,57 @@ function render(){
 
 async function loadSeason(season){
 
-  currentSeason = Number(season);
+  currentSeason = seasonFileKey(season);
   allGames = [];
 
   elLoading.style.display = "block";
+  elLoading.textContent = "Loading games…";
 
-  const indexRaw = await fetch(`/data/nba/${season}/index.json`).then(r=>r.json());
+  try{
 
-  const gameIds = indexRaw.games || [];
-  const teamKey = norm(teamRaw);
+    const data = await fetch(`/data/nba/${currentSeason}.json`).then(r=>r.json());
 
-  const games = await Promise.all(
-    gameIds.map(id =>
-      fetch(`/data/nba/${season}/${id}.json`)
-        .then(r=>r.json())
-        .catch(()=>null)
-    )
-  );
+    const games = data.games || [];
+    const teamKey = norm(teamRaw);
 
-  for(const g of games){
+    for(const g of games){
 
-    if(!g) continue;
+      if((g.game_type || "").toLowerCase().includes("pre")) continue;
 
-    if((g.game_type || "").toLowerCase().includes("pre")) continue;
+      const home = norm(g.home_team);
+      const away = norm(g.away_team);
 
-    allTeams.add(g.home_team);
-    allTeams.add(g.away_team);
+      if(home !== teamKey && away !== teamKey) continue;
 
-    const home = norm(g.home_team);
-    const away = norm(g.away_team);
+      const isHome = home === teamKey;
 
-    if(home !== teamKey && away !== teamKey) continue;
+      const teamScore = Number(isHome ? g.home_score : g.away_score);
+      const oppScore = Number(isHome ? g.away_score : g.home_score);
 
-    const isHome = home === teamKey;
+      allTeams.add(g.home_team);
+      allTeams.add(g.away_team);
 
-    const teamScore = Number(isHome ? g.home_score : g.away_score);
-    const oppScore = Number(isHome ? g.away_score : g.home_score);
+      allGames.push({
+        id: g.game_id,
+        date: g.date,
+        type: typeBucket(g.game_type),
+        typeLabel: g.game_type,
+        opponent: isHome ? g.away_team : g.home_team,
+        result: teamScore > oppScore ? "W" : "L",
+        score: `${teamScore} - ${oppScore}`
+      });
 
-    allGames.push({
-      id:g.game_id,
-      date:g.date,
-      type:typeBucket(g.game_type),
-      typeLabel:g.game_type,
-      opponent:isHome ? g.away_team : g.home_team,
-      result:teamScore > oppScore ? "W" : "L",
-      score:`${teamScore} - ${oppScore}`,
-      teamScore,
-      oppScore
-    });
+    }
+
+    render();
+    elLoading.style.display = "none";
+
+  }catch(err){
+
+    elLoading.textContent = "Unable to load games.";
+    elBody.innerHTML = "<tr><td colspan='6'>Unable to load season data.</td></tr>";
 
   }
-
-  render();
-
-  elLoading.style.display = "none";
 
 }
 
@@ -378,27 +421,36 @@ async function init(){
 
   elTeamName.textContent = teamRaw;
 
-  const seasons = await fetch(PATH_SEASONS).then(r=>r.json());
+  await loadLeaders();
 
-  seasons.sort((a,b)=>b-a);
+  let seasons = await fetch(PATH_SEASONS).then(r=>r.json());
+
+  if(Array.isArray(seasons?.seasons)) seasons = seasons.seasons;
+  if(!Array.isArray(seasons)) seasons = [];
+
+  seasons.sort((a,b)=>{
+    const aKey = Number(seasonFileKey(a));
+    const bKey = Number(seasonFileKey(b));
+    return bKey - aKey;
+  });
 
   for(const s of seasons){
 
     const opt = document.createElement("option");
-
     opt.value = s;
     opt.textContent = seasonLabel(s);
-
     elSeason.appendChild(opt);
 
   }
 
   elSeason.addEventListener("change",()=>loadSeason(elSeason.value));
-
   elType.addEventListener("change",render);
 
   if(seasons.length){
-    loadSeason(seasons[0]);
+    await loadSeason(seasons[0]);
+  }else{
+    elLoading.textContent = "No seasons found.";
+    elBody.innerHTML = "<tr><td colspan='6'>No seasons found.</td></tr>";
   }
 
 }
