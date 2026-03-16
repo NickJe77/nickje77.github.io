@@ -53,11 +53,17 @@ margin:0;
 font-size:36px;
 }
 
+/* leaders */
+
 .leaders-card{
 background:#fff;
 border-radius:16px;
 padding:18px;
 margin-bottom:20px;
+}
+
+.leaders-card h3{
+margin:0 0 12px;
 }
 
 .leaders-table{
@@ -80,6 +86,8 @@ text-align:right;
 font-weight:700;
 }
 
+/* filters */
+
 .filter-box{
 background:var(--card);
 padding:16px;
@@ -91,13 +99,15 @@ flex-wrap:wrap;
 align-items:center;
 }
 
-select{
+select,input{
 padding:8px 10px;
 border:1px solid #cfd6e3;
 border-radius:10px;
 font-size:14px;
 background:#fff;
 }
+
+/* table */
 
 .card{
 background:var(--card);
@@ -211,16 +221,6 @@ const teamRaw=new URLSearchParams(window.location.search).get("team")||"";
 const PATH_SEASONS="data/nba/seasons.json";
 const PATH_LEADERS="data/nba/team-leaders.json";
 
-const elTeamName=document.getElementById("teamName");
-const elSeason=document.getElementById("seasonSelect");
-const elType=document.getElementById("typeSelect");
-const elBody=document.getElementById("gamesBody");
-const elLoading=document.getElementById("loadingBox");
-const elLeaders=document.getElementById("leadersBody");
-
-let allGames=[];
-let currentSeason=null;
-
 function norm(s){
 return (s||"").toLowerCase().replace(/[^a-z0-9]/g,"");
 }
@@ -236,6 +236,16 @@ const s=t.toLowerCase();
 if(s.includes("regular"))return"regular";
 return"playoffs";
 }
+
+const elTeamName=document.getElementById("teamName");
+const elSeason=document.getElementById("seasonSelect");
+const elType=document.getElementById("typeSelect");
+const elBody=document.getElementById("gamesBody");
+const elLoading=document.getElementById("loadingBox");
+const elLeaders=document.getElementById("leadersBody");
+
+let allGames=[];
+let currentSeason=null;
 
 function render(){
 
@@ -277,7 +287,7 @@ async function loadSeason(season){
 currentSeason=Number(season);
 allGames=[];
 
-try{
+elLoading.style.display="block";
 
 const data=await fetch(`data/nba/${season}.json`).then(r=>r.json());
 
@@ -286,6 +296,8 @@ const games=data.games||[];
 const teamKey=norm(teamRaw);
 
 for(const g of games){
+
+if((g.game_type||"").toLowerCase().includes("pre"))continue;
 
 const home=norm(g.home_team);
 const away=norm(g.away_team);
@@ -313,13 +325,6 @@ render();
 
 elLoading.style.display="none";
 
-}catch{
-
-elLoading.textContent="Unable to load games.";
-elBody.innerHTML="<tr><td colspan='6'>Unable to load season data.</td></tr>";
-
-}
-
 }
 
 async function loadLeaders(){
@@ -345,7 +350,7 @@ elLeaders.innerHTML=`
 <tr><td>Blocks</td><td>${row.blocks_player}</td><td>${row.blocks}</td></tr>
 `;
 
-}catch{
+}catch(err){
 
 elLeaders.innerHTML="<tr><td colspan='3'>Leader data unavailable</td></tr>";
 
@@ -359,9 +364,7 @@ elTeamName.textContent=teamRaw;
 
 loadLeaders();
 
-let seasons=await fetch(PATH_SEASONS).then(r=>r.json());
-
-if(seasons.seasons)seasons=seasons.seasons;
+const seasons=await fetch(PATH_SEASONS).then(r=>r.json());
 
 seasons.sort((a,b)=>b-a);
 
