@@ -7,7 +7,6 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
-/* CSS IDENTICAL TO YOUR ORIGINAL FILE */
 body{
   font-family:Inter,system-ui,Arial,sans-serif;
   margin:0;
@@ -47,48 +46,16 @@ body{
   border-radius:18px;
   padding:28px 30px;
   margin-bottom:24px;
-  box-shadow:0 8px 24px rgba(0,0,0,.12);
-}
-
-.hero-top{
-  display:flex;
-  justify-content:space-between;
-  align-items:flex-start;
-  gap:18px;
-  flex-wrap:wrap;
-}
-
-.hero-title-wrap{
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-}
-
-.eyebrow{
-  font-size:12px;
-  font-weight:800;
-  letter-spacing:1.2px;
-  text-transform:uppercase;
-  opacity:.9;
 }
 
 #title{
   margin:0;
   font-size:42px;
-  line-height:1.05;
   font-weight:800;
 }
 
-.hero-sub{
-  font-size:15px;
-  opacity:.95;
-}
-
 .hero-search{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  flex-wrap:wrap;
+  margin-top:14px;
 }
 
 .search-box{
@@ -97,16 +64,6 @@ body{
   border:none;
   font-size:14px;
   width:280px;
-  outline:none;
-}
-
-.team-stripe{
-  height:18px;
-  width:180px;
-  border-radius:999px;
-  border:1px solid rgba(255,255,255,.35);
-  background:rgba(255,255,255,.25);
-  margin-top:6px;
 }
 
 .section-card{
@@ -130,7 +87,6 @@ body{
   display:grid;
   grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
   gap:14px;
-  margin-bottom:14px;
 }
 
 .stat-box{
@@ -143,76 +99,26 @@ body{
 .stat-box span{
   display:block;
   font-size:28px;
-  line-height:1;
   font-weight:800;
-  margin-bottom:6px;
   color:#0b3ea9;
-}
-
-.stat-box small{
-  color:#666;
-  font-size:12px;
-  display:block;
-  margin-top:4px;
-  line-height:1.35;
-}
-
-.filters-bar{
-  display:flex;
-  flex-wrap:wrap;
-  gap:12px 18px;
-  align-items:center;
-  margin-bottom:18px;
-}
-
-.filter-group{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  font-weight:700;
-  color:#003a99;
-}
-
-select{
-  padding:10px 12px;
-  border-radius:10px;
-  border:1px solid #ccc;
-  font-size:14px;
-  background:#fff;
 }
 
 .table-wrap{
   background:#fff;
   border-radius:18px;
-  box-shadow:0 4px 12px rgba(0,0,0,.05);
   overflow:hidden;
-}
-
-.table-header{
-  padding:20px 22px 10px;
-  font-size:13px;
-  font-weight:800;
-  letter-spacing:1px;
-  color:#666;
-  text-transform:uppercase;
-}
-
-.table-scroll{
-  overflow-x:auto;
 }
 
 table{
   width:100%;
   border-collapse:collapse;
   font-size:14px;
-  min-width:900px;
 }
 
 th,td{
   padding:12px 10px;
   border-bottom:1px solid #eee;
   text-align:center;
-  white-space:nowrap;
 }
 
 th{
@@ -232,27 +138,69 @@ tbody tr:hover{
 .clickable-row{
   cursor:pointer;
 }
-
-.name-note{
-  color:#666;
-  font-size:14px;
-}
-
-.empty-state{
-  padding:24px;
-  text-align:center;
-  color:#666;
-  font-weight:600;
-}
 </style>
 </head>
 <body>
 
-<!-- ALL HTML CONTENT UNCHANGED -->
+<div class="navbar">
+<a href="nba.html">NBA</a>
+<a href="nba-seasons.html">Seasons</a>
+<a href="nba-teams.html">Teams</a>
+<a href="nba-players.html">Players</a>
+</div>
+
+<div class="page-wrap">
+
+<div class="hero">
+<h1 id="title">NBA Player</h1>
+
+<div class="hero-search">
+<input id="playerSearch" class="search-box" placeholder="Search player...">
+</div>
+</div>
+
+<div class="section-card">
+<div class="section-title">Career Totals</div>
+
+<div class="stats-grid" id="careerStats"></div>
+</div>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Date</th>
+<th>Team</th>
+<th>Opp</th>
+<th>PTS</th>
+<th>REB</th>
+<th>AST</th>
+<th>STL</th>
+<th>BLK</th>
+<th>MIN</th>
+</tr>
+</thead>
+
+<tbody id="gamesTable"></tbody>
+
+</table>
+</div>
+
+</div>
 
 <script>
 
-/* ONLY CHANGE: FIX FILTER */
+const params = new URLSearchParams(location.search)
+const player = params.get("player")
+
+if(!player){
+document.getElementById("title").innerText="Player not found"
+throw "No player"
+}
+
+document.getElementById("title").innerText = player
+
+let games = []
 
 function isRegularOrPostseason(r){
 
@@ -280,6 +228,90 @@ function isRegularOrPostseason(r){
 
   return true;
 }
+
+async function loadPlayer(){
+
+const res = await fetch(`docs/data/nba/players/${player}.json`)
+const data = await res.json()
+
+games = data.games.filter(isRegularOrPostseason)
+
+renderStats()
+renderTable()
+
+}
+
+function renderStats(){
+
+let pts=0,reb=0,ast=0,stl=0,blk=0
+
+games.forEach(g=>{
+pts+=g.pts||0
+reb+=g.reb||0
+ast+=g.ast||0
+stl+=g.stl||0
+blk+=g.blk||0
+})
+
+const stats=[
+["Points",pts],
+["Rebounds",reb],
+["Assists",ast],
+["Steals",stl],
+["Blocks",blk]
+]
+
+const grid=document.getElementById("careerStats")
+
+grid.innerHTML=""
+
+stats.forEach(s=>{
+grid.innerHTML+=`
+<div class="stat-box">
+<span>${s[1]}</span>
+<small>${s[0]}</small>
+</div>
+`
+})
+
+}
+
+function renderTable(){
+
+const body=document.getElementById("gamesTable")
+
+body.innerHTML=""
+
+games.forEach(g=>{
+
+const tr=document.createElement("tr")
+tr.className="clickable-row"
+
+tr.onclick=()=>{
+
+location.href=`nba-game.html?game=${g.game_id}`
+
+}
+
+tr.innerHTML=`
+<td>${g.date||""}</td>
+<td>${g.team||""}</td>
+<td>${g.opp||""}</td>
+<td>${g.pts||0}</td>
+<td>${g.reb||0}</td>
+<td>${g.ast||0}</td>
+<td>${g.stl||0}</td>
+<td>${g.blk||0}</td>
+<td>${g.min||0}</td>
+`
+
+body.appendChild(tr)
+
+})
+
+}
+
+loadPlayer()
 
 </script>
 
