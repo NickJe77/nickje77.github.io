@@ -53,6 +53,8 @@ margin:0;
 font-size:36px;
 }
 
+/* leaders */
+
 .leaders-card{
 background:#fff;
 border-radius:16px;
@@ -84,6 +86,8 @@ text-align:right;
 font-weight:700;
 }
 
+/* filters */
+
 .filter-box{
 background:var(--card);
 padding:16px;
@@ -102,6 +106,8 @@ border-radius:10px;
 font-size:14px;
 background:#fff;
 }
+
+/* table */
 
 .card{
 background:var(--card);
@@ -210,175 +216,341 @@ Type:
 
 <script>
 
-const teamRaw=new URLSearchParams(window.location.search).get("team")||"";
+const teamRaw = new URLSearchParams(window.location.search).get("team") || "";
 
-/* FIXED PATHS */
-const PATH_SEASONS="docs/data/nba/seasons.json";
-const PATH_LEADERS="docs/data/nba/team-leaders.json";
+const PATH_SEASONS = "data/nba/seasons.json";
+const PATH_LEADERS = "data/nba/team-leaders.json";
 
 function norm(s){
-return (s||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+return (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 function seasonLabel(start){
-const next=String((Number(start)+1)%100).padStart(2,"0");
+const next = String((Number(start) + 1) % 100).padStart(2, "0");
 return `${start}-${next}`;
 }
 
 function typeBucket(t){
-if(!t)return"regular";
-const s=t.toLowerCase();
-if(s.includes("regular"))return"regular";
-return"playoffs";
+if(!t) return "regular";
+const s = String(t).toLowerCase();
+if(s.includes("regular")) return "regular";
+return "playoffs";
 }
 
-const elTeamName=document.getElementById("teamName");
-const elSeason=document.getElementById("seasonSelect");
-const elType=document.getElementById("typeSelect");
-const elBody=document.getElementById("gamesBody");
-const elLoading=document.getElementById("loadingBox");
-const elLeaders=document.getElementById("leadersBody");
+function unique(arr){
+return [...new Set(arr)];
+}
 
-let allGames=[];
-let currentSeason=null;
+function teamVariants(name){
+const raw = String(name || "").trim();
+const variants = new Set();
+const add = v => { if(v) variants.add(norm(v)); };
+
+add(raw);
+
+const replacements = [
+[/^la lakers$/i, "Los Angeles Lakers"],
+[/^los angeles lakers$/i, "LA Lakers"],
+[/^la clippers$/i, "Los Angeles Clippers"],
+[/^los angeles clippers$/i, "LA Clippers"],
+[/^ny knicks$/i, "New York Knicks"],
+[/^gs warriors$/i, "Golden State Warriors"],
+[/^okc thunder$/i, "Oklahoma City Thunder"],
+[/^no pelicans$/i, "New Orleans Pelicans"],
+[/^nj nets$/i, "New Jersey Nets"],
+[/^brooklyn nets$/i, "Brooklyn Nets"],
+[/^new orleans hornets$/i, "NO Hornets"],
+[/^new orleans pelicans$/i, "NO Pelicans"],
+[/^new jersey nets$/i, "NJ Nets"],
+[/^san antonio spurs$/i, "SA Spurs"],
+[/^phoenix suns$/i, "PHX Suns"],
+[/^philadelphia 76ers$/i, "76ers"],
+[/^portland trail blazers$/i, "Portland Trail Blazers"],
+[/^trail blazers$/i, "Portland Trail Blazers"]
+];
+
+for(const [pattern, replacement] of replacements){
+if(pattern.test(raw)){
+add(replacement);
+}
+if(pattern.test(replacement)){
+add(raw);
+}
+}
+
+if(/lakers/i.test(raw)){
+add("LA Lakers");
+add("Los Angeles Lakers");
+}
+if(/clippers/i.test(raw)){
+add("LA Clippers");
+add("Los Angeles Clippers");
+}
+if(/76ers/i.test(raw) || /philadelphia/i.test(raw)){
+add("Philadelphia 76ers");
+add("76ers");
+}
+if(/nets/i.test(raw)){
+add("Brooklyn Nets");
+add("New Jersey Nets");
+add("NJ Nets");
+}
+if(/pelicans/i.test(raw) || /hornets/i.test(raw)){
+add("New Orleans Pelicans");
+add("NO Pelicans");
+add("New Orleans Hornets");
+add("NO Hornets");
+}
+if(/trailblazers/i.test(norm(raw)) || /blazers/i.test(raw)){
+add("Portland Trail Blazers");
+add("Trail Blazers");
+}
+
+return [...variants];
+}
+
+function matchesTeam(nameA, teamName){
+const a = norm(nameA);
+const vars = teamVariants(teamName);
+return vars.includes(a);
+}
+
+function getSeasonArray(data){
+if(Array.isArray(data)) return data;
+if(Array.isArray(data?.seasons)) return data.seasons;
+if(Array.isArray(data?.years)) return data.years;
+if(Array.isArray(data?.data)) return data.data;
+return [];
+}
+
+function getGamesArray(data){
+if(Array.isArray(data)) return data;
+if(Array.isArray(data?.games)) return data.games;
+if(Array.isArray(data?.data)) return data.data;
+return [];
+}
+
+function getLeadersRow(data, teamName){
+const variants = teamVariants(teamName);
+
+if(Array.isArray(data)){
+return data.find(row => variants.includes(norm(row.team || row.team_name || row.name || row.franchise)));
+}
+
+if(Array.isArray(data?.teams)){
+return data.teams.find(row => variants.includes(norm(row.team || row.team_name || row.name || row.franchise)));
+}
+
+if(Array.isArray(data?.data)){
+return data.data.find(row => variants.includes(norm(row.team || row.team_name || row.name || row.franchise)));
+}
+
+if(data && typeof data === "object"){
+for(const [key, value] of Object.entries(data)){
+if(variants.includes(norm(key))) return value;
+if(value && typeof value === "object"){
+const rowTeam = value.team || value.team_name || value.name || value.franchise || "";
+if(variants.includes(norm(rowTeam))) return value;
+}
+}
+}
+
+return null;
+}
+
+function firstDefined(row, keys){
+for(const key of keys){
+if(row && row[key] !== undefined && row[key] !== null && row[key] !== ""){
+return row[key];
+}
+}
+return "";
+}
+
+const elTeamName = document.getElementById("teamName");
+const elSeason = document.getElementById("seasonSelect");
+const elType = document.getElementById("typeSelect");
+const elBody = document.getElementById("gamesBody");
+const elLoading = document.getElementById("loadingBox");
+const elLeaders = document.getElementById("leadersBody");
+
+let allGames = [];
+let currentSeason = null;
 
 function render(){
 
-let filtered=allGames;
+let filtered = allGames.slice();
 
-if(elType.value!=="all"){
-filtered=filtered.filter(g=>g.type===elType.value);
+if(elType.value !== "all"){
+filtered = filtered.filter(g => g.type === elType.value);
 }
 
-filtered.sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+filtered.sort((a,b) => (b.date || "").localeCompare(a.date || ""));
 
-elBody.innerHTML="";
+elBody.innerHTML = "";
+
+if(!filtered.length){
+elBody.innerHTML = `<tr><td colspan="6">No games found.</td></tr>`;
+return;
+}
 
 for(const g of filtered){
 
-const tr=document.createElement("tr");
+const tr = document.createElement("tr");
 
-tr.onclick=()=>{
-location.href=`nba-game.html?season=${currentSeason}&game=${g.id}`;
+tr.onclick = () => {
+location.href = `nba-game.html?season=${currentSeason}&game=${g.id}`;
 };
 
-tr.innerHTML=`
-<td>${g.date}</td>
+tr.innerHTML = `
+<td>${g.date || ""}</td>
 <td>${seasonLabel(currentSeason)}</td>
-<td>${g.typeLabel}</td>
-<td>${g.opponent}</td>
-<td>${g.result}</td>
-<td>${g.score}</td>
+<td>${g.typeLabel || ""}</td>
+<td>${g.opponent || ""}</td>
+<td>${g.result || ""}</td>
+<td>${g.score || ""}</td>
 `;
 
 elBody.appendChild(tr);
 
 }
-
 }
 
 async function loadSeason(season){
 
-currentSeason=Number(season);
-allGames=[];
+currentSeason = Number(season);
+allGames = [];
+elLoading.style.display = "block";
+elLoading.textContent = "Loading games…";
 
-elLoading.style.display="block";
+try{
+const res = await fetch(`data/nba/${season}.json`);
+if(!res.ok) throw new Error(`Season fetch failed: ${res.status}`);
+const data = await res.json();
 
-const data=await fetch(`docs/data/nba/${season}.json`).then(r=>r.json());
-
-const games=data.games||[];
-
-const teamKey=norm(teamRaw);
+const games = getGamesArray(data);
 
 for(const g of games){
 
-if((g.game_type||"").toLowerCase().includes("pre"))continue;
+if((g.game_type || "").toLowerCase().includes("pre")) continue;
 
-const home=norm(g.home_team);
-const away=norm(g.away_team);
+const homeTeam = g.home_team || g.homeTeam || g.home || "";
+const awayTeam = g.away_team || g.awayTeam || g.away || "";
 
-if(home!==teamKey && away!==teamKey)continue;
+const isHome = matchesTeam(homeTeam, teamRaw);
+const isAway = matchesTeam(awayTeam, teamRaw);
 
-const isHome=home===teamKey;
+if(!isHome && !isAway) continue;
 
-const teamScore=Number(isHome?g.home_score:g.away_score);
-const oppScore=Number(isHome?g.away_score:g.home_score);
+const homeScore = Number(g.home_score ?? g.homeScore ?? 0);
+const awayScore = Number(g.away_score ?? g.awayScore ?? 0);
+
+const teamScore = isHome ? homeScore : awayScore;
+const oppScore = isHome ? awayScore : homeScore;
+
+let result = "L";
+if(teamScore > oppScore) result = "W";
+if(teamScore === oppScore) result = "T";
 
 allGames.push({
-id:g.game_id,
-date:g.date,
-type:typeBucket(g.game_type),
-typeLabel:g.game_type,
-opponent:isHome?g.away_team:g.home_team,
-result:teamScore>oppScore?"W":"L",
-score:`${teamScore}-${oppScore}`
+id: g.game_id || g.id || g.gameId || "",
+date: g.date || g.game_date || "",
+type: typeBucket(g.game_type || g.type || ""),
+typeLabel: g.game_type || g.type || "",
+opponent: isHome ? awayTeam : homeTeam,
+result,
+score: `${teamScore}-${oppScore}`
 });
-
 }
 
 render();
+elLoading.style.display = "none";
 
-elLoading.style.display="none";
-
+}catch(err){
+elBody.innerHTML = `<tr><td colspan="6">Unable to load season data.</td></tr>`;
+elLoading.style.display = "block";
+elLoading.textContent = "Unable to load games.";
+}
 }
 
 async function loadLeaders(){
 
 try{
+const res = await fetch(PATH_LEADERS);
+if(!res.ok) throw new Error(`Leaders fetch failed: ${res.status}`);
+const data = await res.json();
 
-const data=await fetch(PATH_LEADERS).then(r=>r.json());
-
-const teamKey=norm(teamRaw);
-
-const row=data.find(t=>norm(t.team)===teamKey);
+const row = getLeadersRow(data, teamRaw);
 
 if(!row){
-elLeaders.innerHTML="<tr><td colspan='3'>No data</td></tr>";
+elLeaders.innerHTML = "<tr><td colspan='3'>No data</td></tr>";
 return;
 }
 
-elLeaders.innerHTML=`
-<tr><td>Points</td><td>${row.points_player}</td><td>${row.points}</td></tr>
-<tr><td>Rebounds</td><td>${row.rebounds_player}</td><td>${row.rebounds}</td></tr>
-<tr><td>Assists</td><td>${row.assists_player}</td><td>${row.assists}</td></tr>
-<tr><td>Steals</td><td>${row.steals_player}</td><td>${row.steals}</td></tr>
-<tr><td>Blocks</td><td>${row.blocks_player}</td><td>${row.blocks}</td></tr>
+const pointsPlayer   = firstDefined(row, ["points_player","pts_player","scoring_player","pointsLeader"]);
+const pointsValue    = firstDefined(row, ["points","pts","scoring","points_total"]);
+const reboundsPlayer = firstDefined(row, ["rebounds_player","rebs_player","reb_player","reboundsLeader"]);
+const reboundsValue  = firstDefined(row, ["rebounds","rebs","reb","rebounds_total"]);
+const assistsPlayer  = firstDefined(row, ["assists_player","asts_player","ast_player","assistsLeader"]);
+const assistsValue   = firstDefined(row, ["assists","asts","ast","assists_total"]);
+const stealsPlayer   = firstDefined(row, ["steals_player","stl_player","stealsLeader"]);
+const stealsValue    = firstDefined(row, ["steals","stl","steals_total"]);
+const blocksPlayer   = firstDefined(row, ["blocks_player","blk_player","blocksLeader"]);
+const blocksValue    = firstDefined(row, ["blocks","blk","blocks_total"]);
+
+elLeaders.innerHTML = `
+<tr><td>Points</td><td>${pointsPlayer || "-"}</td><td>${pointsValue || "-"}</td></tr>
+<tr><td>Rebounds</td><td>${reboundsPlayer || "-"}</td><td>${reboundsValue || "-"}</td></tr>
+<tr><td>Assists</td><td>${assistsPlayer || "-"}</td><td>${assistsValue || "-"}</td></tr>
+<tr><td>Steals</td><td>${stealsPlayer || "-"}</td><td>${stealsValue || "-"}</td></tr>
+<tr><td>Blocks</td><td>${blocksPlayer || "-"}</td><td>${blocksValue || "-"}</td></tr>
 `;
 
 }catch(err){
-
-elLeaders.innerHTML="<tr><td colspan='3'>Leader data unavailable</td></tr>";
-
+elLeaders.innerHTML = "<tr><td colspan='3'>Leader data unavailable</td></tr>";
 }
-
 }
 
 async function init(){
 
-elTeamName.textContent=teamRaw;
+elTeamName.textContent = teamRaw || "NBA Team";
 
-loadLeaders();
+await loadLeaders();
 
-const seasons=await fetch(PATH_SEASONS).then(r=>r.json());
+try{
+const res = await fetch(PATH_SEASONS);
+if(!res.ok) throw new Error(`Seasons fetch failed: ${res.status}`);
+const seasonsRaw = await res.json();
 
-seasons.sort((a,b)=>b-a);
+let seasons = getSeasonArray(seasonsRaw)
+.map(s => Number(s))
+.filter(s => !Number.isNaN(s));
+
+seasons = unique(seasons).sort((a,b) => b-a);
+
+elSeason.innerHTML = "";
 
 for(const s of seasons){
-
-const opt=document.createElement("option");
-opt.value=s;
-opt.textContent=seasonLabel(s);
+const opt = document.createElement("option");
+opt.value = s;
+opt.textContent = seasonLabel(s);
 elSeason.appendChild(opt);
-
 }
 
-elSeason.addEventListener("change",()=>loadSeason(elSeason.value));
-elType.addEventListener("change",render);
+elSeason.addEventListener("change", () => loadSeason(elSeason.value));
+elType.addEventListener("change", render);
 
 if(seasons.length){
-loadSeason(seasons[0]);
+await loadSeason(seasons[0]);
+}else{
+elLoading.textContent = "No seasons found.";
+elBody.innerHTML = `<tr><td colspan="6">No seasons found.</td></tr>`;
 }
 
+}catch(err){
+elLoading.textContent = "Unable to load seasons.";
+elBody.innerHTML = `<tr><td colspan="6">Unable to load seasons.</td></tr>`;
+}
 }
 
 init();
