@@ -11,7 +11,6 @@ body{
   font-family:Inter,system-ui,Arial,sans-serif;
   margin:0;
   background:#f4f6f8;
-  color:#111;
 }
 
 .navbar{
@@ -32,35 +31,21 @@ body{
 
 .page-wrap{
   max-width:1200px;
-  margin:0 auto;
-  padding:28px 20px 60px;
+  margin:auto;
+  padding:30px 20px 60px;
 }
 
 .hero{
   background:linear-gradient(90deg,#1D428A,#C8102E);
   color:#fff;
+  padding:28px;
   border-radius:18px;
-  padding:28px 30px;
   margin-bottom:24px;
 }
 
-.hero-title-wrap{
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-}
-
-.eyebrow{
-  font-size:12px;
-  font-weight:800;
-  letter-spacing:1.2px;
-  text-transform:uppercase;
-}
-
-#title{
+.hero h1{
   margin:0;
-  font-size:42px;
-  font-weight:800;
+  font-size:40px;
 }
 
 .section-card{
@@ -68,6 +53,34 @@ body{
   border-radius:18px;
   padding:22px;
   margin-bottom:24px;
+}
+
+.section-title{
+  font-size:13px;
+  font-weight:800;
+  letter-spacing:1px;
+  color:#666;
+  margin-bottom:15px;
+  text-transform:uppercase;
+}
+
+.stats-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+  gap:14px;
+}
+
+.stat-box{
+  background:#eef3ff;
+  border-radius:14px;
+  padding:16px;
+  text-align:center;
+}
+
+.stat-box span{
+  font-size:28px;
+  font-weight:800;
+  display:block;
 }
 
 .table-wrap{
@@ -79,7 +92,6 @@ body{
 table{
   width:100%;
   border-collapse:collapse;
-  font-size:14px;
 }
 
 th,td{
@@ -90,7 +102,6 @@ th,td{
 
 th{
   background:#eef3ff;
-  color:#003a99;
   font-weight:800;
 }
 
@@ -115,10 +126,22 @@ tbody tr:nth-child(even){
 <div class="page-wrap">
 
 <div class="hero">
-<div class="hero-title-wrap">
-<div class="eyebrow">NBA Player Career</div>
 <h1 id="title">Player</h1>
 </div>
+
+<div class="section-card">
+<div class="section-title">Career Totals</div>
+<div class="stats-grid" id="careerTotals"></div>
+</div>
+
+<div class="section-card">
+<div class="section-title">Career Averages</div>
+<div class="stats-grid" id="careerAverages"></div>
+</div>
+
+<div class="section-card">
+<div class="section-title">Career Highs</div>
+<div class="stats-grid" id="careerHighs"></div>
 </div>
 
 <div class="table-wrap">
@@ -147,14 +170,13 @@ tbody tr:nth-child(even){
 const params = new URLSearchParams(window.location.search);
 const playerParam = params.get("player");
 
-const gamesBody = document.getElementById("gamesBody");
 const titleEl = document.getElementById("title");
+const gamesBody = document.getElementById("gamesBody");
 
 let rows = [];
 
 function slug(name){
-  return name
-  .toLowerCase()
+  return name.toLowerCase()
   .replace(/[^\w\s-]/g,"")
   .replace(/\s+/g,"-");
 }
@@ -168,73 +190,94 @@ function getSeason(r){
 
   if(r.season) return r.season;
 
-  const d = r.date || "";
+  const d=(r.date||"").split("T")[0];
   if(!d) return "";
 
-  const year = Number(d.substring(0,4));
-  const month = Number(d.substring(5,7));
+  const year=parseInt(d.substring(0,4));
+  const month=parseInt(d.substring(5,7));
 
-  if(month >= 10){
-    return year;
-  }else{
-    return year - 1;
-  }
+  if(month>=10) return year;
+  return year-1;
 }
 
-function getGameId(r){
-  return r.game_id || r.game || r.id || r.gameId || "";
+function calcStats(data){
+
+let totals={pts:0,reb:0,ast:0,stl:0,blk:0};
+let highs={pts:0,reb:0,ast:0,stl:0,blk:0};
+
+data.forEach(r=>{
+
+const pts=parseNum(r.pts);
+const reb=parseNum(r.reb);
+const ast=parseNum(r.ast);
+const stl=parseNum(r.stl);
+const blk=parseNum(r.blk);
+
+totals.pts+=pts;
+totals.reb+=reb;
+totals.ast+=ast;
+totals.stl+=stl;
+totals.blk+=blk;
+
+if(pts>highs.pts) highs.pts=pts;
+if(reb>highs.reb) highs.reb=reb;
+if(ast>highs.ast) highs.ast=ast;
+if(stl>highs.stl) highs.stl=stl;
+if(blk>highs.blk) highs.blk=blk;
+
+});
+
+return {totals,highs};
+
 }
 
-function getFilteredRows(){
+function renderCareer(){
 
-  let filtered = rows.filter(r => r.team && r.opp);
+const {totals,highs}=calcStats(rows);
+const g=rows.length||1;
 
-  return filtered;
-}
+document.getElementById("careerTotals").innerHTML=`
+<div class="stat-box"><span>${rows.length}</span>Games</div>
+<div class="stat-box"><span>${totals.pts}</span>PTS</div>
+<div class="stat-box"><span>${totals.reb}</span>REB</div>
+<div class="stat-box"><span>${totals.ast}</span>AST</div>
+<div class="stat-box"><span>${totals.stl}</span>STL</div>
+<div class="stat-box"><span>${totals.blk}</span>BLK</div>
+`;
 
-async function loadPlayer(){
+document.getElementById("careerAverages").innerHTML=`
+<div class="stat-box"><span>${(totals.pts/g).toFixed(1)}</span>PTS</div>
+<div class="stat-box"><span>${(totals.reb/g).toFixed(1)}</span>REB</div>
+<div class="stat-box"><span>${(totals.ast/g).toFixed(1)}</span>AST</div>
+<div class="stat-box"><span>${(totals.stl/g).toFixed(1)}</span>STL</div>
+<div class="stat-box"><span>${(totals.blk/g).toFixed(1)}</span>BLK</div>
+`;
 
-  if(!playerParam) return;
+document.getElementById("careerHighs").innerHTML=`
+<div class="stat-box"><span>${highs.pts}</span>PTS</div>
+<div class="stat-box"><span>${highs.reb}</span>REB</div>
+<div class="stat-box"><span>${highs.ast}</span>AST</div>
+<div class="stat-box"><span>${highs.stl}</span>STL</div>
+<div class="stat-box"><span>${highs.blk}</span>BLK</div>
+`;
 
-  const playerName = decodeURIComponent(playerParam);
-
-  titleEl.textContent = playerName;
-
-  try{
-
-    const res = await fetch(`/data/nba/players/${slug(playerName)}.json`);
-    const data = await res.json();
-
-    rows = Array.isArray(data.games) ? data.games : [];
-
-    renderGames();
-
-  }catch(err){
-    console.error(err);
-  }
 }
 
 function renderGames(){
 
-  gamesBody.innerHTML = "";
+gamesBody.innerHTML="";
 
-  const filtered = getFilteredRows();
+rows.forEach(r=>{
 
-  filtered.forEach(r=>{
+if(!r.team || !r.opp) return;
 
-    const gameId = getGameId(r);
+const row=document.createElement("tr");
 
-    const row = document.createElement("tr");
-
-    if(gameId){
-      row.className = "clickable-row";
-    }
-
-    row.innerHTML = `
+row.innerHTML=`
 <td>${getSeason(r)}</td>
-<td>${(r.date || "").split("T")[0]}</td>
-<td>${r.team || ""}</td>
-<td>${r.opp || ""}</td>
+<td>${(r.date||"").split("T")[0]}</td>
+<td>${r.team||""}</td>
+<td>${r.opp||""}</td>
 <td>${parseNum(r.pts)}</td>
 <td>${parseNum(r.reb)}</td>
 <td>${parseNum(r.ast)}</td>
@@ -242,15 +285,26 @@ function renderGames(){
 <td>${parseNum(r.blk)}</td>
 `;
 
-    if(gameId){
-      row.addEventListener("click", ()=>{
-        window.location = "nba-game.html?game=" + encodeURIComponent(gameId);
-      });
-    }
+gamesBody.appendChild(row);
 
-    gamesBody.appendChild(row);
+});
 
-  });
+}
+
+async function loadPlayer(){
+
+if(!playerParam) return;
+
+const name=decodeURIComponent(playerParam);
+titleEl.textContent=name;
+
+const res=await fetch(`/data/nba/players/${slug(name)}.json`);
+const data=await res.json();
+
+rows=Array.isArray(data.games)?data.games:[];
+
+renderCareer();
+renderGames();
 
 }
 
