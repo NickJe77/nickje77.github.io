@@ -1,10 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NBA Team | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+:root{
+--nba-primary:#17408B;
+--bg:#f4f6f8;
+--card:#ffffff;
+--line:#e6e8ee;
+}
+
+body{
+font-family:Inter,Arial;
+margin:0;
+background:var(--bg);
+}
+
+.navbar{
+display:flex;
+justify-content:center;
+gap:24px;
+padding:16px;
+background:#fff;
+border-bottom:1px solid var(--line);
+font-weight:700;
+}
+
+.navbar a{
+text-decoration:none;
+color:var(--nba-primary);
+}
+
+.page{
+max-width:1200px;
+margin:auto;
+padding:30px 20px 60px;
+}
+
+.hero{
+background:linear-gradient(270deg,#17408B,#C9082A,#17408B);
+color:#fff;
+padding:34px;
+border-radius:22px;
+margin-bottom:20px;
+}
+
+.hero h1{
+margin:0;
+font-size:36px;
+}
+
+/* leaders */
+
+.leaders-card{
+background:#fff;
+border-radius:16px;
+padding:18px;
+margin-bottom:20px;
+}
+
+.leaders-card h3{
+margin:0 0 12px;
+}
+
+.leaders-table{
+width:100%;
+border-collapse:collapse;
+}
+
+.leaders-table td{
+padding:8px;
+border-bottom:1px solid #eee;
+}
+
+.leaders-table td:nth-child(1){
+font-weight:600;
+width:120px;
+}
+
+.leaders-table td:nth-child(3){
+text-align:right;
+font-weight:700;
+}
+
+.leaders-table a{
+color:#0056d6;
+text-decoration:none;
+font-weight:600;
+}
+
+.leaders-table a:hover{
+text-decoration:underline;
+}
+
+/* filters */
+
+.filter-box{
+background:var(--card);
+padding:16px;
+border-radius:16px;
+margin-bottom:16px;
+display:flex;
+gap:20px;
+flex-wrap:wrap;
+align-items:center;
+}
+
+select,input{
+padding:8px 10px;
+border:1px solid #cfd6e3;
+border-radius:10px;
+font-size:14px;
+background:#fff;
+}
+
+/* table */
+
+.card{
+background:var(--card);
+border-radius:16px;
+overflow:hidden;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+}
+
+th{
+background:var(--nba-primary);
+color:#fff;
+padding:12px;
+text-align:left;
+}
+
+td{
+padding:12px;
+border-bottom:1px solid var(--line);
+}
+
+tr:hover{
+background:#eef2ff;
+cursor:pointer;
+}
+
+.loading{
+background:#fff;
+padding:10px;
+border:1px solid #e5e7eb;
+border-radius:12px;
+margin-bottom:16px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="nba.html">NBA</a>
+</div>
+
+<div class="page">
+
+<div class="hero">
+<h1 id="teamName">Loading…</h1>
+</div>
+
+<div class="leaders-card">
+<h3>Franchise Leaders</h3>
+
+<table class="leaders-table">
+<tbody id="leadersBody">
+<tr><td colspan="3">Loading leaders…</td></tr>
+</tbody>
+</table>
+
+</div>
+
+<div class="loading" id="loadingBox">Loading games…</div>
+
+<div class="filter-box">
+
+<label>
+Season:
+<select id="seasonSelect"></select>
+</label>
+
+<label>
+Type:
+<select id="typeSelect">
+<option value="all">All</option>
+<option value="regular">Regular Season</option>
+<option value="playoffs">Playoffs</option>
+</select>
+</label>
+
+</div>
+
+<div class="card">
+
+<table>
+
+<thead>
+<tr>
+<th>Date</th>
+<th>Season</th>
+<th>Type</th>
+<th>Opponent</th>
+<th>Result</th>
+<th>Score</th>
+</tr>
+</thead>
+
+<tbody id="gamesBody"></tbody>
+
+</table>
+
+</div>
+
+</div>
+
+<script>
+
+const teamRaw = new URLSearchParams(window.location.search).get("team") || "";
+
+const PATH_SEASONS="/data/nba/seasons.json";
+const PATH_LEADERS="/data/nba/team-leaders.json";
+
+function norm(s){
+return (s||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+}
+
+function seasonLabel(start){
+const next = String((Number(start)+1)%100).padStart(2,"0");
+return `${start}-${next}`;
+}
+
+function typeBucket(t){
+if(!t) return "regular";
+const s=t.toLowerCase();
+if(s.includes("regular")) return "regular";
+return "playoffs";
+}
+
+const elTeamName=document.getElementById("teamName");
+const elSeason=document.getElementById("seasonSelect");
+const elType=document.getElementById("typeSelect");
+const elBody=document.getElementById("gamesBody");
+const elLoading=document.getElementById("loadingBox");
+const elLeaders=document.getElementById("leadersBody");
+
+let allGames=[];
+let currentSeason=null;
+
+function render(){
+
+let filtered=allGames;
+
+if(elType.value!=="all"){
+filtered=filtered.filter(g=>g.type===elType.value);
+}
+
+filtered.sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+
+elBody.innerHTML="";
+
+for(const g of filtered){
+
+const tr=document.createElement("tr");
+
+tr.onclick=()=>{
+location.href=`nba-game.html?season=${currentSeason}&game=${g.id}`;
+};
+
+tr.innerHTML=`
+<td>${g.date}</td>
+<td>${seasonLabel(currentSeason)}</td>
+<td>${g.typeLabel}</td>
+<td>${g.opponent}</td>
+<td>${g.result}</td>
+<td>${g.score}</td>
+`;
+
+elBody.appendChild(tr);
+
+}
+
+}
+
+async function loadSeason(season){
+
+currentSeason=Number(season);
+allGames=[];
+
+elLoading.style.display="block";
+
+const indexRaw=await fetch(`/data/nba/${season}.json`).then(r=>r.json());
+
+const games=indexRaw.games || [];
+
+const teamKey=norm(teamRaw);
+
+for(const g of games){
+
+if((g.game_type||"").toLowerCase().includes("pre")) continue;
+
+const home=norm(g.home_team);
+const away=norm(g.away_team);
+
+if(home!==teamKey && away!==teamKey) continue;
+
+const isHome=home===teamKey;
+
+const teamScore=Number(isHome?g.home_score:g.away_score);
+const oppScore=Number(isHome?g.away_score:g.home_score);
+
+allGames.push({
+id:g.game_id,
+date:g.date,
+type:typeBucket(g.game_type),
+typeLabel:g.game_type,
+opponent:isHome?g.away_team:g.home_team,
+result:teamScore>oppScore?"W":"L",
+score:`${teamScore}-${oppScore}`
+});
+
+}
+
+render();
+
+elLoading.style.display="none";
+
+}
+
+async function loadLeaders(){
+
+try{
+
+const data=await fetch(PATH_LEADERS).then(r=>r.json());
+
+const teamKey=norm(teamRaw);
+
+const row=data.find(t=>norm(t.team)===teamKey);
+
+if(!row){
+elLeaders.innerHTML="<tr><td colspan='3'>No data</td></tr>";
+return;
+}
+
+elLeaders.innerHTML=`
+<tr>
+<td>Points</td>
+<td>${row.points_player}</td>
+<td>${row.points}</td>
+</tr>
+
+<tr>
+<td>Rebounds</td>
+<td>${row.rebounds_player}</td>
+<td>${row.rebounds}</td>
+</tr>
+
+<tr>
+<td>Assists</td>
+<td>${row.assists_player}</td>
+<td>${row.assists}</td>
+</tr>
+
+<tr>
+<td>Steals</td>
+<td>${row.steals_player}</td>
+<td>${row.steals}</td>
+</tr>
+
+<tr>
+<td>Blocks</td>
+<td>${row.blocks_player}</td>
+<td>${row.blocks}</td>
+</tr>
+`;
+
+}catch(err){
+
+elLeaders.innerHTML="<tr><td colspan='3'>Leader data unavailable</td></tr>";
+
+}
+
+}
+
 async function init(){
 
-elTeamName.textContent = teamRaw;
+elTeamName.textContent=teamRaw;
 
 loadLeaders();
 
-const seasons = await fetch(PATH_SEASONS).then(r=>r.json());
+const seasons=await fetch(PATH_SEASONS).then(r=>r.json());
 
 seasons.sort((a,b)=>b-a);
 
@@ -25,3 +419,10 @@ loadSeason(seasons[0]);
 }
 
 }
+
+init();
+
+</script>
+
+</body>
+</html>
