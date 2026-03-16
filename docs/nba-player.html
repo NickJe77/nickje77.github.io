@@ -31,8 +31,6 @@ body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#f4f6f8;co
 
 .search-box{padding:12px 14px;border-radius:10px;border:none;font-size:14px;width:280px;outline:none;}
 
-.team-stripe{height:18px;width:180px;border-radius:999px;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.25);margin-top:6px;}
-
 .section-card{background:#fff;border-radius:18px;padding:22px;box-shadow:0 4px 12px rgba(0,0,0,.05);margin-bottom:24px;}
 
 .section-title{font-size:13px;font-weight:800;letter-spacing:1px;color:#666;margin-bottom:15px;text-transform:uppercase;}
@@ -40,41 +38,22 @@ body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#f4f6f8;co
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:14px;}
 
 .stat-box{background:#eef3ff;border-radius:14px;padding:16px;text-align:center;}
-.stat-box span{display:block;font-size:28px;line-height:1;font-weight:800;margin-bottom:6px;color:#0b3ea9;}
-.stat-box small{color:#666;font-size:12px;display:block;margin-top:4px;line-height:1.35;}
-
-.filters-bar{display:flex;flex-wrap:wrap;gap:12px 18px;align-items:center;margin-bottom:18px;}
-
-.filter-group{display:flex;align-items:center;gap:8px;font-weight:700;color:#003a99;}
-
-select{padding:10px 12px;border-radius:10px;border:1px solid #ccc;font-size:14px;background:#fff;}
+.stat-box span{display:block;font-size:28px;font-weight:800;margin-bottom:6px;color:#0b3ea9;}
 
 .table-wrap{background:#fff;border-radius:18px;box-shadow:0 4px 12px rgba(0,0,0,.05);overflow:hidden;}
 
-.table-header{padding:20px 22px 10px;font-size:13px;font-weight:800;letter-spacing:1px;color:#666;text-transform:uppercase;}
-
 .table-scroll{overflow-x:auto;}
 
-table{width:100%;border-collapse:collapse;font-size:14px;min-width:900px;}
+table{width:100%;border-collapse:collapse;font-size:14px;}
 
-th,td{padding:12px 10px;border-bottom:1px solid #eee;text-align:center;white-space:nowrap;}
+th,td{padding:12px 10px;border-bottom:1px solid #eee;text-align:center;}
 
 th{background:#eef3ff;color:#003a99;font-weight:800;}
 
 tbody tr:nth-child(even){background:#f8faff;}
 tbody tr:hover{background:#eaf2ff;}
 
-.clickable-row{cursor:pointer;}
-
-.name-note{color:#666;font-size:14px;}
-
 .empty-state{padding:24px;text-align:center;color:#666;font-weight:600;}
-
-@media (max-width:800px){
-#title{font-size:32px;}
-.search-box{width:100%;max-width:100%;}
-.hero-search{width:100%;}
-}
 </style>
 </head>
 <body>
@@ -93,12 +72,6 @@ tbody tr:hover{background:#eaf2ff;}
 <div class="eyebrow">NBA Player Career</div>
 <h1 id="title">Player</h1>
 <div class="hero-sub" id="heroSub">Career game log, totals, averages and highs</div>
-<div id="teamStripe" class="team-stripe"></div>
-</div>
-
-<div class="hero-search">
-<input id="playerSearch" list="playerList" class="search-box" placeholder="Search player...">
-<datalist id="playerList"></datalist>
 </div>
 </div>
 </div>
@@ -107,35 +80,13 @@ tbody tr:hover{background:#eaf2ff;}
 <div class="section-title">Career Summary</div>
 <div class="stats-grid" id="careerTotals"></div>
 <div class="stats-grid" id="careerAverages"></div>
-<div class="stats-grid" id="careerHighs"></div>
-</div>
-
-<div class="section-card">
-<div class="filters-bar">
-<div class="filter-group">
-<label for="teamFilter">Team:</label>
-<select id="teamFilter"><option value="ALL">All teams</option></select>
-</div>
-
-<div class="filter-group">
-<label for="oppFilter">Opposition:</label>
-<select id="oppFilter"><option value="ALL">All teams</option></select>
-</div>
-
-<div class="name-note" id="filterNote">Filtered breakdown</div>
-</div>
-
-<div class="section-title">Filtered Results</div>
-<div class="stats-grid" id="oppTotals"></div>
-<div class="stats-grid" id="oppAverages"></div>
-<div class="stats-grid" id="oppHighs"></div>
 </div>
 
 <div class="table-wrap">
-<div class="table-header">Game Log</div>
 
 <div class="table-scroll">
 <table>
+
 <thead>
 <tr>
 <th>Season</th>
@@ -151,10 +102,12 @@ tbody tr:hover{background:#eaf2ff;}
 </thead>
 
 <tbody id="gamesBody"></tbody>
+
 </table>
 </div>
 
 <div id="emptyState" class="empty-state" style="display:none;">No games found.</div>
+
 </div>
 
 </div>
@@ -162,84 +115,66 @@ tbody tr:hover{background:#eaf2ff;}
 <script>
 
 const params=new URLSearchParams(window.location.search)
-const playerParam=params.get("player")
+const player=params.get("player")
 
-const titleEl=document.getElementById("title")
+const title=document.getElementById("title")
 const heroSub=document.getElementById("heroSub")
 const gamesBody=document.getElementById("gamesBody")
-const teamFilter=document.getElementById("teamFilter")
-const oppFilter=document.getElementById("oppFilter")
 const emptyState=document.getElementById("emptyState")
 
 let rows=[]
 
-function cleanName(n){return(n||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"")}
-function slug(n){return cleanName(n).toLowerCase().replace(/[^\w\s-]/g,"").replace(/\s+/g,"-")}
 function num(v){const n=Number(v);return Number.isFinite(n)?n:0}
 function date(d){return(d||"").split("T")[0]}
 
-async function fetchJSON(path){
-const res=await fetch(path,{cache:"no-store"})
-if(!res.ok)throw new Error("JSON load fail")
-return await res.json()
+/* IMPORTANT FILTER */
+
+function isRegularOrPostseason(r){
+
+const team=(r.team||"").toLowerCase()
+const opp=(r.opp||"").toLowerCase()
+
+if(team==="world"||team==="usa") return false
+if(opp==="world"||opp==="usa") return false
+
+const type=String(
+r.game_type||
+r.type||
+r.season_type||
+r.gameType||
+r.seasonType||
+""
+).toLowerCase()
+
+if(type.includes("preseason")) return false
+if(type.includes("summer")) return false
+if(type.includes("exhibition")) return false
+if(type.includes("all-star")) return false
+if(type.includes("rising")) return false
+if(type.includes("celebrity")) return false
+
+return true
 }
-
-/* PLAYER SEARCH */
-
-async function loadPlayers(){
-
-try{
-
-const res=await fetch("/data/nba/players/index.json")
-const list=await res.json()
-
-const dl=document.getElementById("playerList")
-dl.innerHTML=""
-
-list.forEach(p=>{
-
-const name=typeof p==="string"?p:(p.name||p.player||"")
-
-if(!name)return
-
-const opt=document.createElement("option")
-opt.value=name
-dl.appendChild(opt)
-
-})
-
-}catch(e){console.error("Player index failed",e)}
-
-}
-
-document.getElementById("playerSearch").addEventListener("change",e=>{
-const name=e.target.value.trim()
-if(!name)return
-window.location="nba-player.html?player="+encodeURIComponent(name)
-})
-
-/* LOAD PLAYER */
 
 async function loadPlayer(){
 
-if(!playerParam)return
+if(!player) return
 
-const name=cleanName(decodeURIComponent(playerParam))
+title.textContent=decodeURIComponent(player)
+heroSub.textContent="Career game log for "+decodeURIComponent(player)
 
-titleEl.textContent=name
-heroSub.textContent="Career game log, totals, averages and highs for "+name
+const slug=player.toLowerCase().replace(/[^\w\s-]/g,"").replace(/\s+/g,"-")
 
-try{
+const res=await fetch(`/data/nba/players/${slug}.json`)
+const data=await res.json()
 
-const data=await fetchJSON(`/data/nba/players/${slug(name)}.json`)
+rows=Array.isArray(data)?data:(data.games||[])
 
-/* SUPPORT BOTH JSON FORMATS */
+/* FILTER HERE */
 
-rows=Array.isArray(data)?data:(Array.isArray(data.games)?data.games:[])
+rows=rows.filter(isRegularOrPostseason)
 
-rows=rows.filter(r=>r.team&&r.opp)
-
-/* SORT NEWEST → OLDEST */
+/* SORT NEWEST FIRST */
 
 rows.sort((a,b)=>{
 const da=(a.date||"").substring(0,10)
@@ -247,138 +182,25 @@ const db=(b.date||"").substring(0,10)
 return db.localeCompare(da)
 })
 
-buildFilters()
-renderCareer()
-renderFiltered()
-renderGames()
-
-}catch(e){
-console.error(e)
-rows=[]
-}
+render()
 
 }
 
-/* FILTERS */
-
-function buildFilters(){
-
-teamFilter.innerHTML='<option value="ALL">All teams</option>'
-oppFilter.innerHTML='<option value="ALL">All teams</option>'
-
-const teams=[...new Set(rows.map(r=>r.team))].sort()
-const opps=[...new Set(rows.map(r=>r.opp))].sort()
-
-teams.forEach(t=>{
-const o=document.createElement("option")
-o.value=t
-o.textContent=t
-teamFilter.appendChild(o)
-})
-
-opps.forEach(t=>{
-const o=document.createElement("option")
-o.value=t
-o.textContent=t
-oppFilter.appendChild(o)
-})
-
-}
-
-/* CALCULATIONS */
-
-function calc(data){
-
-let t={pts:0,reb:0,ast:0,stl:0,blk:0}
-let g=data.length
-
-data.forEach(r=>{
-t.pts+=num(r.pts)
-t.reb+=num(r.reb)
-t.ast+=num(r.ast)
-t.stl+=num(r.stl)
-t.blk+=num(r.blk)
-})
-
-return{t,g}
-
-}
-
-function box(v,l){return `<div class="stat-box"><span>${v}</span>${l}</div>`}
-
-/* RENDER CAREER */
-
-function renderCareer(){
-
-const s=calc(rows)
-
-document.getElementById("careerTotals").innerHTML=`
-${box(rows.length,"Games")}
-${box(s.t.pts,"PTS")}
-${box(s.t.reb,"REB")}
-${box(s.t.ast,"AST")}
-${box(s.t.stl,"STL")}
-${box(s.t.blk,"BLK")}
-`
-
-document.getElementById("careerAverages").innerHTML=`
-${box((s.t.pts/s.g).toFixed(1),"Avg PTS")}
-${box((s.t.reb/s.g).toFixed(1),"Avg REB")}
-${box((s.t.ast/s.g).toFixed(1),"Avg AST")}
-${box((s.t.stl/s.g).toFixed(1),"Avg STL")}
-${box((s.t.blk/s.g).toFixed(1),"Avg BLK")}
-`
-
-}
-
-/* FILTERED */
-
-function getFiltered(){
-
-let f=[...rows]
-
-if(teamFilter.value!=="ALL")f=f.filter(r=>r.team===teamFilter.value)
-if(oppFilter.value!=="ALL")f=f.filter(r=>r.opp===oppFilter.value)
-
-return f
-
-}
-
-function renderFiltered(){
-
-const f=getFiltered()
-const s=calc(f)
-
-document.getElementById("oppTotals").innerHTML=`
-${box(f.length,"Games")}
-${box(s.t.pts,"PTS")}
-${box(s.t.reb,"REB")}
-${box(s.t.ast,"AST")}
-${box(s.t.stl,"STL")}
-${box(s.t.blk,"BLK")}
-`
-
-document.getElementById("oppAverages").innerHTML=`
-${box((s.t.pts/s.g).toFixed(1),"Avg PTS")}
-${box((s.t.reb/s.g).toFixed(1),"Avg REB")}
-${box((s.t.ast/s.g).toFixed(1),"Avg AST")}
-${box((s.t.stl/s.g).toFixed(1),"Avg STL")}
-${box((s.t.blk/s.g).toFixed(1),"Avg BLK")}
-`
-
-}
-
-/* GAME TABLE */
-
-function renderGames(){
+function render(){
 
 gamesBody.innerHTML=""
 
-const f=getFiltered()
+emptyState.style.display=rows.length?"none":"block"
 
-emptyState.style.display=f.length?"none":"block"
+let totals={pts:0,reb:0,ast:0,stl:0,blk:0}
 
-f.forEach(r=>{
+rows.forEach(r=>{
+
+totals.pts+=num(r.pts)
+totals.reb+=num(r.reb)
+totals.ast+=num(r.ast)
+totals.stl+=num(r.stl)
+totals.blk+=num(r.blk)
 
 const tr=document.createElement("tr")
 
@@ -398,12 +220,27 @@ gamesBody.appendChild(tr)
 
 })
 
+const g=rows.length||1
+
+document.getElementById("careerTotals").innerHTML=`
+<div class="stat-box"><span>${rows.length}</span>Games</div>
+<div class="stat-box"><span>${totals.pts}</span>PTS</div>
+<div class="stat-box"><span>${totals.reb}</span>REB</div>
+<div class="stat-box"><span>${totals.ast}</span>AST</div>
+<div class="stat-box"><span>${totals.stl}</span>STL</div>
+<div class="stat-box"><span>${totals.blk}</span>BLK</div>
+`
+
+document.getElementById("careerAverages").innerHTML=`
+<div class="stat-box"><span>${(totals.pts/g).toFixed(1)}</span>Avg PTS</div>
+<div class="stat-box"><span>${(totals.reb/g).toFixed(1)}</span>Avg REB</div>
+<div class="stat-box"><span>${(totals.ast/g).toFixed(1)}</span>Avg AST</div>
+<div class="stat-box"><span>${(totals.stl/g).toFixed(1)}</span>Avg STL</div>
+<div class="stat-box"><span>${(totals.blk/g).toFixed(1)}</span>Avg BLK</div>
+`
+
 }
 
-teamFilter.addEventListener("change",()=>{renderFiltered();renderGames()})
-oppFilter.addEventListener("change",()=>{renderFiltered();renderGames()})
-
-loadPlayers()
 loadPlayer()
 
 </script>
