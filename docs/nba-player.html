@@ -243,26 +243,644 @@ tbody tr:hover{
   color:#666;
   font-weight:600;
 }
+
+.highs-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:14px;
+}
+
+.high-box{
+  background:#f8faff;
+  border:1px solid #e4ecff;
+  border-radius:14px;
+  padding:14px;
+}
+
+.high-box .label{
+  font-size:12px;
+  color:#666;
+  font-weight:800;
+  letter-spacing:.7px;
+  text-transform:uppercase;
+  margin-bottom:6px;
+}
+
+.high-box .value{
+  font-size:28px;
+  font-weight:800;
+  color:#0b3ea9;
+  line-height:1;
+  margin-bottom:6px;
+}
+
+.high-box .meta{
+  font-size:12px;
+  color:#666;
+  line-height:1.35;
+}
+
+.loading{
+  padding:24px;
+  text-align:center;
+  font-weight:700;
+  color:#555;
+}
+
+@media (max-width:700px){
+  #title{
+    font-size:34px;
+  }
+  .search-box{
+    width:100%;
+    max-width:320px;
+  }
+}
 </style>
 </head>
 
 <body>
 
-<!-- your page HTML remains exactly the same -->
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="nba.html">NBA</a>
+  <a href="nba-season.html">Seasons</a>
+</div>
+
+<div class="page-wrap">
+
+  <div class="hero">
+    <div class="hero-top">
+      <div class="hero-title-wrap">
+        <div class="eyebrow">NBA Player Career</div>
+        <h1 id="title">Loading Player...</h1>
+        <div class="hero-sub" id="heroSub">Career game log and totals.</div>
+        <div class="team-stripe"></div>
+      </div>
+
+      <div class="hero-search">
+        <input id="playerSearch" class="search-box" type="text" placeholder="Search player and press Enter">
+      </div>
+    </div>
+  </div>
+
+  <div class="section-card">
+    <div class="section-title">Career Summary</div>
+    <div class="stats-grid" id="summaryGrid">
+      <div class="loading">Loading player data...</div>
+    </div>
+  </div>
+
+  <div class="section-card">
+    <div class="section-title">Career Highs</div>
+    <div class="highs-grid" id="highsGrid">
+      <div class="loading">Loading career highs...</div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-header">Game Log</div>
+
+    <div class="section-card" style="box-shadow:none;margin:0;border-radius:0;padding-top:6px;padding-bottom:12px;">
+      <div class="filters-bar">
+        <div class="filter-group">
+          <label for="seasonFilter">Season</label>
+          <select id="seasonFilter">
+            <option value="All">All</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="teamFilter">Team</label>
+          <select id="teamFilter">
+            <option value="All">All</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="oppFilter">Opponent</label>
+          <select id="oppFilter">
+            <option value="All">All</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="typeFilter">Type</label>
+          <select id="typeFilter">
+            <option value="All">All Games</option>
+            <option value="Regular">Regular Season</option>
+            <option value="Playoffs">Playoffs</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Game</th>
+            <th>Type</th>
+            <th>Team</th>
+            <th>Opp</th>
+            <th>Result</th>
+            <th>MIN</th>
+            <th>PTS</th>
+            <th>REB</th>
+            <th>AST</th>
+            <th>STL</th>
+            <th>BLK</th>
+            <th>TOV</th>
+            <th>FG</th>
+            <th>3PT</th>
+            <th>FT</th>
+          </tr>
+        </thead>
+        <tbody id="gamesTable">
+          <tr><td colspan="16" class="loading">Loading games...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
 
 <script>
+const BASE = "/data/nba/";
+const START_SEASON = 1976;
+const END_SEASON = 2026;
 
-/* THE ONLY CHANGE */
+const params = new URLSearchParams(location.search);
+const playerParam = decodeURIComponent(params.get("player") || "").trim();
 
-rows = rows.filter(r =>
-  (r.team || r.team_name) &&
-  (r.opp || r.opponent)
-);
+const titleEl = document.getElementById("title");
+const heroSubEl = document.getElementById("heroSub");
+const playerSearch = document.getElementById("playerSearch");
 
-/* also allow game_date when rendering */
+const seasonFilter = document.getElementById("seasonFilter");
+const teamFilter = document.getElementById("teamFilter");
+const oppFilter = document.getElementById("oppFilter");
+const typeFilter = document.getElementById("typeFilter");
 
-<td>${cleanDate(r.date || r.game_date || "")}</td>
+const summaryGrid = document.getElementById("summaryGrid");
+const highsGrid = document.getElementById("highsGrid");
+const gamesTable = document.getElementById("gamesTable");
 
+let allRows = [];
+let filteredRows = [];
+
+playerSearch.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    const value = playerSearch.value.trim();
+    if (value) {
+      location.href = "nba-player.html?player=" + encodeURIComponent(value);
+    }
+  }
+});
+
+seasonFilter.onchange = renderPage;
+teamFilter.onchange = renderPage;
+oppFilter.onchange = renderPage;
+typeFilter.onchange = renderPage;
+
+function canonicalName(name){
+  return String(name || "")
+    .toLowerCase()
+    .replace(/\./g,"")
+    .replace(/['’]/g,"")
+    .replace(/[^a-z0-9\s-]/g," ")
+    .replace(/\s+/g," ")
+    .trim();
+}
+
+function slugify(name){
+  return String(name || "")
+    .toLowerCase()
+    .replace(/['’]/g,"")
+    .replace(/[^a-z0-9]+/g,"-")
+    .replace(/^-+|-+$/g,"");
+}
+
+function toNum(v){
+  if (v === null || v === undefined || v === "") return 0;
+  const n = Number(String(v).replace(/[^0-9.-]/g,""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function safeText(v){
+  return v === null || v === undefined ? "" : String(v);
+}
+
+function cleanDate(v){
+  const s = safeText(v);
+  return s ? s.substring(0,10) : "";
+}
+
+function average(total, games){
+  return games ? (total / games).toFixed(1) : "0.0";
+}
+
+function makeStatBox(value, label, note=""){
+  return `
+    <div class="stat-box">
+      <span>${value}</span>
+      ${label}
+      ${note ? `<small>${note}</small>` : ""}
+    </div>
+  `;
+}
+
+function formatHigh(label, value, row){
+  if (!row) {
+    return `
+      <div class="high-box">
+        <div class="label">${label}</div>
+        <div class="value">0</div>
+        <div class="meta">No games found</div>
+      </div>
+    `;
+  }
+
+  const oppText = row.opp ? `vs ${row.opp}` : "";
+  return `
+    <div class="high-box">
+      <div class="label">${label}</div>
+      <div class="value">${value}</div>
+      <div class="meta">${cleanDate(row.date)} ${oppText}<br>${row.team || ""}</div>
+    </div>
+  `;
+}
+
+function getFirst(obj, keys, fallback=""){
+  for (const key of keys) {
+    if (obj && obj[key] !== undefined && obj[key] !== null && obj[key] !== "") {
+      return obj[key];
+    }
+  }
+  return fallback;
+}
+
+function collectPlayersFromGame(game){
+  const out = [];
+
+  function pushPlayers(arr, forcedTeam){
+    if (!Array.isArray(arr)) return;
+    arr.forEach(p => {
+      if (p && typeof p === "object") {
+        out.push({ player: p, forcedTeam });
+      }
+    });
+  }
+
+  pushPlayers(game.players, null);
+  pushPlayers(game.player_stats, null);
+  pushPlayers(game.playerStats, null);
+
+  pushPlayers(game.home_players, game.home_team || "");
+  pushPlayers(game.away_players, game.away_team || "");
+
+  if (game.home && Array.isArray(game.home.players)) pushPlayers(game.home.players, game.home_team || game.home.name || "");
+  if (game.away && Array.isArray(game.away.players)) pushPlayers(game.away.players, game.away_team || game.away.name || "");
+
+  if (game.teams && game.teams.home && Array.isArray(game.teams.home.players)) {
+    pushPlayers(game.teams.home.players, game.home_team || game.teams.home.name || "");
+  }
+  if (game.teams && game.teams.away && Array.isArray(game.teams.away.players)) {
+    pushPlayers(game.teams.away.players, game.away_team || game.teams.away.name || "");
+  }
+
+  if (game.box_score && Array.isArray(game.box_score.players)) pushPlayers(game.box_score.players, null);
+  if (game.boxscore && Array.isArray(game.boxscore.players)) pushPlayers(game.boxscore.players, null);
+
+  return out;
+}
+
+function extractPlayerRow(game, playerName, season){
+  const target = canonicalName(playerName);
+  const homeTeam = getFirst(game, ["home_team","homeTeam"], "");
+  const awayTeam = getFirst(game, ["away_team","awayTeam"], "");
+
+  const playerEntries = collectPlayersFromGame(game);
+
+  for (const entry of playerEntries) {
+    const p = entry.player;
+
+    const rawName = getFirst(p, ["name","player_name","player","full_name","playerName"], "");
+    if (!rawName) continue;
+    if (canonicalName(rawName) !== target) continue;
+
+    const team = getFirst(p, ["team","team_name","teamName"], entry.forcedTeam || "");
+    const opp = team && team === homeTeam ? awayTeam : (team && team === awayTeam ? homeTeam : (team === homeTeam ? awayTeam : homeTeam));
+
+    const homeScore = toNum(getFirst(game, ["home_score","homeScore"], 0));
+    const awayScore = toNum(getFirst(game, ["away_score","awayScore"], 0));
+
+    let result = "";
+    if (team === homeTeam) {
+      if (homeScore || awayScore) result = homeScore > awayScore ? "W" : (homeScore < awayScore ? "L" : "");
+    } else if (team === awayTeam) {
+      if (homeScore || awayScore) result = awayScore > homeScore ? "W" : (awayScore < homeScore ? "L" : "");
+    }
+
+    const points = toNum(getFirst(p, ["pts","points","point"], 0));
+    const rebounds = toNum(getFirst(p, ["reb","trb","rebounds","total_rebounds"], 0));
+    const assists = toNum(getFirst(p, ["ast","assists"], 0));
+    const steals = toNum(getFirst(p, ["stl","steals"], 0));
+    const blocks = toNum(getFirst(p, ["blk","blocks"], 0));
+    const turnovers = toNum(getFirst(p, ["tov","turnovers","to"], 0));
+
+    const fgMade = toNum(getFirst(p, ["fg","fgm","field_goals_made"], 0));
+    const fgAtt = toNum(getFirst(p, ["fga","field_goals_attempted"], 0));
+    const tpMade = toNum(getFirst(p, ["3p","3pm","three_pt_made","three_pointers_made"], 0));
+    const tpAtt = toNum(getFirst(p, ["3pa","three_pt_attempted","three_pointers_attempted"], 0));
+    const ftMade = toNum(getFirst(p, ["ft","ftm","free_throws_made"], 0));
+    const ftAtt = toNum(getFirst(p, ["fta","free_throws_attempted"], 0));
+
+    const minutes = safeText(getFirst(p, ["min","minutes","mp"], ""));
+
+    const ddCats = [points, rebounds, assists, steals, blocks].filter(v => v >= 10).length;
+
+    return {
+      season: String(season),
+      game_id: getFirst(game, ["game_id","gameId","id"], ""),
+      date: getFirst(game, ["date","game_date"], ""),
+      game_type: getFirst(game, ["game_type","type"], ""),
+      home_team: homeTeam,
+      away_team: awayTeam,
+      team,
+      opp,
+      result,
+      minutes,
+      points,
+      rebounds,
+      assists,
+      steals,
+      blocks,
+      turnovers,
+      fgMade,
+      fgAtt,
+      tpMade,
+      tpAtt,
+      ftMade,
+      ftAtt,
+      tripleDouble: ddCats >= 3 ? 1 : 0
+    };
+  }
+
+  return null;
+}
+
+async function fetchSeasonGames(season){
+  try {
+    const res = await fetch(`${BASE}${season}/games.json?${Date.now()}`);
+    if (res.ok) {
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    }
+  } catch (e) {}
+
+  try {
+    const index = await fetch(`${BASE}${season}/index.json?${Date.now()}`).then(r => r.json());
+    const gameIDs = Array.isArray(index.games) ? index.games : [];
+    const games = await Promise.all(
+      gameIDs.map(async id => {
+        try {
+          const res = await fetch(`${BASE}${season}/${id}.json?${Date.now()}`);
+          if (!res.ok) return null;
+          return await res.json();
+        } catch (e) {
+          return null;
+        }
+      })
+    );
+    return games.filter(Boolean);
+  } catch (e) {
+    return [];
+  }
+}
+
+async function loadCareerFromSeasonFiles(playerName){
+  const seasons = [];
+  for (let y = START_SEASON; y <= END_SEASON; y++) seasons.push(y);
+
+  const seasonGames = await Promise.all(
+    seasons.map(async season => {
+      const games = await fetchSeasonGames(season);
+      return { season, games };
+    })
+  );
+
+  const rows = [];
+
+  seasonGames.forEach(({ season, games }) => {
+    games.forEach(game => {
+      const type = safeText(getFirst(game, ["game_type","type"], "")).toLowerCase();
+      if (type.includes("preseason")) return;
+      if (type.includes("allstar") || type.includes("all-star") || type.includes("all star")) return;
+
+      const row = extractPlayerRow(game, playerName, season);
+      if (row) rows.push(row);
+    });
+  });
+
+  rows.sort((a,b) => safeText(a.date).localeCompare(safeText(b.date)));
+  return rows;
+}
+
+function populateFilters(rows){
+  seasonFilter.innerHTML = '<option value="All">All</option>';
+  teamFilter.innerHTML = '<option value="All">All</option>';
+  oppFilter.innerHTML = '<option value="All">All</option>';
+
+  const seasons = Array.from(new Set(rows.map(r => r.season))).sort((a,b) => Number(b) - Number(a));
+  const teams = Array.from(new Set(rows.map(r => r.team).filter(Boolean))).sort();
+  const opps = Array.from(new Set(rows.map(r => r.opp).filter(Boolean))).sort();
+
+  seasons.forEach(v => {
+    const opt = document.createElement("option");
+    opt.value = v;
+    opt.textContent = v;
+    seasonFilter.appendChild(opt);
+  });
+
+  teams.forEach(v => {
+    const opt = document.createElement("option");
+    opt.value = v;
+    opt.textContent = v;
+    teamFilter.appendChild(opt);
+  });
+
+  opps.forEach(v => {
+    const opt = document.createElement("option");
+    opt.value = v;
+    opt.textContent = v;
+    oppFilter.appendChild(opt);
+  });
+}
+
+function getFilteredRows(){
+  return allRows.filter(r => {
+    if (seasonFilter.value !== "All" && r.season !== seasonFilter.value) return false;
+    if (teamFilter.value !== "All" && r.team !== teamFilter.value) return false;
+    if (oppFilter.value !== "All" && r.opp !== oppFilter.value) return false;
+
+    const type = safeText(r.game_type).toLowerCase();
+    if (typeFilter.value === "Regular" && !type.includes("regular")) return false;
+    if (typeFilter.value === "Playoffs" && !type.includes("playoff")) return false;
+
+    return true;
+  });
+}
+
+function renderSummary(rows){
+  if (!rows.length) {
+    summaryGrid.innerHTML = '<div class="empty-state">No games found for the selected filters.</div>';
+    return;
+  }
+
+  const games = rows.length;
+  const seasons = new Set(rows.map(r => r.season)).size;
+  const teams = new Set(rows.map(r => r.team).filter(Boolean)).size;
+
+  const totalPts = rows.reduce((s,r) => s + r.points, 0);
+  const totalReb = rows.reduce((s,r) => s + r.rebounds, 0);
+  const totalAst = rows.reduce((s,r) => s + r.assists, 0);
+  const totalStl = rows.reduce((s,r) => s + r.steals, 0);
+  const totalBlk = rows.reduce((s,r) => s + r.blocks, 0);
+  const totalTov = rows.reduce((s,r) => s + r.turnovers, 0);
+  const tripleDoubles = rows.reduce((s,r) => s + r.tripleDouble, 0);
+
+  summaryGrid.innerHTML = [
+    makeStatBox(games, "Games"),
+    makeStatBox(seasons, "Seasons"),
+    makeStatBox(teams, "Teams"),
+    makeStatBox(average(totalPts, games), "PPG"),
+    makeStatBox(average(totalReb, games), "RPG"),
+    makeStatBox(average(totalAst, games), "APG"),
+    makeStatBox(average(totalStl, games), "SPG"),
+    makeStatBox(average(totalBlk, games), "BPG"),
+    makeStatBox(tripleDoubles, "Triple-Doubles"),
+    makeStatBox(totalPts, "Points"),
+    makeStatBox(totalReb, "Rebounds"),
+    makeStatBox(totalAst, "Assists", `STL ${totalStl} • BLK ${totalBlk} • TOV ${totalTov}`)
+  ].join("");
+}
+
+function rowWithMax(rows, key){
+  if (!rows.length) return null;
+  return rows.reduce((best, row) => row[key] > best[key] ? row : best, rows[0]);
+}
+
+function renderHighs(rows){
+  if (!rows.length) {
+    highsGrid.innerHTML = '<div class="empty-state">No career highs available.</div>';
+    return;
+  }
+
+  const ptsRow = rowWithMax(rows, "points");
+  const rebRow = rowWithMax(rows, "rebounds");
+  const astRow = rowWithMax(rows, "assists");
+  const stlRow = rowWithMax(rows, "steals");
+  const blkRow = rowWithMax(rows, "blocks");
+  const tpRow  = rowWithMax(rows, "tpMade");
+
+  highsGrid.innerHTML = [
+    formatHigh("Points", ptsRow.points, ptsRow),
+    formatHigh("Rebounds", rebRow.rebounds, rebRow),
+    formatHigh("Assists", astRow.assists, astRow),
+    formatHigh("Steals", stlRow.steals, stlRow),
+    formatHigh("Blocks", blkRow.blocks, blkRow),
+    formatHigh("3PT Made", tpRow.tpMade, tpRow)
+  ].join("");
+}
+
+function renderGames(rows){
+  gamesTable.innerHTML = "";
+
+  if (!rows.length) {
+    gamesTable.innerHTML = `<tr><td colspan="16" class="empty-state">No games found.</td></tr>`;
+    return;
+  }
+
+  rows
+    .slice()
+    .sort((a,b) => safeText(b.date).localeCompare(safeText(a.date)))
+    .forEach(r => {
+      const tr = document.createElement("tr");
+      tr.className = "clickable-row";
+      tr.onclick = () => {
+        if (r.game_id) {
+          location.href = `/nba-game.html?season=${encodeURIComponent(r.season)}&game=${encodeURIComponent(r.game_id)}`;
+        }
+      };
+
+      tr.innerHTML = `
+        <td>${cleanDate(r.date)}</td>
+        <td>${safeText(r.home_team)} vs ${safeText(r.away_team)}</td>
+        <td>${safeText(r.game_type)}</td>
+        <td>${safeText(r.team)}</td>
+        <td>${safeText(r.opp)}</td>
+        <td>${safeText(r.result)}</td>
+        <td>${safeText(r.minutes)}</td>
+        <td>${r.points}</td>
+        <td>${r.rebounds}</td>
+        <td>${r.assists}</td>
+        <td>${r.steals}</td>
+        <td>${r.blocks}</td>
+        <td>${r.turnovers}</td>
+        <td>${r.fgMade}-${r.fgAtt}</td>
+        <td>${r.tpMade}-${r.tpAtt}</td>
+        <td>${r.ftMade}-${r.ftAtt}</td>
+      `;
+
+      gamesTable.appendChild(tr);
+    });
+}
+
+function renderPage(){
+  filteredRows = getFilteredRows();
+  renderSummary(filteredRows);
+  renderHighs(filteredRows);
+  renderGames(filteredRows);
+}
+
+async function init(){
+  if (!playerParam) {
+    titleEl.textContent = "Player Not Found";
+    heroSubEl.textContent = "No player parameter was provided in the URL.";
+    summaryGrid.innerHTML = '<div class="empty-state">Use nba-player.html?player=Kawhi%20Leonard</div>';
+    highsGrid.innerHTML = '<div class="empty-state">No data loaded.</div>';
+    gamesTable.innerHTML = '<tr><td colspan="16" class="empty-state">No player specified.</td></tr>';
+    return;
+  }
+
+  titleEl.textContent = playerParam;
+  heroSubEl.textContent = "Career game log built from the same season game data paths as the NBA season page.";
+  playerSearch.value = playerParam;
+
+  try {
+    allRows = await loadCareerFromSeasonFiles(playerParam);
+
+    if (!allRows.length) {
+      summaryGrid.innerHTML = '<div class="empty-state">No games found for this player in the season files.</div>';
+      highsGrid.innerHTML = '<div class="empty-state">No career highs found.</div>';
+      gamesTable.innerHTML = '<tr><td colspan="16" class="empty-state">No player games found.</td></tr>';
+      return;
+    }
+
+    populateFilters(allRows);
+    renderPage();
+
+  } catch (err) {
+    console.error(err);
+    summaryGrid.innerHTML = '<div class="empty-state">Error loading player data.</div>';
+    highsGrid.innerHTML = '<div class="empty-state">Error loading career highs.</div>';
+    gamesTable.innerHTML = '<tr><td colspan="16" class="empty-state">Error loading games.</td></tr>';
+  }
+}
+
+init();
 </script>
 
 </body>
