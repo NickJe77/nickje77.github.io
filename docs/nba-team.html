@@ -247,6 +247,7 @@ tr:hover{
 </div>
 
 <script>
+
 const teamRaw = new URLSearchParams(window.location.search).get("team") || "";
 const PATH_SEASONS = "/data/nba/seasons.json";
 const PATH_LEADERS = "/data/nba/team-leaders.json";
@@ -280,6 +281,41 @@ const elLeaders = document.getElementById("leadersBody");
 let allGames = [];
 let currentSeason = null;
 let allTeams = new Set();
+
+/* ---------------- LEADERS LOADER ---------------- */
+
+async function loadLeaders(){
+
+  try{
+
+    const data = await fetch(PATH_LEADERS).then(r=>r.json());
+
+    const teamKey = norm(teamRaw);
+
+    const row = data.find(t => norm(t.team) === teamKey);
+
+    if(!row){
+      elLeaders.innerHTML="<tr><td colspan='3'>No data</td></tr>";
+      return;
+    }
+
+    elLeaders.innerHTML=`
+<tr><td>Points</td><td><a href="nba-player.html?player=${encodeURIComponent(row.points_player)}">${row.points_player}</a></td><td>${row.points}</td></tr>
+<tr><td>Rebounds</td><td><a href="nba-player.html?player=${encodeURIComponent(row.rebounds_player)}">${row.rebounds_player}</a></td><td>${row.rebounds}</td></tr>
+<tr><td>Assists</td><td><a href="nba-player.html?player=${encodeURIComponent(row.assists_player)}">${row.assists_player}</a></td><td>${row.assists}</td></tr>
+<tr><td>Steals</td><td><a href="nba-player.html?player=${encodeURIComponent(row.steals_player)}">${row.steals_player}</a></td><td>${row.steals}</td></tr>
+<tr><td>Blocks</td><td><a href="nba-player.html?player=${encodeURIComponent(row.blocks_player)}">${row.blocks_player}</a></td><td>${row.blocks}</td></tr>
+`;
+
+  }catch{
+
+    elLeaders.innerHTML="<tr><td colspan='3'>Leader data unavailable</td></tr>";
+
+  }
+
+}
+
+/* ------------------------------------------------ */
 
 function render(){
 
@@ -322,27 +358,14 @@ async function loadSeason(season){
 
   elLoading.style.display = "block";
 
-  const indexRaw = await fetch(`/data/nba/${season}/index.json`).then(r=>r.json());
+  const data = await fetch(`/data/nba/${season}.json`).then(r=>r.json());
 
-  const gameIds = indexRaw.games || [];
+  const games = data.games || [];
   const teamKey = norm(teamRaw);
-
-  const games = await Promise.all(
-    gameIds.map(id =>
-      fetch(`/data/nba/${season}/${id}.json`)
-        .then(r=>r.json())
-        .catch(()=>null)
-    )
-  );
 
   for(const g of games){
 
-    if(!g) continue;
-
     if((g.game_type || "").toLowerCase().includes("pre")) continue;
-
-    allTeams.add(g.home_team);
-    allTeams.add(g.away_team);
 
     const home = norm(g.home_team);
     const away = norm(g.away_team);
@@ -361,15 +384,12 @@ async function loadSeason(season){
       typeLabel:g.game_type,
       opponent:isHome ? g.away_team : g.home_team,
       result:teamScore > oppScore ? "W" : "L",
-      score:`${teamScore} - ${oppScore}`,
-      teamScore,
-      oppScore
+      score:`${teamScore} - ${oppScore}`
     });
 
   }
 
   render();
-
   elLoading.style.display = "none";
 
 }
@@ -377,6 +397,8 @@ async function loadSeason(season){
 async function init(){
 
   elTeamName.textContent = teamRaw;
+
+  loadLeaders();
 
   const seasons = await fetch(PATH_SEASONS).then(r=>r.json());
 
@@ -394,7 +416,6 @@ async function init(){
   }
 
   elSeason.addEventListener("change",()=>loadSeason(elSeason.value));
-
   elType.addEventListener("change",render);
 
   if(seasons.length){
