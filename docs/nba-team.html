@@ -267,10 +267,6 @@ function typeBucket(t){
   return "playoffs";
 }
 
-const teamColours = {
-  "Chicago Bulls":["#CE1141","#000000"]
-};
-
 const elTeamName = document.getElementById("teamName");
 const elHero = document.getElementById("heroBox");
 const elLoading = document.getElementById("loadingBox");
@@ -285,14 +281,8 @@ let allGames = [];
 let currentSeason = null;
 let allTeams = new Set();
 
-function setHeroColours(team){
-  if(teamColours[team]){
-    const c = teamColours[team];
-    elHero.style.background = `linear-gradient(270deg,${c[0]},${c[1]},${c[0]})`;
-  }
-}
-
 function render(){
+
   let filtered = allGames;
 
   if(elType.value !== "all"){
@@ -304,6 +294,7 @@ function render(){
   elBody.innerHTML = "";
 
   for(const g of filtered){
+
     const tr = document.createElement("tr");
 
     tr.onclick = ()=>{
@@ -322,9 +313,94 @@ function render(){
     elBody.appendChild(tr);
   }
 
-  if(!filtered.length){
-    elBody.innerHTML = "<tr><td colspan='6'>No games found.</td></tr>";
+}
+
+async function loadSeason(season){
+
+  currentSeason = Number(season);
+  allGames = [];
+
+  elLoading.style.display = "block";
+
+  const indexRaw = await fetch(`/data/nba/${season}/index.json`).then(r=>r.json());
+
+  const gameIds = indexRaw.games || [];
+  const teamKey = norm(teamRaw);
+
+  const games = await Promise.all(
+    gameIds.map(id =>
+      fetch(`/data/nba/${season}/${id}.json`)
+        .then(r=>r.json())
+        .catch(()=>null)
+    )
+  );
+
+  for(const g of games){
+
+    if(!g) continue;
+
+    if((g.game_type || "").toLowerCase().includes("pre")) continue;
+
+    allTeams.add(g.home_team);
+    allTeams.add(g.away_team);
+
+    const home = norm(g.home_team);
+    const away = norm(g.away_team);
+
+    if(home !== teamKey && away !== teamKey) continue;
+
+    const isHome = home === teamKey;
+
+    const teamScore = Number(isHome ? g.home_score : g.away_score);
+    const oppScore = Number(isHome ? g.away_score : g.home_score);
+
+    allGames.push({
+      id:g.game_id,
+      date:g.date,
+      type:typeBucket(g.game_type),
+      typeLabel:g.game_type,
+      opponent:isHome ? g.away_team : g.home_team,
+      result:teamScore > oppScore ? "W" : "L",
+      score:`${teamScore} - ${oppScore}`,
+      teamScore,
+      oppScore
+    });
+
   }
+
+  render();
+
+  elLoading.style.display = "none";
+
+}
+
+async function init(){
+
+  elTeamName.textContent = teamRaw;
+
+  const seasons = await fetch(PATH_SEASONS).then(r=>r.json());
+
+  seasons.sort((a,b)=>b-a);
+
+  for(const s of seasons){
+
+    const opt = document.createElement("option");
+
+    opt.value = s;
+    opt.textContent = seasonLabel(s);
+
+    elSeason.appendChild(opt);
+
+  }
+
+  elSeason.addEventListener("change",()=>loadSeason(elSeason.value));
+
+  elType.addEventListener("change",render);
+
+  if(seasons.length){
+    loadSeason(seasons[0]);
+  }
+
 }
 
 init();
