@@ -459,24 +459,90 @@ function sortRowsLatestFirst(data){
   });
 }
 
-function isRegularOrPostseason(r){
-  const type = String(
-    r.game_type ||
-    r.type ||
-    r.season_type ||
-    r.gameType ||
-    r.seasonType ||
-    ""
-  ).toLowerCase().trim();
+function getGameId(r){
+  return r.game_id || r.game || r.id || r.gameId || "";
+}
 
-  if(!type) return true;
-  if(type.includes("pre")) return false;
-  if(type.includes("summer")) return false;
-  if(type.includes("exhibition")) return false;
-  if(type.includes("regular")) return true;
-  if(type.includes("post")) return true;
-  if(type.includes("playoff")) return true;
-  return true;
+function combinedGameTypeText(r){
+  return [
+    r.game_type,
+    r.type,
+    r.season_type,
+    r.gameType,
+    r.seasonType,
+    r.stage,
+    r.phase,
+    r.round_type,
+    r.comp_type,
+    r.competition_type,
+    r.game_category,
+    r.category
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function inferredGameCodeType(r){
+  const raw = String(getGameId(r) || "").replace(/\D/g,"");
+  if(!raw) return "";
+
+  const tail5 = raw.slice(-5);
+  if(tail5.length === 5){
+    const code = tail5.slice(0,3);
+    if(code === "001") return "preseason";
+    if(code === "002") return "regular";
+    if(code === "003") return "allstar";
+    if(code === "004") return "playoffs";
+    if(code === "005") return "postseason";
+    if(code === "000") return "regular";
+  }
+
+  return "";
+}
+
+function isRegularOrPostseason(r){
+  if (r.is_preseason === true) return false;
+  if (r.preseason === true) return false;
+  if (r.exhibition === true) return false;
+  if (r.summer_league === true) return false;
+  if (r.all_star === true) return false;
+  if (r.allstar === true) return false;
+
+  const t = combinedGameTypeText(r);
+
+  if (t.includes("preseason")) return false;
+  if (t.includes("pre-season")) return false;
+  if (t.includes("pre season")) return false;
+  if (t.includes("summer league")) return false;
+  if (t.includes("exhibition")) return false;
+  if (t.includes("all-star")) return false;
+  if (t.includes("all star")) return false;
+  if (t.includes("rising stars")) return false;
+  if (t.includes("celebrity")) return false;
+
+  if (t.includes("regular season")) return true;
+  if (t.includes("regular")) return true;
+  if (t.includes("postseason")) return true;
+  if (t.includes("post-season")) return true;
+  if (t.includes("post season")) return true;
+  if (t.includes("playoff")) return true;
+  if (t.includes("playoffs")) return true;
+  if (t.includes("play-in")) return true;
+  if (t.includes("play in")) return true;
+  if (t.includes("nba cup")) return true;
+  if (t.includes("in-season tournament")) return true;
+
+  if (r.playoffs === true) return true;
+  if (r.is_playoff === true) return true;
+  if (r.postseason === true) return true;
+  if (r.regular_season === true) return true;
+
+  const inferred = inferredGameCodeType(r);
+  if (inferred === "preseason") return false;
+  if (inferred === "allstar") return false;
+  if (inferred === "regular") return true;
+  if (inferred === "playoffs") return true;
+  if (inferred === "postseason") return true;
+
+  return false;
 }
 
 function getLatestTeam(){
@@ -551,7 +617,8 @@ async function loadPlayer(){
     ]);
 
     rows = Array.isArray(data.games) ? data.games : [];
-    rows = rows.filter(r => r.team && r.opp && isRegularOrPostseason(r));
+    rows = rows.filter(r => r.team && r.opp);
+    rows = rows.filter(isRegularOrPostseason);
     rows = sortRowsLatestFirst(rows);
 
     currentTeam = getLatestTeam();
@@ -767,10 +834,6 @@ function renderFiltered(){
     ${statBox(highs.stl, "Best STL", buildHighNote(highs.stlDate, highs.stlOpp))}
     ${statBox(highs.blk, "Best BLK", buildHighNote(highs.blkDate, highs.blkOpp))}
   `;
-}
-
-function getGameId(r){
-  return r.game_id || r.game || r.id || r.gameId || "";
 }
 
 function renderGames(){
