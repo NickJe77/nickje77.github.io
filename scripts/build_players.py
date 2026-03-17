@@ -27,9 +27,47 @@ def num(v):
         except:
             return 0
 
+def is_valid_game(game):
+    txt = json.dumps(game).lower()
+
+    if "all-star" in txt:
+        return False
+    if "rising stars" in txt:
+        return False
+    if "celebrity" in txt:
+        return False
+    if "summer league" in txt:
+        return False
+
+    return True
+
+def extract_players(game):
+    # 🔥 HANDLE MULTIPLE STRUCTURES
+
+    if "players" in game:
+        return game["players"]
+
+    if "player_stats" in game:
+        return game["player_stats"]
+
+    if "boxscore" in game:
+        bs = game["boxscore"]
+        if isinstance(bs, dict) and "players" in bs:
+            return bs["players"]
+
+    players = []
+
+    if "home_players" in game:
+        players.extend(game["home_players"])
+
+    if "away_players" in game:
+        players.extend(game["away_players"])
+
+    return players
+
+
 print("Building NBA player files...")
 
-# 🔥 FORCE ORDER: newest seasons first
 season_dirs = sorted(
     [d for d in DATA.iterdir() if d.is_dir()],
     key=lambda x: x.name,
@@ -40,7 +78,6 @@ for season_dir in season_dirs:
 
     season = season_dir.name
 
-    # 🔥 FORCE ORDER: newest games first
     game_files = sorted(
         [f for f in season_dir.glob("*.json") if f.name not in ["index.json","games.json"]],
         key=lambda x: x.name,
@@ -57,10 +94,16 @@ for season_dir in season_dirs:
         if not isinstance(game, dict):
             continue
 
+        # 🔥 SKIP ALL-STAR ETC
+        if not is_valid_game(game):
+            continue
+
         home = game.get("home_team")
         away = game.get("away_team")
 
-        for p in game.get("players", []):
+        players_list = extract_players(game)
+
+        for p in players_list:
 
             name = p.get("player_name") or p.get("name") or p.get("player")
 
@@ -82,41 +125,24 @@ for season_dir in season_dirs:
 
             opp = away if team == home else home
 
-            pts = num(p.get("points"))
-            reb = num(p.get("rebounds"))
-            ast = num(p.get("assists"))
-            stl = num(p.get("steals"))
-            blk = num(p.get("blocks"))
-
-            mins = p.get("min") or p.get("minutes") or p.get("mp") or 0
-
-            if isinstance(mins, str) and ":" in mins:
-                try:
-                    m, s = mins.split(":")
-                    mins = int(m) + int(s) / 60
-                except:
-                    mins = 0
-            else:
-                mins = num(mins)
-
-            players[key]["games"].append({
+            record = {
                 "season": season,
                 "game_id": game.get("game_id"),
                 "date": game.get("date"),
                 "team": team,
                 "opp": opp,
-                "minutes": mins,
-                "pts": pts,
-                "reb": reb,
-                "ast": ast,
-                "stl": stl,
-                "blk": blk
-            })
+                "pts": num(p.get("points")),
+                "reb": num(p.get("rebounds")),
+                "ast": num(p.get("assists")),
+                "stl": num(p.get("steals")),
+                "blk": num(p.get("blocks"))
+            }
+
+            players[key]["games"].append(record)
 
             if team not in players[key]["teams"]:
                 players[key]["teams"][team] = {
                     "games": 0,
-                    "minutes": 0,
                     "pts": 0,
                     "reb": 0,
                     "ast": 0,
@@ -127,16 +153,14 @@ for season_dir in season_dirs:
             t = players[key]["teams"][team]
 
             t["games"] += 1
-            t["minutes"] += mins
-            t["pts"] += pts
-            t["reb"] += reb
-            t["ast"] += ast
-            t["stl"] += stl
-            t["blk"] += blk
+            t["pts"] += record["pts"]
+            t["reb"] += record["reb"]
+            t["ast"] += record["ast"]
+            t["stl"] += record["stl"]
+            t["blk"] += record["blk"]
 
 print("Sorting game logs...")
 
-# 🔥 FINAL SORT: newest → oldest (CRITICAL FIX)
 for player in players.values():
     player["games"].sort(
         key=lambda g: g.get("date", ""),
