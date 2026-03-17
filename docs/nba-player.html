@@ -2,82 +2,245 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>NBA Player Debug</title>
+<title>NBA Player Career | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
+
 <style>
-body{font-family:Arial;margin:20px;background:#f4f6f8;}
-pre{background:#000;color:#0f0;padding:15px;overflow:auto;height:400px;}
-table{width:100%;border-collapse:collapse;margin-top:20px;}
-td,th{border:1px solid #ccc;padding:6px;}
+body{
+  font-family:Inter,system-ui,Arial,sans-serif;
+  margin:0;
+  background:#f4f6f8;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  background:#fff;
+  font-weight:600;
+}
+
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+}
+
+.page-wrap{
+  max-width:1200px;
+  margin:auto;
+  padding:28px 20px 60px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#1D428A,#C8102E);
+  color:#fff;
+  border-radius:18px;
+  padding:26px;
+  margin-bottom:24px;
+}
+
+.controls{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-bottom:14px;
+}
+
+select,input{
+  padding:8px 12px;
+  border-radius:8px;
+  border:1px solid #ccc;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+th,td{
+  padding:10px;
+  border-bottom:1px solid #ddd;
+}
+
+tr:nth-child(even){
+  background:#f0f6ff;
+}
 </style>
 </head>
+
 <body>
 
-<h1 id="title">Loading...</h1>
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="nba.html">NBA</a>
+</div>
 
-<h3>RAW JSON (proves data is loading)</h3>
-<pre id="raw"></pre>
+<div class="page-wrap">
 
-<h3>Parsed Games</h3>
-<table>
+<div class="hero">
+  <h1 id="playerName">Loading...</h1>
+</div>
+
+<div class="controls">
+  <input id="playerSearch" list="players" placeholder="Search player...">
+  <datalist id="players"></datalist>
+
+  <select id="teamFilter">
+    <option value="all">All Teams</option>
+  </select>
+
+  <select id="oppFilter">
+    <option value="all">All Opponents</option>
+  </select>
+</div>
+
+<table id="gamesTable">
 <thead>
 <tr>
+<th>Season</th>
 <th>Date</th>
 <th>Team</th>
 <th>Opp</th>
 <th>PTS</th>
+<th>REB</th>
+<th>AST</th>
+<th>STL</th>
+<th>BLK</th>
 </tr>
 </thead>
-<tbody id="tbody"></tbody>
+<tbody></tbody>
 </table>
+
+</div>
 
 <script>
 
+// NEVER LET PAGE DIE
+window.onerror = function(){ return true; };
+
+// SAFE FIELD GETTER
+function get(g, keys){
+  for(let k of keys){
+    if(g && g[k] !== undefined && g[k] !== null) return g[k];
+  }
+  return "";
+}
+
+// PLAYER SLUG
 const params = new URLSearchParams(window.location.search);
 const slug = params.get("player");
 
-const path = `docs/data/nba/players/${slug}.json`;
-
-document.getElementById("title").innerText = path;
-
-// 🔥 FETCH
-fetch(path)
-.then(r=>{
-  if(!r.ok){
-    throw new Error("404 / BAD PATH");
-  }
-  return r.json();
+// LOAD PLAYER LIST
+fetch("docs/data/nba/players/index.json")
+.then(r=>r.json())
+.then(list=>{
+  const dl = document.getElementById("players");
+  list.forEach(p=>{
+    const o = document.createElement("option");
+    o.value = p.name;
+    dl.appendChild(o);
+  });
 })
+.catch(()=>{});
+
+// SEARCH
+document.getElementById("playerSearch").addEventListener("change", e=>{
+  const val = e.target.value.toLowerCase().replace(/\s+/g,"-");
+  window.location = "?player=" + val;
+});
+
+// LOAD PLAYER
+fetch(`docs/data/nba/players/${slug}.json`)
+.then(r=>r.json())
 .then(data=>{
 
-  console.log("DATA LOADED:", data);
+  document.getElementById("playerName").innerText = data.name || slug;
 
-  // SHOW RAW JSON
-  document.getElementById("raw").textContent =
-    JSON.stringify(data, null, 2);
+  const games = data.games || [];
 
-  const games = data.games || data || [];
-
-  const tbody = document.getElementById("tbody");
+  // BUILD FILTERS
+  const teamSet = new Set();
+  const oppSet = new Set();
 
   games.forEach(g=>{
-
-    const tr = document.createElement("tr");
-
-    tr.innerHTML = `
-      <td>${g.date || g.game_date || ""}</td>
-      <td>${g.team || ""}</td>
-      <td>${g.opponent || ""}</td>
-      <td>${g.pts || g.points || ""}</td>
-    `;
-
-    tbody.appendChild(tr);
+    teamSet.add(get(g,["team","team_name","tm"]));
+    oppSet.add(get(g,["opponent","opp"]));
   });
 
+  const tSel = document.getElementById("teamFilter");
+  const oSel = document.getElementById("oppFilter");
+
+  teamSet.forEach(t=>{
+    if(!t) return;
+    const o = document.createElement("option");
+    o.value = t;
+    o.textContent = t;
+    tSel.appendChild(o);
+  });
+
+  oppSet.forEach(t=>{
+    if(!t) return;
+    const o = document.createElement("option");
+    o.value = t;
+    o.textContent = t;
+    oSel.appendChild(o);
+  });
+
+  function render(){
+
+    const tbody = document.querySelector("#gamesTable tbody");
+    tbody.innerHTML = "";
+
+    const tVal = tSel.value;
+    const oVal = oSel.value;
+
+    let filtered = games.filter(g=>{
+      const team = get(g,["team","team_name","tm"]);
+      const opp  = get(g,["opponent","opp"]);
+      return (tVal==="all" || team===tVal) &&
+             (oVal==="all" || opp===oVal);
+    });
+
+    // SORT SAFE
+    filtered.sort((a,b)=>{
+      const da = new Date(get(a,["date","game_date"]));
+      const db = new Date(get(b,["date","game_date"]));
+      return db - da;
+    });
+
+    filtered.forEach(g=>{
+
+      const tr = document.createElement("tr");
+
+      tr.innerHTML = `
+        <td>${get(g,["season","year"])}</td>
+        <td>${get(g,["date","game_date"])}</td>
+        <td>${get(g,["team","team_name","tm"])}</td>
+        <td>${get(g,["opponent","opp"])}</td>
+        <td>${get(g,["pts","points"])}</td>
+        <td>${get(g,["reb","rebounds"])}</td>
+        <td>${get(g,["ast","assists"])}</td>
+        <td>${get(g,["stl","steals"])}</td>
+        <td>${get(g,["blk","blocks"])}</td>
+      `;
+
+      tbody.appendChild(tr);
+
+    });
+
+  }
+
+  tSel.onchange = render;
+  oSel.onchange = render;
+
+  render();
+
 })
-.catch(e=>{
-  document.getElementById("raw").textContent =
-    "ERROR: " + e.message;
+.catch(()=>{
+  document.getElementById("playerName").innerText = "Failed to load player";
 });
 
 </script>
