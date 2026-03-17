@@ -99,6 +99,15 @@ body{
   outline:none;
 }
 
+.team-stripe{
+  height:18px;
+  width:180px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.35);
+  background:rgba(255,255,255,.25);
+  margin-top:6px;
+}
+
 .section-card{
   background:#fff;
   border-radius:18px;
@@ -107,20 +116,75 @@ body{
   margin-bottom:24px;
 }
 
+.section-title{
+  font-size:13px;
+  font-weight:800;
+  letter-spacing:1px;
+  color:#666;
+  margin-bottom:15px;
+  text-transform:uppercase;
+}
+
+.stats-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+  gap:14px;
+  margin-bottom:14px;
+}
+
+.stat-box{
+  background:#eef3ff;
+  border-radius:14px;
+  padding:16px;
+  text-align:center;
+}
+
+.stat-box span{
+  display:block;
+  font-size:28px;
+  line-height:1;
+  font-weight:800;
+  margin-bottom:6px;
+  color:#0b3ea9;
+}
+
+.stat-box small{
+  color:#666;
+  font-size:12px;
+  display:block;
+  margin-top:4px;
+  line-height:1.35;
+}
+
+.filters-bar{
+  display:flex;
+  flex-wrap:wrap;
+  gap:12px 18px;
+  align-items:center;
+  margin-bottom:18px;
+}
+
+.filter-group{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-weight:700;
+  color:#003a99;
+}
+
+select{
+  padding:10px 12px;
+  border-radius:10px;
+  border:1px solid #ccc;
+  font-size:14px;
+  background:#fff;
+}
+
 .table-wrap{
   background:#fff;
   border-radius:18px;
   box-shadow:0 4px 12px rgba(0,0,0,.05);
   overflow:hidden;
-}
-
-.table-header{
-  padding:20px 22px 10px;
-  font-size:13px;
-  font-weight:800;
-  letter-spacing:1px;
-  color:#666;
-  text-transform:uppercase;
 }
 
 table{
@@ -149,6 +213,15 @@ tbody tr:hover{
   background:#eaf2ff;
 }
 
+.clickable-row{
+  cursor:pointer;
+}
+
+.name-note{
+  color:#666;
+  font-size:14px;
+}
+
 .empty-state{
   padding:24px;
   text-align:center;
@@ -174,7 +247,8 @@ tbody tr:hover{
 <div class="hero-title-wrap">
 <div class="eyebrow">NBA Player Career</div>
 <h1 id="title">Player</h1>
-<div class="hero-sub" id="heroSub">Career game log</div>
+<div class="hero-sub" id="heroSub">Career game log, totals, averages and highs</div>
+<div id="teamStripe" class="team-stripe"></div>
 </div>
 
 <div class="hero-search">
@@ -185,6 +259,46 @@ tbody tr:hover{
 </div>
 </div>
 
+<!-- CAREER SUMMARY -->
+<div class="section-card">
+<div class="section-title">Career Summary</div>
+<div class="stats-grid" id="careerTotals"></div>
+<div class="stats-grid" id="careerAverages"></div>
+<div class="stats-grid" id="careerHighs"></div>
+</div>
+
+<!-- FILTERS -->
+<div class="section-card">
+
+<div class="filters-bar">
+
+<div class="filter-group">
+<label>Team:</label>
+<select id="teamFilter">
+<option value="ALL">All teams</option>
+</select>
+</div>
+
+<div class="filter-group">
+<label>Opposition:</label>
+<select id="oppFilter">
+<option value="ALL">All teams</option>
+</select>
+</div>
+
+<div class="name-note" id="filterNote">Filtered breakdown</div>
+
+</div>
+
+<div class="section-title">Filtered Results</div>
+
+<div class="stats-grid" id="oppTotals"></div>
+<div class="stats-grid" id="oppAverages"></div>
+<div class="stats-grid" id="oppHighs"></div>
+
+</div>
+
+<!-- GAME LOG -->
 <div class="table-wrap">
 
 <div class="table-header">Game Log</div>
@@ -223,124 +337,59 @@ const playerParam = params.get("player");
 const titleEl = document.getElementById("title");
 const heroSub = document.getElementById("heroSub");
 const gamesBody = document.getElementById("gamesBody");
-const emptyState = document.getElementById("emptyState");
 
-let rows = [];
-let playersLoaded = false;
+let rows=[];
 
 function cleanName(name){
-  return (name || "").normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+return (name||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 }
 
 function slug(name){
-  return cleanName(name)
-    .toLowerCase()
-    .replace(/[^\w\s-]/g,"")
-    .replace(/\s+/g,"-");
-}
-
-function parseNum(v){
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
+return cleanName(name)
+.toLowerCase()
+.replace(/[^\w\s-]/g,"")
+.replace(/\s+/g,"-");
 }
 
 function cleanDate(d){
-  return (d || "").split("T")[0];
+return (d||"").split("T")[0];
 }
 
 function sortRowsLatestFirst(data){
-  return [...data].sort((a,b)=>{
-    const da = cleanDate(a.date || a.game_date || "");
-    const db = cleanDate(b.date || b.game_date || "");
-    return db.localeCompare(da);
-  });
-}
-
-async function fetchJSON(paths){
-
-for(const p of paths){
-
-try{
-const res = await fetch(p,{cache:"no-store"});
-if(res.ok) return await res.json();
-}catch{}
-
-}
-
-throw new Error("JSON load failed");
-
-}
-
-async function loadPlayers(){
-
-if(playersLoaded) return;
-
-try{
-
-const list = await fetchJSON([
-"/data/nba/players/index.json",
-"data/nba/players/index.json"
-]);
-
-const dl = document.getElementById("playerList");
-
-list.forEach(item=>{
-
-const name = typeof item==="string" ? item : item.name;
-
-const opt=document.createElement("option");
-opt.value=name;
-dl.appendChild(opt);
-
+return [...data].sort((a,b)=>{
+const da=cleanDate(a.date||a.game_date||"");
+const db=cleanDate(b.date||b.game_date||"");
+return db.localeCompare(da);
 });
-
-playersLoaded=true;
-
-}catch(e){console.error(e);}
-
 }
-
-document.getElementById("playerSearch").addEventListener("change",e=>{
-const v=e.target.value.trim();
-if(v) window.location="nba-player.html?player="+encodeURIComponent(v);
-});
 
 async function loadPlayer(){
 
 if(!playerParam) return;
 
-const displayName = decodeURIComponent(playerParam);
+const displayName=decodeURIComponent(playerParam);
 
-titleEl.textContent = displayName;
-heroSub.textContent = "Career game log for " + displayName;
+titleEl.textContent=displayName;
+heroSub.textContent="Career game log, totals, averages and highs for "+displayName;
 
-try{
+const res=await fetch(`/data/nba/players/${slug(displayName)}.json`);
+const data=await res.json();
 
-const data = await fetchJSON([
-`/data/nba/players/${slug(displayName)}.json`,
-`data/nba/players/${slug(displayName)}.json`
-]);
+rows=data.games || data;
 
-rows = Array.isArray(data) ? data : (data.games || []);
-
-rows = rows.filter(r => r.team && r.opp);
+rows=rows.filter(r=>r.team && r.opp);
 
 /* REMOVE ALL STAR / EXHIBITION */
 
-rows = rows.filter(r => {
+rows=rows.filter(r=>{
 
 const team=(r.team||"").toLowerCase();
 const opp=(r.opp||"").toLowerCase();
 
-if(team==="world" || team==="usa") return false;
-if(opp==="world" || opp==="usa") return false;
+if(team==="world"||team==="usa") return false;
+if(opp==="world"||opp==="usa") return false;
 
-const type=String(
-r.game_type ||
-r.type ||
-r.season_type ||
-""
-).toLowerCase();
+const type=(r.game_type||"").toLowerCase();
 
 if(type.includes("preseason")) return false;
 if(type.includes("all-star")) return false;
@@ -352,17 +401,9 @@ return true;
 
 });
 
-rows = sortRowsLatestFirst(rows);
+rows=sortRowsLatestFirst(rows);
 
 renderGames();
-
-}catch(e){
-
-console.error(e);
-rows=[];
-renderGames();
-
-}
 
 }
 
@@ -370,31 +411,20 @@ function renderGames(){
 
 gamesBody.innerHTML="";
 
-if(!rows.length){
-
-emptyState.style.display="block";
-return;
-
-}
-
-emptyState.style.display="none";
-
 rows.forEach(r=>{
 
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
-
-<td>${r.season || ""}</td>
-<td>${cleanDate(r.date || r.game_date || "")}</td>
-<td>${r.team || ""}</td>
-<td>${r.opp || ""}</td>
-<td>${parseNum(r.pts)}</td>
-<td>${parseNum(r.reb)}</td>
-<td>${parseNum(r.ast)}</td>
-<td>${parseNum(r.stl)}</td>
-<td>${parseNum(r.blk)}</td>
-
+<td>${r.season||""}</td>
+<td>${cleanDate(r.date||r.game_date||"")}</td>
+<td>${r.team||""}</td>
+<td>${r.opp||""}</td>
+<td>${r.pts||0}</td>
+<td>${r.reb||0}</td>
+<td>${r.ast||0}</td>
+<td>${r.stl||0}</td>
+<td>${r.blk||0}</td>
 `;
 
 gamesBody.appendChild(tr);
@@ -403,7 +433,6 @@ gamesBody.appendChild(tr);
 
 }
 
-loadPlayers();
 loadPlayer();
 
 </script>
