@@ -80,10 +80,13 @@ fetch("data/nba/players/index.json")
 
   document.getElementById("name").innerText = data.name;
 
-  let games = data.games || [];
-
-  // 🔥 REMOVE ALL-STAR GAMES
-  games = games.filter(g => !(g.opponent||"").toLowerCase().includes("all-star"));
+  // 🔥 FIX — MERGE ALL POSSIBLE GAME ARRAYS
+  let games = [
+    ...(data.games || []),
+    ...(data.game_logs || []),
+    ...(data.recent_games || []),
+    ...(data.logs || [])
+  ];
 
   render(games);
   stats(games);
@@ -112,30 +115,22 @@ function render(games){
   const tbody = document.getElementById("tbody");
   tbody.innerHTML = "";
 
-  // 🔥 SAFE SORT
   games.sort((a,b)=> safeDate(b.date) - safeDate(a.date));
 
   games.forEach(g=>{
 
-    try{
+    const tr = document.createElement("tr");
 
-      const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${g.date||""}</td>
+      <td>${g.team||""}</td>
+      <td>${g.opponent||""}</td>
+      <td>${get(g,["pts","points"])}</td>
+      <td>${get(g,["reb","rebounds"])}</td>
+      <td>${get(g,["ast","assists"])}</td>
+    `;
 
-      tr.innerHTML = `
-        <td>${g.date||""}</td>
-        <td>${g.team||""}</td>
-        <td>${g.opponent||""}</td>
-        <td>${get(g,["pts","points"])}</td>
-        <td>${get(g,["reb","rebounds"])}</td>
-        <td>${get(g,["ast","assists"])}</td>
-      `;
-
-      tbody.appendChild(tr);
-
-    }catch(e){
-      console.log("Skipped bad game", g);
-    }
-
+    tbody.appendChild(tr);
   });
 }
 
