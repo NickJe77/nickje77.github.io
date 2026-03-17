@@ -10,13 +10,13 @@ OUT.mkdir(exist_ok=True)
 
 players = {}
 
-# 🔥 NORMALISE NAME (MASTER FIX)
+# 🔥 NORMALISE NAME
 def clean_name(name):
     name = unicodedata.normalize("NFD", name)
     name = name.encode("ascii", "ignore").decode("utf-8")
     return name.strip()
 
-# 🔥 PLAYER ID (PERMANENT KEY)
+# 🔥 PLAYER ID
 def player_id(name):
     name = clean_name(name).lower()
     name = re.sub(r"[^\w\s-]", "", name)
@@ -82,6 +82,7 @@ def extract_players(game):
 
 print("Building NBA player database...")
 
+# 🔥 ENSURE SEASONS READ PROPERLY
 season_dirs = sorted(
     [d for d in DATA.iterdir() if d.is_dir()],
     key=lambda x: x.name,
@@ -92,10 +93,18 @@ for season_dir in season_dirs:
 
     season = season_dir.name
 
-    game_files = sorted(
-        [f for f in season_dir.glob("*.json") if f.name not in ["index.json","games.json"]],
-        reverse=True
-    )
+    # 🔥 CRITICAL FIX — DO NOT USE glob()
+    game_files = list(season_dir.iterdir())
+
+    game_files = [
+        f for f in game_files
+        if f.is_file()
+        and f.suffix == ".json"
+        and f.name not in ["index.json", "games.json"]
+    ]
+
+    # newest first
+    game_files.sort(key=lambda x: x.name, reverse=True)
 
     for game_file in game_files:
 
@@ -120,7 +129,6 @@ for season_dir in season_dirs:
             if not raw_name:
                 continue
 
-            # 🔥 CRITICAL — CLEAN NAME FIRST
             name = clean_name(raw_name)
             pid = player_id(name)
 
@@ -137,6 +145,7 @@ for season_dir in season_dirs:
             if not team:
                 continue
 
+            # normalise team
             if team != home and team != away:
                 if str(team).lower() in str(home).lower():
                     team = home
@@ -198,9 +207,9 @@ for player in players.values():
         reverse=True
     )
 
-print("Writing files...")
+print("Writing player files...")
 
-# 🔥 CLEAN OLD FILES (CRITICAL)
+# 🔥 CLEAN OLD FILES
 for f in OUT.glob("*.json"):
     f.unlink()
 
