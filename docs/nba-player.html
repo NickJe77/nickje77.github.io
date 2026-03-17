@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <title>NBA Player Career | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <link rel="stylesheet" href="style.css">
 
 <style>
-/* (UNCHANGED — your styling exactly preserved) */
 body{
   font-family:Inter,system-ui,Arial,sans-serif;
   margin:0;
@@ -15,202 +15,234 @@ body{
   color:#111;
 }
 
-/* KEEPING ALL YOUR CSS EXACTLY AS IS */
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  background:#fff;
+  font-weight:600;
+}
+
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+}
+
+.page-wrap{
+  max-width:1200px;
+  margin:auto;
+  padding:30px 20px 60px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#1D428A,#C8102E);
+  color:#fff;
+  padding:24px;
+  border-radius:14px;
+  margin-bottom:25px;
+}
+
+select,input{
+  padding:8px 12px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  margin:6px 6px 12px 0;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:20px;
+}
+
+th,td{
+  padding:10px;
+  border-bottom:1px solid #ddd;
+  text-align:left;
+}
+
+tr:nth-child(even){
+  background:#f0f6ff;
+}
 </style>
 </head>
+
 <body>
 
 <div class="navbar">
   <a href="index.html">Home</a>
   <a href="nba.html">NBA</a>
-  <a href="nba-season.html">Seasons</a>
 </div>
 
 <div class="page-wrap">
 
-  <div class="hero">
-    <div class="hero-top">
-      <div class="hero-title-wrap">
-        <div class="eyebrow">NBA Player Career</div>
-        <h1 id="title">Player</h1>
-        <div class="hero-sub" id="heroSub">Career game log, totals, averages and highs</div>
-        <div id="teamStripe" class="team-stripe"></div>
-      </div>
+<div class="hero">
+  <h1 id="playerName">Player</h1>
+  <div>Career game log</div>
+</div>
 
-      <div class="hero-search">
-        <input id="playerSearch" list="playerList" class="search-box" placeholder="Search player...">
-        <datalist id="playerList"></datalist>
-      </div>
-    </div>
-  </div>
+<input id="playerSearch" list="players" placeholder="Search player...">
+<datalist id="players"></datalist>
 
-  <div class="section-card">
-    <div class="section-title">Career Summary</div>
-    <div class="stats-grid" id="careerTotals"></div>
-    <div class="stats-grid" id="careerAverages"></div>
-    <div class="stats-grid" id="careerHighs"></div>
-  </div>
+<br>
 
-  <div class="section-card">
-    <div class="filters-bar">
-      <div class="filter-group">
-        <label>Team:</label>
-        <select id="teamFilter"><option value="ALL">All teams</option></select>
-      </div>
+<label>Team:</label>
+<select id="teamFilter"><option value="all">All teams</option></select>
 
-      <div class="filter-group">
-        <label>Opposition:</label>
-        <select id="oppFilter"><option value="ALL">All teams</option></select>
-      </div>
+<label>Opponent:</label>
+<select id="oppFilter"><option value="all">All teams</option></select>
 
-      <div class="name-note" id="filterNote">Filtered breakdown</div>
-    </div>
+<h2>Game Log</h2>
 
-    <div class="section-title">Filtered Results</div>
-    <div class="stats-grid" id="oppTotals"></div>
-    <div class="stats-grid" id="oppAverages"></div>
-    <div class="stats-grid" id="oppHighs"></div>
-  </div>
-
-  <div class="table-wrap">
-    <div class="table-header">Game Log</div>
-    <div class="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th>Season</th>
-            <th>Date</th>
-            <th>Team</th>
-            <th>Opp</th>
-            <th>PTS</th>
-            <th>REB</th>
-            <th>AST</th>
-            <th>STL</th>
-            <th>BLK</th>
-          </tr>
-        </thead>
-        <tbody id="gamesBody"></tbody>
-      </table>
-    </div>
-    <div id="emptyState" class="empty-state" style="display:none;">No games found.</div>
-  </div>
+<table id="gamesTable">
+<thead>
+<tr>
+<th>Season</th>
+<th>Date</th>
+<th>Team</th>
+<th>Opp</th>
+<th>PTS</th>
+<th>REB</th>
+<th>AST</th>
+<th>STL</th>
+<th>BLK</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
 
 </div>
 
 <script>
+
+let playerData = null;
+
 const params = new URLSearchParams(window.location.search);
-const playerParam = params.get("player");
+let playerSlug = params.get("player");
 
-const titleEl = document.getElementById("title");
-const heroSub = document.getElementById("heroSub");
-const gamesBody = document.getElementById("gamesBody");
-const teamFilter = document.getElementById("teamFilter");
-const oppFilter = document.getElementById("oppFilter");
-const stripe = document.getElementById("teamStripe");
-const filterNote = document.getElementById("filterNote");
-const emptyState = document.getElementById("emptyState");
-
-let rows = [];
-
-/* ---------- FIXED FILTER ---------- */
-function isValidGame(r){
-
-  const team = String(r.team || "").toLowerCase();
-  const opp = String(r.opp || "").toLowerCase();
-
-  if(["world","usa","stars","stripes"].includes(team)) return false;
-  if(["world","usa","stars","stripes"].includes(opp)) return false;
-
-  const mins = Number(r.minutes || 0);
-  if(!mins || mins === 0) return false;
-
-  return true;
-}
-
-/* ---------- SORT ---------- */
-function sortRowsLatestFirst(data){
-  return [...data].sort((a,b)=>{
-    const da = new Date(a.date || 0).getTime();
-    const db = new Date(b.date || 0).getTime();
-    return db - da;
-  });
-}
-
-function cleanDate(d){
-  return (d || "").split("T")[0];
-}
-
-function getSeason(r){
-  if(r.season) return r.season;
-
-  const d = cleanDate(r.date || "");
-  if(!d) return "";
-
-  const year = parseInt(d.substring(0,4));
-  const month = parseInt(d.substring(5,7));
-
-  return month >= 10 ? year : year - 1;
-}
-
-/* ---------- LOAD ---------- */
-async function loadPlayer(){
-
-  if(!playerParam) return;
-
-  const name = decodeURIComponent(playerParam);
-
-  titleEl.textContent = name;
-  heroSub.textContent = "Career game log for " + name;
-
+async function loadPlayersList(){
   try{
-    const res = await fetch(`data/nba/players/${name.toLowerCase().replace(/[^a-z0-9]+/g,"-")}.json`);
-    const data = await res.json();
+    const res = await fetch("docs/data/nba/players/index.json");
+    const list = await res.json();
 
-    rows = (data.games || []);
+    const dl = document.getElementById("players");
 
-    /* 🔥 KEY FIXES */
-    rows = rows.filter(isValidGame);
-    rows = sortRowsLatestFirst(rows);
+    list.forEach(p=>{
+      const opt = document.createElement("option");
+      opt.value = p.name;
+      opt.dataset.slug = p.slug;
+      dl.appendChild(opt);
+    });
 
-    renderGames();
-
-  }catch(err){
-    console.error(err);
+  }catch(e){
+    console.log("Player index failed", e);
   }
 }
 
-/* ---------- RENDER ---------- */
-function renderGames(){
+document.getElementById("playerSearch").addEventListener("change", e=>{
+  const val = e.target.value.toLowerCase();
+  window.location = "?player=" + val.replace(/\s+/g,"-");
+});
 
-  gamesBody.innerHTML = "";
+async function loadPlayer(){
 
-  if(!rows.length){
-    emptyState.style.display = "block";
+  if(!playerSlug){
+    console.log("No player slug");
     return;
   }
 
-  emptyState.style.display = "none";
+  try{
+    const res = await fetch(`docs/data/nba/players/${playerSlug}.json`);
+    playerData = await res.json();
 
-  rows.forEach(r=>{
+    document.getElementById("playerName").innerText = playerData.name || "Unknown";
+
+    buildFilters();
+    renderGames();
+
+  }catch(e){
+    console.error("PLAYER LOAD FAILED", e);
+  }
+}
+
+function buildFilters(){
+
+  const teamSet = new Set();
+  const oppSet = new Set();
+
+  (playerData.games || []).forEach(g=>{
+    if(g.team) teamSet.add(g.team);
+    if(g.opponent) oppSet.add(g.opponent);
+  });
+
+  const teamSel = document.getElementById("teamFilter");
+  const oppSel = document.getElementById("oppFilter");
+
+  teamSet.forEach(t=>{
+    const o = document.createElement("option");
+    o.value = t;
+    o.textContent = t;
+    teamSel.appendChild(o);
+  });
+
+  oppSet.forEach(t=>{
+    const o = document.createElement("option");
+    o.value = t;
+    o.textContent = t;
+    oppSel.appendChild(o);
+  });
+
+  teamSel.onchange = renderGames;
+  oppSel.onchange = renderGames;
+}
+
+function renderGames(){
+
+  if(!playerData || !playerData.games){
+    console.log("No games");
+    return;
+  }
+
+  const tbody = document.querySelector("#gamesTable tbody");
+  tbody.innerHTML = "";
+
+  const teamVal = document.getElementById("teamFilter").value;
+  const oppVal = document.getElementById("oppFilter").value;
+
+  const games = playerData.games.filter(g=>{
+    return (teamVal==="all" || g.team===teamVal) &&
+           (oppVal==="all" || g.opponent===oppVal);
+  });
+
+  // SORT NEWEST FIRST (fix your "missing recent games" issue)
+  games.sort((a,b)=> new Date(b.date) - new Date(a.date));
+
+  games.forEach(g=>{
+
     const tr = document.createElement("tr");
 
     tr.innerHTML = `
-      <td>${getSeason(r)}</td>
-      <td>${cleanDate(r.date)}</td>
-      <td>${r.team}</td>
-      <td>${r.opp}</td>
-      <td>${r.pts}</td>
-      <td>${r.reb}</td>
-      <td>${r.ast}</td>
-      <td>${r.stl}</td>
-      <td>${r.blk}</td>
+      <td>${g.season || ""}</td>
+      <td>${g.date || ""}</td>
+      <td>${g.team || ""}</td>
+      <td>${g.opponent || ""}</td>
+      <td>${g.points ?? g.pts ?? 0}</td>
+      <td>${g.rebounds ?? g.reb ?? 0}</td>
+      <td>${g.assists ?? g.ast ?? 0}</td>
+      <td>${g.steals ?? g.stl ?? 0}</td>
+      <td>${g.blocks ?? g.blk ?? 0}</td>
     `;
 
-    gamesBody.appendChild(tr);
+    tbody.appendChild(tr);
   });
+
 }
 
+loadPlayersList();
 loadPlayer();
+
 </script>
 
 </body>
