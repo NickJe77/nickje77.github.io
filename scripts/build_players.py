@@ -11,17 +11,12 @@ OUT.mkdir(exist_ok=True)
 players = {}
 
 def slug(name):
-
-    # Remove accents (Dončić → Doncic)
     s = unicodedata.normalize("NFD", name)
     s = s.encode("ascii", "ignore").decode("utf-8")
-
     s = s.lower()
     s = re.sub(r"[^\w\s-]", "", s)
     s = re.sub(r"\s+", "-", s)
-
     return s
-
 
 def num(v):
     try:
@@ -32,20 +27,27 @@ def num(v):
         except:
             return 0
 
-
 print("Building NBA player files...")
 
-for season_dir in DATA.iterdir():
+# 🔥 FORCE ORDER: newest seasons first
+season_dirs = sorted(
+    [d for d in DATA.iterdir() if d.is_dir()],
+    key=lambda x: x.name,
+    reverse=True
+)
 
-    if not season_dir.is_dir():
-        continue
+for season_dir in season_dirs:
 
     season = season_dir.name
 
-    for game_file in season_dir.glob("*.json"):
+    # 🔥 FORCE ORDER: newest games first
+    game_files = sorted(
+        [f for f in season_dir.glob("*.json") if f.name not in ["index.json","games.json"]],
+        key=lambda x: x.name,
+        reverse=True
+    )
 
-        if game_file.name in ["index.json", "games.json"]:
-            continue
+    for game_file in game_files:
 
         try:
             game = json.loads(game_file.read_text())
@@ -58,9 +60,7 @@ for season_dir in DATA.iterdir():
         home = game.get("home_team")
         away = game.get("away_team")
 
-        players_list = game.get("players", [])
-
-        for p in players_list:
+        for p in game.get("players", []):
 
             name = p.get("player_name") or p.get("name") or p.get("player")
 
@@ -77,7 +77,6 @@ for season_dir in DATA.iterdir():
                 }
 
             team = p.get("team")
-
             if not team:
                 continue
 
@@ -135,12 +134,14 @@ for season_dir in DATA.iterdir():
             t["stl"] += stl
             t["blk"] += blk
 
-
 print("Sorting game logs...")
 
+# 🔥 FINAL SORT: newest → oldest (CRITICAL FIX)
 for player in players.values():
-    player["games"].sort(key=lambda g: g.get("date", ""))
-
+    player["games"].sort(
+        key=lambda g: g.get("date", ""),
+        reverse=True
+    )
 
 print("Writing player files...")
 
