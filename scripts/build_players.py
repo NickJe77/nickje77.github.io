@@ -10,19 +10,19 @@ OUT.mkdir(exist_ok=True)
 
 players = {}
 
-# 🔥 NORMALISE NAME
+# ---------- NAME NORMALISATION ----------
 def clean_name(name):
     name = unicodedata.normalize("NFD", name)
     name = name.encode("ascii", "ignore").decode("utf-8")
     return name.strip()
 
-# 🔥 PLAYER ID
 def player_id(name):
     name = clean_name(name).lower()
     name = re.sub(r"[^\w\s-]", "", name)
     name = re.sub(r"\s+", "-", name)
     return name
 
+# ---------- SAFE NUMBER ----------
 def num(v):
     try:
         return int(v)
@@ -32,6 +32,7 @@ def num(v):
         except:
             return 0
 
+# ---------- FILTER BAD GAMES ----------
 def is_valid_game(game):
     gt = str(game.get("game_type", "")).lower()
 
@@ -44,6 +45,7 @@ def is_valid_game(game):
 
     return True
 
+# ---------- PLAYER EXTRACTION ----------
 def extract_players(game):
     players = []
 
@@ -82,7 +84,7 @@ def extract_players(game):
 
 print("Building NBA player database...")
 
-# 🔥 ENSURE SEASONS READ PROPERLY
+# ---------- READ SEASONS ----------
 season_dirs = sorted(
     [d for d in DATA.iterdir() if d.is_dir()],
     key=lambda x: x.name,
@@ -93,11 +95,9 @@ for season_dir in season_dirs:
 
     season = season_dir.name
 
-    # 🔥 CRITICAL FIX — DO NOT USE glob()
-    game_files = list(season_dir.iterdir())
-
+    # 🔥 CRITICAL: use iterdir, not glob
     game_files = [
-        f for f in game_files
+        f for f in season_dir.iterdir()
         if f.is_file()
         and f.suffix == ".json"
         and f.name not in ["index.json", "games.json"]
@@ -141,7 +141,6 @@ for season_dir in season_dirs:
                 }
 
             team = p.get("team")
-
             if not team:
                 continue
 
@@ -188,6 +187,7 @@ for season_dir in season_dirs:
             t["stl"] += record["stl"]
             t["blk"] += record["blk"]
 
+# ---------- DEDUP + SORT ----------
 print("Deduplicating + sorting...")
 
 for player in players.values():
@@ -207,9 +207,10 @@ for player in players.values():
         reverse=True
     )
 
+# ---------- WRITE FILES ----------
 print("Writing player files...")
 
-# 🔥 CLEAN OLD FILES
+# 🔥 wipe old broken files
 for f in OUT.glob("*.json"):
     f.unlink()
 
