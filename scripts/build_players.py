@@ -2,6 +2,7 @@ import json
 import re
 import unicodedata
 from pathlib import Path
+from datetime import datetime
 
 DATA = Path("docs/data/nba")
 OUT = DATA / "players"
@@ -10,7 +11,7 @@ OUT.mkdir(exist_ok=True)
 
 players = {}
 
-# ---------- CLEAN NAME ----------
+# ---------- NAME CLEAN ----------
 def clean_name(name):
     name = unicodedata.normalize("NFD", name)
     name = name.encode("ascii", "ignore").decode("utf-8")
@@ -22,6 +23,7 @@ def slug(name):
     name = re.sub(r"\s+", "-", name)
     return name
 
+# ---------- SAFE NUMBER ----------
 def num(v):
     try:
         return int(v)
@@ -31,15 +33,20 @@ def num(v):
         except:
             return 0
 
+# ---------- DATE PARSER (🔥 CRITICAL FIX) ----------
+def parse_date(d):
+    try:
+        return datetime.fromisoformat(d.replace("Z",""))
+    except:
+        return datetime.min
+
 # ---------- FILTER BAD GAMES ----------
 def is_valid_game(game, team, opp):
     gt = str(game.get("game_type", "")).lower()
 
-    # remove all star / exhibitions
     if "all" in gt or "star" in gt:
         return False
 
-    # remove world teams
     if team in ["World", "USA", "Stars", "Stripes"]:
         return False
     if opp in ["World", "USA", "Stars", "Stripes"]:
@@ -58,7 +65,7 @@ season_dirs = sorted(
 
 for season_dir in season_dirs:
 
-    season = season_dir.name  # 🔥 FIX SEASON
+    season = season_dir.name
 
     game_files = [
         f for f in season_dir.iterdir()
@@ -95,7 +102,7 @@ for season_dir in season_dirs:
             if not team:
                 continue
 
-            # fix team match
+            # normalise team
             if team != home and team != away:
                 if str(team).lower() in str(home).lower():
                     team = home
@@ -104,7 +111,7 @@ for season_dir in season_dirs:
 
             opp = away if team == home else home
 
-            # 🔥 FILTER BAD GAMES HERE
+            # 🔥 FILTER
             if not is_valid_game(game, team, opp):
                 continue
 
@@ -119,7 +126,7 @@ for season_dir in season_dirs:
             else:
                 mins = num(mins)
 
-            # 🔥 REMOVE ZERO MINUTE GAMES
+            # 🔥 REMOVE ZERO MINUTES
             if mins == 0:
                 continue
 
@@ -137,7 +144,7 @@ for season_dir in season_dirs:
                 }
 
             record = {
-                "season": season,  # 🔥 FIXED
+                "season": season,
                 "game_id": game.get("game_id"),
                 "date": game.get("date"),
                 "team": team,
@@ -173,15 +180,20 @@ for season_dir in season_dirs:
             t["stl"] += stl
             t["blk"] += blk
 
-# ---------- SORT ----------
-print("Sorting games...")
+# ---------- SORT (🔥 REAL FIX) ----------
+print("Sorting games properly...")
 
 for player in players.values():
-    player["games"].sort(key=lambda x: x.get("date",""), reverse=True)
+    player["games"] = sorted(
+        player["games"],
+        key=lambda x: parse_date(x.get("date","")),
+        reverse=True
+    )
 
 # ---------- WRITE ----------
 print("Writing player files...")
 
+# wipe old files
 for f in OUT.glob("*.json"):
     f.unlink()
 
@@ -193,7 +205,10 @@ for key, data in players.items():
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
-    index.append({"name": data["name"], "slug": key})
+    index.append({
+        "name": data["name"],
+        "slug": key
+    })
 
 index.sort(key=lambda x: x["name"])
 
@@ -201,3 +216,4 @@ with open(OUT / "index.json", "w") as f:
     json.dump(index, f, indent=2)
 
 print("DONE")
+print("Players:", len(index))
