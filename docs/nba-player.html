@@ -14,6 +14,11 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
   padding:16px 0;border-bottom:1px solid #ddd;background:#fff;font-weight:600;
 }
 
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+}
+
 .page-wrap{max-width:1200px;margin:auto;padding:28px 20px 60px;}
 
 .hero{
@@ -33,69 +38,106 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
 
 .stat-box{
   background:#fff;border-radius:10px;padding:12px;text-align:center;
+  box-shadow:0 1px 3px rgba(0,0,0,0.06);
 }
 
-.stat-box b{font-size:20px;display:block;}
+.stat-box b{
+  font-size:20px;
+  display:block;
+}
 
-.controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+.controls{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-bottom:14px;
+}
 
-select,input{padding:8px;border-radius:8px;border:1px solid #ccc;}
+select,input{
+  padding:8px;
+  border-radius:8px;
+  border:1px solid #ccc;
+}
 
-table{width:100%;border-collapse:collapse;background:#fff;}
-th,td{padding:10px;border-bottom:1px solid #ddd;}
-tr:nth-child(even){background:#f0f6ff;}
+table{
+  width:100%;
+  border-collapse:collapse;
+  background:#fff;
+}
+
+th,td{
+  padding:10px;
+  border-bottom:1px solid #ddd;
+}
+
+tr:nth-child(even){
+  background:#f0f6ff;
+}
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="nba.html">NBA</a>
+  <a href="index.html">Home</a>
+  <a href="nba.html">NBA</a>
 </div>
 
 <div class="page-wrap">
 
-<div class="hero">
-<h1 id="playerName">Loading...</h1>
-</div>
+  <div class="hero">
+    <h1 id="playerName">Loading...</h1>
+  </div>
 
-<div id="teamStrip" class="team-strip"></div>
+  <div id="teamStrip" class="team-strip"></div>
 
-<div class="stats" id="stats"></div>
+  <div class="stats" id="stats"></div>
 
-<div class="controls">
-<select id="teamFilter"><option value="all">All Teams</option></select>
-<select id="oppFilter"><option value="all">All Opponents</option></select>
-</div>
+  <div class="controls">
+    <select id="teamFilter"><option value="all">All Teams</option></select>
+    <select id="oppFilter"><option value="all">All Opponents</option></select>
+  </div>
 
-<table>
-<thead>
-<tr>
-<th>Date</th><th>Team</th><th>Opp</th>
-<th>PTS</th><th>REB</th><th>AST</th>
-</tr>
-</thead>
-<tbody id="tbody"></tbody>
-</table>
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Team</th>
+        <th>Opp</th>
+        <th>PTS</th>
+        <th>REB</th>
+        <th>AST</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
 
 </div>
 
 <script>
-
 const params = new URLSearchParams(window.location.search);
 const slug = params.get("player");
 
 let data = null;
 
-fetch(`docs/data/nba/players/${slug}.json`)
-.then(r=>r.json())
+function get(g, keys){
+  for(let k of keys){
+    if(g && g[k] !== undefined && g[k] !== null) return g[k];
+  }
+  return 0;
+}
+
+fetch(`data/nba/players/${slug}.json`)
+.then(r=>{
+  if(!r.ok) throw new Error("Failed to load player");
+  return r.json();
+})
 .then(p=>{
 
   data = p;
   document.getElementById("playerName").innerText = p.name || slug;
 
-  const games = p.games || [];
+  const games = Array.isArray(p.games) ? p.games : [];
 
   buildFilters(games);
   render(games);
@@ -107,110 +149,110 @@ fetch(`docs/data/nba/players/${slug}.json`)
   document.getElementById("playerName").innerText = "Failed to load player";
 });
 
-function get(g, keys){
-  for(let k of keys){
-    if(g[k] !== undefined) return g[k];
-  }
-  return 0;
-}
-
 function buildFilters(games){
 
-  const tSet=new Set(), oSet=new Set();
+  const tSet = new Set();
+  const oSet = new Set();
 
   games.forEach(g=>{
-    tSet.add(get(g,["team"]));
-    oSet.add(get(g,["opponent"]));
+    const team = get(g,["team"]);
+    const opp = get(g,["opponent"]);
+    if(team) tSet.add(team);
+    if(opp) oSet.add(opp);
   });
 
-  const tSel=document.getElementById("teamFilter");
-  const oSel=document.getElementById("oppFilter");
+  const tSel = document.getElementById("teamFilter");
+  const oSel = document.getElementById("oppFilter");
 
   tSet.forEach(t=>{
-    const o=document.createElement("option");
-    o.value=t;o.textContent=t;tSel.appendChild(o);
+    const o = document.createElement("option");
+    o.value = t;
+    o.textContent = t;
+    tSel.appendChild(o);
   });
 
   oSet.forEach(t=>{
-    const o=document.createElement("option");
-    o.value=t;o.textContent=t;oSel.appendChild(o);
+    const o = document.createElement("option");
+    o.value = t;
+    o.textContent = t;
+    oSel.appendChild(o);
   });
 
-  tSel.onchange=()=>render(games);
-  oSel.onchange=()=>render(games);
+  tSel.onchange = ()=>render(games);
+  oSel.onchange = ()=>render(games);
 }
 
 function render(games){
 
-  const tbody=document.getElementById("tbody");
-  tbody.innerHTML="";
+  const tbody = document.getElementById("tbody");
+  tbody.innerHTML = "";
 
-  const tVal=document.getElementById("teamFilter").value;
-  const oVal=document.getElementById("oppFilter").value;
+  const tVal = document.getElementById("teamFilter").value;
+  const oVal = document.getElementById("oppFilter").value;
 
   games
-  .filter(g=>{
-    return (tVal==="all"||g.team===tVal) &&
-           (oVal==="all"||g.opponent===oVal);
-  })
-  .sort((a,b)=> new Date(b.date)-new Date(a.date))
-  .forEach(g=>{
+    .filter(g=>{
+      return (tVal==="all" || g.team===tVal) &&
+             (oVal==="all" || g.opponent===oVal);
+    })
+    .sort((a,b)=> new Date(b.date) - new Date(a.date))
+    .forEach(g=>{
 
-    const tr=document.createElement("tr");
+      const tr = document.createElement("tr");
 
-    tr.innerHTML=`
-      <td>${g.date}</td>
-      <td>${g.team}</td>
-      <td>${g.opponent}</td>
-      <td>${get(g,["pts","points"])}</td>
-      <td>${get(g,["reb","rebounds"])}</td>
-      <td>${get(g,["ast","assists"])}</td>
-    `;
+      tr.innerHTML = `
+        <td>${g.date || ""}</td>
+        <td>${g.team || ""}</td>
+        <td>${g.opponent || ""}</td>
+        <td>${get(g,["pts","points"])}</td>
+        <td>${get(g,["reb","rebounds"])}</td>
+        <td>${get(g,["ast","assists"])}</td>
+      `;
 
-    tbody.appendChild(tr);
-  });
+      tbody.appendChild(tr);
+    });
 }
 
 function buildStats(games){
 
-  let pts=0,reb=0,ast=0,td=0;
+  let pts = 0;
+  let reb = 0;
+  let ast = 0;
+  let td = 0;
 
   games.forEach(g=>{
-    const p=get(g,["pts","points"]);
-    const r=get(g,["reb","rebounds"]);
-    const a=get(g,["ast","assists"]);
+    const p = Number(get(g,["pts","points"])) || 0;
+    const r = Number(get(g,["reb","rebounds"])) || 0;
+    const a = Number(get(g,["ast","assists"])) || 0;
 
-    pts+=p; reb+=r; ast+=a;
+    pts += p;
+    reb += r;
+    ast += a;
 
-    if([p,r,a].filter(x=>x>=10).length>=3) td++;
+    if([p,r,a].filter(x=>x>=10).length >= 3) td++;
   });
 
-  const n=games.length||1;
+  const n = games.length || 1;
 
-  const html=`
+  document.getElementById("stats").innerHTML = `
     <div class="stat-box"><b>${(pts/n).toFixed(1)}</b>PPG</div>
     <div class="stat-box"><b>${(reb/n).toFixed(1)}</b>RPG</div>
     <div class="stat-box"><b>${(ast/n).toFixed(1)}</b>APG</div>
     <div class="stat-box"><b>${td}</b>Triple-Doubles</div>
   `;
-
-  document.getElementById("stats").innerHTML=html;
 }
 
 function setTeamColor(games){
 
-  const colors={
+  const colors = {
     "Dallas Mavericks":"#00538C",
     "Los Angeles Lakers":"#552583",
     "Phoenix Suns":"#E56020"
   };
 
-  const team=games[0]?.team;
-  const color=colors[team]||"#333";
-
-  document.getElementById("teamStrip").style.background=color;
+  const team = games[0]?.team;
+  document.getElementById("teamStrip").style.background = colors[team] || "#333";
 }
-
 </script>
 
 </body>
