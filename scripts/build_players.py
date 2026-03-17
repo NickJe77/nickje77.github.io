@@ -10,13 +10,19 @@ OUT.mkdir(exist_ok=True)
 
 players = {}
 
+def clean_name(name):
+    return name.strip()
+
 def slug(name):
-    s = unicodedata.normalize("NFD", name)
-    s = s.encode("ascii", "ignore").decode("utf-8")
-    s = s.lower()
-    s = re.sub(r"[^\w\s-]", "", s)
-    s = re.sub(r"\s+", "-", s)
-    return s
+    # ALWAYS normalize accents
+    name = unicodedata.normalize("NFD", name)
+    name = name.encode("ascii", "ignore").decode("utf-8")
+
+    name = name.lower()
+    name = re.sub(r"[^\w\s-]", "", name)
+    name = re.sub(r"\s+", "-", name)
+
+    return name
 
 def num(v):
     try:
@@ -28,37 +34,49 @@ def num(v):
             return 0
 
 def is_valid_game(game):
-    game_type = str(game.get("game_type", "")).lower()
+    gt = str(game.get("game_type", "")).lower()
 
-    if "all" in game_type and "star" in game_type:
+    if "all" in gt and "star" in gt:
         return False
-    if "preseason" in game_type:
+    if "preseason" in gt:
         return False
-    if "summer" in game_type:
+    if "summer" in gt:
         return False
 
     return True
 
 def extract_players(game):
-
-    if "players" in game:
-        return game["players"]
-
-    if "player_stats" in game:
-        return game["player_stats"]
-
-    if "boxscore" in game:
-        bs = game["boxscore"]
-        if isinstance(bs, dict) and "players" in bs:
-            return bs["players"]
-
     players = []
 
-    if "home_players" in game:
-        players.extend(game["home_players"])
+    if isinstance(game.get("players"), list):
+        players.extend(game["players"])
 
-    if "away_players" in game:
-        players.extend(game["away_players"])
+    if isinstance(game.get("player_stats"), list):
+        players.extend(game["player_stats"])
+
+    if isinstance(game.get("boxscore"), dict):
+        if isinstance(game["boxscore"].get("players"), list):
+            players.extend(game["boxscore"]["players"])
+
+    if isinstance(game.get("home_players"), list):
+        for p in game["home_players"]:
+            p["team"] = game.get("home_team")
+            players.append(p)
+
+    if isinstance(game.get("away_players"), list):
+        for p in game["away_players"]:
+            p["team"] = game.get("away_team")
+            players.append(p)
+
+    if isinstance(game.get("home_team_players"), list):
+        for p in game["home_team_players"]:
+            p["team"] = game.get("home_team")
+            players.append(p)
+
+    if isinstance(game.get("away_team_players"), list):
+        for p in game["away_team_players"]:
+            p["team"] = game.get("away_team")
+            players.append(p)
 
     return players
 
@@ -77,7 +95,6 @@ for season_dir in season_dirs:
 
     game_files = sorted(
         [f for f in season_dir.glob("*.json") if f.name not in ["index.json","games.json"]],
-        key=lambda x: x.name,
         reverse=True
     )
 
@@ -97,15 +114,14 @@ for season_dir in season_dirs:
         home = game.get("home_team")
         away = game.get("away_team")
 
-        players_list = extract_players(game)
+        for p in extract_players(game):
 
-        for p in players_list:
+            raw_name = p.get("player_name") or p.get("name") or p.get("player")
 
-            name = p.get("player_name") or p.get("name") or p.get("player")
-
-            if not name:
+            if not raw_name:
                 continue
 
+            name = clean_name(raw_name)
             key = slug(name)
 
             if key not in players:
@@ -115,24 +131,11 @@ for season_dir in season_dirs:
                     "games": []
                 }
 
-            # 🔥 FIXED TEAM LOGIC
-            team = (
-                p.get("team") or
-                p.get("team_name") or
-                p.get("team_abbreviation") or
-                p.get("team_abbr")
-            )
-
-            if not team:
-                if p in game.get("home_players", []):
-                    team = home
-                elif p in game.get("away_players", []):
-                    team = away
+            team = p.get("team")
 
             if not team:
                 continue
 
-            # Normalize team name
             if team != home and team != away:
                 if str(team).lower() in str(home).lower():
                     team = home
@@ -175,15 +178,25 @@ for season_dir in season_dirs:
             t["stl"] += record["stl"]
             t["blk"] += record["blk"]
 
-print("Sorting game logs...")
+print("Deduplicating games...")
 
 for player in players.values():
-    player["games"].sort(
-        key=lambda g: g.get("date", ""),
-        reverse=True
-    )
+    seen = set()
+    unique_games = []
+
+    for g in player["games"]:
+        key = (g["game_id"], g["team"])
+        if key not in seen:
+            seen.add(key)
+            unique_games.append(g)
+
+    player["games"] = sorted(unique_games, key=lambda x: x["date"], reverse=True)
 
 print("Writing player files...")
+
+# 🔥 CLEAN OLD FILES FIRST
+for f in OUT.glob("*.json"):
+    f.unlink()
 
 index = []
 
@@ -204,5 +217,5 @@ index.sort(key=lambda x: x["name"])
 with open(OUT / "index.json", "w") as f:
     json.dump(index, f, indent=2)
 
-print("NBA player database built successfully")
-print("Players created:", len(index))
+print("NBA player database rebuilt cleanly")
+print("Players:", len(index))
