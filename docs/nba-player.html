@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <title>NBA Player Career | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <link rel="stylesheet" href="style.css">
 
 <style>
@@ -33,34 +32,38 @@ body{
 .page-wrap{
   max-width:1200px;
   margin:auto;
-  padding:30px 20px 60px;
+  padding:28px 20px 60px;
 }
 
 .hero{
   background:linear-gradient(90deg,#1D428A,#C8102E);
   color:#fff;
-  padding:24px;
-  border-radius:14px;
-  margin-bottom:25px;
+  border-radius:18px;
+  padding:26px;
+  margin-bottom:24px;
+}
+
+.controls{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-bottom:14px;
 }
 
 select,input{
   padding:8px 12px;
   border-radius:8px;
   border:1px solid #ccc;
-  margin:6px 6px 12px 0;
 }
 
 table{
   width:100%;
   border-collapse:collapse;
-  margin-top:20px;
 }
 
 th,td{
   padding:10px;
   border-bottom:1px solid #ddd;
-  text-align:left;
 }
 
 tr:nth-child(even){
@@ -79,24 +82,23 @@ tr:nth-child(even){
 <div class="page-wrap">
 
 <div class="hero">
-  <h1 id="playerName">Player</h1>
-  <div>Career game log</div>
+  <h1 id="playerName">Loading...</h1>
 </div>
 
-<input id="playerSearch" list="players" placeholder="Search player...">
-<datalist id="players"></datalist>
+<div class="controls">
+  <input id="playerSearch" list="players" placeholder="Search player...">
+  <datalist id="players"></datalist>
 
-<br>
+  <select id="teamFilter">
+    <option value="all">All Teams</option>
+  </select>
 
-<label>Team:</label>
-<select id="teamFilter"><option value="all">All teams</option></select>
+  <select id="oppFilter">
+    <option value="all">All Opponents</option>
+  </select>
+</div>
 
-<label>Opponent:</label>
-<select id="oppFilter"><option value="all">All teams</option></select>
-
-<h2>Game Log</h2>
-
-<table id="gamesTable">
+<table>
 <thead>
 <tr>
 <th>Season</th>
@@ -110,19 +112,24 @@ tr:nth-child(even){
 <th>BLK</th>
 </tr>
 </thead>
-<tbody></tbody>
+<tbody id="tbody"></tbody>
 </table>
 
 </div>
 
 <script>
 
-let playerData = null;
+// 🔒 GLOBAL ERROR GUARD (prevents blank page)
+window.addEventListener("error", e => console.log("JS error:", e.message));
+window.addEventListener("unhandledrejection", e => console.log("Promise error:", e.reason));
+
+let player = null;
 
 const params = new URLSearchParams(window.location.search);
-let playerSlug = params.get("player");
+const slug = params.get("player");
 
-async function loadPlayersList(){
+// LOAD PLAYER LIST
+async function loadList(){
   try{
     const res = await fetch("docs/data/nba/players/index.json");
     const list = await res.json();
@@ -130,117 +137,131 @@ async function loadPlayersList(){
     const dl = document.getElementById("players");
 
     list.forEach(p=>{
-      const opt = document.createElement("option");
-      opt.value = p.name;
-      opt.dataset.slug = p.slug;
-      dl.appendChild(opt);
+      const o = document.createElement("option");
+      o.value = p.name;
+      dl.appendChild(o);
     });
 
   }catch(e){
-    console.log("Player index failed", e);
+    console.log("Index load failed");
   }
 }
 
+// SEARCH
 document.getElementById("playerSearch").addEventListener("change", e=>{
-  const val = e.target.value.toLowerCase();
-  window.location = "?player=" + val.replace(/\s+/g,"-");
+  const val = e.target.value.toLowerCase().replace(/\s+/g,"-");
+  window.location = "?player=" + val;
 });
 
+// LOAD PLAYER
 async function loadPlayer(){
 
-  if(!playerSlug){
-    console.log("No player slug");
-    return;
-  }
+  if(!slug) return;
 
   try{
-    const res = await fetch(`docs/data/nba/players/${playerSlug}.json`);
-    playerData = await res.json();
+    const res = await fetch(`docs/data/nba/players/${slug}.json`);
+    player = await res.json();
 
-    document.getElementById("playerName").innerText = playerData.name || "Unknown";
+    document.getElementById("playerName").innerText = player.name || "Player";
 
     buildFilters();
-    renderGames();
+    render();
 
   }catch(e){
-    console.error("PLAYER LOAD FAILED", e);
+    console.log("Player load failed");
   }
 }
 
+// FILTERS
 function buildFilters(){
 
   const teamSet = new Set();
   const oppSet = new Set();
 
-  (playerData.games || []).forEach(g=>{
+  (player.games || []).forEach(g=>{
     if(g.team) teamSet.add(g.team);
     if(g.opponent) oppSet.add(g.opponent);
   });
 
-  const teamSel = document.getElementById("teamFilter");
-  const oppSel = document.getElementById("oppFilter");
+  const tSel = document.getElementById("teamFilter");
+  const oSel = document.getElementById("oppFilter");
 
   teamSet.forEach(t=>{
     const o = document.createElement("option");
     o.value = t;
     o.textContent = t;
-    teamSel.appendChild(o);
+    tSel.appendChild(o);
   });
 
   oppSet.forEach(t=>{
     const o = document.createElement("option");
     o.value = t;
     o.textContent = t;
-    oppSel.appendChild(o);
+    oSel.appendChild(o);
   });
 
-  teamSel.onchange = renderGames;
-  oppSel.onchange = renderGames;
+  tSel.onchange = render;
+  oSel.onchange = render;
 }
 
-function renderGames(){
+// RENDER
+function render(){
 
-  if(!playerData || !playerData.games){
-    console.log("No games");
-    return;
-  }
+  if(!player || !player.games) return;
 
-  const tbody = document.querySelector("#gamesTable tbody");
+  const tbody = document.getElementById("tbody");
   tbody.innerHTML = "";
 
-  const teamVal = document.getElementById("teamFilter").value;
-  const oppVal = document.getElementById("oppFilter").value;
+  const tVal = document.getElementById("teamFilter").value;
+  const oVal = document.getElementById("oppFilter").value;
 
-  const games = playerData.games.filter(g=>{
-    return (teamVal==="all" || g.team===teamVal) &&
-           (oppVal==="all" || g.opponent===oppVal);
+  let games = player.games.filter(g=>{
+    return (tVal==="all" || g.team===tVal) &&
+           (oVal==="all" || g.opponent===oVal);
   });
 
-  // SORT NEWEST FIRST (fix your "missing recent games" issue)
-  games.sort((a,b)=> new Date(b.date) - new Date(a.date));
+  // 🔥 FIX: SAFE SORT (prevents Feb cutoff)
+  games.sort((a,b)=>{
+    const da = new Date(a.date || a.game_date || 0);
+    const db = new Date(b.date || b.game_date || 0);
+    return db - da;
+  });
 
   games.forEach(g=>{
 
-    const tr = document.createElement("tr");
+    try{
 
-    tr.innerHTML = `
-      <td>${g.season || ""}</td>
-      <td>${g.date || ""}</td>
-      <td>${g.team || ""}</td>
-      <td>${g.opponent || ""}</td>
-      <td>${g.points ?? g.pts ?? 0}</td>
-      <td>${g.rebounds ?? g.reb ?? 0}</td>
-      <td>${g.assists ?? g.ast ?? 0}</td>
-      <td>${g.steals ?? g.stl ?? 0}</td>
-      <td>${g.blocks ?? g.blk ?? 0}</td>
-    `;
+      const pts = g.pts ?? g.points ?? 0;
+      const reb = g.reb ?? g.rebounds ?? 0;
+      const ast = g.ast ?? g.assists ?? 0;
+      const stl = g.stl ?? g.steals ?? 0;
+      const blk = g.blk ?? g.blocks ?? 0;
 
-    tbody.appendChild(tr);
+      const tr = document.createElement("tr");
+
+      tr.innerHTML = `
+        <td>${g.season || ""}</td>
+        <td>${g.date || ""}</td>
+        <td>${g.team || ""}</td>
+        <td>${g.opponent || ""}</td>
+        <td>${pts}</td>
+        <td>${reb}</td>
+        <td>${ast}</td>
+        <td>${stl}</td>
+        <td>${blk}</td>
+      `;
+
+      tbody.appendChild(tr);
+
+    }catch(e){
+      console.log("Skipped bad game", g);
+    }
+
   });
 
 }
 
-loadPlayersList();
+loadList();
 loadPlayer();
 
 </script>
