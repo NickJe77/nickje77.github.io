@@ -33,7 +33,7 @@ def num(v):
         except:
             return 0
 
-# ---------- DATE PARSER (🔥 CRITICAL FIX) ----------
+# ---------- DATE PARSER ----------
 def parse_date(d):
     try:
         return datetime.fromisoformat(d.replace("Z",""))
@@ -111,7 +111,7 @@ for season_dir in season_dirs:
 
             opp = away if team == home else home
 
-            # 🔥 FILTER
+            # FILTER
             if not is_valid_game(game, team, opp):
                 continue
 
@@ -126,15 +126,15 @@ for season_dir in season_dirs:
             else:
                 mins = num(mins)
 
-            # 🔥 REMOVE ZERO MINUTES
-            if mins == 0:
-                continue
-
             pts = num(p.get("points"))
             reb = num(p.get("rebounds"))
             ast = num(p.get("assists"))
             stl = num(p.get("steals"))
             blk = num(p.get("blocks"))
+
+            # 🔥 FIX: ONLY SKIP TRUE EMPTY ROWS (NOT REAL GAMES)
+            if mins == 0 and pts == 0 and reb == 0 and ast == 0 and stl == 0 and blk == 0:
+                continue
 
             if key not in players:
                 players[key] = {
@@ -148,7 +148,7 @@ for season_dir in season_dirs:
                 "game_id": game.get("game_id"),
                 "date": game.get("date"),
                 "team": team,
-                "opp": opp,
+                "opponent": opp,  # 🔥 FIXED FIELD NAME
                 "minutes": mins,
                 "pts": pts,
                 "reb": reb,
@@ -180,7 +180,7 @@ for season_dir in season_dirs:
             t["stl"] += stl
             t["blk"] += blk
 
-# ---------- SORT (🔥 REAL FIX) ----------
+# ---------- SORT ----------
 print("Sorting games properly...")
 
 for player in players.values():
