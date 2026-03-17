@@ -50,7 +50,6 @@ td,th{padding:8px;border-bottom:1px solid #ddd;}
 
 <script>
 
-// normalize name safely
 function clean(s){
   return (s||"")
     .toLowerCase()
@@ -62,12 +61,10 @@ function clean(s){
 const params = new URLSearchParams(window.location.search);
 const target = clean(params.get("player") || "");
 
-// STEP 1: load index
 fetch("data/nba/players/index.json")
 .then(r=>r.json())
 .then(list=>{
 
-  // find correct player
   let match = list.find(p => clean(p.name) === target);
 
   if(!match){
@@ -75,7 +72,6 @@ fetch("data/nba/players/index.json")
     return;
   }
 
-  // STEP 2: load player file
   return fetch(`data/nba/players/${match.slug}.json`);
 
 })
@@ -84,7 +80,10 @@ fetch("data/nba/players/index.json")
 
   document.getElementById("name").innerText = data.name;
 
-  const games = data.games || [];
+  let games = data.games || [];
+
+  // 🔥 REMOVE ALL-STAR GAMES
+  games = games.filter(g => !(g.opponent||"").toLowerCase().includes("all-star"));
 
   render(games);
   stats(games);
@@ -98,9 +97,14 @@ fetch("data/nba/players/index.json")
 
 function get(g, keys){
   for(let k of keys){
-    if(g[k] !== undefined) return g[k];
+    if(g && g[k] !== undefined && g[k] !== null) return g[k];
   }
   return 0;
+}
+
+function safeDate(d){
+  const t = Date.parse(d);
+  return isNaN(t) ? 0 : t;
 }
 
 function render(games){
@@ -108,21 +112,30 @@ function render(games){
   const tbody = document.getElementById("tbody");
   tbody.innerHTML = "";
 
-  games.sort((a,b)=> new Date(b.date) - new Date(a.date));
+  // 🔥 SAFE SORT
+  games.sort((a,b)=> safeDate(b.date) - safeDate(a.date));
 
   games.forEach(g=>{
-    const tr = document.createElement("tr");
 
-    tr.innerHTML = `
-      <td>${g.date||""}</td>
-      <td>${g.team||""}</td>
-      <td>${g.opponent||""}</td>
-      <td>${get(g,["pts","points"])}</td>
-      <td>${get(g,["reb","rebounds"])}</td>
-      <td>${get(g,["ast","assists"])}</td>
-    `;
+    try{
 
-    tbody.appendChild(tr);
+      const tr = document.createElement("tr");
+
+      tr.innerHTML = `
+        <td>${g.date||""}</td>
+        <td>${g.team||""}</td>
+        <td>${g.opponent||""}</td>
+        <td>${get(g,["pts","points"])}</td>
+        <td>${get(g,["reb","rebounds"])}</td>
+        <td>${get(g,["ast","assists"])}</td>
+      `;
+
+      tbody.appendChild(tr);
+
+    }catch(e){
+      console.log("Skipped bad game", g);
+    }
+
   });
 }
 
