@@ -9,29 +9,27 @@ OUT.mkdir(exist_ok=True)
 
 players = {}
 
-def clean_name(name):
+def normalize(name):
     if not name:
         return ""
 
-    # remove accents (Doncic vs Dončić)
+    # remove accents
     name = unicodedata.normalize("NFKD", name)
     name = name.encode("ascii", "ignore").decode("ascii")
 
-    # remove junk
-    name = re.sub(r"[^\w\s.-]", "", name)
-
-    # normalise spacing
-    name = re.sub(r"\s+", " ", name).strip()
-
-    return name
-
-def slug(name):
-    name = clean_name(name).lower()
+    # remove punctuation
     name = re.sub(r"[^\w\s-]", "", name)
-    name = re.sub(r"\s+", "-", name)
+
+    # lowercase + clean spaces
+    name = re.sub(r"\s+", " ", name).strip().lower()
+
     return name
 
-print("🚀 Building NBA player files...")
+def make_slug(name):
+    name = normalize(name)
+    return name.replace(" ", "-")
+
+print("🚀 Building players (DEDUP FIX)...")
 
 for season_dir in DATA.iterdir():
 
@@ -61,18 +59,17 @@ for season_dir in DATA.iterdir():
                 if not raw_name:
                     continue
 
-                name = clean_name(raw_name)
-                s = slug(name)
+                slug = make_slug(raw_name)
 
-                # 🔥 CRITICAL: FORCE MERGE
-                if s not in players:
-                    players[s] = {
-                        "name": name,
-                        "slug": s,
+                # 🔥 FORCE SINGLE PLAYER ENTRY
+                if slug not in players:
+                    players[slug] = {
+                        "name": raw_name.strip(),  # keep first seen name
+                        "slug": slug,
                         "games": []
                     }
 
-                players[s]["games"].append({
+                players[slug]["games"].append({
                     "game_id": game_id,
                     "team": p.get("team"),
                     "opponent": p.get("opponent"),
@@ -80,17 +77,15 @@ for season_dir in DATA.iterdir():
                     "rebounds": p.get("rebounds", 0),
                     "assists": p.get("assists", 0),
                     "steals": p.get("steals", 0),
-                    "blocks": p.get("blocks", 0),
-                    "turnovers": p.get("turnovers", 0),
-                    "minutes": p.get("minutes")
+                    "blocks": p.get("blocks", 0)
                 })
 
-# ✅ WRITE PLAYER FILES
-for s, data in players.items():
-    with open(OUT / f"{s}.json", "w") as f:
+# WRITE FILES
+for slug, data in players.items():
+    with open(OUT / f"{slug}.json", "w") as f:
         json.dump(data, f)
 
-# ✅ BUILD INDEX (UNIQUE)
+# BUILD INDEX (UNIQUE ONLY)
 index = sorted(
     [{"name": p["name"], "slug": p["slug"]} for p in players.values()],
     key=lambda x: x["name"]
@@ -99,4 +94,4 @@ index = sorted(
 with open(OUT / "index.json", "w") as f:
     json.dump(index, f)
 
-print(f"✅ Built {len(players)} players")
+print(f"✅ Built {len(players)} unique players")
