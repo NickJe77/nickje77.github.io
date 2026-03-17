@@ -13,15 +13,41 @@ players = {}
 
 # ---------- NAME CLEAN ----------
 def clean_name(name):
+    name = str(name or "").strip()
     name = unicodedata.normalize("NFD", name)
     name = name.encode("ascii", "ignore").decode("utf-8")
-    return name.strip()
+    name = re.sub(r"\s+", " ", name).strip()
+    return name
 
 def slug(name):
     name = clean_name(name).lower()
     name = re.sub(r"[^\w\s-]", "", name)
     name = re.sub(r"\s+", "-", name)
+    name = re.sub(r"-+", "-", name).strip("-")
     return name
+
+# Prefer full names over initials / shorter aliases
+def better_display_name(current, candidate):
+    current = clean_name(current)
+    candidate = clean_name(candidate)
+
+    if not current:
+        return candidate
+    if not candidate:
+        return current
+
+    # Prefer the longer, fuller-looking name
+    cur_score = (
+        len(current),
+        current.count(" "),
+        0 if re.search(r"\b[A-Z]\.", current) else 1
+    )
+    cand_score = (
+        len(candidate),
+        candidate.count(" "),
+        0 if re.search(r"\b[A-Z]\.", candidate) else 1
+    )
+    return candidate if cand_score > cur_score else current
 
 # ---------- SAFE NUMBER ----------
 def num(v):
@@ -36,7 +62,7 @@ def num(v):
 # ---------- DATE PARSER ----------
 def parse_date(d):
     try:
-        return datetime.fromisoformat(d.replace("Z",""))
+        return datetime.fromisoformat(str(d).replace("Z", ""))
     except:
         return datetime.min
 
@@ -47,9 +73,10 @@ def is_valid_game(game, team, opp):
     if "all" in gt or "star" in gt:
         return False
 
-    if team in ["World", "USA", "Stars", "Stripes"]:
+    bad_names = {"world", "usa", "stars", "stripes"}
+    if str(team).strip().lower() in bad_names:
         return False
-    if opp in ["World", "USA", "Stars", "Stripes"]:
+    if str(opp).strip().lower() in bad_names:
         return False
 
     return True
@@ -64,7 +91,6 @@ season_dirs = sorted(
 )
 
 for season_dir in season_dirs:
-
     season = season_dir.name
 
     game_files = [
@@ -77,7 +103,6 @@ for season_dir in season_dirs:
     game_files.sort(key=lambda x: x.name, reverse=True)
 
     for game_file in game_files:
-
         try:
             game = json.loads(game_file.read_text())
         except:
@@ -90,13 +115,14 @@ for season_dir in season_dirs:
         away = game.get("away_team")
 
         for p in game.get("players", []):
-
             raw_name = p.get("player_name") or p.get("name") or p.get("player")
             if not raw_name:
                 continue
 
-            name = clean_name(raw_name)
-            key = slug(name)
+            display_name = clean_name(raw_name)
+            key = slug(display_name)
+            if not key:
+                continue
 
             team = p.get("team")
             if not team:
@@ -111,7 +137,6 @@ for season_dir in season_dirs:
 
             opp = away if team == home else home
 
-            # FILTER
             if not is_valid_game(game, team, opp):
                 continue
 
@@ -120,7 +145,7 @@ for season_dir in season_dirs:
             if isinstance(mins, str) and ":" in mins:
                 try:
                     m, s = mins.split(":")
-                    mins = int(m) + int(s)/60
+                    mins = int(m) + int(s) / 60
                 except:
                     mins = 0
             else:
@@ -132,23 +157,30 @@ for season_dir in season_dirs:
             stl = num(p.get("steals"))
             blk = num(p.get("blocks"))
 
-            # 🔥 FIX: ONLY SKIP TRUE EMPTY ROWS (NOT REAL GAMES)
+            # Skip only truly empty junk rows
             if mins == 0 and pts == 0 and reb == 0 and ast == 0 and stl == 0 and blk == 0:
                 continue
 
             if key not in players:
                 players[key] = {
-                    "name": name,
+                    "name": display_name,
+                    "slug": key,
+                    "aliases": [],
                     "teams": {},
                     "games": []
                 }
+            else:
+                players[key]["name"] = better_display_name(players[key]["name"], display_name)
+
+            if display_name and display_name not in players[key]["aliases"]:
+                players[key]["aliases"].append(display_name)
 
             record = {
                 "season": season,
                 "game_id": game.get("game_id"),
                 "date": game.get("date"),
                 "team": team,
-                "opponent": opp,  # 🔥 FIXED FIELD NAME
+                "opponent": opp,
                 "minutes": mins,
                 "pts": pts,
                 "reb": reb,
@@ -171,7 +203,6 @@ for season_dir in season_dirs:
                 }
 
             t = players[key]["teams"][team]
-
             t["games"] += 1
             t["minutes"] += mins
             t["pts"] += pts
@@ -180,20 +211,36 @@ for season_dir in season_dirs:
             t["stl"] += stl
             t["blk"] += blk
 
-# ---------- SORT ----------
-print("Sorting games properly...")
+# ---------- DEDUPE GAME LOGS ----------
+print("Deduping and sorting games...")
 
 for player in players.values():
+    seen = set()
+    deduped = []
+
+    for g in player["games"]:
+        dedupe_key = (
+            g.get("game_id"),
+            g.get("date"),
+            g.get("team"),
+            g.get("opponent")
+        )
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        deduped.append(g)
+
     player["games"] = sorted(
-        player["games"],
-        key=lambda x: parse_date(x.get("date","")),
+        deduped,
+        key=lambda x: parse_date(x.get("date", "")),
         reverse=True
     )
+
+    player["aliases"] = sorted(set(player.get("aliases", [])))
 
 # ---------- WRITE ----------
 print("Writing player files...")
 
-# wipe old files
 for f in OUT.glob("*.json"):
     f.unlink()
 
@@ -210,10 +257,19 @@ for key, data in players.items():
         "slug": key
     })
 
-index.sort(key=lambda x: x["name"])
+# Dedupe index by slug
+index_by_slug = {}
+for item in index:
+    s = item["slug"]
+    if s not in index_by_slug:
+        index_by_slug[s] = item
+    else:
+        index_by_slug[s]["name"] = better_display_name(index_by_slug[s]["name"], item["name"])
+
+final_index = sorted(index_by_slug.values(), key=lambda x: x["name"])
 
 with open(OUT / "index.json", "w") as f:
-    json.dump(index, f, indent=2)
+    json.dump(final_index, f, indent=2)
 
 print("DONE")
-print("Players:", len(index))
+print("Players:", len(final_index))
