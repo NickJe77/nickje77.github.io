@@ -10,18 +10,17 @@ OUT.mkdir(exist_ok=True)
 
 players = {}
 
+# 🔥 NORMALISE NAME (MASTER FIX)
 def clean_name(name):
-    return name.strip()
-
-def slug(name):
-    # ALWAYS normalize accents
     name = unicodedata.normalize("NFD", name)
     name = name.encode("ascii", "ignore").decode("utf-8")
+    return name.strip()
 
-    name = name.lower()
+# 🔥 PLAYER ID (PERMANENT KEY)
+def player_id(name):
+    name = clean_name(name).lower()
     name = re.sub(r"[^\w\s-]", "", name)
     name = re.sub(r"\s+", "-", name)
-
     return name
 
 def num(v):
@@ -81,7 +80,7 @@ def extract_players(game):
     return players
 
 
-print("Building NBA player files...")
+print("Building NBA player database...")
 
 season_dirs = sorted(
     [d for d in DATA.iterdir() if d.is_dir()],
@@ -121,11 +120,13 @@ for season_dir in season_dirs:
             if not raw_name:
                 continue
 
+            # 🔥 CRITICAL — CLEAN NAME FIRST
             name = clean_name(raw_name)
-            key = slug(name)
+            pid = player_id(name)
 
-            if key not in players:
-                players[key] = {
+            if pid not in players:
+                players[pid] = {
+                    "player_id": pid,
                     "name": name,
                     "teams": {},
                     "games": []
@@ -157,10 +158,10 @@ for season_dir in season_dirs:
                 "blk": num(p.get("blocks"))
             }
 
-            players[key]["games"].append(record)
+            players[pid]["games"].append(record)
 
-            if team not in players[key]["teams"]:
-                players[key]["teams"][team] = {
+            if team not in players[pid]["teams"]:
+                players[pid]["teams"][team] = {
                     "games": 0,
                     "pts": 0,
                     "reb": 0,
@@ -169,7 +170,7 @@ for season_dir in season_dirs:
                     "blk": 0
                 }
 
-            t = players[key]["teams"][team]
+            t = players[pid]["teams"][team]
 
             t["games"] += 1
             t["pts"] += record["pts"]
@@ -178,38 +179,43 @@ for season_dir in season_dirs:
             t["stl"] += record["stl"]
             t["blk"] += record["blk"]
 
-print("Deduplicating games...")
+print("Deduplicating + sorting...")
 
 for player in players.values():
+
     seen = set()
-    unique_games = []
+    unique = []
 
     for g in player["games"]:
         key = (g["game_id"], g["team"])
         if key not in seen:
             seen.add(key)
-            unique_games.append(g)
+            unique.append(g)
 
-    player["games"] = sorted(unique_games, key=lambda x: x["date"], reverse=True)
+    player["games"] = sorted(
+        unique,
+        key=lambda x: x.get("date", ""),
+        reverse=True
+    )
 
-print("Writing player files...")
+print("Writing files...")
 
-# 🔥 CLEAN OLD FILES FIRST
+# 🔥 CLEAN OLD FILES (CRITICAL)
 for f in OUT.glob("*.json"):
     f.unlink()
 
 index = []
 
-for key, data in players.items():
+for pid, data in players.items():
 
-    path = OUT / f"{key}.json"
+    path = OUT / f"{pid}.json"
 
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
     index.append({
         "name": data["name"],
-        "slug": key
+        "player_id": pid
     })
 
 index.sort(key=lambda x: x["name"])
@@ -217,5 +223,5 @@ index.sort(key=lambda x: x["name"])
 with open(OUT / "index.json", "w") as f:
     json.dump(index, f, indent=2)
 
-print("NBA player database rebuilt cleanly")
+print("DONE")
 print("Players:", len(index))
