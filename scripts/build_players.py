@@ -10,19 +10,18 @@ OUT.mkdir(exist_ok=True)
 
 players = {}
 
-# ---------- NAME NORMALISATION ----------
+# ---------- CLEAN NAME ----------
 def clean_name(name):
     name = unicodedata.normalize("NFD", name)
     name = name.encode("ascii", "ignore").decode("utf-8")
     return name.strip()
 
-def player_id(name):
+def slug(name):
     name = clean_name(name).lower()
     name = re.sub(r"[^\w\s-]", "", name)
     name = re.sub(r"\s+", "-", name)
     return name
 
-# ---------- SAFE NUMBER ----------
 def num(v):
     try:
         return int(v)
@@ -33,54 +32,20 @@ def num(v):
             return 0
 
 # ---------- FILTER BAD GAMES ----------
-def is_valid_game(game):
+def is_valid_game(game, team, opp):
     gt = str(game.get("game_type", "")).lower()
 
-    if "all" in gt and "star" in gt:
+    # remove all star / exhibitions
+    if "all" in gt or "star" in gt:
         return False
-    if "preseason" in gt:
+
+    # remove world teams
+    if team in ["World", "USA", "Stars", "Stripes"]:
         return False
-    if "summer" in gt:
+    if opp in ["World", "USA", "Stars", "Stripes"]:
         return False
 
     return True
-
-# ---------- PLAYER EXTRACTION ----------
-def extract_players(game):
-    players = []
-
-    if isinstance(game.get("players"), list):
-        players.extend(game["players"])
-
-    if isinstance(game.get("player_stats"), list):
-        players.extend(game["player_stats"])
-
-    if isinstance(game.get("boxscore"), dict):
-        if isinstance(game["boxscore"].get("players"), list):
-            players.extend(game["boxscore"]["players"])
-
-    if isinstance(game.get("home_players"), list):
-        for p in game["home_players"]:
-            p["team"] = game.get("home_team")
-            players.append(p)
-
-    if isinstance(game.get("away_players"), list):
-        for p in game["away_players"]:
-            p["team"] = game.get("away_team")
-            players.append(p)
-
-    if isinstance(game.get("home_team_players"), list):
-        for p in game["home_team_players"]:
-            p["team"] = game.get("home_team")
-            players.append(p)
-
-    if isinstance(game.get("away_team_players"), list):
-        for p in game["away_team_players"]:
-            p["team"] = game.get("away_team")
-            players.append(p)
-
-    return players
-
 
 print("Building NBA player database...")
 
@@ -93,9 +58,8 @@ season_dirs = sorted(
 
 for season_dir in season_dirs:
 
-    season = season_dir.name
+    season = season_dir.name  # 🔥 FIX SEASON
 
-    # 🔥 CRITICAL: use iterdir, not glob
     game_files = [
         f for f in season_dir.iterdir()
         if f.is_file()
@@ -103,7 +67,6 @@ for season_dir in season_dirs:
         and f.name not in ["index.json", "games.json"]
     ]
 
-    # newest first
     game_files.sort(key=lambda x: x.name, reverse=True)
 
     for game_file in game_files:
@@ -116,35 +79,23 @@ for season_dir in season_dirs:
         if not isinstance(game, dict):
             continue
 
-        if not is_valid_game(game):
-            continue
-
         home = game.get("home_team")
         away = game.get("away_team")
 
-        for p in extract_players(game):
+        for p in game.get("players", []):
 
             raw_name = p.get("player_name") or p.get("name") or p.get("player")
-
             if not raw_name:
                 continue
 
             name = clean_name(raw_name)
-            pid = player_id(name)
-
-            if pid not in players:
-                players[pid] = {
-                    "player_id": pid,
-                    "name": name,
-                    "teams": {},
-                    "games": []
-                }
+            key = slug(name)
 
             team = p.get("team")
             if not team:
                 continue
 
-            # normalise team
+            # fix team match
             if team != home and team != away:
                 if str(team).lower() in str(home).lower():
                     team = home
@@ -153,24 +104,58 @@ for season_dir in season_dirs:
 
             opp = away if team == home else home
 
+            # 🔥 FILTER BAD GAMES HERE
+            if not is_valid_game(game, team, opp):
+                continue
+
+            mins = p.get("min") or p.get("minutes") or p.get("mp") or 0
+
+            if isinstance(mins, str) and ":" in mins:
+                try:
+                    m, s = mins.split(":")
+                    mins = int(m) + int(s)/60
+                except:
+                    mins = 0
+            else:
+                mins = num(mins)
+
+            # 🔥 REMOVE ZERO MINUTE GAMES
+            if mins == 0:
+                continue
+
+            pts = num(p.get("points"))
+            reb = num(p.get("rebounds"))
+            ast = num(p.get("assists"))
+            stl = num(p.get("steals"))
+            blk = num(p.get("blocks"))
+
+            if key not in players:
+                players[key] = {
+                    "name": name,
+                    "teams": {},
+                    "games": []
+                }
+
             record = {
-                "season": season,
+                "season": season,  # 🔥 FIXED
                 "game_id": game.get("game_id"),
                 "date": game.get("date"),
                 "team": team,
                 "opp": opp,
-                "pts": num(p.get("points")),
-                "reb": num(p.get("rebounds")),
-                "ast": num(p.get("assists")),
-                "stl": num(p.get("steals")),
-                "blk": num(p.get("blocks"))
+                "minutes": mins,
+                "pts": pts,
+                "reb": reb,
+                "ast": ast,
+                "stl": stl,
+                "blk": blk
             }
 
-            players[pid]["games"].append(record)
+            players[key]["games"].append(record)
 
-            if team not in players[pid]["teams"]:
-                players[pid]["teams"][team] = {
+            if team not in players[key]["teams"]:
+                players[key]["teams"][team] = {
                     "games": 0,
+                    "minutes": 0,
                     "pts": 0,
                     "reb": 0,
                     "ast": 0,
@@ -178,55 +163,37 @@ for season_dir in season_dirs:
                     "blk": 0
                 }
 
-            t = players[pid]["teams"][team]
+            t = players[key]["teams"][team]
 
             t["games"] += 1
-            t["pts"] += record["pts"]
-            t["reb"] += record["reb"]
-            t["ast"] += record["ast"]
-            t["stl"] += record["stl"]
-            t["blk"] += record["blk"]
+            t["minutes"] += mins
+            t["pts"] += pts
+            t["reb"] += reb
+            t["ast"] += ast
+            t["stl"] += stl
+            t["blk"] += blk
 
-# ---------- DEDUP + SORT ----------
-print("Deduplicating + sorting...")
+# ---------- SORT ----------
+print("Sorting games...")
 
 for player in players.values():
+    player["games"].sort(key=lambda x: x.get("date",""), reverse=True)
 
-    seen = set()
-    unique = []
-
-    for g in player["games"]:
-        key = (g["game_id"], g["team"])
-        if key not in seen:
-            seen.add(key)
-            unique.append(g)
-
-    player["games"] = sorted(
-        unique,
-        key=lambda x: x.get("date", ""),
-        reverse=True
-    )
-
-# ---------- WRITE FILES ----------
+# ---------- WRITE ----------
 print("Writing player files...")
 
-# 🔥 wipe old broken files
 for f in OUT.glob("*.json"):
     f.unlink()
 
 index = []
 
-for pid, data in players.items():
-
-    path = OUT / f"{pid}.json"
+for key, data in players.items():
+    path = OUT / f"{key}.json"
 
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
-    index.append({
-        "name": data["name"],
-        "player_id": pid
-    })
+    index.append({"name": data["name"], "slug": key})
 
 index.sort(key=lambda x: x["name"])
 
@@ -234,4 +201,3 @@ with open(OUT / "index.json", "w") as f:
     json.dump(index, f, indent=2)
 
 print("DONE")
-print("Players:", len(index))
