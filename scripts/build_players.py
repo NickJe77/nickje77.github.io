@@ -28,21 +28,18 @@ def num(v):
             return 0
 
 def is_valid_game(game):
-    txt = json.dumps(game).lower()
+    game_type = str(game.get("game_type", "")).lower()
 
-    if "all-star" in txt:
+    if "all" in game_type and "star" in game_type:
         return False
-    if "rising stars" in txt:
+    if "preseason" in game_type:
         return False
-    if "celebrity" in txt:
-        return False
-    if "summer league" in txt:
+    if "summer" in game_type:
         return False
 
     return True
 
 def extract_players(game):
-    # 🔥 HANDLE MULTIPLE STRUCTURES
 
     if "players" in game:
         return game["players"]
@@ -94,7 +91,6 @@ for season_dir in season_dirs:
         if not isinstance(game, dict):
             continue
 
-        # 🔥 SKIP ALL-STAR ETC
         if not is_valid_game(game):
             continue
 
@@ -119,9 +115,29 @@ for season_dir in season_dirs:
                     "games": []
                 }
 
-            team = p.get("team")
+            # 🔥 FIXED TEAM LOGIC
+            team = (
+                p.get("team") or
+                p.get("team_name") or
+                p.get("team_abbreviation") or
+                p.get("team_abbr")
+            )
+
+            if not team:
+                if p in game.get("home_players", []):
+                    team = home
+                elif p in game.get("away_players", []):
+                    team = away
+
             if not team:
                 continue
+
+            # Normalize team name
+            if team != home and team != away:
+                if str(team).lower() in str(home).lower():
+                    team = home
+                elif str(team).lower() in str(away).lower():
+                    team = away
 
             opp = away if team == home else home
 
