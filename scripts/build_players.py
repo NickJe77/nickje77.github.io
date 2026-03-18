@@ -6,74 +6,45 @@ from pathlib import Path
 DATA = Path("docs/data/nba")
 OUT = DATA / "players"
 
-# 🔥 HARD RESET (NO OLD FILES)
-if OUT.exists():
-    for f in OUT.glob("*.json"):
-        f.unlink()
-else:
-    OUT.mkdir(parents=True)
+OUT.mkdir(parents=True, exist_ok=True)
 
 players = {}
 
-# ---------- NORMALIZE NAME ----------
-def normalize(name):
+# ---------- CLEAN NAME ----------
+def clean_name(name):
     if not name:
         return ""
+    name = unicodedata.normalize("NFD", name)
+    name = name.encode("ascii", "ignore").decode("utf-8")
+    return name.strip()
 
-    # remove accents
-    name = unicodedata.normalize("NFKD", name)
-    name = name.encode("ascii", "ignore").decode("ascii")
-
-    # fix "Doncic, Luka"
-    if "," in name:
-        parts = [p.strip() for p in name.split(",")]
-        if len(parts) == 2:
-            name = f"{parts[1]} {parts[0]}"
-
-    # remove suffixes
-    name = re.sub(r"\b(jr|sr|ii|iii|iv)\b", "", name, flags=re.I)
-
-    # remove punctuation
-    name = re.sub(r"[^\w\s]", "", name)
-
-    # clean spaces
-    name = re.sub(r"\s+", " ", name).strip()
-
+def slug(name):
+    name = clean_name(name).lower()
+    name = re.sub(r"[^\w\s-]", "", name)
+    name = re.sub(r"\s+", "-", name)
     return name
 
+def num(v):
+    try:
+        return int(v)
+    except:
+        try:
+            return float(v)
+        except:
+            return 0
 
-# ---------- CANONICAL KEY (THE FIX) ----------
-def get_key(name):
-    name = normalize(name).lower()
-    parts = name.split()
+print("🔥 Building NBA player files...")
 
-    if len(parts) == 0:
-        return None
+game_count = 0
+player_count = 0
 
-    if len(parts) == 1:
-        return parts[0]
-
-    first = parts[0]
-    last = parts[-1]
-
-    # 🔥 CRITICAL: ignore initials completely
-    if len(first) == 1:
-        return None
-
-    return f"{first}_{last}"
-
-
-# ---------- SLUG ----------
-def make_slug(first, last):
-    return f"{first}-{last}"
-
-
-print("🚀 Building players (FINAL DEDUP)...")
-
+# ---------- LOOP SEASONS ----------
 for season_dir in DATA.iterdir():
 
     if not season_dir.is_dir():
         continue
+
+    print(f"→ Processing season {season_dir.name}")
 
     for game_file in season_dir.glob("*.json"):
 
@@ -88,58 +59,68 @@ for season_dir in DATA.iterdir():
         if not isinstance(game, dict):
             continue
 
-        game_id = game.get("game_id") or game_file.stem
+        game_id = game.get("game_id") or game.get("id") or ""
+        date = game.get("date") or game.get("game_date") or ""
+        season = game.get("season") or season_dir.name
 
-        for side in ["home_players", "away_players"]:
+        teams = [
+            ("home", game.get("home_team"), game.get("home_players", [])),
+            ("away", game.get("away_team"), game.get("away_players", []))
+        ]
 
-            for p in game.get(side, []):
+        for side, team_name, plist in teams:
 
-                raw_name = p.get("name") or p.get("player")
-                if not raw_name:
+            for p in plist:
+
+                name = clean_name(p.get("name") or p.get("player") or "")
+                if not name:
                     continue
 
-                key = get_key(raw_name)
+                s = slug(name)
 
-                # 🔥 SKIP BAD / INITIAL NAMES
-                if not key:
-                    continue
-
-                first, last = key.split("_")
-                slug = make_slug(first, last)
-
-                if key not in players:
-                    players[key] = {
-                        "name": f"{first.capitalize()} {last.capitalize()}",
-                        "slug": slug,
+                if s not in players:
+                    players[s] = {
+                        "name": name,
                         "games": []
                     }
+                    player_count += 1
 
-                players[key]["games"].append({
+                players[s]["games"].append({
                     "game_id": game_id,
-                    "team": p.get("team"),
-                    "opponent": p.get("opponent"),
-                    "points": p.get("points", 0),
-                    "rebounds": p.get("rebounds", 0),
-                    "assists": p.get("assists", 0),
-                    "steals": p.get("steals", 0),
-                    "blocks": p.get("blocks", 0)
+                    "date": date,
+                    "season": season,
+                    "team": team_name,
+                    "opponent": game.get("away_team") if side == "home" else game.get("home_team"),
+
+                    "pts": num(p.get("pts") or p.get("points")),
+                    "reb": num(p.get("reb") or p.get("rebounds")),
+                    "ast": num(p.get("ast") or p.get("assists")),
+                    "stl": num(p.get("stl") or p.get("steals")),
+                    "blk": num(p.get("blk") or p.get("blocks"))
                 })
 
+                game_count += 1
 
 # ---------- WRITE FILES ----------
-for data in players.values():
-    with open(OUT / f"{data['slug']}.json", "w") as f:
-        json.dump(data, f)
+print("💾 Writing player files...")
 
+for s, data in players.items():
+    out_file = OUT / f"{s}.json"
+    out_file.write_text(json.dumps(data, indent=2))
 
-# ---------- INDEX ----------
-index = sorted(
-    [{"name": p["name"], "slug": p["slug"]} for p in players.values()],
-    key=lambda x: x["name"]
-)
+# ---------- BUILD INDEX ----------
+index = []
 
-with open(OUT / "index.json", "w") as f:
-    json.dump(index, f)
+for s, data in players.items():
+    index.append({
+        "name": data["name"],
+        "slug": s
+    })
 
+index.sort(key=lambda x: x["name"])
 
-print(f"✅ Built {len(players)} unique players")
+(OUT / "index.json").write_text(json.dumps(index, indent=2))
+
+print("✅ DONE")
+print(f"Players: {player_count}")
+print(f"Game entries: {game_count}")
