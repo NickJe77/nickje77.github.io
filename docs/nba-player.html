@@ -430,12 +430,16 @@ function stat(r, key){
 function normalizeRow(r){
   return {
     ...r,
+    season: r.season || "",
+    game_id: r.game_id || r.game || r.id || r.gameId || "",
+    date: r.date || r.game_date || "",
+    team: r.team || "",
     opp: r.opp || r.opponent || "",
-    pts: stat(r, "pts"),
-    reb: stat(r, "reb"),
-    ast: stat(r, "ast"),
-    stl: stat(r, "stl"),
-    blk: stat(r, "blk")
+    pts: parseNum(r.pts ?? r.points ?? 0),
+    reb: parseNum(r.reb ?? r.rebounds ?? 0),
+    ast: parseNum(r.ast ?? r.assists ?? 0),
+    stl: parseNum(r.stl ?? r.steals ?? 0),
+    blk: parseNum(r.blk ?? r.blocks ?? 0)
   };
 }
 
@@ -549,7 +553,9 @@ async function loadPlayers(){
     dl.innerHTML = "";
 
     list.forEach(item=>{
-      const name = typeof item === "string" ? item : (item.name || item.player || "");
+      const name = typeof item === "string"
+        ? item
+        : (item.name || item.player || item.slug || "");
       if(!name) return;
       const opt = document.createElement("option");
       opt.value = name;
@@ -565,7 +571,7 @@ async function loadPlayers(){
 document.getElementById("playerSearch").addEventListener("change", e=>{
   const value = (e.target.value || "").trim();
   if(value){
-    window.location = "nba-player.html?player=" + encodeURIComponent(value);
+    window.location = "nba-player.html?player=" + encodeURIComponent(slug(value));
   }
 });
 
@@ -573,15 +579,15 @@ async function loadPlayer(){
   if(!playerParam) return;
 
   const rawParam = decodeURIComponent(playerParam);
-  const displayName = cleanName(rawParam);
-  titleEl.textContent = displayName;
-  heroSub.textContent = "Career game log, totals, averages and highs for " + displayName;
+  const displayName = cleanName(rawParam).replace(/-/g, " ");
+  titleEl.textContent = displayName.replace(/\b\w/g, c => c.toUpperCase());
+  heroSub.textContent = "Career game log, totals, averages and highs for " + titleEl.textContent;
   document.getElementById("playerSearch").value = "";
 
   try{
     const data = await fetchJSON([
       `docs/data/nba/players/${playerParam}.json`,
-      `docs/data/nba/players/${slug(displayName)}.json`
+      `docs/data/nba/players/${slug(rawParam)}.json`
     ]);
 
     rows = Array.isArray(data) ? data : (Array.isArray(data.games) ? data.games : []);
