@@ -6,7 +6,7 @@ from pathlib import Path
 DATA = Path("docs/data/nba")
 OUT = DATA / "players"
 
-# 🔥 CLEAN START (IMPORTANT)
+# 🔥 HARD RESET (NO OLD FILES)
 if OUT.exists():
     for f in OUT.glob("*.json"):
         f.unlink()
@@ -15,36 +15,40 @@ else:
 
 players = {}
 
-# ---------- NORMALIZE ----------
+# ---------- NORMALIZE NAME ----------
 def normalize(name):
     if not name:
         return ""
 
-    # Remove accents
+    # remove accents
     name = unicodedata.normalize("NFKD", name)
     name = name.encode("ascii", "ignore").decode("ascii")
 
-    # Handle "Doncic, Luka"
+    # fix "Doncic, Luka"
     if "," in name:
         parts = [p.strip() for p in name.split(",")]
         if len(parts) == 2:
             name = f"{parts[1]} {parts[0]}"
 
-    # Remove suffixes
+    # remove suffixes
     name = re.sub(r"\b(jr|sr|ii|iii|iv)\b", "", name, flags=re.I)
 
-    # Remove punctuation
+    # remove punctuation
     name = re.sub(r"[^\w\s]", "", name)
 
-    # Clean spacing
+    # clean spaces
     name = re.sub(r"\s+", " ", name).strip()
 
     return name
 
-# ---------- KEY BUILDER ----------
-def build_key(name):
+
+# ---------- CANONICAL KEY (THE FIX) ----------
+def get_key(name):
     name = normalize(name).lower()
     parts = name.split()
+
+    if len(parts) == 0:
+        return None
 
     if len(parts) == 1:
         return parts[0]
@@ -52,18 +56,19 @@ def build_key(name):
     first = parts[0]
     last = parts[-1]
 
-    # 🔥 IGNORE INITIAL-ONLY FIRST NAMES
+    # 🔥 CRITICAL: ignore initials completely
     if len(first) == 1:
-        return f"*IGNORE*_{last}"
+        return None
 
     return f"{first}_{last}"
 
-# ---------- SLUG ----------
-def make_slug(name):
-    name = normalize(name).lower()
-    return name.replace(" ", "-")
 
-print("🚀 Building players (HARD DEDUP)...")
+# ---------- SLUG ----------
+def make_slug(first, last):
+    return f"{first}-{last}"
+
+
+print("🚀 Building players (FINAL DEDUP)...")
 
 for season_dir in DATA.iterdir():
 
@@ -93,19 +98,18 @@ for season_dir in DATA.iterdir():
                 if not raw_name:
                     continue
 
-                key = build_key(raw_name)
+                key = get_key(raw_name)
 
-                # 🔥 SKIP BAD INITIAL PLAYERS IF FULL VERSION EXISTS
-                if key.startswith("*IGNORE*"):
-                    last = key.replace("*IGNORE*_", "")
-                    if any(k.endswith(f"_{last}") for k in players):
-                        continue
+                # 🔥 SKIP BAD / INITIAL NAMES
+                if not key:
+                    continue
 
-                slug = make_slug(raw_name)
+                first, last = key.split("_")
+                slug = make_slug(first, last)
 
                 if key not in players:
                     players[key] = {
-                        "name": normalize(raw_name),
+                        "name": f"{first.capitalize()} {last.capitalize()}",
                         "slug": slug,
                         "games": []
                     }
@@ -121,10 +125,12 @@ for season_dir in DATA.iterdir():
                     "blocks": p.get("blocks", 0)
                 })
 
+
 # ---------- WRITE FILES ----------
 for data in players.values():
     with open(OUT / f"{data['slug']}.json", "w") as f:
         json.dump(data, f)
+
 
 # ---------- INDEX ----------
 index = sorted(
@@ -134,5 +140,6 @@ index = sorted(
 
 with open(OUT / "index.json", "w") as f:
     json.dump(index, f)
+
 
 print(f"✅ Built {len(players)} unique players")
