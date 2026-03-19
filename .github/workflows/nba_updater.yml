@@ -41,7 +41,7 @@ jobs:
       - name: Build players
         run: python scripts/build_players.py
 
-      # 🔥 REAL FIX — BUILD CAREER STATS FROM GAME FILES
+      # 🔥 FIXED GAME SCANNER
       - name: Build career stats from games
         run: |
           python <<EOF
@@ -73,16 +73,32 @@ jobs:
                       continue
 
                   try:
-                      game = json.loads(game_file.read_text())
+                      raw = json.loads(game_file.read_text())
                   except:
                       continue
 
-                  for side in ["home", "away"]:
-                      team = game.get(f"{side}_team")
+                  # 🔥 HANDLE LIST OR DICT
+                  if isinstance(raw, list):
+                      if not raw:
+                          continue
+                      game = raw[0]
+                  else:
+                      game = raw
 
-                      players = game.get(f"{side}_players", [])
+                  if not isinstance(game, dict):
+                      continue
+
+                  for side in ["home", "away"]:
+
+                      players = game.get(f"{side}_players")
+
+                      if not isinstance(players, list):
+                          continue
 
                       for p in players:
+
+                          if not isinstance(p, dict):
+                              continue
 
                           name = p.get("name") or p.get("player")
                           pts = p.get("points") or p.get("pts") or p.get("PTS") or 0
@@ -113,7 +129,6 @@ jobs:
                           if isinstance(item, dict) and "player" in item:
 
                               name = item["player"]
-
                               stats = player_stats.get(name, {"games": 0, "points": 0})
 
                               g = stats["games"]
