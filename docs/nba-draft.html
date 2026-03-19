@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
+
 body{
 font-family:Inter,system-ui,Arial,sans-serif;
 margin:0;
@@ -30,10 +31,6 @@ text-decoration:none;
 font-size:18px;
 }
 
-.navbar a:hover{
-text-decoration:underline;
-}
-
 .page-wrap{
 max-width:1400px;
 margin:0 auto;
@@ -44,20 +41,9 @@ padding:30px 20px 60px;
 background:linear-gradient(90deg,#17408B,#C9082A);
 color:white;
 border-radius:16px;
-padding:26px 26px 22px;
+padding:26px;
 margin-bottom:25px;
 text-align:center;
-box-shadow:0 10px 24px rgba(0,0,0,0.08);
-}
-
-.hero h1{
-margin:0 0 6px;
-font-size:32px;
-}
-
-.subtitle{
-opacity:.9;
-font-size:15px;
 }
 
 .controls{
@@ -73,11 +59,6 @@ padding:9px 12px;
 border-radius:10px;
 border:1px solid #d1d5db;
 font-size:14px;
-min-width:160px;
-}
-
-input{
-min-width:260px;
 }
 
 .table-card{
@@ -85,7 +66,6 @@ background:#fff;
 border:1px solid #e5e7eb;
 border-radius:16px;
 overflow:hidden;
-box-shadow:0 6px 16px rgba(0,0,0,0.05);
 }
 
 table{
@@ -94,58 +74,36 @@ border-collapse:collapse;
 }
 
 th,td{
-border-bottom:1px solid #e5e7eb;
 padding:10px 12px;
+border-bottom:1px solid #e5e7eb;
 text-align:left;
 }
 
 th{
 background:#17408B;
 color:white;
-font-size:14px;
-font-weight:700;
+font-size:13px;
 }
 
 tr:nth-child(even){
 background:#f8faff;
 }
 
-tr:hover{
-background:#e9f0ff;
-}
-
 .player-link{
 color:#0056d6;
-text-decoration:none;
 font-weight:700;
-}
-
-.small{
-color:#666;
-font-size:13px;
-}
-
-.team-cell{
-display:flex;
-align-items:center;
-gap:8px;
-}
-
-.team-colour{
-width:16px;
-height:16px;
-border-radius:3px;
-border:1px solid #bbb;
+text-decoration:none;
 }
 
 .num{
 text-align:right;
-white-space:nowrap;
 }
 
-.center{
-text-align:center;
+.small{
+font-size:12px;
+color:#555;
 }
+
 </style>
 </head>
 
@@ -160,137 +118,127 @@ text-align:center;
 
 <div class="hero">
 <h1>NBA Draft</h1>
-<div class="subtitle">Complete draft history by year</div>
+<div>Complete draft history by year</div>
 </div>
 
 <div class="controls">
 <select id="yearSelect"></select>
-<input id="q" placeholder="Filter (player, team, college)…">
+<input id="q" placeholder="Filter player, team, college">
 </div>
 
 <div class="table-card">
+
 <table>
 <thead>
 <tr>
 <th>Pick</th>
-<th>Round</th>
+<th>Rnd</th>
 <th>Player</th>
 <th class="small">Team</th>
-<th class="small">College / From</th>
-<th class="small num">Games</th>
-<th class="small num">PTS</th>
-<th class="small num">PPG</th>
+<th class="small">College</th>
+
+<th class="num">G</th>
+<th class="num">PTS</th>
+<th class="num">PPG</th>
+
+<th class="num">REB</th>
+<th class="num">RPG</th>
+<th class="num">AST</th>
+<th class="num">APG</th>
+<th class="num">STL</th>
+<th class="num">BLK</th>
+
 </tr>
 </thead>
+
 <tbody id="rows"></tbody>
+
 </table>
+
 </div>
 
 </div>
 
 <script>
+
 const yearSelect = document.getElementById("yearSelect");
 const q = document.getElementById("q");
 const rows = document.getElementById("rows");
 
-let currentData = [];
-const statsCache = {};
+let data = [];
 
-function slug(name){
-  return name.toLowerCase().replace(/[^\w\s-]/g,"").replace(/\s+/g,"-");
+async function loadYears(){
+let years = [];
+
+for(let y=1976;y<=2025;y++){
+years.push(y);
 }
 
-async function getPlayerStats(name){
-  const key = slug(name);
-  if(statsCache[key]) return statsCache[key];
+yearSelect.innerHTML = years.reverse().map(y=>`<option>${y}</option>`).join("");
 
-  try{
-    const res = await fetch(`data/nba/players/${key}.json`);
-    const data = await res.json();
-
-    let games = 0;
-    let points = 0;
-
-    if(Array.isArray(data.games)){
-      games = data.games.length;
-
-      for(const g of data.games){
-        const pts = g.points ?? g.pts ?? g.PTS ?? 0;
-        points += Number(pts) || 0;
-      }
-    }
-
-    else if(data.totals){
-      games = data.totals.games || 0;
-      points = data.totals.points || 0;
-    }
-
-    const ppg = games ? (points / games).toFixed(1) : "";
-
-    const stats = { games, points, ppg };
-    statsCache[key] = stats;
-    return stats;
-
-  }catch(e){
-    return { games:"", points:"", ppg:"" };
-  }
-}
-
-function loadYears(){
-  const years = [];
-  for(let y=1976; y<=2025; y++) years.push(y);
-
-  yearSelect.innerHTML = years.reverse()
-    .map(y=>`<option value="${y}">${y}</option>`)
-    .join("");
-
-  loadYear(yearSelect.value);
+loadYear(yearSelect.value);
 }
 
 async function loadYear(year){
-  rows.innerHTML = "<tr><td colspan='8'>Loading...</td></tr>";
-
-  try{
-    const res = await fetch(`data/nba/draft/${year}.json`);
-    currentData = await res.json();
-    render();
-  }catch{
-    rows.innerHTML = "<tr><td colspan='8'>Unable to load data</td></tr>";
-  }
+try{
+let res = await fetch(`data/nba/draft/${year}.json`);
+data = await res.json();
+render();
+}catch{
+rows.innerHTML = "<tr><td colspan='14'>No data</td></tr>";
+}
 }
 
-async function render(){
-  const term = q.value.toLowerCase();
+function render(){
 
-  const filtered = currentData.filter(p =>
-    (p.player||"").toLowerCase().includes(term) ||
-    (p.team||"").toLowerCase().includes(term) ||
-    (p.college||"").toLowerCase().includes(term)
-  );
+let f = q.value.toLowerCase();
 
-  const html = await Promise.all(filtered.map(async p=>{
-    const stats = await getPlayerStats(p.player);
+let filtered = data.filter(p=>{
+return (
+(p.player||"").toLowerCase().includes(f) ||
+(p.team||"").toLowerCase().includes(f) ||
+(p.college||"").toLowerCase().includes(f)
+);
+});
 
-    return `
+rows.innerHTML = filtered.map(p=>`
+
 <tr>
-<td class="center">${p.pick ?? ""}</td>
-<td class="center">${p.round ?? ""}</td>
-<td><a class="player-link" href="nba-player.html?player=${encodeURIComponent(p.player)}">${p.player}</a></td>
-<td>${p.team}</td>
-<td>${p.college ?? ""}</td>
-<td class="num">${stats.games}</td>
-<td class="num">${stats.points}</td>
-<td class="num">${stats.ppg}</td>
-</tr>`;
-  }));
 
-  rows.innerHTML = html.join("") || "<tr><td colspan='8'>No results</td></tr>";
+<td>${p.pick||""}</td>
+<td>${p.round||""}</td>
+
+<td>
+<a class="player-link" href="nba-player.html?player=${encodeURIComponent(p.player)}">
+${p.player}
+</a>
+</td>
+
+<td class="small">${p.team||""}</td>
+<td class="small">${p.college||""}</td>
+
+<td class="num">${p.games||0}</td>
+<td class="num">${p.points||0}</td>
+<td class="num">${p.ppg||0}</td>
+
+<td class="num">${p.reb||0}</td>
+<td class="num">${p.rpg||0}</td>
+<td class="num">${p.ast||0}</td>
+<td class="num">${p.apg||0}</td>
+<td class="num">${p.stl||0}</td>
+<td class="num">${p.blk||0}</td>
+
+</tr>
+
+`).join("");
+
 }
 
-yearSelect.addEventListener("change", ()=>loadYear(yearSelect.value));
-q.addEventListener("input", render);
+yearSelect.onchange = ()=>loadYear(yearSelect.value);
+q.oninput = render;
 
 loadYears();
+
 </script>
 
 </body>
