@@ -52,9 +52,12 @@ for season_dir in DATA.iterdir():
             continue
 
         try:
-            game = json.loads(game_file.read_text())
+            raw = json.loads(game_file.read_text())
         except:
             continue
+
+        # 🔥 FIX 1: HANDLE LIST OR DICT
+        game = raw[0] if isinstance(raw, list) else raw
 
         if not isinstance(game, dict):
             continue
@@ -70,7 +73,14 @@ for season_dir in DATA.iterdir():
 
         for side, team_name, plist in teams:
 
+            # 🔥 FIX 2: ensure list
+            if not isinstance(plist, list):
+                continue
+
             for p in plist:
+
+                if not isinstance(p, dict):
+                    continue
 
                 name = clean_name(p.get("name") or p.get("player") or "")
                 if not name:
@@ -104,18 +114,27 @@ for season_dir in DATA.iterdir():
 # ---------- WRITE FILES ----------
 print("💾 Writing player files...")
 
+written = 0
+
 for s, data in players.items():
+
+    # 🔥 FIX 3: skip empty players (safety)
+    if not data["games"]:
+        continue
+
     out_file = OUT / f"{s}.json"
     out_file.write_text(json.dumps(data, indent=2))
+    written += 1
 
 # ---------- BUILD INDEX ----------
 index = []
 
 for s, data in players.items():
-    index.append({
-        "name": data["name"],
-        "slug": s
-    })
+    if data["games"]:
+        index.append({
+            "name": data["name"],
+            "slug": s
+        })
 
 index.sort(key=lambda x: x["name"])
 
@@ -123,4 +142,5 @@ index.sort(key=lambda x: x["name"])
 
 print("✅ DONE")
 print(f"Players: {player_count}")
+print(f"Written files: {written}")
 print(f"Game entries: {game_count}")
