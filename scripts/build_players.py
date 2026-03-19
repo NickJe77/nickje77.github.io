@@ -33,7 +33,7 @@ def num(v):
         except:
             return 0
 
-print("🔥 Building NBA player files (FIXED TEAMS)...")
+print("🔥 Building NBA player files (CORRECT TEAMS)...")
 
 # ---------- LOOP ----------
 for season_dir in DATA.iterdir():
@@ -63,57 +63,43 @@ for season_dir in DATA.iterdir():
         home_team = game.get("home_team")
         away_team = game.get("away_team")
 
-        home_players = game.get("home_players", [])
-        away_players = game.get("away_players", [])
+        # 🔥 THIS IS THE KEY FIX
+        plist = game.get("players", [])
 
-        # ---------- HOME PLAYERS ----------
-        for p in home_players:
+        for p in plist:
 
-            name = clean_name(p.get("name") or p.get("player"))
+            name = clean_name(p.get("player") or p.get("name"))
             if not name:
                 continue
+
+            player_team = p.get("team")
+
+            # 🚨 safety check
+            if not player_team:
+                continue
+
+            # correct opponent
+            opponent = away_team if player_team == home_team else home_team
 
             s = slug(name)
 
             if s not in players:
-                players[s] = {"name": name, "games": []}
+                players[s] = {
+                    "name": name,
+                    "games": []
+                }
 
             players[s]["games"].append({
                 "game_id": game_id,
                 "date": date,
                 "season": season,
-                "team": home_team,
-                "opponent": away_team,
-                "pts": num(p.get("pts") or p.get("points")),
-                "reb": num(p.get("reb") or p.get("rebounds")),
-                "ast": num(p.get("ast") or p.get("assists")),
-                "stl": num(p.get("stl") or p.get("steals")),
-                "blk": num(p.get("blk") or p.get("blocks"))
-            })
-
-        # ---------- AWAY PLAYERS ----------
-        for p in away_players:
-
-            name = clean_name(p.get("name") or p.get("player"))
-            if not name:
-                continue
-
-            s = slug(name)
-
-            if s not in players:
-                players[s] = {"name": name, "games": []}
-
-            players[s]["games"].append({
-                "game_id": game_id,
-                "date": date,
-                "season": season,
-                "team": away_team,
-                "opponent": home_team,
-                "pts": num(p.get("pts") or p.get("points")),
-                "reb": num(p.get("reb") or p.get("rebounds")),
-                "ast": num(p.get("ast") or p.get("assists")),
-                "stl": num(p.get("stl") or p.get("steals")),
-                "blk": num(p.get("blk") or p.get("blocks"))
+                "team": player_team,
+                "opponent": opponent,
+                "pts": num(p.get("points")),
+                "reb": num(p.get("rebounds")),
+                "ast": num(p.get("assists")),
+                "stl": num(p.get("steals")),
+                "blk": num(p.get("blocks"))
             })
 
 # ---------- WRITE ----------
