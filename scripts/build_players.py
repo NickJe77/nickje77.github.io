@@ -26,31 +26,16 @@ def slug(name):
 
 def num(v):
     try:
-        return float(v)
+        return int(v)
     except:
-        return 0
+        try:
+            return float(v)
+        except:
+            return 0
 
-# 🔥 FIND PLAYERS ANYWHERE
-def find_players(obj):
-    found = []
+print("🔥 Building NBA player files (FIXED TEAMS)...")
 
-    if isinstance(obj, dict):
-        if "name" in obj or "player" in obj:
-            found.append(obj)
-
-        for v in obj.values():
-            found.extend(find_players(v))
-
-    elif isinstance(obj, list):
-        for i in obj:
-            found.extend(find_players(i))
-
-    return found
-
-print("🔥 Building NBA player files...")
-
-game_count = 0
-
+# ---------- LOOP ----------
 for season_dir in DATA.iterdir():
 
     if not season_dir.is_dir():
@@ -64,11 +49,10 @@ for season_dir in DATA.iterdir():
             continue
 
         try:
-            raw = json.loads(game_file.read_text())
+            game = json.loads(game_file.read_text())
         except:
             continue
 
-        game = raw[0] if isinstance(raw, list) else raw
         if not isinstance(game, dict):
             continue
 
@@ -76,30 +60,30 @@ for season_dir in DATA.iterdir():
         date = game.get("date") or game.get("game_date") or ""
         season = game.get("season") or season_dir.name
 
-        # 🔥 CRITICAL CHANGE — NO MORE home_players dependency
-        plist = find_players(game)
+        home_team = game.get("home_team")
+        away_team = game.get("away_team")
 
-        for p in plist:
+        home_players = game.get("home_players", [])
+        away_players = game.get("away_players", [])
 
-            name = clean_name(p.get("name") or p.get("player") or "")
+        # ---------- HOME PLAYERS ----------
+        for p in home_players:
+
+            name = clean_name(p.get("name") or p.get("player"))
             if not name:
                 continue
 
             s = slug(name)
 
             if s not in players:
-                players[s] = {
-                    "name": name,
-                    "games": []
-                }
+                players[s] = {"name": name, "games": []}
 
             players[s]["games"].append({
                 "game_id": game_id,
                 "date": date,
                 "season": season,
-                "team": game.get("home_team") or "",
-                "opponent": game.get("away_team") or "",
-
+                "team": home_team,
+                "opponent": away_team,
                 "pts": num(p.get("pts") or p.get("points")),
                 "reb": num(p.get("reb") or p.get("rebounds")),
                 "ast": num(p.get("ast") or p.get("assists")),
@@ -107,26 +91,42 @@ for season_dir in DATA.iterdir():
                 "blk": num(p.get("blk") or p.get("blocks"))
             })
 
-            game_count += 1
+        # ---------- AWAY PLAYERS ----------
+        for p in away_players:
+
+            name = clean_name(p.get("name") or p.get("player"))
+            if not name:
+                continue
+
+            s = slug(name)
+
+            if s not in players:
+                players[s] = {"name": name, "games": []}
+
+            players[s]["games"].append({
+                "game_id": game_id,
+                "date": date,
+                "season": season,
+                "team": away_team,
+                "opponent": home_team,
+                "pts": num(p.get("pts") or p.get("points")),
+                "reb": num(p.get("reb") or p.get("rebounds")),
+                "ast": num(p.get("ast") or p.get("assists")),
+                "stl": num(p.get("stl") or p.get("steals")),
+                "blk": num(p.get("blk") or p.get("blocks"))
+            })
 
 # ---------- WRITE ----------
-print("💾 Writing player files...")
-
-written = 0
+print("💾 Writing players...")
 
 for s, data in players.items():
-    if not data["games"]:
-        continue
-
     (OUT / f"{s}.json").write_text(json.dumps(data, indent=2))
-    written += 1
 
-# ---------- INDEX ----------
-index = [{"name": d["name"], "slug": s} for s, d in players.items() if d["games"]]
-index.sort(key=lambda x: x["name"])
+index = sorted(
+    [{"name": v["name"], "slug": k} for k,v in players.items()],
+    key=lambda x: x["name"]
+)
 
 (OUT / "index.json").write_text(json.dumps(index, indent=2))
 
 print("✅ DONE")
-print(f"Players written: {written}")
-print(f"Game entries: {game_count}")
