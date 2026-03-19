@@ -41,7 +41,7 @@ jobs:
       - name: Build players
         run: python scripts/build_players.py
 
-      # ✅ FIXED STEP
+      # 🔥 FINAL FIX — READ REAL PLAYER STRUCTURE
       - name: Add career stats to draft files
         run: |
           python <<EOF
@@ -74,37 +74,48 @@ jobs:
               games = 0
               points = 0
 
-              if isinstance(data.get("games"), list):
-
-                  games = len(data["games"])
-
-                  for g in data["games"]:
-
-                      pts = 0
-
-                      if isinstance(g, dict):
-                          pts = g.get("points") or g.get("pts") or g.get("PTS") or 0
-
-                      if not pts and isinstance(g.get("player_stats"), dict):
-                          ps = g["player_stats"]
-                          pts = ps.get("points") or ps.get("pts") or ps.get("PTS") or 0
-
-                      try:
-                          points += float(pts)
-                      except:
-                          pass
-
-              elif "totals" in data:
+              # ✅ 1. totals block
+              if isinstance(data.get("totals"), dict):
                   games = data["totals"].get("games", 0)
                   points = data["totals"].get("points", 0)
 
+              # ✅ 2. career block
+              elif isinstance(data.get("career"), dict):
+                  games = data["career"].get("games", 0)
+                  points = data["career"].get("points", 0)
+
+              # ✅ 3. stats block
+              elif isinstance(data.get("stats"), dict):
+                  games = data["stats"].get("games", 0)
+                  points = data["stats"].get("points", 0)
+
+              # ✅ 4. teams aggregation (VERY LIKELY YOUR STRUCTURE)
+              elif isinstance(data.get("teams"), dict):
+
+                  for team, stats in data["teams"].items():
+                      games += stats.get("games", 0)
+                      points += stats.get("pts", 0)
+
+              # ✅ 5. fallback — scan everything
+              else:
+                  def scan(obj):
+                      nonlocal games, points
+                      if isinstance(obj, dict):
+                          for k, v in obj.items():
+                              if k.lower() == "games":
+                                  games += int(v) if isinstance(v,(int,float)) else 0
+                              if k.lower() in ["points","pts"]:
+                                  points += int(v) if isinstance(v,(int,float)) else 0
+                              scan(v)
+                      elif isinstance(obj, list):
+                          for x in obj:
+                              scan(x)
+
+                  scan(data)
+
               ppg = round(points / games, 1) if games else 0
 
-              return {
-                  "games": games,
-                  "points": int(points),
-                  "ppg": ppg
-              }
+              return {"games": games, "points": points, "ppg": ppg}
 
 
           print("Updating draft files...")
