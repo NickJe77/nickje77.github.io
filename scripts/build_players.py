@@ -10,7 +10,7 @@ OUT.mkdir(parents=True, exist_ok=True)
 
 players = {}
 
-# ---------- CLEAN ----------
+# ---------- CLEAN NAME ----------
 def clean_name(name):
     if not name:
         return ""
@@ -18,11 +18,17 @@ def clean_name(name):
     name = name.encode("ascii", "ignore").decode("utf-8")
     return name.strip()
 
+# ---------- STRONG SLUG (NO DUPES) ----------
 def slug(name):
     name = clean_name(name).lower()
+
+    # remove punctuation
     name = re.sub(r"[^\w\s-]", "", name)
-    name = re.sub(r"\s+", "-", name)
-    return name
+
+    # collapse spaces
+    name = re.sub(r"\s+", " ", name).strip()
+
+    return name.replace(" ", "-")
 
 def num(v):
     try:
@@ -33,7 +39,7 @@ def num(v):
         except:
             return 0
 
-print("🔥 Building NBA player files (CORRECT TEAMS)...")
+print("🔥 Building NBA players (NO DUPES + NO 0 MINUTES)...")
 
 # ---------- LOOP ----------
 for season_dir in DATA.iterdir():
@@ -63,7 +69,6 @@ for season_dir in DATA.iterdir():
         home_team = game.get("home_team")
         away_team = game.get("away_team")
 
-        # 🔥 THIS IS THE KEY FIX
         plist = game.get("players", [])
 
         for p in plist:
@@ -72,13 +77,15 @@ for season_dir in DATA.iterdir():
             if not name:
                 continue
 
-            player_team = p.get("team")
+            # 🔥 REMOVE 0 MINUTE GAMES
+            mins = str(p.get("minutes", "")).strip()
+            if mins in ["0:00", "00:00", "0", ""]:
+                continue
 
-            # 🚨 safety check
+            player_team = p.get("team")
             if not player_team:
                 continue
 
-            # correct opponent
             opponent = away_team if player_team == home_team else home_team
 
             s = slug(name)
@@ -86,8 +93,17 @@ for season_dir in DATA.iterdir():
             if s not in players:
                 players[s] = {
                     "name": name,
-                    "games": []
+                    "games": [],
+                    "seen": set()  # 🔥 prevents duplicate games
                 }
+
+            # 🔥 DUPLICATE GAME PROTECTION
+            unique_key = f"{game_id}-{player_team}"
+
+            if unique_key in players[s]["seen"]:
+                continue
+
+            players[s]["seen"].add(unique_key)
 
             players[s]["games"].append({
                 "game_id": game_id,
@@ -105,13 +121,24 @@ for season_dir in DATA.iterdir():
 # ---------- WRITE ----------
 print("💾 Writing players...")
 
+index = []
+
 for s, data in players.items():
+
+    # remove helper set before saving
+    data.pop("seen", None)
+
+    # sort games newest first
+    data["games"].sort(key=lambda x: (x.get("date","")), reverse=True)
+
     (OUT / f"{s}.json").write_text(json.dumps(data, indent=2))
 
-index = sorted(
-    [{"name": v["name"], "slug": k} for k,v in players.items()],
-    key=lambda x: x["name"]
-)
+    index.append({
+        "name": data["name"],
+        "slug": s
+    })
+
+index.sort(key=lambda x: x["name"])
 
 (OUT / "index.json").write_text(json.dumps(index, indent=2))
 
