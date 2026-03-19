@@ -498,9 +498,11 @@ function getLatestTeam(){
 }
 
 function isRegularOrPostseason(r){
+
   const team = String(r.team || "").toLowerCase();
   const opp = String(r.opp || "").toLowerCase();
 
+  // ❌ remove non-NBA teams
   if(team === "world" || team === "usa") return false;
   if(opp === "world" || opp === "usa") return false;
 
@@ -513,14 +515,12 @@ function isRegularOrPostseason(r){
     ""
   ).toLowerCase();
 
-  if(type.includes("preseason")) return false;
-  if(type.includes("summer")) return false;
-  if(type.includes("exhibition")) return false;
-  if(type.includes("all-star")) return false;
-  if(type.includes("rising")) return false;
-  if(type.includes("celebrity")) return false;
+  // ✅ STRICT allow only real NBA games
+  if(type.includes("regular")) return true;
+  if(type.includes("post")) return true;
+  if(type.includes("playoff")) return true;
 
-  return true;
+  return false;
 }
 
 async function fetchJSON(paths){
@@ -590,12 +590,25 @@ async function loadPlayer(){
       `data/nba/players/${slug(rawParam)}.json`
     ]);
 
-    rows = Array.isArray(data) ? data : (Array.isArray(data.games) ? data.games : []);
-    rows = rows.map(normalizeRow);
-    rows = rows.filter(r => r.team && r.opp);
-    rows = rows.filter(isRegularOrPostseason);
-    rows = sortRowsLatestFirst(rows);
+rows = rows.map(normalizeRow);
 
+// ✅ ONLY keep games player actually appeared in
+rows = rows.filter(r =>
+  r.team &&
+  r.opp &&
+  (
+    r.pts > 0 ||
+    r.reb > 0 ||
+    r.ast > 0 ||
+    r.stl > 0 ||
+    r.blk > 0
+  )
+);
+
+// ✅ ONLY real NBA games
+rows = rows.filter(isRegularOrPostseason);
+
+rows = sortRowsLatestFirst(rows);
     if(data && data.name){
       titleEl.textContent = data.name;
       heroSub.textContent = "Career game log, totals, averages and highs for " + data.name;
@@ -817,7 +830,7 @@ function renderFiltered(){
 }
 
 function getGameId(r){
-  return String(r.game_id || r.game || r.id || r.gameId || "").trim();
+  return r.game_id || r.game || r.id || r.gameId || "";
 }
 
 function renderGames(){
@@ -860,4 +873,5 @@ loadPlayer();
 
 </body>
 </html>
+
 
