@@ -223,90 +223,135 @@ padding:8px;
 
 <script>
 
-/* JAVASCRIPT UNCHANGED */
-
 const yearSelect = document.getElementById("yearSelect");
 const q = document.getElementById("q");
 const rows = document.getElementById("rows");
 
 let currentData = [];
-const statsCache = {};
 
 const teamNames = {
-ATL:"Atlanta Hawks",
-BOS:"Boston Celtics",
-BKN:"Brooklyn Nets",
-BRK:"Brooklyn Nets",
-CHA:"Charlotte Hornets",
-CHO:"Charlotte Hornets",
-CHI:"Chicago Bulls",
-CLE:"Cleveland Cavaliers",
-DAL:"Dallas Mavericks",
-DEN:"Denver Nuggets",
-DET:"Detroit Pistons",
-GSW:"Golden State Warriors",
-HOU:"Houston Rockets",
-IND:"Indiana Pacers",
-LAC:"Los Angeles Clippers",
-LAL:"Los Angeles Lakers",
-MEM:"Memphis Grizzlies",
-MIA:"Miami Heat",
-MIL:"Milwaukee Bucks",
-MIN:"Minnesota Timberwolves",
-NOP:"New Orleans Pelicans",
-NOH:"New Orleans Hornets",
-NOK:"New Orleans/Oklahoma City Hornets",
-NYK:"New York Knicks",
-OKC:"Oklahoma City Thunder",
-SEA:"Seattle SuperSonics",
-ORL:"Orlando Magic",
-PHI:"Philadelphia 76ers",
-PHX:"Phoenix Suns",
-PHO:"Phoenix Suns",
-POR:"Portland Trail Blazers",
-SAC:"Sacramento Kings",
-SAS:"San Antonio Spurs",
-TOR:"Toronto Raptors",
-UTA:"Utah Jazz",
-WAS:"Washington Wizards",
-WSB:"Washington Bullets"
+ATL:"Atlanta Hawks", BOS:"Boston Celtics", BKN:"Brooklyn Nets", BRK:"Brooklyn Nets",
+CHA:"Charlotte Hornets", CHO:"Charlotte Hornets", CHI:"Chicago Bulls",
+CLE:"Cleveland Cavaliers", DAL:"Dallas Mavericks", DEN:"Denver Nuggets",
+DET:"Detroit Pistons", GSW:"Golden State Warriors", HOU:"Houston Rockets",
+IND:"Indiana Pacers", LAC:"Los Angeles Clippers", LAL:"Los Angeles Lakers",
+MEM:"Memphis Grizzlies", MIA:"Miami Heat", MIL:"Milwaukee Bucks",
+MIN:"Minnesota Timberwolves", NOP:"New Orleans Pelicans", NOH:"New Orleans Hornets",
+NOK:"New Orleans/Oklahoma City Hornets", NYK:"New York Knicks",
+OKC:"Oklahoma City Thunder", SEA:"Seattle SuperSonics", ORL:"Orlando Magic",
+PHI:"Philadelphia 76ers", PHX:"Phoenix Suns", PHO:"Phoenix Suns",
+POR:"Portland Trail Blazers", SAC:"Sacramento Kings",
+SAS:"San Antonio Spurs", TOR:"Toronto Raptors",
+UTA:"Utah Jazz", WAS:"Washington Wizards", WSB:"Washington Bullets"
 };
 
 const teamColours = {
-"Atlanta Hawks":"#E03A3E",
-"Boston Celtics":"#007A33",
-"Brooklyn Nets":"#000000",
-"Charlotte Hornets":"#1D1160",
-"Chicago Bulls":"#CE1141",
-"Cleveland Cavaliers":"#860038",
-"Dallas Mavericks":"#00538C",
-"Denver Nuggets":"#0E2240",
-"Detroit Pistons":"#C8102E",
-"Golden State Warriors":"#1D428A",
-"Houston Rockets":"#CE1141",
-"Indiana Pacers":"#002D62",
-"Los Angeles Clippers":"#C8102E",
-"Los Angeles Lakers":"#552583",
-"Memphis Grizzlies":"#5D76A9",
-"Miami Heat":"#98002E",
-"Milwaukee Bucks":"#00471B",
-"Minnesota Timberwolves":"#0C2340",
-"New Orleans Pelicans":"#0C2340",
-"New York Knicks":"#006BB6",
-"Oklahoma City Thunder":"#007AC1",
-"Orlando Magic":"#0077C0",
-"Philadelphia 76ers":"#006BB6",
-"Phoenix Suns":"#1D1160",
-"Portland Trail Blazers":"#E03A3E",
-"Sacramento Kings":"#5A2D81",
-"San Antonio Spurs":"#C4CED4",
-"Toronto Raptors":"#CE1141",
-"Utah Jazz":"#002B5C",
-"Washington Wizards":"#002B5C",
-"Seattle SuperSonics":"#2C5234"
+"Atlanta Hawks":"#E03A3E","Boston Celtics":"#007A33","Brooklyn Nets":"#000000",
+"Charlotte Hornets":"#1D1160","Chicago Bulls":"#CE1141",
+"Cleveland Cavaliers":"#860038","Dallas Mavericks":"#00538C",
+"Denver Nuggets":"#0E2240","Detroit Pistons":"#C8102E",
+"Golden State Warriors":"#1D428A","Houston Rockets":"#CE1141",
+"Indiana Pacers":"#002D62","Los Angeles Clippers":"#C8102E",
+"Los Angeles Lakers":"#552583","Memphis Grizzlies":"#5D76A9",
+"Miami Heat":"#98002E","Milwaukee Bucks":"#00471B",
+"Minnesota Timberwolves":"#0C2340","New Orleans Pelicans":"#0C2340",
+"New York Knicks":"#006BB6","Oklahoma City Thunder":"#007AC1",
+"Orlando Magic":"#0077C0","Philadelphia 76ers":"#006BB6",
+"Phoenix Suns":"#1D1160","Portland Trail Blazers":"#E03A3E",
+"Sacramento Kings":"#5A2D81","San Antonio Spurs":"#C4CED4",
+"Toronto Raptors":"#CE1141","Utah Jazz":"#002B5C",
+"Washington Wizards":"#002B5C","Seattle SuperSonics":"#2C5234"
 };
 
-/* REMAINDER OF YOUR SCRIPT EXACTLY THE SAME */
+/* LOAD YEARS */
+
+function loadYears(){
+  const years = [];
+  for(let y=1976; y<=2025; y++) years.push(y);
+
+  yearSelect.innerHTML = years.reverse()
+    .map(y=>`<option value="${y}">${y}</option>`)
+    .join("");
+
+  loadYear(yearSelect.value);
+}
+
+/* LOAD DATA */
+
+async function loadYear(year){
+
+  rows.innerHTML = "<tr><td colspan='8'>Loading...</td></tr>";
+
+  try{
+    const res = await fetch(`data/nba/draft/${year}.json`);
+    const data = await res.json();
+
+    currentData = data;
+    render();
+
+  }catch(err){
+    rows.innerHTML = "<tr><td colspan='8'>Unable to load data</td></tr>";
+    console.error(err);
+  }
+}
+
+/* RENDER */
+
+function render(){
+
+  const term = q.value.toLowerCase();
+
+  const filtered = currentData.filter(p=>{
+    return (
+      (p.player || "").toLowerCase().includes(term) ||
+      (p.team || "").toLowerCase().includes(term) ||
+      (p.college || "").toLowerCase().includes(term)
+    );
+  });
+
+  rows.innerHTML = filtered.map(p=>{
+
+    const teamFull = teamNames[p.team] || p.team;
+    const colour = teamColours[teamFull] || "#ccc";
+
+    return `
+<tr>
+<td class="center">${p.pick ?? ""}</td>
+<td class="center">${p.round ?? ""}</td>
+
+<td>
+<a class="player-link" href="nba-player.html?player=${encodeURIComponent(p.player)}">
+${p.player ?? ""}
+</a>
+</td>
+
+<td class="team-cell small">
+<span class="team-colour" style="background:${colour}"></span>
+${teamFull ?? ""}
+</td>
+
+<td class="small">${p.college ?? ""}</td>
+
+<td class="num">${p.games ?? ""}</td>
+<td class="num">${p.points ?? ""}</td>
+<td class="num">${p.ppg ?? ""}</td>
+</tr>
+`;
+  }).join("");
+
+  if(!filtered.length){
+    rows.innerHTML = "<tr><td colspan='8'>No results</td></tr>";
+  }
+}
+
+/* EVENTS */
+
+yearSelect.addEventListener("change", ()=> loadYear(yearSelect.value));
+q.addEventListener("input", render);
+
+/* INIT */
+
+loadYears();
 
 </script>
 
