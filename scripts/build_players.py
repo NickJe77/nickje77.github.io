@@ -3,8 +3,8 @@ import re
 import unicodedata
 from pathlib import Path
 
-# 🔥 SET ROOT MANUALLY (THIS IS THE KEY)
-ROOT = Path.cwd()   # <- uses where you run the script from
+# ---------- PATH ----------
+ROOT = Path.cwd()
 DATA = ROOT / "docs/data/nba"
 OUT = DATA / "players"
 
@@ -12,6 +12,7 @@ OUT.mkdir(parents=True, exist_ok=True)
 
 players = {}
 
+# ---------- CLEAN ----------
 def clean_name(name):
     if not name:
         return ""
@@ -34,17 +35,18 @@ def num(v):
         except:
             return 0
 
-print("🔥 SCANNING ALL NBA GAME FILES")
+print("🔥 BUILDING NBA PLAYER CAREERS")
 
-# 🔥 FIND ALL JSON FILES RECURSIVELY
+# ---------- SCAN ALL FILES ----------
 game_files = list(DATA.rglob("*.json"))
 
-print(f"FOUND {len(game_files)} FILES")
+print(f"📂 Found {len(game_files)} JSON files")
 
 for game_file in game_files:
 
+    # skip output folder
     if "players" in game_file.parts:
-        continue  # skip output folder
+        continue
 
     if game_file.name in ["index.json", "games.json"]:
         continue
@@ -57,10 +59,9 @@ for game_file in game_files:
     if not isinstance(game, dict):
         continue
 
-    # DEBUG (see what's actually being read)
-    # print("READING:", game_file)
-
+    # ---------- GAME TYPE FILTER ----------
     game_type = str(
+        game.get("game_type") or
         game.get("type") or
         game.get("season_type") or
         ""
@@ -79,7 +80,7 @@ for game_file in game_files:
     home_team = game.get("home_team")
     away_team = game.get("away_team")
 
-    # 🔥 UNIVERSAL PLAYER EXTRACTION
+    # ---------- PLAYER EXTRACTION ----------
     plist = []
 
     if game.get("players"):
@@ -95,9 +96,15 @@ for game_file in game_files:
             p["team"] = away_team
             plist.append(p)
 
+    # ---------- PROCESS ----------
     for p in plist:
 
-        name = clean_name(p.get("player") or p.get("name"))
+        name = clean_name(
+            p.get("player_name") or
+            p.get("player") or
+            p.get("name")
+        )
+
         if not name:
             continue
 
@@ -105,7 +112,12 @@ for game_file in game_files:
         if mins in ["0:00", "00:00", "0", ""]:
             continue
 
-        team = p.get("team")
+        team = (
+            p.get("team") or
+            p.get("team_name") or
+            p.get("teamName")
+        )
+
         if not team:
             continue
 
@@ -142,7 +154,7 @@ for game_file in game_files:
         })
 
 # ---------- WRITE ----------
-print("💾 WRITING PLAYER FILES")
+print("💾 Writing player files...")
 
 index = []
 
@@ -150,7 +162,10 @@ for s, data in players.items():
 
     data.pop("seen", None)
 
-    data["games"].sort(key=lambda x: x.get("date",""), reverse=True)
+    data["games"].sort(
+        key=lambda x: x.get("date",""),
+        reverse=True
+    )
 
     (OUT / f"{s}.json").write_text(json.dumps(data, indent=2))
 
@@ -163,4 +178,4 @@ index.sort(key=lambda x: x["name"])
 
 (OUT / "index.json").write_text(json.dumps(index, indent=2))
 
-print("✅ DONE — GUARANTEED FULL CAREER BUILD")
+print("✅ DONE — FULL CAREER DATA BUILT")
