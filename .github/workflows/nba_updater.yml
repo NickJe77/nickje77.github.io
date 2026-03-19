@@ -41,93 +41,94 @@ jobs:
       - name: Build players
         run: python scripts/build_players.py
 
-      # 🔥 REAL FINAL FIX — UNIVERSAL SCANNER
-      - name: Add career stats to draft files
+      # 🔥 REAL FIX — BUILD CAREER STATS FROM GAME FILES
+      - name: Build career stats from games
         run: |
           python <<EOF
           import json
           from pathlib import Path
 
-          draft_dir = Path("docs/data/nba/draft")
-          players_dir = Path("docs/data/nba/players")
+          nba_dir = Path("docs/data/nba")
+          draft_dir = nba_dir / "draft"
 
-          def slug(name):
-              return name.lower().replace(".", "").replace("'", "").replace(" ", "-")
+          player_stats = {}
 
-          def scan_stats(obj):
-              points = 0
-              games = 0
+          def add_player(name, pts):
+              if name not in player_stats:
+                  player_stats[name] = {"games": 0, "points": 0}
 
-              if isinstance(obj, dict):
-                  for k, v in obj.items():
+              player_stats[name]["games"] += 1
+              player_stats[name]["points"] += pts
 
-                      # count points
-                      if k.lower() in ["pts", "points"]:
-                          if isinstance(v, (int, float)):
-                              points += v
+          print("Scanning games...")
 
-                      # count games (any game-like entry)
-                      if k.lower() in ["games", "game_log", "gamelog"]:
-                          if isinstance(v, list):
-                              games += len(v)
+          for season in nba_dir.iterdir():
 
-                      # recurse
-                      p, g = scan_stats(v)
-                      points += p
-                      games += g
+              if not season.is_dir():
+                  continue
 
-              elif isinstance(obj, list):
-                  for item in obj:
-                      p, g = scan_stats(item)
-                      points += p
-                      games += g
+              for game_file in season.glob("*.json"):
 
-              return points, games
+                  if game_file.name in ["index.json", "games.json"]:
+                      continue
 
+                  try:
+                      game = json.loads(game_file.read_text())
+                  except:
+                      continue
 
-          def get_stats(name):
-              file = players_dir / f"{slug(name)}.json"
+                  for side in ["home", "away"]:
+                      team = game.get(f"{side}_team")
 
-              if not file.exists():
-                  return {"games": 0, "points": 0, "ppg": 0}
+                      players = game.get(f"{side}_players", [])
 
-              try:
-                  data = json.loads(file.read_text())
-              except:
-                  return {"games": 0, "points": 0, "ppg": 0}
+                      for p in players:
 
-              points, games = scan_stats(data)
+                          name = p.get("name") or p.get("player")
+                          pts = p.get("points") or p.get("pts") or p.get("PTS") or 0
 
-              ppg = round(points / games, 1) if games else 0
+                          if name:
+                              try:
+                                  pts = float(pts)
+                              except:
+                                  pts = 0
 
-              return {
-                  "games": int(games),
-                  "points": int(points),
-                  "ppg": ppg
-              }
+                              add_player(name, pts)
 
-
-          def inject(obj):
-              if isinstance(obj, list):
-                  for item in obj:
-                      if isinstance(item, dict) and "player" in item:
-                          stats = get_stats(item["player"])
-                          item["games"] = stats["games"]
-                          item["points"] = stats["points"]
-                          item["ppg"] = stats["ppg"]
-                      inject(item)
-              elif isinstance(obj, dict):
-                  for v in obj.values():
-                      inject(v)
+          print("Players tracked:", len(player_stats))
 
 
           print("Updating draft files...")
 
           for file in draft_dir.glob("*.json"):
+
               try:
                   data = json.loads(file.read_text())
               except:
                   continue
+
+              def inject(obj):
+                  if isinstance(obj, list):
+                      for item in obj:
+                          if isinstance(item, dict) and "player" in item:
+
+                              name = item["player"]
+
+                              stats = player_stats.get(name, {"games": 0, "points": 0})
+
+                              g = stats["games"]
+                              p = stats["points"]
+                              ppg = round(p / g, 1) if g else 0
+
+                              item["games"] = g
+                              item["points"] = int(p)
+                              item["ppg"] = ppg
+
+                          inject(item)
+
+                  elif isinstance(obj, dict):
+                      for v in obj.values():
+                          inject(v)
 
               inject(data)
 
