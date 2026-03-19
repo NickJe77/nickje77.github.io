@@ -41,7 +41,7 @@ jobs:
       - name: Build players
         run: python scripts/build_players.py
 
-      # 🔥 FINAL FIX — NAME NORMALISATION
+      # 🔥 ABSOLUTE FINAL FIX — FULL SCAN + STRUCTURE DETECTION
       - name: Build career stats from games
         run: |
           python <<EOF
@@ -60,16 +60,40 @@ jobs:
 
           player_stats = {}
 
-          def add_player(name, pts):
+          def add(name, pts):
               key = clean(name)
-
               if key not in player_stats:
                   player_stats[key] = {"games": 0, "points": 0}
-
               player_stats[key]["games"] += 1
               player_stats[key]["points"] += pts
 
-          print("Scanning games...")
+          def scan_for_players(obj):
+              found = []
+
+              if isinstance(obj, dict):
+                  # CASE 1: direct player object
+                  if "name" in obj or "player" in obj:
+                      found.append(obj)
+
+                  for v in obj.values():
+                      found.extend(scan_for_players(v))
+
+              elif isinstance(obj, list):
+                  for item in obj:
+                      found.extend(scan_for_players(item))
+
+              return found
+
+          def extract_points(p):
+              for key in ["points","pts","PTS","Points"]:
+                  if key in p:
+                      try:
+                          return float(p[key])
+                      except:
+                          return 0
+              return 0
+
+          print("Scanning ALL games (structure independent)...")
 
           for season in nba_dir.iterdir():
 
@@ -78,48 +102,27 @@ jobs:
 
               for game_file in season.glob("*.json"):
 
-                  if game_file.name in ["index.json", "games.json"]:
+                  if game_file.name in ["index.json","games.json"]:
                       continue
 
                   try:
-                      raw = json.loads(game_file.read_text())
+                      data = json.loads(game_file.read_text())
                   except:
                       continue
 
-                  if isinstance(raw, list):
-                      if not raw:
-                          continue
-                      game = raw[0]
-                  else:
-                      game = raw
+                  players = scan_for_players(data)
 
-                  if not isinstance(game, dict):
-                      continue
+                  for p in players:
 
-                  for side in ["home", "away"]:
-
-                      players = game.get(f"{side}_players")
-
-                      if not isinstance(players, list):
+                      name = p.get("name") or p.get("player")
+                      if not name:
                           continue
 
-                      for p in players:
+                      pts = extract_points(p)
 
-                          if not isinstance(p, dict):
-                              continue
+                      add(name, pts)
 
-                          name = p.get("name") or p.get("player")
-                          pts = p.get("points") or p.get("pts") or p.get("PTS") or 0
-
-                          if name:
-                              try:
-                                  pts = float(pts)
-                              except:
-                                  pts = 0
-
-                              add_player(name, pts)
-
-          print("Players tracked:", len(player_stats))
+          print("Players found:", len(player_stats))
 
 
           print("Updating draft files...")
@@ -136,14 +139,12 @@ jobs:
                       for item in obj:
                           if isinstance(item, dict) and "player" in item:
 
-                              raw_name = item["player"]
-                              key = clean(raw_name)
-
-                              stats = player_stats.get(key, {"games": 0, "points": 0})
+                              key = clean(item["player"])
+                              stats = player_stats.get(key, {"games":0,"points":0})
 
                               g = stats["games"]
                               p = stats["points"]
-                              ppg = round(p / g, 1) if g else 0
+                              ppg = round(p/g,1) if g else 0
 
                               item["games"] = g
                               item["points"] = int(p)
@@ -160,7 +161,7 @@ jobs:
               file.write_text(json.dumps(data, indent=2))
               print("UPDATED:", file)
 
-          print("Done.")
+          print("DONE")
           EOF
 
       - name: Build NBA finals file
