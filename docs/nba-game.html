@@ -381,53 +381,6 @@ function renderTable(players,tableId){
   });
 }
 
-function sortTable(players,key,tableId,headerEl){
-  let asc=headerEl.classList.toggle("asc");
-  headerEl.classList.toggle("desc",!asc);
-
-  document.querySelectorAll(`#${tableId} th`).forEach(th=>{
-    if(th!==headerEl) th.classList.remove("asc","desc");
-  });
-
-  players.sort((a,b)=>{
-    if(key==="player_name"){
-      const A=getName(a);
-      const B=getName(b);
-      return asc ? A.localeCompare(B) : B.localeCompare(A);
-    }
-
-    if(key==="minutes"){
-      const A=getMinutesValue(a);
-      const B=getMinutesValue(b);
-      return asc ? A-B : B-A;
-    }
-
-    const map={
-      points:["points","pts"],
-      rebounds:["rebounds","reb","total_rebounds"],
-      assists:["assists","ast"],
-      steals:["steals","stl"],
-      blocks:["blocks","blk"]
-    };
-
-    const A=Number(statValue(a,map[key] || [key])) || 0;
-    const B=Number(statValue(b,map[key] || [key])) || 0;
-
-    return asc ? A-B : B-A;
-  });
-
-  renderTable(players,tableId);
-}
-
-function enableSorting(tableId,players){
-  document.querySelectorAll(`#${tableId} th`).forEach(th=>{
-    th.addEventListener("click",()=>{
-      const key=th.dataset.key;
-      sortTable(players,key,tableId,th);
-    });
-  });
-}
-
 function filterPlayedPlayers(players){
   return (players || []).filter(p=>getMinutesValue(p)>0);
 }
@@ -436,15 +389,7 @@ function extractPlayers(game){
   let hp=[];
   let ap=[];
 
-  if(Array.isArray(game.home_players) || Array.isArray(game.away_players)){
-    hp = Array.isArray(game.home_players) ? game.home_players : [];
-    ap = Array.isArray(game.away_players) ? game.away_players : [];
-  }
-  else if(game.boxscore){
-    hp = Array.isArray(game.boxscore.home?.players) ? game.boxscore.home.players : [];
-    ap = Array.isArray(game.boxscore.away?.players) ? game.boxscore.away.players : [];
-  }
-  else if(Array.isArray(game.players)){
+  if(Array.isArray(game.players)){
     hp = game.players.filter(p=>p.team===game.home_team);
     ap = game.players.filter(p=>p.team===game.away_team);
   }
@@ -457,55 +402,60 @@ function extractPlayers(game){
 
 async function loadGame(){
 
-  if(!season || !gameId){
-    showError("Missing season or game id");
+  if(!gameId){
+    showError("Missing game id");
     return;
   }
 
-  try{
-    const res=await fetch(BASE+season+"/"+gameId+".json");
+  let game=null;
 
-    if(!res.ok){
-      showError("Game file not found (404)");
-      return;
-    }
-
-    const game=await res.json();
-
-    if((game.game_type||"").toLowerCase().includes("pre")){
-      showError("Preseason games are not included in official records.");
-      return;
-    }
-
-    titleEl.textContent=(game.away_team || "")+" @ "+(game.home_team || "");
-    subtitleEl.textContent="Season "+season+" — "+(game.date || "");
-
-    scoreLine.textContent=
-      (game.home_team || "")+" "+(game.home_score ?? "")+
-      " – "+
-      (game.away_score ?? "")+" "+(game.away_team || "");
-
-    summaryEl.style.display="flex";
-
-    homeTitle.textContent=game.home_team || "Home";
-    awayTitle.textContent=game.away_team || "Away";
-
-    const extracted=extractPlayers(game);
-    homePlayers=extracted.home;
-    awayPlayers=extracted.away;
-
-    renderTable(homePlayers,"homeTable");
-    renderTable(awayPlayers,"awayTable");
-
-    enableSorting("homeTable",homePlayers);
-    enableSorting("awayTable",awayPlayers);
-
-  }catch(err){
-    showError("Could not load game file");
+  // try season first
+  if(season){
+    try{
+      const res=await fetch(BASE+season+"/"+gameId+".json");
+      if(res.ok) game=await res.json();
+    }catch{}
   }
+
+  // fallback scan
+  if(!game){
+    for(let y=1970;y<=2030;y++){
+      try{
+        const res=await fetch(BASE+y+"/"+gameId+".json");
+        if(res.ok){
+          game=await res.json();
+          break;
+        }
+      }catch{}
+    }
+  }
+
+  if(!game){
+    showError("Game not found");
+    return;
+  }
+
+  titleEl.textContent=(game.away_team || "")+" @ "+(game.home_team || "");
+  subtitleEl.textContent=(game.date || "");
+
+  scoreLine.textContent=
+    (game.home_team || "")+" "+(game.home_score ?? "")+
+    " – "+
+    (game.away_score ?? "")+" "+(game.away_team || "");
+
+  summaryEl.style.display="flex";
+
+  homeTitle.textContent=game.home_team || "Home";
+  awayTitle.textContent=game.away_team || "Away";
+
+  const extracted=extractPlayers(game);
+  homePlayers=extracted.home;
+  awayPlayers=extracted.away;
+
+  renderTable(homePlayers,"homeTable");
+  renderTable(awayPlayers,"awayTable");
 }
 
-window.addEventListener("pageshow",loadGame);
 loadGame();
 
 </script>
