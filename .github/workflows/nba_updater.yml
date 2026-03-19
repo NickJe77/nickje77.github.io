@@ -24,11 +24,25 @@ jobs:
       - run: python scripts/nba_download_boxscores.py
       - run: python scripts/nba_build_season_summaries.py
 
-      - run: rm -rf docs/data/nba/players
+      # ❌ DO NOT DELETE PLAYERS FOLDER ANYMORE
+      # - run: rm -rf docs/data/nba/players
       - run: mkdir -p docs/data/nba/players
+
+      # 🔥 BUILD PLAYERS
       - run: python scripts/build_players.py
 
-      # 🔥 FILTERED STATS (ONLY REG + PLAYOFFS)
+      # 🔒 CRITICAL SAFETY CHECK (PREVENTS DATA WIPE)
+      - name: Validate players exist
+        run: |
+          COUNT=$(ls docs/data/nba/players/*.json 2>/dev/null | wc -l)
+          echo "Player files: $COUNT"
+
+          if [ "$COUNT" -lt 50 ]; then
+            echo "❌ Player build failed — stopping to prevent wipe"
+            exit 1
+          fi
+
+      # 🔥 FILTERED STATS (UNCHANGED)
       - name: Build career stats
         run: |
           python <<EOF
@@ -44,19 +58,13 @@ jobs:
               return re.sub(r"\s+"," ",n).strip()
 
           def is_valid_game(game):
-
               values = [
                   str(game.get("game_type","")).lower(),
                   str(game.get("type","")).lower(),
                   str(game.get("season_type","")).lower()
               ]
-
               text = " ".join(values)
-
-              return (
-                  "regular" in text or
-                  "playoff" in text
-              )
+              return ("regular" in text or "playoff" in text)
 
           stats = {}
 
@@ -117,7 +125,6 @@ jobs:
                   if not isinstance(game,dict):
                       continue
 
-                  # 🔥 FILTER HERE
                   if not is_valid_game(game):
                       continue
 
@@ -172,6 +179,7 @@ jobs:
 
       - run: git config user.name "NBA Auto Bot"
       - run: git config user.email "bot@example.com"
+
       - run: git add -A
       - run: git commit -m "NBA full rebuild" || echo "No changes"
       - run: git pull --rebase origin main
