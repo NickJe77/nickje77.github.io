@@ -433,13 +433,14 @@ function normalizeRow(r){
     season: r.season || "",
     game_id: r.game_id || r.game || r.id || r.gameId || "",
     date: r.date || r.game_date || "",
-    team: r.team || "",
-    opp: r.opp || r.opponent || "",
+    team: r.team || r.team_name || "",
+    opp: r.opp || r.opponent || r.opp_team || r.opponent_team || "",
     pts: parseNum(r.pts ?? r.points ?? 0),
     reb: parseNum(r.reb ?? r.rebounds ?? 0),
     ast: parseNum(r.ast ?? r.assists ?? 0),
     stl: parseNum(r.stl ?? r.steals ?? 0),
-    blk: parseNum(r.blk ?? r.blocks ?? 0)
+    blk: parseNum(r.blk ?? r.blocks ?? 0),
+    game_type: r.game_type || r.type || r.season_type || r.gameType || r.seasonType || ""
   };
 }
 
@@ -498,11 +499,9 @@ function getLatestTeam(){
 }
 
 function isRegularOrPostseason(r){
-
   const team = String(r.team || "").toLowerCase();
   const opp = String(r.opp || "").toLowerCase();
 
-  // ❌ remove non-NBA teams
   if(team === "world" || team === "usa") return false;
   if(opp === "world" || opp === "usa") return false;
 
@@ -515,12 +514,14 @@ function isRegularOrPostseason(r){
     ""
   ).toLowerCase();
 
-  // ✅ STRICT allow only real NBA games
-  if(type.includes("regular")) return true;
-  if(type.includes("post")) return true;
-  if(type.includes("playoff")) return true;
+  if(type.includes("preseason")) return false;
+  if(type.includes("summer")) return false;
+  if(type.includes("exhibition")) return false;
+  if(type.includes("all-star")) return false;
+  if(type.includes("rising")) return false;
+  if(type.includes("celebrity")) return false;
 
-  return false;
+  return true;
 }
 
 async function fetchJSON(paths){
@@ -546,6 +547,7 @@ async function loadPlayers(){
 
   try{
     const list = await fetchJSON([
+      "data/nba/players/index.json",
       "docs/data/nba/players/index.json"
     ]);
 
@@ -587,32 +589,26 @@ async function loadPlayer(){
   try{
     const data = await fetchJSON([
       `data/nba/players/${playerParam}.json`,
-      `data/nba/players/${slug(rawParam)}.json`
+      `docs/data/nba/players/${playerParam}.json`,
+      `data/nba/players/${slug(rawParam)}.json`,
+      `docs/data/nba/players/${slug(rawParam)}.json`
     ]);
 
     rows = Array.isArray(data)
       ? data
-      : data.games || data.game_log || data.gamelog || [];
+      : Array.isArray(data.games)
+        ? data.games
+        : Array.isArray(data.game_log)
+          ? data.game_log
+          : Array.isArray(data.gamelog)
+            ? data.gamelog
+            : [];
 
     rows = rows.map(normalizeRow);
-
-    // ✅ ONLY keep games player actually appeared in
-    rows = rows.filter(r =>
-      r.team &&
-      r.opp &&
-      (
-        r.pts > 0 ||
-        r.reb > 0 ||
-        r.ast > 0 ||
-        r.stl > 0 ||
-        r.blk > 0
-      )
-    );
-
-    // ✅ ONLY real NBA games
+    rows = rows.filter(r => r.team && r.opp);
     rows = rows.filter(isRegularOrPostseason);
-
     rows = sortRowsLatestFirst(rows);
+
     if(data && data.name){
       titleEl.textContent = data.name;
       heroSub.textContent = "Career game log, totals, averages and highs for " + data.name;
@@ -834,7 +830,7 @@ function renderFiltered(){
 }
 
 function getGameId(r){
-  return r.game_id || r.game || r.id || r.gameId || "";
+  return String(r.game_id || r.game || r.id || r.gameId || "").trim();
 }
 
 function renderGames(){
