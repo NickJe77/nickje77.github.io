@@ -41,12 +41,11 @@ jobs:
       - name: Build players
         run: python scripts/build_players.py
 
-      # 🔥 ABSOLUTE FINAL FIX — FULL SCAN + STRUCTURE DETECTION
+      # 🔥 FULL STAT BUILDER
       - name: Build career stats from games
         run: |
           python <<EOF
-          import json
-          import re
+          import json, re
           from pathlib import Path
 
           nba_dir = Path("docs/data/nba")
@@ -58,59 +57,70 @@ jobs:
               name = re.sub(r"\s+", " ", name)
               return name.strip()
 
-          player_stats = {}
+          stats = {}
 
-          def add(name, pts):
+          def add(name, p):
               key = clean(name)
-              if key not in player_stats:
-                  player_stats[key] = {"games": 0, "points": 0}
-              player_stats[key]["games"] += 1
-              player_stats[key]["points"] += pts
+              if key not in stats:
+                  stats[key] = {
+                      "games":0,
+                      "points":0,
+                      "reb":0,
+                      "ast":0,
+                      "stl":0,
+                      "blk":0
+                  }
 
-          def scan_for_players(obj):
+              stats[key]["games"] += 1
+              stats[key]["points"] += p.get("pts",0)
+              stats[key]["reb"] += p.get("reb",0)
+              stats[key]["ast"] += p.get("ast",0)
+              stats[key]["stl"] += p.get("stl",0)
+              stats[key]["blk"] += p.get("blk",0)
+
+          def scan(obj):
               found = []
 
               if isinstance(obj, dict):
-                  # CASE 1: direct player object
                   if "name" in obj or "player" in obj:
                       found.append(obj)
 
                   for v in obj.values():
-                      found.extend(scan_for_players(v))
+                      found += scan(v)
 
               elif isinstance(obj, list):
-                  for item in obj:
-                      found.extend(scan_for_players(item))
+                  for i in obj:
+                      found += scan(i)
 
               return found
 
-          def extract_points(p):
-              for key in ["points","pts","PTS","Points"]:
-                  if key in p:
+          def get_stat(p, keys):
+              for k in keys:
+                  if k in p:
                       try:
-                          return float(p[key])
+                          return float(p[k])
                       except:
                           return 0
               return 0
 
-          print("Scanning ALL games (structure independent)...")
+          print("Scanning games...")
 
           for season in nba_dir.iterdir():
 
               if not season.is_dir():
                   continue
 
-              for game_file in season.glob("*.json"):
+              for file in season.glob("*.json"):
 
-                  if game_file.name in ["index.json","games.json"]:
+                  if file.name in ["index.json","games.json"]:
                       continue
 
                   try:
-                      data = json.loads(game_file.read_text())
+                      data = json.loads(file.read_text())
                   except:
                       continue
 
-                  players = scan_for_players(data)
+                  players = scan(data)
 
                   for p in players:
 
@@ -118,11 +128,15 @@ jobs:
                       if not name:
                           continue
 
-                      pts = extract_points(p)
+                      add(name,{
+                          "pts":get_stat(p,["pts","points","PTS"]),
+                          "reb":get_stat(p,["reb","REB"]),
+                          "ast":get_stat(p,["ast","AST"]),
+                          "stl":get_stat(p,["stl","STL"]),
+                          "blk":get_stat(p,["blk","BLK"])
+                      })
 
-                      add(name, pts)
-
-          print("Players found:", len(player_stats))
+          print("Players:",len(stats))
 
 
           print("Updating draft files...")
@@ -135,46 +149,43 @@ jobs:
                   continue
 
               def inject(obj):
-                  if isinstance(obj, list):
-                      for item in obj:
-                          if isinstance(item, dict) and "player" in item:
+                  if isinstance(obj,list):
+                      for i in obj:
+                          if isinstance(i,dict) and "player" in i:
 
-                              key = clean(item["player"])
-                              stats = player_stats.get(key, {"games":0,"points":0})
+                              key = clean(i["player"])
+                              s = stats.get(key,{
+                                  "games":0,"points":0,"reb":0,"ast":0,"stl":0,"blk":0
+                              })
 
-                              g = stats["games"]
-                              p = stats["points"]
-                              ppg = round(p/g,1) if g else 0
+                              g = s["games"]
 
-                              item["games"] = g
-                              item["points"] = int(p)
-                              item["ppg"] = ppg
+                              i["games"] = g
+                              i["points"] = int(s["points"])
+                              i["ppg"] = round(s["points"]/g,1) if g else 0
 
-                          inject(item)
+                              i["reb"] = int(s["reb"])
+                              i["rpg"] = round(s["reb"]/g,1) if g else 0
 
-                  elif isinstance(obj, dict):
+                              i["ast"] = int(s["ast"])
+                              i["apg"] = round(s["ast"]/g,1) if g else 0
+
+                              i["stl"] = int(s["stl"])
+                              i["blk"] = int(s["blk"])
+
+                          inject(i)
+
+                  elif isinstance(obj,dict):
                       for v in obj.values():
                           inject(v)
 
               inject(data)
 
-              file.write_text(json.dumps(data, indent=2))
-              print("UPDATED:", file)
+              file.write_text(json.dumps(data,indent=2))
+              print("UPDATED:",file)
 
           print("DONE")
           EOF
-
-      - name: Build NBA finals file
-        run: python scripts/build_nba_finals.py
-
-      - name: Build playoff games
-        run: python scripts/build_nba_playoff_games.py
-
-      - name: Build playoff series
-        run: python scripts/build_nba_playoff_series.py
-
-      - name: Build player search index
-        run: python scripts/nba_build_stat_leaders.py
 
       - name: Commit changes
         run: |
@@ -187,4 +198,4 @@ jobs:
         run: git pull --rebase origin main
 
       - name: Push changes
-        run: git push origin main
+        run: git push
