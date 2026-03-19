@@ -41,6 +41,7 @@ jobs:
       - name: Build players
         run: python scripts/build_players.py
 
+      # 🔥 REAL FINAL FIX — UNIVERSAL SCANNER
       - name: Add career stats to draft files
         run: |
           python <<EOF
@@ -53,8 +54,38 @@ jobs:
           def slug(name):
               return name.lower().replace(".", "").replace("'", "").replace(" ", "-")
 
-          def get_stats(name):
+          def scan_stats(obj):
+              points = 0
+              games = 0
 
+              if isinstance(obj, dict):
+                  for k, v in obj.items():
+
+                      # count points
+                      if k.lower() in ["pts", "points"]:
+                          if isinstance(v, (int, float)):
+                              points += v
+
+                      # count games (any game-like entry)
+                      if k.lower() in ["games", "game_log", "gamelog"]:
+                          if isinstance(v, list):
+                              games += len(v)
+
+                      # recurse
+                      p, g = scan_stats(v)
+                      points += p
+                      games += g
+
+              elif isinstance(obj, list):
+                  for item in obj:
+                      p, g = scan_stats(item)
+                      points += p
+                      games += g
+
+              return points, games
+
+
+          def get_stats(name):
               file = players_dir / f"{slug(name)}.json"
 
               if not file.exists():
@@ -65,22 +96,12 @@ jobs:
               except:
                   return {"games": 0, "points": 0, "ppg": 0}
 
-              games = 0
-              points = 0
-
-              # ✅ COUNT GAMES FROM GAME LOGS
-              if isinstance(data.get("games"), list):
-                  games = len(data["games"])
-
-              # ✅ SUM POINTS FROM TEAM TOTALS
-              if isinstance(data.get("teams"), dict):
-                  for t in data["teams"].values():
-                      points += t.get("pts", 0)
+              points, games = scan_stats(data)
 
               ppg = round(points / games, 1) if games else 0
 
               return {
-                  "games": games,
+                  "games": int(games),
                   "points": int(points),
                   "ppg": ppg
               }
