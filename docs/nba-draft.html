@@ -4,106 +4,24 @@
 <meta charset="UTF-8">
 <title>NBA Draft | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="style.css">
 
 <style>
+body{font-family:Inter,Arial;margin:0;background:#fff;}
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px;border-bottom:1px solid #ddd;font-weight:700;}
+.navbar a{color:#0056d6;text-decoration:none;}
+.page-wrap{max-width:1400px;margin:auto;padding:30px;}
 
-body{
-font-family:Inter,system-ui,Arial,sans-serif;
-margin:0;
-background:#fff;
-color:#1f2937;
-}
+.hero{background:linear-gradient(90deg,#17408B,#C9082A);color:#fff;padding:24px;border-radius:12px;text-align:center;margin-bottom:20px;}
 
-.navbar{
-display:flex;
-justify-content:center;
-gap:24px;
-padding:16px 0;
-border-bottom:1px solid #ddd;
-font-weight:700;
-background:#fff;
-}
+.controls{display:flex;justify-content:center;gap:10px;margin-bottom:15px;}
 
-.navbar a{
-color:#0056d6;
-text-decoration:none;
-font-size:18px;
-}
+table{width:100%;border-collapse:collapse;}
+th,td{padding:8px;border-bottom:1px solid #ddd;}
+th{background:#17408B;color:#fff;font-size:13px;}
+tr:nth-child(even){background:#f5f8ff;}
 
-.page-wrap{
-max-width:1400px;
-margin:0 auto;
-padding:30px 20px 60px;
-}
-
-.hero{
-background:linear-gradient(90deg,#17408B,#C9082A);
-color:white;
-border-radius:16px;
-padding:26px;
-margin-bottom:25px;
-text-align:center;
-}
-
-.controls{
-display:flex;
-justify-content:center;
-gap:12px;
-flex-wrap:wrap;
-margin-bottom:20px;
-}
-
-select,input{
-padding:9px 12px;
-border-radius:10px;
-border:1px solid #d1d5db;
-font-size:14px;
-}
-
-.table-card{
-background:#fff;
-border:1px solid #e5e7eb;
-border-radius:16px;
-overflow:hidden;
-}
-
-table{
-width:100%;
-border-collapse:collapse;
-}
-
-th,td{
-padding:10px 12px;
-border-bottom:1px solid #e5e7eb;
-text-align:left;
-}
-
-th{
-background:#17408B;
-color:white;
-font-size:13px;
-}
-
-tr:nth-child(even){
-background:#f8faff;
-}
-
-.player-link{
-color:#0056d6;
-font-weight:700;
-text-decoration:none;
-}
-
-.num{
-text-align:right;
-}
-
-.small{
-font-size:12px;
-color:#555;
-}
-
+.num{text-align:right;}
+.player-link{color:#0056d6;font-weight:700;text-decoration:none;}
 </style>
 </head>
 
@@ -118,15 +36,12 @@ color:#555;
 
 <div class="hero">
 <h1>NBA Draft</h1>
-<div>Complete draft history by year</div>
 </div>
 
 <div class="controls">
 <select id="yearSelect"></select>
-<input id="q" placeholder="Filter player, team, college">
+<input id="q" placeholder="Search player, team, college">
 </div>
-
-<div class="table-card">
 
 <table>
 <thead>
@@ -134,8 +49,8 @@ color:#555;
 <th>Pick</th>
 <th>Rnd</th>
 <th>Player</th>
-<th class="small">Team</th>
-<th class="small">College</th>
+<th>Team</th>
+<th>College</th>
 
 <th class="num">G</th>
 <th class="num">PTS</th>
@@ -147,45 +62,47 @@ color:#555;
 <th class="num">APG</th>
 <th class="num">STL</th>
 <th class="num">BLK</th>
-
 </tr>
 </thead>
 
 <tbody id="rows"></tbody>
-
 </table>
-
-</div>
 
 </div>
 
 <script>
 
+const rows = document.getElementById("rows");
 const yearSelect = document.getElementById("yearSelect");
 const q = document.getElementById("q");
-const rows = document.getElementById("rows");
 
 let data = [];
 
-async function loadYears(){
-let years = [];
-
-for(let y=1976;y<=2025;y++){
-years.push(y);
-}
-
+function buildYears(){
+let years=[];
+for(let y=1976;y<=2025;y++) years.push(y);
 yearSelect.innerHTML = years.reverse().map(y=>`<option>${y}</option>`).join("");
-
-loadYear(yearSelect.value);
 }
 
 async function loadYear(year){
+
 try{
 let res = await fetch(`data/nba/draft/${year}.json`);
-data = await res.json();
+let json = await res.json();
+
+console.log("LOADED DATA:", json);
+
+// 🔥 HANDLE STRUCTURE
+if(Array.isArray(json)) data = json;
+else if(json.players) data = json.players;
+else if(json.picks) data = json.picks;
+else data = [];
+
 render();
-}catch{
-rows.innerHTML = "<tr><td colspan='14'>No data</td></tr>";
+
+}catch(e){
+console.error(e);
+rows.innerHTML = "<tr><td colspan='14'>Error loading</td></tr>";
 }
 }
 
@@ -210,23 +127,23 @@ rows.innerHTML = filtered.map(p=>`
 
 <td>
 <a class="player-link" href="nba-player.html?player=${encodeURIComponent(p.player)}">
-${p.player}
+${p.player||""}
 </a>
 </td>
 
-<td class="small">${p.team||""}</td>
-<td class="small">${p.college||""}</td>
+<td>${p.team||""}</td>
+<td>${p.college||""}</td>
 
-<td class="num">${p.games||0}</td>
-<td class="num">${p.points||0}</td>
-<td class="num">${p.ppg||0}</td>
+<td class="num">${p.games ?? 0}</td>
+<td class="num">${p.points ?? 0}</td>
+<td class="num">${p.ppg ?? 0}</td>
 
-<td class="num">${p.reb||0}</td>
-<td class="num">${p.rpg||0}</td>
-<td class="num">${p.ast||0}</td>
-<td class="num">${p.apg||0}</td>
-<td class="num">${p.stl||0}</td>
-<td class="num">${p.blk||0}</td>
+<td class="num">${p.reb ?? 0}</td>
+<td class="num">${p.rpg ?? 0}</td>
+<td class="num">${p.ast ?? 0}</td>
+<td class="num">${p.apg ?? 0}</td>
+<td class="num">${p.stl ?? 0}</td>
+<td class="num">${p.blk ?? 0}</td>
 
 </tr>
 
@@ -237,7 +154,8 @@ ${p.player}
 yearSelect.onchange = ()=>loadYear(yearSelect.value);
 q.oninput = render;
 
-loadYears();
+buildYears();
+loadYear(2025);
 
 </script>
 
