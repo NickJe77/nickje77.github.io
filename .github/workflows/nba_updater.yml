@@ -28,7 +28,7 @@ jobs:
       - run: mkdir -p docs/data/nba/players
       - run: python scripts/build_players.py
 
-      # 🔥 FINAL STAT FIX (DEEP SCAN PLAYER OBJECT)
+      # 🔥 FILTERED STATS (ONLY REG + PLAYOFFS)
       - name: Build career stats
         run: |
           python <<EOF
@@ -42,6 +42,21 @@ jobs:
               n = n.lower()
               n = re.sub(r"[^\w\s]", "", n)
               return re.sub(r"\s+"," ",n).strip()
+
+          def is_valid_game(game):
+
+              values = [
+                  str(game.get("game_type","")).lower(),
+                  str(game.get("type","")).lower(),
+                  str(game.get("season_type","")).lower()
+              ]
+
+              text = " ".join(values)
+
+              return (
+                  "regular" in text or
+                  "playoff" in text
+              )
 
           stats = {}
 
@@ -83,21 +98,33 @@ jobs:
               stats[key]["stl"]+=find_stat(p,["stl","steals"])
               stats[key]["blk"]+=find_stat(p,["blk","blocks"])
 
-          print("Scanning games...")
+          print("Scanning filtered games...")
 
           for season in nba_dir.iterdir():
               if not season.is_dir(): continue
 
               for f in season.glob("*.json"):
-                  if f.name in ["index.json","games.json"]: continue
+
+                  if f.name in ["index.json","games.json"]:
+                      continue
 
                   try:
-                      data=json.loads(f.read_text())
-                  except: continue
+                      raw = json.loads(f.read_text())
+                  except:
+                      continue
 
-                  for p in find_players(data):
+                  game = raw[0] if isinstance(raw,list) else raw
+                  if not isinstance(game,dict):
+                      continue
+
+                  # 🔥 FILTER HERE
+                  if not is_valid_game(game):
+                      continue
+
+                  for p in find_players(game):
                       name = p.get("name") or p.get("player")
-                      if name: add(name,p)
+                      if name:
+                          add(name,p)
 
           print("Players:",len(stats))
 
@@ -111,6 +138,7 @@ jobs:
                   if isinstance(obj,list):
                       for i in obj:
                           if isinstance(i,dict) and "player" in i:
+
                               k = clean(i["player"])
                               s = stats.get(k,{"g":0,"pts":0,"reb":0,"ast":0,"stl":0,"blk":0})
 
