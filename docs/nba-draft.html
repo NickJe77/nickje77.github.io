@@ -228,6 +228,7 @@ const q = document.getElementById("q");
 const rows = document.getElementById("rows");
 
 let currentData = [];
+const statsCache = {};
 
 const teamNames = {
 ATL:"Atlanta Hawks", BOS:"Boston Celtics", BKN:"Brooklyn Nets", BRK:"Brooklyn Nets",
@@ -263,7 +264,43 @@ const teamColours = {
 "Washington Wizards":"#002B5C","Seattle SuperSonics":"#2C5234"
 };
 
-/* LOAD YEARS */
+function slug(name){
+  return name.toLowerCase().replace(/[^\w\s-]/g,"").replace(/\s+/g,"-");
+}
+
+async function getPlayerStats(name){
+
+  const key = slug(name);
+
+  if(statsCache[key]) return statsCache[key];
+
+  try{
+    const res = await fetch(`data/nba/players/${key}.json`);
+    const data = await res.json();
+
+    let games = 0;
+    let points = 0;
+
+    if(data.totals){
+      games = data.totals.games || 0;
+      points = data.totals.points || 0;
+    }else{
+      games = data.games || 0;
+      points = data.points || 0;
+    }
+
+    const ppg = games ? (points / games).toFixed(1) : "";
+
+    const stats = { games, points, ppg };
+
+    statsCache[key] = stats;
+    return stats;
+
+  }catch(e){
+    statsCache[key] = { games:"", points:"", ppg:"" };
+    return statsCache[key];
+  }
+}
 
 function loadYears(){
   const years = [];
@@ -275,8 +312,6 @@ function loadYears(){
 
   loadYear(yearSelect.value);
 }
-
-/* LOAD DATA */
 
 async function loadYear(year){
 
@@ -295,9 +330,7 @@ async function loadYear(year){
   }
 }
 
-/* RENDER */
-
-function render(){
+async function render(){
 
   const term = q.value.toLowerCase();
 
@@ -309,10 +342,14 @@ function render(){
     );
   });
 
-  rows.innerHTML = filtered.map(p=>{
+  rows.innerHTML = "<tr><td colspan='8'>Loading...</td></tr>";
+
+  const html = await Promise.all(filtered.map(async p=>{
 
     const teamFull = teamNames[p.team] || p.team;
     const colour = teamColours[teamFull] || "#ccc";
+
+    const stats = await getPlayerStats(p.player);
 
     return `
 <tr>
@@ -332,24 +369,22 @@ ${teamFull ?? ""}
 
 <td class="small">${p.college ?? ""}</td>
 
-<td class="num">${p.games ?? ""}</td>
-<td class="num">${p.points ?? ""}</td>
-<td class="num">${p.ppg ?? ""}</td>
+<td class="num">${stats.games}</td>
+<td class="num">${stats.points}</td>
+<td class="num">${stats.ppg}</td>
 </tr>
 `;
-  }).join("");
+  }));
+
+  rows.innerHTML = html.join("");
 
   if(!filtered.length){
     rows.innerHTML = "<tr><td colspan='8'>No results</td></tr>";
   }
 }
 
-/* EVENTS */
-
 yearSelect.addEventListener("change", ()=> loadYear(yearSelect.value));
 q.addEventListener("input", render);
-
-/* INIT */
 
 loadYears();
 
