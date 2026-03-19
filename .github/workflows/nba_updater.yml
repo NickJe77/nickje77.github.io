@@ -41,24 +41,33 @@ jobs:
       - name: Build players
         run: python scripts/build_players.py
 
-      # 🔥 FIXED GAME SCANNER
+      # 🔥 FINAL FIX — NAME NORMALISATION
       - name: Build career stats from games
         run: |
           python <<EOF
           import json
+          import re
           from pathlib import Path
 
           nba_dir = Path("docs/data/nba")
           draft_dir = nba_dir / "draft"
 
+          def clean(name):
+              name = name.lower()
+              name = re.sub(r"[^\w\s]", "", name)
+              name = re.sub(r"\s+", " ", name)
+              return name.strip()
+
           player_stats = {}
 
           def add_player(name, pts):
-              if name not in player_stats:
-                  player_stats[name] = {"games": 0, "points": 0}
+              key = clean(name)
 
-              player_stats[name]["games"] += 1
-              player_stats[name]["points"] += pts
+              if key not in player_stats:
+                  player_stats[key] = {"games": 0, "points": 0}
+
+              player_stats[key]["games"] += 1
+              player_stats[key]["points"] += pts
 
           print("Scanning games...")
 
@@ -77,7 +86,6 @@ jobs:
                   except:
                       continue
 
-                  # 🔥 HANDLE LIST OR DICT
                   if isinstance(raw, list):
                       if not raw:
                           continue
@@ -128,8 +136,10 @@ jobs:
                       for item in obj:
                           if isinstance(item, dict) and "player" in item:
 
-                              name = item["player"]
-                              stats = player_stats.get(name, {"games": 0, "points": 0})
+                              raw_name = item["player"]
+                              key = clean(raw_name)
+
+                              stats = player_stats.get(key, {"games": 0, "points": 0})
 
                               g = stats["games"]
                               p = stats["points"]
