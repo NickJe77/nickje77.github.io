@@ -3,13 +3,16 @@ import re
 import unicodedata
 from pathlib import Path
 
-DATA = Path("docs/data/nba")
+# 🔥 FORCE ROOT PATH (THIS FIXES YOUR ISSUE)
+ROOT = Path(__file__).resolve().parents[1]
+DATA = ROOT / "docs/data/nba"
 OUT = DATA / "players"
 
 OUT.mkdir(parents=True, exist_ok=True)
 
 players = {}
 
+# ---------- CLEAN ----------
 def clean_name(name):
     if not name:
         return ""
@@ -32,14 +35,19 @@ def num(v):
         except:
             return 0
 
-print("🔥 Building NBA players (FULL CAREER)...")
+print("🔥 BUILDING NBA PLAYER CAREERS")
 
-for season_dir in DATA.iterdir():
+# 🔥 DEBUG (LEAVE THIS IN FIRST RUN)
+print("DATA PATH:", DATA.resolve())
+print("FOLDERS:", [p.name for p in DATA.iterdir() if p.is_dir()])
+
+# ---------- LOOP ALL SEASONS ----------
+for season_dir in sorted(DATA.iterdir()):
 
     if not season_dir.is_dir():
         continue
 
-    print(f"→ {season_dir.name}")
+    print(f"→ Processing season {season_dir.name}")
 
     for game_file in season_dir.glob("*.json"):
 
@@ -54,48 +62,60 @@ for season_dir in DATA.iterdir():
         if not isinstance(game, dict):
             continue
 
-        # ✅ FILTER GAME TYPES
-        game_type = str(game.get("type", "")).lower()
+        # ---------- FILTER GAME TYPES ----------
+        game_type = str(
+            game.get("type") or
+            game.get("season_type") or
+            ""
+        ).lower()
+
         if any(x in game_type for x in [
-            "preseason", "summer", "all", "exhibition", "rising", "celebrity"
+            "preseason", "summer", "all", "exhibition",
+            "rising", "celebrity"
         ]):
             continue
 
-        game_id = game.get("game_id") or game.get("id") or ""
+        game_id = game.get("game_id") or game.get("id") or game_file.stem
         date = game.get("date") or game.get("game_date") or ""
         season = game.get("season") or season_dir.name
 
         home_team = game.get("home_team")
         away_team = game.get("away_team")
 
-        # 🔥 FIXED PLAYER EXTRACTION
+        # ---------- GET PLAYERS (ALL FORMATS) ----------
         plist = []
 
         if game.get("players"):
             plist = game["players"]
+
         else:
             for p in game.get("home_players", []):
+                p = dict(p)
                 p["team"] = home_team
                 plist.append(p)
+
             for p in game.get("away_players", []):
+                p = dict(p)
                 p["team"] = away_team
                 plist.append(p)
 
+        # ---------- PROCESS PLAYERS ----------
         for p in plist:
 
             name = clean_name(p.get("player") or p.get("name"))
             if not name:
                 continue
 
+            # ❌ REMOVE ZERO MINUTES
             mins = str(p.get("minutes", "")).strip()
             if mins in ["0:00", "00:00", "0", ""]:
                 continue
 
-            player_team = p.get("team")
-            if not player_team:
+            team = p.get("team")
+            if not team:
                 continue
 
-            opponent = away_team if player_team == home_team else home_team
+            opp = away_team if team == home_team else home_team
 
             s = slug(name)
 
@@ -106,7 +126,7 @@ for season_dir in DATA.iterdir():
                     "seen": set()
                 }
 
-            unique_key = f"{game_id}-{player_team}"
+            unique_key = f"{game_id}-{team}"
 
             if unique_key in players[s]["seen"]:
                 continue
@@ -117,8 +137,8 @@ for season_dir in DATA.iterdir():
                 "game_id": game_id,
                 "date": date,
                 "season": season,
-                "team": player_team,
-                "opp": opponent,
+                "team": team,
+                "opp": opp,
                 "pts": num(p.get("points")),
                 "reb": num(p.get("rebounds")),
                 "ast": num(p.get("assists")),
@@ -127,7 +147,8 @@ for season_dir in DATA.iterdir():
                 "game_type": game_type
             })
 
-print("💾 Writing players...")
+# ---------- WRITE FILES ----------
+print("💾 Writing player files...")
 
 index = []
 
@@ -135,7 +156,10 @@ for s, data in players.items():
 
     data.pop("seen", None)
 
-    data["games"].sort(key=lambda x: x.get("date",""), reverse=True)
+    data["games"].sort(
+        key=lambda x: x.get("date", ""),
+        reverse=True
+    )
 
     (OUT / f"{s}.json").write_text(json.dumps(data, indent=2))
 
@@ -148,4 +172,4 @@ index.sort(key=lambda x: x["name"])
 
 (OUT / "index.json").write_text(json.dumps(index, indent=2))
 
-print("✅ DONE — FULL CAREER FIXED")
+print("✅ DONE — FULL CAREER DATA BUILT")
