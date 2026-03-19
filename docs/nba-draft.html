@@ -7,7 +7,6 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
-
 body{
 font-family:Inter,system-ui,Arial,sans-serif;
 margin:0;
@@ -41,8 +40,6 @@ margin:0 auto;
 padding:30px 20px 60px;
 }
 
-/* HERO */
-
 .hero{
 background:linear-gradient(90deg,#17408B,#C9082A);
 color:white;
@@ -63,8 +60,6 @@ opacity:.9;
 font-size:15px;
 }
 
-/* CONTROLS */
-
 .controls{
 display:flex;
 justify-content:center;
@@ -84,8 +79,6 @@ min-width:160px;
 input{
 min-width:260px;
 }
-
-/* TABLE CARD */
 
 .table-card{
 background:#fff;
@@ -113,10 +106,6 @@ font-size:14px;
 font-weight:700;
 }
 
-td{
-font-size:14px;
-}
-
 tr:nth-child(even){
 background:#f8faff;
 }
@@ -129,10 +118,6 @@ background:#e9f0ff;
 color:#0056d6;
 text-decoration:none;
 font-weight:700;
-}
-
-.player-link:hover{
-text-decoration:underline;
 }
 
 .small{
@@ -151,7 +136,6 @@ width:16px;
 height:16px;
 border-radius:3px;
 border:1px solid #bbb;
-flex:0 0 16px;
 }
 
 .num{
@@ -162,19 +146,6 @@ white-space:nowrap;
 .center{
 text-align:center;
 }
-
-@media(max-width:1000px){
-
-table{
-font-size:13px;
-}
-
-th,td{
-padding:8px;
-}
-
-}
-
 </style>
 </head>
 
@@ -198,7 +169,6 @@ padding:8px;
 </div>
 
 <div class="table-card">
-
 <table>
 <thead>
 <tr>
@@ -212,17 +182,13 @@ padding:8px;
 <th class="small num">PPG</th>
 </tr>
 </thead>
-
 <tbody id="rows"></tbody>
-
 </table>
-
 </div>
 
 </div>
 
 <script>
-
 const yearSelect = document.getElementById("yearSelect");
 const q = document.getElementById("q");
 const rows = document.getElementById("rows");
@@ -230,48 +196,12 @@ const rows = document.getElementById("rows");
 let currentData = [];
 const statsCache = {};
 
-const teamNames = {
-ATL:"Atlanta Hawks", BOS:"Boston Celtics", BKN:"Brooklyn Nets", BRK:"Brooklyn Nets",
-CHA:"Charlotte Hornets", CHO:"Charlotte Hornets", CHI:"Chicago Bulls",
-CLE:"Cleveland Cavaliers", DAL:"Dallas Mavericks", DEN:"Denver Nuggets",
-DET:"Detroit Pistons", GSW:"Golden State Warriors", HOU:"Houston Rockets",
-IND:"Indiana Pacers", LAC:"Los Angeles Clippers", LAL:"Los Angeles Lakers",
-MEM:"Memphis Grizzlies", MIA:"Miami Heat", MIL:"Milwaukee Bucks",
-MIN:"Minnesota Timberwolves", NOP:"New Orleans Pelicans", NOH:"New Orleans Hornets",
-NOK:"New Orleans/Oklahoma City Hornets", NYK:"New York Knicks",
-OKC:"Oklahoma City Thunder", SEA:"Seattle SuperSonics", ORL:"Orlando Magic",
-PHI:"Philadelphia 76ers", PHX:"Phoenix Suns", PHO:"Phoenix Suns",
-POR:"Portland Trail Blazers", SAC:"Sacramento Kings",
-SAS:"San Antonio Spurs", TOR:"Toronto Raptors",
-UTA:"Utah Jazz", WAS:"Washington Wizards", WSB:"Washington Bullets"
-};
-
-const teamColours = {
-"Atlanta Hawks":"#E03A3E","Boston Celtics":"#007A33","Brooklyn Nets":"#000000",
-"Charlotte Hornets":"#1D1160","Chicago Bulls":"#CE1141",
-"Cleveland Cavaliers":"#860038","Dallas Mavericks":"#00538C",
-"Denver Nuggets":"#0E2240","Detroit Pistons":"#C8102E",
-"Golden State Warriors":"#1D428A","Houston Rockets":"#CE1141",
-"Indiana Pacers":"#002D62","Los Angeles Clippers":"#C8102E",
-"Los Angeles Lakers":"#552583","Memphis Grizzlies":"#5D76A9",
-"Miami Heat":"#98002E","Milwaukee Bucks":"#00471B",
-"Minnesota Timberwolves":"#0C2340","New Orleans Pelicans":"#0C2340",
-"New York Knicks":"#006BB6","Oklahoma City Thunder":"#007AC1",
-"Orlando Magic":"#0077C0","Philadelphia 76ers":"#006BB6",
-"Phoenix Suns":"#1D1160","Portland Trail Blazers":"#E03A3E",
-"Sacramento Kings":"#5A2D81","San Antonio Spurs":"#C4CED4",
-"Toronto Raptors":"#CE1141","Utah Jazz":"#002B5C",
-"Washington Wizards":"#002B5C","Seattle SuperSonics":"#2C5234"
-};
-
 function slug(name){
   return name.toLowerCase().replace(/[^\w\s-]/g,"").replace(/\s+/g,"-");
 }
 
 async function getPlayerStats(name){
-
   const key = slug(name);
-
   if(statsCache[key]) return statsCache[key];
 
   try{
@@ -281,24 +211,28 @@ async function getPlayerStats(name){
     let games = 0;
     let points = 0;
 
-    if(data.totals){
+    if(Array.isArray(data.games)){
+      games = data.games.length;
+
+      for(const g of data.games){
+        const pts = g.points ?? g.pts ?? g.PTS ?? 0;
+        points += Number(pts) || 0;
+      }
+    }
+
+    else if(data.totals){
       games = data.totals.games || 0;
       points = data.totals.points || 0;
-    }else{
-      games = data.games || 0;
-      points = data.points || 0;
     }
 
     const ppg = games ? (points / games).toFixed(1) : "";
 
     const stats = { games, points, ppg };
-
     statsCache[key] = stats;
     return stats;
 
   }catch(e){
-    statsCache[key] = { games:"", points:"", ppg:"" };
-    return statsCache[key];
+    return { games:"", points:"", ppg:"" };
   }
 }
 
@@ -314,80 +248,49 @@ function loadYears(){
 }
 
 async function loadYear(year){
-
   rows.innerHTML = "<tr><td colspan='8'>Loading...</td></tr>";
 
   try{
     const res = await fetch(`data/nba/draft/${year}.json`);
-    const data = await res.json();
-
-    currentData = data;
+    currentData = await res.json();
     render();
-
-  }catch(err){
+  }catch{
     rows.innerHTML = "<tr><td colspan='8'>Unable to load data</td></tr>";
-    console.error(err);
   }
 }
 
 async function render(){
-
   const term = q.value.toLowerCase();
 
-  const filtered = currentData.filter(p=>{
-    return (
-      (p.player || "").toLowerCase().includes(term) ||
-      (p.team || "").toLowerCase().includes(term) ||
-      (p.college || "").toLowerCase().includes(term)
-    );
-  });
-
-  rows.innerHTML = "<tr><td colspan='8'>Loading...</td></tr>";
+  const filtered = currentData.filter(p =>
+    (p.player||"").toLowerCase().includes(term) ||
+    (p.team||"").toLowerCase().includes(term) ||
+    (p.college||"").toLowerCase().includes(term)
+  );
 
   const html = await Promise.all(filtered.map(async p=>{
-
-    const teamFull = teamNames[p.team] || p.team;
-    const colour = teamColours[teamFull] || "#ccc";
-
     const stats = await getPlayerStats(p.player);
 
     return `
 <tr>
 <td class="center">${p.pick ?? ""}</td>
 <td class="center">${p.round ?? ""}</td>
-
-<td>
-<a class="player-link" href="nba-player.html?player=${encodeURIComponent(p.player)}">
-${p.player ?? ""}
-</a>
-</td>
-
-<td class="team-cell small">
-<span class="team-colour" style="background:${colour}"></span>
-${teamFull ?? ""}
-</td>
-
-<td class="small">${p.college ?? ""}</td>
-
+<td><a class="player-link" href="nba-player.html?player=${encodeURIComponent(p.player)}">${p.player}</a></td>
+<td>${p.team}</td>
+<td>${p.college ?? ""}</td>
 <td class="num">${stats.games}</td>
 <td class="num">${stats.points}</td>
 <td class="num">${stats.ppg}</td>
-</tr>
-`;
+</tr>`;
   }));
 
-  rows.innerHTML = html.join("");
-
-  if(!filtered.length){
-    rows.innerHTML = "<tr><td colspan='8'>No results</td></tr>";
-  }
+  rows.innerHTML = html.join("") || "<tr><td colspan='8'>No results</td></tr>";
 }
 
-yearSelect.addEventListener("change", ()=> loadYear(yearSelect.value));
+yearSelect.addEventListener("change", ()=>loadYear(yearSelect.value));
 q.addEventListener("input", render);
 
 loadYears();
-
 </script>
 
 </body>
