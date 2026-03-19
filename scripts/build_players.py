@@ -10,7 +10,6 @@ OUT.mkdir(parents=True, exist_ok=True)
 
 players = {}
 
-# ---------- CLEAN NAME ----------
 def clean_name(name):
     if not name:
         return ""
@@ -18,16 +17,10 @@ def clean_name(name):
     name = name.encode("ascii", "ignore").decode("utf-8")
     return name.strip()
 
-# ---------- STRONG SLUG (NO DUPES) ----------
 def slug(name):
     name = clean_name(name).lower()
-
-    # remove punctuation
     name = re.sub(r"[^\w\s-]", "", name)
-
-    # collapse spaces
     name = re.sub(r"\s+", " ", name).strip()
-
     return name.replace(" ", "-")
 
 def num(v):
@@ -39,9 +32,8 @@ def num(v):
         except:
             return 0
 
-print("🔥 Building NBA players (NO DUPES + NO 0 MINUTES)...")
+print("🔥 Building NBA players (FULL CAREER)...")
 
-# ---------- LOOP ----------
 for season_dir in DATA.iterdir():
 
     if not season_dir.is_dir():
@@ -62,6 +54,13 @@ for season_dir in DATA.iterdir():
         if not isinstance(game, dict):
             continue
 
+        # ✅ FILTER GAME TYPES
+        game_type = str(game.get("type", "")).lower()
+        if any(x in game_type for x in [
+            "preseason", "summer", "all", "exhibition", "rising", "celebrity"
+        ]):
+            continue
+
         game_id = game.get("game_id") or game.get("id") or ""
         date = game.get("date") or game.get("game_date") or ""
         season = game.get("season") or season_dir.name
@@ -69,7 +68,18 @@ for season_dir in DATA.iterdir():
         home_team = game.get("home_team")
         away_team = game.get("away_team")
 
-        plist = game.get("players", [])
+        # 🔥 FIXED PLAYER EXTRACTION
+        plist = []
+
+        if game.get("players"):
+            plist = game["players"]
+        else:
+            for p in game.get("home_players", []):
+                p["team"] = home_team
+                plist.append(p)
+            for p in game.get("away_players", []):
+                p["team"] = away_team
+                plist.append(p)
 
         for p in plist:
 
@@ -77,7 +87,6 @@ for season_dir in DATA.iterdir():
             if not name:
                 continue
 
-            # 🔥 REMOVE 0 MINUTE GAMES
             mins = str(p.get("minutes", "")).strip()
             if mins in ["0:00", "00:00", "0", ""]:
                 continue
@@ -94,10 +103,9 @@ for season_dir in DATA.iterdir():
                 players[s] = {
                     "name": name,
                     "games": [],
-                    "seen": set()  # 🔥 prevents duplicate games
+                    "seen": set()
                 }
 
-            # 🔥 DUPLICATE GAME PROTECTION
             unique_key = f"{game_id}-{player_team}"
 
             if unique_key in players[s]["seen"]:
@@ -110,26 +118,24 @@ for season_dir in DATA.iterdir():
                 "date": date,
                 "season": season,
                 "team": player_team,
-                "opponent": opponent,
+                "opp": opponent,
                 "pts": num(p.get("points")),
                 "reb": num(p.get("rebounds")),
                 "ast": num(p.get("assists")),
                 "stl": num(p.get("steals")),
-                "blk": num(p.get("blocks"))
+                "blk": num(p.get("blocks")),
+                "game_type": game_type
             })
 
-# ---------- WRITE ----------
 print("💾 Writing players...")
 
 index = []
 
 for s, data in players.items():
 
-    # remove helper set before saving
     data.pop("seen", None)
 
-    # sort games newest first
-    data["games"].sort(key=lambda x: (x.get("date","")), reverse=True)
+    data["games"].sort(key=lambda x: x.get("date",""), reverse=True)
 
     (OUT / f"{s}.json").write_text(json.dumps(data, indent=2))
 
@@ -142,4 +148,4 @@ index.sort(key=lambda x: x["name"])
 
 (OUT / "index.json").write_text(json.dumps(index, indent=2))
 
-print("✅ DONE")
+print("✅ DONE — FULL CAREER FIXED")
