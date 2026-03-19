@@ -502,7 +502,6 @@ function isRegularOrPostseason(r){
   const team = String(r.team || "").toLowerCase();
   const opp = String(r.opp || "").toLowerCase();
 
-  // ❌ remove non-NBA teams
   if(team === "world" || team === "usa") return false;
   if(opp === "world" || opp === "usa") return false;
 
@@ -515,7 +514,6 @@ function isRegularOrPostseason(r){
     ""
   ).toLowerCase();
 
-  // ✅ STRICT allow only real NBA games
   if(type.includes("regular")) return true;
   if(type.includes("post")) return true;
   if(type.includes("playoff")) return true;
@@ -546,7 +544,7 @@ async function loadPlayers(){
 
   try{
     const list = await fetchJSON([
-      "docs/data/nba/players/index.json"
+      "data/nba/players/index.json"
     ]);
 
     const dl = document.getElementById("playerList");
@@ -590,25 +588,26 @@ async function loadPlayer(){
       `data/nba/players/${slug(rawParam)}.json`
     ]);
 
-rows = rows.map(normalizeRow);
+    rows = Array.isArray(data) ? data : (Array.isArray(data.games) ? data.games : []);
 
-// ✅ ONLY keep games player actually appeared in
-rows = rows.filter(r =>
-  r.team &&
-  r.opp &&
-  (
-    r.pts > 0 ||
-    r.reb > 0 ||
-    r.ast > 0 ||
-    r.stl > 0 ||
-    r.blk > 0
-  )
-);
+    rows = rows.map(normalizeRow);
 
-// ✅ ONLY real NBA games
-rows = rows.filter(isRegularOrPostseason);
+    rows = rows.filter(r =>
+      r.team &&
+      r.opp &&
+      (
+        r.pts > 0 ||
+        r.reb > 0 ||
+        r.ast > 0 ||
+        r.stl > 0 ||
+        r.blk > 0
+      )
+    );
 
-rows = sortRowsLatestFirst(rows);
+    rows = rows.filter(isRegularOrPostseason);
+
+    rows = sortRowsLatestFirst(rows);
+
     if(data && data.name){
       titleEl.textContent = data.name;
       heroSub.textContent = "Career game log, totals, averages and highs for " + data.name;
@@ -873,5 +872,3 @@ loadPlayer();
 
 </body>
 </html>
-
-
