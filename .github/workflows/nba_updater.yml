@@ -32,7 +32,6 @@ jobs:
       - name: Build season summaries
         run: python scripts/nba_build_season_summaries.py
 
-      # 🔥 CRITICAL FIX — CLEAN PLAYERS FIRST
       - name: Remove old player files
         run: rm -rf docs/data/nba/players
 
@@ -42,7 +41,7 @@ jobs:
       - name: Build players
         run: python scripts/build_players.py
 
-      # ✅ NEW STEP — ADD STATS INTO DRAFT FILES
+      # ✅ FIXED STEP
       - name: Add career stats to draft files
         run: |
           python <<EOF
@@ -61,6 +60,7 @@ jobs:
               )
 
           def get_stats(player_name):
+
               file = players_dir / f"{slug(player_name)}.json"
 
               if not file.exists():
@@ -75,10 +75,20 @@ jobs:
               points = 0
 
               if isinstance(data.get("games"), list):
+
                   games = len(data["games"])
 
                   for g in data["games"]:
-                      pts = g.get("points") or g.get("pts") or g.get("PTS") or 0
+
+                      pts = 0
+
+                      if isinstance(g, dict):
+                          pts = g.get("points") or g.get("pts") or g.get("PTS") or 0
+
+                      if not pts and isinstance(g.get("player_stats"), dict):
+                          ps = g["player_stats"]
+                          pts = ps.get("points") or ps.get("pts") or ps.get("PTS") or 0
+
                       try:
                           points += float(pts)
                       except:
@@ -90,7 +100,11 @@ jobs:
 
               ppg = round(points / games, 1) if games else 0
 
-              return {"games": games, "points": int(points), "ppg": ppg}
+              return {
+                  "games": games,
+                  "points": int(points),
+                  "ppg": ppg
+              }
 
 
           print("Updating draft files...")
