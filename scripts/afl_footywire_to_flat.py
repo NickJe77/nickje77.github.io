@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import time
 
-print("AFL FOOTYWIRE → FLAT PLAYER JSON")
+print("AFL FOOTYWIRE → FIXED SCRAPER")
 
 YEAR = 2026
 BASE = "https://www.footywire.com/afl/footy/"
@@ -14,9 +14,6 @@ OUTPUT = Path(f"docs/data/afl/afl_{YEAR}.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
 
-# -------------------------------
-# HELPERS
-# -------------------------------
 def clean(x):
     return x.strip() if x else ""
 
@@ -25,107 +22,113 @@ def num(x):
     try:
         return int(x)
     except:
-        try:
-            return float(x)
-        except:
-            return 0
+        return 0
 
 
 # -------------------------------
 # GET MATCH LINKS
 # -------------------------------
 def get_matches():
-    url = f"{BASE}ft_match_list?year={YEAR}"
-    print("Fetching season:", url)
-
+    url = f"{BASE}ft_match_list?year={YEAR}
+"
     html = requests.get(url, headers=HEADERS).text
     soup = BeautifulSoup(html, "html.parser")
 
-    matches = []
+    links = []
 
     for a in soup.find_all("a", href=True):
         if "ft_match_statistics?mid=" in a["href"]:
-            link = BASE + a["href"]
-            if link not in matches:
-                matches.append(link)
+            full = BASE + a["href"]
+            if full not in links:
+                links.append(full)
 
-    print("Matches found:", len(matches))
-    return matches
+    print("Matches:", len(links))
+    return links
 
 
 # -------------------------------
 # PARSE MATCH
 # -------------------------------
-def parse_match(url, match_index):
+def parse_match(url, idx):
     print("Scraping:", url)
 
     html = requests.get(url, headers=HEADERS).text
     soup = BeautifulSoup(html, "html.parser")
 
-    tables = soup.find_all("table")
-
-    if len(tables) < 2:
-        return []
-
-    # Teams
-    headers = soup.find_all("h2")
-    team1 = clean(headers[0].text) if len(headers) > 0 else "Team A"
-    team2 = clean(headers[1].text) if len(headers) > 1 else "Team B"
-
-    # Round (rough extract)
-    round_text = "Round"
-    for h in soup.find_all(["h1", "h2", "h3"]):
-        if "Round" in h.text:
-            round_text = clean(h.text)
-            break
-
-    # Venue (best guess)
-    venue = ""
-    for td in soup.find_all("td"):
-        if "Venue" in td.text:
-            venue = clean(td.find_next("td").text)
-            break
-
-    match_id = f"{YEAR}_{str(match_index).zfill(4)}"
+    match_id = f"{YEAR}_{str(idx).zfill(4)}"
 
     rows = []
 
-    # ---------------- TEAM TABLE PARSER ----------------
-    def extract_players(table, team, opponent):
+    # -------------------------------
+    # TEAM NAMES (CORRECT)
+    # -------------------------------
+    team_headers = soup.find_all("h2")
+
+    if len(team_headers) < 2:
+        return []
+
+    team1 = clean(team_headers[0].text)
+    team2 = clean(team_headers[1].text)
+
+    # -------------------------------
+    # FIND PLAYER TABLES ONLY
+    # -------------------------------
+    tables = soup.find_all("table")
+
+    player_tables = []
+
+    for t in tables:
+        headers = [clean(th.text) for th in t.find_all("th")]
+
+        # real player table has "Player" + stats columns
+        if "Player" in headers and "D" in headers:
+            player_tables.append(t)
+
+    if len(player_tables) < 2:
+        print("No valid player tables")
+        return []
+
+    # -------------------------------
+    # EXTRACT PLAYERS
+    # -------------------------------
+    def extract(table, team, opp):
         out = []
-        trs = table.find_all("tr")[1:]
 
-        for r in trs:
-            cols = r.find_all("td")
+        for tr in table.find_all("tr")[1:]:
+            tds = tr.find_all("td")
 
-            if len(cols) < 5:
+            if len(tds) < 5:
                 continue
 
-            name = clean(cols[0].text)
+            name = clean(tds[0].text)
 
-            d = num(cols[3].text)  # disposals
-            g = num(cols[6].text) if len(cols) > 6 else 0
-            b = num(cols[7].text) if len(cols) > 7 else 0
+            # skip junk rows
+            if name == "" or "AFL" in name or "Statistics" in name:
+                continue
+
+            d = num(tds[3].text)
+            g = num(tds[6].text) if len(tds) > 6 else 0
+            b = num(tds[7].text) if len(tds) > 7 else 0
 
             out.append({
                 "match_id": match_id,
                 "season": YEAR,
-                "round": round_text,
+                "round": "",
                 "player": name,
                 "played_for": team,
-                "played_against": opponent,
+                "played_against": opp,
                 "D": d,
                 "G": g,
                 "B": b,
                 "date_iso": "",
-                "venue": venue,
+                "venue": "",
                 "crowd": ""
             })
 
         return out
 
-    rows.extend(extract_players(tables[0], team1, team2))
-    rows.extend(extract_players(tables[1], team2, team1))
+    rows.extend(extract(player_tables[0], team1, team2))
+    rows.extend(extract(player_tables[1], team2, team1))
 
     return rows
 
@@ -140,19 +143,19 @@ def main():
 
     for i, link in enumerate(links, start=1):
         try:
-            data = parse_match(link, i)
-            all_rows.extend(data)
+            rows = parse_match(link, i)
+            all_rows.extend(rows)
         except Exception as e:
             print("Error:", e)
 
         time.sleep(1)
 
-    print("Total player rows:", len(all_rows))
+    print("TOTAL ROWS:", len(all_rows))
 
     with open(OUTPUT, "w") as f:
         json.dump(all_rows, f, indent=2)
 
-    print("SAVED:", OUTPUT)
+    print("DONE")
 
 
 if __name__ == "__main__":
