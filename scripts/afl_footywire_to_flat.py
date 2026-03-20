@@ -14,6 +14,9 @@ OUTPUT = Path(f"docs/data/afl/afl_{YEAR}.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
 
+# -------------------------------
+# HELPERS
+# -------------------------------
 def clean(x):
     return x.strip() if x else ""
 
@@ -29,8 +32,8 @@ def num(x):
 # GET MATCH LINKS
 # -------------------------------
 def get_matches():
-    url = f"{BASE}ft_match_list?year={YEAR}
-"
+    url = f"{BASE}ft_match_list?year={YEAR}"
+
     html = requests.get(url, headers=HEADERS).text
     soup = BeautifulSoup(html, "html.parser")
 
@@ -42,7 +45,7 @@ def get_matches():
             if full not in links:
                 links.append(full)
 
-    print("Matches:", len(links))
+    print("Matches found:", len(links))
     return links
 
 
@@ -60,11 +63,12 @@ def parse_match(url, idx):
     rows = []
 
     # -------------------------------
-    # TEAM NAMES (CORRECT)
+    # TEAM NAMES
     # -------------------------------
     team_headers = soup.find_all("h2")
 
     if len(team_headers) < 2:
+        print("No team headers")
         return []
 
     team1 = clean(team_headers[0].text)
@@ -74,13 +78,11 @@ def parse_match(url, idx):
     # FIND PLAYER TABLES ONLY
     # -------------------------------
     tables = soup.find_all("table")
-
     player_tables = []
 
     for t in tables:
         headers = [clean(th.text) for th in t.find_all("th")]
 
-        # real player table has "Player" + stats columns
         if "Player" in headers and "D" in headers:
             player_tables.append(t)
 
@@ -102,7 +104,7 @@ def parse_match(url, idx):
 
             name = clean(tds[0].text)
 
-            # skip junk rows
+            # Skip junk rows
             if name == "" or "AFL" in name or "Statistics" in name:
                 continue
 
@@ -150,12 +152,12 @@ def main():
 
         time.sleep(1)
 
-    print("TOTAL ROWS:", len(all_rows))
+    print("TOTAL PLAYER ROWS:", len(all_rows))
 
     with open(OUTPUT, "w") as f:
         json.dump(all_rows, f, indent=2)
 
-    print("DONE")
+    print("DONE →", OUTPUT)
 
 
 if __name__ == "__main__":
