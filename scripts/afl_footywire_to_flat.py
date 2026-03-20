@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRIPT VERSION 14 — FINAL (NO HREF CRASH)")
+print("AFL SCRIPT VERSION 15 — FINAL (ORDER-BASED FIX)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -46,18 +46,6 @@ def get_links():
     return list(set(links))
 
 
-def extract_team_from_link(link):
-    if not link or "pp-" not in link:
-        return ""
-
-    part = link.split("pp-")[1]
-    return part.split("-")[0].lower()
-
-
-def normalize(name):
-    return name.lower().replace(" ", "")
-
-
 def parse_match(url):
 
     print("→ Scraping:", url)
@@ -66,7 +54,9 @@ def parse_match(url):
 
     title = soup.find("title").text.replace("AFL Match Statistics : ", "")
 
+    # -----------------------------
     # TEAM PARSING
+    # -----------------------------
     if " v " in title:
         t = title.split(" v ")
         team1, team2 = t[0].strip(), t[1].split(" ")[0].strip()
@@ -91,10 +81,9 @@ def parse_match(url):
         print("⚠️ Could not parse teams:", title)
         return []
 
-    team1_key = normalize(team1)
-    team2_key = normalize(team2)
-
+    # -----------------------------
     # ROUND + VENUE
+    # -----------------------------
     round_name = ""
     venue = ""
 
@@ -106,9 +95,12 @@ def parse_match(url):
     if v:
         venue = v.group(1).strip()
 
+    # -----------------------------
+    # FIND PLAYER TABLES
+    # -----------------------------
     tables = soup.find_all("table")
 
-    team_tables = {team1_key: None, team2_key: None}
+    candidate_tables = []
 
     for table in tables:
 
@@ -124,68 +116,83 @@ def parse_match(url):
         for row in rows:
             cols = row.find_all("td")
 
-            if len(cols) >= 5:
-                a = cols[0].find("a")
-                if a:
-                    valid_rows.append(cols)
+            if len(cols) >= 5 and cols[0].find("a"):
+                valid_rows.append(cols)
 
-        if len(valid_rows) < 20:
-            continue
+        if len(valid_rows) >= 20:
+            candidate_tables.append(valid_rows)
 
-        # 🔥 SAFE LINK EXTRACTION
-        first_a = valid_rows[0][0].find("a")
-
-        if not first_a or not first_a.has_attr("href"):
-            continue
-
-        team_guess = extract_team_from_link(first_a["href"])
-
-        if team1_key in team_guess:
-            team_tables[team1_key] = valid_rows
-
-        elif team2_key in team_guess:
-            team_tables[team2_key] = valid_rows
-
-    if not team_tables[team1_key] or not team_tables[team2_key]:
-        print("⚠️ Failed to match both teams")
+    if len(candidate_tables) < 2:
+        print("⚠️ Not enough tables")
         return []
 
+    # 🔥 FINAL FIX: FIRST TWO TABLES ONLY
+    team1_rows = candidate_tables[0][:23]
+    team2_rows = candidate_tables[1][:23]
+
+    print(f"{team1}: {len(team1_rows)} players")
+    print(f"{team2}: {len(team2_rows)} players")
+
+    # -----------------------------
+    # BUILD DATA
+    # -----------------------------
     data = []
 
-    for team_key, rows in team_tables.items():
+    for cols in team1_rows:
+        data.append({
+            "player": cols[0].text.strip(),
+            "played_for": team1,
+            "played_against": team2,
+            "round": round_name,
+            "venue": venue,
+            "season": SEASON,
 
-        for cols in rows[:23]:
+            "K": get_stat(cols, 1),
+            "HB": get_stat(cols, 2),
+            "D": get_stat(cols, 3),
+            "M": get_stat(cols, 4),
+            "G": get_stat(cols, 5),
+            "B": get_stat(cols, 6),
+            "T": get_stat(cols, 7),
+            "HO": get_stat(cols, 8),
+            "GA": get_stat(cols, 9),
+            "I50": get_stat(cols, 10),
+            "CL": get_stat(cols, 11),
+            "CG": get_stat(cols, 12),
+            "R50": get_stat(cols, 13),
+            "FF": get_stat(cols, 14),
+            "FA": get_stat(cols, 15),
+            "AF": get_stat(cols, 16),
+            "SC": get_stat(cols, 17)
+        })
 
-            entry = {
-                "player": cols[0].text.strip(),
-                "played_for": team1 if team_key == team1_key else team2,
-                "played_against": team2 if team_key == team1_key else team1,
-                "round": round_name,
-                "venue": venue,
-                "season": SEASON,
+    for cols in team2_rows:
+        data.append({
+            "player": cols[0].text.strip(),
+            "played_for": team2,
+            "played_against": team1,
+            "round": round_name,
+            "venue": venue,
+            "season": SEASON,
 
-                "K": get_stat(cols, 1),
-                "HB": get_stat(cols, 2),
-                "D": get_stat(cols, 3),
-                "M": get_stat(cols, 4),
-                "G": get_stat(cols, 5),
-                "B": get_stat(cols, 6),
-                "T": get_stat(cols, 7),
-                "HO": get_stat(cols, 8),
-                "GA": get_stat(cols, 9),
-                "I50": get_stat(cols, 10),
-                "CL": get_stat(cols, 11),
-                "CG": get_stat(cols, 12),
-                "R50": get_stat(cols, 13),
-                "FF": get_stat(cols, 14),
-                "FA": get_stat(cols, 15),
-                "AF": get_stat(cols, 16),
-                "SC": get_stat(cols, 17)
-            }
-
-            data.append(entry)
-
-        print(f"{team_key}: {len(rows[:23])} players")
+            "K": get_stat(cols, 1),
+            "HB": get_stat(cols, 2),
+            "D": get_stat(cols, 3),
+            "M": get_stat(cols, 4),
+            "G": get_stat(cols, 5),
+            "B": get_stat(cols, 6),
+            "T": get_stat(cols, 7),
+            "HO": get_stat(cols, 8),
+            "GA": get_stat(cols, 9),
+            "I50": get_stat(cols, 10),
+            "CL": get_stat(cols, 11),
+            "CG": get_stat(cols, 12),
+            "R50": get_stat(cols, 13),
+            "FF": get_stat(cols, 14),
+            "FA": get_stat(cols, 15),
+            "AF": get_stat(cols, 16),
+            "SC": get_stat(cols, 17)
+        })
 
     return data
 
