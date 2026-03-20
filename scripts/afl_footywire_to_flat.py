@@ -7,7 +7,7 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
-print("AFL FOOTYWIRE SCRAPER (FINAL - STABLE)")
+print("AFL FOOTYWIRE SCRAPER (LOCKED FIX VERSION)")
 
 YEAR = 2026
 BASE = "https://www.footywire.com/afl/footy/"
@@ -50,16 +50,14 @@ def get_html(url):
 
 
 # -----------------------
-# TEAM NAME FIX
+# TEAM CLEAN
 # -----------------------
 def extract_team_name(title):
     title = clean(title)
-
     title = title.replace("AFL Match Statistics :", "")
     title = title.replace("Match Statistics", "")
     title = title.replace("Player Statistics", "")
     title = title.replace("Player Stats", "")
-
     return clean(title)
 
 
@@ -78,7 +76,7 @@ def get_links():
             if full not in links:
                 links.append(full)
 
-    print("Matches found:", len(links))
+    print("MATCHES:", len(links))
     return links
 
 
@@ -125,7 +123,6 @@ def parse_header(soup):
     if c:
         crowd = c.group(1).replace(",", "")
 
-    # DATE
     date_iso = ""
     safe = re.sub(r"(\d+)(st|nd|rd|th)", r"\1", date_line)
 
@@ -182,49 +179,64 @@ def extract_scoreboard(soup):
 
 
 # -----------------------
-# PLAYER TABLES
+# 🔥 PLAYER TABLE FIX (CRITICAL)
 # -----------------------
 def get_player_tables(soup):
     tables = []
 
     for table in soup.find_all("table"):
+
+        text = table.get_text(" ")
+
+        # HARD FILTER
+        if "Player" not in text:
+            continue
+        if "Disposals" not in text:
+            continue
+        if "K" not in text or "HB" not in text:
+            continue
+
         rows = table.find_all("tr")
-        if len(rows) < 8:
+
+        valid_rows = 0
+        for r in rows:
+            tds = r.find_all("td")
+            if len(tds) >= 18 and tds[1].get_text().strip().isdigit():
+                valid_rows += 1
+
+        if valid_rows < 10:
             continue
 
-        header = [clean(x.get_text()) for x in rows[0].find_all(["td", "th"])]
-
-        if not {"Player", "K", "HB", "D", "M", "G", "B"}.issubset(set(header)):
-            continue
-
-        # find title above table
-        title = ""
+        # find team name above
+        team = ""
         prev = table.find_previous(["h1", "h2", "h3", "div", "td"])
 
-        for _ in range(8):
+        for _ in range(10):
             if not prev:
                 break
             txt = clean(prev.get_text())
-            if "Player Stats" in txt:
-                title = txt
+            if "Match Statistics" in txt:
+                team = txt
                 break
             prev = prev.find_previous(["h1", "h2", "h3", "div", "td"])
 
-        team = extract_team_name(title)
+        team = extract_team_name(team)
 
-        tables.append({"team": team, "table": table})
+        tables.append({
+            "team": team,
+            "table": table
+        })
 
     return tables
 
 
 # -----------------------
-# PLAYER PARSER (FIXED)
+# PLAYER PARSER
 # -----------------------
 def parse_players(table):
     out = []
 
     for tr in table.find_all("tr"):
-
         tds = tr.find_all("td")
 
         if len(tds) < 18:
@@ -232,20 +244,9 @@ def parse_players(table):
 
         name = clean(tds[0].get_text())
 
-        # FILTER JUNK
-        if not name:
+        if not name or len(name.split()) < 2:
             continue
 
-        if any(x in name for x in [
-            "Player", "Coach", "Statistics", "Match",
-            "Sorted", "Head", "Scoring", "Highlights"
-        ]):
-            continue
-
-        if len(name.split()) < 2:
-            continue
-
-        # MUST BE NUMERIC ROW
         if not tds[1].get_text().strip().isdigit():
             continue
 
@@ -284,6 +285,8 @@ def parse_match(url, idx):
     header = parse_header(soup)
     scores = extract_scoreboard(soup)
     tables = get_player_tables(soup)
+
+    print("TABLES FOUND:", len(tables))
 
     if len(tables) < 2:
         return []
