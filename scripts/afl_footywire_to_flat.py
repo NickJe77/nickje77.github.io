@@ -3,7 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 from pathlib import Path
 
-print("AFL SCRAPER — VERSION 4 (URL FIX)")
+print("AFL SCRIPT VERSION 5 — FINAL WORKING")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -14,6 +14,9 @@ OUTPUT = Path(f"docs/data/afl/afl_{SEASON}.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
 
+# -----------------------------
+# HELPERS
+# -----------------------------
 def to_int(x):
     try:
         return int(x.strip())
@@ -22,7 +25,7 @@ def to_int(x):
 
 
 # -----------------------------
-# GET MATCH LINKS
+# GET MATCH LINKS (FIXED URLS)
 # -----------------------------
 def get_links():
     url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}"
@@ -31,13 +34,26 @@ def get_links():
     links = []
 
     for a in soup.find_all("a", href=True):
-        if "ft_match_statistics" in a["href"]:
-            link = BASE + "/" + a["href"].lstrip("/")
-            links.append(link)
+        href = a["href"]
+
+        if "ft_match_statistics" not in href:
+            continue
+
+        # 🔥 HANDLE ALL CASES CORRECTLY
+        if href.startswith("http"):
+            link = href
+        elif href.startswith("/"):
+            link = BASE + href
+        else:
+            link = BASE + "/afl/footy/" + href
+
+        links.append(link)
 
     links = list(set(links))
 
     print("Matches found:", len(links))
+    if links:
+        print("Sample link:", links[0])
 
     return links
 
@@ -75,6 +91,7 @@ def parse_match(url):
         for row in rows:
             cols = row.find_all("td")
 
+            # 🔥 REAL PLAYER ROW DETECTION
             if len(cols) >= 10 and cols[0].find("a"):
                 valid_rows.append(cols)
 
@@ -133,7 +150,8 @@ all_data = []
 
 for link in links:
     try:
-        all_data.extend(parse_match(link))
+        match_data = parse_match(link)
+        all_data.extend(match_data)
     except Exception as e:
         print("ERROR:", e)
 
