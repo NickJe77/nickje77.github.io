@@ -7,7 +7,7 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
-print("AFL FOOTYWIRE SCRAPER (LOCKED FIX VERSION)")
+print("AFL FOOTYWIRE SCRAPER (FINAL - TEXT PARSER FIX)")
 
 YEAR = 2026
 BASE = "https://www.footywire.com/afl/footy/"
@@ -123,6 +123,7 @@ def parse_header(soup):
     if c:
         crowd = c.group(1).replace(",", "")
 
+    # DATE
     date_iso = ""
     safe = re.sub(r"(\d+)(st|nd|rd|th)", r"\1", date_line)
 
@@ -179,35 +180,27 @@ def extract_scoreboard(soup):
 
 
 # -----------------------
-# 🔥 PLAYER TABLE FIX (CRITICAL)
+# PLAYER TABLES
 # -----------------------
 def get_player_tables(soup):
     tables = []
 
     for table in soup.find_all("table"):
-
         text = table.get_text(" ")
 
-        # HARD FILTER
-        if "Player" not in text:
-            continue
-        if "Disposals" not in text:
-            continue
-        if "K" not in text or "HB" not in text:
+        if "Player" not in text or "Disposals" not in text:
             continue
 
         rows = table.find_all("tr")
 
-        valid_rows = 0
+        valid = 0
         for r in rows:
-            tds = r.find_all("td")
-            if len(tds) >= 18 and tds[1].get_text().strip().isdigit():
-                valid_rows += 1
+            if any(c.isdigit() for c in r.get_text()):
+                valid += 1
 
-        if valid_rows < 10:
+        if valid < 10:
             continue
 
-        # find team name above
         team = ""
         prev = table.find_previous(["h1", "h2", "h3", "div", "td"])
 
@@ -231,45 +224,67 @@ def get_player_tables(soup):
 
 
 # -----------------------
-# PLAYER PARSER
+# 🔥 TEXT PLAYER PARSER
 # -----------------------
 def parse_players(table):
     out = []
 
     for tr in table.find_all("tr"):
-        tds = tr.find_all("td")
 
-        if len(tds) < 18:
+        row_text = clean(tr.get_text(" "))
+
+        if not row_text:
             continue
 
-        name = clean(tds[0].get_text())
-
-        if not name or len(name.split()) < 2:
+        if any(x in row_text for x in [
+            "Player", "Coach", "Statistics", "Match",
+            "Sorted", "Head", "Scoring", "Highlights"
+        ]):
             continue
 
-        if not tds[1].get_text().strip().isdigit():
+        parts = row_text.split()
+
+        if len(parts) < 18:
             continue
 
-        out.append({
-            "player": name,
-            "K": num(tds[1].get_text()),
-            "HB": num(tds[2].get_text()),
-            "D": num(tds[3].get_text()),
-            "M": num(tds[4].get_text()),
-            "G": num(tds[5].get_text()),
-            "B": num(tds[6].get_text()),
-            "T": num(tds[7].get_text()),
-            "HO": num(tds[8].get_text()),
-            "GA": num(tds[9].get_text()),
-            "I50": num(tds[10].get_text()),
-            "CL": num(tds[11].get_text()),
-            "CG": num(tds[12].get_text()),
-            "R50": num(tds[13].get_text()),
-            "FF": num(tds[14].get_text()),
-            "FA": num(tds[15].get_text()),
-            "AF": num(tds[16].get_text()),
-            "SC": num(tds[17].get_text()),
-        })
+        stat_index = None
+        for i, p in enumerate(parts):
+            if p.isdigit():
+                stat_index = i
+                break
+
+        if stat_index is None or stat_index < 2:
+            continue
+
+        name = " ".join(parts[:stat_index])
+        stats = parts[stat_index:]
+
+        if len(stats) < 17:
+            continue
+
+        try:
+            out.append({
+                "player": name,
+                "K": int(stats[0]),
+                "HB": int(stats[1]),
+                "D": int(stats[2]),
+                "M": int(stats[3]),
+                "G": int(stats[4]),
+                "B": int(stats[5]),
+                "T": int(stats[6]),
+                "HO": int(stats[7]),
+                "GA": int(stats[8]),
+                "I50": int(stats[9]),
+                "CL": int(stats[10]),
+                "CG": int(stats[11]),
+                "R50": int(stats[12]),
+                "FF": int(stats[13]),
+                "FA": int(stats[14]),
+                "AF": int(stats[15]),
+                "SC": int(stats[16]),
+            })
+        except:
+            continue
 
     return out
 
