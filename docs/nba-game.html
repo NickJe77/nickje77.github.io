@@ -229,31 +229,42 @@ function showError(msg){
   document.getElementById("errorBox").textContent=msg;
 }
 
+// 🔥 FILTER OUT 0 MIN PLAYERS
+function played(p){
+  const m = p.minutes ?? p.min ?? p.mins ?? "";
+  if(!m) return false;
+  const str = String(m).trim();
+  if(str === "0" || str === "0:00" || str === "00:00") return false;
+  return parseFloat(str) > 0;
+}
+
 function renderTable(players,id){
   const tbody=document.querySelector(`#${id} tbody`);
   tbody.innerHTML="";
 
-  players.forEach(p=>{
-    const name=p.player_name || p.name || p.player || "";
+  players
+    .filter(played)
+    .forEach(p=>{
+      const name=p.player_name || p.name || p.player || "";
 
-    const tr=document.createElement("tr");
+      const tr=document.createElement("tr");
 
-    tr.innerHTML=`
-      <td class="player-link">${name}</td>
-      <td>${p.minutes || ""}</td>
-      <td>${p.points || 0}</td>
-      <td>${p.rebounds || 0}</td>
-      <td>${p.assists || 0}</td>
-      <td>${p.steals || 0}</td>
-      <td>${p.blocks || 0}</td>
-    `;
+      tr.innerHTML=`
+        <td class="player-link">${name}</td>
+        <td>${p.minutes || ""}</td>
+        <td>${p.points || 0}</td>
+        <td>${p.rebounds || 0}</td>
+        <td>${p.assists || 0}</td>
+        <td>${p.steals || 0}</td>
+        <td>${p.blocks || 0}</td>
+      `;
 
-    tr.onclick=()=>{
-      location.href="nba-player.html?player="+encodeURIComponent(name);
-    };
+      tr.onclick=()=>{
+        location.href="nba-player.html?player="+encodeURIComponent(name);
+      };
 
-    tbody.appendChild(tr);
-  });
+      tbody.appendChild(tr);
+    });
 }
 
 async function loadGame(){
@@ -266,7 +277,6 @@ async function loadGame(){
   let game = null;
   let seasonUsed = season;
 
-  // try season first
   if(season){
     try{
       const res = await fetch(BASE + season + "/" + gameId + ".json");
@@ -276,7 +286,6 @@ async function loadGame(){
     }catch{}
   }
 
-  // fallback: scan all seasons
   if(!game){
     for(let y=1970; y<=2030; y++){
       try{
