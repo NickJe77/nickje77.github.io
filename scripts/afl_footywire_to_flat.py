@@ -2,8 +2,9 @@ import json
 import requests
 from bs4 import BeautifulSoup
 from pathlib import Path
+import re
 
-print("AFL SCRIPT VERSION 8 — FINAL STABLE")
+print("AFL SCRIPT VERSION 9 — FINAL CLEAN DATA")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -72,34 +73,42 @@ def parse_match(url):
     title = soup.find("title").text
     title = title.replace("AFL Match Statistics : ", "")
 
-    parts = title.split(" - ")
-    title_main = parts[0]
-
     # -----------------------------
-    # TEAM PARSING (ALL FORMATS)
+    # TEAM PARSING
     # -----------------------------
-    if " v " in title_main:
-        t = title_main.split(" v ")
-        team1, team2 = t[0].strip(), t[1].strip()
+    if " v " in title:
+        t = title.split(" v ")
+        team1, team2 = t[0].strip(), t[1].split(" ")[0].strip()
 
-    elif " defeated by " in title_main:
-        t = title_main.split(" defeated by ")
-        team1, team2 = t[0].strip(), t[1].strip()
+    elif " defeated by " in title:
+        t = title.split(" defeated by ")
+        team1, team2 = t[0].strip(), t[1].split(" at ")[0].strip()
 
-    elif " defeats " in title_main:
-        t = title_main.split(" defeats ")
-        team1, team2 = t[0].strip(), t[1].strip()
+    elif " defeats " in title:
+        t = title.split(" defeats ")
+        team1, team2 = t[0].strip(), t[1].split(" at ")[0].strip()
 
-    elif " defeated " in title_main:
-        t = title_main.split(" defeated ")
-        team1, team2 = t[0].strip(), t[1].strip()
+    elif " defeated " in title:
+        t = title.split(" defeated ")
+        team1, team2 = t[0].strip(), t[1].split(" at ")[0].strip()
 
     else:
-        print("⚠️ Could not parse teams:", title_main)
+        print("⚠️ Could not parse teams:", title)
         return []
 
-    round_name = parts[1] if len(parts) > 1 else ""
-    venue = parts[2] if len(parts) > 2 else ""
+    # -----------------------------
+    # EXTRACT ROUND + VENUE
+    # -----------------------------
+    round_name = ""
+    venue = ""
+
+    round_match = re.search(r"(Round \d+)", title)
+    if round_match:
+        round_name = round_match.group(1)
+
+    venue_match = re.search(r" at ([A-Za-z0-9\s]+) Round", title)
+    if venue_match:
+        venue = venue_match.group(1).strip()
 
     # -----------------------------
     # FIND PLAYER TABLES
@@ -119,7 +128,6 @@ def parse_match(url):
             if len(cols) >= 5 and cols[0].find("a"):
                 valid_rows.append(cols)
 
-        # 🔥 ONLY real team tables
         if len(valid_rows) >= 18:
             player_tables.append(valid_rows)
 
