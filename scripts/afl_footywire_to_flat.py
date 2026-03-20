@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRIPT VERSION 10 — FINAL TABLE FIX")
+print("AFL SCRIPT VERSION 11 — FINAL (23 PLAYER RULE FIXED)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -67,14 +67,11 @@ def parse_match(url):
 
     soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
-    # -----------------------------
-    # CLEAN TITLE
-    # -----------------------------
     title = soup.find("title").text
     title = title.replace("AFL Match Statistics : ", "")
 
     # -----------------------------
-    # TEAM PARSING
+    # TEAM PARSING (FULL COVERAGE)
     # -----------------------------
     if " v " in title:
         t = title.split(" v ")
@@ -88,6 +85,10 @@ def parse_match(url):
         t = title.split(" defeats ")
         team1, team2 = t[0].strip(), t[1].split(" at ")[0].strip()
 
+    elif " defeat " in title:  # 🔥 FIXED CASE
+        t = title.split(" defeat ")
+        team1, team2 = t[0].strip(), t[1].split(" at ")[0].strip()
+
     elif " defeated " in title:
         t = title.split(" defeated ")
         team1, team2 = t[0].strip(), t[1].split(" at ")[0].strip()
@@ -97,7 +98,7 @@ def parse_match(url):
         return []
 
     # -----------------------------
-    # EXTRACT ROUND + VENUE
+    # ROUND + VENUE
     # -----------------------------
     round_name = ""
     venue = ""
@@ -119,6 +120,12 @@ def parse_match(url):
 
     for table in tables:
 
+        header = table.get_text(" ", strip=True)
+
+        # MUST be real stats table
+        if not all(x in header for x in ["K", "HB", "D", "M", "G"]):
+            continue
+
         rows = table.find_all("tr")
         valid_rows = []
 
@@ -128,14 +135,12 @@ def parse_match(url):
             if len(cols) >= 5 and cols[0].find("a"):
                 valid_rows.append(cols)
 
-        if len(valid_rows) >= 18:
+        # 🔥 AFL RULE: 22–23 PLAYERS ONLY
+        if 22 <= len(valid_rows) <= 23:
             player_tables.append(valid_rows)
 
-    # 🔥 CRITICAL: ONLY FIRST 2 TABLES
-    player_tables = player_tables[:2]
-
-    if len(player_tables) < 2:
-        print("⚠️ Could not find both player tables")
+    if len(player_tables) != 2:
+        print("⚠️ Wrong number of player tables:", len(player_tables))
         return []
 
     # -----------------------------
