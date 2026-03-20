@@ -7,7 +7,7 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
-print("AFL SCRAPER (FINAL FIXED)")
+print("AFL SCRAPER (FINAL WORKING)")
 
 YEAR = 2026
 BASE = "https://www.footywire.com/afl/footy/"
@@ -17,6 +17,9 @@ OUT = Path(f"docs/data/afl/afl_{YEAR}.json")
 OUT.parent.mkdir(parents=True, exist_ok=True)
 
 
+# -----------------------
+# HELPERS
+# -----------------------
 def clean(x):
     return re.sub(r"\s+", " ", (x or "")).strip()
 
@@ -32,8 +35,12 @@ def html(url):
     return requests.get(url, headers=HEADERS, timeout=30).text
 
 
+def score_str(p):
+    return f"{p//6}.{p%6} ({p})"
+
+
 # -----------------------
-# LINKS
+# MATCH LINKS
 # -----------------------
 def get_links():
     soup = BeautifulSoup(html(f"{BASE}ft_match_list?year={YEAR}"), "html.parser")
@@ -50,37 +57,36 @@ def get_links():
 
 
 # -----------------------
-# SAFE HEADER PARSER
+# HEADER (SAFE)
 # -----------------------
 def parse_header(soup):
-    text = soup.get_text(" ")
-    text = clean(text)
+    text = clean(soup.get_text(" "))
 
-    # teams
+    team_a = ""
+    team_b = ""
+    rnd = ""
+    venue = ""
+    crowd = ""
+    date_iso = ""
+
     m = re.search(r"([A-Za-z ]+)\s+(defeats|drew)\s+([A-Za-z ]+)", text)
-
     if m:
         team_a = clean(m.group(1))
         team_b = clean(m.group(3))
-    else:
-        team_a = ""
-        team_b = ""
 
-    # round
     r = re.search(r"(Round\s+\d+)", text)
-    rnd = r.group(1) if r else ""
+    if r:
+        rnd = r.group(1)
 
-    # venue
     v = re.search(r"Round\s+\d+,\s*([^,]+)", text)
-    venue = clean(v.group(1)) if v else ""
+    if v:
+        venue = clean(v.group(1))
 
-    # crowd
     c = re.search(r"Attendance:\s*([\d,]+)", text)
-    crowd = c.group(1).replace(",", "") if c else ""
+    if c:
+        crowd = c.group(1).replace(",", "")
 
-    # date
     d = re.search(r"\w+,\s+\d+\s+\w+\s+\d{4},\s+\d+:\d+\s+\w+", text)
-    date_iso = ""
     if d:
         try:
             safe = re.sub(r"(\d+)(st|nd|rd|th)", r"\1", d.group(0))
@@ -93,27 +99,7 @@ def parse_header(soup):
 
 
 # -----------------------
-# SCORE
-# -----------------------
-def get_scores(soup):
-    scores = {}
-
-    for row in soup.find_all("tr"):
-        tds = row.find_all("td")
-        if len(tds) < 2:
-            continue
-
-        team = clean(tds[0].text)
-        val = num(tds[-1].text)
-
-        if team and val:
-            scores[team] = val
-
-    return scores
-
-
-# -----------------------
-# 🔥 PLAYER TABLES (COLUMN BASED)
+# PLAYER TABLE DETECTION
 # -----------------------
 def get_player_tables(soup):
     tables = []
@@ -124,9 +110,9 @@ def get_player_tables(soup):
         if not rows:
             continue
 
-        # check header row column count
         header = rows[0].find_all(["th", "td"])
 
+        # AFL stat tables always have 18+ columns
         if len(header) >= 18:
             tables.append(table)
 
@@ -134,7 +120,7 @@ def get_player_tables(soup):
 
 
 # -----------------------
-# PARSE PLAYERS
+# PLAYER PARSER (FIXED)
 # -----------------------
 def parse_players(table):
     players = []
@@ -145,11 +131,10 @@ def parse_players(table):
         if len(tds) < 18:
             continue
 
-        link = tds[0].find("a")
-        if not link:
-            continue
+        name = clean(tds[0].get_text())
 
-        name = clean(link.text)
+        if not name or name.lower() in ["player", "team"]:
+            continue
 
         players.append({
             "player": name,
@@ -176,7 +161,7 @@ def parse_players(table):
 
 
 # -----------------------
-# MATCH
+# MATCH PARSER
 # -----------------------
 def parse_match(url, idx):
     soup = BeautifulSoup(html(url), "html.parser")
@@ -196,7 +181,9 @@ def parse_match(url, idx):
         team = team_a if i == 0 else team_b
         opp = team_b if i == 0 else team_a
 
-        for p in parse_players(tables[i]):
+        players = parse_players(tables[i])
+
+        for p in players:
             rows.append({
                 "match_id": match_id,
                 "season": YEAR,
@@ -207,7 +194,7 @@ def parse_match(url, idx):
                 **p,
                 "date_iso": date_iso,
                 "venue": venue,
-                "crowd": crowd,
+                "crowd": crowd
             })
 
     return rows
@@ -221,13 +208,17 @@ def main():
     all_rows = []
 
     for i, link in enumerate(links, 1):
-        all_rows += parse_match(link, i)
+        try:
+            all_rows += parse_match(link, i)
+        except Exception as e:
+            print("ERROR:", e)
+
         time.sleep(1)
 
-    print("ROWS:", len(all_rows))
+    print("TOTAL ROWS:", len(all_rows))
 
     if len(all_rows) == 0:
-        print("FAILED")
+        print("FAILED - NO DATA")
         return
 
     json.dump(all_rows, open(OUT, "w"), indent=2)
