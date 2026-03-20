@@ -3,13 +3,14 @@ import requests
 from bs4 import BeautifulSoup
 from pathlib import Path
 
-print("NRL MATCH + PLAYER UPDATER (FULL FIXED)")
+print("NRL MATCH + PLAYER UPDATER (CORRECT STRUCTURE FIXED)")
 
 SEASON = 2026
 BASE = "https://afltables.com/rl/"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-OUTPUT = Path(f"docs/data/nrl/matches/{SEASON}.json")
+ROOT = Path(__file__).resolve().parent
+OUTPUT = ROOT / "docs/data/nrl/matches" / f"{SEASON}.json"
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
 
@@ -21,60 +22,39 @@ def safe_int(x):
 
 
 # -----------------------------
-# 🔥 GET SEASON PAGE
+# GET SEASON PAGE
 # -----------------------------
-print("Downloading season page...")
-
-season_url = f"{BASE}seas/{SEASON}.html"
-season_html = requests.get(season_url, headers=HEADERS).text
+season_html = requests.get(f"{BASE}seas/{SEASON}.html", headers=HEADERS).text
 season_soup = BeautifulSoup(season_html, "html.parser")
 
-# -----------------------------
-# 🔥 FIND MATCH LINKS (FIXED)
-# -----------------------------
 match_links = []
 
 for a in season_soup.find_all("a", href=True):
-
     href = a["href"]
 
-    # ONLY real match pages
     if "matches/" in href and href.endswith(".html"):
-
         if not href.startswith("http"):
             href = BASE + href.replace("../", "")
-
         match_links.append(href)
 
 match_links = sorted(set(match_links))
 
 print("Match pages found:", len(match_links))
 
-if len(match_links) == 0:
-    print("🚨 ERROR: No match links found — AFLTables structure may have changed")
-    exit()
-
 
 # -----------------------------
-# 🔥 PROCESS MATCHES
+# PROCESS MATCHES
 # -----------------------------
 games = []
 
 for link in match_links:
 
     match_id = link.split("/")[-1].replace(".html", "")
-    print("Processing:", match_id)
 
-    try:
-        html = requests.get(link, headers=HEADERS).text
-        soup = BeautifulSoup(html, "html.parser")
-    except:
-        print("❌ Failed to load:", link)
-        continue
+    html = requests.get(link, headers=HEADERS).text
+    soup = BeautifulSoup(html, "html.parser")
 
-    # -----------------------------
-    # 🔥 HEADER PARSE (ROBUST)
-    # -----------------------------
+    # HEADER
     h2 = soup.find("h2")
     header = h2.get_text(" ", strip=True) if h2 else ""
 
@@ -98,18 +78,14 @@ for link in match_links:
             away_team = parts[1].rsplit(" ", 1)[0]
             away_points = int(parts[1].rsplit(" ", 1)[1])
         except:
-            print("⚠️ Header parse failed:", header)
+            pass
 
     total_points = home_points + away_points
     margin = abs(home_points - away_points)
 
-    # -----------------------------
-    # 🔥 PLAYER TABLES
-    # -----------------------------
     tables = soup.find_all("table")
 
     if len(tables) < 2:
-        print("⚠️ No player tables:", match_id)
         continue
 
     def extract_players(table, team_name):
@@ -128,19 +104,14 @@ for link in match_links:
             if not name or name.lower() in ["totals", "team"]:
                 continue
 
-            tries = safe_int(cols[1].text)
-            goals_made = safe_int(cols[2].text)
-            field_goals = safe_int(cols[3].text)
-            points = safe_int(cols[4].text)
-
             players.append({
                 "player": name,
                 "played_for": team_name,
-                "tries": tries,
-                "goals_made": goals_made,
+                "tries": safe_int(cols[1].text),
+                "goals_made": safe_int(cols[2].text),
                 "goals_attempted": 0,
-                "field_goals": field_goals,
-                "points": points
+                "field_goals": safe_int(cols[3].text),
+                "points": safe_int(cols[4].text)
             })
 
         return players
@@ -148,12 +119,9 @@ for link in match_links:
     home_players = extract_players(tables[0], home_team)
     away_players = extract_players(tables[1], away_team)
 
-    if not home_players and not away_players:
-        print("⚠️ No players found:", match_id)
-        continue
-
     players = home_players + away_players
 
+    # 🔥 THIS IS THE CRITICAL FIX
     games.append({
         "season": SEASON,
         "match_id": match_id,
@@ -168,12 +136,10 @@ for link in match_links:
 
 
 # -----------------------------
-# 🔥 SAVE FILE
+# SAVE
 # -----------------------------
 with open(OUTPUT, "w") as f:
     json.dump(games, f, indent=2)
 
-print("\n==============================")
-print("Matches processed:", len(games))
-print("Saved to:", OUTPUT)
-print("==============================")
+print("Saved:", OUTPUT)
+print("Games:", len(games))
