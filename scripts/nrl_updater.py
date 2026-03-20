@@ -3,7 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 from pathlib import Path
 
-print("NRL MATCH + PLAYER UPDATER (FIXED)")
+print("NRL MATCH + PLAYER UPDATER (FULL FIXED)")
 
 SEASON = 2026
 BASE = "https://afltables.com/rl/"
@@ -25,19 +25,25 @@ def safe_int(x):
 # -----------------------------
 print("Downloading season page...")
 
-season_html = requests.get(f"{BASE}seas/{SEASON}.html", headers=HEADERS).text
+season_url = f"{BASE}seas/{SEASON}.html"
+season_html = requests.get(season_url, headers=HEADERS).text
 season_soup = BeautifulSoup(season_html, "html.parser")
 
+# -----------------------------
+# 🔥 FIND MATCH LINKS (FIXED)
+# -----------------------------
 match_links = []
 
-# 🔥 FIX: grab ALL links that point to matches
 for a in season_soup.find_all("a", href=True):
 
     href = a["href"]
 
-    if "matches" in href or "match" in href:
+    # ONLY real match pages
+    if "matches/" in href and href.endswith(".html"):
+
         if not href.startswith("http"):
             href = BASE + href.replace("../", "")
+
         match_links.append(href)
 
 match_links = sorted(set(match_links))
@@ -45,7 +51,7 @@ match_links = sorted(set(match_links))
 print("Match pages found:", len(match_links))
 
 if len(match_links) == 0:
-    print("🚨 NO MATCHES FOUND - PAGE STRUCTURE CHANGED")
+    print("🚨 ERROR: No match links found — AFLTables structure may have changed")
     exit()
 
 
@@ -67,7 +73,7 @@ for link in match_links:
         continue
 
     # -----------------------------
-    # 🔥 HEADER
+    # 🔥 HEADER PARSE (ROBUST)
     # -----------------------------
     h2 = soup.find("h2")
     header = h2.get_text(" ", strip=True) if h2 else ""
@@ -77,7 +83,6 @@ for link in match_links:
     home_points = 0
     away_points = 0
 
-    # 🔥 HANDLE MULTIPLE FORMATS
     if " def. " in header:
         parts = header.split(" def. ")
     elif " bt " in header:
@@ -163,7 +168,7 @@ for link in match_links:
 
 
 # -----------------------------
-# 🔥 SAVE
+# 🔥 SAVE FILE
 # -----------------------------
 with open(OUTPUT, "w") as f:
     json.dump(games, f, indent=2)
