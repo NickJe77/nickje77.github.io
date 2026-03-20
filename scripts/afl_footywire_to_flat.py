@@ -3,8 +3,10 @@ from bs4 import BeautifulSoup
 import json
 from pathlib import Path
 import time
+import re
+from datetime import datetime
 
-print("AFL FOOTYWIRE → FINAL CLEAN SCRAPER")
+print("AFL FOOTYWIRE → FULL PRODUCTION SCRAPER")
 
 YEAR = 2026
 BASE = "https://www.footywire.com/afl/footy/"
@@ -14,9 +16,6 @@ OUTPUT = Path(f"docs/data/afl/afl_{YEAR}.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
 
-# -------------------------------
-# HELPERS
-# -------------------------------
 def clean(x):
     return x.strip() if x else ""
 
@@ -33,7 +32,6 @@ def num(x):
 # -------------------------------
 def get_matches():
     url = f"{BASE}ft_match_list?year={YEAR}"
-
     html = requests.get(url, headers=HEADERS).text
     soup = BeautifulSoup(html, "html.parser")
 
@@ -45,8 +43,48 @@ def get_matches():
             if full not in links:
                 links.append(full)
 
-    print("Matches found:", len(links))
+    print("Matches:", len(links))
     return links
+
+
+# -------------------------------
+# PARSE HEADER INFO
+# -------------------------------
+def parse_header(soup):
+    text = soup.get_text("\n")
+
+    team1 = ""
+    team2 = ""
+    round_name = ""
+    venue = ""
+    crowd = ""
+    date_iso = ""
+
+    for line in text.split("\n"):
+
+        # Teams
+        if "defeats" in line:
+            parts = line.split("defeats")
+            if len(parts) == 2:
+                team1 = clean(parts[0])
+                team2 = clean(parts[1])
+
+        # Round / Venue / Crowd
+        if "Round" in line and "Attendance" in line:
+            round_name = line.split(",")[0]
+            venue = line.split(",")[1].strip()
+            crowd = re.findall(r"\d+", line)
+            crowd = crowd[0] if crowd else ""
+
+        # Date
+        if "2026" in line and ":" in line:
+            try:
+                dt = datetime.strptime(line.strip(), "%A, %d %B %Y, %I:%M %p AEDT")
+                date_iso = dt.isoformat()
+            except:
+                pass
+
+    return team1, team2, round_name, venue, crowd, date_iso
 
 
 # -------------------------------
@@ -60,57 +98,25 @@ def parse_match(url, idx):
 
     match_id = f"{YEAR}_{str(idx).zfill(4)}"
 
-    rows = []
+    team1, team2, round_name, venue, crowd, date_iso = parse_header(soup)
 
-    # -------------------------------
-    # TEAM NAMES (FROM HEADER TEXT)
-    # -------------------------------
-    page_text = soup.get_text(separator="\n")
-
-    team1 = "Team 1"
-    team2 = "Team 2"
-
-    for line in page_text.split("\n"):
-        if "defeats" in line:
-            parts = line.split("defeats")
-            if len(parts) == 2:
-                team1 = clean(parts[0])
-                team2 = clean(parts[1])
-            break
-
-    # fallback (rare)
-    if team1 == "Team 1":
-        title = soup.title.text if soup.title else ""
-        if " vs " in title:
-            parts = title.split(" vs ")
-            team1 = clean(parts[0].replace("AFL Statistics", ""))
-            team2 = clean(parts[1].split("|")[0])
-
-    # -------------------------------
-    # FIND PLAYER TABLES
-    # -------------------------------
     tables = soup.find_all("table")
-
     player_tables = [t for t in tables if len(t.find_all("tr")) > 25]
 
     if len(player_tables) < 2:
         return []
 
-    # -------------------------------
-    # EXTRACT PLAYERS
-    # -------------------------------
     def extract(table, team, opp):
-        out = []
+        rows = []
 
         for tr in table.find_all("tr"):
             tds = tr.find_all("td")
 
-            if len(tds) < 8:
+            if len(tds) < 18:
                 continue
 
             name = clean(tds[0].text)
 
-            # REMOVE NON-PLAYER ROWS
             if (
                 name == ""
                 or "AFL" in name
@@ -125,31 +131,42 @@ def parse_match(url, idx):
             if len(name.split()) < 2:
                 continue
 
-            d = num(tds[3].text)
-            g = num(tds[6].text)
-            b = num(tds[7].text)
-
-            out.append({
+            rows.append({
                 "match_id": match_id,
                 "season": YEAR,
-                "round": "",
+                "round": round_name,
                 "player": name,
                 "played_for": team,
                 "played_against": opp,
-                "D": d,
-                "G": g,
-                "B": b,
-                "date_iso": "",
-                "venue": "",
-                "crowd": ""
+                "K": num(tds[1].text),
+                "HB": num(tds[2].text),
+                "D": num(tds[3].text),
+                "M": num(tds[4].text),
+                "G": num(tds[5].text),
+                "B": num(tds[6].text),
+                "T": num(tds[7].text),
+                "HO": num(tds[8].text),
+                "GA": num(tds[9].text),
+                "I50": num(tds[10].text),
+                "CL": num(tds[11].text),
+                "CG": num(tds[12].text),
+                "R50": num(tds[13].text),
+                "FF": num(tds[14].text),
+                "FA": num(tds[15].text),
+                "AF": num(tds[16].text),
+                "SC": num(tds[17].text),
+                "date_iso": date_iso,
+                "venue": venue,
+                "crowd": crowd
             })
 
-        return out
+        return rows
 
-    rows.extend(extract(player_tables[0], team1, team2))
-    rows.extend(extract(player_tables[1], team2, team1))
+    data = []
+    data.extend(extract(player_tables[0], team1, team2))
+    data.extend(extract(player_tables[1], team2, team1))
 
-    return rows
+    return data
 
 
 # -------------------------------
@@ -169,17 +186,16 @@ def main():
 
         time.sleep(1)
 
-    print("TOTAL PLAYER ROWS:", len(all_rows))
+    print("TOTAL ROWS:", len(all_rows))
 
-    # 🚨 SAFETY: DO NOT WIPE FILE
     if len(all_rows) < 100:
-        print("FAILED — not saving (prevents data wipe)")
+        print("FAILED — not saving")
         return
 
     with open(OUTPUT, "w") as f:
         json.dump(all_rows, f, indent=2)
 
-    print("DONE →", OUTPUT)
+    print("DONE")
 
 
 if __name__ == "__main__":
