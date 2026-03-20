@@ -3,7 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 from pathlib import Path
 
-print("AFL SCRAPER — VERSION 3 (PLAYER ROW DETECTION FIX)")
+print("AFL SCRAPER — VERSION 4 (URL FIX)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -14,9 +14,6 @@ OUTPUT = Path(f"docs/data/afl/afl_{SEASON}.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
 
-# -----------------------------
-# HELPERS
-# -----------------------------
 def to_int(x):
     try:
         return int(x.strip())
@@ -35,7 +32,8 @@ def get_links():
 
     for a in soup.find_all("a", href=True):
         if "ft_match_statistics" in a["href"]:
-            links.append(BASE + a["href"])
+            link = BASE + "/" + a["href"].lstrip("/")
+            links.append(link)
 
     links = list(set(links))
 
@@ -66,7 +64,7 @@ def parse_match(url):
     tables = soup.find_all("table")
 
     data = []
-    team_index = 0  # 0 = team1, 1 = team2
+    team_index = 0
 
     for table in tables:
 
@@ -77,15 +75,12 @@ def parse_match(url):
         for row in rows:
             cols = row.find_all("td")
 
-            # 🔥 ONLY accept real player rows
             if len(cols) >= 10 and cols[0].find("a"):
                 valid_rows.append(cols)
 
-        # Skip non-player tables
         if not valid_rows:
             continue
 
-        # Parse player rows
         for cols in valid_rows:
 
             player_name = cols[0].text.strip()
@@ -123,7 +118,6 @@ def parse_match(url):
 
         team_index += 1
 
-        # Only 2 teams per match
         if team_index > 1:
             break
 
@@ -139,8 +133,7 @@ all_data = []
 
 for link in links:
     try:
-        match_data = parse_match(link)
-        all_data.extend(match_data)
+        all_data.extend(parse_match(link))
     except Exception as e:
         print("ERROR:", e)
 
