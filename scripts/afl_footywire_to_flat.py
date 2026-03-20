@@ -7,7 +7,7 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
-print("AFL FOOTYWIRE SCRAPER (FINAL FIXED)")
+print("AFL FOOTYWIRE SCRAPER (FINAL - STABLE)")
 
 YEAR = 2026
 BASE = "https://www.footywire.com/afl/footy/"
@@ -60,9 +60,7 @@ def extract_team_name(title):
     title = title.replace("Player Statistics", "")
     title = title.replace("Player Stats", "")
 
-    title = re.sub(r"\s+", " ", title)
-
-    return title.strip()
+    return clean(title)
 
 
 # -----------------------
@@ -80,12 +78,12 @@ def get_links():
             if full not in links:
                 links.append(full)
 
-    print("Matches:", len(links))
+    print("Matches found:", len(links))
     return links
 
 
 # -----------------------
-# HEADER INFO
+# HEADER
 # -----------------------
 def parse_header(soup):
     lines = [clean(x) for x in soup.get_text("\n").split("\n") if clean(x)]
@@ -103,16 +101,13 @@ def parse_header(soup):
 
     team_a = ""
     team_b = ""
-    outcome = ""
 
     if " defeats " in result:
         a, b = result.split(" defeats ", 1)
         team_a, team_b = clean(a), clean(b)
-        outcome = "defeats"
     elif " drew " in result:
         a, b = result.split(" drew ", 1)
         team_a, team_b = clean(a), clean(b)
-        outcome = "drew"
 
     round_name = ""
     venue = ""
@@ -156,7 +151,7 @@ def parse_header(soup):
 
 
 # -----------------------
-# SCOREBOARD FIX
+# SCOREBOARD
 # -----------------------
 def extract_scoreboard(soup):
     scores = {}
@@ -202,9 +197,10 @@ def get_player_tables(soup):
         if not {"Player", "K", "HB", "D", "M", "G", "B"}.issubset(set(header)):
             continue
 
-        # find title
+        # find title above table
         title = ""
         prev = table.find_previous(["h1", "h2", "h3", "div", "td"])
+
         for _ in range(8):
             if not prev:
                 break
@@ -221,16 +217,36 @@ def get_player_tables(soup):
     return tables
 
 
+# -----------------------
+# PLAYER PARSER (FIXED)
+# -----------------------
 def parse_players(table):
     out = []
 
-    for tr in table.find_all("tr")[1:]:
+    for tr in table.find_all("tr"):
+
         tds = tr.find_all("td")
+
         if len(tds) < 18:
             continue
 
         name = clean(tds[0].get_text())
+
+        # FILTER JUNK
+        if not name:
+            continue
+
+        if any(x in name for x in [
+            "Player", "Coach", "Statistics", "Match",
+            "Sorted", "Head", "Scoring", "Highlights"
+        ]):
+            continue
+
         if len(name.split()) < 2:
+            continue
+
+        # MUST BE NUMERIC ROW
+        if not tds[1].get_text().strip().isdigit():
             continue
 
         out.append({
@@ -251,7 +267,7 @@ def parse_players(table):
             "FF": num(tds[14].get_text()),
             "FA": num(tds[15].get_text()),
             "AF": num(tds[16].get_text()),
-            "SC": num(tds[17].get_text())
+            "SC": num(tds[17].get_text()),
         })
 
     return out
@@ -281,10 +297,14 @@ def parse_match(url, idx):
         team = t["team"]
         opp = t2 if i == 0 else t1
 
+        players = parse_players(t["table"])
+
+        if not players:
+            print("Skipping bad table")
+            return []
+
         team_score = scores.get(team, 0)
         opp_score = scores.get(opp, 0)
-
-        players = parse_players(t["table"])
 
         for p in players:
             rows.append({
@@ -308,7 +328,7 @@ def parse_match(url, idx):
 
 
 # -----------------------
-# BUILD PLAYERS.JSON
+# PLAYERS.JSON
 # -----------------------
 def build_players(rows):
     players = {}
@@ -324,9 +344,8 @@ def build_players(rows):
                 "teams": set()
             }
 
-        p = players[name]
-        p["games"] += 1
-        p["teams"].add(r["played_for"])
+        players[name]["games"] += 1
+        players[name]["teams"].add(r["played_for"])
 
     out = []
     for p in players.values():
@@ -353,7 +372,7 @@ def main():
 
         time.sleep(1)
 
-    print("ROWS:", len(all_rows))
+    print("TOTAL ROWS:", len(all_rows))
 
     if len(all_rows) < 100:
         print("FAILED - NOT SAVING")
