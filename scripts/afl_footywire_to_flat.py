@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import time
 
-print("AFL FOOTYWIRE → FIXED SCRAPER")
+print("AFL FOOTYWIRE → SAFE SCRAPER")
 
 YEAR = 2026
 BASE = "https://www.footywire.com/afl/footy/"
@@ -14,9 +14,6 @@ OUTPUT = Path(f"docs/data/afl/afl_{YEAR}.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
 
-# -------------------------------
-# HELPERS
-# -------------------------------
 def clean(x):
     return x.strip() if x else ""
 
@@ -68,49 +65,39 @@ def parse_match(url, idx):
     team_headers = soup.find_all("h2")
 
     if len(team_headers) < 2:
-        print("No team headers")
         return []
 
     team1 = clean(team_headers[0].text)
     team2 = clean(team_headers[1].text)
 
-    # -------------------------------
-    # FIND PLAYER TABLES ONLY
-    # -------------------------------
     tables = soup.find_all("table")
-    player_tables = []
-
-    for t in tables:
-        headers = [clean(th.text) for th in t.find_all("th")]
-
-        if "Player" in headers and "D" in headers:
-            player_tables.append(t)
-
-    if len(player_tables) < 2:
-        print("No valid player tables")
-        return []
 
     # -------------------------------
-    # EXTRACT PLAYERS
+    # EXTRACT PLAYERS (NO HEADER GUESSING)
     # -------------------------------
     def extract(table, team, opp):
         out = []
 
-        for tr in table.find_all("tr")[1:]:
+        for tr in table.find_all("tr"):
             tds = tr.find_all("td")
 
-            if len(tds) < 5:
+            if len(tds) < 8:
                 continue
 
             name = clean(tds[0].text)
 
             # Skip junk rows
-            if name == "" or "AFL" in name or "Statistics" in name:
+            if (
+                name == ""
+                or "AFL" in name
+                or "Statistics" in name
+                or name.lower() == "player"
+            ):
                 continue
 
             d = num(tds[3].text)
-            g = num(tds[6].text) if len(tds) > 6 else 0
-            b = num(tds[7].text) if len(tds) > 7 else 0
+            g = num(tds[6].text)
+            b = num(tds[7].text)
 
             out.append({
                 "match_id": match_id,
@@ -129,8 +116,14 @@ def parse_match(url, idx):
 
         return out
 
-    rows.extend(extract(player_tables[0], team1, team2))
-    rows.extend(extract(player_tables[1], team2, team1))
+    # Use first 2 valid tables only
+    valid_tables = [t for t in tables if len(t.find_all("tr")) > 10]
+
+    if len(valid_tables) < 2:
+        return []
+
+    rows.extend(extract(valid_tables[0], team1, team2))
+    rows.extend(extract(valid_tables[1], team2, team1))
 
     return rows
 
@@ -153,6 +146,11 @@ def main():
         time.sleep(1)
 
     print("TOTAL PLAYER ROWS:", len(all_rows))
+
+    # 🚨 SAFETY CHECK (CRITICAL)
+    if len(all_rows) < 100:
+        print("ERROR: Too few rows — NOT saving file (prevents wipe)")
+        return
 
     with open(OUTPUT, "w") as f:
         json.dump(all_rows, f, indent=2)
