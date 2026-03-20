@@ -3,8 +3,9 @@ from bs4 import BeautifulSoup
 import json
 from pathlib import Path
 import time
+import re
 
-print("AFL FOOTYWIRE → WORKING SCRAPER")
+print("AFL FOOTYWIRE → CLEAN FINAL")
 
 YEAR = 2026
 BASE = "https://www.footywire.com/afl/footy/"
@@ -59,30 +60,32 @@ def parse_match(url, idx):
 
     rows = []
 
-    tables = soup.find_all("table")
-
-    if len(tables) < 10:
-        return []
-
-    # 🔥 FOOTYWIRE: player tables are usually table 4 + 5 (varies slightly)
-    # so we scan for tables with lots of rows
-
-    player_tables = [t for t in tables if len(t.find_all("tr")) > 25]
-
-    if len(player_tables) < 2:
-        print("No player tables found")
-        return []
+    # -------------------------------
+    # EXTRACT TEAM NAMES (FIXED)
+    # -------------------------------
+    title = soup.title.text if soup.title else ""
 
     team1 = "Team 1"
     team2 = "Team 2"
 
-    # try to grab team names from page title
-    title = soup.title.text if soup.title else ""
-    if "vs" in title:
-        parts = title.split("vs")
-        team1 = clean(parts[0])
-        team2 = clean(parts[1])
+    if " vs " in title:
+        parts = title.split(" vs ")
+        team1 = clean(parts[0].replace("AFL Statistics", ""))
+        team2 = clean(parts[1].split("|")[0])
 
+    # -------------------------------
+    # FIND PLAYER TABLES
+    # -------------------------------
+    tables = soup.find_all("table")
+
+    player_tables = [t for t in tables if len(t.find_all("tr")) > 25]
+
+    if len(player_tables) < 2:
+        return []
+
+    # -------------------------------
+    # EXTRACT PLAYERS
+    # -------------------------------
     def extract(table, team, opp):
         out = []
 
@@ -94,13 +97,20 @@ def parse_match(url, idx):
 
             name = clean(tds[0].text)
 
-            # skip garbage
+            # 🚨 REMOVE HEADER + GARBAGE ROWS
             if (
                 name == ""
                 or "AFL" in name
-                or "Statistics" in name
+                or "Round" in name
+                or "Attendance" in name
+                or "defeats" in name
                 or "Player" in name
+                or "\n" in name  # kills multi-line junk
             ):
+                continue
+
+            # Must look like a player (basic sanity check)
+            if len(name.split()) < 2:
                 continue
 
             d = num(tds[3].text)
@@ -150,7 +160,7 @@ def main():
     print("TOTAL ROWS:", len(all_rows))
 
     if len(all_rows) < 100:
-        print("FAILED: No data scraped — not saving")
+        print("FAILED — not saving")
         return
 
     with open(OUTPUT, "w") as f:
