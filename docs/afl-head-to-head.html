@@ -1,341 +1,185 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>AFL Season</title>
+<meta charset="UTF-8">
+<title>AFL Head to Head | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet" href="style.css">
 
 <style>
-body { font-family: system-ui, Arial, sans-serif; margin:0; }
-
-.navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px 0;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
-}
+body{font-family:system-ui,Arial,sans-serif;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-
-.page-wrap{ margin:20px; }
-
-.year-bar, .round-bar { margin-bottom:15px; }
-
-.year-btn, .round-btn {
-  margin:4px;
-  padding:10px 16px;
-  border-radius:10px;
-  border:1px solid #ccc;
-  background:#ddd;
-  cursor:pointer;
-  font-size:15px;
-}
-.year-btn.active, .round-btn.active { background:#333; color:#fff; }
-
-select { padding:8px 10px; font-size:16px; margin-bottom:15px; display:block; }
-
-.match { margin-bottom:6px; padding:6px 10px; border-radius:6px; cursor:pointer; }
-
-table { border-collapse: collapse; width:100%; }
-th, td { padding:6px 10px; border:1px solid #ccc; text-align:center; }
-th { background:#f0f0f0; }
-
-td.team { text-align:left; font-weight:600; white-space:nowrap; width:190px; }
-
-.main-layout { display:flex; gap:30px; align-items:flex-start; }
-.ladder-wrap { width:460px; flex-shrink:0; }
-.results-wrap { flex:1; }
-
-.meta { font-size:13px; color:#555; }
-.meta a { color:#0056d6; text-decoration:none; font-weight:600; }
-.meta a:hover { text-decoration:underline; }
+.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px;}
+.selector-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:30px;}
+.selector-box{border:1px solid #ddd;border-radius:10px;padding:20px;}
+.selector-box select{width:100%;padding:10px;font-size:16px;}
+.compare-btn{padding:12px 24px;font-size:16px;font-weight:700;background:#0056d6;color:#fff;border:none;border-radius:8px;cursor:pointer;}
+.results-box{border:1px solid #ddd;border-radius:10px;padding:20px;margin-top:20px;}
+table{width:100%;border-collapse:collapse;margin-top:15px;}
+th,td{border-bottom:1px solid #ddd;padding:8px;}
+th{background:#f4f6f8;}
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-  <a href="index.html">Home</a>
-  <a href="racing.html">Racing</a>
-  <a href="afl.html">AFL</a>
-  <a href="football.html">Football</a>
-  <a href="cricket.html">Cricket</a>
-  <a href="f1.html">F1</a>
+<a href="index.html">Home</a>
+<a href="afl.html">AFL</a>
 </div>
 
 <div class="page-wrap">
-<h1>AFL Season</h1>
+<h1>AFL Head to Head</h1>
 
-<div id="yearBar" class="year-bar"></div>
-<select id="teamSelect"><option value="ALL">All teams</option></select>
-<div id="roundBar" class="round-bar"></div>
-
-<div class="main-layout">
-  <div id="ladder" class="ladder-wrap"></div>
-  <div class="results-wrap"><div id="matches"></div></div>
+<div class="selector-grid">
+<div class="selector-box"><select id="team1"></select></div>
+<div class="selector-box"><select id="team2"></select></div>
 </div>
+
+<button class="compare-btn" onclick="compare()">Compare</button>
+
+<div id="results" class="results-box">Loading AFL database…</div>
 </div>
 
 <script>
 
-const startYear = 1990;
-const endYear = 2026;
+const team1=document.getElementById("team1");
+const team2=document.getElementById("team2");
+const results=document.getElementById("results");
 
-const yearBar = document.getElementById("yearBar");
-const teamSelect = document.getElementById("teamSelect");
-const roundBar = document.getElementById("roundBar");
-const matchesDiv = document.getElementById("matches");
-const ladderDiv = document.getElementById("ladder");
+let allMatches=[];
+let teamMap={};
 
-let rawData = [];
-let matches = [];
-let currentRound = "ALL";
-let currentYear = endYear;
+function norm(s){return (s||"").trim().toLowerCase();}
+function displayName(k){return teamMap[k]||k;}
 
-const finalsRounds = ["Elimination Final","Qualifying Final","Semi Final","Preliminary Final","Grand Final"];
+async function loadAllSeasons(){
 
-for (let y = startYear; y <= endYear; y++) {
-  const btn = document.createElement("button");
-  btn.textContent = y;
-  btn.className = "year-btn";
-  btn.onclick = () => loadYear(y);
-  yearBar.appendChild(btn);
-}
+const startYear=2021;
+const LAST_YEAR=2026;
 
-loadYear(endYear);
+const teamSet=new Set();
+allMatches=[];
 
-function canonicalRound(r){
-  const t=(r??"").toLowerCase();
-  if(t.includes("elimination"))return"Elimination Final";
-  if(t.includes("qualifying"))return"Qualifying Final";
-  if(t.includes("semi"))return"Semi Final";
-  if(t.includes("preliminary"))return"Preliminary Final";
-  if(t.includes("grand"))return"Grand Final";
-  return (r??"").trim();
-}
+for(let y=startYear;y<=LAST_YEAR;y++){
 
-function loadYear(year){
+try{
 
-  currentYear = year;
-  currentRound="ALL";
-  teamSelect.value="ALL";
+const res=await fetch(`/data/afl/afl_${y}.json`);
+if(!res.ok) continue;
 
-  document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
-  [...yearBar.children].find(b=>b.textContent==year).classList.add("active");
+const raw=await res.json();
+if(!Array.isArray(raw)) continue;
 
-  fetch(`data/afl/afl_${year}.json`)
-  .then(r=>r.json())
-  .then(data=>{
-    rawData=data;
-    buildMatchesFromPlayers();
-    buildTeamSelector();
-    buildRoundButtons();
-    renderMatches();
-  });
+const matchMap={};
+
+raw.forEach(r=>{
+
+if(!r.match_id) return;
+
+if(!matchMap[r.match_id]){
+
+matchMap[r.match_id]={
+
+season:Number(r.season)||y,
+round:r.round,
+venue:r.venue,
+teamA:r.played_for,
+teamB:r.played_against
+
+};
 
 }
 
-function buildMatchesFromPlayers(){
+});
 
-  const map={};
+Object.values(matchMap).forEach(m=>{
 
-  rawData.forEach(p=>{
+const a=norm(m.teamA);
+const b=norm(m.teamB);
 
-    const key=p.match_id+"|"+canonicalRound(p.round);
+teamMap[a]=m.teamA;
+teamMap[b]=m.teamB;
 
-    if(!map[key]){
-      map[key]={
-        match_id:p.match_id,
-        round:canonicalRound(p.round),
-        teams:{},
-        players:[],
-        date:p.date_iso||"",
-        venue:p.venue||"",
-        crowd:p.crowd||""
-      };
-    }
+allMatches.push({
 
-    const pts=(+p.G||0)*6+(+p.B||0);
+season:m.season,
+round:m.round,
+venue:m.venue,
+home:a,
+away:b
 
-    if(!map[key].teams[p.played_for])map[key].teams[p.played_for]=0;
-    map[key].teams[p.played_for]+=pts;
+});
 
-    if(p.played_against&&!map[key].teams[p.played_against])map[key].teams[p.played_against]=0;
+teamSet.add(a);
+teamSet.add(b);
 
-    map[key].players.push(p);
+});
 
-  });
-
-  matches=Object.values(map).map(m=>{
-
-    const t=Object.keys(m.teams);
-
-    return{
-      match_id:m.match_id,
-      round:m.round,
-      home_team:t[0],
-      away_team:t[1],
-      home_points:m.teams[t[0]],
-      away_points:m.teams[t[1]],
-      players:m.players,
-      date:m.date,
-      venue:m.venue,
-      crowd:m.crowd
-    };
-
-  });
+}catch(e){
+console.log("Failed year",y,e);
+}
 
 }
 
-function buildTeamSelector(){
+const teams=[...teamSet].sort((a,b)=>displayName(a).localeCompare(displayName(b)));
 
-  const teams=new Set();
+team1.innerHTML=`<option value="">Select team</option>`;
+team2.innerHTML=`<option value="">Select team</option>`;
 
-  matches.forEach(m=>{
-    teams.add(m.home_team);
-    teams.add(m.away_team);
-  });
+teams.forEach(t=>{
+team1.innerHTML+=`<option value="${t}">${displayName(t)}</option>`;
+team2.innerHTML+=`<option value="${t}">${displayName(t)}</option>`;
+});
 
-  teamSelect.innerHTML=`<option value="ALL">All teams</option>`;
-
-  [...teams].sort().forEach(t=>{
-    const o=document.createElement("option");
-    o.value=t;
-    o.textContent=t;
-    teamSelect.appendChild(o);
-  });
+results.innerHTML="Select two teams and click Compare.";
 
 }
 
-function buildRoundButtons(){
+loadAllSeasons();
 
-  roundBar.innerHTML="";
+function compare(){
 
-  const rounds=[...new Set(matches.map(r=>canonicalRound(r.round)))];
+const a=team1.value;
+const b=team2.value;
 
-  const numeric=rounds.filter(r=>/^Round\s*\d+/i.test(r))
-  .map(r=>({label:r,num:+r.match(/\d+/)[0]}))
-  .sort((a,b)=>a.num-b.num);
+if(!a||!b) return;
 
-  addRoundButton("All Rounds",true);
-  numeric.forEach(r=>addRoundButton(r.label));
-  finalsRounds.forEach(r=>addRoundButton(r));
+const games=allMatches.filter(g=>
+(g.home===a&&g.away===b)||
+(g.home===b&&g.away===a)
+).sort((x,y)=>y.season-x.season);
 
-}
+let html=`
+<h3>${displayName(a)} vs ${displayName(b)}</h3>
 
-function addRoundButton(label,active=false){
+<p>Total games: ${games.length}</p>
 
-  const b=document.createElement("button");
+<table>
+<tr>
+<th>Season</th>
+<th>Round</th>
+<th>Venue</th>
+<th>Match</th>
+</tr>
+`;
 
-  b.textContent=label;
-  b.className="round-btn"+(active?" active":"");
+games.forEach(g=>{
+html+=`
+<tr>
+<td>${g.season}</td>
+<td>${g.round}</td>
+<td>${g.venue}</td>
+<td>${displayName(g.home)} v ${displayName(g.away)}</td>
+</tr>
+`;
+});
 
-  b.onclick=()=>{
-    currentRound=label==="All Rounds"?"ALL":label;
-    document.querySelectorAll(".round-btn").forEach(x=>x.classList.remove("active"));
-    b.classList.add("active");
-    renderMatches();
-  };
+html+="</table>";
 
-  roundBar.appendChild(b);
-
-}
-
-teamSelect.onchange=renderMatches;
-
-function getStars(match){
-
-  return match.players
-  .filter(p=>+p.D>=35||+p.G>=5)
-  .map(p=>{
-    return `<a href="afl-player.html?name=${encodeURIComponent(p.player)}">${p.player}</a> (${p.G>=5?`${p.G} goals`:`${p.D} disposals`})`;
-  });
-
-}
-
-function getRunningLadderMatches(){
-
-  if(currentRound==="ALL")
-  return matches.filter(m=>/^Round\s*\d+/i.test(m.round));
-
-  const n=+currentRound.match(/\d+/)?.[0];
-
-  return matches.filter(m=>(+m.round.match(/\d+/)?.[0])<=n);
-
-}
-
-function renderMatches(){
-
-  matchesDiv.innerHTML="";
-  ladderDiv.innerHTML="";
-
-  let rows=matches;
-
-  if(teamSelect.value!=="ALL")
-  rows=rows.filter(r=>r.home_team===teamSelect.value||r.away_team===teamSelect.value);
-
-  if(currentRound!=="ALL")
-  rows=rows.filter(r=>canonicalRound(r.round)===currentRound);
-
-  if(!finalsRounds.includes(currentRound))
-  buildLadder(getRunningLadderMatches());
-
-  rows.forEach(g=>{
-
-    const line=g.home_points>g.away_points
-    ?`${g.home_team} ${g.home_points} def ${g.away_team} ${g.away_points}`
-    :g.home_points<g.away_points
-    ?`${g.home_team} ${g.home_points} def by ${g.away_team} ${g.away_points}`
-    :`${g.home_team} ${g.home_points} drew ${g.away_team} ${g.away_points}`;
-
-    const stars=getStars(g);
-
-    matchesDiv.innerHTML+=`
-    <div class="match" onclick="location.href='afl-game.html?match=${encodeURIComponent(g.match_id)}&year=${currentYear}'">
-      <strong>${g.round}</strong>: ${line}
-      <div class="meta">${[g.date,g.venue,g.crowd&&`Crowd: ${g.crowd}`].filter(Boolean).join(" · ")}</div>
-      ${stars.length?`<div class="meta">⭐ ${stars.join(", ")}</div>`:""}
-    </div>`;
-
-  });
-
-}
-
-function buildLadder(rows){
-
-  let ladder={};
-
-  rows.forEach(g=>{
-
-    const h=g.home_team,a=g.away_team,hp=+g.home_points,ap=+g.away_points;
-
-    if(!ladder[h])ladder[h]={team:h,w:0,l:0,d:0,f:0,ag:0};
-    if(!ladder[a])ladder[a]={team:a,w:0,l:0,d:0,f:0,ag:0};
-
-    ladder[h].f+=hp;ladder[h].ag+=ap;
-    ladder[a].f+=ap;ladder[a].ag+=hp;
-
-    if(hp>ap){ladder[h].w++;ladder[a].l++;}
-    else if(ap>hp){ladder[a].w++;ladder[h].l++;}
-    else{ladder[h].d++;ladder[a].d++;}
-
-  });
-
-  const arr=Object.values(ladder)
-  .map(t=>{t.p=t.ag?((t.f/t.ag)*100).toFixed(1):"0.0";return t;})
-  .sort((a,b)=>b.w-a.w||b.p-a.p);
-
-  let html="<table><tr><th>#</th><th>Team</th><th>W</th><th>L</th><th>D</th><th>%</th></tr>";
-
-  arr.forEach((t,i)=>{
-    html+=`<tr><td>${i+1}</td><td class="team">${t.team}</td><td>${t.w}</td><td>${t.l}</td><td>${t.d}</td><td>${t.p}</td></tr>`;
-  });
-
-  html+="</table>";
-
-  ladderDiv.innerHTML=html;
+results.innerHTML=html;
 
 }
 
