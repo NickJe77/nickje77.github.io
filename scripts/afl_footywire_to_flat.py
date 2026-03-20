@@ -3,7 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 from pathlib import Path
 
-print("AFL SCRIPT VERSION 5 — FINAL WORKING")
+print("AFL SCRIPT VERSION 6 — SAFE COLUMN HANDLING")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -15,17 +15,17 @@ OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
 
 # -----------------------------
-# HELPERS
+# SAFE COLUMN ACCESS
 # -----------------------------
-def to_int(x):
+def get_stat(cols, i):
     try:
-        return int(x.strip())
+        return int(cols[i].text.strip())
     except:
         return 0
 
 
 # -----------------------------
-# GET MATCH LINKS (FIXED URLS)
+# GET LINKS
 # -----------------------------
 def get_links():
     url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}"
@@ -39,7 +39,6 @@ def get_links():
         if "ft_match_statistics" not in href:
             continue
 
-        # 🔥 HANDLE ALL CASES CORRECTLY
         if href.startswith("http"):
             link = href
         elif href.startswith("/"):
@@ -91,8 +90,7 @@ def parse_match(url):
         for row in rows:
             cols = row.find_all("td")
 
-            # 🔥 REAL PLAYER ROW DETECTION
-            if len(cols) >= 10 and cols[0].find("a"):
+            if len(cols) >= 5 and cols[0].find("a"):
                 valid_rows.append(cols)
 
         if not valid_rows:
@@ -110,23 +108,23 @@ def parse_match(url):
                 "venue": venue,
                 "season": SEASON,
 
-                "K": to_int(cols[1].text),
-                "HB": to_int(cols[2].text),
-                "D": to_int(cols[3].text),
-                "M": to_int(cols[4].text),
-                "G": to_int(cols[5].text),
-                "B": to_int(cols[6].text),
-                "T": to_int(cols[7].text),
-                "HO": to_int(cols[8].text),
-                "GA": to_int(cols[9].text),
-                "I50": to_int(cols[10].text),
-                "CL": to_int(cols[11].text),
-                "CG": to_int(cols[12].text),
-                "R50": to_int(cols[13].text),
-                "FF": to_int(cols[14].text),
-                "FA": to_int(cols[15].text),
-                "AF": to_int(cols[16].text),
-                "SC": to_int(cols[17].text)
+                "K": get_stat(cols, 1),
+                "HB": get_stat(cols, 2),
+                "D": get_stat(cols, 3),
+                "M": get_stat(cols, 4),
+                "G": get_stat(cols, 5),
+                "B": get_stat(cols, 6),
+                "T": get_stat(cols, 7),
+                "HO": get_stat(cols, 8),
+                "GA": get_stat(cols, 9),
+                "I50": get_stat(cols, 10),
+                "CL": get_stat(cols, 11),
+                "CG": get_stat(cols, 12),
+                "R50": get_stat(cols, 13),
+                "FF": get_stat(cols, 14),
+                "FA": get_stat(cols, 15),
+                "AF": get_stat(cols, 16),
+                "SC": get_stat(cols, 17)
             }
 
             data.append(entry)
@@ -150,8 +148,7 @@ all_data = []
 
 for link in links:
     try:
-        match_data = parse_match(link)
-        all_data.extend(match_data)
+        all_data.extend(parse_match(link))
     except Exception as e:
         print("ERROR:", e)
 
