@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRIPT VERSION 13 — FINAL (TEAM VERIFIED)")
+print("AFL SCRIPT VERSION 14 — FINAL (NO HREF CRASH)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -47,12 +47,11 @@ def get_links():
 
 
 def extract_team_from_link(link):
-    # /afl/footy/pp-adelaide-crows-jordan-dawson
-    if "pp-" in link:
-        part = link.split("pp-")[1]
-        team = part.split("-")[0]
-        return team.lower()
-    return ""
+    if not link or "pp-" not in link:
+        return ""
+
+    part = link.split("pp-")[1]
+    return part.split("-")[0].lower()
 
 
 def normalize(name):
@@ -95,7 +94,7 @@ def parse_match(url):
     team1_key = normalize(team1)
     team2_key = normalize(team2)
 
-    # ROUND / VENUE
+    # ROUND + VENUE
     round_name = ""
     venue = ""
 
@@ -126,16 +125,20 @@ def parse_match(url):
             cols = row.find_all("td")
 
             if len(cols) >= 5:
-                link = cols[0].find("a")
-                if link:
+                a = cols[0].find("a")
+                if a:
                     valid_rows.append(cols)
 
         if len(valid_rows) < 20:
             continue
 
-        # 🔥 DETERMINE TEAM FROM FIRST PLAYER LINK
-        first_link = valid_rows[0][0].find("a")["href"]
-        team_guess = extract_team_from_link(first_link)
+        # 🔥 SAFE LINK EXTRACTION
+        first_a = valid_rows[0][0].find("a")
+
+        if not first_a or not first_a.has_attr("href"):
+            continue
+
+        team_guess = extract_team_from_link(first_a["href"])
 
         if team1_key in team_guess:
             team_tables[team1_key] = valid_rows
