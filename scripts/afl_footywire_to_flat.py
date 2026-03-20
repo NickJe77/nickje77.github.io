@@ -6,7 +6,7 @@ import time
 import re
 from datetime import datetime
 
-print("AFL FOOTYWIRE → FINAL + PLAYERS PIPELINE")
+print("AFL FOOTYWIRE → FINAL PRODUCTION (FIXED)")
 
 YEAR = 2026
 BASE = "https://www.footywire.com/afl/footy/"
@@ -18,6 +18,9 @@ PLAYERS_OUTPUT = Path("docs/data/afl/players.json")
 SEASON_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
 
+# -------------------------------
+# HELPERS
+# -------------------------------
 def clean(x):
     return x.strip() if x else ""
 
@@ -27,6 +30,12 @@ def num(x):
         return int(x)
     except:
         return 0
+
+
+def format_score(points):
+    goals = points // 6
+    behinds = points % 6
+    return f"{goals}.{behinds} ({points})"
 
 
 # -------------------------------
@@ -53,6 +62,7 @@ def get_matches():
 # PARSE HEADER
 # -------------------------------
 def parse_header(soup):
+
     text = soup.get_text("\n")
 
     team1 = ""
@@ -61,22 +71,30 @@ def parse_header(soup):
     venue = ""
     crowd = ""
     date_iso = ""
+    home_score = 0
+    away_score = 0
 
     for line in text.split("\n"):
 
-        # Teams
+        # ---------------- TEAM RESULT ----------------
         if "defeats" in line:
             parts = line.split("defeats")
             if len(parts) == 2:
                 team1 = clean(parts[0])
                 team2 = clean(parts[1])
 
-        # 🔥 FIXED ROUND PARSER
+        if " drew " in line:
+            parts = line.split("drew")
+            if len(parts) == 2:
+                team1 = clean(parts[0])
+                team2 = clean(parts[1])
+
+        # ---------------- ROUND ----------------
         round_match = re.search(r"(Round\s+\d+)", line)
         if round_match:
             round_name = round_match.group(1)
 
-        # Venue + crowd
+        # ---------------- VENUE + CROWD ----------------
         if "Attendance" in line:
             parts = line.split(",")
             if len(parts) >= 2:
@@ -86,7 +104,7 @@ def parse_header(soup):
             if crowd_match:
                 crowd = crowd_match.group(1)
 
-        # Date
+        # ---------------- DATE ----------------
         if "2026" in line and ":" in line:
             try:
                 dt = datetime.strptime(line.strip(), "%A, %d %B %Y, %I:%M %p AEDT")
@@ -94,7 +112,24 @@ def parse_header(soup):
             except:
                 pass
 
-    return team1, team2, round_name, venue, crowd, date_iso
+    # ---------------- SCORE TABLE ----------------
+    score_table = soup.find("table")
+
+    if score_table:
+        rows = score_table.find_all("tr")
+
+        if len(rows) >= 3:
+            try:
+                home_score = int(rows[1].find_all("td")[-1].text)
+                away_score = int(rows[2].find_all("td")[-1].text)
+            except:
+                pass
+
+    return (
+        team1, team2,
+        round_name, venue, crowd, date_iso,
+        home_score, away_score
+    )
 
 
 # -------------------------------
@@ -108,7 +143,15 @@ def parse_match(url, idx):
 
     match_id = f"{YEAR}_{str(idx).zfill(4)}"
 
-    team1, team2, round_name, venue, crowd, date_iso = parse_header(soup)
+    (
+        team1, team2,
+        round_name, venue, crowd, date_iso,
+        home_score, away_score
+    ) = parse_header(soup)
+
+    # 🚨 Skip bad matches
+    if team1 == "" or team2 == "":
+        return []
 
     tables = soup.find_all("table")
     player_tables = [t for t in tables if len(t.find_all("tr")) > 25]
@@ -148,6 +191,8 @@ def parse_match(url, idx):
                 "player": name,
                 "played_for": team,
                 "played_against": opp,
+
+                # FULL STATS
                 "K": num(tds[1].text),
                 "HB": num(tds[2].text),
                 "D": num(tds[3].text),
@@ -165,9 +210,16 @@ def parse_match(url, idx):
                 "FA": num(tds[15].text),
                 "AF": num(tds[16].text),
                 "SC": num(tds[17].text),
+
                 "date_iso": date_iso,
                 "venue": venue,
-                "crowd": crowd
+                "crowd": crowd,
+
+                # ✅ NEW
+                "team_score": home_score if team == team1 else away_score,
+                "opp_score": away_score if team == team1 else home_score,
+                "team_score_str": format_score(home_score if team == team1 else away_score),
+                "opp_score_str": format_score(away_score if team == team1 else home_score),
             })
 
         return rows
@@ -180,9 +232,10 @@ def parse_match(url, idx):
 
 
 # -------------------------------
-# BUILD PLAYERS.JSON
+# BUILD PLAYERS
 # -------------------------------
 def build_players(all_rows):
+
     players = {}
 
     for r in all_rows:
@@ -233,17 +286,17 @@ def main():
         print("FAILED — not saving")
         return
 
-    # Save season
+    # SAVE SEASON
     with open(SEASON_OUTPUT, "w") as f:
         json.dump(all_rows, f, indent=2)
 
-    # 🔥 Build players.json
+    # SAVE PLAYERS
     players = build_players(all_rows)
 
     with open(PLAYERS_OUTPUT, "w") as f:
         json.dump(players, f, indent=2)
 
-    print("DONE — season + players updated")
+    print("DONE — FULL AFL PIPELINE COMPLETE")
 
 
 if __name__ == "__main__":
