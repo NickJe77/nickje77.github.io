@@ -11,7 +11,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
@@ -24,9 +23,7 @@ jobs:
       - run: python scripts/nba_download_boxscores.py
       - run: python scripts/nba_build_season_summaries.py
 
-      # 🔥 DO NOT TOUCH PLAYERS FOLDER
-
-      - name: Build career stats (STRICT FILTER)
+      - name: Build career stats (deduped regular season + playoffs only)
         run: |
           python <<EOF
           import json, re
@@ -36,9 +33,9 @@ jobs:
           draft_dir = nba_dir / "draft"
 
           def clean(n):
-              n = n.lower()
+              n = str(n).lower()
               n = re.sub(r"[^\w\s]", "", n)
-              return re.sub(r"\s+"," ",n).strip()
+              return re.sub(r"\s+", " ", n).strip()
 
           def is_valid_game(game):
               vals = [
@@ -46,73 +43,81 @@ jobs:
                   game.get("season_type"),
                   game.get("type")
               ]
-              vals = [str(v).lower() for v in vals if v]
+              vals = [str(v).lower().strip() for v in vals if v]
 
-              return any(v in [
-                  "regular",
-                  "regular season",
-                  "playoffs",
-                  "playoff"
-              ] for v in vals)
+              allowed = {"regular", "regular season", "playoff", "playoffs"}
+              blocked_words = ["all-star", "all star", "preseason", "summer", "exhibition"]
 
-          def is_excluded(game):
-              txt = " ".join([
-                  str(game.get("game_type","")),
-                  str(game.get("season_type","")),
-                  str(game.get("type",""))
-              ]).lower()
+              joined = " ".join(vals)
 
-              return any(x in txt for x in [
-                  "all-star","all star","preseason","summer","exhibition"
-              ])
+              if any(word in joined for word in blocked_words):
+                  return False
 
-          stats = {}
+              return any(v in allowed for v in vals)
 
           def find_stat(obj, keys):
               if isinstance(obj, dict):
-                  for k,v in obj.items():
+                  for k, v in obj.items():
                       if k.lower() in keys:
-                          try: return float(v)
-                          except: pass
-                      r = find_stat(v, keys)
-                      if r: return r
+                          try:
+                              return float(v)
+                          except:
+                              pass
+                      res = find_stat(v, keys)
+                      if res is not None:
+                          return res
               elif isinstance(obj, list):
-                  for i in obj:
-                      r = find_stat(i, keys)
-                      if r: return r
-              return 0
+                  for item in obj:
+                      res = find_stat(item, keys)
+                      if res is not None:
+                          return res
+              return None
 
-          def find_players(obj):
-              out=[]
-              if isinstance(obj,dict):
-                  if "name" in obj or "player" in obj:
-                      out.append(obj)
+          def find_player_objects(obj):
+              found = []
+              if isinstance(obj, dict):
+                  has_name = "name" in obj or "player" in obj
+
+                  # only treat as a player record if there is at least one usable stat
+                  has_stat = any(
+                      find_stat(obj, keys) is not None
+                      for keys in [
+                          ["pts", "points"],
+                          ["reb", "rebounds"],
+                          ["ast", "assists"],
+                          ["stl", "steals"],
+                          ["blk", "blocks"]
+                      ]
+                  )
+
+                  if has_name and has_stat:
+                      found.append(obj)
+
                   for v in obj.values():
-                      out += find_players(v)
-              elif isinstance(obj,list):
-                  for i in obj:
-                      out += find_players(i)
-              return out
+                      found.extend(find_player_objects(v))
 
-          def add(name,p):
-              k = clean(name)
-              if k not in stats:
-                  stats[k]={"g":0,"pts":0,"reb":0,"ast":0,"stl":0,"blk":0}
+              elif isinstance(obj, list):
+                  for item in obj:
+                      found.extend(find_player_objects(item))
 
-              stats[k]["g"]+=1
-              stats[k]["pts"]+=find_stat(p,["pts","points"])
-              stats[k]["reb"]+=find_stat(p,["reb","rebounds"])
-              stats[k]["ast"]+=find_stat(p,["ast","assists"])
-              stats[k]["stl"]+=find_stat(p,["stl","steals"])
-              stats[k]["blk"]+=find_stat(p,["blk","blocks"])
+              return found
+
+          stats = {}
+
+          def ensure_player(name):
+              key = clean(name)
+              if key not in stats:
+                  stats[key] = {"g": 0, "pts": 0, "reb": 0, "ast": 0, "stl": 0, "blk": 0}
+              return key
 
           print("Scanning games...")
 
           for season in nba_dir.iterdir():
-              if not season.is_dir(): continue
+              if not season.is_dir():
+                  continue
 
               for f in season.glob("*.json"):
-                  if f.name in ["index.json","games.json"]:
+                  if f.name in ["index.json", "games.json"]:
                       continue
 
                   try:
@@ -120,54 +125,78 @@ jobs:
                   except:
                       continue
 
-                  game = raw[0] if isinstance(raw,list) else raw
-                  if not isinstance(game,dict):
+                  game = raw[0] if isinstance(raw, list) and raw else raw
+                  if not isinstance(game, dict):
                       continue
 
-                  if not is_valid_game(game): continue
-                  if is_excluded(game): continue
+                  if not is_valid_game(game):
+                      continue
 
-                  for p in find_players(game):
+                  # dedupe within each single game
+                  seen_in_game = set()
+
+                  for p in find_player_objects(game):
                       name = p.get("name") or p.get("player")
-                      if name:
-                          add(name,p)
+                      if not name:
+                          continue
+
+                      key = ensure_player(name)
+
+                      pts = find_stat(p, ["pts", "points"]) or 0
+                      reb = find_stat(p, ["reb", "rebounds"]) or 0
+                      ast = find_stat(p, ["ast", "assists"]) or 0
+                      stl = find_stat(p, ["stl", "steals"]) or 0
+                      blk = find_stat(p, ["blk", "blocks"]) or 0
+
+                      # count the game only once per player per file
+                      if key not in seen_in_game:
+                          stats[key]["g"] += 1
+                          seen_in_game.add(key)
+
+                      stats[key]["pts"] += pts
+                      stats[key]["reb"] += reb
+                      stats[key]["ast"] += ast
+                      stats[key]["stl"] += stl
+                      stats[key]["blk"] += blk
+
+          print("Players tracked:", len(stats))
 
           for file in draft_dir.glob("*.json"):
               try:
-                  data=json.loads(file.read_text())
-              except: continue
+                  data = json.loads(file.read_text())
+              except:
+                  continue
 
               def inject(obj):
-                  if isinstance(obj,list):
-                      for i in obj:
-                          if isinstance(i,dict) and "player" in i:
+                  if isinstance(obj, list):
+                      for item in obj:
+                          if isinstance(item, dict) and "player" in item:
+                              key = clean(item["player"])
+                              s = stats.get(key, {"g": 0, "pts": 0, "reb": 0, "ast": 0, "stl": 0, "blk": 0})
 
-                              k = clean(i["player"])
-                              s = stats.get(k,{"g":0,"pts":0,"reb":0,"ast":0,"stl":0,"blk":0})
+                              g = s["g"]
 
-                              g=s["g"]
+                              item["games"] = g
+                              item["points"] = int(round(s["pts"]))
+                              item["ppg"] = round(s["pts"] / g, 1) if g else 0
 
-                              i["games"]=g
-                              i["points"]=int(s["pts"])
-                              i["ppg"]=round(s["pts"]/g,1) if g else 0
+                              item["reb"] = int(round(s["reb"]))
+                              item["rpg"] = round(s["reb"] / g, 1) if g else 0
 
-                              i["reb"]=int(s["reb"])
-                              i["rpg"]=round(s["reb"]/g,1) if g else 0
+                              item["ast"] = int(round(s["ast"]))
+                              item["apg"] = round(s["ast"] / g, 1) if g else 0
 
-                              i["ast"]=int(s["ast"])
-                              i["apg"]=round(s["ast"]/g,1) if g else 0
+                              item["stl"] = int(round(s["stl"]))
+                              item["blk"] = int(round(s["blk"]))
 
-                              i["stl"]=int(s["stl"])
-                              i["blk"]=int(s["blk"])
+                          inject(item)
 
-                          inject(i)
-
-                  elif isinstance(obj,dict):
-                      for v in obj.values(): inject(v)
+                  elif isinstance(obj, dict):
+                      for v in obj.values():
+                          inject(v)
 
               inject(data)
-
-              file.write_text(json.dumps(data,indent=2))
+              file.write_text(json.dumps(data, indent=2))
 
           print("DONE")
           EOF
