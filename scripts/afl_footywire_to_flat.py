@@ -3,7 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 from pathlib import Path
 
-print("AFL SCRIPT VERSION 6 — SAFE COLUMN HANDLING")
+print("AFL SCRIPT VERSION 7 — TITLE FIX (FINAL)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -15,7 +15,7 @@ OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
 
 # -----------------------------
-# SAFE COLUMN ACCESS
+# SAFE STAT
 # -----------------------------
 def get_stat(cols, i):
     try:
@@ -69,9 +69,27 @@ def parse_match(url):
     title = soup.find("title").text
     parts = title.split(" - ")
 
-    teams = parts[0].split(" v ")
-    team1 = teams[0].strip()
-    team2 = teams[1].strip()
+    title_main = parts[0]
+
+    # 🔥 FIX: HANDLE MULTIPLE TITLE FORMATS
+    if " v " in title_main:
+        teams = title_main.split(" v ")
+        team1 = teams[0].strip()
+        team2 = teams[1].strip()
+
+    elif " defeated by " in title_main:
+        t = title_main.split(" defeated by ")
+        team1 = t[0].strip()
+        team2 = t[1].strip()
+
+    elif " defeated " in title_main:
+        t = title_main.split(" defeated ")
+        team1 = t[0].strip()
+        team2 = t[1].strip()
+
+    else:
+        print("⚠️ Could not parse teams:", title_main)
+        return []
 
     round_name = parts[1] if len(parts) > 1 else ""
     venue = parts[2] if len(parts) > 2 else ""
