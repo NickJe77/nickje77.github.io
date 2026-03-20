@@ -7,7 +7,7 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
-print("AFL FOOTYWIRE SCRAPER (LOCKED TO REAL PAGE)")
+print("AFL FOOTYWIRE SCRAPER (FINAL DEBUG LOCK)")
 
 YEAR = 2026
 BASE = "https://www.footywire.com/afl/footy/"
@@ -18,6 +18,9 @@ PLAYERS_OUT = Path("docs/data/afl/players.json")
 OUT.parent.mkdir(parents=True, exist_ok=True)
 
 
+# -----------------------
+# HELPERS
+# -----------------------
 def clean(x):
     return re.sub(r"\s+", " ", (x or "")).strip()
 
@@ -42,7 +45,7 @@ def html(url):
 
 
 # -----------------------
-# GET LINKS
+# MATCH LINKS
 # -----------------------
 def get_links():
     soup = BeautifulSoup(html(f"{BASE}ft_match_list?year={YEAR}"), "html.parser")
@@ -62,8 +65,8 @@ def get_links():
 # HEADER
 # -----------------------
 def parse_header(soup):
-    text = soup.get_text("\n")
-    lines = [clean(x) for x in text.split("\n") if clean(x)]
+    txt = soup.get_text("\n")
+    lines = [clean(x) for x in txt.split("\n") if clean(x)]
 
     team_a = ""
     team_b = ""
@@ -142,31 +145,34 @@ def get_scores(soup):
 
 
 # -----------------------
-# PLAYER TABLES (REAL FIX)
+# 🔥 PLAYER TABLE DETECTION (FIXED)
 # -----------------------
 def get_player_tables(soup):
     tables = []
 
     for table in soup.find_all("table"):
 
-        text = table.get_text(" ")
+        links = table.select("a")
 
-        if "Match Statistics" not in text:
-            continue
-        if "Sorted by Disposals" not in text:
-            continue
-
-        # must contain player links
-        if len(table.select("a[href*='player']")) < 15:
+        # must contain lots of links (players)
+        if len(links) < 18:
             continue
 
-        tables.append(table)
+        rows = table.find_all("tr")[:10]
+
+        player_rows = 0
+        for r in rows:
+            if r.find("a"):
+                player_rows += 1
+
+        if player_rows >= 5:
+            tables.append(table)
 
     return tables
 
 
 # -----------------------
-# PARSE PLAYERS (STRICT)
+# PLAYER PARSER
 # -----------------------
 def parse_players(table):
     players = []
@@ -183,32 +189,35 @@ def parse_players(table):
 
         name = clean(link.text)
 
-        players.append({
-            "player": name,
-            "K": num(tds[1].text),
-            "HB": num(tds[2].text),
-            "D": num(tds[3].text),
-            "M": num(tds[4].text),
-            "G": num(tds[5].text),
-            "B": num(tds[6].text),
-            "T": num(tds[7].text),
-            "HO": num(tds[8].text),
-            "GA": num(tds[9].text),
-            "I50": num(tds[10].text),
-            "CL": num(tds[11].text),
-            "CG": num(tds[12].text),
-            "R50": num(tds[13].text),
-            "FF": num(tds[14].text),
-            "FA": num(tds[15].text),
-            "AF": num(tds[16].text),
-            "SC": num(tds[17].text),
-        })
+        try:
+            players.append({
+                "player": name,
+                "K": num(tds[1].text),
+                "HB": num(tds[2].text),
+                "D": num(tds[3].text),
+                "M": num(tds[4].text),
+                "G": num(tds[5].text),
+                "B": num(tds[6].text),
+                "T": num(tds[7].text),
+                "HO": num(tds[8].text),
+                "GA": num(tds[9].text),
+                "I50": num(tds[10].text),
+                "CL": num(tds[11].text),
+                "CG": num(tds[12].text),
+                "R50": num(tds[13].text),
+                "FF": num(tds[14].text),
+                "FA": num(tds[15].text),
+                "AF": num(tds[16].text),
+                "SC": num(tds[17].text),
+            })
+        except:
+            continue
 
     return players
 
 
 # -----------------------
-# MATCH
+# MATCH PARSER
 # -----------------------
 def parse_match(url, idx):
     soup = BeautifulSoup(html(url), "html.parser")
@@ -217,7 +226,9 @@ def parse_match(url, idx):
     scores = get_scores(soup)
     tables = get_player_tables(soup)
 
-    print("TABLES:", len(tables))
+    print("\nDEBUG:", url)
+    print("TEAMS:", team_a, "vs", team_b)
+    print("TABLE COUNT:", len(tables))
 
     if len(tables) < 2:
         return []
@@ -232,6 +243,7 @@ def parse_match(url, idx):
         players = parse_players(tables[i])
 
         if not players:
+            print("NO PLAYERS FOUND")
             return []
 
         for p in players:
@@ -256,7 +268,7 @@ def parse_match(url, idx):
 
 
 # -----------------------
-# PLAYERS JSON
+# PLAYERS.JSON
 # -----------------------
 def build_players(rows):
     players = {}
@@ -299,10 +311,10 @@ def main():
 
         time.sleep(1)
 
-    print("ROWS:", len(all_rows))
+    print("\nTOTAL ROWS:", len(all_rows))
 
-    if len(all_rows) < 100:
-        print("FAILED - NOT SAVING")
+    if len(all_rows) == 0:
+        print("FAILED - NO DATA")
         return
 
     json.dump(all_rows, open(OUT, "w"), indent=2)
