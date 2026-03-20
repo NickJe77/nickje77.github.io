@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRIPT VERSION 9 — FINAL CLEAN DATA")
+print("AFL SCRIPT VERSION 10 — FINAL TABLE FIX")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -111,7 +111,7 @@ def parse_match(url):
         venue = venue_match.group(1).strip()
 
     # -----------------------------
-    # FIND PLAYER TABLES
+    # FIND PLAYER TABLES (FINAL FIX)
     # -----------------------------
     tables = soup.find_all("table")
 
@@ -131,6 +131,9 @@ def parse_match(url):
         if len(valid_rows) >= 18:
             player_tables.append(valid_rows)
 
+    # 🔥 CRITICAL: ONLY FIRST 2 TABLES
+    player_tables = player_tables[:2]
+
     if len(player_tables) < 2:
         print("⚠️ Could not find both player tables")
         return []
@@ -140,7 +143,7 @@ def parse_match(url):
     # -----------------------------
     data = []
 
-    for team_index, valid_rows in enumerate(player_tables[:2]):
+    for team_index, valid_rows in enumerate(player_tables):
 
         for cols in valid_rows:
 
