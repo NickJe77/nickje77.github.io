@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRIPT VERSION 11 — FINAL (23 PLAYER RULE FIXED)")
+print("AFL SCRIPT VERSION 12 — FINAL FINAL (FORCED 2 TABLE FIX)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -71,7 +71,7 @@ def parse_match(url):
     title = title.replace("AFL Match Statistics : ", "")
 
     # -----------------------------
-    # TEAM PARSING (FULL COVERAGE)
+    # TEAM PARSING
     # -----------------------------
     if " v " in title:
         t = title.split(" v ")
@@ -85,7 +85,7 @@ def parse_match(url):
         t = title.split(" defeats ")
         team1, team2 = t[0].strip(), t[1].split(" at ")[0].strip()
 
-    elif " defeat " in title:  # 🔥 FIXED CASE
+    elif " defeat " in title:
         t = title.split(" defeat ")
         team1, team2 = t[0].strip(), t[1].split(" at ")[0].strip()
 
@@ -112,18 +112,18 @@ def parse_match(url):
         venue = venue_match.group(1).strip()
 
     # -----------------------------
-    # FIND PLAYER TABLES (FINAL FIX)
+    # FIND PLAYER TABLES
     # -----------------------------
     tables = soup.find_all("table")
 
-    player_tables = []
+    candidate_tables = []
 
     for table in tables:
 
-        header = table.get_text(" ", strip=True)
+        text = table.get_text(" ", strip=True)
 
-        # MUST be real stats table
-        if not all(x in header for x in ["K", "HB", "D", "M", "G"]):
+        # Must contain stat headers
+        if not all(x in text for x in ["K", "HB", "D", "M", "G"]):
             continue
 
         rows = table.find_all("tr")
@@ -135,12 +135,15 @@ def parse_match(url):
             if len(cols) >= 5 and cols[0].find("a"):
                 valid_rows.append(cols)
 
-        # 🔥 AFL RULE: 22–23 PLAYERS ONLY
-        if 22 <= len(valid_rows) <= 23:
-            player_tables.append(valid_rows)
+        # AFL = exactly 23 players
+        if len(valid_rows) >= 20:
+            candidate_tables.append(valid_rows)
 
-    if len(player_tables) != 2:
-        print("⚠️ Wrong number of player tables:", len(player_tables))
+    # 🔥 FINAL FIX: FORCE FIRST 2 ONLY
+    player_tables = candidate_tables[:2]
+
+    if len(player_tables) < 2:
+        print("⚠️ Not enough player tables")
         return []
 
     # -----------------------------
@@ -150,7 +153,7 @@ def parse_match(url):
 
     for team_index, valid_rows in enumerate(player_tables):
 
-        for cols in valid_rows:
+        for cols in valid_rows[:23]:  # 🔥 HARD CAP
 
             player_name = cols[0].text.strip()
 
@@ -183,7 +186,7 @@ def parse_match(url):
 
             data.append(entry)
 
-        print(f"Players parsed (team {team_index+1}):", len(valid_rows))
+        print(f"Players parsed (team {team_index+1}):", len(valid_rows[:23]))
 
     return data
 
