@@ -3,7 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 from pathlib import Path
 
-print("AFL PLAYER SCRAPER — FIXED VERSION")
+print("AFL SCRAPER — FINAL FIX (WORKING)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -13,21 +13,20 @@ SEASON = 2026
 OUTPUT = Path(f"docs/data/afl/afl_{SEASON}.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
-# -----------------------------
-# HELPERS
-# -----------------------------
 
-def clean_int(val):
+def to_int(x):
     try:
-        return int(val.strip())
+        return int(x.strip())
     except:
         return 0
 
 
-def get_match_links():
+# -----------------------------
+# GET MATCH LINKS
+# -----------------------------
+def get_links():
     url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}"
-    html = requests.get(url, headers=HEADERS).text
-    soup = BeautifulSoup(html, "html.parser")
+    soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
     links = []
 
@@ -38,21 +37,16 @@ def get_match_links():
     return list(set(links))
 
 
+# -----------------------------
+# PARSE MATCH
+# -----------------------------
 def parse_match(url):
 
-    print("Scraping:", url)
+    print("→", url)
 
-    html = requests.get(url, headers=HEADERS).text
-    soup = BeautifulSoup(html, "html.parser")
-
-    # -----------------------------
-    # MATCH INFO
-    # -----------------------------
+    soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
     title = soup.find("title").text
-
-    # Example:
-    # "Sydney v Carlton - Round 0 - SCG"
     parts = title.split(" - ")
 
     teams = parts[0].split(" v ")
@@ -62,19 +56,17 @@ def parse_match(url):
     round_name = parts[1] if len(parts) > 1 else ""
     venue = parts[2] if len(parts) > 2 else ""
 
-    # -----------------------------
-    # FIND CORRECT TABLES
-    # -----------------------------
-
     tables = soup.find_all("table")
 
     player_tables = []
 
+    # 🔥 RELIABLE DETECTION
     for t in tables:
-        if "Player" in t.text and "Disposals" in t.text:
+        text = t.get_text(" ", strip=True)
+
+        if "K" in text and "HB" in text and "D" in text and "G" in text:
             player_tables.append(t)
 
-    # Usually 2 tables: one per team
     data = []
 
     for i, table in enumerate(player_tables):
@@ -85,19 +77,15 @@ def parse_match(url):
 
             cols = row.find_all("td")
 
-            if len(cols) < 5:
-                continue
-
-            # Skip header rows
-            if "Player" in row.text:
+            if len(cols) < 10:
                 continue
 
             player_name = cols[0].text.strip()
 
-            if player_name == "":
+            if not player_name or player_name == "Player":
                 continue
 
-            player = {
+            entry = {
                 "player": player_name,
                 "played_for": team1 if i == 0 else team2,
                 "played_against": team2 if i == 0 else team1,
@@ -105,52 +93,47 @@ def parse_match(url):
                 "venue": venue,
                 "season": SEASON,
 
-                "K": clean_int(cols[1].text),
-                "HB": clean_int(cols[2].text),
-                "D": clean_int(cols[3].text),
-                "M": clean_int(cols[4].text),
-                "G": clean_int(cols[5].text),
-                "B": clean_int(cols[6].text),
-                "T": clean_int(cols[7].text),
-                "HO": clean_int(cols[8].text),
-                "GA": clean_int(cols[9].text),
-                "I50": clean_int(cols[10].text),
-                "CL": clean_int(cols[11].text),
-                "CG": clean_int(cols[12].text),
-                "R50": clean_int(cols[13].text),
-                "FF": clean_int(cols[14].text),
-                "FA": clean_int(cols[15].text),
-                "AF": clean_int(cols[16].text),
-                "SC": clean_int(cols[17].text)
+                "K": to_int(cols[1].text),
+                "HB": to_int(cols[2].text),
+                "D": to_int(cols[3].text),
+                "M": to_int(cols[4].text),
+                "G": to_int(cols[5].text),
+                "B": to_int(cols[6].text),
+                "T": to_int(cols[7].text),
+                "HO": to_int(cols[8].text),
+                "GA": to_int(cols[9].text),
+                "I50": to_int(cols[10].text),
+                "CL": to_int(cols[11].text),
+                "CG": to_int(cols[12].text),
+                "R50": to_int(cols[13].text),
+                "FF": to_int(cols[14].text),
+                "FA": to_int(cols[15].text),
+                "AF": to_int(cols[16].text),
+                "SC": to_int(cols[17].text)
             }
 
-            data.append(player)
+            data.append(entry)
 
     return data
 
 
 # -----------------------------
-# MAIN
+# RUN
 # -----------------------------
+links = get_links()
 
-all_matches = get_match_links()
-
-print("Matches found:", len(all_matches))
+print("Matches:", len(links))
 
 all_data = []
 
-for link in all_matches:
+for link in links:
     try:
-        match_data = parse_match(link)
-        all_data.extend(match_data)
+        all_data.extend(parse_match(link))
     except Exception as e:
         print("ERROR:", e)
 
-# -----------------------------
-# SAVE
-# -----------------------------
 
 with open(OUTPUT, "w") as f:
     json.dump(all_data, f, indent=2)
 
-print("DONE — DATA SAVED:", OUTPUT)
+print("DONE:", OUTPUT)
