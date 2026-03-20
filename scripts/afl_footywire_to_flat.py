@@ -6,14 +6,16 @@ import time
 import re
 from datetime import datetime
 
-print("AFL FOOTYWIRE → FULL PRODUCTION SCRAPER")
+print("AFL FOOTYWIRE → FINAL + PLAYERS PIPELINE")
 
 YEAR = 2026
 BASE = "https://www.footywire.com/afl/footy/"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-OUTPUT = Path(f"docs/data/afl/afl_{YEAR}.json")
-OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+SEASON_OUTPUT = Path(f"docs/data/afl/afl_{YEAR}.json")
+PLAYERS_OUTPUT = Path("docs/data/afl/players.json")
+
+SEASON_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
 
 def clean(x):
@@ -48,7 +50,7 @@ def get_matches():
 
 
 # -------------------------------
-# PARSE HEADER INFO
+# PARSE HEADER
 # -------------------------------
 def parse_header(soup):
     text = soup.get_text("\n")
@@ -69,12 +71,20 @@ def parse_header(soup):
                 team1 = clean(parts[0])
                 team2 = clean(parts[1])
 
-        # Round / Venue / Crowd
-        if "Round" in line and "Attendance" in line:
-            round_name = line.split(",")[0]
-            venue = line.split(",")[1].strip()
-            crowd = re.findall(r"\d+", line)
-            crowd = crowd[0] if crowd else ""
+        # 🔥 FIXED ROUND PARSER
+        round_match = re.search(r"(Round\s+\d+)", line)
+        if round_match:
+            round_name = round_match.group(1)
+
+        # Venue + crowd
+        if "Attendance" in line:
+            parts = line.split(",")
+            if len(parts) >= 2:
+                venue = parts[1].strip()
+
+            crowd_match = re.search(r"(\d+)", line)
+            if crowd_match:
+                crowd = crowd_match.group(1)
 
         # Date
         if "2026" in line and ":" in line:
@@ -170,6 +180,37 @@ def parse_match(url, idx):
 
 
 # -------------------------------
+# BUILD PLAYERS.JSON
+# -------------------------------
+def build_players(all_rows):
+    players = {}
+
+    for r in all_rows:
+        name = r["player"]
+
+        if name not in players:
+            players[name] = {
+                "player": name,
+                "games": 0,
+                "K": 0, "HB": 0, "D": 0, "M": 0,
+                "G": 0, "B": 0, "T": 0
+            }
+
+        p = players[name]
+
+        p["games"] += 1
+        p["K"] += r["K"]
+        p["HB"] += r["HB"]
+        p["D"] += r["D"]
+        p["M"] += r["M"]
+        p["G"] += r["G"]
+        p["B"] += r["B"]
+        p["T"] += r["T"]
+
+    return list(players.values())
+
+
+# -------------------------------
 # MAIN
 # -------------------------------
 def main():
@@ -192,10 +233,17 @@ def main():
         print("FAILED — not saving")
         return
 
-    with open(OUTPUT, "w") as f:
+    # Save season
+    with open(SEASON_OUTPUT, "w") as f:
         json.dump(all_rows, f, indent=2)
 
-    print("DONE")
+    # 🔥 Build players.json
+    players = build_players(all_rows)
+
+    with open(PLAYERS_OUTPUT, "w") as f:
+        json.dump(players, f, indent=2)
+
+    print("DONE — season + players updated")
 
 
 if __name__ == "__main__":
