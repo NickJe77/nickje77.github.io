@@ -3,7 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 from pathlib import Path
 
-print("AFL SCRIPT VERSION 7 — TITLE FIX (FINAL)")
+print("AFL SCRIPT VERSION 8 — FINAL STABLE")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -25,7 +25,7 @@ def get_stat(cols, i):
 
 
 # -----------------------------
-# GET LINKS
+# GET MATCH LINKS
 # -----------------------------
 def get_links():
     url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}"
@@ -66,26 +66,33 @@ def parse_match(url):
 
     soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
+    # -----------------------------
+    # CLEAN TITLE
+    # -----------------------------
     title = soup.find("title").text
-    parts = title.split(" - ")
+    title = title.replace("AFL Match Statistics : ", "")
 
+    parts = title.split(" - ")
     title_main = parts[0]
 
-    # 🔥 FIX: HANDLE MULTIPLE TITLE FORMATS
+    # -----------------------------
+    # TEAM PARSING (ALL FORMATS)
+    # -----------------------------
     if " v " in title_main:
-        teams = title_main.split(" v ")
-        team1 = teams[0].strip()
-        team2 = teams[1].strip()
+        t = title_main.split(" v ")
+        team1, team2 = t[0].strip(), t[1].strip()
 
     elif " defeated by " in title_main:
         t = title_main.split(" defeated by ")
-        team1 = t[0].strip()
-        team2 = t[1].strip()
+        team1, team2 = t[0].strip(), t[1].strip()
+
+    elif " defeats " in title_main:
+        t = title_main.split(" defeats ")
+        team1, team2 = t[0].strip(), t[1].strip()
 
     elif " defeated " in title_main:
         t = title_main.split(" defeated ")
-        team1 = t[0].strip()
-        team2 = t[1].strip()
+        team1, team2 = t[0].strip(), t[1].strip()
 
     else:
         print("⚠️ Could not parse teams:", title_main)
@@ -94,15 +101,16 @@ def parse_match(url):
     round_name = parts[1] if len(parts) > 1 else ""
     venue = parts[2] if len(parts) > 2 else ""
 
+    # -----------------------------
+    # FIND PLAYER TABLES
+    # -----------------------------
     tables = soup.find_all("table")
 
-    data = []
-    team_index = 0
+    player_tables = []
 
     for table in tables:
 
         rows = table.find_all("tr")
-
         valid_rows = []
 
         for row in rows:
@@ -111,8 +119,20 @@ def parse_match(url):
             if len(cols) >= 5 and cols[0].find("a"):
                 valid_rows.append(cols)
 
-        if not valid_rows:
-            continue
+        # 🔥 ONLY real team tables
+        if len(valid_rows) >= 18:
+            player_tables.append(valid_rows)
+
+    if len(player_tables) < 2:
+        print("⚠️ Could not find both player tables")
+        return []
+
+    # -----------------------------
+    # PARSE PLAYERS
+    # -----------------------------
+    data = []
+
+    for team_index, valid_rows in enumerate(player_tables[:2]):
 
         for cols in valid_rows:
 
@@ -148,11 +168,6 @@ def parse_match(url):
             data.append(entry)
 
         print(f"Players parsed (team {team_index+1}):", len(valid_rows))
-
-        team_index += 1
-
-        if team_index > 1:
-            break
 
     return data
 
