@@ -3,9 +3,8 @@ from bs4 import BeautifulSoup
 import json
 from pathlib import Path
 import time
-import re
 
-print("AFL FOOTYWIRE → CLEAN FINAL")
+print("AFL FOOTYWIRE → FINAL CLEAN SCRAPER")
 
 YEAR = 2026
 BASE = "https://www.footywire.com/afl/footy/"
@@ -15,6 +14,9 @@ OUTPUT = Path(f"docs/data/afl/afl_{YEAR}.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
 
+# -------------------------------
+# HELPERS
+# -------------------------------
 def clean(x):
     return x.strip() if x else ""
 
@@ -43,7 +45,7 @@ def get_matches():
             if full not in links:
                 links.append(full)
 
-    print("Matches:", len(links))
+    print("Matches found:", len(links))
     return links
 
 
@@ -61,17 +63,28 @@ def parse_match(url, idx):
     rows = []
 
     # -------------------------------
-    # EXTRACT TEAM NAMES (FIXED)
+    # TEAM NAMES (FROM HEADER TEXT)
     # -------------------------------
-    title = soup.title.text if soup.title else ""
+    page_text = soup.get_text(separator="\n")
 
     team1 = "Team 1"
     team2 = "Team 2"
 
-    if " vs " in title:
-        parts = title.split(" vs ")
-        team1 = clean(parts[0].replace("AFL Statistics", ""))
-        team2 = clean(parts[1].split("|")[0])
+    for line in page_text.split("\n"):
+        if "defeats" in line:
+            parts = line.split("defeats")
+            if len(parts) == 2:
+                team1 = clean(parts[0])
+                team2 = clean(parts[1])
+            break
+
+    # fallback (rare)
+    if team1 == "Team 1":
+        title = soup.title.text if soup.title else ""
+        if " vs " in title:
+            parts = title.split(" vs ")
+            team1 = clean(parts[0].replace("AFL Statistics", ""))
+            team2 = clean(parts[1].split("|")[0])
 
     # -------------------------------
     # FIND PLAYER TABLES
@@ -97,7 +110,7 @@ def parse_match(url, idx):
 
             name = clean(tds[0].text)
 
-            # 🚨 REMOVE HEADER + GARBAGE ROWS
+            # REMOVE NON-PLAYER ROWS
             if (
                 name == ""
                 or "AFL" in name
@@ -105,11 +118,10 @@ def parse_match(url, idx):
                 or "Attendance" in name
                 or "defeats" in name
                 or "Player" in name
-                or "\n" in name  # kills multi-line junk
+                or "\n" in name
             ):
                 continue
 
-            # Must look like a player (basic sanity check)
             if len(name.split()) < 2:
                 continue
 
@@ -157,16 +169,17 @@ def main():
 
         time.sleep(1)
 
-    print("TOTAL ROWS:", len(all_rows))
+    print("TOTAL PLAYER ROWS:", len(all_rows))
 
+    # 🚨 SAFETY: DO NOT WIPE FILE
     if len(all_rows) < 100:
-        print("FAILED — not saving")
+        print("FAILED — not saving (prevents data wipe)")
         return
 
     with open(OUTPUT, "w") as f:
         json.dump(all_rows, f, indent=2)
 
-    print("DONE")
+    print("DONE →", OUTPUT)
 
 
 if __name__ == "__main__":
