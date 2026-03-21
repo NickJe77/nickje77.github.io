@@ -1,216 +1,131 @@
 import json
-import requests
-from bs4 import BeautifulSoup
 from pathlib import Path
-import re
+from collections import defaultdict
 
-print("AFL SCRIPT VERSION 15 — FINAL (ORDER-BASED FIX)")
-
-BASE = "https://www.footywire.com"
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+print("AFL PLAYER BUILDER — SEASON + MASTER (SAFE)")
 
 SEASON = 2026
 
-OUTPUT = Path(f"docs/data/afl/afl_{SEASON}.json")
-OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+INPUT = Path(f"docs/data/afl/afl_{SEASON}.json")
+SEASON_OUT = Path(f"docs/data/afl/players_{SEASON}.json")
+MASTER_OUT = Path("docs/data/afl/players.json")
 
 
-def get_stat(cols, i):
-    try:
-        return int(cols[i].text.strip())
-    except:
-        return 0
+STATS = [
+    "K","HB","D","M","G","B","T","HO","GA",
+    "I50","CL","CG","R50","FF","FA","AF","SC"
+]
 
 
-def get_links():
-    url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}"
-    soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
+# -----------------------------
+# LOAD DATA
+# -----------------------------
+if not INPUT.exists():
+    print("❌ Missing input:", INPUT)
+    exit()
 
-    links = []
-
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
-
-        if "ft_match_statistics" not in href:
-            continue
-
-        if href.startswith("http"):
-            link = href
-        elif href.startswith("/"):
-            link = BASE + href
-        else:
-            link = BASE + "/afl/footy/" + href
-
-        links.append(link)
-
-    return list(set(links))
+with open(INPUT) as f:
+    games = json.load(f)
 
 
-def parse_match(url):
+# -----------------------------
+# BUILD SEASON PLAYERS
+# -----------------------------
+players = defaultdict(lambda: {
+    "player": "",
+    "team": "",
+    "games": 0,
+    **{s: 0 for s in STATS}
+})
 
-    print("→ Scraping:", url)
+for row in games:
 
-    soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
+    name = row.get("player")
+    if not name:
+        continue
 
-    title = soup.find("title").text.replace("AFL Match Statistics : ", "")
+    p = players[name]
 
-    # -----------------------------
-    # TEAM PARSING
-    # -----------------------------
-    if " v " in title:
-        t = title.split(" v ")
-        team1, team2 = t[0].strip(), t[1].split(" ")[0].strip()
+    p["player"] = name
+    p["team"] = row.get("played_for", "")
+    p["games"] += 1
 
-    elif " defeated by " in title:
-        t = title.split(" defeated by ")
-        team1, team2 = t[0].strip(), t[1].split(" at ")[0].strip()
-
-    elif " defeats " in title:
-        t = title.split(" defeats ")
-        team1, team2 = t[0].strip(), t[1].split(" at ")[0].strip()
-
-    elif " defeat " in title:
-        t = title.split(" defeat ")
-        team1, team2 = t[0].strip(), t[1].split(" at ")[0].strip()
-
-    elif " defeated " in title:
-        t = title.split(" defeated ")
-        team1, team2 = t[0].strip(), t[1].split(" at ")[0].strip()
-
-    else:
-        print("⚠️ Could not parse teams:", title)
-        return []
-
-    # -----------------------------
-    # ROUND + VENUE
-    # -----------------------------
-    round_name = ""
-    venue = ""
-
-    r = re.search(r"(Round \d+)", title)
-    if r:
-        round_name = r.group(1)
-
-    v = re.search(r" at ([A-Za-z0-9\s]+) Round", title)
-    if v:
-        venue = v.group(1).strip()
-
-    # -----------------------------
-    # FIND PLAYER TABLES
-    # -----------------------------
-    tables = soup.find_all("table")
-
-    candidate_tables = []
-
-    for table in tables:
-
-        text = table.get_text(" ", strip=True)
-
-        if not all(x in text for x in ["K", "HB", "D", "M", "G"]):
-            continue
-
-        rows = table.find_all("tr")
-
-        valid_rows = []
-
-        for row in rows:
-            cols = row.find_all("td")
-
-            if len(cols) >= 5 and cols[0].find("a"):
-                valid_rows.append(cols)
-
-        if len(valid_rows) >= 20:
-            candidate_tables.append(valid_rows)
-
-    if len(candidate_tables) < 2:
-        print("⚠️ Not enough tables")
-        return []
-
-    # 🔥 FINAL FIX: FIRST TWO TABLES ONLY
-    team1_rows = candidate_tables[0][:23]
-    team2_rows = candidate_tables[1][:23]
-
-    print(f"{team1}: {len(team1_rows)} players")
-    print(f"{team2}: {len(team2_rows)} players")
-
-    # -----------------------------
-    # BUILD DATA
-    # -----------------------------
-    data = []
-
-    for cols in team1_rows:
-        data.append({
-            "player": cols[0].text.strip(),
-            "played_for": team1,
-            "played_against": team2,
-            "round": round_name,
-            "venue": venue,
-            "season": SEASON,
-
-            "K": get_stat(cols, 1),
-            "HB": get_stat(cols, 2),
-            "D": get_stat(cols, 3),
-            "M": get_stat(cols, 4),
-            "G": get_stat(cols, 5),
-            "B": get_stat(cols, 6),
-            "T": get_stat(cols, 7),
-            "HO": get_stat(cols, 8),
-            "GA": get_stat(cols, 9),
-            "I50": get_stat(cols, 10),
-            "CL": get_stat(cols, 11),
-            "CG": get_stat(cols, 12),
-            "R50": get_stat(cols, 13),
-            "FF": get_stat(cols, 14),
-            "FA": get_stat(cols, 15),
-            "AF": get_stat(cols, 16),
-            "SC": get_stat(cols, 17)
-        })
-
-    for cols in team2_rows:
-        data.append({
-            "player": cols[0].text.strip(),
-            "played_for": team2,
-            "played_against": team1,
-            "round": round_name,
-            "venue": venue,
-            "season": SEASON,
-
-            "K": get_stat(cols, 1),
-            "HB": get_stat(cols, 2),
-            "D": get_stat(cols, 3),
-            "M": get_stat(cols, 4),
-            "G": get_stat(cols, 5),
-            "B": get_stat(cols, 6),
-            "T": get_stat(cols, 7),
-            "HO": get_stat(cols, 8),
-            "GA": get_stat(cols, 9),
-            "I50": get_stat(cols, 10),
-            "CL": get_stat(cols, 11),
-            "CG": get_stat(cols, 12),
-            "R50": get_stat(cols, 13),
-            "FF": get_stat(cols, 14),
-            "FA": get_stat(cols, 15),
-            "AF": get_stat(cols, 16),
-            "SC": get_stat(cols, 17)
-        })
-
-    return data
+    for stat in STATS:
+        p[stat] += row.get(stat, 0)
 
 
-# RUN
-links = get_links()
+# -----------------------------
+# CALCULATE AVERAGES
+# -----------------------------
+for p in players.values():
 
-all_data = []
+    g = p["games"] if p["games"] else 1
 
-for link in links:
-    try:
-        all_data.extend(parse_match(link))
-    except Exception as e:
-        print("ERROR:", e)
+    for stat in STATS:
+        p[f"{stat}_avg"] = round(p[stat] / g, 2)
 
-print("TOTAL:", len(all_data))
 
-with open(OUTPUT, "w") as f:
-    json.dump(all_data, f, indent=2)
+# -----------------------------
+# SAVE SEASON FILE
+# -----------------------------
+season_list = sorted(players.values(), key=lambda x: x.get("SC", 0), reverse=True)
 
-print("DONE")
+with open(SEASON_OUT, "w") as f:
+    json.dump(season_list, f, indent=2)
+
+print("✅ Season players saved:", SEASON_OUT)
+
+
+# -----------------------------
+# LOAD MASTER (SAFE)
+# -----------------------------
+master = {}
+
+if MASTER_OUT.exists():
+    with open(MASTER_OUT) as f:
+        try:
+            existing = json.load(f)
+            for p in existing:
+                name = p.get("player")
+                if name:
+                    master[name] = p
+        except:
+            print("⚠️ Master file corrupted — rebuilding fresh")
+            master = {}
+
+
+# -----------------------------
+# MERGE SEASON INTO MASTER
+# -----------------------------
+for p in season_list:
+
+    name = p["player"]
+
+    if name not in master:
+        master[name] = p.copy()
+        continue
+
+    m = master[name]
+
+    # ensure games exists
+    m["games"] = m.get("games", 0) + p.get("games", 0)
+
+    for stat in STATS:
+        m[stat] = m.get(stat, 0) + p.get(stat, 0)
+
+    # recalc averages safely
+    g = m.get("games", 1)
+
+    for stat in STATS:
+        m[f"{stat}_avg"] = round(m.get(stat, 0) / g, 2)
+
+
+# -----------------------------
+# SAVE MASTER FILE
+# -----------------------------
+master_list = sorted(master.values(), key=lambda x: x.get("SC", 0), reverse=True)
+
+with open(MASTER_OUT, "w") as f:
+    json.dump(master_list, f, indent=2)
+
+print("✅ Master players updated:", MASTER_OUT)
