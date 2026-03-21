@@ -6,7 +6,11 @@ print("AFL PLAYER BUILDER — CLEAN + CORRECT")
 
 SEASON = 2026
 
+# 🔥 FIXED INPUT PATH (MATCH YOUR SCRAPER OUTPUT)
 INPUT = Path(f"docs/data/afl/afl_{SEASON}.json")
+
+# If your scraper uses a different name, change ONLY this line
+
 SEASON_OUT = Path(f"docs/data/afl/players_{SEASON}.json")
 MASTER_OUT = Path("docs/data/afl/players.json")
 
@@ -19,12 +23,15 @@ STATS = [
 # -----------------------------
 # LOAD DATA
 # -----------------------------
+if not INPUT.exists():
+    raise FileNotFoundError(f"❌ Expected file not found: {INPUT}")
+
 with open(INPUT) as f:
     games = json.load(f)
 
 
 # -----------------------------
-# FILTER VALID PLAYER ROWS
+# VALID PLAYER FILTER
 # -----------------------------
 def valid_player(row):
     name = row.get("player", "").strip()
@@ -32,18 +39,14 @@ def valid_player(row):
     if not name:
         return False
 
-    # ❌ remove junk rows
     if "Match Statistics" in name:
-        return False
-
-    if len(name) < 3:
         return False
 
     return True
 
 
 # -----------------------------
-# BUILD PLAYERS (KEY = player+team)
+# BUILD PLAYERS (TEAM SAFE)
 # -----------------------------
 players = defaultdict(lambda: {
     "player": "",
@@ -63,7 +66,7 @@ for row in games:
     if not team:
         continue
 
-    key = f"{name}__{team}"   # 🔥 prevents cross-team mix
+    key = f"{name}__{team}"
 
     p = players[key]
 
@@ -76,7 +79,7 @@ for row in games:
 
 
 # -----------------------------
-# CALCULATE AVERAGES
+# AVERAGES
 # -----------------------------
 for p in players.values():
 
@@ -87,18 +90,18 @@ for p in players.values():
 
 
 # -----------------------------
-# SORT + SAVE SEASON
+# SAVE SEASON
 # -----------------------------
 season_list = sorted(players.values(), key=lambda x: x["SC"], reverse=True)
 
 with open(SEASON_OUT, "w") as f:
     json.dump(season_list, f, indent=2)
 
-print("✅ Season players built:", len(season_list))
+print(f"✅ Season players built: {len(season_list)}")
 
 
 # -----------------------------
-# REBUILD MASTER CLEANLY
+# BUILD MASTER CLEAN
 # -----------------------------
 master = defaultdict(lambda: {
     "player": "",
@@ -118,7 +121,6 @@ for p in season_list:
         m[stat] += p[stat]
 
 
-# averages
 for m in master.values():
 
     g = m["games"]
@@ -132,4 +134,4 @@ master_list = sorted(master.values(), key=lambda x: x["SC"], reverse=True)
 with open(MASTER_OUT, "w") as f:
     json.dump(master_list, f, indent=2)
 
-print("✅ Master players built:", len(master_list))
+print(f"✅ Master players built: {len(master_list)}")
