@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from collections import defaultdict
 
-print("AFL PLAYER BUILDER — CLEAN VERSION")
+print("AFL PLAYER BUILDER — CLEAN + CORRECT")
 
 SEASON = 2026
 
@@ -17,17 +17,33 @@ STATS = [
 
 
 # -----------------------------
-# LOAD MATCH DATA
+# LOAD DATA
 # -----------------------------
-if not INPUT.exists():
-    raise FileNotFoundError(f"Missing {INPUT}")
-
 with open(INPUT) as f:
     games = json.load(f)
 
 
 # -----------------------------
-# BUILD SEASON PLAYERS
+# FILTER VALID PLAYER ROWS
+# -----------------------------
+def valid_player(row):
+    name = row.get("player", "").strip()
+
+    if not name:
+        return False
+
+    # ❌ remove junk rows
+    if "Match Statistics" in name:
+        return False
+
+    if len(name) < 3:
+        return False
+
+    return True
+
+
+# -----------------------------
+# BUILD PLAYERS (KEY = player+team)
 # -----------------------------
 players = defaultdict(lambda: {
     "player": "",
@@ -38,12 +54,21 @@ players = defaultdict(lambda: {
 
 for row in games:
 
-    name = row["player"]  # strict — must exist
+    if not valid_player(row):
+        continue
 
-    p = players[name]
+    name = row["player"].strip()
+    team = row.get("played_for", "").strip()
+
+    if not team:
+        continue
+
+    key = f"{name}__{team}"   # 🔥 prevents cross-team mix
+
+    p = players[key]
 
     p["player"] = name
-    p["team"] = row["played_for"]
+    p["team"] = team
     p["games"] += 1
 
     for stat in STATS:
@@ -62,49 +87,39 @@ for p in players.values():
 
 
 # -----------------------------
-# SORT SEASON
+# SORT + SAVE SEASON
 # -----------------------------
 season_list = sorted(players.values(), key=lambda x: x["SC"], reverse=True)
 
-
-# -----------------------------
-# SAVE SEASON FILE
-# -----------------------------
 with open(SEASON_OUT, "w") as f:
     json.dump(season_list, f, indent=2)
 
-print("✅ Season players built")
+print("✅ Season players built:", len(season_list))
 
 
 # -----------------------------
-# BUILD MASTER (CLEAN REBUILD)
+# REBUILD MASTER CLEANLY
 # -----------------------------
-# 🔥 NO MERGING — CLEAN STRUCTURE
-master = {}
-
-if MASTER_OUT.exists():
-    with open(MASTER_OUT) as f:
-        existing = json.load(f)
-
-        for p in existing:
-            name = p["player"]
-            master[name] = p
-
+master = defaultdict(lambda: {
+    "player": "",
+    "games": 0,
+    **{s: 0 for s in STATS}
+})
 
 for p in season_list:
 
     name = p["player"]
-
-    if name not in master:
-        master[name] = p.copy()
-        continue
-
     m = master[name]
 
+    m["player"] = name
     m["games"] += p["games"]
 
     for stat in STATS:
         m[stat] += p[stat]
+
+
+# averages
+for m in master.values():
 
     g = m["games"]
 
@@ -112,16 +127,9 @@ for p in season_list:
         m[f"{stat}_avg"] = round(m[stat] / g, 2)
 
 
-# -----------------------------
-# SORT MASTER
-# -----------------------------
 master_list = sorted(master.values(), key=lambda x: x["SC"], reverse=True)
 
-
-# -----------------------------
-# SAVE MASTER FILE
-# -----------------------------
 with open(MASTER_OUT, "w") as f:
     json.dump(master_list, f, indent=2)
 
-print("✅ Master players built")
+print("✅ Master players built:", len(master_list))
