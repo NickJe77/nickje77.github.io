@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from collections import defaultdict
 
-print("AFL PLAYER BUILDER — SEASON + MASTER (FINAL SAFE)")
+print("AFL PLAYER BUILDER — SEASON + MASTER (FINAL FINAL)")
 
 SEASON = 2026
 
@@ -58,10 +58,10 @@ for row in games:
 # -----------------------------
 for p in players.values():
 
-    g = p["games"] if p["games"] else 1
+    g = p.get("games", 0) or 1
 
     for stat in STATS:
-        p[f"{stat}_avg"] = round(p[stat] / g, 2)
+        p[f"{stat}_avg"] = round(p.get(stat, 0) / g, 2)
 
 
 # -----------------------------
@@ -119,14 +119,14 @@ for p in season_list:
         m[stat] = m.get(stat, 0) + p.get(stat, 0)
 
     # averages (SAFE)
-    g = m.get("games", 1)
+    g = m.get("games", 0) or 1
 
     for stat in STATS:
         m[f"{stat}_avg"] = round(m.get(stat, 0) / g, 2)
 
 
 # -----------------------------
-# SORT MASTER (SAFE)
+# SORT MASTER (SAFE — THIS FIXES YOUR ERROR)
 # -----------------------------
 master_list = sorted(master.values(), key=lambda x: x.get("SC", 0), reverse=True)
 
