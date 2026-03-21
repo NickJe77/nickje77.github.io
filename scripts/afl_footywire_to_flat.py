@@ -2,14 +2,13 @@ import json
 from pathlib import Path
 from collections import defaultdict
 
-print("AFL PLAYER BUILDER — SEASON + MASTER (SAFE)")
+print("AFL PLAYER BUILDER — SEASON + MASTER (FINAL SAFE)")
 
 SEASON = 2026
 
 INPUT = Path(f"docs/data/afl/afl_{SEASON}.json")
 SEASON_OUT = Path(f"docs/data/afl/players_{SEASON}.json")
 MASTER_OUT = Path("docs/data/afl/players.json")
-
 
 STATS = [
     "K","HB","D","M","G","B","T","HO","GA",
@@ -18,7 +17,7 @@ STATS = [
 
 
 # -----------------------------
-# LOAD DATA
+# LOAD MATCH DATA
 # -----------------------------
 if not INPUT.exists():
     print("❌ Missing input:", INPUT)
@@ -66,10 +65,14 @@ for p in players.values():
 
 
 # -----------------------------
-# SAVE SEASON FILE
+# SORT SEASON (SAFE)
 # -----------------------------
 season_list = sorted(players.values(), key=lambda x: x.get("SC", 0), reverse=True)
 
+
+# -----------------------------
+# SAVE SEASON FILE
+# -----------------------------
 with open(SEASON_OUT, "w") as f:
     json.dump(season_list, f, indent=2)
 
@@ -77,21 +80,22 @@ print("✅ Season players saved:", SEASON_OUT)
 
 
 # -----------------------------
-# LOAD MASTER (SAFE)
+# LOAD MASTER FILE (SAFE)
 # -----------------------------
 master = {}
 
 if MASTER_OUT.exists():
-    with open(MASTER_OUT) as f:
-        try:
+    try:
+        with open(MASTER_OUT) as f:
             existing = json.load(f)
+
             for p in existing:
                 name = p.get("player")
                 if name:
                     master[name] = p
-        except:
-            print("⚠️ Master file corrupted — rebuilding fresh")
-            master = {}
+    except:
+        print("⚠️ Master file corrupted — rebuilding fresh")
+        master = {}
 
 
 # -----------------------------
@@ -107,13 +111,14 @@ for p in season_list:
 
     m = master[name]
 
-    # ensure games exists
+    # games
     m["games"] = m.get("games", 0) + p.get("games", 0)
 
+    # stats (SAFE)
     for stat in STATS:
         m[stat] = m.get(stat, 0) + p.get(stat, 0)
 
-    # recalc averages safely
+    # averages (SAFE)
     g = m.get("games", 1)
 
     for stat in STATS:
@@ -121,10 +126,14 @@ for p in season_list:
 
 
 # -----------------------------
-# SAVE MASTER FILE
+# SORT MASTER (SAFE)
 # -----------------------------
 master_list = sorted(master.values(), key=lambda x: x.get("SC", 0), reverse=True)
 
+
+# -----------------------------
+# SAVE MASTER FILE
+# -----------------------------
 with open(MASTER_OUT, "w") as f:
     json.dump(master_list, f, indent=2)
 
