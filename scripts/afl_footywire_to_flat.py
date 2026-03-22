@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRAPER — FINAL FINAL (ROUND GUARANTEED)")
+print("AFL SCRAPER — ROUND DEBUG VERSION")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -32,7 +32,6 @@ def get_links():
     for rnd in range(1, 31):
 
         url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}&round={rnd}"
-        print(f"Checking Round {rnd}...")
 
         res = requests.get(url, headers=HEADERS)
 
@@ -40,8 +39,6 @@ def get_links():
             continue
 
         soup = BeautifulSoup(res.text, "html.parser")
-
-        found = 0
 
         for a in soup.find_all("a", href=True):
 
@@ -56,16 +53,13 @@ def get_links():
                 href = BASE + "/afl/footy/" + href
 
             links.add(href)
-            found += 1
-
-        print(f"  → Found {found} matches")
 
     links = list(links)
 
-    print("TOTAL MATCHES FOUND:", len(links))
+    print("MATCHES FOUND:", len(links))
 
     if not links:
-        raise Exception("❌ NO MATCH LINKS FOUND")
+        raise Exception("NO MATCHES FOUND")
 
     return links
 
@@ -75,18 +69,15 @@ def get_links():
 # -----------------------------
 def parse_match(url):
 
-    print("→", url)
-
     soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
     title = soup.find("title").text
 
     # -----------------------------
-    # ROUND (🔥 TARGET MATCH INFO LINE)
+    # ROUND (STRICT)
     # -----------------------------
     round_num = None
 
-    # Find text that contains "Round"
     for tag in soup.find_all(["td", "b", "span", "div"]):
         txt = tag.get_text(" ", strip=True)
 
@@ -96,8 +87,7 @@ def parse_match(url):
                 round_num = int(m.group(1))
                 break
 
-    if round_num is None:
-        print("⚠️ ROUND NOT FOUND")
+    print("ROUND FOUND:", round_num)  # 👈 DEBUG LINE
 
     # -----------------------------
     # TEAMS
@@ -107,7 +97,6 @@ def parse_match(url):
     elif " defeats " in title:
         parts = title.split(" defeats ")
     else:
-        print("⚠️ Cannot parse teams:", title)
         return []
 
     team1 = parts[0].replace("AFL Match Statistics :", "").strip()
@@ -126,7 +115,6 @@ def parse_match(url):
             player_tables.append(t)
 
     if len(player_tables) < 2:
-        print("⚠️ Missing player tables")
         return []
 
     data = []
@@ -135,8 +123,6 @@ def parse_match(url):
     for i in range(2):
 
         rows = player_tables[i].find_all("tr")
-
-        count = 0
 
         for r in rows:
 
@@ -153,12 +139,12 @@ def parse_match(url):
             if not name:
                 continue
 
-            entry = {
+            data.append({
                 "player": name,
                 "played_for": teams[i],
                 "played_against": teams[1 - i],
                 "season": SEASON,
-                "round": round_num,
+                "round": round_num,  # 👈 THIS MUST EXIST
 
                 "K": to_int(cols[1].text),
                 "HB": to_int(cols[2].text),
@@ -177,12 +163,7 @@ def parse_match(url):
                 "FA": to_int(cols[15].text),
                 "AF": to_int(cols[16].text),
                 "SC": to_int(cols[17].text)
-            }
-
-            data.append(entry)
-            count += 1
-
-        print(f"{teams[i]} players:", count)
+            })
 
     return data
 
@@ -195,14 +176,11 @@ links = get_links()
 all_data = []
 
 for link in links:
-    try:
-        all_data.extend(parse_match(link))
-    except Exception as e:
-        print("ERROR:", e)
+    all_data.extend(parse_match(link))
 
-print("TOTAL PLAYER ROWS:", len(all_data))
+print("TOTAL ROWS:", len(all_data))
 
 with open(OUTPUT, "w") as f:
     json.dump(all_data, f, indent=2)
 
-print("✅ FILE WRITTEN:", OUTPUT)
+print("DONE:", OUTPUT)
