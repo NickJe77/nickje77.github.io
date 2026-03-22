@@ -3,7 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 from pathlib import Path
 
-print("AFL SCRAPER — FINAL (LINK FIX)")
+print("AFL SCRAPER — FINAL (HEADER FIX)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -21,25 +21,18 @@ def to_int(x):
         return 0
 
 
-# -----------------------------
-# GET MATCH LINKS (FIXED)
-# -----------------------------
 def get_links():
-
     url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}"
-
     soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
     links = []
 
     for a in soup.select('a[href*="ft_match_statistics"]'):
-
         href = a.get("href", "")
 
         if not href:
             continue
 
-        # 🔥 FIX FULL URL
         if href.startswith("/"):
             href = BASE + href
         elif not href.startswith("http"):
@@ -50,18 +43,11 @@ def get_links():
     links = list(set(links))
 
     print("Matches found:", len(links))
-
-    if not links:
-        raise Exception("❌ NO MATCH LINKS FOUND")
-
     print("Sample:", links[0])
 
     return links
 
 
-# -----------------------------
-# PARSE MATCH
-# -----------------------------
 def parse_match(url):
 
     print("→", url)
@@ -70,7 +56,6 @@ def parse_match(url):
 
     title = soup.find("title").text
 
-    # 🔥 TEAM PARSE FIX
     if " def " in title:
         parts = title.split(" def ")
     elif " defeats " in title:
@@ -96,7 +81,6 @@ def parse_match(url):
         return []
 
     data = []
-
     teams = [team1, team2]
 
     for i in range(2):
@@ -106,15 +90,20 @@ def parse_match(url):
         count = 0
 
         for r in rows:
-
             cols = r.find_all("td")
 
             if len(cols) < 18:
                 continue
 
-            name = cols[0].text.strip()
+            # 🔥 CRITICAL FIX — ONLY REAL PLAYERS
+            link = cols[0].find("a")
 
-            if not name or name == "Player":
+            if not link:
+                continue
+
+            name = link.text.strip()
+
+            if not name:
                 continue
 
             entry = {
@@ -150,9 +139,6 @@ def parse_match(url):
     return data
 
 
-# -----------------------------
-# RUN
-# -----------------------------
 links = get_links()
 
 all_data = []
@@ -166,7 +152,6 @@ for link in links:
 
 print("TOTAL PLAYER ROWS:", len(all_data))
 
-# 🔥 WRITE FILE
 with open(OUTPUT, "w") as f:
     json.dump(all_data, f, indent=2)
 
