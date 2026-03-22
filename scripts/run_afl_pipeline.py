@@ -7,7 +7,7 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
-print("AFL FULL PIPELINE — FINAL STABLE")
+print("AFL FULL PIPELINE — FINAL (TYPE SAFE + STABLE)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -79,7 +79,7 @@ def get_links():
 def get_round(soup):
     txt = clean(soup.get_text(" ", strip=True))
     m = re.search(r"Round\s+(\d+)", txt)
-    return int(m.group(1)) if m else None
+    return to_int(m.group(1)) if m else 0
 
 
 def parse_title_teams(title):
@@ -128,7 +128,6 @@ def scrape():
         for tr in rows:
             text = clean(tr.get_text(" ", strip=True))
 
-            # Detect team section
             m = re.match(r"^(.*?) Match Statistics \(Sorted by Disposals\)", text)
             if m:
                 t = clean(m.group(1))
@@ -157,7 +156,7 @@ def scrape():
                 "played_for": current_team,
                 "played_against": opponent,
                 "season": SEASON,
-                "round": round_num,
+                "round": to_int(round_num),  # 🔥 FIXED
                 "K": to_int(cols[1].text),
                 "HB": to_int(cols[2].text),
                 "D": to_int(cols[3].text),
@@ -181,7 +180,7 @@ def scrape():
 
 
 # -----------------------------
-# PLAYERS BUILDER (FIXED FOR SCALE)
+# PLAYERS BUILDER
 # -----------------------------
 def build_players(rows):
 
@@ -192,6 +191,8 @@ def build_players(rows):
 
     players = {}
 
+    print("Grouping players...")
+
     for r in rows:
         name = clean(r.get("player"))
         if not name:
@@ -200,65 +201,80 @@ def build_players(rows):
         slug = slugify(name)
 
         if slug not in players:
-            players[slug] = {
-                "player": name,
-                "slug": slug,
-                "games": []
-            }
+            players[slug] = []
 
-        players[slug]["games"].append({
-            "season": r.get("season"),
-            "round": r.get("round"),
-            "team": r.get("played_for"),
-            "opponent": r.get("played_against"),
-            "K": to_int(r.get("K")),
-            "HB": to_int(r.get("HB")),
-            "D": to_int(r.get("D")),
-            "M": to_int(r.get("M")),
-            "G": to_int(r.get("G")),
-            "B": to_int(r.get("B")),
-            "T": to_int(r.get("T")),
-            "HO": to_int(r.get("HO")),
-            "GA": to_int(r.get("GA")),
-            "I50": to_int(r.get("I50")),
-            "CL": to_int(r.get("CL")),
-            "CG": to_int(r.get("CG")),
-            "R50": to_int(r.get("R50")),
-            "FF": to_int(r.get("FF")),
-            "FA": to_int(r.get("FA")),
-            "AF": to_int(r.get("AF")),
-            "SC": to_int(r.get("SC"))
-        })
+        players[slug].append(r)
+
+    print("Total players:", len(players))
 
     index = []
 
-    for slug, p in players.items():
+    print("Building players...")
+
+    for slug, games_raw in players.items():
 
         seen = set()
         deduped = []
 
-        for g in p["games"]:
+        for r in games_raw:
+            season = to_int(r.get("season"))
+            round_num = to_int(r.get("round"))
+
             key = (
-                g["season"],
-                g["round"],
-                g["team"],
-                g["opponent"],
-                g["K"], g["HB"], g["D"]
+                season,
+                round_num,
+                r.get("played_for"),
+                r.get("played_against"),
+                to_int(r.get("K")),
+                to_int(r.get("HB")),
+                to_int(r.get("D"))
             )
 
             if key in seen:
                 continue
 
             seen.add(key)
-            deduped.append(g)
 
-        games = sorted(deduped, key=lambda g: (g["season"], g["round"] or 999))
+            deduped.append({
+                "season": season,
+                "round": round_num,
+                "team": r.get("played_for"),
+                "opponent": r.get("played_against"),
+                "K": to_int(r.get("K")),
+                "HB": to_int(r.get("HB")),
+                "D": to_int(r.get("D")),
+                "M": to_int(r.get("M")),
+                "G": to_int(r.get("G")),
+                "B": to_int(r.get("B")),
+                "T": to_int(r.get("T")),
+                "HO": to_int(r.get("HO")),
+                "GA": to_int(r.get("GA")),
+                "I50": to_int(r.get("I50")),
+                "CL": to_int(r.get("CL")),
+                "CG": to_int(r.get("CG")),
+                "R50": to_int(r.get("R50")),
+                "FF": to_int(r.get("FF")),
+                "FA": to_int(r.get("FA")),
+                "AF": to_int(r.get("AF")),
+                "SC": to_int(r.get("SC"))
+            })
+
+        # 🔥 FIXED SORT (no type crash)
+        games = sorted(
+            deduped,
+            key=lambda g: (
+                int(g["season"]),
+                int(g["round"]) if g["round"] else 999
+            )
+        )
+
+        player_name = clean(games_raw[0].get("player"))
 
         seasons = sorted({g["season"] for g in games})
         teams = list(dict.fromkeys([g["team"] for g in games]))
 
         out = {
-            "player": p["player"],
+            "player": player_name,
             "slug": slug,
             "seasons": seasons,
             "teams": teams,
@@ -269,7 +285,7 @@ def build_players(rows):
             json.dump(out, f, indent=2)
 
         index.append({
-            "player": p["player"],
+            "player": player_name,
             "slug": slug,
             "seasons": seasons,
             "teams": teams
@@ -277,6 +293,8 @@ def build_players(rows):
 
     with open(PLAYERS_INDEX, "w") as f:
         json.dump(index, f, indent=2)
+
+    print("Players complete")
 
 
 # -----------------------------
