@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRAPER — STABLE FINAL")
+print("AFL SCRAPER — FINAL TEAM FIX (TABLE COUNT METHOD)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -91,6 +91,20 @@ def get_round(soup):
 
 
 # -----------------------------
+# COUNT PLAYERS IN TABLE
+# -----------------------------
+def count_players(table):
+    count = 0
+    for r in table.find_all("tr"):
+        cols = r.find_all("td")
+        if len(cols) < 18:
+            continue
+        if cols[0].find("a"):
+            count += 1
+    return count
+
+
+# -----------------------------
 # MATCH
 # -----------------------------
 def parse_match(url):
@@ -117,12 +131,34 @@ def parse_match(url):
     if len(stat_tables) < 2:
         return []
 
-    # 🔥 FIX: assign by table index (this actually works consistently)
-    teams = [team1, team2]
+    # 🔥 COUNT PLAYERS
+    c0 = count_players(stat_tables[0])
+    c1 = count_players(stat_tables[1])
+
+    print("TABLE COUNTS:", c0, c1)
+
+    # 🔥 ASSIGN TEAMS BASED ON COUNT
+    # Usually: one team has ~22–23 players, the other similar
+    # but consistency is: first table = home team MOST of the time
+
+    # fallback logic
+    if c0 >= c1:
+        table_team_map = {
+            0: team1,
+            1: team2
+        }
+    else:
+        table_team_map = {
+            0: team2,
+            1: team1
+        }
 
     data = []
 
     for i in range(2):
+
+        played_for = table_team_map[i]
+        played_against = team2 if played_for == team1 else team1
 
         rows = stat_tables[i].find_all("tr")
 
@@ -140,8 +176,8 @@ def parse_match(url):
 
             data.append({
                 "player": name,
-                "played_for": teams[i],
-                "played_against": teams[1 - i],
+                "played_for": played_for,
+                "played_against": played_against,
                 "season": SEASON,
                 "round": round_num,
 
