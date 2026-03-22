@@ -1,15 +1,25 @@
 import json
 import re
 import unicodedata
+import shutil
 from pathlib import Path
 
-print("BUILD AFL PLAYERS — FULL (FILES + INDEX + ROUND)")
+print("BUILD AFL PLAYERS — FINAL (NO DUPES + ROUND + INDEX)")
 
 DATA = Path("docs/data/afl/afl_2026.json")
 OUT = Path("docs/data/afl/players")
 INDEX = Path("docs/data/afl/players.json")
 
+# -----------------------------
+# RESET OUTPUT (🔥 CRITICAL FIX)
+# -----------------------------
+if OUT.exists():
+    shutil.rmtree(OUT)
+
 OUT.mkdir(parents=True, exist_ok=True)
+
+if INDEX.exists():
+    INDEX.unlink()
 
 if not DATA.exists():
     raise Exception("❌ afl_2026.json not found")
@@ -49,12 +59,21 @@ for r in rows:
         players[key] = {
             "player": name,
             "slug": key,
-            "games": []
+            "games": [],
+            "seen": set()   # 🔥 for dedupe
         }
+
+    # 🔥 UNIQUE GAME KEY (PREVENT DUPES)
+    game_key = f"{r.get('season')}_{r.get('round')}_{r.get('played_for')}_{r.get('played_against')}_{name}"
+
+    if game_key in players[key]["seen"]:
+        continue
+
+    players[key]["seen"].add(game_key)
 
     players[key]["games"].append({
         "season": r.get("season"),
-        "round": r.get("round"),  # ✅ INCLUDED
+        "round": r.get("round"),
 
         "team": r.get("played_for"),
         "opponent": r.get("played_against"),
@@ -88,6 +107,9 @@ count = 0
 
 for key, pdata in players.items():
 
+    # remove internal dedupe tracker
+    pdata.pop("seen", None)
+
     out_file = OUT / f"{key}.json"
 
     with open(out_file, "w") as f:
@@ -110,5 +132,6 @@ with open(INDEX, "w") as f:
     json.dump(index, f, indent=2)
 
 
-print(f"✅ PLAYER FILES: {count}")
-print(f"✅ players.json CREATED")
+print(f"✅ PLAYER FILES WRITTEN: {count}")
+print("✅ players.json CREATED")
+print("✅ NO DUPLICATES — SAFE TO RE-RUN")
