@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRAPER — WORKING VERSION (NO EMPTY DATA)")
+print("AFL SCRAPER — FINAL (TAB-BASED TEAM FIX)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -26,7 +26,7 @@ def clean(s):
 
 
 # -----------------------------
-# LINKS
+# GET MATCH LINKS
 # -----------------------------
 def get_links():
     links = set()
@@ -57,27 +57,6 @@ def get_links():
 
 
 # -----------------------------
-# TITLE TEAMS
-# -----------------------------
-def parse_title(title):
-    title = title.replace("AFL Match Statistics :", "").strip()
-
-    if " def " in title:
-        a, b = title.split(" def ")
-        return clean(a), clean(b.split(" at ")[0])
-
-    if " defeats " in title:
-        a, b = title.split(" defeats ")
-        return clean(a), clean(b.split(" at ")[0])
-
-    if " defeated by " in title:
-        a, b = title.split(" defeated by ")
-        return clean(b.split(" at ")[0]), clean(a)
-
-    return None, None
-
-
-# -----------------------------
 # ROUND
 # -----------------------------
 def get_round(soup):
@@ -91,31 +70,36 @@ def get_round(soup):
 
 
 # -----------------------------
-# COUNT PLAYERS
+# GET TEAMS FROM PLAYER LINKS
 # -----------------------------
-def count_players(table):
-    count = 0
-    for r in table.find_all("tr"):
-        cols = r.find_all("td")
-        if len(cols) < 18:
-            continue
-        if cols[0].find("a"):
-            count += 1
-    return count
+def get_teams_from_tabs(soup):
+    links = soup.find_all("a")
+
+    teams = []
+
+    for a in links:
+        txt = clean(a.get_text())
+
+        if "Player Stats" in txt:
+            team = txt.replace("Player Stats", "").strip()
+            teams.append(team)
+
+    return teams[:2] if len(teams) >= 2 else (None, None)
 
 
 # -----------------------------
-# MATCH
+# PARSE MATCH
 # -----------------------------
 def parse_match(url):
+
     print("→", url)
 
     soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
-    title = soup.find("title").text
-    team1, team2 = parse_title(title)
+    team1, team2 = get_teams_from_tabs(soup)
 
-    if not team1:
+    if not team1 or not team2:
+        print("⚠️ Could not detect teams from tabs")
         return []
 
     round_num = get_round(soup)
@@ -131,19 +115,9 @@ def parse_match(url):
     if len(stat_tables) < 2:
         return []
 
-    # 🔥 COUNT PLAYERS IN EACH TABLE
-    c0 = count_players(stat_tables[0])
-    c1 = count_players(stat_tables[1])
-
-    print("COUNTS:", c0, c1)
-
-    # 🔥 FIX: larger table = main team
-    if c0 >= c1:
-        teams = [team1, team2]
-    else:
-        teams = [team2, team1]
-
     data = []
+
+    teams = [team1, team2]
 
     for i in range(2):
 
