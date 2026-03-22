@@ -6,7 +6,7 @@ from pathlib import Path
 from collections import defaultdict
 from urllib.parse import urljoin
 
-print("AFL REBUILD (AFLTABLES REAL FINAL FIX)")
+print("AFL REBUILD (WORKING ROW DETECTION VERSION)")
 
 SEASON = 2026
 BASE = "https://afltables.com/afl/seas/"
@@ -44,12 +44,8 @@ links = []
 
 for a in soup.find_all("a", href=True):
     href = a["href"]
-
-    if "stats/games" not in href:
-        continue
-
-    full_url = urljoin(season_url, href)
-    links.append(full_url)
+    if "stats/games" in href:
+        links.append(urljoin(season_url, href))
 
 links = sorted(set(links))
 
@@ -57,7 +53,7 @@ print("MATCHES FOUND:", len(links))
 
 
 # -------------------------------
-# PARSE MATCHES
+# PARSE MATCHES (NO HEADER LOGIC)
 # -------------------------------
 all_rows = []
 match_id = 0
@@ -74,24 +70,20 @@ for link in links:
     for table in tables:
         rows = table.find_all("tr")
 
-        if len(rows) < 15:
+        if len(rows) < 10:
             continue
 
-        # 🔥 FIX: include <th>
-        header = [clean(c.text) for c in rows[0].find_all(["td", "th"])]
-
-        if "KI" not in header or "HB" not in header:
-            continue
-
-        for tr in rows[1:]:
+        for tr in rows:
             cols = tr.find_all("td")
 
-            if len(cols) < 8:
+            # 🔥 REAL FILTER: player rows have LOTS of columns
+            if len(cols) < 15:
                 continue
 
             name = clean(cols[0].text)
 
-            if not name or name.lower() == "player":
+            # skip totals / junk rows
+            if not name or name.lower() in ["player", "totals", "opposition"]:
                 continue
 
             row = {
