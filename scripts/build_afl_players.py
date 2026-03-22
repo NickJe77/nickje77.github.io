@@ -3,10 +3,11 @@ import re
 import unicodedata
 from pathlib import Path
 
-print("BUILD AFL PLAYERS — FINAL (WITH ROUND)")
+print("BUILD AFL PLAYERS — FULL (FILES + INDEX + ROUND)")
 
 DATA = Path("docs/data/afl/afl_2026.json")
 OUT = Path("docs/data/afl/players")
+INDEX = Path("docs/data/afl/players.json")
 
 OUT.mkdir(parents=True, exist_ok=True)
 
@@ -47,12 +48,13 @@ for r in rows:
     if key not in players:
         players[key] = {
             "player": name,
+            "slug": key,
             "games": []
         }
 
     players[key]["games"].append({
         "season": r.get("season"),
-        "round": r.get("round"),  # 🔥 FIX — NOW INCLUDED
+        "round": r.get("round"),  # ✅ INCLUDED
 
         "team": r.get("played_for"),
         "opponent": r.get("played_against"),
@@ -78,8 +80,10 @@ for r in rows:
 
 
 # -----------------------------
-# WRITE FILES
+# WRITE PLAYER FILES
 # -----------------------------
+index = []
+
 count = 0
 
 for key, pdata in players.items():
@@ -89,6 +93,22 @@ for key, pdata in players.items():
     with open(out_file, "w") as f:
         json.dump(pdata, f, indent=2)
 
+    index.append({
+        "player": pdata["player"],
+        "slug": key
+    })
+
     count += 1
 
-print(f"✅ PLAYER FILES WRITTEN: {count}")
+
+# -----------------------------
+# WRITE INDEX FILE
+# -----------------------------
+index = sorted(index, key=lambda x: x["player"])
+
+with open(INDEX, "w") as f:
+    json.dump(index, f, indent=2)
+
+
+print(f"✅ PLAYER FILES: {count}")
+print(f"✅ players.json CREATED")
