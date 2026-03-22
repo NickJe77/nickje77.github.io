@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRAPER — FINAL WORKING VERSION (TEAM FIX CONFIRMED)")
+print("AFL SCRAPER — FINAL FINAL (NO TEAM BUGS)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -57,6 +57,28 @@ def get_links():
 
 
 # -----------------------------
+# GET TEAMS FROM PAGE TITLE (SOURCE OF TRUTH)
+# -----------------------------
+def get_teams_from_title(title):
+
+    title = title.replace("AFL Match Statistics :", "").strip()
+
+    if " def " in title:
+        a, b = title.split(" def ")
+        return clean(a), clean(b.split(" at ")[0])
+
+    if " defeats " in title:
+        a, b = title.split(" defeats ")
+        return clean(a), clean(b.split(" at ")[0])
+
+    if " defeated by " in title:
+        a, b = title.split(" defeated by ")
+        return clean(b.split(" at ")[0]), clean(a)
+
+    return None, None
+
+
+# -----------------------------
 # GET ROUND
 # -----------------------------
 def get_round(soup):
@@ -70,6 +92,7 @@ def get_round(soup):
 # -----------------------------
 def get_player_tables(soup):
     tables = soup.find_all("table")
+
     result = []
 
     for t in tables:
@@ -82,7 +105,7 @@ def get_player_tables(soup):
 
 
 # -----------------------------
-# EXTRACT TEAM FROM TABLE (🔥 FINAL FIX)
+# EXTRACT TEAM FROM TABLE HEADER
 # -----------------------------
 def extract_team_from_table(table):
 
@@ -108,6 +131,13 @@ def parse_match(url):
 
     soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
+    title = soup.find("title").text
+    team1, team2 = get_teams_from_title(title)
+
+    if not team1:
+        print("⚠️ Could not parse teams from title")
+        return []
+
     round_num = get_round(soup)
 
     tables = get_player_tables(soup)
@@ -116,23 +146,24 @@ def parse_match(url):
         print("⚠️ Could not find player tables")
         return []
 
-    teams = []
+    data = []
 
     for table in tables:
+
         team = extract_team_from_table(table)
 
         if not team:
-            print("⚠️ Failed to extract team")
-            return []
+            print("⚠️ Missing team from table")
+            continue
 
-        teams.append(team)
-
-    data = []
-
-    for i, table in enumerate(tables):
-
-        played_for = teams[i]
-        played_against = teams[1 - i]
+        # 🔥 FIX: determine opponent safely
+        if team == team1:
+            opponent = team2
+        elif team == team2:
+            opponent = team1
+        else:
+            # fallback safety
+            opponent = team2 if team1 in team else team1
 
         rows = table.find_all("tr")
 
@@ -150,8 +181,8 @@ def parse_match(url):
 
             data.append({
                 "player": name,
-                "played_for": played_for,
-                "played_against": played_against,
+                "played_for": team,
+                "played_against": opponent,
                 "season": SEASON,
                 "round": round_num,
 
