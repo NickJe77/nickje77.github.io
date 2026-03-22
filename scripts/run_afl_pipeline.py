@@ -103,7 +103,7 @@ def dedupe_games(games):
 
 
 # -------------------------------
-# 🔥 EXTRACT PLAYERS (FIXED)
+# 🔥 EXTRACT PLAYERS (FIXED ONLY PART)
 # -------------------------------
 def extract_players(game):
     players = []
@@ -118,7 +118,18 @@ def extract_players(game):
                 for p in plist:
                     players.append((p, team.get("name"), None))
 
-    # CASE 2: flat players list (common AFLTables format)
+    # 🔥 NEW: scan ALL nested dicts for player lists
+    for key, val in game.items():
+
+        if isinstance(val, dict):
+            for subkey, subval in val.items():
+
+                if isinstance(subval, list):
+                    for p in subval:
+                        if isinstance(p, dict) and p.get("name"):
+                            players.append((p, val.get("team") or val.get("name"), None))
+
+    # CASE 3: flat players list
     if isinstance(game.get("players"), list):
         for p in game["players"]:
             team = p.get("team") or p.get("team_name")
