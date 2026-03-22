@@ -7,7 +7,7 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
-print("AFL FULL PIPELINE — FINAL (ALL SEASONS + PLAYERS)")
+print("AFL FULL PIPELINE — FINAL STABLE")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -62,6 +62,7 @@ def get_links():
 
         for a in soup.find_all("a", href=True):
             href = a["href"]
+
             if "ft_match_statistics" not in href:
                 continue
 
@@ -180,7 +181,7 @@ def scrape():
 
 
 # -----------------------------
-# PLAYERS BUILDER
+# PLAYERS BUILDER (FIXED FOR SCALE)
 # -----------------------------
 def build_players(rows):
 
@@ -192,60 +193,66 @@ def build_players(rows):
     players = {}
 
     for r in rows:
-        name = clean(r["player"])
+        name = clean(r.get("player"))
+        if not name:
+            continue
+
         slug = slugify(name)
 
         if slug not in players:
             players[slug] = {
                 "player": name,
                 "slug": slug,
-                "games": [],
-                "_seen": set()
+                "games": []
             }
 
-        key = (
-            name,
-            r["season"],
-            r["round"],
-            r["played_for"],
-            r["played_against"],
-            r["K"], r["HB"], r["D"]
-        )
-
-        if key in players[slug]["_seen"]:
-            continue
-
-        players[slug]["_seen"].add(key)
-
         players[slug]["games"].append({
-            "season": r["season"],
-            "round": r["round"],
-            "team": r["played_for"],
-            "opponent": r["played_against"],
-            "K": r["K"],
-            "HB": r["HB"],
-            "D": r["D"],
-            "M": r["M"],
-            "G": r["G"],
-            "B": r["B"],
-            "T": r["T"],
-            "HO": r["HO"],
-            "GA": r["GA"],
-            "I50": r["I50"],
-            "CL": r["CL"],
-            "CG": r["CG"],
-            "R50": r["R50"],
-            "FF": r["FF"],
-            "FA": r["FA"],
-            "AF": r["AF"],
-            "SC": r["SC"]
+            "season": r.get("season"),
+            "round": r.get("round"),
+            "team": r.get("played_for"),
+            "opponent": r.get("played_against"),
+            "K": to_int(r.get("K")),
+            "HB": to_int(r.get("HB")),
+            "D": to_int(r.get("D")),
+            "M": to_int(r.get("M")),
+            "G": to_int(r.get("G")),
+            "B": to_int(r.get("B")),
+            "T": to_int(r.get("T")),
+            "HO": to_int(r.get("HO")),
+            "GA": to_int(r.get("GA")),
+            "I50": to_int(r.get("I50")),
+            "CL": to_int(r.get("CL")),
+            "CG": to_int(r.get("CG")),
+            "R50": to_int(r.get("R50")),
+            "FF": to_int(r.get("FF")),
+            "FA": to_int(r.get("FA")),
+            "AF": to_int(r.get("AF")),
+            "SC": to_int(r.get("SC"))
         })
 
     index = []
 
     for slug, p in players.items():
 
-        games = sorted(p["games"], key=lambda g: (g["season"], g["round"] or 999))
+        seen = set()
+        deduped = []
+
+        for g in p["games"]:
+            key = (
+                g["season"],
+                g["round"],
+                g["team"],
+                g["opponent"],
+                g["K"], g["HB"], g["D"]
+            )
+
+            if key in seen:
+                continue
+
+            seen.add(key)
+            deduped.append(g)
+
+        games = sorted(deduped, key=lambda g: (g["season"], g["round"] or 999))
 
         seasons = sorted({g["season"] for g in games})
         teams = list(dict.fromkeys([g["team"] for g in games]))
