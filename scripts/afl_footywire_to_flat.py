@@ -28,16 +28,33 @@ def to_int(text):
 
 
 # -------------------------------
-# ROUND FORMAT (FIX)
+# FIXED ROUND DETECTION
 # -------------------------------
-def format_round(r):
-    if r is None:
-        return None
-    return f"Round {r}"
+def get_round_label(soup):
+    text = soup.get_text(" ", strip=True).lower()
+
+    # finals
+    if "grand final" in text:
+        return "Grand Final"
+    if "preliminary final" in text:
+        return "Preliminary Final"
+    if "semi final" in text:
+        return "Semi Final"
+    if "qualifying final" in text:
+        return "Qualifying Final"
+    if "elimination final" in text:
+        return "Elimination Final"
+
+    # regular rounds
+    m = re.search(r"round\s+(\d+)", text)
+    if m:
+        return f"Round {int(m.group(1))}"
+
+    return None
 
 
 # -------------------------------
-# GET LINKS
+# GET LINKS (UNCHANGED)
 # -------------------------------
 def get_links():
     links = set()
@@ -72,12 +89,6 @@ def get_links():
     return links
 
 
-def get_round(soup):
-    page_text = clean(soup.get_text(" ", strip=True))
-    m = re.search(r"Round\s+(\d+)", page_text)
-    return int(m.group(1)) if m else None
-
-
 def parse_title_teams(title_text):
     title_text = clean(title_text.replace("AFL Match Statistics :", ""))
 
@@ -106,7 +117,7 @@ def parse_match(url, match_counter):
         res = requests.get(url, headers=HEADERS, timeout=30)
         res.raise_for_status()
     except Exception as e:
-        print("  failed to fetch match:", e)
+        print("  failed:", e)
         return []
 
     soup = BeautifulSoup(res.text, "html.parser")
@@ -119,10 +130,15 @@ def parse_match(url, match_counter):
     if not team_a or not team_b:
         return []
 
-    round_num = get_round(soup)
+    # ✅ FIXED ROUND
+    round_label = get_round_label(soup)
 
-    # 🔥 MATCH ID FIX (THIS IS THE KEY)
-    match_id = f"{SEASON}_R{round_num:02d}_{match_counter:03d}"
+    # fallback (never allow None)
+    if not round_label:
+        round_label = f"Round {match_counter}"
+
+    # ✅ FIXED MATCH ID
+    match_id = f"{SEASON}_{match_counter:04d}"
 
     rows = soup.find_all("tr")
     current_team = None
@@ -158,12 +174,12 @@ def parse_match(url, match_counter):
         opponent = team_b if current_team == team_a else team_a
 
         entry = {
-            "match_id": match_id,                     # ✅ FIX
+            "match_id": match_id,
             "player": player_name,
             "played_for": current_team,
             "played_against": opponent,
             "season": SEASON,
-            "round": format_round(round_num),         # ✅ FIX
+            "round": round_label,
             "K": to_int(cols[1].get_text()),
             "HB": to_int(cols[2].get_text()),
             "D": to_int(cols[3].get_text()),
