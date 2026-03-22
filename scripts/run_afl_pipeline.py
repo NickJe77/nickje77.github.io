@@ -1,31 +1,33 @@
 import json
 import re
+import time
 from pathlib import Path
 from collections import defaultdict
 
 import requests
 from bs4 import BeautifulSoup
 
-DATA_DIR = Path("docs/data/afl")
-PLAYERS_DIR = DATA_DIR / "players"
-PLAYERS_JSON = DATA_DIR / "players.json"
-
-SEASON = 2026
-
-OUTPUT = DATA_DIR / f"afl_{SEASON}.json"
-
-PLAYERS_DIR.mkdir(parents=True, exist_ok=True)
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+print("AFL PIPELINE (SAFE + STABLE)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
+SEASON = 2026
+
+DATA_DIR = Path("docs/data/afl")
+OUTPUT = DATA_DIR / f"afl_{SEASON}.json"
+PLAYERS_DIR = DATA_DIR / "players"
+PLAYERS_JSON = DATA_DIR / "players.json"
+
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+PLAYERS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # -------------------------------
-# SCRAPER (MINIMAL ADD)
+# HELPERS
 # -------------------------------
 def clean(text):
     return re.sub(r"\s+", " ", (text or "")).strip()
+
 
 def to_int(text):
     try:
@@ -33,21 +35,49 @@ def to_int(text):
     except:
         return 0
 
-def get_round(soup):
-    txt = soup.get_text(" ", strip=True).lower()
-    m = re.search(r"round\s+(\d+)", txt)
-    return int(m.group(1)) if m else None
 
+def fetch(url):
+    for _ in range(3):  # retry
+        try:
+            res = requests.get(url, headers=HEADERS, timeout=30)
+            if res.status_code == 200 and len(res.text) > 1000:
+                return res.text
+        except:
+            pass
+        time.sleep(2)
+    return None
+
+
+def get_round_label(soup):
+    text = soup.get_text(" ", strip=True).lower()
+
+    if "grand final" in text: return "Grand Final"
+    if "preliminary final" in text: return "Preliminary Final"
+    if "semi final" in text: return "Semi Final"
+    if "qualifying final" in text: return "Qualifying Final"
+    if "elimination final" in text: return "Elimination Final"
+
+    m = re.search(r"round\s+(\d+)", text)
+    if m:
+        return f"Round {int(m.group(1))}"
+
+    return None
+
+
+# -------------------------------
+# GET MATCH LINKS
+# -------------------------------
 def get_links():
     links = set()
 
     for rnd in range(0, 31):
         url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}&round={rnd}"
-        try:
-            res = requests.get(url, headers=HEADERS, timeout=30)
-            soup = BeautifulSoup(res.text, "html.parser")
-        except:
+
+        html = fetch(url)
+        if not html:
             continue
+
+        soup = BeautifulSoup(html, "html.parser")
 
         for a in soup.find_all("a", href=True):
             href = a["href"]
@@ -61,20 +91,27 @@ def get_links():
 
             links.add(href)
 
+        time.sleep(1)
+
+    print("MATCH LINKS:", len(links))
     return sorted(links)
 
+
+# -------------------------------
+# PARSE MATCH
+# -------------------------------
 def parse_match(url, match_counter):
-    try:
-        res = requests.get(url, headers=HEADERS, timeout=30)
-        soup = BeautifulSoup(res.text, "html.parser")
-    except:
+    html = fetch(url)
+    if not html:
         return []
+
+    soup = BeautifulSoup(html, "html.parser")
 
     title = soup.find("title")
     if not title:
         return []
 
-    text = clean(title.text)
+    text = clean(title.text.replace("AFL Match Statistics :", ""))
 
     if " def " not in text:
         return []
@@ -82,8 +119,9 @@ def parse_match(url, match_counter):
     team_a, team_b = text.split(" def ", 1)
     team_b = team_b.split(" at ")[0]
 
-    round_num = get_round(soup)
-    round_label = f"Round {round_num}" if round_num else f"Round {match_counter}"
+    round_label = get_round_label(soup)
+    if not round_label:
+        round_label = f"Round {match_counter}"
 
     match_id = f"{SEASON}_{match_counter:04d}"
 
@@ -141,30 +179,31 @@ def parse_match(url, match_counter):
 
         data.append(row)
 
+    time.sleep(1)
     return data
 
 
+# -------------------------------
+# SCRAPE
+# -------------------------------
 def scrape():
-    print("SCRAPING 2026...")
-
     all_rows = []
     match_counter = 0
 
-    for link in get_links():
+    links = get_links()
+
+    for link in links:
         match_counter += 1
-        all_rows.extend(parse_match(link, match_counter))
+        rows = parse_match(link, match_counter)
+        all_rows.extend(rows)
 
-    OUTPUT.write_text(json.dumps(all_rows, indent=2))
-    print("SCRAPER DONE:", len(all_rows))
+    print("TOTAL ROWS:", len(all_rows))
+    return all_rows
 
 
 # -------------------------------
-# PLAYER PIPELINE (UNCHANGED)
+# BUILD PLAYERS
 # -------------------------------
-def load_rows():
-    return json.loads(OUTPUT.read_text())
-
-
 def build_players(rows):
     players = {}
 
@@ -223,9 +262,16 @@ def save_players(players):
 # MAIN
 # -------------------------------
 def main():
-    scrape()  # 🔥 THIS WAS MISSING
+    rows = scrape()
 
-    rows = load_rows()
+    # 🔴 SAFETY — NEVER WIPE FILE
+    if len(rows) < 1000:
+        print("SCRAPER FAILED — NOT OVERWRITING DATA")
+        return
+
+    OUTPUT.write_text(json.dumps(rows, indent=2))
+    print("DATA SAVED")
+
     players = build_players(rows)
     save_players(players)
 
