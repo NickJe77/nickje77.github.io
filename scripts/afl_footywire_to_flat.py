@@ -2,8 +2,9 @@ import json
 import requests
 from bs4 import BeautifulSoup
 from pathlib import Path
+import re
 
-print("AFL SCRAPER — FINAL (HEADER FIX)")
+print("AFL SCRAPER — FINAL (ROUND FIXED PROPERLY)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -14,6 +15,9 @@ OUTPUT = Path(f"docs/data/afl/afl_{SEASON}.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
 
+# -----------------------------
+# SAFE INT
+# -----------------------------
 def to_int(x):
     try:
         return int(x.strip())
@@ -21,13 +25,50 @@ def to_int(x):
         return 0
 
 
+# -----------------------------
+# EXTRACT ROUND (RELIABLE)
+# -----------------------------
+def extract_round(soup):
+
+    # Look for the specific header line
+    candidates = soup.find_all(["b", "td", "div", "span"])
+
+    for tag in candidates:
+
+        txt = tag.get_text(" ", strip=True)
+
+        if txt.startswith("Round") and "," in txt:
+            # Example: "Round 2, Adelaide Oval"
+            part = txt.split(",")[0]
+
+            try:
+                return int(part.replace("Round", "").strip())
+            except:
+                continue
+
+    # fallback (just in case)
+    text = soup.get_text(" ", strip=True)
+    match = re.search(r"Round\s+(\d+)", text)
+
+    if match:
+        return int(match.group(1))
+
+    return None
+
+
+# -----------------------------
+# GET MATCH LINKS
+# -----------------------------
 def get_links():
+
     url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}"
+
     soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
     links = []
 
     for a in soup.select('a[href*="ft_match_statistics"]'):
+
         href = a.get("href", "")
 
         if not href:
@@ -43,11 +84,18 @@ def get_links():
     links = list(set(links))
 
     print("Matches found:", len(links))
+
+    if not links:
+        raise Exception("❌ NO MATCH LINKS FOUND")
+
     print("Sample:", links[0])
 
     return links
 
 
+# -----------------------------
+# PARSE MATCH
+# -----------------------------
 def parse_match(url):
 
     print("→", url)
@@ -56,6 +104,9 @@ def parse_match(url):
 
     title = soup.find("title").text
 
+    # -----------------------------
+    # TEAM PARSING
+    # -----------------------------
     if " def " in title:
         parts = title.split(" def ")
     elif " defeats " in title:
@@ -67,6 +118,15 @@ def parse_match(url):
     team1 = parts[0].replace("AFL Match Statistics :", "").strip()
     team2 = parts[1].split(" at ")[0].strip()
 
+    # -----------------------------
+    # ROUND
+    # -----------------------------
+    round_num = extract_round(soup)
+    print("ROUND:", round_num)
+
+    # -----------------------------
+    # FIND PLAYER TABLES
+    # -----------------------------
     tables = soup.find_all("table")
 
     player_tables = []
@@ -83,6 +143,9 @@ def parse_match(url):
     data = []
     teams = [team1, team2]
 
+    # -----------------------------
+    # PARSE BOTH TEAMS
+    # -----------------------------
     for i in range(2):
 
         rows = player_tables[i].find_all("tr")
@@ -95,7 +158,7 @@ def parse_match(url):
             if len(cols) < 18:
                 continue
 
-            # 🔥 CRITICAL FIX — ONLY REAL PLAYERS
+            # 🔥 ONLY REAL PLAYERS
             link = cols[0].find("a")
 
             if not link:
@@ -111,6 +174,7 @@ def parse_match(url):
                 "played_for": teams[i],
                 "played_against": teams[1 - i],
                 "season": SEASON,
+                "round": round_num,
 
                 "K": to_int(cols[1].text),
                 "HB": to_int(cols[2].text),
@@ -139,6 +203,9 @@ def parse_match(url):
     return data
 
 
+# -----------------------------
+# RUN SCRAPER
+# -----------------------------
 links = get_links()
 
 all_data = []
@@ -152,6 +219,10 @@ for link in links:
 
 print("TOTAL PLAYER ROWS:", len(all_data))
 
+
+# -----------------------------
+# WRITE FILE
+# -----------------------------
 with open(OUTPUT, "w") as f:
     json.dump(all_data, f, indent=2)
 
