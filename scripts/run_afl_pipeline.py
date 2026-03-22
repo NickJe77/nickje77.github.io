@@ -5,10 +5,9 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 from collections import defaultdict
 
-print("AFL REBUILD (AFLTABLES MATCH VERSION)")
+print("AFL REBUILD (AFLTABLES FINAL VERSION)")
 
 SEASON = 2026
-BASE = "https://afltables.com/afl/stats/games"
 
 DATA_DIR = Path("docs/data/afl")
 OUTPUT = DATA_DIR / f"afl_{SEASON}.json"
@@ -33,8 +32,6 @@ def to_int(x):
 # -------------------------------
 # GET MATCH LINKS
 # -------------------------------
-print("Getting match links...")
-
 season_url = f"https://afltables.com/afl/seas/{SEASON}.html"
 html = requests.get(season_url).text
 soup = BeautifulSoup(html, "html.parser")
@@ -43,10 +40,8 @@ links = []
 
 for a in soup.find_all("a", href=True):
     href = a["href"]
-
     if "/stats/games/" in href:
-        full = "https://afltables.com" + href
-        links.append(full)
+        links.append("https://afltables.com" + href)
 
 links = sorted(set(links))
 
@@ -54,7 +49,7 @@ print("MATCHES FOUND:", len(links))
 
 
 # -------------------------------
-# PARSE MATCHES
+# PARSE MATCHES (FIXED)
 # -------------------------------
 all_rows = []
 match_id = 0
@@ -63,11 +58,8 @@ for link in links:
     match_id += 1
     print("Match:", match_id)
 
-    try:
-        html = requests.get(link).text
-        soup = BeautifulSoup(html, "html.parser")
-    except:
-        continue
+    html = requests.get(link).text
+    soup = BeautifulSoup(html, "html.parser")
 
     tables = soup.find_all("table")
 
@@ -75,6 +67,12 @@ for link in links:
         rows = table.find_all("tr")
 
         if len(rows) < 15:
+            continue
+
+        # 🔥 detect player tables by header row
+        header = [clean(td.text) for td in rows[0].find_all("td")]
+
+        if "K" not in header or "HB" not in header:
             continue
 
         for tr in rows[1:]:
