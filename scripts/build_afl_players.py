@@ -1,158 +1,54 @@
 import json
-import requests
-from bs4 import BeautifulSoup
 from pathlib import Path
 
-print("AFL SCRAPER — FINAL (HEADER FIX)")
+print("BUILD AFL PLAYERS — PRESERVE ROUND")
 
-BASE = "https://www.footywire.com"
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+INPUT = Path("docs/data/afl/afl_2026.json")
+OUTPUT = Path("docs/data/afl/afl_2026.json")  # overwriting same file
 
-SEASON = 2026
+if not INPUT.exists():
+    raise Exception("Input file missing")
 
-OUTPUT = Path(f"docs/data/afl/afl_{SEASON}.json")
-OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+with open(INPUT) as f:
+    data = json.load(f)
 
+players = []
 
-def to_int(x):
-    try:
-        return int(x.strip())
-    except:
-        return 0
+for row in data:
 
+    entry = {
+        "player": row.get("player"),
+        "played_for": row.get("played_for"),
+        "played_against": row.get("played_against"),
+        "season": row.get("season"),
 
-def get_links():
-    url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}"
-    soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
+        # 🔥 THIS IS THE FIX
+        "round": row.get("round"),
 
-    links = []
+        "K": row.get("K", 0),
+        "HB": row.get("HB", 0),
+        "D": row.get("D", 0),
+        "M": row.get("M", 0),
+        "G": row.get("G", 0),
+        "B": row.get("B", 0),
+        "T": row.get("T", 0),
+        "HO": row.get("HO", 0),
+        "GA": row.get("GA", 0),
+        "I50": row.get("I50", 0),
+        "CL": row.get("CL", 0),
+        "CG": row.get("CG", 0),
+        "R50": row.get("R50", 0),
+        "FF": row.get("FF", 0),
+        "FA": row.get("FA", 0),
+        "AF": row.get("AF", 0),
+        "SC": row.get("SC", 0)
+    }
 
-    for a in soup.select('a[href*="ft_match_statistics"]'):
-        href = a.get("href", "")
+    players.append(entry)
 
-        if not href:
-            continue
-
-        if href.startswith("/"):
-            href = BASE + href
-        elif not href.startswith("http"):
-            href = BASE + "/afl/footy/" + href
-
-        links.append(href)
-
-    links = list(set(links))
-
-    print("Matches found:", len(links))
-    print("Sample:", links[0])
-
-    return links
-
-
-def parse_match(url):
-
-    print("→", url)
-
-    soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
-
-    title = soup.find("title").text
-
-    if " def " in title:
-        parts = title.split(" def ")
-    elif " defeats " in title:
-        parts = title.split(" defeats ")
-    else:
-        print("⚠️ Cannot parse teams:", title)
-        return []
-
-    team1 = parts[0].replace("AFL Match Statistics :", "").strip()
-    team2 = parts[1].split(" at ")[0].strip()
-
-    tables = soup.find_all("table")
-
-    player_tables = []
-
-    for t in tables:
-        txt = t.get_text(" ", strip=True)
-        if "K" in txt and "HB" in txt and "D" in txt:
-            player_tables.append(t)
-
-    if len(player_tables) < 2:
-        print("⚠️ Missing player tables")
-        return []
-
-    data = []
-    teams = [team1, team2]
-
-    for i in range(2):
-
-        rows = player_tables[i].find_all("tr")
-
-        count = 0
-
-        for r in rows:
-            cols = r.find_all("td")
-
-            if len(cols) < 18:
-                continue
-
-            # 🔥 CRITICAL FIX — ONLY REAL PLAYERS
-            link = cols[0].find("a")
-
-            if not link:
-                continue
-
-            name = link.text.strip()
-
-            if not name:
-                continue
-
-            entry = {
-                "player": name,
-                "played_for": teams[i],
-                "played_against": teams[1 - i],
-                "season": SEASON,
-
-                "K": to_int(cols[1].text),
-                "HB": to_int(cols[2].text),
-                "D": to_int(cols[3].text),
-                "M": to_int(cols[4].text),
-                "G": to_int(cols[5].text),
-                "B": to_int(cols[6].text),
-                "T": to_int(cols[7].text),
-                "HO": to_int(cols[8].text),
-                "GA": to_int(cols[9].text),
-                "I50": to_int(cols[10].text),
-                "CL": to_int(cols[11].text),
-                "CG": to_int(cols[12].text),
-                "R50": to_int(cols[13].text),
-                "FF": to_int(cols[14].text),
-                "FA": to_int(cols[15].text),
-                "AF": to_int(cols[16].text),
-                "SC": to_int(cols[17].text)
-            }
-
-            data.append(entry)
-            count += 1
-
-        print(f"{teams[i]} players:", count)
-
-    return data
-
-
-links = get_links()
-
-all_data = []
-
-for link in links:
-    try:
-        all_data.extend(parse_match(link))
-    except Exception as e:
-        print("ERROR:", e)
-
-
-print("TOTAL PLAYER ROWS:", len(all_data))
+print("PLAYERS BUILT:", len(players))
 
 with open(OUTPUT, "w") as f:
-    json.dump(all_data, f, indent=2)
+    json.dump(players, f, indent=2)
 
-print("✅ FILE WRITTEN:", OUTPUT)
+print("DONE — ROUND PRESERVED")
