@@ -43,20 +43,7 @@ def clean_round(raw):
 
 
 # -------------------------------
-# SAFE NUMBER
-# -------------------------------
-def num(v):
-    try:
-        return int(v)
-    except:
-        try:
-            return float(v)
-        except:
-            return 0
-
-
-# -------------------------------
-# LOAD ALL GAMES (🔥 FIXED)
+# LOAD ALL GAMES
 # -------------------------------
 def load_all_games():
     games = []
@@ -69,9 +56,6 @@ def load_all_games():
         except:
             continue
 
-        # -------------------------------
-        # CASE 1: dict format
-        # -------------------------------
         if isinstance(data, dict):
             season = int(data.get("season", 0))
 
@@ -83,9 +67,6 @@ def load_all_games():
                 g["round"] = clean_round(g.get("round"))
                 games.append(g)
 
-        # -------------------------------
-        # CASE 2: list format
-        # -------------------------------
         elif isinstance(data, list):
             try:
                 season = int(file.stem.split("_")[1])
@@ -114,8 +95,8 @@ def dedupe_games(games):
         key = (
             g.get("season"),
             g.get("round"),
-            g.get("home_team", {}).get("name"),
-            g.get("away_team", {}).get("name"),
+            str(g.get("home_team")),
+            str(g.get("away_team")),
             g.get("date"),
         )
 
@@ -129,7 +110,7 @@ def dedupe_games(games):
 
 
 # -------------------------------
-# BUILD PLAYERS
+# BUILD PLAYERS (🔥 SAFE VERSION)
 # -------------------------------
 def build_players(games):
     players = {}
@@ -138,14 +119,24 @@ def build_players(games):
         season = g.get("season")
         rnd = g.get("round")
 
-        home = g.get("home_team", {})
-        away = g.get("away_team", {})
+        home = g.get("home_team") or {}
+        away = g.get("away_team") or {}
 
         for team, opponent in [(home, away), (away, home)]:
-            team_name = team.get("name")
-            opp_name = opponent.get("name")
 
-            for p in team.get("players", []):
+            team_name = team.get("name") if isinstance(team, dict) else None
+            opp_name = opponent.get("name") if isinstance(opponent, dict) else None
+
+            raw_players = team.get("players") if isinstance(team, dict) else []
+
+            # 🔥 CRITICAL FIX
+            if not isinstance(raw_players, list):
+                continue
+
+            for p in raw_players:
+                if not isinstance(p, dict):
+                    continue
+
                 name = p.get("name")
                 if not name:
                     continue
@@ -167,7 +158,6 @@ def build_players(games):
 
                 players[name]["games"].append(entry)
 
-                # aggregate stats
                 for k, v in p.items():
                     if isinstance(v, (int, float)):
                         players[name]["career"][k] += v
@@ -216,7 +206,7 @@ def save_players(players):
 
 
 # -------------------------------
-# MAIN PIPELINE
+# MAIN
 # -------------------------------
 def main():
     print("=== AFL PIPELINE START ===")
