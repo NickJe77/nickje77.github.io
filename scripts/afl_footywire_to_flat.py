@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRAPER — ROUND DEBUG VERSION")
+print("AFL SCRAPER — FINAL (ROUND LOCKED IN)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -32,6 +32,7 @@ def get_links():
     for rnd in range(1, 31):
 
         url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}&round={rnd}"
+        print(f"Checking Round {rnd}...")
 
         res = requests.get(url, headers=HEADERS)
 
@@ -56,10 +57,10 @@ def get_links():
 
     links = list(links)
 
-    print("MATCHES FOUND:", len(links))
+    print("TOTAL MATCHES FOUND:", len(links))
 
     if not links:
-        raise Exception("NO MATCHES FOUND")
+        raise Exception("❌ NO MATCH LINKS FOUND")
 
     return links
 
@@ -69,12 +70,14 @@ def get_links():
 # -----------------------------
 def parse_match(url):
 
+    print("→", url)
+
     soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
     title = soup.find("title").text
 
     # -----------------------------
-    # ROUND (STRICT)
+    # ROUND (LOCKED EXTRACTION)
     # -----------------------------
     round_num = None
 
@@ -87,7 +90,7 @@ def parse_match(url):
                 round_num = int(m.group(1))
                 break
 
-    print("ROUND FOUND:", round_num)  # 👈 DEBUG LINE
+    print("ROUND FOUND:", round_num)  # 🔥 MUST PRINT
 
     # -----------------------------
     # TEAMS
@@ -97,6 +100,7 @@ def parse_match(url):
     elif " defeats " in title:
         parts = title.split(" defeats ")
     else:
+        print("⚠️ Cannot parse teams:", title)
         return []
 
     team1 = parts[0].replace("AFL Match Statistics :", "").strip()
@@ -115,6 +119,7 @@ def parse_match(url):
             player_tables.append(t)
 
     if len(player_tables) < 2:
+        print("⚠️ Missing player tables")
         return []
 
     data = []
@@ -139,12 +144,12 @@ def parse_match(url):
             if not name:
                 continue
 
-            data.append({
+            entry = {
                 "player": name,
                 "played_for": teams[i],
                 "played_against": teams[1 - i],
                 "season": SEASON,
-                "round": round_num,  # 👈 THIS MUST EXIST
+                "round": round_num,  # 🔥 THIS IS THE KEY FIX
 
                 "K": to_int(cols[1].text),
                 "HB": to_int(cols[2].text),
@@ -163,7 +168,9 @@ def parse_match(url):
                 "FA": to_int(cols[15].text),
                 "AF": to_int(cols[16].text),
                 "SC": to_int(cols[17].text)
-            })
+            }
+
+            data.append(entry)
 
     return data
 
@@ -176,11 +183,14 @@ links = get_links()
 all_data = []
 
 for link in links:
-    all_data.extend(parse_match(link))
+    try:
+        all_data.extend(parse_match(link))
+    except Exception as e:
+        print("ERROR:", e)
 
-print("TOTAL ROWS:", len(all_data))
+print("TOTAL PLAYER ROWS:", len(all_data))
 
 with open(OUTPUT, "w") as f:
     json.dump(all_data, f, indent=2)
 
-print("DONE:", OUTPUT)
+print("✅ FILE WRITTEN:", OUTPUT)
