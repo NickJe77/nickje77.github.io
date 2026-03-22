@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRAPER — FINAL (ROUND FROM MATCH PAGE — GUARANTEED)")
+print("AFL SCRAPER — 2026 FIXED (ROUND PAGE METHOD)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -23,32 +23,48 @@ def to_int(x):
 
 
 # -----------------------------
-# GET MATCH LINKS ONLY
+# GET LINKS FROM ROUND PAGES ✅
 # -----------------------------
 def get_links():
 
-    url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}"
-    soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
+    links = set()
 
-    links = []
+    # try up to 30 rounds (covers finals too)
+    for rnd in range(1, 31):
 
-    for a in soup.find_all("a", href=True):
+        url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}&round={rnd}"
 
-        href = a["href"]
+        print(f"Checking Round {rnd}...")
 
-        if "ft_match_statistics" not in href:
+        res = requests.get(url, headers=HEADERS)
+
+        if res.status_code != 200:
             continue
 
-        if href.startswith("/"):
-            href = BASE + href
-        elif not href.startswith("http"):
-            href = BASE + "/afl/footy/" + href
+        soup = BeautifulSoup(res.text, "html.parser")
 
-        links.append(href)
+        found_this_round = 0
 
-    links = list(set(links))
+        for a in soup.find_all("a", href=True):
 
-    print("Matches found:", len(links))
+            href = a["href"]
+
+            if "ft_match_statistics" not in href:
+                continue
+
+            if href.startswith("/"):
+                href = BASE + href
+            elif not href.startswith("http"):
+                href = BASE + "/afl/footy/" + href
+
+            links.add(href)
+            found_this_round += 1
+
+        print(f"  → Found {found_this_round} matches")
+
+    links = list(links)
+
+    print("TOTAL MATCHES FOUND:", len(links))
 
     if not links:
         raise Exception("❌ NO MATCH LINKS FOUND")
@@ -70,14 +86,11 @@ def parse_match(url):
     title = soup.find("title").text
 
     # -----------------------------
-    # ROUND (🔥 GUARANTEED FIX)
+    # ROUND (reliable from title)
     # -----------------------------
     round_match = re.search(r"Round\s+(\d+)", title)
 
-    if round_match:
-        round_num = int(round_match.group(1))
-    else:
-        round_num = None
+    round_num = int(round_match.group(1)) if round_match else None
 
     # -----------------------------
     # TEAMS
@@ -130,7 +143,6 @@ def parse_match(url):
                 continue
 
             name = link.text.strip()
-
             if not name:
                 continue
 
@@ -139,7 +151,7 @@ def parse_match(url):
                 "played_for": teams[i],
                 "played_against": teams[1 - i],
                 "season": SEASON,
-                "round": round_num,   # ✅ NOW ALWAYS FILLED
+                "round": round_num,
 
                 "K": to_int(cols[1].text),
                 "HB": to_int(cols[2].text),
@@ -181,9 +193,7 @@ for link in links:
     except Exception as e:
         print("ERROR:", e)
 
-
 print("TOTAL PLAYER ROWS:", len(all_data))
-
 
 with open(OUTPUT, "w") as f:
     json.dump(all_data, f, indent=2)
