@@ -4,14 +4,14 @@ import unicodedata
 import shutil
 from pathlib import Path
 
-print("BUILD AFL PLAYERS — FINAL (NO DUPES + ROUND + INDEX)")
+print("BUILD AFL PLAYERS — ALL SEASONS (FULL CAREER)")
 
-DATA = Path("docs/data/afl/afl_2026.json")
+DATA_DIR = Path("docs/data/afl")
 OUT = Path("docs/data/afl/players")
 INDEX = Path("docs/data/afl/players.json")
 
 # -----------------------------
-# RESET OUTPUT (🔥 CRITICAL FIX)
+# RESET OUTPUT
 # -----------------------------
 if OUT.exists():
     shutil.rmtree(OUT)
@@ -21,11 +21,20 @@ OUT.mkdir(parents=True, exist_ok=True)
 if INDEX.exists():
     INDEX.unlink()
 
-if not DATA.exists():
-    raise Exception("❌ afl_2026.json not found")
+# -----------------------------
+# LOAD ALL SEASON FILES
+# -----------------------------
+rows = []
 
-with open(DATA) as f:
-    rows = json.load(f)
+for file in DATA_DIR.glob("afl_*.json"):
+
+    print("Loading:", file)
+
+    with open(file) as f:
+        season_data = json.load(f)
+        rows.extend(season_data)
+
+print("TOTAL ROWS:", len(rows))
 
 players = {}
 
@@ -60,10 +69,10 @@ for r in rows:
             "player": name,
             "slug": key,
             "games": [],
-            "seen": set()   # 🔥 for dedupe
+            "seen": set()
         }
 
-    # 🔥 UNIQUE GAME KEY (PREVENT DUPES)
+    # UNIQUE GAME KEY
     game_key = f"{r.get('season')}_{r.get('round')}_{r.get('played_for')}_{r.get('played_against')}_{name}"
 
     if game_key in players[key]["seen"]:
@@ -99,15 +108,12 @@ for r in rows:
 
 
 # -----------------------------
-# WRITE PLAYER FILES
+# WRITE FILES
 # -----------------------------
 index = []
 
-count = 0
-
 for key, pdata in players.items():
 
-    # remove internal dedupe tracker
     pdata.pop("seen", None)
 
     out_file = OUT / f"{key}.json"
@@ -120,11 +126,9 @@ for key, pdata in players.items():
         "slug": key
     })
 
-    count += 1
-
 
 # -----------------------------
-# WRITE INDEX FILE
+# WRITE INDEX
 # -----------------------------
 index = sorted(index, key=lambda x: x["player"])
 
@@ -132,6 +136,4 @@ with open(INDEX, "w") as f:
     json.dump(index, f, indent=2)
 
 
-print(f"✅ PLAYER FILES WRITTEN: {count}")
-print("✅ players.json CREATED")
-print("✅ NO DUPLICATES — SAFE TO RE-RUN")
+print("✅ FULL CAREER PLAYER FILES BUILT")
