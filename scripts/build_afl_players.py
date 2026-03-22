@@ -1,54 +1,94 @@
 import json
+import re
+import unicodedata
 from pathlib import Path
 
-print("BUILD AFL PLAYERS — PRESERVE ROUND")
+print("BUILD AFL PLAYERS — FINAL (WITH ROUND)")
 
-INPUT = Path("docs/data/afl/afl_2026.json")
-OUTPUT = Path("docs/data/afl/afl_2026.json")  # overwriting same file
+DATA = Path("docs/data/afl/afl_2026.json")
+OUT = Path("docs/data/afl/players")
 
-if not INPUT.exists():
-    raise Exception("Input file missing")
+OUT.mkdir(parents=True, exist_ok=True)
 
-with open(INPUT) as f:
-    data = json.load(f)
+if not DATA.exists():
+    raise Exception("❌ afl_2026.json not found")
 
-players = []
+with open(DATA) as f:
+    rows = json.load(f)
 
-for row in data:
+players = {}
 
-    entry = {
-        "player": row.get("player"),
-        "played_for": row.get("played_for"),
-        "played_against": row.get("played_against"),
-        "season": row.get("season"),
+# -----------------------------
+# CLEAN NAME
+# -----------------------------
+def clean_name(name):
+    name = unicodedata.normalize("NFD", name)
+    name = name.encode("ascii", "ignore").decode("utf-8")
+    return name.strip()
 
-        # 🔥 THIS IS THE FIX
-        "round": row.get("round"),
+def slug(name):
+    name = clean_name(name).lower()
+    name = re.sub(r"[^\w\s-]", "", name)
+    name = re.sub(r"\s+", "-", name)
+    return name
 
-        "K": row.get("K", 0),
-        "HB": row.get("HB", 0),
-        "D": row.get("D", 0),
-        "M": row.get("M", 0),
-        "G": row.get("G", 0),
-        "B": row.get("B", 0),
-        "T": row.get("T", 0),
-        "HO": row.get("HO", 0),
-        "GA": row.get("GA", 0),
-        "I50": row.get("I50", 0),
-        "CL": row.get("CL", 0),
-        "CG": row.get("CG", 0),
-        "R50": row.get("R50", 0),
-        "FF": row.get("FF", 0),
-        "FA": row.get("FA", 0),
-        "AF": row.get("AF", 0),
-        "SC": row.get("SC", 0)
-    }
 
-    players.append(entry)
+# -----------------------------
+# BUILD PLAYER DATA
+# -----------------------------
+for r in rows:
 
-print("PLAYERS BUILT:", len(players))
+    name = clean_name(r.get("player", ""))
+    if not name:
+        continue
 
-with open(OUTPUT, "w") as f:
-    json.dump(players, f, indent=2)
+    key = slug(name)
 
-print("DONE — ROUND PRESERVED")
+    if key not in players:
+        players[key] = {
+            "player": name,
+            "games": []
+        }
+
+    players[key]["games"].append({
+        "season": r.get("season"),
+        "round": r.get("round"),  # 🔥 FIX — NOW INCLUDED
+
+        "team": r.get("played_for"),
+        "opponent": r.get("played_against"),
+
+        "K": r.get("K", 0),
+        "HB": r.get("HB", 0),
+        "D": r.get("D", 0),
+        "M": r.get("M", 0),
+        "G": r.get("G", 0),
+        "B": r.get("B", 0),
+        "T": r.get("T", 0),
+        "HO": r.get("HO", 0),
+        "GA": r.get("GA", 0),
+        "I50": r.get("I50", 0),
+        "CL": r.get("CL", 0),
+        "CG": r.get("CG", 0),
+        "R50": r.get("R50", 0),
+        "FF": r.get("FF", 0),
+        "FA": r.get("FA", 0),
+        "AF": r.get("AF", 0),
+        "SC": r.get("SC", 0)
+    })
+
+
+# -----------------------------
+# WRITE FILES
+# -----------------------------
+count = 0
+
+for key, pdata in players.items():
+
+    out_file = OUT / f"{key}.json"
+
+    with open(out_file, "w") as f:
+        json.dump(pdata, f, indent=2)
+
+    count += 1
+
+print(f"✅ PLAYER FILES WRITTEN: {count}")
