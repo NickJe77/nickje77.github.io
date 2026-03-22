@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRAPER — FINAL COMPLETE FIX")
+print("AFL SCRAPER — FINAL COMPLETE FIX (CORRECT TEAMS + ROUND)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -22,27 +22,33 @@ def to_int(x):
         return 0
 
 
+def norm_space(s):
+    return re.sub(r"\s+", " ", (s or "")).strip()
+
+
 # -----------------------------
 # GET MATCH LINKS
 # -----------------------------
 def get_links():
-
     links = set()
 
-    for rnd in range(1, 31):
-
+    for rnd in range(0, 31):  # includes Opening Round as round 0
         url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}&round={rnd}"
         print(f"Checking Round {rnd}...")
 
-        res = requests.get(url, headers=HEADERS)
+        try:
+            res = requests.get(url, headers=HEADERS, timeout=20)
+        except Exception as e:
+            print("Request failed:", e)
+            continue
 
         if res.status_code != 200:
             continue
 
         soup = BeautifulSoup(res.text, "html.parser")
 
+        found = 0
         for a in soup.find_all("a", href=True):
-
             href = a["href"]
 
             if "ft_match_statistics" not in href:
@@ -54,9 +60,11 @@ def get_links():
                 href = BASE + "/afl/footy/" + href
 
             links.add(href)
+            found += 1
 
-    links = list(links)
+        print(f"  → Found {found} matches")
 
+    links = sorted(links)
     print("TOTAL MATCHES FOUND:", len(links))
 
     if not links:
@@ -66,86 +74,146 @@ def get_links():
 
 
 # -----------------------------
-# PARSE MATCH
+# PARSE TITLE TEAMS
 # -----------------------------
-def parse_match(url):
-
-    print("→", url)
-
-    soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
-
-    title = soup.find("title").text
-
-    # -----------------------------
-    # ROUND (BODY EXTRACTION)
-    # -----------------------------
-    round_num = None
-
-    for tag in soup.find_all(["td", "b", "span", "div"]):
-        txt = tag.get_text(" ", strip=True)
-
-        if "Round" in txt:
-            m = re.search(r"Round\s+(\d+)", txt)
-            if m:
-                round_num = int(m.group(1))
-                break
-
-    print("ROUND FOUND:", round_num)
-
-    # -----------------------------
-    # TEAMS (FULL FIX)
-    # -----------------------------
+def parse_title_teams(title):
     clean_title = title.replace("AFL Match Statistics :", "").strip()
-
-    team1 = None
-    team2 = None
 
     if " def " in clean_title:
         parts = clean_title.split(" def ")
-        team1 = parts[0].strip()
-        team2 = parts[1].split(" at ")[0].strip()
+        winner = norm_space(parts[0])
+        loser = norm_space(parts[1].split(" at ")[0])
+        return winner, loser
 
-    elif " defeats " in clean_title:
+    if " defeats " in clean_title:
         parts = clean_title.split(" defeats ")
-        team1 = parts[0].strip()
-        team2 = parts[1].split(" at ")[0].strip()
+        winner = norm_space(parts[0])
+        loser = norm_space(parts[1].split(" at ")[0])
+        return winner, loser
 
-    elif " defeated by " in clean_title:
+    if " defeated by " in clean_title:
         parts = clean_title.split(" defeated by ")
-        team1 = parts[1].split(" at ")[0].strip()  # winner
-        team2 = parts[0].strip()                  # loser
+        loser = norm_space(parts[0])
+        winner = norm_space(parts[1].split(" at ")[0])
+        return winner, loser
 
-    else:
-        print("⚠️ Cannot parse teams:", title)
+    return None, None
+
+
+# -----------------------------
+# FIND ROUND
+# -----------------------------
+def extract_round(soup):
+    for tag in soup.find_all(["td", "b", "span", "div"]):
+        txt = norm_space(tag.get_text(" ", strip=True))
+        if "Round" in txt:
+            m = re.search(r"Round\s+(\d+)", txt, re.IGNORECASE)
+            if m:
+                return int(m.group(1))
+    return None
+
+
+# -----------------------------
+# FIND PLAYER TABLES + TEAM NAMES
+# -----------------------------
+def find_player_tables_with_teams(soup, winner, loser):
+    results = []
+
+    all_tables = soup.find_all("table")
+
+    for table in all_tables:
+        txt = norm_space(table.get_text(" ", strip=True))
+
+        if not ("K" in txt and "HB" in txt and "D" in txt):
+            continue
+
+        team_name = None
+
+        # Try previous elements near the table for team heading
+        prev = table
+        for _ in range(12):
+            prev = prev.find_previous(["b", "strong", "td", "th", "div", "span"])
+            if not prev:
+                break
+
+            prev_txt = norm_space(prev.get_text(" ", strip=True))
+            if not prev_txt:
+                continue
+
+            if winner and winner.lower() in prev_txt.lower():
+                team_name = winner
+                break
+
+            if loser and loser.lower() in prev_txt.lower():
+                team_name = loser
+                break
+
+        results.append((table, team_name))
+
+    # If exactly 2 tables and one/both team names missing, assign safely
+    if len(results) >= 2:
+        # only keep first two stat tables
+        results = results[:2]
+
+        names = [r[1] for r in results]
+
+        if names[0] is None and names[1] is not None:
+            results[0] = (results[0][0], winner if results[1][1] == loser else loser)
+
+        if names[1] is None and results[0][1] is not None:
+            results[1] = (results[1][0], winner if results[0][1] == loser else loser)
+
+        if results[0][1] is None and results[1][1] is None:
+            # fall back to title order only if neither table can be identified
+            results[0] = (results[0][0], winner)
+            results[1] = (results[1][0], loser)
+
+    return results
+
+
+# -----------------------------
+# PARSE MATCH
+# -----------------------------
+def parse_match(url):
+    print("→", url)
+
+    res = requests.get(url, headers=HEADERS, timeout=20)
+    soup = BeautifulSoup(res.text, "html.parser")
+
+    title_tag = soup.find("title")
+    if not title_tag:
+        print("⚠️ No title found")
         return []
 
-    # -----------------------------
-    # PLAYER TABLES
-    # -----------------------------
-    tables = soup.find_all("table")
+    title = norm_space(title_tag.text)
 
-    player_tables = []
+    round_num = extract_round(soup)
+    print("ROUND FOUND:", round_num)
 
-    for t in tables:
-        txt = t.get_text(" ", strip=True)
-        if "K" in txt and "HB" in txt and "D" in txt:
-            player_tables.append(t)
+    winner, loser = parse_title_teams(title)
+    if not winner or not loser:
+        print("⚠️ Cannot parse teams from title:", title)
+        return []
+
+    player_tables = find_player_tables_with_teams(soup, winner, loser)
 
     if len(player_tables) < 2:
         print("⚠️ Missing player tables")
         return []
 
     data = []
-    teams = [team1, team2]
 
-    for i in range(2):
+    for table, played_for in player_tables[:2]:
+        if not played_for:
+            print("⚠️ Could not identify team for player table")
+            continue
 
-        rows = player_tables[i].find_all("tr")
+        played_against = loser if played_for == winner else winner
 
+        rows = table.find_all("tr")
         count = 0
 
         for r in rows:
-
             cols = r.find_all("td")
 
             if len(cols) < 18:
@@ -155,16 +223,16 @@ def parse_match(url):
             if not link:
                 continue
 
-            name = link.text.strip()
+            name = norm_space(link.text)
             if not name:
                 continue
 
             entry = {
                 "player": name,
-                "played_for": teams[i],
-                "played_against": teams[1 - i],
+                "played_for": played_for,
+                "played_against": played_against,
                 "season": SEASON,
-                "round": round_num,   # ✅ GUARANTEED
+                "round": round_num,
 
                 "K": to_int(cols[1].text),
                 "HB": to_int(cols[2].text),
@@ -188,7 +256,7 @@ def parse_match(url):
             data.append(entry)
             count += 1
 
-        print(f"{teams[i]} players:", count)
+        print(f"{played_for} players:", count)
 
     return data
 
