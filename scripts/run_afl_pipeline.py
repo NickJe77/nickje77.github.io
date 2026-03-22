@@ -6,7 +6,7 @@ from pathlib import Path
 from collections import defaultdict
 from urllib.parse import urljoin
 
-print("AFL REBUILD (AFLTABLES WORKING FINAL FIX)")
+print("AFL REBUILD (AFLTABLES REAL FINAL FIX)")
 
 SEASON = 2026
 BASE = "https://afltables.com/afl/seas/"
@@ -57,7 +57,7 @@ print("MATCHES FOUND:", len(links))
 
 
 # -------------------------------
-# PARSE MATCHES (CORRECTED)
+# PARSE MATCHES
 # -------------------------------
 all_rows = []
 match_id = 0
@@ -77,16 +77,16 @@ for link in links:
         if len(rows) < 15:
             continue
 
-        header = [clean(td.text) for td in rows[0].find_all("td")]
+        # 🔥 FIX: include <th>
+        header = [clean(c.text) for c in rows[0].find_all(["td", "th"])]
 
-        # 🔥 FIXED HEADER MATCH
         if "KI" not in header or "HB" not in header:
             continue
 
         for tr in rows[1:]:
             cols = tr.find_all("td")
 
-            if len(cols) < 10:
+            if len(cols) < 8:
                 continue
 
             name = clean(cols[0].text)
