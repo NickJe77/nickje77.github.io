@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRAPER — TRUE FINAL FIX")
+print("AFL SCRAPER — FINAL (TABLE HEADER TEAM DETECTION)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -26,7 +26,7 @@ def clean(s):
 
 
 # -----------------------------
-# GET LINKS
+# LINKS
 # -----------------------------
 def get_links():
     links = set()
@@ -57,38 +57,18 @@ def get_links():
 
 
 # -----------------------------
-# GET TEAMS FROM TABS
-# -----------------------------
-def get_teams(soup):
-    teams = []
-
-    for a in soup.find_all("a"):
-        txt = clean(a.get_text())
-
-        if "Player Stats" in txt:
-            teams.append(txt.replace("Player Stats", "").strip())
-
-    if len(teams) >= 2:
-        return teams[0], teams[1]
-
-    return None, None
-
-
-# -----------------------------
-# GET ROUND
+# ROUND
 # -----------------------------
 def get_round(soup):
     txt = soup.get_text(" ", strip=True)
-
     m = re.search(r"Round\s+(\d+)", txt)
     if m:
         return int(m.group(1))
-
     return None
 
 
 # -----------------------------
-# GET CORRECT PLAYER TABLES
+# GET PLAYER TABLES WITH TEAM
 # -----------------------------
 def get_player_tables(soup):
 
@@ -96,13 +76,22 @@ def get_player_tables(soup):
     result = []
 
     for t in tables:
+
         txt = clean(t.get_text())
 
-        # 🔥 THIS IS THE KEY FILTER
-        if "Match Statistics (Sorted by Disposals)" in txt:
-            result.append(t)
+        if "Match Statistics (Sorted by Disposals)" not in txt:
+            continue
 
-    return result[:2]
+        # 🔥 EXTRACT TEAM NAME FROM TABLE TEXT
+        m = re.search(r"^(.*?) Match Statistics", txt)
+        if not m:
+            continue
+
+        team = clean(m.group(1))
+
+        result.append((t, team))
+
+    return result
 
 
 # -----------------------------
@@ -114,30 +103,24 @@ def parse_match(url):
 
     soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
-    team1, team2 = get_teams(soup)
-
-    if not team1:
-        print("⚠️ No teams found")
-        return []
-
     round_num = get_round(soup)
 
     tables = get_player_tables(soup)
 
     if len(tables) < 2:
-        print("⚠️ No player tables")
+        print("⚠️ No valid player tables")
         return []
 
     data = []
 
-    teams = [team1, team2]
+    # determine opponents
+    teams = [tables[0][1], tables[1][1]]
 
-    for i in range(2):
+    for table, team in tables[:2]:
 
-        played_for = teams[i]
-        played_against = teams[1 - i]
+        opponent = teams[1] if team == teams[0] else teams[0]
 
-        rows = tables[i].find_all("tr")
+        rows = table.find_all("tr")
 
         for r in rows:
             cols = r.find_all("td")
@@ -153,8 +136,8 @@ def parse_match(url):
 
             data.append({
                 "player": name,
-                "played_for": played_for,
-                "played_against": played_against,
+                "played_for": team,
+                "played_against": opponent,
                 "season": SEASON,
                 "round": round_num,
 
