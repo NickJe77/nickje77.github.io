@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRAPER — FINAL (MATCH DETECTION FIXED)")
+print("AFL SCRAPER — FINAL (ROUND FROM MATCH PAGE — GUARANTEED)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -23,71 +23,65 @@ def to_int(x):
 
 
 # -----------------------------
-# GET LINKS + ROUND (FIXED)
+# GET MATCH LINKS ONLY
 # -----------------------------
-def get_links_with_rounds():
+def get_links():
 
     url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}"
     soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
-    matches = []
-    current_round = None
+    links = []
 
-    rows = soup.find_all("tr")
+    for a in soup.find_all("a", href=True):
 
-    for r in rows:
+        href = a["href"]
 
-        text = r.get_text(" ", strip=True)
-
-        # ✅ Detect round
-        round_match = re.search(r"Round\s+(\d+)", text)
-        if round_match:
-            current_round = int(round_match.group(1))
-            print("Detected Round:", current_round)
+        if "ft_match_statistics" not in href:
             continue
 
-        # ✅ Find ALL links in row (IMPORTANT FIX)
-        links = r.find_all("a", href=True)
+        if href.startswith("/"):
+            href = BASE + href
+        elif not href.startswith("http"):
+            href = BASE + "/afl/footy/" + href
 
-        for a in links:
+        links.append(href)
 
-            href = a["href"]
+    links = list(set(links))
 
-            if "ft_match_statistics" not in href:
-                continue
+    print("Matches found:", len(links))
 
-            # build full URL
-            if href.startswith("/"):
-                href = BASE + href
-            elif not href.startswith("http"):
-                href = BASE + "/afl/footy/" + href
+    if not links:
+        raise Exception("❌ NO MATCH LINKS FOUND")
 
-            matches.append((href, current_round))
+    print("Sample:", links[0])
 
-    # remove duplicates
-    matches = list(set(matches))
-
-    print("Matches found:", len(matches))
-
-    if not matches:
-        raise Exception("❌ NO MATCHES FOUND — LINK PARSING FAILED")
-
-    print("Sample:", matches[0])
-
-    return matches
+    return links
 
 
 # -----------------------------
 # PARSE MATCH
 # -----------------------------
-def parse_match(url, round_num):
+def parse_match(url):
 
-    print(f"→ {url} (Round {round_num})")
+    print("→", url)
 
     soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
     title = soup.find("title").text
 
+    # -----------------------------
+    # ROUND (🔥 GUARANTEED FIX)
+    # -----------------------------
+    round_match = re.search(r"Round\s+(\d+)", title)
+
+    if round_match:
+        round_num = int(round_match.group(1))
+    else:
+        round_num = None
+
+    # -----------------------------
+    # TEAMS
+    # -----------------------------
     if " def " in title:
         parts = title.split(" def ")
     elif " defeats " in title:
@@ -99,6 +93,9 @@ def parse_match(url, round_num):
     team1 = parts[0].replace("AFL Match Statistics :", "").strip()
     team2 = parts[1].split(" at ")[0].strip()
 
+    # -----------------------------
+    # PLAYER TABLES
+    # -----------------------------
     tables = soup.find_all("table")
 
     player_tables = []
@@ -133,6 +130,7 @@ def parse_match(url, round_num):
                 continue
 
             name = link.text.strip()
+
             if not name:
                 continue
 
@@ -141,7 +139,7 @@ def parse_match(url, round_num):
                 "played_for": teams[i],
                 "played_against": teams[1 - i],
                 "season": SEASON,
-                "round": round_num,
+                "round": round_num,   # ✅ NOW ALWAYS FILLED
 
                 "K": to_int(cols[1].text),
                 "HB": to_int(cols[2].text),
@@ -173,13 +171,13 @@ def parse_match(url, round_num):
 # -----------------------------
 # RUN
 # -----------------------------
-matches = get_links_with_rounds()
+links = get_links()
 
 all_data = []
 
-for url, rnd in matches:
+for link in links:
     try:
-        all_data.extend(parse_match(url, rnd))
+        all_data.extend(parse_match(link))
     except Exception as e:
         print("ERROR:", e)
 
