@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 from datetime import datetime
 
-print("RUNNING AFL SCRAPER 2026")
+print("RUNNING AFL SCRAPER — FIXED TEAMS")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -27,14 +27,13 @@ def clean(s):
 
 
 # -----------------------------
-# GET MATCH LINKS
+# MATCH LINKS
 # -----------------------------
 def get_links():
     links = set()
 
     for rnd in range(0, 31):
         url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}&round={rnd}"
-        print(f"Checking Round {rnd}...")
 
         res = requests.get(url, headers=HEADERS)
         if res.status_code != 200:
@@ -44,6 +43,7 @@ def get_links():
 
         for a in soup.find_all("a", href=True):
             href = a["href"]
+
             if "ft_match_statistics" not in href:
                 continue
 
@@ -54,13 +54,11 @@ def get_links():
 
             links.add(href)
 
-    links = sorted(links)
-    print("TOTAL MATCHES:", len(links))
-    return links
+    return sorted(links)
 
 
 # -----------------------------
-# PARSE TITLE TEAMS
+# TEAMS FROM TITLE
 # -----------------------------
 def parse_title(title):
     title = title.replace("AFL Match Statistics :", "").strip()
@@ -94,7 +92,28 @@ def get_round(soup):
 
 
 # -----------------------------
-# MATCH
+# FIND TEAM FOR TABLE
+# -----------------------------
+def get_team_for_table(table, team1, team2):
+    prev = table
+
+    for _ in range(15):
+        prev = prev.find_previous(["b", "strong", "td", "th", "div", "span"])
+        if not prev:
+            break
+
+        txt = clean(prev.get_text())
+
+        if team1 and team1.lower() in txt.lower():
+            return team1
+        if team2 and team2.lower() in txt.lower():
+            return team2
+
+    return None
+
+
+# -----------------------------
+# PARSE MATCH
 # -----------------------------
 def parse_match(url):
     print("→", url)
@@ -112,8 +131,8 @@ def parse_match(url):
     print("ROUND:", round_num)
 
     tables = soup.find_all("table")
-    stat_tables = []
 
+    stat_tables = []
     for t in tables:
         txt = t.get_text()
         if "K" in txt and "HB" in txt and "D" in txt:
@@ -124,11 +143,21 @@ def parse_match(url):
 
     data = []
 
-    for i in range(2):
-        rows = stat_tables[i].find_all("tr")
+    for table in stat_tables[:2]:
+
+        played_for = get_team_for_table(table, team1, team2)
+
+        # fallback if detection fails
+        if not played_for:
+            played_for = team1 if len(data) == 0 else team2
+
+        played_against = team2 if played_for == team1 else team1
+
+        rows = table.find_all("tr")
 
         for r in rows:
             cols = r.find_all("td")
+
             if len(cols) < 18:
                 continue
 
@@ -137,9 +166,6 @@ def parse_match(url):
                 continue
 
             name = clean(link.text)
-
-            played_for = team1 if i == 0 else team2
-            played_against = team2 if i == 0 else team1
 
             data.append({
                 "player": name,
@@ -181,10 +207,7 @@ for link in get_links():
     except Exception as e:
         print("ERROR:", e)
 
-print("TOTAL ROWS:", len(all_data))
-
 with open(OUTPUT, "w") as f:
     json.dump(all_data, f, indent=2)
 
-print("WRITTEN:", OUTPUT)
-print("UPDATED:", datetime.utcnow())
+print("DONE:", datetime.utcnow())
