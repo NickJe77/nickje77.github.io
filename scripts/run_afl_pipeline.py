@@ -6,7 +6,7 @@ from pathlib import Path
 from collections import defaultdict
 from urllib.parse import urljoin
 
-print("AFL REBUILD (AFLTABLES FINAL FIXED VERSION)")
+print("AFL REBUILD (AFLTABLES WORKING FINAL FIX)")
 
 SEASON = 2026
 BASE = "https://afltables.com/afl/seas/"
@@ -20,9 +20,6 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 PLAYERS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# -------------------------------
-# HELPERS
-# -------------------------------
 def clean(x):
     return re.sub(r"\s+", " ", (x or "")).strip()
 
@@ -35,7 +32,7 @@ def to_int(x):
 
 
 # -------------------------------
-# GET MATCH LINKS (FIXED)
+# GET MATCH LINKS
 # -------------------------------
 season_url = f"{BASE}{SEASON}.html"
 print("Loading:", season_url)
@@ -60,7 +57,7 @@ print("MATCHES FOUND:", len(links))
 
 
 # -------------------------------
-# PARSE MATCHES
+# PARSE MATCHES (CORRECTED)
 # -------------------------------
 all_rows = []
 match_id = 0
@@ -69,12 +66,8 @@ for link in links:
     match_id += 1
     print("Match:", match_id)
 
-    try:
-        html = requests.get(link).text
-        soup = BeautifulSoup(html, "html.parser")
-    except Exception as e:
-        print("FAILED:", link)
-        continue
+    html = requests.get(link).text
+    soup = BeautifulSoup(html, "html.parser")
 
     tables = soup.find_all("table")
 
@@ -84,16 +77,16 @@ for link in links:
         if len(rows) < 15:
             continue
 
-        # 🔥 detect correct player stat tables
         header = [clean(td.text) for td in rows[0].find_all("td")]
 
-        if "K" not in header or "HB" not in header:
+        # 🔥 FIXED HEADER MATCH
+        if "KI" not in header or "HB" not in header:
             continue
 
         for tr in rows[1:]:
             cols = tr.find_all("td")
 
-            if len(cols) < 8:
+            if len(cols) < 10:
                 continue
 
             name = clean(cols[0].text)
@@ -107,9 +100,9 @@ for link in links:
                 "season": SEASON,
 
                 "K": to_int(cols[1].text),
-                "HB": to_int(cols[2].text),
-                "D": to_int(cols[3].text),
-                "M": to_int(cols[4].text),
+                "M": to_int(cols[2].text),
+                "HB": to_int(cols[3].text),
+                "D": to_int(cols[4].text),
                 "G": to_int(cols[5].text),
                 "B": to_int(cols[6].text),
             }
@@ -149,9 +142,6 @@ for r in all_rows:
             players[name]["career"][k] += v
 
 
-# -------------------------------
-# SAVE PLAYERS
-# -------------------------------
 summary = []
 
 for name, p in players.items():
