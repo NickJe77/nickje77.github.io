@@ -2,35 +2,25 @@ import json
 import re
 import time
 from pathlib import Path
-from collections import defaultdict
 
 import requests
 from bs4 import BeautifulSoup
 
-print("AFL PIPELINE (FOOTYWIRE STABLE)")
+print("AFL PIPELINE (FRESH SAFE START)")
 
 BASE = "https://www.footywire.com"
 SEASON = 2026
 
 DATA_DIR = Path("docs/data/afl")
 OUTPUT = DATA_DIR / f"afl_{SEASON}.json"
-PLAYERS_DIR = DATA_DIR / "players"
-PLAYERS_JSON = DATA_DIR / "players.json"
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-PLAYERS_DIR.mkdir(parents=True, exist_ok=True)
 
-# -------------------------------
-# SESSION + HEADERS
-# -------------------------------
 session = requests.Session()
-
-HEADERS = {
+session.headers.update({
     "User-Agent": "Mozilla/5.0",
     "Accept-Language": "en-AU,en;q=0.9"
-}
-
-session.headers.update(HEADERS)
+})
 
 
 # -------------------------------
@@ -48,52 +38,47 @@ def to_int(x):
 
 
 def fetch(url):
-    for i in range(3):
-        try:
-            r = session.get(url, timeout=20)
+    try:
+        r = session.get(url, timeout=20)
 
-            if r.status_code == 200 and "Match Statistics" in r.text:
-                return r.text
+        if r.status_code == 200 and "Match Statistics" in r.text:
+            return r.text
 
-        except Exception as e:
-            print("Fetch error:", e)
+    except:
+        pass
 
-        time.sleep(5)
-
-    print("BLOCKED:", url)
     return None
 
 
 # -------------------------------
-# GET MATCH LINKS (LIMITED)
+# GET ONE ROUND ONLY
 # -------------------------------
 def get_links():
+    # 🔥 START WITH ROUND 0 ONLY
+    rnd = 0
+
+    url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}&round={rnd}"
+
+    print("Scraping Round:", rnd)
+
+    html = fetch(url)
+    if not html:
+        return []
+
+    soup = BeautifulSoup(html, "html.parser")
+
     links = []
 
-    # 🔥 ONLY DO FIRST FEW ROUNDS (SAFE)
-    for rnd in range(0, 5):
-        url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}&round={rnd}"
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
 
-        print("Round:", rnd)
-
-        html = fetch(url)
-        if not html:
+        if "ft_match_statistics" not in href:
             continue
 
-        soup = BeautifulSoup(html, "html.parser")
+        if href.startswith("/"):
+            href = BASE + href
 
-        for a in soup.find_all("a", href=True):
-            href = a["href"]
-
-            if "ft_match_statistics" not in href:
-                continue
-
-            if href.startswith("/"):
-                href = BASE + href
-
-            links.append(href)
-
-        time.sleep(3)
+        links.append(href)
 
     return sorted(set(links))
 
@@ -117,29 +102,6 @@ def parse_match(url, match_id):
     team_a, rest = text.split(" def ", 1)
     team_b = rest.split(" at ")[0]
 
-    # -------------------------------
-    # MATCH META
-    # -------------------------------
-    page_text = soup.get_text(" ")
-
-    venue = ""
-    m = re.search(r"Venue:\s*(.*?)\s", page_text)
-    if m:
-        venue = clean(m.group(1))
-
-    crowd = 0
-    m = re.search(r"Attendance:\s*(\d+)", page_text)
-    if m:
-        crowd = int(m.group(1))
-
-    date = ""
-    m = re.search(r"\w{3}\s\d{1,2}\s\w+\s\d{1,2}:\d{2}", page_text)
-    if m:
-        date = m.group(0)
-
-    # -------------------------------
-    # PLAYER TABLES
-    # -------------------------------
     rows = soup.find_all("tr")
 
     data = []
@@ -165,10 +127,10 @@ def parse_match(url, match_id):
 
         opponent = team_b if current_team == team_a else team_a
 
-        row = {
+        data.append({
             "season": SEASON,
-            "round": "",  # we can refine later
-            "venue": venue,
+            "round": "Round 0",
+            "venue": "",
             "match_id": match_id,
 
             "player": name,
@@ -202,60 +164,12 @@ def parse_match(url, match_id):
             "away_q3": 0,
             "away_q4": 0,
 
-            "crowd": crowd,
-            "date": date,
+            "crowd": 0,
+            "date": "",
             "date_iso": ""
-        }
-
-        data.append(row)
-
-    return data
-
-
-# -------------------------------
-# BUILD PLAYERS
-# -------------------------------
-def build_players(rows):
-    players = {}
-
-    for r in rows:
-        name = r["player"]
-
-        if name not in players:
-            players[name] = {
-                "name": name,
-                "games": [],
-                "career": defaultdict(int),
-            }
-
-        players[name]["games"].append(r)
-
-        for k, v in r.items():
-            if isinstance(v, int):
-                players[name]["career"][k] += v
-
-    return players
-
-
-def save_players(players):
-    summary = []
-
-    for name, p in players.items():
-        slug = re.sub(r"[^a-z0-9\-]", "", name.lower().replace(" ", "-"))[:60]
-
-        (PLAYERS_DIR / f"{slug}.json").write_text(json.dumps({
-            "name": name,
-            "career": dict(p["career"]),
-            "games": p["games"]
-        }, indent=2))
-
-        summary.append({
-            "name": name,
-            "slug": slug,
-            "games": len(p["games"])
         })
 
-    PLAYERS_JSON.write_text(json.dumps(summary, indent=2))
+    return data
 
 
 # -------------------------------
@@ -265,30 +179,21 @@ def main():
     links = get_links()
 
     all_rows = []
-    match_id = 0
+    match_id = 1
 
     for link in links:
-        match_id += 1
         print("Match:", match_id)
-
-        time.sleep(4)
 
         rows = parse_match(link, match_id)
         all_rows.extend(rows)
 
+        match_id += 1
+        time.sleep(5)  # 🔥 CRITICAL
+
     print("TOTAL ROWS:", len(all_rows))
 
-    if len(all_rows) < 200:
-        print("❌ BLOCKED — NOT SAVING")
-        return
-
     OUTPUT.write_text(json.dumps(all_rows, indent=2))
-    print("✅ DATA SAVED")
-
-    players = build_players(all_rows)
-    save_players(players)
-
-    print("✅ PLAYERS BUILT")
+    print("✅ FIRST ROUND BUILT")
 
 
 if __name__ == "__main__":
