@@ -2,9 +2,8 @@ import json
 import requests
 from bs4 import BeautifulSoup
 from pathlib import Path
-import re
 
-print("AFL SCRAPER — FINAL (ROUND WORKING)")
+print("AFL SCRAPER — FINAL (ROUND FROM MATCH LIST)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -26,31 +25,9 @@ def to_int(x):
 
 
 # -----------------------------
-# EXTRACT ROUND (FROM FIRST TABLE — RELIABLE)
+# GET MATCH LINKS + ROUND (FIXED)
 # -----------------------------
-def extract_round(soup):
-
-    tables = soup.find_all("table")
-
-    if not tables:
-        return None
-
-    first_table = tables[0]
-
-    text = first_table.get_text(" ", strip=True)
-
-    match = re.search(r"Round\s+(\d+)", text)
-
-    if match:
-        return int(match.group(1))
-
-    return None
-
-
-# -----------------------------
-# GET MATCH LINKS
-# -----------------------------
-def get_links():
+def get_links_with_rounds():
 
     url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}"
 
@@ -58,19 +35,34 @@ def get_links():
 
     links = []
 
-    for a in soup.select('a[href*="ft_match_statistics"]'):
+    current_round = None
 
-        href = a.get("href", "")
+    for row in soup.find_all("tr"):
 
-        if not href:
-            continue
+        text = row.get_text(" ", strip=True)
 
-        if href.startswith("/"):
-            href = BASE + href
-        elif not href.startswith("http"):
-            href = BASE + "/afl/footy/" + href
+        # Detect round rows
+        if text.startswith("Round"):
+            try:
+                current_round = int(text.replace("Round", "").strip())
+                print("Detected Round:", current_round)
+            except:
+                continue
 
-        links.append(href)
+        # Find match links
+        for a in row.find_all("a", href=True):
+
+            if "ft_match_statistics" not in a["href"]:
+                continue
+
+            href = a["href"]
+
+            if href.startswith("/"):
+                href = BASE + href
+            elif not href.startswith("http"):
+                href = BASE + "/afl/footy/" + href
+
+            links.append((href, current_round))
 
     links = list(set(links))
 
@@ -87,9 +79,9 @@ def get_links():
 # -----------------------------
 # PARSE MATCH
 # -----------------------------
-def parse_match(url):
+def parse_match(url, round_num):
 
-    print("→", url)
+    print(f"→ {url} (Round {round_num})")
 
     soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
@@ -108,12 +100,6 @@ def parse_match(url):
 
     team1 = parts[0].replace("AFL Match Statistics :", "").strip()
     team2 = parts[1].split(" at ")[0].strip()
-
-    # -----------------------------
-    # ROUND
-    # -----------------------------
-    round_num = extract_round(soup)
-    print("ROUND:", round_num)
 
     # -----------------------------
     # FIND PLAYER TABLES
@@ -149,7 +135,7 @@ def parse_match(url):
             if len(cols) < 18:
                 continue
 
-            # 🔥 ONLY REAL PLAYERS
+            # ONLY REAL PLAYERS
             link = cols[0].find("a")
 
             if not link:
@@ -165,7 +151,7 @@ def parse_match(url):
                 "played_for": teams[i],
                 "played_against": teams[1 - i],
                 "season": SEASON,
-                "round": round_num,
+                "round": round_num,   # ✅ GUARANTEED NOW
 
                 "K": to_int(cols[1].text),
                 "HB": to_int(cols[2].text),
@@ -197,13 +183,13 @@ def parse_match(url):
 # -----------------------------
 # RUN SCRAPER
 # -----------------------------
-links = get_links()
+matches = get_links_with_rounds()
 
 all_data = []
 
-for link in links:
+for url, round_num in matches:
     try:
-        all_data.extend(parse_match(link))
+        all_data.extend(parse_match(url, round_num))
     except Exception as e:
         print("ERROR:", e)
 
