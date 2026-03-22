@@ -1,195 +1,121 @@
-import json
-import re
-import shutil
-import unicodedata
-from pathlib import Path
+def build_players(rows):
 
-print("BUILD AFL PLAYERS — FINAL")
+    if PLAYERS_DIR.exists():
+        shutil.rmtree(PLAYERS_DIR)
 
-DATA_DIR = Path("docs/data/afl")
-PLAYERS_DIR = DATA_DIR / "players"
-PLAYERS_INDEX = DATA_DIR / "players.json"
+    PLAYERS_DIR.mkdir(parents=True, exist_ok=True)
 
-# -----------------------------
-# RESET OUTPUT
-# -----------------------------
-if PLAYERS_DIR.exists():
-    shutil.rmtree(PLAYERS_DIR)
+    players = {}
 
-PLAYERS_DIR.mkdir(parents=True, exist_ok=True)
+    print("Grouping players...")
 
-if PLAYERS_INDEX.exists():
-    PLAYERS_INDEX.unlink()
+    for r in rows:
+        name = clean(r.get("player"))
+        if not name:
+            continue
 
-# -----------------------------
-# HELPERS
-# -----------------------------
-def clean_name(name):
-    name = unicodedata.normalize("NFD", str(name))
-    name = name.encode("ascii", "ignore").decode("utf-8")
-    return name.strip()
+        slug = slugify(name)
 
-def slugify(name):
-    name = clean_name(name).lower()
-    name = re.sub(r"[^\w\s-]", "", name)
-    name = re.sub(r"\s+", "-", name)
-    return name.strip("-")
+        if slug not in players:
+            players[slug] = []
 
-def to_int(value):
-    try:
-        return int(value)
-    except:
-        try:
-            return int(float(value))
-        except:
-            return 0
+        players[slug].append(r)
 
-def sort_key(game):
-    season = to_int(game.get("season", 0))
-    round_num = game.get("round")
-    if round_num is None:
-        round_num = 999
-    return (season, to_int(round_num), game.get("team", ""), game.get("opponent", ""))
+    print("Total players:", len(players))
 
-# -----------------------------
-# LOAD ALL AFL SEASON FILES
-# -----------------------------
-rows = []
+    index = []
 
-season_files = sorted(DATA_DIR.glob("afl_*.json"))
+    print("Building + writing players...")
 
-for file in season_files:
-    print("Loading:", file)
-    try:
-        with open(file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            if isinstance(data, list):
-                rows.extend(data)
-    except Exception as e:
-        print("Failed loading", file, e)
+    batch = []
+    BATCH_SIZE = 50  # 🔥 critical
 
-print("TOTAL ROWS LOADED:", len(rows))
+    for i, (slug, games_raw) in enumerate(players.items()):
 
-# -----------------------------
-# BUILD PLAYER GAME LOGS
-# -----------------------------
-players = {}
+        seen = set()
+        games = []
 
-for row in rows:
-    player_name = clean_name(row.get("player", ""))
-    if not player_name:
-        continue
+        for r in games_raw:
+            key = (
+                r.get("season"),
+                r.get("round"),
+                r.get("played_for"),
+                r.get("played_against"),
+                r.get("K"), r.get("HB"), r.get("D")
+            )
 
-    slug = slugify(player_name)
-    if not slug:
-        continue
+            if key in seen:
+                continue
 
-    if slug not in players:
-        players[slug] = {
+            seen.add(key)
+
+            games.append({
+                "season": r.get("season"),
+                "round": r.get("round"),
+                "team": r.get("played_for"),
+                "opponent": r.get("played_against"),
+                "K": to_int(r.get("K")),
+                "HB": to_int(r.get("HB")),
+                "D": to_int(r.get("D")),
+                "M": to_int(r.get("M")),
+                "G": to_int(r.get("G")),
+                "B": to_int(r.get("B")),
+                "T": to_int(r.get("T")),
+                "HO": to_int(r.get("HO")),
+                "GA": to_int(r.get("GA")),
+                "I50": to_int(r.get("I50")),
+                "CL": to_int(r.get("CL")),
+                "CG": to_int(r.get("CG")),
+                "R50": to_int(r.get("R50")),
+                "FF": to_int(r.get("FF")),
+                "FA": to_int(r.get("FA")),
+                "AF": to_int(r.get("AF")),
+                "SC": to_int(r.get("SC"))
+            })
+
+        games.sort(key=lambda g: (g["season"], g["round"] or 999))
+
+        player_name = clean(games_raw[0].get("player"))
+
+        seasons = sorted({g["season"] for g in games})
+        teams = list(dict.fromkeys([g["team"] for g in games]))
+
+        out = {
             "player": player_name,
             "slug": slug,
-            "games": [],
-            "_seen": set()
+            "seasons": seasons,
+            "teams": teams,
+            "games": games
         }
 
-    season = to_int(row.get("season", 0))
-    round_num = row.get("round")
-    team = row.get("played_for", "")
-    opponent = row.get("played_against", "")
+        batch.append((slug, out))
 
-    # dedupe key
-    game_key = (
-        player_name,
-        season,
-        round_num,
-        str(team),
-        str(opponent),
-        to_int(row.get("K", 0)),
-        to_int(row.get("HB", 0)),
-        to_int(row.get("D", 0)),
-        to_int(row.get("M", 0)),
-        to_int(row.get("G", 0)),
-        to_int(row.get("B", 0)),
-        to_int(row.get("T", 0)),
-        to_int(row.get("HO", 0)),
-        to_int(row.get("GA", 0)),
-        to_int(row.get("I50", 0)),
-        to_int(row.get("CL", 0)),
-        to_int(row.get("CG", 0)),
-        to_int(row.get("R50", 0)),
-        to_int(row.get("FF", 0)),
-        to_int(row.get("FA", 0)),
-        to_int(row.get("AF", 0)),
-        to_int(row.get("SC", 0)),
-    )
+        # 🔥 WRITE IN BATCHES
+        if len(batch) >= BATCH_SIZE:
+            for s, data in batch:
+                with open(PLAYERS_DIR / f"{s}.json", "w") as f:
+                    json.dump(data, f)
 
-    if game_key in players[slug]["_seen"]:
-        continue
+            batch = []
 
-    players[slug]["_seen"].add(game_key)
+        index.append({
+            "player": player_name,
+            "slug": slug,
+            "seasons": seasons,
+            "teams": teams
+        })
 
-    players[slug]["games"].append({
-        "season": season,
-        "round": round_num,
-        "team": team,
-        "opponent": opponent,
-        "K": to_int(row.get("K", 0)),
-        "HB": to_int(row.get("HB", 0)),
-        "D": to_int(row.get("D", 0)),
-        "M": to_int(row.get("M", 0)),
-        "G": to_int(row.get("G", 0)),
-        "B": to_int(row.get("B", 0)),
-        "T": to_int(row.get("T", 0)),
-        "HO": to_int(row.get("HO", 0)),
-        "GA": to_int(row.get("GA", 0)),
-        "I50": to_int(row.get("I50", 0)),
-        "CL": to_int(row.get("CL", 0)),
-        "CG": to_int(row.get("CG", 0)),
-        "R50": to_int(row.get("R50", 0)),
-        "FF": to_int(row.get("FF", 0)),
-        "FA": to_int(row.get("FA", 0)),
-        "AF": to_int(row.get("AF", 0)),
-        "SC": to_int(row.get("SC", 0))
-    })
+        if i % 100 == 0:
+            print(f"Processed {i} players")
 
-# -----------------------------
-# WRITE PLAYER FILES + INDEX
-# -----------------------------
-index = []
+    # 🔥 write remaining
+    for s, data in batch:
+        with open(PLAYERS_DIR / f"{s}.json", "w") as f:
+            json.dump(data, f)
 
-for slug, pdata in sorted(players.items(), key=lambda x: x[1]["player"]):
-    games = sorted(pdata["games"], key=sort_key)
+    print("Writing index...")
 
-    seasons = sorted({g["season"] for g in games if g.get("season") is not None})
-    teams = []
-    seen_teams = set()
+    with open(PLAYERS_INDEX, "w") as f:
+        json.dump(index, f)
 
-    for g in games:
-        t = g.get("team")
-        if t and t not in seen_teams:
-            seen_teams.add(t)
-            teams.append(t)
-
-    out = {
-        "player": pdata["player"],
-        "slug": slug,
-        "seasons": seasons,
-        "teams": teams,
-        "games": games
-    }
-
-    with open(PLAYERS_DIR / f"{slug}.json", "w", encoding="utf-8") as f:
-        json.dump(out, f, indent=2, ensure_ascii=False)
-
-    index.append({
-        "player": pdata["player"],
-        "slug": slug,
-        "seasons": seasons,
-        "teams": teams
-    })
-
-with open(PLAYERS_INDEX, "w", encoding="utf-8") as f:
-    json.dump(index, f, indent=2, ensure_ascii=False)
-
-print("PLAYER FILES WRITTEN:", len(index))
-print("INDEX WRITTEN:", PLAYERS_INDEX)
+    print("DONE")
