@@ -5,10 +5,10 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 from collections import defaultdict
 
-print("AFL REBUILD (AFLTABLES WORKING VERSION)")
+print("AFL REBUILD (AFLTABLES MATCH VERSION)")
 
 SEASON = 2026
-BASE = "https://afltables.com/afl/seas"
+BASE = "https://afltables.com/afl/stats/games"
 
 DATA_DIR = Path("docs/data/afl")
 OUTPUT = DATA_DIR / f"afl_{SEASON}.json"
@@ -19,9 +19,6 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 PLAYERS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# -------------------------------
-# HELPERS
-# -------------------------------
 def clean(x):
     return re.sub(r"\s+", " ", (x or "")).strip()
 
@@ -34,65 +31,76 @@ def to_int(x):
 
 
 # -------------------------------
-# LOAD SEASON PAGE
+# GET MATCH LINKS
 # -------------------------------
-url = f"{BASE}/{SEASON}.html"
-print("Loading:", url)
+print("Getting match links...")
 
-html = requests.get(url).text
+season_url = f"https://afltables.com/afl/seas/{SEASON}.html"
+html = requests.get(season_url).text
 soup = BeautifulSoup(html, "html.parser")
 
-tables = soup.find_all("table")
+links = []
 
+for a in soup.find_all("a", href=True):
+    href = a["href"]
+
+    if "/stats/games/" in href:
+        full = "https://afltables.com" + href
+        links.append(full)
+
+links = sorted(set(links))
+
+print("MATCHES FOUND:", len(links))
+
+
+# -------------------------------
+# PARSE MATCHES
+# -------------------------------
 all_rows = []
 match_id = 0
 
-
-# -------------------------------
-# PARSE TABLES (FIXED)
-# -------------------------------
-for table in tables:
-    rows = table.find_all("tr")
-
-    # skip junk tables
-    if len(rows) < 20:
-        continue
-
-    # check if it looks like a player table
-    first_data_row = rows[1].find_all("td")
-    if len(first_data_row) < 10:
-        continue
-
+for link in links:
     match_id += 1
+    print("Match:", match_id)
 
-    for tr in rows[1:]:
-        cols = tr.find_all("td")
+    try:
+        html = requests.get(link).text
+        soup = BeautifulSoup(html, "html.parser")
+    except:
+        continue
 
-        if len(cols) < 10:
+    tables = soup.find_all("table")
+
+    for table in tables:
+        rows = table.find_all("tr")
+
+        if len(rows) < 15:
             continue
 
-        name = clean(cols[0].text)
+        for tr in rows[1:]:
+            cols = tr.find_all("td")
 
-        if not name or name.lower() == "player":
-            continue
+            if len(cols) < 8:
+                continue
 
-        row = {
-            "match_id": f"{SEASON}_{match_id:04d}",
-            "player": name,
-            "season": SEASON,
-            "round": None,
-            "played_for": None,
-            "played_against": None,
+            name = clean(cols[0].text)
 
-            "K": to_int(cols[1].text),
-            "HB": to_int(cols[2].text),
-            "D": to_int(cols[3].text),
-            "M": to_int(cols[4].text),
-            "G": to_int(cols[5].text),
-            "B": to_int(cols[6].text),
-        }
+            if not name or name.lower() == "player":
+                continue
 
-        all_rows.append(row)
+            row = {
+                "match_id": f"{SEASON}_{match_id:04d}",
+                "player": name,
+                "season": SEASON,
+                "K": to_int(cols[1].text),
+                "HB": to_int(cols[2].text),
+                "D": to_int(cols[3].text),
+                "M": to_int(cols[4].text),
+                "G": to_int(cols[5].text),
+                "B": to_int(cols[6].text),
+            }
+
+            all_rows.append(row)
 
 
 print("TOTAL ROWS:", len(all_rows))
@@ -127,9 +135,6 @@ for r in all_rows:
             players[name]["career"][k] += v
 
 
-# -------------------------------
-# SAVE PLAYERS
-# -------------------------------
 summary = []
 
 for name, p in players.items():
