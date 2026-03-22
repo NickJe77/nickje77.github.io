@@ -7,43 +7,36 @@ permissions:
   contents: write
 
 jobs:
-  run-scraper:
+  run:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: |
-          pip install requests beautifulsoup4
+      - run: pip install requests beautifulsoup4
 
-      # STEP 1 — SCRAPER
-      - name: Run AFL scraper
-        run: |
-          python scripts/afl_footywire_to_flat.py
+      - name: Scrape AFL
+        run: python scripts/afl_footywire_to_flat.py
 
-      # 🔥 STEP 2 — CLEAN OLD PLAYER OUTPUT
-      - name: Clean player data
+      - name: Clean players
         run: |
           rm -rf docs/data/afl/players
           rm -f docs/data/afl/players.json
 
-      # STEP 3 — PLAYER BUILDER
-      - name: Build AFL players
-        run: |
-          python scripts/build_afl_players.py
+      - name: Build players
+        run: python scripts/build_afl_players.py
 
-      # STEP 4 — COMMIT
-      - name: Commit and push
+      - name: Force change
+        run: date > last_run.txt
+
+      - name: Commit
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add -A
-          git commit -m "Update AFL data + players" || echo "No changes"
+          git commit -m "Update AFL data" || echo "No changes"
           git push
