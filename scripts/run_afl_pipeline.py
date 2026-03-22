@@ -11,6 +11,33 @@ PLAYERS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # -------------------------------
+# ROUND FIX
+# -------------------------------
+def fix_round(r):
+    if r is None:
+        return None
+
+    # already correct
+    if isinstance(r, str) and r.lower().startswith("round"):
+        return r
+
+    # finals
+    if isinstance(r, str):
+        t = r.lower()
+        if "grand" in t: return "Grand Final"
+        if "prelim" in t: return "Preliminary Final"
+        if "semi" in t: return "Semi Final"
+        if "qualifying" in t: return "Qualifying Final"
+        if "elimination" in t: return "Elimination Final"
+
+    # numeric
+    try:
+        return f"Round {int(r)}"
+    except:
+        return None
+
+
+# -------------------------------
 # LOAD ALL PLAYER ROWS
 # -------------------------------
 def load_rows():
@@ -24,11 +51,9 @@ def load_rows():
         except:
             continue
 
-        # YOUR FILE = LIST OF PLAYER ROWS
         if isinstance(data, list):
             rows.extend(data)
 
-        # fallback if wrapped
         elif isinstance(data, dict):
             rows.extend(data.get("games", []))
 
@@ -36,17 +61,44 @@ def load_rows():
 
 
 # -------------------------------
-# BUILD PLAYERS (🔥 FIXED FOR YOUR STRUCTURE)
+# BUILD PLAYERS (FIXED)
 # -------------------------------
 def build_players(rows):
     players = {}
 
+    match_counter = 0
+    last_match_key = None
+
     for r in rows:
 
-        name = r.get("player")   # 🔥 THIS IS THE FIX
+        name = r.get("player")
         if not name:
             continue
 
+        # -------------------------------
+        # FIX ROUND
+        # -------------------------------
+        round_label = fix_round(r.get("round"))
+
+        # -------------------------------
+        # FIX MATCH ID (if missing)
+        # -------------------------------
+        match_key = (
+            r.get("season"),
+            round_label,
+            r.get("played_for"),
+            r.get("played_against")
+        )
+
+        if match_key != last_match_key:
+            match_counter += 1
+            last_match_key = match_key
+
+        match_id = r.get("match_id") or f"{r.get('season')}_{match_counter:04d}"
+
+        # -------------------------------
+        # BUILD PLAYER
+        # -------------------------------
         if name not in players:
             players[name] = {
                 "name": name,
@@ -56,15 +108,15 @@ def build_players(rows):
 
         entry = {
             "season": r.get("season"),
-            "round": r.get("round"),
+            "round": round_label,
             "team": r.get("played_for"),
             "opponent": r.get("played_against"),
+            "match_id": match_id,
             "stats": r
         }
 
         players[name]["games"].append(entry)
 
-        # aggregate stats
         for k, v in r.items():
             if isinstance(v, (int, float)):
                 players[name]["career"][k] += v
@@ -77,7 +129,12 @@ def build_players(rows):
 # -------------------------------
 def sort_player_games(players):
     def round_key(r):
-        return r if isinstance(r, int) else 999
+        if isinstance(r, str) and r.startswith("Round"):
+            try:
+                return int(re.search(r"\d+", r).group())
+            except:
+                return 999
+        return 999
 
     for p in players.values():
         p["games"] = sorted(
