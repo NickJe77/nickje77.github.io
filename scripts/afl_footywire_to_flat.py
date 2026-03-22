@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRAPER — FINAL TEAM FIX (TABLE COUNT METHOD)")
+print("AFL SCRAPER — FINAL (TID LOCKED)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -91,24 +91,9 @@ def get_round(soup):
 
 
 # -----------------------------
-# COUNT PLAYERS IN TABLE
-# -----------------------------
-def count_players(table):
-    count = 0
-    for r in table.find_all("tr"):
-        cols = r.find_all("td")
-        if len(cols) < 18:
-            continue
-        if cols[0].find("a"):
-            count += 1
-    return count
-
-
-# -----------------------------
 # MATCH
 # -----------------------------
 def parse_match(url):
-    print("→", url)
 
     soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
@@ -131,36 +116,12 @@ def parse_match(url):
     if len(stat_tables) < 2:
         return []
 
-    # 🔥 COUNT PLAYERS
-    c0 = count_players(stat_tables[0])
-    c1 = count_players(stat_tables[1])
-
-    print("TABLE COUNTS:", c0, c1)
-
-    # 🔥 ASSIGN TEAMS BASED ON COUNT
-    # Usually: one team has ~22–23 players, the other similar
-    # but consistency is: first table = home team MOST of the time
-
-    # fallback logic
-    if c0 >= c1:
-        table_team_map = {
-            0: team1,
-            1: team2
-        }
-    else:
-        table_team_map = {
-            0: team2,
-            1: team1
-        }
-
     data = []
+    team_map = {}
 
-    for i in range(2):
+    for table in stat_tables:
 
-        played_for = table_team_map[i]
-        played_against = team2 if played_for == team1 else team1
-
-        rows = stat_tables[i].find_all("tr")
+        rows = table.find_all("tr")
 
         for r in rows:
             cols = r.find_all("td")
@@ -173,6 +134,25 @@ def parse_match(url):
                 continue
 
             name = clean(link.text)
+
+            href = link.get("href", "")
+
+            # 🔥 EXTRACT TEAM ID
+            tid_match = re.search(r"[?&]tid=(\d+)", href)
+            if not tid_match:
+                continue
+
+            tid = tid_match.group(1)
+
+            # 🔥 MAP TEAM IDS
+            if tid not in team_map:
+                if len(team_map) == 0:
+                    team_map[tid] = team1
+                else:
+                    team_map[tid] = team2
+
+            played_for = team_map[tid]
+            played_against = team2 if played_for == team1 else team1
 
             data.append({
                 "player": name,
@@ -211,10 +191,8 @@ all_data = []
 for link in get_links():
     try:
         all_data.extend(parse_match(link))
-    except Exception as e:
-        print("ERROR:", e)
-
-print("TOTAL ROWS:", len(all_data))
+    except:
+        pass
 
 with open(OUTPUT, "w") as f:
     json.dump(all_data, f, indent=2)
