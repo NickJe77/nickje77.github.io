@@ -4,10 +4,12 @@ import requests
 from bs4 import BeautifulSoup
 from pathlib import Path
 from collections import defaultdict
+from urllib.parse import urljoin
 
-print("AFL REBUILD (AFLTABLES FINAL VERSION)")
+print("AFL REBUILD (AFLTABLES FINAL FIXED VERSION)")
 
 SEASON = 2026
+BASE = "https://afltables.com/afl/seas/"
 
 DATA_DIR = Path("docs/data/afl")
 OUTPUT = DATA_DIR / f"afl_{SEASON}.json"
@@ -18,6 +20,9 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 PLAYERS_DIR.mkdir(parents=True, exist_ok=True)
 
 
+# -------------------------------
+# HELPERS
+# -------------------------------
 def clean(x):
     return re.sub(r"\s+", " ", (x or "")).strip()
 
@@ -30,9 +35,11 @@ def to_int(x):
 
 
 # -------------------------------
-# GET MATCH LINKS
+# GET MATCH LINKS (FIXED)
 # -------------------------------
-season_url = f"https://afltables.com/afl/seas/{SEASON}.html"
+season_url = f"{BASE}{SEASON}.html"
+print("Loading:", season_url)
+
 html = requests.get(season_url).text
 soup = BeautifulSoup(html, "html.parser")
 
@@ -40,8 +47,12 @@ links = []
 
 for a in soup.find_all("a", href=True):
     href = a["href"]
-    if "/stats/games/" in href:
-        links.append("https://afltables.com" + href)
+
+    if "stats/games" not in href:
+        continue
+
+    full_url = urljoin(season_url, href)
+    links.append(full_url)
 
 links = sorted(set(links))
 
@@ -49,7 +60,7 @@ print("MATCHES FOUND:", len(links))
 
 
 # -------------------------------
-# PARSE MATCHES (FIXED)
+# PARSE MATCHES
 # -------------------------------
 all_rows = []
 match_id = 0
@@ -58,8 +69,12 @@ for link in links:
     match_id += 1
     print("Match:", match_id)
 
-    html = requests.get(link).text
-    soup = BeautifulSoup(html, "html.parser")
+    try:
+        html = requests.get(link).text
+        soup = BeautifulSoup(html, "html.parser")
+    except Exception as e:
+        print("FAILED:", link)
+        continue
 
     tables = soup.find_all("table")
 
@@ -69,7 +84,7 @@ for link in links:
         if len(rows) < 15:
             continue
 
-        # 🔥 detect player tables by header row
+        # 🔥 detect correct player stat tables
         header = [clean(td.text) for td in rows[0].find_all("td")]
 
         if "K" not in header or "HB" not in header:
@@ -90,6 +105,7 @@ for link in links:
                 "match_id": f"{SEASON}_{match_id:04d}",
                 "player": name,
                 "season": SEASON,
+
                 "K": to_int(cols[1].text),
                 "HB": to_int(cols[2].text),
                 "D": to_int(cols[3].text),
@@ -133,6 +149,9 @@ for r in all_rows:
             players[name]["career"][k] += v
 
 
+# -------------------------------
+# SAVE PLAYERS
+# -------------------------------
 summary = []
 
 for name, p in players.items():
