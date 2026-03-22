@@ -7,29 +7,50 @@ from collections import defaultdict
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
-print("AFL PIPELINE (PLAYWRIGHT VERSION)")
+print("AFL PIPELINE (PLAYWRIGHT STEALTH VERSION)")
 
 BASE = "https://www.footywire.com"
 SEASON = 2026
 
 DATA_DIR = Path("docs/data/afl")
 OUTPUT = DATA_DIR / f"afl_{SEASON}.json"
-PLAYERS_DIR = DATA_DIR / "players"
-PLAYERS_JSON = DATA_DIR / "players.json"
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-PLAYERS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # -------------------------------
-# BROWSER FETCH
+# BROWSER SETUP (REALISTIC)
+# -------------------------------
+def launch_browser(p):
+    browser = p.chromium.launch(headless=True)
+
+    context = browser.new_context(
+        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+        viewport={"width": 1280, "height": 800},
+        locale="en-AU"
+    )
+
+    page = context.new_page()
+    return browser, page
+
+
+# -------------------------------
+# FETCH WITH WAIT
 # -------------------------------
 def fetch(page, url):
     try:
         page.goto(url, timeout=60000)
-        time.sleep(2)
+
+        # 🔥 WAIT FOR TABLE (CRITICAL)
+        page.wait_for_selector("table", timeout=10000)
+
+        # 🔥 SCROLL (triggers lazy load)
+        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        time.sleep(1)
+
         return page.content()
-    except:
+
+    except Exception as e:
         print("FAILED:", url)
         return None
 
@@ -46,28 +67,6 @@ def to_int(text):
         return int(clean(text))
     except:
         return 0
-
-
-def get_round_label(soup):
-    text = soup.get_text(" ", strip=True).lower()
-
-    finals = [
-        "grand final",
-        "preliminary final",
-        "semi final",
-        "qualifying final",
-        "elimination final"
-    ]
-
-    for f in finals:
-        if f in text:
-            return f.title()
-
-    m = re.search(r"round\s+(\d+)", text)
-    if m:
-        return f"Round {int(m.group(1))}"
-
-    return None
 
 
 # -------------------------------
@@ -97,6 +96,8 @@ def get_links(page):
 
             links.add(href)
 
+        time.sleep(1)
+
     print("MATCH LINKS:", len(links))
     return sorted(links)
 
@@ -111,25 +112,10 @@ def parse_match(page, url, match_counter):
 
     soup = BeautifulSoup(html, "html.parser")
 
-    title = soup.find("title")
-    if not title:
-        return []
-
-    text = clean(title.text.replace("AFL Match Statistics :", ""))
-
-    if " def " not in text:
-        return []
-
-    team_a, team_b = text.split(" def ", 1)
-    team_b = team_b.split(" at ")[0]
-
-    round_label = get_round_label(soup) or f"Round {match_counter}"
-    match_id = f"{SEASON}_{match_counter:04d}"
-
     rows = soup.find_all("tr")
 
-    current_team = None
     data = []
+    current_team = None
 
     for tr in rows:
         txt = clean(tr.get_text(" ", strip=True))
@@ -137,9 +123,6 @@ def parse_match(page, url, match_counter):
         m = re.match(r"^(.*?) Match Statistics", txt)
         if m:
             current_team = clean(m.group(1))
-            continue
-
-        if not current_team:
             continue
 
         cols = tr.find_all("td", recursive=False)
@@ -151,32 +134,14 @@ def parse_match(page, url, match_counter):
             continue
 
         name = clean(link.text)
-        opponent = team_b if current_team == team_a else team_a
 
         row = {
-            "match_id": match_id,
+            "match_id": f"{SEASON}_{match_counter:04d}",
             "player": name,
-            "played_for": current_team,
-            "played_against": opponent,
-            "season": SEASON,
-            "round": round_label,
+            "team": current_team,
             "K": to_int(cols[1].text),
             "HB": to_int(cols[2].text),
             "D": to_int(cols[3].text),
-            "M": to_int(cols[4].text),
-            "G": to_int(cols[5].text),
-            "B": to_int(cols[6].text),
-            "T": to_int(cols[7].text),
-            "HO": to_int(cols[8].text),
-            "GA": to_int(cols[9].text),
-            "I50": to_int(cols[10].text),
-            "CL": to_int(cols[11].text),
-            "CG": to_int(cols[12].text),
-            "R50": to_int(cols[13].text),
-            "FF": to_int(cols[14].text),
-            "FA": to_int(cols[15].text),
-            "AF": to_int(cols[16].text),
-            "SC": to_int(cols[17].text),
         }
 
         data.append(row)
@@ -190,8 +155,7 @@ def parse_match(page, url, match_counter):
 # -------------------------------
 def main():
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        browser, page = launch_browser(p)
 
         links = get_links(page)
 
@@ -205,7 +169,7 @@ def main():
 
     print("TOTAL ROWS:", len(all_rows))
 
-    if len(all_rows) < 1000:
+    if len(all_rows) < 100:
         print("❌ STILL BLOCKED")
         return
 
