@@ -3,7 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 from pathlib import Path
 
-print("AFL SCRAPER — FINAL (WRITE GUARANTEED)")
+print("AFL SCRAPER — FINAL (LINK FIX)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -22,23 +22,40 @@ def to_int(x):
 
 
 # -----------------------------
-# GET MATCH LINKS
+# GET MATCH LINKS (FIXED)
 # -----------------------------
 def get_links():
+
     url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}"
 
-    r = requests.get(url, headers=HEADERS)
-    soup = BeautifulSoup(r.text, "html.parser")
+    soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
     links = []
 
-    for a in soup.find_all("a", href=True):
-        if "ft_match_statistics" in a["href"]:
-            links.append(BASE + a["href"])
+    for a in soup.select('a[href*="ft_match_statistics"]'):
+
+        href = a.get("href", "")
+
+        if not href:
+            continue
+
+        # 🔥 FIX FULL URL
+        if href.startswith("/"):
+            href = BASE + href
+        elif not href.startswith("http"):
+            href = BASE + "/afl/footy/" + href
+
+        links.append(href)
 
     links = list(set(links))
 
     print("Matches found:", len(links))
+
+    if not links:
+        raise Exception("❌ NO MATCH LINKS FOUND")
+
+    print("Sample:", links[0])
+
     return links
 
 
@@ -49,18 +66,17 @@ def parse_match(url):
 
     print("→", url)
 
-    r = requests.get(url, headers=HEADERS)
-    soup = BeautifulSoup(r.text, "html.parser")
+    soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
     title = soup.find("title").text
 
-    # 🔥 FIXED TEAM PARSING
+    # 🔥 TEAM PARSE FIX
     if " def " in title:
         parts = title.split(" def ")
     elif " defeats " in title:
         parts = title.split(" defeats ")
     else:
-        print("⚠️ Could not parse teams:", title)
+        print("⚠️ Cannot parse teams:", title)
         return []
 
     team1 = parts[0].replace("AFL Match Statistics :", "").strip()
@@ -71,12 +87,12 @@ def parse_match(url):
     player_tables = []
 
     for t in tables:
-        text = t.get_text(" ", strip=True)
-        if "K" in text and "HB" in text and "D" in text and "G" in text:
+        txt = t.get_text(" ", strip=True)
+        if "K" in txt and "HB" in txt and "D" in txt:
             player_tables.append(t)
 
     if len(player_tables) < 2:
-        print("⚠️ Not enough tables")
+        print("⚠️ Missing player tables")
         return []
 
     data = []
@@ -85,15 +101,15 @@ def parse_match(url):
 
     for i in range(2):
 
-        table = player_tables[i]
-        rows = table.find_all("tr")
+        rows = player_tables[i].find_all("tr")
 
         count = 0
 
-        for row in rows:
-            cols = row.find_all("td")
+        for r in rows:
 
-            if len(cols) < 10:
+            cols = r.find_all("td")
+
+            if len(cols) < 18:
                 continue
 
             name = cols[0].text.strip()
@@ -143,15 +159,14 @@ all_data = []
 
 for link in links:
     try:
-        match_data = parse_match(link)
-        all_data.extend(match_data)
+        all_data.extend(parse_match(link))
     except Exception as e:
         print("ERROR:", e)
 
 
 print("TOTAL PLAYER ROWS:", len(all_data))
 
-# 🔥 GUARANTEED WRITE
+# 🔥 WRITE FILE
 with open(OUTPUT, "w") as f:
     json.dump(all_data, f, indent=2)
 
