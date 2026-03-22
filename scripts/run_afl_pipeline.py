@@ -4,10 +4,10 @@ import time
 from pathlib import Path
 from collections import defaultdict
 
-import requests
+import cloudscraper
 from bs4 import BeautifulSoup
 
-print("AFL PIPELINE (ANTI-BLOCK FULL VERSION)")
+print("AFL PIPELINE (CLOUDSCRAPER VERSION)")
 
 BASE = "https://www.footywire.com"
 SEASON = 2026
@@ -21,18 +21,14 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 PLAYERS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# -------------------------------
-# HEADERS (REAL BROWSER)
-# -------------------------------
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-    "Accept-Language": "en-AU,en;q=0.9",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-    "Connection": "keep-alive",
-}
-
-session = requests.Session()
-session.headers.update(HEADERS)
+# 🔥 REAL BROWSER SESSION
+scraper = cloudscraper.create_scraper(
+    browser={
+        "browser": "chrome",
+        "platform": "windows",
+        "mobile": False
+    }
+)
 
 
 # -------------------------------
@@ -50,38 +46,22 @@ def to_int(text):
 
 
 # -------------------------------
-# FETCH (ANTI BLOCK)
+# FETCH (BYPASS BLOCK)
 # -------------------------------
 def fetch(url):
-    for i in range(6):
+    for i in range(5):
         try:
-            res = session.get(url, timeout=30)
+            res = scraper.get(url, timeout=30)
 
-            if res.status_code != 200:
-                time.sleep(3)
-                continue
-
-            html = res.text
-
-            # 🔥 BLOCK DETECTION
-            if "Match Statistics" not in html:
-                print("⚠️ BLOCKED:", url)
-                time.sleep(5)
-                continue
-
-            if len(html) < 8000:
-                print("⚠️ SHORT PAGE:", url)
-                time.sleep(5)
-                continue
-
-            return html
+            if res.status_code == 200 and len(res.text) > 5000:
+                return res.text
 
         except Exception as e:
             print("fetch error:", e)
 
         time.sleep(3)
 
-    print("❌ FAILED FETCH:", url)
+    print("FAILED:", url)
     return None
 
 
@@ -105,7 +85,7 @@ def get_round_label(soup):
 
 
 # -------------------------------
-# GET MATCH LINKS
+# GET LINKS
 # -------------------------------
 def get_links():
     links = set()
@@ -113,7 +93,7 @@ def get_links():
     for rnd in range(0, 31):
         url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}&round={rnd}"
 
-        print("Fetching round:", rnd)
+        print("Round:", rnd)
 
         html = fetch(url)
         if not html:
@@ -134,7 +114,7 @@ def get_links():
 
             links.add(href)
 
-        time.sleep(3)
+        time.sleep(2)
 
     print("MATCH LINKS:", len(links))
     return sorted(links)
@@ -223,7 +203,7 @@ def parse_match(url, match_counter):
 
         data.append(row)
 
-    print(f"Parsed {len(data)} rows from match {match_counter}")
+    print(f"Match {match_counter}: {len(data)} rows")
     return data
 
 
@@ -239,9 +219,9 @@ def scrape():
     for link in links:
         match_counter += 1
 
-        print("Match:", match_counter, link)
+        print("Match:", match_counter)
 
-        time.sleep(4)  # 🔥 KEY ANTI-BLOCK
+        time.sleep(3)
 
         rows = parse_match(link, match_counter)
         all_rows.extend(rows)
@@ -304,9 +284,8 @@ def save_players(players):
 def main():
     rows = scrape()
 
-    # 🔴 PROTECTION — NEVER WIPE DATA
     if len(rows) < 1000:
-        print("❌ SCRAPER BLOCKED — NO UPDATE APPLIED")
+        print("❌ STILL BLOCKED")
         return
 
     OUTPUT.write_text(json.dumps(rows, indent=2))
