@@ -4,15 +4,12 @@ import unicodedata
 import shutil
 from pathlib import Path
 
-print("BUILD AFL PLAYERS — FINAL (ALL SEASONS + NO DUPES + ROUND + INDEX)")
+print("RUNNING PLAYER BUILDER")
 
 DATA_DIR = Path("docs/data/afl")
 OUT = Path("docs/data/afl/players")
 INDEX = Path("docs/data/afl/players.json")
 
-# -----------------------------
-# RESET OUTPUT (PREVENT DUPES)
-# -----------------------------
 if OUT.exists():
     shutil.rmtree(OUT)
 
@@ -21,119 +18,54 @@ OUT.mkdir(parents=True, exist_ok=True)
 if INDEX.exists():
     INDEX.unlink()
 
-# -----------------------------
-# LOAD ALL SEASON FILES
-# -----------------------------
 rows = []
 
 for file in DATA_DIR.glob("afl_*.json"):
-    print("Loading:", file)
     with open(file) as f:
-        season_data = json.load(f)
-        rows.extend(season_data)
-
-print("TOTAL ROWS:", len(rows))
+        rows.extend(json.load(f))
 
 players = {}
 
-# -----------------------------
-# CLEAN NAME
-# -----------------------------
-def clean_name(name):
+def clean(name):
     name = unicodedata.normalize("NFD", name)
-    name = name.encode("ascii", "ignore").decode("utf-8")
-    return name.strip()
+    return name.encode("ascii", "ignore").decode().strip()
 
 def slug(name):
-    name = clean_name(name).lower()
-    name = re.sub(r"[^\w\s-]", "", name)
-    name = re.sub(r"\s+", "-", name)
-    return name
+    return re.sub(r"\s+", "-", clean(name).lower())
 
-
-# -----------------------------
-# BUILD PLAYER DATA
-# -----------------------------
 for r in rows:
 
-    name = clean_name(r.get("player", ""))
-    if not name:
-        continue
-
+    name = clean(r["player"])
     key = slug(name)
 
     if key not in players:
-        players[key] = {
-            "player": name,
-            "slug": key,
-            "games": [],
-            "seen": set()
-        }
+        players[key] = {"player": name, "games": [], "seen": set()}
 
-    # UNIQUE GAME KEY (NO DUPES)
-    game_key = f"{r.get('season')}_{r.get('round')}_{r.get('played_for')}_{r.get('played_against')}_{name}"
+    gid = f"{r['season']}_{r['round']}_{r['played_for']}_{r['played_against']}_{name}"
 
-    if game_key in players[key]["seen"]:
+    if gid in players[key]["seen"]:
         continue
 
-    players[key]["seen"].add(game_key)
+    players[key]["seen"].add(gid)
 
     players[key]["games"].append({
-        "season": r.get("season"),
-        "round": r.get("round"),
-
-        "team": r.get("played_for"),
-        "opponent": r.get("played_against"),
-
-        "K": r.get("K", 0),
-        "HB": r.get("HB", 0),
-        "D": r.get("D", 0),
-        "M": r.get("M", 0),
-        "G": r.get("G", 0),
-        "B": r.get("B", 0),
-        "T": r.get("T", 0),
-        "HO": r.get("HO", 0),
-        "GA": r.get("GA", 0),
-        "I50": r.get("I50", 0),
-        "CL": r.get("CL", 0),
-        "CG": r.get("CG", 0),
-        "R50": r.get("R50", 0),
-        "FF": r.get("FF", 0),
-        "FA": r.get("FA", 0),
-        "AF": r.get("AF", 0),
-        "SC": r.get("SC", 0)
+        "season": r["season"],
+        "round": r["round"],
+        "team": r["played_for"],
+        "opponent": r["played_against"]
     })
 
-
-# -----------------------------
-# WRITE PLAYER FILES
-# -----------------------------
 index = []
 
-for key, pdata in players.items():
+for key, p in players.items():
+    p.pop("seen", None)
 
-    pdata.pop("seen", None)
+    with open(OUT / f"{key}.json", "w") as f:
+        json.dump(p, f, indent=2)
 
-    out_file = OUT / f"{key}.json"
-
-    with open(out_file, "w") as f:
-        json.dump(pdata, f, indent=2)
-
-    index.append({
-        "player": pdata["player"],
-        "slug": key
-    })
-
-
-# -----------------------------
-# WRITE INDEX
-# -----------------------------
-index = sorted(index, key=lambda x: x["player"])
+    index.append({"player": p["player"], "slug": key})
 
 with open(INDEX, "w") as f:
-    json.dump(index, f, indent=2)
+    json.dump(sorted(index, key=lambda x: x["player"]), f, indent=2)
 
-
-print("✅ PLAYER FILES BUILT (ALL SEASONS)")
-print("✅ players.json CREATED")
-print("✅ NO DUPLICATES — SAFE TO RE-RUN")
+print("DONE PLAYERS")
