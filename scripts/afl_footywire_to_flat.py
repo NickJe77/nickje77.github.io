@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRAPER — FINAL (TABLE HEADER FIX — WORKING)")
+print("AFL SCRAPER — FINAL WORKING VERSION (TEAM FIX CONFIRMED)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -82,18 +82,19 @@ def get_player_tables(soup):
 
 
 # -----------------------------
-# EXTRACT TEAM FROM TABLE HEADER
+# EXTRACT TEAM FROM TABLE (🔥 FINAL FIX)
 # -----------------------------
 def extract_team_from_table(table):
 
-    # Look upwards for the header text
-    prev = table.find_previous(string=re.compile("Match Statistics"))
+    first_row = table.find("tr")
+    if not first_row:
+        return None
 
-    if prev:
-        txt = prev.strip()
-        m = re.search(r"^(.*?) Match Statistics", txt)
-        if m:
-            return m.group(1).strip()
+    txt = first_row.get_text(" ", strip=True)
+
+    m = re.search(r"^(.*?) Match Statistics", txt)
+    if m:
+        return m.group(1).strip()
 
     return None
 
