@@ -1,140 +1,158 @@
 import json
+import requests
+from bs4 import BeautifulSoup
 from pathlib import Path
-from collections import defaultdict
 
-print("AFL PLAYER BUILDER — SEASON + MASTER (FINAL FINAL)")
+print("AFL SCRAPER — FINAL (HEADER FIX)")
+
+BASE = "https://www.footywire.com"
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 SEASON = 2026
 
-INPUT = Path(f"docs/data/afl/afl_{SEASON}.json")
-SEASON_OUT = Path(f"docs/data/afl/players_{SEASON}.json")
-MASTER_OUT = Path("docs/data/afl/players.json")
-
-STATS = [
-    "K","HB","D","M","G","B","T","HO","GA",
-    "I50","CL","CG","R50","FF","FA","AF","SC"
-]
+OUTPUT = Path(f"docs/data/afl/afl_{SEASON}.json")
+OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
 
-# -----------------------------
-# LOAD MATCH DATA
-# -----------------------------
-if not INPUT.exists():
-    print("❌ Missing input:", INPUT)
-    exit()
-
-with open(INPUT) as f:
-    games = json.load(f)
-
-
-# -----------------------------
-# BUILD SEASON PLAYERS
-# -----------------------------
-players = defaultdict(lambda: {
-    "player": "",
-    "team": "",
-    "games": 0,
-    **{s: 0 for s in STATS}
-})
-
-for row in games:
-
-    name = row.get("player")
-    if not name:
-        continue
-
-    p = players[name]
-
-    p["player"] = name
-    p["team"] = row.get("played_for", "")
-    p["games"] += 1
-
-    for stat in STATS:
-        p[stat] += row.get(stat, 0)
-
-
-# -----------------------------
-# CALCULATE AVERAGES
-# -----------------------------
-for p in players.values():
-
-    g = p.get("games", 0) or 1
-
-    for stat in STATS:
-        p[f"{stat}_avg"] = round(p.get(stat, 0) / g, 2)
-
-
-# -----------------------------
-# SORT SEASON (SAFE)
-# -----------------------------
-season_list = sorted(players.values(), key=lambda x: x.get("SC", 0), reverse=True)
-
-
-# -----------------------------
-# SAVE SEASON FILE
-# -----------------------------
-with open(SEASON_OUT, "w") as f:
-    json.dump(season_list, f, indent=2)
-
-print("✅ Season players saved:", SEASON_OUT)
-
-
-# -----------------------------
-# LOAD MASTER FILE (SAFE)
-# -----------------------------
-master = {}
-
-if MASTER_OUT.exists():
+def to_int(x):
     try:
-        with open(MASTER_OUT) as f:
-            existing = json.load(f)
-
-            for p in existing:
-                name = p.get("player")
-                if name:
-                    master[name] = p
+        return int(x.strip())
     except:
-        print("⚠️ Master file corrupted — rebuilding fresh")
-        master = {}
+        return 0
 
 
-# -----------------------------
-# MERGE SEASON INTO MASTER
-# -----------------------------
-for p in season_list:
+def get_links():
+    url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}"
+    soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
-    name = p["player"]
+    links = []
 
-    if name not in master:
-        master[name] = p.copy()
-        continue
+    for a in soup.select('a[href*="ft_match_statistics"]'):
+        href = a.get("href", "")
 
-    m = master[name]
+        if not href:
+            continue
 
-    # games
-    m["games"] = m.get("games", 0) + p.get("games", 0)
+        if href.startswith("/"):
+            href = BASE + href
+        elif not href.startswith("http"):
+            href = BASE + "/afl/footy/" + href
 
-    # stats (SAFE)
-    for stat in STATS:
-        m[stat] = m.get(stat, 0) + p.get(stat, 0)
+        links.append(href)
 
-    # averages (SAFE)
-    g = m.get("games", 0) or 1
+    links = list(set(links))
 
-    for stat in STATS:
-        m[f"{stat}_avg"] = round(m.get(stat, 0) / g, 2)
+    print("Matches found:", len(links))
+    print("Sample:", links[0])
 
-
-# -----------------------------
-# SORT MASTER (SAFE — THIS FIXES YOUR ERROR)
-# -----------------------------
-master_list = sorted(master.values(), key=lambda x: x.get("SC", 0), reverse=True)
+    return links
 
 
-# -----------------------------
-# SAVE MASTER FILE
-# -----------------------------
-with open(MASTER_OUT, "w") as f:
-    json.dump(master_list, f, indent=2)
+def parse_match(url):
 
-print("✅ Master players updated:", MASTER_OUT)
+    print("→", url)
+
+    soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
+
+    title = soup.find("title").text
+
+    if " def " in title:
+        parts = title.split(" def ")
+    elif " defeats " in title:
+        parts = title.split(" defeats ")
+    else:
+        print("⚠️ Cannot parse teams:", title)
+        return []
+
+    team1 = parts[0].replace("AFL Match Statistics :", "").strip()
+    team2 = parts[1].split(" at ")[0].strip()
+
+    tables = soup.find_all("table")
+
+    player_tables = []
+
+    for t in tables:
+        txt = t.get_text(" ", strip=True)
+        if "K" in txt and "HB" in txt and "D" in txt:
+            player_tables.append(t)
+
+    if len(player_tables) < 2:
+        print("⚠️ Missing player tables")
+        return []
+
+    data = []
+    teams = [team1, team2]
+
+    for i in range(2):
+
+        rows = player_tables[i].find_all("tr")
+
+        count = 0
+
+        for r in rows:
+            cols = r.find_all("td")
+
+            if len(cols) < 18:
+                continue
+
+            # 🔥 CRITICAL FIX — ONLY REAL PLAYERS
+            link = cols[0].find("a")
+
+            if not link:
+                continue
+
+            name = link.text.strip()
+
+            if not name:
+                continue
+
+            entry = {
+                "player": name,
+                "played_for": teams[i],
+                "played_against": teams[1 - i],
+                "season": SEASON,
+
+                "K": to_int(cols[1].text),
+                "HB": to_int(cols[2].text),
+                "D": to_int(cols[3].text),
+                "M": to_int(cols[4].text),
+                "G": to_int(cols[5].text),
+                "B": to_int(cols[6].text),
+                "T": to_int(cols[7].text),
+                "HO": to_int(cols[8].text),
+                "GA": to_int(cols[9].text),
+                "I50": to_int(cols[10].text),
+                "CL": to_int(cols[11].text),
+                "CG": to_int(cols[12].text),
+                "R50": to_int(cols[13].text),
+                "FF": to_int(cols[14].text),
+                "FA": to_int(cols[15].text),
+                "AF": to_int(cols[16].text),
+                "SC": to_int(cols[17].text)
+            }
+
+            data.append(entry)
+            count += 1
+
+        print(f"{teams[i]} players:", count)
+
+    return data
+
+
+links = get_links()
+
+all_data = []
+
+for link in links:
+    try:
+        all_data.extend(parse_match(link))
+    except Exception as e:
+        print("ERROR:", e)
+
+
+print("TOTAL PLAYER ROWS:", len(all_data))
+
+with open(OUTPUT, "w") as f:
+    json.dump(all_data, f, indent=2)
+
+print("✅ FILE WRITTEN:", OUTPUT)
