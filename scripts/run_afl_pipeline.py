@@ -7,10 +7,9 @@ from collections import defaultdict
 import requests
 from bs4 import BeautifulSoup
 
-print("AFL PIPELINE (SAFE + STABLE)")
+print("AFL PIPELINE (ACTION-SAFE VERSION)")
 
 BASE = "https://www.footywire.com"
-HEADERS = {"User-Agent": "Mozilla/5.0"}
 SEASON = 2026
 
 DATA_DIR = Path("docs/data/afl")
@@ -20,6 +19,15 @@ PLAYERS_JSON = DATA_DIR / "players.json"
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 PLAYERS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+# 🔥 REAL BROWSER HEADERS (fix blocking)
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept-Language": "en-AU,en;q=0.9",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Connection": "keep-alive",
+}
 
 
 # -------------------------------
@@ -36,18 +44,26 @@ def to_int(text):
         return 0
 
 
+# 🔥 RETRY + BLOCK PROTECTION
 def fetch(url):
-    for _ in range(3):  # retry
+    for i in range(5):
         try:
             res = requests.get(url, headers=HEADERS, timeout=30)
-            if res.status_code == 200 and len(res.text) > 1000:
+
+            if res.status_code == 200 and len(res.text) > 5000:
                 return res.text
-        except:
-            pass
-        time.sleep(2)
+
+        except Exception as e:
+            print("fetch error:", e)
+
+        time.sleep(3)
+
     return None
 
 
+# -------------------------------
+# ROUND
+# -------------------------------
 def get_round_label(soup):
     text = soup.get_text(" ", strip=True).lower()
 
@@ -65,7 +81,7 @@ def get_round_label(soup):
 
 
 # -------------------------------
-# GET MATCH LINKS
+# GET LINKS
 # -------------------------------
 def get_links():
     links = set()
@@ -75,6 +91,7 @@ def get_links():
 
         html = fetch(url)
         if not html:
+            print("FAILED ROUND PAGE:", rnd)
             continue
 
         soup = BeautifulSoup(html, "html.parser")
@@ -91,7 +108,7 @@ def get_links():
 
             links.add(href)
 
-        time.sleep(1)
+        time.sleep(2)
 
     print("MATCH LINKS:", len(links))
     return sorted(links)
@@ -103,6 +120,7 @@ def get_links():
 def parse_match(url, match_counter):
     html = fetch(url)
     if not html:
+        print("FAILED MATCH:", url)
         return []
 
     soup = BeautifulSoup(html, "html.parser")
@@ -179,7 +197,7 @@ def parse_match(url, match_counter):
 
         data.append(row)
 
-    time.sleep(1)
+    time.sleep(2)
     return data
 
 
@@ -264,18 +282,18 @@ def save_players(players):
 def main():
     rows = scrape()
 
-    # 🔴 SAFETY — NEVER WIPE FILE
+    # 🔴 NEVER WIPE DATA
     if len(rows) < 1000:
-        print("SCRAPER FAILED — NOT OVERWRITING DATA")
+        print("❌ SCRAPER BLOCKED — DATA NOT UPDATED")
         return
 
     OUTPUT.write_text(json.dumps(rows, indent=2))
-    print("DATA SAVED")
+    print("✅ DATA SAVED")
 
     players = build_players(rows)
     save_players(players)
 
-    print("DONE")
+    print("✅ PLAYERS BUILT")
 
 
 if __name__ == "__main__":
