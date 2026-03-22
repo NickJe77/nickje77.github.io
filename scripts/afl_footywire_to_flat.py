@@ -27,6 +27,18 @@ def to_int(text):
         return 0
 
 
+# -------------------------------
+# ROUND FORMAT (FIX)
+# -------------------------------
+def format_round(r):
+    if r is None:
+        return None
+    return f"Round {r}"
+
+
+# -------------------------------
+# GET LINKS
+# -------------------------------
 def get_links():
     links = set()
 
@@ -71,26 +83,23 @@ def parse_title_teams(title_text):
 
     if " def " in title_text:
         a, b = title_text.split(" def ", 1)
-        winner = clean(a)
-        loser = clean(b.split(" at ")[0])
-        return winner, loser
+        return clean(a), clean(b.split(" at ")[0])
 
     if " defeats " in title_text:
         a, b = title_text.split(" defeats ", 1)
-        winner = clean(a)
-        loser = clean(b.split(" at ")[0])
-        return winner, loser
+        return clean(a), clean(b.split(" at ")[0])
 
     if " defeated by " in title_text:
         loser, winner_part = title_text.split(" defeated by ", 1)
-        winner = clean(winner_part.split(" at ")[0])
-        loser = clean(loser)
-        return winner, loser
+        return clean(winner_part.split(" at ")[0]), clean(loser)
 
     return None, None
 
 
-def parse_match(url):
+# -------------------------------
+# PARSE MATCH (FIXED)
+# -------------------------------
+def parse_match(url, match_counter):
     print("→", url)
 
     try:
@@ -104,15 +113,16 @@ def parse_match(url):
 
     title_tag = soup.find("title")
     if not title_tag:
-        print("  no title")
         return []
 
     team_a, team_b = parse_title_teams(title_tag.get_text(" ", strip=True))
     if not team_a or not team_b:
-        print("  could not parse title teams")
         return []
 
     round_num = get_round(soup)
+
+    # 🔥 MATCH ID FIX (THIS IS THE KEY)
+    match_id = f"{SEASON}_R{round_num:02d}_{match_counter:03d}"
 
     rows = soup.find_all("tr")
     current_team = None
@@ -121,27 +131,19 @@ def parse_match(url):
     for tr in rows:
         row_text = clean(tr.get_text(" ", strip=True))
 
-        # Detect section header rows like:
-        # "Sydney Match Statistics (Sorted by Disposals) Coach: Dean Cox"
         m = re.match(r"^(.*?) Match Statistics \(Sorted by Disposals\)", row_text)
         if m:
             header_team = clean(m.group(1))
-
-            # only accept the two teams from the page title
             if header_team == team_a or header_team == team_b:
                 current_team = header_team
             else:
                 current_team = None
-
             continue
 
-        # Ignore everything until we've entered one of the two player sections
         if not current_team:
             continue
 
         cols = tr.find_all("td", recursive=False)
-
-        # Player rows have 18 td cells on Footywire
         if len(cols) < 18:
             continue
 
@@ -150,17 +152,18 @@ def parse_match(url):
             continue
 
         player_name = clean(link.get_text(" ", strip=True))
-        if not player_name or player_name == "Player":
+        if not player_name:
             continue
 
         opponent = team_b if current_team == team_a else team_a
 
         entry = {
+            "match_id": match_id,                     # ✅ FIX
             "player": player_name,
             "played_for": current_team,
             "played_against": opponent,
             "season": SEASON,
-            "round": round_num,
+            "round": format_round(round_num),         # ✅ FIX
             "K": to_int(cols[1].get_text()),
             "HB": to_int(cols[2].get_text()),
             "D": to_int(cols[3].get_text()),
@@ -186,10 +189,15 @@ def parse_match(url):
     return data
 
 
+# -------------------------------
+# MAIN
+# -------------------------------
 all_data = []
+match_counter = 0
 
 for link in get_links():
-    match_rows = parse_match(link)
+    match_counter += 1
+    match_rows = parse_match(link, match_counter)
     all_data.extend(match_rows)
 
 print("TOTAL PLAYER ROWS:", len(all_data))
