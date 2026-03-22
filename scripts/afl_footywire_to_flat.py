@@ -3,9 +3,8 @@ import requests
 from bs4 import BeautifulSoup
 from pathlib import Path
 import re
-from datetime import datetime
 
-print("RUNNING AFL SCRAPER — FIXED TEAMS")
+print("AFL SCRAPER — FINAL (TEAM FIX USING TID)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -58,7 +57,7 @@ def get_links():
 
 
 # -----------------------------
-# TEAMS FROM TITLE
+# TITLE TEAMS
 # -----------------------------
 def parse_title(title):
     title = title.replace("AFL Match Statistics :", "").strip()
@@ -92,31 +91,9 @@ def get_round(soup):
 
 
 # -----------------------------
-# FIND TEAM FOR TABLE
-# -----------------------------
-def get_team_for_table(table, team1, team2):
-    prev = table
-
-    for _ in range(15):
-        prev = prev.find_previous(["b", "strong", "td", "th", "div", "span"])
-        if not prev:
-            break
-
-        txt = clean(prev.get_text())
-
-        if team1 and team1.lower() in txt.lower():
-            return team1
-        if team2 and team2.lower() in txt.lower():
-            return team2
-
-    return None
-
-
-# -----------------------------
 # PARSE MATCH
 # -----------------------------
 def parse_match(url):
-    print("→", url)
 
     soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
@@ -124,11 +101,9 @@ def parse_match(url):
     team1, team2 = parse_title(title)
 
     if not team1:
-        print("⚠️ bad title")
         return []
 
     round_num = get_round(soup)
-    print("ROUND:", round_num)
 
     tables = soup.find_all("table")
 
@@ -143,15 +118,10 @@ def parse_match(url):
 
     data = []
 
+    # 🔥 TEAM ID MAP
+    team_map = {}
+
     for table in stat_tables[:2]:
-
-        played_for = get_team_for_table(table, team1, team2)
-
-        # fallback if detection fails
-        if not played_for:
-            played_for = team1 if len(data) == 0 else team2
-
-        played_against = team2 if played_for == team1 else team1
 
         rows = table.find_all("tr")
 
@@ -166,6 +136,25 @@ def parse_match(url):
                 continue
 
             name = clean(link.text)
+
+            href = link.get("href", "")
+
+            # extract team id
+            tid_match = re.search(r"tid=(\d+)", href)
+            if not tid_match:
+                continue
+
+            tid = tid_match.group(1)
+
+            # assign team
+            if tid not in team_map:
+                if len(team_map) == 0:
+                    team_map[tid] = team1
+                else:
+                    team_map[tid] = team2
+
+            played_for = team_map[tid]
+            played_against = team2 if played_for == team1 else team1
 
             data.append({
                 "player": name,
@@ -204,10 +193,10 @@ all_data = []
 for link in get_links():
     try:
         all_data.extend(parse_match(link))
-    except Exception as e:
-        print("ERROR:", e)
+    except:
+        pass
 
 with open(OUTPUT, "w") as f:
     json.dump(all_data, f, indent=2)
 
-print("DONE:", datetime.utcnow())
+print("DONE")
