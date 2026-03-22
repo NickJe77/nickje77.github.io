@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRAPER — FINAL (TEAM FIX USING TID)")
+print("AFL SCRAPER — STABLE FINAL")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -26,7 +26,7 @@ def clean(s):
 
 
 # -----------------------------
-# MATCH LINKS
+# LINKS
 # -----------------------------
 def get_links():
     links = set()
@@ -91,9 +91,10 @@ def get_round(soup):
 
 
 # -----------------------------
-# PARSE MATCH
+# MATCH
 # -----------------------------
 def parse_match(url):
+    print("→", url)
 
     soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
@@ -116,14 +117,14 @@ def parse_match(url):
     if len(stat_tables) < 2:
         return []
 
+    # 🔥 FIX: assign by table index (this actually works consistently)
+    teams = [team1, team2]
+
     data = []
 
-    # 🔥 TEAM ID MAP
-    team_map = {}
+    for i in range(2):
 
-    for table in stat_tables[:2]:
-
-        rows = table.find_all("tr")
+        rows = stat_tables[i].find_all("tr")
 
         for r in rows:
             cols = r.find_all("td")
@@ -137,29 +138,10 @@ def parse_match(url):
 
             name = clean(link.text)
 
-            href = link.get("href", "")
-
-            # extract team id
-            tid_match = re.search(r"tid=(\d+)", href)
-            if not tid_match:
-                continue
-
-            tid = tid_match.group(1)
-
-            # assign team
-            if tid not in team_map:
-                if len(team_map) == 0:
-                    team_map[tid] = team1
-                else:
-                    team_map[tid] = team2
-
-            played_for = team_map[tid]
-            played_against = team2 if played_for == team1 else team1
-
             data.append({
                 "player": name,
-                "played_for": played_for,
-                "played_against": played_against,
+                "played_for": teams[i],
+                "played_against": teams[1 - i],
                 "season": SEASON,
                 "round": round_num,
 
@@ -193,8 +175,10 @@ all_data = []
 for link in get_links():
     try:
         all_data.extend(parse_match(link))
-    except:
-        pass
+    except Exception as e:
+        print("ERROR:", e)
+
+print("TOTAL ROWS:", len(all_data))
 
 with open(OUTPUT, "w") as f:
     json.dump(all_data, f, indent=2)
