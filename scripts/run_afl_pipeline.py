@@ -6,7 +6,7 @@ from pathlib import Path
 from collections import defaultdict
 from urllib.parse import urljoin
 
-print("AFL REBUILD (WORKING ROW DETECTION VERSION)")
+print("AFL REBUILD (STABLE FINAL VERSION)")
 
 SEASON = 2026
 BASE = "https://afltables.com/afl/seas/"
@@ -20,6 +20,9 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 PLAYERS_DIR.mkdir(parents=True, exist_ok=True)
 
 
+# -------------------------------
+# HELPERS
+# -------------------------------
 def clean(x):
     return re.sub(r"\s+", " ", (x or "")).strip()
 
@@ -29,6 +32,12 @@ def to_int(x):
         return int(clean(x))
     except:
         return 0
+
+
+def safe_slug(name):
+    slug = name.lower().replace(" ", "-")
+    slug = re.sub(r"[^a-z0-9\-]", "", slug)
+    return slug[:60]
 
 
 # -------------------------------
@@ -44,8 +53,12 @@ links = []
 
 for a in soup.find_all("a", href=True):
     href = a["href"]
-    if "stats/games" in href:
-        links.append(urljoin(season_url, href))
+
+    if "stats/games" not in href:
+        continue
+
+    full_url = urljoin(season_url, href)
+    links.append(full_url)
 
 links = sorted(set(links))
 
@@ -53,7 +66,7 @@ print("MATCHES FOUND:", len(links))
 
 
 # -------------------------------
-# PARSE MATCHES (NO HEADER LOGIC)
+# PARSE MATCHES
 # -------------------------------
 all_rows = []
 match_id = 0
@@ -62,8 +75,12 @@ for link in links:
     match_id += 1
     print("Match:", match_id)
 
-    html = requests.get(link).text
-    soup = BeautifulSoup(html, "html.parser")
+    try:
+        html = requests.get(link).text
+        soup = BeautifulSoup(html, "html.parser")
+    except:
+        print("FAILED:", link)
+        continue
 
     tables = soup.find_all("table")
 
@@ -76,14 +93,23 @@ for link in links:
         for tr in rows:
             cols = tr.find_all("td")
 
-            # 🔥 REAL FILTER: player rows have LOTS of columns
+            # must be wide player row
             if len(cols) < 15:
                 continue
 
             name = clean(cols[0].text)
 
-            # skip totals / junk rows
-            if not name or name.lower() in ["player", "totals", "opposition"]:
+            # 🔥 STRICT FILTER (CRITICAL FIX)
+            if (
+                not name
+                or "quarter" in name.lower()
+                or "minute" in name.lower()
+                or "goal" in name.lower()
+                or "behind" in name.lower()
+                or "rushed" in name.lower()
+                or "lead" in name.lower()
+                or name.lower() in ["player", "totals", "opposition"]
+            ):
                 continue
 
             row = {
@@ -91,6 +117,7 @@ for link in links:
                 "player": name,
                 "season": SEASON,
 
+                # core stats
                 "K": to_int(cols[1].text),
                 "M": to_int(cols[2].text),
                 "HB": to_int(cols[3].text),
@@ -134,10 +161,13 @@ for r in all_rows:
             players[name]["career"][k] += v
 
 
+# -------------------------------
+# SAVE PLAYERS
+# -------------------------------
 summary = []
 
 for name, p in players.items():
-    slug = name.lower().replace(" ", "-")
+    slug = safe_slug(name)
 
     (PLAYERS_DIR / f"{slug}.json").write_text(json.dumps({
         "name": name,
