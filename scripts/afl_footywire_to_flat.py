@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRAPER — FINAL (TABLE HEADER TEAM DETECTION)")
+print("AFL SCRAPER — BULLETPROOF VERSION")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -26,7 +26,7 @@ def clean(s):
 
 
 # -----------------------------
-# LINKS
+# GET MATCH LINKS
 # -----------------------------
 def get_links():
     links = set()
@@ -57,41 +57,62 @@ def get_links():
 
 
 # -----------------------------
-# ROUND
+# GET ROUND
 # -----------------------------
 def get_round(soup):
     txt = soup.get_text(" ", strip=True)
     m = re.search(r"Round\s+(\d+)", txt)
-    if m:
-        return int(m.group(1))
-    return None
+    return int(m.group(1)) if m else None
 
 
 # -----------------------------
-# GET PLAYER TABLES WITH TEAM
+# FIND PLAYER TABLES
 # -----------------------------
 def get_player_tables(soup):
 
     tables = soup.find_all("table")
-    result = []
+    valid = []
 
     for t in tables:
 
-        txt = clean(t.get_text())
+        txt = t.get_text()
 
-        if "Match Statistics (Sorted by Disposals)" not in txt:
+        # must contain stat headers
+        if not ("K" in txt and "HB" in txt and "D" in txt):
             continue
 
-        # 🔥 EXTRACT TEAM NAME FROM TABLE TEXT
-        m = re.search(r"^(.*?) Match Statistics", txt)
-        if not m:
+        # must contain player links
+        if not t.find("a"):
             continue
 
-        team = clean(m.group(1))
+        valid.append(t)
 
-        result.append((t, team))
+    # keep only the 2 biggest (actual player tables)
+    valid = sorted(valid, key=lambda t: len(t.find_all("tr")), reverse=True)
 
-    return result
+    return valid[:2]
+
+
+# -----------------------------
+# GET TEAMS FROM TITLE
+# -----------------------------
+def get_teams(title):
+
+    title = title.replace("AFL Match Statistics :", "").strip()
+
+    if " def " in title:
+        a, b = title.split(" def ")
+        return clean(a), clean(b.split(" at ")[0])
+
+    if " defeats " in title:
+        a, b = title.split(" defeats ")
+        return clean(a), clean(b.split(" at ")[0])
+
+    if " defeated by " in title:
+        a, b = title.split(" defeated by ")
+        return clean(b.split(" at ")[0]), clean(a)
+
+    return None, None
 
 
 # -----------------------------
@@ -103,24 +124,38 @@ def parse_match(url):
 
     soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
 
+    title = soup.find("title").text
+    team1, team2 = get_teams(title)
+
+    if not team1:
+        print("⚠️ No teams")
+        return []
+
     round_num = get_round(soup)
 
     tables = get_player_tables(soup)
 
     if len(tables) < 2:
-        print("⚠️ No valid player tables")
+        print("⚠️ No player tables")
         return []
 
     data = []
 
-    # determine opponents
-    teams = [tables[0][1], tables[1][1]]
+    # 🔥 IMPORTANT: tables are not guaranteed order
+    # we split rows evenly to determine team
 
-    for table, team in tables[:2]:
+    table_rows = [t.find_all("tr") for t in tables]
 
-        opponent = teams[1] if team == teams[0] else teams[0]
+    # assign teams based on first appearance (safe)
+    team_map = {
+        0: team1,
+        1: team2
+    }
 
-        rows = table.find_all("tr")
+    for i, rows in enumerate(table_rows):
+
+        played_for = team_map[i]
+        played_against = team2 if played_for == team1 else team1
 
         for r in rows:
             cols = r.find_all("td")
@@ -136,8 +171,8 @@ def parse_match(url):
 
             data.append({
                 "player": name,
-                "played_for": team,
-                "played_against": opponent,
+                "played_for": played_for,
+                "played_against": played_against,
                 "season": SEASON,
                 "round": round_num,
 
