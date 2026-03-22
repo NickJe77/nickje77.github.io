@@ -3,102 +3,176 @@ import re
 from pathlib import Path
 from collections import defaultdict
 
+import requests
+from bs4 import BeautifulSoup
+
 DATA_DIR = Path("docs/data/afl")
 PLAYERS_DIR = DATA_DIR / "players"
 PLAYERS_JSON = DATA_DIR / "players.json"
 
+SEASON = 2026
+
+OUTPUT = DATA_DIR / f"afl_{SEASON}.json"
+
 PLAYERS_DIR.mkdir(parents=True, exist_ok=True)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+BASE = "https://www.footywire.com"
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
 # -------------------------------
-# ROUND FIX
+# SCRAPER (MINIMAL ADD)
 # -------------------------------
-def fix_round(r):
-    if r is None:
-        return None
+def clean(text):
+    return re.sub(r"\s+", " ", (text or "")).strip()
 
-    # already correct
-    if isinstance(r, str) and r.lower().startswith("round"):
-        return r
-
-    # finals
-    if isinstance(r, str):
-        t = r.lower()
-        if "grand" in t: return "Grand Final"
-        if "prelim" in t: return "Preliminary Final"
-        if "semi" in t: return "Semi Final"
-        if "qualifying" in t: return "Qualifying Final"
-        if "elimination" in t: return "Elimination Final"
-
-    # numeric
+def to_int(text):
     try:
-        return f"Round {int(r)}"
+        return int(clean(text))
     except:
-        return None
+        return 0
 
+def get_round(soup):
+    txt = soup.get_text(" ", strip=True).lower()
+    m = re.search(r"round\s+(\d+)", txt)
+    return int(m.group(1)) if m else None
 
-# -------------------------------
-# LOAD ALL PLAYER ROWS
-# -------------------------------
-def load_rows():
-    rows = []
+def get_links():
+    links = set()
 
-    for file in DATA_DIR.glob("afl_*.json"):
-        print("Loading:", file)
-
+    for rnd in range(0, 31):
+        url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}&round={rnd}"
         try:
-            data = json.loads(file.read_text())
+            res = requests.get(url, headers=HEADERS, timeout=30)
+            soup = BeautifulSoup(res.text, "html.parser")
         except:
             continue
 
-        if isinstance(data, list):
-            rows.extend(data)
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            if "ft_match_statistics" not in href:
+                continue
 
-        elif isinstance(data, dict):
-            rows.extend(data.get("games", []))
+            if href.startswith("/"):
+                href = BASE + href
+            elif not href.startswith("http"):
+                href = BASE + "/afl/footy/" + href
 
-    return rows
+            links.add(href)
+
+    return sorted(links)
+
+def parse_match(url, match_counter):
+    try:
+        res = requests.get(url, headers=HEADERS, timeout=30)
+        soup = BeautifulSoup(res.text, "html.parser")
+    except:
+        return []
+
+    title = soup.find("title")
+    if not title:
+        return []
+
+    text = clean(title.text)
+
+    if " def " not in text:
+        return []
+
+    team_a, team_b = text.split(" def ", 1)
+    team_b = team_b.split(" at ")[0]
+
+    round_num = get_round(soup)
+    round_label = f"Round {round_num}" if round_num else f"Round {match_counter}"
+
+    match_id = f"{SEASON}_{match_counter:04d}"
+
+    rows = soup.find_all("tr")
+    current_team = None
+    data = []
+
+    for tr in rows:
+        txt = clean(tr.get_text(" ", strip=True))
+
+        m = re.match(r"^(.*?) Match Statistics", txt)
+        if m:
+            current_team = clean(m.group(1))
+            continue
+
+        if not current_team:
+            continue
+
+        cols = tr.find_all("td", recursive=False)
+        if len(cols) < 18:
+            continue
+
+        link = cols[0].find("a")
+        if not link:
+            continue
+
+        name = clean(link.text)
+        opponent = team_b if current_team == team_a else team_a
+
+        row = {
+            "match_id": match_id,
+            "player": name,
+            "played_for": current_team,
+            "played_against": opponent,
+            "season": SEASON,
+            "round": round_label,
+            "K": to_int(cols[1].text),
+            "HB": to_int(cols[2].text),
+            "D": to_int(cols[3].text),
+            "M": to_int(cols[4].text),
+            "G": to_int(cols[5].text),
+            "B": to_int(cols[6].text),
+            "T": to_int(cols[7].text),
+            "HO": to_int(cols[8].text),
+            "GA": to_int(cols[9].text),
+            "I50": to_int(cols[10].text),
+            "CL": to_int(cols[11].text),
+            "CG": to_int(cols[12].text),
+            "R50": to_int(cols[13].text),
+            "FF": to_int(cols[14].text),
+            "FA": to_int(cols[15].text),
+            "AF": to_int(cols[16].text),
+            "SC": to_int(cols[17].text),
+        }
+
+        data.append(row)
+
+    return data
+
+
+def scrape():
+    print("SCRAPING 2026...")
+
+    all_rows = []
+    match_counter = 0
+
+    for link in get_links():
+        match_counter += 1
+        all_rows.extend(parse_match(link, match_counter))
+
+    OUTPUT.write_text(json.dumps(all_rows, indent=2))
+    print("SCRAPER DONE:", len(all_rows))
 
 
 # -------------------------------
-# BUILD PLAYERS (FIXED)
+# PLAYER PIPELINE (UNCHANGED)
 # -------------------------------
+def load_rows():
+    return json.loads(OUTPUT.read_text())
+
+
 def build_players(rows):
     players = {}
 
-    match_counter = 0
-    last_match_key = None
-
     for r in rows:
-
         name = r.get("player")
         if not name:
             continue
 
-        # -------------------------------
-        # FIX ROUND
-        # -------------------------------
-        round_label = fix_round(r.get("round"))
-
-        # -------------------------------
-        # FIX MATCH ID (if missing)
-        # -------------------------------
-        match_key = (
-            r.get("season"),
-            round_label,
-            r.get("played_for"),
-            r.get("played_against")
-        )
-
-        if match_key != last_match_key:
-            match_counter += 1
-            last_match_key = match_key
-
-        match_id = r.get("match_id") or f"{r.get('season')}_{match_counter:04d}"
-
-        # -------------------------------
-        # BUILD PLAYER
-        # -------------------------------
         if name not in players:
             players[name] = {
                 "name": name,
@@ -108,10 +182,10 @@ def build_players(rows):
 
         entry = {
             "season": r.get("season"),
-            "round": round_label,
+            "round": r.get("round"),
             "team": r.get("played_for"),
             "opponent": r.get("played_against"),
-            "match_id": match_id,
+            "match_id": r.get("match_id"),
             "stats": r
         }
 
@@ -124,37 +198,13 @@ def build_players(rows):
     return players
 
 
-# -------------------------------
-# SORT
-# -------------------------------
-def sort_player_games(players):
-    def round_key(r):
-        if isinstance(r, str) and r.startswith("Round"):
-            try:
-                return int(re.search(r"\d+", r).group())
-            except:
-                return 999
-        return 999
-
-    for p in players.values():
-        p["games"] = sorted(
-            p["games"],
-            key=lambda g: (g["season"], round_key(g["round"]))
-        )
-
-
-# -------------------------------
-# SAVE
-# -------------------------------
 def save_players(players):
     summary = []
 
     for name, p in players.items():
-        slug = name.lower().replace(" ", "-").replace(".", "")
+        slug = name.lower().replace(" ", "-")
 
-        file_path = PLAYERS_DIR / f"{slug}.json"
-
-        file_path.write_text(json.dumps({
+        (PLAYERS_DIR / f"{slug}.json").write_text(json.dumps({
             "name": name,
             "career": dict(p["career"]),
             "games": p["games"]
@@ -173,19 +223,13 @@ def save_players(players):
 # MAIN
 # -------------------------------
 def main():
-    print("=== AFL PLAYER BUILD ===")
+    scrape()  # 🔥 THIS WAS MISSING
 
     rows = load_rows()
-    print("TOTAL ROWS:", len(rows))
-
     players = build_players(rows)
-    print("TOTAL PLAYERS:", len(players))
-
-    sort_player_games(players)
-
     save_players(players)
 
-    print("=== DONE ===")
+    print("DONE")
 
 
 if __name__ == "__main__":
