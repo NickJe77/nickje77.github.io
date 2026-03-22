@@ -7,7 +7,7 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
-print("AFL FULL PIPELINE — SCRAPER + PLAYERS")
+print("AFL FULL PIPELINE — FINAL (ALL SEASONS + PLAYERS)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -127,7 +127,7 @@ def scrape():
         for tr in rows:
             text = clean(tr.get_text(" ", strip=True))
 
-            # detect team section
+            # Detect team section
             m = re.match(r"^(.*?) Match Statistics \(Sorted by Disposals\)", text)
             if m:
                 t = clean(m.group(1))
@@ -273,19 +273,35 @@ def build_players(rows):
 
 
 # -----------------------------
-# RUN ALL
+# RUN PIPELINE
 # -----------------------------
-print("\n--- SCRAPING ---")
-rows = scrape()
+print("\n--- SCRAPING CURRENT SEASON ---")
+rows_2026 = scrape()
 
-print("TOTAL ROWS:", len(rows))
+print("2026 ROWS:", len(rows_2026))
 
 with open(OUTPUT, "w") as f:
-    json.dump(rows, f, indent=2)
+    json.dump(rows_2026, f, indent=2)
 
 print("WROTE:", OUTPUT)
 
+print("\n--- LOADING ALL SEASONS ---")
+all_rows = []
+
+for file in DATA_DIR.glob("afl_*.json"):
+    print("Loading:", file)
+
+    try:
+        with open(file, "r") as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                all_rows.extend(data)
+    except:
+        continue
+
+print("TOTAL PLAYER SOURCE ROWS:", len(all_rows))
+
 print("\n--- BUILDING PLAYERS ---")
-build_players(rows)
+build_players(all_rows)
 
 print("DONE ✅")
