@@ -56,7 +56,7 @@ def num(v):
 
 
 # -------------------------------
-# LOAD ALL SEASONS
+# LOAD ALL GAMES (🔥 FIXED)
 # -------------------------------
 def load_all_games():
     games = []
@@ -69,10 +69,36 @@ def load_all_games():
         except:
             continue
 
-        for g in data.get("games", []):
-            g["season"] = int(data.get("season", 0))
-            g["round"] = clean_round(g.get("round"))
-            games.append(g)
+        # -------------------------------
+        # CASE 1: dict format
+        # -------------------------------
+        if isinstance(data, dict):
+            season = int(data.get("season", 0))
+
+            for g in data.get("games", []):
+                if not isinstance(g, dict):
+                    continue
+
+                g["season"] = season
+                g["round"] = clean_round(g.get("round"))
+                games.append(g)
+
+        # -------------------------------
+        # CASE 2: list format
+        # -------------------------------
+        elif isinstance(data, list):
+            try:
+                season = int(file.stem.split("_")[1])
+            except:
+                season = 0
+
+            for g in data:
+                if not isinstance(g, dict):
+                    continue
+
+                g["season"] = season
+                g["round"] = clean_round(g.get("round"))
+                games.append(g)
 
     return games
 
@@ -88,8 +114,8 @@ def dedupe_games(games):
         key = (
             g.get("season"),
             g.get("round"),
-            g.get("home_team"),
-            g.get("away_team"),
+            g.get("home_team", {}).get("name"),
+            g.get("away_team", {}).get("name"),
             g.get("date"),
         )
 
@@ -112,8 +138,12 @@ def build_players(games):
         season = g.get("season")
         rnd = g.get("round")
 
-        for team_key in ["home_team", "away_team"]:
-            team = g.get(team_key, {})
+        home = g.get("home_team", {})
+        away = g.get("away_team", {})
+
+        for team, opponent in [(home, away), (away, home)]:
+            team_name = team.get("name")
+            opp_name = opponent.get("name")
 
             for p in team.get("players", []):
                 name = p.get("name")
@@ -130,14 +160,14 @@ def build_players(games):
                 entry = {
                     "season": season,
                     "round": rnd,
-                    "team": team.get("name"),
-                    "opponent": g.get("away_team" if team_key == "home_team" else "home_team", {}).get("name"),
+                    "team": team_name,
+                    "opponent": opp_name,
                     "stats": p
                 }
 
                 players[name]["games"].append(entry)
 
-                # ---- aggregate stats ----
+                # aggregate stats
                 for k, v in p.items():
                     if isinstance(v, (int, float)):
                         players[name]["career"][k] += v
