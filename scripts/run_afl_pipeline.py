@@ -4,10 +4,10 @@ import time
 from pathlib import Path
 from collections import defaultdict
 
-import cloudscraper
 from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 
-print("AFL PIPELINE (CLOUDSCRAPER VERSION)")
+print("AFL PIPELINE (PLAYWRIGHT VERSION)")
 
 BASE = "https://www.footywire.com"
 SEASON = 2026
@@ -21,14 +21,17 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 PLAYERS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# 🔥 REAL BROWSER SESSION
-scraper = cloudscraper.create_scraper(
-    browser={
-        "browser": "chrome",
-        "platform": "windows",
-        "mobile": False
-    }
-)
+# -------------------------------
+# BROWSER FETCH
+# -------------------------------
+def fetch(page, url):
+    try:
+        page.goto(url, timeout=60000)
+        time.sleep(2)
+        return page.content()
+    except:
+        print("FAILED:", url)
+        return None
 
 
 # -------------------------------
@@ -45,37 +48,20 @@ def to_int(text):
         return 0
 
 
-# -------------------------------
-# FETCH (BYPASS BLOCK)
-# -------------------------------
-def fetch(url):
-    for i in range(5):
-        try:
-            res = scraper.get(url, timeout=30)
-
-            if res.status_code == 200 and len(res.text) > 5000:
-                return res.text
-
-        except Exception as e:
-            print("fetch error:", e)
-
-        time.sleep(3)
-
-    print("FAILED:", url)
-    return None
-
-
-# -------------------------------
-# ROUND DETECTION
-# -------------------------------
 def get_round_label(soup):
     text = soup.get_text(" ", strip=True).lower()
 
-    if "grand final" in text: return "Grand Final"
-    if "preliminary final" in text: return "Preliminary Final"
-    if "semi final" in text: return "Semi Final"
-    if "qualifying final" in text: return "Qualifying Final"
-    if "elimination final" in text: return "Elimination Final"
+    finals = [
+        "grand final",
+        "preliminary final",
+        "semi final",
+        "qualifying final",
+        "elimination final"
+    ]
+
+    for f in finals:
+        if f in text:
+            return f.title()
 
     m = re.search(r"round\s+(\d+)", text)
     if m:
@@ -87,15 +73,14 @@ def get_round_label(soup):
 # -------------------------------
 # GET LINKS
 # -------------------------------
-def get_links():
+def get_links(page):
     links = set()
 
     for rnd in range(0, 31):
         url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}&round={rnd}"
-
         print("Round:", rnd)
 
-        html = fetch(url)
+        html = fetch(page, url)
         if not html:
             continue
 
@@ -109,12 +94,8 @@ def get_links():
 
             if href.startswith("/"):
                 href = BASE + href
-            elif not href.startswith("http"):
-                href = BASE + "/afl/footy/" + href
 
             links.add(href)
-
-        time.sleep(2)
 
     print("MATCH LINKS:", len(links))
     return sorted(links)
@@ -123,8 +104,8 @@ def get_links():
 # -------------------------------
 # PARSE MATCH
 # -------------------------------
-def parse_match(url, match_counter):
-    html = fetch(url)
+def parse_match(page, url, match_counter):
+    html = fetch(page, url)
     if not html:
         return []
 
@@ -142,10 +123,7 @@ def parse_match(url, match_counter):
     team_a, team_b = text.split(" def ", 1)
     team_b = team_b.split(" at ")[0]
 
-    round_label = get_round_label(soup)
-    if not round_label:
-        round_label = f"Round {match_counter}"
-
+    round_label = get_round_label(soup) or f"Round {match_counter}"
     match_id = f"{SEASON}_{match_counter:04d}"
 
     rows = soup.find_all("tr")
@@ -208,93 +186,31 @@ def parse_match(url, match_counter):
 
 
 # -------------------------------
-# SCRAPE
-# -------------------------------
-def scrape():
-    all_rows = []
-    match_counter = 0
-
-    links = get_links()
-
-    for link in links:
-        match_counter += 1
-
-        print("Match:", match_counter)
-
-        time.sleep(3)
-
-        rows = parse_match(link, match_counter)
-        all_rows.extend(rows)
-
-    print("TOTAL ROWS:", len(all_rows))
-    return all_rows
-
-
-# -------------------------------
-# BUILD PLAYERS
-# -------------------------------
-def build_players(rows):
-    players = {}
-
-    for r in rows:
-        name = r.get("player")
-        if not name:
-            continue
-
-        if name not in players:
-            players[name] = {
-                "name": name,
-                "games": [],
-                "career": defaultdict(int),
-            }
-
-        players[name]["games"].append(r)
-
-        for k, v in r.items():
-            if isinstance(v, (int, float)):
-                players[name]["career"][k] += v
-
-    return players
-
-
-def save_players(players):
-    summary = []
-
-    for name, p in players.items():
-        slug = name.lower().replace(" ", "-")
-
-        (PLAYERS_DIR / f"{slug}.json").write_text(json.dumps({
-            "name": name,
-            "career": dict(p["career"]),
-            "games": p["games"]
-        }, indent=2))
-
-        summary.append({
-            "name": name,
-            "slug": slug,
-            "games": len(p["games"])
-        })
-
-    PLAYERS_JSON.write_text(json.dumps(summary, indent=2))
-
-
-# -------------------------------
 # MAIN
 # -------------------------------
 def main():
-    rows = scrape()
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
 
-    if len(rows) < 1000:
+        links = get_links(page)
+
+        all_rows = []
+        for i, link in enumerate(links, 1):
+            print("Match:", i)
+            rows = parse_match(page, link, i)
+            all_rows.extend(rows)
+
+        browser.close()
+
+    print("TOTAL ROWS:", len(all_rows))
+
+    if len(all_rows) < 1000:
         print("❌ STILL BLOCKED")
         return
 
-    OUTPUT.write_text(json.dumps(rows, indent=2))
-    print("✅ MATCH DATA SAVED")
-
-    players = build_players(rows)
-    save_players(players)
-
-    print("✅ PLAYERS BUILT")
+    OUTPUT.write_text(json.dumps(all_rows, indent=2))
+    print("✅ DATA SAVED")
 
 
 if __name__ == "__main__":
