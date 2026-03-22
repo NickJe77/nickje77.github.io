@@ -1,181 +1,132 @@
 import json
 import re
-import time
+import requests
+from bs4 import BeautifulSoup
 from pathlib import Path
 from collections import defaultdict
 
-from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright
+print("AFL REBUILD (AFLTABLES VERSION)")
 
-print("AFL PIPELINE (PLAYWRIGHT STEALTH VERSION)")
-
-BASE = "https://www.footywire.com"
 SEASON = 2026
+BASE = "https://afltables.com/afl/seas"
 
 DATA_DIR = Path("docs/data/afl")
 OUTPUT = DATA_DIR / f"afl_{SEASON}.json"
+PLAYERS_DIR = DATA_DIR / "players"
+PLAYERS_JSON = DATA_DIR / "players.json"
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+PLAYERS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# -------------------------------
-# BROWSER SETUP (REALISTIC)
-# -------------------------------
-def launch_browser(p):
-    browser = p.chromium.launch(headless=True)
-
-    context = browser.new_context(
-        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-        viewport={"width": 1280, "height": 800},
-        locale="en-AU"
-    )
-
-    page = context.new_page()
-    return browser, page
+def clean(x):
+    return re.sub(r"\s+", " ", (x or "")).strip()
 
 
-# -------------------------------
-# FETCH WITH WAIT
-# -------------------------------
-def fetch(page, url):
+def to_int(x):
     try:
-        page.goto(url, timeout=60000)
-
-        # 🔥 WAIT FOR TABLE (CRITICAL)
-        page.wait_for_selector("table", timeout=10000)
-
-        # 🔥 SCROLL (triggers lazy load)
-        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        time.sleep(1)
-
-        return page.content()
-
-    except Exception as e:
-        print("FAILED:", url)
-        return None
-
-
-# -------------------------------
-# HELPERS
-# -------------------------------
-def clean(text):
-    return re.sub(r"\s+", " ", (text or "")).strip()
-
-
-def to_int(text):
-    try:
-        return int(clean(text))
+        return int(x)
     except:
         return 0
 
 
 # -------------------------------
-# GET LINKS
+# GET SEASON PAGE
 # -------------------------------
-def get_links(page):
-    links = set()
+url = f"{BASE}/{SEASON}.html"
+html = requests.get(url).text
+soup = BeautifulSoup(html, "html.parser")
 
-    for rnd in range(0, 31):
-        url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}&round={rnd}"
-        print("Round:", rnd)
+tables = soup.find_all("table")
 
-        html = fetch(page, url)
-        if not html:
+all_rows = []
+match_id = 0
+
+for table in tables:
+    rows = table.find_all("tr")
+
+    if len(rows) < 10:
+        continue
+
+    headers = [clean(td.text) for td in rows[0].find_all("td")]
+
+    if "K" not in headers:
+        continue
+
+    match_id += 1
+
+    for tr in rows[1:]:
+        cols = tr.find_all("td")
+
+        if len(cols) < len(headers):
             continue
 
-        soup = BeautifulSoup(html, "html.parser")
-
-        for a in soup.find_all("a", href=True):
-            href = a["href"]
-
-            if "ft_match_statistics" not in href:
-                continue
-
-            if href.startswith("/"):
-                href = BASE + href
-
-            links.add(href)
-
-        time.sleep(1)
-
-    print("MATCH LINKS:", len(links))
-    return sorted(links)
-
-
-# -------------------------------
-# PARSE MATCH
-# -------------------------------
-def parse_match(page, url, match_counter):
-    html = fetch(page, url)
-    if not html:
-        return []
-
-    soup = BeautifulSoup(html, "html.parser")
-
-    rows = soup.find_all("tr")
-
-    data = []
-    current_team = None
-
-    for tr in rows:
-        txt = clean(tr.get_text(" ", strip=True))
-
-        m = re.match(r"^(.*?) Match Statistics", txt)
-        if m:
-            current_team = clean(m.group(1))
+        player = clean(cols[0].text)
+        if not player:
             continue
-
-        cols = tr.find_all("td", recursive=False)
-        if len(cols) < 18:
-            continue
-
-        link = cols[0].find("a")
-        if not link:
-            continue
-
-        name = clean(link.text)
 
         row = {
-            "match_id": f"{SEASON}_{match_counter:04d}",
-            "player": name,
-            "team": current_team,
-            "K": to_int(cols[1].text),
-            "HB": to_int(cols[2].text),
-            "D": to_int(cols[3].text),
+            "match_id": f"{SEASON}_{match_id:04d}",
+            "player": player,
+            "season": SEASON,
         }
 
-        data.append(row)
+        for i, h in enumerate(headers):
+            if i >= len(cols):
+                continue
+            row[h] = to_int(cols[i].text)
 
-    print(f"Match {match_counter}: {len(data)} rows")
-    return data
+        all_rows.append(row)
+
+
+print("TOTAL ROWS:", len(all_rows))
 
 
 # -------------------------------
-# MAIN
+# SAVE MATCH DATA
 # -------------------------------
-def main():
-    with sync_playwright() as p:
-        browser, page = launch_browser(p)
-
-        links = get_links(page)
-
-        all_rows = []
-        for i, link in enumerate(links, 1):
-            print("Match:", i)
-            rows = parse_match(page, link, i)
-            all_rows.extend(rows)
-
-        browser.close()
-
-    print("TOTAL ROWS:", len(all_rows))
-
-    if len(all_rows) < 100:
-        print("❌ STILL BLOCKED")
-        return
-
-    OUTPUT.write_text(json.dumps(all_rows, indent=2))
-    print("✅ DATA SAVED")
+OUTPUT.write_text(json.dumps(all_rows, indent=2))
 
 
-if __name__ == "__main__":
-    main()
+# -------------------------------
+# BUILD PLAYERS
+# -------------------------------
+players = {}
+
+for r in all_rows:
+    name = r["player"]
+
+    if name not in players:
+        players[name] = {
+            "name": name,
+            "games": [],
+            "career": defaultdict(int),
+        }
+
+    players[name]["games"].append(r)
+
+    for k, v in r.items():
+        if isinstance(v, int):
+            players[name]["career"][k] += v
+
+
+summary = []
+
+for name, p in players.items():
+    slug = name.lower().replace(" ", "-")
+
+    (PLAYERS_DIR / f"{slug}.json").write_text(json.dumps({
+        "name": name,
+        "career": dict(p["career"]),
+        "games": p["games"]
+    }, indent=2))
+
+    summary.append({
+        "name": name,
+        "slug": slug,
+        "games": len(p["games"])
+    })
+
+PLAYERS_JSON.write_text(json.dumps(summary, indent=2))
+
+print("✅ REBUILD COMPLETE")
