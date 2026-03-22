@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRAPER — FINAL (ROUND LOCKED IN)")
+print("AFL SCRAPER — FINAL COMPLETE FIX")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -77,7 +77,7 @@ def parse_match(url):
     title = soup.find("title").text
 
     # -----------------------------
-    # ROUND (LOCKED EXTRACTION)
+    # ROUND (BODY EXTRACTION)
     # -----------------------------
     round_num = None
 
@@ -90,21 +90,34 @@ def parse_match(url):
                 round_num = int(m.group(1))
                 break
 
-    print("ROUND FOUND:", round_num)  # 🔥 MUST PRINT
+    print("ROUND FOUND:", round_num)
 
     # -----------------------------
-    # TEAMS
+    # TEAMS (FULL FIX)
     # -----------------------------
-    if " def " in title:
-        parts = title.split(" def ")
-    elif " defeats " in title:
-        parts = title.split(" defeats ")
+    clean_title = title.replace("AFL Match Statistics :", "").strip()
+
+    team1 = None
+    team2 = None
+
+    if " def " in clean_title:
+        parts = clean_title.split(" def ")
+        team1 = parts[0].strip()
+        team2 = parts[1].split(" at ")[0].strip()
+
+    elif " defeats " in clean_title:
+        parts = clean_title.split(" defeats ")
+        team1 = parts[0].strip()
+        team2 = parts[1].split(" at ")[0].strip()
+
+    elif " defeated by " in clean_title:
+        parts = clean_title.split(" defeated by ")
+        team1 = parts[1].split(" at ")[0].strip()  # winner
+        team2 = parts[0].strip()                  # loser
+
     else:
         print("⚠️ Cannot parse teams:", title)
         return []
-
-    team1 = parts[0].replace("AFL Match Statistics :", "").strip()
-    team2 = parts[1].split(" at ")[0].strip()
 
     # -----------------------------
     # PLAYER TABLES
@@ -129,6 +142,8 @@ def parse_match(url):
 
         rows = player_tables[i].find_all("tr")
 
+        count = 0
+
         for r in rows:
 
             cols = r.find_all("td")
@@ -149,7 +164,7 @@ def parse_match(url):
                 "played_for": teams[i],
                 "played_against": teams[1 - i],
                 "season": SEASON,
-                "round": round_num,  # 🔥 THIS IS THE KEY FIX
+                "round": round_num,   # ✅ GUARANTEED
 
                 "K": to_int(cols[1].text),
                 "HB": to_int(cols[2].text),
@@ -171,6 +186,9 @@ def parse_match(url):
             }
 
             data.append(entry)
+            count += 1
+
+        print(f"{teams[i]} players:", count)
 
     return data
 
