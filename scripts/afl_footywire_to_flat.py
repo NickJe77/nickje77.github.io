@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRAPER — 2026 FIXED (ROUND PAGE METHOD)")
+print("AFL SCRAPER — FULL FIX (2026 + ROUND WORKING)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -23,17 +23,15 @@ def to_int(x):
 
 
 # -----------------------------
-# GET LINKS FROM ROUND PAGES ✅
+# GET MATCH LINKS (ROUND METHOD)
 # -----------------------------
 def get_links():
 
     links = set()
 
-    # try up to 30 rounds (covers finals too)
-    for rnd in range(1, 31):
+    for rnd in range(1, 31):  # covers full season + finals
 
         url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}&round={rnd}"
-
         print(f"Checking Round {rnd}...")
 
         res = requests.get(url, headers=HEADERS)
@@ -43,7 +41,7 @@ def get_links():
 
         soup = BeautifulSoup(res.text, "html.parser")
 
-        found_this_round = 0
+        found = 0
 
         for a in soup.find_all("a", href=True):
 
@@ -58,9 +56,9 @@ def get_links():
                 href = BASE + "/afl/footy/" + href
 
             links.add(href)
-            found_this_round += 1
+            found += 1
 
-        print(f"  → Found {found_this_round} matches")
+        print(f"  → Found {found} matches")
 
     links = list(links)
 
@@ -86,11 +84,16 @@ def parse_match(url):
     title = soup.find("title").text
 
     # -----------------------------
-    # ROUND (reliable from title)
+    # ROUND (🔥 FIXED — BODY SEARCH)
     # -----------------------------
-    round_match = re.search(r"Round\s+(\d+)", title)
+    round_num = None
 
-    round_num = int(round_match.group(1)) if round_match else None
+    page_text = soup.get_text(" ", strip=True)
+
+    round_match = re.search(r"Round\s+(\d+)", page_text)
+
+    if round_match:
+        round_num = int(round_match.group(1))
 
     # -----------------------------
     # TEAMS
