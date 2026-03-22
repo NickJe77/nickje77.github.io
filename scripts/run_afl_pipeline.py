@@ -20,11 +20,7 @@ def clean_round(raw):
     r = r.replace("round", "").strip()
 
     finals_map = {
-        "ef": 25,
-        "qf": 26,
-        "sf": 27,
-        "pf": 28,
-        "gf": 29,
+        "ef": 25, "qf": 26, "sf": 27, "pf": 28, "gf": 29,
         "elimination final": 25,
         "qualifying final": 26,
         "semi final": 27,
@@ -43,7 +39,7 @@ def clean_round(raw):
 
 
 # -------------------------------
-# LOAD ALL GAMES
+# LOAD GAMES
 # -------------------------------
 def load_all_games():
     games = []
@@ -58,34 +54,31 @@ def load_all_games():
 
         if isinstance(data, dict):
             season = int(data.get("season", 0))
-
-            for g in data.get("games", []):
-                if not isinstance(g, dict):
-                    continue
-
-                g["season"] = season
-                g["round"] = clean_round(g.get("round"))
-                games.append(g)
+            raw_games = data.get("games", [])
 
         elif isinstance(data, list):
             try:
                 season = int(file.stem.split("_")[1])
             except:
                 season = 0
+            raw_games = data
 
-            for g in data:
-                if not isinstance(g, dict):
-                    continue
+        else:
+            continue
 
-                g["season"] = season
-                g["round"] = clean_round(g.get("round"))
-                games.append(g)
+        for g in raw_games:
+            if not isinstance(g, dict):
+                continue
+
+            g["season"] = season
+            g["round"] = clean_round(g.get("round"))
+            games.append(g)
 
     return games
 
 
 # -------------------------------
-# DEDUPE GAMES
+# DEDUPE
 # -------------------------------
 def dedupe_games(games):
     seen = set()
@@ -110,7 +103,32 @@ def dedupe_games(games):
 
 
 # -------------------------------
-# BUILD PLAYERS (🔥 SAFE VERSION)
+# 🔥 EXTRACT PLAYERS (FIXED)
+# -------------------------------
+def extract_players(game):
+    players = []
+
+    # CASE 1: players inside home/away teams
+    for side in ["home_team", "away_team", "home", "away"]:
+        team = game.get(side)
+
+        if isinstance(team, dict):
+            plist = team.get("players")
+            if isinstance(plist, list):
+                for p in plist:
+                    players.append((p, team.get("name"), None))
+
+    # CASE 2: flat players list (common AFLTables format)
+    if isinstance(game.get("players"), list):
+        for p in game["players"]:
+            team = p.get("team") or p.get("team_name")
+            players.append((p, team, None))
+
+    return players
+
+
+# -------------------------------
+# BUILD PLAYERS
 # -------------------------------
 def build_players(games):
     players = {}
@@ -119,54 +137,41 @@ def build_players(games):
         season = g.get("season")
         rnd = g.get("round")
 
-        home = g.get("home_team") or {}
-        away = g.get("away_team") or {}
+        extracted = extract_players(g)
 
-        for team, opponent in [(home, away), (away, home)]:
-
-            team_name = team.get("name") if isinstance(team, dict) else None
-            opp_name = opponent.get("name") if isinstance(opponent, dict) else None
-
-            raw_players = team.get("players") if isinstance(team, dict) else []
-
-            # 🔥 CRITICAL FIX
-            if not isinstance(raw_players, list):
+        for p, team_name, _ in extracted:
+            if not isinstance(p, dict):
                 continue
 
-            for p in raw_players:
-                if not isinstance(p, dict):
-                    continue
+            name = p.get("name")
+            if not name:
+                continue
 
-                name = p.get("name")
-                if not name:
-                    continue
-
-                if name not in players:
-                    players[name] = {
-                        "name": name,
-                        "games": [],
-                        "career": defaultdict(int),
-                    }
-
-                entry = {
-                    "season": season,
-                    "round": rnd,
-                    "team": team_name,
-                    "opponent": opp_name,
-                    "stats": p
+            if name not in players:
+                players[name] = {
+                    "name": name,
+                    "games": [],
+                    "career": defaultdict(int),
                 }
 
-                players[name]["games"].append(entry)
+            entry = {
+                "season": season,
+                "round": rnd,
+                "team": team_name,
+                "stats": p
+            }
 
-                for k, v in p.items():
-                    if isinstance(v, (int, float)):
-                        players[name]["career"][k] += v
+            players[name]["games"].append(entry)
+
+            for k, v in p.items():
+                if isinstance(v, (int, float)):
+                    players[name]["career"][k] += v
 
     return players
 
 
 # -------------------------------
-# SORT PLAYER GAMES
+# SORT
 # -------------------------------
 def sort_player_games(players):
     def round_key(r):
@@ -180,7 +185,7 @@ def sort_player_games(players):
 
 
 # -------------------------------
-# SAVE PLAYERS
+# SAVE
 # -------------------------------
 def save_players(players):
     summary = []
