@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRAPER — FINAL (ROUND GUARANTEED)")
+print("AFL SCRAPER — FINAL (MATCH DETECTION FIXED)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -23,7 +23,7 @@ def to_int(x):
 
 
 # -----------------------------
-# GET LINKS + ROUND (ROBUST)
+# GET LINKS + ROUND (FIXED)
 # -----------------------------
 def get_links_with_rounds():
 
@@ -37,44 +37,40 @@ def get_links_with_rounds():
 
     for r in rows:
 
-        cells = r.find_all("td")
-
-        if not cells:
-            continue
-
         text = r.get_text(" ", strip=True)
 
-        # 🔥 Detect round header (works on FootyWire)
+        # ✅ Detect round
         round_match = re.search(r"Round\s+(\d+)", text)
-
         if round_match:
             current_round = int(round_match.group(1))
             print("Detected Round:", current_round)
             continue
 
-        # 🔥 Extract match link
-        link_tag = r.find("a", href=True)
+        # ✅ Find ALL links in row (IMPORTANT FIX)
+        links = r.find_all("a", href=True)
 
-        if not link_tag:
-            continue
+        for a in links:
 
-        href = link_tag["href"]
+            href = a["href"]
 
-        if "ft_match_statistics" not in href:
-            continue
+            if "ft_match_statistics" not in href:
+                continue
 
-        # build full URL
-        if href.startswith("/"):
-            href = BASE + href
-        elif not href.startswith("http"):
-            href = BASE + "/afl/footy/" + href
+            # build full URL
+            if href.startswith("/"):
+                href = BASE + href
+            elif not href.startswith("http"):
+                href = BASE + "/afl/footy/" + href
 
-        matches.append((href, current_round))
+            matches.append((href, current_round))
+
+    # remove duplicates
+    matches = list(set(matches))
 
     print("Matches found:", len(matches))
 
     if not matches:
-        raise Exception("❌ NO MATCHES FOUND")
+        raise Exception("❌ NO MATCHES FOUND — LINK PARSING FAILED")
 
     print("Sample:", matches[0])
 
@@ -132,14 +128,11 @@ def parse_match(url, round_num):
             if len(cols) < 18:
                 continue
 
-            # ONLY REAL PLAYERS
             link = cols[0].find("a")
-
             if not link:
                 continue
 
             name = link.text.strip()
-
             if not name:
                 continue
 
@@ -148,7 +141,7 @@ def parse_match(url, round_num):
                 "played_for": teams[i],
                 "played_against": teams[1 - i],
                 "season": SEASON,
-                "round": round_num,   # 🔥 NOW GUARANTEED
+                "round": round_num,
 
                 "K": to_int(cols[1].text),
                 "HB": to_int(cols[2].text),
