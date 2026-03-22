@@ -7,7 +7,7 @@ from collections import defaultdict
 import requests
 from bs4 import BeautifulSoup
 
-print("AFL PIPELINE (ACTION-SAFE VERSION)")
+print("AFL PIPELINE (ANTI-BLOCK FULL VERSION)")
 
 BASE = "https://www.footywire.com"
 SEASON = 2026
@@ -21,13 +21,18 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 PLAYERS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# 🔥 REAL BROWSER HEADERS (fix blocking)
+# -------------------------------
+# HEADERS (REAL BROWSER)
+# -------------------------------
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
     "Accept-Language": "en-AU,en;q=0.9",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
     "Connection": "keep-alive",
 }
+
+session = requests.Session()
+session.headers.update(HEADERS)
 
 
 # -------------------------------
@@ -44,25 +49,44 @@ def to_int(text):
         return 0
 
 
-# 🔥 RETRY + BLOCK PROTECTION
+# -------------------------------
+# FETCH (ANTI BLOCK)
+# -------------------------------
 def fetch(url):
-    for i in range(5):
+    for i in range(6):
         try:
-            res = requests.get(url, headers=HEADERS, timeout=30)
+            res = session.get(url, timeout=30)
 
-            if res.status_code == 200 and len(res.text) > 5000:
-                return res.text
+            if res.status_code != 200:
+                time.sleep(3)
+                continue
+
+            html = res.text
+
+            # 🔥 BLOCK DETECTION
+            if "Match Statistics" not in html:
+                print("⚠️ BLOCKED:", url)
+                time.sleep(5)
+                continue
+
+            if len(html) < 8000:
+                print("⚠️ SHORT PAGE:", url)
+                time.sleep(5)
+                continue
+
+            return html
 
         except Exception as e:
             print("fetch error:", e)
 
         time.sleep(3)
 
+    print("❌ FAILED FETCH:", url)
     return None
 
 
 # -------------------------------
-# ROUND
+# ROUND DETECTION
 # -------------------------------
 def get_round_label(soup):
     text = soup.get_text(" ", strip=True).lower()
@@ -81,7 +105,7 @@ def get_round_label(soup):
 
 
 # -------------------------------
-# GET LINKS
+# GET MATCH LINKS
 # -------------------------------
 def get_links():
     links = set()
@@ -89,15 +113,17 @@ def get_links():
     for rnd in range(0, 31):
         url = f"{BASE}/afl/footy/ft_match_list?year={SEASON}&round={rnd}"
 
+        print("Fetching round:", rnd)
+
         html = fetch(url)
         if not html:
-            print("FAILED ROUND PAGE:", rnd)
             continue
 
         soup = BeautifulSoup(html, "html.parser")
 
         for a in soup.find_all("a", href=True):
             href = a["href"]
+
             if "ft_match_statistics" not in href:
                 continue
 
@@ -108,7 +134,7 @@ def get_links():
 
             links.add(href)
 
-        time.sleep(2)
+        time.sleep(3)
 
     print("MATCH LINKS:", len(links))
     return sorted(links)
@@ -120,7 +146,6 @@ def get_links():
 def parse_match(url, match_counter):
     html = fetch(url)
     if not html:
-        print("FAILED MATCH:", url)
         return []
 
     soup = BeautifulSoup(html, "html.parser")
@@ -144,6 +169,7 @@ def parse_match(url, match_counter):
     match_id = f"{SEASON}_{match_counter:04d}"
 
     rows = soup.find_all("tr")
+
     current_team = None
     data = []
 
@@ -197,7 +223,7 @@ def parse_match(url, match_counter):
 
         data.append(row)
 
-    time.sleep(2)
+    print(f"Parsed {len(data)} rows from match {match_counter}")
     return data
 
 
@@ -212,6 +238,11 @@ def scrape():
 
     for link in links:
         match_counter += 1
+
+        print("Match:", match_counter, link)
+
+        time.sleep(4)  # 🔥 KEY ANTI-BLOCK
+
         rows = parse_match(link, match_counter)
         all_rows.extend(rows)
 
@@ -237,16 +268,7 @@ def build_players(rows):
                 "career": defaultdict(int),
             }
 
-        entry = {
-            "season": r.get("season"),
-            "round": r.get("round"),
-            "team": r.get("played_for"),
-            "opponent": r.get("played_against"),
-            "match_id": r.get("match_id"),
-            "stats": r
-        }
-
-        players[name]["games"].append(entry)
+        players[name]["games"].append(r)
 
         for k, v in r.items():
             if isinstance(v, (int, float)):
@@ -282,13 +304,13 @@ def save_players(players):
 def main():
     rows = scrape()
 
-    # 🔴 NEVER WIPE DATA
+    # 🔴 PROTECTION — NEVER WIPE DATA
     if len(rows) < 1000:
-        print("❌ SCRAPER BLOCKED — DATA NOT UPDATED")
+        print("❌ SCRAPER BLOCKED — NO UPDATE APPLIED")
         return
 
     OUTPUT.write_text(json.dumps(rows, indent=2))
-    print("✅ DATA SAVED")
+    print("✅ MATCH DATA SAVED")
 
     players = build_players(rows)
     save_players(players)
