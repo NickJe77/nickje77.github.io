@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("AFL SCRAPER — FINAL (ROUND FIXED PROPERLY)")
+print("AFL SCRAPER — FINAL (ROUND WORKING)")
 
 BASE = "https://www.footywire.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -26,28 +26,19 @@ def to_int(x):
 
 
 # -----------------------------
-# EXTRACT ROUND (RELIABLE)
+# EXTRACT ROUND (FROM FIRST TABLE — RELIABLE)
 # -----------------------------
 def extract_round(soup):
 
-    # Look for the specific header line
-    candidates = soup.find_all(["b", "td", "div", "span"])
+    tables = soup.find_all("table")
 
-    for tag in candidates:
+    if not tables:
+        return None
 
-        txt = tag.get_text(" ", strip=True)
+    first_table = tables[0]
 
-        if txt.startswith("Round") and "," in txt:
-            # Example: "Round 2, Adelaide Oval"
-            part = txt.split(",")[0]
+    text = first_table.get_text(" ", strip=True)
 
-            try:
-                return int(part.replace("Round", "").strip())
-            except:
-                continue
-
-    # fallback (just in case)
-    text = soup.get_text(" ", strip=True)
     match = re.search(r"Round\s+(\d+)", text)
 
     if match:
