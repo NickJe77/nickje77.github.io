@@ -6,7 +6,7 @@ import re
 import time
 from datetime import datetime
 
-print("F1 2026 FINAL (CLEAN + CORRECT)")
+print("F1 2026 FINAL FIX (STATIC PARSE)")
 
 BASE = "https://www.formula1.com"
 START_URL = "https://www.formula1.com/en/results/2026/races"
@@ -20,10 +20,14 @@ OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 # -----------------------------
 # HELPERS
 # -----------------------------
-def get_soup(url):
+def get_html(url):
     r = requests.get(url, headers=HEADERS, timeout=15)
     r.raise_for_status()
-    return BeautifulSoup(r.text, "html.parser")
+    return r.text
+
+
+def get_soup(url):
+    return BeautifulSoup(get_html(url), "html.parser")
 
 
 def clean_text(t):
@@ -32,67 +36,40 @@ def clean_text(t):
 
 def clean_driver(name):
     name = clean_text(name)
-
-    # remove 3-letter suffix (VER, HAM, ANT)
     parts = name.split()
+
+    # remove 3-letter suffix
     if len(parts) >= 2 and len(parts[-1]) == 3:
         parts = parts[:-1]
 
     return " ".join(parts)
 
 
-def extract_slug(href):
-    # /en/results/2026/races/australia/race-result
-    parts = href.split("/")
-    if "races" in parts:
-        i = parts.index("races")
-        if i + 1 < len(parts):
-            return parts[i + 1]
-    return None
-
-
-def clean_gp_from_slug(slug):
+def clean_gp(slug):
     return slug.replace("-", " ").title() + " Grand Prix"
 
 
 # -----------------------------
-# GET RACE LIST (CORRECT)
+# GET RACE SLUGS (BULLETPROOF)
 # -----------------------------
-print("Loading race table...")
+print("Extracting races...")
 
-main = get_soup(START_URL)
+html = get_html(START_URL)
+
+slugs = sorted(set(re.findall(r"/en/results/2026/races/([a-z0-9-]+)/", html)))
+
+print("Slugs found:", slugs)
 
 race_links = []
 
-for row in main.select("table tbody tr"):
-
-    cols = row.select("td")
-    if len(cols) < 2:
-        continue
-
-    try:
-        round_num = int(cols[0].text.strip())
-    except:
-        continue
-
-    a = row.select_one("a")
-    if not a:
-        continue
-
-    href = a.get("href", "")
-
-    if "/en/results/2026/races/" not in href:
-        continue
-
-    slug = extract_slug(href)
-
+for i, slug in enumerate(slugs, start=1):
     race_links.append({
-        "round": round_num,
+        "round": i,
         "slug": slug,
-        "url": BASE + href + "/race-result"
+        "url": f"{BASE}/en/results/2026/races/{slug}/race-result"
     })
 
-print("Races found:", len(race_links))
+print("Races built:", len(race_links))
 
 
 # -----------------------------
@@ -109,26 +86,19 @@ for race in race_links:
     slug = race["slug"]
     race_url = race["url"]
 
-    print("\n---", slug, "Round", round_num)
+    print("\n---", slug)
 
     race_soup = get_soup(race_url)
-
-    # ✅ GP NAME FROM SLUG (ALWAYS CORRECT)
-    gp_name = clean_gp_from_slug(slug)
-
-    # -------------------------
-    # RESULTS
-    # -------------------------
-    results = []
 
     rows = race_soup.select("table tbody tr")
 
     if not rows:
-        print("No results yet")
+        print("No results yet → skipping")
         continue
 
-    for r in rows:
+    results = []
 
+    for r in rows:
         cols = [clean_text(c.text) for c in r.select("td")]
 
         if len(cols) < 7:
@@ -200,7 +170,7 @@ for race in race_links:
     # -------------------------
     season["races"].append({
         "round": round_num,
-        "grand_prix": gp_name,
+        "grand_prix": clean_gp(slug),
         "race_id": None,
         "slug": slug,
         "fastest_lap_driver": fastest_driver,
@@ -217,7 +187,7 @@ for race in race_links:
 final = {
     "season": 2026,
     "last_updated": datetime.utcnow().isoformat(),
-    "races": sorted(season["races"], key=lambda x: x["round"])
+    "races": season["races"]
 }
 
 with open(OUTPUT, "w") as f:
