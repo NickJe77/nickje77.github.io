@@ -6,7 +6,7 @@ import re
 import time
 from datetime import datetime
 
-print("F1 2026 FINAL SCRAPER")
+print("F1 2026 FIXED SCRAPER")
 
 BASE = "https://www.formula1.com"
 START_URL = "https://www.formula1.com/en/results/2026/races"
@@ -38,23 +38,24 @@ def clean_text(t):
     return t.strip()
 
 
-def extract_driver(cell):
-    spans = cell.select("span")
+def clean_driver(name):
+    name = clean_text(name)
 
-    if len(spans) >= 2:
-        first = clean_text(spans[0].text)
-        last = clean_text(spans[1].text)
-        return f"{first} {last}"
+    # REMOVE 3-letter code at end (VER, HAM, ANT etc)
+    parts = name.split()
+    if len(parts) >= 2 and len(parts[-1]) == 3:
+        parts = parts[:-1]
 
-    return clean_text(cell.text)
+    return " ".join(parts)
 
 
 def clean_gp(text):
     text = clean_text(text)
 
-    # remove FORMULA 1 branding + suffix
-    text = re.sub(r"FORMULA 1 .*? GRAND PRIX", lambda m: m.group(0).split("GRAND PRIX")[0] + "Grand Prix", text)
-    text = re.sub(r" – .*", "", text)
+    # remove FORMULA 1 junk
+    text = re.sub(r"FORMULA 1 .*? GRAND PRIX", "", text)
+    text = text.replace("– RACE RESULT", "")
+    text = text.replace("– Race result", "")
 
     return text.strip()
 
@@ -64,7 +65,7 @@ def slug_from_url(url):
 
 
 # -----------------------------
-# GET RACE LINKS (FIXED)
+# GET RACE LINKS (FIXED PROPERLY)
 # -----------------------------
 print("Loading races...")
 
@@ -72,13 +73,19 @@ main = get_soup(START_URL)
 
 race_links = []
 
-for a in main.select("a[href]"):
-    href = a["href"]
+# 🔥 THIS IS THE FIX — USE TABLE
+for row in main.select("table tbody tr"):
+    a = row.select_one("a")
+    if not a:
+        continue
 
-    if "/en/results/2026/races/" in href and "/race-result" in href:
-        full = BASE + href
-        if full not in race_links:
-            race_links.append(full)
+    href = a.get("href", "")
+
+    if "/en/results/2026/races/" in href:
+        race_url = BASE + href + "/race-result"
+
+        if race_url not in race_links:
+            race_links.append(race_url)
 
 print("Races found:", len(race_links))
 
@@ -126,7 +133,7 @@ for race_url in race_links:
         except:
             continue
 
-        driver = extract_driver(tds[2])
+        driver = clean_driver(cols[2])
 
         results.append({
             "position": pos,
@@ -149,8 +156,7 @@ for race_url in race_links:
 
     if grid_soup:
         for r in grid_soup.select("table tbody tr"):
-            tds = r.select("td")
-            cols = [clean_text(c.text) for c in tds]
+            cols = [clean_text(c.text) for c in r.select("td")]
 
             if len(cols) < 3:
                 continue
@@ -160,7 +166,7 @@ for race_url in race_links:
             except:
                 continue
 
-            driver = extract_driver(tds[2])
+            driver = clean_driver(cols[2])
             grid_map[driver] = pos
 
     for r in results:
@@ -179,11 +185,10 @@ for race_url in race_links:
         fl_rows = fl_soup.select("table tbody tr")
 
         if fl_rows:
-            tds = fl_rows[0].select("td")
-            cols = [clean_text(c.text) for c in tds]
+            cols = [clean_text(c.text) for c in fl_rows[0].select("td")]
 
             if len(cols) >= 5:
-                fastest_driver = extract_driver(tds[2])
+                fastest_driver = clean_driver(cols[2])
                 fastest_time = cols[4]
 
     # -------------------------
