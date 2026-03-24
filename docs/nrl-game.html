@@ -222,82 +222,82 @@ async function loadGame(){
 
   try{
 
-    // NEW 2026 URL-BASED LINKING
+    // ✅ NEW URL SYSTEM (optional)
     if(matchUrl){
-      await loadGameFrom2026MatchesFileByUrl(matchUrl);
+
+      const decoded = decodeURIComponent(matchUrl);
+      const res = await fetch(decoded);
+      const html = await res.text();
+
+      document.querySelector(".teams").innerHTML =
+        `<div style="grid-column:1/-1">${html}</div>`;
+
+      document.getElementById("gameTitle").innerText = "NRL Game";
+      document.getElementById("gameMeta").innerText = "Live Data";
+      document.getElementById("scoreline").innerText = "";
+
       return;
     }
 
-    // OLD SYSTEM
-    if(season && matchId){
-      const res = await fetch(`/data/nrl/seasons/${season}.json`);
-      const data = await res.json();
+    // ✅ 2026 FIX
+    if(season == "2026"){
 
-      const gameRows = data.filter(r => String(r.match_id) === String(matchId));
+      const res = await fetch(`/data/nrl/matches/2026.json`);
+      const matches = await res.json();
 
-      if(gameRows.length === 0){
+      const game = matches.find(m =>
+        String(m.match_id) === String(matchId)
+      );
+
+      if(!game){
         document.getElementById("gameTitle").innerText = "Game Not Found";
         return;
       }
 
-      const game = gameRows[0];
-      const homeTeam = game.home_team;
-      const awayTeam = game.away_team;
-
-      document.getElementById("gameTitle").innerText =
-        `${season} – ${homeTeam} vs ${awayTeam}`;
-
-      document.getElementById("gameMeta").innerText =
-        `Venue: ${game.venue || "-"} • Crowd: ${game.crowd ? Number(game.crowd).toLocaleString() : "-"}`;
-
-      document.getElementById("scoreline").innerText =
-        `${homeTeam} ${game.home_points} – ${game.away_points} ${awayTeam}`;
-
-      document.getElementById("homeName").innerText = homeTeam;
-      document.getElementById("awayName").innerText = awayTeam;
-
-      document.getElementById("homeBar").style.background =
-        teamColours[homeTeam] || "#333";
-
-      document.getElementById("awayBar").style.background =
-        teamColours[awayTeam] || "#333";
-
-      homePlayers = gameRows.filter(r => r.played_for === homeTeam);
-      awayPlayers = gameRows.filter(r => r.played_for === awayTeam);
-
-      renderTable("home");
-      renderTable("away");
+      renderGameObject(game);
       return;
     }
 
-    document.getElementById("gameTitle").innerText = "Game Not Found";
+    // ✅ OLD SYSTEM
+    const res = await fetch(`/data/nrl/seasons/${season}.json`);
+    const data = await res.json();
 
-  } catch (err){
+    const gameRows = data.filter(r =>
+      String(r.match_id) === String(matchId)
+    );
+
+    if(gameRows.length === 0){
+      document.getElementById("gameTitle").innerText = "Game Not Found";
+      return;
+    }
+
+    const game = gameRows[0];
+
+    const structuredGame = {
+      home_team: game.home_team,
+      away_team: game.away_team,
+      home_points: game.home_points,
+      away_points: game.away_points,
+      venue: game.venue,
+      crowd: game.crowd,
+      players: gameRows
+    };
+
+    renderGameObject(structuredGame);
+
+  } catch(err){
     console.error(err);
     document.getElementById("gameTitle").innerText = "Game Not Found";
   }
 }
 
-async function loadGameFrom2026MatchesFileByUrl(urlValue){
-  const decodedUrl = decodeURIComponent(urlValue);
-
-  const res = await fetch(`/data/nrl/matches/2026.json`);
-  const matches = await res.json();
-
-  const game = matches.find(m =>
-    String(m.match_url || "") === String(decodedUrl)
-  );
-
-  if(!game){
-    document.getElementById("gameTitle").innerText = "Game Not Found";
-    return;
-  }
+function renderGameObject(game){
 
   const homeTeam = game.home_team;
   const awayTeam = game.away_team;
 
   document.getElementById("gameTitle").innerText =
-    `${game.season || 2026} – ${homeTeam} vs ${awayTeam}`;
+    `${season} – ${homeTeam} vs ${awayTeam}`;
 
   document.getElementById("gameMeta").innerText =
     `Venue: ${game.venue || "-"} • Crowd: ${game.crowd ? Number(game.crowd).toLocaleString() : "-"}`;
