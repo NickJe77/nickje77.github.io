@@ -3,7 +3,7 @@ from pathlib import Path
 from datetime import datetime
 import pytz
 
-print("BUILDING ON THIS DAY (CORRECT FORMAT)")
+print("BUILDING ON THIS DAY (SAFE MODE)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -11,6 +11,20 @@ OUTPUT = BASE / "on_this_day.json"
 today = datetime.now(pytz.timezone("Australia/Melbourne")).strftime("%m-%d")
 
 data_out = {}
+
+# -----------------------
+# SAFE JSON LOAD
+# -----------------------
+def load_json_safe(path):
+    try:
+        text = path.read_text().strip()
+        if not text:
+            print(f"⚠️ Empty file skipped: {path}")
+            return []
+        return json.loads(text)
+    except Exception as e:
+        print(f"❌ Bad JSON skipped: {path} ({e})")
+        return []
 
 # -----------------------
 # GET DATE
@@ -51,7 +65,10 @@ def add_event(sport, row):
     ts = row.get("team_score") or row.get("home_score")
     os = row.get("opponent_score") or row.get("away_score")
 
+    # skip junk rows
     if not team or not opp:
+        return
+    if ts is None or os is None:
         return
 
     text = f"{team} {ts} defeated {opp} {os}"
@@ -69,7 +86,7 @@ def add_event(sport, row):
 nba_dir = BASE / "nba" / "seasons"
 if nba_dir.exists():
     for file in nba_dir.glob("*.json"):
-        rows = json.loads(file.read_text())
+        rows = load_json_safe(file)
         for r in rows:
             add_event("NBA", r)
 
@@ -79,17 +96,17 @@ if nba_dir.exists():
 afl_dir = BASE / "afl"
 if afl_dir.exists():
     for file in afl_dir.glob("afl_*.json"):
-        rows = json.loads(file.read_text())
+        rows = load_json_safe(file)
         for r in rows:
             add_event("AFL", r)
 
 # -----------------------
-# NRL (optional mapping to "Football")
+# NRL
 # -----------------------
 nrl_dir = BASE / "nrl"
 if nrl_dir.exists():
     for file in nrl_dir.rglob("*.json"):
-        data = json.loads(file.read_text())
+        data = load_json_safe(file)
 
         rows = data if isinstance(data, list) else data.get("games", [])
 
@@ -97,7 +114,7 @@ if nrl_dir.exists():
             add_event("Football", r)
 
 # -----------------------
-# SORT EACH SPORT BY YEAR DESC
+# SORT
 # -----------------------
 for day in data_out:
     for sport in data_out[day]:
@@ -108,4 +125,4 @@ for day in data_out:
 # -----------------------
 OUTPUT.write_text(json.dumps(data_out, indent=2))
 
-print(f"Saved → {OUTPUT}")
+print(f"✅ Saved → {OUTPUT}")
