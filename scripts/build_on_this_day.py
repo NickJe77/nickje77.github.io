@@ -3,7 +3,7 @@ from pathlib import Path
 from datetime import datetime
 import pytz
 
-print("BUILDING ON THIS DAY (SAFE MODE)")
+print("BUILDING ON THIS DAY (FINAL SAFE VERSION)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -25,6 +25,12 @@ def load_json_safe(path):
     except Exception as e:
         print(f"❌ Bad JSON skipped: {path} ({e})")
         return []
+
+# -----------------------
+# ENSURE VALID ROW
+# -----------------------
+def is_valid_row(r):
+    return isinstance(r, dict)
 
 # -----------------------
 # GET DATE
@@ -53,6 +59,9 @@ def normalise(d):
 # ADD EVENT
 # -----------------------
 def add_event(sport, row):
+    if not is_valid_row(row):
+        return
+
     d = normalise(get_date(row))
     if not d:
         return
@@ -65,7 +74,6 @@ def add_event(sport, row):
     ts = row.get("team_score") or row.get("home_score")
     os = row.get("opponent_score") or row.get("away_score")
 
-    # skip junk rows
     if not team or not opp:
         return
     if ts is None or os is None:
@@ -81,12 +89,20 @@ def add_event(sport, row):
     })
 
 # -----------------------
-# NBA
+# NBA (SKIP index.json)
 # -----------------------
 nba_dir = BASE / "nba" / "seasons"
 if nba_dir.exists():
     for file in nba_dir.glob("*.json"):
+        if file.name == "index.json":
+            print(f"⏭️ Skipping index file: {file}")
+            continue
+
         rows = load_json_safe(file)
+
+        if not isinstance(rows, list):
+            continue
+
         for r in rows:
             add_event("NBA", r)
 
@@ -97,6 +113,10 @@ afl_dir = BASE / "afl"
 if afl_dir.exists():
     for file in afl_dir.glob("afl_*.json"):
         rows = load_json_safe(file)
+
+        if not isinstance(rows, list):
+            continue
+
         for r in rows:
             add_event("AFL", r)
 
@@ -109,6 +129,9 @@ if nrl_dir.exists():
         data = load_json_safe(file)
 
         rows = data if isinstance(data, list) else data.get("games", [])
+
+        if not isinstance(rows, list):
+            continue
 
         for r in rows:
             add_event("Football", r)
