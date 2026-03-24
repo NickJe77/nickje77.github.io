@@ -2,49 +2,59 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>F1 Driver | The Sporting Almanac</title>
+<title>F1 Drivers Championship | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<link rel="stylesheet" href="style.css">
-
 <style>
-body{font-family:system-ui,Arial,sans-serif;margin:0;}
-.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
-.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+body{
+  font-family:Inter,system-ui,Arial,sans-serif;
+  margin:0;
+  background:#f4f6f8;
+  color:#111;
+}
 
-.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px;}
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  background:#fff;
+  font-weight:600;
+}
 
-h1{text-align:center;margin-bottom:10px;}
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+  font-size:18px;
+}
 
-.stats{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-  gap:16px;
+.page-wrap{
+  max-width:1100px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+h1{
   margin-bottom:20px;
 }
-.stat{
-  border:1px solid #ddd;
-  border-radius:12px;
-  padding:14px;
-  text-align:center;
-  background:#f6f9ff;
-}
-.stat h3{margin:0 0 5px;font-size:14px;color:#555;}
-.stat div{font-size:22px;font-weight:700;}
 
-.controls{text-align:center;margin-bottom:15px;}
-.controls input{
-  padding:8px 12px;
-  border-radius:8px;
-  border:1px solid #ccc;
-  font-size:14px;
-  width:260px;
+table{
+  width:100%;
+  border-collapse:collapse;
+  background:#fff;
 }
 
-table{width:100%;border-collapse:collapse;}
-th,td{border-bottom:1px solid #ddd;padding:8px;text-align:center;}
-th{background:#f0f0f0;}
-tr:nth-child(even){background:#f6f9ff;}
+th,td{
+  padding:10px;
+  border-bottom:1px solid #eee;
+  text-align:left;
+}
+
+th{
+  background:#fafafa;
+}
+
 </style>
 </head>
 
@@ -53,219 +63,178 @@ tr:nth-child(even){background:#f6f9ff;}
 <div class="navbar">
   <a href="index.html">Home</a>
   <a href="f1.html">F1</a>
-  <a href="f1-drivers.html">Drivers</a>
 </div>
 
 <div class="page-wrap">
 
-<h1 id="driverName">Driver</h1>
+<h1>F1 Drivers Championship</h1>
 
-<div class="stats">
-  <div class="stat"><h3>Races</h3><div id="totalRaces">0</div></div>
-  <div class="stat"><h3>Wins</h3><div id="totalWins">0</div></div>
-  <div class="stat"><h3>Championships</h3><div id="totalTitles">0</div></div>
-  <div class="stat"><h3>Poles</h3><div id="totalPoles">0</div></div>
-  <div class="stat"><h3>Points</h3><div id="totalPoints">0</div></div>
-</div>
+<select id="seasonSelect"></select>
 
-<div class="controls">
-  <input id="raceFilter" placeholder="Search race…">
-</div>
-
-<table>
+<table id="table">
 <thead>
 <tr>
-  <th>Season</th>
-  <th>Race</th>
-  <th>Grid</th>
-  <th>Finish</th>
+  <th>#</th>
+  <th>Driver</th>
   <th>Points</th>
+  <th>Wins</th>
+  <th>Titles</th>
 </tr>
 </thead>
-<tbody id="raceTable"></tbody>
+<tbody></tbody>
 </table>
 
 </div>
 
 <script>
-const params = new URLSearchParams(window.location.search);
 
-function cleanDriver(name){
-  return String(name||"").replace(/\s[A-Z]{3}$/,"").trim();
-}
-
-/* -------- COUNTRY + FLAGS -------- */
-
-const COUNTRY_ALIASES = {
-  "United States of America": "United States",
-  "Great Britain": "United Kingdom",
-  "People's Republic of China": "China",
-  "United Arab Emirates": "UAE"
+// -----------------------------
+// REAL CHAMPIONS (FIXES SENNA)
+// -----------------------------
+const CHAMPIONS = {
+  1988: "Ayrton Senna",
+  1989: "Alain Prost",
+  1990: "Ayrton Senna",
+  1991: "Ayrton Senna",
+  1992: "Nigel Mansell",
+  1993: "Alain Prost",
+  1994: "Michael Schumacher",
+  1995: "Michael Schumacher",
+  1996: "Damon Hill",
+  1997: "Jacques Villeneuve",
+  1998: "Mika Hakkinen",
+  1999: "Mika Hakkinen",
+  2000: "Michael Schumacher",
+  2001: "Michael Schumacher",
+  2002: "Michael Schumacher",
+  2003: "Michael Schumacher",
+  2004: "Michael Schumacher",
+  2005: "Fernando Alonso",
+  2006: "Fernando Alonso",
+  2007: "Kimi Raikkonen",
+  2008: "Lewis Hamilton",
+  2009: "Jenson Button",
+  2010: "Sebastian Vettel",
+  2011: "Sebastian Vettel",
+  2012: "Sebastian Vettel",
+  2013: "Sebastian Vettel",
+  2014: "Lewis Hamilton",
+  2015: "Lewis Hamilton",
+  2016: "Nico Rosberg",
+  2017: "Lewis Hamilton",
+  2018: "Lewis Hamilton",
+  2019: "Lewis Hamilton",
+  2020: "Lewis Hamilton",
+  2021: "Max Verstappen",
+  2022: "Max Verstappen",
+  2023: "Max Verstappen",
+  2024: "Max Verstappen"
 };
 
-const FLAG_MAP = {
-  "Australia":"🇦🇺","China":"🇨🇳","Japan":"🇯🇵","Bahrain":"🇧🇭","Saudi Arabia":"🇸🇦",
-  "Qatar":"🇶🇦","United States":"🇺🇸","Mexico":"🇲🇽","Brazil":"🇧🇷","Monaco":"🇲🇨",
-  "Spain":"🇪🇸","France":"🇫🇷","Italy":"🇮🇹","United Kingdom":"🇬🇧","Austria":"🇦🇹",
-  "Hungary":"🇭🇺","Belgium":"🇧🇪","Netherlands":"🇳🇱","Singapore":"🇸🇬",
-  "Azerbaijan":"🇦🇿","Canada":"🇨🇦","UAE":"🇦🇪"
-};
+// -----------------------------
+// LOAD SEASONS
+// -----------------------------
+const seasonSelect = document.getElementById("seasonSelect");
 
-const COUNTRY_PREFIXES = Array.from(
-  new Set([...Object.keys(COUNTRY_ALIASES), ...Object.keys(FLAG_MAP)])
-).sort((a,b)=> b.split(" ").length - a.split(" ").length);
-
-function normalizeSpaces(s){
-  return String(s||"")
-    .replace(/[’‘]/g,"'")   // normalize curly apostrophes
-    .replace(/\s+/g," ")
-    .trim();
+for(let y=1988;y<=2026;y++){
+  const opt=document.createElement("option");
+  opt.value=y;
+  opt.textContent=y;
+  if(y===2026) opt.selected=true;
+  seasonSelect.appendChild(opt);
 }
 
-function dedupeFullPhrase(n){
-  const words = n.split(" ");
-  if(words.length >= 2 && words.length % 2 === 0){
-    const half = words.length/2;
-    const first = words.slice(0, half).join(" ");
-    const second = words.slice(half).join(" ");
-    if(first === second) return first;
-  }
-  return n;
-}
+seasonSelect.addEventListener("change", loadSeason);
 
-function extractCountryFromRace(raw){
-  let n = normalizeSpaces(String(raw||"").replace(/^Flag of\s+/,""));
-  n = dedupeFullPhrase(n);
+// -----------------------------
+// LOAD DATA
+// -----------------------------
+async function loadSeason(){
 
-  // Hard catch for China variants
-  if(n.startsWith("People")) return "China";
+  const year = seasonSelect.value;
 
-  let matched = "";
-  for(const c of COUNTRY_PREFIXES){
-    if(n === c || n.startsWith(c + " ")){
-      matched = c;
-      break;
-    }
-  }
+  const res = await fetch(`data/f1/${year}.json`);
+  const data = await res.json();
 
-  if(!matched){
-    matched = n.split(" ")[0] || "";
-  }
+  const standings = {};
 
-  return COUNTRY_ALIASES[matched] || matched;
-}
+  data.races.forEach(race=>{
+    race.results.forEach(r=>{
 
-function formatRaceWithFlag(raw){
-  const country = extractCountryFromRace(raw);
-  const flag = FLAG_MAP[country] || "";
-  return flag ? `${country} ${flag}` : country;
-}
+      const name = r.driver;
 
-/* -------- PAGE LOGIC -------- */
+      if(!standings[name]){
+        standings[name]={
+          driver:name,
+          points:0,
+          wins:0
+        };
+      }
 
-const driver = cleanDriver(decodeURIComponent(params.get("driver")||""));
-document.getElementById("driverName").textContent = driver;
+      const pts = Number(r.points)||0;
+      standings[name].points += pts;
 
-const startYear = 1950;
-const endYear = new Date().getFullYear();
+      if(r.position === 1){
+        standings[name].wins++;
+      }
 
-const totalRaces=document.getElementById("totalRaces");
-const totalWins=document.getElementById("totalWins");
-const totalTitles=document.getElementById("totalTitles");
-const totalPoles=document.getElementById("totalPoles");
-const totalPoints=document.getElementById("totalPoints");
-const raceTable=document.getElementById("raceTable");
-const raceFilter=document.getElementById("raceFilter");
-
-let seasonsData=[];
-let allRows=[];
-
-async function loadAll(){
-  for(let y=startYear;y<=endYear;y++){
-    try{
-      const r = await fetch(`data/f1/${y}.json`);
-      if(!r.ok) continue;
-      seasonsData.push(await r.json());
-    }catch(e){}
-  }
-  build();
-}
-
-function getChampion(season){
-  const totals={};
-  (season.races||[]).forEach(r=>{
-    (r.results||[]).forEach(x=>{
-      const d=cleanDriver(x.driver);
-      totals[d]=(totals[d]||0)+(Number(x.points)||0);
     });
   });
-  return Object.entries(totals).sort((a,b)=>b[1]-a[1])[0]?.[0];
-}
 
-function build(){
-  let races=0,wins=0,poles=0,points=0;
-  const titleSeasons=new Set();
-  allRows=[];
+  // -----------------------------
+  // ADD TITLES
+  // -----------------------------
+  const titles = {};
 
-  seasonsData.forEach(season=>{
-    const champ=getChampion(season);
+  for(const yr in CHAMPIONS){
+    const d = CHAMPIONS[yr];
+    titles[d] = (titles[d]||0)+1;
+  }
 
-    (season.races||[]).forEach(race=>{
-      const raceLabel = formatRaceWithFlag(race.grand_prix || "");
+  const list = Object.values(standings).map(d=>({
+    ...d,
+    titles: titles[d.driver] || 0
+  }));
 
-      (race.results||[]).forEach(r=>{
-        const d=cleanDriver(r.driver);
-        if(d!==driver) return;
-
-        races++;
-        if(Number(r.position)===1) wins++;
-        if(Number(r.grid)===1) poles++;
-        points += Number(r.points)||0;
-
-        allRows.push({
-          season:season.season,
-          race:raceLabel,
-          grid:r.grid,
-          finish:r.position,
-          points:r.points
-        });
-      });
-    });
-
-    if(champ===driver) titleSeasons.add(season.season);
+  // sort
+  list.sort((a,b)=>{
+    if(b.points!==a.points) return b.points-a.points;
+    return b.wins-a.wins;
   });
 
-  totalRaces.textContent=races;
-  totalWins.textContent=wins;
-  totalPoles.textContent=poles;
-  totalTitles.textContent=titleSeasons.size;
-  totalPoints.textContent=points.toFixed(1);
-
-  renderTable();
+  render(list);
 }
 
-function renderTable(){
-  const f=raceFilter.value.toLowerCase();
-  raceTable.innerHTML="";
 
-  allRows
-    .filter(r=>r.race.toLowerCase().includes(f))
-    .sort((a,b)=>b.season-a.season)
-    .forEach(r=>{
-      const tr=document.createElement("tr");
-      tr.innerHTML=`
-        <td>${r.season}</td>
-        <td>${r.race}</td>
-        <td>${r.grid}</td>
-        <td>${r.finish}</td>
-        <td>${r.points}</td>
-      `;
-      raceTable.appendChild(tr);
-    });
+// -----------------------------
+// RENDER
+// -----------------------------
+function render(list){
+
+  const tbody = document.querySelector("#table tbody");
+  tbody.innerHTML = "";
+
+  list.forEach((d,i)=>{
+
+    const tr=document.createElement("tr");
+
+    tr.innerHTML=`
+      <td>${i+1}</td>
+      <td>${d.driver}</td>
+      <td>${d.points}</td>
+      <td>${d.wins}</td>
+      <td>${d.titles}</td>
+    `;
+
+    tbody.appendChild(tr);
+
+  });
+
 }
 
-raceFilter.addEventListener("input", renderTable);
-loadAll();
+// init
+loadSeason();
+
 </script>
 
 </body>
