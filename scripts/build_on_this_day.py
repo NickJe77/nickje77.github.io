@@ -1,18 +1,19 @@
 import json
 from pathlib import Path
 from datetime import datetime
+import pytz
 
-print("BUILDING ON THIS DAY")
+print("BUILDING ON THIS DAY (CORRECT FORMAT)")
 
 BASE = Path("docs/data")
-OUTPUT = BASE / "onthisday.json"
+OUTPUT = BASE / "on_this_day.json"
 
-today = datetime.utcnow().strftime("%m-%d")
+today = datetime.now(pytz.timezone("Australia/Melbourne")).strftime("%m-%d")
 
-results = []
+data_out = {}
 
 # -----------------------
-# SAFE GET DATE
+# GET DATE
 # -----------------------
 def get_date(row):
     return (
@@ -25,28 +26,41 @@ def get_date(row):
 # -----------------------
 # NORMALISE DATE
 # -----------------------
-def normalise_date(d):
+def normalise(d):
     try:
-        return datetime.fromisoformat(d).strftime("%m-%d")
+        return datetime.fromisoformat(d)
     except:
         try:
-            return datetime.strptime(d, "%Y-%m-%d").strftime("%m-%d")
+            return datetime.strptime(d, "%Y-%m-%d")
         except:
             return None
 
 # -----------------------
-# ADD GAME
+# ADD EVENT
 # -----------------------
-def add_game(row, sport):
-    results.append({
-        "sport": sport,
-        "season": row.get("season"),
-        "date": get_date(row),
-        "team": row.get("team") or row.get("home_team"),
-        "opponent": row.get("opponent") or row.get("away_team"),
-        "team_score": row.get("team_score") or row.get("home_score"),
-        "opponent_score": row.get("opponent_score") or row.get("away_score"),
-        "match_id": row.get("match_id") or row.get("game_id")
+def add_event(sport, row):
+    d = normalise(get_date(row))
+    if not d:
+        return
+
+    key = d.strftime("%m-%d")
+    year = d.year
+
+    team = row.get("team") or row.get("home_team")
+    opp = row.get("opponent") or row.get("away_team")
+    ts = row.get("team_score") or row.get("home_score")
+    os = row.get("opponent_score") or row.get("away_score")
+
+    if not team or not opp:
+        return
+
+    text = f"{team} {ts} defeated {opp} {os}"
+
+    data_out.setdefault(key, {})
+    data_out[key].setdefault(sport, [])
+    data_out[key][sport].append({
+        "year": year,
+        "text": text
     })
 
 # -----------------------
@@ -55,11 +69,9 @@ def add_game(row, sport):
 nba_dir = BASE / "nba" / "seasons"
 if nba_dir.exists():
     for file in nba_dir.glob("*.json"):
-        data = json.loads(file.read_text())
-        for row in data:
-            d = normalise_date(get_date(row))
-            if d == today:
-                add_game(row, "NBA")
+        rows = json.loads(file.read_text())
+        for r in rows:
+            add_event("NBA", r)
 
 # -----------------------
 # AFL
@@ -67,38 +79,33 @@ if nba_dir.exists():
 afl_dir = BASE / "afl"
 if afl_dir.exists():
     for file in afl_dir.glob("afl_*.json"):
-        data = json.loads(file.read_text())
-        for row in data:
-            d = normalise_date(get_date(row))
-            if d == today:
-                add_game(row, "AFL")
+        rows = json.loads(file.read_text())
+        for r in rows:
+            add_event("AFL", r)
 
 # -----------------------
-# NRL
+# NRL (optional mapping to "Football")
 # -----------------------
 nrl_dir = BASE / "nrl"
 if nrl_dir.exists():
     for file in nrl_dir.rglob("*.json"):
         data = json.loads(file.read_text())
 
-        if isinstance(data, list):
-            rows = data
-        else:
-            rows = data.get("games", [])
+        rows = data if isinstance(data, list) else data.get("games", [])
 
-        for row in rows:
-            d = normalise_date(get_date(row))
-            if d == today:
-                add_game(row, "NRL")
+        for r in rows:
+            add_event("Football", r)
 
 # -----------------------
-# SORT (newest first)
+# SORT EACH SPORT BY YEAR DESC
 # -----------------------
-results.sort(key=lambda x: x.get("date", ""), reverse=True)
+for day in data_out:
+    for sport in data_out[day]:
+        data_out[day][sport].sort(key=lambda x: x["year"], reverse=True)
 
 # -----------------------
 # SAVE
 # -----------------------
-OUTPUT.write_text(json.dumps(results, indent=2))
+OUTPUT.write_text(json.dumps(data_out, indent=2))
 
-print(f"Saved {len(results)} games to {OUTPUT}")
+print(f"Saved → {OUTPUT}")
