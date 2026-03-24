@@ -1,39 +1,15 @@
 import json
 from pathlib import Path
 from datetime import datetime
-import pytz
 import unicodedata
 import re
 
-print("BUILDING ON THIS DAY (PLAYERS + LINKS)")
+print("BUILDING ON THIS DAY (FINAL FIXED VERSION)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
 
 data_out = {}
-
-# -----------------------
-# LOAD PLAYER MAP
-# -----------------------
-player_map = {}
-
-players_dir = BASE / "nba" / "players"
-
-if players_dir.exists():
-    for file in players_dir.glob("*.json"):
-        try:
-            data = json.loads(file.read_text())
-
-            name = data.get("name")
-            pid = data.get("player_id")
-
-            if name and pid:
-                player_map[str(pid)] = name
-
-        except:
-            continue
-
-print(f"Loaded {len(player_map)} NBA players")
 
 # -----------------------
 # SLUGIFY
@@ -56,6 +32,7 @@ def load_json_safe(path):
             return None
         return json.loads(text)
     except:
+        print(f"❌ Skipped bad JSON: {path}")
         return None
 
 # -----------------------
@@ -66,6 +43,7 @@ def parse_date(row):
         row.get("date")
         or row.get("game_date")
         or row.get("match_date")
+        or row.get("Date")
     )
 
     if not d:
@@ -92,14 +70,39 @@ def detect_sport(path):
     if "nrl" in p:
         return "Football"
 
-    return "Other"
+    return None  # 🔥 IMPORTANT: ignore unknown files
+
+# -----------------------
+# LOAD NBA PLAYERS
+# -----------------------
+player_map = {}
+players_dir = BASE / "nba" / "players"
+
+if players_dir.exists():
+    for file in players_dir.glob("*.json"):
+        data = load_json_safe(file)
+        if isinstance(data, dict):
+            pid = data.get("player_id")
+            name = data.get("name")
+            if pid and name:
+                player_map[str(pid)] = name
+
+print(f"Loaded {len(player_map)} NBA players")
+
+# -----------------------
+# VALID GAME CHECK
+# -----------------------
+def is_game_row(row):
+    return isinstance(row, dict) and (
+        "home_team" in row
+        or "team" in row
+        or "away_team" in row
+    )
 
 # -----------------------
 # ADD GAME
 # -----------------------
 def add_event(row, sport, d):
-
-    key = d.strftime("%m-%d")
 
     team = row.get("team") or row.get("home_team")
     opp = row.get("opponent") or row.get("away_team")
@@ -117,6 +120,8 @@ def add_event(row, sport, d):
     else:
         text = f"{team} {ts} defeated {opp} {os}"
 
+    key = d.strftime("%m-%d")
+
     data_out.setdefault(key, {})
     data_out[key].setdefault(sport, [])
 
@@ -133,14 +138,16 @@ def add_event(row, sport, d):
 def add_player_events(row, sport, d):
 
     players = row.get("players")
-    if not players or not isinstance(players, list):
+    if not isinstance(players, list):
         return
 
     key = d.strftime("%m-%d")
 
     for p in players:
 
-        # ---------- NBA ----------
+        if not isinstance(p, dict):
+            continue
+
         if sport == "NBA":
 
             pts = p.get("points", 0)
@@ -149,32 +156,19 @@ def add_player_events(row, sport, d):
 
             pid = str(p.get("player_id"))
             name = player_map.get(pid, f"Player {pid}")
-
-            # SLUG FOR LINK
             slug = slugify(name)
 
             if pts >= 50:
                 text = f"<a href='nba-player.html?player={slug}'>{name}</a> scored {pts} points"
-
             elif sum(x >= 10 for x in [pts, reb, ast]) >= 3:
                 text = f"<a href='nba-player.html?player={slug}'>{name}</a> recorded a triple-double"
-
             else:
                 continue
 
-            data_out.setdefault(key, {})
-            data_out[key].setdefault("NBA", []).append({
-                "year": d.year,
-                "text": text,
-                "sport": "NBA"
-            })
-
-        # ---------- AFL ----------
-        if sport == "AFL":
+        elif sport == "AFL":
 
             goals = p.get("goals", 0)
             name = p.get("player_name") or "Unknown"
-
             slug = slugify(name)
 
             if goals >= 8:
@@ -182,19 +176,10 @@ def add_player_events(row, sport, d):
             else:
                 continue
 
-            data_out.setdefault(key, {})
-            data_out[key].setdefault("AFL", []).append({
-                "year": d.year,
-                "text": text,
-                "sport": "AFL"
-            })
-
-        # ---------- NRL ----------
-        if sport == "Football":
+        elif sport == "Football":
 
             tries = p.get("tries", 0)
             name = p.get("player_name") or "Unknown"
-
             slug = slugify(name)
 
             if tries >= 3:
@@ -202,35 +187,48 @@ def add_player_events(row, sport, d):
             else:
                 continue
 
-            data_out.setdefault(key, {})
-            data_out[key].setdefault("Football", []).append({
-                "year": d.year,
-                "text": text,
-                "sport": "Football"
-            })
+        else:
+            continue
+
+        data_out.setdefault(key, {})
+        data_out[key].setdefault(sport, [])
+
+        data_out[key][sport].append({
+            "year": d.year,
+            "text": text,
+            "sport": sport
+        })
 
 # -----------------------
-# WALK FILES
+# MAIN LOOP
 # -----------------------
 for file in BASE.rglob("*.json"):
 
     if file.name == "on_this_day.json":
         continue
 
+    sport = detect_sport(file)
+    if not sport:
+        continue  # 🔥 skip non-sport files
+
     data = load_json_safe(file)
     if not data:
         continue
 
-    sport = detect_sport(file)
-
+    # HANDLE STRUCTURES
     if isinstance(data, dict):
-        rows = data.get("games", [])
+        rows = data.get("games")
+        if not isinstance(rows, list):
+            continue
     elif isinstance(data, list):
         rows = data
     else:
         continue
 
     for row in rows:
+
+        if not is_game_row(row):
+            continue
 
         d = parse_date(row)
         if not d:
@@ -244,11 +242,15 @@ for file in BASE.rglob("*.json"):
 # -----------------------
 for day in data_out:
     for sport in data_out[day]:
-        data_out[day][sport].sort(key=lambda x: x["year"], reverse=True)
+        data_out[day][sport].sort(
+            key=lambda x: x["year"],
+            reverse=True
+        )
 
 # -----------------------
 # SAVE
 # -----------------------
+OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 OUTPUT.write_text(json.dumps(data_out, indent=2))
 
-print("✅ DONE")
+print(f"✅ DONE → {OUTPUT}")
