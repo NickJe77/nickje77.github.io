@@ -7,8 +7,7 @@
 
 <style>
 body{
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
-               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: Inter, system-ui, Arial;
   margin:0;
   background:#ffffff;
   color:#111;
@@ -31,7 +30,20 @@ body{
 }
 
 h1{text-align:center;margin-bottom:6px;}
-.subtitle{text-align:center;color:#555;margin-bottom:30px;}
+.subtitle{text-align:center;color:#555;margin-bottom:20px;}
+
+.date-picker{
+  display:flex;
+  justify-content:center;
+  margin-bottom:25px;
+}
+
+input[type="date"]{
+  padding:8px 12px;
+  font-size:14px;
+  border:1px solid #ccc;
+  border-radius:6px;
+}
 
 .section{
   margin-bottom:40px;
@@ -46,6 +58,16 @@ h1{text-align:center;margin-bottom:6px;}
 .event{
   padding:8px 0;
   border-bottom:1px solid #f0f0f0;
+}
+
+.event a{
+  text-decoration:none;
+  color:#111;
+  display:block;
+}
+
+.event a:hover{
+  color:#0056d6;
 }
 
 .event span.year{
@@ -73,6 +95,12 @@ h1{text-align:center;margin-bottom:6px;}
 <div class="page-wrap">
   <h1>On This Day in Sport</h1>
   <div class="subtitle" id="subtitle"></div>
+
+  <!-- DATE PICKER -->
+  <div class="date-picker">
+    <input type="date" id="dateInput">
+  </div>
+
   <div id="content"></div>
 </div>
 
@@ -82,17 +110,41 @@ const DATA_URL = "data/on_this_day.json";
 function formatDateLong(d){
   return d.toLocaleDateString("en-AU", {
     day: "numeric",
-    month: "long"
+    month: "long",
+    year: "numeric"
   });
 }
 
-function getTodayKey(){
-  const d = new Date();
+function getKeyFromDate(d){
   const mm = String(d.getMonth()+1).padStart(2,"0");
   const dd = String(d.getDate()).padStart(2,"0");
   return `${mm}-${dd}`;
 }
 
+// -----------------------------
+// BUILD GAME LINK (YOUR SITE)
+// -----------------------------
+function buildLink(e){
+  if(!e.match_id) return null;
+
+  if(e.sport === "NBA"){
+    return `nba-game.html?game=${e.match_id}`;
+  }
+
+  if(e.sport === "AFL"){
+    return `afl-game.html?match=${e.match_id}`;
+  }
+
+  if(e.sport === "Football"){
+    return `nrl-game.html?match=${e.match_id}`;
+  }
+
+  return null;
+}
+
+// -----------------------------
+// RENDER
+// -----------------------------
 function renderSection(sport, events){
   let html = `<div class="section"><h2>${sport}</h2>`;
 
@@ -102,55 +154,86 @@ function renderSection(sport, events){
   }
 
   events.forEach(e=>{
-    html += `
-      <div class="event">
-        <span class="year">${e.year}</span>
-        ${e.text}
-      </div>
-    `;
+    const link = buildLink(e);
+
+    if(link){
+      html += `
+        <div class="event">
+          <a href="${link}">
+            <span class="year">${e.year}</span>
+            ${e.text}
+          </a>
+        </div>
+      `;
+    } else {
+      html += `
+        <div class="event">
+          <span class="year">${e.year}</span>
+          ${e.text}
+        </div>
+      `;
+    }
   });
 
   html += `</div>`;
   return html;
 }
 
+// -----------------------------
+// LOAD + DISPLAY
+// -----------------------------
+function renderPage(data, date){
+  const key = getKeyFromDate(date);
+  const todayData = data[key];
+
+  document.getElementById("subtitle").textContent =
+    formatDateLong(date);
+
+  const content = document.getElementById("content");
+
+  if(!todayData){
+    content.innerHTML =
+      `<div class="empty">No events recorded for this date yet.</div>`;
+    return;
+  }
+
+  let html = "";
+  const sportOrder = ["NBA","F1","Cricket","AFL","Racing","Football"];
+
+  sportOrder.forEach(sport=>{
+    if(todayData[sport]){
+      html += renderSection(sport, todayData[sport]);
+    }
+  });
+
+  Object.keys(todayData).forEach(sport=>{
+    if(!sportOrder.includes(sport)){
+      html += renderSection(sport, todayData[sport]);
+    }
+  });
+
+  content.innerHTML = html;
+}
+
+// -----------------------------
+// INIT
+// -----------------------------
 fetch(DATA_URL)
   .then(r => r.json())
   .then(data => {
 
-    const todayKey = getTodayKey();
-    const todayData = data[todayKey];
+    const today = new Date();
 
-    document.getElementById("subtitle").textContent =
-      formatDateLong(new Date());
+    const input = document.getElementById("dateInput");
+    input.valueAsDate = today;
 
-    const content = document.getElementById("content");
+    renderPage(data, today);
 
-    if(!todayData){
-      content.innerHTML =
-        `<div class="empty">No events recorded for this date yet.</div>`;
-      return;
-    }
-
-    let html = "";
-
-    // preferred order
-    const sportOrder = ["NBA","F1","Cricket","AFL","Racing","Football"];
-
-    sportOrder.forEach(sport=>{
-      if(todayData[sport]){
-        html += renderSection(sport, todayData[sport]);
-      }
+    input.addEventListener("change", () => {
+      const selected = new Date(input.value);
+      renderPage(data, selected);
     });
 
-    // any extra sports not in list
-    Object.keys(todayData).forEach(sport=>{
-      if(!sportOrder.includes(sport)){
-        html += renderSection(sport, todayData[sport]);
-      }
-    });
-
-    content.innerHTML = html;
   })
   .catch(err=>{
     document.getElementById("content").innerHTML =
