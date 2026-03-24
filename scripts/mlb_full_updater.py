@@ -3,11 +3,8 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-print("MLB FULL UPDATER (FIXED BOXSCORES)")
+print("MLB UPDATER (LIVE FEED FIX)")
 
-# -------------------------
-# CONFIG
-# -------------------------
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1"
 
@@ -27,8 +24,6 @@ BOX_DIR.mkdir(parents=True, exist_ok=True)
 # GET SCHEDULE
 # -------------------------
 def get_schedule():
-    print(f"Schedule: {START_DATE} → {END_DATE}")
-
     url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
     data = requests.get(url, headers=HEADERS).json()
 
@@ -40,8 +35,6 @@ def get_schedule():
             if g.get("gameType") not in ["R", "P"]:
                 continue
 
-            status = g["status"]["detailedState"]
-
             games.append({
                 "game_id": str(g["gamePk"]),
                 "date": g["gameDate"][:10],
@@ -51,31 +44,30 @@ def get_schedule():
                 "away_team": g["teams"]["away"]["team"]["name"],
                 "home_score": g["teams"]["home"].get("score", 0),
                 "away_score": g["teams"]["away"].get("score", 0),
-                "status": status
+                "status": g["status"]["detailedState"]
             })
 
-    print("Games found:", len(games))
+    print("Games:", len(games))
     return games
 
 
 # -------------------------
-# CHECK IF GAME IS FINAL
-# -------------------------
-def is_final(status):
-    return status in ["Final", "Game Over", "Completed Early"]
-
-
-# -------------------------
-# GET BOXSCORE
+# GET BOXSCORE (LIVE FEED)
 # -------------------------
 def get_boxscore(game_id):
 
-    url = f"{BASE}/game/{game_id}/boxscore"
+    url = f"{BASE}/game/{game_id}/feed/live"
 
     try:
         data = requests.get(url, headers=HEADERS, timeout=10).json()
     except:
         print("❌ Failed:", game_id)
+        return None
+
+    try:
+        box = data["liveData"]["boxscore"]["teams"]
+    except:
+        print("❌ No data:", game_id)
         return None
 
     def parse_team(team):
@@ -105,8 +97,8 @@ def get_boxscore(game_id):
         return players
 
     players = []
-    players += parse_team(data["teams"]["home"])
-    players += parse_team(data["teams"]["away"])
+    players += parse_team(box["home"])
+    players += parse_team(box["away"])
 
     return players
 
@@ -124,14 +116,15 @@ for g in games:
 
     print(f"{game_id} → {status}")
 
-    # 🔥 ONLY FINISHED GAMES
-    if not is_final(status):
+    # 🔥 Only completed games
+    if status not in ["Final", "Game Over", "Completed Early"]:
         continue
 
-    # 🔥 SKIP IF ALREADY EXISTS
     file_path = BOX_DIR / f"{game_id}.json"
+
+    # Skip existing
     if file_path.exists():
-        print("✔ Already exists:", game_id)
+        print("✔ Exists:", game_id)
         all_games.append(g)
         continue
 
@@ -142,6 +135,8 @@ for g in games:
     if box:
         with open(file_path, "w") as f:
             json.dump(box, f, indent=2)
+    else:
+        print("❌ Empty boxscore:", game_id)
 
     all_games.append(g)
 
@@ -151,8 +146,6 @@ for g in games:
 # -------------------------
 season_output = {
     "season": SEASON,
-    "start_date": START_DATE,
-    "end_date": END_DATE,
     "games": all_games,
     "updated": datetime.utcnow().isoformat()
 }
