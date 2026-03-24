@@ -6,7 +6,7 @@ import re
 import time
 from datetime import datetime
 
-print("F1 2026 FINAL FIX (STATIC PARSE)")
+print("F1 2026 FINAL WORKING SCRIPT")
 
 BASE = "https://www.formula1.com"
 START_URL = "https://www.formula1.com/en/results/2026/races"
@@ -38,7 +38,7 @@ def clean_driver(name):
     name = clean_text(name)
     parts = name.split()
 
-    # remove 3-letter suffix
+    # remove 3-letter code
     if len(parts) >= 2 and len(parts[-1]) == 3:
         parts = parts[:-1]
 
@@ -50,15 +50,24 @@ def clean_gp(slug):
 
 
 # -----------------------------
-# GET RACE SLUGS (BULLETPROOF)
+# GET RACE SLUGS (FIXED)
 # -----------------------------
-print("Extracting races...")
+print("Extracting race slugs...")
 
 html = get_html(START_URL)
 
-slugs = sorted(set(re.findall(r"/en/results/2026/races/([a-z0-9-]+)/", html)))
+matches = re.findall(r'/en/results/2026/races/([a-z-]+)/race-result', html)
+
+# keep order
+seen = set()
+slugs = []
+for m in matches:
+    if m not in seen:
+        seen.add(m)
+        slugs.append(m)
 
 print("Slugs found:", slugs)
+
 
 race_links = []
 
@@ -88,7 +97,11 @@ for race in race_links:
 
     print("\n---", slug)
 
-    race_soup = get_soup(race_url)
+    try:
+        race_soup = get_soup(race_url)
+    except:
+        print("Skipping bad URL:", race_url)
+        continue
 
     rows = race_soup.select("table tbody tr")
 
@@ -126,23 +139,28 @@ for race in race_links:
     # GRID
     # -------------------------
     grid_url = race_url.replace("race-result", "starting-grid")
-    grid_soup = get_soup(grid_url)
+
+    try:
+        grid_soup = get_soup(grid_url)
+    except:
+        grid_soup = None
 
     grid_map = {}
 
-    for r in grid_soup.select("table tbody tr"):
-        cols = [clean_text(c.text) for c in r.select("td")]
+    if grid_soup:
+        for r in grid_soup.select("table tbody tr"):
+            cols = [clean_text(c.text) for c in r.select("td")]
 
-        if len(cols) < 3:
-            continue
+            if len(cols) < 3:
+                continue
 
-        try:
-            pos = int(cols[0])
-        except:
-            continue
+            try:
+                pos = int(cols[0])
+            except:
+                continue
 
-        driver = clean_driver(cols[2])
-        grid_map[driver] = pos
+            driver = clean_driver(cols[2])
+            grid_map[driver] = pos
 
     for r in results:
         r["grid"] = grid_map.get(r["driver"])
@@ -151,19 +169,22 @@ for race in race_links:
     # FASTEST LAP
     # -------------------------
     fl_url = race_url.replace("race-result", "fastest-laps")
-    fl_soup = get_soup(fl_url)
 
     fastest_driver = None
     fastest_time = None
 
-    fl_rows = fl_soup.select("table tbody tr")
+    try:
+        fl_soup = get_soup(fl_url)
+        fl_rows = fl_soup.select("table tbody tr")
 
-    if fl_rows:
-        cols = [clean_text(c.text) for c in fl_rows[0].select("td")]
+        if fl_rows:
+            cols = [clean_text(c.text) for c in fl_rows[0].select("td")]
 
-        if len(cols) >= 5:
-            fastest_driver = clean_driver(cols[2])
-            fastest_time = cols[4]
+            if len(cols) >= 5:
+                fastest_driver = clean_driver(cols[2])
+                fastest_time = cols[4]
+    except:
+        pass
 
     # -------------------------
     # SAVE
