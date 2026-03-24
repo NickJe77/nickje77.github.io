@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-print("F1 2026 FINAL BUILDER (CLEAN)")
+print("F1 2026 FINAL BUILDER (WITH DNF FIX)")
 
 BASE = "https://api.jolpi.ca/ergast/f1"
 SEASON = 2026
@@ -20,6 +20,29 @@ def get_json(url):
     except Exception as e:
         print("ERROR:", url, e)
         return None
+
+
+# -----------------------------
+# STATUS CLEANING
+# -----------------------------
+status_map = {
+    "Accident": "DNF",
+    "Collision": "DNF",
+    "Engine": "DNF",
+    "Gearbox": "DNF",
+    "Hydraulics": "DNF",
+    "Electrical": "DNF",
+    "Spun off": "DNF",
+    "Overheating": "DNF",
+    "Mechanical": "DNF",
+    "Did Not Finish": "DNF",
+    "Retired": "DNF",
+
+    "Did Not Start": "DNS",
+    "Withdrawn": "DNS",
+
+    "Disqualified": "DSQ"
+}
 
 
 # -----------------------------
@@ -67,9 +90,17 @@ for race in races:
         # -----------------------------
         name = f"{driver['givenName']} {driver['familyName']}"
 
-        # fix Antonelli
         if name.startswith("Andrea Kimi Antonelli"):
             name = "Kimi Antonelli"
+
+        # -----------------------------
+        # TIME / STATUS HANDLING
+        # -----------------------------
+        status = r.get("status", "")
+        time_val = r.get("Time", {}).get("time")
+
+        if not time_val:
+            time_val = status_map.get(status, status)
 
         # -----------------------------
         # FASTEST LAP
@@ -84,7 +115,7 @@ for race in races:
             "driver": name,
             "team": constructor["name"],
             "grid": int(r.get("grid", 0)),
-            "time": r.get("Time", {}).get("time"),
+            "time": time_val,
             "race_points": float(r.get("points", 0)),
             "sprint_points": 0,
             "points": float(r.get("points", 0))
