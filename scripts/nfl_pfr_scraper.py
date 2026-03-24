@@ -13,11 +13,9 @@ END_YEAR = dt.date.today().year
 
 OUT_DIR = Path("docs/data/nfl")
 GAMES_DIR = OUT_DIR / "games"
-BOX_DIR = OUT_DIR / "boxscores"
 
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 GAMES_DIR.mkdir(parents=True, exist_ok=True)
-BOX_DIR.mkdir(parents=True, exist_ok=True)
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
@@ -33,18 +31,24 @@ def get_schedule(year):
     print(f"Fetching {year} schedule...")
 
     try:
-        tables = pd.read_html(url)
-    except:
-        print(f"FAILED: {year}")
+        res = session.get(url, timeout=30)
+        html = res.text
+
+        tables = pd.read_html(html)
+    except Exception as e:
+        print(f"FAILED {year}: {e}")
         return []
 
     if not tables:
+        print(f"NO TABLES {year}")
         return []
 
     df = tables[0]
 
-    # Clean columns
-    df = df[df["Week"] != "Week"]  # remove headers inside table
+    # remove repeated headers
+    df = df[df["Week"] != "Week"]
+
+    # remove empty rows
     df = df.dropna(subset=["Date"])
 
     games = []
@@ -82,7 +86,8 @@ def get_schedule(year):
 # -----------------------------
 def get_boxscore(url):
     try:
-        tables = pd.read_html(url)
+        res = session.get(url, timeout=30)
+        tables = pd.read_html(res.text)
         return [t.fillna("").to_dict(orient="records") for t in tables]
     except:
         return None
@@ -105,22 +110,28 @@ def scrape_year(year):
         }
 
         done = 0
+        total = len(schedule)
+
         for fut in as_completed(futures):
             g = futures[fut]
-            box = fut.result()
+
+            try:
+                box = fut.result()
+            except:
+                box = None
 
             g["boxscore"] = box
             results.append(g)
 
             done += 1
-            if done % 25 == 0:
-                print(f"{year}: {done}/{len(schedule)}")
+            if done % 25 == 0 or done == total:
+                print(f"{year}: {done}/{total} boxscores")
 
     return results
 
 
 # -----------------------------
-# SAVE
+# SAVE JSON
 # -----------------------------
 def save(path, data):
     path.write_text(json.dumps(data, indent=2))
@@ -133,9 +144,12 @@ def main():
     all_years = []
 
     for year in range(START_YEAR, END_YEAR + 1):
+        print(f"\n--- {year} ---")
+
         games = scrape_year(year)
 
         if not games:
+            print(f"Skipping {year} (no games)")
             continue
 
         save(GAMES_DIR / f"{year}.json", {
@@ -148,6 +162,8 @@ def main():
             "games": len(games)
         })
 
+        print(f"Saved {year}: {len(games)} games")
+
     index = {
         "sport": "NFL",
         "start_season": START_YEAR,
@@ -159,7 +175,7 @@ def main():
 
     save(OUT_DIR / "index.json", index)
 
-    print("DONE")
+    print("\nDONE")
 
 
 if __name__ == "__main__":
