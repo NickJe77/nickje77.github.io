@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-print("F1 2026 STABLE BUILDER")
+print("F1 2026 FINAL BUILDER (CLEAN)")
 
 BASE = "https://api.jolpi.ca/ergast/f1"
 SEASON = 2026
@@ -62,9 +62,18 @@ for race in races:
         driver = r["Driver"]
         constructor = r["Constructor"]
 
+        # -----------------------------
+        # DRIVER NAME (FIXED)
+        # -----------------------------
         name = f"{driver['givenName']} {driver['familyName']}"
 
-        # fastest lap
+        # fix Antonelli
+        if name.startswith("Andrea Kimi Antonelli"):
+            name = "Kimi Antonelli"
+
+        # -----------------------------
+        # FASTEST LAP
+        # -----------------------------
         fl = r.get("FastestLap")
         if fl and fl.get("rank") == "1":
             fastest_driver = name
@@ -93,7 +102,7 @@ for race in races:
 
 
 # -----------------------------
-# SAVE
+# SAVE FILE
 # -----------------------------
 final = {
     "season": SEASON,
