@@ -216,29 +216,91 @@ let sortState = {};
 const params = new URLSearchParams(window.location.search);
 const season = params.get("season");
 const matchId = params.get("match");
+const matchUrl = params.get("url");
 
 async function loadGame(){
 
-  const res = await fetch(`/data/nrl/seasons/${season}.json`);
-  const data = await res.json();
+  try{
 
-  const gameRows = data.filter(r => r.match_id === matchId);
+    // NEW 2026 URL-BASED LINKING
+    if(matchUrl){
+      await loadGameFrom2026MatchesFileByUrl(matchUrl);
+      return;
+    }
 
-  if(gameRows.length === 0){
+    // OLD SYSTEM
+    if(season && matchId){
+      const res = await fetch(`/data/nrl/seasons/${season}.json`);
+      const data = await res.json();
+
+      const gameRows = data.filter(r => String(r.match_id) === String(matchId));
+
+      if(gameRows.length === 0){
+        document.getElementById("gameTitle").innerText = "Game Not Found";
+        return;
+      }
+
+      const game = gameRows[0];
+      const homeTeam = game.home_team;
+      const awayTeam = game.away_team;
+
+      document.getElementById("gameTitle").innerText =
+        `${season} – ${homeTeam} vs ${awayTeam}`;
+
+      document.getElementById("gameMeta").innerText =
+        `Venue: ${game.venue || "-"} • Crowd: ${game.crowd ? Number(game.crowd).toLocaleString() : "-"}`;
+
+      document.getElementById("scoreline").innerText =
+        `${homeTeam} ${game.home_points} – ${game.away_points} ${awayTeam}`;
+
+      document.getElementById("homeName").innerText = homeTeam;
+      document.getElementById("awayName").innerText = awayTeam;
+
+      document.getElementById("homeBar").style.background =
+        teamColours[homeTeam] || "#333";
+
+      document.getElementById("awayBar").style.background =
+        teamColours[awayTeam] || "#333";
+
+      homePlayers = gameRows.filter(r => r.played_for === homeTeam);
+      awayPlayers = gameRows.filter(r => r.played_for === awayTeam);
+
+      renderTable("home");
+      renderTable("away");
+      return;
+    }
+
+    document.getElementById("gameTitle").innerText = "Game Not Found";
+
+  } catch (err){
+    console.error(err);
+    document.getElementById("gameTitle").innerText = "Game Not Found";
+  }
+}
+
+async function loadGameFrom2026MatchesFileByUrl(urlValue){
+  const decodedUrl = decodeURIComponent(urlValue);
+
+  const res = await fetch(`/data/nrl/matches/2026.json`);
+  const matches = await res.json();
+
+  const game = matches.find(m =>
+    String(m.match_url || "") === String(decodedUrl)
+  );
+
+  if(!game){
     document.getElementById("gameTitle").innerText = "Game Not Found";
     return;
   }
-
-  const game = gameRows[0];
 
   const homeTeam = game.home_team;
   const awayTeam = game.away_team;
 
   document.getElementById("gameTitle").innerText =
-    `${season} – ${homeTeam} vs ${awayTeam}`;
+    `${game.season || 2026} – ${homeTeam} vs ${awayTeam}`;
 
   document.getElementById("gameMeta").innerText =
-    `Venue: ${game.venue} • Crowd: ${Number(game.crowd).toLocaleString()}`;
+    `Venue: ${game.venue || "-"} • Crowd: ${game.crowd ? Number(game.crowd).toLocaleString() : "-"}`;
 
   document.getElementById("scoreline").innerText =
     `${homeTeam} ${game.home_points} – ${game.away_points} ${awayTeam}`;
@@ -252,8 +314,8 @@ async function loadGame(){
   document.getElementById("awayBar").style.background =
     teamColours[awayTeam] || "#333";
 
-  homePlayers = gameRows.filter(r => r.played_for === homeTeam);
-  awayPlayers = gameRows.filter(r => r.played_for === awayTeam);
+  homePlayers = (game.players || []).filter(p => p.played_for === homeTeam);
+  awayPlayers = (game.players || []).filter(p => p.played_for === awayTeam);
 
   renderTable("home");
   renderTable("away");
@@ -274,9 +336,9 @@ function renderTable(team){
            ${p.player}
         </a>
       </td>
-      <td class="numeric">${p.tries}</td>
-      <td class="numeric">${p.goals_made}</td>
-      <td class="numeric"><strong>${p.points}</strong></td>
+      <td class="numeric">${p.tries ?? 0}</td>
+      <td class="numeric">${p.goals_made ?? 0}</td>
+      <td class="numeric"><strong>${p.points ?? 0}</strong></td>
     `;
     tbody.appendChild(row);
   });
@@ -290,9 +352,9 @@ function sortTeam(team, key){
   sortState[team][key] = !sortState[team][key];
 
   players.sort((a,b)=>{
-    return sortState[team][key]
-      ? b[key] - a[key]
-      : a[key] - b[key];
+    const av = Number(a[key] ?? 0);
+    const bv = Number(b[key] ?? 0);
+    return sortState[team][key] ? bv - av : av - bv;
   });
 
   renderTable(team);
