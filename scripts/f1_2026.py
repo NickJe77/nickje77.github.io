@@ -4,8 +4,9 @@ import json
 from pathlib import Path
 import re
 import time
+from datetime import datetime
 
-print("F1 2026 CLEAN SCRAPER")
+print("F1 2026 FINAL SCRAPER")
 
 BASE = "https://www.formula1.com"
 START_URL = "https://www.formula1.com/en/results/2026/races"
@@ -32,26 +33,30 @@ def get_soup(url):
 def clean_text(t):
     if not t:
         return ""
-    t = t.replace("\xa0", " ")  # remove NBSP
+    t = t.replace("\xa0", " ")
     t = re.sub(r"\s+", " ", t)
     return t.strip()
 
 
-def clean_driver(name):
-    name = clean_text(name)
+def extract_driver(cell):
+    spans = cell.select("span")
 
-    # remove 3-letter code at end
-    parts = name.split()
-    if len(parts) >= 2 and len(parts[-1]) == 3:
-        parts = parts[:-1]
+    if len(spans) >= 2:
+        first = clean_text(spans[0].text)
+        last = clean_text(spans[1].text)
+        return f"{first} {last}"
 
-    return " ".join(parts)
+    return clean_text(cell.text)
 
 
 def clean_gp(text):
     text = clean_text(text)
-    text = re.sub(r"Flag of .*? ", "", text)
-    return text
+
+    # remove FORMULA 1 branding + suffix
+    text = re.sub(r"FORMULA 1 .*? GRAND PRIX", lambda m: m.group(0).split("GRAND PRIX")[0] + "Grand Prix", text)
+    text = re.sub(r" – .*", "", text)
+
+    return text.strip()
 
 
 def slug_from_url(url):
@@ -70,10 +75,8 @@ race_links = []
 for a in main.select("a[href]"):
     href = a["href"]
 
-    if "/en/results/2026/races/" in href and href.endswith("race-result"):
-
+    if "/en/results/2026/races/" in href and "/race-result" in href:
         full = BASE + href
-
         if full not in race_links:
             race_links.append(full)
 
@@ -112,7 +115,8 @@ for race_url in race_links:
 
     for r in rows:
 
-        cols = [clean_text(c.text) for c in r.select("td")]
+        tds = r.select("td")
+        cols = [clean_text(c.text) for c in tds]
 
         if len(cols) < 7:
             continue
@@ -122,7 +126,7 @@ for race_url in race_links:
         except:
             continue
 
-        driver = clean_driver(cols[2])
+        driver = extract_driver(tds[2])
 
         results.append({
             "position": pos,
@@ -136,7 +140,7 @@ for race_url in race_links:
         })
 
     # -------------------------
-    # GRID (FIXED MATCHING)
+    # GRID
     # -------------------------
     grid_url = race_url.replace("race-result", "starting-grid")
     grid_soup = get_soup(grid_url)
@@ -145,7 +149,8 @@ for race_url in race_links:
 
     if grid_soup:
         for r in grid_soup.select("table tbody tr"):
-            cols = [clean_text(c.text) for c in r.select("td")]
+            tds = r.select("td")
+            cols = [clean_text(c.text) for c in tds]
 
             if len(cols) < 3:
                 continue
@@ -155,7 +160,7 @@ for race_url in race_links:
             except:
                 continue
 
-            driver = clean_driver(cols[2])
+            driver = extract_driver(tds[2])
             grid_map[driver] = pos
 
     for r in results:
@@ -172,18 +177,20 @@ for race_url in race_links:
 
     if fl_soup:
         fl_rows = fl_soup.select("table tbody tr")
+
         if fl_rows:
-            cols = [clean_text(c.text) for c in fl_rows[0].select("td")]
+            tds = fl_rows[0].select("td")
+            cols = [clean_text(c.text) for c in tds]
 
             if len(cols) >= 5:
-                fastest_driver = clean_driver(cols[2])
+                fastest_driver = extract_driver(tds[2])
                 fastest_time = cols[4]
 
     # -------------------------
     # SAVE RACE
     # -------------------------
     season["races"].append({
-        "round": len(season["races"]) + 1,  # reliable fallback
+        "round": len(season["races"]) + 1,
         "grand_prix": gp_name,
         "race_id": None,
         "slug": slug,
@@ -196,15 +203,15 @@ for race_url in race_links:
 
 
 # -----------------------------
-# SAVE
+# SAVE FILE
 # -----------------------------
 final = {
     "season": 2026,
-    "last_updated": str(__import__("datetime").datetime.utcnow()),
+    "last_updated": datetime.utcnow().isoformat(),
     "races": season["races"]
 }
 
 with open(OUTPUT, "w") as f:
     json.dump(final, f, indent=2)
 
-print("\nDONE:", len(season["races"]), "races")
+print("\nDONE:", len(season["races"]), "races saved")
