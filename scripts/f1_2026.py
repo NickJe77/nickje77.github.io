@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-print("F1 2026 FINAL BUILDER (WITH DNF FIX)")
+print("F1 2026 FINAL BUILDER (POSITION STATUS FIX)")
 
 BASE = "https://api.jolpi.ca/ergast/f1"
 SEASON = 2026
@@ -94,13 +94,17 @@ for race in races:
             name = "Kimi Antonelli"
 
         # -----------------------------
-        # TIME / STATUS HANDLING
+        # POSITION + STATUS HANDLING
         # -----------------------------
         status = r.get("status", "")
         time_val = r.get("Time", {}).get("time")
 
+        display_position = int(r.get("position", 0))
+
         if not time_val:
-            time_val = status_map.get(status, status)
+            mapped = status_map.get(status, status)
+            display_position = mapped
+            time_val = ""  # cleaner for frontend
 
         # -----------------------------
         # FASTEST LAP
@@ -111,7 +115,7 @@ for race in races:
             fastest_time = fl["Time"]["time"]
 
         results.append({
-            "position": int(r.get("position", 0)),
+            "position": display_position,
             "driver": name,
             "team": constructor["name"],
             "grid": int(r.get("grid", 0)),
