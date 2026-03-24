@@ -3,7 +3,7 @@ from pathlib import Path
 from datetime import datetime
 import pytz
 
-print("BUILDING ON THIS DAY (UNIVERSAL SCAN)")
+print("BUILDING ON THIS DAY (UNIVERSAL + FLEXIBLE)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -24,13 +24,14 @@ def load_json_safe(path):
         return None
 
 # -----------------------
-# NORMALISE DATE
+# PARSE DATE (ALL FORMATS)
 # -----------------------
 def parse_date(row):
     d = (
         row.get("date")
         or row.get("game_date")
         or row.get("match_date")
+        or row.get("Date")
     )
 
     if not d:
@@ -43,45 +44,6 @@ def parse_date(row):
             return datetime.strptime(d, "%Y-%m-%d")
         except:
             return None
-
-# -----------------------
-# ADD EVENT
-# -----------------------
-def add_event(row, sport):
-
-    if not isinstance(row, dict):
-        return
-
-    d = parse_date(row)
-    if not d:
-        return
-
-    key = d.strftime("%m-%d")
-
-    team = row.get("team") or row.get("home_team")
-    opp = row.get("opponent") or row.get("away_team")
-
-    ts = row.get("team_score") or row.get("home_score")
-    os = row.get("opponent_score") or row.get("away_score")
-
-    match_id = row.get("match_id") or row.get("game_id")
-
-    if not team or not opp:
-        return
-    if ts is None or os is None:
-        return
-
-    text = f"{team} {ts} defeated {opp} {os}"
-
-    data_out.setdefault(key, {})
-    data_out[key].setdefault(sport, [])
-
-    data_out[key][sport].append({
-        "year": d.year,
-        "text": text,
-        "match_id": match_id,
-        "sport": sport
-    })
 
 # -----------------------
 # DETECT SPORT FROM PATH
@@ -99,10 +61,74 @@ def detect_sport(path):
     return "Other"
 
 # -----------------------
+# ADD EVENT (FLEXIBLE)
+# -----------------------
+def add_event(row, sport):
+
+    if not isinstance(row, dict):
+        return
+
+    d = parse_date(row)
+    if not d:
+        return
+
+    key = d.strftime("%m-%d")
+
+    # TEAM DETECTION
+    team = (
+        row.get("team")
+        or row.get("home_team")
+        or row.get("team_name")
+    )
+
+    opp = (
+        row.get("opponent")
+        or row.get("away_team")
+        or row.get("opp")
+        or row.get("opponent_team")
+    )
+
+    # SCORE DETECTION
+    ts = (
+        row.get("team_score")
+        or row.get("home_score")
+        or row.get("score")
+    )
+
+    os = (
+        row.get("opponent_score")
+        or row.get("away_score")
+        or row.get("opp_score")
+    )
+
+    match_id = row.get("match_id") or row.get("game_id")
+
+    # REQUIRE TEAMS
+    if not team or not opp:
+        return
+
+    # BUILD TEXT
+    if ts is None or os is None:
+        text = f"{team} vs {opp}"
+    else:
+        text = f"{team} {ts} defeated {opp} {os}"
+
+    data_out.setdefault(key, {})
+    data_out[key].setdefault(sport, [])
+
+    data_out[key][sport].append({
+        "year": d.year,
+        "text": text,
+        "match_id": match_id,
+        "sport": sport
+    })
+
+# -----------------------
 # WALK ALL FILES
 # -----------------------
 for file in BASE.rglob("*.json"):
 
+    # skip output file
     if file.name == "on_this_day.json":
         continue
 
@@ -112,10 +138,9 @@ for file in BASE.rglob("*.json"):
 
     sport = detect_sport(file)
 
-    # CASE 1: dict with games
+    # HANDLE STRUCTURES
     if isinstance(data, dict):
         rows = data.get("games", [])
-    # CASE 2: flat list
     elif isinstance(data, list):
         rows = data
     else:
@@ -128,7 +153,7 @@ for file in BASE.rglob("*.json"):
         add_event(row, sport)
 
 # -----------------------
-# SORT
+# SORT RESULTS
 # -----------------------
 for day in data_out:
     for sport in data_out[day]:
