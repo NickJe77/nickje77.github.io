@@ -2,8 +2,9 @@ import requests
 from bs4 import BeautifulSoup
 import json
 from pathlib import Path
+import re
 
-print("F1 2026 SCRAPER (OFFICIAL SITE)")
+print("F1 2026 STRUCTURED SCRAPER")
 
 BASE = "https://www.formula1.com"
 START_URL = "https://www.formula1.com/en/results/2026/races"
@@ -26,15 +27,19 @@ def get_soup(url):
         return None
 
 
-print("Loading race list...")
+def clean_gp_name(text):
+    text = re.sub(r"Flag of .*? ", "", text)
+    return text.strip()
+
+
+def extract_slug(url):
+    return url.split("/")[-2]
+
+
+print("Loading races...")
 
 soup = get_soup(START_URL)
 
-if not soup:
-    print("FAILED TO LOAD MAIN PAGE")
-    exit()
-
-# 🔥 FIND ALL RACE LINKS
 race_links = []
 
 for a in soup.select("a"):
@@ -44,12 +49,15 @@ for a in soup.select("a"):
         if full not in race_links:
             race_links.append(full)
 
-print("RACES FOUND:", len(race_links))
+print("Races found:", len(race_links))
 
 
-all_rows = []
+season_data = {
+    "season": 2026,
+    "races": []
+}
 
-# 🔥 LOOP RACES
+
 for race_url in race_links:
 
     print("Scraping:", race_url)
@@ -58,20 +66,39 @@ for race_url in race_links:
     if not race_soup:
         continue
 
-    # race name
+    # -----------------------
+    # HEADER INFO
+    # -----------------------
     try:
-        race_name = race_soup.select_one("h1").text.strip()
+        header = race_soup.select_one("h1").text.strip()
+        grand_prix = clean_gp_name(header)
     except:
-        race_name = "Unknown"
+        grand_prix = "Unknown"
 
-    # table rows
-    rows = race_soup.select("table tbody tr")
+    slug = extract_slug(race_url)
 
-    if not rows:
+    # try to extract round
+    round_num = None
+    try:
+        sub = race_soup.select_one("p")
+        if sub:
+            match = re.search(r"Round (\d+)", sub.text)
+            if match:
+                round_num = int(match.group(1))
+    except:
+        pass
+
+    results_table = race_soup.select("table tbody tr")
+
+    if not results_table:
         print("  → no results yet")
         continue
 
-    for row in rows:
+    race_results = []
+    fastest_driver = None
+    fastest_time = None
+
+    for row in results_table:
 
         cols = [c.text.strip() for c in row.select("td")]
 
@@ -84,32 +111,48 @@ for race_url in race_links:
             continue
 
         driver = cols[2]
-        constructor = cols[3]
+        team = cols[3]
         laps = cols[4]
         time_val = cols[5]
         points = cols[6]
 
-        all_rows.append({
-            "season": 2026,
-            "race_name": race_name,
+        race_results.append({
             "position": position,
             "driver": driver,
-            "constructor": constructor,
-            "laps": laps,
+            "team": team,
+            "grid": None,  # F1 site doesn't show grid here
             "time": time_val,
+            "race_points": float(points) if points else 0,
+            "sprint_points": 0,
             "points": float(points) if points else 0
         })
 
+        # crude fastest lap detection (usually marked by fastest time)
+        if "FL" in time_val or "fastest" in time_val.lower():
+            fastest_driver = driver
+            fastest_time = time_val
 
-print("TOTAL ROWS:", len(all_rows))
+    season_data["races"].append({
+        "round": round_num,
+        "grand_prix": grand_prix,
+        "race_id": None,
+        "slug": slug,
+        "fastest_lap_driver": fastest_driver,
+        "fastest_lap_time": fastest_time,
+        "results": race_results
+    })
 
-# 🔥 FORCE UPDATE
-data = {
+
+print("Races built:", len(season_data["races"]))
+
+# FORCE UPDATE
+final_output = {
+    "season": 2026,
     "last_updated": str(__import__("datetime").datetime.utcnow()),
-    "rows": all_rows
+    "races": season_data["races"]
 }
 
 with open(OUTPUT, "w") as f:
-    json.dump(data, f, indent=2)
+    json.dump(final_output, f, indent=2)
 
 print("SAVED:", OUTPUT)
