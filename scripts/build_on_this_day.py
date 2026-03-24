@@ -3,44 +3,39 @@ from pathlib import Path
 from datetime import datetime
 import pytz
 
-print("BUILDING ON THIS DAY (FINAL WORKING VERSION)")
+print("BUILDING ON THIS DAY (UNIVERSAL SCAN)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
 
-today = datetime.now(pytz.timezone("Australia/Melbourne")).strftime("%m-%d")
-
 data_out = {}
 
 # -----------------------
-# SAFE JSON LOAD
+# SAFE LOAD
 # -----------------------
 def load_json_safe(path):
     try:
         text = path.read_text().strip()
         if not text:
-            print(f"⚠️ Empty file skipped: {path}")
             return None
         return json.loads(text)
-    except Exception as e:
-        print(f"❌ Bad JSON skipped: {path} ({e})")
+    except:
+        print(f"❌ Skipped bad JSON: {path}")
         return None
-
-# -----------------------
-# GET DATE
-# -----------------------
-def get_date(row):
-    return (
-        row.get("date")
-        or row.get("game_date")
-        or row.get("match_date")
-        or ""
-    )
 
 # -----------------------
 # NORMALISE DATE
 # -----------------------
-def normalise(d):
+def parse_date(row):
+    d = (
+        row.get("date")
+        or row.get("game_date")
+        or row.get("match_date")
+    )
+
+    if not d:
+        return None
+
     try:
         return datetime.fromisoformat(d)
     except:
@@ -52,17 +47,16 @@ def normalise(d):
 # -----------------------
 # ADD EVENT
 # -----------------------
-def add_event(sport, row):
+def add_event(row, sport):
 
     if not isinstance(row, dict):
         return
 
-    d = normalise(get_date(row))
+    d = parse_date(row)
     if not d:
         return
 
     key = d.strftime("%m-%d")
-    year = d.year
 
     team = row.get("team") or row.get("home_team")
     opp = row.get("opponent") or row.get("away_team")
@@ -83,72 +77,55 @@ def add_event(sport, row):
     data_out[key].setdefault(sport, [])
 
     data_out[key][sport].append({
-        "year": year,
+        "year": d.year,
         "text": text,
         "match_id": match_id,
         "sport": sport
     })
 
 # -----------------------
-# NBA (FIXED FOR YOUR STRUCTURE)
+# DETECT SPORT FROM PATH
 # -----------------------
-nba_dir = BASE / "nba" / "seasons"
-if nba_dir.exists():
-    for file in nba_dir.glob("*.json"):
+def detect_sport(path):
+    p = str(path).lower()
 
-        if file.name == "index.json":
-            print(f"⏭️ Skipping index: {file}")
-            continue
+    if "nba" in p:
+        return "NBA"
+    if "afl" in p:
+        return "AFL"
+    if "nrl" in p:
+        return "Football"
 
-        data = load_json_safe(file)
-        if not data:
-            continue
-
-        # HANDLE BOTH FORMATS
-        if isinstance(data, dict):
-            rows = data.get("games", [])
-        elif isinstance(data, list):
-            rows = data
-        else:
-            rows = []
-
-        for r in rows:
-            add_event("NBA", r)
+    return "Other"
 
 # -----------------------
-# AFL
+# WALK ALL FILES
 # -----------------------
-afl_dir = BASE / "afl"
-if afl_dir.exists():
-    for file in afl_dir.glob("afl_*.json"):
+for file in BASE.rglob("*.json"):
 
-        data = load_json_safe(file)
-        if not data or not isinstance(data, list):
-            continue
+    if file.name == "on_this_day.json":
+        continue
 
-        for r in data:
-            add_event("AFL", r)
+    data = load_json_safe(file)
+    if not data:
+        continue
 
-# -----------------------
-# NRL
-# -----------------------
-nrl_dir = BASE / "nrl"
-if nrl_dir.exists():
-    for file in nrl_dir.rglob("*.json"):
+    sport = detect_sport(file)
 
-        data = load_json_safe(file)
-        if not data:
-            continue
+    # CASE 1: dict with games
+    if isinstance(data, dict):
+        rows = data.get("games", [])
+    # CASE 2: flat list
+    elif isinstance(data, list):
+        rows = data
+    else:
+        rows = []
 
-        if isinstance(data, dict):
-            rows = data.get("games", [])
-        elif isinstance(data, list):
-            rows = data
-        else:
-            rows = []
+    if not isinstance(rows, list):
+        continue
 
-        for r in rows:
-            add_event("Football", r)
+    for row in rows:
+        add_event(row, sport)
 
 # -----------------------
 # SORT
@@ -165,4 +142,4 @@ for day in data_out:
 # -----------------------
 OUTPUT.write_text(json.dumps(data_out, indent=2))
 
-print(f"✅ Saved → {OUTPUT}")
+print(f"✅ Built → {OUTPUT}")
