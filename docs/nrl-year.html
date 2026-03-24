@@ -163,6 +163,7 @@ box-shadow:0 4px 14px rgba(0,0,0,0.08);
 
 let seasonRows=[]
 let currentSeason=null
+let isNewStructure=false
 
 function toNum(v){
 const n=Number(v)
@@ -208,14 +209,22 @@ fetch("data/nrl/matches/"+year+".json")
 if(r.ok){
 
 return r.json().then(data=>{
+
+// 🔥 detect structure
+if(Array.isArray(data) && data.length && data[0].players){
+isNewStructure = true
+}else{
+isNewStructure = false
+}
+
 seasonRows=data
 buildTeamSelector()
 render()
+
 })
 
 }else{
 
-// fallback for 2026 folder structure
 loadFolderSeason(year)
 
 }
@@ -237,6 +246,7 @@ fetch("data/nrl/matches/"+year+"/"+id+".json").then(r=>r.json())
 Promise.all(promises).then(data=>{
 
 seasonRows=data.flat()
+isNewStructure=false
 
 buildTeamSelector()
 render()
@@ -274,6 +284,19 @@ function render(){
 
 const team=document.getElementById("teamFilter").value
 
+let matches=[]
+
+if(isNewStructure){
+
+// 🔥 2026 STRUCTURE
+matches = seasonRows.filter(m=>{
+if(!team) return true
+return m.home_team===team || m.away_team===team
+})
+
+}else{
+
+// 🔥 OLD STRUCTURE
 const matchMap=new Map()
 
 seasonRows.forEach(r=>{
@@ -286,6 +309,7 @@ if(!matchMap.has(id)){
 
 matchMap.set(id,{
 match_id:id,
+match_url:r.match_url,
 date_iso:r.date_iso,
 venue:r.venue,
 home_team:r.home_team,
@@ -298,9 +322,11 @@ away_points:toNum(r.away_points)
 
 })
 
-const matches=Array.from(matchMap.values())
+matches=Array.from(matchMap.values())
 
-matches.sort((a,b)=>a.match_id.localeCompare(b.match_id))
+}
+
+matches.sort((a,b)=>String(a.match_id).localeCompare(String(b.match_id)))
 
 renderMatches(matches)
 renderLadder(matches)
@@ -318,9 +344,13 @@ div.innerHTML=matches.map(m=>{
 const line1=`${m.home_team} ${m.home_points} - ${m.away_points} ${m.away_team}`
 const meta=`${m.date_iso}${m.venue?" • "+m.venue:""}`
 
+// 🔥 SMART LINKING
+const link = m.match_url
+  ? `nrl-game.html?url=${encodeURIComponent(m.match_url)}`
+  : `nrl-game.html?season=${currentSeason}&match=${m.match_id}`
+
 return `
-<div class="match"
-onclick="window.location.href='nrl-game.html?season=${currentSeason}&match=${m.match_id}'">
+<div class="match" onclick="window.location.href='${link}'">
 <div class="line1">${line1}</div>
 <div class="line2">${meta}</div>
 </div>
