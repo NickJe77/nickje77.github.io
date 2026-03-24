@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-print("MLB UPDATER (LIVE FEED FIX)")
+print("MLB UPDATER (FINAL FIX)")
 
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1"
@@ -44,7 +44,8 @@ def get_schedule():
                 "away_team": g["teams"]["away"]["team"]["name"],
                 "home_score": g["teams"]["home"].get("score", 0),
                 "away_score": g["teams"]["away"].get("score", 0),
-                "status": g["status"]["detailedState"]
+                "status": g["status"]["detailedState"],
+                "state": g["status"]["abstractGameState"]   # 🔥 KEY FIELD
             })
 
     print("Games:", len(games))
@@ -52,7 +53,7 @@ def get_schedule():
 
 
 # -------------------------
-# GET BOXSCORE (LIVE FEED)
+# GET BOXSCORE
 # -------------------------
 def get_boxscore(game_id):
 
@@ -65,12 +66,12 @@ def get_boxscore(game_id):
         return None
 
     try:
-        box = data["liveData"]["boxscore"]["teams"]
+        teams = data["liveData"]["boxscore"]["teams"]
     except:
         print("❌ No data:", game_id)
         return None
 
-    def parse_team(team):
+    def parse(team):
         team_name = team["team"]["name"]
         players = []
 
@@ -97,8 +98,8 @@ def get_boxscore(game_id):
         return players
 
     players = []
-    players += parse_team(box["home"])
-    players += parse_team(box["away"])
+    players += parse(teams["home"])
+    players += parse(teams["away"])
 
     return players
 
@@ -112,23 +113,16 @@ all_games = []
 for g in games:
 
     game_id = g["game_id"]
-    status = g["status"]
 
-    print(f"{game_id} → {status}")
+    print(f"{game_id} → {g['status']} ({g['state']})")
 
-    # 🔥 Only completed games
-    if status not in ["Final", "Game Over", "Completed Early"]:
+    # 🔥 ONLY FINISHED GAMES
+    if g["state"] != "Final":
         continue
 
     file_path = BOX_DIR / f"{game_id}.json"
 
-    # Skip existing
-    if file_path.exists():
-        print("✔ Exists:", game_id)
-        all_games.append(g)
-        continue
-
-    print("⬇ Downloading:", game_id)
+    print("⬇ Writing:", game_id)
 
     box = get_boxscore(game_id)
 
@@ -136,7 +130,7 @@ for g in games:
         with open(file_path, "w") as f:
             json.dump(box, f, indent=2)
     else:
-        print("❌ Empty boxscore:", game_id)
+        print("❌ Empty:", game_id)
 
     all_games.append(g)
 
