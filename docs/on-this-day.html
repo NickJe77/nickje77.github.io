@@ -32,23 +32,59 @@ body{
 h1{text-align:center;margin-bottom:6px;}
 .subtitle{text-align:center;color:#555;margin-bottom:20px;}
 
-.date-picker{
+/* ---------------- CALENDAR ---------------- */
+.calendar{
+  max-width:420px;
+  margin:0 auto 30px;
+  border:1px solid #ddd;
+  border-radius:12px;
+  padding:12px;
+}
+
+.cal-header{
   display:flex;
-  justify-content:center;
-  margin-bottom:25px;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:10px;
 }
 
-input[type="date"]{
-  padding:8px 12px;
-  font-size:14px;
-  border:1px solid #ccc;
+.cal-header button{
+  background:#0056d6;
+  color:#fff;
+  border:none;
+  padding:6px 10px;
   border-radius:6px;
+  cursor:pointer;
 }
 
-.section{
-  margin-bottom:40px;
+.cal-grid{
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  gap:6px;
+  text-align:center;
 }
 
+.cal-day{
+  padding:10px 0;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+.cal-day:hover{
+  background:#eee;
+}
+
+.cal-today{
+  background:#0056d6;
+  color:#fff;
+}
+
+.cal-selected{
+  outline:2px solid #0056d6;
+}
+
+/* ---------------- EVENTS ---------------- */
+.section{margin-bottom:40px;}
 .section h2{
   border-bottom:2px solid #eee;
   padding-bottom:6px;
@@ -96,8 +132,14 @@ input[type="date"]{
   <h1>On This Day in Sport</h1>
   <div class="subtitle" id="subtitle"></div>
 
-  <div class="date-picker">
-    <input type="date" id="dateInput">
+  <!-- CALENDAR -->
+  <div class="calendar">
+    <div class="cal-header">
+      <button id="prevMonth">‹</button>
+      <div id="monthLabel"></div>
+      <button id="nextMonth">›</button>
+    </div>
+    <div class="cal-grid" id="calendarGrid"></div>
   </div>
 
   <div id="content"></div>
@@ -106,52 +148,37 @@ input[type="date"]{
 <script>
 const DATA_URL = "data/on_this_day.json";
 
-// -----------------------------
-// DATE HELPERS
-// -----------------------------
+let currentDate = new Date();
+let selectedDate = new Date();
+
+// ---------------- DATE HELPERS ----------------
 function formatDateLong(d){
   return d.toLocaleDateString("en-AU", {
-    day: "numeric",
-    month: "long",
-    year: "numeric"
+    day:"numeric", month:"long", year:"numeric"
   });
 }
 
-function getKeyFromDate(d){
-  const mm = String(d.getMonth()+1).padStart(2,"0");
-  const dd = String(d.getDate()).padStart(2,"0");
-  return `${mm}-${dd}`;
+function getKey(d){
+  return String(d.getMonth()+1).padStart(2,"0") + "-" +
+         String(d.getDate()).padStart(2,"0");
 }
 
-// -----------------------------
-// BUILD LINKS (YOUR STRUCTURE)
-// -----------------------------
+// ---------------- BUILD LINKS ----------------
 function buildLink(e){
-
   if(!e.match_id) return null;
 
-  if(e.sport === "NBA"){
-    return `nba-game.html?game=${e.match_id}`;
-  }
-
-  if(e.sport === "AFL"){
-    return `afl-game.html?match=${e.match_id}`;
-  }
-
-  if(e.sport === "Football"){
-    return `nrl-game.html?match=${e.match_id}`;
-  }
+  if(e.sport==="NBA") return `nba-game.html?game=${e.match_id}`;
+  if(e.sport==="AFL") return `afl-game.html?match=${e.match_id}`;
+  if(e.sport==="Football") return `nrl-game.html?match=${e.match_id}`;
 
   return null;
 }
 
-// -----------------------------
-// RENDER SECTION
-// -----------------------------
+// ---------------- RENDER EVENTS ----------------
 function renderSection(sport, events){
   let html = `<div class="section"><h2>${sport}</h2>`;
 
-  if(!events || events.length === 0){
+  if(!events || events.length===0){
     html += `<div class="empty">No recorded events for this day.</div></div>`;
     return html;
   }
@@ -159,92 +186,110 @@ function renderSection(sport, events){
   events.forEach(e=>{
     const link = buildLink(e);
 
+    html += `<div class="event">`;
+
     if(link){
-      html += `
-        <div class="event">
-          <a href="${link}">
-            <span class="year">${e.year}</span>
-            ${e.text}
-          </a>
-        </div>
-      `;
-    } else {
-      html += `
-        <div class="event">
-          <span class="year">${e.year}</span>
-          ${e.text}
-        </div>
-      `;
+      html += `<a href="${link}">`;
     }
+
+    html += `<span class="year">${e.year}</span> ${e.text}`;
+
+    if(link){
+      html += `</a>`;
+    }
+
+    html += `</div>`;
   });
 
   html += `</div>`;
   return html;
 }
 
-// -----------------------------
-// RENDER PAGE
-// -----------------------------
 function renderPage(data, date){
-
-  const key = getKeyFromDate(date);
+  const key = getKey(date);
   const dayData = data[key];
 
   document.getElementById("subtitle").textContent =
     formatDateLong(date);
 
-  const content = document.getElementById("content");
-
   if(!dayData){
-    content.innerHTML =
-      `<div class="empty">No events recorded for this date yet.</div>`;
+    document.getElementById("content").innerHTML =
+      `<div class="empty">No events recorded.</div>`;
     return;
   }
 
-  let html = "";
+  let html="";
+  const order=["NBA","F1","Cricket","AFL","Racing","Football"];
 
-  const sportOrder = ["NBA","F1","Cricket","AFL","Racing","Football"];
-
-  sportOrder.forEach(sport=>{
-    if(dayData[sport]){
-      html += renderSection(sport, dayData[sport]);
-    }
+  order.forEach(s=>{
+    if(dayData[s]) html+=renderSection(s,dayData[s]);
   });
 
-  Object.keys(dayData).forEach(sport=>{
-    if(!sportOrder.includes(sport)){
-      html += renderSection(sport, dayData[sport]);
-    }
-  });
-
-  content.innerHTML = html;
+  document.getElementById("content").innerHTML=html;
 }
 
-// -----------------------------
-// INIT
-// -----------------------------
+// ---------------- CALENDAR ----------------
+function renderCalendar(){
+  const grid = document.getElementById("calendarGrid");
+  grid.innerHTML="";
+
+  const year=currentDate.getFullYear();
+  const month=currentDate.getMonth();
+
+  document.getElementById("monthLabel").textContent =
+    currentDate.toLocaleDateString("en-AU",{month:"long",year:"numeric"});
+
+  const firstDay=new Date(year,month,1).getDay();
+  const days=new Date(year,month+1,0).getDate();
+
+  for(let i=0;i<firstDay;i++){
+    grid.innerHTML+="<div></div>";
+  }
+
+  for(let d=1; d<=days; d++){
+    const date=new Date(year,month,d);
+    const div=document.createElement("div");
+    div.className="cal-day";
+    div.textContent=d;
+
+    if(date.toDateString()===new Date().toDateString()){
+      div.classList.add("cal-today");
+    }
+
+    if(date.toDateString()===selectedDate.toDateString()){
+      div.classList.add("cal-selected");
+    }
+
+    div.onclick=()=>{
+      selectedDate=date;
+      renderCalendar();
+      renderPage(DATA, date);
+    };
+
+    grid.appendChild(div);
+  }
+}
+
+// ---------------- INIT ----------------
+let DATA={};
+
 fetch(DATA_URL)
-  .then(r => r.json())
-  .then(data => {
-
-    const today = new Date();
-
-    const input = document.getElementById("dateInput");
-    input.valueAsDate = today;
-
-    renderPage(data, today);
-
-    input.addEventListener("change", () => {
-      const selected = new Date(input.value);
-      renderPage(data, selected);
-    });
-
-  })
-  .catch(err=>{
-    document.getElementById("content").innerHTML =
-      `<div class="empty">Error loading On This Day data.</div>`;
-    console.error(err);
+  .then(r=>r.json())
+  .then(d=>{
+    DATA=d;
+    renderCalendar();
+    renderPage(DATA, selectedDate);
   });
+
+document.getElementById("prevMonth").onclick=()=>{
+  currentDate.setMonth(currentDate.getMonth()-1);
+  renderCalendar();
+};
+
+document.getElementById("nextMonth").onclick=()=>{
+  currentDate.setMonth(currentDate.getMonth()+1);
+  renderCalendar();
+};
 </script>
 
 </body>
