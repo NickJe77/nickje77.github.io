@@ -11,41 +11,51 @@ OUTPUT = "docs/data/cycling"
 os.makedirs(OUTPUT, exist_ok=True)
 
 # -----------------------
-# DATA SOURCES (MEN ONLY)
+# DATA SOURCES (MEN ONLY - FIXED URLS)
 # -----------------------
 URLS = {
-    "riders": "https://raw.githubusercontent.com/thomascamminady/LeTourDataSet/master/data/men/TDF_Riders_History.csv",
-    "stages": "https://raw.githubusercontent.com/thomascamminady/LeTourDataSet/master/data/men/TDF_Stages_History.csv",
-    "rankings": "https://raw.githubusercontent.com/thomascamminady/LeTourDataSet/master/data/men/TDF_All_Rankings_History.csv",
+    "riders": "https://raw.githubusercontent.com/thomascamminady/LeTourDataSet/main/data/men/TDF_Riders_History.csv",
+    "stages": "https://raw.githubusercontent.com/thomascamminady/LeTourDataSet/main/data/men/TDF_Stages_History.csv",
+    "rankings": "https://raw.githubusercontent.com/thomascamminady/LeTourDataSet/main/data/men/TDF_All_Rankings_History.csv",
 }
 
 # -----------------------
-# CONVERT FUNCTION
+# DOWNLOAD + CONVERT
 # -----------------------
 def convert(name, url):
+    print("\n-----------------------")
     print("Downloading:", name)
+    print("URL:", url)
 
-    df = pd.read_csv(url)
+    try:
+        df = pd.read_csv(url)
+    except Exception as e:
+        print("❌ FAILED:", name)
+        print("ERROR:", e)
+        return
 
-    print("Rows:", len(df))
+    print("✅ Loaded rows:", len(df))
 
-    # Convert NaN → None
+    # Replace NaN with None
     df = df.where(pd.notnull(df), None)
 
     data = df.to_dict(orient="records")
 
     out_file = f"{OUTPUT}/{name}.json"
 
-    with open(out_file, "w") as f:
-        json.dump(data, f)
-
-    print("Saved:", out_file)
+    try:
+        with open(out_file, "w") as f:
+            json.dump(data, f)
+        print("✅ Saved:", out_file)
+    except Exception as e:
+        print("❌ SAVE FAILED:", out_file)
+        print("ERROR:", e)
 
 
 # -----------------------
-# RUN
+# RUN ALL
 # -----------------------
 for name, url in URLS.items():
     convert(name, url)
 
-print("TDF DATA COMPLETE")
+print("\nTDF DATA COMPLETE")
