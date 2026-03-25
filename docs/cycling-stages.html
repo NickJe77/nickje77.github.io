@@ -9,14 +9,13 @@
 
 <style>
 
-/* MATCH SITE FONT + RESET */
 body{
   font-family:system-ui, Arial, sans-serif;
   margin:0;
   padding:20px;
 }
 
-/* NAVBAR (MATCH HOME) */
+/* NAVBAR */
 .home-nav{
   display:flex;
   justify-content:center;
@@ -32,13 +31,13 @@ body{
   font-size:15px;
 }
 
-/* PAGE TITLE */
+/* TITLE */
 h1{
   text-align:center;
   margin-top:20px;
 }
 
-/* CONTROLS */
+/* FILTER */
 .controls{
   text-align:center;
   margin:20px 0;
@@ -71,25 +70,26 @@ tr:hover{
   background:#f5f5f5;
 }
 
+a{
+  color:#0056d6;
+  text-decoration:none;
+}
+
+a:hover{
+  text-decoration:underline;
+}
+
 </style>
 </head>
 
 <body>
 
-<!-- NAVIGATION -->
+<!-- NAV -->
 <nav class="home-nav">
   <a href="./index.html">Home</a>
-  <a href="./on-this-day.html">On This Day</a>
-  <a href="./racing.html">Racing</a>
-  <a href="./afl.html">AFL</a>
-  <a href="./nrl.html">NRL</a>
-  <a href="./football.html">Football</a>
-  <a href="./cricket.html">Cricket</a>
-  <a href="./baseball.html">Baseball</a>
-  <a href="./f1.html">F1</a>
+  <a href="./cycling.html">Cycling</a>
   <a href="./nba.html">NBA</a>
   <a href="./nfl.html">NFL</a>
-  <a href="./olympics.html">Olympics</a>
 </nav>
 
 <h1>Tour de France Stages</h1>
@@ -122,7 +122,7 @@ tr:hover{
 
 let DATA = [];
 
-/* FIX ACCENTS */
+/* FIX TEXT (ACCENTS) */
 function clean(text){
   if(!text) return "";
   try{
@@ -132,12 +132,36 @@ function clean(text){
   }
 }
 
+/* FLEXIBLE FIELD LOOKUP */
+function get(d, keys){
+  for(let k of keys){
+    if(d[k] && d[k] !== "") return clean(d[k]);
+  }
+  return "—";
+}
+
+/* SLUG FOR LINKS */
+function slug(name){
+  if(!name) return "";
+  return name
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+/* LINK BUILDER */
+function riderLink(name){
+  if(!name || name === "—") return "—";
+  return `<a href="cycling-rider.html?name=${slug(name)}">${name}</a>`;
+}
+
 /* LOAD DATA */
 fetch("data/cycling/stages.json")
   .then(res => res.json())
   .then(data => {
     DATA = data;
-    console.log("Sample:", DATA[0]); // debug
+    console.log("FIELDS:", Object.keys(DATA[0])); // debug
     buildYearFilter();
     renderTable();
   });
@@ -158,8 +182,9 @@ function buildYearFilter(){
   select.addEventListener("change", renderTable);
 }
 
-/* RENDER */
+/* RENDER TABLE */
 function renderTable(){
+
   const year = document.getElementById("yearFilter").value;
 
   let rows = DATA;
@@ -173,6 +198,12 @@ function renderTable(){
 
   rows.slice(0,500).forEach(d => {
 
+    const winner = get(d, ["Winner of stage","Winner","Stage Winner"]);
+    const yellow = get(d, ["Yellow jersey","Yellow Jersey","Yellow"]);
+    const green = get(d, ["Green jersey","Green"]);
+    const polka = get(d, ["Polka-dot jersey","Polka Dot"]);
+    const white = get(d, ["White jersey","White"]);
+
     const tr = document.createElement("tr");
 
     tr.innerHTML = `
@@ -180,11 +211,11 @@ function renderTable(){
       <td>${d.Stages || ""}</td>
       <td>${clean(d.Start)}</td>
       <td>${clean(d.End)}</td>
-      <td>${clean(d["Winner of stage"]) || "—"}</td>
-      <td>${clean(d["Yellow jersey"]) || "—"}</td>
-      <td>${clean(d["Green jersey"]) || "—"}</td>
-      <td>${clean(d["Polka-dot jersey"]) || "—"}</td>
-      <td>${clean(d["White jersey"]) || "—"}</td>
+      <td>${riderLink(winner)}</td>
+      <td>${riderLink(yellow)}</td>
+      <td>${riderLink(green)}</td>
+      <td>${riderLink(polka)}</td>
+      <td>${riderLink(white)}</td>
     `;
 
     body.appendChild(tr);
