@@ -12,15 +12,15 @@ body{font-family:system-ui,Arial,sans-serif;margin:0;padding:20px;background:#f8
 
 h1{text-align:center;margin:20px 0;}
 
-.search{
-  text-align:center;
-  margin-bottom:20px;
-}
+.search{text-align:center;margin-bottom:20px;}
 
-input, select{
-  padding:8px;
-  font-size:14px;
-  margin:5px;
+input, select{padding:8px;font-size:14px;margin:5px;}
+
+.section-title{
+  text-align:center;
+  margin-top:30px;
+  font-size:18px;
+  font-weight:700;
 }
 
 .summary{
@@ -43,7 +43,7 @@ input, select{
 table{
   width:100%;
   border-collapse:collapse;
-  margin-top:20px;
+  margin-top:10px;
 }
 
 th,td{
@@ -52,14 +52,9 @@ th,td{
   text-align:center;
 }
 
-th{
-  background:#eee;
-}
+th{background:#eee;}
 
-tr:hover{
-  background:#f1f1f1;
-  cursor:pointer;
-}
+tr:hover{background:#f1f1f1;cursor:pointer;}
 </style>
 </head>
 
@@ -75,35 +70,28 @@ tr:hover{
 
 <div class="search">
   <input list="players" id="playerInput" placeholder="Search player...">
-  <datalist id="players"></datalist>
+  <datalist id="players"></datalist><br>
 
-  <br>
-
-  <select id="teamFilter">
-    <option value="">All Teams</option>
-  </select>
-
-  <select id="oppFilter">
-    <option value="">All Opponents</option>
-  </select>
+  <select id="teamFilter"><option value="">All Teams</option></select>
+  <select id="oppFilter"><option value="">All Opponents</option></select>
 </div>
 
+<div class="section-title">Career Summary</div>
 <div class="summary" id="summary"></div>
+
+<div class="section-title">Career Highs</div>
+<div class="summary" id="highs"></div>
+
+<div class="section-title">Records</div>
+<div class="summary" id="records"></div>
 
 <table>
 <thead>
 <tr>
-  <th>Date</th>
-  <th>Team</th>
-  <th>Opp</th>
-  <th>Type</th>
-  <th>Pass Yds</th>
-  <th>Pass TD</th>
-  <th>INT</th>
-  <th>Rush Yds</th>
-  <th>Rush TD</th>
-  <th>Rec Yds</th>
-  <th>Rec TD</th>
+<th>Date</th><th>Team</th><th>Opp</th><th>Type</th>
+<th>Pass Yds</th><th>Pass TD</th><th>INT</th>
+<th>Rush Yds</th><th>Rush TD</th>
+<th>Rec Yds</th><th>Rec TD</th>
 </tr>
 </thead>
 <tbody id="gamesTable"></tbody>
@@ -119,8 +107,8 @@ const slugify = name =>
 async function loadPlayers(){
   const res = await fetch("data/nfl/players/index.json");
   const data = await res.json();
-
   const dl = document.getElementById("players");
+
   data.forEach(p=>{
     const opt = document.createElement("option");
     opt.value = p;
@@ -154,17 +142,11 @@ async function loadPlayer(){
   const oppFilter = document.getElementById("oppFilter");
 
   teamSet.forEach(t=>{
-    const o = document.createElement("option");
-    o.value = t;
-    o.textContent = t;
-    teamFilter.appendChild(o);
+    teamFilter.innerHTML += `<option value="${t}">${t}</option>`;
   });
 
   oppSet.forEach(t=>{
-    const o = document.createElement("option");
-    o.value = t;
-    o.textContent = t;
-    oppFilter.appendChild(o);
+    oppFilter.innerHTML += `<option value="${t}">${t}</option>`;
   });
 
   render(data.games);
@@ -181,11 +163,17 @@ function render(games){
   const table = document.getElementById("gamesTable");
   table.innerHTML = "";
 
-  let totals = {
-    games:0,
-    passY:0, passTD:0, int:0,
-    rushY:0, rushTD:0,
-    recY:0, recTD:0
+  let totals = {games:0, passY:0, passTD:0, int:0, rushY:0, rushTD:0, recY:0, recTD:0};
+
+  let highs = {
+    passY:{v:0}, passTD:{v:0}, rushY:{v:0}, recY:{v:0}
+  };
+
+  let records = {
+    g300:0,
+    multiPassTD:0,
+    rush100:0,
+    rec100:0
   };
 
   games.forEach(g=>{
@@ -198,12 +186,22 @@ function render(games){
     totals.passY += g.passing.yards;
     totals.passTD += g.passing.td;
     totals.int += g.passing.int;
-
     totals.rushY += g.rushing.yards;
     totals.rushTD += g.rushing.td;
-
     totals.recY += g.receiving.yards;
     totals.recTD += g.receiving.td;
+
+    // highs
+    if(g.passing.yards > highs.passY.v) highs.passY = {v:g.passing.yards, g};
+    if(g.passing.td > highs.passTD.v) highs.passTD = {v:g.passing.td, g};
+    if(g.rushing.yards > highs.rushY.v) highs.rushY = {v:g.rushing.yards, g};
+    if(g.receiving.yards > highs.recY.v) highs.recY = {v:g.receiving.yards, g};
+
+    // records
+    if(g.passing.yards >= 300) records.g300++;
+    if(g.passing.td >= 3) records.multiPassTD++;
+    if(g.rushing.yards >= 100) records.rush100++;
+    if(g.receiving.yards >= 100) records.rec100++;
 
     const tr = document.createElement("tr");
 
@@ -225,23 +223,47 @@ function render(games){
   });
 
   renderSummary(totals);
+  renderHighs(highs);
+  renderRecords(records);
 }
 
 function renderSummary(t){
+  const avg = v => t.games ? (v/t.games).toFixed(1) : 0;
 
-  const div = document.getElementById("summary");
-
-  const avg = (v)=> t.games ? (v/t.games).toFixed(1) : 0;
-
-  div.innerHTML = `
+  document.getElementById("summary").innerHTML = `
     <div class="box"><b>Games</b><br>${t.games}</div>
     <div class="box"><b>Pass Yards</b><br>${t.passY} (${avg(t.passY)})</div>
     <div class="box"><b>Pass TD</b><br>${t.passTD}</div>
     <div class="box"><b>INT</b><br>${t.int}</div>
     <div class="box"><b>Rush Yards</b><br>${t.rushY}</div>
-    <div class="box"><b>Rush TD</b><br>${t.rushTD}</div>
     <div class="box"><b>Rec Yards</b><br>${t.recY}</div>
-    <div class="box"><b>Rec TD</b><br>${t.recTD}</div>
+  `;
+}
+
+function highBox(title, obj){
+  if(!obj.g) return "";
+  return `<div class="box"><b>${title}</b><br>
+    ${obj.v}<br>
+    vs ${obj.g.opponent}<br>
+    ${obj.g.date}
+  </div>`;
+}
+
+function renderHighs(h){
+  document.getElementById("highs").innerHTML = `
+    ${highBox("Pass Yards", h.passY)}
+    ${highBox("Pass TD", h.passTD)}
+    ${highBox("Rush Yards", h.rushY)}
+    ${highBox("Rec Yards", h.recY)}
+  `;
+}
+
+function renderRecords(r){
+  document.getElementById("records").innerHTML = `
+    <div class="box"><b>300+ Passing Games</b><br>${r.g300}</div>
+    <div class="box"><b>3+ Pass TD Games</b><br>${r.multiPassTD}</div>
+    <div class="box"><b>100 Rush Games</b><br>${r.rush100}</div>
+    <div class="box"><b>100 Rec Games</b><br>${r.rec100}</div>
   `;
 }
 
