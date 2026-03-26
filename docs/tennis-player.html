@@ -28,7 +28,7 @@ body{
 }
 
 .container{
-  max-width:1100px;
+  max-width:1200px;
   margin:auto;
   padding:20px;
 }
@@ -48,9 +48,9 @@ select{
 .summary{
   display:flex;
   justify-content:center;
-  gap:30px;
-  margin:20px 0;
+  gap:20px;
   flex-wrap:wrap;
+  margin-bottom:20px;
 }
 
 .card{
@@ -62,11 +62,18 @@ select{
   box-shadow:0 2px 6px rgba(0,0,0,0.1);
 }
 
+.section{
+  margin-top:30px;
+}
+
+.section h2{
+  text-align:center;
+}
+
 table{
   width:100%;
   border-collapse:collapse;
   background:white;
-  margin-top:20px;
 }
 
 th, td{
@@ -75,12 +82,14 @@ th, td{
   text-align:center;
 }
 
-th{
-  background:#fafafa;
-}
+th{background:#fafafa;}
 
-tr:hover{
-  background:#f0f8ff;
+tr:hover{background:#f0f8ff;}
+
+a.player-link{
+  color:#0056d6;
+  text-decoration:none;
+  font-weight:600;
 }
 </style>
 </head>
@@ -109,47 +118,62 @@ tr:hover{
   </select>
 </div>
 
+<!-- SUMMARY -->
 <div class="summary">
-  <div class="card">
-    <h3>Matches</h3>
-    <div id="matches">0</div>
-  </div>
-  <div class="card">
-    <h3>Wins</h3>
-    <div id="wins">0</div>
-  </div>
-  <div class="card">
-    <h3>Losses</h3>
-    <div id="losses">0</div>
-  </div>
-  <div class="card">
-    <h3>Win %</h3>
-    <div id="winpct">0%</div>
-  </div>
+  <div class="card"><h3>Matches</h3><div id="matches">0</div></div>
+  <div class="card"><h3>Wins</h3><div id="wins">0</div></div>
+  <div class="card"><h3>Losses</h3><div id="losses">0</div></div>
+  <div class="card"><h3>Win %</h3><div id="winpct">0%</div></div>
+  <div class="card"><h3>Titles</h3><div id="titles">0</div></div>
 </div>
 
-<table>
-  <thead>
-    <tr>
-      <th>Date</th>
-      <th>Tournament</th>
-      <th>Surface</th>
-      <th>Round</th>
-      <th>Opponent</th>
-      <th>Result</th>
-      <th>Score</th>
-    </tr>
-  </thead>
-  <tbody id="tableBody"></tbody>
-</table>
+<!-- SURFACE BREAKDOWN -->
+<div class="section">
+  <h2>Surface Breakdown</h2>
+  <div class="summary" id="surfaceBreakdown"></div>
+</div>
+
+<!-- HEAD TO HEAD -->
+<div class="section">
+  <h2>Top Opponents</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Opponent</th>
+        <th>Matches</th>
+        <th>Wins</th>
+        <th>Losses</th>
+      </tr>
+    </thead>
+    <tbody id="h2hTable"></tbody>
+  </table>
+</div>
+
+<!-- MATCHES -->
+<div class="section">
+  <h2>Match Log</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Tournament</th>
+        <th>Surface</th>
+        <th>Round</th>
+        <th>Opponent</th>
+        <th>Result</th>
+        <th>Score</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+</div>
 
 </div>
 
 <script>
 
 function getParam(name){
-  const url = new URL(window.location.href);
-  return url.searchParams.get(name);
+  return new URL(window.location.href).searchParams.get(name);
 }
 
 function slug(name){
@@ -157,7 +181,6 @@ function slug(name){
 }
 
 const playerName = getParam("player");
-
 document.getElementById("playerName").textContent = playerName;
 
 fetch(`data/tennis/players/${slug(playerName)}.json`)
@@ -166,14 +189,14 @@ fetch(`data/tennis/players/${slug(playerName)}.json`)
 
   const matches = data.matches;
 
-  // populate year filter
-  const years = [...new Set(matches.map(m => m.date?.slice(0,4)))].filter(Boolean);
-
+  // year dropdown
+  const years = [...new Set(matches.map(m=>m.date?.slice(0,4)))].filter(Boolean);
   const yearSelect = document.getElementById("yearFilter");
+
   years.sort().forEach(y=>{
-    const opt = document.createElement("option");
-    opt.textContent = y;
-    yearSelect.appendChild(opt);
+    const o = document.createElement("option");
+    o.textContent = y;
+    yearSelect.appendChild(o);
   });
 
   function render(){
@@ -183,16 +206,12 @@ fetch(`data/tennis/players/${slug(playerName)}.json`)
 
     let filtered = matches;
 
-    if(surface){
-      filtered = filtered.filter(m=>m.surface===surface);
-    }
+    if(surface) filtered = filtered.filter(m=>m.surface===surface);
+    if(year) filtered = filtered.filter(m=>m.date?.startsWith(year));
 
-    if(year){
-      filtered = filtered.filter(m=>m.date?.startsWith(year));
-    }
-
-    let wins = 0;
-    let losses = 0;
+    let wins = 0, losses = 0, titles = 0;
+    const surfaceStats = {};
+    const h2h = {};
 
     const tbody = document.getElementById("tableBody");
     tbody.innerHTML = "";
@@ -200,10 +219,22 @@ fetch(`data/tennis/players/${slug(playerName)}.json`)
     filtered.forEach(m=>{
 
       const isWin = m.player1 === playerName;
+      const opponent = isWin ? m.player2 : m.player1;
 
       if(isWin) wins++; else losses++;
 
-      const opponent = isWin ? m.player2 : m.player1;
+      // titles
+      if(isWin && m.round === "F") titles++;
+
+      // surface stats
+      if(!surfaceStats[m.surface]) surfaceStats[m.surface] = {w:0,l:0};
+      if(isWin) surfaceStats[m.surface].w++;
+      else surfaceStats[m.surface].l++;
+
+      // head to head
+      if(!h2h[opponent]) h2h[opponent] = {w:0,l:0};
+      if(isWin) h2h[opponent].w++;
+      else h2h[opponent].l++;
 
       const tr = document.createElement("tr");
 
@@ -212,7 +243,7 @@ fetch(`data/tennis/players/${slug(playerName)}.json`)
         <td>${m.tournament}</td>
         <td>${m.surface}</td>
         <td>${m.round}</td>
-        <td>${opponent}</td>
+        <td><a class="player-link" href="tennis-player.html?player=${opponent}">${opponent}</a></td>
         <td>${isWin ? "W" : "L"}</td>
         <td>${m.score}</td>
       `;
@@ -220,12 +251,49 @@ fetch(`data/tennis/players/${slug(playerName)}.json`)
       tbody.appendChild(tr);
     });
 
+    // summary
     document.getElementById("matches").textContent = filtered.length;
     document.getElementById("wins").textContent = wins;
     document.getElementById("losses").textContent = losses;
+    document.getElementById("titles").textContent = titles;
 
     const pct = filtered.length ? ((wins/filtered.length)*100).toFixed(1) : 0;
     document.getElementById("winpct").textContent = pct + "%";
+
+    // surface breakdown
+    const sb = document.getElementById("surfaceBreakdown");
+    sb.innerHTML = "";
+
+    Object.entries(surfaceStats).forEach(([surf,val])=>{
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = `
+        <h3>${surf}</h3>
+        <div>${val.w}-${val.l}</div>
+      `;
+      sb.appendChild(card);
+    });
+
+    // head to head table (top 10)
+    const h2hArr = Object.entries(h2h)
+      .map(([name,val])=>({name,...val,total:val.w+val.l}))
+      .sort((a,b)=>b.total-a.total)
+      .slice(0,10);
+
+    const h2hTable = document.getElementById("h2hTable");
+    h2hTable.innerHTML = "";
+
+    h2hArr.forEach(o=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><a class="player-link" href="tennis-player.html?player=${o.name}">${o.name}</a></td>
+        <td>${o.total}</td>
+        <td>${o.w}</td>
+        <td>${o.l}</td>
+      `;
+      h2hTable.appendChild(tr);
+    });
+
   }
 
   render();
