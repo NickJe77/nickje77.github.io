@@ -5,35 +5,31 @@ import zipfile
 import io
 import csv
 import datetime
+import shutil
 
 OUTPUT_DIR = "docs/data/tennis/matches"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+TMP_DIR = "tennis_tmp"
 
 ATP_URL = "https://github.com/JeffSackmann/tennis_atp/archive/refs/heads/master.zip"
 WTA_URL = "https://github.com/JeffSackmann/tennis_wta/archive/refs/heads/master.zip"
 
-TMP_DIR = "tennis_tmp"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# 🔥 IMPORTANT: STOP AT LAST COMPLETE YEAR
-CURRENT_YEAR = datetime.datetime.now().year - 1  # e.g. 2025 → builds to 2024
+# 🔥 CRITICAL: STOP AT LAST COMPLETE YEAR
+CURRENT_YEAR = datetime.datetime.now().year - 1   # e.g. 2026 → builds to 2025 EXCLUDED
 
 
 # -----------------------------
-# CLEAN TEMP
+# CLEAN TEMP FOLDER ONLY
 # -----------------------------
 def clean_tmp():
     if os.path.exists(TMP_DIR):
-        for root, dirs, files in os.walk(TMP_DIR, topdown=False):
-            for f in files:
-                os.remove(os.path.join(root, f))
-            for d in dirs:
-                os.rmdir(os.path.join(root, d))
-    else:
-        os.makedirs(TMP_DIR)
+        shutil.rmtree(TMP_DIR)
+    os.makedirs(TMP_DIR, exist_ok=True)
 
 
 # -----------------------------
-# DOWNLOAD + EXTRACT
+# DOWNLOAD ZIP
 # -----------------------------
 def download_zip(url):
     r = requests.get(url)
@@ -45,7 +41,6 @@ def download_zip(url):
 # LOAD CSV
 # -----------------------------
 def load_csv(path, gender):
-
     matches = []
 
     if not os.path.exists(path):
@@ -73,7 +68,7 @@ def load_csv(path, gender):
 
 
 # -----------------------------
-# BUILD YEAR
+# BUILD YEAR (HISTORICAL ONLY)
 # -----------------------------
 def build_year(year):
 
@@ -93,7 +88,9 @@ def build_year(year):
 
     output_path = f"{OUTPUT_DIR}/{year}.json"
 
-    json.dump(matches, open(output_path, "w"), indent=2)
+    # 🔥 SAFE WRITE — DOES NOT DELETE OTHER YEARS
+    with open(output_path, "w") as f:
+        json.dump(matches, f, indent=2)
 
     print(f"{year} done ({len(matches)} matches)")
 
@@ -103,6 +100,8 @@ def build_year(year):
 # -----------------------------
 def main():
 
+    print("Starting historical build...")
+
     clean_tmp()
 
     print("Downloading ATP dataset...")
@@ -111,11 +110,12 @@ def main():
     print("Downloading WTA dataset...")
     download_zip(WTA_URL)
 
-    # 🔥 BUILD HISTORY ONLY
+    # 🔥 CRITICAL FIX — DO NOT TOUCH 2025+
     for year in range(1968, CURRENT_YEAR):
         build_year(year)
 
-    print("\nDone building historical dataset.")
+    print("\n✅ Historical dataset complete (1968 → 2024)")
+    print("🚫 2025+ handled by live scraper only")
 
 
 if __name__ == "__main__":
