@@ -1,70 +1,79 @@
 import os
 import json
-from collections import defaultdict
+import requests
+import zipfile
+import io
+import csv
 
-INPUT_DIR = "docs/data/tennis/matches"
-OUTPUT_DIR = "docs/data/tennis/players"
-
+OUTPUT_DIR = "docs/data/tennis/matches"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-players = defaultdict(lambda: {
-    "matches": [],
-    "wins": 0,
-    "losses": 0
-})
+ATP_URL = "https://github.com/JeffSackmann/tennis_atp/archive/refs/heads/master.zip"
+WTA_URL = "https://github.com/JeffSackmann/tennis_wta/archive/refs/heads/master.zip"
 
 
-def slug(name):
-    return name.lower().replace(" ", "-")
+def download_and_extract(url, folder):
+    r = requests.get(url)
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    z.extractall(folder)
 
 
-for file in os.listdir(INPUT_DIR):
-    if not file.endswith(".json"):
-        continue
+def load_year(path, gender):
+    matches = []
 
-    data = json.load(open(os.path.join(INPUT_DIR, file)))
+    if not os.path.exists(path):
+        return matches
 
-    for match in data:
-        p1 = match["player1"]
-        p2 = match["player2"]
-        winner = match["player1"]  # dataset uses winner first
+    with open(path, newline='', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
 
-        # player1
-        players[p1]["matches"].append(match)
-        if winner == p1:
-            players[p1]["wins"] += 1
-        else:
-            players[p1]["losses"] += 1
+        for row in reader:
+            matches.append({
+                "tournament": row["tourney_name"],
+                "surface": row["surface"],
+                "round": row["round"],
+                "player1": row["winner_name"],
+                "player2": row["loser_name"],
+                "score": row["score"],
+                "date": row["tourney_date"],
+                "gender": gender
+            })
 
-        # player2
-        players[p2]["matches"].append(match)
-        if winner == p2:
-            players[p2]["wins"] += 1
-        else:
-            players[p2]["losses"] += 1
+    return matches
 
 
-index = []
+def main():
 
-for name, data in players.items():
-    s = slug(name)
+    print("Downloading ATP...")
+    download_and_extract(ATP_URL, "tennis_data")
 
-    data["name"] = name
-    data["total_matches"] = len(data["matches"])
+    print("Downloading WTA...")
+    download_and_extract(WTA_URL, "tennis_data")
 
-    json.dump(
-        data,
-        open(f"{OUTPUT_DIR}/{s}.json", "w"),
-        indent=2
-    )
+    for year in range(1968, 2027):
 
-    index.append(name)
+        print(f"Processing {year}")
+
+        atp_path = f"tennis_data/tennis_atp-master/atp_matches_{year}.csv"
+        wta_path = f"tennis_data/tennis_wta-master/wta_matches_{year}.csv"
+
+        matches = []
+
+        matches += load_year(atp_path, "M")
+        matches += load_year(wta_path, "W")
+
+        if not matches:
+            print(f"{year} missing")
+            continue
+
+        json.dump(
+            matches,
+            open(f"{OUTPUT_DIR}/{year}.json", "w"),
+            indent=2
+        )
+
+        print(f"{year} done ({len(matches)} matches)")
 
 
-json.dump(
-    sorted(index),
-    open(f"{OUTPUT_DIR}/index.json", "w"),
-    indent=2
-)
-
-print("Players built:", len(players))
+if __name__ == "__main__":
+    main()
