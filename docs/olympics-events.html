@@ -2,75 +2,36 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Olympic Events | The Sporting Almanac</title>
+<title>Olympic Events</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{
-    font-family:system-ui,Arial,sans-serif;
-    margin:0;
-    background:#f5f5f5;
-    color:#111;
-}
-
-.navbar{
-    display:flex;
-    justify-content:center;
-    gap:20px;
-    padding:15px;
-    background:#111;
-}
-.navbar a{
-    color:#fff;
-    text-decoration:none;
-    font-weight:600;
-}
+body{font-family:system-ui;margin:0;background:#f5f5f5;}
+.navbar{display:flex;justify-content:center;gap:20px;padding:15px;background:#111;}
+.navbar a{color:white;text-decoration:none;font-weight:600;}
 
 .hero{
-    background:linear-gradient(90deg,#0085C7,#F4C300,#000,#009F3D,#DF0024);
-    color:#fff;
-    text-align:center;
-    padding:32px 12px;
+background:linear-gradient(90deg,#0085C7,#F4C300,#000,#009F3D,#DF0024);
+color:white;text-align:center;padding:30px;
 }
 
-.container{
-    max-width:1100px;
-    margin:20px auto;
-    padding:0 12px;
+.container{max-width:1100px;margin:20px auto;padding:10px;}
+
+.controls{display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap;}
+select,input{padding:10px;border-radius:8px;border:1px solid #ccc;}
+
+.card{
+background:white;
+padding:15px;
+border-radius:10px;
+margin-bottom:12px;
+cursor:pointer;
 }
 
-.controls{
-    display:flex;
-    gap:10px;
-    margin-bottom:15px;
-    flex-wrap:wrap;
-}
+.card:hover{background:#f0f0f0;}
 
-select,input{
-    padding:10px;
-    border-radius:8px;
-    border:1px solid #ccc;
-}
-
-.event-card{
-    background:#fff;
-    border-radius:12px;
-    padding:15px;
-    margin-bottom:12px;
-}
-
-.medals{
-    display:grid;
-    grid-template-columns:repeat(3,1fr);
-    gap:10px;
-}
-
-.medal-box{
-    background:#f2f2f2;
-    padding:10px;
-    border-radius:8px;
-}
-
+.medals{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.medal{background:#f2f2f2;padding:10px;border-radius:6px;}
 .gold{border-left:5px solid gold;}
 .silver{border-left:5px solid silver;}
 .bronze{border-left:5px solid #cd7f32;}
@@ -79,25 +40,24 @@ select,input{
 
 <body>
 
-<nav class="navbar">
-    <a href="/">Home</a>
-    <a href="/olympics.html">Olympics</a>
-    <a href="/olympics-medals.html">Medal Table</a>
-    <a href="/olympics-events.html">Events</a>
-    <a href="/olympics-athletes.html">Athletes</a>
-</nav>
+<div class="navbar">
+<a href="/">Home</a>
+<a href="/olympics.html">Olympics</a>
+<a href="/olympics-medals.html">Medal Table</a>
+<a href="/olympics-events.html">Events</a>
+<a href="/olympics-athletes.html">Athletes</a>
+</div>
 
 <div class="hero">
-    <h1>Olympic Events</h1>
-    <p>Results by event across Olympic history</p>
+<h1>Olympic Events</h1>
 </div>
 
 <div class="container">
 
 <div class="controls">
-    <select id="yearFilter"><option value="">All Years</option></select>
-    <select id="sportFilter"><option value="">All Sports</option></select>
-    <input id="searchFilter" placeholder="Search event...">
+<select id="yearFilter"><option value="">All Years</option></select>
+<select id="sportFilter"><option value="">All Sports</option></select>
+<input id="searchFilter" placeholder="Search event...">
 </div>
 
 <div id="events"></div>
@@ -108,122 +68,117 @@ select,input{
 
 let eventsData = [];
 
-async function loadData(){
+async function load(){
 
-    const res = await fetch("/data/olympics/olympic_results.json");
-    const rows = await res.json();
+const res = await fetch("/data/olympics/olympic_results.json");
+const rows = await res.json();
 
-    const map = new Map();
+const map = new Map();
 
-    rows.forEach(r=>{
+rows.forEach(r=>{
 
-        const year = Number(r.year || (r.slug_game||"").slice(0,4));
-        const sport = r.discipline_title || r.discipline;
-        const event = r.event_title || r.event;
-        const athlete = r.athlete_full_name || r.name;
-        let medal = r.medal_type || r.medal;
+const year = Number(r.year || (r.slug_game||"").substring(0,4));
+const sport = r.discipline_title || r.discipline || "";
+const event = r.event_title || r.event || "";
+const athlete = r.athlete_full_name || r.name || "";
+let medal = r.medal_type || r.medal || "";
 
-        if(!year || !sport || !event || !athlete || !medal) return;
+if(!year || !sport || !event || !athlete || !medal) return;
 
-        medal = medal.toUpperCase()
-            .replace("GOLD MEDAL","GOLD")
-            .replace("SILVER MEDAL","SILVER")
-            .replace("BRONZE MEDAL","BRONZE");
+medal = medal.toUpperCase()
+.replace("GOLD MEDAL","GOLD")
+.replace("SILVER MEDAL","SILVER")
+.replace("BRONZE MEDAL","BRONZE");
 
-        if(!["GOLD","SILVER","BRONZE"].includes(medal)) return;
+if(!["GOLD","SILVER","BRONZE"].includes(medal)) return;
 
-        const key = year+"|"+sport+"|"+event;
+const key = year+"|"+sport+"|"+event;
 
-        if(!map.has(key)){
-            map.set(key,{
-                year,
-                sport,
-                event,
-                gold:[],
-                silver:[],
-                bronze:[]
-            });
-        }
+if(!map.has(key)){
+map.set(key,{year,sport,event,gold:[],silver:[],bronze:[]});
+}
 
-        const obj = map.get(key);
+const obj = map.get(key);
 
-        if(medal==="GOLD") obj.gold.push(athlete);
-        if(medal==="SILVER") obj.silver.push(athlete);
-        if(medal==="BRONZE") obj.bronze.push(athlete);
+if(medal==="GOLD") obj.gold.push(athlete);
+if(medal==="SILVER") obj.silver.push(athlete);
+if(medal==="BRONZE") obj.bronze.push(athlete);
 
-    });
+});
 
-    eventsData = Array.from(map.values());
+eventsData = Array.from(map.values());
 
-    buildFilters();
-    render(eventsData);
+buildFilters();
+render(eventsData);
 }
 
 function buildFilters(){
 
-    const years = [...new Set(eventsData.map(e=>e.year))].sort((a,b)=>b-a);
-    const sports = [...new Set(eventsData.map(e=>e.sport))].sort();
+const years = [...new Set(eventsData.map(e=>e.year))].sort((a,b)=>b-a);
+const sports = [...new Set(eventsData.map(e=>e.sport))].sort();
 
-    years.forEach(y=>{
-        yearFilter.innerHTML += `<option value="${y}">${y}</option>`;
-    });
+years.forEach(y=>{
+yearFilter.innerHTML += `<option value="${y}">${y}</option>`;
+});
 
-    sports.forEach(s=>{
-        sportFilter.innerHTML += `<option value="${s}">${s}</option>`;
-    });
+sports.forEach(s=>{
+sportFilter.innerHTML += `<option value="${s}">${s}</option>`;
+});
+
 }
 
 function render(list){
 
-    const container = document.getElementById("events");
-    container.innerHTML = "";
+const container = document.getElementById("events");
+container.innerHTML = "";
 
-    list.forEach(e=>{
+list.forEach(e=>{
 
-        const div = document.createElement("div");
-        div.className = "event-card";
+const div = document.createElement("div");
+div.className = "card";
 
-        div.innerHTML = `
-            <h3>${e.event}</h3>
-            <div>${e.year} • ${e.sport}</div>
+div.innerHTML = `
+<h3>${e.event}</h3>
+<div>${e.year} • ${e.sport}</div>
 
-            <div class="medals">
-                <div class="medal-box gold">
-                    <b>Gold</b><br>${e.gold.join("<br>")}
-                </div>
-                <div class="medal-box silver">
-                    <b>Silver</b><br>${e.silver.join("<br>")}
-                </div>
-                <div class="medal-box bronze">
-                    <b>Bronze</b><br>${e.bronze.join("<br>")}
-                </div>
-            </div>
-        `;
+<div class="medals">
+<div class="medal gold"><b>Gold</b><br>${e.gold.join("<br>")}</div>
+<div class="medal silver"><b>Silver</b><br>${e.silver.join("<br>")}</div>
+<div class="medal bronze"><b>Bronze</b><br>${e.bronze.join("<br>")}</div>
+</div>
+`;
 
-        container.appendChild(div);
-    });
+div.onclick = () => {
+window.location.href =
+`olympics-event.html?event=${encodeURIComponent(e.event)}&year=${e.year}`;
+};
+
+container.appendChild(div);
+
+});
+
 }
 
-function applyFilters(){
+function filter(){
 
-    const y = yearFilter.value;
-    const s = sportFilter.value;
-    const q = searchFilter.value.toLowerCase();
+const y = yearFilter.value;
+const s = sportFilter.value;
+const q = searchFilter.value.toLowerCase();
 
-    let filtered = [...eventsData];
+let f = [...eventsData];
 
-    if(y) filtered = filtered.filter(e=>e.year==y);
-    if(s) filtered = filtered.filter(e=>e.sport==s);
-    if(q) filtered = filtered.filter(e=>e.event.toLowerCase().includes(q));
+if(y) f = f.filter(e=>e.year==y);
+if(s) f = f.filter(e=>e.sport==s);
+if(q) f = f.filter(e=>e.event.toLowerCase().includes(q));
 
-    render(filtered);
+render(f);
 }
 
-yearFilter.onchange = applyFilters;
-sportFilter.onchange = applyFilters;
-searchFilter.oninput = applyFilters;
+yearFilter.onchange = filter;
+sportFilter.onchange = filter;
+searchFilter.oninput = filter;
 
-loadData();
+load();
 
 </script>
 
