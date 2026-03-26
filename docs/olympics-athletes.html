@@ -57,6 +57,11 @@ input{
     padding:15px;
     border-radius:10px;
     margin-bottom:15px;
+    cursor:pointer;
+}
+
+.card:hover{
+    background:#f0f0f0;
 }
 
 .medals{
@@ -77,22 +82,10 @@ input{
 .silver{border-left:5px solid silver;}
 .bronze{border-left:5px solid #cd7f32;}
 
-/* TABLE */
-table{
-    width:100%;
-    margin-top:10px;
-    border-collapse:collapse;
-}
-td, th{
-    padding:6px;
-    text-align:left;
-}
-th{
-    background:#222;
-    color:white;
-}
-tr:nth-child(even){
-    background:#f2f2f2;
+.detail{
+    background:white;
+    padding:20px;
+    border-radius:10px;
 }
 </style>
 </head>
@@ -115,6 +108,7 @@ tr:nth-child(even){
     <input id="search" placeholder="Search athlete...">
 </div>
 
+<div id="detail"></div>
 <div id="results"></div>
 
 </div>
@@ -123,15 +117,21 @@ tr:nth-child(even){
 
 let athletes = [];
 
+const params = new URLSearchParams(window.location.search);
+const selectedAthlete = params.get("athlete");
+
 async function load(){
     const res = await fetch("data/olympics/olympic_athletes.json");
     athletes = await res.json();
 
-    renderTop();
+    if(selectedAthlete){
+        showDetail(selectedAthlete);
+    }else{
+        renderTop();
+    }
 }
 
 function renderTop(){
-    // show top athletes by medals initially
     const top = [...athletes].sort((a,b)=>b.total - a.total).slice(0,50);
     renderList(top);
 }
@@ -156,8 +156,41 @@ function renderList(list){
             <div>Total: <b>${a.total}</b></div>
         `;
 
+        div.onclick = () => {
+            window.location.href = `olympics-athletes.html?athlete=${encodeURIComponent(a.athlete)}`;
+        };
+
         container.appendChild(div);
     });
+}
+
+function showDetail(name){
+    const athlete = athletes.find(a => a.athlete === name);
+
+    if(!athlete) return;
+
+    document.getElementById("results").style.display = "none";
+
+    const div = document.getElementById("detail");
+
+    div.innerHTML = `
+        <div class="detail">
+            <h2>${athlete.athlete}</h2>
+
+            <div class="medals">
+                <div class="medal gold">Gold<br>${athlete.GOLD || 0}</div>
+                <div class="medal silver">Silver<br>${athlete.SILVER || 0}</div>
+                <div class="medal bronze">Bronze<br>${athlete.BRONZE || 0}</div>
+            </div>
+
+            <h3>Total: ${athlete.total}</h3>
+
+            <br>
+            <button onclick="window.location.href='olympics-athletes.html'">
+                Back
+            </button>
+        </div>
+    `;
 }
 
 document.getElementById("search").addEventListener("input", function(){
