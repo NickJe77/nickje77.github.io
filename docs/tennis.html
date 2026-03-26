@@ -162,13 +162,31 @@
       color:#8a1f1f;
     }
 
+    .feature-links{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      margin:0 0 18px;
+    }
+
+    .feature-links a{
+      display:inline-block;
+      text-decoration:none;
+      background:#fff;
+      color:var(--green);
+      border:1px solid var(--border);
+      border-radius:999px;
+      padding:10px 14px;
+      font-weight:800;
+      box-shadow:var(--shadow);
+    }
+
     .events-grid{
       display:grid;
       grid-template-columns:repeat(3,minmax(0,1fr));
       gap:18px;
     }
 
-    .event-card,
     .event-link{
       display:block;
       background:#fff;
@@ -181,8 +199,7 @@
       transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
     }
 
-    .event-link:hover,
-    .event-card:hover{
+    .event-link:hover{
       transform:translateY(-2px);
       box-shadow:0 14px 34px rgba(0,0,0,.10);
       border-color:#b8ccb8;
@@ -272,6 +289,7 @@
       color:var(--muted);
       font-weight:700;
       box-shadow:var(--shadow);
+      grid-column:1 / -1;
     }
 
     .footer-space{
@@ -390,6 +408,13 @@
       </div>
     </section>
 
+    <div class="feature-links">
+      <a href="./tennis-slam.html?slam=Australian%20Open">Australian Open</a>
+      <a href="./tennis-slam.html?slam=French%20Open">French Open</a>
+      <a href="./tennis-slam.html?slam=Wimbledon">Wimbledon</a>
+      <a href="./tennis-slam.html?slam=US%20Open">US Open</a>
+    </div>
+
     <div class="status" id="status">Loading tennis events...</div>
 
     <section class="events-grid" id="eventsGrid"></section>
@@ -414,10 +439,6 @@
 
     let rawEvents = [];
     let filteredEvents = [];
-
-    function safeArray(value){
-      return Array.isArray(value) ? value : [];
-    }
 
     function text(v){
       if (v === null || v === undefined) return '';
@@ -449,6 +470,15 @@
 
     function makeTitleCase(str){
       return text(str).replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    function slugify(str){
+      return text(str)
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
     }
 
     function toComparableDate(item){
@@ -512,10 +542,6 @@
 
       const year = text(pick(item, ['year','season'])) || String(fallbackYear);
 
-      const url = text(
-        pick(item, ['url','link','event_url','page_url'])
-      );
-
       if (!name && !winner && !runnerUp) return null;
 
       return {
@@ -532,7 +558,7 @@
         date: endDate || startDate,
         date_sort: endDate || startDate,
         year,
-        url
+        slug: slugify(name || 'Unnamed Event')
       };
     }
 
@@ -574,7 +600,12 @@
         opt.textContent = String(y);
         yearSelect.appendChild(opt);
       }
-      yearSelect.value = String(CURRENT_YEAR);
+
+      const params = new URLSearchParams(window.location.search);
+      const urlYear = params.get('year');
+      yearSelect.value = urlYear && Number(urlYear) >= START_YEAR && Number(urlYear) <= CURRENT_YEAR
+        ? urlYear
+        : String(CURRENT_YEAR);
     }
 
     function populateSurfaceFilter(events){
@@ -649,62 +680,56 @@
         return;
       }
 
-      eventsGrid.innerHTML = filteredEvents.map(event => {
-        const wrapperTag = event.url ? 'a' : 'div';
-        const wrapperClass = event.url ? 'event-link' : 'event-card';
-        const hrefAttr = event.url ? `href="${event.url}" target="_blank" rel="noopener"` : '';
+      eventsGrid.innerHTML = filteredEvents.map(event => `
+        <a class="event-link" href="./tennis-event.html?year=${encodeURIComponent(event.year)}&event=${encodeURIComponent(event.name)}">
+          <div class="event-top">
+            <h2 class="event-name">${escapeHtml(event.name)}</h2>
+            <div class="event-meta-line">
+              ${event.surface ? `<span class="pill">${escapeHtml(event.surface)}</span>` : ''}
+              ${event.category ? `<span class="pill">${escapeHtml(makeTitleCase(event.category))}</span>` : ''}
+              ${event.year ? `<span class="pill">${escapeHtml(event.year)}</span>` : ''}
+            </div>
+          </div>
 
-        return `
-          <${wrapperTag} class="${wrapperClass}" ${hrefAttr}>
-            <div class="event-top">
-              <h2 class="event-name">${escapeHtml(event.name)}</h2>
-              <div class="event-meta-line">
-                ${event.surface ? `<span class="pill">${escapeHtml(event.surface)}</span>` : ''}
-                ${event.category ? `<span class="pill">${escapeHtml(makeTitleCase(event.category))}</span>` : ''}
-                ${event.year ? `<span class="pill">${escapeHtml(event.year)}</span>` : ''}
+          <div class="event-body">
+            <p class="winner">
+              <span>Winner:</span>${escapeHtml(event.winner || 'Unknown')}
+            </p>
+
+            <div class="details">
+              <div class="detail">
+                <span class="detail-label">Runner-Up</span>
+                <div class="detail-value">${escapeHtml(event.runnerUp || '-')}</div>
+              </div>
+
+              <div class="detail">
+                <span class="detail-label">Location</span>
+                <div class="detail-value">${escapeHtml(event.location || '-')}</div>
+              </div>
+
+              <div class="detail">
+                <span class="detail-label">Date</span>
+                <div class="detail-value">${escapeHtml(event.end_date || event.start_date || event.date || '-')}</div>
+              </div>
+
+              <div class="detail">
+                <span class="detail-label">Final Score</span>
+                <div class="detail-value">${escapeHtml(event.score || '-')}</div>
+              </div>
+
+              <div class="detail">
+                <span class="detail-label">Draw</span>
+                <div class="detail-value">${escapeHtml(event.draw || '-')}</div>
+              </div>
+
+              <div class="detail">
+                <span class="detail-label">Category</span>
+                <div class="detail-value">${escapeHtml(event.category || '-')}</div>
               </div>
             </div>
-
-            <div class="event-body">
-              <p class="winner">
-                <span>Winner:</span>${escapeHtml(event.winner || 'Unknown')}
-              </p>
-
-              <div class="details">
-                <div class="detail">
-                  <span class="detail-label">Runner-Up</span>
-                  <div class="detail-value">${escapeHtml(event.runnerUp || '-')}</div>
-                </div>
-
-                <div class="detail">
-                  <span class="detail-label">Location</span>
-                  <div class="detail-value">${escapeHtml(event.location || '-')}</div>
-                </div>
-
-                <div class="detail">
-                  <span class="detail-label">Date</span>
-                  <div class="detail-value">${escapeHtml(event.end_date || event.start_date || event.date || '-')}</div>
-                </div>
-
-                <div class="detail">
-                  <span class="detail-label">Final Score</span>
-                  <div class="detail-value">${escapeHtml(event.score || '-')}</div>
-                </div>
-
-                <div class="detail">
-                  <span class="detail-label">Draw</span>
-                  <div class="detail-value">${escapeHtml(event.draw || '-')}</div>
-                </div>
-
-                <div class="detail">
-                  <span class="detail-label">Category</span>
-                  <div class="detail-value">${escapeHtml(event.category || '-')}</div>
-                </div>
-              </div>
-            </div>
-          </${wrapperTag}>
-        `;
-      }).join('');
+          </div>
+        </a>
+      `).join('');
     }
 
     function setStatus(message, isError = false){
@@ -751,7 +776,7 @@
             No data found for ${year}.
           </div>
         `;
-        setStatus(`Could not load /data/tennis/events/${year}.json`, true);
+        setStatus(`Could not load ./data/tennis/events/${year}.json`, true);
       }
     }
 
