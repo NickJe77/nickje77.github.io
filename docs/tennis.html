@@ -2,280 +2,91 @@
 
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Tennis | The Sporting Almanac</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<title>Tennis | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <style>
-    :root{
-      --green:#1b5e20;
-      --green-2:#2e7d32;
-      --green-3:#43a047;
-      --light:#f5f7f5;
-      --card:#ffffff;
-      --border:#d9e2d9;
-      --text:#172117;
-      --muted:#5f6b5f;
-      --shadow:0 10px 30px rgba(0,0,0,.08);
-    }
-
-    *{box-sizing:border-box}
-
-    body{
-      margin:0;
-      font-family:Inter,system-ui,Arial,sans-serif;
-      color:var(--text);
-      background:linear-gradient(180deg,#f7faf7 0%,#eef5ef 100%);
-    }
-
-    .navbar{
-      display:flex;
-      justify-content:center;
-      gap:18px;
-      padding:16px;
-      background:#fff;
-      border-bottom:1px solid #e3e8e3;
-      font-weight:700;
-    }
-
-    .navbar a{
-      color:#1e4ed8;
-      text-decoration:none;
-    }
-
-    .navbar a.active{color:var(--green);}
-
-    .hero{
-      background:linear-gradient(90deg,#1b5e20,#2e7d32,#43a047);
-      color:#fff;
-      padding:40px 20px;
-      text-align:center;
-    }
-
-    .wrap{
-      max-width:1200px;
-      margin:auto;
-      padding:20px;
-    }
-
-    .controls{
-      display:grid;
-      grid-template-columns:repeat(3,1fr);
-      gap:12px;
-      margin-bottom:20px;
-    }
-
-    select,input{
-      padding:10px;
-      border-radius:10px;
-      border:1px solid #ccc;
-    }
-
-    .events-grid{
-      display:grid;
-      grid-template-columns:repeat(3,1fr);
-      gap:16px;
-    }
-
-    .event-link{
-      display:block;
-      background:#fff;
-      border-radius:16px;
-      padding:16px;
-      text-decoration:none;
-      color:inherit;
-      box-shadow:var(--shadow);
-    }
-
-    .event-name{
-      font-size:20px;
-      font-weight:900;
-      margin-bottom:10px;
-    }
-
-    .winner{
-      font-weight:800;
-      margin-bottom:10px;
-    }
-
-    .player-link{
-      color:#1e4ed8;
-      text-decoration:none;
-      font-weight:700;
-    }
-
-    .empty{
-      text-align:center;
-      padding:30px;
-    }
-
-    @media(max-width:900px){
-      .events-grid{grid-template-columns:1fr;}
-      .controls{grid-template-columns:1fr;}
-    }
-  </style>
+<style>
+body{font-family:system-ui,Arial;margin:0;background:#f5f5f5;}
+.navbar{display:flex;justify-content:center;gap:20px;padding:15px;background:#fff;border-bottom:1px solid #ddd;}
+.wrap{max-width:1100px;margin:auto;padding:20px;}
+select,input{padding:10px;border-radius:8px;border:1px solid #ccc;margin:5px;}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;}
+.card{background:#fff;padding:15px;border-radius:12px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.1);}
+.card:hover{transform:translateY(-2px);}
+@media(max-width:900px){.grid{grid-template-columns:1fr;}}
+</style>
 
 </head>
 
 <body>
 
-<nav class="navbar">
-  <a href="index.html">Home</a>
-  <a href="tennis.html" class="active">Tennis</a>
-</nav>
-
-<header class="hero">
-  <h1>Tennis</h1>
-  <p>Full match-level dataset (1968–Present)</p>
-</header>
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="tennis.html">Tennis</a>
+</div>
 
 <div class="wrap">
 
-<div class="controls">
-  <select id="yearSelect"></select>
-  <input id="searchInput" placeholder="Search tournament or player">
-  <select id="surfaceSelect">
-    <option value="all">All Surfaces</option>
-  </select>
-</div>
+<h1>Tennis</h1>
 
-<div id="status">Loading...</div>
+<select id="yearSelect"></select> <input id="searchInput" placeholder="Search tournaments">
 
-<div class="events-grid" id="eventsGrid"></div>
+<div id="grid" class="grid"></div>
 
 </div>
 
 <script>
 
-const CURRENT_YEAR = new Date().getFullYear();
 const yearSelect = document.getElementById("yearSelect");
-const eventsGrid = document.getElementById("eventsGrid");
-const statusBox = document.getElementById("status");
+const grid = document.getElementById("grid");
 
-let rawEvents = [];
-let filteredEvents = [];
-
-// YEARS
-for(let y=CURRENT_YEAR; y>=1968; y--){
-  const opt = document.createElement("option");
-  opt.value = y;
-  opt.textContent = y;
-  yearSelect.appendChild(opt);
+for(let y=new Date().getFullYear(); y>=1968; y--){
+  let o=document.createElement("option");
+  o.value=y; o.textContent=y;
+  yearSelect.appendChild(o);
 }
 
-// SLUG
-function slug(name){
-  return name.toLowerCase().replace(/ /g,"-");
-}
-
-// LOAD DATA (NO DAVIS CUP FILTERING)
 async function loadYear(year){
 
-  statusBox.textContent = "Loading...";
-  eventsGrid.innerHTML = "";
+  const res = await fetch(`data/tennis/matches/${year}.json`);
+  const data = await res.json();
 
-  try{
-    const res = await fetch(`data/tennis/matches/${year}.json`);
-    const data = await res.json();
+  const map = {};
 
-    const map = {};
-
-    data.forEach(m=>{
-      const name = m.tournament || "Unknown";
-
-      if(!map[name]){
-        map[name] = {
-          name,
-          surface:m.surface,
-          winner:"",
-          runnerUp:"",
-          score:"",
-          year
-        };
-      }
-
-      // FINAL ONLY
-      if(m.round === "F"){
-        map[name].winner = m.player1;
-        map[name].runnerUp = m.player2;
-        map[name].score = m.score;
-      }
-    });
-
-    rawEvents = Object.values(map);
-
-    populateSurfaceFilter(rawEvents);
-    applyFilters();
-
-    statusBox.textContent = `Loaded ${rawEvents.length} tournaments`;
-
-  }catch(e){
-    statusBox.textContent = "No data found";
-  }
-}
-
-// SURFACE FILTER
-function populateSurfaceFilter(events){
-  const surfaces = [...new Set(events.map(e=>e.surface).filter(Boolean))];
-  const select = document.getElementById("surfaceSelect");
-
-  select.innerHTML = '<option value="all">All Surfaces</option>';
-
-  surfaces.forEach(s=>{
-    const opt = document.createElement("option");
-    opt.value = s;
-    opt.textContent = s;
-    select.appendChild(opt);
+  data.forEach(m=>{
+    if(!map[m.tournament]){
+      map[m.tournament] = m.surface;
+    }
   });
+
+  render(Object.entries(map), year);
 }
 
-// FILTERS
-function applyFilters(){
+function render(events, year){
 
   const q = document.getElementById("searchInput").value.toLowerCase();
-  const surface = document.getElementById("surfaceSelect").value;
 
-  filteredEvents = rawEvents.filter(e=>{
-    const matchSearch = !q || (e.name + e.winner).toLowerCase().includes(q);
-    const matchSurface = surface==="all" || e.surface===surface;
-    return matchSearch && matchSurface;
-  });
+  const filtered = events.filter(([name]) =>
+    name.toLowerCase().includes(q)
+  );
 
-  render();
-}
-
-// RENDER
-function render(){
-
-  if(!filteredEvents.length){
-    eventsGrid.innerHTML = `<div class="empty">No events found</div>`;
-    return;
-  }
-
-  eventsGrid.innerHTML = filteredEvents.map(e=>`
-    <div class="event-link">
-      <div class="event-name">${e.name}</div>
-
-      <div class="winner">
-        Winner:
-        <a class="player-link" href="tennis-player.html?player=${e.winner}">
-          ${e.winner || "Unknown"}
-        </a>
-      </div>
-
-      <div>${e.surface || ""}</div>
-      <div>${e.score || ""}</div>
+  grid.innerHTML = filtered.map(([name,surface])=>`
+    <div class="card" onclick="openEvent('${name}','${year}')">
+      <h3>${name}</h3>
+      <div>${surface || ""}</div>
     </div>
   `).join("");
 }
 
-// EVENTS
-yearSelect.onchange = ()=>loadYear(yearSelect.value);
-document.getElementById("searchInput").oninput = applyFilters;
-document.getElementById("surfaceSelect").onchange = applyFilters;
+function openEvent(name,year){
+  window.location = `tennis-event.html?year=${year}&event=${encodeURIComponent(name)}`;
+}
 
-// INIT
-loadYear(CURRENT_YEAR);
+yearSelect.onchange = ()=>loadYear(yearSelect.value);
+document.getElementById("searchInput").oninput = ()=>loadYear(yearSelect.value);
+
+loadYear(new Date().getFullYear());
 
 </script>
 
