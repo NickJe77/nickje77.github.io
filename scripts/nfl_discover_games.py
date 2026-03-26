@@ -1,5 +1,5 @@
-import requests, os, sys, json
-from bs4 import BeautifulSoup
+import requests, os, sys, json, re
+from bs4 import BeautifulSoup, Comment
 
 season = sys.argv[1]
 
@@ -11,24 +11,29 @@ print("Fetching schedule:", season)
 res = requests.get(url, headers={"User-Agent":"Mozilla/5.0"})
 soup = BeautifulSoup(res.text, "html.parser")
 
-games = []
+# 🔥 STEP 1: find commented tables
+comments = soup.find_all(string=lambda text: isinstance(text, Comment))
 
-table = soup.find("table", {"id": "games"})
+table = None
+
+for c in comments:
+    if 'id="games"' in c:
+        table = BeautifulSoup(c, "html.parser").find("table", {"id": "games"})
+        break
+
+# fallback (in case it's not commented)
+if not table:
+    table = soup.find("table", {"id": "games"})
 
 if not table:
-    print("No games table found")
+    print("Still no games table found")
     exit()
 
-tbody = table.find("tbody")
+games = []
 
-for row in tbody.find_all("tr"):
+for row in table.find("tbody").find_all("tr"):
 
-    # skip headers
     if row.get("class") and "thead" in row.get("class"):
-        continue
-
-    cols = row.find_all("td")
-    if len(cols) == 0:
         continue
 
     link = row.find("a", href=True)
