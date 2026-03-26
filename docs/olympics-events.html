@@ -19,7 +19,6 @@ body{
     gap:20px;
     padding:15px;
     background:#111;
-    flex-wrap:wrap;
 }
 .navbar a{
     color:#fff;
@@ -33,351 +32,199 @@ body{
     text-align:center;
     padding:32px 12px;
 }
-.hero h1{
-    margin:0 0 8px 0;
-    font-size:30px;
-}
-.hero p{
-    margin:0;
-    font-size:15px;
-}
 
 .container{
     max-width:1100px;
     margin:20px auto;
-    padding:0 12px 30px;
+    padding:0 12px;
 }
 
 .controls{
     display:flex;
     gap:10px;
+    margin-bottom:15px;
     flex-wrap:wrap;
-    margin-bottom:16px;
-}
-.controls select,
-.controls input{
-    padding:10px 12px;
-    font-size:14px;
-    border:1px solid #ccc;
-    border-radius:8px;
-    background:#fff;
 }
 
-.summary{
-    margin-bottom:14px;
-    font-size:14px;
-    color:#444;
+select,input{
+    padding:10px;
+    border-radius:8px;
+    border:1px solid #ccc;
 }
 
 .event-card{
     background:#fff;
     border-radius:12px;
-    padding:16px;
-    margin-bottom:14px;
-    box-shadow:0 2px 8px rgba(0,0,0,.08);
-}
-
-.event-title{
-    margin:0 0 6px 0;
-    font-size:20px;
-}
-
-.event-meta{
-    color:#555;
-    font-size:14px;
+    padding:15px;
     margin-bottom:12px;
 }
 
 .medals{
     display:grid;
     grid-template-columns:repeat(3,1fr);
-    gap:12px;
+    gap:10px;
 }
 
 .medal-box{
-    background:#f7f7f7;
-    border-radius:10px;
-    padding:12px;
-    min-height:90px;
+    background:#f2f2f2;
+    padding:10px;
+    border-radius:8px;
 }
 
-.medal-box h3{
-    margin:0 0 8px 0;
-    font-size:16px;
-}
-
-.gold{
-    border-left:6px solid #d4af37;
-}
-.silver{
-    border-left:6px solid #c0c0c0;
-}
-.bronze{
-    border-left:6px solid #cd7f32;
-}
-
-.medal-box ul{
-    margin:0;
-    padding-left:18px;
-}
-.medal-box li{
-    margin-bottom:4px;
-}
-
-.empty{
-    background:#fff;
-    border-radius:12px;
-    padding:18px;
-    text-align:center;
-    color:#555;
-    box-shadow:0 2px 8px rgba(0,0,0,.08);
-}
-
-.error{
-    background:#fff3f3;
-    color:#a40000;
-    border:1px solid #f0c4c4;
-    border-radius:12px;
-    padding:14px;
-    margin-bottom:14px;
-}
-
-@media (max-width: 800px){
-    .medals{
-        grid-template-columns:1fr;
-    }
-    .hero h1{
-        font-size:26px;
-    }
-}
+.gold{border-left:5px solid gold;}
+.silver{border-left:5px solid silver;}
+.bronze{border-left:5px solid #cd7f32;}
 </style>
 </head>
+
 <body>
 
 <nav class="navbar">
-    <a href="./index.html">Home</a>
-    <a href="./olympics.html">Olympics</a>
-    <a href="./olympics-medals.html">Medal Table</a>
-    <a href="./olympics-events.html">Events</a>
-    <a href="./olympics-athletes.html">Athletes</a>
+    <a href="/">Home</a>
+    <a href="/olympics.html">Olympics</a>
+    <a href="/olympics-medals.html">Medal Table</a>
+    <a href="/olympics-events.html">Events</a>
+    <a href="/olympics-athletes.html">Athletes</a>
 </nav>
 
-<header class="hero">
+<div class="hero">
     <h1>Olympic Events</h1>
     <p>Results by event across Olympic history</p>
-</header>
+</div>
 
 <div class="container">
-    <div class="controls">
-        <select id="yearFilter">
-            <option value="">All Years</option>
-        </select>
 
-        <select id="sportFilter">
-            <option value="">All Sports</option>
-        </select>
+<div class="controls">
+    <select id="yearFilter"><option value="">All Years</option></select>
+    <select id="sportFilter"><option value="">All Sports</option></select>
+    <input id="searchFilter" placeholder="Search event...">
+</div>
 
-        <input id="searchFilter" type="text" placeholder="Search event...">
-    </div>
+<div id="events"></div>
 
-    <div class="summary" id="summary">Loading events...</div>
-
-    <div id="errorBox"></div>
-    <div id="events"></div>
 </div>
 
 <script>
-let rawData = [];
+
 let eventsData = [];
 
-function normaliseMedalValue(value){
-    const v = String(value || "").trim().toUpperCase();
-    if (v === "GOLD MEDAL") return "GOLD";
-    if (v === "SILVER MEDAL") return "SILVER";
-    if (v === "BRONZE MEDAL") return "BRONZE";
-    return v;
-}
+async function loadData(){
 
-function toArray(value){
-    if (Array.isArray(value)) return value.filter(Boolean);
-    if (value === null || value === undefined || value === "") return [];
-    return [String(value)];
-}
+    const res = await fetch("/data/olympics/olympic_results.json");
+    const rows = await res.json();
 
-function normaliseData(data){
-    if (!Array.isArray(data) || data.length === 0) return [];
+    const map = new Map();
 
-    const first = data[0] || {};
+    rows.forEach(r=>{
 
-    const alreadyGrouped =
-        ("gold" in first) || ("silver" in first) || ("bronze" in first);
+        const year = Number(r.year || (r.slug_game||"").slice(0,4));
+        const sport = r.discipline_title || r.discipline;
+        const event = r.event_title || r.event;
+        const athlete = r.athlete_full_name || r.name;
+        let medal = r.medal_type || r.medal;
 
-    if (alreadyGrouped){
-        return data.map(item => ({
-            year: Number(item.year) || "",
-            sport: item.sport || item.discipline || "",
-            event: item.event || item.event_title || "",
-            gold: toArray(item.gold),
-            silver: toArray(item.silver),
-            bronze: toArray(item.bronze)
-        }));
-    }
+        if(!year || !sport || !event || !athlete || !medal) return;
 
-    const groupedMap = new Map();
+        medal = medal.toUpperCase()
+            .replace("GOLD MEDAL","GOLD")
+            .replace("SILVER MEDAL","SILVER")
+            .replace("BRONZE MEDAL","BRONZE");
 
-    data.forEach(row => {
-        const year = Number(row.year) || "";
-        const sport = row.sport || row.discipline || row.discipline_title || "";
-        const event = row.event || row.event_title || "";
-        const athlete = row.athlete || row.name || row.athlete_full_name || "";
-        const medal = normaliseMedalValue(row.medal || row.medal_type || "");
+        if(!["GOLD","SILVER","BRONZE"].includes(medal)) return;
 
-        if (!year || !sport || !event || !athlete || !medal) return;
+        const key = year+"|"+sport+"|"+event;
 
-        const key = `${year}|||${sport}|||${event}`;
-
-        if (!groupedMap.has(key)) {
-            groupedMap.set(key, {
+        if(!map.has(key)){
+            map.set(key,{
                 year,
                 sport,
                 event,
-                gold: [],
-                silver: [],
-                bronze: []
+                gold:[],
+                silver:[],
+                bronze:[]
             });
         }
 
-        const obj = groupedMap.get(key);
+        const obj = map.get(key);
 
-        if (medal === "GOLD") obj.gold.push(athlete);
-        if (medal === "SILVER") obj.silver.push(athlete);
-        if (medal === "BRONZE") obj.bronze.push(athlete);
+        if(medal==="GOLD") obj.gold.push(athlete);
+        if(medal==="SILVER") obj.silver.push(athlete);
+        if(medal==="BRONZE") obj.bronze.push(athlete);
+
     });
 
-    return Array.from(groupedMap.values());
+    eventsData = Array.from(map.values());
+
+    buildFilters();
+    render(eventsData);
 }
 
-function populateFilters(data){
-    const yearSelect = document.getElementById("yearFilter");
-    const sportSelect = document.getElementById("sportFilter");
+function buildFilters(){
 
-    const years = [...new Set(data.map(d => d.year).filter(Boolean))].sort((a,b) => b-a);
-    const sports = [...new Set(data.map(d => d.sport).filter(Boolean))].sort((a,b) => a.localeCompare(b));
+    const years = [...new Set(eventsData.map(e=>e.year))].sort((a,b)=>b-a);
+    const sports = [...new Set(eventsData.map(e=>e.sport))].sort();
 
-    yearSelect.innerHTML = '<option value="">All Years</option>';
-    sportSelect.innerHTML = '<option value="">All Sports</option>';
-
-    years.forEach(year => {
-        const option = document.createElement("option");
-        option.value = year;
-        option.textContent = year;
-        yearSelect.appendChild(option);
+    years.forEach(y=>{
+        yearFilter.innerHTML += `<option value="${y}">${y}</option>`;
     });
 
-    sports.forEach(sport => {
-        const option = document.createElement("option");
-        option.value = sport;
-        option.textContent = sport;
-        sportSelect.appendChild(option);
+    sports.forEach(s=>{
+        sportFilter.innerHTML += `<option value="${s}">${s}</option>`;
     });
 }
 
-function renderList(list){
+function render(list){
+
     const container = document.getElementById("events");
-    const summary = document.getElementById("summary");
-
     container.innerHTML = "";
 
-    summary.textContent = `${list.length.toLocaleString()} event${list.length === 1 ? "" : "s"} found`;
+    list.forEach(e=>{
 
-    if (!list.length){
-        container.innerHTML = `<div class="empty">No events found.</div>`;
-        return;
-    }
+        const div = document.createElement("div");
+        div.className = "event-card";
 
-    list.forEach(item => {
-        const card = document.createElement("div");
-        card.className = "event-card";
-
-        card.innerHTML = `
-            <h2 class="event-title">${item.event}</h2>
-            <div class="event-meta">${item.year} · ${item.sport}</div>
+        div.innerHTML = `
+            <h3>${e.event}</h3>
+            <div>${e.year} • ${e.sport}</div>
 
             <div class="medals">
                 <div class="medal-box gold">
-                    <h3>Gold</h3>
-                    ${item.gold.length ? `<ul>${item.gold.map(name => `<li>${name}</li>`).join("")}</ul>` : `<div>—</div>`}
+                    <b>Gold</b><br>${e.gold.join("<br>")}
                 </div>
-
                 <div class="medal-box silver">
-                    <h3>Silver</h3>
-                    ${item.silver.length ? `<ul>${item.silver.map(name => `<li>${name}</li>`).join("")}</ul>` : `<div>—</div>`}
+                    <b>Silver</b><br>${e.silver.join("<br>")}
                 </div>
-
                 <div class="medal-box bronze">
-                    <h3>Bronze</h3>
-                    ${item.bronze.length ? `<ul>${item.bronze.map(name => `<li>${name}</li>`).join("")}</ul>` : `<div>—</div>`}
+                    <b>Bronze</b><br>${e.bronze.join("<br>")}
                 </div>
             </div>
         `;
 
-        container.appendChild(card);
+        container.appendChild(div);
     });
 }
 
 function applyFilters(){
-    const year = document.getElementById("yearFilter").value;
-    const sport = document.getElementById("sportFilter").value;
-    const search = document.getElementById("searchFilter").value.trim().toLowerCase();
+
+    const y = yearFilter.value;
+    const s = sportFilter.value;
+    const q = searchFilter.value.toLowerCase();
 
     let filtered = [...eventsData];
 
-    if (year) filtered = filtered.filter(item => String(item.year) === String(year));
-    if (sport) filtered = filtered.filter(item => item.sport === sport);
-    if (search) {
-        filtered = filtered.filter(item =>
-            String(item.event).toLowerCase().includes(search) ||
-            String(item.sport).toLowerCase().includes(search)
-        );
-    }
+    if(y) filtered = filtered.filter(e=>e.year==y);
+    if(s) filtered = filtered.filter(e=>e.sport==s);
+    if(q) filtered = filtered.filter(e=>e.event.toLowerCase().includes(q));
 
-    filtered.sort((a,b) => {
-        if (b.year !== a.year) return b.year - a.year;
-        if (a.sport !== b.sport) return String(a.sport).localeCompare(String(b.sport));
-        return String(a.event).localeCompare(String(b.event));
-    });
-
-    renderList(filtered);
+    render(filtered);
 }
 
-async function loadData(){
-    const errorBox = document.getElementById("errorBox");
-    errorBox.innerHTML = "";
-
-    try{
-        const response = await fetch("./data/olympics/olympic_events.json");
-
-        if (!response.ok){
-            throw new Error(`Could not load data file (${response.status})`);
-        }
-
-        rawData = await response.json();
-        eventsData = normaliseData(rawData);
-
-        populateFilters(eventsData);
-        applyFilters();
-    }catch(err){
-        document.getElementById("summary").textContent = "Could not load events.";
-        errorBox.innerHTML = `<div class="error">Events data failed to load. Check that <b>data/olympics/olympic_events.json</b> exists and contains valid JSON.</div>`;
-        console.error(err);
-    }
-}
-
-document.getElementById("yearFilter").addEventListener("change", applyFilters);
-document.getElementById("sportFilter").addEventListener("change", applyFilters);
-document.getElementById("searchFilter").addEventListener("input", applyFilters);
+yearFilter.onchange = applyFilters;
+sportFilter.onchange = applyFilters;
+searchFilter.oninput = applyFilters;
 
 loadData();
+
 </script>
 
 </body>
