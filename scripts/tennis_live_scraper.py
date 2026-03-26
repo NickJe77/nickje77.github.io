@@ -5,9 +5,6 @@ import os
 import time
 from datetime import datetime
 
-# ==============================
-# CONFIG
-# ==============================
 OUTPUT = "docs/data/tennis/matches"
 os.makedirs(OUTPUT, exist_ok=True)
 
@@ -20,12 +17,9 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0"
 }
 
-DELAY = 1.5  # be nice, avoid blocks
+DELAY = 1.5
 
 
-# ==============================
-# HELPERS
-# ==============================
 def load_existing(year):
     path = f"{OUTPUT}/{year}.json"
     if os.path.exists(path):
@@ -40,6 +34,9 @@ def save_year(year, data):
         json.dump(data, f, indent=2)
 
 
+# =========================
+# FIXED TOURNAMENT PARSER
+# =========================
 def get_tournaments(year):
     print(f"Fetching tournaments for {year}")
     url = f"{BASE_URL}?year={year}"
@@ -47,64 +44,69 @@ def get_tournaments(year):
     res = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(res.text, "html.parser")
 
-    tournaments = []
+    tournaments = set()
 
-    for row in soup.select("tr.tourney-result"):
-        link = row.select_one("a")
-        if not link:
-            continue
+    # 🔥 NEW METHOD (WORKS NOW)
+    for a in soup.select("a"):
+        href = a.get("href", "")
 
-        href = link.get("href")
-        if not href:
-            continue
+        if "/scores/archive/" in href:
+            full = "https://www.atptour.com" + href
+            tournaments.add(full)
 
-        full_url = "https://www.atptour.com" + href
-
-        tournaments.append(full_url)
+    tournaments = list(tournaments)
 
     print(f"Found {len(tournaments)} tournaments")
     return tournaments
 
 
+# =========================
+# MATCH PARSER (MORE ROBUST)
+# =========================
 def get_matches(tournament_url):
     res = requests.get(tournament_url, headers=HEADERS)
     soup = BeautifulSoup(res.text, "html.parser")
 
     matches = []
 
-    for match in soup.select(".day-table tr"):
-        players = match.select(".day-table-name")
-        score = match.select_one(".day-table-score")
+    rows = soup.select("tr")
+
+    for row in rows:
+        players = row.select(".day-table-name, .player")
+        score = row.select_one(".day-table-score, .score")
 
         if len(players) < 2 or not score:
             continue
 
-        p1 = players[0].get_text(strip=True)
-        p2 = players[1].get_text(strip=True)
-        sc = score.get_text(strip=True)
+        try:
+            p1 = players[0].get_text(strip=True)
+            p2 = players[1].get_text(strip=True)
+            sc = score.get_text(strip=True)
 
-        matches.append({
-            "player1": p1,
-            "player2": p2,
-            "score": sc,
-            "tournament_url": tournament_url
-        })
+            matches.append({
+                "player1": p1,
+                "player2": p2,
+                "score": sc,
+                "tournament_url": tournament_url
+            })
+
+        except:
+            continue
 
     return matches
 
 
-# ==============================
-# MAIN RUNNER
-# ==============================
+# =========================
+# MAIN
+# =========================
 def run():
     for year in YEARS:
-        print(f"\n====================")
+        print("\n====================")
         print(f"YEAR: {year}")
-        print(f"====================")
+        print("====================")
 
         existing = load_existing(year)
 
-        # Track already scraped tournaments
         done_tournaments = set()
         for m in existing:
             if "tournament_url" in m:
@@ -146,8 +148,5 @@ def run():
         print(f"New matches added: {len(new_matches)}")
 
 
-# ==============================
-# ENTRY
-# ==============================
 if __name__ == "__main__":
     run()
