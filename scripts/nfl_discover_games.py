@@ -1,60 +1,57 @@
-import requests, os, sys, json, re
-from bs4 import BeautifulSoup, Comment
+import requests, os, sys, json
+from bs4 import BeautifulSoup
 
 season = sys.argv[1]
 
 BASE = "https://www.pro-football-reference.com"
-url = f"{BASE}/years/{season}/games.htm"
 
-print("Fetching schedule:", season)
-
-res = requests.get(url, headers={"User-Agent":"Mozilla/5.0"})
-soup = BeautifulSoup(res.text, "html.parser")
-
-# 🔥 STEP 1: find commented tables
-comments = soup.find_all(string=lambda text: isinstance(text, Comment))
-
-table = None
-
-for c in comments:
-    if 'id="games"' in c:
-        table = BeautifulSoup(c, "html.parser").find("table", {"id": "games"})
-        break
-
-# fallback (in case it's not commented)
-if not table:
-    table = soup.find("table", {"id": "games"})
-
-if not table:
-    print("Still no games table found")
-    exit()
+print("Fetching games via boxscore index:", season)
 
 games = []
 
-for row in table.find("tbody").find_all("tr"):
+# 🔥 iterate months (PFR splits schedule by month)
+months = [
+    "september", "october", "november",
+    "december", "january", "february"
+]
 
-    if row.get("class") and "thead" in row.get("class"):
+for m in months:
+
+    url = f"{BASE}/years/{season}/{m}.htm"
+
+    res = requests.get(url, headers={"User-Agent":"Mozilla/5.0"})
+
+    if res.status_code != 200:
         continue
 
-    link = row.find("a", href=True)
-    if not link:
-        continue
+    soup = BeautifulSoup(res.text, "html.parser")
 
-    href = link["href"]
+    for link in soup.find_all("a", href=True):
 
-    if "/boxscores/" not in href:
-        continue
+        href = link["href"]
 
-    game_id = href.split("/")[-1].replace(".htm","")
+        if "/boxscores/" not in href:
+            continue
 
-    games.append({
-        "game_id": game_id,
-        "url": BASE + href
-    })
+        game_id = href.split("/")[-1].replace(".htm","")
+
+        games.append({
+            "game_id": game_id,
+            "url": BASE + href
+        })
 
 print("Games found:", len(games))
+
+# remove duplicates
+seen = set()
+unique_games = []
+
+for g in games:
+    if g["game_id"] not in seen:
+        seen.add(g["game_id"])
+        unique_games.append(g)
 
 os.makedirs("docs/data/nfl/raw", exist_ok=True)
 
 with open(f"docs/data/nfl/raw/{season}_games.json","w") as f:
-    json.dump(games, f)
+    json.dump(unique_games, f)
