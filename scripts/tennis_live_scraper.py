@@ -10,6 +10,9 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
+# -----------------------------
+# GENERIC GET
+# -----------------------------
 def get_soup(url):
     try:
         r = requests.get(url, headers=HEADERS, timeout=20)
@@ -20,51 +23,37 @@ def get_soup(url):
     return None
 
 
-# ---------------------------------
-# ATP CURRENT TOURNAMENTS
-# ---------------------------------
-def get_atp_tournaments():
-    soup = get_soup("https://www.atptour.com/en/scores/current")
-    tournaments = []
+# -----------------------------
+# SOURCE 1 — TENNIS EXPLORER
+# -----------------------------
+def scrape_tennisexplorer(year):
 
-    if not soup:
-        return tournaments
+    print(f"[TE] {year}")
 
-    for a in soup.select("a"):
-        href = a.get("href","")
-        if "/scores/current/" in href and href.endswith("/results"):
-            tournaments.append("https://www.atptour.com" + href)
-
-    return list(set(tournaments))
-
-
-# ---------------------------------
-# PARSE MATCHES
-# ---------------------------------
-def parse_matches(url, gender):
-
+    url = f"https://www.tennisexplorer.com/results/?year={year}"
     soup = get_soup(url)
+
     matches = []
 
     if not soup:
         return matches
 
-    for row in soup.select(".day-table tr"):
-
+    for row in soup.select("tr"):
         cols = row.find_all("td")
-        if len(cols) < 3:
+
+        if len(cols) < 5:
             continue
 
         try:
-            p1 = cols[0].get_text(strip=True)
-            p2 = cols[1].get_text(strip=True)
-            score = cols[2].get_text(strip=True)
+            player1 = cols[2].text.strip()
+            player2 = cols[3].text.strip()
+            score = cols[4].text.strip()
 
             matches.append({
-                "player1": p1,
-                "player2": p2,
+                "player1": player1,
+                "player2": player2,
                 "score": score,
-                "gender": gender
+                "year": year
             })
         except:
             continue
@@ -72,29 +61,79 @@ def parse_matches(url, gender):
     return matches
 
 
-# ---------------------------------
-# UPDATE YEAR
-# ---------------------------------
-def update_year(year):
+# -----------------------------
+# SOURCE 2 — TENNIS ABSTRACT (BACKUP)
+# -----------------------------
+def scrape_tennisabstract(year):
 
-    print(f"\nUpdating {year}")
+    print(f"[TA] {year}")
+
+    base = f"https://r.jina.ai/http://www.tennisabstract.com/cgi-bin/tourneys.cgi?year={year}"
+    soup = get_soup(base)
 
     matches = []
 
-    # ATP
-    for t in get_atp_tournaments():
-        print("ATP:", t)
+    if not soup:
+        return matches
 
-        m = parse_matches(t, "M")
+    for a in soup.find_all("a"):
+        href = a.get("href","")
+        if "tourney.cgi?t=" in href:
 
-        for x in m:
-            x["tournament"] = t.split("/")[-2]
-            x["year"] = year
+            tid = href.split("t=")[-1]
 
-        matches += m
-        time.sleep(1)
+            t_url = f"https://r.jina.ai/http://www.tennisabstract.com/cgi-bin/tourney.cgi?t={tid}"
+            t_soup = get_soup(t_url)
 
-    # TODO: add WTA same way
+            if not t_soup:
+                continue
+
+            for row in t_soup.find_all("tr"):
+                cols = row.find_all("td")
+
+                if len(cols) < 4:
+                    continue
+
+                try:
+                    matches.append({
+                        "round": cols[0].text.strip(),
+                        "player1": cols[1].text.strip(),
+                        "player2": cols[2].text.strip(),
+                        "score": cols[3].text.strip(),
+                        "year": year
+                    })
+                except:
+                    continue
+
+            time.sleep(0.5)
+
+    return matches
+
+
+# -----------------------------
+# MERGE + DEDUPE
+# -----------------------------
+def merge_matches(primary, backup):
+
+    seen = set()
+    out = []
+
+    for m in primary + backup:
+        key = (m.get("player1"), m.get("player2"), m.get("score"))
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+        out.append(m)
+
+    return out
+
+
+# -----------------------------
+# SAVE
+# -----------------------------
+def save_year(year, matches):
 
     path = f"{OUTPUT_DIR}/{year}.json"
 
@@ -103,16 +142,26 @@ def update_year(year):
     else:
         existing = []
 
-    existing += matches
+    combined = merge_matches(existing, matches)
 
-    json.dump(existing, open(path,"w"), indent=2)
+    json.dump(combined, open(path,"w"), indent=2)
 
-    print(f"{year} updated: {len(existing)} matches")
+    print(f"{year} saved ({len(combined)})")
 
 
+# -----------------------------
+# MAIN
+# -----------------------------
 def main():
-    update_year(2025)
-    update_year(2026)
+
+    for year in [2025, 2026]:
+
+        te = scrape_tennisexplorer(year)
+        ta = scrape_tennisabstract(year)
+
+        merged = merge_matches(te, ta)
+
+        save_year(year, merged)
 
 
 if __name__ == "__main__":
