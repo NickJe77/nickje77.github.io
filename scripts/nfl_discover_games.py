@@ -1,57 +1,39 @@
 import requests, os, sys, json
-from bs4 import BeautifulSoup
 
 season = sys.argv[1]
 
-BASE = "https://www.pro-football-reference.com"
+print("Fetching ESPN schedule:", season)
 
-print("Fetching games via boxscore index:", season)
+url = f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&year={season}"
+
+res = requests.get(url)
+data = res.json()
 
 games = []
 
-# 🔥 iterate months (PFR splits schedule by month)
-months = [
-    "september", "october", "november",
-    "december", "january", "february"
-]
+for event in data.get("events", []):
 
-for m in months:
+    game_id = event.get("id")
 
-    url = f"{BASE}/years/{season}/{m}.htm"
+    competitions = event.get("competitions", [])[0]
 
-    res = requests.get(url, headers={"User-Agent":"Mozilla/5.0"})
+    competitors = competitions.get("competitors", [])
 
-    if res.status_code != 200:
-        continue
+    home = [c for c in competitors if c.get("homeAway") == "home"][0]
+    away = [c for c in competitors if c.get("homeAway") == "away"][0]
 
-    soup = BeautifulSoup(res.text, "html.parser")
-
-    for link in soup.find_all("a", href=True):
-
-        href = link["href"]
-
-        if "/boxscores/" not in href:
-            continue
-
-        game_id = href.split("/")[-1].replace(".htm","")
-
-        games.append({
-            "game_id": game_id,
-            "url": BASE + href
-        })
+    games.append({
+        "game_id": game_id,
+        "home_team": home["team"]["displayName"],
+        "away_team": away["team"]["displayName"],
+        "home_score": home.get("score"),
+        "away_score": away.get("score"),
+        "status": competitions.get("status", {}).get("type", {}).get("description")
+    })
 
 print("Games found:", len(games))
-
-# remove duplicates
-seen = set()
-unique_games = []
-
-for g in games:
-    if g["game_id"] not in seen:
-        seen.add(g["game_id"])
-        unique_games.append(g)
 
 os.makedirs("docs/data/nfl/raw", exist_ok=True)
 
 with open(f"docs/data/nfl/raw/{season}_games.json","w") as f:
-    json.dump(unique_games, f)
+    json.dump(games, f)
