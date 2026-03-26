@@ -6,87 +6,40 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{
-    font-family: system-ui, Arial, sans-serif;
-    margin:0;
-    background:#f5f5f5;
-}
+body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f5f5f5;}
+.navbar{display:flex;justify-content:center;gap:20px;padding:15px;background:#111;}
+.navbar a{color:white;text-decoration:none;font-weight:600;}
+.hero{background:linear-gradient(90deg,#0085C7,#F4C300,#000,#009F3D,#DF0024);color:white;text-align:center;padding:30px;}
+.container{max-width:1000px;margin:20px auto;padding:10px;}
 
-/* NAV */
-.navbar{
-    display:flex;
-    justify-content:center;
-    gap:20px;
-    padding:15px;
-    background:#111;
-}
-.navbar a{
-    color:white;
-    text-decoration:none;
-    font-weight:600;
-}
+input{width:100%;padding:10px;font-size:16px;margin-bottom:15px;}
 
-/* HERO */
-.hero{
-    background:linear-gradient(90deg,#0085C7,#F4C300,#000,#009F3D,#DF0024);
-    color:white;
-    text-align:center;
-    padding:30px 10px;
-}
+.card{background:white;padding:15px;border-radius:10px;margin-bottom:12px;cursor:pointer;}
+.card:hover{background:#f0f0f0;}
 
-/* CONTENT */
-.container{
-    max-width:1000px;
-    margin:20px auto;
-    padding:10px;
-}
-
-/* SEARCH */
-.search-box{
-    margin-bottom:15px;
-}
-input{
-    width:100%;
-    padding:10px;
-    font-size:16px;
-}
-
-/* CARD */
-.card{
-    background:white;
-    padding:15px;
-    border-radius:10px;
-    margin-bottom:15px;
-    cursor:pointer;
-}
-
-.card:hover{
-    background:#f0f0f0;
-}
-
-.medals{
-    display:flex;
-    gap:10px;
-    margin-top:10px;
-}
-
-.medal{
-    flex:1;
-    text-align:center;
-    padding:10px;
-    border-radius:6px;
-    background:#f2f2f2;
-}
-
+.medals{display:flex;gap:10px;margin-top:10px;}
+.medal{flex:1;text-align:center;padding:10px;border-radius:6px;background:#f2f2f2;}
 .gold{border-left:5px solid gold;}
 .silver{border-left:5px solid silver;}
 .bronze{border-left:5px solid #cd7f32;}
 
-.detail{
-    background:white;
-    padding:20px;
-    border-radius:10px;
+.gold-list{
+    margin-top:6px;
+    font-size:12px;
+    text-align:left;
 }
+
+.gold-year{
+    font-weight:700;
+    margin-top:6px;
+}
+
+.detail{background:white;padding:20px;border-radius:10px;}
+
+table{width:100%;margin-top:15px;border-collapse:collapse;}
+th,td{padding:8px;text-align:left;}
+th{background:#222;color:white;}
+tr:nth-child(even){background:#f2f2f2;}
 </style>
 </head>
 
@@ -99,30 +52,30 @@ input{
 
 <div class="hero">
     <h1>Olympic Athletes</h1>
-    <p>Career Medal Records</p>
 </div>
 
 <div class="container">
 
-<div class="search-box">
-    <input id="search" placeholder="Search athlete...">
-</div>
+<input id="search" placeholder="Search athlete...">
 
 <div id="detail"></div>
-<div id="results"></div>
+<div id="list"></div>
 
 </div>
 
 <script>
 
+let results = [];
 let athletes = [];
 
 const params = new URLSearchParams(window.location.search);
 const selectedAthlete = params.get("athlete");
 
 async function load(){
-    const res = await fetch("data/olympics/olympic_athletes.json");
-    athletes = await res.json();
+    const res = await fetch("data/olympics/olympic_results.json");
+    results = await res.json();
+
+    buildAthletes();
 
     if(selectedAthlete){
         showDetail(selectedAthlete);
@@ -131,16 +84,85 @@ async function load(){
     }
 }
 
+// BUILD ATHLETES
+function buildAthletes(){
+    const map = {};
+
+    results.forEach(r=>{
+        const name = r.athlete_full_name || r.name;
+        let medal = (r.medal_type || r.medal || "").toUpperCase();
+
+        medal = medal
+            .replace("GOLD MEDAL","GOLD")
+            .replace("SILVER MEDAL","SILVER")
+            .replace("BRONZE MEDAL","BRONZE");
+
+        if(!name || !["GOLD","SILVER","BRONZE"].includes(medal)) return;
+
+        if(!map[name]){
+            map[name] = {athlete:name,GOLD:0,SILVER:0,BRONZE:0,total:0};
+        }
+
+        map[name][medal]++;
+        map[name].total++;
+    });
+
+    athletes = Object.values(map);
+}
+
+// GROUP GOLD MEDALS BY YEAR
+function getGoldGrouped(name){
+    const golds = results.filter(r=>{
+        const n = r.athlete_full_name || r.name;
+        let medal = (r.medal_type || r.medal || "").toUpperCase();
+
+        medal = medal
+            .replace("GOLD MEDAL","GOLD")
+            .replace("SILVER MEDAL","SILVER")
+            .replace("BRONZE MEDAL","BRONZE");
+
+        return n === name && medal === "GOLD";
+    });
+
+    const grouped = {};
+
+    golds.forEach(g=>{
+        const year = g.year || (g.slug_game||"").slice(0,4);
+        const event = g.event_title || g.event;
+
+        if(!grouped[year]) grouped[year] = [];
+        grouped[year].push(event);
+    });
+
+    return grouped;
+}
+
+// RENDER LIST
 function renderTop(){
-    const top = [...athletes].sort((a,b)=>b.total - a.total).slice(0,50);
+    const top = [...athletes].sort((a,b)=>b.total-a.total).slice(0,50);
     renderList(top);
 }
 
 function renderList(list){
-    const container = document.getElementById("results");
+    const container = document.getElementById("list");
     container.innerHTML = "";
 
     list.forEach(a=>{
+
+        const grouped = getGoldGrouped(a.athlete);
+
+        let goldHTML = "";
+
+        Object.keys(grouped)
+            .sort((a,b)=>b-a)
+            .slice(0,3) // limit years shown
+            .forEach(year=>{
+                goldHTML += `<div class="gold-year">${year}</div>`;
+                grouped[year].slice(0,3).forEach(e=>{
+                    goldHTML += `<div>${e}</div>`;
+                });
+            });
+
         const div = document.createElement("div");
         div.className = "card";
 
@@ -148,9 +170,13 @@ function renderList(list){
             <h2>${a.athlete}</h2>
 
             <div class="medals">
-                <div class="medal gold">Gold<br>${a.GOLD || 0}</div>
-                <div class="medal silver">Silver<br>${a.SILVER || 0}</div>
-                <div class="medal bronze">Bronze<br>${a.BRONZE || 0}</div>
+                <div class="medal gold">
+                    Gold<br>${a.GOLD}
+                    <div class="gold-list">${goldHTML}</div>
+                </div>
+
+                <div class="medal silver">Silver<br>${a.SILVER}</div>
+                <div class="medal bronze">Bronze<br>${a.BRONZE}</div>
             </div>
 
             <div>Total: <b>${a.total}</b></div>
@@ -164,35 +190,68 @@ function renderList(list){
     });
 }
 
+// DETAIL VIEW
 function showDetail(name){
-    const athlete = athletes.find(a => a.athlete === name);
 
+    const athlete = athletes.find(a=>a.athlete===name);
     if(!athlete) return;
 
-    document.getElementById("results").style.display = "none";
+    document.getElementById("list").style.display = "none";
 
-    const div = document.getElementById("detail");
+    const games = results.filter(r=>{
+        const n = r.athlete_full_name || r.name;
+        return n === name;
+    });
 
-    div.innerHTML = `
+    const rows = games.map(r=>{
+        let medal = (r.medal_type || r.medal || "").toUpperCase();
+
+        medal = medal
+            .replace("GOLD MEDAL","GOLD")
+            .replace("SILVER MEDAL","SILVER")
+            .replace("BRONZE MEDAL","BRONZE");
+
+        const year = r.year || (r.slug_game||"").slice(0,4);
+
+        return `
+            <tr>
+                <td>${year}</td>
+                <td>${r.discipline_title || r.discipline}</td>
+                <td>${r.event_title || r.event}</td>
+                <td>${medal}</td>
+            </tr>
+        `;
+    }).join("");
+
+    document.getElementById("detail").innerHTML = `
         <div class="detail">
             <h2>${athlete.athlete}</h2>
 
             <div class="medals">
-                <div class="medal gold">Gold<br>${athlete.GOLD || 0}</div>
-                <div class="medal silver">Silver<br>${athlete.SILVER || 0}</div>
-                <div class="medal bronze">Bronze<br>${athlete.BRONZE || 0}</div>
+                <div class="medal gold">Gold<br>${athlete.GOLD}</div>
+                <div class="medal silver">Silver<br>${athlete.SILVER}</div>
+                <div class="medal bronze">Bronze<br>${athlete.BRONZE}</div>
             </div>
 
             <h3>Total: ${athlete.total}</h3>
 
+            <table>
+                <tr>
+                    <th>Year</th>
+                    <th>Sport</th>
+                    <th>Event</th>
+                    <th>Medal</th>
+                </tr>
+                ${rows}
+            </table>
+
             <br>
-            <button onclick="window.location.href='olympics-athletes.html'">
-                Back
-            </button>
+            <button onclick="window.location.href='olympics-athletes.html'">Back</button>
         </div>
     `;
 }
 
+// SEARCH
 document.getElementById("search").addEventListener("input", function(){
     const q = this.value.toLowerCase();
 
