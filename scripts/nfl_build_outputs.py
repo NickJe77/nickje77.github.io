@@ -21,21 +21,36 @@ for file in os.listdir(GAME_DIR):
     if not file.endswith(".json"):
         continue
 
-    game = json.load(open(f"{GAME_DIR}/{file}"))
+    raw = json.load(open(f"{GAME_DIR}/{file}"))
+
+    # 🔥 FIX: handle list OR dict
+    if isinstance(raw, list):
+        if len(raw) == 0:
+            continue
+        game = raw[0]
+    else:
+        game = raw
+
+    # SAFE ACCESS
+    game_id = game.get("game_id")
+    home_team = game.get("home_team")
+    away_team = game.get("away_team")
+    home_score = game.get("home_score")
+    away_score = game.get("away_score")
 
     season_games.append({
-        "game_id": game.get("game_id"),
-        "home_team": game.get("home_team"),
-        "away_team": game.get("away_team"),
-        "home_score": game.get("home_score"),
-        "away_score": game.get("away_score")
+        "game_id": game_id,
+        "home_team": home_team,
+        "away_team": away_team,
+        "home_score": home_score,
+        "away_score": away_score
     })
 
     for p in game.get("players", []):
         name = p.get("name", "Unknown")
 
         players[name].append({
-            "game_id": game.get("game_id"),
+            "game_id": game_id,
             "stats": p.get("stats", {})
         })
 
