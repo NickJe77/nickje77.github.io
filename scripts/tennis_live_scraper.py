@@ -5,13 +5,14 @@ import os
 import time
 
 OUTPUT_DIR = "docs/data/tennis/matches"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-BASE = "https://r.jina.ai/http://www.tennisabstract.com/cgi-bin/tourneys.cgi?year="
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
 def get_soup(url):
     try:
-        r = requests.get(url, timeout=20)
+        r = requests.get(url, headers=HEADERS, timeout=20)
         if r.status_code == 200:
             return BeautifulSoup(r.text, "html.parser")
     except:
@@ -19,43 +20,51 @@ def get_soup(url):
     return None
 
 
-def get_tournaments(year):
-    soup = get_soup(BASE + str(year))
+# ---------------------------------
+# ATP CURRENT TOURNAMENTS
+# ---------------------------------
+def get_atp_tournaments():
+    soup = get_soup("https://www.atptour.com/en/scores/current")
     tournaments = []
 
     if not soup:
         return tournaments
 
-    for a in soup.find_all("a"):
+    for a in soup.select("a"):
         href = a.get("href","")
-        if "tourney.cgi?t=" in href:
-            tid = href.split("t=")[-1]
-            name = a.text.strip()
-            tournaments.append((tid,name))
+        if "/scores/current/" in href and href.endswith("/results"):
+            tournaments.append("https://www.atptour.com" + href)
 
-    return tournaments
+    return list(set(tournaments))
 
 
-def get_matches(tid):
-    url = f"https://r.jina.ai/http://www.tennisabstract.com/cgi-bin/tourney.cgi?t={tid}"
+# ---------------------------------
+# PARSE MATCHES
+# ---------------------------------
+def parse_matches(url, gender):
+
     soup = get_soup(url)
-
     matches = []
 
     if not soup:
         return matches
 
-    for row in soup.find_all("tr"):
+    for row in soup.select(".day-table tr"):
+
         cols = row.find_all("td")
-        if len(cols) < 4:
+        if len(cols) < 3:
             continue
 
         try:
+            p1 = cols[0].get_text(strip=True)
+            p2 = cols[1].get_text(strip=True)
+            score = cols[2].get_text(strip=True)
+
             matches.append({
-                "round": cols[0].text.strip(),
-                "player1": cols[1].text.strip(),
-                "player2": cols[2].text.strip(),
-                "score": cols[3].text.strip()
+                "player1": p1,
+                "player2": p2,
+                "score": score,
+                "gender": gender
             })
         except:
             continue
@@ -63,29 +72,29 @@ def get_matches(tid):
     return matches
 
 
+# ---------------------------------
+# UPDATE YEAR
+# ---------------------------------
 def update_year(year):
 
-    print(f"\nYEAR {year}")
+    print(f"\nUpdating {year}")
 
-    tournaments = get_tournaments(year)
-    print(f"Found {len(tournaments)} tournaments")
+    matches = []
 
-    all_matches = []
+    # ATP
+    for t in get_atp_tournaments():
+        print("ATP:", t)
 
-    for tid,name in tournaments:
+        m = parse_matches(t, "M")
 
-        print(" ",name)
+        for x in m:
+            x["tournament"] = t.split("/")[-2]
+            x["year"] = year
 
-        matches = get_matches(tid)
-
-        for m in matches:
-            m["tournament"] = name
-            m["year"] = year
-            m["gender"] = "M"  # default (can expand later)
-
-        all_matches += matches
-
+        matches += m
         time.sleep(1)
+
+    # TODO: add WTA same way
 
     path = f"{OUTPUT_DIR}/{year}.json"
 
@@ -94,16 +103,16 @@ def update_year(year):
     else:
         existing = []
 
-    existing += all_matches
+    existing += matches
 
     json.dump(existing, open(path,"w"), indent=2)
 
-    print(f"{year} updated ({len(existing)})")
+    print(f"{year} updated: {len(existing)} matches")
 
 
 def main():
-    for year in [2025, 2026]:
-        update_year(year)
+    update_year(2025)
+    update_year(2026)
 
 
 if __name__ == "__main__":
