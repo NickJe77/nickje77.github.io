@@ -1,7 +1,9 @@
-name: Tennis Dataset Builder
+name: Tennis Full Updater
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"   # every Monday
 
 jobs:
   build:
@@ -20,24 +22,28 @@ jobs:
         run: |
           pip install requests
 
-      # 🔥 BUILD MATCH DATA
+      # STEP 1 — HISTORICAL (SAFE TO RUN AGAIN)
       - name: Build dataset
         run: |
           python scripts/tennis_dataset_builder.py
 
-      # 🔥 BUILD PLAYERS (LIKE NBA)
+      # STEP 2 — LIVE UPDATE
+      - name: Live updater
+        run: |
+          python scripts/tennis_live_updater.py
+
+      # STEP 3 — BUILD PLAYERS
       - name: Build players
         run: |
           python scripts/build_tennis_players.py
 
-      # 🔥 COMMIT EVERYTHING
-      - name: Commit & push
+      # STEP 4 — COMMIT
+      - name: Commit
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
           git add docs/data/tennis
-
-          git commit -m "Update tennis dataset + players" || echo "No changes"
+          git commit -m "Update tennis data (live + historical)" || echo "No changes"
 
           git push
