@@ -4,10 +4,12 @@ import time
 import requests
 from bs4 import BeautifulSoup
 
-BASE_DIR = "docs/data/tennis/events"
+INPUT_DIR = "docs/data/tennis/events"
 OUTPUT_DIR = "docs/data/tennis/matches"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+BASE_URL = "https://www.tennisabstract.com/cgi-bin/tourney.cgi?t="
 
 session = requests.Session()
 session.headers.update({
@@ -16,101 +18,99 @@ session.headers.update({
 
 
 # -----------------------------------
-# SEARCH TOURNAMENT (Tennis Abstract)
+# FETCH TOURNAMENT
 # -----------------------------------
-def get_tournament_url(name, year):
-    query = f"{name} {year} tennis abstract"
-    url = f"https://www.google.com/search?q={query.replace(' ', '+')}"
+def fetch_tournament(tournament_id):
+    url = BASE_URL + tournament_id
 
-    try:
-        r = session.get(url)
-        soup = BeautifulSoup(r.text, "html.parser")
-
-        for a in soup.select("a"):
-            href = a.get("href", "")
-            if "tennisabstract.com" in href:
-                return href.split("/url?q=")[-1].split("&")[0]
-    except:
-        return None
-
-    return None
-
-
-# -----------------------------------
-# PARSE TOURNAMENT PAGE
-# -----------------------------------
-def parse_tournament(url):
-    soup = None
     try:
         r = session.get(url, timeout=20)
         if r.status_code != 200:
-            return []
-        soup = BeautifulSoup(r.text, "html.parser")
+            print(f"FAIL {url}")
+            return None
+        return BeautifulSoup(r.text, "html.parser")
     except:
-        return []
+        return None
 
+
+# -----------------------------------
+# PARSE MATCHES
+# -----------------------------------
+def parse_matches(soup):
     matches = []
 
-    try:
-        rows = soup.select("table tr")
+    rows = soup.select("table tr")
 
-        for row in rows:
-            cols = row.find_all("td")
-            if len(cols) < 4:
-                continue
+    for row in rows:
+        cols = row.find_all("td")
 
+        if len(cols) < 4:
+            continue
+
+        try:
+            round_name = cols[0].get_text(strip=True)
             p1 = cols[1].get_text(strip=True)
             p2 = cols[2].get_text(strip=True)
             score = cols[3].get_text(strip=True)
 
+            if not p1 or not p2:
+                continue
+
             matches.append({
+                "round": round_name,
                 "player1": p1,
                 "player2": p2,
                 "score": score,
-                "winner": p1  # basic assumption
+                "winner": p1  # winner always first on this site
             })
-    except:
-        pass
+
+        except:
+            continue
 
     return matches
 
 
 # -----------------------------------
-# PROCESS YEAR FILE
+# PROCESS YEAR
 # -----------------------------------
 def process_year(file):
     year = file.replace(".json", "")
     print(f"\nYEAR {year}")
 
-    tournaments = json.load(open(os.path.join(BASE_DIR, file)))
-
-    year_data = []
+    tournaments = json.load(open(os.path.join(INPUT_DIR, file)))
+    year_output = []
 
     for t in tournaments:
+        tid = t.get("tournament_id")
         name = t.get("name")
-        print(f"  Tournament: {name}")
 
-        url = get_tournament_url(name, year)
-
-        if not url:
-            print("   ❌ no url")
+        if not tid:
             continue
 
-        matches = parse_tournament(url)
+        print(f"  {name} ({tid})")
+
+        soup = fetch_tournament(tid)
+        if not soup:
+            continue
+
+        matches = parse_matches(soup)
 
         if not matches:
-            print("   ❌ no matches")
+            print("   ⚠ no matches found")
             continue
 
-        year_data.append({
-            "tournament": name,
+        year_output.append({
+            "tournament_id": tid,
+            "name": name,
+            "surface": t.get("surface"),
+            "date": t.get("date"),
             "matches": matches
         })
 
-        time.sleep(2)
+        time.sleep(1)
 
     json.dump(
-        year_data,
+        year_output,
         open(os.path.join(OUTPUT_DIR, f"{year}.json"), "w"),
         indent=2
     )
@@ -120,7 +120,7 @@ def process_year(file):
 # MAIN
 # -----------------------------------
 def main():
-    for file in sorted(os.listdir(BASE_DIR)):
+    for file in sorted(os.listdir(INPUT_DIR)):
         if not file.endswith(".json"):
             continue
 
