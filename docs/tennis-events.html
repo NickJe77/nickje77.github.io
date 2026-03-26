@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tennis Event | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  margin:0;
+  font-family:system-ui,Arial,sans-serif;
+  background:#f5f7f5;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:20px;
+  padding:16px;
+  background:#fff;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+
+.navbar a{
+  text-decoration:none;
+  color:#0056d6;
+}
+
+.hero{
+  background:linear-gradient(90deg,#1b5e20,#2e7d32);
+  color:#fff;
+  padding:40px 20px;
+  text-align:center;
+}
+
+.hero h1{
+  margin:0;
+  font-size:36px;
+}
+
+.container{
+  max-width:1000px;
+  margin:30px auto;
+  padding:0 16px;
+}
+
+.card{
+  background:#fff;
+  border-radius:12px;
+  padding:20px;
+  margin-bottom:20px;
+  box-shadow:0 4px 14px rgba(0,0,0,.08);
+}
+
+.label{
+  font-size:12px;
+  text-transform:uppercase;
+  color:#777;
+  margin-bottom:4px;
+}
+
+.value{
+  font-size:18px;
+  font-weight:700;
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:16px;
+}
+
+.back{
+  margin-bottom:20px;
+  display:inline-block;
+  text-decoration:none;
+  font-weight:700;
+  color:#1b5e20;
+}
+</style>
+</head>
+
+<body>
+
+<nav class="navbar">
+  <a href="./index.html">Home</a>
+  <a href="./tennis.html">Tennis</a>
+</nav>
+
+<header class="hero">
+  <h1 id="eventName">Loading...</h1>
+</header>
+
+<div class="container">
+
+  <a id="backLink" class="back">← Back to Tennis</a>
+
+  <div class="card">
+    <div class="grid">
+
+      <div>
+        <div class="label">Winner</div>
+        <div class="value" id="winner"></div>
+      </div>
+
+      <div>
+        <div class="label">Runner-Up</div>
+        <div class="value" id="runnerUp"></div>
+      </div>
+
+      <div>
+        <div class="label">Surface</div>
+        <div class="value" id="surface"></div>
+      </div>
+
+      <div>
+        <div class="label">Location</div>
+        <div class="value" id="location"></div>
+      </div>
+
+      <div>
+        <div class="label">Date</div>
+        <div class="value" id="date"></div>
+      </div>
+
+      <div>
+        <div class="label">Score</div>
+        <div class="value" id="score"></div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+
+function getParam(name){
+  return new URLSearchParams(window.location.search).get(name);
+}
+
+const year = getParam('year');
+const eventNameParam = decodeURIComponent(getParam('event') || '');
+
+document.getElementById('backLink').href = `./tennis.html?year=${year}`;
+
+function text(v){
+  if(!v) return '';
+  return String(v).trim();
+}
+
+function pick(obj, keys){
+  for(const k of keys){
+    if(obj[k]) return obj[k];
+  }
+  return '';
+}
+
+function normaliseEvent(item){
+
+  return {
+    name: text(pick(item,['event','name','tournament','event_name'])),
+    winner: text(pick(item,['winner','champion'])),
+    runnerUp: text(pick(item,['runner_up','finalist'])),
+    surface: text(pick(item,['surface'])),
+    location: text(pick(item,['location','venue'])),
+    date: text(pick(item,['date','end_date'])),
+    score: text(pick(item,['score','result']))
+  };
+
+}
+
+async function loadEvent(){
+
+  try{
+
+    const res = await fetch(`./data/tennis/events/${year}.json`);
+    const data = await res.json();
+
+    let events = [];
+
+    if(Array.isArray(data)){
+      events = data;
+    } else if(data.events){
+      events = data.events;
+    }
+
+    const normalised = events.map(e => normaliseEvent(e));
+
+    const match = normalised.find(e =>
+      e.name.toLowerCase() === eventNameParam.toLowerCase()
+    );
+
+    if(!match){
+      document.getElementById('eventName').textContent = "Event Not Found";
+      return;
+    }
+
+    document.getElementById('eventName').textContent = match.name;
+    document.getElementById('winner').textContent = match.winner || '-';
+    document.getElementById('runnerUp').textContent = match.runnerUp || '-';
+    document.getElementById('surface').textContent = match.surface || '-';
+    document.getElementById('location').textContent = match.location || '-';
+    document.getElementById('date').textContent = match.date || '-';
+    document.getElementById('score').textContent = match.score || '-';
+
+  } catch(err){
+    document.getElementById('eventName').textContent = "Error Loading Event";
+  }
+
+}
+
+loadEvent();
+
+</script>
+
+</body>
+</html>
