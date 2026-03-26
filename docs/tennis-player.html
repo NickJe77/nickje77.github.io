@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tennis Player | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family: system-ui, Arial, sans-serif;
+  margin:0;
+  background:#f5f5f5;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  background:white;
+  font-weight:600;
+}
+
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+}
+
+.container{
+  max-width:1100px;
+  margin:auto;
+  padding:20px;
+}
+
+h1{text-align:center;}
+
+.controls{
+  text-align:center;
+  margin:20px 0;
+}
+
+select{
+  padding:8px;
+  margin:0 5px;
+}
+
+.summary{
+  display:flex;
+  justify-content:center;
+  gap:30px;
+  margin:20px 0;
+  flex-wrap:wrap;
+}
+
+.card{
+  background:white;
+  padding:15px;
+  border-radius:10px;
+  text-align:center;
+  min-width:120px;
+  box-shadow:0 2px 6px rgba(0,0,0,0.1);
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  background:white;
+  margin-top:20px;
+}
+
+th, td{
+  padding:10px;
+  border-bottom:1px solid #eee;
+  text-align:center;
+}
+
+th{
+  background:#fafafa;
+}
+
+tr:hover{
+  background:#f0f8ff;
+}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="tennis.html">Tennis</a>
+</div>
+
+<div class="container">
+
+<h1 id="playerName">Player</h1>
+
+<div class="controls">
+  <select id="surfaceFilter">
+    <option value="">All Surfaces</option>
+    <option>Hard</option>
+    <option>Clay</option>
+    <option>Grass</option>
+  </select>
+
+  <select id="yearFilter">
+    <option value="">All Years</option>
+  </select>
+</div>
+
+<div class="summary">
+  <div class="card">
+    <h3>Matches</h3>
+    <div id="matches">0</div>
+  </div>
+  <div class="card">
+    <h3>Wins</h3>
+    <div id="wins">0</div>
+  </div>
+  <div class="card">
+    <h3>Losses</h3>
+    <div id="losses">0</div>
+  </div>
+  <div class="card">
+    <h3>Win %</h3>
+    <div id="winpct">0%</div>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Tournament</th>
+      <th>Surface</th>
+      <th>Round</th>
+      <th>Opponent</th>
+      <th>Result</th>
+      <th>Score</th>
+    </tr>
+  </thead>
+  <tbody id="tableBody"></tbody>
+</table>
+
+</div>
+
+<script>
+
+function getParam(name){
+  const url = new URL(window.location.href);
+  return url.searchParams.get(name);
+}
+
+function slug(name){
+  return name.toLowerCase().replace(/ /g,"-");
+}
+
+const playerName = getParam("player");
+
+document.getElementById("playerName").textContent = playerName;
+
+fetch(`data/tennis/players/${slug(playerName)}.json`)
+.then(r=>r.json())
+.then(data=>{
+
+  const matches = data.matches;
+
+  // populate year filter
+  const years = [...new Set(matches.map(m => m.date?.slice(0,4)))].filter(Boolean);
+
+  const yearSelect = document.getElementById("yearFilter");
+  years.sort().forEach(y=>{
+    const opt = document.createElement("option");
+    opt.textContent = y;
+    yearSelect.appendChild(opt);
+  });
+
+  function render(){
+
+    const surface = document.getElementById("surfaceFilter").value;
+    const year = document.getElementById("yearFilter").value;
+
+    let filtered = matches;
+
+    if(surface){
+      filtered = filtered.filter(m=>m.surface===surface);
+    }
+
+    if(year){
+      filtered = filtered.filter(m=>m.date?.startsWith(year));
+    }
+
+    let wins = 0;
+    let losses = 0;
+
+    const tbody = document.getElementById("tableBody");
+    tbody.innerHTML = "";
+
+    filtered.forEach(m=>{
+
+      const isWin = m.player1 === playerName;
+
+      if(isWin) wins++; else losses++;
+
+      const opponent = isWin ? m.player2 : m.player1;
+
+      const tr = document.createElement("tr");
+
+      tr.innerHTML = `
+        <td>${m.date || ""}</td>
+        <td>${m.tournament}</td>
+        <td>${m.surface}</td>
+        <td>${m.round}</td>
+        <td>${opponent}</td>
+        <td>${isWin ? "W" : "L"}</td>
+        <td>${m.score}</td>
+      `;
+
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById("matches").textContent = filtered.length;
+    document.getElementById("wins").textContent = wins;
+    document.getElementById("losses").textContent = losses;
+
+    const pct = filtered.length ? ((wins/filtered.length)*100).toFixed(1) : 0;
+    document.getElementById("winpct").textContent = pct + "%";
+  }
+
+  render();
+
+  document.getElementById("surfaceFilter").onchange = render;
+  document.getElementById("yearFilter").onchange = render;
+
+});
+
+</script>
+
+</body>
+</html>
