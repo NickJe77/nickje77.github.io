@@ -6,72 +6,41 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{
-  font-family:Inter,system-ui,Arial;
-  margin:0;
-  background:#f3f4f7;
-}
+
+body{font-family:Inter,system-ui,Arial;margin:0;background:#f3f4f7;}
 
 .navbar{
-  display:flex;
-  justify-content:center;
-  gap:24px;
-  padding:16px;
-  background:white;
-  border-bottom:1px solid #ddd;
+  display:flex;justify-content:center;gap:24px;
+  padding:16px;background:white;border-bottom:1px solid #ddd;
 }
-
-.navbar a{
-  text-decoration:none;
-  color:#013369;
-  font-weight:600;
-}
+.navbar a{color:#013369;text-decoration:none;font-weight:600;}
 
 .hero{
   background:linear-gradient(90deg,#013369,#d50a0a);
-  color:white;
-  padding:40px;
-  text-align:center;
+  color:white;padding:40px;text-align:center;
 }
-
-.hero-score{
-  font-size:34px;
-  font-weight:700;
-}
-
-.hero-round{
-  margin-top:8px;
-  font-size:18px;
-  opacity:.95;
-}
+.hero-score{font-size:34px;font-weight:700;}
 
 .container{
-  max-width:900px;
-  margin:30px auto;
-  background:white;
-  padding:20px;
-  border-radius:12px;
+  max-width:1000px;margin:30px auto;
+  background:white;padding:20px;border-radius:12px;
 }
 
-table{
-  width:100%;
-  border-collapse:collapse;
-}
+h2{margin-top:30px;}
 
-th, td{
-  padding:12px;
-  border-bottom:1px solid #eee;
-  text-align:center;
-}
+table{width:100%;border-collapse:collapse;}
+th,td{padding:10px;border-bottom:1px solid #eee;text-align:center;}
+th{background:#f8fafc;}
+.team{text-align:left;font-weight:600;}
 
-th{
-  background:#f8fafc;
-}
-
-.team{
-  text-align:left;
+.player-link{
+  color:#013369;
+  text-decoration:none;
   font-weight:600;
 }
+
+.player-link:hover{ text-decoration:underline; }
+
 </style>
 </head>
 
@@ -84,22 +53,36 @@ th{
 
 <div class="hero">
 <div id="heroScore" class="hero-score">Loading...</div>
-<div id="heroRound" class="hero-round"></div>
+<div id="heroRound"></div>
 </div>
 
 <div class="container">
 
 <h2>Score</h2>
+<table>
+<thead>
+<tr><th class="team">Team</th><th>Final</th></tr>
+</thead>
+<tbody id="scoreTable"></tbody>
+</table>
+
+<h2>Box Score</h2>
 
 <table>
 <thead>
 <tr>
-<th class="team">Team</th>
-<th>Final</th>
+<th class="team">Player</th>
+<th>Team</th>
+<th>Pass Yds</th>
+<th>Pass TD</th>
+<th>INT</th>
+<th>Rush Yds</th>
+<th>Rush TD</th>
+<th>Rec Yds</th>
+<th>Rec TD</th>
 </tr>
 </thead>
-
-<tbody id="scoreTable"></tbody>
+<tbody id="boxTable"></tbody>
 </table>
 
 </div>
@@ -111,35 +94,74 @@ const params=new URLSearchParams(location.search);
 const season=params.get("season");
 const gameID=params.get("id");
 
+function slugify(name){
+  return name.toLowerCase().replace(/[^a-z0-9]+/g,"-");
+}
+
 async function loadGame(){
 
+// load game
 const res=await fetch(`data/nfl/seasons/${season}.json`);
 const data=await res.json();
 
 const game=data.games.find(g=>String(g.game_id)===String(gameID));
-
 if(!game) return;
 
 // hero
-
 document.getElementById("heroScore").innerHTML=
 `${game.home_team} ${game.home_score} — ${game.away_score} ${game.away_team}`;
 
 document.getElementById("heroRound").innerHTML=game.game_type;
 
-// table
-
+// score table
 document.getElementById("scoreTable").innerHTML=`
-<tr>
-<td class="team">${game.home_team}</td>
-<td><b>${game.home_score}</b></td>
-</tr>
-
-<tr>
-<td class="team">${game.away_team}</td>
-<td><b>${game.away_score}</b></td>
-</tr>
+<tr><td class="team">${game.home_team}</td><td><b>${game.home_score}</b></td></tr>
+<tr><td class="team">${game.away_team}</td><td><b>${game.away_score}</b></td></tr>
 `;
+
+// load players index
+const indexRes=await fetch("data/nfl/players/index.json");
+const players=await indexRes.json();
+
+let boxHTML="";
+
+// loop players (limit for performance)
+for(let i=0;i<players.length;i++){
+
+  const name=players[i];
+  const slug=slugify(name);
+
+  try{
+
+    const res=await fetch(`data/nfl/players/${slug}.json`);
+    const p=await res.json();
+
+    const gameStats=p.games.find(g=>String(g.date)===String(game.date));
+    if(!gameStats) continue;
+
+    boxHTML+=`
+    <tr>
+      <td class="team">
+        <a class="player-link" href="nfl-player.html?player=${slug}">
+          ${p.name}
+        </a>
+      </td>
+      <td>${gameStats.team}</td>
+      <td>${gameStats.passing.yards}</td>
+      <td>${gameStats.passing.td}</td>
+      <td>${gameStats.passing.int}</td>
+      <td>${gameStats.rushing.yards}</td>
+      <td>${gameStats.rushing.td}</td>
+      <td>${gameStats.receiving.yards}</td>
+      <td>${gameStats.receiving.td}</td>
+    </tr>
+    `;
+
+  }catch(e){}
+
+}
+
+document.getElementById("boxTable").innerHTML=boxHTML;
 
 }
 
