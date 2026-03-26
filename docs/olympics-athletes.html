@@ -23,16 +23,8 @@ input{width:100%;padding:10px;font-size:16px;margin-bottom:15px;}
 .silver{border-left:5px solid silver;}
 .bronze{border-left:5px solid #cd7f32;}
 
-.gold-list{
-    margin-top:6px;
-    font-size:12px;
-    text-align:left;
-}
-
-.gold-year{
-    font-weight:700;
-    margin-top:6px;
-}
+.gold-list{margin-top:6px;font-size:12px;text-align:left;}
+.gold-year{font-weight:700;margin-top:6px;}
 
 .detail{background:white;padding:20px;border-radius:10px;}
 
@@ -46,12 +38,12 @@ tr:nth-child(even){background:#f2f2f2;}
 <body>
 
 <div class="navbar">
-    <a href="/">Home</a>
-    <a href="/olympics.html">Olympics</a>
+<a href="/">Home</a>
+<a href="/olympics.html">Olympics</a>
 </div>
 
 <div class="hero">
-    <h1>Olympic Athletes</h1>
+<h1>Olympic Athletes</h1>
 </div>
 
 <div class="container">
@@ -65,201 +57,203 @@ tr:nth-child(even){background:#f2f2f2;}
 
 <script>
 
-let results = [];
 let athletes = [];
+let results = [];
 
 const params = new URLSearchParams(window.location.search);
 const selectedAthlete = params.get("athlete");
 
 async function load(){
-    const res = await fetch("data/olympics/olympic_results.json");
-    results = await res.json();
 
-    buildAthletes();
+// ✅ LOAD FAST LIST (THIS FIXES YOUR ISSUE)
+const aRes = await fetch("data/olympics/olympic_athletes.json");
+athletes = await aRes.json();
 
-    if(selectedAthlete){
-        showDetail(selectedAthlete);
-    }else{
-        renderTop();
-    }
+// ✅ LOAD FULL DATA (FOR DETAILS)
+try{
+const rRes = await fetch("data/olympics/olympic_results.json");
+results = await rRes.json();
+}catch{
+results = [];
 }
 
-// BUILD ATHLETES
-function buildAthletes(){
-    const map = {};
-
-    results.forEach(r=>{
-        const name = r.athlete_full_name || r.name;
-        let medal = (r.medal_type || r.medal || "").toUpperCase();
-
-        medal = medal
-            .replace("GOLD MEDAL","GOLD")
-            .replace("SILVER MEDAL","SILVER")
-            .replace("BRONZE MEDAL","BRONZE");
-
-        if(!name || !["GOLD","SILVER","BRONZE"].includes(medal)) return;
-
-        if(!map[name]){
-            map[name] = {athlete:name,GOLD:0,SILVER:0,BRONZE:0,total:0};
-        }
-
-        map[name][medal]++;
-        map[name].total++;
-    });
-
-    athletes = Object.values(map);
+if(selectedAthlete){
+showDetail(selectedAthlete);
+}else{
+renderTop();
 }
 
-// GROUP GOLD MEDALS BY YEAR
-function getGoldGrouped(name){
-    const golds = results.filter(r=>{
-        const n = r.athlete_full_name || r.name;
-        let medal = (r.medal_type || r.medal || "").toUpperCase();
-
-        medal = medal
-            .replace("GOLD MEDAL","GOLD")
-            .replace("SILVER MEDAL","SILVER")
-            .replace("BRONZE MEDAL","BRONZE");
-
-        return n === name && medal === "GOLD";
-    });
-
-    const grouped = {};
-
-    golds.forEach(g=>{
-        const year = g.year || (g.slug_game||"").slice(0,4);
-        const event = g.event_title || g.event;
-
-        if(!grouped[year]) grouped[year] = [];
-        grouped[year].push(event);
-    });
-
-    return grouped;
 }
 
-// RENDER LIST
+// =======================
+// LIST VIEW
+// =======================
 function renderTop(){
-    const top = [...athletes].sort((a,b)=>b.total-a.total).slice(0,50);
-    renderList(top);
+const top = [...athletes].sort((a,b)=>b.total-a.total).slice(0,50);
+renderList(top);
 }
 
 function renderList(list){
-    const container = document.getElementById("list");
-    container.innerHTML = "";
 
-    list.forEach(a=>{
+const container = document.getElementById("list");
+container.innerHTML = "";
 
-        const grouped = getGoldGrouped(a.athlete);
+list.forEach(a=>{
 
-        let goldHTML = "";
+// 🔥 GOLD GROUPING (only if results exist)
+let goldHTML = "";
 
-        Object.keys(grouped)
-            .sort((a,b)=>b-a)
-            .slice(0,3) // limit years shown
-            .forEach(year=>{
-                goldHTML += `<div class="gold-year">${year}</div>`;
-                grouped[year].slice(0,3).forEach(e=>{
-                    goldHTML += `<div>${e}</div>`;
-                });
-            });
+if(results.length){
 
-        const div = document.createElement("div");
-        div.className = "card";
+const golds = results.filter(r=>{
+const n = r.athlete_full_name || r.name;
+let medal = (r.medal_type || r.medal || "").toUpperCase();
 
-        div.innerHTML = `
-            <h2>${a.athlete}</h2>
+medal = medal
+.replace("GOLD MEDAL","GOLD")
+.replace("SILVER MEDAL","SILVER")
+.replace("BRONZE MEDAL","BRONZE");
 
-            <div class="medals">
-                <div class="medal gold">
-                    Gold<br>${a.GOLD}
-                    <div class="gold-list">${goldHTML}</div>
-                </div>
+return n === a.athlete && medal === "GOLD";
+});
 
-                <div class="medal silver">Silver<br>${a.SILVER}</div>
-                <div class="medal bronze">Bronze<br>${a.BRONZE}</div>
-            </div>
+const grouped = {};
 
-            <div>Total: <b>${a.total}</b></div>
-        `;
+golds.forEach(g=>{
+const year = g.year || (g.slug_game||"").slice(0,4);
+const event = g.event_title || g.event;
 
-        div.onclick = () => {
-            window.location.href = `olympics-athletes.html?athlete=${encodeURIComponent(a.athlete)}`;
-        };
+if(!grouped[year]) grouped[year] = [];
+grouped[year].push(event);
+});
 
-        container.appendChild(div);
-    });
+Object.keys(grouped)
+.sort((a,b)=>b-a)
+.slice(0,3)
+.forEach(year=>{
+goldHTML += `<div class="gold-year">${year}</div>`;
+grouped[year].slice(0,3).forEach(e=>{
+goldHTML += `<div>${e}</div>`;
+});
+});
+
 }
 
+const div = document.createElement("div");
+div.className = "card";
+
+div.innerHTML = `
+<h2>${a.athlete}</h2>
+
+<div class="medals">
+<div class="medal gold">
+Gold<br>${a.GOLD}
+<div class="gold-list">${goldHTML}</div>
+</div>
+
+<div class="medal silver">Silver<br>${a.SILVER}</div>
+<div class="medal bronze">Bronze<br>${a.BRONZE}</div>
+</div>
+
+<div>Total: <b>${a.total}</b></div>
+`;
+
+div.onclick = () => {
+window.location.href = `olympics-athletes.html?athlete=${encodeURIComponent(a.athlete)}`;
+};
+
+container.appendChild(div);
+
+});
+}
+
+// =======================
 // DETAIL VIEW
+// =======================
 function showDetail(name){
 
-    const athlete = athletes.find(a=>a.athlete===name);
-    if(!athlete) return;
+const athlete = athletes.find(a=>a.athlete===name);
+if(!athlete) return;
 
-    document.getElementById("list").style.display = "none";
+document.getElementById("list").style.display = "none";
 
-    const games = results.filter(r=>{
-        const n = r.athlete_full_name || r.name;
-        return n === name;
-    });
+let rows = "";
 
-    const rows = games.map(r=>{
-        let medal = (r.medal_type || r.medal || "").toUpperCase();
+if(results.length){
 
-        medal = medal
-            .replace("GOLD MEDAL","GOLD")
-            .replace("SILVER MEDAL","SILVER")
-            .replace("BRONZE MEDAL","BRONZE");
+rows = results
+.filter(r=>{
+const n = r.athlete_full_name || r.name;
+return n === name;
+})
+.map(r=>{
 
-        const year = r.year || (r.slug_game||"").slice(0,4);
+let medal = (r.medal_type || r.medal || "").toUpperCase();
 
-        return `
-            <tr>
-                <td>${year}</td>
-                <td>${r.discipline_title || r.discipline}</td>
-                <td>${r.event_title || r.event}</td>
-                <td>${medal}</td>
-            </tr>
-        `;
-    }).join("");
+medal = medal
+.replace("GOLD MEDAL","GOLD")
+.replace("SILVER MEDAL","SILVER")
+.replace("BRONZE MEDAL","BRONZE");
 
-    document.getElementById("detail").innerHTML = `
-        <div class="detail">
-            <h2>${athlete.athlete}</h2>
+const year = r.year || (r.slug_game||"").slice(0,4);
 
-            <div class="medals">
-                <div class="medal gold">Gold<br>${athlete.GOLD}</div>
-                <div class="medal silver">Silver<br>${athlete.SILVER}</div>
-                <div class="medal bronze">Bronze<br>${athlete.BRONZE}</div>
-            </div>
+return `
+<tr>
+<td>${year}</td>
+<td>${r.discipline_title || r.discipline}</td>
+<td>${r.event_title || r.event}</td>
+<td>${medal}</td>
+</tr>
+`;
 
-            <h3>Total: ${athlete.total}</h3>
+}).join("");
 
-            <table>
-                <tr>
-                    <th>Year</th>
-                    <th>Sport</th>
-                    <th>Event</th>
-                    <th>Medal</th>
-                </tr>
-                ${rows}
-            </table>
-
-            <br>
-            <button onclick="window.location.href='olympics-athletes.html'">Back</button>
-        </div>
-    `;
 }
 
+document.getElementById("detail").innerHTML = `
+<div class="detail">
+<h2>${athlete.athlete}</h2>
+
+<div class="medals">
+<div class="medal gold">Gold<br>${athlete.GOLD}</div>
+<div class="medal silver">Silver<br>${athlete.SILVER}</div>
+<div class="medal bronze">Bronze<br>${athlete.BRONZE}</div>
+</div>
+
+<h3>Total: ${athlete.total}</h3>
+
+${rows ? `
+<table>
+<tr>
+<th>Year</th>
+<th>Sport</th>
+<th>Event</th>
+<th>Medal</th>
+</tr>
+${rows}
+</table>
+` : `<p>No detailed results available</p>`}
+
+<br>
+<button onclick="window.location.href='olympics-athletes.html'">Back</button>
+</div>
+`;
+
+}
+
+// =======================
 // SEARCH
+// =======================
 document.getElementById("search").addEventListener("input", function(){
-    const q = this.value.toLowerCase();
 
-    const filtered = athletes.filter(a =>
-        a.athlete.toLowerCase().includes(q)
-    ).slice(0,50);
+const q = this.value.toLowerCase();
 
-    renderList(filtered);
+const filtered = athletes.filter(a =>
+a.athlete.toLowerCase().includes(q)
+).slice(0,50);
+
+renderList(filtered);
+
 });
 
 load();
