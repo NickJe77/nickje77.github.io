@@ -11,10 +11,17 @@ EVENT_DIR.mkdir(parents=True, exist_ok=True)
 
 all_matches = []
 
-# LOAD ALL MATCHES
+# LOAD ALL MATCH FILES
 for file in MATCH_DIR.glob("*.json"):
     data = json.load(open(file))
-    all_matches.extend(data["matches"])
+
+    # 🔥 HANDLE BOTH STRUCTURES
+    if isinstance(data, dict) and "matches" in data:
+        all_matches.extend(data["matches"])
+    elif isinstance(data, list):
+        all_matches.extend(data)
+    else:
+        print(f"Skipping bad file: {file}")
 
 print(f"Loaded {len(all_matches)} matches")
 
@@ -35,21 +42,17 @@ for m in all_matches:
 
     events[key]["matches"].append(m)
 
-# SAVE EVENTS
-for key, event in events.items():
-    season = event["season"]
+# SAVE EVENTS PER SEASON
+season_files = {}
 
+for event in events.values():
+    season = event["season"]
+    season_files.setdefault(season, []).append(event)
+
+for season, evts in season_files.items():
     out_file = EVENT_DIR / f"{season}.json"
 
-    # group multiple events per season
-    if out_file.exists():
-        existing = json.load(open(out_file))
-    else:
-        existing = []
-
-    existing.append(event)
-
     with open(out_file, "w") as f:
-        json.dump(existing, f, indent=2)
+        json.dump(evts, f, indent=2)
 
-print(f"Saved {len(events)} events")
+    print(f"Saved {len(evts)} events → {out_file}")
