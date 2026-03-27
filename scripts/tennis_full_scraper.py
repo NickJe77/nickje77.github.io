@@ -2,10 +2,10 @@ import requests
 from bs4 import BeautifulSoup
 import json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 
-print("TENNIS SCRAPER (FINAL — TOURNAMENT MODE FIXED)")
+print("TENNIS SCRAPER (DAILY MODE — GUARANTEED DATA)")
 
 BASE = Path("docs/data/tennis")
 MATCH_DIR = BASE / "matches"
@@ -16,8 +16,8 @@ EVENT_DIR.mkdir(parents=True, exist_ok=True)
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-START_YEAR = 2025
-CURRENT_YEAR = datetime.utcnow().year
+START_DATE = datetime(2025, 1, 1)
+END_DATE = datetime.utcnow()
 
 
 # -------------------------
@@ -34,58 +34,31 @@ def fetch(url):
 
 
 # -------------------------
-# GET TOURNAMENTS (FIXED)
+# SCRAPE DAY
 # -------------------------
-def get_tournaments(year):
-    print(f"\nGetting tournaments for {year}")
-
-    url = f"https://www.tennisexplorer.com/results/?type=atp&year={year}"
+def scrape_day(date):
+    url = f"https://www.tennisexplorer.com/results/?type=atp&year={date.year}&month={date.month}&day={date.day}"
     html = fetch(url)
 
-    if not html:
-        print("Failed to load tournaments page")
-        return []
-
-    soup = BeautifulSoup(html, "html.parser")
-
-    links = []
-
-    for a in soup.select("a"):
-        href = a.get("href", "")
-
-        # ignore match pages
-        if "/match-detail/" in href:
-            continue
-
-        # 🔥 correct tournament pattern
-        if "/atp-men/" in href and href.endswith("/results/"):
-            full = "https://www.tennisexplorer.com" + href
-            links.append(full)
-
-    links = sorted(list(set(links)))
-
-    print(f" → {len(links)} tournaments found")
-    return links
-
-
-# -------------------------
-# SCRAPE TOURNAMENT
-# -------------------------
-def scrape_tournament(url, year):
-    html = fetch(url)
     if not html:
         return []
 
     soup = BeautifulSoup(html, "html.parser")
-
-    name = url.split("/")[-3].replace("-", " ").title()
 
     matches = []
+    current_tournament = "Unknown"
 
     rows = soup.find_all("tr")
 
     for row in rows:
         cols = row.find_all("td")
+
+        # tournament header row
+        if len(cols) == 1:
+            txt = cols[0].text.strip()
+            if txt:
+                current_tournament = txt
+            continue
 
         if len(cols) < 6:
             continue
@@ -98,20 +71,20 @@ def scrape_tournament(url, year):
             player1 = links[0].text.strip()
             player2 = links[1].text.strip()
 
-            round_val = cols[0].text.strip()
             score = cols[-1].text.strip()
+            round_val = cols[0].text.strip()
 
             if not player1 or not player2:
                 continue
 
             matches.append({
-                "tournament": name,
-                "surface": "Hard",
+                "tournament": current_tournament,
+                "surface": "Hard",  # default fallback
                 "round": round_val,
                 "player1": player1,
                 "player2": player2,
                 "score": score,
-                "date": f"{year}0101",
+                "date": date.strftime("%Y%m%d"),
                 "gender": "M"
             })
 
@@ -148,29 +121,38 @@ def build_events(matches, year):
 # MAIN
 # -------------------------
 def run():
-    for year in range(START_YEAR, CURRENT_YEAR + 1):
+    current = START_DATE
 
-        tournaments = get_tournaments(year)
+    yearly_matches = {}
 
-        all_matches = []
+    while current <= END_DATE:
+        print("Scraping:", current.strftime("%Y-%m-%d"))
 
-        for t in tournaments:
-            print("Scraping:", t)
-            matches = scrape_tournament(t, year)
-            all_matches.extend(matches)
-            time.sleep(1)
+        day_matches = scrape_day(current)
 
-        print(f"\n{year} MATCHES: {len(all_matches)}")
+        if day_matches:
+            year = current.year
 
-        if not all_matches:
-            continue
+            if year not in yearly_matches:
+                yearly_matches[year] = []
 
-        # SAVE MATCHES
+            yearly_matches[year].extend(day_matches)
+
+        current += timedelta(days=1)
+        time.sleep(0.5)  # avoid blocking
+
+    # -------------------------
+    # SAVE
+    # -------------------------
+    for year, matches in yearly_matches.items():
+        print(f"\n{year} MATCHES: {len(matches)}")
+
+        # matches
         with open(MATCH_DIR / f"{year}.json", "w") as f:
-            json.dump(all_matches, f, indent=2)
+            json.dump(matches, f, indent=2)
 
-        # BUILD EVENTS
-        events = build_events(all_matches, year)
+        # events
+        events = build_events(matches, year)
 
         with open(EVENT_DIR / f"{year}.json", "w") as f:
             json.dump(events, f, indent=2)
