@@ -6,7 +6,7 @@ from datetime import datetime
 import time
 import random
 
-print("TENNIS SCRAPER (TOURNAMENT FIXED)")
+print("TENNIS SCRAPER (REAL FIX — HEADER BASED)")
 
 BASE = Path("docs/data/tennis")
 MATCH_DIR = BASE / "matches"
@@ -42,35 +42,52 @@ def scrape_month(year, month):
     soup = BeautifulSoup(html, "html.parser")
 
     matches = []
+    current_tournament = None
+    current_surface = "Hard"
+
     rows = soup.select("table.result tr")
 
     for row in rows:
+
+        # 🔥 CORRECT TOURNAMENT HEADER
+        if row.find("th"):
+            txt = row.get_text(strip=True)
+
+            if txt and len(txt) > 3:
+                current_tournament = txt
+
+                low = txt.lower()
+                if "clay" in low:
+                    current_surface = "Clay"
+                elif "grass" in low:
+                    current_surface = "Grass"
+                else:
+                    current_surface = "Hard"
+
+            continue
+
         cols = row.find_all("td")
 
-        # skip invalid rows
-        if len(cols) < 7:
+        if len(cols) < 6:
             continue
 
         try:
-            # 🔥 TOURNAMENT IS IN COLUMN 1 (NOT HEADER)
-            tournament = cols[1].text.strip()
-
-            player_links = row.find_all("a")
-            if len(player_links) < 2:
+            links = row.find_all("a")
+            if len(links) < 2:
                 continue
 
-            player1 = player_links[0].text.strip()
-            player2 = player_links[1].text.strip()
+            player1 = links[0].text.strip()
+            player2 = links[1].text.strip()
 
-            score = cols[-1].text.strip()
             round_val = cols[0].text.strip()
+            score = cols[-1].text.strip()
 
-            if not tournament or not player1 or not player2:
-                continue
+            if not current_tournament:
+                continue  # 🔥 skip bad rows
 
             matches.append({
-                "tournament": tournament,
-                "surface": "Hard",  # temp
+                "tournament": current_tournament,
+                "surface": current_surface,
                 "round": round_val,
 
                 "player1": player1,
