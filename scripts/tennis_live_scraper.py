@@ -1,13 +1,11 @@
 import requests
-import os
+from bs4 import BeautifulSoup
 import json
+import os
 from datetime import datetime
 
 OUTPUT = "docs/data/tennis/matches"
 os.makedirs(OUTPUT, exist_ok=True)
-
-CURRENT_YEAR = datetime.now().year
-YEARS = list(range(2025, CURRENT_YEAR + 1))
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0"
@@ -28,34 +26,39 @@ def save_year(year, data):
 
 
 # =========================
-# 🔥 REAL MATCH API
+# 🔥 LIVE MATCHES (WORKING SOURCE)
 # =========================
-def fetch_matches(year):
-    print(f"Fetching {year} from UTS API")
+def fetch_current_matches():
+    url = "https://www.atptour.com/en/scores/current"
 
-    url = f"https://api.ultimatetennisstatistics.com/matches?season={year}"
+    print("Fetching current matches...")
 
     res = requests.get(url, headers=HEADERS)
-
-    if res.status_code != 200:
-        print("FAILED:", res.status_code)
-        return []
-
-    data = res.json()
+    soup = BeautifulSoup(res.text, "html.parser")
 
     matches = []
 
-    for m in data.get("data", []):
+    for match in soup.select(".scores-draw-entry-box"):
         try:
+            players = match.select(".scores-draw-entry-box__name")
+
+            if len(players) < 2:
+                continue
+
+            p1 = players[0].text.strip()
+            p2 = players[1].text.strip()
+
+            score = match.select_one(".scores-draw-entry-box__score")
+
+            score_text = score.text.strip() if score else ""
+
             matches.append({
-                "player1": m["winner"]["name"],
-                "player2": m["loser"]["name"],
-                "score": m.get("score", ""),
-                "date": m.get("date", ""),
-                "tournament": m.get("tournament", {}).get("name", ""),
-                "surface": m.get("tournament", {}).get("surface", ""),
-                "round": m.get("round", "")
+                "player1": p1,
+                "player2": p2,
+                "score": score_text,
+                "date": datetime.now().strftime("%Y-%m-%d")
             })
+
         except:
             continue
 
@@ -63,27 +66,28 @@ def fetch_matches(year):
 
 
 def run():
-    for year in YEARS:
-        print(f"\nYEAR: {year}")
+    year = datetime.now().year
 
-        existing = load_existing(year)
-        seen = {(m["player1"], m["player2"], m["score"]) for m in existing}
+    existing = load_existing(year)
 
-        new_matches = []
+    seen = {(m["player1"], m["player2"], m["score"]) for m in existing}
 
-        matches = fetch_matches(year)
+    new_matches = []
 
-        for m in matches:
-            key = (m["player1"], m["player2"], m["score"])
-            if key not in seen:
-                new_matches.append(m)
-                seen.add(key)
+    matches = fetch_current_matches()
 
-        all_matches = existing + new_matches
+    for m in matches:
+        key = (m["player1"], m["player2"], m["score"])
 
-        save_year(year, all_matches)
+        if key not in seen:
+            new_matches.append(m)
+            seen.add(key)
 
-        print(f"Saved {len(all_matches)} matches ({len(new_matches)} new)")
+    all_matches = existing + new_matches
+
+    save_year(year, all_matches)
+
+    print(f"Saved {len(all_matches)} matches ({len(new_matches)} new)")
 
 
 if __name__ == "__main__":
