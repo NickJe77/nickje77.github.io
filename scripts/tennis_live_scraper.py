@@ -1,9 +1,9 @@
 import requests
-from bs4 import BeautifulSoup
 import json
 import os
 import time
 from datetime import datetime
+from bs4 import BeautifulSoup
 
 OUTPUT = "docs/data/tennis/matches"
 os.makedirs(OUTPUT, exist_ok=True)
@@ -11,15 +11,17 @@ os.makedirs(OUTPUT, exist_ok=True)
 CURRENT_YEAR = datetime.now().year
 YEARS = list(range(2025, CURRENT_YEAR + 1))
 
-BASE_URL = "https://www.atptour.com/en/scores/results-archive"
-
 HEADERS = {
-    "User-Agent": "Mozilla/5.0"
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json"
 }
 
-DELAY = 1.5
+DELAY = 1
 
 
+# =========================
+# LOAD / SAVE
+# =========================
 def load_existing(year):
     path = f"{OUTPUT}/{year}.json"
     if os.path.exists(path):
@@ -35,65 +37,72 @@ def save_year(year, data):
 
 
 # =========================
-# FIXED TOURNAMENT PARSER
+# GET TOURNAMENT LINKS
 # =========================
 def get_tournaments(year):
-    print(f"Fetching tournaments for {year}")
-    url = f"{BASE_URL}?year={year}"
+    url = f"https://www.atptour.com/en/scores/results-archive?year={year}"
 
     res = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(res.text, "html.parser")
 
-    tournaments = set()
+    tournaments = []
 
-    # 🔥 NEW METHOD (WORKS NOW)
     for a in soup.select("a"):
         href = a.get("href", "")
-
-        if "/scores/archive/" in href:
+        if "/scores/archive/" in href and f"/{year}/" in href:
             full = "https://www.atptour.com" + href
-            tournaments.add(full)
+            if "results" in full:
+                tournaments.append(full)
 
-    tournaments = list(tournaments)
-
-    print(f"Found {len(tournaments)} tournaments")
-    return tournaments
+    return list(set(tournaments))
 
 
 # =========================
-# MATCH PARSER (MORE ROBUST)
+# 🔥 REAL MATCH FETCHER (API)
 # =========================
-def get_matches(tournament_url):
-    res = requests.get(tournament_url, headers=HEADERS)
-    soup = BeautifulSoup(res.text, "html.parser")
+def get_matches_api(tournament_url):
+    try:
+        parts = tournament_url.split("/")
 
-    matches = []
+        # Example:
+        # /archive/indian-wells/404/2026/results
+        slug = parts[-5]
+        tourney_id = parts[-4]
+        year = parts[-3]
 
-    rows = soup.select("tr")
+        api_url = f"https://www.atptour.com/-/api/scores/archive/{slug}/{tourney_id}/{year}"
 
-    for row in rows:
-        players = row.select(".day-table-name, .player")
-        score = row.select_one(".day-table-score, .score")
+        res = requests.get(api_url, headers=HEADERS)
 
-        if len(players) < 2 or not score:
-            continue
+        if res.status_code != 200:
+            return []
 
-        try:
-            p1 = players[0].get_text(strip=True)
-            p2 = players[1].get_text(strip=True)
-            sc = score.get_text(strip=True)
+        data = res.json()
 
-            matches.append({
-                "player1": p1,
-                "player2": p2,
-                "score": sc,
-                "tournament_url": tournament_url
-            })
+        matches = []
 
-        except:
-            continue
+        for match in data.get("matches", []):
+            try:
+                p1 = match.get("player1", {}).get("name", "")
+                p2 = match.get("player2", {}).get("name", "")
+                score = match.get("score", "")
 
-    return matches
+                if p1 and p2:
+                    matches.append({
+                        "player1": p1,
+                        "player2": p2,
+                        "score": score,
+                        "tournament": slug,
+                        "year": int(year)
+                    })
+
+            except:
+                continue
+
+        return matches
+
+    except:
+        return []
 
 
 # =========================
@@ -101,51 +110,40 @@ def get_matches(tournament_url):
 # =========================
 def run():
     for year in YEARS:
-        print("\n====================")
-        print(f"YEAR: {year}")
-        print("====================")
+        print(f"\nYEAR: {year}")
 
         existing = load_existing(year)
-
-        done_tournaments = set()
-        for m in existing:
-            if "tournament_url" in m:
-                done_tournaments.add(m["tournament_url"])
-
-        print(f"Already have {len(existing)} matches")
-        print(f"Already scraped {len(done_tournaments)} tournaments")
+        seen = {(m["player1"], m["player2"], m["score"]) for m in existing}
 
         tournaments = get_tournaments(year)
+
+        print(f"Found {len(tournaments)} tournaments")
 
         new_matches = []
 
         for t in tournaments:
-            if t in done_tournaments:
-                print("SKIP:", t)
-                continue
-
             print("SCRAPING:", t)
 
-            try:
-                matches = get_matches(t)
+            matches = get_matches_api(t)
 
-                if matches:
-                    new_matches.extend(matches)
-                    print(f"  + {len(matches)} matches")
-                else:
-                    print("  (no matches found)")
+            added = 0
 
-                time.sleep(DELAY)
+            for m in matches:
+                key = (m["player1"], m["player2"], m["score"])
+                if key not in seen:
+                    new_matches.append(m)
+                    seen.add(key)
+                    added += 1
 
-            except Exception as e:
-                print("FAILED:", t, e)
+            print(f"  + {added} new matches")
+
+            time.sleep(DELAY)
 
         all_matches = existing + new_matches
 
         save_year(year, all_matches)
 
-        print(f"\nSaved {len(all_matches)} total matches for {year}")
-        print(f"New matches added: {len(new_matches)}")
+        print(f"Saved {len(all_matches)} matches ({len(new_matches)} new)")
 
 
 if __name__ == "__main__":
