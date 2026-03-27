@@ -6,7 +6,7 @@ from datetime import datetime
 import time
 import random
 
-print("TENNIS SCRAPER (REAL FIX — HEADER BASED)")
+print("TENNIS SCRAPER (CLEAN TOURNAMENT SOURCE)")
 
 BASE = Path("docs/data/tennis")
 MATCH_DIR = BASE / "matches"
@@ -31,6 +31,19 @@ def fetch(url):
     return None
 
 
+def clean_header(text):
+    text = text.strip()
+
+    # remove surface text from header
+    for s in ["Hard", "Clay", "Grass"]:
+        text = text.replace(s, "")
+
+    # remove country brackets
+    text = re.sub(r"\(.*?\)", "", text)
+
+    return text.strip()
+
+
 def scrape_month(year, month):
     url = f"https://www.tennisexplorer.com/results/atp-men/?year={year}&month={month}"
     print(f"Scraping {year}-{month}")
@@ -49,12 +62,12 @@ def scrape_month(year, month):
 
     for row in rows:
 
-        # 🔥 CORRECT TOURNAMENT HEADER
+        # ✅ ONLY USE HEADER ROWS
         if row.find("th"):
             txt = row.get_text(strip=True)
 
-            if txt and len(txt) > 3:
-                current_tournament = txt
+            if txt and len(txt) > 5:
+                current_tournament = clean_header(txt)
 
                 low = txt.lower()
                 if "clay" in low:
@@ -79,11 +92,11 @@ def scrape_month(year, month):
             player1 = links[0].text.strip()
             player2 = links[1].text.strip()
 
-            round_val = cols[0].text.strip()
             score = cols[-1].text.strip()
+            round_val = cols[0].text.strip()
 
             if not current_tournament:
-                continue  # 🔥 skip bad rows
+                continue  # 🚫 skip if no valid tournament
 
             matches.append({
                 "tournament": current_tournament,
