@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 import unicodedata
 
-print("BUILDING TENNIS EVENTS (CORRECT FORMAT)")
+print("BUILDING TENNIS EVENTS (2025+ ONLY)")
 
 BASE = Path("docs/data/tennis")
 MATCH_DIR = BASE / "matches"
@@ -12,9 +12,6 @@ EVENT_DIR = BASE / "events"
 EVENT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# -----------------------------
-# HELPERS
-# -----------------------------
 def slug(text):
     text = unicodedata.normalize("NFKD", text)
     text = text.encode("ascii", "ignore").decode("ascii")
@@ -22,22 +19,24 @@ def slug(text):
     return re.sub(r"\s+", "-", text)
 
 
-def extract_year(date):
-    return int(date[:4])
-
-
-# -----------------------------
-# LOAD MATCHES
-# -----------------------------
 all_matches = []
 
+# 🔥 ONLY LOAD 2025+
 for file in MATCH_DIR.glob("*.json"):
+    try:
+        year = int(file.stem)
+    except:
+        continue
+
+    if year < 2025:
+        continue  # 🚫 LOCK OLD DATA
+
     data = json.load(open(file))
 
     if isinstance(data, list):
         matches = data
-    elif isinstance(data, dict) and "matches" in data:
-        matches = data["matches"]
+    elif isinstance(data, dict):
+        matches = data.get("matches", [])
     else:
         continue
 
@@ -46,9 +45,6 @@ for file in MATCH_DIR.glob("*.json"):
 print(f"Loaded {len(all_matches)} matches")
 
 
-# -----------------------------
-# BUILD EVENTS
-# -----------------------------
 events = {}
 
 for m in all_matches:
@@ -59,7 +55,7 @@ for m in all_matches:
     if not tournament or not date:
         continue
 
-    year = extract_year(date)
+    year = int(date[:4])
 
     key = f"{year}_{tournament}"
 
@@ -68,20 +64,18 @@ for m in all_matches:
             "tournament_id": f"{year}-{slug(tournament)}",
             "name": tournament,
             "surface": surface,
-            "draw_size": "32",   # placeholder
-            "level": "A",        # placeholder
+            "draw_size": "32",
+            "level": "A",
             "date": date,
             "year": year
         }
 
 
-# -----------------------------
-# SAVE PER YEAR
-# -----------------------------
 season_events = {}
 
 for e in events.values():
     season_events.setdefault(e["year"], []).append(e)
+
 
 for year, evts in season_events.items():
     out_file = EVENT_DIR / f"{year}.json"
