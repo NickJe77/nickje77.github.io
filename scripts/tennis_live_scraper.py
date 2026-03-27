@@ -1,9 +1,10 @@
 import requests
+from bs4 import BeautifulSoup
 import json
 import os
 import time
+import re
 from datetime import datetime
-from bs4 import BeautifulSoup
 
 OUTPUT = "docs/data/tennis/matches"
 os.makedirs(OUTPUT, exist_ok=True)
@@ -12,11 +13,10 @@ CURRENT_YEAR = datetime.now().year
 YEARS = list(range(2025, CURRENT_YEAR + 1))
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0",
-    "Accept": "application/json"
+    "User-Agent": "Mozilla/5.0"
 }
 
-DELAY = 1
+DELAY = 1.5
 
 
 # =========================
@@ -37,7 +37,7 @@ def save_year(year, data):
 
 
 # =========================
-# GET TOURNAMENT LINKS
+# GET TOURNAMENTS
 # =========================
 def get_tournaments(year):
     url = f"https://www.atptour.com/en/scores/results-archive?year={year}"
@@ -45,64 +45,60 @@ def get_tournaments(year):
     res = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(res.text, "html.parser")
 
-    tournaments = []
+    tournaments = set()
 
     for a in soup.select("a"):
         href = a.get("href", "")
         if "/scores/archive/" in href and f"/{year}/" in href:
-            full = "https://www.atptour.com" + href
-            if "results" in full:
-                tournaments.append(full)
+            if "results" in href:
+                tournaments.add("https://www.atptour.com" + href)
 
-    return list(set(tournaments))
+    return list(tournaments)
 
 
 # =========================
-# 🔥 REAL MATCH FETCHER (API)
+# 🔥 REAL MATCH EXTRACTION
 # =========================
-def get_matches_api(tournament_url):
+def get_matches(tournament_url):
+    res = requests.get(tournament_url, headers=HEADERS)
+    html = res.text
+
+    matches = []
+
     try:
-        parts = tournament_url.split("/")
+        # 🔥 FIND EMBEDDED JSON
+        script_match = re.search(r'window\.__INITIAL_STATE__\s*=\s*(\{.*?\});', html)
 
-        # Example:
-        # /archive/indian-wells/404/2026/results
-        slug = parts[-5]
-        tourney_id = parts[-4]
-        year = parts[-3]
-
-        api_url = f"https://www.atptour.com/-/api/scores/archive/{slug}/{tourney_id}/{year}"
-
-        res = requests.get(api_url, headers=HEADERS)
-
-        if res.status_code != 200:
+        if not script_match:
             return []
 
-        data = res.json()
+        data = json.loads(script_match.group(1))
 
-        matches = []
+        # navigate structure (ATP changes this often)
+        draws = data.get("scores", {}).get("draws", [])
 
-        for match in data.get("matches", []):
-            try:
-                p1 = match.get("player1", {}).get("name", "")
-                p2 = match.get("player2", {}).get("name", "")
-                score = match.get("score", "")
+        for draw in draws:
+            for match in draw.get("matches", []):
+                try:
+                    p1 = match.get("player1", {}).get("name", "")
+                    p2 = match.get("player2", {}).get("name", "")
+                    score = match.get("score", "")
 
-                if p1 and p2:
-                    matches.append({
-                        "player1": p1,
-                        "player2": p2,
-                        "score": score,
-                        "tournament": slug,
-                        "year": int(year)
-                    })
+                    if p1 and p2:
+                        matches.append({
+                            "player1": p1,
+                            "player2": p2,
+                            "score": score,
+                            "tournament_url": tournament_url
+                        })
 
-            except:
-                continue
+                except:
+                    continue
 
-        return matches
+    except Exception as e:
+        print("PARSE FAIL:", e)
 
-    except:
-        return []
+    return matches
 
 
 # =========================
@@ -124,7 +120,7 @@ def run():
         for t in tournaments:
             print("SCRAPING:", t)
 
-            matches = get_matches_api(t)
+            matches = get_matches(t)
 
             added = 0
 
