@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import time
 
-print("MLB UPDATER (FINAL - BULLETPROOF)")
+print("MLB UPDATER (FINAL - BOX SCORE FIX)")
 
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1"
@@ -55,11 +55,12 @@ def get_schedule():
 
 
 # -------------------------------------------------
-# GET BOXSCORE (BULLETPROOF)
+# GET BOXSCORE (FIXED PROPERLY)
 # -------------------------------------------------
 def get_boxscore(game_id):
 
-    url = f"{BASE}/game/{game_id}/feed/live"
+    # 🔥 PRIMARY ENDPOINT (THIS FIXES YOUR ISSUE)
+    url = f"{BASE}/game/{game_id}/boxscore"
 
     try:
         data = requests.get(url, headers=HEADERS, timeout=10).json()
@@ -69,11 +70,8 @@ def get_boxscore(game_id):
 
     players = []
 
-    # -------------------------
-    # TRY FULL BOXSCORE
-    # -------------------------
     try:
-        teams = data["liveData"]["boxscore"]["teams"]
+        teams = data["teams"]
 
         def parse(team):
             team_name = team["team"]["name"]
@@ -81,6 +79,7 @@ def get_boxscore(game_id):
 
             for p in team.get("players", {}).values():
                 stats = p.get("stats", {}).get("batting", {})
+
                 if not stats:
                     continue
 
@@ -89,7 +88,8 @@ def get_boxscore(game_id):
                     "team": team_name,
                     "hits": stats.get("hits", 0),
                     "runs": stats.get("runs", 0),
-                    "rbi": stats.get("rbi", 0)
+                    "rbi": stats.get("rbi", 0),
+                    "home_runs": stats.get("homeRuns", 0)
                 })
 
             return out
@@ -104,34 +104,19 @@ def get_boxscore(game_id):
         return players
 
     # -------------------------
-    # FALLBACK 1 — LINESCORE
+    # FALLBACK → feed/live
     # -------------------------
     try:
-        linescore = data["liveData"]["linescore"]
+        live = requests.get(f"{BASE}/game/{game_id}/feed/live", headers=HEADERS).json()
+        game = live.get("gameData", {})
 
-        print("⚠️ Using linescore fallback:", game_id)
-
-        return [{
-            "fallback": "linescore",
-            "home_runs": linescore["teams"]["home"]["runs"],
-            "away_runs": linescore["teams"]["away"]["runs"]
-        }]
-    except:
-        pass
-
-    # -------------------------
-    # FALLBACK 2 — GAMEDATA (ALWAYS WORKS)
-    # -------------------------
-    try:
-        game = data["gameData"]
-
-        print("⚠️ Using gameData fallback:", game_id)
+        print("⚠️ Using fallback:", game_id)
 
         return [{
-            "fallback": "gameData",
-            "home_team": game["teams"]["home"]["name"],
-            "away_team": game["teams"]["away"]["name"],
-            "status": game["status"]["detailedState"]
+            "fallback": True,
+            "home_team": game.get("teams", {}).get("home", {}).get("name"),
+            "away_team": game.get("teams", {}).get("away", {}).get("name"),
+            "status": game.get("status", {}).get("detailedState")
         }]
     except:
         pass
