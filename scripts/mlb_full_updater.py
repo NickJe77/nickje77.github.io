@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-print("MLB UPDATER (FINAL FIX)")
+print("MLB UPDATER (FIXED)")
 
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1"
@@ -32,9 +32,6 @@ def get_schedule():
     for date in data.get("dates", []):
         for g in date.get("games", []):
 
-            if g.get("gameType") not in ["R", "P"]:
-                continue
-
             games.append({
                 "game_id": str(g["gamePk"]),
                 "date": g["gameDate"][:10],
@@ -45,10 +42,15 @@ def get_schedule():
                 "home_score": g["teams"]["home"].get("score", 0),
                 "away_score": g["teams"]["away"].get("score", 0),
                 "status": g["status"]["detailedState"],
-                "state": g["status"]["abstractGameState"]   # 🔥 KEY FIELD
+                "state": g["status"]["abstractGameState"]
             })
 
-    print("Games:", len(games))
+    print("Games found:", len(games))
+
+    # 🔥 DEBUG
+    for g in games:
+        print(g["game_id"], g["state"], g["home_score"], g["away_score"])
+
     return games
 
 
@@ -116,8 +118,8 @@ for g in games:
 
     print(f"{game_id} → {g['status']} ({g['state']})")
 
-    # 🔥 ONLY FINISHED GAMES
-    if g["state"] != "Final":
+    # ✅ INCLUDE LIVE + FINAL (skip empty scheduled games)
+    if g["home_score"] == 0 and g["away_score"] == 0:
         continue
 
     file_path = BOX_DIR / f"{game_id}.json"
@@ -130,7 +132,7 @@ for g in games:
         with open(file_path, "w") as f:
             json.dump(box, f, indent=2)
     else:
-        print("❌ Empty:", game_id)
+        print("⚠️ No boxscore yet:", game_id)
 
     all_games.append(g)
 
