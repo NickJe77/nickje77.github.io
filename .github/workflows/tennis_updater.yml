@@ -1,70 +1,40 @@
-name: Tennis Full Updater
+name: Tennis Updater
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 6 * * 1"   # every Monday
+    - cron: "0 6 * * 1"   # weekly
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      # -----------------------------
-      # CHECKOUT
-      # -----------------------------
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # -----------------------------
-      # SETUP PYTHON
-      # -----------------------------
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: 3.11
 
-      # -----------------------------
-      # INSTALL DEPENDENCIES
-      # -----------------------------
-      - name: Install dependencies
+      - name: Install deps
         run: |
           pip install requests beautifulsoup4
 
-      # -----------------------------
-      # DEBUG (CONFIRMS FILES EXIST)
-      # -----------------------------
-      - name: Debug file structure
-        run: |
-          echo "=== ROOT ==="
-          ls -R
-          echo "=== SCRIPTS ==="
-          ls scripts || echo "scripts folder missing"
+      - name: Run scraper
+        run: python scripts/tennis_full_scraper.py
 
-      # -----------------------------
-      # SCRAPE CURRENT TENNIS (2025+)
-      # -----------------------------
-      - name: Scrape tennis (2025+)
-        run: |
-          python scripts/tennis_live_scraper.py
+      - name: Build players
+        run: python scripts/build_tennis_players.py
 
-      # -----------------------------
-      # BUILD PLAYERS
-      # -----------------------------
-      - name: Build tennis players
-        run: |
-          python scripts/build_tennis_players.py
-
-      # -----------------------------
-      # COMMIT & PUSH
-      # -----------------------------
-      - name: Commit and push changes
+      - name: Commit data
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
           git add docs/data/tennis
 
-          git diff --quiet && git diff --staged --quiet || git commit -m "Tennis update (2025+ live)"
+          git commit -m "Update tennis data" || echo "No changes"
 
           git push
