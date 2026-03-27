@@ -1,79 +1,99 @@
-import os
 import json
-import requests
-import zipfile
-import io
-import csv
+from pathlib import Path
+import unicodedata
+import re
 
-OUTPUT_DIR = "docs/data/tennis/matches"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+print("BUILDING TENNIS PLAYERS")
 
-ATP_URL = "https://github.com/JeffSackmann/tennis_atp/archive/refs/heads/master.zip"
-WTA_URL = "https://github.com/JeffSackmann/tennis_wta/archive/refs/heads/master.zip"
+BASE = Path("docs/data/tennis")
+MATCH_DIR = BASE / "matches"
+PLAYER_DIR = BASE / "players"
 
-
-def download_and_extract(url, folder):
-    r = requests.get(url)
-    z = zipfile.ZipFile(io.BytesIO(r.content))
-    z.extractall(folder)
+PLAYER_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def load_year(path, gender):
-    matches = []
-
-    if not os.path.exists(path):
-        return matches
-
-    with open(path, newline='', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-
-        for row in reader:
-            matches.append({
-                "tournament": row["tourney_name"],
-                "surface": row["surface"],
-                "round": row["round"],
-                "player1": row["winner_name"],
-                "player2": row["loser_name"],
-                "score": row["score"],
-                "date": row["tourney_date"],
-                "gender": gender
-            })
-
-    return matches
+# -----------------------------
+# SLUG FUNCTION
+# -----------------------------
+def slug(name):
+    name = unicodedata.normalize("NFKD", name)
+    name = name.encode("ascii", "ignore").decode("ascii")
+    name = re.sub(r"[^\w\s-]", "", name).strip().lower()
+    return re.sub(r"\s+", "-", name)
 
 
-def main():
+# -----------------------------
+# LOAD ALL MATCHES
+# -----------------------------
+all_matches = []
 
-    print("Downloading ATP...")
-    download_and_extract(ATP_URL, "tennis_data")
+for file in MATCH_DIR.glob("*.json"):
+    try:
+        data = json.load(open(file))
+    except Exception as e:
+        print(f"Failed to load {file}: {e}")
+        continue
 
-    print("Downloading WTA...")
-    download_and_extract(WTA_URL, "tennis_data")
+    # ✅ HANDLE BOTH STRUCTURES
+    if isinstance(data, dict) and "matches" in data:
+        matches = data["matches"]
+    elif isinstance(data, list):
+        matches = data
+    else:
+        print(f"Skipping bad format: {file}")
+        continue
 
-    for year in range(1968, 2027):
+    if not matches:
+        print(f"{file.stem} missing")
+        continue
 
-        print(f"Processing {year}")
+    print(f"{file.stem} done ({len(matches)} matches)")
+    all_matches.extend(matches)
 
-        atp_path = f"tennis_data/tennis_atp-master/atp_matches_{year}.csv"
-        wta_path = f"tennis_data/tennis_wta-master/wta_matches_{year}.csv"
-
-        matches = []
-
-        matches += load_year(atp_path, "M")
-        matches += load_year(wta_path, "W")
-
-        if not matches:
-            print(f"{year} missing")
-            continue
-
-        json.dump(
-            matches,
-            open(f"{OUTPUT_DIR}/{year}.json", "w"),
-            indent=2
-        )
-
-        print(f"{year} done ({len(matches)} matches)")
+print(f"\nTOTAL MATCHES LOADED: {len(all_matches)}")
 
 
-if __name__ == "__main__":
-    main()
+# -----------------------------
+# BUILD PLAYER MAP
+# -----------------------------
+players = {}
+
+for m in all_matches:
+    p1 = m.get("player1")
+    p2 = m.get("player2")
+
+    if not p1 or not p2:
+        continue
+
+    players.setdefault(p1, []).append(m)
+    players.setdefault(p2, []).append(m)
+
+
+# -----------------------------
+# SAVE PLAYER FILES
+# -----------------------------
+index = []
+
+for name, matches in players.items():
+    s = slug(name)
+
+    out = {
+        "name": name,
+        "matches": matches
+    }
+
+    with open(PLAYER_DIR / f"{s}.json", "w") as f:
+        json.dump(out, f, indent=2)
+
+    index.append(name)
+
+print(f"Saved {len(players)} players")
+
+
+# -----------------------------
+# BUILD INDEX
+# -----------------------------
+with open(PLAYER_DIR / "index.json", "w") as f:
+    json.dump(sorted(index), f, indent=2)
+
+print("Index built successfully")
