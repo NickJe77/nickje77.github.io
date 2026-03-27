@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 import unicodedata
 
-print("BUILDING TENNIS EVENTS (2025+ ONLY — FIXED GROUPING)")
+print("BUILDING TENNIS EVENTS (2025+ ONLY — FINAL FIX)")
 
 BASE = Path("docs/data/tennis")
 MATCH_DIR = BASE / "matches"
@@ -28,24 +28,40 @@ def clean_tournament(name):
 
     name = name.lower()
 
+    # remove brackets
+    name = re.sub(r"\(.*?\)", "", name)
+
+    # remove numbers
+    name = re.sub(r"\d+", "", name)
+
     # remove round junk
-    remove = [" qf", " sf", " f", " r16", " r32", " r64", " r128"]
-    for r in remove:
-        if name.endswith(r):
-            name = name.replace(r, "")
+    junk = [
+        "qf", "sf", "f", "r16", "r32", "r64", "r128",
+        "round", "final", "qualifying"
+    ]
 
-    # remove surface/location junk
-    name = name.replace("(australia)", "")
-    name = name.replace("(usa)", "")
-    name = name.replace("hard", "")
-    name = name.replace("clay", "")
-    name = name.replace("grass", "")
+    for j in junk:
+        name = name.replace(j, "")
 
-    return name.strip().title()
+    # remove surfaces
+    for s in ["hard", "clay", "grass"]:
+        name = name.replace(s, "")
+
+    # remove generic words
+    for w in ["atp", "men", "singles"]:
+        name = name.replace(w, "")
+
+    # clean spacing
+    name = re.sub(r"\s+", " ", name).strip()
+
+    if not name:
+        return "Unknown"
+
+    return name.title()
 
 
 # -----------------------------
-# LOAD MATCHES (2025+ ONLY)
+# LOAD MATCHES (LOCK OLD DATA)
 # -----------------------------
 all_matches = []
 
@@ -56,7 +72,7 @@ for file in MATCH_DIR.glob("*.json"):
         continue
 
     if year < 2025:
-        continue  # 🚫 LOCK OLD DATA
+        continue  # 🚫 DO NOT TOUCH OLD DATA
 
     try:
         data = json.load(open(file))
@@ -76,7 +92,7 @@ print(f"Loaded {len(all_matches)} matches")
 
 
 # -----------------------------
-# BUILD EVENTS (GROUP PROPERLY)
+# BUILD EVENTS (PROPER GROUPING)
 # -----------------------------
 events = {}
 
@@ -92,15 +108,16 @@ for m in all_matches:
 
     year = int(date[:4])
 
-    key = f"{year}_{name}"
+    # 🔥 FIXED GROUPING KEY
+    key = f"{year}_{slug(name)}"
 
     if key not in events:
         events[key] = {
-            "tournament_id": f"{year}-{slug(name)}",
+            "tournament_id": key,
             "name": name,
             "surface": surface,
-            "draw_size": "32",   # placeholder
-            "level": "A",        # placeholder
+            "draw_size": "32",
+            "level": "A",
             "date": date,
             "year": year
         }
