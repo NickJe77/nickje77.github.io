@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
+import re
+import unicodedata
 
-print("BUILDING TENNIS EVENTS")
+print("BUILDING TENNIS EVENTS (CORRECT FORMAT)")
 
 BASE = Path("docs/data/tennis")
 MATCH_DIR = BASE / "matches"
@@ -9,48 +11,80 @@ EVENT_DIR = BASE / "events"
 
 EVENT_DIR.mkdir(parents=True, exist_ok=True)
 
+
+# -----------------------------
+# HELPERS
+# -----------------------------
+def slug(text):
+    text = unicodedata.normalize("NFKD", text)
+    text = text.encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"[^\w\s-]", "", text).strip().lower()
+    return re.sub(r"\s+", "-", text)
+
+
+def extract_year(date):
+    return int(date[:4])
+
+
+# -----------------------------
+# LOAD MATCHES
+# -----------------------------
 all_matches = []
 
-# LOAD ALL MATCH FILES
 for file in MATCH_DIR.glob("*.json"):
     data = json.load(open(file))
 
-    # 🔥 HANDLE BOTH STRUCTURES
-    if isinstance(data, dict) and "matches" in data:
-        all_matches.extend(data["matches"])
-    elif isinstance(data, list):
-        all_matches.extend(data)
+    if isinstance(data, list):
+        matches = data
+    elif isinstance(data, dict) and "matches" in data:
+        matches = data["matches"]
     else:
-        print(f"Skipping bad file: {file}")
+        continue
+
+    all_matches.extend(matches)
 
 print(f"Loaded {len(all_matches)} matches")
 
+
+# -----------------------------
+# BUILD EVENTS
+# -----------------------------
 events = {}
 
 for m in all_matches:
-    season = m.get("season")
-    tournament = m.get("tournament", "Unknown Event")
+    tournament = m.get("tournament", "Unknown")
+    surface = m.get("surface", "Hard")
+    date = m.get("date", "")
 
-    key = f"{season}_{tournament}"
+    if not tournament or not date:
+        continue
+
+    year = extract_year(date)
+
+    key = f"{year}_{tournament}"
 
     if key not in events:
         events[key] = {
-            "season": season,
-            "tournament": tournament,
-            "matches": []
+            "tournament_id": f"{year}-{slug(tournament)}",
+            "name": tournament,
+            "surface": surface,
+            "draw_size": "32",   # placeholder
+            "level": "A",        # placeholder
+            "date": date,
+            "year": year
         }
 
-    events[key]["matches"].append(m)
 
-# SAVE EVENTS PER SEASON
-season_files = {}
+# -----------------------------
+# SAVE PER YEAR
+# -----------------------------
+season_events = {}
 
-for event in events.values():
-    season = event["season"]
-    season_files.setdefault(season, []).append(event)
+for e in events.values():
+    season_events.setdefault(e["year"], []).append(e)
 
-for season, evts in season_files.items():
-    out_file = EVENT_DIR / f"{season}.json"
+for year, evts in season_events.items():
+    out_file = EVENT_DIR / f"{year}.json"
 
     with open(out_file, "w") as f:
         json.dump(evts, f, indent=2)
