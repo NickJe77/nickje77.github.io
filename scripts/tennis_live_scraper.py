@@ -26,26 +26,22 @@ def get(url):
     return SESSION.get(url, timeout=30).text
 
 
+def is_score(text):
+    return any(c.isdigit() for c in text) and "-" in text
+
+
 def parse_page(url, gender, year):
     print(f"Scraping {url}")
 
     soup = BeautifulSoup(get(url), "html.parser")
 
     matches = []
-    current_tournament = ""
-
-    rows = soup.select("table tr")
+    rows = soup.select("tr")
 
     for tr in rows:
-        cols = tr.find_all("td")
-
-        # 👉 MUST HAVE PROPER MATCH STRUCTURE
-        if len(cols) < 5:
-            continue
-
         links = tr.find_all("a")
 
-        # 👉 EXACTLY TWO PLAYER LINKS
+        # must have at least 2 player links
         if len(links) < 2:
             continue
 
@@ -60,25 +56,31 @@ def parse_page(url, gender, year):
         if len(p2) < 3:
             continue
 
-        # 👉 SCORE CELL (usually near end)
-        score = cols[-2].get_text(strip=True)
+        cells = [td.get_text(strip=True) for td in tr.find_all("td")]
 
-        # skip invalid scores
-        if not score or score.lower() in ["info", "preview"]:
+        # find score anywhere in row
+        score = ""
+        for c in cells:
+            if is_score(c):
+                score = c
+                break
+
+        if not score:
             continue
 
-        # 👉 DATE (first column)
-        date_text = cols[0].get_text(strip=True)
+        # find date
+        date = f"{year}0101"
+        if cells:
+            raw = cells[0]
+            if "." in raw:
+                try:
+                    d, m = raw.split(".")[:2]
+                    date = f"{year}{int(m):02d}{int(d):02d}"
+                except:
+                    pass
 
-        # basic date fallback
-        if "." in date_text:
-            d, m = date_text.split(".")[:2]
-            date = f"{year}{int(m):02d}{int(d):02d}"
-        else:
-            date = f"{year}0101"
-
-        match = {
-            "tournament": current_tournament,
+        matches.append({
+            "tournament": "",
             "surface": "",
             "round": "",
             "player1": p1,
@@ -86,9 +88,7 @@ def parse_page(url, gender, year):
             "score": score,
             "date": date,
             "gender": gender,
-        }
-
-        matches.append(match)
+        })
 
     print(f"✔ {len(matches)} matches parsed")
     return matches
@@ -101,7 +101,7 @@ def save(year, matches):
 
 
 def main():
-    print("RUNNING CLEAN TENNIS SCRAPER")
+    print("RUNNING TENNIS SCRAPER (FIXED)")
 
     for year in YEARS:
         year_matches = []
