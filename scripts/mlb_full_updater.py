@@ -2,8 +2,9 @@ import requests
 import json
 from pathlib import Path
 from datetime import datetime
+import time
 
-print("MLB UPDATER (FIXED)")
+print("MLB UPDATER (FINAL WORKING)")
 
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1"
@@ -20,9 +21,9 @@ SEASON_DIR.mkdir(parents=True, exist_ok=True)
 BOX_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# -------------------------
+# -------------------------------------------------
 # GET SCHEDULE
-# -------------------------
+# -------------------------------------------------
 def get_schedule():
     url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
     data = requests.get(url, headers=HEADERS).json()
@@ -47,16 +48,16 @@ def get_schedule():
 
     print("Games found:", len(games))
 
-    # 🔥 DEBUG
+    # DEBUG (keep this)
     for g in games:
         print(g["game_id"], g["state"], g["home_score"], g["away_score"])
 
     return games
 
 
-# -------------------------
-# GET BOXSCORE
-# -------------------------
+# -------------------------------------------------
+# GET BOXSCORE (FIXED)
+# -------------------------------------------------
 def get_boxscore(game_id):
 
     url = f"{BASE}/game/{game_id}/feed/live"
@@ -67,48 +68,71 @@ def get_boxscore(game_id):
         print("❌ Failed:", game_id)
         return None
 
+    players = []
+
+    # -------------------------
+    # TRY FULL BOXSCORE
+    # -------------------------
     try:
         teams = data["liveData"]["boxscore"]["teams"]
+
+        def parse(team):
+            team_name = team["team"]["name"]
+            out = []
+
+            for p in team.get("players", {}).values():
+                person = p.get("person", {})
+                stats = p.get("stats", {}).get("batting", {})
+
+                if not stats:
+                    continue
+
+                out.append({
+                    "player": person.get("fullName"),
+                    "team": team_name,
+                    "at_bats": stats.get("atBats", 0),
+                    "runs": stats.get("runs", 0),
+                    "hits": stats.get("hits", 0),
+                    "rbi": stats.get("rbi", 0),
+                    "home_runs": stats.get("homeRuns", 0),
+                    "walks": stats.get("baseOnBalls", 0),
+                    "strikeouts": stats.get("strikeOuts", 0)
+                })
+
+            return out
+
+        players += parse(teams["home"])
+        players += parse(teams["away"])
+
     except:
-        print("❌ No data:", game_id)
-        return None
+        pass
 
-    def parse(team):
-        team_name = team["team"]["name"]
-        players = []
+    # -------------------------
+    # FALLBACK (IMPORTANT)
+    # -------------------------
+    if not players:
+        try:
+            linescore = data["liveData"]["linescore"]
 
-        for p in team.get("players", {}).values():
+            print("⚠️ Using fallback:", game_id)
 
-            person = p.get("person", {})
-            stats = p.get("stats", {}).get("batting", {})
-
-            if not stats:
-                continue
-
-            players.append({
-                "player": person.get("fullName"),
-                "team": team_name,
-                "at_bats": stats.get("atBats", 0),
-                "runs": stats.get("runs", 0),
-                "hits": stats.get("hits", 0),
-                "rbi": stats.get("rbi", 0),
-                "home_runs": stats.get("homeRuns", 0),
-                "walks": stats.get("baseOnBalls", 0),
-                "strikeouts": stats.get("strikeOuts", 0)
-            })
-
-        return players
-
-    players = []
-    players += parse(teams["home"])
-    players += parse(teams["away"])
+            return [{
+                "fallback": True,
+                "note": "Boxscore not ready yet",
+                "home_runs": linescore["teams"]["home"]["runs"],
+                "away_runs": linescore["teams"]["away"]["runs"],
+                "innings": linescore.get("innings", [])
+            }]
+        except:
+            print("❌ No usable data:", game_id)
+            return None
 
     return players
 
 
-# -------------------------
+# -------------------------------------------------
 # RUN
-# -------------------------
+# -------------------------------------------------
 games = get_schedule()
 all_games = []
 
@@ -118,7 +142,7 @@ for g in games:
 
     print(f"{game_id} → {g['status']} ({g['state']})")
 
-    # ✅ INCLUDE LIVE + FINAL (skip empty scheduled games)
+    # ✅ include LIVE + FINAL games (skip empty previews)
     if g["home_score"] == 0 and g["away_score"] == 0:
         continue
 
@@ -132,14 +156,16 @@ for g in games:
         with open(file_path, "w") as f:
             json.dump(box, f, indent=2)
     else:
-        print("⚠️ No boxscore yet:", game_id)
+        print("❌ Still no data:", game_id)
 
     all_games.append(g)
 
+    time.sleep(0.5)  # prevent API hammering
 
-# -------------------------
+
+# -------------------------------------------------
 # SAVE SEASON
-# -------------------------
+# -------------------------------------------------
 season_output = {
     "season": SEASON,
     "games": all_games,
