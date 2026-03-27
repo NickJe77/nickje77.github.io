@@ -6,14 +6,14 @@ from datetime import datetime
 import time
 import random
 
-print("TENNIS FULL SCRAPER (GITHUB SAFE)")
+print("TENNIS SCRAPER (ALIGNED WITH SITE)")
 
 BASE = Path("docs/data/tennis")
 MATCH_DIR = BASE / "matches"
 MATCH_DIR.mkdir(parents=True, exist_ok=True)
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    "User-Agent": "Mozilla/5.0"
 }
 
 START_YEAR = 2025
@@ -22,20 +22,21 @@ CURRENT_MONTH = datetime.utcnow().month
 
 
 def fetch_page(url):
-    for attempt in range(3):
+    for _ in range(3):
         try:
-            res = requests.get(url, headers=HEADERS, timeout=15)
-
-            if res.status_code == 200 and len(res.text) > 5000:
-                return res.text
-
+            r = requests.get(url, headers=HEADERS, timeout=15)
+            if r.status_code == 200 and len(r.text) > 5000:
+                return r.text
         except:
             pass
 
-        print(f"Retrying ({attempt+1})...")
         time.sleep(random.uniform(2, 5))
 
     return None
+
+
+def format_date(year, month):
+    return f"{year}{str(month).zfill(2)}01"
 
 
 def scrape_month(year, month):
@@ -43,7 +44,6 @@ def scrape_month(year, month):
     print(f"Scraping {year}-{month}...")
 
     html = fetch_page(url)
-
     if not html:
         print("Failed page")
         return []
@@ -53,14 +53,22 @@ def scrape_month(year, month):
     matches = []
     rows = soup.select("table.result tr")
 
+    current_tournament = "Unknown"
+
     for r in rows:
         cols = r.find_all("td")
+
+        # detect tournament header rows
+        if len(cols) == 1:
+            txt = cols[0].text.strip()
+            if txt:
+                current_tournament = txt
+            continue
 
         if len(cols) < 5:
             continue
 
         try:
-            date = cols[0].text.strip()
             player1 = cols[2].text.strip()
             player2 = cols[3].text.strip()
             score = cols[4].text.strip()
@@ -69,14 +77,16 @@ def scrape_month(year, month):
                 continue
 
             matches.append({
-                "date": date,
+                "tournament": current_tournament,
+                "surface": "Hard",      # temp (we upgrade next)
+                "round": "R32",         # temp
+
                 "player1": player1,
                 "player2": player2,
                 "score": score,
-                "season": year,
-                "tournament": "ATP Event",
-                "surface": "Hard",
-                "round": "R32"
+
+                "date": format_date(year, month),
+                "gender": "M"
             })
 
         except:
@@ -93,26 +103,23 @@ def run():
         max_month = CURRENT_MONTH if year == CURRENT_YEAR else 12
 
         for month in range(1, max_month + 1):
-            matches = scrape_month(year, month)
-            all_matches.extend(matches)
-
-            time.sleep(random.uniform(1, 3))  # 🔥 anti-block
+            all_matches.extend(scrape_month(year, month))
+            time.sleep(random.uniform(1, 3))
 
     print(f"\nTOTAL: {len(all_matches)} matches")
 
+    # SAVE PER YEAR (FLAT LIST — IMPORTANT)
     seasons = {}
 
     for m in all_matches:
-        seasons.setdefault(m["season"], []).append(m)
+        year = int(m["date"][:4])
+        seasons.setdefault(year, []).append(m)
 
-    for season, games in seasons.items():
-        out_file = MATCH_DIR / f"{season}.json"
+    for year, games in seasons.items():
+        out_file = MATCH_DIR / f"{year}.json"
 
         with open(out_file, "w") as f:
-            json.dump({
-                "season": season,
-                "matches": games
-            }, f, indent=2)
+            json.dump(games, f, indent=2)
 
         print(f"Saved {len(games)} → {out_file}")
 
