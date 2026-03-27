@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime
 import time
 
-print("TENNIS SCRAPER (CLEAN BUILD — 2025+)")
+print("TENNIS SCRAPER (FINAL — TOURNAMENT MODE FIXED)")
 
 BASE = Path("docs/data/tennis")
 MATCH_DIR = BASE / "matches"
@@ -34,14 +34,16 @@ def fetch(url):
 
 
 # -------------------------
-# GET TOURNAMENTS
+# GET TOURNAMENTS (FIXED)
 # -------------------------
 def get_tournaments(year):
-    url = f"https://www.tennisexplorer.com/atp-men/{year}/"
     print(f"\nGetting tournaments for {year}")
 
+    url = f"https://www.tennisexplorer.com/results/?type=atp&year={year}"
     html = fetch(url)
+
     if not html:
+        print("Failed to load tournaments page")
         return []
 
     soup = BeautifulSoup(html, "html.parser")
@@ -51,13 +53,18 @@ def get_tournaments(year):
     for a in soup.select("a"):
         href = a.get("href", "")
 
-        if "/atp-men/" in href and "/results/" in href:
+        # ignore match pages
+        if "/match-detail/" in href:
+            continue
+
+        # 🔥 correct tournament pattern
+        if "/atp-men/" in href and href.endswith("/results/"):
             full = "https://www.tennisexplorer.com" + href
             links.append(full)
 
     links = sorted(list(set(links)))
 
-    print(f" → {len(links)} tournaments")
+    print(f" → {len(links)} tournaments found")
     return links
 
 
@@ -153,7 +160,7 @@ def run():
             all_matches.extend(matches)
             time.sleep(1)
 
-        print(f"\n{year} MATCHES:", len(all_matches))
+        print(f"\n{year} MATCHES: {len(all_matches)}")
 
         if not all_matches:
             continue
@@ -168,7 +175,7 @@ def run():
         with open(EVENT_DIR / f"{year}.json", "w") as f:
             json.dump(events, f, indent=2)
 
-        print(f"{year} EVENTS:", len(events))
+        print(f"{year} EVENTS: {len(events)}")
 
 
 run()
