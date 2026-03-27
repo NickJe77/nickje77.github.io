@@ -5,8 +5,9 @@ from pathlib import Path
 from datetime import datetime
 import time
 import random
+import re
 
-print("TENNIS SCRAPER (CLEAN TOURNAMENT SOURCE)")
+print("TENNIS SCRAPER (STABLE FINAL)")
 
 BASE = Path("docs/data/tennis")
 MATCH_DIR = BASE / "matches"
@@ -19,6 +20,9 @@ CURRENT_YEAR = datetime.utcnow().year
 CURRENT_MONTH = datetime.utcnow().month
 
 
+# -----------------------------
+# FETCH
+# -----------------------------
 def fetch(url):
     for _ in range(3):
         try:
@@ -27,46 +31,59 @@ def fetch(url):
                 return r.text
         except:
             pass
+
         time.sleep(random.uniform(2, 5))
+
     return None
 
 
+# -----------------------------
+# CLEAN HEADER
+# -----------------------------
 def clean_header(text):
     text = text.strip()
 
-    # remove surface text from header
+    # remove brackets
+    text = re.sub(r"\(.*?\)", "", text)
+
+    # remove surfaces
     for s in ["Hard", "Clay", "Grass"]:
         text = text.replace(s, "")
-
-    # remove country brackets
-    text = re.sub(r"\(.*?\)", "", text)
 
     return text.strip()
 
 
+# -----------------------------
+# SCRAPE MONTH
+# -----------------------------
 def scrape_month(year, month):
     url = f"https://www.tennisexplorer.com/results/atp-men/?year={year}&month={month}"
     print(f"Scraping {year}-{month}")
 
     html = fetch(url)
     if not html:
+        print("Failed page")
         return []
 
     soup = BeautifulSoup(html, "html.parser")
 
     matches = []
-    current_tournament = None
-    current_surface = "Hard"
+    rows = soup.find_all("tr")   # 🔥 robust selector
 
-    rows = soup.select("table.result tr")
+    current_tournament = "Unknown"
+    current_surface = "Hard"
 
     for row in rows:
 
-        # ✅ ONLY USE HEADER ROWS
+        # -------------------------
+        # HEADER DETECTION
+        # -------------------------
         if row.find("th"):
             txt = row.get_text(strip=True)
 
             if txt and len(txt) > 5:
+                print("HEADER FOUND:", txt)
+
                 current_tournament = clean_header(txt)
 
                 low = txt.lower()
@@ -86,6 +103,7 @@ def scrape_month(year, month):
 
         try:
             links = row.find_all("a")
+
             if len(links) < 2:
                 continue
 
@@ -95,11 +113,11 @@ def scrape_month(year, month):
             score = cols[-1].text.strip()
             round_val = cols[0].text.strip()
 
-            if not current_tournament:
-                continue  # 🚫 skip if no valid tournament
+            if not player1 or not player2:
+                continue
 
             matches.append({
-                "tournament": current_tournament,
+                "tournament": current_tournament,   # 🔥 always set
                 "surface": current_surface,
                 "round": round_val,
 
@@ -118,6 +136,9 @@ def scrape_month(year, month):
     return matches
 
 
+# -----------------------------
+# MAIN
+# -----------------------------
 def run():
     all_matches = []
 
@@ -125,10 +146,12 @@ def run():
         max_month = CURRENT_MONTH if year == CURRENT_YEAR else 12
 
         for month in range(1, max_month + 1):
-            all_matches.extend(scrape_month(year, month))
+            matches = scrape_month(year, month)
+            all_matches.extend(matches)
+
             time.sleep(random.uniform(1, 2))
 
-    print(f"\nTOTAL: {len(all_matches)} matches")
+    print(f"\nTOTAL MATCHES: {len(all_matches)}")
 
     seasons = {}
 
@@ -137,7 +160,9 @@ def run():
         seasons.setdefault(y, []).append(m)
 
     for y, games in seasons.items():
-        with open(MATCH_DIR / f"{y}.json", "w") as f:
+        out_file = MATCH_DIR / f"{y}.json"
+
+        with open(out_file, "w") as f:
             json.dump(games, f, indent=2)
 
         print(f"Saved {y} ({len(games)})")
