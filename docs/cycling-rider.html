@@ -5,19 +5,11 @@
 <title>Rider | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<link rel="stylesheet" href="style.css">
-
 <style>
+body{font-family:system-ui,Arial,sans-serif;margin:0;padding:20px;}
+h1{text-align:center;}
 
-/* BASE */
-body{
-  font-family:system-ui, Arial, sans-serif;
-  margin:0;
-  padding:20px;
-}
-
-/* NAVBAR */
-.home-nav{
+.navbar{
   display:flex;
   justify-content:center;
   gap:22px;
@@ -26,164 +18,133 @@ body{
   font-weight:600;
 }
 
-.home-nav a{
-  color:#0056d6;
-  text-decoration:none;
-  font-size:15px;
-}
+.navbar a{color:#0056d6;text-decoration:none;}
 
-/* HEADER */
-h1{
-  text-align:center;
-  margin-top:20px;
-}
+.section{max-width:800px;margin:30px auto;}
 
-/* SUMMARY */
-.summary{
-  text-align:center;
-  margin:20px 0;
-  font-size:18px;
-  font-weight:600;
-}
+h2{border-bottom:2px solid #eee;padding-bottom:6px;}
 
-/* TABLE */
-table{
-  width:100%;
-  border-collapse:collapse;
-  margin-top:20px;
-}
+table{width:100%;border-collapse:collapse;margin-top:10px;}
 
-th,td{
-  padding:8px;
-  border-bottom:1px solid #ddd;
-  text-align:left;
-}
+th{background:#111;color:#fff;padding:10px;}
 
-th{
-  background:#111;
-  color:#fff;
-}
+td{padding:8px;border-bottom:1px solid #ddd;}
 
-tr:hover{
-  background:#f5f5f5;
-}
-
+tbody tr:nth-child(even){background:#f2f6ff;}
 </style>
 </head>
 
 <body>
 
-<!-- NAV -->
-<nav class="home-nav">
+<div class="navbar">
   <a href="./index.html">Home</a>
   <a href="./cycling.html">Cycling</a>
-  <a href="./cycling-leaders.html">Leaders</a>
-  <a href="./nba.html">NBA</a>
-  <a href="./nfl.html">NFL</a>
-</nav>
+</div>
 
-<h1 id="name">Rider</h1>
+<h1 id="name"></h1>
 
-<div class="summary" id="summary"></div>
+<div class="section">
+  <h2>Tour Wins</h2>
+  <table>
+    <thead><tr><th>Year</th></tr></thead>
+    <tbody id="tour"></tbody>
+  </table>
+</div>
 
-<table>
-  <thead>
-    <tr>
-      <th>Year</th>
-      <th>Stage Wins</th>
-      <th>Yellow</th>
-      <th>Green</th>
-      <th>Polka Dot</th>
-      <th>White</th>
-    </tr>
-  </thead>
-  <tbody id="tableBody"></tbody>
-</table>
+<div class="section">
+  <h2>Stage Wins</h2>
+  <table>
+    <thead><tr><th>Year</th><th>Wins</th></tr></thead>
+    <tbody id="stages"></tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h2>Jerseys</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Year</th>
+        <th>Green</th>
+        <th>Polka</th>
+        <th>White</th>
+      </tr>
+    </thead>
+    <tbody id="jerseys"></tbody>
+  </table>
+</div>
 
 <script>
 
-/* GET URL PARAM */
-function getParam(name){
-  return new URLSearchParams(window.location.search).get(name);
-}
-
-/* CONVERT SLUG → NAME */
-function unslug(slug){
-  if(!slug) return "";
-  return slug
-    .replace(/-/g," ")
-    .replace(/\b\w/g, l => l.toUpperCase());
-}
-
-/* SAFE NUMBER */
-function num(v){
-  return v ? v : 0;
-}
-
-const slug = getParam("name");
-const riderName = unslug(slug);
+const params = new URLSearchParams(window.location.search);
+const riderName = decodeURIComponent(params.get("name") || "");
 
 document.getElementById("name").textContent = riderName;
 
-let DATA = [];
-
-/* LOAD DATA */
-fetch("data/cycling/riders.json")
-  .then(r => r.json())
-  .then(data => {
-    DATA = data;
-    render();
-  });
-
-/* RENDER PAGE */
-function render(){
-
-  const rows = DATA.filter(d =>
-    d.Name.toLowerCase() === riderName.toLowerCase()
-  );
-
-  const body = document.getElementById("tableBody");
-  body.innerHTML = "";
-
-  let totals = {
-    Wins:0,
-    Yellow:0,
-    Green:0,
-    PolkaDot:0,
-    White:0
-  };
-
-  rows.forEach(d => {
-
-    totals.Wins += num(d.Wins);
-    totals.Yellow += num(d.Yellow);
-    totals.Green += num(d.Green);
-    totals.PolkaDot += num(d.PolkaDot);
-    totals.White += num(d.White);
-
-    const tr = document.createElement("tr");
-
-    tr.innerHTML = `
-      <td>${d.Year}</td>
-      <td>${num(d.Wins)}</td>
-      <td>${num(d.Yellow)}</td>
-      <td>${num(d.Green)}</td>
-      <td>${num(d.PolkaDot)}</td>
-      <td>${num(d.White)}</td>
-    `;
-
-    body.appendChild(tr);
-  });
-
-  /* SUMMARY */
-  document.getElementById("summary").innerHTML = `
-    Wins: ${totals.Wins} |
-    Yellow: ${totals.Yellow} |
-    Green: ${totals.Green} |
-    Polka Dot: ${totals.PolkaDot} |
-    White: ${totals.White}
-  `;
+function cleanName(name){
+  return (name || "").replace(/\(.*?\)/g,"").trim();
 }
+
+fetch("/data/cycling/riders.json")
+.then(r=>r.json())
+.then(data=>{
+
+  const rider = data.filter(r => cleanName(r.Name) === riderName);
+
+  const winners = {};
+  data.forEach(r=>{
+    const year = r.Year;
+    const name = cleanName(r.Name);
+    const y = Number(r.Yellow||0);
+
+    if(!winners[year] || y > winners[year].y){
+      winners[year] = {name,y};
+    }
+  });
+
+  const tourBody = document.getElementById("tour");
+  const stageBody = document.getElementById("stages");
+  const jerseyBody = document.getElementById("jerseys");
+
+  const stageMap = {};
+
+  rider.forEach(r=>{
+
+    const year = r.Year;
+
+    if(winners[year] && winners[year].name === riderName){
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${year}</td>`;
+      tourBody.appendChild(tr);
+    }
+
+    const wins = Number(r.Wins||0);
+    if(wins > 0){
+      stageMap[year] = wins;
+    }
+
+    if(r.Green || r.PolkaDot || r.White){
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${year}</td>
+        <td>${r.Green||0}</td>
+        <td>${r.PolkaDot||0}</td>
+        <td>${r.White||0}</td>
+      `;
+      jerseyBody.appendChild(tr);
+    }
+
+  });
+
+  Object.entries(stageMap)
+    .sort((a,b)=>b[0]-a[0])
+    .forEach(([y,w])=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${y}</td><td>${w}</td>`;
+      stageBody.appendChild(tr);
+    });
+
+});
 
 </script>
 
