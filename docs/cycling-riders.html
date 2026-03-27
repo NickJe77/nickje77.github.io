@@ -6,7 +6,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{font-family:system-ui,Arial,sans-serif;margin:0;padding:20px;}
+body{
+  font-family:system-ui,Arial,sans-serif;
+  margin:0;
+  padding:20px;
+}
+
 h1{text-align:center;}
 
 .navbar{
@@ -18,9 +23,15 @@ h1{text-align:center;}
   font-weight:600;
 }
 
-.navbar a{color:#0056d6;text-decoration:none;}
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+}
 
-.controls{text-align:center;margin:20px 0;}
+.controls{
+  text-align:center;
+  margin:20px 0;
+}
 
 input{
   padding:10px;
@@ -30,7 +41,10 @@ input{
   border:1px solid #ccc;
 }
 
-table{width:100%;border-collapse:collapse;}
+table{
+  width:100%;
+  border-collapse:collapse;
+}
 
 th{
   background:#111;
@@ -44,7 +58,14 @@ td{
   border-bottom:1px solid #ddd;
 }
 
-tr:hover{background:#f5f5f5;}
+/* 🔵 BLUE STRIPING */
+tbody tr:nth-child(even){
+  background:#f2f6ff;
+}
+
+tr:hover{
+  background:#e6edff;
+}
 </style>
 </head>
 
@@ -65,6 +86,7 @@ tr:hover{background:#f5f5f5;}
 <thead>
 <tr>
   <th>Rider</th>
+  <th>Tour Wins</th>
   <th>Stage Wins</th>
   <th>Green</th>
   <th>Polka Dot</th>
@@ -77,28 +99,71 @@ tr:hover{background:#f5f5f5;}
 <script>
 
 let riders = [];
+let winnersPerYear = {};
+let tourWins = {};
 
+/* LOAD DATA */
 fetch("/data/cycling/riders.json")
 .then(r => r.json())
-.then(data => build(data));
+.then(data => {
 
+  buildWinners(data);
+  buildRiders(data);
+
+});
+
+/* REMOVE TEAMS */
 function cleanName(name){
   return (name || "").replace(/\(.*?\)/g,"").trim();
 }
 
-function build(data){
+/* -------------------------
+FIND WINNER PER YEAR
+------------------------- */
+function buildWinners(data){
+
+  data.forEach(r => {
+
+    const year = r.Year;
+    const name = cleanName(r.Name);
+    const yellow = Number(r.Yellow || 0);
+
+    if(!year || !name) return;
+
+    if(!winnersPerYear[year]){
+      winnersPerYear[year] = { name, yellow };
+    } else {
+      if(yellow > winnersPerYear[year].yellow){
+        winnersPerYear[year] = { name, yellow };
+      }
+    }
+
+  });
+
+  /* COUNT TOUR WINS */
+  Object.values(winnersPerYear).forEach(w => {
+    if(!tourWins[w.name]) tourWins[w.name] = 0;
+    tourWins[w.name]++;
+  });
+
+}
+
+/* -------------------------
+BUILD RIDERS
+------------------------- */
+function buildRiders(data){
 
   const map = {};
 
   data.forEach(r => {
 
     const name = cleanName(r.Name);
-
     if(!name) return;
 
     if(!map[name]){
       map[name] = {
         name: name,
+        tour: tourWins[name] || 0,
         stage: 0,
         green: 0,
         polka: 0,
@@ -114,11 +179,14 @@ function build(data){
   });
 
   riders = Object.values(map)
-    .sort((a,b)=> b.stage - a.stage);
+    .sort((a,b)=> b.tour - a.tour || b.stage - a.stage);
 
   render(riders);
 }
 
+/* -------------------------
+RENDER
+------------------------- */
 function render(data){
   const tbody = document.getElementById("table-body");
   tbody.innerHTML = "";
@@ -128,6 +196,7 @@ function render(data){
 
     tr.innerHTML = `
       <td>${r.name}</td>
+      <td>${r.tour}</td>
       <td>${r.stage}</td>
       <td>${r.green}</td>
       <td>${r.polka}</td>
@@ -138,6 +207,9 @@ function render(data){
   });
 }
 
+/* -------------------------
+SEARCH
+------------------------- */
 document.getElementById("search").addEventListener("input", e => {
   const q = e.target.value.toLowerCase();
   render(riders.filter(r => r.name.toLowerCase().includes(q)));
