@@ -5,19 +5,20 @@
 <title>Tour de France Riders | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<link rel="stylesheet" href="style.css">
-
 <style>
-
-/* MATCH SITE */
 body{
-  font-family:system-ui, Arial, sans-serif;
+  font-family:system-ui,Arial,sans-serif;
   margin:0;
   padding:20px;
 }
 
-/* NAVBAR */
-.home-nav{
+h1{
+  text-align:center;
+  margin-bottom:10px;
+}
+
+/* NAV */
+.navbar{
   display:flex;
   justify-content:center;
   gap:22px;
@@ -26,28 +27,23 @@ body{
   font-weight:600;
 }
 
-.home-nav a{
+.navbar a{
   color:#0056d6;
   text-decoration:none;
-  font-size:15px;
 }
 
-/* TITLE */
-h1{
-  text-align:center;
-  margin-top:20px;
-}
-
-/* CONTROLS */
+/* SEARCH */
 .controls{
   text-align:center;
   margin:20px 0;
 }
 
 input{
-  padding:8px;
-  width:250px;
+  padding:10px;
+  width:260px;
   font-size:16px;
+  border-radius:8px;
+  border:1px solid #ccc;
 }
 
 /* TABLE */
@@ -57,15 +53,16 @@ table{
   margin-top:20px;
 }
 
-th,td{
-  padding:8px;
-  border-bottom:1px solid #ddd;
-  text-align:left;
-}
-
 th{
   background:#111;
   color:#fff;
+  padding:12px;
+  text-align:left;
+}
+
+td{
+  padding:10px;
+  border-bottom:1px solid #ddd;
 }
 
 tr:hover{
@@ -77,87 +74,134 @@ tr:hover{
 
 <body>
 
-<!-- NAVBAR -->
-<nav class="home-nav">
+<!-- NAV -->
+<div class="navbar">
   <a href="./index.html">Home</a>
   <a href="./cycling.html">Cycling</a>
   <a href="./nba.html">NBA</a>
   <a href="./nfl.html">NFL</a>
   <a href="./olympics.html">Olympics</a>
-</nav>
+</div>
 
 <h1>Tour de France Riders</h1>
 
+<!-- SEARCH -->
 <div class="controls">
-  <input type="text" id="search" placeholder="Search rider...">
+  <input id="search" placeholder="Search rider...">
 </div>
 
+<!-- TABLE -->
 <table>
-  <thead>
-    <tr>
-      <th>Year</th>
-      <th>Rider</th>
-      <th>Stage Wins</th>
-      <th>Yellow</th>
-      <th>Green</th>
-      <th>Polka Dot</th>
-      <th>White</th>
-    </tr>
-  </thead>
-  <tbody id="tableBody"></tbody>
+<thead>
+<tr>
+  <th>Rider</th>
+  <th>Tour Wins</th>
+  <th>Stage Wins</th>
+  <th>Green</th>
+  <th>Polka Dot</th>
+  <th>White</th>
+</tr>
+</thead>
+<tbody id="table-body"></tbody>
 </table>
 
 <script>
 
-let DATA = [];
+let riders = [];
 
-/* SAFE NUMBER HANDLER */
-function num(v){
-  return v ? v : 0;
+/* -------------------------
+LOAD DATA
+------------------------- */
+fetch("data/cycling/riders.json")
+.then(r => r.json())
+.then(data => {
+  build(data);
+});
+
+/* -------------------------
+CLEAN NAME (REMOVE TEAMS)
+------------------------- */
+function cleanName(name){
+  return name.replace(/\(.*?\)/g,"").trim();
 }
 
-fetch("data/cycling/riders.json")
-  .then(r => r.json())
-  .then(data => {
-    DATA = data;
-    render();
+/* -------------------------
+BUILD AGGREGATED DATA
+------------------------- */
+function build(data){
+
+  const map = {};
+
+  data.forEach(r => {
+
+    const name = cleanName(r.rider || r.name || "");
+
+    if(!name) return;
+
+    if(!map[name]){
+      map[name] = {
+        name: name,
+        tour: 0,
+        stage: 0,
+        green: 0,
+        polka: 0,
+        white: 0
+      };
+    }
+
+    map[name].stage += Number(r.stage_wins || r.stage || 0);
+    map[name].green += Number(r.green || 0);
+    map[name].polka += Number(r.polka_dot || r.polka || 0);
+    map[name].white += Number(r.white || 0);
+
+    // TOUR WIN (if flagged)
+    if(r.tour_winner === true || r.yellow === 1){
+      map[name].tour += 1;
+    }
+
   });
 
-document.getElementById("search").addEventListener("input", render);
+  riders = Object.values(map)
+    .sort((a,b)=> b.tour - a.tour || b.stage - a.stage);
 
-function render(){
+  render(riders);
+}
 
-  const search = document.getElementById("search").value.toLowerCase();
+/* -------------------------
+RENDER
+------------------------- */
+function render(data){
+  const tbody = document.getElementById("table-body");
+  tbody.innerHTML = "";
 
-  let rows = DATA;
-
-  if(search){
-    rows = rows.filter(d =>
-      (d.Name || "").toLowerCase().includes(search)
-    );
-  }
-
-  const body = document.getElementById("tableBody");
-  body.innerHTML = "";
-
-  rows.slice(0,500).forEach(d => {
-
+  data.forEach(r => {
     const tr = document.createElement("tr");
 
     tr.innerHTML = `
-      <td>${d.Year || ""}</td>
-      <td>${d.Name || ""}</td>
-      <td>${num(d.Wins)}</td>
-      <td>${num(d.Yellow)}</td>
-      <td>${num(d.Green)}</td>
-      <td>${num(d.PolkaDot)}</td>
-      <td>${num(d.White)}</td>
+      <td>${r.name}</td>
+      <td>${r.tour}</td>
+      <td>${r.stage}</td>
+      <td>${r.green}</td>
+      <td>${r.polka}</td>
+      <td>${r.white}</td>
     `;
 
-    body.appendChild(tr);
+    tbody.appendChild(tr);
   });
-
 }
+
+/* -------------------------
+SEARCH
+------------------------- */
+document.getElementById("search").addEventListener("input", e => {
+  const q = e.target.value.toLowerCase();
+
+  const filtered = riders.filter(r =>
+    r.name.toLowerCase().includes(q)
+  );
+
+  render(filtered);
+});
 
 </script>
 
