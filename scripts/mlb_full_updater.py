@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import time
 
-print("MLB UPDATER (FINAL WORKING)")
+print("MLB UPDATER (FINAL - BULLETPROOF)")
 
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1"
@@ -48,7 +48,6 @@ def get_schedule():
 
     print("Games found:", len(games))
 
-    # DEBUG (keep this)
     for g in games:
         print(g["game_id"], g["state"], g["home_score"], g["away_score"])
 
@@ -56,7 +55,7 @@ def get_schedule():
 
 
 # -------------------------------------------------
-# GET BOXSCORE (FIXED)
+# GET BOXSCORE (BULLETPROOF)
 # -------------------------------------------------
 def get_boxscore(game_id):
 
@@ -81,22 +80,16 @@ def get_boxscore(game_id):
             out = []
 
             for p in team.get("players", {}).values():
-                person = p.get("person", {})
                 stats = p.get("stats", {}).get("batting", {})
-
                 if not stats:
                     continue
 
                 out.append({
-                    "player": person.get("fullName"),
+                    "player": p.get("person", {}).get("fullName"),
                     "team": team_name,
-                    "at_bats": stats.get("atBats", 0),
-                    "runs": stats.get("runs", 0),
                     "hits": stats.get("hits", 0),
-                    "rbi": stats.get("rbi", 0),
-                    "home_runs": stats.get("homeRuns", 0),
-                    "walks": stats.get("baseOnBalls", 0),
-                    "strikeouts": stats.get("strikeOuts", 0)
+                    "runs": stats.get("runs", 0),
+                    "rbi": stats.get("rbi", 0)
                 })
 
             return out
@@ -107,27 +100,44 @@ def get_boxscore(game_id):
     except:
         pass
 
+    if players:
+        return players
+
     # -------------------------
-    # FALLBACK (IMPORTANT)
+    # FALLBACK 1 — LINESCORE
     # -------------------------
-    if not players:
-        try:
-            linescore = data["liveData"]["linescore"]
+    try:
+        linescore = data["liveData"]["linescore"]
 
-            print("⚠️ Using fallback:", game_id)
+        print("⚠️ Using linescore fallback:", game_id)
 
-            return [{
-                "fallback": True,
-                "note": "Boxscore not ready yet",
-                "home_runs": linescore["teams"]["home"]["runs"],
-                "away_runs": linescore["teams"]["away"]["runs"],
-                "innings": linescore.get("innings", [])
-            }]
-        except:
-            print("❌ No usable data:", game_id)
-            return None
+        return [{
+            "fallback": "linescore",
+            "home_runs": linescore["teams"]["home"]["runs"],
+            "away_runs": linescore["teams"]["away"]["runs"]
+        }]
+    except:
+        pass
 
-    return players
+    # -------------------------
+    # FALLBACK 2 — GAMEDATA (ALWAYS WORKS)
+    # -------------------------
+    try:
+        game = data["gameData"]
+
+        print("⚠️ Using gameData fallback:", game_id)
+
+        return [{
+            "fallback": "gameData",
+            "home_team": game["teams"]["home"]["name"],
+            "away_team": game["teams"]["away"]["name"],
+            "status": game["status"]["detailedState"]
+        }]
+    except:
+        pass
+
+    print("❌ Still no usable data:", game_id)
+    return None
 
 
 # -------------------------------------------------
@@ -142,7 +152,7 @@ for g in games:
 
     print(f"{game_id} → {g['status']} ({g['state']})")
 
-    # ✅ include LIVE + FINAL games (skip empty previews)
+    # ✅ include live + final (skip empty previews)
     if g["home_score"] == 0 and g["away_score"] == 0:
         continue
 
@@ -156,11 +166,11 @@ for g in games:
         with open(file_path, "w") as f:
             json.dump(box, f, indent=2)
     else:
-        print("❌ Still no data:", game_id)
+        print("❌ No data saved:", game_id)
 
     all_games.append(g)
 
-    time.sleep(0.5)  # prevent API hammering
+    time.sleep(0.5)
 
 
 # -------------------------------------------------
