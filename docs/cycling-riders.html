@@ -6,12 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{
-  font-family:system-ui,Arial,sans-serif;
-  margin:0;
-  padding:20px;
-}
-
+body{font-family:system-ui,Arial,sans-serif;margin:0;padding:20px;}
 h1{text-align:center;}
 
 .navbar{
@@ -23,34 +18,25 @@ h1{text-align:center;}
   font-weight:600;
 }
 
-.navbar a{
-  color:#0056d6;
-  text-decoration:none;
-}
+.navbar a{color:#0056d6;text-decoration:none;}
 
-.controls{
-  text-align:center;
-  margin:20px 0;
-}
+.controls{text-align:center;margin:20px 0;}
 
 input{
   padding:10px;
   width:260px;
-  font-size:16px;
   border-radius:8px;
   border:1px solid #ccc;
 }
 
-table{
-  width:100%;
-  border-collapse:collapse;
-}
+/* TABLE */
+table{width:100%;border-collapse:collapse;}
 
 th{
   background:#111;
   color:#fff;
   padding:12px;
-  text-align:left;
+  cursor:pointer;
 }
 
 td{
@@ -58,14 +44,9 @@ td{
   border-bottom:1px solid #ddd;
 }
 
-/* 🔵 BLUE STRIPING */
-tbody tr:nth-child(even){
-  background:#f2f6ff;
-}
-
-tr:hover{
-  background:#e6edff;
-}
+/* STRIPING */
+tbody tr:nth-child(even){background:#f2f6ff;}
+tr:hover{background:#e6edff;}
 </style>
 </head>
 
@@ -85,12 +66,12 @@ tr:hover{
 <table>
 <thead>
 <tr>
-  <th>Rider</th>
-  <th>Tour Wins</th>
-  <th>Stage Wins</th>
-  <th>Green</th>
-  <th>Polka Dot</th>
-  <th>White</th>
+  <th onclick="setSort('name')">Rider</th>
+  <th onclick="setSort('tour')">Tour Wins</th>
+  <th onclick="setSort('stage')">Stage Wins</th>
+  <th onclick="setSort('green')">Green</th>
+  <th onclick="setSort('polka')">Polka Dot</th>
+  <th onclick="setSort('white')">White</th>
 </tr>
 </thead>
 <tbody id="table-body"></tbody>
@@ -101,25 +82,22 @@ tr:hover{
 let riders = [];
 let winnersPerYear = {};
 let tourWins = {};
+let currentSort = { key:"tour", asc:false };
 
-/* LOAD DATA */
+/* LOAD */
 fetch("/data/cycling/riders.json")
 .then(r => r.json())
 .then(data => {
-
   buildWinners(data);
   buildRiders(data);
-
 });
 
-/* REMOVE TEAMS */
+/* CLEAN */
 function cleanName(name){
   return (name || "").replace(/\(.*?\)/g,"").trim();
 }
 
-/* -------------------------
-FIND WINNER PER YEAR
-------------------------- */
+/* FIND WINNERS */
 function buildWinners(data){
 
   data.forEach(r => {
@@ -140,7 +118,6 @@ function buildWinners(data){
 
   });
 
-  /* COUNT TOUR WINS */
   Object.values(winnersPerYear).forEach(w => {
     if(!tourWins[w.name]) tourWins[w.name] = 0;
     tourWins[w.name]++;
@@ -148,9 +125,7 @@ function buildWinners(data){
 
 }
 
-/* -------------------------
-BUILD RIDERS
-------------------------- */
+/* BUILD */
 function buildRiders(data){
 
   const map = {};
@@ -162,7 +137,7 @@ function buildRiders(data){
 
     if(!map[name]){
       map[name] = {
-        name: name,
+        name,
         tour: tourWins[name] || 0,
         stage: 0,
         green: 0,
@@ -178,24 +153,41 @@ function buildRiders(data){
 
   });
 
-  riders = Object.values(map)
-    .sort((a,b)=> b.tour - a.tour || b.stage - a.stage);
+  riders = Object.values(map);
+  sortAndRender();
+}
+
+/* SORT */
+function sortAndRender(){
+
+  const {key, asc} = currentSort;
+
+  riders.sort((a,b)=>{
+    if(typeof a[key] === "string"){
+      return asc ? a[key].localeCompare(b[key]) : b[key].localeCompare(a[key]);
+    }
+    return asc ? a[key]-b[key] : b[key]-a[key];
+  });
 
   render(riders);
 }
 
-/* -------------------------
-RENDER
-------------------------- */
+/* RENDER */
 function render(data){
+
   const tbody = document.getElementById("table-body");
   tbody.innerHTML = "";
 
-  data.forEach(r => {
+  data.forEach(r=>{
+
     const tr = document.createElement("tr");
 
     tr.innerHTML = `
-      <td>${r.name}</td>
+      <td>
+        <a href="cycling-rider.html?name=${encodeURIComponent(r.name)}">
+          ${r.name}
+        </a>
+      </td>
       <td>${r.tour}</td>
       <td>${r.stage}</td>
       <td>${r.green}</td>
@@ -204,15 +196,28 @@ function render(data){
     `;
 
     tbody.appendChild(tr);
+
   });
+
 }
 
-/* -------------------------
-SEARCH
-------------------------- */
-document.getElementById("search").addEventListener("input", e => {
+/* CLICK SORT */
+function setSort(key){
+
+  if(currentSort.key === key){
+    currentSort.asc = !currentSort.asc;
+  }else{
+    currentSort.key = key;
+    currentSort.asc = false;
+  }
+
+  sortAndRender();
+}
+
+/* SEARCH */
+document.getElementById("search").addEventListener("input", e=>{
   const q = e.target.value.toLowerCase();
-  render(riders.filter(r => r.name.toLowerCase().includes(q)));
+  render(riders.filter(r=>r.name.toLowerCase().includes(q)));
 });
 
 </script>
