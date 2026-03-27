@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 import unicodedata
 
-print("BUILDING TENNIS EVENTS (2025+ ONLY — FINAL FIX)")
+print("BUILDING TENNIS EVENTS (2025+ ONLY — HARD FIX)")
 
 BASE = Path("docs/data/tennis")
 MATCH_DIR = BASE / "matches"
@@ -22,7 +22,7 @@ def slug(text):
     return re.sub(r"\s+", "-", text)
 
 
-def clean_tournament(name):
+def extract_tournament(name):
     if not name:
         return "Unknown"
 
@@ -34,28 +34,29 @@ def clean_tournament(name):
     # remove numbers
     name = re.sub(r"\d+", "", name)
 
-    # remove round junk
+    # remove junk words
     junk = [
         "qf", "sf", "f", "r16", "r32", "r64", "r128",
-        "round", "final", "qualifying"
+        "round", "final", "qualifying",
+        "court", "atp", "men", "singles",
+        "hard", "clay", "grass"
     ]
 
     for j in junk:
         name = name.replace(j, "")
 
-    # remove surfaces
-    for s in ["hard", "clay", "grass"]:
-        name = name.replace(s, "")
-
-    # remove generic words
-    for w in ["atp", "men", "singles"]:
-        name = name.replace(w, "")
-
-    # clean spacing
+    # collapse spaces
     name = re.sub(r"\s+", " ", name).strip()
 
     if not name:
         return "Unknown"
+
+    # 🔥 TAKE FIRST 2 WORDS MAX (THIS IS THE KEY FIX)
+    parts = name.split()
+    if len(parts) >= 2:
+        name = f"{parts[0]} {parts[1]}"
+    else:
+        name = parts[0]
 
     return name.title()
 
@@ -72,7 +73,7 @@ for file in MATCH_DIR.glob("*.json"):
         continue
 
     if year < 2025:
-        continue  # 🚫 DO NOT TOUCH OLD DATA
+        continue
 
     try:
         data = json.load(open(file))
@@ -92,13 +93,13 @@ print(f"Loaded {len(all_matches)} matches")
 
 
 # -----------------------------
-# BUILD EVENTS (PROPER GROUPING)
+# BUILD EVENTS
 # -----------------------------
 events = {}
 
 for m in all_matches:
-    raw_name = m.get("tournament", "Unknown")
-    name = clean_tournament(raw_name)
+    raw = m.get("tournament", "")
+    name = extract_tournament(raw)
 
     surface = m.get("surface", "Hard")
     date = m.get("date", "")
@@ -108,7 +109,6 @@ for m in all_matches:
 
     year = int(date[:4])
 
-    # 🔥 FIXED GROUPING KEY
     key = f"{year}_{slug(name)}"
 
     if key not in events:
@@ -124,7 +124,7 @@ for m in all_matches:
 
 
 # -----------------------------
-# SAVE PER YEAR
+# SAVE
 # -----------------------------
 season_events = {}
 
