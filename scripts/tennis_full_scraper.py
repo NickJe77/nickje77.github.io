@@ -2,26 +2,54 @@ import requests
 from bs4 import BeautifulSoup
 import json
 from pathlib import Path
-from datetime import datetime
+import time
 
-print("TENNIS SCRAPER (STABLE SOURCE)")
+print("TENNIS FULL SCRAPER (PLAYER-BASED — RELIABLE)")
 
 BASE = Path("docs/data/tennis")
 MATCH_DIR = BASE / "matches"
 MATCH_DIR.mkdir(parents=True, exist_ok=True)
 
-URL = "https://www.tennisexplorer.com/matches/"
-
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
+# 🔥 START WITH KNOWN PLAYER LIST (we expand later)
+PLAYERS = [
+    "novak-djokovic",
+    "carlos-alcaraz",
+    "jannik-sinner",
+    "daniil-medvedev",
+    "alexander-zverev",
+    "stefanos-tsitsipas",
+    "andrey-rublev",
+    "casper-ruud",
+    "holger-rune",
+    "taylor-fritz"
+]
 
-def run():
-    r = requests.get(URL, headers=HEADERS)
-    soup = BeautifulSoup(r.text, "html.parser")
+BASE_URL = "https://www.tennisexplorer.com/player/{}/?matches=1"
 
-    rows = soup.select("table tr")
+
+def fetch(url):
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=15)
+        if r.status_code == 200:
+            return r.text
+    except:
+        return None
+
+
+def parse_player(player_slug):
+    url = BASE_URL.format(player_slug)
+    print(f"Fetching {player_slug}")
+
+    html = fetch(url)
+    if not html:
+        return []
+
+    soup = BeautifulSoup(html, "html.parser")
 
     matches = []
+    rows = soup.select("table.result tr")
 
     for row in rows:
         cols = row.find_all("td")
@@ -30,33 +58,67 @@ def run():
             continue
 
         try:
-            player1 = cols[2].text.strip()
-            player2 = cols[3].text.strip()
-            score = cols[4].text.strip()
+            date = cols[0].text.strip().replace(".", "")
+            opponent = cols[2].text.strip()
+            score = cols[3].text.strip()
+            tournament = cols[1].text.strip()
 
-            if not player1 or not player2:
+            if not opponent:
                 continue
 
             matches.append({
-                "tournament": "Unknown",
-                "surface": "Hard",
+                "tournament": tournament,
+                "surface": "Hard",   # upgrade later
                 "round": "R32",
 
-                "player1": player1,
-                "player2": player2,
+                "player1": player_slug.replace("-", " ").title(),
+                "player2": opponent,
                 "score": score,
 
-                "date": datetime.utcnow().strftime("%Y%m%d"),
+                "date": date,
                 "gender": "M"
             })
 
         except:
             continue
 
-    print(f"Saved {len(matches)} matches")
+    print(f" → {len(matches)} matches")
+    return matches
 
-    with open(MATCH_DIR / "2026.json", "w") as f:
-        json.dump(matches, f, indent=2)
+
+def run():
+    all_matches = []
+
+    for p in PLAYERS:
+        matches = parse_player(p)
+        all_matches.extend(matches)
+        time.sleep(1)
+
+    print(f"\nTOTAL MATCHES: {len(all_matches)}")
+
+    # 🔥 FILTER LAST 2 YEARS
+    filtered = []
+    for m in all_matches:
+        try:
+            year = int(m["date"][:4])
+            if year >= 2025:
+                filtered.append(m)
+        except:
+            continue
+
+    print(f"Filtered: {len(filtered)} matches (2025+)")
+
+    seasons = {}
+
+    for m in filtered:
+        y = int(m["date"][:4])
+        seasons.setdefault(y, []).append(m)
+
+    for y, games in seasons.items():
+        with open(MATCH_DIR / f"{y}.json", "w") as f:
+            json.dump(games, f, indent=2)
+
+        print(f"Saved {y} ({len(games)})")
 
 
 run()
