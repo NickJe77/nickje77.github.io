@@ -28,7 +28,6 @@ h1{text-align:center;}
   color:#0056d6;
 }
 
-/* TABLE */
 table{
   width:100%;
   max-width:900px;
@@ -87,15 +86,23 @@ tbody tr:nth-child(even){
 <script>
 
 // -------------------------
-// GET PARAMS
+// PARAMS (FIXED)
 // -------------------------
 const params = new URLSearchParams(window.location.search);
-const tournament = params.get("tournament");
-const year = params.get("year");
+
+const tournament = decodeURIComponent(params.get("tournament") || "");
+const year = params.get("year") || new Date().getFullYear();
 
 // -------------------------
 document.getElementById("title").textContent =
   `${tournament} ${year}`;
+
+// -------------------------
+// CLEAN FUNCTION (🔥 IMPORTANT)
+// -------------------------
+function clean(t){
+  return (t || "").toLowerCase().trim();
+}
 
 // -------------------------
 // LOAD DATA
@@ -105,7 +112,7 @@ fetch(`/data/tennis/matches/${year}.json`)
 .then(data => {
 
   const matches = data.filter(m =>
-    m.tournament === tournament
+    clean(m.tournament) === clean(tournament)
   );
 
   buildTable(matches);
@@ -113,17 +120,40 @@ fetch(`/data/tennis/matches/${year}.json`)
 });
 
 // -------------------------
+// DETECT WINNER FROM SCORE
+// -------------------------
+function getWinner(score, p1, p2){
+
+  if(!score) return "";
+
+  let p1Sets = 0;
+  let p2Sets = 0;
+
+  score.split(" ").forEach(set=>{
+    const [a,b] = set.split("-");
+    if(!a || !b) return;
+
+    const s1 = parseInt(a);
+    const s2 = parseInt(b);
+
+    if(s1 > s2) p1Sets++;
+    else p2Sets++;
+  });
+
+  return p1Sets > p2Sets ? "p1" : "p2";
+}
+
+// -------------------------
 function buildTable(matches){
 
   const tbody = document.getElementById("matches");
+  tbody.innerHTML = "";
 
   matches.forEach(m => {
 
-    const tr = document.createElement("tr");
+    const winner = getWinner(m.score, m.player1, m.player2);
 
-    const winner =
-      m.winner === m.player1 ? "p1" :
-      m.winner === m.player2 ? "p2" : "";
+    const tr = document.createElement("tr");
 
     tr.innerHTML = `
       <td>${m.round}</td>
