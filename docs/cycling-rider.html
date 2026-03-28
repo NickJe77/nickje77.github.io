@@ -113,40 +113,38 @@ const riderName = decodeURIComponent(params.get("name") || "");
 
 document.getElementById("name").textContent = riderName;
 
+// -------------------------
 function cleanName(name){
-  return (name || "").replace(/\(.*?\)/g,"").trim();
+  return (name || "")
+    .replace(/\[.*?\]/g,"")
+    .replace(/\(.*?\)/g,"")
+    .trim();
 }
 
 // -------------------------
-// LOAD BOTH DATA SOURCES
+// LOAD DATA
 // -------------------------
 Promise.all([
   fetch("/data/cycling/riders.json").then(r=>r.json()),
-  fetch("/data/cycling/TDF winners.csv").then(r=>r.text())
-]).then(([data, csv]) => {
+  fetch("/data/cycling/tdf_winners.json").then(r=>r.json())
+]).then(([data, winners]) => {
 
-  const tourWinsYears = buildTourWins(csv);
+  const tourWinsYears = getTourWins(winners);
   buildPage(data, tourWinsYears);
 
 });
 
 // -------------------------
-// PARSE CSV → YEARS WON
+// GET TOUR WIN YEARS
 // -------------------------
-function buildTourWins(csv){
+function getTourWins(data){
 
-  const rows = csv.split("\n").slice(1);
   const wins = [];
 
-  rows.forEach(r=>{
-    const cols = r.split(",");
-    if(cols.length < 2) return;
-
-    const year = cols[0];
-    const name = cleanName(cols[1]);
-
+  data.forEach(r => {
+    const name = cleanName(r.Cyclist);
     if(name === riderName){
-      wins.push(Number(year));
+      wins.push(Number(r.Year));
     }
   });
 
@@ -180,7 +178,7 @@ function buildPage(data, tourWinsYears){
       };
     }
 
-    // ✅ FIX: max per year (no duplicates)
+    // ✅ FIX: prevent duplicate stage rows
     yearly[year].wins = Math.max(yearly[year].wins, wins);
 
     yearly[year].green += Number(r.Green || 0);
