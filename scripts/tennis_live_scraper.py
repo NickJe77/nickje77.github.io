@@ -52,6 +52,39 @@ def slug(text):
     )
 
 
+def is_main_tour_event(name):
+    name = (name or "").lower()
+
+    # ❌ exclude junk
+    if any(x in name for x in [
+        "futures",
+        "itf",
+        "challenger",
+        "utr",
+        "exhibition",
+        "junior",
+        "qualification"
+    ]):
+        return False
+
+    # ✅ allow real events
+    if any(x in name for x in [
+        "atp",
+        "wta",
+        "masters",
+        "open",
+        "cup",
+        "slam"
+    ]):
+        return True
+
+    # fallback: allow normal tournament names (Miami, Madrid etc)
+    if len(name) > 3:
+        return True
+
+    return False
+
+
 def parse_score(cols1, cols2):
     score_parts = []
 
@@ -99,14 +132,24 @@ def parse_page(url, gender, year):
         r1 = rows[i]
         r2 = rows[i + 1]
 
-        # detect tournament header
+        # detect tournament
         text = r1.get_text(" ", strip=True)
+
         if text and len(text) < 40 and "." not in text and ":" not in text:
             if any(c.isalpha() for c in text):
-                current_tournament = text
+                if is_main_tour_event(text):
+                    current_tournament = text
+                else:
+                    current_tournament = ""
 
+        # must be valid player rows
         if not is_player_row(r1) or not is_player_row(r2):
             i += 1
+            continue
+
+        # skip if tournament not valid
+        if not current_tournament:
+            i += 2
             continue
 
         cols1 = r1.find_all("td")
@@ -144,6 +187,7 @@ def parse_page(url, gender, year):
         }
 
         matches.append(match)
+
         i += 2
 
     print(f"✔ {len(matches)} matches parsed")
@@ -151,7 +195,7 @@ def parse_page(url, gender, year):
 
 
 # -------------------------
-# MERGE + DEDUPE
+# MERGE / DEDUPE
 # -------------------------
 
 def load_existing(path):
@@ -162,8 +206,6 @@ def load_existing(path):
         data = json.loads(path.read_text())
         if isinstance(data, list):
             return data
-        if isinstance(data, dict) and "matches" in data:
-            return data["matches"]
     except:
         pass
 
@@ -175,16 +217,9 @@ def dedupe(matches):
     clean = []
 
     for m in matches:
-        key = (
-            m["date"],
-            m["player1"],
-            m["player2"],
-            m["score"]
-        )
-
+        key = (m["date"], m["player1"], m["player2"], m["score"])
         if key in seen:
             continue
-
         seen.add(key)
         clean.append(m)
 
@@ -207,7 +242,7 @@ def save_outputs(year, new_matches):
     # save matches
     matches_path.write_text(json.dumps(combined, indent=2))
 
-    # save seasons (same structure)
+    # save seasons
     season_path.write_text(json.dumps(combined, indent=2))
 
     print(f"Saved {year} → {len(combined)} matches")
@@ -218,7 +253,7 @@ def save_outputs(year, new_matches):
 # -------------------------
 
 def main():
-    print("RUNNING TENNIS SCRAPER (FINAL FULL VERSION)")
+    print("RUNNING TENNIS SCRAPER (FINAL FILTERED VERSION)")
 
     for year in YEARS:
         year_matches = []
