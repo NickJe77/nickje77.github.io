@@ -12,11 +12,8 @@ body{
   padding:20px;
 }
 
-h1{
-  text-align:center;
-}
+h1{text-align:center;}
 
-/* NAV */
 .navbar{
   display:flex;
   justify-content:center;
@@ -26,19 +23,14 @@ h1{
   font-weight:600;
 }
 
-.navbar a{
-  color:#0056d6;
-  text-decoration:none;
-}
+.navbar a{color:#0056d6;text-decoration:none;}
 
-/* SECTION (CENTERED WITH TABLE WIDTH) */
 .section{
   max-width:700px;
   margin:30px auto;
   text-align:center;
 }
 
-/* HEADERS */
 h2{
   border-bottom:2px solid #eee;
   padding-bottom:6px;
@@ -46,14 +38,12 @@ h2{
   font-size:20px;
 }
 
-/* TABLE */
 table{
   width:100%;
   border-collapse:collapse;
   margin-top:10px;
 }
 
-/* HEADER */
 th{
   background:#111;
   color:#fff;
@@ -61,7 +51,6 @@ th{
   text-align:center;
 }
 
-/* CELLS */
 td{
   padding:8px;
   border-bottom:1px solid #ddd;
@@ -69,15 +58,9 @@ td{
   font-variant-numeric: tabular-nums;
 }
 
-/* FIRST COLUMN LEFT */
-td:first-child{
-  text-align:left;
-}
+td:first-child{text-align:left;}
 
-/* STRIPING */
-tbody tr:nth-child(even){
-  background:#f2f6ff;
-}
+tbody tr:nth-child(even){background:#f2f6ff;}
 </style>
 </head>
 
@@ -90,34 +73,24 @@ tbody tr:nth-child(even){
 
 <h1 id="name"></h1>
 
-<!-- TOUR WINS -->
 <div class="section">
   <h2>Tour Wins</h2>
   <table>
-    <thead>
-      <tr>
-        <th>Year</th>
-      </tr>
-    </thead>
+    <thead><tr><th>Year</th></tr></thead>
     <tbody id="tour"></tbody>
   </table>
 </div>
 
-<!-- STAGE WINS -->
 <div class="section">
   <h2>Stage Wins</h2>
   <table>
     <thead>
-      <tr>
-        <th>Year</th>
-        <th>Wins</th>
-      </tr>
+      <tr><th>Year</th><th>Wins</th></tr>
     </thead>
     <tbody id="stages"></tbody>
   </table>
 </div>
 
-<!-- JERSEYS -->
 <div class="section">
   <h2>Jerseys</h2>
   <table>
@@ -140,67 +113,86 @@ const riderName = decodeURIComponent(params.get("name") || "");
 
 document.getElementById("name").textContent = riderName;
 
-/* CLEAN NAME */
 function cleanName(name){
   return (name || "").replace(/\(.*?\)/g,"").trim();
 }
 
-fetch("/data/cycling/riders.json")
-.then(r => r.json())
-.then(data => {
+// -------------------------
+// LOAD BOTH DATA SOURCES
+// -------------------------
+Promise.all([
+  fetch("/data/cycling/riders.json").then(r=>r.json()),
+  fetch("/data/cycling/TDF winners.csv").then(r=>r.text())
+]).then(([data, csv]) => {
 
-  const rider = data.filter(r => cleanName(r.Name) === riderName);
+  const tourWinsYears = buildTourWins(csv);
+  buildPage(data, tourWinsYears);
 
-  const winners = {};
+});
 
-  data.forEach(r=>{
-    const year = r.Year;
-    const name = cleanName(r.Name);
-    const y = Number(r.Yellow||0);
+// -------------------------
+// PARSE CSV → YEARS WON
+// -------------------------
+function buildTourWins(csv){
 
-    if(!winners[year] || y > winners[year].y){
-      winners[year] = {name,y};
+  const rows = csv.split("\n").slice(1);
+  const wins = [];
+
+  rows.forEach(r=>{
+    const cols = r.split(",");
+    if(cols.length < 2) return;
+
+    const year = cols[0];
+    const name = cleanName(cols[1]);
+
+    if(name === riderName){
+      wins.push(Number(year));
     }
   });
+
+  return wins;
+}
+
+// -------------------------
+// BUILD PAGE
+// -------------------------
+function buildPage(data, tourWinsYears){
+
+  const rider = data.filter(r => cleanName(r.Name) === riderName);
 
   const tourBody = document.getElementById("tour");
   const stageBody = document.getElementById("stages");
   const jerseyBody = document.getElementById("jerseys");
 
-  const tourSet = new Set();
-  const stageMap = {};
+  const yearly = {};
 
   rider.forEach(r=>{
 
     const year = r.Year;
+    const wins = Number(r.Wins || 0);
 
-    /* TOUR WIN */
-    if(winners[year] && winners[year].name === riderName){
-      tourSet.add(year);
+    if(!yearly[year]){
+      yearly[year] = {
+        wins: 0,
+        green: 0,
+        polka: 0,
+        white: 0
+      };
     }
 
-    /* STAGE WINS */
-    const wins = Number(r.Wins||0);
-    if(wins > 0){
-      stageMap[year] = wins;
-    }
+    // ✅ FIX: max per year (no duplicates)
+    yearly[year].wins = Math.max(yearly[year].wins, wins);
 
-    /* JERSEYS */
-    if(r.Green || r.PolkaDot || r.White){
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${year}</td>
-        <td>${r.Green||0}</td>
-        <td>${r.PolkaDot||0}</td>
-        <td>${r.White||0}</td>
-      `;
-      jerseyBody.appendChild(tr);
-    }
+    yearly[year].green += Number(r.Green || 0);
+    yearly[year].polka += Number(r.PolkaDot || 0);
+    yearly[year].white += Number(r.White || 0);
 
   });
 
-  /* TOUR WINS (DEDUPED) */
-  [...tourSet]
+  // -------------------------
+  // TOUR WINS
+  // -------------------------
+  tourWinsYears
     .sort((a,b)=>b-a)
     .forEach(year=>{
       const tr = document.createElement("tr");
@@ -208,19 +200,41 @@ fetch("/data/cycling/riders.json")
       tourBody.appendChild(tr);
     });
 
-  /* STAGE WINS */
-  Object.entries(stageMap)
+  // -------------------------
+  // STAGE WINS
+  // -------------------------
+  Object.entries(yearly)
     .sort((a,b)=>b[0]-a[0])
-    .forEach(([year,wins])=>{
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${year}</td>
-        <td>${wins}</td>
-      `;
-      stageBody.appendChild(tr);
+    .forEach(([year,y])=>{
+      if(y.wins > 0){
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${year}</td>
+          <td>${y.wins}</td>
+        `;
+        stageBody.appendChild(tr);
+      }
     });
 
-});
+  // -------------------------
+  // JERSEYS
+  // -------------------------
+  Object.entries(yearly)
+    .sort((a,b)=>b[0]-a[0])
+    .forEach(([year,y])=>{
+      if(y.green || y.polka || y.white){
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${year}</td>
+          <td>${y.green}</td>
+          <td>${y.polka}</td>
+          <td>${y.white}</td>
+        `;
+        jerseyBody.appendChild(tr);
+      }
+    });
+
+}
 
 </script>
 
