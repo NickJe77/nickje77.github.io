@@ -6,257 +6,246 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f5f5f5;}
-.navbar{display:flex;justify-content:center;gap:20px;padding:15px;background:#111;}
-.navbar a{color:white;text-decoration:none;font-weight:600;}
-.hero{background:linear-gradient(90deg,#0085C7,#F4C300,#000,#009F3D,#DF0024);color:white;text-align:center;padding:30px;}
-.container{max-width:1000px;margin:20px auto;padding:10px;}
+body{
+  font-family:system-ui,Arial,sans-serif;
+  margin:0;
+  padding:20px;
+}
 
-input{width:100%;padding:10px;font-size:16px;margin-bottom:15px;}
+h1{text-align:center;}
 
-.card{background:white;padding:15px;border-radius:10px;margin-bottom:12px;cursor:pointer;}
-.card:hover{background:#f0f0f0;}
+/* NAV */
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
 
-.medals{display:flex;gap:10px;margin-top:10px;}
-.medal{flex:1;text-align:center;padding:10px;border-radius:6px;background:#f2f2f2;}
-.gold{border-left:5px solid gold;}
-.silver{border-left:5px solid silver;}
-.bronze{border-left:5px solid #cd7f32;}
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+}
 
-.gold-list{margin-top:6px;font-size:12px;text-align:left;}
-.gold-year{font-weight:700;margin-top:6px;}
+/* SEARCH */
+.controls{
+  text-align:center;
+  margin:20px 0;
+}
 
-.detail{background:white;padding:20px;border-radius:10px;}
+input{
+  padding:10px;
+  width:260px;
+  border-radius:8px;
+  border:1px solid #ccc;
+}
 
-table{width:100%;margin-top:15px;border-collapse:collapse;}
-th,td{padding:8px;text-align:left;}
-th{background:#222;color:white;}
-tr:nth-child(even){background:#f2f2f2;}
+/* TABLE */
+table{
+  width:100%;
+  max-width:900px;
+  margin:20px auto;
+  border-collapse:collapse;
+}
+
+/* HEADER */
+th{
+  background:#111;
+  color:#fff;
+  padding:10px;
+  cursor:pointer;
+}
+
+/* ALIGNMENT */
+th:first-child,
+td:first-child{
+  text-align:left;
+}
+
+th:not(:first-child),
+td:not(:first-child){
+  text-align:center;
+}
+
+/* CELLS */
+td{
+  padding:10px;
+  border-bottom:1px solid #ddd;
+  font-variant-numeric: tabular-nums;
+}
+
+/* STRIPING */
+tbody tr:nth-child(even){
+  background:#f2f6ff;
+}
+
+tr:hover{
+  background:#e6edff;
+}
+
+/* LINKS */
+a{
+  color:#1a56db;
+  text-decoration:none;
+}
+
+a:hover{
+  text-decoration:underline;
+}
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-<a href="/">Home</a>
-<a href="/olympics.html">Olympics</a>
+  <a href="./index.html">Home</a>
+  <a href="./olympics.html">Olympics</a>
 </div>
 
-<div class="hero">
 <h1>Olympic Athletes</h1>
+
+<div class="controls">
+  <input id="search" placeholder="Search athlete...">
 </div>
 
-<div class="container">
-
-<input id="search" placeholder="Search athlete...">
-
-<div id="detail"></div>
-<div id="list"></div>
-
-</div>
+<table>
+<thead>
+<tr>
+  <th onclick="setSort('name')">Athlete</th>
+  <th onclick="setSort('gold')">Gold</th>
+  <th onclick="setSort('silver')">Silver</th>
+  <th onclick="setSort('bronze')">Bronze</th>
+  <th onclick="setSort('total')">Total</th>
+</tr>
+</thead>
+<tbody id="table-body"></tbody>
+</table>
 
 <script>
 
 let athletes = [];
-let results = [];
+let currentSort = { key:"gold", asc:false };
 
-const params = new URLSearchParams(window.location.search);
-const selectedAthlete = params.get("athlete");
+/* LOAD DATA */
+fetch("/data/olympics/athletes.json")
+.then(r => r.json())
+.then(data => build(data));
 
-async function load(){
+/* CLEAN NAME */
+function cleanName(name){
+  if(!name) return "";
 
-// ✅ LOAD FAST LIST (THIS FIXES YOUR ISSUE)
-const aRes = await fetch("data/olympics/olympic_athletes.json");
-athletes = await aRes.json();
+  const cleaned = name.trim();
 
-// ✅ LOAD FULL DATA (FOR DETAILS)
-try{
-const rRes = await fetch("data/olympics/olympic_results.json");
-results = await rRes.json();
-}catch{
-results = [];
+  if(
+    cleaned === "" ||
+    cleaned.toLowerCase() === "nan" ||
+    cleaned.toLowerCase() === "null"
+  ){
+    return "";
+  }
+
+  return cleaned;
 }
 
-if(selectedAthlete){
-showDetail(selectedAthlete);
-}else{
-renderTop();
+/* BUILD */
+function build(data){
+
+  const map = {};
+
+  data.forEach(a => {
+
+    const name = cleanName(a.name || a.Name);
+    if(!name) return;
+
+    if(!map[name]){
+      map[name] = {
+        name,
+        gold: 0,
+        silver: 0,
+        bronze: 0,
+        total: 0
+      };
+    }
+
+    const gold = Number(a.gold || a.Gold || 0);
+    const silver = Number(a.silver || a.Silver || 0);
+    const bronze = Number(a.bronze || a.Bronze || 0);
+
+    map[name].gold += gold;
+    map[name].silver += silver;
+    map[name].bronze += bronze;
+    map[name].total += gold + silver + bronze;
+
+  });
+
+  athletes = Object.values(map);
+  sortAndRender();
 }
 
+/* SORT */
+function sortAndRender(){
+
+  const {key, asc} = currentSort;
+
+  athletes.sort((a,b)=>{
+    if(typeof a[key] === "string"){
+      return asc ? a[key].localeCompare(b[key]) : b[key].localeCompare(a[key]);
+    }
+    return asc ? a[key]-b[key] : b[key]-a[key];
+  });
+
+  render(athletes);
 }
 
-// =======================
-// LIST VIEW
-// =======================
-function renderTop(){
-const top = [...athletes].sort((a,b)=>b.total-a.total).slice(0,50);
-renderList(top);
+/* RENDER */
+function render(data){
+
+  const tbody = document.getElementById("table-body");
+  tbody.innerHTML = "";
+
+  data.forEach(a => {
+
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td>
+        <a href="olympics-athlete.html?name=${encodeURIComponent(a.name)}">
+          ${a.name}
+        </a>
+      </td>
+      <td>${a.gold}</td>
+      <td>${a.silver}</td>
+      <td>${a.bronze}</td>
+      <td>${a.total}</td>
+    `;
+
+    tbody.appendChild(tr);
+
+  });
+
 }
 
-function renderList(list){
+/* SORT CLICK */
+function setSort(key){
 
-const container = document.getElementById("list");
-container.innerHTML = "";
+  if(currentSort.key === key){
+    currentSort.asc = !currentSort.asc;
+  }else{
+    currentSort.key = key;
+    currentSort.asc = false;
+  }
 
-list.forEach(a=>{
+  sortAndRender();
+}
 
-// 🔥 GOLD GROUPING (only if results exist)
-let goldHTML = "";
-
-if(results.length){
-
-const golds = results.filter(r=>{
-const n = r.athlete_full_name || r.name;
-let medal = (r.medal_type || r.medal || "").toUpperCase();
-
-medal = medal
-.replace("GOLD MEDAL","GOLD")
-.replace("SILVER MEDAL","SILVER")
-.replace("BRONZE MEDAL","BRONZE");
-
-return n === a.athlete && medal === "GOLD";
+/* SEARCH */
+document.getElementById("search").addEventListener("input", e=>{
+  const q = e.target.value.toLowerCase();
+  render(athletes.filter(a=>a.name.toLowerCase().includes(q)));
 });
-
-const grouped = {};
-
-golds.forEach(g=>{
-const year = g.year || (g.slug_game||"").slice(0,4);
-const event = g.event_title || g.event;
-
-if(!grouped[year]) grouped[year] = [];
-grouped[year].push(event);
-});
-
-Object.keys(grouped)
-.sort((a,b)=>b-a)
-.slice(0,3)
-.forEach(year=>{
-goldHTML += `<div class="gold-year">${year}</div>`;
-grouped[year].slice(0,3).forEach(e=>{
-goldHTML += `<div>${e}</div>`;
-});
-});
-
-}
-
-const div = document.createElement("div");
-div.className = "card";
-
-div.innerHTML = `
-<h2>${a.athlete}</h2>
-
-<div class="medals">
-<div class="medal gold">
-Gold<br>${a.GOLD}
-<div class="gold-list">${goldHTML}</div>
-</div>
-
-<div class="medal silver">Silver<br>${a.SILVER}</div>
-<div class="medal bronze">Bronze<br>${a.BRONZE}</div>
-</div>
-
-<div>Total: <b>${a.total}</b></div>
-`;
-
-div.onclick = () => {
-window.location.href = `olympics-athletes.html?athlete=${encodeURIComponent(a.athlete)}`;
-};
-
-container.appendChild(div);
-
-});
-}
-
-// =======================
-// DETAIL VIEW
-// =======================
-function showDetail(name){
-
-const athlete = athletes.find(a=>a.athlete===name);
-if(!athlete) return;
-
-document.getElementById("list").style.display = "none";
-
-let rows = "";
-
-if(results.length){
-
-rows = results
-.filter(r=>{
-const n = r.athlete_full_name || r.name;
-return n === name;
-})
-.map(r=>{
-
-let medal = (r.medal_type || r.medal || "").toUpperCase();
-
-medal = medal
-.replace("GOLD MEDAL","GOLD")
-.replace("SILVER MEDAL","SILVER")
-.replace("BRONZE MEDAL","BRONZE");
-
-const year = r.year || (r.slug_game||"").slice(0,4);
-
-return `
-<tr>
-<td>${year}</td>
-<td>${r.discipline_title || r.discipline}</td>
-<td>${r.event_title || r.event}</td>
-<td>${medal}</td>
-</tr>
-`;
-
-}).join("");
-
-}
-
-document.getElementById("detail").innerHTML = `
-<div class="detail">
-<h2>${athlete.athlete}</h2>
-
-<div class="medals">
-<div class="medal gold">Gold<br>${athlete.GOLD}</div>
-<div class="medal silver">Silver<br>${athlete.SILVER}</div>
-<div class="medal bronze">Bronze<br>${athlete.BRONZE}</div>
-</div>
-
-<h3>Total: ${athlete.total}</h3>
-
-${rows ? `
-<table>
-<tr>
-<th>Year</th>
-<th>Sport</th>
-<th>Event</th>
-<th>Medal</th>
-</tr>
-${rows}
-</table>
-` : `<p>No detailed results available</p>`}
-
-<br>
-<button onclick="window.location.href='olympics-athletes.html'">Back</button>
-</div>
-`;
-
-}
-
-// =======================
-// SEARCH
-// =======================
-document.getElementById("search").addEventListener("input", function(){
-
-const q = this.value.toLowerCase();
-
-const filtered = athletes.filter(a =>
-a.athlete.toLowerCase().includes(q)
-).slice(0,50);
-
-renderList(filtered);
-
-});
-
-load();
 
 </script>
 
