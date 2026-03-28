@@ -1,163 +1,314 @@
+import json
+import time
+from pathlib import Path
+from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
-import json
-from pathlib import Path
-from datetime import datetime, timedelta
-import time
 
-print("TENNIS SCRAPER (DAILY MODE — GUARANTEED DATA)")
+# -------------------------
+# PATHS
+# -------------------------
 
-BASE = Path("docs/data/tennis")
-MATCH_DIR = BASE / "matches"
-EVENT_DIR = BASE / "events"
+BASE_DIR = Path("docs/data/tennis")
+SEASONS_DIR = BASE_DIR / "seasons"
+MATCHES_DIR = BASE_DIR / "matches"
 
-MATCH_DIR.mkdir(parents=True, exist_ok=True)
-EVENT_DIR.mkdir(parents=True, exist_ok=True)
+SEASONS_DIR.mkdir(parents=True, exist_ok=True)
+MATCHES_DIR.mkdir(parents=True, exist_ok=True)
+
+# -------------------------
+# CONFIG
+# -------------------------
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
+SESSION = requests.Session()
+SESSION.headers.update(HEADERS)
 
-START_DATE = datetime(2025, 1, 1)
-END_DATE = datetime.utcnow()
+CURRENT_YEAR = datetime.utcnow().year
+YEARS = [2025, CURRENT_YEAR]
+
+URLS = {
+    "M": lambda y: f"https://www.tennisexplorer.com/results/?type=ATP&year={y}",
+    "F": lambda y: f"https://www.tennisexplorer.com/results/?type=WTA&year={y}",
+}
+
+# -------------------------
+# HELPERS
+# -------------------------
+
+def get(url):
+    return SESSION.get(url, timeout=30).text
+
+
+def slug(text):
+    return (
+        text.lower()
+        .replace(".", "")
+        .replace(",", "")
+        .replace("'", "")
+        .replace("(", "")
+        .replace(")", "")
+        .replace(" ", "-")
+    )
+
+
+# 🔥 STRICT FILTER (NO FALLBACK)
+def is_main_tour_event(name):
+    name = (name or "").lower().strip()
+
+    # ❌ HARD EXCLUDE
+    if any(x in name for x in [
+        "futures",
+        "itf",
+        "challenger",
+        "utr",
+        "exhibition",
+        "junior",
+        "qualification"
+    ]):
+        return False
+
+    # ✅ GRAND SLAMS
+    if any(x in name for x in [
+        "australian open",
+        "french open",
+        "wimbledon",
+        "us open"
+    ]):
+        return True
+
+    # ✅ ATP/WTA TOUR KEYWORDS
+    if any(x in name for x in [
+        "masters",
+        "atp",
+        "wta",
+        "finals",
+        "1000",
+        "500",
+        "250"
+    ]):
+        return True
+
+    # ✅ KNOWN TOUR EVENTS (covers most)
+    allowed = [
+        "miami",
+        "madrid",
+        "rome",
+        "indian wells",
+        "toronto",
+        "cincinnati",
+        "shanghai",
+        "paris",
+        "rotterdam",
+        "dubai",
+        "doha",
+        "acapulco",
+        "monte carlo",
+        "barcelona",
+        "hamburg",
+        "vienna",
+        "basel",
+        "tokyo",
+        "beijing",
+        "washington",
+        "halle",
+        "queen",
+        "adelaide",
+        "brisbane",
+        "sydney",
+        "auckland"
+    ]
+
+    if any(x in name for x in allowed):
+        return True
+
+    return False
+
+
+def parse_score(cols1, cols2):
+    score_parts = []
+
+    for i in range(3, min(len(cols1), len(cols2))):
+        a = cols1[i].get_text(strip=True)
+        b = cols2[i].get_text(strip=True)
+
+        if a.isdigit() and b.isdigit():
+            score_parts.append(f"{a}-{b}")
+
+    return " ".join(score_parts)
+
+
+def is_player_row(row):
+    links = row.find_all("a")
+    if not links:
+        return False
+
+    name = links[0].get_text(strip=True)
+
+    if len(name.split()) < 2:
+        return False
+
+    if "." not in name:
+        return False
+
+    return True
 
 
 # -------------------------
-# FETCH
+# PARSER
 # -------------------------
-def fetch(url):
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=15)
-        if r.status_code == 200:
-            return r.text
-    except:
-        pass
-    return None
 
+def parse_page(url, gender, year):
+    print(f"Scraping {url}")
 
-# -------------------------
-# SCRAPE DAY
-# -------------------------
-def scrape_day(date):
-    url = f"https://www.tennisexplorer.com/results/?type=atp&year={date.year}&month={date.month}&day={date.day}"
-    html = fetch(url)
-
-    if not html:
-        return []
-
-    soup = BeautifulSoup(html, "html.parser")
+    soup = BeautifulSoup(get(url), "html.parser")
+    rows = soup.select("table tr")
 
     matches = []
-    current_tournament = "Unknown"
+    current_tournament = ""
 
-    rows = soup.find_all("tr")
+    i = 0
+    while i < len(rows) - 1:
+        r1 = rows[i]
+        r2 = rows[i + 1]
 
-    for row in rows:
-        cols = row.find_all("td")
+        # detect tournament header
+        text = r1.get_text(" ", strip=True)
 
-        # tournament header row
-        if len(cols) == 1:
-            txt = cols[0].text.strip()
-            if txt:
-                current_tournament = txt
+        if text and len(text) < 40 and "." not in text and ":" not in text:
+            if any(c.isalpha() for c in text):
+                if is_main_tour_event(text):
+                    current_tournament = text
+                else:
+                    current_tournament = ""
+
+        # must be player rows
+        if not is_player_row(r1) or not is_player_row(r2):
+            i += 1
             continue
 
-        if len(cols) < 6:
+        # skip invalid tournaments
+        if not current_tournament:
+            i += 2
             continue
 
+        cols1 = r1.find_all("td")
+        cols2 = r2.find_all("td")
+
+        p1 = r1.find_all("a")[0].get_text(strip=True)
+        p2 = r2.find_all("a")[0].get_text(strip=True)
+
+        if p1 == p2:
+            i += 1
+            continue
+
+        # date
+        date = f"{year}0101"
         try:
-            links = row.find_all("a")
-            if len(links) < 2:
-                continue
-
-            player1 = links[0].text.strip()
-            player2 = links[1].text.strip()
-
-            score = cols[-1].text.strip()
-            round_val = cols[0].text.strip()
-
-            if not player1 or not player2:
-                continue
-
-            matches.append({
-                "tournament": current_tournament,
-                "surface": "Hard",  # default fallback
-                "round": round_val,
-                "player1": player1,
-                "player2": player2,
-                "score": score,
-                "date": date.strftime("%Y%m%d"),
-                "gender": "M"
-            })
-
+            raw = cols1[0].get_text(strip=True)
+            if "." in raw:
+                d, m = raw.split(".")[:2]
+                date = f"{year}{int(m):02d}{int(d):02d}"
         except:
-            continue
+            pass
 
+        score = parse_score(cols1, cols2)
+
+        match = {
+            "match_id": f"{date}_{slug(p1)}_vs_{slug(p2)}",
+            "tournament": current_tournament,
+            "surface": "",
+            "round": "",
+            "player1": p1,
+            "player2": p2,
+            "score": score,
+            "date": date,
+            "gender": gender,
+        }
+
+        matches.append(match)
+        i += 2
+
+    print(f"✔ {len(matches)} matches parsed")
     return matches
 
 
 # -------------------------
-# BUILD EVENTS
+# MERGE / DEDUPE
 # -------------------------
-def build_events(matches, year):
-    events = {}
+
+def load_existing(path):
+    if not path.exists():
+        return []
+
+    try:
+        data = json.loads(path.read_text())
+        if isinstance(data, list):
+            return data
+    except:
+        pass
+
+    return []
+
+
+def dedupe(matches):
+    seen = set()
+    clean = []
 
     for m in matches:
-        key = m["tournament"]
+        key = (m["date"], m["player1"], m["player2"], m["score"])
 
-        if key not in events:
-            events[key] = {
-                "tournament_id": f"{year}-{key.lower().replace(' ', '-')}",
-                "name": key,
-                "surface": m["surface"],
-                "draw_size": "32",
-                "level": "A",
-                "date": m["date"],
-                "year": year
-            }
+        if key in seen:
+            continue
 
-    return list(events.values())
+        seen.add(key)
+        clean.append(m)
+
+    return clean
+
+
+# -------------------------
+# SAVE
+# -------------------------
+
+def save_outputs(year, new_matches):
+    season_path = SEASONS_DIR / f"{year}.json"
+    matches_path = MATCHES_DIR / f"{year}.json"
+
+    existing = load_existing(matches_path)
+
+    combined = existing + new_matches
+    combined = dedupe(combined)
+
+    matches_path.write_text(json.dumps(combined, indent=2))
+    season_path.write_text(json.dumps(combined, indent=2))
+
+    print(f"Saved {year} → {len(combined)} matches")
 
 
 # -------------------------
 # MAIN
 # -------------------------
-def run():
-    current = START_DATE
 
-    yearly_matches = {}
+def main():
+    print("RUNNING TENNIS SCRAPER (STRICT FILTER FINAL)")
 
-    while current <= END_DATE:
-        print("Scraping:", current.strftime("%Y-%m-%d"))
+    for year in YEARS:
+        year_matches = []
 
-        day_matches = scrape_day(current)
+        for gender in ["M", "F"]:
+            try:
+                url = URLS[gender](year)
+                data = parse_page(url, gender, year)
+                year_matches.extend(data)
+                time.sleep(2)
+            except Exception as e:
+                print(f"FAIL {year} {gender}: {e}")
 
-        if day_matches:
-            year = current.year
+        save_outputs(year, year_matches)
 
-            if year not in yearly_matches:
-                yearly_matches[year] = []
-
-            yearly_matches[year].extend(day_matches)
-
-        current += timedelta(days=1)
-        time.sleep(0.5)  # avoid blocking
-
-    # -------------------------
-    # SAVE
-    # -------------------------
-    for year, matches in yearly_matches.items():
-        print(f"\n{year} MATCHES: {len(matches)}")
-
-        # matches
-        with open(MATCH_DIR / f"{year}.json", "w") as f:
-            json.dump(matches, f, indent=2)
-
-        # events
-        events = build_events(matches, year)
-
-        with open(EVENT_DIR / f"{year}.json", "w") as f:
-            json.dump(events, f, indent=2)
-
-        print(f"{year} EVENTS: {len(events)}")
+    print("DONE")
 
 
-run()
+if __name__ == "__main__":
+    main()
