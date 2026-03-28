@@ -33,7 +33,7 @@ URLS = {
 }
 
 # =========================
-# UTIL FUNCTIONS
+# HELPERS
 # =========================
 
 def get(url):
@@ -61,14 +61,7 @@ def is_player_row(row):
 
     name = links[0].get_text(strip=True)
 
-    # must look like tennis player
-    if len(name.split()) < 2:
-        return False
-
-    if "." not in name:
-        return False
-
-    return True
+    return len(name.split()) >= 2 and "." in name
 
 
 def is_junk_event(name):
@@ -116,8 +109,7 @@ def extract_date(cols, year):
 def parse_page(url, gender, year):
     print(f"Scraping {url}")
 
-    html = get(url)
-    soup = BeautifulSoup(html, "html.parser")
+    soup = BeautifulSoup(get(url), "html.parser")
     rows = soup.select("table tr")
 
     matches = []
@@ -128,19 +120,18 @@ def parse_page(url, gender, year):
         r1 = rows[i]
         r2 = rows[i + 1]
 
-        # detect tournament header
-        header_text = r1.get_text(" ", strip=True)
+        # tournament detection
+        header = r1.get_text(" ", strip=True)
 
-        if header_text and len(header_text) < 40 and "." not in header_text and ":" not in header_text:
-            if any(c.isalpha() for c in header_text):
-                current_tournament = header_text
+        if header and len(header) < 40 and "." not in header and ":" not in header:
+            if any(c.isalpha() for c in header):
+                current_tournament = header
 
-        # skip if junk event
+        # skip junk events only
         if is_junk_event(current_tournament):
             i += 1
             continue
 
-        # must be player rows
         if not is_player_row(r1) or not is_player_row(r2):
             i += 1
             continue
@@ -152,15 +143,8 @@ def parse_page(url, gender, year):
             i += 1
             continue
 
-        links1 = r1.find_all("a")
-        links2 = r2.find_all("a")
-
-        if not links1 or not links2:
-            i += 1
-            continue
-
-        p1 = links1[0].get_text(strip=True)
-        p2 = links2[0].get_text(strip=True)
+        p1 = r1.find_all("a")[0].get_text(strip=True)
+        p2 = r2.find_all("a")[0].get_text(strip=True)
 
         if not p1 or not p2 or p1 == p2:
             i += 1
@@ -189,26 +173,12 @@ def parse_page(url, gender, year):
 
 
 # =========================
-# MERGE / DEDUPE
+# DEDUPE
 # =========================
-
-def load_existing(path):
-    if not path.exists():
-        return []
-
-    try:
-        data = json.loads(path.read_text())
-        if isinstance(data, list):
-            return data
-    except:
-        pass
-
-    return []
-
 
 def dedupe(matches):
     seen = set()
-    clean = []
+    out = []
 
     for m in matches:
         key = (m["date"], m["player1"], m["player2"], m["score"])
@@ -217,28 +187,26 @@ def dedupe(matches):
             continue
 
         seen.add(key)
-        clean.append(m)
+        out.append(m)
 
-    return clean
+    return out
 
 
 # =========================
-# SAVE
+# SAVE (FULL REBUILD)
 # =========================
 
-def save_outputs(year, new_matches):
-    season_file = SEASONS_DIR / f"{year}.json"
+def save_outputs(year, matches):
+    matches = dedupe(matches)
+
     matches_file = MATCHES_DIR / f"{year}.json"
+    season_file = SEASONS_DIR / f"{year}.json"
 
-    existing = load_existing(matches_file)
+    # 🔥 overwrite every run (FIXES your issue)
+    matches_file.write_text(json.dumps(matches, indent=2))
+    season_file.write_text(json.dumps(matches, indent=2))
 
-    combined = existing + new_matches
-    combined = dedupe(combined)
-
-    matches_file.write_text(json.dumps(combined, indent=2))
-    season_file.write_text(json.dumps(combined, indent=2))
-
-    print(f"Saved {year}: {len(combined)} matches")
+    print(f"Rebuilt {year}: {len(matches)} matches")
 
 
 # =========================
@@ -254,12 +222,13 @@ def main():
         for gender in ["M", "F"]:
             try:
                 url = URLS[gender](year)
-                matches = parse_page(url, gender, year)
-                all_matches.extend(matches)
+                data = parse_page(url, gender, year)
+                all_matches.extend(data)
                 time.sleep(2)
             except Exception as e:
                 print(f"ERROR {year} {gender}: {e}")
 
+        print(f"TOTAL MATCHES {year}: {len(all_matches)}")
         save_outputs(year, all_matches)
 
     print("=== DONE ===")
