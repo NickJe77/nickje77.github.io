@@ -10,9 +10,14 @@ body{
   font-family:system-ui,Arial,sans-serif;
   margin:0;
   padding:20px;
+  background:#fff;
+  color:#111;
 }
 
-h1{text-align:center;}
+h1{
+  text-align:center;
+  margin:24px 0 10px;
+}
 
 /* NAV */
 .navbar{
@@ -22,6 +27,7 @@ h1{text-align:center;}
   padding:16px 0;
   border-bottom:1px solid #ddd;
   font-weight:600;
+  flex-wrap:wrap;
 }
 
 .navbar a{
@@ -29,59 +35,80 @@ h1{text-align:center;}
   text-decoration:none;
 }
 
-/* SEARCH */
-.controls{
-  text-align:center;
-  margin:20px 0;
+.navbar a:hover{
+  text-decoration:underline;
 }
 
-input{
-  padding:10px;
-  width:260px;
+/* CONTROLS */
+.controls{
+  max-width:1000px;
+  margin:20px auto 10px;
+  display:flex;
+  justify-content:center;
+  gap:12px;
+  flex-wrap:wrap;
+}
+
+.controls input,
+.controls select{
+  padding:10px 12px;
   border-radius:8px;
   border:1px solid #ccc;
+  font-size:14px;
+}
+
+.controls input{
+  width:280px;
+}
+
+.note{
+  text-align:center;
+  color:#666;
+  font-size:14px;
+  margin:6px 0 18px;
 }
 
 /* TABLE */
-table{
-  width:100%;
-  max-width:900px;
-  margin:20px auto;
-  border-collapse:collapse;
+.table-wrap{
+  max-width:1000px;
+  margin:0 auto;
+  overflow-x:auto;
 }
 
-/* HEADER */
+table{
+  width:100%;
+  border-collapse:collapse;
+  table-layout:fixed;
+}
+
 th{
   background:#111;
   color:#fff;
-  padding:10px;
+  padding:12px 10px;
   cursor:pointer;
+  font-weight:700;
+  text-align:center;
+  white-space:nowrap;
 }
 
-/* ALIGNMENT */
 th:first-child,
 td:first-child{
   text-align:left;
 }
 
-th:not(:first-child),
-td:not(:first-child){
-  text-align:center;
-}
-
-/* CELLS */
 td{
   padding:10px;
   border-bottom:1px solid #ddd;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric:tabular-nums;
+  text-align:center;
+  vertical-align:middle;
 }
 
-/* STRIPING */
 tbody tr:nth-child(even){
   background:#f2f6ff;
 }
 
-tr:hover{
+tbody tr:hover{
   background:#e6edff;
 }
 
@@ -93,6 +120,36 @@ a{
 
 a:hover{
   text-decoration:underline;
+}
+
+/* SMALL TEXT */
+.subtle{
+  color:#666;
+  font-size:13px;
+}
+
+/* EMPTY */
+.empty{
+  text-align:center;
+  color:#666;
+  padding:30px 10px;
+}
+
+/* MOBILE */
+@media (max-width:700px){
+  body{
+    padding:14px;
+  }
+
+  th, td{
+    padding:9px 8px;
+    font-size:14px;
+  }
+
+  .controls input{
+    width:100%;
+    max-width:320px;
+  }
 }
 </style>
 </head>
@@ -107,42 +164,57 @@ a:hover{
 <h1>Olympic Athletes</h1>
 
 <div class="controls">
-  <input id="search" placeholder="Search athlete...">
+  <input id="search" type="text" placeholder="Search athlete...">
+  <select id="countryFilter">
+    <option value="">All countries</option>
+  </select>
 </div>
 
-<table>
-<thead>
-<tr>
-  <th onclick="setSort('name')">Athlete</th>
-  <th onclick="setSort('gold')">Gold</th>
-  <th onclick="setSort('silver')">Silver</th>
-  <th onclick="setSort('bronze')">Bronze</th>
-  <th onclick="setSort('total')">Total</th>
-</tr>
-</thead>
-<tbody id="table-body"></tbody>
-</table>
+<div class="note" id="count-note">Loading athletes...</div>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th onclick="setSort('name')">Athlete</th>
+        <th onclick="setSort('country')">Country</th>
+        <th onclick="setSort('gold')">Gold</th>
+        <th onclick="setSort('silver')">Silver</th>
+        <th onclick="setSort('bronze')">Bronze</th>
+        <th onclick="setSort('total')">Total</th>
+      </tr>
+    </thead>
+    <tbody id="table-body"></tbody>
+  </table>
+</div>
 
 <script>
-
 let athletes = [];
-let currentSort = { key:"gold", asc:false };
+let filteredAthletes = [];
+let currentSort = { key: "gold", asc: false };
 
 /* LOAD DATA */
-fetch("/data/olympics/athletes.json")
-.then(r => r.json())
-.then(data => build(data));
+fetch("/data/olympics/summer_olympic_medals.json")
+  .then(r => r.json())
+  .then(data => build(data))
+  .catch(err => {
+    console.error(err);
+    document.getElementById("count-note").textContent = "Failed to load Olympic medal data.";
+    document.getElementById("table-body").innerHTML = `
+      <tr><td colspan="6" class="empty">Could not load data.</td></tr>
+    `;
+  });
 
-/* CLEAN NAME */
-function cleanName(name){
-  if(!name) return "";
-
-  const cleaned = name.trim();
+/* CLEAN TEXT */
+function cleanText(value){
+  if(value === null || value === undefined) return "";
+  const cleaned = String(value).trim();
 
   if(
     cleaned === "" ||
     cleaned.toLowerCase() === "nan" ||
-    cleaned.toLowerCase() === "null"
+    cleaned.toLowerCase() === "null" ||
+    cleaned.toLowerCase() === "undefined"
   ){
     return "";
   }
@@ -150,19 +222,34 @@ function cleanName(name){
   return cleaned;
 }
 
-/* BUILD */
-function build(data){
+/* TITLE CASE LIGHTLY */
+function titleCaseName(name){
+  return cleanText(name)
+    .toLowerCase()
+    .split(" ")
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
+/* BUILD ATHLETE TABLE FROM MEDAL-ROW DATA */
+function build(data){
   const map = {};
 
-  data.forEach(a => {
+  data.forEach(row => {
+    const rawName = cleanText(row.athlete);
+    if(!rawName) return;
 
-    const name = cleanName(a.name || a.Name);
-    if(!name) return;
+    const rawCountry = cleanText(row.country) || "Unknown";
 
-    if(!map[name]){
-      map[name] = {
-        name,
+    const nameKey = rawName.toLowerCase();
+    const medal = cleanText(row.medal).toUpperCase();
+
+    if(!map[nameKey]){
+      map[nameKey] = {
+        name: titleCaseName(rawName),
+        rawName: rawName,
+        country: rawCountry,
         gold: 0,
         silver: 0,
         bronze: 0,
@@ -170,67 +257,46 @@ function build(data){
       };
     }
 
-    const gold = Number(a.gold || a.Gold || 0);
-    const silver = Number(a.silver || a.Silver || 0);
-    const bronze = Number(a.bronze || a.Bronze || 0);
+    if(medal === "GOLD") map[nameKey].gold += 1;
+    if(medal === "SILVER") map[nameKey].silver += 1;
+    if(medal === "BRONZE") map[nameKey].bronze += 1;
 
-    map[name].gold += gold;
-    map[name].silver += silver;
-    map[name].bronze += bronze;
-    map[name].total += gold + silver + bronze;
-
+    map[nameKey].total = map[nameKey].gold + map[nameKey].silver + map[nameKey].bronze;
   });
 
   athletes = Object.values(map);
-  sortAndRender();
+
+  athletes.sort((a,b) => {
+    if(b.gold !== a.gold) return b.gold - a.gold;
+    if(b.silver !== a.silver) return b.silver - a.silver;
+    if(b.bronze !== a.bronze) return b.bronze - a.bronze;
+    return a.name.localeCompare(b.name);
+  });
+
+  buildCountryFilter();
+  applyFilters();
+}
+
+/* COUNTRY FILTER OPTIONS */
+function buildCountryFilter(){
+  const select = document.getElementById("countryFilter");
+  const countries = [...new Set(
+    athletes
+      .map(a => cleanText(a.country))
+      .filter(Boolean)
+      .sort((a,b) => a.localeCompare(b))
+  )];
+
+  countries.forEach(country => {
+    const option = document.createElement("option");
+    option.value = country;
+    option.textContent = country;
+    select.appendChild(option);
+  });
 }
 
 /* SORT */
-function sortAndRender(){
-
-  const {key, asc} = currentSort;
-
-  athletes.sort((a,b)=>{
-    if(typeof a[key] === "string"){
-      return asc ? a[key].localeCompare(b[key]) : b[key].localeCompare(a[key]);
-    }
-    return asc ? a[key]-b[key] : b[key]-a[key];
-  });
-
-  render(athletes);
-}
-
-/* RENDER */
-function render(data){
-
-  const tbody = document.getElementById("table-body");
-  tbody.innerHTML = "";
-
-  data.forEach(a => {
-
-    const tr = document.createElement("tr");
-
-    tr.innerHTML = `
-      <td>
-        <a href="olympics-athlete.html?name=${encodeURIComponent(a.name)}">
-          ${a.name}
-        </a>
-      </td>
-      <td>${a.gold}</td>
-      <td>${a.silver}</td>
-      <td>${a.bronze}</td>
-      <td>${a.total}</td>
-    `;
-
-    tbody.appendChild(tr);
-
-  });
-
-}
-
-/* SORT CLICK */
 function setSort(key){
-
   if(currentSort.key === key){
     currentSort.asc = !currentSort.asc;
   }else{
@@ -238,15 +304,84 @@ function setSort(key){
     currentSort.asc = false;
   }
 
-  sortAndRender();
+  sortFiltered();
+  render(filteredAthletes);
 }
 
-/* SEARCH */
-document.getElementById("search").addEventListener("input", e=>{
-  const q = e.target.value.toLowerCase();
-  render(athletes.filter(a=>a.name.toLowerCase().includes(q)));
-});
+function sortFiltered(){
+  const { key, asc } = currentSort;
 
+  filteredAthletes.sort((a,b) => {
+    let result = 0;
+
+    if(typeof a[key] === "string"){
+      result = a[key].localeCompare(b[key]);
+    }else{
+      result = a[key] - b[key];
+    }
+
+    if(result === 0){
+      result = a.name.localeCompare(b.name);
+    }
+
+    return asc ? result : -result;
+  });
+}
+
+/* APPLY FILTERS */
+function applyFilters(){
+  const query = document.getElementById("search").value.trim().toLowerCase();
+  const country = document.getElementById("countryFilter").value;
+
+  filteredAthletes = athletes.filter(a => {
+    const matchesName = a.name.toLowerCase().includes(query);
+    const matchesCountry = !country || a.country === country;
+    return matchesName && matchesCountry;
+  });
+
+  sortFiltered();
+  render(filteredAthletes);
+}
+
+/* RENDER */
+function render(data){
+  const tbody = document.getElementById("table-body");
+  const note = document.getElementById("count-note");
+
+  note.textContent = `${data.length.toLocaleString()} athletes`;
+
+  if(!data.length){
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" class="empty">No athletes found.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = "";
+
+  data.forEach(a => {
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td>
+        <a href="olympics-athlete.html?name=${encodeURIComponent(a.rawName)}">${a.name}</a>
+      </td>
+      <td>${a.country}</td>
+      <td>${a.gold}</td>
+      <td>${a.silver}</td>
+      <td>${a.bronze}</td>
+      <td><strong>${a.total}</strong></td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+
+/* EVENTS */
+document.getElementById("search").addEventListener("input", applyFilters);
+document.getElementById("countryFilter").addEventListener("change", applyFilters);
 </script>
 
 </body>
