@@ -6,15 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{
-  font-family:system-ui,Arial,sans-serif;
-  margin:0;
-  padding:20px;
-}
-
+body{font-family:system-ui,Arial,sans-serif;margin:0;padding:20px;}
 h1{text-align:center;}
 
-/* NAV */
 .navbar{
   display:flex;
   justify-content:center;
@@ -24,16 +18,9 @@ h1{text-align:center;}
   font-weight:600;
 }
 
-.navbar a{
-  color:#0056d6;
-  text-decoration:none;
-}
+.navbar a{color:#0056d6;text-decoration:none;}
 
-/* SEARCH */
-.controls{
-  text-align:center;
-  margin:20px 0;
-}
+.controls{text-align:center;margin:20px 0;}
 
 input{
   padding:10px;
@@ -42,7 +29,6 @@ input{
   border:1px solid #ccc;
 }
 
-/* TABLE */
 table{
   width:100%;
   max-width:850px;
@@ -50,7 +36,6 @@ table{
   border-collapse:collapse;
 }
 
-/* HEADER */
 th{
   background:#111;
   color:#fff;
@@ -59,42 +44,20 @@ th{
   cursor:pointer;
 }
 
-/* ALIGNMENT FIX */
-th:first-child,
-td:first-child{
-  text-align:left;
-}
+th:first-child, td:first-child{text-align:left;}
+th:not(:first-child), td:not(:first-child){text-align:center;}
 
-th:not(:first-child),
-td:not(:first-child){
-  text-align:center;   /* 🔥 KEY FIX */
-}
-
-/* CELLS */
 td{
   padding:10px 12px;
   border-bottom:1px solid #ddd;
   font-variant-numeric: tabular-nums;
 }
 
-/* STRIPING */
-tbody tr:nth-child(even){
-  background:#f2f6ff;
-}
+tbody tr:nth-child(even){background:#f2f6ff;}
+tr:hover{background:#e6edff;}
 
-tr:hover{
-  background:#e6edff;
-}
-
-/* LINKS */
-a{
-  color:#1a56db;
-  text-decoration:none;
-}
-
-a:hover{
-  text-decoration:underline;
-}
+a{color:#1a56db;text-decoration:none;}
+a:hover{text-decoration:underline;}
 </style>
 </head>
 
@@ -128,68 +91,67 @@ a:hover{
 <script>
 
 let riders = [];
-let winnersPerYear = {};
 let tourWins = {};
 let currentSort = { key:"tour", asc:false };
 
-fetch("/data/cycling/riders.json")
-.then(r => r.json())
-.then(data => {
-  buildWinners(data);
-  buildRiders(data);
+// -------------------------
+// LOAD BOTH DATA SOURCES
+// -------------------------
+Promise.all([
+  fetch("/data/cycling/riders.json").then(r=>r.json()),
+  fetch("/data/cycling/TDF winners.csv").then(r=>r.text())
+]).then(([ridersData, winnersCSV]) => {
+
+  buildTourWins(winnersCSV);
+  buildRiders(ridersData);
+
 });
 
+// -------------------------
+// CLEAN NAME
+// -------------------------
 function cleanName(name){
   if(!name) return "";
-  const cleaned = name.replace(/\(.*?\)/g,"").trim();
-
-  if(
-    cleaned === "" ||
-    cleaned.toLowerCase() === "nan" ||
-    cleaned.toLowerCase() === "null" ||
-    cleaned.toLowerCase() === "undefined"
-  ){
-    return "";
-  }
-
-  return cleaned;
+  return name.replace(/\(.*?\)/g,"").trim();
 }
 
-function buildWinners(data){
+// -------------------------
+// PARSE CSV → TOUR WINS
+// -------------------------
+function buildTourWins(csv){
 
-  data.forEach(r => {
+  const rows = csv.split("\n").slice(1); // skip header
 
-    const year = r.Year;
-    const name = cleanName(r.Name);
-    const yellow = Number(r.Yellow || 0);
+  rows.forEach(row => {
 
-    if(!year || !name) return;
+    const cols = row.split(",");
+    if(cols.length < 2) return;
 
-    if(!winnersPerYear[year]){
-      winnersPerYear[year] = { name, yellow };
-    } else {
-      if(yellow > winnersPerYear[year].yellow){
-        winnersPerYear[year] = { name, yellow };
-      }
-    }
+    const name = cleanName(cols[1]); // assumes column 2 = winner
+    if(!name) return;
 
-  });
+    if(!tourWins[name]) tourWins[name] = 0;
+    tourWins[name]++;
 
-  Object.values(winnersPerYear).forEach(w => {
-    if(!tourWins[w.name]) tourWins[w.name] = 0;
-    tourWins[w.name]++;
   });
 
 }
 
+// -------------------------
+// BUILD RIDERS
+// -------------------------
 function buildRiders(data){
 
   const map = {};
+  const stageTracker = {};
 
   data.forEach(r => {
 
     const name = cleanName(r.Name);
     if(!name) return;
+
+    const year = r.Year;
+    const wins = Number(r.Wins || 0);
 
     if(!map[name]){
       map[name] = {
@@ -202,17 +164,32 @@ function buildRiders(data){
       };
     }
 
-    map[name].stage += Number(r.Wins || 0);
+    // FIX STAGE COUNT
+    const key = `${name}_${year}`;
+    if(!stageTracker[key]){
+      stageTracker[key] = wins;
+    } else {
+      stageTracker[key] = Math.max(stageTracker[key], wins);
+    }
+
     map[name].green += Number(r.Green || 0);
     map[name].polka += Number(r.PolkaDot || 0);
     map[name].white += Number(r.White || 0);
 
   });
 
+  Object.entries(stageTracker).forEach(([key, wins])=>{
+    const name = key.split("_")[0];
+    map[name].stage += wins;
+  });
+
   riders = Object.values(map);
   sortAndRender();
 }
 
+// -------------------------
+// SORT
+// -------------------------
 function sortAndRender(){
 
   const {key, asc} = currentSort;
@@ -227,6 +204,9 @@ function sortAndRender(){
   render(riders);
 }
 
+// -------------------------
+// RENDER
+// -------------------------
 function render(data){
 
   const tbody = document.getElementById("table-body");
@@ -255,6 +235,9 @@ function render(data){
 
 }
 
+// -------------------------
+// SORT CLICK
+// -------------------------
 function setSort(key){
 
   if(currentSort.key === key){
@@ -267,6 +250,9 @@ function setSort(key){
   sortAndRender();
 }
 
+// -------------------------
+// SEARCH
+// -------------------------
 document.getElementById("search").addEventListener("input", e=>{
   const q = e.target.value.toLowerCase();
   render(riders.filter(r=>r.name.toLowerCase().includes(q)));
