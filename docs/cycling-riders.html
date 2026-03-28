@@ -68,7 +68,6 @@ td:not(:first-child){
 td{
   padding:10px 12px;
   border-bottom:1px solid #ddd;
-  font-variant-numeric: tabular-nums;
 }
 
 tbody tr:nth-child(even){
@@ -124,7 +123,7 @@ let tourWins = {};
 let currentSort = { key:"tour", asc:false };
 
 // -------------------------
-// CLEAN + NORMALISE NAME
+// CLEAN (FOR MATCHING)
 // -------------------------
 function cleanName(name){
   return (name || "")
@@ -132,6 +131,15 @@ function cleanName(name){
     .replace(/[\u0300-\u036f]/g,"")
     .replace(/\[.*?\]/g,"")
     .replace(/\(.*?\)/g,"")
+    .trim();
+}
+
+// -------------------------
+// DISPLAY NAME (NO TEAM)
+// -------------------------
+function displayName(name){
+  return (name || "")
+    .replace(/\(.*?\)/g,"") // 🔥 removes team names
     .trim();
 }
 
@@ -149,8 +157,6 @@ Promise.all([
 });
 
 // -------------------------
-// BUILD TOUR WINS
-// -------------------------
 function buildTourWins(data){
 
   data.forEach(r => {
@@ -166,8 +172,6 @@ function buildTourWins(data){
 }
 
 // -------------------------
-// BUILD RIDERS
-// -------------------------
 function buildRiders(data){
 
   const map = {};
@@ -175,17 +179,17 @@ function buildRiders(data){
 
   data.forEach(r => {
 
-    const name = cleanName(r.Name);
-    if(!name) return;
+    const clean = cleanName(r.Name);
+    if(!clean) return;
 
     const year = r.Year;
     const wins = Number(r.Wins || 0);
 
-    if(!map[name]){
-      map[name] = {
-        name,
-        displayName: r.Name, // keep original accents for display
-        tour: tourWins[name] || 0,
+    if(!map[clean]){
+      map[clean] = {
+        name: clean,
+        displayName: displayName(r.Name), // 🔥 CLEAN DISPLAY
+        tour: tourWins[clean] || 0,
         stage: 0,
         green: 0,
         polka: 0,
@@ -193,7 +197,7 @@ function buildRiders(data){
       };
     }
 
-    const key = `${name}_${year}`;
+    const key = `${clean}_${year}`;
 
     if(!stageTracker[key]){
       stageTracker[key] = wins;
@@ -201,9 +205,9 @@ function buildRiders(data){
       stageTracker[key] = Math.max(stageTracker[key], wins);
     }
 
-    map[name].green += Number(r.Green || 0);
-    map[name].polka += Number(r.PolkaDot || 0);
-    map[name].white += Number(r.White || 0);
+    map[clean].green += Number(r.Green || 0);
+    map[clean].polka += Number(r.PolkaDot || 0);
+    map[clean].white += Number(r.White || 0);
 
   });
 
@@ -216,8 +220,6 @@ function buildRiders(data){
   sortAndRender();
 }
 
-// -------------------------
-// SORT
 // -------------------------
 function sortAndRender(){
 
@@ -233,8 +235,6 @@ function sortAndRender(){
   render(riders);
 }
 
-// -------------------------
-// RENDER
 // -------------------------
 function render(data){
 
@@ -265,8 +265,6 @@ function render(data){
 }
 
 // -------------------------
-// SORT CLICK
-// -------------------------
 function setSort(key){
 
   if(currentSort.key === key){
@@ -279,8 +277,6 @@ function setSort(key){
   sortAndRender();
 }
 
-// -------------------------
-// SEARCH
 // -------------------------
 document.getElementById("search").addEventListener("input", e=>{
   const q = cleanName(e.target.value);
