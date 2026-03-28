@@ -5,20 +5,12 @@ from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 
-# =========================
-# PATHS
-# =========================
-
 BASE_DIR = Path("docs/data/tennis")
 SEASONS_DIR = BASE_DIR / "seasons"
 MATCHES_DIR = BASE_DIR / "matches"
 
 SEASONS_DIR.mkdir(parents=True, exist_ok=True)
 MATCHES_DIR.mkdir(parents=True, exist_ok=True)
-
-# =========================
-# CONFIG
-# =========================
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 SESSION = requests.Session()
@@ -32,14 +24,13 @@ URLS = {
     "F": lambda y: f"https://www.tennisexplorer.com/results/?type=WTA&year={y}",
 }
 
-# =========================
+
+# -------------------------
 # HELPERS
-# =========================
+# -------------------------
 
 def get(url):
-    r = SESSION.get(url, timeout=30)
-    r.raise_for_status()
-    return r.text
+    return SESSION.get(url, timeout=30).text
 
 
 def slug(text):
@@ -50,6 +41,7 @@ def slug(text):
         .replace("'", "")
         .replace("(", "")
         .replace(")", "")
+        .replace("/", "")
         .replace(" ", "-")
     )
 
@@ -61,20 +53,37 @@ def is_player_row(row):
 
     name = links[0].get_text(strip=True)
 
-    return len(name.split()) >= 2 and "." in name
+    return "." in name and len(name.split()) >= 2
+
+
+def is_doubles(p1, p2):
+    return "/" in p1 or "/" in p2
 
 
 def is_junk_event(name):
     name = (name or "").lower()
-
     return any(x in name for x in [
-        "futures",
-        "itf",
-        "challenger",
-        "utr",
-        "exhibition",
-        "junior"
+        "futures", "itf", "challenger", "utr", "junior"
     ])
+
+
+def is_tournament_row(row):
+    text = row.get_text(" ", strip=True)
+
+    # tournament rows:
+    # - short
+    # - no scores
+    # - no player initials
+    if not text:
+        return False
+
+    if any(c.isdigit() for c in text):
+        return False
+
+    if "." in text:
+        return False
+
+    return len(text) < 40
 
 
 def parse_score(cols1, cols2):
@@ -102,9 +111,9 @@ def extract_date(cols, year):
     return f"{year}0101"
 
 
-# =========================
+# -------------------------
 # PARSER
-# =========================
+# -------------------------
 
 def parse_page(url, gender, year):
     print(f"Scraping {url}")
@@ -120,15 +129,15 @@ def parse_page(url, gender, year):
         r1 = rows[i]
         r2 = rows[i + 1]
 
-        # tournament detection
-        header = r1.get_text(" ", strip=True)
+        # ✅ FIXED tournament detection
+        if is_tournament_row(r1):
+            text = r1.get_text(" ", strip=True)
 
-        if header and len(header) < 40 and "." not in header and ":" not in header:
-            if any(c.isalpha() for c in header):
-                current_tournament = header
+            if not is_junk_event(text):
+                current_tournament = text
+            else:
+                current_tournament = ""
 
-        # skip junk events only
-        if is_junk_event(current_tournament):
             i += 1
             continue
 
@@ -146,8 +155,9 @@ def parse_page(url, gender, year):
         p1 = r1.find_all("a")[0].get_text(strip=True)
         p2 = r2.find_all("a")[0].get_text(strip=True)
 
-        if not p1 or not p2 or p1 == p2:
-            i += 1
+        # ❌ REMOVE DOUBLES
+        if is_doubles(p1, p2):
+            i += 2
             continue
 
         date = extract_date(cols1, year)
@@ -172,9 +182,9 @@ def parse_page(url, gender, year):
     return matches
 
 
-# =========================
+# -------------------------
 # DEDUPE
-# =========================
+# -------------------------
 
 def dedupe(matches):
     seen = set()
@@ -182,53 +192,45 @@ def dedupe(matches):
 
     for m in matches:
         key = (m["date"], m["player1"], m["player2"], m["score"])
-
         if key in seen:
             continue
-
         seen.add(key)
         out.append(m)
 
     return out
 
 
-# =========================
+# -------------------------
 # SAVE (FULL REBUILD)
-# =========================
+# -------------------------
 
 def save_outputs(year, matches):
     matches = dedupe(matches)
 
-    matches_file = MATCHES_DIR / f"{year}.json"
-    season_file = SEASONS_DIR / f"{year}.json"
-
-    # 🔥 overwrite every run (FIXES your issue)
-    matches_file.write_text(json.dumps(matches, indent=2))
-    season_file.write_text(json.dumps(matches, indent=2))
+    (MATCHES_DIR / f"{year}.json").write_text(json.dumps(matches, indent=2))
+    (SEASONS_DIR / f"{year}.json").write_text(json.dumps(matches, indent=2))
 
     print(f"Rebuilt {year}: {len(matches)} matches")
 
 
-# =========================
+# -------------------------
 # MAIN
-# =========================
+# -------------------------
 
 def main():
-    print("=== TENNIS SCRAPER START ===")
+    print("=== TENNIS SCRAPER (FIXED STRUCTURE) ===")
 
     for year in YEARS:
         all_matches = []
 
         for gender in ["M", "F"]:
             try:
-                url = URLS[gender](year)
-                data = parse_page(url, gender, year)
+                data = parse_page(URLS[gender](year), gender, year)
                 all_matches.extend(data)
                 time.sleep(2)
             except Exception as e:
-                print(f"ERROR {year} {gender}: {e}")
+                print("ERROR:", e)
 
-        print(f"TOTAL MATCHES {year}: {len(all_matches)}")
         save_outputs(year, all_matches)
 
     print("=== DONE ===")
