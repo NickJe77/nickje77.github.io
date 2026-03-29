@@ -123,11 +123,8 @@ a.game-link{
 const params = new URLSearchParams(window.location.search);
 const season = params.get("season");
 
-if(!season){
-  document.getElementById("seasonTitle").textContent = "Season Not Found";
-}else{
-  document.getElementById("seasonTitle").textContent = "MLB Season " + season;
-}
+document.getElementById("seasonTitle").textContent =
+  season ? "MLB Season " + season : "Season Not Found";
 
 Promise.all([
   fetch("/docs/data/baseball/seasons/" + season + ".json").then(r => r.json()),
@@ -151,11 +148,10 @@ Promise.all([
   const tbody = document.getElementById("gamesBody");
   tbody.innerHTML = "";
 
-  // 🔥 SUPPORT BOTH FORMATS
   let games = [];
 
+  // ✅ 2025 FORMAT (ARRAY)
   if(Array.isArray(seasonData)){
-    // 2025 FORMAT
     games = seasonData.map(g => ({
       game_id: g[0],
       date: g[1],
@@ -166,25 +162,43 @@ Promise.all([
       away_score: g[7],
       home_score: g[8]
     }));
-  }else if(seasonData.games){
-    // 2026 FORMAT
-    games = seasonData.games;
   }
 
-  // SORT BY DATE
+  // ✅ 2026 FORMAT (OBJECT)
+  else if(seasonData.games){
+    games = seasonData.games.map(g => ({
+      game_id: g.game_id,
+      date: g.date,
+      home_team: g.home_team,
+      away_team: g.away_team,
+      venue: g.venue || "",
+      attendance: g.attendance || "",
+      away_score: g.away_score,
+      home_score: g.home_score
+    }));
+  }
+
+  // ❌ NOTHING FOUND → DEBUG
+  if(!games.length){
+    console.error("NO GAMES FOUND", seasonData);
+    return;
+  }
+
+  // SORT
   games.sort((a,b)=> new Date(a.date) - new Date(b.date));
 
+  // RENDER
   games.forEach(g => {
 
-    const link = "baseball-game.html?game=" + g.game_id;
-
-    const score = (g.home_score != null && g.away_score != null)
+    const score =
+      (g.away_score != null && g.home_score != null)
       ? `${g.away_score}-${g.home_score}`
       : "";
 
     const tr = document.createElement("tr");
+
     tr.innerHTML = `
-      <td><a class="game-link" href="${link}">${g.date}</a></td>
+      <td><a class="game-link" href="baseball-game.html?game=${g.game_id}">${g.date}</a></td>
       <td>${g.away_team}</td>
       <td>${g.home_team}</td>
       <td class="score">${score}</td>
@@ -196,7 +210,7 @@ Promise.all([
   });
 
 }).catch(err=>{
-  console.error(err);
+  console.error("LOAD ERROR:", err);
 });
 
 </script>
