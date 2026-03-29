@@ -151,34 +151,45 @@ Promise.all([
   const tbody = document.getElementById("gamesBody");
   tbody.innerHTML = "";
 
-  seasonData.sort((a,b)=> new Date(a[1].replace(/\//g,"-")) - new Date(b[1].replace(/\//g,"-")));
+  // 🔥 SUPPORT BOTH FORMATS
+  let games = [];
 
-  seasonData.forEach(g => {
+  if(Array.isArray(seasonData)){
+    // 2025 FORMAT
+    games = seasonData.map(g => ({
+      game_id: g[0],
+      date: g[1],
+      home_team: teamName(g[3]),
+      away_team: teamName(g[4]),
+      venue: g[5],
+      attendance: g[6],
+      away_score: g[7],
+      home_score: g[8]
+    }));
+  }else if(seasonData.games){
+    // 2026 FORMAT
+    games = seasonData.games;
+  }
 
-    const gameId = g[0];
-    const date = g[1];
-    const home = g[3];
-    const away = g[4];
-    const venueCode = g[5];
-    const attendance = g[6];
-    const awayScore = g[7];
-    const homeScore = g[8];
+  // SORT BY DATE
+  games.sort((a,b)=> new Date(a.date) - new Date(b.date));
 
-    const link = "baseball-game.html?game=" + gameId;
+  games.forEach(g => {
 
-    const venueName = parkMap[venueCode] || venueCode || "";
-    const score = (awayScore !== null && homeScore !== null)
-      ? awayScore + "-" + homeScore
+    const link = "baseball-game.html?game=" + g.game_id;
+
+    const score = (g.home_score != null && g.away_score != null)
+      ? `${g.away_score}-${g.home_score}`
       : "";
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><a class="game-link" href="${link}">${date}</a></td>
-      <td>${teamName(away)}</td>
-      <td>${teamName(home)}</td>
+      <td><a class="game-link" href="${link}">${g.date}</a></td>
+      <td>${g.away_team}</td>
+      <td>${g.home_team}</td>
       <td class="score">${score}</td>
-      <td>${venueName}</td>
-      <td>${attendance ? Number(attendance).toLocaleString() : ""}</td>
+      <td>${parkMap[g.venue] || g.venue || ""}</td>
+      <td>${g.attendance ? Number(g.attendance).toLocaleString() : ""}</td>
     `;
 
     tbody.appendChild(tr);
