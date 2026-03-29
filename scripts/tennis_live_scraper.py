@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from datetime import datetime, timedelta
 
-print("TENNIS SCRAPER (REAL FIX - DAILY PAGES)")
+print("TENNIS SCRAPER (FINAL FIX - HEADERS + SESSION)")
 
 BASE = Path("docs/data/tennis")
 MATCHES = BASE / "matches"
@@ -13,9 +13,18 @@ SEASONS = BASE / "seasons"
 MATCHES.mkdir(parents=True, exist_ok=True)
 SEASONS.mkdir(parents=True, exist_ok=True)
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
-
 YEARS = [2025, 2026]
+
+# 🔥 REAL BROWSER HEADERS
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.tennisexplorer.com/",
+    "Connection": "keep-alive"
+}
+
+session = requests.Session()
+session.headers.update(HEADERS)
 
 
 def slug(s):
@@ -25,40 +34,34 @@ def slug(s):
 def get_dates(year):
     start = datetime(year, 1, 1)
     end = datetime.utcnow()
-
     for i in range((end - start).days + 1):
         yield start + timedelta(days=i)
 
 
 def scrape_day(date):
-    url = f"https://www.tennisexplorer.com/matches/?year={date.year}&month={date.month:02d}&day={date.day:02d}"
-    
+    url = f"https://www.tennisexplorer.com/matches/?year={date.year}&month={date.month}&day={date.day}"
+
     try:
-        r = requests.get(url, headers=HEADERS, timeout=10)
+        r = session.get(url, timeout=10)
+        if "table" not in r.text:
+            return []
         soup = BeautifulSoup(r.text, "html.parser")
     except:
         return []
 
     matches = []
 
-    tables = soup.find_all("table", class_="result")
+    tables = soup.select("table.result")
 
-    # remove junk tables (critical)
-    tables = tables[:-3] if len(tables) > 3 else tables
+    if not tables:
+        return []
 
     for table in tables:
-        tournament = "Unknown"
-
-        # find tournament name from previous header
         header = table.find_previous("tr", class_="head")
-        if header:
-            tournament = header.text.strip()
+        tournament = header.text.strip() if header else "Unknown"
 
-        rows = table.find_all("tr")
-
-        for row in rows:
+        for row in table.select("tr"):
             cols = row.find_all("td")
-
             if len(cols) < 4:
                 continue
 
