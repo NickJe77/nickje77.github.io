@@ -1,110 +1,134 @@
 import requests
 from bs4 import BeautifulSoup
-import json
-from pathlib import Path
 from datetime import datetime, timedelta
+import json
+import time
+from pathlib import Path
 
-print("TENNIS SCRAPER (FINAL WORKING VERSION)")
+print("TENNIS LIVE SCRAPER (STABLE VERSION)")
 
-BASE = Path("docs/data/tennis")
-MATCHES = BASE / "matches"
-SEASONS = BASE / "seasons"
-
-MATCHES.mkdir(parents=True, exist_ok=True)
-SEASONS.mkdir(parents=True, exist_ok=True)
-
+BASE_URL = "https://www.tennisexplorer.com"
 HEADERS = {
-    "User-Agent": "Mozilla/5.0"
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
 }
+
+OUTPUT_DIR = Path("docs/data/tennis/seasons")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+START_YEAR = 2025
+END_YEAR = datetime.utcnow().year
 
 session = requests.Session()
 session.headers.update(HEADERS)
 
-YEARS = [2025, 2026]
+
+# -----------------------------------
+# SAFE REQUEST (RETRY LOGIC)
+# -----------------------------------
+def get_soup(url, retries=5):
+    for attempt in range(retries):
+        try:
+            r = session.get(url, timeout=20)
+
+            if r.status_code == 200:
+                return BeautifulSoup(r.text, "html.parser")
+
+            print(f"Bad status {r.status_code}, retrying...")
+
+        except requests.exceptions.RequestException as e:
+            print(f"Request failed ({attempt+1}/{retries}): {e}")
+
+        time.sleep(2 + attempt * 2)  # backoff
+
+    print(f"FAILED URL: {url}")
+    return None
 
 
-def slug(s):
-    return "".join(c.lower() if c.isalnum() else "-" for c in s).strip("-")
-
-
-def get_dates(year):
-    start = datetime(year, 1, 1)
-    end = datetime.utcnow()
-    for i in range((end - start).days + 1):
-        yield start + timedelta(days=i)
-
-
+# -----------------------------------
+# SCRAPE ONE DAY
+# -----------------------------------
 def scrape_day(date):
-    url = f"https://www.tennisexplorer.com/matches/?year={date.year}&month={date.month}&day={date.day}"
+    date_str = date.strftime("%Y-%m-%d")
+    url = f"{BASE_URL}/matches/?type=all&year={date.year}&month={date.month}&day={date.day}"
 
-    r = session.get(url)
-
-    if "result" not in r.text:
+    soup = get_soup(url)
+    if not soup:
         return []
-
-    soup = BeautifulSoup(r.text, "html.parser")
 
     matches = []
 
-    tables = soup.select("table.result")
+    rows = soup.select("table.result tbody tr")
 
-    for table in tables:
-        header = table.find_previous("tr", class_="head")
-        tournament = header.text.strip() if header else "Unknown"
+    for row in rows:
+        cols = row.find_all("td")
+        if len(cols) < 7:
+            continue
 
-        for row in table.select("tr"):
-            cols = row.find_all("td")
+        try:
+            tournament = cols[0].get_text(strip=True)
+            surface = cols[1].get_text(strip=True)
+            round_name = cols[2].get_text(strip=True)
+            player1 = cols[3].get_text(strip=True)
+            player2 = cols[5].get_text(strip=True)
+            score = cols[6].get_text(strip=True)
 
-            if len(cols) < 4:
+            if not player1 or not player2:
                 continue
 
-            try:
-                players = cols[2].text.strip().split("-")
-                score = cols[3].text.strip()
+            matches.append({
+                "date": date_str,
+                "tournament": tournament,
+                "surface": surface,
+                "round": round_name,
+                "player1": player1,
+                "player2": player2,
+                "score": score
+            })
 
-                if len(players) != 2:
-                    continue
-
-                p1 = players[0].strip()
-                p2 = players[1].strip()
-
-                matches.append({
-                    "match_id": f"{date.date()}_{slug(p1)}_{slug(p2)}",
-                    "date": str(date.date()),
-                    "tournament": tournament,
-                    "surface": "",
-                    "round": "",
-                    "player1": p1,
-                    "player2": p2,
-                    "winner": p1,
-                    "loser": p2,
-                    "score": score,
-                    "gender": "",
-                    "best_of": 3,
-                    "draw_size": 0,
-                    "minutes": 0,
-                    "tourney_level": "",
-                    "tourney_id": ""
-                })
-
-            except:
-                continue
+        except Exception:
+            continue
 
     return matches
 
 
-for year in YEARS:
-    print(f"Processing {year}")
+# -----------------------------------
+# MAIN LOOP
+# -----------------------------------
+def scrape_year(year):
+    print(f"\nScraping {year}...")
+
+    start = datetime(year, 1, 1)
+    end = datetime.utcnow() if year == END_YEAR else datetime(year, 12, 31)
 
     all_matches = []
 
-    for d in get_dates(year):
+    d = start
+    while d <= end:
+        print(f"  {d.strftime('%Y-%m-%d')}")
+
         daily = scrape_day(d)
         all_matches.extend(daily)
 
-    print(f"{year}: {len(all_matches)} matches")
+        # VERY IMPORTANT (prevents blocking)
+        time.sleep(1.5)
 
-    (MATCHES / f"{year}.json").write_text(json.dumps(all_matches, indent=2))
-    (SEASONS / f"{year}.json").write_text(json.dumps(all_matches, indent=2))
+        d += timedelta(days=1)
 
-print("DONE")
+    print(f"{year} matches: {len(all_matches)}")
+
+    if all_matches:
+        with open(OUTPUT_DIR / f"{year}.json", "w") as f:
+            json.dump(all_matches, f, indent=2)
+
+    return len(all_matches)
+
+
+# -----------------------------------
+# RUN
+# -----------------------------------
+total = 0
+
+for y in range(START_YEAR, END_YEAR + 1):
+    total += scrape_year(y)
+
+print(f"\nDONE. TOTAL MATCHES: {total}")
