@@ -1,93 +1,84 @@
 import json
-import re
 from pathlib import Path
 
-FILES = [
-    "docs/data/tennis/matches/2025.json",
-    "docs/data/tennis/matches/2026.json"
-]
+print("FIXING TENNIS MATCHES")
 
-# -------------------------
-def clean_name(name):
-    if not name:
-        return ""
+BASE_DIR = Path("docs/data/tennis")
+MATCH_DIR = BASE_DIR / "matches"
 
-    name = re.sub(r"\(.*?\)", "", name)
-    name = name.replace(".", "").strip()
+# Ensure folder exists
+MATCH_DIR.mkdir(parents=True, exist_ok=True)
 
-    return name
+years = [2025, 2026]
 
-# -------------------------
-def fix_score(score):
-    if not score:
-        return ""
+fixed_count = 0
+skipped = 0
 
-    parts = score.split()
-    fixed = []
+for year in years:
+    path = MATCH_DIR / f"{year}.json"
 
-    for p in parts:
-        if "-" not in p:
+    # -----------------------------
+    # FILE DOES NOT EXIST → SKIP
+    # -----------------------------
+    if not path.exists():
+        print(f"⚠️ Missing file: {path} — skipping")
+        skipped += 1
+        continue
+
+    try:
+        data = json.loads(path.read_text())
+    except Exception as e:
+        print(f"❌ Broken JSON in {path}: {e}")
+        skipped += 1
+        continue
+
+    # -----------------------------
+    # NORMALISE STRUCTURE
+    # -----------------------------
+    matches = data.get("matches") or data.get("games") or data
+
+    if not isinstance(matches, list):
+        print(f"⚠️ Invalid structure in {path}")
+        skipped += 1
+        continue
+
+    fixed_matches = []
+
+    for m in matches:
+        if not isinstance(m, dict):
             continue
 
-        a,b = p.split("-")
+        fixed = {}
 
-        # handle broken tiebreak like 67 → 6(7)
-        if len(b) > 1:
-            fixed.append(f"{a}-{b[0]}({b[1:]})")
-        else:
-            fixed.append(p)
+        # --- NORMALISE FIELDS ---
+        fixed["tournament"] = m.get("tournament") or m.get("event")
+        fixed["round"] = m.get("round")
+        fixed["date"] = m.get("date")
 
-    return " ".join(fixed)
+        fixed["player1"] = m.get("player1") or m.get("winner")
+        fixed["player2"] = m.get("player2") or m.get("loser")
 
-# -------------------------
-def fix_round(r):
+        fixed["score"] = m.get("score")
 
-    r = (r or "").lower()
-
-    if r in ["f","final"]:
-        return "F"
-    if "semi" in r or r == "sf":
-        return "SF"
-    if "quarter" in r or r == "qf":
-        return "QF"
-
-    if "16" in r:
-        return "R16"
-    if "32" in r:
-        return "R32"
-    if "64" in r:
-        return "R64"
-
-    return "R32"
-
-# -------------------------
-for file in FILES:
-
-    path = Path(file)
-    data = json.loads(path.read_text())
-
-    fixed = []
-
-    for m in data:
-
-        tournament = m.get("tournament")
-        p1 = clean_name(m.get("player1"))
-        p2 = clean_name(m.get("player2"))
-
-        if not tournament or not p1 or not p2:
+        # Skip garbage rows
+        if not fixed["player1"] or not fixed["player2"]:
             continue
 
-        fixed.append({
-            "tournament": tournament.strip(),
-            "surface": m.get("surface") or "Hard",
-            "round": fix_round(m.get("round")),
-            "player1": p1,
-            "player2": p2,
-            "score": fix_score(m.get("score")),
-            "date": m.get("date"),
-            "gender": m.get("gender")
-        })
+        fixed_matches.append(fixed)
 
-    path.write_text(json.dumps(fixed, indent=2))
+    # -----------------------------
+    # SAVE BACK
+    # -----------------------------
+    output = {
+        "season": year,
+        "matches": fixed_matches
+    }
 
-print("✅ 2025 & 2026 NOW MATCH 2024 FORMAT")
+    path.write_text(json.dumps(output, indent=2))
+
+    print(f"✅ Fixed {year} — {len(fixed_matches)} matches")
+    fixed_count += 1
+
+print("\nDONE")
+print(f"Fixed: {fixed_count}")
+print(f"Skipped: {skipped}")
