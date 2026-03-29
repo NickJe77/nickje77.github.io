@@ -1,69 +1,51 @@
 import json
 from pathlib import Path
 
-BASE = Path("docs/data/tennis")
-SEASONS_DIR = BASE / "seasons"
-OUTPUT = BASE / "history.json"
+MATCH_DIR = Path("docs/data/tennis/matches")
+OUT_FILE = Path("docs/data/tennis/history.json")
 
-def normalise_match(m):
-    return {
-        "tournament": m.get("tournament") or m.get("event") or m.get("tourney_name") or "",
-        "surface": m.get("surface") or "",
-        "round": m.get("round") or "",
-        "date": m.get("date") or "",
+all_matches = []
 
-        "player1": m.get("player1") or m.get("winner") or m.get("w_name") or "",
-        "player2": m.get("player2") or m.get("loser") or m.get("l_name") or "",
+# -------------------------
+# LOAD ALL YEARS
+# -------------------------
+for file in sorted(MATCH_DIR.glob("*.json")):
 
-        "score": m.get("score") or "",
-
-        "gender": m.get("gender") or ""
-    }
-
-history = []
-
-print("REBUILDING TENNIS HISTORY")
-
-for file in sorted(SEASONS_DIR.glob("*.json")):
-    print(f"Processing {file.name}")
+    print("Loading:", file.name)
 
     try:
-        with open(file) as f:
-            data = json.load(f)
-
-        # ✅ HANDLE BOTH STRUCTURES
+        data = json.loads(file.read_text())
         if isinstance(data, list):
-            matches = data
-        elif isinstance(data, dict):
-            matches = data.get("matches") or data.get("results") or []
-        else:
-            matches = []
-
-        for m in matches:
-            if not isinstance(m, dict):
-                continue
-
-            fixed = normalise_match(m)
-
-            # ❌ skip junk rows
-            if not fixed["player1"] or not fixed["player2"]:
-                continue
-            if fixed["player2"].lower() == "info":
-                continue
-            if fixed["score"].lower() == "info":
-                continue
-
-            history.append(fixed)
-
+            all_matches.extend(data)
     except Exception as e:
-        print(f"ERROR: {file} -> {e}")
+        print("ERROR:", file.name, e)
 
-# sort
-history.sort(key=lambda x: x.get("date", ""))
+# -------------------------
+# VALIDATE + CLEAN
+# -------------------------
+clean = []
 
-OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+for m in all_matches:
 
-with open(OUTPUT, "w") as f:
-    json.dump({"matches": history}, f, indent=2)
+    if not m.get("tournament"):
+        continue
+    if not m.get("player1") or not m.get("player2"):
+        continue
 
-print(f"DONE: {len(history)} matches saved")
+    clean.append(m)
+
+# -------------------------
+# SORT
+# -------------------------
+clean.sort(key=lambda x: (
+    x.get("date",""),
+    x.get("tournament","")
+))
+
+# -------------------------
+# SAVE
+# -------------------------
+OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+OUT_FILE.write_text(json.dumps(clean, indent=2))
+
+print(f"✅ DONE: {len(clean)} matches saved")
