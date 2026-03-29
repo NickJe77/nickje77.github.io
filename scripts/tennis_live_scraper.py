@@ -1,10 +1,9 @@
 import requests
-from bs4 import BeautifulSoup
 import json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
-print("LIVE TENNIS SCRAPER (2025+)")
+print("LIVE TENNIS SCRAPER (REAL FIX)")
 
 BASE = Path("docs/data/tennis")
 MATCHES = BASE / "matches"
@@ -13,7 +12,10 @@ SEASONS = BASE / "seasons"
 MATCHES.mkdir(parents=True, exist_ok=True)
 SEASONS.mkdir(parents=True, exist_ok=True)
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json"
+}
 
 YEARS = [2025, 2026]
 
@@ -22,53 +24,47 @@ def slug(s):
     return "".join(c.lower() if c.isalnum() else "-" for c in s).strip("-")
 
 
-def get_tournaments(year):
-    url = f"https://www.tennisexplorer.com/results/?type=all&year={year}"
-    soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, "html.parser")
-
-    links = []
-    for a in soup.select("a"):
-        href = a.get("href", "")
-        if "/tournament/" in href:
-            links.append("https://www.tennisexplorer.com" + href)
-
-    return list(set(links))
+def daterange(start, end):
+    for n in range((end - start).days + 1):
+        yield start + timedelta(n)
 
 
-def parse_match_row(row, tournament):
-    cols = row.find_all("td")
-    if len(cols) < 5:
-        return None
-
+def fetch_day(date):
+    url = f"https://api.atptour.com/en/scores/current/{date.strftime('%Y-%m-%d')}"
     try:
-        date = cols[0].text.strip()
-        players = cols[2].text.strip().split(" - ")
-        score = cols[3].text.strip()
+        r = requests.get(url, headers=HEADERS, timeout=10)
+        if r.status_code != 200:
+            return []
+        return r.json().get("scores", [])
+    except:
+        return []
 
-        if len(players) != 2:
-            return None
 
-        p1, p2 = players
+def build_match(m):
+    try:
+        p1 = m["players"][0]["name"]
+        p2 = m["players"][1]["name"]
+        score = m.get("score", "")
+        date = m.get("date", "")
 
         return {
-            "match_id": f"{date}_{slug(tournament)}_{slug(p1)}_{slug(p2)}",
+            "match_id": f"{date}_{slug(p1)}_{slug(p2)}",
             "date": date,
-            "tournament": tournament,
-            "surface": "",
-            "round": "",
+            "tournament": m.get("tournamentName", ""),
+            "surface": m.get("surface", ""),
+            "round": m.get("round", ""),
             "player1": p1,
             "player2": p2,
             "winner": p1,
             "loser": p2,
             "score": score,
-            "gender": "",
+            "gender": "M",
             "best_of": 3,
             "draw_size": 0,
             "minutes": 0,
             "tourney_level": "",
             "tourney_id": ""
         }
-
     except:
         return None
 
@@ -76,24 +72,18 @@ def parse_match_row(row, tournament):
 def scrape_year(year):
     print(f"Scraping {year}")
 
+    start = datetime(year, 1, 1)
+    end = datetime.utcnow()
+
     matches = []
 
-    tournaments = get_tournaments(year)
+    for d in daterange(start, end):
+        daily = fetch_day(d)
 
-    for t_url in tournaments[:200]:  # limit to avoid timeouts
-        try:
-            soup = BeautifulSoup(requests.get(t_url, headers=HEADERS).text, "html.parser")
-            name = soup.title.text.split("|")[0].strip()
-
-            rows = soup.select("table tr")
-
-            for r in rows:
-                m = parse_match_row(r, name)
-                if m:
-                    matches.append(m)
-
-        except:
-            continue
+        for m in daily:
+            built = build_match(m)
+            if built:
+                matches.append(built)
 
     return matches
 
@@ -104,6 +94,6 @@ for year in YEARS:
     (MATCHES / f"{year}.json").write_text(json.dumps(data, indent=2))
     (SEASONS / f"{year}.json").write_text(json.dumps(data, indent=2))
 
-    print(f"{year}: {len(data)} matches saved")
+    print(f"{year}: {len(data)} matches")
 
 print("DONE")
