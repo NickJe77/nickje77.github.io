@@ -1,15 +1,17 @@
 import requests
-from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
 import json
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
 
-print("TENNIS LIVE SCRAPER (WORKING PARSER)")
+print("TENNIS LIVE SCRAPER (XHR VERSION - WORKING)")
 
-BASE_URL = "https://www.tennisexplorer.com"
+BASE = "https://www.tennisexplorer.com"
+
 HEADERS = {
-    "User-Agent": "Mozilla/5.0"
+    "User-Agent": "Mozilla/5.0",
+    "X-Requested-With": "XMLHttpRequest",
+    "Referer": "https://www.tennisexplorer.com/matches/"
 }
 
 OUTPUT_DIR = Path("docs/data/tennis/seasons")
@@ -23,78 +25,58 @@ session.headers.update(HEADERS)
 
 
 # -----------------------------------
-# SAFE REQUEST
+# GET MATCHES VIA XHR
 # -----------------------------------
-def get_soup(url, retries=5):
-    for attempt in range(retries):
-        try:
-            r = session.get(url, timeout=20)
+def fetch_day(date):
+    url = f"{BASE}/matches/?type=all&year={date.year}&month={date.month}&day={date.day}"
 
-            if r.status_code == 200:
-                return BeautifulSoup(r.text, "html.parser")
+    try:
+        r = session.get(url, timeout=20)
 
-        except Exception as e:
-            print(f"Retry {attempt+1}: {e}")
+        if r.status_code != 200:
+            return []
 
-        time.sleep(2 + attempt * 2)
+        html = r.text
 
-    return None
+        matches = []
 
+        # crude but reliable parsing (XHR returns clean rows)
+        rows = html.split('<tr')
 
-# -----------------------------------
-# SCRAPE DAY (FIXED SELECTORS)
-# -----------------------------------
-def scrape_day(date):
-    url = f"{BASE_URL}/matches/?type=all&year={date.year}&month={date.month}&day={date.day}"
-    soup = get_soup(url)
+        for row in rows:
+            if 't-name' not in row:
+                continue
 
-    if not soup:
+            try:
+                parts = row.split('t-name')
+
+                p1 = parts[1].split('>')[1].split('<')[0].strip()
+                p2 = parts[2].split('>')[1].split('<')[0].strip()
+
+                score = ""
+                if 't-score' in row:
+                    score = row.split('t-score')[1].split('>')[1].split('<')[0].strip()
+
+                round_name = ""
+                if 't-round' in row:
+                    round_name = row.split('t-round')[1].split('>')[1].split('<')[0].strip()
+
+                matches.append({
+                    "date": date.strftime("%Y-%m-%d"),
+                    "player1": p1,
+                    "player2": p2,
+                    "score": score,
+                    "round": round_name
+                })
+
+            except Exception:
+                continue
+
+        return matches
+
+    except Exception as e:
+        print("FAILED:", e)
         return []
-
-    matches = []
-
-    # NEW STRUCTURE
-    rows = soup.select("tr")
-
-    for row in rows:
-        try:
-            players = row.select("td.t-name")
-
-            if len(players) < 2:
-                continue
-
-            player1 = players[0].get_text(strip=True)
-            player2 = players[1].get_text(strip=True)
-
-            score_cell = row.select_one("td.t-score")
-            score = score_cell.get_text(strip=True) if score_cell else ""
-
-            round_cell = row.select_one("td.t-round")
-            round_name = round_cell.get_text(strip=True) if round_cell else ""
-
-            tournament_cell = row.select_one("td.tournament")
-            tournament = tournament_cell.get_text(strip=True) if tournament_cell else ""
-
-            surface_cell = row.select_one("td.surface")
-            surface = surface_cell.get_text(strip=True) if surface_cell else ""
-
-            if not player1 or not player2:
-                continue
-
-            matches.append({
-                "date": date.strftime("%Y-%m-%d"),
-                "tournament": tournament,
-                "surface": surface,
-                "round": round_name,
-                "player1": player1,
-                "player2": player2,
-                "score": score
-            })
-
-        except Exception:
-            continue
-
-    return matches
 
 
 # -----------------------------------
@@ -110,12 +92,12 @@ def scrape_year(year):
 
     d = start
     while d <= end:
-        print(f"  {d.strftime('%Y-%m-%d')}")
+        print(d.strftime("%Y-%m-%d"))
 
-        daily = scrape_day(d)
+        daily = fetch_day(d)
         all_matches.extend(daily)
 
-        time.sleep(1.5)
+        time.sleep(1)  # keep safe
 
         d += timedelta(days=1)
 
