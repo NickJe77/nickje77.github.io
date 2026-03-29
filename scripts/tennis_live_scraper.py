@@ -6,7 +6,6 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 
 BASE = "https://www.tennisexplorer.com"
-
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 OUT_DIR = Path("docs/data/tennis/matches")
@@ -18,7 +17,8 @@ def clean(text):
 
 # -------------------------
 def get_tournaments(year):
-    url = f"{BASE}/calendar/{year}/atp/"
+
+    url = f"{BASE}/atp-calendar/?year={year}"
     html = requests.get(url, headers=HEADERS).text
     soup = BeautifulSoup(html, "html.parser")
 
@@ -26,8 +26,10 @@ def get_tournaments(year):
 
     for a in soup.select("a"):
         href = a.get("href", "")
+
         if "/tournament/" in href:
             full = BASE + href
+
             if full not in links:
                 links.append(full)
 
@@ -36,11 +38,13 @@ def get_tournaments(year):
 
 # -------------------------
 def parse_score(row):
+
     cells = row.find_all("td")
     score = []
 
     for c in cells:
         t = c.get_text(strip=True)
+
         if re.match(r"^\d+$", t):
             score.append(t)
 
@@ -53,25 +57,27 @@ def parse_score(row):
 
 # -------------------------
 def parse_round(text):
-    text = text.lower()
 
-    if "final" in text:
+    t = text.lower()
+
+    if "final" in t:
         return "F"
-    if "semi" in text:
+    if "semi" in t:
         return "SF"
-    if "quarter" in text:
+    if "quarter" in t:
         return "QF"
-    if "round of 16" in text:
+    if "round of 16" in t:
         return "R16"
-    if "round of 32" in text:
+    if "round of 32" in t:
         return "R32"
-    if "round of 64" in text:
+    if "round of 64" in t:
         return "R64"
 
     return ""
 
 # -------------------------
 def scrape_tournament(url, year):
+
     html = requests.get(url, headers=HEADERS).text
     soup = BeautifulSoup(html, "html.parser")
 
@@ -87,8 +93,8 @@ def scrape_tournament(url, year):
 
         text = clean(r.get_text())
 
-        # detect round headers
-        if "final" in text.lower() or "round" in text.lower():
+        # round header
+        if any(x in text.lower() for x in ["final","semi","quarter","round"]):
             current_round = parse_round(text)
             continue
 
