@@ -3,10 +3,7 @@ from pathlib import Path
 
 print("FIXING TENNIS MATCHES")
 
-BASE_DIR = Path("docs/data/tennis")
-MATCH_DIR = BASE_DIR / "matches"
-
-# Ensure folder exists
+MATCH_DIR = Path("docs/data/tennis/matches")
 MATCH_DIR.mkdir(parents=True, exist_ok=True)
 
 years = [2025, 2026]
@@ -17,29 +14,33 @@ skipped = 0
 for year in years:
     path = MATCH_DIR / f"{year}.json"
 
-    # -----------------------------
-    # FILE DOES NOT EXIST → SKIP
-    # -----------------------------
     if not path.exists():
-        print(f"⚠️ Missing file: {path} — skipping")
+        print(f"⚠️ Missing file: {path}")
         skipped += 1
         continue
 
     try:
         data = json.loads(path.read_text())
     except Exception as e:
-        print(f"❌ Broken JSON in {path}: {e}")
+        print(f"❌ Bad JSON: {path} ({e})")
         skipped += 1
         continue
 
-    # -----------------------------
-    # NORMALISE STRUCTURE
-    # -----------------------------
-    matches = data.get("matches") or data.get("games") or data
+    matches = data.get("matches")
+
+    # ✅ FIX: allow empty lists (this was your issue)
+    if matches is None:
+        print(f"⚠️ No matches key in {path}")
+        skipped += 1
+        continue
 
     if not isinstance(matches, list):
         print(f"⚠️ Invalid structure in {path}")
         skipped += 1
+        continue
+
+    if len(matches) == 0:
+        print(f"⚠️ No matches yet in {year} (this is fine)")
         continue
 
     fixed_matches = []
@@ -48,35 +49,26 @@ for year in years:
         if not isinstance(m, dict):
             continue
 
-        fixed = {}
+        fixed = {
+            "tournament": m.get("tournament"),
+            "round": m.get("round"),
+            "date": m.get("date"),
+            "player1": m.get("player1"),
+            "player2": m.get("player2"),
+            "score": m.get("score")
+        }
 
-        # --- NORMALISE FIELDS ---
-        fixed["tournament"] = m.get("tournament") or m.get("event")
-        fixed["round"] = m.get("round")
-        fixed["date"] = m.get("date")
-
-        fixed["player1"] = m.get("player1") or m.get("winner")
-        fixed["player2"] = m.get("player2") or m.get("loser")
-
-        fixed["score"] = m.get("score")
-
-        # Skip garbage rows
         if not fixed["player1"] or not fixed["player2"]:
             continue
 
         fixed_matches.append(fixed)
 
-    # -----------------------------
-    # SAVE BACK
-    # -----------------------------
-    output = {
+    path.write_text(json.dumps({
         "season": year,
         "matches": fixed_matches
-    }
+    }, indent=2))
 
-    path.write_text(json.dumps(output, indent=2))
-
-    print(f"✅ Fixed {year} — {len(fixed_matches)} matches")
+    print(f"✅ Fixed {year} ({len(fixed_matches)} matches)")
     fixed_count += 1
 
 print("\nDONE")
