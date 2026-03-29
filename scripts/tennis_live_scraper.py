@@ -1,147 +1,60 @@
-import requests
 import json
-import time
-import re
-from bs4 import BeautifulSoup
 from pathlib import Path
+import re
 
-BASE = "https://www.tennisexplorer.com"
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+FILES = [
+    "docs/data/tennis/matches/2025.json",
+    "docs/data/tennis/matches/2026.json"
+]
 
-OUT_DIR = Path("docs/data/tennis/matches")
-OUT_DIR.mkdir(parents=True, exist_ok=True)
+def clean_name(name):
+    name = re.sub(r"\(.*?\)", "", name)
+    name = name.replace(".", "").strip()
+    return name
 
-# -------------------------
-def clean(text):
-    return re.sub(r"\s+", " ", text or "").strip()
+def fix_score(score):
+    if not score:
+        return ""
 
-# -------------------------
-def get_tournaments(year):
+    parts = score.split()
+    fixed = []
 
-    url = f"{BASE}/atp-calendar/?year={year}"
-    html = requests.get(url, headers=HEADERS).text
-    soup = BeautifulSoup(html, "html.parser")
+    for p in parts:
+        if "-" in p:
+            a,b = p.split("-")
+            if len(b) > 1:
+                fixed.append(f"{a}-{b[0]}({b[1:]})")
+            else:
+                fixed.append(p)
 
-    links = []
+    return " ".join(fixed)
 
-    for a in soup.select("a"):
-        href = a.get("href", "")
+def fix_round(r):
+    r = (r or "").lower()
 
-        if "/tournament/" in href:
-            full = BASE + href
+    if "final" in r: return "F"
+    if "semi" in r: return "SF"
+    if "quarter" in r: return "QF"
 
-            if full not in links:
-                links.append(full)
+    return r.upper() if r else "R32"
 
-    print(f"{year}: found {len(links)} tournaments")
-    return links
+for file in FILES:
 
-# -------------------------
-def parse_score(row):
+    path = Path(file)
+    data = json.loads(path.read_text())
 
-    cells = row.find_all("td")
-    score = []
+    for m in data:
 
-    for c in cells:
-        t = c.get_text(strip=True)
+        m["player1"] = clean_name(m.get("player1"))
+        m["player2"] = clean_name(m.get("player2"))
 
-        if re.match(r"^\d+$", t):
-            score.append(t)
+        m["score"] = fix_score(m.get("score"))
 
-    pairs = []
-    for i in range(0, len(score), 2):
-        if i+1 < len(score):
-            pairs.append(f"{score[i]}-{score[i+1]}")
+        m["round"] = fix_round(m.get("round"))
 
-    return " ".join(pairs)
+        if not m.get("surface"):
+            m["surface"] = "Hard"
 
-# -------------------------
-def parse_round(text):
+    path.write_text(json.dumps(data, indent=2))
 
-    t = text.lower()
-
-    if "final" in t:
-        return "F"
-    if "semi" in t:
-        return "SF"
-    if "quarter" in t:
-        return "QF"
-    if "round of 16" in t:
-        return "R16"
-    if "round of 32" in t:
-        return "R32"
-    if "round of 64" in t:
-        return "R64"
-
-    return ""
-
-# -------------------------
-def scrape_tournament(url, year):
-
-    html = requests.get(url, headers=HEADERS).text
-    soup = BeautifulSoup(html, "html.parser")
-
-    title = soup.find("h1")
-    tournament = clean(title.text) if title else "Unknown"
-
-    rows = soup.select("table tr")
-
-    matches = []
-    current_round = ""
-
-    for r in rows:
-
-        text = clean(r.get_text())
-
-        # round header
-        if any(x in text.lower() for x in ["final","semi","quarter","round"]):
-            current_round = parse_round(text)
-            continue
-
-        links = r.select("a")
-        if len(links) < 2:
-            continue
-
-        p1 = clean(links[0].text)
-        p2 = clean(links[1].text)
-
-        score = parse_score(r)
-
-        if not p1 or not p2:
-            continue
-
-        matches.append({
-            "tournament": tournament,
-            "year": year,
-            "round": current_round,
-            "player1": p1,
-            "player2": p2,
-            "score": score
-        })
-
-    print(f"✓ {tournament}: {len(matches)} matches")
-    return matches
-
-# -------------------------
-def build_year(year):
-
-    all_matches = []
-    tournaments = get_tournaments(year)
-
-    for url in tournaments:
-        try:
-            matches = scrape_tournament(url, year)
-            all_matches.extend(matches)
-            time.sleep(1)
-        except Exception as e:
-            print("ERROR:", e)
-
-    path = OUT_DIR / f"{year}.json"
-    path.write_text(json.dumps(all_matches, indent=2))
-
-    print(f"\nSaved {year}: {len(all_matches)} matches")
-
-# -------------------------
-if __name__ == "__main__":
-    for year in [2025, 2026]:
-        build_year(year)
+print("✅ CLEANED DATA")
