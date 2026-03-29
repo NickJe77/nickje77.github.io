@@ -1,10 +1,10 @@
 import requests
-import csv
-import io
+from bs4 import BeautifulSoup
 import json
 from pathlib import Path
+from datetime import datetime, timedelta
 
-print("LIVE TENNIS SCRAPER (WORKING SOURCE)")
+print("TENNIS SCRAPER (REAL FIX - DAILY PAGES)")
 
 BASE = Path("docs/data/tennis")
 MATCHES = BASE / "matches"
@@ -13,93 +13,102 @@ SEASONS = BASE / "seasons"
 MATCHES.mkdir(parents=True, exist_ok=True)
 SEASONS.mkdir(parents=True, exist_ok=True)
 
+HEADERS = {"User-Agent": "Mozilla/5.0"}
+
 YEARS = [2025, 2026]
-
-ATP = "https://tennisabstract.com/cgi-bin/atp_matches_{year}.csv"
-WTA = "https://tennisabstract.com/cgi-bin/wta_matches_{year}.csv"
-
-
-def parse_date(d):
-    if d and len(d) == 8:
-        return f"{d[:4]}-{d[4:6]}-{d[6:8]}"
-    return ""
 
 
 def slug(s):
     return "".join(c.lower() if c.isalnum() else "-" for c in s).strip("-")
 
 
-def safe_int(v):
+def get_dates(year):
+    start = datetime(year, 1, 1)
+    end = datetime.utcnow()
+
+    for i in range((end - start).days + 1):
+        yield start + timedelta(days=i)
+
+
+def scrape_day(date):
+    url = f"https://www.tennisexplorer.com/matches/?year={date.year}&month={date.month:02d}&day={date.day:02d}"
+    
     try:
-        return int(float(v))
+        r = requests.get(url, headers=HEADERS, timeout=10)
+        soup = BeautifulSoup(r.text, "html.parser")
     except:
-        return 0
-
-
-def build_match(row, gender):
-    winner = row.get("winner_name", "").strip()
-    loser = row.get("loser_name", "").strip()
-
-    if not winner or not loser:
-        return None
-
-    date = parse_date(row.get("tourney_date"))
-    tournament = row.get("tourney_name", "")
-    rnd = row.get("round", "")
-    score = row.get("score", "")
-    surface = row.get("surface", "")
-
-    match_id = f"{date[:4]}_{gender.lower()}_{date}_{slug(tournament)}_{rnd.lower()}_{slug(winner)}_{slug(loser)}"
-
-    m = {
-        "match_id": match_id,
-        "date": date,
-        "tournament": tournament,
-        "surface": surface,
-        "round": rnd,
-        "player1": winner,
-        "player2": loser,
-        "winner": winner,
-        "loser": loser,
-        "score": score,
-        "gender": gender,
-        "best_of": safe_int(row.get("best_of")),
-        "draw_size": safe_int(row.get("draw_size")),
-        "minutes": safe_int(row.get("minutes")),
-        "tourney_level": row.get("tourney_level", ""),
-        "tourney_id": row.get("tourney_id", "")
-    }
-
-    return m
-
-
-def fetch(url):
-    r = requests.get(url)
-    if r.status_code != 200:
         return []
-    return list(csv.DictReader(io.StringIO(r.text)))
+
+    matches = []
+
+    tables = soup.find_all("table", class_="result")
+
+    # remove junk tables (critical)
+    tables = tables[:-3] if len(tables) > 3 else tables
+
+    for table in tables:
+        tournament = "Unknown"
+
+        # find tournament name from previous header
+        header = table.find_previous("tr", class_="head")
+        if header:
+            tournament = header.text.strip()
+
+        rows = table.find_all("tr")
+
+        for row in rows:
+            cols = row.find_all("td")
+
+            if len(cols) < 4:
+                continue
+
+            try:
+                players = cols[2].text.strip().split("-")
+                score = cols[3].text.strip()
+
+                if len(players) != 2:
+                    continue
+
+                p1 = players[0].strip()
+                p2 = players[1].strip()
+
+                matches.append({
+                    "match_id": f"{date.date()}_{slug(p1)}_{slug(p2)}",
+                    "date": str(date.date()),
+                    "tournament": tournament,
+                    "surface": "",
+                    "round": "",
+                    "player1": p1,
+                    "player2": p2,
+                    "winner": p1,
+                    "loser": p2,
+                    "score": score,
+                    "gender": "",
+                    "best_of": 3,
+                    "draw_size": 0,
+                    "minutes": 0,
+                    "tourney_level": "",
+                    "tourney_id": ""
+                })
+
+            except:
+                continue
+
+    return matches
 
 
 for year in YEARS:
     print(f"Processing {year}")
 
-    matches = []
+    all_matches = []
 
-    for gender, url in [("M", ATP), ("F", WTA)]:
-        rows = fetch(url.format(year=year))
+    for d in get_dates(year):
+        daily = scrape_day(d)
+        all_matches.extend(daily)
 
-        if not rows:
-            print(f"{year} no data for {gender}")
-            continue
+    print(f"{year}: {len(all_matches)} matches")
 
-        for r in rows:
-            m = build_match(r, gender)
-            if m:
-                matches.append(m)
-
-    (MATCHES / f"{year}.json").write_text(json.dumps(matches, indent=2))
-    (SEASONS / f"{year}.json").write_text(json.dumps(matches, indent=2))
-
-    print(f"{year}: {len(matches)} matches saved")
+    (MATCHES / f"{year}.json").write_text(json.dumps(all_matches, indent=2))
+    (SEASONS / f"{year}.json").write_text(json.dumps(all_matches, indent=2))
 
 print("DONE")
