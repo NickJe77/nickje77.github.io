@@ -1,0 +1,44 @@
+name: RESTORE TENNIS (AUTO FIX)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout FULL history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore deleted tennis files
+        run: |
+          echo "Restoring deleted tennis files..."
+
+          FILES=$(git log --diff-filter=D --name-only --pretty="" | grep "docs/data/tennis/seasons/" | sort -u)
+
+          COUNT=0
+
+          for f in $FILES; do
+            echo "Restoring $f"
+
+            COMMIT=$(git rev-list -n 1 HEAD -- "$f")
+
+            if [ -n "$COMMIT" ]; then
+              git checkout "$COMMIT" -- "$f" || true
+              COUNT=$((COUNT+1))
+            fi
+          done
+
+          echo "Restored $COUNT files"
+
+      - name: Commit restored files
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
+          git add docs/data/tennis/seasons/*.json
+          git commit -m "RESTORE tennis files (auto recovery)" || echo "No changes"
+          git push
