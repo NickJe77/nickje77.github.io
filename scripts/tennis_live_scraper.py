@@ -1,267 +1,141 @@
-import json
-import re
-import time
-from pathlib import Path
-from datetime import date, datetime, timedelta
-
 import requests
+import json
+import time
+import re
 from bs4 import BeautifulSoup
+from pathlib import Path
 
-# =========================
-# PATHS
-# =========================
+BASE = "https://www.tennisexplorer.com"
 
-BASE_DIR = Path("docs/data/tennis")
-SEASONS_DIR = BASE_DIR / "seasons"
-MATCHES_DIR = BASE_DIR / "matches"
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-SEASONS_DIR.mkdir(parents=True, exist_ok=True)
-MATCHES_DIR.mkdir(parents=True, exist_ok=True)
+OUT_DIR = Path("docs/data/tennis/matches")
+OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# =========================
-# CONFIG
-# =========================
+# -------------------------
+def clean(text):
+    return re.sub(r"\s+", " ", text or "").strip()
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Referer": "https://www.tennisexplorer.com/",
-}
+# -------------------------
+def get_tournaments(year):
+    url = f"{BASE}/calendar/{year}/atp/"
+    html = requests.get(url, headers=HEADERS).text
+    soup = BeautifulSoup(html, "html.parser")
 
-SESSION = requests.Session()
-SESSION.headers.update(HEADERS)
+    links = []
 
-CURRENT_YEAR = datetime.utcnow().year
-YEARS = [2025, CURRENT_YEAR] if CURRENT_YEAR >= 2025 else [2025]
+    for a in soup.select("a"):
+        href = a.get("href", "")
+        if "/tournament/" in href:
+            full = BASE + href
+            if full not in links:
+                links.append(full)
 
-DAY_URLS = {
-    "M": lambda d: f"https://www.tennisexplorer.com/results/?day={d.day:02d}&month={d.month:02d}&year={d.year}&type=atp-single",
-    "F": lambda d: f"https://www.tennisexplorer.com/results/?day={d.day:02d}&month={d.month:02d}&year={d.year}&type=wta-single",
-}
+    print(f"{year}: found {len(links)} tournaments")
+    return links
 
-START_DATES = {
-    2025: date(2025, 1, 1),
-    CURRENT_YEAR: date(CURRENT_YEAR, 1, 1),
-}
+# -------------------------
+def parse_score(row):
+    cells = row.find_all("td")
+    score = []
 
-# =========================
-# HELPERS
-# =========================
+    for c in cells:
+        t = c.get_text(strip=True)
+        if re.match(r"^\d+$", t):
+            score.append(t)
 
-def safe_get(url: str, tries: int = 3):
-    for _ in range(tries):
-        try:
-            r = SESSION.get(url, timeout=30)
-            r.raise_for_status()
-            return r.text
-        except:
-            time.sleep(2)
+    pairs = []
+    for i in range(0, len(score), 2):
+        if i+1 < len(score):
+            pairs.append(f"{score[i]}-{score[i+1]}")
+
+    return " ".join(pairs)
+
+# -------------------------
+def parse_round(text):
+    text = text.lower()
+
+    if "final" in text:
+        return "F"
+    if "semi" in text:
+        return "SF"
+    if "quarter" in text:
+        return "QF"
+    if "round of 16" in text:
+        return "R16"
+    if "round of 32" in text:
+        return "R32"
+    if "round of 64" in text:
+        return "R64"
+
     return ""
 
-def clean_text(value):
-    return re.sub(r"\s+", " ", str(value or "")).strip()
-
-def slug(text):
-    text = clean_text(text).lower()
-    text = re.sub(r"[().,']", "", text)
-    text = re.sub(r"\s+", "-", text)
-    return text
-
-# 🔥 CLEAN PLAYER (FIXED)
-def clean_player(name):
-    name = clean_text(name)
-    name = re.sub(r"\(.*?\)", "", name)  # remove seeds
-    name = name.replace(".", "")         # remove dots
-    return name.strip()
-
-def iter_days(year):
-    d = START_DATES[year]
-    end = min(date(year,12,31), datetime.utcnow().date())
-    while d <= end:
-        yield d
-        d += timedelta(days=1)
-
-# =========================
-# SCORE
-# =========================
-
-def parse_score(cols1, cols2):
-    score = []
-    for i in range(3, min(len(cols1), len(cols2), 8)):
-        a = cols1[i].get_text(strip=True)
-        b = cols2[i].get_text(strip=True)
-
-        a = re.match(r"\d+", a)
-        b = re.match(r"\d+", b)
-
-        if a and b:
-            score.append(f"{a.group()}-{b.group()}")
-
-    return " ".join(score)
-
-# =========================
-# ROUND FIX (🔥 CORE FIX)
-# =========================
-
-def parse_round(raw, score):
-    raw = clean_text(raw).lower()
-
-    if "final" in raw:
-        return "F"
-    if "semi" in raw or raw == "sf":
-        return "SF"
-    if "quarter" in raw or raw == "qf":
-        return "QF"
-
-    # fallback using score length
-    sets = score.split()
-    if len(sets) >= 3:
-        return "R32"
-
-    return "R64"
-
-# =========================
-# TOURNAMENT HEADER
-# =========================
-
-def clean_header(text):
-    text = clean_text(text)
-    text = re.sub(r"\s+S\s+1\s+2\s+3\s+4\s+5.*$", "", text)
-    return text.strip()
-
-def is_junk(name):
-    name = name.lower()
-    return any(x in name for x in [
-        "itf","challenger","futures","doubles","junior"
-    ])
-
-# =========================
-# PARSER
-# =========================
-
-def parse_day(day, gender):
-    url = DAY_URLS[gender](day)
-    print("Scraping", url)
-
-    html = safe_get(url)
+# -------------------------
+def scrape_tournament(url, year):
+    html = requests.get(url, headers=HEADERS).text
     soup = BeautifulSoup(html, "html.parser")
-    rows = soup.select("tr")
+
+    title = soup.find("h1")
+    tournament = clean(title.text) if title else "Unknown"
+
+    rows = soup.select("table tr")
 
     matches = []
-    tournament = ""
-    surface = ""
+    current_round = ""
 
-    i = 0
-    while i < len(rows):
+    for r in rows:
 
-        text = clean_text(rows[i].get_text())
+        text = clean(r.get_text())
 
-        if " S " in text and " H " in text:
-            header = clean_header(text)
-
-            if is_junk(header):
-                tournament = ""
-            else:
-                tournament = header
-
-            i += 1
+        # detect round headers
+        if "final" in text.lower() or "round" in text.lower():
+            current_round = parse_round(text)
             continue
 
-        if i+1 >= len(rows):
-            break
-
-        r1 = rows[i]
-        r2 = rows[i+1]
-
-        a1 = r1.find("a")
-        a2 = r2.find("a")
-
-        if not a1 or not a2 or not tournament:
-            i += 1
+        links = r.select("a")
+        if len(links) < 2:
             continue
 
-        p1 = clean_player(a1.get_text())
-        p2 = clean_player(a2.get_text())
+        p1 = clean(links[0].text)
+        p2 = clean(links[1].text)
 
-        cols1 = r1.find_all("td")
-        cols2 = r2.find_all("td")
+        score = parse_score(r)
 
-        if len(cols1) < 4 or len(cols2) < 4:
-            i += 1
+        if not p1 or not p2:
             continue
 
-        score = parse_score(cols1, cols2)
-        raw_round = cols1[1].get_text(strip=True)
-        rnd = parse_round(raw_round, score)
-
-        date_str = f"{day.year:04d}{day.month:02d}{day.day:02d}"
-
-        match = {
-            "match_id": f"{date_str}_{slug(p1)}_vs_{slug(p2)}",
+        matches.append({
             "tournament": tournament,
-            "surface": surface or "Hard",
-            "round": rnd,
+            "year": year,
+            "round": current_round,
             "player1": p1,
             "player2": p2,
-            "score": score,
-            "date": date_str,
-            "gender": gender,
-        }
+            "score": score
+        })
 
-        matches.append(match)
-        i += 2
-
+    print(f"✓ {tournament}: {len(matches)} matches")
     return matches
 
-# =========================
-# SAVE
-# =========================
+# -------------------------
+def build_year(year):
 
-def save(year, matches):
-    seen = set()
-    clean = []
+    all_matches = []
+    tournaments = get_tournaments(year)
 
-    for m in matches:
-        key = (
-            m["date"],
-            m["tournament"],
-            m["round"],
-            m["player1"],
-            m["player2"]
-        )
-        if key in seen:
-            continue
-        seen.add(key)
-        clean.append(m)
+    for url in tournaments:
+        try:
+            matches = scrape_tournament(url, year)
+            all_matches.extend(matches)
+            time.sleep(1)
+        except Exception as e:
+            print("ERROR:", e)
 
-    clean.sort(key=lambda x: (x["date"], x["tournament"]))
+    path = OUT_DIR / f"{year}.json"
+    path.write_text(json.dumps(all_matches, indent=2))
 
-    (MATCHES_DIR / f"{year}.json").write_text(json.dumps(clean, indent=2))
-    (SEASONS_DIR / f"{year}.json").write_text(json.dumps(clean, indent=2))
+    print(f"\nSaved {year}: {len(all_matches)} matches")
 
-    print(f"Saved {year}: {len(clean)} matches")
-
-# =========================
-# MAIN
-# =========================
-
-def main():
-    print("=== TENNIS SCRAPER START ===")
-
-    for year in YEARS:
-        all_matches = []
-
-        for d in iter_days(year):
-            for g in ["M","F"]:
-                try:
-                    all_matches += parse_day(d, g)
-                    time.sleep(0.8)
-                except Exception as e:
-                    print("ERROR:", e)
-
-        save(year, all_matches)
-
-    print("=== DONE ===")
-
+# -------------------------
 if __name__ == "__main__":
-    main()
+    for year in [2025, 2026]:
+        build_year(year)
