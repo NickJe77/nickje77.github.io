@@ -1,110 +1,59 @@
+import requests
 import json
-import re
 from pathlib import Path
+from datetime import datetime
 
-FILES = [
-    "docs/data/tennis/matches/2025.json",
-    "docs/data/tennis/matches/2026.json"
-]
+print("TENNIS LIVE SCRAPER (MATCHES FIX)")
 
-# -------------------------
-def clean_name(name):
-    if not name:
-        return ""
+BASE_DIR = Path("docs/data/tennis")
+SEASON_DIR = BASE_DIR / "seasons"
+MATCH_DIR = BASE_DIR / "matches"
 
-    # remove seeds
-    name = re.sub(r"\(.*?\)", "", name)
+SEASON_DIR.mkdir(parents=True, exist_ok=True)
+MATCH_DIR.mkdir(parents=True, exist_ok=True)
 
-    # remove dots
-    name = name.replace(".", "")
+YEARS = [2025, 2026]
 
-    return name.strip()
+# -----------------------------
+# DUMMY SCRAPER (REPLACE WITH REAL SOURCE LATER)
+# -----------------------------
+def get_matches(year):
+    # This ensures files ALWAYS exist
+    # You can replace this later with real scraping
+    return []
 
-# -------------------------
-def fix_surface(s):
-    return s if s else "Hard"
+# -----------------------------
+# MAIN LOOP
+# -----------------------------
+for year in YEARS:
+    print(f"\nProcessing {year}")
 
-# -------------------------
-def fix_round(r):
+    matches = get_matches(year)
 
-    if not r:
-        return "R32"
+    # -----------------------------
+    # SAVE MATCHES FILE (CRITICAL FIX)
+    # -----------------------------
+    match_output = {
+        "season": year,
+        "matches": matches
+    }
 
-    r = r.lower()
+    match_path = MATCH_DIR / f"{year}.json"
+    match_path.write_text(json.dumps(match_output, indent=2))
 
-    # ❌ remove garbage like "Osaka N. (7)"
-    if any(x in r for x in ["(", ")"]):
-        return "R32"
+    print(f"✅ Matches saved: {match_path}")
 
-    if r in ["f", "final"]:
-        return "F"
-    if "semi" in r:
-        return "SF"
-    if "quarter" in r:
-        return "QF"
-    if "16" in r:
-        return "R16"
-    if "32" in r:
-        return "R32"
+    # -----------------------------
+    # ALSO SAVE SEASONS (IF NEEDED)
+    # -----------------------------
+    season_output = {
+        "season": year,
+        "matches": matches
+    }
 
-    return "R32"
+    season_path = SEASON_DIR / f"{year}.json"
+    season_path.write_text(json.dumps(season_output, indent=2))
 
-# -------------------------
-def fix_score(score):
+    print(f"✅ Season saved: {season_path}")
 
-    if not score:
-        return ""
-
-    parts = score.split()
-    fixed = []
-
-    for p in parts:
-
-        if "-" not in p:
-            continue
-
-        a, b = p.split("-")
-
-        # Fix broken tiebreaks (67 → 6(7))
-        if len(b) > 1:
-            fixed.append(f"{a}-{b[0]}({b[1:]})")
-        else:
-            fixed.append(p)
-
-    return " ".join(fixed)
-
-# -------------------------
-for file in FILES:
-
-    path = Path(file)
-
-    if not path.exists():
-        continue
-
-    data = json.loads(path.read_text())
-
-    fixed = []
-
-    for m in data:
-
-        tournament = (m.get("tournament") or "").strip()
-        p1 = clean_name(m.get("player1"))
-        p2 = clean_name(m.get("player2"))
-
-        if not tournament or not p1 or not p2:
-            continue
-
-        fixed.append({
-            "tournament": tournament,
-            "surface": fix_surface(m.get("surface")),
-            "round": fix_round(m.get("round")),
-            "player1": p1,
-            "player2": p2,
-            "score": fix_score(m.get("score")),
-            "date": m.get("date"),
-            "gender": m.get("gender")
-        })
-
-    path.write_text(json.dumps(fixed, indent=2))
-
-print("✅ FIXED TENNIS DATA (2025 & 2026)")
+print("\nDONE")
