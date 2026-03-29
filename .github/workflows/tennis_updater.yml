@@ -3,19 +3,20 @@ name: Tennis Updater
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 6 * * 1"
+    - cron: "0 6 * * 1"   # every Monday
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
 
     steps:
       # -------------------------
-      # CHECKOUT
+      # CHECKOUT (FULL HISTORY)
       # -------------------------
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # -------------------------
       # PYTHON
@@ -33,58 +34,50 @@ jobs:
           pip install requests beautifulsoup4
 
       # -------------------------
-      # CLEAN ONLY CURRENT YEARS
-      # -------------------------
-      - name: Clean current seasons only
-        run: |
-          rm -f docs/data/tennis/seasons/2025.json || true
-          rm -f docs/data/tennis/seasons/2026.json || true
-          rm -f docs/data/tennis/matches/2025.json || true
-          rm -f docs/data/tennis/matches/2026.json || true
-
-      # -------------------------
-      # RUN SCRAPER
+      # RUN SCRAPER (2025+)
       # -------------------------
       - name: Run scraper
-        run: python scripts/tennis_live_scraper.py
+        run: |
+          python scripts/tennis_live_scraper.py
 
-      # 🔥 NEW STEP (CRITICAL)
+      # -------------------------
+      # FIX MATCH STRUCTURE
       # -------------------------
       - name: Fix tennis matches
-        run: python scripts/tennis_fix_matches.py
-
-      # -------------------------
-      # REBUILD HISTORY
-      # -------------------------
-      - name: Rebuild history
-        run: python scripts/tennis_rebuild_history.py
-
-      # -------------------------
-      # DEBUG OUTPUT
-      # -------------------------
-      - name: Show output
         run: |
-          echo "MATCHES:"
-          ls docs/data/tennis/matches || true
-
-          echo "SEASONS:"
-          ls docs/data/tennis/seasons || true
-
-          echo "HISTORY:"
-          ls docs/data/tennis || true
+          python scripts/tennis_fix_matches.py
 
       # -------------------------
-      # COMMIT + PUSH
+      # 🔥 CRITICAL: RESET GIT STATE
       # -------------------------
-      - name: Commit data
+      - name: Reset git state
+        run: |
+          git reset --hard
+
+      # -------------------------
+      # 🔥 SAFE COMMIT (NO DELETIONS)
+      # -------------------------
+      - name: Commit data safely
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          git add docs/data/tennis
+          FILES="
+          docs/data/tennis/matches/2025.json
+          docs/data/tennis/matches/2026.json
+          docs/data/tennis/seasons/2025.json
+          docs/data/tennis/seasons/2026.json
+          "
 
-          git commit -m "Update tennis data" || echo "No changes"
+          for f in $FILES
+          do
+            if [ -s "$f" ]; then
+              echo "Adding $f"
+              git add "$f"
+            else
+              echo "Skipping empty $f (prevents deletion)"
+            fi
+          done
 
-          git pull --rebase origin main
-
-          git push || git push --force
+          git commit -m "Update tennis data (safe)" || echo "No changes"
+          git push
