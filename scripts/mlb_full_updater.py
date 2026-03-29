@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import time
 
-print("MLB UPDATER (FINAL - BOX SCORE FIX)")
+print("MLB UPDATER (VENUE + ATTENDANCE FIX)")
 
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1"
@@ -22,7 +22,7 @@ BOX_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # -------------------------------------------------
-# GET SCHEDULE
+# GET SCHEDULE (ADD VENUE)
 # -------------------------------------------------
 def get_schedule():
     url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
@@ -42,24 +42,42 @@ def get_schedule():
                 "away_team": g["teams"]["away"]["team"]["name"],
                 "home_score": g["teams"]["home"].get("score", 0),
                 "away_score": g["teams"]["away"].get("score", 0),
+                "venue": g.get("venue", {}).get("name", ""),   # ✅ ADDED
+                "attendance": None,                           # ✅ PLACEHOLDER
                 "status": g["status"]["detailedState"],
                 "state": g["status"]["abstractGameState"]
             })
 
     print("Games found:", len(games))
-
-    for g in games:
-        print(g["game_id"], g["state"], g["home_score"], g["away_score"])
-
     return games
 
 
 # -------------------------------------------------
-# GET BOXSCORE (FIXED PROPERLY)
+# GET ATTENDANCE FROM BOXSCORE
+# -------------------------------------------------
+def get_attendance(game_id):
+    url = f"{BASE}/game/{game_id}/boxscore"
+
+    try:
+        data = requests.get(url, headers=HEADERS, timeout=10).json()
+
+        for item in data.get("info", []):
+            if item.get("label") == "Att":
+                val = item.get("value", "").replace(",", "")
+                if val.isdigit():
+                    return int(val)
+
+    except:
+        pass
+
+    return None
+
+
+# -------------------------------------------------
+# GET BOXSCORE (UNCHANGED)
 # -------------------------------------------------
 def get_boxscore(game_id):
 
-    # 🔥 PRIMARY ENDPOINT (THIS FIXES YOUR ISSUE)
     url = f"{BASE}/game/{game_id}/boxscore"
 
     try:
@@ -103,9 +121,6 @@ def get_boxscore(game_id):
     if players:
         return players
 
-    # -------------------------
-    # FALLBACK → feed/live
-    # -------------------------
     try:
         live = requests.get(f"{BASE}/game/{game_id}/feed/live", headers=HEADERS).json()
         game = live.get("gameData", {})
@@ -137,13 +152,15 @@ for g in games:
 
     print(f"{game_id} → {g['status']} ({g['state']})")
 
-    # ✅ include live + final (skip empty previews)
     if g["home_score"] == 0 and g["away_score"] == 0:
         continue
 
     file_path = BOX_DIR / f"{game_id}.json"
 
     print("⬇ Writing:", game_id)
+
+    # ✅ ADD ATTENDANCE
+    g["attendance"] = get_attendance(game_id)
 
     box = get_boxscore(game_id)
 
