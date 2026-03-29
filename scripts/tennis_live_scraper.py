@@ -1,117 +1,190 @@
 import requests
-from bs4 import BeautifulSoup
 import json
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime
+import time
 
-print("TENNIS SCRAPER (FINAL FIX - HEADERS + SESSION)")
+print("MLB UPDATER (VENUE + ATTENDANCE FIX)")
 
-BASE = Path("docs/data/tennis")
-MATCHES = BASE / "matches"
-SEASONS = BASE / "seasons"
+SEASON = 2026
+BASE = "https://statsapi.mlb.com/api/v1"
 
-MATCHES.mkdir(parents=True, exist_ok=True)
-SEASONS.mkdir(parents=True, exist_ok=True)
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-YEARS = [2025, 2026]
+START_DATE = "2026-03-26"
+END_DATE = datetime.utcnow().strftime("%Y-%m-%d")
 
-# 🔥 REAL BROWSER HEADERS
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Referer": "https://www.tennisexplorer.com/",
-    "Connection": "keep-alive"
-}
+SEASON_DIR = Path("docs/data/baseball/seasons")
+BOX_DIR = Path(f"docs/data/baseball/boxscores/{SEASON}")
 
-session = requests.Session()
-session.headers.update(HEADERS)
+SEASON_DIR.mkdir(parents=True, exist_ok=True)
+BOX_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def slug(s):
-    return "".join(c.lower() if c.isalnum() else "-" for c in s).strip("-")
+# -------------------------------------------------
+# GET SCHEDULE (ADD VENUE)
+# -------------------------------------------------
+def get_schedule():
+    url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
+    data = requests.get(url, headers=HEADERS).json()
+
+    games = []
+
+    for date in data.get("dates", []):
+        for g in date.get("games", []):
+
+            games.append({
+                "game_id": str(g["gamePk"]),
+                "date": g["gameDate"][:10],
+                "season": SEASON,
+                "game_type": "Regular Season" if g["gameType"] == "R" else "Playoffs",
+                "home_team": g["teams"]["home"]["team"]["name"],
+                "away_team": g["teams"]["away"]["team"]["name"],
+                "home_score": g["teams"]["home"].get("score", 0),
+                "away_score": g["teams"]["away"].get("score", 0),
+                "venue": g.get("venue", {}).get("name", ""),   # ✅ ADDED
+                "attendance": None,                           # ✅ PLACEHOLDER
+                "status": g["status"]["detailedState"],
+                "state": g["status"]["abstractGameState"]
+            })
+
+    print("Games found:", len(games))
+    return games
 
 
-def get_dates(year):
-    start = datetime(year, 1, 1)
-    end = datetime.utcnow()
-    for i in range((end - start).days + 1):
-        yield start + timedelta(days=i)
-
-
-def scrape_day(date):
-    url = f"https://www.tennisexplorer.com/matches/?year={date.year}&month={date.month}&day={date.day}"
+# -------------------------------------------------
+# GET ATTENDANCE FROM BOXSCORE
+# -------------------------------------------------
+def get_attendance(game_id):
+    url = f"{BASE}/game/{game_id}/boxscore"
 
     try:
-        r = session.get(url, timeout=10)
-        if "table" not in r.text:
-            return []
-        soup = BeautifulSoup(r.text, "html.parser")
+        data = requests.get(url, headers=HEADERS, timeout=10).json()
+
+        for item in data.get("info", []):
+            if item.get("label") == "Att":
+                val = item.get("value", "").replace(",", "")
+                if val.isdigit():
+                    return int(val)
+
     except:
-        return []
+        pass
 
-    matches = []
+    return None
 
-    tables = soup.select("table.result")
 
-    if not tables:
-        return []
+# -------------------------------------------------
+# GET BOXSCORE (UNCHANGED)
+# -------------------------------------------------
+def get_boxscore(game_id):
 
-    for table in tables:
-        header = table.find_previous("tr", class_="head")
-        tournament = header.text.strip() if header else "Unknown"
+    url = f"{BASE}/game/{game_id}/boxscore"
 
-        for row in table.select("tr"):
-            cols = row.find_all("td")
-            if len(cols) < 4:
-                continue
+    try:
+        data = requests.get(url, headers=HEADERS, timeout=10).json()
+    except:
+        print("❌ Failed:", game_id)
+        return None
 
-            try:
-                players = cols[2].text.strip().split("-")
-                score = cols[3].text.strip()
+    players = []
 
-                if len(players) != 2:
+    try:
+        teams = data["teams"]
+
+        def parse(team):
+            team_name = team["team"]["name"]
+            out = []
+
+            for p in team.get("players", {}).values():
+                stats = p.get("stats", {}).get("batting", {})
+
+                if not stats:
                     continue
 
-                p1 = players[0].strip()
-                p2 = players[1].strip()
-
-                matches.append({
-                    "match_id": f"{date.date()}_{slug(p1)}_{slug(p2)}",
-                    "date": str(date.date()),
-                    "tournament": tournament,
-                    "surface": "",
-                    "round": "",
-                    "player1": p1,
-                    "player2": p2,
-                    "winner": p1,
-                    "loser": p2,
-                    "score": score,
-                    "gender": "",
-                    "best_of": 3,
-                    "draw_size": 0,
-                    "minutes": 0,
-                    "tourney_level": "",
-                    "tourney_id": ""
+                out.append({
+                    "player": p.get("person", {}).get("fullName"),
+                    "team": team_name,
+                    "hits": stats.get("hits", 0),
+                    "runs": stats.get("runs", 0),
+                    "rbi": stats.get("rbi", 0),
+                    "home_runs": stats.get("homeRuns", 0)
                 })
 
-            except:
-                continue
+            return out
 
-    return matches
+        players += parse(teams["home"])
+        players += parse(teams["away"])
+
+    except:
+        pass
+
+    if players:
+        return players
+
+    try:
+        live = requests.get(f"{BASE}/game/{game_id}/feed/live", headers=HEADERS).json()
+        game = live.get("gameData", {})
+
+        print("⚠️ Using fallback:", game_id)
+
+        return [{
+            "fallback": True,
+            "home_team": game.get("teams", {}).get("home", {}).get("name"),
+            "away_team": game.get("teams", {}).get("away", {}).get("name"),
+            "status": game.get("status", {}).get("detailedState")
+        }]
+    except:
+        pass
+
+    print("❌ Still no usable data:", game_id)
+    return None
 
 
-for year in YEARS:
-    print(f"Processing {year}")
+# -------------------------------------------------
+# RUN
+# -------------------------------------------------
+games = get_schedule()
+all_games = []
 
-    all_matches = []
+for g in games:
 
-    for d in get_dates(year):
-        daily = scrape_day(d)
-        all_matches.extend(daily)
+    game_id = g["game_id"]
 
-    print(f"{year}: {len(all_matches)} matches")
+    print(f"{game_id} → {g['status']} ({g['state']})")
 
-    (MATCHES / f"{year}.json").write_text(json.dumps(all_matches, indent=2))
-    (SEASONS / f"{year}.json").write_text(json.dumps(all_matches, indent=2))
+    if g["home_score"] == 0 and g["away_score"] == 0:
+        continue
 
-print("DONE")
+    file_path = BOX_DIR / f"{game_id}.json"
+
+    print("⬇ Writing:", game_id)
+
+    # ✅ ADD ATTENDANCE
+    g["attendance"] = get_attendance(game_id)
+
+    box = get_boxscore(game_id)
+
+    if box:
+        with open(file_path, "w") as f:
+            json.dump(box, f, indent=2)
+    else:
+        print("❌ No data saved:", game_id)
+
+    all_games.append(g)
+
+    time.sleep(0.5)
+
+
+# -------------------------------------------------
+# SAVE SEASON
+# -------------------------------------------------
+season_output = {
+    "season": SEASON,
+    "games": all_games,
+    "updated": datetime.utcnow().isoformat()
+}
+
+with open(SEASON_DIR / f"{SEASON}.json", "w") as f:
+    json.dump(season_output, f, indent=2)
+
+print("DONE ✅")
