@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import time
 
-print("MLB DEBUG SCRAPER")
+print("MLB 2026 SCRAPER (FINAL FIX - STATUS FILTER)")
 
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1"
@@ -25,37 +25,30 @@ BOX_DIR.mkdir(parents=True, exist_ok=True)
 # GET SCHEDULE
 # -----------------------------------
 def get_schedule():
-    url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
+    url = (
+        f"{BASE}/schedule?"
+        f"sportId=1"
+        f"&startDate={START_DATE}"
+        f"&endDate={END_DATE}"
+    )
 
-    print("REQUESTING:", url)
-
-    r = requests.get(url, headers=HEADERS)
-
-    print("STATUS CODE:", r.status_code)
-
-    data = r.json()
-
-    print("DATES FOUND:", len(data.get("dates", [])))
+    data = requests.get(url, headers=HEADERS).json()
 
     games = []
 
     for date in data.get("dates", []):
         for g in date.get("games", []):
 
-            print("GAME FOUND:", g.get("gamePk"), g.get("gameType"))
-
             if g.get("gameType") not in ["R", "P"]:
-                print("SKIPPED (not regular/postseason)")
                 continue
 
             games.append({
                 "game_id": str(g["gamePk"]),
                 "date": g["gameDate"],
+                "status": g["status"]["detailedState"],
                 "home_team": g["teams"]["home"]["team"]["name"],
-                "away_team": g["teams"]["away"]["team"]["name"],
+                "away_team": g["teams"]["away"]["team"]["name"]
             })
-
-    print("TOTAL VALID GAMES:", len(games))
 
     return games
 
@@ -66,25 +59,54 @@ def get_schedule():
 def get_boxscore(game_id):
     url = f"{BASE}/game/{game_id}/boxscore"
 
-    print("BOX REQUEST:", url)
-
-    r = requests.get(url, headers=HEADERS)
-
-    print("BOX STATUS:", r.status_code)
-
     try:
-        data = r.json()
+        data = requests.get(url, headers=HEADERS).json()
     except:
-        print("FAILED JSON")
         return None
 
     if "teams" not in data:
-        print("NO TEAMS IN RESPONSE")
         return None
 
-    print("BOX OK:", game_id)
+    game = {
+        "game_id": game_id,
+        "teams": {},
+        "players": []
+    }
 
-    return data
+    for side in ["home", "away"]:
+        team = data["teams"][side]
+        team_name = team["team"]["name"]
+
+        game["teams"][side] = {
+            "name": team_name,
+            "runs": team.get("teamStats", {}).get("batting", {}).get("runs", 0),
+            "hits": team.get("teamStats", {}).get("batting", {}).get("hits", 0),
+            "errors": team.get("teamStats", {}).get("fielding", {}).get("errors", 0)
+        }
+
+        for pid, p in team.get("players", {}).items():
+            person = p.get("person", {})
+            stats = p.get("stats", {})
+
+            batting = stats.get("batting", {})
+            pitching = stats.get("pitching", {})
+
+            game["players"].append({
+                "player_id": person.get("id"),
+                "name": person.get("fullName"),
+                "team": team_name,
+
+                "ab": batting.get("atBats"),
+                "r": batting.get("runs"),
+                "h": batting.get("hits"),
+                "rbi": batting.get("rbi"),
+
+                "ip": pitching.get("inningsPitched"),
+                "er": pitching.get("earnedRuns"),
+                "so": pitching.get("strikeOuts"),
+            })
+
+    return game
 
 
 # -----------------------------------
@@ -93,27 +115,34 @@ def get_boxscore(game_id):
 def run():
     games = get_schedule()
 
-    if not games:
-        print("❌ NO GAMES FOUND — THIS IS THE PROBLEM")
-        return
+    print(f"Found {len(games)} games")
 
-    for g in games[:5]:  # only test first 5
+    for g in games:
         gid = g["game_id"]
 
-        box = get_boxscore(gid)
-
-        if not box:
-            print("❌ FAILED:", gid)
+        # ✅ ONLY FINAL GAMES
+        if g["status"] != "Final":
+            print(f"Skipping {gid} (not final: {g['status']})")
             continue
 
         outfile = BOX_DIR / f"{gid}.json"
 
+        print(f"Downloading {gid}")
+
+        box = get_boxscore(gid)
+
+        if not box:
+            print("FAILED")
+            continue
+
         with open(outfile, "w") as f:
             json.dump(box, f, indent=2)
 
-        print("✅ SAVED:", gid)
+        time.sleep(0.5)
 
-        time.sleep(1)
+    # SAVE SEASON INDEX
+    with open(SEASON_DIR / f"{SEASON}.json", "w") as f:
+        json.dump(games, f, indent=2)
 
 
 if __name__ == "__main__":
