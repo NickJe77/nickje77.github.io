@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import time
 
-print("MLB 2026 FULL SCRAPER (FIXED)")
+print("MLB 2026 FULL SCRAPER (REBUILD FIX)")
 
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1"
@@ -22,7 +22,7 @@ BOX_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # -----------------------------------
-# GET FULL SCHEDULE (WITH MORE DATA)
+# GET SCHEDULE
 # -----------------------------------
 def get_schedule():
     url = (
@@ -40,7 +40,6 @@ def get_schedule():
     for date in data.get("dates", []):
         for g in date.get("games", []):
 
-            # ONLY REGULAR + POSTSEASON
             if g.get("gameType") not in ["R", "P"]:
                 continue
 
@@ -56,7 +55,26 @@ def get_schedule():
 
 
 # -----------------------------------
-# GET FULL BOXSCORE (THIS IS THE KEY)
+# VALIDATE EXISTING FILE
+# -----------------------------------
+def is_valid_game_file(path):
+    try:
+        with open(path) as f:
+            data = json.load(f)
+
+        # must have players and teams
+        if "players" not in data:
+            return False
+        if len(data["players"]) < 10:
+            return False
+
+        return True
+    except:
+        return False
+
+
+# -----------------------------------
+# GET BOXSCORE
 # -----------------------------------
 def get_boxscore(game_id):
     url = f"{BASE}/game/{game_id}/boxscore"
@@ -101,13 +119,11 @@ def get_boxscore(game_id):
                 "name": person.get("fullName"),
                 "team": team_name,
 
-                # batting
                 "ab": batting.get("atBats"),
                 "r": batting.get("runs"),
                 "h": batting.get("hits"),
                 "rbi": batting.get("rbi"),
 
-                # pitching
                 "ip": pitching.get("inningsPitched"),
                 "er": pitching.get("earnedRuns"),
                 "so": pitching.get("strikeOuts"),
@@ -123,15 +139,13 @@ def run():
     games = get_schedule()
     print(f"Found {len(games)} games")
 
-    season_games = []
-
     for g in games:
         gid = g["game_id"]
-
         outfile = BOX_DIR / f"{gid}.json"
 
-        if outfile.exists():
-            print(f"Skipping {gid}")
+        # ✅ ONLY SKIP IF FILE IS ACTUALLY GOOD
+        if outfile.exists() and is_valid_game_file(outfile):
+            print(f"Valid, skipping {gid}")
             continue
 
         print(f"Downloading {gid}")
@@ -145,13 +159,11 @@ def run():
         with open(outfile, "w") as f:
             json.dump(box, f, indent=2)
 
-        season_games.append(g)
-
         time.sleep(0.5)
 
     # SAVE SEASON INDEX
     with open(SEASON_DIR / f"{SEASON}.json", "w") as f:
-        json.dump(season_games, f, indent=2)
+        json.dump(games, f, indent=2)
 
 
 if __name__ == "__main__":
