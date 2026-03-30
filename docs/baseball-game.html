@@ -98,40 +98,50 @@ if(parts.length>1) PARKS[parts[0].trim()]=parts[1].trim()
 
 async function loadGame(){
 
-const id=param("game")
-if(!id){
-document.getElementById("title").innerText="Game not found"
-return
+const id = param("game");
+let season = param("season");
+
+/* 🔥 fallback for old links */
+if(!season && id){
+  const m = id.match(/(\d{4})/);
+  if(m) season = m[1];
 }
 
-const season=id.match(/(\d{4})/)[1]
+if(!id || !season){
+  document.getElementById("title").innerText="Game not found";
+  return;
+}
 
-let gameRes = await fetch(`/data/baseball/boxscores/${season}/${id}.json`)
+/* ✅ correct path */
+const gameRes = await fetch(`/data/baseball/boxscores/${season}/${id}.json`);
 
-// 🔥 FALLBACK TO OLD STRUCTURE
 if(!gameRes.ok){
-  gameRes = await fetch(`/data/baseball/games/${season}/${id}.json`)
+  document.getElementById("title").innerText="Game not found";
+  console.error("FAILED PATH:", `/data/baseball/boxscores/${season}/${id}.json`);
+  return;
 }
 
-if(!gameRes.ok){
-document.getElementById("title").innerText="Game not found"
-return
-}
-
-const game=await gameRes.json()
+const game = await gameRes.json();
 
 const seasonRes=await fetch(`/data/baseball/seasons/${season}.json`)
 let meta=null
 
 if(seasonRes.ok){
 const seasonData=await seasonRes.json()
+
+/* try match by game_id first */
+meta = seasonData.find(g => String(g.game_id) === String(id));
+
+/* fallback match by date + team */
+if(!meta){
 const m=id.match(/(\d{4})(\d{2})(\d{2})/)
 if(m){
 const formatted=`${m[1]}-${m[2]}-${m[3]}`
 meta=seasonData.find(g=>
-g.home_code===game.home_code &&
+g.home_team===game.home_code &&
 g.date===formatted
 )
+}
 }
 }
 
