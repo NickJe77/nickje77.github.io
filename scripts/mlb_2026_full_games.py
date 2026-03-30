@@ -1,126 +1,162 @@
 import requests
 import json
 import time
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
-print("MLB 2026 FULL GAME BUILDER (FIXED)")
+print("MLB UPDATER (FULL WITH EVENTS)")
 
-BASE = "https://statsapi.mlb.com/api"
 SEASON = 2026
+BASE = "https://statsapi.mlb.com/api/v1"
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 START_DATE = "2026-03-26"
 END_DATE = datetime.utcnow().strftime("%Y-%m-%d")
 
-OUT_DIR = Path(f"docs/data/baseball/games/{SEASON}")
-OUT_DIR.mkdir(parents=True, exist_ok=True)
+# 🔥 KEEP YOUR EXISTING STRUCTURE
+SEASON_DIR = Path("docs/data/baseball/seasons")
+GAMES_DIR = Path(f"docs/data/baseball/games/{SEASON}")
 
-# -------------------------
-# SAFE TEAM NAME
-# -------------------------
-def get_team_code(team):
-    return (
-        team.get("abbreviation")
-        or team.get("teamName")
-        or team.get("name")
-        or "UNK"
-    )
+SEASON_DIR.mkdir(parents=True, exist_ok=True)
+GAMES_DIR.mkdir(parents=True, exist_ok=True)
 
-# -------------------------
-# GET SCHEDULE
-# -------------------------
+
+# -------------------------------------------------
+# GET SCHEDULE (ONLY REGULAR + POSTSEASON)
+# -------------------------------------------------
 def get_schedule():
-    url = f"{BASE}/v1/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
-    data = requests.get(url).json()
+    url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
+    data = requests.get(url, headers=HEADERS).json()
 
     games = []
 
-    for d in data.get("dates", []):
-        for g in d.get("games", []):
+    for date in data.get("dates", []):
+        for g in date.get("games", []):
 
+            # ONLY REGULAR + POSTSEASON
             if g.get("gameType") not in ["R", "P"]:
                 continue
 
-            home_team = g.get("teams", {}).get("home", {}).get("team", {})
-            away_team = g.get("teams", {}).get("away", {}).get("team", {})
-
             games.append({
-                "id": g.get("gamePk"),
-                "date": g.get("officialDate"),
-                "home": get_team_code(home_team),
-                "away": get_team_code(away_team)
+                "game_id": str(g["gamePk"]),
+                "date": g["gameDate"][:10],
+                "home": g["teams"]["home"]["team"]["name"],
+                "away": g["teams"]["away"]["team"]["name"]
             })
 
+    print(f"Found {len(games)} games")
     return games
 
-# -------------------------
-# GET GAME FEED
-# -------------------------
-def get_game(game_id):
-    url = f"{BASE}/v1.1/game/{game_id}/feed/live"
-    r = requests.get(url)
 
-    if r.status_code != 200:
-        print("FAILED", game_id)
-        return None
-
-    return r.json()
-
-# -------------------------
-# BUILD EVENTS
-# -------------------------
-def build_events(data):
-    plays = data.get("liveData", {}).get("plays", {}).get("allPlays", [])
+# -------------------------------------------------
+# EXTRACT EVENTS (PLAY-BY-PLAY)
+# -------------------------------------------------
+def extract_events(game_data):
     events = []
 
-    for p in plays:
-        events.append([
-            "play",
-            str(p.get("about", {}).get("inning")),
-            str(p.get("about", {}).get("halfInning")),
-            str(p.get("matchup", {}).get("batter", {}).get("id")),
-            str(p.get("count", {}).get("outs")),
-            p.get("result", {}).get("event"),
-            p.get("result", {}).get("description")
-        ])
+    plays = game_data.get("liveData", {}).get("plays", {}).get("allPlays", [])
+
+    for play in plays:
+        try:
+            about = play.get("about", {})
+            result = play.get("result", {})
+            matchup = play.get("matchup", {})
+
+            events.append({
+                "inning": about.get("inning"),
+                "half": about.get("halfInning"),
+                "event": result.get("event"),
+                "description": result.get("description"),
+                "rbi": result.get("rbi"),
+                "outs": about.get("outs"),
+                "batter": matchup.get("batter", {}).get("fullName"),
+                "pitcher": matchup.get("pitcher", {}).get("fullName")
+            })
+
+        except:
+            continue
 
     return events
 
-# -------------------------
-# MAIN
-# -------------------------
-games = get_schedule()
 
-print("TOTAL GAMES:", len(games))
+# -------------------------------------------------
+# DOWNLOAD SINGLE GAME
+# -------------------------------------------------
+def download_game(game):
+    game_id = game["game_id"]
+    file_path = GAMES_DIR / f"{game_id}.json"
 
-for g in games:
-
-    game_id = str(g["id"])
-    file_path = OUT_DIR / f"{game_id}.json"
-
+    # skip if already exists
     if file_path.exists():
-        continue
+        return
 
-    data = get_game(game_id)
+    url = f"{BASE}/game/{game_id}/feed/live"
 
-    if not data:
-        continue
+    try:
+        r = requests.get(url, headers=HEADERS)
 
+        if r.status_code != 200:
+            print(f"FAILED {game_id}")
+            return
+
+        data = r.json()
+
+        teams = data.get("gameData", {}).get("teams", {})
+
+        home = teams.get("home", {}).get("name", "")
+        away = teams.get("away", {}).get("name", "")
+
+        # 🔥 EVENTS FIX
+        events = extract_events(data)
+
+        game_json = {
+            "game_id": game_id,
+            "date": game["date"],
+            "season": SEASON,
+            "home_code": home,
+            "away_code": away,
+            "home_team": home,
+            "away_team": away,
+            "events": events
+        }
+
+        with open(file_path, "w") as f:
+            json.dump(game_json, f, indent=2)
+
+        print(f"{game_id} saved ({len(events)} events)")
+
+        time.sleep(0.3)
+
+    except Exception as e:
+        print(f"ERROR {game_id}: {e}")
+
+
+# -------------------------------------------------
+# BUILD SEASON INDEX (OPTIONAL BUT USEFUL)
+# -------------------------------------------------
+def build_season_file(games):
     output = {
-        "game_id": game_id,
-        "date": g["date"],
         "season": SEASON,
-        "home_code": g["home"],
-        "away_code": g["away"],
-        "home_team": g["home"],
-        "away_team": g["away"],
-        "events": build_events(data)
+        "games": games
     }
 
-    file_path.write_text(json.dumps(output, indent=2))
+    with open(SEASON_DIR / f"{SEASON}.json", "w") as f:
+        json.dump(output, f, indent=2)
 
-    print("✔ Saved", game_id)
 
-    time.sleep(0.4)
+# -------------------------------------------------
+# MAIN
+# -------------------------------------------------
+def main():
+    games = get_schedule()
 
-print("DONE")
+    for g in games:
+        download_game(g)
+
+    build_season_file(games)
+
+    print("DONE")
+
+
+if __name__ == "__main__":
+    main()
