@@ -44,7 +44,6 @@ a{color:#0056d6;text-decoration:none;font-weight:700;}
 <div id="scoreline" class="scoreline"></div>
 <div id="subtitle" class="sub"></div>
 <div id="venueLine" class="meta-line"></div>
-<div id="crowdLine" class="meta-line"></div>
 </div>
 
 <div class="section">
@@ -67,9 +66,6 @@ function param(n){
   return new URLSearchParams(window.location.search).get(n);
 }
 
-// -------------------------
-// LOAD GAME
-// -------------------------
 async function loadGame(){
 
 const id = param("game");
@@ -81,20 +77,15 @@ return;
 }
 
 // -------------------------
-// LOAD BOX SCORE
+// LOAD DATA
 // -------------------------
 let game = null;
-
 try{
 const res = await fetch(`/data/baseball/boxscores/${season}/${id}.json`);
 if(res.ok) game = await res.json();
 }catch(e){}
 
-// -------------------------
-// LOAD SEASON META
-// -------------------------
 let meta = null;
-
 try{
 const res = await fetch(`/data/baseball/seasons/${season}.json`);
 if(res.ok){
@@ -109,7 +100,7 @@ meta = games.find(g => String(g.game_id) === String(id));
 }catch(e){}
 
 // -------------------------
-// RENDER HEADER
+// HEADER
 // -------------------------
 const awayName = meta?.away_team || "";
 const homeName = meta?.home_team || "";
@@ -120,45 +111,30 @@ document.getElementById("title").innerText =
 if(meta){
 document.getElementById("scoreline").innerText =
 `${awayName} ${meta.away_score} – ${homeName} ${meta.home_score}`;
-
 document.getElementById("subtitle").innerText = meta.date || "";
-
 document.getElementById("venueLine").innerText =
 meta.venue ? `Venue: ${meta.venue}` : "";
 }
 
 // -------------------------
-// HANDLE 2026 FORMAT (FLAT ARRAY)
-// -------------------------
-let awayData = [];
-let homeData = [];
-
-if(Array.isArray(game)){
-
-game.forEach(p => {
-if(p.team === awayName) awayData.push(p);
-if(p.team === homeName) homeData.push(p);
-});
-
-}
-
-// -------------------------
-// BUILD TABLES
+// TABLE BUILDER
 // -------------------------
 function buildTable(data){
 
-if(!data.length) return "No detailed data available.";
+if(!data || !data.length){
+return "No detailed data available.";
+}
 
-let html = "<table><thead><tr><th>Player</th><th>H</th><th>R</th><th>RBI</th><th>HR</th></tr></thead><tbody>";
+const keys = Object.keys(data[0]).filter(k => k !== "player_id");
 
-data.forEach(p => {
-html += `<tr>
-<td>${p.player}</td>
-<td>${p.hits}</td>
-<td>${p.runs}</td>
-<td>${p.rbi}</td>
-<td>${p.home_runs}</td>
-</tr>`;
+let html = "<table><thead><tr><th>Player</th>";
+keys.forEach(k=>html+=`<th>${k}</th>`);
+html += "</tr></thead><tbody>";
+
+data.forEach(p=>{
+html += `<tr><td>${p.player || p.name || ""}</td>`;
+keys.forEach(k=>html+=`<td>${p[k] ?? ""}</td>`);
+html += "</tr>";
 });
 
 html += "</tbody></table>";
@@ -166,12 +142,40 @@ html += "</tbody></table>";
 return html;
 }
 
-document.getElementById("awayBatting").innerHTML = buildTable(awayData);
-document.getElementById("homeBatting").innerHTML = buildTable(homeData);
+// -------------------------
+// HANDLE BOTH FORMATS
+// -------------------------
 
-// no pitching data in your JSON
-document.getElementById("awayPitching").innerHTML = "No detailed data available.";
-document.getElementById("homePitching").innerHTML = "No detailed data available.";
+let awayBatting = [];
+let homeBatting = [];
+let awayPitching = [];
+let homePitching = [];
+
+// ✅ OLD STRUCTURE (working seasons)
+if(game && game.batters_away){
+
+awayBatting = game.batters_away;
+homeBatting = game.batters_home;
+awayPitching = game.pitchers_away;
+homePitching = game.pitchers_home;
+
+}
+
+// ✅ 2026 STRUCTURE (flat array)
+else if(Array.isArray(game)){
+
+game.forEach(p => {
+if(p.team === awayName) awayBatting.push(p);
+if(p.team === homeName) homeBatting.push(p);
+});
+
+}
+
+// -------------------------
+document.getElementById("awayBatting").innerHTML = buildTable(awayBatting);
+document.getElementById("homeBatting").innerHTML = buildTable(homeBatting);
+document.getElementById("awayPitching").innerHTML = buildTable(awayPitching);
+document.getElementById("homePitching").innerHTML = buildTable(homePitching);
 
 }
 
