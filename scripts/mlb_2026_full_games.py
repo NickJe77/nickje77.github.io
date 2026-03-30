@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 from datetime import datetime
 
-print("MLB 2026 FULL GAME BUILDER")
+print("MLB 2026 FULL GAME BUILDER (FIXED)")
 
 BASE = "https://statsapi.mlb.com/api"
 SEASON = 2026
@@ -14,6 +14,17 @@ END_DATE = datetime.utcnow().strftime("%Y-%m-%d")
 
 OUT_DIR = Path(f"docs/data/baseball/games/{SEASON}")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+# -------------------------
+# SAFE TEAM NAME
+# -------------------------
+def get_team_code(team):
+    return (
+        team.get("abbreviation")
+        or team.get("teamName")
+        or team.get("name")
+        or "UNK"
+    )
 
 # -------------------------
 # GET SCHEDULE
@@ -30,15 +41,17 @@ def get_schedule():
             if g.get("gameType") not in ["R", "P"]:
                 continue
 
+            home_team = g.get("teams", {}).get("home", {}).get("team", {})
+            away_team = g.get("teams", {}).get("away", {}).get("team", {})
+
             games.append({
-                "id": g["gamePk"],
-                "date": g["officialDate"],
-                "home": g["teams"]["home"]["team"]["abbreviation"],
-                "away": g["teams"]["away"]["team"]["abbreviation"]
+                "id": g.get("gamePk"),
+                "date": g.get("officialDate"),
+                "home": get_team_code(home_team),
+                "away": get_team_code(away_team)
             })
 
     return games
-
 
 # -------------------------
 # GET GAME FEED
@@ -52,7 +65,6 @@ def get_game(game_id):
         return None
 
     return r.json()
-
 
 # -------------------------
 # BUILD EVENTS
@@ -73,7 +85,6 @@ def build_events(data):
         ])
 
     return events
-
 
 # -------------------------
 # MAIN
