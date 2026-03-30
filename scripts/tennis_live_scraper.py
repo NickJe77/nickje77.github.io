@@ -1,9 +1,10 @@
 import requests
 import json
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 from pathlib import Path
 
-print("TENNIS SCRAPER (WORKING SOURCE)")
+print("TENNIS SCRAPER (FLASHSCORE WORKING)")
 
 OUTPUT_DIR = Path("docs/data/tennis/seasons")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -11,42 +12,44 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 START_YEAR = 2025
 END_YEAR = datetime.utcnow().year
 
+session = requests.Session()
+session.headers.update({
+    "User-Agent": "Mozilla/5.0",
+})
+
 
 # -----------------------------------
-# FETCH MATCHES (ATP STYLE DATA)
+# FETCH DAY (FLASHSCORE API STYLE)
 # -----------------------------------
-def fetch_year(year):
-    print(f"\nFetching {year}...")
-
-    matches = []
-
-    # Example working endpoint (stable public dataset style)
-    url = f"https://raw.githubusercontent.com/JeffSackmann/tennis_atp/master/atp_matches_{year}.csv"
+def fetch_day(date):
+    url = f"https://d.flashscore.com/x/feed/f_tn_{date.strftime('%Y%m%d')}"
 
     try:
-        r = requests.get(url, timeout=30)
+        r = session.get(url, timeout=20)
 
         if r.status_code != 200:
-            print(f"FAILED {year}")
             return []
 
-        lines = r.text.splitlines()
+        text = r.text
 
-        headers = lines[0].split(",")
+        matches = []
 
-        for line in lines[1:]:
-            parts = line.split(",")
+        rows = text.split("~")
+
+        for row in rows:
+            if "AA÷" not in row:
+                continue
 
             try:
-                date = parts[5]
-                player1 = parts[10]
-                player2 = parts[18]
-                score = parts[27]
-                tournament = parts[1]
+                player1 = row.split("AD÷")[1].split("¬")[0]
+                player2 = row.split("AE÷")[1].split("¬")[0]
+
+                score = ""
+                if "AG÷" in row:
+                    score = row.split("AG÷")[1].split("¬")[0]
 
                 matches.append({
-                    "date": date,
-                    "tournament": tournament,
+                    "date": date.strftime("%Y-%m-%d"),
                     "player1": player1,
                     "player2": player2,
                     "score": score
@@ -55,12 +58,42 @@ def fetch_year(year):
             except:
                 continue
 
-        print(f"{year} matches: {len(matches)}")
         return matches
 
     except Exception as e:
-        print("ERROR:", e)
+        print("FAILED:", e)
         return []
+
+
+# -----------------------------------
+# YEAR LOOP
+# -----------------------------------
+def scrape_year(year):
+    print(f"\nScraping {year}...")
+
+    start = datetime(year, 1, 1)
+    end = datetime.utcnow() if year == END_YEAR else datetime(year, 12, 31)
+
+    all_matches = []
+
+    d = start
+    while d <= end:
+        print(d.strftime("%Y-%m-%d"))
+
+        daily = fetch_day(d)
+        all_matches.extend(daily)
+
+        time.sleep(0.5)
+
+        d += timedelta(days=1)
+
+    print(f"{year} matches: {len(all_matches)}")
+
+    if all_matches:
+        with open(OUTPUT_DIR / f"{year}.json", "w") as f:
+            json.dump(all_matches, f, indent=2)
+
+    return len(all_matches)
 
 
 # -----------------------------------
@@ -69,12 +102,6 @@ def fetch_year(year):
 total = 0
 
 for y in range(START_YEAR, END_YEAR + 1):
-    data = fetch_year(y)
-
-    if data:
-        with open(OUTPUT_DIR / f"{y}.json", "w") as f:
-            json.dump(data, f, indent=2)
-
-        total += len(data)
+    total += scrape_year(y)
 
 print(f"\nDONE. TOTAL MATCHES: {total}")
