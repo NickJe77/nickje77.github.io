@@ -1,87 +1,142 @@
+import requests
 import json
+import time
 from pathlib import Path
+from datetime import datetime
 
-SEASON = "2026"
+print("MLB 2026 BOXSCORE BUILDER (CORRECT FORMAT)")
+
+SEASON = 2026
+BASE = "https://statsapi.mlb.com/api/v1"
+
+HEADERS = {"User-Agent": "Mozilla/5.0"}
+
+START_DATE = "2026-03-26"
+END_DATE = datetime.utcnow().strftime("%Y-%m-%d")
 
 BOX_DIR = Path(f"docs/data/baseball/boxscores/{SEASON}")
-SEASON_FILE = Path(f"docs/data/baseball/seasons/{SEASON}.json")
-
-print("FIXING 2026 BOXSCORES → MATCHING OLD FORMAT")
+BOX_DIR.mkdir(parents=True, exist_ok=True)
 
 # -------------------------
-# LOAD SEASON (for teams)
+# GET SCHEDULE
 # -------------------------
-season_data = json.loads(SEASON_FILE.read_text())
+def get_schedule():
+    url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
+    data = requests.get(url, headers=HEADERS).json()
 
-games = season_data["games"] if isinstance(season_data, dict) else season_data
+    games = []
 
-game_lookup = {str(g["game_id"]): g for g in games}
+    for date in data.get("dates", []):
+        for g in date.get("games", []):
+
+            # ONLY REGULAR + PLAYOFFS
+            if g.get("gameType") not in ["R", "P"]:
+                continue
+
+            games.append({
+                "game_id": str(g["gamePk"]),
+                "date": g["officialDate"]
+            })
+
+    return games
+
 
 # -------------------------
-# PROCESS EACH GAME
+# GET BOXSCORE
 # -------------------------
-for file in BOX_DIR.glob("*.json"):
+def get_boxscore(game_id):
+    url = f"{BASE}/game/{game_id}/boxscore"
+    r = requests.get(url, headers=HEADERS)
 
-    game_id = file.stem
+    if r.status_code != 200:
+        print("FAILED", game_id)
+        return None
 
-    if game_id not in game_lookup:
-        print(f"Skipping {game_id} (not in season file)")
+    return r.json()
+
+
+# -------------------------
+# EXTRACT PLAYERS
+# -------------------------
+def extract_batting(team):
+    players = []
+
+    for p in team.get("players", {}).values():
+
+        person = p.get("person", {})
+        stats = p.get("stats", {}).get("batting", {})
+
+        players.append({
+            "player": person.get("fullName"),
+            "hits": stats.get("hits", 0),
+            "runs": stats.get("runs", 0),
+            "rbi": stats.get("rbi", 0),
+            "home_runs": stats.get("homeRuns", 0)
+        })
+
+    return players
+
+
+def extract_pitching(team):
+    players = []
+
+    for p in team.get("players", {}).values():
+
+        person = p.get("person", {})
+        stats = p.get("stats", {}).get("pitching", {})
+
+        if not stats:
+            continue
+
+        players.append({
+            "player": person.get("fullName"),
+            "ip": stats.get("inningsPitched"),
+            "hits": stats.get("hits"),
+            "runs": stats.get("runs"),
+            "er": stats.get("earnedRuns"),
+            "bb": stats.get("baseOnBalls"),
+            "so": stats.get("strikeOuts")
+        })
+
+    return players
+
+
+# -------------------------
+# MAIN
+# -------------------------
+games = get_schedule()
+
+print("TOTAL GAMES:", len(games))
+
+for g in games:
+
+    game_id = g["game_id"]
+    file_path = BOX_DIR / f"{game_id}.json"
+
+    # SKIP EXISTING
+    if file_path.exists():
         continue
 
-    meta = game_lookup[game_id]
+    data = get_boxscore(game_id)
 
-    away_team = meta["away_team"]
-    home_team = meta["home_team"]
-
-    data = json.loads(file.read_text())
-
-    # -------------------------
-    # SKIP IF ALREADY FIXED
-    # -------------------------
-    if isinstance(data, dict) and "batters_away" in data:
+    if not data:
         continue
 
-    if not isinstance(data, list):
-        print(f"Skipping {game_id} (unexpected format)")
-        continue
+    away_team = data["teams"]["away"]
+    home_team = data["teams"]["home"]
 
-    # -------------------------
-    # SPLIT PLAYERS
-    # -------------------------
-    away_players = []
-    home_players = []
-
-    for p in data:
-
-        player_obj = {
-            "player": p.get("player"),
-            "hits": p.get("hits"),
-            "runs": p.get("runs"),
-            "rbi": p.get("rbi"),
-            "home_runs": p.get("home_runs")
-        }
-
-        if p.get("team") == away_team:
-            away_players.append(player_obj)
-
-        elif p.get("team") == home_team:
-            home_players.append(player_obj)
-
-    # -------------------------
-    # BUILD NEW STRUCTURE
-    # -------------------------
-    new_data = {
-        "batters_away": away_players,
-        "batters_home": home_players,
-        "pitchers_away": [],
-        "pitchers_home": []
+    output = {
+        "batters_away": extract_batting(away_team),
+        "batters_home": extract_batting(home_team),
+        "pitchers_away": extract_pitching(away_team),
+        "pitchers_home": extract_pitching(home_team)
     }
 
-    # -------------------------
-    # SAVE
-    # -------------------------
-    file.write_text(json.dumps(new_data, indent=2))
+    file_path.write_text(json.dumps(output, indent=2))
 
-    print(f"✔ Fixed {game_id}")
+    print("✔ Saved", game_id)
+
+    # polite delay
+    time.sleep(0.4)
 
 print("DONE")
