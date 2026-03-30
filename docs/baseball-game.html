@@ -62,204 +62,209 @@ a{color:#0056d6;text-decoration:none;font-weight:700;}
 </div>
 
 <script>
-let PLAYERS = {}, TEAMS = {}, PARKS = {};
 
-function param(n){
-  return new URLSearchParams(window.location.search).get(n);
-}
+let PLAYERS={}, TEAMS={}, PARKS={}
 
-function playerName(id){
-  return PLAYERS[id] || id;
-}
+function param(n){return new URLSearchParams(window.location.search).get(n)}
+function playerName(id){return PLAYERS[id]||id}
+function teamName(code){return TEAMS[code]||code}
+function parkName(code){return PARKS[code]||code}
 
-function teamName(code){
-  return TEAMS[code] || code;
-}
-
-function parkName(code){
-  return PARKS[code] || code;
-}
-
+// -------------------------
+// LOAD LOOKUPS
+// -------------------------
 async function loadLookups(){
-  const p = await fetch("/data/baseball/players.json");
-  if(p.ok){
-    const d = await p.json();
-    d.forEach(pl => {
-      PLAYERS[pl.player_id] = pl.name;
-    });
-  }
 
-  const t = await fetch("/data/baseball/teams.json");
-  if(t.ok){
-    const d = await t.json();
-    d.forEach(team => {
-      if(Array.isArray(team.codes)){
-        team.codes.forEach(c => {
-          TEAMS[c] = team.name;
-        });
-      }
-    });
-  }
-
-  const b = await fetch("/data/baseball/ballparks.csv");
-  if(b.ok){
-    const text = await b.text();
-    text.split("\n").slice(1).forEach(l => {
-      const parts = l.split(",");
-      if(parts.length > 1){
-        PARKS[parts[0].trim()] = parts[1].trim();
-      }
-    });
-  }
+const p=await fetch("/data/baseball/players.json")
+if(p.ok){
+const d=await p.json()
+d.forEach(pl=>PLAYERS[pl.player_id]=pl.name)
 }
 
+const t=await fetch("/data/baseball/teams.json")
+if(t.ok){
+const d=await t.json()
+d.forEach(team=>{
+team.codes.forEach(c=>TEAMS[c]=team.name)
+})
+}
+
+const b=await fetch("/data/baseball/ballparks.csv")
+if(b.ok){
+const text=await b.text()
+text.split("\n").slice(1).forEach(l=>{
+const parts=l.split(",")
+if(parts.length>1) PARKS[parts[0].trim()]=parts[1].trim()
+})
+}
+}
+
+// -------------------------
+// SAFE JSON FETCH
+// -------------------------
 async function fetchJson(path){
-  try{
-    const res = await fetch(path);
-    if(!res.ok) return null;
-    return await res.json();
-  }catch(e){
-    return null;
-  }
+try{
+const res=await fetch(path)
+if(!res.ok) return null
+return await res.json()
+}catch(e){return null}
 }
 
-function normalizeSeasonGames(seasonData){
-  if(Array.isArray(seasonData)) return seasonData;
-  if(seasonData && Array.isArray(seasonData.games)) return seasonData.games;
-  return [];
-}
-
-function findMeta(seasonGames, id, game, season){
-  let meta = seasonGames.find(g => String(g.game_id) === String(id));
-  if(meta) return meta;
-
-  if(game){
-    meta = seasonGames.find(g =>
-      String(g.home_code || g.home_team || "") === String(game.home_code || game.home_team || "") &&
-      String(g.away_code || g.away_team || "") === String(game.away_code || game.away_team || "")
-    );
-    if(meta) return meta;
-  }
-
-  return null;
-}
-
+// -------------------------
+// LOAD GAME
+// -------------------------
 async function loadGame(){
-  const id = param("game");
-  let season = param("season");
 
-  if(!id){
-    document.getElementById("title").innerText = "Game not found";
-    return;
-  }
+const id=param("game")
+const season=param("season")
 
-  if(!season){
-    const m = String(id).match(/(\d{4})/);
-    if(m) season = m[1];
-  }
-
-  let game = null;
-
-  if(season){
-    game = await fetchJson(`/data/baseball/boxscores/${season}/${id}.json`);
-    if(!game){
-      game = await fetchJson(`/data/baseball/games/${season}/${id}.json`);
-    }
-  }
-
-  if(!game){
-    document.getElementById("title").innerText = "Game not found";
-    console.error("Could not load game", { id, season });
-    return;
-  }
-
-  if(!season){
-    document.getElementById("title").innerText = `${teamName(game.away_code)} @ ${teamName(game.home_code)}`;
-    render(game, null);
-    return;
-  }
-
-  const seasonData = await fetchJson(`/data/baseball/seasons/${season}.json`);
-  const seasonGames = normalizeSeasonGames(seasonData);
-  const meta = findMeta(seasonGames, id, game, season);
-
-  render(game, meta);
+if(!id||!season){
+document.getElementById("title").innerText="Game not found"
+return
 }
 
-function render(game, meta){
-  const homeFull = teamName(game.home_code || game.home_team);
-  const awayFull = teamName(game.away_code || game.away_team);
+// ✅ correct path
+let game=await fetchJson(`/data/baseball/boxscores/${season}/${id}.json`)
 
-  document.getElementById("title").innerText = `${awayFull} @ ${homeFull}`;
-
-  if(meta){
-    const awayScore = meta.away_score ?? game.away_score ?? "";
-    const homeScore = meta.home_score ?? game.home_score ?? "";
-    const date = meta.date || game.date || "";
-    const venue = meta.venue || game.venue || "";
-    const attendance = meta.attendance || game.attendance || "";
-
-    document.getElementById("scoreline").innerText =
-      `${awayFull} ${awayScore} – ${homeFull} ${homeScore}`;
-    document.getElementById("subtitle").innerText = date;
-    document.getElementById("venueLine").innerText = venue ? `Venue: ${parkName(venue)}` : "";
-    document.getElementById("crowdLine").innerText =
-      attendance ? `Attendance: ${Number(attendance).toLocaleString()}` : "";
-  } else {
-    const awayScore = game.away_score ?? "";
-    const homeScore = game.home_score ?? "";
-    const date = game.date || "";
-    const venue = game.venue || "";
-    const attendance = game.attendance || "";
-
-    if(awayScore !== "" || homeScore !== ""){
-      document.getElementById("scoreline").innerText =
-        `${awayFull} ${awayScore} – ${homeFull} ${homeScore}`;
-    }
-    document.getElementById("subtitle").innerText = date;
-    document.getElementById("venueLine").innerText = venue ? `Venue: ${parkName(venue)}` : "";
-    document.getElementById("crowdLine").innerText =
-      attendance ? `Attendance: ${Number(attendance).toLocaleString()}` : "";
-  }
-
-  renderTable("awayBatting", game.batters_away || []);
-  renderTable("homeBatting", game.batters_home || []);
-  renderTable("awayPitching", game.pitchers_away || []);
-  renderTable("homePitching", game.pitchers_home || []);
+if(!game){
+document.getElementById("title").innerText="Game not found"
+return
 }
 
-function renderTable(id, data){
-  if(!data || data.length === 0){
-    document.getElementById(id).innerHTML = "No detailed data available.";
-    return;
-  }
+// -------------------------
+// FIX FIELD DIFFERENCES
+// -------------------------
+const homeCode =
+  game.home_code ||
+  game.home_team ||
+  game.home ||
+  game.homeTeam ||
+  ""
 
-  const keys = Object.keys(data[0]).filter(k => k !== "player_id");
-  let html = "<table><thead><tr><th>Player</th>";
-  keys.forEach(k => html += `<th>${k}</th>`);
-  html += "</tr></thead><tbody>";
+const awayCode =
+  game.away_code ||
+  game.away_team ||
+  game.away ||
+  game.awayTeam ||
+  ""
 
-  data.forEach(p => {
-    html += `<tr><td><a href="./baseball-player.html?player=${encodeURIComponent(p.player_id)}">${playerName(p.player_id)}</a></td>`;
-    keys.forEach(k => html += `<td>${p[k] ?? ""}</td>`);
-    html += "</tr>";
-  });
+// -------------------------
+// LOAD SEASON META
+// -------------------------
+let meta=null
+const seasonData=await fetchJson(`/data/baseball/seasons/${season}.json`)
 
-  html += "</tbody></table>";
-  document.getElementById(id).innerHTML = html;
+if(seasonData){
+
+let games = Array.isArray(seasonData)
+  ? seasonData
+  : seasonData.games || []
+
+meta = games.find(g=>String(g.game_id)===String(id))
 }
 
+// -------------------------
+render(game,meta,homeCode,awayCode)
+}
+
+// -------------------------
+// RENDER
+// -------------------------
+function render(game,meta,homeCode,awayCode){
+
+const homeFull=teamName(homeCode)
+const awayFull=teamName(awayCode)
+
+document.getElementById("title").innerText=`${awayFull} @ ${homeFull}`
+
+// score + info
+const awayScore = meta?.away_score ?? game.away_score ?? ""
+const homeScore = meta?.home_score ?? game.home_score ?? ""
+const date = meta?.date ?? game.date ?? ""
+const venue = meta?.venue ?? game.venue ?? ""
+const attendance = meta?.attendance ?? game.attendance ?? ""
+
+if(awayScore!=="" || homeScore!==""){
+document.getElementById("scoreline").innerText=
+`${awayFull} ${awayScore} – ${homeFull} ${homeScore}`
+}
+
+document.getElementById("subtitle").innerText=date
+document.getElementById("venueLine").innerText=
+venue?`Venue: ${parkName(venue)}`:""
+document.getElementById("crowdLine").innerText=
+attendance?`Attendance: ${Number(attendance).toLocaleString()}`:""
+
+// -------------------------
+// FLEXIBLE STAT KEYS
+// -------------------------
+renderTable("awayBatting",
+  game.batters_away ||
+  game.away_batting ||
+  game.awayBatting ||
+  []
+)
+
+renderTable("homeBatting",
+  game.batters_home ||
+  game.home_batting ||
+  game.homeBatting ||
+  []
+)
+
+renderTable("awayPitching",
+  game.pitchers_away ||
+  game.away_pitching ||
+  game.awayPitching ||
+  []
+)
+
+renderTable("homePitching",
+  game.pitchers_home ||
+  game.home_pitching ||
+  game.homePitching ||
+  []
+)
+
+}
+
+// -------------------------
+function renderTable(id,data){
+if(!data||data.length===0){
+document.getElementById(id).innerHTML="No detailed data available."
+return
+}
+
+const keys=Object.keys(data[0]).filter(k=>k!=="player_id")
+
+let html="<table><thead><tr><th>Player</th>"
+keys.forEach(k=>html+=`<th>${k}</th>`)
+html+="</tr></thead><tbody>"
+
+data.forEach(p=>{
+html+=`<tr>
+<td><a href="./baseball-player.html?player=${p.player_id}">
+${playerName(p.player_id)}
+</a></td>`
+
+keys.forEach(k=>html+=`<td>${p[k]??""}</td>`)
+
+html+="</tr>"
+})
+
+html+="</tbody></table>"
+
+document.getElementById(id).innerHTML=html
+}
+
+// -------------------------
 async function init(){
-  try{
-    await loadLookups();
-    await loadGame();
-  }catch(err){
-    console.error("GAME PAGE ERROR:", err);
-    document.getElementById("title").innerText = "Game not found";
-  }
+await loadLookups()
+await loadGame()
 }
 
-init();
+init()
+
 </script>
 
 </body>
