@@ -1,0 +1,127 @@
+name: MLB 2026 Full Game Builder
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - name: Install deps
+        run: |
+          pip install requests
+
+      - name: Build full game files
+        run: |
+          python << 'EOF'
+          import requests
+          import json
+          import time
+          from pathlib import Path
+          from datetime import datetime
+
+          BASE = "https://statsapi.mlb.com/api"
+          SEASON = 2026
+
+          START_DATE = "2026-03-26"
+          END_DATE = datetime.utcnow().strftime("%Y-%m-%d")
+
+          OUT_DIR = Path(f"docs/data/baseball/games/{SEASON}")
+          OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+          # -------------------------
+          # GET SCHEDULE
+          # -------------------------
+          sched = requests.get(
+              f"{BASE}/v1/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
+          ).json()
+
+          games = []
+
+          for d in sched.get("dates", []):
+              for g in d.get("games", []):
+                  if g.get("gameType") not in ["R", "P"]:
+                      continue
+
+                  games.append({
+                      "id": g["gamePk"],
+                      "date": g["officialDate"],
+                      "home": g["teams"]["home"]["team"]["abbreviation"],
+                      "away": g["teams"]["away"]["team"]["abbreviation"]
+                  })
+
+          print("TOTAL:", len(games))
+
+          # -------------------------
+          # BUILD FILES
+          # -------------------------
+          for g in games:
+
+              gid = str(g["id"])
+              file = OUT_DIR / f"{gid}.json"
+
+              if file.exists():
+                  continue
+
+              url = f"{BASE}/v1.1/game/{gid}/feed/live"
+              r = requests.get(url)
+
+              if r.status_code != 200:
+                  print("FAIL", gid)
+                  continue
+
+              data = r.json()
+
+              plays = data.get("liveData", {}).get("plays", {}).get("allPlays", [])
+
+              events = []
+
+              for p in plays:
+                  events.append([
+                      "play",
+                      str(p.get("about", {}).get("inning")),
+                      str(p.get("about", {}).get("halfInning")),
+                      p.get("matchup", {}).get("batter", {}).get("id"),
+                      str(p.get("count", {}).get("outs")),
+                      p.get("result", {}).get("event"),
+                      p.get("result", {}).get("description")
+                  ])
+
+              output = {
+                  "game_id": gid,
+                  "date": g["date"],
+                  "season": SEASON,
+                  "home_code": g["home"],
+                  "away_code": g["away"],
+                  "home_team": g["home"],
+                  "away_team": g["away"],
+                  "events": events
+              }
+
+              file.write_text(json.dumps(output, indent=2))
+
+              print("✔", gid)
+
+              time.sleep(0.4)
+
+          print("DONE")
+          EOF
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add docs/data/baseball/games/2026
+          git commit -m "Build MLB 2026 full game data" || echo "No changes"
+          git pushmlb
