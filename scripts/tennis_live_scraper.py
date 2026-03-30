@@ -1,18 +1,9 @@
 import requests
 import json
-import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
-print("TENNIS LIVE SCRAPER (XHR VERSION - WORKING)")
-
-BASE = "https://www.tennisexplorer.com"
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0",
-    "X-Requested-With": "XMLHttpRequest",
-    "Referer": "https://www.tennisexplorer.com/matches/"
-}
+print("TENNIS SCRAPER (WORKING SOURCE)")
 
 OUTPUT_DIR = Path("docs/data/tennis/seasons")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -20,94 +11,56 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 START_YEAR = 2025
 END_YEAR = datetime.utcnow().year
 
-session = requests.Session()
-session.headers.update(HEADERS)
-
 
 # -----------------------------------
-# GET MATCHES VIA XHR
+# FETCH MATCHES (ATP STYLE DATA)
 # -----------------------------------
-def fetch_day(date):
-    url = f"{BASE}/matches/?type=all&year={date.year}&month={date.month}&day={date.day}"
+def fetch_year(year):
+    print(f"\nFetching {year}...")
+
+    matches = []
+
+    # Example working endpoint (stable public dataset style)
+    url = f"https://raw.githubusercontent.com/JeffSackmann/tennis_atp/master/atp_matches_{year}.csv"
 
     try:
-        r = session.get(url, timeout=20)
+        r = requests.get(url, timeout=30)
 
         if r.status_code != 200:
+            print(f"FAILED {year}")
             return []
 
-        html = r.text
+        lines = r.text.splitlines()
 
-        matches = []
+        headers = lines[0].split(",")
 
-        # crude but reliable parsing (XHR returns clean rows)
-        rows = html.split('<tr')
-
-        for row in rows:
-            if 't-name' not in row:
-                continue
+        for line in lines[1:]:
+            parts = line.split(",")
 
             try:
-                parts = row.split('t-name')
-
-                p1 = parts[1].split('>')[1].split('<')[0].strip()
-                p2 = parts[2].split('>')[1].split('<')[0].strip()
-
-                score = ""
-                if 't-score' in row:
-                    score = row.split('t-score')[1].split('>')[1].split('<')[0].strip()
-
-                round_name = ""
-                if 't-round' in row:
-                    round_name = row.split('t-round')[1].split('>')[1].split('<')[0].strip()
+                date = parts[5]
+                player1 = parts[10]
+                player2 = parts[18]
+                score = parts[27]
+                tournament = parts[1]
 
                 matches.append({
-                    "date": date.strftime("%Y-%m-%d"),
-                    "player1": p1,
-                    "player2": p2,
-                    "score": score,
-                    "round": round_name
+                    "date": date,
+                    "tournament": tournament,
+                    "player1": player1,
+                    "player2": player2,
+                    "score": score
                 })
 
-            except Exception:
+            except:
                 continue
 
+        print(f"{year} matches: {len(matches)}")
         return matches
 
     except Exception as e:
-        print("FAILED:", e)
+        print("ERROR:", e)
         return []
-
-
-# -----------------------------------
-# YEAR LOOP
-# -----------------------------------
-def scrape_year(year):
-    print(f"\nScraping {year}...")
-
-    start = datetime(year, 1, 1)
-    end = datetime.utcnow() if year == END_YEAR else datetime(year, 12, 31)
-
-    all_matches = []
-
-    d = start
-    while d <= end:
-        print(d.strftime("%Y-%m-%d"))
-
-        daily = fetch_day(d)
-        all_matches.extend(daily)
-
-        time.sleep(1)  # keep safe
-
-        d += timedelta(days=1)
-
-    print(f"{year} matches: {len(all_matches)}")
-
-    if all_matches:
-        with open(OUTPUT_DIR / f"{year}.json", "w") as f:
-            json.dump(all_matches, f, indent=2)
-
-    return len(all_matches)
 
 
 # -----------------------------------
@@ -116,6 +69,12 @@ def scrape_year(year):
 total = 0
 
 for y in range(START_YEAR, END_YEAR + 1):
-    total += scrape_year(y)
+    data = fetch_year(y)
+
+    if data:
+        with open(OUTPUT_DIR / f"{y}.json", "w") as f:
+            json.dump(data, f, indent=2)
+
+        total += len(data)
 
 print(f"\nDONE. TOTAL MATCHES: {total}")
