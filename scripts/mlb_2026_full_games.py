@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import time
 
-print("MLB 2026 FULL SCRAPER (REBUILD FIX)")
+print("MLB DEBUG SCRAPER")
 
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1"
@@ -25,22 +25,27 @@ BOX_DIR.mkdir(parents=True, exist_ok=True)
 # GET SCHEDULE
 # -----------------------------------
 def get_schedule():
-    url = (
-        f"{BASE}/schedule?"
-        f"sportId=1"
-        f"&startDate={START_DATE}"
-        f"&endDate={END_DATE}"
-        f"&hydrate=team,linescore"
-    )
+    url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
 
-    data = requests.get(url, headers=HEADERS).json()
+    print("REQUESTING:", url)
+
+    r = requests.get(url, headers=HEADERS)
+
+    print("STATUS CODE:", r.status_code)
+
+    data = r.json()
+
+    print("DATES FOUND:", len(data.get("dates", [])))
 
     games = []
 
     for date in data.get("dates", []):
         for g in date.get("games", []):
 
+            print("GAME FOUND:", g.get("gamePk"), g.get("gameType"))
+
             if g.get("gameType") not in ["R", "P"]:
+                print("SKIPPED (not regular/postseason)")
                 continue
 
             games.append({
@@ -48,29 +53,11 @@ def get_schedule():
                 "date": g["gameDate"],
                 "home_team": g["teams"]["home"]["team"]["name"],
                 "away_team": g["teams"]["away"]["team"]["name"],
-                "status": g["status"]["detailedState"]
             })
 
+    print("TOTAL VALID GAMES:", len(games))
+
     return games
-
-
-# -----------------------------------
-# VALIDATE EXISTING FILE
-# -----------------------------------
-def is_valid_game_file(path):
-    try:
-        with open(path) as f:
-            data = json.load(f)
-
-        # must have players and teams
-        if "players" not in data:
-            return False
-        if len(data["players"]) < 10:
-            return False
-
-        return True
-    except:
-        return False
 
 
 # -----------------------------------
@@ -79,57 +66,25 @@ def is_valid_game_file(path):
 def get_boxscore(game_id):
     url = f"{BASE}/game/{game_id}/boxscore"
 
+    print("BOX REQUEST:", url)
+
+    r = requests.get(url, headers=HEADERS)
+
+    print("BOX STATUS:", r.status_code)
+
     try:
-        data = requests.get(url, headers=HEADERS).json()
+        data = r.json()
     except:
+        print("FAILED JSON")
         return None
 
     if "teams" not in data:
+        print("NO TEAMS IN RESPONSE")
         return None
 
-    game = {
-        "game_id": game_id,
-        "teams": {},
-        "players": []
-    }
+    print("BOX OK:", game_id)
 
-    for side in ["home", "away"]:
-        team = data["teams"][side]
-
-        team_name = team["team"]["name"]
-
-        game["teams"][side] = {
-            "name": team_name,
-            "runs": team.get("teamStats", {}).get("batting", {}).get("runs", 0),
-            "hits": team.get("teamStats", {}).get("batting", {}).get("hits", 0),
-            "errors": team.get("teamStats", {}).get("fielding", {}).get("errors", 0)
-        }
-
-        players = team.get("players", {})
-
-        for pid, p in players.items():
-            person = p.get("person", {})
-            stats = p.get("stats", {})
-
-            batting = stats.get("batting", {})
-            pitching = stats.get("pitching", {})
-
-            game["players"].append({
-                "player_id": person.get("id"),
-                "name": person.get("fullName"),
-                "team": team_name,
-
-                "ab": batting.get("atBats"),
-                "r": batting.get("runs"),
-                "h": batting.get("hits"),
-                "rbi": batting.get("rbi"),
-
-                "ip": pitching.get("inningsPitched"),
-                "er": pitching.get("earnedRuns"),
-                "so": pitching.get("strikeOuts"),
-            })
-
-    return game
+    return data
 
 
 # -----------------------------------
@@ -137,33 +92,28 @@ def get_boxscore(game_id):
 # -----------------------------------
 def run():
     games = get_schedule()
-    print(f"Found {len(games)} games")
 
-    for g in games:
+    if not games:
+        print("❌ NO GAMES FOUND — THIS IS THE PROBLEM")
+        return
+
+    for g in games[:5]:  # only test first 5
         gid = g["game_id"]
-        outfile = BOX_DIR / f"{gid}.json"
-
-        # ✅ ONLY SKIP IF FILE IS ACTUALLY GOOD
-        if outfile.exists() and is_valid_game_file(outfile):
-            print(f"Valid, skipping {gid}")
-            continue
-
-        print(f"Downloading {gid}")
 
         box = get_boxscore(gid)
 
         if not box:
-            print("FAILED")
+            print("❌ FAILED:", gid)
             continue
+
+        outfile = BOX_DIR / f"{gid}.json"
 
         with open(outfile, "w") as f:
             json.dump(box, f, indent=2)
 
-        time.sleep(0.5)
+        print("✅ SAVED:", gid)
 
-    # SAVE SEASON INDEX
-    with open(SEASON_DIR / f"{SEASON}.json", "w") as f:
-        json.dump(games, f, indent=2)
+        time.sleep(1)
 
 
 if __name__ == "__main__":
