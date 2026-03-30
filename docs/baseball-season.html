@@ -119,95 +119,95 @@ a.game-link{
 </div>
 
 <script>
-
 const params = new URLSearchParams(window.location.search);
 const season = params.get("season");
 
 document.getElementById("seasonTitle").textContent =
   season ? "MLB Season " + season : "Season Not Found";
 
-Promise.all([
-  fetch("/data/baseball/seasons/" + season + ".json").then(r => r.json()),
-  fetch("/data/baseball/teams.json").then(r => r.json()),
-  fetch("/data/baseball/ballparks.csv").then(r => r.text())
-]).then(([seasonData, teamNames, ballparkCSV]) => {
+if(!season){
+  console.error("No season in URL");
+} else {
+  Promise.all([
+    fetch("/data/baseball/seasons/" + season + ".json").then(r => r.json()),
+    fetch("/data/baseball/teams.json").then(r => r.json()),
+    fetch("/data/baseball/ballparks.csv").then(r => r.text())
+  ]).then(([seasonData, teamNames, ballparkCSV]) => {
 
-  const parkMap = {};
-  ballparkCSV.trim().split("\n").forEach(line=>{
-    const parts = line.split(",");
-    if(parts.length >= 2){
-      parkMap[parts[0].trim()] = parts[1].trim();
+    const parkMap = {};
+    ballparkCSV.trim().split("\n").forEach((line, i) => {
+      if(i === 0) return;
+      const parts = line.split(",");
+      if(parts.length >= 2){
+        parkMap[parts[0].trim()] = parts[1].trim();
+      }
+    });
+
+    function teamName(code){
+      const t = teamNames.find(t => Array.isArray(t.codes) && t.codes.includes(code));
+      return t ? t.name : code;
     }
+
+    const tbody = document.getElementById("gamesBody");
+    tbody.innerHTML = "";
+
+    let games = [];
+
+    if(Array.isArray(seasonData)){
+      games = seasonData.map(g => ({
+        game_id: g[0],
+        date: g[1],
+        home_team: teamName(g[3]),
+        away_team: teamName(g[4]),
+        venue: g[5],
+        attendance: g[6],
+        away_score: g[7],
+        home_score: g[8]
+      }));
+    } else if(seasonData && Array.isArray(seasonData.games)){
+      games = seasonData.games.map(g => ({
+        game_id: g.game_id,
+        date: g.date,
+        home_team: g.home_team || teamName(g.home_code),
+        away_team: g.away_team || teamName(g.away_code),
+        venue: g.venue || "",
+        attendance: g.attendance || "",
+        away_score: g.away_score,
+        home_score: g.home_score
+      }));
+    }
+
+    if(!games.length){
+      console.error("NO GAMES FOUND", seasonData);
+      return;
+    }
+
+    games.sort((a,b)=> new Date(a.date) - new Date(b.date));
+
+    games.forEach(g => {
+      const score =
+        (g.away_score != null && g.home_score != null)
+        ? `${g.away_score}-${g.home_score}`
+        : "";
+
+      const tr = document.createElement("tr");
+
+      tr.innerHTML = `
+        <td><a class="game-link" href="baseball-game.html?game=${encodeURIComponent(g.game_id)}&season=${encodeURIComponent(season)}">${g.date}</a></td>
+        <td>${g.away_team || ""}</td>
+        <td>${g.home_team || ""}</td>
+        <td class="score">${score}</td>
+        <td>${parkMap[g.venue] || g.venue || ""}</td>
+        <td>${g.attendance ? Number(g.attendance).toLocaleString() : ""}</td>
+      `;
+
+      tbody.appendChild(tr);
+    });
+
+  }).catch(err=>{
+    console.error("LOAD ERROR:", err);
   });
-
-  function teamName(code){
-    const t = teamNames.find(t => t.codes.includes(code));
-    return t ? t.name : code;
-  }
-
-  const tbody = document.getElementById("gamesBody");
-  tbody.innerHTML = "";
-
-  let games = [];
-
-  if(Array.isArray(seasonData)){
-    games = seasonData.map(g => ({
-      game_id: g[0],
-      date: g[1],
-      home_team: teamName(g[3]),
-      away_team: teamName(g[4]),
-      venue: g[5],
-      attendance: g[6],
-      away_score: g[7],
-      home_score: g[8]
-    }));
-  }
-
-  else if(seasonData.games){
-    games = seasonData.games.map(g => ({
-      game_id: g.game_id,
-      date: g.date,
-      home_team: g.home_team,
-      away_team: g.away_team,
-      venue: g.venue || "",
-      attendance: g.attendance || "",
-      away_score: g.away_score,
-      home_score: g.home_score
-    }));
-  }
-
-  if(!games.length){
-    console.error("NO GAMES FOUND", seasonData);
-    return;
-  }
-
-  games.sort((a,b)=> new Date(a.date) - new Date(b.date));
-
-  games.forEach(g => {
-
-    const score =
-      (g.away_score != null && g.home_score != null)
-      ? `${g.away_score}-${g.home_score}`
-      : "";
-
-    const tr = document.createElement("tr");
-
-    tr.innerHTML = `
-      <td><a class="game-link" href="baseball-game.html?game=${g.game_id}&season=${season}">${g.date}</a></td>
-      <td>${g.away_team}</td>
-      <td>${g.home_team}</td>
-      <td class="score">${score}</td>
-      <td>${parkMap[g.venue] || g.venue || ""}</td>
-      <td>${g.attendance ? Number(g.attendance).toLocaleString() : ""}</td>
-    `;
-
-    tbody.appendChild(tr);
-  });
-
-}).catch(err=>{
-  console.error("LOAD ERROR:", err);
-});
-
+}
 </script>
 
 </body>
