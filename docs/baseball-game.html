@@ -73,7 +73,7 @@ document.getElementById("title").innerText="Game not found";
 return;
 }
 
-// ------------------ LOAD GAME ------------------
+// ---------------- LOAD GAME ----------------
 let game = null;
 
 try{
@@ -86,7 +86,7 @@ document.getElementById("title").innerText="Game not found";
 return;
 }
 
-// ------------------ LOAD META ------------------
+// ---------------- LOAD META ----------------
 let meta = null;
 
 try{
@@ -98,7 +98,7 @@ meta = games.find(g => String(g.game_id) === String(id));
 }
 }catch(e){}
 
-// ------------------ HEADER ------------------
+// ---------------- HEADER ----------------
 const away = meta?.away_team || "";
 const home = meta?.home_team || "";
 
@@ -112,7 +112,7 @@ document.getElementById("venueLine").innerText =
 meta.venue ? `Venue: ${meta.venue}` : "";
 }
 
-// ------------------ TABLE BUILDER ------------------
+// ---------------- TABLE BUILDER ----------------
 function buildTable(data){
 
 if(!data || data.length === 0){
@@ -122,18 +122,22 @@ return "No detailed data available.";
 let keys = Object.keys(data[0]);
 
 let html = "<table><thead><tr><th>Player</th>";
+
 keys.forEach(k=>{
-if(k !== "player" && k !== "team") html += `<th>${k}</th>`;
+if(k !== "player_id" && k !== "team") html += `<th>${k}</th>`;
 });
+
 html += "</tr></thead><tbody>";
 
 data.forEach(p=>{
-html += `<tr><td>${p.player || ""}</td>`;
+html += `<tr><td>${p.player || p.name || ""}</td>`;
+
 keys.forEach(k=>{
-if(k !== "player" && k !== "team"){
-html += `<td>${p[k]}</td>`;
+if(k !== "player_id" && k !== "team"){
+html += `<td>${p[k] ?? ""}</td>`;
 }
 });
+
 html += "</tr>";
 });
 
@@ -142,24 +146,15 @@ html += "</tbody></table>";
 return html;
 }
 
-// ------------------ FORMAT DETECTION ------------------
+// ---------------- FORMAT DETECTION (FIXED ORDER) ----------------
+
 let awayBatting = [];
 let homeBatting = [];
 let awayPitching = [];
 let homePitching = [];
 
-// ✅ NEW (2026 flat array)
-if(Array.isArray(game)){
-
-game.forEach(p=>{
-if(p.team === away) awayBatting.push(p);
-if(p.team === home) homeBatting.push(p);
-});
-
-}
-
-// ✅ OLD (working seasons)
-else if(game.batters_away){
+// ✅ OLD STRUCTURE FIRST
+if(game && typeof game === "object" && game.batters_away){
 
 awayBatting = game.batters_away || [];
 homeBatting = game.batters_home || [];
@@ -168,7 +163,17 @@ homePitching = game.pitchers_home || [];
 
 }
 
-// ------------------ RENDER ------------------
+// ✅ 2026 FLAT ARRAY
+else if(Array.isArray(game)){
+
+game.forEach(p=>{
+if(p.team === away) awayBatting.push(p);
+if(p.team === home) homeBatting.push(p);
+});
+
+}
+
+// ---------------- RENDER ----------------
 document.getElementById("awayBatting").innerHTML = buildTable(awayBatting);
 document.getElementById("homeBatting").innerHTML = buildTable(homeBatting);
 document.getElementById("awayPitching").innerHTML = buildTable(awayPitching);
