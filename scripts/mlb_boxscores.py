@@ -3,140 +3,107 @@ import json
 from pathlib import Path
 import time
 
-print("MLB BOXSCORE BUILDER (FULL SCRIPT)")
+print("MLB PLAY-BY-PLAY BUILDER (MATCHES 2025)")
 
-# -------------------------
-# CONFIG
-# -------------------------
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1"
 
 SEASON_FILE = Path(f"docs/data/baseball/seasons/{SEASON}.json")
-BOX_DIR = Path(f"docs/data/baseball/boxscores/{SEASON}")
+OUT_DIR = Path(f"docs/data/baseball/boxscores/{SEASON}")
 
-BOX_DIR.mkdir(parents=True, exist_ok=True)
+OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
-
-# -------------------------
-# LOAD SEASON DATA
-# -------------------------
-if not SEASON_FILE.exists():
-    print("❌ Season file missing")
-    exit()
-
-with open(SEASON_FILE) as f:
-    season_data = json.load(f)
-
-games = season_data.get("games", [])
-
-print(f"Loaded {len(games)} games")
+data = json.load(open(SEASON_FILE))
+games = data["games"]
 
 
 # -------------------------
-# GET BOXSCORE
+# TEAM CODE MAP (CRITICAL)
 # -------------------------
-def fetch_boxscore(game_id):
-    url = f"{BASE}/game/{game_id}/boxscore"
+TEAM_CODES = {
+    "Chicago Cubs": "CHN",
+    "Los Angeles Dodgers": "LAN",
+    "Toronto Blue Jays": "TOR",
+    "Athletics": "OAK",
+    # ⚠️ we can expand this fully after test
+}
+
+
+# -------------------------
+# GET PLAY BY PLAY
+# -------------------------
+def get_pbp(game_id):
+    url = f"{BASE}/game/{game_id}/playByPlay"
 
     try:
-        r = requests.get(url, headers=HEADERS)
-        data = r.json()
-    except Exception as e:
-        print("Request failed:", e)
+        return requests.get(url).json()
+    except:
         return None
-
-    if "teams" not in data:
-        return None
-
-    return data
 
 
 # -------------------------
-# BUILD GAME OBJECT
+# BUILD EVENTS
 # -------------------------
-def build_game(game_id, data):
+def build_events(data):
+    events = []
+
+    for play in data.get("allPlays", []):
+        about = play.get("about", {})
+        result = play.get("result", {})
+        matchup = play.get("matchup", {})
+
+        inning = about.get("inning")
+        half = about.get("halfInning")
+        desc = result.get("description")
+
+        batter = matchup.get("batter", {}).get("fullName")
+
+        events.append([
+            "play",
+            str(inning),
+            half,
+            batter,
+            desc
+        ])
+
+    return events
+
+
+# -------------------------
+# MAIN
+# -------------------------
+for g in games:
+    gid = g["game_id"]
+
+    if g["status"] != "Final":
+        continue
+
+    print("Processing", gid)
+
+    pbp = get_pbp(gid)
+
+    if not pbp or "allPlays" not in pbp:
+        print("FAILED", gid)
+        continue
+
+    home_team = g["home_team"]
+    away_team = g["away_team"]
+
+    home_code = TEAM_CODES.get(home_team, home_team[:3].upper())
+    away_code = TEAM_CODES.get(away_team, away_team[:3].upper())
+
     game = {
-        "game_id": game_id,
-        "score": {
-            "home": {},
-            "away": {}
-        },
-        "players": []
+        "game_id": gid,
+        "date": g["date"][:10],
+        "season": SEASON,
+        "home_code": home_code,
+        "away_code": away_code,
+        "home_team": home_code,
+        "away_team": away_code,
+        "events": build_events(pbp)
     }
 
-    for side in ["home", "away"]:
-        team = data["teams"][side]
-        team_name = team["team"]["name"]
-
-        # TEAM SCORE
-        game["score"][side] = {
-            "team": team_name,
-            "runs": team.get("teamStats", {}).get("batting", {}).get("runs", 0),
-            "hits": team.get("teamStats", {}).get("batting", {}).get("hits", 0),
-            "errors": team.get("teamStats", {}).get("fielding", {}).get("errors", 0)
-        }
-
-        # PLAYERS
-        for player_id, p in team.get("players", {}).items():
-
-            person = p.get("person", {})
-            stats = p.get("stats", {})
-
-            player = {
-                "player_id": person.get("id"),
-                "name": person.get("fullName"),
-                "team": team_name,
-                "position": p.get("position", {}).get("abbreviation"),
-
-                "batting": stats.get("batting", {}),
-                "pitching": stats.get("pitching", {}),
-                "fielding": stats.get("fielding", {})
-            }
-
-            game["players"].append(player)
-
-    return game
-
-
-# -------------------------
-# MAIN LOOP
-# -------------------------
-saved = 0
-failed = 0
-
-for g in games:
-    game_id = g["game_id"]
-    status = g.get("status", "")
-
-    # ONLY FINAL GAMES
-    if status != "Final":
-        continue
-
-    outfile = BOX_DIR / f"{game_id}.json"
-
-    print(f"Processing {game_id}")
-
-    raw = fetch_boxscore(game_id)
-
-    if not raw:
-        print("❌ Failed:", game_id)
-        failed += 1
-        continue
-
-    game_data = build_game(game_id, raw)
-
-    with open(outfile, "w") as f:
-        json.dump(game_data, f, indent=2)
-
-    saved += 1
+    with open(OUT_DIR / f"{gid}.json", "w") as f:
+        json.dump(game, f, indent=2)
 
     time.sleep(0.4)
-
-
-# -------------------------
-# SUMMARY
-# -------------------------
-print("\nDONE")
-print(f"Saved: {saved}")
-print(f"Failed: {failed}")
