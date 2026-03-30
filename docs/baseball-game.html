@@ -62,140 +62,204 @@ a{color:#0056d6;text-decoration:none;font-weight:700;}
 </div>
 
 <script>
+let PLAYERS = {}, TEAMS = {}, PARKS = {};
 
-let PLAYERS={}, TEAMS={}, PARKS={}
+function param(n){
+  return new URLSearchParams(window.location.search).get(n);
+}
 
-function param(n){return new URLSearchParams(window.location.search).get(n)}
-function playerName(id){return PLAYERS[id]||id}
-function teamName(code){return TEAMS[code]||code}
-function parkName(code){return PARKS[code]||code}
+function playerName(id){
+  return PLAYERS[id] || id;
+}
+
+function teamName(code){
+  return TEAMS[code] || code;
+}
+
+function parkName(code){
+  return PARKS[code] || code;
+}
 
 async function loadLookups(){
+  const p = await fetch("/data/baseball/players.json");
+  if(p.ok){
+    const d = await p.json();
+    d.forEach(pl => {
+      PLAYERS[pl.player_id] = pl.name;
+    });
+  }
 
-const p=await fetch("/data/baseball/players.json")
-if(p.ok){
-const d=await p.json()
-d.forEach(pl=>PLAYERS[pl.player_id]=pl.name)
+  const t = await fetch("/data/baseball/teams.json");
+  if(t.ok){
+    const d = await t.json();
+    d.forEach(team => {
+      if(Array.isArray(team.codes)){
+        team.codes.forEach(c => {
+          TEAMS[c] = team.name;
+        });
+      }
+    });
+  }
+
+  const b = await fetch("/data/baseball/ballparks.csv");
+  if(b.ok){
+    const text = await b.text();
+    text.split("\n").slice(1).forEach(l => {
+      const parts = l.split(",");
+      if(parts.length > 1){
+        PARKS[parts[0].trim()] = parts[1].trim();
+      }
+    });
+  }
 }
 
-const t=await fetch("/data/baseball/teams.json")
-if(t.ok){
-const d=await t.json()
-d.forEach(team=>{
-team.codes.forEach(c=>TEAMS[c]=team.name)
-})
+async function fetchJson(path){
+  try{
+    const res = await fetch(path);
+    if(!res.ok) return null;
+    return await res.json();
+  }catch(e){
+    return null;
+  }
 }
 
-const b=await fetch("/data/baseball/ballparks.csv")
-if(b.ok){
-const text=await b.text()
-text.split("\n").slice(1).forEach(l=>{
-const parts=l.split(",")
-if(parts.length>1) PARKS[parts[0].trim()]=parts[1].trim()
-})
+function normalizeSeasonGames(seasonData){
+  if(Array.isArray(seasonData)) return seasonData;
+  if(seasonData && Array.isArray(seasonData.games)) return seasonData.games;
+  return [];
 }
+
+function findMeta(seasonGames, id, game, season){
+  let meta = seasonGames.find(g => String(g.game_id) === String(id));
+  if(meta) return meta;
+
+  if(game){
+    meta = seasonGames.find(g =>
+      String(g.home_code || g.home_team || "") === String(game.home_code || game.home_team || "") &&
+      String(g.away_code || g.away_team || "") === String(game.away_code || game.away_team || "")
+    );
+    if(meta) return meta;
+  }
+
+  return null;
 }
 
 async function loadGame(){
+  const id = param("game");
+  let season = param("season");
 
-const id = param("game");
-let season = param("season");
+  if(!id){
+    document.getElementById("title").innerText = "Game not found";
+    return;
+  }
 
-/* 🔥 fallback for old links */
-if(!season && id){
-  const m = id.match(/(\d{4})/);
-  if(m) season = m[1];
+  if(!season){
+    const m = String(id).match(/(\d{4})/);
+    if(m) season = m[1];
+  }
+
+  let game = null;
+
+  if(season){
+    game = await fetchJson(`/data/baseball/boxscores/${season}/${id}.json`);
+    if(!game){
+      game = await fetchJson(`/data/baseball/games/${season}/${id}.json`);
+    }
+  }
+
+  if(!game){
+    document.getElementById("title").innerText = "Game not found";
+    console.error("Could not load game", { id, season });
+    return;
+  }
+
+  if(!season){
+    document.getElementById("title").innerText = `${teamName(game.away_code)} @ ${teamName(game.home_code)}`;
+    render(game, null);
+    return;
+  }
+
+  const seasonData = await fetchJson(`/data/baseball/seasons/${season}.json`);
+  const seasonGames = normalizeSeasonGames(seasonData);
+  const meta = findMeta(seasonGames, id, game, season);
+
+  render(game, meta);
 }
 
-if(!id || !season){
-  document.getElementById("title").innerText="Game not found";
-  return;
+function render(game, meta){
+  const homeFull = teamName(game.home_code || game.home_team);
+  const awayFull = teamName(game.away_code || game.away_team);
+
+  document.getElementById("title").innerText = `${awayFull} @ ${homeFull}`;
+
+  if(meta){
+    const awayScore = meta.away_score ?? game.away_score ?? "";
+    const homeScore = meta.home_score ?? game.home_score ?? "";
+    const date = meta.date || game.date || "";
+    const venue = meta.venue || game.venue || "";
+    const attendance = meta.attendance || game.attendance || "";
+
+    document.getElementById("scoreline").innerText =
+      `${awayFull} ${awayScore} – ${homeFull} ${homeScore}`;
+    document.getElementById("subtitle").innerText = date;
+    document.getElementById("venueLine").innerText = venue ? `Venue: ${parkName(venue)}` : "";
+    document.getElementById("crowdLine").innerText =
+      attendance ? `Attendance: ${Number(attendance).toLocaleString()}` : "";
+  } else {
+    const awayScore = game.away_score ?? "";
+    const homeScore = game.home_score ?? "";
+    const date = game.date || "";
+    const venue = game.venue || "";
+    const attendance = game.attendance || "";
+
+    if(awayScore !== "" || homeScore !== ""){
+      document.getElementById("scoreline").innerText =
+        `${awayFull} ${awayScore} – ${homeFull} ${homeScore}`;
+    }
+    document.getElementById("subtitle").innerText = date;
+    document.getElementById("venueLine").innerText = venue ? `Venue: ${parkName(venue)}` : "";
+    document.getElementById("crowdLine").innerText =
+      attendance ? `Attendance: ${Number(attendance).toLocaleString()}` : "";
+  }
+
+  renderTable("awayBatting", game.batters_away || []);
+  renderTable("homeBatting", game.batters_home || []);
+  renderTable("awayPitching", game.pitchers_away || []);
+  renderTable("homePitching", game.pitchers_home || []);
 }
 
-/* ✅ correct path */
-const gameRes = await fetch(`/data/baseball/boxscores/${season}/${id}.json`);
+function renderTable(id, data){
+  if(!data || data.length === 0){
+    document.getElementById(id).innerHTML = "No detailed data available.";
+    return;
+  }
 
-if(!gameRes.ok){
-  document.getElementById("title").innerText="Game not found";
-  console.error("FAILED PATH:", `/data/baseball/boxscores/${season}/${id}.json`);
-  return;
-}
+  const keys = Object.keys(data[0]).filter(k => k !== "player_id");
+  let html = "<table><thead><tr><th>Player</th>";
+  keys.forEach(k => html += `<th>${k}</th>`);
+  html += "</tr></thead><tbody>";
 
-const game = await gameRes.json();
+  data.forEach(p => {
+    html += `<tr><td><a href="./baseball-player.html?player=${encodeURIComponent(p.player_id)}">${playerName(p.player_id)}</a></td>`;
+    keys.forEach(k => html += `<td>${p[k] ?? ""}</td>`);
+    html += "</tr>";
+  });
 
-const seasonRes=await fetch(`/data/baseball/seasons/${season}.json`)
-let meta=null
-
-if(seasonRes.ok){
-const seasonData=await seasonRes.json()
-
-/* try match by game_id first */
-meta = seasonData.find(g => String(g.game_id) === String(id));
-
-/* fallback match by date + team */
-if(!meta){
-const m=id.match(/(\d{4})(\d{2})(\d{2})/)
-if(m){
-const formatted=`${m[1]}-${m[2]}-${m[3]}`
-meta=seasonData.find(g=>
-g.home_team===game.home_code &&
-g.date===formatted
-)
-}
-}
-}
-
-render(game,meta)
-}
-
-function render(game,meta){
-
-const homeFull=teamName(game.home_code)
-const awayFull=teamName(game.away_code)
-
-document.getElementById("title").innerText=`${awayFull} @ ${homeFull}`
-
-if(meta){
-document.getElementById("scoreline").innerText=
-`${awayFull} ${meta.away_score} – ${homeFull} ${meta.home_score}`
-document.getElementById("subtitle").innerText=meta.date
-document.getElementById("venueLine").innerText=`Venue: ${parkName(meta.venue)}`
-document.getElementById("crowdLine").innerText=
-meta.attendance?`Attendance: ${meta.attendance.toLocaleString()}`:""
-}
-
-renderTable("awayBatting",game.batters_away)
-renderTable("homeBatting",game.batters_home)
-renderTable("awayPitching",game.pitchers_away)
-renderTable("homePitching",game.pitchers_home)
-}
-
-function renderTable(id,data){
-if(!data||data.length===0){
-document.getElementById(id).innerHTML="No detailed data available."
-return
-}
-const keys=Object.keys(data[0]).filter(k=>k!=="player_id")
-let html="<table><thead><tr><th>Player</th>"
-keys.forEach(k=>html+=`<th>${k}</th>`)
-html+="</tr></thead><tbody>"
-data.forEach(p=>{
-html+=`<tr>
-<td><a href="./baseball-player.html?player=${p.player_id}">${playerName(p.player_id)}</a></td>`
-keys.forEach(k=>html+=`<td>${p[k]}</td>`)
-html+="</tr>"
-})
-html+="</tbody></table>"
-document.getElementById(id).innerHTML=html
+  html += "</tbody></table>";
+  document.getElementById(id).innerHTML = html;
 }
 
 async function init(){
-await loadLookups()
-await loadGame()
+  try{
+    await loadLookups();
+    await loadGame();
+  }catch(err){
+    console.error("GAME PAGE ERROR:", err);
+    document.getElementById("title").innerText = "Game not found";
+  }
 }
 
-init()
-
+init();
 </script>
 
 </body>
