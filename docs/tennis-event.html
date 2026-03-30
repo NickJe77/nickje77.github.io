@@ -14,6 +14,28 @@ body{
 
 h1{text-align:center;}
 
+/* 🔥 NEW: gender selector */
+.gender-toggle{
+  display:flex;
+  justify-content:center;
+  gap:10px;
+  margin-top:10px;
+}
+
+.gender-toggle a{
+  padding:6px 14px;
+  border-radius:20px;
+  border:1px solid #0056d6;
+  text-decoration:none;
+  font-weight:600;
+  color:#0056d6;
+}
+
+.gender-toggle a.active{
+  background:#0056d6;
+  color:#fff;
+}
+
 .navbar{
   display:flex;
   justify-content:center;
@@ -71,6 +93,9 @@ tbody tr:nth-child(even){
 
 <h1 id="title"></h1>
 
+<!-- 🔥 NEW: gender selector -->
+<div class="gender-toggle" id="genderToggle"></div>
+
 <table>
 <thead>
 <tr>
@@ -86,19 +111,37 @@ tbody tr:nth-child(even){
 <script>
 
 // -------------------------
-// PARAMS (FIXED)
+// PARAMS
 // -------------------------
 const params = new URLSearchParams(window.location.search);
 
 const tournament = decodeURIComponent(params.get("tournament") || "");
 const year = params.get("year") || new Date().getFullYear();
+const gender = params.get("gender") || "male"; // default male
 
 // -------------------------
 document.getElementById("title").textContent =
   `${tournament} ${year}`;
 
 // -------------------------
-// CLEAN FUNCTION (🔥 IMPORTANT)
+// 🔥 BUILD GENDER TOGGLE
+// -------------------------
+function buildGenderToggle(){
+
+  const container = document.getElementById("genderToggle");
+
+  const base = `?tournament=${encodeURIComponent(tournament)}&year=${year}`;
+
+  container.innerHTML = `
+    <a href="${base}&gender=male" class="${gender==="male"?"active":""}">Male</a>
+    <a href="${base}&gender=female" class="${gender==="female"?"active":""}">Female</a>
+  `;
+}
+
+buildGenderToggle();
+
+// -------------------------
+// CLEAN FUNCTION
 // -------------------------
 function clean(t){
   return (t || "").toLowerCase().trim();
@@ -112,7 +155,11 @@ fetch(`/data/tennis/matches/${year}.json`)
 .then(data => {
 
   const matches = data.filter(m =>
-    clean(m.tournament) === clean(tournament)
+    clean(m.tournament) === clean(tournament) &&
+    (
+      !m.gender || // fallback if older data
+      clean(m.gender) === gender
+    )
   );
 
   buildTable(matches);
@@ -120,7 +167,7 @@ fetch(`/data/tennis/matches/${year}.json`)
 });
 
 // -------------------------
-// DETECT WINNER FROM SCORE
+// DETECT WINNER
 // -------------------------
 function getWinner(score, p1, p2){
 
