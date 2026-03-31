@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import time
 
-print("MLB 2026 REBUILD (FINAL - WORKING)")
+print("MLB 2026 REBUILD (FINAL FIX - NO SKIPS)")
 
 BASE = "https://statsapi.mlb.com/api/v1"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -27,19 +27,12 @@ TEAM_MAP = {
 
 
 # -------------------------
-# GET GAMES (FIXED)
+# GET GAMES
 # -------------------------
 def get_games():
 
     url = f"{BASE}/schedule?sportId=1&season={SEASON}&gameType=R,P"
-
-    res = requests.get(url, headers=HEADERS)
-
-    if res.status_code != 200:
-        print("Schedule failed")
-        return []
-
-    data = res.json()
+    data = requests.get(url, headers=HEADERS).json()
 
     games = []
 
@@ -48,22 +41,15 @@ def get_games():
 
             game_date = g["gameDate"][:10]
 
-            # skip pre-opening day
             if game_date < START_DATE:
                 continue
 
-            # ONLY regular + playoffs
             if g.get("gameType") not in ["R", "P"]:
                 continue
 
-            # 🔥 ONLY completed / live games
             status = g.get("status", {}).get("codedGameState")
 
             if status not in ["F", "O", "I"]:
-                continue
-
-            # safety: skip future games
-            if game_date > END_DATE:
                 continue
 
             games.append({
@@ -73,47 +59,64 @@ def get_games():
                 "away": TEAM_MAP.get(g["teams"]["away"]["team"]["id"], "UNK")
             })
 
-    print(f"FOUND {len(games)} PLAYED GAMES")
+    print(f"FOUND {len(games)} GAMES")
     return games
 
 
 # -------------------------
-# BUILD EVENTS
+# GET DATA
 # -------------------------
-def build_events(gamePk):
+def get_game_data(gamePk):
 
     url = f"{BASE}/game/{gamePk}/feed/live"
-    res = requests.get(url, headers=HEADERS)
-
-    if res.status_code != 200:
-        return []
-
-    data = res.json()
+    data = requests.get(url, headers=HEADERS).json()
 
     plays = data.get("liveData", {}).get("plays", {}).get("allPlays", [])
 
-    if not plays:
-        return []
+    # ✅ USE PLAYS IF AVAILABLE
+    if plays:
+        events = []
+
+        for p in plays:
+            try:
+                inning = p["about"]["inning"]
+                half = p["about"]["halfInning"]
+                batter = p["matchup"]["batter"]["id"]
+                result = p["result"]["eventType"]
+
+                events.append([
+                    "play",
+                    str(inning),
+                    "0" if half == "top" else "1",
+                    str(batter),
+                    result
+                ])
+            except:
+                continue
+
+        return events
+
+    # 🔥 FALLBACK → BOXSCORE
+    box = data.get("liveData", {}).get("boxscore", {}).get("teams", {})
 
     events = []
 
-    for p in plays:
-        try:
-            inning = p["about"]["inning"]
-            half = p["about"]["halfInning"]
+    for side in ["home", "away"]:
+        players = box.get(side, {}).get("players", {})
 
-            batter = p["matchup"]["batter"]["id"]
-            result = p["result"]["eventType"]
+        for p in players.values():
+            try:
+                pid = p["person"]["id"]
 
-            events.append([
-                "play",
-                str(inning),
-                "0" if half == "top" else "1",
-                str(batter),
-                result
-            ])
-        except:
-            continue
+                events.append([
+                    "play",
+                    "0",
+                    "0",
+                    str(pid),
+                    "appearance"
+                ])
+            except:
+                continue
 
     return events
 
@@ -123,10 +126,6 @@ def build_events(gamePk):
 # -------------------------
 games = get_games()
 
-if not games:
-    print("NO GAMES FOUND")
-    exit()
-
 built = 0
 
 for g in games:
@@ -134,17 +133,15 @@ for g in games:
     fname = f"{g['date']}_{g['away']}_{g['home']}.json"
     out_file = OUT_DIR / fname
 
-    # DO NOT overwrite
     if out_file.exists():
         continue
 
     print("Building", fname)
 
-    events = build_events(g["gamePk"])
+    events = get_game_data(g["gamePk"])
 
-    # skip empty (important)
     if not events:
-        print("No events, skipping")
+        print("Still empty, skipping")
         continue
 
     game_json = {
