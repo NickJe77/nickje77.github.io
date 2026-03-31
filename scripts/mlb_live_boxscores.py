@@ -2,109 +2,101 @@ import requests
 import json
 from pathlib import Path
 from datetime import datetime
+import time
 
-print("BUILDING PLAYER MAP (SAFE)")
+print("MLB 2026 REBUILDER (SAFE)")
 
+SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 START_DATE = "2026-03-26"
 END_DATE = datetime.utcnow().strftime("%Y-%m-%d")
 
-OUT = Path("docs/data/baseball/players.json")
-OUT.parent.mkdir(parents=True, exist_ok=True)
-
-players = {}
+BOX_DIR = Path(f"docs/data/baseball/boxscores/{SEASON}")
+BOX_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # -------------------------
-# LOAD EXISTING PLAYERS
+# GET SCHEDULE
 # -------------------------
-if OUT.exists():
-    try:
-        with open(OUT) as f:
-            existing = json.load(f)
-            for p in existing:
-                players[p["player_id"]] = p["name"]
-        print(f"Loaded existing players: {len(players)}")
-    except:
-        print("Failed to load existing players")
+def get_schedule():
+    url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
 
-
-# -------------------------
-# GET GAMES
-# -------------------------
-def get_games():
-    url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}&gameType=R,P"
     res = requests.get(url, headers=HEADERS)
-
     if res.status_code != 200:
-        print("Schedule request failed")
+        print("Schedule failed")
         return []
 
     data = res.json()
 
     games = []
+
     for d in data.get("dates", []):
         for g in d.get("games", []):
-            games.append(g["gamePk"])
 
+            # ONLY regular + playoffs
+            if g.get("gameType") not in ["R", "P"]:
+                continue
+
+            games.append({
+                "id": str(g["gamePk"]),
+                "date": g["gameDate"]
+            })
+
+    print(f"Found {len(games)} games")
     return games
 
 
 # -------------------------
-# EXTRACT PLAYERS
+# GET BOXSCORE
 # -------------------------
-def extract_players(gamePk):
-    url = f"{BASE}/game/{gamePk}/feed/live"
+def get_boxscore(game_id):
+    url = f"{BASE}/game/{game_id}/boxscore"
+
     res = requests.get(url, headers=HEADERS)
-
     if res.status_code != 200:
-        return
+        return None
 
-    data = res.json()
-
-    teams = data.get("liveData", {}).get("boxscore", {}).get("teams", {})
-
-    for side in ["home", "away"]:
-        for p in teams.get(side, {}).get("players", {}).values():
-            try:
-                pid = str(p["person"]["id"])
-                name = p["person"]["fullName"]
-
-                players[pid] = name
-            except:
-                continue
+    return res.json()
 
 
 # -------------------------
 # MAIN
 # -------------------------
-games = get_games()
+games = get_schedule()
 
 if not games:
-    print("NO GAMES FOUND → NOT TOUCHING FILE")
+    print("NO GAMES FOUND — STOPPING")
     exit()
 
-print(f"Processing {len(games)} games")
+added = 0
+skipped = 0
 
 for g in games:
-    try:
-        extract_players(g)
-    except:
+    game_id = g["id"]
+    out_file = BOX_DIR / f"{game_id}.json"
+
+    # DO NOT overwrite existing
+    if out_file.exists():
+        skipped += 1
         continue
 
+    print(f"Fetching {game_id}")
 
-# -------------------------
-# SAVE (ONLY IF DATA EXISTS)
-# -------------------------
-if not players:
-    print("NO PLAYERS FOUND → NOT SAVING")
-    exit()
+    data = get_boxscore(game_id)
 
-out = [{"player_id": k, "name": v} for k, v in players.items()]
+    if not data:
+        print(f"Failed {game_id}")
+        continue
 
-with open(OUT, "w") as f:
-    json.dump(out, f, indent=2)
+    with open(out_file, "w") as f:
+        json.dump(data, f)
 
-print("Saved players:", len(out))
+    added += 1
+    time.sleep(0.25)
+
+
+print(f"\nDONE")
+print(f"Added: {added}")
+print(f"Skipped (already existed): {skipped}")
