@@ -20,7 +20,6 @@ table{width:100%;border-collapse:collapse;}
 th{background:#002D72;color:white;padding:10px;}
 td{padding:8px;border-bottom:1px solid #eee;}
 tr:nth-child(even){background:#f0f6ff;}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
 </style>
 </head>
 
@@ -43,11 +42,9 @@ tr:nth-child(even){background:#f0f6ff;}
 <div id="venueLine" class="meta-line"></div>
 </div>
 
-<div class="grid">
-<div class="section"><h2>Away Batting</h2><div id="awayBatting"></div></div>
-<div class="section"><h2>Home Batting</h2><div id="homeBatting"></div></div>
-<div class="section"><h2>Away Pitching</h2><div id="awayPitching"></div></div>
-<div class="section"><h2>Home Pitching</h2><div id="homePitching"></div></div>
+<div class="section">
+<h2>Play By Play</h2>
+<div id="events"></div>
 </div>
 
 </div>
@@ -69,7 +66,6 @@ document.getElementById("title").innerText="Game not found";
 return;
 }
 
-// TRY BOTH PATHS
 let game = null;
 
 let res = await fetch(`/data/baseball/boxscores/${season}/${id}.json`);
@@ -85,7 +81,7 @@ document.getElementById("title").innerText="Game not found";
 return;
 }
 
-// ---------------- LOAD SEASON ----------------
+// ---------------- LOAD SEASON META ----------------
 let meta = null;
 
 try{
@@ -97,68 +93,55 @@ const games = Array.isArray(seasonData)
   ? seasonData
   : seasonData.games || [];
 
-// 🔥 FIX: MULTI MATCH STRATEGY
-
-// 1. try game_id
 meta = games.find(g => String(g.game_id) === String(id));
-
-// 2. fallback by date
-if(!meta && game.date){
-meta = games.find(g => g.date === game.date);
-}
-
-// 3. fallback by teams
-if(!meta){
-meta = games.find(g =>
-(g.home_team && g.away_team)
-);
-}
 
 }
 }catch(e){}
 
 // ---------------- HEADER ----------------
-const away = meta?.away_team || "";
-const home = meta?.home_team || "";
+const away = meta?.away_team || game.away_team || "";
+const home = meta?.home_team || game.home_team || "";
 
 document.getElementById("title").innerText =
 `${away} @ ${home}`;
 
-if(meta){
-document.getElementById("scoreline").innerText =
-`${away} ${meta.away_score} – ${home} ${meta.home_score}`;
-document.getElementById("subtitle").innerText = meta.date || "";
-document.getElementById("venueLine").innerText =
-meta.venue ? `Venue: ${meta.venue}` : "";
+document.getElementById("subtitle").innerText = game.date || "";
+
+// ---------------- EVENTS TABLE ----------------
+function buildEvents(events){
+
+if(!events || events.length === 0){
+return "No play-by-play available.";
 }
 
-// ---------------- TABLE BUILDER ----------------
-function buildTable(data){
+let html = `
+<table>
+<thead>
+<tr>
+<th>Inning</th>
+<th>Half</th>
+<th>Batter</th>
+<th>Count</th>
+<th>Pitches</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+`;
 
-if(!data || data.length === 0){
-return "No detailed data available.";
-}
+events.forEach(e=>{
 
-let keys = Object.keys(data[0]);
+html += `
+<tr>
+<td>${e[1]}</td>
+<td>${e[2] === "0" ? "Top" : "Bottom"}</td>
+<td>${e[3]}</td>
+<td>${e[4]}</td>
+<td>${e[5]}</td>
+<td>${e[6]}</td>
+</tr>
+`;
 
-let html = "<table><thead><tr><th>Player</th>";
-
-keys.forEach(k=>{
-if(k !== "player_id" && k !== "team") html += `<th>${k}</th>`;
-});
-
-html += "</tr></thead><tbody>";
-
-data.forEach(p=>{
-html += `<tr><td>${p.player || p.name || ""}</td>`;
-
-keys.forEach(k=>{
-if(k !== "player_id" && k !== "team"){
-html += `<td>${p[k] ?? ""}</td>`;
-}
-});
-
-html += "</tr>";
 });
 
 html += "</tbody></table>";
@@ -166,34 +149,9 @@ html += "</tbody></table>";
 return html;
 }
 
-// ---------------- FORMAT HANDLING ----------------
-
-let awayBatting = [];
-let homeBatting = [];
-let awayPitching = [];
-let homePitching = [];
-
-// OLD STRUCTURE
-if(game && game.batters_away){
-awayBatting = game.batters_away || [];
-homeBatting = game.batters_home || [];
-awayPitching = game.pitchers_away || [];
-homePitching = game.pitchers_home || [];
-}
-
-// 2026 STRUCTURE
-else if(Array.isArray(game)){
-game.forEach(p=>{
-if(p.team === away) awayBatting.push(p);
-if(p.team === home) homeBatting.push(p);
-});
-}
-
 // ---------------- RENDER ----------------
-document.getElementById("awayBatting").innerHTML = buildTable(awayBatting);
-document.getElementById("homeBatting").innerHTML = buildTable(homeBatting);
-document.getElementById("awayPitching").innerHTML = buildTable(awayPitching);
-document.getElementById("homePitching").innerHTML = buildTable(homePitching);
+document.getElementById("events").innerHTML =
+buildEvents(game.events);
 
 }
 
