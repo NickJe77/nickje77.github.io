@@ -3,29 +3,17 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-print("MLB BUILDER (FINAL FIX)")
+print("BUILDING PLAYER MAP")
 
-SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1"
-
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 START_DATE = "2026-03-26"
 END_DATE = datetime.utcnow().strftime("%Y-%m-%d")
 
-OUTPUT_DIR = Path(f"docs/data/baseball/boxscores/{SEASON}")
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+OUT = Path("docs/data/baseball/players.json")
 
-TEAM_MAP = {
-    108:"LAA",109:"ARI",110:"BAL",111:"BOS",112:"CHN",113:"CIN",
-    114:"CLE",115:"COL",116:"DET",117:"HOU",118:"KCA",119:"LAN",
-    120:"WAS",121:"NYN",133:"OAK",134:"PIT",135:"SDN",136:"SEA",
-    137:"SFN",138:"SLN",139:"TBA",140:"TEX",141:"TOR",142:"MIN",
-    143:"PHI",144:"ATL",145:"CHA",146:"MIA",147:"NYA",158:"MIL"
-}
-
-def team_code(team):
-    return TEAM_MAP.get(team["id"], team.get("abbreviation","UNK"))
+players = {}
 
 def get_games():
     url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}&gameType=R,P"
@@ -34,122 +22,33 @@ def get_games():
     games=[]
     for d in data.get("dates",[]):
         for g in d.get("games",[]):
-            home=g["teams"]["home"]["team"]
-            away=g["teams"]["away"]["team"]
-
-            games.append({
-                "gamePk":g["gamePk"],
-                "date":g["gameDate"][:10],
-                "home":team_code(home),
-                "away":team_code(away)
-            })
-
-    print("FOUND", len(games), "GAMES")
+            games.append(g["gamePk"])
     return games
 
-def build_batting(players):
-    rows=[]
-    for p in players.values():
-        stats=p.get("stats",{}).get("batting",{})
-        if not stats: continue
+def extract_players(gamePk):
+    url = f"{BASE}/game/{gamePk}/feed/live"
+    data = requests.get(url, headers=HEADERS).json()
 
-        rows.append({
-            "player_id":str(p["person"]["id"]),
-            "AB":stats.get("atBats",0),
-            "R":stats.get("runs",0),
-            "H":stats.get("hits",0),
-            "RBI":stats.get("rbi",0),
-            "BB":stats.get("baseOnBalls",0),
-            "SO":stats.get("strikeOuts",0)
-        })
-    return rows
+    teams = data.get("liveData",{}).get("boxscore",{}).get("teams",{})
 
-def build_pitching(players):
-    rows=[]
-    for p in players.values():
-        stats=p.get("stats",{}).get("pitching",{})
-        if not stats: continue
+    for side in ["home","away"]:
+        for p in teams.get(side,{}).get("players",{}).values():
+            pid = str(p["person"]["id"])
+            name = p["person"]["fullName"]
 
-        rows.append({
-            "player_id":str(p["person"]["id"]),
-            "IP":stats.get("inningsPitched","0"),
-            "H":stats.get("hits",0),
-            "R":stats.get("runs",0),
-            "ER":stats.get("earnedRuns",0),
-            "BB":stats.get("baseOnBalls",0),
-            "SO":stats.get("strikeOuts",0)
-        })
-    return rows
+            players[pid] = name
 
-# 🔴 THIS IS THE IMPORTANT PART
-def get_boxscore(gamePk):
-
-    # try live feed
-    try:
-        url=f"{BASE}/game/{gamePk}/feed/live"
-        data=requests.get(url,headers=HEADERS).json()
-
-        box=data.get("liveData",{}).get("boxscore",{}).get("teams",{})
-
-        if box and box.get("home",{}).get("players"):
-            return box
-    except:
-        pass
-
-    # fallback to boxscore endpoint
-    try:
-        url=f"{BASE}/game/{gamePk}/boxscore"
-        data=requests.get(url,headers=HEADERS).json()
-
-        if data.get("teams"):
-            return data["teams"]
-    except:
-        pass
-
-    return {}
-
-def build_game(g):
-
-    box=get_boxscore(g["gamePk"])
-
-    home_players=box.get("home",{}).get("players",{})
-    away_players=box.get("away",{}).get("players",{})
-
-    game_id=f"{g['home']}{g['date'].replace('-','')}0"
-
-    return {
-        "game_id":game_id,
-        "date":g["date"],
-        "season":SEASON,
-        "home_code":g["home"],
-        "away_code":g["away"],
-        "home_team":g["home"],
-        "away_team":g["away"],
-
-        "batters_home":build_batting(home_players),
-        "batters_away":build_batting(away_players),
-        "pitchers_home":build_pitching(home_players),
-        "pitchers_away":build_pitching(away_players)
-    }
-
-print("STARTING BUILD...")
-
-games=get_games()
+games = get_games()
 
 for g in games:
     try:
-        game_data=build_game(g)
+        extract_players(g)
+    except:
+        continue
 
-        out=OUTPUT_DIR / f"{game_data['game_id']}.json"
+out = [{"player_id":k,"name":v} for k,v in players.items()]
 
-        print("WRITING:", out)
+with open(OUT,"w") as f:
+    json.dump(out,f,indent=2)
 
-        with open(out,"w") as f:
-            json.dump(game_data,f,indent=2)
-
-        print("Saved:", game_data["game_id"])
-
-    except Exception as e:
-        print("ERROR:", g["gamePk"], e)
-
-print("DONE")
+print("Saved players:", len(out))
