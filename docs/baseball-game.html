@@ -51,12 +51,11 @@ function param(n){
   return new URLSearchParams(window.location.search).get(n);
 }
 
-// ---------------- PLAYER NAME FIX ----------------
-function formatName(id){
+// ---------------- FIX NAME ----------------
+function cleanName(id){
 if(!id) return "";
 return id.replace(/\d+/g,"")
-.replace(/([a-z])([A-Z])/g,'$1 $2')
-.replace(/^./, c => c.toUpperCase());
+.replace(/([a-z]{5})([a-z]{3})/, (_,a,b)=> b.charAt(0).toUpperCase()+b.slice(1)+" "+a.charAt(0).toUpperCase()+a.slice(1));
 }
 
 // ---------------- TABLE ----------------
@@ -79,7 +78,7 @@ html += "</tbody></table>";
 return html;
 }
 
-// ---------------- BUILD FROM EVENTS ----------------
+// ---------------- BUILD 2026 STATS ----------------
 function buildFromEvents(events, home, away){
 
 const batting = {};
@@ -91,25 +90,14 @@ const batter = e[3];
 const result = e[6];
 const team = e[2] === "0" ? away : home;
 
-// init batter
 if(!batting[batter]){
-batting[batter] = {
-player: formatName(batter),
-team,
-AB:0,H:0,BB:0,SO:0
-};
+batting[batter] = {player:cleanName(batter),team,AB:0,H:0,BB:0,SO:0};
 }
 
-// init pitcher (team based)
 if(!pitching[team]){
-pitching[team] = {
-player: team,
-team,
-SO:0,BB:0
-};
+pitching[team] = {player:team,team,SO:0,BB:0};
 }
 
-// stats
 if(result !== "BB") batting[batter].AB++;
 
 if(["1B","2B","3B","HR"].includes(result)) batting[batter].H++;
@@ -126,10 +114,7 @@ pitching[team].SO++;
 
 });
 
-return {
-batting:Object.values(batting),
-pitching:Object.values(pitching)
-};
+return {batting:Object.values(batting), pitching:Object.values(pitching)};
 }
 
 // ---------------- LOAD GAME ----------------
@@ -138,8 +123,26 @@ async function loadGame(){
 const id = param("game");
 const season = param("season");
 
+let game = null;
+
+// try normal path
 let res = await fetch(`/data/baseball/boxscores/${season}/${id}.json`);
-let game = res.ok ? await res.json() : null;
+if(res.ok) game = await res.json();
+
+// 🔥 FIX: try scanning 2025 filenames
+if(!game){
+const res2 = await fetch(`/data/baseball/boxscores/${season}/`);
+const text = await res2.text();
+
+// crude match
+const match = text.match(/href="([^"]+${id}[^"]+\.json)"/);
+
+if(match){
+const file = match[1];
+const r = await fetch(`/data/baseball/boxscores/${season}/${file}`);
+if(r.ok) game = await r.json();
+}
+}
 
 if(!game){
 document.getElementById("title").innerText="Game not found";
@@ -149,9 +152,7 @@ return;
 document.getElementById("title").innerText =
 `${game.away_team} @ ${game.home_team}`;
 
-// ---------------- FORMAT SWITCH ----------------
-
-// OLD (2025)
+// ---------------- OLD FORMAT ----------------
 if(game.batters_away){
 
 document.getElementById("awayBatting").innerHTML = table(game.batters_away);
@@ -162,14 +163,10 @@ document.getElementById("homePitching").innerHTML = table(game.pitchers_home);
 return;
 }
 
-// NEW (2026)
+// ---------------- NEW FORMAT ----------------
 if(game.events){
 
-const stats = buildFromEvents(
-game.events,
-game.home_team,
-game.away_team
-);
+const stats = buildFromEvents(game.events, game.home_team, game.away_team);
 
 document.getElementById("awayBatting").innerHTML =
 table(stats.batting.filter(p=>p.team===game.away_team));
@@ -178,10 +175,10 @@ document.getElementById("homeBatting").innerHTML =
 table(stats.batting.filter(p=>p.team===game.home_team));
 
 document.getElementById("awayPitching").innerHTML =
-table(stats.pitching.filter(p=>p.team===game.home_team));
+table(stats.pitching.filter(p=>p.team===game.away_team));
 
 document.getElementById("homePitching").innerHTML =
-table(stats.pitching.filter(p=>p.team===game.away_team));
+table(stats.pitching.filter(p=>p.team===game.home_team));
 
 }
 
