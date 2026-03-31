@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-print("MLB LIVE BOXSCORE BUILDER (SAFE)")
+print("MLB BUILDER (FINAL FIX)")
 
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1"
@@ -27,9 +27,6 @@ TEAM_MAP = {
 def team_code(team):
     return TEAM_MAP.get(team["id"], team.get("abbreviation","UNK"))
 
-# -----------------------------
-# GET GAMES
-# -----------------------------
 def get_games():
     url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}&gameType=R,P"
     data = requests.get(url, headers=HEADERS).json()
@@ -50,15 +47,11 @@ def get_games():
     print("FOUND", len(games), "GAMES")
     return games
 
-# -----------------------------
-# BUILD BATTING
-# -----------------------------
 def build_batting(players):
     rows=[]
     for p in players.values():
         stats=p.get("stats",{}).get("batting",{})
-        if not stats:
-            continue
+        if not stats: continue
 
         rows.append({
             "player_id":str(p["person"]["id"]),
@@ -71,15 +64,11 @@ def build_batting(players):
         })
     return rows
 
-# -----------------------------
-# BUILD PITCHING
-# -----------------------------
 def build_pitching(players):
     rows=[]
     for p in players.values():
         stats=p.get("stats",{}).get("pitching",{})
-        if not stats:
-            continue
+        if not stats: continue
 
         rows.append({
             "player_id":str(p["person"]["id"]),
@@ -92,22 +81,39 @@ def build_pitching(players):
         })
     return rows
 
-# -----------------------------
-# BUILD GAME (SAFE)
-# -----------------------------
+# 🔴 THIS IS THE IMPORTANT PART
+def get_boxscore(gamePk):
+
+    # try live feed
+    try:
+        url=f"{BASE}/game/{gamePk}/feed/live"
+        data=requests.get(url,headers=HEADERS).json()
+
+        box=data.get("liveData",{}).get("boxscore",{}).get("teams",{})
+
+        if box and box.get("home",{}).get("players"):
+            return box
+    except:
+        pass
+
+    # fallback to boxscore endpoint
+    try:
+        url=f"{BASE}/game/{gamePk}/boxscore"
+        data=requests.get(url,headers=HEADERS).json()
+
+        if data.get("teams"):
+            return data["teams"]
+    except:
+        pass
+
+    return {}
+
 def build_game(g):
 
-    url=f"{BASE}/game/{g['gamePk']}/feed/live"
-    data=requests.get(url,headers=HEADERS).json()
+    box=get_boxscore(g["gamePk"])
 
-    box=data.get("liveData",{}).get("boxscore",{}).get("teams",{})
-
-    home_players={}
-    away_players={}
-
-    if box:
-        home_players=box.get("home",{}).get("players",{})
-        away_players=box.get("away",{}).get("players",{})
+    home_players=box.get("home",{}).get("players",{})
+    away_players=box.get("away",{}).get("players",{})
 
     game_id=f"{g['home']}{g['date'].replace('-','')}0"
 
@@ -120,16 +126,12 @@ def build_game(g):
         "home_team":g["home"],
         "away_team":g["away"],
 
-        # ALWAYS WRITE ARRAYS (even if empty)
         "batters_home":build_batting(home_players),
         "batters_away":build_batting(away_players),
         "pitchers_home":build_pitching(home_players),
         "pitchers_away":build_pitching(away_players)
     }
 
-# -----------------------------
-# MAIN
-# -----------------------------
 print("STARTING BUILD...")
 
 games=get_games()
