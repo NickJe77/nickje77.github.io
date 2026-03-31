@@ -4,14 +4,13 @@ from pathlib import Path
 from datetime import datetime
 import time
 
-print("MLB 2026 REBUILD (FINAL FIX - NO SKIPS)")
+print("MLB 2026 FORCE BUILD")
 
 BASE = "https://statsapi.mlb.com/api/v1"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 SEASON = 2026
 START_DATE = "2026-03-26"
-END_DATE = datetime.utcnow().strftime("%Y-%m-%d")
 
 OUT_DIR = Path(f"docs/data/baseball/boxscores/{SEASON}")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -44,14 +43,6 @@ def get_games():
             if game_date < START_DATE:
                 continue
 
-            if g.get("gameType") not in ["R", "P"]:
-                continue
-
-            status = g.get("status", {}).get("codedGameState")
-
-            if status not in ["F", "O", "I"]:
-                continue
-
             games.append({
                 "gamePk": g["gamePk"],
                 "date": game_date,
@@ -64,86 +55,51 @@ def get_games():
 
 
 # -------------------------
-# GET DATA
+# BUILD FILE (NO FAIL)
 # -------------------------
-def get_game_data(gamePk):
-
-    url = f"{BASE}/game/{gamePk}/feed/live"
-    data = requests.get(url, headers=HEADERS).json()
-
-    plays = data.get("liveData", {}).get("plays", {}).get("allPlays", [])
-
-    # ✅ USE PLAYS IF AVAILABLE
-    if plays:
-        events = []
-
-        for p in plays:
-            try:
-                inning = p["about"]["inning"]
-                half = p["about"]["halfInning"]
-                batter = p["matchup"]["batter"]["id"]
-                result = p["result"]["eventType"]
-
-                events.append([
-                    "play",
-                    str(inning),
-                    "0" if half == "top" else "1",
-                    str(batter),
-                    result
-                ])
-            except:
-                continue
-
-        return events
-
-    # 🔥 FALLBACK → BOXSCORE
-    box = data.get("liveData", {}).get("boxscore", {}).get("teams", {})
-
-    events = []
-
-    for side in ["home", "away"]:
-        players = box.get(side, {}).get("players", {})
-
-        for p in players.values():
-            try:
-                pid = p["person"]["id"]
-
-                events.append([
-                    "play",
-                    "0",
-                    "0",
-                    str(pid),
-                    "appearance"
-                ])
-            except:
-                continue
-
-    return events
-
-
-# -------------------------
-# MAIN
-# -------------------------
-games = get_games()
-
-built = 0
-
-for g in games:
+def build_file(g):
 
     fname = f"{g['date']}_{g['away']}_{g['home']}.json"
     out_file = OUT_DIR / fname
 
-    if out_file.exists():
-        continue
+    url = f"{BASE}/game/{g['gamePk']}/feed/live"
+    data = requests.get(url, headers=HEADERS).json()
 
-    print("Building", fname)
+    plays = data.get("liveData", {}).get("plays", {}).get("allPlays", [])
 
-    events = get_game_data(g["gamePk"])
+    events = []
 
+    # try plays
+    for p in plays:
+        try:
+            inning = p["about"]["inning"]
+            half = p["about"]["halfInning"]
+            batter = p["matchup"]["batter"]["id"]
+            result = p["result"]["eventType"]
+
+            events.append([
+                "play",
+                str(inning),
+                "0" if half == "top" else "1",
+                str(batter),
+                result
+            ])
+        except:
+            continue
+
+    # fallback if empty
     if not events:
-        print("Still empty, skipping")
-        continue
+        box = data.get("liveData", {}).get("boxscore", {}).get("teams", {})
 
+        for side in ["home", "away"]:
+            for p in box.get(side, {}).get("players", {}).values():
+                try:
+                    pid = p["person"]["id"]
+                    events.append(["play","0","0",str(pid),"appearance"])
+                except:
+                    continue
+
+    # 🔥 FORCE WRITE (NO CONDITIONS)
     game_json = {
         "game_id": f"{g['home']}{g['date'].replace('-','')}0",
         "date": g["date"],
@@ -158,8 +114,15 @@ for g in games:
     with open(out_file, "w") as f:
         json.dump(game_json, f, indent=2)
 
-    built += 1
-    time.sleep(0.25)
 
+# -------------------------
+# MAIN
+# -------------------------
+games = get_games()
 
-print(f"DONE — BUILT {built} FILES")
+for g in games:
+    print("Writing", g["date"], g["away"], g["home"])
+    build_file(g)
+    time.sleep(0.2)
+
+print("DONE — FILES CREATED")
