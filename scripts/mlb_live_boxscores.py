@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import time
 
-print("MLB 2026 FORCE BUILD")
+print("MLB 2026 REBUILD (REAL DATA FIX)")
 
 BASE = "https://statsapi.mlb.com/api/v1"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -43,6 +43,11 @@ def get_games():
             if game_date < START_DATE:
                 continue
 
+            status = g.get("status", {}).get("codedGameState")
+
+            if status != "F":
+                continue
+
             games.append({
                 "gamePk": g["gamePk"],
                 "date": game_date,
@@ -50,56 +55,67 @@ def get_games():
                 "away": TEAM_MAP.get(g["teams"]["away"]["team"]["id"], "UNK")
             })
 
-    print(f"FOUND {len(games)} GAMES")
+    print(f"FOUND {len(games)} COMPLETED GAMES")
     return games
 
 
 # -------------------------
-# BUILD FILE (NO FAIL)
+# BUILD EVENTS (REAL DATA)
 # -------------------------
-def build_file(g):
+def build_events(gamePk):
 
-    fname = f"{g['date']}_{g['away']}_{g['home']}.json"
-    out_file = OUT_DIR / fname
+    url = f"{BASE}/game/{gamePk}/playByPlay"
+    res = requests.get(url, headers=HEADERS)
 
-    url = f"{BASE}/game/{g['gamePk']}/feed/live"
-    data = requests.get(url, headers=HEADERS).json()
+    if res.status_code != 200:
+        return []
 
-    plays = data.get("liveData", {}).get("plays", {}).get("allPlays", [])
+    data = res.json()
+
+    plays = data.get("allPlays", [])
 
     events = []
 
-    # try plays
     for p in plays:
         try:
             inning = p["about"]["inning"]
             half = p["about"]["halfInning"]
             batter = p["matchup"]["batter"]["id"]
-            result = p["result"]["eventType"]
+            desc = p["result"]["description"]
 
             events.append([
                 "play",
                 str(inning),
                 "0" if half == "top" else "1",
                 str(batter),
-                result
+                desc
             ])
         except:
             continue
 
-    # fallback if empty
+    return events
+
+
+# -------------------------
+# MAIN
+# -------------------------
+games = get_games()
+
+built = 0
+
+for g in games:
+
+    fname = f"{g['date']}_{g['away']}_{g['home']}.json"
+    out_file = OUT_DIR / fname
+
+    print("Building", fname)
+
+    events = build_events(g["gamePk"])
+
     if not events:
-        box = data.get("liveData", {}).get("boxscore", {}).get("teams", {})
+        print("No data, skipping")
+        continue
 
-        for side in ["home", "away"]:
-            for p in box.get(side, {}).get("players", {}).values():
-                try:
-                    pid = p["person"]["id"]
-                    events.append(["play","0","0",str(pid),"appearance"])
-                except:
-                    continue
-
-    # 🔥 FORCE WRITE (NO CONDITIONS)
     game_json = {
         "game_id": f"{g['home']}{g['date'].replace('-','')}0",
         "date": g["date"],
@@ -114,15 +130,8 @@ def build_file(g):
     with open(out_file, "w") as f:
         json.dump(game_json, f, indent=2)
 
-
-# -------------------------
-# MAIN
-# -------------------------
-games = get_games()
-
-for g in games:
-    print("Writing", g["date"], g["away"], g["home"])
-    build_file(g)
+    built += 1
     time.sleep(0.2)
 
-print("DONE — FILES CREATED")
+
+print(f"DONE — BUILT {built} FILES")
