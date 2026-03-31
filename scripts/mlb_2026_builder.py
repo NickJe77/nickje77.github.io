@@ -1,8 +1,8 @@
 import requests
 import zipfile
 import io
-import os
 from pathlib import Path
+import json
 
 SEASON = 2026
 
@@ -14,13 +14,25 @@ RETRO_URL = f"https://www.retrosheet.org/events/{SEASON}eve.zip"
 print(f"DOWNLOADING RETROSHEET {SEASON}...")
 
 r = requests.get(RETRO_URL)
-z = zipfile.ZipFile(io.BytesIO(r.content))
+
+# -----------------------------------------
+# ✅ CHECK IF FILE IS VALID ZIP
+# -----------------------------------------
+if r.status_code != 200 or b"<html" in r.content[:500]:
+    print(f"❌ Retrosheet {SEASON} not available yet")
+    print("➡️ This is normal — they update later")
+    exit(0)
+
+try:
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+except zipfile.BadZipFile:
+    print("❌ Invalid zip returned (Retrosheet not ready)")
+    exit(0)
 
 # -----------------------------------------
 # HELPERS
 # -----------------------------------------
 def parse_event(parts):
-    # play,inning,half,player,count,pitches,result
     return [
         "play",
         parts[1],
@@ -78,8 +90,7 @@ for filename in z.namelist():
                 games[current_game]["home_team"] = val
 
         elif parts[0] == "play":
-            event = parse_event(parts)
-            games[current_game]["events"].append(event)
+            games[current_game]["events"].append(parse_event(parts))
 
 # -----------------------------------------
 # SAVE FILES
@@ -90,7 +101,6 @@ for game_id, game in games.items():
     out_file = OUTPUT_DIR / f"{game_id}.json"
 
     with open(out_file, "w") as f:
-        import json
         json.dump(game, f)
 
 print("DONE ✅")
