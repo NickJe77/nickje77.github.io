@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import time
 
-print("MLB 2026 REBUILD (FIXED SCHEDULE)")
+print("MLB 2026 REBUILD (FINAL - WORKING)")
 
 BASE = "https://statsapi.mlb.com/api/v1"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -27,7 +27,7 @@ TEAM_MAP = {
 
 
 # -------------------------
-# FIXED SCHEDULE
+# GET GAMES (FIXED)
 # -------------------------
 def get_games():
 
@@ -46,10 +46,24 @@ def get_games():
     for d in data.get("dates", []):
         for g in d.get("games", []):
 
-            # filter by date manually
             game_date = g["gameDate"][:10]
 
+            # skip pre-opening day
             if game_date < START_DATE:
+                continue
+
+            # ONLY regular + playoffs
+            if g.get("gameType") not in ["R", "P"]:
+                continue
+
+            # 🔥 ONLY completed / live games
+            status = g.get("status", {}).get("codedGameState")
+
+            if status not in ["F", "O", "I"]:
+                continue
+
+            # safety: skip future games
+            if game_date > END_DATE:
                 continue
 
             games.append({
@@ -59,7 +73,7 @@ def get_games():
                 "away": TEAM_MAP.get(g["teams"]["away"]["team"]["id"], "UNK")
             })
 
-    print(f"FOUND {len(games)} GAMES")
+    print(f"FOUND {len(games)} PLAYED GAMES")
     return games
 
 
@@ -67,10 +81,19 @@ def get_games():
 # BUILD EVENTS
 # -------------------------
 def build_events(gamePk):
+
     url = f"{BASE}/game/{gamePk}/feed/live"
-    data = requests.get(url, headers=HEADERS).json()
+    res = requests.get(url, headers=HEADERS)
+
+    if res.status_code != 200:
+        return []
+
+    data = res.json()
 
     plays = data.get("liveData", {}).get("plays", {}).get("allPlays", [])
+
+    if not plays:
+        return []
 
     events = []
 
@@ -101,20 +124,28 @@ def build_events(gamePk):
 games = get_games()
 
 if not games:
-    print("NO GAMES FOUND — THIS WAS THE PROBLEM")
+    print("NO GAMES FOUND")
     exit()
+
+built = 0
 
 for g in games:
 
     fname = f"{g['date']}_{g['away']}_{g['home']}.json"
     out_file = OUT_DIR / fname
 
+    # DO NOT overwrite
     if out_file.exists():
         continue
 
     print("Building", fname)
 
     events = build_events(g["gamePk"])
+
+    # skip empty (important)
+    if not events:
+        print("No events, skipping")
+        continue
 
     game_json = {
         "game_id": f"{g['home']}{g['date'].replace('-','')}0",
@@ -130,6 +161,8 @@ for g in games:
     with open(out_file, "w") as f:
         json.dump(game_json, f, indent=2)
 
+    built += 1
     time.sleep(0.25)
 
-print("DONE")
+
+print(f"DONE — BUILT {built} FILES")
