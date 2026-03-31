@@ -58,10 +58,9 @@ def get_games():
     return games
 
 # -----------------------------
-# BUILD BATTING (MATCH YOUR TABLE)
+# BUILD BATTING
 # -----------------------------
 def build_batting(players):
-
     rows = []
 
     for p in players.values():
@@ -85,7 +84,6 @@ def build_batting(players):
 # BUILD PITCHING
 # -----------------------------
 def build_pitching(players):
-
     rows = []
 
     for p in players.values():
@@ -109,7 +107,6 @@ def build_pitching(players):
 # BUILD GAME FILE
 # -----------------------------
 def build_game(g):
-
     url = f"{BASE}/game/{g['gamePk']}/boxscore"
     data = requests.get(url, headers=HEADERS).json()
 
@@ -139,7 +136,6 @@ def build_game(g):
 print("FETCHING GAMES...")
 
 games = get_games()
-
 print(f"FOUND {len(games)} GAMES")
 
 for g in games:
@@ -156,4 +152,4 @@ for g in games:
     except Exception as e:
         print("ERROR:", g["gamePk"], e)
 
-print("DONE")ml
+print("DONE")
