@@ -15,6 +15,17 @@ START_DATE = "2026-03-26"
 END_DATE = datetime.utcnow().strftime("%Y-%m-%d")
 
 # -----------------------------------------
+# SAFE TEAM CODE GETTER
+# -----------------------------------------
+def get_team_code(team):
+    return (
+        team.get("abbreviation")
+        or team.get("teamCode")
+        or team.get("fileCode")
+        or team.get("name", "")[:3].upper()
+    )
+
+# -----------------------------------------
 # GET SCHEDULE
 # -----------------------------------------
 def get_games():
@@ -25,21 +36,25 @@ def get_games():
 
     for d in data.get("dates", []):
         for g in d.get("games", []):
+
             if g.get("gameType") not in ["R", "P"]:
                 continue
+
+            home_team = g["teams"]["home"]["team"]
+            away_team = g["teams"]["away"]["team"]
 
             games.append({
                 "gamePk": g["gamePk"],
                 "date": g["gameDate"][:10],
-                "home": g["teams"]["home"]["team"]["abbreviation"],
-                "away": g["teams"]["away"]["team"]["abbreviation"]
+                "home": get_team_code(home_team),
+                "away": get_team_code(away_team)
             })
 
     return games
 
 
 # -----------------------------------------
-# GET PLAY-BY-PLAY
+# BUILD GAME
 # -----------------------------------------
 def build_game(game):
     url = f"{BASE}/game/{game['gamePk']}/playByPlay"
@@ -56,10 +71,8 @@ def build_game(game):
         half = "0" if about.get("halfInning") == "top" else "1"
 
         batter = matchup.get("batter", {}).get("id", "unknown")
-
         desc = result.get("event", "")
 
-        # convert to your format
         events.append([
             "play",
             inning,
