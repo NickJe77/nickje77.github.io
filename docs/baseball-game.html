@@ -2,33 +2,22 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Baseball Game | The Sporting Almanac</title>
+<title>Baseball Game</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
-.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:#fff;border-bottom:1px solid #ddd;font-weight:700;}
-.navbar a{text-decoration:none;color:#0056d6;}
+body{font-family:Inter,system-ui;margin:0;background:#f4f6f8;}
 .page{max-width:1200px;margin:auto;padding:20px;}
 .hero{background:linear-gradient(90deg,#002D72,#C8102E);color:white;padding:30px;border-radius:20px;margin-bottom:20px;}
-.section{background:white;padding:18px;border-radius:16px;margin-bottom:20px;}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.section{background:white;padding:18px;border-radius:16px;}
 table{width:100%;border-collapse:collapse;}
 th{background:#002D72;color:white;padding:10px;}
 td{padding:8px;border-bottom:1px solid #eee;}
-tr:nth-child(even){background:#f0f6ff;}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
 </style>
 </head>
 
 <body>
-
-<div class="navbar">
-<a href="./index.html">Home</a>
-<a href="./baseball.html">Baseball</a>
-<a href="./baseball-seasons.html">Seasons</a>
-<a href="./baseball-teams.html">Teams</a>
-<a href="./baseball-players.html">Players</a>
-</div>
 
 <div class="page">
 
@@ -37,10 +26,10 @@ tr:nth-child(even){background:#f0f6ff;}
 </div>
 
 <div class="grid">
-<div class="section"><h2>Away Batting</h2><div id="awayBatting"></div></div>
-<div class="section"><h2>Home Batting</h2><div id="homeBatting"></div></div>
-<div class="section"><h2>Away Pitching</h2><div id="awayPitching"></div></div>
-<div class="section"><h2>Home Pitching</h2><div id="homePitching"></div></div>
+<div class="section"><h3>Away Batting</h3><div id="awayBatting"></div></div>
+<div class="section"><h3>Home Batting</h3><div id="homeBatting"></div></div>
+<div class="section"><h3>Away Pitching</h3><div id="awayPitching"></div></div>
+<div class="section"><h3>Home Pitching</h3><div id="homePitching"></div></div>
 </div>
 
 </div>
@@ -51,22 +40,15 @@ function param(n){
   return new URLSearchParams(window.location.search).get(n);
 }
 
-// ---------------- FIX NAME ----------------
-function cleanName(id){
-if(!id) return "";
-return id.replace(/\d+/g,"")
-.replace(/([a-z]{5})([a-z]{3})/, (_,a,b)=> b.charAt(0).toUpperCase()+b.slice(1)+" "+a.charAt(0).toUpperCase()+a.slice(1));
-}
-
 // ---------------- TABLE ----------------
 function table(data){
-if(!data.length) return "No data";
+if(!data || !data.length) return "No data";
 
 let keys = Object.keys(data[0]);
 
-let html = "<table><thead><tr>";
+let html = "<table><tr>";
 keys.forEach(k=> html += `<th>${k}</th>`);
-html += "</tr></thead><tbody>";
+html += "</tr>";
 
 data.forEach(r=>{
 html += "<tr>";
@@ -74,11 +56,11 @@ keys.forEach(k=> html += `<td>${r[k]}</td>`);
 html += "</tr>";
 });
 
-html += "</tbody></table>";
+html += "</table>";
 return html;
 }
 
-// ---------------- BUILD 2026 STATS ----------------
+// ---------------- BUILD 2026 ----------------
 function buildFromEvents(events, home, away){
 
 const batting = {};
@@ -91,7 +73,7 @@ const result = e[6];
 const team = e[2] === "0" ? away : home;
 
 if(!batting[batter]){
-batting[batter] = {player:cleanName(batter),team,AB:0,H:0,BB:0,SO:0};
+batting[batter] = {player:batter,team,AB:0,H:0,BB:0,SO:0};
 }
 
 if(!pitching[team]){
@@ -114,43 +96,57 @@ pitching[team].SO++;
 
 });
 
-return {batting:Object.values(batting), pitching:Object.values(pitching)};
+return {
+batting:Object.values(batting),
+pitching:Object.values(pitching)
+};
 }
 
-// ---------------- LOAD GAME ----------------
+// ---------------- LOAD ----------------
 async function loadGame(){
 
 const id = param("game");
 const season = param("season");
 
-let game = null;
-
-// try normal path
-let res = await fetch(`/data/baseball/boxscores/${season}/${id}.json`);
-if(res.ok) game = await res.json();
-
-// 🔥 FIX: try scanning 2025 filenames
-if(!game){
-const res2 = await fetch(`/data/baseball/boxscores/${season}/`);
-const text = await res2.text();
-
-// crude match
-const match = text.match(/href="([^"]+${id}[^"]+\.json)"/);
-
-if(match){
-const file = match[1];
-const r = await fetch(`/data/baseball/boxscores/${season}/${file}`);
-if(r.ok) game = await r.json();
-}
-}
-
-if(!game){
-document.getElementById("title").innerText="Game not found";
+if(!id || !season){
+document.getElementById("title").innerText="Missing params";
 return;
 }
 
+// 🔥 STEP 1: LOAD SEASON FILE
+const seasonRes = await fetch(`/data/baseball/seasons/${season}.json`);
+if(!seasonRes.ok){
+document.getElementById("title").innerText="Season file missing";
+return;
+}
+
+const seasonData = await seasonRes.json();
+const games = seasonData.games || seasonData;
+
+// 🔥 STEP 2: FIND GAME
+let meta = games.find(g => String(g.game_id) === String(id));
+
+if(!meta){
+document.getElementById("title").innerText="Game not found in season";
+return;
+}
+
+// 🔥 STEP 3: BUILD FILENAME (THIS IS THE FIX)
+let file = `${meta.date}_${meta.away_team}_${meta.home_team}.json`;
+
+// 🔥 STEP 4: LOAD GAME FILE
+const res = await fetch(`/data/baseball/boxscores/${season}/${file}`);
+
+if(!res.ok){
+document.getElementById("title").innerText="Boxscore not found";
+return;
+}
+
+const game = await res.json();
+
+// HEADER
 document.getElementById("title").innerText =
-`${game.away_team} @ ${game.home_team}`;
+`${meta.away_team} @ ${meta.home_team}`;
 
 // ---------------- OLD FORMAT ----------------
 if(game.batters_away){
@@ -166,19 +162,19 @@ return;
 // ---------------- NEW FORMAT ----------------
 if(game.events){
 
-const stats = buildFromEvents(game.events, game.home_team, game.away_team);
+const stats = buildFromEvents(game.events, meta.home_team, meta.away_team);
 
 document.getElementById("awayBatting").innerHTML =
-table(stats.batting.filter(p=>p.team===game.away_team));
+table(stats.batting.filter(p=>p.team===meta.away_team));
 
 document.getElementById("homeBatting").innerHTML =
-table(stats.batting.filter(p=>p.team===game.home_team));
+table(stats.batting.filter(p=>p.team===meta.home_team));
 
 document.getElementById("awayPitching").innerHTML =
-table(stats.pitching.filter(p=>p.team===game.away_team));
+table(stats.pitching.filter(p=>p.team===meta.away_team));
 
 document.getElementById("homePitching").innerHTML =
-table(stats.pitching.filter(p=>p.team===game.home_team));
+table(stats.pitching.filter(p=>p.team===meta.home_team));
 
 }
 
