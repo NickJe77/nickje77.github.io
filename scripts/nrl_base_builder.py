@@ -2,9 +2,8 @@ import requests
 from bs4 import BeautifulSoup
 import json
 from pathlib import Path
-from datetime import datetime
 
-print("NRL BASE BUILDER")
+print("NRL BASE BUILDER (SAFE + MERGE)")
 
 SEASON = 2026
 URL = "https://www.nrl.com/draw/"
@@ -17,30 +16,47 @@ HEADERS = {
 }
 
 
+# -------------------------------------------------
+# LOAD EXISTING DATA (CRITICAL)
+# -------------------------------------------------
+def load_existing():
+    if OUTPUT.exists():
+        try:
+            return json.loads(OUTPUT.read_text())
+        except:
+            return []
+    return []
+
+
+# -------------------------------------------------
+# FETCH PAGE
+# -------------------------------------------------
 def fetch():
     r = requests.get(URL, headers=HEADERS)
     return r.text
 
 
+# -------------------------------------------------
+# PARSE MATCHES
+# -------------------------------------------------
 def parse(html):
 
     soup = BeautifulSoup(html, "html.parser")
 
     games = []
 
-    matches = soup.select("a[href*='/draw/']")
+    links = soup.select("a[href*='/draw/']")
 
-    for m in matches:
+    for a in links:
 
-        text = m.get_text(" ", strip=True)
+        text = a.get_text(" ", strip=True)
 
-        if "Round" not in text:
+        if "vs" not in text:
             continue
 
         try:
             parts = text.split()
 
-            # crude but stable parsing
             home = parts[parts.index("vs") - 1]
             away = parts[parts.index("vs") + 1]
 
@@ -56,14 +72,44 @@ def parse(html):
     return games
 
 
+# -------------------------------------------------
+# MERGE DATA (NO DUPES)
+# -------------------------------------------------
+def merge(existing, new):
+
+    seen = set()
+
+    merged = []
+
+    for g in existing + new:
+        key = f"{g.get('home_team')}_{g.get('away_team')}"
+        if key not in seen:
+            seen.add(key)
+            merged.append(g)
+
+    return merged
+
+
+# -------------------------------------------------
+# MAIN
+# -------------------------------------------------
 def main():
 
+    existing = load_existing()
+
     html = fetch()
-    games = parse(html)
+    new_games = parse(html)
 
-    OUTPUT.write_text(json.dumps(games, indent=2))
+    # 🚨 SAFETY CHECK
+    if len(new_games) < 5:
+        print("❌ ABORTED: Scrape failed — keeping existing data")
+        return
 
-    print("Saved", len(games), "games")
+    merged = merge(existing, new_games)
+
+    OUTPUT.write_text(json.dumps(merged, indent=2))
+
+    print(f"Saved {len(merged)} games (merged safely)")
 
 
 if __name__ == "__main__":
