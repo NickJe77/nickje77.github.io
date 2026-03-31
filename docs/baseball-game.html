@@ -1,273 +1,155 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Baseball Game | The Sporting Almanac</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+import requests
+import json
+from pathlib import Path
+from datetime import datetime
 
-<style>
-body{font-family:system-ui,Arial;margin:0;background:#f4f6f8;}
-.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:#fff;border-bottom:1px solid #ddd;font-weight:700;}
-.navbar a{text-decoration:none;color:#0056d6;}
-.page{max-width:1200px;margin:auto;padding:20px;}
+print("MLB LIVE BOXSCORE BUILDER (FIXED)")
 
-.hero{
-  background:linear-gradient(90deg,#002D72,#C8102E);
-  color:white;
-  padding:30px;
-  border-radius:20px;
-  margin-bottom:20px;
-}
-.hero h1{margin:0;font-size:36px;}
-.scoreline{font-size:20px;font-weight:700;margin-top:8px;}
-.meta-line{margin-top:6px;}
+SEASON = 2026
+BASE = "https://statsapi.mlb.com/api/v1"
 
-.section{
-  background:white;
-  padding:18px;
-  border-radius:16px;
-  margin-bottom:20px;
+HEADERS = {"User-Agent": "Mozilla/5.0"}
+
+START_DATE = "2026-03-26"
+END_DATE = datetime.utcnow().strftime("%Y-%m-%d")
+
+OUTPUT_DIR = Path(f"docs/data/baseball/boxscores/{SEASON}")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+TEAM_MAP = {
+    108:"LAA",109:"ARI",110:"BAL",111:"BOS",112:"CHN",113:"CIN",
+    114:"CLE",115:"COL",116:"DET",117:"HOU",118:"KCA",119:"LAN",
+    120:"WAS",121:"NYN",133:"OAK",134:"PIT",135:"SDN",136:"SEA",
+    137:"SFN",138:"SLN",139:"TBA",140:"TEX",141:"TOR",142:"MIN",
+    143:"PHI",144:"ATL",145:"CHA",146:"MIA",147:"NYA",158:"MIL"
 }
 
-.section h2{margin:0 0 12px 0;}
+def team_code(team):
+    return TEAM_MAP.get(team["id"], team.get("abbreviation","UNK"))
 
-table{
-  width:100%;
-  border-collapse:collapse;
-}
+# -----------------------------
+# GET GAMES
+# -----------------------------
+def get_games():
+    url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}&gameType=R,P"
+    data = requests.get(url, headers=HEADERS).json()
 
-th{
-  background:#002D72;
-  color:white;
-  padding:10px;
-  text-align:left;
-}
+    games=[]
+    for d in data.get("dates",[]):
+        for g in d.get("games",[]):
+            home=g["teams"]["home"]["team"]
+            away=g["teams"]["away"]["team"]
 
-td{
-  padding:8px;
-  border-bottom:1px solid #eee;
-}
+            games.append({
+                "gamePk":g["gamePk"],
+                "date":g["gameDate"][:10],
+                "home":team_code(home),
+                "away":team_code(away)
+            })
 
-tr:nth-child(even){
-  background:#f0f6ff;
-}
+    print("FOUND", len(games), "GAMES")
+    return games
 
-.grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:20px;
-}
+# -----------------------------
+# BUILD BATTING
+# -----------------------------
+def build_batting(players):
+    rows=[]
+    for p in players.values():
+        stats=p.get("stats",{}).get("batting",{})
+        if not stats:
+            continue
 
-@media(max-width:900px){
-  .grid{grid-template-columns:1fr;}
-}
-</style>
-</head>
+        rows.append({
+            "player_id":str(p["person"]["id"]),
+            "AB":stats.get("atBats",0),
+            "R":stats.get("runs",0),
+            "H":stats.get("hits",0),
+            "RBI":stats.get("rbi",0),
+            "BB":stats.get("baseOnBalls",0),
+            "SO":stats.get("strikeOuts",0)
+        })
+    return rows
 
-<body>
+# -----------------------------
+# BUILD PITCHING
+# -----------------------------
+def build_pitching(players):
+    rows=[]
+    for p in players.values():
+        stats=p.get("stats",{}).get("pitching",{})
+        if not stats:
+            continue
 
-<div class="navbar">
-<a href="./index.html">Home</a>
-<a href="./baseball.html">Baseball</a>
-<a href="./baseball-seasons.html">Seasons</a>
-<a href="./baseball-teams.html">Teams</a>
-<a href="./baseball-players.html">Players</a>
-</div>
+        rows.append({
+            "player_id":str(p["person"]["id"]),
+            "IP":stats.get("inningsPitched","0"),
+            "H":stats.get("hits",0),
+            "R":stats.get("runs",0),
+            "ER":stats.get("earnedRuns",0),
+            "BB":stats.get("baseOnBalls",0),
+            "SO":stats.get("strikeOuts",0)
+        })
+    return rows
 
-<div class="page">
+# -----------------------------
+# BUILD GAME (FIXED SOURCE)
+# -----------------------------
+def build_game(g):
 
-<div class="hero">
-<h1 id="title">Loading...</h1>
-<div id="scoreline" class="scoreline"></div>
-<div id="subtitle"></div>
-<div id="venueLine" class="meta-line"></div>
-<div id="crowdLine" class="meta-line"></div>
-</div>
+    url=f"{BASE}/game/{g['gamePk']}/feed/live"
+    data=requests.get(url,headers=HEADERS).json()
 
-<div class="section">
-<h2>Game Details</h2>
-<div id="meta"></div>
-</div>
+    box=data.get("liveData",{}).get("boxscore",{}).get("teams",{})
 
-<div class="grid">
-<div class="section"><h2 id="awayBatTitle"></h2><div id="awayBatting"></div></div>
-<div class="section"><h2 id="homeBatTitle"></h2><div id="homeBatting"></div></div>
-<div class="section"><h2 id="awayPitchTitle"></h2><div id="awayPitching"></div></div>
-<div class="section"><h2 id="homePitchTitle"></h2><div id="homePitching"></div></div>
-</div>
+    if not box:
+        print("No boxscore yet:", g["gamePk"])
+        return None
 
-</div>
+    home=box.get("home",{})
+    away=box.get("away",{})
 
-<script>
+    game_id=f"{g['home']}{g['date'].replace('-','')}0"
 
-let PLAYERS={}, TEAMS={}, PARKS={}
+    return {
+        "game_id":game_id,
+        "date":g["date"],
+        "season":SEASON,
+        "home_code":g["home"],
+        "away_code":g["away"],
+        "home_team":g["home"],
+        "away_team":g["away"],
 
-function param(n){return new URLSearchParams(window.location.search).get(n)}
-function playerName(id){return PLAYERS[id]||id}
-function teamName(code){return TEAMS[code]||code}
-function parkName(code){return PARKS[code]||code}
-
-// -----------------------------
-// LOAD LOOKUPS
-// -----------------------------
-async function loadLookups(){
-
-  try{
-    const p=await fetch("/data/baseball/players.json")
-    if(p.ok){
-      const d=await p.json()
-      d.forEach(pl=>PLAYERS[pl.player_id]=pl.name)
+        "batters_home":build_batting(home.get("players",{})),
+        "batters_away":build_batting(away.get("players",{})),
+        "pitchers_home":build_pitching(home.get("players",{})),
+        "pitchers_away":build_pitching(away.get("players",{}))
     }
-  }catch{}
 
-  try{
-    const t=await fetch("/data/baseball/teams.json")
-    if(t.ok){
-      const d=await t.json()
-      d.forEach(team=>{
-        team.codes.forEach(c=>TEAMS[c]=team.name)
-      })
-    }
-  }catch{}
+# -----------------------------
+# MAIN
+# -----------------------------
+print("STARTING BUILD...")
 
-  try{
-    const b=await fetch("/data/baseball/ballparks.csv")
-    if(b.ok){
-      const text=await b.text()
-      text.split("\n").slice(1).forEach(l=>{
-        const parts=l.split(",")
-        if(parts.length>1) PARKS[parts[0].trim()]=parts[1].trim()
-      })
-    }
-  }catch{}
-}
+games=get_games()
 
-// -----------------------------
-// LOAD GAME (FIXED)
-// -----------------------------
-async function loadGame(){
+for g in games:
+    try:
+        game_data=build_game(g)
 
-  const id = param("game")
-  const season = param("season") || id?.match(/(\d{4})/)?.[1]
+        if not game_data:
+            continue
 
-  if(!id){
-    document.getElementById("title").innerText="Game not found"
-    return
-  }
+        out=OUTPUT_DIR / f"{game_data['game_id']}.json"
 
-  let game = null
+        print("WRITING:", out)
 
-  // 1. OLD SYSTEM
-  try{
-    let res = await fetch(`/data/baseball/games/${season}/${id}.json`)
-    if(res.ok) game = await res.json()
-  }catch{}
+        with open(out,"w") as f:
+            json.dump(game_data,f,indent=2)
 
-  // 2. NEW SYSTEM
-  if(!game){
-    try{
-      let res = await fetch(`/data/baseball/boxscores/${season}/${id}.json`)
-      if(res.ok) game = await res.json()
-    }catch{}
-  }
+        print("Saved:", game_data["game_id"])
 
-  // 3. 🔥 FIX gamePk (YOUR CURRENT ISSUE)
-  if(!game && /^\d+$/.test(id)){
+    except Exception as e:
+        print("ERROR:", g["gamePk"], e)
 
-    try{
-      const schedule = await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&gamePk=${id}`)
-      const data = await schedule.json()
-
-      const g = data.dates?.[0]?.games?.[0]
-
-      if(g){
-        const date = g.gameDate.slice(0,10)
-
-        const yyyy = date.slice(0,4)
-        const mm = date.slice(5,7)
-        const dd = date.slice(8,10)
-
-        const home = g.teams.home.team.abbreviation
-
-        const newId = `${home}${yyyy}${mm}${dd}0`
-
-        let res = await fetch(`/data/baseball/boxscores/${season}/${newId}.json`)
-        if(res.ok) game = await res.json()
-      }
-
-    }catch(e){
-      console.log("gamePk conversion failed", e)
-    }
-  }
-
-  if(!game){
-    document.getElementById("title").innerText="Game not found"
-    return
-  }
-
-  render(game)
-}
-
-// -----------------------------
-// RENDER
-// -----------------------------
-function render(game){
-
-  const home = teamName(game.home_code)
-  const away = teamName(game.away_code)
-
-  document.getElementById("title").innerText = `${away} @ ${home}`
-
-  document.getElementById("meta").innerHTML =
-    `<strong>Date:</strong> ${game.date}`
-
-  document.getElementById("awayBatTitle").innerText = `${away} Batting`
-  document.getElementById("homeBatTitle").innerText = `${home} Batting`
-  document.getElementById("awayPitchTitle").innerText = `${away} Pitching`
-  document.getElementById("homePitchTitle").innerText = `${home} Pitching`
-
-  renderTable("awayBatting", game.batters_away)
-  renderTable("homeBatting", game.batters_home)
-  renderTable("awayPitching", game.pitchers_away)
-  renderTable("homePitching", game.pitchers_home)
-}
-
-// -----------------------------
-// TABLE
-// -----------------------------
-function renderTable(id,data){
-
-  if(!data||data.length===0){
-    document.getElementById(id).innerHTML="No data available"
-    return
-  }
-
-  const keys = Object.keys(data[0]).filter(k=>k!=="player_id")
-
-  let html="<table><thead><tr><th>Player</th>"
-  keys.forEach(k=>html+=`<th>${k}</th>`)
-  html+="</tr></thead><tbody>"
-
-  data.forEach(p=>{
-    html+=`<tr>
-    <td>${playerName(p.player_id)}</td>`
-    keys.forEach(k=>html+=`<td>${p[k]}</td>`)
-    html+="</tr>"
-  })
-
-  html+="</tbody></table>"
-
-  document.getElementById(id).innerHTML=html
-}
-
-// -----------------------------
-async function init(){
-  await loadLookups()
-  await loadGame()
-}
-init()
-
-</script>
-
-</body>
-</html>
+print("DONE")
