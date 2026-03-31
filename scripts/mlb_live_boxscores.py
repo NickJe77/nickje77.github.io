@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-print("MLB LIVE BOXSCORE BUILDER (FIXED)")
+print("MLB LIVE BOXSCORE BUILDER (SAFE)")
 
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1"
@@ -93,7 +93,7 @@ def build_pitching(players):
     return rows
 
 # -----------------------------
-# BUILD GAME (FIXED SOURCE)
+# BUILD GAME (SAFE)
 # -----------------------------
 def build_game(g):
 
@@ -102,12 +102,12 @@ def build_game(g):
 
     box=data.get("liveData",{}).get("boxscore",{}).get("teams",{})
 
-    if not box:
-        print("No boxscore yet:", g["gamePk"])
-        return None
+    home_players={}
+    away_players={}
 
-    home=box.get("home",{})
-    away=box.get("away",{})
+    if box:
+        home_players=box.get("home",{}).get("players",{})
+        away_players=box.get("away",{}).get("players",{})
 
     game_id=f"{g['home']}{g['date'].replace('-','')}0"
 
@@ -120,10 +120,11 @@ def build_game(g):
         "home_team":g["home"],
         "away_team":g["away"],
 
-        "batters_home":build_batting(home.get("players",{})),
-        "batters_away":build_batting(away.get("players",{})),
-        "pitchers_home":build_pitching(home.get("players",{})),
-        "pitchers_away":build_pitching(away.get("players",{}))
+        # ALWAYS WRITE ARRAYS (even if empty)
+        "batters_home":build_batting(home_players),
+        "batters_away":build_batting(away_players),
+        "pitchers_home":build_pitching(home_players),
+        "pitchers_away":build_pitching(away_players)
     }
 
 # -----------------------------
@@ -136,9 +137,6 @@ games=get_games()
 for g in games:
     try:
         game_data=build_game(g)
-
-        if not game_data:
-            continue
 
         out=OUTPUT_DIR / f"{game_data['game_id']}.json"
 
