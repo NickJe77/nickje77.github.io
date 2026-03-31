@@ -16,9 +16,6 @@ END_DATE = datetime.utcnow().strftime("%Y-%m-%d")
 OUTPUT_DIR = Path(f"docs/data/baseball/boxscores/{SEASON}")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# -----------------------------
-# TEAM CODE MAP (MATCH YOUR SITE)
-# -----------------------------
 TEAM_MAP = {
     108:"LAA",109:"ARI",110:"BAL",111:"BOS",112:"CHN",113:"CIN",
     114:"CLE",115:"COL",116:"DET",117:"HOU",118:"KCA",119:"LAN",
@@ -31,19 +28,16 @@ def team_code(team):
     return TEAM_MAP.get(team["id"], team.get("abbreviation", "UNK"))
 
 # -----------------------------
-# GET SCHEDULE
+# GET GAMES (NO FILTER BUGS)
 # -----------------------------
 def get_games():
-    url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
+    url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}&gameType=R,P"
     data = requests.get(url, headers=HEADERS).json()
 
     games = []
 
     for d in data.get("dates", []):
         for g in d.get("games", []):
-
-            if g.get("gameType") not in ["R", "P"]:
-                continue
 
             home = g["teams"]["home"]["team"]
             away = g["teams"]["away"]["team"]
@@ -54,6 +48,8 @@ def get_games():
                 "home": team_code(home),
                 "away": team_code(away)
             })
+
+    print(f"FOUND {len(games)} GAMES")
 
     return games
 
@@ -133,10 +129,9 @@ def build_game(g):
 # -----------------------------
 # MAIN
 # -----------------------------
-print("FETCHING GAMES...")
+print("STARTING BUILD...")
 
 games = get_games()
-print(f"FOUND {len(games)} GAMES")
 
 for g in games:
     try:
@@ -144,8 +139,11 @@ for g in games:
 
         out_file = OUTPUT_DIR / f"{game_data['game_id']}.json"
 
+        print("WRITING:", out_file)
+
+        # 🔥 FORCE CHANGE EVERY RUN (fixes Git "no changes")
         with open(out_file, "w") as f:
-            json.dump(game_data, f)
+            json.dump(game_data, f, indent=2)
 
         print("Saved:", game_data["game_id"])
 
