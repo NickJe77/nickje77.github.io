@@ -1,102 +1,52 @@
-import requests
 import json
 from pathlib import Path
-from datetime import datetime
-import time
 
-print("MLB 2026 REBUILDER (SAFE)")
+print("BUILD PLAYER MAP FROM EXISTING DATA (NO API, NO CHANGES)")
 
-SEASON = 2026
-BASE = "https://statsapi.mlb.com/api/v1"
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+BOX_DIR = Path("docs/data/baseball/boxscores/2026")
+OUT = Path("docs/data/baseball/players.json")
 
-START_DATE = "2026-03-26"
-END_DATE = datetime.utcnow().strftime("%Y-%m-%d")
+players = {}
 
-BOX_DIR = Path(f"docs/data/baseball/boxscores/{SEASON}")
-BOX_DIR.mkdir(parents=True, exist_ok=True)
+files = list(BOX_DIR.glob("*.json"))
 
-
-# -------------------------
-# GET SCHEDULE
-# -------------------------
-def get_schedule():
-    url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
-
-    res = requests.get(url, headers=HEADERS)
-    if res.status_code != 200:
-        print("Schedule failed")
-        return []
-
-    data = res.json()
-
-    games = []
-
-    for d in data.get("dates", []):
-        for g in d.get("games", []):
-
-            # ONLY regular + playoffs
-            if g.get("gameType") not in ["R", "P"]:
-                continue
-
-            games.append({
-                "id": str(g["gamePk"]),
-                "date": g["gameDate"]
-            })
-
-    print(f"Found {len(games)} games")
-    return games
-
-
-# -------------------------
-# GET BOXSCORE
-# -------------------------
-def get_boxscore(game_id):
-    url = f"{BASE}/game/{game_id}/boxscore"
-
-    res = requests.get(url, headers=HEADERS)
-    if res.status_code != 200:
-        return None
-
-    return res.json()
-
-
-# -------------------------
-# MAIN
-# -------------------------
-games = get_schedule()
-
-if not games:
-    print("NO GAMES FOUND — STOPPING")
+if not files:
+    print("NO FILES FOUND — STOP")
     exit()
 
-added = 0
-skipped = 0
+print(f"Scanning {len(files)} games")
 
-for g in games:
-    game_id = g["id"]
-    out_file = BOX_DIR / f"{game_id}.json"
+for file in files:
+    try:
+        with open(file) as f:
+            data = json.load(f)
 
-    # DO NOT overwrite existing
-    if out_file.exists():
-        skipped += 1
+        # MLB boxscore structure
+        teams = data.get("teams", {})
+
+        for side in ["home", "away"]:
+            team = teams.get(side, {})
+
+            for p in team.get("players", {}).values():
+                try:
+                    pid = str(p["person"]["id"])
+                    name = p["person"]["fullName"]
+
+                    players[pid] = name
+                except:
+                    continue
+
+    except:
         continue
 
-    print(f"Fetching {game_id}")
 
-    data = get_boxscore(game_id)
+if not players:
+    print("NO PLAYERS FOUND — STOP")
+    exit()
 
-    if not data:
-        print(f"Failed {game_id}")
-        continue
+out = [{"player_id": k, "name": v} for k, v in players.items()]
 
-    with open(out_file, "w") as f:
-        json.dump(data, f)
+with open(OUT, "w") as f:
+    json.dump(out, f, indent=2)
 
-    added += 1
-    time.sleep(0.25)
-
-
-print(f"\nDONE")
-print(f"Added: {added}")
-print(f"Skipped (already existed): {skipped}")
+print(f"Saved {len(out)} players")
