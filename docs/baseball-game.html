@@ -7,7 +7,7 @@
 
 <style>
 body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
-.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:#fff;border-bottom:1px solid #ddd;font-weight:700;}
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:#fff;border-bottom:1px solid #ddd;font-weight:700;flex-wrap:wrap;}
 .navbar a{text-decoration:none;color:#0056d6;}
 .page{max-width:1200px;margin:auto;padding:20px;}
 .hero{background:linear-gradient(90deg,#002D72,#C8102E);color:white;padding:30px;border-radius:20px;margin-bottom:20px;}
@@ -23,6 +23,7 @@ td{padding:8px;border-bottom:1px solid #eee;}
 tr:nth-child(even){background:#f0f6ff;}
 a{color:#0056d6;text-decoration:none;font-weight:700;}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.note{padding:12px 14px;background:#f7f9fc;border:1px solid #dbe6f5;border-radius:12px;}
 @media(max-width:900px){.grid{grid-template-columns:1fr;}}
 </style>
 </head>
@@ -30,155 +31,327 @@ a{color:#0056d6;text-decoration:none;font-weight:700;}
 <body>
 
 <div class="navbar">
-<a href="./index.html">Home</a>
-<a href="./baseball.html">Baseball</a>
-<a href="./baseball-seasons.html">Seasons</a>
-<a href="./baseball-teams.html">Teams</a>
-<a href="./baseball-players.html">Players</a>
+  <a href="./index.html">Home</a>
+  <a href="./baseball.html">Baseball</a>
+  <a href="./baseball-seasons.html">Seasons</a>
+  <a href="./baseball-teams.html">Teams</a>
+  <a href="./baseball-players.html">Players</a>
 </div>
 
 <div class="page">
 
-<div class="hero">
-<h1 id="title">Loading...</h1>
-<div id="scoreline" class="scoreline"></div>
-<div id="subtitle" class="sub"></div>
-<div id="venueLine" class="meta-line"></div>
-<div id="crowdLine" class="meta-line"></div>
-</div>
+  <div class="hero">
+    <h1 id="title">Loading...</h1>
+    <div id="scoreline" class="scoreline"></div>
+    <div id="subtitle" class="sub"></div>
+    <div id="venueLine" class="meta-line"></div>
+    <div id="crowdLine" class="meta-line"></div>
+  </div>
 
-<div class="section">
-<h2>Game Details</h2>
-<div id="meta"></div>
-</div>
+  <div class="section">
+    <h2>Game Details</h2>
+    <div id="meta"></div>
+  </div>
 
-<div class="grid">
-<div class="section"><h2>Away Batting</h2><div id="awayBatting"></div></div>
-<div class="section"><h2>Home Batting</h2><div id="homeBatting"></div></div>
-<div class="section"><h2>Away Pitching</h2><div id="awayPitching"></div></div>
-<div class="section"><h2>Home Pitching</h2><div id="homePitching"></div></div>
-</div>
+  <div class="grid">
+    <div class="section"><h2>Away Batting</h2><div id="awayBatting"></div></div>
+    <div class="section"><h2>Home Batting</h2><div id="homeBatting"></div></div>
+    <div class="section"><h2>Away Pitching</h2><div id="awayPitching"></div></div>
+    <div class="section"><h2>Home Pitching</h2><div id="homePitching"></div></div>
+  </div>
 
 </div>
 
 <script>
+let PLAYERS = {}, TEAMS = {}, PARKS = {};
 
-let PLAYERS={}, TEAMS={}, PARKS={}
+function param(n){
+  return new URLSearchParams(window.location.search).get(n);
+}
 
-function param(n){return new URLSearchParams(window.location.search).get(n)}
-function playerName(id){return PLAYERS[id]||id}
-function teamName(code){return TEAMS[code]||code}
-function parkName(code){return PARKS[code]||code}
+function playerName(id){
+  return PLAYERS[id] || id;
+}
+
+function teamName(code){
+  return TEAMS[code] || code;
+}
+
+function parkName(code){
+  return PARKS[code] || code;
+}
+
+async function fetchJsonIfExists(url){
+  try{
+    const res = await fetch(url);
+    if(!res.ok) return null;
+    return await res.json();
+  }catch(e){
+    return null;
+  }
+}
 
 async function loadLookups(){
+  try{
+    const p = await fetch("/data/baseball/players.json");
+    if(p.ok){
+      const d = await p.json();
+      d.forEach(pl => {
+        if(pl.player_id) PLAYERS[String(pl.player_id)] = pl.name;
+      });
+    }
+  }catch(e){}
 
-const p=await fetch("/data/baseball/players.json")
-if(p.ok){
-const d=await p.json()
-d.forEach(pl=>PLAYERS[pl.player_id]=pl.name)
+  try{
+    const t = await fetch("/data/baseball/teams.json");
+    if(t.ok){
+      const d = await t.json();
+      d.forEach(team => {
+        (team.codes || []).forEach(c => TEAMS[c] = team.name);
+      });
+    }
+  }catch(e){}
+
+  try{
+    const b = await fetch("/data/baseball/ballparks.csv");
+    if(b.ok){
+      const text = await b.text();
+      text.split("\n").slice(1).forEach(l => {
+        const parts = l.split(",");
+        if(parts.length > 1) PARKS[parts[0].trim()] = parts[1].trim();
+      });
+    }
+  }catch(e){}
 }
 
-const t=await fetch("/data/baseball/teams.json")
-if(t.ok){
-const d=await t.json()
-d.forEach(team=>{
-team.codes.forEach(c=>TEAMS[c]=team.name)
-})
+function pad(n){
+  return String(n).padStart(2, "0");
 }
 
-const b=await fetch("/data/baseball/ballparks.csv")
-if(b.ok){
-const text=await b.text()
-text.split("\n").slice(1).forEach(l=>{
-const parts=l.split(",")
-if(parts.length>1) PARKS[parts[0].trim()]=parts[1].trim()
-})
-}
+function buildAltBoxscoreFilename(id){
+  const m = id.match(/^([A-Z]{3})(\d{4})(\d{2})(\d{2})(\d)$/);
+  if(!m) return null;
+
+  const home = m[1];
+  const yyyy = m[2];
+  const mm = m[3];
+  const dd = m[4];
+
+  return `${yyyy}-${mm}-${dd}_XXX_${home}.json`;
 }
 
 async function loadGame(){
+  const id = param("game");
 
-const id=param("game")
-if(!id){
-document.getElementById("title").innerText="Game not found"
-return
+  if(!id){
+    document.getElementById("title").innerText = "Game not found";
+    return;
+  }
+
+  const seasonMatch = id.match(/(\d{4})/);
+  if(!seasonMatch){
+    document.getElementById("title").innerText = "Game not found";
+    return;
+  }
+
+  const season = seasonMatch[1];
+  let game = null;
+
+  // 1) live/new files
+  game = await fetchJsonIfExists(`/data/baseball/boxscores/${season}/${id}.json`);
+
+  // 2) older files
+  if(!game){
+    game = await fetchJsonIfExists(`/data/baseball/games/${season}/${id}.json`);
+  }
+
+  // 3) older alternate naming under boxscores, if present
+  if(!game){
+    const alt = buildAltBoxscoreFilename(id);
+    if(alt){
+      const maybe = await fetchJsonIfExists(`/data/baseball/boxscores/${season}/${alt}`);
+      if(maybe && maybe.game_id === id){
+        game = maybe;
+      }
+    }
+  }
+
+  if(!game){
+    document.getElementById("title").innerText = "Game not found";
+    return;
+  }
+
+  const seasonRes = await fetchJsonIfExists(`/data/baseball/seasons/${season}.json`);
+  let meta = null;
+
+  if(Array.isArray(seasonRes)){
+    const m = id.match(/(\d{4})(\d{2})(\d{2})/);
+    if(m){
+      const formatted = `${m[1]}-${m[2]}-${m[3]}`;
+      meta = seasonRes.find(g =>
+        g.home_code === game.home_code &&
+        g.away_code === game.away_code &&
+        g.date === formatted
+      ) || seasonRes.find(g =>
+        g.home_code === game.home_code &&
+        g.date === formatted
+      ) || null;
+    }
+  }
+
+  render(game, meta);
 }
 
-const season=id.match(/(\d{4})/)[1]
+function render(game, meta){
+  const homeFull = teamName(game.home_code);
+  const awayFull = teamName(game.away_code);
 
-const gameRes=await fetch(`/data/baseball/games/${season}/${id}.json`)
-if(!gameRes.ok){
-document.getElementById("title").innerText="Game not found"
-return
+  document.getElementById("title").innerText = `${awayFull} @ ${homeFull}`;
+
+  if(meta){
+    const awayScore = meta.away_score ?? "";
+    const homeScore = meta.home_score ?? "";
+    document.getElementById("scoreline").innerText = `${awayFull} ${awayScore} – ${homeFull} ${homeScore}`;
+    document.getElementById("subtitle").innerText = meta.date || game.date || "";
+    document.getElementById("venueLine").innerText = meta.venue ? `Venue: ${parkName(meta.venue)}` : "";
+    document.getElementById("crowdLine").innerText = meta.attendance ? `Attendance: ${Number(meta.attendance).toLocaleString()}` : "";
+    document.getElementById("meta").innerHTML = buildMetaHtml(game, meta);
+  } else {
+    document.getElementById("subtitle").innerText = game.date || "";
+    document.getElementById("venueLine").innerText = "";
+    document.getElementById("crowdLine").innerText = "";
+    document.getElementById("meta").innerHTML = buildMetaHtml(game, null);
+  }
+
+  // Preferred: real boxscore tables
+  if(Array.isArray(game.batters_away) || Array.isArray(game.batters_home) || Array.isArray(game.pitchers_away) || Array.isArray(game.pitchers_home)){
+    renderTable("awayBatting", game.batters_away || []);
+    renderTable("homeBatting", game.batters_home || []);
+    renderTable("awayPitching", game.pitchers_away || []);
+    renderTable("homePitching", game.pitchers_home || []);
+    return;
+  }
+
+  // Fallback: derive simple batting from event files
+  if(Array.isArray(game.events) && game.events.length){
+    const derived = deriveFromEvents(game.events);
+
+    renderTable("awayBatting", derived.batters_away);
+    renderTable("homeBatting", derived.batters_home);
+
+    document.getElementById("awayPitching").innerHTML =
+      `<div class="note">Pitching table not available in this file format.</div>`;
+    document.getElementById("homePitching").innerHTML =
+      `<div class="note">Pitching table not available in this file format.</div>`;
+    return;
+  }
+
+  document.getElementById("awayBatting").innerHTML = "No detailed data available.";
+  document.getElementById("homeBatting").innerHTML = "No detailed data available.";
+  document.getElementById("awayPitching").innerHTML = "No detailed data available.";
+  document.getElementById("homePitching").innerHTML = "No detailed data available.";
 }
-const game=await gameRes.json()
 
-const seasonRes=await fetch(`/data/baseball/seasons/${season}.json`)
-let meta=null
-
-if(seasonRes.ok){
-const seasonData=await seasonRes.json()
-const m=id.match(/(\d{4})(\d{2})(\d{2})/)
-if(m){
-const formatted=`${m[1]}-${m[2]}-${m[3]}`
-meta=seasonData.find(g=>
-g.home_code===game.home_code &&
-g.date===formatted
-)
-}
+function buildMetaHtml(game, meta){
+  const bits = [];
+  bits.push(`<strong>Game ID:</strong> ${game.game_id || ""}`);
+  bits.push(`<strong>Date:</strong> ${meta?.date || game.date || ""}`);
+  bits.push(`<strong>Away:</strong> ${teamName(game.away_code)}`);
+  bits.push(`<strong>Home:</strong> ${teamName(game.home_code)}`);
+  if(meta?.venue) bits.push(`<strong>Venue:</strong> ${parkName(meta.venue)}`);
+  if(meta?.attendance) bits.push(`<strong>Attendance:</strong> ${Number(meta.attendance).toLocaleString()}`);
+  return bits.join("<br>");
 }
 
-render(game,meta)
+function renderTable(id, data){
+  if(!data || data.length === 0){
+    document.getElementById(id).innerHTML = "No detailed data available.";
+    return;
+  }
+
+  const keys = Object.keys(data[0]).filter(k => k !== "player_id");
+
+  let html = "<table><thead><tr><th>Player</th>";
+  keys.forEach(k => html += `<th>${k}</th>`);
+  html += "</tr></thead><tbody>";
+
+  data.forEach(p => {
+    const pid = String(p.player_id || "");
+    html += `<tr><td><a href="./baseball-player.html?player=${encodeURIComponent(pid)}">${playerName(pid)}</a></td>`;
+    keys.forEach(k => {
+      html += `<td>${p[k] ?? ""}</td>`;
+    });
+    html += "</tr>";
+  });
+
+  html += "</tbody></table>";
+  document.getElementById(id).innerHTML = html;
 }
 
-function render(game,meta){
+function deriveFromEvents(events){
+  const awayBatters = {};
+  const homeBatters = {};
 
-const homeFull=teamName(game.home_code)
-const awayFull=teamName(game.away_code)
+  for(const ev of events){
+    if(!Array.isArray(ev) || ev.length < 7) continue;
+    if(ev[0] !== "play") continue;
 
-document.getElementById("title").innerText=`${awayFull} @ ${homeFull}`
+    const half = String(ev[2] || "");
+    const batterId = String(ev[3] || "");
+    const result = String(ev[6] || "").toUpperCase();
 
-if(meta){
-document.getElementById("scoreline").innerText=
-`${awayFull} ${meta.away_score} – ${homeFull} ${meta.home_score}`
-document.getElementById("subtitle").innerText=meta.date
-document.getElementById("venueLine").innerText=`Venue: ${parkName(meta.venue)}`
-document.getElementById("crowdLine").innerText=
-meta.attendance?`Attendance: ${meta.attendance.toLocaleString()}`:""
-}
+    if(!batterId) continue;
 
-renderTable("awayBatting",game.batters_away)
-renderTable("homeBatting",game.batters_home)
-renderTable("awayPitching",game.pitchers_away)
-renderTable("homePitching",game.pitchers_home)
-}
+    const bucket = half === "0" ? awayBatters : homeBatters;
 
-function renderTable(id,data){
-if(!data||data.length===0){
-document.getElementById(id).innerHTML="No detailed data available."
-return
-}
-const keys=Object.keys(data[0]).filter(k=>k!=="player_id")
-let html="<table><thead><tr><th>Player</th>"
-keys.forEach(k=>html+=`<th>${k}</th>`)
-html+="</tr></thead><tbody>"
-data.forEach(p=>{
-html+=`<tr>
-<td><a href="./baseball-player.html?player=${p.player_id}">${playerName(p.player_id)}</a></td>`
-keys.forEach(k=>html+=`<td>${p[k]}</td>`)
-html+="</tr>"
-})
-html+="</tbody></table>"
-document.getElementById(id).innerHTML=html
+    if(!bucket[batterId]){
+      bucket[batterId] = {
+        player_id: batterId,
+        AB: 0,
+        R: 0,
+        H: 0,
+        RBI: 0,
+        BB: 0,
+        SO: 0
+      };
+    }
+
+    const row = bucket[batterId];
+
+    const isWalk = result === "W" || result === "IW" || result.includes("/IW");
+    const isStrikeout = result === "K" || result.startsWith("K.");
+    const isSingle = result.startsWith("S") && !result.startsWith("SB");
+    const isDouble = result.startsWith("D");
+    const isTriple = result.startsWith("T");
+    const isHR = result.startsWith("HR");
+
+    if(isWalk){
+      row.BB += 1;
+    } else {
+      row.AB += 1;
+    }
+
+    if(isStrikeout) row.SO += 1;
+    if(isSingle || isDouble || isTriple || isHR) row.H += 1;
+
+    // rough RBI estimate from encoded result text
+    const rbiMatches = result.match(/-H/g);
+    if(rbiMatches) row.RBI += rbiMatches.length;
+    if(isHR && row.RBI === 0) row.RBI += 1;
+  }
+
+  return {
+    batters_away: Object.values(awayBatters),
+    batters_home: Object.values(homeBatters)
+  };
 }
 
 async function init(){
-await loadLookups()
-await loadGame()
+  await loadLookups();
+  await loadGame();
 }
 
-init()
-
+init();
 </script>
 
 </body>
