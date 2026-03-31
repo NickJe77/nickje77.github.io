@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import time
 
-print("MLB → WORKING 2025 FORMAT (RESTORE)")
+print("MLB 2026 REBUILD (FIXED SCHEDULE)")
 
 BASE = "https://statsapi.mlb.com/api/v1"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -17,9 +17,6 @@ OUT_DIR = Path(f"docs/data/baseball/boxscores/{SEASON}")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# -------------------------
-# TEAM MAP (same as before)
-# -------------------------
 TEAM_MAP = {
     108:"LAA",109:"ARI",110:"BAL",111:"BOS",112:"CHC",113:"CIN",
     114:"CLE",115:"COL",116:"DET",117:"HOU",118:"KC",119:"LAD",
@@ -30,32 +27,44 @@ TEAM_MAP = {
 
 
 # -------------------------
-# GET SCHEDULE
+# FIXED SCHEDULE
 # -------------------------
 def get_games():
-    url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
-    data = requests.get(url, headers=HEADERS).json()
+
+    url = f"{BASE}/schedule?sportId=1&season={SEASON}&gameType=R,P"
+
+    res = requests.get(url, headers=HEADERS)
+
+    if res.status_code != 200:
+        print("Schedule failed")
+        return []
+
+    data = res.json()
 
     games = []
 
     for d in data.get("dates", []):
         for g in d.get("games", []):
 
-            if g.get("gameType") not in ["R", "P"]:
+            # filter by date manually
+            game_date = g["gameDate"][:10]
+
+            if game_date < START_DATE:
                 continue
 
             games.append({
                 "gamePk": g["gamePk"],
-                "date": g["gameDate"][:10],
+                "date": game_date,
                 "home": TEAM_MAP.get(g["teams"]["home"]["team"]["id"], "UNK"),
                 "away": TEAM_MAP.get(g["teams"]["away"]["team"]["id"], "UNK")
             })
 
+    print(f"FOUND {len(games)} GAMES")
     return games
 
 
 # -------------------------
-# BUILD EVENTS (THIS IS KEY)
+# BUILD EVENTS
 # -------------------------
 def build_events(gamePk):
     url = f"{BASE}/game/{gamePk}/feed/live"
@@ -73,7 +82,6 @@ def build_events(gamePk):
             batter = p["matchup"]["batter"]["id"]
             result = p["result"]["eventType"]
 
-            # This matches YOUR structure
             events.append([
                 "play",
                 str(inning),
@@ -93,7 +101,7 @@ def build_events(gamePk):
 games = get_games()
 
 if not games:
-    print("NO GAMES FOUND")
+    print("NO GAMES FOUND — THIS WAS THE PROBLEM")
     exit()
 
 for g in games:
@@ -101,7 +109,6 @@ for g in games:
     fname = f"{g['date']}_{g['away']}_{g['home']}.json"
     out_file = OUT_DIR / fname
 
-    # DO NOT overwrite
     if out_file.exists():
         continue
 
