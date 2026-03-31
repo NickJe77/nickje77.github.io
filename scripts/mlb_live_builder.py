@@ -6,7 +6,7 @@ from datetime import datetime
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1"
 
-OUTPUT_DIR = Path(f"docs/data/baseball/games/{SEASON}")
+OUTPUT_DIR = Path(f"docs/data/baseball/boxscores/{SEASON}")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -14,89 +14,124 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 START_DATE = "2026-03-26"
 END_DATE = datetime.utcnow().strftime("%Y-%m-%d")
 
+# -----------------------------
+# TEAM CODE MAP (RETROSHEET STYLE)
+# -----------------------------
+TEAM_MAP = {
+    108:"LAA",109:"ARI",110:"BAL",111:"BOS",112:"CHN",113:"CIN",
+    114:"CLE",115:"COL",116:"DET",117:"HOU",118:"KCA",119:"LAN",
+    120:"WAS",121:"NYN",133:"OAK",134:"PIT",135:"SDN",136:"SEA",
+    137:"SFN",138:"SLN",139:"TBA",140:"TEX",141:"TOR",142:"MIN",
+    143:"PHI",144:"ATL",145:"CHA",146:"MIA",147:"NYA",158:"MIL"
+}
+
+def team_code(team):
+    return TEAM_MAP.get(team["id"], team.get("abbreviation","UNK"))
+
+# -----------------------------
+# GET SCHEDULE
+# -----------------------------
 def get_games():
     url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
     data = requests.get(url, headers=HEADERS).json()
 
-    games = []
+    games=[]
 
-    for d in data.get("dates", []):
-        for g in d.get("games", []):
+    for d in data.get("dates",[]):
+        for g in d.get("games",[]):
+
             if g.get("gameType") not in ["R","P"]:
                 continue
 
+            home=g["teams"]["home"]["team"]
+            away=g["teams"]["away"]["team"]
+
             games.append({
-                "gamePk": g["gamePk"],
-                "date": g["gameDate"][:10]
+                "gamePk":g["gamePk"],
+                "date":g["gameDate"][:10],
+                "home":team_code(home),
+                "away":team_code(away)
             })
 
     return games
 
-def extract_batting(players):
+# -----------------------------
+# BATTING (MATCH YOUR STRUCTURE)
+# -----------------------------
+def build_batting(players):
     out=[]
-    for pid,p in players.items():
-        if "stats" not in p: continue
-        b=p["stats"].get("batting",{})
-        if not b: continue
+
+    for p in players.values():
+        stats=p.get("stats",{}).get("batting",{})
+        if not stats: continue
 
         out.append({
-            "player_id": str(p["person"]["id"]),
-            "AB": b.get("atBats",0),
-            "R": b.get("runs",0),
-            "H": b.get("hits",0),
-            "RBI": b.get("rbi",0),
-            "BB": b.get("baseOnBalls",0),
-            "SO": b.get("strikeOuts",0)
+            "player_id":str(p["person"]["id"]),
+            "AB":stats.get("atBats",0),
+            "R":stats.get("runs",0),
+            "H":stats.get("hits",0),
+            "RBI":stats.get("rbi",0),
+            "BB":stats.get("baseOnBalls",0),
+            "SO":stats.get("strikeOuts",0)
         })
+
     return out
 
-def extract_pitching(players):
+# -----------------------------
+# PITCHING (MATCH YOUR STRUCTURE)
+# -----------------------------
+def build_pitching(players):
     out=[]
-    for pid,p in players.items():
-        if "stats" not in p: continue
-        pit=p["stats"].get("pitching",{})
-        if not pit: continue
+
+    for p in players.values():
+        stats=p.get("stats",{}).get("pitching",{})
+        if not stats: continue
 
         out.append({
-            "player_id": str(p["person"]["id"]),
-            "IP": pit.get("inningsPitched","0"),
-            "H": pit.get("hits",0),
-            "R": pit.get("runs",0),
-            "ER": pit.get("earnedRuns",0),
-            "BB": pit.get("baseOnBalls",0),
-            "SO": pit.get("strikeOuts",0)
+            "player_id":str(p["person"]["id"]),
+            "IP":stats.get("inningsPitched","0"),
+            "H":stats.get("hits",0),
+            "R":stats.get("runs",0),
+            "ER":stats.get("earnedRuns",0),
+            "BB":stats.get("baseOnBalls",0),
+            "SO":stats.get("strikeOuts",0)
         })
+
     return out
 
-def build_game(game):
+# -----------------------------
+# BUILD GAME
+# -----------------------------
+def build_game(g):
 
-    url=f"{BASE}/game/{game['gamePk']}/boxscore"
+    url=f"{BASE}/game/{g['gamePk']}/boxscore"
     data=requests.get(url,headers=HEADERS).json()
 
     home=data["teams"]["home"]
     away=data["teams"]["away"]
 
-    home_code=home["team"]["abbreviation"]
-    away_code=away["team"]["abbreviation"]
-
-    game_id=f"{home_code}{game['date'].replace('-','')}0"
+    game_id=f"{g['home']}{g['date'].replace('-','')}0"
 
     return {
-        "game_id": game_id,
-        "date": game["date"],
-        "season": SEASON,
-        "home_code": home_code,
-        "away_code": away_code,
-        "home_team": home_code,
-        "away_team": away_code,
+        "game_id":game_id,
+        "date":g["date"],
+        "season":SEASON,
+        "home_code":g["home"],
+        "away_code":g["away"],
+        "home_team":g["home"],
+        "away_team":g["away"],
 
-        "batters_home": extract_batting(home["players"]),
-        "batters_away": extract_batting(away["players"]),
-        "pitchers_home": extract_pitching(home["players"]),
-        "pitchers_away": extract_pitching(away["players"])
+        # 🔥 EXACT SAME KEYS AS YOUR 2025 SYSTEM
+        "batters_home":build_batting(home["players"]),
+        "batters_away":build_batting(away["players"]),
+        "pitchers_home":build_pitching(home["players"]),
+        "pitchers_away":build_pitching(away["players"])
     }
 
-print("BUILDING MLB BOXSCORES...")
+# -----------------------------
+# MAIN
+# -----------------------------
+print("BUILDING MLB BOXSCORES (2025 FORMAT)...")
 
 games=get_games()
 
@@ -114,4 +149,4 @@ for g in games:
     except Exception as e:
         print("Error",g["gamePk"],e)
 
-print("DONE")
+print("DONE ✅")
