@@ -15,7 +15,7 @@ START_DATE = "2026-03-26"
 END_DATE = datetime.utcnow().strftime("%Y-%m-%d")
 
 # -----------------------------------------
-# SAFE TEAM CODE GETTER
+# TEAM CODE SAFE
 # -----------------------------------------
 def get_team_code(team):
     return (
@@ -24,6 +24,40 @@ def get_team_code(team):
         or team.get("fileCode")
         or team.get("name", "")[:3].upper()
     )
+
+# -----------------------------------------
+# RESULT ENCODER (CRITICAL FIX)
+# -----------------------------------------
+def encode_result(play):
+    result = play.get("result", {})
+    event = result.get("event", "").lower()
+
+    # BASIC RETROSHEET STYLE
+    if "home run" in event:
+        return "HR"
+    if "strikeout" in event:
+        return "K"
+    if "walk" in event:
+        return "W"
+    if "single" in event:
+        return "S"
+    if "double" in event:
+        return "D"
+    if "triple" in event:
+        return "T"
+
+    # OUT TYPES (approximate)
+    if "ground" in event:
+        return "43"
+    if "fly" in event:
+        return "F8"
+    if "line" in event:
+        return "L8"
+    if "pop" in event:
+        return "P2"
+
+    return "O"  # generic out fallback
+
 
 # -----------------------------------------
 # GET SCHEDULE
@@ -65,13 +99,13 @@ def build_game(game):
     for play in data.get("allPlays", []):
         about = play.get("about", {})
         matchup = play.get("matchup", {})
-        result = play.get("result", {})
-
+        
         inning = str(about.get("inning", ""))
         half = "0" if about.get("halfInning") == "top" else "1"
 
         batter = matchup.get("batter", {}).get("id", "unknown")
-        desc = result.get("event", "")
+
+        encoded = encode_result(play)
 
         events.append([
             "play",
@@ -80,7 +114,7 @@ def build_game(game):
             str(batter),
             "00",
             "",
-            desc
+            encoded
         ])
 
     return {
@@ -98,7 +132,7 @@ def build_game(game):
 # -----------------------------------------
 # MAIN
 # -----------------------------------------
-print("BUILDING LIVE MLB DATA...")
+print("BUILDING LIVE MLB DATA (ENCODED)...")
 
 games = get_games()
 
