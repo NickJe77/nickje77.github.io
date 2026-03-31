@@ -1,229 +1,50 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Baseball Game</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+name: NRL Updater
 
-<style>
-body{font-family:Inter,system-ui;margin:0;background:#f4f6f8;}
-.page{max-width:1300px;margin:auto;padding:20px;}
-.hero{background:linear-gradient(90deg,#002D72,#C8102E);color:white;padding:30px;border-radius:20px;margin-bottom:20px;}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
-.section{background:white;padding:18px;border-radius:16px;}
-table{width:100%;border-collapse:collapse;}
-th{background:#002D72;color:white;padding:10px;}
-td{padding:8px;border-bottom:1px solid #eee;text-align:center;}
-td:first-child{text-align:left;}
-</style>
-</head>
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"   # every Monday
 
-<body>
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-<div class="page">
+    steps:
+      # -------------------------
+      # CHECKOUT
+      # -------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
 
-<div class="hero">
-<h1 id="title">Loading...</h1>
-<div id="scoreline"></div>
-<div id="meta"></div>
-</div>
+      # -------------------------
+      # PYTHON
+      # -------------------------
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
 
-<div class="grid">
-<div class="section"><h3>Away Batting</h3><div id="awayBat"></div></div>
-<div class="section"><h3>Home Batting</h3><div id="homeBat"></div></div>
-<div class="section"><h3>Away Pitching</h3><div id="awayPitch"></div></div>
-<div class="section"><h3>Home Pitching</h3><div id="homePitch"></div></div>
-</div>
+      # -------------------------
+      # INSTALL DEPENDENCIES
+      # -------------------------
+      - name: Install deps
+        run: |
+          pip install requests beautifulsoup4
 
-</div>
+      # -------------------------
+      # RUN SCRIPT
+      # -------------------------
+      - name: Run NRL builder
+        run: |
+          python scripts/nrl_base_builder.py
 
-<script>
-
-const TEAM_NAMES = {
-LAN:"Los Angeles Dodgers",
-CHN:"Chicago Cubs",
-TOR:"Toronto Blue Jays",
-ATH:"Athletics",
-NEW:"New York Yankees"
-};
-
-function param(n){
-return new URLSearchParams(window.location.search).get(n);
-}
-
-function table(rows){
-if(!rows.length) return "No data";
-
-let keys = Object.keys(rows[0]);
-
-let html="<table><tr>";
-keys.forEach(k=> html+=`<th>${k}</th>`);
-html+="</tr>";
-
-rows.forEach(r=>{
-html+="<tr>";
-keys.forEach(k=> html+=`<td>${r[k]}</td>`);
-html+="</tr>";
-});
-
-html+="</table>";
-return html;
-}
-
-// ---------------- LOAD PLAYERS ----------------
-async function loadPlayers(){
-const data = await fetch("/data/baseball/players.json").then(r=>r.json());
-const map={};
-
-data.forEach(p=>{
-map[p.player_id]=p.name;
-});
-
-return map;
-}
-
-// ---------------- BUILD ----------------
-function build(game, players){
-
-const batting={};
-const pitching={};
-
-let scoreHome=0;
-let scoreAway=0;
-
-game.events.forEach(e=>{
-
-const batter=e[3];
-const result=e[6];
-const half=e[2];
-
-const batTeam = half==="0" ? game.away_team : game.home_team;
-const pitTeam = half==="0" ? game.home_team : game.away_team;
-
-// batting
-if(!batting[batter]){
-batting[batter]={
-player: players[batter] || batter,
-team: batTeam,
-AB:0,H:0,BB:0,SO:0,HR:0
-};
-}
-
-// pitching (team aggregate)
-if(!pitching[pitTeam]){
-pitching[pitTeam]={
-player: TEAM_NAMES[pitTeam] || pitTeam,
-team: pitTeam,
-IP:0, BF:0, H:0, BB:0, SO:0, HR:0
-};
-}
-
-// plate appearance
-pitching[pitTeam].BF++;
-
-// hits
-if(["1B","2B","3B","HR"].includes(result)){
-batting[batter].H++;
-pitching[pitTeam].H++;
-}
-
-// walks
-if(result==="BB"){
-batting[batter].BB++;
-pitching[pitTeam].BB++;
-}
-
-// strikeouts
-if(result==="K"){
-batting[batter].SO++;
-pitching[pitTeam].SO++;
-}
-
-// HR
-if(result==="HR"){
-batting[batter].HR++;
-pitching[pitTeam].HR++;
-}
-
-// AB
-if(result!=="BB") batting[batter].AB++;
-
-// OUTS → innings pitched
-if(["K","GO","FO","LO","PO"].includes(result)){
-pitching[pitTeam].IP += 1/3;
-}
-
-// SCORE (simple — HR only for now)
-if(result==="HR"){
-if(batTeam===game.home_team) scoreHome++;
-else scoreAway++;
-}
-
-});
-
-return {
-batting:Object.values(batting),
-pitching:Object.values(pitching),
-scoreHome,
-scoreAway
-};
-}
-
-// ---------------- LOAD GAME ----------------
-async function loadGame(){
-
-const id=param("game");
-const season=param("season");
-
-// find file
-const home=id.slice(0,3);
-const date=id.slice(3,11);
-const d=`${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`;
-
-let game=null;
-
-const teams=["LAN","CHN","TOR","ATH","NEW"];
-
-for(let t of teams){
-let f1=`${d}_${t}_${home}.json`;
-let res=await fetch(`/data/baseball/boxscores/${season}/${f1}`);
-if(res.ok){game=await res.json();break;}
-}
-
-if(!game){
-document.getElementById("title").innerText="Game not found";
-return;
-}
-
-const players=await loadPlayers();
-
-const stats=build(game, players);
-
-// header
-document.getElementById("title").innerText=
-`${TEAM_NAMES[game.away_team]} @ ${TEAM_NAMES[game.home_team]}`;
-
-document.getElementById("scoreline").innerText=
-`${stats.scoreAway} - ${stats.scoreHome}`;
-
-// render
-document.getElementById("awayBat").innerHTML=
-table(stats.batting.filter(p=>p.team===game.away_team));
-
-document.getElementById("homeBat").innerHTML=
-table(stats.batting.filter(p=>p.team===game.home_team));
-
-document.getElementById("awayPitch").innerHTML=
-table(stats.pitching.filter(p=>p.team===game.away_team));
-
-document.getElementById("homePitch").innerHTML=
-table(stats.pitching.filter(p=>p.team===game.home_team));
-
-}
-
-loadGame();
-
-</script>
-
-</body>
-</html>
+      # -------------------------
+      # COMMIT
+      # -------------------------
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add docs/data/nrl
+          git commit -m "Update NRL data" || echo "No changes"
+          git push
