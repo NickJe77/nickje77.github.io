@@ -1,23 +1,15 @@
-// GOOGLE ANALYTICS LOADER
+(function(){
+  var script1 = document.createElement('script');
+  script1.async = true;
+  script1.src = "https://www.googletagmanager.com/gtag/js?id=G-N8J9ZPKDDH";
+  document.head.appendChild(script1);
 
-(function () {
-
-  const GA_ID = "G-XXXXXXXXXX"; // <-- PUT YOUR REAL ID HERE
-
-  // Load script
-  const script = document.createElement("script");
-  script.async = true;
-  script.src = `https://www.googletagmanager.com/gtag/js?id=${GA_ID}`;
-  document.head.appendChild(script);
-
-  // Setup dataLayer
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  window.gtag = gtag;
-
-  gtag('js', new Date());
-  gtag('config', GA_ID, {
-    page_path: window.location.pathname
-  });
-
+  var script2 = document.createElement('script');
+  script2.innerHTML = `
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-N8J9ZPKDDH');
+  `;
+  document.head.appendChild(script2);
 })();
