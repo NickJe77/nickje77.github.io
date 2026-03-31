@@ -108,16 +108,22 @@ const season=id.match(/(\d{4})/)[1]
 
 let game=null
 
-// 🔥 USE BOXSCORES (2026 FIX)
-const res=await fetch(`/data/baseball/boxscores/${season}/${id}.json`)
+// ✅ FIRST try ORIGINAL (keeps old pages working)
+let res=await fetch(`/data/baseball/games/${season}/${id}.json`)
 if(res.ok) game=await res.json()
+
+// ✅ THEN try new 2026 data
+if(!game){
+res=await fetch(`/data/baseball/boxscores/${season}/${id}.json`)
+if(res.ok) game=await res.json()
+}
 
 if(!game){
 document.getElementById("title").innerText="Game not found"
 return
 }
 
-// META (scores, venue etc)
+// meta
 let meta=null
 const seasonRes=await fetch(`/data/baseball/seasons/${season}.json`)
 if(seasonRes.ok){
@@ -140,10 +146,8 @@ function render(game,meta){
 const homeFull=teamName(game.home_code)
 const awayFull=teamName(game.away_code)
 
-// TITLE
 document.getElementById("title").innerText=`${awayFull} @ ${homeFull}`
 
-// SCORE
 if(meta){
 document.getElementById("scoreline").innerText=
 `${awayFull} ${meta.away_score} – ${homeFull} ${meta.home_score}`
@@ -153,18 +157,16 @@ document.getElementById("crowdLine").innerText=
 meta.attendance?`Attendance: ${meta.attendance.toLocaleString()}`:""
 }
 
-// 🔥 CLEAN META (NO GAME ID)
-document.getElementById("meta").innerHTML=`
-<strong>Date:</strong> ${meta?.date || game.date || ""}
-`
+// clean meta
+document.getElementById("meta").innerHTML=
+`<strong>Date:</strong> ${meta?.date || game.date || ""}`
 
-// 🔥 TEAM NAME HEADINGS
+// headings
 document.getElementById("awayBatTitle").innerText=`${awayFull} Batting`
 document.getElementById("homeBatTitle").innerText=`${homeFull} Batting`
 document.getElementById("awayPitchTitle").innerText=`${awayFull} Pitching`
 document.getElementById("homePitchTitle").innerText=`${homeFull} Pitching`
 
-// TABLES
 renderTable("awayBatting",game.batters_away)
 renderTable("homeBatting",game.batters_home)
 renderTable("awayPitching",game.pitchers_away)
