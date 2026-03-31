@@ -42,7 +42,7 @@ function param(n){
 
 // ---------------- TABLE ----------------
 function table(data){
-if(!data || !data.length) return "No data";
+if(!data.length) return "No data";
 
 let keys = Object.keys(data[0]);
 
@@ -60,8 +60,8 @@ html += "</table>";
 return html;
 }
 
-// ---------------- BUILD 2026 ----------------
-function buildFromEvents(events, home, away){
+// ---------------- BUILD STATS ----------------
+function buildStats(events, home, away){
 
 const batting = {};
 const pitching = {};
@@ -102,7 +102,7 @@ pitching:Object.values(pitching)
 };
 }
 
-// ---------------- LOAD ----------------
+// ---------------- LOAD GAME ----------------
 async function loadGame(){
 
 const id = param("game");
@@ -113,70 +113,66 @@ document.getElementById("title").innerText="Missing params";
 return;
 }
 
-// 🔥 STEP 1: LOAD SEASON FILE
-const seasonRes = await fetch(`/data/baseball/seasons/${season}.json`);
-if(!seasonRes.ok){
-document.getElementById("title").innerText="Season file missing";
+// 🔥 BUILD FROM GAME_ID
+const home = id.slice(0,3);
+const date = id.slice(3,11);
+
+const formattedDate = `${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`;
+
+// try BOTH possible filename orders
+const tryFiles = [
+`${formattedDate}_${home}_${home}.json`, // fallback (unlikely)
+];
+
+// we don't know away team → try both possibilities
+let game = null;
+
+// brute force: try every team combo from common codes
+const teams = ["LAN","CHN","TOR","ATH","NYA","BOS","ATL","HOU","SEA","SDN","SFN"];
+
+for(let t of teams){
+
+let file1 = `${formattedDate}_${t}_${home}.json`;
+let file2 = `${formattedDate}_${home}_${t}.json`;
+
+let res = await fetch(`/data/baseball/boxscores/${season}/${file1}`);
+if(res.ok){
+game = await res.json();
+break;
+}
+
+res = await fetch(`/data/baseball/boxscores/${season}/${file2}`);
+if(res.ok){
+game = await res.json();
+break;
+}
+
+}
+
+if(!game){
+document.getElementById("title").innerText="Game not found";
 return;
 }
 
-const seasonData = await seasonRes.json();
-const games = seasonData.games || seasonData;
-
-// 🔥 STEP 2: FIND GAME
-let meta = games.find(g => String(g.game_id) === String(id));
-
-if(!meta){
-document.getElementById("title").innerText="Game not found in season";
-return;
-}
-
-// 🔥 STEP 3: BUILD FILENAME (THIS IS THE FIX)
-let file = `${meta.date}_${meta.away_team}_${meta.home_team}.json`;
-
-// 🔥 STEP 4: LOAD GAME FILE
-const res = await fetch(`/data/baseball/boxscores/${season}/${file}`);
-
-if(!res.ok){
-document.getElementById("title").innerText="Boxscore not found";
-return;
-}
-
-const game = await res.json();
-
-// HEADER
+// header
 document.getElementById("title").innerText =
-`${meta.away_team} @ ${meta.home_team}`;
+`${game.away_team} @ ${game.home_team}`;
 
-// ---------------- OLD FORMAT ----------------
-if(game.batters_away){
+// build stats
+const stats = buildStats(game.events, game.home_team, game.away_team);
 
-document.getElementById("awayBatting").innerHTML = table(game.batters_away);
-document.getElementById("homeBatting").innerHTML = table(game.batters_home);
-document.getElementById("awayPitching").innerHTML = table(game.pitchers_away);
-document.getElementById("homePitching").innerHTML = table(game.pitchers_home);
-
-return;
-}
-
-// ---------------- NEW FORMAT ----------------
-if(game.events){
-
-const stats = buildFromEvents(game.events, meta.home_team, meta.away_team);
-
+// render
 document.getElementById("awayBatting").innerHTML =
-table(stats.batting.filter(p=>p.team===meta.away_team));
+table(stats.batting.filter(p=>p.team===game.away_team));
 
 document.getElementById("homeBatting").innerHTML =
-table(stats.batting.filter(p=>p.team===meta.home_team));
+table(stats.batting.filter(p=>p.team===game.home_team));
 
 document.getElementById("awayPitching").innerHTML =
-table(stats.pitching.filter(p=>p.team===meta.away_team));
+table(stats.pitching.filter(p=>p.team===game.away_team));
 
 document.getElementById("homePitching").innerHTML =
-table(stats.pitching.filter(p=>p.team===meta.home_team));
-
-}
+table(stats.pitching.filter(p=>p.team===game.home_team));
 
 }
 
