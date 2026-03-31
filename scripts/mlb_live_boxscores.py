@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-print("MLB LIVE BOXSCORE BUILDER (2026)")
+print("MLB LIVE BOXSCORE BUILDER (FIXED)")
 
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1"
@@ -25,105 +25,105 @@ TEAM_MAP = {
 }
 
 def team_code(team):
-    return TEAM_MAP.get(team["id"], team.get("abbreviation", "UNK"))
+    return TEAM_MAP.get(team["id"], team.get("abbreviation","UNK"))
 
 # -----------------------------
-# GET GAMES (NO FILTER BUGS)
+# GET GAMES
 # -----------------------------
 def get_games():
     url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}&gameType=R,P"
     data = requests.get(url, headers=HEADERS).json()
 
-    games = []
-
-    for d in data.get("dates", []):
-        for g in d.get("games", []):
-
-            home = g["teams"]["home"]["team"]
-            away = g["teams"]["away"]["team"]
+    games=[]
+    for d in data.get("dates",[]):
+        for g in d.get("games",[]):
+            home=g["teams"]["home"]["team"]
+            away=g["teams"]["away"]["team"]
 
             games.append({
-                "gamePk": g["gamePk"],
-                "date": g["gameDate"][:10],
-                "home": team_code(home),
-                "away": team_code(away)
+                "gamePk":g["gamePk"],
+                "date":g["gameDate"][:10],
+                "home":team_code(home),
+                "away":team_code(away)
             })
 
-    print(f"FOUND {len(games)} GAMES")
-
+    print("FOUND", len(games), "GAMES")
     return games
 
 # -----------------------------
 # BUILD BATTING
 # -----------------------------
 def build_batting(players):
-    rows = []
-
+    rows=[]
     for p in players.values():
-        stats = p.get("stats", {}).get("batting", {})
+        stats=p.get("stats",{}).get("batting",{})
         if not stats:
             continue
 
         rows.append({
-            "player_id": str(p["person"]["id"]),
-            "AB": stats.get("atBats", 0),
-            "R": stats.get("runs", 0),
-            "H": stats.get("hits", 0),
-            "RBI": stats.get("rbi", 0),
-            "BB": stats.get("baseOnBalls", 0),
-            "SO": stats.get("strikeOuts", 0)
+            "player_id":str(p["person"]["id"]),
+            "AB":stats.get("atBats",0),
+            "R":stats.get("runs",0),
+            "H":stats.get("hits",0),
+            "RBI":stats.get("rbi",0),
+            "BB":stats.get("baseOnBalls",0),
+            "SO":stats.get("strikeOuts",0)
         })
-
     return rows
 
 # -----------------------------
 # BUILD PITCHING
 # -----------------------------
 def build_pitching(players):
-    rows = []
-
+    rows=[]
     for p in players.values():
-        stats = p.get("stats", {}).get("pitching", {})
+        stats=p.get("stats",{}).get("pitching",{})
         if not stats:
             continue
 
         rows.append({
-            "player_id": str(p["person"]["id"]),
-            "IP": stats.get("inningsPitched", "0"),
-            "H": stats.get("hits", 0),
-            "R": stats.get("runs", 0),
-            "ER": stats.get("earnedRuns", 0),
-            "BB": stats.get("baseOnBalls", 0),
-            "SO": stats.get("strikeOuts", 0)
+            "player_id":str(p["person"]["id"]),
+            "IP":stats.get("inningsPitched","0"),
+            "H":stats.get("hits",0),
+            "R":stats.get("runs",0),
+            "ER":stats.get("earnedRuns",0),
+            "BB":stats.get("baseOnBalls",0),
+            "SO":stats.get("strikeOuts",0)
         })
-
     return rows
 
 # -----------------------------
-# BUILD GAME FILE
+# BUILD GAME (FIXED SOURCE)
 # -----------------------------
 def build_game(g):
-    url = f"{BASE}/game/{g['gamePk']}/boxscore"
-    data = requests.get(url, headers=HEADERS).json()
 
-    home = data["teams"]["home"]
-    away = data["teams"]["away"]
+    url=f"{BASE}/game/{g['gamePk']}/feed/live"
+    data=requests.get(url,headers=HEADERS).json()
 
-    game_id = f"{g['home']}{g['date'].replace('-','')}0"
+    box=data.get("liveData",{}).get("boxscore",{}).get("teams",{})
+
+    if not box:
+        print("No boxscore yet:", g["gamePk"])
+        return None
+
+    home=box.get("home",{})
+    away=box.get("away",{})
+
+    game_id=f"{g['home']}{g['date'].replace('-','')}0"
 
     return {
-        "game_id": game_id,
-        "date": g["date"],
-        "season": SEASON,
-        "home_code": g["home"],
-        "away_code": g["away"],
-        "home_team": g["home"],
-        "away_team": g["away"],
+        "game_id":game_id,
+        "date":g["date"],
+        "season":SEASON,
+        "home_code":g["home"],
+        "away_code":g["away"],
+        "home_team":g["home"],
+        "away_team":g["away"],
 
-        "batters_home": build_batting(home["players"]),
-        "batters_away": build_batting(away["players"]),
-        "pitchers_home": build_pitching(home["players"]),
-        "pitchers_away": build_pitching(away["players"])
+        "batters_home":build_batting(home.get("players",{})),
+        "batters_away":build_batting(away.get("players",{})),
+        "pitchers_home":build_pitching(home.get("players",{})),
+        "pitchers_away":build_pitching(away.get("players",{}))
     }
 
 # -----------------------------
@@ -131,19 +131,21 @@ def build_game(g):
 # -----------------------------
 print("STARTING BUILD...")
 
-games = get_games()
+games=get_games()
 
 for g in games:
     try:
-        game_data = build_game(g)
+        game_data=build_game(g)
 
-        out_file = OUTPUT_DIR / f"{game_data['game_id']}.json"
+        if not game_data:
+            continue
 
-        print("WRITING:", out_file)
+        out=OUTPUT_DIR / f"{game_data['game_id']}.json"
 
-        # 🔥 FORCE CHANGE EVERY RUN (fixes Git "no changes")
-        with open(out_file, "w") as f:
-            json.dump(game_data, f, indent=2)
+        print("WRITING:", out)
+
+        with open(out,"w") as f:
+            json.dump(game_data,f,indent=2)
 
         print("Saved:", game_data["game_id"])
 
