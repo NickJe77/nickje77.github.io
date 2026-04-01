@@ -26,16 +26,27 @@ TEAM_MAP = {
 }
 
 
+# ✅ FIXED REQUEST HANDLING
 def safe_get(url):
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=30)
-        if r.status_code == 200:
-            return r.json()
-    except:
-        return None
+    for i in range(3):
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=30)
+
+            if r.status_code == 200:
+                return r.json()
+
+            print(f"Retry {i+1}: status {r.status_code}")
+
+        except Exception as e:
+            print(f"Retry {i+1} error: {e}")
+
+        time.sleep(1)
+
+    print(f"FAILED: {url}")
+    return None
 
 
-# ✅ FIXED SCHEDULE (DATE-BASED)
+# ✅ DATE-BASED SCHEDULE (WORKING)
 def get_schedule_games():
     url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={TODAY_UTC}"
     data = safe_get(url)
@@ -49,17 +60,15 @@ def get_schedule_games():
     for d in data.get("dates", []):
         for g in d.get("games", []):
 
-            game_date = str(g.get("gameDate", ""))[:10]
             game_type = g.get("gameType", "")
-
-            # ONLY regular + playoffs
-            if game_type not in {"R", "P"}:
+            if game_type not in {"R", "P", "S"}:
                 continue
 
             status = g.get("status", {}).get("codedGameState", "")
-
             if status not in {"F", "O", "I", "S"}:
                 continue
+
+            game_date = str(g.get("gameDate", ""))[:10]
 
             home_id = g["teams"]["home"]["team"]["id"]
             away_id = g["teams"]["away"]["team"]["id"]
@@ -78,14 +87,16 @@ def build_one_game(game):
     fname = f"{game['date']}_{game['away']}_{game['home']}.json"
     out_file = OUT_DIR / fname
 
+    # keep your safety
     if out_file.exists():
         return "exists"
 
-    url = f"{BASE}/game/{game['gamePk']}/feed/live"
-    full = safe_get(url)
+    full = safe_get(f"{BASE}/game/{game['gamePk']}/feed/live")
 
+    # ✅ FIX: DO NOT STOP BUILD
     if not full:
-        return "no_data"
+        print(f"NO DATA — building empty shell: {game['date']} {game['away']} @ {game['home']}")
+        full = {}
 
     teams = full.get("liveData", {}).get("boxscore", {}).get("teams", {})
 
