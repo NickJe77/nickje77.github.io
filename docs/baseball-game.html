@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
   <script src="/js/analytics.js"></script>
@@ -63,6 +64,7 @@ tr:nth-child(even){
   .grid{grid-template-columns:1fr;}
 }
 </style>
+
 </head>
 
 <body>
@@ -144,7 +146,7 @@ async function loadLookups(){
 }
 
 // -----------------------------
-// LOAD GAME (FIXED)
+// LOAD GAME
 // -----------------------------
 async function loadGame(){
 
@@ -158,47 +160,16 @@ async function loadGame(){
 
   let game = null
 
-  // 1. OLD SYSTEM
   try{
     let res = await fetch(`/data/baseball/games/${season}/${id}.json`)
     if(res.ok) game = await res.json()
   }catch{}
 
-  // 2. NEW SYSTEM
   if(!game){
     try{
       let res = await fetch(`/data/baseball/boxscores/${season}/${id}.json`)
       if(res.ok) game = await res.json()
     }catch{}
-  }
-
-  // 3. 🔥 FIX gamePk (YOUR CURRENT ISSUE)
-  if(!game && /^\d+$/.test(id)){
-
-    try{
-      const schedule = await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&gamePk=${id}`)
-      const data = await schedule.json()
-
-      const g = data.dates?.[0]?.games?.[0]
-
-      if(g){
-        const date = g.gameDate.slice(0,10)
-
-        const yyyy = date.slice(0,4)
-        const mm = date.slice(5,7)
-        const dd = date.slice(8,10)
-
-        const home = g.teams.home.team.abbreviation
-
-        const newId = `${home}${yyyy}${mm}${dd}0`
-
-        let res = await fetch(`/data/baseball/boxscores/${season}/${newId}.json`)
-        if(res.ok) game = await res.json()
-      }
-
-    }catch(e){
-      console.log("gamePk conversion failed", e)
-    }
   }
 
   if(!game){
@@ -207,6 +178,38 @@ async function loadGame(){
   }
 
   render(game)
+}
+
+// -----------------------------
+// PLAY BY PLAY RENDER
+// -----------------------------
+function renderEvents(game){
+
+  const container = document.getElementById("meta")
+
+  let html = "<h3>Play By Play</h3><table><thead><tr>"
+  html += "<th>Inning</th><th>Player</th><th>Result</th></tr></thead><tbody>"
+
+  game.events.forEach(e=>{
+
+    if(!Array.isArray(e)) return
+    if(e[0] !== "play") return
+
+    const inning = e[1]
+    const half = e[2] === "0" ? "Top" : "Bottom"
+    const player = playerName(e[3])
+    const result = e[6]
+
+    html += `<tr>
+      <td>${half} ${inning}</td>
+      <td>${player}</td>
+      <td>${result}</td>
+    </tr>`
+  })
+
+  html += "</tbody></table>"
+
+  container.innerHTML += html
 }
 
 // -----------------------------
@@ -227,10 +230,14 @@ function render(game){
   document.getElementById("awayPitchTitle").innerText = `${away} Pitching`
   document.getElementById("homePitchTitle").innerText = `${home} Pitching`
 
-  renderTable("awayBatting", game.batters_away)
-  renderTable("homeBatting", game.batters_home)
-  renderTable("awayPitching", game.pitchers_away)
-  renderTable("homePitching", game.pitchers_home)
+  if(game.batters_away){
+    renderTable("awayBatting", game.batters_away)
+    renderTable("homeBatting", game.batters_home)
+    renderTable("awayPitching", game.pitchers_away)
+    renderTable("homePitching", game.pitchers_home)
+  }else{
+    renderEvents(game)
+  }
 }
 
 // -----------------------------
