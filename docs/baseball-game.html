@@ -68,9 +68,14 @@ tr:nth-child(even){background:#f0f6ff;}
 let PLAYERS={}
 
 async function loadPlayers(){
-  const r=await fetch("/data/baseball/players.json")
-  const d=await r.json()
-  d.forEach(p=>PLAYERS[p.short_id||p.player_id]=p.name)
+  try{
+    const r=await fetch("/data/baseball/players.json")
+    const d=await r.json()
+    d.forEach(p=>{
+      PLAYERS[p.short_id||p.player_id]=p.name
+      PLAYERS[p.player_id]=p.name
+    })
+  }catch{}
 }
 
 function playerName(id){return PLAYERS[id]||id}
@@ -97,7 +102,6 @@ function buildStats(events){
       pitching[player]={player_id:player,IP:0,H:0,BB:0,SO:0}
     }
 
-    // batting
     if(result==="S"||result==="D"||result==="T"||result==="HR"){
       batting[player].AB++
       batting[player].H++
@@ -113,11 +117,9 @@ function buildStats(events){
       batting[player].AB++
     }
 
-    // pitching (basic)
     if(result==="K") pitching[player].SO++
     if(result==="W") pitching[player].BB++
     if(result==="S"||result==="D"||result==="T"||result==="HR") pitching[player].H++
-
   })
 
   return {
@@ -152,13 +154,70 @@ function renderTable(id,data){
 }
 
 // -------------------------
+// LOAD GAME (FIXED)
+// -------------------------
 async function loadGame(){
 
-  const id=new URLSearchParams(location.search).get("game")
-  const season=new URLSearchParams(location.search).get("season")
+  const gameParam = new URLSearchParams(location.search).get("game")
+  const season = new URLSearchParams(location.search).get("season")
 
-  const res=await fetch(`/data/baseball/boxscores/${season}/${id}.json`)
-  const game=await res.json()
+  if(!gameParam || !season){
+    document.getElementById("title").innerText="Game not found"
+    return
+  }
+
+  let game = null
+
+  // ✅ TRY OLD FORMAT FIRST (2025)
+  try{
+    let res = await fetch(`/data/baseball/boxscores/${season}/${gameParam}.json`)
+    if(res.ok) game = await res.json()
+  }catch{}
+
+  // ✅ IF FAIL → TRY 2026 FORMAT
+  if(!game){
+
+    try{
+      const date = gameParam.slice(3,11)
+      const yyyy = date.slice(0,4)
+      const mm = date.slice(4,6)
+      const dd = date.slice(6,8)
+
+      const formatted = `${yyyy}-${mm}-${dd}`
+
+      // brute guess filenames
+      const teams = ["ARI","ATL","BAL","BOS","CHC","CIN","CLE","COL","DET","HOU","KC","LAD","MIA","MIL","MIN","NYM","NYY","OAK","PHI","PIT","SD","SEA","SF","STL","TB","TEX","TOR","WSH"]
+
+      for(const away of teams){
+        for(const home of teams){
+
+          const fname = `${formatted}_${away}_${home}.json`
+
+          try{
+            let res = await fetch(`/data/baseball/boxscores/${season}/${fname}`)
+            if(res.ok){
+              game = await res.json()
+              break
+            }
+          }catch{}
+
+        }
+        if(game) break
+      }
+
+    }catch{}
+  }
+
+  if(!game){
+    document.getElementById("title").innerText="Game not found"
+    return
+  }
+
+  render(game)
+}
+
+// -------------------------
+function render(game){
 
   document.getElementById("title").innerText=`${game.away_team} @ ${game.home_team}`
   document.getElementById("meta").innerText=`Date: ${game.date}`
@@ -168,9 +227,6 @@ async function loadGame(){
   document.getElementById("awayPitchTitle").innerText=`${game.away_team} Pitching`
   document.getElementById("homePitchTitle").innerText=`${game.home_team} Pitching`
 
-  // -------------------------
-  // IF OLD DATA EXISTS
-  // -------------------------
   if(game.batters_away){
     renderTable("awayBatting",game.batters_away)
     renderTable("homeBatting",game.batters_home)
@@ -178,7 +234,6 @@ async function loadGame(){
     renderTable("homePitching",game.pitchers_home)
   }
   else{
-    // 🔥 BUILD FROM EVENTS
     const stats=buildStats(game.events)
 
     renderTable("awayBatting",stats.batting)
