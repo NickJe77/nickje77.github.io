@@ -72,6 +72,9 @@ function playerName(id){return PLAYERS[id]||id}
 function teamName(code){return TEAMS[code]||code}
 function parkName(code){return PARKS[code]||code}
 
+// -------------------------
+// LOOKUPS (UNCHANGED)
+// -------------------------
 async function loadLookups(){
 
 const p=await fetch("/data/baseball/players.json")
@@ -98,55 +101,45 @@ if(parts.length>1) PARKS[parts[0].trim()]=parts[1].trim()
 }
 }
 
+// -------------------------
+// 🔥 FIXED LOAD GAME
+// -------------------------
 async function loadGame(){
 
 const id=param("game")
+const seasonParam=param("season")
+
 if(!id){
 document.getElementById("title").innerText="Game not found"
 return
 }
 
-const season=id.match(/(\d{4})/)[1]
-
 let game=null
+let season=seasonParam
 
-// ✅ ORIGINAL (WORKING — DO NOT TOUCH)
+// 🟢 OLD SYSTEM (WORKING YEARS)
+if(!/^\d+$/.test(id)){
+
+season=id.match(/(\d{4})/)[1]
+
 try{
 const gameRes=await fetch(`/data/baseball/games/${season}/${id}.json`)
 if(gameRes.ok){
 game=await gameRes.json()
 }
 }catch{}
-
-// ✅ ONLY ADD THIS BLOCK (2026 FIX)
-if(!game && season==="2026"){
-
-try{
-const home=id.slice(0,3)
-const date=id.slice(3,11)
-
-const yyyy=date.slice(0,4)
-const mm=date.slice(4,6)
-const dd=date.slice(6,8)
-
-const formatted=`${yyyy}-${mm}-${dd}`
-
-const teams=["ARI","ATL","BAL","BOS","CHC","CIN","CLE","COL","DET","HOU","KC","LAD","MIA","MIL","MIN","NYM","NYY","OAK","PHI","PIT","SD","SEA","SF","STL","TB","TEX","TOR","WSH"]
-
-for(const away of teams){
-
-const fname=`${formatted}_${away}_${home}.json`
-
-try{
-const res=await fetch(`/data/baseball/boxscores/2026/${fname}`)
-if(res.ok){
-game=await res.json()
-break
-}
-}catch{}
-
 }
 
+// 🔵 NEW SYSTEM (2026 gamePk)
+else{
+
+season="2026"
+
+try{
+const gameRes=await fetch(`/data/baseball/boxscores/2026/${id}.json`)
+if(gameRes.ok){
+game=await gameRes.json()
+}
 }catch{}
 }
 
@@ -158,24 +151,26 @@ return
 // -------------------------
 // META (UNCHANGED)
 // -------------------------
-const seasonRes=await fetch(`/data/baseball/seasons/${season}.json`)
 let meta=null
 
+try{
+const seasonRes=await fetch(`/data/baseball/seasons/${season}.json`)
 if(seasonRes.ok){
 const seasonData=await seasonRes.json()
-const m=id.match(/(\d{4})(\d{2})(\d{2})/)
-if(m){
-const formatted=`${m[1]}-${m[2]}-${m[3]}`
+
 meta=seasonData.find(g=>
-g.home_code===game.home_code &&
-g.date===formatted
+g.game_id==id ||
+(g.home_code===game.home_code && g.date===game.date)
 )
 }
-}
+}catch{}
 
 render(game,meta)
 }
 
+// -------------------------
+// RENDER (UNCHANGED)
+// -------------------------
 function render(game,meta){
 
 const homeFull=teamName(game.home_code)
@@ -198,6 +193,9 @@ renderTable("awayPitching",game.pitchers_away)
 renderTable("homePitching",game.pitchers_home)
 }
 
+// -------------------------
+// TABLE (UNCHANGED)
+// -------------------------
 function renderTable(id,data){
 if(!data||data.length===0){
 document.getElementById(id).innerHTML="No detailed data available."
@@ -217,11 +215,11 @@ html+="</tbody></table>"
 document.getElementById(id).innerHTML=html
 }
 
+// -------------------------
 async function init(){
 await loadLookups()
 await loadGame()
 }
-
 init()
 
 </script>
