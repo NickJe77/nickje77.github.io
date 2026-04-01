@@ -73,8 +73,6 @@ function teamName(code){return TEAMS[code]||code}
 function parkName(code){return PARKS[code]||code}
 
 // -------------------------
-// LOOKUPS (UNCHANGED)
-// -------------------------
 async function loadLookups(){
 
 const p=await fetch("/data/baseball/players.json")
@@ -102,43 +100,56 @@ if(parts.length>1) PARKS[parts[0].trim()]=parts[1].trim()
 }
 
 // -------------------------
-// 🔥 FIXED LOAD GAME
+// 🔥 AUTO DETECT LOADER
 // -------------------------
 async function loadGame(){
 
 const id=param("game")
-const seasonParam=param("season")
-
 if(!id){
 document.getElementById("title").innerText="Game not found"
 return
 }
 
 let game=null
-let season=seasonParam
+let season=null
 
-// 🟢 OLD SYSTEM (WORKING YEARS)
+// 🟢 OLD SYSTEM
 if(!/^\d+$/.test(id)){
 
 season=id.match(/(\d{4})/)[1]
 
 try{
-const gameRes=await fetch(`/data/baseball/games/${season}/${id}.json`)
-if(gameRes.ok){
-game=await gameRes.json()
-}
+const res=await fetch(`/data/baseball/games/${season}/${id}.json`)
+if(res.ok) game=await res.json()
 }catch{}
 }
 
-// 🔵 NEW SYSTEM (2026 gamePk)
+// 🔵 2026 AUTO DETECT
 else{
 
 season="2026"
 
 try{
-const gameRes=await fetch(`/data/baseball/boxscores/2026/${id}.json`)
-if(gameRes.ok){
-game=await gameRes.json()
+const indexRes=await fetch(`/data/baseball/boxscores/2026/index.json`)
+if(indexRes.ok){
+
+const files=await indexRes.json()
+
+for(const file of files){
+
+const res=await fetch(`/data/baseball/boxscores/2026/${file}`)
+if(!res.ok) continue
+
+const data=await res.json()
+
+// ✅ match using game_id inside file
+if(data.game_id){
+game=data
+break
+}
+
+}
+
 }
 }catch{}
 }
@@ -149,18 +160,15 @@ return
 }
 
 // -------------------------
-// META (UNCHANGED)
-// -------------------------
 let meta=null
 
 try{
 const seasonRes=await fetch(`/data/baseball/seasons/${season}.json`)
 if(seasonRes.ok){
 const seasonData=await seasonRes.json()
-
 meta=seasonData.find(g=>
-g.game_id==id ||
-(g.home_code===game.home_code && g.date===game.date)
+g.home_code===game.home_code &&
+g.date===game.date
 )
 }
 }catch{}
@@ -168,8 +176,6 @@ g.game_id==id ||
 render(game,meta)
 }
 
-// -------------------------
-// RENDER (UNCHANGED)
 // -------------------------
 function render(game,meta){
 
@@ -193,8 +199,6 @@ renderTable("awayPitching",game.pitchers_away)
 renderTable("homePitching",game.pitchers_home)
 }
 
-// -------------------------
-// TABLE (UNCHANGED)
 // -------------------------
 function renderTable(id,data){
 if(!data||data.length===0){
