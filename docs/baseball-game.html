@@ -1,231 +1,206 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Baseball Game | The Sporting Almanac</title>
+<title>Baseball Game</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
-.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:#fff;border-bottom:1px solid #ddd;font-weight:700;}
-.navbar a{text-decoration:none;color:#0056d6;}
-.page{max-width:1200px;margin:auto;padding:20px;}
-.hero{background:linear-gradient(90deg,#002D72,#C8102E);color:white;padding:30px;border-radius:20px;margin-bottom:20px;}
-.hero h1{margin:0;font-size:36px;}
-.hero .sub{margin-top:10px;font-size:18px;opacity:.95;}
-.scoreline{font-size:20px;font-weight:700;margin-top:8px;}
-.meta-line{margin-top:6px;}
-.section{background:white;padding:18px;border-radius:16px;margin-bottom:20px;}
-.section h2{margin:0 0 12px 0;}
-table{width:100%;border-collapse:collapse;}
-th{background:#002D72;color:white;padding:10px;text-align:left;}
-td{padding:8px;border-bottom:1px solid #eee;}
-tr:nth-child(even){background:#f0f6ff;}
-a{color:#0056d6;text-decoration:none;font-weight:700;}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
-@media(max-width:900px){.grid{grid-template-columns:1fr;}}
-</style>
+body {
+  font-family: system-ui, Arial, sans-serif;
+  margin:0;
+  padding:20px;
+  background:#f5f6fa;
+}
 
+h1 { text-align:center; }
+
+.header {
+  padding:30px;
+  border-radius:16px;
+  color:#fff;
+  font-size:28px;
+  font-weight:700;
+  background: linear-gradient(90deg,#1e3c72,#c31432);
+}
+
+.section {
+  background:#fff;
+  padding:20px;
+  margin-top:20px;
+  border-radius:12px;
+}
+
+.grid {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:20px;
+}
+
+table {
+  width:100%;
+  border-collapse:collapse;
+  margin-top:10px;
+}
+
+th, td {
+  padding:6px;
+  text-align:left;
+  border-bottom:1px solid #ddd;
+  font-size:14px;
+}
+
+th {
+  background:#eee;
+}
+</style>
 </head>
 
 <body>
 
-<div class="navbar">
-<a href="./index.html">Home</a>
-<a href="./baseball.html">Baseball</a>
-<a href="./baseball-seasons.html">Seasons</a>
-<a href="./baseball-teams.html">Teams</a>
-<a href="./baseball-players.html">Players</a>
-</div>
-
-<div class="page">
-
-<div class="hero">
-<h1 id="title">Loading...</h1>
-<div id="scoreline" class="scoreline"></div>
-<div id="subtitle" class="sub"></div>
-<div id="venueLine" class="meta-line"></div>
-<div id="crowdLine" class="meta-line"></div>
-</div>
+<div id="title" class="header"></div>
 
 <div class="section">
-<h2>Game Details</h2>
-<div id="meta"></div>
+  <h2>Game Details</h2>
+  <div id="details"></div>
 </div>
 
 <div class="grid">
-<div class="section"><h2>Away Batting</h2><div id="awayBatting"></div></div>
-<div class="section"><h2>Home Batting</h2><div id="homeBatting"></div></div>
-<div class="section"><h2>Away Pitching</h2><div id="awayPitching"></div></div>
-<div class="section"><h2>Home Pitching</h2><div id="homePitching"></div></div>
-</div>
+
+  <div class="section">
+    <h3>Away Batting</h3>
+    <div id="awayBatting"></div>
+  </div>
+
+  <div class="section">
+    <h3>Home Batting</h3>
+    <div id="homeBatting"></div>
+  </div>
+
+  <div class="section">
+    <h3>Away Pitching</h3>
+    <div id="awayPitching"></div>
+  </div>
+
+  <div class="section">
+    <h3>Home Pitching</h3>
+    <div id="homePitching"></div>
+  </div>
 
 </div>
 
 <script>
+const params = new URLSearchParams(window.location.search);
+const gameId = params.get("game");
+const season = params.get("season");
 
-let PLAYERS={}, TEAMS={}, PARKS={}
+const url = `/data/baseball/boxscores/${season}/${gameId}.json`;
 
-function param(n){return new URLSearchParams(window.location.search).get(n)}
-function playerName(id){return PLAYERS[id]||id}
-function teamName(code){return TEAMS[code]||code}
-function parkName(code){return PARKS[code]||code}
+fetch(url)
+  .then(res => res.json())
+  .then(game => {
 
-// -------------------------
-async function loadLookups(){
+    console.log("GAME DATA:", game);
 
-const p=await fetch("/data/baseball/players.json")
-if(p.ok){
-const d=await p.json()
-d.forEach(pl=>PLAYERS[pl.player_id]=pl.name)
-}
+    // -------------------------
+    // TITLE
+    // -------------------------
+    const away = game.away_team || game.teams?.away?.team?.name || "Away";
+    const home = game.home_team || game.teams?.home?.team?.name || "Home";
 
-const t=await fetch("/data/baseball/teams.json")
-if(t.ok){
-const d=await t.json()
-d.forEach(team=>{
-team.codes.forEach(c=>TEAMS[c]=team.name)
-})
-}
+    document.getElementById("title").innerText =
+      `${away} @ ${home}`;
 
-const b=await fetch("/data/baseball/ballparks.csv")
-if(b.ok){
-const text=await b.text()
-text.split("\n").slice(1).forEach(l=>{
-const parts=l.split(",")
-if(parts.length>1) PARKS[parts[0].trim()]=parts[1].trim()
-})
-}
-}
+    // -------------------------
+    // DETAILS
+    // -------------------------
+    document.getElementById("details").innerHTML = `
+      <b>Date:</b> ${game.date || ""}<br>
+      <b>Venue:</b> ${game.venue || game.venue?.name || ""}<br>
+      <b>Score:</b> ${game.away_score ?? game.teams?.away?.runs ?? ""} - ${game.home_score ?? game.teams?.home?.runs ?? ""}
+    `;
 
-// -------------------------
-// 🔥 AUTO DETECT LOADER
-// -------------------------
-async function loadGame(){
+    // -------------------------
+    // NORMALISE DATA
+    // -------------------------
+    function getBatting(side) {
 
-const id=param("game")
-if(!id){
-document.getElementById("title").innerText="Game not found"
-return
-}
+      // OLD FORMAT
+      if (game.batting) {
+        return game.batting.filter(p => p.team === side);
+      }
 
-let game=null
-let season=null
+      // NEW MLB FORMAT
+      const players = game.liveData?.boxscore?.teams?.[side]?.players;
 
-// 🟢 OLD SYSTEM
-if(!/^\d+$/.test(id)){
+      if (!players) return [];
 
-season=id.match(/(\d{4})/)[1]
+      return Object.values(players)
+        .map(p => p.stats?.batting ? {
+          name: p.person.fullName,
+          ...p.stats.batting
+        } : null)
+        .filter(Boolean);
+    }
 
-try{
-const res=await fetch(`/data/baseball/games/${season}/${id}.json`)
-if(res.ok) game=await res.json()
-}catch{}
-}
+    function getPitching(side) {
 
-// 🔵 2026 AUTO DETECT
-else{
+      if (game.pitching) {
+        return game.pitching.filter(p => p.team === side);
+      }
 
-season="2026"
+      const players = game.liveData?.boxscore?.teams?.[side]?.players;
 
-try{
-const indexRes=await fetch(`/data/baseball/boxscores/2026/index.json`)
-if(indexRes.ok){
+      if (!players) return [];
 
-const files=await indexRes.json()
+      return Object.values(players)
+        .map(p => p.stats?.pitching ? {
+          name: p.person.fullName,
+          ...p.stats.pitching
+        } : null)
+        .filter(Boolean);
+    }
 
-for(const file of files){
+    // -------------------------
+    // RENDER TABLE
+    // -------------------------
+    function renderTable(data, elId) {
 
-const res=await fetch(`/data/baseball/boxscores/2026/${file}`)
-if(!res.ok) continue
+      if (!data || data.length === 0) {
+        document.getElementById(elId).innerText = "No detailed data available.";
+        return;
+      }
 
-const data=await res.json()
+      let html = "<table><tr>";
 
-// ✅ match using game_id inside file
-if(data.game_id){
-game=data
-break
-}
+      Object.keys(data[0]).forEach(k => {
+        html += `<th>${k}</th>`;
+      });
 
-}
+      html += "</tr>";
 
-}
-}catch{}
-}
+      data.forEach(row => {
+        html += "<tr>";
+        Object.values(row).forEach(v => {
+          html += `<td>${v ?? ""}</td>`;
+        });
+        html += "</tr>";
+      });
 
-if(!game){
-document.getElementById("title").innerText="Game not found"
-return
-}
+      html += "</table>";
 
-// -------------------------
-let meta=null
+      document.getElementById(elId).innerHTML = html;
+    }
 
-try{
-const seasonRes=await fetch(`/data/baseball/seasons/${season}.json`)
-if(seasonRes.ok){
-const seasonData=await seasonRes.json()
-meta=seasonData.find(g=>
-g.home_code===game.home_code &&
-g.date===game.date
-)
-}
-}catch{}
+    // -------------------------
+    // OUTPUT
+    // -------------------------
+    renderTable(getBatting("away"), "awayBatting");
+    renderTable(getBatting("home"), "homeBatting");
+    renderTable(getPitching("away"), "awayPitching");
+    renderTable(getPitching("home"), "homePitching");
 
-render(game,meta)
-}
-
-// -------------------------
-function render(game,meta){
-
-const homeFull=teamName(game.home_code)
-const awayFull=teamName(game.away_code)
-
-document.getElementById("title").innerText=`${awayFull} @ ${homeFull}`
-
-if(meta){
-document.getElementById("scoreline").innerText=
-`${awayFull} ${meta.away_score} – ${homeFull} ${meta.home_score}`
-document.getElementById("subtitle").innerText=meta.date
-document.getElementById("venueLine").innerText=`Venue: ${parkName(meta.venue)}`
-document.getElementById("crowdLine").innerText=
-meta.attendance?`Attendance: ${meta.attendance.toLocaleString()}`:""
-}
-
-renderTable("awayBatting",game.batters_away)
-renderTable("homeBatting",game.batters_home)
-renderTable("awayPitching",game.pitchers_away)
-renderTable("homePitching",game.pitchers_home)
-}
-
-// -------------------------
-function renderTable(id,data){
-if(!data||data.length===0){
-document.getElementById(id).innerHTML="No detailed data available."
-return
-}
-const keys=Object.keys(data[0]).filter(k=>k!=="player_id")
-let html="<table><thead><tr><th>Player</th>"
-keys.forEach(k=>html+=`<th>${k}</th>`)
-html+="</tr></thead><tbody>"
-data.forEach(p=>{
-html+=`<tr>
-<td><a href="./baseball-player.html?player=${p.player_id}">${playerName(p.player_id)}</a></td>`
-keys.forEach(k=>html+=`<td>${p[k]}</td>`)
-html+="</tr>"
-})
-html+="</tbody></table>"
-document.getElementById(id).innerHTML=html
-}
-
-// -------------------------
-async function init(){
-await loadLookups()
-await loadGame()
-}
-init()
-
+  });
 </script>
 
 </body>
