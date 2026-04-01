@@ -1,0 +1,63 @@
+name: MLB Index Builder
+
+on:
+workflow_dispatch:
+schedule:
+- cron: "0 6 * * *"  # daily
+
+jobs:
+build-index:
+runs-on: ubuntu-latest
+
+```
+steps:
+
+  # -------------------------
+  # CHECKOUT
+  # -------------------------
+  - name: Checkout
+    uses: actions/checkout@v4
+
+  # -------------------------
+  # BUILD INDEX
+  # -------------------------
+  - name: Build 2026 boxscore index
+    run: |
+      mkdir -p docs/data/baseball/boxscores/2026
+
+      python << 'EOF'
+```
+
+import os, json
+
+folder = "docs/data/baseball/boxscores/2026"
+
+files = []
+
+for f in os.listdir(folder):
+if f.endswith(".json") and f != "index.json":
+files.append(f)
+
+files.sort()
+
+with open(os.path.join(folder, "index.json"), "w") as out:
+json.dump(files, out, indent=2)
+
+print("Index built:", len(files), "files")
+EOF
+
+```
+  # -------------------------
+  # COMMIT
+  # -------------------------
+  - name: Commit index
+    run: |
+      git config user.name "github-actions"
+      git config user.email "actions@github.com"
+
+      git add docs/data/baseball/boxscores/2026/index.json
+
+      git commit -m "Update 2026 boxscore index" || echo "No changes"
+
+      git push
+```
