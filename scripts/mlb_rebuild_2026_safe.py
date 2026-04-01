@@ -25,6 +25,7 @@ TEAM_MAP = {
     144: "ATL", 145: "CWS", 146: "MIA", 147: "NYY", 158: "MIL",
 }
 
+
 def safe_get(url):
     try:
         r = requests.get(url, headers=HEADERS, timeout=30)
@@ -34,8 +35,9 @@ def safe_get(url):
         return None
 
 
+# ✅ FIXED SCHEDULE (DATE-BASED)
 def get_schedule_games():
-    url = f"{BASE}/schedule?sportId=1&season={SEASON}&gameType=R,P"
+    url = f"{BASE}/schedule?sportId=1&startDate={START_DATE}&endDate={TODAY_UTC}"
     data = safe_get(url)
 
     if not data:
@@ -48,16 +50,14 @@ def get_schedule_games():
         for g in d.get("games", []):
 
             game_date = str(g.get("gameDate", ""))[:10]
+            game_type = g.get("gameType", "")
 
-            if not game_date:
-                continue
-
-            if game_date < START_DATE or game_date > TODAY_UTC:
+            # ONLY regular + playoffs
+            if game_type not in {"R", "P"}:
                 continue
 
             status = g.get("status", {}).get("codedGameState", "")
 
-            # 🔧 FIXED (allow more states)
             if status not in {"F", "O", "I", "S"}:
                 continue
 
@@ -125,7 +125,6 @@ def build_one_game(game):
                     "SO": pit.get("strikeOuts", 0)
                 })
 
-    # 🔧 FIX: DO NOT BLOCK FILE CREATION
     data = {
         "game_id": f"{game['home']}{game['date'].replace('-', '')}0",
         "date": game["date"],
