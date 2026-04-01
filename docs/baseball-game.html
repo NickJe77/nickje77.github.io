@@ -2,13 +2,13 @@
 
 <html lang="en">
 <head>
-  <script src="/js/analytics.js"></script>
+<script src="/js/analytics.js"></script>
 <meta charset="UTF-8">
-<title>Baseball Game | The Sporting Almanac</title>
+<title>Baseball Game</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{font-family:system-ui,Arial;margin:0;background:#f4f6f8;}
+body{font-family:system-ui;margin:0;background:#f4f6f8;}
 .navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:#fff;border-bottom:1px solid #ddd;font-weight:700;}
 .navbar a{text-decoration:none;color:#0056d6;}
 .page{max-width:1200px;margin:auto;padding:20px;}
@@ -20,49 +20,15 @@ body{font-family:system-ui,Arial;margin:0;background:#f4f6f8;}
   border-radius:20px;
   margin-bottom:20px;
 }
-.hero h1{margin:0;font-size:36px;}
-.scoreline{font-size:20px;font-weight:700;margin-top:8px;}
-.meta-line{margin-top:6px;}
 
-.section{
-  background:white;
-  padding:18px;
-  border-radius:16px;
-  margin-bottom:20px;
-}
+.section{background:white;padding:18px;border-radius:16px;margin-bottom:20px;}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+@media(max-width:900px){.grid{grid-template-columns:1fr;}}
 
-.section h2{margin:0 0 12px 0;}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-}
-
-th{
-  background:#002D72;
-  color:white;
-  padding:10px;
-  text-align:left;
-}
-
-td{
-  padding:8px;
-  border-bottom:1px solid #eee;
-}
-
-tr:nth-child(even){
-  background:#f0f6ff;
-}
-
-.grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:20px;
-}
-
-@media(max-width:900px){
-  .grid{grid-template-columns:1fr;}
-}
+table{width:100%;border-collapse:collapse;}
+th{background:#002D72;color:white;padding:10px;text-align:left;}
+td{padding:8px;border-bottom:1px solid #eee;}
+tr:nth-child(even){background:#f0f6ff;}
 </style>
 
 </head>
@@ -80,11 +46,7 @@ tr:nth-child(even){
 <div class="page">
 
 <div class="hero">
-<h1 id="title">Loading...</h1>
-<div id="scoreline" class="scoreline"></div>
-<div id="subtitle"></div>
-<div id="venueLine" class="meta-line"></div>
-<div id="crowdLine" class="meta-line"></div>
+<h1 id="title"></h1>
 </div>
 
 <div class="section">
@@ -103,162 +65,83 @@ tr:nth-child(even){
 
 <script>
 
-let PLAYERS={}, TEAMS={}, PARKS={}
+let PLAYERS={}
 
-function param(n){return new URLSearchParams(window.location.search).get(n)}
+async function loadPlayers(){
+  const r=await fetch("/data/baseball/players.json")
+  const d=await r.json()
+  d.forEach(p=>PLAYERS[p.short_id||p.player_id]=p.name)
+}
+
 function playerName(id){return PLAYERS[id]||id}
-function teamName(code){return TEAMS[code]||code}
-function parkName(code){return PARKS[code]||code}
 
-// -----------------------------
-// LOAD LOOKUPS
-// -----------------------------
-async function loadLookups(){
+// -------------------------
+// BUILD STATS FROM EVENTS
+// -------------------------
+function buildStats(events){
 
-  try{
-    const p=await fetch("/data/baseball/players.json")
-    if(p.ok){
-      const d=await p.json()
-      d.forEach(pl=>PLAYERS[pl.player_id]=pl.name)
+  const batting={}
+  const pitching={}
+
+  events.forEach(e=>{
+    if(e[0]!=="play") return
+
+    const player=e[3]
+    const result=e[6]
+
+    if(!batting[player]){
+      batting[player]={player_id:player,AB:0,H:0,BB:0,SO:0}
     }
-  }catch{}
 
-  try{
-    const t=await fetch("/data/baseball/teams.json")
-    if(t.ok){
-      const d=await t.json()
-      d.forEach(team=>{
-        team.codes.forEach(c=>TEAMS[c]=team.name)
-      })
+    if(!pitching[player]){
+      pitching[player]={player_id:player,IP:0,H:0,BB:0,SO:0}
     }
-  }catch{}
 
-  try{
-    const b=await fetch("/data/baseball/ballparks.csv")
-    if(b.ok){
-      const text=await b.text()
-      text.split("\n").slice(1).forEach(l=>{
-        const parts=l.split(",")
-        if(parts.length>1) PARKS[parts[0].trim()]=parts[1].trim()
-      })
+    // batting
+    if(result==="S"||result==="D"||result==="T"||result==="HR"){
+      batting[player].AB++
+      batting[player].H++
     }
-  }catch{}
-}
+    else if(result==="K"){
+      batting[player].AB++
+      batting[player].SO++
+    }
+    else if(result==="W"){
+      batting[player].BB++
+    }
+    else{
+      batting[player].AB++
+    }
 
-// -----------------------------
-// LOAD GAME
-// -----------------------------
-async function loadGame(){
+    // pitching (basic)
+    if(result==="K") pitching[player].SO++
+    if(result==="W") pitching[player].BB++
+    if(result==="S"||result==="D"||result==="T"||result==="HR") pitching[player].H++
 
-  const id = param("game")
-  const season = param("season") || id?.match(/(\d{4})/)?.[1]
-
-  if(!id){
-    document.getElementById("title").innerText="Game not found"
-    return
-  }
-
-  let game = null
-
-  try{
-    let res = await fetch(`/data/baseball/games/${season}/${id}.json`)
-    if(res.ok) game = await res.json()
-  }catch{}
-
-  if(!game){
-    try{
-      let res = await fetch(`/data/baseball/boxscores/${season}/${id}.json`)
-      if(res.ok) game = await res.json()
-    }catch{}
-  }
-
-  if(!game){
-    document.getElementById("title").innerText="Game not found"
-    return
-  }
-
-  render(game)
-}
-
-// -----------------------------
-// PLAY BY PLAY RENDER
-// -----------------------------
-function renderEvents(game){
-
-  const container = document.getElementById("meta")
-
-  let html = "<h3>Play By Play</h3><table><thead><tr>"
-  html += "<th>Inning</th><th>Player</th><th>Result</th></tr></thead><tbody>"
-
-  game.events.forEach(e=>{
-
-    if(!Array.isArray(e)) return
-    if(e[0] !== "play") return
-
-    const inning = e[1]
-    const half = e[2] === "0" ? "Top" : "Bottom"
-    const player = playerName(e[3])
-    const result = e[6]
-
-    html += `<tr>
-      <td>${half} ${inning}</td>
-      <td>${player}</td>
-      <td>${result}</td>
-    </tr>`
   })
 
-  html += "</tbody></table>"
-
-  container.innerHTML += html
-}
-
-// -----------------------------
-// RENDER
-// -----------------------------
-function render(game){
-
-  const home = teamName(game.home_code)
-  const away = teamName(game.away_code)
-
-  document.getElementById("title").innerText = `${away} @ ${home}`
-
-  document.getElementById("meta").innerHTML =
-    `<strong>Date:</strong> ${game.date}`
-
-  document.getElementById("awayBatTitle").innerText = `${away} Batting`
-  document.getElementById("homeBatTitle").innerText = `${home} Batting`
-  document.getElementById("awayPitchTitle").innerText = `${away} Pitching`
-  document.getElementById("homePitchTitle").innerText = `${home} Pitching`
-
-  if(game.batters_away){
-    renderTable("awayBatting", game.batters_away)
-    renderTable("homeBatting", game.batters_home)
-    renderTable("awayPitching", game.pitchers_away)
-    renderTable("homePitching", game.pitchers_home)
-  }else{
-    renderEvents(game)
+  return {
+    batting:Object.values(batting),
+    pitching:Object.values(pitching)
   }
 }
 
-// -----------------------------
-// TABLE
-// -----------------------------
+// -------------------------
 function renderTable(id,data){
 
-  if(!data||data.length===0){
-    document.getElementById(id).innerHTML="No data available"
+  if(!data.length){
+    document.getElementById(id).innerHTML="No data"
     return
   }
 
-  const keys = Object.keys(data[0]).filter(k=>k!=="player_id")
+  const keys=Object.keys(data[0]).filter(k=>k!=="player_id")
 
   let html="<table><thead><tr><th>Player</th>"
   keys.forEach(k=>html+=`<th>${k}</th>`)
   html+="</tr></thead><tbody>"
 
   data.forEach(p=>{
-    html+=`<tr>
-    <td>${playerName(p.player_id)}</td>`
+    html+=`<tr><td>${playerName(p.player_id)}</td>`
     keys.forEach(k=>html+=`<td>${p[k]}</td>`)
     html+="</tr>"
   })
@@ -268,9 +151,46 @@ function renderTable(id,data){
   document.getElementById(id).innerHTML=html
 }
 
-// -----------------------------
+// -------------------------
+async function loadGame(){
+
+  const id=new URLSearchParams(location.search).get("game")
+  const season=new URLSearchParams(location.search).get("season")
+
+  const res=await fetch(`/data/baseball/boxscores/${season}/${id}.json`)
+  const game=await res.json()
+
+  document.getElementById("title").innerText=`${game.away_team} @ ${game.home_team}`
+  document.getElementById("meta").innerText=`Date: ${game.date}`
+
+  document.getElementById("awayBatTitle").innerText=`${game.away_team} Batting`
+  document.getElementById("homeBatTitle").innerText=`${game.home_team} Batting`
+  document.getElementById("awayPitchTitle").innerText=`${game.away_team} Pitching`
+  document.getElementById("homePitchTitle").innerText=`${game.home_team} Pitching`
+
+  // -------------------------
+  // IF OLD DATA EXISTS
+  // -------------------------
+  if(game.batters_away){
+    renderTable("awayBatting",game.batters_away)
+    renderTable("homeBatting",game.batters_home)
+    renderTable("awayPitching",game.pitchers_away)
+    renderTable("homePitching",game.pitchers_home)
+  }
+  else{
+    // 🔥 BUILD FROM EVENTS
+    const stats=buildStats(game.events)
+
+    renderTable("awayBatting",stats.batting)
+    renderTable("homeBatting",stats.batting)
+    renderTable("awayPitching",stats.pitching)
+    renderTable("homePitching",stats.pitching)
+  }
+}
+
+// -------------------------
 async function init(){
-  await loadLookups()
+  await loadPlayers()
   await loadGame()
 }
 init()
