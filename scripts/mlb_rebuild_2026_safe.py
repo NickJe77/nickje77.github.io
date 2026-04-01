@@ -17,39 +17,14 @@ OUT_DIR = Path(f"docs/data/baseball/boxscores/{SEASON}")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 TEAM_MAP = {
-    108: "LAA",
-    109: "ARI",
-    110: "BAL",
-    111: "BOS",
-    112: "CHC",
-    113: "CIN",
-    114: "CLE",
-    115: "COL",
-    116: "DET",
-    117: "HOU",
-    118: "KC",
-    119: "LAD",
-    120: "WSH",
-    121: "NYM",
-    133: "OAK",
-    134: "PIT",
-    135: "SD",
-    136: "SEA",
-    137: "SF",
-    138: "STL",
-    139: "TB",
-    140: "TEX",
-    141: "TOR",
-    142: "MIN",
-    143: "PHI",
-    144: "ATL",
-    145: "CWS",
-    146: "MIA",
-    147: "NYY",
-    158: "MIL",
+    108: "LAA", 109: "ARI", 110: "BAL", 111: "BOS", 112: "CHC",
+    113: "CIN", 114: "CLE", 115: "COL", 116: "DET", 117: "HOU",
+    118: "KC", 119: "LAD", 120: "WSH", 121: "NYM", 133: "OAK",
+    134: "PIT", 135: "SD", 136: "SEA", 137: "SF", 138: "STL",
+    139: "TB", 140: "TEX", 141: "TOR", 142: "MIN", 143: "PHI",
+    144: "ATL", 145: "CWS", 146: "MIA", 147: "NYY", 158: "MIL",
 }
 
-# best-effort numeric-id -> retrosheet-style-ish id cache
 PLAYER_ID_CACHE = Path("docs/data/baseball/players.json")
 
 
@@ -96,8 +71,6 @@ def save_player_map(mapping):
 
 
 def make_short_id(full_name, used_short_ids):
-    # best-effort only: lastname first 5 + firstname first 3 + 001
-    # matches style shape, not guaranteed identical to historical retrosheet IDs
     name = (full_name or "").strip()
     if not name:
         return ""
@@ -130,14 +103,15 @@ def get_schedule_games():
     games = []
     for d in data.get("dates", []):
         for g in d.get("games", []):
+
             game_date = str(g.get("gameDate", ""))[:10]
             if not game_date:
                 continue
+
             if game_date < START_DATE or game_date > TODAY_UTC:
                 continue
 
             status = g.get("status", {}).get("codedGameState", "")
-            # final / completed / in-progress only; skip future scheduled games
             if status not in {"F", "O", "I"}:
                 continue
 
@@ -150,6 +124,7 @@ def get_schedule_games():
                 "home": TEAM_MAP.get(home_id, "UNK"),
                 "away": TEAM_MAP.get(away_id, "UNK"),
             })
+
     return games
 
 
@@ -163,81 +138,6 @@ def build_header(game):
         ["info", "hometeam", game["home"]],
         ["info", "date", date_slash],
     ]
-
-
-def event_triplet_from_description(desc):
-    d = (desc or "").lower()
-
-    if "home run" in d or "homers" in d:
-        return ["23", "CBX", "HR"]
-    if "triples" in d or "triple" in d:
-        return ["22", "CBX", "T"]
-    if "doubles" in d or "double" in d:
-        return ["21", "CBX", "D"]
-    if "singles" in d or "single" in d:
-        return ["20", "CBX", "S"]
-    if "walks" in d or "walk" in d:
-        return ["14", "BBBX", "W"]
-    if "hit by pitch" in d:
-        return ["16", "HP", "HBP"]
-    if "strikes out" in d or "strikeout" in d or "struck out" in d:
-        return ["3", "K", "K"]
-    if "grounds into a double play" in d:
-        return ["2", "GDP", "DP"]
-    if "grounds out" in d or "grounded out" in d:
-        return ["2", "GB", "GO"]
-    if "flies out" in d or "flied out" in d:
-        return ["2", "FB", "FO"]
-    if "pops out" in d or "popped out" in d:
-        return ["2", "PU", "PO"]
-    if "lines out" in d or "lined out" in d:
-        return ["2", "LD", "LO"]
-    if "reaches on error" in d or "fielding error" in d:
-        return ["18", "E", "ROE"]
-    if "sacrifice fly" in d:
-        return ["2", "SF", "SF"]
-    if "sacrifice bunt" in d or "sac bunt" in d:
-        return ["2", "SH", "SH"]
-
-    return ["0", "UNK", (desc or "").strip()[:80]]
-
-
-def get_play_events(game_pk, player_map, used_short_ids):
-    url = f"{BASE}/game/{game_pk}/playByPlay"
-    data = safe_get(url)
-    if not data:
-        return []
-
-    plays = data.get("allPlays", [])
-    events = []
-
-    for p in plays:
-        try:
-            inning = str(p.get("about", {}).get("inning", ""))
-            half = p.get("about", {}).get("halfInning", "")
-            bat_flag = "0" if half == "top" else "1"
-
-            batter = p.get("matchup", {}).get("batter", {}) or {}
-            pid = str(batter.get("id", "")).strip()
-            full_name = batter.get("fullName", "") or batter.get("full", "") or ""
-
-            if pid and pid not in player_map:
-                player_map[pid] = {
-                    "short_id": make_short_id(full_name, used_short_ids) if full_name else pid,
-                    "name": full_name
-                }
-
-            short_id = player_map.get(pid, {}).get("short_id", pid if pid else "")
-
-            desc = p.get("result", {}).get("description", "")
-            a, b, c = event_triplet_from_description(desc)
-
-            if inning and short_id:
-                events.append(["play", inning, bat_flag, short_id, a, b, c])
-        except Exception:
-            continue
-
-    return events
 
 
 def get_start_rows(game_pk, player_map, used_short_ids):
@@ -280,19 +180,95 @@ def get_start_rows(game_pk, player_map, used_short_ids):
     return rows
 
 
+def get_play_events(game_pk, player_map, used_short_ids):
+    url = f"{BASE}/game/{game_pk}/playByPlay"
+    data = safe_get(url)
+    if not data:
+        return []
+
+    plays = data.get("allPlays", [])
+    events = []
+
+    for p in plays:
+        try:
+            inning = str(p.get("about", {}).get("inning", ""))
+            half = p.get("about", {}).get("halfInning", "")
+            bat_flag = "0" if half == "top" else "1"
+
+            batter = p.get("matchup", {}).get("batter", {}) or {}
+            pid = str(batter.get("id", "")).strip()
+            full_name = batter.get("fullName", "") or ""
+
+            if pid and pid not in player_map:
+                player_map[pid] = {
+                    "short_id": make_short_id(full_name, used_short_ids) if full_name else pid,
+                    "name": full_name
+                }
+
+            short_id = player_map.get(pid, {}).get("short_id", pid if pid else "")
+
+            if inning and short_id:
+                events.append(["play", inning, bat_flag, short_id, "0", "UNK", ""])
+
+        except Exception:
+            continue
+
+    return events
+
+
 def build_one_game(game, player_map, used_short_ids):
     fname = f"{game['date']}_{game['away']}_{game['home']}.json"
     out_file = OUT_DIR / fname
 
-    # absolute safety: never overwrite an existing file
     if out_file.exists():
         return "exists"
+
+    full = safe_get(f"{BASE}/game/{game['gamePk']}/feed/live")
+    if not full:
+        return "no_data"
+
+    teams = full.get("liveData", {}).get("boxscore", {}).get("teams", {})
+
+    batting = []
+    pitching = []
+
+    for side in ["away", "home"]:
+        players = teams.get(side, {}).get("players", {})
+
+        for p in players.values():
+            name = p.get("person", {}).get("fullName", "")
+            stats = p.get("stats", {})
+
+            b = stats.get("batting")
+            if b:
+                batting.append({
+                    "team": side,
+                    "name": name,
+                    "AB": b.get("atBats", 0),
+                    "R": b.get("runs", 0),
+                    "H": b.get("hits", 0),
+                    "RBI": b.get("rbi", 0),
+                    "BB": b.get("baseOnBalls", 0),
+                    "SO": b.get("strikeOuts", 0)
+                })
+
+            pit = stats.get("pitching")
+            if pit:
+                pitching.append({
+                    "team": side,
+                    "name": name,
+                    "IP": pit.get("inningsPitched", "0.0"),
+                    "H": pit.get("hits", 0),
+                    "R": pit.get("runs", 0),
+                    "ER": pit.get("earnedRuns", 0),
+                    "BB": pit.get("baseOnBalls", 0),
+                    "SO": pit.get("strikeOuts", 0)
+                })
 
     header = build_header(game)
     starts = get_start_rows(game["gamePk"], player_map, used_short_ids)
     plays = get_play_events(game["gamePk"], player_map, used_short_ids)
 
-    # do not create junk empty files
     if not plays:
         return "no_plays"
 
@@ -304,6 +280,8 @@ def build_one_game(game, player_map, used_short_ids):
         "away_code": game["away"],
         "home_team": game["home"],
         "away_team": game["away"],
+        "batting": batting,
+        "pitching": pitching,
         "events": header + starts + plays
     }
 
@@ -330,6 +308,7 @@ def main():
 
     for game in games:
         result = build_one_game(game, player_map, used_short_ids)
+
         if result == "built":
             built += 1
             print(f"Built: {game['date']}_{game['away']}_{game['home']}.json")
