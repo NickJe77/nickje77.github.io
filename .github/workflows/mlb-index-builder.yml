@@ -2,46 +2,41 @@ name: MLB Index Builder
 
 on:
 workflow_dispatch:
-schedule:
-- cron: "0 6 * * *"
 
 jobs:
-build-index:
+build:
 runs-on: ubuntu-latest
 
 ```
 steps:
-  # -------------------------
-  # CHECKOUT
-  # -------------------------
-  - name: Checkout
-    uses: actions/checkout@v4
+  - uses: actions/checkout@v4
 
-  # -------------------------
-  # SETUP PYTHON
-  # -------------------------
-  - name: Setup Python
-    uses: actions/setup-python@v5
-    with:
-      python-version: 3.11
-
-  # -------------------------
-  # RUN SCRIPT
-  # -------------------------
   - name: Build index
-    run: python scripts/build_mlb_index.py
+    run: |
+      mkdir -p docs/data/baseball/boxscores/2026
 
-  # -------------------------
-  # COMMIT
-  # -------------------------
-  - name: Commit index
+      ls docs/data/baseball/boxscores/2026 | grep .json | grep -v index.json > files.txt
+
+      echo "[" > docs/data/baseball/boxscores/2026/index.json
+
+      first=1
+      while read line; do
+        if [ $first -eq 1 ]; then
+          first=0
+        else
+          echo "," >> docs/data/baseball/boxscores/2026/index.json
+        fi
+        echo "  \"$line\"" >> docs/data/baseball/boxscores/2026/index.json
+      done < files.txt
+
+      echo "]" >> docs/data/baseball/boxscores/2026/index.json
+
+  - name: Commit
     run: |
       git config user.name "github-actions"
       git config user.email "actions@github.com"
 
       git add docs/data/baseball/boxscores/2026/index.json
-
-      git commit -m "Update 2026 boxscore index" || echo "No changes"
-
+      git commit -m "Update index" || echo "No changes"
       git push
 ```
