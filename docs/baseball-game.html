@@ -46,7 +46,7 @@ tr:nth-child(even){background:#f0f6ff;}
 <div class="page">
 
 <div class="hero">
-<h1 id="title">Loading...</h1>
+<h1 id="title"></h1>
 </div>
 
 <div class="section">
@@ -68,25 +68,69 @@ tr:nth-child(even){background:#f0f6ff;}
 let PLAYERS={}
 
 async function loadPlayers(){
-  try{
-    const r=await fetch("/data/baseball/players.json")
-    const d=await r.json()
-    d.forEach(p=>{
-      PLAYERS[p.short_id||p.player_id]=p.name
-      PLAYERS[p.player_id]=p.name
-    })
-  }catch{}
+  const r=await fetch("/data/baseball/players.json")
+  const d=await r.json()
+  d.forEach(p=>PLAYERS[p.short_id||p.player_id]=p.name)
 }
 
 function playerName(id){return PLAYERS[id]||id}
 
 // -------------------------
-// TABLE RENDER (UNCHANGED)
+// BUILD STATS FROM EVENTS
+// -------------------------
+function buildStats(events){
+
+  const batting={}
+  const pitching={}
+
+  events.forEach(e=>{
+    if(e[0]!=="play") return
+
+    const player=e[3]
+    const result=e[6]
+
+    if(!batting[player]){
+      batting[player]={player_id:player,AB:0,H:0,BB:0,SO:0}
+    }
+
+    if(!pitching[player]){
+      pitching[player]={player_id:player,IP:0,H:0,BB:0,SO:0}
+    }
+
+    // batting
+    if(result==="S"||result==="D"||result==="T"||result==="HR"){
+      batting[player].AB++
+      batting[player].H++
+    }
+    else if(result==="K"){
+      batting[player].AB++
+      batting[player].SO++
+    }
+    else if(result==="W"){
+      batting[player].BB++
+    }
+    else{
+      batting[player].AB++
+    }
+
+    // pitching (basic)
+    if(result==="K") pitching[player].SO++
+    if(result==="W") pitching[player].BB++
+    if(result==="S"||result==="D"||result==="T"||result==="HR") pitching[player].H++
+
+  })
+
+  return {
+    batting:Object.values(batting),
+    pitching:Object.values(pitching)
+  }
+}
+
 // -------------------------
 function renderTable(id,data){
 
-  if(!data || data.length===0){
-    document.getElementById(id).innerHTML="No data available"
+  if(!data.length){
+    document.getElementById(id).innerHTML="No data"
     return
   }
 
@@ -108,70 +152,13 @@ function renderTable(id,data){
 }
 
 // -------------------------
-// LOAD GAME (SAFE VERSION)
-// -------------------------
 async function loadGame(){
 
-  const game = new URLSearchParams(location.search).get("game")
-  const season = new URLSearchParams(location.search).get("season")
+  const id=new URLSearchParams(location.search).get("game")
+  const season=new URLSearchParams(location.search).get("season")
 
-  if(!game || !season){
-    document.getElementById("title").innerText="Game not found"
-    return
-  }
-
-  let data = null
-
-  // ✅ ORIGINAL WORKING METHOD
-  try{
-    const res = await fetch(`/data/baseball/boxscores/${season}/${game}.json`)
-    if(res.ok){
-      data = await res.json()
-    }
-  }catch{}
-
-  // ✅ SIMPLE 2026 FIX (NO BREAKING)
-  if(!data && season === "2026"){
-
-    try{
-      const home = game.slice(0,3)
-      const date = game.slice(3,11)
-
-      const yyyy = date.slice(0,4)
-      const mm = date.slice(4,6)
-      const dd = date.slice(6,8)
-
-      const formatted = `${yyyy}-${mm}-${dd}`
-
-      // try simple patterns only
-      const patterns = [
-        `${formatted}_${home}_`,
-        `${formatted}_`
-      ]
-
-      for(const p of patterns){
-
-        const res = await fetch(`/data/baseball/boxscores/${season}/`)
-        
-        // skip directory scanning (not supported)
-        // fallback handled manually later if needed
-      }
-
-    }catch{}
-  }
-
-  if(!data){
-    document.getElementById("title").innerText="Game not found"
-    return
-  }
-
-  render(data)
-}
-
-// -------------------------
-// RENDER (UNCHANGED)
-// -------------------------
-function render(game){
+  const res=await fetch(`/data/baseball/boxscores/${season}/${id}.json`)
+  const game=await res.json()
 
   document.getElementById("title").innerText=`${game.away_team} @ ${game.home_team}`
   document.getElementById("meta").innerText=`Date: ${game.date}`
@@ -181,14 +168,23 @@ function render(game){
   document.getElementById("awayPitchTitle").innerText=`${game.away_team} Pitching`
   document.getElementById("homePitchTitle").innerText=`${game.home_team} Pitching`
 
-  // ✅ ONLY USE REAL TABLE DATA (LIKE 2025)
+  // -------------------------
+  // IF OLD DATA EXISTS
+  // -------------------------
   if(game.batters_away){
     renderTable("awayBatting",game.batters_away)
     renderTable("homeBatting",game.batters_home)
     renderTable("awayPitching",game.pitchers_away)
     renderTable("homePitching",game.pitchers_home)
-  }else{
-    document.getElementById("meta").innerText += " (No structured stats available)"
+  }
+  else{
+    // 🔥 BUILD FROM EVENTS
+    const stats=buildStats(game.events)
+
+    renderTable("awayBatting",stats.batting)
+    renderTable("homeBatting",stats.batting)
+    renderTable("awayPitching",stats.pitching)
+    renderTable("homePitching",stats.pitching)
   }
 }
 
