@@ -63,7 +63,6 @@ select{
   text-align:center;
 }
 
-/* middle column */
 .compare-table td.label{
   font-weight:700;
   background:#fafafa;
@@ -75,7 +74,7 @@ select{
   background:#eef4ff;
 }
 
-/* highlight better */
+/* highlight */
 .better{
   font-weight:700;
   color:#0056d6;
@@ -107,17 +106,38 @@ const result = document.getElementById("result");
 
 let players = {};
 
-/* load players index */
+/* LOAD PLAYERS (FIXED) */
 async function loadPlayers(){
 
-const res = await fetch("/data/afl/players.json");
+try{
+
+const res = await fetch("data/afl/players.json");
+if(!res.ok) throw new Error("No players file");
+
 const data = await res.json();
 
 data.forEach(p=>{
-players[p.name.toLowerCase()] = p;
+
+const name =
+  p.name ||
+  p.player ||
+  p.full_name ||
+  "";
+
+if(!name) return;
+
+players[name.toLowerCase()] = {
+  name: name,
+  games: p.games || 0,
+  best_disposals: p.best_disposals || p.disposals_high || 0,
+  best_goals: p.best_goals || p.goals_high || 0,
+  avg_disposals: p.avg_disposals || p.disposals_avg || 0,
+  avg_goals: p.avg_goals || p.goals_avg || 0
+};
+
 });
 
-let list = Object.values(players).sort((a,b)=>a.name.localeCompare(b.name));
+const list = Object.values(players).sort((a,b)=>a.name.localeCompare(b.name));
 
 player1.innerHTML = `<option value="">Select Player</option>`;
 player2.innerHTML = `<option value="">Select Player</option>`;
@@ -127,6 +147,11 @@ player1.innerHTML += `<option value="${p.name.toLowerCase()}">${p.name}</option>
 player2.innerHTML += `<option value="${p.name.toLowerCase()}">${p.name}</option>`;
 });
 
+}catch(e){
+result.innerHTML = "<p>Failed to load players.</p>";
+console.error(e);
+}
+
 }
 
 loadPlayers();
@@ -134,6 +159,7 @@ loadPlayers();
 player1.onchange = compare;
 player2.onchange = compare;
 
+/* COMPARE */
 function compare(){
 
 const p1 = players[player1.value];
@@ -141,7 +167,6 @@ const p2 = players[player2.value];
 
 if(!p1 || !p2) return;
 
-/* stats */
 const stats = [
   {label:"Games", key:"games"},
   {label:"Best Disposals", key:"best_disposals"},
