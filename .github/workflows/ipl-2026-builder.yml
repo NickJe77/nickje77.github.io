@@ -2,26 +2,64 @@ name: IPL 2026 Builder
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *"
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      # -------------------------
+      # CHECKOUT
+      # -------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      # -------------------------
+      # PYTHON
+      # -------------------------
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Run builder
+      # -------------------------
+      # DEBUG FILES (VERY IMPORTANT)
+      # -------------------------
+      - name: List IPL files
+        run: |
+          echo "=== IPL FILES ==="
+          ls -R docs/data/ipl || true
+
+      # -------------------------
+      # RUN BUILDER
+      # -------------------------
+      - name: Run IPL 2026 builder
         run: |
           python scripts/build_ipl_2026.py
 
-      - name: Commit
+      # -------------------------
+      # VERIFY OUTPUT
+      # -------------------------
+      - name: Check output
+        run: |
+          if [ -f docs/data/ipl/ipl_2026.json ]; then
+            echo "✅ ipl_2026.json exists"
+          else
+            echo "❌ ipl_2026.json missing"
+          fi
+
+      # -------------------------
+      # COMMIT (SAFE)
+      # -------------------------
+      - name: Commit changes
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add docs/data/ipl/ipl_2026.json
-          git commit -m "Build IPL 2026 season" || echo "No changes"
+
+          git add docs/data/ipl || true
+
+          git commit -m "Update IPL 2026 data" || echo "No changes"
+
           git push
