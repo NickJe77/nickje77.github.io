@@ -2,280 +2,335 @@
 <html lang="en">
 <head>
   <script src="/js/analytics.js"></script>
-<meta charset="UTF-8">
-<title>IPL Match | The Sporting Almanac</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8">
+  <title>IPL Match | The Sporting Almanac</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<style>
-body{
-  font-family: Inter, system-ui, Arial, sans-serif;
-  margin:0;
-  background:#ffffff;
-}
+  <style>
+    body{
+      font-family: Inter, system-ui, Arial, sans-serif;
+      margin:0;
+      background:#ffffff;
+    }
 
-.navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px 0;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
-}
-.navbar a{
-  color:#0056d6;
-  text-decoration:none;
-  font-size:18px;
-}
+    .navbar{
+      display:flex;
+      justify-content:center;
+      gap:22px;
+      padding:16px 0;
+      border-bottom:1px solid #ddd;
+      font-weight:600;
+    }
+    .navbar a{
+      color:#0056d6;
+      text-decoration:none;
+      font-size:18px;
+    }
 
-.page-wrap{
-  max-width:1200px;
-  margin:auto;
-  padding:30px 20px;
-}
+    .page-wrap{
+      max-width:1200px;
+      margin:auto;
+      padding:30px 20px;
+    }
 
-.hero{
-  background:linear-gradient(90deg,#3b007a,#7b2cbf);
-  color:white;
-  padding:40px 50px;
-  border-radius:24px;
-  margin-bottom:25px;
-}
-.hero h1{
-  margin:0;
-  font-size:46px;
-}
-.hero p{
-  margin-top:10px;
-  font-size:18px;
-  opacity:0.95;
-}
+    .hero{
+      background:linear-gradient(90deg,#3b007a,#7b2cbf);
+      color:white;
+      padding:40px 50px;
+      border-radius:24px;
+      margin-bottom:25px;
+    }
+    .hero h1{
+      margin:0;
+      font-size:46px;
+    }
+    .hero p{
+      margin-top:10px;
+      font-size:18px;
+      opacity:0.95;
+    }
 
-h2{
-  margin-top:40px;
-  color:#3b007a;
-}
+    h2{
+      margin-top:40px;
+      color:#3b007a;
+    }
 
-table{
-  width:100%;
-  border-collapse:collapse;
-  margin-top:10px;
-}
+    h3{
+      margin-top:20px;
+      color:#3b007a;
+    }
 
-th,td{
-  border-bottom:1px solid #ddd;
-  padding:8px 10px;
-}
+    table{
+      width:100%;
+      border-collapse:collapse;
+      margin-top:10px;
+    }
 
-th{
-  background:#f3f6fb;
-}
+    th,td{
+      border-bottom:1px solid #ddd;
+      padding:8px 10px;
+    }
 
-td.num{
-  text-align:right;
-}
+    th{
+      background:#f3f6fb;
+    }
 
-tr:nth-child(even){
-  background:#f8fbff;
-}
+    td.num{
+      text-align:right;
+    }
 
-.note{
-  margin-top:6px;
-  font-size:13px;
-}
-</style>
+    tr:nth-child(even){
+      background:#f8fbff;
+    }
+
+    .note{
+      margin-top:6px;
+      font-size:13px;
+    }
+  </style>
 </head>
 
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="cricket.html">Cricket</a>
-<a href="ipl-player.html">IPL Players</a>
+  <a href="index.html">Home</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="ipl-player.html">IPL Players</a>
 </div>
 
 <div class="page-wrap">
 
-<div class="hero">
-<h1 id="matchTitle">Loading match…</h1>
-<p id="statusText"></p>
-</div>
+  <div class="hero">
+    <h1 id="matchTitle">Loading match…</h1>
+    <p id="statusText"></p>
+  </div>
 
-<div id="inningsContainer"></div>
+  <div id="inningsContainer"></div>
 
 </div>
 
 <script>
-document.addEventListener("DOMContentLoaded", ()=>{
+document.addEventListener("DOMContentLoaded", () => {
 
-const params = new URLSearchParams(location.search);
-const fileParam = params.get("file");
-const season = params.get("season");
+  const params = new URLSearchParams(location.search);
+  const season = params.get("season");
+  const indexParam = params.get("index");
 
-const namesUrl = "data/ipl/player-names.json";
+  const namesUrl = "data/ipl/player-names.json";
 
-let nameMap = {};
+  let nameMap = {};
 
-const matchTitle = document.getElementById("matchTitle");
-const statusText = document.getElementById("statusText");
-const inningsContainer = document.getElementById("inningsContainer");
+  const matchTitle = document.getElementById("matchTitle");
+  const statusText = document.getElementById("statusText");
+  const inningsContainer = document.getElementById("inningsContainer");
 
-function fullName(n){
-  return nameMap[n] || n;
-}
-
-if(!season){
-  matchTitle.textContent = "Missing season";
-  return;
-}
-
-fetch(namesUrl)
-.then(r=>r.json())
-.then(names=>{
-
-  nameMap = names || {};
-
-  return fetch(`data/ipl/ipl_${season}_FULL.json`)
-    .then(r=>r.json());
-
-})
-.then(matches=>{
-
-  let match = null;
-
-  // ✅ FIRST: try matching by file (old seasons)
-  if(fileParam){
-    match = matches.find(m => m.file === fileParam);
+  function fullName(n){
+    return nameMap[n] || n;
   }
 
-  // ✅ FALLBACK: use index (2026 fix)
-  if(!match && fileParam){
-    const index = parseInt(fileParam.replace(/\D/g,'')) - 1;
-    if(index >= 0 && index < matches.length){
-      match = matches[index];
-    }
+  if (!season || indexParam === null) {
+    matchTitle.textContent = "Missing match data";
+    return;
   }
 
-  if(!match){
+  const matchIndex = parseInt(indexParam, 10);
+
+  if (Number.isNaN(matchIndex)) {
     matchTitle.textContent = "Match not found";
     return;
   }
 
-  const info = match.info;
+  fetch(namesUrl)
+    .then(r => r.json())
+    .then(names => {
+      nameMap = names || {};
+      return fetch(`data/ipl/ipl_${season}_FULL.json`).then(r => r.json());
+    })
+    .then(matches => {
+      if (!Array.isArray(matches) || matchIndex < 0 || matchIndex >= matches.length) {
+        matchTitle.textContent = "Match not found";
+        return;
+      }
 
-  matchTitle.textContent =
-    fullName(info.teams[0]) + " vs " + fullName(info.teams[1]);
-
-  let heroMeta =
-    info.venue + " • " +
-    new Date(info.dates[0]).toDateString() +
-    " • Winner: " +
-    fullName(info.outcome?.winner || "—");
-
-  if(info.player_of_match){
-    heroMeta += " • Player of the Match: " +
-      info.player_of_match.map(fullName).join(", ");
-  }
-
-  statusText.textContent = heroMeta;
-
-  renderInnings(match.innings);
-
-});
-
-function renderInnings(innings){
-
-  inningsContainer.innerHTML = "";
-
-  innings.forEach(inn=>{
-
-    const batStats = {};
-    const bowlStats = {};
-    const dismissals = {};
-
-    let runs = 0;
-    let wkts = 0;
-    let legalBalls = 0;
-
-    let extras = {b:0, lb:0, w:0, nb:0, p:0};
-    let fall = [];
-
-    inn.overs.forEach((over,oIndex)=>{
-
-      over.deliveries.forEach((d,bIndex)=>{
-
-        const batter = d.batter;
-        const bowler = d.bowler;
-
-        if(!batStats[batter]){
-          batStats[batter] = {runs:0, balls:0};
-        }
-
-        batStats[batter].runs += d.runs.batter;
-
-        if(!d.extras?.wides){
-          batStats[batter].balls++;
-        }
-
-        if(!bowlStats[bowler]){
-          bowlStats[bowler] = {runs:0, balls:0, wkts:0};
-        }
-
-        bowlStats[bowler].runs += d.runs.total;
-
-        if(!d.extras?.wides && !d.extras?.noballs){
-          bowlStats[bowler].balls++;
-          legalBalls++;
-        }
-
-        if(d.extras){
-          extras.b += d.extras.byes || 0;
-          extras.lb += d.extras.legbyes || 0;
-          extras.w += d.extras.wides || 0;
-          extras.nb += d.extras.noballs || 0;
-          extras.p += d.extras.penalty || 0;
-        }
-
-        if(d.wickets){
-          d.wickets.forEach(w=>{
-
-            wkts++;
-
-            const out = w.player_out;
-            const bowlerName = fullName(bowler);
-            const fielderName = fullName(w.fielders?.[0]?.name || "");
-
-            let how = "";
-
-            if(w.kind === "caught") how = `c ${fielderName} b ${bowlerName}`;
-            else if(w.kind === "bowled") how = `b ${bowlerName}`;
-            else if(w.kind === "lbw") how = `lbw b ${bowlerName}`;
-            else if(w.kind === "run out") how = `run out (${fielderName})`;
-            else how = `${w.kind} b ${bowlerName}`;
-
-            dismissals[out] = how;
-
-            bowlStats[bowler].wkts++;
-
-            fall.push(`${runs}/${wkts} (${fullName(out)}, ${oIndex}.${bIndex+1})`);
-          });
-        }
-
-        runs += d.runs.total;
-
+      const sortedMatches = [...matches].sort((a, b) => {
+        const da = new Date(a.info?.dates?.[0] || a.date);
+        const db = new Date(b.info?.dates?.[0] || b.date);
+        return db - da;
       });
 
+      const match = sortedMatches[matchIndex];
+
+      if (!match) {
+        matchTitle.textContent = "Match not found";
+        return;
+      }
+
+      const info = match.info;
+
+      matchTitle.textContent =
+        fullName(info.teams[0]) + " vs " + fullName(info.teams[1]);
+
+      let heroMeta =
+        (info.venue || "") + " • " +
+        new Date(info.dates[0]).toDateString() + " • Winner: " +
+        fullName(info.outcome?.winner || "—");
+
+      if (info.player_of_match) {
+        heroMeta += " • Player of the Match: " +
+          info.player_of_match.map(fullName).join(", ");
+      }
+
+      statusText.textContent = heroMeta;
+
+      renderInnings(match.innings);
     });
 
-    const overs = Math.floor(legalBalls/6) + "." + (legalBalls%6);
+  function renderInnings(innings){
+    inningsContainer.innerHTML = "";
 
-    let html = `<h2>${fullName(inn.team)} Innings</h2>
-    <p><strong>${runs}/${wkts}</strong> (${overs} ov)</p>`;
+    innings.forEach(inn => {
+      const batStats = {};
+      const bowlStats = {};
+      const dismissals = {};
 
-    inningsContainer.innerHTML += html;
+      let runs = 0;
+      let wkts = 0;
+      let legalBalls = 0;
 
-  });
+      let extras = {b:0, lb:0, w:0, nb:0, p:0};
+      let fall = [];
 
-}
+      inn.overs.forEach((over, oIndex) => {
+        over.deliveries.forEach((d, bIndex) => {
+          const batter = d.batter;
+          const bowler = d.bowler;
+
+          if (!batStats[batter]) {
+            batStats[batter] = { runs:0, balls:0 };
+          }
+
+          batStats[batter].runs += d.runs.batter;
+
+          if (!d.extras?.wides) {
+            batStats[batter].balls++;
+          }
+
+          if (!bowlStats[bowler]) {
+            bowlStats[bowler] = { runs:0, balls:0, wkts:0 };
+          }
+
+          bowlStats[bowler].runs += d.runs.total;
+
+          if (!d.extras?.wides && !d.extras?.noballs) {
+            bowlStats[bowler].balls++;
+            legalBalls++;
+          }
+
+          if (d.extras) {
+            extras.b += d.extras.byes || 0;
+            extras.lb += d.extras.legbyes || 0;
+            extras.w += d.extras.wides || 0;
+            extras.nb += d.extras.noballs || 0;
+            extras.p += d.extras.penalty || 0;
+          }
+
+          if (d.wickets) {
+            d.wickets.forEach(w => {
+              wkts++;
+
+              const out = w.player_out;
+              const bowlerName = fullName(bowler);
+              const fielderName = fullName(w.fielders?.[0]?.name || "");
+
+              let how = "";
+
+              if (w.kind === "caught") how = `c ${fielderName} b ${bowlerName}`;
+              else if (w.kind === "bowled") how = `b ${bowlerName}`;
+              else if (w.kind === "lbw") how = `lbw b ${bowlerName}`;
+              else if (w.kind === "run out") how = `run out (${fielderName})`;
+              else how = `${w.kind} b ${bowlerName}`;
+
+              dismissals[out] = how;
+              bowlStats[bowler].wkts++;
+              fall.push(`${runs}/${wkts} (${fullName(out)}, ${oIndex}.${bIndex + 1})`);
+            });
+          }
+
+          runs += d.runs.total;
+        });
+      });
+
+      const overs = Math.floor(legalBalls / 6) + "." + (legalBalls % 6);
+
+      let html = `
+        <h2>${fullName(inn.team)} Innings</h2>
+        <p><strong>${runs}/${wkts}</strong> (${overs} ov)</p>
+
+        <table>
+          <tr>
+            <th>Batter</th>
+            <th>How out</th>
+            <th class="num">R</th>
+            <th class="num">B</th>
+            <th class="num">SR</th>
+          </tr>
+      `;
+
+      Object.entries(batStats).forEach(([p, s]) => {
+        const sr = s.balls ? ((s.runs / s.balls) * 100).toFixed(1) : "";
+        html += `
+          <tr>
+            <td>${fullName(p)}</td>
+            <td>${dismissals[p] || "not out"}</td>
+            <td class="num">${s.runs}</td>
+            <td class="num">${s.balls}</td>
+            <td class="num">${sr}</td>
+          </tr>
+        `;
+      });
+
+      html += `</table>
+
+      <div class="note">
+        Extras: ${extras.b + extras.lb + extras.w + extras.nb + extras.p}
+        (b ${extras.b}, lb ${extras.lb}, w ${extras.w}, nb ${extras.nb}, p ${extras.p})
+      </div>
+
+      <div class="note">
+        Fall of wickets: ${fall.length ? fall.join(", ") : "None"}
+      </div>
+
+      <h3>Bowling vs ${fullName(inn.team)}</h3>
+
+      <table>
+        <tr>
+          <th>Bowler</th>
+          <th class="num">O</th>
+          <th class="num">R</th>
+          <th class="num">W</th>
+          <th class="num">Econ</th>
+        </tr>`;
+
+      Object.entries(bowlStats).forEach(([p, s]) => {
+        const o = Math.floor(s.balls / 6) + "." + (s.balls % 6);
+        const econ = s.balls ? (s.runs / (s.balls / 6)).toFixed(2) : "0.00";
+
+        html += `
+          <tr>
+            <td>${fullName(p)}</td>
+            <td class="num">${o}</td>
+            <td class="num">${s.runs}</td>
+            <td class="num">${s.wkts}</td>
+            <td class="num">${econ}</td>
+          </tr>
+        `;
+      });
+
+      html += `</table>`;
+
+      inningsContainer.innerHTML += html;
+    });
+  }
 });
 </script>
 
