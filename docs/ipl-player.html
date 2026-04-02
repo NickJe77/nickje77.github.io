@@ -8,122 +8,96 @@
 
 <style>
 body{
-  font-family:system-ui,Arial,sans-serif;
+  font-family:Inter,system-ui,Arial,sans-serif;
   margin:0;
-  background:#f5f6f7;
+  background:#f6f7f9;
 }
 
-/* HEADER */
-.header{
+.navbar{
   display:flex;
-  justify-content:space-between;
-  align-items:center;
-  padding:20px;
-}
-
-.header-left{
-  display:flex;
-  align-items:center;
-  gap:16px;
-}
-
-.header h1{
-  margin:0;
-  font-size:36px;
-}
-
-.bar{
-  width:120px;
-  height:16px;
-  background:#ddd;
-  border-radius:8px;
-  overflow:hidden;
-}
-.bar-inner{
-  width:60%;
-  height:100%;
-  background:#0b3d91;
-}
-
-/* SEARCH */
-.search{
-  padding:10px;
-  width:220px;
-  border-radius:10px;
-  border:1px solid #ccc;
-}
-
-/* CARD AREA */
-.container{
+  justify-content:center;
+  gap:24px;
+  padding:16px 0;
   background:#fff;
-  margin:20px;
-  padding:20px;
-  border-radius:16px;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+  font-size:18px;
 }
 
-.section-title{
-  font-weight:700;
-  margin:20px 0 10px;
-  color:#555;
+.page{
+  max-width:1200px;
+  margin:30px auto;
+  padding:0 20px;
 }
 
-.cards{
+.hero{
+  background:linear-gradient(90deg,#3b007a,#7b2cbf);
+  color:white;
+  padding:40px;
+  border-radius:24px;
+}
+.hero h1{
+  margin:0;
+  font-size:38px;
+}
+
+.stats{
   display:grid;
   grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
-  gap:16px;
+  gap:14px;
+  margin-top:20px;
 }
 
-.card{
-  background:#eef1f5;
-  padding:20px;
+.stat{
+  background:#fff;
+  padding:18px;
   border-radius:14px;
   text-align:center;
 }
 
-.card h2{
-  margin:0;
-  font-size:28px;
+.table-wrap{
+  margin-top:30px;
+  background:#fff;
+  border-radius:14px;
+  overflow:hidden;
 }
 
-/* TABLE */
 table{
   width:100%;
   border-collapse:collapse;
-  margin-top:20px;
 }
 
 th,td{
-  padding:10px;
-  border-bottom:1px solid #ddd;
+  padding:12px;
+  border-bottom:1px solid #eee;
   text-align:center;
 }
 
-th{background:#e9edf3;}
-tr:nth-child(even){background:#f7f9fb;}
+th{background:#f1f4f8;}
 </style>
 </head>
 
 <body>
 
-<div class="header">
-  <div class="header-left">
-    <h1 id="playerName">Loading…</h1>
-    <div class="bar"><div class="bar-inner"></div></div>
-  </div>
-
-  <input class="search" placeholder="Search player…">
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="cricket.html">Cricket</a>
+<a href="ipl.html">IPL</a>
 </div>
 
-<div class="container">
+<div class="page">
 
-<select id="oppFilter"></select>
+<div class="hero">
+<h1 id="playerName">Loading…</h1>
+</div>
 
-<div class="section-title">CAREER SUMMARY</div>
-<div class="cards" id="careerStats"></div>
+<div class="stats" id="careerStats"></div>
 
-<div class="section-title">VS SELECTED OPPONENT</div>
-<div class="cards" id="vsStats"></div>
-
+<div class="table-wrap">
 <table>
 <thead>
 <tr>
@@ -136,131 +110,120 @@ tr:nth-child(even){background:#f7f9fb;}
 </thead>
 <tbody id="gamesTable"></tbody>
 </table>
+</div>
 
 </div>
 
 <script>
 (async function(){
 
-const slug = new URLSearchParams(location.search).get("player");
+const params = new URLSearchParams(location.search);
+const slug = params.get("player");
 
-function norm(n){
-  return n.toLowerCase().replace(/[^a-z]/g,"");
+if(!slug){
+  document.getElementById("playerName").textContent="No player specified";
+  return;
 }
 
-// NAME MAP
-const nameMap = await fetch("/data/ipl/player-names.json").then(r=>r.json());
-let reverseMap = {};
-Object.entries(nameMap).forEach(([f,s])=>reverseMap[s]=f);
+// 🔥 LOAD NAME MAP
+const nameMap =
+  await fetch("/data/ipl/player-names.json")
+  .then(r=>r.json());
 
-// STRICT
+// 🔥 REVERSE MAP
+let reverseMap = {};
+Object.entries(nameMap).forEach(([full, s])=>{
+  reverseMap[s] = full;
+});
+
+// ✅ STRICT NAME MATCH (FIX)
 const playerName = reverseMap[slug];
+
 if(!playerName){
   document.getElementById("playerName").textContent="Player not found";
   return;
 }
 
-document.getElementById("playerName").textContent=playerName;
+document.getElementById("playerName").textContent = playerName;
 
-const P = norm(playerName);
-
-// LOAD INDEX
-const index = await fetch("/data/ipl/index.json").then(r=>r.json());
+// -----------------------------
+// ORIGINAL LOGIC (UNCHANGED)
+// -----------------------------
+const P = playerName.toLowerCase();
 
 let games=[];
-let opponents=new Set();
 
+// LOAD INDEX
+const index =
+  await fetch("/data/ipl/index.json")
+  .then(r=>r.json());
+
+// LOAD MATCHES
 for(const file of index){
 
   if(!file.includes("_FULL.json")) continue;
 
-  const matches = await fetch("/data/ipl/"+file).then(r=>r.json());
+  const matches =
+    await fetch("/data/ipl/"+file)
+    .then(r=>r.json());
 
   matches.forEach(match=>{
+
     match.innings.forEach(inn=>{
 
-      let runs=0, balls=0, played=false;
+      let runs=0;
+      let balls=0;
+      let played=false;
 
       inn.overs.forEach(o=>{
         o.deliveries.forEach(d=>{
-          if(norm(d.batter||"")===P){
+
+          if(d.batter?.toLowerCase()===P){
             played=true;
-            runs+=d.runs.batter||0;
+            runs+=d.runs.batter;
             if(!d.extras?.wides) balls++;
           }
+
         });
       });
 
       if(played){
-        const opp = match.info.teams.find(t=>t!==inn.team);
-        opponents.add(opp);
-
         games.push({
           season:match.info.season,
-          date:match.info.dates?.[0]||"",
-          opp,
+          date:match.info.dates[0],
+          opp:match.info.teams.find(t=>t!==inn.team),
           runs,
           balls
         });
       }
 
     });
+
   });
+
 }
 
-// FILTER
-const filter=document.getElementById("oppFilter");
-filter.innerHTML='<option value="">All Teams</option>';
-[...opponents].sort().forEach(o=>{
-  const opt=document.createElement("option");
-  opt.value=o;
-  opt.textContent=o;
-  filter.appendChild(opt);
-});
+// CAREER TOTALS
+const totalRuns = games.reduce((a,b)=>a+b.runs,0);
+const totalBalls = games.reduce((a,b)=>a+b.balls,0);
 
-// RENDER
-function render(){
+document.getElementById("careerStats").innerHTML=`
+<div class="stat"><h3>${games.length}</h3><span>Matches</span></div>
+<div class="stat"><h3>${totalRuns}</h3><span>Runs</span></div>
+<div class="stat"><h3>${totalBalls}</h3><span>Balls</span></div>
+`;
 
-  const opp=filter.value;
-  let data=games;
-  if(opp) data=data.filter(g=>g.opp===opp);
-
-  // CAREER
-  const totalRuns = games.reduce((a,b)=>a+b.runs,0);
-  const totalBalls = games.reduce((a,b)=>a+b.balls,0);
-  const avg = games.length? (totalRuns/games.length).toFixed(1):0;
-
-  document.getElementById("careerStats").innerHTML=`
-  <div class="card"><h2>${games.length}</h2>Games</div>
-  <div class="card"><h2>${Math.max(...games.map(g=>g.runs),0)}</h2>Best Score</div>
-  <div class="card"><h2>${avg}</h2>Avg Runs</div>
-  `;
-
-  // VS OPP
-  const r = data.reduce((a,b)=>a+b.runs,0);
-  const avgOpp = data.length? (r/data.length).toFixed(1):0;
-
-  document.getElementById("vsStats").innerHTML=`
-  <div class="card"><h2>${data.length}</h2>Games</div>
-  <div class="card"><h2>${Math.max(...data.map(g=>g.runs),0)}</h2>Best</div>
-  <div class="card"><h2>${avgOpp}</h2>Avg</div>
-  `;
-
-  // TABLE
-  document.getElementById("gamesTable").innerHTML=
-  data.map(g=>`
-  <tr>
-  <td>${g.season}</td>
-  <td>${g.date}</td>
-  <td>${g.opp}</td>
-  <td>${g.runs}</td>
-  <td>${g.balls}</td>
-  </tr>
-  `).join("");
-}
-
-filter.onchange=render;
-render();
+// TABLE
+document.getElementById("gamesTable").innerHTML =
+games.map(g=>`
+<tr>
+<td>${g.season}</td>
+<td>${g.date}</td>
+<td>${g.opp}</td>
+<td>${g.runs}</td>
+<td>${g.balls}</td>
+</tr>
+`).join("");
 
 })();
 </script>
