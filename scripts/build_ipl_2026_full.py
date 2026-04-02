@@ -11,8 +11,6 @@ URL = "https://cricsheet.org/downloads/ipl_json.zip"
 OUTPUT = Path("docs/data/ipl/ipl_2026_FULL.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
-print("Downloading IPL data...")
-
 r = requests.get(URL)
 z = zipfile.ZipFile(io.BytesIO(r.content))
 
@@ -24,15 +22,16 @@ for file in z.namelist():
 
     data = json.loads(z.read(file))
 
-    season = data.get("info", {}).get("season")
+    season = str(data.get("info", {}).get("season"))
 
-    if str(season) == "2026":
+    if season == "2026":
+        data["file"] = file   # 🔥 IMPORTANT (matches your 2025 format)
         matches_2026.append(data)
 
 print("Matches found:", len(matches_2026))
 
 if not matches_2026:
-    print("❌ No 2026 matches yet (season may not be in Cricsheet)")
+    print("❌ No 2026 matches found yet")
     exit()
 
 with open(OUTPUT, "w") as f:
