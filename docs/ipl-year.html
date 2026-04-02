@@ -174,7 +174,9 @@ fetch(indexUrl)
       const btn = document.createElement("button");
       btn.className="year-btn";
       btn.textContent=year;
+
       btn.onclick=()=>selectSeason(file,btn);
+
       yearGrid.appendChild(btn);
 
       if(i===files.length-1){
@@ -196,23 +198,22 @@ fetch(basePath+file)
 .then(matches=>{
   tableBody.innerHTML="";
 
-  // ✅ SORT (works for both formats)
+  const season = file.match(/\d{4}/)[0];
+
   matches.sort((a,b)=>{
     const da = new Date(a.info?.dates?.[0] || a.date);
     const db = new Date(b.info?.dates?.[0] || b.date);
     return db - da;
   });
 
-  // ✅ FINAL DETECTION (fixed)
-  const finalMatch = matches.find(m =>
-    (m.info?.event?.match_number || "").toString().toLowerCase().includes("final")
-  );
-
-  if (!finalMatch) {
+  // ✅ ONLY 2026 SUPPRESSED
+  if (season === "2026") {
     winnerBox.textContent = "—";
     runnerBox.textContent = "—";
   } else {
+    const finalMatch = matches[0];
     const info = finalMatch.info || finalMatch;
+
     const winner = info.outcome?.winner || "—";
     const teams = info.teams || [];
     const runnerUp = teams.find(t => t !== winner) || "—";
@@ -222,7 +223,7 @@ fetch(basePath+file)
   }
 
   matches.forEach(m=>{
-    const info = m.info || m; // ✅ key fix
+    const info = m.info || m;
 
     let margin="";
     if(info.outcome?.by){
@@ -231,8 +232,9 @@ fetch(basePath+file)
     }
 
     const tr=document.createElement("tr");
+
     tr.onclick = () => {
-      window.location.href = "ipl-match.html?file=" + m.file;
+      window.location.href = `ipl-match.html?file=${m.file}&season=${season}`;
     };
 
     tr.innerHTML=`
@@ -243,6 +245,7 @@ fetch(basePath+file)
       <td class="winner">${info.outcome?.winner||""}</td>
       <td>${margin}</td>
     `;
+
     tableBody.appendChild(tr);
   });
 });
