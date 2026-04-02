@@ -125,29 +125,24 @@ if(!slug){
   return;
 }
 
-// ---------------- CLEAN FUNCTION ----------------
+// CLEAN
 function clean(n){
-  return (n||"")
-    .toLowerCase()
-    .replace(/[^a-z]/g,"");
+  return (n||"").toLowerCase().replace(/[^a-z]/g,"");
 }
 
-// ---------------- SLUG → INITIALS ----------------
+// SLUG → INITIALS
 function slugToInitials(slug){
   return slug
     .replace(/-/g," ")
     .replace(/\b\w/g,c=>c.toUpperCase());
 }
 
-// LOAD JSON
-const nameMap =
-  await fetch("/data/ipl/player-names.json")
-  .then(r=>r.json());
+// LOAD NAME MAP
+const nameMap = await fetch("/data/ipl/player-names.json").then(r=>r.json());
 
-let playerName = null;
+let playerName=null;
 let initials = slugToInitials(slug);
 
-// FIND PLAYER
 for(const [shortName, fullName] of Object.entries(nameMap)){
   if(clean(shortName) === clean(initials)){
     playerName = fullName;
@@ -163,27 +158,22 @@ if(!playerName){
 
 document.getElementById("playerName").textContent = playerName;
 
-// 🔥 MATCH USING CLEANED NAME (THIS FIXES MISSING DATA)
 const target = clean(initials);
+
+// LOAD INDEX
+const index = await fetch("/data/ipl/index.json").then(r=>r.json());
+
+// 🚀 LOAD ALL FILES IN PARALLEL (BIG SPEED FIX)
+const matchData = await Promise.all(
+  index
+    .filter(f=>f.includes("_FULL.json"))
+    .map(f=>fetch("/data/ipl/"+f).then(r=>r.json()))
+);
 
 let games=[];
 
-// LOAD INDEX
-const index =
-  await fetch("/data/ipl/index.json")
-  .then(r=>r.json());
-
-// LOAD MATCHES
-for(const file of index){
-
-  if(!file.includes("_FULL.json")) continue;
-
-  const matches =
-    await fetch("/data/ipl/"+file)
-    .then(r=>r.json());
-
+matchData.forEach(matches=>{
   matches.forEach(match=>{
-
     match.innings.forEach(inn=>{
 
       let runs=0;
@@ -192,13 +182,11 @@ for(const file of index){
 
       inn.overs.forEach(o=>{
         o.deliveries.forEach(d=>{
-
           if(clean(d.batter) === target){
             played=true;
             runs+=d.runs.batter || 0;
             if(!d.extras?.wides) balls++;
           }
-
         });
       });
 
@@ -213,21 +201,23 @@ for(const file of index){
       }
 
     });
-
   });
+});
 
-}
-
-// TOTALS
+// STATS
 const totalRuns = games.reduce((a,b)=>a+b.runs,0);
 const totalBalls = games.reduce((a,b)=>a+b.balls,0);
+const sr = totalBalls ? (totalRuns/totalBalls*100).toFixed(1) : 0;
+const hs = Math.max(...games.map(g=>g.runs),0);
 
 document.getElementById("careerStats").innerHTML=`
 <div class="stat"><h3>${games.length}</h3><span>Matches</span></div>
 <div class="stat"><h3>${totalRuns}</h3><span>Runs</span></div>
-<div class="stat"><h3>${totalBalls}</h3><span>Balls</span></div>
+<div class="stat"><h3>${sr}</h3><span>Strike Rate</span></div>
+<div class="stat"><h3>${hs}</h3><span>Highest Score</span></div>
 `;
 
+// TABLE
 document.getElementById("gamesTable").innerHTML =
 games.map(g=>`
 <tr>
