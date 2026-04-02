@@ -134,7 +134,16 @@ th{background:#f1f4f8;}
 
 <div class="table-wrap">
 <table>
-<thead id="thead"></thead>
+<thead>
+<tr id="tableHead">
+<th>Season</th>
+<th>Date</th>
+<th>Opponent</th>
+<th>Runs</th>
+<th>Balls</th>
+<th>SR</th>
+</tr>
+</thead>
 <tbody id="gamesTable"></tbody>
 </table>
 </div>
@@ -154,7 +163,6 @@ function slugToInitials(slug){
   return slug.replace(/-/g," ").replace(/\b\w/g,c=>c.toUpperCase());
 }
 
-// LOAD NAME MAP
 const nameMap = await fetch("/data/ipl/player-names.json").then(r=>r.json());
 
 let playerName=null;
@@ -177,10 +185,8 @@ document.getElementById("playerName").textContent = playerName;
 
 const target = clean(initials);
 
-// LOAD INDEX
 const index = await fetch("/data/ipl/index.json").then(r=>r.json());
 
-// LOAD ALL MATCHES FAST
 const matchData = await Promise.all(
   index.filter(f=>f.includes("_FULL.json"))
        .map(f=>fetch("/data/ipl/"+f).then(r=>r.json()))
@@ -198,14 +204,12 @@ matchData.forEach(matches=>{
       inn.overs.forEach(o=>{
         o.deliveries.forEach(d=>{
 
-          // batting
           if(clean(d.batter) === target){
             played=true;
             batRuns+=d.runs.batter || 0;
             if(!d.extras?.wides) batBalls++;
           }
 
-          // bowling
           if(clean(d.bowler) === target){
             bowlRuns+=d.runs.total || 0;
             bowlBalls++;
@@ -219,31 +223,18 @@ matchData.forEach(matches=>{
       opponents.add(opp);
 
       if(played){
-        batting.push({
-          season:match.info.season,
-          date:match.info.dates?.[0],
-          opp,
-          runs:batRuns,
-          balls:batBalls
-        });
+        batting.push({season:match.info.season,date:match.info.dates[0],opp,runs:batRuns,balls:batBalls});
       }
 
       if(bowlBalls){
-        bowling.push({
-          season:match.info.season,
-          date:match.info.dates?.[0],
-          opp,
-          runs:bowlRuns,
-          balls:bowlBalls,
-          wkts
-        });
+        bowling.push({season:match.info.season,date:match.info.dates[0],opp,runs:bowlRuns,wkts});
       }
 
     });
   });
 });
 
-// BUILD FILTER
+// FILTER
 const filter=document.getElementById("oppFilter");
 [...opponents].sort().forEach(o=>{
   const opt=document.createElement("option");
@@ -256,18 +247,16 @@ let mode="bat";
 
 function render(){
 
-  let data = mode==="bat" ? batting : bowling;
+  let data = mode==="bat"?batting:bowling;
   const opp = filter.value;
 
-  if(opp) data = data.filter(g=>g.opp===opp);
+  if(opp) data=data.filter(g=>g.opp===opp);
 
   if(mode==="bat"){
 
-    document.getElementById("thead").innerHTML=`
-    <tr>
+    document.getElementById("tableHead").innerHTML=`
     <th>Season</th><th>Date</th><th>Opponent</th>
-    <th>Runs</th><th>Balls</th><th>SR</th>
-    </tr>`;
+    <th>Runs</th><th>Balls</th><th>SR</th>`;
 
     document.getElementById("gamesTable").innerHTML =
     data.map(g=>{
@@ -283,28 +272,24 @@ function render(){
       </tr>`;
     }).join("");
 
-  } else {
+  }else{
 
-    document.getElementById("thead").innerHTML=`
-    <tr>
+    document.getElementById("tableHead").innerHTML=`
     <th>Season</th><th>Date</th><th>Opponent</th>
-    <th>Wkts</th><th>Runs</th>
-    </tr>`;
+    <th>Wkts</th><th>Runs</th>`;
 
     document.getElementById("gamesTable").innerHTML =
     data.map(g=>`
-      <tr>
-      <td>${g.season}</td>
-      <td>${g.date}</td>
-      <td>${g.opp}</td>
-      <td>${g.wkts}</td>
-      <td>${g.runs}</td>
-      </tr>
-    `).join("");
+    <tr>
+    <td>${g.season}</td>
+    <td>${g.date}</td>
+    <td>${g.opp}</td>
+    <td>${g.wkts}</td>
+    <td>${g.runs}</td>
+    </tr>`).join("");
   }
 }
 
-// EVENTS
 document.getElementById("batTab").onclick=()=>{
   mode="bat";
   document.getElementById("batTab").classList.add("active");
@@ -319,9 +304,8 @@ document.getElementById("bowlTab").onclick=()=>{
   render();
 };
 
-filter.onchange = render;
+filter.onchange=render;
 
-// INIT
 render();
 
 })();
