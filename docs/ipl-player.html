@@ -125,12 +125,25 @@ if(!slug){
   return;
 }
 
+// ------------------------------
+// NORMALISE FUNCTION (CRITICAL)
+// ------------------------------
+function norm(name){
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"")
+    .replace(/[^a-z\s]/g,"")
+    .replace(/\s+/g," ")
+    .trim();
+}
+
 // 🔥 LOAD NAME MAP
 const nameMap =
   await fetch("/data/ipl/player-names.json")
   .then(r=>r.json());
 
-// 🔥 REVERSE MAP (CRITICAL FIX)
+// 🔥 REVERSE MAP
 let reverseMap = {};
 Object.entries(nameMap).forEach(([full, s])=>{
   reverseMap[s] = full;
@@ -146,7 +159,8 @@ if(!playerName){
 
 document.getElementById("playerName").textContent = playerName;
 
-const P = playerName.toLowerCase();
+// NORMALISED PLAYER NAME
+const P = norm(playerName);
 
 let games=[];
 
@@ -175,9 +189,9 @@ for(const file of index){
       inn.overs.forEach(o=>{
         o.deliveries.forEach(d=>{
 
-          if(d.batter?.toLowerCase()===P){
+          if(norm(d.batter || "") === P){
             played=true;
-            runs+=d.runs.batter;
+            runs+=d.runs.batter || 0;
             if(!d.extras?.wides) balls++;
           }
 
@@ -187,7 +201,7 @@ for(const file of index){
       if(played){
         games.push({
           season:match.info.season,
-          date:match.info.dates[0],
+          date:match.info.dates?.[0] || "",
           opp:match.info.teams.find(t=>t!==inn.team),
           runs,
           balls
