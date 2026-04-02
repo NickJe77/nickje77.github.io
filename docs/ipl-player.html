@@ -125,26 +125,33 @@ if(!slug){
   return;
 }
 
-// 🔥 SLUG → INITIALS (THIS MATCHES YOUR SYSTEM)
+// ---------------- CLEAN FUNCTION ----------------
+function clean(n){
+  return (n||"")
+    .toLowerCase()
+    .replace(/[^a-z]/g,"");
+}
+
+// ---------------- SLUG → INITIALS ----------------
 function slugToInitials(slug){
   return slug
     .replace(/-/g," ")
     .replace(/\b\w/g,c=>c.toUpperCase());
 }
 
-// LOAD YOUR JSON
+// LOAD JSON
 const nameMap =
   await fetch("/data/ipl/player-names.json")
   .then(r=>r.json());
 
-// 🔥 FIND PLAYER USING YOUR STRUCTURE
 let playerName = null;
 let initials = slugToInitials(slug);
 
+// FIND PLAYER
 for(const [shortName, fullName] of Object.entries(nameMap)){
-  if(shortName.toLowerCase() === initials.toLowerCase()){
+  if(clean(shortName) === clean(initials)){
     playerName = fullName;
-    initials = shortName; // IMPORTANT for matching
+    initials = shortName;
     break;
   }
 }
@@ -156,8 +163,8 @@ if(!playerName){
 
 document.getElementById("playerName").textContent = playerName;
 
-// 🔥 MATCH USING INITIALS (NOT FULL NAME)
-const P = initials.toLowerCase();
+// 🔥 MATCH USING CLEANED NAME (THIS FIXES MISSING DATA)
+const target = clean(initials);
 
 let games=[];
 
@@ -186,9 +193,9 @@ for(const file of index){
       inn.overs.forEach(o=>{
         o.deliveries.forEach(d=>{
 
-          if(d.batter?.toLowerCase()===P){
+          if(clean(d.batter) === target){
             played=true;
-            runs+=d.runs.batter;
+            runs+=d.runs.batter || 0;
             if(!d.extras?.wides) balls++;
           }
 
@@ -198,7 +205,7 @@ for(const file of index){
       if(played){
         games.push({
           season:match.info.season,
-          date:match.info.dates[0],
+          date:match.info.dates?.[0] || "",
           opp:match.info.teams.find(t=>t!==inn.team),
           runs,
           balls
