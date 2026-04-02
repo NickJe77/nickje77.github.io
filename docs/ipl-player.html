@@ -22,6 +22,7 @@ body{
   border-bottom:1px solid #ddd;
   font-weight:600;
 }
+
 .navbar a{
   color:#0056d6;
   text-decoration:none;
@@ -40,6 +41,7 @@ body{
   padding:40px;
   border-radius:24px;
 }
+
 .hero h1{
   margin:0;
   font-size:38px;
@@ -56,7 +58,6 @@ body{
   background:#eee;
   border-radius:10px;
   cursor:pointer;
-  user-select:none;
 }
 
 .tab.active{
@@ -69,11 +70,8 @@ body{
 }
 
 .controls select{
-  padding:10px 12px;
+  padding:10px;
   border-radius:10px;
-  border:1px solid #ccc;
-  background:#fff;
-  font-size:16px;
 }
 
 .stats{
@@ -90,9 +88,11 @@ body{
   text-align:center;
 }
 
-.stat h3{
-  margin:0 0 6px;
-  font-size:30px;
+.stat small{
+  display:block;
+  margin-top:6px;
+  color:#666;
+  font-size:13px;
 }
 
 .table-wrap{
@@ -116,6 +116,10 @@ th,td{
 th{
   background:#f1f4f8;
 }
+
+tbody tr:nth-child(even){
+  background:#f0f6ff;
+}
 </style>
 </head>
 
@@ -134,14 +138,14 @@ th{
 </div>
 
 <div class="tabs">
-  <div class="tab active" id="batTab">Batting</div>
-  <div class="tab" id="bowlTab">Bowling</div>
+<div class="tab active" id="batTab">Batting</div>
+<div class="tab" id="bowlTab">Bowling</div>
 </div>
 
 <div class="controls">
-  <select id="oppFilter">
-    <option value="">All Opponents</option>
-  </select>
+<select id="oppFilter">
+<option value="">All Opponents</option>
+</select>
 </div>
 
 <div class="stats" id="careerStats"></div>
@@ -150,12 +154,12 @@ th{
 <table>
 <thead>
 <tr id="tableHead">
-  <th>Season</th>
-  <th>Date</th>
-  <th>Opponent</th>
-  <th>Runs</th>
-  <th>Balls</th>
-  <th>SR</th>
+<th>Season</th>
+<th>Date</th>
+<th>Opponent</th>
+<th>Runs</th>
+<th>Balls</th>
+<th>SR</th>
 </tr>
 </thead>
 <tbody id="gamesTable"></tbody>
@@ -169,24 +173,17 @@ th{
 
 const slug = new URLSearchParams(location.search).get("player");
 
-if(!slug){
-  document.getElementById("playerName").textContent = "No player specified";
-  return;
-}
-
 function clean(n){
-  return (n || "").toLowerCase().replace(/[^a-z]/g, "");
+  return (n||"").toLowerCase().replace(/[^a-z]/g,"");
 }
 
-function slugToInitials(value){
-  return (value || "")
-    .replace(/-/g, " ")
-    .replace(/\b\w/g, c => c.toUpperCase());
+function slugToInitials(slug){
+  return slug.replace(/-/g," ").replace(/\b\w/g,c=>c.toUpperCase());
 }
 
-const nameMap = await fetch("/data/ipl/player-names.json").then(r => r.json());
+const nameMap = await fetch("/data/ipl/player-names.json").then(r=>r.json());
 
-let playerName = null;
+let playerName=null;
 let initials = slugToInitials(slug);
 
 for(const [shortName, fullName] of Object.entries(nameMap)){
@@ -198,7 +195,7 @@ for(const [shortName, fullName] of Object.entries(nameMap)){
 }
 
 if(!playerName){
-  document.getElementById("playerName").textContent = "Player not found";
+  document.getElementById("playerName").textContent="Player not found";
   return;
 }
 
@@ -207,211 +204,142 @@ document.getElementById("playerName").textContent = playerName;
 const targetInitials = clean(initials);
 const targetFullName = clean(playerName);
 
-const index = await fetch("/data/ipl/index.json").then(r => r.json());
+const index = await fetch("/data/ipl/index.json").then(r=>r.json());
 
 const allMatchesArrays = await Promise.all(
-  index
-    .filter(file => file.includes("_FULL.json"))
-    .map(file => fetch("/data/ipl/" + file).then(r => r.json()))
+  index.filter(file => file.includes("_FULL.json"))
+       .map(file => fetch("/data/ipl/"+file).then(r => r.json()))
 );
 
-let batting = [];
-let bowling = [];
-let opponents = new Set();
+let batting=[], bowling=[], opponents=new Set();
 
-function playerMatchesName(name){
+function playerMatches(name){
   const c = clean(name);
   return c === targetInitials || c === targetFullName;
 }
 
-allMatchesArrays.forEach(matches => {
-  matches.forEach(match => {
-    (match.innings || []).forEach(inn => {
+allMatchesArrays.forEach(matches=>{
+  matches.forEach(match=>{
+    (match.innings || []).forEach(inn=>{
 
-      let batRuns = 0;
-      let batBalls = 0;
-      let batted = false;
+      let batRuns=0, batBalls=0, played=false;
+      let bowlRuns=0, bowlBalls=0, wkts=0;
 
-      let bowlRuns = 0;
-      let bowlBalls = 0;
-      let wkts = 0;
+      (inn.overs || []).forEach(o=>{
+        (o.deliveries || []).forEach(d=>{
 
-      (inn.overs || []).forEach(over => {
-        (over.deliveries || []).forEach(d => {
-
-          if(playerMatchesName(d.batter)){
-            batted = true;
-            batRuns += (d.runs && typeof d.runs.batter === "number") ? d.runs.batter : 0;
-            if(!(d.extras && d.extras.wides)) batBalls++;
+          if(playerMatches(d.batter)){
+            played=true;
+            batRuns+=d.runs?.batter || 0;
+            if(!d.extras?.wides) batBalls++;
           }
 
-          if(playerMatchesName(d.bowler)){
+          if(playerMatches(d.bowler)){
             bowlBalls++;
-            bowlRuns += (d.runs && typeof d.runs.total === "number") ? d.runs.total : 0;
-
-            if(Array.isArray(d.wickets)){
-              wkts += d.wickets.length;
-            }
+            bowlRuns+=d.runs?.total || 0;
+            if(Array.isArray(d.wickets)) wkts+=d.wickets.length;
           }
 
         });
       });
 
-      const opp = (match.info && Array.isArray(match.info.teams))
-        ? match.info.teams.find(t => t !== inn.team) || ""
-        : "";
-
+      const opp = match.info?.teams?.find(t=>t!==inn.team) || "";
       if(opp) opponents.add(opp);
 
-      if(batted){
-        batting.push({
-          season: match.info?.season || "",
-          date: match.info?.dates?.[0] || "",
-          opp,
-          runs: batRuns,
-          balls: batBalls
-        });
+      if(played){
+        batting.push({season:match.info?.season,date:match.info?.dates?.[0],opp,runs:batRuns,balls:batBalls});
       }
 
-      if(bowlBalls > 0){
-        bowling.push({
-          season: match.info?.season || "",
-          date: match.info?.dates?.[0] || "",
-          opp,
-          wkts,
-          runs: bowlRuns,
-          balls: bowlBalls
-        });
+      if(bowlBalls){
+        bowling.push({season:match.info?.season,date:match.info?.dates?.[0],opp,wkts,runs:bowlRuns,balls:bowlBalls});
       }
 
     });
   });
 });
 
-batting.sort((a,b) => String(b.date).localeCompare(String(a.date)));
-bowling.sort((a,b) => String(b.date).localeCompare(String(a.date)));
-
-const oppFilter = document.getElementById("oppFilter");
-[...opponents].sort().forEach(opp => {
-  const opt = document.createElement("option");
-  opt.value = opp;
-  opt.textContent = opp;
-  oppFilter.appendChild(opt);
+// FILTER
+const filter=document.getElementById("oppFilter");
+[...opponents].sort().forEach(o=>{
+  const opt=document.createElement("option");
+  opt.value=o;
+  opt.textContent=o;
+  filter.appendChild(opt);
 });
 
-let mode = "bat";
+let mode="bat";
 
-function renderStatsAndTable(){
-  const selectedOpp = oppFilter.value;
+function render(){
 
-  if(mode === "bat"){
-    let data = batting.slice();
-    if(selectedOpp) data = data.filter(g => g.opp === selectedOpp);
+  const opp=filter.value;
 
-    const totalRuns = data.reduce((a,b) => a + b.runs, 0);
-    const totalBalls = data.reduce((a,b) => a + b.balls, 0);
-    const strikeRate = totalBalls ? (totalRuns / totalBalls * 100).toFixed(1) : "0.0";
-    const highestScore = data.length ? Math.max(...data.map(g => g.runs)) : 0;
+  if(mode==="bat"){
+    let data = batting;
+    if(opp) data=data.filter(g=>g.opp===opp);
 
-    document.getElementById("careerStats").innerHTML = `
-      <div class="stat"><h3>${data.length}</h3><span>Games</span></div>
-      <div class="stat"><h3>${totalRuns}</h3><span>Runs</span></div>
-      <div class="stat"><h3>${totalBalls}</h3><span>Balls</span></div>
-      <div class="stat"><h3>${strikeRate}</h3><span>Strike Rate</span></div>
-      <div class="stat"><h3>${highestScore}</h3><span>Highest Score</span></div>
+    const totalRuns = data.reduce((a,b)=>a+b.runs,0);
+    const totalBalls = data.reduce((a,b)=>a+b.balls,0);
+    const sr = totalBalls ? (totalRuns/totalBalls*100).toFixed(1) : "0.0";
+
+    let hsObj = data.reduce((max,g)=> g.runs>max.runs ? g : max, {runs:0,opp:""});
+
+    document.getElementById("careerStats").innerHTML=`
+    <div class="stat"><h3>${data.length}</h3><span>Games</span></div>
+    <div class="stat"><h3>${totalRuns}</h3><span>Runs</span></div>
+    <div class="stat"><h3>${sr}</h3><span>Strike Rate</span></div>
+    <div class="stat">
+      <h3>${hsObj.runs}</h3>
+      <span>Highest Score</span>
+      <small>vs ${hsObj.opp}</small>
+    </div>
     `;
 
-    document.getElementById("tableHead").innerHTML = `
-      <th>Season</th>
-      <th>Date</th>
-      <th>Opponent</th>
-      <th>Runs</th>
-      <th>Balls</th>
-      <th>SR</th>
-    `;
-
-    document.getElementById("gamesTable").innerHTML = data.map(g => {
-      const sr = g.balls ? (g.runs / g.balls * 100).toFixed(1) : "0.0";
-      return `
-        <tr>
-          <td>${g.season}</td>
-          <td>${g.date}</td>
-          <td>${g.opp}</td>
-          <td>${g.runs}</td>
-          <td>${g.balls}</td>
-          <td>${sr}</td>
-        </tr>
-      `;
-    }).join("");
   } else {
-    let data = bowling.slice();
-    if(selectedOpp) data = data.filter(g => g.opp === selectedOpp);
 
-    const matches = data.length;
-    const totalWkts = data.reduce((a,b) => a + b.wkts, 0);
-    const totalRunsConceded = data.reduce((a,b) => a + b.runs, 0);
+    let data = bowling;
+    if(opp) data=data.filter(g=>g.opp===opp);
 
-    let bestWkts = 0;
-    let bestRuns = 0;
+    const wkts = data.reduce((a,b)=>a+b.wkts,0);
+    const runs = data.reduce((a,b)=>a+b.runs,0);
 
-    data.forEach(g => {
-      if(
-        g.wkts > bestWkts ||
-        (g.wkts === bestWkts && g.wkts > 0 && g.runs < bestRuns)
-      ){
-        bestWkts = g.wkts;
-        bestRuns = g.runs;
+    let best = data.reduce((best,g)=>{
+      if(g.wkts > best.wkts || (g.wkts === best.wkts && g.runs < best.runs)){
+        return g;
       }
-    });
+      return best;
+    }, {wkts:0,runs:999,opp:""});
 
-    const bestBowling = bestWkts > 0 ? `${bestWkts}/${bestRuns}` : "0/0";
-
-    document.getElementById("careerStats").innerHTML = `
-      <div class="stat"><h3>${matches}</h3><span>Games</span></div>
-      <div class="stat"><h3>${totalWkts}</h3><span>Wickets</span></div>
-      <div class="stat"><h3>${totalRunsConceded}</h3><span>Runs Conceded</span></div>
-      <div class="stat"><h3>${bestBowling}</h3><span>Best Bowling</span></div>
+    document.getElementById("careerStats").innerHTML=`
+    <div class="stat"><h3>${data.length}</h3><span>Games</span></div>
+    <div class="stat"><h3>${wkts}</h3><span>Wickets</span></div>
+    <div class="stat"><h3>${runs}</h3><span>Runs Conceded</span></div>
+    <div class="stat">
+      <h3>${best.wkts}/${best.runs}</h3>
+      <span>Best Bowling</span>
+      <small>vs ${best.opp}</small>
+    </div>
     `;
-
-    document.getElementById("tableHead").innerHTML = `
-      <th>Season</th>
-      <th>Date</th>
-      <th>Opponent</th>
-      <th>Wkts</th>
-      <th>Runs</th>
-      <th>Balls</th>
-    `;
-
-    document.getElementById("gamesTable").innerHTML = data.map(g => `
-      <tr>
-        <td>${g.season}</td>
-        <td>${g.date}</td>
-        <td>${g.opp}</td>
-        <td>${g.wkts}</td>
-        <td>${g.runs}</td>
-        <td>${g.balls}</td>
-      </tr>
-    `).join("");
   }
+
 }
 
-document.getElementById("batTab").onclick = () => {
-  mode = "bat";
+document.getElementById("batTab").onclick=()=>{
+  mode="bat";
   document.getElementById("batTab").classList.add("active");
   document.getElementById("bowlTab").classList.remove("active");
-  renderStatsAndTable();
+  render();
 };
 
-document.getElementById("bowlTab").onclick = () => {
-  mode = "bowl";
+document.getElementById("bowlTab").onclick=()=>{
+  mode="bowl";
   document.getElementById("bowlTab").classList.add("active");
   document.getElementById("batTab").classList.remove("active");
-  renderStatsAndTable();
+  render();
 };
 
-oppFilter.onchange = renderStatsAndTable;
+filter.onchange=render;
 
-renderStatsAndTable();
+render();
 
 })();
 </script>
