@@ -130,14 +130,32 @@ const nameMap =
   await fetch("/data/ipl/player-names.json")
   .then(r=>r.json());
 
-// REVERSE MAP
-let reverseMap = {};
-Object.entries(nameMap).forEach(([full, s])=>{
-  reverseMap[s] = full;
-});
+// 🔥 SMART MATCH (THIS FIXES EVERYTHING)
+let playerName = null;
 
-// RESTORE ORIGINAL BEHAVIOUR
-const playerName = reverseMap[slug];
+const clean = s => (s || "")
+  .toLowerCase()
+  .replace(/[^a-z]/g,"");
+
+// try exact match first
+for(const [full, s] of Object.entries(nameMap)){
+  if(s === slug){
+    playerName = full;
+    break;
+  }
+}
+
+// fallback: loose match (handles your initials system)
+if(!playerName){
+  const target = clean(slug);
+
+  for(const [full, s] of Object.entries(nameMap)){
+    if(clean(s) === target){
+      playerName = full;
+      break;
+    }
+  }
+}
 
 if(!playerName){
   document.getElementById("playerName").textContent="Player not found";
@@ -146,7 +164,7 @@ if(!playerName){
 
 document.getElementById("playerName").textContent = playerName;
 
-// IMPORTANT: EXACT MATCH (AS BEFORE)
+// ORIGINAL MATCHING (UNCHANGED)
 const P = playerName.toLowerCase();
 
 let games=[];
@@ -201,7 +219,7 @@ for(const file of index){
 
 }
 
-// CAREER TOTALS
+// TOTALS
 const totalRuns = games.reduce((a,b)=>a+b.runs,0);
 const totalBalls = games.reduce((a,b)=>a+b.balls,0);
 
@@ -211,7 +229,6 @@ document.getElementById("careerStats").innerHTML=`
 <div class="stat"><h3>${totalBalls}</h3><span>Balls</span></div>
 `;
 
-// TABLE
 document.getElementById("gamesTable").innerHTML =
 games.map(g=>`
 <tr>
