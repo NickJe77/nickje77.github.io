@@ -176,6 +176,7 @@ fetch(indexUrl)
       btn.textContent=year;
       btn.onclick=()=>selectSeason(file,btn);
       yearGrid.appendChild(btn);
+
       if(i===files.length-1){
         btn.classList.add("active");
         loadSeason(file);
@@ -195,30 +196,38 @@ fetch(basePath+file)
 .then(matches=>{
   tableBody.innerHTML="";
 
-  matches.sort((a,b)=>new Date(b.info.dates[0]) - new Date(a.info.dates[0]));
+  // ✅ SORT (works for both formats)
+  matches.sort((a,b)=>{
+    const da = new Date(a.info?.dates?.[0] || a.date);
+    const db = new Date(b.info?.dates?.[0] || b.date);
+    return db - da;
+  });
 
-  // ✅ FIXED LOGIC
+  // ✅ FINAL DETECTION (fixed)
   const finalMatch = matches.find(m =>
-    m.info?.event?.match_number?.toLowerCase().includes("final")
+    (m.info?.event?.match_number || "").toString().toLowerCase().includes("final")
   );
 
   if (!finalMatch) {
     winnerBox.textContent = "—";
     runnerBox.textContent = "—";
   } else {
-    const winner = finalMatch.info.outcome?.winner || "—";
-    const teams = finalMatch.info.teams || [];
-    const runnerUp = teams.find(t=>t!==winner) || "—";
+    const info = finalMatch.info || finalMatch;
+    const winner = info.outcome?.winner || "—";
+    const teams = info.teams || [];
+    const runnerUp = teams.find(t => t !== winner) || "—";
 
     winnerBox.textContent = winner;
     runnerBox.textContent = runnerUp;
   }
 
   matches.forEach(m=>{
+    const info = m.info || m; // ✅ key fix
+
     let margin="";
-    if(m.info.outcome?.by){
-      if(m.info.outcome.by.runs) margin = m.info.outcome.by.runs + " runs";
-      else if(m.info.outcome.by.wickets) margin = m.info.outcome.by.wickets + " wickets";
+    if(info.outcome?.by){
+      if(info.outcome.by.runs) margin = info.outcome.by.runs + " runs";
+      else if(info.outcome.by.wickets) margin = info.outcome.by.wickets + " wickets";
     }
 
     const tr=document.createElement("tr");
@@ -227,11 +236,11 @@ fetch(basePath+file)
     };
 
     tr.innerHTML=`
-      <td>${formatDate(m.info.dates[0])}</td>
-      <td>${m.info.teams?.[0]||""}</td>
-      <td>${m.info.teams?.[1]||""}</td>
-      <td>${m.info.venue||""}</td>
-      <td class="winner">${m.info.outcome?.winner||""}</td>
+      <td>${formatDate(info.dates?.[0] || m.date)}</td>
+      <td>${info.teams?.[0]||""}</td>
+      <td>${info.teams?.[1]||""}</td>
+      <td>${info.venue||""}</td>
+      <td class="winner">${info.outcome?.winner||""}</td>
       <td>${margin}</td>
     `;
     tableBody.appendChild(tr);
