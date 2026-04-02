@@ -22,6 +22,7 @@ body{
   border-bottom:1px solid #ddd;
   font-weight:600;
 }
+
 .navbar a{
   color:#0056d6;
   text-decoration:none;
@@ -40,9 +41,32 @@ body{
   padding:40px;
   border-radius:24px;
 }
+
 .hero h1{
   margin:0;
   font-size:38px;
+}
+
+.tabs{
+  display:flex;
+  gap:10px;
+  margin-top:20px;
+}
+
+.tab{
+  padding:10px 16px;
+  background:#eee;
+  border-radius:10px;
+  cursor:pointer;
+}
+
+.tab.active{
+  background:#0056d6;
+  color:#fff;
+}
+
+.controls{
+  margin-top:20px;
 }
 
 .stats{
@@ -95,19 +119,22 @@ th{background:#f1f4f8;}
 <h1 id="playerName">Loading…</h1>
 </div>
 
+<div class="tabs">
+<div class="tab active" id="batTab">Batting</div>
+<div class="tab" id="bowlTab">Bowling</div>
+</div>
+
+<div class="controls">
+<select id="oppFilter">
+<option value="">All Opponents</option>
+</select>
+</div>
+
 <div class="stats" id="careerStats"></div>
 
 <div class="table-wrap">
 <table>
-<thead>
-<tr>
-<th>Season</th>
-<th>Date</th>
-<th>Opponent</th>
-<th>Runs</th>
-<th>Balls</th>
-</tr>
-</thead>
+<thead id="thead"></thead>
 <tbody id="gamesTable"></tbody>
 </table>
 </div>
@@ -117,24 +144,14 @@ th{background:#f1f4f8;}
 <script>
 (async function(){
 
-const params = new URLSearchParams(location.search);
-const slug = params.get("player");
+const slug = new URLSearchParams(location.search).get("player");
 
-if(!slug){
-  document.getElementById("playerName").textContent="No player specified";
-  return;
-}
-
-// CLEAN
 function clean(n){
   return (n||"").toLowerCase().replace(/[^a-z]/g,"");
 }
 
-// SLUG → INITIALS
 function slugToInitials(slug){
-  return slug
-    .replace(/-/g," ")
-    .replace(/\b\w/g,c=>c.toUpperCase());
+  return slug.replace(/-/g," ").replace(/\b\w/g,c=>c.toUpperCase());
 }
 
 // LOAD NAME MAP
@@ -163,40 +180,62 @@ const target = clean(initials);
 // LOAD INDEX
 const index = await fetch("/data/ipl/index.json").then(r=>r.json());
 
-// 🚀 LOAD ALL FILES IN PARALLEL (BIG SPEED FIX)
+// LOAD ALL MATCHES FAST
 const matchData = await Promise.all(
-  index
-    .filter(f=>f.includes("_FULL.json"))
-    .map(f=>fetch("/data/ipl/"+f).then(r=>r.json()))
+  index.filter(f=>f.includes("_FULL.json"))
+       .map(f=>fetch("/data/ipl/"+f).then(r=>r.json()))
 );
 
-let games=[];
+let batting=[], bowling=[], opponents=new Set();
 
 matchData.forEach(matches=>{
   matches.forEach(match=>{
     match.innings.forEach(inn=>{
 
-      let runs=0;
-      let balls=0;
-      let played=false;
+      let batRuns=0, batBalls=0, played=false;
+      let bowlRuns=0, bowlBalls=0, wkts=0;
 
       inn.overs.forEach(o=>{
         o.deliveries.forEach(d=>{
+
+          // batting
           if(clean(d.batter) === target){
             played=true;
-            runs+=d.runs.batter || 0;
-            if(!d.extras?.wides) balls++;
+            batRuns+=d.runs.batter || 0;
+            if(!d.extras?.wides) batBalls++;
           }
+
+          // bowling
+          if(clean(d.bowler) === target){
+            bowlRuns+=d.runs.total || 0;
+            bowlBalls++;
+            if(d.wickets) wkts+=d.wickets.length;
+          }
+
         });
       });
 
+      const opp = match.info.teams.find(t=>t!==inn.team);
+      opponents.add(opp);
+
       if(played){
-        games.push({
+        batting.push({
           season:match.info.season,
-          date:match.info.dates?.[0] || "",
-          opp:match.info.teams.find(t=>t!==inn.team),
-          runs,
-          balls
+          date:match.info.dates?.[0],
+          opp,
+          runs:batRuns,
+          balls:batBalls
+        });
+      }
+
+      if(bowlBalls){
+        bowling.push({
+          season:match.info.season,
+          date:match.info.dates?.[0],
+          opp,
+          runs:bowlRuns,
+          balls:bowlBalls,
+          wkts
         });
       }
 
@@ -204,30 +243,86 @@ matchData.forEach(matches=>{
   });
 });
 
-// STATS
-const totalRuns = games.reduce((a,b)=>a+b.runs,0);
-const totalBalls = games.reduce((a,b)=>a+b.balls,0);
-const sr = totalBalls ? (totalRuns/totalBalls*100).toFixed(1) : 0;
-const hs = Math.max(...games.map(g=>g.runs),0);
+// BUILD FILTER
+const filter=document.getElementById("oppFilter");
+[...opponents].sort().forEach(o=>{
+  const opt=document.createElement("option");
+  opt.value=o;
+  opt.textContent=o;
+  filter.appendChild(opt);
+});
 
-document.getElementById("careerStats").innerHTML=`
-<div class="stat"><h3>${games.length}</h3><span>Matches</span></div>
-<div class="stat"><h3>${totalRuns}</h3><span>Runs</span></div>
-<div class="stat"><h3>${sr}</h3><span>Strike Rate</span></div>
-<div class="stat"><h3>${hs}</h3><span>Highest Score</span></div>
-`;
+let mode="bat";
 
-// TABLE
-document.getElementById("gamesTable").innerHTML =
-games.map(g=>`
-<tr>
-<td>${g.season}</td>
-<td>${g.date}</td>
-<td>${g.opp}</td>
-<td>${g.runs}</td>
-<td>${g.balls}</td>
-</tr>
-`).join("");
+function render(){
+
+  let data = mode==="bat" ? batting : bowling;
+  const opp = filter.value;
+
+  if(opp) data = data.filter(g=>g.opp===opp);
+
+  if(mode==="bat"){
+
+    document.getElementById("thead").innerHTML=`
+    <tr>
+    <th>Season</th><th>Date</th><th>Opponent</th>
+    <th>Runs</th><th>Balls</th><th>SR</th>
+    </tr>`;
+
+    document.getElementById("gamesTable").innerHTML =
+    data.map(g=>{
+      const sr = g.balls ? (g.runs/g.balls*100).toFixed(1) : 0;
+      return `
+      <tr>
+      <td>${g.season}</td>
+      <td>${g.date}</td>
+      <td>${g.opp}</td>
+      <td>${g.runs}</td>
+      <td>${g.balls}</td>
+      <td>${sr}</td>
+      </tr>`;
+    }).join("");
+
+  } else {
+
+    document.getElementById("thead").innerHTML=`
+    <tr>
+    <th>Season</th><th>Date</th><th>Opponent</th>
+    <th>Wkts</th><th>Runs</th>
+    </tr>`;
+
+    document.getElementById("gamesTable").innerHTML =
+    data.map(g=>`
+      <tr>
+      <td>${g.season}</td>
+      <td>${g.date}</td>
+      <td>${g.opp}</td>
+      <td>${g.wkts}</td>
+      <td>${g.runs}</td>
+      </tr>
+    `).join("");
+  }
+}
+
+// EVENTS
+document.getElementById("batTab").onclick=()=>{
+  mode="bat";
+  document.getElementById("batTab").classList.add("active");
+  document.getElementById("bowlTab").classList.remove("active");
+  render();
+};
+
+document.getElementById("bowlTab").onclick=()=>{
+  mode="bowl";
+  document.getElementById("bowlTab").classList.add("active");
+  document.getElementById("batTab").classList.remove("active");
+  render();
+};
+
+filter.onchange = render;
+
+// INIT
+render();
 
 })();
 </script>
