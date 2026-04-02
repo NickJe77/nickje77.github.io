@@ -50,15 +50,8 @@
       opacity:0.95;
     }
 
-    h2{
-      margin-top:40px;
-      color:#3b007a;
-    }
-
-    h3{
-      margin-top:20px;
-      color:#3b007a;
-    }
+    h2{margin-top:40px;color:#3b007a;}
+    h3{margin-top:20px;color:#3b007a;}
 
     table{
       width:100%;
@@ -71,21 +64,22 @@
       padding:8px 10px;
     }
 
-    th{
-      background:#f3f6fb;
-    }
-
-    td.num{
-      text-align:right;
-    }
-
-    tr:nth-child(even){
-      background:#f8fbff;
-    }
+    th{background:#f3f6fb;}
+    td.num{text-align:right;}
+    tr:nth-child(even){background:#f8fbff;}
 
     .note{
       margin-top:6px;
       font-size:13px;
+    }
+
+    a.player-link{
+      color:#0056d6;
+      text-decoration:none;
+      font-weight:500;
+    }
+    a.player-link:hover{
+      text-decoration:underline;
     }
   </style>
 </head>
@@ -128,17 +122,27 @@ document.addEventListener("DOMContentLoaded", () => {
     return nameMap[n] || n;
   }
 
+  function slugify(name){
+    return name
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g,"")
+      .replace(/[^a-z0-9\s-]/g,"")
+      .trim()
+      .replace(/\s+/g,"-");
+  }
+
+  function playerLink(name){
+    const slug = slugify(name);
+    return `<a class="player-link" href="ipl-player.html?player=${slug}">${fullName(name)}</a>`;
+  }
+
   if (!season || indexParam === null) {
     matchTitle.textContent = "Missing match data";
     return;
   }
 
   const matchIndex = parseInt(indexParam, 10);
-
-  if (Number.isNaN(matchIndex)) {
-    matchTitle.textContent = "Match not found";
-    return;
-  }
 
   fetch(namesUrl)
     .then(r => r.json())
@@ -147,10 +151,6 @@ document.addEventListener("DOMContentLoaded", () => {
       return fetch(`data/ipl/ipl_${season}_FULL.json`).then(r => r.json());
     })
     .then(matches => {
-      if (!Array.isArray(matches) || matchIndex < 0 || matchIndex >= matches.length) {
-        matchTitle.textContent = "Match not found";
-        return;
-      }
 
       const sortedMatches = [...matches].sort((a, b) => {
         const da = new Date(a.info?.dates?.[0] || a.date);
@@ -172,7 +172,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       let heroMeta =
         (info.venue || "") + " • " +
-        new Date(info.dates[0]).toDateString() + " • Winner: " +
+        new Date(info.dates[0]).toDateString() +
+        " • Winner: " +
         fullName(info.outcome?.winner || "—");
 
       if (info.player_of_match) {
@@ -189,6 +190,7 @@ document.addEventListener("DOMContentLoaded", () => {
     inningsContainer.innerHTML = "";
 
     innings.forEach(inn => {
+
       const batStats = {};
       const bowlStats = {};
       const dismissals = {};
@@ -202,6 +204,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       inn.overs.forEach((over, oIndex) => {
         over.deliveries.forEach((d, bIndex) => {
+
           const batter = d.batter;
           const bowler = d.bowler;
 
@@ -236,23 +239,29 @@ document.addEventListener("DOMContentLoaded", () => {
 
           if (d.wickets) {
             d.wickets.forEach(w => {
+
               wkts++;
 
               const out = w.player_out;
-              const bowlerName = fullName(bowler);
-              const fielderName = fullName(w.fielders?.[0]?.name || "");
 
               let how = "";
 
-              if (w.kind === "caught") how = `c ${fielderName} b ${bowlerName}`;
-              else if (w.kind === "bowled") how = `b ${bowlerName}`;
-              else if (w.kind === "lbw") how = `lbw b ${bowlerName}`;
-              else if (w.kind === "run out") how = `run out (${fielderName})`;
-              else how = `${w.kind} b ${bowlerName}`;
+              if (w.kind === "caught")
+                how = `c ${playerLink(w.fielders?.[0]?.name || "")} b ${playerLink(bowler)}`;
+              else if (w.kind === "bowled")
+                how = `b ${playerLink(bowler)}`;
+              else if (w.kind === "lbw")
+                how = `lbw b ${playerLink(bowler)}`;
+              else if (w.kind === "run out")
+                how = `run out (${playerLink(w.fielders?.[0]?.name || "")})`;
+              else
+                how = `${w.kind} b ${playerLink(bowler)}`;
 
               dismissals[out] = how;
+
               bowlStats[bowler].wkts++;
-              fall.push(`${runs}/${wkts} (${fullName(out)}, ${oIndex}.${bIndex + 1})`);
+
+              fall.push(`${runs}/${wkts} (${playerLink(out)}, ${oIndex}.${bIndex+1})`);
             });
           }
 
@@ -280,7 +289,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const sr = s.balls ? ((s.runs / s.balls) * 100).toFixed(1) : "";
         html += `
           <tr>
-            <td>${fullName(p)}</td>
+            <td>${playerLink(p)}</td>
             <td>${dismissals[p] || "not out"}</td>
             <td class="num">${s.runs}</td>
             <td class="num">${s.balls}</td>
@@ -293,11 +302,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
       <div class="note">
         Extras: ${extras.b + extras.lb + extras.w + extras.nb + extras.p}
-        (b ${extras.b}, lb ${extras.lb}, w ${extras.w}, nb ${extras.nb}, p ${extras.p})
       </div>
 
       <div class="note">
-        Fall of wickets: ${fall.length ? fall.join(", ") : "None"}
+        Fall of wickets: ${fall.join(", ")}
       </div>
 
       <h3>Bowling vs ${fullName(inn.team)}</h3>
@@ -317,7 +325,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         html += `
           <tr>
-            <td>${fullName(p)}</td>
+            <td>${playerLink(p)}</td>
             <td class="num">${o}</td>
             <td class="num">${s.runs}</td>
             <td class="num">${s.wkts}</td>
