@@ -1,90 +1,56 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <script src="/js/analytics.js"></script>
+<script src="/js/analytics.js"></script>
 <meta charset="UTF-8">
-<title>AFL Player Compare | The Sporting Almanac</title>
+<title>AFL Player Compare</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<link rel="stylesheet" href="style.css">
-
 <style>
-body{
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
-               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-}
-
-.navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px 0;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
-}
-
-.navbar a{
-  text-decoration:none;
-  color:#0056d6;
-  font-size:18px;
-}
-
-.page-wrap{
-  max-width:1200px;
-  margin:0 auto;
-  padding:30px 20px;
-}
+body{font-family:system-ui,Arial,sans-serif;margin:0;padding:20px;}
 
 .controls{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:20px;
-  margin-bottom:30px;
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:20px;
+margin-bottom:30px;
 }
 
 select{
-  width:100%;
-  padding:12px;
-  font-size:16px;
+padding:12px;
+font-size:16px;
+width:100%;
 }
 
-.compare-table{
-  width:100%;
-  border-collapse:collapse;
+table{
+width:100%;
+border-collapse:collapse;
 }
 
-.compare-table th,
-.compare-table td{
-  padding:14px;
-  border-bottom:1px solid #ddd;
-  text-align:center;
+th,td{
+padding:12px;
+border-bottom:1px solid #ddd;
+text-align:center;
 }
 
-.compare-table td.label{
-  text-align:left;
-  font-weight:700;
-  background:#fafafa;
+td.label{
+text-align:left;
+font-weight:700;
+background:#fafafa;
 }
 
-.compare-table tr:nth-child(even){
-  background:#eef4ff;
+tbody tr:nth-child(even){
+background:#eef4ff;
 }
 
 .better{
-  font-weight:700;
-  color:#0056d6;
+font-weight:700;
+color:#0056d6;
 }
 </style>
 </head>
 
 <body>
-
-<div class="navbar">
-<a href="index.html">Home</a>
-<a href="afl.html">AFL</a>
-</div>
-
-<div class="page-wrap">
 
 <h1>AFL Player Compare</h1>
 
@@ -95,134 +61,107 @@ select{
 
 <div id="result"></div>
 
-</div>
-
 <script>
 
 const player1 = document.getElementById("player1");
 const player2 = document.getElementById("player2");
 const result = document.getElementById("result");
 
-let players = {};
+let allGames = [];
+let players = [];
 
-/* 🔥 LOAD INDEX (THIS IS THE FIX) */
-async function loadPlayers(){
+/* 🔥 SAME LOGIC AS YOUR PLAYER PAGE */
+const years=[];
+for(let y=1990;y<=2026;y++) years.push(y);
 
-try{
+Promise.all(
+years.map(y=>fetch(`/data/afl/afl_${y}.json`).then(r=>r.json()).catch(()=>[]))
+).then(data=>{
 
-const res = await fetch("data/afl/players/index.json");
-const data = await res.json();
+allGames = data.flat();
 
-data.forEach(p=>{
-players[p.name.toLowerCase()] = p;
-});
-
-const list = data.sort((a,b)=>a.name.localeCompare(b.name));
+/* build player list */
+players = [...new Set(allGames.map(p=>p.player))].sort();
 
 player1.innerHTML = `<option value="">Select Player</option>`;
 player2.innerHTML = `<option value="">Select Player</option>`;
 
-list.forEach(p=>{
-player1.innerHTML += `<option value="${p.name.toLowerCase()}">${p.name}</option>`;
-player2.innerHTML += `<option value="${p.name.toLowerCase()}">${p.name}</option>`;
+players.forEach(p=>{
+player1.innerHTML += `<option value="${p}">${p}</option>`;
+player2.innerHTML += `<option value="${p}">${p}</option>`;
 });
 
-}catch(e){
-result.innerHTML = "<p>Failed to load players.</p>";
-}
+});
 
-}
-
-loadPlayers();
-
+/* compare */
 player1.onchange = compare;
 player2.onchange = compare;
 
-/* 🔥 LOAD PLAYER FILE WHEN SELECTED */
-async function getPlayerData(name){
+function compare(){
 
-const slug = name.toLowerCase().replace(/[^a-z0-9]+/g,"-");
+const p1 = player1.value;
+const p2 = player2.value;
 
-try{
-const res = await fetch(`data/afl/players/${slug}.json`);
-return await res.json();
-}catch{
-return null;
-}
+if(!p1 || !p2) return;
 
-}
+const g1 = allGames.filter(g=>g.player===p1);
+const g2 = allGames.filter(g=>g.player===p2);
 
-async function compare(){
+function stats(g){
 
-const name1 = player1.value;
-const name2 = player2.value;
-
-if(!name1 || !name2) return;
-
-const p1 = await getPlayerData(name1);
-const p2 = await getPlayerData(name2);
-
-if(!p1 || !p2){
-result.innerHTML = "<p>Missing player data</p>";
-return;
-}
-
-/* compute stats */
-function buildStats(p){
-
-let games = p.games || p.games_played || 0;
-let disposals = p.disposals || [];
-let goals = p.goals || [];
+const games = g.length;
+const d = g.map(x=>+x.D||0);
+const goals = g.map(x=>+x.G||0);
 
 return {
 games,
-best_disposals: Math.max(...disposals,0),
-best_goals: Math.max(...goals,0),
-avg_disposals: disposals.length ? (disposals.reduce((a,b)=>a+b,0)/disposals.length).toFixed(1) : 0,
-avg_goals: goals.length ? (goals.reduce((a,b)=>a+b,0)/goals.length).toFixed(2) : 0
+bestD: Math.max(...d,0),
+bestG: Math.max(...goals,0),
+avgD: games ? (d.reduce((a,b)=>a+b,0)/games).toFixed(1) : 0,
+avgG: games ? (goals.reduce((a,b)=>a+b,0)/games).toFixed(2) : 0
 };
 
 }
 
-const s1 = buildStats(p1);
-const s2 = buildStats(p2);
+const s1 = stats(g1);
+const s2 = stats(g2);
 
-const stats = [
+const rows = [
 ["Games", s1.games, s2.games],
-["Best Disposals", s1.best_disposals, s2.best_disposals],
-["Best Goals", s1.best_goals, s2.best_goals],
-["Avg Disposals", s1.avg_disposals, s2.avg_disposals],
-["Avg Goals", s1.avg_goals, s2.avg_goals]
+["Best Disposals", s1.bestD, s2.bestD],
+["Best Goals", s1.bestG, s2.bestG],
+["Avg Disposals", s1.avgD, s2.avgD],
+["Avg Goals", s1.avgG, s2.avgG]
 ];
 
 let html = `
-<table class="compare-table">
+<table>
 <thead>
 <tr>
-<th>${p1.name}</th>
+<th>${p1}</th>
 <th></th>
-<th>${p2.name}</th>
+<th>${p2}</th>
 </tr>
 </thead>
 <tbody>
 `;
 
-stats.forEach(row=>{
+rows.forEach(r=>{
 
-let better1 = row[1] > row[2] ? "better" : "";
-let better2 = row[2] > row[1] ? "better" : "";
+let b1 = r[1] > r[2] ? "better" : "";
+let b2 = r[2] > r[1] ? "better" : "";
 
 html += `
 <tr>
-<td class="${better1}">${row[1]}</td>
-<td class="label">${row[0]}</td>
-<td class="${better2}">${row[2]}</td>
+<td class="${b1}">${r[1]}</td>
+<td class="label">${r[0]}</td>
+<td class="${b2}">${r[2]}</td>
 </tr>
 `;
 
 });
 
-html += `</tbody></table>`;
+html += "</tbody></table>";
 
 result.innerHTML = html;
 
