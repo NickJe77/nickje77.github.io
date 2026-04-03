@@ -7,52 +7,104 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{font-family:system-ui,Arial,sans-serif;margin:0;padding:20px;}
+body{
+  font-family:system-ui,Arial,sans-serif;
+  margin:0;
+  background:#f4f6f8;
+}
 
+/* container */
+.page{
+  max-width:1100px;
+  margin:0 auto;
+  padding:30px 20px;
+}
+
+/* title */
+h1{
+  text-align:center;
+  margin-bottom:25px;
+}
+
+/* inputs */
 .controls{
-display:grid;
-grid-template-columns:1fr 1fr;
-gap:20px;
-margin-bottom:30px;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:20px;
+  margin-bottom:25px;
 }
 
 input{
-padding:12px;
-font-size:16px;
-width:100%;
-border:1px solid #ccc;
-border-radius:8px;
+  padding:14px;
+  font-size:16px;
+  border-radius:10px;
+  border:1px solid #ccc;
+  background:white;
 }
 
-table{
-width:100%;
-border-collapse:collapse;
+/* card */
+.card{
+  background:white;
+  border-radius:14px;
+  box-shadow:0 6px 18px rgba(0,0,0,.08);
+  overflow:hidden;
 }
 
-th,td{
-padding:12px;
-border-bottom:1px solid #ddd;
-text-align:center;
+/* header row */
+.header{
+  display:grid;
+  grid-template-columns:1fr 1fr 1fr;
+  padding:18px;
+  font-weight:700;
+  font-size:18px;
+  border-bottom:1px solid #ddd;
+  text-align:center;
 }
 
-td.label{
-text-align:left;
-font-weight:700;
-background:#fafafa;
+/* rows */
+.row{
+  display:grid;
+  grid-template-columns:1fr 1fr 1fr;
+  padding:14px 18px;
+  border-bottom:1px solid #eee;
+  align-items:center;
 }
 
-tbody tr:nth-child(even){
-background:#eef4ff;
+/* zebra */
+.row:nth-child(even){
+  background:#f7fbff;
 }
 
-.better{
-font-weight:700;
-color:#0056d6;
+/* middle labels */
+.label{
+  text-align:center;
+  font-weight:700;
+  color:#333;
+}
+
+/* values */
+.val{
+  text-align:center;
+  font-size:16px;
+}
+
+/* winner highlight */
+.win{
+  color:#0056d6;
+  font-weight:700;
+}
+
+/* responsive */
+@media(max-width:700px){
+  .controls{grid-template-columns:1fr;}
+  .header,.row{font-size:14px;}
 }
 </style>
 </head>
 
 <body>
+
+<div class="page">
 
 <h1>AFL Player Compare</h1>
 
@@ -64,6 +116,8 @@ color:#0056d6;
 
 <div id="result"></div>
 
+</div>
+
 <script>
 
 const input1 = document.getElementById("player1");
@@ -71,10 +125,9 @@ const input2 = document.getElementById("player2");
 const list = document.getElementById("playerList");
 const result = document.getElementById("result");
 
-let allGames = [];
-let players = [];
+let allGames=[];
 
-/* load data */
+/* load */
 const years=[];
 for(let y=1990;y<=2026;y++) years.push(y);
 
@@ -82,12 +135,10 @@ Promise.all(
 years.map(y=>fetch(`/data/afl/afl_${y}.json`).then(r=>r.json()).catch(()=>[]))
 ).then(data=>{
 
-allGames = data.flat();
+allGames=data.flat();
 
-/* player list */
-players = [...new Set(allGames.map(p=>p.player))].sort();
+const players=[...new Set(allGames.map(p=>p.player))].sort();
 
-list.innerHTML = "";
 players.forEach(p=>{
 const o=document.createElement("option");
 o.value=p;
@@ -96,99 +147,92 @@ list.appendChild(o);
 
 });
 
-/* compare trigger */
-input1.onchange = compare;
-input2.onchange = compare;
+input1.onchange=compare;
+input2.onchange=compare;
 
 function compare(){
 
-const p1 = input1.value;
-const p2 = input2.value;
+const p1=input1.value;
+const p2=input2.value;
 
-if(!p1 || !p2) return;
+if(!p1||!p2) return;
 
-const g1 = allGames.filter(g=>g.player===p1);
-const g2 = allGames.filter(g=>g.player===p2);
+const g1=allGames.filter(g=>g.player===p1);
+const g2=allGames.filter(g=>g.player===p2);
 
-if(!g1.length || !g2.length){
-result.innerHTML = "<p>Player not found</p>";
+if(!g1.length||!g2.length){
+result.innerHTML="<p>Player not found</p>";
 return;
 }
 
+/* stats */
 function stats(g){
 
-const games = g.length;
+const games=g.length;
 
-const d = g.map(x=>+x.D||0);
-const goals = g.map(x=>+x.G||0);
+const d=g.map(x=>+x.D||0);
+const goals=g.map(x=>+x.G||0);
 
-const kicks = g.map(x=>+x.K||0);
-const handballs = g.map(x=>+x.H||0);
-const marks = g.map(x=>+x.M||0);
+/* 🔥 FIXED HANDLING */
+const kicks=g.map(x=>+x.K||+x.kicks||0);
+const handballs=g.map(x=>+x.H||+x.HB||+x.handballs||0);
+const marks=g.map(x=>+x.M||+x.marks||0);
 
-return {
+return{
 games,
-
-bestD: Math.max(...d,0),
-bestG: Math.max(...goals,0),
-
-bestK: Math.max(...kicks,0),
-bestH: Math.max(...handballs,0),
-bestM: Math.max(...marks,0),
-
-avgD: games ? (d.reduce((a,b)=>a+b,0)/games).toFixed(1) : 0,
-avgG: games ? (goals.reduce((a,b)=>a+b,0)/games).toFixed(2) : 0
+bestD:Math.max(...d,0),
+bestG:Math.max(...goals,0),
+bestK:Math.max(...kicks,0),
+bestH:Math.max(...handballs,0),
+bestM:Math.max(...marks,0),
+avgD:games?(d.reduce((a,b)=>a+b,0)/games).toFixed(1):0,
+avgG:games?(goals.reduce((a,b)=>a+b,0)/games).toFixed(2):0
 };
 
 }
 
-const s1 = stats(g1);
-const s2 = stats(g2);
+const s1=stats(g1);
+const s2=stats(g2);
 
-const rows = [
-["Games", s1.games, s2.games],
-
-["Best Disposals", s1.bestD, s2.bestD],
-["Best Goals", s1.bestG, s2.bestG],
-
-["Most Kicks", s1.bestK, s2.bestK],
-["Most Handballs", s1.bestH, s2.bestH],
-["Most Marks", s1.bestM, s2.bestM],
-
-["Avg Disposals", s1.avgD, s2.avgD],
-["Avg Goals", s1.avgG, s2.avgG]
+const rows=[
+["Games",s1.games,s2.games],
+["Best Disposals",s1.bestD,s2.bestD],
+["Best Goals",s1.bestG,s2.bestG],
+["Most Kicks",s1.bestK,s2.bestK],
+["Most Handballs",s1.bestH,s2.bestH],
+["Most Marks",s1.bestM,s2.bestM],
+["Avg Disposals",s1.avgD,s2.avgD],
+["Avg Goals",s1.avgG,s2.avgG]
 ];
 
-let html = `
-<table>
-<thead>
-<tr>
-<th>${p1}</th>
-<th></th>
-<th>${p2}</th>
-</tr>
-</thead>
-<tbody>
+let html=`
+<div class="card">
+
+<div class="header">
+<div>${p1}</div>
+<div></div>
+<div>${p2}</div>
+</div>
 `;
 
 rows.forEach(r=>{
 
-let b1 = r[1] > r[2] ? "better" : "";
-let b2 = r[2] > r[1] ? "better" : "";
+let w1=r[1]>r[2]?"win":"";
+let w2=r[2]>r[1]?"win":"";
 
-html += `
-<tr>
-<td class="${b1}">${r[1]}</td>
-<td class="label">${r[0]}</td>
-<td class="${b2}">${r[2]}</td>
-</tr>
+html+=`
+<div class="row">
+<div class="val ${w1}">${r[1]}</div>
+<div class="label">${r[0]}</div>
+<div class="val ${w2}">${r[2]}</div>
+</div>
 `;
 
 });
 
-html += "</tbody></table>";
+html+="</div>";
 
-result.innerHTML = html;
+result.innerHTML=html;
 
 }
 
