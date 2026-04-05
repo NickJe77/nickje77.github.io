@@ -5,7 +5,7 @@ from datetime import datetime
 import time
 import re
 
-print("MLB 2026 REBUILD (FINAL WITH INDEX)")
+print("MLB 2026 FULL BOX SCORE BUILD")
 
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1.1"
@@ -18,33 +18,25 @@ BOX_DIR.mkdir(parents=True, exist_ok=True)
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-# 🔥 INDEX MAP (GAME ID → FILE)
 INDEX = {}
 
 
-# -------------------------------------------------
+# -----------------------------
 # PLAYER CODE
-# -------------------------------------------------
+# -----------------------------
 def make_player_code(name):
-    try:
-        name = re.sub(r"[^\w\s]", "", name.lower())
-        parts = name.split()
-
-        if len(parts) < 2:
-            return "unknown001"
-
-        first = parts[0]
-        last = parts[-1]
-
-        return f"{last[:5]}{first[:2]}001"
-
-    except:
+    name = re.sub(r"[^\w\s]", "", name.lower())
+    parts = name.split()
+    if len(parts) < 2:
         return "unknown001"
+    first = parts[0]
+    last = parts[-1]
+    return f"{last[:5]}{first[:2]}001"
 
 
-# -------------------------------------------------
+# -----------------------------
 # TEAM CODE
-# -------------------------------------------------
+# -----------------------------
 def get_team_code(team):
     return (
         team.get("abbreviation")
@@ -54,9 +46,9 @@ def get_team_code(team):
     )
 
 
-# -------------------------------------------------
-# GET SCHEDULE (FILTERED)
-# -------------------------------------------------
+# -----------------------------
+# GET SCHEDULE
+# -----------------------------
 def get_schedule():
     url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
     data = requests.get(url, headers=HEADERS).json()
@@ -66,124 +58,111 @@ def get_schedule():
     for date in data.get("dates", []):
         for g in date.get("games", []):
 
-            # 🔥 ONLY REGULAR + POSTSEASON
-            game_type = g.get("gameType")
-            if game_type not in ["R", "P"]:
+            if g.get("gameType") not in ["R", "P"]:
                 continue
 
-            gamePk = str(g["gamePk"])
-            gameDate = g["gameDate"][:10]
-
-            home = get_team_code(g["teams"]["home"]["team"])
-            away = get_team_code(g["teams"]["away"]["team"])
-
             games.append({
-                "game_id": gamePk,
-                "date": gameDate,
-                "home": home,
-                "away": away
+                "game_id": str(g["gamePk"]),
+                "date": g["gameDate"][:10],
+                "home": get_team_code(g["teams"]["home"]["team"]),
+                "away": get_team_code(g["teams"]["away"]["team"])
             })
 
-    print(f"FOUND {len(games)} VALID GAMES")
+    print(f"FOUND {len(games)} GAMES")
     return games
 
 
-# -------------------------------------------------
-# BUILD GAME
-# -------------------------------------------------
+# -----------------------------
+# BUILD GAME (FULL STATS)
+# -----------------------------
 def build_game(game):
 
     game_id = game["game_id"]
     url = f"{BASE}/game/{game_id}/feed/live"
 
     try:
-        data = requests.get(url, headers=HEADERS, timeout=20).json()
+        data = requests.get(url, headers=HEADERS).json()
     except:
-        print(f"❌ FAILED REQUEST {game_id}")
+        print("FAILED", game_id)
         return False
 
     try:
-        plays = data["liveData"]["plays"]["allPlays"]
+        box = data["liveData"]["boxscore"]["teams"]
 
-        events = []
+        def extract_batting(team):
+            out = []
+            for p in team["players"].values():
+                stats = p.get("stats", {}).get("batting")
+                if not stats:
+                    continue
 
-        for p in plays:
+                name = p["person"]["fullName"]
+                out.append({
+                    "player_id": make_player_code(name),
+                    "AB": stats.get("atBats", 0),
+                    "H": stats.get("hits", 0),
+                    "BB": stats.get("baseOnBalls", 0),
+                    "SO": stats.get("strikeOuts", 0)
+                })
+            return out
 
-            about = p.get("about", {})
-            matchup = p.get("matchup", {})
-            result = p.get("result", {})
-            count_data = p.get("count", {})
+        def extract_pitching(team):
+            out = []
+            for p in team["players"].values():
+                stats = p.get("stats", {}).get("pitching")
+                if not stats:
+                    continue
 
-            inning = str(about.get("inning", ""))
-            half = "1" if about.get("isTopInning", True) else "0"
+                name = p["person"]["fullName"]
+                out.append({
+                    "player_id": make_player_code(name),
+                    "IP": stats.get("inningsPitched", "0.0"),
+                    "H": stats.get("hits", 0),
+                    "BB": stats.get("baseOnBalls", 0),
+                    "SO": stats.get("strikeOuts", 0)
+                })
+            return out
 
-            batter_name = matchup.get("batter", {}).get("fullName", "")
-            batter_code = make_player_code(batter_name)
+        game_json = {
+            "game_id": game_id,
+            "date": game["date"],
+            "season": SEASON,
+            "home_code": game["home"],
+            "away_code": game["away"],
 
-            balls = count_data.get("balls", 0)
-            strikes = count_data.get("strikes", 0)
-
-            count = f"{balls}{strikes}"
-            event = result.get("event", "")
-
-            events.append([
-                "play",
-                inning,
-                half,
-                batter_code,
-                count,
-                event
-            ])
+            # ✅ FULL DATA (THIS FIXES EVERYTHING)
+            "batters_home": extract_batting(box["home"]),
+            "batters_away": extract_batting(box["away"]),
+            "pitchers_home": extract_pitching(box["home"]),
+            "pitchers_away": extract_pitching(box["away"])
+        }
 
         file_name = f"{game['date']}_{game['away']}_{game['home']}.json"
-        file_path = BOX_DIR / file_name
 
-        # 🔥 WRITE FILE
-        with open(file_path, "w") as f:
-            json.dump({
-                "game_id": game_id,
-                "date": game["date"],
-                "season": SEASON,
-                "home_code": game["home"],
-                "away_code": game["away"],
-                "home_team": game["home"],
-                "away_team": game["away"],
-                "events": events
-            }, f, indent=2)
+        with open(BOX_DIR / file_name, "w") as f:
+            json.dump(game_json, f, indent=2)
 
-        # 🔥 ADD TO INDEX
         INDEX[game_id] = file_name
 
-        print(f"✅ SAVED {file_name}")
+        print("SAVED", file_name)
         return True
 
     except Exception as e:
-        print(f"❌ PARSE ERROR {game_id}: {e}")
+        print("ERROR", game_id, e)
         return False
 
 
-# -------------------------------------------------
+# -----------------------------
 # MAIN
-# -------------------------------------------------
+# -----------------------------
 games = get_schedule()
 
-if not games:
-    print("❌ NO GAMES FOUND")
-    exit()
-
-saved = 0
-
 for g in games:
-    if build_game(g):
-        saved += 1
-
+    build_game(g)
     time.sleep(0.3)
 
-# 🔥 BUILD INDEX FILE
-index_path = BOX_DIR / "index.json"
-
-with open(index_path, "w") as f:
+# INDEX
+with open(BOX_DIR / "index.json", "w") as f:
     json.dump(INDEX, f, indent=2)
 
-print(f"📦 INDEX BUILT ({len(INDEX)} games)")
-print(f"🎯 DONE — {saved} FILES WRITTEN")
+print("DONE")
