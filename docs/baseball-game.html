@@ -111,7 +111,7 @@ const season = seasonParam || id.match(/(\d{4})/)[1]
 
 let game = null
 
-// NEW SYSTEM (2026)
+// 2026 (index system)
 try{
   const indexRes = await fetch(`/data/baseball/boxscores/${season}/index.json`)
   if(indexRes.ok){
@@ -127,7 +127,7 @@ try{
   }
 }catch(e){}
 
-// OLD SYSTEM (2025)
+// fallback (2025 and older)
 if(!game){
   try{
     const res = await fetch(`/data/baseball/games/${season}/${id}.json`)
@@ -142,7 +142,7 @@ document.getElementById("title").innerText="Game not found"
 return
 }
 
-// LOAD META
+// load season meta (score + venue)
 const seasonRes=await fetch(`/data/baseball/seasons/${season}.json`)
 let meta=null
 
@@ -163,21 +163,32 @@ render(game,meta)
 
 function render(game,meta){
 
-// 🔥 THIS IS THE FIX
 const homeFull = game.home_team || teamName(game.home_code)
 const awayFull = game.away_team || teamName(game.away_code)
 
-document.getElementById("title").innerText=`${awayFull} @ ${homeFull}`
+// TITLE
+document.getElementById("title").innerText =
+`${awayFull} @ ${homeFull}`
 
+// SCORE + VENUE
 if(meta){
-document.getElementById("scoreline").innerText=
-`${awayFull} ${meta.away_score} – ${homeFull} ${meta.home_score}`
-document.getElementById("subtitle").innerText=meta.date
-document.getElementById("venueLine").innerText=`Venue: ${parkName(meta.venue)}`
-document.getElementById("crowdLine").innerText=
-meta.attendance?`Attendance: ${meta.attendance.toLocaleString()}`:""
+
+  const score =
+    (meta.away_score != null && meta.home_score != null)
+    ? `${awayFull} ${meta.away_score} – ${homeFull} ${meta.home_score}`
+    : ""
+
+  document.getElementById("scoreline").innerText = score
+  document.getElementById("subtitle").innerText = meta.date
+
+  document.getElementById("venueLine").innerText =
+    meta.venue ? `Venue: ${parkName(meta.venue)}` : ""
+
+  document.getElementById("crowdLine").innerText =
+    meta.attendance ? `Attendance: ${meta.attendance.toLocaleString()}` : ""
 }
 
+// tables
 renderTable("awayBatting",game.batters_away)
 renderTable("homeBatting",game.batters_home)
 renderTable("awayPitching",game.pitchers_away)
