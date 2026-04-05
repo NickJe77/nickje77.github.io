@@ -19,6 +19,18 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
 # -------------------------------------------------
+# GET TEAM CODE SAFELY
+# -------------------------------------------------
+def get_team_code(team):
+    return (
+        team.get("abbreviation")
+        or team.get("teamCode")
+        or team.get("fileCode")
+        or team.get("name", "")[:3].upper()
+    )
+
+
+# -------------------------------------------------
 # GET SCHEDULE
 # -------------------------------------------------
 def get_schedule():
@@ -33,8 +45,11 @@ def get_schedule():
             gamePk = str(g["gamePk"])
             gameDate = g["gameDate"][:10]
 
-            home = g["teams"]["home"]["team"]["abbreviation"]
-            away = g["teams"]["away"]["team"]["abbreviation"]
+            home_team = g["teams"]["home"]["team"]
+            away_team = g["teams"]["away"]["team"]
+
+            home = get_team_code(home_team)
+            away = get_team_code(away_team)
 
             games.append({
                 "game_id": gamePk,
@@ -50,16 +65,16 @@ def get_schedule():
 # -------------------------------------------------
 # BUILD EVENTS FROM PLAY-BY-PLAY
 # -------------------------------------------------
-def get_game(game):
-    game_id = game["game_id"]
+def build_game(game):
 
+    game_id = game["game_id"]
     url = f"{BASE}/game/{game_id}/feed/live"
 
     try:
         data = requests.get(url, headers=HEADERS, timeout=20).json()
     except:
-        print(f"Failed {game_id}")
-        return None
+        print(f"Failed request {game_id}")
+        return False
 
     try:
         plays = data["liveData"]["plays"]["allPlays"]
@@ -67,16 +82,20 @@ def get_game(game):
         events = []
 
         for p in plays:
+
             about = p.get("about", {})
             matchup = p.get("matchup", {})
             result = p.get("result", {})
+            count_data = p.get("count", {})
 
             inning = str(about.get("inning", ""))
-            is_top = about.get("isTopInning", True)
-            half = "1" if is_top else "0"
+            half = "1" if about.get("isTopInning", True) else "0"
 
             batter = matchup.get("batter", {}).get("id", "")
-            count = f"{p.get('count', {}).get('balls', 0)}{p.get('count', {}).get('strikes', 0)}"
+            balls = count_data.get("balls", 0)
+            strikes = count_data.get("strikes", 0)
+
+            count = f"{balls}{strikes}"
 
             event = result.get("event", "")
 
@@ -109,8 +128,8 @@ def get_game(game):
         return True
 
     except Exception as e:
-        print(f"Error {game_id}: {e}")
-        return None
+        print(f"Parse error {game_id}: {e}")
+        return False
 
 
 # -------------------------------------------------
@@ -118,14 +137,14 @@ def get_game(game):
 # -------------------------------------------------
 games = get_schedule()
 
-count = 0
+saved = 0
 
 for g in games:
-    ok = get_game(g)
+    ok = build_game(g)
 
     if ok:
-        count += 1
+        saved += 1
 
     time.sleep(0.3)
 
-print(f"DONE: {count} games built")
+print(f"DONE — {saved} games built")
