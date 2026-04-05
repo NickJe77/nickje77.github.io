@@ -99,20 +99,50 @@ if(parts.length>1) PARKS[parts[0].trim()]=parts[1].trim()
 async function loadGame(){
 
 const id=param("game")
+const seasonParam=param("season")
+
 if(!id){
 document.getElementById("title").innerText="Game not found"
 return
 }
 
-const season=id.match(/(\d{4})/)[1]
+const season = seasonParam || id.match(/(\d{4})/)[1]
 
-const gameRes=await fetch(`/data/baseball/games/${season}/${id}.json`)
-if(!gameRes.ok){
-document.getElementById("title").innerText="Game not found"
-return
+let game = null
+
+// 🔥 TRY NEW INDEX SYSTEM (2026)
+try{
+  const indexRes = await fetch(`/data/baseball/boxscores/${season}/index.json`)
+  if(indexRes.ok){
+    const index = await indexRes.json()
+    const file = index[id]
+
+    if(file){
+      const res = await fetch(`/data/baseball/boxscores/${season}/${file}`)
+      if(res.ok){
+        game = await res.json()
+      }
+    }
+  }
+}catch(e){}
+
+// 🔥 FALLBACK TO OLD SYSTEM (2025+)
+if(!game){
+  try{
+    const res = await fetch(`/data/baseball/games/${season}/${id}.json`)
+    if(res.ok){
+      game = await res.json()
+    }
+  }catch(e){}
 }
-const game=await gameRes.json()
 
+// ❌ STILL NOTHING
+if(!game){
+  document.getElementById("title").innerText="Game not found"
+  return
+}
+
+// 🔥 LOAD META (UNCHANGED)
 const seasonRes=await fetch(`/data/baseball/seasons/${season}.json`)
 let meta=null
 
@@ -147,6 +177,7 @@ document.getElementById("crowdLine").innerText=
 meta.attendance?`Attendance: ${meta.attendance.toLocaleString()}`:""
 }
 
+// 🔥 SAFE TABLE HANDLING (WON’T BREAK EVENTS-ONLY DATA)
 renderTable("awayBatting",game.batters_away)
 renderTable("homeBatting",game.batters_home)
 renderTable("awayPitching",game.pitchers_away)
