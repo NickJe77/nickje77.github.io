@@ -64,21 +64,37 @@ function playerName(id){return PLAYERS[id]||id}
 function teamName(code){return TEAMS[code]||code}
 function parkName(code){return PARKS[code]||code}
 
-async function loadLookups(){
-
-// 🔥 PLAYERS (FIXED FOR BOTH FORMATS)
+//
+// 🔥 PLAYERS — ONLY LOADED HERE (FIX)
+//
+async function loadPlayers(){
 try{
-const p=await fetch("/data/baseball/players.json")
-if(p.ok){
-const d=await p.json()
+const res = await fetch("/data/baseball/players.json")
+if(!res.ok) throw new Error("no players file")
 
-if(Array.isArray(d)){
-d.forEach(pl=>PLAYERS[pl.player_id]=pl.name)
+const data = await res.json()
+
+if(Array.isArray(data)){
+data.forEach(p=>{
+PLAYERS[p.player_id] = p.name
+})
 }else{
-Object.keys(d).forEach(k=>PLAYERS[k]=d[k])
+Object.keys(data).forEach(k=>{
+PLAYERS[k] = data[k]
+})
+}
+
+console.log("PLAYERS LOADED:", Object.keys(PLAYERS).length)
+
+}catch(e){
+console.error("PLAYERS FAILED", e)
 }
 }
-}catch(e){}
+
+//
+// LOOKUPS (NO PLAYERS HERE ANYMORE)
+//
+async function loadLookups(){
 
 // TEAMS
 try{
@@ -91,7 +107,7 @@ team.codes.forEach(c=>TEAMS[c]=team.name)
 }
 }catch(e){}
 
-// BALLPARKS
+// PARKS
 try{
 const b=await fetch("/data/baseball/ballparks.csv")
 if(b.ok){
@@ -116,7 +132,7 @@ return
 
 let game = null
 
-// 🔥 2026 INDEX SYSTEM
+// 2026
 try{
 const indexRes = await fetch(`/data/baseball/boxscores/${season}/index.json`)
 if(indexRes.ok){
@@ -129,7 +145,7 @@ if(res.ok) game = await res.json()
 }
 }catch(e){}
 
-// 🔥 2025+ FALLBACK
+// older
 if(!game){
 try{
 const res = await fetch(`/data/baseball/games/${season}/${id}.json`)
@@ -142,13 +158,12 @@ document.getElementById("title").innerText="Game not found"
 return
 }
 
-// 🔥 META (FIXED — WORKS FOR ALL FORMATS)
+// META (score + venue)
 let meta=null
 try{
 const seasonRes=await fetch(`/data/baseball/seasons/${season}.json`)
 if(seasonRes.ok){
 const seasonData=await seasonRes.json()
-
 meta = seasonData.find(g=>{
 return String(g.game_id) === id || g[0] === id
 })
@@ -166,7 +181,7 @@ const awayFull = game.away_team || teamName(game.away_code)
 document.getElementById("title").innerText =
 `${awayFull} @ ${homeFull}`
 
-// 🔥 SCORE + VENUE (ALL YEARS)
+// SCORE + VENUE
 if(meta){
 
 const awayScore = meta.away_score ?? meta[7]
@@ -185,6 +200,7 @@ document.getElementById("venueLine").innerText =
 venue ? `Venue: ${parkName(venue)}` : ""
 }
 
+// TABLES
 renderTable("awayBatting",game.batters_away)
 renderTable("homeBatting",game.batters_home)
 renderTable("awayPitching",game.pitchers_away)
@@ -210,8 +226,12 @@ html+="</tbody></table>"
 document.getElementById(id).innerHTML=html
 }
 
+//
+// 🔥 CORRECT LOAD ORDER
+//
 async function init(){
-await loadLookups()
+await loadPlayers()   // FIRST
+await loadLookups()   // THEN teams/parks
 await loadGame()
 }
 
