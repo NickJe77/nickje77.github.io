@@ -5,7 +5,7 @@ from datetime import datetime
 import time
 import re
 
-print("MLB 2026 REBUILD (FINAL - FILTERED + CODES)")
+print("MLB 2026 REBUILD (FINAL WITH INDEX)")
 
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1.1"
@@ -18,9 +18,12 @@ BOX_DIR.mkdir(parents=True, exist_ok=True)
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
+# 🔥 INDEX MAP (GAME ID → FILE)
+INDEX = {}
+
 
 # -------------------------------------------------
-# PLAYER CODE (MATCHES YOUR 2025 FORMAT)
+# PLAYER CODE
 # -------------------------------------------------
 def make_player_code(name):
     try:
@@ -40,7 +43,7 @@ def make_player_code(name):
 
 
 # -------------------------------------------------
-# TEAM CODE SAFE
+# TEAM CODE
 # -------------------------------------------------
 def get_team_code(team):
     return (
@@ -56,17 +59,15 @@ def get_team_code(team):
 # -------------------------------------------------
 def get_schedule():
     url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
-    res = requests.get(url, headers=HEADERS)
-    data = res.json()
+    data = requests.get(url, headers=HEADERS).json()
 
     games = []
 
     for date in data.get("dates", []):
         for g in date.get("games", []):
 
-            # ✅ ONLY REGULAR + POSTSEASON
+            # 🔥 ONLY REGULAR + POSTSEASON
             game_type = g.get("gameType")
-
             if game_type not in ["R", "P"]:
                 continue
 
@@ -83,12 +84,12 @@ def get_schedule():
                 "away": away
             })
 
-    print(f"FOUND {len(games)} VALID GAMES (R + P ONLY)")
+    print(f"FOUND {len(games)} VALID GAMES")
     return games
 
 
 # -------------------------------------------------
-# BUILD GAME EVENTS
+# BUILD GAME
 # -------------------------------------------------
 def build_game(game):
 
@@ -123,7 +124,6 @@ def build_game(game):
             strikes = count_data.get("strikes", 0)
 
             count = f"{balls}{strikes}"
-
             event = result.get("event", "")
 
             events.append([
@@ -138,7 +138,7 @@ def build_game(game):
         file_name = f"{game['date']}_{game['away']}_{game['home']}.json"
         file_path = BOX_DIR / file_name
 
-        # 🔥 FORCE WRITE
+        # 🔥 WRITE FILE
         with open(file_path, "w") as f:
             json.dump({
                 "game_id": game_id,
@@ -150,6 +150,9 @@ def build_game(game):
                 "away_team": game["away"],
                 "events": events
             }, f, indent=2)
+
+        # 🔥 ADD TO INDEX
+        INDEX[game_id] = file_name
 
         print(f"✅ SAVED {file_name}")
         return True
@@ -165,7 +168,7 @@ def build_game(game):
 games = get_schedule()
 
 if not games:
-    print("❌ NO VALID GAMES FOUND")
+    print("❌ NO GAMES FOUND")
     exit()
 
 saved = 0
@@ -176,4 +179,11 @@ for g in games:
 
     time.sleep(0.3)
 
+# 🔥 BUILD INDEX FILE
+index_path = BOX_DIR / "index.json"
+
+with open(index_path, "w") as f:
+    json.dump(INDEX, f, indent=2)
+
+print(f"📦 INDEX BUILT ({len(INDEX)} games)")
 print(f"🎯 DONE — {saved} FILES WRITTEN")
