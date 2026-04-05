@@ -111,7 +111,7 @@ const season = seasonParam || id.match(/(\d{4})/)[1]
 
 let game = null
 
-// 🔥 NEW SYSTEM (2026)
+// NEW SYSTEM (2026)
 try{
   const indexRes = await fetch(`/data/baseball/boxscores/${season}/index.json`)
   if(indexRes.ok){
@@ -127,7 +127,7 @@ try{
   }
 }catch(e){}
 
-// 🔥 OLD SYSTEM (2025)
+// OLD SYSTEM (2025)
 if(!game){
   try{
     const res = await fetch(`/data/baseball/games/${season}/${id}.json`)
@@ -142,51 +142,7 @@ document.getElementById("title").innerText="Game not found"
 return
 }
 
-// 🔥 BUILD TABLE DATA FROM EVENTS (2026 FIX)
-function buildBoxFromEvents(game){
-
-  if(!game.events) return game
-
-  const awayBat = {}
-  const homeBat = {}
-
-  game.events.forEach(e=>{
-    const player = e[3]
-    const isAway = e[2] === "1"
-    const target = isAway ? awayBat : homeBat
-
-    if(!target[player]){
-      target[player] = { player_id: player, AB:0, H:0, BB:0, SO:0 }
-    }
-
-    const stat = target[player]
-    const event = e[5] || ""
-
-    if(event.includes("Single") || event.includes("Double") || event.includes("Triple") || event.includes("Home Run")){
-      stat.H++; stat.AB++
-    }
-    else if(event.includes("Walk")){
-      stat.BB++
-    }
-    else if(event.includes("Strikeout")){
-      stat.SO++; stat.AB++
-    }
-    else{
-      stat.AB++
-    }
-  })
-
-  game.batters_away = Object.values(awayBat)
-  game.batters_home = Object.values(homeBat)
-  game.pitchers_away = []
-  game.pitchers_home = []
-
-  return game
-}
-
-game = buildBoxFromEvents(game)
-
-// 🔥 META (unchanged)
+// LOAD META
 const seasonRes=await fetch(`/data/baseball/seasons/${season}.json`)
 let meta=null
 
@@ -207,8 +163,9 @@ render(game,meta)
 
 function render(game,meta){
 
-const homeFull=teamName(game.home_code)
-const awayFull=teamName(game.away_code)
+// 🔥 THIS IS THE FIX
+const homeFull = game.home_team || teamName(game.home_code)
+const awayFull = game.away_team || teamName(game.away_code)
 
 document.getElementById("title").innerText=`${awayFull} @ ${homeFull}`
 
