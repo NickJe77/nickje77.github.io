@@ -3,8 +3,9 @@ import json
 from pathlib import Path
 from datetime import datetime
 import time
+import re
 
-print("MLB 2026 REBUILD (EVENT STRUCTURE)")
+print("MLB 2026 REBUILD (FINAL WITH PLAYER CODES)")
 
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1.1"
@@ -19,7 +20,24 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
 # -------------------------------------------------
-# GET TEAM CODE SAFELY
+# PLAYER CODE GENERATOR (MATCHES YOUR FORMAT)
+# -------------------------------------------------
+def make_player_code(name):
+    try:
+        name = name.lower()
+        parts = re.split(r"\s+", name)
+
+        first = parts[0]
+        last = parts[-1]
+
+        code = (last[:5] + first[:2]).ljust(7, "x") + "001"
+        return code.replace(" ", "")
+    except:
+        return "unknown001"
+
+
+# -------------------------------------------------
+# TEAM CODE
 # -------------------------------------------------
 def get_team_code(team):
     return (
@@ -63,7 +81,7 @@ def get_schedule():
 
 
 # -------------------------------------------------
-# BUILD EVENTS FROM PLAY-BY-PLAY
+# BUILD GAME
 # -------------------------------------------------
 def build_game(game):
 
@@ -91,7 +109,9 @@ def build_game(game):
             inning = str(about.get("inning", ""))
             half = "1" if about.get("isTopInning", True) else "0"
 
-            batter = matchup.get("batter", {}).get("id", "")
+            batter_name = matchup.get("batter", {}).get("fullName", "")
+            batter_code = make_player_code(batter_name)
+
             balls = count_data.get("balls", 0)
             strikes = count_data.get("strikes", 0)
 
@@ -103,7 +123,7 @@ def build_game(game):
                 "play",
                 inning,
                 half,
-                str(batter),
+                batter_code,
                 count,
                 event
             ])
