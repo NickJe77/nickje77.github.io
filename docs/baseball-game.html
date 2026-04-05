@@ -66,14 +66,21 @@ function parkName(code){return PARKS[code]||code}
 
 async function loadLookups(){
 
+// 🔥 PLAYERS (FIXED FOR BOTH FORMATS)
 try{
 const p=await fetch("/data/baseball/players.json")
 if(p.ok){
 const d=await p.json()
+
+if(Array.isArray(d)){
 d.forEach(pl=>PLAYERS[pl.player_id]=pl.name)
+}else{
+Object.keys(d).forEach(k=>PLAYERS[k]=d[k])
+}
 }
 }catch(e){}
 
+// TEAMS
 try{
 const t=await fetch("/data/baseball/teams.json")
 if(t.ok){
@@ -84,6 +91,7 @@ team.codes.forEach(c=>TEAMS[c]=team.name)
 }
 }catch(e){}
 
+// BALLPARKS
 try{
 const b=await fetch("/data/baseball/ballparks.csv")
 if(b.ok){
@@ -108,7 +116,7 @@ return
 
 let game = null
 
-// NEW (2026)
+// 🔥 2026 INDEX SYSTEM
 try{
 const indexRes = await fetch(`/data/baseball/boxscores/${season}/index.json`)
 if(indexRes.ok){
@@ -121,7 +129,7 @@ if(res.ok) game = await res.json()
 }
 }catch(e){}
 
-// OLD (2025)
+// 🔥 2025+ FALLBACK
 if(!game){
 try{
 const res = await fetch(`/data/baseball/games/${season}/${id}.json`)
@@ -134,8 +142,8 @@ document.getElementById("title").innerText="Game not found"
 return
 }
 
-// 🔥 FIXED META MATCH (BY DATE ONLY — NOT TEAM CODE)
-let meta = null
+// 🔥 META (FIXED — WORKS FOR ALL FORMATS)
+let meta=null
 try{
 const seasonRes=await fetch(`/data/baseball/seasons/${season}.json`)
 if(seasonRes.ok){
@@ -158,18 +166,23 @@ const awayFull = game.away_team || teamName(game.away_code)
 document.getElementById("title").innerText =
 `${awayFull} @ ${homeFull}`
 
-// 🔥 SCORE + VENUE ALWAYS WORK NOW
+// 🔥 SCORE + VENUE (ALL YEARS)
 if(meta){
 
-document.getElementById("scoreline").innerText =
-`${awayFull} ${meta.away_score || meta[7]} – ${homeFull} ${meta.home_score || meta[8]}`
+const awayScore = meta.away_score ?? meta[7]
+const homeScore = meta.home_score ?? meta[8]
+const date = meta.date ?? meta[1]
+const venue = meta.venue ?? meta[5]
 
-document.getElementById("subtitle").innerText =
-meta.date || meta[1]
+if(awayScore!=null && homeScore!=null){
+document.getElementById("scoreline").innerText =
+`${awayFull} ${awayScore} – ${homeFull} ${homeScore}`
+}
+
+document.getElementById("subtitle").innerText = date || ""
 
 document.getElementById("venueLine").innerText =
-meta.venue ? `Venue: ${parkName(meta.venue)}` :
-(meta[5] ? `Venue: ${parkName(meta[5])}` : "")
+venue ? `Venue: ${parkName(venue)}` : ""
 }
 
 renderTable("awayBatting",game.batters_away)
