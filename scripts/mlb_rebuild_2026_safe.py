@@ -5,7 +5,7 @@ from datetime import datetime
 import time
 import re
 
-print("MLB 2026 FULL BUILD (FINAL)")
+print("MLB 2026 FULL BUILD (FINAL WITH REAL TEAM NAMES)")
 
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1.1"
@@ -35,10 +35,7 @@ def make_player_code(name):
     last = parts[-1]
 
     code = f"{last[:5]}{first[:2]}001"
-
-    # store mapping
     PLAYERS[code] = name
-
     return code
 
 # -------------------------------------------------
@@ -64,15 +61,19 @@ def get_schedule():
     for date in data.get("dates", []):
         for g in date.get("games", []):
 
-            # only real MLB games
             if g.get("gameType") not in ["R", "P"]:
                 continue
+
+            home_team_obj = g["teams"]["home"]["team"]
+            away_team_obj = g["teams"]["away"]["team"]
 
             games.append({
                 "game_id": str(g["gamePk"]),
                 "date": g["gameDate"][:10],
-                "home": get_team_code(g["teams"]["home"]["team"]),
-                "away": get_team_code(g["teams"]["away"]["team"])
+                "home_code": get_team_code(home_team_obj),
+                "away_code": get_team_code(away_team_obj),
+                "home_team": home_team_obj.get("name", get_team_code(home_team_obj)),
+                "away_team": away_team_obj.get("name", get_team_code(away_team_obj))
             })
 
     print(f"FOUND {len(games)} GAMES")
@@ -95,7 +96,6 @@ def build_game(game):
     try:
         box = data["liveData"]["boxscore"]["teams"]
 
-        # ---------------- BATTERS ----------------
         def extract_batting(team):
             out = []
             for p in team["players"].values():
@@ -117,7 +117,6 @@ def build_game(game):
                 })
             return out
 
-        # ---------------- PITCHERS ----------------
         def extract_pitching(team):
             out = []
             for p in team["players"].values():
@@ -143,17 +142,17 @@ def build_game(game):
             "game_id": game_id,
             "date": game["date"],
             "season": SEASON,
-            "home_code": game["home"],
-            "away_code": game["away"],
-
-            # FULL STATS
+            "home_code": game["home_code"],
+            "away_code": game["away_code"],
+            "home_team": game["home_team"],
+            "away_team": game["away_team"],
             "batters_home": extract_batting(box["home"]),
             "batters_away": extract_batting(box["away"]),
             "pitchers_home": extract_pitching(box["home"]),
             "pitchers_away": extract_pitching(box["away"])
         }
 
-        file_name = f"{game['date']}_{game['away']}_{game['home']}.json"
+        file_name = f"{game['date']}_{game['away_code']}_{game['home_code']}.json"
 
         with open(BOX_DIR / file_name, "w") as f:
             json.dump(game_json, f, indent=2)
@@ -176,23 +175,16 @@ for g in games:
     build_game(g)
     time.sleep(0.3)
 
-# ---------------- INDEX ----------------
 with open(BOX_DIR / "index.json", "w") as f:
     json.dump(INDEX, f, indent=2)
 
 print("INDEX BUILT")
 
-# ---------------- PLAYERS ----------------
 players_path = Path("docs/data/baseball/players.json")
-
-players_list = [
-    {"player_id": k, "name": v}
-    for k, v in PLAYERS.items()
-]
+players_list = [{"player_id": k, "name": v} for k, v in PLAYERS.items()]
 
 with open(players_path, "w") as f:
     json.dump(players_list, f, indent=2)
 
 print(f"PLAYERS BUILT: {len(players_list)}")
-
 print("DONE")
