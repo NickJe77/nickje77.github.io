@@ -5,7 +5,7 @@ from datetime import datetime
 import time
 import re
 
-print("MLB 2026 REBUILD (FORCED WRITE)")
+print("MLB 2026 REBUILD (FINAL - FILTERED + CODES)")
 
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1.1"
@@ -19,9 +19,9 @@ BOX_DIR.mkdir(parents=True, exist_ok=True)
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
-# -----------------------------
-# PLAYER CODE
-# -----------------------------
+# -------------------------------------------------
+# PLAYER CODE (MATCHES YOUR 2025 FORMAT)
+# -------------------------------------------------
 def make_player_code(name):
     try:
         name = re.sub(r"[^\w\s]", "", name.lower())
@@ -39,9 +39,9 @@ def make_player_code(name):
         return "unknown001"
 
 
-# -----------------------------
-# TEAM CODE
-# -----------------------------
+# -------------------------------------------------
+# TEAM CODE SAFE
+# -------------------------------------------------
 def get_team_code(team):
     return (
         team.get("abbreviation")
@@ -51,9 +51,9 @@ def get_team_code(team):
     )
 
 
-# -----------------------------
-# GET SCHEDULE
-# -----------------------------
+# -------------------------------------------------
+# GET SCHEDULE (FILTERED)
+# -------------------------------------------------
 def get_schedule():
     url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
     res = requests.get(url, headers=HEADERS)
@@ -63,6 +63,12 @@ def get_schedule():
 
     for date in data.get("dates", []):
         for g in date.get("games", []):
+
+            # ✅ ONLY REGULAR + POSTSEASON
+            game_type = g.get("gameType")
+
+            if game_type not in ["R", "P"]:
+                continue
 
             gamePk = str(g["gamePk"])
             gameDate = g["gameDate"][:10]
@@ -77,13 +83,13 @@ def get_schedule():
                 "away": away
             })
 
-    print(f"FOUND {len(games)} GAMES")
+    print(f"FOUND {len(games)} VALID GAMES (R + P ONLY)")
     return games
 
 
-# -----------------------------
-# BUILD GAME
-# -----------------------------
+# -------------------------------------------------
+# BUILD GAME EVENTS
+# -------------------------------------------------
 def build_game(game):
 
     game_id = game["game_id"]
@@ -101,6 +107,7 @@ def build_game(game):
         events = []
 
         for p in plays:
+
             about = p.get("about", {})
             matchup = p.get("matchup", {})
             result = p.get("result", {})
@@ -114,6 +121,7 @@ def build_game(game):
 
             balls = count_data.get("balls", 0)
             strikes = count_data.get("strikes", 0)
+
             count = f"{balls}{strikes}"
 
             event = result.get("event", "")
@@ -130,7 +138,7 @@ def build_game(game):
         file_name = f"{game['date']}_{game['away']}_{game['home']}.json"
         file_path = BOX_DIR / file_name
 
-        # 🔥 FORCE WRITE (NO SKIPPING)
+        # 🔥 FORCE WRITE
         with open(file_path, "w") as f:
             json.dump({
                 "game_id": game_id,
@@ -151,13 +159,13 @@ def build_game(game):
         return False
 
 
-# -----------------------------
+# -------------------------------------------------
 # MAIN
-# -----------------------------
+# -------------------------------------------------
 games = get_schedule()
 
 if not games:
-    print("❌ NO GAMES FOUND — CHECK DATES/API")
+    print("❌ NO VALID GAMES FOUND")
     exit()
 
 saved = 0
