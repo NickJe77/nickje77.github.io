@@ -4,8 +4,9 @@ from pathlib import Path
 from datetime import datetime
 import time
 import re
+import os
 
-print("MLB 2026 FULL BUILD (FINAL FIXED)")
+print("MLB 2026 FULL BUILD (FORCED UPDATE + SAFE)")
 
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1.1"
@@ -25,9 +26,9 @@ INDEX = {}
 NEW_PLAYERS = {}
 SEASON_GAMES = []
 
-# -------------------------------------------------
+# -----------------------------
 # PLAYER CODE
-# -------------------------------------------------
+# -----------------------------
 def make_player_code(name):
     name_clean = re.sub(r"[^\w\s]", "", name.lower())
     parts = name_clean.split()
@@ -42,9 +43,9 @@ def make_player_code(name):
     NEW_PLAYERS[code] = name
     return code
 
-# -------------------------------------------------
+# -----------------------------
 # TEAM CODE
-# -------------------------------------------------
+# -----------------------------
 def get_team_code(team):
     return (
         team.get("abbreviation")
@@ -53,9 +54,9 @@ def get_team_code(team):
         or team.get("name", "")[:3].upper()
     )
 
-# -------------------------------------------------
+# -----------------------------
 # GET SCHEDULE
-# -------------------------------------------------
+# -----------------------------
 def get_schedule():
     url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
     data = requests.get(url, headers=HEADERS).json()
@@ -78,9 +79,9 @@ def get_schedule():
     print(f"FOUND {len(games)} GAMES")
     return games
 
-# -------------------------------------------------
+# -----------------------------
 # BUILD GAME
-# -------------------------------------------------
+# -----------------------------
 def build_game(game):
 
     game_id = game["game_id"]
@@ -103,7 +104,7 @@ def build_game(game):
         home_code = get_team_code(home_team)
         away_code = get_team_code(away_team)
 
-        # ---------------- BATTERS ----------------
+        # -------- BATTERS --------
         def extract_batting(team):
             out = []
             for p in team["players"].values():
@@ -125,7 +126,7 @@ def build_game(game):
                 })
             return out
 
-        # ---------------- PITCHERS ----------------
+        # -------- PITCHERS --------
         def extract_pitching(team):
             out = []
             for p in team["players"].values():
@@ -147,7 +148,6 @@ def build_game(game):
                 })
             return out
 
-        # ---------------- SAVE BOX ----------------
         file_name = f"{game['date']}_{away_code}_{home_code}.json"
 
         game_json = {
@@ -164,12 +164,15 @@ def build_game(game):
             "pitchers_away": extract_pitching(box["away"])
         }
 
+        # 🔥 FORCE OVERWRITE
         with open(BOX_DIR / file_name, "w") as f:
             json.dump(game_json, f, indent=2)
 
+        os.utime(BOX_DIR / file_name, None)
+
         INDEX[game_id] = file_name
 
-        # ---------------- SEASON ENTRY (ARRAY FORMAT) ----------------
+        # -------- SEASON ENTRY --------
         SEASON_GAMES.append({
             "game_id": game_id,
             "date": game["date"],
@@ -180,35 +183,31 @@ def build_game(game):
             "home_score": linescore["teams"]["home"]["runs"]
         })
 
-        print("SAVED", file_name)
+        print("UPDATED", file_name)
         return True
 
     except Exception as e:
         print("ERROR", game_id, e)
         return False
 
-# -------------------------------------------------
+# -----------------------------
 # RUN
-# -------------------------------------------------
+# -----------------------------
 games = get_schedule()
 
 for g in games:
     build_game(g)
     time.sleep(0.3)
 
-# ---------------- INDEX ----------------
+# -------- INDEX --------
 with open(BOX_DIR / "index.json", "w") as f:
     json.dump(INDEX, f, indent=2)
 
-print("INDEX BUILT")
-
-# ---------------- SEASON FILE (FIXED FORMAT) ----------------
+# -------- SEASON FILE (ARRAY) --------
 with open(SEASON_FILE, "w") as f:
     json.dump(SEASON_GAMES, f, indent=2)
 
-print("SEASON FILE BUILT")
-
-# ---------------- SAFE PLAYER MERGE ----------------
+# -------- SAFE PLAYER MERGE --------
 players_path = Path("docs/data/baseball/players.json")
 
 existing = {}
@@ -231,5 +230,4 @@ players_list = [
 with open(players_path, "w") as f:
     json.dump(players_list, f, indent=2)
 
-print(f"PLAYERS TOTAL: {len(players_list)}")
 print("DONE")
