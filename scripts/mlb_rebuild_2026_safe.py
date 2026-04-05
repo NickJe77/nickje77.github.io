@@ -5,7 +5,7 @@ from datetime import datetime
 import time
 import re
 
-print("MLB 2026 FULL BOX SCORE BUILD")
+print("MLB 2026 FULL BUILD (FINAL)")
 
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1.1"
@@ -19,24 +19,31 @@ BOX_DIR.mkdir(parents=True, exist_ok=True)
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 INDEX = {}
+PLAYERS = {}
 
-
-# -----------------------------
-# PLAYER CODE
-# -----------------------------
+# -------------------------------------------------
+# PLAYER CODE + STORE NAME
+# -------------------------------------------------
 def make_player_code(name):
-    name = re.sub(r"[^\w\s]", "", name.lower())
-    parts = name.split()
+    name_clean = re.sub(r"[^\w\s]", "", name.lower())
+    parts = name_clean.split()
+
     if len(parts) < 2:
         return "unknown001"
+
     first = parts[0]
     last = parts[-1]
-    return f"{last[:5]}{first[:2]}001"
 
+    code = f"{last[:5]}{first[:2]}001"
 
-# -----------------------------
+    # store mapping
+    PLAYERS[code] = name
+
+    return code
+
+# -------------------------------------------------
 # TEAM CODE
-# -----------------------------
+# -------------------------------------------------
 def get_team_code(team):
     return (
         team.get("abbreviation")
@@ -45,10 +52,9 @@ def get_team_code(team):
         or team.get("name", "")[:3].upper()
     )
 
-
-# -----------------------------
+# -------------------------------------------------
 # GET SCHEDULE
-# -----------------------------
+# -------------------------------------------------
 def get_schedule():
     url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
     data = requests.get(url, headers=HEADERS).json()
@@ -58,6 +64,7 @@ def get_schedule():
     for date in data.get("dates", []):
         for g in date.get("games", []):
 
+            # only real MLB games
             if g.get("gameType") not in ["R", "P"]:
                 continue
 
@@ -71,10 +78,9 @@ def get_schedule():
     print(f"FOUND {len(games)} GAMES")
     return games
 
-
-# -----------------------------
+# -------------------------------------------------
 # BUILD GAME (FULL STATS)
-# -----------------------------
+# -------------------------------------------------
 def build_game(game):
 
     game_id = game["game_id"]
@@ -89,6 +95,7 @@ def build_game(game):
     try:
         box = data["liveData"]["boxscore"]["teams"]
 
+        # ---------------- BATTERS ----------------
         def extract_batting(team):
             out = []
             for p in team["players"].values():
@@ -97,15 +104,20 @@ def build_game(game):
                     continue
 
                 name = p["person"]["fullName"]
+                code = make_player_code(name)
+
                 out.append({
-                    "player_id": make_player_code(name),
+                    "player_id": code,
                     "AB": stats.get("atBats", 0),
+                    "R": stats.get("runs", 0),
                     "H": stats.get("hits", 0),
+                    "RBI": stats.get("rbi", 0),
                     "BB": stats.get("baseOnBalls", 0),
                     "SO": stats.get("strikeOuts", 0)
                 })
             return out
 
+        # ---------------- PITCHERS ----------------
         def extract_pitching(team):
             out = []
             for p in team["players"].values():
@@ -114,10 +126,14 @@ def build_game(game):
                     continue
 
                 name = p["person"]["fullName"]
+                code = make_player_code(name)
+
                 out.append({
-                    "player_id": make_player_code(name),
+                    "player_id": code,
                     "IP": stats.get("inningsPitched", "0.0"),
                     "H": stats.get("hits", 0),
+                    "R": stats.get("runs", 0),
+                    "ER": stats.get("earnedRuns", 0),
                     "BB": stats.get("baseOnBalls", 0),
                     "SO": stats.get("strikeOuts", 0)
                 })
@@ -130,7 +146,7 @@ def build_game(game):
             "home_code": game["home"],
             "away_code": game["away"],
 
-            # ✅ FULL DATA (THIS FIXES EVERYTHING)
+            # FULL STATS
             "batters_home": extract_batting(box["home"]),
             "batters_away": extract_batting(box["away"]),
             "pitchers_home": extract_pitching(box["home"]),
@@ -151,18 +167,32 @@ def build_game(game):
         print("ERROR", game_id, e)
         return False
 
-
-# -----------------------------
+# -------------------------------------------------
 # MAIN
-# -----------------------------
+# -------------------------------------------------
 games = get_schedule()
 
 for g in games:
     build_game(g)
     time.sleep(0.3)
 
-# INDEX
+# ---------------- INDEX ----------------
 with open(BOX_DIR / "index.json", "w") as f:
     json.dump(INDEX, f, indent=2)
+
+print("INDEX BUILT")
+
+# ---------------- PLAYERS ----------------
+players_path = Path("docs/data/baseball/players.json")
+
+players_list = [
+    {"player_id": k, "name": v}
+    for k, v in PLAYERS.items()
+]
+
+with open(players_path, "w") as f:
+    json.dump(players_list, f, indent=2)
+
+print(f"PLAYERS BUILT: {len(players_list)}")
 
 print("DONE")
