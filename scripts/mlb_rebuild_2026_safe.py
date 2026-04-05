@@ -5,7 +5,7 @@ from datetime import datetime
 import time
 import re
 
-print("MLB 2026 FULL BUILD (FINAL WITH REAL TEAM NAMES)")
+print("MLB 2026 FULL BUILD (SAFE)")
 
 SEASON = 2026
 BASE = "https://statsapi.mlb.com/api/v1.1"
@@ -19,11 +19,11 @@ BOX_DIR.mkdir(parents=True, exist_ok=True)
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 INDEX = {}
-PLAYERS = {}
+NEW_PLAYERS = {}
 
-# -------------------------------------------------
-# PLAYER CODE + STORE NAME
-# -------------------------------------------------
+# -----------------------------
+# PLAYER CODE (SAFE)
+# -----------------------------
 def make_player_code(name):
     name_clean = re.sub(r"[^\w\s]", "", name.lower())
     parts = name_clean.split()
@@ -35,12 +35,15 @@ def make_player_code(name):
     last = parts[-1]
 
     code = f"{last[:5]}{first[:2]}001"
-    PLAYERS[code] = name
+
+    # only store NEW players (do not overwrite existing)
+    NEW_PLAYERS[code] = name
+
     return code
 
-# -------------------------------------------------
+# -----------------------------
 # TEAM CODE
-# -------------------------------------------------
+# -----------------------------
 def get_team_code(team):
     return (
         team.get("abbreviation")
@@ -49,9 +52,9 @@ def get_team_code(team):
         or team.get("name", "")[:3].upper()
     )
 
-# -------------------------------------------------
+# -----------------------------
 # GET SCHEDULE
-# -------------------------------------------------
+# -----------------------------
 def get_schedule():
     url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
     data = requests.get(url, headers=HEADERS).json()
@@ -64,24 +67,24 @@ def get_schedule():
             if g.get("gameType") not in ["R", "P"]:
                 continue
 
-            home_team_obj = g["teams"]["home"]["team"]
-            away_team_obj = g["teams"]["away"]["team"]
+            home = g["teams"]["home"]["team"]
+            away = g["teams"]["away"]["team"]
 
             games.append({
                 "game_id": str(g["gamePk"]),
                 "date": g["gameDate"][:10],
-                "home_code": get_team_code(home_team_obj),
-                "away_code": get_team_code(away_team_obj),
-                "home_team": home_team_obj.get("name", get_team_code(home_team_obj)),
-                "away_team": away_team_obj.get("name", get_team_code(away_team_obj))
+                "home_code": get_team_code(home),
+                "away_code": get_team_code(away),
+                "home_team": home.get("name"),
+                "away_team": away.get("name")
             })
 
     print(f"FOUND {len(games)} GAMES")
     return games
 
-# -------------------------------------------------
-# BUILD GAME (FULL STATS)
-# -------------------------------------------------
+# -----------------------------
+# BUILD GAME
+# -----------------------------
 def build_game(game):
 
     game_id = game["game_id"]
@@ -166,25 +169,46 @@ def build_game(game):
         print("ERROR", game_id, e)
         return False
 
-# -------------------------------------------------
-# MAIN
-# -------------------------------------------------
+# -----------------------------
+# RUN
+# -----------------------------
 games = get_schedule()
 
 for g in games:
     build_game(g)
     time.sleep(0.3)
 
+# -----------------------------
+# SAVE INDEX
+# -----------------------------
 with open(BOX_DIR / "index.json", "w") as f:
     json.dump(INDEX, f, indent=2)
 
-print("INDEX BUILT")
-
+# -----------------------------
+# SAFE PLAYER MERGE (KEY FIX)
+# -----------------------------
 players_path = Path("docs/data/baseball/players.json")
-players_list = [{"player_id": k, "name": v} for k, v in PLAYERS.items()]
+
+existing = {}
+
+if players_path.exists():
+    with open(players_path) as f:
+        data = json.load(f)
+        for p in data:
+            existing[p["player_id"]] = p["name"]
+
+# ONLY ADD NEW — NEVER REMOVE
+for k, v in NEW_PLAYERS.items():
+    if k not in existing:
+        existing[k] = v
+
+players_list = [
+    {"player_id": k, "name": v}
+    for k, v in sorted(existing.items())
+]
 
 with open(players_path, "w") as f:
     json.dump(players_list, f, indent=2)
 
-print(f"PLAYERS BUILT: {len(players_list)}")
+print(f"PLAYERS TOTAL: {len(players_list)}")
 print("DONE")
