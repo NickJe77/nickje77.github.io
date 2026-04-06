@@ -5,7 +5,7 @@ from pathlib import Path
 import time
 import re
 
-print("PGA BUILDER (MAJORS + PLAYERS)")
+print("PGA BUILDER FINAL (WORKING VERSION)")
 
 BASE_DIR = Path("docs/data/golf")
 PLAYERS_DIR = BASE_DIR / "players"
@@ -23,20 +23,10 @@ END_YEAR = 2026
 
 
 # ---------------------------
-# MAJORS LIST
+# HELPERS
 # ---------------------------
-MAJORS = [
-    "masters",
-    "u.s. open",
-    "the open",
-    "open championship",
-    "pga championship"
-]
-
-
-def is_major(event):
-    e = event.lower()
-    return any(m in e for m in MAJORS)
+def clean(text):
+    return text.replace("\n", "").replace("\xa0", " ").strip()
 
 
 def slugify(name):
@@ -46,28 +36,38 @@ def slugify(name):
     return name.strip("-")
 
 
-def clean_text(text):
-    return text.replace("\n", "").replace("\xa0", " ").strip()
+def is_major(event):
+    e = event.lower()
+    return any(x in e for x in [
+        "masters",
+        "u.s. open",
+        "open championship",
+        "the open",
+        "pga championship"
+    ])
 
 
 def get_page(year):
     url = f"https://en.wikipedia.org/wiki/{year}_PGA_Tour"
     r = requests.get(url, headers=HEADERS, timeout=20)
-
     if r.status_code != 200:
-        print("Failed:", year)
+        print("FAILED", year)
         return None
-
     return BeautifulSoup(r.text, "html.parser")
 
 
-def parse_tables(soup, year):
-    tables = soup.find_all("table", {"class": "wikitable"})
-    rows = []
+# ---------------------------
+# PARSER (FIXED PROPERLY)
+# ---------------------------
+def parse_year(soup, year):
+    rows_out = []
+
+    tables = soup.find_all("table", class_="wikitable")
 
     for table in tables:
-        headers = [clean_text(th.text).lower() for th in table.find_all("th")]
+        headers = [clean(th.text).lower() for th in table.find_all("th")]
 
+        # find key columns
         winner_idx = None
         event_idx = None
 
@@ -80,23 +80,32 @@ def parse_tables(soup, year):
         if winner_idx is None or event_idx is None:
             continue
 
-        for row in table.find_all("tr")[1:]:
-            cols = [clean_text(c.text) for c in row.find_all(["td", "th"])]
+        for tr in table.find_all("tr")[1:]:
+            cols = [clean(td.text) for td in tr.find_all(["td", "th"])]
 
             if len(cols) <= max(winner_idx, event_idx):
                 continue
 
-            winner = cols[winner_idx]
             event = cols[event_idx]
+            winner = cols[winner_idx]
 
-            # skip garbage
-            if "$" in winner or winner.replace(",", "").isdigit():
+            # 🔴 HARD FILTERS (THIS FIXES YOUR DATA)
+            if not event or not winner:
                 continue
 
-            if not winner or not event:
+            # remove money rows
+            if re.search(r"\$\d|,\d{3}", winner):
                 continue
 
-            rows.append({
+            # remove numeric junk
+            if winner.replace(",", "").isdigit():
+                continue
+
+            # remove weird rows
+            if len(winner) < 3:
+                continue
+
+            rows_out.append({
                 "tour": "pga",
                 "year": year,
                 "date": "",
@@ -109,11 +118,11 @@ def parse_tables(soup, year):
                 "url": f"https://en.wikipedia.org/wiki/{year}_PGA_Tour"
             })
 
-    return rows
+    return rows_out
 
 
 # ---------------------------
-# BUILD DATA
+# BUILD EVERYTHING
 # ---------------------------
 all_rows = []
 players = {}
@@ -125,8 +134,8 @@ for year in range(START_YEAR, END_YEAR + 1):
     if not soup:
         continue
 
-    rows = parse_tables(soup, year)
-    print("  found:", len(rows))
+    rows = parse_year(soup, year)
+    print("  rows:", len(rows))
 
     for r in rows:
         all_rows.append(r)
@@ -151,23 +160,23 @@ for year in range(START_YEAR, END_YEAR + 1):
         players[slug]["years"].add(r["year"])
         players[slug]["events"].append(r)
 
-    time.sleep(0.3)
+    time.sleep(0.2)
 
 
 # ---------------------------
-# CLEAN PLAYERS
+# CLEAN + SAVE PLAYERS
 # ---------------------------
-players_list = []
+players_index = []
 
 for slug, p in players.items():
     p["years"] = sorted(list(p["years"]))
     p["events"].sort(key=lambda x: x["year"], reverse=True)
 
-    # save individual player file
+    # save individual file
     with open(PLAYERS_DIR / f"{slug}.json", "w") as f:
         json.dump(p, f, indent=2)
 
-    players_list.append({
+    players_index.append({
         "name": p["name"],
         "slug": slug,
         "wins": p["wins"],
@@ -175,19 +184,19 @@ for slug, p in players.items():
     })
 
 
-# sort players by wins
-players_list.sort(key=lambda x: x["wins"], reverse=True)
+players_index.sort(key=lambda x: x["wins"], reverse=True)
 
 
 # ---------------------------
-# SAVE FILES
+# SAVE MAIN FILES
 # ---------------------------
 with open(OUT_FILE, "w") as f:
     json.dump(all_rows, f, indent=2)
 
 with open(PLAYERS_INDEX, "w") as f:
-    json.dump(players_list, f, indent=2)
+    json.dump(players_index, f, indent=2)
+
 
 print("DONE")
-print("Players:", len(players_list))
-print("Tournaments:", len(all_rows))
+print("PLAYERS:", len(players_index))
+print("EVENTS:", len(all_rows))
