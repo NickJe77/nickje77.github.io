@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-print("LIV BUILDER (STATIC CLEAN DATA)")
+print("LIV BUILDER (FULL DATA + FUTURE READY)")
 
 OUTPUT = Path("docs/data/golf")
 OUTPUT.mkdir(parents=True, exist_ok=True)
@@ -9,7 +9,7 @@ OUTPUT.mkdir(parents=True, exist_ok=True)
 OUT_FILE = OUTPUT / "liv_winners.json"
 
 # ---------------------------
-# CLEAN DATA (STABLE)
+# DATA
 # ---------------------------
 data = [
 
@@ -39,14 +39,21 @@ data = [
     {"year": 2023, "event": "LIV Golf Jeddah", "winner": "Brooks Koepka"},
     {"year": 2023, "event": "LIV Golf Miami", "winner": "Talor Gooch"},
 
-    # 2024 (sample, extend later)
+    # 2024 (example structure)
     {"year": 2024, "event": "LIV Golf Mayakoba", "winner": "Joaquin Niemann"},
     {"year": 2024, "event": "LIV Golf Las Vegas", "winner": "Dustin Johnson"},
-    {"year": 2024, "event": "LIV Golf Jeddah", "winner": "Joaquin Niemann"},
+
+    # 2025 (PLACEHOLDER - YOU UPDATE WEEKLY)
+    {"year": 2025, "event": "LIV Golf Adelaide", "winner": ""},
+    {"year": 2025, "event": "LIV Golf Singapore", "winner": ""},
+
+    # 2026 (LIVE BUILD YEAR)
+    {"year": 2026, "event": "LIV Golf Adelaide", "winner": ""},
+    {"year": 2026, "event": "LIV Golf Singapore", "winner": ""},
 ]
 
 # ---------------------------
-# FORMAT
+# BUILD JSON
 # ---------------------------
 rows = []
 
@@ -63,7 +70,6 @@ for r in data:
         "url": ""
     })
 
-# sort newest first
 rows.sort(key=lambda x: (x["year"], x["event"]), reverse=True)
 
 with open(OUT_FILE, "w") as f:
