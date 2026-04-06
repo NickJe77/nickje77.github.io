@@ -5,7 +5,7 @@ from pathlib import Path
 import time
 import re
 
-print("LIV BUILDER")
+print("LIV BUILDER (FIXED)")
 
 OUTPUT = Path("docs/data/golf")
 OUTPUT.mkdir(parents=True, exist_ok=True)
@@ -22,26 +22,26 @@ def clean(text):
     return text.replace("\n", "").replace("\xa0", " ").strip()
 
 
-def slugify(name):
-    name = name.lower()
-    name = re.sub(r"[^\w\s-]", "", name)
-    name = re.sub(r"\s+", "-", name)
-    return name.strip("-")
+def normalize_name(name):
+    name = re.sub(r"\(.*?\)", "", name)
+    name = re.sub(r"\*", "", name)
+    name = re.sub(r"\s+", " ", name)
+    return name.strip()
 
 
-def get_schedule(year):
+def get_page(year):
     url = f"https://en.wikipedia.org/wiki/{year}_LIV_Golf_League"
-    r = requests.get(url, headers=HEADERS)
+    r = requests.get(url, headers=HEADERS, timeout=20)
 
     if r.status_code != 200:
-        print("Failed:", year)
+        print("FAILED", year)
         return None
 
     return BeautifulSoup(r.text, "html.parser")
 
 
 def parse_year(soup, year):
-    rows_out = []
+    results = []
 
     tables = soup.find_all("table", class_="wikitable")
 
@@ -52,9 +52,9 @@ def parse_year(soup, year):
         event_idx = None
 
         for i, h in enumerate(headers):
-            if "winner" in h:
+            if "winner" in h or "individual champion" in h:
                 winner_idx = i
-            if "tournament" in h or "event" in h or "location" in h:
+            if "event" in h or "tournament" in h or "location" in h:
                 event_idx = i
 
         if winner_idx is None or event_idx is None:
@@ -66,7 +66,7 @@ def parse_year(soup, year):
             if len(cols) <= max(winner_idx, event_idx):
                 continue
 
-            winner = cols[winner_idx]
+            winner = normalize_name(cols[winner_idx])
             event = cols[event_idx]
 
             if not winner or not event:
@@ -75,7 +75,10 @@ def parse_year(soup, year):
             if winner.replace(",", "").isdigit():
                 continue
 
-            rows_out.append({
+            if len(winner) < 3:
+                continue
+
+            results.append({
                 "tour": "liv",
                 "year": year,
                 "date": "",
@@ -87,7 +90,7 @@ def parse_year(soup, year):
                 "url": f"https://en.wikipedia.org/wiki/{year}_LIV_Golf_League"
             })
 
-    return rows_out
+    return results
 
 
 all_rows = []
@@ -95,7 +98,7 @@ all_rows = []
 for year in range(START_YEAR, END_YEAR + 1):
     print(f"YEAR {year}")
 
-    soup = get_schedule(year)
+    soup = get_page(year)
     if not soup:
         continue
 
