@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import time
 
-print("PGA WINNERS BUILDER (FINAL FIX)")
+print("PGA WINNERS BUILDER (SAFE FIX)")
 
 OUTPUT = Path("docs/data/golf")
 OUTPUT.mkdir(parents=True, exist_ok=True)
@@ -12,14 +12,22 @@ OUT_FILE = OUTPUT / "pga_winners.json"
 
 BASE = "https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard"
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
+
+MAX_PAGES = 5
+
 all_rows = []
 
 
 def get_page(page):
     url = f"{BASE}?limit=50&dates=2026&page={page}"
-    r = requests.get(url)
+    r = requests.get(url, headers=HEADERS, timeout=10)
+
     if r.status_code != 200:
         return []
+
     return r.json().get("events", [])
 
 
@@ -30,17 +38,12 @@ def extract_winner(event):
 
         winner = sorted(players, key=lambda x: int(x.get("score", 9999)))[0]
 
-        name = winner["athlete"]["displayName"]
-        score = winner.get("score", "")
-
-        return name, score
+        return winner["athlete"]["displayName"], winner.get("score", "")
     except:
         return None, None
 
 
-page = 1
-
-while True:
+for page in range(1, MAX_PAGES + 1):
     print(f"PAGE {page}")
 
     events = get_page(page)
@@ -58,8 +61,7 @@ while True:
             if not winner:
                 continue
 
-            venue = e["competitions"][0].get("venue", {}).get("fullName", "")
-            country = e["competitions"][0].get("venue", {}).get("address", {}).get("country", "")
+            comp = e["competitions"][0]
 
             row = {
                 "tour": "pga",
@@ -68,19 +70,17 @@ while True:
                 "event": name,
                 "winner": winner,
                 "score": score,
-                "venue": venue,
-                "country": country,
+                "venue": comp.get("venue", {}).get("fullName", ""),
+                "country": comp.get("venue", {}).get("address", {}).get("country", ""),
                 "url": ""
             }
 
             all_rows.append(row)
 
-        except Exception as err:
-            print("Error:", err)
+        except:
             continue
 
-    page += 1
-    time.sleep(0.3)
+    time.sleep(1)
 
 
 # remove duplicates
@@ -92,7 +92,6 @@ for r in all_rows:
         seen.add(key)
         unique.append(r)
 
-# sort newest first
 unique.sort(key=lambda x: x["date"], reverse=True)
 
 with open(OUT_FILE, "w") as f:
