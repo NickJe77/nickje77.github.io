@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import time
 
-print("PGA FULL HISTORY BUILDER (1968+)")
+print("PGA FULL HISTORY BUILDER (FIXED WINNER PARSING)")
 
 OUTPUT = Path("docs/data/golf")
 OUTPUT.mkdir(parents=True, exist_ok=True)
@@ -39,10 +39,20 @@ def parse_table(soup, year):
     results = []
 
     for table in tables:
-        headers = [clean_text(th.text).lower() for th in table.find_all("th")]
+        header_cells = table.find_all("th")
+        headers = [clean_text(th.text).lower() for th in header_cells]
 
-        # Ensure this is a tournament results table
-        if "winner" not in " ".join(headers):
+        # find winner column index
+        winner_idx = None
+        event_idx = None
+
+        for i, h in enumerate(headers):
+            if "winner" in h:
+                winner_idx = i
+            if "tournament" in h or "event" in h:
+                event_idx = i
+
+        if winner_idx is None or event_idx is None:
             continue
 
         rows = table.find_all("tr")[1:]
@@ -50,36 +60,31 @@ def parse_table(soup, year):
         for row in rows:
             cols = [clean_text(c.text) for c in row.find_all(["td", "th"])]
 
-            # skip bad rows
-            if len(cols) < 4:
+            if len(cols) <= max(winner_idx, event_idx):
                 continue
 
-            try:
-                event = cols[1]
-                winner = cols[3]
+            winner = cols[winner_idx]
+            event = cols[event_idx]
 
-                # skip empty / weird rows
-                if not event or not winner:
-                    continue
-
-                # skip headers repeated inside tables
-                if winner.lower() == "winner":
-                    continue
-
-                results.append({
-                    "tour": "pga",
-                    "year": year,
-                    "date": "",
-                    "event": event,
-                    "winner": winner,
-                    "score": "",
-                    "venue": "",
-                    "country": "",
-                    "url": f"https://en.wikipedia.org/wiki/{year}_PGA_Tour"
-                })
-
-            except:
+            # ❌ skip prize money rows
+            if "$" in winner or winner.replace(",", "").isdigit():
                 continue
+
+            # ❌ skip empty
+            if not winner or not event:
+                continue
+
+            results.append({
+                "tour": "pga",
+                "year": year,
+                "date": "",
+                "event": event,
+                "winner": winner,
+                "score": "",
+                "venue": "",
+                "country": "",
+                "url": f"https://en.wikipedia.org/wiki/{year}_PGA_Tour"
+            })
 
     return results
 
@@ -100,12 +105,10 @@ for year in range(START_YEAR, END_YEAR + 1):
 
     all_rows.extend(rows)
 
-    time.sleep(0.3)  # safe + faster
+    time.sleep(0.3)
 
 
-# ---------------------------
-# REMOVE DUPLICATES
-# ---------------------------
+# remove duplicates
 seen = set()
 clean = []
 
@@ -116,15 +119,8 @@ for r in all_rows:
         clean.append(r)
 
 
-# ---------------------------
-# SORT
-# ---------------------------
 clean.sort(key=lambda x: (x["year"], x["event"]), reverse=True)
 
-
-# ---------------------------
-# SAVE
-# ---------------------------
 with open(OUT_FILE, "w") as f:
     json.dump(clean, f, indent=2)
 
