@@ -1,46 +1,31 @@
 import requests
 import json
 from pathlib import Path
+from datetime import datetime, timedelta
 import time
 
-print("MLB FULL HISTORY REBUILD (SAFE)")
+print("MLB FAST FULL HISTORY BUILD")
 
-BASE = "https://statsapi.mlb.com/api/v1.1"
+BASE = "https://statsapi.mlb.com/api/v1"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 SEASONS = list(range(1947, 2027))
-
 BOX_ROOT = Path("docs/data/baseball/boxscores")
-BOX_ROOT.mkdir(parents=True, exist_ok=True)
 
-def get_schedule(year):
-    url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&season={year}"
-    data = requests.get(url, headers=HEADERS).json()
-
-    games = []
-    for d in data.get("dates", []):
-        for g in d.get("games", []):
-            if g.get("gameType") not in ["R", "P"]:
-                continue
-
-            games.append({
-                "game_id": str(g["gamePk"]),
-                "date": g["gameDate"][:10],
-                "home": g["teams"]["home"]["team"],
-                "away": g["teams"]["away"]["team"]
-            })
-
-    print(f"{year}: {len(games)} games")
-    return games
+def daterange(start, end):
+    d = start
+    while d <= end:
+        yield d
+        d += timedelta(days=1)
 
 def extract_batting(team):
     out = []
-    for p in team["players"].values():
+    for p in team.get("players", {}).values():
         stats = p.get("stats", {}).get("batting")
         if not stats:
             continue
         out.append({
-            "player_id": str(p["person"]["id"]),  # 🔥 REAL ID
+            "player_id": str(p["person"]["id"]),
             "AB": stats.get("atBats", 0),
             "H": stats.get("hits", 0),
             "HR": stats.get("homeRuns", 0)
@@ -49,7 +34,7 @@ def extract_batting(team):
 
 def extract_pitching(team):
     out = []
-    for p in team["players"].values():
+    for p in team.get("players", {}).values():
         stats = p.get("stats", {}).get("pitching")
         if not stats:
             continue
@@ -62,69 +47,76 @@ def extract_pitching(team):
         })
     return out
 
-def build_game(year, game):
+def build_season(year):
 
-    game_id = game["game_id"]
+    print(f"\n=== {year} ===")
 
-    url = f"{BASE}/game/{game_id}/feed/live"
-    data = requests.get(url, headers=HEADERS).json()
-
-    box = data["liveData"]["boxscore"]["teams"]
-    linescore = data["liveData"].get("linescore", {})
-    gameData = data.get("gameData", {})
-
-    home_team = game["home"]
-    away_team = game["away"]
-
-    home_code = home_team.get("abbreviation")
-    away_code = away_team.get("abbreviation")
-
-    venue = gameData.get("venue", {}).get("name")
-    away_score = linescore.get("teams", {}).get("away", {}).get("runs")
-    home_score = linescore.get("teams", {}).get("home", {}).get("runs")
+    start = datetime(year, 3, 1)
+    end = datetime(year, 11, 30)
 
     season_dir = BOX_ROOT / str(year)
     season_dir.mkdir(parents=True, exist_ok=True)
 
-    file_name = f"{game['date']}_{away_code}_{home_code}.json"
-
-    with open(season_dir / file_name, "w") as f:
-        json.dump({
-            "game_id": game_id,
-            "date": game["date"],
-            "season": year,
-            "home_code": home_code,
-            "away_code": away_code,
-            "home_team": home_team.get("name"),
-            "away_team": away_team.get("name"),
-            "venue": venue,
-            "away_score": away_score,
-            "home_score": home_score,
-            "batters_home": extract_batting(box["home"]),
-            "batters_away": extract_batting(box["away"]),
-            "pitchers_home": extract_pitching(box["home"]),
-            "pitchers_away": extract_pitching(box["away"])
-        }, f, indent=2)
-
-    return file_name
-
-def build_season(year):
-
-    games = get_schedule(year)
     index = {}
 
-    for g in games:
-        try:
-            file = build_game(year, g)
-            index[g["game_id"]] = file
-            time.sleep(0.2)
-        except Exception as e:
-            print(f"FAIL {g['game_id']}:", e)
+    for d in daterange(start, end):
 
-    with open(BOX_ROOT / str(year) / "index.json", "w") as f:
+        date_str = d.strftime("%Y-%m-%d")
+
+        url = f"{BASE}/schedule?sportId=1&date={date_str}&hydrate=boxscore,linescore"
+
+        try:
+            data = requests.get(url, headers=HEADERS).json()
+        except:
+            continue
+
+        for day in data.get("dates", []):
+            for g in day.get("games", []):
+
+                if g.get("gameType") not in ["R", "P"]:
+                    continue
+
+                game_id = str(g["gamePk"])
+
+                box = g.get("teams", {})
+                linescore = g.get("linescore", {})
+
+                try:
+                    box_full = g["teams"]
+                    home = box_full["home"]
+                    away = box_full["away"]
+
+                    file_name = f"{date_str}_{away['team']['abbreviation']}_{home['team']['abbreviation']}.json"
+
+                    with open(season_dir / file_name, "w") as f:
+                        json.dump({
+                            "game_id": game_id,
+                            "date": date_str,
+                            "season": year,
+                            "home_code": home["team"]["abbreviation"],
+                            "away_code": away["team"]["abbreviation"],
+                            "home_team": home["team"]["name"],
+                            "away_team": away["team"]["name"],
+                            "venue": g.get("venue", {}).get("name"),
+                            "away_score": linescore.get("teams", {}).get("away", {}).get("runs"),
+                            "home_score": linescore.get("teams", {}).get("home", {}).get("runs"),
+                            "batters_home": extract_batting(home),
+                            "batters_away": extract_batting(away),
+                            "pitchers_home": extract_pitching(home),
+                            "pitchers_away": extract_pitching(away)
+                        }, f, indent=2)
+
+                    index[game_id] = file_name
+
+                except Exception as e:
+                    continue
+
+        time.sleep(0.1)
+
+    with open(season_dir / "index.json", "w") as f:
         json.dump(index, f, indent=2)
 
-for year in SEASONS:
-    build_season(year)
+for y in SEASONS:
+    build_season(y)
 
-print("FULL REBUILD COMPLETE")
+print("FAST BUILD COMPLETE")
