@@ -1,64 +1,52 @@
 import requests
 import json
 from pathlib import Path
-from datetime import datetime
 import time
 
-print("PGA WINNERS BUILDER (ESPN VERSION)")
+print("PGA WINNERS BUILDER (FINAL FIX)")
 
 OUTPUT = Path("docs/data/golf")
 OUTPUT.mkdir(parents=True, exist_ok=True)
 
 OUT_FILE = OUTPUT / "pga_winners.json"
 
-BASE = "https://site.api.espn.com/apis/site/v2/sports/golf/pga"
+BASE = "https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard"
 
-CURRENT_YEAR = datetime.utcnow().year
-YEARS = list(range(2015, CURRENT_YEAR + 1))
+all_rows = []
 
 
-def get_events(year):
-    url = f"{BASE}/scoreboard?year={year}"
+def get_page(page):
+    url = f"{BASE}?limit=50&dates=2026&page={page}"
     r = requests.get(url)
-
     if r.status_code != 200:
-        print("Failed ESPN", year)
         return []
-
     return r.json().get("events", [])
 
 
 def extract_winner(event):
     try:
-        competitions = event.get("competitions", [])
-        if not competitions:
-            return None, None
+        comp = event["competitions"][0]
+        players = comp["competitors"]
 
-        competitors = competitions[0].get("competitors", [])
-        if not competitors:
-            return None, None
+        winner = sorted(players, key=lambda x: int(x.get("score", 9999)))[0]
 
-        # winner = lowest score
-        winner = sorted(
-            competitors,
-            key=lambda x: int(x.get("score", 9999))
-        )[0]
-
-        name = winner.get("athlete", {}).get("displayName", "")
+        name = winner["athlete"]["displayName"]
         score = winner.get("score", "")
 
         return name, score
-
     except:
         return None, None
 
 
-all_rows = []
+page = 1
 
-for year in YEARS:
-    print(f"YEAR {year}")
+while True:
+    print(f"PAGE {page}")
 
-    events = get_events(year)
+    events = get_page(page)
+
+    if not events:
+        break
 
     for e in events:
         try:
@@ -70,12 +58,12 @@ for year in YEARS:
             if not winner:
                 continue
 
-            venue = e.get("competitions", [{}])[0].get("venue", {}).get("fullName", "")
-            country = e.get("competitions", [{}])[0].get("venue", {}).get("address", {}).get("country", "")
+            venue = e["competitions"][0].get("venue", {}).get("fullName", "")
+            country = e["competitions"][0].get("venue", {}).get("address", {}).get("country", "")
 
             row = {
                 "tour": "pga",
-                "year": year,
+                "year": int(date[:4]) if date else "",
                 "date": date,
                 "event": name,
                 "winner": winner,
@@ -87,17 +75,27 @@ for year in YEARS:
 
             all_rows.append(row)
 
-            time.sleep(0.2)
-
         except Exception as err:
             print("Error:", err)
             continue
 
+    page += 1
+    time.sleep(0.3)
+
+
+# remove duplicates
+seen = set()
+unique = []
+for r in all_rows:
+    key = (r["event"], r["date"])
+    if key not in seen:
+        seen.add(key)
+        unique.append(r)
 
 # sort newest first
-all_rows.sort(key=lambda x: x.get("date", ""), reverse=True)
+unique.sort(key=lambda x: x["date"], reverse=True)
 
 with open(OUT_FILE, "w") as f:
-    json.dump(all_rows, f, indent=2)
+    json.dump(unique, f, indent=2)
 
-print("DONE:", len(all_rows))
+print("DONE:", len(unique))
