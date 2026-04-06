@@ -1,78 +1,107 @@
+import requests
+from bs4 import BeautifulSoup
 import json
 from pathlib import Path
+import time
+import re
 
-print("LIV BUILDER (FULL DATA + FUTURE READY)")
+print("LIV BUILDER (REAL SCRAPER)")
 
 OUTPUT = Path("docs/data/golf")
 OUTPUT.mkdir(parents=True, exist_ok=True)
 
 OUT_FILE = OUTPUT / "liv_winners.json"
 
-# ---------------------------
-# DATA
-# ---------------------------
-data = [
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-    # 2022
-    {"year": 2022, "event": "LIV Golf London", "winner": "Charl Schwartzel"},
-    {"year": 2022, "event": "LIV Golf Portland", "winner": "Branden Grace"},
-    {"year": 2022, "event": "LIV Golf Bedminster", "winner": "Henrik Stenson"},
-    {"year": 2022, "event": "LIV Golf Boston", "winner": "Dustin Johnson"},
-    {"year": 2022, "event": "LIV Golf Chicago", "winner": "Cameron Smith"},
-    {"year": 2022, "event": "LIV Golf Bangkok", "winner": "Eugenio Chacarra"},
-    {"year": 2022, "event": "LIV Golf Jeddah", "winner": "Brooks Koepka"},
-    {"year": 2022, "event": "LIV Golf Miami", "winner": "Dustin Johnson"},
+YEARS = [2022, 2023, 2024, 2025, 2026]
 
-    # 2023
-    {"year": 2023, "event": "LIV Golf Mayakoba", "winner": "Charles Howell III"},
-    {"year": 2023, "event": "LIV Golf Tucson", "winner": "Danny Lee"},
-    {"year": 2023, "event": "LIV Golf Orlando", "winner": "Brooks Koepka"},
-    {"year": 2023, "event": "LIV Golf Adelaide", "winner": "Talor Gooch"},
-    {"year": 2023, "event": "LIV Golf Singapore", "winner": "Talor Gooch"},
-    {"year": 2023, "event": "LIV Golf Tulsa", "winner": "Dustin Johnson"},
-    {"year": 2023, "event": "LIV Golf DC", "winner": "Harold Varner III"},
-    {"year": 2023, "event": "LIV Golf Andalucia", "winner": "Talor Gooch"},
-    {"year": 2023, "event": "LIV Golf London", "winner": "Cameron Smith"},
-    {"year": 2023, "event": "LIV Golf Greenbrier", "winner": "Bryson DeChambeau"},
-    {"year": 2023, "event": "LIV Golf Bedminster", "winner": "Cameron Smith"},
-    {"year": 2023, "event": "LIV Golf Chicago", "winner": "Talor Gooch"},
-    {"year": 2023, "event": "LIV Golf Jeddah", "winner": "Brooks Koepka"},
-    {"year": 2023, "event": "LIV Golf Miami", "winner": "Talor Gooch"},
 
-    # 2024 (example structure)
-    {"year": 2024, "event": "LIV Golf Mayakoba", "winner": "Joaquin Niemann"},
-    {"year": 2024, "event": "LIV Golf Las Vegas", "winner": "Dustin Johnson"},
+def clean(text):
+    return text.replace("\n", "").strip()
 
-    # 2025 (PLACEHOLDER - YOU UPDATE WEEKLY)
-    {"year": 2025, "event": "LIV Golf Adelaide", "winner": ""},
-    {"year": 2025, "event": "LIV Golf Singapore", "winner": ""},
 
-    # 2026 (LIVE BUILD YEAR)
-    {"year": 2026, "event": "LIV Golf Adelaide", "winner": ""},
-    {"year": 2026, "event": "LIV Golf Singapore", "winner": ""},
-]
+def normalize(name):
+    name = re.sub(r"\(.*?\)", "", name)
+    name = re.sub(r"\*", "", name)
+    return name.strip()
 
-# ---------------------------
-# BUILD JSON
-# ---------------------------
+
+def get_year_events(year):
+    url = f"https://www.livgolf.com/schedule?season={year}"
+    r = requests.get(url, headers=HEADERS)
+
+    if r.status_code != 200:
+        print("FAILED:", year)
+        return []
+
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    events = []
+
+    cards = soup.find_all("div", class_="event-card")
+
+    for c in cards:
+        try:
+            event = c.find("h3").text.strip()
+
+            winner_tag = c.find("span", string=lambda x: x and "Winner" in x)
+
+            winner = ""
+
+            if winner_tag:
+                winner = winner_tag.find_next("span").text.strip()
+
+            events.append({
+                "year": year,
+                "event": event,
+                "winner": normalize(winner)
+            })
+
+        except:
+            continue
+
+    return events
+
+
 rows = []
 
-for r in data:
-    rows.append({
-        "tour": "liv",
-        "year": r["year"],
-        "date": "",
-        "event": r["event"],
-        "winner": r["winner"],
-        "score": "",
-        "venue": "",
-        "country": "",
-        "url": ""
-    })
+for year in YEARS:
+    print("YEAR", year)
 
-rows.sort(key=lambda x: (x["year"], x["event"]), reverse=True)
+    events = get_year_events(year)
+
+    print("  found:", len(events))
+
+    for e in events:
+        rows.append({
+            "tour": "liv",
+            "year": e["year"],
+            "date": "",
+            "event": e["event"],
+            "winner": e["winner"],
+            "score": "",
+            "venue": "",
+            "country": "",
+            "url": ""
+        })
+
+    time.sleep(1)
+
+
+# remove duplicates
+seen = set()
+clean_rows = []
+
+for r in rows:
+    key = (r["event"], r["year"])
+    if key not in seen:
+        seen.add(key)
+        clean_rows.append(r)
+
+clean_rows.sort(key=lambda x: (x["year"], x["event"]), reverse=True)
 
 with open(OUT_FILE, "w") as f:
-    json.dump(rows, f, indent=2)
+    json.dump(clean_rows, f, indent=2)
 
-print("DONE:", len(rows))
+print("DONE:", len(clean_rows))
