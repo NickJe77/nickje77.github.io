@@ -132,6 +132,9 @@ Promise.all([
   fetch("/data/baseball/ballparks.csv").then(r => r.text())
 ]).then(([seasonData, teamNames, ballparkCSV]) => {
 
+  // -------------------------
+  // BALLPARK MAP
+  // -------------------------
   const parkMap = {};
   ballparkCSV.trim().split("\n").forEach(line=>{
     const parts = line.split(",");
@@ -140,6 +143,9 @@ Promise.all([
     }
   });
 
+  // -------------------------
+  // TEAM NAME LOOKUP
+  // -------------------------
   function teamName(code){
     const t = teamNames.find(t => t.codes.includes(code));
     return t ? t.name : code;
@@ -148,53 +154,23 @@ Promise.all([
   const tbody = document.getElementById("gamesBody");
   tbody.innerHTML = "";
 
-  let games = [];
+  // -------------------------
+  // CLEAN STANDARD FORMAT
+  // -------------------------
+  const games = seasonData.map(g => ({
+    game_id: g.game_id,
+    date: g.date,
+    away_team: teamName(g.away_team),
+    home_team: teamName(g.home_team),
+    venue: parkMap[g.venue] || g.venue || "",
+    away_score: g.away_score,
+    home_score: g.home_score
+  }));
 
-  // ✅ FIXED LOGIC
-  if(Array.isArray(seasonData)){
-
-    // NEW STRUCTURE (2026)
-    if(seasonData.length && typeof seasonData[0] === "object"){
-      games = seasonData.map(g => ({
-        game_id: g.game_id,
-        date: g.date,
-        home_team: g.home_team,
-        away_team: g.away_team,
-        venue: g.venue || "",
-        away_score: g.away_score,
-        home_score: g.home_score
-      }));
-    }
-
-    // OLD STRUCTURE
-    else{
-      games = seasonData.map(g => ({
-        game_id: g[0],
-        date: g[1],
-        home_team: teamName(g[3]),
-        away_team: teamName(g[4]),
-        venue: g[5],
-        away_score: g[7],
-        home_score: g[8]
-      }));
-    }
-  }
-
-  // OLD WRAPPED STRUCTURE
-  else if(seasonData.games){
-    games = seasonData.games.map(g => ({
-      game_id: g.game_id,
-      date: g.date,
-      home_team: g.home_team,
-      away_team: g.away_team,
-      venue: g.venue || "",
-      away_score: g.away_score,
-      home_score: g.home_score
-    }));
-  }
-
+  // sort
   games.sort((a,b)=> new Date(a.date) - new Date(b.date));
 
+  // render
   games.forEach(g => {
 
     const score =
@@ -209,7 +185,7 @@ Promise.all([
       <td>${g.away_team}</td>
       <td>${g.home_team}</td>
       <td class="score">${score}</td>
-      <td>${parkMap[g.venue] || g.venue || ""}</td>
+      <td>${g.venue}</td>
     `;
 
     tbody.appendChild(tr);
