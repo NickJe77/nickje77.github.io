@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import time
 
-print("LIV SCRAPER (PLAYWRIGHT)")
+print("LIV SCRAPER (PLAYWRIGHT FIXED)")
 
 OUTPUT = Path("docs/data/golf")
 OUTPUT.mkdir(parents=True, exist_ok=True)
@@ -16,52 +16,63 @@ rows = []
 
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
-    page = browser.new_page()
+
+    context = browser.new_context(
+        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    )
+
+    page = context.new_page()
 
     for year in YEARS:
         print(f"YEAR {year}")
 
         url = f"https://www.livgolf.com/schedule?season={year}"
-        page.goto(url, timeout=60000)
 
-        # wait for JS to load
-        page.wait_for_timeout(5000)
+        try:
+            page.goto(url, timeout=120000, wait_until="domcontentloaded")
 
-        # get all event cards
-        cards = page.query_selector_all("div[class*=event]")
+            # wait for page to render something useful
+            page.wait_for_timeout(8000)
 
-        print("  cards found:", len(cards))
+            # grab page text (fallback method)
+            content = page.content()
 
-        for c in cards:
-            try:
-                text = c.inner_text()
+            # VERY IMPORTANT: fallback extraction
+            blocks = page.query_selector_all("div")
 
-                lines = text.split("\n")
+            print("  elements:", len(blocks))
 
-                event = lines[0].strip()
-                winner = ""
+            for b in blocks:
+                try:
+                    text = b.inner_text()
 
-                # look for winner in text
-                for line in lines:
-                    if "Winner" in line:
-                        idx = lines.index(line)
-                        if idx + 1 < len(lines):
-                            winner = lines[idx + 1].strip()
+                    if "LIV Golf" in text and len(text) < 200:
+                        lines = text.split("\n")
 
-                rows.append({
-                    "tour": "liv",
-                    "year": year,
-                    "date": "",
-                    "event": event,
-                    "winner": winner,
-                    "score": "",
-                    "venue": "",
-                    "country": "",
-                    "url": url
-                })
+                        event = lines[0].strip()
+                        winner = ""
 
-            except:
-                continue
+                        for i, l in enumerate(lines):
+                            if "Winner" in l and i + 1 < len(lines):
+                                winner = lines[i + 1].strip()
+
+                        rows.append({
+                            "tour": "liv",
+                            "year": year,
+                            "date": "",
+                            "event": event,
+                            "winner": winner,
+                            "score": "",
+                            "venue": "",
+                            "country": "",
+                            "url": url
+                        })
+
+                except:
+                    continue
+
+        except Exception as e:
+            print("FAILED YEAR:", year, e)
 
         time.sleep(2)
 
