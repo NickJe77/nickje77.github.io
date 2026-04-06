@@ -71,8 +71,8 @@ def build_game(game):
     data = requests.get(url, headers=HEADERS).json()
 
     box = data["liveData"]["boxscore"]["teams"]
-    linescore = data["liveData"]["linescore"]
-    gameData = data["gameData"]
+    linescore = data["liveData"].get("linescore", {})
+    gameData = data.get("gameData", {})
 
     home_team = game["home"]
     away_team = game["away"]
@@ -118,6 +118,11 @@ def build_game(game):
             })
         return out
 
+    # 🔒 SAFE EXTRACTION
+    away_score = linescore.get("teams", {}).get("away", {}).get("runs")
+    home_score = linescore.get("teams", {}).get("home", {}).get("runs")
+    venue = gameData.get("venue", {}).get("name")
+
     file_name = f"{game['date']}_{away_code}_{home_code}.json"
 
     with open(BOX_DIR / file_name, "w") as f:
@@ -129,10 +134,10 @@ def build_game(game):
             "home_team": home_team.get("name"),
             "away_team": away_team.get("name"),
 
-            # 🔥 ADDED (CRITICAL)
-            "venue": gameData["venue"]["name"],
-            "away_score": linescore["teams"]["away"]["runs"],
-            "home_score": linescore["teams"]["home"]["runs"],
+            # ✅ NOW ALWAYS SAFE
+            "venue": venue,
+            "away_score": away_score,
+            "home_score": home_score,
 
             "batters_home": extract_batting(box["home"]),
             "batters_away": extract_batting(box["away"]),
@@ -149,9 +154,9 @@ def build_game(game):
         "date": game["date"],
         "home_team": home_team.get("name"),
         "away_team": away_team.get("name"),
-        "venue": gameData["venue"]["name"],
-        "away_score": linescore["teams"]["away"]["runs"],
-        "home_score": linescore["teams"]["home"]["runs"]
+        "venue": venue,
+        "away_score": away_score,
+        "home_score": home_score
     })
 
 games = get_schedule()
@@ -163,8 +168,8 @@ for g in games:
 with open(BOX_DIR / "index.json", "w") as f:
     json.dump(INDEX, f, indent=2)
 
-# ✅ FIXED — MATCHES 2025 STRUCTURE
+# ✅ MATCHES 2025 STRUCTURE
 with open(SEASON_FILE, "w") as f:
     json.dump(SEASON_GAMES, f, indent=2)
 
-print("SEASON FILE FIXED + DATA COMPLETE")
+print("SEASON FILE FIXED + SAFE BUILD COMPLETE")
