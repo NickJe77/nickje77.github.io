@@ -5,7 +5,7 @@ from pathlib import Path
 import time
 import re
 
-print("PGA BUILDER FINAL (WORKING VERSION)")
+print("PGA BUILDER FINAL (CLEAN PLAYERS + NO DUPES)")
 
 BASE_DIR = Path("docs/data/golf")
 PLAYERS_DIR = BASE_DIR / "players"
@@ -27,6 +27,14 @@ END_YEAR = 2026
 # ---------------------------
 def clean(text):
     return text.replace("\n", "").replace("\xa0", " ").strip()
+
+
+def normalize_name(name):
+    name = name.lower()
+    name = re.sub(r"\(.*?\)", "", name)   # remove brackets
+    name = re.sub(r"\*", "", name)        # remove asterisks
+    name = re.sub(r"\s+", " ", name)
+    return name.strip().title()
 
 
 def slugify(name):
@@ -57,7 +65,7 @@ def get_page(year):
 
 
 # ---------------------------
-# PARSER (FIXED PROPERLY)
+# PARSE TABLES
 # ---------------------------
 def parse_year(soup, year):
     rows_out = []
@@ -67,7 +75,6 @@ def parse_year(soup, year):
     for table in tables:
         headers = [clean(th.text).lower() for th in table.find_all("th")]
 
-        # find key columns
         winner_idx = None
         event_idx = None
 
@@ -89,21 +96,20 @@ def parse_year(soup, year):
             event = cols[event_idx]
             winner = cols[winner_idx]
 
-            # 🔴 HARD FILTERS (THIS FIXES YOUR DATA)
+            # filter garbage rows
             if not event or not winner:
                 continue
 
-            # remove money rows
             if re.search(r"\$\d|,\d{3}", winner):
                 continue
 
-            # remove numeric junk
             if winner.replace(",", "").isdigit():
                 continue
 
-            # remove weird rows
             if len(winner) < 3:
                 continue
+
+            winner = normalize_name(winner)
 
             rows_out.append({
                 "tour": "pga",
@@ -122,7 +128,7 @@ def parse_year(soup, year):
 
 
 # ---------------------------
-# BUILD EVERYTHING
+# BUILD DATA
 # ---------------------------
 all_rows = []
 players = {}
@@ -164,7 +170,7 @@ for year in range(START_YEAR, END_YEAR + 1):
 
 
 # ---------------------------
-# CLEAN + SAVE PLAYERS
+# SAVE PLAYERS
 # ---------------------------
 players_index = []
 
@@ -172,7 +178,7 @@ for slug, p in players.items():
     p["years"] = sorted(list(p["years"]))
     p["events"].sort(key=lambda x: x["year"], reverse=True)
 
-    # save individual file
+    # ONE FILE PER PLAYER (no duplicates now)
     with open(PLAYERS_DIR / f"{slug}.json", "w") as f:
         json.dump(p, f, indent=2)
 
