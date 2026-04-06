@@ -128,6 +128,12 @@ def build_game(game):
             "away_code": away_code,
             "home_team": home_team.get("name"),
             "away_team": away_team.get("name"),
+
+            # 🔥 ADDED (CRITICAL)
+            "venue": gameData["venue"]["name"],
+            "away_score": linescore["teams"]["away"]["runs"],
+            "home_score": linescore["teams"]["home"]["runs"],
+
             "batters_home": extract_batting(box["home"]),
             "batters_away": extract_batting(box["away"]),
             "pitchers_home": extract_pitching(box["home"]),
@@ -157,8 +163,8 @@ for g in games:
 with open(BOX_DIR / "index.json", "w") as f:
     json.dump(INDEX, f, indent=2)
 
-# 🔥 THIS IS THE CRITICAL FIX
+# ✅ FIXED — MATCHES 2025 STRUCTURE
 with open(SEASON_FILE, "w") as f:
-    json.dump({"games": SEASON_GAMES}, f, indent=2)
+    json.dump(SEASON_GAMES, f, indent=2)
 
-print("SEASON FILE FIXED")
+print("SEASON FILE FIXED + DATA COMPLETE")
