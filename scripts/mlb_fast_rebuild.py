@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import time
 
-print("MLB FAST FULL HISTORY BUILD")
+print("MLB INCREMENTAL FAST BUILD")
 
 BASE = "https://statsapi.mlb.com/api/v1"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -49,15 +49,23 @@ def extract_pitching(team):
 
 def build_season(year):
 
-    print(f"\n=== {year} ===")
-
-    start = datetime(year, 3, 1)
-    end = datetime(year, 11, 30)
+    print(f"=== {year} ===")
 
     season_dir = BOX_ROOT / str(year)
     season_dir.mkdir(parents=True, exist_ok=True)
 
-    index = {}
+    # 🔥 LOAD EXISTING INDEX
+    index_path = season_dir / "index.json"
+    if index_path.exists():
+        with open(index_path) as f:
+            index = json.load(f)
+    else:
+        index = {}
+
+    existing_files = set(index.values())
+
+    start = datetime(year, 3, 1)
+    end = datetime(year, 11, 30)
 
     for d in daterange(start, end):
 
@@ -76,18 +84,18 @@ def build_season(year):
                 if g.get("gameType") not in ["R", "P"]:
                     continue
 
+                home = g["teams"]["home"]
+                away = g["teams"]["away"]
+
+                file_name = f"{date_str}_{away['team']['abbreviation']}_{home['team']['abbreviation']}.json"
+
+                # 🔥 SKIP IF EXISTS
+                if file_name in existing_files:
+                    continue
+
                 game_id = str(g["gamePk"])
 
-                box = g.get("teams", {})
-                linescore = g.get("linescore", {})
-
                 try:
-                    box_full = g["teams"]
-                    home = box_full["home"]
-                    away = box_full["away"]
-
-                    file_name = f"{date_str}_{away['team']['abbreviation']}_{home['team']['abbreviation']}.json"
-
                     with open(season_dir / file_name, "w") as f:
                         json.dump({
                             "game_id": game_id,
@@ -98,8 +106,8 @@ def build_season(year):
                             "home_team": home["team"]["name"],
                             "away_team": away["team"]["name"],
                             "venue": g.get("venue", {}).get("name"),
-                            "away_score": linescore.get("teams", {}).get("away", {}).get("runs"),
-                            "home_score": linescore.get("teams", {}).get("home", {}).get("runs"),
+                            "away_score": g.get("linescore", {}).get("teams", {}).get("away", {}).get("runs"),
+                            "home_score": g.get("linescore", {}).get("teams", {}).get("home", {}).get("runs"),
                             "batters_home": extract_batting(home),
                             "batters_away": extract_batting(away),
                             "pitchers_home": extract_pitching(home),
@@ -108,15 +116,15 @@ def build_season(year):
 
                     index[game_id] = file_name
 
-                except Exception as e:
+                except:
                     continue
 
-        time.sleep(0.1)
+        time.sleep(0.05)
 
-    with open(season_dir / "index.json", "w") as f:
+    with open(index_path, "w") as f:
         json.dump(index, f, indent=2)
 
 for y in SEASONS:
     build_season(y)
 
-print("FAST BUILD COMPLETE")
+print("INCREMENTAL BUILD COMPLETE")
