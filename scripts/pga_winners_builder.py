@@ -3,124 +3,119 @@ import json
 from pathlib import Path
 from datetime import datetime
 import time
+from bs4 import BeautifulSoup
 
-print("PGA WINNERS BUILDER STARTING")
-
-BASE = "https://statdata.pgatour.com/r"
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+print("PGA WINNERS BUILDER (WORKING VERSION)")
 
 OUTPUT = Path("docs/data/golf")
 OUTPUT.mkdir(parents=True, exist_ok=True)
 
 OUT_FILE = OUTPUT / "pga_winners.json"
 
+HEADERS = {"User-Agent": "Mozilla/5.0"}
+
 CURRENT_YEAR = datetime.utcnow().year
 
-# you can extend this back later
-YEARS = list(range(2010, CURRENT_YEAR + 1))
-
-
-def safe_get(url):
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=20)
-        if r.status_code == 200:
-            return r.json()
-    except:
-        return None
-    return None
+YEARS = list(range(2015, CURRENT_YEAR + 1))  # safer range
 
 
 def get_schedule(year):
-    url = f"{BASE}/{year}/schedule-v2.json"
-    return safe_get(url)
+    url = f"https://www.pgatour.com/schedule/{year}"
+    r = requests.get(url, headers=HEADERS)
+    if r.status_code != 200:
+        return []
+
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    events = []
+
+    cards = soup.select("a.c-card__link")
+
+    for c in cards:
+        href = c.get("href", "")
+        name_el = c.select_one(".c-card__title")
+        date_el = c.select_one(".c-card__date")
+        loc_el = c.select_one(".c-card__subtitle")
+
+        if not href or not name_el:
+            continue
+
+        events.append({
+            "url": "https://www.pgatour.com" + href,
+            "event": name_el.text.strip(),
+            "date": date_el.text.strip() if date_el else "",
+            "location": loc_el.text.strip() if loc_el else ""
+        })
+
+    return events
 
 
-def get_leaderboard(tournament_id):
-    url = f"{BASE}/{tournament_id}/leaderboard-v2mini.json"
-    return safe_get(url)
+def get_winner(event_url):
+    try:
+        r = requests.get(event_url, headers=HEADERS)
+        if r.status_code != 200:
+            return None, None
 
+        soup = BeautifulSoup(r.text, "html.parser")
 
-def extract_country(location):
-    if not location:
-        return ""
-    parts = location.split(",")
-    return parts[-1].strip()
+        # winner = first leaderboard row
+        player = soup.select_one(".leaderboard__player-name")
+        score = soup.select_one(".leaderboard__score")
 
+        if not player:
+            return None, None
 
-def extract_winner(leaderboard):
-    if not leaderboard:
+        name = player.text.strip()
+        score_val = score.text.strip() if score else ""
+
+        return name, score_val
+
+    except:
         return None, None
 
-    players = leaderboard.get("players", [])
-    if not players:
-        return None, None
 
-    # winner is first place
-    winner = players[0]
-
-    name = winner.get("player_bio", {}).get("full_name", "")
-    score = winner.get("total", "")
-
-    return name, score
-
-
-all_results = []
+all_rows = []
 
 for year in YEARS:
-    print(f"Processing {year}...")
+    print(f"YEAR {year}")
 
-    schedule = get_schedule(year)
-    if not schedule:
-        print(f"Failed schedule {year}")
-        continue
+    events = get_schedule(year)
 
-    tournaments = schedule.get("tournaments", [])
-
-    for t in tournaments:
+    for e in events:
         try:
-            tid = t.get("id")
-            name = t.get("name")
-            date = t.get("end_date")
-            venue = t.get("course_name")
-            location = t.get("city_state")
+            print("  ", e["event"])
 
-            if not tid or not name:
-                continue
-
-            print(f"  {name}")
-
-            leaderboard = get_leaderboard(tid)
-
-            winner, score = extract_winner(leaderboard)
+            winner, score = get_winner(e["url"])
 
             if not winner:
                 continue
 
+            country = e["location"].split(",")[-1].strip() if e["location"] else ""
+
             row = {
                 "tour": "pga",
                 "year": year,
-                "date": date,
-                "event": name,
+                "date": "",
+                "event": e["event"],
                 "winner": winner,
                 "score": score,
-                "venue": venue,
-                "country": extract_country(location),
-                "url": f"https://www.pgatour.com/tournaments/{year}/{tid}/leaderboard"
+                "venue": e["location"],
+                "country": country,
+                "url": e["url"]
             }
 
-            all_results.append(row)
+            all_rows.append(row)
 
-            time.sleep(0.3)
+            time.sleep(0.5)
 
-        except Exception as e:
-            print("Error:", e)
+        except Exception as err:
+            print("error", err)
             continue
 
 
-# sort newest first
-all_results.sort(key=lambda x: x.get("date", ""), reverse=True)
+all_rows.sort(key=lambda x: x["year"], reverse=True)
 
 with open(OUT_FILE, "w") as f:
-    json.dump(all_results, f, indent=2)
+    json.dump(all_rows, f, indent=2)
 
-print(f"\nDONE - {len(all_results)} tournaments saved")
+print("DONE:", len(all_rows))
