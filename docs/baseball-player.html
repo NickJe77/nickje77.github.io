@@ -112,73 +112,92 @@ const param=qs.get("player");
 if(!param){document.getElementById("playerName").textContent="Player not found";return;}
 
 const players=await safeFetch("/data/baseball/players.json");
-const meta=players.find(p=>String(p.player_id)===String(param)||p.name.toLowerCase()===param.toLowerCase());
+if(!players){document.getElementById("playerName").textContent="Player not found";return;}
+
+const meta=players.find(p=>String(p.player_id)===String(param)||String(p.name||"").toLowerCase()===String(param||"").toLowerCase());
 if(!meta){document.getElementById("playerName").textContent="Player not found";return;}
+
 const playerId=meta.player_id;
 document.getElementById("playerName").textContent=meta.name;
 
 const teamsData=await safeFetch("/data/baseball/teams.json");
 const TEAM_LOOKUP={};
-teamsData.forEach(t=>t.codes.forEach(c=>TEAM_LOOKUP[c]=t.name));
-function teamName(c){return TEAM_LOOKUP[c]||c;}
+(teamsData||[]).forEach(t=>(t.codes||[]).forEach(c=>TEAM_LOOKUP[c]=t.name));
+function teamName(c){return TEAM_LOOKUP[c]||c||"";}
 
 const seasons=await safeFetch("/data/baseball/index.json");
+if(!seasons || !Array.isArray(seasons)){
+  document.getElementById("gameBody").innerHTML='<tr><td colspan="8">No data available.</td></tr>';
+  return;
+}
+
 const seasonSel=document.getElementById("seasonSel");
-seasons.sort((a,b)=>b-a).forEach(y=>{
+seasons.slice().sort((a,b)=>b-a).forEach(y=>{
   if(y>=1947) seasonSel.innerHTML+=`<option value="${y}">${y}</option>`;
 });
 
 let games=[];
 
 /* REGULAR */
-const seasonResults=await Promise.all(
-  seasons.filter(y=>y>=1947).map(y=>safeFetch(`/data/baseball/seasons/${y}.json`))
-);
+for(const y of seasons.filter(y=>y>=1947)){
 
-seasonResults.forEach(data=>{
-  if(!data) return;
-  data.forEach(g=>{
-    const homeBat=g[9]||[];
-    const awayBat=g[10]||[];
-    const homePlayer=homeBat.find(p=>String(p[0])===playerId);
-    const awayPlayer=awayBat.find(p=>String(p[0])===playerId);
-    if(!homePlayer&&!awayPlayer)return;
-    const isHome=!!homePlayer;
-    const p=homePlayer||awayPlayer;
+  const index = await safeFetch(`/data/baseball/boxscores/${y}/index.json`);
+  if(!index) continue;
+
+  for(const gameId in index){
+    const file = index[gameId];
+    if(!file) continue;
+
+    const box = await safeFetch(`/data/baseball/boxscores/${y}/${file}`);
+    if(!box) continue;
+
+    const homeBat = Array.isArray(box.batters_home) ? box.batters_home : [];
+    const awayBat = Array.isArray(box.batters_away) ? box.batters_away : [];
+
+    const homePlayer = homeBat.find(p=>String(p.player_id)===String(playerId));
+    const awayPlayer = awayBat.find(p=>String(p.player_id)===String(playerId));
+
+    if(!homePlayer && !awayPlayer) continue;
+
+    const isHome = !!homePlayer;
+    const p = homePlayer || awayPlayer;
+
     games.push({
-      date:g[1]||"",
-      season:g[2],
-      type:"Regular",
-      team:isHome?g[3]:g[4],
-      opponent:isHome?g[4]:g[3],
-      AB:Number(p[1])||0,
-      H:Number(p[2])||0,
-      HR:Number(p[3])||0
+      date: box.date || "",
+      season: y,
+      type: "Regular",
+      team: isHome ? box.home_code : box.away_code,
+      opponent: isHome ? box.away_code : box.home_code,
+      AB: Number(p.AB) || 0,
+      H: Number(p.H) || 0,
+      HR: Number(p.HR) || 0
     });
-  });
-});
+  }
+}
 
 /* POSTSEASON */
 const postMeta=await safeFetch("/data/baseball/postseason_meta.json");
-const postBoxes=await Promise.all(
-  postMeta.map(m=>safeFetch(`/data/baseball/postseason-games/${m.game_id}.json`))
-);
+if(Array.isArray(postMeta)){
+  const postBoxes=await Promise.all(
+    postMeta.map(m=>safeFetch(`/data/baseball/postseason-games/${m.game_id}.json`))
+  );
 
-postBoxes.forEach(box=>{
-  if(!box||!box.batting)return;
-  const pstats=box.batting[playerId];
-  if(!pstats)return;
-  games.push({
-    date: box.date ? box.date : "",
-    season: box.season || "",
-    type:"Postseason",
-    team:box.home,
-    opponent:box.away,
-    AB:Number(pstats.AB)||0,
-    H:Number(pstats.H)||0,
-    HR:Number(pstats.HR)||0
+  postBoxes.forEach(box=>{
+    if(!box||!box.batting)return;
+    const pstats=box.batting[playerId];
+    if(!pstats)return;
+    games.push({
+      date: box.date ? box.date : "",
+      season: box.season || "",
+      type:"Postseason",
+      team:box.home,
+      opponent:box.away,
+      AB:Number(pstats.AB)||0,
+      H:Number(pstats.H)||0,
+      HR:Number(pstats.HR)||0
+    });
   });
-});
+}
 
 function render(){
 
@@ -187,7 +206,7 @@ function render(){
 
   let filtered=games.filter(g=>{
     if(type!=="All"&&g.type!==type)return false;
-    if(season!=="All"&&g.season!=season)return false;
+    if(season!=="All"&&String(g.season)!==String(season))return false;
     return true;
   });
 
@@ -195,7 +214,11 @@ function render(){
   let oppStats={};
 
   filtered.forEach(g=>{
-    career.g++;career.ab+=g.AB;career.h+=g.H;career.hr+=g.HR;
+    career.g++;
+    career.ab+=g.AB;
+    career.h+=g.H;
+    career.hr+=g.HR;
+
     if(!oppStats[g.opponent])oppStats[g.opponent]={g:0,ab:0,h:0,hr:0};
     oppStats[g.opponent].g++;
     oppStats[g.opponent].ab+=g.AB;
@@ -212,15 +235,17 @@ function render(){
   `;
 
   const oppSelect=document.getElementById("oppSelect");
+  const currentOpp = oppSelect.value || "All";
   oppSelect.innerHTML='<option value="All">Select Opponent</option>';
   Object.keys(oppStats).sort((a,b)=>teamName(a).localeCompare(teamName(b))).forEach(opp=>{
     oppSelect.innerHTML+=`<option value="${opp}">${teamName(opp)}</option>`;
   });
+  if(Object.keys(oppStats).includes(currentOpp)) oppSelect.value = currentOpp;
 
-  oppSelect.onchange=function(){
-    const val=this.value;
+  function renderOpponentCards(){
+    const val=oppSelect.value;
     const container=document.getElementById("oppCards");
-    if(val==="All"){container.innerHTML="";return;}
+    if(val==="All" || !oppStats[val]){container.innerHTML="";return;}
     const s=oppStats[val];
     container.innerHTML=`
       <div class="card"><div class="value">${s.g}</div><div class="label">Games</div></div>
@@ -229,7 +254,10 @@ function render(){
       <div class="card"><div class="value">${s.hr}</div><div class="label">HR</div></div>
       <div class="card"><div class="value">${avg(s.h,s.ab)}</div><div class="label">AVG</div></div>
     `;
-  };
+  }
+
+  oppSelect.onchange=renderOpponentCards;
+  renderOpponentCards();
 
   filtered.sort((a,b)=>{
     if(!a.date) return 1;
