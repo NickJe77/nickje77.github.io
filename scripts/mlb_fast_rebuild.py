@@ -12,12 +12,32 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 SEASONS = list(range(1947, 2027))
 BOX_ROOT = Path("docs/data/baseball/boxscores")
 
+
+# -----------------------------
+# DATE RANGE
+# -----------------------------
 def daterange(start, end):
     d = start
     while d <= end:
         yield d
         d += timedelta(days=1)
 
+
+# -----------------------------
+# TEAM CODE (FIXED)
+# -----------------------------
+def get_team_code(t):
+    return (
+        t["team"].get("abbreviation")
+        or t["team"].get("teamCode")
+        or t["team"].get("fileCode")
+        or t["team"].get("name", "")[:3].upper()
+    )
+
+
+# -----------------------------
+# BATTING
+# -----------------------------
 def extract_batting(team):
     out = []
     for p in team.get("players", {}).values():
@@ -32,6 +52,10 @@ def extract_batting(team):
         })
     return out
 
+
+# -----------------------------
+# PITCHING
+# -----------------------------
 def extract_pitching(team):
     out = []
     for p in team.get("players", {}).values():
@@ -47,6 +71,10 @@ def extract_pitching(team):
         })
     return out
 
+
+# -----------------------------
+# BUILD SEASON
+# -----------------------------
 def build_season(year):
 
     print(f"=== {year} ===")
@@ -54,7 +82,7 @@ def build_season(year):
     season_dir = BOX_ROOT / str(year)
     season_dir.mkdir(parents=True, exist_ok=True)
 
-    # 🔥 LOAD EXISTING INDEX
+    # load existing index
     index_path = season_dir / "index.json"
     if index_path.exists():
         with open(index_path) as f:
@@ -84,27 +112,30 @@ def build_season(year):
                 if g.get("gameType") not in ["R", "P"]:
                     continue
 
-                home = g["teams"]["home"]
-                away = g["teams"]["away"]
-
-                file_name = f"{date_str}_{away['team']['abbreviation']}_{home['team']['abbreviation']}.json"
-
-                # 🔥 SKIP IF EXISTS
-                if file_name in existing_files:
-                    continue
-
-                game_id = str(g["gamePk"])
-
                 try:
+                    home = g["teams"]["home"]
+                    away = g["teams"]["away"]
+
+                    home_code = get_team_code(home)
+                    away_code = get_team_code(away)
+
+                    file_name = f"{date_str}_{away_code}_{home_code}.json"
+
+                    # 🔥 SKIP EXISTING
+                    if file_name in existing_files:
+                        continue
+
+                    game_id = str(g["gamePk"])
+
                     with open(season_dir / file_name, "w") as f:
                         json.dump({
                             "game_id": game_id,
                             "date": date_str,
                             "season": year,
-                            "home_code": home["team"]["abbreviation"],
-                            "away_code": away["team"]["abbreviation"],
-                            "home_team": home["team"]["name"],
-                            "away_team": away["team"]["name"],
+                            "home_code": home_code,
+                            "away_code": away_code,
+                            "home_team": home["team"].get("name"),
+                            "away_team": away["team"].get("name"),
                             "venue": g.get("venue", {}).get("name"),
                             "away_score": g.get("linescore", {}).get("teams", {}).get("away", {}).get("runs"),
                             "home_score": g.get("linescore", {}).get("teams", {}).get("home", {}).get("runs"),
@@ -116,7 +147,7 @@ def build_season(year):
 
                     index[game_id] = file_name
 
-                except:
+                except Exception as e:
                     continue
 
         time.sleep(0.05)
@@ -124,6 +155,10 @@ def build_season(year):
     with open(index_path, "w") as f:
         json.dump(index, f, indent=2)
 
+
+# -----------------------------
+# RUN ALL
+# -----------------------------
 for y in SEASONS:
     build_season(y)
 
