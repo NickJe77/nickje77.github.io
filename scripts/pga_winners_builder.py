@@ -1,100 +1,113 @@
 import requests
+from bs4 import BeautifulSoup
 import json
 from pathlib import Path
 import time
 
-print("PGA WINNERS BUILDER (SAFE FIX)")
+print("PGA FULL HISTORY BUILDER")
 
 OUTPUT = Path("docs/data/golf")
 OUTPUT.mkdir(parents=True, exist_ok=True)
 
 OUT_FILE = OUTPUT / "pga_winners.json"
 
-BASE = "https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard"
-
 HEADERS = {
     "User-Agent": "Mozilla/5.0"
 }
 
-MAX_PAGES = 5
+START_YEAR = 2000
+END_YEAR = 2026
+
+
+def get_season_page(year):
+    url = f"https://en.wikipedia.org/wiki/{year}_PGA_Tour"
+    r = requests.get(url, headers=HEADERS)
+
+    if r.status_code != 200:
+        print("Failed:", year)
+        return None
+
+    return BeautifulSoup(r.text, "html.parser")
+
+
+def parse_table(soup, year):
+    tables = soup.find_all("table", {"class": "wikitable"})
+
+    results = []
+
+    for table in tables:
+        headers = [th.text.strip().lower() for th in table.find_all("th")]
+
+        # find the main results table
+        if "winner" not in " ".join(headers):
+            continue
+
+        rows = table.find_all("tr")[1:]
+
+        for row in rows:
+            cols = [c.text.strip() for c in row.find_all(["td", "th"])]
+
+            if len(cols) < 5:
+                continue
+
+            try:
+                event = cols[1]
+                winner = cols[3]
+
+                if not winner or winner.lower() == "winner":
+                    continue
+
+                results.append({
+                    "tour": "pga",
+                    "year": year,
+                    "date": "",
+                    "event": event,
+                    "winner": winner,
+                    "score": "",
+                    "venue": "",
+                    "country": "",
+                    "url": f"https://en.wikipedia.org/wiki/{year}_PGA_Tour"
+                })
+
+            except:
+                continue
+
+    return results
+
 
 all_rows = []
 
+for year in range(START_YEAR, END_YEAR + 1):
+    print(f"YEAR {year}")
 
-def get_page(page):
-    url = f"{BASE}?limit=50&dates=2026&page={page}"
-    r = requests.get(url, headers=HEADERS, timeout=10)
+    soup = get_season_page(year)
 
-    if r.status_code != 200:
-        return []
+    if not soup:
+        continue
 
-    return r.json().get("events", [])
+    rows = parse_table(soup, year)
 
+    print("  found:", len(rows))
 
-def extract_winner(event):
-    try:
-        comp = event["competitions"][0]
-        players = comp["competitors"]
-
-        winner = sorted(players, key=lambda x: int(x.get("score", 9999)))[0]
-
-        return winner["athlete"]["displayName"], winner.get("score", "")
-    except:
-        return None, None
-
-
-for page in range(1, MAX_PAGES + 1):
-    print(f"PAGE {page}")
-
-    events = get_page(page)
-
-    if not events:
-        break
-
-    for e in events:
-        try:
-            name = e.get("name")
-            date = e.get("date", "")[:10]
-
-            winner, score = extract_winner(e)
-
-            if not winner:
-                continue
-
-            comp = e["competitions"][0]
-
-            row = {
-                "tour": "pga",
-                "year": int(date[:4]) if date else "",
-                "date": date,
-                "event": name,
-                "winner": winner,
-                "score": score,
-                "venue": comp.get("venue", {}).get("fullName", ""),
-                "country": comp.get("venue", {}).get("address", {}).get("country", ""),
-                "url": ""
-            }
-
-            all_rows.append(row)
-
-        except:
-            continue
+    all_rows.extend(rows)
 
     time.sleep(1)
 
 
 # remove duplicates
 seen = set()
-unique = []
+clean = []
+
 for r in all_rows:
-    key = (r["event"], r["date"])
+    key = (r["event"], r["year"])
     if key not in seen:
         seen.add(key)
-        unique.append(r)
+        clean.append(r)
 
-unique.sort(key=lambda x: x["date"], reverse=True)
+
+clean.sort(key=lambda x: (x["year"], x["event"]), reverse=True)
 
 with open(OUT_FILE, "w") as f:
-    json.dump(unique, f, indent=2)
+    json.dump(clean, f, indent=2)
 
-print("DONE:", len(unique))
+print("DONE:", len(clean))
