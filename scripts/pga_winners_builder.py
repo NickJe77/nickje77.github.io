@@ -3,23 +3,54 @@ from bs4 import BeautifulSoup
 import json
 from pathlib import Path
 import time
+import re
 
-print("PGA FULL HISTORY BUILDER (FIXED WINNER PARSING)")
+print("PGA BUILDER (MAJORS + PLAYERS)")
 
-OUTPUT = Path("docs/data/golf")
-OUTPUT.mkdir(parents=True, exist_ok=True)
+BASE_DIR = Path("docs/data/golf")
+PLAYERS_DIR = BASE_DIR / "players"
 
-OUT_FILE = OUTPUT / "pga_winners.json"
+BASE_DIR.mkdir(parents=True, exist_ok=True)
+PLAYERS_DIR.mkdir(parents=True, exist_ok=True)
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
+OUT_FILE = BASE_DIR / "pga_winners.json"
+PLAYERS_INDEX = BASE_DIR / "players.json"
+
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 START_YEAR = 1968
 END_YEAR = 2026
 
 
-def get_season_page(year):
+# ---------------------------
+# MAJORS LIST
+# ---------------------------
+MAJORS = [
+    "masters",
+    "u.s. open",
+    "the open",
+    "open championship",
+    "pga championship"
+]
+
+
+def is_major(event):
+    e = event.lower()
+    return any(m in e for m in MAJORS)
+
+
+def slugify(name):
+    name = name.lower()
+    name = re.sub(r"[^\w\s-]", "", name)
+    name = re.sub(r"\s+", "-", name)
+    return name.strip("-")
+
+
+def clean_text(text):
+    return text.replace("\n", "").replace("\xa0", " ").strip()
+
+
+def get_page(year):
     url = f"https://en.wikipedia.org/wiki/{year}_PGA_Tour"
     r = requests.get(url, headers=HEADERS, timeout=20)
 
@@ -30,19 +61,13 @@ def get_season_page(year):
     return BeautifulSoup(r.text, "html.parser")
 
 
-def clean_text(text):
-    return text.replace("\n", "").replace("\xa0", " ").strip()
-
-
-def parse_table(soup, year):
+def parse_tables(soup, year):
     tables = soup.find_all("table", {"class": "wikitable"})
-    results = []
+    rows = []
 
     for table in tables:
-        header_cells = table.find_all("th")
-        headers = [clean_text(th.text).lower() for th in header_cells]
+        headers = [clean_text(th.text).lower() for th in table.find_all("th")]
 
-        # find winner column index
         winner_idx = None
         event_idx = None
 
@@ -55,9 +80,7 @@ def parse_table(soup, year):
         if winner_idx is None or event_idx is None:
             continue
 
-        rows = table.find_all("tr")[1:]
-
-        for row in rows:
+        for row in table.find_all("tr")[1:]:
             cols = [clean_text(c.text) for c in row.find_all(["td", "th"])]
 
             if len(cols) <= max(winner_idx, event_idx):
@@ -66,62 +89,105 @@ def parse_table(soup, year):
             winner = cols[winner_idx]
             event = cols[event_idx]
 
-            # ❌ skip prize money rows
+            # skip garbage
             if "$" in winner or winner.replace(",", "").isdigit():
                 continue
 
-            # ❌ skip empty
             if not winner or not event:
                 continue
 
-            results.append({
+            rows.append({
                 "tour": "pga",
                 "year": year,
                 "date": "",
                 "event": event,
                 "winner": winner,
+                "major": is_major(event),
                 "score": "",
                 "venue": "",
                 "country": "",
                 "url": f"https://en.wikipedia.org/wiki/{year}_PGA_Tour"
             })
 
-    return results
+    return rows
 
 
+# ---------------------------
+# BUILD DATA
+# ---------------------------
 all_rows = []
+players = {}
 
 for year in range(START_YEAR, END_YEAR + 1):
     print(f"YEAR {year}")
 
-    soup = get_season_page(year)
-
+    soup = get_page(year)
     if not soup:
         continue
 
-    rows = parse_table(soup, year)
-
+    rows = parse_tables(soup, year)
     print("  found:", len(rows))
 
-    all_rows.extend(rows)
+    for r in rows:
+        all_rows.append(r)
+
+        name = r["winner"]
+        slug = slugify(name)
+
+        if slug not in players:
+            players[slug] = {
+                "name": name,
+                "slug": slug,
+                "wins": 0,
+                "majors": 0,
+                "years": set(),
+                "events": []
+            }
+
+        players[slug]["wins"] += 1
+        if r["major"]:
+            players[slug]["majors"] += 1
+
+        players[slug]["years"].add(r["year"])
+        players[slug]["events"].append(r)
 
     time.sleep(0.3)
 
 
-# remove duplicates
-seen = set()
-clean = []
+# ---------------------------
+# CLEAN PLAYERS
+# ---------------------------
+players_list = []
 
-for r in all_rows:
-    key = (r["event"], r["year"])
-    if key not in seen:
-        seen.add(key)
-        clean.append(r)
+for slug, p in players.items():
+    p["years"] = sorted(list(p["years"]))
+    p["events"].sort(key=lambda x: x["year"], reverse=True)
+
+    # save individual player file
+    with open(PLAYERS_DIR / f"{slug}.json", "w") as f:
+        json.dump(p, f, indent=2)
+
+    players_list.append({
+        "name": p["name"],
+        "slug": slug,
+        "wins": p["wins"],
+        "majors": p["majors"]
+    })
 
 
-clean.sort(key=lambda x: (x["year"], x["event"]), reverse=True)
+# sort players by wins
+players_list.sort(key=lambda x: x["wins"], reverse=True)
 
+
+# ---------------------------
+# SAVE FILES
+# ---------------------------
 with open(OUT_FILE, "w") as f:
-    json.dump(clean, f, indent=2)
+    json.dump(all_rows, f, indent=2)
 
-print("DONE:", len(clean))
+with open(PLAYERS_INDEX, "w") as f:
+    json.dump(players_list, f, indent=2)
+
+print("DONE")
+print("Players:", len(players_list))
+print("Tournaments:", len(all_rows))
