@@ -3,7 +3,7 @@
 <head>
 <script src="/js/analytics.js"></script>
 <meta charset="UTF-8">
-<title>Golf Player | The Sporting Almanac</title>
+<title>Golf | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -11,12 +11,16 @@
   --green:#0c6f3c;
   --green-dark:#08552d;
   --gold:#d9b44a;
+  --blue:#0056d6;
   --bg:#f4f6f8;
   --card:#ffffff;
   --line:#e3e7eb;
+  --text:#1f2937;
+  --muted:#6b7280;
   --zebra:#f3f8f4;
-  --blue:#0056d6;
 }
+
+*{box-sizing:border-box;}
 
 body{
   margin:0;
@@ -43,29 +47,87 @@ body{
 
 /* HERO */
 .hero{
-  background:linear-gradient(135deg,#08552d,#0c6f3c);
-  color:#fff;
+  height:220px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
   text-align:center;
-  padding:40px 20px;
+  color:#fff;
+  background:
+    linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)),
+    url("/images/golf-hero.jpg");
+  background-size:cover;
+  background-position:center;
   border-bottom:4px solid var(--gold);
 }
 
 .hero h1{
   margin:0;
-  font-size:42px;
-}
-
-.hero .wins{
-  margin-top:10px;
-  font-size:18px;
-  opacity:.95;
+  font-size:52px;
 }
 
 /* PAGE */
 .page{
-  max-width:900px;
+  max-width:1200px;
   margin:auto;
   padding:25px;
+}
+
+/* CONTROLS */
+.controls-card{
+  background:var(--card);
+  border-radius:16px;
+  padding:18px;
+  margin-bottom:20px;
+  border:1px solid var(--line);
+}
+
+.controls-top{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:12px;
+}
+
+.controls{
+  display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+}
+
+select,input{
+  padding:10px 12px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  font-size:14px;
+}
+
+/* AUTOCOMPLETE */
+.autocomplete{
+  position:relative;
+}
+
+.suggestions{
+  position:absolute;
+  top:40px;
+  left:0;
+  right:0;
+  background:#fff;
+  border:1px solid #ccc;
+  border-radius:8px;
+  max-height:220px;
+  overflow-y:auto;
+  display:none;
+  z-index:10;
+}
+
+.suggestions div{
+  padding:10px;
+  cursor:pointer;
+}
+
+.suggestions div:hover{
+  background:#eee;
 }
 
 /* TABLE */
@@ -74,11 +136,6 @@ body{
   border-radius:16px;
   overflow:hidden;
   border:1px solid var(--line);
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
 }
 
 thead{
@@ -96,14 +153,21 @@ tbody tr:nth-child(even){
   background:var(--zebra);
 }
 
-.year{
-  width:100px;
-  font-weight:700;
-}
+.col-year{width:90px;font-weight:700;}
+.col-tournament{width:55%;}
+.col-winner{width:30%;}
 
-.tournament{
+/* LINKS */
+.tournament-link{
   color:var(--blue);
   font-weight:600;
+  text-decoration:none;
+}
+
+.player-link{
+  color:#111;
+  font-weight:600;
+  text-decoration:none;
 }
 </style>
 </head>
@@ -114,21 +178,41 @@ tbody tr:nth-child(even){
   <a href="/">Home</a>
   <a href="/golf.html">Golf</a>
   <a href="/golf-majors.html">Majors</a>
+  <a href="/golf-players.html">Players</a>
 </div>
 
 <div class="hero">
-  <h1 id="playerName">Player</h1>
-  <div class="wins" id="winsText"></div>
+  <h1>Golf</h1>
 </div>
 
 <div class="page">
+
+<div class="controls-card">
+  <div class="controls">
+
+    <select id="yearFilter">
+      <option value="all">All Years</option>
+    </select>
+
+    <input type="text" id="tournamentSearch" list="tournamentList" placeholder="Search tournament">
+    <datalist id="tournamentList"></datalist>
+
+    <!-- PLAYER SEARCH -->
+    <div class="autocomplete">
+      <input type="text" id="playerSearch" placeholder="Search player">
+      <div id="playerSuggestions" class="suggestions"></div>
+    </div>
+
+  </div>
+</div>
 
 <div class="table-card">
 <table>
 <thead>
 <tr>
-  <th>Year</th>
-  <th>Tournament</th>
+  <th class="col-year">Year</th>
+  <th class="col-tournament">Tournament</th>
+  <th class="col-winner">Winner</th>
 </tr>
 </thead>
 <tbody id="tableBody"></tbody>
@@ -138,55 +222,112 @@ tbody tr:nth-child(even){
 </div>
 
 <script>
-const majorsList = [
-  "Masters Tournament",
-  "PGA Championship",
-  "U.S. Open",
-  "The Open Championship"
-];
-
-function getParam(name){
-  const url=new URL(window.location.href);
-  return url.searchParams.get(name);
-}
+let data=[];
+let players=[];
 
 async function load(){
-  const player=getParam("player");
-  document.getElementById("playerName").textContent=player;
-
   const res=await fetch("/data/golf/pga_winners.json");
-  const data=await res.json();
+  data=await res.json();
 
-  const wins=data
-    .filter(d=>d.winner===player)
+  data.sort((a,b)=>b.year-a.year);
+
+  players=[...new Set(data.map(d=>d.winner))].sort();
+
+  populateFilters();
+  render();
+}
+
+function populateFilters(){
+  const years=[...new Set(data.map(d=>d.year))].sort((a,b)=>b-a);
+  const tournaments=[...new Set(data.map(d=>d.event))].sort();
+
+  const yearSelect=document.getElementById("yearFilter");
+  const list=document.getElementById("tournamentList");
+
+  years.forEach(y=>{
+    const o=document.createElement("option");
+    o.value=y;
+    o.textContent=y;
+    yearSelect.appendChild(o);
+  });
+
+  tournaments.forEach(t=>{
+    const o=document.createElement("option");
+    o.value=t;
+    list.appendChild(o);
+  });
+}
+
+function render(){
+  const year=document.getElementById("yearFilter").value;
+  const search=document.getElementById("tournamentSearch").value.toLowerCase();
+
+  let filtered=data
+    .filter(d=>{
+      return (year==="all" || d.year==year) &&
+             (!search || d.event.toLowerCase().includes(search));
+    })
     .filter(d=>{
       const w=(d.winner||"").toLowerCase();
-      return !w.includes("cancel") && !w.includes("postpon");
-    })
-    .sort((a,b)=>b.year-a.year);
+      return !w.includes("cancel");
+    });
 
-  // TOTAL WINS
-  const totalWins = wins.length;
+  draw(filtered);
+}
 
-  // MAJOR WINS
-  const majorWins = wins.filter(w => majorsList.includes(w.event)).length;
-
-  document.getElementById("winsText").textContent =
-    `${totalWins} wins / ${majorWins} ${majorWins === 1 ? "major" : "majors"}`;
-
+function draw(rows){
   const tbody=document.getElementById("tableBody");
+  tbody.innerHTML="";
 
-  wins.forEach(w=>{
+  rows.forEach(r=>{
     const tr=document.createElement("tr");
 
     tr.innerHTML=`
-      <td class="year">${w.year}</td>
-      <td class="tournament">${w.event}</td>
+      <td class="col-year">${r.year}</td>
+      <td class="col-tournament">
+        <a class="tournament-link" href="/golf-tournament.html?tournament=${encodeURIComponent(r.event)}">
+          ${r.event}
+        </a>
+      </td>
+      <td class="col-winner">
+        <a class="player-link" href="/golf-player.html?player=${encodeURIComponent(r.winner)}">
+          ${r.winner}
+        </a>
+      </td>
     `;
 
     tbody.appendChild(tr);
   });
 }
+
+/* PLAYER AUTOCOMPLETE */
+const input=document.getElementById("playerSearch");
+const box=document.getElementById("playerSuggestions");
+
+input.addEventListener("input",()=>{
+  const val=input.value.toLowerCase();
+  box.innerHTML="";
+
+  if(!val){
+    box.style.display="none";
+    return;
+  }
+
+  const matches=players.filter(p=>p.toLowerCase().includes(val)).slice(0,10);
+
+  matches.forEach(m=>{
+    const div=document.createElement("div");
+    div.textContent=m;
+
+    div.onclick=()=>{
+      window.location.href="/golf-player.html?player="+encodeURIComponent(m);
+    };
+
+    box.appendChild(div);
+  });
+
+  box.style.display="block";
+});
 
 load();
 </script>
