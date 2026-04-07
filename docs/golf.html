@@ -26,7 +26,6 @@ body{
   margin:0;
   font-family:Inter,system-ui,Arial;
   background:var(--bg);
-  color:var(--text);
 }
 
 /* NAV */
@@ -46,7 +45,7 @@ body{
   font-size:18px;
 }
 
-/* HERO WITH IMAGE */
+/* HERO */
 .hero{
   height:220px;
   display:flex;
@@ -54,11 +53,9 @@ body{
   justify-content:center;
   text-align:center;
   color:#fff;
-
   background:
     linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)),
     url("/images/golf-hero.jpg");
-
   background-size:cover;
   background-position:center;
   border-bottom:4px solid var(--gold);
@@ -67,13 +64,6 @@ body{
 .hero h1{
   margin:0;
   font-size:52px;
-  letter-spacing:1px;
-}
-
-.hero p{
-  margin-top:8px;
-  font-size:16px;
-  opacity:.9;
 }
 
 /* PAGE */
@@ -83,7 +73,7 @@ body{
   padding:25px;
 }
 
-/* FILTER CARD */
+/* CONTROLS */
 .controls-card{
   background:var(--card);
   border-radius:16px;
@@ -99,18 +89,6 @@ body{
   margin-bottom:12px;
 }
 
-.controls-title{
-  font-size:22px;
-  font-weight:700;
-  color:var(--green-dark);
-}
-
-.result-count{
-  font-size:14px;
-  color:var(--muted);
-  font-weight:600;
-}
-
 .controls{
   display:flex;
   gap:12px;
@@ -124,6 +102,34 @@ select,input{
   font-size:14px;
 }
 
+/* AUTOCOMPLETE */
+.autocomplete{
+  position:relative;
+}
+
+.suggestions{
+  position:absolute;
+  top:40px;
+  left:0;
+  right:0;
+  background:#fff;
+  border:1px solid #ccc;
+  border-radius:8px;
+  max-height:220px;
+  overflow-y:auto;
+  display:none;
+  z-index:10;
+}
+
+.suggestions div{
+  padding:10px;
+  cursor:pointer;
+}
+
+.suggestions div:hover{
+  background:#eee;
+}
+
 /* TABLE */
 .table-card{
   background:var(--card);
@@ -132,25 +138,13 @@ select,input{
   border:1px solid var(--line);
 }
 
-.table-header{
-  padding:16px;
-  font-weight:700;
-  color:var(--green-dark);
-  border-bottom:1px solid var(--line);
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-}
-
 thead{
   background:var(--green);
   color:#fff;
 }
 
 th,td{
-  padding:12px 14px;
+  padding:12px;
   font-size:14px;
   text-align:left;
 }
@@ -159,23 +153,9 @@ tbody tr:nth-child(even){
   background:var(--zebra);
 }
 
-tbody tr:hover{
-  background:#e3efe7;
-}
-
-/* COLUMN WIDTHS */
-.col-year{
-  width:90px;
-  font-weight:700;
-}
-
-.col-tournament{
-  width:55%;
-}
-
-.col-winner{
-  width:30%;
-}
+.col-year{width:90px;font-weight:700;}
+.col-tournament{width:55%;}
+.col-winner{width:30%;}
 
 /* LINKS */
 .tournament-link{
@@ -184,19 +164,10 @@ tbody tr:hover{
   text-decoration:none;
 }
 
-.tournament-link:hover{
-  text-decoration:underline;
-}
-
 .player-link{
   color:#111;
   font-weight:600;
   text-decoration:none;
-}
-
-.player-link:hover{
-  text-decoration:underline;
-  color:var(--blue);
 }
 </style>
 </head>
@@ -207,66 +178,60 @@ tbody tr:hover{
   <a href="/">Home</a>
   <a href="/golf.html">Golf</a>
   <a href="/golf-majors.html">Majors</a>
-  <a href="/golf-player.html">Players</a>
-  <a href="/nba.html">NBA</a>
-  <a href="/baseball.html">Baseball</a>
+  <a href="/golf-players.html">Players</a>
 </div>
 
 <div class="hero">
-  <div>
-    <h1>Golf</h1>
-    <p>PGA Tour tournament winners</p>
-  </div>
+  <h1>Golf</h1>
 </div>
 
 <div class="page">
 
 <div class="controls-card">
-  <div class="controls-top">
-    <div class="controls-title">Tournament Winners</div>
-    <div class="result-count" id="count">Loading...</div>
-  </div>
-
   <div class="controls">
+
     <select id="yearFilter">
       <option value="all">All Years</option>
     </select>
 
-    <input 
-      type="text" 
-      id="tournamentSearch" 
-      list="tournamentList"
-      placeholder="Search tournament"
-    >
+    <input type="text" id="tournamentSearch" list="tournamentList" placeholder="Search tournament">
     <datalist id="tournamentList"></datalist>
+
+    <!-- PLAYER SEARCH -->
+    <div class="autocomplete">
+      <input type="text" id="playerSearch" placeholder="Search player">
+      <div id="playerSuggestions" class="suggestions"></div>
+    </div>
+
   </div>
 </div>
 
 <div class="table-card">
-  <div class="table-header">PGA Results</div>
-
-  <table>
-    <thead>
-      <tr>
-        <th class="col-year">Year</th>
-        <th class="col-tournament">Tournament</th>
-        <th class="col-winner">Winner</th>
-      </tr>
-    </thead>
-    <tbody id="tableBody"></tbody>
-  </table>
+<table>
+<thead>
+<tr>
+  <th class="col-year">Year</th>
+  <th class="col-tournament">Tournament</th>
+  <th class="col-winner">Winner</th>
+</tr>
+</thead>
+<tbody id="tableBody"></tbody>
+</table>
 </div>
 
 </div>
 
 <script>
 let data=[];
+let players=[];
 
 async function load(){
   const res=await fetch("/data/golf/pga_winners.json");
   data=await res.json();
 
   data.sort((a,b)=>b.year-a.year);
+
+  players=[...new Set(data.map(d=>d.winner))].sort();
 
   populateFilters();
   render();
@@ -308,8 +273,6 @@ function render(){
     });
 
   draw(filtered);
-
-  document.getElementById("count").textContent = filtered.length+" tournaments";
 }
 
 function draw(rows){
@@ -337,8 +300,34 @@ function draw(rows){
   });
 }
 
-document.getElementById("yearFilter").addEventListener("change",render);
-document.getElementById("tournamentSearch").addEventListener("input",render);
+/* PLAYER AUTOCOMPLETE */
+const input=document.getElementById("playerSearch");
+const box=document.getElementById("playerSuggestions");
+
+input.addEventListener("input",()=>{
+  const val=input.value.toLowerCase();
+  box.innerHTML="";
+
+  if(!val){
+    box.style.display="none";
+    return;
+  }
+
+  const matches=players.filter(p=>p.toLowerCase().includes(val)).slice(0,10);
+
+  matches.forEach(m=>{
+    const div=document.createElement("div");
+    div.textContent=m;
+
+    div.onclick=()=>{
+      window.location.href="/golf-player.html?player="+encodeURIComponent(m);
+    };
+
+    box.appendChild(div);
+  });
+
+  box.style.display="block";
+});
 
 load();
 </script>
