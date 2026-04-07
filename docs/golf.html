@@ -51,7 +51,6 @@ body{
 .hero h1{
   margin:0;
   font-size:36px;
-  letter-spacing:1px;
 }
 
 /* PAGE */
@@ -68,11 +67,39 @@ body{
   margin-bottom:20px;
 }
 
-select{
+select, input{
   padding:8px 10px;
   border-radius:6px;
   border:1px solid #ccc;
   font-size:14px;
+}
+
+/* AUTOCOMPLETE */
+.autocomplete{
+  position:relative;
+}
+
+.suggestions{
+  position:absolute;
+  top:36px;
+  left:0;
+  right:0;
+  background:#fff;
+  border:1px solid #ccc;
+  border-radius:6px;
+  max-height:200px;
+  overflow-y:auto;
+  display:none;
+  z-index:10;
+}
+
+.suggestions div{
+  padding:8px;
+  cursor:pointer;
+}
+
+.suggestions div:hover{
+  background:#eee;
 }
 
 /* TABLE */
@@ -126,9 +153,10 @@ tbody tr:nth-child(even){
     <option value="all">All Years</option>
   </select>
 
-  <select id="tournamentFilter">
-    <option value="all">All Tournaments</option>
-  </select>
+  <div class="autocomplete">
+    <input type="text" id="tournamentSearch" placeholder="Search tournament">
+    <div id="suggestions" class="suggestions"></div>
+  </div>
 </div>
 
 <div class="table-card">
@@ -136,12 +164,8 @@ tbody tr:nth-child(even){
 <thead>
 <tr>
   <th>Year</th>
-  <th>Date</th>
   <th>Tournament</th>
   <th>Winner</th>
-  <th>Score</th>
-  <th>Venue</th>
-  <th>Country</th>
 </tr>
 </thead>
 <tbody id="tableBody"></tbody>
@@ -152,36 +176,28 @@ tbody tr:nth-child(even){
 
 <script>
 let data = [];
+let tournaments = [];
+let selectedTournament = "";
 
 async function loadData(){
   const res = await fetch("/data/golf/pga_winners.json");
   data = await res.json();
 
-  populateFilters();
+  tournaments = [...new Set(data.map(d=>d.event))].sort();
+
+  populateYears();
   render();
 }
 
-function populateFilters(){
-  // YEARS
+function populateYears(){
   const years = [...new Set(data.map(d=>d.year))].sort((a,b)=>b-a);
-  const yearSelect = document.getElementById("yearFilter");
+  const select = document.getElementById("yearFilter");
 
   years.forEach(y=>{
     const opt=document.createElement("option");
     opt.value=y;
     opt.textContent=y;
-    yearSelect.appendChild(opt);
-  });
-
-  // TOURNAMENTS
-  const tournaments = [...new Set(data.map(d=>d.event))].sort();
-  const tourSelect = document.getElementById("tournamentFilter");
-
-  tournaments.forEach(t=>{
-    const opt=document.createElement("option");
-    opt.value=t;
-    opt.textContent=t;
-    tourSelect.appendChild(opt);
+    select.appendChild(opt);
   });
 }
 
@@ -189,14 +205,13 @@ function render(){
   let filtered=[...data];
 
   const year=document.getElementById("yearFilter").value;
-  const tournament=document.getElementById("tournamentFilter").value;
 
   if(year!=="all"){
     filtered=filtered.filter(d=>d.year==year);
   }
 
-  if(tournament!=="all"){
-    filtered=filtered.filter(d=>d.event===tournament);
+  if(selectedTournament){
+    filtered=filtered.filter(d=>d.event===selectedTournament);
   }
 
   draw(filtered);
@@ -211,20 +226,47 @@ function draw(rows){
 
     tr.innerHTML=`
       <td>${r.year}</td>
-      <td>${r.date || ""}</td>
       <td class="tournament">${r.event}</td>
       <td>${r.winner}</td>
-      <td>${r.score || ""}</td>
-      <td>${r.venue || ""}</td>
-      <td>${r.country || ""}</td>
     `;
 
     tbody.appendChild(tr);
   });
 }
 
+/* AUTOCOMPLETE */
+const input=document.getElementById("tournamentSearch");
+const suggestions=document.getElementById("suggestions");
+
+input.addEventListener("input",()=>{
+  const val=input.value.toLowerCase();
+  suggestions.innerHTML="";
+
+  if(!val){
+    suggestions.style.display="none";
+    selectedTournament="";
+    render();
+    return;
+  }
+
+  const matches=tournaments.filter(t=>t.toLowerCase().includes(val)).slice(0,20);
+
+  matches.forEach(m=>{
+    const div=document.createElement("div");
+    div.textContent=m;
+    div.onclick=()=>{
+      input.value=m;
+      selectedTournament=m;
+      suggestions.style.display="none";
+      render();
+    };
+    suggestions.appendChild(div);
+  });
+
+  suggestions.style.display="block";
+});
+
 document.getElementById("yearFilter").addEventListener("change",render);
-document.getElementById("tournamentFilter").addEventListener("change",render);
 
 loadData();
 </script>
