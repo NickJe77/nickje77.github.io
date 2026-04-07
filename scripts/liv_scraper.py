@@ -1,96 +1,116 @@
 import requests
-from bs4 import BeautifulSoup
 import json
 from pathlib import Path
+from bs4 import BeautifulSoup
 
-print("LIV SCRAPER (REAL WORKING VERSION — NO WIKI)")
+print("LIV SCRAPER (FINAL FIXED VERSION)")
+
+START_YEAR = 2022
+END_YEAR = 2026
 
 OUT = Path("docs/data/golf/liv")
 OUT.mkdir(parents=True, exist_ok=True)
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
 
+# -----------------------------------
+# GET HTML FROM WIKIPEDIA API
+# -----------------------------------
+def get_html(year):
+    url = "https://en.wikipedia.org/w/api.php"
 
-# 🔥 KNOWN EVENTS (reliable backbone)
-EVENTS = {
-    2022: [
-        ("London", "https://en.wikipedia.org/wiki/LIV_Golf_Invitational_London"),
-        ("Portland", "https://en.wikipedia.org/wiki/LIV_Golf_Invitational_Portland"),
-        ("Bedminster", "https://en.wikipedia.org/wiki/LIV_Golf_Invitational_Bedminster"),
-    ],
-    2023: [
-        ("Mayakoba", "https://en.wikipedia.org/wiki/LIV_Golf_Mayakoba"),
-        ("Tucson", "https://en.wikipedia.org/wiki/LIV_Golf_Tucson"),
-        ("Orlando", "https://en.wikipedia.org/wiki/LIV_Golf_Orlando"),
-        ("Adelaide", "https://en.wikipedia.org/wiki/LIV_Golf_Adelaide"),
-    ],
-    2024: [],
-    2025: [],
-    2026: []
-}
-
-
-def scrape_event(name, url, year):
-    print(f"Scraping {name}")
-
-    r = requests.get(url, headers=HEADERS)
-
-    if r.status_code != 200:
-        return None
-
-    soup = BeautifulSoup(r.text, "html.parser")
-
-    # find infobox
-    box = soup.find("table", {"class": "infobox"})
-
-    if not box:
-        return None
-
-    text = box.get_text(" ", strip=True)
-
-    winner = ""
-
-    # 🔥 extract winner
-    for row in box.find_all("tr"):
-        th = row.find("th")
-        td = row.find("td")
-
-        if not th or not td:
-            continue
-
-        if "winner" in th.text.lower():
-            winner = td.text.strip()
-
-    return {
-        "season": year,
-        "event": f"LIV Golf {name}",
-        "date": "",
-        "location": "",
-        "winner": winner,
-        "score": ""
+    params = {
+        "action": "parse",
+        "page": f"{year} LIV Golf League",
+        "format": "json",
+        "prop": "text"
     }
 
+    r = requests.get(url, params=params)
 
-# -----------------------
+    try:
+        return r.json()["parse"]["text"]["*"]
+    except:
+        return ""
+
+
+# -----------------------------------
+# EXTRACT EVENTS (FIXED MAPPING)
+# -----------------------------------
+def extract_events(html, year):
+    soup = BeautifulSoup(html, "html.parser")
+    tables = soup.find_all("table")
+
+    for table in tables:
+        text = table.get_text(" ", strip=True).lower()
+
+        # find correct table
+        if "liv golf" in text and "winner" in text:
+
+            rows = table.find_all("tr")
+            events = []
+
+            for row in rows:
+                cols = [td.text.strip() for td in row.find_all("td")]
+
+                if len(cols) < 2:
+                    continue
+
+                try:
+                    # ✅ CORRECT COLUMN ORDER
+                    event_name = cols[0]
+                    date = cols[1] if len(cols) > 1 else ""
+                    location = cols[2] if len(cols) > 2 else ""
+                    winner = cols[3] if len(cols) > 3 else ""
+                    score = cols[4] if len(cols) > 4 else ""
+
+                    # skip junk rows
+                    if "liv golf" not in event_name.lower():
+                        continue
+
+                    events.append({
+                        "season": year,
+                        "event": event_name,
+                        "date": date,
+                        "location": location,
+                        "winner": winner,
+                        "score": score
+                    })
+
+                except:
+                    continue
+
+            if events:
+                return events
+
+    return []
+
+
+# -----------------------------------
 # RUN
-# -----------------------
+# -----------------------------------
 all_events = []
 
-for year, events in EVENTS.items():
-    season_data = []
+for year in range(START_YEAR, END_YEAR + 1):
+    print(f"\nProcessing {year}")
 
-    for name, url in events:
-        data = scrape_event(name, url, year)
+    html = get_html(year)
 
-        if data:
-            season_data.append(data)
+    if not html:
+        data = []
+    else:
+        data = extract_events(html, year)
+
+    print(f"{year}: {len(data)} events")
 
     with open(OUT / f"{year}.json", "w") as f:
-        json.dump(season_data, f, indent=2)
+        json.dump(data, f, indent=2)
 
-    all_events.extend(season_data)
+    if data:
+        all_events.extend(data)
 
+
+# combined file
 with open(OUT / "all.json", "w") as f:
     json.dump(all_events, f, indent=2)
 
-print("DONE")
+print("\nDONE")
