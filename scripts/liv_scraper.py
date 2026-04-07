@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup
 import json
 from pathlib import Path
 
-print("LIV SCRAPER (FORCED WORKING VERSION)")
+print("LIV SCRAPER DEBUG MODE")
 
 BASE = "https://en.wikipedia.org"
 START_YEAR = 2022
@@ -19,78 +19,55 @@ def clean(x):
     return x.replace("\xa0", " ").strip()
 
 
-def extract_events(table, year):
-    events = []
-
-    rows = table.find_all("tr")
-
-    for row in rows:
-        cols = [clean(td.text) for td in row.find_all("td")]
-
-        if len(cols) < 4:
-            continue
-
-        # force mapping based on actual LIV structure
-        date = cols[0]
-        event = cols[1]
-        location = cols[2]
-        winner = cols[3]
-
-        score = ""
-        if len(cols) > 4:
-            score = cols[4]
-
-        # skip garbage rows
-        if "team" in event.lower():
-            continue
-
-        if len(event) < 3:
-            continue
-
-        events.append({
-            "season": year,
-            "event": event,
-            "date": date,
-            "location": location,
-            "winner": winner,
-            "score": score
-        })
-
-    return events
-
-
 def get_season(year):
     url = f"{BASE}/wiki/{year}_LIV_Golf_League"
-    print(f"\nFetching {year}...")
+    print(f"\nFetching {year}: {url}")
 
     r = requests.get(url, headers=HEADERS)
 
+    print("Status:", r.status_code)
+
     if r.status_code != 200:
-        print("FAILED")
         return []
 
     soup = BeautifulSoup(r.text, "html.parser")
 
     tables = soup.find_all("table")
+    print("Tables found:", len(tables))
 
-    best = None
-
-    # 🔥 find the correct table manually
-    for table in tables:
+    for i, table in enumerate(tables):
         text = table.get_text(" ", strip=True).lower()
 
-        if "winner" in text and "location" in text and "date" in text:
-            best = table
-            break
+        if "winner" in text and "date" in text:
+            print(f"Using table #{i}")
 
-    if not best:
-        print("NO TABLE FOUND")
-        return []
+            rows = table.find_all("tr")
+            events = []
 
-    events = extract_events(best, year)
+            for row in rows:
+                cols = [clean(td.text) for td in row.find_all("td")]
 
-    print(f"{year}: {len(events)} events")
-    return events
+                if len(cols) < 4:
+                    continue
+
+                print("ROW:", cols[:5])  # 🔥 DEBUG OUTPUT
+
+                event = {
+                    "season": year,
+                    "date": cols[0],
+                    "event": cols[1],
+                    "location": cols[2],
+                    "winner": cols[3],
+                    "score": cols[4] if len(cols) > 4 else ""
+                }
+
+                events.append(event)
+
+            print(f"{year} EVENTS:", len(events))
+            return events
+
+    print("NO TABLE MATCHED")
+    return []
 
 
 # -----------------------
@@ -101,15 +78,15 @@ all_events = []
 for year in range(START_YEAR, END_YEAR + 1):
     data = get_season(year)
 
+    # 🔥 FORCE WRITE EVEN IF EMPTY
+    with open(OUT / f"{year}.json", "w") as f:
+        json.dump(data, f, indent=2)
+
     if data:
-        with open(OUT / f"{year}.json", "w") as f:
-            json.dump(data, f, indent=2)
-
         all_events.extend(data)
-    else:
-        print(f"{year} EMPTY")
 
+# combined file
 with open(OUT / "all.json", "w") as f:
     json.dump(all_events, f, indent=2)
 
-print("\nDONE")
+print("\nDONE WRITING FILES")
