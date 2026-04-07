@@ -3,19 +3,14 @@ import json
 from pathlib import Path
 from bs4 import BeautifulSoup
 
-print("LIV SCRAPER (EVENT-LEVEL — REAL DATA)")
+print("LIV SCRAPER (RESULTS TABLE VERSION)")
 
 OUT = Path("docs/data/golf/liv")
 OUT.mkdir(parents=True, exist_ok=True)
 
 BASE = "https://en.wikipedia.org/wiki/"
-
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-
-# -----------------------------------
-# EVENT LIST (THIS PART IS STABLE)
-# -----------------------------------
 
 EVENTS = {
     2022: [
@@ -47,10 +42,6 @@ EVENTS = {
 }
 
 
-# -----------------------------------
-# SCRAPE EVENT PAGE
-# -----------------------------------
-
 def scrape_event(slug, year):
     url = BASE + slug
     print("Fetching:", url)
@@ -58,41 +49,63 @@ def scrape_event(slug, year):
     r = requests.get(url, headers=HEADERS)
 
     if r.status_code != 200:
+        print("FAILED:", slug)
         return None
 
     soup = BeautifulSoup(r.text, "html.parser")
 
+    # event name
     title = soup.find("h1")
     event_name = title.text.strip() if title else slug
 
-    infobox = soup.find("table", {"class": "infobox"})
-
+    # date/location (still safe from infobox)
     date = ""
     location = ""
-    winner = ""
-    score = ""
 
+    infobox = soup.find("table", {"class": "infobox"})
     if infobox:
-        rows = infobox.find_all("tr")
-
-        for row in rows:
+        for row in infobox.find_all("tr"):
             th = row.find("th")
             td = row.find("td")
-
             if not th or not td:
                 continue
 
-            label = th.text.strip().lower()
-            value = td.text.strip()
+            label = th.text.lower()
+            val = td.text.strip()
 
             if "date" in label:
-                date = value
-            elif "location" in label:
-                location = value
-            elif "winner" in label:
-                winner = value
-            elif "score" in label:
-                score = value
+                date = val
+            if "location" in label:
+                location = val
+
+    # 🔥 FIND RESULTS TABLE
+    winner = ""
+    score = ""
+
+    tables = soup.find_all("table")
+
+    for table in tables:
+        text = table.get_text(" ", strip=True).lower()
+
+        # look for leaderboard style table
+        if "pos" in text and "player" in text and "score" in text:
+
+            rows = table.find_all("tr")
+
+            for row in rows:
+                cols = [td.text.strip() for td in row.find_all("td")]
+
+                if len(cols) < 3:
+                    continue
+
+                # winner is first row (position 1)
+                if cols[0] == "1" or cols[0] == "T1":
+                    winner = cols[1]
+                    score = cols[-1]
+                    break
+
+            if winner:
+                break
 
     return {
         "season": year,
@@ -104,9 +117,9 @@ def scrape_event(slug, year):
     }
 
 
-# -----------------------------------
+# -----------------------
 # RUN
-# -----------------------------------
+# -----------------------
 
 all_events = []
 
