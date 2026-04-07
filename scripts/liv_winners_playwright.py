@@ -1,86 +1,120 @@
-from playwright.sync_api import sync_playwright
+import requests
+from bs4 import BeautifulSoup
 import json
 from pathlib import Path
+import time
 
-print("LIV SCRAPER (NEXT DATA FIX)")
+print("LIV SCRAPER (ROBUST WIKI VERSION)")
 
 OUTPUT = Path("docs/data/golf")
 OUTPUT.mkdir(parents=True, exist_ok=True)
 
 OUT_FILE = OUTPUT / "liv_winners.json"
 
+HEADERS = {"User-Agent": "Mozilla/5.0"}
+
 YEARS = [2022, 2023, 2024, 2025, 2026]
 
 rows = []
 
-with sync_playwright() as p:
-    browser = p.chromium.launch(headless=True)
-    page = browser.new_page()
 
-    for year in YEARS:
-        print("YEAR", year)
+def clean(text):
+    return text.replace("\n", "").replace("\xa0", " ").strip()
 
-        url = f"https://www.livgolf.com/schedule?season={year}"
-        page.goto(url, wait_until="domcontentloaded", timeout=120000)
 
-        page.wait_for_timeout(5000)
+def get_page(year):
+    url = f"https://en.wikipedia.org/wiki/{year}_LIV_Golf_League"
+    r = requests.get(url, headers=HEADERS)
 
-        try:
-            # 🔥 extract Next.js data
-            data = page.evaluate("() => window.__NEXT_DATA__")
+    if r.status_code != 200:
+        print("FAILED:", year)
+        return None
 
-            # navigate structure (varies slightly)
-            props = data.get("props", {})
-            page_props = props.get("pageProps", {})
+    return BeautifulSoup(r.text, "html.parser")
 
-            # try common paths
-            events = []
 
-            for key in page_props:
-                if isinstance(page_props[key], list):
-                    events = page_props[key]
+def parse_tables(soup, year):
+    results = []
 
-            print("  events:", len(events))
+    tables = soup.find_all("table", class_="wikitable")
 
-            for e in events:
-                name = e.get("name") or e.get("eventName") or ""
-                winner = ""
+    for table in tables:
+        headers = [clean(th.text).lower() for th in table.find_all("th")]
 
-                # try winner fields
-                if "winner" in e:
-                    winner = e["winner"]
+        # find winner column
+        winner_idx = None
+        event_idx = None
 
-                rows.append({
-                    "tour": "liv",
-                    "year": year,
-                    "date": "",
-                    "event": name,
-                    "winner": winner,
-                    "score": "",
-                    "venue": "",
-                    "country": "",
-                    "url": url
-                })
+        for i, h in enumerate(headers):
+            if "winner" in h or "individual" in h:
+                winner_idx = i
+            if "event" in h or "tournament" in h:
+                event_idx = i
 
-        except Exception as e:
-            print("FAILED:", e)
+        if winner_idx is None or event_idx is None:
+            continue
 
-    browser.close()
+        for tr in table.find_all("tr")[1:]:
+            cols = [clean(td.text) for td in tr.find_all(["td", "th"])]
+
+            if len(cols) <= max(winner_idx, event_idx):
+                continue
+
+            winner = cols[winner_idx]
+            event = cols[event_idx]
+
+            # skip junk rows
+            if not winner or not event:
+                continue
+            if winner.replace(",", "").isdigit():
+                continue
+            if "team" in event.lower():
+                continue
+
+            results.append({
+                "tour": "liv",
+                "year": year,
+                "date": "",
+                "event": event,
+                "winner": winner,
+                "score": "",
+                "venue": "",
+                "country": "",
+                "url": f"https://en.wikipedia.org/wiki/{year}_LIV_Golf_League"
+            })
+
+    return results
+
+
+for year in YEARS:
+    print("YEAR", year)
+
+    soup = get_page(year)
+    if not soup:
+        continue
+
+    year_rows = parse_tables(soup, year)
+
+    print("  rows:", len(year_rows))
+
+    rows.extend(year_rows)
+
+    time.sleep(0.3)
 
 
 # remove duplicates
 seen = set()
-clean = []
+clean_rows = []
 
 for r in rows:
     key = (r["event"], r["year"])
-    if key not in seen and r["event"]:
+    if key not in seen:
         seen.add(key)
-        clean.append(r)
+        clean_rows.append(r)
 
-clean.sort(key=lambda x: (x["year"], x["event"]), reverse=True)
+clean_rows.sort(key=lambda x: (x["year"], x["event"]), reverse=True)
 
 with open(OUT_FILE, "w") as f:
-    json.dump(clean, f, indent=2)
+    json.dump(clean_rows, f, indent=2)
 
-print("DONE:", len(clean))
+print("DONE:", len(clean_rows))
