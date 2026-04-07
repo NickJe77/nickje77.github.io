@@ -1,9 +1,8 @@
 from playwright.sync_api import sync_playwright
 import json
 from pathlib import Path
-import time
 
-print("LIV SCRAPER (PLAYWRIGHT FIXED)")
+print("LIV SCRAPER (API INTERCEPT)")
 
 OUTPUT = Path("docs/data/golf")
 OUTPUT.mkdir(parents=True, exist_ok=True)
@@ -16,67 +15,67 @@ rows = []
 
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
-
-    context = browser.new_context(
-        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-    )
-
+    context = browser.new_context()
     page = context.new_page()
 
+    captured = []
+
+    def handle_response(response):
+        url = response.url
+
+        # 🔥 capture LIV API responses
+        if "schedule" in url or "event" in url or "api" in url:
+            try:
+                data = response.json()
+                captured.append(data)
+            except:
+                pass
+
+    page.on("response", handle_response)
+
     for year in YEARS:
-        print(f"YEAR {year}")
+        print("YEAR", year)
 
         url = f"https://www.livgolf.com/schedule?season={year}"
+        page.goto(url, wait_until="domcontentloaded", timeout=120000)
 
-        try:
-            page.goto(url, timeout=120000, wait_until="domcontentloaded")
+        page.wait_for_timeout(8000)
 
-            # wait for page to render something useful
-            page.wait_for_timeout(8000)
+    browser.close()
 
-            # grab page text (fallback method)
-            content = page.content()
 
-            # VERY IMPORTANT: fallback extraction
-            blocks = page.query_selector_all("div")
+# ---------------------------
+# PARSE CAPTURED DATA
+# ---------------------------
+for block in captured:
+    try:
+        # adapt depending on API structure
+        if isinstance(block, dict):
+            for key in block:
+                if isinstance(block[key], list):
+                    for item in block[key]:
 
-            print("  elements:", len(blocks))
-
-            for b in blocks:
-                try:
-                    text = b.inner_text()
-
-                    if "LIV Golf" in text and len(text) < 200:
-                        lines = text.split("\n")
-
-                        event = lines[0].strip()
+                        event = item.get("name") or item.get("eventName") or ""
                         winner = ""
 
-                        for i, l in enumerate(lines):
-                            if "Winner" in l and i + 1 < len(lines):
-                                winner = lines[i + 1].strip()
+                        # try to extract winner
+                        if "winner" in item:
+                            winner = item["winner"]
 
                         rows.append({
                             "tour": "liv",
-                            "year": year,
+                            "year": item.get("year", ""),
                             "date": "",
                             "event": event,
                             "winner": winner,
                             "score": "",
                             "venue": "",
                             "country": "",
-                            "url": url
+                            "url": ""
                         })
 
-                except:
-                    continue
-
-        except Exception as e:
-            print("FAILED YEAR:", year, e)
-
-        time.sleep(2)
-
-    browser.close()
+    except:
+        continue
 
 
 # remove duplicates
@@ -85,7 +84,7 @@ clean = []
 
 for r in rows:
     key = (r["event"], r["year"])
-    if key not in seen:
+    if key not in seen and r["event"]:
         seen.add(key)
         clean.append(r)
 
