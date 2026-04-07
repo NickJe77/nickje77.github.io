@@ -1,91 +1,76 @@
 import requests
+from bs4 import BeautifulSoup
 import json
 from pathlib import Path
-import time
 
-print("=== LIV FULL BUILDER (API) ===")
-
-# 🔑 YOUR KEY (already seen in your screenshot)
-API_KEY = "ad73e6aa34d346e29e241f57dc92cabe"
+print("LIV FULL BUILDER (WIKI TABLE PARSER)")
 
 OUT = Path("docs/data/golf/liv")
 OUT.mkdir(parents=True, exist_ok=True)
 
-SEASONS = [2022, 2023, 2024, 2025, 2026]
+URL = "https://en.wikipedia.org/wiki/LIV_Golf"
 
-BASE = "https://api.sportsdata.io/golf/v2/json/Tournaments"
+r = requests.get(URL)
+soup = BeautifulSoup(r.text, "html.parser")
 
-HEADERS = {
-    "Ocp-Apim-Subscription-Key": API_KEY
-}
+tables = soup.find_all("table", {"class": "wikitable"})
 
+events = []
 
-def get_events(year):
-    url = f"{BASE}/{year}"
+for table in tables:
+    rows = table.find_all("tr")
 
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=15)
+    for row in rows[1:]:
+        cols = row.find_all(["td", "th"])
 
-        print(f"{year} STATUS:", r.status_code)
-
-        if r.status_code != 200:
-            print("FAILED:", r.text[:200])
-            return []
-
-        return r.json()
-
-    except Exception as e:
-        print("ERROR:", e)
-        return []
-
-
-def build(events, year):
-    output = []
-
-    for e in events:
-        name = e.get("Name", "")
-
-        # only LIV events
-        if "LIV" not in name:
+        if len(cols) < 4:
             continue
 
-        output.append({
-            "season": year,
-            "event": name,
-            "date": e.get("StartDate", ""),
-            "location": e.get("City", ""),
-            "winner": "",
-            "score": ""
-        })
+        try:
+            event = cols[0].text.strip()
+            date = cols[1].text.strip()
+            location = cols[2].text.strip()
+            winner = cols[3].text.strip()
 
-    return output
+            if "LIV Golf" not in event:
+                continue
 
+            # extract season from date
+            season = None
+            for year in ["2022", "2023", "2024", "2025", "2026"]:
+                if year in date:
+                    season = int(year)
 
-all_events = []
+            if not season:
+                continue
 
-for year in SEASONS:
-    print(f"\n--- Processing {year} ---")
+            events.append({
+                "season": season,
+                "event": event,
+                "date": date,
+                "location": location,
+                "winner": winner,
+                "score": ""
+            })
 
-    events = get_events(year)
+        except:
+            continue
 
-    print(f"{year} TOTAL EVENTS:", len(events))
+# sort
+events = sorted(events, key=lambda x: (x["season"], x["event"]))
 
-    data = build(events, year)
+# write all
+with open(OUT / "all.json", "w") as f:
+    json.dump(events, f, indent=2)
 
-    print(f"{year} LIV EVENTS:", len(data))
+# split by year
+years = {}
 
-    # write yearly file
-    with open(OUT / f"{year}.json", "w") as f:
+for e in events:
+    years.setdefault(e["season"], []).append(e)
+
+for y, data in years.items():
+    with open(OUT / f"{y}.json", "w") as f:
         json.dump(data, f, indent=2)
 
-    all_events.extend(data)
-
-    time.sleep(1)
-
-
-# write master file
-with open(OUT / "all.json", "w") as f:
-    json.dump(all_events, f, indent=2)
-
-print("\n=== DONE ===")
-print("TOTAL LIV EVENTS:", len(all_events))
+print("DONE — EVENTS:", len(events))
