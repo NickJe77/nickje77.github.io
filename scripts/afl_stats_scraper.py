@@ -1,27 +1,19 @@
-from pathlib import Path
-import json
-import csv
-import re
-import time
 import requests
 from bs4 import BeautifulSoup
+from pathlib import Path
+import json
+import re
+import time
 from urllib.parse import urljoin, urlparse, parse_qs
 
-print("AFL SCRAPER (WORKING - DIRECT SAVE)")
+print("AFL SCRAPER (ROBUST VERSION)")
 
-# -------------------------------------------------
-# CONFIG
-# -------------------------------------------------
 SEASON = 2026
-FIXTURE_URL = f"https://www.footywire.com/afl/footy/ft_match_list?year={SEASON}"
 BASE = "https://www.footywire.com"
+FIXTURE_URL = f"{BASE}/afl/footy/ft_match_list?year={SEASON}"
 
 DATA_DIR = Path("docs/data/afl")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-SEASON_JSON = DATA_DIR / f"afl_{SEASON}.json"
-MATCHES_JSON = DATA_DIR / f"afl_{SEASON}_matches.json"
-PLAYERS_JSON = DATA_DIR / f"players_{SEASON}.json"
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
@@ -34,24 +26,67 @@ def clean(x):
 def mid(url):
     return int(parse_qs(urlparse(url).query).get("mid", ["0"])[0])
 
-def parse_qtr(q):
-    if re.match(r"\d+\.\d+", q):
-        return float(q)
-    return 0.0
-
 def get_soup(url):
-    r = requests.get(url, headers=HEADERS)
+    r = requests.get(url, headers=HEADERS, timeout=20)
     r.raise_for_status()
     return BeautifulSoup(r.text, "html.parser")
+
+# -------------------------------------------------
+# SCOREBOARD (ROBUST DETECTION)
+# -------------------------------------------------
+def extract_scoreboard(soup):
+
+    tables = soup.find_all("table")
+
+    for table in tables:
+        rows = table.find_all("tr")
+
+        parsed = []
+
+        for r in rows:
+            cols = [clean(td.text) for td in r.find_all("td")]
+
+            # Must look like:
+            # Team | 3.2 | 5.6 | 7.8 | 10.10 | 70
+            if len(cols) != 6:
+                continue
+
+            # team must not contain numbers
+            if any(c.isdigit() for c in cols[0]):
+                continue
+
+            # quarter format must be X.X
+            if not re.match(r"^\d+\.\d+$", cols[1]):
+                continue
+
+            # final must be integer
+            if not cols[5].isdigit():
+                continue
+
+            parsed.append({
+                "team": cols[0],
+                "q1": cols[1],
+                "q2": cols[2],
+                "q3": cols[3],
+                "q4": cols[4],
+                "final": int(cols[5])
+            })
+
+        if len(parsed) == 2:
+            return parsed[0], parsed[1]
+
+    return None, None
 
 # -------------------------------------------------
 # HEADER
 # -------------------------------------------------
 def extract_header(soup):
     text = soup.get_text("\n")
-    lines = [clean(x) for x in text.split("\n") if clean(x)]
 
-    round_name, venue, date, crowd = "", "", "", 0
+    round_name = ""
+    venue = ""
+    crowd = 0
+    date = ""
 
     m = re.search(r"(Round\s+\d+),\s*(.*?),\s*Attendance:\s*([\d,]+)", text)
     if m:
@@ -59,51 +94,48 @@ def extract_header(soup):
         venue = m.group(2)
         crowd = int(m.group(3).replace(",", ""))
 
-    for i, line in enumerate(lines):
-        if "Round" in line and i+1 < len(lines):
+    lines = [clean(x) for x in text.split("\n") if clean(x)]
+
+    for i, l in enumerate(lines):
+        if "Round" in l and i+1 < len(lines):
             date = lines[i+1]
             break
 
     return round_name, venue, date, crowd
 
 # -------------------------------------------------
-# SCOREBOARD (LOCKED)
-# -------------------------------------------------
-def extract_scoreboard(soup):
-    lines = [clean(x) for x in soup.get_text("\n").split("\n") if clean(x)]
-
-    for i, line in enumerate(lines):
-        if line == "Team Q1 Q2 Q3 Q4 Final":
-            rows = []
-            for l in lines[i+1:i+5]:
-                m = re.match(r"^(.*?)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+)$", l)
-                if m:
-                    rows.append({
-                        "team": clean(m.group(1)),
-                        "q1": m.group(2),
-                        "q2": m.group(3),
-                        "q3": m.group(4),
-                        "q4": m.group(5),
-                        "final": int(m.group(6))
-                    })
-            if len(rows) == 2:
-                return rows[0], rows[1]
-
-    return None, None
-
-# -------------------------------------------------
 # PLAYER TABLE
 # -------------------------------------------------
+def extract_player_tables(soup):
+
+    tables = soup.find_all("table")
+    results = []
+
+    for table in tables:
+        text = table.get_text()
+
+        if "Player" in text and "K" in text and "HB" in text:
+            prev = table.find_previous(["b", "font"])
+
+            if prev and "Match Statistics" in prev.text:
+                team = clean(prev.text.split("Match Statistics")[0])
+                results.append((team, table))
+
+    return results[:2]
+
 def parse_table(tbl, team):
+
     rows = []
     seen = set()
 
     for tr in tbl.find_all("tr"):
         cols = [clean(td.text) for td in tr.find_all("td")]
+
         if len(cols) < 5 or cols[0] == "Player":
             continue
 
         name = cols[0]
+
         if name in seen:
             continue
         seen.add(name)
@@ -121,28 +153,26 @@ def parse_table(tbl, team):
 # SCRAPE MATCH
 # -------------------------------------------------
 def scrape_match(url):
+
     match_id = mid(url)
     soup = get_soup(url)
 
-    round_name, venue, date, crowd = extract_header(soup)
     home, away = extract_scoreboard(soup)
 
     if not home:
-        print("FAILED:", match_id)
+        print("SKIPPED (no valid scoreboard):", match_id)
         return []
 
-    tables = []
-    for h in soup.find_all(["b","font"]):
-        if "Match Statistics" in h.text:
-            team = clean(h.text.split("Match Statistics")[0])
-            table = h.find_next("table")
-            tables.append((team, table))
+    round_name, venue, date, crowd = extract_header(soup)
+
+    tables = extract_player_tables(soup)
+
+    if len(tables) < 2:
+        print("SKIPPED (no player tables):", match_id)
+        return []
 
     home_rows = parse_table(tables[0][1], home["team"])
     away_rows = parse_table(tables[1][1], away["team"])
-
-    margin = abs(home["final"] - away["final"])
-    total = home["final"] + away["final"]
 
     rows = []
 
@@ -163,22 +193,14 @@ def scrape_match(url):
             "away_team": away["team"],
             "home_points": home["final"],
             "away_points": away["final"],
-            "margin": margin,
-            "total_points": total,
-            "home_q1": parse_qtr(home["q1"]),
-            "home_q2": parse_qtr(home["q2"]),
-            "home_q3": parse_qtr(home["q3"]),
-            "home_q4": parse_qtr(home["q4"]),
-            "away_q1": parse_qtr(away["q1"]),
-            "away_q2": parse_qtr(away["q2"]),
-            "away_q3": parse_qtr(away["q3"]),
-            "away_q4": parse_qtr(away["q4"]),
+            "margin": abs(home["final"] - away["final"]),
+            "total_points": home["final"] + away["final"],
             "crowd": crowd,
             "date": date,
             "date_iso": ""
         })
 
-    print("DONE:", match_id)
+    print("OK:", match_id, home["final"], "-", away["final"])
     return rows
 
 # -------------------------------------------------
@@ -195,36 +217,16 @@ urls = list(set(
 all_rows = []
 
 for u in urls:
-    all_rows.extend(scrape_match(u))
-    time.sleep(0.3)
+    try:
+        all_rows.extend(scrape_match(u))
+        time.sleep(0.3)
+    except Exception as e:
+        print("ERROR:", u)
 
 # -------------------------------------------------
 # SAVE
 # -------------------------------------------------
-with open(SEASON_JSON, "w") as f:
+with open(DATA_DIR / f"afl_{SEASON}.json", "w") as f:
     json.dump(all_rows, f, indent=2)
-
-matches = {}
-for r in all_rows:
-    mid_ = r["match_id"]
-    if mid_ not in matches:
-        matches[mid_] = {
-            "match_id": mid_,
-            "round": r["round"],
-            "home_team": r["home_team"],
-            "away_team": r["away_team"],
-            "home_score": r["home_points"],
-            "away_score": r["away_points"]
-        }
-
-with open(MATCHES_JSON, "w") as f:
-    json.dump(list(matches.values()), f, indent=2)
-
-players = {}
-for r in all_rows:
-    players.setdefault(r["player"], {"player": r["player"], "games": []})["games"].append(r)
-
-with open(PLAYERS_JSON, "w") as f:
-    json.dump(list(players.values()), f, indent=2)
 
 print("DONE ✅")
