@@ -40,13 +40,11 @@ body{
 
 /* HERO */
 .hero{
-  position:relative;
-  height:180px;
+  height:140px;
   display:flex;
   align-items:center;
   justify-content:center;
   color:#fff;
-  text-align:center;
   background:
     linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)),
     url("https://images.unsplash.com/photo-1599058917212-d750089bc07b?q=80&w=1400");
@@ -55,8 +53,8 @@ body{
 }
 
 .hero h1{
-  font-size:42px;
   margin:0;
+  font-size:34px;
 }
 
 /* PAGE */
@@ -66,41 +64,18 @@ body{
   padding:25px;
 }
 
-/* TOGGLE */
-.toggle{
-  display:flex;
-  gap:10px;
-  margin-bottom:20px;
-}
-
-.toggle button{
-  padding:8px 14px;
-  border:none;
-  border-radius:20px;
-  background:#ddd;
-  cursor:pointer;
-  font-weight:600;
-}
-
-.toggle button.active{
-  background:var(--green);
-  color:#fff;
-}
-
-/* FILTERS */
-.filters{
+/* CONTROLS */
+.controls{
   display:flex;
   gap:15px;
   margin-bottom:20px;
-  flex-wrap:wrap;
 }
 
-.filters input,
-.filters select{
+.controls select{
   padding:8px 10px;
-  font-size:14px;
   border:1px solid #ccc;
   border-radius:6px;
+  font-size:14px;
 }
 
 /* TABLE */
@@ -153,16 +128,14 @@ tbody tr:nth-child(even){
 
 <div class="page">
 
-<div class="toggle">
-  <button class="active" id="allBtn">All Results</button>
-  <button id="tournamentBtn">By Tournament</button>
-</div>
-
-<div class="filters">
-  <input type="text" id="search" placeholder="Search tournament or winner">
-  
+<div class="controls">
   <select id="yearFilter">
     <option value="all">All Years</option>
+  </select>
+
+  <select id="viewMode">
+    <option value="all">All Results</option>
+    <option value="tournaments">Tournaments</option>
   </select>
 </div>
 
@@ -187,14 +160,13 @@ tbody tr:nth-child(even){
 
 <script>
 let data = [];
-let mode = "all";
 
 async function loadData(){
   const res = await fetch("/data/golf/pga_winners.json");
   data = await res.json();
 
   populateYearFilter();
-  renderTable(data);
+  render();
 }
 
 function populateYearFilter(){
@@ -209,7 +181,28 @@ function populateYearFilter(){
   });
 }
 
-function renderTable(rows){
+function render(){
+  let filtered = [...data];
+
+  const year = document.getElementById("yearFilter").value;
+  const mode = document.getElementById("viewMode").value;
+
+  if(year !== "all"){
+    filtered = filtered.filter(d => d.year == year);
+  }
+
+  if(mode === "tournaments"){
+    const grouped = {};
+    filtered.forEach(d=>{
+      if(!grouped[d.event]) grouped[d.event] = d;
+    });
+    filtered = Object.values(grouped);
+  }
+
+  drawTable(filtered);
+}
+
+function drawTable(rows){
   const tbody = document.getElementById("tableBody");
   tbody.innerHTML = "";
 
@@ -230,50 +223,8 @@ function renderTable(rows){
   });
 }
 
-function applyFilters(){
-  let filtered = [...data];
-
-  const search = document.getElementById("search").value.toLowerCase();
-  const year = document.getElementById("yearFilter").value;
-
-  if(search){
-    filtered = filtered.filter(d =>
-      (d.event || "").toLowerCase().includes(search) ||
-      (d.winner || "").toLowerCase().includes(search)
-    );
-  }
-
-  if(year !== "all"){
-    filtered = filtered.filter(d => d.year == year);
-  }
-
-  renderTable(filtered);
-}
-
-/* TOGGLE */
-document.getElementById("allBtn").onclick = () => {
-  mode = "all";
-  document.getElementById("allBtn").classList.add("active");
-  document.getElementById("tournamentBtn").classList.remove("active");
-  renderTable(data);
-};
-
-document.getElementById("tournamentBtn").onclick = () => {
-  mode = "tournament";
-
-  document.getElementById("tournamentBtn").classList.add("active");
-  document.getElementById("allBtn").classList.remove("active");
-
-  const grouped = {};
-  data.forEach(d=>{
-    if(!grouped[d.event]) grouped[d.event] = d;
-  });
-
-  renderTable(Object.values(grouped));
-};
-
-document.getElementById("search").addEventListener("input", applyFilters);
-document.getElementById("yearFilter").addEventListener("change", applyFilters);
+document.getElementById("yearFilter").addEventListener("change", render);
+document.getElementById("viewMode").addEventListener("change", render);
 
 loadData();
 </script>
