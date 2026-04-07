@@ -46,7 +46,6 @@ body{
   display:flex;
   align-items:center;
   justify-content:center;
-  text-align:center;
   color:#fff;
   background:
     linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)),
@@ -63,19 +62,9 @@ body{
 
 /* PAGE */
 .page{
-  max-width:1000px;
+  max-width:1100px;
   margin:auto;
   padding:25px;
-}
-
-/* SECTION */
-.section{
-  margin-bottom:30px;
-}
-
-.section h2{
-  margin:0 0 10px;
-  color:#0c6f3c;
 }
 
 /* TABLE */
@@ -107,17 +96,14 @@ tbody tr:nth-child(even){
 }
 
 .year{
-  width:100px;
   font-weight:700;
-}
-
-.player{
-  font-weight:600;
+  width:100px;
 }
 
 .player a{
   color:#111;
   text-decoration:none;
+  font-weight:600;
 }
 
 .player a:hover{
@@ -140,70 +126,78 @@ tbody tr:nth-child(even){
   <h1>Majors</h1>
 </div>
 
-<div class="page" id="content"></div>
+<div class="page">
+
+<div class="table-card">
+<table>
+<thead>
+<tr>
+  <th>Year</th>
+  <th>Masters</th>
+  <th>PGA Championship</th>
+  <th>U.S. Open</th>
+  <th>The Open</th>
+</tr>
+</thead>
+<tbody id="tableBody"></tbody>
+</table>
+</div>
+
+</div>
 
 <script>
-const majors = [
-  "Masters Tournament",
-  "PGA Championship",
-  "U.S. Open",
-  "The Open Championship"
-];
+const majors = {
+  "Masters Tournament": "masters",
+  "PGA Championship": "pga",
+  "U.S. Open": "usopen",
+  "The Open Championship": "open"
+};
 
 async function load(){
   const res = await fetch("/data/golf/pga_winners.json");
   const data = await res.json();
 
-  const container = document.getElementById("content");
+  // filter majors only
+  const majorsData = data.filter(d => majors[d.event]);
 
-  majors.forEach(m=>{
-    const section = document.createElement("div");
-    section.className = "section";
+  // group by year
+  const years = [...new Set(majorsData.map(d => d.year))].sort((a,b)=>b-a);
 
-    const title = document.createElement("h2");
-    title.textContent = m;
-    section.appendChild(title);
+  const tbody = document.getElementById("tableBody");
 
-    const tableCard = document.createElement("div");
-    tableCard.className = "table-card";
+  years.forEach(year=>{
+    const row = {
+      masters: "",
+      pga: "",
+      usopen: "",
+      open: ""
+    };
 
-    const table = document.createElement("table");
-
-    table.innerHTML = `
-      <thead>
-        <tr>
-          <th>Year</th>
-          <th>Winner</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    `;
-
-    const tbody = table.querySelector("tbody");
-
-    data
-      .filter(d => d.event === m)
-      .filter(d => !(d.winner || "").toLowerCase().includes("cancel"))
-      .sort((a,b)=>b.year-a.year)
-      .forEach(r=>{
-        const tr = document.createElement("tr");
-
-        tr.innerHTML = `
-          <td class="year">${r.year}</td>
-          <td class="player">
-            <a href="/golf-player.html?player=${encodeURIComponent(r.winner)}">
-              ${r.winner}
-            </a>
-          </td>
-        `;
-
-        tbody.appendChild(tr);
+    majorsData
+      .filter(d => d.year === year)
+      .forEach(d=>{
+        if(!(d.winner || "").toLowerCase().includes("cancel")){
+          row[majors[d.event]] = d.winner;
+        }
       });
 
-    tableCard.appendChild(table);
-    section.appendChild(tableCard);
-    container.appendChild(section);
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td class="year">${year}</td>
+      <td class="player">${formatPlayer(row.masters)}</td>
+      <td class="player">${formatPlayer(row.pga)}</td>
+      <td class="player">${formatPlayer(row.usopen)}</td>
+      <td class="player">${formatPlayer(row.open)}</td>
+    `;
+
+    tbody.appendChild(tr);
   });
+}
+
+function formatPlayer(name){
+  if(!name) return "";
+  return `<a href="/golf-player.html?player=${encodeURIComponent(name)}">${name}</a>`;
 }
 
 load();
