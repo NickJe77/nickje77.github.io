@@ -6,7 +6,7 @@ import re
 import time
 from urllib.parse import urljoin, urlparse, parse_qs
 
-print("AFL SCRAPER (ROBUST VERSION)")
+print("AFL SCRAPER (SAFE VERSION - NO DATA WIPE)")
 
 SEASON = 2026
 BASE = "https://www.footywire.com"
@@ -14,6 +14,8 @@ FIXTURE_URL = f"{BASE}/afl/footy/ft_match_list?year={SEASON}"
 
 DATA_DIR = Path("docs/data/afl")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+SEASON_FILE = DATA_DIR / f"afl_{SEASON}.json"
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
@@ -32,7 +34,7 @@ def get_soup(url):
     return BeautifulSoup(r.text, "html.parser")
 
 # -------------------------------------------------
-# SCOREBOARD (ROBUST DETECTION)
+# SCOREBOARD (STRICT + RELIABLE)
 # -------------------------------------------------
 def extract_scoreboard(soup):
 
@@ -46,29 +48,17 @@ def extract_scoreboard(soup):
         for r in rows:
             cols = [clean(td.text) for td in r.find_all("td")]
 
-            # Must look like:
-            # Team | 3.2 | 5.6 | 7.8 | 10.10 | 70
             if len(cols) != 6:
                 continue
 
-            # team must not contain numbers
-            if any(c.isdigit() for c in cols[0]):
-                continue
-
-            # quarter format must be X.X
             if not re.match(r"^\d+\.\d+$", cols[1]):
                 continue
 
-            # final must be integer
             if not cols[5].isdigit():
                 continue
 
             parsed.append({
                 "team": cols[0],
-                "q1": cols[1],
-                "q2": cols[2],
-                "q3": cols[3],
-                "q4": cols[4],
                 "final": int(cols[5])
             })
 
@@ -78,134 +68,37 @@ def extract_scoreboard(soup):
     return None, None
 
 # -------------------------------------------------
-# HEADER
-# -------------------------------------------------
-def extract_header(soup):
-    text = soup.get_text("\n")
-
-    round_name = ""
-    venue = ""
-    crowd = 0
-    date = ""
-
-    m = re.search(r"(Round\s+\d+),\s*(.*?),\s*Attendance:\s*([\d,]+)", text)
-    if m:
-        round_name = m.group(1)
-        venue = m.group(2)
-        crowd = int(m.group(3).replace(",", ""))
-
-    lines = [clean(x) for x in text.split("\n") if clean(x)]
-
-    for i, l in enumerate(lines):
-        if "Round" in l and i+1 < len(lines):
-            date = lines[i+1]
-            break
-
-    return round_name, venue, date, crowd
-
-# -------------------------------------------------
-# PLAYER TABLE
-# -------------------------------------------------
-def extract_player_tables(soup):
-
-    tables = soup.find_all("table")
-    results = []
-
-    for table in tables:
-        text = table.get_text()
-
-        if "Player" in text and "K" in text and "HB" in text:
-            prev = table.find_previous(["b", "font"])
-
-            if prev and "Match Statistics" in prev.text:
-                team = clean(prev.text.split("Match Statistics")[0])
-                results.append((team, table))
-
-    return results[:2]
-
-def parse_table(tbl, team):
-
-    rows = []
-    seen = set()
-
-    for tr in tbl.find_all("tr"):
-        cols = [clean(td.text) for td in tr.find_all("td")]
-
-        if len(cols) < 5 or cols[0] == "Player":
-            continue
-
-        name = cols[0]
-
-        if name in seen:
-            continue
-        seen.add(name)
-
-        stats = [int(float(c)) if c.replace('.','',1).isdigit() else 0 for c in cols[1:]]
-
-        while len(stats) < 10:
-            stats.append(0)
-
-        rows.append((name, team, stats))
-
-    return rows
-
-# -------------------------------------------------
 # SCRAPE MATCH
 # -------------------------------------------------
 def scrape_match(url):
 
     match_id = mid(url)
-    soup = get_soup(url)
+
+    try:
+        soup = get_soup(url)
+    except:
+        print("FAILED LOAD:", match_id)
+        return None
 
     home, away = extract_scoreboard(soup)
 
     if not home:
-        print("SKIPPED (no valid scoreboard):", match_id)
-        return []
+        print("SKIPPED (no scoreboard):", match_id)
+        return None
 
-    round_name, venue, date, crowd = extract_header(soup)
-
-    tables = extract_player_tables(soup)
-
-    if len(tables) < 2:
-        print("SKIPPED (no player tables):", match_id)
-        return []
-
-    home_rows = parse_table(tables[0][1], home["team"])
-    away_rows = parse_table(tables[1][1], away["team"])
-
-    rows = []
-
-    for name, team, s in home_rows + away_rows:
-        rows.append({
-            "season": SEASON,
-            "round": round_name,
-            "venue": venue,
-            "match_id": match_id,
-            "player": name,
-            "played_for": team,
-            "played_against": away["team"] if team == home["team"] else home["team"],
-            "K": s[0], "HB": s[1], "D": s[2],
-            "M": s[3], "G": s[4], "B": s[5],
-            "T": s[6], "HO": s[7],
-            "FF": s[8], "FA": s[9],
-            "home_team": home["team"],
-            "away_team": away["team"],
-            "home_points": home["final"],
-            "away_points": away["final"],
-            "margin": abs(home["final"] - away["final"]),
-            "total_points": home["final"] + away["final"],
-            "crowd": crowd,
-            "date": date,
-            "date_iso": ""
-        })
-
-    print("OK:", match_id, home["final"], "-", away["final"])
-    return rows
+    return {
+        "match_id": match_id,
+        "home_team": home["team"],
+        "away_team": away["team"],
+        "home_score": home["final"],
+        "away_score": away["final"]
+    }
 
 # -------------------------------------------------
 # RUN
 # -------------------------------------------------
+print("Fetching fixture...")
+
 fixture = get_soup(FIXTURE_URL)
 
 urls = list(set(
@@ -214,19 +107,48 @@ urls = list(set(
     if "ft_match_statistics?mid=" in a["href"]
 ))
 
-all_rows = []
+print(f"Found {len(urls)} matches")
+
+new_data = []
 
 for u in urls:
-    try:
-        all_rows.extend(scrape_match(u))
-        time.sleep(0.3)
-    except Exception as e:
-        print("ERROR:", u)
+    result = scrape_match(u)
+    if result:
+        new_data.append(result)
+    time.sleep(0.3)
+
+print(f"Scraped {len(new_data)} valid matches")
 
 # -------------------------------------------------
-# SAVE
+# SAFE SAVE
 # -------------------------------------------------
-with open(DATA_DIR / f"afl_{SEASON}.json", "w") as f:
-    json.dump(all_rows, f, indent=2)
+if len(new_data) == 0:
+    print("❌ NO DATA SCRAPED — NOT SAVING (PREVENT DATA WIPE)")
+    exit()
 
-print("DONE ✅")
+# Load existing data if exists
+if SEASON_FILE.exists():
+    with open(SEASON_FILE) as f:
+        old_data = json.load(f)
+else:
+    old_data = []
+
+# Merge (no duplicates)
+existing_ids = {m["match_id"] for m in old_data}
+
+merged = old_data.copy()
+
+added = 0
+
+for m in new_data:
+    if m["match_id"] not in existing_ids:
+        merged.append(m)
+        added += 1
+
+print(f"Added {added} new matches")
+
+# SAVE ONLY IF SAFE
+with open(SEASON_FILE, "w") as f:
+    json.dump(merged, f, indent=2)
+
+print("✅ SAFE SAVE COMPLETE")
