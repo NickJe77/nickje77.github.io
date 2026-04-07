@@ -1,8 +1,9 @@
 import requests
 import json
 from pathlib import Path
+from bs4 import BeautifulSoup
 
-print("LIV SCRAPER (WIKI API VERSION)")
+print("LIV SCRAPER (SECTION TARGETED FIX)")
 
 START_YEAR = 2022
 END_YEAR = 2026
@@ -11,75 +12,70 @@ OUT = Path("docs/data/golf/liv")
 OUT.mkdir(parents=True, exist_ok=True)
 
 
-def get_page(year):
-    title = f"{year} LIV Golf League"
-
+def get_html(year):
     url = "https://en.wikipedia.org/w/api.php"
 
     params = {
         "action": "parse",
-        "page": title,
+        "page": f"{year} LIV Golf League",
         "format": "json",
         "prop": "text"
     }
 
     r = requests.get(url, params=params)
 
-    if r.status_code != 200:
-        print("FAILED:", year)
-        return ""
-
-    data = r.json()
-
     try:
-        return data["parse"]["text"]["*"]
+        return r.json()["parse"]["text"]["*"]
     except:
-        print("NO PAGE:", year)
         return ""
 
 
 def extract_events(html, year):
-    from bs4 import BeautifulSoup
-
     soup = BeautifulSoup(html, "html.parser")
-    tables = soup.find_all("table")
+
+    # 🔥 find "Results" section properly
+    results_header = soup.find(id="Results")
+
+    if not results_header:
+        print("NO RESULTS SECTION")
+        return []
+
+    # next table after "Results"
+    table = results_header.find_next("table")
+
+    if not table:
+        print("NO TABLE AFTER RESULTS")
+        return []
 
     events = []
 
-    for table in tables:
-        text = table.get_text(" ", strip=True).lower()
+    rows = table.find_all("tr")
 
-        if "winner" in text and "location" in text:
+    for row in rows:
+        cols = [td.text.strip() for td in row.find_all("td")]
 
-            rows = table.find_all("tr")
+        if len(cols) < 4:
+            continue
 
-            for row in rows:
-                cols = [td.text.strip() for td in row.find_all("td")]
+        try:
+            event = {
+                "season": year,
+                "date": cols[0],
+                "event": cols[1],
+                "location": cols[2],
+                "winner": cols[3],
+                "score": cols[4] if len(cols) > 4 else ""
+            }
 
-                if len(cols) < 4:
-                    continue
+            if len(event["event"]) < 3:
+                continue
 
-                event = {
-                    "season": year,
-                    "date": cols[0],
-                    "event": cols[1],
-                    "location": cols[2],
-                    "winner": cols[3],
-                    "score": cols[4] if len(cols) > 4 else ""
-                }
+            events.append(event)
 
-                # clean junk
-                if len(event["event"]) < 3:
-                    continue
+        except:
+            continue
 
-                if "team" in event["event"].lower():
-                    continue
-
-                events.append(event)
-
-            return events
-
-    return []
+    return events
 
 
 # -----------------------
@@ -90,7 +86,7 @@ all_events = []
 for year in range(START_YEAR, END_YEAR + 1):
     print(f"\nProcessing {year}")
 
-    html = get_page(year)
+    html = get_html(year)
 
     if not html:
         data = []
