@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from bs4 import BeautifulSoup
 
-print("LIV SCRAPER (SECTION TARGETED FIX)")
+print("LIV SCRAPER (FINAL WORKING VERSION)")
 
 START_YEAR = 2022
 END_YEAR = 2026
@@ -32,50 +32,49 @@ def get_html(year):
 
 def extract_events(html, year):
     soup = BeautifulSoup(html, "html.parser")
+    tables = soup.find_all("table")
 
-    # 🔥 find "Results" section properly
-    results_header = soup.find(id="Results")
+    for table in tables:
+        text = table.get_text(" ", strip=True).lower()
 
-    if not results_header:
-        print("NO RESULTS SECTION")
-        return []
+        # 🔥 smarter detection
+        if "liv golf" in text and "winner" in text:
 
-    # next table after "Results"
-    table = results_header.find_next("table")
+            rows = table.find_all("tr")
+            events = []
 
-    if not table:
-        print("NO TABLE AFTER RESULTS")
-        return []
+            for row in rows:
+                cols = [td.text.strip() for td in row.find_all("td")]
 
-    events = []
+                if len(cols) < 4:
+                    continue
 
-    rows = table.find_all("tr")
+                try:
+                    event = {
+                        "season": year,
+                        "date": cols[0],
+                        "event": cols[1],
+                        "location": cols[2],
+                        "winner": cols[3],
+                        "score": cols[4] if len(cols) > 4 else ""
+                    }
 
-    for row in rows:
-        cols = [td.text.strip() for td in row.find_all("td")]
+                    # clean junk rows
+                    if len(event["event"]) < 5:
+                        continue
 
-        if len(cols) < 4:
-            continue
+                    if "team" in event["event"].lower():
+                        continue
 
-        try:
-            event = {
-                "season": year,
-                "date": cols[0],
-                "event": cols[1],
-                "location": cols[2],
-                "winner": cols[3],
-                "score": cols[4] if len(cols) > 4 else ""
-            }
+                    events.append(event)
 
-            if len(event["event"]) < 3:
-                continue
+                except:
+                    continue
 
-            events.append(event)
+            if events:
+                return events
 
-        except:
-            continue
-
-    return events
+    return []
 
 
 # -----------------------
