@@ -46,19 +46,62 @@ body{
   background:linear-gradient(135deg,#08552d,#0c6f3c);
   color:#fff;
   text-align:center;
-  padding:40px 20px;
+  padding:35px 20px 25px;
   border-bottom:4px solid var(--gold);
 }
 
 .hero h1{
   margin:0;
-  font-size:42px;
+  font-size:40px;
 }
 
 .hero .wins{
   margin-top:10px;
   font-size:18px;
-  opacity:.95;
+}
+
+/* SEARCH */
+.search-bar{
+  margin-top:18px;
+  display:flex;
+  justify-content:center;
+}
+
+.search-wrap{
+  position:relative;
+  width:320px;
+}
+
+.search-wrap input{
+  width:100%;
+  padding:10px 12px;
+  border-radius:8px;
+  border:none;
+  font-size:14px;
+}
+
+/* AUTOCOMPLETE */
+.suggestions{
+  position:absolute;
+  top:42px;
+  left:0;
+  right:0;
+  background:#fff;
+  border:1px solid #ccc;
+  border-radius:8px;
+  max-height:220px;
+  overflow-y:auto;
+  display:none;
+  z-index:10;
+}
+
+.suggestions div{
+  padding:10px;
+  cursor:pointer;
+}
+
+.suggestions div:hover{
+  background:#eee;
 }
 
 /* PAGE */
@@ -119,6 +162,14 @@ tbody tr:nth-child(even){
 <div class="hero">
   <h1 id="playerName">Player</h1>
   <div class="wins" id="winsText"></div>
+
+  <!-- SEARCH -->
+  <div class="search-bar">
+    <div class="search-wrap">
+      <input type="text" id="playerSearch" placeholder="Search player">
+      <div id="playerSuggestions" class="suggestions"></div>
+    </div>
+  </div>
 </div>
 
 <div class="page">
@@ -145,6 +196,8 @@ const majorsList = [
   "The Open Championship"
 ];
 
+let allPlayers = [];
+
 function getParam(name){
   const url=new URL(window.location.href);
   return url.searchParams.get(name);
@@ -157,6 +210,9 @@ async function load(){
   const res=await fetch("/data/golf/pga_winners.json");
   const data=await res.json();
 
+  // build player list
+  allPlayers=[...new Set(data.map(d=>d.winner))].sort();
+
   const wins=data
     .filter(d=>d.winner===player)
     .filter(d=>{
@@ -165,14 +221,11 @@ async function load(){
     })
     .sort((a,b)=>b.year-a.year);
 
-  // TOTAL WINS
   const totalWins = wins.length;
-
-  // MAJOR WINS
   const majorWins = wins.filter(w => majorsList.includes(w.event)).length;
 
   document.getElementById("winsText").textContent =
-    `${totalWins} wins / ${majorWins} ${majorWins === 1 ? "major" : "majors"}`;
+    `${totalWins} wins / ${majorWins} ${majorWins===1?"major":"majors"}`;
 
   const tbody=document.getElementById("tableBody");
 
@@ -185,6 +238,41 @@ async function load(){
     `;
 
     tbody.appendChild(tr);
+  });
+
+  setupSearch();
+}
+
+/* SEARCH */
+function setupSearch(){
+  const input=document.getElementById("playerSearch");
+  const box=document.getElementById("playerSuggestions");
+
+  input.addEventListener("input",()=>{
+    const val=input.value.toLowerCase();
+    box.innerHTML="";
+
+    if(!val){
+      box.style.display="none";
+      return;
+    }
+
+    const matches=allPlayers
+      .filter(p=>p.toLowerCase().includes(val))
+      .slice(0,10);
+
+    matches.forEach(m=>{
+      const div=document.createElement("div");
+      div.textContent=m;
+
+      div.onclick=()=>{
+        window.location.href="/golf-player.html?player="+encodeURIComponent(m);
+      };
+
+      box.appendChild(div);
+    });
+
+    box.style.display="block";
   });
 }
 
