@@ -3,7 +3,7 @@
 <head>
 <script src="/js/analytics.js"></script>
 <meta charset="UTF-8">
-<title>Golf Players | The Sporting Almanac</title>
+<title>Golf Player | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -46,7 +46,13 @@ body{
 
 .hero h1{
   margin:0;
-  font-size:40px;
+  font-size:34px;
+}
+
+.summary{
+  margin-top:10px;
+  font-size:16px;
+  opacity:.9;
 }
 
 .page{
@@ -92,12 +98,6 @@ th, td{
 tbody tr:nth-child(even){
   background:var(--zebra);
 }
-
-.player-link{
-  color:#0056d6;
-  text-decoration:none;
-  font-weight:600;
-}
 </style>
 </head>
 
@@ -111,7 +111,8 @@ tbody tr:nth-child(even){
 </div>
 
 <div class="hero">
-  <h1>Golf Players</h1>
+  <h1 id="playerName">Loading...</h1>
+  <div class="summary" id="summary"></div>
 </div>
 
 <div class="page">
@@ -124,9 +125,9 @@ tbody tr:nth-child(even){
 <table>
 <thead>
 <tr>
-  <th>Player</th>
-  <th>Wins</th>
-  <th>Majors</th>
+  <th>Year</th>
+  <th>Tournament</th>
+  <th>Major</th>
 </tr>
 </thead>
 <tbody id="tbody"></tbody>
@@ -138,96 +139,100 @@ tbody tr:nth-child(even){
 <script>
 function clean(name){
   if(!name) return "";
+  name = String(name).replace(/\s*\(.*?\)/g,"").replace(/\*/g,"").trim();
+  name = name.split(/\/|&| and /i)[0].trim();
 
-  name = String(name);
-
-  // remove brackets
-  name = name.replace(/\s*\(.*?\)/g,"");
-
-  // remove junk
-  name = name.replace(/\*/g,"").trim();
-
-  if(name.toLowerCase() === "not played") return "";
-
-  // split combo names
-  if(name.includes(" / ")) name = name.split(" / ")[0];
-  if(name.includes("/")) name = name.split("/")[0];
-  if(name.includes(" & ")) name = name.split(" & ")[0];
-  if(name.includes("&")) name = name.split("&")[0];
-  if(name.includes(" and ")) name = name.split(" and ")[0];
-  if(name.includes(" And ")) name = name.split(" And ")[0];
-
-  // 🔥 NORMALISE CASE
   name = name.toLowerCase()
     .split(" ")
     .map(w => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
 
-  // 🔥 FIX COMMON NAMES
   if(name === "Rory Mcilroy") name = "Rory McIlroy";
 
-  return name.trim();
+  return name;
 }
 
 function slug(name){
   return name.toLowerCase().replace(/[^a-z0-9]+/g,"-");
 }
 
+function unslug(s){
+  return s.replace(/-/g," ");
+}
+
 async function load(){
+  const params = new URLSearchParams(location.search);
+  const playerSlug = params.get("player");
+
+  if(!playerSlug){
+    document.getElementById("playerName").innerText = "Player not found";
+    return;
+  }
+
   const res = await fetch("/data/golf/pga_winners.json");
   const data = await res.json();
 
-  const players = {};
+  let playerName = "";
+  const wins = [];
 
   data.forEach(d=>{
-    let name = clean(d.winner);
+    const name = clean(d.winner);
     if(!name) return;
 
-    // 🔥 FORCE MERGE USING LOWERCASE KEY
-    const key = name.toLowerCase();
+    if(slug(name) === playerSlug){
+      playerName = name;
 
-    if(!players[key]){
-      players[key] = {
-        name: name,
-        wins: 0,
-        majors: 0
-      };
-    }
-
-    players[key].wins++;
-
-    if(d.major === true){
-      players[key].majors++;
+      wins.push({
+        year: d.year,
+        tournament: d.tournament,
+        major: d.major === true
+      });
     }
   });
 
-  const list = Object.values(players)
-    .sort((a,b)=>b.wins-a.wins);
+  if(!playerName){
+    document.getElementById("playerName").innerText = "Player not found";
+    return;
+  }
+
+  // sort latest first
+  wins.sort((a,b)=>b.year - a.year);
+
+  document.getElementById("playerName").innerText = playerName;
+
+  const totalWins = wins.length;
+  const majors = wins.filter(w=>w.major).length;
+
+  document.getElementById("summary").innerText =
+    totalWins + " wins / " + majors + " majors";
 
   const tbody = document.getElementById("tbody");
 
-  function render(filter=""){
-    tbody.innerHTML="";
+  wins.forEach(w=>{
+    const tr = document.createElement("tr");
 
-    list
-      .filter(p=>p.name.toLowerCase().includes(filter))
-      .forEach(p=>{
-        const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${w.year}</td>
+      <td>${w.tournament}</td>
+      <td>${w.major ? "Yes" : ""}</td>
+    `;
 
-        tr.innerHTML = `
-          <td><a class="player-link" href="/golf-player.html?player=${slug(p.name)}">${p.name}</a></td>
-          <td>${p.wins}</td>
-          <td>${p.majors}</td>
-        `;
+    tbody.appendChild(tr);
+  });
 
-        tbody.appendChild(tr);
-      });
-  }
-
-  render();
+  // SEARCH (redirect to player)
+  const players = [...new Set(
+    data.map(d=>clean(d.winner)).filter(n=>n)
+  )].sort();
 
   document.getElementById("search").addEventListener("input", e=>{
-    render(e.target.value.toLowerCase());
+    const val = e.target.value.toLowerCase();
+
+    const match = players.find(p => p.toLowerCase().startsWith(val));
+
+    if(match && val.length > 2){
+      location.href = "/golf-player.html?player=" + slug(match);
+    }
   });
 }
 
