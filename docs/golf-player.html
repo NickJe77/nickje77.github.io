@@ -178,7 +178,6 @@ tbody tr:nth-child(even){
 <script>
 function clean(name){
   if(!name) return "";
-
   return String(name)
     .replace(/\s*\(.*?\)/g, "")
     .replace(/\*/g, "")
@@ -198,8 +197,7 @@ function slug(name){
 
 function isMajor(name){
   if(!name) return false;
-  const n = String(name).toLowerCase();
-
+  const n = name.toLowerCase();
   return (
     n.includes("masters") ||
     n.includes("u.s. open") ||
@@ -210,20 +208,34 @@ function isMajor(name){
   );
 }
 
+async function fetchData(){
+  // TRY primary path
+  let res = await fetch("/data/golf/pga_winners.json");
+
+  // fallback if broken
+  if(!res.ok){
+    res = await fetch("/docs/data/golf/pga_winners.json");
+  }
+
+  if(!res.ok){
+    console.error("DATA FAILED TO LOAD");
+    return [];
+  }
+
+  return await res.json();
+}
+
 async function load(){
   const params = new URLSearchParams(location.search);
-
-  // FIX: normalize whatever comes in from any page
   const rawPlayerParam = params.get("player") || "";
   const playerSlug = slug(decodeURIComponent(rawPlayerParam));
 
-  if(!playerSlug){
-    document.getElementById("playerName").innerText = "Player not found";
+  const data = await fetchData();
+
+  if(!data.length){
+    document.getElementById("playerName").innerText = "Data not loading";
     return;
   }
-
-  const res = await fetch("/data/golf/pga_winners.json");
-  const data = await res.json();
 
   let playerName = "";
   const wins = [];
@@ -247,8 +259,6 @@ async function load(){
 
   if(!playerName){
     document.getElementById("playerName").innerText = "Player not found";
-    document.getElementById("summary").innerText = "";
-    document.getElementById("tbody").innerHTML = "";
   } else {
     document.getElementById("playerName").innerText = playerName;
 
@@ -276,6 +286,7 @@ async function load(){
       });
   }
 
+  // ===== SEARCH FIX (NOW WORKS) =====
   const players = [...new Set(
     data.map(d => clean(d.winner)).filter(Boolean)
   )].sort((a,b) => a.localeCompare(b));
@@ -312,7 +323,6 @@ async function load(){
     if(e.key === "Enter"){
       const val = search.value.toLowerCase().trim();
       const match = players.find(p => p.toLowerCase().includes(val));
-
       if(match){
         location.href = "/golf-player.html?player=" + slug(match);
       }
