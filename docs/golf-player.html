@@ -144,18 +144,27 @@ function clean(name){
   // remove brackets
   name = name.replace(/\s*\(.*?\)/g,"");
 
-  // remove asterisks
+  // remove junk
   name = name.replace(/\*/g,"").trim();
 
   if(name.toLowerCase() === "not played") return "";
 
-  // 🔥 split combo names (KEY FIX)
+  // split combo names
   if(name.includes(" / ")) name = name.split(" / ")[0];
   if(name.includes("/")) name = name.split("/")[0];
   if(name.includes(" & ")) name = name.split(" & ")[0];
   if(name.includes("&")) name = name.split("&")[0];
   if(name.includes(" and ")) name = name.split(" and ")[0];
   if(name.includes(" And ")) name = name.split(" And ")[0];
+
+  // 🔥 NORMALISE CASE
+  name = name.toLowerCase()
+    .split(" ")
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+
+  // 🔥 FIX COMMON NAMES
+  if(name === "Rory Mcilroy") name = "Rory McIlroy";
 
   return name.trim();
 }
@@ -172,23 +181,27 @@ async function load(){
 
   data.forEach(d=>{
     let name = clean(d.winner);
-
     if(!name) return;
 
-    // 🔥 force merge duplicates
-    if(!players[name]){
-      players[name] = {wins:0, majors:0};
+    // 🔥 FORCE MERGE USING LOWERCASE KEY
+    const key = name.toLowerCase();
+
+    if(!players[key]){
+      players[key] = {
+        name: name,
+        wins: 0,
+        majors: 0
+      };
     }
 
-    players[name].wins++;
+    players[key].wins++;
 
     if(d.major === true){
-      players[name].majors++;
+      players[key].majors++;
     }
   });
 
-  const list = Object.entries(players)
-    .map(([name,stats])=>({name,...stats}))
+  const list = Object.values(players)
     .sort((a,b)=>b.wins-a.wins);
 
   const tbody = document.getElementById("tbody");
