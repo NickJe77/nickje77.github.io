@@ -101,6 +101,7 @@ body{
   border-radius:14px;
   overflow:hidden;
   border:1px solid var(--line);
+  display:none; /* hidden by default */
 }
 
 table{
@@ -149,8 +150,8 @@ tbody tr:nth-child(even){
 </div>
 
 <div class="hero">
-  <h1 id="playerName">Loading...</h1>
-  <div class="summary" id="summary"></div>
+  <h1 id="playerName">Golf Players</h1>
+  <div class="summary" id="summary">Search for a player to view career wins</div>
 </div>
 
 <div class="page">
@@ -209,19 +210,13 @@ function isMajor(name){
 }
 
 async function fetchData(){
-  // TRY primary path
   let res = await fetch("/data/golf/pga_winners.json");
-
-  // fallback if broken
   if(!res.ok){
     res = await fetch("/docs/data/golf/pga_winners.json");
   }
-
   if(!res.ok){
-    console.error("DATA FAILED TO LOAD");
     return [];
   }
-
   return await res.json();
 }
 
@@ -237,56 +232,6 @@ async function load(){
     return;
   }
 
-  let playerName = "";
-  const wins = [];
-
-  data.forEach(d => {
-    const winnerName = clean(d.winner);
-    if(!winnerName) return;
-
-    if(slug(winnerName) === playerSlug){
-      playerName = winnerName;
-
-      const tournament = d.event || d.tournament || d.name || "";
-
-      wins.push({
-        year: d.year || "",
-        tournament,
-        isMajor: isMajor(tournament)
-      });
-    }
-  });
-
-  if(!playerName){
-    document.getElementById("playerName").innerText = "Player not found";
-  } else {
-    document.getElementById("playerName").innerText = playerName;
-
-    const totalWins = wins.length;
-    const majors = wins.filter(w => w.isMajor).length;
-
-    document.getElementById("summary").innerText =
-      totalWins + " wins / " + majors + " majors";
-
-    const tbody = document.getElementById("tbody");
-    tbody.innerHTML = "";
-
-    wins
-      .sort((a,b) => Number(b.year || 0) - Number(a.year || 0))
-      .forEach(w => {
-        const tr = document.createElement("tr");
-
-        tr.innerHTML = `
-          <td>${w.year}</td>
-          <td>${!w.isMajor ? `<a class="t-link" href="/golf-tournament.html?tournament=${slug(w.tournament)}">${w.tournament}</a>` : ""}</td>
-          <td>${w.isMajor ? `<a class="t-link" href="/golf-tournament.html?tournament=${slug(w.tournament)}">${w.tournament}</a>` : ""}</td>
-        `;
-
-        tbody.appendChild(tr);
-      });
-  }
-
-  // ===== SEARCH FIX (NOW WORKS) =====
   const players = [...new Set(
     data.map(d => clean(d.winner)).filter(Boolean)
   )].sort((a,b) => a.localeCompare(b));
@@ -294,6 +239,7 @@ async function load(){
   const search = document.getElementById("search");
   const dropdown = document.getElementById("dropdown");
 
+  // ===== SEARCH =====
   search.addEventListener("input", e => {
     const val = e.target.value.toLowerCase().trim();
     dropdown.innerHTML = "";
@@ -334,6 +280,64 @@ async function load(){
       dropdown.style.display = "none";
     }
   });
+
+  // ===== NO PLAYER SELECTED =====
+  if(!playerSlug){
+    return;
+  }
+
+  // ===== LOAD PLAYER =====
+  let playerName = "";
+  const wins = [];
+
+  data.forEach(d => {
+    const winnerName = clean(d.winner);
+    if(!winnerName) return;
+
+    if(slug(winnerName) === playerSlug){
+      playerName = winnerName;
+
+      const tournament = d.event || d.tournament || d.name || "";
+
+      wins.push({
+        year: d.year || "",
+        tournament,
+        isMajor: isMajor(tournament)
+      });
+    }
+  });
+
+  if(!playerName){
+    document.getElementById("playerName").innerText = "Player not found";
+    return;
+  }
+
+  document.getElementById("playerName").innerText = playerName;
+
+  const totalWins = wins.length;
+  const majors = wins.filter(w => w.isMajor).length;
+
+  document.getElementById("summary").innerText =
+    totalWins + " wins / " + majors + " majors";
+
+  const tbody = document.getElementById("tbody");
+  tbody.innerHTML = "";
+
+  wins
+    .sort((a,b) => Number(b.year || 0) - Number(a.year || 0))
+    .forEach(w => {
+      const tr = document.createElement("tr");
+
+      tr.innerHTML = `
+        <td>${w.year}</td>
+        <td>${!w.isMajor ? `<a class="t-link" href="/golf-tournament.html?tournament=${slug(w.tournament)}">${w.tournament}</a>` : ""}</td>
+        <td>${w.isMajor ? `<a class="t-link" href="/golf-tournament.html?tournament=${slug(w.tournament)}">${w.tournament}</a>` : ""}</td>
+      `;
+
+      tbody.appendChild(tr);
+    });
+
+  document.querySelector(".table-card").style.display = "block";
 }
 
 load();
