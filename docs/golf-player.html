@@ -118,7 +118,7 @@ tbody tr:nth-child(even){
 <div class="page">
 
 <div class="search-box">
-  <input id="search" placeholder="Search player...">
+  <input id="search" placeholder="Search player and press Enter...">
 </div>
 
 <div class="table-card">
@@ -139,14 +139,24 @@ tbody tr:nth-child(even){
 <script>
 function clean(name){
   if(!name) return "";
-  name = String(name).replace(/\s*\(.*?\)/g,"").replace(/\*/g,"").trim();
+
+  name = String(name)
+    .replace(/\s*\(.*?\)/g,"")
+    .replace(/\*/g,"")
+    .trim();
+
+  if(!name || name === "--") return "";
+
+  // split combo winners
   name = name.split(/\/|&| and /i)[0].trim();
 
+  // normalise case
   name = name.toLowerCase()
     .split(" ")
     .map(w => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
 
+  // fix known names
   if(name === "Rory Mcilroy") name = "Rory McIlroy";
 
   return name;
@@ -154,10 +164,6 @@ function clean(name){
 
 function slug(name){
   return name.toLowerCase().replace(/[^a-z0-9]+/g,"-");
-}
-
-function unslug(s){
-  return s.replace(/-/g," ");
 }
 
 async function load(){
@@ -207,6 +213,7 @@ async function load(){
     totalWins + " wins / " + majors + " majors";
 
   const tbody = document.getElementById("tbody");
+  tbody.innerHTML = "";
 
   wins.forEach(w=>{
     const tr = document.createElement("tr");
@@ -220,18 +227,22 @@ async function load(){
     tbody.appendChild(tr);
   });
 
-  // SEARCH (redirect to player)
+  // SEARCH (press Enter)
   const players = [...new Set(
     data.map(d=>clean(d.winner)).filter(n=>n)
   )].sort();
 
-  document.getElementById("search").addEventListener("input", e=>{
-    const val = e.target.value.toLowerCase();
+  const search = document.getElementById("search");
 
-    const match = players.find(p => p.toLowerCase().startsWith(val));
+  search.addEventListener("keydown", e=>{
+    if(e.key === "Enter"){
+      const val = search.value.toLowerCase();
 
-    if(match && val.length > 2){
-      location.href = "/golf-player.html?player=" + slug(match);
+      const match = players.find(p => p.toLowerCase() === val);
+
+      if(match){
+        location.href = "/golf-player.html?player=" + slug(match);
+      }
     }
   });
 }
