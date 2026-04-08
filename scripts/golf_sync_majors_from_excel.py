@@ -1,68 +1,26 @@
-import pandas as pd
-import json
-import re
+name: Sync Majors From Excel (SAFE)
 
-EXCEL = "scripts/golf.xlsx"
-FILE = "docs/data/golf/pga_winners.json"
+on:
+  workflow_dispatch:
 
-def clean(name):
-    if not name:
-        return ""
-    name = str(name)
-    name = re.sub(r"\s*\(.*?\)", "", name)
-    return name.strip()
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-def main():
-    df = pd.read_excel(EXCEL)
-    df.columns = ["year", "masters", "pga", "us_open", "open"]
+    steps:
+      - uses: actions/checkout@v4
 
-    with open(FILE, "r", encoding="utf-8") as f:
-        data = json.load(f)
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-    updated = 0
-    added = 0
+      - run: pip install pandas openpyxl
 
-    for _, row in df.iterrows():
-        year = int(row["year"])
+      - run: python scripts/golf_sync_majors_from_excel.py
 
-        mapping = {
-            "Masters Tournament": clean(row["masters"]),
-            "PGA Championship": clean(row["pga"]),
-            "U.S. Open": clean(row["us_open"]),
-            "The Open Championship": clean(row["open"])
-        }
-
-        for event, winner in mapping.items():
-
-            found = False
-
-            for d in data:
-                if d["event"] == event and d["year"] == year:
-                    if d.get("winner") != winner:
-                        d["winner"] = winner
-                        updated += 1
-                    found = True
-                    break
-
-            if not found:
-                data.append({
-                    "tour": "pga",
-                    "year": year,
-                    "event": event,
-                    "winner": winner,
-                    "major": True,
-                    "score": "",
-                    "venue": "",
-                    "country": ""
-                })
-                added += 1
-
-    data.sort(key=lambda x: (x["event"], x["year"]))
-
-    with open(FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-
-    print(f"Updated {updated} rows, added {added} rows")
-
-if __name__ == "__main__":
-    main()gold
+      - run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add docs/data/golf/pga_winners.json
+          git commit -m "Sync majors from Excel (safe)" || echo "No changes"
+          git push
