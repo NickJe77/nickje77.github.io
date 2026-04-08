@@ -3,21 +3,17 @@ from bs4 import BeautifulSoup
 import json
 
 URL = "https://thegolfnewsnet.com/list-of-mens-golf-major-championship-winners-by-year/"
-
 OUTPUT_FILE = "docs/data/golf/pga_winners.json"
 
-MAJORS = ["Masters", "U.S. Open", "The Open Championship", "PGA Championship"]
+MAJORS = [
+    "Masters Tournament",
+    "U.S. Open",
+    "The Open Championship",
+    "PGA Championship"
+]
 
-def normalise_event(name):
-    if "Masters" in name:
-        return "Masters Tournament"
-    if "U.S." in name:
-        return "U.S. Open"
-    if "Open Championship" in name:
-        return "The Open Championship"
-    if "PGA Championship" in name:
-        return "PGA Championship"
-    return name
+START_YEAR = 1860
+END_YEAR = 1967
 
 def load_existing():
     try:
@@ -34,86 +30,81 @@ def scrape():
     res = requests.get(URL)
     soup = BeautifulSoup(res.text, "html.parser")
 
-    tables = soup.find_all("table")
+    table = soup.find("table")
+    rows = table.find_all("tr")
 
-    results = []
+    data = {}
 
-    for table in tables:
-        rows = table.find_all("tr")
+    for r in rows[1:]:
+        cols = [c.get_text(strip=True) for c in r.find_all("td")]
 
-        for r in rows[1:]:
-            cols = [c.get_text(strip=True) for c in r.find_all("td")]
+        if len(cols) < 5:
+            continue
 
-            if len(cols) < 5:
-                continue
+        year = cols[0]
+        if not year.isdigit():
+            continue
 
-            year = cols[0]
+        year = int(year)
 
-            if not year.isdigit():
-                continue
+        data[year] = {
+            "Masters Tournament": cols[1],
+            "U.S. Open": cols[2],
+            "The Open Championship": cols[3],
+            "PGA Championship": cols[4],
+        }
 
-            year = int(year)
+    return data
 
-            masters = cols[1]
-            us_open = cols[2]
-            open_champ = cols[3]
-            pga = cols[4]
+def clean_name(name):
+    if not name:
+        return ""
 
-            data = [
-                ("Masters Tournament", masters),
-                ("U.S. Open", us_open),
-                ("The Open Championship", open_champ),
-                ("PGA Championship", pga)
-            ]
+    name = name.replace("*", "").strip()
 
-            for event, winner in data:
+    if name.lower() in ["—", "-", ""]:
+        return ""
 
-                if not winner or winner.lower() in ["—", "-", ""]:
-                    continue
-
-                # skip amateur / weird formatting cleanup
-                winner = winner.replace("*", "").strip()
-
-                results.append({
-                    "tour": "pga",
-                    "year": year,
-                    "event": event,
-                    "winner": winner,
-                    "major": True,
-                    "score": "",
-                    "venue": "",
-                    "country": ""
-                })
-
-    return results
+    return name
 
 def main():
     existing = load_existing()
-
     existing_keys = set((e["event"], e["year"]) for e in existing)
 
-    new_data = scrape()
+    scraped = scrape()
 
-    added = []
+    new_rows = []
 
-    for row in new_data:
-        if row["year"] >= 1968:
-            continue
+    for year in range(START_YEAR, END_YEAR + 1):
 
-        key = (row["event"], row["year"])
+        year_data = scraped.get(year, {})
 
-        if key in existing_keys:
-            continue
+        for event in MAJORS:
 
-        added.append(row)
+            key = (event, year)
 
-    combined = existing + added
+            if key in existing_keys:
+                continue
 
-    combined.sort(key=lambda x: (x["event"], x["year"]))
+            winner = clean_name(year_data.get(event, ""))
+
+            new_rows.append({
+                "tour": "pga",
+                "year": year,
+                "event": event,
+                "winner": winner,
+                "major": True,
+                "score": "",
+                "venue": "",
+                "country": ""
+            })
+
+    combined = existing + new_rows
+    combined.sort(key=lambda x: (x.get("event",""), x.get("year",0)))
 
     save(combined)
 
-    print(f"Added {len(added)} pre-1968 major results")
+    print(f"Added {len(new_rows)} rows (including blanks where needed)")
 
 if __name__ == "__main__":
     main()
