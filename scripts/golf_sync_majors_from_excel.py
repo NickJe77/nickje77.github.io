@@ -6,34 +6,28 @@ EXCEL = "scripts/golf.xlsx"
 FILE = "docs/data/golf/pga_winners.json"
 
 
-# -----------------------
-# CLEAN NAME
-# -----------------------
 def clean(name):
     if not name:
         return ""
     name = str(name)
-    name = re.sub(r"\s*\(.*?\)", "", name)  # remove (2), (3)
+    name = re.sub(r"\s*\(.*?\)", "", name)
     name = name.replace("*", "")
     name = name.strip()
 
-    if name.lower() in ["not played", "—", "-", ""]:
+    if name.lower() in ["not played", "—", "-", "nan"]:
         return ""
 
     return name
 
 
-# -----------------------
-# MAIN
-# -----------------------
 def main():
-    # load excel
     df = pd.read_excel(EXCEL)
 
-    # force correct column names
     df.columns = ["year", "masters", "pga", "us_open", "open"]
 
-    # load existing json
+    # 🔥 DROP EMPTY ROWS
+    df = df[df["year"].notna()]
+
     with open(FILE, "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -41,7 +35,12 @@ def main():
     added = 0
 
     for _, row in df.iterrows():
-        year = int(row["year"])
+
+        # 🔥 SAFE YEAR CONVERSION
+        try:
+            year = int(row["year"])
+        except:
+            continue
 
         mapping = {
             "Masters Tournament": clean(row["masters"]),
@@ -56,14 +55,12 @@ def main():
 
             for d in data:
                 if d.get("event") == event and d.get("year") == year:
-                    # update existing row safely
                     if d.get("winner") != winner:
                         d["winner"] = winner
                         updated += 1
                     found = True
                     break
 
-            # add only if missing
             if not found:
                 data.append({
                     "tour": "pga",
@@ -77,7 +74,6 @@ def main():
                 })
                 added += 1
 
-    # keep everything else untouched
     data.sort(key=lambda x: (x.get("event", ""), x.get("year", 0)))
 
     with open(FILE, "w", encoding="utf-8") as f:
@@ -86,8 +82,5 @@ def main():
     print(f"Updated {updated} rows, added {added} rows safely")
 
 
-# -----------------------
-# RUN
-# -----------------------
 if __name__ == "__main__":
     main()
