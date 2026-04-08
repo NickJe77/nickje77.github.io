@@ -21,7 +21,6 @@ body{
   background:var(--bg);
 }
 
-/* NAV */
 .navbar{
   display:flex;
   justify-content:center;
@@ -38,7 +37,6 @@ body{
   font-size:18px;
 }
 
-/* HERO */
 .hero{
   background:linear-gradient(135deg,#08552d,#0c6f3c);
   color:#fff;
@@ -48,17 +46,16 @@ body{
 
 .hero h1{
   margin:0;
-  font-size:40px;
+  font-size:34px;
+  text-transform:capitalize;
 }
 
-/* PAGE */
 .page{
   max-width:1000px;
   margin:auto;
   padding:25px;
 }
 
-/* TABLE */
 .table-card{
   background:var(--card);
   border-radius:14px;
@@ -97,7 +94,7 @@ tbody tr:nth-child(even){
 </div>
 
 <div class="hero">
-  <h1 id="title">Tournament</h1>
+  <h1 id="title">Loading...</h1>
 </div>
 
 <div class="page">
@@ -110,40 +107,81 @@ tbody tr:nth-child(even){
   <th>Winner</th>
 </tr>
 </thead>
-<tbody id="tableBody"></tbody>
+<tbody id="tbody"></tbody>
 </table>
 </div>
 
 </div>
 
 <script>
-function getParam(name){
-  const url=new URL(window.location.href);
-  return url.searchParams.get(name);
+function clean(name){
+  if(!name) return "";
+
+  return String(name)
+    .replace(/\s*\(.*?\)/g,"")
+    .replace(/\*/g,"")
+    .trim()
+    .split(/\/|&| and /i)[0]
+    .trim();
+}
+
+function slug(name){
+  return name.toLowerCase().replace(/[^a-z0-9]+/g,"-");
+}
+
+// 🔥 KEY FIX
+function matchTournament(dataName, urlSlug){
+  const s1 = slug(dataName);
+  const s2 = urlSlug;
+
+  return s1 === s2 || s1.includes(s2) || s2.includes(s1);
 }
 
 async function load(){
-  const tournament=getParam("tournament");
+  const params = new URLSearchParams(location.search);
+  const tournamentSlug = params.get("tournament");
 
-  document.getElementById("title").textContent=tournament;
+  const res = await fetch("/data/golf/pga_winners.json");
+  const data = await res.json();
 
-  const res=await fetch("/data/golf/pga_winners.json");
-  const data=await res.json();
+  const rows = [];
 
-  const rows=data
-    .filter(d=>d.event===tournament)
-    .sort((a,b)=>b.year-a.year);
+  data.forEach(d=>{
+    const name = d.event || d.tournament || d.name || "";
 
-  const tbody=document.getElementById("tableBody");
+    if(!name) return;
 
-  rows.forEach(r=>{
-    const tr=document.createElement("tr");
-    tr.innerHTML=`
-      <td>${r.year}</td>
-      <td>${r.winner}</td>
-    `;
-    tbody.appendChild(tr);
+    if(matchTournament(name, tournamentSlug)){
+      rows.push({
+        year: d.year,
+        winner: clean(d.winner),
+        tournament: name
+      });
+    }
   });
+
+  if(rows.length === 0){
+    document.getElementById("title").innerText = "Tournament not found";
+    return;
+  }
+
+  // set title nicely
+  document.getElementById("title").innerText = rows[0].tournament;
+
+  const tbody = document.getElementById("tbody");
+
+  rows
+    .sort((a,b)=>b.year-a.year)
+    .forEach(r=>{
+      const tr = document.createElement("tr");
+
+      tr.innerHTML = `
+        <td>${r.year}</td>
+        <td>${r.winner}</td>
+      `;
+
+      tbody.appendChild(tr);
+    });
 }
 
 load();
