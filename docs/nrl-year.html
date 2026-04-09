@@ -1,13 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <script src="/js/analytics.js"></script>
+<script src="/js/analytics.js"></script>
 <meta charset="UTF-8">
 <title>NRL Season</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-
 body{font-family:Inter,Arial;margin:0;background:#f4f6f8;}
 
 .navbar{
@@ -107,7 +106,6 @@ box-shadow:0 4px 14px rgba(0,0,0,0.08);
 
 .match .line1{font-weight:800;}
 .match .line2{color:#666;font-size:13px;margin-top:4px;}
-
 </style>
 </head>
 
@@ -123,19 +121,16 @@ box-shadow:0 4px 14px rgba(0,0,0,0.08);
 <h1>NRL Season</h1>
 
 <div class="controls">
-
 <div class="year-bar" id="years"></div>
 
 <select id="teamFilter">
 <option value="">All Teams</option>
 </select>
-
 </div>
 
 <div class="status" id="status">Loading seasons…</div>
 
 <div class="content">
-
 <div class="card">
 
 <table>
@@ -149,15 +144,12 @@ box-shadow:0 4px 14px rgba(0,0,0,0.08);
 </thead>
 
 <tbody id="ladderBody"></tbody>
-
 </table>
 
 </div>
 
 <div id="matches"></div>
-
 </div>
-
 </div>
 
 <script>
@@ -205,53 +197,15 @@ setActiveYear(year)
 document.getElementById("status").textContent="Loading "+year+"..."
 
 fetch("data/nrl/matches/"+year+".json")
-.then(r=>{
+.then(r=>r.json())
+.then(data=>{
 
-if(r.ok){
-
-return r.json().then(data=>{
-
-if(Array.isArray(data) && data.length && data[0].players){
-isNewStructure = true
-}else{
-isNewStructure = false
-}
+// detect structure
+isNewStructure = data.length && data[0].home_score !== undefined
 
 seasonRows=data
 buildTeamSelector()
 render()
-
-})
-
-}else{
-
-loadFolderSeason(year)
-
-}
-
-})
-
-}
-
-function loadFolderSeason(year){
-
-fetch("data/nrl/matches/"+year+"/index.json")
-.then(r=>r.json())
-.then(index=>{
-
-const promises=index.matches.map(id=>
-fetch("data/nrl/matches/"+year+"/"+id+".json").then(r=>r.json())
-)
-
-Promise.all(promises).then(data=>{
-
-seasonRows=data.flat()
-isNewStructure=false
-
-buildTeamSelector()
-render()
-
-})
 
 })
 
@@ -288,10 +242,21 @@ let matches=[]
 
 if(isNewStructure){
 
-matches = seasonRows.filter(m=>{
+// ✅ FIX: NORMALISE 2026 DATA
+matches = seasonRows
+.filter(m=>{
 if(!team) return true
 return m.home_team===team || m.away_team===team
 })
+.map(m=>({
+match_id:m.match_id || m.game_id,
+date_iso:m.date || m.date_iso,
+venue:m.venue,
+home_team:m.home_team,
+away_team:m.away_team,
+home_points:toNum(m.home_score),
+away_points:toNum(m.away_score)
+}))
 
 }else{
 
@@ -301,22 +266,8 @@ seasonRows.forEach(r=>{
 
 if(team && r.home_team!==team && r.away_team!==team) return
 
-const id=r.match_id
-
-if(!matchMap.has(id)){
-
-matchMap.set(id,{
-match_id:id,
-match_url:r.match_url,
-date_iso:r.date_iso,
-date:r.date, // 👈 added support
-venue:r.venue,
-home_team:r.home_team,
-away_team:r.away_team,
-home_points:toNum(r.home_points),
-away_points:toNum(r.away_points)
-})
-
+if(!matchMap.has(r.match_id)){
+matchMap.set(r.match_id,r)
 }
 
 })
@@ -340,14 +291,10 @@ const div=document.getElementById("matches")
 
 div.innerHTML=matches.map(m=>{
 
-const date = m.date_iso || m.date || ""   // 🔥 FIX HERE
-
 const line1=`${m.home_team} ${m.home_points} - ${m.away_points} ${m.away_team}`
-const meta=`${date}${m.venue?" • "+m.venue:""}`
+const meta=`${m.date_iso}${m.venue?" • "+m.venue:""}`
 
-const link = m.match_url
-  ? `nrl-game.html?url=${encodeURIComponent(m.match_url)}`
-  : `nrl-game.html?season=${currentSeason}&match=${m.match_id}`
+const link = `nrl-game.html?season=${currentSeason}&match=${m.match_id}`
 
 return `
 <div class="match" onclick="window.location.href='${link}'">
