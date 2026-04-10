@@ -1,12 +1,9 @@
-name: Bathurst Builder
+name: NHL Scorers All Seasons
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 6 * * 1"
-
-permissions:
-  contents: write   # 🔥 THIS IS CRITICAL
+    - cron: "0 6 * * *"
 
 jobs:
   build:
@@ -21,28 +18,34 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install deps
+      - name: Install dependencies
         run: |
-          pip install requests beautifulsoup4 pandas lxml
+          pip install requests
 
-      - name: Run builder
+      - name: Ensure folders exist
         run: |
-          python scripts/bathurst_build_history.py
+          mkdir -p docs/data/nhl/boxscores
 
-      - name: Debug files (IMPORTANT)
+      - name: Run NHL scorers builder
         run: |
-          echo "FILES CREATED:"
-          ls -R docs || echo "NO DOCS FOLDER"
+          python scripts/nhl_scorers_all.py
 
-      - name: Commit files
+      - name: Commit and push (SAFE)
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          git add -A   # 🔥 FORCE ADD EVERYTHING
+          git add docs/data/nhl/boxscores
 
-          git status   # 🔍 SEE WHAT IT PICKS UP
+          # ✅ STOP if no changes (prevents your error)
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
 
-          git commit -m "Bathurst data build" || echo "No changes"
+          git commit -m "Update NHL scorers all seasons"
+
+          # ✅ ALWAYS sync before push (fixes rejection error)
+          git pull --rebase origin main
 
           git push
