@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-print("NHL SCORERS FAST BUILDER")
+print("NHL SCORERS SMART BUILDER")
 
 BASE = Path("docs/data/nhl")
 SEASONS = list(range(1967, 2026))
@@ -85,8 +85,10 @@ def process_game(SEASON, game):
 
 
 tasks = []
+skipped_seasons = 0
 
 for SEASON in SEASONS:
+
     season_file = BASE / f"seasons/{SEASON}.json"
     box_dir = BASE / f"boxscores/{SEASON}"
     box_dir.mkdir(parents=True, exist_ok=True)
@@ -96,11 +98,30 @@ for SEASON in SEASONS:
 
     games = json.loads(season_file.read_text())
 
+    # 🔥 COUNT EXISTING FILES
+    existing_files = list(box_dir.glob("*.json"))
+
+    # ✅ SKIP FULL SEASON
+    if len(existing_files) >= len(games) and len(games) > 0:
+        print(f"✅ Skipping {SEASON} (complete)")
+        skipped_seasons += 1
+        continue
+
+    print(f"--- {SEASON} --- missing {len(games) - len(existing_files)} games")
+
     for game in games:
-        tasks.append((SEASON, game))
+        game_id = game.get("game_id") or game.get("id")
+        if not game_id:
+            continue
+
+        file_path = box_dir / f"{game_id}.json"
+
+        if not file_path.exists():
+            tasks.append((SEASON, game))
 
 
-print(f"Total games to check: {len(tasks)}")
+print(f"\nQueued missing games: {len(tasks)}")
+print(f"Skipped seasons: {skipped_seasons}")
 
 with ThreadPoolExecutor(max_workers=12) as executor:
     futures = [executor.submit(process_game, s, g) for s, g in tasks]
@@ -114,7 +135,7 @@ with ThreadPoolExecutor(max_workers=12) as executor:
 
             count += 1
 
-            if count % 100 == 0:
+            if count % 200 == 0:
                 print(f"Built {count} games")
 
             if count >= MAX_PER_RUN:
