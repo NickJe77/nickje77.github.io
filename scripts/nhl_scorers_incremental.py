@@ -2,7 +2,7 @@ import requests
 import json
 from pathlib import Path
 
-print("NHL SCORERS BUILDER (FIXED NAMES)")
+print("NHL SCORERS BUILDER (ACTUAL FIX)")
 
 SEASON = 2026
 
@@ -42,18 +42,23 @@ for game in games:
     box = fetch(f"https://api-web.nhle.com/v1/gamecenter/{game_id}/boxscore")
 
     try:
-        # 🔥 BUILD PLAYER MAP
+        # 🔥 CORRECT PLAYER MAP
         player_map = {}
 
-        for side in ["homeTeam", "awayTeam"]:
-            team = box.get(side, {})
-            for p in team.get("players", []):
-                pid = p.get("playerId")
-                name = p.get("name", {}).get("default")
-                if pid and name:
-                    player_map[pid] = name
+        stats = box.get("playerByGameStats", {})
 
-        # 🔥 FIXED PLAY EXTRACTION
+        for side in ["homeTeam", "awayTeam"]:
+            team = stats.get(side, {})
+
+            for group in ["forwards", "defense", "goalies"]:
+                for p in team.get(group, []):
+                    pid = p.get("playerId")
+                    name = p.get("name", {}).get("default")
+
+                    if pid and name:
+                        player_map[pid] = name
+
+        # 🔥 FIX PLAY DATA LOCATION
         plays = pbp.get("plays") or pbp.get("gameData", {}).get("plays") or []
 
         goals = []
