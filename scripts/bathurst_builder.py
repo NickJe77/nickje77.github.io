@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 from datetime import datetime, timezone
 
-print("BATHURST BUILDER (FINAL - ALL YEARS FIXED)")
+print("BATHURST BUILDER (FORCED DRIVER EXTRACTION)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS = BASE / "seasons"
@@ -70,7 +70,6 @@ def extract_tables(html):
 
 
 def normalize(df):
-    # flatten multi-index columns
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [
             " ".join([str(i) for i in col if str(i) != "nan"])
@@ -104,7 +103,6 @@ def normalize(df):
 
     df = df.rename(columns=rename)
 
-    # PRIMARY: merge driver columns
     if driver_cols:
         df["drivers"] = df[driver_cols].apply(
             lambda row: " / ".join([clean(x) for x in row if clean(x)]),
@@ -112,36 +110,30 @@ def normalize(df):
         )
         df = df.drop(columns=driver_cols)
 
-    # FALLBACK: use 2nd column if no driver column found
-    elif len(df.columns) >= 2:
-        fallback_col = df.columns[1]
-        df["drivers"] = df[fallback_col].apply(lambda x: clean(x))
-
     return df
 
 
-def best_results(tables):
-    best = None
-    score = 0
+# 🔥 FORCE DRIVER EXTRACTION FROM ROW
+def extract_drivers_from_row(row):
+    possible = []
 
-    for df in tables:
-        df = normalize(df)
+    for val in row.values():
+        val = clean(val)
+        if not val:
+            continue
 
-        s = 0
-        if "pos" in df.columns:
-            s += 10
-        if "drivers" in df.columns:
-            s += 10
-        if "car" in df.columns:
-            s += 10
-        if len(df) > 10:
-            s += 10
+        # skip obvious non-driver fields
+        if re.search(r"\d", val):
+            continue
+        if len(val) < 4:
+            continue
 
-        if s > score:
-            score = s
-            best = df
+        possible.append(val)
 
-    return best
+    if not possible:
+        return None
+
+    return " / ".join(possible[:2])  # take first 2 likely names
 
 
 def split_drivers(val):
@@ -150,10 +142,8 @@ def split_drivers(val):
 
     val = clean(val)
 
-    # remove brackets
     val = re.sub(r"\([^)]*\)", "", val)
 
-    # normalize separators
     val = val.replace("\n", "/")
     val = val.replace(" and ", "/")
     val = val.replace("&", "/")
@@ -168,7 +158,6 @@ def split_drivers(val):
         if not p:
             continue
 
-        # fix reversed names
         if "," in p:
             bits = [b.strip() for b in p.split(",")]
             if len(bits) == 2:
@@ -179,7 +168,6 @@ def split_drivers(val):
 
         drivers.append(p)
 
-    # dedupe
     seen = set()
     out = []
     for d in drivers:
@@ -191,11 +179,38 @@ def split_drivers(val):
     return out
 
 
+def best_results(tables):
+    best = None
+    score = 0
+
+    for df in tables:
+        df = normalize(df)
+
+        s = 0
+        if "pos" in df.columns:
+            s += 10
+        if "car" in df.columns:
+            s += 10
+        if len(df) > 10:
+            s += 10
+
+        if s > score:
+            score = s
+            best = df
+
+    return best
+
+
 def df_to_json(df):
     rows = []
 
     for _, r in df.iterrows():
         row = {k: clean(v) for k, v in r.items()}
+
+        # 🔥 if drivers missing, force extract
+        if "drivers" not in row or not row["drivers"]:
+            forced = extract_drivers_from_row(r)
+            row["drivers"] = forced
 
         if "drivers" in row:
             row["drivers"] = split_drivers(row["drivers"])
@@ -237,20 +252,9 @@ def build_year(year):
 
     results = df_to_json(res_df)
 
-    grid = []
-    for r in results:
-        if r.get("grid"):
-            grid.append({
-                "grid": r.get("grid"),
-                "drivers": r.get("drivers"),
-                "team": r.get("team"),
-                "car": r.get("car")
-            })
-
     data = {
         "year": year,
         "url": url,
-        "grid": grid,
         "results": results
     }
 
