@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+  <meta charset="UTF-8">
+  <title>Bathurst Driver | The Sporting Almanac</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    body{
+      font-family:Inter,system-ui,Arial;
+      margin:0;
+      background:#f4f6f8;
+    }
+
+    .navbar{
+      display:flex;
+      justify-content:center;
+      gap:24px;
+      padding:16px 0;
+      background:#fff;
+      border-bottom:1px solid #ddd;
+      font-weight:600;
+    }
+
+    .navbar a{
+      text-decoration:none;
+      color:#0056d6;
+    }
+
+    .container{
+      max-width:1100px;
+      margin:auto;
+      padding:20px;
+    }
+
+    h1{
+      text-align:center;
+      margin-bottom:10px;
+    }
+
+    .summary{
+      display:flex;
+      justify-content:center;
+      gap:40px;
+      margin-bottom:20px;
+      font-weight:600;
+    }
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+      background:#fff;
+      border-radius:10px;
+      overflow:hidden;
+    }
+
+    th, td{
+      padding:10px;
+      text-align:left;
+      font-size:14px;
+    }
+
+    th{
+      background:#002D72;
+      color:#fff;
+    }
+
+    tbody tr:nth-child(even){
+      background:#f2f6ff;
+    }
+
+    tbody tr:hover{
+      background:#e0ecff;
+    }
+
+    .win{
+      background:#d4edda !important;
+      font-weight:600;
+    }
+
+    .podium{
+      background:#fff3cd !important;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="bathurst-drivers.html">Drivers</a>
+  <a href="bathurst.html">Bathurst</a>
+  <a href="/">Home</a>
+</div>
+
+<div class="container">
+  <h1 id="name"></h1>
+
+  <div class="summary">
+    <div>Starts: <span id="starts">0</span></div>
+    <div>Wins: <span id="wins">0</span></div>
+    <div>Podiums: <span id="podiums">0</span></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Year</th>
+        <th>Pos</th>
+        <th>Team</th>
+        <th>Car</th>
+        <th>Laps</th>
+      </tr>
+    </thead>
+    <tbody id="table"></tbody>
+  </table>
+</div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const driverName = decodeURIComponent(params.get("name") || "");
+
+document.getElementById("name").innerText = driverName;
+
+let races = [];
+let starts = 0;
+let wins = 0;
+let podiums = 0;
+
+function matchDriver(field, name){
+  if(!field) return false;
+
+  // handle co-drivers
+  let parts = field.split(/\/|,| and /);
+
+  return parts.some(p => p.trim().toLowerCase() === name.toLowerCase());
+}
+
+
+fetch("data/bathurst/index.json")
+.then(res => res.json())
+.then(async years => {
+
+  for(const y of years){
+    try{
+      const res = await fetch(`data/bathurst/seasons/${y.year}.json`);
+      const data = await res.json();
+
+      if(data.results){
+        data.results.forEach(r => {
+
+          if(matchDriver(r.drivers, driverName)){
+
+            let pos = parseInt(r.pos) || null;
+
+            races.push({
+              year: y.year,
+              pos: pos,
+              team: r.team,
+              car: r.car,
+              laps: r.laps
+            });
+
+            starts++;
+
+            if(pos === 1) wins++;
+            if(pos && pos <= 3) podiums++;
+          }
+
+        });
+      }
+
+    } catch(e){}
+  }
+
+  render();
+});
+
+
+function render(){
+  document.getElementById("starts").innerText = starts;
+  document.getElementById("wins").innerText = wins;
+  document.getElementById("podiums").innerText = podiums;
+
+  const tbody = document.getElementById("table");
+
+  races.sort((a,b) => b.year - a.year);
+
+  races.forEach(r => {
+    const tr = document.createElement("tr");
+
+    if(r.pos === 1) tr.classList.add("win");
+    else if(r.pos && r.pos <= 3) tr.classList.add("podium");
+
+    tr.innerHTML = `
+      <td>${r.year}</td>
+      <td>${r.pos || ""}</td>
+      <td>${r.team || ""}</td>
+      <td>${r.car || ""}</td>
+      <td>${r.laps || ""}</td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+</script>
+
+</body>
+</html>
