@@ -1,50 +1,33 @@
 import json
-import re
-from datetime import datetime, timezone
-from io import StringIO
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import quote
-
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+from io import StringIO
+from pathlib import Path
+import re
+from datetime import datetime, timezone
 
-
-print("BATHURST FULL HISTORY BUILDER")
-
+print("BATHURST BUILDER (FIXED)")
 
 BASE = Path("docs/data/bathurst")
-SEASONS_DIR = BASE / "seasons"
-INDEX_FILE = BASE / "index.json"
+SEASONS = BASE / "seasons"
+INDEX = BASE / "index.json"
 
-SEASONS_DIR.mkdir(parents=True, exist_ok=True)
-
-SESSION = requests.Session()
-SESSION.headers.update({
-    "User-Agent": "Mozilla/5.0"
-})
-
-WIKI_API = "https://en.wikipedia.org/w/api.php"
+SEASONS.mkdir(parents=True, exist_ok=True)
 
 START_YEAR = 1960
 
-
-def latest_completed_year():
+def latest_year():
     now = datetime.now(timezone.utc)
-    if now.month > 10 or (now.month == 10 and now.day >= 20):
-        return now.year
-    return now.year - 1
+    return now.year if now.month > 10 else now.year - 1
 
+END_YEAR = latest_year()
 
-END_YEAR = latest_completed_year()
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
 def clean(x):
-    if x is None:
-        return None
-    if isinstance(x, float) and pd.isna(x):
-        return None
+    if x is None: return None
     x = str(x)
     x = re.sub(r"\[[^\]]+\]", "", x)
     x = x.replace("\xa0", " ")
@@ -52,81 +35,22 @@ def clean(x):
     return x if x else None
 
 
-def flatten(df):
-    cols = []
-    for c in df.columns:
-        if isinstance(c, tuple):
-            c = " ".join([clean(x) for x in c if clean(x)])
-        cols.append(clean(c))
-    df.columns = cols
-    return df
-
-
-def normalize(df):
-    df = flatten(df)
-    rename = {}
-    for c in df.columns:
-        n = c.lower()
-
-        if "pos" in n:
-            rename[c] = "pos"
-        elif "driver" in n:
-            rename[c] = "drivers"
-        elif "team" in n or "entrant" in n:
-            rename[c] = "team"
-        elif "car" in n:
-            rename[c] = "car"
-        elif "lap" in n:
-            rename[c] = "laps"
-        elif "grid" in n:
-            rename[c] = "grid"
-        elif "time" in n:
-            rename[c] = "time"
-        else:
-            rename[c] = n
-
-    return df.rename(columns=rename).dropna(how="all")
-
-
-def wiki_search(q):
-    try:
-        r = SESSION.get(WIKI_API, params={
-            "action": "opensearch",
-            "search": q,
-            "limit": 5,
-            "namespace": 0,
-            "format": "json"
-        })
-        return r.json()[1]
-    except:
-        return []
-
-
-def find_page(year):
-    queries = [
-        f"{year} Bathurst 1000",
-        f"{year} Bathurst 500",
-        f"{year} Armstrong 500",
-        f"{year} Hardie-Ferodo 500"
+def try_urls(year):
+    names = [
+        f"{year}_Bathurst_1000",
+        f"{year}_Bathurst_500",
+        f"{year}_Armstrong_500",
+        f"{year}_Hardie-Ferodo_500",
+        f"{year}_Tooheys_1000"
     ]
 
-    for q in queries:
-        res = wiki_search(q)
-        for r in res:
-            if str(year) in r:
-                return r
+    for n in names:
+        url = f"https://en.wikipedia.org/wiki/{n}"
+        r = requests.get(url, headers=HEADERS)
+        if r.status_code == 200 and "Bathurst" in r.text:
+            return url, r.text
 
-    return None
-
-
-def get_html(title):
-    r = SESSION.get(WIKI_API, params={
-        "action": "parse",
-        "page": title,
-        "prop": "text",
-        "format": "json"
-    })
-    return r.json()["parse"]["text"]["*"]
+    return None, None
 
 
 def extract_tables(html):
@@ -137,41 +61,48 @@ def extract_tables(html):
     for t in tables:
         try:
             df = pd.read_html(StringIO(str(t)))[0]
-            dfs.append(normalize(df))
+            dfs.append(df)
         except:
             continue
 
     return dfs
 
 
-def find_results_table(tables):
+def normalize(df):
+    df.columns = [clean(c).lower() for c in df.columns]
+
+    rename = {}
+    for c in df.columns:
+        if "pos" in c: rename[c] = "pos"
+        elif "driver" in c: rename[c] = "drivers"
+        elif "team" in c: rename[c] = "team"
+        elif "car" in c: rename[c] = "car"
+        elif "lap" in c: rename[c] = "laps"
+        elif "grid" in c: rename[c] = "grid"
+
+    return df.rename(columns=rename)
+
+
+def best_results(tables):
     best = None
-    best_score = 0
+    score = 0
 
     for df in tables:
-        score = 0
-        cols = df.columns
+        df = normalize(df)
+        s = 0
+        if "pos" in df.columns: s += 10
+        if "drivers" in df.columns: s += 10
+        if "car" in df.columns: s += 10
+        if len(df) > 10: s += 10
 
-        if "pos" in cols:
-            score += 10
-        if "drivers" in cols:
-            score += 10
-        if "car" in cols:
-            score += 10
-        if "laps" in cols:
-            score += 5
-
-        if len(df) > 10:
-            score += 10
-
-        if score > best_score:
-            best_score = score
+        if s > score:
+            score = s
             best = df
 
     return best
 
 
-def df_to_list(df):
+def df_to_json(df):
     rows = []
     for _, r in df.iterrows():
         row = {k: clean(v) for k, v in r.items()}
@@ -183,23 +114,27 @@ def df_to_list(df):
 def build_year(year):
     print(f"\n--- {year} ---")
 
-    title = find_page(year)
-    if not title:
+    url, html = try_urls(year)
+
+    if not html:
         print("No page")
         return None
 
-    print("Page:", title)
+    print("URL:", url)
 
-    html = get_html(title)
     tables = extract_tables(html)
 
     if not tables:
         print("No tables")
         return None
 
-    results_df = find_results_table(tables)
+    res_df = best_results(tables)
 
-    results = df_to_list(results_df) if results_df is not None else []
+    if res_df is None:
+        print("No results table")
+        return None
+
+    results = df_to_json(res_df)
 
     grid = []
     for r in results:
@@ -213,21 +148,17 @@ def build_year(year):
 
     data = {
         "year": year,
-        "source": title,
+        "url": url,
         "grid": grid,
         "results": results
     }
 
-    out = SEASONS_DIR / f"{year}.json"
-    out.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    file = SEASONS / f"{year}.json"
+    file.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
-    print(f"Saved {year} ({len(results)} results)")
+    print(f"Saved {year}")
 
-    return {
-        "year": year,
-        "file": f"seasons/{year}.json",
-        "results": len(results)
-    }
+    return {"year": year, "file": f"seasons/{year}.json"}
 
 
 def main():
@@ -239,9 +170,9 @@ def main():
             if r:
                 summary.append(r)
         except Exception as e:
-            print("FAILED", y, e)
+            print("FAIL", y, e)
 
-    INDEX_FILE.write_text(json.dumps(summary, indent=2))
+    INDEX.write_text(json.dumps(summary, indent=2))
     print("\nDONE")
 
 
