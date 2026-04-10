@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 from datetime import datetime, timezone
 
-print("BATHURST BUILDER (FINAL DRIVER FIX)")
+print("BATHURST BUILDER (FINAL DRIVER FIX - WORKING)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS = BASE / "seasons"
@@ -81,7 +81,7 @@ def normalize(df):
         if "pos" in c:
             rename[c] = "pos"
 
-        elif "driver" in c:
+        elif any(k in c for k in ["driver", "co-driver", "co driver", "entrant"]):
             driver_cols.append(c)
 
         elif "team" in c:
@@ -133,7 +133,7 @@ def best_results(tables):
     return best
 
 
-# 🔥 FINAL DRIVER PARSER (ROBUST)
+# 🔥 FINAL DRIVER PARSER (FIXED)
 def split_drivers(val):
     if not val:
         return []
@@ -144,8 +144,10 @@ def split_drivers(val):
     val = re.sub(r"\([^)]*\)", "", val)
 
     # normalize separators
+    val = val.replace("\n", "/")
     val = val.replace(" and ", "/")
     val = val.replace(";", "/")
+    val = val.replace("&", "/")
 
     parts = re.split(r"/", val)
 
@@ -163,7 +165,6 @@ def split_drivers(val):
             if len(bits) == 2:
                 p = f"{bits[1]} {bits[0]}"
 
-        # ignore junk
         if len(p) < 3:
             continue
 
@@ -189,6 +190,13 @@ def df_to_json(df):
 
         if "drivers" in row:
             row["drivers"] = split_drivers(row["drivers"])
+
+        # optional: clean pos to integer (safe)
+        if "pos" in row and row["pos"]:
+            try:
+                row["pos"] = int(re.sub(r"[^\d]", "", row["pos"]))
+            except:
+                pass
 
         if any(row.values()):
             rows.append(row)
