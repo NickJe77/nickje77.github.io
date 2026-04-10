@@ -1,30 +1,122 @@
-name: NHL Scorers All Seasons
+import requests
+import json
+from pathlib import Path
 
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: "0 6 * * *"
+print("NHL SCORERS ALL SEASONS (FORCED BUILD)")
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+BASE = Path("docs/data/nhl")
 
-    steps:
-      - uses: actions/checkout@v4
+SEASONS = list(range(1967, 2026))
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+MAX_PER_RUN = 300
+count = 0
 
-      - run: pip install requests
+def fetch(url):
+    try:
+        r = requests.get(url)
+        if r.status_code == 200:
+            return r.json()
+    except:
+        pass
+    return {}
 
-      - run: mkdir -p docs/data/nhl/boxscores
+for SEASON in SEASONS:
 
-      - run: python scripts/nhl_scorers_all.py
+    season_file = BASE / f"seasons/{SEASON}.json"
+    box_dir = BASE / f"boxscores/{SEASON}"
+    box_dir.mkdir(parents=True, exist_ok=True)
 
-      - run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add docs/data/nhl/boxscores
-          git commit -m "Update NHL scorers all seasons" || echo "No changes"
-          git push
+    print(f"\n--- {SEASON} ---")
+
+    if not season_file.exists():
+        print(f"❌ Missing season file for {SEASON}")
+        continue
+
+    games = json.loads(season_file.read_text())
+
+    print(f"Games found: {len(games)}")
+
+    if not games:
+        continue
+
+    for game in games:
+
+        game_id = game.get("game_id") or game.get("id")
+
+        if not game_id:
+            print("❌ Missing game_id")
+            continue
+
+        file_path = box_dir / f"{game_id}.json"
+
+        # 🔥 COMMENT THIS OUT TO FORCE REBUILD
+        # if file_path.exists():
+        #     continue
+
+        print(f"Building {SEASON} - {game_id}")
+
+        game_json = {
+            "game_id": game_id,
+            "date": game.get("date"),
+            "home_team": game.get("home_team"),
+            "away_team": game.get("away_team"),
+            "home_score": game.get("home_score"),
+            "away_score": game.get("away_score"),
+            "goals": []
+        }
+
+        # ONLY MODERN NHL HAS SCORERS
+        if SEASON >= 2005:
+
+            pbp = fetch(f"https://api-web.nhle.com/v1/gamecenter/{game_id}/play-by-play")
+            box = fetch(f"https://api-web.nhle.com/v1/gamecenter/{game_id}/boxscore")
+
+            try:
+                player_map = {}
+
+                stats = box.get("playerByGameStats", {})
+
+                for side in ["homeTeam", "awayTeam"]:
+                    team = stats.get(side, {})
+
+                    for group in ["forwards", "defense", "goalies"]:
+                        for p in team.get(group, []):
+                            pid = p.get("playerId")
+                            name = p.get("name", {}).get("default")
+
+                            if pid and name:
+                                player_map[pid] = name
+
+                plays = pbp.get("plays") or pbp.get("gameData", {}).get("plays") or []
+
+                for play in plays:
+                    if play.get("typeDescKey") != "goal":
+                        continue
+
+                    d = play.get("details", {})
+
+                    game_json["goals"].append({
+                        "period": play.get("periodDescriptor", {}).get("number"),
+                        "time": play.get("timeInPeriod"),
+                        "scorer": player_map.get(d.get("scoringPlayerId")),
+                        "assists": [
+                            player_map.get(a)
+                            for a in [d.get("assist1PlayerId"), d.get("assist2PlayerId")]
+                            if player_map.get(a)
+                        ],
+                        "strength": d.get("strength")
+                    })
+
+            except Exception as e:
+                print(f"⚠️ No scorer data for {game_id}")
+
+        # 🔥 ALWAYS WRITE FILE
+        file_path.write_text(json.dumps(game_json, indent=2))
+
+        count += 1
+
+        if count >= MAX_PER_RUN:
+            print("🛑 Hit run limit — stopping")
+            exit()
+
+print("DONE")
