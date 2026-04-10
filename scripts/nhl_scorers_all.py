@@ -6,7 +6,8 @@ print("NHL SCORERS ALL SEASONS")
 
 BASE = Path("docs/data/nhl")
 
-SEASONS = list(range(2005, 2027))  # 🔥 start here (reliable NHL data)
+# 🔥 Adjust range as needed
+SEASONS = list(range(2005, 2027))  # 2005 → 2026
 
 MAX_PER_RUN = 300
 count = 0
@@ -39,6 +40,7 @@ for SEASON in SEASONS:
         game_id = game.get("game_id") or game.get("id")
         file_path = box_dir / f"{game_id}.json"
 
+        # ✅ skip existing files
         if file_path.exists():
             continue
 
@@ -48,6 +50,7 @@ for SEASON in SEASONS:
         box = fetch(f"https://api-web.nhle.com/v1/gamecenter/{game_id}/boxscore")
 
         try:
+            # 🔥 PLAYER MAP (CORRECT LOCATION)
             player_map = {}
 
             stats = box.get("playerByGameStats", {})
@@ -63,6 +66,7 @@ for SEASON in SEASONS:
                         if pid and name:
                             player_map[pid] = name
 
+            # 🔥 PLAY DATA (HANDLE BOTH FORMATS)
             plays = pbp.get("plays") or pbp.get("gameData", {}).get("plays") or []
 
             goals = []
@@ -73,13 +77,17 @@ for SEASON in SEASONS:
 
                 d = play.get("details", {})
 
+                scorer_id = d.get("scoringPlayerId")
+                a1 = d.get("assist1PlayerId")
+                a2 = d.get("assist2PlayerId")
+
                 goals.append({
                     "period": play.get("periodDescriptor", {}).get("number"),
                     "time": play.get("timeInPeriod"),
-                    "scorer": player_map.get(d.get("scoringPlayerId")),
+                    "scorer": player_map.get(scorer_id),
                     "assists": [
                         player_map.get(a)
-                        for a in [d.get("assist1PlayerId"), d.get("assist2PlayerId")]
+                        for a in [a1, a2]
                         if player_map.get(a)
                     ],
                     "strength": d.get("strength")
@@ -87,11 +95,11 @@ for SEASON in SEASONS:
 
             game_json = {
                 "game_id": game_id,
-                "date": game["date"],
-                "home_team": game["home_team"],
-                "away_team": game["away_team"],
-                "home_score": game["home_score"],
-                "away_score": game["away_score"],
+                "date": game.get("date"),
+                "home_team": game.get("home_team"),
+                "away_team": game.get("away_team"),
+                "home_score": game.get("home_score"),
+                "away_score": game.get("away_score"),
                 "goals": goals
             }
 
@@ -99,6 +107,7 @@ for SEASON in SEASONS:
 
             count += 1
 
+            # 🔥 STOP BEFORE TIMEOUT
             if count >= MAX_PER_RUN:
                 print("Hit run limit — stopping safely")
                 exit()
@@ -107,4 +116,4 @@ for SEASON in SEASONS:
             print(f"FAILED {game_id}: {e}")
             continue
 
-print("DONE")nh
+print("DONE")
