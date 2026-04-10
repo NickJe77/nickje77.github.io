@@ -1,14 +1,11 @@
 import json
 from pathlib import Path
 
-print("SAFE BATHURST REBUILD (NO OVERWRITE)")
+print("BATHURST REBUILD (FIXED + SAFE)")
 
-SOURCE = Path("docs/data/bathurst")
-OUTPUT = Path("docs/data/bathurst_new")
+BASE = Path("docs/data/bathurst")
 
-OUTPUT.mkdir(parents=True, exist_ok=True)
-
-MAP_FILE = SOURCE / "driver_map.json"
+MAP_FILE = BASE / "driver_map.json"
 
 if MAP_FILE.exists():
     with open(MAP_FILE) as f:
@@ -16,53 +13,67 @@ if MAP_FILE.exists():
 else:
     DRIVER_MAP = {}
 
-def fix_drivers(drivers):
-
-    if isinstance(drivers, str):
-        drivers = [drivers]
-
-    if not isinstance(drivers, list):
-        return []
-
-    # ONLY fix if ALL are numbers
-    if all(str(d).isdigit() for d in drivers):
-        fixed = []
-        for d in drivers:
-            d = str(d)
-            if d in DRIVER_MAP:
-                fixed.extend(DRIVER_MAP[d])
-            else:
-                fixed.append(d)
-        return fixed
-
-    return drivers  # leave good data untouched
-
-
+# DO NOT TOUCH THESE FILES
 files = [
-    f for f in SOURCE.glob("*.json")
+    f for f in BASE.glob("*.json")
     if f.name not in ["driver_map.json", "index.json"]
 ]
 
-print(f"Files found: {len(files)}")
+def is_fake(name):
+    return str(name).lower().startswith("driver ")
+
+def is_number(val):
+    return str(val).isdigit()
 
 for file in files:
 
     with open(file) as f:
         data = json.load(f)
 
-    for r in data.get("results", []):
-        r["drivers"] = fix_drivers(r.get("drivers"))
+    changed = False
 
-    # rebuild winners safely
     for r in data.get("results", []):
-        if r.get("finish") == 1:
+
+        drivers = r.get("drivers")
+
+        if not drivers:
+            continue
+
+        if isinstance(drivers, str):
+            drivers = [drivers]
+
+        cleaned = []
+
+        for d in drivers:
+            d_str = str(d)
+
+            # ❌ REMOVE FAKE PLACEHOLDERS
+            if is_fake(d_str):
+                continue
+
+            # ⚠️ FIX NUMBERS ONLY IF WE HAVE A REAL MAP
+            if is_number(d_str) and d_str in DRIVER_MAP:
+                cleaned.extend(DRIVER_MAP[d_str])
+                changed = True
+            else:
+                cleaned.append(d_str)
+
+        if cleaned:
+            r["drivers"] = cleaned
+
+    # ✅ ALWAYS REBUILD WINNERS FROM POSITION
+    for r in data.get("results", []):
+        pos = str(r.get("pos") or r.get("finish") or "").strip()
+
+        if pos == "1":
             data["winners"] = r.get("drivers", [])
 
-    out_file = OUTPUT / file.name
+    if changed:
+        with open(file, "w") as f:
+            json.dump(data, f, indent=2)
 
-    with open(out_file, "w") as f:
-        json.dump(data, f, indent=2)
+        print(f"✔ updated {file.name}")
+    else:
+        print(f"– no change {file.name}")
 
-    print(f"✔ built {file.name}")
-
-print("DONE — check bathurst_new folder")
+print("DONE")
