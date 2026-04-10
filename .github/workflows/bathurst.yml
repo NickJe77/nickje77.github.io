@@ -1,46 +1,40 @@
-name: Bathurst Rebuild
+name: Bathurst Builder
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      # ✅ Checkout repo
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      # ✅ Python
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # ✅ Install everything your script needs
       - name: Install dependencies
         run: |
           pip install pandas requests beautifulsoup4 lxml
 
-      # ✅ Ensure folders exist (important)
-      - name: Ensure output folders
+      - name: Run Bathurst builder
         run: |
-          mkdir -p docs/data/bathurst/seasons
+          python scripts/bathurst_builder.py
 
-      # ✅ Run your script
-      - name: Run Bathurst rebuild
-        run: |
-          python scripts/bathurst_rebuild.py
-
-      # ✅ Commit + FIXED PUSH (this solves your error)
-      - name: Commit changes
+      - name: Commit & push
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          git pull --rebase
+          git add docs/data/bathurst/
 
-          git add docs/data/bathurst
-          git commit -m "Rebuild Bathurst data" || echo "No changes"
+          # 🔥 Prevent failure when nothing changed
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+
+          git commit -m "Bathurst update"
           git push
