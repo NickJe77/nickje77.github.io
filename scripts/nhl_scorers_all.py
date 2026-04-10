@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-print("NHL SCORERS SMART BUILDER")
+print("NHL SCORERS (FIXED DATA PARSING)")
 
 BASE = Path("docs/data/nhl")
 SEASONS = list(range(1967, 2026))
@@ -41,54 +41,44 @@ def process_game(SEASON, game):
         "goals": []
     }
 
+    # ONLY MODERN ERA HAS PLAY-BY-PLAY
     if SEASON >= 2005:
-        pbp = fetch_json(f"https://api-web.nhle.com/v1/gamecenter/{game_id}/play-by-play")
-        box = fetch_json(f"https://api-web.nhle.com/v1/gamecenter/{game_id}/boxscore")
+
+        pbp = fetch_json(f"https://statsapi.web.nhl.com/api/v1/game/{game_id}/feed/live")
 
         try:
-            player_map = {}
-
-            stats = box.get("playerByGameStats", {})
-
-            for side in ["homeTeam", "awayTeam"]:
-                team = stats.get(side, {})
-                for group in ["forwards", "defense", "goalies"]:
-                    for p in team.get(group, []):
-                        pid = p.get("playerId")
-                        name = p.get("name", {}).get("default")
-                        if pid and name:
-                            player_map[pid] = name
-
-            plays = pbp.get("plays") or pbp.get("gameData", {}).get("plays") or []
+            plays = pbp["liveData"]["plays"]["allPlays"]
 
             for play in plays:
-                if play.get("typeDescKey") != "goal":
+                if play["result"]["eventTypeId"] != "GOAL":
                     continue
 
-                d = play.get("details", {})
+                scorer = None
+                assists = []
+
+                for player in play.get("players", []):
+                    if player["playerType"] == "Scorer":
+                        scorer = player["player"]["fullName"]
+                    elif player["playerType"] == "Assist":
+                        assists.append(player["player"]["fullName"])
 
                 game_json["goals"].append({
-                    "period": play.get("periodDescriptor", {}).get("number"),
-                    "time": play.get("timeInPeriod"),
-                    "scorer": player_map.get(d.get("scoringPlayerId")),
-                    "assists": [
-                        player_map.get(a)
-                        for a in [d.get("assist1PlayerId"), d.get("assist2PlayerId")]
-                        if player_map.get(a)
-                    ],
-                    "strength": d.get("strength")
+                    "period": play["about"]["period"],
+                    "time": play["about"]["periodTime"],
+                    "scorer": scorer,
+                    "assists": assists,
+                    "strength": play["result"].get("strength", {}).get("name")
                 })
-        except:
-            pass
+
+        except Exception as e:
+            print(f"⚠️ Failed parsing {game_id}")
 
     return (file_path, game_json)
 
 
 tasks = []
-skipped_seasons = 0
 
 for SEASON in SEASONS:
-
     season_file = BASE / f"seasons/{SEASON}.json"
     box_dir = BASE / f"boxscores/{SEASON}"
     box_dir.mkdir(parents=True, exist_ok=True)
@@ -97,17 +87,6 @@ for SEASON in SEASONS:
         continue
 
     games = json.loads(season_file.read_text())
-
-    # 🔥 COUNT EXISTING FILES
-    existing_files = list(box_dir.glob("*.json"))
-
-    # ✅ SKIP FULL SEASON
-    if len(existing_files) >= len(games) and len(games) > 0:
-        print(f"✅ Skipping {SEASON} (complete)")
-        skipped_seasons += 1
-        continue
-
-    print(f"--- {SEASON} --- missing {len(games) - len(existing_files)} games")
 
     for game in games:
         game_id = game.get("game_id") or game.get("id")
@@ -119,9 +98,7 @@ for SEASON in SEASONS:
         if not file_path.exists():
             tasks.append((SEASON, game))
 
-
-print(f"\nQueued missing games: {len(tasks)}")
-print(f"Skipped seasons: {skipped_seasons}")
+print(f"Queued games: {len(tasks)}")
 
 with ThreadPoolExecutor(max_workers=12) as executor:
     futures = [executor.submit(process_game, s, g) for s, g in tasks]
@@ -136,10 +113,10 @@ with ThreadPoolExecutor(max_workers=12) as executor:
             count += 1
 
             if count % 200 == 0:
-                print(f"Built {count} games")
+                print(f"Built {count}")
 
             if count >= MAX_PER_RUN:
-                print("🛑 Hit limit, stopping")
+                print("🛑 Hit limit")
                 break
 
-print(f"DONE — built {count} games")
+print(f"DONE — built {count}")
