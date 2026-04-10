@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 from datetime import datetime, timezone
 
-print("BATHURST BUILDER (FINAL DRIVER FIX - WORKING)")
+print("BATHURST BUILDER (FINAL - ALL YEARS FIXED)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS = BASE / "seasons"
@@ -69,8 +69,14 @@ def extract_tables(html):
     return dfs
 
 
-# 🔥 NORMALIZE + MERGE DRIVER COLUMNS
 def normalize(df):
+    # flatten multi-index columns
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = [
+            " ".join([str(i) for i in col if str(i) != "nan"])
+            for col in df.columns
+        ]
+
     df.columns = [clean(c).lower() for c in df.columns]
 
     rename = {}
@@ -81,7 +87,7 @@ def normalize(df):
         if "pos" in c:
             rename[c] = "pos"
 
-        elif any(k in c for k in ["driver", "co-driver", "co driver", "entrant"]):
+        elif any(k in c for k in ["driver", "drivers", "co-driver", "co driver", "entrant"]):
             driver_cols.append(c)
 
         elif "team" in c:
@@ -98,13 +104,18 @@ def normalize(df):
 
     df = df.rename(columns=rename)
 
-    # merge driver columns into one string
+    # PRIMARY: merge driver columns
     if driver_cols:
         df["drivers"] = df[driver_cols].apply(
             lambda row: " / ".join([clean(x) for x in row if clean(x)]),
             axis=1
         )
         df = df.drop(columns=driver_cols)
+
+    # FALLBACK: use 2nd column if no driver column found
+    elif len(df.columns) >= 2:
+        fallback_col = df.columns[1]
+        df["drivers"] = df[fallback_col].apply(lambda x: clean(x))
 
     return df
 
@@ -133,21 +144,20 @@ def best_results(tables):
     return best
 
 
-# 🔥 FINAL DRIVER PARSER (FIXED)
 def split_drivers(val):
     if not val:
         return []
 
     val = clean(val)
 
-    # remove brackets content
+    # remove brackets
     val = re.sub(r"\([^)]*\)", "", val)
 
     # normalize separators
     val = val.replace("\n", "/")
     val = val.replace(" and ", "/")
-    val = val.replace(";", "/")
     val = val.replace("&", "/")
+    val = val.replace(";", "/")
 
     parts = re.split(r"/", val)
 
@@ -155,11 +165,10 @@ def split_drivers(val):
 
     for p in parts:
         p = clean(p)
-
         if not p:
             continue
 
-        # FIX reversed names: "Brock, Peter"
+        # fix reversed names
         if "," in p:
             bits = [b.strip() for b in p.split(",")]
             if len(bits) == 2:
@@ -170,7 +179,7 @@ def split_drivers(val):
 
         drivers.append(p)
 
-    # remove duplicates
+    # dedupe
     seen = set()
     out = []
     for d in drivers:
@@ -191,7 +200,6 @@ def df_to_json(df):
         if "drivers" in row:
             row["drivers"] = split_drivers(row["drivers"])
 
-        # optional: clean pos to integer (safe)
         if "pos" in row and row["pos"]:
             try:
                 row["pos"] = int(re.sub(r"[^\d]", "", row["pos"]))
