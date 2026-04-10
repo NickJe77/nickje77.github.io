@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 from datetime import datetime, timezone
 
-print("BATHURST BUILDER (FULL FIX)")
+print("BATHURST BUILDER (FINAL DRIVER FIX)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS = BASE / "seasons"
@@ -69,7 +69,7 @@ def extract_tables(html):
     return dfs
 
 
-# 🔥 FIXED NORMALIZE (handles multiple driver columns)
+# 🔥 NORMALIZE + MERGE DRIVER COLUMNS
 def normalize(df):
     df.columns = [clean(c).lower() for c in df.columns]
 
@@ -98,7 +98,7 @@ def normalize(df):
 
     df = df.rename(columns=rename)
 
-    # 🔥 MERGE DRIVER COLUMNS
+    # merge driver columns into one string
     if driver_cols:
         df["drivers"] = df[driver_cols].apply(
             lambda row: " / ".join([clean(x) for x in row if clean(x)]),
@@ -133,13 +133,52 @@ def best_results(tables):
     return best
 
 
-# 🔥 SPLIT DRIVERS INTO LIST
+# 🔥 FINAL DRIVER PARSER (ROBUST)
 def split_drivers(val):
     if not val:
         return []
 
-    parts = re.split(r"/| and |,", val)
-    return [clean(p) for p in parts if clean(p)]
+    val = clean(val)
+
+    # remove brackets content
+    val = re.sub(r"\([^)]*\)", "", val)
+
+    # normalize separators
+    val = val.replace(" and ", "/")
+    val = val.replace(";", "/")
+
+    parts = re.split(r"/", val)
+
+    drivers = []
+
+    for p in parts:
+        p = clean(p)
+
+        if not p:
+            continue
+
+        # FIX reversed names: "Brock, Peter"
+        if "," in p:
+            bits = [b.strip() for b in p.split(",")]
+            if len(bits) == 2:
+                p = f"{bits[1]} {bits[0]}"
+
+        # ignore junk
+        if len(p) < 3:
+            continue
+
+        drivers.append(p)
+
+    # remove duplicates
+    seen = set()
+    out = []
+    for d in drivers:
+        key = d.lower()
+        if key not in seen:
+            seen.add(key)
+            out.append(d)
+
+    return out
 
 
 def df_to_json(df):
@@ -182,7 +221,6 @@ def build_year(year):
 
     results = df_to_json(res_df)
 
-    # 🔥 BUILD GRID CLEANLY
     grid = []
     for r in results:
         if r.get("grid"):
