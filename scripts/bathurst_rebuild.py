@@ -1,237 +1,227 @@
 import json
-import re
-from pathlib import Path
-
+import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+from io import StringIO
+from pathlib import Path
+import re
+from datetime import datetime, timezone
 
-print("BATHURST REBUILD 1963+ (ALL DRIVERS, NO PLACEHOLDERS)")
+print("BATHURST BUILDER (FULL FIX)")
 
-BASE_URL = "https://www.uniquecarsandparts.com/bathurst_{year}.htm"
-OUT_DIR = Path("docs/data/bathurst")
-OUT_DIR.mkdir(parents=True, exist_ok=True)
+BASE = Path("docs/data/bathurst")
+SEASONS = BASE / "seasons"
+INDEX = BASE / "index.json"
 
-START_YEAR = 1963
-END_YEAR = 2026
+SEASONS.mkdir(parents=True, exist_ok=True)
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
+START_YEAR = 1960
 
-RESULT_TOKENS_STOP = {
-    "Image", "back", "next"
-}
+def latest_year():
+    now = datetime.now(timezone.utc)
+    return now.year if now.month > 10 else now.year - 1
 
-STATUS_VALUES = {"DNF", "DNS", "DSQ", "DQ", "RET", "WD"}
+END_YEAR = latest_year()
 
-
-def clean_text(text: str) -> str:
-    text = text.replace("\xa0", " ")
-    text = re.sub(r"\[\d+\]", "", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
-def driver_slug(name: str) -> str:
-    name = name.lower().strip()
-    name = re.sub(r"[^a-z0-9]+", "-", name)
-    name = re.sub(r"-+", "-", name).strip("-")
-    return name
+def clean(x):
+    if x is None:
+        return None
+    x = str(x)
+    x = re.sub(r"\[[^\]]+\]", "", x)
+    x = x.replace("\xa0", " ")
+    x = re.sub(r"\s+", " ", x).strip()
+    return x if x else None
 
 
-def parse_driver_list(raw: str):
-    raw = clean_text(raw)
-    if not raw:
-        return []
+def try_urls(year):
+    names = [
+        f"{year}_Bathurst_1000",
+        f"{year}_Bathurst_500",
+        f"{year}_Armstrong_500",
+        f"{year}_Hardie-Ferodo_500",
+        f"{year}_Tooheys_1000"
+    ]
 
-    parts = re.split(r"\s*/\s*|\s+and\s+|,\s*", raw)
-    drivers = [clean_text(p) for p in parts if clean_text(p)]
+    for n in names:
+        url = f"https://en.wikipedia.org/wiki/{n}"
+        r = requests.get(url, headers=HEADERS)
+        if r.status_code == 200 and "Bathurst" in r.text:
+            return url, r.text
 
-    seen = set()
-    out = []
-    for d in drivers:
-        key = d.lower()
-        if key not in seen:
-            seen.add(key)
-            out.append(d)
-
-    return out
-
-
-def parse_finish(value: str):
-    value = clean_text(value)
-    if value.isdigit():
-        return int(value)
-    return value
+    return None, None
 
 
-def parse_laps(value: str):
-    value = clean_text(value)
-    m = re.search(r"\d+", value)
-    return int(m.group(0)) if m else None
-
-
-def extract_text_lines(html: str):
+def extract_tables(html):
     soup = BeautifulSoup(html, "html.parser")
+    tables = soup.find_all("table", {"class": "wikitable"})
 
-    for tag in soup(["script", "style", "noscript"]):
-        tag.decompose()
+    dfs = []
+    for t in tables:
+        try:
+            df = pd.read_html(StringIO(str(t)))[0]
+            dfs.append(df)
+        except:
+            continue
 
-    text = soup.get_text("\n")
-    lines = [clean_text(line) for line in text.splitlines()]
-    lines = [line for line in lines if line]
-    return lines
-
-
-def find_results_start(lines):
-    for i in range(len(lines) - 4):
-        if (
-            lines[i] == "PLACE"
-            and "DRIVER" in lines[i + 1].upper()
-            and lines[i + 2] == "VEHICLE"
-            and lines[i + 3] == "CLASS"
-            and lines[i + 4] == "LAPS"
-        ):
-            return i + 5
-    return None
+    return dfs
 
 
-def looks_like_place_token(token: str):
-    token = clean_text(token).upper()
-    if token.isdigit():
-        return True
-    if token in STATUS_VALUES:
-        return True
-    return False
+# 🔥 FIXED NORMALIZE (handles multiple driver columns)
+def normalize(df):
+    df.columns = [clean(c).lower() for c in df.columns]
+
+    rename = {}
+    driver_cols = []
+
+    for c in df.columns:
+
+        if "pos" in c:
+            rename[c] = "pos"
+
+        elif "driver" in c:
+            driver_cols.append(c)
+
+        elif "team" in c:
+            rename[c] = "team"
+
+        elif "car" in c:
+            rename[c] = "car"
+
+        elif "lap" in c:
+            rename[c] = "laps"
+
+        elif "grid" in c:
+            rename[c] = "grid"
+
+    df = df.rename(columns=rename)
+
+    # 🔥 MERGE DRIVER COLUMNS
+    if driver_cols:
+        df["drivers"] = df[driver_cols].apply(
+            lambda row: " / ".join([clean(x) for x in row if clean(x)]),
+            axis=1
+        )
+        df = df.drop(columns=driver_cols)
+
+    return df
 
 
-def parse_results_from_lines(lines):
-    start = find_results_start(lines)
-    if start is None:
+def best_results(tables):
+    best = None
+    score = 0
+
+    for df in tables:
+        df = normalize(df)
+
+        s = 0
+        if "pos" in df.columns:
+            s += 10
+        if "drivers" in df.columns:
+            s += 10
+        if "car" in df.columns:
+            s += 10
+        if len(df) > 10:
+            s += 10
+
+        if s > score:
+            score = s
+            best = df
+
+    return best
+
+
+# 🔥 SPLIT DRIVERS INTO LIST
+def split_drivers(val):
+    if not val:
         return []
 
-    results = []
-    i = start
-
-    while i + 4 < len(lines):
-        place = clean_text(lines[i])
-
-        if place in RESULT_TOKENS_STOP:
-            break
-
-        if not looks_like_place_token(place):
-            i += 1
-            continue
-
-        drivers_raw = clean_text(lines[i + 1])
-        car = clean_text(lines[i + 2])
-        race_class = clean_text(lines[i + 3])
-        laps_raw = clean_text(lines[i + 4])
-
-        if not drivers_raw or not car:
-            i += 1
-            continue
-
-        drivers = parse_driver_list(drivers_raw)
-
-        if not drivers:
-            i += 1
-            continue
-
-        result = {
-            "finish": parse_finish(place),
-            "grid": None,
-            "drivers": drivers,
-            "car": car,
-            "class": race_class or None,
-            "laps": parse_laps(laps_raw),
-            "time": None
-        }
-
-        results.append(result)
-        i += 5
-
-    return results
+    parts = re.split(r"/| and |,", val)
+    return [clean(p) for p in parts if clean(p)]
 
 
-def fetch_year(year: int):
-    url = BASE_URL.format(year=year)
-    r = requests.get(url, headers=HEADERS, timeout=30)
+def df_to_json(df):
+    rows = []
 
-    if r.status_code != 200:
-        print(f"Skip {year}: HTTP {r.status_code}")
+    for _, r in df.iterrows():
+        row = {k: clean(v) for k, v in r.items()}
+
+        if "drivers" in row:
+            row["drivers"] = split_drivers(row["drivers"])
+
+        if any(row.values()):
+            rows.append(row)
+
+    return rows
+
+
+def build_year(year):
+    print(f"\n--- {year} ---")
+
+    url, html = try_urls(year)
+
+    if not html:
+        print("No page")
         return None
 
-    lines = extract_text_lines(r.text)
-    results = parse_results_from_lines(lines)
+    print("URL:", url)
 
-    if not results:
-        print(f"Skip {year}: no parsed results")
+    tables = extract_tables(html)
+
+    if not tables:
+        print("No tables")
         return None
 
-    winners = []
-    for row in results:
-        if row["finish"] == 1:
-            winners = row["drivers"]
-            break
-    if not winners and results:
-        winners = results[0]["drivers"]
+    res_df = best_results(tables)
 
-    race = {
+    if res_df is None:
+        print("No results table")
+        return None
+
+    results = df_to_json(res_df)
+
+    # 🔥 BUILD GRID CLEANLY
+    grid = []
+    for r in results:
+        if r.get("grid"):
+            grid.append({
+                "grid": r.get("grid"),
+                "drivers": r.get("drivers"),
+                "team": r.get("team"),
+                "car": r.get("car")
+            })
+
+    data = {
         "year": year,
-        "track": "Mount Panorama",
-        "results": results,
-        "winners": winners,
-        "source": url
+        "url": url,
+        "grid": grid,
+        "results": results
     }
 
-    return race
+    file = SEASONS / f"{year}.json"
+    file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    print(f"Saved {year}")
+
+    return {"year": year, "file": f"seasons/{year}.json"}
 
 
-all_years = []
-all_drivers = {}
+def main():
+    summary = []
 
-for year in range(START_YEAR, END_YEAR + 1):
-    print(f"Scraping {year}...")
-    race = fetch_year(year)
+    for y in range(START_YEAR, END_YEAR + 1):
+        try:
+            r = build_year(y)
+            if r:
+                summary.append(r)
+        except Exception as e:
+            print("FAIL", y, e)
 
-    if not race:
-        continue
+    INDEX.write_text(json.dumps(summary, indent=2))
+    print("\nDONE")
 
-    out_file = OUT_DIR / f"{year}.json"
-    with open(out_file, "w", encoding="utf-8") as f:
-        json.dump(race, f, indent=2, ensure_ascii=False)
 
-    all_years.append({
-        "year": year,
-        "winners": race["winners"]
-    })
-
-    for row in race["results"]:
-        pos = row["finish"] if isinstance(row["finish"], int) else None
-
-        for d in row["drivers"]:
-            rec = all_drivers.setdefault(d, {
-                "name": d,
-                "slug": driver_slug(d),
-                "starts": 0,
-                "wins": 0,
-                "podiums": 0
-            })
-            rec["starts"] += 1
-            if pos == 1:
-                rec["wins"] += 1
-            if pos is not None and pos <= 3:
-                rec["podiums"] += 1
-
-    print(f"Saved {year}.json ({len(race['results'])} results)")
-
-all_years.sort(key=lambda x: x["year"])
-with open(OUT_DIR / "index.json", "w", encoding="utf-8") as f:
-    json.dump(all_years, f, indent=2, ensure_ascii=False)
-
-driver_list = sorted(all_drivers.values(), key=lambda x: (-x["wins"], -x["podiums"], x["name"]))
-with open(OUT_DIR / "drivers.json", "w", encoding="utf-8") as f:
-    json.dump(driver_list, f, indent=2, ensure_ascii=False)
-
-print("DONE")
+if __name__ == "__main__":
+    main()
