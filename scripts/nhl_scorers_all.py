@@ -2,7 +2,7 @@ import requests
 import json
 from pathlib import Path
 
-print("NHL SCORERS ALL SEASONS (FORCED BUILD)")
+print("NHL SCORERS ALL SEASONS (FIXED PROGRESSION)")
 
 BASE = Path("docs/data/nhl")
 
@@ -10,6 +10,7 @@ SEASONS = list(range(1967, 2026))
 
 MAX_PER_RUN = 300
 count = 0
+stop = False
 
 def fetch(url):
     try:
@@ -22,6 +23,9 @@ def fetch(url):
 
 for SEASON in SEASONS:
 
+    if stop:
+        break
+
     season_file = BASE / f"seasons/{SEASON}.json"
     box_dir = BASE / f"boxscores/{SEASON}"
     box_dir.mkdir(parents=True, exist_ok=True)
@@ -29,29 +33,19 @@ for SEASON in SEASONS:
     print(f"\n--- {SEASON} ---")
 
     if not season_file.exists():
-        print(f"❌ Missing season file for {SEASON}")
+        print(f"Skipping {SEASON} (no season file)")
         continue
 
     games = json.loads(season_file.read_text())
-
     print(f"Games found: {len(games)}")
-
-    if not games:
-        continue
 
     for game in games:
 
         game_id = game.get("game_id") or game.get("id")
-
-        if not game_id:
-            print("❌ Missing game_id")
-            continue
-
         file_path = box_dir / f"{game_id}.json"
 
-        # 🔥 COMMENT THIS OUT TO FORCE REBUILD
-        # if file_path.exists():
-        #     continue
+        if file_path.exists():
+            continue
 
         print(f"Building {SEASON} - {game_id}")
 
@@ -65,7 +59,6 @@ for SEASON in SEASONS:
             "goals": []
         }
 
-        # ONLY MODERN NHL HAS SCORERS
         if SEASON >= 2005:
 
             pbp = fetch(f"https://api-web.nhle.com/v1/gamecenter/{game_id}/play-by-play")
@@ -107,16 +100,16 @@ for SEASON in SEASONS:
                         "strength": d.get("strength")
                     })
 
-            except Exception as e:
-                print(f"⚠️ No scorer data for {game_id}")
+            except:
+                pass
 
-        # 🔥 ALWAYS WRITE FILE
         file_path.write_text(json.dumps(game_json, indent=2))
 
         count += 1
 
         if count >= MAX_PER_RUN:
-            print("🛑 Hit run limit — stopping")
-            exit()
+            print("🛑 Hit run limit — stopping safely")
+            stop = True
+            break
 
 print("DONE")
