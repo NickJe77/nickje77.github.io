@@ -1,19 +1,10 @@
 import json
 from pathlib import Path
 
-print("BATHURST REBUILD (FIXED + SAFE)")
+print("BATHURST CLEAN FIX")
 
 BASE = Path("docs/data/bathurst")
 
-MAP_FILE = BASE / "driver_map.json"
-
-if MAP_FILE.exists():
-    with open(MAP_FILE) as f:
-        DRIVER_MAP = json.load(f)
-else:
-    DRIVER_MAP = {}
-
-# DO NOT TOUCH THESE FILES
 files = [
     f for f in BASE.glob("*.json")
     if f.name not in ["driver_map.json", "index.json"]
@@ -21,9 +12,6 @@ files = [
 
 def is_fake(name):
     return str(name).lower().startswith("driver ")
-
-def is_number(val):
-    return str(val).isdigit()
 
 for file in files:
 
@@ -36,43 +24,29 @@ for file in files:
 
         drivers = r.get("drivers")
 
-        if not drivers:
-            continue
-
         if isinstance(drivers, str):
             drivers = [drivers]
 
-        cleaned = []
+        if not isinstance(drivers, list):
+            continue
 
-        for d in drivers:
-            d_str = str(d)
+        # REMOVE ONLY FAKE NAMES
+        cleaned = [d for d in drivers if not is_fake(d)]
 
-            # ❌ REMOVE FAKE PLACEHOLDERS
-            if is_fake(d_str):
-                continue
-
-            # ⚠️ FIX NUMBERS ONLY IF WE HAVE A REAL MAP
-            if is_number(d_str) and d_str in DRIVER_MAP:
-                cleaned.extend(DRIVER_MAP[d_str])
-                changed = True
-            else:
-                cleaned.append(d_str)
-
-        if cleaned:
+        if cleaned != drivers and cleaned:
             r["drivers"] = cleaned
+            changed = True
 
-    # ✅ ALWAYS REBUILD WINNERS FROM POSITION
+    # rebuild winners
     for r in data.get("results", []):
-        pos = str(r.get("pos") or r.get("finish") or "").strip()
-
-        if pos == "1":
+        if r.get("finish") == 1:
             data["winners"] = r.get("drivers", [])
 
     if changed:
         with open(file, "w") as f:
             json.dump(data, f, indent=2)
 
-        print(f"✔ updated {file.name}")
+        print(f"✔ cleaned {file.name}")
     else:
         print(f"– no change {file.name}")
 
