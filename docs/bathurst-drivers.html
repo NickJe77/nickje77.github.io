@@ -108,54 +108,55 @@
 </div>
 
 <script>
-let drivers = [];
 
+let drivers = {};
+
+// ✅ FIXED FOR ARRAY DATA
 function addDriver(name, result){
   if(!name) return;
 
-  // split co-drivers
-  let parts = name.split(/\/|,| and /);
+  if(!drivers[name]){
+    drivers[name] = {name:name, starts:0, wins:0, podiums:0};
+  }
 
-  parts.forEach(p => {
-    let d = p.trim();
-    if(!d) return;
+  drivers[name].starts++;
 
-    if(!drivers[d]){
-      drivers[d] = {name:d, starts:0, wins:0, podiums:0};
-    }
-
-    drivers[d].starts++;
-
-    if(result == 1) drivers[d].wins++;
-    if(result <= 3) drivers[d].podiums++;
-  });
+  if(result === 1) drivers[name].wins++;
+  if(result && result <= 3) drivers[name].podiums++;
 }
 
+const START_YEAR = 1963;
+const END_YEAR = new Date().getFullYear();
 
-fetch("data/bathurst/index.json")
-.then(res => res.json())
-.then(async years => {
+async function load(){
 
-  for(const y of years){
+  for(let y = START_YEAR; y <= END_YEAR; y++){
+
     try{
-      const res = await fetch(`data/bathurst/seasons/${y.year}.json`);
+      const res = await fetch(`data/bathurst/${y}.json`);
+      if(!res.ok) continue;
+
       const data = await res.json();
 
-      if(data.results){
-        data.results.forEach(r => {
-          let pos = parseInt(r.pos);
-          addDriver(r.drivers, pos);
+      data.results.forEach(r => {
+
+        const pos = r.finish || null;
+
+        // 🔥 LOOP EACH DRIVER (array)
+        r.drivers.forEach(d => {
+          addDriver(d, pos);
         });
-      }
+
+      });
 
     } catch(e){}
   }
 
   renderTable();
-});
-
+}
 
 function renderTable(filter=""){
+
   const tbody = document.getElementById("table");
   tbody.innerHTML = "";
 
@@ -168,6 +169,7 @@ function renderTable(filter=""){
   list.sort((a,b) => b.wins - a.wins);
 
   list.forEach(d => {
+
     const tr = document.createElement("tr");
 
     tr.innerHTML = `
@@ -185,10 +187,12 @@ function renderTable(filter=""){
   });
 }
 
-
 document.getElementById("search").addEventListener("input", e => {
   renderTable(e.target.value);
 });
+
+load();
+
 </script>
 
 </body>
