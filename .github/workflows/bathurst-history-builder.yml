@@ -1,9 +1,12 @@
-name: Bathurst History Builder
+name: Bathurst Builder
 
 on:
   workflow_dispatch:
   schedule:
     - cron: "0 6 * * 1"
+
+permissions:
+  contents: write   # 🔥 THIS IS CRITICAL
 
 jobs:
   build:
@@ -22,19 +25,24 @@ jobs:
         run: |
           pip install requests beautifulsoup4 pandas lxml
 
-      - name: Ensure folders exist
-        run: |
-          mkdir -p docs/data/bathurst/seasons
-          mkdir -p scripts
-
-      - name: Build Bathurst history
+      - name: Run builder
         run: |
           python scripts/bathurst_build_history.py
 
-      - name: Commit updated Bathurst data
+      - name: Debug files (IMPORTANT)
+        run: |
+          echo "FILES CREATED:"
+          ls -R docs || echo "NO DOCS FOLDER"
+
+      - name: Commit files
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add docs/data/bathurst
-          git commit -m "Update Bathurst history data" || echo "No changes"
-          git pushbath
+
+          git add -A   # 🔥 FORCE ADD EVERYTHING
+
+          git status   # 🔍 SEE WHAT IT PICKS UP
+
+          git commit -m "Bathurst data build" || echo "No changes"
+
+          git push
