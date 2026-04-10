@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-print("FIXING BATHURST DRIVER NAMES")
+print("BATHURST DRIVER FIX (BULLETPROOF)")
 
 BASE = Path("docs/data/bathurst")
 MAP_FILE = BASE / "driver_map.json"
@@ -17,7 +17,40 @@ with open(MAP_FILE, "r") as f:
     DRIVER_MAP = json.load(f)
 
 # -----------------------------
-# PROCESS ALL YEAR FILES
+# HELPER: NORMALISE DRIVERS
+# -----------------------------
+def normalise(drivers):
+
+    # Convert string → list
+    if isinstance(drivers, str):
+        drivers = [drivers]
+
+    if not isinstance(drivers, list):
+        return []
+
+    fixed = []
+
+    for d in drivers:
+
+        if not d:
+            continue
+
+        d = str(d).strip()
+
+        # If numeric → map it
+        if d.isdigit():
+            if d in DRIVER_MAP:
+                fixed.extend(DRIVER_MAP[d])
+            else:
+                fixed.append(d)
+
+        else:
+            fixed.append(d)
+
+    return fixed
+
+# -----------------------------
+# PROCESS FILES
 # -----------------------------
 files = sorted(BASE.glob("*.json"))
 
@@ -34,39 +67,28 @@ for file in files:
 
         for r in data.get("results", []):
 
-            # If drivers already look correct → skip
-            if isinstance(r.get("drivers"), list):
-                if all(not d.isdigit() for d in r["drivers"]):
-                    continue
+            original = r.get("drivers")
 
-            # Fix numeric drivers
-            new_drivers = []
+            fixed = normalise(original)
 
-            for d in r.get("drivers", []):
+            # Only update if changed
+            if fixed != original:
+                r["drivers"] = fixed
+                changed = True
 
-                key = str(d)
-
-                if key in DRIVER_MAP:
-                    new_drivers.extend(DRIVER_MAP[key])
-                    changed = True
-                else:
-                    new_drivers.append(d)
-
-            r["drivers"] = new_drivers
-
-        # Rebuild winners properly
-        winners = []
+        # rebuild winners
         for r in data.get("results", []):
             if r.get("finish") == 1:
-                winners = r.get("drivers", [])
+                data["winners"] = r.get("drivers", [])
 
-        data["winners"] = winners
+        # save if needed
+        if changed:
+            with open(file, "w") as f:
+                json.dump(data, f, indent=2)
 
-        # Save back
-        with open(file, "w") as f:
-            json.dump(data, f, indent=2)
-
-        print(f"✔ Fixed {file.name}")
+            print(f"✔ Fixed {file.name}")
+        else:
+            print(f"– No change {file.name}")
 
     except Exception as e:
         print(f"⚠ Failed {file.name}: {e}")
