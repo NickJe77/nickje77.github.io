@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-print("NHL SCORERS (FIXED DATA PARSING)")
+print("NHL SCORERS (FINAL WORKING VERSION)")
 
 BASE = Path("docs/data/nhl")
 SEASONS = list(range(1967, 2026))
@@ -41,33 +41,29 @@ def process_game(SEASON, game):
         "goals": []
     }
 
-    # ONLY MODERN ERA HAS PLAY-BY-PLAY
+    # ONLY MODERN ERA
     if SEASON >= 2005:
 
-        pbp = fetch_json(f"https://statsapi.web.nhl.com/api/v1/game/{game_id}/feed/live")
+        pbp = fetch_json(f"https://api-web.nhle.com/v1/gamecenter/{game_id}/play-by-play")
 
         try:
-            plays = pbp["liveData"]["plays"]["allPlays"]
+            plays = pbp.get("plays", [])
 
             for play in plays:
-                if play["result"]["eventTypeId"] != "GOAL":
+                if play.get("typeDescKey") != "goal":
                     continue
 
-                scorer = None
-                assists = []
-
-                for player in play.get("players", []):
-                    if player["playerType"] == "Scorer":
-                        scorer = player["player"]["fullName"]
-                    elif player["playerType"] == "Assist":
-                        assists.append(player["player"]["fullName"])
+                details = play.get("details", {})
 
                 game_json["goals"].append({
-                    "period": play["about"]["period"],
-                    "time": play["about"]["periodTime"],
-                    "scorer": scorer,
-                    "assists": assists,
-                    "strength": play["result"].get("strength", {}).get("name")
+                    "period": play.get("periodDescriptor", {}).get("number"),
+                    "time": play.get("timeInPeriod"),
+                    "scorer": details.get("scoringPlayerName"),
+                    "assists": [
+                        details.get("assist1PlayerName"),
+                        details.get("assist2PlayerName")
+                    ],
+                    "strength": details.get("strength")
                 })
 
         except Exception as e:
