@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+  <meta charset="UTF-8">
+  <title>Bathurst Drivers | The Sporting Almanac</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    body{
+      font-family:Inter,system-ui,Arial;
+      margin:0;
+      background:#f4f6f8;
+    }
+
+    .navbar{
+      display:flex;
+      justify-content:center;
+      gap:24px;
+      padding:16px 0;
+      background:#fff;
+      border-bottom:1px solid #ddd;
+      font-weight:600;
+    }
+
+    .navbar a{
+      text-decoration:none;
+      color:#0056d6;
+    }
+
+    .container{
+      max-width:1100px;
+      margin:auto;
+      padding:20px;
+    }
+
+    h1{
+      text-align:center;
+      margin-bottom:15px;
+    }
+
+    .search{
+      width:100%;
+      padding:10px;
+      font-size:16px;
+      margin-bottom:15px;
+      border-radius:8px;
+      border:1px solid #ccc;
+    }
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+      background:#fff;
+      border-radius:10px;
+      overflow:hidden;
+    }
+
+    th, td{
+      padding:10px;
+      text-align:left;
+    }
+
+    th{
+      background:#002D72;
+      color:#fff;
+    }
+
+    tbody tr:nth-child(even){
+      background:#f2f6ff;
+    }
+
+    tbody tr:hover{
+      background:#e0ecff;
+    }
+
+    .driver-link{
+      color:#0056d6;
+      text-decoration:none;
+      font-weight:600;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="bathurst.html">Bathurst</a>
+  <a href="/">Home</a>
+</div>
+
+<div class="container">
+  <h1>Bathurst Drivers</h1>
+
+  <input type="text" id="search" class="search" placeholder="Search driver...">
+
+  <table>
+    <thead>
+      <tr>
+        <th>Driver</th>
+        <th>Starts</th>
+        <th>Wins</th>
+        <th>Podiums</th>
+      </tr>
+    </thead>
+    <tbody id="table"></tbody>
+  </table>
+</div>
+
+<script>
+let drivers = [];
+
+function addDriver(name, result){
+  if(!name) return;
+
+  // split co-drivers
+  let parts = name.split(/\/|,| and /);
+
+  parts.forEach(p => {
+    let d = p.trim();
+    if(!d) return;
+
+    if(!drivers[d]){
+      drivers[d] = {name:d, starts:0, wins:0, podiums:0};
+    }
+
+    drivers[d].starts++;
+
+    if(result == 1) drivers[d].wins++;
+    if(result <= 3) drivers[d].podiums++;
+  });
+}
+
+
+fetch("data/bathurst/index.json")
+.then(res => res.json())
+.then(async years => {
+
+  for(const y of years){
+    try{
+      const res = await fetch(`data/bathurst/seasons/${y.year}.json`);
+      const data = await res.json();
+
+      if(data.results){
+        data.results.forEach(r => {
+          let pos = parseInt(r.pos);
+          addDriver(r.drivers, pos);
+        });
+      }
+
+    } catch(e){}
+  }
+
+  renderTable();
+});
+
+
+function renderTable(filter=""){
+  const tbody = document.getElementById("table");
+  tbody.innerHTML = "";
+
+  let list = Object.values(drivers);
+
+  list = list.filter(d => 
+    d.name.toLowerCase().includes(filter.toLowerCase())
+  );
+
+  list.sort((a,b) => b.wins - a.wins);
+
+  list.forEach(d => {
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td>
+        <a class="driver-link" href="bathurst-driver.html?name=${encodeURIComponent(d.name)}">
+          ${d.name}
+        </a>
+      </td>
+      <td>${d.starts}</td>
+      <td>${d.wins}</td>
+      <td>${d.podiums}</td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+
+
+document.getElementById("search").addEventListener("input", e => {
+  renderTable(e.target.value);
+});
+</script>
+
+</body>
+</html>
