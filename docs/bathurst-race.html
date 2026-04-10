@@ -3,7 +3,7 @@
 <head>
   <script src="/js/analytics.js"></script>
   <meta charset="UTF-8">
-  <title>Bathurst 1000 Race | The Sporting Almanac</title>
+  <title>Bathurst Race | The Sporting Almanac</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -33,15 +33,6 @@ body{
   max-width:1100px;
   margin:auto;
   padding:25px;
-}
-
-h1{
-  margin-bottom:10px;
-}
-
-.race-meta{
-  margin-bottom:20px;
-  color:#555;
 }
 
 .table{
@@ -82,7 +73,6 @@ h1{
 
 <body>
 
-<!-- NAV -->
 <div class="navbar">
   <a href="./index.html">Home</a>
   <a href="./racing.html">Racing</a>
@@ -91,13 +81,8 @@ h1{
 
 <div class="page">
 
-  <h1>2026 Bathurst 1000</h1>
+  <h1 id="title">Loading...</h1>
 
-  <div class="race-meta">
-    Mount Panorama, Bathurst • 1000km • 161 laps
-  </div>
-
-  <!-- MERGED TABLE -->
   <table class="table">
     <thead>
       <tr>
@@ -106,7 +91,6 @@ h1{
         <th>Driver(s)</th>
         <th>Car</th>
         <th>Laps</th>
-        <th>Time / Gap</th>
       </tr>
     </thead>
     <tbody id="results"></tbody>
@@ -116,49 +100,48 @@ h1{
 
 <script>
 
-// 🔧 SAMPLE DATA STRUCTURE (replace with your JSON later)
-const data = [
-  {
-    finish: 1,
-    grid: 3,
-    drivers: ["Driver One", "Driver Two"],
-    car: "Ford Mustang",
-    laps: 161,
-    time: "6:12:34"
-  },
-  {
-    finish: 2,
-    grid: 1,
-    drivers: ["Driver Three", "Driver Four"],
-    car: "Chevrolet Camaro",
-    laps: 161,
-    time: "+5.3s"
-  }
-];
+// ✅ GET YEAR FROM URL
+const params = new URLSearchParams(window.location.search);
+const year = params.get("year") || "2026";
 
-// build table
-const table = document.getElementById("results");
+// ✅ IMPORTANT: use /data NOT /docs/data
+const url = `/data/bathurst/${year}.json`;
 
-data.forEach(row => {
+fetch(url)
+  .then(res => res.json())
+  .then(data => {
 
-  const tr = document.createElement("tr");
+    document.getElementById("title").textContent =
+      `${data.year} Bathurst 1000`;
 
-  const driverLinks = row.drivers.map(d => {
-    const slug = d.toLowerCase().replace(/ /g,"-");
-    return `<a class="driver" href="./bathurst-driver.html?driver=${slug}">${d}</a>`;
-  }).join(" / ");
+    const table = document.getElementById("results");
 
-  tr.innerHTML = `
-    <td>${row.finish}</td>
-    <td>${row.grid}</td>
-    <td>${driverLinks}</td>
-    <td>${row.car}</td>
-    <td>${row.laps}</td>
-    <td>${row.time}</td>
-  `;
+    data.results.forEach(row => {
 
-  table.appendChild(tr);
-});
+      // 🔥 MULTI-DRIVER FIX
+      const drivers = row.drivers.map(d => {
+        const slug = d.toLowerCase().replace(/ /g, "-");
+        return `<a class="driver" href="./bathurst-driver.html?driver=${slug}">${d}</a>`;
+      }).join(" / ");
+
+      const tr = document.createElement("tr");
+
+      tr.innerHTML = `
+        <td>${row.finish ?? ""}</td>
+        <td>${row.grid ?? ""}</td>
+        <td>${drivers}</td>
+        <td>${row.car ?? ""}</td>
+        <td>${row.laps ?? ""}</td>
+      `;
+
+      table.appendChild(tr);
+    });
+
+  })
+  .catch(err => {
+    document.getElementById("title").textContent = "Race not found";
+    console.error(err);
+  });
 
 </script>
 
