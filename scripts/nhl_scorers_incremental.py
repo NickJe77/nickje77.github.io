@@ -2,9 +2,9 @@ import requests
 import json
 from pathlib import Path
 
-print("NHL SCORERS INCREMENTAL BUILDER")
+print("NHL SCORERS BUILDER (FIXED NAMES)")
 
-SEASON = 2026  # change per run
+SEASON = 2026
 
 SEASON_FILE = Path(f"docs/data/nhl/seasons/{SEASON}.json")
 BOX_DIR = Path(f"docs/data/nhl/boxscores/{SEASON}")
@@ -20,20 +20,19 @@ def fetch(url):
     return {}
 
 if not SEASON_FILE.exists():
-    print("Season file missing")
+    print("Missing season file")
     exit()
 
 games = json.loads(SEASON_FILE.read_text())
 
 count = 0
-MAX_PER_RUN = 200   # 🔥 prevents timeout
+MAX_PER_RUN = 200
 
 for game in games:
 
-    game_id = game["game_id"]
+    game_id = game.get("game_id") or game.get("id")
     file_path = BOX_DIR / f"{game_id}.json"
 
-    # ✅ skip existing
     if file_path.exists():
         continue
 
@@ -43,6 +42,18 @@ for game in games:
     box = fetch(f"https://api-web.nhle.com/v1/gamecenter/{game_id}/boxscore")
 
     try:
+        # 🔥 BUILD PLAYER MAP
+        player_map = {}
+
+        for side in ["homeTeam", "awayTeam"]:
+            team = box.get(side, {})
+            for p in team.get("players", []):
+                pid = p.get("playerId")
+                name = p.get("name", {}).get("default")
+                if pid and name:
+                    player_map[pid] = name
+
+        # 🔥 FIXED PLAY EXTRACTION
         plays = pbp.get("plays") or pbp.get("gameData", {}).get("plays") or []
 
         goals = []
@@ -53,15 +64,16 @@ for game in games:
 
             d = play.get("details", {})
 
+            scorer_id = d.get("scoringPlayerId")
+            a1 = d.get("assist1PlayerId")
+            a2 = d.get("assist2PlayerId")
+
             goals.append({
                 "period": play.get("periodDescriptor", {}).get("number"),
                 "time": play.get("timeInPeriod"),
-                "scorer": d.get("scoringPlayerName"),
+                "scorer": player_map.get(scorer_id),
                 "assists": [
-                    a for a in [
-                        d.get("assist1PlayerName"),
-                        d.get("assist2PlayerName")
-                    ] if a
+                    player_map.get(a) for a in [a1, a2] if player_map.get(a)
                 ],
                 "strength": d.get("strength")
             })
@@ -79,9 +91,8 @@ for game in games:
         file_path.write_text(json.dumps(game_json, indent=2))
 
         count += 1
-
         if count >= MAX_PER_RUN:
-            print("Hit run limit, stopping safely")
+            print("Hit limit, stopping")
             break
 
     except Exception as e:
