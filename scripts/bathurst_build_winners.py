@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import Path
 
-print("BATHURST WINNERS BUILDER (LOCKED FIX)")
+print("BATHURST WINNERS BUILDER (FINAL FIXED)")
 
 URL = "https://en.wikipedia.org/wiki/Bathurst_1000"
 
@@ -17,7 +17,7 @@ def clean(x):
     if not x:
         return None
     x = str(x)
-    x = re.sub(r"\[[^\]]+\]", "", x)
+    x = re.sub(r"\[[^\]]+\]", "", x)  # remove [a], [1] etc
     x = x.replace("\xa0", " ")
     return re.sub(r"\s+", " ", x).strip()
 
@@ -36,7 +36,7 @@ soup = BeautifulSoup(res.text, "html.parser")
 
 print("Locating 'List of winners' section...")
 
-# 🔥 STEP 1 — find the correct section
+# 🔥 find the correct section
 header = None
 for h in soup.find_all(["h2", "h3"]):
     if "List of winners" in h.get_text():
@@ -46,7 +46,7 @@ for h in soup.find_all(["h2", "h3"]):
 if header is None:
     raise Exception("❌ Winners section not found")
 
-# 🔥 STEP 2 — find the FIRST table after that header
+# 🔥 get the table directly after that section
 table = header.find_next("table", {"class": "wikitable"})
 
 if table is None:
@@ -65,13 +65,18 @@ for row in rows:
         continue
 
     try:
+        # 🔥 FIXED YEAR EXTRACTION
         year_text = clean(cols[0].get_text())
-        if not year_text or not year_text.isdigit():
+        match = re.search(r"\d{4}", year_text or "")
+        if not match:
             continue
 
-        year = int(year_text)
-        drivers = split_drivers(clean(cols[1].get_text()))
+        year = int(match.group())
+
+        drivers_raw = clean(cols[1].get_text())
         car = clean(cols[2].get_text())
+
+        drivers = split_drivers(drivers_raw)
 
         if not drivers:
             continue
@@ -82,9 +87,11 @@ for row in rows:
             "car": car
         })
 
-    except:
+    except Exception as e:
+        print(f"⚠️ Skipped row: {e}")
         continue
 
+# sort properly
 data = sorted(data, key=lambda x: x["year"])
 
 with open(OUT, "w") as f:
