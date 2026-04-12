@@ -4,9 +4,9 @@ import json
 import re
 from pathlib import Path
 
-print("BATHURST WINNERS BUILDER (FINAL)")
+print("BATHURST WINNERS BUILDER (LOCKED FIX)")
 
-URL = "https://en.wikipedia.org/wiki/Bathurst_1000#List_of_winners"
+URL = "https://en.wikipedia.org/wiki/Bathurst_1000"
 
 OUT = Path("docs/data/bathurst/winners.json")
 OUT.parent.mkdir(parents=True, exist_ok=True)
@@ -24,8 +24,7 @@ def clean(x):
 def split_drivers(text):
     if not text:
         return []
-    parts = re.split(r"/| and ", text)
-    return [clean(p) for p in parts if clean(p)]
+    return [clean(x) for x in re.split(r"/| and ", text) if clean(x)]
 
 print("Fetching page...")
 res = requests.get(URL, headers=HEADERS)
@@ -35,17 +34,20 @@ if res.status_code != 200:
 
 soup = BeautifulSoup(res.text, "html.parser")
 
-print("Finding correct winners table...")
+print("Locating 'List of winners' section...")
 
-tables = soup.find_all("table", {"class": "wikitable"})
-
-table = None
-for t in tables:
-    headers = [th.get_text(strip=True) for th in t.find_all("th")]
-
-    if "Year" in headers and any("Driver" in h for h in headers):
-        table = t
+# 🔥 STEP 1 — find the correct section
+header = None
+for h in soup.find_all(["h2", "h3"]):
+    if "List of winners" in h.get_text():
+        header = h
         break
+
+if header is None:
+    raise Exception("❌ Winners section not found")
+
+# 🔥 STEP 2 — find the FIRST table after that header
+table = header.find_next("table", {"class": "wikitable"})
 
 if table is None:
     raise Exception("❌ Winners table not found")
@@ -53,6 +55,8 @@ if table is None:
 rows = table.find_all("tr")[1:]
 
 data = []
+
+print(f"Processing {len(rows)} rows...")
 
 for row in rows:
     cols = row.find_all("td")
