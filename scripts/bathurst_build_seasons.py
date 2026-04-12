@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (FINAL CLEAN VERSION)")
+print("BATHURST BUILDER (FINAL FINAL CLEAN)")
 
 BASE = Path("docs/data/bathurst")
 BASE.mkdir(parents=True, exist_ok=True)
@@ -31,7 +31,6 @@ def split_drivers(text):
 
     text = clean(text)
 
-    # normal splits first
     parts = re.split(r"/|,| and | & |\+", text)
     parts = [p.strip() for p in parts if p.strip()]
 
@@ -47,7 +46,6 @@ def split_drivers(text):
     for w in words:
         current.append(w)
 
-        # assume names are 2 words (First Last)
         if len(current) == 2:
             drivers.append(" ".join(current))
             current = []
@@ -125,7 +123,7 @@ def fetch_year(year):
 
         finish = int(cols[0])
 
-        # 🔥 FIND DRIVER COLUMN PROPERLY
+        # 🔥 FIND DRIVER COLUMN
         drivers = []
         driver_index = None
 
@@ -140,12 +138,12 @@ def fetch_year(year):
         if not drivers:
             continue
 
-        # 🔥 CAR COLUMN (usually next column)
+        # 🔥 CAR COLUMN
         car = None
         if driver_index is not None and driver_index + 1 < len(cols):
             car = cols[driver_index + 1]
 
-        # 🚨 FINAL CLEAN FILTERS
+        # 🚨 CLEAN FILTERS
         if len(drivers) > 4:
             continue
 
@@ -165,13 +163,19 @@ def fetch_year(year):
         print(f"⚠️ No clean results {year}")
         return None
 
-    # dedupe
-    unique = {}
-    for r in results:
-        key = (r["finish"], tuple(r["drivers"]))
-        unique[key] = r
+    # 🔥 FINAL FIX: REMOVE DUPLICATES (KEEP FULL DRIVER ROW)
+    by_finish = {}
 
-    final_results = list(unique.values())
+    for r in results:
+        f = r["finish"]
+
+        if f not in by_finish:
+            by_finish[f] = r
+        else:
+            if len(r["drivers"]) > len(by_finish[f]["drivers"]):
+                by_finish[f] = r
+
+    final_results = list(by_finish.values())
     final_results.sort(key=lambda x: x["finish"])
 
     return {
