@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import Path
 
-print("BATHURST WINNERS BUILDER (FINAL FIXED)")
+print("BATHURST WINNERS BUILDER (CLEAN FINAL)")
 
 URL = "https://en.wikipedia.org/wiki/Bathurst_1000"
 
@@ -17,14 +17,31 @@ def clean(x):
     if not x:
         return None
     x = str(x)
-    x = re.sub(r"\[[^\]]+\]", "", x)  # remove [a], [1] etc
+    x = re.sub(r"\[[^\]]+\]", "", x)
     x = x.replace("\xa0", " ")
     return re.sub(r"\s+", " ", x).strip()
 
 def split_drivers(text):
     if not text:
         return []
-    return [clean(x) for x in re.split(r"/| and ", text) if clean(x)]
+
+    text = clean(text)
+
+    # normal case
+    if "/" in text or " and " in text:
+        parts = re.split(r"/| and ", text)
+        return [clean(p) for p in parts if clean(p)]
+
+    # fallback: split into names (assume pairs)
+    words = text.split()
+    if len(words) >= 4:
+        mid = len(words) // 2
+        return [
+            " ".join(words[:mid]),
+            " ".join(words[mid:])
+        ]
+
+    return [text]
 
 print("Fetching page...")
 res = requests.get(URL, headers=HEADERS)
@@ -34,9 +51,8 @@ if res.status_code != 200:
 
 soup = BeautifulSoup(res.text, "html.parser")
 
-print("Locating 'List of winners' section...")
+print("Finding winners section...")
 
-# 🔥 find the correct section
 header = None
 for h in soup.find_all(["h2", "h3"]):
     if "List of winners" in h.get_text():
@@ -46,7 +62,6 @@ for h in soup.find_all(["h2", "h3"]):
 if header is None:
     raise Exception("❌ Winners section not found")
 
-# 🔥 get the table directly after that section
 table = header.find_next("table", {"class": "wikitable"})
 
 if table is None:
@@ -56,8 +71,6 @@ rows = table.find_all("tr")[1:]
 
 data = []
 
-print(f"Processing {len(rows)} rows...")
-
 for row in rows:
     cols = row.find_all("td")
 
@@ -65,13 +78,17 @@ for row in rows:
         continue
 
     try:
-        # 🔥 FIXED YEAR EXTRACTION
         year_text = clean(cols[0].get_text())
+
         match = re.search(r"\d{4}", year_text or "")
         if not match:
             continue
 
         year = int(match.group())
+
+        # 🔥 FILTER BAD YEARS
+        if year < 1960 or year > 2100:
+            continue
 
         drivers_raw = clean(cols[1].get_text())
         car = clean(cols[2].get_text())
@@ -87,11 +104,9 @@ for row in rows:
             "car": car
         })
 
-    except Exception as e:
-        print(f"⚠️ Skipped row: {e}")
+    except:
         continue
 
-# sort properly
 data = sorted(data, key=lambda x: x["year"])
 
 with open(OUT, "w") as f:
