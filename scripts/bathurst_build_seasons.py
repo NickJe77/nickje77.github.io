@@ -5,10 +5,13 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (STABLE VERSION)")
+print("BATHURST BUILDER (FULL SYSTEM FIXED)")
 
 BASE = Path("docs/data/bathurst")
+SEASONS_DIR = BASE / "seasons"
+
 BASE.mkdir(parents=True, exist_ok=True)
+SEASONS_DIR.mkdir(parents=True, exist_ok=True)
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
@@ -31,6 +34,7 @@ def split_drivers(text):
     return [clean(p) for p in parts if clean(p)]
 
 
+# 🔥 FIND CORRECT PAGE
 def get_url(year):
     patterns = [
         f"{year}_Bathurst_1000",
@@ -54,7 +58,8 @@ def get_url(year):
     return None
 
 
-def find_results_table(soup):
+# 🔥 FIND RESULTS TABLE + COLUMN INDEXES
+def find_table(soup):
     tables = soup.find_all("table", {"class": "wikitable"})
 
     for table in tables:
@@ -63,7 +68,6 @@ def find_results_table(soup):
         if not headers:
             continue
 
-        # MUST have both position + driver
         if any("pos" in h.lower() for h in headers) and \
            any("driver" in h.lower() for h in headers):
 
@@ -84,13 +88,13 @@ def fetch_year(year):
     res = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(res.text, "html.parser")
 
-    table, headers = find_results_table(soup)
+    table, headers = find_table(soup)
 
     if not table:
-        print(f"⚠️ No results table {year}")
+        print(f"⚠️ No table {year}")
         return None
 
-    # 🔥 find correct column indexes
+    # 🔥 GET COLUMN INDEXES
     driver_idx = None
     car_idx = None
 
@@ -130,7 +134,7 @@ def fetch_year(year):
             "car": car
         })
 
-    # 🔥 remove duplicates (keep co-driver row)
+    # 🔥 REMOVE DUPLICATES (KEEP FULL DRIVER ROW)
     by_finish = {}
     for r in results:
         f = r["finish"]
@@ -146,22 +150,58 @@ def fetch_year(year):
     }
 
 
+# ========================
+# 🚀 BUILD EVERYTHING
+# ========================
+
+seasons = []
 built = 0
 
-for y in range(START_YEAR, END_YEAR + 1):
-    data = fetch_year(y)
+for year in range(START_YEAR, END_YEAR + 1):
+    data = fetch_year(year)
 
     if not data:
         continue
 
-    out = BASE / f"{y}.json"
+    results = data["results"]
 
-    with open(out, "w", encoding="utf-8") as f:
+    # 🔥 WINNER (CORRECT)
+    winner_drivers = results[0]["drivers"] if results else []
+    winner_car = results[0]["car"] if results else None
+
+    # YEAR FILE
+    with open(BASE / f"{year}.json", "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-    print(f"✅ Saved {y} ({len(data['results'])} entries)")
+    # SEASON FILE COPY
+    with open(SEASONS_DIR / f"{year}.json", "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+    # SEASONS SUMMARY
+    seasons.append({
+        "year": year,
+        "winner_drivers": winner_drivers,
+        "winner_car": winner_car
+    })
+
+    print(f"✅ Saved {year} ({len(results)} results)")
     built += 1
 
     time.sleep(1)
 
+
+# 🔥 WRITE MASTER FILES
+
+seasons.sort(key=lambda x: x["year"])
+
+with open(BASE / "seasons.json", "w", encoding="utf-8") as f:
+    json.dump(seasons, f, indent=2, ensure_ascii=False)
+
+with open(BASE / "index.json", "w", encoding="utf-8") as f:
+    json.dump({
+        "sport": "bathurst",
+        "seasons": seasons
+    }, f, indent=2, ensure_ascii=False)
+
 print(f"🔥 BUILT {built} YEARS")
+print("✅ seasons.json + index.json written")
