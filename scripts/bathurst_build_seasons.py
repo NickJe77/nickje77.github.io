@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST FULL FIELD BUILDER (FORCED TABLE PARSE)")
+print("BATHURST BUILDER (FORCE ALL YEARS)")
 
 BASE = Path("docs/data/bathurst")
 BASE.mkdir(parents=True, exist_ok=True)
@@ -31,7 +31,6 @@ def split_drivers(text):
     return [clean(p) for p in parts if clean(p)]
 
 
-# try multiple page names
 def get_url(year):
     patterns = [
         f"{year}_Bathurst_1000",
@@ -51,68 +50,53 @@ def get_url(year):
     return None
 
 
+def extract_any_results(soup):
+    results = []
+
+    for r in soup.find_all("tr"):
+        cols = [clean(c.get_text()) for c in r.find_all("td")]
+
+        if len(cols) < 3:
+            continue
+
+        try:
+            finish = int(cols[0])
+        except:
+            continue
+
+        drivers_raw = cols[2] if len(cols) >= 5 else cols[1]
+        car = cols[3] if len(cols) >= 4 else None
+
+        drivers = split_drivers(drivers_raw)
+
+        if not drivers:
+            continue
+
+        results.append({
+            "finish": finish,
+            "drivers": drivers,
+            "car": car
+        })
+
+    return results
+
+
 def fetch_year(year):
     url = get_url(year)
 
     if not url:
         print(f"❌ No page {year}")
-        return None
+        return {"year": year, "results": []}
 
     print(f"Fetching {year} → {url}")
 
     res = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(res.text, "html.parser")
 
-    results = []
-
-    # 🔥 KEY FIX: find tables AFTER a results heading
-    for header in soup.find_all(["h2", "h3"]):
-        title = header.get_text().lower()
-
-        if "result" in title or "classification" in title:
-            table = header.find_next("table")
-
-            if not table:
-                continue
-
-            for r in table.find_all("tr"):
-                cols = [clean(c.get_text()) for c in r.find_all("td")]
-
-                if len(cols) < 3:
-                    continue
-
-                try:
-                    finish = int(cols[0])
-                except:
-                    continue
-
-                # flexible column handling
-                drivers_raw = None
-                car = None
-
-                if len(cols) >= 5:
-                    drivers_raw = cols[2]
-                    car = cols[3]
-                else:
-                    drivers_raw = cols[1]
-                    car = cols[2] if len(cols) > 2 else None
-
-                drivers = split_drivers(drivers_raw)
-
-                if not drivers:
-                    continue
-
-                results.append({
-                    "finish": finish,
-                    "drivers": drivers,
-                    "car": car
-                })
-
-            break  # stop after first valid results table
+    results = extract_any_results(soup)
 
     if not results:
-        print(f"⚠️ No results found {year}")
-        return None
+        print(f"⚠️ Empty results {year}")
 
     # dedupe
     unique = {}
@@ -133,9 +117,6 @@ built = 0
 
 for y in range(START_YEAR, END_YEAR + 1):
     data = fetch_year(y)
-
-    if not data:
-        continue
 
     out = BASE / f"{y}.json"
 
