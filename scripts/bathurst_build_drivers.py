@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 import re
 
-print("BATHURST DRIVER BUILDER (FINAL)")
+print("BATHURST DRIVER BUILDER (SAFE)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS = BASE / "seasons"
@@ -19,12 +19,16 @@ for file in SEASONS.glob("*.json"):
     with open(file) as f:
         data = json.load(f)
 
+    # 🔥 SAFETY CHECK
+    if not isinstance(data, dict):
+        continue
+
     year = data.get("year")
     results = data.get("results", [])
 
     for r in results:
-        position = r.get("position")
         drivers = r.get("drivers", [])
+        position = r.get("position")
 
         for d in drivers:
             s = slug(d)
@@ -47,7 +51,7 @@ for file in SEASONS.glob("*.json"):
                 "position": position
             })
 
-# save files
+# save
 index = []
 
 for s, data in players.items():
