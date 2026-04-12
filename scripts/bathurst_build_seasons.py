@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (DRIVERS FIXED)")
+print("BATHURST BUILDER (FINAL CLEAN VERSION)")
 
 BASE = Path("docs/data/bathurst")
 BASE.mkdir(parents=True, exist_ok=True)
@@ -24,22 +24,47 @@ def clean(x):
     return re.sub(r"\s+", " ", x).strip()
 
 
+# 🔥 FIXED DRIVER SPLITTING
 def split_drivers(text):
     if not text:
         return []
+
+    text = clean(text)
+
+    # normal splits first
     parts = re.split(r"/|,| and | & |\+", text)
-    return [clean(p) for p in parts if clean(p)]
+    parts = [p.strip() for p in parts if p.strip()]
+
+    if len(parts) > 1:
+        return parts
+
+    # fallback for merged names
+    words = text.split()
+
+    drivers = []
+    current = []
+
+    for w in words:
+        current.append(w)
+
+        # assume names are 2 words (First Last)
+        if len(current) == 2:
+            drivers.append(" ".join(current))
+            current = []
+
+    if current:
+        drivers.append(" ".join(current))
+
+    return drivers
 
 
 def is_driver_text(text):
     if not text:
         return False
 
-    # must contain at least one space (first + last name)
     if " " not in text:
         return False
 
-    # reject obvious team words
     bad_words = [
         "team", "racing", "motorsport",
         "engineering", "holden", "ford"
@@ -59,14 +84,18 @@ def get_url(year):
         f"{year}_Hardie-Ferodo_1000",
         f"{year}_Hardie-Ferodo_500",
         f"{year}_Tooheys_1000",
-        f"{year}_James_Hardie_1000"
+        f"{year}_James_Hardie_1000",
+        f"{year}_AMP_Bathurst_1000"
     ]
 
     for p in patterns:
         url = f"https://en.wikipedia.org/wiki/{p}"
-        res = requests.get(url, headers=HEADERS)
-        if res.status_code == 200:
-            return url
+        try:
+            res = requests.get(url, headers=HEADERS, timeout=20)
+            if res.status_code == 200:
+                return url
+        except:
+            pass
 
     return None
 
@@ -96,24 +125,35 @@ def fetch_year(year):
 
         finish = int(cols[0])
 
-        # 🔥 FIND DRIVER COLUMN DYNAMICALLY
+        # 🔥 FIND DRIVER COLUMN PROPERLY
         drivers = []
-        for c in cols:
+        driver_index = None
+
+        for i, c in enumerate(cols):
             if is_driver_text(c):
-                drivers = split_drivers(c)
-                if drivers:
+                possible = split_drivers(c)
+                if possible:
+                    drivers = possible
+                    driver_index = i
                     break
 
         if not drivers:
             continue
 
-        # car is usually next column after drivers
+        # 🔥 CAR COLUMN (usually next column)
         car = None
-        for i, c in enumerate(cols):
-            if c in drivers:
-                if i + 1 < len(cols):
-                    car = cols[i + 1]
-                break
+        if driver_index is not None and driver_index + 1 < len(cols):
+            car = cols[driver_index + 1]
+
+        # 🚨 FINAL CLEAN FILTERS
+        if len(drivers) > 4:
+            continue
+
+        if any(len(d) > 40 for d in drivers):
+            continue
+
+        if any("http" in d.lower() for d in drivers):
+            continue
 
         results.append({
             "finish": finish,
@@ -140,6 +180,8 @@ def fetch_year(year):
     }
 
 
+built = 0
+
 for y in range(START_YEAR, END_YEAR + 1):
     data = fetch_year(y)
 
@@ -152,7 +194,8 @@ for y in range(START_YEAR, END_YEAR + 1):
         json.dump(data, f, indent=2, ensure_ascii=False)
 
     print(f"✅ Saved {y} ({len(data['results'])} entries)")
+    built += 1
 
     time.sleep(1)
 
-print("🔥 DONE")
+print(f"🔥 BUILT {built} YEARS")
