@@ -5,15 +5,12 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST FULL FIELD BUILDER (WORKING)")
+print("BATHURST FULL FIELD BUILDER (FINAL FIX)")
 
 BASE = Path("docs/data/bathurst")
 BASE.mkdir(parents=True, exist_ok=True)
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
-
-START_YEAR = 1963
-END_YEAR = 2025
 
 
 def clean(x):
@@ -31,8 +28,33 @@ def split_drivers(text):
     return [clean(p) for p in parts if clean(p)]
 
 
-def fetch_year(year):
-    url = f"https://en.wikipedia.org/wiki/{year}_Bathurst_1000"
+# 🔥 STEP 1: GET ALL RACE LINKS (NO GUESSING)
+def get_links():
+    url = "https://en.wikipedia.org/wiki/Bathurst_1000"
+    res = requests.get(url, headers=HEADERS)
+
+    soup = BeautifulSoup(res.text, "html.parser")
+
+    links = []
+
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+
+        # find pages that look like race years
+        if re.search(r"\d{4}.*(1000|500)", href):
+            if href.startswith("/wiki/"):
+                full = "https://en.wikipedia.org" + href
+                links.append(full)
+
+    return sorted(list(set(links)))
+
+
+def fetch_page(url):
+    year_match = re.search(r"(19|20)\d{2}", url)
+    if not year_match:
+        return None
+
+    year = int(year_match.group(0))
 
     print(f"Fetching {year}...")
 
@@ -44,17 +66,18 @@ def fetch_year(year):
 
     soup = BeautifulSoup(res.text, "html.parser")
 
-    tables = soup.find_all("table", {"class": "wikitable"})
     results = []
+
+    tables = soup.find_all("table", {"class": "wikitable"})
 
     for table in tables:
         headers = [clean(th.get_text()) for th in table.find_all("th")]
+
         if not headers:
             continue
 
         header_str = " ".join(headers).lower()
 
-        # find results table
         if "position" in header_str or "pos" in header_str:
             for r in table.find_all("tr"):
                 cols = [clean(c.get_text()) for c in r.find_all("td")]
@@ -85,7 +108,7 @@ def fetch_year(year):
         print(f"⚠️ No results {year}")
         return None
 
-    # remove duplicates
+    # dedupe
     unique = {}
     for r in results:
         key = (r["finish"], tuple(r["drivers"]))
@@ -94,31 +117,33 @@ def fetch_year(year):
     final_results = list(unique.values())
     final_results.sort(key=lambda x: x["finish"])
 
-    return {
-        "year": year,
-        "results": final_results
-    }
+    return year, final_results
 
+
+# 🚀 RUN
+links = get_links()
+print(f"Found {len(links)} race pages")
 
 built = 0
 
-for y in range(START_YEAR, END_YEAR + 1):
-    out = BASE / f"{y}.json"
-
-    # DO NOT overwrite existing (your rule)
-    if out.exists():
-        print(f"Skipping {y} (exists)")
-        continue
-
-    data = fetch_year(y)
+for link in links:
+    data = fetch_page(link)
 
     if not data:
         continue
 
-    with open(out, "w") as f:
-        json.dump(data, f, indent=2)
+    year, results = data
 
-    print(f"✅ Saved {y} ({len(data['results'])} entries)")
+    out = BASE / f"{year}.json"
+
+    if out.exists():
+        print(f"Skipping {year} (exists)")
+        continue
+
+    with open(out, "w") as f:
+        json.dump({"year": year, "results": results}, f, indent=2)
+
+    print(f"✅ Saved {year} ({len(results)} entries)")
     built += 1
 
     time.sleep(1)
