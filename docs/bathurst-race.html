@@ -101,41 +101,45 @@ h1{
 
 <script>
 
-// ✅ GET YEAR
+// GET YEAR
 const params = new URLSearchParams(window.location.search);
 const year = parseInt(params.get("year"));
 
-// 🔥 USE WINNERS FILE
-fetch("/data/bathurst/winners.json")
+// LOAD FULL RACE DATA
+fetch(`/data/bathurst/${year}.json`)
   .then(res => res.json())
   .then(data => {
 
-    const race = data.find(r => r.year === year);
-
-    if(!race){
+    if(!data || !data.results){
       document.getElementById("title").textContent = "Race not found";
       return;
     }
 
     document.getElementById("title").textContent =
-      `${race.year} Bathurst 1000`;
+      `${year} Bathurst 1000`;
 
     const table = document.getElementById("results");
+    table.innerHTML = "";
 
-    const drivers = race.drivers.map(d => {
-      const slug = d.toLowerCase().replace(/ /g, "-");
-      return `<a class="driver" href="./bathurst-driver.html?driver=${slug}">${d}</a>`;
-    }).join(" / ");
+    data.results
+      .sort((a,b) => a.finish - b.finish)
+      .forEach(r => {
 
-    const tr = document.createElement("tr");
+        const drivers = (r.drivers || []).map(d => {
+          const slug = d.toLowerCase().replace(/ /g, "-");
+          return `<a class="driver" href="./bathurst-driver.html?driver=${slug}">${d}</a>`;
+        }).join(" / ");
 
-    tr.innerHTML = `
-      <td>1</td>
-      <td>${drivers}</td>
-      <td>${race.car}</td>
-    `;
+        const tr = document.createElement("tr");
 
-    table.appendChild(tr);
+        tr.innerHTML = `
+          <td>${r.finish || ""}</td>
+          <td>${drivers}</td>
+          <td>${r.car || ""}</td>
+        `;
+
+        table.appendChild(tr);
+      });
 
   })
   .catch(err => {
