@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (STRUCTURED TABLE FIX)")
+print("BATHURST BUILDER (STABLE VERSION)")
 
 BASE = Path("docs/data/bathurst")
 BASE.mkdir(parents=True, exist_ok=True)
@@ -63,13 +63,13 @@ def find_results_table(soup):
         if not headers:
             continue
 
-        header_text = " ".join(headers).lower()
+        # MUST have both position + driver
+        if any("pos" in h.lower() for h in headers) and \
+           any("driver" in h.lower() for h in headers):
 
-        if "driver" in header_text or "drivers" in header_text:
-            if "position" in header_text or "pos" in header_text:
-                return table
+            return table, headers
 
-    return None
+    return None, None
 
 
 def fetch_year(year):
@@ -84,10 +84,25 @@ def fetch_year(year):
     res = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(res.text, "html.parser")
 
-    table = find_results_table(soup)
+    table, headers = find_results_table(soup)
 
     if not table:
         print(f"⚠️ No results table {year}")
+        return None
+
+    # 🔥 find correct column indexes
+    driver_idx = None
+    car_idx = None
+
+    for i, h in enumerate(headers):
+        h = h.lower()
+        if "driver" in h:
+            driver_idx = i
+        if "car" in h or "vehicle" in h:
+            car_idx = i
+
+    if driver_idx is None:
+        print(f"⚠️ No driver column {year}")
         return None
 
     results = []
@@ -95,7 +110,7 @@ def fetch_year(year):
     for r in table.find_all("tr"):
         cols = [clean(c.get_text(" ", strip=True)) for c in r.find_all("td")]
 
-        if len(cols) < 3:
+        if len(cols) <= driver_idx:
             continue
 
         try:
@@ -103,25 +118,11 @@ def fetch_year(year):
         except:
             continue
 
-        # 🔥 find drivers column properly
-        drivers = []
-        for c in cols:
-            if c and len(c.split()) >= 2:
-                possible = split_drivers(c)
-                if possible and len(possible) <= 4:
-                    drivers = possible
-                    break
+        drivers = split_drivers(cols[driver_idx])
+        car = cols[car_idx] if car_idx is not None and car_idx < len(cols) else None
 
         if not drivers:
             continue
-
-        # car = next column
-        car = None
-        for i, c in enumerate(cols):
-            if c in drivers:
-                if i + 1 < len(cols):
-                    car = cols[i + 1]
-                break
 
         results.append({
             "finish": finish,
@@ -129,17 +130,12 @@ def fetch_year(year):
             "car": car
         })
 
-    # 🔥 dedupe (keep best row)
+    # 🔥 remove duplicates (keep co-driver row)
     by_finish = {}
-
     for r in results:
         f = r["finish"]
-
-        if f not in by_finish:
+        if f not in by_finish or len(r["drivers"]) > len(by_finish[f]["drivers"]):
             by_finish[f] = r
-        else:
-            if len(r["drivers"]) > len(by_finish[f]["drivers"]):
-                by_finish[f] = r
 
     final_results = list(by_finish.values())
     final_results.sort(key=lambda x: x["finish"])
