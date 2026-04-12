@@ -1,108 +1,138 @@
-import requests
 import json
 import re
+from io import StringIO
 from pathlib import Path
 
-print("BATHURST WINNERS BUILDER (API FIX)")
+import pandas as pd
+import requests
 
+print("BATHURST WINNERS BUILDER (PANDAS FIX)")
+
+URL = "https://en.wikipedia.org/wiki/Bathurst_1000"
 OUT = Path("docs/data/bathurst/winners.json")
 OUT.parent.mkdir(parents=True, exist_ok=True)
 
-URL = "https://en.wikipedia.org/w/api.php"
-
-params = {
-    "action": "parse",
-    "page": "Bathurst 1000",
-    "format": "json",
-    "prop": "text",
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
 }
 
-def clean(x):
-    if not x:
-        return None
-    x = re.sub(r"\[[^\]]+\]", "", x)
-    x = x.replace("\xa0", " ")
-    return re.sub(r"\s+", " ", x).strip()
 
-def split_drivers(text):
+def clean(text):
+    if text is None:
+        return None
+    text = str(text)
+    text = re.sub(r"\[[^\]]+\]", "", text)
+    text = text.replace("\xa0", " ")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text or None
+
+
+def extract_year(value):
+    text = clean(value)
+    if not text:
+        return None
+    m = re.search(r"(19|20)\d{2}", text)
+    if not m:
+        return None
+    return int(m.group(0))
+
+
+def split_drivers(value):
+    text = clean(value)
     if not text:
         return []
 
-    text = clean(text)
+    text = text.replace(" / ", "/")
+    text = text.replace(" and ", "/")
+    parts = [clean(x) for x in text.split("/") if clean(x)]
 
-    parts = re.split(r"/| and ", text)
-    parts = [p.strip() for p in parts if p.strip()]
+    if len(parts) >= 2:
+        return parts
 
-    # fallback split
-    if len(parts) == 1:
-        words = parts[0].split()
-        if len(words) >= 4:
-            mid = len(words) // 2
-            parts = [
-                " ".join(words[:mid]),
-                " ".join(words[mid:])
-            ]
+    # fallback for badly merged names like "Bob Morris John Fitzpatrick"
+    words = text.split()
+    if len(words) == 4:
+        return [" ".join(words[:2]), " ".join(words[2:])]
+    if len(words) == 6:
+        return [" ".join(words[:3]), " ".join(words[3:])]
 
-    return parts
+    return [text]
 
-print("Fetching via API...")
-res = requests.get(URL, params=params)
-data = res.json()
 
-html = data["parse"]["text"]["*"]
+print("Fetching page...")
+res = requests.get(URL, headers=HEADERS, timeout=30)
+res.raise_for_status()
 
-# 🔥 find the winners table directly in HTML string
-tables = re.findall(r"<table.*?wikitable.*?>.*?</table>", html, re.DOTALL)
+print("Reading tables...")
+tables = pd.read_html(StringIO(res.text))
 
 target = None
 
-for t in tables:
-    if "List of winners" in html or "Drivers" in t:
-        target = t
+for df in tables:
+    cols = [clean(c) for c in df.columns]
+    cols_lower = [c.lower() if c else "" for c in cols]
+
+    has_year = any("year" == c or c.startswith("year") for c in cols_lower)
+    has_driver = any("driver" in c for c in cols_lower)
+    has_car = any("car" in c for c in cols_lower)
+
+    if has_year and has_driver and has_car:
+        target = df.copy()
         break
 
 if target is None:
-    raise Exception("No winners table found")
+    raise RuntimeError("Could not find Bathurst winners table")
 
-# 🔥 extract rows
-rows = re.findall(r"<tr>(.*?)</tr>", target, re.DOTALL)
+# normalise column names
+rename_map = {}
+for col in target.columns:
+    c = clean(col)
+    c_lower = c.lower() if c else ""
+
+    if "year" in c_lower:
+        rename_map[col] = "year"
+    elif "driver" in c_lower:
+        rename_map[col] = "drivers"
+    elif "car" in c_lower:
+        rename_map[col] = "car"
+
+target = target.rename(columns=rename_map)
+
+required = {"year", "drivers", "car"}
+missing = required - set(target.columns)
+if missing:
+    raise RuntimeError(f"Missing expected columns: {sorted(missing)}")
 
 results = []
 
-for row in rows:
-    cols = re.findall(r"<td.*?>(.*?)</td>", row, re.DOTALL)
-
-    if len(cols) < 3:
+for _, row in target.iterrows():
+    year = extract_year(row.get("year"))
+    if year is None or year < 1960 or year > 2100:
         continue
 
-    try:
-        year_text = clean(cols[0])
-        match = re.search(r"\d{4}", year_text or "")
-        if not match:
-            continue
+    drivers = split_drivers(row.get("drivers"))
+    car = clean(row.get("car"))
 
-        year = int(match.group())
-
-        if year < 1960 or year > 2100:
-            continue
-
-        drivers_raw = clean(cols[1])
-        car = clean(cols[2])
-
-        drivers = split_drivers(drivers_raw)
-
-        results.append({
-            "year": year,
-            "drivers": drivers,
-            "car": car
-        })
-
-    except:
+    if not car:
         continue
 
-results = sorted(results, key=lambda x: x["year"])
+    results.append({
+        "year": year,
+        "drivers": drivers,
+        "car": car
+    })
 
-with open(OUT, "w") as f:
-    json.dump(results, f, indent=2)
+# dedupe by year, keep first good row
+deduped = []
+seen = set()
 
-print(f"✅ DONE — saved {len(results)} years")
+for item in sorted(results, key=lambda x: x["year"]):
+    if item["year"] in seen:
+        continue
+    seen.add(item["year"])
+    deduped.append(item)
+
+with open(OUT, "w", encoding="utf-8") as f:
+    json.dump(deduped, f, indent=2, ensure_ascii=False)
+
+print(f"✅ DONE — saved {len(deduped)} years")
