@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (FINAL FINAL CLEAN)")
+print("BATHURST BUILDER (STRUCTURED TABLE FIX)")
 
 BASE = Path("docs/data/bathurst")
 BASE.mkdir(parents=True, exist_ok=True)
@@ -24,55 +24,11 @@ def clean(x):
     return re.sub(r"\s+", " ", x).strip()
 
 
-# 🔥 FIXED DRIVER SPLITTING
 def split_drivers(text):
     if not text:
         return []
-
-    text = clean(text)
-
     parts = re.split(r"/|,| and | & |\+", text)
-    parts = [p.strip() for p in parts if p.strip()]
-
-    if len(parts) > 1:
-        return parts
-
-    # fallback for merged names
-    words = text.split()
-
-    drivers = []
-    current = []
-
-    for w in words:
-        current.append(w)
-
-        if len(current) == 2:
-            drivers.append(" ".join(current))
-            current = []
-
-    if current:
-        drivers.append(" ".join(current))
-
-    return drivers
-
-
-def is_driver_text(text):
-    if not text:
-        return False
-
-    if " " not in text:
-        return False
-
-    bad_words = [
-        "team", "racing", "motorsport",
-        "engineering", "holden", "ford"
-    ]
-
-    t = text.lower()
-    if any(b in t for b in bad_words):
-        return False
-
-    return True
+    return [clean(p) for p in parts if clean(p)]
 
 
 def get_url(year):
@@ -98,6 +54,24 @@ def get_url(year):
     return None
 
 
+def find_results_table(soup):
+    tables = soup.find_all("table", {"class": "wikitable"})
+
+    for table in tables:
+        headers = [clean(th.get_text()) for th in table.find_all("th")]
+
+        if not headers:
+            continue
+
+        header_text = " ".join(headers).lower()
+
+        if "driver" in header_text or "drivers" in header_text:
+            if "position" in header_text or "pos" in header_text:
+                return table
+
+    return None
+
+
 def fetch_year(year):
     url = get_url(year)
 
@@ -110,48 +84,44 @@ def fetch_year(year):
     res = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(res.text, "html.parser")
 
+    table = find_results_table(soup)
+
+    if not table:
+        print(f"⚠️ No results table {year}")
+        return None
+
     results = []
 
-    for r in soup.find_all("tr"):
+    for r in table.find_all("tr"):
         cols = [clean(c.get_text(" ", strip=True)) for c in r.find_all("td")]
 
         if len(cols) < 3:
             continue
 
-        if not re.match(r"^\d+$", cols[0] or ""):
+        try:
+            finish = int(cols[0])
+        except:
             continue
 
-        finish = int(cols[0])
-
-        # 🔥 FIND DRIVER COLUMN
+        # 🔥 find drivers column properly
         drivers = []
-        driver_index = None
-
-        for i, c in enumerate(cols):
-            if is_driver_text(c):
+        for c in cols:
+            if c and len(c.split()) >= 2:
                 possible = split_drivers(c)
-                if possible:
+                if possible and len(possible) <= 4:
                     drivers = possible
-                    driver_index = i
                     break
 
         if not drivers:
             continue
 
-        # 🔥 CAR COLUMN
+        # car = next column
         car = None
-        if driver_index is not None and driver_index + 1 < len(cols):
-            car = cols[driver_index + 1]
-
-        # 🚨 CLEAN FILTERS
-        if len(drivers) > 4:
-            continue
-
-        if any(len(d) > 40 for d in drivers):
-            continue
-
-        if any("http" in d.lower() for d in drivers):
-            continue
+        for i, c in enumerate(cols):
+            if c in drivers:
+                if i + 1 < len(cols):
+                    car = cols[i + 1]
+                break
 
         results.append({
             "finish": finish,
@@ -159,11 +129,7 @@ def fetch_year(year):
             "car": car
         })
 
-    if not results:
-        print(f"⚠️ No clean results {year}")
-        return None
-
-    # 🔥 FINAL FIX: REMOVE DUPLICATES (KEEP FULL DRIVER ROW)
+    # 🔥 dedupe (keep best row)
     by_finish = {}
 
     for r in results:
