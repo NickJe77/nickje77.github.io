@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (REAL FINAL - DRIVER DETECTION FIX)")
+print("BATHURST BUILDER (FINAL - CO-DRIVER FIXED)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -33,23 +33,17 @@ def split_drivers(text):
         return []
 
     parts = re.split(r"/|,| and | & |\+", text)
-    parts = [clean(p) for p in parts if clean(p)]
-
-    return parts
+    return [clean(p) for p in parts if clean(p)]
 
 
-# 🔥 DETECT REAL DRIVER TEXT
+# 🔥 DETECT DRIVER-LIKE TEXT
 def looks_like_driver(text):
     if not text:
         return False
 
-    text = text.strip()
-
-    # must contain space (first + last name)
     if " " not in text:
         return False
 
-    # reject team words
     bad_words = [
         "team", "racing", "motorsport",
         "engineering", "holden", "ford",
@@ -58,10 +52,6 @@ def looks_like_driver(text):
 
     t = text.lower()
     if any(b in t for b in bad_words):
-        return False
-
-    # must contain letters only (no weird junk)
-    if not re.match(r"^[A-Za-z\s\-/]+$", text):
         return False
 
     return True
@@ -116,22 +106,24 @@ def fetch_year(year):
         except:
             continue
 
-        # 🔥 FIND DRIVER COLUMN BY CONTENT
-        drivers = []
+        # 🔥 FIND BEST DRIVER COLUMN (MOST DRIVERS)
+        best_drivers = []
         driver_index = None
 
         for i, c in enumerate(cols):
             if looks_like_driver(c):
                 d = split_drivers(c)
-                if d:
-                    drivers = d
+
+                if len(d) > len(best_drivers):
+                    best_drivers = d
                     driver_index = i
-                    break
+
+        drivers = best_drivers
 
         if not drivers:
             continue
 
-        # car = next column
+        # 🔥 CAR COLUMN
         car = None
         if driver_index is not None and driver_index + 1 < len(cols):
             car = cols[driver_index + 1]
@@ -146,7 +138,7 @@ def fetch_year(year):
         print(f"⚠️ No results {year}")
         return None
 
-    # 🔥 REMOVE DUPLICATES (KEEP FULL DRIVER ROW)
+    # 🔥 REMOVE DUPLICATES (KEEP CO-DRIVER ROW)
     by_finish = {}
     for r in results:
         f = r["finish"]
@@ -162,7 +154,7 @@ def fetch_year(year):
     }
 
 
-# 🚀 BUILD
+# 🚀 BUILD EVERYTHING
 seasons = []
 
 for year in range(START_YEAR, END_YEAR + 1):
@@ -176,9 +168,11 @@ for year in range(START_YEAR, END_YEAR + 1):
     winner_drivers = results[0]["drivers"] if results else []
     winner_car = results[0]["car"] if results else None
 
+    # YEAR FILE
     with open(BASE / f"{year}.json", "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
+    # SEASON COPY
     with open(SEASONS_DIR / f"{year}.json", "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
@@ -192,7 +186,7 @@ for year in range(START_YEAR, END_YEAR + 1):
     time.sleep(1)
 
 
-# WRITE SUMMARY FILES
+# MASTER FILES
 seasons.sort(key=lambda x: x["year"])
 
 with open(BASE / "seasons.json", "w", encoding="utf-8") as f:
