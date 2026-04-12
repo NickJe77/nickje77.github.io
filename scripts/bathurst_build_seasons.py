@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST FULL FIELD BUILDER (ALL YEARS FIXED)")
+print("BATHURST FULL FIELD BUILDER (FORCED TABLE PARSE)")
 
 BASE = Path("docs/data/bathurst")
 BASE.mkdir(parents=True, exist_ok=True)
@@ -31,7 +31,7 @@ def split_drivers(text):
     return [clean(p) for p in parts if clean(p)]
 
 
-# 🔥 Try ALL known naming patterns
+# try multiple page names
 def get_url(year):
     patterns = [
         f"{year}_Bathurst_1000",
@@ -39,14 +39,12 @@ def get_url(year):
         f"{year}_Hardie-Ferodo_1000",
         f"{year}_Hardie-Ferodo_500",
         f"{year}_Tooheys_1000",
-        f"{year}_James_Hardie_1000",
-        f"{year}_AMP_Bathurst_1000"
+        f"{year}_James_Hardie_1000"
     ]
 
     for p in patterns:
         url = f"https://en.wikipedia.org/wiki/{p}"
         res = requests.get(url, headers=HEADERS)
-
         if res.status_code == 200:
             return url
 
@@ -63,21 +61,20 @@ def fetch_year(year):
     print(f"Fetching {year} → {url}")
 
     res = requests.get(url, headers=HEADERS)
-
     soup = BeautifulSoup(res.text, "html.parser")
 
     results = []
 
-    tables = soup.find_all("table", {"class": "wikitable"})
+    # 🔥 KEY FIX: find tables AFTER a results heading
+    for header in soup.find_all(["h2", "h3"]):
+        title = header.get_text().lower()
 
-    for table in tables:
-        headers = [clean(th.get_text()) for th in table.find_all("th")]
-        if not headers:
-            continue
+        if "result" in title or "classification" in title:
+            table = header.find_next("table")
 
-        header_str = " ".join(headers).lower()
+            if not table:
+                continue
 
-        if "position" in header_str or "pos" in header_str:
             for r in table.find_all("tr"):
                 cols = [clean(c.get_text()) for c in r.find_all("td")]
 
@@ -89,8 +86,16 @@ def fetch_year(year):
                 except:
                     continue
 
-                drivers_raw = cols[2] if len(cols) >= 5 else cols[1]
-                car = cols[3] if len(cols) >= 4 else None
+                # flexible column handling
+                drivers_raw = None
+                car = None
+
+                if len(cols) >= 5:
+                    drivers_raw = cols[2]
+                    car = cols[3]
+                else:
+                    drivers_raw = cols[1]
+                    car = cols[2] if len(cols) > 2 else None
 
                 drivers = split_drivers(drivers_raw)
 
@@ -103,8 +108,10 @@ def fetch_year(year):
                     "car": car
                 })
 
+            break  # stop after first valid results table
+
     if not results:
-        print(f"⚠️ No results {year}")
+        print(f"⚠️ No results found {year}")
         return None
 
     # dedupe
