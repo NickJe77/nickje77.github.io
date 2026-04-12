@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST FULL FIELD BUILDER (FINAL WORKING)")
+print("BATHURST FULL FIELD BUILDER (ALL YEARS FIXED)")
 
 BASE = Path("docs/data/bathurst")
 BASE.mkdir(parents=True, exist_ok=True)
@@ -31,15 +31,38 @@ def split_drivers(text):
     return [clean(p) for p in parts if clean(p)]
 
 
+# 🔥 Try ALL known naming patterns
+def get_url(year):
+    patterns = [
+        f"{year}_Bathurst_1000",
+        f"{year}_Bathurst_500",
+        f"{year}_Hardie-Ferodo_1000",
+        f"{year}_Hardie-Ferodo_500",
+        f"{year}_Tooheys_1000",
+        f"{year}_James_Hardie_1000",
+        f"{year}_AMP_Bathurst_1000"
+    ]
+
+    for p in patterns:
+        url = f"https://en.wikipedia.org/wiki/{p}"
+        res = requests.get(url, headers=HEADERS)
+
+        if res.status_code == 200:
+            return url
+
+    return None
+
+
 def fetch_year(year):
-    url = f"https://en.wikipedia.org/wiki/{year}_Bathurst_1000"
+    url = get_url(year)
 
-    print(f"Fetching {year}...")
-    res = requests.get(url, headers=HEADERS)
-    print(f"STATUS {year}: {res.status_code}")
-
-    if res.status_code != 200:
+    if not url:
+        print(f"❌ No page {year}")
         return None
+
+    print(f"Fetching {year} → {url}")
+
+    res = requests.get(url, headers=HEADERS)
 
     soup = BeautifulSoup(res.text, "html.parser")
 
@@ -84,7 +107,7 @@ def fetch_year(year):
         print(f"⚠️ No results {year}")
         return None
 
-    # remove duplicates
+    # dedupe
     unique = {}
     for r in results:
         key = (r["finish"], tuple(r["drivers"]))
@@ -109,7 +132,6 @@ for y in range(START_YEAR, END_YEAR + 1):
 
     out = BASE / f"{y}.json"
 
-    # ✅ ALWAYS WRITE (this was your issue)
     with open(out, "w") as f:
         json.dump(data, f, indent=2)
 
