@@ -5,27 +5,31 @@ from pathlib import Path
 
 import pandas as pd
 import requests
-from bs4 import BeautifulSoup
 
-print("BATHURST WINNERS BUILDER (LOCKED TO WINNERS SECTION)")
+print("BATHURST WINNERS BUILDER (STRUCTURE LOCKED)")
 
 URL = "https://en.wikipedia.org/wiki/Bathurst_1000"
 OUT = Path("docs/data/bathurst/winners.json")
 OUT.parent.mkdir(parents=True, exist_ok=True)
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
-def clean(text):
-    if text is None:
+def clean(x):
+    if x is None:
         return None
-    text = str(text)
-    text = re.sub(r"\[[^\]]+\]", "", text)
-    text = text.replace("\xa0", " ")
-    text = re.sub(r"\s+", " ", text).strip()
-    return text or None
+    x = str(x)
+    x = re.sub(r"\[[^\]]+\]", "", x)
+    x = x.replace("\xa0", " ")
+    return re.sub(r"\s+", " ", x).strip()
+
+
+def extract_year(x):
+    x = clean(x)
+    if not x:
+        return None
+    m = re.search(r"(19|20)\d{2}", x)
+    return int(m.group()) if m else None
 
 
 def split_drivers(text):
@@ -35,12 +39,13 @@ def split_drivers(text):
 
     text = text.replace(" / ", "/")
     text = text.replace(" and ", "/")
-    parts = [clean(x) for x in text.split("/") if clean(x)]
+
+    parts = [clean(p) for p in text.split("/") if clean(p)]
 
     if len(parts) >= 2:
         return parts
 
-    # fallback for cases where names may be merged oddly
+    # fallback split
     words = text.split()
     if len(words) == 4:
         return [" ".join(words[:2]), " ".join(words[2:])]
@@ -51,72 +56,60 @@ def split_drivers(text):
 
 
 print("Fetching page...")
-res = requests.get(URL, headers=HEADERS, timeout=30)
+res = requests.get(URL, headers=HEADERS)
 res.raise_for_status()
 
-soup = BeautifulSoup(res.text, "html.parser")
+print("Reading ALL tables...")
+tables = pd.read_html(StringIO(res.text))
 
-print("Locating exact 'List of winners' section...")
-anchor = soup.find(id="List_of_winners")
-if anchor is None:
-    raise RuntimeError("Could not find 'List_of_winners' section on page")
+print(f"Found {len(tables)} tables")
 
-table = anchor.find_parent(["h2", "h3"]).find_next("table", class_="wikitable")
-if table is None:
-    raise RuntimeError("Could not find winners table after 'List_of_winners' section")
+target = None
 
-print("Reading exact winners table...")
-dfs = pd.read_html(StringIO(str(table)))
-if not dfs:
-    raise RuntimeError("pandas could not read winners table")
+for df in tables:
+    cols = [clean(c) for c in df.columns]
+    cols_lower = [c.lower() if c else "" for c in cols]
 
-df = dfs[0].copy()
+    # 🔥 THIS matches EXACT structure in your screenshots
+    if (
+        any("year" in c for c in cols_lower)
+        and any("driver" in c for c in cols_lower)
+        and any("car" in c for c in cols_lower)
+        and len(df) > 20  # real table, not small junk tables
+    ):
+        print("👉 FOUND CORRECT WINNERS TABLE")
+        target = df.copy()
+        break
 
-# Flatten any multi-index columns just in case
-if isinstance(df.columns, pd.MultiIndex):
-    df.columns = [
-        " ".join([clean(part) for part in col if clean(part)]).strip()
-        for col in df.columns
-    ]
-else:
-    df.columns = [clean(c) for c in df.columns]
+if target is None:
+    raise Exception("❌ Could not find winners table")
 
-# Find the right columns from the exact table
-year_col = None
-drivers_col = None
-car_col = None
+# normalize columns
+rename = {}
+for col in target.columns:
+    c = clean(col).lower()
 
-for col in df.columns:
-    cl = (col or "").lower()
-    if year_col is None and "year" in cl:
-        year_col = col
-    elif drivers_col is None and "driver" in cl:
-        drivers_col = col
-    elif car_col is None and "car" in cl:
-        car_col = col
+    if "year" in c:
+        rename[col] = "year"
+    elif "driver" in c:
+        rename[col] = "drivers"
+    elif "car" in c:
+        rename[col] = "car"
 
-if year_col is None or drivers_col is None or car_col is None:
-    raise RuntimeError(
-        f"Could not identify required columns. Found columns: {list(df.columns)}"
-    )
+target = target.rename(columns=rename)
 
 results = []
 
-for _, row in df.iterrows():
-    year_text = clean(row.get(year_col))
-    if not year_text:
+for _, row in target.iterrows():
+    year = extract_year(row.get("year"))
+    if not year:
         continue
 
-    m = re.search(r"(19|20)\d{2}", year_text)
-    if not m:
-        continue
-
-    year = int(m.group(0))
     if year < 1960 or year > 2100:
         continue
 
-    drivers = split_drivers(row.get(drivers_col))
-    car = clean(row.get(car_col))
+    drivers = split_drivers(row.get("drivers"))
+    car = clean(row.get("car"))
 
     if not drivers or not car:
         continue
@@ -127,17 +120,17 @@ for _, row in df.iterrows():
         "car": car
     })
 
-# Deduplicate by year, keeping first occurrence from the winners table
+# remove duplicates
 final = []
 seen = set()
 
-for item in sorted(results, key=lambda x: x["year"]):
-    if item["year"] in seen:
+for r in sorted(results, key=lambda x: x["year"]):
+    if r["year"] in seen:
         continue
-    seen.add(item["year"])
-    final.append(item)
+    seen.add(r["year"])
+    final.append(r)
 
-with open(OUT, "w", encoding="utf-8") as f:
-    json.dump(final, f, indent=2, ensure_ascii=False)
+with open(OUT, "w") as f:
+    json.dump(final, f, indent=2)
 
 print(f"✅ DONE — saved {len(final)} years")
