@@ -1,12 +1,11 @@
 import json
 import re
-from io import StringIO
 from pathlib import Path
 
-import pandas as pd
 import requests
+from bs4 import BeautifulSoup
 
-print("BATHURST WINNERS BUILDER (STRUCTURE LOCKED)")
+print("BATHURST WINNERS BUILDER (HARD LOCKED)")
 
 URL = "https://en.wikipedia.org/wiki/Bathurst_1000"
 OUT = Path("docs/data/bathurst/winners.json")
@@ -16,7 +15,7 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
 def clean(x):
-    if x is None:
+    if not x:
         return None
     x = str(x)
     x = re.sub(r"\[[^\]]+\]", "", x)
@@ -24,101 +23,88 @@ def clean(x):
     return re.sub(r"\s+", " ", x).strip()
 
 
-def extract_year(x):
-    x = clean(x)
-    if not x:
+def extract_year(text):
+    text = clean(text)
+    if not text:
         return None
-    m = re.search(r"(19|20)\d{2}", x)
+    m = re.search(r"(19|20)\d{2}", text)
     return int(m.group()) if m else None
 
 
-def split_drivers(text):
-    text = clean(text)
+def split_drivers(cell):
+    names = [clean(a.get_text()) for a in cell.find_all("a") if clean(a.get_text())]
+
+    if names:
+        return names
+
+    text = clean(cell.get_text())
     if not text:
         return []
 
-    text = text.replace(" / ", "/")
     text = text.replace(" and ", "/")
+    parts = [clean(x) for x in text.split("/") if clean(x)]
 
-    parts = [clean(p) for p in text.split("/") if clean(p)]
-
-    if len(parts) >= 2:
-        return parts
-
-    # fallback split
-    words = text.split()
-    if len(words) == 4:
-        return [" ".join(words[:2]), " ".join(words[2:])]
-    if len(words) == 6:
-        return [" ".join(words[:3]), " ".join(words[3:])]
-
-    return [text]
+    return parts
 
 
 print("Fetching page...")
 res = requests.get(URL, headers=HEADERS)
 res.raise_for_status()
 
-print("Reading ALL tables...")
-tables = pd.read_html(StringIO(res.text))
+soup = BeautifulSoup(res.text, "html.parser")
+
+print("Finding ALL wikitable tables...")
+tables = soup.find_all("table", class_="wikitable")
 
 print(f"Found {len(tables)} tables")
 
 target = None
 
-for df in tables:
-    cols = [clean(c) for c in df.columns]
-    cols_lower = [c.lower() if c else "" for c in cols]
+# 🔥 FIND THE BIG RESULTS TABLE
+for table in tables:
+    rows = table.find_all("tr")
 
-    # 🔥 THIS matches EXACT structure in your screenshots
-    if (
-        any("year" in c for c in cols_lower)
-        and any("driver" in c for c in cols_lower)
-        and any("car" in c for c in cols_lower)
-        and len(df) > 20  # real table, not small junk tables
-    ):
-        print("👉 FOUND CORRECT WINNERS TABLE")
-        target = df.copy()
+    if len(rows) < 50:
+        continue
+
+    header = " ".join([clean(th.get_text()) for th in table.find_all("th")]).lower()
+
+    if "year" in header and "driver" in header and "car" in header:
+        print("👉 FOUND MAIN RESULTS TABLE")
+        target = table
         break
 
 if target is None:
-    raise Exception("❌ Could not find winners table")
-
-# normalize columns
-rename = {}
-for col in target.columns:
-    c = clean(col).lower()
-
-    if "year" in c:
-        rename[col] = "year"
-    elif "driver" in c:
-        rename[col] = "drivers"
-    elif "car" in c:
-        rename[col] = "car"
-
-target = target.rename(columns=rename)
+    raise Exception("❌ Could not find Bathurst results table")
 
 results = []
 
-for _, row in target.iterrows():
-    year = extract_year(row.get("year"))
-    if not year:
+for row in target.find_all("tr"):
+    cols = row.find_all("td")
+
+    # must match layout in your screenshot
+    if len(cols) < 4:
         continue
 
-    if year < 1960 or year > 2100:
+    try:
+        year = extract_year(cols[0].get_text())
+        if not year or year < 1960:
+            continue
+
+        drivers = split_drivers(cols[2])
+        car = clean(cols[3].get_text())
+
+        if not drivers or not car:
+            continue
+
+        results.append({
+            "year": year,
+            "drivers": drivers,
+            "car": car
+        })
+
+    except:
         continue
-
-    drivers = split_drivers(row.get("drivers"))
-    car = clean(row.get("car"))
-
-    if not drivers or not car:
-        continue
-
-    results.append({
-        "year": year,
-        "drivers": drivers,
-        "car": car
-    })
 
 # remove duplicates
 final = []
