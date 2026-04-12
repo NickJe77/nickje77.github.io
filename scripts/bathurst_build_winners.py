@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import Path
 
-print("BATHURST WINNERS BUILDER (CLEAN FINAL)")
+print("BATHURST WINNERS BUILDER (ACTUAL FIX)")
 
 URL = "https://en.wikipedia.org/wiki/Bathurst_1000"
 
@@ -27,32 +27,30 @@ def split_drivers(text):
 
     text = clean(text)
 
-    # normal case
-    if "/" in text or " and " in text:
-        parts = re.split(r"/| and ", text)
-        return [clean(p) for p in parts if clean(p)]
+    # normal separators
+    parts = re.split(r"/| and ", text)
+    parts = [p.strip() for p in parts if p.strip()]
 
-    # fallback: split into names (assume pairs)
-    words = text.split()
-    if len(words) >= 4:
-        mid = len(words) // 2
-        return [
-            " ".join(words[:mid]),
-            " ".join(words[mid:])
-        ]
+    # 🔥 if still one long string → force split
+    if len(parts) == 1:
+        words = parts[0].split()
 
-    return [text]
+        # assume 2 drivers → split in half
+        if len(words) >= 4:
+            mid = len(words) // 2
+            parts = [
+                " ".join(words[:mid]),
+                " ".join(words[mid:])
+            ]
+
+    return parts
 
 print("Fetching page...")
 res = requests.get(URL, headers=HEADERS)
 
-if res.status_code != 200:
-    raise Exception("Failed to fetch page")
-
 soup = BeautifulSoup(res.text, "html.parser")
 
-print("Finding winners section...")
-
+# find correct section
 header = None
 for h in soup.find_all(["h2", "h3"]):
     if "List of winners" in h.get_text():
@@ -60,33 +58,28 @@ for h in soup.find_all(["h2", "h3"]):
         break
 
 if header is None:
-    raise Exception("❌ Winners section not found")
+    raise Exception("No winners section")
 
 table = header.find_next("table", {"class": "wikitable"})
-
-if table is None:
-    raise Exception("❌ Winners table not found")
-
 rows = table.find_all("tr")[1:]
 
 data = []
 
 for row in rows:
     cols = row.find_all("td")
-
     if len(cols) < 3:
         continue
 
     try:
+        # extract year
         year_text = clean(cols[0].get_text())
-
         match = re.search(r"\d{4}", year_text or "")
         if not match:
             continue
 
         year = int(match.group())
 
-        # 🔥 FILTER BAD YEARS
+        # filter real Bathurst years
         if year < 1960 or year > 2100:
             continue
 
@@ -95,9 +88,7 @@ for row in rows:
 
         drivers = split_drivers(drivers_raw)
 
-        if not drivers:
-            continue
-
+        # 🔥 DO NOT SKIP — always include
         data.append({
             "year": year,
             "drivers": drivers,
