@@ -29,7 +29,7 @@
     }
 
     .container{
-      max-width:1100px;
+      max-width:1000px;
       margin:auto;
       padding:20px;
     }
@@ -78,10 +78,6 @@
       background:#d4edda !important;
       font-weight:600;
     }
-
-    .podium{
-      background:#fff3cd !important;
-    }
   </style>
 </head>
 
@@ -99,16 +95,14 @@
   <div class="summary">
     <div>Starts: <span id="starts">0</span></div>
     <div>Wins: <span id="wins">0</span></div>
-    <div>Podiums: <span id="podiums">0</span></div>
   </div>
 
   <table>
     <thead>
       <tr>
         <th>Year</th>
-        <th>Pos</th>
+        <th>Result</th>
         <th>Car</th>
-        <th>Laps</th>
       </tr>
     </thead>
     <tbody id="table"></tbody>
@@ -122,65 +116,39 @@ const driverName = decodeURIComponent(params.get("name") || "");
 
 document.getElementById("name").innerText = driverName;
 
-let races = [];
 let starts = 0;
 let wins = 0;
-let podiums = 0;
+let races = [];
 
-// ✅ FIXED FOR ARRAY DRIVERS
-function matchDriver(drivers, name){
-  if(!drivers) return false;
+// 🔥 USE WINNERS FILE ONLY
+fetch("data/bathurst/winners.json")
+  .then(res => res.json())
+  .then(data => {
 
-  return drivers.some(d => 
-    d.toLowerCase() === name.toLowerCase()
-  );
-}
+    data.forEach(r => {
 
-const START_YEAR = 1963;
-const END_YEAR = new Date().getFullYear();
+      if(r.drivers.some(d => d.toLowerCase() === driverName.toLowerCase())){
 
-async function load(){
+        starts++;
+        wins++;
 
-  for(let y = START_YEAR; y <= END_YEAR; y++){
+        races.push({
+          year: r.year,
+          car: r.car
+        });
 
-    try{
-      const res = await fetch(`data/bathurst/${y}.json`);
-      if(!res.ok) continue;
+      }
 
-      const data = await res.json();
+    });
 
-      data.results.forEach(r => {
+    render();
 
-        if(matchDriver(r.drivers, driverName)){
-
-          const pos = r.finish || null;
-
-          races.push({
-            year: y,
-            pos: pos,
-            car: r.car,
-            laps: r.laps
-          });
-
-          starts++;
-
-          if(pos === 1) wins++;
-          if(pos && pos <= 3) podiums++;
-        }
-
-      });
-
-    } catch(e){}
-  }
-
-  render();
-}
+  });
 
 function render(){
 
   document.getElementById("starts").innerText = starts;
   document.getElementById("wins").innerText = wins;
-  document.getElementById("podiums").innerText = podiums;
 
   const tbody = document.getElementById("table");
 
@@ -190,21 +158,17 @@ function render(){
 
     const tr = document.createElement("tr");
 
-    if(r.pos === 1) tr.classList.add("win");
-    else if(r.pos && r.pos <= 3) tr.classList.add("podium");
+    tr.classList.add("win");
 
     tr.innerHTML = `
       <td>${r.year}</td>
-      <td>${r.pos || ""}</td>
-      <td>${r.car || ""}</td>
-      <td>${r.laps || ""}</td>
+      <td>1</td>
+      <td>${r.car}</td>
     `;
 
     tbody.appendChild(tr);
   });
 }
-
-load();
 
 </script>
 
