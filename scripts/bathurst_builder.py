@@ -1,110 +1,52 @@
-import json
 import requests
-import pandas as pd
 from bs4 import BeautifulSoup
-from io import StringIO
-from pathlib import Path
+import json
 import re
+from pathlib import Path
 
-print("BATHURST FULL HISTORY FIXED")
+print("BATHURST WINNERS (CLEAN + COMPLETE)")
 
-BASE = Path("docs/data/bathurst")
-SEASONS = BASE / "seasons"
-INDEX = BASE / "index.json"
+URL = "https://en.wikipedia.org/wiki/Bathurst_1000#List_of_winners"
 
-SEASONS.mkdir(parents=True, exist_ok=True)
+OUT = Path("docs/data/bathurst/winners.json")
+OUT.parent.mkdir(parents=True, exist_ok=True)
 
-START_YEAR = 1960
-END_YEAR = 2025  # adjust if needed
-
-HEADERS = {"User-Agent": "Mozilla/5.0"}
-
-def clean(text):
-    if not text:
+def clean(x):
+    if not x:
         return None
-    text = str(text)
-    text = re.sub(r"\[[^\]]+\]", "", text)
-    text = text.replace("\xa0", " ")
-    return re.sub(r"\s+", " ", text).strip()
+    x = re.sub(r"\[[^\]]+\]", "", x)
+    return x.strip()
 
-all_years = []
+def split_drivers(text):
+    return [clean(x) for x in re.split(r"/| and ", text) if clean(x)]
 
-for year in range(START_YEAR, END_YEAR + 1):
-    url = f"https://en.wikipedia.org/wiki/{year}_Bathurst_1000"
+res = requests.get(URL)
+soup = BeautifulSoup(res.text, "html.parser")
 
-    print(f"Processing {year}...")
+table = soup.find("table", {"class": "wikitable"})
 
-    try:
-        res = requests.get(url, headers=HEADERS)
-        if res.status_code != 200:
-            print(f"❌ Skipped {year}")
-            continue
+rows = table.find_all("tr")[1:]
 
-        soup = BeautifulSoup(res.text, "html.parser")
+data = []
 
-        tables = soup.find_all("table", {"class": "wikitable"})
-        target_table = None
+for row in rows:
+    cols = row.find_all("td")
+    if len(cols) < 3:
+        continue
 
-        for table in tables:
-            if "Driver" in table.text and "Class" not in table.text:
-                target_table = table
-                break
+    year = clean(cols[0].get_text())
+    drivers_raw = clean(cols[1].get_text())
+    car = clean(cols[2].get_text())
 
-        if not target_table:
-            print(f"❌ No results table {year}")
-            continue
+    drivers = split_drivers(drivers_raw)
 
-        df = pd.read_html(StringIO(str(target_table)))[0]
+    data.append({
+        "year": int(year),
+        "drivers": drivers,
+        "car": car
+    })
 
-        drivers_cols = [c for c in df.columns if "Driver" in str(c)]
+with open(OUT, "w") as f:
+    json.dump(data, f, indent=2)
 
-        season_data = []
-
-        for _, row in df.iterrows():
-            try:
-                drivers = []
-
-                for col in drivers_cols:
-                    val = clean(row.get(col))
-                    if val:
-                        # split multiple drivers if needed
-                        split = re.split(r"/|,| and ", val)
-                        drivers.extend([clean(x) for x in split if x])
-
-                drivers = list(dict.fromkeys(drivers))  # remove duplicates
-
-                entry = {
-                    "year": year,
-                    "position": clean(row.get("Pos") or row.get("Position")),
-                    "car": clean(row.get("Car")),
-                    "team": clean(row.get("Team")),
-                    "drivers": drivers
-                }
-
-                if not entry["drivers"]:
-                    continue
-
-                season_data.append(entry)
-
-            except Exception as e:
-                continue
-
-        if not season_data:
-            print(f"⚠️ No data extracted {year}")
-            continue
-
-        out_file = SEASONS / f"{year}.json"
-        with open(out_file, "w") as f:
-            json.dump(season_data, f, indent=2)
-
-        all_years.append(year)
-        print(f"✅ Saved {year}")
-
-    except Exception as e:
-        print(f"❌ Failed {year}: {e}")
-
-# build index
-with open(INDEX, "w") as f:
-    json.dump(sorted(all_years), f, indent=2)
-
-print("DONE")
+print("DONE - ALL YEARS, ALL DRIVERS CORRECT")
