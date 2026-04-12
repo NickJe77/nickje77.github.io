@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("BATHURST SEASONS BUILDER (LOCKED TABLE FIX)")
+print("BATHURST SEASONS BUILDER (DEBUG LOCKED)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS = BASE / "seasons"
@@ -29,64 +29,64 @@ with open(BASE / "winners.json") as f:
     winners = {x["year"]: x for x in json.load(f)}
 
 for year in winners.keys():
-    print(f"\nProcessing {year}")
+    print(f"\n====================")
+    print(f"YEAR: {year}")
 
     url = f"https://en.wikipedia.org/wiki/{year}_Bathurst_1000"
 
     try:
         res = requests.get(url, headers=HEADERS)
         if res.status_code != 200:
-            print("❌ Missing page")
+            print("❌ Page missing")
             continue
 
         soup = BeautifulSoup(res.text, "html.parser")
 
-        # 🔥 STEP 1 — find ALL tables
         tables = soup.find_all("table", {"class": "wikitable"})
+        print(f"Found {len(tables)} tables")
 
         target = None
 
-        # 🔥 STEP 2 — find the actual RESULTS table
-        for t in tables:
+        # 🔥 PRINT HEADERS FOR DEBUG
+        for i, t in enumerate(tables):
             headers = [clean(th.get_text()) for th in t.find_all("th")]
+            header_text = " | ".join(headers).lower()
 
-            if not headers:
-                continue
-
-            header_text = " ".join(headers).lower()
+            print(f"\nTable {i} headers:")
+            print(header_text)
 
             if (
-                ("pos" in header_text or "position" in header_text)
-                and ("driver" in header_text)
-                and ("car" in header_text)
+                "driver" in header_text
+                and ("pos" in header_text or "position" in header_text)
+                and "car" in header_text
             ):
+                print("👉 THIS IS THE RESULTS TABLE")
                 target = t
                 break
 
         if target is None:
-            print("❌ No results table found")
+            print("❌ NO MATCHING TABLE FOUND")
             continue
 
         rows = target.find_all("tr")
 
         headers = [clean(th.get_text()) for th in rows[0].find_all("th")]
 
-        # 🔥 find indexes properly
         pos_idx = None
         car_idx = None
 
         for i, h in enumerate(headers):
             if not h:
                 continue
-            h_lower = h.lower()
+            h = h.lower()
 
-            if "pos" in h_lower or "position" in h_lower:
+            if "pos" in h or "position" in h:
                 pos_idx = i
 
-            if "car" in h_lower:
+            if "car" in h:
                 car_idx = i
 
-        print(f"Detected columns → pos:{pos_idx}, car:{car_idx}")
+        print(f"Detected → pos:{pos_idx}, car:{car_idx}")
 
         results = []
 
@@ -117,7 +117,9 @@ for year in winners.keys():
             except:
                 continue
 
-        # 🔥 FORCE winner
+        print(f"Extracted {len(results)} rows")
+
+        # force winner
         winner = winners[year]
 
         if results:
@@ -131,7 +133,7 @@ for year in winners.keys():
                 "results": results
             }, f, indent=2)
 
-        print(f"✅ Saved {len(results)} results")
+        print("✅ SAVED")
 
     except Exception as e:
-        print("❌ Failed:", e)
+        print("❌ ERROR:", e)
