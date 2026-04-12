@@ -30,9 +30,13 @@ body{
 }
 
 .page{
-  max-width:1100px;
+  max-width:900px;
   margin:auto;
   padding:25px;
+}
+
+h1{
+  text-align:center;
 }
 
 .table{
@@ -51,8 +55,7 @@ body{
 }
 
 .table td{
-  padding:10px;
-  border-bottom:1px solid #eee;
+  padding:12px;
 }
 
 .table tr:nth-child(even){
@@ -86,11 +89,9 @@ body{
   <table class="table">
     <thead>
       <tr>
-        <th>Finish</th>
-        <th>Grid</th>
+        <th>Position</th>
         <th>Driver(s)</th>
         <th>Car</th>
-        <th>Laps</th>
       </tr>
     </thead>
     <tbody id="results"></tbody>
@@ -100,46 +101,45 @@ body{
 
 <script>
 
-// ✅ GET YEAR FROM URL
+// ✅ GET YEAR
 const params = new URLSearchParams(window.location.search);
-const year = params.get("year") || "2026";
+const year = parseInt(params.get("year"));
 
-// ✅ IMPORTANT: use /data NOT /docs/data
-const url = `/data/bathurst/${year}.json`;
-
-fetch(url)
+// 🔥 USE WINNERS FILE
+fetch("/data/bathurst/winners.json")
   .then(res => res.json())
   .then(data => {
 
+    const race = data.find(r => r.year === year);
+
+    if(!race){
+      document.getElementById("title").textContent = "Race not found";
+      return;
+    }
+
     document.getElementById("title").textContent =
-      `${data.year} Bathurst 1000`;
+      `${race.year} Bathurst 1000`;
 
     const table = document.getElementById("results");
 
-    data.results.forEach(row => {
+    const drivers = race.drivers.map(d => {
+      const slug = d.toLowerCase().replace(/ /g, "-");
+      return `<a class="driver" href="./bathurst-driver.html?driver=${slug}">${d}</a>`;
+    }).join(" / ");
 
-      // 🔥 MULTI-DRIVER FIX
-      const drivers = row.drivers.map(d => {
-        const slug = d.toLowerCase().replace(/ /g, "-");
-        return `<a class="driver" href="./bathurst-driver.html?driver=${slug}">${d}</a>`;
-      }).join(" / ");
+    const tr = document.createElement("tr");
 
-      const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>1</td>
+      <td>${drivers}</td>
+      <td>${race.car}</td>
+    `;
 
-      tr.innerHTML = `
-        <td>${row.finish ?? ""}</td>
-        <td>${row.grid ?? ""}</td>
-        <td>${drivers}</td>
-        <td>${row.car ?? ""}</td>
-        <td>${row.laps ?? ""}</td>
-      `;
-
-      table.appendChild(tr);
-    });
+    table.appendChild(tr);
 
   })
   .catch(err => {
-    document.getElementById("title").textContent = "Race not found";
+    document.getElementById("title").textContent = "Error loading race";
     console.error(err);
   });
 
