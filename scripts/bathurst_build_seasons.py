@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 import re
 
-print("BATHURST SEASONS BUILDER (POSITION FIXED)")
+print("BATHURST SEASONS BUILDER (LOCKED TABLE FIX)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS = BASE / "seasons"
@@ -29,7 +29,7 @@ with open(BASE / "winners.json") as f:
     winners = {x["year"]: x for x in json.load(f)}
 
 for year in winners.keys():
-    print(f"Processing {year}")
+    print(f"\nProcessing {year}")
 
     url = f"https://en.wikipedia.org/wiki/{year}_Bathurst_1000"
 
@@ -40,66 +40,84 @@ for year in winners.keys():
             continue
 
         soup = BeautifulSoup(res.text, "html.parser")
+
+        # 🔥 STEP 1 — find ALL tables
         tables = soup.find_all("table", {"class": "wikitable"})
 
         target = None
+
+        # 🔥 STEP 2 — find the actual RESULTS table
         for t in tables:
-            if "Driver" in t.text or "Drivers" in t.text:
+            headers = [clean(th.get_text()) for th in t.find_all("th")]
+
+            if not headers:
+                continue
+
+            header_text = " ".join(headers).lower()
+
+            if (
+                ("pos" in header_text or "position" in header_text)
+                and ("driver" in header_text)
+                and ("car" in header_text)
+            ):
                 target = t
                 break
 
+        if target is None:
+            print("❌ No results table found")
+            continue
+
+        rows = target.find_all("tr")
+
+        headers = [clean(th.get_text()) for th in rows[0].find_all("th")]
+
+        # 🔥 find indexes properly
+        pos_idx = None
+        car_idx = None
+
+        for i, h in enumerate(headers):
+            if not h:
+                continue
+            h_lower = h.lower()
+
+            if "pos" in h_lower or "position" in h_lower:
+                pos_idx = i
+
+            if "car" in h_lower:
+                car_idx = i
+
+        print(f"Detected columns → pos:{pos_idx}, car:{car_idx}")
+
         results = []
 
-        if target:
-            rows = target.find_all("tr")
+        for row in rows[1:]:
+            cols = row.find_all("td")
+            if len(cols) < 3:
+                continue
 
-            # 🔥 FIND HEADER
-            headers = [clean(th.get_text()) for th in rows[0].find_all("th")]
+            try:
+                pos = clean(cols[pos_idx].get_text()) if pos_idx is not None and pos_idx < len(cols) else None
+                car = clean(cols[car_idx].get_text()) if car_idx is not None and car_idx < len(cols) else None
 
-            pos_idx = None
-            car_idx = None
+                drivers = []
+                for c in cols:
+                    drivers.extend(extract_drivers(c.get_text()))
 
-            for i, h in enumerate(headers):
-                if h and ("Pos" in h or "Position" in h):
-                    pos_idx = i
-                if h and "Car" in h:
-                    car_idx = i
+                drivers = list(dict.fromkeys(drivers))
 
-            # fallback if not found
-            if pos_idx is None:
-                pos_idx = 0
-            if car_idx is None:
-                car_idx = 2 if len(headers) > 2 else 1
-
-            # 🔥 PROCESS ROWS
-            for row in rows[1:]:
-                cols = row.find_all("td")
-                if len(cols) < 3:
+                if not drivers:
                     continue
 
-                try:
-                    pos = clean(cols[pos_idx].get_text()) if pos_idx < len(cols) else None
-                    car = clean(cols[car_idx].get_text()) if car_idx < len(cols) else None
+                results.append({
+                    "position": pos,
+                    "car": car,
+                    "drivers": drivers
+                })
 
-                    drivers = []
-                    for c in cols:
-                        drivers.extend(extract_drivers(c.get_text()))
+            except:
+                continue
 
-                    drivers = list(dict.fromkeys(drivers))
-
-                    if not drivers:
-                        continue
-
-                    results.append({
-                        "position": pos,
-                        "car": car,
-                        "drivers": drivers
-                    })
-
-                except:
-                    continue
-
-        # 🔥 FORCE correct winner
+        # 🔥 FORCE winner
         winner = winners[year]
 
         if results:
@@ -113,7 +131,7 @@ for year in winners.keys():
                 "results": results
             }, f, indent=2)
 
-        print("✅ Saved")
+        print(f"✅ Saved {len(results)} results")
 
     except Exception as e:
-        print("❌ Failed", e)
+        print("❌ Failed:", e)
