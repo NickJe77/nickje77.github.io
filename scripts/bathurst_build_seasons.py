@@ -1,84 +1,94 @@
-import json
-import re
-from pathlib import Path
-from io import StringIO
-
-import pandas as pd
 import requests
+from bs4 import BeautifulSoup
+import json
+from pathlib import Path
+import re
 
-print("BATHURST FULL SEASON BUILDER")
+print("BATHURST FULL SEASON BUILDER (NO PANDAS)")
 
-BASE = Path("docs/data/bathurst/seasons")
+URL = "https://en.wikipedia.org/wiki/Bathurst_1000#List_of_winners"
+
+BASE = Path("docs/data/bathurst")
 BASE.mkdir(parents=True, exist_ok=True)
 
-URL = "https://en.wikipedia.org/wiki/Bathurst_1000"
+headers = {"User-Agent": "Mozilla/5.0"}
 
-def clean(x):
-    if x is None: return None
-    x = str(x)
-    x = re.sub(r"\[[^\]]+\]", "", x)
-    x = x.replace("\xa0", " ")
-    return re.sub(r"\s+", " ", x).strip()
+res = requests.get(URL, headers=headers)
+soup = BeautifulSoup(res.text, "html.parser")
 
-def extract_year(x):
-    m = re.search(r"(19|20)\d{2}", str(x))
-    return int(m.group()) if m else None
+tables = soup.find_all("table", {"class": "wikitable"})
 
-print("Fetching tables...")
-html = requests.get(URL).text
-tables = pd.read_html(StringIO(html))
+if not tables:
+    print("❌ No tables found")
+    exit()
 
-print(f"{len(tables)} tables found")
+results_by_year = {}
 
-for df in tables:
+def clean(text):
+    text = re.sub(r"\[[^\]]*\]", "", text)
+    return text.strip()
 
-    cols = [clean(c).lower() for c in df.columns]
+def extract_drivers(cell):
+    links = cell.find_all("a")
+    names = []
 
-    # 🔥 detect FULL RESULTS tables
-    if not any("position" in c or "pos" in c for c in cols):
-        continue
+    for a in links:
+        name = clean(a.get_text())
+        if name and not name.startswith("File"):
+            names.append(name)
 
-    if not any("driver" in c for c in cols):
-        continue
+    # fallback if no links
+    if not names:
+        raw = clean(cell.get_text())
+        parts = re.split(r",|/| and ", raw)
+        names = [p.strip() for p in parts if p.strip()]
 
-    if not any("car" in c for c in cols):
-        continue
+    return names
 
-    print("Processing table...")
 
-    for _, row in df.iterrows():
+for table in tables:
+
+    rows = table.find_all("tr")[1:]
+
+    for row in rows:
+        cols = row.find_all(["td", "th"])
+
+        if len(cols) < 5:
+            continue
 
         try:
-            year = extract_year(row.iloc[0])
-            if not year:
-                continue
-
-            finish = int(row.iloc[1]) if str(row.iloc[1]).isdigit() else None
-            drivers_raw = clean(row.iloc[2])
-            car = clean(row.iloc[3])
-
-            drivers = [d.strip() for d in re.split(r"/| and ", drivers_raw) if d.strip()]
-
-            if not drivers:
-                continue
-
-            season_file = BASE / f"{year}.json"
-
-            if season_file.exists():
-                data = json.load(open(season_file))
-            else:
-                data = {"year": year, "results": []}
-
-            data["results"].append({
-                "finish": finish,
-                "drivers": drivers,
-                "car": car
-            })
-
-            with open(season_file, "w") as f:
-                json.dump(data, f, indent=2)
-
+            year = int(clean(cols[0].get_text()))
         except:
             continue
 
-print("DONE")
+        drivers = extract_drivers(cols[2])
+        car = clean(cols[3].get_text())
+
+        if year not in results_by_year:
+            results_by_year[year] = []
+
+        results_by_year[year].append({
+            "finish": 1,  # only winners for now
+            "grid": None,
+            "drivers": drivers,
+            "car": car,
+            "laps": None
+        })
+
+
+# SAVE FILES PER YEAR
+count = 0
+
+for year, data in results_by_year.items():
+
+    file = BASE / f"{year}.json"
+
+    with open(file, "w") as f:
+        json.dump({
+            "year": year,
+            "results": data
+        }, f, indent=2)
+
+    count += 1
+
+print(f"✅ Built {count} seasons")
