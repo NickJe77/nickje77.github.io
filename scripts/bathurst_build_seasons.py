@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (FINAL CLEAN FIX)")
+print("BATHURST BUILDER (FINAL - NO JUNK)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -27,7 +27,7 @@ def clean(x):
     return re.sub(r"\s+", " ", x).strip()
 
 
-# 🔥 SPLIT DRIVERS (SAFE)
+# 🔥 STRICT DRIVER SPLIT (KILLS "Top 10")
 def split_drivers(text):
     if not text:
         return []
@@ -42,14 +42,21 @@ def split_drivers(text):
         if not p:
             continue
 
-        if " " not in p:
+        # ❌ REMOVE ANYTHING WITH NUMBERS ("Top 10")
+        if re.search(r"\d", p):
+            continue
+
+        words = p.split()
+
+        # must be exactly 2 words (first + last name)
+        if len(words) != 2:
             continue
 
         bad_words = [
             "team", "racing", "motorsport",
             "engineering", "holden", "ford",
             "nissan", "toyota", "audi",
-            "camaro"
+            "camaro", "shootout", "top"
         ]
 
         if any(b in p.lower() for b in bad_words):
@@ -60,7 +67,6 @@ def split_drivers(text):
     return drivers
 
 
-# 🔥 CLEAN FINAL DRIVER LIST (THIS FIXES YOUR SCREENSHOT ISSUE)
 def clean_driver_list(drivers):
     final = []
     seen = set()
@@ -71,16 +77,22 @@ def clean_driver_list(drivers):
 
         d = clean(d)
 
-        # remove car strings
+        if not d:
+            continue
+
+        # ❌ REMOVE ANYTHING WITH NUMBERS AGAIN (safety)
+        if re.search(r"\d", d):
+            continue
+
         if any(x in d.lower() for x in [
-            "camaro", "ford", "holden", "nissan", "toyota"
+            "camaro", "ford", "holden", "nissan", "toyota",
+            "top", "shootout"
         ]):
             continue
 
         words = d.split()
 
-        # only allow realistic names (2 words max)
-        if len(words) > 2:
+        if len(words) != 2:
             continue
 
         key = d.lower()
@@ -95,13 +107,19 @@ def looks_like_driver(text):
     if not text:
         return False
 
-    if " " not in text:
+    if re.search(r"\d", text):
+        return False
+
+    words = text.split()
+
+    if len(words) != 2:
         return False
 
     bad_words = [
         "team", "racing", "motorsport",
         "engineering", "holden", "ford",
-        "nissan", "toyota", "audi"
+        "nissan", "toyota", "audi",
+        "camaro", "top", "shootout"
     ]
 
     t = text.lower()
@@ -154,6 +172,7 @@ def fetch_year(year):
         if len(cols) < 3:
             continue
 
+        # must be a finishing position
         try:
             finish = int(cols[0])
         except:
@@ -179,7 +198,6 @@ def fetch_year(year):
                 best_drivers = d
                 driver_index = i
 
-        # 🔥 CLEAN DRIVERS HERE
         drivers = clean_driver_list(best_drivers)
 
         if not drivers:
@@ -199,7 +217,7 @@ def fetch_year(year):
         print(f"⚠️ No results {year}")
         return None
 
-    # 🔥 DEDUPE (KEEP CO-DRIVERS)
+    # 🔥 DEDUPE
     by_finish = {}
     for r in results:
         f = r["finish"]
