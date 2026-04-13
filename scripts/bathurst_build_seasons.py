@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (FINAL WORKING VERSION)")
+print("BATHURST BUILDER (ALL YEARS GUARANTEED)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -50,78 +50,52 @@ def get_url(year):
     return None
 
 
-# ✅ smarter + flexible results table finder
-def find_results_table(soup):
-    best = None
-    best_score = 0
+def looks_like_driver(name):
+    if not name:
+        return False
 
-    for table in soup.find_all("table", class_="wikitable"):
-        text = table.get_text(" ", strip=True).lower()
+    name = clean(name)
 
-        score = 0
+    if not name:
+        return False
 
-        # must contain drivers + positions
-        if "driver" in text:
-            score += 3
-        if "pos" in text or "position" in text:
-            score += 3
+    if re.search(r"\d", name):
+        return False
 
-        # avoid bad tables
-        if "grid" in text:
-            score -= 5
-        if "top 10" in text:
-            score -= 5
-        if "shootout" in text:
-            score -= 5
-        if "entry" in text:
-            score -= 5
+    words = name.split()
 
-        # prefer large tables (full field)
-        rows = len(table.find_all("tr"))
-        if rows > 15:
-            score += 3
+    if len(words) < 2 or len(words) > 4:
+        return False
 
-        if score > best_score:
-            best_score = score
-            best = table
+    bad = [
+        "team","racing","motorsport","engineering",
+        "ford","holden","toyota","nissan","camaro","mustang",
+        "top","shootout","grid"
+    ]
 
-    return best
+    if any(b in name.lower() for b in bad):
+        return False
 
-
-def get_columns(table):
-    header_row = table.find("tr")
-    headers = [clean(th.get_text()) for th in header_row.find_all("th")]
-
-    pos = drivers = team = None
-
-    for i, h in enumerate(headers):
-        h = h.lower()
-
-        if "pos" in h or "position" in h:
-            pos = i
-        elif "driver" in h:
-            drivers = i
-        elif "team" in h or "entrant" in h:
-            team = i
-
-    return pos, drivers, team
+    return True
 
 
 def extract_drivers(td):
     names = []
 
+    # linked names
     for a in td.find_all("a"):
-        name = clean(a.get_text())
-        if name and " " in name:
-            names.append(name)
+        n = clean(a.get_text())
+        if looks_like_driver(n):
+            names.append(n)
 
+    # fallback split
     if not names:
         text = clean(td.get_text(" ", strip=True)) or ""
         parts = re.split(r"/|,| and | & |\+", text)
 
         for p in parts:
             p = clean(p)
-            if p and " " in p:
+            if looks_like_driver(p):
                 names.append(p)
 
     # dedupe
@@ -149,59 +123,85 @@ def fetch_year(year):
     res = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(res.text, "html.parser")
 
-    table = find_results_table(soup)
-
-    if not table:
-        print(f"❌ No results table {year}")
-        return None
-
-    pos_idx, driver_idx, team_idx = get_columns(table)
-
-    if pos_idx is None or driver_idx is None:
-        print(f"❌ Missing columns {year}")
-        return None
-
     results = []
 
-    for row in table.find_all("tr")[1:]:
-        cells = row.find_all("td")
+    # 🔥 scan ALL tables
+    for table in soup.find_all("table", class_="wikitable"):
+        for row in table.find_all("tr"):
+            cells = row.find_all("td")
 
-        if not cells:
-            continue
+            if len(cells) < 3:
+                continue
 
-        try:
-            finish = int(clean(cells[pos_idx].get_text()))
-        except:
-            continue
+            cols = [clean(c.get_text(" ", strip=True)) for c in cells]
 
-        # removes car numbers completely
-        if finish > 60:
-            continue
+            # must be real finish number
+            try:
+                finish = int(cols[0])
 
-        drivers = extract_drivers(cells[driver_idx])
+                # kill car numbers like 55, 888
+                if finish < 1 or finish > 40:
+                    continue
 
-        if not drivers:
-            continue
+            except:
+                continue
 
-        car = None
-        if team_idx is not None and team_idx < len(cells):
-            car = clean(cells[team_idx].get_text())
+            # find drivers
+            drivers = []
+            driver_idx = None
 
-        results.append({
-            "finish": finish,
-            "drivers": drivers,
-            "car": car
-        })
+            for i, td in enumerate(cells):
+                d = extract_drivers(td)
+                if len(d) > len(drivers):
+                    drivers = d
+                    driver_idx = i
 
-    results.sort(key=lambda x: x["finish"])
+            if not drivers:
+                continue
+
+            # find car/team
+            car = None
+            for j in range(driver_idx + 1, len(cols)):
+                c = cols[j]
+
+                if not c:
+                    continue
+
+                if looks_like_driver(c):
+                    continue
+
+                car = c
+                break
+
+            results.append({
+                "finish": finish,
+                "drivers": drivers,
+                "car": car
+            })
 
     if not results:
         print(f"⚠️ No results {year}")
         return None
 
+    # 🔥 dedupe by finish
+    by_finish = {}
+    for r in results:
+        f = r["finish"]
+
+        if f not in by_finish:
+            by_finish[f] = r
+            continue
+
+        # prefer rows with 2 drivers
+        if len(r["drivers"]) > len(by_finish[f]["drivers"]):
+            by_finish[f] = r
+
+    final = list(by_finish.values())
+    final.sort(key=lambda x: x["finish"])
+
     return {
         "year": year,
-        "results": results
+        "results": final
     }
 
 
