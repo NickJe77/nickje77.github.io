@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (FINAL - NO JUNK)")
+print("BATHURST BUILDER (FINAL SAFER FIELD FIX)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -24,47 +24,85 @@ def clean(x):
         return None
     x = re.sub(r"\[[^\]]+\]", "", str(x))
     x = x.replace("\xa0", " ")
-    return re.sub(r"\s+", " ", x).strip()
+    x = re.sub(r"\s+", " ", x).strip()
+    return x or None
 
 
-# 🔥 STRICT DRIVER SPLIT (KILLS "Top 10")
+def has_bad_term(text):
+    t = (text or "").lower()
+    bad_words = [
+        "team", "racing", "motorsport", "engineering",
+        "shootout", "top 10", "top ten", "pole", "grid",
+        "laps", "km", "practice", "qualifying", "driver(s)",
+        "position", "car", "class", "time", "notes"
+    ]
+    return any(b in t for b in bad_words)
+
+
+def looks_like_driver(text):
+    if not text:
+        return False
+
+    text = clean(text)
+    if not text:
+        return False
+
+    # kill junk like Top 10
+    if re.search(r"\d", text):
+        return False
+
+    if has_bad_term(text):
+        return False
+
+    words = text.split()
+
+    # allow Anton de Pasquale etc
+    if len(words) < 2 or len(words) > 4:
+        return False
+
+    # must mostly look like name words
+    for w in words:
+        if len(w) == 1:
+            return False
+
+    lower = text.lower()
+
+    # obvious non-driver manufacturer / car strings
+    banned = [
+        "camaro", "mustang", "commodore", "falcon", "nissan",
+        "holden", "ford", "toyota", "audi", "bmw", "mercedes",
+        "porsche", "mazda", "volvo", "chevrolet"
+    ]
+    if any(b in lower for b in banned):
+        return False
+
+    return True
+
+
 def split_drivers(text):
     if not text:
         return []
 
     text = clean(text)
+    if not text:
+        return []
 
     parts = re.split(r"/|,| and | & |\+|\n", text)
 
-    drivers = []
+    out = []
+    seen = set()
+
     for p in parts:
         p = clean(p)
         if not p:
             continue
+        if looks_like_driver(p):
+            key = p.lower()
+            if key not in seen:
+                seen.add(key)
+                out.append(p)
 
-        # ❌ REMOVE ANYTHING WITH NUMBERS ("Top 10")
-        if re.search(r"\d", p):
-            continue
-
-        words = p.split()
-
-        # must be exactly 2 words (first + last name)
-        if len(words) != 2:
-            continue
-
-        bad_words = [
-            "team", "racing", "motorsport",
-            "engineering", "holden", "ford",
-            "nissan", "toyota", "audi",
-            "camaro", "shootout", "top"
-        ]
-
-        if any(b in p.lower() for b in bad_words):
-            continue
-
-        drivers.append(p)
-
-    return drivers
+    return out
 
 
 def clean_driver_list(drivers):
@@ -72,27 +110,10 @@ def clean_driver_list(drivers):
     seen = set()
 
     for d in drivers:
-        if not d:
-            continue
-
         d = clean(d)
-
         if not d:
             continue
-
-        # ❌ REMOVE ANYTHING WITH NUMBERS AGAIN (safety)
-        if re.search(r"\d", d):
-            continue
-
-        if any(x in d.lower() for x in [
-            "camaro", "ford", "holden", "nissan", "toyota",
-            "top", "shootout"
-        ]):
-            continue
-
-        words = d.split()
-
-        if len(words) != 2:
+        if not looks_like_driver(d):
             continue
 
         key = d.lower()
@@ -103,30 +124,19 @@ def clean_driver_list(drivers):
     return final
 
 
-def looks_like_driver(text):
-    if not text:
-        return False
+def extract_links_from_cell(td):
+    names = []
+    seen = set()
 
-    if re.search(r"\d", text):
-        return False
+    for a in td.find_all("a"):
+        name = clean(a.get_text(" ", strip=True))
+        if looks_like_driver(name):
+            key = name.lower()
+            if key not in seen:
+                seen.add(key)
+                names.append(name)
 
-    words = text.split()
-
-    if len(words) != 2:
-        return False
-
-    bad_words = [
-        "team", "racing", "motorsport",
-        "engineering", "holden", "ford",
-        "nissan", "toyota", "audi",
-        "camaro", "top", "shootout"
-    ]
-
-    t = text.lower()
-    if any(b in t for b in bad_words):
-        return False
-
-    return True
+    return names
 
 
 def get_url(year):
@@ -146,10 +156,48 @@ def get_url(year):
             res = requests.get(url, headers=HEADERS, timeout=20)
             if res.status_code == 200:
                 return url
-        except:
+        except Exception:
             pass
 
     return None
+
+
+def looks_like_car_or_team(text, drivers):
+    text = clean(text)
+    if not text:
+        return False
+
+    lower = text.lower()
+
+    # reject obvious junk
+    if re.search(r"^\d+$", text):
+        return False
+
+    if lower in {"ret", "dnf", "dns", "dsq", "nc"}:
+        return False
+
+    # if this cell is basically just the drivers again, reject
+    joined_drivers = " ".join(drivers).lower().strip()
+    if joined_drivers and lower == joined_drivers:
+        return False
+
+    # reject if it's just names
+    if looks_like_driver(text):
+        return False
+
+    # accept common team/car patterns
+    good_terms = [
+        "racing", "motorsport", "engineering", "team", "united",
+        "grove", "premiair", "erebus", "tickford", "blanchard",
+        "brad jones", "triple eight", "walkinshaw", "dick johnson",
+        "team 18", "matt stone", "camaro", "mustang", "commodore",
+        "falcon", "chevrolet", "ford", "holden", "nissan", "toyota"
+    ]
+    if any(term in lower for term in good_terms):
+        return True
+
+    # fallback: multi-word non-driver text can still be a team/car
+    return len(text.split()) >= 2
 
 
 def fetch_year(year):
@@ -161,41 +209,40 @@ def fetch_year(year):
 
     print(f"Fetching {year} → {url}")
 
-    res = requests.get(url, headers=HEADERS)
-    soup = BeautifulSoup(res.text, "html.parser")
+    try:
+        res = requests.get(url, headers=HEADERS, timeout=30)
+        res.raise_for_status()
+    except Exception as e:
+        print(f"❌ Request failed for {year}: {e}")
+        return None
 
+    soup = BeautifulSoup(res.text, "html.parser")
     results = []
 
     for r in soup.find_all("tr"):
-        cols = [clean(c.get_text(" ", strip=True)) for c in r.find_all("td")]
-
-        if len(cols) < 3:
+        tds = r.find_all("td")
+        if len(tds) < 3:
             continue
 
-        # must be a finishing position
+        cols = [clean(td.get_text(" ", strip=True)) for td in tds]
+
         try:
             finish = int(cols[0])
-        except:
+        except Exception:
             continue
 
         best_drivers = []
         driver_index = None
 
-        for i, c in enumerate(cols):
+        for i, td in enumerate(tds):
+            cell_text = clean(td.get_text(" ", strip=True)) or ""
+            text_drivers = split_drivers(cell_text)
+            link_drivers = extract_links_from_cell(td)
 
-            d = split_drivers(c)
+            cell_drivers = clean_driver_list(text_drivers + link_drivers)
 
-            # 🔥 ADD LINKED NAMES
-            links = []
-            for a in r.find_all("a"):
-                name = clean(a.get_text(" ", strip=True))
-                if looks_like_driver(name):
-                    links.append(name)
-
-            d = list(dict.fromkeys(d + links))
-
-            if len(d) > len(best_drivers):
-                best_drivers = d
+            if len(cell_drivers) > len(best_drivers):
+                best_drivers = cell_drivers
                 driver_index = i
 
         drivers = clean_driver_list(best_drivers)
@@ -204,8 +251,23 @@ def fetch_year(year):
             continue
 
         car = None
-        if driver_index is not None and driver_index + 1 < len(cols):
-            car = cols[driver_index + 1]
+
+        # Prefer next sensible non-driver cell after the driver cell
+        if driver_index is not None:
+            for j in range(driver_index + 1, len(cols)):
+                candidate = cols[j]
+                if looks_like_car_or_team(candidate, drivers):
+                    car = candidate
+                    break
+
+        # fallback: scan all cells except finish and driver cell
+        if not car:
+            for j, candidate in enumerate(cols):
+                if j == 0 or j == driver_index:
+                    continue
+                if looks_like_car_or_team(candidate, drivers):
+                    car = candidate
+                    break
 
         results.append({
             "finish": finish,
@@ -217,26 +279,31 @@ def fetch_year(year):
         print(f"⚠️ No results {year}")
         return None
 
-    # 🔥 DEDUPE
     by_finish = {}
-    for r in results:
-        f = r["finish"]
+    for row in results:
+        finish = row["finish"]
 
-        if f not in by_finish:
-            by_finish[f] = r
+        if finish not in by_finish:
+            by_finish[finish] = row
             continue
 
-        existing = by_finish[f]
+        existing = by_finish[finish]
 
-        existing_drivers = len(existing["drivers"])
-        new_drivers = len(r["drivers"])
+        existing_drivers = len(existing.get("drivers", []))
+        new_drivers = len(row.get("drivers", []))
 
+        # prefer two-driver rows over one-driver rows
         if existing_drivers < 2 and new_drivers >= 2:
-            by_finish[f] = r
+            by_finish[finish] = row
             continue
 
         if new_drivers > existing_drivers:
-            by_finish[f] = r
+            by_finish[finish] = row
+            continue
+
+        # if driver count equal, prefer row that has a car/team
+        if not existing.get("car") and row.get("car"):
+            by_finish[finish] = row
 
     final_results = list(by_finish.values())
     final_results.sort(key=lambda x: x["finish"])
@@ -247,7 +314,6 @@ def fetch_year(year):
     }
 
 
-# 🚀 BUILD
 seasons = []
 
 for year in range(START_YEAR, END_YEAR + 1):
@@ -275,7 +341,6 @@ for year in range(START_YEAR, END_YEAR + 1):
 
     print(f"✅ Saved {year} ({len(results)} rows)")
     time.sleep(1)
-
 
 seasons.sort(key=lambda x: x["year"])
 
