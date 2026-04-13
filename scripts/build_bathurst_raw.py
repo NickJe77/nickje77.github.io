@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST RAW BUILDER (FINAL + LOCKED EARLY YEAR)")
+print("BATHURST RAW BUILDER (FINAL LOCKED + STABLE)")
 
 OUT = Path("docs/data/bathurst/raw/bathurst_full.csv")
 OUT.parent.mkdir(parents=True, exist_ok=True)
@@ -27,22 +27,50 @@ def clean(x):
     return x
 
 
-# ---------------- LOCKED DATA ----------------
+# ---------------- LOCKED YEARS ----------------
 def locked_early_years(year):
-    if year != 1963:
+
+    DATA = {
+
+        1963: [
+            (1,"Bob Jane","Harry Firth","Ford Cortina"),
+            (2,"Doug Chivas","Ken Wilkinson","Morris Cooper"),
+            (3,"Jim McKeown","George Reynolds","Volkswagen 1200"),
+            (4,"Tony Allen","Tony Reynolds","Valiant AP5"),
+            (5,"Greg Mackie","Graham White","Volkswagen 1200"),
+            (6,"Bill Stanley","John Alexander","Morris 850"),
+            (7,"Barry Seton","Herb Taylor","Morris 850"),
+            (8,"Frank Matich","George Murray","Volkswagen 1200"),
+            (9,"Spencer Martin","Brian Muir","Holden EH"),
+            (10,"Brian Foley","Peter Manton","Morris Cooper"),
+        ],
+
+        1964: [
+            (1,"Bob Jane","Harry Firth","Ford Cortina"),
+            (2,"Norm Beechey","Jim McKeown","Ford Cortina"),
+            (3,"John Marchiori","Arnold Ahrenfeld","Volkswagen 1200"),
+            (4,"Tony Simmons","Mike Champion","Volkswagen 1200"),
+            (5,"Jack Gates","Mike Nedelko","Volkswagen 1200"),
+            (6,"George Murray","C. McLean","Volkswagen 1200"),
+            (7,"Brian Milton","David Walker","Volkswagen 1200"),
+            (8,"Midge Bosworth","Peter Williamson","Volkswagen 1200"),
+            (9,"Phil West","Chris McSorley","Volkswagen 1200"),
+            (10,"Lionel Ayers","Dennis Geary","Volkswagen 1200"),
+        ],
+    }
+
+    if year not in DATA:
         return None
 
     return [
-        {"year":1963,"finish":1,"driver1":"Bob Jane","driver2":"Harry Firth","car":"Ford Cortina"},
-        {"year":1963,"finish":2,"driver1":"Doug Chivas","driver2":"Ken Wilkinson","car":"Morris Cooper"},
-        {"year":1963,"finish":3,"driver1":"Jim McKeown","driver2":"George Reynolds","car":"Volkswagen 1200"},
-        {"year":1963,"finish":4,"driver1":"Tony Allen","driver2":"Tony Reynolds","car":"Valiant AP5"},
-        {"year":1963,"finish":5,"driver1":"Greg Mackie","driver2":"Graham White","car":"Volkswagen 1200"},
-        {"year":1963,"finish":6,"driver1":"Bill Stanley","driver2":"John Alexander","car":"Morris 850"},
-        {"year":1963,"finish":7,"driver1":"Barry Seton","driver2":"Herb Taylor","car":"Morris 850"},
-        {"year":1963,"finish":8,"driver1":"Frank Matich","driver2":"George Murray","car":"Volkswagen 1200"},
-        {"year":1963,"finish":9,"driver1":"Spencer Martin","driver2":"Brian Muir","car":"Holden EH"},
-        {"year":1963,"finish":10,"driver1":"Brian Foley","driver2":"Peter Manton","car":"Morris Cooper"},
+        {
+            "year": year,
+            "finish": f,
+            "driver1": d1,
+            "driver2": d2,
+            "car": car
+        }
+        for (f,d1,d2,car) in DATA[year]
     ]
 
 
@@ -103,8 +131,7 @@ def looks_like_person(name):
         "motors","ltd","pty","team","sales","co","dealer"
     ]
 
-    lower = name.lower()
-    if any(b in lower for b in bad):
+    if any(b in name.lower() for b in bad):
         return False
 
     return len(name.split()) >= 2
@@ -122,7 +149,6 @@ def extract_drivers(td):
     if len(names) >= 2:
         return names[:2]
 
-    # fallback split
     raw = clean(td.get_text())
     parts = re.split(r"/|&|,| and ", raw)
 
@@ -146,7 +172,7 @@ def parse_finish(tr):
 # ---------------- PARSE YEAR ----------------
 def parse_year(year):
 
-    # 🔥 LOCKED YEARS
+    # 🔒 LOCKED YEARS
     locked = locked_early_years(year)
     if locked:
         print(f"🔒 Locked {year}")
@@ -173,7 +199,6 @@ def parse_year(year):
         print(f"❌ No table {year}")
         return []
 
-    rows = []
     by_finish = {}
 
     for tr in table.find_all("tr"):
@@ -199,7 +224,6 @@ def parse_year(year):
         if len(drivers) == 1:
             drivers.append("Unknown")
 
-        # CAR DETECTION
         car = ""
         for td in tds:
             txt = clean(td.get_text())
