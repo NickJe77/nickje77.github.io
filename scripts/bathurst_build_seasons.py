@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (FINAL – TABLE FIXED)")
+print("BATHURST BUILDER (FINAL – BULLETPROOF)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -52,57 +52,29 @@ def get_url(year):
     return None
 
 
-# 🔥 FIXED TABLE SELECTION
+# 🔥 CORRECT TABLE PICKING
 def find_results_table(soup):
-    # STEP 1: find Race results / Classification section
     for header in soup.find_all(["h2", "h3"]):
         title = header.get_text().lower()
 
         if "race results" in title or "classification" in title:
 
-            # STEP 2: scan tables under that section
             for table in header.find_all_next("table"):
-
-                # stop when next section begins
                 if table.find_previous(["h2", "h3"]) != header:
                     break
 
                 text = table.get_text(" ", strip=True).lower()
 
-                # must be real results table
                 if "pos" in text and "driver" in text:
                     return table
 
-    # 🔁 fallback for older years
-    best = None
-    best_score = 0
-
+    # fallback for old years
     for table in soup.find_all("table"):
         text = table.get_text(" ", strip=True).lower()
+        if "driver" in text and "pos" in text:
+            return table
 
-        score = 0
-
-        if "driver" in text:
-            score += 3
-        if "pos" in text or "position" in text:
-            score += 3
-
-        if "grid" in text:
-            score -= 5
-        if "shootout" in text:
-            score -= 5
-        if "entry" in text:
-            score -= 5
-
-        rows = len(table.find_all("tr"))
-        if rows > 10:
-            score += 2
-
-        if score > best_score:
-            best_score = score
-            best = table
-
-    return best
+    return None
 
 
 def extract_drivers(td):
@@ -134,6 +106,49 @@ def extract_drivers(td):
     return final[:2]
 
 
+# 🔥 INFObox fallback (fixes 2019–2021)
+def extract_infobox_winner(soup):
+    text = soup.get_text("\n", strip=True)
+    lines = [clean(x) for x in text.split("\n")]
+    lines = [x for x in lines if x]
+
+    for i, line in enumerate(lines):
+        if line == "Winner":
+
+            candidates = []
+            for j in range(i + 1, min(i + 8, len(lines))):
+                val = lines[j]
+                if not val:
+                    continue
+                if val.lower().startswith("image"):
+                    continue
+                candidates.append(val)
+
+            names = []
+            for val in candidates:
+                if len(val.split()) >= 2 and not re.search(r"\d", val):
+                    names.append(val)
+                if len(names) == 2:
+                    break
+
+            team = None
+            for val in candidates:
+                if val in names:
+                    continue
+                if not re.search(r"\d", val):
+                    team = val
+                    break
+
+            if names:
+                return {
+                    "finish": 1,
+                    "drivers": names[:2],
+                    "car": team
+                }
+
+    return None
+
+
 def fetch_year(year):
     url = get_url(year)
 
@@ -162,7 +177,6 @@ def fetch_year(year):
         if not tds:
             continue
 
-        # 🔥 FIX: position from th OR td
         finish = None
 
         if ths:
@@ -181,13 +195,12 @@ def fetch_year(year):
         if finish < 1 or finish > 40:
             continue
 
-        cells = tds
-        cols = [clean(td.get_text(" ", strip=True)) for td in cells]
+        cols = [clean(td.get_text(" ", strip=True)) for td in tds]
 
         drivers = []
         driver_idx = None
 
-        for i, td in enumerate(cells):
+        for i, td in enumerate(tds):
             d = extract_drivers(td)
             if len(d) > len(drivers):
                 drivers = d
@@ -199,13 +212,10 @@ def fetch_year(year):
         car = None
         for j in range(driver_idx + 1, len(cols)):
             c = cols[j]
-
             if not c:
                 continue
-
             if c in drivers:
                 continue
-
             car = c
             break
 
@@ -214,6 +224,12 @@ def fetch_year(year):
             "drivers": drivers,
             "car": car
         })
+
+    # 🔥 FIX missing winner
+    if not any(r["finish"] == 1 for r in results):
+        winner = extract_infobox_winner(soup)
+        if winner:
+            results.append(winner)
 
     if not results:
         print(f"⚠️ No results {year}")
