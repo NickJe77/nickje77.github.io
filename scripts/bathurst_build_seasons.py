@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (HARD LOCKED VERSION)")
+print("BATHURST BUILDER (FINAL WORKING VERSION)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -50,19 +50,42 @@ def get_url(year):
     return None
 
 
-# ✅ ONLY pick results table
+# ✅ smarter + flexible results table finder
 def find_results_table(soup):
+    best = None
+    best_score = 0
+
     for table in soup.find_all("table", class_="wikitable"):
-        header_text = table.get_text(" ", strip=True).lower()
+        text = table.get_text(" ", strip=True).lower()
 
-        if "driver" in header_text and "laps" in header_text:
-            if "grid" in header_text:
-                continue
-            if "top 10" in header_text:
-                continue
-            return table
+        score = 0
 
-    return None
+        # must contain drivers + positions
+        if "driver" in text:
+            score += 3
+        if "pos" in text or "position" in text:
+            score += 3
+
+        # avoid bad tables
+        if "grid" in text:
+            score -= 5
+        if "top 10" in text:
+            score -= 5
+        if "shootout" in text:
+            score -= 5
+        if "entry" in text:
+            score -= 5
+
+        # prefer large tables (full field)
+        rows = len(table.find_all("tr"))
+        if rows > 15:
+            score += 3
+
+        if score > best_score:
+            best_score = score
+            best = table
+
+    return best
 
 
 def get_columns(table):
@@ -74,7 +97,7 @@ def get_columns(table):
     for i, h in enumerate(headers):
         h = h.lower()
 
-        if "pos" in h:
+        if "pos" in h or "position" in h:
             pos = i
         elif "driver" in h:
             drivers = i
@@ -87,13 +110,11 @@ def get_columns(table):
 def extract_drivers(td):
     names = []
 
-    # use links first
     for a in td.find_all("a"):
         name = clean(a.get_text())
         if name and " " in name:
             names.append(name)
 
-    # fallback
     if not names:
         text = clean(td.get_text(" ", strip=True)) or ""
         parts = re.split(r"/|,| and | & |\+", text)
@@ -136,6 +157,10 @@ def fetch_year(year):
 
     pos_idx, driver_idx, team_idx = get_columns(table)
 
+    if pos_idx is None or driver_idx is None:
+        print(f"❌ Missing columns {year}")
+        return None
+
     results = []
 
     for row in table.find_all("tr")[1:]:
@@ -149,8 +174,8 @@ def fetch_year(year):
         except:
             continue
 
-        # this kills car numbers completely
-        if finish > 40:
+        # removes car numbers completely
+        if finish > 60:
             continue
 
         drivers = extract_drivers(cells[driver_idx])
