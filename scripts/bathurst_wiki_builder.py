@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST BUILDER (FINAL FIXED VERSION)")
+print("BATHURST BUILDER (FINAL WORKING VERSION)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -25,9 +25,9 @@ SESSION.headers.update({"User-Agent": "Mozilla/5.0"})
 WIKI_BASE = "https://en.wikipedia.org/wiki/"
 
 
-# --------------------------------------------------
+# -----------------------
 # HELPERS
-# --------------------------------------------------
+# -----------------------
 def clean(v):
     if v is None:
         return None
@@ -54,14 +54,12 @@ def split_drivers(text):
     text = text.replace(" and ", " / ")
     text = text.replace("&", "/")
 
+    # normal split
     if "/" in text:
         parts = re.split(r"\s*/\s*", text)
         return [clean(p) for p in parts if clean(p)]
 
-    tokens = text.split()
-    if len(tokens) == 4:
-        return [f"{tokens[0]} {tokens[1]}", f"{tokens[2]} {tokens[3]}"]
-
+    # 🔥 FIX: split multiple full names in one string
     names = re.findall(r"[A-Z][A-Za-z'.-]+\s+[A-Z][A-Za-z'.-]+", text)
     if len(names) >= 2:
         return names
@@ -79,9 +77,9 @@ def fetch(url):
         return None
 
 
-# --------------------------------------------------
+# -----------------------
 # UNIQUECARS (1963–2002)
-# --------------------------------------------------
+# -----------------------
 def scrape_uniquecars(year):
     url = f"https://www.uniquecarsandparts.com/bathurst_{year}.htm"
     html = fetch(url)
@@ -130,9 +128,9 @@ def scrape_uniquecars(year):
     }
 
 
-# --------------------------------------------------
+# -----------------------
 # WIKIPEDIA (2003+ FIXED)
-# --------------------------------------------------
+# -----------------------
 WIKI_PAGE_MAP = {
     2003: "2003_Bob_Jane_T-Marts_1000",
     2004: "2004_Bob_Jane_T-Marts_1000",
@@ -215,7 +213,6 @@ def scrape_wikipedia(year):
             if not drivers:
                 continue
 
-            # reject junk
             d = " ".join(drivers).lower()
             if any(x in d for x in ["km", "pts", "team"]):
                 continue
@@ -224,7 +221,6 @@ def scrape_wikipedia(year):
             if len(r) > 4:
                 constructor = r[4]
 
-                # reject time values
                 if constructor and re.match(r"\d+[:.]\d+", constructor):
                     constructor = None
 
@@ -250,9 +246,9 @@ def scrape_wikipedia(year):
     }
 
 
-# --------------------------------------------------
+# -----------------------
 # RUN
-# --------------------------------------------------
+# -----------------------
 index = []
 
 for year in range(START_YEAR, END_YEAR + 1):
@@ -268,6 +264,7 @@ for year in range(START_YEAR, END_YEAR + 1):
         continue
 
     out_file = SEASONS_DIR / f"{year}.json"
+
     with open(out_file, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
