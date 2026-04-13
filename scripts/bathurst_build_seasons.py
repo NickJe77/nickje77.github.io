@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (SAFE FIX - CO-DRIVERS ONLY)")
+print("BATHURST BUILDER (FINAL CLEAN FIX)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -27,7 +27,7 @@ def clean(x):
     return re.sub(r"\s+", " ", x).strip()
 
 
-# ✅ FIXED DRIVER SPLIT (NO STRUCTURE CHANGE)
+# 🔥 SPLIT DRIVERS (SAFE)
 def split_drivers(text):
     if not text:
         return []
@@ -48,7 +48,8 @@ def split_drivers(text):
         bad_words = [
             "team", "racing", "motorsport",
             "engineering", "holden", "ford",
-            "nissan", "toyota", "audi"
+            "nissan", "toyota", "audi",
+            "camaro"
         ]
 
         if any(b in p.lower() for b in bad_words):
@@ -57,6 +58,37 @@ def split_drivers(text):
         drivers.append(p)
 
     return drivers
+
+
+# 🔥 CLEAN FINAL DRIVER LIST (THIS FIXES YOUR SCREENSHOT ISSUE)
+def clean_driver_list(drivers):
+    final = []
+    seen = set()
+
+    for d in drivers:
+        if not d:
+            continue
+
+        d = clean(d)
+
+        # remove car strings
+        if any(x in d.lower() for x in [
+            "camaro", "ford", "holden", "nissan", "toyota"
+        ]):
+            continue
+
+        words = d.split()
+
+        # only allow realistic names (2 words max)
+        if len(words) > 2:
+            continue
+
+        key = d.lower()
+        if key not in seen:
+            seen.add(key)
+            final.append(d)
+
+    return final
 
 
 def looks_like_driver(text):
@@ -122,7 +154,6 @@ def fetch_year(year):
         if len(cols) < 3:
             continue
 
-        # must be a finishing position
         try:
             finish = int(cols[0])
         except:
@@ -133,24 +164,23 @@ def fetch_year(year):
 
         for i, c in enumerate(cols):
 
-            # 🔥 ORIGINAL LOGIC (KEPT)
             d = split_drivers(c)
 
-            # 🔥 ADD THIS (FIX)
+            # 🔥 ADD LINKED NAMES
             links = []
             for a in r.find_all("a"):
                 name = clean(a.get_text(" ", strip=True))
                 if looks_like_driver(name):
                     links.append(name)
 
-            # merge both sources
             d = list(dict.fromkeys(d + links))
 
             if len(d) > len(best_drivers):
                 best_drivers = d
                 driver_index = i
 
-        drivers = best_drivers
+        # 🔥 CLEAN DRIVERS HERE
+        drivers = clean_driver_list(best_drivers)
 
         if not drivers:
             continue
@@ -169,7 +199,7 @@ def fetch_year(year):
         print(f"⚠️ No results {year}")
         return None
 
-    # 🔥 IMPROVED DEDUPE (SAFE FIX)
+    # 🔥 DEDUPE (KEEP CO-DRIVERS)
     by_finish = {}
     for r in results:
         f = r["finish"]
@@ -183,7 +213,6 @@ def fetch_year(year):
         existing_drivers = len(existing["drivers"])
         new_drivers = len(r["drivers"])
 
-        # ALWAYS prefer rows with co-drivers
         if existing_drivers < 2 and new_drivers >= 2:
             by_finish[f] = r
             continue
@@ -214,7 +243,6 @@ for year in range(START_YEAR, END_YEAR + 1):
     winner_drivers = results[0]["drivers"] if results else []
     winner_car = results[0]["car"] if results else None
 
-    # SAVE (UNCHANGED STRUCTURE)
     with open(BASE / f"{year}.json", "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
@@ -231,7 +259,6 @@ for year in range(START_YEAR, END_YEAR + 1):
     time.sleep(1)
 
 
-# MASTER FILES (UNCHANGED)
 seasons.sort(key=lambda x: x["year"])
 
 with open(BASE / "seasons.json", "w", encoding="utf-8") as f:
