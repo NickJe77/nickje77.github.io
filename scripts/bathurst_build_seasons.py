@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (STABLE FINAL)")
+print("BATHURST BUILDER (RESULTS + ENTRANTS FIX)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -20,11 +20,17 @@ END_YEAR = 2025
 
 
 def clean(x):
-    if not x:
+    if x is None:
         return None
     x = re.sub(r"\[[^\]]+\]", "", str(x))
     x = x.replace("\xa0", " ")
-    return re.sub(r"\s+", " ", x).strip()
+    x = re.sub(r"\s+", " ", x).strip()
+    return x or None
+
+
+def normalize_key(x):
+    x = clean(x) or ""
+    return re.sub(r"[^a-z0-9]+", "", x.lower())
 
 
 def get_url(year):
@@ -44,98 +50,363 @@ def get_url(year):
             r = requests.get(url, headers=HEADERS, timeout=20)
             if r.status_code == 200:
                 return url
-        except:
+        except Exception:
             pass
 
     return None
 
 
-# ✅ smarter table detection (not header fragile)
-def find_results_table(soup):
-    best_table = None
-    best_score = 0
-
-    for table in soup.find_all("table", class_="wikitable"):
-        text = table.get_text(" ", strip=True).lower()
-
-        score = 0
-
-        # must look like results table
-        if "driver" in text:
-            score += 2
-        if "pos" in text:
-            score += 2
-        if "laps" in text:
-            score += 1
-        if "grid" in text:
-            score -= 2   # avoid starting grid tables
-        if "top 10" in text:
-            score -= 3   # avoid shootout
-
-        rows = table.find_all("tr")
-        if len(rows) > 10:
-            score += 2
-
-        if score > best_score:
-            best_score = score
-            best_table = table
-
-    return best_table
-
-
 def looks_like_driver(name):
-    if not name:
-        return False
-
     name = clean(name)
     if not name:
         return False
 
+    lower = name.lower()
+
+    # reject obvious junk
+    banned_terms = [
+        "team", "racing", "motorsport", "engineering",
+        "ford", "holden", "toyota", "nissan", "chevrolet",
+        "camaro", "mustang", "commodore", "falcon",
+        "top 10", "shootout", "grid", "pole", "laps",
+        "time", "class", "race", "results", "position",
+        "car", "number", "no.", "entrant", "driver(s)"
+    ]
+    if any(term in lower for term in banned_terms):
+        return False
+
+    # allow apostrophes and particles like de
     if re.search(r"\d", name):
         return False
 
-    bad = [
-        "team","racing","motorsport","engineering",
-        "ford","holden","toyota","nissan","camaro","mustang"
-    ]
-
-    if any(b in name.lower() for b in bad):
+    words = name.split()
+    if len(words) < 2 or len(words) > 4:
         return False
 
-    words = name.split()
-    return 2 <= len(words) <= 4
+    return True
 
 
-def extract_drivers(td):
+def extract_drivers_from_cell(td):
     drivers = []
 
-    # links first
+    # Linked names first
     for a in td.find_all("a"):
-        name = clean(a.get_text())
-        if looks_like_driver(name):
-            drivers.append(name)
+        txt = clean(a.get_text(" ", strip=True))
+        if looks_like_driver(txt):
+            drivers.append(txt)
 
-    # fallback split
+    # Fallback text split
     if not drivers:
-        text = clean(td.get_text(" ", strip=True)) or ""
-        parts = re.split(r"/|,| and | & |\+", text)
+        raw = clean(td.get_text(" ", strip=True)) or ""
+        parts = re.split(r"/|,| and | & |\+|\n", raw)
+        for part in parts:
+            part = clean(part)
+            if looks_like_driver(part):
+                drivers.append(part)
 
-        for p in parts:
-            p = clean(p)
-            if looks_like_driver(p):
-                drivers.append(p)
-
-    # dedupe
+    # de-dupe preserving order
     final = []
     seen = set()
-
     for d in drivers:
-        key = d.lower()
-        if key not in seen:
-            seen.add(key)
+        k = normalize_key(d)
+        if k and k not in seen:
+            seen.add(k)
             final.append(d)
 
-    return final[:2]
+    return final
+
+
+def table_header_cells(table):
+    rows = table.find_all("tr")
+    for tr in rows[:3]:
+        ths = tr.find_all("th")
+        if ths:
+            return [clean(th.get_text(" ", strip=True)) or "" for th in ths]
+    return []
+
+
+def classify_header(text):
+    t = (text or "").lower()
+
+    if t in {"pos", "position", "place", "fin", "finish"}:
+        return "finish"
+
+    if "pos" in t or "position" in t or "finish" in t:
+        return "finish"
+
+    if t in {"no", "number", "car no", "car", "no."}:
+        return "car_no"
+
+    if "car no" in t or "number" in t or t == "no" or t == "no.":
+        return "car_no"
+
+    if "driver" in t:
+        return "drivers"
+
+    if "team" in t or "entrant" in t:
+        return "team"
+
+    if "vehicle" in t or "model" in t or "car" in t:
+        return "vehicle"
+
+    return None
+
+
+def find_best_results_table(soup):
+    best = None
+    best_score = -999
+
+    for table in soup.find_all("table", class_="wikitable"):
+        headers = table_header_cells(table)
+        if not headers:
+            continue
+
+        classes = [classify_header(h) for h in headers]
+        text = " | ".join(h.lower() for h in headers)
+
+        score = 0
+
+        if "finish" in classes:
+            score += 8
+        if "drivers" in classes:
+            score += 8
+        if "team" in classes or "vehicle" in classes:
+            score += 3
+
+        # avoid entry/starting-grid tables
+        if "grid" in text:
+            score -= 8
+        if "starting grid" in text:
+            score -= 10
+        if "shootout" in text or "top 10" in text:
+            score -= 10
+        if "entry list" in text or "entries" in text:
+            score -= 8
+
+        row_count = len(table.find_all("tr"))
+        if row_count >= 10:
+            score += 2
+
+        if score > best_score:
+            best_score = score
+            best = table
+
+    return best
+
+
+def find_best_entrants_table(soup):
+    best = None
+    best_score = -999
+
+    for table in soup.find_all("table", class_="wikitable"):
+        headers = table_header_cells(table)
+        if not headers:
+            continue
+
+        classes = [classify_header(h) for h in headers]
+        text = " | ".join(h.lower() for h in headers)
+
+        score = 0
+
+        if "car_no" in classes:
+            score += 8
+        if "drivers" in classes:
+            score += 8
+        if "team" in classes or "vehicle" in classes:
+            score += 3
+
+        if "grid" in text or "starting grid" in text or "entry" in text or "entries" in text:
+            score += 4
+
+        if "finish" in classes:
+            score -= 6
+
+        if score > best_score:
+            best_score = score
+            best = table
+
+    return best
+
+
+def map_columns(headers):
+    mapping = {}
+    for i, h in enumerate(headers):
+        c = classify_header(h)
+        if c and c not in mapping:
+            mapping[c] = i
+    return mapping
+
+
+def extract_table_rows(table):
+    rows = []
+    for tr in table.find_all("tr"):
+        cells = tr.find_all(["td", "th"])
+        if tr.find_all("td"):
+            rows.append(tr)
+    return rows
+
+
+def parse_entrants_map(table):
+    entrants_by_car_no = {}
+    entrants_by_team = {}
+    entrants_by_driver = {}
+
+    if not table:
+        return entrants_by_car_no, entrants_by_team, entrants_by_driver
+
+    headers = table_header_cells(table)
+    colmap = map_columns(headers)
+    rows = extract_table_rows(table)
+
+    car_no_idx = colmap.get("car_no")
+    drivers_idx = colmap.get("drivers")
+    team_idx = colmap.get("team")
+
+    if drivers_idx is None:
+        return entrants_by_car_no, entrants_by_team, entrants_by_driver
+
+    for tr in rows:
+        tds = tr.find_all("td")
+        if not tds:
+            continue
+
+        # Some tables have fewer cells because of rowspans; ignore those rows
+        max_needed = max([i for i in [car_no_idx, drivers_idx, team_idx] if i is not None], default=0)
+        if len(tds) <= max_needed:
+            continue
+
+        drivers = extract_drivers_from_cell(tds[drivers_idx])
+        if not drivers:
+            continue
+
+        team = clean(tds[team_idx].get_text(" ", strip=True)) if team_idx is not None and team_idx < len(tds) else None
+        car_no = clean(tds[car_no_idx].get_text(" ", strip=True)) if car_no_idx is not None and car_no_idx < len(tds) else None
+
+        entry = {
+            "drivers": drivers[:2],
+            "team": team,
+            "car_no": car_no
+        }
+
+        if car_no:
+            entrants_by_car_no[normalize_key(car_no)] = entry
+        if team:
+            entrants_by_team[normalize_key(team)] = entry
+
+        for d in drivers:
+            entrants_by_driver[normalize_key(d)] = entry
+
+    return entrants_by_car_no, entrants_by_team, entrants_by_driver
+
+
+def parse_results_table(table, entrants_by_car_no, entrants_by_team, entrants_by_driver):
+    if not table:
+        return []
+
+    headers = table_header_cells(table)
+    colmap = map_columns(headers)
+    rows = extract_table_rows(table)
+
+    finish_idx = colmap.get("finish")
+    drivers_idx = colmap.get("drivers")
+    team_idx = colmap.get("team")
+    car_no_idx = colmap.get("car_no")
+    vehicle_idx = colmap.get("vehicle")
+
+    results = []
+
+    for tr in rows:
+        tds = tr.find_all("td")
+        if not tds:
+            continue
+
+        max_needed = max([i for i in [finish_idx, drivers_idx, team_idx, car_no_idx, vehicle_idx] if i is not None], default=0)
+        if len(tds) <= max_needed:
+            continue
+
+        if finish_idx is None or finish_idx >= len(tds):
+            continue
+
+        finish_text = clean(tds[finish_idx].get_text(" ", strip=True))
+        if not finish_text:
+            continue
+
+        # only classified finish numbers, not car numbers
+        if not re.fullmatch(r"\d{1,2}", finish_text):
+            continue
+
+        finish = int(finish_text)
+        if finish < 1 or finish > 40:
+            continue
+
+        drivers = []
+        if drivers_idx is not None and drivers_idx < len(tds):
+            drivers = extract_drivers_from_cell(tds[drivers_idx])
+
+        team = clean(tds[team_idx].get_text(" ", strip=True)) if team_idx is not None and team_idx < len(tds) else None
+        car_no = clean(tds[car_no_idx].get_text(" ", strip=True)) if car_no_idx is not None and car_no_idx < len(tds) else None
+
+        # prefer entrant/team in car column for your page
+        car = None
+        if team:
+            car = team
+        elif vehicle_idx is not None and vehicle_idx < len(tds):
+            car = clean(tds[vehicle_idx].get_text(" ", strip=True))
+
+        # backfill missing co-driver from entrant map
+        if len(drivers) < 2:
+            entry = None
+
+            if car_no and normalize_key(car_no) in entrants_by_car_no:
+                entry = entrants_by_car_no[normalize_key(car_no)]
+            elif team and normalize_key(team) in entrants_by_team:
+                entry = entrants_by_team[normalize_key(team)]
+            elif drivers:
+                first_key = normalize_key(drivers[0])
+                if first_key in entrants_by_driver:
+                    entry = entrants_by_driver[first_key]
+
+            if entry and entry.get("drivers"):
+                enriched = []
+                seen = set()
+
+                for d in drivers + entry["drivers"]:
+                    k = normalize_key(d)
+                    if k and k not in seen:
+                        seen.add(k)
+                        enriched.append(d)
+
+                drivers = enriched[:2]
+
+        if not drivers:
+            continue
+
+        results.append({
+            "finish": finish,
+            "drivers": drivers[:2],
+            "car": car
+        })
+
+    # dedupe by finish
+    by_finish = {}
+    for row in results:
+        f = row["finish"]
+        if f not in by_finish:
+            by_finish[f] = row
+            continue
+
+        existing = by_finish[f]
+
+        if len(row.get("drivers", [])) > len(existing.get("drivers", [])):
+            by_finish[f] = row
+            continue
+
+        if not existing.get("car") and row.get("car"):
+            by_finish[f] = row
+
+    final = list(by_finish.values())
+    final.sort(key=lambda x: x["finish"])
+    return final
 
 
 def fetch_year(year):
@@ -147,71 +418,24 @@ def fetch_year(year):
 
     print(f"Fetching {year} → {url}")
 
-    res = requests.get(url, headers=HEADERS)
-    soup = BeautifulSoup(res.text, "html.parser")
-
-    table = find_results_table(soup)
-
-    if not table:
-        print(f"❌ No valid table {year}")
+    try:
+        res = requests.get(url, headers=HEADERS, timeout=30)
+        res.raise_for_status()
+    except Exception as e:
+        print(f"❌ Request failed for {year}: {e}")
         return None
 
-    results = []
+    soup = BeautifulSoup(res.text, "html.parser")
 
-    for row in table.find_all("tr"):
-        cells = row.find_all("td")
+    results_table = find_best_results_table(soup)
+    entrants_table = find_best_entrants_table(soup)
 
-        if len(cells) < 3:
-            continue
-
-        cols = [clean(c.get_text(" ", strip=True)) for c in cells]
-
-        try:
-            finish = int(cols[0])
-
-            # reject car numbers (888 etc)
-            if finish > 60:
-                continue
-
-        except:
-            continue
-
-        drivers = []
-        driver_index = None
-
-        for i, td in enumerate(cells):
-            d = extract_drivers(td)
-            if len(d) > len(drivers):
-                drivers = d
-                driver_index = i
-
-        if not drivers:
-            continue
-
-        car = None
-
-        for j in range(driver_index + 1, len(cols)):
-            c = cols[j]
-            if not c:
-                continue
-
-            if looks_like_driver(c):
-                continue
-
-            car = c
-            break
-
-        results.append({
-            "finish": finish,
-            "drivers": drivers,
-            "car": car
-        })
+    entrants_by_car_no, entrants_by_team, entrants_by_driver = parse_entrants_map(entrants_table)
+    results = parse_results_table(results_table, entrants_by_car_no, entrants_by_team, entrants_by_driver)
 
     if not results:
         print(f"⚠️ No results {year}")
         return None
-
-    results.sort(key=lambda x: x["finish"])
 
     return {
         "year": year,
@@ -219,7 +443,6 @@ def fetch_year(year):
     }
 
 
-# BUILD
 seasons = []
 
 for year in range(START_YEAR, END_YEAR + 1):
@@ -247,7 +470,6 @@ for year in range(START_YEAR, END_YEAR + 1):
 
     print(f"✅ Saved {year} ({len(results)} rows)")
     time.sleep(1)
-
 
 seasons.sort(key=lambda x: x["year"])
 
