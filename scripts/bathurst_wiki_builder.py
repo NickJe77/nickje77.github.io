@@ -5,11 +5,10 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
-import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST WIKIPEDIA BUILDER (FORCE SAVE VERSION)")
+print("BATHURST WIKIPEDIA BUILDER (MANUAL TABLE PARSER)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -36,6 +35,8 @@ def clean_text(v):
     v = str(v)
     v = re.sub(r"\[[^\]]*\]", "", v)
     v = v.replace("\xa0", " ")
+    v = v.replace("†", "")
+    v = v.replace("‡", "")
     v = re.sub(r"\s+", " ", v).strip()
     return v if v else None
 
@@ -50,6 +51,48 @@ def safe_int(v):
     return int(m.group()) if m else None
 
 
+def parse_date(value):
+    value = clean_text(value)
+    if not value:
+        return None
+
+    value = value.replace("–", "-")
+    value = re.sub(r"\([^)]*\)", "", value).strip()
+
+    candidates = [value]
+
+    if "-" in value:
+        parts = [x.strip() for x in value.split("-") if x.strip()]
+        candidates.extend(parts[::-1])
+
+    full_dates = re.findall(r"\b\d{1,2}\s+[A-Za-z]+\s+\d{4}\b", value)
+    candidates.extend(full_dates)
+
+    year_match = re.search(r"\b(19\d{2}|20\d{2})\b", value)
+    if year_match:
+        year = year_match.group(1)
+        day_month = re.findall(r"\b\d{1,2}\s+[A-Za-z]+\b", value)
+        for dm in day_month:
+            candidates.append(f"{dm} {year}")
+
+    seen = set()
+    ordered = []
+    for c in candidates:
+        c = clean_text(c)
+        if c and c not in seen:
+            ordered.append(c)
+            seen.add(c)
+
+    for c in ordered:
+        for fmt in ("%d %B %Y", "%d %b %Y", "%B %d %Y", "%b %d %Y"):
+            try:
+                return datetime.strptime(c, fmt).strftime("%Y-%m-%d")
+            except Exception:
+                pass
+
+    return None
+
+
 def split_drivers(text):
     text = clean_text(text)
     if not text:
@@ -58,6 +101,7 @@ def split_drivers(text):
     text = re.sub(r"\(.*?\)", "", text)
     text = text.replace(" and ", " / ")
     text = text.replace(" & ", " / ")
+    text = text.replace(" + ", " / ")
     text = re.sub(r"\s*/\s*", " / ", text)
 
     parts = [clean_text(x) for x in text.split(" / ") if clean_text(x)]
@@ -65,10 +109,15 @@ def split_drivers(text):
     out = []
     seen = set()
     for p in parts:
+        p = re.sub(r"\b(?:drivers?|co-driver|co driver|codriver)\b", "", p, flags=re.I)
+        p = clean_text(p)
+        if not p:
+            continue
         low = p.lower()
         if low not in seen:
             out.append(p)
             seen.add(low)
+
     return out
 
 
@@ -166,168 +215,6 @@ def get_heading(table_tag):
     return ""
 
 
-def normalize_columns(df):
-    cols = []
-    for i, c in enumerate(df.columns):
-        if isinstance(c, tuple):
-            c = " ".join(str(x) for x in c if str(x) != "nan")
-        c = clean_text(c) or f"col_{i+1}"
-        cols.append(c)
-    df = df.copy()
-    df.columns = cols
-    return df
-
-
-def score_table(df, heading):
-    cols = " | ".join(str(c).lower() for c in df.columns)
-    heading = (heading or "").lower()
-
-    grid_score = 0
-    result_score = 0
-
-    if any(x in heading for x in ["grid", "starting grid", "qualifying", "shootout"]):
-        grid_score += 8
-    if any(x in heading for x in ["race", "results", "classification"]):
-        result_score += 8
-
-    if any(x in cols for x in ["driver", "co-driver", "team", "car", "number", "no.", "pos", "position"]):
-        grid_score += 2
-        result_score += 2
-
-    if any(x in cols for x in ["laps", "gap", "status", "time"]):
-        result_score += 3
-
-    if any(x in cols for x in ["qualifying", "grid"]):
-        grid_score += 3
-
-    return grid_score, result_score
-
-
-def pick_val(record, needles):
-    low = {str(k).lower(): v for k, v in record.items()}
-    for needle in needles:
-        for k, v in low.items():
-            if needle in k:
-                return clean_text(v)
-    return None
-
-
-def extract_drivers(record):
-    drivers = []
-
-    d1 = pick_val(record, ["co-driver", "co driver", "codriver"])
-    d2 = pick_val(record, ["driver"])
-
-    if d2:
-        drivers.extend(split_drivers(d2))
-    if d1:
-        drivers.extend(split_drivers(d1))
-
-    if not drivers:
-        for k, v in record.items():
-            txt = clean_text(v)
-            if not txt:
-                continue
-            if "/" in txt and re.search(r"[A-Z][a-z]", txt):
-                drivers = split_drivers(txt)
-                if drivers:
-                    break
-
-    out = []
-    seen = set()
-    for d in drivers:
-        k = d.lower()
-        if k not in seen:
-            out.append(d)
-            seen.add(k)
-    return out
-
-
-def normalize_grid(df):
-    rows = []
-    for record in df.fillna("").to_dict(orient="records"):
-        pos = safe_int(pick_val(record, ["grid", "position", "pos"]))
-        if pos is None:
-            continue
-
-        rows.append({
-            "grid_pos": pos,
-            "car_no": pick_val(record, ["car no", "number", "no.", "no", "#"]),
-            "drivers": extract_drivers(record),
-            "team": pick_val(record, ["team", "entrant"]),
-            "car": pick_val(record, ["car", "model", "vehicle"]),
-            "qualifying_time": pick_val(record, ["qualifying time", "time"]),
-        })
-
-    seen = set()
-    out = []
-    for row in rows:
-        ident = (
-            row["grid_pos"],
-            row["car_no"],
-            "|".join(row["drivers"]),
-            row["car"],
-        )
-        if ident in seen:
-            continue
-        seen.add(ident)
-        out.append(row)
-
-    out.sort(key=lambda x: x["grid_pos"])
-    return out
-
-
-def normalize_results(df):
-    rows = []
-    for record in df.fillna("").to_dict(orient="records"):
-        pos_raw = pick_val(record, ["position", "pos", "place"])
-        pos = safe_int(pos_raw)
-
-        drivers = extract_drivers(record)
-        car = pick_val(record, ["car", "model", "vehicle"])
-
-        if pos is None and not drivers and not car:
-            continue
-
-        rows.append({
-            "finish_pos": pos if pos is not None else pos_raw,
-            "car_no": pick_val(record, ["car no", "number", "no.", "no", "#"]),
-            "drivers": drivers,
-            "team": pick_val(record, ["team", "entrant"]),
-            "car": car,
-            "laps": pick_val(record, ["laps", "lap"]),
-            "time": pick_val(record, ["total time", "race time", "time"]),
-            "gap": pick_val(record, ["gap"]),
-            "status": pick_val(record, ["status", "reason"]),
-        })
-
-    def sort_key(x):
-        v = x["finish_pos"]
-        if isinstance(v, int):
-            return (0, v)
-        m = re.search(r"\d+", str(v or ""))
-        if m:
-            return (0, int(m.group()))
-        return (1, 9999)
-
-    seen = set()
-    out = []
-    for row in rows:
-        ident = (
-            str(row["finish_pos"]),
-            row["car_no"],
-            "|".join(row["drivers"]),
-            row["car"],
-        )
-        if ident in seen:
-            continue
-        seen.add(ident)
-        out.append(row)
-
-    out.sort(key=sort_key)
-    return out
-
-
 def parse_infobox(soup, year, url):
     title = clean_text(soup.find("h1").get_text(" ", strip=True)) if soup.find("h1") else str(year)
 
@@ -341,15 +228,18 @@ def parse_infobox(soup, year, url):
             td = tr.find("td")
             if not th or not td:
                 continue
+
             key = clean_text(th.get_text(" ", strip=True))
             val = clean_text(td.get_text(" ", strip=True))
+
             if not key or not val:
                 continue
 
             low = key.lower()
+
             if low == "date" and not date:
-                m = re.search(r"\b(\d{1,2}\s+[A-Za-z]+\s+\d{4})\b", val)
-                date = m.group(1) if m else val
+                date = parse_date(val)
+
             if any(x in low for x in ["location", "venue", "circuit"]) and not venue:
                 venue = val
 
@@ -363,6 +253,164 @@ def parse_infobox(soup, year, url):
     }
 
 
+def unique_rows(rows, pos_key):
+    out = []
+    seen = set()
+
+    for row in rows:
+        ident = (
+            str(row.get(pos_key)),
+            clean_text(row.get("car_no")),
+            "|".join(row.get("drivers", [])),
+            clean_text(row.get("team")),
+            clean_text(row.get("car")),
+        )
+        if ident in seen:
+            continue
+        seen.add(ident)
+        out.append(row)
+
+    return out
+
+
+def guess_driver_cells(row):
+    candidates = []
+    for cell in row:
+        cell = clean_text(cell)
+        if not cell:
+            continue
+        if "/" in cell:
+            s = split_drivers(cell)
+            if s:
+                candidates.extend(s)
+
+    if candidates:
+        seen = set()
+        out = []
+        for x in candidates:
+            low = x.lower()
+            if low not in seen:
+                out.append(x)
+                seen.add(low)
+        return out
+
+    return []
+
+
+def parse_manual_results_table(parsed_rows):
+    header = [str(x or "").lower() for x in parsed_rows[0]]
+    rows = []
+
+    pos_idx = 0
+    car_no_idx = None
+    driver_idx = None
+    team_idx = None
+    car_idx = None
+    laps_idx = None
+    time_idx = None
+    gap_idx = None
+    status_idx = None
+
+    for i, h in enumerate(header):
+        if car_no_idx is None and any(x in h for x in ["car no", "number", "no.", "no", "#"]):
+            car_no_idx = i
+        if driver_idx is None and "driver" in h:
+            driver_idx = i
+        if team_idx is None and any(x in h for x in ["team", "entrant"]):
+            team_idx = i
+        if car_idx is None and any(x in h for x in ["car", "model", "vehicle"]):
+            car_idx = i
+        if laps_idx is None and "lap" in h:
+            laps_idx = i
+        if time_idx is None and "time" in h:
+            time_idx = i
+        if gap_idx is None and "gap" in h:
+            gap_idx = i
+        if status_idx is None and any(x in h for x in ["status", "reason"]):
+            status_idx = i
+
+    for r in parsed_rows[1:]:
+        if not r:
+            continue
+
+        pos = safe_int(r[pos_idx] if len(r) > pos_idx else None)
+        if pos is None:
+            continue
+
+        drivers = []
+        if driver_idx is not None and len(r) > driver_idx:
+            drivers = split_drivers(r[driver_idx])
+        if not drivers:
+            drivers = guess_driver_cells(r)
+
+        rows.append({
+            "finish_pos": pos,
+            "car_no": clean_text(r[car_no_idx]) if car_no_idx is not None and len(r) > car_no_idx else None,
+            "drivers": drivers,
+            "team": clean_text(r[team_idx]) if team_idx is not None and len(r) > team_idx else None,
+            "car": clean_text(r[car_idx]) if car_idx is not None and len(r) > car_idx else None,
+            "laps": clean_text(r[laps_idx]) if laps_idx is not None and len(r) > laps_idx else None,
+            "time": clean_text(r[time_idx]) if time_idx is not None and len(r) > time_idx else None,
+            "gap": clean_text(r[gap_idx]) if gap_idx is not None and len(r) > gap_idx else None,
+            "status": clean_text(r[status_idx]) if status_idx is not None and len(r) > status_idx else None,
+        })
+
+    rows = unique_rows(rows, "finish_pos")
+    rows.sort(key=lambda x: x["finish_pos"])
+    return rows
+
+
+def parse_manual_grid_table(parsed_rows):
+    header = [str(x or "").lower() for x in parsed_rows[0]]
+    rows = []
+
+    pos_idx = 0
+    car_no_idx = None
+    driver_idx = None
+    team_idx = None
+    car_idx = None
+    time_idx = None
+
+    for i, h in enumerate(header):
+        if car_no_idx is None and any(x in h for x in ["car no", "number", "no.", "no", "#"]):
+            car_no_idx = i
+        if driver_idx is None and "driver" in h:
+            driver_idx = i
+        if team_idx is None and any(x in h for x in ["team", "entrant"]):
+            team_idx = i
+        if car_idx is None and any(x in h for x in ["car", "model", "vehicle"]):
+            car_idx = i
+        if time_idx is None and "time" in h:
+            time_idx = i
+
+    for r in parsed_rows[1:]:
+        if not r:
+            continue
+
+        pos = safe_int(r[pos_idx] if len(r) > pos_idx else None)
+        if pos is None:
+            continue
+
+        drivers = []
+        if driver_idx is not None and len(r) > driver_idx:
+            drivers = split_drivers(r[driver_idx])
+        if not drivers:
+            drivers = guess_driver_cells(r)
+
+        rows.append({
+            "grid_pos": pos,
+            "car_no": clean_text(r[car_no_idx]) if car_no_idx is not None and len(r) > car_no_idx else None,
+            "drivers": drivers,
+            "team": clean_text(r[team_idx]) if team_idx is not None and len(r) > team_idx else None,
+            "car": clean_text(r[car_idx]) if car_idx is not None and len(r) > car_idx else None,
+            "qualifying_time": clean_text(r[time_idx]) if time_idx is not None and len(r) > time_idx else None,
+        })
+
+    rows = unique_rows(rows, "grid_pos")
+    rows.sort(key=lambda x: x["grid_pos"])
+    return rows
+
+
 def parse_page(year, url, html):
     soup = BeautifulSoup(html, "html.parser")
     meta = parse_infobox(soup, year, url)
@@ -370,43 +418,79 @@ def parse_page(year, url, html):
     grid = []
     results = []
 
-    candidate_grids = []
-    candidate_results = []
+    tables = soup.find_all("table")
 
-    for table_tag in soup.find_all("table", class_=lambda c: c and "wikitable" in c):
-        heading = get_heading(table_tag)
+    for table in tables:
+        rows = table.find_all("tr")
 
-        try:
-            dfs = pd.read_html(str(table_tag))
-        except Exception:
-            dfs = []
+        if len(rows) < 3:
+            continue
 
-        for df in dfs:
-            try:
-                df = normalize_columns(df)
-                gscore, rscore = score_table(df, heading)
+        parsed_rows = []
 
-                if gscore >= 5:
-                    ng = normalize_grid(df)
-                    if ng:
-                        candidate_grids.append((len(ng), gscore, ng, heading, list(df.columns)))
+        for tr in rows:
+            cols = tr.find_all(["td", "th"])
+            if len(cols) < 2:
+                continue
 
-                if rscore >= 5:
-                    nr = normalize_results(df)
-                    if nr:
-                        candidate_results.append((len(nr), rscore, nr, heading, list(df.columns)))
-            except Exception:
-                pass
+            row = [clean_text(c.get_text(" ", strip=True)) for c in cols]
+            row = [x for x in row if x is not None]
 
-    if candidate_grids:
-        candidate_grids.sort(key=lambda x: (x[1], x[0]), reverse=True)
-        grid = candidate_grids[0][2]
+            if len(row) < 2:
+                continue
 
-    if candidate_results:
-        candidate_results.sort(key=lambda x: (x[0], x[1]), reverse=True)
-        results = candidate_results[0][2]
+            parsed_rows.append(row)
 
-    winner = results[0]["drivers"] if results and results[0]["drivers"] else []
+        if len(parsed_rows) < 3:
+            continue
+
+        heading = get_heading(table)
+        flat = " ".join(" ".join(r) for r in parsed_rows).lower()
+        first_row = " ".join(parsed_rows[0]).lower()
+
+        is_grid = False
+        is_results = False
+
+        if any(x in heading for x in ["starting grid", "grid", "qualifying", "shootout"]):
+            is_grid = True
+
+        if any(x in heading for x in ["race", "results", "classification"]):
+            is_results = True
+
+        if any(x in first_row for x in ["laps", "gap", "status", "ret", "retired", "time"]):
+            is_results = True
+
+        if any(x in first_row for x in ["grid", "qualifying"]):
+            is_grid = True
+
+        if not is_results and any(x in flat for x in ["laps", "gap", "retired", "classification"]):
+            is_results = True
+
+        if not is_grid and any(x in flat for x in ["starting grid", "qualifying order", "pole time"]):
+            is_grid = True
+
+        # early ugly pages: big numbered table is usually results
+        data_rows_with_numeric_first_cell = 0
+        for r in parsed_rows[1:]:
+            if safe_int(r[0]) is not None:
+                data_rows_with_numeric_first_cell += 1
+
+        if not is_results and not is_grid and data_rows_with_numeric_first_cell >= 10:
+            is_results = True
+
+        if is_results:
+            candidate = parse_manual_results_table(parsed_rows)
+            if len(candidate) > len(results):
+                results = candidate
+            continue
+
+        if is_grid:
+            candidate = parse_manual_grid_table(parsed_rows)
+            if len(candidate) > len(grid):
+                grid = candidate
+            continue
+
+    winner = results[0]["drivers"] if results else []
 
     meta["winner"] = winner
     meta["grid_count"] = len(grid)
@@ -431,16 +515,12 @@ for year in range(START_YEAR, END_YEAR + 1):
     try:
         data = parse_page(year, url, html)
 
-        # force save if we found anything at all
-        if not data["grid"] and not data["results"]:
-            print("  no parsed tables, saving stub anyway")
-
         out_file = SEASONS_DIR / f"{year}.json"
         with out_file.open("w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
         index.append({
-            "year": year,
+            "year": data["year"],
             "title": data["title"],
             "name": data["name"],
             "date": data["date"],
