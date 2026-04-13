@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST BUILDER (FINAL – LINK DRIVER FIX)")
+print("BATHURST BUILDER (ACTUAL FINAL)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -55,9 +55,9 @@ def split_drivers(text):
     text = text.replace("&", "/")
 
     if "/" in text:
-        parts = re.split(r"\s*/\s*", text)
-        return [clean(p) for p in parts if clean(p)]
+        return [clean(x) for x in re.split(r"\s*/\s*", text) if clean(x)]
 
+    # force split multiple names
     names = re.findall(r"[A-Z][A-Za-z'.-]+\s+[A-Z][A-Za-z'.-]+", text)
     if len(names) >= 2:
         return names
@@ -127,7 +127,7 @@ def scrape_uniquecars(year):
 
 
 # -----------------------
-# WIKIPEDIA (2003+ – FIXED)
+# WIKIPEDIA (2003+ FINAL FIX)
 # -----------------------
 WIKI_PAGE_MAP = {
     2003: "2003_Bob_Jane_T-Marts_1000",
@@ -175,11 +175,9 @@ def scrape_wikipedia(year):
         if len(rows) < 10:
             continue
 
-        header_text = " ".join(rows[0].get_text().lower())
+        header = rows[0].get_text(" ").lower()
 
-        if "driver" not in header_text:
-            continue
-        if "pos" not in header_text and "position" not in header_text:
+        if "driver" not in header or ("pos" not in header and "position" not in header):
             continue
 
         results = []
@@ -193,24 +191,43 @@ def scrape_wikipedia(year):
             if pos is None:
                 continue
 
-            # 🔥 KEY FIX: extract drivers from links
+            cell = tds[2]
+
+            # -------- DRIVER EXTRACTION (FINAL FIX) --------
             drivers = []
-            for a in tds[2].find_all("a"):
+
+            # links
+            for a in cell.find_all("a"):
                 name = clean(a.get_text())
                 if name and " " in name:
                     drivers.append(name)
 
-            # fallback if no links
-            if not drivers:
-                drivers = split_drivers(tds[2].get_text())
+            # raw text
+            text = clean(cell.get_text(" "))
+            text_names = re.findall(r"[A-Z][A-Za-z'.-]+\s+[A-Z][A-Za-z'.-]+", text)
 
+            combined = drivers + text_names
+
+            # dedupe
+            final = []
+            seen = set()
+            for name in combined:
+                key = name.lower()
+                if key not in seen:
+                    final.append(name)
+                    seen.add(key)
+
+            if not final:
+                final = split_drivers(text)
+
+            # constructor
             constructor = None
             if len(tds) > 4:
                 constructor = clean(tds[4].get_text())
 
             results.append({
                 "finish_pos": pos,
-                "drivers": drivers,
+                "drivers": final,
                 "constructor": constructor
             })
 
@@ -247,9 +264,7 @@ for year in range(START_YEAR, END_YEAR + 1):
         print("  FAILED")
         continue
 
-    out_file = SEASONS_DIR / f"{year}.json"
-
-    with open(out_file, "w", encoding="utf-8") as f:
+    with open(SEASONS_DIR / f"{year}.json", "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
     index.append({
@@ -260,8 +275,6 @@ for year in range(START_YEAR, END_YEAR + 1):
     print(f"  saved {len(data['results'])} results")
 
     time.sleep(0.3)
-
-index.sort(key=lambda x: x["year"])
 
 with open(INDEX_FILE, "w", encoding="utf-8") as f:
     json.dump(index, f, indent=2, ensure_ascii=False)
