@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (FINAL – CAR NUMBER CO-DRIVER FIX)")
+print("BATHURST BUILDER (ENTRY-BASED – FULL GRID + CO-DRIVERS FIXED)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -65,22 +65,15 @@ def get_url(year):
     return None
 
 
-def find_results_table(soup):
+def find_entry_table(soup):
     for header in soup.find_all(["h2", "h3"]):
         title = header.get_text().lower()
-
-        if any(x in title for x in ["results", "classification"]):
-            for table in header.find_all_next("table"):
-                if table.find_previous(["h2", "h3"]) != header:
-                    break
-
-                text = table.get_text(" ", strip=True).lower()
-                if "driver" in text and ("pos" in text or "position" in text):
-                    return table
+        if "entry" in title or "starting grid" in title:
+            return header.find_next("table")
     return None
 
 
-def fallback_results_table(soup):
+def find_results_table(soup):
     for table in soup.find_all("table"):
         text = table.get_text(" ", strip=True).lower()
         if "driver" in text and ("pos" in text or "position" in text):
@@ -88,21 +81,12 @@ def fallback_results_table(soup):
     return None
 
 
-def find_entry_table(soup):
-    for header in soup.find_all(["h2", "h3"]):
-        title = header.get_text().lower()
-
-        if "entry" in title or "starting grid" in title:
-            return header.find_next("table")
-    return None
-
-
-# 🔥 CAR NUMBER → DRIVERS
-def build_driver_map(entry_table):
-    mapping = {}
+# 🔥 BUILD FULL GRID FROM ENTRY LIST
+def build_entry_grid(entry_table):
+    grid = []
 
     if not entry_table:
-        return mapping
+        return grid
 
     for row in entry_table.find_all("tr"):
         tds = row.find_all("td")
@@ -113,6 +97,7 @@ def build_driver_map(entry_table):
 
         car_no = None
         drivers = []
+        car = None
 
         for c in cols:
             if not car_no and c and c.isdigit():
@@ -122,65 +107,30 @@ def build_driver_map(entry_table):
             if len(d) >= 2:
                 drivers = d
 
-        if car_no and len(drivers) == 2:
-            mapping[car_no] = drivers
+        for c in cols:
+            if c and c not in drivers and c != car_no:
+                car = c
+                break
 
-    return mapping
+        if drivers:
+            grid.append({
+                "car_no": car_no,
+                "drivers": drivers,
+                "car": car,
+                "finish": None
+            })
 
-
-def extract_car_number(cols):
-    for c in cols:
-        if c and c.isdigit():
-            return c
-    return None
-
-
-def extract_drivers(td):
-    names = []
-
-    for a in td.find_all("a"):
-        n = clean(a.get_text())
-        if n and " " in n:
-            names.append(n)
-
-    if not names:
-        names = split_drivers(td.get_text(" ", strip=True))
-
-    return names[:2]
+    return grid
 
 
-def fetch_year(year):
-    url = get_url(year)
-
-    if not url:
-        print(f"❌ No page {year}")
-        return None
-
-    print(f"Fetching {year} → {url}")
-
-    try:
-        res = requests.get(url, headers=HEADERS, timeout=20)
-        soup = BeautifulSoup(res.text, "html.parser")
-    except:
-        print(f"❌ Request failed {year}")
-        return None
-
-    results_table = find_results_table(soup)
+# 🔥 APPLY RESULTS ON TOP
+def apply_results(grid, results_table):
     if not results_table:
-        results_table = fallback_results_table(soup)
-
-    if not results_table:
-        print(f"❌ No results table {year}")
-        return None
-
-    entry_table = find_entry_table(soup)
-    driver_map = build_driver_map(entry_table)
-
-    results = []
+        return grid
 
     for row in results_table.find_all("tr"):
-        ths = row.find_all("th")
         tds = row.find_all("td")
+        ths = row.find_all("th")
 
         if not tds:
             continue
@@ -197,57 +147,52 @@ def fetch_year(year):
             if f and f.isdigit():
                 finish = int(f)
 
-        if finish is None or finish > 60:
+        if finish is None:
             continue
 
-        cols = [clean(td.get_text(" ", strip=True)) for td in tds]
+        text = row.get_text(" ", strip=True)
 
-        # DRIVER EXTRACTION
-        drivers = []
-        for td in tds:
-            d = extract_drivers(td)
-            if len(d) > len(drivers):
-                drivers = d
+        # 🔥 MATCH BY DRIVER NAME (fallback)
+        for entry in grid:
+            for d in entry["drivers"]:
+                if d in text:
+                    entry["finish"] = finish
+                    break
 
-        # 🔥 REAL FIX — USE CAR NUMBER
-        car_no = extract_car_number(cols)
-        if car_no and car_no in driver_map:
-            drivers = driver_map[car_no]
+    return grid
 
-        # CAR NAME
-        car = None
-        for c in cols:
-            if c and c != car_no and c not in drivers:
-                car = c
-                break
 
-        results.append({
-            "finish": finish,
-            "drivers": drivers,
-            "car": car
-        })
+def fetch_year(year):
+    url = get_url(year)
 
-    if not results:
-        print(f"⚠️ No parsed rows {year}")
+    if not url:
+        print(f"❌ No page {year}")
         return None
 
-    # REMOVE DUPLICATES
-    by_finish = {}
-    for r in results:
-        f = r["finish"]
+    print(f"Fetching {year} → {url}")
 
-        if f not in by_finish:
-            by_finish[f] = r
-        else:
-            if len(r["drivers"]) > len(by_finish[f]["drivers"]):
-                by_finish[f] = r
+    res = requests.get(url, headers=HEADERS)
+    soup = BeautifulSoup(res.text, "html.parser")
 
-    final = list(by_finish.values())
-    final.sort(key=lambda x: x["finish"])
+    entry_table = find_entry_table(soup)
+    results_table = find_results_table(soup)
+
+    grid = build_entry_grid(entry_table)
+
+    if not grid:
+        print(f"❌ No entry grid {year}")
+        return None
+
+    grid = apply_results(grid, results_table)
+
+    # remove entries without finish if needed
+    grid = [g for g in grid if g["finish"] is not None]
+
+    grid.sort(key=lambda x: x["finish"])
 
     return {
         "year": year,
-        "results": final
+        "results": grid
     }
 
 
@@ -278,9 +223,6 @@ for year in range(START_YEAR, END_YEAR + 1):
     time.sleep(1)
 
 seasons.sort(key=lambda x: x["year"])
-
-with open(BASE / "seasons.json", "w", encoding="utf-8") as f:
-    json.dump(seasons, f, indent=2, ensure_ascii=False)
 
 with open(BASE / "index.json", "w", encoding="utf-8") as f:
     json.dump({
