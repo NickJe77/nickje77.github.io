@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (CLEAN RESET VERSION)")
+print("BATHURST BUILDER (ALL YEARS FIXED)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -52,43 +52,50 @@ def get_url(year):
     return None
 
 
-# ✅ FIND CORRECT RESULTS TABLE
+# 🔥 FIX: search ALL tables (not just wikitable)
 def find_results_table(soup):
     best = None
-    best_rows = 0
+    best_score = 0
 
-    for table in soup.find_all("table", class_="wikitable"):
+    for table in soup.find_all("table"):
         text = table.get_text(" ", strip=True).lower()
 
-        # must look like results
-        if "driver" not in text or "pos" not in text:
-            continue
+        score = 0
 
-        # exclude bad tables
-        if "grid" in text or "shootout" in text or "entry" in text:
-            continue
+        if "driver" in text:
+            score += 3
+        if "pos" in text or "position" in text:
+            score += 3
+
+        # reject bad tables
+        if "grid" in text:
+            score -= 5
+        if "shootout" in text:
+            score -= 5
+        if "entry" in text:
+            score -= 5
 
         rows = len(table.find_all("tr"))
+        if rows > 10:
+            score += 2
 
-        if rows > best_rows:
-            best_rows = rows
+        if score > best_score:
+            best_score = score
             best = table
 
     return best
 
 
-def extract_drivers(cell):
+def extract_drivers(td):
     names = []
 
-    # linked names
-    for a in cell.find_all("a"):
-        name = clean(a.get_text())
-        if name and " " in name:
-            names.append(name)
+    for a in td.find_all("a"):
+        n = clean(a.get_text())
+        if n and " " in n:
+            names.append(n)
 
-    # fallback
     if not names:
-        text = clean(cell.get_text(" ", strip=True)) or ""
+        text = clean(td.get_text(" ", strip=True)) or ""
         parts = re.split(r"/|,| and | & |\+", text)
 
         for p in parts:
@@ -96,7 +103,6 @@ def extract_drivers(cell):
             if p and " " in p:
                 names.append(p)
 
-    # dedupe
     final = []
     seen = set()
 
@@ -130,22 +136,22 @@ def fetch_year(year):
     results = []
 
     for row in table.find_all("tr"):
-        cells = row.find_all("td")
+        cells = row.find_all(["td", "th"])  # 🔥 FIX: include th
 
         if len(cells) < 3:
             continue
 
-        # finish position
+        cols = [clean(c.get_text(" ", strip=True)) for c in cells]
+
         try:
-            finish = int(clean(cells[0].get_text()))
+            finish = int(cols[0])
         except:
             continue
 
-        # ignore car numbers pretending to be positions
-        if finish > 40:
+        # avoid car numbers
+        if finish < 1 or finish > 40:
             continue
 
-        # drivers = longest cell with names
         drivers = []
         driver_idx = None
 
@@ -158,18 +164,17 @@ def fetch_year(year):
         if not drivers:
             continue
 
-        # car/team = next non-driver cell
         car = None
         for j in range(driver_idx + 1, len(cells)):
-            txt = clean(cells[j].get_text())
+            c = cols[j]
 
-            if not txt:
+            if not c:
                 continue
 
-            if txt in drivers:
+            if c in drivers:
                 continue
 
-            car = txt
+            car = c
             break
 
         results.append({
