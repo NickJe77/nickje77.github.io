@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (FINAL – STABLE + CO-DRIVER FIXED)")
+print("BATHURST BUILDER (FINAL – CAR NUMBER CO-DRIVER FIX)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -29,25 +29,14 @@ def clean(x):
     return x or None
 
 
-def norm(x):
-    return re.sub(r"[^a-z0-9]", "", (x or "").lower())
-
-
 def split_drivers(text):
     text = clean(text) or ""
     parts = re.split(r"/|,| and | & |\+", text)
 
     out = []
-    seen = set()
-
     for p in parts:
         p = clean(p)
-        if not p or len(p.split()) < 2:
-            continue
-
-        k = norm(p)
-        if k not in seen:
-            seen.add(k)
+        if p and len(p.split()) >= 2:
             out.append(p)
 
     return out[:2]
@@ -80,7 +69,7 @@ def find_results_table(soup):
     for header in soup.find_all(["h2", "h3"]):
         title = header.get_text().lower()
 
-        if any(x in title for x in ["race results", "classification", "results"]):
+        if any(x in title for x in ["results", "classification"]):
             for table in header.find_all_next("table"):
                 if table.find_previous(["h2", "h3"]) != header:
                     break
@@ -88,17 +77,14 @@ def find_results_table(soup):
                 text = table.get_text(" ", strip=True).lower()
                 if "driver" in text and ("pos" in text or "position" in text):
                     return table
-
     return None
 
 
 def fallback_results_table(soup):
     for table in soup.find_all("table"):
         text = table.get_text(" ", strip=True).lower()
-
         if "driver" in text and ("pos" in text or "position" in text):
             return table
-
     return None
 
 
@@ -106,14 +92,12 @@ def find_entry_table(soup):
     for header in soup.find_all(["h2", "h3"]):
         title = header.get_text().lower()
 
-        if "entry" in title or "entries" in title or "starting grid" in title:
-            table = header.find_next("table")
-            if table:
-                return table
-
+        if "entry" in title or "starting grid" in title:
+            return header.find_next("table")
     return None
 
 
+# 🔥 CAR NUMBER → DRIVERS
 def build_driver_map(entry_table):
     mapping = {}
 
@@ -122,22 +106,33 @@ def build_driver_map(entry_table):
 
     for row in entry_table.find_all("tr"):
         tds = row.find_all("td")
-
         if len(tds) < 2:
             continue
 
+        cols = [clean(td.get_text(" ", strip=True)) for td in tds]
+
+        car_no = None
         drivers = []
-        for td in tds:
-            d = split_drivers(td.get_text(" ", strip=True))
+
+        for c in cols:
+            if not car_no and c and c.isdigit():
+                car_no = c
+
+            d = split_drivers(c)
             if len(d) >= 2:
                 drivers = d
-                break
 
-        if len(drivers) == 2:
-            mapping[norm(drivers[0])] = drivers
-            mapping[norm(drivers[1])] = drivers
+        if car_no and len(drivers) == 2:
+            mapping[car_no] = drivers
 
     return mapping
+
+
+def extract_car_number(cols):
+    for c in cols:
+        if c and c.isdigit():
+            return c
+    return None
 
 
 def extract_drivers(td):
@@ -171,12 +166,9 @@ def fetch_year(year):
         return None
 
     results_table = find_results_table(soup)
-
-    # 🔥 FALLBACK
     if not results_table:
         results_table = fallback_results_table(soup)
 
-    # ❌ SKIP IF STILL NONE
     if not results_table:
         print(f"❌ No results table {year}")
         return None
@@ -187,7 +179,6 @@ def fetch_year(year):
     results = []
 
     for row in results_table.find_all("tr"):
-
         ths = row.find_all("th")
         tds = row.find_all("td")
 
@@ -211,33 +202,24 @@ def fetch_year(year):
 
         cols = [clean(td.get_text(" ", strip=True)) for td in tds]
 
+        # DRIVER EXTRACTION
         drivers = []
-        driver_idx = None
-
-        for i, td in enumerate(tds):
+        for td in tds:
             d = extract_drivers(td)
             if len(d) > len(drivers):
                 drivers = d
-                driver_idx = i
 
-        if not drivers:
-            continue
+        # 🔥 REAL FIX — USE CAR NUMBER
+        car_no = extract_car_number(cols)
+        if car_no and car_no in driver_map:
+            drivers = driver_map[car_no]
 
-        # 🔥 CO-DRIVER FIX
-        if len(drivers) == 1:
-            key = norm(drivers[0])
-            if key in driver_map:
-                drivers = driver_map[key]
-
+        # CAR NAME
         car = None
-        for j in range(driver_idx + 1, len(cols)):
-            c = cols[j]
-            if not c:
-                continue
-            if c in drivers:
-                continue
-            car = c
-            break
+        for c in cols:
+            if c and c != car_no and c not in drivers:
+                car = c
+                break
 
         results.append({
             "finish": finish,
@@ -249,16 +231,16 @@ def fetch_year(year):
         print(f"⚠️ No parsed rows {year}")
         return None
 
+    # REMOVE DUPLICATES
     by_finish = {}
     for r in results:
         f = r["finish"]
 
         if f not in by_finish:
             by_finish[f] = r
-            continue
-
-        if len(r["drivers"]) > len(by_finish[f]["drivers"]):
-            by_finish[f] = r
+        else:
+            if len(r["drivers"]) > len(by_finish[f]["drivers"]):
+                by_finish[f] = r
 
     final = list(by_finish.values())
     final.sort(key=lambda x: x["finish"])
@@ -280,9 +262,6 @@ for year in range(START_YEAR, END_YEAR + 1):
 
     results = data["results"]
 
-    winner_drivers = results[0]["drivers"]
-    winner_car = results[0]["car"]
-
     with open(BASE / f"{year}.json", "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
@@ -291,8 +270,8 @@ for year in range(START_YEAR, END_YEAR + 1):
 
     seasons.append({
         "year": year,
-        "winner_drivers": winner_drivers,
-        "winner_car": winner_car
+        "winner_drivers": results[0]["drivers"],
+        "winner_car": results[0]["car"]
     })
 
     print(f"✅ Saved {year} ({len(results)} rows)")
