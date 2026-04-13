@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (FINAL FIXED VERSION)")
+print("BATHURST BUILDER (FINAL – 2021 FIXED)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -52,8 +52,17 @@ def get_url(year):
     return None
 
 
-# 🔥 works for ALL years (wikitable + non-wikitable)
+# 🔥 PRIMARY: use Race results / Classification section
 def find_results_table(soup):
+    for header in soup.find_all(["h2", "h3"]):
+        title = header.get_text().lower()
+
+        if "race results" in title or "classification" in title:
+            table = header.find_next("table")
+            if table:
+                return table
+
+    # 🔁 FALLBACK for older years
     best = None
     best_score = 0
 
@@ -136,14 +145,13 @@ def fetch_year(year):
 
     for row in table.find_all("tr"):
 
-        # 🔥 FIX: handle th + td properly
         ths = row.find_all("th")
         tds = row.find_all("td")
 
         if not tds:
             continue
 
-        # get finish position
+        # 🔥 FIX: get finish from th OR td
         finish = None
 
         if ths:
@@ -162,7 +170,6 @@ def fetch_year(year):
         if finish < 1 or finish > 40:
             continue
 
-        # use only td cells for data
         cells = tds
         cols = [clean(td.get_text(" ", strip=True)) for td in cells]
 
