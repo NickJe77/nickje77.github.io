@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (ALL YEARS FIXED)")
+print("BATHURST BUILDER (FINAL FIXED VERSION)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -52,7 +52,7 @@ def get_url(year):
     return None
 
 
-# 🔥 FIX: search ALL tables (not just wikitable)
+# 🔥 works for ALL years (wikitable + non-wikitable)
 def find_results_table(soup):
     best = None
     best_score = 0
@@ -67,7 +67,6 @@ def find_results_table(soup):
         if "pos" in text or "position" in text:
             score += 3
 
-        # reject bad tables
         if "grid" in text:
             score -= 5
         if "shootout" in text:
@@ -136,21 +135,36 @@ def fetch_year(year):
     results = []
 
     for row in table.find_all("tr"):
-        cells = row.find_all(["td", "th"])  # 🔥 FIX: include th
 
-        if len(cells) < 3:
+        # 🔥 FIX: handle th + td properly
+        ths = row.find_all("th")
+        tds = row.find_all("td")
+
+        if not tds:
             continue
 
-        cols = [clean(c.get_text(" ", strip=True)) for c in cells]
+        # get finish position
+        finish = None
 
-        try:
-            finish = int(cols[0])
-        except:
+        if ths:
+            f = clean(ths[0].get_text())
+            if f and f.isdigit():
+                finish = int(f)
+
+        if finish is None:
+            f = clean(tds[0].get_text())
+            if f and f.isdigit():
+                finish = int(f)
+
+        if finish is None:
             continue
 
-        # avoid car numbers
         if finish < 1 or finish > 40:
             continue
+
+        # use only td cells for data
+        cells = tds
+        cols = [clean(td.get_text(" ", strip=True)) for td in cells]
 
         drivers = []
         driver_idx = None
@@ -165,7 +179,7 @@ def fetch_year(year):
             continue
 
         car = None
-        for j in range(driver_idx + 1, len(cells)):
+        for j in range(driver_idx + 1, len(cols)):
             c = cols[j]
 
             if not c:
