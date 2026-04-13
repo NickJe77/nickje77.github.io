@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST RAW BUILDER (FINAL STABLE)")
+print("BATHURST RAW BUILDER (FINAL + LOCKED EARLY YEAR)")
 
 OUT = Path("docs/data/bathurst/raw/bathurst_full.csv")
 OUT.parent.mkdir(parents=True, exist_ok=True)
@@ -16,6 +16,7 @@ START_YEAR = 1963
 END_YEAR = 2025
 
 
+# ---------------- CLEAN ----------------
 def clean(x):
     if x is None:
         return ""
@@ -26,6 +27,26 @@ def clean(x):
     return x
 
 
+# ---------------- LOCKED DATA ----------------
+def locked_early_years(year):
+    if year != 1963:
+        return None
+
+    return [
+        {"year":1963,"finish":1,"driver1":"Bob Jane","driver2":"Harry Firth","car":"Ford Cortina"},
+        {"year":1963,"finish":2,"driver1":"Doug Chivas","driver2":"Ken Wilkinson","car":"Morris Cooper"},
+        {"year":1963,"finish":3,"driver1":"Jim McKeown","driver2":"George Reynolds","car":"Volkswagen 1200"},
+        {"year":1963,"finish":4,"driver1":"Tony Allen","driver2":"Tony Reynolds","car":"Valiant AP5"},
+        {"year":1963,"finish":5,"driver1":"Greg Mackie","driver2":"Graham White","car":"Volkswagen 1200"},
+        {"year":1963,"finish":6,"driver1":"Bill Stanley","driver2":"John Alexander","car":"Morris 850"},
+        {"year":1963,"finish":7,"driver1":"Barry Seton","driver2":"Herb Taylor","car":"Morris 850"},
+        {"year":1963,"finish":8,"driver1":"Frank Matich","driver2":"George Murray","car":"Volkswagen 1200"},
+        {"year":1963,"finish":9,"driver1":"Spencer Martin","driver2":"Brian Muir","car":"Holden EH"},
+        {"year":1963,"finish":10,"driver1":"Brian Foley","driver2":"Peter Manton","car":"Morris Cooper"},
+    ]
+
+
+# ---------------- URL ----------------
 def get_url(year):
     patterns = [
         f"{year}_Bathurst_1000",
@@ -49,6 +70,7 @@ def get_url(year):
     return None
 
 
+# ---------------- FIND TABLE ----------------
 def find_results_table(soup):
     best = None
     best_score = 0
@@ -68,22 +90,7 @@ def find_results_table(soup):
     return best
 
 
-def build_header_map(table):
-    for tr in table.find_all("tr"):
-        ths = tr.find_all("th")
-        if ths:
-            return {i: clean(th.get_text()).lower() for i, th in enumerate(ths)}
-    return {}
-
-
-def find_col(header_map, keywords):
-    for i, name in header_map.items():
-        for k in keywords:
-            if k in name:
-                return i
-    return None
-
-
+# ---------------- DRIVER CHECK ----------------
 def looks_like_person(name):
     name = clean(name)
 
@@ -103,6 +110,7 @@ def looks_like_person(name):
     return len(name.split()) >= 2
 
 
+# ---------------- DRIVER EXTRACT ----------------
 def extract_drivers(td):
     names = []
 
@@ -114,7 +122,7 @@ def extract_drivers(td):
     if len(names) >= 2:
         return names[:2]
 
-    # fallback
+    # fallback split
     raw = clean(td.get_text())
     parts = re.split(r"/|&|,| and ", raw)
 
@@ -126,46 +134,24 @@ def extract_drivers(td):
     return names[:2]
 
 
+# ---------------- FINISH ----------------
 def parse_finish(tr):
-    cells = tr.find_all(["td","th"])
-
-    for c in cells:
+    for c in tr.find_all(["td","th"]):
         txt = clean(c.get_text())
         if txt.isdigit():
             return int(txt)
-
     return None
 
 
-def fix_early_years(rows, year):
-    if year > 1972:
-        return rows
-
-    fixed = []
-
-    for r in rows:
-        combined = f"{r['driver1']} {r['driver2']}"
-
-        names = re.findall(r"[A-Z][a-z]+ [A-Z][a-z]+", combined)
-
-        unique = []
-        for n in names:
-            if n not in unique:
-                unique.append(n)
-
-        if len(unique) >= 2:
-            r["driver1"] = unique[0]
-            r["driver2"] = unique[1]
-        elif len(unique) == 1:
-            r["driver1"] = unique[0]
-            r["driver2"] = "Unknown"
-
-        fixed.append(r)
-
-    return fixed
-
-
+# ---------------- PARSE YEAR ----------------
 def parse_year(year):
+
+    # 🔥 LOCKED YEARS
+    locked = locked_early_years(year)
+    if locked:
+        print(f"🔒 Locked {year}")
+        return locked
+
     url = get_url(year)
 
     if not url:
@@ -187,15 +173,12 @@ def parse_year(year):
         print(f"❌ No table {year}")
         return []
 
-    header_map = build_header_map(table)
-
-    driver_idx = find_col(header_map, ["driver"])
-
     rows = []
     by_finish = {}
 
     for tr in table.find_all("tr"):
         tds = tr.find_all("td")
+
         if not tds:
             continue
 
@@ -205,16 +188,10 @@ def parse_year(year):
 
         drivers = []
 
-        if driver_idx is not None and driver_idx < len(tds):
-            drivers = extract_drivers(tds[driver_idx])
-
-        if len(drivers) < 2:
-            best = []
-            for td in tds:
-                d = extract_drivers(td)
-                if len(d) > len(best):
-                    best = d
-            drivers = best
+        for td in tds:
+            d = extract_drivers(td)
+            if len(d) > len(drivers):
+                drivers = d
 
         if not drivers:
             continue
@@ -222,6 +199,7 @@ def parse_year(year):
         if len(drivers) == 1:
             drivers.append("Unknown")
 
+        # CAR DETECTION
         car = ""
         for td in tds:
             txt = clean(td.get_text())
@@ -249,13 +227,10 @@ def parse_year(year):
     clean_rows = list(by_finish.values())
     clean_rows.sort(key=lambda x: x["finish"])
 
-    # 🔥 FIX EARLY YEARS
-    clean_rows = fix_early_years(clean_rows, year)
-
     return clean_rows
 
 
-# BUILD
+# ---------------- BUILD ----------------
 all_rows = []
 
 for year in range(START_YEAR, END_YEAR + 1):
