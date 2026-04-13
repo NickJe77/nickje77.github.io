@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (FINAL – BULLETPROOF)")
+print("BATHURST BUILDER (FINAL – CO-DRIVER FIXED)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -27,6 +27,30 @@ def clean(x):
     x = x.replace("\xa0", " ")
     x = re.sub(r"\s+", " ", x).strip()
     return x or None
+
+
+def norm(x):
+    return re.sub(r"[^a-z0-9]", "", (x or "").lower())
+
+
+def split_drivers(text):
+    text = clean(text) or ""
+    parts = re.split(r"/|,| and | & |\+", text)
+
+    out = []
+    seen = set()
+
+    for p in parts:
+        p = clean(p)
+        if not p or len(p.split()) < 2:
+            continue
+
+        k = norm(p)
+        if k not in seen:
+            seen.add(k)
+            out.append(p)
+
+    return out[:2]
 
 
 def get_url(year):
@@ -52,29 +76,58 @@ def get_url(year):
     return None
 
 
-# 🔥 CORRECT TABLE PICKING
 def find_results_table(soup):
     for header in soup.find_all(["h2", "h3"]):
         title = header.get_text().lower()
 
         if "race results" in title or "classification" in title:
-
             for table in header.find_all_next("table"):
                 if table.find_previous(["h2", "h3"]) != header:
                     break
 
                 text = table.get_text(" ", strip=True).lower()
-
                 if "pos" in text and "driver" in text:
                     return table
 
-    # fallback for old years
-    for table in soup.find_all("table"):
-        text = table.get_text(" ", strip=True).lower()
-        if "driver" in text and "pos" in text:
-            return table
+    return None
+
+
+def find_entry_table(soup):
+    for header in soup.find_all(["h2", "h3"]):
+        title = header.get_text().lower()
+
+        if "entry" in title or "entries" in title or "starting grid" in title:
+            table = header.find_next("table")
+            if table:
+                return table
 
     return None
+
+
+def build_driver_map(entry_table):
+    mapping = {}
+
+    if not entry_table:
+        return mapping
+
+    for row in entry_table.find_all("tr"):
+        tds = row.find_all("td")
+
+        if len(tds) < 2:
+            continue
+
+        drivers = []
+        for td in tds:
+            d = split_drivers(td.get_text(" ", strip=True))
+            if len(d) >= 2:
+                drivers = d
+                break
+
+        if len(drivers) == 2:
+            mapping[norm(drivers[0])] = drivers
+            mapping[norm(drivers[1])] = drivers
+
+    return mapping
 
 
 def extract_drivers(td):
@@ -86,67 +139,9 @@ def extract_drivers(td):
             names.append(n)
 
     if not names:
-        text = clean(td.get_text(" ", strip=True)) or ""
-        parts = re.split(r"/|,| and | & |\+", text)
+        names = split_drivers(td.get_text(" ", strip=True))
 
-        for p in parts:
-            p = clean(p)
-            if p and " " in p:
-                names.append(p)
-
-    final = []
-    seen = set()
-
-    for n in names:
-        k = n.lower()
-        if k not in seen:
-            seen.add(k)
-            final.append(n)
-
-    return final[:2]
-
-
-# 🔥 INFObox fallback (fixes 2019–2021)
-def extract_infobox_winner(soup):
-    text = soup.get_text("\n", strip=True)
-    lines = [clean(x) for x in text.split("\n")]
-    lines = [x for x in lines if x]
-
-    for i, line in enumerate(lines):
-        if line == "Winner":
-
-            candidates = []
-            for j in range(i + 1, min(i + 8, len(lines))):
-                val = lines[j]
-                if not val:
-                    continue
-                if val.lower().startswith("image"):
-                    continue
-                candidates.append(val)
-
-            names = []
-            for val in candidates:
-                if len(val.split()) >= 2 and not re.search(r"\d", val):
-                    names.append(val)
-                if len(names) == 2:
-                    break
-
-            team = None
-            for val in candidates:
-                if val in names:
-                    continue
-                if not re.search(r"\d", val):
-                    team = val
-                    break
-
-            if names:
-                return {
-                    "finish": 1,
-                    "drivers": names[:2],
-                    "car": team
-                }
-
-    return None
+    return names[:2]
 
 
 def fetch_year(year):
@@ -161,15 +156,14 @@ def fetch_year(year):
     res = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(res.text, "html.parser")
 
-    table = find_results_table(soup)
+    results_table = find_results_table(soup)
+    entry_table = find_entry_table(soup)
 
-    if not table:
-        print(f"❌ No results table {year}")
-        return None
+    driver_map = build_driver_map(entry_table)
 
     results = []
 
-    for row in table.find_all("tr"):
+    for row in results_table.find_all("tr"):
 
         ths = row.find_all("th")
         tds = row.find_all("td")
@@ -189,10 +183,7 @@ def fetch_year(year):
             if f and f.isdigit():
                 finish = int(f)
 
-        if finish is None:
-            continue
-
-        if finish < 1 or finish > 40:
+        if finish is None or finish > 40:
             continue
 
         cols = [clean(td.get_text(" ", strip=True)) for td in tds]
@@ -208,6 +199,12 @@ def fetch_year(year):
 
         if not drivers:
             continue
+
+        # 🔥 CO-DRIVER FIX
+        if len(drivers) == 1:
+            key = norm(drivers[0])
+            if key in driver_map:
+                drivers = driver_map[key]
 
         car = None
         for j in range(driver_idx + 1, len(cols)):
@@ -225,17 +222,10 @@ def fetch_year(year):
             "car": car
         })
 
-    # 🔥 FIX missing winner
-    if not any(r["finish"] == 1 for r in results):
-        winner = extract_infobox_winner(soup)
-        if winner:
-            results.append(winner)
-
     if not results:
         print(f"⚠️ No results {year}")
         return None
 
-    # dedupe
     by_finish = {}
     for r in results:
         f = r["finish"]
