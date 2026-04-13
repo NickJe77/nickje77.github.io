@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST WIKIPEDIA BUILDER (MANUAL TABLE PARSER)")
+print("BATHURST WIKIPEDIA BUILDER (MANUAL TABLE PARSER + DRIVER SPLIT + POSITION CLEANUP)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -102,23 +102,42 @@ def split_drivers(text):
     text = text.replace(" and ", " / ")
     text = text.replace(" & ", " / ")
     text = text.replace(" + ", " / ")
-    text = re.sub(r"\s*/\s*", " / ", text)
 
-    parts = [clean_text(x) for x in text.split(" / ") if clean_text(x)]
+    if "/" in text:
+        parts = re.split(r"\s*/\s*", text)
+        out = []
+        seen = set()
+        for p in parts:
+            p = clean_text(p)
+            if not p:
+                continue
+            low = p.lower()
+            if low not in seen:
+                out.append(p)
+                seen.add(low)
+        return out
 
-    out = []
-    seen = set()
-    for p in parts:
-        p = re.sub(r"\b(?:drivers?|co-driver|co driver|codriver)\b", "", p, flags=re.I)
-        p = clean_text(p)
-        if not p:
-            continue
-        low = p.lower()
-        if low not in seen:
-            out.append(p)
-            seen.add(low)
+    # fallback: try to split concatenated full names
+    tokens = text.split()
+    if len(tokens) == 4:
+        # very common early Bathurst format: "Barry Ferguson Bill Ford"
+        return [f"{tokens[0]} {tokens[1]}", f"{tokens[2]} {tokens[3]}"]
 
-    return out
+    names = re.findall(r"[A-Z][a-z]+(?:\s+[A-Z][a-z'.-]+)+", text)
+    if len(names) >= 2:
+        out = []
+        seen = set()
+        for n in names:
+            n = clean_text(n)
+            if not n:
+                continue
+            low = n.lower()
+            if low not in seen:
+                out.append(n)
+                seen.add(low)
+        return out
+
+    return [text]
 
 
 PAGE_MAP = {
@@ -273,28 +292,33 @@ def unique_rows(rows, pos_key):
     return out
 
 
+def dedupe_driver_list(drivers):
+    out = []
+    seen = set()
+    for d in drivers:
+        d = clean_text(d)
+        if not d:
+            continue
+        low = d.lower()
+        if low not in seen:
+            out.append(d)
+            seen.add(low)
+    return out
+
+
 def guess_driver_cells(row):
     candidates = []
+
     for cell in row:
         cell = clean_text(cell)
         if not cell:
             continue
-        if "/" in cell:
-            s = split_drivers(cell)
-            if s:
-                candidates.extend(s)
 
-    if candidates:
-        seen = set()
-        out = []
-        for x in candidates:
-            low = x.lower()
-            if low not in seen:
-                out.append(x)
-                seen.add(low)
-        return out
+        split = split_drivers(cell)
+        if len(split) >= 2:
+            candidates.extend(split)
 
-    return []
+    return dedupe_driver_list(candidates)
 
 
 def parse_manual_results_table(parsed_rows):
@@ -340,13 +364,16 @@ def parse_manual_results_table(parsed_rows):
         drivers = []
         if driver_idx is not None and len(r) > driver_idx:
             drivers = split_drivers(r[driver_idx])
-        if not drivers:
-            drivers = guess_driver_cells(r)
+
+        if len(drivers) < 2:
+            guessed = guess_driver_cells(r)
+            if guessed:
+                drivers = guessed
 
         rows.append({
             "finish_pos": pos,
             "car_no": clean_text(r[car_no_idx]) if car_no_idx is not None and len(r) > car_no_idx else None,
-            "drivers": drivers,
+            "drivers": dedupe_driver_list(drivers),
             "team": clean_text(r[team_idx]) if team_idx is not None and len(r) > team_idx else None,
             "car": clean_text(r[car_idx]) if car_idx is not None and len(r) > car_idx else None,
             "laps": clean_text(r[laps_idx]) if laps_idx is not None and len(r) > laps_idx else None,
@@ -357,7 +384,18 @@ def parse_manual_results_table(parsed_rows):
 
     rows = unique_rows(rows, "finish_pos")
     rows.sort(key=lambda x: x["finish_pos"])
-    return rows
+
+    # keep only first occurrence of each finish position
+    seen_positions = set()
+    filtered = []
+    for row in rows:
+        pos = row["finish_pos"]
+        if pos in seen_positions:
+            continue
+        seen_positions.add(pos)
+        filtered.append(row)
+
+    return filtered
 
 
 def parse_manual_grid_table(parsed_rows):
@@ -394,13 +432,16 @@ def parse_manual_grid_table(parsed_rows):
         drivers = []
         if driver_idx is not None and len(r) > driver_idx:
             drivers = split_drivers(r[driver_idx])
-        if not drivers:
-            drivers = guess_driver_cells(r)
+
+        if len(drivers) < 2:
+            guessed = guess_driver_cells(r)
+            if guessed:
+                drivers = guessed
 
         rows.append({
             "grid_pos": pos,
             "car_no": clean_text(r[car_no_idx]) if car_no_idx is not None and len(r) > car_no_idx else None,
-            "drivers": drivers,
+            "drivers": dedupe_driver_list(drivers),
             "team": clean_text(r[team_idx]) if team_idx is not None and len(r) > team_idx else None,
             "car": clean_text(r[car_idx]) if car_idx is not None and len(r) > car_idx else None,
             "qualifying_time": clean_text(r[time_idx]) if time_idx is not None and len(r) > time_idx else None,
@@ -469,7 +510,6 @@ def parse_page(year, url, html):
         if not is_grid and any(x in flat for x in ["starting grid", "qualifying order", "pole time"]):
             is_grid = True
 
-        # early ugly pages: big numbered table is usually results
         data_rows_with_numeric_first_cell = 0
         for r in parsed_rows[1:]:
             if safe_int(r[0]) is not None:
@@ -490,7 +530,11 @@ def parse_page(year, url, html):
                 grid = candidate
             continue
 
-    winner = results[0]["drivers"] if results else []
+    winner = []
+    for r in results:
+        if r["finish_pos"] == 1:
+            winner = r["drivers"]
+            break
 
     meta["winner"] = winner
     meta["grid_count"] = len(grid)
