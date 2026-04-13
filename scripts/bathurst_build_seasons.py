@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (FINAL – CO-DRIVER FIXED)")
+print("BATHURST BUILDER (FINAL – STABLE + CO-DRIVER FIXED)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -80,14 +80,24 @@ def find_results_table(soup):
     for header in soup.find_all(["h2", "h3"]):
         title = header.get_text().lower()
 
-        if "race results" in title or "classification" in title:
+        if any(x in title for x in ["race results", "classification", "results"]):
             for table in header.find_all_next("table"):
                 if table.find_previous(["h2", "h3"]) != header:
                     break
 
                 text = table.get_text(" ", strip=True).lower()
-                if "pos" in text and "driver" in text:
+                if "driver" in text and ("pos" in text or "position" in text):
                     return table
+
+    return None
+
+
+def fallback_results_table(soup):
+    for table in soup.find_all("table"):
+        text = table.get_text(" ", strip=True).lower()
+
+        if "driver" in text and ("pos" in text or "position" in text):
+            return table
 
     return None
 
@@ -153,12 +163,25 @@ def fetch_year(year):
 
     print(f"Fetching {year} → {url}")
 
-    res = requests.get(url, headers=HEADERS)
-    soup = BeautifulSoup(res.text, "html.parser")
+    try:
+        res = requests.get(url, headers=HEADERS, timeout=20)
+        soup = BeautifulSoup(res.text, "html.parser")
+    except:
+        print(f"❌ Request failed {year}")
+        return None
 
     results_table = find_results_table(soup)
-    entry_table = find_entry_table(soup)
 
+    # 🔥 FALLBACK
+    if not results_table:
+        results_table = fallback_results_table(soup)
+
+    # ❌ SKIP IF STILL NONE
+    if not results_table:
+        print(f"❌ No results table {year}")
+        return None
+
+    entry_table = find_entry_table(soup)
     driver_map = build_driver_map(entry_table)
 
     results = []
@@ -183,7 +206,7 @@ def fetch_year(year):
             if f and f.isdigit():
                 finish = int(f)
 
-        if finish is None or finish > 40:
+        if finish is None or finish > 60:
             continue
 
         cols = [clean(td.get_text(" ", strip=True)) for td in tds]
@@ -223,7 +246,7 @@ def fetch_year(year):
         })
 
     if not results:
-        print(f"⚠️ No results {year}")
+        print(f"⚠️ No parsed rows {year}")
         return None
 
     by_finish = {}
@@ -274,7 +297,6 @@ for year in range(START_YEAR, END_YEAR + 1):
 
     print(f"✅ Saved {year} ({len(results)} rows)")
     time.sleep(1)
-
 
 seasons.sort(key=lambda x: x["year"])
 
