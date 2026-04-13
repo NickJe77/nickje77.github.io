@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST WIKIPEDIA BUILDER (FULL FIELD FIX)")
+print("BATHURST WIKIPEDIA BUILDER (BALANCED PARSER)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -26,6 +26,9 @@ SESSION.headers.update(HEADERS)
 WIKI = "https://en.wikipedia.org/wiki/"
 
 
+# -----------------------
+# HELPERS
+# -----------------------
 def clean_text(v):
     if v is None:
         return None
@@ -64,11 +67,43 @@ def split_drivers(text):
 
     names = re.findall(r"[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+", text)
     if len(names) >= 2:
-        return [clean_text(n) for n in names if clean_text(n)]
+        return names
 
     return [text]
 
 
+def extract_drivers(row):
+    drivers = []
+
+    for cell in row:
+        cell_clean = clean_text(cell)
+        if not cell_clean:
+            continue
+
+        # must look like a name
+        if not re.search(r"[A-Z][a-z]+ [A-Z][a-z]+", cell_clean):
+            continue
+
+        # skip obvious non-driver text
+        if any(x in cell_clean.lower() for x in [
+            "racing", "engineering", "ford", "holden",
+            "chevrolet", "mustang", "camaro", "nissan",
+            "toyota", "bmw", "audi"
+        ]):
+            continue
+
+        drivers = split_drivers(cell_clean)
+        if drivers:
+            return drivers
+
+    # fallback (early messy tables)
+    joined = " ".join([x for x in row if x])
+    return split_drivers(joined)
+
+
+# -----------------------
+# PAGE MAP
+# -----------------------
 PAGE_MAP = {
     1960: "1960_Armstrong_500",
     1961: "1961_Armstrong_500",
@@ -151,18 +186,19 @@ def fetch_page(year):
         if r.status_code != 200:
             return url, None
         return url, r.text
-    except Exception:
+    except:
         return url, None
 
 
+# -----------------------
+# PARSER
+# -----------------------
 def parse_page(year, url, html):
     soup = BeautifulSoup(html, "html.parser")
 
     results = []
 
-    tables = soup.find_all("table")
-
-    for table in tables:
+    for table in soup.find_all("table"):
         rows = table.find_all("tr")
         if len(rows) < 10:
             continue
@@ -174,7 +210,7 @@ def parse_page(year, url, html):
                 continue
 
             row = [clean_text(c.get_text(" ", strip=True)) for c in cols]
-            row = [x for x in row if x is not None]
+            row = [x for x in row if x]
 
             if row:
                 parsed.append(row)
@@ -185,15 +221,11 @@ def parse_page(year, url, html):
         table_results = []
 
         for r in parsed[1:]:
-            if not r:
-                continue
-
-            pos = safe_int(r[0] if len(r) > 0 else None)
+            pos = safe_int(r[0])
             if pos is None:
                 continue
 
-            joined = " ".join([x for x in r if x is not None])
-            drivers = split_drivers(joined)
+            drivers = extract_drivers(r)
 
             table_results.append({
                 "finish_pos": pos,
@@ -231,6 +263,9 @@ def parse_page(year, url, html):
     }
 
 
+# -----------------------
+# RUN
+# -----------------------
 index = []
 
 for year in range(START_YEAR, END_YEAR + 1):
@@ -242,21 +277,17 @@ for year in range(START_YEAR, END_YEAR + 1):
         print("  failed")
         continue
 
-    try:
-        data = parse_page(year, url, html)
+    data = parse_page(year, url, html)
 
-        with open(SEASONS_DIR / f"{year}.json", "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+    with open(SEASONS_DIR / f"{year}.json", "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
-        index.append({
-            "year": year,
-            "file": f"/data/bathurst/seasons/{year}.json"
-        })
+    index.append({
+        "year": year,
+        "file": f"/data/bathurst/seasons/{year}.json"
+    })
 
-        print(f"  saved {data['result_count']} results")
-
-    except Exception as e:
-        print(f"  FAILED: {e}")
+    print(f"  saved {data['result_count']} results")
 
     time.sleep(0.3)
 
