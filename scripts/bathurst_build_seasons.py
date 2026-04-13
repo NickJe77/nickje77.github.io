@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST BUILDER (CLEAN DRIVERS FINAL)")
+print("BATHURST BUILDER (TABLE LOCKED - FINAL)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -35,34 +35,31 @@ def looks_like_driver(name):
     if not name:
         return False
 
-    # remove numbers / junk
     if re.search(r"\d", name):
         return False
 
     bad = [
         "team","racing","motorsport","engineering",
-        "top","shootout","grid","lap","km",
         "ford","holden","toyota","nissan","camaro","mustang"
     ]
+
     if any(b in name.lower() for b in bad):
         return False
 
     words = name.split()
-
-    # allow 2–3 word names (Anton de Pasquale etc)
-    return 2 <= len(words) <= 3
+    return 2 <= len(words) <= 4
 
 
 def extract_drivers(td):
     drivers = []
 
-    # 1. linked names (most reliable)
+    # linked names
     for a in td.find_all("a"):
         name = clean(a.get_text())
         if looks_like_driver(name):
             drivers.append(name)
 
-    # 2. fallback split
+    # fallback split
     text = clean(td.get_text(" ", strip=True)) or ""
     parts = re.split(r"/|,| and | & |\+|\n", text)
 
@@ -71,17 +68,11 @@ def extract_drivers(td):
         if looks_like_driver(p):
             drivers.append(p)
 
-    # 🔥 CLEAN + REMOVE COMBINED STRINGS
+    # dedupe
     final = []
     seen = set()
-
     for d in drivers:
         key = d.lower()
-
-        # remove long combined junk like "Will Brown Scott Pye"
-        if len(d.split()) > 3:
-            continue
-
         if key not in seen:
             seen.add(key)
             final.append(d)
@@ -112,6 +103,19 @@ def get_url(year):
     return None
 
 
+def find_results_table(soup):
+    # ONLY pick table with "Classified" or "Results"
+    for header in soup.find_all(["h2", "h3"]):
+        title = header.get_text().lower()
+
+        if "classification" in title or "results" in title:
+            table = header.find_next("table", class_="wikitable")
+            if table:
+                return table
+
+    return None
+
+
 def fetch_year(year):
     url = get_url(year)
 
@@ -124,54 +128,45 @@ def fetch_year(year):
     res = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(res.text, "html.parser")
 
+    table = find_results_table(soup)
+
+    if not table:
+        print(f"❌ No results table {year}")
+        return None
+
     results = []
 
-    for r in soup.find_all("tr"):
+    for r in table.find_all("tr"):
         tds = r.find_all("td")
 
-        if len(tds) < 3:
+        if len(tds) < 4:
             continue
 
         cols = [clean(td.get_text(" ", strip=True)) for td in tds]
 
+        # finish MUST be small number (not car number)
         try:
             finish = int(cols[0])
+            if finish > 60:  # avoids car numbers like 888, 100, etc
+                continue
         except:
             continue
 
-        best_drivers = []
-        driver_index = None
-
-        for i, td in enumerate(tds):
+        # drivers usually in column 2 or 3
+        drivers = []
+        for td in tds:
             d = extract_drivers(td)
+            if len(d) >= 1:
+                drivers = d
+                break
 
-            if len(d) > len(best_drivers):
-                best_drivers = d
-                driver_index = i
-
-        if not best_drivers:
+        if not drivers:
             continue
 
-        # keep ONLY first 2 drivers (Bathurst rule)
-        drivers = best_drivers[:2]
+        drivers = drivers[:2]
 
-        # 🔥 FIX CAR COLUMN
-        car = None
-        for j in range(driver_index + 1, len(cols)):
-            candidate = cols[j]
-            if not candidate:
-                continue
-
-            # reject if looks like driver text
-            if looks_like_driver(candidate):
-                continue
-
-            # reject if same as drivers joined
-            if candidate.lower() == " ".join(drivers).lower():
-                continue
-
-            car = candidate
-            break
+        # car/team = last column usually
+        car = cols[-1]
 
         results.append({
             "finish": finish,
@@ -183,24 +178,11 @@ def fetch_year(year):
         print(f"⚠️ No results {year}")
         return None
 
-    # dedupe by finish
-    by_finish = {}
-    for r in results:
-        f = r["finish"]
-
-        if f not in by_finish:
-            by_finish[f] = r
-            continue
-
-        if len(r["drivers"]) > len(by_finish[f]["drivers"]):
-            by_finish[f] = r
-
-    final_results = list(by_finish.values())
-    final_results.sort(key=lambda x: x["finish"])
+    results.sort(key=lambda x: x["finish"])
 
     return {
         "year": year,
-        "results": final_results
+        "results": results
     }
 
 
