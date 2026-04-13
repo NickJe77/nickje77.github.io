@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST BUILDER (ACTUAL FINAL)")
+print("BATHURST BUILDER (STABLE FINAL)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -57,7 +57,6 @@ def split_drivers(text):
     if "/" in text:
         return [clean(x) for x in re.split(r"\s*/\s*", text) if clean(x)]
 
-    # force split multiple names
     names = re.findall(r"[A-Z][A-Za-z'.-]+\s+[A-Z][A-Za-z'.-]+", text)
     if len(names) >= 2:
         return names
@@ -76,7 +75,7 @@ def fetch(url):
 
 
 # -----------------------
-# UNIQUECARS (1963–2002)
+# UNIQUECARS (1963–2002 SAFE)
 # -----------------------
 def scrape_uniquecars(year):
     url = f"https://www.uniquecarsandparts.com/bathurst_{year}.htm"
@@ -127,39 +126,10 @@ def scrape_uniquecars(year):
 
 
 # -----------------------
-# WIKIPEDIA (2003+ FINAL FIX)
+# WIKIPEDIA (ROBUST)
 # -----------------------
-WIKI_PAGE_MAP = {
-    2003: "2003_Bob_Jane_T-Marts_1000",
-    2004: "2004_Bob_Jane_T-Marts_1000",
-    2005: "2005_SUPERCHEAP_AUTO_Bathurst_1000",
-    2006: "2006_SUPERCHEAP_AUTO_Bathurst_1000",
-    2007: "2007_SUPERCHEAP_AUTO_Bathurst_1000",
-    2008: "2008_SUPERCHEAP_AUTO_Bathurst_1000",
-    2009: "2009_SUPERCHEAP_AUTO_Bathurst_1000",
-    2010: "2010_Supercheap_Auto_Bathurst_1000",
-    2011: "2011_Supercheap_Auto_Bathurst_1000",
-    2012: "2012_Supercheap_Auto_Bathurst_1000",
-    2013: "2013_Supercheap_Auto_Bathurst_1000",
-    2014: "2014_Supercheap_Auto_Bathurst_1000",
-    2015: "2015_Supercheap_Auto_Bathurst_1000",
-    2016: "2016_Supercheap_Auto_Bathurst_1000",
-    2017: "2017_Supercheap_Auto_Bathurst_1000",
-    2018: "2018_Supercheap_Auto_Bathurst_1000",
-    2019: "2019_Supercheap_Auto_Bathurst_1000",
-    2020: "2020_Supercheap_Auto_Bathurst_1000",
-    2021: "2021_Bathurst_1000",
-    2022: "2022_Bathurst_1000",
-    2023: "2023_Bathurst_1000",
-    2024: "2024_Bathurst_1000",
-    2025: "2025_Bathurst_1000",
-    2026: "2026_Bathurst_1000",
-}
-
-
 def scrape_wikipedia(year):
-    slug = WIKI_PAGE_MAP.get(year, f"{year}_Bathurst_1000")
-    url = WIKI_BASE + quote(slug)
+    url = WIKI_BASE + quote(f"{year}_Bathurst_1000")
 
     html = fetch(url)
     if not html:
@@ -171,13 +141,15 @@ def scrape_wikipedia(year):
 
     for table in soup.find_all("table"):
         rows = table.find_all("tr")
-
-        if len(rows) < 10:
+        if len(rows) < 8:
             continue
 
-        header = rows[0].get_text(" ").lower()
+        # flexible header detection
+        header = " ".join(
+            [r.get_text(" ").lower() for r in rows[:3]]
+        )
 
-        if "driver" not in header or ("pos" not in header and "position" not in header):
+        if "driver" not in header or "pos" not in header:
             continue
 
         results = []
@@ -193,18 +165,22 @@ def scrape_wikipedia(year):
 
             cell = tds[2]
 
-            # -------- DRIVER EXTRACTION (FINAL FIX) --------
-            drivers = []
+            # SAFE TEXT
+            raw_text = cell.get_text(" ") if cell else ""
+            text = clean(raw_text) or ""
 
-            # links
+            # driver links
+            drivers = []
             for a in cell.find_all("a"):
                 name = clean(a.get_text())
                 if name and " " in name:
                     drivers.append(name)
 
-            # raw text
-            text = clean(cell.get_text(" "))
-            text_names = re.findall(r"[A-Z][A-Za-z'.-]+\s+[A-Z][A-Za-z'.-]+", text)
+            # fallback regex
+            text_names = re.findall(
+                r"[A-Z][A-Za-z'.-]+\s+[A-Z][A-Za-z'.-]+",
+                text
+            ) if text else []
 
             combined = drivers + text_names
 
@@ -220,7 +196,6 @@ def scrape_wikipedia(year):
             if not final:
                 final = split_drivers(text)
 
-            # constructor
             constructor = None
             if len(tds) > 4:
                 constructor = clean(tds[4].get_text())
@@ -248,23 +223,32 @@ def scrape_wikipedia(year):
 
 
 # -----------------------
-# RUN
+# RUN (SAFE - DOES NOT OVERWRITE GOOD DATA)
 # -----------------------
 index = []
 
 for year in range(START_YEAR, END_YEAR + 1):
     print(f"\n=== {year} ===")
 
+    file_path = SEASONS_DIR / f"{year}.json"
+
     if year <= 2002:
         data = scrape_uniquecars(year)
     else:
         data = scrape_wikipedia(year)
 
+    # 🚨 DO NOT overwrite if scrape failed
     if not data:
-        print("  FAILED")
+        print("  FAILED — keeping existing file")
+        if file_path.exists():
+            index.append({
+                "year": year,
+                "file": f"/data/bathurst/seasons/{year}.json"
+            })
         continue
 
-    with open(SEASONS_DIR / f"{year}.json", "w", encoding="utf-8") as f:
+    # save safely
+    with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
     index.append({
@@ -276,7 +260,8 @@ for year in range(START_YEAR, END_YEAR + 1):
 
     time.sleep(0.3)
 
+# save index
 with open(INDEX_FILE, "w", encoding="utf-8") as f:
     json.dump(index, f, indent=2, ensure_ascii=False)
 
-print("\nDONE")
+print("\nDONE — SAFE BUILD COMPLETE")
