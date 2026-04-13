@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-print("BATHURST RAW BUILDER (FINAL LOCKED + STABLE)")
+print("BATHURST RAW BUILDER (FINAL LOCKED 63–65)")
 
 OUT = Path("docs/data/bathurst/raw/bathurst_full.csv")
 OUT.parent.mkdir(parents=True, exist_ok=True)
@@ -56,6 +56,19 @@ def locked_early_years(year):
             (8,"Midge Bosworth","Peter Williamson","Volkswagen 1200"),
             (9,"Phil West","Chris McSorley","Volkswagen 1200"),
             (10,"Lionel Ayers","Dennis Geary","Volkswagen 1200"),
+        ],
+
+        1965: [
+            (1,"Barry Seton","Midge Bosworth","Ford Cortina GT500"),
+            (2,"Bruce McPhee","Barry Mulholland","Ford Cortina GT500"),
+            (3,"Brian Foley","Peter Manton","Morris Cooper S"),
+            (4,"Lindsay Little","Stan Pomroy","Morris Cooper S"),
+            (5,"Jack Murray","Bill McLachlan","Ford Cortina GT500"),
+            (6,"Paddy Hopkirk","Timo Mäkinen","Morris Cooper S"),
+            (7,"Bill Stanley","Ralph Sach","Morris Cooper S"),
+            (8,"Ray Kaleda","Graham Moore","Morris Cooper S"),
+            (9,"Greg Cusack","Bob Holden","Ford Cortina GT500"),
+            (10,"Max Stewart","Bob Young","Triumph 2000"),
         ],
     }
 
