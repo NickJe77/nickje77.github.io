@@ -26,9 +26,6 @@ SESSION.headers.update(HEADERS)
 WIKI = "https://en.wikipedia.org/wiki/"
 
 
-# -----------------------
-# BASIC HELPERS
-# -----------------------
 def clean_text(v):
     if v is None:
         return None
@@ -61,21 +58,17 @@ def split_drivers(text):
         parts = re.split(r"\s*/\s*", text)
         return [clean_text(p) for p in parts if clean_text(p)]
 
-    # handle "Barry Ferguson Bill Ford"
     tokens = text.split()
     if len(tokens) == 4:
         return [f"{tokens[0]} {tokens[1]}", f"{tokens[2]} {tokens[3]}"]
 
     names = re.findall(r"[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+", text)
     if len(names) >= 2:
-        return names
+        return [clean_text(n) for n in names if clean_text(n)]
 
     return [text]
 
 
-# -----------------------
-# PAGE MAP
-# -----------------------
 PAGE_MAP = {
     1960: "1960_Armstrong_500",
     1961: "1961_Armstrong_500",
@@ -158,13 +151,10 @@ def fetch_page(year):
         if r.status_code != 200:
             return url, None
         return url, r.text
-    except:
+    except Exception:
         return url, None
 
 
-# -----------------------
-# TABLE PARSER
-# -----------------------
 def parse_page(year, url, html):
     soup = BeautifulSoup(html, "html.parser")
 
@@ -184,20 +174,28 @@ def parse_page(year, url, html):
                 continue
 
             row = [clean_text(c.get_text(" ", strip=True)) for c in cols]
+            row = [x for x in row if x is not None]
+
             if row:
                 parsed.append(row)
 
         if len(parsed) < 10:
             continue
 
+        table_results = []
+
         for r in parsed[1:]:
-            pos = safe_int(r[0])
+            if not r:
+                continue
+
+            pos = safe_int(r[0] if len(r) > 0 else None)
             if pos is None:
                 continue
 
-            drivers = split_drivers(" ".join(r))
+            joined = " ".join([x for x in r if x is not None])
+            drivers = split_drivers(joined)
 
-            results.append({
+            table_results.append({
                 "finish_pos": pos,
                 "car_no": r[1] if len(r) > 1 else None,
                 "drivers": drivers,
@@ -209,8 +207,8 @@ def parse_page(year, url, html):
                 "status": None
             })
 
-        if len(results) > 20:
-            break
+        if len(table_results) > len(results):
+            results = table_results
 
     winner = []
     for r in results:
@@ -233,9 +231,6 @@ def parse_page(year, url, html):
     }
 
 
-# -----------------------
-# RUN
-# -----------------------
 index = []
 
 for year in range(START_YEAR, END_YEAR + 1):
@@ -247,21 +242,25 @@ for year in range(START_YEAR, END_YEAR + 1):
         print("  failed")
         continue
 
-    data = parse_page(year, url, html)
+    try:
+        data = parse_page(year, url, html)
 
-    with open(SEASONS_DIR / f"{year}.json", "w") as f:
-        json.dump(data, f, indent=2)
+        with open(SEASONS_DIR / f"{year}.json", "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
 
-    index.append({
-        "year": year,
-        "file": f"/data/bathurst/seasons/{year}.json"
-    })
+        index.append({
+            "year": year,
+            "file": f"/data/bathurst/seasons/{year}.json"
+        })
 
-    print(f"  saved {data['result_count']} results")
+        print(f"  saved {data['result_count']} results")
+
+    except Exception as e:
+        print(f"  FAILED: {e}")
 
     time.sleep(0.3)
 
-with open(INDEX_FILE, "w") as f:
-    json.dump(index, f, indent=2)
+with open(INDEX_FILE, "w", encoding="utf-8") as f:
+    json.dump(index, f, indent=2, ensure_ascii=False)
 
 print("\nDONE")
