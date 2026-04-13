@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST BUILDER (STABLE FINAL)")
+print("BATHURST BUILDER (FINAL FIXED DRIVERS)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -51,14 +51,19 @@ def split_drivers(text):
         return []
 
     text = re.sub(r"\(.*?\)", "", text)
-    text = text.replace(" and ", " / ")
+
+    text = text.replace(" and ", "/")
     text = text.replace("&", "/")
+    text = text.replace(",", "/")
 
-    if "/" in text:
-        return [clean(x) for x in re.split(r"\s*/\s*", text) if clean(x)]
+    parts = [clean(x) for x in re.split(r"\s*/\s*", text) if clean(x)]
 
+    if len(parts) >= 2:
+        return parts
+
+    # fallback regex
     names = re.findall(r"[A-Z][A-Za-z'.-]+\s+[A-Z][A-Za-z'.-]+", text)
-    if len(names) >= 2:
+    if names:
         return names
 
     return [text]
@@ -75,7 +80,7 @@ def fetch(url):
 
 
 # -----------------------
-# UNIQUECARS (1963–2002 SAFE)
+# UNIQUECARS (1963–2002)
 # -----------------------
 def scrape_uniquecars(year):
     url = f"https://www.uniquecarsandparts.com/bathurst_{year}.htm"
@@ -126,7 +131,7 @@ def scrape_uniquecars(year):
 
 
 # -----------------------
-# WIKIPEDIA (ROBUST)
+# WIKIPEDIA (FIXED DRIVER EXTRACTION)
 # -----------------------
 def scrape_wikipedia(year):
     url = WIKI_BASE + quote(f"{year}_Bathurst_1000")
@@ -144,10 +149,7 @@ def scrape_wikipedia(year):
         if len(rows) < 8:
             continue
 
-        # flexible header detection
-        header = " ".join(
-            [r.get_text(" ").lower() for r in rows[:3]]
-        )
+        header = " ".join([r.get_text(" ").lower() for r in rows[:3]])
 
         if "driver" not in header or "pos" not in header:
             continue
@@ -165,36 +167,11 @@ def scrape_wikipedia(year):
 
             cell = tds[2]
 
-            # SAFE TEXT
+            # 🔥 THIS IS THE FIX
             raw_text = cell.get_text(" ") if cell else ""
             text = clean(raw_text) or ""
 
-            # driver links
-            drivers = []
-            for a in cell.find_all("a"):
-                name = clean(a.get_text())
-                if name and " " in name:
-                    drivers.append(name)
-
-            # fallback regex
-            text_names = re.findall(
-                r"[A-Z][A-Za-z'.-]+\s+[A-Z][A-Za-z'.-]+",
-                text
-            ) if text else []
-
-            combined = drivers + text_names
-
-            # dedupe
-            final = []
-            seen = set()
-            for name in combined:
-                key = name.lower()
-                if key not in seen:
-                    final.append(name)
-                    seen.add(key)
-
-            if not final:
-                final = split_drivers(text)
+            drivers = split_drivers(text)
 
             constructor = None
             if len(tds) > 4:
@@ -202,7 +179,7 @@ def scrape_wikipedia(year):
 
             results.append({
                 "finish_pos": pos,
-                "drivers": final,
+                "drivers": drivers,
                 "constructor": constructor
             })
 
@@ -223,7 +200,7 @@ def scrape_wikipedia(year):
 
 
 # -----------------------
-# RUN (SAFE - DOES NOT OVERWRITE GOOD DATA)
+# RUN (SAFE)
 # -----------------------
 index = []
 
@@ -237,9 +214,8 @@ for year in range(START_YEAR, END_YEAR + 1):
     else:
         data = scrape_wikipedia(year)
 
-    # 🚨 DO NOT overwrite if scrape failed
     if not data:
-        print("  FAILED — keeping existing file")
+        print("  FAILED — keeping existing")
         if file_path.exists():
             index.append({
                 "year": year,
@@ -247,7 +223,6 @@ for year in range(START_YEAR, END_YEAR + 1):
             })
         continue
 
-    # save safely
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
@@ -260,8 +235,7 @@ for year in range(START_YEAR, END_YEAR + 1):
 
     time.sleep(0.3)
 
-# save index
 with open(INDEX_FILE, "w", encoding="utf-8") as f:
     json.dump(index, f, indent=2, ensure_ascii=False)
 
-print("\nDONE — SAFE BUILD COMPLETE")
+print("\nDONE")
