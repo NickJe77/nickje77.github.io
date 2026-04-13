@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST BUILDER (FINAL WORKING VERSION)")
+print("BATHURST BUILDER (FINAL – LINK DRIVER FIX)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -54,12 +54,10 @@ def split_drivers(text):
     text = text.replace(" and ", " / ")
     text = text.replace("&", "/")
 
-    # normal split
     if "/" in text:
         parts = re.split(r"\s*/\s*", text)
         return [clean(p) for p in parts if clean(p)]
 
-    # 🔥 FIX: split multiple full names in one string
     names = re.findall(r"[A-Z][A-Za-z'.-]+\s+[A-Z][A-Za-z'.-]+", text)
     if len(names) >= 2:
         return names
@@ -129,7 +127,7 @@ def scrape_uniquecars(year):
 
 
 # -----------------------
-# WIKIPEDIA (2003+ FIXED)
+# WIKIPEDIA (2003+ – FIXED)
 # -----------------------
 WIKI_PAGE_MAP = {
     2003: "2003_Bob_Jane_T-Marts_1000",
@@ -177,52 +175,38 @@ def scrape_wikipedia(year):
         if len(rows) < 10:
             continue
 
-        parsed = []
-        for tr in rows:
-            cols = tr.find_all(["td", "th"])
-            row = [clean(c.get_text(" ", strip=True)) for c in cols]
-            row = [x for x in row if x]
-            if row:
-                parsed.append(row)
+        header_text = " ".join(rows[0].get_text().lower())
 
-        if len(parsed) < 10:
+        if "driver" not in header_text:
             continue
-
-        header = " ".join(parsed[0]).lower()
-
-        # STRICT FILTER
-        if "driver" not in header:
-            continue
-        if "pos" not in header and "position" not in header:
-            continue
-        if "lap" not in header and "time" not in header:
+        if "pos" not in header_text and "position" not in header_text:
             continue
 
         results = []
 
-        for r in parsed[1:]:
-            if len(r) < 3:
+        for tr in rows[1:]:
+            tds = tr.find_all("td")
+            if len(tds) < 3:
                 continue
 
-            pos = safe_int(r[0])
-            if pos is None or pos > 100:
+            pos = safe_int(tds[0].get_text())
+            if pos is None:
                 continue
 
-            drivers = split_drivers(r[2])
+            # 🔥 KEY FIX: extract drivers from links
+            drivers = []
+            for a in tds[2].find_all("a"):
+                name = clean(a.get_text())
+                if name and " " in name:
+                    drivers.append(name)
 
+            # fallback if no links
             if not drivers:
-                continue
-
-            d = " ".join(drivers).lower()
-            if any(x in d for x in ["km", "pts", "team"]):
-                continue
+                drivers = split_drivers(tds[2].get_text())
 
             constructor = None
-            if len(r) > 4:
-                constructor = r[4]
-
-                if constructor and re.match(r"\d+[:.]\d+", constructor):
-                    constructor = None
+            if len(tds) > 4:
+                constructor = clean(tds[4].get_text())
 
             results.append({
                 "finish_pos": pos,
