@@ -5,8 +5,9 @@ from pathlib import Path
 
 import pandas as pd
 import requests
+from bs4 import BeautifulSoup
 
-print("BATHURST BUILDER (PATCHED VERSION)")
+print("BATHURST BUILDER (PATCHED + WINNER FIX)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -33,36 +34,6 @@ def clean(x):
 def norm_key(x):
     x = clean(x) or ""
     return re.sub(r"[^a-z0-9]+", "", x.lower())
-
-
-def flatten_columns(df):
-    cols = []
-    for c in df.columns:
-        if isinstance(c, tuple):
-            parts = [clean(p) for p in c if clean(p)]
-            cols.append(" ".join(parts) if parts else "")
-        else:
-            cols.append(clean(c) or "")
-    df = df.copy()
-    df.columns = cols
-    return df
-
-
-def normalize_col_name(name):
-    n = (clean(name) or "").lower()
-
-    if any(x in n for x in ["pos", "position", "finish"]):
-        return "finish"
-    if "driver" in n:
-        return "drivers"
-    if "team" in n or "entrant" in n:
-        return "team"
-    if "vehicle" in n or "model" in n or "car" in n:
-        return "vehicle"
-    if n in {"no", "number"}:
-        return "car_no"
-
-    return None
 
 
 def split_driver_text(text):
@@ -117,20 +88,23 @@ def read_tables(url):
     except:
         return []
 
-    fixed = []
-    for df in tables:
-        df = flatten_columns(df)
-        fixed.append(df)
-
-    return fixed
+    return tables
 
 
 def map_columns(df):
     out = {}
     for c in df.columns:
-        k = normalize_col_name(c)
-        if k and k not in out:
-            out[k] = c
+        name = str(c).lower()
+
+        if "pos" in name or "position" in name:
+            out["finish"] = c
+        elif "driver" in name:
+            out["drivers"] = c
+        elif "team" in name or "entrant" in name:
+            out["team"] = c
+        elif "no" in name or "number" in name:
+            out["car_no"] = c
+
     return out
 
 
@@ -143,13 +117,13 @@ def parse_entrants_map(df):
         return by_car_no, by_team, by_driver
 
     colmap = map_columns(df)
+
     drivers_col = colmap.get("drivers")
+    team_col = colmap.get("team")
+    car_no_col = colmap.get("car_no")
 
     if not drivers_col:
         return by_car_no, by_team, by_driver
-
-    team_col = colmap.get("team")
-    car_no_col = colmap.get("car_no")
 
     for _, row in df.iterrows():
         drivers = split_driver_text(row.get(drivers_col))
@@ -182,20 +156,20 @@ def parse_results(df, entrants_by_car_no, entrants_by_team, entrants_by_driver):
         return results
 
     colmap = map_columns(df)
+
     finish_col = colmap.get("finish")
     drivers_col = colmap.get("drivers")
+    team_col = colmap.get("team")
+    car_no_col = colmap.get("car_no")
 
     if not finish_col or not drivers_col:
         return results
 
-    team_col = colmap.get("team")
-    car_no_col = colmap.get("car_no")
-
     for _, row in df.iterrows():
 
-        # 🔥 FIX 1 — fallback for missing finish
         finish_raw = clean(row.get(finish_col))
 
+        # 🔥 FIX: fallback if missing
         if not finish_raw:
             for val in row:
                 v = clean(val)
@@ -212,7 +186,7 @@ def parse_results(df, entrants_by_car_no, entrants_by_team, entrants_by_driver):
         team = clean(row.get(team_col)) if team_col else None
         car_no = clean(row.get(car_no_col)) if car_no_col else None
 
-        # 🔥 FIX 2 — improved backfill
+        # 🔥 FIX: co-driver backfill
         if len(drivers) < 2:
             entry = None
 
@@ -231,7 +205,7 @@ def parse_results(df, entrants_by_car_no, entrants_by_team, entrants_by_driver):
 
                 for d in entry.get("drivers", []) + drivers:
                     k = norm_key(d)
-                    if k and k not in seen:
+                    if k not in seen:
                         seen.add(k)
                         merged.append(d)
 
@@ -250,6 +224,32 @@ def parse_results(df, entrants_by_car_no, entrants_by_team, entrants_by_driver):
     return results
 
 
+# 🔥 NEW: winner fallback
+def extract_winner_from_html(soup):
+    for table in soup.find_all("table", class_="wikitable"):
+        for row in table.find_all("tr"):
+            ths = row.find_all("th")
+            tds = row.find_all("td")
+
+            if not ths or not tds:
+                continue
+
+            pos = clean(ths[0].get_text())
+
+            if pos == "1":
+                drivers = split_driver_text(tds[0].get_text(" ", strip=True))
+                team = clean(tds[-1].get_text(" ", strip=True))
+
+                if drivers:
+                    return {
+                        "finish": 1,
+                        "drivers": drivers[:2],
+                        "car": team
+                    }
+
+    return None
+
+
 def fetch_year(year):
     url = get_url(year)
 
@@ -261,6 +261,9 @@ def fetch_year(year):
 
     tables = read_tables(url)
 
+    res = requests.get(url, headers=HEADERS)
+    soup = BeautifulSoup(res.text, "html.parser")
+
     if not tables:
         return None
 
@@ -269,6 +272,14 @@ def fetch_year(year):
 
     entrants_by_car_no, entrants_by_team, entrants_by_driver = parse_entrants_map(entrants_df)
     results = parse_results(results_df, entrants_by_car_no, entrants_by_team, entrants_by_driver)
+
+    # 🔥 FIX: ensure winner exists
+    if not any(r["finish"] == 1 for r in results):
+        winner = extract_winner_from_html(soup)
+        if winner:
+            results.append(winner)
+
+    results.sort(key=lambda x: x["finish"])
 
     if not results:
         print(f"⚠️ No results {year}")
