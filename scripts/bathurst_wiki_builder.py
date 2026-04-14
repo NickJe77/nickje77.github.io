@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST BUILDER (FINAL LOCKED VERSION)")
+print("BATHURST BUILDER (FINAL — CAPTION LOCK FIX)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -20,9 +20,7 @@ START_YEAR = 1963
 END_YEAR = min(datetime.utcnow().year, 2026)
 
 SESSION = requests.Session()
-SESSION.headers.update({
-    "User-Agent": "Mozilla/5.0"
-})
+SESSION.headers.update({"User-Agent": "Mozilla/5.0"})
 
 WIKI_BASE = "https://en.wikipedia.org/wiki/"
 
@@ -121,7 +119,7 @@ def scrape_uniquecars(year):
 
 
 # -----------------------
-# WIKIPEDIA (LOCKED TO RACE RESULTS)
+# WIKIPEDIA (REAL FIX)
 # -----------------------
 def scrape_wikipedia(year):
     url = WIKI_BASE + quote(f"{year}_Bathurst_1000")
@@ -132,27 +130,28 @@ def scrape_wikipedia(year):
 
     soup = BeautifulSoup(html, "html.parser")
 
-    # 🔥 FIND "Race results" SECTION
-    race_header = None
-    for h in soup.find_all(["h2", "h3"]):
-        if "race results" in h.get_text(" ").lower():
-            race_header = h
+    correct_table = None
+
+    # 🔥 STRICT: only tables with caption "Race results"
+    for table in soup.find_all("table"):
+        caption = table.find("caption")
+        if not caption:
+            continue
+
+        if "race results" in caption.get_text(" ").lower():
+            correct_table = table
             break
 
-    if not race_header:
+    if not correct_table:
         return None
 
-    # 🔥 FIRST TABLE AFTER HEADER
-    table = race_header.find_next("table")
-    if not table:
-        return None
-
-    rows = table.find_all("tr")
+    rows = correct_table.find_all("tr")
     if len(rows) < 5:
         return None
 
-    # 🔥 HEADER MAPPING
-    headers = [clean(th.get_text()) for th in rows[0].find_all("th")]
+    # header row
+    header_cells = rows[0].find_all("th")
+    headers = [clean(th.get_text()) for th in header_cells]
 
     pos_idx = None
     drivers_idx = None
@@ -184,7 +183,7 @@ def scrape_wikipedia(year):
 
         driver_cell = tds[drivers_idx]
 
-        # 🔥 EXTRACT ALL DRIVER NAMES
+        # ✅ Extract ALL drivers
         drivers = []
         for a in driver_cell.find_all("a"):
             name = clean(a.get_text())
@@ -223,7 +222,7 @@ def scrape_wikipedia(year):
 
 
 # -----------------------
-# RUN (SAFE)
+# RUN
 # -----------------------
 index = []
 
