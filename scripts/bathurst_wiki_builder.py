@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST WIKI BUILDER (2003+ ONLY, FIXED ROW PARSING)")
+print("BATHURST BUILDER (STABLE FINAL - NO CRASH)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -16,65 +16,29 @@ INDEX_FILE = BASE / "index.json"
 
 SEASONS_DIR.mkdir(parents=True, exist_ok=True)
 
-START_YEAR = 2003  # do not touch 2002 and earlier
+START_YEAR = 2003
 END_YEAR = min(datetime.utcnow().year, 2026)
 
 SESSION = requests.Session()
-SESSION.headers.update({
-    "User-Agent": "Mozilla/5.0"
-})
+SESSION.headers.update({"User-Agent": "Mozilla/5.0"})
 
-WIKI_PAGE_MAP = {
-    2003: "2003_Bob_Jane_T-Marts_1000",
-    2004: "2004_Bob_Jane_T-Marts_1000",
-    2005: "2005_Supercheap_Auto_1000",
-    2006: "2006_Supercheap_Auto_Bathurst_1000",
-    2007: "2007_Supercheap_Auto_Bathurst_1000",
-    2008: "2008_Supercheap_Auto_Bathurst_1000",
-    2009: "2009_Supercheap_Auto_Bathurst_1000",
-    2010: "2010_Supercheap_Auto_Bathurst_1000",
-    2011: "2011_Supercheap_Auto_Bathurst_1000",
-    2012: "2012_Supercheap_Auto_Bathurst_1000",
-    2013: "2013_Supercheap_Auto_Bathurst_1000",
-    2014: "2014_Supercheap_Auto_Bathurst_1000",
-    2015: "2015_Supercheap_Auto_Bathurst_1000",
-    2016: "2016_Supercheap_Auto_Bathurst_1000",
-    2017: "2017_Supercheap_Auto_Bathurst_1000",
-    2018: "2018_Supercheap_Auto_Bathurst_1000",
-    2019: "2019_Supercheap_Auto_Bathurst_1000",
-    2020: "2020_Supercheap_Auto_Bathurst_1000",
-    2021: "2021_Bathurst_1000",
-    2022: "2022_Bathurst_1000",
-    2023: "2023_Bathurst_1000",
-    2024: "2024_Bathurst_1000",
-    2025: "2025_Bathurst_1000",
-    2026: "2026_Bathurst_1000",
-}
-
-
-def clean(value):
-    if value is None:
+# -----------------------
+# HELPERS
+# -----------------------
+def clean(v):
+    if v is None:
         return None
-    value = str(value)
-    value = re.sub(r"\[[^\]]*\]", "", value)
-    value = value.replace("\xa0", " ")
-    value = re.sub(r"\s+", " ", value).strip()
-    return value if value else None
+    v = str(v)
+    v = re.sub(r"\[[^\]]*\]", "", v)
+    v = v.replace("\xa0", " ")
+    v = re.sub(r"\s+", " ", v).strip()
+    return v if v else None
 
 
-def norm_header(value):
-    value = clean(value) or ""
-    value = value.lower()
-    value = value.replace("/", " ")
-    value = re.sub(r"[^a-z0-9 ]+", " ", value)
-    value = re.sub(r"\s+", " ", value).strip()
-    return value
-
-
-def safe_int(value):
-    if value is None:
+def safe_int(v):
+    if v is None:
         return None
-    m = re.search(r"\d+", str(value))
+    m = re.search(r"\d+", str(v))
     return int(m.group()) if m else None
 
 
@@ -84,119 +48,67 @@ def fetch(url):
         if r.status_code != 200:
             return None
         return r.text
-    except Exception:
+    except:
         return None
 
 
-def slug_for_year(year):
-    return WIKI_PAGE_MAP.get(year, f"{year}_Bathurst_1000")
-
-
-def extract_driver_names(cell):
-    # Pull linked names only from the drivers cell.
-    names = []
-
-    for a in cell.find_all("a"):
-        text = clean(a.get_text(" ", strip=True))
-        if not text or " " not in text:
-            continue
-
-        # Skip obvious non-driver links
-        low = text.lower()
-        if any(bad in low for bad in [
-            "australia", "new zealand", "sweden", "denmark", "france",
-            "united kingdom", "holden", "ford", "commodore", "falcon",
-            "racing", "motorsport", "engineering", "team", "bathurst"
-        ]):
-            continue
-
-        names.append(text)
-
-    # De-dupe while keeping order
-    out = []
-    seen = set()
-    for n in names:
-        k = n.lower()
-        if k not in seen:
-            out.append(n)
-            seen.add(k)
-
-    if out:
-        return out
-
-    # Fallback: split visible text by line breaks/slashes
-    raw = cell.get_text("\n", strip=True)
-    raw = re.sub(r"\[[^\]]*\]", "", raw)
-    parts = re.split(r"[\n/]+", raw)
-
-    out = []
-    seen = set()
-    for part in parts:
-        part = clean(part)
-        if not part or " " not in part:
-            continue
-        k = part.lower()
-        if k not in seen:
-            out.append(part)
-            seen.add(k)
-
-    return out
-
-
+# -----------------------
+# FIND TABLE (SAFE)
+# -----------------------
 def find_results_table(soup):
-    """
-    Find the actual race results table.
-    We prefer a table whose header row contains:
-    Pos, No, Team, Driver(s), Car/Vehicle
-    """
-    best = None
-
     for table in soup.find_all("table"):
         rows = table.find_all("tr")
         if len(rows) < 3:
             continue
 
-        # look for the first row with enough header cells
-        header_row = None
         for tr in rows[:3]:
-            cells = tr.find_all(["th", "td"], recursive=False)
-            headers = [norm_header(c.get_text(" ", strip=True)) for c in cells]
-            text = " ".join(headers)
-            if "pos" in text and "driver" in text and ("car" in text or "vehicle" in text):
-                header_row = tr
-                break
+            cells = tr.find_all(["th", "td"])
+            headers = [clean(c.get_text()) for c in cells]
+            header_text = " ".join([h.lower() for h in headers if h])
 
-        if header_row is None:
-            continue
+            # relaxed match
+            if "pos" in header_text and "driver" in header_text:
+                return table, headers
 
-        header_cells = header_row.find_all(["th", "td"], recursive=False)
-        headers = [norm_header(c.get_text(" ", strip=True)) for c in header_cells]
-        header_text = " ".join(headers)
-
-        score = 0
-        for key in ["pos", "no", "team", "driver"]:
-            if key in header_text:
-                score += 1
-        if "car" in header_text or "vehicle" in header_text:
-            score += 1
-        if "laps" in header_text:
-            score += 1
-        if "time retired" in header_text or "time" in header_text:
-            score += 1
-
-        if best is None or score > best["score"]:
-            best = {
-                "table": table,
-                "headers": headers,
-                "score": score,
-            }
-
-    return best["table"], best["headers"] if best else (None, None)
+    return None, None
 
 
+# -----------------------
+# DRIVER EXTRACTION
+# -----------------------
+def extract_drivers(cell):
+    drivers = []
+
+    for a in cell.find_all("a"):
+        name = clean(a.get_text())
+        if name and " " in name:
+            drivers.append(name)
+
+    # fallback
+    if not drivers:
+        text = clean(cell.get_text(" ")) or ""
+        drivers = re.findall(
+            r"[A-Z][A-Za-z'.-]+\s+[A-Z][A-Za-z'.-]+",
+            text
+        )
+
+    # dedupe
+    seen = set()
+    out = []
+    for d in drivers:
+        k = d.lower()
+        if k not in seen:
+            out.append(d)
+            seen.add(k)
+
+    return out
+
+
+# -----------------------
+# SCRAPER
+# -----------------------
 def scrape_wikipedia(year):
-    slug = slug_for_year(year)
-    url = "https://en.wikipedia.org/wiki/" + quote(slug)
+    url = "https://en.wikipedia.org/wiki/" + quote(f"{year}_Bathurst_1000")
 
     html = fetch(url)
     if not html:
@@ -206,62 +118,67 @@ def scrape_wikipedia(year):
     soup = BeautifulSoup(html, "html.parser")
 
     table, headers = find_results_table(soup)
+
     if table is None:
-        print("  no results table found")
+        print("  no table found")
         return None
 
-    try:
-        pos_idx = next(i for i, h in enumerate(headers) if h == "pos" or h.startswith("pos "))
-        no_idx = next(i for i, h in enumerate(headers) if h == "no" or h.startswith("no "))
-        team_idx = next(i for i, h in enumerate(headers) if "team" in h)
-        drivers_idx = next(i for i, h in enumerate(headers) if "driver" in h)
-        car_idx = next(i for i, h in enumerate(headers) if "car" in h or "vehicle" in h)
-    except StopIteration:
-        print("  header mapping failed:", headers)
-        return None
-
-    results = []
     rows = table.find_all("tr")
 
+    headers = [clean(h) for h in headers]
+
+    # column indexes (safe)
+    try:
+        pos_idx = next(i for i, h in enumerate(headers) if h and "pos" in h.lower())
+        drivers_idx = next(i for i, h in enumerate(headers) if h and "driver" in h.lower())
+    except:
+        print("  header mapping failed")
+        return None
+
+    car_idx = next(
+        (i for i, h in enumerate(headers)
+         if h and ("car" in h.lower() or "vehicle" in h.lower())),
+        None
+    )
+
+    results = []
+
     started = False
+
     for tr in rows:
-        # IMPORTANT: read BOTH th and td so the Pos column doesn't disappear
-        cells = tr.find_all(["th", "td"], recursive=False)
+        cells = tr.find_all(["th", "td"])  # 🔥 FIX (IMPORTANT)
         if not cells:
             continue
 
-        cell_text = [norm_header(c.get_text(" ", strip=True)) for c in cells]
+        text = " ".join([clean(c.get_text()) or "" for c in cells]).lower()
 
-        # skip until we hit the real header row
+        # find header row start
         if not started:
-            row_text = " ".join(cell_text)
-            if "pos" in row_text and "driver" in row_text and ("car" in row_text or "vehicle" in row_text):
+            if "pos" in text and "driver" in text:
                 started = True
             continue
 
-        # data rows must have enough cells for the mapped indexes
-        if len(cells) <= max(pos_idx, no_idx, team_idx, drivers_idx, car_idx):
+        if len(cells) <= max(pos_idx, drivers_idx):
             continue
 
-        pos = safe_int(cells[pos_idx].get_text(" ", strip=True))
+        pos = safe_int(cells[pos_idx].get_text())
         if pos is None:
             continue
 
-        car_no = safe_int(cells[no_idx].get_text(" ", strip=True))
-        team = clean(cells[team_idx].get_text(" ", strip=True))
-        drivers = extract_driver_names(cells[drivers_idx])
-        constructor = clean(cells[car_idx].get_text(" ", strip=True))
+        drivers = extract_drivers(cells[drivers_idx])
+
+        constructor = None
+        if car_idx is not None and car_idx < len(cells):
+            constructor = clean(cells[car_idx].get_text())
 
         results.append({
             "finish_pos": pos,
-            "car_no": car_no,
-            "team": team,
             "drivers": drivers,
-            "constructor": constructor,
+            "constructor": constructor
         })
 
     if not results:
-        print("  no rows parsed")
+        print("  no results parsed")
         return None
 
     results.sort(key=lambda x: x["finish_pos"])
@@ -270,67 +187,45 @@ def scrape_wikipedia(year):
         "year": year,
         "results": results,
         "winner": results[0]["drivers"],
-        "source": url,
+        "source": url
     }
 
 
 # -----------------------
-# RUN (2003+ ONLY, SAFE)
+# RUN
 # -----------------------
-existing_index = []
-if INDEX_FILE.exists():
-    try:
-        existing_index = json.loads(INDEX_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        existing_index = []
-
-index_map = {}
-for item in existing_index:
-    try:
-        y = int(item.get("year"))
-        index_map[y] = item
-    except Exception:
-        pass
+index = []
 
 for year in range(START_YEAR, END_YEAR + 1):
     print(f"\n=== {year} ===")
+
     file_path = SEASONS_DIR / f"{year}.json"
 
     data = scrape_wikipedia(year)
 
-    # Do not overwrite if a scrape fails
     if not data:
         print("  skipped (kept existing)")
         if file_path.exists():
-            index_map[year] = {
+            index.append({
                 "year": year,
                 "file": f"/data/bathurst/seasons/{year}.json"
-            }
+            })
         continue
 
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-    index_map[year] = {
+    index.append({
         "year": year,
         "file": f"/data/bathurst/seasons/{year}.json"
-    }
+    })
 
     print(f"  saved {len(data['results'])} results")
+
     time.sleep(0.2)
 
-# Preserve pre-2003 entries in index
-for item in existing_index:
-    try:
-        y = int(item.get("year"))
-        if y < 2003 and y not in index_map:
-            index_map[y] = item
-    except Exception:
-        pass
-
-final_index = [index_map[y] for y in sorted(index_map)]
 
 with open(INDEX_FILE, "w", encoding="utf-8") as f:
-    json.dump(final_index, f, indent=2, ensure_ascii=False)
+    json.dump(index, f, indent=2, ensure_ascii=False)
 
 print("\nDONE")
