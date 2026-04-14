@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST BUILDER (FINAL — CAPTION LOCK FIX)")
+print("BATHURST BUILDER (HEADER-LOCKED FIX)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -25,9 +25,6 @@ SESSION.headers.update({"User-Agent": "Mozilla/5.0"})
 WIKI_BASE = "https://en.wikipedia.org/wiki/"
 
 
-# -----------------------
-# HELPERS
-# -----------------------
 def clean(v):
     if v is None:
         return None
@@ -130,28 +127,27 @@ def scrape_wikipedia(year):
 
     soup = BeautifulSoup(html, "html.parser")
 
-    correct_table = None
-
-    # 🔥 STRICT: only tables with caption "Race results"
-    for table in soup.find_all("table"):
-        caption = table.find("caption")
-        if not caption:
-            continue
-
-        if "race results" in caption.get_text(" ").lower():
-            correct_table = table
+    # 🔥 STEP 1: FIND "Race results" HEADER
+    header = None
+    for h in soup.find_all(["h2", "h3"]):
+        if "race results" in h.get_text(" ").lower():
+            header = h
             break
 
-    if not correct_table:
+    if not header:
         return None
 
-    rows = correct_table.find_all("tr")
+    # 🔥 STEP 2: GET FIRST TABLE AFTER HEADER
+    table = header.find_next("table")
+    if not table:
+        return None
+
+    rows = table.find_all("tr")
     if len(rows) < 5:
         return None
 
-    # header row
-    header_cells = rows[0].find_all("th")
-    headers = [clean(th.get_text()) for th in header_cells]
+    # 🔥 STEP 3: FIND COLUMN INDEXES
+    headers = [clean(th.get_text()) for th in rows[0].find_all("th")]
 
     pos_idx = None
     drivers_idx = None
@@ -172,6 +168,7 @@ def scrape_wikipedia(year):
 
     results = []
 
+    # 🔥 STEP 4: READ ROWS
     for tr in rows[1:]:
         tds = tr.find_all("td")
         if len(tds) <= max(pos_idx, drivers_idx):
@@ -183,14 +180,13 @@ def scrape_wikipedia(year):
 
         driver_cell = tds[drivers_idx]
 
-        # ✅ Extract ALL drivers
+        # 🔥 THIS IS THE KEY FIX
         drivers = []
         for a in driver_cell.find_all("a"):
             name = clean(a.get_text())
             if name and " " in name:
                 drivers.append(name)
 
-        # fallback
         if not drivers:
             text = clean(driver_cell.get_text(" ")) or ""
             drivers = re.findall(
