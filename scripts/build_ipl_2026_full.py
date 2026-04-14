@@ -11,7 +11,25 @@ URL = "https://cricsheet.org/downloads/ipl_json.zip"
 OUTPUT = Path("docs/data/ipl/ipl_2026_FULL.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
-r = requests.get(URL)
+print("Downloading IPL data...")
+
+headers = {
+    "User-Agent": "Mozilla/5.0"
+}
+
+r = requests.get(URL, headers=headers)
+
+# 🔥 STOP if bad response
+if r.status_code != 200:
+    print("❌ Download failed:", r.status_code)
+    exit()
+
+# 🔥 STOP if not actually a zip
+if "zip" not in r.headers.get("Content-Type", ""):
+    print("❌ Not a zip file returned")
+    print(r.text[:300])  # show what came back
+    exit()
+
 z = zipfile.ZipFile(io.BytesIO(r.content))
 
 matches_2026 = []
@@ -25,7 +43,7 @@ for file in z.namelist():
     season = str(data.get("info", {}).get("season"))
 
     if season == "2026":
-        data["file"] = file   # 🔥 IMPORTANT (matches your 2025 format)
+        data["file"] = file
         matches_2026.append(data)
 
 print("Matches found:", len(matches_2026))
