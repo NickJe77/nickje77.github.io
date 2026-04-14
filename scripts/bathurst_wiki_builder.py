@@ -8,22 +8,21 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST WIKI BUILDER (2003+ ONLY)")
+print("BATHURST CSV BUILDER (SAFE EARLY YEARS)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
-INDEX_FILE = BASE / "index.json"
+CSV_FILE = BASE / "bathurst_export.csv"
 
 SEASONS_DIR.mkdir(parents=True, exist_ok=True)
 
-START_YEAR = 2003
-END_YEAR = min(datetime.utcnow().year, 2026)
+START_YEAR = 1963
+END_YEAR = datetime.utcnow().year
 
 SESSION = requests.Session()
-SESSION.headers.update({
-    "User-Agent": "Mozilla/5.0"
-})
+SESSION.headers.update({"User-Agent": "Mozilla/5.0"})
 
+# ONLY NEEDED FOR 2003+
 WIKI_PAGE_MAP = {
     2003: "2003_Bob_Jane_T-Marts_1000",
     2004: "2004_Bob_Jane_T-Marts_1000",
@@ -51,224 +50,74 @@ WIKI_PAGE_MAP = {
     2026: "2026_Bathurst_1000",
 }
 
+def clean(x):
+    if not x:
+        return ""
+    x = str(x)
+    x = re.sub(r"\[[^\]]*\]", "", x)
+    x = x.replace("\xa0", " ")
+    x = re.sub(r"\s+", " ", x).strip()
+    return x
 
-def clean(value):
-    if value is None:
-        return None
-    value = str(value)
-    value = re.sub(r"\[[^\]]*\]", "", value)
-    value = value.replace("\xa0", " ")
-    value = re.sub(r"\s+", " ", value).strip()
-    return value if value else None
-
-
-def norm_header(value):
-    value = clean(value) or ""
-    value = value.lower()
-    value = value.replace("/", " ")
-    value = re.sub(r"[^a-z0-9 ]+", " ", value)
-    value = re.sub(r"\s+", " ", value).strip()
-    return value
-
-
-def safe_int(value):
-    if value is None:
-        return None
-    m = re.search(r"\d+", str(value))
-    return int(m.group()) if m else None
-
+def safe_int(x):
+    if not x:
+        return ""
+    m = re.search(r"\d+", str(x))
+    return m.group() if m else ""
 
 def fetch(url):
     try:
-        response = SESSION.get(url, timeout=30)
-        if response.status_code != 200:
+        r = SESSION.get(url, timeout=30)
+        if r.status_code != 200:
             return None
-        return response.text
-    except Exception:
+        return r.text
+    except:
         return None
 
-
-def wiki_slug(year):
-    return WIKI_PAGE_MAP.get(year, f"{year}_Bathurst_1000")
-
-
-def looks_like_person(text):
-    """
-    Keep likely personal names, reject team/sponsor/car strings.
-    """
-    text = clean(text)
-    if not text:
-        return False
-
-    low = text.lower()
-
-    banned_bits = [
-        "racing", "motorsport", "engineering", "performance", "team",
-        "holden", "ford", "nissan", "commodore", "falcon", "mustang",
-        "camaro", "mercedes", "bmw", "audi", "porsche", "toyota",
-        "mobil", "castrol", "shell", "caltex", "repco", "red bull",
-        "penrite", "monster", "supercheap", "hsv", "walkinshaw",
-        "lap", "laps", "retired", "grid", "points"
-    ]
-    if any(bit in low for bit in banned_bits):
-        return False
-
-    words = text.split()
-    if len(words) < 2 or len(words) > 4:
-        return False
-
-    # Allow names like "Greg Murphy", "Steven Richards", "Jan Magnussen"
-    # but avoid all-caps acronyms and obvious junk.
-    capitalized = 0
-    for w in words:
-        if re.match(r"^[A-Z][A-Za-z'`.-]+$", w):
-            capitalized += 1
-
-    return capitalized >= 2
-
-
-def extract_drivers_from_cell(cell):
-    """
-    Pull only the first two real person-like lines from the Drivers cell.
-    This avoids dragging in team, sponsor, car, or adjacent-row junk.
-    """
-    pieces = []
-
-    # get text as separate lines from <br> / nested tags
-    for s in cell.stripped_strings:
-        t = clean(s)
-        if t:
-            pieces.append(t)
-
-    # also split any joined text fragments just in case
-    expanded = []
-    for piece in pieces:
-        for part in re.split(r"\n|/|,| & | and ", piece):
-            part = clean(part)
-            if part:
-                expanded.append(part)
+def extract_drivers(cell):
+    text = cell.get_text("\n", strip=True)
+    parts = re.split(r"\n|/|,| & | and ", text)
 
     drivers = []
-    seen = set()
-
-    for part in expanded:
-        if not looks_like_person(part):
+    for p in parts:
+        p = clean(p)
+        if not p:
             continue
-        key = part.lower()
-        if key in seen:
-            continue
-        drivers.append(part)
-        seen.add(key)
-        if len(drivers) == 2:
-            break
+        if len(p.split()) >= 2:
+            drivers.append(p)
 
-    return drivers
+    return drivers[:2]
 
+def scrape(year):
+    slug = WIKI_PAGE_MAP.get(year)
+    if not slug:
+        return None
 
-def find_results_table(soup):
-    """
-    Find the actual race results table by exact-style headers.
-    We score tables and take the best match.
-    """
-    best_table = None
-    best_headers = None
-    best_score = -1
-
-    for table in soup.find_all("table"):
-        rows = table.find_all("tr")
-        if len(rows) < 3:
-            continue
-
-        # look at first few rows for a header row
-        for tr in rows[:3]:
-            cells = tr.find_all(["th", "td"], recursive=False)
-            if len(cells) < 5:
-                continue
-
-            headers = [norm_header(c.get_text(" ", strip=True)) for c in cells]
-            joined = " ".join(headers)
-
-            score = 0
-            if "pos" in joined:
-                score += 2
-            if re.search(r"\bno\b", joined):
-                score += 2
-            if "team" in joined or "entrant" in joined:
-                score += 2
-            if "driver" in joined:
-                score += 3
-            if "car" in joined or "vehicle" in joined:
-                score += 3
-            if "laps" in joined:
-                score += 1
-            if "time retired" in joined or "time" in joined:
-                score += 1
-
-            # reject obvious non-results tables
-            if "driver" not in joined or ("car" not in joined and "vehicle" not in joined):
-                continue
-
-            if score > best_score:
-                best_score = score
-                best_table = table
-                best_headers = headers
-
-    return best_table, best_headers
-
-
-def scrape_wikipedia(year):
-    url = "https://en.wikipedia.org/wiki/" + quote(wiki_slug(year))
-
+    url = "https://en.wikipedia.org/wiki/" + quote(slug)
     html = fetch(url)
+
     if not html:
-        print("  fetch failed")
         return None
 
     soup = BeautifulSoup(html, "html.parser")
-
-    table, headers = find_results_table(soup)
-    if table is None or headers is None:
-        print("  no results table found")
+    table = soup.find("table", {"class": "wikitable"})
+    if not table:
         return None
 
-    try:
-        pos_idx = next(i for i, h in enumerate(headers) if h == "pos" or h.startswith("pos "))
-        drivers_idx = next(i for i, h in enumerate(headers) if "driver" in h)
-        car_idx = next(i for i, h in enumerate(headers) if "car" in h or "vehicle" in h)
-    except StopIteration:
-        print("  header mapping failed:", headers)
-        return None
-
-    results = []
     rows = table.find_all("tr")
+    results = []
 
-    started = False
-    for tr in rows:
-        # IMPORTANT: include th so the position column does not vanish
-        cells = tr.find_all(["th", "td"], recursive=False)
-        if not cells:
+    for tr in rows[1:]:
+        cells = tr.find_all(["td", "th"])
+        if len(cells) < 5:
             continue
 
-        row_headers = [norm_header(c.get_text(" ", strip=True)) for c in cells]
-        row_joined = " ".join(row_headers)
-
-        if not started:
-            if "pos" in row_joined and "driver" in row_joined and ("car" in row_joined or "vehicle" in row_joined):
-                started = True
+        pos = safe_int(cells[0].get_text())
+        if not pos:
             continue
 
-        if len(cells) <= max(pos_idx, drivers_idx, car_idx):
-            continue
-
-        pos = safe_int(cells[pos_idx].get_text(" ", strip=True))
-        if pos is None:
-            continue
-
-        driver_cell = cells[drivers_idx]
-        car_cell = cells[car_idx]
-
-        drivers = extract_drivers_from_cell(driver_cell)
-        constructor = clean(car_cell.get_text(" ", strip=True))
+        drivers = extract_drivers(cells[2])
+        constructor = clean(cells[3].get_text())
 
         results.append({
             "finish_pos": pos,
@@ -276,75 +125,60 @@ def scrape_wikipedia(year):
             "constructor": constructor
         })
 
-    if not results:
-        print("  no rows parsed")
-        return None
-
-    results.sort(key=lambda x: x["finish_pos"])
-
-    return {
-        "year": year,
-        "results": results,
-        "winner": results[0]["drivers"],
-        "source": url
-    }
-
-
-def load_existing_index():
-    if not INDEX_FILE.exists():
-        return []
-    try:
-        return json.loads(INDEX_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return []
-
-
-def build_index(existing_index):
-    index_map = {}
-
-    # preserve anything already in the index, especially pre-2003
-    for item in existing_index:
-        try:
-            y = int(item.get("year"))
-            index_map[y] = item
-        except Exception:
-            continue
-
-    for year in range(START_YEAR, END_YEAR + 1):
-        path = SEASONS_DIR / f"{year}.json"
-        if path.exists():
-            index_map[year] = {
-                "year": year,
-                "file": f"/data/bathurst/seasons/{year}.json"
-            }
-
-    return [index_map[y] for y in sorted(index_map)]
+    return results
 
 
 # -----------------------
-# RUN (2003+ ONLY)
+# BUILD CSV ONLY (NO RISK)
 # -----------------------
+
+rows = []
+
 for year in range(START_YEAR, END_YEAR + 1):
     print(f"\n=== {year} ===")
+
     file_path = SEASONS_DIR / f"{year}.json"
 
-    data = scrape_wikipedia(year)
+    # ✅ USE EXISTING DATA (EARLY YEARS SAFE)
+    if file_path.exists():
+        try:
+            data = json.loads(file_path.read_text(encoding="utf-8"))
+            results = data.get("results", [])
+            print("using existing")
+        except:
+            results = []
+    else:
+        # ONLY SCRAPE 2003+
+        if year >= 2003:
+            print("scraping")
+            results = scrape(year) or []
+        else:
+            results = []
 
-    # safe: do not overwrite on failure
-    if not data:
-        print("  skipped (kept existing)")
+    # ALWAYS OUTPUT ROW (NO GAPS)
+    if not results:
+        rows.append([year, "", "", "", ""])
         continue
 
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    for r in results:
+        d = r.get("drivers", [])
+        d1 = d[0] if len(d) > 0 else ""
+        d2 = d[1] if len(d) > 1 else ""
 
-    print(f"  saved {len(data['results'])} results")
+        rows.append([
+            year,
+            r.get("finish_pos", ""),
+            d1,
+            d2,
+            r.get("constructor", "")
+        ])
+
     time.sleep(0.2)
 
-existing_index = load_existing_index()
-final_index = build_index(existing_index)
+# WRITE CSV
+with open(CSV_FILE, "w", encoding="utf-8") as f:
+    f.write("year,position,driver_1,driver_2,constructor\n")
+    for r in rows:
+        f.write(",".join([str(x).replace(",", "") for x in r]) + "\n")
 
-with open(INDEX_FILE, "w", encoding="utf-8") as f:
-    json.dump(final_index, f, indent=2, ensure_ascii=False)
-
-print("\nDONE")
+print(f"\nCSV COMPLETE → {CSV_FILE}")
