@@ -8,12 +8,10 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST BUILDER (FINAL STABLE)")
+print("BATHURST BUILDER (ROWSPAN FIX FINAL)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
-INDEX_FILE = BASE / "index.json"
-
 SEASONS_DIR.mkdir(parents=True, exist_ok=True)
 
 START_YEAR = 2003
@@ -23,15 +21,11 @@ SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": "Mozilla/5.0"})
 
 
-# -----------------------
-# HELPERS
-# -----------------------
 def clean(v):
     if not v:
         return None
     v = str(v)
     v = re.sub(r"\[[^\]]*\]", "", v)
-    v = v.replace("\xa0", " ")
     v = re.sub(r"\s+", " ", v).strip()
     return v
 
@@ -54,189 +48,103 @@ def fetch(url):
 
 
 # -----------------------
-# DRIVER FILTER
+# FIND RESULTS TABLE
 # -----------------------
-def looks_like_driver(text):
-    if not text:
-        return False
-
-    text = clean(text)
-    if not text:
-        return False
-
-    words = text.split()
-    if len(words) < 2 or len(words) > 4:
-        return False
-
-    banned = [
-        "racing", "motorsport", "engineering", "team",
-        "holden", "ford", "nissan", "commodore", "falcon",
-        "mobil", "shell", "castrol", "caltex", "red bull",
-        "performance", "supercheap"
-    ]
-
-    low = text.lower()
-    if any(b in low for b in banned):
-        return False
-
-    return True
-
-
-# -----------------------
-# EXTRACT DRIVERS (FIXED)
-# -----------------------
-def extract_drivers(cell):
-    lines = []
-
-    # get clean line-separated text
-    for s in cell.stripped_strings:
-        s = clean(s)
-        if s:
-            lines.append(s)
-
-    drivers = []
-    seen = set()
-
-    for line in lines:
-        if not looks_like_driver(line):
-            continue
-
-        key = line.lower()
-        if key in seen:
-            continue
-
-        drivers.append(line)
-        seen.add(key)
-
-        if len(drivers) == 2:
-            break
-
-    return drivers
-
-
-# -----------------------
-# FIND RESULTS TABLE (ROBUST)
-# -----------------------
-def find_results_table(soup):
-    best_table = None
-    best_headers = None
-    best_score = 0
-
+def find_table(soup):
     for table in soup.find_all("table"):
-        rows = table.find_all("tr")
-        if len(rows) < 3:
-            continue
-
-        for tr in rows[:5]:
-            cells = tr.find_all(["th", "td"])
-            if len(cells) < 4:
-                continue
-
-            headers = [clean(c.get_text()) for c in cells if c]
-            header_text = " ".join([h.lower() for h in headers if h])
-
-            score = 0
-
-            if "pos" in header_text:
-                score += 2
-            if "driver" in header_text:
-                score += 3
-            if "car" in header_text or "vehicle" in header_text:
-                score += 2
-            if "team" in header_text or "entrant" in header_text:
-                score += 1
-            if "laps" in header_text:
-                score += 1
-
-            if "pos" not in header_text or "driver" not in header_text:
-                continue
-
-            if score > best_score:
-                best_score = score
-                best_table = table
-                best_headers = headers
-
-    return best_table, best_headers
+        text = table.get_text(" ").lower()
+        if "pos" in text and "driver" in text:
+            return table
+    return None
 
 
 # -----------------------
-# SCRAPER
+# EXTRACT DRIVER FROM CELL
+# -----------------------
+def extract_driver(cell):
+    text = cell.get_text(" ", strip=True)
+    text = clean(text)
+
+    if not text:
+        return None
+
+    # remove junk
+    if any(x in text.lower() for x in [
+        "racing", "team", "holden", "ford",
+        "commodore", "falcon"
+    ]):
+        return None
+
+    if len(text.split()) < 2:
+        return None
+
+    return text
+
+
+# -----------------------
+# SCRAPE YEAR
 # -----------------------
 def scrape_year(year):
     url = "https://en.wikipedia.org/wiki/" + quote(f"{year}_Bathurst_1000")
 
     html = fetch(url)
     if not html:
-        print("  fetch failed")
         return None
 
     soup = BeautifulSoup(html, "html.parser")
 
-    table, headers = find_results_table(soup)
-
+    table = find_table(soup)
     if not table:
-        print("  no table found")
+        print("  no table")
         return None
-
-    headers = [clean(h) for h in headers]
-
-    try:
-        pos_idx = next(i for i, h in enumerate(headers) if h and "pos" in h.lower())
-        drivers_idx = next(i for i, h in enumerate(headers) if h and "driver" in h.lower())
-    except:
-        print("  header mapping failed")
-        return None
-
-    car_idx = next(
-        (i for i, h in enumerate(headers)
-         if h and ("car" in h.lower() or "vehicle" in h.lower())),
-        None
-    )
 
     results = []
-    started = False
+    current = None
 
     for tr in table.find_all("tr"):
-        cells = tr.find_all(["th", "td"])
+        cells = tr.find_all(["td", "th"])
         if not cells:
             continue
 
-        row_text = " ".join([clean(c.get_text()) or "" for c in cells]).lower()
+        pos = safe_int(cells[0].get_text())
 
-        if not started:
-            if "pos" in row_text and "driver" in row_text:
-                started = True
-            continue
+        # NEW RESULT ROW
+        if pos:
+            # save previous
+            if current:
+                results.append(current)
 
-        if len(cells) <= max(pos_idx, drivers_idx):
-            continue
+            current = {
+                "finish_pos": pos,
+                "drivers": [],
+                "constructor": None
+            }
 
-        pos = safe_int(cells[pos_idx].get_text())
-        if pos is None:
-            continue
+            # driver
+            if len(cells) > 3:
+                d = extract_driver(cells[3])
+                if d:
+                    current["drivers"].append(d)
 
-        drivers = extract_drivers(cells[drivers_idx])
+            # constructor
+            if len(cells) > 4:
+                current["constructor"] = clean(cells[4].get_text())
 
-        constructor = None
-        if car_idx is not None and car_idx < len(cells):
-            constructor = clean(cells[car_idx].get_text())
+        else:
+            # CONTINUATION ROW (SECOND DRIVER)
+            if current and len(cells) > 3:
+                d = extract_driver(cells[3])
+                if d:
+                    current["drivers"].append(d)
 
-        results.append({
-            "finish_pos": pos,
-            "drivers": drivers,
-            "constructor": constructor
-        })
-
-    if not results:
-        print("  no results parsed")
-        return None
-
-    results.sort(key=lambda x: x["finish_pos"])
+    # add last
+    if current:
+        results.append(current)
 
     return {
         "year": year,
         "results": results,
-        "winner": results[0]["drivers"],
+        "winner": results[0]["drivers"] if results else [],
         "source": url
     }
 
@@ -247,18 +155,18 @@ def scrape_year(year):
 for year in range(START_YEAR, END_YEAR + 1):
     print(f"\n=== {year} ===")
 
-    path = SEASONS_DIR / f"{year}.json"
+    file_path = SEASONS_DIR / f"{year}.json"
 
     data = scrape_year(year)
 
     if not data:
-        print("  skipped")
+        print("FAILED")
         continue
 
-    with open(path, "w", encoding="utf-8") as f:
+    with open(file_path, "w") as f:
         json.dump(data, f, indent=2)
 
-    print(f"  saved {len(data['results'])} results")
+    print(f"saved {len(data['results'])}")
 
     time.sleep(0.2)
 
