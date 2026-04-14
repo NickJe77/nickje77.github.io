@@ -8,11 +8,10 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST BUILDER (WORKING VERSION - TEAM MAP)")
+print("BATHURST BUILDER (FIXED TEAM MAP)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
-
 SEASONS_DIR.mkdir(parents=True, exist_ok=True)
 
 START_YEAR = 2003
@@ -49,35 +48,57 @@ def fetch(url):
 
 
 # -----------------------
-# GET TEAM → DRIVERS MAP
+# TEAM → DRIVERS MAP (FIXED)
 # -----------------------
 def get_team_map(soup):
     team_map = {}
 
     for table in soup.find_all("table"):
-        text = table.get_text(" ").lower()
-
-        if "driver" not in text or "team" not in text:
+        rows = table.find_all("tr")
+        if len(rows) < 3:
             continue
 
-        rows = table.find_all("tr")
+        header = rows[0].get_text(" ").lower()
 
-        for tr in rows:
-            tds = tr.find_all("td")
-            if len(tds) < 4:
+        # must be teams table
+        if "driver" not in header or "team" not in header:
+            continue
+
+        for tr in rows[1:]:
+            cells = tr.find_all(["td", "th"])
+            if len(cells) < 2:
                 continue
 
-            car_no = safe_int(tds[0].get_text())
+            car_no = safe_int(cells[0].get_text())
             if not car_no:
                 continue
 
-            d1 = clean(tds[2].get_text())
-            d2 = clean(tds[3].get_text())
+            # 🔥 GET ALL DRIVER NAMES FROM ROW
+            names = []
 
+            for a in tr.find_all("a"):
+                name = clean(a.get_text())
+                if name and len(name.split()) >= 2:
+                    names.append(name)
+
+            # fallback if no <a>
+            if not names:
+                text = tr.get_text("\n")
+                parts = re.split(r"\n|/|,|&| and ", text)
+
+                for p in parts:
+                    p = clean(p)
+                    if p and len(p.split()) >= 2:
+                        names.append(p)
+
+            # dedupe
+            seen = set()
             drivers = []
-            for d in [d1, d2]:
-                if d and len(d.split()) >= 2:
-                    drivers.append(d)
+            for n in names:
+                k = n.lower()
+                if k not in seen:
+                    drivers.append(n)
+                    seen.add(k)
 
             if drivers:
                 team_map[car_no] = drivers
@@ -89,7 +110,7 @@ def get_team_map(soup):
 
 
 # -----------------------
-# GET RESULTS TABLE
+# RESULTS TABLE
 # -----------------------
 def get_results(soup, team_map):
     best = []
@@ -97,7 +118,7 @@ def get_results(soup, team_map):
     for table in soup.find_all("table"):
         rows = table.find_all("tr")
 
-        if len(rows) < 8:
+        if len(rows) < 5:
             continue
 
         header = rows[0].get_text(" ").lower()
@@ -108,21 +129,21 @@ def get_results(soup, team_map):
         results = []
 
         for tr in rows[1:]:
-            tds = tr.find_all("td")
-            if len(tds) < 3:
+            cells = tr.find_all(["td", "th"])
+            if len(cells) < 2:
                 continue
 
-            pos = safe_int(tds[0].get_text())
+            pos = safe_int(cells[0].get_text())
             if pos is None:
                 continue
 
-            car_no = safe_int(tds[1].get_text())
+            car_no = safe_int(cells[1].get_text())
 
             drivers = team_map.get(car_no, [])
 
             constructor = None
-            if len(tds) > 4:
-                constructor = clean(tds[4].get_text())
+            if len(cells) > 4:
+                constructor = clean(cells[4].get_text())
 
             results.append({
                 "finish_pos": pos,
@@ -149,6 +170,8 @@ def scrape_year(year):
     soup = BeautifulSoup(html, "html.parser")
 
     team_map = get_team_map(soup)
+
+    print(f"  team map entries: {len(team_map)}")
 
     results = get_results(soup, team_map)
 
