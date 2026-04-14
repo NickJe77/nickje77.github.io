@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST BUILDER (FINAL FIXED DRIVERS)")
+print("BATHURST BUILDER (FORCED CO-DRIVERS FIX)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -45,13 +45,13 @@ def safe_int(v):
     return int(m.group(1)) if m else None
 
 
-def split_drivers(text):
-    text = clean(text)
-    if not text:
-        return []
+def extract_names(text):
+    text = clean(text) or ""
 
+    # remove brackets
     text = re.sub(r"\(.*?\)", "", text)
 
+    # split separators
     text = text.replace(" and ", "/")
     text = text.replace("&", "/")
     text = text.replace(",", "/")
@@ -63,10 +63,11 @@ def split_drivers(text):
 
     # fallback regex
     names = re.findall(r"[A-Z][A-Za-z'.-]+\s+[A-Z][A-Za-z'.-]+", text)
+
     if names:
         return names
 
-    return [text]
+    return []
 
 
 def fetch(url):
@@ -108,9 +109,11 @@ def scrape_uniquecars(year):
             if pos is None:
                 continue
 
+            drivers = extract_names(cols[1])
+
             results.append({
                 "finish_pos": pos,
-                "drivers": split_drivers(cols[1]),
+                "drivers": drivers,
                 "constructor": cols[2]
             })
 
@@ -131,7 +134,7 @@ def scrape_uniquecars(year):
 
 
 # -----------------------
-# WIKIPEDIA (FIXED DRIVER EXTRACTION)
+# WIKIPEDIA (FORCED ROW SCAN)
 # -----------------------
 def scrape_wikipedia(year):
     url = WIKI_BASE + quote(f"{year}_Bathurst_1000")
@@ -151,7 +154,7 @@ def scrape_wikipedia(year):
 
         header = " ".join([r.get_text(" ").lower() for r in rows[:3]])
 
-        if "driver" not in header or "pos" not in header:
+        if "driver" not in header:
             continue
 
         results = []
@@ -165,13 +168,28 @@ def scrape_wikipedia(year):
             if pos is None:
                 continue
 
-            cell = tds[2]
+            # 🔥 KEY FIX: scan ENTIRE ROW for names
+            row_text = " ".join([td.get_text(" ") for td in tds])
+            names = extract_names(row_text)
 
-            # 🔥 THIS IS THE FIX
-            raw_text = cell.get_text(" ") if cell else ""
-            text = clean(raw_text) or ""
+            # remove junk (teams, brands etc)
+            cleaned = []
+            for n in names:
+                if len(n.split()) == 2:  # only real names
+                    cleaned.append(n)
 
-            drivers = split_drivers(text)
+            # force unique
+            final = []
+            seen = set()
+            for n in cleaned:
+                k = n.lower()
+                if k not in seen:
+                    final.append(n)
+                    seen.add(k)
+
+            # 🔥 CRITICAL: ensure at least 2 drivers
+            if len(final) > 2:
+                final = final[:2]
 
             constructor = None
             if len(tds) > 4:
@@ -179,7 +197,7 @@ def scrape_wikipedia(year):
 
             results.append({
                 "finish_pos": pos,
-                "drivers": drivers,
+                "drivers": final,
                 "constructor": constructor
             })
 
