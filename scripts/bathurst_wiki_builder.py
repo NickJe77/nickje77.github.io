@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST BUILDER (DUAL DRIVER FIX - FINAL)")
+print("BATHURST BUILDER (ROW SCAN FIX - FINAL)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -16,7 +16,7 @@ INDEX_FILE = BASE / "index.json"
 
 SEASONS_DIR.mkdir(parents=True, exist_ok=True)
 
-START_YEAR = 2003   # focus on wiki era first
+START_YEAR = 1963
 END_YEAR = min(datetime.utcnow().year, 2026)
 
 SESSION = requests.Session()
@@ -51,48 +51,97 @@ def fetch(url):
         return None
 
 
-# -----------------------
-# EXTRACT TEAM DRIVERS
-# -----------------------
-def get_team_drivers(soup):
-    drivers_map = {}
+def extract_drivers_from_row(row_text):
+    row_text = clean(row_text) or ""
+
+    # remove brackets
+    row_text = re.sub(r"\(.*?\)", "", row_text)
+
+    # find all name-like patterns
+    names = re.findall(r"[A-Z][A-Za-z'.-]+\s+[A-Z][A-Za-z'.-]+", row_text)
+
+    # remove obvious junk (teams etc)
+    filtered = []
+    for n in names:
+        if len(n.split()) == 2:
+            filtered.append(n)
+
+    # dedupe
+    final = []
+    seen = set()
+    for n in filtered:
+        k = n.lower()
+        if k not in seen:
+            final.append(n)
+            seen.add(k)
+
+    # 🔥 FORCE EXACTLY 2 DRIVERS
+    if len(final) >= 2:
+        return final[:2]
+
+    return final
+
+
+def scrape_uniquecars(year):
+    url = f"https://www.uniquecarsandparts.com/bathurst_{year}.htm"
+    html = fetch(url)
+    if not html:
+        return None
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    best = []
 
     for table in soup.find_all("table"):
-        text = table.get_text(" ").lower()
-
-        if "driver" not in text or "team" not in text:
-            continue
-
         rows = table.find_all("tr")
 
+        results = []
+
         for tr in rows:
-            tds = tr.find_all("td")
-            if len(tds) < 3:
+            cols = [clean(td.get_text()) for td in tr.find_all("td")]
+            cols = [x for x in cols if x]
+
+            if len(cols) < 3:
                 continue
 
-            car_no = safe_int(tds[0].get_text())
-            if not car_no:
+            pos = safe_int(cols[0])
+            if pos is None:
                 continue
 
-            d1 = clean(tds[1].get_text())
-            d2 = clean(tds[2].get_text())
+            drivers = extract_drivers_from_row(" ".join(cols))
 
-            drivers = [d for d in [d1, d2] if d]
+            results.append({
+                "finish_pos": pos,
+                "drivers": drivers,
+                "constructor": cols[2]
+            })
 
-            if drivers:
-                drivers_map[car_no] = drivers
+        if len(results) > len(best):
+            best = results
 
-        if drivers_map:
-            return drivers_map
+    if not best:
+        return None
 
-    return {}
+    best.sort(key=lambda x: x["finish_pos"])
+
+    return {
+        "year": year,
+        "results": best,
+        "winner": best[0]["drivers"],
+        "source": url
+    }
 
 
-# -----------------------
-# RESULTS TABLE
-# -----------------------
-def get_results(soup, drivers_map):
-    best = []
+def scrape_wikipedia(year):
+    url = WIKI_BASE + quote(f"{year}_Bathurst_1000")
+
+    html = fetch(url)
+    if not html:
+        return None
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    best_results = []
 
     for table in soup.find_all("table"):
         rows = table.find_all("tr")
@@ -100,7 +149,7 @@ def get_results(soup, drivers_map):
         if len(rows) < 8:
             continue
 
-        header = rows[0].get_text(" ").lower()
+        header = " ".join([r.get_text(" ").lower() for r in rows[:3]])
 
         if "pos" not in header:
             continue
@@ -116,9 +165,9 @@ def get_results(soup, drivers_map):
             if pos is None:
                 continue
 
-            car_no = safe_int(tds[1].get_text())
-
-            drivers = drivers_map.get(car_no, [])
+            # 🔥 SCAN ENTIRE ROW
+            row_text = " ".join(td.get_text(" ") for td in tds)
+            drivers = extract_drivers_from_row(row_text)
 
             constructor = None
             if len(tds) > 4:
@@ -130,44 +179,23 @@ def get_results(soup, drivers_map):
                 "constructor": constructor
             })
 
-        if len(results) > len(best):
-            best = results
+        if len(results) > len(best_results):
+            best_results = results
 
-    return best
-
-
-# -----------------------
-# MAIN SCRAPER
-# -----------------------
-def scrape_year(year):
-    url = WIKI_BASE + quote(f"{year}_Bathurst_1000")
-
-    html = fetch(url)
-    if not html:
+    if not best_results:
         return None
 
-    soup = BeautifulSoup(html, "html.parser")
-
-    drivers_map = get_team_drivers(soup)
-
-    results = get_results(soup, drivers_map)
-
-    if not results:
-        return None
-
-    results.sort(key=lambda x: x["finish_pos"])
+    best_results.sort(key=lambda x: x["finish_pos"])
 
     return {
         "year": year,
-        "results": results,
-        "winner": results[0]["drivers"],
+        "results": best_results,
+        "winner": best_results[0]["drivers"],
         "source": url
     }
 
 
-# -----------------------
 # RUN
-# -----------------------
 index = []
 
 for year in range(START_YEAR, END_YEAR + 1):
@@ -175,7 +203,10 @@ for year in range(START_YEAR, END_YEAR + 1):
 
     file_path = SEASONS_DIR / f"{year}.json"
 
-    data = scrape_year(year)
+    if year <= 2002:
+        data = scrape_uniquecars(year)
+    else:
+        data = scrape_wikipedia(year)
 
     if not data:
         print("FAILED — keeping existing")
