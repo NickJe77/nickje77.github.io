@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST BUILDER (FINAL - CORRECT DRIVER EXTRACTION)")
+print("BATHURST BUILDER (FINAL - DYNAMIC COLUMN FIX)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -25,9 +25,6 @@ SESSION.headers.update({"User-Agent": "Mozilla/5.0"})
 WIKI_BASE = "https://en.wikipedia.org/wiki/"
 
 
-# -----------------------
-# HELPERS
-# -----------------------
 def clean(v):
     if v is None:
         return None
@@ -54,25 +51,27 @@ def fetch(url):
         return None
 
 
-def split_drivers(text):
-    text = clean(text)
-    if not text:
-        return []
+# -----------------------
+# FIND COLUMN INDEX BY HEADER
+# -----------------------
+def find_column_indexes(header_row):
+    headers = [h.get_text(" ").lower() for h in header_row.find_all(["th", "td"])]
 
-    text = re.sub(r"\(.*?\)", "", text)
-    text = text.replace(" and ", "/")
-    text = text.replace("&", "/")
+    col_map = {}
 
-    parts = [clean(x) for x in re.split(r"\s*/\s*", text) if clean(x)]
+    for i, h in enumerate(headers):
+        if "pos" in h:
+            col_map["pos"] = i
+        elif "driver" in h:
+            col_map["drivers"] = i
+        elif "car" in h or "vehicle" in h:
+            col_map["car"] = i
 
-    if parts:
-        return parts
-
-    return [text]
+    return col_map
 
 
 # -----------------------
-# UNIQUECARS (1963–2002)
+# UNIQUECARS (SAFE)
 # -----------------------
 def scrape_uniquecars(year):
     url = f"https://www.uniquecarsandparts.com/bathurst_{year}.htm"
@@ -102,7 +101,7 @@ def scrape_uniquecars(year):
 
             results.append({
                 "finish_pos": pos,
-                "drivers": split_drivers(cols[1]),
+                "drivers": [cols[1]],
                 "constructor": cols[2]
             })
 
@@ -123,7 +122,7 @@ def scrape_uniquecars(year):
 
 
 # -----------------------
-# WIKIPEDIA (CORRECT DRIVER CELL)
+# WIKIPEDIA (DYNAMIC)
 # -----------------------
 def scrape_wikipedia(year):
     url = WIKI_BASE + quote(f"{year}_Bathurst_1000")
@@ -138,34 +137,30 @@ def scrape_wikipedia(year):
 
     for table in soup.find_all("table"):
         rows = table.find_all("tr")
-
-        if len(rows) < 8:
+        if len(rows) < 5:
             continue
 
-        header = rows[0].get_text(" ").lower()
+        col_map = find_column_indexes(rows[0])
 
-        if "driver" not in header or "pos" not in header:
+        if "pos" not in col_map or "drivers" not in col_map:
             continue
 
         results = []
 
         for tr in rows[1:]:
-            tds = tr.find_all("td")
-
-            # ensure correct structure
-            if len(tds) < 4:
+            cells = tr.find_all("td")
+            if len(cells) <= max(col_map.values()):
                 continue
 
-            pos = safe_int(tds[0].get_text())
+            pos = safe_int(cells[col_map["pos"]].get_text())
             if pos is None:
                 continue
 
-            # ✅ DRIVER CELL (THIS IS THE FIX)
-            driver_cell = tds[3]
+            driver_cell = cells[col_map["drivers"]]
 
             drivers = []
 
-            # extract ALL linked names
+            # ✅ GET ALL <a> TAGS
             for a in driver_cell.find_all("a"):
                 name = clean(a.get_text())
                 if name and " " in name:
@@ -180,8 +175,8 @@ def scrape_wikipedia(year):
                 )
 
             constructor = None
-            if len(tds) > 4:
-                constructor = clean(tds[4].get_text())
+            if "car" in col_map and len(cells) > col_map["car"]:
+                constructor = clean(cells[col_map["car"]].get_text())
 
             results.append({
                 "finish_pos": pos,
@@ -206,7 +201,7 @@ def scrape_wikipedia(year):
 
 
 # -----------------------
-# RUN (SAFE)
+# RUN
 # -----------------------
 index = []
 
