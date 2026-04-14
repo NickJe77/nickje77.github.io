@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST BUILDER (FIXED RESULTS COLUMNS)")
+print("BATHURST BUILDER (FINAL LOCKED VERSION)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -53,7 +53,7 @@ def fetch(url):
         if r.status_code != 200:
             return None
         return r.text
-    except Exception:
+    except:
         return None
 
 
@@ -67,62 +67,7 @@ def split_early_drivers(text):
     text = text.replace("&", "/")
 
     parts = [clean(x) for x in re.split(r"\s*/\s*", text) if clean(x)]
-    if parts:
-        return parts
-
-    return [text]
-
-
-def normalize_header_text(text):
-    text = clean(text) or ""
-    text = text.lower()
-    text = text.replace("/", " ")
-    text = re.sub(r"[^a-z0-9 ]+", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
-
-
-def extract_driver_names_from_cell(cell):
-    names = []
-
-    # First try linked names in the cell
-    for a in cell.find_all("a"):
-        name = clean(a.get_text(" ", strip=True))
-        if not name:
-            continue
-        # Real driver names are multi-word; ignore empty / flag links
-        if " " in name:
-            names.append(name)
-
-    # De-duplicate while preserving order
-    deduped = []
-    seen = set()
-    for name in names:
-        key = name.lower()
-        if key not in seen:
-            deduped.append(name)
-            seen.add(key)
-
-    if deduped:
-        return deduped
-
-    # Fallback: text split by line breaks or separators
-    raw = cell.get_text("\n", strip=True)
-    raw = re.sub(r"\[[^\]]*\]", "", raw)
-    bits = re.split(r"[\n/]+", raw)
-
-    fallback = []
-    seen = set()
-    for bit in bits:
-        bit = clean(bit)
-        if not bit or " " not in bit:
-            continue
-        key = bit.lower()
-        if key not in seen:
-            fallback.append(bit)
-            seen.add(key)
-
-    return fallback
+    return parts if parts else [text]
 
 
 # -----------------------
@@ -135,6 +80,7 @@ def scrape_uniquecars(year):
         return None
 
     soup = BeautifulSoup(html, "html.parser")
+
     best = []
 
     for table in soup.find_all("table"):
@@ -142,7 +88,7 @@ def scrape_uniquecars(year):
         results = []
 
         for tr in rows:
-            cols = [clean(td.get_text(" ", strip=True)) for td in tr.find_all("td")]
+            cols = [clean(td.get_text()) for td in tr.find_all("td")]
             cols = [x for x in cols if x]
 
             if len(cols) < 3:
@@ -175,88 +121,87 @@ def scrape_uniquecars(year):
 
 
 # -----------------------
-# WIKIPEDIA (2003+)
+# WIKIPEDIA (LOCKED TO RACE RESULTS)
 # -----------------------
-def find_results_table(soup):
-    """
-    Find the actual race results table by looking for the expected
-    Bathurst results headers:
-    Pos | No | Team | Drivers | Car | ...
-    """
-    for table in soup.find_all("table"):
-        rows = table.find_all("tr")
-        if len(rows) < 3:
-            continue
-
-        header_row = None
-        for tr in rows[:3]:
-            ths = tr.find_all("th")
-            if len(ths) >= 5:
-                header_row = tr
-                break
-
-        if header_row is None:
-            continue
-
-        headers = [normalize_header_text(th.get_text(" ", strip=True)) for th in header_row.find_all("th")]
-
-        needed = {"pos", "no", "team", "drivers", "car"}
-        if needed.issubset(set(headers)):
-            return table, headers
-
-    return None, None
-
-
 def scrape_wikipedia(year):
     url = WIKI_BASE + quote(f"{year}_Bathurst_1000")
+
     html = fetch(url)
     if not html:
         return None
 
     soup = BeautifulSoup(html, "html.parser")
 
-    table, headers = find_results_table(soup)
-    if table is None:
+    # 🔥 FIND "Race results" SECTION
+    race_header = None
+    for h in soup.find_all(["h2", "h3"]):
+        if "race results" in h.get_text(" ").lower():
+            race_header = h
+            break
+
+    if not race_header:
         return None
 
-    # Exact header positions from the actual table we found
-    col_idx = {h: i for i, h in enumerate(headers)}
+    # 🔥 FIRST TABLE AFTER HEADER
+    table = race_header.find_next("table")
+    if not table:
+        return None
 
-    pos_idx = col_idx["pos"]
-    drivers_idx = col_idx["drivers"]
-    car_idx = col_idx["car"]
+    rows = table.find_all("tr")
+    if len(rows) < 5:
+        return None
+
+    # 🔥 HEADER MAPPING
+    headers = [clean(th.get_text()) for th in rows[0].find_all("th")]
+
+    pos_idx = None
+    drivers_idx = None
+    car_idx = None
+
+    for i, h in enumerate(headers):
+        h_low = (h or "").lower()
+
+        if "pos" in h_low:
+            pos_idx = i
+        elif "driver" in h_low:
+            drivers_idx = i
+        elif "car" in h_low:
+            car_idx = i
+
+    if pos_idx is None or drivers_idx is None:
+        return None
 
     results = []
-    rows = table.find_all("tr")
 
-    started = False
-    for tr in rows:
-        ths = tr.find_all("th")
-        if ths and not started:
-            row_headers = [normalize_header_text(th.get_text(" ", strip=True)) for th in ths]
-            if set(["pos", "no", "team", "drivers", "car"]).issubset(set(row_headers)):
-                started = True
+    for tr in rows[1:]:
+        tds = tr.find_all("td")
+        if len(tds) <= max(pos_idx, drivers_idx):
             continue
 
-        if not started:
-            continue
-
-        tds = tr.find_all("td", recursive=False)
-        if not tds:
-            tds = tr.find_all("td")
-
-        if len(tds) <= max(pos_idx, drivers_idx, car_idx):
-            continue
-
-        pos = safe_int(tds[pos_idx].get_text(" ", strip=True))
+        pos = safe_int(tds[pos_idx].get_text())
         if pos is None:
             continue
 
         driver_cell = tds[drivers_idx]
-        car_cell = tds[car_idx]
 
-        drivers = extract_driver_names_from_cell(driver_cell)
-        constructor = clean(car_cell.get_text(" ", strip=True))
+        # 🔥 EXTRACT ALL DRIVER NAMES
+        drivers = []
+        for a in driver_cell.find_all("a"):
+            name = clean(a.get_text())
+            if name and " " in name:
+                drivers.append(name)
+
+        # fallback
+        if not drivers:
+            text = clean(driver_cell.get_text(" ")) or ""
+            drivers = re.findall(
+                r"[A-Z][A-Za-z'.-]+\s+[A-Z][A-Za-z'.-]+",
+                text
+            )
+
+        constructor = None
+        if car_idx is not None and len(tds) > car_idx:
+            constructor = clean(tds[car_idx].get_text())
 
         results.append({
             "finish_pos": pos,
@@ -284,6 +229,7 @@ index = []
 
 for year in range(START_YEAR, END_YEAR + 1):
     print(f"\n=== {year} ===")
+
     file_path = SEASONS_DIR / f"{year}.json"
 
     if year <= 2002:
@@ -292,7 +238,7 @@ for year in range(START_YEAR, END_YEAR + 1):
         data = scrape_wikipedia(year)
 
     if not data:
-        print("  FAILED — keeping existing file")
+        print("FAILED — keeping existing")
         if file_path.exists():
             index.append({
                 "year": year,
@@ -308,7 +254,8 @@ for year in range(START_YEAR, END_YEAR + 1):
         "file": f"/data/bathurst/seasons/{year}.json"
     })
 
-    print(f"  saved {len(data['results'])} results")
+    print(f"saved {len(data['results'])} results")
+
     time.sleep(0.2)
 
 with open(INDEX_FILE, "w", encoding="utf-8") as f:
