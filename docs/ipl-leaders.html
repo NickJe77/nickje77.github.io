@@ -103,15 +103,14 @@ tr:nth-child(even){background:#f8fbff;}
 </div>
 
 <script>
-const indexUrl="data/ipl/index.json";
-const basePath="data/ipl/";
-const nameMapUrl="data/ipl/player-names.json";
+const indexUrl="/data/ipl/index.json";
+const basePath="/data/ipl/";
+const nameMapUrl="/data/ipl/player-names.json";
 
 const batting={}, bowling={}, fielding={}, matchesPlayed={};
 let leaders={};
 let nameMap={};
 
-// load name map safely, then index
 fetch(nameMapUrl)
   .then(r => r.ok ? r.json() : {})
   .catch(() => ({}))
@@ -154,17 +153,17 @@ fetch(nameMapUrl)
     leaders.runs=Object.entries(batting)
       .sort((a,b)=>b[1].runs-a[1].runs)
       .slice(0,10)
-      .map(([p,v],i)=>[i+1,fullName(p),v.runs]);
+      .map(([p,v],i)=>[i+1,playerLink(p),v.runs]);
 
     leaders.wickets=Object.entries(bowling)
       .sort((a,b)=>b[1]-a[1])
       .slice(0,10)
-      .map(([p,v],i)=>[i+1,fullName(p),v]);
+      .map(([p,v],i)=>[i+1,playerLink(p),v]);
 
     leaders.fielding=Object.entries(fielding)
       .sort((a,b)=>b[1]-a[1])
       .slice(0,10)
-      .map(([p,v],i)=>[i+1,fullName(p),v]);
+      .map(([p,v],i)=>[i+1,playerLink(p),v]);
 
     leaders.sr=[];
     Object.keys(batting).forEach(p=>{
@@ -175,13 +174,35 @@ fetch(nameMapUrl)
       }
     });
     leaders.sr.sort((a,b)=>b[1]-a[1]);
-    leaders.sr=leaders.sr.slice(0,10).map((x,i)=>[i+1,fullName(x[0]),x[1].toFixed(1)]);
+    leaders.sr=leaders.sr.slice(0,10)
+      .map((x,i)=>[i+1,playerLink(x[0]),x[1].toFixed(1)]);
 
     render("runs");
   });
 
 function fullName(name){
-  return nameMap[name] || name;
+  if (!name) return name;
+
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
+
+  return nameMap[slug] || name;
+}
+
+function slugify(name){
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
+}
+
+function playerLink(name){
+  const slug = slugify(name);
+  return `<a href="ipl-player.html?player=${slug}" style="color:#0056d6;text-decoration:none;font-weight:500;">${fullName(name)}</a>`;
 }
 
 function showTab(type,btn){
