@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST BUILDER (STABLE FINAL - NO CRASH)")
+print("BATHURST BUILDER (FINAL — DRIVER FIX WORKING)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -21,6 +21,7 @@ END_YEAR = min(datetime.utcnow().year, 2026)
 
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": "Mozilla/5.0"})
+
 
 # -----------------------
 # HELPERS
@@ -53,7 +54,7 @@ def fetch(url):
 
 
 # -----------------------
-# FIND TABLE (SAFE)
+# FIND CORRECT TABLE
 # -----------------------
 def find_results_table(soup):
     for table in soup.find_all("table"):
@@ -61,38 +62,41 @@ def find_results_table(soup):
         if len(rows) < 3:
             continue
 
-        for tr in rows[:3]:
-            cells = tr.find_all(["th", "td"])
-            headers = [clean(c.get_text()) for c in cells]
-            header_text = " ".join([h.lower() for h in headers if h])
+        header_cells = rows[0].find_all(["th", "td"])
+        headers = [clean(c.get_text()) for c in header_cells if c]
 
-            # relaxed match
-            if "pos" in header_text and "driver" in header_text:
-                return table, headers
+        header_text = " ".join([h.lower() for h in headers if h])
+
+        if "pos" in header_text and "driver" in header_text:
+            return table, headers
 
     return None, None
 
 
 # -----------------------
-# DRIVER EXTRACTION
+# DRIVER EXTRACTION (REAL FIX)
 # -----------------------
 def extract_drivers(cell):
+    text = cell.get_text("\n", strip=True)
+
+    # remove references like [1]
+    text = re.sub(r"\[[^\]]*\]", "", text)
+
+    # split on common separators
+    parts = re.split(r"\n|/|,|&| and ", text)
+
     drivers = []
 
-    for a in cell.find_all("a"):
-        name = clean(a.get_text())
-        if name and " " in name:
-            drivers.append(name)
+    for p in parts:
+        p = clean(p)
+        if not p:
+            continue
 
-    # fallback
-    if not drivers:
-        text = clean(cell.get_text(" ")) or ""
-        drivers = re.findall(
-            r"[A-Z][A-Za-z'.-]+\s+[A-Z][A-Za-z'.-]+",
-            text
-        )
+        # must look like a real name (2+ words)
+        if len(p.split()) >= 2:
+            drivers.append(p)
 
-    # dedupe
+    # remove duplicates
     seen = set()
     out = []
     for d in drivers:
@@ -127,7 +131,6 @@ def scrape_wikipedia(year):
 
     headers = [clean(h) for h in headers]
 
-    # column indexes (safe)
     try:
         pos_idx = next(i for i, h in enumerate(headers) if h and "pos" in h.lower())
         drivers_idx = next(i for i, h in enumerate(headers) if h and "driver" in h.lower())
@@ -142,19 +145,18 @@ def scrape_wikipedia(year):
     )
 
     results = []
-
     started = False
 
     for tr in rows:
-        cells = tr.find_all(["th", "td"])  # 🔥 FIX (IMPORTANT)
+        cells = tr.find_all(["th", "td"])  # 🔥 critical fix
         if not cells:
             continue
 
-        text = " ".join([clean(c.get_text()) or "" for c in cells]).lower()
+        row_text = " ".join([clean(c.get_text()) or "" for c in cells]).lower()
 
-        # find header row start
+        # find header row
         if not started:
-            if "pos" in text and "driver" in text:
+            if "pos" in row_text and "driver" in row_text:
                 started = True
             continue
 
