@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST BUILDER (ROW SCAN FIX - FINAL)")
+print("BATHURST BUILDER (FINAL - CORRECT DRIVER EXTRACTION)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -25,6 +25,9 @@ SESSION.headers.update({"User-Agent": "Mozilla/5.0"})
 WIKI_BASE = "https://en.wikipedia.org/wiki/"
 
 
+# -----------------------
+# HELPERS
+# -----------------------
 def clean(v):
     if v is None:
         return None
@@ -51,37 +54,26 @@ def fetch(url):
         return None
 
 
-def extract_drivers_from_row(row_text):
-    row_text = clean(row_text) or ""
+def split_drivers(text):
+    text = clean(text)
+    if not text:
+        return []
 
-    # remove brackets
-    row_text = re.sub(r"\(.*?\)", "", row_text)
+    text = re.sub(r"\(.*?\)", "", text)
+    text = text.replace(" and ", "/")
+    text = text.replace("&", "/")
 
-    # find all name-like patterns
-    names = re.findall(r"[A-Z][A-Za-z'.-]+\s+[A-Z][A-Za-z'.-]+", row_text)
+    parts = [clean(x) for x in re.split(r"\s*/\s*", text) if clean(x)]
 
-    # remove obvious junk (teams etc)
-    filtered = []
-    for n in names:
-        if len(n.split()) == 2:
-            filtered.append(n)
+    if parts:
+        return parts
 
-    # dedupe
-    final = []
-    seen = set()
-    for n in filtered:
-        k = n.lower()
-        if k not in seen:
-            final.append(n)
-            seen.add(k)
-
-    # 🔥 FORCE EXACTLY 2 DRIVERS
-    if len(final) >= 2:
-        return final[:2]
-
-    return final
+    return [text]
 
 
+# -----------------------
+# UNIQUECARS (1963–2002)
+# -----------------------
 def scrape_uniquecars(year):
     url = f"https://www.uniquecarsandparts.com/bathurst_{year}.htm"
     html = fetch(url)
@@ -108,11 +100,9 @@ def scrape_uniquecars(year):
             if pos is None:
                 continue
 
-            drivers = extract_drivers_from_row(" ".join(cols))
-
             results.append({
                 "finish_pos": pos,
-                "drivers": drivers,
+                "drivers": split_drivers(cols[1]),
                 "constructor": cols[2]
             })
 
@@ -132,6 +122,9 @@ def scrape_uniquecars(year):
     }
 
 
+# -----------------------
+# WIKIPEDIA (CORRECT DRIVER CELL)
+# -----------------------
 def scrape_wikipedia(year):
     url = WIKI_BASE + quote(f"{year}_Bathurst_1000")
 
@@ -149,25 +142,42 @@ def scrape_wikipedia(year):
         if len(rows) < 8:
             continue
 
-        header = " ".join([r.get_text(" ").lower() for r in rows[:3]])
+        header = rows[0].get_text(" ").lower()
 
-        if "pos" not in header:
+        if "driver" not in header or "pos" not in header:
             continue
 
         results = []
 
         for tr in rows[1:]:
             tds = tr.find_all("td")
-            if len(tds) < 3:
+
+            # ensure correct structure
+            if len(tds) < 4:
                 continue
 
             pos = safe_int(tds[0].get_text())
             if pos is None:
                 continue
 
-            # 🔥 SCAN ENTIRE ROW
-            row_text = " ".join(td.get_text(" ") for td in tds)
-            drivers = extract_drivers_from_row(row_text)
+            # ✅ DRIVER CELL (THIS IS THE FIX)
+            driver_cell = tds[3]
+
+            drivers = []
+
+            # extract ALL linked names
+            for a in driver_cell.find_all("a"):
+                name = clean(a.get_text())
+                if name and " " in name:
+                    drivers.append(name)
+
+            # fallback if needed
+            if not drivers:
+                text = clean(driver_cell.get_text(" ")) or ""
+                drivers = re.findall(
+                    r"[A-Z][A-Za-z'.-]+\s+[A-Z][A-Za-z'.-]+",
+                    text
+                )
 
             constructor = None
             if len(tds) > 4:
@@ -195,7 +205,9 @@ def scrape_wikipedia(year):
     }
 
 
-# RUN
+# -----------------------
+# RUN (SAFE)
+# -----------------------
 index = []
 
 for year in range(START_YEAR, END_YEAR + 1):
@@ -225,7 +237,7 @@ for year in range(START_YEAR, END_YEAR + 1):
         "file": f"/data/bathurst/seasons/{year}.json"
     })
 
-    print(f"saved {len(data['results'])} rows")
+    print(f"saved {len(data['results'])} results")
 
     time.sleep(0.3)
 
