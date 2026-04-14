@@ -8,11 +8,9 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST BUILDER (ROWSPAN FIX FINAL)")
+print("BATHURST SAFE FIXER")
 
-BASE = Path("docs/data/bathurst")
-SEASONS_DIR = BASE / "seasons"
-SEASONS_DIR.mkdir(parents=True, exist_ok=True)
+BASE = Path("docs/data/bathurst/seasons")
 
 START_YEAR = 2003
 END_YEAR = min(datetime.utcnow().year, 2026)
@@ -26,8 +24,7 @@ def clean(v):
         return None
     v = str(v)
     v = re.sub(r"\[[^\]]*\]", "", v)
-    v = re.sub(r"\s+", " ", v).strip()
-    return v
+    return re.sub(r"\s+", " ", v).strip()
 
 
 def safe_int(v):
@@ -48,54 +45,37 @@ def fetch(url):
 
 
 # -----------------------
-# FIND RESULTS TABLE
+# CHECK IF FILE IS BROKEN
 # -----------------------
-def find_table(soup):
-    for table in soup.find_all("table"):
-        text = table.get_text(" ").lower()
-        if "pos" in text and "driver" in text:
-            return table
-    return None
-
-
-# -----------------------
-# EXTRACT DRIVER FROM CELL
-# -----------------------
-def extract_driver(cell):
-    text = cell.get_text(" ", strip=True)
-    text = clean(text)
-
-    if not text:
-        return None
-
-    # remove junk
-    if any(x in text.lower() for x in [
-        "racing", "team", "holden", "ford",
-        "commodore", "falcon"
-    ]):
-        return None
-
-    if len(text.split()) < 2:
-        return None
-
-    return text
+def is_broken(path):
+    try:
+        data = json.loads(path.read_text())
+        for r in data.get("results", []):
+            if not r.get("drivers") or len(r.get("drivers")) < 2:
+                return True
+        return False
+    except:
+        return True
 
 
 # -----------------------
-# SCRAPE YEAR
+# SCRAPER (ROWSPAN SAFE)
 # -----------------------
 def scrape_year(year):
     url = "https://en.wikipedia.org/wiki/" + quote(f"{year}_Bathurst_1000")
-
     html = fetch(url)
     if not html:
         return None
 
     soup = BeautifulSoup(html, "html.parser")
 
-    table = find_table(soup)
+    table = None
+    for t in soup.find_all("table"):
+        if "driver" in t.get_text(" ").lower() and "pos" in t.get_text(" ").lower():
+            table = t
+            break
+
     if not table:
-        print("  no table")
         return None
 
     results = []
@@ -108,9 +88,7 @@ def scrape_year(year):
 
         pos = safe_int(cells[0].get_text())
 
-        # NEW RESULT ROW
         if pos:
-            # save previous
             if current:
                 results.append(current)
 
@@ -120,24 +98,20 @@ def scrape_year(year):
                 "constructor": None
             }
 
-            # driver
             if len(cells) > 3:
-                d = extract_driver(cells[3])
-                if d:
-                    current["drivers"].append(d)
+                name = clean(cells[3].get_text())
+                if name and len(name.split()) >= 2:
+                    current["drivers"].append(name)
 
-            # constructor
             if len(cells) > 4:
                 current["constructor"] = clean(cells[4].get_text())
 
         else:
-            # CONTINUATION ROW (SECOND DRIVER)
             if current and len(cells) > 3:
-                d = extract_driver(cells[3])
-                if d:
-                    current["drivers"].append(d)
+                name = clean(cells[3].get_text())
+                if name and len(name.split()) >= 2:
+                    current["drivers"].append(name)
 
-    # add last
     if current:
         results.append(current)
 
@@ -150,12 +124,18 @@ def scrape_year(year):
 
 
 # -----------------------
-# RUN
+# RUN (SAFE MODE)
 # -----------------------
 for year in range(START_YEAR, END_YEAR + 1):
     print(f"\n=== {year} ===")
 
-    file_path = SEASONS_DIR / f"{year}.json"
+    path = BASE / f"{year}.json"
+
+    if path.exists() and not is_broken(path):
+        print("SKIPPED (already good)")
+        continue
+
+    print("FIXING...")
 
     data = scrape_year(year)
 
@@ -163,10 +143,10 @@ for year in range(START_YEAR, END_YEAR + 1):
         print("FAILED")
         continue
 
-    with open(file_path, "w") as f:
+    with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
-    print(f"saved {len(data['results'])}")
+    print("UPDATED")
 
     time.sleep(0.2)
 
