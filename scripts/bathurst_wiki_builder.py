@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-print("BATHURST BUILDER (FORCED CO-DRIVERS FIX)")
+print("BATHURST BUILDER (DUAL DRIVER FIX - FINAL)")
 
 BASE = Path("docs/data/bathurst")
 SEASONS_DIR = BASE / "seasons"
@@ -16,7 +16,7 @@ INDEX_FILE = BASE / "index.json"
 
 SEASONS_DIR.mkdir(parents=True, exist_ok=True)
 
-START_YEAR = 1963
+START_YEAR = 2003   # focus on wiki era first
 END_YEAR = min(datetime.utcnow().year, 2026)
 
 SESSION = requests.Session()
@@ -25,15 +25,11 @@ SESSION.headers.update({"User-Agent": "Mozilla/5.0"})
 WIKI_BASE = "https://en.wikipedia.org/wiki/"
 
 
-# -----------------------
-# HELPERS
-# -----------------------
 def clean(v):
     if v is None:
         return None
     v = str(v)
     v = re.sub(r"\[[^\]]*\]", "", v)
-    v = v.replace("\xa0", " ")
     v = re.sub(r"\s+", " ", v).strip()
     return v if v else None
 
@@ -41,33 +37,8 @@ def clean(v):
 def safe_int(v):
     if v is None:
         return None
-    m = re.search(r"^\D*(\d+)", str(v))
-    return int(m.group(1)) if m else None
-
-
-def extract_names(text):
-    text = clean(text) or ""
-
-    # remove brackets
-    text = re.sub(r"\(.*?\)", "", text)
-
-    # split separators
-    text = text.replace(" and ", "/")
-    text = text.replace("&", "/")
-    text = text.replace(",", "/")
-
-    parts = [clean(x) for x in re.split(r"\s*/\s*", text) if clean(x)]
-
-    if len(parts) >= 2:
-        return parts
-
-    # fallback regex
-    names = re.findall(r"[A-Z][A-Za-z'.-]+\s+[A-Z][A-Za-z'.-]+", text)
-
-    if names:
-        return names
-
-    return []
+    m = re.search(r"\d+", str(v))
+    return int(m.group()) if m else None
 
 
 def fetch(url):
@@ -81,80 +52,57 @@ def fetch(url):
 
 
 # -----------------------
-# UNIQUECARS (1963–2002)
+# EXTRACT TEAM DRIVERS
 # -----------------------
-def scrape_uniquecars(year):
-    url = f"https://www.uniquecarsandparts.com/bathurst_{year}.htm"
-    html = fetch(url)
-    if not html:
-        return None
+def get_team_drivers(soup):
+    drivers_map = {}
 
-    soup = BeautifulSoup(html, "html.parser")
+    for table in soup.find_all("table"):
+        text = table.get_text(" ").lower()
 
+        if "driver" not in text or "team" not in text:
+            continue
+
+        rows = table.find_all("tr")
+
+        for tr in rows:
+            tds = tr.find_all("td")
+            if len(tds) < 3:
+                continue
+
+            car_no = safe_int(tds[0].get_text())
+            if not car_no:
+                continue
+
+            d1 = clean(tds[1].get_text())
+            d2 = clean(tds[2].get_text())
+
+            drivers = [d for d in [d1, d2] if d]
+
+            if drivers:
+                drivers_map[car_no] = drivers
+
+        if drivers_map:
+            return drivers_map
+
+    return {}
+
+
+# -----------------------
+# RESULTS TABLE
+# -----------------------
+def get_results(soup, drivers_map):
     best = []
 
     for table in soup.find_all("table"):
         rows = table.find_all("tr")
 
-        results = []
-
-        for tr in rows:
-            cols = [clean(td.get_text()) for td in tr.find_all("td")]
-            cols = [x for x in cols if x]
-
-            if len(cols) < 3:
-                continue
-
-            pos = safe_int(cols[0])
-            if pos is None:
-                continue
-
-            drivers = extract_names(cols[1])
-
-            results.append({
-                "finish_pos": pos,
-                "drivers": drivers,
-                "constructor": cols[2]
-            })
-
-        if len(results) > len(best):
-            best = results
-
-    if not best:
-        return None
-
-    best.sort(key=lambda x: x["finish_pos"])
-
-    return {
-        "year": year,
-        "results": best,
-        "winner": best[0]["drivers"],
-        "source": url
-    }
-
-
-# -----------------------
-# WIKIPEDIA (FORCED ROW SCAN)
-# -----------------------
-def scrape_wikipedia(year):
-    url = WIKI_BASE + quote(f"{year}_Bathurst_1000")
-
-    html = fetch(url)
-    if not html:
-        return None
-
-    soup = BeautifulSoup(html, "html.parser")
-
-    best_results = []
-
-    for table in soup.find_all("table"):
-        rows = table.find_all("tr")
         if len(rows) < 8:
             continue
 
-        header = " ".join([r.get_text(" ").lower() for r in rows[:3]])
+        header = rows[0].get_text(" ").lower()
 
-        if "driver" not in header:
+        if "pos" not in header:
             continue
 
         results = []
@@ -168,28 +116,9 @@ def scrape_wikipedia(year):
             if pos is None:
                 continue
 
-            # 🔥 KEY FIX: scan ENTIRE ROW for names
-            row_text = " ".join([td.get_text(" ") for td in tds])
-            names = extract_names(row_text)
+            car_no = safe_int(tds[1].get_text())
 
-            # remove junk (teams, brands etc)
-            cleaned = []
-            for n in names:
-                if len(n.split()) == 2:  # only real names
-                    cleaned.append(n)
-
-            # force unique
-            final = []
-            seen = set()
-            for n in cleaned:
-                k = n.lower()
-                if k not in seen:
-                    final.append(n)
-                    seen.add(k)
-
-            # 🔥 CRITICAL: ensure at least 2 drivers
-            if len(final) > 2:
-                final = final[:2]
+            drivers = drivers_map.get(car_no, [])
 
             constructor = None
             if len(tds) > 4:
@@ -197,28 +126,47 @@ def scrape_wikipedia(year):
 
             results.append({
                 "finish_pos": pos,
-                "drivers": final,
+                "drivers": drivers,
                 "constructor": constructor
             })
 
-        if len(results) > len(best_results):
-            best_results = results
+        if len(results) > len(best):
+            best = results
 
-    if not best_results:
+    return best
+
+
+# -----------------------
+# MAIN SCRAPER
+# -----------------------
+def scrape_year(year):
+    url = WIKI_BASE + quote(f"{year}_Bathurst_1000")
+
+    html = fetch(url)
+    if not html:
         return None
 
-    best_results.sort(key=lambda x: x["finish_pos"])
+    soup = BeautifulSoup(html, "html.parser")
+
+    drivers_map = get_team_drivers(soup)
+
+    results = get_results(soup, drivers_map)
+
+    if not results:
+        return None
+
+    results.sort(key=lambda x: x["finish_pos"])
 
     return {
         "year": year,
-        "results": best_results,
-        "winner": best_results[0]["drivers"],
+        "results": results,
+        "winner": results[0]["drivers"],
         "source": url
     }
 
 
 # -----------------------
-# RUN (SAFE)
+# RUN
 # -----------------------
 index = []
 
@@ -227,13 +175,10 @@ for year in range(START_YEAR, END_YEAR + 1):
 
     file_path = SEASONS_DIR / f"{year}.json"
 
-    if year <= 2002:
-        data = scrape_uniquecars(year)
-    else:
-        data = scrape_wikipedia(year)
+    data = scrape_year(year)
 
     if not data:
-        print("  FAILED — keeping existing")
+        print("FAILED — keeping existing")
         if file_path.exists():
             index.append({
                 "year": year,
@@ -249,7 +194,7 @@ for year in range(START_YEAR, END_YEAR + 1):
         "file": f"/data/bathurst/seasons/{year}.json"
     })
 
-    print(f"  saved {len(data['results'])} results")
+    print(f"saved {len(data['results'])} rows")
 
     time.sleep(0.3)
 
