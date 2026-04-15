@@ -1,11 +1,11 @@
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Comment
 import json
 from pathlib import Path
 
-print("ALL-NBA BUILDER (WORKING HTML PARSER)")
+print("ALL-NBA BUILDER (FINAL WORKING - COMMENTS FIX)")
 
-URL = "https://www.nba.com/news/history-all-nba-teams"
+URL = "https://www.basketball-reference.com/awards/all_nba.html"
 
 OUTPUT = Path("docs/data/nba/all_nba.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
@@ -14,81 +14,86 @@ headers = {"User-Agent": "Mozilla/5.0"}
 res = requests.get(URL, headers=headers)
 soup = BeautifulSoup(res.text, "html.parser")
 
-data = []
+# 🔥 FIND TABLE INSIDE COMMENTS
+comments = soup.find_all(string=lambda text: isinstance(text, Comment))
 
-TEAM_MAP = {
-    "Milwaukee Bucks":"MIL","Oklahoma City Thunder":"OKC","Denver Nuggets":"DEN",
-    "Cleveland Cavaliers":"CLE","Boston Celtics":"BOS","New York Knicks":"NYK",
-    "Golden State Warriors":"GSW","Minnesota Timberwolves":"MIN",
-    "Los Angeles Lakers":"LAL","Detroit Pistons":"DET","Indiana Pacers":"IND",
-    "LA Clippers":"LAC","Dallas Mavericks":"DAL","Phoenix Suns":"PHX",
-    "Philadelphia 76ers":"PHI","Miami Heat":"MIA","Sacramento Kings":"SAC",
-    "Portland Trail Blazers":"POR","Toronto Raptors":"TOR","Chicago Bulls":"CHI",
-    "Brooklyn Nets":"BKN","Atlanta Hawks":"ATL","Utah Jazz":"UTA",
-    "Washington Wizards":"WAS","New Orleans Pelicans":"NOP",
-    "Charlotte Hornets":"CHA","Memphis Grizzlies":"MEM",
-    "San Antonio Spurs":"SAS","Houston Rockets":"HOU","Orlando Magic":"ORL"
-}
+table = None
 
-def abbr(team):
-    return TEAM_MAP.get(team, team)
+for c in comments:
+    if "id=\"all_nba\"" in c:
+        comment_soup = BeautifulSoup(c, "html.parser")
+        table = comment_soup.find("table", {"id": "all_nba"})
+        break
 
-article = soup.find("article")
-
-if not article:
-    print("❌ Article not found")
+if not table:
+    print("❌ Table not found")
     exit()
 
-elements = article.find_all(["h2", "h3", "ul"])
+tbody = table.find("tbody")
 
-current = None
-current_team = None
+data = []
+season_obj = None
+current_season = None
 
-for el in elements:
+TEAM_MAP = {
+    "BRK": "BKN",
+    "CHO": "CHA"
+}
 
-    # SEASON (e.g. > 2024-25)
-    if el.name == "h2":
-        season = el.text.replace(">", "").strip()
+for row in tbody.find_all("tr"):
 
-        if "-" in season:
-            if current:
-                data.append(current)
+    if row.get("class") and "thead" in row.get("class"):
+        continue
 
-            current = {
-                "season": season,
-                "first_team": [],
-                "second_team": [],
-                "third_team": []
-            }
-            current_team = None
+    season = row.find("th").text.strip()
+    tds = row.find_all("td")
 
-    # TEAM HEADINGS
-    elif el.name == "h3" and current:
-        text = el.text.strip().upper()
+    if not tds:
+        continue
 
-        if "FIRST TEAM" in text:
-            current_team = "first_team"
-        elif "SECOND TEAM" in text:
-            current_team = "second_team"
-        elif "THIRD TEAM" in text:
-            current_team = "third_team"
+    team_type = tds[0].text.strip()
 
-    # PLAYER LISTS
-    elif el.name == "ul" and current and current_team:
-        for li in el.find_all("li"):
-            text = li.text.strip()
+    if season != current_season:
+        if season_obj:
+            data.append(season_obj)
 
-            if "," in text:
-                name, team = text.split(",", 1)
+        season_obj = {
+            "season": season,
+            "first_team": [],
+            "second_team": [],
+            "third_team": []
+        }
+        current_season = season
 
-                current[current_team].append({
-                    "player": name.strip(),
-                    "team": abbr(team.strip())
-                })
+    key = None
+    if team_type == "1st":
+        key = "first_team"
+    elif team_type == "2nd":
+        key = "second_team"
+    elif team_type == "3rd":
+        key = "third_team"
 
-# append last season
-if current:
-    data.append(current)
+    if not key:
+        continue
+
+    players = tds[1:6]
+    teams = tds[6:11]
+
+    for p, t in zip(players, teams):
+        name = p.text.strip()
+        team = t.text.strip()
+
+        if name:
+            team = TEAM_MAP.get(team, team)
+
+            season_obj[key].append({
+                "player": name,
+                "team": team
+            })
+
+# append last
+if season_obj:
+    data.append(season_obj)
 
 with open(OUTPUT, "w") as f:
     json.dump(data, f, indent=2)
