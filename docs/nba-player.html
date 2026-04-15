@@ -432,7 +432,9 @@ function slug(name){
   return cleanName(name)
     .toLowerCase()
     .replace(/[^\w\s-]/g,"")
-    .replace(/\s+/g,"-");
+    .replace(/\s+/g,"-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 function parseNum(v){
@@ -440,22 +442,52 @@ function parseNum(v){
   return Number.isFinite(n) ? n : 0;
 }
 
-function stat(r, key){
-  const map = {
-    pts: ["pts", "points"],
-    reb: ["reb", "rebounds"],
-    ast: ["ast", "assists"],
-    stl: ["stl", "steals"],
-    blk: ["blk", "blocks"]
-  };
+function normalizeCsvValue(v){
+  return String(v || "")
+    .replace(/^"(.*)"$/, "$1")
+    .replace(/""/g, '"')
+    .trim();
+}
 
-  for(const k of map[key] || [key]){
-    if(r[k] != null && r[k] !== ""){
-      return parseNum(r[k]);
+function parseCSVLine(line){
+  const out = [];
+  let cur = "";
+  let inQuotes = false;
+
+  for(let i = 0; i < line.length; i++){
+    const ch = line[i];
+    const next = line[i + 1];
+
+    if(ch === '"'){
+      if(inQuotes && next === '"'){
+        cur += '"';
+        i++;
+      }else{
+        inQuotes = !inQuotes;
+      }
+    }else if(ch === "," && !inQuotes){
+      out.push(normalizeCsvValue(cur));
+      cur = "";
+    }else{
+      cur += ch;
     }
   }
 
-  return 0;
+  out.push(normalizeCsvValue(cur));
+  return out;
+}
+
+function normalizeAwardPlayerName(name){
+  let n = cleanName(name || "").trim();
+
+  if(n.includes(",")){
+    const parts = n.split(",").map(p => p.trim()).filter(Boolean);
+    if(parts.length >= 2){
+      n = parts.slice(1).join(" ") + " " + parts[0];
+    }
+  }
+
+  return n.replace(/\s+/g, " ").trim();
 }
 
 function normalizeRow(r){
@@ -573,6 +605,24 @@ async function fetchJSON(paths){
   throw lastError || new Error("Unable to load JSON");
 }
 
+async function fetchText(paths){
+  let lastError = null;
+
+  for(const path of paths){
+    try{
+      const res = await fetch(path, { cache: "no-store" });
+      if(res.ok){
+        return await res.text();
+      }
+      lastError = new Error(`Failed ${path}: ${res.status}`);
+    }catch(err){
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error("Unable to load text");
+}
+
 async function loadPlayers(){
   if(playersLoaded) return;
 
@@ -603,9 +653,12 @@ async function loadPlayers(){
 
 async function loadAwardsCSV(){
   try{
-    const res = await fetch("/data/nba/nba_awards.csv", { cache: "no-store" });
-    if(!res.ok) throw new Error(`Failed awards CSV: ${res.status}`);
-    const text = await res.text();
+    const text = await fetchText([
+      "data/nba/nba_awards.csv",
+      "/data/nba/nba_awards.csv",
+      "docs/data/nba/nba_awards.csv",
+      "/docs/data/nba/nba_awards.csv"
+    ]);
 
     const lines = text
       .split(/\r?\n/)
@@ -617,15 +670,20 @@ async function loadAwardsCSV(){
       return;
     }
 
-    const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
+    const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase());
 
     awardsData = lines.slice(1).map(line => {
-      const values = line.split(",").map(v => v.trim());
+      const values = parseCSVLine(line);
       const obj = {};
       headers.forEach((h, i) => {
         obj[h] = values[i] || "";
       });
-      return obj;
+
+      return {
+        player: normalizeAwardPlayerName(obj.player || obj.name || obj.player_name || ""),
+        award: normalizeCsvValue(obj.award || obj.awards || obj.honour || obj.honor || ""),
+        year: normalizeCsvValue(obj.year || obj.season || obj.years || "")
+      };
     }).filter(a => a.player && a.award);
   }catch(err){
     console.error("Could not load awards CSV", err);
@@ -634,16 +692,14 @@ async function loadAwardsCSV(){
 }
 
 function getPlayerAwards(playerSlug){
-  return awardsData.filter(a => slug(a.player || "") === playerSlug);
+  return awardsData.filter(a => slug(a.player) === playerSlug);
 }
 
 function renderAwards(playerSlug){
   const card = document.getElementById("awardsCard");
   const container = document.getElementById("awardsContent");
 
-  if(!card || !container){
-    return;
-  }
+  if(!card || !container) return;
 
   const awards = getPlayerAwards(playerSlug);
 
@@ -658,6 +714,7 @@ function renderAwards(playerSlug){
   awards.forEach(a => {
     const award = a.award || "Award";
     const year = a.year || "";
+
     if(!grouped[award]) grouped[award] = [];
     if(year) grouped[award].push(year);
   });
@@ -667,7 +724,9 @@ function renderAwards(playerSlug){
   let html = `<div class="awards-grid">`;
 
   awardNames.forEach(award => {
-    const years = grouped[award].slice().sort((a,b) => Number(b) - Number(a));
+    const years = [...new Set(grouped[award])]
+      .sort((a,b) => Number(b) - Number(a) || String(b).localeCompare(String(a)));
+
     html += `
       <div class="award-box">
         <div class="award-name">${award}</div>
@@ -739,6 +798,7 @@ async function loadPlayer(){
   }catch(err){
     console.error("Could not load player file", err);
     rows = [];
+    await loadAwardsCSV();
     buildFilters();
     renderCareer();
     renderFiltered();
