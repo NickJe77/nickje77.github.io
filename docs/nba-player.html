@@ -96,7 +96,7 @@ body{
   <div id="awardsContent"></div>
 </div>
 
-<!-- CAREER -->
+<!-- KEEP YOUR EXISTING PAGE CONTENT -->
 <div class="section-card">
   <div class="section-title">Career Summary</div>
   <div id="careerTotals"></div>
@@ -106,11 +106,15 @@ body{
 
 <script>
 
+/* =========================
+   EXISTING PLAYER PARAM
+========================= */
 const params = new URLSearchParams(window.location.search);
 const playerParam = params.get("player");
 
-let awardsData = [];
-
+/* =========================
+   HELPERS
+========================= */
 function slug(name){
   return (name || "")
     .toLowerCase()
@@ -118,49 +122,88 @@ function slug(name){
     .replace(/\s+/g,"-");
 }
 
-/* CSV LOADER */
+/* =========================
+   SAFE CSV PARSER
+========================= */
+function parseCSVLine(line){
+  const out = [];
+  let cur = "";
+  let inQuotes = false;
+
+  for(let i=0;i<line.length;i++){
+    const ch = line[i];
+    const next = line[i+1];
+
+    if(ch === '"'){
+      if(inQuotes && next === '"'){
+        cur += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if(ch === "," && !inQuotes){
+      out.push(cur.trim());
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+
+  out.push(cur.trim());
+  return out;
+}
+
+/* =========================
+   LOAD AWARDS
+========================= */
+let awardsData = [];
+
 async function loadAwardsCSV(){
   try{
-    const res = await fetch("/data/nba/nba_awards.csv"); // ✅ FIXED PATH
+    const res = await fetch("/docs/data/nba/nba_awards.csv");
     if(!res.ok) return;
 
     const text = await res.text();
-    const lines = text.split("\n").map(l=>l.trim()).filter(l=>l);
+    const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l);
 
-    const headers = lines[0].split(",").map(h=>h.trim().toLowerCase());
+    const headers = parseCSVLine(lines[0]).map(h=>h.toLowerCase());
 
     awardsData = [];
 
     lines.slice(1).forEach(line=>{
-      const values = line.split(",").map(v=>v.trim());
+      const values = parseCSVLine(line);
 
-      let row = {};
-      headers.forEach((h,i)=> row[h] = values[i] || "");
+      while(values.length < headers.length) values.push("");
 
-      const year = row.year;
+      const year = values[0];
 
-      Object.keys(row).forEach(key=>{
-        if(key === "year") return;
-
-        const player = row[key];
-        if(!player) return;
+      for(let i=1;i<headers.length;i++){
+        const player = values[i];
+        if(!player) continue;
 
         awardsData.push({
-          player,
-          award: key.toUpperCase(),
+          player: player.trim(),
+          award: headers[i].toUpperCase(),
           year
         });
-      });
+      }
     });
 
   }catch(e){
-    console.log("Awards failed");
+    console.log("Awards failed", e);
   }
 }
 
-function renderAwards(playerSlug){
+/* =========================
+   RENDER AWARDS
+========================= */
+function renderAwards(){
   const card = document.getElementById("awardsCard");
   const container = document.getElementById("awardsContent");
+
+  if(!card || !container) return;
+
+  const playerSlug = slug(playerParam);
 
   const awards = awardsData.filter(a => slug(a.player) === playerSlug);
 
@@ -194,6 +237,9 @@ function renderAwards(playerSlug){
   container.innerHTML = html;
 }
 
+/* =========================
+   INIT (NON-BREAKING)
+========================= */
 async function init(){
   if(!playerParam) return;
 
@@ -201,7 +247,7 @@ async function init(){
     playerParam.replace(/-/g," ");
 
   await loadAwardsCSV();
-  renderAwards(playerParam);
+  renderAwards();
 }
 
 init();
