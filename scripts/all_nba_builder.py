@@ -1,18 +1,34 @@
 import requests
+from bs4 import BeautifulSoup
 import json
 from pathlib import Path
 import re
 
-print("ALL-NBA BUILDER (API VERSION)")
+print("ALL-NBA BUILDER (FINAL FIX)")
+
+URL = "https://www.nba.com/news/history-all-nba-teams"
 
 OUTPUT = Path("docs/data/nba/all_nba.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
-# 🔥 This endpoint contains the real data
-URL = "https://cdn.nba.com/static/json/staticData/all_nba_teams.json"
+headers = {
+    "User-Agent": "Mozilla/5.0"
+}
 
-res = requests.get(URL)
-data_raw = res.json()
+res = requests.get(URL, headers=headers)
+html = res.text
+
+# 🔥 Extract embedded JSON from page
+match = re.search(r'window\.__NUXT__=(.*?);\s*</script>', html)
+
+if not match:
+    print("❌ Could not find embedded data")
+    exit()
+
+nuxt_data = json.loads(match.group(1))
+
+# 🔥 Navigate to article body
+body = nuxt_data["data"][0]["content"]["body"]
 
 data = []
 
@@ -28,36 +44,52 @@ TEAM_MAP = {
 def abbr(team):
     return TEAM_MAP.get(team, team)
 
-for season in data_raw.get("seasons", []):
+current = None
 
-    season_obj = {
-        "season": season.get("season"),
-        "first_team": [],
-        "second_team": [],
-        "third_team": []
-    }
+for block in body:
 
-    for team in season.get("teams", []):
-        team_type = team.get("teamType")  # FIRST / SECOND / THIRD
+    # season header
+    if block.get("type") == "heading":
+        text = block.get("text", "")
+        if re.match(r"\d{4}-\d{2}", text):
+            if current:
+                data.append(current)
 
-        key = None
-        if team_type == "FIRST":
-            key = "first_team"
-        elif team_type == "SECOND":
-            key = "second_team"
-        elif team_type == "THIRD":
-            key = "third_team"
-
-        if not key:
+            current = {
+                "season": text,
+                "first_team": [],
+                "second_team": [],
+                "third_team": []
+            }
             continue
 
-        for player in team.get("players", []):
-            season_obj[key].append({
-                "player": player.get("name"),
-                "team": abbr(player.get("teamName", ""))
-            })
+    # paragraphs (contain teams)
+    if block.get("type") == "paragraph" and current:
+        text = block.get("text", "")
 
-    data.append(season_obj)
+        if "First Team" in text:
+            key = "first_team"
+        elif "Second Team" in text:
+            key = "second_team"
+        elif "Third Team" in text:
+            key = "third_team"
+        else:
+            continue
+
+        players = text.split(":")[-1].split(";")
+
+        for p in players:
+            if "," in p:
+                name, team = p.split(",", 1)
+
+                current[key].append({
+                    "player": name.strip(),
+                    "team": abbr(team.strip())
+                })
+
+# append last
+if current:
+    data.append(current)
 
 with open(OUTPUT, "w") as f:
     json.dump(data, f, indent=2)
