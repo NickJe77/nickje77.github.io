@@ -1,15 +1,24 @@
+import requests
 import pandas as pd
 import json
 from pathlib import Path
 
-print("ALL-NBA BUILDER (FINAL WORKING VERSION)")
+print("ALL-NBA BUILDER (FINAL FIXED FOR 404)")
 
 OUTPUT = Path("docs/data/nba/all_nba.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
 URL = "https://www.basketball-reference.com/awards/all_nba.html"
 
-tables = pd.read_html(URL)
+headers = {
+    "User-Agent": "Mozilla/5.0"
+}
+
+res = requests.get(URL, headers=headers)
+html = res.text
+
+# 🔥 pass HTML instead of URL
+tables = pd.read_html(html)
 df = tables[0]
 
 data = []
