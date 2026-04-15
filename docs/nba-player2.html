@@ -634,25 +634,37 @@ async function loadAwards(){
     if(!res.ok) return;
 
     const text = await res.text();
-    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length);
     if(lines.length < 2) return;
 
     const headers = parseAwardsCSVLine(lines[0]).map(h => h.trim());
     const playerSlug = slug(playerParam || "");
-
     if(!playerSlug || playerSlug === "player") return;
 
     const grouped = {};
 
     for(let i=1;i<lines.length;i++){
       const parts = parseAwardsCSVLine(lines[i]);
-      const year = parts[0] || "";
+      const year = (parts[0] || "").trim();
 
       for(let j=1;j<headers.length;j++){
-        const player = (parts[j] || "").trim();
+        const rawPlayer = parts[j] || "";
+        const player = rawPlayer.trim();
         if(!player) continue;
 
-        if(slug(player) === playerSlug){
+        const csvSlug = slug(player);
+        const csvLoose = csvSlug.replace(/-/g,"");
+        const targetLoose = playerSlug.replace(/-/g,"");
+
+        const isMatch =
+          csvSlug === playerSlug ||
+          csvLoose === targetLoose ||
+          csvSlug.includes(playerSlug) ||
+          playerSlug.includes(csvSlug) ||
+          csvLoose.includes(targetLoose) ||
+          targetLoose.includes(csvLoose);
+
+        if(isMatch){
           const award = headers[j].trim().toUpperCase();
           if(!grouped[award]) grouped[award] = [];
           grouped[award].push(year);
