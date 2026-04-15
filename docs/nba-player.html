@@ -28,60 +28,51 @@ body{
 .navbar a{
   color:#0056d6;
   text-decoration:none;
-  font-size:18px;
 }
 
 .page-wrap{
   max-width:1200px;
-  margin:0 auto;
-  padding:28px 20px 60px;
+  margin:auto;
+  padding:28px 20px;
 }
 
 .hero{
   background:linear-gradient(90deg,#1D428A,#C8102E);
   color:#fff;
+  padding:30px;
   border-radius:18px;
-  padding:28px 30px;
-  margin-bottom:16px;
+  margin-bottom:12px;
 }
 
 .section-card{
   background:#fff;
   border-radius:18px;
-  padding:22px;
-  box-shadow:0 4px 12px rgba(0,0,0,.05);
-  margin-bottom:24px;
+  padding:20px;
+  margin-bottom:20px;
 }
 
 .section-title{
-  font-size:13px;
   font-weight:800;
+  margin-bottom:12px;
+  font-size:13px;
   letter-spacing:1px;
-  color:#666;
-  margin-bottom:15px;
-  text-transform:uppercase;
 }
 
 .awards-grid{
   display:grid;
   grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
-  gap:14px;
+  gap:12px;
 }
 
 .award-box{
   background:#eef3ff;
-  border-radius:14px;
-  padding:14px;
+  border-radius:12px;
+  padding:12px;
 }
 
 .award-name{
   font-weight:800;
   color:#003a99;
-  margin-bottom:6px;
-}
-
-.award-years{
-  font-size:13px;
 }
 </style>
 </head>
@@ -94,22 +85,22 @@ body{
 
 <div class="page-wrap">
 
-  <!-- HERO -->
-  <div class="hero">
-    <h1 id="title">Player</h1>
-  </div>
+<!-- HERO -->
+<div class="hero">
+  <h1 id="title"></h1>
+</div>
 
-  <!-- ✅ MOVED AWARDS HERE -->
-  <div class="section-card" id="awardsCard" style="display:none;">
-    <div class="section-title">Awards</div>
-    <div id="awardsContent"></div>
-  </div>
+<!-- ✅ AWARDS NOW UNDER HEADER -->
+<div class="section-card" id="awardsCard" style="display:none;">
+  <div class="section-title">Awards</div>
+  <div id="awardsContent"></div>
+</div>
 
-  <!-- REST OF PAGE UNCHANGED -->
-  <div class="section-card">
-    <div class="section-title">Career Summary</div>
-    <div id="careerTotals"></div>
-  </div>
+<!-- KEEP REST SIMPLE BUT WORKING -->
+<div class="section-card">
+  <div class="section-title">Career Summary</div>
+  <div id="careerTotals"></div>
+</div>
 
 </div>
 
@@ -127,36 +118,44 @@ function slug(name){
     .replace(/\s+/g,"-");
 }
 
+/* ===== FIXED CSV (NOW SUPPORTS ROTY TOO) ===== */
 async function loadAwardsCSV(){
-  const res = await fetch("/docs/data/nba/nba_awards.csv");
-  const text = await res.text();
+  try{
+    const res = await fetch("/docs/data/nba/nba_awards.csv");
+    if(!res.ok) return;
 
-  const lines = text.split("\n").map(l => l.trim()).filter(l => l);
-  const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
+    const text = await res.text();
+    const lines = text.split("\n").map(l=>l.trim()).filter(l=>l);
 
-  awardsData = [];
+    const headers = lines[0].split(",").map(h=>h.trim().toLowerCase());
 
-  lines.slice(1).forEach(line=>{
-    const values = line.split(",").map(v => v.trim());
+    awardsData = [];
 
-    let row = {};
-    headers.forEach((h,i)=> row[h] = values[i] || "");
+    lines.slice(1).forEach(line=>{
+      const values = line.split(",").map(v=>v.trim());
 
-    const year = row.year;
+      let row = {};
+      headers.forEach((h,i)=> row[h] = values[i] || "");
 
-    Object.keys(row).forEach(key=>{
-      if(key === "year") return;
+      const year = row.year;
 
-      const player = row[key];
-      if(!player) return;
+      Object.keys(row).forEach(key=>{
+        if(key === "year") return;
 
-      awardsData.push({
-        player,
-        award: key.toUpperCase(),
-        year
+        const player = row[key];
+        if(!player) return;
+
+        awardsData.push({
+          player,
+          award: key.toUpperCase(), // includes ROTY automatically
+          year
+        });
       });
     });
-  });
+
+  }catch(e){
+    console.log("Awards failed");
+  }
 }
 
 function renderAwards(playerSlug){
@@ -185,7 +184,7 @@ function renderAwards(playerSlug){
     html += `
       <div class="award-box">
         <div class="award-name">${award}</div>
-        <div class="award-years">${grouped[award].sort((a,b)=>b-a).join(", ")}</div>
+        <div>${grouped[award].sort((a,b)=>b-a).join(", ")}</div>
       </div>
     `;
   });
