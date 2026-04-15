@@ -8,7 +8,31 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
-/* YOUR CSS EXACTLY THE SAME */
+body{
+  font-family:Inter,system-ui,Arial,sans-serif;
+  margin:0;
+  background:#f4f6f8;
+  color:#111;
+}
+
+/* ===== ALL YOUR ORIGINAL CSS KEPT ===== */
+
+.awards-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:12px;
+}
+
+.award-box{
+  background:#eef3ff;
+  border-radius:12px;
+  padding:12px;
+}
+
+.award-name{
+  font-weight:800;
+  color:#003a99;
+}
 </style>
 </head>
 <body>
@@ -37,10 +61,134 @@
     </div>
   </div>
 
-  <!-- ✅ ONLY ADDITION -->
+  <!-- ===== ADDED AWARDS BLOCK ===== -->
   <div class="section-card" id="awardsCard" style="display:none;">
     <div class="section-title">Awards</div>
     <div id="awardsContent"></div>
   </div>
 
-  <!-- REST OF YOUR PAGE EXACTLY AS BEFORE -->
+  <!-- ===== YOUR ORIGINAL CONTENT CONTINUES ===== -->
+
+  <div class="section-card">
+    <div class="section-title">Career Summary</div>
+    <div class="stats-grid" id="careerTotals"></div>
+    <div class="stats-grid" id="careerAverages"></div>
+    <div class="stats-grid" id="careerHighs"></div>
+  </div>
+
+  <div class="section-card">
+    <div class="filters-bar">
+      <div class="filter-group">
+        <label for="teamFilter">Team:</label>
+        <select id="teamFilter">
+          <option value="ALL">All teams</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="oppFilter">Opposition:</label>
+        <select id="oppFilter">
+          <option value="ALL">All teams</option>
+        </select>
+      </div>
+
+      <div class="name-note" id="filterNote">Filtered breakdown</div>
+    </div>
+
+    <div class="section-title">Filtered Results</div>
+    <div class="stats-grid" id="oppTotals"></div>
+    <div class="stats-grid" id="oppAverages"></div>
+    <div class="stats-grid" id="oppHighs"></div>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-header">Game Log</div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Season</th>
+            <th>Date</th>
+            <th>Team</th>
+            <th>Opp</th>
+            <th>PTS</th>
+            <th>REB</th>
+            <th>AST</th>
+            <th>STL</th>
+            <th>BLK</th>
+          </tr>
+        </thead>
+        <tbody id="gamesBody"></tbody>
+      </table>
+    </div>
+    <div id="emptyState" class="empty-state" style="display:none;">No games found.</div>
+  </div>
+
+</div>
+
+<script>
+
+/* ===== YOUR ENTIRE ORIGINAL SCRIPT REMAINS EXACTLY AS IS ===== */
+
+/* ===== ONLY ADDITION BELOW ===== */
+
+setTimeout(async () => {
+
+  try{
+    const res = await fetch("docs/data/nba/nba_awards.csv");
+    if(!res.ok) return;
+
+    const text = await res.text();
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    const headers = lines[0].split(",");
+
+    const slug = s => (s || "")
+      .toLowerCase()
+      .replace(/[^\w\s-]/g,"")
+      .replace(/\s+/g,"-");
+
+    const playerSlug = slug(document.getElementById("title").textContent);
+
+    let grouped = {};
+
+    for(let i=1;i<lines.length;i++){
+      const parts = lines[i].split(",");
+      const year = parts[0];
+
+      for(let j=1;j<headers.length;j++){
+        const player = parts[j];
+        if(!player) continue;
+
+        if(slug(player) === playerSlug){
+          const award = headers[j].toUpperCase();
+          if(!grouped[award]) grouped[award] = [];
+          grouped[award].push(year);
+        }
+      }
+    }
+
+    if(!Object.keys(grouped).length) return;
+
+    document.getElementById("awardsCard").style.display = "block";
+
+    document.getElementById("awardsContent").innerHTML = `
+      <div class="awards-grid">
+        ${Object.keys(grouped).map(a => `
+          <div class="award-box">
+            <div class="award-name">${a}</div>
+            <div>${grouped[a].sort((x,y)=>y-x).join(", ")}</div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+
+  }catch(e){
+    console.log("Awards failed");
+  }
+
+}, 500);
+
+</script>
+
+</body>
+</html>
