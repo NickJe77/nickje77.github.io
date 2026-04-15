@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import re
 
-print("ALL-NBA BUILDER (STABLE)")
+print("ALL-NBA BUILDER (FIXED PARSER)")
 
 URL = "https://www.nba.com/news/history-all-nba-teams"
 
@@ -18,7 +18,14 @@ headers = {
 res = requests.get(URL, headers=headers)
 soup = BeautifulSoup(res.text, "html.parser")
 
-text = soup.get_text("\n")
+# 🔥 KEY FIX: target article content only
+article = soup.find("article")
+
+if not article:
+    print("❌ Could not find article content")
+    exit()
+
+text = article.get_text("\n")
 
 lines = [l.strip() for l in text.split("\n") if l.strip()]
 
@@ -45,7 +52,7 @@ def abbr(team):
 
 for line in lines:
 
-    # season line
+    # season
     if re.match(r"^\d{4}-\d{2}$", line):
         if season_obj:
             data.append(season_obj)
@@ -60,35 +67,35 @@ for line in lines:
         continue
 
     # team headers
-    if "FIRST TEAM" in line:
+    if "First Team" in line:
         current_team = "first_team"
         continue
-    if "SECOND TEAM" in line:
+    if "Second Team" in line:
         current_team = "second_team"
         continue
-    if "THIRD TEAM" in line:
+    if "Third Team" in line:
         current_team = "third_team"
         continue
 
-    # player lines
-    if line.startswith("•") and season_obj and current_team:
-        clean = line.replace("•", "").strip()
+    # players
+    if current_team and season_obj:
+        # expected format: Player Name, Team
+        if "," in line and not any(x in line for x in ["Team", "Season"]):
 
-        # remove positions (F:, G:, C:)
-        clean = re.sub(r"^[A-Z]:\s*", "", clean)
+            parts = line.split(",")
 
-        parts = clean.split(",")
+            if len(parts) >= 2:
+                player = parts[0].strip()
+                team = parts[1].strip()
 
-        if len(parts) >= 2:
-            player = parts[0].strip()
-            team = parts[1].strip()
+                # ignore junk lines
+                if len(player.split()) >= 2:
+                    season_obj[current_team].append({
+                        "player": player,
+                        "team": abbr(team)
+                    })
 
-            season_obj[current_team].append({
-                "player": player,
-                "team": abbr(team)
-            })
-
-# final append
+# append last
 if season_obj:
     data.append(season_obj)
 
