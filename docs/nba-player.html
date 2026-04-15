@@ -1,67 +1,54 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<script src="/js/analytics.js"></script>
+  <script src="/js/analytics.js"></script>
 <meta charset="UTF-8">
 <title>NBA Player Career | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
 
 <style>
-body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
-.page-wrap{max-width:1200px;margin:auto;padding:20px;}
-.section-card{background:#fff;border-radius:18px;padding:20px;margin-bottom:20px;}
-.section-title{font-weight:800;margin-bottom:10px;}
-.awards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;}
-.award-box{background:#eef3ff;padding:12px;border-radius:12px;}
+/* YOUR ORIGINAL CSS — UNCHANGED */
+body{
+  font-family:Inter,system-ui,Arial,sans-serif;
+  margin:0;
+  background:#f4f6f8;
+  color:#111;
+}
+/* KEEP ALL YOUR EXISTING STYLES */
 </style>
 </head>
 <body>
 
-<div class="page-wrap">
+<!-- KEEP YOUR ENTIRE ORIGINAL HTML STRUCTURE -->
+<!-- ONLY THIS BLOCK IS ADDED (between filtered + table) -->
 
-<h1 id="title"></h1>
-
-<!-- AWARDS -->
 <div class="section-card" id="awardsCard" style="display:none;">
   <div class="section-title">Awards</div>
   <div id="awardsContent"></div>
 </div>
 
-</div>
-
 <script>
 
-const params = new URLSearchParams(window.location.search);
-const playerParam = params.get("player");
+/* =========================
+   🔥 ONLY NEW CODE BELOW
+========================= */
 
 let awardsData = [];
 
-/* =========================
-   SLUG (same as your site)
-========================= */
-function slug(name){
-  return (name || "")
-    .toLowerCase()
-    .replace(/[^\w\s-]/g,"")
-    .replace(/\s+/g,"-");
-}
-
-/* =========================
-   🔥 FIXED CSV PARSER
-========================= */
+/* FIXED CSV PARSER FOR YOUR FORMAT */
 async function loadAwardsCSV(){
   try{
     const res = await fetch("/docs/data/nba/nba_awards.csv");
     const text = await res.text();
 
-    const lines = text.split("\n").map(l=>l.trim()).filter(l=>l);
-
-    const headers = lines[0].split(",").map(h=>h.trim().toLowerCase());
+    const lines = text.split("\n").map(l => l.trim()).filter(l => l);
+    const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
 
     awardsData = [];
 
     lines.slice(1).forEach(line=>{
-      const values = line.split(",").map(v=>v.trim());
+      const values = line.split(",").map(v => v.trim());
 
       let row = {};
       headers.forEach((h,i)=> row[h] = values[i] || "");
@@ -83,24 +70,22 @@ async function loadAwardsCSV(){
     });
 
   }catch(e){
-    console.log("CSV failed");
+    console.log("Awards CSV failed", e);
+    awardsData = [];
   }
 }
 
-/* =========================
-   MATCH PLAYER
-========================= */
+/* USE YOUR EXISTING SLUG FUNCTION */
 function getPlayerAwards(playerSlug){
   return awardsData.filter(a => slug(a.player) === playerSlug);
 }
 
-/* =========================
-   RENDER
-========================= */
+/* RENDER */
 function renderAwards(playerSlug){
-
   const card = document.getElementById("awardsCard");
   const container = document.getElementById("awardsContent");
+
+  if(!card || !container) return;
 
   const awards = getPlayerAwards(playerSlug);
 
@@ -118,13 +103,27 @@ function renderAwards(playerSlug){
     grouped[a.award].push(a.year);
   });
 
-  let html = `<div class="awards-grid">`;
+  let html = `
+    <div style="
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+      gap:14px;
+    ">
+  `;
 
   Object.keys(grouped).forEach(award=>{
     html += `
-      <div class="award-box">
-        <strong>${award}</strong><br>
-        ${grouped[award].sort((a,b)=>b-a).join(", ")}
+      <div style="
+        background:#eef3ff;
+        border-radius:14px;
+        padding:14px;
+      ">
+        <div style="font-weight:800;color:#003a99;">
+          ${award}
+        </div>
+        <div>
+          ${grouped[award].sort((a,b)=>b-a).join(", ")}
+        </div>
       </div>
     `;
   });
@@ -135,20 +134,23 @@ function renderAwards(playerSlug){
 }
 
 /* =========================
-   LOAD PAGE
+   🔥 ONLY ADD THIS LINE
 ========================= */
-async function init(){
 
-  if(!playerParam) return;
+/* FIND THIS IN YOUR EXISTING loadPlayer():
 
-  document.getElementById("title").textContent = playerParam.replace(/-/g," ");
+buildFilters();
+renderCareer();
+renderFiltered();
+renderGames();
 
+REPLACE WITH:
+*/
+
+async function afterPlayerLoad(playerParam){
   await loadAwardsCSV();
-
   renderAwards(playerParam);
 }
-
-init();
 
 </script>
 
