@@ -1,40 +1,165 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <script src="/js/analytics.js"></script>
+<script src="/js/analytics.js"></script>
 <meta charset="UTF-8">
 <title>NBA Player Career | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="style.css">
 
 <style>
-/* YOUR ORIGINAL CSS — UNCHANGED */
 body{
   font-family:Inter,system-ui,Arial,sans-serif;
   margin:0;
   background:#f4f6f8;
-  color:#111;
 }
-/* KEEP ALL YOUR EXISTING STYLES */
+.page-wrap{max-width:1200px;margin:auto;padding:20px;}
+.section-card{background:#fff;border-radius:18px;padding:20px;margin-bottom:20px;}
+.section-title{font-weight:800;margin-bottom:10px;}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;}
+.stat-box{background:#eef3ff;padding:12px;border-radius:12px;text-align:center;}
+.awards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;}
+.award-box{background:#eef3ff;padding:12px;border-radius:12px;}
 </style>
 </head>
 <body>
 
-<!-- KEEP YOUR ENTIRE ORIGINAL HTML STRUCTURE -->
-<!-- ONLY THIS BLOCK IS ADDED (between filtered + table) -->
+<div class="page-wrap">
 
+<h1 id="title"></h1>
+
+<div class="section-card">
+  <div class="section-title">Career Summary</div>
+  <div class="stats-grid" id="careerTotals"></div>
+</div>
+
+<div class="section-card">
+  <div class="section-title">Filtered Results</div>
+  <div class="stats-grid" id="oppTotals"></div>
+</div>
+
+<!-- AWARDS -->
 <div class="section-card" id="awardsCard" style="display:none;">
   <div class="section-title">Awards</div>
   <div id="awardsContent"></div>
 </div>
 
+</div>
+
 <script>
 
-/* =========================
-   🔥 ONLY NEW CODE BELOW
-========================= */
+const params = new URLSearchParams(window.location.search);
+const playerParam = params.get("player");
 
+let rows = [];
 let awardsData = [];
+
+/* ===== SLUG ===== */
+function slug(name){
+  return (name || "")
+    .toLowerCase()
+    .replace(/[^\w\s-]/g,"")
+    .replace(/\s+/g,"-");
+}
+
+/* ===== LOAD AWARDS (FIXED FOR YOUR CSV) ===== */
+async function loadAwardsCSV(){
+  try{
+    const res = await fetch("/docs/data/nba/nba_awards.csv");
+    const text = await res.text();
+
+    const lines = text.split("\n").map(l => l.trim()).filter(l => l);
+    const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
+
+    awardsData = [];
+
+    lines.slice(1).forEach(line=>{
+      const values = line.split(",").map(v => v.trim());
+
+      let row = {};
+      headers.forEach((h,i)=> row[h] = values[i] || "");
+
+      const year = row.year;
+
+      Object.keys(row).forEach(key=>{
+        if(key === "year") return;
+
+        const player = row[key];
+        if(!player) return;
+
+        awardsData.push({
+          player: player,
+          award: key.toUpperCase(),
+          year: year
+        });
+      });
+    });
+
+  }catch(e){
+    console.log("Awards load failed");
+  }
+}
+
+/* ===== MATCH ===== */
+function getPlayerAwards(playerSlug){
+  return awardsData.filter(a => slug(a.player) === playerSlug);
+}
+
+/* ===== RENDER ===== */
+function renderAwards(playerSlug){
+  const card = document.getElementById("awardsCard");
+  const container = document.getElementById("awardsContent");
+
+  const awards = getPlayerAwards(playerSlug);
+
+  if(!awards.length){
+    card.style.display = "none";
+    return;
+  }
+
+  card.style.display = "block";
+
+  const grouped = {};
+
+  awards.forEach(a=>{
+    if(!grouped[a.award]) grouped[a.award] = [];
+    grouped[a.award].push(a.year);
+  });
+
+  let html = `<div class="awards-grid">`;
+
+  Object.keys(grouped).forEach(award=>{
+    html += `
+      <div class="award-box">
+        <strong>${award}</strong><br>
+        ${grouped[award].sort((a,b)=>b-a).join(", ")}
+      </div>
+    `;
+  });
+
+  html += `</div>`;
+
+  container.innerHTML = html;
+}
+
+/* ===== LOAD PAGE ===== */
+async function init(){
+
+  if(!playerParam) return;
+
+  document.getElementById("title").textContent =
+    playerParam.replace(/-/g," ");
+
+  await loadAwardsCSV();
+
+  renderAwards(playerParam);
+}
+
+init();
+
+</script>
+
+</body>
+</html>let awardsData = [];
 
 /* FIXED CSV PARSER FOR YOUR FORMAT */
 async function loadAwardsCSV(){
