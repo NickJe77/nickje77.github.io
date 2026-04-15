@@ -245,6 +245,30 @@ tbody tr:hover{
   font-weight:600;
 }
 
+.awards-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:14px;
+}
+
+.award-box{
+  background:#eef3ff;
+  border-radius:14px;
+  padding:14px;
+}
+
+.award-name{
+  font-weight:800;
+  color:#003a99;
+  margin-bottom:6px;
+}
+
+.award-years{
+  font-size:13px;
+  color:#444;
+  line-height:1.4;
+}
+
 @media (max-width: 800px){
   #title{
     font-size:32px;
@@ -319,6 +343,11 @@ tbody tr:hover{
     <div class="stats-grid" id="oppHighs"></div>
   </div>
 
+  <div class="section-card" id="awardsCard" style="display:none;">
+    <div class="section-title">Awards</div>
+    <div id="awardsContent"></div>
+  </div>
+
   <div class="table-wrap">
     <div class="table-header">Game Log</div>
     <div class="table-scroll">
@@ -360,6 +389,7 @@ const emptyState = document.getElementById("emptyState");
 let rows = [];
 let currentTeam = "";
 let playersLoaded = false;
+let awardsData = [];
 
 const teamColours = {
   "Atlanta Hawks":["#E03A3E","#C1D32F"],
@@ -408,24 +438,6 @@ function slug(name){
 function parseNum(v){
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
-}
-
-function stat(r, key){
-  const map = {
-    pts: ["pts", "points"],
-    reb: ["reb", "rebounds"],
-    ast: ["ast", "assists"],
-    stl: ["stl", "steals"],
-    blk: ["blk", "blocks"]
-  };
-
-  for(const k of map[key] || [key]){
-    if(r[k] != null && r[k] !== ""){
-      return parseNum(r[k]);
-    }
-  }
-
-  return 0;
 }
 
 function normalizeRow(r){
@@ -543,6 +555,24 @@ async function fetchJSON(paths){
   throw lastError || new Error("Unable to load JSON");
 }
 
+async function fetchText(paths){
+  let lastError = null;
+
+  for(const path of paths){
+    try{
+      const res = await fetch(path, { cache: "no-store" });
+      if(res.ok){
+        return await res.text();
+      }
+      lastError = new Error(`Failed ${path}: ${res.status}`);
+    }catch(err){
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error("Unable to load text");
+}
+
 async function loadPlayers(){
   if(playersLoaded) return;
 
@@ -569,6 +599,104 @@ async function loadPlayers(){
   }catch(err){
     console.error("Could not load player index", err);
   }
+}
+
+async function loadAwardsCSV(){
+  try{
+    const text = await fetchText([
+      "data/nba/nba_awards.csv",
+      "/data/nba/nba_awards.csv",
+      "docs/data/nba/nba_awards.csv",
+      "/docs/data/nba/nba_awards.csv"
+    ]);
+
+    const lines = text
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(l => l);
+
+    if(!lines.length){
+      awardsData = [];
+      return;
+    }
+
+    const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
+    awardsData = [];
+
+    lines.slice(1).forEach(line=>{
+      const values = line.split(",").map(v => v.trim());
+      const row = {};
+
+      headers.forEach((h, i) => {
+        row[h] = values[i] || "";
+      });
+
+      const year = row.year || "";
+
+      Object.keys(row).forEach(key=>{
+        if(key === "year") return;
+
+        const player = (row[key] || "").trim();
+        if(!player) return;
+
+        awardsData.push({
+          player,
+          award: key.toUpperCase(),
+          year
+        });
+      });
+    });
+  }catch(err){
+    console.error("Could not load awards CSV", err);
+    awardsData = [];
+  }
+}
+
+function getPlayerAwards(playerSlug){
+  return awardsData.filter(a => slug(a.player) === playerSlug);
+}
+
+function renderAwards(playerSlug){
+  const card = document.getElementById("awardsCard");
+  const container = document.getElementById("awardsContent");
+
+  if(!card || !container) return;
+
+  const awards = getPlayerAwards(playerSlug);
+
+  if(!awards.length){
+    card.style.display = "none";
+    container.innerHTML = "";
+    return;
+  }
+
+  const grouped = {};
+
+  awards.forEach(a=>{
+    if(!grouped[a.award]) grouped[a.award] = [];
+    if(a.year) grouped[a.award].push(a.year);
+  });
+
+  let html = `<div class="awards-grid">`;
+
+  Object.keys(grouped)
+    .sort((a,b)=>a.localeCompare(b))
+    .forEach(award=>{
+      const years = [...new Set(grouped[award])]
+        .sort((a,b)=>Number(b) - Number(a) || String(b).localeCompare(String(a)));
+
+      html += `
+        <div class="award-box">
+          <div class="award-name">${award}</div>
+          <div class="award-years">${years.join(", ")}</div>
+        </div>
+      `;
+    });
+
+  html += `</div>`;
+
+  card.style.display = "block";
+  container.innerHTML = html;
 }
 
 document.getElementById("playerSearch").addEventListener("change", e=>{
@@ -618,15 +746,21 @@ async function loadPlayer(){
     currentTeam = getLatestTeam();
     setStripe(currentTeam);
 
+    await loadAwardsCSV();
+
     buildFilters();
     renderCareer();
     renderFiltered();
+    renderAwards(playerParam);
     renderGames();
   }catch(err){
     console.error("Could not load player file", err);
     rows = [];
+    await loadAwardsCSV();
+    buildFilters();
     renderCareer();
     renderFiltered();
+    renderAwards(playerParam);
     renderGames();
   }
 }
@@ -801,7 +935,7 @@ function renderFiltered(){
   let noteParts = [];
   if(teamFilter.value !== "ALL") noteParts.push(teamFilter.value);
   if(oppFilter.value !== "ALL") noteParts.push("vs " + oppFilter.value);
-  filterNote.textContent = noteParts.length ? noteParts.join(" ‚Ä¢ ") : "Filtered breakdown";
+  filterNote.textContent = noteParts.length ? noteParts.join(" • ") : "Filtered breakdown";
 
   document.getElementById("oppTotals").innerHTML = `
     ${statBox(filtered.length, "Games")}
