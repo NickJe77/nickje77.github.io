@@ -641,28 +641,45 @@ async function loadAwards(){
       "docs/data/nba/nba_awards.csv"
     ];
 
-    let text = "";
+    let csvText = "";
     for(const path of paths){
       try{
         const res = await fetch(path + "?v=" + Date.now(), { cache: "no-store" });
         if(res.ok){
-          text = await res.text();
+          csvText = await res.text();
           break;
         }
       }catch(err){}
     }
 
-    if(!text) return;
+    const awardsCard = document.getElementById("awardsCard");
+    const awardsContent = document.getElementById("awardsContent");
 
-    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    if(lines.length < 2) return;
+    if(!csvText){
+      awardsCard.style.display = "block";
+      awardsContent.innerHTML = '<div class="award-box">Awards file not found.</div>';
+      return;
+    }
+
+    const lines = csvText.split(/
+?
+/).map(l => l.trim()).filter(Boolean);
+    if(lines.length < 2){
+      awardsCard.style.display = "block";
+      awardsContent.innerHTML = '<div class="award-box">Awards file is empty.</div>';
+      return;
+    }
 
     const headers = parseAwardsCSVLine(lines[0]).map(h => h.trim());
     const playerSlug = String(playerParam || "")
       .toLowerCase()
       .replace(/[^a-z]/g, "");
 
-    if(!playerSlug || playerSlug === "player") return;
+    if(!playerSlug || playerSlug === "player"){
+      awardsCard.style.display = "none";
+      awardsContent.innerHTML = "";
+      return;
+    }
 
     const grouped = {};
 
@@ -671,7 +688,7 @@ async function loadAwards(){
       const year = parts[0] || "";
 
       for(let j=1;j<headers.length;j++){
-        let player = (parts[j] || "");
+        const player = (parts[j] || "").trim();
         if(!player) continue;
 
         const csvSlug = String(player)
@@ -686,12 +703,9 @@ async function loadAwards(){
       }
     }
 
-    const awardsCard = document.getElementById("awardsCard");
-    const awardsContent = document.getElementById("awardsContent");
-
     if(!Object.keys(grouped).length){
-      awardsCard.style.display = "none";
-      awardsContent.innerHTML = "";
+      awardsCard.style.display = "block";
+      awardsContent.innerHTML = '<div class="award-box">No awards found.</div>';
       return;
     }
 
@@ -708,6 +722,10 @@ async function loadAwards(){
     `;
   }catch(err){
     console.error("Could not load awards", err);
+    const awardsCard = document.getElementById("awardsCard");
+    const awardsContent = document.getElementById("awardsContent");
+    awardsCard.style.display = "block";
+    awardsContent.innerHTML = '<div class="award-box">Could not load awards.</div>';
   }
 }
 
