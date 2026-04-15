@@ -2,92 +2,91 @@ import requests
 from bs4 import BeautifulSoup
 import json
 from pathlib import Path
-import re
 
-print("ALL-NBA BUILDER (FINAL FIX)")
+print("ALL-NBA BUILDER (WORKING HTML PARSER)")
 
 URL = "https://www.nba.com/news/history-all-nba-teams"
 
 OUTPUT = Path("docs/data/nba/all_nba.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
-headers = {
-    "User-Agent": "Mozilla/5.0"
-}
-
+headers = {"User-Agent": "Mozilla/5.0"}
 res = requests.get(URL, headers=headers)
-html = res.text
-
-# 🔥 Extract embedded JSON from page
-match = re.search(r'window\.__NUXT__=(.*?);\s*</script>', html)
-
-if not match:
-    print("❌ Could not find embedded data")
-    exit()
-
-nuxt_data = json.loads(match.group(1))
-
-# 🔥 Navigate to article body
-body = nuxt_data["data"][0]["content"]["body"]
+soup = BeautifulSoup(res.text, "html.parser")
 
 data = []
 
 TEAM_MAP = {
-    "Bucks":"MIL","Thunder":"OKC","Nuggets":"DEN","Cavaliers":"CLE","Celtics":"BOS",
-    "Knicks":"NYK","Warriors":"GSW","Timberwolves":"MIN","Lakers":"LAL","Pistons":"DET",
-    "Pacers":"IND","Clippers":"LAC","Mavericks":"DAL","Suns":"PHX","76ers":"PHI",
-    "Heat":"MIA","Kings":"SAC","Trail Blazers":"POR","Raptors":"TOR","Bulls":"CHI",
-    "Nets":"BKN","Hawks":"ATL","Jazz":"UTA","Wizards":"WAS","Pelicans":"NOP",
-    "Hornets":"CHA","Grizzlies":"MEM","Spurs":"SAS","Rockets":"HOU","Magic":"ORL"
+    "Milwaukee Bucks":"MIL","Oklahoma City Thunder":"OKC","Denver Nuggets":"DEN",
+    "Cleveland Cavaliers":"CLE","Boston Celtics":"BOS","New York Knicks":"NYK",
+    "Golden State Warriors":"GSW","Minnesota Timberwolves":"MIN",
+    "Los Angeles Lakers":"LAL","Detroit Pistons":"DET","Indiana Pacers":"IND",
+    "LA Clippers":"LAC","Dallas Mavericks":"DAL","Phoenix Suns":"PHX",
+    "Philadelphia 76ers":"PHI","Miami Heat":"MIA","Sacramento Kings":"SAC",
+    "Portland Trail Blazers":"POR","Toronto Raptors":"TOR","Chicago Bulls":"CHI",
+    "Brooklyn Nets":"BKN","Atlanta Hawks":"ATL","Utah Jazz":"UTA",
+    "Washington Wizards":"WAS","New Orleans Pelicans":"NOP",
+    "Charlotte Hornets":"CHA","Memphis Grizzlies":"MEM",
+    "San Antonio Spurs":"SAS","Houston Rockets":"HOU","Orlando Magic":"ORL"
 }
 
 def abbr(team):
     return TEAM_MAP.get(team, team)
 
+article = soup.find("article")
+
+if not article:
+    print("❌ Article not found")
+    exit()
+
+elements = article.find_all(["h2", "h3", "ul"])
+
 current = None
+current_team = None
 
-for block in body:
+for el in elements:
 
-    # season header
-    if block.get("type") == "heading":
-        text = block.get("text", "")
-        if re.match(r"\d{4}-\d{2}", text):
+    # SEASON (e.g. > 2024-25)
+    if el.name == "h2":
+        season = el.text.replace(">", "").strip()
+
+        if "-" in season:
             if current:
                 data.append(current)
 
             current = {
-                "season": text,
+                "season": season,
                 "first_team": [],
                 "second_team": [],
                 "third_team": []
             }
-            continue
+            current_team = None
 
-    # paragraphs (contain teams)
-    if block.get("type") == "paragraph" and current:
-        text = block.get("text", "")
+    # TEAM HEADINGS
+    elif el.name == "h3" and current:
+        text = el.text.strip().upper()
 
-        if "First Team" in text:
-            key = "first_team"
-        elif "Second Team" in text:
-            key = "second_team"
-        elif "Third Team" in text:
-            key = "third_team"
-        else:
-            continue
+        if "FIRST TEAM" in text:
+            current_team = "first_team"
+        elif "SECOND TEAM" in text:
+            current_team = "second_team"
+        elif "THIRD TEAM" in text:
+            current_team = "third_team"
 
-        players = text.split(":")[-1].split(";")
+    # PLAYER LISTS
+    elif el.name == "ul" and current and current_team:
+        for li in el.find_all("li"):
+            text = li.text.strip()
 
-        for p in players:
-            if "," in p:
-                name, team = p.split(",", 1)
+            if "," in text:
+                name, team = text.split(",", 1)
 
-                current[key].append({
+                current[current_team].append({
                     "player": name.strip(),
                     "team": abbr(team.strip())
                 })
 
-# append last
+# append last season
 if current:
     data.append(current)
 
