@@ -421,7 +421,12 @@ function cleanName(name){
 }
 
 function slug(name){
-  return cleanName(name)
+  return (name || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"")
+    .replace(/\u00a0/g," ")
+    .replace(/\s+/g," ")
+    .trim()
     .toLowerCase()
     .replace(/[^\w\s-]/g,"")
     .replace(/\s+/g,"-");
@@ -634,37 +639,25 @@ async function loadAwards(){
     if(!res.ok) return;
 
     const text = await res.text();
-    const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     if(lines.length < 2) return;
 
     const headers = parseAwardsCSVLine(lines[0]).map(h => h.trim());
     const playerSlug = slug(playerParam || "");
+
     if(!playerSlug || playerSlug === "player") return;
 
     const grouped = {};
 
     for(let i=1;i<lines.length;i++){
       const parts = parseAwardsCSVLine(lines[i]);
-      const year = (parts[0] || "").trim();
+      const year = parts[0] || "";
 
       for(let j=1;j<headers.length;j++){
-        const rawPlayer = parts[j] || "";
-        const player = rawPlayer.trim();
+        const player = (parts[j] || "").trim();
         if(!player) continue;
 
-        const csvSlug = slug(player);
-        const csvLoose = csvSlug.replace(/-/g,"");
-        const targetLoose = playerSlug.replace(/-/g,"");
-
-        const isMatch =
-          csvSlug === playerSlug ||
-          csvLoose === targetLoose ||
-          csvSlug.includes(playerSlug) ||
-          playerSlug.includes(csvSlug) ||
-          csvLoose.includes(targetLoose) ||
-          targetLoose.includes(csvLoose);
-
-        if(isMatch){
+        if(slug(player) === playerSlug){
           const award = headers[j].trim().toUpperCase();
           if(!grouped[award]) grouped[award] = [];
           grouped[award].push(year);
