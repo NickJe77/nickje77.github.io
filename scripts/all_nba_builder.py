@@ -1,57 +1,30 @@
-import requests
-from bs4 import BeautifulSoup, Comment
+import pandas as pd
 import json
 from pathlib import Path
 
-print("ALL-NBA BUILDER (FINAL WORKING - COMMENTS FIX)")
-
-URL = "https://www.basketball-reference.com/awards/all_nba.html"
+print("ALL-NBA BUILDER (FINAL WORKING VERSION)")
 
 OUTPUT = Path("docs/data/nba/all_nba.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
-headers = {"User-Agent": "Mozilla/5.0"}
-res = requests.get(URL, headers=headers)
-soup = BeautifulSoup(res.text, "html.parser")
+URL = "https://www.basketball-reference.com/awards/all_nba.html"
 
-# 🔥 FIND TABLE INSIDE COMMENTS
-comments = soup.find_all(string=lambda text: isinstance(text, Comment))
-
-table = None
-
-for c in comments:
-    if "id=\"all_nba\"" in c:
-        comment_soup = BeautifulSoup(c, "html.parser")
-        table = comment_soup.find("table", {"id": "all_nba"})
-        break
-
-if not table:
-    print("❌ Table not found")
-    exit()
-
-tbody = table.find("tbody")
+tables = pd.read_html(URL)
+df = tables[0]
 
 data = []
-season_obj = None
 current_season = None
+season_obj = None
 
 TEAM_MAP = {
     "BRK": "BKN",
     "CHO": "CHA"
 }
 
-for row in tbody.find_all("tr"):
+for _, row in df.iterrows():
 
-    if row.get("class") and "thead" in row.get("class"):
-        continue
-
-    season = row.find("th").text.strip()
-    tds = row.find_all("td")
-
-    if not tds:
-        continue
-
-    team_type = tds[0].text.strip()
+    season = row["Season"]
+    team_type = row["Lg"]
 
     if season != current_season:
         if season_obj:
@@ -76,22 +49,25 @@ for row in tbody.find_all("tr"):
     if not key:
         continue
 
-    players = tds[1:6]
-    teams = tds[6:11]
+    players = [
+        row["Player 1"], row["Player 2"], row["Player 3"],
+        row["Player 4"], row["Player 5"]
+    ]
+
+    teams = [
+        row["Tm 1"], row["Tm 2"], row["Tm 3"],
+        row["Tm 4"], row["Tm 5"]
+    ]
 
     for p, t in zip(players, teams):
-        name = p.text.strip()
-        team = t.text.strip()
-
-        if name:
-            team = TEAM_MAP.get(team, team)
+        if pd.notna(p):
+            team = TEAM_MAP.get(t, t)
 
             season_obj[key].append({
-                "player": name,
-                "team": team
+                "player": str(p),
+                "team": str(team)
             })
 
-# append last
 if season_obj:
     data.append(season_obj)
 
