@@ -1,0 +1,98 @@
+import requests
+from bs4 import BeautifulSoup
+import json
+from pathlib import Path
+import re
+
+print("ALL-NBA BUILDER (STABLE)")
+
+URL = "https://www.nba.com/news/history-all-nba-teams"
+
+OUTPUT = Path("docs/data/nba/all_nba.json")
+OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+
+headers = {
+    "User-Agent": "Mozilla/5.0"
+}
+
+res = requests.get(URL, headers=headers)
+soup = BeautifulSoup(res.text, "html.parser")
+
+text = soup.get_text("\n")
+
+lines = [l.strip() for l in text.split("\n") if l.strip()]
+
+data = []
+season_obj = None
+current_team = None
+
+TEAM_MAP = {
+    "Milwaukee Bucks":"MIL","Oklahoma City Thunder":"OKC","Denver Nuggets":"DEN",
+    "Cleveland Cavaliers":"CLE","Boston Celtics":"BOS","New York Knicks":"NYK",
+    "Golden State Warriors":"GSW","Minnesota Timberwolves":"MIN",
+    "Los Angeles Lakers":"LAL","Detroit Pistons":"DET","Indiana Pacers":"IND",
+    "LA Clippers":"LAC","Dallas Mavericks":"DAL","Phoenix Suns":"PHX",
+    "Philadelphia 76ers":"PHI","Miami Heat":"MIA","Sacramento Kings":"SAC",
+    "Portland Trail Blazers":"POR","Toronto Raptors":"TOR","Chicago Bulls":"CHI",
+    "Brooklyn Nets":"BKN","Atlanta Hawks":"ATL","Utah Jazz":"UTA",
+    "Washington Wizards":"WAS","New Orleans Pelicans":"NOP",
+    "Charlotte Hornets":"CHA","Memphis Grizzlies":"MEM",
+    "San Antonio Spurs":"SAS","Houston Rockets":"HOU","Orlando Magic":"ORL"
+}
+
+def abbr(team):
+    return TEAM_MAP.get(team, team)
+
+for line in lines:
+
+    # season line
+    if re.match(r"^\d{4}-\d{2}$", line):
+        if season_obj:
+            data.append(season_obj)
+
+        season_obj = {
+            "season": line,
+            "first_team": [],
+            "second_team": [],
+            "third_team": []
+        }
+        current_team = None
+        continue
+
+    # team headers
+    if "FIRST TEAM" in line:
+        current_team = "first_team"
+        continue
+    if "SECOND TEAM" in line:
+        current_team = "second_team"
+        continue
+    if "THIRD TEAM" in line:
+        current_team = "third_team"
+        continue
+
+    # player lines
+    if line.startswith("•") and season_obj and current_team:
+        clean = line.replace("•", "").strip()
+
+        # remove positions (F:, G:, C:)
+        clean = re.sub(r"^[A-Z]:\s*", "", clean)
+
+        parts = clean.split(",")
+
+        if len(parts) >= 2:
+            player = parts[0].strip()
+            team = parts[1].strip()
+
+            season_obj[current_team].append({
+                "player": player,
+                "team": abbr(team)
+            })
+
+# final append
+if season_obj:
+    data.append(season_obj)
+
+with open(OUTPUT, "w") as f:
+    json.dump(data, f, indent=2)
+
+print(f"✅ DONE: {len(data)} seasons saved")
