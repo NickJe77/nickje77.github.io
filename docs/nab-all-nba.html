@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+  <meta charset="UTF-8">
+  <title>All-NBA Teams | The Sporting Almanac</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family: Inter, system-ui, Arial;
+  margin:0;
+  background:#f4f6f8;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  background:#fff;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+.navbar a{
+  text-decoration:none;
+  color:#0056d6;
+}
+
+.container{
+  max-width:1100px;
+  margin:auto;
+  padding:20px;
+}
+
+.hero{
+  background:linear-gradient(90deg,#0a2a6c,#0056d6);
+  color:white;
+  padding:40px;
+  border-radius:16px;
+  margin-bottom:20px;
+}
+.hero h1{margin:0;}
+
+select{
+  padding:10px;
+  font-size:16px;
+  margin-bottom:20px;
+}
+
+.team-block{
+  background:#fff;
+  border-radius:12px;
+  padding:20px;
+  margin-bottom:20px;
+  box-shadow:0 2px 6px rgba(0,0,0,0.05);
+}
+
+.team-title{
+  font-size:20px;
+  font-weight:700;
+  margin-bottom:10px;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+th,td{
+  padding:10px;
+  text-align:left;
+}
+
+tr:nth-child(even){
+  background:#f2f6ff;
+}
+
+.player-link{
+  color:#0056d6;
+  text-decoration:none;
+  font-weight:600;
+}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+  <a href="/">Home</a>
+  <a href="/nba.html">NBA</a>
+</div>
+
+<div class="container">
+
+  <div class="hero">
+    <h1>All-NBA Teams</h1>
+  </div>
+
+  <select id="seasonSelect"></select>
+
+  <div id="teams"></div>
+
+</div>
+
+<script>
+
+let DATA = [];
+
+function slug(name){
+  return name.toLowerCase()
+    .replace(/[^a-z0-9 ]/g,"")
+    .replace(/\s+/g,"-");
+}
+
+function renderSeason(season){
+  const wrap = document.getElementById("teams");
+  wrap.innerHTML = "";
+
+  const seasonData = DATA.find(d => d.season === season);
+  if(!seasonData) return;
+
+  renderTeam("First Team", seasonData.first_team);
+  renderTeam("Second Team", seasonData.second_team);
+  renderTeam("Third Team", seasonData.third_team);
+}
+
+function renderTeam(title, players){
+  if(!players || !players.length) return;
+
+  const div = document.createElement("div");
+  div.className = "team-block";
+
+  const heading = document.createElement("div");
+  heading.className = "team-title";
+  heading.textContent = title;
+
+  const table = document.createElement("table");
+
+  players.forEach(p=>{
+    const tr = document.createElement("tr");
+
+    const td1 = document.createElement("td");
+    const link = document.createElement("a");
+    link.className = "player-link";
+    link.href = `/nba-player.html?player=${slug(p.player)}`;
+    link.textContent = p.player;
+    td1.appendChild(link);
+
+    const td2 = document.createElement("td");
+    td2.textContent = p.team;
+
+    tr.appendChild(td1);
+    tr.appendChild(td2);
+    table.appendChild(tr);
+  });
+
+  div.appendChild(heading);
+  div.appendChild(table);
+
+  document.getElementById("teams").appendChild(div);
+}
+
+fetch("/data/nba/all_nba_teams.json")
+  .then(r=>r.json())
+  .then(data=>{
+    DATA = data.sort((a,b)=> b.season.localeCompare(a.season));
+
+    const select = document.getElementById("seasonSelect");
+
+    DATA.forEach(d=>{
+      const opt = document.createElement("option");
+      opt.value = d.season;
+      opt.textContent = d.season;
+      select.appendChild(opt);
+    });
+
+    select.addEventListener("change", ()=>{
+      renderSeason(select.value);
+    });
+
+    renderSeason(DATA[0].season);
+  });
+
+</script>
+
+</body>
+</html>
