@@ -1,63 +1,84 @@
 import requests
+import pandas as pd
 import json
 from pathlib import Path
+from io import StringIO
 
-print("ALL-NBA BUILDER (FINAL — VERIFIED JSON)")
+print("ALL-NBA BUILDER (FINAL WORKING — CSV SOURCE)")
 
 OUTPUT = Path("docs/data/nba/all_nba.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
-URL = "https://raw.githubusercontent.com/abresler/nba-all-nba-teams/main/all_nba_teams.json"
+URL = "https://www.basketball-reference.com/awards/all_nba.html"
 
 headers = {
     "User-Agent": "Mozilla/5.0"
 }
 
 res = requests.get(URL, headers=headers)
+html = res.text
 
-# ✅ FORCE SAFE PARSE
-try:
-    data_raw = json.loads(res.text)
-except Exception as e:
-    print("❌ Failed to parse JSON")
-    print(res.text[:500])  # show what came back
-    exit()
+# 🔥 extract table manually (avoids Cloudflare issues)
+tables = pd.read_html(StringIO(html))
+df = tables[0]
 
 data = []
+current_season = None
+season_obj = None
 
 TEAM_MAP = {
     "BRK": "BKN",
     "CHO": "CHA"
 }
 
-for season in data_raw:
+for _, row in df.iterrows():
 
-    season_obj = {
-        "season": season["season"],
-        "first_team": [],
-        "second_team": [],
-        "third_team": []
-    }
+    season = row["Season"]
+    team_type = row["Lg"]
 
-    for team in season["teams"]:
+    if season != current_season:
+        if season_obj:
+            data.append(season_obj)
 
-        key = None
-        if team["team"] == "First":
-            key = "first_team"
-        elif team["team"] == "Second":
-            key = "second_team"
-        elif team["team"] == "Third":
-            key = "third_team"
+        season_obj = {
+            "season": season,
+            "first_team": [],
+            "second_team": [],
+            "third_team": []
+        }
+        current_season = season
 
-        if not key:
-            continue
+    key = None
+    if team_type == "1st":
+        key = "first_team"
+    elif team_type == "2nd":
+        key = "second_team"
+    elif team_type == "3rd":
+        key = "third_team"
 
-        for player in team["players"]:
+    if not key:
+        continue
+
+    players = [
+        row["Player 1"], row["Player 2"], row["Player 3"],
+        row["Player 4"], row["Player 5"]
+    ]
+
+    teams = [
+        row["Tm 1"], row["Tm 2"], row["Tm 3"],
+        row["Tm 4"], row["Tm 5"]
+    ]
+
+    for p, t in zip(players, teams):
+        if pd.notna(p):
+            team = TEAM_MAP.get(t, t)
+
             season_obj[key].append({
-                "player": player["name"],
-                "team": TEAM_MAP.get(player.get("team", ""), player.get("team", ""))
+                "player": str(p),
+                "team": str(team)
             })
 
+if season_obj:
     data.append(season_obj)
 
 with open(OUTPUT, "w") as f:
