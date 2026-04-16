@@ -245,6 +245,23 @@ tbody tr:hover{
   font-weight:600;
 }
 
+.awards-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:12px;
+}
+
+.award-box{
+  background:#eef3ff;
+  border-radius:12px;
+  padding:12px;
+}
+
+.award-name{
+  font-weight:800;
+  color:#003a99;
+}
+
 @media (max-width: 800px){
   #title{
     font-size:32px;
@@ -285,6 +302,11 @@ tbody tr:hover{
         <datalist id="playerList"></datalist>
       </div>
     </div>
+  </div>
+
+  <div class="section-card" id="awardsCard">
+    <div class="section-title">Awards</div>
+    <div id="awardsContent">Loading awards...</div>
   </div>
 
   <div class="section-card">
@@ -399,7 +421,12 @@ function cleanName(name){
 }
 
 function slug(name){
-  return cleanName(name)
+  return (name || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"")
+    .replace(/\u00a0/g," ")
+    .replace(/\s+/g," ")
+    .trim()
     .toLowerCase()
     .replace(/[^\w\s-]/g,"")
     .replace(/\s+/g,"-");
@@ -578,6 +605,136 @@ document.getElementById("playerSearch").addEventListener("change", e=>{
   }
 });
 
+function parseAwardsCSVLine(line){
+  const cells = [];
+  let current = "";
+  let inQuotes = false;
+
+  for(let i=0;i<line.length;i++){
+    const ch = line[i];
+    const next = line[i + 1];
+
+    if(ch === '"'){
+      if(inQuotes && next === '"'){
+        current += '"';
+        i++;
+      }else{
+        inQuotes = !inQuotes;
+      }
+    }else if(ch === "," && !inQuotes){
+      cells.push(current.trim());
+      current = "";
+    }else{
+      current += ch;
+    }
+  }
+
+  cells.push(current.trim());
+  return cells;
+}
+
+async function loadAwards(){
+  const awardsCard = document.getElementById("awardsCard");
+  const awardsContent = document.getElementById("awardsContent");
+
+  awardsCard.style.display = "block";
+  awardsContent.innerHTML = "Loading awards...";
+
+  try{
+    const paths = [
+      "/docs/data/nba/nba_awards.csv",
+      "/data/nba/nba_awards.csv",
+      "docs/data/nba/nba_awards.csv",
+      "data/nba/nba_awards.csv"
+    ];
+
+    let text = "";
+    for(const path of paths){
+      try{
+        const res = await fetch(path + "?v=" + Date.now(), { cache: "no-store" });
+        if(res.ok){
+          text = await res.text();
+          break;
+        }
+      }catch(err){}
+    }
+
+    if(!text){
+      awardsContent.innerHTML = "CSV NOT FOUND";
+      return;
+    }
+
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if(lines.length < 2){
+      awardsContent.innerHTML = "CSV EMPTY";
+      return;
+    }
+
+    const headers = parseAwardsCSVLine(lines[0]).map(h => h.trim());
+
+    const pageName = document.getElementById("title").textContent || "";
+    const candidateNames = [
+      pageName,
+      String(playerParam || "").replace(/-/g, " "),
+      decodeURIComponent(String(playerParam || "")).replace(/-/g, " ")
+    ];
+
+    const targets = candidateNames
+      .map(v => String(v).toLowerCase().replace(/[^a-z]/g, ""))
+      .filter(Boolean);
+
+    if(!targets.length){
+      awardsContent.innerHTML = "NO PLAYER";
+      return;
+    }
+
+    const grouped = {};
+
+    for(let i=1;i<lines.length;i++){
+      const parts = parseAwardsCSVLine(lines[i]);
+      const year = parts[0] || "";
+
+      for(let j=1;j<headers.length;j++){
+        let player = (parts[j] || "");
+        if(!player) continue;
+
+        const csvSlug = String(player)
+          .replace(/-/g, " ")
+          .toLowerCase()
+          .replace(/[^a-z]/g, "");
+
+        if(
+  targets.some(t => csvSlug.includes(t)) ||
+  targets.some(t => t.includes(csvSlug))
+){
+          const award = headers[j].trim().toUpperCase();
+          if(!grouped[award]) grouped[award] = [];
+          grouped[award].push(year);
+        }
+      }
+    }
+
+    if(!Object.keys(grouped).length){
+      awardsContent.innerHTML = "NO MATCH FOUND";
+      return;
+    }
+
+    awardsContent.innerHTML = `
+      <div class="awards-grid">
+        ${Object.keys(grouped).map(award => `
+          <div class="award-box">
+            <div class="award-name">${award}</div>
+            <div>${grouped[award].filter(Boolean).sort((a,b)=>Number(b)-Number(a)).join(", ")}</div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }catch(err){
+    awardsContent.innerHTML = "ERROR LOADING AWARDS";
+    console.error("Could not load awards", err);
+  }
+}
+
 async function loadPlayer(){
   if(!playerParam) return;
 
@@ -628,6 +785,8 @@ async function loadPlayer(){
     renderCareer();
     renderFiltered();
     renderGames();
+  } finally {
+    loadAwards();
   }
 }
 
@@ -801,7 +960,7 @@ function renderFiltered(){
   let noteParts = [];
   if(teamFilter.value !== "ALL") noteParts.push(teamFilter.value);
   if(oppFilter.value !== "ALL") noteParts.push("vs " + oppFilter.value);
-  filterNote.textContent = noteParts.length ? noteParts.join(" ‚Ä¢ ") : "Filtered breakdown";
+  filterNote.textContent = noteParts.length ? noteParts.join(" • ") : "Filtered breakdown";
 
   document.getElementById("oppTotals").innerHTML = `
     ${statBox(filtered.length, "Games")}
