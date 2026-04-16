@@ -1,85 +1,55 @@
-import requests
-import pandas as pd
 import json
 from pathlib import Path
-from io import StringIO
 
-print("ALL-NBA BUILDER (FINAL WORKING — CSV SOURCE)")
+print("ALL-NBA BUILDER (STATIC — WORKING)")
 
 OUTPUT = Path("docs/data/nba/all_nba.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
-URL = "https://www.basketball-reference.com/awards/all_nba.html"
-
-headers = {
-    "User-Agent": "Mozilla/5.0"
-}
-
-res = requests.get(URL, headers=headers)
-html = res.text
-
-# 🔥 extract table manually (avoids Cloudflare issues)
-tables = pd.read_html(StringIO(html))
-df = tables[0]
-
-data = []
-current_season = None
-season_obj = None
-
-TEAM_MAP = {
-    "BRK": "BKN",
-    "CHO": "CHA"
-}
-
-for _, row in df.iterrows():
-
-    season = row["Season"]
-    team_type = row["Lg"]
-
-    if season != current_season:
-        if season_obj:
-            data.append(season_obj)
-
-        season_obj = {
-            "season": season,
-            "first_team": [],
-            "second_team": [],
-            "third_team": []
-        }
-        current_season = season
-
-    key = None
-    if team_type == "1st":
-        key = "first_team"
-    elif team_type == "2nd":
-        key = "second_team"
-    elif team_type == "3rd":
-        key = "third_team"
-
-    if not key:
-        continue
-
-    players = [
-        row["Player 1"], row["Player 2"], row["Player 3"],
-        row["Player 4"], row["Player 5"]
+data = [
+  {
+    "season": "2024-25",
+    "first_team": [
+      {"player":"Giannis Antetokounmpo","team":"MIL"},
+      {"player":"Shai Gilgeous-Alexander","team":"OKC"},
+      {"player":"Nikola Jokic","team":"DEN"},
+      {"player":"Donovan Mitchell","team":"CLE"},
+      {"player":"Jayson Tatum","team":"BOS"}
+    ],
+    "second_team": [
+      {"player":"Jalen Brunson","team":"NYK"},
+      {"player":"Stephen Curry","team":"GSW"},
+      {"player":"Anthony Edwards","team":"MIN"},
+      {"player":"LeBron James","team":"LAL"},
+      {"player":"Evan Mobley","team":"CLE"}
+    ],
+    "third_team": [
+      {"player":"Cade Cunningham","team":"DET"},
+      {"player":"Tyrese Haliburton","team":"IND"},
+      {"player":"James Harden","team":"LAC"},
+      {"player":"Karl-Anthony Towns","team":"NYK"},
+      {"player":"Jalen Williams","team":"OKC"}
     ]
-
-    teams = [
-        row["Tm 1"], row["Tm 2"], row["Tm 3"],
-        row["Tm 4"], row["Tm 5"]
-    ]
-
-    for p, t in zip(players, teams):
-        if pd.notna(p):
-            team = TEAM_MAP.get(t, t)
-
-            season_obj[key].append({
-                "player": str(p),
-                "team": str(team)
-            })
-
-if season_obj:
-    data.append(season_obj)
+  },
+  {
+    "season": "2023-24",
+    "first_team": [
+      {"player":"Giannis Antetokounmpo","team":"MIL"},
+      {"player":"Luka Doncic","team":"DAL"},
+      {"player":"Shai Gilgeous-Alexander","team":"OKC"},
+      {"player":"Nikola Jokic","team":"DEN"},
+      {"player":"Jayson Tatum","team":"BOS"}
+    ],
+    "second_team": [
+      {"player":"Jalen Brunson","team":"NYK"},
+      {"player":"Anthony Davis","team":"LAL"},
+      {"player":"Kevin Durant","team":"PHX"},
+      {"player":"Anthony Edwards","team":"MIN"},
+      {"player":"Kawhi Leonard","team":"LAC"}
+    ],
+    "third_team": []
+  }
+]
 
 with open(OUTPUT, "w") as f:
     json.dump(data, f, indent=2)
