@@ -47,13 +47,76 @@ body{
   font-weight:800;
 }
 
+/* NEW LAYOUT */
+.top-bar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:25px;
+  gap:20px;
+}
+
 select{
   padding:12px 16px;
   font-size:16px;
   border-radius:10px;
   border:1px solid #ddd;
-  margin-bottom:25px;
   background:#fff;
+}
+
+/* SEARCH */
+.search-box{
+  position:relative;
+  width:300px;
+}
+
+.search-box input{
+  width:100%;
+  padding:12px 14px;
+  border-radius:10px;
+  border:1px solid #ddd;
+  font-size:16px;
+}
+
+.search-results{
+  position:absolute;
+  top:46px;
+  left:0;
+  right:0;
+  background:#fff;
+  border:1px solid #ddd;
+  border-radius:10px;
+  max-height:250px;
+  overflow:auto;
+  display:none;
+  z-index:10;
+}
+
+.search-results div{
+  padding:10px;
+  cursor:pointer;
+}
+
+.search-results div:hover{
+  background:#f2f6ff;
+}
+
+/* PLAYER PANEL */
+.player-panel{
+  background:#fff;
+  border-radius:16px;
+  padding:20px;
+  margin-bottom:25px;
+  box-shadow:0 4px 12px rgba(0,0,0,0.06);
+  display:none;
+}
+
+.player-panel h2{
+  margin:0 0 10px 0;
+}
+
+.player-panel table{
+  width:100%;
 }
 
 .team-block{
@@ -68,15 +131,6 @@ select{
   font-size:22px;
   font-weight:800;
   margin-bottom:14px;
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-}
-
-.team-title span{
-  font-size:14px;
-  color:#666;
-  font-weight:600;
 }
 
 table{
@@ -84,17 +138,8 @@ table{
   border-collapse:collapse;
 }
 
-tr{
-  border-bottom:1px solid #eee;
-}
-
-tr:last-child{
-  border-bottom:none;
-}
-
 td{
   padding:12px 8px;
-  font-size:16px;
 }
 
 tr:nth-child(even){
@@ -107,14 +152,9 @@ tr:nth-child(even){
   font-weight:700;
 }
 
-.player-link:hover{
-  text-decoration:underline;
-}
-
 .team-cell{
   text-align:right;
   font-weight:600;
-  color:#333;
 }
 
 </style>
@@ -133,7 +173,16 @@ tr:nth-child(even){
     <h1>All-NBA Teams</h1>
   </div>
 
-  <select id="seasonSelect"></select>
+  <div class="top-bar">
+    <select id="seasonSelect"></select>
+
+    <div class="search-box">
+      <input type="text" id="playerSearch" placeholder="Search player...">
+      <div class="search-results" id="searchResults"></div>
+    </div>
+  </div>
+
+  <div id="playerPanel" class="player-panel"></div>
 
   <div id="teams"></div>
 
@@ -142,11 +191,84 @@ tr:nth-child(even){
 <script>
 
 let DATA = [];
+let PLAYER_MAP = {};
 
 function slug(name){
   return name.toLowerCase()
     .replace(/[^a-z0-9 ]/g,"")
     .replace(/\s+/g,"-");
+}
+
+function buildPlayerMap(){
+  PLAYER_MAP = {};
+
+  DATA.forEach(season=>{
+    ["first_team","second_team","third_team"].forEach(type=>{
+      (season[type] || []).forEach(p=>{
+        if(!PLAYER_MAP[p.player]) PLAYER_MAP[p.player] = [];
+
+        PLAYER_MAP[p.player].push({
+          season: season.season,
+          team: p.team,
+          type: type.replace("_"," ")
+        });
+      });
+    });
+  });
+}
+
+function showPlayer(name){
+  const panel = document.getElementById("playerPanel");
+  const records = PLAYER_MAP[name];
+
+  if(!records) return;
+
+  panel.style.display = "block";
+
+  let html = `<h2>${name}</h2><table>`;
+
+  records.forEach(r=>{
+    html += `<tr>
+      <td>${r.season}</td>
+      <td>${r.type}</td>
+      <td>${r.team}</td>
+    </tr>`;
+  });
+
+  html += "</table>";
+
+  panel.innerHTML = html;
+}
+
+function setupSearch(){
+  const input = document.getElementById("playerSearch");
+  const results = document.getElementById("searchResults");
+
+  input.addEventListener("input", ()=>{
+    const val = input.value.toLowerCase();
+    results.innerHTML = "";
+
+    if(!val){
+      results.style.display = "none";
+      return;
+    }
+
+    Object.keys(PLAYER_MAP)
+      .filter(p => p.toLowerCase().includes(val))
+      .slice(0,10)
+      .forEach(p=>{
+        const div = document.createElement("div");
+        div.textContent = p;
+        div.onclick = ()=>{
+          input.value = p;
+          results.style.display = "none";
+          showPlayer(p);
+        };
+        results.appendChild(div);
+      });
+
+    results.style.display = "block";
+  });
 }
 
 function renderSeason(season){
@@ -162,40 +284,27 @@ function renderSeason(season){
 }
 
 function renderTeam(title, players){
-
   if(!players || !players.length) return;
 
   const div = document.createElement("div");
   div.className = "team-block";
 
-  const heading = document.createElement("div");
-  heading.className = "team-title";
-  heading.innerHTML = `${title} <span>5 players</span>`;
+  div.innerHTML = `<div class="team-title">${title}</div>`;
 
   const table = document.createElement("table");
 
   players.forEach((p,i)=>{
     const tr = document.createElement("tr");
 
-    const td1 = document.createElement("td");
-    const link = document.createElement("a");
-    link.className = "player-link";
-    link.href = `/nba-player.html?player=${slug(p.player)}`;
-    link.textContent = `${i+1}. ${p.player}`;
-    td1.appendChild(link);
+    tr.innerHTML = `
+      <td><a class="player-link" href="/nba-player.html?player=${slug(p.player)}">${i+1}. ${p.player}</a></td>
+      <td class="team-cell">${p.team}</td>
+    `;
 
-    const td2 = document.createElement("td");
-    td2.className = "team-cell";
-    td2.textContent = p.team;
-
-    tr.appendChild(td1);
-    tr.appendChild(td2);
     table.appendChild(tr);
   });
 
-  div.appendChild(heading);
   div.appendChild(table);
-
   document.getElementById("teams").appendChild(div);
 }
 
@@ -203,6 +312,9 @@ fetch("/data/nba/all_nba_teams.json")
   .then(r=>r.json())
   .then(data=>{
     DATA = data.sort((a,b)=> b.season.localeCompare(a.season));
+
+    buildPlayerMap();
+    setupSearch();
 
     const select = document.getElementById("seasonSelect");
 
