@@ -417,14 +417,14 @@ const teamColours = {
 };
 
 function cleanName(name){
-  return (name || "").normalize("NFD").replace(/[̀-ͯ]/g,"");
+  return (name || "").normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 }
 
 function slug(name){
   return (name || "")
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g,"")
-    .replace(/ /g," ")
+    .replace(/[\u0300-\u036f]/g,"")
+    .replace(/\u00a0/g," ")
     .replace(/\s+/g," ")
     .trim()
     .toLowerCase()
@@ -642,9 +642,10 @@ async function loadAwards(){
 
   try{
     const paths = [
+      "/docs/data/nba/nba_awards.csv",
       "/data/nba/nba_awards.csv",
-      "data/nba/nba_awards.csv",
-      "docs/data/nba/nba_awards.csv"
+      "docs/data/nba/nba_awards.csv",
+      "data/nba/nba_awards.csv"
     ];
 
     let text = "";
@@ -663,9 +664,7 @@ async function loadAwards(){
       return;
     }
 
-    const lines = text.split(/
-?
-/).map(l => l.trim()).filter(Boolean);
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     if(lines.length < 2){
       awardsContent.innerHTML = "CSV EMPTY";
       return;
@@ -673,6 +672,7 @@ async function loadAwards(){
 
     const headers = parseAwardsCSVLine(lines[0]).map(h => h.trim());
     const playerSlug = String(playerParam || "")
+      .replace(/-/g, " ")
       .toLowerCase()
       .replace(/[^a-z]/g, "");
 
@@ -692,6 +692,7 @@ async function loadAwards(){
         if(!player) continue;
 
         const csvSlug = String(player)
+          .replace(/-/g, " ")
           .toLowerCase()
           .replace(/[^a-z]/g, "");
 
@@ -729,7 +730,7 @@ async function loadPlayer(){
 
   const rawParam = decodeURIComponent(playerParam);
   const displayName = cleanName(rawParam).replace(/-/g, " ");
-  titleEl.textContent = displayName.replace(/\w/g, c => c.toUpperCase());
+  titleEl.textContent = displayName.replace(/\b\w/g, c => c.toUpperCase());
   heroSub.textContent = "Career game log, totals, averages and highs for " + titleEl.textContent;
   document.getElementById("playerSearch").value = "";
 
