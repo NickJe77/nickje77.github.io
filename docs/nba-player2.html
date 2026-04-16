@@ -304,9 +304,9 @@ tbody tr:hover{
     </div>
   </div>
 
-  <div class="section-card" id="awardsCard" style="display:none;">
+  <div class="section-card" id="awardsCard">
     <div class="section-title">Awards</div>
-    <div id="awardsContent"></div>
+    <div id="awardsContent">Loading awards...</div>
   </div>
 
   <div class="section-card">
@@ -417,14 +417,14 @@ const teamColours = {
 };
 
 function cleanName(name){
-  return (name || "").normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  return (name || "").normalize("NFD").replace(/[̀-ͯ]/g,"");
 }
 
 function slug(name){
   return (name || "")
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g,"")
-    .replace(/\u00a0/g," ")
+    .replace(/[̀-ͯ]/g,"")
+    .replace(/ /g," ")
     .replace(/\s+/g," ")
     .trim()
     .toLowerCase()
@@ -634,6 +634,12 @@ function parseAwardsCSVLine(line){
 }
 
 async function loadAwards(){
+  const awardsCard = document.getElementById("awardsCard");
+  const awardsContent = document.getElementById("awardsContent");
+
+  awardsCard.style.display = "block";
+  awardsContent.innerHTML = "Loading awards...";
+
   try{
     const paths = [
       "/data/nba/nba_awards.csv",
@@ -641,32 +647,27 @@ async function loadAwards(){
       "docs/data/nba/nba_awards.csv"
     ];
 
-    let csvText = "";
+    let text = "";
     for(const path of paths){
       try{
         const res = await fetch(path + "?v=" + Date.now(), { cache: "no-store" });
         if(res.ok){
-          csvText = await res.text();
+          text = await res.text();
           break;
         }
       }catch(err){}
     }
 
-    const awardsCard = document.getElementById("awardsCard");
-    const awardsContent = document.getElementById("awardsContent");
-
-    if(!csvText){
-      awardsCard.style.display = "block";
-      awardsContent.innerHTML = '<div class="award-box">Awards file not found.</div>';
+    if(!text){
+      awardsContent.innerHTML = "CSV NOT FOUND";
       return;
     }
 
-    const lines = csvText.split(/
+    const lines = text.split(/
 ?
 /).map(l => l.trim()).filter(Boolean);
     if(lines.length < 2){
-      awardsCard.style.display = "block";
-      awardsContent.innerHTML = '<div class="award-box">Awards file is empty.</div>';
+      awardsContent.innerHTML = "CSV EMPTY";
       return;
     }
 
@@ -676,8 +677,7 @@ async function loadAwards(){
       .replace(/[^a-z]/g, "");
 
     if(!playerSlug || playerSlug === "player"){
-      awardsCard.style.display = "none";
-      awardsContent.innerHTML = "";
+      awardsContent.innerHTML = "NO PLAYER";
       return;
     }
 
@@ -688,7 +688,7 @@ async function loadAwards(){
       const year = parts[0] || "";
 
       for(let j=1;j<headers.length;j++){
-        const player = (parts[j] || "").trim();
+        let player = (parts[j] || "");
         if(!player) continue;
 
         const csvSlug = String(player)
@@ -704,12 +704,10 @@ async function loadAwards(){
     }
 
     if(!Object.keys(grouped).length){
-      awardsCard.style.display = "block";
-      awardsContent.innerHTML = '<div class="award-box">No awards found.</div>';
+      awardsContent.innerHTML = "NO MATCH FOUND";
       return;
     }
 
-    awardsCard.style.display = "block";
     awardsContent.innerHTML = `
       <div class="awards-grid">
         ${Object.keys(grouped).map(award => `
@@ -721,11 +719,8 @@ async function loadAwards(){
       </div>
     `;
   }catch(err){
+    awardsContent.innerHTML = "ERROR LOADING AWARDS";
     console.error("Could not load awards", err);
-    const awardsCard = document.getElementById("awardsCard");
-    const awardsContent = document.getElementById("awardsContent");
-    awardsCard.style.display = "block";
-    awardsContent.innerHTML = '<div class="award-box">Could not load awards.</div>';
   }
 }
 
@@ -734,7 +729,7 @@ async function loadPlayer(){
 
   const rawParam = decodeURIComponent(playerParam);
   const displayName = cleanName(rawParam).replace(/-/g, " ");
-  titleEl.textContent = displayName.replace(/\b\w/g, c => c.toUpperCase());
+  titleEl.textContent = displayName.replace(/\w/g, c => c.toUpperCase());
   heroSub.textContent = "Career game log, totals, averages and highs for " + titleEl.textContent;
   document.getElementById("playerSearch").value = "";
 
@@ -773,14 +768,12 @@ async function loadPlayer(){
     renderCareer();
     renderFiltered();
     renderGames();
-    await loadAwards();
   }catch(err){
     console.error("Could not load player file", err);
     rows = [];
     renderCareer();
     renderFiltered();
     renderGames();
-    await loadAwards();
   }
 }
 
@@ -1023,6 +1016,7 @@ function renderGames(){
 
 loadPlayers();
 loadPlayer();
+loadAwards();
 </script>
 
 </body>
