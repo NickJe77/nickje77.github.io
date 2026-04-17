@@ -68,6 +68,7 @@ select{
 /* SEARCH */
 
 .search-box{
+  position:relative;
   width:320px;
 }
 
@@ -76,6 +77,31 @@ select{
   padding:12px;
   border-radius:10px;
   border:1px solid #ddd;
+}
+
+.search-results{
+  position:absolute;
+  top:46px;
+  left:0;
+  right:0;
+  background:#fff;
+  border:1px solid #ddd;
+  border-radius:10px;
+  max-height:260px;
+  overflow:auto;
+  display:none;
+  z-index:10;
+  box-shadow:0 6px 16px rgba(0,0,0,0.08);
+}
+
+.search-results div{
+  padding:10px 12px;
+  cursor:pointer;
+  font-weight:600;
+}
+
+.search-results div:hover{
+  background:#f2f6ff;
 }
 
 /* PLAYER PANEL */
@@ -218,6 +244,7 @@ td{
 
     <div class="search-box">
       <input type="text" placeholder="Search player..." id="playerSearch">
+      <div class="search-results" id="searchResults"></div>
     </div>
   </div>
 
@@ -258,43 +285,76 @@ function buildPlayerMap(){
   });
 }
 
-/* SEARCH */
+/* SHOW PLAYER */
+
+function showPlayer(name){
+  const panel = document.getElementById("playerPanel");
+  const records = PLAYER_MAP[name];
+
+  if(!records) return;
+
+  let html = `<h2>${name}</h2><table>`;
+
+  records.forEach(r=>{
+    html += `
+      <tr>
+        <td>${r.season}</td>
+        <td>${r.type}</td>
+        <td>${r.team}</td>
+      </tr>
+    `;
+  });
+
+  html += "</table>";
+
+  panel.innerHTML = html;
+  panel.style.display = "block";
+}
+
+/* SEARCH DROPDOWN */
 
 function setupSearch(){
   const input = document.getElementById("playerSearch");
-  const panel = document.getElementById("playerPanel");
+  const results = document.getElementById("searchResults");
 
   input.addEventListener("input", ()=>{
     const val = input.value.toLowerCase();
+    results.innerHTML = "";
 
     if(!val){
-      panel.style.display = "none";
+      results.style.display = "none";
       return;
     }
 
-    const match = Object.keys(PLAYER_MAP)
-      .find(p => p.toLowerCase().includes(val));
+    const matches = Object.keys(PLAYER_MAP)
+      .filter(p => p.toLowerCase().includes(val))
+      .slice(0, 12);
 
-    if(!match) return;
+    if(!matches.length){
+      results.style.display = "none";
+      return;
+    }
 
-    const records = PLAYER_MAP[match];
+    matches.forEach(name=>{
+      const div = document.createElement("div");
+      div.textContent = name;
 
-    let html = `<h2>${match}</h2><table>`;
+      div.onclick = ()=>{
+        input.value = name;
+        results.style.display = "none";
+        showPlayer(name);
+      };
 
-    records.forEach(r=>{
-      html += `
-        <tr>
-          <td>${r.season}</td>
-          <td>${r.type}</td>
-          <td>${r.team}</td>
-        </tr>
-      `;
+      results.appendChild(div);
     });
 
-    html += "</table>";
+    results.style.display = "block";
+  });
 
-    panel.innerHTML = html;
-    panel.style.display = "block";
+  document.addEventListener("click", (e)=>{
+    if(!e.target.closest(".search-box")){
+      results.style.display = "none";
+    }
   });
 }
 
