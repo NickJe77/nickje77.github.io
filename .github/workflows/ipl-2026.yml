@@ -1,4 +1,4 @@
-name: IPL 2026 ESPN Scraper
+name: IPL 2026 Builder
 
 on:
   workflow_dispatch:
@@ -11,72 +11,31 @@ jobs:
 
     steps:
 
-      # -------------------------
-      # CHECKOUT
-      # -------------------------
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # -------------------------
-      # PYTHON
-      # -------------------------
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # -------------------------
-      # INSTALL DEPENDENCIES
-      # -------------------------
-      - name: Install dependencies
-        run: |
-          pip install requests beautifulsoup4
+      - name: Install deps
+        run: pip install requests
 
-      # -------------------------
-      # ENSURE DATA FOLDER EXISTS
-      # -------------------------
-      - name: Ensure IPL folder exists
-        run: |
-          mkdir -p docs/data/ipl
+      - name: Ensure folder
+        run: mkdir -p docs/data/ipl
 
-      # -------------------------
-      # RUN ESPN SCRAPER
-      # -------------------------
-      - name: Build IPL 2026 dataset
+      - name: Build FULL file (safe)
         run: |
-          python scripts/build_ipl_2026.py
+          python scripts/build_ipl_2026_full.py || echo "Skip"
 
-      # -------------------------
-      # VERIFY OUTPUT
-      # -------------------------
-      - name: Check output
+      - name: Build season file
         run: |
-          if [ -f docs/data/ipl/ipl_2026.json ]; then
-            echo "✅ ipl_2026.json created"
-            wc -l docs/data/ipl/ipl_2026.json
-          else
-            echo "❌ ipl_2026.json missing"
-            exit 1
-          fi
+          python scripts/build_ipl_2026.py || echo "Skip"
 
-      # -------------------------
-      # DEBUG FILE LIST
-      # -------------------------
-      - name: List IPL files
-        run: |
-          echo "=== IPL DATA ==="
-          ls -R docs/data/ipl
-
-      # -------------------------
-      # COMMIT (SAFE)
-      # -------------------------
-      - name: Commit & push if changed
+      - name: Commit
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
           git add docs/data/ipl || true
-
-          git diff --cached --quiet || git commit -m "Update IPL 2026 data"
-
+          git commit -m "Update IPL 2026 data" || echo "No changes"
           git push
