@@ -1,79 +1,65 @@
-name: IPL 2026 Builder
+import requests
+import zipfile
+import io
+import json
+from pathlib import Path
 
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: "0 6 * * *"
+print("BUILD IPL 2026 FULL FILE")
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+URL = "https://cricsheet.org/downloads/ipl_json.zip"
 
-    steps:
-      # -------------------------
-      # CHECKOUT
-      # -------------------------
-      - name: Checkout
-        uses: actions/checkout@v4
+OUTPUT = Path("docs/data/ipl/ipl_2026_FULL.json")
+OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
-      # -------------------------
-      # PYTHON
-      # -------------------------
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/zip"
+}
 
-      # -------------------------
-      # INSTALL DEPENDENCIES  👈 THIS WAS MISSING
-      # -------------------------
-      - name: Install dependencies
-        run: |
-          pip install requests
+print("Downloading IPL data...")
 
-      # -------------------------
-      # DEBUG FILES
-      # -------------------------
-      - name: List IPL files
-        run: |
-          echo "=== IPL FILES ==="
-          ls -R docs/data/ipl || true
+r = requests.get(URL, headers=HEADERS)
 
-      # -------------------------
-      # BUILD FULL FILE (if using it)
-      # -------------------------
-      - name: Build FULL 2026 file
-        run: |
-          python scripts/build_ipl_2026_full.py
+# ---- DEBUG ----
+print("Status:", r.status_code)
+print("Content-Type:", r.headers.get("Content-Type"))
 
-      # -------------------------
-      # BUILD SEASON FILE
-      # -------------------------
-      - name: Build season file
-        run: |
-          python scripts/build_ipl_2026.py
+if r.status_code != 200:
+    print("❌ Failed request")
+    print(r.text[:500])
+    exit()
 
-      # -------------------------
-      # VERIFY OUTPUT
-      # -------------------------
-      - name: Check output
-        run: |
-          if [ -f docs/data/ipl/ipl_2026.json ]; then
-            echo "✅ ipl_2026.json exists"
-          else
-            echo "❌ ipl_2026.json missing"
-          fi
+if "zip" not in r.headers.get("Content-Type", ""):
+    print("❌ Not a zip file returned")
+    print(r.text[:500])
+    exit()
 
-      # -------------------------
-      # COMMIT (SAFE)
-      # -------------------------
-      - name: Commit changes
-        run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
+# ---- LOAD ZIP SAFELY ----
+try:
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+except zipfile.BadZipFile:
+    print("❌ Bad zip file")
+    exit()
 
-          git add docs/data/ipl || true
+print("ZIP LOADED")
 
-          git commit -m "Update IPL 2026 data" || echo "No changes"
+matches_2026 = []
 
-          git push
+for file in z.namelist():
+    if not file.endswith(".json"):
+        continue
+
+    data = json.loads(z.read(file))
+    season = str(data.get("info", {}).get("season"))
+
+    if season == "2026":
+        data["file"] = file
+        matches_2026.append(data)
+
+print("Matches found:", len(matches_2026))
+
+# ---- SAVE ----
+with open(OUTPUT, "w") as f:
+    json.dump(matches_2026, f)
+
+print("✅ Saved:", OUTPUT)
