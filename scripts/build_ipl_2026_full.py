@@ -11,26 +11,37 @@ URL = "https://cricsheet.org/downloads/ipl_json.zip"
 OUTPUT = Path("docs/data/ipl/ipl_2026_FULL.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
-print("Downloading IPL data...")
-
-headers = {
-    "User-Agent": "Mozilla/5.0"
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/zip"
 }
 
-r = requests.get(URL, headers=headers)
+print("Downloading IPL data...")
 
-# 🔥 STOP if bad response
+r = requests.get(URL, headers=HEADERS)
+
+# ---- DEBUG ----
+print("Status:", r.status_code)
+print("Content-Type:", r.headers.get("Content-Type"))
+
 if r.status_code != 200:
-    print("❌ Download failed:", r.status_code)
+    print("❌ Failed request")
+    print(r.text[:500])
     exit()
 
-# 🔥 STOP if not actually a zip
 if "zip" not in r.headers.get("Content-Type", ""):
     print("❌ Not a zip file returned")
-    print(r.text[:300])  # show what came back
+    print(r.text[:500])
     exit()
 
-z = zipfile.ZipFile(io.BytesIO(r.content))
+# ---- LOAD ZIP SAFELY ----
+try:
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+except zipfile.BadZipFile:
+    print("❌ Bad zip file")
+    exit()
+
+print("ZIP LOADED")
 
 matches_2026 = []
 
@@ -39,7 +50,6 @@ for file in z.namelist():
         continue
 
     data = json.loads(z.read(file))
-
     season = str(data.get("info", {}).get("season"))
 
     if season == "2026":
@@ -48,10 +58,7 @@ for file in z.namelist():
 
 print("Matches found:", len(matches_2026))
 
-if not matches_2026:
-    print("❌ No 2026 matches found yet")
-    exit()
-
+# ---- SAVE ----
 with open(OUTPUT, "w") as f:
     json.dump(matches_2026, f)
 
