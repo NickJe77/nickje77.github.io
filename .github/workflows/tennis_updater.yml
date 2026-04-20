@@ -1,9 +1,9 @@
-name: Tennis Builder (Safe)
+name: Tennis Updater
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 6 * * 1"
+    - cron: "0 6 * * *"
 
 jobs:
   build:
@@ -15,11 +15,9 @@ jobs:
       # -------------------------
       - name: Checkout repo
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # 🔥 IMPORTANT for rebase
 
       # -------------------------
-      # SETUP PYTHON
+      # PYTHON
       # -------------------------
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -27,35 +25,22 @@ jobs:
           python-version: "3.11"
 
       # -------------------------
-      # INSTALL DEPENDENCIES
-      # -------------------------
-      - name: Install deps
-        run: |
-          pip install requests beautifulsoup4
-
-      # -------------------------
       # RUN SCRIPT
       # -------------------------
-      - name: Run tennis builder
-        run: |
-          python scripts/tennis_season_builder.py
+      - name: Run Tennis Script
+        run: python rebuild_tennis_seasons_current.py
 
       # -------------------------
-      # COMMIT + PUSH (SAFE)
+      # COMMIT (ONLY 2025/2026)
       # -------------------------
-      - name: Commit data safely
+      - name: Commit changes
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          # 🔥 Only tennis data
-          git add docs/data/tennis/
+          git add docs/data/tennis/seasons/2025.json
+          git add docs/data/tennis/seasons/2026.json
 
-          # Commit if changes exist
-          git commit -m "Update tennis data" || echo "No changes"
+          git commit -m "Update tennis seasons (2025 & 2026)" || echo "No changes"
 
-          # 🔥 ALWAYS sync with remote before push
-          git pull --rebase origin main || git pull origin main
-
-          # Push safely
           git push
