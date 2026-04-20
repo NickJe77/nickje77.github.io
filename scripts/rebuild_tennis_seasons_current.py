@@ -1,48 +1,35 @@
 import json
 import os
 
-OUT = "docs/data/tennis/seasons"
+OUT = "docs/data/tennis/matches"
 
 def save(path, data):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
-def build(year):
-    return [
+def main():
+
+    matches = [
         {
             "tournament": "Australian Open",
-            "surface": "Hard",
-            "location": "Melbourne",
-            "tour": "ATP",
-            "start_date": f"{year}-01-15",
-            "end_date": f"{year}-01-28",
-            "date": f"{year}-01-15"
+            "date": "2025-01-15",
+            "player1": "Novak Djokovic",
+            "player2": "Carlos Alcaraz",
+            "score": "6-4 6-4"
         },
         {
-            "tournament": "Acapulco",
-            "surface": "Hard",
-            "location": "Acapulco",
-            "tour": "ATP",
-            "start_date": f"{year}-02-24",
-            "end_date": f"{year}-03-02",
-            "date": f"{year}-02-24"
-        },
-        {
-            "tournament": "Adelaide",
-            "surface": "Hard",
-            "location": "Adelaide",
-            "tour": "ATP",
-            "start_date": f"{year}-01-01",
-            "end_date": f"{year}-01-07",
-            "date": f"{year}-01-01"
+            "tournament": "Australian Open",
+            "date": "2025-01-16",
+            "player1": "Jannik Sinner",
+            "player2": "Daniil Medvedev",
+            "score": "7-6 6-3"
         }
     ]
 
-def main():
-    save(f"{OUT}/2025.json", build("2025"))
-    save(f"{OUT}/2026.json", build("2026"))
-    print("✅ Data written")
+    save(f"{OUT}/2025.json", matches)
+
+    print("✅ Matches created")
 
 if __name__ == "__main__":
     main()
