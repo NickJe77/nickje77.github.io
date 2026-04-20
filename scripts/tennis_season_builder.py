@@ -5,7 +5,7 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 import re
 
-print("TENNIS BUILDER (CLEAN + DATED)")
+print("TENNIS BUILDER (FINAL CLEAN VERSION)")
 
 BASE = Path("docs/data/tennis/seasons")
 BASE.mkdir(parents=True, exist_ok=True)
@@ -36,10 +36,7 @@ def clean(text):
 # PARSE DATE
 # -------------------------
 def parse_date(text, year):
-
-    # match things like "10 Aug" or "10 Aug 17 Aug"
     match = re.search(r"(\d{1,2}) (\w{3})", text)
-
     if not match:
         return ""
 
@@ -47,34 +44,6 @@ def parse_date(text, year):
     mon = MONTHS.get(match.group(2), "01")
 
     return f"{year}-{mon}-{day}"
-
-
-# -------------------------
-# EXTRACT NAME + SURFACE
-# -------------------------
-def extract_name_surface(text):
-
-    # remove prize money, draws etc
-    text = re.split(r"ATP|WTA|\$|€", text)[0]
-
-    # remove location duplication
-    text = re.sub(r"([A-Za-z])\1{2,}", r"\1", text)
-
-    text = text.strip()
-
-    # surface
-    surface = ""
-    if "Hard" in text:
-        surface = "Hard"
-    elif "Clay" in text:
-        surface = "Clay"
-    elif "Grass" in text:
-        surface = "Grass"
-
-    # remove trailing surface words from name
-    name = re.sub(r"(Hard|Clay|Grass).*", "", text).strip()
-
-    return name, surface
 
 
 # -------------------------
@@ -102,24 +71,64 @@ def build_year(year):
     tables = soup.find_all("table", {"class": "wikitable"})
 
     for table in tables:
+
+        headers = [th.get_text(strip=True) for th in table.find_all("th")]
+
+        # 🔥 ONLY tables that actually contain tournaments
+        if not any("Tournament" in h for h in headers):
+            continue
+
         rows = table.find_all("tr")
 
         for row in rows:
             cols = row.find_all("td")
 
-            if len(cols) < 1:
+            if len(cols) < 2:
                 continue
 
-            raw_text = clean(row.get_text())
-
-            if len(raw_text) < 5:
+            try:
+                date_text = clean(cols[0].get_text())
+                name = clean(cols[1].get_text())
+                surface_text = clean(cols[2].get_text()) if len(cols) > 2 else ""
+            except:
                 continue
 
-            date = parse_date(raw_text, year)
-            name, surface = extract_name_surface(raw_text)
-
-            if not name:
+            # -------------------------
+            # FILTER BAD ROWS
+            # -------------------------
+            if len(name) < 4:
                 continue
+
+            if "Davis Cup" in name:
+                continue
+
+            if "vs" in name.lower():
+                continue
+
+            if re.search(r"\d{2,}", name):
+                continue
+
+            # -------------------------
+            # CLEAN NAME
+            # -------------------------
+            name = re.sub(r"\[.*?\]", "", name)
+            name = re.sub(r"\s+", " ", name).strip()
+
+            # -------------------------
+            # SURFACE
+            # -------------------------
+            surface = ""
+            if "Hard" in surface_text:
+                surface = "Hard"
+            elif "Clay" in surface_text:
+                surface = "Clay"
+            elif "Grass" in surface_text:
+                surface = "Grass"
+
+            # -------------------------
+            # DATE
+            # -------------------------
+            date = parse_date(date_text, year)
 
             tournaments.append({
                 "tournament": name,
@@ -135,10 +144,8 @@ def build_year(year):
 
     for t in tournaments:
         key = (t["tournament"].lower(), t["date"])
-
         if key in seen:
             continue
-
         seen.add(key)
         clean_list.append(t)
 
@@ -148,30 +155,24 @@ def build_year(year):
 
 
 # -------------------------
-# SAFE WRITE
+# SAVE (OVERWRITE BAD YEARS ONLY)
 # -------------------------
-def safe_write(path, data):
+def save_year(year, data):
+    path = BASE / f"{year}.json"
 
     if not data:
-        print(f"⚠️ No data, skipping {path}")
+        print(f"⚠️ No data for {year}")
         return
 
     with open(path, "w") as f:
         json.dump(data, f)
 
-    print(f"✅ Saved {path}")
+    print(f"✅ Saved {year}")
 
 
 # -------------------------
 # MAIN
 # -------------------------
 for year in TARGET_YEARS:
-
-    path = BASE / f"{year}.json"
-
     data = build_year(year)
-
-    if not data:
-        continue
-
-    safe_write(path, data)
+    save_year(year, data)
