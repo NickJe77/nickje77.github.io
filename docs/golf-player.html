@@ -101,7 +101,7 @@ body{
   border-radius:14px;
   overflow:hidden;
   border:1px solid var(--line);
-  display:none; /* hidden by default */
+  display:none;
 }
 
 table{
@@ -239,7 +239,7 @@ async function load(){
   const search = document.getElementById("search");
   const dropdown = document.getElementById("dropdown");
 
-  // ===== SEARCH =====
+  // SEARCH
   search.addEventListener("input", e => {
     const val = e.target.value.toLowerCase().trim();
     dropdown.innerHTML = "";
@@ -265,28 +265,16 @@ async function load(){
     dropdown.style.display = matches.length ? "block" : "none";
   });
 
-  search.addEventListener("keydown", e => {
-    if(e.key === "Enter"){
-      const val = search.value.toLowerCase().trim();
-      const match = players.find(p => p.toLowerCase().includes(val));
-      if(match){
-        location.href = "/golf-player.html?player=" + slug(match);
-      }
-    }
-  });
-
   document.addEventListener("click", e => {
     if(!document.querySelector(".search-box").contains(e.target)){
       dropdown.style.display = "none";
     }
   });
 
-  // ===== NO PLAYER SELECTED =====
   if(!playerSlug){
     return;
   }
 
-  // ===== LOAD PLAYER =====
   let playerName = "";
   const wins = [];
 
@@ -314,8 +302,17 @@ async function load(){
 
   document.getElementById("playerName").innerText = playerName;
 
-  const totalWins = wins.length;
-  const majors = wins.filter(w => w.isMajor).length;
+  // 🔥 DEDUPE
+  const seen = new Set();
+  const uniqueWins = wins.filter(w => {
+    const key = w.year + "|" + w.tournament;
+    if(seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const totalWins = uniqueWins.length;
+  const majors = uniqueWins.filter(w => w.isMajor).length;
 
   document.getElementById("summary").innerText =
     totalWins + " wins / " + majors + " majors";
@@ -323,7 +320,7 @@ async function load(){
   const tbody = document.getElementById("tbody");
   tbody.innerHTML = "";
 
-  wins
+  uniqueWins
     .sort((a,b) => Number(b.year || 0) - Number(a.year || 0))
     .forEach(w => {
       const tr = document.createElement("tr");
