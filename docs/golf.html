@@ -206,6 +206,15 @@ tbody tr:nth-child(even){
 let data=[];
 let players=[];
 
+// 🔥 CLEAN TOURNAMENT NAME
+function cleanTournament(name){
+  if(!name) return "";
+  return name
+    .replace(/Augusta National.*$/i, "")
+    .replace(/ - .*$/i, "")
+    .trim();
+}
+
 async function load(){
   const res=await fetch("/data/golf/pga_winners.json");
   data=await res.json();
@@ -220,7 +229,7 @@ async function load(){
 
 function populateFilters(){
   const years=[...new Set(data.map(d=>d.year))].sort((a,b)=>b-a);
-  const tournaments=[...new Set(data.map(d=>d.event))].sort();
+  const tournaments=[...new Set(data.map(d=>cleanTournament(d.event)))].sort();
 
   const yearSelect=document.getElementById("yearFilter");
   const list=document.getElementById("tournamentList");
@@ -243,15 +252,21 @@ function render(){
   const year=document.getElementById("yearFilter").value;
   const search=document.getElementById("tournamentSearch").value.toLowerCase();
 
-  let filtered=data
-    .filter(d=>{
-      return (year==="all" || d.year==year) &&
-             (!search || (d.event||"").toLowerCase().includes(search));
-    })
-    .filter(d=>{
-      const w=(d.winner||"").toLowerCase();
-      return !w.includes("cancel");
-    });
+  // 🔥 CLEAN + DEDUPE
+  const seen=new Set();
+
+  let filtered=data.filter(d=>{
+    let event=cleanTournament(d.event||"");
+    const key=d.year+"|"+event.toLowerCase();
+
+    if(seen.has(key)) return false;
+    seen.add(key);
+
+    d._cleanEvent=event;
+
+    return (year==="all" || d.year==year) &&
+           (!search || event.toLowerCase().includes(search));
+  });
 
   draw(filtered);
 }
@@ -261,16 +276,7 @@ function draw(rows){
   tbody.innerHTML="";
 
   rows.forEach(r=>{
-
-    let event = r.event || "";
-
-    if(event.includes("Golf Club") && event.includes(" - ")){
-      event = event.split("Golf Club")[0] + "Golf Club";
-    }
-
-    if(!event && r.major){
-      event = r.major;
-    }
+    const event=r._cleanEvent||"";
 
     const tr=document.createElement("tr");
 
@@ -321,7 +327,6 @@ input.addEventListener("input",()=>{
   box.style.display="block";
 });
 
-// 🔥 FIX: FILTER EVENTS NOW WORK
 document.getElementById("yearFilter").addEventListener("change", render);
 document.getElementById("tournamentSearch").addEventListener("input", render);
 
