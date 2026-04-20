@@ -1,46 +1,89 @@
+import requests
+from bs4 import BeautifulSoup
 import json
 import os
 
 FILE = "docs/data/golf/pga_winners.json"
 
-if not os.path.exists(FILE):
-    print("No winners file found")
-    exit()
+# -----------------------
+# LOAD EXISTING DATA
+# -----------------------
+if os.path.exists(FILE):
+    with open(FILE) as f:
+        data = json.load(f)
+else:
+    data = []
 
-with open(FILE) as f:
-    data = json.load(f)
+existing_events = set((d["year"], d["event"]) for d in data)
 
-years = set([d["year"] for d in data])
+print("Existing records:", len(existing_events))
 
-print("Existing years:", sorted(years))
+# -----------------------
+# SCRAPE PGA SCHEDULE
+# -----------------------
+URL = "https://www.pgatour.com/schedule"
 
-# --- SAFE: only check for missing recent years ---
-target_years = [2024, 2025, 2026]
+headers = {
+    "User-Agent": "Mozilla/5.0"
+}
 
-new_rows = []
+r = requests.get(URL, headers=headers)
+soup = BeautifulSoup(r.text, "html.parser")
 
-for y in target_years:
-    if y not in years:
-        print(f"Missing year {y} — placeholder added")
-        new_rows.append({
-            "tour": "pga",
-            "year": y,
-            "date": "",
-            "event": "Season Placeholder",
-            "winner": "",
-            "major": False,
-            "score": "",
-            "venue": "",
-            "country": "",
-            "url": ""
-        })
+events = []
 
-if new_rows:
-    data.extend(new_rows)
+cards = soup.select("div.css-1y0v7zb")  # schedule cards (stable class used for events)
+
+print("Found cards:", len(cards))
+
+for c in cards:
+
+    try:
+        name = c.select_one("span.css-1g9p1c6").text.strip()
+    except:
+        continue
+
+    try:
+        date = c.select_one("span.css-1v0q3ez").text.strip()
+    except:
+        date = ""
+
+    try:
+        winner = c.select_one("span.css-1x0e9x2").text.strip()
+    except:
+        winner = ""
+
+    year = 2026  # keep fixed for now
+
+    key = (year, name)
+
+    if key in existing_events:
+        continue
+
+    print("Adding:", name)
+
+    events.append({
+        "tour": "pga",
+        "year": year,
+        "date": date,
+        "event": name,
+        "winner": winner,
+        "major": False,
+        "score": "",
+        "venue": "",
+        "country": "",
+        "url": ""
+    })
+
+# -----------------------
+# SAVE
+# -----------------------
+if events:
+    data.extend(events)
 
     with open(FILE, "w") as f:
         json.dump(data, f, indent=2)
 
-    print("Updated file")
+    print("✅ Added", len(events), "new events")
 else:
-    print("No updates needed")
+    print("No new events found")
