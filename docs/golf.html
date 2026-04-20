@@ -223,7 +223,6 @@ async function load(){
 
   data.sort((a,b)=>b.year-a.year);
 
-  // ✅ FIX: remove empty winners from player list
   players=[...new Set(data.map(d=>d.winner).filter(Boolean))].sort();
 
   populateFilters();
@@ -258,7 +257,7 @@ function render(){
   let filtered=data
     .filter(d=>{
       return (year==="all" || d.year==year) &&
-             (!search || d.event.toLowerCase().includes(search));
+             (!search || (d.event||"").toLowerCase().includes(search));
     })
     .filter(d=>{
       const w=(d.winner||"").toLowerCase();
@@ -273,13 +272,26 @@ function draw(rows){
   tbody.innerHTML="";
 
   rows.forEach(r=>{
+
+    let event = r.event || "";
+
+    // FIX 1: split merged event + venue
+    if(event.includes("Golf Club") && event.includes(" - ")){
+      event = event.split("Golf Club")[0] + "Golf Club";
+    }
+
+    // FIX 2: fallback if blank
+    if(!event && r.major){
+      event = r.major;
+    }
+
     const tr=document.createElement("tr");
 
     tr.innerHTML=`
       <td class="col-year">${r.year}</td>
       <td class="col-tournament">
-        <a class="tournament-link" href="/golf-tournament.html?tournament=${encodeURIComponent(r.event)}">
-          ${r.event}
+        <a class="tournament-link" href="/golf-tournament.html?tournament=${encodeURIComponent(event)}">
+          ${event}
         </a>
       </td>
       <td class="col-winner">
