@@ -19,12 +19,25 @@ def shift_year(date_str, year):
         return date_str
     return year + date_str[4:]
 
+def dedupe(data):
+    seen = set()
+    out = []
+
+    for t in data:
+        key = (t.get("tournament",""), t.get("date",""))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(t)
+
+    return out
+
 def main():
 
     source = load(f"{BASE}/2024.json")
 
     if not source:
-        print("❌ 2024.json is empty — cannot build seasons")
+        print("❌ 2024.json missing or empty")
         return
 
     for year in ["2025", "2026"]:
@@ -41,6 +54,8 @@ def main():
                 "end_date": shift_year(t.get("end_date",""), year),
                 "date": shift_year(t.get("date",""), year)
             })
+
+        new = dedupe(new)
 
         save(f"{BASE}/{year}.json", new)
         print(f"✅ Built {year} with {len(new)} tournaments")
