@@ -12,6 +12,34 @@ index_path = os.path.join(season_path, "index.json")
 with open(index_path) as f:
     index = json.load(f)
 
+def get_game_type(game):
+    vals = [
+        game.get("game_type"),
+        game.get("season_type"),
+        game.get("type"),
+        game.get("status"),
+        game.get("name")
+    ]
+
+    vals = [str(v).lower() for v in vals if v]
+    joined = " ".join(vals)
+
+    # PLAY-IN
+    if "play-in" in joined or "play in" in joined:
+        return "Play-In"
+
+    # PLAYOFFS
+    if any(x in joined for x in ["playoff", "final", "conference", "round"]):
+        return "Playoffs"
+
+    # FALLBACK: DATE (very reliable for NBA)
+    date = game.get("date", "")
+    if date >= "2026-04-15":
+        return "Playoffs"
+
+    return "Regular Season"
+
+
 summaries = []
 
 for game_id in index["games"]:
@@ -24,7 +52,7 @@ for game_id in index["games"]:
     with open(game_file) as f:
         game = json.load(f)
 
-    game_type = game.get("game_type", "")
+    game_type = get_game_type(game)
 
     # skip preseason + all star
     if game_type in ("Preseason", "All-Star"):
