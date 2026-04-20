@@ -1,29 +1,62 @@
 import json
 import os
+from collections import defaultdict
 
-BASE = "docs/data/tennis"
-OUT = os.path.join(BASE, "full_match_database.json")
+MATCH_FILE = "docs/data/tennis/full_match_database.json"
+OUT = "docs/data/tennis/seasons"
+
+def load(path):
+    if not os.path.exists(path):
+        return []
+    with open(path) as f:
+        return json.load(f)
+
+def save(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+
+def build(matches, year):
+
+    tournaments = defaultdict(list)
+
+    for m in matches:
+
+        if not m["date"].startswith(year):
+            continue
+
+        tournaments[m["tournament"]].append(m)
+
+    output = []
+
+    for name, games in tournaments.items():
+
+        dates = sorted([g["date"] for g in games])
+
+        output.append({
+            "tournament": name,
+            "surface": "",
+            "location": "",
+            "tour": "",
+            "start_date": dates[0],
+            "end_date": dates[-1],
+            "date": dates[0],
+            "matches": games
+        })
+
+    output.sort(key=lambda x: x["date"])
+
+    return output
+
 
 def main():
 
-    matches = []
+    matches = load(MATCH_FILE)
 
-    # Sample real structure (this is what your site expects)
-    for i in range(1, 51):
-        matches.append({
-            "date": f"2025-01-{str(i%28+1).zfill(2)}",
-            "tournament": "Australian Open",
-            "player1": f"Player {i}",
-            "player2": f"Player {i+1}",
-            "score": "6-4 6-3"
-        })
-
-    os.makedirs(BASE, exist_ok=True)
-
-    with open(OUT, "w") as f:
-        json.dump(matches, f, indent=2)
-
-    print("✅ MATCH DATA CREATED:", len(matches))
+    for year in ["2025", "2026"]:
+        data = build(matches, year)
+        save(f"{OUT}/{year}.json", data)
+        print(year, len(data))
 
 
 if __name__ == "__main__":
