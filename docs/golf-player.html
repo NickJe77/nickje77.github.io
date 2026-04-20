@@ -7,342 +7,127 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-:root{
-  --green:#0c6f3c;
-  --bg:#f4f6f8;
-  --card:#ffffff;
-  --line:#e3e7eb;
-  --zebra:#f3f8f4;
-}
-
-body{
-  margin:0;
-  font-family:Inter,system-ui,Arial;
-  background:var(--bg);
-}
-
-.navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px 0;
-  background:#fff;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
-}
-
-.navbar a{
-  color:#0056d6;
-  text-decoration:none;
-  font-size:18px;
-}
-
-.hero{
-  background:linear-gradient(135deg,#08552d,#0c6f3c);
-  color:#fff;
-  text-align:center;
-  padding:40px 20px;
-}
-
-.hero h1{
-  margin:0;
-  font-size:34px;
-}
-
-.summary{
-  margin-top:10px;
-  font-size:16px;
-  opacity:.9;
-}
-
-.page{
-  max-width:1000px;
-  margin:auto;
-  padding:25px;
-}
-
-.search-box{
-  margin-bottom:10px;
-  position:relative;
-}
-
-.search-box input{
-  width:100%;
-  padding:12px;
-  font-size:16px;
-  border:1px solid #ccc;
-  border-radius:10px;
-}
-
-.dropdown{
-  position:absolute;
-  width:100%;
-  background:#fff;
-  border:1px solid #ccc;
-  border-radius:10px;
-  margin-top:5px;
-  max-height:200px;
-  overflow-y:auto;
-  display:none;
-  z-index:10;
-}
-
-.dropdown div{
-  padding:10px;
-  cursor:pointer;
-}
-
-.dropdown div:hover{
-  background:#f0f6ff;
-}
-
-.table-card{
-  background:var(--card);
-  border-radius:14px;
-  overflow:hidden;
-  border:1px solid var(--line);
-  display:none;
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-}
-
-thead{
-  background:var(--green);
-  color:#fff;
-}
-
-th, td{
-  padding:12px;
-  font-size:14px;
-}
-
-th:last-child,
-td:last-child{
-  text-align:center;
-}
-
-tbody tr:nth-child(even){
-  background:var(--zebra);
-}
-
-.t-link{
-  color:#0056d6;
-  text-decoration:none;
-  font-weight:600;
-}
-
-.t-link:hover{
-  text-decoration:underline;
-}
+/* KEEP YOUR EXISTING CSS */
 </style>
 </head>
 
 <body>
 
-<div class="navbar">
-  <a href="/">Home</a>
-  <a href="/golf.html">Golf</a>
-  <a href="/golf-majors.html">Majors</a>
-  <a href="/golf-player.html">Players</a>
-</div>
-
-<div class="hero">
-  <h1 id="playerName">Golf Players</h1>
-  <div class="summary" id="summary">Search for a player to view career wins</div>
-</div>
-
-<div class="page">
-
-<div class="search-box">
-  <input id="search" placeholder="Search player...">
-  <div id="dropdown" class="dropdown"></div>
-</div>
-
-<div class="table-card">
-<table>
-<thead>
-<tr>
-  <th>Year</th>
-  <th>Tournament</th>
-  <th>Major</th>
-</tr>
-</thead>
-<tbody id="tbody"></tbody>
-</table>
-</div>
-
-</div>
+<!-- KEEP YOUR EXISTING HTML -->
 
 <script>
-function clean(name){
+function cleanPlayerName(name){
   if(!name) return "";
-  return String(name)
-    .replace(/\s*\(.*?\)/g, "")
-    .replace(/\*/g, "")
-    .trim()
-    .split(/\/|&| and /i)[0]
+
+  return name
+    .replace(/\./g,". ")
+    .replace(/\s+/g," ")
+    .replace(/\b([a-z])/g,l=>l.toUpperCase())
+    .replace(/\s*\(.*?\)/g,"")
+    .replace(/\*/g,"")
+    .trim();
+}
+
+function cleanTournament(name){
+  if(!name) return "";
+  return name
+    .replace(/Augusta National.*$/i,"")
+    .replace(/ - .*$/i,"")
     .trim();
 }
 
 function slug(name){
-  return String(name || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+  return String(name||"")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/[^a-z0-9]+/g,"-")
+    .replace(/^-+|-+$/g,"");
 }
 
 function isMajor(name){
   if(!name) return false;
-  const n = name.toLowerCase();
+  const n=name.toLowerCase();
   return (
     n.includes("masters") ||
-    n.includes("u.s. open") ||
     n.includes("us open") ||
     n.includes("open championship") ||
-    n.includes("british open") ||
     n.includes("pga championship")
   );
 }
 
-// 🔥 NORMALISE TOURNAMENT NAME
-function cleanTournament(name){
-  if(!name) return "";
-
-  return name
-    .replace(/Augusta National.*$/i, "")
-    .replace(/ - .*$/i, "")
-    .trim();
-}
-
 async function fetchData(){
-  let res = await fetch("/data/golf/pga_winners.json");
-  if(!res.ok){
-    res = await fetch("/docs/data/golf/pga_winners.json");
-  }
-  if(!res.ok){
-    return [];
-  }
+  let res=await fetch("/data/golf/pga_winners.json");
+  if(!res.ok) res=await fetch("/docs/data/golf/pga_winners.json");
+  if(!res.ok) return [];
   return await res.json();
 }
 
 async function load(){
-  const params = new URLSearchParams(location.search);
-  const rawPlayerParam = params.get("player") || "";
-  const playerSlug = slug(decodeURIComponent(rawPlayerParam));
+  const params=new URLSearchParams(location.search);
+  const playerSlug=slug(params.get("player")||"");
 
-  const data = await fetchData();
+  const data=await fetchData();
 
-  if(!data.length){
-    document.getElementById("playerName").innerText = "Data not loading";
-    return;
-  }
+  let playerName="";
+  const wins=[];
 
-  const players = [...new Set(
-    data.map(d => clean(d.winner)).filter(Boolean)
-  )].sort((a,b) => a.localeCompare(b));
+  data.forEach(d=>{
+    const winner=cleanPlayerName(d.winner);
 
-  const search = document.getElementById("search");
-  const dropdown = document.getElementById("dropdown");
+    if(!winner) return;
 
-  search.addEventListener("input", e => {
-    const val = e.target.value.toLowerCase().trim();
-    dropdown.innerHTML = "";
+    if(slug(winner)===playerSlug){
+      playerName=winner;
 
-    if(val.length < 2){
-      dropdown.style.display = "none";
-      return;
-    }
-
-    const matches = players.filter(p =>
-      p.toLowerCase().includes(val)
-    ).slice(0, 10);
-
-    matches.forEach(p => {
-      const item = document.createElement("div");
-      item.textContent = p;
-      item.onclick = () => {
-        location.href = "/golf-player.html?player=" + slug(p);
-      };
-      dropdown.appendChild(item);
-    });
-
-    dropdown.style.display = matches.length ? "block" : "none";
-  });
-
-  document.addEventListener("click", e => {
-    if(!document.querySelector(".search-box").contains(e.target)){
-      dropdown.style.display = "none";
-    }
-  });
-
-  if(!playerSlug) return;
-
-  let playerName = "";
-  const wins = [];
-
-  data.forEach(d => {
-    const winnerName = clean(d.winner);
-    if(!winnerName) return;
-
-    if(slug(winnerName) === playerSlug){
-      playerName = winnerName;
-
-      let tournament = d.event || d.tournament || d.name || "";
-      tournament = cleanTournament(tournament);
+      const tournament=cleanTournament(d.event||"");
 
       wins.push({
-        year: d.year || "",
+        year:d.year,
         tournament,
-        isMajor: isMajor(tournament)
+        isMajor:isMajor(tournament)
       });
     }
   });
 
   if(!playerName){
-    document.getElementById("playerName").innerText = "Player not found";
+    document.getElementById("playerName").innerText="Player not found";
     return;
   }
 
-  document.getElementById("playerName").innerText = playerName;
+  document.getElementById("playerName").innerText=playerName;
 
-  // 🔥 DEDUPE (FINAL FIX)
-  const seen = new Set();
-  const uniqueWins = wins.filter(w => {
-    const key = w.year + "|" + w.tournament.toLowerCase();
+  /* 🔥 DEDUPE */
+  const seen=new Set();
+  const uniqueWins=wins.filter(w=>{
+    const key=w.year+"|"+w.tournament.toLowerCase();
     if(seen.has(key)) return false;
     seen.add(key);
     return true;
   });
 
-  const totalWins = uniqueWins.length;
-  const majors = uniqueWins.filter(w => w.isMajor).length;
+  const totalWins=uniqueWins.length;
+  const majors=uniqueWins.filter(w=>w.isMajor).length;
 
-  document.getElementById("summary").innerText =
-    totalWins + " wins / " + majors + " majors";
+  document.getElementById("summary").innerText=
+    totalWins+" wins / "+majors+" majors";
 
-  const tbody = document.getElementById("tbody");
-  tbody.innerHTML = "";
+  const tbody=document.getElementById("tbody");
+  tbody.innerHTML="";
 
   uniqueWins
-    .sort((a,b) => Number(b.year || 0) - Number(a.year || 0))
-    .forEach(w => {
-      const tr = document.createElement("tr");
+    .sort((a,b)=>b.year-a.year)
+    .forEach(w=>{
+      const tr=document.createElement("tr");
 
-      tr.innerHTML = `
+      tr.innerHTML=`
         <td>${w.year}</td>
-        <td>${!w.isMajor ? `<a class="t-link" href="/golf-tournament.html?tournament=${slug(w.tournament)}">${w.tournament}</a>` : ""}</td>
-        <td>${w.isMajor ? `<a class="t-link" href="/golf-tournament.html?tournament=${slug(w.tournament)}">${w.tournament}</a>` : ""}</td>
+        <td>${!w.isMajor ? w.tournament : ""}</td>
+        <td>${w.isMajor ? w.tournament : ""}</td>
       `;
 
       tbody.appendChild(tr);
     });
 
-  document.querySelector(".table-card").style.display = "block";
+  document.querySelector(".table-card").style.display="block";
 }
 
 load();
