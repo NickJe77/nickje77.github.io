@@ -1,9 +1,9 @@
-name: Tennis Updater
+name: Tennis Builder (Safe)
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 6 * * 1"   # every Monday
+    - cron: "0 6 * * 1"
 
 jobs:
   build:
@@ -11,20 +11,20 @@ jobs:
 
     steps:
       # -------------------------
-      # CHECKOUT (FULL HISTORY)
+      # CHECKOUT
       # -------------------------
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0   # 🔥 IMPORTANT for rebase
 
       # -------------------------
-      # PYTHON
+      # SETUP PYTHON
       # -------------------------
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: 3.11
+          python-version: "3.11"
 
       # -------------------------
       # INSTALL DEPENDENCIES
@@ -34,50 +34,28 @@ jobs:
           pip install requests beautifulsoup4
 
       # -------------------------
-      # RUN SCRAPER (2025+)
+      # RUN SCRIPT
       # -------------------------
-      - name: Run scraper
+      - name: Run tennis builder
         run: |
-          python scripts/tennis_live_scraper.py
+          python scripts/tennis_season_builder.py
 
       # -------------------------
-      # FIX MATCH STRUCTURE
-      # -------------------------
-      - name: Fix tennis matches
-        run: |
-          python scripts/tennis_fix_matches.py
-
-      # -------------------------
-      # 🔥 CRITICAL: RESET GIT STATE
-      # -------------------------
-      - name: Reset git state
-        run: |
-          git reset --hard
-
-      # -------------------------
-      # 🔥 SAFE COMMIT (NO DELETIONS)
+      # COMMIT + PUSH (SAFE)
       # -------------------------
       - name: Commit data safely
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          FILES="
-          docs/data/tennis/matches/2025.json
-          docs/data/tennis/matches/2026.json
-          docs/data/tennis/seasons/2025.json
-          docs/data/tennis/seasons/2026.json
-          "
+          # 🔥 Only tennis data
+          git add docs/data/tennis/
 
-          for f in $FILES
-          do
-            if [ -s "$f" ]; then
-              echo "Adding $f"
-              git add "$f"
-            else
-              echo "Skipping empty $f (prevents deletion)"
-            fi
-          done
+          # Commit if changes exist
+          git commit -m "Update tennis data" || echo "No changes"
 
-          git commit -m "Update tennis data (safe)" || echo "No changes"
+          # 🔥 ALWAYS sync with remote before push
+          git pull --rebase origin main || git pull origin main
+
+          # Push safely
           git push
