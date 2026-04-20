@@ -30,11 +30,19 @@ def get(m, keys):
     return ""
 
 
-def year_of(m):
-    d = get(m, ["date","match_date"])
+def extract_year(m):
+    d = get(m, ["date","match_date","start_date"])
     if len(d) >= 4:
         return d[:4]
     return ""
+
+
+def clean_name(name):
+    # strip score junk if present
+    if " 6-" in name or " 7-" in name:
+        parts = name.split(" ")
+        name = " ".join([p for p in parts if "-" not in p])
+    return name.strip()
 
 
 def build(matches, year):
@@ -43,18 +51,32 @@ def build(matches, year):
 
     for m in matches:
 
-        if year_of(m) != year:
+        if extract_year(m) != year:
             continue
 
-        name = get(m, ["tournament","tourney_name","event","event_name"])
+        # 🔥 try every possible field (this is the fix)
+        name = get(m, [
+            "tournament",
+            "tourney_name",
+            "event",
+            "event_name",
+            "competition",
+            "name"
+        ])
+
         if not name:
             continue
 
-        date = get(m, ["date","match_date"])
+        name = clean_name(name)
+
+        # ignore obvious player-only junk
+        if len(name.split()) > 5 and "Open" not in name and "Masters" not in name:
+            continue
+
+        date = get(m, ["date","match_date","start_date"])
         if not date:
             continue
 
-        # KEY = tournament name only (this fixes your duplication)
         grouped[name].append(date)
 
     output = []
@@ -65,7 +87,7 @@ def build(matches, year):
 
         output.append({
             "tournament": name,
-            "surface": "",       # leave blank if unknown
+            "surface": "",
             "location": "",
             "tour": "",
             "start_date": dates[0],
