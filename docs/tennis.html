@@ -101,6 +101,17 @@ select,input{
   font-weight:800;
 }
 
+.empty-state{
+  grid-column:1 / -1;
+  background:#fff;
+  border-radius:16px;
+  padding:24px;
+  box-shadow:var(--shadow);
+  color:var(--muted);
+  text-align:center;
+  font-weight:700;
+}
+
 @media(max-width:900px){
   .grid{grid-template-columns:1fr;}
   .controls{grid-template-columns:1fr;}
@@ -135,7 +146,6 @@ select,input{
 </div>
 
 <script>
-
 const yearSelect = document.getElementById("yearSelect");
 const grid = document.getElementById("grid");
 
@@ -144,31 +154,53 @@ let rawEvents = [];
 // YEARS
 for(let y=new Date().getFullYear(); y>=1968; y--){
   let o=document.createElement("option");
-  o.value=y; o.textContent=y;
+  o.value=y;
+  o.textContent=y;
   yearSelect.appendChild(o);
 }
 
 // LOAD YEAR
 async function loadYear(year){
+  let data = [];
 
-  const res = await fetch(`data/tennis/matches/${year}.json`);
-  const data = await res.json();
+  try{
+    let res = await fetch(`/data/tennis/seasons/${year}.json`);
+
+    if(!res.ok){
+      res = await fetch(`/docs/data/tennis/seasons/${year}.json`);
+    }
+
+    if(!res.ok){
+      rawEvents = [];
+      populateSurface();
+      applyFilters();
+      return;
+    }
+
+    data = await res.json();
+  }catch(err){
+    rawEvents = [];
+    populateSurface();
+    applyFilters();
+    return;
+  }
 
   const map = {};
 
   data.forEach(m=>{
-    const name = m.tournament || "Unknown";
+    const name = (m.tournament || m.event || "Unknown").trim();
+    const surface = (m.surface || "").trim();
 
     if(!map[name]){
       map[name] = {
         name,
-        surface:m.surface,
+        surface,
         year
       };
     }
   });
 
-  rawEvents = Object.values(map);
+  rawEvents = Object.values(map).sort((a,b)=>a.name.localeCompare(b.name));
 
   populateSurface();
   applyFilters();
@@ -176,7 +208,7 @@ async function loadYear(year){
 
 // SURFACE FILTER
 function populateSurface(){
-  const surfaces = [...new Set(rawEvents.map(e=>e.surface).filter(Boolean))];
+  const surfaces = [...new Set(rawEvents.map(e=>e.surface).filter(Boolean))].sort();
 
   const select = document.getElementById("surfaceSelect");
   select.innerHTML = '<option value="all">All Surfaces</option>';
@@ -191,7 +223,6 @@ function populateSurface(){
 
 // FILTERS
 function applyFilters(){
-
   const q = document.getElementById("searchInput").value.toLowerCase();
   const surface = document.getElementById("surfaceSelect").value;
 
@@ -204,13 +235,16 @@ function applyFilters(){
   render(filtered);
 }
 
-// 🔥 FIXED RENDER (SAFE CLICK HANDLER)
+// RENDER
 function render(events){
-
   grid.innerHTML = "";
 
-  events.forEach(e => {
+  if(!events.length){
+    grid.innerHTML = `<div class="empty-state">No tournaments found for this year.</div>`;
+    return;
+  }
 
+  events.forEach(e => {
     const card = document.createElement("div");
     card.className = "card";
 
@@ -219,15 +253,12 @@ function render(events){
       <div class="pill">${e.surface || ""}</div>
     `;
 
-    // ✅ SAFE NAVIGATION
     card.onclick = () => {
       window.location = `tennis-event.html?tournament=${encodeURIComponent(e.name)}&year=${e.year}`;
     };
 
     grid.appendChild(card);
-
   });
-
 }
 
 // EVENTS
@@ -236,8 +267,8 @@ document.getElementById("searchInput").oninput = applyFilters;
 document.getElementById("surfaceSelect").onchange = applyFilters;
 
 // INIT
-loadYear(new Date().getFullYear());
-
+yearSelect.value = new Date().getFullYear();
+loadYear(yearSelect.value);
 </script>
 
 </body>
