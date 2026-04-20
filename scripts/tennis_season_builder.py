@@ -1,178 +1,137 @@
-import requests
 import json
-from pathlib import Path
-from datetime import datetime
-from bs4 import BeautifulSoup
+import os
 import re
+from collections import defaultdict
 
-print("TENNIS BUILDER (FINAL CLEAN VERSION)")
+BASE_DIR = "docs/data/tennis"
+FULL_DB = os.path.join(BASE_DIR, "full_match_database.json")
+SEASONS_DIR = os.path.join(BASE_DIR, "seasons")
 
-BASE = Path("docs/data/tennis/seasons")
-BASE.mkdir(parents=True, exist_ok=True)
-
-HEADERS = {"User-Agent": "Mozilla/5.0"}
-
-TARGET_YEARS = [2025, 2026]
-
-MONTHS = {
-    "Jan":"01","Feb":"02","Mar":"03","Apr":"04","May":"05","Jun":"06",
-    "Jul":"07","Aug":"08","Sep":"09","Oct":"10","Nov":"11","Dec":"12"
-}
+TARGET_YEARS = ["2025", "2026"]
 
 
-# -------------------------
-# CLEAN TEXT
-# -------------------------
-def clean(text):
-    if not text:
-        return ""
-    text = re.sub(r"\[[^\]]+\]", "", text)
-    text = text.replace("\xa0", " ")
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
-
-
-# -------------------------
-# PARSE DATE
-# -------------------------
-def parse_date(text, year):
-    match = re.search(r"(\d{1,2}) (\w{3})", text)
-    if not match:
-        return ""
-
-    day = match.group(1).zfill(2)
-    mon = MONTHS.get(match.group(2), "01")
-
-    return f"{year}-{mon}-{day}"
-
-
-# -------------------------
-# BUILD YEAR
-# -------------------------
-def build_year(year):
-
-    print(f"\n--- {year} ---")
-
-    url = f"https://en.wikipedia.org/wiki/{year}_ATP_Tour"
-
-    try:
-        r = requests.get(url, headers=HEADERS)
-        if r.status_code != 200:
-            print("❌ No page")
-            return []
-    except Exception as e:
-        print("❌ Request error:", e)
+def load_json(path):
+    if not os.path.exists(path):
         return []
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-    soup = BeautifulSoup(r.text, "html.parser")
 
-    tournaments = []
+def save_json(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
 
-    tables = soup.find_all("table", {"class": "wikitable"})
 
-    for table in tables:
+def clean(v):
+    if not v:
+        return ""
+    return str(v).replace("\xa0", " ").strip()
 
-        headers = [th.get_text(strip=True) for th in table.find_all("th")]
 
-        # 🔥 ONLY tables that actually contain tournaments
-        if not any("Tournament" in h for h in headers):
+def is_bad_tournament(name):
+    n = clean(name)
+
+    if not n:
+        return True
+
+    # scorelines
+    if re.search(r"\d+[-–]\d+", n):
+        return True
+
+    # long garbage strings (like your screenshot)
+    if len(n.split()) > 6 and not any(x in n.lower() for x in [
+        "open","masters","cup","finals","championship","wimbledon"
+    ]):
+        return True
+
+    return False
+
+
+def get_field(m, keys):
+    for k in keys:
+        v = clean(m.get(k))
+        if v:
+            return v
+    return ""
+
+
+def detect_tour(m):
+    blob = str(m).lower()
+    if "wta" in blob or "women" in blob:
+        return "WTA"
+    if "atp" in blob or "men" in blob:
+        return "ATP"
+    return ""
+
+
+def build_season(matches, year):
+
+    grouped = defaultdict(list)
+
+    for m in matches:
+
+        date = get_field(m, ["date","match_date","start_date"])
+        if not date.startswith(str(year)):
             continue
 
-        rows = table.find_all("tr")
+        name = get_field(m, [
+            "tournament",
+            "tourney_name",
+            "event",
+            "event_name"
+        ])
 
-        for row in rows:
-            cols = row.find_all("td")
-
-            if len(cols) < 2:
-                continue
-
-            try:
-                date_text = clean(cols[0].get_text())
-                name = clean(cols[1].get_text())
-                surface_text = clean(cols[2].get_text()) if len(cols) > 2 else ""
-            except:
-                continue
-
-            # -------------------------
-            # FILTER BAD ROWS
-            # -------------------------
-            if len(name) < 4:
-                continue
-
-            if "Davis Cup" in name:
-                continue
-
-            if "vs" in name.lower():
-                continue
-
-            if re.search(r"\d{2,}", name):
-                continue
-
-            # -------------------------
-            # CLEAN NAME
-            # -------------------------
-            name = re.sub(r"\[.*?\]", "", name)
-            name = re.sub(r"\s+", " ", name).strip()
-
-            # -------------------------
-            # SURFACE
-            # -------------------------
-            surface = ""
-            if "Hard" in surface_text:
-                surface = "Hard"
-            elif "Clay" in surface_text:
-                surface = "Clay"
-            elif "Grass" in surface_text:
-                surface = "Grass"
-
-            # -------------------------
-            # DATE
-            # -------------------------
-            date = parse_date(date_text, year)
-
-            tournaments.append({
-                "tournament": name,
-                "surface": surface,
-                "date": date
-            })
-
-    # -------------------------
-    # DEDUPE
-    # -------------------------
-    seen = set()
-    clean_list = []
-
-    for t in tournaments:
-        key = (t["tournament"].lower(), t["date"])
-        if key in seen:
+        if is_bad_tournament(name):
             continue
-        seen.add(key)
-        clean_list.append(t)
 
-    print(f"Found {len(clean_list)} tournaments")
+        surface = get_field(m, ["surface","court_surface"])
+        location = get_field(m, ["location","city","venue"])
+        tour = detect_tour(m)
 
-    return clean_list
+        key = (name, location, surface, tour)
+
+        grouped[key].append(date)
+
+    output = []
+
+    for (name, location, surface, tour), dates in grouped.items():
+
+        dates = [d for d in dates if d]
+        if not dates:
+            continue
+
+        output.append({
+            "tournament": name,
+            "surface": surface,
+            "location": location,
+            "tour": tour,
+            "start_date": min(dates),
+            "end_date": max(dates),
+            "date": min(dates)
+        })
+
+    output.sort(key=lambda x: (x["date"], x["tournament"]))
+
+    return output
 
 
-# -------------------------
-# SAVE (OVERWRITE BAD YEARS ONLY)
-# -------------------------
-def save_year(year, data):
-    path = BASE / f"{year}.json"
+def main():
 
-    if not data:
-        print(f"⚠️ No data for {year}")
+    matches = load_json(FULL_DB)
+
+    if not isinstance(matches, list):
+        print("❌ full_match_database.json is not a list")
         return
 
-    with open(path, "w") as f:
-        json.dump(data, f)
+    for year in TARGET_YEARS:
+        season = build_season(matches, year)
+        out = os.path.join(SEASONS_DIR, f"{year}.json")
+        save_json(out, season)
+        print(f"✅ {year} → {len(season)} tournaments")
 
-    print(f"✅ Saved {year}")
+    print("✅ DONE")
 
 
-# -------------------------
-# MAIN
-# -------------------------
-for year in TARGET_YEARS:
-    data = build_year(year)
-    save_year(year, data)
+if __name__ == "__main__":
+    main()
