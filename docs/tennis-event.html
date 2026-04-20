@@ -135,6 +135,19 @@ function clean(t){
 }
 
 // -------------------------
+function genderMatch(g){
+
+  if(!g) return true;
+
+  g = clean(g);
+
+  if(g === "m" || g === "men") return gender === "male";
+  if(g === "f" || g === "women") return gender === "female";
+
+  return g === gender;
+}
+
+// -------------------------
 fetch(`/data/tennis/seasons/${year}.json`)
 .then(r => {
   if(!r.ok) throw new Error("Fetch failed");
@@ -144,22 +157,27 @@ fetch(`/data/tennis/seasons/${year}.json`)
 
   console.log("RAW DATA:", data);
 
-  // support both formats
   const allMatches = Array.isArray(data) ? data : (data.matches || []);
+
+  console.log("TOTAL MATCHES:", allMatches.length);
 
   const matches = allMatches.filter(m => {
 
-    const tName = m.tournament || m.event || "";
-    const g = m.gender || "";
+    const tName =
+      m.tournament ||
+      m.event ||
+      m.tourney ||
+      m.event_name ||
+      "";
 
     return (
-      clean(tName) === clean(tournament) &&
-      (!g || clean(g) === gender)
+      clean(tName).includes(clean(tournament)) &&
+      genderMatch(m.gender)
     );
 
   });
 
-  console.log("FILTERED:", matches.length);
+  console.log("FILTERED MATCHES:", matches.length);
 
   buildTable(matches);
 })
@@ -192,10 +210,19 @@ function buildTable(matches){
   const tbody = document.getElementById("matches");
   tbody.innerHTML = "";
 
+  if(matches.length === 0){
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="4">No matches found</td>
+      </tr>
+    `;
+    return;
+  }
+
   matches.forEach(m => {
 
-    const p1 = m.player1 || m.winner || "";
-    const p2 = m.player2 || m.loser || "";
+    const p1 = m.player1 || m.winner || m.p1 || "";
+    const p2 = m.player2 || m.loser || m.p2 || "";
     const score = m.score || "";
 
     const winner = getWinner(score);
