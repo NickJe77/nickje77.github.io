@@ -209,6 +209,16 @@ function isMajor(name){
   );
 }
 
+// 🔥 NORMALISE TOURNAMENT NAME
+function cleanTournament(name){
+  if(!name) return "";
+
+  return name
+    .replace(/Augusta National.*$/i, "")
+    .replace(/ - .*$/i, "")
+    .trim();
+}
+
 async function fetchData(){
   let res = await fetch("/data/golf/pga_winners.json");
   if(!res.ok){
@@ -239,7 +249,6 @@ async function load(){
   const search = document.getElementById("search");
   const dropdown = document.getElementById("dropdown");
 
-  // SEARCH
   search.addEventListener("input", e => {
     const val = e.target.value.toLowerCase().trim();
     dropdown.innerHTML = "";
@@ -271,9 +280,7 @@ async function load(){
     }
   });
 
-  if(!playerSlug){
-    return;
-  }
+  if(!playerSlug) return;
 
   let playerName = "";
   const wins = [];
@@ -285,7 +292,8 @@ async function load(){
     if(slug(winnerName) === playerSlug){
       playerName = winnerName;
 
-      const tournament = d.event || d.tournament || d.name || "";
+      let tournament = d.event || d.tournament || d.name || "";
+      tournament = cleanTournament(tournament);
 
       wins.push({
         year: d.year || "",
@@ -302,10 +310,10 @@ async function load(){
 
   document.getElementById("playerName").innerText = playerName;
 
-  // 🔥 DEDUPE
+  // 🔥 DEDUPE (FINAL FIX)
   const seen = new Set();
   const uniqueWins = wins.filter(w => {
-    const key = w.year + "|" + w.tournament;
+    const key = w.year + "|" + w.tournament.toLowerCase();
     if(seen.has(key)) return false;
     seen.add(key);
     return true;
