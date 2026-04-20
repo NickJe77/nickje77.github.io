@@ -5,15 +5,19 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 import re
 
-print("TENNIS FULL SAFE BUILDER")
+print("TENNIS BUILDER (CLEAN + DATED)")
 
 BASE = Path("docs/data/tennis/seasons")
 BASE.mkdir(parents=True, exist_ok=True)
 
-START_YEAR = 1968
-END_YEAR = datetime.now().year
-
 HEADERS = {"User-Agent": "Mozilla/5.0"}
+
+TARGET_YEARS = [2025, 2026]
+
+MONTHS = {
+    "Jan":"01","Feb":"02","Mar":"03","Apr":"04","May":"05","Jun":"06",
+    "Jul":"07","Aug":"08","Sep":"09","Oct":"10","Nov":"11","Dec":"12"
+}
 
 
 # -------------------------
@@ -29,29 +33,48 @@ def clean(text):
 
 
 # -------------------------
-# SAFE WRITE
+# PARSE DATE
 # -------------------------
-def safe_write(path, data):
+def parse_date(text, year):
 
-    if not data:
-        print(f"⚠️ Skipping {path} (no data)")
-        return
+    # match things like "10 Aug" or "10 Aug 17 Aug"
+    match = re.search(r"(\d{1,2}) (\w{3})", text)
 
-    if path.exists():
-        try:
-            with open(path) as f:
-                existing = json.load(f)
+    if not match:
+        return ""
 
-            if isinstance(existing, list) and len(existing) > 0:
-                print(f"✅ Keeping existing {path}")
-                return
-        except:
-            pass
+    day = match.group(1).zfill(2)
+    mon = MONTHS.get(match.group(2), "01")
 
-    with open(path, "w") as f:
-        json.dump(data, f)
+    return f"{year}-{mon}-{day}"
 
-    print(f"✅ Saved {path}")
+
+# -------------------------
+# EXTRACT NAME + SURFACE
+# -------------------------
+def extract_name_surface(text):
+
+    # remove prize money, draws etc
+    text = re.split(r"ATP|WTA|\$|€", text)[0]
+
+    # remove location duplication
+    text = re.sub(r"([A-Za-z])\1{2,}", r"\1", text)
+
+    text = text.strip()
+
+    # surface
+    surface = ""
+    if "Hard" in text:
+        surface = "Hard"
+    elif "Clay" in text:
+        surface = "Clay"
+    elif "Grass" in text:
+        surface = "Grass"
+
+    # remove trailing surface words from name
+    name = re.sub(r"(Hard|Clay|Grass).*", "", text).strip()
+
+    return name, surface
 
 
 # -------------------------
@@ -79,24 +102,29 @@ def build_year(year):
     tables = soup.find_all("table", {"class": "wikitable"})
 
     for table in tables:
-
         rows = table.find_all("tr")
 
         for row in rows:
             cols = row.find_all("td")
 
-            if len(cols) < 2:
+            if len(cols) < 1:
                 continue
 
-            name = clean(cols[0].get_text())
-            surface = clean(cols[1].get_text())
+            raw_text = clean(row.get_text())
 
-            if not name or len(name) < 3:
+            if len(raw_text) < 5:
+                continue
+
+            date = parse_date(raw_text, year)
+            name, surface = extract_name_surface(raw_text)
+
+            if not name:
                 continue
 
             tournaments.append({
                 "tournament": name,
-                "surface": surface
+                "surface": surface,
+                "date": date
             })
 
     # -------------------------
@@ -106,7 +134,7 @@ def build_year(year):
     clean_list = []
 
     for t in tournaments:
-        key = t["tournament"].lower()
+        key = (t["tournament"].lower(), t["date"])
 
         if key in seen:
             continue
@@ -120,29 +148,30 @@ def build_year(year):
 
 
 # -------------------------
-# MAIN LOOP (ALL YEARS)
+# SAFE WRITE
 # -------------------------
-for year in range(START_YEAR, END_YEAR + 1):
+def safe_write(path, data):
+
+    if not data:
+        print(f"⚠️ No data, skipping {path}")
+        return
+
+    with open(path, "w") as f:
+        json.dump(data, f)
+
+    print(f"✅ Saved {path}")
+
+
+# -------------------------
+# MAIN
+# -------------------------
+for year in TARGET_YEARS:
 
     path = BASE / f"{year}.json"
 
-    # 🔥 SKIP GOOD DATA
-    if path.exists():
-        try:
-            with open(path) as f:
-                existing = json.load(f)
-
-            if isinstance(existing, list) and len(existing) > 0:
-                print(f"Skipping {year} (already populated)")
-                continue
-        except:
-            pass
-
     data = build_year(year)
 
-    # 🔥 NEVER WRITE EMPTY
     if not data:
-        print(f"⚠️ No data for {year}, not writing file")
         continue
 
     safe_write(path, data)
