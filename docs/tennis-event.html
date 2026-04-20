@@ -155,11 +155,7 @@ fetch(`/data/tennis/seasons/${year}.json`)
 })
 .then(data => {
 
-  console.log("RAW DATA:", data);
-
   const allMatches = Array.isArray(data) ? data : (data.matches || []);
-
-  console.log("TOTAL MATCHES:", allMatches.length);
 
   const matches = allMatches.filter(m => {
 
@@ -177,9 +173,8 @@ fetch(`/data/tennis/seasons/${year}.json`)
 
   });
 
-  console.log("FILTERED MATCHES:", matches.length);
+  buildTable(matches, allMatches);
 
-  buildTable(matches);
 })
 .catch(err => {
   console.error("ERROR LOADING DATA:", err);
@@ -205,20 +200,54 @@ function getWinner(score){
 }
 
 // -------------------------
-function buildTable(matches){
+function buildTable(matches, allMatches){
 
   const tbody = document.getElementById("matches");
   tbody.innerHTML = "";
 
-  if(matches.length === 0){
+  // detect if tournament exists at all
+  const tournamentExists = allMatches.some(m => {
+    const tName =
+      m.tournament ||
+      m.event ||
+      m.tourney ||
+      m.event_name ||
+      "";
+
+    return clean(tName).includes(clean(tournament));
+  });
+
+  // -------------------------
+  // NOT PLAYED YET
+  // -------------------------
+  if(matches.length === 0 && tournamentExists){
     tbody.innerHTML = `
       <tr>
-        <td colspan="4">No matches found</td>
+        <td colspan="4" style="padding:30px;font-weight:600;">
+          Tournament not played yet
+        </td>
       </tr>
     `;
     return;
   }
 
+  // -------------------------
+  // NOT FOUND
+  // -------------------------
+  if(matches.length === 0){
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="4" style="padding:30px;font-weight:600;">
+          Tournament not found
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  // -------------------------
+  // NORMAL
+  // -------------------------
   matches.forEach(m => {
 
     const p1 = m.player1 || m.winner || m.p1 || "";
