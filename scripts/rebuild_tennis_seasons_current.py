@@ -1,10 +1,13 @@
 import json
 import os
+from collections import defaultdict
 
-BASE = "docs/data/tennis/seasons"
+BASE = "docs/data/tennis"
+FULL_DB = os.path.join(BASE, "full_match_database.json")
+OUT = os.path.join(BASE, "seasons")
 
-SOURCE_YEAR = "2024"
-TARGET_YEARS = ["2025", "2026"]
+YEARS = ["2025", "2026"]
+
 
 def load(path):
     if not os.path.exists(path):
@@ -12,39 +15,78 @@ def load(path):
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
+
 def save(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
-def shift_year(date_str, new_year):
-    if not date_str or len(date_str) < 10:
-        return date_str
-    return new_year + date_str[4:]
+
+def get(m, keys):
+    for k in keys:
+        v = m.get(k)
+        if v:
+            return str(v).strip()
+    return ""
+
+
+def year_of(m):
+    d = get(m, ["date","match_date"])
+    if len(d) >= 4:
+        return d[:4]
+    return ""
+
+
+def build(matches, year):
+
+    grouped = defaultdict(list)
+
+    for m in matches:
+
+        if year_of(m) != year:
+            continue
+
+        name = get(m, ["tournament","tourney_name","event","event_name"])
+        if not name:
+            continue
+
+        date = get(m, ["date","match_date"])
+        if not date:
+            continue
+
+        # KEY = tournament name only (this fixes your duplication)
+        grouped[name].append(date)
+
+    output = []
+
+    for name, dates in grouped.items():
+
+        dates = sorted(dates)
+
+        output.append({
+            "tournament": name,
+            "surface": "",       # leave blank if unknown
+            "location": "",
+            "tour": "",
+            "start_date": dates[0],
+            "end_date": dates[-1],
+            "date": dates[0]
+        })
+
+    output.sort(key=lambda x: (x["date"], x["tournament"]))
+
+    return output
+
 
 def main():
-    source_path = f"{BASE}/{SOURCE_YEAR}.json"
-    source = load(source_path)
 
-    if not source:
-        print("❌ 2024 season missing")
-        return
+    matches = load(FULL_DB)
 
-    for year in TARGET_YEARS:
-        new_data = []
+    for y in YEARS:
+        data = build(matches, y)
+        save(f"{OUT}/{y}.json", data)
+        print(y, len(data))
 
-        for t in source:
-            new_data.append({
-                "tournament": t.get("tournament",""),
-                "surface": t.get("surface",""),
-                "location": t.get("location",""),
-                "tour": t.get("tour",""),
-                "start_date": shift_year(t.get("start_date",""), year),
-                "end_date": shift_year(t.get("end_date",""), year),
-                "date": shift_year(t.get("date",""), year)
-            })
-
-        save(f"{BASE}/{year}.json", new_data)
-        print(f"✅ Built {year} with {len(new_data)} tournaments")
 
 if __name__ == "__main__":
     main()
