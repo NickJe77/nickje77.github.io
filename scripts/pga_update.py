@@ -1,4 +1,5 @@
 import requests
+from bs4 import BeautifulSoup
 import json
 import os
 
@@ -18,48 +19,59 @@ existing = set((d["year"], d["event"]) for d in data)
 print("Existing records:", len(existing))
 
 # -----------------------
-# PGA TOUR JSON (REAL SOURCE)
+# ESPN SCHEDULE (WORKS IN GITHUB)
 # -----------------------
-URL = "https://statdata.pgatour.com/r/current/schedule-v2.json"
+URL = "https://www.espn.com/golf/schedule"
 
-r = requests.get(URL)
-js = r.json()
+headers = {
+    "User-Agent": "Mozilla/5.0"
+}
 
-tournaments = js.get("schedule", [])
+r = requests.get(URL, headers=headers)
+soup = BeautifulSoup(r.text, "html.parser")
 
-print("Tournaments found:", len(tournaments))
+tables = soup.select("table")
 
 new_rows = []
 
-for t in tournaments:
+for table in tables:
+    rows = table.select("tbody tr")
 
-    name = t.get("name", "").strip()
-    date = t.get("date", {}).get("startDate", "")
-    year = int(date[:4]) if date else 2026
+    for row in rows:
+        cols = row.find_all("td")
 
-    winner = ""
-    if t.get("winner"):
-        winner = t["winner"].get("playerName", "")
+        if len(cols) < 2:
+            continue
 
-    key = (year, name)
+        date = cols[0].text.strip()
+        event = cols[1].text.strip()
 
-    if key in existing:
-        continue
+        # try get winner if exists
+        winner = ""
+        if len(cols) >= 3:
+            winner = cols[2].text.strip()
 
-    print("Adding:", name)
+        year = 2026  # current season
 
-    new_rows.append({
-        "tour": "pga",
-        "year": year,
-        "date": date,
-        "event": name,
-        "winner": winner,
-        "major": False,
-        "score": "",
-        "venue": t.get("courseName", ""),
-        "country": "",
-        "url": ""
-    })
+        key = (year, event)
+
+        if key in existing:
+            continue
+
+        print("Adding:", event)
+
+        new_rows.append({
+            "tour": "pga",
+            "year": year,
+            "date": date,
+            "event": event,
+            "winner": winner,
+            "major": False,
+            "score": "",
+            "venue": "",
+            "country": "",
+            "url": ""
+        })
 
 # -----------------------
 # SAVE
