@@ -1,5 +1,4 @@
 import requests
-from bs4 import BeautifulSoup
 import json
 import os
 
@@ -14,55 +13,42 @@ if os.path.exists(FILE):
 else:
     data = []
 
-existing_events = set((d["year"], d["event"]) for d in data)
+existing = set((d["year"], d["event"]) for d in data)
 
-print("Existing records:", len(existing_events))
+print("Existing records:", len(existing))
 
 # -----------------------
-# SCRAPE PGA SCHEDULE
+# PGA TOUR JSON (REAL SOURCE)
 # -----------------------
-URL = "https://www.pgatour.com/schedule"
+URL = "https://statdata.pgatour.com/r/current/schedule-v2.json"
 
-headers = {
-    "User-Agent": "Mozilla/5.0"
-}
+r = requests.get(URL)
+js = r.json()
 
-r = requests.get(URL, headers=headers)
-soup = BeautifulSoup(r.text, "html.parser")
+tournaments = js.get("schedule", [])
 
-events = []
+print("Tournaments found:", len(tournaments))
 
-cards = soup.select("div.css-1y0v7zb")  # schedule cards (stable class used for events)
+new_rows = []
 
-print("Found cards:", len(cards))
+for t in tournaments:
 
-for c in cards:
+    name = t.get("name", "").strip()
+    date = t.get("date", {}).get("startDate", "")
+    year = int(date[:4]) if date else 2026
 
-    try:
-        name = c.select_one("span.css-1g9p1c6").text.strip()
-    except:
-        continue
-
-    try:
-        date = c.select_one("span.css-1v0q3ez").text.strip()
-    except:
-        date = ""
-
-    try:
-        winner = c.select_one("span.css-1x0e9x2").text.strip()
-    except:
-        winner = ""
-
-    year = 2026  # keep fixed for now
+    winner = ""
+    if t.get("winner"):
+        winner = t["winner"].get("playerName", "")
 
     key = (year, name)
 
-    if key in existing_events:
+    if key in existing:
         continue
 
     print("Adding:", name)
 
-    events.append({
+    new_rows.append({
         "tour": "pga",
         "year": year,
         "date": date,
@@ -70,7 +56,7 @@ for c in cards:
         "winner": winner,
         "major": False,
         "score": "",
-        "venue": "",
+        "venue": t.get("courseName", ""),
         "country": "",
         "url": ""
     })
@@ -78,12 +64,12 @@ for c in cards:
 # -----------------------
 # SAVE
 # -----------------------
-if events:
-    data.extend(events)
+if new_rows:
+    data.extend(new_rows)
 
     with open(FILE, "w") as f:
         json.dump(data, f, indent=2)
 
-    print("✅ Added", len(events), "new events")
+    print("✅ Added", len(new_rows), "events")
 else:
     print("No new events found")
