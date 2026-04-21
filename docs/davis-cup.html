@@ -7,14 +7,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-
 body{
-font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+font-family:Inter,system-ui;
 margin:0;
 background:#f4f6f8;
 }
 
-/* NAV */
 .navbar{
 display:flex;
 justify-content:center;
@@ -32,7 +30,6 @@ margin:auto;
 padding:30px 20px;
 }
 
-/* SEARCH */
 .search-box{
 position:relative;
 margin-bottom:20px;
@@ -55,7 +52,7 @@ background:#fff;
 border-radius:10px;
 box-shadow:0 6px 18px rgba(0,0,0,0.15);
 max-height:200px;
-overflow-y:auto;
+overflow:auto;
 z-index:10;
 }
 
@@ -65,7 +62,6 @@ cursor:pointer;
 }
 .suggestions div:hover{background:#f2f6ff;}
 
-/* HERO */
 .hero{
 background:#fff;
 padding:20px;
@@ -75,10 +71,6 @@ margin-bottom:25px;
 text-align:center;
 }
 
-.hero h1{margin:0;}
-.hero p{margin:5px 0 0;color:#666;}
-
-/* TABLE */
 table{
 width:100%;
 border-collapse:collapse;
@@ -104,7 +96,6 @@ text-align:center;
 td:first-child{text-align:left;}
 
 tbody tr:nth-child(even){background:#f2f6ff;}
-
 </style>
 </head>
 
@@ -118,19 +109,16 @@ tbody tr:nth-child(even){background:#f2f6ff;}
 
 <div class="wrap">
 
-<!-- SEARCH -->
 <div class="search-box">
 <input id="countryInput" placeholder="Search country...">
 <div id="suggestions" class="suggestions"></div>
 </div>
 
-<!-- HERO -->
 <div class="hero">
 <h1 id="countryName">Select a country</h1>
 <p id="titles">Davis Cup Titles: 0</p>
 </div>
 
-<!-- RESULTS -->
 <h2>Results</h2>
 <table>
 <thead>
@@ -144,13 +132,10 @@ tbody tr:nth-child(even){background:#f2f6ff;}
 <tbody id="results"></tbody>
 </table>
 
-<!-- PLAYERS -->
 <h2>Players</h2>
 <table>
 <thead>
-<tr>
-<th>Player</th>
-</tr>
+<tr><th>Player</th></tr>
 </thead>
 <tbody id="players"></tbody>
 </table>
@@ -159,16 +144,24 @@ tbody tr:nth-child(even){background:#f2f6ff;}
 
 <script>
 
-let allMatches = [];
-let countries = new Set();
+let matches=[];
+let countries=new Set();
+let playerCountry={};
 
-/* LOAD DATA */
+/* LOAD PLAYER → COUNTRY */
+fetch("/data/tennis/player_countries.json")
+.then(r=>r.json())
+.then(data=>{
+  playerCountry=data;
+});
+
+/* LOAD MATCHES */
 async function load(){
 
   const years=[];
   for(let y=2026;y>=1968;y--) years.push(y);
 
-  const res = await Promise.all(
+  const res=await Promise.all(
     years.map(y =>
       fetch(`/data/tennis/seasons/${y}.json`)
       .then(r=>r.ok?r.json():null)
@@ -179,17 +172,24 @@ async function load(){
   res.forEach(data=>{
     if(!data) return;
 
-    const games = Array.isArray(data)?data:(data.matches||[]);
+    const games=Array.isArray(data)?data:(data.matches||[]);
 
     games.forEach(g=>{
+
       if((g.tournament||"").toLowerCase().includes("davis cup")){
 
-        allMatches.push(g);
+        matches.push(g);
 
-        if(g.country1) countries.add(g.country1);
-        if(g.country2) countries.add(g.country2);
+        const c1 = playerCountry[g.player1];
+        const c2 = playerCountry[g.player2];
+
+        if(c1) countries.add(c1);
+        if(c2) countries.add(c2);
+
       }
+
     });
+
   });
 
 }
@@ -197,11 +197,11 @@ async function load(){
 load();
 
 /* SEARCH */
-const input = document.getElementById("countryInput");
-const box = document.getElementById("suggestions");
+const input=document.getElementById("countryInput");
+const box=document.getElementById("suggestions");
 
 input.addEventListener("input",()=>{
-  const val = input.value.toLowerCase();
+  const val=input.value.toLowerCase();
   box.innerHTML="";
 
   [...countries]
@@ -219,49 +219,57 @@ input.addEventListener("input",()=>{
     });
 });
 
-/* BUILD PAGE */
+/* BUILD */
 function build(country){
 
-  document.getElementById("countryName").textContent = country;
+  document.getElementById("countryName").textContent=country;
 
-  let titles = 0;
-  let results = [];
-  let players = new Set();
+  let titles=0;
+  let results=[];
+  let players=new Set();
 
-  allMatches.forEach(g=>{
+  matches.forEach(g=>{
 
-    if(g.country1===country || g.country2===country){
+    const c1 = playerCountry[g.player1];
+    const c2 = playerCountry[g.player2];
+
+    if(c1===country || c2===country){
 
       results.push(g);
 
       players.add(g.player1);
       players.add(g.player2);
 
-      if(g.round==="Final" && g.winner && g.winner.includes(country)){
-        titles++;
+      if(g.round==="Final" && g.winner){
+        if(playerCountry[g.winner]===country){
+          titles++;
+        }
       }
 
     }
 
   });
 
-  document.getElementById("titles").textContent = `Davis Cup Titles: ${titles}`;
+  document.getElementById("titles").textContent=`Davis Cup Titles: ${titles}`;
 
   document.getElementById("results").innerHTML =
     results.sort((a,b)=>new Date(b.date)-new Date(a.date))
-    .map(g=>`
-      <tr>
-        <td>${g.date||""}</td>
-        <td>${g.country1===country ? g.country2 : g.country1}</td>
-        <td>${g.winner||""}</td>
-        <td>${g.score||""}</td>
-      </tr>
-    `).join("");
+    .map(g=>{
+      const opponent =
+        playerCountry[g.player1]===country ? g.player2 : g.player1;
+
+      return `
+        <tr>
+          <td>${g.date||""}</td>
+          <td>${opponent}</td>
+          <td>${g.winner||""}</td>
+          <td>${g.score||""}</td>
+        </tr>
+      `;
+    }).join("");
 
   document.getElementById("players").innerHTML =
-    [...players].sort().map(p=>`
-      <tr><td>${p}</td></tr>
-    `).join("");
+    [...players].sort().map(p=>`<tr><td>${p}</td></tr>`).join("");
 
 }
 
