@@ -10,7 +10,7 @@ print("🔍 Loading players from seasons...")
 players = set()
 
 # -------------------------
-# LOAD PLAYERS
+# LOAD PLAYERS FROM YOUR DATA
 # -------------------------
 for file in os.listdir(BASE):
 
@@ -40,7 +40,7 @@ for file in os.listdir(BASE):
 print("👥 Players found:", len(players))
 
 # -------------------------
-# FETCH ATP DATA (NO REQUESTS)
+# FETCH ATP DATASET
 # -------------------------
 print("🌍 Fetching country dataset...")
 
@@ -63,12 +63,12 @@ for row in csv_data[1:]:
 
     parts = row.split(",")
 
-    if len(parts) < 5:
+    if len(parts) < 6:
         continue
 
     first = parts[1].strip()
     last = parts[2].strip()
-    country = parts[4].strip()
+    country = parts[5].strip()   # ✅ FIXED (was 4)
 
     if not first or not last or not country:
         continue
@@ -76,6 +76,7 @@ for row in csv_data[1:]:
     full = f"{first} {last}".lower()
     country_map[full] = country
 
+    # initial mapping (R Federer → Roger Federer)
     key = f"{first[0].lower()}_{last.lower()}"
     surname_map[key] = country
 
@@ -86,36 +87,43 @@ player_country = {}
 
 for p in players:
 
-    key = p.lower()
+    if not p or not isinstance(p, str):
+        continue
 
-    # direct match
+    key = p.lower().strip()
+
+    # ✅ DIRECT MATCH
     if key in country_map:
         player_country[p] = country_map[key]
         continue
 
     parts = p.split()
+
     if len(parts) < 2:
         continue
 
     first = parts[0]
     last = parts[-1]
 
-    # initial match (R Federer)
+    if not first or not last:
+        continue
+
+    # ✅ INITIAL MATCH (R Federer)
     if len(first) == 1:
         lookup = f"{first.lower()}_{last.lower()}"
         if lookup in surname_map:
             player_country[p] = surname_map[lookup]
             continue
 
-    # fallback full match
-    lookup = f"{first.lower()} {last.lower()}"
-    if lookup in country_map:
-        player_country[p] = country_map[lookup]
+    # ✅ FULL NAME FALLBACK
+    lookup_full = f"{first.lower()} {last.lower()}"
+    if lookup_full in country_map:
+        player_country[p] = country_map[lookup_full]
 
 print("✅ Players mapped:", len(player_country))
 
 # -------------------------
-# SAVE
+# SAVE FILE
 # -------------------------
 os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
 
