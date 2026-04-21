@@ -185,22 +185,41 @@ async function loadYear(year){
     return;
   }
 
+  const matches = Array.isArray(data) ? data : (data.matches || []);
+
   const map = {};
 
-  data.forEach(m=>{
+  matches.forEach(m=>{
+
+    // 🔥 ONLY include played matches
+    if(!m.score || !m.score.includes("-")) return;
+
     const name = (m.tournament || m.event || "Unknown").trim();
     const surface = (m.surface || "").trim();
+    const date = m.date || "";
 
     if(!map[name]){
       map[name] = {
         name,
         surface,
-        year
+        year,
+        date
       };
+    }else{
+      // keep earliest date
+      if(date && (!map[name].date || date < map[name].date)){
+        map[name].date = date;
+      }
     }
+
   });
 
-  rawEvents = Object.values(map).sort((a,b)=>a.name.localeCompare(b.name));
+  // 🔥 SORT BY DATE
+  rawEvents = Object.values(map).sort((a,b)=>{
+    if(!a.date) return 1;
+    if(!b.date) return -1;
+    return new Date(a.date) - new Date(b.date);
+  });
 
   populateSurface();
   applyFilters();
