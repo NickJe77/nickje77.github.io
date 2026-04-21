@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <script src="/js/analytics.js"></script>
+<script src="/js/analytics.js"></script>
 <meta charset="UTF-8">
 <title>Tennis Players | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,7 +15,7 @@ margin:0;
 background:#f4f6f8;
 }
 
-/* NAVBAR */
+/* NAV */
 .navbar{
 display:flex;
 justify-content:center;
@@ -49,9 +49,6 @@ position:absolute;
 width:100%;
 height:100%;
 object-fit:cover;
-top:0;
-left:0;
-z-index:0;
 }
 
 .hero::after{
@@ -59,23 +56,11 @@ content:"";
 position:absolute;
 inset:0;
 background:rgba(0,0,0,0.6);
-z-index:1;
 }
 
 .hero-content{
 position:relative;
 z-index:2;
-}
-
-.hero h1{
-margin:0;
-font-size:40px;
-}
-
-.hero p{
-margin-top:10px;
-font-size:18px;
-opacity:0.95;
 }
 
 /* WRAP */
@@ -85,8 +70,9 @@ margin:0 auto;
 padding:40px 20px;
 }
 
-/* SEARCH BOX */
+/* SEARCH */
 .search-box{
+position:relative;
 background:#fff;
 padding:25px;
 border-radius:18px;
@@ -101,6 +87,31 @@ border:1px solid #ccc;
 font-size:16px;
 }
 
+/* 🔥 DROPDOWN */
+.dropdown{
+position:absolute;
+top:80px;
+left:25px;
+right:25px;
+background:#fff;
+border-radius:12px;
+box-shadow:0 8px 24px rgba(0,0,0,0.1);
+max-height:300px;
+overflow:auto;
+z-index:10;
+}
+
+.dropdown div{
+padding:12px;
+cursor:pointer;
+border-bottom:1px solid #eee;
+}
+
+.dropdown div:hover,
+.dropdown .active{
+background:#eef3ff;
+}
+
 button{
 margin-top:12px;
 padding:12px 18px;
@@ -110,10 +121,6 @@ background:#0056d6;
 color:#fff;
 font-weight:700;
 cursor:pointer;
-}
-
-button:hover{
-opacity:0.9;
 }
 
 </style>
@@ -127,9 +134,8 @@ opacity:0.9;
 <a href="tennis-players.html">Players</a>
 </div>
 
-<!-- HERO -->
 <div class="hero">
-<img src="/images/tennis-hero.jpg" alt="Tennis">
+<img src="/images/tennis-hero.jpg">
 <div class="hero-content">
 <h1>Tennis Players</h1>
 <p>Search any player</p>
@@ -140,13 +146,9 @@ opacity:0.9;
 
 <div class="search-box">
 
-<input 
-  id="playerInput"
-  list="playersList"
-  placeholder="Start typing a player name..."
->
+<input id="search" placeholder="Start typing a player name...">
 
-<datalist id="playersList"></datalist>
+<div id="dropdown" class="dropdown" style="display:none;"></div>
 
 <button onclick="goToPlayer()">Search</button>
 
@@ -157,56 +159,113 @@ opacity:0.9;
 <script>
 
 let players = [];
+let currentIndex = -1;
 
 // LOAD PLAYERS
 async function loadPlayers(){
+
   try{
     let res = await fetch('/data/tennis/players.json');
 
-    // fallback for GitHub Pages structure
     if(!res.ok){
       res = await fetch('/docs/data/tennis/players.json');
     }
 
-    if(!res.ok){
-      console.error("players.json not found");
-      return;
-    }
-
     players = await res.json();
-
-    buildList();
 
   }catch(e){
     console.error("Error loading players", e);
   }
 }
 
-// BUILD DATALIST (PREDICTIVE SEARCH)
-function buildList(){
-  const list = document.getElementById("playersList");
-  list.innerHTML = "";
+// SEARCH INPUT
+const input = document.getElementById("search");
+const dropdown = document.getElementById("dropdown");
 
-  players.sort().forEach(p=>{
-    const opt = document.createElement("option");
-    opt.value = p;
-    list.appendChild(opt);
+input.addEventListener("input", function(){
+
+  const q = this.value.toLowerCase();
+
+  if(!q){
+    dropdown.style.display = "none";
+    return;
+  }
+
+  const results = players.filter(p =>
+    p.toLowerCase().includes(q)
+  ).slice(0,15);
+
+  renderDropdown(results);
+
+});
+
+// RENDER DROPDOWN
+function renderDropdown(list){
+
+  dropdown.innerHTML = "";
+
+  if(!list.length){
+    dropdown.style.display = "none";
+    return;
+  }
+
+  list.forEach((p,i)=>{
+    const div = document.createElement("div");
+    div.textContent = p;
+
+    div.onclick = ()=>{
+      input.value = p;
+      dropdown.style.display = "none";
+    };
+
+    dropdown.appendChild(div);
   });
+
+  dropdown.style.display = "block";
+  currentIndex = -1;
 }
 
-// NAVIGATE TO PLAYER PAGE
+// KEYBOARD NAV
+input.addEventListener("keydown", function(e){
+
+  const items = dropdown.querySelectorAll("div");
+
+  if(e.key === "ArrowDown"){
+    currentIndex++;
+  }
+
+  if(e.key === "ArrowUp"){
+    currentIndex--;
+  }
+
+  if(e.key === "Enter"){
+    if(currentIndex >= 0 && items[currentIndex]){
+      input.value = items[currentIndex].textContent;
+    }
+    goToPlayer();
+  }
+
+  items.forEach(el => el.classList.remove("active"));
+
+  if(items[currentIndex]){
+    items[currentIndex].classList.add("active");
+  }
+
+});
+
+// GO TO PLAYER PAGE
 function goToPlayer(){
-  const name = document.getElementById("playerInput").value.trim();
+  const name = input.value.trim();
   if(!name) return;
 
   location.href =
     `tennis-player.html?player=${encodeURIComponent(name)}`;
 }
 
-// ENTER KEY SUPPORT
-document.getElementById("playerInput").addEventListener("keypress", e=>{
-  if(e.key === "Enter"){
-    goToPlayer();
+// CLOSE DROPDOWN
+document.addEventListener("click", e=>{
+  if(!e.target.closest(".search-box")){
+    dropdown.style.display = "none";
   }
 });
 
