@@ -25,21 +25,20 @@ for file in os.listdir(BASE):
 
     for m in matches:
 
-        p1 = m.get("player1") or m.get("winner")
-        p2 = m.get("player2") or m.get("loser")
+        p1 = m.get("player1")
+        p2 = m.get("player2")
 
-        if p1:
+        # 🔥 ONLY USE FULL NAME FIELDS
+        if p1 and len(p1) > 3:
             players.add(p1.strip())
 
-        if p2:
+        if p2 and len(p2) > 3:
             players.add(p2.strip())
 
 print("👥 Players found:", len(players))
 
-# SORT CLEAN
 players = sorted(players)
 
-# ENSURE FOLDER
 os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
 
 with open(OUTPUT, "w", encoding="utf-8") as f:
