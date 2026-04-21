@@ -4,7 +4,9 @@ import os
 BASE = "docs/data/tennis/seasons"
 OUTPUT = "docs/data/tennis/players.json"
 
-players_by_surname = {}
+players = {}
+# key = lowercase full name
+# value = best version (full name preferred)
 
 print("🔍 Scanning seasons...")
 
@@ -37,28 +39,28 @@ for file in os.listdir(BASE):
             if len(parts) < 2:
                 continue
 
-            surname = parts[-1]
+            clean_key = name.lower()
 
-            # detect initial vs full name
             is_initial = len(parts[0]) == 1
 
-            if surname not in players_by_surname:
-                players_by_surname[surname] = name
+            if clean_key not in players:
+                players[clean_key] = name
             else:
-                existing = players_by_surname[surname]
+                existing = players[clean_key]
+                existing_initial = len(existing.split()[0]) == 1
 
-                # if existing is initial but new is full → replace
-                if len(existing.split()[0]) == 1 and not is_initial:
-                    players_by_surname[surname] = name
+                # replace initial with full name
+                if existing_initial and not is_initial:
+                    players[clean_key] = name
 
 # FINAL LIST
-players = sorted(set(players_by_surname.values()))
+final_players = sorted(set(players.values()))
 
-print("👥 Players found:", len(players))
+print("👥 Players found:", len(final_players))
 
 os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
 
 with open(OUTPUT, "w", encoding="utf-8") as f:
-    json.dump(players, f, indent=2)
+    json.dump(final_players, f, indent=2)
 
 print("✅ Saved to:", OUTPUT)
