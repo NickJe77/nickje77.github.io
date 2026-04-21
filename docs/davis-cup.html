@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Davis Cup | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+
+body{
+font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+margin:0;
+background:#f4f6f8;
+}
+
+/* NAV */
+.navbar{
+display:flex;
+justify-content:center;
+gap:22px;
+padding:16px 0;
+border-bottom:1px solid #ddd;
+background:#fff;
+font-weight:600;
+}
+.navbar a{color:#0056d6;text-decoration:none;}
+
+.wrap{
+max-width:1100px;
+margin:auto;
+padding:30px 20px;
+}
+
+/* SEARCH */
+.search-box{
+position:relative;
+margin-bottom:20px;
+}
+
+.search-box input{
+width:100%;
+padding:14px;
+border-radius:12px;
+border:1px solid #ccc;
+font-size:16px;
+}
+
+.suggestions{
+position:absolute;
+top:100%;
+left:0;
+right:0;
+background:#fff;
+border-radius:10px;
+box-shadow:0 6px 18px rgba(0,0,0,0.15);
+max-height:200px;
+overflow-y:auto;
+z-index:10;
+}
+
+.suggestions div{
+padding:10px;
+cursor:pointer;
+}
+.suggestions div:hover{background:#f2f6ff;}
+
+/* HERO */
+.hero{
+background:#fff;
+padding:20px;
+border-radius:14px;
+box-shadow:0 6px 18px rgba(0,0,0,0.08);
+margin-bottom:25px;
+text-align:center;
+}
+
+.hero h1{margin:0;}
+.hero p{margin:5px 0 0;color:#666;}
+
+/* TABLE */
+table{
+width:100%;
+border-collapse:collapse;
+background:#fff;
+border-radius:14px;
+overflow:hidden;
+box-shadow:0 6px 18px rgba(0,0,0,0.08);
+margin-bottom:25px;
+}
+
+th{
+background:#111;
+color:#fff;
+padding:12px;
+}
+
+td{
+padding:10px;
+border-bottom:1px solid #eee;
+text-align:center;
+}
+
+td:first-child{text-align:left;}
+
+tbody tr:nth-child(even){background:#f2f6ff;}
+
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="tennis.html">Tennis</a>
+<a href="tennis-players.html">Players</a>
+</div>
+
+<div class="wrap">
+
+<!-- SEARCH -->
+<div class="search-box">
+<input id="countryInput" placeholder="Search country...">
+<div id="suggestions" class="suggestions"></div>
+</div>
+
+<!-- HERO -->
+<div class="hero">
+<h1 id="countryName">Select a country</h1>
+<p id="titles">Davis Cup Titles: 0</p>
+</div>
+
+<!-- RESULTS -->
+<h2>Results</h2>
+<table>
+<thead>
+<tr>
+<th>Date</th>
+<th>Opponent</th>
+<th>Winner</th>
+<th>Score</th>
+</tr>
+</thead>
+<tbody id="results"></tbody>
+</table>
+
+<!-- PLAYERS -->
+<h2>Players</h2>
+<table>
+<thead>
+<tr>
+<th>Player</th>
+</tr>
+</thead>
+<tbody id="players"></tbody>
+</table>
+
+</div>
+
+<script>
+
+let allMatches = [];
+let countries = new Set();
+
+/* LOAD DATA */
+async function load(){
+
+  const years=[];
+  for(let y=2026;y>=1968;y--) years.push(y);
+
+  const res = await Promise.all(
+    years.map(y =>
+      fetch(`/data/tennis/seasons/${y}.json`)
+      .then(r=>r.ok?r.json():null)
+      .catch(()=>null)
+    )
+  );
+
+  res.forEach(data=>{
+    if(!data) return;
+
+    const games = Array.isArray(data)?data:(data.matches||[]);
+
+    games.forEach(g=>{
+      if((g.tournament||"").toLowerCase().includes("davis cup")){
+
+        allMatches.push(g);
+
+        if(g.country1) countries.add(g.country1);
+        if(g.country2) countries.add(g.country2);
+      }
+    });
+  });
+
+}
+
+load();
+
+/* SEARCH */
+const input = document.getElementById("countryInput");
+const box = document.getElementById("suggestions");
+
+input.addEventListener("input",()=>{
+  const val = input.value.toLowerCase();
+  box.innerHTML="";
+
+  [...countries]
+    .filter(c=>c.toLowerCase().includes(val))
+    .slice(0,10)
+    .forEach(c=>{
+      const div=document.createElement("div");
+      div.textContent=c;
+      div.onclick=()=>{
+        input.value=c;
+        box.innerHTML="";
+        build(c);
+      };
+      box.appendChild(div);
+    });
+});
+
+/* BUILD PAGE */
+function build(country){
+
+  document.getElementById("countryName").textContent = country;
+
+  let titles = 0;
+  let results = [];
+  let players = new Set();
+
+  allMatches.forEach(g=>{
+
+    if(g.country1===country || g.country2===country){
+
+      results.push(g);
+
+      players.add(g.player1);
+      players.add(g.player2);
+
+      if(g.round==="Final" && g.winner && g.winner.includes(country)){
+        titles++;
+      }
+
+    }
+
+  });
+
+  document.getElementById("titles").textContent = `Davis Cup Titles: ${titles}`;
+
+  document.getElementById("results").innerHTML =
+    results.sort((a,b)=>new Date(b.date)-new Date(a.date))
+    .map(g=>`
+      <tr>
+        <td>${g.date||""}</td>
+        <td>${g.country1===country ? g.country2 : g.country1}</td>
+        <td>${g.winner||""}</td>
+        <td>${g.score||""}</td>
+      </tr>
+    `).join("");
+
+  document.getElementById("players").innerHTML =
+    [...players].sort().map(p=>`
+      <tr><td>${p}</td></tr>
+    `).join("");
+
+}
+
+</script>
+
+</body>
+</html>
