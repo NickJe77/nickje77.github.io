@@ -7,7 +7,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-
 body{
 font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
 margin:0;
@@ -82,10 +81,9 @@ margin-bottom:20px;
 align-items:center;
 }
 
-/* 🔥 FIX WIDTHS */
 .filters .search-box{
 flex:1;
-max-width:calc(100% - 170px); /* 👈 prevents overlap */
+max-width:calc(100% - 170px);
 }
 
 #surfaceFilter{
@@ -158,22 +156,12 @@ tbody tr:nth-child(even){background:#f2f6ff;}
 
 /* MOBILE */
 @media (max-width:768px){
-
 .search-row{flex-direction:column;}
 .filters{flex-direction:column;}
-
-.filters .search-box{
-max-width:none;
-}
-
-#surfaceFilter{
-width:100%;
-}
-
+.filters .search-box{max-width:none;}
+#surfaceFilter{width:100%;}
 .h2h{flex-direction:column;}
-
 }
-
 </style>
 </head>
 
@@ -202,13 +190,12 @@ width:100%;
 
 <!-- FILTERS -->
 <div class="filters">
-
 <div class="search-box">
 <input id="tournamentSearch" placeholder="Search tournament...">
 <div id="tournamentSuggestions" class="suggestions"></div>
 </div>
 
-<div style="width:160px;">
+<div>
 <select id="surfaceFilter">
 <option value="ALL">All Surfaces</option>
 <option value="Hard">Hard</option>
@@ -216,7 +203,6 @@ width:100%;
 <option value="Grass">Grass</option>
 </select>
 </div>
-
 </div>
 
 <!-- H2H -->
@@ -251,16 +237,17 @@ let allMatches = [];
 let tournaments = [];
 let selectedTournament = "ALL";
 
-/* NORMALISE */
+/* CLEAN */
 function clean(name){
   return (name || "").toLowerCase().trim();
 }
 
-/* SURFACE */
+/* SURFACE DETECTION */
 function getSurface(t){
   t = (t||"").toLowerCase();
   if(t.includes("wimbledon")) return "Grass";
   if(t.includes("french") || t.includes("roland")) return "Clay";
+  if(t.includes("us open") || t.includes("australian")) return "Hard";
   return "Hard";
 }
 
@@ -269,7 +256,7 @@ fetch("/data/tennis/players.json")
 .then(r=>r.json())
 .then(d=>players=d);
 
-/* SEARCH */
+/* PLAYER SEARCH */
 function setupSearch(id, boxId){
   const input = document.getElementById(id);
   const box = document.getElementById(boxId);
@@ -286,7 +273,7 @@ function setupSearch(id, boxId){
       div.onclick=()=>{
         input.value=p;
         box.innerHTML="";
-        run(); // 🔥 FIX
+        run();
       };
       box.appendChild(div);
     });
@@ -346,15 +333,13 @@ async function load(){
       const t=(g.tournament||"").toLowerCase();
       if(t.includes("davis cup")) return;
 
-      g.surface=g.surface||getSurface(g.tournament);
-
       allMatches.push(g);
     });
   });
 
   tournaments=[...new Set(allMatches.map(m=>m.tournament))].sort();
 
-  run(); // 🔥 FIX — auto run after load
+  run();
 }
 
 /* RUN */
@@ -379,20 +364,22 @@ function run(){
       (gp1===p2 && gp2===p1)
     ){
 
-      if(selectedTournament!=="ALL" && g.tournament!==selectedTournament) return;
-      if(sFilter!=="ALL" && g.surface!==sFilter) return;
+      const surface = (g.surface || getSurface(g.tournament)).trim();
 
-      h2h.push(g);
+      if(selectedTournament!=="ALL" && g.tournament!==selectedTournament) return;
+      if(sFilter!=="ALL" && surface!==sFilter) return;
+
+      h2h.push({...g, surface});
 
       if(clean(g.winner)===p1) p1w++;
       if(clean(g.winner)===p2) p2w++;
+
     }
 
   });
 
   document.getElementById("name1").textContent=document.getElementById("p1").value;
   document.getElementById("name2").textContent=document.getElementById("p2").value;
-
   document.getElementById("score").textContent=`${p1w} - ${p2w}`;
 
   document.getElementById("table").innerHTML =
