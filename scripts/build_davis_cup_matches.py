@@ -19,11 +19,24 @@ for file in BASE.glob("*.json"):
     with open(file) as f:
         data = json.load(f)
 
+    # -------------------------
+    # HANDLE BOTH FORMATS
+    # -------------------------
+    if isinstance(data, list):
+        matches_source = data
+        output_container = {}   # we’ll wrap output safely
+    elif isinstance(data, dict):
+        matches_source = data.get("matches", [])
+        output_container = data
+    else:
+        print(f"⚠️ Skipping {file.name} (unknown format)")
+        continue
+
     matches_out = []
 
-    for match in data.get("matches", []):
+    for match in matches_source:
 
-        event = match.get("event", "").lower()
+        event = str(match.get("event", "")).lower()
 
         # ONLY DAVIS CUP
         if "davis cup" not in event:
@@ -32,7 +45,7 @@ for file in BASE.glob("*.json"):
         players = match.get("players", [])
 
         # -------------------------
-        # DETECT SINGLES / DOUBLES
+        # DETECT MATCH TYPE
         # -------------------------
         if isinstance(players, list) and len(players) == 2:
             match_type = "Singles"
@@ -41,13 +54,9 @@ for file in BASE.glob("*.json"):
             match_type = "Doubles"
 
         else:
-            # fallback (skip weird formats)
             continue
 
-        # -------------------------
-        # BUILD MATCH OBJECT
-        # -------------------------
-        new_match = {
+        matches_out.append({
             "date": match.get("date", ""),
             "event": match.get("event", ""),
             "round": match.get("round", ""),
@@ -56,9 +65,7 @@ for file in BASE.glob("*.json"):
             "players": players,
             "winner": match.get("winner", ""),
             "match_type": match_type
-        }
-
-        matches_out.append(new_match)
+        })
 
     # -------------------------
     # SORT NEWEST → OLDEST
@@ -69,12 +76,19 @@ for file in BASE.glob("*.json"):
     )
 
     # -------------------------
-    # SAVE BACK
+    # SAVE SAFELY
     # -------------------------
-    data["davis_cup_matches"] = matches_out
+    if isinstance(data, list):
+        # keep original untouched, add new wrapper file format
+        output_container = {
+            "matches": data,
+            "davis_cup_matches": matches_out
+        }
+    else:
+        output_container["davis_cup_matches"] = matches_out
 
     with open(file, "w") as f:
-        json.dump(data, f, indent=2)
+        json.dump(output_container, f, indent=2)
 
     print(f"✅ Saved {len(matches_out)} matches for {file.name}")
 
