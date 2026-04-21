@@ -42,6 +42,7 @@ margin-bottom:20px;
 .search-box{
 flex:1;
 position:relative;
+min-width:0;
 }
 
 .search-box input{
@@ -50,6 +51,7 @@ padding:14px 16px;
 border-radius:12px;
 border:1px solid #ccc;
 font-size:16px;
+box-sizing:border-box;
 }
 
 /* SUGGESTIONS */
@@ -75,28 +77,30 @@ cursor:pointer;
 /* FILTERS */
 .filters{
 display:flex;
-gap:15px;
+gap:12px;
 margin-bottom:20px;
-align-items:stretch;
+align-items:center;
 }
 
+/* 🔥 FIX WIDTHS */
 .filters .search-box{
 flex:1;
-min-width:0;
+max-width:calc(100% - 170px); /* 👈 prevents overlap */
 }
 
 #surfaceFilter{
-flex:0 0 180px;
-max-width:180px;
+width:160px;
+flex-shrink:0;
 }
 
 /* SELECT */
 select{
-padding:14px 16px;
+padding:14px;
 border-radius:12px;
 border:1px solid #ccc;
 font-size:16px;
 min-height:48px;
+width:100%;
 }
 
 /* H2H */
@@ -158,9 +162,12 @@ tbody tr:nth-child(even){background:#f2f6ff;}
 .search-row{flex-direction:column;}
 .filters{flex-direction:column;}
 
+.filters .search-box{
+max-width:none;
+}
+
 #surfaceFilter{
 width:100%;
-max-width:none;
 }
 
 .h2h{flex-direction:column;}
@@ -201,12 +208,14 @@ max-width:none;
 <div id="tournamentSuggestions" class="suggestions"></div>
 </div>
 
+<div style="width:160px;">
 <select id="surfaceFilter">
 <option value="ALL">All Surfaces</option>
 <option value="Hard">Hard</option>
 <option value="Clay">Clay</option>
 <option value="Grass">Grass</option>
 </select>
+</div>
 
 </div>
 
@@ -242,54 +251,42 @@ let allMatches = [];
 let tournaments = [];
 let selectedTournament = "ALL";
 
-/* 🔥 TOURNAMENT CLEAN */
-const TOURNAMENT_MAP = {
-  "roland garros": "French Open"
-};
-
-function normalizeTournament(name){
-  if(!name) return name;
-  const key = name.toLowerCase().trim();
-  return TOURNAMENT_MAP[key] || name;
+/* NORMALISE */
+function clean(name){
+  return (name || "").toLowerCase().trim();
 }
 
-/* 🔥 SURFACE DETECTION */
-function getSurface(tournament){
-
-  if(!tournament) return "";
-
-  const t = tournament.toLowerCase();
-
+/* SURFACE */
+function getSurface(t){
+  t = (t||"").toLowerCase();
   if(t.includes("wimbledon")) return "Grass";
   if(t.includes("french") || t.includes("roland")) return "Clay";
-  if(t.includes("australian") || t.includes("us open")) return "Hard";
-
-  return "Hard"; // default fallback
+  return "Hard";
 }
 
-// PLAYERS
+/* PLAYERS */
 fetch("/data/tennis/players.json")
 .then(r=>r.json())
 .then(d=>players=d);
 
-// PLAYER SEARCH
-function setupSearch(inputId, suggestionId){
-  const input = document.getElementById(inputId);
-  const box = document.getElementById(suggestionId);
+/* SEARCH */
+function setupSearch(id, boxId){
+  const input = document.getElementById(id);
+  const box = document.getElementById(boxId);
 
   input.addEventListener("input", ()=>{
     const val = input.value.toLowerCase();
-    box.innerHTML = "";
+    box.innerHTML="";
 
     if(!val) return;
 
     players.filter(p=>p.toLowerCase().includes(val)).slice(0,10).forEach(p=>{
-      const div = document.createElement("div");
-      div.textContent = p;
-      div.onclick = ()=>{
-        input.value = p;
-        box.innerHTML = "";
-        run();
+      const div=document.createElement("div");
+      div.textContent=p;
+      div.onclick=()=>{
+        input.value=p;
+        box.innerHTML="";
+        run(); // 🔥 FIX
       };
       box.appendChild(div);
     });
@@ -299,42 +296,40 @@ function setupSearch(inputId, suggestionId){
 setupSearch("p1","s1");
 setupSearch("p2","s2");
 
-// TOURNAMENT SEARCH
-const tInput = document.getElementById("tournamentSearch");
-const tBox = document.getElementById("tournamentSuggestions");
+/* TOURNAMENT SEARCH */
+const tInput=document.getElementById("tournamentSearch");
+const tBox=document.getElementById("tournamentSuggestions");
 
-tInput.addEventListener("input", ()=>{
-  const val = tInput.value.toLowerCase();
-  tBox.innerHTML = "";
+tInput.addEventListener("input",()=>{
+  const val=tInput.value.toLowerCase();
+  tBox.innerHTML="";
 
   if(!val){
-    selectedTournament = "ALL";
+    selectedTournament="ALL";
     run();
     return;
   }
 
   tournaments.filter(t=>t.toLowerCase().includes(val)).slice(0,10).forEach(t=>{
-    const div = document.createElement("div");
-    div.textContent = t;
-
-    div.onclick = ()=>{
-      tInput.value = t;
-      selectedTournament = t;
-      tBox.innerHTML = "";
+    const div=document.createElement("div");
+    div.textContent=t;
+    div.onclick=()=>{
+      tInput.value=t;
+      selectedTournament=t;
+      tBox.innerHTML="";
       run();
     };
-
     tBox.appendChild(div);
   });
 });
 
-// LOAD DATA
+/* LOAD */
 async function load(){
 
-  const years = [];
+  const years=[];
   for(let y=2026;y>=1968;y--) years.push(y);
 
-  const res = await Promise.all(
+  const res=await Promise.all(
     years.map(y =>
       fetch(`/data/tennis/seasons/${y}.json`)
       .then(r=>r.ok?r.json():null)
@@ -345,59 +340,60 @@ async function load(){
   res.forEach(data=>{
     if(!data) return;
 
-    const games = Array.isArray(data)?data:(data.matches||[]);
+    const games=Array.isArray(data)?data:(data.matches||[]);
 
     games.forEach(g=>{
-
-      const t = (g.tournament||"").toLowerCase();
+      const t=(g.tournament||"").toLowerCase();
       if(t.includes("davis cup")) return;
 
-      g.tournament = normalizeTournament(g.tournament);
-      g.surface = g.surface || getSurface(g.tournament);
+      g.surface=g.surface||getSurface(g.tournament);
 
       allMatches.push(g);
-
     });
   });
 
-  tournaments = [...new Set(allMatches.map(m=>m.tournament))].sort();
+  tournaments=[...new Set(allMatches.map(m=>m.tournament))].sort();
+
+  run(); // 🔥 FIX — auto run after load
 }
 
-// RUN
+/* RUN */
 function run(){
 
-  const p1 = document.getElementById("p1").value;
-  const p2 = document.getElementById("p2").value;
-  const sFilter = document.getElementById("surfaceFilter").value;
+  const p1=clean(document.getElementById("p1").value);
+  const p2=clean(document.getElementById("p2").value);
+  const sFilter=document.getElementById("surfaceFilter").value;
 
   if(!p1 || !p2) return;
 
-  document.getElementById("name1").textContent = p1;
-  document.getElementById("name2").textContent = p2;
-
-  let p1w=0, p2w=0;
+  let p1w=0,p2w=0;
   let h2h=[];
 
   allMatches.forEach(g=>{
 
+    const gp1=clean(g.player1);
+    const gp2=clean(g.player2);
+
     if(
-      (g.player1===p1 && g.player2===p2) ||
-      (g.player1===p2 && g.player2===p1)
+      (gp1===p1 && gp2===p2) ||
+      (gp1===p2 && gp2===p1)
     ){
 
-      if(selectedTournament !== "ALL" && g.tournament !== selectedTournament) return;
-      if(sFilter !== "ALL" && g.surface !== sFilter) return;
+      if(selectedTournament!=="ALL" && g.tournament!==selectedTournament) return;
+      if(sFilter!=="ALL" && g.surface!==sFilter) return;
 
       h2h.push(g);
 
-      if(g.winner===p1) p1w++;
-      if(g.winner===p2) p2w++;
-
+      if(clean(g.winner)===p1) p1w++;
+      if(clean(g.winner)===p2) p2w++;
     }
 
   });
 
-  document.getElementById("score").textContent = `${p1w} - ${p2w}`;
+  document.getElementById("name1").textContent=document.getElementById("p1").value;
+  document.getElementById("name2").textContent=document.getElementById("p2").value;
+
+  document.getElementById("score").textContent=`${p1w} - ${p2w}`;
 
   document.getElementById("table").innerHTML =
     h2h.sort((a,b)=>new Date(b.date)-new Date(a.date))
