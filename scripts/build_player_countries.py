@@ -1,6 +1,6 @@
 import json
 import os
-import requests
+import urllib.request
 
 BASE = "docs/data/tennis/seasons"
 OUTPUT = "docs/data/tennis/player_countries.json"
@@ -10,7 +10,7 @@ print("🔍 Loading players from seasons...")
 players = set()
 
 # -------------------------
-# LOAD PLAYERS FROM YOUR DATA
+# LOAD PLAYERS
 # -------------------------
 for file in os.listdir(BASE):
 
@@ -40,21 +40,25 @@ for file in os.listdir(BASE):
 print("👥 Players found:", len(players))
 
 # -------------------------
-# LOAD ATP DATASET
+# FETCH ATP DATA (NO REQUESTS)
 # -------------------------
 print("🌍 Fetching country dataset...")
 
 url = "https://raw.githubusercontent.com/JeffSackmann/tennis_atp/master/atp_players.csv"
 
 try:
-    csv_data = requests.get(url, timeout=20).text.splitlines()
-except:
-    print("❌ Failed to fetch dataset")
+    with urllib.request.urlopen(url) as response:
+        csv_data = response.read().decode("utf-8").splitlines()
+except Exception as e:
+    print("❌ Failed to fetch dataset:", e)
     csv_data = []
 
 country_map = {}
 surname_map = {}
 
+# -------------------------
+# BUILD LOOKUP TABLES
+# -------------------------
 for row in csv_data[1:]:
 
     parts = row.split(",")
@@ -66,17 +70,14 @@ for row in csv_data[1:]:
     last = parts[2].strip()
     country = parts[4].strip()
 
-    # skip bad rows
     if not first or not last or not country:
         continue
 
-    full_name = f"{first} {last}".lower()
-    country_map[full_name] = country
+    full = f"{first} {last}".lower()
+    country_map[full] = country
 
-    # initial mapping (R Federer → Roger Federer)
-    if len(first) > 0:
-        key = f"{first[0].lower()}_{last.lower()}"
-        surname_map[key] = country
+    key = f"{first[0].lower()}_{last.lower()}"
+    surname_map[key] = country
 
 # -------------------------
 # MATCH PLAYERS
@@ -85,44 +86,36 @@ player_country = {}
 
 for p in players:
 
-    if not p or not isinstance(p, str):
-        continue
+    key = p.lower()
 
-    key = p.lower().strip()
-
-    # ✅ DIRECT MATCH
+    # direct match
     if key in country_map:
         player_country[p] = country_map[key]
         continue
 
     parts = p.split()
-
     if len(parts) < 2:
         continue
 
     first = parts[0]
     last = parts[-1]
 
-    if not first or not last:
-        continue
-
-    # ✅ INITIAL MATCH (R Federer)
+    # initial match (R Federer)
     if len(first) == 1:
         lookup = f"{first.lower()}_{last.lower()}"
         if lookup in surname_map:
             player_country[p] = surname_map[lookup]
             continue
 
-    # ✅ TRY FIRST NAME MATCH (Roger Federer style mismatch)
-    lookup_full = f"{first.lower()} {last.lower()}"
-    if lookup_full in country_map:
-        player_country[p] = country_map[lookup_full]
-        continue
+    # fallback full match
+    lookup = f"{first.lower()} {last.lower()}"
+    if lookup in country_map:
+        player_country[p] = country_map[lookup]
 
 print("✅ Players mapped:", len(player_country))
 
 # -------------------------
-# SAVE FILE
+# SAVE
 # -------------------------
 os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
 
