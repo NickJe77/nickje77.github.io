@@ -112,6 +112,14 @@ select,input{
   font-weight:700;
 }
 
+.h2h-box{
+  grid-column:1 / -1;
+  background:#fff;
+  padding:20px;
+  border-radius:16px;
+  box-shadow:var(--shadow);
+}
+
 @media(max-width:900px){
   .grid{grid-template-columns:1fr;}
   .controls{grid-template-columns:1fr;}
@@ -141,6 +149,19 @@ select,input{
 </select>
 </div>
 
+<!-- 🔥 HEAD TO HEAD -->
+<div class="h2h-box">
+  <h2 style="margin-top:0;">Head to Head</h2>
+  <div style="display:flex; gap:10px; margin-bottom:10px;">
+    <input id="p1" placeholder="Player 1">
+    <input id="p2" placeholder="Player 2">
+    <button onclick="runH2H()" style="padding:10px 16px;border-radius:10px;border:none;background:#1e4ed8;color:#fff;font-weight:700;cursor:pointer;">
+      Compare
+    </button>
+  </div>
+  <div id="h2hResult"></div>
+</div>
+
 <div id="grid" class="grid"></div>
 
 </div>
@@ -165,18 +186,15 @@ async function loadYear(year){
 
   try{
     let res = await fetch(`/data/tennis/seasons/${year}.json`);
-
     if(!res.ok){
       res = await fetch(`/docs/data/tennis/seasons/${year}.json`);
     }
-
     if(!res.ok){
       rawEvents = [];
       populateSurface();
       applyFilters();
       return;
     }
-
     data = await res.json();
   }catch(err){
     rawEvents = [];
@@ -186,38 +204,27 @@ async function loadYear(year){
   }
 
   const matches = Array.isArray(data) ? data : (data.matches || []);
-
   const map = {};
 
   matches.forEach(m=>{
-
-    // ✔ ONLY include played matches
     if(!m.score || !m.score.includes("-")) return;
 
     const name = (m.tournament || m.event || "Unknown").trim();
 
-    // ❌ REMOVE DAVIS CUP
     if(name.toLowerCase().includes("davis cup")) return;
 
     const surface = (m.surface || "").trim();
     const date = m.date || "";
 
     if(!map[name]){
-      map[name] = {
-        name,
-        surface,
-        year,
-        date
-      };
+      map[name] = {name, surface, year, date};
     }else{
       if(date && (!map[name].date || date < map[name].date)){
         map[name].date = date;
       }
     }
-
   });
 
-  // ✔ SORT BY DATE
   rawEvents = Object.values(map).sort((a,b)=>{
     if(!a.date) return 1;
     if(!b.date) return -1;
@@ -281,6 +288,113 @@ function render(events){
 
     grid.appendChild(card);
   });
+}
+
+// 🔥 HEAD TO HEAD
+async function runH2H(){
+
+  const p1 = document.getElementById("p1").value.toLowerCase().trim();
+  const p2 = document.getElementById("p2").value.toLowerCase().trim();
+  const year = yearSelect.value;
+
+  if(!p1 || !p2){
+    alert("Enter two players");
+    return;
+  }
+
+  let data = [];
+
+  try{
+    let res = await fetch(`/data/tennis/seasons/${year}.json`);
+    if(!res.ok){
+      res = await fetch(`/docs/data/tennis/seasons/${year}.json`);
+    }
+    data = await res.json();
+  }catch(e){
+    document.getElementById("h2hResult").innerHTML = "Error loading data";
+    return;
+  }
+
+  const matches = Array.isArray(data) ? data : (data.matches || []);
+
+  const h2hMatches = matches.filter(m => {
+    const a = (m.player1 || m.winner || "").toLowerCase();
+    const b = (m.player2 || m.loser || "").toLowerCase();
+
+    return (
+      (a.includes(p1) && b.includes(p2)) ||
+      (a.includes(p2) && b.includes(p1))
+    );
+  });
+
+  if(!h2hMatches.length){
+    document.getElementById("h2hResult").innerHTML =
+      `<div class="empty-state">No head-to-head matches found</div>`;
+    return;
+  }
+
+  let p1Wins = 0;
+  let p2Wins = 0;
+
+  h2hMatches.forEach(m => {
+    const score = m.score || "";
+    if(!score.includes("-")) return;
+
+    let p1Sets = 0;
+    let p2Sets = 0;
+
+    score.split(" ").forEach(set=>{
+      const [x,y] = set.split("-");
+      if(parseInt(x) > parseInt(y)) p1Sets++;
+      else p2Sets++;
+    });
+
+    const a = (m.player1 || m.winner || "").toLowerCase();
+
+    if(a.includes(p1)){
+      if(p1Sets > p2Sets) p1Wins++;
+      else p2Wins++;
+    }else{
+      if(p1Sets > p2Sets) p2Wins++;
+      else p1Wins++;
+    }
+  });
+
+  h2hMatches.sort((a,b)=> new Date(b.date) - new Date(a.date));
+
+  let html = `
+    <div style="font-weight:900;margin-bottom:10px;">
+      ${p1.toUpperCase()} ${p1Wins} - ${p2Wins} ${p2.toUpperCase()}
+    </div>
+
+    <table style="width:100%;border-collapse:collapse;">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Tournament</th>
+          <th>Player 1</th>
+          <th>Player 2</th>
+          <th>Score</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  h2hMatches.forEach(m=>{
+    html += `
+      <tr>
+        <td>${m.date || ""}</td>
+        <td>${m.tournament || m.event || ""}</td>
+        <td>${m.player1 || m.winner || ""}</td>
+        <td>${m.player2 || m.loser || ""}</td>
+        <td>${m.score || ""}</td>
+      </tr>
+    `;
+  });
+
+  html += `</tbody></table>`;
+
+  document.getElementById("h2hResult").innerHTML = html;
 }
 
 // EVENTS
