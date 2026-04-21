@@ -2,6 +2,8 @@ name: Davis Cup Builder
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"   # every Monday (change if you want)
 
 jobs:
   build:
@@ -9,13 +11,13 @@ jobs:
 
     steps:
       # -------------------------
-      # CHECKOUT
+      # CHECKOUT REPO
       # -------------------------
       - name: Checkout
         uses: actions/checkout@v4
 
       # -------------------------
-      # PYTHON
+      # SETUP PYTHON
       # -------------------------
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -23,19 +25,29 @@ jobs:
           python-version: "3.11"
 
       # -------------------------
-      # RUN SCRIPT
+      # INSTALL DEPS (SAFE)
+      # -------------------------
+      - name: Install dependencies
+        run: |
+          pip install requests || true
+
+      # -------------------------
+      # RUN BUILDER
       # -------------------------
       - name: Build Davis Cup Matches
         run: |
           python scripts/build_davis_cup_matches.py
 
       # -------------------------
-      # COMMIT
+      # COMMIT + PUSH
       # -------------------------
-      - name: Commit changes
+      - name: Commit and Push
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
+
           git add docs/data/tennis/seasons/
+
           git commit -m "Update Davis Cup matches (include doubles)" || echo "No changes"
-          git pushdavis
+
+          git push
