@@ -10,7 +10,7 @@ print("🔍 Loading players from seasons...")
 players = set()
 
 # -------------------------
-# LOAD PLAYERS FROM YOUR DATA
+# LOAD PLAYERS
 # -------------------------
 for file in os.listdir(BASE):
 
@@ -28,19 +28,71 @@ for file in os.listdir(BASE):
     matches = data if isinstance(data, list) else data.get("matches", [])
 
     for m in matches:
-        p1 = m.get("player1")
-        p2 = m.get("player2")
-
-        if p1 and isinstance(p1, str):
-            players.add(p1.strip())
-
-        if p2 and isinstance(p2, str):
-            players.add(p2.strip())
+        if m.get("player1"):
+            players.add(m["player1"].strip())
+        if m.get("player2"):
+            players.add(m["player2"].strip())
 
 print("👥 Players found:", len(players))
 
 # -------------------------
-# FETCH ATP DATASET
+# COUNTRY CODE → NAME MAP
+# -------------------------
+COUNTRY_NAMES = {
+    "USA": "United States",
+    "GBR": "United Kingdom",
+    "AUS": "Australia",
+    "SUI": "Switzerland",
+    "SRB": "Serbia",
+    "ESP": "Spain",
+    "FRA": "France",
+    "GER": "Germany",
+    "ITA": "Italy",
+    "NED": "Netherlands",
+    "BEL": "Belgium",
+    "SWE": "Sweden",
+    "ARG": "Argentina",
+    "BRA": "Brazil",
+    "CAN": "Canada",
+    "JPN": "Japan",
+    "KOR": "South Korea",
+    "CHN": "China",
+    "IND": "India",
+    "RSA": "South Africa",
+    "NZL": "New Zealand",
+    "CRO": "Croatia",
+    "CZE": "Czech Republic",
+    "POL": "Poland",
+    "AUT": "Austria",
+    "DEN": "Denmark",
+    "NOR": "Norway",
+    "FIN": "Finland",
+    "HUN": "Hungary",
+    "ROU": "Romania",
+    "BUL": "Bulgaria",
+    "GRE": "Greece",
+    "POR": "Portugal",
+    "MEX": "Mexico",
+    "CHI": "Chile",
+    "COL": "Colombia",
+    "PER": "Peru",
+    "VEN": "Venezuela",
+    "URU": "Uruguay",
+    "ECU": "Ecuador",
+    "TUR": "Turkey",
+    "ISR": "Israel",
+    "EGY": "Egypt",
+    "MAR": "Morocco",
+    "ALG": "Algeria",
+    "TUN": "Tunisia",
+    "KAZ": "Kazakhstan",
+    "UKR": "Ukraine",
+    "BLR": "Belarus",
+    "RUS": "Russia"
+}
+
+# -------------------------
+# FETCH ATP DATA
 # -------------------------
 print("🌍 Fetching country dataset...")
 
@@ -49,15 +101,15 @@ url = "https://raw.githubusercontent.com/JeffSackmann/tennis_atp/master/atp_play
 try:
     with urllib.request.urlopen(url) as response:
         csv_data = response.read().decode("utf-8").splitlines()
-except Exception as e:
-    print("❌ Failed to fetch dataset:", e)
+except:
+    print("❌ Failed to fetch dataset")
     csv_data = []
 
 country_map = {}
 surname_map = {}
 
 # -------------------------
-# BUILD LOOKUP TABLES
+# BUILD LOOKUP
 # -------------------------
 for row in csv_data[1:]:
 
@@ -68,15 +120,16 @@ for row in csv_data[1:]:
 
     first = parts[1].strip()
     last = parts[2].strip()
-    country = parts[5].strip()   # ✅ FIXED (was 4)
+    code = parts[5].strip()
 
-    if not first or not last or not country:
+    if not first or not last or not code:
         continue
+
+    country = COUNTRY_NAMES.get(code, code)  # 🔥 convert here
 
     full = f"{first} {last}".lower()
     country_map[full] = country
 
-    # initial mapping (R Federer → Roger Federer)
     key = f"{first[0].lower()}_{last.lower()}"
     surname_map[key] = country
 
@@ -87,43 +140,33 @@ player_country = {}
 
 for p in players:
 
-    if not p or not isinstance(p, str):
-        continue
+    key = p.lower()
 
-    key = p.lower().strip()
-
-    # ✅ DIRECT MATCH
     if key in country_map:
         player_country[p] = country_map[key]
         continue
 
     parts = p.split()
-
     if len(parts) < 2:
         continue
 
     first = parts[0]
     last = parts[-1]
 
-    if not first or not last:
-        continue
-
-    # ✅ INITIAL MATCH (R Federer)
     if len(first) == 1:
         lookup = f"{first.lower()}_{last.lower()}"
         if lookup in surname_map:
             player_country[p] = surname_map[lookup]
             continue
 
-    # ✅ FULL NAME FALLBACK
-    lookup_full = f"{first.lower()} {last.lower()}"
-    if lookup_full in country_map:
-        player_country[p] = country_map[lookup_full]
+    lookup = f"{first.lower()} {last.lower()}"
+    if lookup in country_map:
+        player_country[p] = country_map[lookup]
 
 print("✅ Players mapped:", len(player_country))
 
 # -------------------------
-# SAVE FILE
+# SAVE
 # -------------------------
 os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
 
