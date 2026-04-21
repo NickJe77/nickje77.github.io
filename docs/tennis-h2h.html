@@ -26,7 +26,6 @@ font-weight:600;
 }
 .navbar a{color:#0056d6;text-decoration:none;}
 
-/* WRAP */
 .wrap{
 max-width:1100px;
 margin:auto;
@@ -53,6 +52,7 @@ border:1px solid #ccc;
 font-size:16px;
 }
 
+/* SUGGESTIONS */
 .suggestions{
 position:absolute;
 top:100%;
@@ -77,15 +77,25 @@ cursor:pointer;
 display:flex;
 gap:15px;
 margin-bottom:20px;
+align-items:stretch;
 }
 
-/* BIG SELECT */
+.filters .search-box{
+flex:1;
+min-width:0;
+}
+
+#surfaceFilter{
+flex:0 0 180px;
+max-width:180px;
+}
+
+/* SELECT */
 select{
 padding:14px 16px;
 border-radius:12px;
 border:1px solid #ccc;
 font-size:16px;
-font-weight:500;
 min-height:48px;
 }
 
@@ -147,6 +157,12 @@ tbody tr:nth-child(even){background:#f2f6ff;}
 
 .search-row{flex-direction:column;}
 .filters{flex-direction:column;}
+
+#surfaceFilter{
+width:100%;
+max-width:none;
+}
+
 .h2h{flex-direction:column;}
 
 }
@@ -226,7 +242,7 @@ let allMatches = [];
 let tournaments = [];
 let selectedTournament = "ALL";
 
-/* 🔥 TOURNAMENT NORMALIZATION */
+/* 🔥 TOURNAMENT CLEAN */
 const TOURNAMENT_MAP = {
   "roland garros": "French Open"
 };
@@ -237,7 +253,21 @@ function normalizeTournament(name){
   return TOURNAMENT_MAP[key] || name;
 }
 
-// LOAD PLAYERS
+/* 🔥 SURFACE DETECTION */
+function getSurface(tournament){
+
+  if(!tournament) return "";
+
+  const t = tournament.toLowerCase();
+
+  if(t.includes("wimbledon")) return "Grass";
+  if(t.includes("french") || t.includes("roland")) return "Clay";
+  if(t.includes("australian") || t.includes("us open")) return "Hard";
+
+  return "Hard"; // default fallback
+}
+
+// PLAYERS
 fetch("/data/tennis/players.json")
 .then(r=>r.json())
 .then(d=>players=d);
@@ -269,7 +299,7 @@ function setupSearch(inputId, suggestionId){
 setupSearch("p1","s1");
 setupSearch("p2","s2");
 
-/* TOURNAMENT SEARCH */
+// TOURNAMENT SEARCH
 const tInput = document.getElementById("tournamentSearch");
 const tBox = document.getElementById("tournamentSuggestions");
 
@@ -322,10 +352,11 @@ async function load(){
       const t = (g.tournament||"").toLowerCase();
       if(t.includes("davis cup")) return;
 
-      // 🔥 NORMALIZE HERE
       g.tournament = normalizeTournament(g.tournament);
+      g.surface = g.surface || getSurface(g.tournament);
 
       allMatches.push(g);
+
     });
   });
 
@@ -374,7 +405,7 @@ function run(){
       <tr>
         <td>${g.date||""}</td>
         <td>${g.tournament}</td>
-        <td>${g.surface||""}</td>
+        <td>${g.surface}</td>
         <td>${g.round}</td>
         <td class="win">${g.winner}</td>
         <td>${g.score||""}</td>
@@ -382,7 +413,6 @@ function run(){
     `).join("");
 }
 
-// INIT
 load();
 
 </script>
