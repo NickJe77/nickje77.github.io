@@ -1,14 +1,13 @@
 import json
 import os
+import requests
 
 BASE = "docs/data/tennis/seasons"
-OUTPUT = "docs/data/tennis/players.json"
+OUTPUT = "docs/data/tennis/player_countries.json"
 
-players = {}
-# key = lowercase full name
-# value = best version (full name preferred)
+print("🔍 Loading players from seasons...")
 
-print("🔍 Scanning seasons...")
+players = set()
 
 for file in os.listdir(BASE):
 
@@ -26,41 +25,50 @@ for file in os.listdir(BASE):
     matches = data if isinstance(data, list) else data.get("matches", [])
 
     for m in matches:
+        if m.get("player1"):
+            players.add(m["player1"].strip())
+        if m.get("player2"):
+            players.add(m["player2"].strip())
 
-        for key in ["player1", "player2"]:
+print("👥 Players found:", len(players))
 
-            name = m.get(key)
-            if not name:
-                continue
+# 🔥 LOAD EXTERNAL PLAYER COUNTRY DATA
+print("🌍 Fetching country dataset...")
 
-            name = name.strip()
+url = "https://raw.githubusercontent.com/JeffSackmann/tennis_atp/master/atp_players.csv"
 
-            parts = name.split()
-            if len(parts) < 2:
-                continue
+csv_data = requests.get(url).text.splitlines()
 
-            clean_key = name.lower()
+country_map = {}
 
-            is_initial = len(parts[0]) == 1
+for row in csv_data[1:]:
+    parts = row.split(",")
 
-            if clean_key not in players:
-                players[clean_key] = name
-            else:
-                existing = players[clean_key]
-                existing_initial = len(existing.split()[0]) == 1
+    if len(parts) < 5:
+        continue
 
-                # replace initial with full name
-                if existing_initial and not is_initial:
-                    players[clean_key] = name
+    first = parts[1].strip()
+    last = parts[2].strip()
+    country = parts[4].strip()
 
-# FINAL LIST
-final_players = sorted(set(players.values()))
+    full_name = f"{first} {last}"
 
-print("👥 Players found:", len(final_players))
+    country_map[full_name.lower()] = country
+
+# 🔥 BUILD FINAL MAP
+player_country = {}
+
+for p in players:
+    key = p.lower()
+
+    if key in country_map:
+        player_country[p] = country_map[key]
+
+print("✅ Players mapped:", len(player_country))
 
 os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
 
 with open(OUTPUT, "w", encoding="utf-8") as f:
-    json.dump(final_players, f, indent=2)
+    json.dump(player_country, f, indent=2)
 
-print("✅ Saved to:", OUTPUT)
+print("💾 Saved:", OUTPUT)
