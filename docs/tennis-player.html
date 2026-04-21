@@ -69,6 +69,42 @@ margin:auto;
 padding:30px 20px;
 }
 
+/* SEARCH */
+.search-box{
+margin-bottom:20px;
+position:relative;
+}
+
+.search-box input{
+width:100%;
+padding:12px 14px;
+border-radius:10px;
+border:1px solid #ccc;
+font-size:16px;
+}
+
+.suggestions{
+position:absolute;
+top:100%;
+left:0;
+right:0;
+background:#fff;
+border-radius:10px;
+box-shadow:0 6px 18px rgba(0,0,0,0.15);
+max-height:250px;
+overflow-y:auto;
+z-index:10;
+}
+
+.suggestions div{
+padding:10px;
+cursor:pointer;
+}
+
+.suggestions div:hover{
+background:#f2f6ff;
+}
+
 /* STATS */
 .stats{
 display:flex;
@@ -95,7 +131,7 @@ margin:5px 0 0;
 color:#666;
 }
 
-/* GRAND SLAMS */
+/* SLAMS */
 .slams{
 display:grid;
 grid-template-columns:repeat(4,1fr);
@@ -111,17 +147,6 @@ box-shadow:0 6px 18px rgba(0,0,0,0.08);
 text-align:center;
 }
 
-.slam h3{
-margin:0;
-font-size:16px;
-}
-
-.slam p{
-margin:8px 0 0;
-font-size:20px;
-font-weight:700;
-}
-
 .slam.win{
 background:#e8f5e9;
 border:2px solid #2e7d32;
@@ -132,13 +157,6 @@ border:2px solid #2e7d32;
 margin-bottom:20px;
 display:flex;
 justify-content:flex-end;
-}
-
-select{
-padding:10px 14px;
-border-radius:10px;
-border:1px solid #ccc;
-font-size:14px;
 }
 
 /* TABLE */
@@ -163,23 +181,12 @@ border-bottom:1px solid #eee;
 text-align:center;
 }
 
-td:first-child{
-text-align:left;
-}
+td:first-child{ text-align:left; }
 
-.win{
-color:#0a7f2e;
-font-weight:700;
-}
+.win{ color:#0a7f2e; font-weight:700; }
+.loss{ color:#c62828; font-weight:700; }
 
-.loss{
-color:#c62828;
-font-weight:700;
-}
-
-tbody tr:nth-child(even){
-background:#f2f6ff;
-}
+tbody tr:nth-child(even){ background:#f2f6ff; }
 
 </style>
 </head>
@@ -199,16 +206,20 @@ background:#f2f6ff;
 
 <div class="wrap">
 
+<!-- 🔥 SEARCH -->
+<div class="search-box">
+<input type="text" id="playerSearch" placeholder="Search player...">
+<div id="suggestions" class="suggestions"></div>
+</div>
+
 <div class="stats">
 <div class="stat"><h2 id="matches">0</h2><p>Matches</p></div>
 <div class="stat"><h2 id="wins">0</h2><p>Wins</p></div>
 <div class="stat"><h2 id="losses">0</h2><p>Losses</p></div>
 </div>
 
-<!-- GRAND SLAMS -->
 <div class="slams" id="slamsBox"></div>
 
-<!-- FILTER -->
 <div class="filter-bar">
 <select id="tournamentFilter">
 <option value="ALL">All Tournaments</option>
@@ -218,12 +229,7 @@ background:#f2f6ff;
 <table>
 <thead>
 <tr>
-<th>Date</th>
-<th>Tournament</th>
-<th>Round</th>
-<th>Opponent</th>
-<th>Score</th>
-<th>Result</th>
+<th>Date</th><th>Tournament</th><th>Round</th><th>Opponent</th><th>Score</th><th>Result</th>
 </tr>
 </thead>
 <tbody id="table"></tbody>
@@ -235,13 +241,12 @@ background:#f2f6ff;
 
 const params = new URLSearchParams(window.location.search);
 const player = decodeURIComponent(params.get("player") || "");
-
 document.getElementById("playerName").textContent = player;
 
+let players = [];
 let matches = [];
 let filteredMatches = [];
 
-// SLAM NAME MAPPING
 const SLAM_MAP = {
   "Australian Open": ["Australian Open"],
   "French Open": ["French Open", "Roland Garros"],
@@ -249,37 +254,62 @@ const SLAM_MAP = {
   "US Open": ["US Open"]
 };
 
+// 🔥 LOAD PLAYER LIST
+fetch("/data/tennis/players.json")
+.then(res=>res.json())
+.then(data=> players = data)
+.catch(()=> players = []);
+
+// 🔥 SEARCH LOGIC
+const input = document.getElementById("playerSearch");
+const suggestions = document.getElementById("suggestions");
+
+input.addEventListener("input", ()=>{
+
+  const val = input.value.toLowerCase();
+  suggestions.innerHTML = "";
+
+  if(!val) return;
+
+  const filtered = players.filter(p=> p.toLowerCase().includes(val)).slice(0,10);
+
+  filtered.forEach(p=>{
+    const div = document.createElement("div");
+    div.textContent = p;
+
+    div.onclick = ()=>{
+      window.location.href = `tennis-player.html?player=${encodeURIComponent(p)}`;
+    };
+
+    suggestions.appendChild(div);
+  });
+
+});
+
 // LOAD DATA
 async function loadData(){
 
   const years = [];
-  for(let y=2026; y>=1968; y--){
-    years.push(y);
-  }
+  for(let y=2026; y>=1968; y--) years.push(y);
 
-  const requests = years.map(y =>
-    fetch(`/data/tennis/seasons/${y}.json`)
+  const results = await Promise.all(
+    years.map(y =>
+      fetch(`/data/tennis/seasons/${y}.json`)
       .then(res => res.ok ? res.json() : null)
       .catch(()=>null)
+    )
   );
 
-  const results = await Promise.all(requests);
-
-  results.forEach(data => {
-
+  results.forEach(data=>{
     if(!data) return;
 
     const games = Array.isArray(data) ? data : (data.matches || []);
 
     games.forEach(g=>{
-
       if(g.player1 === player || g.player2 === player){
 
-        const opponent =
-          g.player1 === player ? g.player2 : g.player1;
-
-        const result =
-          g.winner === player ? "W" : "L";
+        const opponent = g.player1 === player ? g.player2 : g.player1;
+        const result = g.winner === player ? "W" : "L";
 
         matches.push({
           date:g.date,
@@ -289,23 +319,17 @@ async function loadData(){
           score:g.score,
           result
         });
-
       }
-
     });
-
   });
 
   buildSlams();
   buildTournamentFilter();
   applyFilter();
-
 }
 
-// BUILD SLAMS (FIXED ROUND LOGIC)
+// SLAMS
 function buildSlams(){
-
-  const box = document.getElementById("slamsBox");
 
   const counts = {
     "Australian Open":0,
@@ -319,8 +343,6 @@ function buildSlams(){
     if(m.result !== "W") return;
 
     const round = (m.round || "").toLowerCase();
-
-    // ACCEPT ALL FINAL VARIATIONS
     if(!round.includes("final") && round !== "f") return;
 
     Object.keys(SLAM_MAP).forEach(slam=>{
@@ -331,88 +353,54 @@ function buildSlams(){
 
   });
 
-  box.innerHTML = Object.keys(SLAM_MAP).map(slam => {
-
-    const wins = counts[slam];
-
-    return `
-      <div class="slam ${wins > 0 ? "win" : ""}">
-        <h3>${slam}</h3>
-        <p>${wins}</p>
+  document.getElementById("slamsBox").innerHTML =
+    Object.keys(counts).map(s=>`
+      <div class="slam ${counts[s] ? "win":""}">
+        <h3>${s}</h3>
+        <p>${counts[s]}</p>
       </div>
-    `;
-
-  }).join("");
-
+    `).join("");
 }
 
-// TOURNAMENT FILTER
+// FILTER
 function buildTournamentFilter(){
-
   const select = document.getElementById("tournamentFilter");
 
-  const tournaments = [...new Set(matches.map(m=>m.tournament).filter(Boolean))].sort();
-
-  tournaments.forEach(t=>{
-    const opt = document.createElement("option");
-    opt.value = t;
-    opt.textContent = t;
-    select.appendChild(opt);
+  [...new Set(matches.map(m=>m.tournament))].sort().forEach(t=>{
+    const o = document.createElement("option");
+    o.value=t; o.textContent=t;
+    select.appendChild(o);
   });
 
-  select.addEventListener("change", applyFilter);
-
+  select.onchange = applyFilter;
 }
 
-// APPLY FILTER
 function applyFilter(){
-
-  const selected = document.getElementById("tournamentFilter").value;
-
-  if(selected === "ALL"){
-    filteredMatches = [...matches];
-  } else {
-    filteredMatches = matches.filter(m=>m.tournament === selected);
-  }
-
+  const val = document.getElementById("tournamentFilter").value;
+  filteredMatches = val==="ALL" ? matches : matches.filter(m=>m.tournament===val);
   build();
-
 }
 
-// BUILD TABLE
+// TABLE
 function build(){
 
-  filteredMatches.sort((a,b)=> new Date(b.date) - new Date(a.date));
-
-  let wins = filteredMatches.filter(m=>m.result==="W").length;
-  let losses = filteredMatches.length - wins;
+  filteredMatches.sort((a,b)=> new Date(b.date)-new Date(a.date));
 
   document.getElementById("matches").textContent = filteredMatches.length;
-  document.getElementById("wins").textContent = wins;
-  document.getElementById("losses").textContent = losses;
+  document.getElementById("wins").textContent = filteredMatches.filter(m=>m.result==="W").length;
+  document.getElementById("losses").textContent = filteredMatches.filter(m=>m.result==="L").length;
 
-  const tbody = document.getElementById("table");
-  tbody.innerHTML = "";
-
-  const rows = filteredMatches.map(m=>{
-
-    const date = m.date ? new Date(m.date).toLocaleDateString() : "";
-
-    return `
+  document.getElementById("table").innerHTML =
+    filteredMatches.map(m=>`
       <tr>
-        <td>${date}</td>
+        <td>${m.date||""}</td>
         <td>${m.tournament}</td>
         <td>${m.round}</td>
         <td>${m.opponent}</td>
-        <td>${m.score || ""}</td>
+        <td>${m.score||""}</td>
         <td class="${m.result==="W"?"win":"loss"}">${m.result}</td>
       </tr>
-    `;
-
-  }).join("");
-
-  tbody.innerHTML = rows;
-
+    `).join("");
 }
 
 loadData();
