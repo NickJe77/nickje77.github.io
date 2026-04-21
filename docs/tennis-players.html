@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<script src="/js/analytics.js"></script>
+  <script src="/js/analytics.js"></script>
 <meta charset="UTF-8">
 <title>Tennis Players | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,7 +15,7 @@ margin:0;
 background:#f4f6f8;
 }
 
-/* NAV */
+/* NAVBAR */
 .navbar{
 display:flex;
 justify-content:center;
@@ -49,6 +49,9 @@ position:absolute;
 width:100%;
 height:100%;
 object-fit:cover;
+top:0;
+left:0;
+z-index:0;
 }
 
 .hero::after{
@@ -56,11 +59,23 @@ content:"";
 position:absolute;
 inset:0;
 background:rgba(0,0,0,0.6);
+z-index:1;
 }
 
 .hero-content{
 position:relative;
 z-index:2;
+}
+
+.hero h1{
+margin:0;
+font-size:40px;
+}
+
+.hero p{
+margin-top:10px;
+font-size:18px;
+opacity:0.95;
 }
 
 /* WRAP */
@@ -70,7 +85,7 @@ margin:0 auto;
 padding:40px 20px;
 }
 
-/* SEARCH */
+/* SEARCH BOX */
 .search-box{
 background:#fff;
 padding:25px;
@@ -86,24 +101,19 @@ border:1px solid #ccc;
 font-size:16px;
 }
 
-/* RESULTS */
-.results{
-margin-top:20px;
-background:#fff;
-border-radius:18px;
-box-shadow:0 6px 20px rgba(0,0,0,0.08);
-max-height:400px;
-overflow:auto;
-}
-
-.result-item{
-padding:14px;
-border-bottom:1px solid #eee;
+button{
+margin-top:12px;
+padding:12px 18px;
+border:none;
+border-radius:10px;
+background:#0056d6;
+color:#fff;
+font-weight:700;
 cursor:pointer;
 }
 
-.result-item:hover{
-background:#f0f4ff;
+button:hover{
+opacity:0.9;
 }
 
 </style>
@@ -117,8 +127,9 @@ background:#f0f4ff;
 <a href="tennis-players.html">Players</a>
 </div>
 
+<!-- HERO -->
 <div class="hero">
-<img src="/images/tennis-hero.jpg">
+<img src="/images/tennis-hero.jpg" alt="Tennis">
 <div class="hero-content">
 <h1>Tennis Players</h1>
 <p>Search any player</p>
@@ -128,10 +139,18 @@ background:#f0f4ff;
 <div class="wrap">
 
 <div class="search-box">
-<input id="search" placeholder="Start typing a player name...">
-</div>
 
-<div id="results" class="results"></div>
+<input 
+  id="playerInput"
+  list="playersList"
+  placeholder="Start typing a player name..."
+>
+
+<datalist id="playersList"></datalist>
+
+<button onclick="goToPlayer()">Search</button>
+
+</div>
 
 </div>
 
@@ -140,53 +159,59 @@ background:#f0f4ff;
 let players = [];
 
 // LOAD PLAYERS
-fetch('/data/tennis/players.json')
-.then(r => r.json())
-.then(data => {
-  players = data.sort();
-});
+async function loadPlayers(){
+  try{
+    let res = await fetch('/data/tennis/players.json');
 
-// SEARCH
-document.getElementById("search").addEventListener("input", function(){
+    // fallback for GitHub Pages structure
+    if(!res.ok){
+      res = await fetch('/docs/data/tennis/players.json');
+    }
 
-  const q = this.value.toLowerCase();
+    if(!res.ok){
+      console.error("players.json not found");
+      return;
+    }
 
-  const filtered = players.filter(p =>
-    p.toLowerCase().includes(q)
-  ).slice(0,50);
+    players = await res.json();
 
-  render(filtered);
+    buildList();
 
-});
-
-// RENDER
-function render(list){
-
-  const container = document.getElementById("results");
-
-  if(!list.length){
-    container.innerHTML = "";
-    return;
+  }catch(e){
+    console.error("Error loading players", e);
   }
-
-  container.innerHTML = "";
-
-  list.forEach(p => {
-
-    const div = document.createElement("div");
-    div.className = "result-item";
-    div.textContent = p;
-
-    div.onclick = () => {
-      location.href =
-        `tennis-player.html?player=${encodeURIComponent(p)}`;
-    };
-
-    container.appendChild(div);
-
-  });
-
 }
+
+// BUILD DATALIST (PREDICTIVE SEARCH)
+function buildList(){
+  const list = document.getElementById("playersList");
+  list.innerHTML = "";
+
+  players.sort().forEach(p=>{
+    const opt = document.createElement("option");
+    opt.value = p;
+    list.appendChild(opt);
+  });
+}
+
+// NAVIGATE TO PLAYER PAGE
+function goToPlayer(){
+  const name = document.getElementById("playerInput").value.trim();
+  if(!name) return;
+
+  location.href =
+    `tennis-player.html?player=${encodeURIComponent(name)}`;
+}
+
+// ENTER KEY SUPPORT
+document.getElementById("playerInput").addEventListener("keypress", e=>{
+  if(e.key === "Enter"){
+    goToPlayer();
+  }
+});
+
+// INIT
+loadPlayers();
 
 </script>
 
