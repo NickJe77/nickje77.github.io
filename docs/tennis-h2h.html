@@ -14,6 +14,7 @@ margin:0;
 background:#f4f6f8;
 }
 
+/* NAV */
 .navbar{
 display:flex;
 justify-content:center;
@@ -25,6 +26,7 @@ font-weight:600;
 }
 .navbar a{color:#0056d6;text-decoration:none;}
 
+/* WRAP */
 .wrap{
 max-width:1100px;
 margin:auto;
@@ -48,6 +50,7 @@ width:100%;
 padding:12px;
 border-radius:10px;
 border:1px solid #ccc;
+font-size:16px;
 }
 
 .suggestions{
@@ -91,7 +94,7 @@ background:#fff;
 padding:20px;
 border-radius:14px;
 box-shadow:0 6px 18px rgba(0,0,0,0.08);
-margin-bottom:20px;
+margin-bottom:25px;
 }
 
 .h2h div{
@@ -102,6 +105,10 @@ font-weight:700;
 }
 
 /* TABLE */
+.table-wrap{
+overflow-x:auto;
+}
+
 table{
 width:100%;
 border-collapse:collapse;
@@ -109,12 +116,15 @@ background:#fff;
 border-radius:14px;
 overflow:hidden;
 box-shadow:0 6px 18px rgba(0,0,0,0.08);
+min-width:700px;
 }
 
 th{
 background:#111;
 color:#fff;
 padding:12px;
+position:sticky;
+top:0;
 }
 
 td{
@@ -125,9 +135,41 @@ text-align:center;
 
 td:first-child{text-align:left;}
 
+tbody tr:nth-child(even){background:#f2f6ff;}
 .win{color:#0a7f2e;font-weight:700;}
 
-tbody tr:nth-child(even){background:#f2f6ff;}
+/* 📱 MOBILE FIX */
+@media (max-width:768px){
+
+.search-row{
+flex-direction:column;
+gap:12px;
+}
+
+.filters{
+flex-direction:column;
+gap:10px;
+}
+
+.h2h{
+flex-direction:column;
+gap:10px;
+}
+
+.h2h div{
+font-size:18px;
+}
+
+th, td{
+font-size:13px;
+padding:8px;
+}
+
+select{
+width:100%;
+}
+
+}
 
 </style>
 </head>
@@ -176,6 +218,8 @@ tbody tr:nth-child(even){background:#f2f6ff;}
 <div id="name2">-</div>
 </div>
 
+<!-- TABLE -->
+<div class="table-wrap">
 <table>
 <thead>
 <tr>
@@ -189,21 +233,23 @@ tbody tr:nth-child(even){background:#f2f6ff;}
 </thead>
 <tbody id="table"></tbody>
 </table>
+</div>
 
 </div>
 
 <script>
 
 let players = [];
-let matches = [];
+let allMatches = [];
 
-// LOAD PLAYERS
+// PLAYERS
 fetch("/data/tennis/players.json")
 .then(r=>r.json())
 .then(d=>players=d);
 
 // AUTOCOMPLETE
 function setupSearch(inputId, suggestionId){
+
   const input = document.getElementById(inputId);
   const box = document.getElementById(suggestionId);
 
@@ -213,19 +259,16 @@ function setupSearch(inputId, suggestionId){
 
     if(!val) return;
 
-    players
-      .filter(p=>p.toLowerCase().includes(val))
-      .slice(0,10)
-      .forEach(p=>{
-        const div = document.createElement("div");
-        div.textContent = p;
-        div.onclick = ()=>{
-          input.value = p;
-          box.innerHTML = "";
-          run();
-        };
-        box.appendChild(div);
-      });
+    players.filter(p=>p.toLowerCase().includes(val)).slice(0,10).forEach(p=>{
+      const div = document.createElement("div");
+      div.textContent = p;
+      div.onclick = ()=>{
+        input.value = p;
+        box.innerHTML = "";
+        run();
+      };
+      box.appendChild(div);
+    });
   });
 }
 
@@ -253,29 +296,28 @@ async function load(){
 
     games.forEach(g=>{
 
-      const tournament = (g.tournament||"").toLowerCase();
+      const t = (g.tournament||"").toLowerCase();
 
-      if(tournament.includes("davis cup")) return;
+      // 🚫 REMOVE DAVIS CUP
+      if(t.includes("davis cup")) return;
 
-      matches.push(g);
+      allMatches.push(g);
 
     });
-
   });
 
   buildTournamentFilter();
 }
 
+// FILTERS
 function buildTournamentFilter(){
 
   const select = document.getElementById("tournamentFilter");
 
-  const tournaments = [...new Set(matches.map(m=>m.tournament).filter(Boolean))].sort();
-
-  tournaments.forEach(t=>{
+  [...new Set(allMatches.map(m=>m.tournament))].sort().forEach(t=>{
     const o = document.createElement("option");
-    o.value = t;
-    o.textContent = t;
+    o.value=t;
+    o.textContent=t;
     select.appendChild(o);
   });
 
@@ -291,27 +333,24 @@ function run(){
 
   if(!p1 || !p2) return;
 
-  const tournamentFilter = document.getElementById("tournamentFilter").value;
-  const surfaceFilter = document.getElementById("surfaceFilter").value;
-
   document.getElementById("name1").textContent = p1;
   document.getElementById("name2").textContent = p2;
+
+  const tFilter = document.getElementById("tournamentFilter").value;
+  const sFilter = document.getElementById("surfaceFilter").value;
 
   let h2h = [];
   let p1w=0, p2w=0;
 
-  matches.forEach(g=>{
+  allMatches.forEach(g=>{
 
     if(
       (g.player1===p1 && g.player2===p2) ||
       (g.player1===p2 && g.player2===p1)
     ){
 
-      // tournament filter
-      if(tournamentFilter !== "ALL" && g.tournament !== tournamentFilter) return;
-
-      // surface filter (if exists)
-      if(surfaceFilter !== "ALL" && g.surface !== surfaceFilter) return;
+      if(tFilter !== "ALL" && g.tournament !== tFilter) return;
+      if(sFilter !== "ALL" && g.surface !== sFilter) return;
 
       h2h.push(g);
 
@@ -324,8 +363,8 @@ function run(){
 
   document.getElementById("score").textContent = `${p1w} - ${p2w}`;
 
-  document.getElementById("table").innerHTML = h2h
-    .sort((a,b)=> new Date(b.date)-new Date(a.date))
+  document.getElementById("table").innerHTML =
+    h2h.sort((a,b)=>new Date(b.date)-new Date(a.date))
     .map(g=>`
       <tr>
         <td>${g.date||""}</td>
@@ -336,7 +375,6 @@ function run(){
         <td>${g.score||""}</td>
       </tr>
     `).join("");
-
 }
 
 // INIT
