@@ -18,8 +18,8 @@ display:flex;
 justify-content:center;
 gap:22px;
 padding:16px 0;
-border-bottom:1px solid #ddd;
 background:#fff;
+border-bottom:1px solid #ddd;
 font-weight:600;
 }
 .navbar a{color:#0056d6;text-decoration:none;}
@@ -30,45 +30,24 @@ margin:auto;
 padding:30px 20px;
 }
 
-.search-box{
-position:relative;
-margin-bottom:20px;
-}
-
-.search-box input{
+.select{
 width:100%;
-padding:14px;
-border-radius:12px;
+padding:12px;
+border-radius:10px;
 border:1px solid #ccc;
+margin-bottom:20px;
 font-size:16px;
 }
 
-.suggestions{
-position:absolute;
-top:100%;
-left:0;
-right:0;
-background:#fff;
-border-radius:10px;
-box-shadow:0 6px 18px rgba(0,0,0,0.15);
-max-height:200px;
-overflow:auto;
-z-index:10;
-}
-
-.suggestions div{
-padding:10px;
-cursor:pointer;
-}
-.suggestions div:hover{background:#f2f6ff;}
-
-.hero{
+.country-box{
 background:#fff;
 padding:20px;
-border-radius:14px;
+border-radius:16px;
+margin-bottom:20px;
 box-shadow:0 6px 18px rgba(0,0,0,0.08);
-margin-bottom:25px;
 text-align:center;
+font-size:26px;
+font-weight:700;
 }
 
 table{
@@ -78,7 +57,6 @@ background:#fff;
 border-radius:14px;
 overflow:hidden;
 box-shadow:0 6px 18px rgba(0,0,0,0.08);
-margin-bottom:25px;
 }
 
 th{
@@ -93,9 +71,10 @@ border-bottom:1px solid #eee;
 text-align:center;
 }
 
-td:first-child{text-align:left;}
+tbody tr:nth-child(even){
+background:#f2f6ff;
+}
 
-tbody tr:nth-child(even){background:#f2f6ff;}
 </style>
 </head>
 
@@ -109,169 +88,153 @@ tbody tr:nth-child(even){background:#f2f6ff;}
 
 <div class="wrap">
 
-<div class="search-box">
-<input id="countryInput" placeholder="Search country...">
-<div id="suggestions" class="suggestions"></div>
-</div>
+<input id="countrySearch" class="select" placeholder="Search country...">
 
-<div class="hero">
-<h1 id="countryName">Select a country</h1>
-<p id="titles">Davis Cup Titles: 0</p>
-</div>
+<div id="countryBox" class="country-box"></div>
 
-<h2>Results</h2>
 <table>
 <thead>
 <tr>
 <th>Date</th>
 <th>Opponent</th>
+<th>Player 1</th>
+<th>Player 2</th>
 <th>Winner</th>
 <th>Score</th>
 </tr>
 </thead>
-<tbody id="results"></tbody>
-</table>
-
-<h2>Players</h2>
-<table>
-<thead>
-<tr><th>Player</th></tr>
-</thead>
-<tbody id="players"></tbody>
+<tbody id="table"></tbody>
 </table>
 
 </div>
 
 <script>
 
-let matches=[];
-let countries=new Set();
-let playerCountry={};
+// -------------------------
+// FLAG MAP (emoji)
+// -------------------------
+const FLAGS = {
+"United States":"🇺🇸",
+"Australia":"🇦🇺",
+"Switzerland":"🇨🇭",
+"Spain":"🇪🇸",
+"France":"🇫🇷",
+"Germany":"🇩🇪",
+"United Kingdom":"🇬🇧",
+"Serbia":"🇷🇸",
+"Argentina":"🇦🇷",
+"Canada":"🇨🇦",
+"Italy":"🇮🇹",
+"Japan":"🇯🇵",
+"Croatia":"🇭🇷",
+"Brazil":"🇧🇷",
+"Belgium":"🇧🇪",
+"Netherlands":"🇳🇱"
+};
 
-/* LOAD PLAYER → COUNTRY */
-fetch("/data/tennis/player_countries.json")
-.then(r=>r.json())
-.then(data=>{
-  playerCountry=data;
-});
+// -------------------------
+// LOAD DATA
+// -------------------------
+let matches = [];
+let playerCountries = {};
 
-/* LOAD MATCHES */
-async function load(){
+async function loadData(){
 
-  const years=[];
-  for(let y=2026;y>=1968;y--) years.push(y);
+  // player → country map
+  let pc = await fetch("/data/tennis/player_countries.json");
+  if(!pc.ok) pc = await fetch("/docs/data/tennis/player_countries.json");
+  playerCountries = await pc.json();
 
-  const res=await Promise.all(
-    years.map(y =>
-      fetch(`/data/tennis/seasons/${y}.json`)
-      .then(r=>r.ok?r.json():null)
-      .catch(()=>null)
-    )
-  );
+  // seasons
+  for(let y=2026; y>=1968; y--){
 
-  res.forEach(data=>{
-    if(!data) return;
+    try{
+      let res = await fetch(`/data/tennis/seasons/${y}.json`);
+      if(!res.ok) res = await fetch(`/docs/data/tennis/seasons/${y}.json`);
+      if(!res.ok) continue;
 
-    const games=Array.isArray(data)?data:(data.matches||[]);
+      let data = await res.json();
+      let games = Array.isArray(data) ? data : (data.matches || []);
 
-    games.forEach(g=>{
-
-      if((g.tournament||"").toLowerCase().includes("davis cup")){
-
-        matches.push(g);
-
-        const c1 = playerCountry[g.player1];
-        const c2 = playerCountry[g.player2];
-
-        if(c1) countries.add(c1);
-        if(c2) countries.add(c2);
-
-      }
-
-    });
-
-  });
-
-}
-
-load();
-
-/* SEARCH */
-const input=document.getElementById("countryInput");
-const box=document.getElementById("suggestions");
-
-input.addEventListener("input",()=>{
-  const val=input.value.toLowerCase();
-  box.innerHTML="";
-
-  [...countries]
-    .filter(c=>c.toLowerCase().includes(val))
-    .slice(0,10)
-    .forEach(c=>{
-      const div=document.createElement("div");
-      div.textContent=c;
-      div.onclick=()=>{
-        input.value=c;
-        box.innerHTML="";
-        build(c);
-      };
-      box.appendChild(div);
-    });
-});
-
-/* BUILD */
-function build(country){
-
-  document.getElementById("countryName").textContent=country;
-
-  let titles=0;
-  let results=[];
-  let players=new Set();
-
-  matches.forEach(g=>{
-
-    const c1 = playerCountry[g.player1];
-    const c2 = playerCountry[g.player2];
-
-    if(c1===country || c2===country){
-
-      results.push(g);
-
-      players.add(g.player1);
-      players.add(g.player2);
-
-      if(g.round==="Final" && g.winner){
-        if(playerCountry[g.winner]===country){
-          titles++;
+      games.forEach(g=>{
+        if(g.tournament && g.tournament.includes("Davis Cup")){
+          matches.push(g);
         }
-      }
+      });
 
-    }
+    }catch(e){continue;}
+
+  }
+
+  buildCountryList();
+}
+
+// -------------------------
+// BUILD COUNTRY LIST
+// -------------------------
+function buildCountryList(){
+
+  const countries = new Set();
+
+  matches.forEach(m=>{
+    const c1 = playerCountries[m.player1];
+    const c2 = playerCountries[m.player2];
+
+    if(c1) countries.add(c1);
+    if(c2) countries.add(c2);
+  });
+
+  const input = document.getElementById("countrySearch");
+
+  input.addEventListener("input", ()=>{
+    const val = input.value.toLowerCase();
+
+    const match = [...countries].find(c=>c.toLowerCase().includes(val));
+    if(match) render(match);
+  });
+
+}
+
+// -------------------------
+// RENDER
+// -------------------------
+function render(country){
+
+  const tbody = document.getElementById("table");
+  tbody.innerHTML = "";
+
+  const flag = FLAGS[country] || "";
+
+  document.getElementById("countryBox").textContent = `${flag} ${country}`;
+
+  let games = matches.filter(m=>{
+    return playerCountries[m.player1] === country ||
+           playerCountries[m.player2] === country;
+  });
+
+  // 🔥 SORT NEWEST → OLDEST
+  games.sort((a,b)=> new Date(b.date) - new Date(a.date));
+
+  games.forEach(g=>{
+
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td>${g.date || ""}</td>
+      <td>${playerCountries[g.player1] === country ? playerCountries[g.player2] : playerCountries[g.player1]}</td>
+      <td>${g.player1}</td>
+      <td>${g.player2}</td>
+      <td>${g.winner}</td>
+      <td>${g.score || ""}</td>
+    `;
+
+    tbody.appendChild(tr);
 
   });
 
-  document.getElementById("titles").textContent=`Davis Cup Titles: ${titles}`;
-
-  document.getElementById("results").innerHTML =
-    results.sort((a,b)=>new Date(b.date)-new Date(a.date))
-    .map(g=>{
-      const opponent =
-        playerCountry[g.player1]===country ? g.player2 : g.player1;
-
-      return `
-        <tr>
-          <td>${g.date||""}</td>
-          <td>${opponent}</td>
-          <td>${g.winner||""}</td>
-          <td>${g.score||""}</td>
-        </tr>
-      `;
-    }).join("");
-
-  document.getElementById("players").innerHTML =
-    [...players].sort().map(p=>`<tr><td>${p}</td></tr>`).join("");
-
 }
+
+loadData();
 
 </script>
 
