@@ -20,16 +20,14 @@ for table in tables:
     for row in rows[1:]:
         cols = [c.get_text(strip=True) for c in row.find_all(["td","th"])]
 
-        if len(cols) < 4:
+        if len(cols) < 3:
             continue
 
         players = cols[0]
 
-        # detect doubles
         if "/" in players:
             match_type = "Doubles"
-            p = players.split("/")
-            players_list = [x.strip() for x in p]
+            players_list = [p.strip() for p in players.split("/")]
         else:
             match_type = "Singles"
             players_list = [players]
