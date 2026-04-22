@@ -12,6 +12,26 @@ def parse_date(d):
     except:
         return datetime(1900,1,1)
 
+def detect_match_type(match):
+    players = match.get("players", [])
+
+    # CASE 1: 4 players
+    if isinstance(players, list) and len(players) == 4:
+        return "Doubles"
+
+    # CASE 2: "A/B"
+    if isinstance(players, list) and len(players) == 2:
+        if "/" in players[0] or "/" in players[1]:
+            return "Doubles"
+        return "Singles"
+
+    # CASE 3: team1 / team2
+    if match.get("team1") and match.get("team2"):
+        if len(match["team1"]) == 2 and len(match["team2"]) == 2:
+            return "Doubles"
+
+    return None
+
 for file in BASE.glob("*.json"):
 
     print(f"Processing {file.name}")
@@ -19,18 +39,13 @@ for file in BASE.glob("*.json"):
     with open(file) as f:
         data = json.load(f)
 
-    # -------------------------
-    # HANDLE BOTH FORMATS
-    # -------------------------
+    # handle both formats
     if isinstance(data, list):
         matches_source = data
-        output_container = {}   # we’ll wrap output safely
-    elif isinstance(data, dict):
+        output_container = {}
+    else:
         matches_source = data.get("matches", [])
         output_container = data
-    else:
-        print(f"⚠️ Skipping {file.name} (unknown format)")
-        continue
 
     matches_out = []
 
@@ -38,23 +53,19 @@ for file in BASE.glob("*.json"):
 
         event = str(match.get("event", "")).lower()
 
-        # ONLY DAVIS CUP
         if "davis cup" not in event:
             continue
 
+        match_type = detect_match_type(match)
+
+        if not match_type:
+            continue
+
+        # normalize players for output
         players = match.get("players", [])
 
-        # -------------------------
-        # DETECT MATCH TYPE
-        # -------------------------
-        if isinstance(players, list) and len(players) == 2:
-            match_type = "Singles"
-
-        elif isinstance(players, list) and len(players) == 4:
-            match_type = "Doubles"
-
-        else:
-            continue
+        if match_type == "Doubles" and match.get("team1"):
+            players = match["team1"] + match["team2"]
 
         matches_out.append({
             "date": match.get("date", ""),
@@ -67,19 +78,12 @@ for file in BASE.glob("*.json"):
             "match_type": match_type
         })
 
-    # -------------------------
-    # SORT NEWEST → OLDEST
-    # -------------------------
     matches_out.sort(
         key=lambda x: parse_date(x.get("date","")),
         reverse=True
     )
 
-    # -------------------------
-    # SAVE SAFELY
-    # -------------------------
     if isinstance(data, list):
-        # keep original untouched, add new wrapper file format
         output_container = {
             "matches": data,
             "davis_cup_matches": matches_out
