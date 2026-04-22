@@ -4,40 +4,29 @@ import json
 from pathlib import Path
 import re
 
-print("🏆 Building FULL Davis Cup dataset (ITF legacy)")
+print("🏆 Building Davis Cup FULL dataset")
 
 OUT = Path("docs/data/tennis/davis_cup/full_bracket.json")
 OUT.parent.mkdir(parents=True, exist_ok=True)
 
 data = []
 
-# -------------------------
-# YEARS TO BUILD
-# -------------------------
-START_YEAR = 1960   # you can push this back later
-END_YEAR = 2024
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
+}
 
-# -------------------------
-# BASE SEARCH URL
-# -------------------------
 BASE = "https://legacy.daviscup.com/en/results/tie/details.aspx?tieId="
 
-# -------------------------
-# THIS IS THE KEY IDEA:
-# Tie IDs are numeric and roughly sequential
-# -------------------------
-START_ID = 1000
-END_ID = 200000   # large range, script will filter valid ones
-
-seen = set()
+START_ID = 1
+END_ID = 20000   # keep this SMALL first to prove it works
 
 for tie_id in range(START_ID, END_ID):
     url = BASE + str(tie_id)
 
     try:
-        r = requests.get(url, timeout=10)
+        r = requests.get(url, headers=HEADERS, timeout=10)
 
-        if "Davis Cup" not in r.text:
+        if r.status_code != 200:
             continue
 
         soup = BeautifulSoup(r.text, "lxml")
@@ -48,43 +37,28 @@ for tie_id in range(START_ID, END_ID):
 
         text = title.get_text()
 
-        # Example title:
-        # "Italy v Netherlands | Davis Cup 2024 Final"
         if " v " not in text:
             continue
 
-        parts = text.split("|")[0].strip()
+        teams_part = text.split("|")[0].strip()
+        teams = teams_part.split(" v ")
 
-        teams = parts.split(" v ")
         if len(teams) != 2:
             continue
 
         team1 = teams[0].strip()
         team2 = teams[1].strip()
 
-        # extract year
         year_match = re.search(r"(19|20)\d{2}", text)
         if not year_match:
             continue
 
         year = int(year_match.group())
 
-        if year < START_YEAR or year > END_YEAR:
-            continue
-
-        key = f"{year}-{team1}-{team2}"
-        if key in seen:
-            continue
-        seen.add(key)
-
-        # try to get result line
-        score = ""
-
-        body_text = soup.get_text(" ", strip=True)
-
-        score_match = re.search(r"\d-\d", body_text)
-        if score_match:
-            score = score_match.group()
+        # extract score from page text
+        body = soup.get_text(" ", strip=True)
+        score_match = re.search(r"\d-\d", body)
+        score = score_match.group() if score_match else ""
 
         data.append({
             "year": year,
@@ -95,13 +69,13 @@ for tie_id in range(START_ID, END_ID):
             "winner": team1 if score.startswith("3") else team2 if score else ""
         })
 
-        if len(data) % 100 == 0:
+        if len(data) % 50 == 0:
             print("Collected:", len(data))
 
     except:
         continue
 
-print("Total ties collected:", len(data))
+print("Total ties:", len(data))
 
 with open(OUT, "w") as f:
     json.dump(data, f, indent=2)
