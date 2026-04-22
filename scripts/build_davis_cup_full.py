@@ -20,7 +20,7 @@ for year in range(START_YEAR, END_YEAR + 1):
     r = requests.get(url)
     soup = BeautifulSoup(r.text, "lxml")
 
-    tables = soup.find_all("table", class_="wikitable")
+    tables = soup.find_all("table")
 
     for table in tables:
         rows = table.find_all("tr")
@@ -35,7 +35,12 @@ for year in range(START_YEAR, END_YEAR + 1):
             team2 = cols[1]
             score = cols[2]
 
-            if "-" not in score:
+            # must look like a real tie score
+            if not score or "-" not in score:
+                continue
+
+            # filter obvious junk
+            if len(team1) > 40 or len(team2) > 40:
                 continue
 
             data.append({
