@@ -1,80 +1,55 @@
+import requests
+from bs4 import BeautifulSoup
 import json
 from pathlib import Path
 
-print("🏆 Building full Davis Cup structure")
+print("🏆 Building Davis Cup FULL dataset")
+
+START_YEAR = 2000
+END_YEAR = 2024
 
 OUT = Path("docs/data/tennis/davis_cup/full_bracket.json")
 OUT.parent.mkdir(parents=True, exist_ok=True)
 
 data = []
 
-def add_year(year, final, semis, qfs):
-    # Final
-    data.append({
-        "year": year,
-        "round": "Final",
-        **final
-    })
+for year in range(START_YEAR, END_YEAR + 1):
+    url = f"https://en.wikipedia.org/wiki/{year}_Davis_Cup"
+    print("→", url)
 
-    # Semis
-    for m in semis:
-        data.append({
-            "year": year,
-            "round": "Semi Final",
-            **m
-        })
+    r = requests.get(url)
+    soup = BeautifulSoup(r.text, "lxml")
 
-    # Quarter Finals
-    for m in qfs:
-        data.append({
-            "year": year,
-            "round": "Quarter Final",
-            **m
-        })
+    tables = soup.find_all("table", class_="wikitable")
 
-# -------------------------
-# EXAMPLE FULL YEAR (2024)
-# -------------------------
+    for table in tables:
+        rows = table.find_all("tr")
 
-add_year(
-    2024,
-    final={"team1":"Italy","team2":"Netherlands","score":"2-0","winner":"Italy"},
-    semis=[
-        {"team1":"Italy","team2":"Serbia","score":"2-1","winner":"Italy"},
-        {"team1":"Netherlands","team2":"Australia","score":"2-1","winner":"Netherlands"}
-    ],
-    qfs=[
-        {"team1":"Italy","team2":"USA","score":"2-1","winner":"Italy"},
-        {"team1":"Serbia","team2":"Great Britain","score":"2-1","winner":"Serbia"},
-        {"team1":"Netherlands","team2":"Canada","score":"2-1","winner":"Netherlands"},
-        {"team1":"Australia","team2":"Germany","score":"2-1","winner":"Australia"}
-    ]
-)
+        for row in rows:
+            cols = [c.get_text(strip=True) for c in row.find_all("td")]
 
-# -------------------------
-# 2023
-# -------------------------
+            if len(cols) < 3:
+                continue
 
-add_year(
-    2023,
-    final={"team1":"Italy","team2":"Australia","score":"2-0","winner":"Italy"},
-    semis=[
-        {"team1":"Italy","team2":"Serbia","score":"2-1","winner":"Italy"},
-        {"team1":"Australia","team2":"Finland","score":"2-0","winner":"Australia"}
-    ],
-    qfs=[
-        {"team1":"Italy","team2":"Netherlands","score":"2-1","winner":"Italy"},
-        {"team1":"Serbia","team2":"Great Britain","score":"2-0","winner":"Serbia"},
-        {"team1":"Australia","team2":"Czech Republic","score":"2-1","winner":"Australia"},
-        {"team1":"Finland","team2":"Canada","score":"2-1","winner":"Finland"}
-    ]
-)
+            team1 = cols[0]
+            team2 = cols[1]
+            score = cols[2]
 
-# -------------------------
-# SAVE
-# -------------------------
+            if "-" not in score:
+                continue
+
+            data.append({
+                "year": year,
+                "round": "Unknown",
+                "team1": team1,
+                "team2": team2,
+                "score": score,
+                "winner": team1 if score.startswith("3") else team2
+            })
+
+print("Total ties:", len(data))
 
 with open(OUT, "w") as f:
     json.dump(data, f, indent=2)
 
-print("✅ Saved:", len(data), "ties")
+print("✅ Saved:", OUT)
