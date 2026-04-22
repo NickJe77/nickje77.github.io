@@ -1,64 +1,76 @@
-import requests
-from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 import json
 from pathlib import Path
-import re
 
-print("🏆 Davis Cup scraper (clean version)")
+print("🏆 Davis Cup scraper (official site)")
 
-URLS = [
-    "https://en.wikipedia.org/wiki/2025_Davis_Cup_Qualifiers",
-    "https://en.wikipedia.org/wiki/2025_Davis_Cup_World_Group_I",
-    "https://en.wikipedia.org/wiki/2025_Davis_Cup_World_Group_II",
-    "https://en.wikipedia.org/wiki/2025_Davis_Cup_Finals"
+BASE = "https://www.daviscup.com"
+YEAR = "2025"
+
+SECTIONS = [
+    f"{BASE}/en/draws-results/{YEAR}/qualifiers",
+    f"{BASE}/en/draws-results/{YEAR}/world-group-i",
+    f"{BASE}/en/draws-results/{YEAR}/world-group-ii",
+    f"{BASE}/en/draws-results/{YEAR}/finals",
 ]
 
 matches = []
 
-score_pattern = re.compile(r"\d-\d")
+with sync_playwright() as p:
+    browser = p.chromium.launch(headless=True)
+    page = browser.new_page()
 
-for url in URLS:
-    print("→", url)
+    tie_links = set()
 
-    r = requests.get(url)
-    soup = BeautifulSoup(r.text, "lxml")
+    # -------------------------
+    # GET ALL TIES
+    # -------------------------
+    for section in SECTIONS:
+        print("→ section:", section)
+        page.goto(section, timeout=60000)
 
-    tables = soup.find_all("table", class_="wikitable")
+        links = page.eval_on_selector_all(
+            "a",
+            "els => els.map(e => e.href)"
+        )
 
-    for table in tables:
-        rows = table.find_all("tr")
+        for link in links:
+            if f"/{YEAR}/" in link and "-" in link and "vs" in link:
+                tie_links.add(link)
+
+    print("Ties found:", len(tie_links))
+
+    # -------------------------
+    # SCRAPE EACH TIE
+    # -------------------------
+    for link in tie_links:
+        print("→ tie:", link)
+
+        page.goto(link, timeout=60000)
+
+        rows = page.query_selector_all("tr")
 
         for row in rows:
-            cols = [c.get_text(strip=True) for c in row.find_all("td")]
+            text = row.inner_text()
 
-            if len(cols) < 3:
+            if " def " not in text:
                 continue
 
-            player1 = cols[0]
-            player2 = cols[1]
-            score = cols[2]
-
-            # must look like a tennis score
-            if not score_pattern.search(score):
-                continue
-
-            # detect doubles
-            if "/" in player1 or "/" in player2:
+            if "/" in text:
                 match_type = "Doubles"
             else:
                 match_type = "Singles"
 
             matches.append({
-                "player1": player1,
-                "player2": player2,
-                "score": score,
-                "match_type": match_type,
-                "event": "Davis Cup 2025"
+                "text": text.strip(),
+                "match_type": match_type
             })
+
+    browser.close()
 
 print("Matches found:", len(matches))
 
-OUT = Path("docs/data/tennis/davis_cup/2025.json")
+OUT = Path(f"docs/data/tennis/davis_cup/{YEAR}.json")
 OUT.parent.mkdir(parents=True, exist_ok=True)
 
 with open(OUT, "w") as f:
