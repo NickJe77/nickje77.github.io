@@ -133,43 +133,58 @@ def extract_rows(data):
     return []
 
 # -----------------------
-# ADD GAME EVENT
+# ADD GAME EVENT (FIXED)
 # -----------------------
 def add_event(row, sport, d):
 
-    team = (
-        row.get("team")
-        or row.get("home_team")
+    home = (
+        row.get("home_team")
+        or row.get("team")
         or row.get("played_for")
     )
 
-    opp = (
-        row.get("opponent")
-        or row.get("away_team")
+    away = (
+        row.get("away_team")
+        or row.get("opponent")
         or row.get("played_against")
     )
 
-    ts = (
-        row.get("team_score")
-        or row.get("home_score")
+    hs = (
+        row.get("home_score")
+        or row.get("team_score")
         or row.get("home_points")
     )
 
-    os = (
-        row.get("opponent_score")
-        or row.get("away_score")
+    as_ = (
+        row.get("away_score")
+        or row.get("opponent_score")
         or row.get("away_points")
     )
 
     match_id = row.get("match_id") or row.get("game_id")
 
-    if not team or not opp:
+    if not home or not away:
         return
 
-    if ts is None or os is None:
-        text = f"{team} vs {opp}"
-    else:
-        text = f"{team} {ts} defeated {opp} {os}"
+    # -----------------------
+    # FIX: DETERMINE WINNER
+    # -----------------------
+    try:
+        hs = str(hs).replace("–", "").strip()
+        as_ = str(as_).replace("–", "").strip()
+
+        hs_i = int(hs)
+        as_i = int(as_)
+
+        if hs_i > as_i:
+            text = f"{home} {hs_i} defeated {away} {as_i}"
+        elif as_i > hs_i:
+            text = f"{away} {as_i} defeated {home} {hs_i}"
+        else:
+            text = f"{home} {hs_i} drew with {away} {as_i}"
+
+    except:
+        text = f"{home} vs {away}"
 
     key = d.strftime("%m-%d")
 
@@ -184,7 +199,7 @@ def add_event(row, sport, d):
     })
 
 # -----------------------
-# PROCESS RACING CSV (FIXED)
+# PROCESS RACING CSV
 # -----------------------
 def process_racing_csv(file):
 
@@ -196,7 +211,6 @@ def process_racing_csv(file):
 
             for r in reader:
 
-                # flexible headers
                 d = r.get("Date") or r.get("date")
                 race = r.get("Race") or r.get("race")
                 winner = r.get("Winner") or r.get("winner")
@@ -238,12 +252,10 @@ for file in BASE.rglob("*"):
     if not file.is_file():
         continue
 
-    # 🔥 PROCESS ALL CSV FILES
     if file.suffix.lower() == ".csv":
         process_racing_csv(file)
         continue
 
-    # JSON ONLY BELOW
     if file.suffix.lower() != ".json":
         continue
 
