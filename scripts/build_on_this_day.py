@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import re
 
-print("BUILDING ON THIS DAY (MERGED VERSION)")
+print("BUILDING ON THIS DAY (FULL - ALL SPORTS)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -88,7 +88,7 @@ def is_valid_data_file(path):
     return True
 
 # -----------------------
-# ADD FINAL EVENT
+# ADD EVENT
 # -----------------------
 def add_final_event(d, sport, text):
 
@@ -104,7 +104,58 @@ def add_final_event(d, sport, text):
     })
 
 # -----------------------
-# AFL MATCH BUILDER (MERGED)
+# GENERIC MATCH (ALL SPORTS)
+# -----------------------
+def process_generic_file(file, sport):
+
+    data = load_json_safe(file)
+    if not data:
+        return
+
+    rows = data if isinstance(data, list) else data.get("games", [])
+
+    for row in rows:
+
+        if not isinstance(row, dict):
+            continue
+
+        d = parse_date(row)
+        if not d:
+            continue
+
+        match_id = row.get("match_id") or row.get("game_id")
+
+        uid = f"{sport}|{match_id}"
+        if uid in seen:
+            continue
+        seen.add(uid)
+
+        home = row.get("home_team") or row.get("team")
+        away = row.get("away_team") or row.get("opponent")
+
+        hs = row.get("home_score") or row.get("team_score")
+        as_ = row.get("away_score") or row.get("opponent_score")
+
+        if not home or not away:
+            continue
+
+        try:
+            hs = int(hs)
+            as_ = int(as_)
+
+            if hs > as_:
+                text = f"{home} {hs} defeated {away} {as_}"
+            elif as_ > hs:
+                text = f"{away} {as_} defeated {home} {hs}"
+            else:
+                text = f"{home} {hs} drew with {away} {as_}"
+        except:
+            text = f"{home} vs {away}"
+
+        add_final_event(d, sport, text)
+
+# -----------------------
+# AFL MERGED
 # -----------------------
 def process_afl_file(file):
 
@@ -136,45 +187,40 @@ def process_afl_file(file):
 
         matches[match_id]["players"].append(row)
 
-    # BUILD OUTPUT
     for match_id, m in matches.items():
 
-        uid = f"AFL|MATCH|{match_id}"
+        uid = f"AFL|{match_id}"
         if uid in seen:
             continue
         seen.add(uid)
 
         d = m["date"]
-        home = m["home"]
-        away = m["away"]
 
         try:
             hs = int(m["hs"])
             as_ = int(m["as"])
 
             if hs > as_:
-                result = f"{home} {hs} defeated {away} {as_}"
+                result = f"{m['home']} {hs} defeated {m['away']} {as_}"
             elif as_ > hs:
-                result = f"{away} {as_} defeated {home} {hs}"
+                result = f"{m['away']} {as_} defeated {m['home']} {hs}"
             else:
-                result = f"{home} {hs} drew with {away} {as_}"
+                result = f"{m['home']} {hs} drew with {m['away']} {as_}"
         except:
-            result = f"{home} vs {away}"
+            result = f"{m['home']} vs {m['away']}"
 
-        # 🔥 TOP GOAL KICKER
+        # top goals
         top_player = None
         top_goals = 0
 
         for p in m["players"]:
-            g = p.get("G")
             try:
-                g = int(g)
+                g = int(p.get("G"))
+                if g > top_goals:
+                    top_goals = g
+                    top_player = p.get("player")
             except:
-                continue
-
-            if g > top_goals:
-                top_goals = g
-                top_player = p.get("player")
+                pass
 
         if top_player and top_goals >= 5:
             result += f" — {top_player} kicked {top_goals} goals"
@@ -182,7 +228,7 @@ def process_afl_file(file):
         add_final_event(d, "AFL", result)
 
 # -----------------------
-# NBA MATCH BUILDER (MERGED)
+# NBA MERGED
 # -----------------------
 def process_nba_boxscore(file):
 
@@ -201,7 +247,7 @@ def process_nba_boxscore(file):
 
     game_id = data.get("game_id")
 
-    uid = f"NBA|MATCH|{game_id}"
+    uid = f"NBA|{game_id}"
     if uid in seen:
         return
     seen.add(uid)
@@ -224,22 +270,18 @@ def process_nba_boxscore(file):
     except:
         result = f"{home} vs {away}"
 
-    # 🔥 TOP SCORER
-    players = data.get("players", [])
-
+    # top scorer
     top_player = None
     top_pts = 0
 
-    for p in players:
-        pts = p.get("points")
+    for p in data.get("players", []):
         try:
-            pts = int(pts)
+            pts = int(p.get("points"))
+            if pts > top_pts:
+                top_pts = pts
+                top_player = p.get("player")
         except:
-            continue
-
-        if pts > top_pts:
-            top_pts = pts
-            top_player = p.get("player")
+            pass
 
     if top_player and top_pts >= 40:
         result += f" — {top_player} scored {top_pts} points"
@@ -256,15 +298,18 @@ for file in BASE.rglob("*"):
 
     path = str(file).lower()
 
-    # NBA BOXSCORES
     if "nba" in path and "boxscores" in path:
         process_nba_boxscore(file)
         continue
 
-    # AFL FILE
     if "afl" in path and file.suffix == ".json":
         process_afl_file(file)
         continue
+
+    if file.suffix == ".json":
+        sport = detect_sport(file)
+        if sport and sport not in ["NBA","AFL"]:
+            process_generic_file(file, sport)
 
 # -----------------------
 # SORT
