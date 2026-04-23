@@ -1,10 +1,9 @@
 import json
-import csv
 from pathlib import Path
 from datetime import datetime
 import re
 
-print("BUILDING ON THIS DAY (FULL - ALL SPORTS)")
+print("BUILDING ON THIS DAY (FINAL – NBA FIXED)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -62,32 +61,6 @@ def parse_date(row):
     return None
 
 # -----------------------
-# SPORT
-# -----------------------
-def detect_sport(path):
-    p = str(path).lower()
-    if "nba" in p: return "NBA"
-    if "afl" in p: return "AFL"
-    if "nrl" in p: return "NRL"
-    if "baseball" in p: return "MLB"
-    if "tennis" in p: return "Tennis"
-    if "golf" in p: return "Golf"
-    if "cycling" in p: return "Cycling"
-    if "bathurst" in p: return "Motorsport"
-    if "f1" in p: return "F1"
-    return None
-
-# -----------------------
-# FILTER
-# -----------------------
-def is_valid_data_file(path):
-    p = str(path).lower()
-    if "players" in p: return False
-    if "index.json" in p: return False
-    if "on_this_day.json" in p: return False
-    return True
-
-# -----------------------
 # ADD EVENT
 # -----------------------
 def add_final_event(d, sport, text):
@@ -104,7 +77,7 @@ def add_final_event(d, sport, text):
     })
 
 # -----------------------
-# GENERIC MATCH (ALL SPORTS)
+# GENERIC (ALL OTHER SPORTS)
 # -----------------------
 def process_generic_file(file, sport):
 
@@ -228,12 +201,16 @@ def process_afl_file(file):
         add_final_event(d, "AFL", result)
 
 # -----------------------
-# NBA MERGED
+# NBA MERGED (FIXED PATH)
 # -----------------------
-def process_nba_boxscore(file):
+def process_nba_game(file):
 
     data = load_json_safe(file)
     if not data:
+        return
+
+    # skip non-game files
+    if "game_id" not in data:
         return
 
     d_raw = data.get("date")
@@ -289,6 +266,22 @@ def process_nba_boxscore(file):
     add_final_event(d, "NBA", result)
 
 # -----------------------
+# SPORT DETECT
+# -----------------------
+def detect_sport(path):
+    p = str(path).lower()
+    if "nba" in p: return "NBA"
+    if "afl" in p: return "AFL"
+    if "nrl" in p: return "NRL"
+    if "baseball" in p: return "MLB"
+    if "tennis" in p: return "Tennis"
+    if "golf" in p: return "Golf"
+    if "cycling" in p: return "Cycling"
+    if "bathurst" in p: return "Motorsport"
+    if "f1" in p: return "F1"
+    return None
+
+# -----------------------
 # MAIN LOOP
 # -----------------------
 for file in BASE.rglob("*"):
@@ -298,17 +291,20 @@ for file in BASE.rglob("*"):
 
     path = str(file).lower()
 
-    if "nba" in path and "boxscores" in path:
-        process_nba_boxscore(file)
+    # NBA (YOUR STRUCTURE)
+    if "docs/data/nba/" in path and path.endswith(".json"):
+        process_nba_game(file)
         continue
 
-    if "afl" in path and file.suffix == ".json":
+    # AFL
+    if "docs/data/afl/" in path and path.endswith(".json"):
         process_afl_file(file)
         continue
 
-    if file.suffix == ".json":
+    # ALL OTHER SPORTS
+    if path.endswith(".json"):
         sport = detect_sport(file)
-        if sport and sport not in ["NBA","AFL"]:
+        if sport and sport not in ["NBA", "AFL"]:
             process_generic_file(file, sport)
 
 # -----------------------
