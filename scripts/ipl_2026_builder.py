@@ -1,10 +1,8 @@
 import requests
 import json
-import re
 from pathlib import Path
-from bs4 import BeautifulSoup
 
-print("IPL 2026 BUILDER (RESTORED)")
+print("IPL 2026 BUILDER (FIXED MATCH DISCOVERY)")
 
 OUTPUT = Path("docs/data/ipl/ipl_2026_FULL.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
@@ -26,19 +24,33 @@ if OUTPUT.exists():
 print("Existing matches:", len(existing))
 
 # -------------------------
-# STEP 1: GET MATCH IDS (FIXED)
+# STEP 1: GET MATCH LIST (WORKING ENDPOINT)
 # -------------------------
-series_url = "https://www.espncricinfo.com/series/ipl-2026-1510719"
+url = "https://site.web.api.espn.com/apis/site/v2/sports/cricket/ipl/scoreboard"
 
-r = requests.get(series_url, headers=HEADERS)
-html = r.text
+r = requests.get(url, headers=HEADERS)
 
-match_ids = sorted(set(re.findall(r"/match/(\d+)", html)))
+print("STATUS:", r.status_code)
 
-print("Match IDs found:", len(match_ids))
+if r.status_code != 200:
+    print("❌ scoreboard endpoint failed")
+    exit()
+
+data = r.json()
+
+events = data.get("events", [])
+
+print("Events found:", len(events))
+
+match_ids = []
+
+for e in events:
+    match_ids.append(str(e.get("id")))
+
+print("Match IDs:", match_ids)
 
 # -------------------------
-# STEP 2: FETCH SCORECARDS
+# STEP 2: BUILD MATCHES (KEEP YOUR FORMAT)
 # -------------------------
 new_matches = []
 
@@ -50,55 +62,28 @@ for match_id in match_ids:
         continue
 
     try:
-        url = f"https://www.espncricinfo.com/series/ipl-2026-1510719/match-{match_id}/full-scorecard"
-        res = requests.get(url, headers=HEADERS)
+        event = next(e for e in events if e.get("id") == match_id)
 
-        if res.status_code != 200:
-            print("skip", match_id)
-            continue
+        comp = event["competitions"][0]
+        teams = comp["competitors"]
 
-        soup = BeautifulSoup(res.text, "html.parser")
-
-        # -------------------------
-        # BASIC MATCH INFO
-        # -------------------------
-        title = soup.title.text if soup.title else ""
-        teams = []
-
-        t = re.search(r"(.+?) vs (.+?),", title)
-        if t:
-            teams = [t.group(1).strip(), t.group(2).strip()]
-
-        venue = ""
-        v = re.search(r"at (.+?),", title)
-        if v:
-            venue = v.group(1)
-
-        text = soup.get_text(" ", strip=True)
-
-        result = ""
-        r_match = re.search(r"([A-Za-z .]+ won by [^\.]+)", text)
-        if r_match:
-            result = r_match.group(1)
-
-        # -------------------------
-        # BUILD MATCH (YOUR FORMAT)
-        # -------------------------
         match = {
             "meta": {},
             "info": {
                 "season": "2026",
-                "teams": teams,
-                "venue": venue,
-                "outcome": {"result": result},
+                "teams": [
+                    teams[0]["team"]["displayName"],
+                    teams[1]["team"]["displayName"]
+                ],
+                "venue": comp.get("venue", {}).get("fullName", ""),
+                "outcome": {"result": comp.get("status", {}).get("type", {}).get("description", "")},
                 "event": {"name": "Indian Premier League"}
             },
-            "innings": [],  # keep structure intact
+            "innings": [],
             "file": file_name
         }
 
         new_matches.append(match)
-
         print("✔ added", match_id)
 
     except Exception as e:
