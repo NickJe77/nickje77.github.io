@@ -4,17 +4,18 @@ import io
 import json
 from pathlib import Path
 
-print("IPL 2026 BUILDER (CRICSHEET - STABLE)")
+print("IPL 2026 FULL RAW BUILDER (MATCHES YOUR FORMAT)")
 
 URL = "https://cricsheet.org/downloads/ipl_json.zip"
 
-OUTPUT = Path("docs/data/ipl/seasons/2026.json")
+OUTPUT = Path("docs/data/ipl/ipl_2026_FULL.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
+# download zip
 r = requests.get(URL)
 z = zipfile.ZipFile(io.BytesIO(r.content))
 
-matches = []
+matches_2026 = []
 
 for file in z.namelist():
     if not file.endswith(".json"):
@@ -22,28 +23,16 @@ for file in z.namelist():
 
     data = json.loads(z.read(file))
 
-    info = data.get("info", {})
-    season = str(info.get("season"))
+    season = str(data.get("info", {}).get("season"))
 
-    if season != "2026":
-        continue
+    if season == "2026":
+        data["file"] = file   # 🔥 IMPORTANT (your existing format uses this)
+        matches_2026.append(data)
 
-    match = {
-        "match_id": file.replace(".json",""),
-        "date": info.get("dates", [""])[0],
-        "teams": info.get("teams", []),
-        "venue": info.get("venue",""),
-        "result": info.get("outcome", {}),
-    }
+print("MATCHES FOUND:", len(matches_2026))
 
-    matches.append(match)
-
-print("MATCHES FOUND:", len(matches))
-
+# save EXACT structure (list of full matches)
 with open(OUTPUT, "w") as f:
-    json.dump({
-        "season": "2026",
-        "matches": matches
-    }, f, indent=2)
+    json.dump(matches_2026, f, indent=2)
 
-print("DONE")
+print("DONE:", OUTPUT)
