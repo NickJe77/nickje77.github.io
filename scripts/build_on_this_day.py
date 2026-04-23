@@ -5,24 +5,13 @@ from datetime import datetime
 import unicodedata
 import re
 
-print("BUILDING ON THIS DAY (ALL SPORTS + RACING + AU FIX)")
+print("BUILDING ON THIS DAY (FINAL)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
 
 data_out = {}
 seen = set()
-
-# -----------------------
-# SLUGIFY
-# -----------------------
-def slugify(name):
-    name = unicodedata.normalize("NFKD", name)
-    name = name.encode("ascii", "ignore").decode("ascii")
-    name = re.sub(r"[^\w\s-]", "", name)
-    name = name.strip().lower()
-    name = re.sub(r"\s+", "-", name)
-    return name
 
 # -----------------------
 # SAFE JSON LOAD
@@ -71,7 +60,7 @@ def parse_date(row):
     # AU numeric
     for fmt in ("%d/%m/%Y", "%d-%m-%Y"):
         try:
-            return datetime.strptime(d[:10], fmt)
+            return datetime.strptime(d.replace(" ", "")[:10], fmt)
         except:
             pass
 
@@ -103,7 +92,6 @@ def detect_sport(path):
     if "cycling" in p: return "Cycling"
     if "bathurst" in p: return "Motorsport"
     if "f1" in p: return "F1"
-    if "racing" in p: return "Racing"
 
     return None
 
@@ -196,9 +184,11 @@ def add_event(row, sport, d):
     })
 
 # -----------------------
-# PROCESS RACING CSV
+# PROCESS RACING CSV (FIXED)
 # -----------------------
 def process_racing_csv(file):
+
+    print("Processing CSV:", file)
 
     try:
         with open(file, newline='', encoding="utf-8") as f:
@@ -206,15 +196,16 @@ def process_racing_csv(file):
 
             for r in reader:
 
-                d = r.get("Date")
-                race = r.get("Race")
-                winner = r.get("Winner")
+                # flexible headers
+                d = r.get("Date") or r.get("date")
+                race = r.get("Race") or r.get("race")
+                winner = r.get("Winner") or r.get("winner")
 
                 if not d or not race or not winner:
                     continue
 
                 try:
-                    dt = datetime.strptime(d.strip(), "%d/%m/%Y")
+                    dt = datetime.strptime(d.strip().replace(" ", ""), "%d/%m/%Y")
                 except:
                     continue
 
@@ -247,10 +238,12 @@ for file in BASE.rglob("*"):
     if not file.is_file():
         continue
 
-    if file.suffix.lower() == ".csv" and "racing" in str(file).lower():
+    # 🔥 PROCESS ALL CSV FILES
+    if file.suffix.lower() == ".csv":
         process_racing_csv(file)
         continue
 
+    # JSON ONLY BELOW
     if file.suffix.lower() != ".json":
         continue
 
@@ -301,4 +294,4 @@ OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 OUTPUT.write_text(json.dumps(data_out, indent=2))
 
 print("✅ DONE")
-print("Days:", len(data_out))
+print("Days built:", len(data_out))
