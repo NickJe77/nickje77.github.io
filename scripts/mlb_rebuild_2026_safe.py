@@ -12,7 +12,7 @@ BOXSCORE_DIR = f"{BASE_DIR}/boxscores/{SEASON}"
 os.makedirs(BOXSCORE_DIR, exist_ok=True)
 
 # -------------------------
-# LOAD EXISTING
+# LOAD EXISTING SEASON DATA
 # -------------------------
 if os.path.exists(SEASON_FILE):
     with open(SEASON_FILE) as f:
@@ -22,50 +22,73 @@ else:
 
 existing_ids = {str(g.get("game_id")) for g in games_list}
 
+print("Loaded existing games:", len(existing_ids))
+
 # -------------------------
-# FETCH ALL GAMES (FIX GAP)
+# FETCH SCHEDULE (FULL RANGE)
 # -------------------------
 start_date = "2026-03-01"
 end_date = datetime.now().strftime("%Y-%m-%d")
+
+print("Fetching schedule:", start_date, "to", end_date)
 
 url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate={start_date}&endDate={end_date}"
 data = requests.get(url).json()
 
 added_games = 0
-added_box = 0
+added_boxscores = 0
 
+# -------------------------
+# LOOP GAMES
+# -------------------------
 for date in data.get("dates", []):
     for game in date.get("games", []):
 
         game_id = str(game.get("gamePk"))
         game_type = game.get("gameType")
 
+        # ONLY REGULAR + POSTSEASON
         if game_type not in ["R", "P"]:
             continue
+
+        status = game.get("status", {}).get("detailedState", "")
 
         teams = game.get("teams", {})
         home = teams.get("home", {})
         away = teams.get("away", {})
 
         # -------------------------
-        # BUILD BOXSCORE (CORRECT NAME)
+        # BUILD BOXSCORE (KEY FIX)
         # -------------------------
         box_path = f"{BOXSCORE_DIR}/{game_id}.json"
 
         if not os.path.exists(box_path):
-            try:
-                feed = requests.get(
-                    f"https://statsapi.mlb.com/api/v1.1/game/{game_id}/feed/live"
-                ).json()
 
-                with open(box_path, "w") as f:
-                    json.dump(feed, f)
+            if status != "Final":
+                print("Skipping (not final):", game_id)
+            else:
+                feed_url = f"https://statsapi.mlb.com/api/v1.1/game/{game_id}/feed/live"
 
-                added_box += 1
-                print("Saved boxscore:", game_id)
+                try:
+                    r = requests.get(feed_url)
 
-            except:
-                print("Failed boxscore:", game_id)
+                    if r.status_code != 200:
+                        print("Bad response:", game_id, r.status_code)
+                    else:
+                        feed = r.json()
+
+                        # validate feed
+                        if "liveData" not in feed or not feed["liveData"]:
+                            print("Empty feed:", game_id)
+                        else:
+                            with open(box_path, "w") as f:
+                                json.dump(feed, f)
+
+                            added_boxscores += 1
+                            print("Saved boxscore:", game_id)
+
+                except Exception as e:
+                    print("ERROR fetching boxscore:", game_id, str(e))
 
         # -------------------------
         # ADD TO SEASON FILE
@@ -86,15 +109,21 @@ for date in data.get("dates", []):
             added_games += 1
 
 # -------------------------
-# SORT (IMPORTANT FOR UI)
+# SORT (FOR YOUR UI)
 # -------------------------
 games_list.sort(key=lambda x: x["date"])
 
 # -------------------------
-# SAVE
+# SAVE SEASON FILE
 # -------------------------
 with open(SEASON_FILE, "w") as f:
     json.dump(games_list, f, indent=2)
 
-print(f"Added {added_games} games")
-print(f"Added {added_box} boxscores")
+# -------------------------
+# SUMMARY
+# -------------------------
+print("===================================")
+print("Added games:", added_games)
+print("Added boxscores:", added_boxscores)
+print("Total games now:", len(games_list))
+print("===================================")
