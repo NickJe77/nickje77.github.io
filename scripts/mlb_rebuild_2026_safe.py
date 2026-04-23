@@ -12,43 +12,26 @@ BOXSCORE_DIR = f"{BASE_DIR}/boxscores/{SEASON}"
 os.makedirs(BOXSCORE_DIR, exist_ok=True)
 
 # -------------------------
-# TEAM CODE FALLBACK MAP
+# TEAM ID → CODE (LOCKED)
 # -------------------------
-TEAM_CODES = {
-    "Arizona Diamondbacks":"ARI",
-    "Atlanta Braves":"ATL",
-    "Baltimore Orioles":"BAL",
-    "Boston Red Sox":"BOS",
-    "Chicago Cubs":"CHC",
-    "Chicago White Sox":"CHW",
-    "Cincinnati Reds":"CIN",
-    "Cleveland Guardians":"CLE",
-    "Colorado Rockies":"COL",
-    "Detroit Tigers":"DET",
-    "Houston Astros":"HOU",
-    "Kansas City Royals":"KAN",
-    "Los Angeles Angels":"LAA",
-    "Los Angeles Dodgers":"LOS",
-    "Miami Marlins":"MIA",
-    "Milwaukee Brewers":"MIL",
-    "Minnesota Twins":"MIN",
-    "New York Mets":"NEW",
-    "New York Yankees":"NEW",
-    "Oakland Athletics":"ATH",
-    "Philadelphia Phillies":"PHI",
-    "Pittsburgh Pirates":"PIT",
-    "San Diego Padres":"SAN",
-    "San Francisco Giants":"SAN",
-    "Seattle Mariners":"SEA",
-    "St. Louis Cardinals":"ST",
-    "Tampa Bay Rays":"TAM",
-    "Texas Rangers":"TEX",
-    "Toronto Blue Jays":"TOR",
-    "Washington Nationals":"WAS"
+TEAM_ID_MAP = {
+    109:"ARI", 144:"ATL", 110:"BAL", 111:"BOS", 112:"CHC", 145:"CHW",
+    113:"CIN", 114:"CLE", 115:"COL", 116:"DET", 117:"HOU", 118:"KAN",
+    108:"LAA", 119:"LOS", 146:"MIA", 158:"MIL", 142:"MIN",
+    121:"NEW", 147:"NEW",   # Mets / Yankees
+    133:"ATH",
+    143:"PHI", 134:"PIT",
+    135:"SAN", 137:"SAN",   # Padres / Giants
+    136:"SEA",
+    138:"ST",
+    139:"TAM",
+    140:"TEX",
+    141:"TOR",
+    120:"WAS"
 }
 
 # -------------------------
-# LOAD EXISTING SEASON
+# LOAD SEASON
 # -------------------------
 if os.path.exists(SEASON_FILE):
     with open(SEASON_FILE) as f:
@@ -71,6 +54,7 @@ data = requests.get(url).json()
 
 added_games = 0
 box_written = 0
+skipped_invalid = 0
 
 # -------------------------
 # LOOP GAMES
@@ -90,27 +74,18 @@ for date in data.get("dates", []):
         home = teams.get("home", {})
         away = teams.get("away", {})
 
-        # -------------------------
-        # TEAM NAMES
-        # -------------------------
-        away_team_name = away.get("team", {}).get("name", "")
-        home_team_name = home.get("team", {}).get("name", "")
+        home_id = home.get("team", {}).get("id")
+        away_id = away.get("team", {}).get("id")
 
-        # -------------------------
-        # TEAM CODES (FIXED)
-        # -------------------------
-        away_code = away.get("team", {}).get("abbreviation")
-        home_code = home.get("team", {}).get("abbreviation")
+        home_code = TEAM_ID_MAP.get(home_id)
+        away_code = TEAM_ID_MAP.get(away_id)
 
-        if not away_code:
-            away_code = TEAM_CODES.get(away_team_name, "UNK")
+        # 🔒 HARD LOCK — DO NOT WRITE BAD FILES
+        if not home_code or not away_code:
+            print("❌ SKIPPING (missing team code):", game_id, home_id, away_id)
+            skipped_invalid += 1
+            continue
 
-        if not home_code:
-            home_code = TEAM_CODES.get(home_team_name, "UNK")
-
-        # -------------------------
-        # BUILD FILENAME
-        # -------------------------
         filename = f"{date_str}_{away_code}_{home_code}.json"
         box_path = os.path.join(BOXSCORE_DIR, filename)
 
@@ -124,23 +99,23 @@ for date in data.get("dates", []):
                 r = requests.get(feed_url)
 
                 if r.status_code != 200:
-                    print("FAILED:", filename, r.status_code)
+                    print("❌ FAILED:", filename, r.status_code)
                     continue
 
                 feed = r.json()
 
                 if "liveData" not in feed:
-                    print("EMPTY:", filename)
+                    print("❌ EMPTY:", filename)
                     continue
 
                 with open(box_path, "w") as f:
                     json.dump(feed, f)
 
+                print("✅ WROTE:", filename)
                 box_written += 1
-                print("WROTE:", filename)
 
             except Exception as e:
-                print("ERROR:", filename, str(e))
+                print("❌ ERROR:", filename, str(e))
 
         # -------------------------
         # ADD TO SEASON FILE
@@ -150,8 +125,8 @@ for date in data.get("dates", []):
             game_obj = {
                 "game_id": game_id,
                 "date": date_str,
-                "away_team": away_team_name,
-                "home_team": home_team_name,
+                "away_team": away.get("team", {}).get("name", ""),
+                "home_team": home.get("team", {}).get("name", ""),
                 "away_score": away.get("score", None),
                 "home_score": home.get("score", None),
                 "venue": game.get("venue", {}).get("name", "")
@@ -177,4 +152,5 @@ with open(SEASON_FILE, "w") as f:
 print("================================")
 print("Games added:", added_games)
 print("Boxscores written:", box_written)
+print("Skipped invalid:", skipped_invalid)
 print("================================")
