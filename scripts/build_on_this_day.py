@@ -4,7 +4,7 @@ from datetime import datetime
 import unicodedata
 import re
 
-print("BUILDING ON THIS DAY (ALL SPORTS AUTO)")
+print("BUILDING ON THIS DAY (ALL SPORTS + AU FIX)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -37,9 +37,10 @@ def load_json_safe(path):
         return None
 
 # -----------------------
-# PARSE DATE
+# PARSE DATE (FIXED)
 # -----------------------
 def parse_date(row):
+
     d = (
         row.get("date")
         or row.get("game_date")
@@ -51,16 +52,37 @@ def parse_date(row):
     if not d:
         return None
 
+    d = str(d).strip()
+
+    # ISO / standard
     try:
-        return datetime.fromisoformat(str(d).replace("Z",""))
+        return datetime.fromisoformat(d.replace("Z", ""))
     except:
-        try:
-            return datetime.strptime(str(d)[:10], "%Y-%m-%d")
-        except:
-            return None
+        pass
+
+    # YYYY-MM-DD
+    try:
+        return datetime.strptime(d[:10], "%Y-%m-%d")
+    except:
+        pass
+
+    # 🔥 AU FORMAT (DD/MM/YYYY)
+    try:
+        return datetime.strptime(d[:10], "%d/%m/%Y")
+    except:
+        pass
+
+    # 🔥 AU FORMAT (DD-MM-YYYY)
+    try:
+        return datetime.strptime(d[:10], "%d-%m-%Y")
+    except:
+        pass
+
+    print("❌ BAD DATE:", d)
+    return None
 
 # -----------------------
-# DETECT SPORT (AUTO)
+# DETECT SPORT
 # -----------------------
 def detect_sport(path):
     p = str(path).lower()
@@ -87,12 +109,11 @@ def detect_sport(path):
     return None
 
 # -----------------------
-# FILTER FILES (CRITICAL)
+# FILTER FILES
 # -----------------------
 def is_valid_data_file(path):
     p = str(path).lower()
 
-    # ❌ skip junk
     if "players" in p:
         return False
     if "boxscores" in p:
@@ -105,15 +126,13 @@ def is_valid_data_file(path):
     return True
 
 # -----------------------
-# EXTRACT ROWS (ALL FORMATS)
+# EXTRACT ROWS
 # -----------------------
 def extract_rows(data):
 
-    # list format
     if isinstance(data, list):
         return data
 
-    # dict formats
     if isinstance(data, dict):
 
         if "games" in data:
@@ -135,11 +154,29 @@ def extract_rows(data):
 # -----------------------
 def add_event(row, sport, d):
 
-    team = row.get("team") or row.get("home_team")
-    opp = row.get("opponent") or row.get("away_team")
+    team = (
+        row.get("team")
+        or row.get("home_team")
+        or row.get("played_for")
+    )
 
-    ts = row.get("team_score") or row.get("home_score")
-    os = row.get("opponent_score") or row.get("away_score")
+    opp = (
+        row.get("opponent")
+        or row.get("away_team")
+        or row.get("played_against")
+    )
+
+    ts = (
+        row.get("team_score")
+        or row.get("home_score")
+        or row.get("home_points")
+    )
+
+    os = (
+        row.get("opponent_score")
+        or row.get("away_score")
+        or row.get("away_points")
+    )
 
     match_id = row.get("match_id") or row.get("game_id")
 
@@ -164,7 +201,7 @@ def add_event(row, sport, d):
     })
 
 # -----------------------
-# MAIN LOOP (AUTO)
+# MAIN LOOP
 # -----------------------
 for file in BASE.rglob("*.json"):
 
@@ -215,3 +252,4 @@ OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 OUTPUT.write_text(json.dumps(data_out, indent=2))
 
 print("✅ DONE")
+print("Days:", len(data_out))
