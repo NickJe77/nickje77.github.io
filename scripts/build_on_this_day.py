@@ -4,7 +4,7 @@ from datetime import datetime
 import unicodedata
 import re
 
-print("BUILDING ON THIS DAY (LOCKED + MULTI-SPORT)")
+print("BUILDING ON THIS DAY (ALL SPORTS AUTO)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -28,7 +28,7 @@ def slugify(name):
 # -----------------------
 def load_json_safe(path):
     try:
-        text = path.read_text().strip()
+        text = path.read_text(encoding="utf-8").strip()
         if not text:
             return None
         return json.loads(text)
@@ -40,29 +40,27 @@ def load_json_safe(path):
 # PARSE DATE
 # -----------------------
 def parse_date(row):
-    if not isinstance(row, dict):
-        return None
-
     d = (
         row.get("date")
         or row.get("game_date")
         or row.get("match_date")
         or row.get("Date")
+        or row.get("gameDate")
     )
 
     if not d:
         return None
 
     try:
-        return datetime.fromisoformat(d)
+        return datetime.fromisoformat(str(d).replace("Z",""))
     except:
         try:
-            return datetime.strptime(d, "%Y-%m-%d")
+            return datetime.strptime(str(d)[:10], "%Y-%m-%d")
         except:
             return None
 
 # -----------------------
-# DETECT SPORT
+# DETECT SPORT (AUTO)
 # -----------------------
 def detect_sport(path):
     p = str(path).lower()
@@ -72,44 +70,68 @@ def detect_sport(path):
     if "afl" in p:
         return "AFL"
     if "nrl" in p:
-        return "Football"
+        return "NRL"
     if "baseball" in p:
         return "MLB"
+    if "tennis" in p:
+        return "Tennis"
+    if "golf" in p:
+        return "Golf"
+    if "cycling" in p:
+        return "Cycling"
+    if "bathurst" in p:
+        return "Motorsport"
+    if "f1" in p:
+        return "F1"
 
     return None
 
 # -----------------------
-# LOAD NBA PLAYERS
+# FILTER FILES (CRITICAL)
 # -----------------------
-player_map = {}
-players_dir = BASE / "nba" / "players"
+def is_valid_data_file(path):
+    p = str(path).lower()
 
-if players_dir.exists():
-    for file in players_dir.glob("*.json"):
-        data = load_json_safe(file)
-        if not data:
-            continue
+    # ❌ skip junk
+    if "players" in p:
+        return False
+    if "boxscores" in p:
+        return False
+    if "index.json" in p:
+        return False
+    if "on_this_day.json" in p:
+        return False
 
-        name = file.stem.replace("-", " ").title()
-        pid = data.get("player_id") if isinstance(data, dict) else None
-
-        if pid:
-            player_map[str(pid)] = name
-
-print(f"Loaded {len(player_map)} NBA players")
+    return True
 
 # -----------------------
-# VALID GAME CHECK
+# EXTRACT ROWS (ALL FORMATS)
 # -----------------------
-def is_game_row(row):
-    return isinstance(row, dict) and (
-        "home_team" in row
-        or "team" in row
-        or "away_team" in row
-    )
+def extract_rows(data):
+
+    # list format
+    if isinstance(data, list):
+        return data
+
+    # dict formats
+    if isinstance(data, dict):
+
+        if "games" in data:
+            return data["games"]
+
+        if "matches" in data:
+            return data["matches"]
+
+        if "dates" in data:
+            rows = []
+            for d in data["dates"]:
+                rows.extend(d.get("games", []))
+            return rows
+
+    return []
 
 # -----------------------
-# ADD GAME EVENT
+# ADD EVENT
 # -----------------------
 def add_event(row, sport, d):
 
@@ -142,129 +164,39 @@ def add_event(row, sport, d):
     })
 
 # -----------------------
-# ADD PLAYER EVENTS
+# MAIN LOOP (AUTO)
 # -----------------------
-def add_player_events(row, sport, d):
+for file in BASE.rglob("*.json"):
 
-    players = row.get("players")
-    if not isinstance(players, list):
-        return
-
-    key = d.strftime("%m-%d")
-
-    for p in players:
-
-        if not isinstance(p, dict):
-            continue
-
-        # NBA
-        if sport == "NBA":
-            pts = p.get("points", 0)
-            reb = p.get("rebounds", 0)
-            ast = p.get("assists", 0)
-
-            pid = str(p.get("player_id"))
-            name = player_map.get(pid, f"Player {pid}")
-            slug = slugify(name)
-
-            if pts >= 50:
-                text = f"<a href='nba-player.html?player={slug}'>{name}</a> scored {pts} points"
-            elif sum(x >= 10 for x in [pts, reb, ast]) >= 3:
-                text = f"<a href='nba-player.html?player={slug}'>{name}</a> recorded a triple-double"
-            else:
-                continue
-
-        # AFL
-        elif sport == "AFL":
-            goals = p.get("goals", 0)
-            name = p.get("player_name") or "Unknown"
-            slug = slugify(name)
-
-            if goals >= 8:
-                text = f"<a href='afl-player.html?player={slug}'>{name}</a> kicked {goals} goals"
-            else:
-                continue
-
-        # NRL
-        elif sport == "Football":
-            tries = p.get("tries", 0)
-            name = p.get("player_name") or "Unknown"
-            slug = slugify(name)
-
-            if tries >= 3:
-                text = f"<a href='nrl-player.html?player={slug}'>{name}</a> scored {tries} tries"
-            else:
-                continue
-
-        else:
-            continue
-
-        data_out.setdefault(key, {})
-        data_out[key].setdefault(sport, [])
-
-        data_out[key][sport].append({
-            "year": d.year,
-            "text": text,
-            "sport": sport
-        })
-
-# -----------------------
-# TARGET DIRECTORIES ONLY
-# -----------------------
-TARGET_DIRS = [
-    BASE / "nba" / "seasons",
-    BASE / "afl",
-    BASE / "nrl",
-    BASE / "baseball" / "seasons"
-]
-
-# -----------------------
-# MAIN LOOP (DEDUPED)
-# -----------------------
-for dir_path in TARGET_DIRS:
-
-    if not dir_path.exists():
+    if not is_valid_data_file(file):
         continue
 
-    for file in dir_path.rglob("*.json"):
+    sport = detect_sport(file)
+    if not sport:
+        continue
 
-        if file.name == "on_this_day.json":
+    data = load_json_safe(file)
+    if not data:
+        continue
+
+    rows = extract_rows(data)
+
+    for row in rows:
+
+        if not isinstance(row, dict):
             continue
 
-        sport = detect_sport(file)
-        if not sport:
+        d = parse_date(row)
+        if not d:
             continue
 
-        data = load_json_safe(file)
-        if not data:
+        uid = f"{sport}|{d}|{row.get('game_id')}|{row.get('match_id')}"
+
+        if uid in seen:
             continue
+        seen.add(uid)
 
-        if isinstance(data, dict):
-            rows = data.get("games")
-            if not isinstance(rows, list):
-                continue
-        elif isinstance(data, list):
-            rows = data
-        else:
-            continue
-
-        for row in rows:
-
-            if not is_game_row(row):
-                continue
-
-            d = parse_date(row)
-            if not d:
-                continue
-
-            uid = f"{sport}_{row.get('game_id')}_{d}"
-
-            if uid in seen:
-                continue
-            seen.add(uid)
-
-            add_event(row, sport, d)
-            add_player_events(row, sport, d)
+        add_event(row, sport, d)
 
 # -----------------------
 # SORT
@@ -282,4 +214,4 @@ for day in data_out:
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 OUTPUT.write_text(json.dumps(data_out, indent=2))
 
-print(f"✅ DONE → {OUTPUT}")
+print("✅ DONE")
