@@ -1,7 +1,7 @@
 import requests
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 
 BASE_DIR = "docs/data/baseball"
 SEASON = "2026"
@@ -18,21 +18,24 @@ if os.path.exists(SEASON_FILE):
     with open(SEASON_FILE) as f:
         season_data = json.load(f)
 else:
-    season_data = {"season": SEASON, "games": []}
+    season_data = []
 
-existing_ids = {g["game_id"] for g in season_data["games"]}
+# 🔥 HANDLE BOTH STRUCTURES
+if isinstance(season_data, dict):
+    games_list = season_data.get("games", [])
+else:
+    games_list = season_data
+
+existing_ids = {str(g.get("game_id")) for g in games_list}
 
 # -------------------------
-# DATE RANGE (FIXED)
+# DATE RANGE
 # -------------------------
-start_date = datetime(2026, 3, 1)   # 🔥 start BEFORE your gap
+start_date = datetime(2026, 3, 1)
 end_date = datetime.now()
 
 print("Fetching games from", start_date.date(), "to", end_date.date())
 
-# -------------------------
-# FETCH SCHEDULE
-# -------------------------
 url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate={start_date.date()}&endDate={end_date.date()}"
 
 res = requests.get(url)
@@ -44,13 +47,12 @@ for date in data.get("dates", []):
     for game in date.get("games", []):
 
         game_id = str(game.get("gamePk"))
-
-        # only regular + postseason
         game_type = game.get("gameType")
+
+        # ONLY REGULAR + POSTSEASON
         if game_type not in ["R", "P"]:
             continue
 
-        # skip if already exists
         if game_id in existing_ids:
             continue
 
@@ -69,15 +71,21 @@ for date in data.get("dates", []):
             "venue": game.get("venue", {}).get("name", "")
         }
 
-        season_data["games"].append(game_obj)
+        games_list.append(game_obj)
         added += 1
 
 print(f"Added {added} new games")
 
 # -------------------------
-# SAVE SEASON FILE
+# SAVE (PRESERVE STRUCTURE)
 # -------------------------
+if isinstance(season_data, dict):
+    season_data["games"] = games_list
+    output = season_data
+else:
+    output = games_list
+
 with open(SEASON_FILE, "w") as f:
-    json.dump(season_data, f, indent=2)
+    json.dump(output, f, indent=2)
 
 print("Season file updated")
