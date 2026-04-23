@@ -1,68 +1,49 @@
 import requests
-from bs4 import BeautifulSoup
+import zipfile
+import io
 import json
 from pathlib import Path
 
-print("IPL 2026 FINAL SCRAPER")
+print("IPL 2026 BUILDER (CRICSHEET - STABLE)")
 
-URL = "https://www.espncricinfo.com/series/ipl-2026-1510719/match-results"
+URL = "https://cricsheet.org/downloads/ipl_json.zip"
 
 OUTPUT = Path("docs/data/ipl/seasons/2026.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
-session = requests.Session()
-
-session.headers.update({
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept": "text/html,application/xhtml+xml",
-    "Connection": "keep-alive"
-})
-
-# 🔁 retry logic
-for i in range(3):
-    r = session.get(URL)
-    if r.status_code == 200 and len(r.text) > 5000:
-        break
-    print("Retrying...", i)
-
-print("STATUS:", r.status_code)
-print("LEN:", len(r.text))
-
-soup = BeautifulSoup(r.text, "html.parser")
+r = requests.get(URL)
+z = zipfile.ZipFile(io.BytesIO(r.content))
 
 matches = []
 
-cards = soup.select("a[href*='/match/']")
-
-for a in cards:
-    text = a.get_text(" ", strip=True)
-
-    if " vs " not in text:
+for file in z.namelist():
+    if not file.endswith(".json"):
         continue
 
-    try:
-        team1, rest = text.split(" vs ")
-        team2 = rest.split(",")[0]
+    data = json.loads(z.read(file))
 
-        match = {
-            "teams": [team1.strip(), team2.strip()],
-            "text": text,
-            "link": "https://www.espncricinfo.com" + a["href"]
-        }
+    info = data.get("info", {})
+    season = str(info.get("season"))
 
-        matches.append(match)
-
-    except:
+    if season != "2026":
         continue
 
-# remove duplicates
-unique = {m["link"]: m for m in matches}.values()
+    match = {
+        "match_id": file.replace(".json",""),
+        "date": info.get("dates", [""])[0],
+        "teams": info.get("teams", []),
+        "venue": info.get("venue",""),
+        "result": info.get("outcome", {}),
+    }
+
+    matches.append(match)
+
+print("MATCHES FOUND:", len(matches))
 
 with open(OUTPUT, "w") as f:
     json.dump({
         "season": "2026",
-        "matches": list(unique)
+        "matches": matches
     }, f, indent=2)
 
-print("DONE:", len(unique))
+print("DONE")
