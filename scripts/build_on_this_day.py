@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import re
 
-print("BUILDING ON THIS DAY (FINAL WORKING VERSION)")
+print("BUILDING ON THIS DAY (MERGED VERSION)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -13,7 +13,7 @@ data_out = {}
 seen = set()
 
 # -----------------------
-# SAFE LOAD
+# LOAD
 # -----------------------
 def load_json_safe(path):
     try:
@@ -22,10 +22,9 @@ def load_json_safe(path):
         return None
 
 # -----------------------
-# DATE PARSER (ROWS)
+# DATE
 # -----------------------
 def parse_date(row):
-
     d = (
         row.get("date_iso")
         or row.get("date")
@@ -63,7 +62,7 @@ def parse_date(row):
     return None
 
 # -----------------------
-# SPORT DETECT
+# SPORT
 # -----------------------
 def detect_sport(path):
     p = str(path).lower()
@@ -79,7 +78,7 @@ def detect_sport(path):
     return None
 
 # -----------------------
-# FILTER FILES
+# FILTER
 # -----------------------
 def is_valid_data_file(path):
     p = str(path).lower()
@@ -89,32 +88,9 @@ def is_valid_data_file(path):
     return True
 
 # -----------------------
-# ADD MATCH RESULT
+# ADD FINAL EVENT
 # -----------------------
-def add_event(row, sport, d):
-
-    home = row.get("home_team") or row.get("played_for")
-    away = row.get("away_team") or row.get("played_against")
-
-    hs = row.get("home_score") or row.get("home_points")
-    as_ = row.get("away_score") or row.get("away_points")
-
-    if not home or not away:
-        return
-
-    try:
-        hs = int(str(hs))
-        as_ = int(str(as_))
-
-        if hs > as_:
-            text = f"{home} {hs} defeated {away} {as_}"
-        elif as_ > hs:
-            text = f"{away} {as_} defeated {home} {hs}"
-        else:
-            text = f"{home} {hs} drew with {away} {as_}"
-
-    except:
-        text = f"{home} vs {away}"
+def add_final_event(d, sport, text):
 
     key = d.strftime("%m-%d")
 
@@ -128,42 +104,85 @@ def add_event(row, sport, d):
     })
 
 # -----------------------
-# AFL PLAYER STATS
+# AFL MATCH BUILDER (MERGED)
 # -----------------------
-def add_afl_stats(row, d):
+def process_afl_file(file):
 
-    player = row.get("player")
-    goals = row.get("G")
-
-    if not player or goals is None:
+    data = load_json_safe(file)
+    if not data:
         return
 
-    try:
-        goals = int(goals)
-    except:
-        return
+    matches = {}
 
-    if goals < 5:
-        return
+    for row in data:
 
-    key = d.strftime("%m-%d")
+        d = parse_date(row)
+        if not d:
+            continue
 
-    uid = f"AFL|{d}|{player}|{goals}"
-    if uid in seen:
-        return
-    seen.add(uid)
+        match_id = row.get("match_id")
+        if not match_id:
+            continue
 
-    data_out.setdefault(key, {})
-    data_out[key].setdefault("AFL", [])
+        if match_id not in matches:
+            matches[match_id] = {
+                "date": d,
+                "home": row.get("played_for"),
+                "away": row.get("played_against"),
+                "hs": row.get("home_points"),
+                "as": row.get("away_points"),
+                "players": []
+            }
 
-    data_out[key]["AFL"].append({
-        "year": d.year,
-        "text": f"{player} kicked {goals} goals",
-        "sport": "AFL"
-    })
+        matches[match_id]["players"].append(row)
+
+    # BUILD OUTPUT
+    for match_id, m in matches.items():
+
+        uid = f"AFL|MATCH|{match_id}"
+        if uid in seen:
+            continue
+        seen.add(uid)
+
+        d = m["date"]
+        home = m["home"]
+        away = m["away"]
+
+        try:
+            hs = int(m["hs"])
+            as_ = int(m["as"])
+
+            if hs > as_:
+                result = f"{home} {hs} defeated {away} {as_}"
+            elif as_ > hs:
+                result = f"{away} {as_} defeated {home} {hs}"
+            else:
+                result = f"{home} {hs} drew with {away} {as_}"
+        except:
+            result = f"{home} vs {away}"
+
+        # 🔥 TOP GOAL KICKER
+        top_player = None
+        top_goals = 0
+
+        for p in m["players"]:
+            g = p.get("G")
+            try:
+                g = int(g)
+            except:
+                continue
+
+            if g > top_goals:
+                top_goals = g
+                top_player = p.get("player")
+
+        if top_player and top_goals >= 5:
+            result += f" — {top_player} kicked {top_goals} goals"
+
+        add_final_event(d, "AFL", result)
 
 # -----------------------
-# NBA BOXSCORE PLAYER STATS
+# NBA MATCH BUILDER (MERGED)
 # -----------------------
 def process_nba_boxscore(file):
 
@@ -171,7 +190,6 @@ def process_nba_boxscore(file):
     if not data:
         return
 
-    # ✅ DIRECT DATE FROM GAME OBJECT
     d_raw = data.get("date")
     if not d_raw:
         return
@@ -181,39 +199,52 @@ def process_nba_boxscore(file):
     except:
         return
 
-    key = d.strftime("%m-%d")
+    game_id = data.get("game_id")
 
+    uid = f"NBA|MATCH|{game_id}"
+    if uid in seen:
+        return
+    seen.add(uid)
+
+    home = data.get("home_team")
+    away = data.get("away_team")
+    hs = data.get("home_score")
+    as_ = data.get("away_score")
+
+    try:
+        hs = int(hs)
+        as_ = int(as_)
+
+        if hs > as_:
+            result = f"{home} {hs} defeated {away} {as_}"
+        elif as_ > hs:
+            result = f"{away} {as_} defeated {home} {hs}"
+        else:
+            result = f"{home} {hs} drew with {away} {as_}"
+    except:
+        result = f"{home} vs {away}"
+
+    # 🔥 TOP SCORER
     players = data.get("players", [])
 
+    top_player = None
+    top_pts = 0
+
     for p in players:
-
-        name = p.get("player")
         pts = p.get("points")
-
-        if not name or pts is None:
-            continue
-
         try:
             pts = int(pts)
         except:
             continue
 
-        if pts < 40:
-            continue
+        if pts > top_pts:
+            top_pts = pts
+            top_player = p.get("player")
 
-        uid = f"NBA|{d}|{name}|{pts}"
-        if uid in seen:
-            continue
-        seen.add(uid)
+    if top_player and top_pts >= 40:
+        result += f" — {top_player} scored {top_pts} points"
 
-        data_out.setdefault(key, {})
-        data_out[key].setdefault("NBA", [])
-
-        data_out[key]["NBA"].append({
-            "year": d.year,
-            "text": f"{name} scored {pts} points",
-            "sport": "NBA"
-        })
+    add_final_event(d, "NBA", result)
 
 # -----------------------
 # MAIN LOOP
@@ -223,41 +254,17 @@ for file in BASE.rglob("*"):
     if not file.is_file():
         continue
 
-    # 🔥 NBA BOXSCORES
-    if "nba" in str(file).lower() and "boxscores" in str(file).lower():
+    path = str(file).lower()
+
+    # NBA BOXSCORES
+    if "nba" in path and "boxscores" in path:
         process_nba_boxscore(file)
         continue
 
-    if file.suffix.lower() != ".json":
+    # AFL FILE
+    if "afl" in path and file.suffix == ".json":
+        process_afl_file(file)
         continue
-
-    if not is_valid_data_file(file):
-        continue
-
-    sport = detect_sport(file)
-    if not sport:
-        continue
-
-    data = load_json_safe(file)
-    if not data:
-        continue
-
-    # AFL is flat list
-    rows = data if isinstance(data, list) else data.get("games", [])
-
-    for row in rows:
-
-        if not isinstance(row, dict):
-            continue
-
-        d = parse_date(row)
-        if not d:
-            continue
-
-        add_event(row, sport, d)
-
-        if sport == "AFL":
-            add_afl_stats(row, d)
 
 # -----------------------
 # SORT
