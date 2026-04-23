@@ -19,24 +19,10 @@ body{font-family:Inter,system-ui,Arial;margin:0;background:#fff;color:#111;}
 h1{text-align:center;margin-bottom:6px;}
 .subtitle{text-align:center;color:#555;margin-bottom:10px;}
 
-/* FILTER */
-.filter-bar{
-  display:flex;
-  justify-content:center;
-  margin-bottom:20px;
-}
-
-select{
-  padding:10px 14px;
-  font-size:16px;
-  border-radius:8px;
-  border:1px solid #ccc;
-}
-
 /* CALENDAR */
 .calendar{
   max-width:420px;
-  margin:0 auto 30px;
+  margin:0 auto 20px;
   border:1px solid #ddd;
   border-radius:12px;
   padding:12px;
@@ -76,10 +62,43 @@ select{
   outline:2px solid #0056d6;
 }
 
-/* 🔥 NEW: highlight days with events */
+/* highlight days with events */
 .cal-has-events{
   background:#dbeafe;
   font-weight:600;
+}
+
+/* SPORT BUTTONS */
+.sport-tabs{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  gap:10px;
+  margin:0 auto 28px;
+  max-width:900px;
+}
+
+.sport-tab{
+  border:1px solid #cfd8e3;
+  background:#fff;
+  color:#111;
+  border-radius:999px;
+  padding:10px 16px;
+  font-size:14px;
+  font-weight:600;
+  cursor:pointer;
+  transition:.18s ease;
+}
+
+.sport-tab:hover{
+  background:#f3f7ff;
+  border-color:#9dbcf3;
+}
+
+.sport-tab.active{
+  background:#0056d6;
+  color:#fff;
+  border-color:#0056d6;
 }
 
 /* EVENTS */
@@ -120,16 +139,6 @@ select{
   <h1>On This Day in Sport</h1>
   <div class="subtitle" id="subtitle"></div>
 
-  <!-- FILTER -->
-  <div class="filter-bar">
-    <select id="sportFilter">
-      <option value="ALL">All Sports</option>
-      <option value="NBA">NBA</option>
-      <option value="AFL">AFL</option>
-      <option value="Football">NRL</option>
-    </select>
-  </div>
-
   <!-- CALENDAR -->
   <div class="calendar">
     <div class="cal-header">
@@ -139,6 +148,9 @@ select{
     </div>
     <div class="cal-grid" id="calendarGrid"></div>
   </div>
+
+  <!-- SPORT BUTTONS -->
+  <div class="sport-tabs" id="sportTabs"></div>
 
   <div id="content"></div>
 </div>
@@ -160,6 +172,39 @@ function getKey(d){
   return String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 }
 
+// ---------------- SPORT BUTTONS ----------------
+function renderSportTabs(date){
+  const key = getKey(date);
+  const dayData = DATA[key] || {};
+  const tabs = document.getElementById("sportTabs");
+
+  const sports = Object.keys(dayData).sort();
+
+  let html = `
+    <button class="sport-tab ${selectedSport === "ALL" ? "active" : ""}" data-sport="ALL">
+      All Sports
+    </button>
+  `;
+
+  sports.forEach(sport=>{
+    html += `
+      <button class="sport-tab ${selectedSport === sport ? "active" : ""}" data-sport="${sport}">
+        ${sport}
+      </button>
+    `;
+  });
+
+  tabs.innerHTML = html;
+
+  tabs.querySelectorAll(".sport-tab").forEach(btn=>{
+    btn.onclick = ()=>{
+      selectedSport = btn.dataset.sport;
+      renderSportTabs(selectedDate);
+      renderPage(selectedDate);
+    };
+  });
+}
+
 // ---------------- RENDER EVENTS ----------------
 function renderPage(date){
 
@@ -171,12 +216,13 @@ function renderPage(date){
   if(!dayData){
     document.getElementById("content").innerHTML =
       `<div class="empty">No events</div>`;
+    renderSportTabs(date);
     return;
   }
 
   let html="";
 
-  Object.keys(dayData).forEach(sport=>{
+  Object.keys(dayData).sort().forEach(sport=>{
 
     if(selectedSport !== "ALL" && sport !== selectedSport) return;
 
@@ -195,6 +241,7 @@ function renderPage(date){
   });
 
   document.getElementById("content").innerHTML = html || `<div class="empty">No events</div>`;
+  renderSportTabs(date);
 }
 
 // ---------------- CALENDAR ----------------
@@ -231,13 +278,13 @@ function renderCalendar(){
       div.classList.add("cal-selected");
     }
 
-    // 🔥 highlight if data exists
     if(DATA[key]){
       div.classList.add("cal-has-events");
     }
 
     div.onclick=()=>{
       selectedDate=date;
+      selectedSport="ALL";
       renderCalendar();
       renderPage(date);
     };
@@ -245,12 +292,6 @@ function renderCalendar(){
     grid.appendChild(div);
   }
 }
-
-// ---------------- FILTER ----------------
-document.getElementById("sportFilter").onchange = (e)=>{
-  selectedSport = e.target.value;
-  renderPage(selectedDate);
-};
 
 // ---------------- INIT ----------------
 fetch(DATA_URL)
