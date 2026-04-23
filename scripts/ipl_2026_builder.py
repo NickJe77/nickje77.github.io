@@ -1,79 +1,79 @@
 import requests
+from bs4 import BeautifulSoup
 import json
-import time
 from pathlib import Path
 
-print("IPL 2026 BUILDER (ESPN FIXED)")
+print("IPL 2026 RESULTS SCRAPER (WORKING)")
+
+URL = "https://www.espncricinfo.com/series/ipl-2026-1510719/match-results"
 
 OUTPUT = Path("docs/data/ipl/seasons/2026.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
-# 🔑 HEADERS FIX (this is what broke your old scraper)
-HEADERS = {
-    "User-Agent": "Mozilla/5.0",
-    "Accept": "application/json, text/plain, */*",
-    "Referer": "https://www.espncricinfo.com/",
-    "Origin": "https://www.espncricinfo.com"
+headers = {
+    "User-Agent": "Mozilla/5.0"
 }
 
-session = requests.Session()
-session.headers.update(HEADERS)
+r = requests.get(URL, headers=headers)
 
-# 🔢 IPL 2026 MATCH IDS (same structure as before)
-MATCH_IDS = list(range(70343128, 70343225))
+if r.status_code != 200:
+    print("FAILED:", r.status_code)
+    exit()
+
+soup = BeautifulSoup(r.text, "html.parser")
 
 matches = []
 
-for match_id in MATCH_IDS:
+cards = soup.find_all("a", href=True)
+
+for a in cards:
+    href = a["href"]
+
+    if "/match/" not in href:
+        continue
+
+    text = a.get_text(" ", strip=True)
+
+    if "v" not in text and "vs" not in text:
+        continue
+
     try:
-        url = f"https://site.web.api.espn.com/apis/v2/sports/cricket/ipl/scoreboard?event={match_id}"
+        parts = text.split("vs")
+        if len(parts) < 2:
+            parts = text.split("v")
 
-        r = session.get(url, timeout=10)
+        team1 = parts[0].strip()
+        rest = parts[1].strip()
 
-        print("ID:", match_id, "STATUS:", r.status_code, "LEN:", len(r.text))
-
-        if r.status_code != 200 or len(r.text) < 500:
-            continue
-
-        data = r.json()
-
-        if not data.get("events"):
-            continue
-
-        event = data["events"][0]
-        comp = event["competitions"][0]
-        teams = comp["competitors"]
+        team2 = rest.split(",")[0].strip()
 
         match = {
-            "match_id": match_id,
-            "date": event.get("date", ""),
-            "status": comp.get("status", {}).get("type", {}).get("description", ""),
-            "venue": comp.get("venue", {}).get("fullName", ""),
-            "teams": [
-                teams[0]["team"]["displayName"],
-                teams[1]["team"]["displayName"]
-            ],
-            "scores": [
-                teams[0].get("score", ""),
-                teams[1].get("score", "")
-            ]
+            "teams": [team1, team2],
+            "text": text,
+            "link": "https://www.espncricinfo.com" + href
         }
 
         matches.append(match)
-        print("✔ added", match_id)
 
-        time.sleep(1)
+    except:
+        continue
 
-    except Exception as e:
-        print("❌ fail", match_id, e)
+# remove duplicates
+unique = []
+seen = set()
 
-# 💾 SAVE
+for m in matches:
+    key = m["link"]
+    if key not in seen:
+        unique.append(m)
+        seen.add(key)
+
 out = {
     "season": "2026",
-    "matches": matches
+    "matches": unique
 }
 
 with open(OUTPUT, "w") as f:
     json.dump(out, f, indent=2)
 
-print("DONE:", len(matches), "matches")
+print("DONE:", len(unique), "matches")
