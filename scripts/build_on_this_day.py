@@ -1,10 +1,11 @@
 import json
+import csv
 from pathlib import Path
 from datetime import datetime
 import unicodedata
 import re
 
-print("BUILDING ON THIS DAY (ALL SPORTS + AU FIX)")
+print("BUILDING ON THIS DAY (ALL SPORTS + RACING + AU FIX)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -24,7 +25,7 @@ def slugify(name):
     return name
 
 # -----------------------
-# SAFE LOAD
+# SAFE JSON LOAD
 # -----------------------
 def load_json_safe(path):
     try:
@@ -33,16 +34,17 @@ def load_json_safe(path):
             return None
         return json.loads(text)
     except:
-        print(f"❌ Skipped bad JSON: {path}")
+        print(f"❌ Bad JSON: {path}")
         return None
 
 # -----------------------
-# PARSE DATE (FIXED)
+# DATE PARSER (ALL FORMATS)
 # -----------------------
 def parse_date(row):
 
     d = (
-        row.get("date")
+        row.get("date_iso")
+        or row.get("date")
         or row.get("game_date")
         or row.get("match_date")
         or row.get("Date")
@@ -54,7 +56,7 @@ def parse_date(row):
 
     d = str(d).strip()
 
-    # ISO / standard
+    # ISO
     try:
         return datetime.fromisoformat(d.replace("Z", ""))
     except:
@@ -66,15 +68,20 @@ def parse_date(row):
     except:
         pass
 
-    # 🔥 AU FORMAT (DD/MM/YYYY)
-    try:
-        return datetime.strptime(d[:10], "%d/%m/%Y")
-    except:
-        pass
+    # AU numeric
+    for fmt in ("%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(d[:10], fmt)
+        except:
+            pass
 
-    # 🔥 AU FORMAT (DD-MM-YYYY)
+    # AFL long format
     try:
-        return datetime.strptime(d[:10], "%d-%m-%Y")
+        if "," in d:
+            d = d.split(",", 1)[1].strip()
+        d = d.split(",")[0]
+        d = re.sub(r'(\d+)(st|nd|rd|th)', r'\1', d)
+        return datetime.strptime(d.strip(), "%d %B %Y")
     except:
         pass
 
@@ -82,29 +89,21 @@ def parse_date(row):
     return None
 
 # -----------------------
-# DETECT SPORT
+# SPORT DETECTION
 # -----------------------
 def detect_sport(path):
     p = str(path).lower()
 
-    if "nba" in p:
-        return "NBA"
-    if "afl" in p:
-        return "AFL"
-    if "nrl" in p:
-        return "NRL"
-    if "baseball" in p:
-        return "MLB"
-    if "tennis" in p:
-        return "Tennis"
-    if "golf" in p:
-        return "Golf"
-    if "cycling" in p:
-        return "Cycling"
-    if "bathurst" in p:
-        return "Motorsport"
-    if "f1" in p:
-        return "F1"
+    if "nba" in p: return "NBA"
+    if "afl" in p: return "AFL"
+    if "nrl" in p: return "NRL"
+    if "baseball" in p: return "MLB"
+    if "tennis" in p: return "Tennis"
+    if "golf" in p: return "Golf"
+    if "cycling" in p: return "Cycling"
+    if "bathurst" in p: return "Motorsport"
+    if "f1" in p: return "F1"
+    if "racing" in p: return "Racing"
 
     return None
 
@@ -114,19 +113,15 @@ def detect_sport(path):
 def is_valid_data_file(path):
     p = str(path).lower()
 
-    if "players" in p:
-        return False
-    if "boxscores" in p:
-        return False
-    if "index.json" in p:
-        return False
-    if "on_this_day.json" in p:
-        return False
+    if "players" in p: return False
+    if "boxscores" in p: return False
+    if "index.json" in p: return False
+    if "on_this_day.json" in p: return False
 
     return True
 
 # -----------------------
-# EXTRACT ROWS
+# EXTRACT JSON ROWS
 # -----------------------
 def extract_rows(data):
 
@@ -150,7 +145,7 @@ def extract_rows(data):
     return []
 
 # -----------------------
-# ADD EVENT
+# ADD GAME EVENT
 # -----------------------
 def add_event(row, sport, d):
 
@@ -201,9 +196,63 @@ def add_event(row, sport, d):
     })
 
 # -----------------------
+# PROCESS RACING CSV
+# -----------------------
+def process_racing_csv(file):
+
+    try:
+        with open(file, newline='', encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+
+            for r in reader:
+
+                d = r.get("Date")
+                race = r.get("Race")
+                winner = r.get("Winner")
+
+                if not d or not race or not winner:
+                    continue
+
+                try:
+                    dt = datetime.strptime(d.strip(), "%d/%m/%Y")
+                except:
+                    continue
+
+                key = dt.strftime("%m-%d")
+
+                uid = f"RACING|{dt}|{race}|{winner}"
+                if uid in seen:
+                    continue
+                seen.add(uid)
+
+                data_out.setdefault(key, {})
+                data_out[key].setdefault("Racing", [])
+
+                text = f"{winner.strip()} won the {race.strip()}"
+
+                data_out[key]["Racing"].append({
+                    "year": dt.year,
+                    "text": text,
+                    "sport": "Racing"
+                })
+
+    except Exception as e:
+        print("❌ CSV error:", file, e)
+
+# -----------------------
 # MAIN LOOP
 # -----------------------
-for file in BASE.rglob("*.json"):
+for file in BASE.rglob("*"):
+
+    if not file.is_file():
+        continue
+
+    if file.suffix.lower() == ".csv" and "racing" in str(file).lower():
+        process_racing_csv(file)
+        continue
+
+    if file.suffix.lower() != ".json":
+        continue
 
     if not is_valid_data_file(file):
         continue
