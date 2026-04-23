@@ -1,231 +1,83 @@
 import requests
 import json
-from pathlib import Path
-from datetime import datetime
-import time
-import re
 import os
+from datetime import datetime, timedelta
 
-print("MLB 2026 FULL BUILD (SCORE FIXED)")
+BASE_DIR = "docs/data/baseball"
+SEASON = "2026"
 
-SEASON = 2026
-BASE = "https://statsapi.mlb.com/api/v1.1"
+SEASON_FILE = f"{BASE_DIR}/seasons/{SEASON}.json"
+BOXSCORE_DIR = f"{BASE_DIR}/boxscores/{SEASON}"
 
-START_DATE = "2026-03-26"
-END_DATE = datetime.utcnow().strftime("%Y-%m-%d")
-
-BOX_DIR = Path(f"docs/data/baseball/boxscores/{SEASON}")
-SEASON_FILE = Path(f"docs/data/baseball/seasons/{SEASON}.json")
-
-BOX_DIR.mkdir(parents=True, exist_ok=True)
-SEASON_FILE.parent.mkdir(parents=True, exist_ok=True)
-
-HEADERS = {"User-Agent": "Mozilla/5.0"}
-
-INDEX = {}
-NEW_PLAYERS = {}
-SEASON_GAMES = []
-
+os.makedirs(BOXSCORE_DIR, exist_ok=True)
 
 # -------------------------
-# HELPERS
+# LOAD EXISTING DATA (SAFE)
 # -------------------------
+if os.path.exists(SEASON_FILE):
+    with open(SEASON_FILE) as f:
+        season_data = json.load(f)
+else:
+    season_data = {"season": SEASON, "games": []}
 
-def make_player_code(name):
-    name_clean = re.sub(r"[^\w\s]", "", name.lower())
-    parts = name_clean.split()
-    if len(parts) < 2:
-        return "unknown001"
-    code = f"{parts[-1][:5]}{parts[0][:2]}001"
-    NEW_PLAYERS[code] = name
-    return code
-
-
-def get_team_code(team):
-    return (
-        team.get("abbreviation")
-        or team.get("teamCode")
-        or team.get("fileCode")
-        or team.get("name", "")[:3].upper()
-    )
-
+existing_ids = {g["game_id"] for g in season_data["games"]}
 
 # -------------------------
-# GET SCHEDULE
+# DATE RANGE (FIXED)
 # -------------------------
+start_date = datetime(2026, 3, 1)   # 🔥 start BEFORE your gap
+end_date = datetime.now()
 
-def get_schedule():
-    url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate={START_DATE}&endDate={END_DATE}"
-    data = requests.get(url, headers=HEADERS).json()
-
-    games = []
-    for date in data.get("dates", []):
-        for g in date.get("games", []):
-
-            if g.get("gameType") not in ["R", "P"]:
-                continue
-
-            games.append({
-                "game_id": str(g["gamePk"]),
-                "date": g["gameDate"][:10],
-                "home": g["teams"]["home"]["team"],
-                "away": g["teams"]["away"]["team"]
-            })
-
-    print(f"FOUND {len(games)} GAMES")
-    return games
-
+print("Fetching games from", start_date.date(), "to", end_date.date())
 
 # -------------------------
-# BUILD GAME
+# FETCH SCHEDULE
 # -------------------------
+url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate={start_date.date()}&endDate={end_date.date()}"
 
-def build_game(game):
+res = requests.get(url)
+data = res.json()
 
-    game_id = game["game_id"]
-    url = f"{BASE}/game/{game_id}/feed/live"
+added = 0
 
-    data = requests.get(url, headers=HEADERS).json()
+for date in data.get("dates", []):
+    for game in date.get("games", []):
 
-    box = data["liveData"]["boxscore"]["teams"]
-    linescore = data["liveData"].get("linescore", {})
-    gameData = data.get("gameData", {})
+        game_id = str(game.get("gamePk"))
 
-    home_team = game["home"]
-    away_team = game["away"]
+        # only regular + postseason
+        game_type = game.get("gameType")
+        if game_type not in ["R", "P"]:
+            continue
 
-    home_code = get_team_code(home_team)
-    away_code = get_team_code(away_team)
+        # skip if already exists
+        if game_id in existing_ids:
+            continue
 
-    # -------------------------
-    # SCORE FIX (CRITICAL)
-    # -------------------------
+        teams = game.get("teams", {})
+        home = teams.get("home", {})
+        away = teams.get("away", {})
 
-    away_score = None
-    home_score = None
-
-    # 1. Try linescore
-    if linescore.get("teams"):
-        away_score = linescore["teams"].get("away", {}).get("runs")
-        home_score = linescore["teams"].get("home", {}).get("runs")
-
-    # 2. Fallback to boxscore
-    if away_score is None:
-        away_score = box["away"].get("teamStats", {}).get("batting", {}).get("runs")
-
-    if home_score is None:
-        home_score = box["home"].get("teamStats", {}).get("batting", {}).get("runs")
-
-    # 3. Final safety (never break frontend)
-    away_score = away_score if away_score is not None else 0
-    home_score = home_score if home_score is not None else 0
-
-    # -------------------------
-    # VENUE
-    # -------------------------
-
-    venue = gameData.get("venue", {}).get("name", "")
-
-    # -------------------------
-    # STATS
-    # -------------------------
-
-    def extract_batting(team):
-        out = []
-        for p in team["players"].values():
-            stats = p.get("stats", {}).get("batting")
-            if not stats:
-                continue
-            name = p["person"]["fullName"]
-            code = make_player_code(name)
-            out.append({
-                "player_id": code,
-                "AB": stats.get("atBats", 0),
-                "R": stats.get("runs", 0),
-                "H": stats.get("hits", 0),
-                "RBI": stats.get("rbi", 0),
-                "BB": stats.get("baseOnBalls", 0),
-                "SO": stats.get("strikeOuts", 0)
-            })
-        return out
-
-    def extract_pitching(team):
-        out = []
-        for p in team["players"].values():
-            stats = p.get("stats", {}).get("pitching")
-            if not stats:
-                continue
-            name = p["person"]["fullName"]
-            code = make_player_code(name)
-            out.append({
-                "player_id": code,
-                "IP": stats.get("inningsPitched", "0.0"),
-                "H": stats.get("hits", 0),
-                "R": stats.get("runs", 0),
-                "ER": stats.get("earnedRuns", 0),
-                "BB": stats.get("baseOnBalls", 0),
-                "SO": stats.get("strikeOuts", 0)
-            })
-        return out
-
-    # -------------------------
-    # SAVE BOX SCORE
-    # -------------------------
-
-    file_name = f"{game['date']}_{away_code}_{home_code}.json"
-
-    with open(BOX_DIR / file_name, "w") as f:
-        json.dump({
+        game_obj = {
             "game_id": game_id,
-            "date": game["date"],
-            "home_code": home_code,
-            "away_code": away_code,
-            "home_team": home_team.get("name"),
-            "away_team": away_team.get("name"),
-            "venue": venue,
-            "away_score": away_score,
-            "home_score": home_score,
-            "batters_home": extract_batting(box["home"]),
-            "batters_away": extract_batting(box["away"]),
-            "pitchers_home": extract_pitching(box["home"]),
-            "pitchers_away": extract_pitching(box["away"])
-        }, f, indent=2)
+            "date": game.get("gameDate", "")[:10],
+            "game_type": "Regular Season" if game_type == "R" else "Postseason",
+            "home_team": home.get("team", {}).get("name", ""),
+            "away_team": away.get("team", {}).get("name", ""),
+            "home_score": home.get("score", 0),
+            "away_score": away.get("score", 0),
+            "venue": game.get("venue", {}).get("name", "")
+        }
 
-    os.utime(BOX_DIR / file_name, None)
+        season_data["games"].append(game_obj)
+        added += 1
 
-    INDEX[game_id] = file_name
-
-    # -------------------------
-    # SEASON ENTRY
-    # -------------------------
-
-    SEASON_GAMES.append({
-        "game_id": game_id,
-        "date": game["date"],
-        "home_team": home_team.get("name"),
-        "away_team": away_team.get("name"),
-        "venue": venue,
-        "away_score": away_score,
-        "home_score": home_score
-    })
-
+print(f"Added {added} new games")
 
 # -------------------------
-# RUN BUILD
+# SAVE SEASON FILE
 # -------------------------
-
-games = get_schedule()
-
-for g in games:
-    build_game(g)
-    time.sleep(0.3)
-
-# index file
-with open(BOX_DIR / "index.json", "w") as f:
-    json.dump(INDEX, f, indent=2)
-
-# season file (matches your 2025 structure)
 with open(SEASON_FILE, "w") as f:
-    json.dump(SEASON_GAMES, f, indent=2)
+    json.dump(season_data, f, indent=2)
 
-print("DONE — SCORES FIXED, BUILD COMPLETE")
+print("Season file updated")
