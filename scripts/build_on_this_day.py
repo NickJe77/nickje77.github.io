@@ -4,12 +4,13 @@ from datetime import datetime
 import unicodedata
 import re
 
-print("BUILDING ON THIS DAY (FINAL - NAMES + LINKS + STABLE)")
+print("BUILDING ON THIS DAY (LOCKED + MULTI-SPORT)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
 
 data_out = {}
+seen = set()
 
 # -----------------------
 # SLUGIFY
@@ -72,28 +73,25 @@ def detect_sport(path):
         return "AFL"
     if "nrl" in p:
         return "Football"
+    if "baseball" in p:
+        return "MLB"
 
     return None
 
 # -----------------------
-# LOAD NBA PLAYERS (FIXED)
+# LOAD NBA PLAYERS
 # -----------------------
 player_map = {}
 players_dir = BASE / "nba" / "players"
 
 if players_dir.exists():
     for file in players_dir.glob("*.json"):
-
         data = load_json_safe(file)
         if not data:
             continue
 
-        # 🔥 get name from filename
         name = file.stem.replace("-", " ").title()
-
-        pid = None
-        if isinstance(data, dict):
-            pid = data.get("player_id")
+        pid = data.get("player_id") if isinstance(data, dict) else None
 
         if pid:
             player_map[str(pid)] = name
@@ -159,9 +157,8 @@ def add_player_events(row, sport, d):
         if not isinstance(p, dict):
             continue
 
-        # ---------- NBA ----------
+        # NBA
         if sport == "NBA":
-
             pts = p.get("points", 0)
             reb = p.get("rebounds", 0)
             ast = p.get("assists", 0)
@@ -172,16 +169,13 @@ def add_player_events(row, sport, d):
 
             if pts >= 50:
                 text = f"<a href='nba-player.html?player={slug}'>{name}</a> scored {pts} points"
-
             elif sum(x >= 10 for x in [pts, reb, ast]) >= 3:
                 text = f"<a href='nba-player.html?player={slug}'>{name}</a> recorded a triple-double"
-
             else:
                 continue
 
-        # ---------- AFL ----------
+        # AFL
         elif sport == "AFL":
-
             goals = p.get("goals", 0)
             name = p.get("player_name") or "Unknown"
             slug = slugify(name)
@@ -191,9 +185,8 @@ def add_player_events(row, sport, d):
             else:
                 continue
 
-        # ---------- NRL ----------
+        # NRL
         elif sport == "Football":
-
             tries = p.get("tries", 0)
             name = p.get("player_name") or "Unknown"
             slug = slugify(name)
@@ -216,41 +209,62 @@ def add_player_events(row, sport, d):
         })
 
 # -----------------------
-# MAIN LOOP
+# TARGET DIRECTORIES ONLY
 # -----------------------
-for file in BASE.rglob("*.json"):
+TARGET_DIRS = [
+    BASE / "nba" / "seasons",
+    BASE / "afl",
+    BASE / "nrl",
+    BASE / "baseball" / "seasons"
+]
 
-    if file.name == "on_this_day.json":
+# -----------------------
+# MAIN LOOP (DEDUPED)
+# -----------------------
+for dir_path in TARGET_DIRS:
+
+    if not dir_path.exists():
         continue
 
-    sport = detect_sport(file)
-    if not sport:
-        continue
+    for file in dir_path.rglob("*.json"):
 
-    data = load_json_safe(file)
-    if not data:
-        continue
-
-    if isinstance(data, dict):
-        rows = data.get("games")
-        if not isinstance(rows, list):
-            continue
-    elif isinstance(data, list):
-        rows = data
-    else:
-        continue
-
-    for row in rows:
-
-        if not is_game_row(row):
+        if file.name == "on_this_day.json":
             continue
 
-        d = parse_date(row)
-        if not d:
+        sport = detect_sport(file)
+        if not sport:
             continue
 
-        add_event(row, sport, d)
-        add_player_events(row, sport, d)
+        data = load_json_safe(file)
+        if not data:
+            continue
+
+        if isinstance(data, dict):
+            rows = data.get("games")
+            if not isinstance(rows, list):
+                continue
+        elif isinstance(data, list):
+            rows = data
+        else:
+            continue
+
+        for row in rows:
+
+            if not is_game_row(row):
+                continue
+
+            d = parse_date(row)
+            if not d:
+                continue
+
+            uid = f"{sport}_{row.get('game_id')}_{d}"
+
+            if uid in seen:
+                continue
+            seen.add(uid)
+
+            add_event(row, sport, d)
+            add_player_events(row, sport, d)
 
 # -----------------------
 # SORT
