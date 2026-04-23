@@ -1,124 +1,79 @@
-import json
 import requests
+import json
 import time
 from pathlib import Path
-from bs4 import BeautifulSoup
 
-SERIES_ID = "1510719"
-OUT_FILE = Path("docs/data/ipl/seasons/2026.json")
-OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+print("IPL 2026 BUILDER (ESPN FIXED)")
 
-MATCH_ID_START = 1529244
-MATCH_ID_END = 1529317
+OUTPUT = Path("docs/data/ipl/seasons/2026.json")
+OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+
+# 🔑 HEADERS FIX (this is what broke your old scraper)
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json, text/plain, */*",
+    "Referer": "https://www.espncricinfo.com/",
+    "Origin": "https://www.espncricinfo.com"
+}
 
 session = requests.Session()
+session.headers.update(HEADERS)
 
-def get_next_data(html):
-    soup = BeautifulSoup(html, "html.parser")
-    script = soup.find("script", id="__NEXT_DATA__")
-    if not script:
-        return None
-    return json.loads(script.string)
+# 🔢 IPL 2026 MATCH IDS (same structure as before)
+MATCH_IDS = list(range(70343128, 70343225))
 
-def parse_match(match_id):
-    url = f"https://www.espncricinfo.com/series/ipl-2026-{SERIES_ID}/match-{match_id}/full-scorecard"
-    
-    r = session.get(url)
-    if r.status_code != 200:
-        return None
+matches = []
 
-    data = get_next_data(r.text)
-    if not data:
-        return None
-
+for match_id in MATCH_IDS:
     try:
-        props = data["props"]["pageProps"]
-        content = props["data"]["content"]
+        url = f"https://site.web.api.espn.com/apis/v2/sports/cricket/ipl/scoreboard?event={match_id}"
+
+        r = session.get(url, timeout=10)
+
+        print("ID:", match_id, "STATUS:", r.status_code, "LEN:", len(r.text))
+
+        if r.status_code != 200 or len(r.text) < 500:
+            continue
+
+        data = r.json()
+
+        if not data.get("events"):
+            continue
+
+        event = data["events"][0]
+        comp = event["competitions"][0]
+        teams = comp["competitors"]
 
         match = {
-            "match_id": str(match_id),
-            "teams": [],
-            "date": "",
-            "venue": "",
-            "result": "",
-            "innings": []
+            "match_id": match_id,
+            "date": event.get("date", ""),
+            "status": comp.get("status", {}).get("type", {}).get("description", ""),
+            "venue": comp.get("venue", {}).get("fullName", ""),
+            "teams": [
+                teams[0]["team"]["displayName"],
+                teams[1]["team"]["displayName"]
+            ],
+            "scores": [
+                teams[0].get("score", ""),
+                teams[1].get("score", "")
+            ]
         }
 
-        # basic info
-        header = content.get("header", {})
-        if header:
-            match["teams"] = [
-                header.get("team1", {}).get("team", {}).get("name", ""),
-                header.get("team2", {}).get("team", {}).get("name", "")
-            ]
-            match["venue"] = header.get("ground", {}).get("name", "")
-            match["date"] = header.get("startDate", "")
-            match["result"] = header.get("statusText", "")
-
-        # innings
-        innings = content.get("innings", [])
-
-        for inn in innings:
-            inning = {
-                "team": inn.get("team", {}).get("name", ""),
-                "runs": inn.get("score", {}).get("runs", 0),
-                "wickets": inn.get("score", {}).get("wickets", 0),
-                "overs": inn.get("score", {}).get("overs", ""),
-                "batting": [],
-                "bowling": []
-            }
-
-            # batting
-            for b in inn.get("batsmen", []):
-                inning["batting"].append({
-                    "player": b.get("player", {}).get("name", ""),
-                    "runs": b.get("runs", 0),
-                    "balls": b.get("balls", 0),
-                    "4s": b.get("fours", 0),
-                    "6s": b.get("sixes", 0),
-                    "dismissal": b.get("dismissalText", "")
-                })
-
-            # bowling
-            for b in inn.get("bowlers", []):
-                inning["bowling"].append({
-                    "player": b.get("player", {}).get("name", ""),
-                    "overs": b.get("overs", ""),
-                    "runs": b.get("runs", 0),
-                    "wickets": b.get("wickets", 0)
-                })
-
-            match["innings"].append(inning)
-
-        return match
-
-    except Exception:
-        return None
-
-
-def main():
-    matches = []
-
-    for match_id in range(MATCH_ID_START, MATCH_ID_END + 1):
-        m = parse_match(match_id)
-        if m:
-            matches.append(m)
-            print("✔", match_id)
-        else:
-            print("skip", match_id)
+        matches.append(match)
+        print("✔ added", match_id)
 
         time.sleep(1)
 
-    out = {
-        "season": "2026",
-        "matches": matches
-    }
+    except Exception as e:
+        print("❌ fail", match_id, e)
 
-    with open(OUT_FILE, "w") as f:
-        json.dump(out, f, indent=2)
+# 💾 SAVE
+out = {
+    "season": "2026",
+    "matches": matches
+}
 
-    print("DONE:", len(matches))
+with open(OUTPUT, "w") as f:
+    json.dump(out, f, indent=2)
 
-
-if __name__ == "__main__":
-    main()
+print("DONE:", len(matches), "matches")
