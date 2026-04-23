@@ -12,7 +12,43 @@ BOXSCORE_DIR = f"{BASE_DIR}/boxscores/{SEASON}"
 os.makedirs(BOXSCORE_DIR, exist_ok=True)
 
 # -------------------------
-# LOAD SEASON DATA
+# TEAM CODE FALLBACK MAP
+# -------------------------
+TEAM_CODES = {
+    "Arizona Diamondbacks":"ARI",
+    "Atlanta Braves":"ATL",
+    "Baltimore Orioles":"BAL",
+    "Boston Red Sox":"BOS",
+    "Chicago Cubs":"CHC",
+    "Chicago White Sox":"CHW",
+    "Cincinnati Reds":"CIN",
+    "Cleveland Guardians":"CLE",
+    "Colorado Rockies":"COL",
+    "Detroit Tigers":"DET",
+    "Houston Astros":"HOU",
+    "Kansas City Royals":"KAN",
+    "Los Angeles Angels":"LAA",
+    "Los Angeles Dodgers":"LOS",
+    "Miami Marlins":"MIA",
+    "Milwaukee Brewers":"MIL",
+    "Minnesota Twins":"MIN",
+    "New York Mets":"NEW",
+    "New York Yankees":"NEW",
+    "Oakland Athletics":"ATH",
+    "Philadelphia Phillies":"PHI",
+    "Pittsburgh Pirates":"PIT",
+    "San Diego Padres":"SAN",
+    "San Francisco Giants":"SAN",
+    "Seattle Mariners":"SEA",
+    "St. Louis Cardinals":"ST",
+    "Tampa Bay Rays":"TAM",
+    "Texas Rangers":"TEX",
+    "Toronto Blue Jays":"TOR",
+    "Washington Nationals":"WAS"
+}
+
+# -------------------------
+# LOAD EXISTING SEASON
 # -------------------------
 if os.path.exists(SEASON_FILE):
     with open(SEASON_FILE) as f:
@@ -37,7 +73,7 @@ added_games = 0
 box_written = 0
 
 # -------------------------
-# LOOP
+# LOOP GAMES
 # -------------------------
 for date in data.get("dates", []):
     for game in date.get("games", []):
@@ -48,18 +84,33 @@ for date in data.get("dates", []):
         if game_type not in ["R", "P"]:
             continue
 
-        # -------------------------
-        # BUILD FILENAME (YOUR FORMAT)
-        # -------------------------
         date_str = game.get("gameDate", "")[:10]
 
         teams = game.get("teams", {})
         home = teams.get("home", {})
         away = teams.get("away", {})
 
-        away_code = away.get("team", {}).get("abbreviation", "")
-        home_code = home.get("team", {}).get("abbreviation", "")
+        # -------------------------
+        # TEAM NAMES
+        # -------------------------
+        away_team_name = away.get("team", {}).get("name", "")
+        home_team_name = home.get("team", {}).get("name", "")
 
+        # -------------------------
+        # TEAM CODES (FIXED)
+        # -------------------------
+        away_code = away.get("team", {}).get("abbreviation")
+        home_code = home.get("team", {}).get("abbreviation")
+
+        if not away_code:
+            away_code = TEAM_CODES.get(away_team_name, "UNK")
+
+        if not home_code:
+            home_code = TEAM_CODES.get(home_team_name, "UNK")
+
+        # -------------------------
+        # BUILD FILENAME
+        # -------------------------
         filename = f"{date_str}_{away_code}_{home_code}.json"
         box_path = os.path.join(BOXSCORE_DIR, filename)
 
@@ -99,8 +150,8 @@ for date in data.get("dates", []):
             game_obj = {
                 "game_id": game_id,
                 "date": date_str,
-                "away_team": away.get("team", {}).get("name", ""),
-                "home_team": home.get("team", {}).get("name", ""),
+                "away_team": away_team_name,
+                "home_team": home_team_name,
                 "away_score": away.get("score", None),
                 "home_score": home.get("score", None),
                 "venue": game.get("venue", {}).get("name", "")
