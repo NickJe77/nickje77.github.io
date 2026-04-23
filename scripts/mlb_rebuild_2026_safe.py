@@ -12,7 +12,7 @@ BOXSCORE_DIR = f"{BASE_DIR}/boxscores/{SEASON}"
 os.makedirs(BOXSCORE_DIR, exist_ok=True)
 
 # -------------------------
-# LOAD EXISTING SEASON DATA
+# LOAD EXISTING SEASON
 # -------------------------
 if os.path.exists(SEASON_FILE):
     with open(SEASON_FILE) as f:
@@ -22,7 +22,7 @@ else:
 
 existing_ids = {str(g.get("game_id")) for g in games_list}
 
-print("Loaded existing games:", len(existing_ids))
+print("Existing games:", len(existing_ids))
 
 # -------------------------
 # FETCH SCHEDULE (FULL RANGE)
@@ -36,10 +36,10 @@ url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate={start_date
 data = requests.get(url).json()
 
 added_games = 0
-added_boxscores = 0
+box_written = 0
 
 # -------------------------
-# LOOP GAMES
+# LOOP THROUGH GAMES
 # -------------------------
 for date in data.get("dates", []):
     for game in date.get("games", []):
@@ -47,53 +47,45 @@ for date in data.get("dates", []):
         game_id = str(game.get("gamePk"))
         game_type = game.get("gameType")
 
-        # ONLY REGULAR + POSTSEASON
         if game_type not in ["R", "P"]:
             continue
 
-        status = game.get("status", {}).get("detailedState", "")
-
-        teams = game.get("teams", {})
-        home = teams.get("home", {})
-        away = teams.get("away", {})
+        print("Processing:", game_id)
 
         # -------------------------
-        # BUILD BOXSCORE (KEY FIX)
+        # FORCE BOXSCORE WRITE
         # -------------------------
         box_path = f"{BOXSCORE_DIR}/{game_id}.json"
 
-        if not os.path.exists(box_path):
+        try:
+            # 🔥 DIFFERENT ENDPOINT (MORE STABLE)
+            url = f"https://statsapi.mlb.com/api/v1/game/{game_id}/boxscore"
+            r = requests.get(url)
 
-            if status != "Final":
-                print("Skipping (not final):", game_id)
-            else:
-                feed_url = f"https://statsapi.mlb.com/api/v1.1/game/{game_id}/feed/live"
+            if r.status_code != 200:
+                print("FAILED:", game_id, r.status_code)
+                continue
 
-                try:
-                    r = requests.get(feed_url)
+            data = r.json()
 
-                    if r.status_code != 200:
-                        print("Bad response:", game_id, r.status_code)
-                    else:
-                        feed = r.json()
+            # 🔥 ALWAYS WRITE (even partial)
+            with open(box_path, "w") as f:
+                json.dump(data, f)
 
-                        # validate feed
-                        if "liveData" not in feed or not feed["liveData"]:
-                            print("Empty feed:", game_id)
-                        else:
-                            with open(box_path, "w") as f:
-                                json.dump(feed, f)
+            box_written += 1
+            print("WROTE:", game_id)
 
-                            added_boxscores += 1
-                            print("Saved boxscore:", game_id)
-
-                except Exception as e:
-                    print("ERROR fetching boxscore:", game_id, str(e))
+        except Exception as e:
+            print("ERROR:", game_id, str(e))
 
         # -------------------------
         # ADD TO SEASON FILE
         # -------------------------
         if game_id not in existing_ids:
+
+            teams = game.get("teams", {})
+            home = teams.get("home", {})
+            away = teams.get("away", {})
 
             game_obj = {
                 "game_id": game_id,
@@ -109,12 +101,12 @@ for date in data.get("dates", []):
             added_games += 1
 
 # -------------------------
-# SORT (FOR YOUR UI)
+# SORT
 # -------------------------
 games_list.sort(key=lambda x: x["date"])
 
 # -------------------------
-# SAVE SEASON FILE
+# SAVE SEASON
 # -------------------------
 with open(SEASON_FILE, "w") as f:
     json.dump(games_list, f, indent=2)
@@ -122,8 +114,7 @@ with open(SEASON_FILE, "w") as f:
 # -------------------------
 # SUMMARY
 # -------------------------
-print("===================================")
-print("Added games:", added_games)
-print("Added boxscores:", added_boxscores)
-print("Total games now:", len(games_list))
-print("===================================")
+print("================================")
+print("Games added:", added_games)
+print("Boxscores written:", box_written)
+print("================================")
