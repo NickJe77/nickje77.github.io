@@ -12,7 +12,7 @@ BOXSCORE_DIR = f"{BASE_DIR}/boxscores/{SEASON}"
 os.makedirs(BOXSCORE_DIR, exist_ok=True)
 
 # -------------------------
-# LOAD EXISTING DATA (SAFE)
+# LOAD SEASON DATA
 # -------------------------
 if os.path.exists(SEASON_FILE):
     with open(SEASON_FILE) as f:
@@ -20,28 +20,23 @@ if os.path.exists(SEASON_FILE):
 else:
     season_data = []
 
-# 🔥 HANDLE BOTH STRUCTURES
-if isinstance(season_data, dict):
-    games_list = season_data.get("games", [])
-else:
-    games_list = season_data
+games_list = season_data if isinstance(season_data, list) else season_data.get("games", [])
 
 existing_ids = {str(g.get("game_id")) for g in games_list}
 
 # -------------------------
-# DATE RANGE
+# DATE RANGE (FIX GAP)
 # -------------------------
 start_date = datetime(2026, 3, 1)
 end_date = datetime.now()
 
-print("Fetching games from", start_date.date(), "to", end_date.date())
+print("Fetching schedule...")
 
 url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate={start_date.date()}&endDate={end_date.date()}"
+data = requests.get(url).json()
 
-res = requests.get(url)
-data = res.json()
-
-added = 0
+added_games = 0
+new_boxscores = 0
 
 for date in data.get("dates", []):
     for game in date.get("games", []):
@@ -49,35 +44,58 @@ for date in data.get("dates", []):
         game_id = str(game.get("gamePk"))
         game_type = game.get("gameType")
 
-        # ONLY REGULAR + POSTSEASON
         if game_type not in ["R", "P"]:
             continue
 
-        if game_id in existing_ids:
-            continue
+        # -------------------------
+        # BUILD BOXSCORE IF MISSING
+        # -------------------------
+        box_file = f"{BOXSCORE_DIR}/{game_id}.json"
 
-        teams = game.get("teams", {})
-        home = teams.get("home", {})
-        away = teams.get("away", {})
+        if not os.path.exists(box_file):
+            feed_url = f"https://statsapi.mlb.com/api/v1.1/game/{game_id}/feed/live"
 
-        game_obj = {
-            "game_id": game_id,
-            "date": game.get("gameDate", "")[:10],
-            "game_type": "Regular Season" if game_type == "R" else "Postseason",
-            "home_team": home.get("team", {}).get("name", ""),
-            "away_team": away.get("team", {}).get("name", ""),
-            "home_score": home.get("score", 0),
-            "away_score": away.get("score", 0),
-            "venue": game.get("venue", {}).get("name", "")
-        }
+            try:
+                feed = requests.get(feed_url).json()
 
-        games_list.append(game_obj)
-        added += 1
+                with open(box_file, "w") as f:
+                    json.dump(feed, f)
 
-print(f"Added {added} new games")
+                new_boxscores += 1
+                print("Saved boxscore:", game_id)
+
+            except Exception as e:
+                print("Failed boxscore:", game_id)
+                continue
+
+        # -------------------------
+        # ADD TO SEASON FILE
+        # -------------------------
+        if game_id not in existing_ids:
+
+            teams = game.get("teams", {})
+            home = teams.get("home", {})
+            away = teams.get("away", {})
+
+            game_obj = {
+                "game_id": game_id,
+                "date": game.get("gameDate", "")[:10],
+                "game_type": "Regular Season" if game_type == "R" else "Postseason",
+                "home_team": home.get("team", {}).get("name", ""),
+                "away_team": away.get("team", {}).get("name", ""),
+                "home_score": home.get("score", 0),
+                "away_score": away.get("score", 0),
+                "venue": game.get("venue", {}).get("name", "")
+            }
+
+            games_list.append(game_obj)
+            added_games += 1
+
+print(f"Added {added_games} games")
+print(f"Added {new_boxscores} boxscores")
 
 # -------------------------
-# SAVE (PRESERVE STRUCTURE)
+# SAVE SEASON FILE
 # -------------------------
 if isinstance(season_data, dict):
     season_data["games"] = games_list
@@ -88,4 +106,4 @@ else:
 with open(SEASON_FILE, "w") as f:
     json.dump(output, f, indent=2)
 
-print("Season file updated")
+print("Done")
