@@ -1,41 +1,35 @@
 import requests
-from bs4 import BeautifulSoup
 import json
 from pathlib import Path
-import re
 
-print("🌍 WORLD CUP BUILDER (WIKI VERSION)")
+print("🌍 WORLD CUP BUILDER (API VERSION)")
 
 BASE = Path("docs/data/cricket/worldcups")
 BASE.mkdir(parents=True, exist_ok=True)
 
-URL = "https://en.wikipedia.org/wiki/2023_Cricket_World_Cup"
+# -----------------------
+# ⚠️ GET FREE API KEY
+# https://cricapi.com/
+# -----------------------
+API_KEY = "YOUR_API_KEY_HERE"
+
+URL = f"https://api.cricapi.com/v1/series_info?apikey={API_KEY}&id=9b4b78e0-5f8c-4b62-9e56-0d4b9b9c9a45"
 
 r = requests.get(URL)
-soup = BeautifulSoup(r.text, "html.parser")
+data = r.json()
 
 matches = []
 
-tables = soup.select("table.wikitable")
+if data.get("data"):
 
-for table in tables:
-
-    rows = table.find_all("tr")
-
-    for row in rows[1:]:
-        cols = [c.get_text(strip=True) for c in row.find_all(["td","th"])]
-
-        if len(cols) < 3:
-            continue
-
-        text = " ".join(cols)
-
-        # crude but effective filter
-        if "v" not in text.lower() and "beat" not in text.lower():
-            continue
+    for match in data["data"].get("matchList", []):
 
         matches.append({
-            "text": text
+            "match_id": match.get("id"),
+            "name": match.get("name"),
+            "date": match.get("date"),
+            "status": match.get("status"),
+            "venue": match.get("venue")
         })
 
 print("Matches found:", len(matches))
@@ -45,7 +39,7 @@ print("Matches found:", len(matches))
 # -----------------------
 out_file = BASE / "2023.json"
 
-with open(out_file, "w", encoding="utf-8") as f:
+with open(out_file, "w") as f:
     json.dump(matches, f, indent=2)
 
 print("Saved:", out_file)
