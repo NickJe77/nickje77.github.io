@@ -1,45 +1,77 @@
 import requests
 import json
+import zipfile
+import io
 from pathlib import Path
 
-print("🌍 WORLD CUP BUILDER (API VERSION)")
+print("🌍 WORLD CUP BUILDER (CRICSHEET)")
 
 BASE = Path("docs/data/cricket/worldcups")
 BASE.mkdir(parents=True, exist_ok=True)
 
 # -----------------------
-# ⚠️ GET FREE API KEY
-# https://cricapi.com/
+# DOWNLOAD DATA
 # -----------------------
-API_KEY = "YOUR_API_KEY_HERE"
+URL = "https://cricsheet.org/downloads/odis_male_json.zip"
 
-URL = f"https://api.cricapi.com/v1/series_info?apikey={API_KEY}&id=9b4b78e0-5f8c-4b62-9e56-0d4b9b9c9a45"
-
+print("⬇️ Downloading dataset...")
 r = requests.get(URL)
-data = r.json()
+
+z = zipfile.ZipFile(io.BytesIO(r.content))
 
 matches = []
 
-if data.get("data"):
+# -----------------------
+# LOOP FILES
+# -----------------------
+for file in z.namelist():
 
-    for match in data["data"].get("matchList", []):
+    if not file.endswith(".json"):
+        continue
 
-        matches.append({
-            "match_id": match.get("id"),
-            "name": match.get("name"),
-            "date": match.get("date"),
-            "status": match.get("status"),
-            "venue": match.get("venue")
-        })
+    data = json.loads(z.read(file))
 
-print("Matches found:", len(matches))
+    info = data.get("info", {})
+
+    # ONLY WORLD CUP
+    if "world cup" not in str(info.get("event", "")).lower():
+        continue
+
+    teams = info.get("teams", [])
+    dates = info.get("dates", [])
+    venue = info.get("venue", "")
+
+    outcome = info.get("outcome", {})
+
+    winner = outcome.get("winner", "")
+    by = outcome.get("by", {})
+
+    margin = ""
+    if "runs" in by:
+        margin = f"{by['runs']} runs"
+    elif "wickets" in by:
+        margin = f"{by['wickets']} wickets"
+
+    if len(teams) != 2:
+        continue
+
+    matches.append({
+        "date": dates[0] if dates else "",
+        "team1": teams[0],
+        "team2": teams[1],
+        "winner": winner,
+        "margin": margin,
+        "venue": venue
+    })
+
+print("✅ Matches found:", len(matches))
 
 # -----------------------
 # SAVE
 # -----------------------
-out_file = BASE / "2023.json"
+out_file = BASE / "world_cups_all.json"
 
 with open(out_file, "w") as f:
     json.dump(matches, f, indent=2)
 
-print("Saved:", out_file)
+print("💾 Saved:", out_file)
