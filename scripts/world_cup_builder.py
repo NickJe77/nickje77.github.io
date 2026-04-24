@@ -4,7 +4,7 @@ import zipfile
 import io
 from pathlib import Path
 
-print("🌍 WORLD CUP BUILDER (CLEAN)")
+print("🌍 WORLD CUP BUILDER (WITH SCORES)")
 
 BASE = Path("docs/data/cricket/worldcups")
 BASE.mkdir(parents=True, exist_ok=True)
@@ -26,22 +26,42 @@ for file in z.namelist():
 
     event = str(info.get("event", "")).lower()
 
-    # 🔥 CRITICAL FILTER
+    # ✅ ONLY MAIN WORLD CUP
     if "world cup" not in event:
         continue
-
-    # ❌ REMOVE QUALIFIERS
     if "qualifier" in event:
-        continue
-
-    # ❌ REMOVE OTHER EVENTS
-    if any(x in event for x in ["league", "super league", "warm-up"]):
         continue
 
     teams = info.get("teams", [])
     dates = info.get("dates", [])
     venue = info.get("venue", "")
 
+    if len(teams) != 2:
+        continue
+
+    # -----------------------
+    # 🏏 GET SCORES FROM INNINGS
+    # -----------------------
+    scores = {}
+
+    for inn in data.get("innings", []):
+
+        team = inn.get("team")
+        runs = 0
+        wickets = 0
+
+        for over in inn.get("overs", []):
+            for ball in over.get("deliveries", []):
+                runs += ball.get("runs", {}).get("total", 0)
+
+                if "wickets" in ball:
+                    wickets += len(ball["wickets"])
+
+        scores[team] = f"{runs}/{wickets}"
+
+    # -----------------------
+    # RESULT
+    # -----------------------
     outcome = info.get("outcome", {})
     winner = outcome.get("winner", "")
     by = outcome.get("by", {})
@@ -52,24 +72,23 @@ for file in z.namelist():
     elif "wickets" in by:
         margin = f"{by['wickets']} wickets"
 
-    if len(teams) != 2:
-        continue
-
     matches.append({
         "date": dates[0] if dates else "",
         "team1": teams[0],
         "team2": teams[1],
+        "team1_score": scores.get(teams[0], ""),
+        "team2_score": scores.get(teams[1], ""),
         "winner": winner,
         "margin": margin,
         "venue": venue
     })
 
-print("✅ Matches found:", len(matches))
+print("✅ Matches:", len(matches))
 
 # -----------------------
 # SAVE
 # -----------------------
-out_file = BASE / "world_cup_clean.json"
+out_file = BASE / "world_cup_with_scores.json"
 
 with open(out_file, "w") as f:
     json.dump(matches, f, indent=2)
