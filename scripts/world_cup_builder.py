@@ -3,8 +3,9 @@ import json
 import zipfile
 import io
 from pathlib import Path
+from collections import defaultdict
 
-print("🌍 WORLD CUP BUILDER (WITH SCORES)")
+print("🌍 WORLD CUP BUILDER (WITH PLAYER STATS)")
 
 BASE = Path("docs/data/cricket/worldcups")
 BASE.mkdir(parents=True, exist_ok=True)
@@ -26,7 +27,7 @@ for file in z.namelist():
 
     event = str(info.get("event", "")).lower()
 
-    # ✅ ONLY MAIN WORLD CUP
+    # ✅ FILTER WORLD CUP ONLY
     if "world cup" not in event:
         continue
     if "qualifier" in event:
@@ -39,11 +40,13 @@ for file in z.namelist():
     if len(teams) != 2:
         continue
 
-    # -----------------------
-    # 🏏 GET SCORES FROM INNINGS
-    # -----------------------
     scores = {}
+    bat_stats = defaultdict(int)
+    bowl_stats = defaultdict(int)
 
+    # -----------------------
+    # PROCESS INNINGS
+    # -----------------------
     for inn in data.get("innings", []):
 
         team = inn.get("team")
@@ -52,12 +55,46 @@ for file in z.namelist():
 
         for over in inn.get("overs", []):
             for ball in over.get("deliveries", []):
+
+                # total runs
                 runs += ball.get("runs", {}).get("total", 0)
 
+                # batsman runs
+                batter = ball.get("batter")
+                bat_runs = ball.get("runs", {}).get("batter", 0)
+
+                if batter:
+                    bat_stats[batter] += bat_runs
+
+                # wickets
                 if "wickets" in ball:
                     wickets += len(ball["wickets"])
 
+                    for w in ball["wickets"]:
+                        bowler = ball.get("bowler")
+                        if bowler:
+                            bowl_stats[bowler] += 1
+
         scores[team] = f"{runs}/{wickets}"
+
+    # -----------------------
+    # TOP PLAYERS
+    # -----------------------
+    top_batter = ""
+    top_runs = 0
+
+    for p, r in bat_stats.items():
+        if r > top_runs:
+            top_runs = r
+            top_batter = p
+
+    top_bowler = ""
+    top_wkts = 0
+
+    for p, w in bowl_stats.items():
+        if w > top_wkts:
+            top_wkts = w
+            top_bowler = p
 
     # -----------------------
     # RESULT
@@ -80,7 +117,9 @@ for file in z.namelist():
         "team2_score": scores.get(teams[1], ""),
         "winner": winner,
         "margin": margin,
-        "venue": venue
+        "venue": venue,
+        "top_batter": f"{top_batter} ({top_runs})" if top_batter else "",
+        "top_bowler": f"{top_bowler} ({top_wkts})" if top_bowler else ""
     })
 
 print("✅ Matches:", len(matches))
@@ -88,7 +127,7 @@ print("✅ Matches:", len(matches))
 # -----------------------
 # SAVE
 # -----------------------
-out_file = BASE / "world_cup_with_scores.json"
+out_file = BASE / "world_cup_full.json"
 
 with open(out_file, "w") as f:
     json.dump(matches, f, indent=2)
