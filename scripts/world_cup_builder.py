@@ -2,103 +2,50 @@ import requests
 from bs4 import BeautifulSoup
 import json
 from pathlib import Path
-import time
+import re
 
-print("🌍 WORLD CUP BUILDER STARTED")
+print("🌍 WORLD CUP BUILDER (WIKI VERSION)")
 
 BASE = Path("docs/data/cricket/worldcups")
 BASE.mkdir(parents=True, exist_ok=True)
 
-TOURNAMENTS = [
-    {
-        "year": 2023,
-        "slug": "icc-cricket-world-cup-2023-1345038"
-    }
-]
+URL = "https://en.wikipedia.org/wiki/2023_Cricket_World_Cup"
 
-def scrape_tournament(year, slug):
+r = requests.get(URL)
+soup = BeautifulSoup(r.text, "html.parser")
 
-    print(f"➡️ Scraping {year}")
+matches = []
 
-    url = f"https://www.espncricinfo.com/series/{slug}/match-results"
-    r = requests.get(url)
+tables = soup.select("table.wikitable")
 
-    soup = BeautifulSoup(r.text, "html.parser")
+for table in tables:
 
-    matches = []
+    rows = table.find_all("tr")
 
-    # 🔥 UPDATED SELECTOR (WORKING)
-    rows = soup.select("div.ds-p-4")
+    for row in rows[1:]:
+        cols = [c.get_text(strip=True) for c in row.find_all(["td","th"])]
 
-    for row in rows:
-
-        teams = row.select("p.ds-text-tight-m")
-
-        if len(teams) < 2:
+        if len(cols) < 3:
             continue
 
-        team1 = teams[0].text.strip()
-        team2 = teams[1].text.strip()
+        text = " ".join(cols)
 
-        result_el = row.select_one("span.ds-text-tight-s")
-        result = result_el.text.strip() if result_el else ""
-
-        link = row.find("a", href=True)
-        match_url = ""
-        if link:
-            match_url = "https://www.espncricinfo.com" + link["href"]
+        # crude but effective filter
+        if "v" not in text.lower() and "beat" not in text.lower():
+            continue
 
         matches.append({
-            "team1": team1,
-            "team2": team2,
-            "result": result,
-            "url": match_url,
-            "year": year
+            "text": text
         })
 
-    print(f"✅ {year} matches found: {len(matches)}")
-
-    # 🛑 FAIL SAFE
-    if len(matches) == 0:
-        print("❌ ERROR: No matches found — site structure likely changed")
-        return []
-
-    out_file = BASE / f"{year}.json"
-
-    with open(out_file, "w", encoding="utf-8") as f:
-        json.dump(matches, f, indent=2)
-
-    print(f"💾 Saved: {out_file}")
-
-    return matches
-
-def build_index(all_data):
-
-    index = []
-
-    for year, matches in all_data.items():
-        index.append({
-            "year": year,
-            "matches": len(matches)
-        })
-
-    with open(BASE / "index.json", "w") as f:
-        json.dump(index, f, indent=2)
-
-    print("📚 Index built")
+print("Matches found:", len(matches))
 
 # -----------------------
-# MAIN
+# SAVE
 # -----------------------
-all_data = {}
+out_file = BASE / "2023.json"
 
-for t in TOURNAMENTS:
-    data = scrape_tournament(t["year"], t["slug"])
-    if data:
-        all_data[t["year"]] = data
-    time.sleep(1)
+with open(out_file, "w", encoding="utf-8") as f:
+    json.dump(matches, f, indent=2)
 
-if all_data:
-    build_index(all_data)
-
-print("🏁 DONE")
+print("Saved:", out_file)
