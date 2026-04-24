@@ -1,9 +1,10 @@
 import json
+import csv
 from pathlib import Path
 from datetime import datetime
 import re
 
-print("BUILDING ON THIS DAY (FINAL – NBA FIXED)")
+print("BUILDING ON THIS DAY (FINAL – ALL FIXED)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -64,7 +65,6 @@ def parse_date(row):
 # ADD EVENT
 # -----------------------
 def add_final_event(d, sport, text):
-
     key = d.strftime("%m-%d")
 
     data_out.setdefault(key, {})
@@ -97,8 +97,8 @@ def process_generic_file(file, sport):
             continue
 
         match_id = row.get("match_id") or row.get("game_id")
-
         uid = f"{sport}|{match_id}"
+
         if uid in seen:
             continue
         seen.add(uid)
@@ -182,7 +182,7 @@ def process_afl_file(file):
         except:
             result = f"{m['home']} vs {m['away']}"
 
-        # top goals
+        # top goal kicker
         top_player = None
         top_goals = 0
 
@@ -201,7 +201,7 @@ def process_afl_file(file):
         add_final_event(d, "AFL", result)
 
 # -----------------------
-# NBA MERGED (FIXED PATH)
+# NBA MERGED (YOUR STRUCTURE)
 # -----------------------
 def process_nba_game(file):
 
@@ -223,8 +223,8 @@ def process_nba_game(file):
         return
 
     game_id = data.get("game_id")
-
     uid = f"NBA|{game_id}"
+
     if uid in seen:
         return
     seen.add(uid)
@@ -266,6 +266,50 @@ def process_nba_game(file):
     add_final_event(d, "NBA", result)
 
 # -----------------------
+# RACING CSV
+# -----------------------
+def process_racing_csv(file):
+
+    try:
+        with open(file, newline='', encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+
+            for r in reader:
+
+                d = r.get("Date") or r.get("date")
+                race = r.get("Race") or r.get("race")
+                winner = r.get("Winner") or r.get("winner")
+
+                if not d or not race or not winner:
+                    continue
+
+                try:
+                    dt = datetime.strptime(d.strip().replace(" ", ""), "%d/%m/%Y")
+                except:
+                    continue
+
+                key = dt.strftime("%m-%d")
+
+                uid = f"RACING|{dt}|{race}|{winner}"
+                if uid in seen:
+                    continue
+                seen.add(uid)
+
+                data_out.setdefault(key, {})
+                data_out[key].setdefault("Racing", [])
+
+                text = f"{winner.strip()} won the {race.strip()}"
+
+                data_out[key]["Racing"].append({
+                    "year": dt.year,
+                    "text": text,
+                    "sport": "Racing"
+                })
+
+    except Exception as e:
+        print("❌ CSV error:", file, e)
+
+# -----------------------
 # SPORT DETECT
 # -----------------------
 def detect_sport(path):
@@ -291,17 +335,22 @@ for file in BASE.rglob("*"):
 
     path = str(file).lower()
 
-    # NBA (YOUR STRUCTURE)
+    # 1. RACING CSV FIRST
+    if file.suffix.lower() == ".csv":
+        process_racing_csv(file)
+        continue
+
+    # 2. NBA (your structure)
     if "docs/data/nba/" in path and path.endswith(".json"):
         process_nba_game(file)
         continue
 
-    # AFL
+    # 3. AFL
     if "docs/data/afl/" in path and path.endswith(".json"):
         process_afl_file(file)
         continue
 
-    # ALL OTHER SPORTS
+    # 4. ALL OTHER SPORTS
     if path.endswith(".json"):
         sport = detect_sport(file)
         if sport and sport not in ["NBA", "AFL"]:
