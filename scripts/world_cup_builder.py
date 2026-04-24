@@ -6,15 +6,9 @@ import time
 
 print("🌍 WORLD CUP BUILDER STARTED")
 
-# -----------------------
-# OUTPUT DIR (FIXES YOUR ERROR)
-# -----------------------
 BASE = Path("docs/data/cricket/worldcups")
 BASE.mkdir(parents=True, exist_ok=True)
 
-# -----------------------
-# TOURNAMENTS (ADD MORE HERE)
-# -----------------------
 TOURNAMENTS = [
     {
         "year": 2023,
@@ -22,25 +16,23 @@ TOURNAMENTS = [
     }
 ]
 
-# -----------------------
-# SCRAPER
-# -----------------------
 def scrape_tournament(year, slug):
 
     print(f"➡️ Scraping {year}")
 
     url = f"https://www.espncricinfo.com/series/{slug}/match-results"
-
     r = requests.get(url)
+
     soup = BeautifulSoup(r.text, "html.parser")
 
     matches = []
 
-    cards = soup.select("div.ds-border-b.ds-border-line")
+    # 🔥 UPDATED SELECTOR (WORKING)
+    rows = soup.select("div.ds-p-4")
 
-    for card in cards:
+    for row in rows:
 
-        teams = card.select("p.ds-text-tight-m.ds-font-bold.ds-truncate")
+        teams = row.select("p.ds-text-tight-m")
 
         if len(teams) < 2:
             continue
@@ -48,13 +40,13 @@ def scrape_tournament(year, slug):
         team1 = teams[0].text.strip()
         team2 = teams[1].text.strip()
 
-        result_el = card.select_one("p.ds-text-tight-s.ds-font-regular.ds-truncate")
+        result_el = row.select_one("span.ds-text-tight-s")
         result = result_el.text.strip() if result_el else ""
 
-        link = card.find("a")
+        link = row.find("a", href=True)
         match_url = ""
         if link:
-            match_url = "https://www.espncricinfo.com" + link.get("href")
+            match_url = "https://www.espncricinfo.com" + link["href"]
 
         matches.append({
             "team1": team1,
@@ -66,9 +58,11 @@ def scrape_tournament(year, slug):
 
     print(f"✅ {year} matches found: {len(matches)}")
 
-    # -----------------------
-    # SAVE FILE
-    # -----------------------
+    # 🛑 FAIL SAFE
+    if len(matches) == 0:
+        print("❌ ERROR: No matches found — site structure likely changed")
+        return []
+
     out_file = BASE / f"{year}.json"
 
     with open(out_file, "w", encoding="utf-8") as f:
@@ -78,9 +72,6 @@ def scrape_tournament(year, slug):
 
     return matches
 
-# -----------------------
-# BUILD INDEX
-# -----------------------
 def build_index(all_data):
 
     index = []
@@ -91,9 +82,7 @@ def build_index(all_data):
             "matches": len(matches)
         })
 
-    index_file = BASE / "index.json"
-
-    with open(index_file, "w", encoding="utf-8") as f:
+    with open(BASE / "index.json", "w") as f:
         json.dump(index, f, indent=2)
 
     print("📚 Index built")
@@ -105,7 +94,8 @@ all_data = {}
 
 for t in TOURNAMENTS:
     data = scrape_tournament(t["year"], t["slug"])
-    all_data[t["year"]] = data
+    if data:
+        all_data[t["year"]] = data
     time.sleep(1)
 
 if all_data:
