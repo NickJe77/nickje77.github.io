@@ -4,8 +4,9 @@ import zipfile
 import io
 from pathlib import Path
 from collections import defaultdict
+import hashlib
 
-print("🌍 WORLD CUP BUILDER (WITH PLAYER STATS)")
+print("🌍 WORLD CUP FULL SYSTEM")
 
 BASE = Path("docs/data/cricket/worldcups")
 BASE.mkdir(parents=True, exist_ok=True)
@@ -15,8 +16,11 @@ URL = "https://cricsheet.org/downloads/odis_male_json.zip"
 r = requests.get(URL)
 z = zipfile.ZipFile(io.BytesIO(r.content))
 
-matches = []
+season_index = []
 
+# -----------------------
+# LOOP MATCHES
+# -----------------------
 for file in z.namelist():
 
     if not file.endswith(".json"):
@@ -27,7 +31,7 @@ for file in z.namelist():
 
     event = str(info.get("event", "")).lower()
 
-    # ✅ FILTER WORLD CUP ONLY
+    # ✅ ONLY REAL WORLD CUP
     if "world cup" not in event:
         continue
     if "qualifier" in event:
@@ -40,61 +44,90 @@ for file in z.namelist():
     if len(teams) != 2:
         continue
 
-    scores = {}
-    bat_stats = defaultdict(int)
-    bowl_stats = defaultdict(int)
+    match_id = hashlib.md5(file.encode()).hexdigest()[:10]
+
+    innings_data = []
 
     # -----------------------
-    # PROCESS INNINGS
+    # BUILD INNINGS
     # -----------------------
     for inn in data.get("innings", []):
 
         team = inn.get("team")
-        runs = 0
-        wickets = 0
+
+        batting = defaultdict(lambda: {
+            "runs": 0,
+            "balls": 0,
+            "fours": 0,
+            "sixes": 0,
+            "out": False
+        })
+
+        bowling = defaultdict(lambda: {
+            "balls": 0,
+            "runs": 0,
+            "wickets": 0
+        })
+
+        total_runs = 0
+        total_wkts = 0
 
         for over in inn.get("overs", []):
             for ball in over.get("deliveries", []):
 
-                # total runs
-                runs += ball.get("runs", {}).get("total", 0)
-
-                # batsman runs
                 batter = ball.get("batter")
-                bat_runs = ball.get("runs", {}).get("batter", 0)
+                bowler = ball.get("bowler")
 
+                runs = ball.get("runs", {})
+                bat_runs = runs.get("batter", 0)
+                total = runs.get("total", 0)
+
+                total_runs += total
+
+                # -----------------------
+                # BATTING
+                # -----------------------
                 if batter:
-                    bat_stats[batter] += bat_runs
+                    batting[batter]["runs"] += bat_runs
+                    batting[batter]["balls"] += 1
 
-                # wickets
+                    if bat_runs == 4:
+                        batting[batter]["fours"] += 1
+                    if bat_runs == 6:
+                        batting[batter]["sixes"] += 1
+
+                # -----------------------
+                # BOWLING
+                # -----------------------
+                if bowler:
+                    bowling[bowler]["balls"] += 1
+                    bowling[bowler]["runs"] += total
+
+                # -----------------------
+                # WICKETS
+                # -----------------------
                 if "wickets" in ball:
-                    wickets += len(ball["wickets"])
+                    total_wkts += len(ball["wickets"])
 
                     for w in ball["wickets"]:
-                        bowler = ball.get("bowler")
+                        player_out = w.get("player_out")
+                        if player_out:
+                            batting[player_out]["out"] = True
+
                         if bowler:
-                            bowl_stats[bowler] += 1
+                            bowling[bowler]["wickets"] += 1
 
-        scores[team] = f"{runs}/{wickets}"
+        # convert balls → overs
+        for b in bowling.values():
+            b["overs"] = f"{b['balls']//6}.{b['balls']%6}"
+            del b["balls"]
 
-    # -----------------------
-    # TOP PLAYERS
-    # -----------------------
-    top_batter = ""
-    top_runs = 0
-
-    for p, r in bat_stats.items():
-        if r > top_runs:
-            top_runs = r
-            top_batter = p
-
-    top_bowler = ""
-    top_wkts = 0
-
-    for p, w in bowl_stats.items():
-        if w > top_wkts:
-            top_wkts = w
-            top_bowler = p
+        innings_data.append({
+            "team": team,
+            "score": f"{total_runs}/{total_wkts}",
+            "batting": dict(batting),
+            "bowling": dict(bowling)
+        })
 
     # -----------------------
     # RESULT
@@ -109,27 +142,47 @@ for file in z.namelist():
     elif "wickets" in by:
         margin = f"{by['wickets']} wickets"
 
-    matches.append({
+    match = {
+        "match_id": match_id,
         "date": dates[0] if dates else "",
         "team1": teams[0],
         "team2": teams[1],
-        "team1_score": scores.get(teams[0], ""),
-        "team2_score": scores.get(teams[1], ""),
+        "venue": venue,
         "winner": winner,
         "margin": margin,
-        "venue": venue,
-        "top_batter": f"{top_batter} ({top_runs})" if top_batter else "",
-        "top_bowler": f"{top_bowler} ({top_wkts})" if top_bowler else ""
+        "innings": innings_data
+    }
+
+    # -----------------------
+    # SAVE MATCH FILE
+    # -----------------------
+    year = match["date"][:4]
+    year_path = BASE / year
+    year_path.mkdir(parents=True, exist_ok=True)
+
+    match_file = year_path / f"{match_id}.json"
+
+    with open(match_file, "w") as f:
+        json.dump(match, f, indent=2)
+
+    # -----------------------
+    # ADD TO SEASON INDEX
+    # -----------------------
+    season_index.append({
+        "match_id": match_id,
+        "date": match["date"],
+        "team1": match["team1"],
+        "team2": match["team2"],
+        "winner": match["winner"]
     })
 
-print("✅ Matches:", len(matches))
-
 # -----------------------
-# SAVE
+# SAVE SEASON INDEX
 # -----------------------
-out_file = BASE / "world_cup_full.json"
+index_file = BASE / "index.json"
 
-with open(out_file, "w") as f:
-    json.dump(matches, f, indent=2)
+with open(index_file, "w") as f:
+    json.dump(season_index, f, indent=2)
 
-print("💾 Saved:", out_file)
+print("✅ DONE")
+print("Matches built:", len(season_index))
