@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import re
 
-print("🏏 LEGACY WORLD CUP SCRAPER (ESPN)")
+print("🏏 LEGACY WORLD CUP SCRAPER (FINAL)")
 
 BASE = Path("docs/data/cricket/worldcups")
 BASE.mkdir(parents=True, exist_ok=True)
@@ -14,7 +14,7 @@ HEADERS = {
 }
 
 # -----------------------
-# ADD MATCHES HERE
+# ADD MATCHES HERE (TEST ONE FIRST)
 # -----------------------
 MATCHES = [
     {
@@ -24,110 +24,126 @@ MATCHES = [
     }
 ]
 
+# -----------------------
+# CLEAN TEXT
+# -----------------------
 def clean(text):
     return re.sub(r"\s+", " ", text.strip())
 
+# -----------------------
+# PARSE SCORECARD
+# -----------------------
 def parse_scorecard(url):
 
     r = requests.get(url, headers=HEADERS)
-    soup = BeautifulSoup(r.text, "html.parser")
 
-    innings_blocks = soup.select("div.ds-rounded-lg")
+    if r.status_code != 200:
+        print("❌ Failed to fetch:", r.status_code)
+        return []
+
+    soup = BeautifulSoup(r.text, "html.parser")
 
     innings_data = []
 
-    for block in innings_blocks:
+    # 🔥 ALL TABLES
+    tables = soup.select("table")
 
-        title = block.find("span")
-        if not title:
+    for table in tables:
+
+        # find innings title above table
+        header = table.find_previous(["span", "h2", "h3"])
+        if not header:
             continue
 
-        team_name = clean(title.text)
+        team_name = clean(header.text)
+
+        # only pick innings tables (avoid junk)
+        if "innings" not in team_name.lower():
+            continue
 
         # -----------------------
-        # BATTING TABLE
+        # BATTING
         # -----------------------
         batting = []
 
-        rows = block.select("tbody tr")
+        rows = table.find_all("tr")
 
         for row in rows:
 
             cols = [c.get_text(strip=True) for c in row.find_all("td")]
 
-            if len(cols) < 8:
+            # batting rows typically 8+ columns
+            if len(cols) < 7:
                 continue
 
-            batter = cols[0]
-            runs = cols[2]
-            balls = cols[3]
-            fours = cols[5]
-            sixes = cols[6]
+            player = cols[0]
+
+            # skip extras/total rows
+            if player.lower() in ["extras", "total"]:
+                continue
 
             batting.append({
-                "player": batter,
-                "runs": runs,
-                "balls": balls,
-                "fours": fours,
-                "sixes": sixes
+                "player": player,
+                "runs": cols[2] if len(cols) > 2 else "",
+                "balls": cols[3] if len(cols) > 3 else "",
+                "fours": cols[5] if len(cols) > 5 else "",
+                "sixes": cols[6] if len(cols) > 6 else ""
             })
 
         # -----------------------
-        # BOWLING TABLE
+        # BOWLING (NEXT TABLE)
         # -----------------------
         bowling = []
 
-        bowl_rows = block.select("table + table tbody tr")
+        next_table = table.find_next("table")
 
-        for row in bowl_rows:
+        if next_table:
+            for row in next_table.find_all("tr"):
 
-            cols = [c.get_text(strip=True) for c in row.find_all("td")]
+                cols = [c.get_text(strip=True) for c in row.find_all("td")]
 
-            if len(cols) < 5:
-                continue
+                if len(cols) < 5:
+                    continue
 
-            bowling.append({
-                "player": cols[0],
-                "overs": cols[1],
-                "runs": cols[3],
-                "wickets": cols[4]
+                bowling.append({
+                    "player": cols[0],
+                    "overs": cols[1],
+                    "runs": cols[3],
+                    "wickets": cols[4]
+                })
+
+        if batting:
+            innings_data.append({
+                "team": team_name,
+                "batting": batting,
+                "bowling": bowling
             })
-
-        innings_data.append({
-            "team": team_name,
-            "batting": batting,
-            "bowling": bowling
-        })
 
     return innings_data
 
 # -----------------------
-# MAIN
+# MAIN LOOP
 # -----------------------
 for m in MATCHES:
 
-    print("➡️ Scraping", m["url"])
+    print("➡️ Scraping:", m["url"])
 
-    try:
-        innings = parse_scorecard(m["url"])
+    innings = parse_scorecard(m["url"])
 
-        match_data = {
-            "match_id": m["match_id"],
-            "year": m["year"],
-            "innings": innings
-        }
+    match_data = {
+        "match_id": m["match_id"],
+        "year": m["year"],
+        "innings": innings
+    }
 
-        year_path = BASE / str(m["year"])
-        year_path.mkdir(parents=True, exist_ok=True)
+    year_path = BASE / str(m["year"])
+    year_path.mkdir(parents=True, exist_ok=True)
 
-        out_file = year_path / f"{m['match_id']}.json"
+    out_file = year_path / f"{m['match_id']}.json"
 
-        with open(out_file, "w") as f:
-            json.dump(match_data, f, indent=2)
+    with open(out_file, "w") as f:
+        json.dump(match_data, f, indent=2)
 
-        print("✅ Saved:", out_file)
-
-    except Exception as e:
-        print("❌ Failed:", e)
+    print("✅ Saved:", out_file)
 
 print("🏁 DONE")
