@@ -2,75 +2,136 @@ import requests
 from bs4 import BeautifulSoup
 import json
 from pathlib import Path
+import re
 
-print("🏏 DEBUG WORLD CUP SCRAPER")
+print("🏏 LEGACY WORLD CUP SCRAPER (FINAL)")
 
 BASE = Path("docs/data/cricket/worldcups")
 BASE.mkdir(parents=True, exist_ok=True)
 
-URL = "https://www.espncricinfo.com/series/prudential-world-cup-1975-60793/england-vs-india-1st-match-65035/full-scorecard"
+# -----------------------
+# MATCH LIST (ADD MORE)
+# -----------------------
+MATCHES = [
+    {
+        "year": 1975,
+        "match_id": "65035",
+        "url": "https://www.espncricinfo.com/series/prudential-world-cup-1975-60793/england-vs-india-1st-match-65035/full-scorecard"
+    }
+]
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
+# -----------------------
+# FETCH PAGE (BLOCK DETECTION)
+# -----------------------
+def get_page(url):
 
-r = requests.get(URL, headers=HEADERS)
+    session = requests.Session()
 
-print("STATUS:", r.status_code)
-print("PAGE LENGTH:", len(r.text))
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.espncricinfo.com/"
+    }
 
-soup = BeautifulSoup(r.text, "html.parser")
+    r = session.get(url, headers=headers)
 
-tables = soup.find_all("table")
+    print("STATUS:", r.status_code)
+    print("HTML SIZE:", len(r.text))
 
-print("TABLES FOUND:", len(tables))
+    # 🚨 BLOCK DETECTION
+    if r.status_code != 200 or len(r.text) < 50000:
+        print("❌ ESPN BLOCKED OR RETURNED LITE PAGE")
+        return None
 
-innings = []
+    return r.text
 
-for i, table in enumerate(tables):
+# -----------------------
+# CLEAN TEXT
+# -----------------------
+def clean(text):
+    return re.sub(r"\s+", " ", text.strip())
 
-    rows = table.find_all("tr")
+# -----------------------
+# PARSE SCORECARD
+# -----------------------
+def parse_scorecard(html):
 
-    if len(rows) < 5:
-        continue
+    soup = BeautifulSoup(html, "html.parser")
 
-    batting = []
+    tables = soup.find_all("table")
 
-    for row in rows:
+    print("TABLES FOUND:", len(tables))
 
-        cols = [c.get_text(strip=True) for c in row.find_all("td")]
+    innings_data = []
 
-        if len(cols) < 2:
+    for i, table in enumerate(tables):
+
+        rows = table.find_all("tr")
+
+        if len(rows) < 5:
             continue
 
-        # try detect player rows
-        name = cols[0]
+        batting = []
 
-        if name.lower() in ["extras", "total"]:
-            continue
+        for row in rows:
 
-        # crude but effective: must have runs column
-        if any(char.isdigit() for char in "".join(cols[1:])):
+            cols = [c.get_text(strip=True) for c in row.find_all("td")]
 
-            batting.append({
-                "player": name,
-                "raw": cols
+            if len(cols) < 3:
+                continue
+
+            name = cols[0]
+
+            if name.lower() in ["extras", "total"]:
+                continue
+
+            # detect batting rows (must have numbers)
+            if any(char.isdigit() for char in "".join(cols[1:])):
+
+                batting.append({
+                    "player": name,
+                    "raw": cols
+                })
+
+        if len(batting) > 5:
+            print(f"✅ TABLE {i} = batting table ({len(batting)} players)")
+
+            innings_data.append({
+                "table_index": i,
+                "batting": batting
             })
 
-    if len(batting) > 5:
-        print(f"✅ TABLE {i} looks like batting table ({len(batting)} rows)")
-
-        innings.append({
-            "table_index": i,
-            "batting": batting
-        })
+    return innings_data
 
 # -----------------------
-# SAVE
+# MAIN LOOP
 # -----------------------
-out_file = BASE / "1975_debug.json"
+for m in MATCHES:
 
-with open(out_file, "w") as f:
-    json.dump(innings, f, indent=2)
+    print("\n➡️ Scraping:", m["url"])
 
-print("💾 Saved debug file")
+    html = get_page(m["url"])
+
+    if not html:
+        print("⚠️ Skipping due to block")
+        continue
+
+    innings = parse_scorecard(html)
+
+    match_data = {
+        "match_id": m["match_id"],
+        "year": m["year"],
+        "innings": innings
+    }
+
+    year_path = BASE / str(m["year"])
+    year_path.mkdir(parents=True, exist_ok=True)
+
+    out_file = year_path / f"{m['match_id']}.json"
+
+    with open(out_file, "w") as f:
+        json.dump(match_data, f, indent=2)
+
+    print("💾 Saved:", out_file)
+
+print("\n🏁 DONE")
