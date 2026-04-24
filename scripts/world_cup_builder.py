@@ -4,37 +4,38 @@ import zipfile
 import io
 from pathlib import Path
 
-print("🌍 WORLD CUP BUILDER (CRICSHEET)")
+print("🌍 WORLD CUP BUILDER (CLEAN)")
 
 BASE = Path("docs/data/cricket/worldcups")
 BASE.mkdir(parents=True, exist_ok=True)
 
-# -----------------------
-# DOWNLOAD DATA
-# -----------------------
 URL = "https://cricsheet.org/downloads/odis_male_json.zip"
 
-print("⬇️ Downloading dataset...")
 r = requests.get(URL)
-
 z = zipfile.ZipFile(io.BytesIO(r.content))
 
 matches = []
 
-# -----------------------
-# LOOP FILES
-# -----------------------
 for file in z.namelist():
 
     if not file.endswith(".json"):
         continue
 
     data = json.loads(z.read(file))
-
     info = data.get("info", {})
 
-    # ONLY WORLD CUP
-    if "world cup" not in str(info.get("event", "")).lower():
+    event = str(info.get("event", "")).lower()
+
+    # 🔥 CRITICAL FILTER
+    if "world cup" not in event:
+        continue
+
+    # ❌ REMOVE QUALIFIERS
+    if "qualifier" in event:
+        continue
+
+    # ❌ REMOVE OTHER EVENTS
+    if any(x in event for x in ["league", "super league", "warm-up"]):
         continue
 
     teams = info.get("teams", [])
@@ -42,7 +43,6 @@ for file in z.namelist():
     venue = info.get("venue", "")
 
     outcome = info.get("outcome", {})
-
     winner = outcome.get("winner", "")
     by = outcome.get("by", {})
 
@@ -69,7 +69,7 @@ print("✅ Matches found:", len(matches))
 # -----------------------
 # SAVE
 # -----------------------
-out_file = BASE / "world_cups_all.json"
+out_file = BASE / "world_cup_clean.json"
 
 with open(out_file, "w") as f:
     json.dump(matches, f, indent=2)
