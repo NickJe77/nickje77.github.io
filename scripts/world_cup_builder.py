@@ -1,50 +1,114 @@
 import requests
 from bs4 import BeautifulSoup
 import json
+from pathlib import Path
 import time
 
-print("🌍 Scraping World Cup matches...")
+print("🌍 WORLD CUP BUILDER STARTED")
 
-BASE_URL = "https://www.espncricinfo.com/series/"
-SERIES_ID = "icc-cricket-world-cup-2023-1345038"  # change per tournament
+# -----------------------
+# OUTPUT DIR (FIXES YOUR ERROR)
+# -----------------------
+BASE = Path("docs/data/cricket/worldcups")
+BASE.mkdir(parents=True, exist_ok=True)
 
-url = f"{BASE_URL}{SERIES_ID}/match-results"
+# -----------------------
+# TOURNAMENTS (ADD MORE HERE)
+# -----------------------
+TOURNAMENTS = [
+    {
+        "year": 2023,
+        "slug": "icc-cricket-world-cup-2023-1345038"
+    }
+]
 
-r = requests.get(url)
-soup = BeautifulSoup(r.text, "html.parser")
+# -----------------------
+# SCRAPER
+# -----------------------
+def scrape_tournament(year, slug):
 
-matches = []
+    print(f"➡️ Scraping {year}")
 
-cards = soup.select("div.ds-border-b.ds-border-line")
+    url = f"https://www.espncricinfo.com/series/{slug}/match-results"
 
-for card in cards:
+    r = requests.get(url)
+    soup = BeautifulSoup(r.text, "html.parser")
 
-    teams = card.select("p.ds-text-tight-m.ds-font-bold.ds-truncate")
+    matches = []
 
-    if len(teams) < 2:
-        continue
+    cards = soup.select("div.ds-border-b.ds-border-line")
 
-    team1 = teams[0].text.strip()
-    team2 = teams[1].text.strip()
+    for card in cards:
 
-    result = card.select_one("p.ds-text-tight-s.ds-font-regular.ds-truncate")
+        teams = card.select("p.ds-text-tight-m.ds-font-bold.ds-truncate")
 
-    score = result.text.strip() if result else ""
+        if len(teams) < 2:
+            continue
 
-    link = card.find("a")
-    match_url = "https://www.espncricinfo.com" + link["href"] if link else ""
+        team1 = teams[0].text.strip()
+        team2 = teams[1].text.strip()
 
-    matches.append({
-        "team1": team1,
-        "team2": team2,
-        "result": score,
-        "url": match_url
-    })
+        result_el = card.select_one("p.ds-text-tight-s.ds-font-regular.ds-truncate")
+        result = result_el.text.strip() if result_el else ""
 
-print(f"✅ Found {len(matches)} matches")
+        link = card.find("a")
+        match_url = ""
+        if link:
+            match_url = "https://www.espncricinfo.com" + link.get("href")
 
-# SAVE
-with open("world_cup_matches.json", "w") as f:
-    json.dump(matches, f, indent=2)
+        matches.append({
+            "team1": team1,
+            "team2": team2,
+            "result": result,
+            "url": match_url,
+            "year": year
+        })
 
-print("💾 Saved to world_cup_matches.json")
+    print(f"✅ {year} matches found: {len(matches)}")
+
+    # -----------------------
+    # SAVE FILE
+    # -----------------------
+    out_file = BASE / f"{year}.json"
+
+    with open(out_file, "w", encoding="utf-8") as f:
+        json.dump(matches, f, indent=2)
+
+    print(f"💾 Saved: {out_file}")
+
+    return matches
+
+# -----------------------
+# BUILD INDEX
+# -----------------------
+def build_index(all_data):
+
+    index = []
+
+    for year, matches in all_data.items():
+        index.append({
+            "year": year,
+            "matches": len(matches)
+        })
+
+    index_file = BASE / "index.json"
+
+    with open(index_file, "w", encoding="utf-8") as f:
+        json.dump(index, f, indent=2)
+
+    print("📚 Index built")
+
+# -----------------------
+# MAIN
+# -----------------------
+all_data = {}
+
+for t in TOURNAMENTS:
+    data = scrape_tournament(t["year"], t["slug"])
+    all_data[t["year"]] = data
+    time.sleep(1)
+
+if all_data:
+    build_index(all_data)
+
+print("🏁 DONE")
