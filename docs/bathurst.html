@@ -39,6 +39,23 @@
       margin-bottom:20px;
     }
 
+    .top-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:20px;
+      margin-bottom:20px;
+    }
+
+    .card{
+      background:#fff;
+      padding:16px;
+      border-radius:10px;
+    }
+
+    .card h3{
+      margin-top:0;
+    }
+
     table{
       width:100%;
       border-collapse:collapse;
@@ -80,6 +97,13 @@
       color:#666;
       font-size:13px;
     }
+
+    .leaderboard li{
+      display:flex;
+      justify-content:space-between;
+      padding:4px 0;
+      border-bottom:1px solid #eee;
+    }
   </style>
 </head>
 
@@ -92,6 +116,24 @@
 <div class="container">
   <h1>Bathurst 1000 History</h1>
 
+  <!-- NEW TOP SECTION -->
+  <div class="top-grid">
+
+    <!-- Latest Winner -->
+    <div class="card">
+      <h3>🏆 Latest Winner</h3>
+      <div id="latestWinner">Loading...</div>
+    </div>
+
+    <!-- Top Wins -->
+    <div class="card">
+      <h3>🏁 Most Wins</h3>
+      <ul id="leaderboard" class="leaderboard"></ul>
+    </div>
+
+  </div>
+
+  <!-- EXISTING TABLE (UNCHANGED STRUCTURE) -->
   <table>
     <thead>
       <tr>
@@ -108,16 +150,30 @@
 
 const body = document.getElementById("table-body");
 
+// -------------------------
+// LOAD WINNERS TABLE
+// -------------------------
 fetch("data/bathurst/winners.json")
   .then(res => res.json())
   .then(data => {
 
-    // sort newest first
     data.sort((a, b) => b.year - a.year);
+
+    // Latest winner
+    const latest = data[0];
+
+    document.getElementById("latestWinner").innerHTML = `
+      <strong>${latest.year}</strong><br>
+      ${latest.driver}<br>
+      <em>${latest.car}</em>
+    `;
 
     data.forEach(r => {
 
       const tr = document.createElement("tr");
+
+      // FIX: split drivers safely
+      const drivers = r.driver.split("/").map(d => d.trim()).join(" / ");
 
       tr.innerHTML = `
         <td>
@@ -126,7 +182,7 @@ fetch("data/bathurst/winners.json")
           </a>
         </td>
         <td class="drivers">
-          ${r.drivers.join(" / ")}
+          ${drivers}
         </td>
         <td class="car">
           ${r.car}
@@ -145,6 +201,25 @@ fetch("data/bathurst/winners.json")
         <td colspan="3">Failed to load data</td>
       </tr>
     `;
+  });
+
+
+// -------------------------
+// LOAD DRIVER STATS
+// -------------------------
+fetch("data/bathurst/drivers.json")
+  .then(res => res.json())
+  .then(data => {
+
+    const top = data.slice(0, 10);
+    const list = document.getElementById("leaderboard");
+
+    top.forEach(d => {
+      const li = document.createElement("li");
+      li.innerHTML = `<span>${d.name}</span><span>${d.wins}</span>`;
+      list.appendChild(li);
+    });
+
   });
 
 </script>
