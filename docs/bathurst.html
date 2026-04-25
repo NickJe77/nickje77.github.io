@@ -1,225 +1,189 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
   <script src="/js/analytics.js"></script>
   <meta charset="UTF-8">
-  <title>Bathurst 1000 | The Sporting Almanac</title>
+  <title>Bathurst Race | The Sporting Almanac</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <style>
-    body{
-      font-family:Inter,system-ui,Arial;
-      margin:0;
-      background:#f4f6f8;
-    }
+<style>
+body{
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:#f4f6f8;
+}
 
-    .navbar{
-      display:flex;
-      justify-content:center;
-      gap:24px;
-      padding:16px 0;
-      background:#fff;
-      border-bottom:1px solid #ddd;
-      font-weight:600;
-    }
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  padding:16px 0;
+  background:#fff;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
 
-    .navbar a{
-      text-decoration:none;
-      color:#0056d6;
-    }
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+  font-size:18px;
+}
 
-    .container{
-      max-width:1000px;
-      margin:auto;
-      padding:20px;
-    }
+.page{
+  max-width:900px;
+  margin:auto;
+  padding:25px;
+}
 
-    h1{
-      text-align:center;
-      margin-bottom:20px;
-    }
+h1{
+  text-align:center;
+}
 
-    .top-grid{
-      display:grid;
-      grid-template-columns:1fr 1fr;
-      gap:20px;
-      margin-bottom:20px;
-    }
+.table{
+  width:100%;
+  border-collapse:collapse;
+  background:#fff;
+  border-radius:10px;
+  overflow:hidden;
+}
 
-    .card{
-      background:#fff;
-      padding:16px;
-      border-radius:10px;
-    }
+.table th{
+  background:#002D72;
+  color:#fff;
+  padding:12px;
+  text-align:left;
+}
 
-    .card h3{
-      margin-top:0;
-    }
+.table td{
+  padding:12px;
+}
 
-    table{
-      width:100%;
-      border-collapse:collapse;
-      background:#fff;
-      border-radius:10px;
-      overflow:hidden;
-    }
+.table tr:nth-child(even){
+  background:#f2f6ff;
+}
 
-    th, td{
-      padding:12px;
-      text-align:left;
-    }
+.driver{
+  color:#0056d6;
+  font-weight:600;
+  text-decoration:none;
+}
 
-    th{
-      background:#002D72;
-      color:#fff;
-    }
+.driver:hover{
+  text-decoration:underline;
+}
+</style>
 
-    tbody tr:nth-child(even){
-      background:#f2f6ff;
-    }
-
-    tbody tr:hover{
-      background:#e0ecff;
-    }
-
-    a.year-link{
-      font-weight:600;
-      color:#0056d6;
-      text-decoration:none;
-    }
-
-    .drivers{
-      color:#333;
-      font-size:14px;
-    }
-
-    .car{
-      color:#666;
-      font-size:13px;
-    }
-
-    .leaderboard li{
-      display:flex;
-      justify-content:space-between;
-      padding:4px 0;
-      border-bottom:1px solid #eee;
-    }
-  </style>
 </head>
 
 <body>
 
 <div class="navbar">
-  <a href="/">Home</a>
+  <a href="./index.html">Home</a>
+  <a href="./racing.html">Racing</a>
+  <a href="./bathurst.html">Bathurst</a>
 </div>
 
-<div class="container">
-  <h1>Bathurst 1000 History</h1>
+<div class="page">
 
-  <!-- NEW TOP SECTION -->
-  <div class="top-grid">
+  <h1 id="title">Loading...</h1>
 
-    <!-- Latest Winner -->
-    <div class="card">
-      <h3>🏆 Latest Winner</h3>
-      <div id="latestWinner">Loading...</div>
-    </div>
-
-    <!-- Top Wins -->
-    <div class="card">
-      <h3>🏁 Most Wins</h3>
-      <ul id="leaderboard" class="leaderboard"></ul>
-    </div>
-
-  </div>
-
-  <!-- EXISTING TABLE (UNCHANGED STRUCTURE) -->
-  <table>
+  <table class="table">
     <thead>
       <tr>
-        <th>Year</th>
-        <th>Winners</th>
+        <th>Position</th>
+        <th>Driver(s)</th>
         <th>Car</th>
       </tr>
     </thead>
-    <tbody id="table-body"></tbody>
+    <tbody id="results"></tbody>
   </table>
+
 </div>
 
 <script>
 
-const body = document.getElementById("table-body");
+// GET YEAR
+const params = new URLSearchParams(window.location.search);
+const year = parseInt(params.get("year"));
 
 // -------------------------
-// LOAD WINNERS TABLE
+// DRIVER FORMAT FIX
 // -------------------------
-fetch("data/bathurst/winners.json")
+function formatDrivers(str){
+  if(!str) return "";
+
+  // already correct
+  if(str.includes("/")){
+    return str.split("/")
+      .map(d => d.trim())
+      .join(" / ");
+  }
+
+  const parts = str.trim().split(" ");
+
+  // split into two drivers if long enough
+  if(parts.length >= 4){
+    const mid = Math.floor(parts.length / 2);
+    return parts.slice(0, mid).join(" ") + " / " + parts.slice(mid).join(" ");
+  }
+
+  return str;
+}
+
+// -------------------------
+// LOAD DATA
+// -------------------------
+fetch(`/data/bathurst/seasons/${year}.json`)
   .then(res => res.json())
   .then(data => {
 
-    data.sort((a, b) => b.year - a.year);
+    if(!data || !data.results){
+      document.getElementById("title").textContent = "Race not found";
+      return;
+    }
 
-    // Latest winner
-    const latest = data[0];
+    document.getElementById("title").textContent =
+      `${year} Bathurst 1000`;
 
-    document.getElementById("latestWinner").innerHTML = `
-      <strong>${latest.year}</strong><br>
-      ${latest.driver}<br>
-      <em>${latest.car}</em>
-    `;
+    const table = document.getElementById("results");
+    table.innerHTML = "";
 
-    data.forEach(r => {
+    // SORT (DNF last)
+    data.results.sort((a,b) => {
+      if(a.position === "DNF") return 1;
+      if(b.position === "DNF") return -1;
+      return parseInt(a.position) - parseInt(b.position);
+    });
+
+    data.results.forEach(r => {
+
+      const formatted = formatDrivers(r.driver);
+
+      const drivers = formatted
+        .split("/")
+        .map(d => {
+          const name = d.trim();
+          const slug = name.toLowerCase().replace(/[^a-z0-9]+/g,"-");
+          return `<a class="driver" href="./bathurst-driver.html?driver=${slug}">${name}</a>`;
+        })
+        .join(" / ");
 
       const tr = document.createElement("tr");
 
-      // FIX: split drivers safely
-      const drivers = r.driver.split("/").map(d => d.trim()).join(" / ");
-
       tr.innerHTML = `
-        <td>
-          <a class="year-link" href="bathurst-race.html?year=${r.year}">
-            ${r.year}
-          </a>
-        </td>
-        <td class="drivers">
-          ${drivers}
-        </td>
-        <td class="car">
-          ${r.car}
-        </td>
+        <td>${r.position || ""}</td>
+        <td>${drivers}</td>
+        <td>${r.car || ""}</td>
       `;
 
-      body.appendChild(tr);
+      table.appendChild(tr);
     });
 
   })
   .catch(err => {
-    console.error("Failed to load Bathurst data", err);
-
-    body.innerHTML = `
-      <tr>
-        <td colspan="3">Failed to load data</td>
-      </tr>
-    `;
-  });
-
-
-// -------------------------
-// LOAD DRIVER STATS
-// -------------------------
-fetch("data/bathurst/drivers.json")
-  .then(res => res.json())
-  .then(data => {
-
-    const top = data.slice(0, 10);
-    const list = document.getElementById("leaderboard");
-
-    top.forEach(d => {
-      const li = document.createElement("li");
-      li.innerHTML = `<span>${d.name}</span><span>${d.wins}</span>`;
-      list.appendChild(li);
-    });
-
+    document.getElementById("title").textContent = "Error loading race";
+    console.error(err);
   });
 
 </script>
