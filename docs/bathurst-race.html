@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
   <script src="/js/analytics.js"></script>
@@ -72,6 +73,7 @@ h1{
   text-decoration:underline;
 }
 </style>
+
 </head>
 
 <body>
@@ -105,8 +107,8 @@ h1{
 const params = new URLSearchParams(window.location.search);
 const year = parseInt(params.get("year"));
 
-// LOAD FULL RACE DATA
-fetch(`/data/bathurst/${year}.json`)
+// LOAD DATA
+fetch(`/data/bathurst/seasons/${year}.json`)
   .then(res => res.json())
   .then(data => {
 
@@ -121,25 +123,35 @@ fetch(`/data/bathurst/${year}.json`)
     const table = document.getElementById("results");
     table.innerHTML = "";
 
-    data.results
-      .sort((a,b) => a.finish - b.finish)
-      .forEach(r => {
+    // SORT (DNF last)
+    data.results.sort((a,b) => {
+      if(a.position === "DNF") return 1;
+      if(b.position === "DNF") return -1;
+      return parseInt(a.position) - parseInt(b.position);
+    });
 
-        const drivers = (r.drivers || []).map(d => {
-          const slug = d.toLowerCase().replace(/ /g, "-");
-          return `<a class="driver" href="./bathurst-driver.html?driver=${slug}">${d}</a>`;
-        }).join(" / ");
+    data.results.forEach(r => {
 
-        const tr = document.createElement("tr");
+      // SPLIT DRIVERS STRING → LINKS
+      const drivers = (r.driver || "")
+        .split("/")
+        .map(d => {
+          const name = d.trim();
+          const slug = name.toLowerCase().replace(/[^a-z0-9]+/g,"-");
+          return `<a class="driver" href="./bathurst-driver.html?driver=${slug}">${name}</a>`;
+        })
+        .join(" / ");
 
-        tr.innerHTML = `
-          <td>${r.finish || ""}</td>
-          <td>${drivers}</td>
-          <td>${r.car || ""}</td>
-        `;
+      const tr = document.createElement("tr");
 
-        table.appendChild(tr);
-      });
+      tr.innerHTML = `
+        <td>${r.position || ""}</td>
+        <td>${drivers}</td>
+        <td>${r.car || ""}</td>
+      `;
+
+      table.appendChild(tr);
+    });
 
   })
   .catch(err => {
