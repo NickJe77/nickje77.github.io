@@ -111,11 +111,12 @@
 
 <script>
 
-// ✅ GET SLUG FROM URL
+// -------------------------
+// GET DRIVER
+// -------------------------
 const params = new URLSearchParams(window.location.search);
 const slug = params.get("driver") || "";
 
-// 🔥 CONVERT slug → Name
 function deslug(s){
   return s
     .split("-")
@@ -127,28 +128,72 @@ const driverName = deslug(slug);
 
 document.getElementById("name").innerText = driverName || "Driver";
 
+// -------------------------
 let starts = 0;
 let wins = 0;
 let races = [];
 
-// ✅ LOAD DATA
-fetch("data/bathurst/winners.json")
+// -------------------------
+// LOAD INDEX (YEARS)
+// -------------------------
+fetch("/data/bathurst/index.json")
   .then(res => res.json())
-  .then(data => {
+  .then(index => {
 
-    data.forEach(r => {
+    let years = index.seasons || index.years || index;
 
-      if(r.drivers.some(d => d.toLowerCase() === driverName.toLowerCase())){
+    if(!Array.isArray(years)){
+      throw new Error("Invalid index.json");
+    }
 
-        starts++;
-        wins++;
+    // load all seasons
+    return Promise.all(
+      years.map(y =>
+        fetch(`/data/bathurst/seasons/${y}.json`)
+          .then(r => r.json())
+          .then(data => ({ year: y, data }))
+      )
+    );
 
-        races.push({
-          year: r.year,
-          car: r.car
-        });
+  })
+  .then(allSeasons => {
 
-      }
+    allSeasons.forEach(season => {
+
+      season.data.results.forEach(r => {
+
+        // split drivers properly
+        let driverList = [];
+
+        if(r.driver && r.driver.includes("/")){
+          driverList = r.driver.split("/").map(d => d.trim());
+        } else {
+          const parts = r.driver.trim().split(" ");
+          const mid = Math.floor(parts.length / 2);
+          driverList = [
+            parts.slice(0, mid).join(" "),
+            parts.slice(mid).join(" ")
+          ];
+        }
+
+        // check if this driver is in the race
+        if(driverList.some(d => d.toLowerCase() === driverName.toLowerCase())){
+
+          starts++;
+
+          if(r.position == 1){
+            wins++;
+          }
+
+          races.push({
+            year: season.year,
+            position: r.position,
+            car: r.car
+          });
+
+        }
+
+      });
 
     });
 
@@ -160,24 +205,29 @@ fetch("data/bathurst/winners.json")
     console.error(err);
   });
 
+// -------------------------
 function render(){
 
   document.getElementById("starts").innerText = starts;
   document.getElementById("wins").innerText = wins;
 
   const tbody = document.getElementById("table");
+  tbody.innerHTML = "";
 
   races.sort((a,b) => b.year - a.year);
 
   races.forEach(r => {
 
     const tr = document.createElement("tr");
-    tr.classList.add("win");
+
+    if(r.position == 1){
+      tr.classList.add("win");
+    }
 
     tr.innerHTML = `
       <td>${r.year}</td>
-      <td>1</td>
-      <td>${r.car}</td>
+      <td>${r.position}</td>
+      <td>${r.car || ""}</td>
     `;
 
     tbody.appendChild(tr);
