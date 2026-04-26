@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
   <script src="/js/analytics.js"></script>
@@ -103,13 +102,27 @@ h1{
 
 <script>
 
+// -------------------------
 // GET YEAR
+// -------------------------
 const params = new URLSearchParams(window.location.search);
-const year = parseInt(params.get("year"));
+let year = parseInt(params.get("year"));
 
+if(!year || isNaN(year)){
+  document.getElementById("title").textContent = "No year selected";
+  throw new Error("Missing year parameter");
+}
+
+// -------------------------
 // LOAD DATA
-fetch(`/data/bathurst/seasons/${year}.json`)
-  .then(res => res.json())
+// -------------------------
+const url = `/data/bathurst/seasons/${year}.json`;
+
+fetch(url)
+  .then(res => {
+    if(!res.ok) throw new Error("Fetch failed");
+    return res.json();
+  })
   .then(data => {
 
     if(!data || !data.results){
@@ -123,7 +136,7 @@ fetch(`/data/bathurst/seasons/${year}.json`)
     const table = document.getElementById("results");
     table.innerHTML = "";
 
-    // SORT (DNF last)
+    // sort positions
     data.results.sort((a,b) => {
       if(a.position === "DNF") return 1;
       if(b.position === "DNF") return -1;
@@ -132,15 +145,31 @@ fetch(`/data/bathurst/seasons/${year}.json`)
 
     data.results.forEach(r => {
 
-      // SPLIT DRIVERS STRING → LINKS
-      const drivers = (r.driver || "")
-        .split("/")
-        .map(d => {
-          const name = d.trim();
-          const slug = name.toLowerCase().replace(/[^a-z0-9]+/g,"-");
-          return `<a class="driver" href="./bathurst-driver.html?driver=${slug}">${name}</a>`;
-        })
-        .join(" / ");
+      let driverList = [];
+
+      // -------------------------
+      // FIX DRIVER SPLITTING
+      // -------------------------
+      if(r.driver && r.driver.includes("/")){
+        driverList = r.driver.split("/").map(d => d.trim());
+      }
+      else{
+        const parts = (r.driver || "").trim().split(" ");
+        const mid = Math.floor(parts.length / 2);
+
+        const d1 = parts.slice(0, mid).join(" ");
+        const d2 = parts.slice(mid).join(" ");
+
+        driverList = [d1, d2];
+      }
+
+      // -------------------------
+      // BUILD DRIVER LINKS
+      // -------------------------
+      const drivers = driverList.map(name => {
+        const slug = name.toLowerCase().replace(/[^a-z0-9]+/g,"-");
+        return `<a class="driver" href="./bathurst-driver.html?driver=${slug}">${name}</a>`;
+      }).join(" / ");
 
       const tr = document.createElement("tr");
 
