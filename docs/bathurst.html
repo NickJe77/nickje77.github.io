@@ -7,11 +7,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
+
 body{
   font-family:Inter,system-ui,Arial;
   margin:0;
   background:#f4f6f8;
 }
+
+/* NAVBAR */
 
 .navbar{
   display:flex;
@@ -29,41 +32,111 @@ body{
   font-size:18px;
 }
 
-.page{
-  max-width:1000px;
-  margin:auto;
-  padding:30px 20px;
+/* HERO */
+
+.hero{
+  background:linear-gradient(135deg,#002D72,#0056d6);
+  color:#fff;
+  text-align:center;
+  padding:50px 20px 35px;
 }
 
-h1{
-  text-align:center;
-  margin-bottom:30px;
+.hero h1{
+  margin:0;
+  font-size:36px;
 }
+
+.hero p{
+  margin-top:8px;
+  opacity:.9;
+  font-size:16px;
+}
+
+/* SEARCH */
+
+.search-box{
+  margin:25px auto 0;
+  max-width:420px;
+  position:relative;
+}
+
+.search-box input{
+  width:100%;
+  padding:13px;
+  border-radius:10px;
+  border:none;
+  font-size:16px;
+  outline:none;
+}
+
+.suggestions{
+  position:absolute;
+  width:100%;
+  background:#fff;
+  border-radius:10px;
+  margin-top:6px;
+  overflow:hidden;
+  box-shadow:0 10px 20px rgba(0,0,0,.12);
+  z-index:10;
+}
+
+.suggestion{
+  padding:12px;
+  cursor:pointer;
+}
+
+.suggestion:hover{
+  background:#f2f6ff;
+}
+
+.suggestion-name{
+  font-weight:600;
+  color:#0056d6;
+}
+
+.suggestion-meta{
+  font-size:12px;
+  color:#666;
+}
+
+/* PAGE */
+
+.page{
+  max-width:1100px;
+  margin:auto;
+  padding:35px 20px;
+}
+
+/* GRID */
 
 .grid{
   display:grid;
   grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
-  gap:16px;
+  gap:18px;
 }
+
+/* TILE */
 
 .tile{
   display:block;
   text-align:center;
-  padding:18px 10px;
+  padding:24px 10px;
   background:#fff;
-  border-radius:10px;
+  border-radius:12px;
   text-decoration:none;
   font-weight:600;
   color:#0056d6;
   border:1px solid #e0e0e0;
   transition:.2s;
+  font-size:18px;
 }
 
 .tile:hover{
   background:#eaf2ff;
-  transform:translateY(-2px);
-  box-shadow:0 6px 14px rgba(0,0,0,.1);
+  transform:translateY(-4px);
+  box-shadow:0 12px 22px rgba(0,0,0,.12);
 }
+
 </style>
 </head>
 
@@ -75,40 +148,37 @@ h1{
   <a href="./bathurst.html">Bathurst</a>
 </div>
 
-<div class="page">
-
+<!-- HERO -->
+<div class="hero">
   <h1>Bathurst 1000</h1>
+  <p>History, Results & Drivers</p>
 
+  <div class="search-box">
+    <input id="search" placeholder="Search driver..." autocomplete="off">
+    <div id="suggestions" class="suggestions"></div>
+  </div>
+</div>
+
+<div class="page">
   <div id="years" class="grid"></div>
-
 </div>
 
 <script>
 
+// -------------------------
+// BUILD YEARS GRID
+// -------------------------
 fetch("/data/bathurst/index.json")
   .then(res => res.json())
   .then(data => {
 
-    let years = [];
+    let years = data.seasons || data.years || data;
 
-    // ✅ HANDLE MULTIPLE POSSIBLE STRUCTURES
-
-    if(Array.isArray(data)){
-      years = data;
-    }
-    else if(data.seasons){
-      years = data.seasons;
-    }
-    else if(data.years){
-      years = data.years;
+    if(!Array.isArray(years)){
+      console.error("Invalid index.json");
+      return;
     }
 
-    // ❌ if still empty → fallback (so page never breaks)
-    if(years.length === 0){
-      years = [2025, 2024, 2023]; // safe fallback
-    }
-
-    // sort newest first
     years.sort((a,b) => b - a);
 
     const container = document.getElementById("years");
@@ -116,20 +186,64 @@ fetch("/data/bathurst/index.json")
     years.forEach(year => {
       const a = document.createElement("a");
       a.className = "tile";
-
-      // ✅ THIS is the critical fix
       a.href = `./bathurst-race.html?year=${year}`;
-
       a.textContent = year;
-
       container.appendChild(a);
     });
 
-  })
-  .catch(err => {
-    document.getElementById("years").innerHTML = "Error loading years";
-    console.error(err);
   });
+
+// -------------------------
+// DRIVER SEARCH (FIXED FOR YOUR DATA)
+// -------------------------
+let drivers = [];
+
+fetch("/data/bathurst/drivers.json")
+  .then(res => res.json())
+  .then(data => {
+    drivers = data; // keep full object now
+  });
+
+const input = document.getElementById("search");
+const suggestions = document.getElementById("suggestions");
+
+input.addEventListener("input", () => {
+
+  const value = input.value.toLowerCase();
+  suggestions.innerHTML = "";
+
+  if(!value) return;
+
+  const matches = drivers
+    .filter(d => d.name.toLowerCase().includes(value))
+    .slice(0,8);
+
+  matches.forEach(d => {
+
+    const div = document.createElement("div");
+    div.className = "suggestion";
+
+    div.innerHTML = `
+      <div class="suggestion-name">${d.name}</div>
+      <div class="suggestion-meta">${d.wins} wins • ${d.starts} starts</div>
+    `;
+
+    div.onclick = () => {
+      const slug = d.name.toLowerCase().replace(/[^a-z0-9]+/g,"-");
+      window.location.href = `./bathurst-driver.html?driver=${slug}`;
+    };
+
+    suggestions.appendChild(div);
+  });
+
+});
+
+// close dropdown
+document.addEventListener("click", (e) => {
+  if(!e.target.closest(".search-box")){
+    suggestions.innerHTML = "";
+  }
+});
 
 </script>
 
