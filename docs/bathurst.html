@@ -3,15 +3,18 @@
 <head>
   <script src="/js/analytics.js"></script>
   <meta charset="UTF-8">
-  <title>Bathurst Race | The Sporting Almanac</title>
+  <title>Bathurst | The Sporting Almanac</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
+
 body{
   font-family:Inter,system-ui,Arial;
   margin:0;
   background:#f4f6f8;
 }
+
+/* NAVBAR */
 
 .navbar{
   display:flex;
@@ -29,50 +32,49 @@ body{
   font-size:18px;
 }
 
+/* PAGE */
+
 .page{
-  max-width:900px;
+  max-width:1000px;
   margin:auto;
-  padding:25px;
+  padding:30px 20px;
 }
 
 h1{
   text-align:center;
+  margin-bottom:30px;
 }
 
-.table{
-  width:100%;
-  border-collapse:collapse;
+/* GRID */
+
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
+  gap:16px;
+}
+
+/* TILE */
+
+.tile{
+  display:block;
+  text-align:center;
+  padding:18px 10px;
   background:#fff;
   border-radius:10px;
-  overflow:hidden;
-}
-
-.table th{
-  background:#002D72;
-  color:#fff;
-  padding:12px;
-  text-align:left;
-}
-
-.table td{
-  padding:12px;
-}
-
-.table tr:nth-child(even){
-  background:#f2f6ff;
-}
-
-.driver{
-  color:#0056d6;
-  font-weight:600;
   text-decoration:none;
+  font-weight:600;
+  color:#0056d6;
+  border:1px solid #e0e0e0;
+  transition:.2s;
 }
 
-.driver:hover{
-  text-decoration:underline;
+.tile:hover{
+  background:#eaf2ff;
+  transform:translateY(-2px);
+  box-shadow:0 6px 14px rgba(0,0,0,.1);
 }
+
 </style>
-
 </head>
 
 <body>
@@ -85,115 +87,49 @@ h1{
 
 <div class="page">
 
-  <h1 id="title">Loading...</h1>
+  <h1>Bathurst 1000</h1>
 
-  <table class="table">
-    <thead>
-      <tr>
-        <th>Position</th>
-        <th>Driver(s)</th>
-        <th>Car</th>
-      </tr>
-    </thead>
-    <tbody id="results"></tbody>
-  </table>
+  <div id="years" class="grid"></div>
 
 </div>
 
 <script>
 
 // -------------------------
-// GET YEAR (SAFE)
+// LOAD INDEX
 // -------------------------
-const params = new URLSearchParams(window.location.search);
-let year = parseInt(params.get("year"));
-
-console.log("Year param:", year);
-
-// fallback if missing
-if(!year || isNaN(year)){
-  document.getElementById("title").textContent = "No year selected";
-  throw new Error("Missing year parameter");
-}
-
-// -------------------------
-// DRIVER FORMAT FIX
-// -------------------------
-function formatDrivers(str){
-  if(!str) return "";
-
-  if(str.includes("/")){
-    return str.split("/").map(d => d.trim()).join(" / ");
-  }
-
-  const parts = str.trim().split(" ");
-
-  if(parts.length >= 4){
-    const mid = Math.floor(parts.length / 2);
-    return parts.slice(0, mid).join(" ") + " / " + parts.slice(mid).join(" ");
-  }
-
-  return str;
-}
-
-// -------------------------
-// LOAD DATA (CORRECT PATH)
-// -------------------------
-const url = `/data/bathurst/seasons/${year}.json`;
-console.log("Loading:", url);
-
-fetch(url)
-  .then(res => {
-    if(!res.ok) throw new Error("Fetch failed");
-    return res.json();
-  })
+fetch("/data/bathurst/index.json")
+  .then(res => res.json())
   .then(data => {
 
-    if(!data || !data.results){
-      document.getElementById("title").textContent = "Race not found";
+    if(!data || !data.years){
+      document.getElementById("years").innerHTML = "No data found";
       return;
     }
 
-    document.getElementById("title").textContent =
-      `${year} Bathurst 1000`;
+    const container = document.getElementById("years");
+    container.innerHTML = "";
 
-    const table = document.getElementById("results");
-    table.innerHTML = "";
+    // sort newest first
+    data.years.sort((a,b) => b - a);
 
-    data.results.sort((a,b) => {
-      if(a.position === "DNF") return 1;
-      if(b.position === "DNF") return -1;
-      return parseInt(a.position) - parseInt(b.position);
-    });
+    data.years.forEach(year => {
 
-    data.results.forEach(r => {
+      const a = document.createElement("a");
+      a.className = "tile";
 
-      const formatted = formatDrivers(r.driver);
+      // ✅ THIS IS THE FIX
+      a.href = `./bathurst-race.html?year=${year}`;
 
-      const drivers = formatted
-        .split("/")
-        .map(d => {
-          const name = d.trim();
-          const slug = name.toLowerCase().replace(/[^a-z0-9]+/g,"-");
-          return `<a class="driver" href="./bathurst-driver.html?driver=${slug}">${name}</a>`;
-        })
-        .join(" / ");
+      a.textContent = year;
 
-      const tr = document.createElement("tr");
-
-      tr.innerHTML = `
-        <td>${r.position || ""}</td>
-        <td>${drivers}</td>
-        <td>${r.car || ""}</td>
-      `;
-
-      table.appendChild(tr);
+      container.appendChild(a);
     });
 
   })
   .catch(err => {
-    document.getElementById("title").textContent = "Error loading race";
-    console.error("ERROR:", err);
+    document.getElementById("years").innerHTML = "Error loading years";
+    console.error(err);
   });
 
 </script>
