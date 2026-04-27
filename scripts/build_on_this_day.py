@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import re
 
-print("BUILDING ON THIS DAY (FINAL – STABLE)")
+print("BUILDING ON THIS DAY (HARDENED FINAL)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -13,7 +13,7 @@ data_out = {}
 seen = set()
 
 # -----------------------
-# LOAD EXISTING (MERGE)
+# LOAD EXISTING
 # -----------------------
 if OUTPUT.exists():
     try:
@@ -31,6 +31,9 @@ for day in data_out:
 # DATE PARSER
 # -----------------------
 def parse_date(row):
+    if not isinstance(row, dict):
+        return None
+
     d = (
         row.get("date_iso")
         or row.get("date")
@@ -80,20 +83,20 @@ def add_event(d, sport, text):
     })
 
 # -----------------------
-# NBA (FIXED FOR BOTH FORMATS)
+# NBA (ALL FORMATS)
 # -----------------------
-def process_nba_player(file):
+def process_nba(file):
     try:
         data = json.loads(file.read_text(encoding="utf-8"))
     except:
         return
 
-    # CASE 1: dict format
+    # dict format
     if isinstance(data, dict):
         player = data.get("name")
         games = data.get("games", [])
 
-    # CASE 2: list format
+    # list format
     elif isinstance(data, list):
         if not data:
             return
@@ -106,26 +109,25 @@ def process_nba_player(file):
     if not player:
         return
 
-    for game in games:
+    for g in games:
 
-        d = parse_date(game)
+        if not isinstance(g, dict):
+            continue
+
+        d = parse_date(g)
         if not d:
             continue
 
         try:
-            pts = int(game.get("PTS") or 0)
-            reb = int(game.get("REB") or 0)
-            ast = int(game.get("AST") or 0)
+            pts = int(g.get("PTS") or 0)
+            reb = int(g.get("REB") or 0)
+            ast = int(g.get("AST") or 0)
         except:
             continue
 
-        opp = game.get("OPP") or ""
+        opp = g.get("OPP") or ""
 
-        triple = sum([
-            pts >= 10,
-            reb >= 10,
-            ast >= 10
-        ])
+        triple = sum([pts >= 10, reb >= 10, ast >= 10])
 
         if pts >= 50:
             text = f"{player} exploded for {pts} points vs {opp}"
@@ -139,7 +141,7 @@ def process_nba_player(file):
         add_event(d, "NBA", text)
 
 # -----------------------
-# MLB
+# MLB (ALL FORMATS)
 # -----------------------
 def process_mlb(file):
     try:
@@ -147,17 +149,27 @@ def process_mlb(file):
     except:
         return
 
-    for g in data.get("games", []):
+    if isinstance(data, dict):
+        games = data.get("games", [])
+    elif isinstance(data, list):
+        games = data
+    else:
+        return
+
+    for g in games:
+
+        if not isinstance(g, dict):
+            continue
 
         d = parse_date(g)
         if not d:
             continue
 
-        home = g.get("home") or g.get("home_team")
-        away = g.get("away") or g.get("away_team")
+        home = g.get("home") or g.get("home_team") or g.get("team1")
+        away = g.get("away") or g.get("away_team") or g.get("team2")
 
-        hs = g.get("home_score") or g.get("home_runs")
-        as_ = g.get("away_score") or g.get("away_runs")
+        hs = g.get("home_score") or g.get("home_runs") or g.get("runs1")
+        as_ = g.get("away_score") or g.get("away_runs") or g.get("runs2")
 
         if not home or not away:
             continue
@@ -176,7 +188,7 @@ def process_mlb(file):
         add_event(d, "MLB", text)
 
 # -----------------------
-# AFL (WITH STATS)
+# AFL
 # -----------------------
 def process_afl(file):
     try:
@@ -184,9 +196,15 @@ def process_afl(file):
     except:
         return
 
+    if not isinstance(data, list):
+        return
+
     matches = {}
 
     for row in data:
+        if not isinstance(row, dict):
+            continue
+
         d = parse_date(row)
         if not d:
             continue
@@ -221,33 +239,29 @@ def process_afl(file):
         except:
             text = f"{m['home']} vs {m['away']}"
 
-        top_goals = 0
-        top_disp = 0
-        g_player = None
-        d_player = None
+        tg, td = 0, 0
+        gp, dp = None, None
 
         for p in m["players"]:
             try:
                 g = int(p.get("G") or 0)
-                if g > top_goals:
-                    top_goals = g
-                    g_player = p.get("player")
+                if g > tg:
+                    tg, gp = g, p.get("player")
             except:
                 pass
 
             try:
                 dpos = int(p.get("D") or 0)
-                if dpos > top_disp:
-                    top_disp = dpos
-                    d_player = p.get("player")
+                if dpos > td:
+                    td, dp = dpos, p.get("player")
             except:
                 pass
 
-        if g_player and top_goals >= 5:
-            text += f" — {g_player} kicked {top_goals} goals"
+        if gp and tg >= 5:
+            text += f" — {gp} kicked {tg} goals"
 
-        if d_player and top_disp >= 30:
-            text += f" — {d_player} had {top_disp} disposals"
+        if dp and td >= 30:
+            text += f" — {dp} had {td} disposals"
 
         add_event(d, "AFL", text)
 
@@ -262,17 +276,20 @@ def process_generic(file, sport):
 
     rows = data if isinstance(data, list) else data.get("games", [])
 
-    for row in rows:
+    for r in rows:
 
-        d = parse_date(row)
+        if not isinstance(r, dict):
+            continue
+
+        d = parse_date(r)
         if not d:
             continue
 
-        home = row.get("home_team") or row.get("team")
-        away = row.get("away_team") or row.get("opponent")
+        home = r.get("home_team") or r.get("team")
+        away = r.get("away_team") or r.get("opponent")
 
-        hs = row.get("home_score") or row.get("team_score")
-        as_ = row.get("away_score") or row.get("opponent_score")
+        hs = r.get("home_score") or r.get("team_score")
+        as_ = r.get("away_score") or r.get("opponent_score")
 
         if not home or not away:
             continue
@@ -336,7 +353,7 @@ for file in BASE.rglob("*"):
         continue
 
     if "nba/players" in path:
-        process_nba_player(file)
+        process_nba(file)
         continue
 
     if "baseball/seasons" in path:
