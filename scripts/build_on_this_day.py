@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 
-print("BUILDING ON THIS DAY - FINAL (ALL SPORTS + NBA FIXED)")
+print("BUILDING ON THIS DAY - FINAL (ALL SPORTS + AFL + NBA FIXED)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -86,7 +86,7 @@ def add_event(d, sport, text):
     })
 
 # -----------------------
-# NBA (FIXED FOR YOUR DATA)
+# NBA
 # -----------------------
 def process_nba_boxscore(file):
     data = load_json_safe(file)
@@ -115,7 +115,7 @@ def process_nba_boxscore(file):
 
         if pts >= 30:
             name = (
-                p.get("player_name")   # YOUR KEY
+                p.get("player_name")
                 or p.get("player")
                 or p.get("name")
                 or p.get("full_name")
@@ -144,7 +144,7 @@ def process_nba_boxscore(file):
             pass
 
 # -----------------------
-# AFL (WITH STATS)
+# AFL (FIXED)
 # -----------------------
 def process_afl_file(file):
     data = load_json_safe(file)
@@ -161,9 +161,11 @@ def process_afl_file(file):
         if not d:
             continue
 
-        match_id = row.get("match_id")
-        if not match_id:
-            continue
+        # FIXED MATCH KEY
+        match_id = (
+            row.get("match_id")
+            or f"{row.get('date')}_{row.get('played_for')}_{row.get('played_against')}"
+        )
 
         if match_id not in matches:
             matches[match_id] = {
