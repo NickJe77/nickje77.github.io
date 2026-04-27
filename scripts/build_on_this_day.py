@@ -2,27 +2,14 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-print("BUILDING ON THIS DAY (FINAL WORKING VERSION)")
+print("BUILDING ON THIS DAY (FORCE REBUILD)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
 
+# 🔥 FORCE CLEAN BUILD
 data_out = {}
 seen = set()
-
-# -----------------------
-# LOAD EXISTING
-# -----------------------
-if OUTPUT.exists():
-    try:
-        data_out = json.loads(OUTPUT.read_text())
-    except:
-        data_out = {}
-
-for d in data_out:
-    for s in data_out[d]:
-        for e in data_out[d][s]:
-            seen.add(f"{s}|{e['year']}|{e['text']}")
 
 # -----------------------
 def add_event(d, sport, text):
@@ -42,7 +29,7 @@ def add_event(d, sport, text):
     })
 
 # =======================
-# NBA (BOXSCORE STRUCTURE)
+# NBA
 # =======================
 for file in BASE.glob("nba/*/*.json"):
 
@@ -54,7 +41,6 @@ for file in BASE.glob("nba/*/*.json"):
     if "players" not in g:
         continue
 
-    # DATE
     try:
         d = datetime.strptime(g["date"][:10], "%Y-%m-%d")
     except:
@@ -69,19 +55,19 @@ for file in BASE.glob("nba/*/*.json"):
     if not home or not away:
         continue
 
-    # RESULT (ONLY IF VALID)
     try:
         hs = int(hs)
         as_ = int(as_)
     except:
         continue
 
+    # result
     if hs > as_:
         add_event(d, "NBA", f"{home} {hs} def {away} {as_}")
     else:
         add_event(d, "NBA", f"{away} {as_} def {home} {hs}")
 
-    # 🔥 TOP PLAYER (ALWAYS ADD — UNIQUE STRING)
+    # 🔥 ALWAYS ADD PLAYER LINE
     best_pts = -1
     best_player = None
     best_reb = 0
@@ -99,15 +85,14 @@ for file in BASE.glob("nba/*/*.json"):
             continue
 
     if best_player:
-        # 🔥 MAKE UNIQUE (includes teams)
         add_event(
             d,
             "NBA",
-            f"{best_player} {best_pts} pts, {best_reb} reb, {best_ast} ast ({home} vs {away})"
+            f"{best_player} {best_pts} pts, {best_reb} reb, {best_ast} ast"
         )
 
 # =======================
-# MLB (BOXSCORES ONLY)
+# MLB
 # =======================
 for file in BASE.glob("baseball/boxscores/*/*.json"):
 
@@ -116,7 +101,6 @@ for file in BASE.glob("baseball/boxscores/*/*.json"):
     except:
         continue
 
-    # DATE
     try:
         d = datetime.strptime(g["date"], "%Y-%m-%d")
     except:
@@ -128,10 +112,10 @@ for file in BASE.glob("baseball/boxscores/*/*.json"):
     hs = g.get("home_score")
     as_ = g.get("away_score")
 
-    # 🔥 STRICT — ONLY VALID GAMES
-    if home is None or away is None:
+    if not home or not away:
         continue
 
+    # 🔥 ONLY REAL GAMES
     if hs is None or as_ is None:
         continue
 
@@ -142,11 +126,9 @@ for file in BASE.glob("baseball/boxscores/*/*.json"):
         continue
 
     if hs > as_:
-        text = f"{home} {hs} def {away} {as_}"
+        add_event(d, "MLB", f"{home} {hs} def {away} {as_}")
     else:
-        text = f"{away} {as_} def {home} {hs}"
-
-    add_event(d, "MLB", text)
+        add_event(d, "MLB", f"{away} {as_} def {home} {hs}")
 
 # =======================
 # SAVE
