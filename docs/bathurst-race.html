@@ -35,8 +35,28 @@ body{
   padding:25px;
 }
 
+/* NAV HEADER */
+.nav-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:15px;
+}
+
+.nav-header a{
+  color:#0056d6;
+  text-decoration:none;
+  font-weight:600;
+}
+
+.nav-header a:hover{
+  text-decoration:underline;
+}
+
 h1{
+  margin:0;
   text-align:center;
+  flex:1;
 }
 
 .table{
@@ -85,7 +105,12 @@ h1{
 
 <div class="page">
 
-  <h1 id="title">Loading...</h1>
+  <!-- NAV HEADER -->
+  <div class="nav-header">
+    <a id="prev"></a>
+    <h1 id="title">Loading...</h1>
+    <a id="next"></a>
+  </div>
 
   <table class="table">
     <thead>
@@ -114,11 +139,38 @@ if(!year || isNaN(year)){
 }
 
 // -------------------------
-// LOAD DATA
+// BUILD PREV/NEXT NAV
 // -------------------------
-const url = `/data/bathurst/seasons/${year}.json`;
+fetch("/data/bathurst/index.json")
+  .then(res => res.json())
+  .then(index => {
 
-fetch(url)
+    if(!Array.isArray(index)) return;
+
+    const years = index.map(x => x.year).sort((a,b) => a - b);
+    const i = years.indexOf(year);
+
+    const prevYear = years[i - 1];
+    const nextYear = years[i + 1];
+
+    if(prevYear){
+      const prev = document.getElementById("prev");
+      prev.textContent = "← " + prevYear;
+      prev.href = `./bathurst-race.html?year=${prevYear}`;
+    }
+
+    if(nextYear){
+      const next = document.getElementById("next");
+      next.textContent = nextYear + " →";
+      next.href = `./bathurst-race.html?year=${nextYear}`;
+    }
+
+  });
+
+// -------------------------
+// LOAD RACE DATA
+// -------------------------
+fetch(`/data/bathurst/seasons/${year}.json`)
   .then(res => {
     if(!res.ok) throw new Error("Fetch failed");
     return res.json();
@@ -136,36 +188,33 @@ fetch(url)
     const table = document.getElementById("results");
     table.innerHTML = "";
 
-    // sort positions
+    // -------------------------
+    // SORT RESULTS
+    // -------------------------
     data.results.sort((a,b) => {
-      if(a.position === "DNF") return 1;
-      if(b.position === "DNF") return -1;
-      return parseInt(a.position) - parseInt(b.position);
+
+      const isNumA = !isNaN(a.position);
+      const isNumB = !isNaN(b.position);
+
+      if(isNumA && isNumB){
+        return Number(a.position) - Number(b.position);
+      }
+
+      if(isNumA) return -1;
+      if(isNumB) return 1;
+
+      return 0;
     });
 
+    // -------------------------
+    // BUILD TABLE
+    // -------------------------
     data.results.forEach(r => {
 
-      let driverList = [];
+      if(!r.driver) return;
 
-      // -------------------------
-      // FIX DRIVER SPLITTING
-      // -------------------------
-      if(r.driver && r.driver.includes("/")){
-        driverList = r.driver.split("/").map(d => d.trim());
-      }
-      else{
-        const parts = (r.driver || "").trim().split(" ");
-        const mid = Math.floor(parts.length / 2);
+      const driverList = r.driver.split("/").map(d => d.trim());
 
-        const d1 = parts.slice(0, mid).join(" ");
-        const d2 = parts.slice(mid).join(" ");
-
-        driverList = [d1, d2];
-      }
-
-      // -------------------------
-      // BUILD DRIVER LINKS
-      // -------------------------
       const drivers = driverList.map(name => {
         const slug = name.toLowerCase().replace(/[^a-z0-9]+/g,"-");
         return `<a class="driver" href="./bathurst-driver.html?driver=${slug}">${name}</a>`;
