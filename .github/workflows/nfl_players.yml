@@ -1,0 +1,72 @@
+name: NFL Players Builder
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "docs/data/nfl/games/**"
+      - "**build_nfl_players.py"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # -------------------------
+      # CHECKOUT
+      # -------------------------
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # -------------------------
+      # SETUP PYTHON
+      # -------------------------
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # -------------------------
+      # FIND SCRIPT AUTOMATICALLY
+      # -------------------------
+      - name: Locate script
+        id: find_script
+        run: |
+          FILE=$(find . -name "build_nfl_players.py" | head -n 1)
+          if [ -z "$FILE" ]; then
+            echo "❌ build_nfl_players.py not found"
+            exit 1
+          fi
+          echo "SCRIPT_PATH=$FILE" >> $GITHUB_ENV
+          echo "Found script at $FILE"
+
+      # -------------------------
+      # ENSURE OUTPUT FOLDER
+      # -------------------------
+      - name: Ensure players folder exists
+        run: |
+          mkdir -p docs/data/nfl/players
+
+      # -------------------------
+      # RUN SCRIPT (NO PATH ISSUES)
+      # -------------------------
+      - name: Run builder
+        run: |
+          python "$SCRIPT_PATH"
+
+      # -------------------------
+      # COMMIT RESULTS
+      # -------------------------
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
+          git add docs/data/nfl/players
+
+          git commit -m "Update NFL players" || echo "No changes"
+
+          git push
