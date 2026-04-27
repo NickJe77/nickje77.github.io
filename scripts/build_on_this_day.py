@@ -4,10 +4,10 @@ from pathlib import Path
 from datetime import datetime
 import re
 
-print("BUILDING ON THIS DAY (FINAL – ALL FIXED)")
+print("BUILDING ON THIS DAY (FIXED)")
 
 BASE = Path("docs/data")
-OUTPUT = BASE / "on_this_day.json"
+OUTPUT = BASE / "on_thisday.json"
 
 data_out = {}
 seen = set()
@@ -22,7 +22,7 @@ def load_json_safe(path):
         return None
 
 # -----------------------
-# DATE
+# DATE PARSER (ROBUST)
 # -----------------------
 def parse_date(row):
     d = (
@@ -77,7 +77,7 @@ def add_final_event(d, sport, text):
     })
 
 # -----------------------
-# GENERIC (ALL OTHER SPORTS)
+# GENERIC SPORTS
 # -----------------------
 def process_generic_file(file, sport):
 
@@ -128,7 +128,7 @@ def process_generic_file(file, sport):
         add_final_event(d, sport, text)
 
 # -----------------------
-# AFL MERGED
+# AFL
 # -----------------------
 def process_afl_file(file):
 
@@ -201,7 +201,7 @@ def process_afl_file(file):
         add_final_event(d, "AFL", result)
 
 # -----------------------
-# NBA MERGED (YOUR STRUCTURE)
+# NBA (FIXED)
 # -----------------------
 def process_nba_game(file):
 
@@ -209,17 +209,11 @@ def process_nba_game(file):
     if not data:
         return
 
-    # skip non-game files
     if "game_id" not in data:
         return
 
-    d_raw = data.get("date")
-    if not d_raw:
-        return
-
-    try:
-        d = datetime.fromisoformat(d_raw.replace("Z",""))
-    except:
+    d = parse_date(data)
+    if not d:
         return
 
     game_id = data.get("game_id")
@@ -247,18 +241,25 @@ def process_nba_game(file):
     except:
         result = f"{home} vs {away}"
 
-    # top scorer
+    # 🔥 FIXED PLAYER SCAN
     top_player = None
     top_pts = 0
 
     for p in data.get("players", []):
         try:
-            pts = int(p.get("points"))
+            pts = (
+                p.get("points")
+                or p.get("PTS")
+                or p.get("pts")
+                or 0
+            )
+            pts = int(pts)
+
             if pts > top_pts:
                 top_pts = pts
-                top_player = p.get("player")
+                top_player = p.get("player") or p.get("name")
         except:
-            pass
+            continue
 
     if top_player and top_pts >= 40:
         result += f" — {top_player} scored {top_pts} points"
@@ -266,7 +267,7 @@ def process_nba_game(file):
     add_final_event(d, "NBA", result)
 
 # -----------------------
-# RACING CSV
+# RACING CSV (FIXED)
 # -----------------------
 def process_racing_csv(file):
 
@@ -276,24 +277,23 @@ def process_racing_csv(file):
 
             for r in reader:
 
-                d = r.get("Date") or r.get("date")
+                d_raw = r.get("Date") or r.get("date")
                 race = r.get("Race") or r.get("race")
                 winner = r.get("Winner") or r.get("winner")
 
-                if not d or not race or not winner:
+                if not d_raw or not race or not winner:
                     continue
 
-                try:
-                    dt = datetime.strptime(d.strip().replace(" ", ""), "%d/%m/%Y")
-                except:
+                dt = parse_date({"date": d_raw})
+                if not dt:
                     continue
-
-                key = dt.strftime("%m-%d")
 
                 uid = f"RACING|{dt}|{race}|{winner}"
                 if uid in seen:
                     continue
                 seen.add(uid)
+
+                key = dt.strftime("%m-%d")
 
                 data_out.setdefault(key, {})
                 data_out[key].setdefault("Racing", [])
@@ -307,7 +307,7 @@ def process_racing_csv(file):
                 })
 
     except Exception as e:
-        print("❌ CSV error:", file, e)
+        print("CSV error:", file, e)
 
 # -----------------------
 # SPORT DETECT
@@ -335,22 +335,22 @@ for file in BASE.rglob("*"):
 
     path = str(file).lower()
 
-    # 1. RACING CSV FIRST
+    # CSV FIRST
     if file.suffix.lower() == ".csv":
         process_racing_csv(file)
         continue
 
-    # 2. NBA (your structure)
-    if "docs/data/nba/" in path and path.endswith(".json"):
+    # NBA (ONLY BOX SCORES)
+    if "docs/data/nba/" in path and "boxscores" in path and path.endswith(".json"):
         process_nba_game(file)
         continue
 
-    # 3. AFL
+    # AFL
     if "docs/data/afl/" in path and path.endswith(".json"):
         process_afl_file(file)
         continue
 
-    # 4. ALL OTHER SPORTS
+    # GENERIC
     if path.endswith(".json"):
         sport = detect_sport(file)
         if sport and sport not in ["NBA", "AFL"]:
@@ -372,5 +372,5 @@ for day in data_out:
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 OUTPUT.write_text(json.dumps(data_out, indent=2))
 
-print("✅ DONE")
+print("DONE")
 print("Days built:", len(data_out))
