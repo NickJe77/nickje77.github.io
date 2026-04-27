@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
   <script src="/js/analytics.js"></script>
@@ -97,12 +98,10 @@ tbody tr:nth-child(even){
 background:#eaf3ff;
 }
 
-
 tbody tr:hover{
 background:#dbeafe;
 cursor:pointer;
 }
-
 
 .playoff{
 color:#d50a0a;
@@ -110,15 +109,13 @@ font-weight:700;
 }
 
 </style>
+
 </head>
 <body>
 
-
 <div class="hero" id="title">NFL Season</div>
 
-
 <div class="year-tabs" id="yearTabs"></div>
-
 
 <div class="round-tabs" id="roundTabs">
 
@@ -130,7 +127,6 @@ font-weight:700;
 <div class="round-tab" onclick="setRound('Super Bowl')">Super Bowl</div>
 
 </div>
-
 
 <div class="container">
 
@@ -151,7 +147,6 @@ font-weight:700;
 </table>
 
 </div>
-
 
 <script>
 
@@ -208,7 +203,7 @@ document.querySelectorAll(".round-tab").forEach(t=>{
 
 t.classList.remove("active");
 
-if(t.innerText==round|| (round=="All" && t.innerText=="All Rounds"))
+if(t.innerText==round || (round=="All" && t.innerText=="All Rounds"))
 t.classList.add("active");
 
 });
@@ -218,21 +213,7 @@ renderGames();
 }
 
 
-/* PLAYOFF STRUCTURE */
-
-function playoffStructure(year){
-
-if(year<=1977)return{wild:0,div:4,conf:2,sb:1};
-if(year<=1989)return{wild:4,div:4,conf:2,sb:1};
-if(year<=2001)return{wild:6,div:4,conf:2,sb:1};
-if(year<=2019)return{wild:4,div:4,conf:2,sb:1};
-
-return{wild:6,div:4,conf:2,sb:1};
-
-}
-
-
-/* LOAD SEASON */
+/* LOAD SEASON (NEW DATA STRUCTURE) */
 
 async function loadSeason(year){
 
@@ -242,41 +223,13 @@ highlightYear(year);
 
 document.getElementById("title").innerText="NFL "+year;
 
-const res=await fetch("data/nfl/nfl_"+year+".json");
-
+const res=await fetch(`/data/nfl/games/${year}.json`);
 const data=await res.json();
 
-seasonGames=data.games.filter(g=>
+seasonGames=data.games || [];
 
-g &&
-g.game_id &&
-g.score &&
-g.score.length==2 &&
-g.score[0]["Unnamed: 1"] &&
-g.score[1]["Unnamed: 1"]
-
-);
-
-seasonGames.sort((a,b)=>a.game_id.localeCompare(b.game_id));
-
-const structure=playoffStructure(year);
-
-let i=seasonGames.length-1;
-
-seasonGames[i--].round="Super Bowl";
-
-for(let x=0;x<structure.conf;x++)
-seasonGames[i--].round="Conference Championship";
-
-for(let x=0;x<structure.div;x++)
-seasonGames[i--].round="Divisional";
-
-for(let x=0;x<structure.wild;x++)
-seasonGames[i--].round="Wild Card";
-
-seasonGames.forEach(g=>{
-if(!g.round)g.round="Regular Season";
-});
+/* sort by date */
+seasonGames.sort((a,b)=>a.date.localeCompare(b.date));
 
 renderGames();
 
@@ -293,42 +246,42 @@ tbody.innerHTML="";
 
 seasonGames.forEach(g=>{
 
-if(currentRound!="All" && g.round!=currentRound)return;
+if(currentRound!="All" && g.game_type!=currentRound)return;
 
-const date=g.game_id.substring(0,8);
+const date=g.date;
 
-const team1=g.score[0]["Unnamed: 1"];
-const team2=g.score[1]["Unnamed: 1"];
+const home=g.home_team;
+const away=g.away_team;
 
-const s1=parseInt(g.score[0]["Final"]);
-const s2=parseInt(g.score[1]["Final"]);
+const hs=g.home_score;
+const as=g.away_score;
 
 let winner,loser,ws,ls;
 
-if(s1>s2){
-winner=team1;
-loser=team2;
-ws=s1;
-ls=s2;
+if(hs>as){
+winner=home;
+loser=away;
+ws=hs;
+ls=as;
 }else{
-winner=team2;
-loser=team1;
-ws=s2;
-ls=s1;
+winner=away;
+loser=home;
+ws=as;
+ls=hs;
 }
 
 const tr=document.createElement("tr");
 
 tr.innerHTML=`
-<td>${date.substring(6,8)}/${date.substring(4,6)}/${date.substring(0,4)}</td>
+<td>${date.split("-").reverse().join("/")}</td>
 <td>${winner} ${ws}</td>
 <td>def</td>
 <td>${loser} ${ls}</td>
-<td class="${g.round!='Regular Season'?'playoff':''}">${g.round}</td>
+<td class="${g.game_type!='Regular Season'?'playoff':''}">${g.game_type}</td>
 `;
 
 tr.onclick=()=>{
-location.href="nfl-game.html?year="+currentSeason+"&id="+g.game_id;
+location.href=`nfl-game.html?year=${currentSeason}&id=${g.game_id}`;
 };
 
 tbody.appendChild(tr);
