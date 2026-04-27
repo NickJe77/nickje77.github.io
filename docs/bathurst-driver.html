@@ -112,7 +112,7 @@
 <script>
 
 // -------------------------
-// GET DRIVER
+// GET DRIVER FROM URL
 // -------------------------
 const params = new URLSearchParams(window.location.search);
 const slug = params.get("driver") || "";
@@ -125,7 +125,6 @@ function deslug(s){
 }
 
 const driverName = deslug(slug);
-
 document.getElementById("name").innerText = driverName || "Driver";
 
 // -------------------------
@@ -134,24 +133,18 @@ let wins = 0;
 let races = [];
 
 // -------------------------
-// LOAD INDEX (YEARS)
+// LOAD INDEX
 // -------------------------
 fetch("/data/bathurst/index.json")
   .then(res => res.json())
   .then(index => {
 
-    let years = index.seasons || index.years || index;
-
-    if(!Array.isArray(years)){
-      throw new Error("Invalid index.json");
-    }
-
-    // load all seasons
+    // index is array of objects {year, winner}
     return Promise.all(
-      years.map(y =>
-        fetch(`/data/bathurst/seasons/${y}.json`)
+      index.map(item =>
+        fetch(`/data/bathurst/seasons/${item.year}.json`)
           .then(r => r.json())
-          .then(data => ({ year: y, data }))
+          .then(data => ({ year: item.year, data }))
       )
     );
 
@@ -162,26 +155,19 @@ fetch("/data/bathurst/index.json")
 
       season.data.results.forEach(r => {
 
+        if(!r.driver) return;
+
         // split drivers properly
-        let driverList = [];
+        let driverList = r.driver.includes("/")
+          ? r.driver.split("/").map(d => d.trim())
+          : [r.driver.trim()];
 
-        if(r.driver && r.driver.includes("/")){
-          driverList = r.driver.split("/").map(d => d.trim());
-        } else {
-          const parts = r.driver.trim().split(" ");
-          const mid = Math.floor(parts.length / 2);
-          driverList = [
-            parts.slice(0, mid).join(" "),
-            parts.slice(mid).join(" ")
-          ];
-        }
-
-        // check if this driver is in the race
-        if(driverList.some(d => d.toLowerCase() === driverName.toLowerCase())){
+        // check if driver is in this race
+        if(driverList.some(d => d.toLowerCase().trim() === driverName.toLowerCase().trim())){
 
           starts++;
 
-          if(r.position == 1){
+          if(String(r.position) === "1"){
             wins++;
           }
 
@@ -220,7 +206,7 @@ function render(){
 
     const tr = document.createElement("tr");
 
-    if(r.position == 1){
+    if(String(r.position) === "1"){
       tr.classList.add("win");
     }
 
