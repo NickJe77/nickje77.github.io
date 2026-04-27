@@ -21,7 +21,7 @@ players = defaultdict(lambda: {
 
 # -------------------------
 
-# LOAD ALL SEASON FILES
+# LOAD SEASON FILES
 
 # -------------------------
 
@@ -47,25 +47,23 @@ for game in data.get("games", []):
 
         players[name]["games"] += 1
 
-        # PASSING
         passing = p.get("passing", {})
+        rushing = p.get("rushing", {})
+        receiving = p.get("receiving", {})
+
         players[name]["passY"] += passing.get("yards", 0)
         players[name]["passTD"] += passing.get("td", 0)
 
-        # RUSHING
-        rushing = p.get("rushing", {})
         players[name]["rushY"] += rushing.get("yards", 0)
         players[name]["rushTD"] += rushing.get("td", 0)
 
-        # RECEIVING
-        receiving = p.get("receiving", {})
         players[name]["recY"] += receiving.get("yards", 0)
         players[name]["recTD"] += receiving.get("td", 0)
 ```
 
 # -------------------------
 
-# BUILD OUTPUT FILES
+# BUILD OUTPUT
 
 # -------------------------
 
@@ -73,7 +71,7 @@ summary = []
 index = []
 
 for name, stats in players.items():
-entry = {
+summary.append({
 "name": name,
 "games": stats["games"],
 "passY": stats["passY"],
@@ -82,19 +80,11 @@ entry = {
 "rushTD": stats["rushTD"],
 "recY": stats["recY"],
 "recTD": stats["recTD"]
-}
-
-```
-summary.append(entry)
+})
 index.append(name)
-```
-
-# sort for clean UI
 
 summary.sort(key=lambda x: x["name"])
 index.sort()
-
-# write files
 
 with open(os.path.join(OUTPUT_PATH, "summary.json"), "w") as f:
 json.dump(summary, f, indent=2)
