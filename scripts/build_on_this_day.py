@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import re
 
-print("BUILDING ON THIS DAY (FINAL – NBA UPGRADED)")
+print("BUILDING ON THIS DAY (FINAL – STABLE)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -80,7 +80,7 @@ def add_event(d, sport, text):
     })
 
 # -----------------------
-# NBA (UPGRADED)
+# NBA (FIXED FOR BOTH FORMATS)
 # -----------------------
 def process_nba_player(file):
     try:
@@ -88,11 +88,25 @@ def process_nba_player(file):
     except:
         return
 
-    player = data.get("name")
+    # CASE 1: dict format
+    if isinstance(data, dict):
+        player = data.get("name")
+        games = data.get("games", [])
+
+    # CASE 2: list format
+    elif isinstance(data, list):
+        if not data:
+            return
+        player = data[0].get("player") or data[0].get("name")
+        games = data
+
+    else:
+        return
+
     if not player:
         return
 
-    for game in data.get("games", []):
+    for game in games:
 
         d = parse_date(game)
         if not d:
@@ -113,7 +127,6 @@ def process_nba_player(file):
             ast >= 10
         ])
 
-        # 🔥 logic tiers
         if pts >= 50:
             text = f"{player} exploded for {pts} points vs {opp}"
         elif pts >= 40:
@@ -126,7 +139,7 @@ def process_nba_player(file):
         add_event(d, "NBA", text)
 
 # -----------------------
-# MLB (SEASONS)
+# MLB
 # -----------------------
 def process_mlb(file):
     try:
@@ -163,7 +176,7 @@ def process_mlb(file):
         add_event(d, "MLB", text)
 
 # -----------------------
-# AFL (GOALS + DISPOSALS)
+# AFL (WITH STATS)
 # -----------------------
 def process_afl(file):
     try:
@@ -209,16 +222,16 @@ def process_afl(file):
             text = f"{m['home']} vs {m['away']}"
 
         top_goals = 0
-        top_goal_player = None
         top_disp = 0
-        top_disp_player = None
+        g_player = None
+        d_player = None
 
         for p in m["players"]:
             try:
                 g = int(p.get("G") or 0)
                 if g > top_goals:
                     top_goals = g
-                    top_goal_player = p.get("player")
+                    g_player = p.get("player")
             except:
                 pass
 
@@ -226,15 +239,15 @@ def process_afl(file):
                 dpos = int(p.get("D") or 0)
                 if dpos > top_disp:
                     top_disp = dpos
-                    top_disp_player = p.get("player")
+                    d_player = p.get("player")
             except:
                 pass
 
-        if top_goal_player and top_goals >= 5:
-            text += f" — {top_goal_player} kicked {top_goals} goals"
+        if g_player and top_goals >= 5:
+            text += f" — {g_player} kicked {top_goals} goals"
 
-        if top_disp_player and top_disp >= 30:
-            text += f" — {top_disp_player} had {top_disp} disposals"
+        if d_player and top_disp >= 30:
+            text += f" — {d_player} had {top_disp} disposals"
 
         add_event(d, "AFL", text)
 
@@ -284,7 +297,6 @@ def process_racing(file):
     try:
         with open(file, encoding="utf-8", errors="ignore") as f:
             reader = csv.DictReader(f)
-
             for r in reader:
                 dt = parse_date({"date": r.get("Date")})
                 if not dt:
