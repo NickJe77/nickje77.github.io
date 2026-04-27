@@ -4,10 +4,10 @@ from pathlib import Path
 from datetime import datetime
 import re
 
-print("BUILDING ON THIS DAY (FINAL FIXED)")
+print("BUILDING ON THIS DAY (FINAL – CORRECT FILE)")
 
 BASE = Path("docs/data")
-OUTPUT = BASE / "onthisday.json"
+OUTPUT = BASE / "on_this_day.json"   # ✅ CORRECT FILE NAME
 
 data_out = {}
 seen = set()
@@ -38,25 +38,21 @@ def parse_date(row):
 
     d = str(d).strip()
 
-    # ISO
     try:
         return datetime.fromisoformat(d.replace("Z",""))
     except:
         pass
 
-    # YYYY-MM-DD
     try:
         return datetime.strptime(d[:10], "%Y-%m-%d")
     except:
         pass
 
-    # DD/MM/YYYY
     try:
         return datetime.strptime(d.replace(" ", "")[:10], "%d/%m/%Y")
     except:
         pass
 
-    # "6 October 2003"
     try:
         d = re.sub(r'(\d+)(st|nd|rd|th)', r'\1', d)
         return datetime.strptime(d.strip(), "%d %B %Y")
@@ -111,7 +107,6 @@ def process_nba(file):
     except:
         result = f"{home} vs {away}"
 
-    # 🔥 FIXED PLAYER SCAN
     top_player = None
     top_pts = 0
 
@@ -160,11 +155,8 @@ def process_afl(file):
             "home": row.get("played_for"),
             "away": row.get("played_against"),
             "hs": row.get("home_points"),
-            "as": row.get("away_points"),
-            "players": []
+            "as": row.get("away_points")
         })
-
-        matches[mid]["players"].append(row)
 
     for mid, m in matches.items():
 
@@ -189,7 +181,7 @@ def process_afl(file):
         add_event(d, "AFL", text)
 
 # -----------------------
-# RACING CSV (FIXED UTF-8)
+# RACING CSV (UTF FIX)
 # -----------------------
 def process_racing(file):
 
@@ -217,7 +209,7 @@ def process_racing(file):
                 add_event(dt, "Racing", f"{winner.strip()} won the {race.strip()}")
 
     except Exception as e:
-        print("❌ Racing CSV error:", file, e)
+        print("CSV error:", file, e)
 
 # -----------------------
 # MAIN LOOP
@@ -229,17 +221,14 @@ for file in BASE.rglob("*"):
 
     path = str(file).lower()
 
-    # CSV
     if file.suffix.lower() == ".csv":
         process_racing(file)
         continue
 
-    # NBA (ONLY boxscores)
     if "nba" in path and "boxscores" in path:
         process_nba(file)
         continue
 
-    # AFL
     if "afl" in path:
         process_afl(file)
         continue
