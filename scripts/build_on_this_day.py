@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import re
 
-print("BUILDING ON THIS DAY (FORCED OUTPUT)")
+print("BUILDING ON THIS DAY (FINAL FIXED)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "onthisday.json"
@@ -13,7 +13,7 @@ data_out = {}
 seen = set()
 
 # -----------------------
-# LOAD
+# LOAD JSON SAFE
 # -----------------------
 def load_json_safe(path):
     try:
@@ -38,16 +38,25 @@ def parse_date(row):
 
     d = str(d).strip()
 
-    for fmt in [
-        "%Y-%m-%d",
-        "%d/%m/%Y",
-        "%Y/%m/%d"
-    ]:
-        try:
-            return datetime.strptime(d[:10], fmt)
-        except:
-            pass
+    # ISO
+    try:
+        return datetime.fromisoformat(d.replace("Z",""))
+    except:
+        pass
 
+    # YYYY-MM-DD
+    try:
+        return datetime.strptime(d[:10], "%Y-%m-%d")
+    except:
+        pass
+
+    # DD/MM/YYYY
+    try:
+        return datetime.strptime(d.replace(" ", "")[:10], "%d/%m/%Y")
+    except:
+        pass
+
+    # "6 October 2003"
     try:
         d = re.sub(r'(\d+)(st|nd|rd|th)', r'\1', d)
         return datetime.strptime(d.strip(), "%d %B %Y")
@@ -123,7 +132,7 @@ def process_nba(file):
             continue
 
     if top_player and top_pts >= 40:
-        result += f" — {top_player} scored {top_pts}"
+        result += f" — {top_player} scored {top_pts} points"
 
     add_event(d, "NBA", result)
 
@@ -180,53 +189,70 @@ def process_afl(file):
         add_event(d, "AFL", text)
 
 # -----------------------
-# RACING CSV (FIXED)
+# RACING CSV (FIXED UTF-8)
 # -----------------------
 def process_racing(file):
 
-    with open(file, newline='', encoding="utf-8") as f:
-        reader = csv.DictReader(f)
+    try:
+        with open(file, newline='', encoding="utf-8", errors="ignore") as f:
+            reader = csv.DictReader(f)
 
-        for r in reader:
+            for r in reader:
 
-            dt = parse_date({"date": r.get("Date")})
-            if not dt:
-                continue
+                dt = parse_date({"date": r.get("Date") or r.get("date")})
+                if not dt:
+                    continue
 
-            race = r.get("Race")
-            winner = r.get("Winner")
+                race = r.get("Race") or r.get("race")
+                winner = r.get("Winner") or r.get("winner")
 
-            if not race or not winner:
-                continue
+                if not race or not winner:
+                    continue
 
-            uid = f"RACING|{dt}|{race}|{winner}"
-            if uid in seen:
-                continue
-            seen.add(uid)
+                uid = f"RACING|{dt}|{race}|{winner}"
+                if uid in seen:
+                    continue
+                seen.add(uid)
 
-            add_event(dt, "Racing", f"{winner} won the {race}")
+                add_event(dt, "Racing", f"{winner.strip()} won the {race.strip()}")
+
+    except Exception as e:
+        print("❌ Racing CSV error:", file, e)
 
 # -----------------------
 # MAIN LOOP
 # -----------------------
 for file in BASE.rglob("*"):
 
-    path = str(file).lower()
-
     if not file.is_file():
         continue
 
-    if file.suffix == ".csv":
+    path = str(file).lower()
+
+    # CSV
+    if file.suffix.lower() == ".csv":
         process_racing(file)
         continue
 
+    # NBA (ONLY boxscores)
     if "nba" in path and "boxscores" in path:
         process_nba(file)
         continue
 
+    # AFL
     if "afl" in path:
         process_afl(file)
         continue
+
+# -----------------------
+# SORT
+# -----------------------
+for day in data_out:
+    for sport in data_out[day]:
+        data_out[day][sport].sort(
+            key=lambda x: x["year"],
+            reverse=True
+        )
 
 # -----------------------
 # SAVE (FORCED)
