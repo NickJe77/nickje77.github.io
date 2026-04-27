@@ -1,16 +1,18 @@
 import requests
+import zipfile
+import io
 import json
 from pathlib import Path
 
-print("IPL 2026 BUILDER (FIXED MATCH DISCOVERY)")
+print("IPL 2026 CRICSHEET BUILDER")
 
 OUTPUT = Path("docs/data/ipl/ipl_2026_FULL.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+ZIP_URL = "https://cricsheet.org/downloads/ipl_json.zip"
 
 # -------------------------
-# LOAD EXISTING DATA (SAFE)
+# LOAD EXISTING
 # -------------------------
 existing = []
 existing_ids = set()
@@ -19,81 +21,76 @@ if OUTPUT.exists():
     with open(OUTPUT) as f:
         existing = json.load(f)
         for m in existing:
-            existing_ids.add(m.get("file"))
+            if "file" in m:
+                existing_ids.add(m["file"])
 
 print("Existing matches:", len(existing))
 
 # -------------------------
-# STEP 1: GET MATCH LIST (WORKING ENDPOINT)
+# DOWNLOAD ZIP
 # -------------------------
-url = "https://site.web.api.espn.com/apis/site/v2/sports/cricket/ipl/scoreboard"
+print("Downloading Cricsheet ZIP...")
 
-r = requests.get(url, headers=HEADERS)
-
-print("STATUS:", r.status_code)
+r = requests.get(ZIP_URL)
 
 if r.status_code != 200:
-    print("❌ scoreboard endpoint failed")
+    print("❌ Failed to download zip")
     exit()
 
-data = r.json()
+z = zipfile.ZipFile(io.BytesIO(r.content))
 
-events = data.get("events", [])
+files = z.namelist()
 
-print("Events found:", len(events))
-
-match_ids = []
-
-for e in events:
-    match_ids.append(str(e.get("id")))
-
-print("Match IDs:", match_ids)
+print("Files in zip:", len(files))
 
 # -------------------------
-# STEP 2: BUILD MATCHES (KEEP YOUR FORMAT)
+# PROCESS MATCHES
 # -------------------------
 new_matches = []
 
-for match_id in match_ids:
+for file_name in files:
 
-    file_name = f"{match_id}.json"
+    if not file_name.endswith(".json"):
+        continue
 
-    if file_name in existing_ids:
+    # IPL 2026 filter
+    if "2026" not in file_name:
+        continue
+
+    short_name = file_name.split("/")[-1]
+
+    if short_name in existing_ids:
         continue
 
     try:
-        event = next(e for e in events if e.get("id") == match_id)
+        data = json.loads(z.read(file_name).decode("utf-8"))
 
-        comp = event["competitions"][0]
-        teams = comp["competitors"]
-
-        match = {
-            "meta": {},
-            "info": {
-                "season": "2026",
-                "teams": [
-                    teams[0]["team"]["displayName"],
-                    teams[1]["team"]["displayName"]
-                ],
-                "venue": comp.get("venue", {}).get("fullName", ""),
-                "outcome": {"result": comp.get("status", {}).get("type", {}).get("description", "")},
-                "event": {"name": "Indian Premier League"}
-            },
-            "innings": [],
-            "file": file_name
-        }
+        match = data
+        match["file"] = short_name
 
         new_matches.append(match)
-        print("✔ added", match_id)
+        print("✔ added", short_name)
 
     except Exception as e:
-        print("fail", match_id)
+        print("fail", file_name)
 
 # -------------------------
-# STEP 3: MERGE + SAVE
+# MERGE
 # -------------------------
 combined = existing + new_matches
 
+# optional sort by date
+def get_date(m):
+    try:
+        return m["info"]["dates"][0]
+    except:
+        return ""
+
+combined.sort(key=get_date)
+
+# -------------------------
+# SAVE
+# -------------------------
 with open(OUTPUT, "w") as f:
     json.dump(combined, f, indent=2)
 
