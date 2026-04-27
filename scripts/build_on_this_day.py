@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import re
 
-print("BUILDING ON THIS DAY (NBA + MLB FIXED)")
+print("BUILDING ON THIS DAY (FINAL – NBA UPGRADED)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -38,6 +38,7 @@ def parse_date(row):
         or row.get("match_date")
         or row.get("Date")
     )
+
     if not d:
         return None
 
@@ -79,7 +80,7 @@ def add_event(d, sport, text):
     })
 
 # -----------------------
-# NBA (FROM PLAYER FILES)
+# NBA (UPGRADED)
 # -----------------------
 def process_nba_player(file):
     try:
@@ -99,20 +100,33 @@ def process_nba_player(file):
 
         try:
             pts = int(game.get("PTS") or 0)
+            reb = int(game.get("REB") or 0)
+            ast = int(game.get("AST") or 0)
         except:
-            continue
-
-        if pts < 40:
             continue
 
         opp = game.get("OPP") or ""
 
-        text = f"{player} scored {pts} points vs {opp}"
+        triple = sum([
+            pts >= 10,
+            reb >= 10,
+            ast >= 10
+        ])
+
+        # 🔥 logic tiers
+        if pts >= 50:
+            text = f"{player} exploded for {pts} points vs {opp}"
+        elif pts >= 40:
+            text = f"{player} scored {pts} points vs {opp}"
+        elif triple >= 3:
+            text = f"{player} recorded a triple-double ({pts}/{reb}/{ast}) vs {opp}"
+        else:
+            continue
 
         add_event(d, "NBA", text)
 
 # -----------------------
-# MLB (SEASONS FILES)
+# MLB (SEASONS)
 # -----------------------
 def process_mlb(file):
     try:
@@ -149,7 +163,7 @@ def process_mlb(file):
         add_event(d, "MLB", text)
 
 # -----------------------
-# AFL (WITH GOALS + DISPOSALS)
+# AFL (GOALS + DISPOSALS)
 # -----------------------
 def process_afl(file):
     try:
@@ -270,6 +284,7 @@ def process_racing(file):
     try:
         with open(file, encoding="utf-8", errors="ignore") as f:
             reader = csv.DictReader(f)
+
             for r in reader:
                 dt = parse_date({"date": r.get("Date")})
                 if not dt:
