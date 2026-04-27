@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 
-print("BUILDING ON THIS DAY - FINAL (AFL PATH FIX + ALL SPORTS)")
+print("BUILDING ON THIS DAY - FINAL (AFL DATE FIX + ALL SPORTS)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -22,7 +22,7 @@ def load_json_safe(path):
         return None
 
 # -----------------------
-# DATE PARSER
+# DATE PARSER (FIXED)
 # -----------------------
 def parse_date(row):
     if not isinstance(row, dict):
@@ -41,24 +41,25 @@ def parse_date(row):
 
     d = str(d).strip()
 
+    # 🔥 CLEAN AFL FORMAT
+    # "Saturday, 11th April 2026, 3:45 PM ACST"
     try:
-        return datetime.fromisoformat(d.replace("Z", "")[:19])
+        d = d.split(", ", 1)[1]  # remove weekday
     except:
         pass
 
+    d = re.sub(r"(\d+)(st|nd|rd|th)", r"\1", d)  # 11th → 11
+    d = re.sub(r"\b[A-Z]{3,4}\b$", "", d).strip()  # remove timezone
+
     for fmt in [
+        "%d %B %Y, %I:%M %p",
         "%Y-%m-%d",
         "%d/%m/%Y",
-        "%Y/%m/%d",
-        "%d-%m-%Y",
-        "%d %B %Y",
-        "%B %d, %Y",
     ]:
         try:
-            clean = re.sub(r"(\d+)(st|nd|rd|th)", r"\1", d)
-            return datetime.strptime(clean[:30], fmt)
+            return datetime.strptime(d, fmt)
         except:
-            pass
+            continue
 
     return None
 
@@ -66,15 +67,11 @@ def parse_date(row):
 # ADD EVENT
 # -----------------------
 def add_event(d, sport, text):
-    if not d or not sport or not text:
-        return
-
     key = d.strftime("%m-%d")
     uid = f"{key}|{sport}|{d.year}|{text}"
 
     if uid in seen:
         return
-
     seen.add(uid)
 
     data_out.setdefault(key, {})
@@ -105,45 +102,34 @@ def process_nba_boxscore(file):
     scorers_30 = []
 
     for p in data.get("players", []):
-        if not isinstance(p, dict):
-            continue
-
         try:
             pts = int(p.get("points") or 0)
         except:
             continue
 
         if pts >= 30:
-            name = (
-                p.get("player_name")
-                or p.get("player")
-                or p.get("name")
-            )
+            name = p.get("player_name") or p.get("player") or p.get("name")
             if name:
                 scorers_30.append(f"{name} {pts}")
 
-    if home and away and hs is not None and as_ is not None:
-        try:
-            hs = int(hs)
-            as_ = int(as_)
+    try:
+        hs = int(hs)
+        as_ = int(as_)
+    except:
+        return
 
-            if hs > as_:
-                text = f"{home} {hs} defeated {away} {as_}"
-            elif as_ > hs:
-                text = f"{away} {as_} defeated {home} {hs}"
-            else:
-                text = f"{home} {hs} drew with {away} {as_}"
+    if hs > as_:
+        text = f"{home} {hs} defeated {away} {as_}"
+    else:
+        text = f"{away} {as_} defeated {home} {hs}"
 
-            if scorers_30:
-                text += " — " + ", ".join(scorers_30) + " pts"
+    if scorers_30:
+        text += " — " + ", ".join(scorers_30) + " pts"
 
-            add_event(d, "NBA", text)
-
-        except:
-            pass
+    add_event(d, "NBA", text)
 
 # -----------------------
-# AFL
+# AFL (FIXED PROPERLY)
 # -----------------------
 def process_afl_file(file):
     data = load_json_safe(file)
@@ -180,36 +166,30 @@ def process_afl_file(file):
         d = m["date"]
         home = m["home"]
         away = m["away"]
-        hs = m["hs"]
-        as_ = m["as"]
-
-        if not home or not away:
-            continue
 
         try:
-            hs = int(hs)
-            as_ = int(as_)
+            hs = int(m["hs"])
+            as_ = int(m["as"])
         except:
             continue
 
         if hs > as_:
             text = f"{home} {hs} defeated {away} {as_}"
-        elif as_ > hs:
-            text = f"{away} {as_} defeated {home} {hs}"
         else:
-            text = f"{home} {hs} drew with {away} {as_}"
+            text = f"{away} {as_} defeated {home} {hs}"
 
+        # stats
         top_goals = 0
-        top_goals_player = None
         top_disp = 0
-        top_disp_player = None
+        g_player = None
+        d_player = None
 
         for p in m["players"]:
             try:
                 g = int(p.get("G") or 0)
                 if g > top_goals:
                     top_goals = g
-                    top_goals_player = p.get("player")
+                    g_player = p.get("player")
             except:
                 pass
 
@@ -217,17 +197,17 @@ def process_afl_file(file):
                 d_ = int(p.get("D") or 0)
                 if d_ > top_disp:
                     top_disp = d_
-                    top_disp_player = p.get("player")
+                    d_player = p.get("player")
             except:
                 pass
 
         extras = []
 
-        if top_goals_player and top_goals >= 5:
-            extras.append(f"{top_goals_player} {top_goals} goals")
+        if g_player and top_goals >= 5:
+            extras.append(f"{g_player} {top_goals} goals")
 
-        if top_disp_player and top_disp >= 30:
-            extras.append(f"{top_disp_player} {top_disp} disposals")
+        if d_player and top_disp >= 30:
+            extras.append(f"{d_player} {top_disp} disposals")
 
         if extras:
             text += " — " + ", ".join(extras)
@@ -246,32 +226,24 @@ def process_mlb_boxscore(file):
     if not d:
         return
 
-    home = data.get("home_team")
-    away = data.get("away_team")
-    hs = data.get("home_score")
-    as_ = data.get("away_score")
-
-    if not home or not away:
+    try:
+        hs = int(data.get("home_score"))
+        as_ = int(data.get("away_score"))
+    except:
         return
 
-    try:
-        hs = int(hs)
-        as_ = int(as_)
+    home = data.get("home_team")
+    away = data.get("away_team")
 
-        if hs > as_:
-            text = f"{home} {hs} defeated {away} {as_}"
-        elif as_ > hs:
-            text = f"{away} {as_} defeated {home} {hs}"
-        else:
-            text = f"{home} {hs} drew with {away} {as_}"
+    if hs > as_:
+        text = f"{home} {hs} defeated {away} {as_}"
+    else:
+        text = f"{away} {as_} defeated {home} {hs}"
 
-        add_event(d, "MLB", text)
-
-    except:
-        pass
+    add_event(d, "MLB", text)
 
 # -----------------------
-# GENERIC
+# GENERIC (NRL etc)
 # -----------------------
 def process_generic_file(file, sport):
     data = load_json_safe(file)
@@ -281,9 +253,6 @@ def process_generic_file(file, sport):
     rows = data if isinstance(data, list) else data.get("games", [])
 
     for row in rows:
-        if not isinstance(row, dict):
-            continue
-
         d = parse_date(row)
         if not d:
             continue
@@ -291,29 +260,21 @@ def process_generic_file(file, sport):
         home = row.get("home_team") or row.get("home")
         away = row.get("away_team") or row.get("away")
 
-        hs = row.get("home_score") or row.get("home_points")
-        as_ = row.get("away_score") or row.get("away_points")
-
-        if not home or not away:
+        try:
+            hs = int(row.get("home_score") or row.get("home_points"))
+            as_ = int(row.get("away_score") or row.get("away_points"))
+        except:
             continue
 
-        try:
-            hs = int(hs)
-            as_ = int(as_)
-
-            if hs > as_:
-                text = f"{home} {hs} defeated {away} {as_}"
-            elif as_ > hs:
-                text = f"{away} {as_} defeated {home} {hs}"
-            else:
-                text = f"{home} {hs} drew with {away} {as_}"
-        except:
-            text = f"{home} vs {away}"
+        if hs > as_:
+            text = f"{home} {hs} defeated {away} {as_}"
+        else:
+            text = f"{away} {as_} defeated {home} {hs}"
 
         add_event(d, sport, text)
 
 # -----------------------
-# RACING
+# RACING CSV
 # -----------------------
 def process_racing_csv(file):
     try:
@@ -331,15 +292,6 @@ def process_racing_csv(file):
         pass
 
 # -----------------------
-# DETECT SPORT
-# -----------------------
-def detect_sport(path):
-    p = str(path).lower()
-    if "nrl" in p:
-        return "NRL"
-    return None
-
-# -----------------------
 # MAIN LOOP
 # -----------------------
 for file in BASE.rglob("*"):
@@ -348,21 +300,18 @@ for file in BASE.rglob("*"):
 
     path = str(file).lower()
 
-    if path.endswith("on_this_day.json"):
-        continue
-
-    if file.suffix.lower() == ".csv":
+    if file.suffix == ".csv":
         process_racing_csv(file)
         continue
 
-    if file.suffix.lower() != ".json":
+    if file.suffix != ".json":
         continue
 
     if "nba" in path:
         process_nba_boxscore(file)
         continue
 
-    if "afl" in path:   # 🔥 FIXED
+    if "afl" in path:
         process_afl_file(file)
         continue
 
@@ -370,9 +319,9 @@ for file in BASE.rglob("*"):
         process_mlb_boxscore(file)
         continue
 
-    sport = detect_sport(path)
-    if sport:
-        process_generic_file(file, sport)
+    if "nrl" in path:
+        process_generic_file(file, "NRL")
+        continue
 
 # -----------------------
 # SAVE
