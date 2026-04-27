@@ -43,9 +43,28 @@
       width:100%;
       padding:10px;
       font-size:16px;
-      margin-bottom:15px;
       border-radius:8px;
       border:1px solid #ccc;
+    }
+
+    .suggestions{
+      background:#fff;
+      border:1px solid #ccc;
+      border-top:none;
+      max-height:200px;
+      overflow-y:auto;
+      border-radius:0 0 8px 8px;
+      position:relative;
+      z-index:10;
+    }
+
+    .suggestion-item{
+      padding:8px;
+      cursor:pointer;
+    }
+
+    .suggestion-item:hover{
+      background:#f2f6ff;
     }
 
     table{
@@ -54,6 +73,7 @@
       background:#fff;
       border-radius:10px;
       overflow:hidden;
+      margin-top:10px;
     }
 
     th, td{
@@ -93,6 +113,7 @@
   <h1>Bathurst Drivers</h1>
 
   <input type="text" id="search" class="search" placeholder="Search driver...">
+  <div id="suggestions" class="suggestions"></div>
 
   <table>
     <thead>
@@ -109,8 +130,9 @@
 <script>
 
 let drivers = {};
+let driverList = [];
 
-// 🔥 BUILD FROM WINNERS ONLY
+// LOAD DATA
 fetch("/data/bathurst/winners.json")
   .then(res => res.json())
   .then(data => {
@@ -134,25 +156,27 @@ fetch("/data/bathurst/winners.json")
 
     });
 
-    renderTable();
+    driverList = Object.values(drivers);
 
+    renderTable();
   });
 
+// TABLE
 function renderTable(filter=""){
-
   const tbody = document.getElementById("table");
   tbody.innerHTML = "";
 
-  let list = Object.values(drivers);
+  let list = driverList;
 
-  list = list.filter(d => 
-    d.name.toLowerCase().includes(filter.toLowerCase())
-  );
+  if(filter){
+    list = list.filter(d =>
+      d.name.toLowerCase().includes(filter.toLowerCase())
+    );
+  }
 
   list.sort((a,b) => b.wins - a.wins);
 
   list.forEach(d => {
-
     const tr = document.createElement("tr");
 
     tr.innerHTML = `
@@ -169,8 +193,47 @@ function renderTable(filter=""){
   });
 }
 
-document.getElementById("search").addEventListener("input", e => {
-  renderTable(e.target.value);
+// PREDICTIVE SEARCH
+const searchInput = document.getElementById("search");
+const suggestions = document.getElementById("suggestions");
+
+searchInput.addEventListener("input", e => {
+
+  const value = e.target.value.toLowerCase();
+
+  suggestions.innerHTML = "";
+
+  if(!value){
+    renderTable();
+    return;
+  }
+
+  const matches = driverList
+    .filter(d => d.name.toLowerCase().includes(value))
+    .slice(0, 10);
+
+  matches.forEach(d => {
+    const div = document.createElement("div");
+    div.className = "suggestion-item";
+    div.textContent = d.name;
+
+    div.onclick = () => {
+      searchInput.value = d.name;
+      suggestions.innerHTML = "";
+      renderTable(d.name);
+    };
+
+    suggestions.appendChild(div);
+  });
+
+  renderTable(value);
+});
+
+// CLICK OUTSIDE CLOSE
+document.addEventListener("click", e => {
+  if(!e.target.closest(".search")){
+    suggestions.innerHTML = "";
+  }
 });
 
 </script>
