@@ -4,10 +4,10 @@ import io
 import json
 from pathlib import Path
 
-print("IPL 2026 CRICSHEET BUILDER + PLAYERS")
+print("IPL 2026 CRICSHEET BUILDER + PLAYER-NAMES")
 
 OUTPUT = Path("docs/data/ipl/ipl_2026_FULL.json")
-PLAYERS_FILE = Path("docs/data/ipl/players.json")
+PLAYERS_FILE = Path("docs/data/ipl/player-names.json")
 
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
@@ -29,7 +29,7 @@ if OUTPUT.exists():
 print("Existing matches:", len(existing))
 
 # -------------------------
-# LOAD EXISTING PLAYERS (SAFE)
+# LOAD PLAYER NAMES (SAFE)
 # -------------------------
 players = {}
 
@@ -110,6 +110,7 @@ for file_name in files:
 
                 s = slug(p)
 
+                # ONLY ADD IF NEW
                 if s not in players:
                     players[s] = p
                     new_players_added += 1
@@ -137,7 +138,7 @@ with open(OUTPUT, "w") as f:
     json.dump(combined, f, indent=2)
 
 # -------------------------
-# SAVE PLAYERS (SAFE)
+# SAVE PLAYER NAMES
 # -------------------------
 with open(PLAYERS_FILE, "w") as f:
     json.dump(players, f, indent=2)
