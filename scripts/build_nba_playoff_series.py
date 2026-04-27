@@ -1,115 +1,332 @@
 import json
+import csv
 from pathlib import Path
-from collections import defaultdict
+from datetime import datetime
+import re
 
-DATA_DIR = Path("docs/data/nba")
-PLAYOFF_FILE = DATA_DIR / "playoff-games.json"
-OUTPUT_FILE = DATA_DIR / "playoff-series.json"
+print("BUILDING ON THIS DAY (FULL RESTORED)")
 
+BASE = Path("docs/data")
+OUTPUT = BASE / "on_this_day.json"
 
-def normalise_round(game_type):
+data_out = {}
+seen = set()
 
-    g = game_type.lower()
+# -----------------------
+# LOAD JSON SAFE
+# -----------------------
+def load_json_safe(path):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except:
+        return None
 
-    if "finals" in g and "conference" not in g:
-        return "NBA Finals"
+# -----------------------
+# DATE PARSER
+# -----------------------
+def parse_date(row):
+    d = (
+        row.get("date_iso")
+        or row.get("date")
+        or row.get("game_date")
+        or row.get("match_date")
+        or row.get("Date")
+    )
 
-    if "conference finals" in g:
-        return "Conference Finals"
+    if not d:
+        return None
 
-    if "semifinals" in g:
-        return "Conference Semifinals"
+    d = str(d).strip()
 
-    if "first" in g:
-        return "First Round"
+    try:
+        return datetime.fromisoformat(d.replace("Z",""))
+    except:
+        pass
 
-    return game_type
+    try:
+        return datetime.strptime(d[:10], "%Y-%m-%d")
+    except:
+        pass
 
+    try:
+        return datetime.strptime(d.replace(" ", "")[:10], "%d/%m/%Y")
+    except:
+        pass
 
-def load_games():
-    with open(PLAYOFF_FILE) as f:
-        return json.load(f)
+    try:
+        d = re.sub(r'(\d+)(st|nd|rd|th)', r'\1', d)
+        return datetime.strptime(d.strip(), "%d %B %Y")
+    except:
+        pass
 
+    return None
 
-def build_series(games):
+# -----------------------
+# ADD EVENT
+# -----------------------
+def add_event(d, sport, text):
+    key = d.strftime("%m-%d")
 
-    grouped = defaultdict(list)
+    data_out.setdefault(key, {})
+    data_out[key].setdefault(sport, [])
 
-    for g in games:
+    data_out[key][sport].append({
+        "year": d.year,
+        "text": text,
+        "sport": sport
+    })
 
-        round_name = normalise_round(g["game_type"])
+# -----------------------
+# NBA (WITH HIGH SCORERS)
+# -----------------------
+def process_nba(file):
+    data = load_json_safe(file)
+    if not data or "game_id" not in data:
+        return
 
-        teams = tuple(sorted([g["home_team"], g["away_team"]]))
+    d = parse_date(data)
+    if not d:
+        return
 
-        key = (g["season"], round_name, teams)
+    uid = f"NBA|{data.get('game_id')}"
+    if uid in seen:
+        return
+    seen.add(uid)
 
-        grouped[key].append(g)
+    home = data.get("home_team")
+    away = data.get("away_team")
 
-    series_list = []
+    try:
+        hs = int(data.get("home_score"))
+        as_ = int(data.get("away_score"))
 
-    for (season, round_name, teams), games in grouped.items():
+        if hs > as_:
+            result = f"{home} {hs} defeated {away} {as_}"
+        else:
+            result = f"{away} {as_} defeated {home} {hs}"
+    except:
+        result = f"{home} vs {away}"
 
-        games.sort(key=lambda x: x["date"])
+    # 🔥 high scorer fix
+    top_player = None
+    top_pts = 0
 
-        wins = {teams[0]: 0, teams[1]: 0}
+    for p in data.get("players", []):
+        try:
+            pts = (
+                p.get("points")
+                or p.get("PTS")
+                or p.get("pts")
+                or 0
+            )
+            pts = int(pts)
 
-        game_ids = []
+            if pts > top_pts:
+                top_pts = pts
+                top_player = p.get("player") or p.get("name")
+        except:
+            continue
 
-        for g in games:
+    if top_player and top_pts >= 40:
+        result += f" — {top_player} scored {top_pts} points"
 
-            home = g["home_team"]
-            away = g["away_team"]
+    add_event(d, "NBA", result)
 
-            hs = int(g["home_score"])
-            as_ = int(g["away_score"])
+# -----------------------
+# AFL
+# -----------------------
+def process_afl(file):
+    data = load_json_safe(file)
+    if not data:
+        return
 
-            if hs > as_:
-                winner = home
-            else:
-                winner = away
+    matches = {}
 
-            if winner in wins:
-                wins[winner] += 1
+    for row in data:
+        d = parse_date(row)
+        if not d:
+            continue
 
-            game_ids.append(g["game_id"])
+        mid = row.get("match_id")
+        if not mid:
+            continue
 
-        team1, team2 = teams
-        w1 = wins[team1]
-        w2 = wins[team2]
-
-        winner = team1 if w1 > w2 else team2
-
-        series_list.append({
-
-            "season": season,
-            "round": round_name,
-
-            "team1": team1,
-            "team2": team2,
-
-            "team1_wins": w1,
-            "team2_wins": w2,
-
-            "winner": winner,
-
-            "games": game_ids
-
+        matches.setdefault(mid, {
+            "date": d,
+            "home": row.get("played_for"),
+            "away": row.get("played_against"),
+            "hs": row.get("home_points"),
+            "as": row.get("away_points")
         })
 
-    return sorted(series_list, key=lambda x: (x["season"], x["round"]))
+    for mid, m in matches.items():
 
+        uid = f"AFL|{mid}"
+        if uid in seen:
+            continue
+        seen.add(uid)
 
-def main():
+        d = m["date"]
 
-    games = load_games()
+        try:
+            hs = int(m["hs"])
+            as_ = int(m["as"])
 
-    series = build_series(games)
+            if hs > as_:
+                text = f"{m['home']} {hs} defeated {m['away']} {as_}"
+            else:
+                text = f"{m['away']} {as_} defeated {m['home']} {hs}"
+        except:
+            text = f"{m['home']} vs {m['away']}"
 
-    with open(OUTPUT_FILE, "w") as f:
-        json.dump(series, f, indent=2)
+        add_event(d, "AFL", text)
 
-    print("Created playoff-series.json with", len(series), "series")
+# -----------------------
+# GENERIC (NRL / MLB / ETC)
+# -----------------------
+def process_generic(file, sport):
 
+    data = load_json_safe(file)
+    if not data:
+        return
 
-if __name__ == "__main__":
-    main()
+    rows = data if isinstance(data, list) else data.get("games", [])
+
+    for row in rows:
+
+        if not isinstance(row, dict):
+            continue
+
+        d = parse_date(row)
+        if not d:
+            continue
+
+        match_id = row.get("match_id") or row.get("game_id")
+        uid = f"{sport}|{match_id}"
+
+        if uid in seen:
+            continue
+        seen.add(uid)
+
+        home = row.get("home_team") or row.get("team")
+        away = row.get("away_team") or row.get("opponent")
+
+        hs = row.get("home_score") or row.get("team_score")
+        as_ = row.get("away_score") or row.get("opponent_score")
+
+        if not home or not away:
+            continue
+
+        try:
+            hs = int(hs)
+            as_ = int(as_)
+
+            if hs > as_:
+                text = f"{home} {hs} defeated {away} {as_}"
+            elif as_ > hs:
+                text = f"{away} {as_} defeated {home} {hs}"
+            else:
+                text = f"{home} {hs} drew with {away} {as_}"
+        except:
+            text = f"{home} vs {away}"
+
+        add_event(d, sport, text)
+
+# -----------------------
+# RACING CSV (NO CRASH)
+# -----------------------
+def process_racing(file):
+
+    try:
+        with open(file, newline='', encoding="utf-8", errors="ignore") as f:
+            reader = csv.DictReader(f)
+
+            for r in reader:
+
+                dt = parse_date({"date": r.get("Date") or r.get("date")})
+                if not dt:
+                    continue
+
+                race = r.get("Race") or r.get("race")
+                winner = r.get("Winner") or r.get("winner")
+
+                if not race or not winner:
+                    continue
+
+                uid = f"RACING|{dt}|{race}|{winner}"
+                if uid in seen:
+                    continue
+                seen.add(uid)
+
+                add_event(dt, "Racing", f"{winner.strip()} won the {race.strip()}")
+
+    except Exception as e:
+        print("CSV error:", file, e)
+
+# -----------------------
+# SPORT DETECTOR
+# -----------------------
+def detect_sport(path):
+    p = str(path).lower()
+    if "nrl" in p: return "NRL"
+    if "baseball" in p: return "MLB"
+    if "tennis" in p: return "Tennis"
+    if "golf" in p: return "Golf"
+    if "cycling" in p: return "Cycling"
+    return None
+
+# -----------------------
+# MAIN LOOP
+# -----------------------
+for file in BASE.rglob("*"):
+
+    if not file.is_file():
+        continue
+
+    path = str(file).lower()
+
+    # CSV
+    if file.suffix.lower() == ".csv":
+        process_racing(file)
+        continue
+
+    # NBA
+    if "nba" in path and "boxscores" in path:
+        process_nba(file)
+        continue
+
+    # AFL
+    if "afl" in path:
+        process_afl(file)
+        continue
+
+    # GENERIC (RESTORED)
+    if path.endswith(".json"):
+        sport = detect_sport(file)
+        if sport:
+            process_generic(file, sport)
+
+# -----------------------
+# SORT
+# -----------------------
+for day in data_out:
+    for sport in data_out[day]:
+        data_out[day][sport].sort(
+            key=lambda x: x["year"],
+            reverse=True
+        )
+
+# -----------------------
+# SAVE (FORCED)
+# -----------------------
+OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+
+if not data_out:
+    print("⚠️ No data built — writing empty file")
+    OUTPUT.write_text("{}")
+else:
+    OUTPUT.write_text(json.dumps(data_out, indent=2))
+
+print("DONE")
+print("Days built:", len(data_out))
+print("Saved to:", OUTPUT)
