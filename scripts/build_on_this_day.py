@@ -1,38 +1,44 @@
 import json
 from pathlib import Path
 from datetime import datetime
+import csv
 
-print("BUILDING ON THIS DAY (FORCE REBUILD)")
+print("ON THIS DAY - SAFE UPDATE (ALL SPORTS)")
 
+FILE = Path("docs/data/on_this_day.json")
 BASE = Path("docs/data")
-OUTPUT = BASE / "on_this_day.json"
 
-# 🔥 FORCE CLEAN BUILD
-data_out = {}
-seen = set()
+data = json.loads(FILE.read_text())
 
 # -----------------------
-def add_event(d, sport, text):
-    key = d.strftime("%m-%d")
-    uid = f"{sport}|{d.year}|{text}"
+# HELPERS
+# -----------------------
+def add(day, sport, year, text):
+    data.setdefault(day, {})
+    data[day].setdefault(sport, [])
 
-    if uid in seen:
-        return
+    existing = [e["text"] for e in data[day][sport]]
+    if text not in existing:
+        data[day][sport].append({
+            "year": year,
+            "text": text
+        })
 
-    seen.add(uid)
+# -----------------------
+# CLEAN MLB (REMOVE JUNK)
+# -----------------------
+for day in list(data.keys()):
+    if "MLB" in data[day]:
+        cleaned = [e for e in data[day]["MLB"] if " vs " not in e["text"]]
+        if cleaned:
+            data[day]["MLB"] = cleaned
+        else:
+            del data[day]["MLB"]
 
-    data_out.setdefault(key, {})
-    data_out[key].setdefault(sport, [])
-    data_out[key][sport].append({
-        "year": d.year,
-        "text": text
-    })
-
-# =======================
-# NBA
-# =======================
+# -----------------------
+# NBA (ADD STATS ONLY)
+# -----------------------
 for file in BASE.glob("nba/*/*.json"):
-
     try:
         g = json.loads(file.read_text())
     except:
@@ -43,97 +49,139 @@ for file in BASE.glob("nba/*/*.json"):
 
     try:
         d = datetime.strptime(g["date"][:10], "%Y-%m-%d")
+        day = d.strftime("%m-%d")
+        year = d.year
     except:
         continue
 
-    home = g.get("home_team")
-    away = g.get("away_team")
-
-    hs = g.get("home_score")
-    as_ = g.get("away_score")
-
-    if not home or not away:
+    if day not in data:
         continue
 
-    try:
-        hs = int(hs)
-        as_ = int(as_)
-    except:
-        continue
-
-    # result
-    if hs > as_:
-        add_event(d, "NBA", f"{home} {hs} def {away} {as_}")
-    else:
-        add_event(d, "NBA", f"{away} {as_} def {home} {hs}")
-
-    # 🔥 ALWAYS ADD PLAYER LINE
-    best_pts = -1
-    best_player = None
-    best_reb = 0
-    best_ast = 0
-
+    best = None
     for p in g.get("players", []):
         try:
             pts = int(p.get("points") or 0)
-            if pts > best_pts:
-                best_pts = pts
-                best_player = p.get("player")
-                best_reb = int(p.get("rebounds") or 0)
-                best_ast = int(p.get("assists") or 0)
+            if not best or pts > best["pts"]:
+                best = {
+                    "name": p.get("player"),
+                    "pts": pts,
+                    "reb": int(p.get("rebounds") or 0),
+                    "ast": int(p.get("assists") or 0)
+                }
         except:
             continue
 
-    if best_player:
-        add_event(
-            d,
-            "NBA",
-            f"{best_player} {best_pts} pts, {best_reb} reb, {best_ast} ast"
-        )
+    if best:
+        text = f"{best['name']} {best['pts']} pts, {best['reb']} reb, {best['ast']} ast"
+        add(day, "NBA", year, text)
 
-# =======================
-# MLB
-# =======================
-for file in BASE.glob("baseball/boxscores/*/*.json"):
-
+# -----------------------
+# AFL (FROM YOUR AFL FILES)
+# -----------------------
+for file in BASE.glob("afl/*.json"):
     try:
-        g = json.loads(file.read_text())
+        rows = json.loads(file.read_text())
     except:
         continue
 
+    for r in rows:
+        try:
+            d = datetime.strptime(r["date"][:10], "%Y-%m-%d")
+        except:
+            continue
+
+        day = d.strftime("%m-%d")
+        year = d.year
+
+        home = r.get("played_for")
+        away = r.get("played_against")
+
+        hs = r.get("home_points")
+        as_ = r.get("away_points")
+
+        if home and away and hs is not None and as_ is not None:
+            try:
+                hs = int(hs)
+                as_ = int(as_)
+            except:
+                continue
+
+            if hs > as_:
+                text = f"{home} {hs} def {away} {as_}"
+            else:
+                text = f"{away} {as_} def {home} {hs}"
+
+            add(day, "AFL", year, text)
+
+# -----------------------
+# NRL (GENERIC SUPPORT)
+# -----------------------
+for file in BASE.glob("nrl/*.json"):
     try:
-        d = datetime.strptime(g["date"], "%Y-%m-%d")
+        rows = json.loads(file.read_text())
     except:
         continue
 
-    home = g.get("home_team")
-    away = g.get("away_team")
+    for r in rows:
+        try:
+            d = datetime.strptime(r["date"][:10], "%Y-%m-%d")
+        except:
+            continue
 
-    hs = g.get("home_score")
-    as_ = g.get("away_score")
+        day = d.strftime("%m-%d")
+        year = d.year
 
-    if not home or not away:
-        continue
+        home = r.get("home_team")
+        away = r.get("away_team")
 
-    # 🔥 ONLY REAL GAMES
-    if hs is None or as_ is None:
+        hs = r.get("home_score")
+        as_ = r.get("away_score")
+
+        if home and away and hs is not None and as_ is not None:
+            try:
+                hs = int(hs)
+                as_ = int(as_)
+            except:
+                continue
+
+            if hs > as_:
+                text = f"{home} {hs} def {away} {as_}"
+            else:
+                text = f"{away} {as_} def {home} {hs}"
+
+            add(day, "NRL", year, text)
+
+# -----------------------
+# RACING (CSV SUPPORT)
+# -----------------------
+for file in BASE.rglob("*.csv"):
+    if "cycling" not in str(file).lower():
         continue
 
     try:
-        hs = int(hs)
-        as_ = int(as_)
+        with open(file, encoding="utf-8", errors="ignore") as f:
+            reader = csv.DictReader(f)
+            for r in reader:
+                try:
+                    d = datetime.strptime(r["Date"][:10], "%Y-%m-%d")
+                except:
+                    continue
+
+                day = d.strftime("%m-%d")
+                year = d.year
+
+                race = r.get("Race")
+                winner = r.get("Winner")
+
+                if race and winner:
+                    text = f"{winner} won the {race}"
+                    add(day, "Racing", year, text)
     except:
         continue
 
-    if hs > as_:
-        add_event(d, "MLB", f"{home} {hs} def {away} {as_}")
-    else:
-        add_event(d, "MLB", f"{away} {as_} def {home} {hs}")
-
-# =======================
+# -----------------------
 # SAVE
-# =======================
-OUTPUT.write_text(json.dumps(data_out, indent=2))
+# -----------------------
+FILE.write_text(json.dumps(data, indent=2))
 
-print("DONE")
-print("DAYS:", len(data_out))
+print("DONE - ALL SPORTS UPDATED SAFELY")
