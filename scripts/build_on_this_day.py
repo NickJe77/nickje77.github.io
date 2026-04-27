@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 
-print("BUILDING ON THIS DAY - FINAL (ALL SPORTS + AFL + NBA FIXED)")
+print("BUILDING ON THIS DAY - FINAL (ALL SPORTS + AFL FIXED CORRECTLY)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -86,7 +86,7 @@ def add_event(d, sport, text):
     })
 
 # -----------------------
-# NBA
+# NBA (player_name FIX)
 # -----------------------
 def process_nba_boxscore(file):
     data = load_json_safe(file)
@@ -144,7 +144,7 @@ def process_nba_boxscore(file):
             pass
 
 # -----------------------
-# AFL (FIXED)
+# AFL (CORRECT FIX)
 # -----------------------
 def process_afl_file(file):
     data = load_json_safe(file)
@@ -161,17 +161,15 @@ def process_afl_file(file):
         if not d:
             continue
 
-        # FIXED MATCH KEY
-        match_id = (
-            row.get("match_id")
-            or f"{row.get('date')}_{row.get('played_for')}_{row.get('played_against')}"
-        )
+        match_id = row.get("match_id")
+        if not match_id:
+            continue
 
         if match_id not in matches:
             matches[match_id] = {
                 "date": d,
-                "home": row.get("played_for"),
-                "away": row.get("played_against"),
+                "home": row.get("home_team"),
+                "away": row.get("away_team"),
                 "hs": row.get("home_points"),
                 "as": row.get("away_points"),
                 "players": []
@@ -181,20 +179,28 @@ def process_afl_file(file):
 
     for m in matches.values():
         d = m["date"]
+        home = m["home"]
+        away = m["away"]
+        hs = m["hs"]
+        as_ = m["as"]
+
+        if not home or not away:
+            continue
 
         try:
-            hs = int(m["hs"])
-            as_ = int(m["as"])
-
-            if hs > as_:
-                text = f"{m['home']} {hs} defeated {m['away']} {as_}"
-            elif as_ > hs:
-                text = f"{m['away']} {as_} defeated {m['home']} {hs}"
-            else:
-                text = f"{m['home']} {hs} drew with {m['away']} {as_}"
+            hs = int(hs)
+            as_ = int(as_)
         except:
             continue
 
+        if hs > as_:
+            text = f"{home} {hs} defeated {away} {as_}"
+        elif as_ > hs:
+            text = f"{away} {as_} defeated {home} {hs}"
+        else:
+            text = f"{home} {hs} drew with {away} {as_}"
+
+        # stats
         top_goals = 0
         top_goals_player = None
         top_disp = 0
