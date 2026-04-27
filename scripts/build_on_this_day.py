@@ -3,7 +3,7 @@ from pathlib import Path
 from datetime import datetime
 import csv
 
-print("ON THIS DAY - SAFE UPDATE (ALL SPORTS)")
+print("ON THIS DAY - FULL RECOVERY")
 
 FILE = Path("docs/data/on_this_day.json")
 BASE = Path("docs/data")
@@ -11,33 +11,28 @@ BASE = Path("docs/data")
 data = json.loads(FILE.read_text())
 
 # -----------------------
-# HELPERS
-# -----------------------
 def add(day, sport, year, text):
     data.setdefault(day, {})
     data[day].setdefault(sport, [])
 
-    existing = [e["text"] for e in data[day][sport]]
-    if text not in existing:
+    if not any(e["text"] == text for e in data[day][sport]):
         data[day][sport].append({
             "year": year,
             "text": text
         })
 
-# -----------------------
-# CLEAN MLB (REMOVE JUNK)
-# -----------------------
+# =======================
+# CLEAN MLB JUNK
+# =======================
 for day in list(data.keys()):
     if "MLB" in data[day]:
-        cleaned = [e for e in data[day]["MLB"] if " vs " not in e["text"]]
-        if cleaned:
-            data[day]["MLB"] = cleaned
-        else:
+        data[day]["MLB"] = [e for e in data[day]["MLB"] if " vs " not in e["text"]]
+        if not data[day]["MLB"]:
             del data[day]["MLB"]
 
-# -----------------------
-# NBA (ADD STATS ONLY)
-# -----------------------
+# =======================
+# NBA STATS FIX
+# =======================
 for file in BASE.glob("nba/*/*.json"):
     try:
         g = json.loads(file.read_text())
@@ -49,10 +44,11 @@ for file in BASE.glob("nba/*/*.json"):
 
     try:
         d = datetime.strptime(g["date"][:10], "%Y-%m-%d")
-        day = d.strftime("%m-%d")
-        year = d.year
     except:
         continue
+
+    day = d.strftime("%m-%d")
+    year = d.year
 
     if day not in data:
         continue
@@ -75,9 +71,9 @@ for file in BASE.glob("nba/*/*.json"):
         text = f"{best['name']} {best['pts']} pts, {best['reb']} reb, {best['ast']} ast"
         add(day, "NBA", year, text)
 
-# -----------------------
-# AFL (FROM YOUR AFL FILES)
-# -----------------------
+# =======================
+# AFL RESTORE
+# =======================
 for file in BASE.glob("afl/*.json"):
     try:
         rows = json.loads(file.read_text())
@@ -99,23 +95,25 @@ for file in BASE.glob("afl/*.json"):
         hs = r.get("home_points")
         as_ = r.get("away_points")
 
-        if home and away and hs is not None and as_ is not None:
-            try:
-                hs = int(hs)
-                as_ = int(as_)
-            except:
-                continue
+        if not home or not away:
+            continue
 
-            if hs > as_:
-                text = f"{home} {hs} def {away} {as_}"
-            else:
-                text = f"{away} {as_} def {home} {hs}"
+        try:
+            hs = int(hs)
+            as_ = int(as_)
+        except:
+            continue
 
-            add(day, "AFL", year, text)
+        if hs > as_:
+            text = f"{home} {hs} def {away} {as_}"
+        else:
+            text = f"{away} {as_} def {home} {hs}"
 
-# -----------------------
-# NRL (GENERIC SUPPORT)
-# -----------------------
+        add(day, "AFL", year, text)
+
+# =======================
+# NRL RESTORE
+# =======================
 for file in BASE.glob("nrl/*.json"):
     try:
         rows = json.loads(file.read_text())
@@ -137,23 +135,25 @@ for file in BASE.glob("nrl/*.json"):
         hs = r.get("home_score")
         as_ = r.get("away_score")
 
-        if home and away and hs is not None and as_ is not None:
-            try:
-                hs = int(hs)
-                as_ = int(as_)
-            except:
-                continue
+        if not home or not away:
+            continue
 
-            if hs > as_:
-                text = f"{home} {hs} def {away} {as_}"
-            else:
-                text = f"{away} {as_} def {home} {hs}"
+        try:
+            hs = int(hs)
+            as_ = int(as_)
+        except:
+            continue
 
-            add(day, "NRL", year, text)
+        if hs > as_:
+            text = f"{home} {hs} def {away} {as_}"
+        else:
+            text = f"{away} {as_} def {home} {hs}"
 
-# -----------------------
-# RACING (CSV SUPPORT)
-# -----------------------
+        add(day, "NRL", year, text)
+
+# =======================
+# RACING RESTORE
+# =======================
 for file in BASE.rglob("*.csv"):
     if "cycling" not in str(file).lower():
         continue
@@ -179,9 +179,9 @@ for file in BASE.rglob("*.csv"):
     except:
         continue
 
-# -----------------------
+# =======================
 # SAVE
-# -----------------------
+# =======================
 FILE.write_text(json.dumps(data, indent=2))
 
-print("DONE - ALL SPORTS UPDATED SAFELY")
+print("DONE - EVERYTHING RESTORED")
