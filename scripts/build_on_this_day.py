@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-print("BUILDING ON THIS DAY (MATCHED TO YOUR DATA)")
+print("BUILDING ON THIS DAY (FINAL FIXED)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -14,7 +14,10 @@ seen = set()
 # LOAD EXISTING
 # -----------------------
 if OUTPUT.exists():
-    data_out = json.loads(OUTPUT.read_text())
+    try:
+        data_out = json.loads(OUTPUT.read_text())
+    except:
+        data_out = {}
 
 for d in data_out:
     for s in data_out[d]:
@@ -39,7 +42,7 @@ def add_event(d, sport, text):
     })
 
 # -----------------------
-# NBA (YOUR STRUCTURE)
+# NBA (YOUR REAL STRUCTURE)
 # -----------------------
 for file in BASE.glob("nba/*/*.json"):
 
@@ -61,32 +64,39 @@ for file in BASE.glob("nba/*/*.json"):
     hs = g.get("home_score")
     as_ = g.get("away_score")
 
+    # 🔥 FIX: skip bad scores
+    try:
+        hs = int(hs)
+        as_ = int(as_)
+    except:
+        continue
+
     if not home or not away:
         continue
 
-    # game result
     if hs > as_:
-        text = f"{home} {hs} def {away} {as_}"
+        add_event(d, "NBA", f"{home} {hs} def {away} {as_}")
     else:
-        text = f"{away} {as_} def {home} {hs}"
+        add_event(d, "NBA", f"{away} {as_} def {home} {hs}")
 
-    add_event(d, "NBA", text)
-
-    # 🔥 HIGH GAME LOGIC
+    # 🔥 HIGH GAME
     best_pts = 0
     best_player = None
 
-    for p in g["players"]:
-        pts = p.get("points") or 0
-        if pts > best_pts:
-            best_pts = pts
-            best_player = p.get("player")
+    for p in g.get("players", []):
+        try:
+            pts = int(p.get("points") or 0)
+            if pts > best_pts:
+                best_pts = pts
+                best_player = p.get("player")
+        except:
+            continue
 
-    if best_pts >= 40:
+    if best_pts >= 40 and best_player:
         add_event(d, "NBA", f"{best_player} scored {best_pts}")
 
 # -----------------------
-# MLB (YOUR STRUCTURE)
+# MLB (YOUR REAL STRUCTURE)
 # -----------------------
 for file in BASE.glob("baseball/boxscores/*/*.json"):
 
@@ -105,15 +115,20 @@ for file in BASE.glob("baseball/boxscores/*/*.json"):
     hs = g.get("home_score")
     as_ = g.get("away_score")
 
+    # 🔥 FIX: skip bad scores
+    try:
+        hs = int(hs)
+        as_ = int(as_)
+    except:
+        continue
+
     if not home or not away:
         continue
 
     if hs > as_:
-        text = f"{home} {hs} def {away} {as_}"
+        add_event(d, "MLB", f"{home} {hs} def {away} {as_}")
     else:
-        text = f"{away} {as_} def {home} {hs}"
-
-    add_event(d, "MLB", text)
+        add_event(d, "MLB", f"{away} {as_} def {home} {hs}")
 
 # -----------------------
 # SAVE
