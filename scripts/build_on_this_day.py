@@ -4,22 +4,30 @@ from pathlib import Path
 from datetime import datetime
 import re
 
-print("BUILDING ON THIS DAY (FINAL – CORRECT FILE)")
+print("BUILDING ON THIS DAY (MERGE MODE)")
 
 BASE = Path("docs/data")
-OUTPUT = BASE / "on_this_day.json"   # ✅ CORRECT FILE NAME
+OUTPUT = BASE / "on_this_day.json"
 
 data_out = {}
 seen = set()
 
 # -----------------------
-# LOAD JSON SAFE
+# LOAD EXISTING FILE
 # -----------------------
-def load_json_safe(path):
+if OUTPUT.exists():
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        data_out = json.loads(OUTPUT.read_text(encoding="utf-8"))
+        print("Loaded existing file")
     except:
-        return None
+        data_out = {}
+
+# build seen set from existing
+for day in data_out:
+    for sport in data_out[day]:
+        for e in data_out[day][sport]:
+            key = f"{sport}|{e['year']}|{e['text']}"
+            seen.add(key)
 
 # -----------------------
 # DATE PARSER
@@ -38,20 +46,11 @@ def parse_date(row):
 
     d = str(d).strip()
 
-    try:
-        return datetime.fromisoformat(d.replace("Z",""))
-    except:
-        pass
-
-    try:
-        return datetime.strptime(d[:10], "%Y-%m-%d")
-    except:
-        pass
-
-    try:
-        return datetime.strptime(d.replace(" ", "")[:10], "%d/%m/%Y")
-    except:
-        pass
+    for fmt in ["%Y-%m-%d", "%d/%m/%Y"]:
+        try:
+            return datetime.strptime(d[:10], fmt)
+        except:
+            pass
 
     try:
         d = re.sub(r'(\d+)(st|nd|rd|th)', r'\1', d)
@@ -62,10 +61,16 @@ def parse_date(row):
     return None
 
 # -----------------------
-# ADD EVENT
+# ADD EVENT (NO DUPES)
 # -----------------------
 def add_event(d, sport, text):
     key = d.strftime("%m-%d")
+    uid = f"{sport}|{d.year}|{text}"
+
+    if uid in seen:
+        return
+
+    seen.add(uid)
 
     data_out.setdefault(key, {})
     data_out[key].setdefault(sport, [])
@@ -77,21 +82,64 @@ def add_event(d, sport, text):
     })
 
 # -----------------------
-# NBA (FIXED)
+# GENERIC (NRL / MLB / ETC)
+# -----------------------
+def process_generic(file, sport):
+
+    try:
+        data = json.loads(file.read_text(encoding="utf-8"))
+    except:
+        return
+
+    rows = data if isinstance(data, list) else data.get("games", [])
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        d = parse_date(row)
+        if not d:
+            continue
+
+        home = row.get("home_team") or row.get("team")
+        away = row.get("away_team") or row.get("opponent")
+
+        hs = row.get("home_score") or row.get("team_score")
+        as_ = row.get("away_score") or row.get("opponent_score")
+
+        if not home or not away:
+            continue
+
+        try:
+            hs = int(hs)
+            as_ = int(as_)
+
+            if hs > as_:
+                text = f"{home} {hs} defeated {away} {as_}"
+            elif as_ > hs:
+                text = f"{away} {as_} defeated {home} {hs}"
+            else:
+                text = f"{home} {hs} drew with {away} {as_}"
+        except:
+            text = f"{home} vs {away}"
+
+        add_event(d, sport, text)
+
+# -----------------------
+# NBA
 # -----------------------
 def process_nba(file):
-    data = load_json_safe(file)
-    if not data or "game_id" not in data:
+    try:
+        data = json.loads(file.read_text(encoding="utf-8"))
+    except:
+        return
+
+    if "game_id" not in data:
         return
 
     d = parse_date(data)
     if not d:
         return
-
-    uid = f"NBA|{data.get('game_id')}"
-    if uid in seen:
-        return
-    seen.add(uid)
 
     home = data.get("home_team")
     away = data.get("away_team")
@@ -107,121 +155,73 @@ def process_nba(file):
     except:
         result = f"{home} vs {away}"
 
+    # high scorer
     top_player = None
     top_pts = 0
 
     for p in data.get("players", []):
         try:
-            pts = (
-                p.get("points")
-                or p.get("PTS")
-                or p.get("pts")
-                or 0
-            )
-            pts = int(pts)
-
+            pts = int(p.get("PTS") or p.get("points") or 0)
             if pts > top_pts:
                 top_pts = pts
-                top_player = p.get("player") or p.get("name")
+                top_player = p.get("player")
         except:
-            continue
+            pass
 
     if top_player and top_pts >= 40:
-        result += f" — {top_player} scored {top_pts} points"
+        result += f" — {top_player} scored {top_pts}"
 
     add_event(d, "NBA", result)
 
 # -----------------------
-# AFL
-# -----------------------
-def process_afl(file):
-    data = load_json_safe(file)
-    if not data:
-        return
-
-    matches = {}
-
-    for row in data:
-        d = parse_date(row)
-        if not d:
-            continue
-
-        mid = row.get("match_id")
-        if not mid:
-            continue
-
-        matches.setdefault(mid, {
-            "date": d,
-            "home": row.get("played_for"),
-            "away": row.get("played_against"),
-            "hs": row.get("home_points"),
-            "as": row.get("away_points")
-        })
-
-    for mid, m in matches.items():
-
-        uid = f"AFL|{mid}"
-        if uid in seen:
-            continue
-        seen.add(uid)
-
-        d = m["date"]
-
-        try:
-            hs = int(m["hs"])
-            as_ = int(m["as"])
-
-            if hs > as_:
-                text = f"{m['home']} {hs} defeated {m['away']} {as_}"
-            else:
-                text = f"{m['away']} {as_} defeated {m['home']} {hs}"
-        except:
-            text = f"{m['home']} vs {m['away']}"
-
-        add_event(d, "AFL", text)
-
-# -----------------------
-# RACING CSV (UTF FIX)
+# RACING CSV
 # -----------------------
 def process_racing(file):
 
     try:
-        with open(file, newline='', encoding="utf-8", errors="ignore") as f:
+        with open(file, encoding="utf-8", errors="ignore") as f:
             reader = csv.DictReader(f)
 
             for r in reader:
 
-                dt = parse_date({"date": r.get("Date") or r.get("date")})
+                dt = parse_date({"date": r.get("Date")})
                 if not dt:
                     continue
 
-                race = r.get("Race") or r.get("race")
-                winner = r.get("Winner") or r.get("winner")
+                race = r.get("Race")
+                winner = r.get("Winner")
 
                 if not race or not winner:
                     continue
 
-                uid = f"RACING|{dt}|{race}|{winner}"
-                if uid in seen:
-                    continue
-                seen.add(uid)
+                add_event(dt, "Racing", f"{winner} won the {race}")
 
-                add_event(dt, "Racing", f"{winner.strip()} won the {race.strip()}")
+    except:
+        pass
 
-    except Exception as e:
-        print("CSV error:", file, e)
+# -----------------------
+# DETECT SPORT
+# -----------------------
+def detect_sport(path):
+    p = str(path).lower()
+    if "nrl" in p: return "NRL"
+    if "baseball" in p: return "MLB"
+    if "tennis" in p: return "Tennis"
+    if "golf" in p: return "Golf"
+    if "cycling" in p: return "Cycling"
+    return None
 
 # -----------------------
 # MAIN LOOP
 # -----------------------
 for file in BASE.rglob("*"):
 
+    path = str(file).lower()
+
     if not file.is_file():
         continue
 
-    path = str(file).lower()
-
-    if file.suffix.lower() == ".csv":
+    if file.suffix == ".csv":
         process_racing(file)
         continue
 
@@ -229,31 +229,15 @@ for file in BASE.rglob("*"):
         process_nba(file)
         continue
 
-    if "afl" in path:
-        process_afl(file)
-        continue
+    if path.endswith(".json"):
+        sport = detect_sport(file)
+        if sport:
+            process_generic(file, sport)
 
 # -----------------------
-# SORT
+# SAVE
 # -----------------------
-for day in data_out:
-    for sport in data_out[day]:
-        data_out[day][sport].sort(
-            key=lambda x: x["year"],
-            reverse=True
-        )
-
-# -----------------------
-# SAVE (FORCED)
-# -----------------------
-OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-
-if not data_out:
-    print("⚠️ No data built — writing empty file")
-    OUTPUT.write_text("{}")
-else:
-    OUTPUT.write_text(json.dumps(data_out, indent=2))
+OUTPUT.write_text(json.dumps(data_out, indent=2))
 
 print("DONE")
-print("Days built:", len(data_out))
-print("Saved to:", OUTPUT)
+print("Days:", len(data_out))
