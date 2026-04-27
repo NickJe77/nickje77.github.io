@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 
-print("BUILDING ON THIS DAY - FULL BUILD (NBA + AFL + NRL + MLB + RACING)")
+print("BUILDING ON THIS DAY - FINAL (ALL SPORTS + STATS FIXED)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -86,14 +86,11 @@ def add_event(d, sport, text):
     })
 
 # -----------------------
-# NBA (30+ INLINE)
+# NBA (FIXED PROPERLY)
 # -----------------------
 def process_nba_boxscore(file):
     data = load_json_safe(file)
     if not isinstance(data, dict):
-        return
-
-    if "players" not in data:
         return
 
     d = parse_date(data)
@@ -111,8 +108,10 @@ def process_nba_boxscore(file):
         if not isinstance(p, dict):
             continue
 
+        raw = p.get("points") or p.get("PTS") or p.get("pts")
+
         try:
-            pts = int(p.get("points") or p.get("PTS") or 0)
+            pts = int(str(raw).replace("pts","").strip())
         except:
             continue
 
@@ -142,7 +141,7 @@ def process_nba_boxscore(file):
             pass
 
 # -----------------------
-# AFL
+# AFL (RESTORED STATS)
 # -----------------------
 def process_afl_file(file):
     data = load_json_safe(file)
@@ -191,10 +190,44 @@ def process_afl_file(file):
         except:
             continue
 
+        # stats
+        top_goals = 0
+        top_goals_player = None
+        top_disp = 0
+        top_disp_player = None
+
+        for p in m["players"]:
+            try:
+                g = int(p.get("G") or 0)
+                if g > top_goals:
+                    top_goals = g
+                    top_goals_player = p.get("player")
+            except:
+                pass
+
+            try:
+                d_ = int(p.get("D") or 0)
+                if d_ > top_disp:
+                    top_disp = d_
+                    top_disp_player = p.get("player")
+            except:
+                pass
+
+        extras = []
+
+        if top_goals_player and top_goals >= 5:
+            extras.append(f"{top_goals_player} {top_goals} goals")
+
+        if top_disp_player and top_disp >= 30:
+            extras.append(f"{top_disp_player} {top_disp} disposals")
+
+        if extras:
+            text += " — " + ", ".join(extras)
+
         add_event(d, "AFL", text)
 
 # -----------------------
-# MLB (NEW)
+# MLB
 # -----------------------
 def process_mlb_boxscore(file):
     data = load_json_safe(file)
