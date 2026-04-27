@@ -4,7 +4,7 @@ import io
 import json
 from pathlib import Path
 
-print("IPL 2026 CRICSHEET BUILDER")
+print("IPL 2026 CRICSHEET BUILDER (FULL FIX)")
 
 OUTPUT = Path("docs/data/ipl/ipl_2026_FULL.json")
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
@@ -12,7 +12,7 @@ OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 ZIP_URL = "https://cricsheet.org/downloads/ipl_json.zip"
 
 # -------------------------
-# LOAD EXISTING
+# LOAD EXISTING DATA
 # -------------------------
 existing = []
 existing_ids = set()
@@ -38,7 +38,6 @@ if r.status_code != 200:
     exit()
 
 z = zipfile.ZipFile(io.BytesIO(r.content))
-
 files = z.namelist()
 
 print("Files in zip:", len(files))
@@ -53,22 +52,34 @@ for file_name in files:
     if not file_name.endswith(".json"):
         continue
 
-    # IPL 2026 filter
-    if "2026" not in file_name:
-        continue
-
-    short_name = file_name.split("/")[-1]
-
-    if short_name in existing_ids:
-        continue
-
     try:
-        data = json.loads(z.read(file_name).decode("utf-8"))
+        raw = z.read(file_name).decode("utf-8")
+        data = json.loads(raw)
 
-        match = data
-        match["file"] = short_name
+        # -------------------------
+        # FILTER IPL + 2026
+        # -------------------------
+        info = data.get("info", {})
 
-        new_matches.append(match)
+        season = str(info.get("season", ""))
+        event_name = str(info.get("event", {}).get("name", "")).lower()
+
+        # must be IPL + 2026
+        if "2026" not in season:
+            continue
+
+        if "indian premier league" not in event_name:
+            continue
+
+        short_name = file_name.split("/")[-1]
+
+        if short_name in existing_ids:
+            continue
+
+        # keep exact cricsheet format
+        data["file"] = short_name
+
+        new_matches.append(data)
         print("✔ added", short_name)
 
     except Exception as e:
@@ -79,7 +90,7 @@ for file_name in files:
 # -------------------------
 combined = existing + new_matches
 
-# optional sort by date
+# sort by date (safe)
 def get_date(m):
     try:
         return m["info"]["dates"][0]
