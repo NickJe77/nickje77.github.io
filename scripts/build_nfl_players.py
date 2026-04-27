@@ -3,64 +3,103 @@ import json
 from collections import defaultdict
 
 GAMES_PATH = "docs/data/nfl/games"
-OUTPUT = "docs/data/nfl/players"
+OUTPUT_PATH = "docs/data/nfl/players"
 
-os.makedirs(OUTPUT, exist_ok=True)
+os.makedirs(OUTPUT_PATH, exist_ok=True)
+
+print("Building NFL players dataset...")
 
 players = defaultdict(lambda: {
-    "games":0,
-    "passY":0,
-    "passTD":0,
-    "rushY":0,
-    "rushTD":0,
-    "recY":0,
-    "recTD":0
+"games": 0,
+"passY": 0,
+"passTD": 0,
+"rushY": 0,
+"rushTD": 0,
+"recY": 0,
+"recTD": 0
 })
 
+# -------------------------
+
+# LOAD ALL SEASON FILES
+
+# -------------------------
+
 for file in os.listdir(GAMES_PATH):
-    if not file.endswith(".json"):
-        continue
+if not file.endswith(".json"):
+continue
 
-    with open(os.path.join(GAMES_PATH, file)) as f:
+```
+path = os.path.join(GAMES_PATH, file)
+
+try:
+    with open(path, "r") as f:
         data = json.load(f)
+except:
+    continue
 
-    for g in data["games"]:
-        for p in g.get("players", []):
+for game in data.get("games", []):
+    for p in game.get("players", []):
 
-            name = p.get("name")
-            if not name:
-                continue
+        name = p.get("name")
+        if not name:
+            continue
 
-            players[name]["games"] += 1
+        players[name]["games"] += 1
 
-            players[name]["passY"] += p.get("passing", {}).get("yards",0)
-            players[name]["passTD"] += p.get("passing", {}).get("td",0)
+        # PASSING
+        passing = p.get("passing", {})
+        players[name]["passY"] += passing.get("yards", 0)
+        players[name]["passTD"] += passing.get("td", 0)
 
-            players[name]["rushY"] += p.get("rushing", {}).get("yards",0)
-            players[name]["rushTD"] += p.get("rushing", {}).get("td",0)
+        # RUSHING
+        rushing = p.get("rushing", {})
+        players[name]["rushY"] += rushing.get("yards", 0)
+        players[name]["rushTD"] += rushing.get("td", 0)
 
-            players[name]["recY"] += p.get("receiving", {}).get("yards",0)
-            players[name]["recTD"] += p.get("receiving", {}).get("td",0)
+        # RECEIVING
+        receiving = p.get("receiving", {})
+        players[name]["recY"] += receiving.get("yards", 0)
+        players[name]["recTD"] += receiving.get("td", 0)
+```
 
+# -------------------------
 
-# build output
+# BUILD OUTPUT FILES
+
+# -------------------------
+
 summary = []
 index = []
 
 for name, stats in players.items():
-    summary.append({
-        "name": name,
-        **stats
-    })
-    index.append(name)
+entry = {
+"name": name,
+"games": stats["games"],
+"passY": stats["passY"],
+"passTD": stats["passTD"],
+"rushY": stats["rushY"],
+"rushTD": stats["rushTD"],
+"recY": stats["recY"],
+"recTD": stats["recTD"]
+}
+
+```
+summary.append(entry)
+index.append(name)
+```
+
+# sort for clean UI
 
 summary.sort(key=lambda x: x["name"])
 index.sort()
 
-with open(f"{OUTPUT}/summary.json","w") as f:
-    json.dump(summary,f,indent=2)
+# write files
 
-with open(f"{OUTPUT}/index.json","w") as f:
-    json.dump(index,f,indent=2)
+with open(os.path.join(OUTPUT_PATH, "summary.json"), "w") as f:
+json.dump(summary, f, indent=2)
 
-print("✅ Players built:", len(summary))bui
+with open(os.path.join(OUTPUT_PATH, "index.json"), "w") as f:
+json.dump(index, f, indent=2)
+
+print("Players built:", len(summary))
