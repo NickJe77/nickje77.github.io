@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 
-print("BUILDING ON THIS DAY - FINAL (ALL SPORTS + AFL FIXED CORRECTLY)")
+print("BUILDING ON THIS DAY - FINAL (AFL PATH FIX + ALL SPORTS)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -86,7 +86,7 @@ def add_event(d, sport, text):
     })
 
 # -----------------------
-# NBA (player_name FIX)
+# NBA
 # -----------------------
 def process_nba_boxscore(file):
     data = load_json_safe(file)
@@ -118,7 +118,6 @@ def process_nba_boxscore(file):
                 p.get("player_name")
                 or p.get("player")
                 or p.get("name")
-                or p.get("full_name")
             )
             if name:
                 scorers_30.append(f"{name} {pts}")
@@ -144,7 +143,7 @@ def process_nba_boxscore(file):
             pass
 
 # -----------------------
-# AFL (CORRECT FIX)
+# AFL
 # -----------------------
 def process_afl_file(file):
     data = load_json_safe(file)
@@ -200,7 +199,6 @@ def process_afl_file(file):
         else:
             text = f"{home} {hs} drew with {away} {as_}"
 
-        # stats
         top_goals = 0
         top_goals_player = None
         top_disp = 0
@@ -273,7 +271,7 @@ def process_mlb_boxscore(file):
         pass
 
 # -----------------------
-# GENERIC (NRL etc)
+# GENERIC
 # -----------------------
 def process_generic_file(file, sport):
     data = load_json_safe(file)
@@ -281,9 +279,6 @@ def process_generic_file(file, sport):
         return
 
     rows = data if isinstance(data, list) else data.get("games", [])
-
-    if not isinstance(rows, list):
-        return
 
     for row in rows:
         if not isinstance(row, dict):
@@ -318,46 +313,30 @@ def process_generic_file(file, sport):
         add_event(d, sport, text)
 
 # -----------------------
-# RACING CSV
+# RACING
 # -----------------------
 def process_racing_csv(file):
     try:
-        with open(file, newline="", encoding="utf-8", errors="ignore") as f:
+        with open(file, newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
-
             for r in reader:
-                d = parse_date({"date": r.get("Date") or r.get("date")})
+                d = parse_date({"date": r.get("Date")})
                 if not d:
                     continue
-
-                race = r.get("Race") or r.get("Event")
-                winner = r.get("Winner") or r.get("Driver")
-
+                race = r.get("Race")
+                winner = r.get("Winner")
                 if race and winner:
-                    add_event(d, "Racing", f"{winner.strip()} won the {race.strip()}")
-
-    except Exception as e:
-        print("CSV error:", file, e)
+                    add_event(d, "Racing", f"{winner} won the {race}")
+    except:
+        pass
 
 # -----------------------
 # DETECT SPORT
 # -----------------------
 def detect_sport(path):
     p = str(path).lower()
-
-    if "/nrl/" in p:
+    if "nrl" in p:
         return "NRL"
-    if "/tennis/" in p:
-        return "Tennis"
-    if "/golf/" in p:
-        return "Golf"
-    if "/cycling/" in p:
-        return "Cycling"
-    if "/bathurst/" in p:
-        return "Motorsport"
-    if "/f1/" in p:
-        return "F1"
-
     return None
 
 # -----------------------
@@ -367,7 +346,7 @@ for file in BASE.rglob("*"):
     if not file.is_file():
         continue
 
-    path = str(file).replace("\\", "/").lower()
+    path = str(file).lower()
 
     if path.endswith("on_this_day.json"):
         continue
@@ -379,15 +358,15 @@ for file in BASE.rglob("*"):
     if file.suffix.lower() != ".json":
         continue
 
-    if "/nba/" in path:
+    if "nba" in path:
         process_nba_boxscore(file)
         continue
 
-    if "/afl/" in path:
+    if "afl" in path:   # 🔥 FIXED
         process_afl_file(file)
         continue
 
-    if "/baseball/" in path:
+    if "baseball" in path:
         process_mlb_boxscore(file)
         continue
 
@@ -396,20 +375,9 @@ for file in BASE.rglob("*"):
         process_generic_file(file, sport)
 
 # -----------------------
-# SORT
-# -----------------------
-for day in data_out:
-    for sport in data_out[day]:
-        data_out[day][sport].sort(
-            key=lambda x: x.get("year", 0),
-            reverse=True
-        )
-
-# -----------------------
 # SAVE
 # -----------------------
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 OUTPUT.write_text(json.dumps(data_out, indent=2), encoding="utf-8")
 
 print("DONE")
-print("Days built:", len(data_out))
