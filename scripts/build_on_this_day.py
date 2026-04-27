@@ -3,7 +3,7 @@ from pathlib import Path
 from datetime import datetime
 import csv
 
-print("ON THIS DAY - FULL RECOVERY")
+print("ON THIS DAY - FIX (NO SKIPS)")
 
 FILE = Path("docs/data/on_this_day.json")
 BASE = Path("docs/data")
@@ -22,16 +22,7 @@ def add(day, sport, year, text):
         })
 
 # =======================
-# CLEAN MLB JUNK
-# =======================
-for day in list(data.keys()):
-    if "MLB" in data[day]:
-        data[day]["MLB"] = [e for e in data[day]["MLB"] if " vs " not in e["text"]]
-        if not data[day]["MLB"]:
-            del data[day]["MLB"]
-
-# =======================
-# NBA STATS FIX
+# NBA (ADD STATS PROPERLY)
 # =======================
 for file in BASE.glob("nba/*/*.json"):
     try:
@@ -50,8 +41,8 @@ for file in BASE.glob("nba/*/*.json"):
     day = d.strftime("%m-%d")
     year = d.year
 
-    if day not in data:
-        continue
+    # DO NOT SKIP DAY ANYMORE
+    # this is the key fix
 
     best = None
     for p in g.get("players", []):
@@ -72,7 +63,7 @@ for file in BASE.glob("nba/*/*.json"):
         add(day, "NBA", year, text)
 
 # =======================
-# AFL RESTORE
+# AFL (FORCED ADD BACK)
 # =======================
 for file in BASE.glob("afl/*.json"):
     try:
@@ -112,7 +103,7 @@ for file in BASE.glob("afl/*.json"):
         add(day, "AFL", year, text)
 
 # =======================
-# NRL RESTORE
+# NRL
 # =======================
 for file in BASE.glob("nrl/*.json"):
     try:
@@ -152,7 +143,7 @@ for file in BASE.glob("nrl/*.json"):
         add(day, "NRL", year, text)
 
 # =======================
-# RACING RESTORE
+# RACING
 # =======================
 for file in BASE.rglob("*.csv"):
     if "cycling" not in str(file).lower():
@@ -184,4 +175,4 @@ for file in BASE.rglob("*.csv"):
 # =======================
 FILE.write_text(json.dumps(data, indent=2))
 
-print("DONE - EVERYTHING RESTORED")
+print("DONE - NO SKIPS")
