@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-print("BUILDING ON THIS DAY (FINAL FIXED)")
+print("BUILDING ON THIS DAY (FINAL CLEAN)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -41,9 +41,9 @@ def add_event(d, sport, text):
         "text": text
     })
 
-# -----------------------
-# NBA (YOUR REAL STRUCTURE)
-# -----------------------
+# =======================
+# NBA (YOUR STRUCTURE)
+# =======================
 for file in BASE.glob("nba/*/*.json"):
 
     try:
@@ -54,6 +54,7 @@ for file in BASE.glob("nba/*/*.json"):
     if "players" not in g:
         continue
 
+    # date
     try:
         d = datetime.strptime(g["date"][:10], "%Y-%m-%d")
     except:
@@ -61,27 +62,29 @@ for file in BASE.glob("nba/*/*.json"):
 
     home = g.get("home_team")
     away = g.get("away_team")
+
     hs = g.get("home_score")
     as_ = g.get("away_score")
-
-    # 🔥 FIX: skip bad scores
-    try:
-        hs = int(hs)
-        as_ = int(as_)
-    except:
-        continue
 
     if not home or not away:
         continue
 
-    if hs > as_:
-        add_event(d, "NBA", f"{home} {hs} def {away} {as_}")
-    else:
-        add_event(d, "NBA", f"{away} {as_} def {home} {hs}")
+    # result (safe)
+    try:
+        hs = int(hs)
+        as_ = int(as_)
+        if hs > as_:
+            add_event(d, "NBA", f"{home} {hs} def {away} {as_}")
+        else:
+            add_event(d, "NBA", f"{away} {as_} def {home} {hs}")
+    except:
+        add_event(d, "NBA", f"{home} vs {away}")
 
-    # 🔥 HIGH GAME
+    # 🔥 ALWAYS ADD PLAYER STATS
     best_pts = 0
     best_player = None
+    best_reb = 0
+    best_ast = 0
 
     for p in g.get("players", []):
         try:
@@ -89,15 +92,21 @@ for file in BASE.glob("nba/*/*.json"):
             if pts > best_pts:
                 best_pts = pts
                 best_player = p.get("player")
+                best_reb = int(p.get("rebounds") or 0)
+                best_ast = int(p.get("assists") or 0)
         except:
             continue
 
-    if best_pts >= 40 and best_player:
-        add_event(d, "NBA", f"{best_player} scored {best_pts}")
+    if best_player:
+        add_event(
+            d,
+            "NBA",
+            f"{best_player} {best_pts} pts, {best_reb} reb, {best_ast} ast"
+        )
 
-# -----------------------
-# MLB (YOUR REAL STRUCTURE)
-# -----------------------
+# =======================
+# MLB (YOUR STRUCTURE)
+# =======================
 for file in BASE.glob("baseball/boxscores/*/*.json"):
 
     try:
@@ -105,6 +114,7 @@ for file in BASE.glob("baseball/boxscores/*/*.json"):
     except:
         continue
 
+    # date
     try:
         d = datetime.strptime(g["date"], "%Y-%m-%d")
     except:
@@ -112,27 +122,29 @@ for file in BASE.glob("baseball/boxscores/*/*.json"):
 
     home = g.get("home_team")
     away = g.get("away_team")
+
     hs = g.get("home_score")
     as_ = g.get("away_score")
-
-    # 🔥 FIX: skip bad scores
-    try:
-        hs = int(hs)
-        as_ = int(as_)
-    except:
-        continue
 
     if not home or not away:
         continue
 
-    if hs > as_:
-        add_event(d, "MLB", f"{home} {hs} def {away} {as_}")
-    else:
-        add_event(d, "MLB", f"{away} {as_} def {home} {hs}")
+    # safe score handling
+    try:
+        hs = int(hs)
+        as_ = int(as_)
+        if hs > as_:
+            text = f"{home} {hs} def {away} {as_}"
+        else:
+            text = f"{away} {as_} def {home} {hs}"
+    except:
+        text = f"{home} vs {away}"
 
-# -----------------------
+    add_event(d, "MLB", text)
+
+# =======================
 # SAVE
-# -----------------------
+# =======================
 OUTPUT.write_text(json.dumps(data_out, indent=2))
 
 print("DONE")
