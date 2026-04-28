@@ -11,7 +11,7 @@ import requests
 from bs4 import BeautifulSoup, Comment
 
 START_YEAR = 1970
-END_YEAR = 1970   # 🔥 test ONE year first
+END_YEAR = 1970   # test first
 
 BASE = "https://www.pro-football-reference.com"
 OUT_ROOT = "docs/data/nfl"
@@ -19,10 +19,13 @@ SEASONS_DIR = os.path.join(OUT_ROOT, "seasons")
 BOXSCORES_DIR = os.path.join(OUT_ROOT, "boxscores")
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
     "Accept-Language": "en-US,en;q=0.9",
 }
 
+# -------------------------
+# SETUP
+# -------------------------
 def mkdirs():
     os.makedirs(SEASONS_DIR, exist_ok=True)
     os.makedirs(BOXSCORES_DIR, exist_ok=True)
@@ -30,16 +33,18 @@ def mkdirs():
 def get(url):
     print(f"GET {url}")
     r = requests.get(url, headers=HEADERS, timeout=30)
-    time.sleep(random.uniform(3.5, 6.0))
+
+    time.sleep(random.uniform(4.0, 7.0))  # slow = avoid block
 
     if r.status_code != 200:
         print(f"  !! HTTP {r.status_code}")
         return None
 
     if "ad blocker" in r.text.lower():
-        print("  !! BLOCKED BY SITE")
+        print("  !! BLOCKED BY PFR")
         return None
 
+    print(f"  OK ({len(r.text)} bytes)")
     return r.text
 
 def clean(s):
@@ -51,42 +56,62 @@ def to_int(v):
     except:
         return None
 
-# =============================
+# -------------------------
 # 🔥 FIXED SCHEDULE PARSER
-# =============================
+# -------------------------
 def parse_schedule(year):
     url = f"{BASE}/years/{year}/games.htm"
     html = get(url)
+
     if not html:
+        print("  !! NO HTML RETURNED")
         return []
 
     soup = BeautifulSoup(html, "html.parser")
 
-    # 🔥 find table inside comments
-    comments = soup.find_all(string=lambda text: isinstance(text, Comment))
+    # 1️⃣ try normal table
+    table = soup.find("table", id="games")
+    if table:
+        print("  ✅ found normal table")
 
-    table = None
-    for c in comments:
-        if 'id="games"' in c:
-            table_soup = BeautifulSoup(c, "html.parser")
-            table = table_soup.find("table", id="games")
-            if table:
-                break
+    # 2️⃣ try comments
+    if not table:
+        print("  trying comment extraction...")
+        comments = soup.find_all(string=lambda text: isinstance(text, Comment))
+
+        for c in comments:
+            if "games" in c:
+                try:
+                    comment_soup = BeautifulSoup(c, "html.parser")
+                    table = comment_soup.find("table", id="games")
+                    if table:
+                        print("  ✅ found table in comment")
+                        break
+                except:
+                    continue
 
     if not table:
-        print("  !! games table not found")
+        print("  ❌ NO TABLE FOUND ANYWHERE")
         return []
 
     games = []
 
-    for tr in table.select("tbody tr"):
+    rows = table.select("tbody tr")
+    print(f"  rows found: {len(rows)}")
+
+    for tr in rows:
         if "thead" in tr.get("class", []):
             continue
 
-        cells = {td.get("data-stat"): clean(td.get_text(" ")) for td in tr.find_all(["th", "td"])}
+        cells = {}
+        for td in tr.find_all(["th", "td"]):
+            key = td.get("data-stat")
+            if key:
+                cells[key] = clean(td.get_text(" "))
 
         box_td = tr.find("td", {"data-stat": "boxscore_word"})
         a = box_td.find("a") if box_td else None
+
         if not a:
             continue
 
@@ -106,12 +131,12 @@ def parse_schedule(year):
             "boxscore_file": f"/data/nfl/boxscores/{year}/{game_id}.json"
         })
 
-    print(f"  found {len(games)} games")
+    print(f"  🎯 games parsed: {len(games)}")
     return games
 
-# =============================
-# SIMPLE BOXSCORE (optional)
-# =============================
+# -------------------------
+# SIMPLE BOXSCORE
+# -------------------------
 def parse_boxscore(game):
     year = game["season"]
     game_id = game["game_id"]
@@ -144,6 +169,9 @@ def parse_boxscore(game):
 
     print(f"  wrote boxscore {game_id}")
 
+# -------------------------
+# WRITE FILES
+# -------------------------
 def write_season(year, games):
     out_file = os.path.join(SEASONS_DIR, f"{year}.json")
 
@@ -157,8 +185,11 @@ def write_season(year, games):
     with open(out_file, "w") as f:
         json.dump(data, f, indent=2)
 
-    print(f"wrote {year}.json with {len(games)} games")
+    print(f"wrote {year}.json ({len(games)} games)")
 
+# -------------------------
+# MAIN
+# -------------------------
 def main():
     mkdirs()
 
