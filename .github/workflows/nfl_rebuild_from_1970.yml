@@ -8,26 +8,59 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # -------------------------
+      # CHECKOUT
+      # -------------------------
       - name: Checkout
         uses: actions/checkout@v4
 
+      # -------------------------
+      # DEBUG (shows where your script actually is)
+      # -------------------------
+      - name: Show repo structure
+        run: |
+          echo "=== ROOT ==="
+          ls -la
+          echo "=== FULL TREE ==="
+          ls -R
+
+      # -------------------------
+      # PYTHON SETUP
+      # -------------------------
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
+      # -------------------------
+      # INSTALL DEPS
+      # -------------------------
       - name: Install dependencies
         run: |
           pip install requests beautifulsoup4
 
-      - name: Build NFL dataset
+      # -------------------------
+      # RUN SCRIPT (AUTO-FIND)
+      # -------------------------
+      - name: Run NFL scraper
         run: |
-          python nfl_rebuild_from_1970.py
+          FILE=$(find . -name "nfl_rebuild_from_1970.py" | head -n 1)
+          echo "Found script at: $FILE"
 
+          if [ -z "$FILE" ]; then
+            echo "ERROR: nfl_rebuild_from_1970.py NOT FOUND"
+            exit 1
+          fi
+
+          python "$FILE"
+
+      # -------------------------
+      # COMMIT DATA
+      # -------------------------
       - name: Commit data
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add docs/data/nfl
-          git commit -m "Build NFL data from 1970" || echo "No changes"
+          git commit -m "NFL rebuild from 1970" || echo "No changes"
           git push
