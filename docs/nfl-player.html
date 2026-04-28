@@ -1,7 +1,8 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
-  <script src="/js/analytics.js"></script>
+<script src="/js/analytics.js"></script>
 <meta charset="UTF-8">
 <title>NFL Player | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,67 +15,38 @@ body{font-family:system-ui,Arial,sans-serif;margin:0;padding:20px;background:#f8
 h1{text-align:center;margin:20px 0;}
 
 .search{text-align:center;margin-bottom:20px;}
-
 input, select{padding:8px;font-size:14px;margin:5px;}
 
-.section-title{
-  text-align:center;
-  margin-top:30px;
-  font-size:18px;
-  font-weight:700;
-}
+.section-title{text-align:center;margin-top:30px;font-size:18px;font-weight:700;}
 
-.summary{
-  display:flex;
-  flex-wrap:wrap;
-  justify-content:center;
-  gap:20px;
-  margin:20px 0;
-}
+.summary{display:flex;flex-wrap:wrap;justify-content:center;gap:20px;margin:20px 0;}
 
-.box{
-  background:white;
-  padding:15px;
-  border-radius:10px;
-  min-width:200px;
-  text-align:center;
-  box-shadow:0 2px 6px rgba(0,0,0,0.08);
-}
+.box{background:white;padding:15px;border-radius:10px;min-width:200px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,0.08);}
 
-table{
-  width:100%;
-  border-collapse:collapse;
-  margin-top:10px;
-}
-
-th,td{
-  padding:8px;
-  border-bottom:1px solid #ddd;
-  text-align:center;
-}
-
+table{width:100%;border-collapse:collapse;margin-top:10px;}
+th,td{padding:8px;border-bottom:1px solid #ddd;text-align:center;}
 th{background:#eee;}
-
 tr:hover{background:#f1f1f1;cursor:pointer;}
 </style>
+
 </head>
 
 <body>
 
 <div class="navbar">
-  <a href="/">Home</a>
-  <a href="/nfl">NFL</a>
-  <a href="/nfl-seasons.html">Seasons</a>
+<a href="/">Home</a>
+<a href="/nfl">NFL</a>
+<a href="/nfl-seasons.html">Seasons</a>
 </div>
 
 <h1 id="playerName">NFL Player</h1>
 
 <div class="search">
-  <input list="players" id="playerInput" placeholder="Search player...">
-  <datalist id="players"></datalist><br>
+<input list="players" id="playerInput" placeholder="Search player...">
+<datalist id="players"></datalist><br>
 
-  <select id="teamFilter"><option value="">All Teams</option></select>
-  <select id="oppFilter"><option value="">All Opponents</option></select>
+<select id="teamFilter"><option value="">All Teams</option></select> <select id="oppFilter"><option value="">All Opponents</option></select>
+
 </div>
 
 <div class="section-title">Career Summary</div>
@@ -102,11 +74,13 @@ tr:hover{background:#f1f1f1;cursor:pointer;}
 const params = new URLSearchParams(window.location.search);
 let player = params.get("player");
 
-const slugify = name =>
-  name.toLowerCase().replace(/[^a-z0-9]+/g,"-");
+const slugify = name => name.toLowerCase().replace(/[^a-z0-9]+/g,"-");
 
+let allGames = [];
+
+// LOAD PLAYER LIST
 async function loadPlayers(){
-  const res = await fetch("data/nfl/players/index.json");
+  const res = await fetch("/data/nfl/players/index.json");
   const data = await res.json();
   const dl = document.getElementById("players");
 
@@ -117,24 +91,73 @@ async function loadPlayers(){
   });
 }
 
+// SEARCH NAV
 document.getElementById("playerInput").addEventListener("change",()=>{
   const val = document.getElementById("playerInput").value;
   window.location = "?player="+slugify(val);
 });
 
-async function loadPlayer(){
+// LOAD ALL GAMES (ALL SEASONS)
+async function loadAllGames(){
+
+  const startYear = 1970;
+  const endYear = new Date().getFullYear();
+
+  for(let y=startYear;y<=endYear;y++){
+    try{
+      const res = await fetch(`/data/nfl/games/${y}.json`);
+      const data = await res.json();
+      allGames.push(...data.games);
+    }catch{}
+  }
+
+  buildPlayer();
+}
+
+// BUILD PLAYER FROM GAMES
+function buildPlayer(){
 
   if(!player) return;
 
-  const res = await fetch(`data/nfl/players/${player}.json`);
-  const data = await res.json();
+  const nameMatch = (n) => slugify(n) === player;
 
-  document.getElementById("playerName").innerText = data.name;
+  let games = [];
+
+  allGames.forEach(g=>{
+    g.players.forEach(p=>{
+      if(nameMatch(p.name)){
+        games.push({
+          date:g.date,
+          team:p.team,
+          opponent:(p.team===g.home_team?g.away_team:g.home_team),
+          game_type:g.game_type,
+          passing:p.passing||{yards:0,td:0,int:0},
+          rushing:p.rushing||{yards:0,td:0},
+          receiving:p.receiving||{yards:0,td:0}
+        });
+      }
+    });
+  });
+
+  if(!games.length){
+    document.getElementById("playerName").innerText = "Player Not Found";
+    return;
+  }
+
+  document.getElementById("playerName").innerText =
+    games[0].team ? games[0].team.split(" ").slice(-1)[0] + " Player" : "NFL Player";
+
+  setupFilters(games);
+  render(games);
+}
+
+// FILTER SETUP
+function setupFilters(games){
 
   const teamSet = new Set();
   const oppSet = new Set();
 
-  data.games.forEach(g=>{
+  games.forEach(g=>{
     teamSet.add(g.team);
     oppSet.add(g.opponent);
   });
@@ -142,40 +165,25 @@ async function loadPlayer(){
   const teamFilter = document.getElementById("teamFilter");
   const oppFilter = document.getElementById("oppFilter");
 
-  teamSet.forEach(t=>{
-    teamFilter.innerHTML += `<option value="${t}">${t}</option>`;
-  });
+  teamSet.forEach(t=> teamFilter.innerHTML += `<option>${t}</option>`);
+  oppSet.forEach(t=> oppFilter.innerHTML += `<option>${t}</option>`);
 
-  oppSet.forEach(t=>{
-    oppFilter.innerHTML += `<option value="${t}">${t}</option>`;
-  });
-
-  render(data.games);
-
-  teamFilter.onchange = ()=>render(data.games);
-  oppFilter.onchange = ()=>render(data.games);
+  teamFilter.onchange = ()=>render(games);
+  oppFilter.onchange = ()=>render(games);
 }
 
+// RENDER
 function render(games){
 
   const teamVal = document.getElementById("teamFilter").value;
   const oppVal = document.getElementById("oppFilter").value;
 
   const table = document.getElementById("gamesTable");
-  table.innerHTML = "";
+  table.innerHTML="";
 
   let totals = {games:0, passY:0, passTD:0, int:0, rushY:0, rushTD:0, recY:0, recTD:0};
-
-  let highs = {
-    passY:{v:0}, passTD:{v:0}, rushY:{v:0}, recY:{v:0}
-  };
-
-  let records = {
-    g300:0,
-    multiPassTD:0,
-    rush100:0,
-    rec100:0
-  };
+  let highs = {passY:{v:0}, passTD:{v:0}, rushY:{v:0}, recY:{v:0}};
+  let records = {g300:0, multiPassTD:0, rush100:0, rec100:0};
 
   games.forEach(g=>{
 
@@ -183,7 +191,6 @@ function render(games){
     if(oppVal && g.opponent !== oppVal) return;
 
     totals.games++;
-
     totals.passY += g.passing.yards;
     totals.passTD += g.passing.td;
     totals.int += g.passing.int;
@@ -192,21 +199,19 @@ function render(games){
     totals.recY += g.receiving.yards;
     totals.recTD += g.receiving.td;
 
-    // highs
-    if(g.passing.yards > highs.passY.v) highs.passY = {v:g.passing.yards, g};
-    if(g.passing.td > highs.passTD.v) highs.passTD = {v:g.passing.td, g};
-    if(g.rushing.yards > highs.rushY.v) highs.rushY = {v:g.rushing.yards, g};
-    if(g.receiving.yards > highs.recY.v) highs.recY = {v:g.receiving.yards, g};
+    if(g.passing.yards > highs.passY.v) highs.passY={v:g.passing.yards,g};
+    if(g.passing.td > highs.passTD.v) highs.passTD={v:g.passing.td,g};
+    if(g.rushing.yards > highs.rushY.v) highs.rushY={v:g.rushing.yards,g};
+    if(g.receiving.yards > highs.recY.v) highs.recY={v:g.receiving.yards,g};
 
-    // records
-    if(g.passing.yards >= 300) records.g300++;
-    if(g.passing.td >= 3) records.multiPassTD++;
-    if(g.rushing.yards >= 100) records.rush100++;
-    if(g.receiving.yards >= 100) records.rec100++;
+    if(g.passing.yards>=300) records.g300++;
+    if(g.passing.td>=3) records.multiPassTD++;
+    if(g.rushing.yards>=100) records.rush100++;
+    if(g.receiving.yards>=100) records.rec100++;
 
-    const tr = document.createElement("tr");
+    const tr=document.createElement("tr");
 
-    tr.innerHTML = `
+    tr.innerHTML=`
       <td>${g.date}</td>
       <td>${g.team}</td>
       <td>${g.opponent}</td>
@@ -228,10 +233,10 @@ function render(games){
   renderRecords(records);
 }
 
+// SUMMARY
 function renderSummary(t){
-  const avg = v => t.games ? (v/t.games).toFixed(1) : 0;
-
-  document.getElementById("summary").innerHTML = `
+  const avg=v=>t.games?(v/t.games).toFixed(1):0;
+  document.getElementById("summary").innerHTML=`
     <div class="box"><b>Games</b><br>${t.games}</div>
     <div class="box"><b>Pass Yards</b><br>${t.passY} (${avg(t.passY)})</div>
     <div class="box"><b>Pass TD</b><br>${t.passTD}</div>
@@ -241,35 +246,31 @@ function renderSummary(t){
   `;
 }
 
-function highBox(title, obj){
+function highBox(title,obj){
   if(!obj.g) return "";
-  return `<div class="box"><b>${title}</b><br>
-    ${obj.v}<br>
-    vs ${obj.g.opponent}<br>
-    ${obj.g.date}
-  </div>`;
+  return `<div class="box"><b>${title}</b><br>${obj.v}<br>vs ${obj.g.opponent}<br>${obj.g.date}</div>`;
 }
 
 function renderHighs(h){
-  document.getElementById("highs").innerHTML = `
-    ${highBox("Pass Yards", h.passY)}
-    ${highBox("Pass TD", h.passTD)}
-    ${highBox("Rush Yards", h.rushY)}
-    ${highBox("Rec Yards", h.recY)}
+  document.getElementById("highs").innerHTML=`
+    ${highBox("Pass Yards",h.passY)}
+    ${highBox("Pass TD",h.passTD)}
+    ${highBox("Rush Yards",h.rushY)}
+    ${highBox("Rec Yards",h.recY)}
   `;
 }
 
 function renderRecords(r){
-  document.getElementById("records").innerHTML = `
-    <div class="box"><b>300+ Passing Games</b><br>${r.g300}</div>
-    <div class="box"><b>3+ Pass TD Games</b><br>${r.multiPassTD}</div>
-    <div class="box"><b>100 Rush Games</b><br>${r.rush100}</div>
-    <div class="box"><b>100 Rec Games</b><br>${r.rec100}</div>
+  document.getElementById("records").innerHTML=`
+    <div class="box"><b>300+ Passing</b><br>${r.g300}</div>
+    <div class="box"><b>3+ Pass TD</b><br>${r.multiPassTD}</div>
+    <div class="box"><b>100 Rush</b><br>${r.rush100}</div>
+    <div class="box"><b>100 Rec</b><br>${r.rec100}</div>
   `;
 }
 
 loadPlayers();
-loadPlayer();
+loadAllGames();
 </script>
 
 </body>
