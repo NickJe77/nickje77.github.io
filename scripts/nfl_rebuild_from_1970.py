@@ -9,7 +9,7 @@ END_YEAR = 1970
 OUT_ROOT = "docs/data/nfl"
 SEASONS_DIR = os.path.join(OUT_ROOT, "seasons")
 
-BASE = "https://raw.githubusercontent.com/nflverse/nflverse-data/master/data/games.csv"
+BASE = "https://github.com/nflverse/nflverse-data/releases/latest/download/games.csv"
 
 def mkdirs():
     os.makedirs(SEASONS_DIR, exist_ok=True)
