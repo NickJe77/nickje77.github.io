@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import os
 import json
-import time
 import requests
 
 START_YEAR = 1970
@@ -10,7 +9,7 @@ END_YEAR = 1970
 OUT_ROOT = "docs/data/nfl"
 SEASONS_DIR = os.path.join(OUT_ROOT, "seasons")
 
-BASE = "https://raw.githubusercontent.com/nflverse/nflverse-data/releases/download/games/games.csv"
+BASE = "https://raw.githubusercontent.com/nflverse/nflverse-data/master/data/games.csv"
 
 def mkdirs():
     os.makedirs(SEASONS_DIR, exist_ok=True)
