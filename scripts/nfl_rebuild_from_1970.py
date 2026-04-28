@@ -2,7 +2,7 @@
 import os
 import json
 import requests
-import gzip
+import csv
 import io
 
 START_YEAR = 1970
@@ -11,35 +11,17 @@ END_YEAR = 1970
 OUT_ROOT = "docs/data/nfl"
 SEASONS_DIR = os.path.join(OUT_ROOT, "seasons")
 
-BASE = "https://raw.githubusercontent.com/nflverse/nflverse-data/main/data/games.csv.gz"
+# 🔥 STABLE DATA SOURCE (this does NOT move)
+BASE = "https://raw.githubusercontent.com/ryurko/nflscrapR-data/master/games_data.csv"
 
 def mkdirs():
     os.makedirs(SEASONS_DIR, exist_ok=True)
 
 def fetch_csv():
     print("Downloading NFL dataset...")
-
     r = requests.get(BASE)
     r.raise_for_status()
-
-    # decompress
-    buf = io.BytesIO(r.content)
-    f = gzip.GzipFile(fileobj=buf)
-    content = f.read().decode("utf-8")
-
-    return content.splitlines()
-
-def parse_csv(lines):
-    headers = lines[0].split(",")
-    data = []
-
-    for line in lines[1:]:
-        cols = line.split(",")
-        if len(cols) != len(headers):
-            continue
-        data.append(dict(zip(headers, cols)))
-
-    return data
+    return list(csv.DictReader(io.StringIO(r.text)))
 
 def build_season(year, data):
     games = []
@@ -47,9 +29,6 @@ def build_season(year, data):
     for g in data:
         try:
             if int(g["season"]) != year:
-                continue
-
-            if g["game_type"] not in ["REG", "POST"]:
                 continue
 
             games.append({
@@ -60,8 +39,7 @@ def build_season(year, data):
                 "home_team": g["home_team"],
                 "away_team": g["away_team"],
                 "home_points": int(g["home_score"]) if g["home_score"] else None,
-                "away_points": int(g["away_score"]) if g["away_score"] else None,
-                "season_type": "postseason" if g["game_type"] == "POST" else "regular"
+                "away_points": int(g["away_score"]) if g["away_score"] else None
             })
         except:
             continue
@@ -74,7 +52,7 @@ def write_season(year, games):
 
     data = {
         "season": year,
-        "source": "nflverse",
+        "source": "nflscrapR",
         "games": games
     }
 
@@ -85,8 +63,7 @@ def write_season(year, games):
 
 def main():
     mkdirs()
-    lines = fetch_csv()
-    data = parse_csv(lines)
+    data = fetch_csv()
 
     for year in range(START_YEAR, END_YEAR + 1):
         games = build_season(year, data)
