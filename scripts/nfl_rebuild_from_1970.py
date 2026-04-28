@@ -2,6 +2,8 @@
 import os
 import json
 import requests
+import gzip
+import io
 
 START_YEAR = 1970
 END_YEAR = 1970
@@ -9,16 +11,23 @@ END_YEAR = 1970
 OUT_ROOT = "docs/data/nfl"
 SEASONS_DIR = os.path.join(OUT_ROOT, "seasons")
 
-BASE = "https://github.com/nflverse/nflverse-data/releases/latest/download/games.csv"
+BASE = "https://raw.githubusercontent.com/nflverse/nflverse-data/main/data/games.csv.gz"
 
 def mkdirs():
     os.makedirs(SEASONS_DIR, exist_ok=True)
 
 def fetch_csv():
     print("Downloading NFL dataset...")
+
     r = requests.get(BASE)
     r.raise_for_status()
-    return r.text.splitlines()
+
+    # decompress
+    buf = io.BytesIO(r.content)
+    f = gzip.GzipFile(fileobj=buf)
+    content = f.read().decode("utf-8")
+
+    return content.splitlines()
 
 def parse_csv(lines):
     headers = lines[0].split(",")
@@ -28,9 +37,7 @@ def parse_csv(lines):
         cols = line.split(",")
         if len(cols) != len(headers):
             continue
-
-        row = dict(zip(headers, cols))
-        data.append(row)
+        data.append(dict(zip(headers, cols)))
 
     return data
 
