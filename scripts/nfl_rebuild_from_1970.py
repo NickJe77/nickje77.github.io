@@ -11,16 +11,18 @@ END_YEAR = 1970
 OUT_ROOT = "docs/data/nfl"
 SEASONS_DIR = os.path.join(OUT_ROOT, "seasons")
 
-# 🔥 STABLE DATA SOURCE (this does NOT move)
-BASE = "https://raw.githubusercontent.com/ryurko/nflscrapR-data/master/games_data.csv"
+# 🔥 PERMANENT SNAPSHOT (this will NOT move)
+BASE = "https://cdn.jsdelivr.net/gh/nflverse/nflverse-data@v0.0.0/data/games.csv"
 
 def mkdirs():
     os.makedirs(SEASONS_DIR, exist_ok=True)
 
 def fetch_csv():
     print("Downloading NFL dataset...")
+
     r = requests.get(BASE)
     r.raise_for_status()
+
     return list(csv.DictReader(io.StringIO(r.text)))
 
 def build_season(year, data):
@@ -31,6 +33,9 @@ def build_season(year, data):
             if int(g["season"]) != year:
                 continue
 
+            if g.get("game_type") not in ["REG", "POST"]:
+                continue
+
             games.append({
                 "season": year,
                 "game_id": g["game_id"],
@@ -39,7 +44,8 @@ def build_season(year, data):
                 "home_team": g["home_team"],
                 "away_team": g["away_team"],
                 "home_points": int(g["home_score"]) if g["home_score"] else None,
-                "away_points": int(g["away_score"]) if g["away_score"] else None
+                "away_points": int(g["away_score"]) if g["away_score"] else None,
+                "season_type": "postseason" if g["game_type"] == "POST" else "regular"
             })
         except:
             continue
@@ -52,7 +58,7 @@ def write_season(year, games):
 
     data = {
         "season": year,
-        "source": "nflscrapR",
+        "source": "nflverse-snapshot",
         "games": games
     }
 
