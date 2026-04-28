@@ -1,29 +1,24 @@
 #!/usr/bin/env python3
 import os
 import json
-import requests
 import csv
-import io
 
 START_YEAR = 1970
 END_YEAR = 1970
 
 OUT_ROOT = "docs/data/nfl"
 SEASONS_DIR = os.path.join(OUT_ROOT, "seasons")
-
-# 🔥 PERMANENT SNAPSHOT (this will NOT move)
-BASE = "https://cdn.jsdelivr.net/gh/nflverse/nflverse-data@v0.0.0/data/games.csv"
+RAW_FILE = os.path.join(OUT_ROOT, "raw_games.csv")
 
 def mkdirs():
     os.makedirs(SEASONS_DIR, exist_ok=True)
 
-def fetch_csv():
-    print("Downloading NFL dataset...")
+def load_data():
+    print("Loading local dataset...")
 
-    r = requests.get(BASE)
-    r.raise_for_status()
-
-    return list(csv.DictReader(io.StringIO(r.text)))
+    with open(RAW_FILE, newline="") as f:
+        reader = csv.DictReader(f)
+        return list(reader)
 
 def build_season(year, data):
     games = []
@@ -33,7 +28,7 @@ def build_season(year, data):
             if int(g["season"]) != year:
                 continue
 
-            if g.get("game_type") not in ["REG", "POST"]:
+            if g["game_type"] not in ["REG", "POST"]:
                 continue
 
             games.append({
@@ -43,8 +38,8 @@ def build_season(year, data):
                 "date": g["gameday"],
                 "home_team": g["home_team"],
                 "away_team": g["away_team"],
-                "home_points": int(g["home_score"]) if g["home_score"] else None,
-                "away_points": int(g["away_score"]) if g["away_score"] else None,
+                "home_points": int(g["home_score"]),
+                "away_points": int(g["away_score"]),
                 "season_type": "postseason" if g["game_type"] == "POST" else "regular"
             })
         except:
@@ -58,7 +53,7 @@ def write_season(year, games):
 
     data = {
         "season": year,
-        "source": "nflverse-snapshot",
+        "source": "local",
         "games": games
     }
 
@@ -69,7 +64,7 @@ def write_season(year, games):
 
 def main():
     mkdirs()
-    data = fetch_csv()
+    data = load_data()
 
     for year in range(START_YEAR, END_YEAR + 1):
         games = build_season(year, data)
