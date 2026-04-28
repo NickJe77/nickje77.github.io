@@ -1,114 +1,128 @@
+import os, re, json, time
+from datetime import datetime
 import pandas as pd
-import os
-import json
+from bs4 import BeautifulSoup, Comment
+from playwright.sync_api import sync_playwright
 
-# -------------------------
-# PATHS
-# -------------------------
-DATA_DIR = os.path.expanduser("~/Desktop/NFL")
+YEAR = int(os.environ.get("YEAR", "1970"))
 
 BASE_DIR = "docs/data/nfl"
 SEASON_DIR = f"{BASE_DIR}/seasons"
 BOX_DIR = f"{BASE_DIR}/boxscores"
 
+PFR = "https://www.pro-football-reference.com"
+
 os.makedirs(SEASON_DIR, exist_ok=True)
 os.makedirs(BOX_DIR, exist_ok=True)
 
-print("🏈 Loading nflscraPy data...")
+def clean(x):
+    return re.sub(r"\s+", " ", str(x)).strip()
 
-# -------------------------
-# LOAD FILES
-# -------------------------
-games = pd.read_csv(f"{DATA_DIR}/BoxScores.csv")  # or GameData.csv
-players = pd.read_csv(f"{DATA_DIR}/PlayerStats.csv")
+def gid(h):
+    m = re.search(r"/boxscores/(.+)\.htm", h or "")
+    return m.group(1) if m else None
 
-# -------------------------
-# CLEAN COLUMN NAMES
-# -------------------------
-games.columns = games.columns.str.lower()
-players.columns = players.columns.str.lower()
+def rnd(w):
+    w = clean(w).lower()
+    if "wild" in w: return "Wild Card"
+    if "div" in w: return "Divisional"
+    if "conf" in w: return "Conference Championship"
+    if "super" in w: return "Super Bowl"
+    return "Regular Season"
 
-# -------------------------
-# REQUIRED COLUMNS CHECK
-# -------------------------
-print("Games columns:", list(games.columns))
-print("Players columns:", list(players.columns))
+def get(page, url):
+    print("GET", url)
+    page.goto(url, timeout=60000)
+    time.sleep(2)
+    html = page.content()
+    if "Access denied" in html or "403" in html:
+        raise Exception("Blocked")
+    return html
 
-# -------------------------
-# BUILD
-# -------------------------
-for year in sorted(games["season"].unique()):
-    if year < 1970:
-        continue
+with sync_playwright() as p:
+    browser = p.chromium.launch(headless=True)
+    page = browser.new_page()
 
-    print(f"\n===== {year} =====")
+    print(f"=== BUILDING {YEAR} ===")
 
-    year_games = games[games["season"] == year]
+    html = get(page, f"{PFR}/years/{YEAR}/games.htm")
+    soup = BeautifulSoup(html, "html.parser")
 
-    year_dir = f"{BOX_DIR}/{year}"
+    table = soup.find("table", id="games")
+    games = []
+
+    for r in table.select("tbody tr"):
+        if "thead" in r.get("class", []): continue
+        a = r.select_one('td[data-stat="boxscore_word"] a')
+        if not a: continue
+
+        games.append({
+            "game_id": gid(a["href"]),
+            "url": PFR + a["href"],
+            "date": clean(r.select_one('td[data-stat="game_date"]').text),
+            "winner": clean(r.select_one('td[data-stat="winner"]').text),
+            "loser": clean(r.select_one('td[data-stat="loser"]').text),
+            "pts_w": clean(r.select_one('td[data-stat="pts_win"]').text),
+            "pts_l": clean(r.select_one('td[data-stat="pts_lose"]').text),
+            "round": rnd(r.select_one('th[data-stat="week_num"]').text)
+        })
+
+    year_dir = f"{BOX_DIR}/{YEAR}"
     os.makedirs(year_dir, exist_ok=True)
 
     season = []
 
-    for _, g in year_games.iterrows():
+    for g in games:
+        try:
+            html = get(page, g["url"])
+            soup = BeautifulSoup(html, "html.parser")
 
-        gid = str(g.get("game_id") or g.get("gameid"))
+            for c in soup.find_all(string=lambda x: isinstance(x, Comment)):
+                try:
+                    cs = BeautifulSoup(c, "html.parser")
+                    for t in cs.find_all("table"):
+                        soup.append(t)
+                except: pass
 
-        home = g.get("home_team") or g.get("hometeam")
-        away = g.get("away_team") or g.get("awayteam")
+            stats = {}
+            for t in soup.find_all("table"):
+                tid = t.get("id")
+                if not tid: continue
+                try:
+                    df = pd.read_html(str(t))[0]
+                    df.columns = [clean(c) for c in df.columns]
+                    stats[tid] = df.to_dict("records")
+                except: continue
 
-        hs = int(g.get("home_score") or g.get("homescore") or 0)
-        as_ = int(g.get("away_score") or g.get("awayscore") or 0)
+            with open(f"{year_dir}/{g['game_id']}.json","w") as f:
+                json.dump({
+                    "game_id": g["game_id"],
+                    "date": g["date"],
+                    "winner": f"{g['winner']} {g['pts_w']}",
+                    "loser": f"{g['loser']} {g['pts_l']}",
+                    "round": g["round"],
+                    "player_stats": stats
+                }, f)
 
-        if hs >= as_:
-            winner = f"{home} {hs}"
-            loser = f"{away} {as_}"
-        else:
-            winner = f"{away} {as_}"
-            loser = f"{home} {hs}"
+            season.append({
+                "game_id": g["game_id"],
+                "date": g["date"],
+                "winner": f"{g['winner']} {g['pts_w']}",
+                "loser": f"{g['loser']} {g['pts_l']}",
+                "round": g["round"],
+                "boxscore_file": f"/data/nfl/boxscores/{YEAR}/{g['game_id']}.json"
+            })
 
-        # -------------------------
-        # PLAYER FILTER (REAL MATCH)
-        # -------------------------
-        g_players = players[
-            (players["season"] == year) &
-            (
-                (players["game_id"] == gid) |
-                (players.get("gameid") == gid)
-            )
-        ]
+            print("OK", g["game_id"])
 
-        player_list = g_players.to_dict("records")
+        except Exception as e:
+            print("FAIL", g["game_id"], e)
 
-        # -------------------------
-        # SAVE BOXSCORE
-        # -------------------------
-        with open(f"{year_dir}/{gid}.json", "w") as f:
-            json.dump({
-                "game_id": gid,
-                "home": home,
-                "away": away,
-                "players": player_list
-            }, f, indent=2)
+        time.sleep(2)
 
-        season.append({
-            "game_id": gid,
-            "date": str(g.get("date") or g.get("gamedate") or ""),
-            "winner": winner,
-            "loser": loser,
-            "round": "Regular Season",
-            "boxscore_file": f"/data/nfl/boxscores/{year}/{gid}.json"
-        })
+    with open(f"{SEASON_DIR}/{YEAR}.json","w") as f:
+        json.dump({"year": YEAR, "games": season}, f)
 
-    # -------------------------
-    # SAVE SEASON
-    # -------------------------
-    with open(f"{SEASON_DIR}/{year}.json", "w") as f:
-        json.dump({
-            "year": int(year),
-            "games": season
-        }, f, indent=2)
+    browser.close()
 
-    print(f"✅ {year} done ({len(season)} games)")
-
-print("🔥 DONE")
+print("DONE", YEAR)
