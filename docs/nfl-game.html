@@ -1,31 +1,22 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
-  <script src="/js/analytics.js"></script>
+<script src="/js/analytics.js"></script>
 <meta charset="UTF-8">
 <title>NFL Game | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-
 body{font-family:Inter,system-ui,Arial;margin:0;background:#f3f4f7;}
 
-.navbar{
-  display:flex;justify-content:center;gap:24px;
-  padding:16px;background:white;border-bottom:1px solid #ddd;
-}
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:white;border-bottom:1px solid #ddd;}
 .navbar a{color:#013369;text-decoration:none;font-weight:600;}
 
-.hero{
-  background:linear-gradient(90deg,#013369,#d50a0a);
-  color:white;padding:40px;text-align:center;
-}
+.hero{background:linear-gradient(90deg,#013369,#d50a0a);color:white;padding:40px;text-align:center;}
 .hero-score{font-size:34px;font-weight:700;}
 
-.container{
-  max-width:1000px;margin:30px auto;
-  background:white;padding:20px;border-radius:12px;
-}
+.container{max-width:1000px;margin:30px auto;background:white;padding:20px;border-radius:12px;}
 
 h2{margin-top:30px;}
 
@@ -34,15 +25,10 @@ th,td{padding:10px;border-bottom:1px solid #eee;text-align:center;}
 th{background:#f8fafc;}
 .team{text-align:left;font-weight:600;}
 
-.player-link{
-  color:#013369;
-  text-decoration:none;
-  font-weight:600;
-}
-
-.player-link:hover{ text-decoration:underline; }
-
+.player-link{color:#013369;text-decoration:none;font-weight:600;}
+.player-link:hover{text-decoration:underline;}
 </style>
+
 </head>
 
 <body>
@@ -91,7 +77,6 @@ th{background:#f8fafc;}
 <script>
 
 const params=new URLSearchParams(location.search);
-
 const season=params.get("season");
 const gameID=params.get("id");
 
@@ -101,7 +86,7 @@ function slugify(name){
 
 async function loadGame(){
 
-// load game
+// load season file
 const res=await fetch(`data/nfl/seasons/${season}.json`);
 const data=await res.json();
 
@@ -120,47 +105,35 @@ document.getElementById("scoreTable").innerHTML=`
 <tr><td class="team">${game.away_team}</td><td><b>${game.away_score}</b></td></tr>
 `;
 
-// load players index
-const indexRes=await fetch("data/nfl/players/index.json");
-const players=await indexRes.json();
-
+// build box score directly
 let boxHTML="";
 
-// loop players (limit for performance)
-for(let i=0;i<players.length;i++){
+(game.players || []).forEach(p=>{
 
-  const name=players[i];
-  const slug=slugify(name);
+  const slug=slugify(p.name);
 
-  try{
+  const passing=p.passing||{yards:0,td:0,int:0};
+  const rushing=p.rushing||{yards:0,td:0};
+  const receiving=p.receiving||{yards:0,td:0};
 
-    const res=await fetch(`data/nfl/players/${slug}.json`);
-    const p=await res.json();
-
-    const gameStats=p.games.find(g=>String(g.date)===String(game.date));
-    if(!gameStats) continue;
-
-    boxHTML+=`
-    <tr>
-      <td class="team">
-        <a class="player-link" href="nfl-player.html?player=${slug}">
-          ${p.name}
-        </a>
-      </td>
-      <td>${gameStats.team}</td>
-      <td>${gameStats.passing.yards}</td>
-      <td>${gameStats.passing.td}</td>
-      <td>${gameStats.passing.int}</td>
-      <td>${gameStats.rushing.yards}</td>
-      <td>${gameStats.rushing.td}</td>
-      <td>${gameStats.receiving.yards}</td>
-      <td>${gameStats.receiving.td}</td>
-    </tr>
-    `;
-
-  }catch(e){}
-
-}
+  boxHTML+=`
+  <tr>
+    <td class="team">
+      <a class="player-link" href="nfl-player.html?player=${slug}">
+        ${p.name}
+      </a>
+    </td>
+    <td>${p.team}</td>
+    <td>${passing.yards}</td>
+    <td>${passing.td}</td>
+    <td>${passing.int}</td>
+    <td>${rushing.yards}</td>
+    <td>${rushing.td}</td>
+    <td>${receiving.yards}</td>
+    <td>${receiving.td}</td>
+  </tr>
+  `;
+});
 
 document.getElementById("boxTable").innerHTML=boxHTML;
 
