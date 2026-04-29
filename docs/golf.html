@@ -3,77 +3,96 @@
 <head>
 <script src="/js/analytics.js"></script>
 <meta charset="UTF-8">
-<title>Golf Tournament | The Sporting Almanac</title>
+<title>Golf | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 
 body{
-font-family:Inter,system-ui;
-margin:0;
-background:#f4f6f8;
+  font-family:Inter,system-ui;
+  margin:0;
+  background:#f4f6f8;
 }
 
 /* NAV */
 .navbar{
-display:flex;
-justify-content:center;
-gap:24px;
-padding:16px;
-background:white;
-border-bottom:1px solid #ddd;
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px;
+  background:white;
+  border-bottom:1px solid #ddd;
 }
 .navbar a{
-color:#0056d6;
-text-decoration:none;
-font-weight:600;
+  color:#0f6b3f; /* 🔥 GREEN */
+  text-decoration:none;
+  font-weight:600;
 }
 
 /* HERO */
 .hero{
-background:linear-gradient(90deg,#0f6b3f,#198754);
-color:white;
-padding:40px;
-text-align:center;
+  background:linear-gradient(90deg,#0f6b3f,#198754); /* 🔥 GREEN */
+  color:white;
+  padding:40px;
+  text-align:center;
 }
 .hero h1{
-margin:0;
-font-size:36px;
+  margin:0;
+  font-size:36px;
 }
 
 /* PAGE */
 .page{
-max-width:1000px;
-margin:auto;
-padding:30px;
+  max-width:1100px;
+  margin:auto;
+  padding:20px;
+}
+
+/* FILTERS */
+.filters{
+  display:flex;
+  gap:10px;
+  margin-bottom:20px;
+}
+
+select,input{
+  padding:10px;
+  border:1px solid #ccc;
+  border-radius:8px;
+  font-size:14px;
 }
 
 /* TABLE */
 .table-wrap{
-background:white;
-border-radius:16px;
-overflow:hidden;
-box-shadow:0 6px 18px rgba(0,0,0,0.06);
+  background:white;
+  border-radius:12px;
+  overflow:hidden;
+  box-shadow:0 4px 12px rgba(0,0,0,.05);
 }
 
 table{
-width:100%;
-border-collapse:collapse;
+  width:100%;
+  border-collapse:collapse;
 }
 
 th,td{
-padding:12px;
-border-bottom:1px solid #eee;
-text-align:left;
+  padding:12px;
+  border-bottom:1px solid #eee;
 }
 
 th{
-background:#0f6b3f;
-color:white;
+  background:#0f6b3f; /* 🔥 GREEN HEADER */
+  color:white;
+  text-align:left;
 }
 
 tr:nth-child(even){
-background:#f6faf7;
+  background:#f6faf7; /* 🔥 LIGHT GREEN STRIPE */
+}
+
+a{
+  color:#0f6b3f; /* 🔥 GREEN LINKS */
+  text-decoration:none;
 }
 
 </style>
@@ -82,99 +101,173 @@ background:#f6faf7;
 <body>
 
 <div class="navbar">
-<a href="/">Home</a>
-<a href="/golf.html">Golf</a>
-<a href="/golf-majors.html">Majors</a>
-<a href="/golf-players.html">Players</a>
+  <a href="/">Home</a>
+  <a href="/golf.html">Golf</a>
 </div>
 
 <div class="hero">
-<h1 id="title">Loading...</h1>
+  <h1>PGA Tour Winners</h1>
 </div>
 
 <div class="page">
 
-<div class="table-wrap">
-<table>
-<thead>
-<tr>
-<th>Year</th>
-<th>Winner</th>
-</tr>
-</thead>
-<tbody id="tableBody"></tbody>
-</table>
-</div>
+  <div class="filters">
+    <select id="yearFilter">
+      <option value="all">All Years</option>
+    </select>
+
+    <input 
+      id="tournamentSearch" 
+      placeholder="Search tournament..."
+      list="tournamentList"
+    >
+    <datalist id="tournamentList"></datalist>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Year</th>
+          <th>Tournament</th>
+          <th>Winner</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
 
 </div>
 
 <script>
+let data=[];
+let players=[];
 
-/* GET URL PARAM */
-function getParam(name){
-const url=new URL(window.location.href);
-return url.searchParams.get(name);
+/* PLAYER CLEAN */
+function cleanPlayerName(name){
+  if(!name) return "";
+  return name
+    .replace(/\./g,". ")
+    .replace(/\s+/g," ")
+    .replace(/\b([a-z])/g,l=>l.toUpperCase())
+    .replace(/\s*\(.*?\)/g,"")
+    .replace(/\*/g,"")
+    .trim();
 }
 
-/* NORMALISE STRING */
-function clean(str){
-return (str||"")
-.toLowerCase()
-.replace(/\s+/g," ")
-.trim();
+/* TOURNAMENT CLEAN */
+function cleanTournament(name){
+  if(!name) return "";
+  return name
+    .replace(/Augusta National.*$/i,"")
+    .replace(/ - .*$/i,"")
+    .trim();
 }
 
 async function load(){
+  const res=await fetch("/data/golf/pga_winners.json");
+  data=await res.json();
 
-const tournamentParam=getParam("tournament");
+  data.sort((a,b)=>b.year-a.year);
 
-if(!tournamentParam){
-document.getElementById("title").textContent="Tournament not found";
-return;
+  players=[...new Set(
+    data.map(d=>cleanPlayerName(d.winner))
+      .filter(n=>n && n!=="TBD")
+  )].sort();
+
+  populateFilters();
+  render();
 }
 
-const decoded=decodeURIComponent(tournamentParam);
+function populateFilters(){
+  const years=[...new Set(data.map(d=>d.year))].sort((a,b)=>b-a);
+  const tournaments=[...new Set(data.map(d=>cleanTournament(d.event)))].sort();
 
-const res=await fetch("/data/golf/pga_winners.json");
-const data=await res.json();
+  const yearSelect=document.getElementById("yearFilter");
+  const list=document.getElementById("tournamentList");
 
-/* MATCH PROPERLY */
-const rows=data.filter(d=>clean(d.event)===clean(decoded));
+  if(!yearSelect || !list) return;
 
-if(rows.length===0){
-document.getElementById("title").textContent="Tournament not found";
-return;
+  years.forEach(y=>{
+    const o=document.createElement("option");
+    o.value=y;
+    o.textContent=y;
+    yearSelect.appendChild(o);
+  });
+
+  tournaments.forEach(t=>{
+    const o=document.createElement("option");
+    o.value=t;
+    list.appendChild(o);
+  });
 }
 
-/* SORT */
-rows.sort((a,b)=>b.year-a.year);
+function render(){
+  const yearEl=document.getElementById("yearFilter");
+  const searchEl=document.getElementById("tournamentSearch");
 
-/* SET TITLE */
-document.getElementById("title").textContent=rows[0].event;
+  if(!yearEl || !searchEl) return;
 
-/* DRAW TABLE */
-const tbody=document.getElementById("tableBody");
-tbody.innerHTML="";
+  const year=yearEl.value;
+  const search=searchEl.value.toLowerCase();
 
-rows.forEach(r=>{
-const tr=document.createElement("tr");
+  const seen=new Set();
 
-tr.innerHTML=`
-<td>${r.year}</td>
-<td>
-<a href="/golf-player.html?player=${encodeURIComponent(r.winner)}">
-${r.winner}
-</a>
-</td>
-`;
+  let filtered=data.filter(d=>{
+    const event=cleanTournament(d.event||"");
+    const key=d.year+"|"+event.toLowerCase();
 
-tbody.appendChild(tr);
+    if(seen.has(key)) return false;
+    seen.add(key);
+
+    return (year==="all" || d.year==year) &&
+           (!search || event.toLowerCase().includes(search));
+  });
+
+  draw(filtered);
+}
+
+function draw(rows){
+  const tbody=document.getElementById("tableBody");
+  if(!tbody) return;
+
+  tbody.innerHTML="";
+
+  rows.forEach(r=>{
+    const event=cleanTournament(r.event);
+    const winner=cleanPlayerName(r.winner);
+
+    const tr=document.createElement("tr");
+
+    tr.innerHTML=`
+      <td>${r.year}</td>
+      <td>
+        <a href="/golf-tournament.html?tournament=${encodeURIComponent(r.event)}">
+          ${event}
+        </a>
+      </td>
+      <td>
+        ${winner
+          ? `<a href="/golf-player.html?player=${encodeURIComponent(winner)}">${winner}</a>`
+          : '<span style="color:#999;">TBD</span>'}
+      </td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+
+  const yearEl=document.getElementById("yearFilter");
+  const searchEl=document.getElementById("tournamentSearch");
+
+  if(yearEl) yearEl.addEventListener("change",render);
+  if(searchEl) searchEl.addEventListener("input",render);
+
+  load();
+
 });
-
-}
-
-load();
-
 </script>
 
 </body>
