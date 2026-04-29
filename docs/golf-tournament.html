@@ -7,207 +7,174 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-:root{
-  --green:#0c6f3c;
-  --bg:#f4f6f8;
-  --card:#ffffff;
-  --line:#e3e7eb;
-  --zebra:#f3f8f4;
-}
 
 body{
-  margin:0;
-  font-family:Inter,system-ui,Arial;
-  background:var(--bg);
+font-family:Inter,system-ui;
+margin:0;
+background:#f4f6f8;
 }
 
+/* NAV */
 .navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px 0;
-  background:#fff;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
+display:flex;
+justify-content:center;
+gap:24px;
+padding:16px;
+background:white;
+border-bottom:1px solid #ddd;
 }
-
 .navbar a{
-  color:#0056d6;
-  text-decoration:none;
-  font-size:18px;
+color:#0056d6;
+text-decoration:none;
+font-weight:600;
 }
 
+/* HERO */
 .hero{
-  background:linear-gradient(135deg,#08552d,#0c6f3c);
-  color:#fff;
-  text-align:center;
-  padding:40px 20px;
+background:linear-gradient(90deg,#0f6b3f,#198754);
+color:white;
+padding:40px;
+text-align:center;
 }
-
 .hero h1{
-  margin:0;
-  font-size:34px;
+margin:0;
+font-size:36px;
 }
 
+/* PAGE */
 .page{
-  max-width:700px; /* ✅ tightened */
-  margin:auto;
-  padding:25px;
+max-width:1000px;
+margin:auto;
+padding:30px;
 }
 
-.table-card{
-  background:var(--card);
-  border-radius:14px;
-  overflow:hidden;
-  border:1px solid var(--line);
+/* TABLE */
+.table-wrap{
+background:white;
+border-radius:16px;
+overflow:hidden;
+box-shadow:0 6px 18px rgba(0,0,0,0.06);
 }
 
 table{
-  width:100%;
-  border-collapse:collapse;
+width:100%;
+border-collapse:collapse;
 }
 
-thead{
-  background:var(--green);
-  color:#fff;
+th,td{
+padding:12px;
+border-bottom:1px solid #eee;
+text-align:left;
 }
 
-th, td{
-  padding:10px 12px; /* ✅ tighter */
-  font-size:14px;
+th{
+background:#0f6b3f;
+color:white;
 }
 
-/* column sizing */
-th:first-child,
-td:first-child{
-  width:90px;
-  text-align:left;
+tr:nth-child(even){
+background:#f6faf7;
 }
 
-th:last-child,
-td:last-child{
-  text-align:left;
-}
-
-/* zebra */
-tbody tr:nth-child(even){
-  background:var(--zebra);
-}
-
-/* player links */
-.player-link{
-  color:#0056d6;
-  text-decoration:none;
-  font-weight:600;
-}
-
-.player-link:hover{
-  text-decoration:underline;
-}
 </style>
 </head>
 
 <body>
 
 <div class="navbar">
-  <a href="/">Home</a>
-  <a href="/golf.html">Golf</a>
-  <a href="/golf-majors.html">Majors</a>
-  <a href="/golf-player.html">Players</a>
+<a href="/">Home</a>
+<a href="/golf.html">Golf</a>
+<a href="/golf-majors.html">Majors</a>
+<a href="/golf-players.html">Players</a>
 </div>
 
 <div class="hero">
-  <h1 id="title">Loading...</h1>
+<h1 id="title">Loading...</h1>
 </div>
 
 <div class="page">
 
-<div class="table-card">
+<div class="table-wrap">
 <table>
 <thead>
 <tr>
-  <th>Year</th>
-  <th>Winner</th>
+<th>Year</th>
+<th>Winner</th>
 </tr>
 </thead>
-<tbody id="tbody"></tbody>
+<tbody id="tableBody"></tbody>
 </table>
 </div>
 
 </div>
 
 <script>
-function clean(name){
-  if(!name) return "";
 
-  return String(name)
-    .replace(/\s*\(.*?\)/g,"")
-    .replace(/\*/g,"")
-    .trim()
-    .split(/\/|&| and /i)[0]
-    .trim();
+/* GET URL PARAM */
+function getParam(name){
+const url=new URL(window.location.href);
+return url.searchParams.get(name);
 }
 
-function slug(name){
-  return name.toLowerCase().replace(/[^a-z0-9]+/g,"-");
-}
-
-function matchTournament(dataName, urlSlug){
-  const s1 = slug(dataName);
-  const s2 = urlSlug;
-  return s1 === s2 || s1.includes(s2) || s2.includes(s1);
+/* NORMALISE STRING */
+function clean(str){
+return (str||"")
+.toLowerCase()
+.replace(/\s+/g," ")
+.trim();
 }
 
 async function load(){
-  const params = new URLSearchParams(location.search);
-  const tournamentSlug = params.get("tournament");
 
-  const res = await fetch("/data/golf/pga_winners.json");
-  const data = await res.json();
+const tournamentParam=getParam("tournament");
 
-  const rows = [];
+if(!tournamentParam){
+document.getElementById("title").textContent="Tournament not found";
+return;
+}
 
-  data.forEach(d=>{
-    const name = d.event || d.tournament || d.name || "";
-    if(!name) return;
+const decoded=decodeURIComponent(tournamentParam);
 
-    if(matchTournament(name, tournamentSlug)){
-      rows.push({
-        year: d.year,
-        winner: clean(d.winner),
-        tournament: name
-      });
-    }
-  });
+const res=await fetch("/data/golf/pga_winners.json");
+const data=await res.json();
 
-  if(rows.length === 0){
-    document.getElementById("title").innerText = "Tournament not found";
-    return;
-  }
+/* MATCH PROPERLY */
+const rows=data.filter(d=>clean(d.event)===clean(decoded));
 
-  document.getElementById("title").innerText = rows[0].tournament;
+if(rows.length===0){
+document.getElementById("title").textContent="Tournament not found";
+return;
+}
 
-  const tbody = document.getElementById("tbody");
+/* SORT */
+rows.sort((a,b)=>b.year-a.year);
 
-  rows
-    .sort((a,b)=>b.year-a.year)
-    .forEach(r=>{
-      const tr = document.createElement("tr");
+/* SET TITLE */
+document.getElementById("title").textContent=rows[0].event;
 
-      tr.innerHTML = `
-        <td>${r.year}</td>
-        <td>
-          <a class="player-link" href="/golf-player.html?player=${slug(r.winner)}">
-            ${r.winner}
-          </a>
-        </td>
-      `;
+/* DRAW TABLE */
+const tbody=document.getElementById("tableBody");
+tbody.innerHTML="";
 
-      tbody.appendChild(tr);
-    });
+rows.forEach(r=>{
+const tr=document.createElement("tr");
+
+tr.innerHTML=`
+<td>${r.year}</td>
+<td>
+<a href="/golf-player.html?player=${encodeURIComponent(r.winner)}">
+${r.winner}
+</a>
+</td>
+`;
+
+tbody.appendChild(tr);
+});
+
 }
 
 load();
+
 </script>
 
 </body>
