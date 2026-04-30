@@ -7,18 +7,117 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-/* KEEP YOUR EXISTING CSS */
+
+body{
+  font-family:Inter,system-ui;
+  margin:0;
+  background:#f4f6f8;
+}
+
+/* NAV */
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px;
+  background:white;
+  border-bottom:1px solid #ddd;
+}
+.navbar a{
+  color:#0f6b3f;
+  text-decoration:none;
+  font-weight:600;
+}
+
+/* HERO */
+.hero{
+  background:linear-gradient(90deg,#0f6b3f,#198754);
+  color:white;
+  padding:40px;
+  text-align:center;
+}
+.hero h1{
+  margin:0;
+  font-size:36px;
+}
+.hero p{
+  margin-top:10px;
+  font-size:18px;
+  opacity:0.95;
+}
+
+/* PAGE */
+.page{
+  max-width:1000px;
+  margin:auto;
+  padding:20px;
+}
+
+/* TABLE */
+.table-card{
+  display:none;
+  background:white;
+  border-radius:12px;
+  overflow:hidden;
+  box-shadow:0 4px 12px rgba(0,0,0,.05);
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+th,td{
+  padding:12px;
+  border-bottom:1px solid #eee;
+}
+
+th{
+  background:#0f6b3f;
+  color:white;
+  text-align:left;
+}
+
+tr:nth-child(even){
+  background:#f6faf7;
+}
+
 </style>
 </head>
 
 <body>
 
-<!-- KEEP YOUR EXISTING HTML -->
+<div class="navbar">
+  <a href="/">Home</a>
+  <a href="/golf.html">Golf</a>
+</div>
+
+<div class="hero">
+  <h1 id="playerName">Loading...</h1>
+  <p id="summary"></p>
+</div>
+
+<div class="page">
+
+  <div class="table-card">
+    <table>
+      <thead>
+        <tr>
+          <th>Year</th>
+          <th>Tournament</th>
+          <th>Major</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+</div>
 
 <script>
+
 function cleanPlayerName(name){
   if(!name) return "";
-
   return name
     .replace(/\./g,". ")
     .replace(/\s+/g," ")
@@ -40,6 +139,7 @@ function slug(name){
   return String(name||"")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g,"-")
+    .replace(/-+/g,"-")
     .replace(/^-+|-+$/g,"");
 }
 
@@ -62,8 +162,10 @@ async function fetchData(){
 }
 
 async function load(){
+
   const params=new URLSearchParams(location.search);
-  const playerSlug=slug(params.get("player")||"");
+  const rawPlayer=params.get("player") || "";
+  const playerSlug=slug(rawPlayer);
 
   const data=await fetchData();
 
@@ -72,10 +174,14 @@ async function load(){
 
   data.forEach(d=>{
     const winner=cleanPlayerName(d.winner);
-
     if(!winner) return;
 
-    if(slug(winner)===playerSlug){
+    const winnerSlug=slug(winner);
+
+    if(
+      winnerSlug===playerSlug ||
+      winner.toLowerCase()===decodeURIComponent(rawPlayer).toLowerCase()
+    ){
       playerName=winner;
 
       const tournament=cleanTournament(d.event||"");
@@ -95,7 +201,6 @@ async function load(){
 
   document.getElementById("playerName").innerText=playerName;
 
-  /* 🔥 DEDUPE */
   const seen=new Set();
   const uniqueWins=wins.filter(w=>{
     const key=w.year+"|"+w.tournament.toLowerCase();
@@ -131,6 +236,7 @@ async function load(){
 }
 
 load();
+
 </script>
 
 </body>
