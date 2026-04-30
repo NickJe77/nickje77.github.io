@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 
-print("BUILDING ON THIS DAY - FINAL (HORSE RACING FIX)")
+print("BUILDING ON THIS DAY - FINAL (AFL HIGH STATS FIX)")
 
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
@@ -22,7 +22,7 @@ def load_json_safe(path):
         return None
 
 # -----------------------
-# DATE PARSER (ROBUST)
+# DATE PARSER
 # -----------------------
 def parse_date(row):
     if not isinstance(row, dict):
@@ -41,10 +41,7 @@ def parse_date(row):
 
     d = str(d).strip()
 
-    # remove ordinal
     d = re.sub(r"(\d+)(st|nd|rd|th)", r"\1", d)
-
-    # remove timezone
     d = re.sub(r"\b[A-Z]{3,4}\b$", "", d).strip()
 
     for fmt in [
@@ -81,7 +78,7 @@ def add_event(d, sport, text):
     })
 
 # -----------------------
-# HORSE RACING (FIXED)
+# HORSE RACING
 # -----------------------
 def process_racing_csv(file):
     try:
@@ -89,7 +86,6 @@ def process_racing_csv(file):
             reader = csv.DictReader(f)
 
             for r in reader:
-                # 🔥 FLEXIBLE FIELD HANDLING
                 d = parse_date({
                     "date": r.get("Date")
                     or r.get("date")
@@ -122,7 +118,7 @@ def process_racing_csv(file):
         print("CSV error:", file, e)
 
 # -----------------------
-# EXISTING SPORT HANDLERS (UNCHANGED)
+# NBA
 # -----------------------
 def process_nba_boxscore(file):
     data = load_json_safe(file)
@@ -165,6 +161,9 @@ def process_nba_boxscore(file):
 
     add_event(d, "NBA", text)
 
+# -----------------------
+# AFL (FIXED WITH HIGH STATS)
+# -----------------------
 def process_afl_file(file):
     data = load_json_safe(file)
     if not isinstance(data, list):
@@ -204,13 +203,40 @@ def process_afl_file(file):
         except:
             continue
 
+        # SCORE
         if hs > as_:
             text = f"{m['home']} {hs} defeated {m['away']} {as_}"
         else:
             text = f"{m['away']} {as_} defeated {m['home']} {hs}"
 
+        # 🔥 HIGH STATS
+        standout = []
+
+        for p in m["players"]:
+            name = p.get("player")
+
+            try:
+                goals = int(p.get("G") or 0)
+                disposals = int(p.get("D") or 0)
+                kicks = int(p.get("K") or 0)
+            except:
+                continue
+
+            if goals >= 5:
+                standout.append(f"{name} {goals}g")
+            elif disposals >= 30:
+                standout.append(f"{name} {disposals}d")
+            elif kicks >= 25:
+                standout.append(f"{name} {kicks}k")
+
+        if standout:
+            text += " — " + ", ".join(standout)
+
         add_event(m["date"], "AFL", text)
 
+# -----------------------
+# MLB
+# -----------------------
 def process_mlb_boxscore(file):
     data = load_json_safe(file)
     if not isinstance(data, dict):
@@ -236,6 +262,9 @@ def process_mlb_boxscore(file):
 
     add_event(d, "MLB", text)
 
+# -----------------------
+# GENERIC (NRL ETC)
+# -----------------------
 def process_generic_file(file, sport):
     data = load_json_safe(file)
     if not data:
