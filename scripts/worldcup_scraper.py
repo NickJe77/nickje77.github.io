@@ -9,6 +9,22 @@ os.makedirs(OUTPUT, exist_ok=True)
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
+SERIES = {
+    1975: 17,
+    1979: 18,
+    1983: 19,
+    1987: 20,
+    1992: 21,
+    1996: 22,
+    1999: 23,
+    2003: 24,
+    2007: 25,
+    2011: 26,
+    2015: 27,
+    2019: 28,
+    2023: 29
+}
+
 # -----------------------------
 # SAFE WRITE
 # -----------------------------
@@ -21,32 +37,13 @@ def safe_write(path, data):
 # -----------------------------
 # PARSE SCORECARD
 # -----------------------------
-def parse_scorecard(match_id):
+def parse_scorecard(url):
 
-    url = f"http://www.howstat.com/cricket/Statistics/Matches/MatchScorecard.asp?MatchCode={match_id}"
     res = requests.get(url, headers=HEADERS)
-
-    # skip invalid pages
-    if "Scorecard" not in res.text:
-        return None
-
     soup = BeautifulSoup(res.text, "lxml")
 
     title = soup.find("h1")
-    if not title:
-        return None
-
-    match_name = title.text.strip()
-
-    # extract year safely
-    year = None
-    for part in match_name.split():
-        if part.isdigit() and len(part) == 4:
-            year = part
-            break
-
-    if not year:
-        return None
+    match_name = title.text.strip() if title else ""
 
     match = {
         "match": match_name,
@@ -63,7 +60,7 @@ def parse_scorecard(match_id):
 
         headers = [th.text.strip().lower() for th in table.find_all("th")]
 
-        # ---------------- BATTING ----------------
+        # Batting
         if "runs" in headers and "balls" in headers:
 
             team_tag = table.find_previous("h2")
@@ -98,7 +95,7 @@ def parse_scorecard(match_id):
 
             match["innings"].append(current)
 
-        # ---------------- BOWLING ----------------
+        # Bowling
         if "wickets" in headers and current:
 
             rows = table.find_all("tr")[1:]
@@ -119,7 +116,7 @@ def parse_scorecard(match_id):
                         "wickets": int(wkts)
                     }
 
-    return year, match_id, match
+    return match
 
 # -----------------------------
 # MAIN BUILD
@@ -128,41 +125,46 @@ def build():
 
     total = 0
 
-    print("Scanning Howstat match IDs...")
+    for year, code in SERIES.items():
 
-    for match_id in range(1, 20000):
+        print(f"\n--- {year} ---")
 
-        try:
-            result = parse_scorecard(match_id)
+        url = f"http://www.howstat.com/cricket/Statistics/Series/SeriesMatches.asp?SeriesCode={code}"
+        res = requests.get(url, headers=HEADERS)
+        soup = BeautifulSoup(res.text, "lxml")
 
-            if not result:
-                continue
+        links = []
 
-            year, mid, data = result
+        for a in soup.find_all("a", href=True):
+            if "MatchScorecard" in a["href"]:
+                links.append("http://www.howstat.com" + a["href"])
 
-            folder = f"{OUTPUT}/{year}"
-            os.makedirs(folder, exist_ok=True)
+        print(f"{len(links)} matches found")
 
-            path = f"{folder}/{mid}.json"
+        folder = f"{OUTPUT}/{year}"
+        os.makedirs(folder, exist_ok=True)
+
+        for link in links:
+
+            match_id = link.split("=")[-1]
+            path = f"{folder}/{match_id}.json"
 
             if os.path.exists(path):
                 continue
 
-            safe_write(path, data)
+            try:
+                data = parse_scorecard(link)
+                safe_write(path, data)
 
-            print(f"{year} -> Saved {mid}")
-            total += 1
+                print(f"Saved {match_id}")
+                total += 1
+                time.sleep(0.5)
 
-            time.sleep(0.2)
-
-        except Exception as e:
-            print("Error:", match_id, e)
+            except Exception as e:
+                print("FAILED:", link, e)
 
     print(f"\nBuilt {total} matches")
 
-# -----------------------------
-# RUN
-# -----------------------------
 if __name__ == "__main__":
     build()
     print("DONE")
