@@ -9,24 +9,24 @@ os.makedirs(OUTPUT, exist_ok=True)
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-# --------------------------------
+# -----------------------------
 # SAFE WRITE
-# --------------------------------
+# -----------------------------
 def safe_write(path, data):
     if os.path.exists(path):
         return
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
-# --------------------------------
+# -----------------------------
 # PARSE SCORECARD
-# --------------------------------
+# -----------------------------
 def parse_scorecard(match_id):
 
     url = f"http://www.howstat.com/cricket/Statistics/Matches/MatchScorecard.asp?MatchCode={match_id}"
     res = requests.get(url, headers=HEADERS)
 
-    # Skip invalid pages
+    # skip invalid pages
     if "Scorecard" not in res.text:
         return None
 
@@ -38,11 +38,7 @@ def parse_scorecard(match_id):
 
     match_name = title.text.strip()
 
-    # ONLY WORLD CUP MATCHES
-    if "World Cup" not in match_name:
-        return None
-
-    # Extract year from title
+    # extract year safely
     year = None
     for part in match_name.split():
         if part.isdigit() and len(part) == 4:
@@ -125,16 +121,15 @@ def parse_scorecard(match_id):
 
     return year, match_id, match
 
-# --------------------------------
-# MAIN
-# --------------------------------
+# -----------------------------
+# MAIN BUILD
+# -----------------------------
 def build():
 
     total = 0
 
     print("Scanning Howstat match IDs...")
 
-    # Wide range to guarantee coverage
     for match_id in range(1, 20000):
 
         try:
@@ -163,7 +158,11 @@ def build():
         except Exception as e:
             print("Error:", match_id, e)
 
-    print(f"\nBuilt {total} World Cup matches")
+    print(f"\nBuilt {total} matches")
 
+# -----------------------------
+# RUN
+# -----------------------------
 if __name__ == "__main__":
     build()
+    print("DONE")
