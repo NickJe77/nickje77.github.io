@@ -1,155 +1,38 @@
 import requests
 from bs4 import BeautifulSoup
 import os
-import json
-import time
-
-BASE = "docs/data/cricket/world_cups"
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-def load_json(path):
-    with open(path) as f:
-        return json.load(f)
+# test ONE known working match (your example)
+TEST_ID = 67
 
-def save_json(path, data):
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
+def run():
 
-def is_number(val):
-    try:
-        int(val)
-        return True
-    except:
-        return False
+    url = f"https://www.howstat.com/Cricket/Statistics/Matches/MatchScoreCard_ODI.asp?MatchCode={TEST_ID:04d}"
 
-def parse_scorecard(match_id):
-
-    url = f"https://www.howstat.com/Cricket/Statistics/Matches/MatchScoreCard_ODI.asp?MatchCode={match_id:04d}"
+    print("URL:", url)
 
     res = requests.get(url, headers=HEADERS)
 
-    if res.status_code != 200:
-        return None
+    print("STATUS:", res.status_code)
+    print("LENGTH:", len(res.text))
+
+    # print first 500 chars so we SEE what we got
+    print("\nPAGE START:\n")
+    print(res.text[:500])
 
     soup = BeautifulSoup(res.text, "lxml")
 
     tables = soup.find_all("table")
 
-    innings = []
-    current = None
+    print("\nTABLES FOUND:", len(tables))
 
-    for table in tables:
+    # dump one table so we can inspect structure
+    if tables:
+        print("\nFIRST TABLE SAMPLE:\n")
+        print(str(tables[0])[:500])
 
-        rows = table.find_all("tr")
-
-        if len(rows) < 5:
-            continue
-
-        # -----------------------------
-        # DETECT BATTING TABLE
-        # -----------------------------
-        for r in rows[1:5]:
-            cols = [c.text.strip() for c in r.find_all("td")]
-
-            if len(cols) >= 6 and is_number(cols[2]):
-
-                team_tag = table.find_previous("h2")
-                team = team_tag.text.strip() if team_tag else "Unknown"
-
-                current = {
-                    "team": team,
-                    "batting": {},
-                    "bowling": {}
-                }
-
-                for r2 in rows[1:]:
-                    cols2 = [c.text.strip() for c in r2.find_all("td")]
-
-                    if len(cols2) < 5:
-                        continue
-
-                    player = cols2[0]
-                    runs = cols2[2]
-
-                    if is_number(runs):
-                        current["batting"][player] = {
-                            "runs": int(runs),
-                            "balls": int(cols2[3]) if len(cols2) > 3 and is_number(cols2[3]) else 0,
-                            "fours": int(cols2[4]) if len(cols2) > 4 and is_number(cols2[4]) else 0,
-                            "sixes": int(cols2[5]) if len(cols2) > 5 and is_number(cols2[5]) else 0
-                        }
-
-                innings.append(current)
-                break
-
-        # -----------------------------
-        # DETECT BOWLING TABLE
-        # -----------------------------
-        if current:
-            for r in rows[1:]:
-                cols = [c.text.strip() for c in r.find_all("td")]
-
-                if len(cols) >= 4 and is_number(cols[2]) and is_number(cols[3]):
-
-                    player = cols[0]
-                    runs = cols[2]
-                    wkts = cols[3]
-
-                    current["bowling"][player] = {
-                        "runs": int(runs),
-                        "wickets": int(wkts)
-                    }
-
-    return innings if innings else None
-
-def run():
-
-    total = 0
-
-    for year in os.listdir(BASE):
-
-        folder = os.path.join(BASE, year)
-
-        if not os.path.isdir(folder):
-            continue
-
-        print(f"\n--- {year} ---")
-
-        for file in os.listdir(folder):
-
-            if not file.endswith(".json"):
-                continue
-
-            path = os.path.join(folder, file)
-
-            data = load_json(path)
-
-            if data.get("innings"):
-                continue
-
-            match_id = int(file.replace(".json", ""))
-
-            try:
-                innings = parse_scorecard(match_id)
-
-                if not innings:
-                    continue
-
-                data["innings"] = innings
-
-                save_json(path, data)
-
-                print(f"Updated {match_id}")
-                total += 1
-
-                time.sleep(0.3)
-
-            except Exception as e:
-                print("FAILED:", match_id, e)
-
-    print(f"\nUpdated {total} matches")
 
 if __name__ == "__main__":
     run()
-    print("DONE")
