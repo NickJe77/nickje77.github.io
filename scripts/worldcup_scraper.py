@@ -3,20 +3,28 @@ from bs4 import BeautifulSoup
 import os
 import json
 import time
-import re
 
 OUTPUT = "docs/data/cricket/world_cups"
 os.makedirs(OUTPUT, exist_ok=True)
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-WORLD_CUP_KEYWORDS = [
-    "world cup",
-    "prudential",
-    "reliance",
-    "benson & hedges",
-    "wills"
-]
+# World Cup IDs on Cricinfo
+WORLD_CUPS = {
+    "1975": "1",
+    "1979": "2",
+    "1983": "3",
+    "1987": "4",
+    "1992": "5",
+    "1996": "6",
+    "1999": "7",
+    "2003": "8",
+    "2007": "9",
+    "2011": "10",
+    "2015": "11",
+    "2019": "12",
+    "2023": "13"
+}
 
 # -----------------------------
 # SAFE WRITE
@@ -28,33 +36,35 @@ def safe_write(path, data):
         json.dump(data, f, indent=2)
 
 # -----------------------------
-# PARSE SCORECARD
+# GET MATCH LINKS
 # -----------------------------
-def parse_scorecard(match_id):
+def get_matches(series_id):
 
-    url = f"https://www.howstat.com/Cricket/Statistics/Matches/MatchScorecard_ODI.asp?MatchCode={match_id:04d}"
-
+    url = f"https://stats.espncricinfo.com/ci/engine/series/{series_id}.html?view=results"
     res = requests.get(url, headers=HEADERS)
-
-    # If page is junk, skip
-    if res.status_code != 200:
-        return None
-
     soup = BeautifulSoup(res.text, "lxml")
 
-    title = soup.find("h1")
-    if not title:
-        return None
+    links = []
 
-    match_name = title.text.strip()
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
 
-    # FILTER WORLD CUP (ONLY VALID FILTER)
-    if not any(k in match_name.lower() for k in WORLD_CUP_KEYWORDS):
-        return None
+        if "/engine/match/" in href:
+            full = "https://www.espncricinfo.com" + href
+            links.append(full)
 
-    # Extract year safely
-    year_match = re.search(r"(19|20)\d{2}", match_name)
-    year = year_match.group(0) if year_match else "unknown"
+    return list(set(links))
+
+# -----------------------------
+# PARSE SCORECARD
+# -----------------------------
+def parse_match(url):
+
+    res = requests.get(url, headers=HEADERS)
+    soup = BeautifulSoup(res.text, "lxml")
+
+    title = soup.find("title")
+    match_name = title.text if title else ""
 
     match = {
         "match": match_name,
@@ -64,21 +74,16 @@ def parse_scorecard(match_id):
         "innings": []
     }
 
+    # Cricinfo parsing is complex — start simple
     tables = soup.find_all("table")
-    current = None
 
     for table in tables:
-
         headers = [th.text.strip().lower() for th in table.find_all("th")]
 
-        # Batting
-        if "runs" in headers and "balls" in headers:
+        if "runs" in headers:
 
-            team_tag = table.find_previous("h2")
-            team = team_tag.text.strip() if team_tag else "Unknown"
-
-            current = {
-                "team": team,
+            inning = {
+                "team": "Unknown",
                 "batting": {},
                 "bowling": {}
             }
@@ -88,46 +93,18 @@ def parse_scorecard(match_id):
             for r in rows:
                 cols = [c.text.strip() for c in r.find_all("td")]
 
-                if len(cols) < 5:
+                if len(cols) < 3:
                     continue
 
                 player = cols[0]
-                dismissal = cols[1]
                 runs = cols[2]
 
                 if runs.isdigit():
-                    current["batting"][player] = {
-                        "runs": int(runs),
-                        "balls": int(cols[3]) if cols[3].isdigit() else 0,
-                        "fours": int(cols[4]) if cols[4].isdigit() else 0,
-                        "sixes": int(cols[5]) if len(cols) > 5 and cols[5].isdigit() else 0,
-                        "out": dismissal
-                    }
+                    inning["batting"][player] = {"runs": int(runs)}
 
-            match["innings"].append(current)
+            match["innings"].append(inning)
 
-        # Bowling
-        if "wickets" in headers and current:
-
-            rows = table.find_all("tr")[1:]
-
-            for r in rows:
-                cols = [c.text.strip() for c in r.find_all("td")]
-
-                if len(cols) < 4:
-                    continue
-
-                player = cols[0]
-                runs = cols[2]
-                wkts = cols[3]
-
-                if runs.isdigit() and wkts.isdigit():
-                    current["bowling"][player] = {
-                        "runs": int(runs),
-                        "wickets": int(wkts)
-                    }
-
-    return year, match_id, match
+    return match
 
 # -----------------------------
 # BUILD
@@ -136,34 +113,35 @@ def build():
 
     total = 0
 
-    # SAFE RANGE — includes ALL World Cups
-    for match_id in range(1, 4000):
+    for year, series_id in WORLD_CUPS.items():
 
-        if match_id % 100 == 0:
-            print(f"Checking {match_id}...")
+        print(f"\n--- {year} ---")
 
-        try:
-            result = parse_scorecard(match_id)
+        links = get_matches(series_id)
 
-            if not result:
+        print(f"{len(links)} matches found")
+
+        folder = f"{OUTPUT}/{year}"
+        os.makedirs(folder, exist_ok=True)
+
+        for link in links:
+
+            match_id = link.split("/")[-1].replace(".html", "")
+            path = f"{folder}/{match_id}.json"
+
+            if os.path.exists(path):
                 continue
 
-            year, mid, data = result
+            try:
+                data = parse_match(link)
+                safe_write(path, data)
 
-            folder = f"{OUTPUT}/{year}"
-            os.makedirs(folder, exist_ok=True)
+                print(f"Saved {match_id}")
+                total += 1
+                time.sleep(0.3)
 
-            path = f"{folder}/{mid}.json"
-
-            safe_write(path, data)
-
-            print(f"Saved {mid}")
-            total += 1
-
-            time.sleep(0.2)
-
-        except Exception as e:
-            print("FAILED:", match_id, e)
+            except Exception as e:
+                print("FAILED:", link, e)
 
     print(f"\nBuilt {total} matches")
 
