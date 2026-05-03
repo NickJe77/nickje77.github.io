@@ -32,7 +32,8 @@ def safe_write(path, data):
 # -----------------------------
 def parse_scorecard(match_id):
 
-    url = f"https://www.howstat.com/Cricket/Statistics/Matches/MatchScorecard_ODI.asp?MatchCode={match_id:04d}"
+    # ✅ CORRECT URL (this was the main bug)
+    url = f"https://www.howstat.com/Cricket/Statistics/Matches/MatchScoreCard_ODI.asp?MatchCode={match_id:04d}"
 
     res = requests.get(url, headers=HEADERS)
 
@@ -41,21 +42,22 @@ def parse_scorecard(match_id):
 
     soup = BeautifulSoup(res.text, "lxml")
 
-    title = soup.find("h1")
-    if not title:
+    # ✅ Use full page text instead of unreliable tags
+    page_text = soup.get_text(" ", strip=True).lower()
+
+    # FILTER WORLD CUP MATCHES
+    if not any(k in page_text for k in WORLD_CUP_KEYWORDS):
         return None
 
-    match_name = title.text.strip()
+    # Extract match title (best effort)
+    title = soup.find("title")
+    match_name = title.text.strip() if title else f"Match {match_id}"
 
-    # FILTER WORLD CUP
-    if not any(k in match_name.lower() for k in WORLD_CUP_KEYWORDS):
-        return None
-
-    # extract year
-    year_match = re.search(r"(19|20)\d{2}", match_name)
+    # Extract year
+    year_match = re.search(r"(19|20)\d{2}", page_text)
     year = year_match.group(0) if year_match else "unknown"
 
-    data = {
+    match = {
         "match": match_name,
         "date": "",
         "venue": "",
@@ -70,7 +72,9 @@ def parse_scorecard(match_id):
 
         headers = [th.text.strip().lower() for th in table.find_all("th")]
 
-        # Batting
+        # -----------------------------
+        # BATTING
+        # -----------------------------
         if "runs" in headers and "balls" in headers:
 
             team_tag = table.find_previous("h2")
@@ -103,9 +107,11 @@ def parse_scorecard(match_id):
                         "out": dismissal
                     }
 
-            data["innings"].append(current)
+            match["innings"].append(current)
 
-        # Bowling
+        # -----------------------------
+        # BOWLING
+        # -----------------------------
         if "wickets" in headers and current:
 
             rows = table.find_all("tr")[1:]
@@ -126,7 +132,7 @@ def parse_scorecard(match_id):
                         "wickets": int(wkts)
                     }
 
-    return year, match_id, data
+    return year, match_id, match
 
 # -----------------------------
 # BUILD
@@ -135,7 +141,7 @@ def build():
 
     total = 0
 
-    # THIS RANGE COVERS ALL ODI HISTORY
+    # Covers all ODI history safely
     for match_id in range(1, 4000):
 
         if match_id % 100 == 0:
