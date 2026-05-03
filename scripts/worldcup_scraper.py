@@ -1,21 +1,18 @@
 import requests
 from bs4 import BeautifulSoup
-import zipfile, io, os, json, time
+import os
+import json
+import time
 
 OUTPUT = "docs/data/cricket/world_cups"
 os.makedirs(OUTPUT, exist_ok=True)
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-CRICSHEET_URL = "https://cricsheet.org/downloads/odis_json.zip"
-
-VALID_EVENTS = [
-    "ICC Cricket World Cup",
-    "ICC World Cup",
-    "Prudential World Cup",
-    "Reliance World Cup",
-    "Benson & Hedges World Cup",
-    "Wills World Cup"
+# World Cup years
+YEARS = [
+    1975, 1979, 1983, 1987, 1992, 1996, 1999,
+    2003, 2007, 2011, 2015, 2019, 2023
 ]
 
 # --------------------------------
@@ -28,162 +25,137 @@ def safe_write(path, data):
         json.dump(data, f, indent=2)
 
 # --------------------------------
-# CRICSHEET (2000+)
+# PARSE SCORECARD
 # --------------------------------
-def build_cricsheet():
+def parse_scorecard(url):
 
-    print("Downloading Cricsheet...")
-    r = requests.get(CRICSHEET_URL)
-    z = zipfile.ZipFile(io.BytesIO(r.content))
-    z.extractall("tmp")
+    res = requests.get(url, headers=HEADERS)
+    soup = BeautifulSoup(res.text, "lxml")
 
-    built = 0
+    title = soup.find("h1")
+    match_name = title.text.strip() if title else ""
 
-    for file in os.listdir("tmp"):
+    match = {
+        "match": match_name,
+        "date": "",
+        "venue": "",
+        "result": "",
+        "innings": []
+    }
 
-        if not file.endswith(".json"):
-            continue
+    tables = soup.find_all("table")
+    current = None
 
-        with open(f"tmp/{file}") as f:
-            data = json.load(f)
+    for table in tables:
 
-        info = data.get("info", {})
-        event = info.get("event", {}).get("name", "")
+        headers = [th.text.strip().lower() for th in table.find_all("th")]
 
-        if not any(e in event for e in VALID_EVENTS):
-            continue
+        # Batting table
+        if "runs" in headers and "balls" in headers:
 
-        date = info.get("dates", [""])[0]
-        year = date[:4]
+            team_tag = table.find_previous("h2")
+            team = team_tag.text.strip() if team_tag else "Unknown"
 
-        if int(year) < 2000:
-            continue
+            current = {
+                "team": team,
+                "batting": {},
+                "bowling": {}
+            }
 
-        folder = f"{OUTPUT}/{year}"
-        os.makedirs(folder, exist_ok=True)
+            rows = table.find_all("tr")[1:]
 
-        match_id = file.replace(".json", "")
-        path = f"{folder}/{match_id}.json"
+            for r in rows:
+                cols = [c.text.strip() for c in r.find_all("td")]
 
-        if os.path.exists(path):
-            continue
+                if len(cols) < 5:
+                    continue
 
-        match = {
-            "match": " vs ".join(info.get("teams", [])),
-            "date": date,
-            "venue": info.get("venue", ""),
-            "result": info.get("outcome", {}),
-            "innings": []
-        }
+                player = cols[0]
+                dismissal = cols[1]
+                runs = cols[2]
 
-        for inn in data.get("innings", []):
-            team = list(inn.keys())[0]
-            details = inn[team]
+                if runs.isdigit():
+                    current["batting"][player] = {
+                        "runs": int(runs),
+                        "balls": int(cols[3]) if cols[3].isdigit() else 0,
+                        "fours": int(cols[4]) if cols[4].isdigit() else 0,
+                        "sixes": int(cols[5]) if len(cols) > 5 and cols[5].isdigit() else 0,
+                        "out": dismissal
+                    }
 
-            inning = {"team": team, "batting": {}, "bowling": {}}
-            deliveries = []
+            match["innings"].append(current)
 
-            if "overs" in details:
-                for over in details["overs"]:
-                    deliveries.extend(over.get("deliveries", []))
-            else:
-                deliveries = details.get("deliveries", [])
+        # Bowling table
+        if "wickets" in headers and current:
 
-            for delivery in deliveries:
-                for ball in delivery.values():
+            rows = table.find_all("tr")[1:]
 
-                    batter = ball.get("batter")
-                    bowler = ball.get("bowler")
-                    runs_b = ball.get("runs", {}).get("batter", 0)
-                    runs_t = ball.get("runs", {}).get("total", 0)
+            for r in rows:
+                cols = [c.text.strip() for c in r.find_all("td")]
 
-                    if batter:
-                        b = inning["batting"].setdefault(batter, {
-                            "runs": 0, "balls": 0, "fours": 0, "sixes": 0, "out": ""
-                        })
-                        b["runs"] += runs_b
-                        b["balls"] += 1
-                        if runs_b == 4: b["fours"] += 1
-                        if runs_b == 6: b["sixes"] += 1
+                if len(cols) < 4:
+                    continue
 
-                    if bowler:
-                        bl = inning["bowling"].setdefault(bowler, {
-                            "runs": 0, "wickets": 0
-                        })
-                        bl["runs"] += runs_t
+                player = cols[0]
+                runs = cols[2]
+                wkts = cols[3]
 
-                    if "wickets" in ball:
-                        for w in ball["wickets"]:
-                            p = w.get("player_out")
-                            if p and p in inning["batting"]:
-                                inning["batting"][p]["out"] = w.get("kind", "")
-                            if bowler:
-                                inning["bowling"][bowler]["wickets"] += 1
+                if runs.isdigit() and wkts.isdigit():
+                    current["bowling"][player] = {
+                        "runs": int(runs),
+                        "wickets": int(wkts)
+                    }
 
-            match["innings"].append(inning)
-
-        safe_write(path, match)
-        built += 1
-
-    print(f"Cricsheet built: {built}")
+    return match
 
 # --------------------------------
-# HOWSTAT (1975–1999)
+# MAIN BUILD
 # --------------------------------
-def build_howstat():
-
-    print("Building pre-2000...")
+def build():
 
     total = 0
 
-    for match_id in range(1000, 1300):
+    for year in YEARS:
 
-        url = f"http://www.howstat.com/cricket/Statistics/Matches/MatchScorecard.asp?MatchCode={match_id}"
-        res = requests.get(url)
+        print(f"\n--- {year} ---")
 
-        if "Scorecard" not in res.text:
-            continue
-
+        # Howstat World Cup pages follow this pattern
+        url = f"http://www.howstat.com/cricket/Statistics/Series/SeriesMatches.asp?SeriesCode={year}"
+        res = requests.get(url, headers=HEADERS)
         soup = BeautifulSoup(res.text, "lxml")
 
-        title = soup.find("h1")
-        if not title:
-            continue
+        links = []
 
-        match_name = title.text
+        for a in soup.find_all("a", href=True):
+            if "MatchScorecard" in a["href"]:
+                links.append("http://www.howstat.com" + a["href"])
 
-        # filter to world cups only
-        if "World Cup" not in match_name:
-            continue
-
-        year = match_name[-4:]
+        print(f"{len(links)} matches found")
 
         folder = f"{OUTPUT}/{year}"
         os.makedirs(folder, exist_ok=True)
 
-        path = f"{folder}/{match_id}.json"
+        for link in links:
 
-        if os.path.exists(path):
-            continue
+            match_id = link.split("=")[-1]
+            file_path = f"{folder}/{match_id}.json"
 
-        data = {
-            "match": match_name,
-            "date": "",
-            "venue": "",
-            "result": "",
-            "innings": []
-        }
+            if os.path.exists(file_path):
+                continue
 
-        safe_write(path, data)
-        total += 1
-        time.sleep(0.3)
+            try:
+                data = parse_scorecard(link)
+                safe_write(file_path, data)
 
-    print(f"Howstat built: {total}")
+                print(f"Saved {match_id}")
+                total += 1
+                time.sleep(0.5)
 
-# --------------------------------
-# MAIN
-# --------------------------------
+            except Exception as e:
+                print("FAILED:", link, e)
+
+    print(f"\nBuilt {total} matches")
+
 if __name__ == "__main__":
-    build_cricsheet()
-    build_howstat()
+    build()
     print("DONE")
