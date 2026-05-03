@@ -1,13 +1,14 @@
-import requests
-from bs4 import BeautifulSoup
 import os
 import json
 import time
 
+from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+
 OUTPUT = "docs/data/cricket/world_cups"
 os.makedirs(OUTPUT, exist_ok=True)
-
-HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 WORLD_CUP_KEYWORDS = [
     "World Cup",
@@ -27,12 +28,27 @@ def safe_write(path, data):
         json.dump(data, f, indent=2)
 
 # -----------------------------
-# PARSE SCORECARD
+# SETUP DRIVER
 # -----------------------------
-def parse_scorecard(url):
+def get_driver():
+    options = Options()
+    options.add_argument("--headless=new")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
 
-    res = requests.get(url, headers=HEADERS)
-    soup = BeautifulSoup(res.text, "lxml")
+    driver = webdriver.Chrome(options=options)
+    return driver
+
+# -----------------------------
+# PARSE SCORECARD (UNCHANGED LOGIC)
+# -----------------------------
+def parse_scorecard(driver, url):
+
+    driver.get(url)
+    time.sleep(1)
+
+    soup = BeautifulSoup(driver.page_source, "lxml")
 
     title = soup.find("h1")
     match_name = title.text.strip() if title else ""
@@ -111,10 +127,11 @@ def parse_scorecard(url):
     return match
 
 # -----------------------------
-# BUILD (FIXED)
+# BUILD
 # -----------------------------
 def build():
 
+    driver = get_driver()
     total = 0
 
     for year in range(1975, 2024):
@@ -122,10 +139,13 @@ def build():
         print(f"\n--- {year} ---")
 
         url = f"http://www.howstat.com/cricket/Statistics/Matches/MatchList.asp?Stat=ODI;Year={year}"
-        res = requests.get(url, headers=HEADERS)
-        soup = BeautifulSoup(res.text, "lxml")
+        driver.get(url)
+        time.sleep(2)
 
+        soup = BeautifulSoup(driver.page_source, "lxml")
         rows = soup.find_all("tr")
+
+        print("Rows:", len(rows))
 
         links = []
 
@@ -133,15 +153,13 @@ def build():
 
             text = r.text
 
-            # WORLD CUP FILTER
             if not any(k.lower() in text.lower() for k in WORLD_CUP_KEYWORDS):
                 continue
 
             a = r.find("a", href=True)
 
             if a and "MatchScorecard" in a["href"]:
-                full = "http://www.howstat.com" + a["href"]
-                links.append(full)
+                links.append("http://www.howstat.com" + a["href"])
 
         print(f"{len(links)} matches found")
 
@@ -160,16 +178,17 @@ def build():
                 continue
 
             try:
-                data = parse_scorecard(link)
+                data = parse_scorecard(driver, link)
                 safe_write(path, data)
 
                 print(f"Saved {match_id}")
                 total += 1
-                time.sleep(0.3)
+                time.sleep(0.5)
 
             except Exception as e:
                 print("FAILED:", link, e)
 
+    driver.quit()
     print(f"\nBuilt {total} matches")
 
 # -----------------------------
