@@ -9,21 +9,13 @@ os.makedirs(OUTPUT, exist_ok=True)
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-SERIES = {
-    1975: 17,
-    1979: 18,
-    1983: 19,
-    1987: 20,
-    1992: 21,
-    1996: 22,
-    1999: 23,
-    2003: 24,
-    2007: 25,
-    2011: 26,
-    2015: 27,
-    2019: 28,
-    2023: 29
-}
+WORLD_CUP_KEYWORDS = [
+    "World Cup",
+    "Prudential",
+    "Reliance",
+    "Benson & Hedges",
+    "Wills"
+]
 
 # -----------------------------
 # SAFE WRITE
@@ -119,27 +111,40 @@ def parse_scorecard(url):
     return match
 
 # -----------------------------
-# MAIN BUILD
+# BUILD WORLD CUPS
 # -----------------------------
 def build():
 
     total = 0
 
-    for year, code in SERIES.items():
+    for year in range(1975, 2024):
 
         print(f"\n--- {year} ---")
 
-        url = f"http://www.howstat.com/cricket/Statistics/Series/SeriesMatches.asp?SeriesCode={code}"
+        url = f"http://www.howstat.com/cricket/Statistics/Matches/MatchList.asp?Stat=ODI;Year={year}"
         res = requests.get(url, headers=HEADERS)
         soup = BeautifulSoup(res.text, "lxml")
 
+        rows = soup.find_all("tr")
+
         links = []
 
-        for a in soup.find_all("a", href=True):
-            if "MatchScorecard" in a["href"]:
+        for r in rows:
+
+            text = r.text
+
+            # ONLY WORLD CUP MATCHES
+            if not any(k in text for k in WORLD_CUP_KEYWORDS):
+                continue
+
+            a = r.find("a", href=True)
+            if a and "MatchScorecard" in a["href"]:
                 links.append("http://www.howstat.com" + a["href"])
 
         print(f"{len(links)} matches found")
+
+        if not links:
+            continue
 
         folder = f"{OUTPUT}/{year}"
         os.makedirs(folder, exist_ok=True)
@@ -158,13 +163,16 @@ def build():
 
                 print(f"Saved {match_id}")
                 total += 1
-                time.sleep(0.5)
+                time.sleep(0.3)
 
             except Exception as e:
                 print("FAILED:", link, e)
 
     print(f"\nBuilt {total} matches")
 
+# -----------------------------
+# RUN
+# -----------------------------
 if __name__ == "__main__":
     build()
     print("DONE")
