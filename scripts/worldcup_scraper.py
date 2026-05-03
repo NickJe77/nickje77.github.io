@@ -16,6 +16,13 @@ def save_json(path, data):
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
+def is_number(val):
+    try:
+        int(val)
+        return True
+    except:
+        return False
+
 def parse_scorecard(match_id):
 
     url = f"https://www.howstat.com/Cricket/Statistics/Matches/MatchScoreCard_ODI.asp?MatchCode={match_id:04d}"
@@ -28,68 +35,73 @@ def parse_scorecard(match_id):
     soup = BeautifulSoup(res.text, "lxml")
 
     tables = soup.find_all("table")
+
     innings = []
     current = None
 
     for table in tables:
 
-        headers = [th.text.strip().lower() for th in table.find_all("th")]
+        rows = table.find_all("tr")
 
-        # ---------------- BATTING ----------------
-        if "runs" in headers and "balls" in headers:
+        if len(rows) < 5:
+            continue
 
-            team_tag = table.find_previous("h2")
-            team = team_tag.text.strip() if team_tag else "Unknown"
+        # -----------------------------
+        # DETECT BATTING TABLE
+        # -----------------------------
+        for r in rows[1:5]:
+            cols = [c.text.strip() for c in r.find_all("td")]
 
-            current = {
-                "team": team,
-                "batting": {},
-                "bowling": {}
-            }
+            if len(cols) >= 6 and is_number(cols[2]):
 
-            rows = table.find_all("tr")[1:]
+                team_tag = table.find_previous("h2")
+                team = team_tag.text.strip() if team_tag else "Unknown"
 
-            for r in rows:
+                current = {
+                    "team": team,
+                    "batting": {},
+                    "bowling": {}
+                }
+
+                for r2 in rows[1:]:
+                    cols2 = [c.text.strip() for c in r2.find_all("td")]
+
+                    if len(cols2) < 5:
+                        continue
+
+                    player = cols2[0]
+                    runs = cols2[2]
+
+                    if is_number(runs):
+                        current["batting"][player] = {
+                            "runs": int(runs),
+                            "balls": int(cols2[3]) if len(cols2) > 3 and is_number(cols2[3]) else 0,
+                            "fours": int(cols2[4]) if len(cols2) > 4 and is_number(cols2[4]) else 0,
+                            "sixes": int(cols2[5]) if len(cols2) > 5 and is_number(cols2[5]) else 0
+                        }
+
+                innings.append(current)
+                break
+
+        # -----------------------------
+        # DETECT BOWLING TABLE
+        # -----------------------------
+        if current:
+            for r in rows[1:]:
                 cols = [c.text.strip() for c in r.find_all("td")]
 
-                if len(cols) < 5:
-                    continue
+                if len(cols) >= 4 and is_number(cols[2]) and is_number(cols[3]):
 
-                player = cols[0]
-                runs = cols[2]
+                    player = cols[0]
+                    runs = cols[2]
+                    wkts = cols[3]
 
-                if runs.isdigit():
-                    current["batting"][player] = {
-                        "runs": int(runs),
-                        "balls": int(cols[3]) if cols[3].isdigit() else 0,
-                        "fours": int(cols[4]) if cols[4].isdigit() else 0,
-                        "sixes": int(cols[5]) if len(cols) > 5 and cols[5].isdigit() else 0
-                    }
-
-            innings.append(current)
-
-        # ---------------- BOWLING ----------------
-        if "wickets" in headers and current:
-
-            rows = table.find_all("tr")[1:]
-
-            for r in rows:
-                cols = [c.text.strip() for c in r.find_all("td")]
-
-                if len(cols) < 4:
-                    continue
-
-                player = cols[0]
-                runs = cols[2]
-                wkts = cols[3]
-
-                if runs.isdigit() and wkts.isdigit():
                     current["bowling"][player] = {
                         "runs": int(runs),
                         "wickets": int(wkts)
                     }
 
-    return innings
+    return innings if innings else None
 
 def run():
 
@@ -113,7 +125,6 @@ def run():
 
             data = load_json(path)
 
-            # skip already filled matches
             if data.get("innings"):
                 continue
 
