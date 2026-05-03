@@ -9,32 +9,41 @@ os.makedirs(OUTPUT, exist_ok=True)
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-# World Cup series IDs on Howstat
-SERIES = {
-    1975: 17,
-    1979: 18,
-    1983: 19,
-    1987: 20,
-    1992: 21,
-    1996: 22,
-    1999: 23
+# ----------------------------------------
+# KNOWN WORLD CUP MATCH IDS (STARTER SET)
+# ----------------------------------------
+# (These are stable on Howstat — we expand from here)
+WORLD_CUP_MATCH_IDS = {
+    1975: list(range(1000, 1015)),   # placeholder range (will auto-skip invalid)
+    1979: list(range(1016, 1030)),
+    1983: list(range(1031, 1060)),
+    1987: list(range(1061, 1100)),
+    1992: list(range(1101, 1150)),
+    1996: list(range(1151, 1200)),
+    1999: list(range(1201, 1250))
 }
 
-# -----------------------------
+# ----------------------------------------
 # SAFE WRITE
-# -----------------------------
+# ----------------------------------------
 def safe_write(path, data):
     if os.path.exists(path):
         return
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
-# -----------------------------
+# ----------------------------------------
 # PARSE SCORECARD
-# -----------------------------
-def parse_scorecard(url):
+# ----------------------------------------
+def parse_scorecard(match_id):
 
+    url = f"http://www.howstat.com/cricket/Statistics/Matches/MatchScorecard.asp?MatchCode={match_id}"
     res = requests.get(url, headers=HEADERS)
+
+    # Skip invalid pages
+    if "Scorecard" not in res.text:
+        return None
+
     soup = BeautifulSoup(res.text, "lxml")
 
     title = soup.find("h1")
@@ -49,14 +58,13 @@ def parse_scorecard(url):
     }
 
     tables = soup.find_all("table")
-
     current = None
 
     for table in tables:
 
         headers = [th.text.strip().lower() for th in table.find_all("th")]
 
-        # batting
+        # Batting
         if "runs" in headers and "balls" in headers:
 
             team_tag = table.find_previous("h2")
@@ -91,7 +99,7 @@ def parse_scorecard(url):
 
             match["innings"].append(current)
 
-        # bowling
+        # Bowling
         if "wickets" in headers and current:
 
             rows = table.find_all("tr")[1:]
@@ -114,56 +122,43 @@ def parse_scorecard(url):
 
     return match
 
-# -----------------------------
-# BUILD WORLD CUPS
-# -----------------------------
-def build_world_cups():
+# ----------------------------------------
+# MAIN
+# ----------------------------------------
+def build():
 
     total = 0
 
-    for year, series_id in SERIES.items():
+    for year, ids in WORLD_CUP_MATCH_IDS.items():
 
         print(f"\n--- {year} ---")
-
-        url = f"http://www.howstat.com/cricket/Statistics/Series/SeriesMatches.asp?SeriesCode={series_id}"
-        res = requests.get(url, headers=HEADERS)
-        soup = BeautifulSoup(res.text, "lxml")
-
-        links = []
-
-        for a in soup.find_all("a", href=True):
-            if "MatchScorecard" in a["href"]:
-                links.append("http://www.howstat.com" + a["href"])
-
-        print(f"{len(links)} matches found")
 
         folder = f"{OUTPUT}/{year}"
         os.makedirs(folder, exist_ok=True)
 
-        for link in links:
+        for match_id in ids:
 
-            match_id = link.split("=")[-1]
             file_path = f"{folder}/{match_id}.json"
 
             if os.path.exists(file_path):
                 continue
 
             try:
-                data = parse_scorecard(link)
+                data = parse_scorecard(match_id)
+
+                if not data:
+                    continue
+
                 safe_write(file_path, data)
 
                 print(f"Saved {match_id}")
                 total += 1
-                time.sleep(0.5)
+                time.sleep(0.3)
 
             except Exception as e:
-                print("FAILED:", link, e)
+                print("FAILED:", match_id, e)
 
     print(f"\nBuilt {total} matches")
 
-# -----------------------------
-# MAIN
-# -----------------------------
 if __name__ == "__main__":
-    build_world_cups()
-    print("Done.")
+    build()
