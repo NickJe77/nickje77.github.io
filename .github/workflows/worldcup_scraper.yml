@@ -2,30 +2,60 @@ name: World Cup Builder
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *"
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      # -------------------------
+      # CHECKOUT
+      # -------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      # -------------------------
+      # PYTHON
+      # -------------------------
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Run builder
+      # -------------------------
+      # INSTALL DEPENDENCIES
+      # -------------------------
+      - name: Install deps
         run: |
-          python scripts/worldcup_builder.py
+          pip install requests beautifulsoup4 lxml
 
-      - name: Commit
+      # -------------------------
+      # ENSURE FOLDERS EXIST
+      # -------------------------
+      - name: Ensure folders
+        run: |
+          mkdir -p docs/data/cricket/world_cups
+
+      # -------------------------
+      # RUN YOUR SCRIPT (NO NEW NAME)
+      # -------------------------
+      - name: Run script
+        run: |
+          python scripts/worldcup_scraper.py
+
+      # -------------------------
+      # COMMIT + PUSH (SAFE)
+      # -------------------------
+      - name: Commit & push
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
           git pull --rebase
 
-          git add docs/data/cricket/world_cups
-          git commit -m "World Cup build" || echo "No changes"
+          git add docs/data/cricket/world_cups || true
+          git commit -m "World Cup update" || echo "No changes"
 
-          git push
+          git push || true
