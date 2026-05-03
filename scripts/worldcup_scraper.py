@@ -29,13 +29,27 @@ def safe_write(path, data):
 # -----------------------------
 # PARSE SCORECARD
 # -----------------------------
-def parse_scorecard(url):
+def parse_scorecard(match_id):
+
+    url = f"http://www.howstat.com/cricket/Statistics/Matches/MatchScorecard.asp?MatchCode={match_id}"
 
     res = requests.get(url, headers=HEADERS)
+
+    # skip dead pages
+    if "Scorecard" not in res.text:
+        return None
+
     soup = BeautifulSoup(res.text, "lxml")
 
     title = soup.find("h1")
-    match_name = title.text.strip() if title else ""
+    if not title:
+        return None
+
+    match_name = title.text.strip()
+
+    # FILTER HERE (REAL FIX)
+    if not any(k in match_name.lower() for k in WORLD_CUP_KEYWORDS):
+        return None
 
     match = {
         "match": match_name,
@@ -111,67 +125,45 @@ def parse_scorecard(url):
     return match
 
 # -----------------------------
-# BUILD (FIXED)
+# BUILD (SCAN IDS DIRECTLY)
 # -----------------------------
 def build():
 
     total = 0
 
-    for year in range(1975, 2024):
+    # THIS RANGE COVERS ALL ODI ERA
+    for match_id in range(1, 20000):
 
-        print(f"\n--- {year} ---")
+        if match_id % 100 == 0:
+            print(f"Checking {match_id}...")
 
-        url = f"http://www.howstat.com/cricket/Statistics/Matches/MatchList.asp?Stat=ODI;Year={year}"
-        res = requests.get(url, headers=HEADERS)
-        soup = BeautifulSoup(res.text, "lxml")
+        try:
+            data = parse_scorecard(match_id)
 
-        # STEP 1: GET ALL SCORECARD LINKS (NO FILTER HERE)
-        links = []
-
-        for a in soup.find_all("a", href=True):
-
-            href = a["href"]
-
-            if "MatchScorecard.asp?MatchCode=" not in href:
+            if not data:
                 continue
 
-            full = "http://www.howstat.com" + href
-            links.append(full)
+            # extract year from match title (last 4 digits usually)
+            year = "unknown"
+            for part in data["match"].split():
+                if part.isdigit() and len(part) == 4:
+                    year = part
+                    break
 
-        links = list(set(links))
+            folder = f"{OUTPUT}/{year}"
+            os.makedirs(folder, exist_ok=True)
 
-        print(f"Total scorecards found: {len(links)}")
-
-        if not links:
-            continue
-
-        folder = f"{OUTPUT}/{year}"
-        os.makedirs(folder, exist_ok=True)
-
-        # STEP 2: PARSE + FILTER HERE
-        for link in links:
-
-            match_id = link.split("=")[-1]
             path = f"{folder}/{match_id}.json"
 
-            if os.path.exists(path):
-                continue
+            safe_write(path, data)
 
-            try:
-                data = parse_scorecard(link)
+            print(f"Saved {match_id}")
+            total += 1
 
-                # FILTER WORLD CUP HERE (THIS IS THE FIX)
-                if not any(k in data["match"].lower() for k in WORLD_CUP_KEYWORDS):
-                    continue
+            time.sleep(0.2)
 
-                safe_write(path, data)
-
-                print(f"Saved {match_id}")
-                total += 1
-                time.sleep(0.3)
-
-            except Exception as e:
-                print("FAILED:", link, e)
+        except Exception as e:
+            print("FAILED:", match_id, e)
 
     print(f"\nBuilt {total} matches")
 
