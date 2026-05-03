@@ -1,164 +1,189 @@
 import requests
 from bs4 import BeautifulSoup
-import os
-import json
-import time
+import zipfile, io, os, json, time
 
 OUTPUT = "docs/data/cricket/world_cups"
 os.makedirs(OUTPUT, exist_ok=True)
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-# ----------------------------------------
-# KNOWN WORLD CUP MATCH IDS (STARTER SET)
-# ----------------------------------------
-# (These are stable on Howstat — we expand from here)
-WORLD_CUP_MATCH_IDS = {
-    1975: list(range(1000, 1015)),   # placeholder range (will auto-skip invalid)
-    1979: list(range(1016, 1030)),
-    1983: list(range(1031, 1060)),
-    1987: list(range(1061, 1100)),
-    1992: list(range(1101, 1150)),
-    1996: list(range(1151, 1200)),
-    1999: list(range(1201, 1250))
-}
+CRICSHEET_URL = "https://cricsheet.org/downloads/odis_json.zip"
 
-# ----------------------------------------
+VALID_EVENTS = [
+    "ICC Cricket World Cup",
+    "ICC World Cup",
+    "Prudential World Cup",
+    "Reliance World Cup",
+    "Benson & Hedges World Cup",
+    "Wills World Cup"
+]
+
+# --------------------------------
 # SAFE WRITE
-# ----------------------------------------
+# --------------------------------
 def safe_write(path, data):
     if os.path.exists(path):
         return
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
-# ----------------------------------------
-# PARSE SCORECARD
-# ----------------------------------------
-def parse_scorecard(match_id):
+# --------------------------------
+# CRICSHEET (2000+)
+# --------------------------------
+def build_cricsheet():
 
-    url = f"http://www.howstat.com/cricket/Statistics/Matches/MatchScorecard.asp?MatchCode={match_id}"
-    res = requests.get(url, headers=HEADERS)
+    print("Downloading Cricsheet...")
+    r = requests.get(CRICSHEET_URL)
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    z.extractall("tmp")
 
-    # Skip invalid pages
-    if "Scorecard" not in res.text:
-        return None
+    built = 0
 
-    soup = BeautifulSoup(res.text, "lxml")
+    for file in os.listdir("tmp"):
 
-    title = soup.find("h1")
-    match_name = title.text.strip() if title else ""
+        if not file.endswith(".json"):
+            continue
 
-    match = {
-        "match": match_name,
-        "date": "",
-        "venue": "",
-        "result": "",
-        "innings": []
-    }
+        with open(f"tmp/{file}") as f:
+            data = json.load(f)
 
-    tables = soup.find_all("table")
-    current = None
+        info = data.get("info", {})
+        event = info.get("event", {}).get("name", "")
 
-    for table in tables:
+        if not any(e in event for e in VALID_EVENTS):
+            continue
 
-        headers = [th.text.strip().lower() for th in table.find_all("th")]
+        date = info.get("dates", [""])[0]
+        year = date[:4]
 
-        # Batting
-        if "runs" in headers and "balls" in headers:
-
-            team_tag = table.find_previous("h2")
-            team = team_tag.text.strip() if team_tag else "Unknown"
-
-            current = {
-                "team": team,
-                "batting": {},
-                "bowling": {}
-            }
-
-            rows = table.find_all("tr")[1:]
-
-            for r in rows:
-                cols = [c.text.strip() for c in r.find_all("td")]
-
-                if len(cols) < 5:
-                    continue
-
-                player = cols[0]
-                dismissal = cols[1]
-                runs = cols[2]
-
-                if runs.isdigit():
-                    current["batting"][player] = {
-                        "runs": int(runs),
-                        "balls": int(cols[3]) if cols[3].isdigit() else 0,
-                        "fours": int(cols[4]) if cols[4].isdigit() else 0,
-                        "sixes": int(cols[5]) if len(cols) > 5 and cols[5].isdigit() else 0,
-                        "out": dismissal
-                    }
-
-            match["innings"].append(current)
-
-        # Bowling
-        if "wickets" in headers and current:
-
-            rows = table.find_all("tr")[1:]
-
-            for r in rows:
-                cols = [c.text.strip() for c in r.find_all("td")]
-
-                if len(cols) < 4:
-                    continue
-
-                player = cols[0]
-                runs = cols[2]
-                wkts = cols[3]
-
-                if runs.isdigit() and wkts.isdigit():
-                    current["bowling"][player] = {
-                        "runs": int(runs),
-                        "wickets": int(wkts)
-                    }
-
-    return match
-
-# ----------------------------------------
-# MAIN
-# ----------------------------------------
-def build():
-
-    total = 0
-
-    for year, ids in WORLD_CUP_MATCH_IDS.items():
-
-        print(f"\n--- {year} ---")
+        if int(year) < 2000:
+            continue
 
         folder = f"{OUTPUT}/{year}"
         os.makedirs(folder, exist_ok=True)
 
-        for match_id in ids:
+        match_id = file.replace(".json", "")
+        path = f"{folder}/{match_id}.json"
 
-            file_path = f"{folder}/{match_id}.json"
+        if os.path.exists(path):
+            continue
 
-            if os.path.exists(file_path):
-                continue
+        match = {
+            "match": " vs ".join(info.get("teams", [])),
+            "date": date,
+            "venue": info.get("venue", ""),
+            "result": info.get("outcome", {}),
+            "innings": []
+        }
 
-            try:
-                data = parse_scorecard(match_id)
+        for inn in data.get("innings", []):
+            team = list(inn.keys())[0]
+            details = inn[team]
 
-                if not data:
-                    continue
+            inning = {"team": team, "batting": {}, "bowling": {}}
+            deliveries = []
 
-                safe_write(file_path, data)
+            if "overs" in details:
+                for over in details["overs"]:
+                    deliveries.extend(over.get("deliveries", []))
+            else:
+                deliveries = details.get("deliveries", [])
 
-                print(f"Saved {match_id}")
-                total += 1
-                time.sleep(0.3)
+            for delivery in deliveries:
+                for ball in delivery.values():
 
-            except Exception as e:
-                print("FAILED:", match_id, e)
+                    batter = ball.get("batter")
+                    bowler = ball.get("bowler")
+                    runs_b = ball.get("runs", {}).get("batter", 0)
+                    runs_t = ball.get("runs", {}).get("total", 0)
 
-    print(f"\nBuilt {total} matches")
+                    if batter:
+                        b = inning["batting"].setdefault(batter, {
+                            "runs": 0, "balls": 0, "fours": 0, "sixes": 0, "out": ""
+                        })
+                        b["runs"] += runs_b
+                        b["balls"] += 1
+                        if runs_b == 4: b["fours"] += 1
+                        if runs_b == 6: b["sixes"] += 1
 
+                    if bowler:
+                        bl = inning["bowling"].setdefault(bowler, {
+                            "runs": 0, "wickets": 0
+                        })
+                        bl["runs"] += runs_t
+
+                    if "wickets" in ball:
+                        for w in ball["wickets"]:
+                            p = w.get("player_out")
+                            if p and p in inning["batting"]:
+                                inning["batting"][p]["out"] = w.get("kind", "")
+                            if bowler:
+                                inning["bowling"][bowler]["wickets"] += 1
+
+            match["innings"].append(inning)
+
+        safe_write(path, match)
+        built += 1
+
+    print(f"Cricsheet built: {built}")
+
+# --------------------------------
+# HOWSTAT (1975–1999)
+# --------------------------------
+def build_howstat():
+
+    print("Building pre-2000...")
+
+    total = 0
+
+    for match_id in range(1000, 1300):
+
+        url = f"http://www.howstat.com/cricket/Statistics/Matches/MatchScorecard.asp?MatchCode={match_id}"
+        res = requests.get(url)
+
+        if "Scorecard" not in res.text:
+            continue
+
+        soup = BeautifulSoup(res.text, "lxml")
+
+        title = soup.find("h1")
+        if not title:
+            continue
+
+        match_name = title.text
+
+        # filter to world cups only
+        if "World Cup" not in match_name:
+            continue
+
+        year = match_name[-4:]
+
+        folder = f"{OUTPUT}/{year}"
+        os.makedirs(folder, exist_ok=True)
+
+        path = f"{folder}/{match_id}.json"
+
+        if os.path.exists(path):
+            continue
+
+        data = {
+            "match": match_name,
+            "date": "",
+            "venue": "",
+            "result": "",
+            "innings": []
+        }
+
+        safe_write(path, data)
+        total += 1
+        time.sleep(0.3)
+
+    print(f"Howstat built: {total}")
+
+# --------------------------------
+# MAIN
+# --------------------------------
 if __name__ == "__main__":
-    build()
+    build_cricsheet()
+    build_howstat()
+    print("DONE")
