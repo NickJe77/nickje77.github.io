@@ -9,12 +9,6 @@ os.makedirs(OUTPUT, exist_ok=True)
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-# World Cup years
-YEARS = [
-    1975, 1979, 1983, 1987, 1992, 1996, 1999,
-    2003, 2007, 2011, 2015, 2019, 2023
-]
-
 # --------------------------------
 # SAFE WRITE
 # --------------------------------
@@ -27,13 +21,36 @@ def safe_write(path, data):
 # --------------------------------
 # PARSE SCORECARD
 # --------------------------------
-def parse_scorecard(url):
+def parse_scorecard(match_id):
 
+    url = f"http://www.howstat.com/cricket/Statistics/Matches/MatchScorecard.asp?MatchCode={match_id}"
     res = requests.get(url, headers=HEADERS)
+
+    # Skip invalid pages
+    if "Scorecard" not in res.text:
+        return None
+
     soup = BeautifulSoup(res.text, "lxml")
 
     title = soup.find("h1")
-    match_name = title.text.strip() if title else ""
+    if not title:
+        return None
+
+    match_name = title.text.strip()
+
+    # ONLY WORLD CUP MATCHES
+    if "World Cup" not in match_name:
+        return None
+
+    # Extract year from title
+    year = None
+    for part in match_name.split():
+        if part.isdigit() and len(part) == 4:
+            year = part
+            break
+
+    if not year:
+        return None
 
     match = {
         "match": match_name,
@@ -50,7 +67,7 @@ def parse_scorecard(url):
 
         headers = [th.text.strip().lower() for th in table.find_all("th")]
 
-        # Batting table
+        # ---------------- BATTING ----------------
         if "runs" in headers and "balls" in headers:
 
             team_tag = table.find_previous("h2")
@@ -85,7 +102,7 @@ def parse_scorecard(url):
 
             match["innings"].append(current)
 
-        # Bowling table
+        # ---------------- BOWLING ----------------
         if "wickets" in headers and current:
 
             rows = table.find_all("tr")[1:]
@@ -106,56 +123,47 @@ def parse_scorecard(url):
                         "wickets": int(wkts)
                     }
 
-    return match
+    return year, match_id, match
 
 # --------------------------------
-# MAIN BUILD
+# MAIN
 # --------------------------------
 def build():
 
     total = 0
 
-    for year in YEARS:
+    print("Scanning Howstat match IDs...")
 
-        print(f"\n--- {year} ---")
+    # Wide range to guarantee coverage
+    for match_id in range(1, 20000):
 
-        # Howstat World Cup pages follow this pattern
-        url = f"http://www.howstat.com/cricket/Statistics/Series/SeriesMatches.asp?SeriesCode={year}"
-        res = requests.get(url, headers=HEADERS)
-        soup = BeautifulSoup(res.text, "lxml")
+        try:
+            result = parse_scorecard(match_id)
 
-        links = []
-
-        for a in soup.find_all("a", href=True):
-            if "MatchScorecard" in a["href"]:
-                links.append("http://www.howstat.com" + a["href"])
-
-        print(f"{len(links)} matches found")
-
-        folder = f"{OUTPUT}/{year}"
-        os.makedirs(folder, exist_ok=True)
-
-        for link in links:
-
-            match_id = link.split("=")[-1]
-            file_path = f"{folder}/{match_id}.json"
-
-            if os.path.exists(file_path):
+            if not result:
                 continue
 
-            try:
-                data = parse_scorecard(link)
-                safe_write(file_path, data)
+            year, mid, data = result
 
-                print(f"Saved {match_id}")
-                total += 1
-                time.sleep(0.5)
+            folder = f"{OUTPUT}/{year}"
+            os.makedirs(folder, exist_ok=True)
 
-            except Exception as e:
-                print("FAILED:", link, e)
+            path = f"{folder}/{mid}.json"
 
-    print(f"\nBuilt {total} matches")
+            if os.path.exists(path):
+                continue
+
+            safe_write(path, data)
+
+            print(f"{year} -> Saved {mid}")
+            total += 1
+
+            time.sleep(0.2)
+
+        except Exception as e:
+            print("Error:", match_id, e)
+
+    print(f"\nBuilt {total} World Cup matches")
 
 if __name__ == "__main__":
     build()
-    print("DONE")
