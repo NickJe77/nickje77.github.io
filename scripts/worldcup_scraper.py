@@ -25,28 +25,22 @@ WORLD_CUPS = {
 }
 
 # -----------------------------
-# GET MATCH IDS (WORKS ON GH)
+# GET MATCH IDS (FIXED)
 # -----------------------------
 def get_matches(series_id):
 
-    matches = []
-    page = 1
+    url = f"https://stats.espncricinfo.com/ci/engine/series/{series_id}.html?view=results"
 
-    while True:
-        url = f"https://stats.espncricinfo.com/ci/engine/series/{series_id}.html?view=results;page={page}"
+    print("Fetching:", url)
 
-        res = requests.get(url, headers=HEADERS)
-        html = res.text
+    res = requests.get(url, headers=HEADERS)
+    html = res.text
 
-        found = re.findall(r"/ci/engine/match/(\d+)\.html", html)
+    # DEBUG (leave this in)
+    print("HTML length:", len(html))
 
-        if not found:
-            break
-
-        matches.extend(found)
-
-        page += 1
-        time.sleep(1)
+    # Extract match IDs
+    matches = re.findall(r"/ci/engine/match/(\d+)\.html", html)
 
     return sorted(list(set(matches)))
 
@@ -56,11 +50,9 @@ def get_matches(series_id):
 # -----------------------------
 def scrape_match(match_id):
 
-    url = f"https://www.espncricinfo.com/ci/engine/match/{match_id}.html"
-
     return {
         "match_id": match_id,
-        "url": url
+        "url": f"https://www.espncricinfo.com/ci/engine/match/{match_id}.html"
     }
 
 
@@ -84,7 +76,6 @@ def main():
 
             file_path = f"{folder}/{match_id}.json"
 
-            # SAFE MODE (DO NOT OVERWRITE)
             if os.path.exists(file_path):
                 continue
 
@@ -96,7 +87,7 @@ def main():
 
                 print(f"Saved {match_id}")
 
-                time.sleep(1)
+                time.sleep(0.5)
 
             except Exception as e:
                 print("FAILED:", match_id, e)
