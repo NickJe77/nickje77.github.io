@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import os
 import json
 import time
+import re
 
 OUTPUT = "docs/data/cricket/world_cups"
 os.makedirs(OUTPUT, exist_ok=True)
@@ -31,7 +32,7 @@ def safe_write(path, data):
 # -----------------------------
 def parse_scorecard(match_id):
 
-    url = f"http://www.howstat.com/cricket/Statistics/Matches/MatchScorecard.asp?MatchCode={match_id}"
+    url = f"http://www.howstat.com/Cricket/Statistics/Matches/MatchScorecard_ODI.asp?MatchCode={match_id:04d}"
 
     res = requests.get(url, headers=HEADERS)
 
@@ -47,11 +48,19 @@ def parse_scorecard(match_id):
 
     match_name = title.text.strip()
 
-    # FILTER HERE (REAL FIX)
+    # FILTER WORLD CUP
     if not any(k in match_name.lower() for k in WORLD_CUP_KEYWORDS):
         return None
 
-    match = {
+    # extract year properly
+    year = None
+    match = re.search(r"(19|20)\d{2}", match_name)
+    if match:
+        year = match.group(0)
+    else:
+        year = "unknown"
+
+    data = {
         "match": match_name,
         "date": "",
         "venue": "",
@@ -99,7 +108,7 @@ def parse_scorecard(match_id):
                         "out": dismissal
                     }
 
-            match["innings"].append(current)
+            data["innings"].append(current)
 
         # Bowling
         if "wickets" in headers and current:
@@ -122,42 +131,37 @@ def parse_scorecard(match_id):
                         "wickets": int(wkts)
                     }
 
-    return match
+    return year, match_id, data
 
 # -----------------------------
-# BUILD (SCAN IDS DIRECTLY)
+# BUILD
 # -----------------------------
 def build():
 
     total = 0
 
-    # THIS RANGE COVERS ALL ODI ERA
+    # covers all ODI history
     for match_id in range(1, 20000):
 
-        if match_id % 100 == 0:
+        if match_id % 200 == 0:
             print(f"Checking {match_id}...")
 
         try:
-            data = parse_scorecard(match_id)
+            result = parse_scorecard(match_id)
 
-            if not data:
+            if not result:
                 continue
 
-            # extract year from match title (last 4 digits usually)
-            year = "unknown"
-            for part in data["match"].split():
-                if part.isdigit() and len(part) == 4:
-                    year = part
-                    break
+            year, mid, data = result
 
             folder = f"{OUTPUT}/{year}"
             os.makedirs(folder, exist_ok=True)
 
-            path = f"{folder}/{match_id}.json"
+            path = f"{folder}/{mid}.json"
 
             safe_write(path, data)
 
-            print(f"Saved {match_id}")
+            print(f"Saved {mid}")
             total += 1
 
             time.sleep(0.2)
