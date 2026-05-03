@@ -32,12 +32,12 @@ def safe_write(path, data):
 # -----------------------------
 def parse_scorecard(match_id):
 
-    url = f"http://www.howstat.com/Cricket/Statistics/Matches/MatchScorecard_ODI.asp?MatchCode={match_id:04d}"
+    url = f"https://www.howstat.com/Cricket/Statistics/Matches/MatchScorecard_ODI.asp?MatchCode={match_id:04d}"
 
     res = requests.get(url, headers=HEADERS)
 
-    # skip dead pages
-    if "Scorecard" not in res.text:
+    # If page is junk, skip
+    if res.status_code != 200:
         return None
 
     soup = BeautifulSoup(res.text, "lxml")
@@ -48,19 +48,15 @@ def parse_scorecard(match_id):
 
     match_name = title.text.strip()
 
-    # FILTER WORLD CUP
+    # FILTER WORLD CUP (ONLY VALID FILTER)
     if not any(k in match_name.lower() for k in WORLD_CUP_KEYWORDS):
         return None
 
-    # extract year properly
-    year = None
-    match = re.search(r"(19|20)\d{2}", match_name)
-    if match:
-        year = match.group(0)
-    else:
-        year = "unknown"
+    # Extract year safely
+    year_match = re.search(r"(19|20)\d{2}", match_name)
+    year = year_match.group(0) if year_match else "unknown"
 
-    data = {
+    match = {
         "match": match_name,
         "date": "",
         "venue": "",
@@ -108,7 +104,7 @@ def parse_scorecard(match_id):
                         "out": dismissal
                     }
 
-            data["innings"].append(current)
+            match["innings"].append(current)
 
         # Bowling
         if "wickets" in headers and current:
@@ -131,7 +127,7 @@ def parse_scorecard(match_id):
                         "wickets": int(wkts)
                     }
 
-    return year, match_id, data
+    return year, match_id, match
 
 # -----------------------------
 # BUILD
@@ -140,10 +136,10 @@ def build():
 
     total = 0
 
-    # covers all ODI history
-    for match_id in range(1, 20000):
+    # SAFE RANGE — includes ALL World Cups
+    for match_id in range(1, 4000):
 
-        if match_id % 200 == 0:
+        if match_id % 100 == 0:
             print(f"Checking {match_id}...")
 
         try:
