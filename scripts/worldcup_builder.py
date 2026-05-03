@@ -1,62 +1,144 @@
+import requests
+from bs4 import BeautifulSoup
 import os
 import json
+import time
 
-OUTPUT = "docs/data/cricket/world_cups"
-os.makedirs(OUTPUT, exist_ok=True)
+BASE = "docs/data/cricket/world_cups"
 
-# ✅ COMPLETE WORLD CUP MATCH IDS (KNOWN VALID HOWSTAT CODES)
-WORLD_CUP_MATCHES = {
-    "1975": list(range(1, 16)),
-    "1979": list(range(60, 76)),
-    "1983": list(range(130, 160)),
-    "1987": list(range(250, 300)),
-    "1992": list(range(400, 470)),
-    "1996": list(range(600, 680)),
-    "1999": list(range(900, 980)),
-    "2003": list(range(1500, 1600)),
-    "2007": list(range(2000, 2100)),
-    "2011": list(range(2600, 2700)),
-    "2015": list(range(3000, 3100)),
-    "2019": list(range(3400, 3500)),
-    "2023": list(range(3800, 3900))
-}
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-def safe_write(path, data):
-    if os.path.exists(path):
-        return
+def load_json(path):
+    with open(path) as f:
+        return json.load(f)
+
+def save_json(path, data):
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
-def build():
+def parse_scorecard(match_id):
+
+    url = f"https://www.howstat.com/Cricket/Statistics/Matches/MatchScoreCard_ODI.asp?MatchCode={match_id:04d}"
+
+    res = requests.get(url, headers=HEADERS)
+
+    if res.status_code != 200:
+        return None
+
+    soup = BeautifulSoup(res.text, "lxml")
+
+    tables = soup.find_all("table")
+    innings = []
+    current = None
+
+    for table in tables:
+
+        headers = [th.text.strip().lower() for th in table.find_all("th")]
+
+        # ---------------- BATTING ----------------
+        if "runs" in headers and "balls" in headers:
+
+            team_tag = table.find_previous("h2")
+            team = team_tag.text.strip() if team_tag else "Unknown"
+
+            current = {
+                "team": team,
+                "batting": {},
+                "bowling": {}
+            }
+
+            rows = table.find_all("tr")[1:]
+
+            for r in rows:
+                cols = [c.text.strip() for c in r.find_all("td")]
+
+                if len(cols) < 5:
+                    continue
+
+                player = cols[0]
+                runs = cols[2]
+
+                if runs.isdigit():
+                    current["batting"][player] = {
+                        "runs": int(runs),
+                        "balls": int(cols[3]) if cols[3].isdigit() else 0,
+                        "fours": int(cols[4]) if cols[4].isdigit() else 0,
+                        "sixes": int(cols[5]) if len(cols) > 5 and cols[5].isdigit() else 0
+                    }
+
+            innings.append(current)
+
+        # ---------------- BOWLING ----------------
+        if "wickets" in headers and current:
+
+            rows = table.find_all("tr")[1:]
+
+            for r in rows:
+                cols = [c.text.strip() for c in r.find_all("td")]
+
+                if len(cols) < 4:
+                    continue
+
+                player = cols[0]
+                runs = cols[2]
+                wkts = cols[3]
+
+                if runs.isdigit() and wkts.isdigit():
+                    current["bowling"][player] = {
+                        "runs": int(runs),
+                        "wickets": int(wkts)
+                    }
+
+    return innings
+
+def run():
 
     total = 0
 
-    for year, matches in WORLD_CUP_MATCHES.items():
+    for year in os.listdir(BASE):
 
-        folder = f"{OUTPUT}/{year}"
-        os.makedirs(folder, exist_ok=True)
+        folder = os.path.join(BASE, year)
+
+        if not os.path.isdir(folder):
+            continue
 
         print(f"\n--- {year} ---")
 
-        for match_id in matches:
+        for file in os.listdir(folder):
 
-            path = f"{folder}/{match_id}.json"
+            if not file.endswith(".json"):
+                continue
 
-            data = {
-                "match": f"World Cup Match {match_id}",
-                "date": "",
-                "venue": "",
-                "result": "",
-                "innings": []
-            }
+            path = os.path.join(folder, file)
 
-            safe_write(path, data)
+            data = load_json(path)
 
-            print(f"Saved {match_id}")
-            total += 1
+            # skip already filled matches
+            if data.get("innings"):
+                continue
 
-    print(f"\nBuilt {total} matches")
+            match_id = int(file.replace(".json", ""))
+
+            try:
+                innings = parse_scorecard(match_id)
+
+                if not innings:
+                    continue
+
+                data["innings"] = innings
+
+                save_json(path, data)
+
+                print(f"Updated {match_id}")
+                total += 1
+
+                time.sleep(0.3)
+
+            except Exception as e:
+                print("FAILED:", match_id, e)
+
+    print(f"\nUpdated {total} matches")
 
 if __name__ == "__main__":
-    build()
+    run()
     print("DONE")
