@@ -1,21 +1,20 @@
+import requests
+from bs4 import BeautifulSoup
 import os
 import json
 import time
 
-from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-
 OUTPUT = "docs/data/cricket/world_cups"
 os.makedirs(OUTPUT, exist_ok=True)
 
+HEADERS = {"User-Agent": "Mozilla/5.0"}
+
 WORLD_CUP_KEYWORDS = [
-    "World Cup",
-    "Prudential",
-    "Reliance",
-    "Benson & Hedges",
-    "Wills"
+    "world cup",
+    "prudential",
+    "reliance",
+    "benson & hedges",
+    "wills"
 ]
 
 # -----------------------------
@@ -28,27 +27,12 @@ def safe_write(path, data):
         json.dump(data, f, indent=2)
 
 # -----------------------------
-# SETUP DRIVER
+# PARSE SCORECARD
 # -----------------------------
-def get_driver():
-    options = Options()
-    options.add_argument("--headless=new")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
+def parse_scorecard(url):
 
-    driver = webdriver.Chrome(options=options)
-    return driver
-
-# -----------------------------
-# PARSE SCORECARD (UNCHANGED LOGIC)
-# -----------------------------
-def parse_scorecard(driver, url):
-
-    driver.get(url)
-    time.sleep(1)
-
-    soup = BeautifulSoup(driver.page_source, "lxml")
+    res = requests.get(url, headers=HEADERS)
+    soup = BeautifulSoup(res.text, "lxml")
 
     title = soup.find("h1")
     match_name = title.text.strip() if title else ""
@@ -127,11 +111,10 @@ def parse_scorecard(driver, url):
     return match
 
 # -----------------------------
-# BUILD
+# BUILD (FIXED)
 # -----------------------------
 def build():
 
-    driver = get_driver()
     total = 0
 
     for year in range(1975, 2024):
@@ -139,29 +122,25 @@ def build():
         print(f"\n--- {year} ---")
 
         url = f"http://www.howstat.com/cricket/Statistics/Matches/MatchList.asp?Stat=ODI;Year={year}"
-        driver.get(url)
-        time.sleep(2)
+        res = requests.get(url, headers=HEADERS)
+        soup = BeautifulSoup(res.text, "lxml")
 
-        soup = BeautifulSoup(driver.page_source, "lxml")
-        rows = soup.find_all("tr")
-
-        print("Rows:", len(rows))
-
+        # STEP 1: GET ALL SCORECARD LINKS (NO FILTER HERE)
         links = []
 
-        for r in rows:
+        for a in soup.find_all("a", href=True):
 
-            text = r.text
+            href = a["href"]
 
-            if not any(k.lower() in text.lower() for k in WORLD_CUP_KEYWORDS):
+            if "MatchScorecard.asp?MatchCode=" not in href:
                 continue
 
-            a = r.find("a", href=True)
+            full = "http://www.howstat.com" + href
+            links.append(full)
 
-            if a and "MatchScorecard" in a["href"]:
-                links.append("http://www.howstat.com" + a["href"])
+        links = list(set(links))
 
-        print(f"{len(links)} matches found")
+        print(f"Total scorecards found: {len(links)}")
 
         if not links:
             continue
@@ -169,6 +148,7 @@ def build():
         folder = f"{OUTPUT}/{year}"
         os.makedirs(folder, exist_ok=True)
 
+        # STEP 2: PARSE + FILTER HERE
         for link in links:
 
             match_id = link.split("=")[-1]
@@ -178,17 +158,21 @@ def build():
                 continue
 
             try:
-                data = parse_scorecard(driver, link)
+                data = parse_scorecard(link)
+
+                # FILTER WORLD CUP HERE (THIS IS THE FIX)
+                if not any(k in data["match"].lower() for k in WORLD_CUP_KEYWORDS):
+                    continue
+
                 safe_write(path, data)
 
                 print(f"Saved {match_id}")
                 total += 1
-                time.sleep(0.5)
+                time.sleep(0.3)
 
             except Exception as e:
                 print("FAILED:", link, e)
 
-    driver.quit()
     print(f"\nBuilt {total} matches")
 
 # -----------------------------
