@@ -111,7 +111,7 @@ def parse_scorecard(url):
     return match
 
 # -----------------------------
-# BUILD WORLD CUPS
+# BUILD (FIXED)
 # -----------------------------
 def build():
 
@@ -133,13 +133,15 @@ def build():
 
             text = r.text
 
-            # ONLY WORLD CUP MATCHES
-            if not any(k in text for k in WORLD_CUP_KEYWORDS):
+            # WORLD CUP FILTER
+            if not any(k.lower() in text.lower() for k in WORLD_CUP_KEYWORDS):
                 continue
 
             a = r.find("a", href=True)
+
             if a and "MatchScorecard" in a["href"]:
-                links.append("http://www.howstat.com" + a["href"])
+                full = "http://www.howstat.com" + a["href"]
+                links.append(full)
 
         print(f"{len(links)} matches found")
 
