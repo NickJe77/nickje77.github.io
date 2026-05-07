@@ -13,7 +13,6 @@
   --red:#C8102E;
   --bg:#f4f6f8;
   --card:#ffffff;
-  --line:#e6e8ee;
   --soft:#f0f6ff;
 }
 
@@ -46,7 +45,7 @@ body{
 
 .hero{
   background:linear-gradient(90deg,var(--blue),#3a256e,var(--red));
-  color:white;
+  color:#fff;
   padding:24px;
   border-radius:20px;
   margin-bottom:14px;
@@ -58,7 +57,7 @@ body{
 }
 
 .section{
-  background:var(--card);
+  background:#fff;
   padding:14px;
   border-radius:16px;
   margin-bottom:14px;
@@ -122,8 +121,6 @@ tr:nth-child(even){
   font-weight:700;
 }
 
-/* MOBILE */
-
 @media(max-width:900px){
 
 .navbar{
@@ -141,43 +138,26 @@ tr:nth-child(even){
 
 .hero{
   padding:16px;
-  border-radius:16px;
 }
 
 .hero h1{
   font-size:28px;
 }
 
-.section{
-  padding:10px;
-  border-radius:12px;
-}
-
 .cards{
   grid-template-columns:repeat(2,1fr);
-  gap:8px;
-}
-
-.card{
-  padding:10px;
 }
 
 .card .value{
   font-size:18px;
 }
 
-.card .label{
-  font-size:10px;
-}
-
 th{
   font-size:10px;
-  padding:6px 4px;
 }
 
 td{
   font-size:10px;
-  padding:5px 4px;
 }
 
 }
@@ -196,51 +176,52 @@ td{
 
 <div class="page">
 
-<div class="hero">
-  <h1 id="playerName">Loading...</h1>
-</div>
+  <div class="hero">
+    <h1 id="playerName">Loading...</h1>
+  </div>
 
-<div class="section">
+  <div class="section">
 
-  <h2>Career</h2>
+    <h2>Career</h2>
 
-  <div class="cards" id="careerCards">
+    <div class="cards" id="careerCards">
 
-    <div class="loading">
-      Loading player data...
+      <div class="loading">
+        Loading player data...
+      </div>
+
     </div>
 
   </div>
 
-</div>
+  <div class="section">
 
-<div class="section">
+    <h2>Games</h2>
 
-  <h2>Games</h2>
+    <div class="table-wrap">
 
-  <div class="table-wrap">
+      <table>
 
-    <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Season</th>
+            <th>Team</th>
+            <th>Opponent</th>
+            <th>AB</th>
+            <th>H</th>
+            <th>HR</th>
+            <th>AVG</th>
+          </tr>
+        </thead>
 
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Team</th>
-          <th>Opponent</th>
-          <th>AB</th>
-          <th>H</th>
-          <th>HR</th>
-          <th>AVG</th>
-        </tr>
-      </thead>
+        <tbody id="gameBody"></tbody>
 
-      <tbody id="gameBody"></tbody>
+      </table>
 
-    </table>
+    </div>
 
   </div>
-
-</div>
 
 </div>
 
@@ -258,17 +239,24 @@ async function safeFetch(url){
 
     const r = await fetch(url);
 
-    if(!r.ok){
-      return null;
-    }
+    if(!r.ok) return null;
 
     return await r.json();
 
-  }catch(e){
+  }catch{
 
     return null;
 
   }
+
+}
+
+function slugify(name){
+
+  return name
+    .toLowerCase()
+    .replace(/[^\w\s-]/g,"")
+    .replace(/\s+/g,"-");
 
 }
 
@@ -279,192 +267,33 @@ const rawPlayer =
     qs.get("player") || ""
   ).trim();
 
-const playerName =
-  rawPlayer.toLowerCase();
-
 document.getElementById("playerName").textContent =
   rawPlayer || "Player";
 
-let games = [];
+const slug = slugify(rawPlayer);
 
-/* LOAD SEASONS */
+const player =
+  await safeFetch(
+    `/data/baseball/players/${slug}.json`
+  );
 
-const seasonFiles = [
+if(!player){
 
-  "2026",
-  "2025",
-  "2024",
-  "2023",
-  "2022",
-  "2021",
-  "2020",
-  "2019",
-  "2018",
-  "2017",
-  "2016",
-  "2015",
-  "2014",
-  "2013",
-  "2012",
-  "2011",
-  "2010"
+  document.getElementById("careerCards").innerHTML = `
+    <div class="loading">
+      No player data found
+    </div>
+  `;
 
-];
-
-for(const year of seasonFiles){
-
-  console.log("Checking season", year);
-
-  const season =
-    await safeFetch(
-      `/data/baseball/seasons/${year}.json`
-    );
-
-  if(!season) continue;
-
-  for(const g of season){
-
-    let file =
-      g.game_file ||
-      g.filename ||
-      g.file ||
-      "";
-
-    if(!file) continue;
-
-    if(!file.endsWith(".json")){
-      file += ".json";
-    }
-
-    const box =
-      await safeFetch(
-        `/data/baseball/boxscores/${year}/${file}`
-      );
-
-    if(!box) continue;
-
-    const plays =
-      box?.liveData?.plays?.allPlays || [];
-
-    if(!plays.length) continue;
-
-    let stats = {
-      AB:0,
-      H:0,
-      HR:0
-    };
-
-    let found = false;
-    let isTop = false;
-
-    for(const play of plays){
-
-      const batter =
-        play?.matchup?.batter?.fullName || "";
-
-      if(
-        batter.toLowerCase() !== playerName
-      ){
-        continue;
-      }
-
-      found = true;
-
-      isTop =
-        play?.about?.isTopInning || false;
-
-      const eventType =
-        play?.result?.eventType || "";
-
-      /* AB */
-
-      if(![
-        "walk",
-        "intent_walk",
-        "hit_by_pitch",
-        "sac_bunt",
-        "sac_fly"
-      ].includes(eventType)){
-
-        stats.AB++;
-
-      }
-
-      /* HITS */
-
-      if([
-        "single",
-        "double",
-        "triple",
-        "home_run"
-      ].includes(eventType)){
-
-        stats.H++;
-
-      }
-
-      /* HR */
-
-      if(eventType === "home_run"){
-
-        stats.HR++;
-
-      }
-
-    }
-
-    if(!found) continue;
-
-    games.push({
-
-      date:
-        box.date ||
-        g.date ||
-        "",
-
-      team:
-        isTop
-          ? (
-              box.away_team?.code ||
-              g.away_code ||
-              ""
-            )
-          : (
-              box.home_team?.code ||
-              g.home_code ||
-              ""
-            ),
-
-      opponent:
-        isTop
-          ? (
-              box.home_team?.code ||
-              g.home_code ||
-              ""
-            )
-          : (
-              box.away_team?.code ||
-              g.away_code ||
-              ""
-            ),
-
-      AB:stats.AB,
-      H:stats.H,
-      HR:stats.HR
-
-    });
-
-  }
+  return;
 
 }
 
-/* SORT */
+const games = player.games || [];
 
 games.sort((a,b)=>
   new Date(b.date) - new Date(a.date)
 );
-
-/* TOTALS */
 
 const totals = {
   games:games.length,
@@ -475,13 +304,11 @@ const totals = {
 
 games.forEach(g=>{
 
-  totals.AB += g.AB;
-  totals.H += g.H;
-  totals.HR += g.HR;
+  totals.AB += Number(g.AB || 0);
+  totals.H += Number(g.H || 0);
+  totals.HR += Number(g.HR || 0);
 
 });
-
-/* CARDS */
 
 document.getElementById("careerCards").innerHTML = `
 
@@ -512,20 +339,19 @@ document.getElementById("careerCards").innerHTML = `
 
 `;
 
-/* TABLE */
-
 document.getElementById("gameBody").innerHTML =
 games.map(g=>`
 
 <tr>
 
-<td>${g.date}</td>
-<td>${g.team}</td>
-<td>${g.opponent}</td>
-<td>${g.AB}</td>
-<td>${g.H}</td>
-<td>${g.HR}</td>
-<td>${avg(g.H,g.AB)}</td>
+<td>${g.date || ""}</td>
+<td>${g.season || ""}</td>
+<td>${g.team || ""}</td>
+<td>${g.opponent || ""}</td>
+<td>${g.AB || 0}</td>
+<td>${g.H || 0}</td>
+<td>${g.HR || 0}</td>
+<td>${avg(g.H || 0,g.AB || 0)}</td>
 
 </tr>
 
