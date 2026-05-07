@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
   <script src="/js/analytics.js"></script>
-<meta charset="UTF-8" />
-<title>Player | The Sporting Almanac</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8" />
+  <title>Player | The Sporting Almanac</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
 <style>
+
 :root{
   --blue:#002D72;
   --red:#C8102E;
@@ -114,8 +115,10 @@ tr:nth-child(even){
   background:#f7fbff;
 }
 
-.postseason-row{
-  background:#fff4e6;
+.loading{
+  padding:30px;
+  text-align:center;
+  font-size:18px;
   font-weight:700;
 }
 
@@ -201,7 +204,13 @@ td{
 
   <h2>Career</h2>
 
-  <div class="cards" id="careerCards"></div>
+  <div class="cards" id="careerCards">
+
+    <div class="loading">
+      Loading player data...
+    </div>
+
+  </div>
 
 </div>
 
@@ -216,7 +225,6 @@ td{
       <thead>
         <tr>
           <th>Date</th>
-          <th>Type</th>
           <th>Team</th>
           <th>Opponent</th>
           <th>AB</th>
@@ -237,26 +245,39 @@ td{
 </div>
 
 <script>
+
 (async function(){
 
 function avg(h,ab){
-  return ab?(h/ab).toFixed(3):"0.000";
+  return ab ? (h/ab).toFixed(3) : "0.000";
 }
 
-async function safeFetch(u){
+async function safeFetch(url){
+
   try{
-    const r=await fetch(u);
-    if(!r.ok)return null;
+
+    const r = await fetch(url);
+
+    if(!r.ok){
+      return null;
+    }
+
     return await r.json();
-  }catch{
+
+  }catch(e){
+
     return null;
+
   }
+
 }
 
 const qs = new URLSearchParams(location.search);
 
 const rawPlayer =
-  decodeURIComponent(qs.get("player") || "").trim();
+  decodeURIComponent(
+    qs.get("player") || ""
+  ).trim();
 
 const playerName =
   rawPlayer.toLowerCase();
@@ -264,74 +285,112 @@ const playerName =
 document.getElementById("playerName").textContent =
   rawPlayer || "Player";
 
-const seasons =
-  await safeFetch("/data/baseball/index.json") || [];
+let games = [];
 
-let games=[];
+/* LOAD SEASONS */
 
-/* LOOP SEASONS */
+const seasonFiles = [
 
-for(const year of seasons){
+  "2026",
+  "2025",
+  "2024",
+  "2023",
+  "2022",
+  "2021",
+  "2020",
+  "2019",
+  "2018",
+  "2017",
+  "2016",
+  "2015",
+  "2014",
+  "2013",
+  "2012",
+  "2011",
+  "2010"
 
-  const seasonGames =
-    await safeFetch(`/data/baseball/seasons/${year}.json`);
+];
 
-  if(!seasonGames) continue;
+for(const year of seasonFiles){
 
-  for(const g of seasonGames){
+  console.log("Checking season", year);
 
-    const file =
+  const season =
+    await safeFetch(
+      `/data/baseball/seasons/${year}.json`
+    );
+
+  if(!season) continue;
+
+  for(const g of season){
+
+    let file =
       g.game_file ||
       g.filename ||
-      g.file;
+      g.file ||
+      "";
 
     if(!file) continue;
 
+    if(!file.endsWith(".json")){
+      file += ".json";
+    }
+
     const box =
-      await safeFetch(`/data/baseball/boxscores/${year}/${file}`);
+      await safeFetch(
+        `/data/baseball/boxscores/${year}/${file}`
+      );
 
     if(!box) continue;
 
     const plays =
-      box.liveData?.plays?.allPlays || [];
+      box?.liveData?.plays?.allPlays || [];
 
-    const gameStats = {
+    if(!plays.length) continue;
+
+    let stats = {
       AB:0,
       H:0,
       HR:0
     };
 
-    let foundPlayer = false;
+    let found = false;
     let isTop = false;
 
     for(const play of plays){
 
       const batter =
-        play.matchup?.batter?.fullName || "";
+        play?.matchup?.batter?.fullName || "";
 
       if(
         batter.toLowerCase() !== playerName
-      ) continue;
+      ){
+        continue;
+      }
 
-      foundPlayer = true;
+      found = true;
 
       isTop =
-        play.about?.isTopInning || false;
+        play?.about?.isTopInning || false;
 
       const eventType =
-        play.result?.eventType || "";
+        play?.result?.eventType || "";
 
-      const isAB = ![
+      /* AB */
+
+      if(![
         "walk",
         "intent_walk",
         "hit_by_pitch",
         "sac_bunt",
         "sac_fly"
-      ].includes(eventType);
+      ].includes(eventType)){
 
-      if(isAB){
-        gameStats.AB++;
+        stats.AB++;
+
       }
+
+      /* HITS */
 
       if([
         "single",
@@ -339,16 +398,22 @@ for(const year of seasons){
         "triple",
         "home_run"
       ].includes(eventType)){
-        gameStats.H++;
+
+        stats.H++;
+
       }
 
+      /* HR */
+
       if(eventType === "home_run"){
-        gameStats.HR++;
+
+        stats.HR++;
+
       }
 
     }
 
-    if(!foundPlayer) continue;
+    if(!found) continue;
 
     games.push({
 
@@ -357,21 +422,35 @@ for(const year of seasons){
         g.date ||
         "",
 
-      type:"Regular",
-
       team:
         isTop
-          ? box.away_team?.code
-          : box.home_team?.code,
+          ? (
+              box.away_team?.code ||
+              g.away_code ||
+              ""
+            )
+          : (
+              box.home_team?.code ||
+              g.home_code ||
+              ""
+            ),
 
       opponent:
         isTop
-          ? box.home_team?.code
-          : box.away_team?.code,
+          ? (
+              box.home_team?.code ||
+              g.home_code ||
+              ""
+            )
+          : (
+              box.away_team?.code ||
+              g.away_code ||
+              ""
+            ),
 
-      AB:gameStats.AB,
-      H:gameStats.H,
-      HR:gameStats.HR
+      AB:stats.AB,
+      H:stats.H,
+      HR:stats.HR
 
     });
 
@@ -381,9 +460,8 @@ for(const year of seasons){
 
 /* SORT */
 
-games.sort(
-  (a,b)=>
-    new Date(b.date)-new Date(a.date)
+games.sort((a,b)=>
+  new Date(b.date) - new Date(a.date)
 );
 
 /* TOTALS */
@@ -403,7 +481,7 @@ games.forEach(g=>{
 
 });
 
-/* CAREER CARDS */
+/* CARDS */
 
 document.getElementById("careerCards").innerHTML = `
 
@@ -434,7 +512,7 @@ document.getElementById("careerCards").innerHTML = `
 
 `;
 
-/* GAMES TABLE */
+/* TABLE */
 
 document.getElementById("gameBody").innerHTML =
 games.map(g=>`
@@ -442,9 +520,8 @@ games.map(g=>`
 <tr>
 
 <td>${g.date}</td>
-<td>${g.type}</td>
-<td>${g.team || ""}</td>
-<td>${g.opponent || ""}</td>
+<td>${g.team}</td>
+<td>${g.opponent}</td>
 <td>${g.AB}</td>
 <td>${g.H}</td>
 <td>${g.HR}</td>
