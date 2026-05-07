@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>MLB Season | The Sporting Almanac</title>
+<title>Baseball Game | The Sporting Almanac</title>
 
 <link rel="stylesheet" href="style.css">
 
@@ -33,7 +33,7 @@ body{
 }
 
 .page{
-    max-width:1500px;
+    max-width:1600px;
     margin:auto;
     padding:28px;
 }
@@ -49,13 +49,37 @@ body{
 .hero h1{
     margin:0;
     font-size:58px;
+    line-height:1.1;
 }
 
-.table-wrap{
+.sub{
+    margin-top:10px;
+    font-size:22px;
+    opacity:.9;
+}
+
+.scoreline{
+    margin-top:25px;
+    font-size:34px;
+    font-weight:800;
+}
+
+.grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:25px;
+}
+
+.card{
     background:white;
     border-radius:24px;
-    overflow:hidden;
+    padding:24px;
     box-shadow:0 2px 8px rgba(0,0,0,.05);
+}
+
+.card h2{
+    margin-top:0;
+    font-size:26px;
 }
 
 table{
@@ -66,43 +90,38 @@ table{
 th{
     background:#0056d6;
     color:white;
-    padding:14px;
+    padding:10px;
     text-align:left;
-    font-size:15px;
+    font-size:14px;
 }
 
 td{
-    padding:14px;
+    padding:10px;
     border-bottom:1px solid #e6ebf2;
-    font-size:15px;
+    font-size:14px;
 }
 
 tr:nth-child(even){
     background:#f5f8fc;
 }
 
-a.game-link{
-    color:#0056d6;
+.error{
+    background:white;
+    padding:20px;
+    border-radius:18px;
+    font-size:22px;
     font-weight:700;
-    text-decoration:none;
-}
-
-a.game-link:hover{
-    text-decoration:underline;
+    color:#c4002f;
 }
 
 @media(max-width:1000px){
 
+.grid{
+    grid-template-columns:1fr;
+}
+
 .hero h1{
     font-size:38px;
-}
-
-table{
-    font-size:13px;
-}
-
-th,td{
-    padding:10px;
 }
 
 }
@@ -122,27 +141,79 @@ th,td{
 
 <div class="page">
 
-    <div class="hero">
-        <h1 id="title">MLB Season</h1>
+    <div id="hero" class="hero">
+        <h1>Loading...</h1>
     </div>
 
-    <div class="table-wrap">
+    <div class="grid">
 
-        <table>
+        <div class="card">
+            <h2>Away Batting</h2>
 
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Away Team</th>
-                    <th>Home Team</th>
-                    <th>Score</th>
-                    <th>Venue</th>
-                </tr>
-            </thead>
+            <table id="awayBatting">
+                <thead>
+                    <tr>
+                        <th>Player</th>
+                        <th>AB</th>
+                        <th>R</th>
+                        <th>H</th>
+                        <th>RBI</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
 
-            <tbody id="gamesBody"></tbody>
+        <div class="card">
+            <h2>Home Batting</h2>
 
-        </table>
+            <table id="homeBatting">
+                <thead>
+                    <tr>
+                        <th>Player</th>
+                        <th>AB</th>
+                        <th>R</th>
+                        <th>H</th>
+                        <th>RBI</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>Away Pitching</h2>
+
+            <table id="awayPitching">
+                <thead>
+                    <tr>
+                        <th>Pitcher</th>
+                        <th>IP</th>
+                        <th>H</th>
+                        <th>ER</th>
+                        <th>SO</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>Home Pitching</h2>
+
+            <table id="homePitching">
+                <thead>
+                    <tr>
+                        <th>Pitcher</th>
+                        <th>IP</th>
+                        <th>H</th>
+                        <th>ER</th>
+                        <th>SO</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
 
     </div>
 
@@ -152,71 +223,134 @@ th,td{
 
 const params = new URLSearchParams(window.location.search);
 
-const season = params.get("season") || "2026";
+const season = params.get("season");
+const gameFile = params.get("game");
 
-document.getElementById("title").innerText =
-    `MLB ${season} Season`;
+const url = `/data/baseball/boxscores/${season}/${gameFile}`;
 
-async function loadSeason(){
+async function loadGame(){
 
     try{
 
-        const res = await fetch(
-            `/data/baseball/seasons/${season}.json`
-        );
+        const res = await fetch(url);
 
-        const games = await res.json();
+        if(!res.ok){
+            throw new Error("Game not found");
+        }
 
-        renderGames(games);
+        const game = await res.json();
+
+        renderGame(game);
 
     }catch(err){
 
-        console.error(err);
+        document.getElementById("hero").innerHTML = `
+            <h1>Game not found</h1>
+        `;
 
+        console.error(err);
     }
 
 }
 
-function renderGames(games){
+function renderGame(game){
 
-    const body = document.getElementById("gamesBody");
+    const away = game.away_team;
+    const home = game.home_team;
 
-    body.innerHTML = "";
+    document.getElementById("hero").innerHTML = `
+        <h1>${away.name} @ ${home.name}</h1>
 
-    games.forEach(game=>{
+        <div class="sub">
+            ${game.date} • ${game.venue}
+        </div>
 
-        const row = document.createElement("tr");
+        <div class="scoreline">
+            ${away.score} - ${home.score}
+        </div>
+    `;
 
-        const score = (
-            `${game.away_score ?? 0}-${game.home_score ?? 0}`
-        );
+    const box = game.liveData.boxscore;
 
-        const gameFile = game.game_file;
+    if(!box || !box.teams){
+        return;
+    }
 
-        row.innerHTML = `
-            <td>${game.date}</td>
+    renderBatting(
+        box.teams.away.players,
+        document.querySelector("#awayBatting tbody")
+    );
 
-            <td>
-                <a class="game-link"
-                href="baseball-game.html?season=${season}&game=${encodeURIComponent(gameFile)}">
-                    ${game.away_team}
-                </a>
-            </td>
+    renderBatting(
+        box.teams.home.players,
+        document.querySelector("#homeBatting tbody")
+    );
 
-            <td>${game.home_team}</td>
+    renderPitching(
+        box.teams.away.players,
+        document.querySelector("#awayPitching tbody")
+    );
 
-            <td>${score}</td>
+    renderPitching(
+        box.teams.home.players,
+        document.querySelector("#homePitching tbody")
+    );
 
-            <td>${game.venue || ""}</td>
+}
+
+function renderBatting(players, tbody){
+
+    tbody.innerHTML = "";
+
+    Object.values(players).forEach(player=>{
+
+        if(!player.stats || !player.stats.batting) return;
+
+        const b = player.stats.batting;
+
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+            <td>${player.person.fullName}</td>
+            <td>${b.atBats || 0}</td>
+            <td>${b.runs || 0}</td>
+            <td>${b.hits || 0}</td>
+            <td>${b.rbi || 0}</td>
         `;
 
-        body.appendChild(row);
+        tbody.appendChild(tr);
 
     });
 
 }
 
-loadSeason();
+function renderPitching(players, tbody){
+
+    tbody.innerHTML = "";
+
+    Object.values(players).forEach(player=>{
+
+        if(!player.stats || !player.stats.pitching) return;
+
+        const p = player.stats.pitching;
+
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+            <td>${player.person.fullName}</td>
+            <td>${p.inningsPitched || 0}</td>
+            <td>${p.hits || 0}</td>
+            <td>${p.earnedRuns || 0}</td>
+            <td>${p.strikeOuts || 0}</td>
+        `;
+
+        tbody.appendChild(tr);
+
+    });
+
+}
+
+loadGame();
 
 </script>
 
