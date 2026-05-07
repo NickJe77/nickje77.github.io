@@ -207,7 +207,9 @@ font-size:13px;
 <div class="round-tabs">
 
 <div class="round-tab active" onclick="setRound('All')">All Rounds</div>
-<div class="round-tab" onclick="setRound('Regular Season')">Regular Season</div>
+<div class="round-tab" onclick="setRound('1')">Week 1</div>
+<div class="round-tab" onclick="setRound('2')">Week 2</div>
+<div class="round-tab" onclick="setRound('3')">Week 3</div>
 <div class="round-tab" onclick="setRound('Wild Card')">Wild Card</div>
 <div class="round-tab" onclick="setRound('Divisional')">Divisional</div>
 <div class="round-tab" onclick="setRound('Conference Championship')">Conference Championship</div>
@@ -225,7 +227,7 @@ font-size:13px;
 <th>Winner</th>
 <th></th>
 <th>Loser</th>
-<th>Round</th>
+<th>Week</th>
 <th>Venue</th>
 </tr>
 </thead>
@@ -269,7 +271,6 @@ for(let y = currentYear; y >= startYear; y--){
 
   tab.innerText = y;
 
-  // 🔥 NO PAGE CHANGE
   tab.onclick = () => {
     loadSeason(y);
   };
@@ -333,13 +334,7 @@ const res = await fetch(`/data/nfl/seasons/${year}.json`);
 
 const data = await res.json();
 
-console.log(data);
-
-/* 🔥 IMPORTANT */
-
-seasonGames = Array.isArray(data) ? data : [];
-
-/* sort by date */
+seasonGames = data.games || [];
 
 seasonGames.sort((a,b)=>
 (a.date || "").localeCompare(b.date || "")
@@ -367,22 +362,37 @@ tbody.innerHTML = "";
 
 seasonGames.forEach(g=>{
 
-const round =
-g.game_type ||
-g.round ||
-"Regular Season";
+const week = g.week || "";
 
-if(currentRound!="All" && round!=currentRound)return;
+if(currentRound!="All" && week!=currentRound)return;
 
 const date = g.date || "";
 
-const winner = g.winner || "";
-const loser = g.loser || "";
+const team1 = g.team1 || "";
+const team2 = g.team2 || "";
 
-const ws = g.winner_points || "";
-const ls = g.loser_points || "";
+const score1 = parseInt(g.score1 || 0);
+const score2 = parseInt(g.score2 || 0);
 
 const venue = g.venue || "";
+
+let winner="", loser="", ws="", ls="";
+
+if(score1 >= score2){
+
+winner = team1;
+loser = team2;
+ws = score1;
+ls = score2;
+
+}else{
+
+winner = team2;
+loser = team1;
+ws = score2;
+ls = score1;
+
+}
 
 const tr = document.createElement("tr");
 
@@ -391,8 +401,8 @@ tr.innerHTML = `
 <td class="score">${winner} ${ws}</td>
 <td>def</td>
 <td>${loser} ${ls}</td>
-<td class="${round!='Regular Season'?'playoff':''}">
-${round}
+<td class="${week!='Regular Season' && isNaN(parseInt(week)) ? 'playoff' : ''}">
+${week}
 </td>
 <td>${venue}</td>
 `;
