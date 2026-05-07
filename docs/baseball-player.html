@@ -86,15 +86,33 @@ async function safeFetch(u){try{const r=await fetch(u);if(!r.ok)return null;retu
 const qs=new URLSearchParams(location.search);
 const playerId=qs.get("player");
 
-const players=await safeFetch("/data/baseball/players.json");
-const meta=players.find(p=>p.player_id===playerId);
-document.getElementById("playerName").textContent=meta?.name||"Player";
+const players=await safeFetch("/data/baseball/players.json") || [];
+
+/* SUPPORT ID OR NAME */
+
+let meta =
+  players.find(p=>String(p.player_id)===String(playerId));
+
+if(!meta){
+
+  meta = players.find(p=>
+    p.name &&
+    p.name.toLowerCase() ===
+    decodeURIComponent(playerId).toLowerCase()
+  );
+
+}
+
+document.getElementById("playerName").textContent =
+  meta?.name ||
+  decodeURIComponent(playerId).replace(/-/g," ");
 
 const seasons=await safeFetch("/data/baseball/index.json");
 
 let games=[];
 
-/* REGULAR (ROBUST FIX) */
+/* REGULAR */
+
 for(const y of seasons){
 
   const index = await safeFetch(`/data/baseball/boxscores/${y}/index.json`);
@@ -106,17 +124,31 @@ for(const y of seasons){
     const box=await safeFetch(`/data/baseball/boxscores/${y}/${file}`);
     if(!box) continue;
 
-    // 🔥 SUPPORT ALL POSSIBLE STRUCTURES
     const homeList = box.batters_home || box.batting_home || [];
     const awayList = box.batters_away || box.batting_away || [];
 
-    const home = homeList.find(p=>String(p.player_id||p[0])===playerId);
-    const away = awayList.find(p=>String(p.player_id||p[0])===playerId);
+    const home = homeList.find(p=>String(p.player_id||p[0])===String(playerId));
+    const away = awayList.find(p=>String(p.player_id||p[0])===String(playerId));
 
-    if(!home && !away) continue;
+    // SUPPORT NAME LINKS
 
-    const isHome = !!home;
-    const p = home || away;
+    const homeByName = homeList.find(p=>
+      (p.name||"").toLowerCase() ===
+      decodeURIComponent(playerId).toLowerCase()
+    );
+
+    const awayByName = awayList.find(p=>
+      (p.name||"").toLowerCase() ===
+      decodeURIComponent(playerId).toLowerCase()
+    );
+
+    const foundHome = home || homeByName;
+    const foundAway = away || awayByName;
+
+    if(!foundHome && !foundAway) continue;
+
+    const isHome = !!foundHome;
+    const p = foundHome || foundAway;
 
     games.push({
       date: box.date,
@@ -130,16 +162,33 @@ for(const y of seasons){
   }
 }
 
-/* POSTSEASON (UNCHANGED) */
+/* POSTSEASON */
+
 const postMeta=await safeFetch("/data/baseball/postseason_meta.json");
 const postBoxes=await Promise.all(
-  postMeta.map(m=>safeFetch(`/data/baseball/postseason-games/${m.game_id}.json`))
+  (postMeta||[]).map(m=>safeFetch(`/data/baseball/postseason-games/${m.game_id}.json`))
 );
 
 postBoxes.forEach(box=>{
   if(!box||!box.batting)return;
-  const pstats=box.batting[playerId];
+
+  let pstats = box.batting[playerId];
+
+  if(!pstats){
+
+    const foundKey = Object.keys(box.batting).find(k=>
+      k.toLowerCase() ===
+      decodeURIComponent(playerId).toLowerCase()
+    );
+
+    if(foundKey){
+      pstats = box.batting[foundKey];
+    }
+
+  }
+
   if(!pstats)return;
+
   games.push({
     date: box.date,
     type:"Postseason",
@@ -151,8 +200,11 @@ postBoxes.forEach(box=>{
   });
 });
 
-/* RENDER */
+/* SORT */
+
 games.sort((a,b)=>new Date(b.date)-new Date(a.date));
+
+/* RENDER */
 
 document.getElementById("gameBody").innerHTML =
 games.map(g=>`
