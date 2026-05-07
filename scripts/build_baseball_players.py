@@ -24,19 +24,8 @@ players = defaultdict(lambda: {
 # -------------------------
 
 def slugify(name):
+
     name = name.lower().strip()
-
-    replacements = {
-        "á":"a","à":"a","ä":"a","â":"a",
-        "é":"e","è":"e","ë":"e","ê":"e",
-        "í":"i","ì":"i","ï":"i","î":"i",
-        "ó":"o","ò":"o","ö":"o","ô":"o",
-        "ú":"u","ù":"u","ü":"u","û":"u",
-        "ñ":"n"
-    }
-
-    for k,v in replacements.items():
-        name = name.replace(k,v)
 
     name = re.sub(r"[^\w\s-]", "", name)
     name = re.sub(r"\s+", "-", name)
@@ -44,14 +33,33 @@ def slugify(name):
     return name
 
 # -------------------------
-# SAFE INT
+# SAFE GET PLAYER GAME
 # -------------------------
 
-def safe_int(v):
-    try:
-        return int(v)
-    except:
-        return 0
+def get_game_entry(player, date, team, opponent):
+
+    for g in player["games"]:
+
+        if (
+            g["date"] == date and
+            g["team"] == team and
+            g["opponent"] == opponent
+        ):
+            return g
+
+    game = {
+        "date": date,
+        "team": team,
+        "opponent": opponent,
+        "AB": 0,
+        "H": 0,
+        "HR": 0,
+        "RBI": 0
+    }
+
+    player["games"].append(game)
+
+    return game
 
 # -------------------------
 # LOAD SEASONS
@@ -66,15 +74,14 @@ for sf in season_files:
 
     season = sf.replace(".json", "")
 
-    season_path = os.path.join(SEASONS_DIR, sf)
+    print(f"Processing {season}")
 
-    print(f"Processing season {season}")
+    season_path = f"{SEASONS_DIR}/{sf}"
 
     try:
         with open(season_path, "r", encoding="utf-8") as f:
             games = json.load(f)
-    except Exception as e:
-        print(f"Failed season {season}: {e}")
+    except:
         continue
 
     if not isinstance(games, list):
@@ -95,11 +102,7 @@ for sf in season_files:
         if not file_name.endswith(".json"):
             file_name += ".json"
 
-        box_path = os.path.join(
-            BOX_DIR,
-            season,
-            file_name
-        )
+        box_path = f"{BOX_DIR}/{season}/{file_name}"
 
         if not os.path.exists(box_path):
             continue
@@ -110,105 +113,101 @@ for sf in season_files:
         except:
             continue
 
-        date = (
-            box.get("date") or
-            g.get("date") or
-            ""
-        )
+        date = box.get("date", "")
 
         home_code = (
-            box.get("home_code") or
-            g.get("home_code") or
-            g.get("home") or
-            ""
+            box.get("home_team", {})
+            .get("code", "")
         )
 
         away_code = (
-            box.get("away_code") or
-            g.get("away_code") or
-            g.get("away") or
-            ""
+            box.get("away_team", {})
+            .get("code", "")
         )
 
-        home_list = (
-            box.get("batters_home") or
-            box.get("batting_home") or
-            []
+        plays = (
+            box.get("liveData", {})
+            .get("plays", {})
+            .get("allPlays", [])
         )
 
-        away_list = (
-            box.get("batters_away") or
-            box.get("batting_away") or
-            []
-        )
+        for play in plays:
 
-        def process_player(p, is_home):
+            matchup = play.get("matchup", {})
 
-            name = (
-                p.get("name") or
-                p.get("fullName") or
-                p.get("player") or
-                ""
-            ).strip()
+            batter = matchup.get("batter", {})
+
+            name = batter.get("fullName", "").strip()
 
             if not name:
-                return
+                continue
+
+            about = play.get("about", {})
+
+            is_top = about.get("isTopInning", False)
+
+            batting_team = away_code if is_top else home_code
+            opponent = home_code if is_top else away_code
+
+            result = play.get("result", {})
+
+            event_type = result.get("eventType", "")
+            rbi = result.get("rbi", 0)
 
             slug = slugify(name)
-
-            ab = safe_int(
-                p.get("AB") or
-                p.get("ab") or
-                p.get("atBats")
-            )
-
-            hits = safe_int(
-                p.get("H") or
-                p.get("h") or
-                p.get("hits")
-            )
-
-            hr = safe_int(
-                p.get("HR") or
-                p.get("hr") or
-                p.get("homeRuns")
-            )
-
-            rbi = safe_int(
-                p.get("RBI") or
-                p.get("rbi")
-            )
-
-            runs = safe_int(
-                p.get("R") or
-                p.get("runs")
-            )
 
             player = players[slug]
 
             player["name"] = name
             player["slug"] = slug
 
-            player["games"].append({
-                "season": season,
-                "date": date,
-                "team": home_code if is_home else away_code,
-                "opponent": away_code if is_home else home_code,
-                "AB": ab,
-                "H": hits,
-                "HR": hr,
-                "RBI": rbi,
-                "R": runs
-            })
+            game = get_game_entry(
+                player,
+                date,
+                batting_team,
+                opponent
+            )
 
-        for p in home_list:
-            process_player(p, True)
+            # -------------------------
+            # AB
+            # -------------------------
 
-        for p in away_list:
-            process_player(p, False)
+            if event_type not in [
+                "walk",
+                "intent_walk",
+                "hit_by_pitch",
+                "sac_bunt",
+                "sac_fly"
+            ]:
+                game["AB"] += 1
+
+            # -------------------------
+            # HITS
+            # -------------------------
+
+            if event_type in [
+                "single",
+                "double",
+                "triple",
+                "home_run"
+            ]:
+                game["H"] += 1
+
+            # -------------------------
+            # HR
+            # -------------------------
+
+            if event_type == "home_run":
+                game["HR"] += 1
+
+            # -------------------------
+            # RBI
+            # -------------------------
+
+            game["RBI"] += int(rbi)
 
 # -------------------------
-# SAVE PLAYERS
+# SAVE FILES
 # -------------------------
 
 print("Saving player files...")
@@ -217,10 +216,7 @@ index = []
 
 for slug, data in players.items():
 
-    out_path = os.path.join(
-        PLAYERS_DIR,
-        f"{slug}.json"
-    )
+    out_path = f"{PLAYERS_DIR}/{slug}.json"
 
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
@@ -230,14 +226,9 @@ for slug, data in players.items():
         "slug": slug
     })
 
-# -------------------------
-# SAVE INDEX
-# -------------------------
-
 index = sorted(index, key=lambda x: x["name"])
 
 with open(INDEX_FILE, "w", encoding="utf-8") as f:
     json.dump(index, f, indent=2)
 
 print(f"Built {len(players)} player files")
-print("Saved players.json")
