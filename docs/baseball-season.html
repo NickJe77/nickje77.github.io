@@ -1,203 +1,218 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<script src="/js/analytics.js"></script>
-
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>MLB Season | The Sporting Almanac</title>
-
-<link rel="stylesheet" href="style.css">
+  <script src="/js/analytics.js"></script>
+  <meta charset="UTF-8">
+  <title>Baseball Season | The Sporting Almanac</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-
 body{
-    font-family:Inter,system-ui,sans-serif;
-    margin:0;
-    background:#f4f6f8;
-}
-
-.page{
-    max-width:1400px;
-    margin:auto;
-    padding:20px;
+  font-family:Inter,system-ui,Arial;
+  margin:0;
+  background:#f4f6f8;
 }
 
 .hero{
-    background:linear-gradient(135deg,#0b2b66,#0056d6);
-    color:white;
-    padding:40px;
-    border-radius:24px;
-    margin-bottom:25px;
+  padding:20px;
+  font-size:32px;
+  font-weight:700;
 }
 
-.hero h1{
-    margin:0;
-    font-size:54px;
+.year-tabs{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  padding:0 20px 20px 20px;
 }
 
-.table-wrap{
-    background:white;
-    border-radius:20px;
-    overflow:hidden;
-    box-shadow:0 2px 10px rgba(0,0,0,.08);
+.year-tab{
+  padding:10px 16px;
+  background:#d9d9d9;
+  border-radius:10px;
+  cursor:pointer;
+  font-weight:600;
+}
+
+.year-tab.active{
+  background:#333;
+  color:white;
+}
+
+.container{
+  padding:0 20px 30px 20px;
 }
 
 table{
-    width:100%;
-    border-collapse:collapse;
+  width:100%;
+  border-collapse:collapse;
+  background:white;
+  border-radius:14px;
+  overflow:hidden;
 }
 
 th{
-    background:#0056d6;
-    color:white;
-    padding:14px;
-    text-align:left;
-    font-size:14px;
+  background:#0056d6;
+  color:white;
+  padding:12px;
+  text-align:left;
 }
 
 td{
-    padding:14px;
-    border-bottom:1px solid #e7edf5;
-    font-size:14px;
+  padding:12px;
+  border-bottom:1px solid #eee;
 }
 
 tr:nth-child(even){
-    background:#f7fbff;
+  background:#f2f7ff;
 }
 
-a{
-    color:#0056d6;
-    text-decoration:none;
-    font-weight:700;
+tbody tr{
+  cursor:pointer;
 }
 
-a:hover{
-    text-decoration:underline;
+tbody tr:hover{
+  background:#e8f1ff;
 }
 
 .score{
-    font-weight:700;
+  font-weight:700;
 }
 
-@media(max-width:900px){
-
-.hero h1{
-    font-size:34px;
+.status{
+  color:#666;
+  font-size:13px;
 }
-
-th,td{
-    padding:10px;
-    font-size:12px;
-}
-
-}
-
 </style>
 </head>
 
 <body>
 
-<div class="page">
+<div class="hero" id="heroTitle">Baseball Season</div>
 
-    <div class="hero">
-        <h1 id="season-title">MLB Season</h1>
-    </div>
+<div class="year-tabs" id="yearTabs"></div>
 
-    <div class="table-wrap">
-
-        <table>
-
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Away</th>
-                    <th>Home</th>
-                    <th>Score</th>
-                    <th>Venue</th>
-                </tr>
-            </thead>
-
-            <tbody id="games-body"></tbody>
-
-        </table>
-
-    </div>
-
+<div class="container">
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Away</th>
+        <th>Home</th>
+        <th>Score</th>
+        <th>Venue</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody id="gamesBody"></tbody>
+  </table>
 </div>
 
 <script>
-
 const params = new URLSearchParams(window.location.search);
+let season = params.get("season") || "2026";
 
-const season = params.get("season") || "2026";
+const years = [];
+for(let y = 2026; y >= 1901; y--){
+  years.push(String(y));
+}
 
-document.getElementById("season-title").innerText =
-    `MLB ${season} Season`;
+function renderYearTabs(){
+  const wrap = document.getElementById("yearTabs");
+  wrap.innerHTML = "";
+
+  years.forEach(year=>{
+    const div = document.createElement("div");
+    div.className = "year-tab" + (year === season ? " active" : "");
+    div.textContent = year;
+
+    div.onclick = ()=>{
+      window.location.href = `baseball-season.html?season=${year}`;
+    };
+
+    wrap.appendChild(div);
+  });
+}
 
 async function loadSeason(){
+  document.getElementById("heroTitle").textContent = `Baseball ${season} Season`;
 
-    try{
+  try{
+    const res = await fetch(`/data/baseball/seasons/${season}.json`);
 
-        const res = await fetch(
-            `/data/baseball/seasons/${season}.json`
-        );
-
-        const games = await res.json();
-
-        renderGames(games);
-
-    }catch(err){
-
-        console.error(err);
-
+    if(!res.ok){
+      throw new Error("Season file not found");
     }
 
+    const games = await res.json();
+    renderGames(games);
+
+  }catch(err){
+    console.error(err);
+    document.getElementById("gamesBody").innerHTML = `
+      <tr>
+        <td colspan="6">No games found for ${season}</td>
+      </tr>
+    `;
+  }
+}
+
+function getGameFile(game){
+  if(game.game_file) return game.game_file;
+  if(game.file) return game.file;
+  if(game.filename) return game.filename;
+
+  const date = game.date || "";
+  const away = game.away_code || game.away || "";
+  const home = game.home_code || game.home || "";
+
+  if(date && away && home){
+    return `${date}_${away}_${home}.json`;
+  }
+
+  return "";
 }
 
 function renderGames(games){
+  const body = document.getElementById("gamesBody");
+  body.innerHTML = "";
 
-    const tbody = document.getElementById("games-body");
+  games.forEach(game=>{
+    const tr = document.createElement("tr");
 
-    tbody.innerHTML = "";
+    const awayName = game.away_team || game.away || "";
+    const homeName = game.home_team || game.home || "";
 
-    games.forEach(game=>{
+    const awayScore = game.away_score ?? "";
+    const homeScore = game.home_score ?? "";
 
-        const tr = document.createElement("tr");
+    const score = awayScore !== "" && homeScore !== ""
+      ? `${awayScore}-${homeScore}`
+      : "";
 
-        const gameFile = game.game_file;
+    const gameFile = getGameFile(game);
 
-        tr.innerHTML = `
-            <td>${game.date || ""}</td>
+    tr.innerHTML = `
+      <td>${game.date || ""}</td>
+      <td>${awayName}</td>
+      <td>${homeName}</td>
+      <td class="score">${score}</td>
+      <td>${game.venue || ""}</td>
+      <td class="status">${game.status || ""}</td>
+    `;
 
-            <td>
-                <a href="baseball-game.html?season=${season}&game=${encodeURIComponent(gameFile)}">
-                    ${game.away_team || ""}
-                </a>
-            </td>
+    tr.onclick = ()=>{
+      if(!gameFile) return;
+      window.location.href =
+        `baseball-game.html?season=${season}&game=${encodeURIComponent(gameFile)}`;
+    };
 
-            <td>
-                ${game.home_team || ""}
-            </td>
-
-            <td class="score">
-                ${(game.away_score ?? 0)}-${(game.home_score ?? 0)}
-            </td>
-
-            <td>
-                ${game.venue || ""}
-            </td>
-        `;
-
-        tbody.appendChild(tr);
-
-    });
-
+    body.appendChild(tr);
+  });
 }
 
+renderYearTabs();
 loadSeason();
-
 </script>
 
 </body>
