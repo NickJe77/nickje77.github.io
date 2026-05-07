@@ -12,145 +12,207 @@ BOXSCORE_DIR = f"{BASE_DIR}/boxscores/{SEASON}"
 os.makedirs(BOXSCORE_DIR, exist_ok=True)
 
 # -------------------------
-# TEAM ID → CODE (LOCKED)
+# TEAM ID → CODE
 # -------------------------
+
 TEAM_ID_MAP = {
     109:"ARI", 144:"ATL", 110:"BAL", 111:"BOS", 112:"CHC", 145:"CHW",
     113:"CIN", 114:"CLE", 115:"COL", 116:"DET", 117:"HOU", 118:"KAN",
     108:"LAA", 119:"LOS", 146:"MIA", 158:"MIL", 142:"MIN",
-    121:"NEW", 147:"NEW",   # Mets / Yankees
+    121:"NEW", 147:"NEW",
     133:"ATH",
-    143:"PHI", 134:"PIT",
-    135:"SAN", 137:"SAN",   # Padres / Giants
-    136:"SEA",
-    138:"ST",
-    139:"TAM",
-    140:"TEX",
-    141:"TOR",
-    120:"WAS"
+    143:"PHI", 134:"PIT", 135:"SDN", 136:"SEA", 137:"SFN",
+    138:"STL", 139:"TBR", 140:"TEX", 141:"TOR",
+    120:"WSN"
 }
 
 # -------------------------
-# LOAD SEASON
+# LOAD EXISTING SEASON
 # -------------------------
+
+existing_games = []
+
 if os.path.exists(SEASON_FILE):
-    with open(SEASON_FILE) as f:
-        games_list = json.load(f)
-else:
-    games_list = []
+    try:
+        with open(SEASON_FILE, "r", encoding="utf-8") as f:
+            existing_games = json.load(f)
+    except:
+        existing_games = []
 
-existing_ids = {str(g.get("game_id")) for g in games_list}
+existing_map = {}
 
-print("Loaded games:", len(existing_ids))
+for g in existing_games:
+    if "game_file" in g:
+        existing_map[g["game_file"]] = g
 
 # -------------------------
-# FETCH SCHEDULE
+# MLB SCHEDULE API
 # -------------------------
-start_date = "2026-03-01"
-end_date = datetime.now().strftime("%Y-%m-%d")
 
-url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate={start_date}&endDate={end_date}"
+url = (
+    f"https://statsapi.mlb.com/api/v1/schedule?"
+    f"sportId=1&season={SEASON}"
+)
+
+print("Downloading MLB schedule...")
+
 data = requests.get(url).json()
 
-added_games = 0
-box_written = 0
-skipped_invalid = 0
+games_out = []
 
 # -------------------------
-# LOOP GAMES
+# PROCESS GAMES
 # -------------------------
-for date in data.get("dates", []):
-    for game in date.get("games", []):
 
-        game_id = str(game.get("gamePk"))
-        game_type = game.get("gameType")
+for date_block in data.get("dates", []):
 
-        if game_type not in ["R", "P"]:
-            continue
+    game_date = date_block.get("date")
 
-        date_str = game.get("gameDate", "")[:10]
+    for game in date_block.get("games", []):
 
-        teams = game.get("teams", {})
-        home = teams.get("home", {})
-        away = teams.get("away", {})
+        try:
 
-        home_id = home.get("team", {}).get("id")
-        away_id = away.get("team", {}).get("id")
+            game_pk = game.get("gamePk")
 
-        home_code = TEAM_ID_MAP.get(home_id)
-        away_code = TEAM_ID_MAP.get(away_id)
+            status = (
+                game.get("status", {})
+                .get("detailedState", "")
+            )
 
-        # 🔒 HARD LOCK — DO NOT WRITE BAD FILES
-        if not home_code or not away_code:
-            print("❌ SKIPPING (missing team code):", game_id, home_id, away_id)
-            skipped_invalid += 1
-            continue
+            home = game["teams"]["home"]
+            away = game["teams"]["away"]
 
-        filename = f"{date_str}_{away_code}_{home_code}.json"
-        box_path = os.path.join(BOXSCORE_DIR, filename)
+            home_id = home["team"]["id"]
+            away_id = away["team"]["id"]
 
-        # -------------------------
-        # WRITE BOXSCORE
-        # -------------------------
-        if not os.path.exists(box_path):
+            home_code = TEAM_ID_MAP.get(home_id, "UNK")
+            away_code = TEAM_ID_MAP.get(away_id, "UNK")
 
-            try:
-                feed_url = f"https://statsapi.mlb.com/api/v1.1/game/{game_id}/feed/live"
-                r = requests.get(feed_url)
+            home_name = home["team"]["name"]
+            away_name = away["team"]["name"]
 
-                if r.status_code != 200:
-                    print("❌ FAILED:", filename, r.status_code)
-                    continue
+            home_score = home.get("score")
+            away_score = away.get("score")
 
-                feed = r.json()
+            venue = (
+                game.get("venue", {})
+                .get("name", "")
+            )
 
-                if "liveData" not in feed:
-                    print("❌ EMPTY:", filename)
-                    continue
+            # -------------------------
+            # ORIGINAL FILE FORMAT
+            # -------------------------
 
-                with open(box_path, "w") as f:
-                    json.dump(feed, f)
+            box_filename = (
+                f"{game_date}_{away_code}_{home_code}.json"
+            )
 
-                print("✅ WROTE:", filename)
-                box_written += 1
+            box_file = os.path.join(
+                BOXSCORE_DIR,
+                box_filename
+            )
 
-            except Exception as e:
-                print("❌ ERROR:", filename, str(e))
+            # -------------------------
+            # BOXSCORE API
+            # -------------------------
 
-        # -------------------------
-        # ADD TO SEASON FILE
-        # -------------------------
-        if game_id not in existing_ids:
+            live_url = (
+                f"https://statsapi.mlb.com/api/v1.1/game/"
+                f"{game_pk}/feed/live"
+            )
 
-            game_obj = {
-                "game_id": game_id,
-                "date": date_str,
-                "away_team": away.get("team", {}).get("name", ""),
-                "home_team": home.get("team", {}).get("name", ""),
-                "away_score": away.get("score", None),
-                "home_score": home.get("score", None),
-                "venue": game.get("venue", {}).get("name", "")
+            live_data = requests.get(live_url).json()
+
+            # -------------------------
+            # BUILD BOX JSON
+            # -------------------------
+
+            game_json = {
+                "game_id": game_pk,
+                "date": game_date,
+                "status": status,
+                "venue": venue,
+
+                "home_team": {
+                    "code": home_code,
+                    "name": home_name,
+                    "score": home_score
+                },
+
+                "away_team": {
+                    "code": away_code,
+                    "name": away_name,
+                    "score": away_score
+                },
+
+                "boxscore": live_data.get("liveData", {})
             }
 
-            games_list.append(game_obj)
-            added_games += 1
+            # -------------------------
+            # SAVE BOX FILE
+            # -------------------------
+
+            with open(box_file, "w", encoding="utf-8") as f:
+                json.dump(
+                    game_json,
+                    f,
+                    ensure_ascii=False,
+                    indent=2
+                )
+
+            print(f"Saved {box_filename}")
+
+            # -------------------------
+            # SEASON ENTRY
+            # -------------------------
+
+            season_entry = {
+                "game_id": game_pk,
+                "date": game_date,
+                "status": status,
+
+                "home_team": home_name,
+                "away_team": away_name,
+
+                "home_code": home_code,
+                "away_code": away_code,
+
+                "home_score": home_score,
+                "away_score": away_score,
+
+                "venue": venue,
+
+                "game_file": box_filename
+            }
+
+            games_out.append(season_entry)
+
+        except Exception as e:
+            print("FAILED:", e)
 
 # -------------------------
 # SORT
 # -------------------------
-games_list.sort(key=lambda x: x["date"])
+
+games_out.sort(
+    key=lambda x: (
+        x["date"],
+        x["away_team"]
+    )
+)
 
 # -------------------------
-# SAVE
+# SAVE SEASON FILE
 # -------------------------
-with open(SEASON_FILE, "w") as f:
-    json.dump(games_list, f, indent=2)
 
-# -------------------------
-# SUMMARY
-# -------------------------
-print("================================")
-print("Games added:", added_games)
-print("Boxscores written:", box_written)
-print("Skipped invalid:", skipped_invalid)
-print("================================")
+with open(SEASON_FILE, "w", encoding="utf-8") as f:
+    json.dump(
+        games_out,
+        f,
+        ensure_ascii=False,
+        indent=2
+    )
+
+print("")
+print("DONE")
+print(f"Saved {len(games_out)} games")
