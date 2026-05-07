@@ -12,32 +12,120 @@ body{
 font-family:Inter,system-ui,Arial;
 margin:0;
 background:#f4f6f8;
+color:#111;
 }
 
 .hero{
 background:linear-gradient(90deg,#013369,#d50a0a);
 color:white;
-padding:40px;
-font-size:32px;
-font-weight:700;
+padding:50px 20px;
+text-align:center;
+}
+
+.hero h1{
+margin:0;
+font-size:42px;
+font-weight:800;
+}
+
+.hero p{
+margin-top:10px;
+font-size:18px;
+opacity:.9;
 }
 
 .container{
-max-width:1000px;
+max-width:1100px;
 margin:30px auto;
+padding:0 20px;
+}
+
+.search-wrap{
 background:white;
 padding:20px;
-border-radius:12px;
+border-radius:14px;
+box-shadow:0 2px 10px rgba(0,0,0,.08);
+margin-bottom:25px;
+}
+
+.search{
+width:100%;
+padding:14px;
+font-size:16px;
+border:1px solid #ccc;
+border-radius:10px;
+box-sizing:border-box;
+}
+
+.section-title{
+font-size:24px;
+font-weight:700;
+margin:30px 0 15px;
+}
+
+.seasons-grid{
+display:grid;
+grid-template-columns:repeat(auto-fill,minmax(140px,1fr));
+gap:14px;
 }
 
 .season{
-padding:12px;
-border-bottom:1px solid #ddd;
+background:white;
+border-radius:12px;
+padding:18px;
+text-align:center;
+font-size:22px;
+font-weight:700;
 cursor:pointer;
+transition:.2s;
+box-shadow:0 2px 8px rgba(0,0,0,.08);
+border:2px solid transparent;
 }
 
 .season:hover{
-background:#f0f4f8;
+transform:translateY(-3px);
+border-color:#013369;
+background:#f8fbff;
+}
+
+.player-results{
+margin-top:15px;
+max-height:400px;
+overflow-y:auto;
+}
+
+.player{
+padding:12px;
+border-bottom:1px solid #eee;
+cursor:pointer;
+}
+
+.player:hover{
+background:#f5f8fc;
+}
+
+.player-name{
+font-weight:700;
+font-size:16px;
+}
+
+.player-meta{
+font-size:13px;
+color:#666;
+margin-top:4px;
+}
+
+@media(max-width:700px){
+
+.hero h1{
+font-size:30px;
+}
+
+.season{
+font-size:18px;
+padding:16px;
+}
+
 }
 
 </style>
@@ -45,16 +133,47 @@ background:#f0f4f8;
 <body>
 
 <div class="hero">
-NFL Seasons
+  <h1>NFL</h1>
+  <p>The Sporting Almanac</p>
 </div>
 
-<div class="container" id="seasons"></div>
+<div class="container">
+
+  <div class="search-wrap">
+
+    <input
+      type="text"
+      id="playerSearch"
+      class="search"
+      placeholder="Search NFL players..."
+      list="playersList"
+    >
+
+    <datalist id="playersList"></datalist>
+
+    <div class="player-results" id="playerResults"></div>
+
+  </div>
+
+  <div class="section-title">
+    Seasons
+  </div>
+
+  <div class="seasons-grid" id="seasons"></div>
+
+</div>
 
 <script>
 
-const container = document.getElementById("seasons");
+const seasonsContainer = document.getElementById("seasons");
+const playerSearch = document.getElementById("playerSearch");
+const playersList = document.getElementById("playersList");
+const playerResults = document.getElementById("playerResults");
 
-// 🔥 SET YOUR RANGE HERE
+// --------------------------------------------------
+// SEASONS
+// --------------------------------------------------
+
 const startYear = 1970;
 const endYear = 2025;
 
@@ -69,8 +188,73 @@ for(let year = endYear; year >= startYear; year--){
     location.href = `nfl-season.html?year=${year}`;
   };
 
-  container.appendChild(div);
+  seasonsContainer.appendChild(div);
 }
+
+// --------------------------------------------------
+// PLAYERS
+// --------------------------------------------------
+
+let players = [];
+
+fetch("/data/nfl/players/index.json")
+.then(r => r.json())
+.then(data => {
+
+  players = data;
+
+  data.forEach(player => {
+
+    const option = document.createElement("option");
+    option.value = player.name;
+
+    playersList.appendChild(option);
+
+  });
+
+});
+
+// --------------------------------------------------
+// SEARCH
+// --------------------------------------------------
+
+playerSearch.addEventListener("input", () => {
+
+  const q = playerSearch.value.trim().toLowerCase();
+
+  playerResults.innerHTML = "";
+
+  if(q.length < 2) return;
+
+  const matches = players
+    .filter(p => p.name.toLowerCase().includes(q))
+    .slice(0,25);
+
+  matches.forEach(player => {
+
+    const div = document.createElement("div");
+
+    div.className = "player";
+
+    div.innerHTML = `
+      <div class="player-name">
+        ${player.name}
+      </div>
+
+      <div class="player-meta">
+        ${player.teams.join(", ")}
+      </div>
+    `;
+
+    div.onclick = () => {
+      location.href = `nfl-player.html?player=${player.player_id}`;
+    };
+
+    playerResults.appendChild(div);
+
+  });
+
+});
 
 </script>
 
