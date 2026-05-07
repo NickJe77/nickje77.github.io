@@ -19,7 +19,7 @@ color:#111;
 
 .hero{
 position:relative;
-height:260px; 
+height:260px;
 background-image:url('/images/nfl_hero.jpg?v=2');
 background-size:cover;
 background-position:center;
@@ -149,8 +149,6 @@ border-bottom:1px solid #eee;
 font-size:15px;
 }
 
-/* LIGHT BLUE EVERY SECOND ROW */
-
 tbody tr:nth-child(even){
 background:#eaf3ff;
 }
@@ -243,7 +241,7 @@ font-size:13px;
 const startYear = 1970;
 const currentYear = 2025;
 
-let currentSeason = currentYear;
+let currentSeason = 2025;
 let currentRound = "All";
 let seasonGames = [];
 
@@ -265,10 +263,15 @@ for(let y = currentYear; y >= startYear; y--){
 
   tab.className = "year-tab";
 
+  if(y === currentSeason){
+    tab.classList.add("active");
+  }
+
   tab.innerText = y;
 
+  // 🔥 NO PAGE CHANGE
   tab.onclick = () => {
-    location.href = `nfl-season.html?season=${y}`;
+    loadSeason(y);
   };
 
   yearTabs.appendChild(tab);
@@ -283,8 +286,9 @@ document.querySelectorAll(".year-tab").forEach(t=>{
 
 t.classList.remove("active");
 
-if(parseInt(t.innerText)==year)
+if(parseInt(t.innerText)==year){
 t.classList.add("active");
+}
 
 });
 
@@ -294,14 +298,18 @@ t.classList.add("active");
 
 function setRound(round){
 
-currentRound=round;
+currentRound = round;
 
 document.querySelectorAll(".round-tab").forEach(t=>{
 
 t.classList.remove("active");
 
-if(t.innerText==round || (round=="All" && t.innerText=="All Rounds"))
+if(
+t.innerText == round ||
+(round=="All" && t.innerText=="All Rounds")
+){
 t.classList.add("active");
+}
 
 });
 
@@ -313,19 +321,29 @@ renderGames();
 
 async function loadSeason(year){
 
-currentSeason=year;
+currentSeason = year;
 
 highlightYear(year);
 
-document.getElementById("title").innerText="NFL "+year;
+document.getElementById("title").innerText = "NFL " + year;
 
 try{
 
-const res=await fetch(`/data/nfl/seasons/${year}.json`);
+const res = await fetch(`/data/nfl/seasons/${year}.json`);
 
-const data=await res.json();
+const data = await res.json();
 
-seasonGames = Array.isArray(data) ? data : (data.games || []);
+console.log(data);
+
+/* 🔥 IMPORTANT */
+
+seasonGames = Array.isArray(data) ? data : [];
+
+/* sort by date */
+
+seasonGames.sort((a,b)=>
+(a.date || "").localeCompare(b.date || "")
+);
 
 }catch(err){
 
@@ -335,8 +353,6 @@ seasonGames=[];
 
 }
 
-seasonGames.sort((a,b)=>a.date.localeCompare(b.date));
-
 renderGames();
 
 }
@@ -345,13 +361,16 @@ renderGames();
 
 function renderGames(){
 
-const tbody=document.querySelector("#games tbody");
+const tbody = document.querySelector("#games tbody");
 
-tbody.innerHTML="";
+tbody.innerHTML = "";
 
 seasonGames.forEach(g=>{
 
-const round = g.game_type || g.round || "Regular Season";
+const round =
+g.game_type ||
+g.round ||
+"Regular Season";
 
 if(currentRound!="All" && round!=currentRound)return;
 
@@ -365,9 +384,9 @@ const ls = g.loser_points || "";
 
 const venue = g.venue || "";
 
-const tr=document.createElement("tr");
+const tr = document.createElement("tr");
 
-tr.innerHTML=`
+tr.innerHTML = `
 <td>${date}</td>
 <td class="score">${winner} ${ws}</td>
 <td>def</td>
@@ -378,9 +397,10 @@ ${round}
 <td>${venue}</td>
 `;
 
-tr.onclick=()=>{
+tr.onclick = ()=>{
 
-location.href=`nfl-game.html?season=${currentSeason}&game=${g.game_id}`;
+location.href =
+`nfl-game.html?season=${currentSeason}&game=${g.game_id}`;
 
 };
 
