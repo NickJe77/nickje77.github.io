@@ -132,7 +132,7 @@ overflow-x:auto;
 table{
 width:100%;
 border-collapse:collapse;
-min-width:850px;
+min-width:750px;
 }
 
 th{
@@ -204,18 +204,7 @@ font-size:13px;
 
 <div class="year-tabs" id="yearTabs"></div>
 
-<div class="round-tabs">
-
-<div class="round-tab active" onclick="setRound('All')">All Rounds</div>
-<div class="round-tab" onclick="setRound('1')">Week 1</div>
-<div class="round-tab" onclick="setRound('2')">Week 2</div>
-<div class="round-tab" onclick="setRound('3')">Week 3</div>
-<div class="round-tab" onclick="setRound('Wild Card')">Wild Card</div>
-<div class="round-tab" onclick="setRound('Divisional')">Divisional</div>
-<div class="round-tab" onclick="setRound('Conference Championship')">Conference Championship</div>
-<div class="round-tab" onclick="setRound('Super Bowl')">Super Bowl</div>
-
-</div>
+<div class="round-tabs" id="roundTabs"></div>
 
 <div class="container">
 
@@ -228,7 +217,6 @@ font-size:13px;
 <th></th>
 <th>Loser</th>
 <th>Week</th>
-<th>Venue</th>
 </tr>
 </thead>
 
@@ -305,16 +293,57 @@ document.querySelectorAll(".round-tab").forEach(t=>{
 
 t.classList.remove("active");
 
-if(
-t.innerText == round ||
-(round=="All" && t.innerText=="All Rounds")
-){
+if(t.dataset.round == round){
 t.classList.add("active");
 }
 
 });
 
 renderGames();
+
+}
+
+/* BUILD ROUND TABS */
+
+function buildRoundTabs(){
+
+const roundTabs = document.getElementById("roundTabs");
+
+roundTabs.innerHTML = "";
+
+const allTab = document.createElement("div");
+
+allTab.className = "round-tab active";
+allTab.dataset.round = "All";
+allTab.innerText = "All Rounds";
+
+allTab.onclick = ()=>setRound("All");
+
+roundTabs.appendChild(allTab);
+
+const rounds = [...new Set(
+seasonGames.map(g => g.week).filter(Boolean)
+)];
+
+rounds.forEach(round=>{
+
+const tab = document.createElement("div");
+
+tab.className = "round-tab";
+
+if(!isNaN(parseInt(round))){
+tab.innerText = `Week ${round}`;
+}else{
+tab.innerText = round;
+}
+
+tab.dataset.round = round;
+
+tab.onclick = ()=>setRound(round);
+
+roundTabs.appendChild(tab);
+
+});
 
 }
 
@@ -348,6 +377,10 @@ seasonGames=[];
 
 }
 
+currentRound = "All";
+
+buildRoundTabs();
+
 renderGames();
 
 }
@@ -374,8 +407,6 @@ const team2 = g.team2 || "";
 const score1 = parseInt(g.score1 || 0);
 const score2 = parseInt(g.score2 || 0);
 
-const venue = g.venue || "";
-
 let winner="", loser="", ws="", ls="";
 
 if(score1 >= score2){
@@ -401,10 +432,9 @@ tr.innerHTML = `
 <td class="score">${winner} ${ws}</td>
 <td>def</td>
 <td>${loser} ${ls}</td>
-<td class="${week!='Regular Season' && isNaN(parseInt(week)) ? 'playoff' : ''}">
-${week}
+<td class="${isNaN(parseInt(week)) ? 'playoff' : ''}">
+${isNaN(parseInt(week)) ? week : 'Week ' + week}
 </td>
-<td>${venue}</td>
 `;
 
 tr.onclick = ()=>{
