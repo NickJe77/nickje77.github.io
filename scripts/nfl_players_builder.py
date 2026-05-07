@@ -10,8 +10,18 @@ PLAYERS_DIR = f"{BASE_DIR}/players"
 
 os.makedirs(PLAYERS_DIR, exist_ok=True)
 
-MASTER_PLAYERS = {}
+MASTER = {}
 PLAYER_GAMES = defaultdict(list)
+
+STAT_SECTIONS = [
+    "passing",
+    "rushing",
+    "receiving",
+    "defense",
+    "kicking",
+    "punting",
+    "returns"
+]
 
 # ---------------------------------------------------
 # SLUG
@@ -36,7 +46,7 @@ def safe_load(path):
         return None
 
 # ---------------------------------------------------
-# FIND ALL BOXSCORES
+# PROCESS BOXSCORES
 # ---------------------------------------------------
 
 for season in sorted(os.listdir(BOXSCORE_DIR)):
@@ -62,61 +72,54 @@ for season in sorted(os.listdir(BOXSCORE_DIR)):
 
         game_id = game.get("game_id", file.replace(".json", ""))
 
-        home_team = game.get("home_team", "")
-        away_team = game.get("away_team", "")
+        for section in STAT_SECTIONS:
 
-        date = game.get("date", "")
+            rows = game.get(section, [])
 
-        # ---------------------------------------------------
-        # PLAYER STATS
-        # ---------------------------------------------------
-
-        player_stats = game.get("player_stats", {})
-
-        for stat_group, players in player_stats.items():
-
-            if not isinstance(players, list):
+            if not isinstance(rows, list):
                 continue
 
-            for row in players:
+            for row in rows:
 
-                player_name = row.get("player")
+                player = row.get("player")
 
-                if not player_name:
+                if not player:
                     continue
 
-                slug = slugify(player_name)
+                slug = slugify(player)
 
-                team = row.get("team", "")
+                stats = row.get("stats", {})
 
-                MASTER_PLAYERS.setdefault(slug, {
-                    "player_id": slug,
-                    "name": player_name,
-                    "teams": set(),
-                    "seasons": set(),
-                    "games": 0
-                })
+                team = stats.get("team", "")
 
-                MASTER_PLAYERS[slug]["teams"].add(team)
-                MASTER_PLAYERS[slug]["seasons"].add(int(season))
-                MASTER_PLAYERS[slug]["games"] += 1
+                if slug not in MASTER:
+
+                    MASTER[slug] = {
+                        "player_id": slug,
+                        "name": player,
+                        "teams": set(),
+                        "seasons": set(),
+                        "games": 0
+                    }
+
+                MASTER[slug]["teams"].add(team)
+                MASTER[slug]["seasons"].add(int(season))
+                MASTER[slug]["games"] += 1
 
                 PLAYER_GAMES[slug].append({
                     "game_id": game_id,
                     "season": int(season),
-                    "date": date,
-                    "team": team,
-                    "opponent": away_team if team == home_team else home_team,
-                    "stats": row
+                    "section": section,
+                    "stats": stats
                 })
 
 # ---------------------------------------------------
-# BUILD MASTER FILE
+# BUILD MASTER
 # ---------------------------------------------------
 
 master_output = []
 
-for slug, info in MASTER_PLAYERS.items():
+for slug, info in MASTER.items():
 
     obj = {
         "player_id": slug,
@@ -145,12 +148,12 @@ with open(f"{PLAYERS_DIR}/index.json", "w", encoding="utf-8") as f:
     json.dump(master_output, f, indent=2)
 
 # ---------------------------------------------------
-# SAVE INDIVIDUAL FILES
+# SAVE INDIVIDUAL PLAYER FILES
 # ---------------------------------------------------
 
 for slug, games in PLAYER_GAMES.items():
 
-    meta = MASTER_PLAYERS[slug]
+    meta = MASTER[slug]
 
     player_obj = {
         "player_id": slug,
