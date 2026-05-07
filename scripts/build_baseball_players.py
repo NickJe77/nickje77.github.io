@@ -5,10 +5,9 @@ from collections import defaultdict
 
 BASE = "docs/data/baseball"
 
-SEASONS_DIR = f"{BASE}/seasons"
 BOX_DIR = f"{BASE}/boxscores"
-
 PLAYERS_DIR = f"{BASE}/players"
+
 INDEX_FILE = f"{BASE}/players.json"
 
 os.makedirs(PLAYERS_DIR, exist_ok=True)
@@ -34,18 +33,6 @@ def slugify(name):
 
     name = name.lower().strip()
 
-    replacements = {
-        "á":"a","à":"a","ä":"a","â":"a",
-        "é":"e","è":"e","ë":"e","ê":"e",
-        "í":"i","ì":"i","ï":"i","î":"i",
-        "ó":"o","ò":"o","ö":"o","ô":"o",
-        "ú":"u","ù":"u","ü":"u","û":"u",
-        "ñ":"n"
-    }
-
-    for k,v in replacements.items():
-        name = name.replace(k,v)
-
     name = re.sub(r"[^\w\s-]", "", name)
     name = re.sub(r"\s+", "-", name)
 
@@ -55,12 +42,13 @@ def slugify(name):
 # GET GAME ENTRY
 # -------------------------
 
-def get_game(player, date, season, team, opponent):
+def get_game(player,date,season,team,opponent):
 
     for g in player["games"]:
 
         if (
             g["date"] == date and
+            g["season"] == season and
             g["team"] == team and
             g["opponent"] == opponent
         ):
@@ -81,63 +69,42 @@ def get_game(player, date, season, team, opponent):
     return game
 
 # -------------------------
-# LOAD SEASONS
+# SCAN SEASONS
 # -------------------------
 
-season_files = sorted([
-    f for f in os.listdir(SEASONS_DIR)
-    if f.endswith(".json")
+season_dirs = sorted([
+    d for d in os.listdir(BOX_DIR)
+    if os.path.isdir(f"{BOX_DIR}/{d}")
 ])
 
-for sf in season_files:
+for season in season_dirs:
 
-    season = sf.replace(".json","")
+    season_path = f"{BOX_DIR}/{season}"
 
-    print(f"Processing season {season}")
+    print(f"\nProcessing season {season}")
 
-    season_path = f"{SEASONS_DIR}/{sf}"
+    box_files = sorted([
+        f for f in os.listdir(season_path)
+        if f.endswith(".json")
+    ])
 
-    try:
-        with open(season_path,"r",encoding="utf-8") as f:
-            season_games = json.load(f)
-    except Exception as e:
-        print(f"Failed season {season}: {e}")
-        continue
+    print(f"Found {len(box_files)} boxscores")
 
-    if not isinstance(season_games,list):
-        continue
+    for bf in box_files:
 
-    for g in season_games:
-
-        file_name = (
-            g.get("game_file") or
-            g.get("filename") or
-            g.get("file") or
-            ""
-        )
-
-        if not file_name:
-            continue
-
-        if not file_name.endswith(".json"):
-            file_name += ".json"
-
-        box_path = f"{BOX_DIR}/{season}/{file_name}"
-
-        if not os.path.exists(box_path):
-            continue
+        box_path = f"{season_path}/{bf}"
 
         try:
+
             with open(box_path,"r",encoding="utf-8") as f:
                 box = json.load(f)
-        except:
+
+        except Exception as e:
+
+            print(f"Failed {bf}: {e}")
             continue
 
-        date = (
-            box.get("date") or
-            g.get("date") or
-            ""
-        )
+        date = box.get("date","")
 
         home_code = (
             box.get("home_team",{})
@@ -160,34 +127,34 @@ for sf in season_files:
 
         for play in plays:
 
-            matchup = play.get("matchup",{})
-
-            batter = matchup.get("batter",{})
-
-            name = (
-                batter.get("fullName","")
+            batter = (
+                play.get("matchup",{})
+                .get("batter",{})
+                .get("fullName","")
             ).strip()
 
-            if not name:
+            if not batter:
                 continue
 
-            slug = slugify(name)
+            slug = slugify(batter)
 
             player = players[slug]
 
-            player["name"] = name
+            player["name"] = batter
             player["slug"] = slug
 
-            about = play.get("about",{})
-
-            is_top = about.get("isTopInning",False)
+            is_top = (
+                play.get("about",{})
+                .get("isTopInning",False)
+            )
 
             team = away_code if is_top else home_code
             opponent = home_code if is_top else away_code
 
-            result = play.get("result",{})
-
-            event_type = result.get("eventType","")
+            event_type = (
+                play.get("result",{})
+                .get("eventType","")
+            )
 
             game = get_game(
                 player,
@@ -223,17 +190,17 @@ for sf in season_files:
                 game["H"] += 1
 
             # -------------------------
-            # HOME RUNS
+            # HR
             # -------------------------
 
             if event_type == "home_run":
                 game["HR"] += 1
 
 # -------------------------
-# BUILD CAREER TOTALS
+# SAVE PLAYERS
 # -------------------------
 
-print("Building career totals...")
+print("\nSaving players...")
 
 index = []
 
@@ -248,20 +215,9 @@ for slug,data in players.items():
 
     career_games = len(games)
 
-    career_ab = sum(
-        g.get("AB",0)
-        for g in games
-    )
-
-    career_hits = sum(
-        g.get("H",0)
-        for g in games
-    )
-
-    career_hr = sum(
-        g.get("HR",0)
-        for g in games
-    )
+    career_ab = sum(g["AB"] for g in games)
+    career_hits = sum(g["H"] for g in games)
+    career_hr = sum(g["HR"] for g in games)
 
     avg = (
         f"{career_hits / career_ab:.3f}"
@@ -302,5 +258,5 @@ index = sorted(
 with open(INDEX_FILE,"w",encoding="utf-8") as f:
     json.dump(index,f,indent=2)
 
-print(f"Built {len(players)} player files")
+print(f"\nBuilt {len(players)} player files")
 print("Saved players.json")
