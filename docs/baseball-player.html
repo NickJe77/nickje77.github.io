@@ -292,63 +292,63 @@ for(const year of seasons){
 
     if(!box) continue;
 
-    const homeList =
-      box.batters_home ||
-      box.batting_home ||
-      [];
+    const plays =
+      box.liveData?.plays?.allPlays || [];
 
-    const awayList =
-      box.batters_away ||
-      box.batting_away ||
-      [];
+    const gameStats = {
+      AB:0,
+      H:0,
+      HR:0
+    };
 
-    const findPlayer = arr =>
-      arr.find(p => {
+    let foundPlayer = false;
+    let isTop = false;
 
-        const name =
-          (
-            p.name ||
-            p.fullName ||
-            p.player ||
-            ""
-          ).toLowerCase();
+    for(const play of plays){
 
-        return name === playerName;
+      const batter =
+        play.matchup?.batter?.fullName || "";
 
-      });
+      if(
+        batter.toLowerCase() !== playerName
+      ) continue;
 
-    const home = findPlayer(homeList);
-    const away = findPlayer(awayList);
+      foundPlayer = true;
 
-    if(!home && !away) continue;
+      isTop =
+        play.about?.isTopInning || false;
 
-    const isHome = !!home;
+      const eventType =
+        play.result?.eventType || "";
 
-    const p = home || away;
+      const isAB = ![
+        "walk",
+        "intent_walk",
+        "hit_by_pitch",
+        "sac_bunt",
+        "sac_fly"
+      ].includes(eventType);
 
-    const ab =
-      Number(
-        p.AB ??
-        p.ab ??
-        p.atBats ??
-        0
-      );
+      if(isAB){
+        gameStats.AB++;
+      }
 
-    const hits =
-      Number(
-        p.H ??
-        p.h ??
-        p.hits ??
-        0
-      );
+      if([
+        "single",
+        "double",
+        "triple",
+        "home_run"
+      ].includes(eventType)){
+        gameStats.H++;
+      }
 
-    const hr =
-      Number(
-        p.HR ??
-        p.hr ??
-        p.homeRuns ??
-        0
-      );
+      if(eventType === "home_run"){
+        gameStats.HR++;
+      }
+
+    }
+
+    if(!foundPlayer) continue;
 
     games.push({
 
@@ -360,18 +360,18 @@ for(const year of seasons){
       type:"Regular",
 
       team:
-        isHome
-          ? (box.home_code || g.home_code || "")
-          : (box.away_code || g.away_code || ""),
+        isTop
+          ? box.away_team?.code
+          : box.home_team?.code,
 
       opponent:
-        isHome
-          ? (box.away_code || g.away_code || "")
-          : (box.home_code || g.home_code || ""),
+        isTop
+          ? box.home_team?.code
+          : box.away_team?.code,
 
-      AB:ab,
-      H:hits,
-      HR:hr
+      AB:gameStats.AB,
+      H:gameStats.H,
+      HR:gameStats.HR
 
     });
 
@@ -443,8 +443,8 @@ games.map(g=>`
 
 <td>${g.date}</td>
 <td>${g.type}</td>
-<td>${g.team}</td>
-<td>${g.opponent}</td>
+<td>${g.team || ""}</td>
+<td>${g.opponent || ""}</td>
 <td>${g.AB}</td>
 <td>${g.H}</td>
 <td>${g.HR}</td>
