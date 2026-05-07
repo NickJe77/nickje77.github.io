@@ -33,6 +33,18 @@ def slugify(name):
 
     name = name.lower().strip()
 
+    replacements = {
+        "á":"a","à":"a","ä":"a","â":"a",
+        "é":"e","è":"e","ë":"e","ê":"e",
+        "í":"i","ì":"i","ï":"i","î":"i",
+        "ó":"o","ò":"o","ö":"o","ô":"o",
+        "ú":"u","ù":"u","ü":"u","û":"u",
+        "ñ":"n"
+    }
+
+    for k,v in replacements.items():
+        name = name.replace(k,v)
+
     name = re.sub(r"[^\w\s-]", "", name)
     name = re.sub(r"\s+", "-", name)
 
@@ -106,15 +118,38 @@ for season in season_dirs:
 
         date = box.get("date","")
 
-        home_code = (
-            box.get("home_team",{})
-            .get("code","")
-        )
+        # -------------------------
+        # TEAM HANDLING
+        # -------------------------
 
-        away_code = (
-            box.get("away_team",{})
-            .get("code","")
-        )
+        home_team = box.get("home_team","")
+        away_team = box.get("away_team","")
+
+        if isinstance(home_team,dict):
+
+            home_code = home_team.get("code","")
+
+        else:
+
+            home_code = (
+                box.get("home_code") or
+                str(home_team)
+            )
+
+        if isinstance(away_team,dict):
+
+            away_code = away_team.get("code","")
+
+        else:
+
+            away_code = (
+                box.get("away_code") or
+                str(away_team)
+            )
+
+        # -------------------------
+        # PLAYS
+        # -------------------------
 
         plays = (
             box.get("liveData",{})
