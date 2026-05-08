@@ -81,9 +81,17 @@ margin-bottom:15px;
 font-size:28px;
 }
 
+h3{
+margin-top:28px;
+margin-bottom:12px;
+font-size:22px;
+color:#013369;
+}
+
 table{
 width:100%;
 border-collapse:collapse;
+margin-bottom:24px;
 }
 
 th,td{
@@ -160,15 +168,15 @@ min-width:900px;
 
 <div class="hero">
 
-  <div class="hero-content">
+<div class="hero-content">
 
-    <div id="heroScore" class="hero-score">
-      Loading...
-    </div>
+<div id="heroScore" class="hero-score">
+Loading...
+</div>
 
-    <div id="heroRound" class="hero-round"></div>
+<div id="heroRound" class="hero-round"></div>
 
-  </div>
+</div>
 
 </div>
 
@@ -191,6 +199,8 @@ min-width:900px;
 
 <h2>Passing</h2>
 
+<h3 id="passingTeam1"></h3>
+
 <table>
 
 <thead>
@@ -206,11 +216,34 @@ min-width:900px;
 </tr>
 </thead>
 
-<tbody id="passingTable"></tbody>
+<tbody id="passingTable1"></tbody>
+
+</table>
+
+<h3 id="passingTeam2"></h3>
+
+<table>
+
+<thead>
+<tr>
+<th class="team">Player</th>
+<th>Team</th>
+<th>CMP</th>
+<th>ATT</th>
+<th>YDS</th>
+<th>TD</th>
+<th>INT</th>
+<th>RTG</th>
+</tr>
+</thead>
+
+<tbody id="passingTable2"></tbody>
 
 </table>
 
 <h2>Rushing</h2>
+
+<h3 id="rushingTeam1"></h3>
 
 <table>
 
@@ -225,11 +258,32 @@ min-width:900px;
 </tr>
 </thead>
 
-<tbody id="rushingTable"></tbody>
+<tbody id="rushingTable1"></tbody>
+
+</table>
+
+<h3 id="rushingTeam2"></h3>
+
+<table>
+
+<thead>
+<tr>
+<th class="team">Player</th>
+<th>Team</th>
+<th>ATT</th>
+<th>YDS</th>
+<th>TD</th>
+<th>LONG</th>
+</tr>
+</thead>
+
+<tbody id="rushingTable2"></tbody>
 
 </table>
 
 <h2>Receiving</h2>
+
+<h3 id="receivingTeam1"></h3>
 
 <table>
 
@@ -244,7 +298,26 @@ min-width:900px;
 </tr>
 </thead>
 
-<tbody id="receivingTable"></tbody>
+<tbody id="receivingTable1"></tbody>
+
+</table>
+
+<h3 id="receivingTeam2"></h3>
+
+<table>
+
+<thead>
+<tr>
+<th class="team">Player</th>
+<th>Team</th>
+<th>REC</th>
+<th>YDS</th>
+<th>TD</th>
+<th>LONG</th>
+</tr>
+</thead>
+
+<tbody id="receivingTable2"></tbody>
 
 </table>
 
@@ -264,9 +337,31 @@ return name
 .replace(/^-|-$/g,"");
 }
 
-async function loadGame(){
+function hasPassingStats(s){
+return (
+Number(s.pass_att || 0) > 0 ||
+Number(s.pass_yds || 0) > 0 ||
+Number(s.pass_td || 0) > 0
+);
+}
 
-/* LOAD SEASON */
+function hasRushingStats(s){
+return (
+Number(s.rush_att || 0) > 0 ||
+Number(s.rush_yds || 0) > 0 ||
+Number(s.rush_td || 0) > 0
+);
+}
+
+function hasReceivingStats(s){
+return (
+Number(s.rec || 0) > 0 ||
+Number(s.rec_yds || 0) > 0 ||
+Number(s.rec_td || 0) > 0
+);
+}
+
+async function loadGame(){
 
 const seasonRes = await fetch(`/data/nfl/seasons/${season}.json`);
 const seasonData = await seasonRes.json();
@@ -277,12 +372,8 @@ g => String(g.game_id) === String(gameID)
 
 if(!game) return;
 
-/* LOAD BOXSCORE */
-
 const boxRes = await fetch(`/data/nfl/boxscores/${season}/${gameID}.json`);
 const box = await boxRes.json();
-
-/* DETERMINE WINNER */
 
 const score1 = parseInt(game.score1 || 0);
 const score2 = parseInt(game.score2 || 0);
@@ -305,15 +396,23 @@ ls = score1;
 
 }
 
-/* HERO */
-
 document.getElementById("heroScore").innerHTML =
 `${winner} ${ws} — ${ls} ${loser}`;
 
-document.getElementById("heroRound").innerHTML =
-`Week ${game.week}`;
+let roundText = game.week || "";
 
-/* SCORE TABLE */
+const lowerRound = String(roundText).toLowerCase();
+
+if(
+lowerRound.includes("wild") ||
+lowerRound.includes("divisional") ||
+lowerRound.includes("conference") ||
+lowerRound.includes("super bowl")
+){
+document.getElementById("heroRound").innerHTML = roundText;
+}else{
+document.getElementById("heroRound").innerHTML = `Week ${roundText}`;
+}
 
 document.getElementById("scoreTable").innerHTML = `
 <tr>
@@ -327,15 +426,27 @@ document.getElementById("scoreTable").innerHTML = `
 </tr>
 `;
 
+document.getElementById("passingTeam1").innerText = game.team1;
+document.getElementById("passingTeam2").innerText = game.team2;
+
+document.getElementById("rushingTeam1").innerText = game.team1;
+document.getElementById("rushingTeam2").innerText = game.team2;
+
+document.getElementById("receivingTeam1").innerText = game.team1;
+document.getElementById("receivingTeam2").innerText = game.team2;
+
 /* PASSING */
 
-let passingHTML = "";
+let passingHTML1 = "";
+let passingHTML2 = "";
 
-(box.passing || []).forEach(p=>{
+(box.passing || [])
+.filter(p => hasPassingStats(p.stats || {}))
+.forEach(p=>{
 
 const s = p.stats || {};
 
-passingHTML += `
+const row = `
 <tr>
 
 <td class="team">
@@ -356,19 +467,32 @@ ${p.player}
 </tr>
 `;
 
+if(
+s.team === game.team1 ||
+s.team === game.team1_abbr
+){
+passingHTML1 += row;
+}else{
+passingHTML2 += row;
+}
+
 });
 
-document.getElementById("passingTable").innerHTML = passingHTML;
+document.getElementById("passingTable1").innerHTML = passingHTML1;
+document.getElementById("passingTable2").innerHTML = passingHTML2;
 
 /* RUSHING */
 
-let rushingHTML = "";
+let rushingHTML1 = "";
+let rushingHTML2 = "";
 
-(box.rushing || []).forEach(p=>{
+(box.rushing || [])
+.filter(p => hasRushingStats(p.stats || {}))
+.forEach(p=>{
 
 const s = p.stats || {};
 
-rushingHTML += `
+const row = `
 <tr>
 
 <td class="team">
@@ -387,19 +511,32 @@ ${p.player}
 </tr>
 `;
 
+if(
+s.team === game.team1 ||
+s.team === game.team1_abbr
+){
+rushingHTML1 += row;
+}else{
+rushingHTML2 += row;
+}
+
 });
 
-document.getElementById("rushingTable").innerHTML = rushingHTML;
+document.getElementById("rushingTable1").innerHTML = rushingHTML1;
+document.getElementById("rushingTable2").innerHTML = rushingHTML2;
 
 /* RECEIVING */
 
-let receivingHTML = "";
+let receivingHTML1 = "";
+let receivingHTML2 = "";
 
-(box.receiving || []).forEach(p=>{
+(box.receiving || [])
+.filter(p => hasReceivingStats(p.stats || {}))
+.forEach(p=>{
 
 const s = p.stats || {};
 
-receivingHTML += `
+const row = `
 <tr>
 
 <td class="team">
@@ -418,9 +555,19 @@ ${p.player}
 </tr>
 `;
 
+if(
+s.team === game.team1 ||
+s.team === game.team1_abbr
+){
+receivingHTML1 += row;
+}else{
+receivingHTML2 += row;
+}
+
 });
 
-document.getElementById("receivingTable").innerHTML = receivingHTML;
+document.getElementById("receivingTable1").innerHTML = receivingHTML1;
+document.getElementById("receivingTable2").innerHTML = receivingHTML2;
 
 }
 
