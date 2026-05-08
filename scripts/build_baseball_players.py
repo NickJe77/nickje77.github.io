@@ -1,319 +1,460 @@
-import os
-import json
-import glob
-from collections import defaultdict
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>NFL Season | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-BASE = "docs/data/baseball"
+<style>
 
-SEASONS_DIR = f"{BASE}/seasons"
-PLAYERS_DIR = f"{BASE}/players"
-
-os.makedirs(PLAYERS_DIR, exist_ok=True)
-
-# -------------------------
-# TEAM MAP
-# -------------------------
-
-TEAM_MAP = {
-
-    "Arizona Diamondbacks":"ARI",
-    "Atlanta Braves":"ATL",
-    "Baltimore Orioles":"BAL",
-    "Boston Red Sox":"BOS",
-    "Chicago Cubs":"CHC",
-    "Chicago White Sox":"CHW",
-    "Cincinnati Reds":"CIN",
-    "Cleveland Guardians":"CLE",
-    "Colorado Rockies":"COL",
-    "Detroit Tigers":"DET",
-    "Houston Astros":"HOU",
-    "Kansas City Royals":"KC",
-    "Los Angeles Angels":"LAA",
-    "Los Angeles Dodgers":"LAD",
-    "Miami Marlins":"MIA",
-    "Milwaukee Brewers":"MIL",
-    "Minnesota Twins":"MIN",
-    "New York Mets":"NYM",
-    "New York Yankees":"NYY",
-    "Athletics":"ATH",
-    "Oakland Athletics":"ATH",
-    "Philadelphia Phillies":"PHI",
-    "Pittsburgh Pirates":"PIT",
-    "San Diego Padres":"SD",
-    "Seattle Mariners":"SEA",
-    "San Francisco Giants":"SF",
-    "St Louis Cardinals":"STL",
-    "St. Louis Cardinals":"STL",
-    "Tampa Bay Rays":"TB",
-    "Texas Rangers":"TEX",
-    "Toronto Blue Jays":"TOR",
-    "Washington Nationals":"WSH",
-
-    "ARI":"ARI",
-    "ATL":"ATL",
-    "BAL":"BAL",
-    "BOS":"BOS",
-    "CHC":"CHC",
-    "CHW":"CHW",
-    "CIN":"CIN",
-    "CLE":"CLE",
-    "COL":"COL",
-    "DET":"DET",
-    "HOU":"HOU",
-    "KC":"KC",
-    "KAN":"KC",
-    "LAA":"LAA",
-    "LAD":"LAD",
-    "LOS":"LAD",
-    "MIA":"MIA",
-    "MIL":"MIL",
-    "MIN":"MIN",
-    "NYM":"NYM",
-    "NYY":"NYY",
-    "ATH":"ATH",
-    "OAK":"ATH",
-    "PHI":"PHI",
-    "PIT":"PIT",
-    "SD":"SD",
-    "SDP":"SD",
-    "SEA":"SEA",
-    "SF":"SF",
-    "SFG":"SF",
-    "STL":"STL",
-    "TB":"TB",
-    "TBR":"TB",
-    "TEX":"TEX",
-    "TOR":"TOR",
-    "WSH":"WSH",
-    "WSN":"WSH"
+body{
+font-family:Inter,system-ui,Arial;
+margin:0;
+background:#f4f6f8;
+color:#111;
 }
 
-# -------------------------
-# CLEAN PLAYER NAME
-# -------------------------
+/* HERO */
+
+.hero{
+position:relative;
+height:260px;
+background-image:url('/images/nfl_hero.jpg?v=2');
+background-size:cover;
+background-position:center;
+background-repeat:no-repeat;
+display:flex;
+align-items:center;
+justify-content:center;
+overflow:hidden;
+margin-bottom:20px;
+}
+
+.hero::before{
+content:"";
+position:absolute;
+inset:0;
+background:linear-gradient(rgba(1,51,105,.72),rgba(213,10,10,.72));
+}
+
+.hero-content{
+position:relative;
+z-index:2;
+text-align:center;
+color:white;
+padding:20px;
+}
+
+.hero-content h1{
+margin:0;
+font-size:54px;
+font-weight:900;
+text-shadow:0 3px 10px rgba(0,0,0,.35);
+}
+
+.hero-content p{
+margin-top:10px;
+font-size:20px;
+opacity:.95;
+}
+
+/* YEAR TABS */
+
+.year-tabs{
+display:flex;
+flex-wrap:wrap;
+gap:10px;
+padding:0 20px 20px 20px;
+max-width:1200px;
+margin:0 auto;
+}
+
+.year-tab{
+padding:10px 16px;
+background:#d9d9d9;
+border-radius:10px;
+cursor:pointer;
+font-weight:700;
+transition:.2s;
+}
+
+.year-tab:hover{
+background:#c7d7ea;
+}
+
+.year-tab.active{
+background:#013369;
+color:white;
+}
+
+/* ROUND TABS */
+
+.round-tabs{
+display:flex;
+flex-wrap:wrap;
+gap:10px;
+padding:0 20px 20px 20px;
+max-width:1200px;
+margin:0 auto;
+}
+
+.round-tab{
+padding:10px 16px;
+background:#d9d9d9;
+border-radius:10px;
+cursor:pointer;
+font-weight:700;
+transition:.2s;
+}
+
+.round-tab:hover{
+background:#c7d7ea;
+}
+
+.round-tab.active{
+background:#d50a0a;
+color:white;
+}
+
+/* TABLE */
+
+.container{
+max-width:1200px;
+margin:0 auto 40px auto;
+background:white;
+border-radius:14px;
+padding:20px;
+box-shadow:0 2px 10px rgba(0,0,0,.08);
+overflow-x:auto;
+}
 
-def clean_name(name):
+table{
+width:100%;
+border-collapse:collapse;
+min-width:750px;
+}
 
-    if not name:
-        return None
+th{
+background:#013369;
+color:white;
+font-size:15px;
+padding:14px;
+text-align:left;
+}
 
-    name = str(name).strip()
+td{
+padding:14px;
+border-bottom:1px solid #eee;
+font-size:15px;
+}
 
-    if name.lower() in ["team","totals"]:
-        return None
+tbody tr:nth-child(even){
+background:#eaf3ff;
+}
 
-    return name
+tbody tr:hover{
+background:#dbeafe;
+cursor:pointer;
+}
 
-# -------------------------
-# SLUG
-# -------------------------
+.playoff{
+color:#d50a0a;
+font-weight:700;
+}
 
-def slugify(name):
+.score{
+font-weight:800;
+}
 
-    return (
-        name.lower()
-        .replace(".","")
-        .replace("'","")
-        .replace(",","")
-        .replace(" jr","-jr")
-        .replace(" sr","-sr")
-        .replace(" ","-")
-    )
+@media(max-width:700px){
 
-# -------------------------
-# NORMALISE TEAM
-# -------------------------
+.hero{
+height:220px;
+}
 
-def normalise_team(team):
+.hero-content h1{
+font-size:38px;
+}
 
-    if not team:
-        return ""
+.hero-content p{
+font-size:16px;
+}
 
-    return TEAM_MAP.get(team, team)
+th,td{
+padding:10px;
+font-size:13px;
+}
 
-# -------------------------
-# CAREER TOTALS
-# -------------------------
+}
 
-def build_totals(games):
+</style>
 
-    totals = {
-        "games":0,
-        "AB":0,
-        "H":0,
-        "HR":0
-    }
+</head>
+<body>
 
-    for g in games:
+<div class="hero">
 
-        totals["games"] += 1
-        totals["AB"] += int(g.get("AB",0) or 0)
-        totals["H"] += int(g.get("H",0) or 0)
-        totals["HR"] += int(g.get("HR",0) or 0)
+  <div class="hero-content">
+    <h1 id="title">NFL Season</h1>
+    <p>The Sporting Almanac</p>
+  </div>
 
-    avg = (
-        totals["H"] / totals["AB"]
-        if totals["AB"] else 0
-    )
+</div>
 
-    totals["AVG"] = f"{avg:.3f}"
+<div class="year-tabs" id="yearTabs"></div>
 
-    return totals
+<div class="round-tabs" id="roundTabs"></div>
 
-# -------------------------
-# PLAYER STORAGE
-# -------------------------
+<div class="container">
 
-players = defaultdict(list)
+<table id="games">
 
-# -------------------------
-# LOAD ALL SEASONS
-# -------------------------
+<thead>
+<tr>
+<th>Date</th>
+<th>Winner</th>
+<th></th>
+<th>Loser</th>
+<th>Week</th>
+</tr>
+</thead>
 
-season_files = sorted(
-    glob.glob(f"{SEASONS_DIR}/*.json")
-)
+<tbody></tbody>
 
-print(f"FOUND {len(season_files)} SEASON FILES")
+</table>
 
-for season_file in season_files:
+</div>
 
-    print(f"\nPROCESSING {season_file}")
+<script>
 
-    try:
+const startYear = 1970;
+const currentYear = 2025;
 
-        with open(season_file,"r",encoding="utf-8") as f:
-            season_games = json.load(f)
+let currentSeason = 2025;
+let currentRound = "All";
+let seasonGames = [];
 
-    except Exception as e:
+/* URL PARAM */
 
-        print(f"FAILED {season_file}")
-        print(e)
-        continue
+const params = new URLSearchParams(location.search);
 
-    if not isinstance(season_games,list):
-        continue
+if(params.get("season")){
+currentSeason = parseInt(params.get("season"));
+}
 
-    for game in season_games:
+/* BUILD YEAR TABS */
 
-        season = str(game.get("season",""))
-        date = game.get("date","")
+const yearTabs = document.getElementById("yearTabs");
 
-        home_team = normalise_team(
-            game.get("home_team")
-            or game.get("home")
-            or ""
-        )
+for(let y = currentYear; y >= startYear; y--){
 
-        away_team = normalise_team(
-            game.get("away_team")
-            or game.get("away")
-            or ""
-        )
+  const tab = document.createElement("div");
 
-        # -------------------------
-        # HOME BATTING
-        # -------------------------
+  tab.className = "year-tab";
 
-        home_batting = (
-            game.get("home_batting")
-            or game.get("homeBatting")
-            or []
-        )
+  if(y === currentSeason){
+    tab.classList.add("active");
+  }
 
-        for p in home_batting:
+  tab.innerText = y;
 
-            player = clean_name(
-                p.get("player")
-            )
+  tab.onclick = () => {
+    loadSeason(y);
+  };
 
-            if not player:
-                continue
+  yearTabs.appendChild(tab);
 
-            players[player].append({
+}
 
-                "date":date,
-                "season":season,
+/* HIGHLIGHT YEAR */
 
-                "team":home_team,
-                "opponent":away_team,
+function highlightYear(year){
 
-                "AB":int(p.get("AB",0) or 0),
-                "H":int(p.get("H",0) or 0),
-                "HR":int(p.get("HR",0) or 0)
+document.querySelectorAll(".year-tab").forEach(t=>{
 
-            })
+t.classList.remove("active");
 
-        # -------------------------
-        # AWAY BATTING
-        # -------------------------
+if(parseInt(t.innerText)==year){
+t.classList.add("active");
+}
 
-        away_batting = (
-            game.get("away_batting")
-            or game.get("awayBatting")
-            or []
-        )
+});
 
-        for p in away_batting:
+}
 
-            player = clean_name(
-                p.get("player")
-            )
+/* ROUND SELECT */
 
-            if not player:
-                continue
+function setRound(round){
 
-            players[player].append({
+currentRound = round;
 
-                "date":date,
-                "season":season,
+document.querySelectorAll(".round-tab").forEach(t=>{
 
-                "team":away_team,
-                "opponent":home_team,
+t.classList.remove("active");
 
-                "AB":int(p.get("AB",0) or 0),
-                "H":int(p.get("H",0) or 0),
-                "HR":int(p.get("HR",0) or 0)
+if(t.dataset.round == round){
+t.classList.add("active");
+}
 
-            })
+});
 
-# -------------------------
-# BUILD PLAYER FILES
-# -------------------------
+renderGames();
 
-count = 0
+}
 
-for player_name, games in players.items():
+/* BUILD ROUND TABS */
 
-    slug = slugify(player_name)
+function buildRoundTabs(){
 
-    games.sort(
-        key=lambda x:x.get("date",""),
-        reverse=True
-    )
+const roundTabs = document.getElementById("roundTabs");
 
-    player_json = {
+roundTabs.innerHTML = "";
 
-        "name":player_name,
-        "slug":slug,
+const allTab = document.createElement("div");
 
-        "career":build_totals(games),
+allTab.className = "round-tab active";
+allTab.dataset.round = "All";
+allTab.innerText = "All Rounds";
 
-        "games":games
+allTab.onclick = ()=>setRound("All");
 
-    }
+roundTabs.appendChild(allTab);
 
-    out_file = f"{PLAYERS_DIR}/{slug}.json"
+const rounds = [...new Set(
+seasonGames.map(g => g.week).filter(Boolean)
+)];
 
-    with open(out_file,"w",encoding="utf-8") as f:
+rounds.forEach(round=>{
 
-        json.dump(
-            player_json,
-            f,
-            indent=2,
-            ensure_ascii=False
-        )
+const tab = document.createElement("div");
 
-    count += 1
+tab.className = "round-tab";
 
-print(f"\nBUILT {count} PLAYER FILES")
+if(!isNaN(parseInt(round))){
+tab.innerText = `Week ${round}`;
+}else{
+tab.innerText = round;
+}
+
+tab.dataset.round = round;
+
+tab.onclick = ()=>setRound(round);
+
+roundTabs.appendChild(tab);
+
+});
+
+}
+
+/* LOAD SEASON */
+
+async function loadSeason(year){
+
+currentSeason = year;
+
+highlightYear(year);
+
+document.getElementById("title").innerText = "NFL " + year;
+
+try{
+
+const res = await fetch(`/data/nfl/seasons/${year}.json`);
+
+const data = await res.json();
+
+seasonGames = data.games || [];
+
+seasonGames.sort((a,b)=>
+(a.date || "").localeCompare(b.date || "")
+);
+
+}catch(err){
+
+console.log(err);
+
+seasonGames=[];
+
+}
+
+currentRound = "All";
+
+buildRoundTabs();
+
+renderGames();
+
+}
+
+/* RENDER */
+
+function renderGames(){
+
+const tbody = document.querySelector("#games tbody");
+
+tbody.innerHTML = "";
+
+seasonGames.forEach(g=>{
+
+const week = g.week || "";
+
+if(currentRound!="All" && week!=currentRound)return;
+
+const date = g.date || "";
+
+const team1 = g.team1 || "";
+const team2 = g.team2 || "";
+
+const score1 = parseInt(g.score1 || 0);
+const score2 = parseInt(g.score2 || 0);
+
+let winner="", loser="", ws="", ls="";
+
+if(score1 >= score2){
+
+winner = team1;
+loser = team2;
+ws = score1;
+ls = score2;
+
+}else{
+
+winner = team2;
+loser = team1;
+ws = score2;
+ls = score1;
+
+}
+
+const tr = document.createElement("tr");
+
+tr.innerHTML = `
+<td>${date}</td>
+<td class="score">${winner} ${ws}</td>
+<td>def</td>
+<td>${loser} ${ls}</td>
+<td class="${isNaN(parseInt(week)) ? 'playoff' : ''}">
+${isNaN(parseInt(week)) ? week : 'Week ' + week}
+</td>
+`;
+
+tr.onclick = ()=>{
+
+location.href =
+`nfl-game.html?season=${currentSeason}&game=${g.game_id}`;
+
+};
+
+tbody.appendChild(tr);
+
+});
+
+}
+
+/* INIT */
+
+loadSeason(currentSeason);
+
+</script>
+
+</body>
+</html>
