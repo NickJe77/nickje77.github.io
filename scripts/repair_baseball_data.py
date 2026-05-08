@@ -93,9 +93,9 @@ def clean_venue(name):
         return name
     return VENUE_MAP.get(name, name)
 
-# -------------------------
+# ---------------------------------------------------
 # FIX SEASON FILES
-# -------------------------
+# ---------------------------------------------------
 
 season_files = glob(f"{SEASON_DIR}/*.json")
 
@@ -109,40 +109,57 @@ for file in season_files:
 
         for game in data:
 
-            # TEAMS
+            # ----------------------------------------
+            # CONVERT NESTED TEAM STRUCTURE
+            # ----------------------------------------
+
+            if isinstance(game.get("home_team"), dict):
+
+                ht = game["home_team"]
+
+                game["home_team"] = ht.get("name", "")
+                game["home_code"] = ht.get("code", "")
+                game["home_score"] = ht.get("score", 0)
+
+                changed = True
+
+            if isinstance(game.get("away_team"), dict):
+
+                at = game["away_team"]
+
+                game["away_team"] = at.get("name", "")
+                game["away_code"] = at.get("code", "")
+                game["away_score"] = at.get("score", 0)
+
+                changed = True
+
+            # ----------------------------------------
+            # TEAM NAMES
+            # ----------------------------------------
+
             if "home_team" in game:
-                new_name = clean_team(game["home_team"])
-                if new_name != game["home_team"]:
-                    game["home_team"] = new_name
-                    changed = True
+                game["home_team"] = clean_team(game["home_team"])
 
             if "away_team" in game:
-                new_name = clean_team(game["away_team"])
-                if new_name != game["away_team"]:
-                    game["away_team"] = new_name
-                    changed = True
+                game["away_team"] = clean_team(game["away_team"])
 
-            # OLD FIELD SUPPORT
             if "home" in game:
-                new_name = clean_team(game["home"])
-                if new_name != game["home"]:
-                    game["home"] = new_name
-                    changed = True
+                game["home"] = clean_team(game["home"])
 
             if "away" in game:
-                new_name = clean_team(game["away"])
-                if new_name != game["away"]:
-                    game["away"] = new_name
-                    changed = True
+                game["away"] = clean_team(game["away"])
 
+            # ----------------------------------------
             # VENUE
-            if "venue" in game:
-                new_venue = clean_venue(game["venue"])
-                if new_venue != game["venue"]:
-                    game["venue"] = new_venue
-                    changed = True
+            # ----------------------------------------
 
+            if "venue" in game:
+                game["venue"] = clean_venue(game["venue"])
+
+            # ----------------------------------------
             # GAME ID
+            # ----------------------------------------
+
             if "game_id" not in game:
 
                 gid = (
@@ -153,20 +170,25 @@ for file in season_files:
 
                 if gid:
                     game["game_id"] = str(gid)
-                    changed = True
 
-            # CLICKABLE LINK
+            # ----------------------------------------
+            # LINK
+            # ----------------------------------------
+
             season = os.path.basename(file).replace(".json", "")
 
             if game.get("game_id"):
+
                 game["link"] = (
                     f"baseball-game.html?"
                     f"game={game['game_id']}"
                     f"&season={season}"
                 )
-                changed = True
+
+            changed = True
 
         if changed:
+
             with open(file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
 
@@ -175,9 +197,9 @@ for file in season_files:
     except Exception as e:
         print(f"FAILED: {file} -> {e}")
 
-# -------------------------
+# ---------------------------------------------------
 # FIX BOXSCORES
-# -------------------------
+# ---------------------------------------------------
 
 for season in os.listdir(BOXSCORE_DIR):
 
@@ -194,7 +216,34 @@ for season in os.listdir(BOXSCORE_DIR):
 
             changed = False
 
+            # ----------------------------------------
+            # FLATTEN NESTED TEAMS
+            # ----------------------------------------
+
+            if isinstance(game.get("home_team"), dict):
+
+                ht = game["home_team"]
+
+                game["home_team"] = ht.get("name", "")
+                game["home_code"] = ht.get("code", "")
+                game["home_score"] = ht.get("score", 0)
+
+                changed = True
+
+            if isinstance(game.get("away_team"), dict):
+
+                at = game["away_team"]
+
+                game["away_team"] = at.get("name", "")
+                game["away_code"] = at.get("code", "")
+                game["away_score"] = at.get("score", 0)
+
+                changed = True
+
+            # ----------------------------------------
             # TEAM FIXES
+            # ----------------------------------------
+
             for field in [
                 "home_team",
                 "away_team",
@@ -202,19 +251,19 @@ for season in os.listdir(BOXSCORE_DIR):
                 "away"
             ]:
                 if field in game:
-                    new_name = clean_team(game[field])
-                    if new_name != game[field]:
-                        game[field] = new_name
-                        changed = True
+                    game[field] = clean_team(game[field])
 
+            # ----------------------------------------
             # VENUE FIX
-            if "venue" in game:
-                new_venue = clean_venue(game["venue"])
-                if new_venue != game["venue"]:
-                    game["venue"] = new_venue
-                    changed = True
+            # ----------------------------------------
 
-            # FORCE GAME ID
+            if "venue" in game:
+                game["venue"] = clean_venue(game["venue"])
+
+            # ----------------------------------------
+            # GAME ID
+            # ----------------------------------------
+
             if "game_id" not in game:
 
                 gid = (
@@ -225,9 +274,9 @@ for season in os.listdir(BOXSCORE_DIR):
 
                 if gid:
                     game["game_id"] = str(gid)
-                    changed = True
 
             if changed:
+
                 with open(file, "w", encoding="utf-8") as f:
                     json.dump(game, f, indent=2)
 
