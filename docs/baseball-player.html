@@ -77,7 +77,6 @@ body{
 .section h2{
   margin:0 0 18px;
   font-size:30px;
-  line-height:1;
 }
 
 .cards{
@@ -91,16 +90,11 @@ body{
   border-radius:14px;
   padding:18px 12px;
   text-align:center;
-  min-height:88px;
-  display:flex;
-  flex-direction:column;
-  justify-content:center;
 }
 
 .card .value{
   font-size:30px;
   font-weight:950;
-  line-height:1.05;
 }
 
 .card .label{
@@ -109,7 +103,6 @@ body{
   color:var(--muted);
   font-weight:800;
   text-transform:uppercase;
-  letter-spacing:.03em;
 }
 
 .controls{
@@ -138,20 +131,15 @@ body{
   overflow:auto;
   border:1px solid var(--line);
   border-radius:14px;
-  max-height:72vh;
 }
 
 table{
   width:100%;
-  border-collapse:separate;
-  border-spacing:0;
+  border-collapse:collapse;
   min-width:1180px;
 }
 
 thead th{
-  position:sticky;
-  top:0;
-  z-index:2;
   background:var(--blue);
   color:white;
   padding:13px 12px;
@@ -198,52 +186,14 @@ tbody tr:hover{
 
 @media(max-width:1000px){
 
-  .navbar{
-    gap:14px;
-    padding:12px;
-  }
-
-  .navbar a{
-    font-size:14px;
-  }
-
-  .page{
-    padding:12px;
-  }
-
-  .hero{
-    padding:24px;
-    border-radius:18px;
+  .cards{
+    grid-template-columns:repeat(2,1fr);
   }
 
   .hero h1{
     font-size:36px;
   }
 
-  .section{
-    padding:16px;
-  }
-
-  .section h2{
-    font-size:25px;
-  }
-
-  .cards{
-    grid-template-columns:repeat(2,1fr);
-  }
-
-  .card .value{
-    font-size:25px;
-  }
-
-  td{
-    font-size:15px;
-    padding:12px 10px;
-  }
-
-  thead th{
-    font-size:14px;
-  }
 }
 </style>
 </head>
@@ -335,32 +285,25 @@ const TEAM_NAMES = {
   DET:"Detroit Tigers",
   HOU:"Houston Astros",
   KC:"Kansas City Royals",
-  KAN:"Kansas City Royals",
   LAA:"Los Angeles Angels",
   LAD:"Los Angeles Dodgers",
   LAN:"Los Angeles Dodgers",
-  LOS:"Los Angeles Dodgers",
   MIA:"Miami Marlins",
   MIL:"Milwaukee Brewers",
   MIN:"Minnesota Twins",
   NYM:"New York Mets",
   NYY:"New York Yankees",
   ATH:"Athletics",
-  OAK:"Athletics",
   PHI:"Philadelphia Phillies",
   PIT:"Pittsburgh Pirates",
   SD:"San Diego Padres",
-  SDP:"San Diego Padres",
   SEA:"Seattle Mariners",
   SF:"San Francisco Giants",
-  SFG:"San Francisco Giants",
   STL:"St Louis Cardinals",
   TB:"Tampa Bay Rays",
-  TBR:"Tampa Bay Rays",
   TEX:"Texas Rangers",
   TOR:"Toronto Blue Jays",
-  WSH:"Washington Nationals",
-  WSN:"Washington Nationals"
+  WSH:"Washington Nationals"
 };
 
 function n(v){
@@ -369,6 +312,16 @@ function n(v){
 
 function avg(h,ab){
   return ab ? (h / ab).toFixed(3) : "0.000";
+}
+
+function slugify(name){
+  return String(name || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"")
+    .replace(/[^\w\s-]/g,"")
+    .trim()
+    .replace(/\s+/g,"-");
 }
 
 function teamName(t){
@@ -382,18 +335,10 @@ function teamName(t){
   return TEAM_NAMES[t] || t;
 }
 
-function slugify(name){
-  return String(name || "")
-    .toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
-    .replace(/[^\w\s-]/g,"")
-    .trim()
-    .replace(/\s+/g,"-");
-}
-
 async function safeFetch(url){
 
   try{
+
     const r = await fetch(url);
 
     if(!r.ok) return null;
@@ -401,12 +346,16 @@ async function safeFetch(url){
     return await r.json();
 
   }catch(e){
+
     return null;
   }
 }
 
 const qs = new URLSearchParams(location.search);
-const rawPlayer = decodeURIComponent(qs.get("player") || "").trim();
+
+const rawPlayer =
+  decodeURIComponent(qs.get("player") || "").trim();
+
 const slug = slugify(rawPlayer);
 
 document.getElementById("playerName").textContent =
@@ -424,13 +373,93 @@ if(!player){
 }
 
 document.getElementById("playerName").textContent =
-  player.name || rawPlayer || "Player";
+  player.name || rawPlayer;
 
 let games = [];
 
 if(Array.isArray(player.games)){
   games = player.games.slice();
 }
+
+/* =========================================
+   THIS IS THE IMPORTANT PART
+   SUPPORTS OLD + NEW JSON STRUCTURES
+========================================= */
+
+games = games.map(g => {
+
+  /* 2026 STRUCTURE */
+  if(g.team || g.opponent){
+    return {
+      date:g.date,
+      season:g.season,
+      team:g.team,
+      opponent:g.opponent,
+      AB:g.AB,
+      R:g.R,
+      H:g.H,
+      RBI:g.RBI,
+      HR:g.HR,
+      BB:g.BB,
+      SO:g.SO
+    };
+  }
+
+  /* 2025 RETROSHEET STRUCTURE */
+  return {
+    date:g.date,
+    season:g.season,
+
+    team:
+      g.team ||
+      g.team_code ||
+      g.home_code ||
+      g.batting_team,
+
+    opponent:
+      g.opponent ||
+      g.opponent_code ||
+      g.away_code ||
+      g.pitching_team,
+
+    AB:
+      g.AB ||
+      g.ab ||
+      0,
+
+    R:
+      g.R ||
+      g.r ||
+      0,
+
+    H:
+      g.H ||
+      g.h ||
+      0,
+
+    RBI:
+      g.RBI ||
+      g.rbi ||
+      0,
+
+    HR:
+      g.HR ||
+      g.hr ||
+      0,
+
+    BB:
+      g.BB ||
+      g.bb ||
+      0,
+
+    SO:
+      g.SO ||
+      g.so ||
+      g.K ||
+      0
+  };
+
+});
 
 games.sort((a,b) =>
   String(b.date || "").localeCompare(String(a.date || ""))
