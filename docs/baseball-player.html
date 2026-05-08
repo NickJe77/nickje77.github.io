@@ -197,6 +197,7 @@ tbody tr:hover{
 }
 
 @media(max-width:1000px){
+
   .navbar{
     gap:14px;
     padding:12px;
@@ -268,9 +269,11 @@ tbody tr:hover{
   </div>
 
   <div class="section">
+
     <h2>Games</h2>
 
     <div class="controls">
+
       <select id="seasonFilter">
         <option value="">All seasons</option>
       </select>
@@ -280,10 +283,13 @@ tbody tr:hover{
       </select>
 
       <input id="searchBox" placeholder="Search opponent..." />
+
     </div>
 
     <div class="table-wrap">
+
       <table>
+
         <thead>
           <tr>
             <th>Date</th>
@@ -300,14 +306,19 @@ tbody tr:hover{
             <th>AVG</th>
           </tr>
         </thead>
+
         <tbody id="gameBody"></tbody>
+
       </table>
+
     </div>
+
   </div>
 
 </div>
 
 <script>
+
 (async function(){
 
 const TEAM_NAMES = {
@@ -316,6 +327,7 @@ const TEAM_NAMES = {
   BAL:"Baltimore Orioles",
   BOS:"Boston Red Sox",
   CHC:"Chicago Cubs",
+  CHN:"Chicago Cubs",
   CHW:"Chicago White Sox",
   CIN:"Cincinnati Reds",
   CLE:"Cleveland Guardians",
@@ -326,6 +338,7 @@ const TEAM_NAMES = {
   KAN:"Kansas City Royals",
   LAA:"Los Angeles Angels",
   LAD:"Los Angeles Dodgers",
+  LAN:"Los Angeles Dodgers",
   LOS:"Los Angeles Dodgers",
   MIA:"Miami Marlins",
   MIL:"Milwaukee Brewers",
@@ -350,19 +363,22 @@ const TEAM_NAMES = {
   WSN:"Washington Nationals"
 };
 
-function avg(h,ab){
-  return ab ? (h / ab).toFixed(3) : "0.000";
-}
-
 function n(v){
   return Number(v || 0);
 }
 
+function avg(h,ab){
+  return ab ? (h / ab).toFixed(3) : "0.000";
+}
+
 function teamName(t){
+
   if(!t) return "";
+
   if(typeof t === "object"){
     return t.name || TEAM_NAMES[t.code] || t.code || "";
   }
+
   return TEAM_NAMES[t] || t;
 }
 
@@ -376,10 +392,14 @@ function slugify(name){
 }
 
 async function safeFetch(url){
+
   try{
     const r = await fetch(url);
+
     if(!r.ok) return null;
+
     return await r.json();
+
   }catch(e){
     return null;
   }
@@ -389,53 +409,80 @@ const qs = new URLSearchParams(location.search);
 const rawPlayer = decodeURIComponent(qs.get("player") || "").trim();
 const slug = slugify(rawPlayer);
 
-document.getElementById("playerName").textContent = rawPlayer || "Player";
+document.getElementById("playerName").textContent =
+  rawPlayer || "Player";
 
-const player = await safeFetch(`/data/baseball/players/${slug}.json`);
+const player =
+  await safeFetch(`/data/baseball/players/${slug}.json`);
 
 if(!player){
+
   document.getElementById("careerCards").innerHTML =
     `<div class="empty">No player data found.</div>`;
-  document.getElementById("gameBody").innerHTML = "";
+
   return;
 }
 
 document.getElementById("playerName").textContent =
   player.name || rawPlayer || "Player";
 
-let games = Array.isArray(player.games) ? player.games.slice() : [];
+let games = [];
 
-games.sort((a,b) => String(b.date || "").localeCompare(String(a.date || "")));
+if(Array.isArray(player.games)){
+  games = player.games.slice();
+}
+
+games.sort((a,b) =>
+  String(b.date || "").localeCompare(String(a.date || ""))
+);
 
 const seasonFilter = document.getElementById("seasonFilter");
 const teamFilter = document.getElementById("teamFilter");
 const searchBox = document.getElementById("searchBox");
 
-[...new Set(games.map(g => String(g.season || "")).filter(Boolean))]
-  .sort((a,b) => Number(b) - Number(a))
-  .forEach(s => {
-    const o = document.createElement("option");
-    o.value = s;
-    o.textContent = s;
-    seasonFilter.appendChild(o);
-  });
+[...new Set(
+  games.map(g => String(g.season || "")).filter(Boolean)
+)]
+.sort((a,b) => Number(b) - Number(a))
+.forEach(s => {
 
-[...new Set(games.map(g => teamName(g.team)).filter(Boolean))]
-  .sort()
-  .forEach(t => {
-    const o = document.createElement("option");
-    o.value = t;
-    o.textContent = t;
-    teamFilter.appendChild(o);
-  });
+  const o = document.createElement("option");
+
+  o.value = s;
+  o.textContent = s;
+
+  seasonFilter.appendChild(o);
+});
+
+[...new Set(
+  games.map(g => teamName(g.team)).filter(Boolean)
+)]
+.sort()
+.forEach(t => {
+
+  const o = document.createElement("option");
+
+  o.value = t;
+  o.textContent = t;
+
+  teamFilter.appendChild(o);
+});
 
 function totalsFor(list){
+
   const totals = {
     games:list.length,
-    AB:0,R:0,H:0,RBI:0,HR:0,BB:0,SO:0
+    AB:0,
+    R:0,
+    H:0,
+    RBI:0,
+    HR:0,
+    BB:0,
+    SO:0
   };
 
   list.forEach(g => {
+
     totals.AB += n(g.AB);
     totals.R += n(g.R);
     totals.H += n(g.H);
@@ -443,33 +490,71 @@ function totalsFor(list){
     totals.HR += n(g.HR);
     totals.BB += n(g.BB);
     totals.SO += n(g.SO);
+
   });
 
   totals.AVG = avg(totals.H, totals.AB);
+
   return totals;
 }
 
 function renderCards(list){
+
   const t = totalsFor(list);
 
   document.getElementById("careerCards").innerHTML = `
-    <div class="card"><div class="value">${t.games}</div><div class="label">Games</div></div>
-    <div class="card"><div class="value">${t.AB}</div><div class="label">AB</div></div>
-    <div class="card"><div class="value">${t.R}</div><div class="label">Runs</div></div>
-    <div class="card"><div class="value">${t.H}</div><div class="label">Hits</div></div>
-    <div class="card"><div class="value">${t.RBI}</div><div class="label">RBI</div></div>
-    <div class="card"><div class="value">${t.HR}</div><div class="label">HR</div></div>
-    <div class="card"><div class="value">${t.BB}</div><div class="label">Walks</div></div>
-    <div class="card"><div class="value">${t.AVG}</div><div class="label">AVG</div></div>
+
+    <div class="card">
+      <div class="value">${t.games}</div>
+      <div class="label">Games</div>
+    </div>
+
+    <div class="card">
+      <div class="value">${t.AB}</div>
+      <div class="label">AB</div>
+    </div>
+
+    <div class="card">
+      <div class="value">${t.R}</div>
+      <div class="label">Runs</div>
+    </div>
+
+    <div class="card">
+      <div class="value">${t.H}</div>
+      <div class="label">Hits</div>
+    </div>
+
+    <div class="card">
+      <div class="value">${t.RBI}</div>
+      <div class="label">RBI</div>
+    </div>
+
+    <div class="card">
+      <div class="value">${t.HR}</div>
+      <div class="label">HR</div>
+    </div>
+
+    <div class="card">
+      <div class="value">${t.BB}</div>
+      <div class="label">Walks</div>
+    </div>
+
+    <div class="card">
+      <div class="value">${t.AVG}</div>
+      <div class="label">AVG</div>
+    </div>
+
   `;
 }
 
 function renderTable(){
+
   const season = seasonFilter.value;
   const team = teamFilter.value;
   const search = searchBox.value.trim().toLowerCase();
 
   const filtered = games.filter(g => {
+
     const gSeason = String(g.season || "");
     const gTeam = teamName(g.team);
     const opp = teamName(g.opponent);
@@ -484,21 +569,44 @@ function renderTable(){
   renderCards(filtered);
 
   if(!filtered.length){
-    document.getElementById("gameBody").innerHTML =
-      `<tr><td colspan="12" class="empty">No games found.</td></tr>`;
+
+    document.getElementById("gameBody").innerHTML = `
+      <tr>
+        <td colspan="12" class="empty">
+          No games found.
+        </td>
+      </tr>
+    `;
+
     return;
   }
 
-  document.getElementById("gameBody").innerHTML = filtered.map(g => {
-    const AB = n(g.AB);
-    const H = n(g.H);
+  document.getElementById("gameBody").innerHTML =
+    filtered.map(g => {
 
-    return `
+      const AB = n(g.AB);
+      const H = n(g.H);
+
+      return `
+
       <tr>
+
         <td>${g.date || ""}</td>
-        <td><span class="badge">${g.season || ""}</span></td>
-        <td class="left">${teamName(g.team)}</td>
-        <td class="left">${teamName(g.opponent)}</td>
+
+        <td>
+          <span class="badge">
+            ${g.season || ""}
+          </span>
+        </td>
+
+        <td class="left">
+          ${teamName(g.team)}
+        </td>
+
+        <td class="left">
+          ${teamName(g.opponent)}
+        </td>
+
         <td>${AB}</td>
         <td>${n(g.R)}</td>
         <td>${H}</td>
@@ -507,8 +615,10 @@ function renderTable(){
         <td>${n(g.BB)}</td>
         <td>${n(g.SO)}</td>
         <td>${avg(H,AB)}</td>
+
       </tr>
-    `;
+
+      `;
   }).join("");
 }
 
