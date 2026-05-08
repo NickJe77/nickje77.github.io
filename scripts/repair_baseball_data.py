@@ -134,17 +134,52 @@ for file in season_files:
                 changed = True
 
             # ----------------------------------------
+            # ROOT LEVEL SCORES
+            # ----------------------------------------
+
+            if "home_score" not in game:
+                game["home_score"] = 0
+
+            if "away_score" not in game:
+                game["away_score"] = 0
+
+            linescore = game.get("liveData", {}).get("linescore", {})
+            teams = linescore.get("teams", {})
+
+            home = teams.get("home", {})
+            away = teams.get("away", {})
+
+            if "runs" in home:
+                game["home_score"] = home["runs"]
+
+            if "runs" in away:
+                game["away_score"] = away["runs"]
+
+            # FALLBACK FROM PLAYS
+
+            if game["home_score"] == 0 and game["away_score"] == 0:
+
+                for play in game.get("liveData", {}).get("plays", {}).get("allPlays", []):
+
+                    result = play.get("result", {})
+
+                    hs = result.get("homeScore")
+                    aws = result.get("awayScore")
+
+                    if hs is not None:
+                        game["home_score"] = hs
+
+                    if aws is not None:
+                        game["away_score"] = aws
+
+            # ----------------------------------------
             # SCORE STRING
             # ----------------------------------------
 
-            if "home_score" in game and "away_score" in game:
-
-                game["score"] = (
-                    f"{game['away_score']} - "
-                    f"{game['home_score']}"
-                )
-
-                changed = True
+            game["score"] = (
+                f"{game['away_score']} - "
+                f"{game['home_score']}"
+            )
 
             # ----------------------------------------
             # TEAM NAMES
@@ -183,7 +218,6 @@ for file in season_files:
 
                 if gid:
                     game["game_id"] = str(gid)
-                    changed = True
 
             # ----------------------------------------
             # LINK
@@ -199,7 +233,7 @@ for file in season_files:
                     f"&season={season}"
                 )
 
-                changed = True
+            changed = True
 
         if changed:
 
@@ -255,17 +289,52 @@ for season in os.listdir(BOXSCORE_DIR):
                 changed = True
 
             # ----------------------------------------
+            # ROOT LEVEL SCORES
+            # ----------------------------------------
+
+            if "home_score" not in game:
+                game["home_score"] = 0
+
+            if "away_score" not in game:
+                game["away_score"] = 0
+
+            linescore = game.get("liveData", {}).get("linescore", {})
+            teams = linescore.get("teams", {})
+
+            home = teams.get("home", {})
+            away = teams.get("away", {})
+
+            if "runs" in home:
+                game["home_score"] = home["runs"]
+
+            if "runs" in away:
+                game["away_score"] = away["runs"]
+
+            # FALLBACK FROM PLAYS
+
+            if game["home_score"] == 0 and game["away_score"] == 0:
+
+                for play in game.get("liveData", {}).get("plays", {}).get("allPlays", []):
+
+                    result = play.get("result", {})
+
+                    hs = result.get("homeScore")
+                    aws = result.get("awayScore")
+
+                    if hs is not None:
+                        game["home_score"] = hs
+
+                    if aws is not None:
+                        game["away_score"] = aws
+
+            # ----------------------------------------
             # SCORE STRING
             # ----------------------------------------
 
-            if "home_score" in game and "away_score" in game:
-
-                game["score"] = (
-                    f"{game['away_score']} - "
-                    f"{game['home_score']}"
-                )
-
-                changed = True
+            game["score"] = (
+                f"{game['away_score']} - "
+                f"{game['home_score']}"
+            )
 
             # ----------------------------------------
             # TEAM FIXES
@@ -301,7 +370,8 @@ for season in os.listdir(BOXSCORE_DIR):
 
                 if gid:
                     game["game_id"] = str(gid)
-                    changed = True
+
+            changed = True
 
             if changed:
 
