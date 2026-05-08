@@ -1,239 +1,231 @@
-import os
+import requests
 import json
-from glob import glob
+import os
 
-BASE = "docs/data/baseball"
+BASE_DIR = "docs/data/baseball"
+SEASON = "2026"
 
-SEASON_DIR = f"{BASE}/seasons"
-BOXSCORE_DIR = f"{BASE}/boxscores"
+SEASON_FILE = f"{BASE_DIR}/seasons/{SEASON}.json"
+BOXSCORE_DIR = f"{BASE_DIR}/boxscores/{SEASON}"
 
-TEAM_MAP = {
-    "ARI":"Arizona Diamondbacks",
-    "ATL":"Atlanta Braves",
-    "BAL":"Baltimore Orioles",
-    "BOS":"Boston Red Sox",
-    "CHC":"Chicago Cubs",
-    "CHW":"Chicago White Sox",
-    "CHA":"Chicago White Sox",
-    "CIN":"Cincinnati Reds",
-    "CLE":"Cleveland Guardians",
-    "COL":"Colorado Rockies",
-    "DET":"Detroit Tigers",
-    "HOU":"Houston Astros",
-    "KC":"Kansas City Royals",
-    "KAN":"Kansas City Royals",
-    "LAA":"Los Angeles Angels",
-    "ANA":"Los Angeles Angels",
-    "LAD":"Los Angeles Dodgers",
-    "LOS":"Los Angeles Dodgers",
-    "MIA":"Miami Marlins",
-    "MIL":"Milwaukee Brewers",
-    "MIN":"Minnesota Twins",
-    "NYM":"New York Mets",
-    "NYY":"New York Yankees",
-    "NEW":"New York Yankees",
-    "ATH":"Oakland Athletics",
-    "OAK":"Oakland Athletics",
-    "PHI":"Philadelphia Phillies",
-    "PIT":"Pittsburgh Pirates",
-    "SD":"San Diego Padres",
-    "SDP":"San Diego Padres",
-    "SEA":"Seattle Mariners",
-    "SF":"San Francisco Giants",
-    "SFG":"San Francisco Giants",
-    "STL":"St Louis Cardinals",
-    "TB":"Tampa Bay Rays",
-    "TBR":"Tampa Bay Rays",
-    "TEX":"Texas Rangers",
-    "TOR":"Toronto Blue Jays",
-    "WSH":"Washington Nationals",
-    "WAS":"Washington Nationals"
+os.makedirs(BOXSCORE_DIR, exist_ok=True)
+
+TEAM_ID_MAP = {
+    109:"ARI",
+    144:"ATL",
+    110:"BAL",
+    111:"BOS",
+    112:"CHC",
+    145:"CHW",
+    113:"CIN",
+    114:"CLE",
+    115:"COL",
+    116:"DET",
+    117:"HOU",
+    118:"KAN",
+    108:"LAA",
+    119:"LAD",
+    146:"MIA",
+    158:"MIL",
+    142:"MIN",
+    121:"NYM",
+    147:"NYY",
+    133:"ATH",
+    143:"PHI",
+    134:"PIT",
+    135:"SD",
+    136:"SEA",
+    137:"SF",
+    138:"STL",
+    139:"TB",
+    140:"TEX",
+    141:"TOR",
+    120:"WSH"
 }
 
-VENUE_MAP = {
-    "ANA01":"Angel Stadium",
-    "ATL02":"Truist Park",
-    "BAL12":"Oriole Park at Camden Yards",
-    "BOS07":"Fenway Park",
-    "CHI11":"Wrigley Field",
-    "CHI12":"Guaranteed Rate Field",
-    "CIN08":"Great American Ball Park",
-    "CLE08":"Progressive Field",
-    "DEN02":"Coors Field",
-    "DET05":"Comerica Park",
-    "HOU03":"Minute Maid Park",
-    "KAN06":"Kauffman Stadium",
-    "LAA01":"Angel Stadium",
-    "LOS03":"Dodger Stadium",
-    "MIA02":"loanDepot Park",
-    "MIL06":"American Family Field",
-    "MIN03":"Target Field",
-    "NYC20":"Yankee Stadium",
-    "NYC17":"Citi Field",
-    "OAK01":"Oakland Coliseum",
-    "PHI13":"Citizens Bank Park",
-    "PIT08":"PNC Park",
-    "SAN01":"Petco Park",
-    "SEA03":"T-Mobile Park",
-    "SFO03":"Oracle Park",
-    "STL10":"Busch Stadium",
-    "STP01":"Tropicana Field",
-    "TEX05":"Globe Life Field",
-    "TOR02":"Rogers Centre",
-    "WAS11":"Nationals Park"
-}
+print("Downloading MLB 2026 schedule...")
 
-def clean_team(name):
-    if not name:
-        return name
-    return TEAM_MAP.get(name, name)
+schedule_url = (
+    f"https://statsapi.mlb.com/api/v1/schedule?"
+    f"sportId=1&season={SEASON}"
+)
 
-def clean_venue(name):
-    if not name:
-        return name
-    return VENUE_MAP.get(name, name)
+schedule_data = requests.get(schedule_url).json()
 
-# -------------------------
-# FIX SEASON FILES
-# -------------------------
+season_games = []
 
-season_files = glob(f"{SEASON_DIR}/*.json")
+for date_block in schedule_data.get("dates", []):
 
-for file in season_files:
+    game_date = date_block.get("date")
 
-    try:
-        with open(file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        changed = False
-
-        for game in data:
-
-            # TEAMS
-            if "home_team" in game:
-                new_name = clean_team(game["home_team"])
-                if new_name != game["home_team"]:
-                    game["home_team"] = new_name
-                    changed = True
-
-            if "away_team" in game:
-                new_name = clean_team(game["away_team"])
-                if new_name != game["away_team"]:
-                    game["away_team"] = new_name
-                    changed = True
-
-            # OLD FIELD SUPPORT
-            if "home" in game:
-                new_name = clean_team(game["home"])
-                if new_name != game["home"]:
-                    game["home"] = new_name
-                    changed = True
-
-            if "away" in game:
-                new_name = clean_team(game["away"])
-                if new_name != game["away"]:
-                    game["away"] = new_name
-                    changed = True
-
-            # VENUE
-            if "venue" in game:
-                new_venue = clean_venue(game["venue"])
-                if new_venue != game["venue"]:
-                    game["venue"] = new_venue
-                    changed = True
-
-            # GAME ID
-            if "game_id" not in game:
-
-                gid = (
-                    game.get("id")
-                    or game.get("gamePk")
-                    or game.get("pk")
-                )
-
-                if gid:
-                    game["game_id"] = str(gid)
-                    changed = True
-
-            # CLICKABLE LINK
-            season = os.path.basename(file).replace(".json", "")
-
-            if game.get("game_id"):
-                game["link"] = (
-                    f"baseball-game.html?"
-                    f"game={game['game_id']}"
-                    f"&season={season}"
-                )
-                changed = True
-
-        if changed:
-            with open(file, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-
-            print(f"FIXED: {file}")
-
-    except Exception as e:
-        print(f"FAILED: {file} -> {e}")
-
-# -------------------------
-# FIX BOXSCORES
-# -------------------------
-
-for season in os.listdir(BOXSCORE_DIR):
-
-    season_path = f"{BOXSCORE_DIR}/{season}"
-
-    if not os.path.isdir(season_path):
-        continue
-
-    for file in glob(f"{season_path}/*.json"):
+    for game in date_block.get("games", []):
 
         try:
-            with open(file, "r", encoding="utf-8") as f:
-                game = json.load(f)
 
-            changed = False
+            game_pk = game.get("gamePk")
 
-            # TEAM FIXES
-            for field in [
-                "home_team",
-                "away_team",
-                "home",
-                "away"
-            ]:
-                if field in game:
-                    new_name = clean_team(game[field])
-                    if new_name != game[field]:
-                        game[field] = new_name
-                        changed = True
+            home = game["teams"]["home"]
+            away = game["teams"]["away"]
 
-            # VENUE FIX
-            if "venue" in game:
-                new_venue = clean_venue(game["venue"])
-                if new_venue != game["venue"]:
-                    game["venue"] = new_venue
-                    changed = True
+            home_team = home["team"]["name"]
+            away_team = away["team"]["name"]
 
-            # FORCE GAME ID
-            if "game_id" not in game:
+            home_id = home["team"]["id"]
+            away_id = away["team"]["id"]
 
-                gid = (
-                    game.get("id")
-                    or game.get("gamePk")
-                    or game.get("pk")
+            home_code = TEAM_ID_MAP.get(home_id, "UNK")
+            away_code = TEAM_ID_MAP.get(away_id, "UNK")
+
+            venue = (
+                game.get("venue", {})
+                .get("name", "")
+            )
+
+            status = (
+                game.get("status", {})
+                .get("detailedState", "")
+            )
+
+            # -------------------------
+            # LIVE DATA
+            # -------------------------
+
+            live_url = (
+                f"https://statsapi.mlb.com/api/v1.1/game/"
+                f"{game_pk}/feed/live"
+            )
+
+            live_data = requests.get(live_url).json()
+
+            # -------------------------
+            # SCORES
+            # -------------------------
+
+            home_score = 0
+            away_score = 0
+
+            try:
+                linescore = live_data["liveData"]["linescore"]
+
+                home_score = (
+                    linescore["teams"]["home"]["runs"]
                 )
 
-                if gid:
-                    game["game_id"] = str(gid)
-                    changed = True
+                away_score = (
+                    linescore["teams"]["away"]["runs"]
+                )
 
-            if changed:
-                with open(file, "w", encoding="utf-8") as f:
-                    json.dump(game, f, indent=2)
+            except:
+                try:
+                    home_score = home.get("score", 0)
+                    away_score = away.get("score", 0)
+                except:
+                    pass
 
-                print(f"FIXED: {file}")
+            # -------------------------
+            # FILENAME
+            # -------------------------
+
+            filename = (
+                f"{game_date}_{away_code}_{home_code}.json"
+            )
+
+            filepath = os.path.join(
+                BOXSCORE_DIR,
+                filename
+            )
+
+            # -------------------------
+            # GAME JSON
+            # -------------------------
+
+            game_json = {
+                "game_id": game_pk,
+                "date": game_date,
+                "status": status,
+                "venue": venue,
+
+                "home_team": {
+                    "name": home_team,
+                    "code": home_code,
+                    "score": home_score
+                },
+
+                "away_team": {
+                    "name": away_team,
+                    "code": away_code,
+                    "score": away_score
+                },
+
+                "liveData": live_data.get(
+                    "liveData",
+                    {}
+                )
+            }
+
+            # -------------------------
+            # SAVE BOXSCORE
+            # -------------------------
+
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(
+                    game_json,
+                    f,
+                    ensure_ascii=False,
+                    indent=2
+                )
+
+            print(f"Saved {filename}")
+
+            # -------------------------
+            # SEASON ENTRY
+            # -------------------------
+
+            season_games.append({
+                "game_id": game_pk,
+                "date": game_date,
+
+                "home_team": home_team,
+                "away_team": away_team,
+
+                "home_code": home_code,
+                "away_code": away_code,
+
+                "home_score": home_score,
+                "away_score": away_score,
+
+                "venue": venue,
+                "status": status,
+
+                "game_file": filename
+            })
 
         except Exception as e:
-            print(f"FAILED: {file} -> {e}")
+            print("FAILED:", e)
 
-print("\nBASEBALL DATA REPAIR COMPLETE")
+# -------------------------
+# SORT
+# -------------------------
+
+season_games.sort(
+    key=lambda x: (
+        x["date"],
+        x["away_team"]
+    )
+)
+
+# -------------------------
+# SAVE SEASON FILE
+# -------------------------
+
+with open(SEASON_FILE, "w", encoding="utf-8") as f:
+    json.dump(
+        season_games,
+        f,
+        ensure_ascii=False,
+        indent=2
+    )
+
+print("")
+print("DONE")
+print(f"Saved {len(season_games)} games")
