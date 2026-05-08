@@ -123,6 +123,21 @@ def team_code(team):
     if not team:
         return ""
 
+    # TEAM OBJECT
+    if isinstance(team, dict):
+
+        possible = (
+            team.get("abbreviation")
+            or team.get("abbr")
+            or team.get("code")
+            or team.get("team_code")
+            or team.get("name")
+            or ""
+        )
+
+        return TEAM_MAP.get(possible, possible)
+
+    # STRING
     return TEAM_MAP.get(team, team)
 
 # =========================================================
@@ -132,7 +147,7 @@ def team_code(team):
 players = defaultdict(list)
 
 # =========================================================
-# LOOP ALL BOXSCORE FILES
+# LOAD ALL BOXSCORES
 # =========================================================
 
 boxscore_files = sorted(
@@ -142,7 +157,7 @@ boxscore_files = sorted(
 print(f"FOUND {len(boxscore_files)} BOXSCORES")
 
 # =========================================================
-# PROCESS
+# PROCESS BOXSCORES
 # =========================================================
 
 for file in boxscore_files:
@@ -165,17 +180,19 @@ for file in boxscore_files:
     home_team = team_code(
         game.get("home_team")
         or game.get("home")
+        or game.get("homeTeam")
         or ""
     )
 
     away_team = team_code(
         game.get("away_team")
         or game.get("away")
+        or game.get("awayTeam")
         or ""
     )
 
     # =====================================================
-    # FIND BATTING TABLES
+    # POSSIBLE BATTING TABLES
     # =====================================================
 
     possible_home = [
@@ -185,7 +202,8 @@ for file in boxscore_files:
         game.get("home_players"),
         game.get("homePlayers"),
         game.get("batting_home"),
-        game.get("batters_home")
+        game.get("batters_home"),
+        game.get("homeBatters")
 
     ]
 
@@ -196,7 +214,8 @@ for file in boxscore_files:
         game.get("away_players"),
         game.get("awayPlayers"),
         game.get("batting_away"),
-        game.get("batters_away")
+        game.get("batters_away"),
+        game.get("awayBatters")
 
     ]
 
@@ -204,12 +223,16 @@ for file in boxscore_files:
     away_batting = []
 
     for p in possible_home:
+
         if isinstance(p, list) and len(p):
+
             home_batting = p
             break
 
     for p in possible_away:
+
         if isinstance(p, list) and len(p):
+
             away_batting = p
             break
 
