@@ -11,36 +11,125 @@ PLAYERS_DIR = f"{BASE}/players"
 os.makedirs(PLAYERS_DIR, exist_ok=True)
 
 # -------------------------
+# TEAM MAP
+# -------------------------
+
+TEAM_MAP = {
+
+    "Arizona Diamondbacks":"ARI",
+    "Atlanta Braves":"ATL",
+    "Baltimore Orioles":"BAL",
+    "Boston Red Sox":"BOS",
+    "Chicago Cubs":"CHC",
+    "Chicago White Sox":"CHW",
+    "Cincinnati Reds":"CIN",
+    "Cleveland Guardians":"CLE",
+    "Colorado Rockies":"COL",
+    "Detroit Tigers":"DET",
+    "Houston Astros":"HOU",
+    "Kansas City Royals":"KC",
+    "Los Angeles Angels":"LAA",
+    "Los Angeles Dodgers":"LAD",
+    "Miami Marlins":"MIA",
+    "Milwaukee Brewers":"MIL",
+    "Minnesota Twins":"MIN",
+    "New York Mets":"NYM",
+    "New York Yankees":"NYY",
+    "Athletics":"ATH",
+    "Oakland Athletics":"ATH",
+    "Philadelphia Phillies":"PHI",
+    "Pittsburgh Pirates":"PIT",
+    "San Diego Padres":"SD",
+    "Seattle Mariners":"SEA",
+    "San Francisco Giants":"SF",
+    "St Louis Cardinals":"STL",
+    "St. Louis Cardinals":"STL",
+    "Tampa Bay Rays":"TB",
+    "Texas Rangers":"TEX",
+    "Toronto Blue Jays":"TOR",
+    "Washington Nationals":"WSH",
+
+    "ARI":"ARI",
+    "ATL":"ATL",
+    "BAL":"BAL",
+    "BOS":"BOS",
+    "CHC":"CHC",
+    "CHW":"CHW",
+    "CIN":"CIN",
+    "CLE":"CLE",
+    "COL":"COL",
+    "DET":"DET",
+    "HOU":"HOU",
+    "KC":"KC",
+    "KAN":"KC",
+    "LAA":"LAA",
+    "LAD":"LAD",
+    "LOS":"LAD",
+    "MIA":"MIA",
+    "MIL":"MIL",
+    "MIN":"MIN",
+    "NYM":"NYM",
+    "NYY":"NYY",
+    "ATH":"ATH",
+    "OAK":"ATH",
+    "PHI":"PHI",
+    "PIT":"PIT",
+    "SD":"SD",
+    "SDP":"SD",
+    "SEA":"SEA",
+    "SF":"SF",
+    "SFG":"SF",
+    "STL":"STL",
+    "TB":"TB",
+    "TBR":"TB",
+    "TEX":"TEX",
+    "TOR":"TOR",
+    "WSH":"WSH",
+    "WSN":"WSH"
+}
+
+# -------------------------
 # CLEAN PLAYER NAME
 # -------------------------
 
 def clean_name(name):
+
     if not name:
         return None
 
     name = str(name).strip()
 
-    if name.lower() in ["team", "totals"]:
+    if name.lower() in ["team","totals"]:
         return None
 
     return name
 
-
 # -------------------------
-# PLAYER SLUG
+# SLUG
 # -------------------------
 
 def slugify(name):
+
     return (
         name.lower()
-        .replace(".", "")
-        .replace("'", "")
-        .replace(",", "")
-        .replace(" jr", "-jr")
-        .replace(" sr", "-sr")
-        .replace(" ", "-")
+        .replace(".","")
+        .replace("'","")
+        .replace(",","")
+        .replace(" jr","-jr")
+        .replace(" sr","-sr")
+        .replace(" ","-")
     )
 
+# -------------------------
+# NORMALISE TEAM
+# -------------------------
+
+def normalise_team(team):
+
+    if not team:
+        return ""
+
+    return TEAM_MAP.get(team, team)
 
 # -------------------------
 # CAREER TOTALS
@@ -49,18 +138,18 @@ def slugify(name):
 def build_totals(games):
 
     totals = {
-        "games": 0,
-        "AB": 0,
-        "H": 0,
-        "HR": 0
+        "games":0,
+        "AB":0,
+        "H":0,
+        "HR":0
     }
 
     for g in games:
 
         totals["games"] += 1
-        totals["AB"] += int(g.get("AB", 0) or 0)
-        totals["H"] += int(g.get("H", 0) or 0)
-        totals["HR"] += int(g.get("HR", 0) or 0)
+        totals["AB"] += int(g.get("AB",0) or 0)
+        totals["H"] += int(g.get("H",0) or 0)
+        totals["HR"] += int(g.get("HR",0) or 0)
 
     avg = (
         totals["H"] / totals["AB"]
@@ -70,7 +159,6 @@ def build_totals(games):
     totals["AVG"] = f"{avg:.3f}"
 
     return totals
-
 
 # -------------------------
 # PLAYER STORAGE
@@ -93,49 +181,47 @@ for season_file in season_files:
     print(f"\nPROCESSING {season_file}")
 
     try:
-        with open(season_file, "r", encoding="utf-8") as f:
+
+        with open(season_file,"r",encoding="utf-8") as f:
             season_games = json.load(f)
 
     except Exception as e:
-        print(f"FAILED TO LOAD {season_file}")
+
+        print(f"FAILED {season_file}")
         print(e)
         continue
 
-    if not isinstance(season_games, list):
-        print("NOT A LIST")
+    if not isinstance(season_games,list):
         continue
 
     for game in season_games:
 
-        season = str(
-            game.get("season", "")
-        )
+        season = str(game.get("season",""))
+        date = game.get("date","")
 
-        date = game.get("date", "")
-
-        home_team = (
+        home_team = normalise_team(
             game.get("home_team")
             or game.get("home")
             or ""
         )
 
-        away_team = (
+        away_team = normalise_team(
             game.get("away_team")
             or game.get("away")
             or ""
         )
 
         # -------------------------
-        # HOME BATTERS
+        # HOME BATTING
         # -------------------------
 
-        home_batters = (
+        home_batting = (
             game.get("home_batting")
             or game.get("homeBatting")
             or []
         )
 
-        for p in home_batters:
+        for p in home_batting:
 
             player = clean_name(
                 p.get("player")
@@ -146,28 +232,29 @@ for season_file in season_files:
 
             players[player].append({
 
-                "date": date,
-                "season": season,
-                "team": home_team,
-                "opponent": away_team,
+                "date":date,
+                "season":season,
 
-                "AB": int(p.get("AB", 0) or 0),
-                "H": int(p.get("H", 0) or 0),
-                "HR": int(p.get("HR", 0) or 0)
+                "team":home_team,
+                "opponent":away_team,
+
+                "AB":int(p.get("AB",0) or 0),
+                "H":int(p.get("H",0) or 0),
+                "HR":int(p.get("HR",0) or 0)
 
             })
 
         # -------------------------
-        # AWAY BATTERS
+        # AWAY BATTING
         # -------------------------
 
-        away_batters = (
+        away_batting = (
             game.get("away_batting")
             or game.get("awayBatting")
             or []
         )
 
-        for p in away_batters:
+        for p in away_batting:
 
             player = clean_name(
                 p.get("player")
@@ -178,17 +265,17 @@ for season_file in season_files:
 
             players[player].append({
 
-                "date": date,
-                "season": season,
-                "team": away_team,
-                "opponent": home_team,
+                "date":date,
+                "season":season,
 
-                "AB": int(p.get("AB", 0) or 0),
-                "H": int(p.get("H", 0) or 0),
-                "HR": int(p.get("HR", 0) or 0)
+                "team":away_team,
+                "opponent":home_team,
+
+                "AB":int(p.get("AB",0) or 0),
+                "H":int(p.get("H",0) or 0),
+                "HR":int(p.get("HR",0) or 0)
 
             })
-
 
 # -------------------------
 # BUILD PLAYER FILES
@@ -200,24 +287,26 @@ for player_name, games in players.items():
 
     slug = slugify(player_name)
 
-    # SORT NEWEST FIRST
     games.sort(
-        key=lambda x: x.get("date", ""),
+        key=lambda x:x.get("date",""),
         reverse=True
     )
 
     player_json = {
 
-        "name": player_name,
-        "slug": slug,
-        "career": build_totals(games),
-        "games": games
+        "name":player_name,
+        "slug":slug,
+
+        "career":build_totals(games),
+
+        "games":games
 
     }
 
     out_file = f"{PLAYERS_DIR}/{slug}.json"
 
-    with open(out_file, "w", encoding="utf-8") as f:
+    with open(out_file,"w",encoding="utf-8") as f:
+
         json.dump(
             player_json,
             f,
