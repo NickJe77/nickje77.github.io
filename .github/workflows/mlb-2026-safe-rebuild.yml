@@ -5,36 +5,38 @@ on:
   schedule:
     - cron: "0 6 * * *"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install deps
+      - name: Install dependencies
         run: |
           pip install requests
 
-      - name: Run rebuild
+      - name: Run MLB scraper
         run: |
           python scripts/mlb_rebuild_2026_safe.py
 
-      - name: Commit EVERYTHING
+      - name: Repair MLB output schema
+        run: |
+          python scripts/repair_baseball_data.py
+
+      - name: Commit MLB updates
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-
-          git add -A
-          git commit -m "Rebuild MLB 2026 (force update all)" || echo "No changes"
-
-          # 🔥 THIS IS THE FIX
-          git pull --rebase origin main || echo "Nothing to pull"
-
+          git add docs/data/baseball/seasons/2026.json docs/data/baseball/boxscores/2026
+          git commit -m "Update MLB 2026 data" || echo "No changes"
           git push
