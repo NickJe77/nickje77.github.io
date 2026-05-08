@@ -134,6 +134,19 @@ for file in season_files:
                 changed = True
 
             # ----------------------------------------
+            # SCORE STRING
+            # ----------------------------------------
+
+            if "home_score" in game and "away_score" in game:
+
+                game["score"] = (
+                    f"{game['away_score']} - "
+                    f"{game['home_score']}"
+                )
+
+                changed = True
+
+            # ----------------------------------------
             # TEAM NAMES
             # ----------------------------------------
 
@@ -170,6 +183,7 @@ for file in season_files:
 
                 if gid:
                     game["game_id"] = str(gid)
+                    changed = True
 
             # ----------------------------------------
             # LINK
@@ -185,7 +199,7 @@ for file in season_files:
                     f"&season={season}"
                 )
 
-            changed = True
+                changed = True
 
         if changed:
 
@@ -241,6 +255,19 @@ for season in os.listdir(BOXSCORE_DIR):
                 changed = True
 
             # ----------------------------------------
+            # SCORE STRING
+            # ----------------------------------------
+
+            if "home_score" in game and "away_score" in game:
+
+                game["score"] = (
+                    f"{game['away_score']} - "
+                    f"{game['home_score']}"
+                )
+
+                changed = True
+
+            # ----------------------------------------
             # TEAM FIXES
             # ----------------------------------------
 
@@ -274,6 +301,7 @@ for season in os.listdir(BOXSCORE_DIR):
 
                 if gid:
                     game["game_id"] = str(gid)
+                    changed = True
 
             if changed:
 
