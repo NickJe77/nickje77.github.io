@@ -309,68 +309,40 @@ const params = new URLSearchParams(location.search);
 const season = params.get("season");
 const gameID = params.get("game");
 
-const TEAM_MAP = {
-"Arizona Cardinals":"ARI",
-"Atlanta Falcons":"ATL",
-"Baltimore Ravens":"BAL",
-"Buffalo Bills":"BUF",
-"Carolina Panthers":"CAR",
-"Chicago Bears":"CHI",
-"Cincinnati Bengals":"CIN",
-"Cleveland Browns":"CLE",
-"Dallas Cowboys":"DAL",
-"Denver Broncos":"DEN",
-"Detroit Lions":"DET",
-"Green Bay Packers":"GB",
-"Houston Texans":"HOU",
-"Indianapolis Colts":"IND",
-"Jacksonville Jaguars":"JAX",
-"Kansas City Chiefs":"KC",
-"Las Vegas Raiders":"LV",
-"Los Angeles Chargers":"LAC",
-"Los Angeles Rams":"LAR",
-"Miami Dolphins":"MIA",
-"Minnesota Vikings":"MIN",
-"New England Patriots":"NE",
-"New Orleans Saints":"NO",
-"New York Giants":"NYG",
-"New York Jets":"NYJ",
-"Philadelphia Eagles":"PHI",
-"Pittsburgh Steelers":"PIT",
-"San Francisco 49ers":"SF",
-"Seattle Seahawks":"SEA",
-"Tampa Bay Buccaneers":"TB",
-"Tennessee Titans":"TEN",
-"Washington Commanders":"WAS"
+const REVERSE_TEAM_MAP = {
+"ARI":"Arizona Cardinals",
+"ATL":"Atlanta Falcons",
+"BAL":"Baltimore Ravens",
+"BUF":"Buffalo Bills",
+"CAR":"Carolina Panthers",
+"CHI":"Chicago Bears",
+"CIN":"Cincinnati Bengals",
+"CLE":"Cleveland Browns",
+"DAL":"Dallas Cowboys",
+"DEN":"Denver Broncos",
+"DET":"Detroit Lions",
+"GB":"Green Bay Packers",
+"HOU":"Houston Texans",
+"IND":"Indianapolis Colts",
+"JAX":"Jacksonville Jaguars",
+"KC":"Kansas City Chiefs",
+"LV":"Las Vegas Raiders",
+"LAC":"Los Angeles Chargers",
+"LAR":"Los Angeles Rams",
+"MIA":"Miami Dolphins",
+"MIN":"Minnesota Vikings",
+"NE":"New England Patriots",
+"NO":"New Orleans Saints",
+"NYG":"New York Giants",
+"NYJ":"New York Jets",
+"PHI":"Philadelphia Eagles",
+"PIT":"Pittsburgh Steelers",
+"SF":"San Francisco 49ers",
+"SEA":"Seattle Seahawks",
+"TB":"Tampa Bay Buccaneers",
+"TEN":"Tennessee Titans",
+"WAS":"Washington Commanders"
 };
-
-function sameTeam(a,b){
-
-a = String(a || "")
-.toUpperCase()
-.trim();
-
-b = String(b || "")
-.toUpperCase()
-.trim();
-
-if(a === b) return true;
-
-const map = {
-"DALLAS COWBOYS":"DAL",
-"PHILADELPHIA EAGLES":"PHI",
-"NEW YORK GIANTS":"NYG",
-"WASHINGTON COMMANDERS":"WAS",
-"GREEN BAY PACKERS":"GB",
-"CHICAGO BEARS":"CHI"
-};
-
-return (
-map[a] === b ||
-map[b] === a
-);
-
-}
 
 function slugify(name){
 
@@ -434,29 +406,28 @@ await fetch(`/data/nfl/boxscores/${season}/${gameID}.json?v=${Date.now()}`);
 
 const box = await boxRes.json();
 
+/* EVERYTHING STORED HERE */
+
+const players = box.passing || [];
+
+/* GET TEAMS DIRECTLY FROM PLAYER DATA */
+
+const allTeams = [
+...new Set(
+players
+.map(p => (p.stats || {}).team)
+.filter(Boolean)
+)
+];
+
+const team1Code = allTeams[0] || "";
+const team2Code = allTeams[1] || "";
+
 const team1 =
-game.team1 ||
-game.home_team ||
-game.home;
+REVERSE_TEAM_MAP[team1Code] || team1Code;
 
 const team2 =
-game.team2 ||
-game.away_team ||
-game.away;
-
-const team1Code =
-TEAM_MAP[team1] ||
-game.team1_code ||
-game.home_code ||
-game.home_team_code ||
-"";
-
-const team2Code =
-TEAM_MAP[team2] ||
-game.team2_code ||
-game.away_code ||
-game.away_team_code ||
-"";
+REVERSE_TEAM_MAP[team2Code] || team2Code;
 
 const score1 =
 parseInt(game.score1 || game.home_score || 0);
@@ -522,18 +493,23 @@ document.getElementById("scoreTable").innerHTML = `
 </tr>
 `;
 
-document.getElementById("passingTeam1").innerText = team1;
-document.getElementById("passingTeam2").innerText = team2;
+document.getElementById("passingTeam1").innerText =
+team1;
 
-document.getElementById("rushingTeam1").innerText = team1;
-document.getElementById("rushingTeam2").innerText = team2;
+document.getElementById("passingTeam2").innerText =
+team2;
 
-document.getElementById("receivingTeam1").innerText = team1;
-document.getElementById("receivingTeam2").innerText = team2;
+document.getElementById("rushingTeam1").innerText =
+team1;
 
-/* EVERYTHING STORED IN PASSING ARRAY */
+document.getElementById("rushingTeam2").innerText =
+team2;
 
-const players = box.passing || [];
+document.getElementById("receivingTeam1").innerText =
+team1;
+
+document.getElementById("receivingTeam2").innerText =
+team2;
 
 /* PASSING */
 
@@ -560,17 +536,11 @@ ${makePlayerLink(p.player)}
 </tr>
 `;
 
-if(
-sameTeam(s.team, team1Code) ||
-sameTeam(s.team, team1)
-){
+if(s.team === team1Code){
 passingHTML1 += row;
 }
 
-if(
-sameTeam(s.team, team2Code) ||
-sameTeam(s.team, team2)
-){
+if(s.team === team2Code){
 passingHTML2 += row;
 }
 
@@ -605,17 +575,11 @@ ${makePlayerLink(p.player)}
 </tr>
 `;
 
-if(
-sameTeam(s.team, team1Code) ||
-sameTeam(s.team, team1)
-){
+if(s.team === team1Code){
 rushingHTML1 += row;
 }
 
-if(
-sameTeam(s.team, team2Code) ||
-sameTeam(s.team, team2)
-){
+if(s.team === team2Code){
 rushingHTML2 += row;
 }
 
@@ -650,17 +614,11 @@ ${makePlayerLink(p.player)}
 </tr>
 `;
 
-if(
-sameTeam(s.team, team1Code) ||
-sameTeam(s.team, team1)
-){
+if(s.team === team1Code){
 receivingHTML1 += row;
 }
 
-if(
-sameTeam(s.team, team2Code) ||
-sameTeam(s.team, team2)
-){
+if(s.team === team2Code){
 receivingHTML2 += row;
 }
 
