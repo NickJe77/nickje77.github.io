@@ -54,9 +54,15 @@ def clean_team(name):
 
 def repair_game(game):
 
-    # -----------------------------
+    # -----------------------------------
+    # FORCE TEST FIELD
+    # -----------------------------------
+
+    game["repair_test"] = "WORKING"
+
+    # -----------------------------------
     # TEAM FIXES
-    # -----------------------------
+    # -----------------------------------
 
     if isinstance(game.get("home_team"), dict):
 
@@ -77,9 +83,9 @@ def repair_game(game):
     game["home_team"] = clean_team(game.get("home_team"))
     game["away_team"] = clean_team(game.get("away_team"))
 
-    # -----------------------------
+    # -----------------------------------
     # SCORE FIX
-    # -----------------------------
+    # -----------------------------------
 
     home_score = 0
     away_score = 0
@@ -89,9 +95,6 @@ def repair_game(game):
         .get("plays", {})
         .get("allPlays", [])
     )
-
-    # WALK THROUGH ENTIRE GAME
-    # KEEP HIGHEST SCORE FOUND
 
     for play in plays:
 
@@ -156,7 +159,7 @@ for season in os.listdir(BOX_DIR):
             with open(file, "w", encoding="utf-8") as f:
                 json.dump(game, f, indent=2)
 
-            print("FIXED", file)
+            print("UPDATED", file)
 
         except Exception as e:
             print("FAILED", file, e)
@@ -199,7 +202,7 @@ for file in glob(f"{SEASON_DIR}/*.json"):
         with open(file, "w", encoding="utf-8") as f:
             json.dump(fixed, f, indent=2)
 
-        print("FIXED", file)
+        print("UPDATED", file)
 
     except Exception as e:
         print("FAILED", file, e)
