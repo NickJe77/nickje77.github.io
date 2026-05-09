@@ -4,8 +4,8 @@ from glob import glob
 
 BASE = "docs/data/baseball"
 
+BOX_DIR = f"{BASE}/boxscores"
 SEASON_DIR = f"{BASE}/seasons"
-BOXSCORE_DIR = f"{BASE}/boxscores"
 
 TEAM_MAP = {
     "ARI":"Arizona Diamondbacks",
@@ -31,7 +31,6 @@ TEAM_MAP = {
     "MIN":"Minnesota Twins",
     "NYM":"New York Mets",
     "NYY":"New York Yankees",
-    "NEW":"New York Yankees",
     "ATH":"Oakland Athletics",
     "OAK":"Oakland Athletics",
     "PHI":"Philadelphia Phillies",
@@ -50,218 +49,103 @@ TEAM_MAP = {
     "WAS":"Washington Nationals"
 }
 
-VENUE_MAP = {
-    "ANA01":"Angel Stadium",
-    "ATL02":"Truist Park",
-    "BAL12":"Oriole Park at Camden Yards",
-    "BOS07":"Fenway Park",
-    "CHI11":"Wrigley Field",
-    "CHI12":"Guaranteed Rate Field",
-    "CIN08":"Great American Ball Park",
-    "CLE08":"Progressive Field",
-    "DEN02":"Coors Field",
-    "DET05":"Comerica Park",
-    "HOU03":"Minute Maid Park",
-    "KAN06":"Kauffman Stadium",
-    "LAA01":"Angel Stadium",
-    "LOS03":"Dodger Stadium",
-    "MIA02":"loanDepot Park",
-    "MIL06":"American Family Field",
-    "MIN03":"Target Field",
-    "NYC20":"Yankee Stadium",
-    "NYC17":"Citi Field",
-    "OAK01":"Oakland Coliseum",
-    "PHI13":"Citizens Bank Park",
-    "PIT08":"PNC Park",
-    "SAN01":"Petco Park",
-    "SEA03":"T-Mobile Park",
-    "SFO03":"Oracle Park",
-    "STL10":"Busch Stadium",
-    "STP01":"Tropicana Field",
-    "TEX05":"Globe Life Field",
-    "TOR02":"Rogers Centre",
-    "WAS11":"Nationals Park"
-}
-
-def clean_team(name):
-    if not name:
-        return name
+def team_name(name):
     return TEAM_MAP.get(name, name)
 
-def clean_venue(name):
-    if not name:
-        return name
-    return VENUE_MAP.get(name, name)
-
 # ---------------------------------------------------
-# FIX SEASON FILES
+# FIX SINGLE GAME
 # ---------------------------------------------------
 
-season_files = glob(f"{SEASON_DIR}/*.json")
+def repair_game(game):
 
-for file in season_files:
+    # -----------------------------
+    # TEAM NAMES
+    # -----------------------------
+
+    if isinstance(game.get("home_team"), dict):
+
+        ht = game["home_team"]
+
+        game["home_code"] = ht.get("code", "")
+        game["home_team"] = ht.get("name", "")
+        game["home_score"] = ht.get("score", 0)
+
+    if isinstance(game.get("away_team"), dict):
+
+        at = game["away_team"]
+
+        game["away_code"] = at.get("code", "")
+        game["away_team"] = at.get("name", "")
+        game["away_score"] = at.get("score", 0)
+
+    game["home_team"] = team_name(game.get("home_team"))
+    game["away_team"] = team_name(game.get("away_team"))
+
+    # -----------------------------
+    # FORCE SCORE FIELDS
+    # -----------------------------
+
+    home_score = 0
+    away_score = 0
+
+    # TRY LINESCORE
 
     try:
-        with open(file, "r", encoding="utf-8") as f:
-            data = json.load(f)
 
-        changed = False
+        linescore = (
+            game.get("liveData", {})
+            .get("linescore", {})
+            .get("teams", {})
+        )
 
-        for game in data:
+        if "home" in linescore:
+            home_score = linescore["home"].get("runs", 0)
 
-            # ----------------------------------------
-            # FLATTEN TEAM STRUCTURE
-            # ----------------------------------------
+        if "away" in linescore:
+            away_score = linescore["away"].get("runs", 0)
 
-            if isinstance(game.get("home_team"), dict):
+    except:
+        pass
 
-                ht = game["home_team"]
+    # FALLBACK TO LAST PLAY
 
-                game["home_team"] = ht.get("name", "")
-                game["home_code"] = ht.get("code", "")
-                game["home_score"] = ht.get("score", 0)
+    if home_score == 0 and away_score == 0:
 
-                changed = True
+        try:
 
-            if isinstance(game.get("away_team"), dict):
-
-                at = game["away_team"]
-
-                game["away_team"] = at.get("name", "")
-                game["away_code"] = at.get("code", "")
-                game["away_score"] = at.get("score", 0)
-
-                changed = True
-
-            # ----------------------------------------
-            # ROOT LEVEL SCORES
-            # ----------------------------------------
-
-            if "home_score" not in game:
-                game["home_score"] = 0
-
-            if "away_score" not in game:
-                game["away_score"] = 0
-
-            # TRY LINESCORE FIRST
-
-            linescore = game.get("liveData", {}).get("linescore", {})
-            teams = linescore.get("teams", {})
-
-            home = teams.get("home", {})
-            away = teams.get("away", {})
-
-            if isinstance(home, dict) and "runs" in home:
-                game["home_score"] = home["runs"]
-
-            if isinstance(away, dict) and "runs" in away:
-                game["away_score"] = away["runs"]
-
-            # FALLBACK TO LAST PLAY SCORE
-
-            if game["home_score"] == 0 and game["away_score"] == 0:
-
-                all_plays = (
-                    game.get("liveData", {})
-                    .get("plays", {})
-                    .get("allPlays", [])
-                )
-
-                if all_plays:
-
-                    last_play = all_plays[-1]
-
-                    result = last_play.get("result", {})
-
-                    hs = result.get("homeScore")
-                    aws = result.get("awayScore")
-
-                    if hs is not None:
-                        game["home_score"] = hs
-
-                    if aws is not None:
-                        game["away_score"] = aws
-
-            # ----------------------------------------
-            # SCORE STRING
-            # ----------------------------------------
-
-            game["score"] = (
-                f"{game['away_score']} - "
-                f"{game['home_score']}"
+            plays = (
+                game.get("liveData", {})
+                .get("plays", {})
+                .get("allPlays", [])
             )
 
-            # ----------------------------------------
-            # TEAM NAMES
-            # ----------------------------------------
+            if plays:
 
-            if "home_team" in game:
-                game["home_team"] = clean_team(game["home_team"])
+                last_play = plays[-1]
 
-            if "away_team" in game:
-                game["away_team"] = clean_team(game["away_team"])
+                result = last_play.get("result", {})
 
-            if "home" in game:
-                game["home"] = clean_team(game["home"])
+                home_score = result.get("homeScore", 0)
+                away_score = result.get("awayScore", 0)
 
-            if "away" in game:
-                game["away"] = clean_team(game["away"])
+        except:
+            pass
 
-            # ----------------------------------------
-            # VENUE
-            # ----------------------------------------
+    # FORCE WRITE
 
-            if "venue" in game:
-                game["venue"] = clean_venue(game["venue"])
+    game["home_score"] = home_score
+    game["away_score"] = away_score
+    game["score"] = f"{away_score} - {home_score}"
 
-            # ----------------------------------------
-            # GAME ID
-            # ----------------------------------------
-
-            if "game_id" not in game:
-
-                gid = (
-                    game.get("id")
-                    or game.get("gamePk")
-                    or game.get("pk")
-                )
-
-                if gid:
-                    game["game_id"] = str(gid)
-
-            # ----------------------------------------
-            # LINK
-            # ----------------------------------------
-
-            season = os.path.basename(file).replace(".json", "")
-
-            if game.get("game_id"):
-
-                game["link"] = (
-                    f"baseball-game.html?"
-                    f"game={game['game_id']}"
-                    f"&season={season}"
-                )
-
-            changed = True
-
-        if changed:
-
-            with open(file, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-
-            print(f"FIXED: {file}")
-
-    except Exception as e:
-        print(f"FAILED: {file} -> {e}")
+    return game
 
 # ---------------------------------------------------
 # FIX BOXSCORES
 # ---------------------------------------------------
 
-for season in os.listdir(BOXSCORE_DIR):
+for season in os.listdir(BOX_DIR):
 
-    season_path = f"{BOXSCORE_DIR}/{season}"
+    season_path = f"{BOX_DIR}/{season}"
 
     if not os.path.isdir(season_path):
         continue
@@ -269,138 +153,59 @@ for season in os.listdir(BOXSCORE_DIR):
     for file in glob(f"{season_path}/*.json"):
 
         try:
+
             with open(file, "r", encoding="utf-8") as f:
                 game = json.load(f)
 
-            changed = False
+            game = repair_game(game)
 
-            # ----------------------------------------
-            # FLATTEN TEAM STRUCTURE
-            # ----------------------------------------
+            with open(file, "w", encoding="utf-8") as f:
+                json.dump(game, f, indent=2)
 
-            if isinstance(game.get("home_team"), dict):
-
-                ht = game["home_team"]
-
-                game["home_team"] = ht.get("name", "")
-                game["home_code"] = ht.get("code", "")
-                game["home_score"] = ht.get("score", 0)
-
-                changed = True
-
-            if isinstance(game.get("away_team"), dict):
-
-                at = game["away_team"]
-
-                game["away_team"] = at.get("name", "")
-                game["away_code"] = at.get("code", "")
-                game["away_score"] = at.get("score", 0)
-
-                changed = True
-
-            # ----------------------------------------
-            # ROOT LEVEL SCORES
-            # ----------------------------------------
-
-            if "home_score" not in game:
-                game["home_score"] = 0
-
-            if "away_score" not in game:
-                game["away_score"] = 0
-
-            # TRY LINESCORE FIRST
-
-            linescore = game.get("liveData", {}).get("linescore", {})
-            teams = linescore.get("teams", {})
-
-            home = teams.get("home", {})
-            away = teams.get("away", {})
-
-            if isinstance(home, dict) and "runs" in home:
-                game["home_score"] = home["runs"]
-
-            if isinstance(away, dict) and "runs" in away:
-                game["away_score"] = away["runs"]
-
-            # FALLBACK TO LAST PLAY SCORE
-
-            if game["home_score"] == 0 and game["away_score"] == 0:
-
-                all_plays = (
-                    game.get("liveData", {})
-                    .get("plays", {})
-                    .get("allPlays", [])
-                )
-
-                if all_plays:
-
-                    last_play = all_plays[-1]
-
-                    result = last_play.get("result", {})
-
-                    hs = result.get("homeScore")
-                    aws = result.get("awayScore")
-
-                    if hs is not None:
-                        game["home_score"] = hs
-
-                    if aws is not None:
-                        game["away_score"] = aws
-
-            # ----------------------------------------
-            # SCORE STRING
-            # ----------------------------------------
-
-            game["score"] = (
-                f"{game['away_score']} - "
-                f"{game['home_score']}"
-            )
-
-            # ----------------------------------------
-            # TEAM NAMES
-            # ----------------------------------------
-
-            for field in [
-                "home_team",
-                "away_team",
-                "home",
-                "away"
-            ]:
-                if field in game:
-                    game[field] = clean_team(game[field])
-
-            # ----------------------------------------
-            # VENUE
-            # ----------------------------------------
-
-            if "venue" in game:
-                game["venue"] = clean_venue(game["venue"])
-
-            # ----------------------------------------
-            # GAME ID
-            # ----------------------------------------
-
-            if "game_id" not in game:
-
-                gid = (
-                    game.get("id")
-                    or game.get("gamePk")
-                    or game.get("pk")
-                )
-
-                if gid:
-                    game["game_id"] = str(gid)
-
-            changed = True
-
-            if changed:
-
-                with open(file, "w", encoding="utf-8") as f:
-                    json.dump(game, f, indent=2)
-
-                print(f"FIXED: {file}")
+            print("FIXED", file)
 
         except Exception as e:
-            print(f"FAILED: {file} -> {e}")
+            print("FAILED", file, e)
 
-print("\nBASEBALL DATA REPAIR COMPLETE")
+# ---------------------------------------------------
+# FIX SEASON FILES
+# ---------------------------------------------------
+
+for file in glob(f"{SEASON_DIR}/*.json"):
+
+    try:
+
+        with open(file, "r", encoding="utf-8") as f:
+            games = json.load(f)
+
+        fixed = []
+
+        for game in games:
+
+            game = repair_game(game)
+
+            season = os.path.basename(file).replace(".json", "")
+
+            gid = (
+                game.get("game_id")
+                or game.get("id")
+                or game.get("gamePk")
+                or ""
+            )
+
+            game["link"] = (
+                f"baseball-game.html?"
+                f"game={gid}&season={season}"
+            )
+
+            fixed.append(game)
+
+        with open(file, "w", encoding="utf-8") as f:
+            json.dump(fixed, f, indent=2)
+
+        print("FIXED", file)
+
+    except Exception as e:
+        print("FAILED", file, e)
+
+print("DONE")
