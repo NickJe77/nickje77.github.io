@@ -191,7 +191,6 @@ Loading...
 <h2>Final Score</h2>
 
 <table>
-
 <thead>
 <tr>
 <th class="team">Team</th>
@@ -348,70 +347,98 @@ const TEAM_MAP = {
 };
 
 function slugify(name){
+
 return String(name || "")
 .toLowerCase()
 .replace(/[^a-z0-9]+/g,"-")
 .replace(/^-|-$/g,"");
+
 }
 
 function val(...items){
+
 for(const x of items){
+
 if(x !== undefined && x !== null && x !== ""){
 return x;
 }
+
 }
+
 return "";
+
 }
 
 function num(x){
+
 const n = Number(x);
+
 return Number.isFinite(n) ? n : 0;
+
 }
 
 function normalTeam(t){
+
 t = String(t || "").trim();
+
 return TEAM_MAP[t] || t;
+
 }
 
 function getPlayerTeam(p){
 
-const s = p.stats || {};
+const s =
+p.stats ||
+p.statistics ||
+p;
 
 return normalTeam(
 val(
+
 p.team,
 p.team_code,
 p.teamCode,
 p.played_for,
 p.playedFor,
+p.tm,
+p.team_abbr,
+
 s.team,
 s.team_code,
 s.teamCode,
 s.played_for,
-s.playedFor
+s.playedFor,
+s.tm,
+s.team_abbr
+
 )
 );
 
 }
 
 function playerName(p){
+
 return val(
 p.player,
 p.name,
 p.player_name,
 p.playerName
 );
+
 }
 
 function hasPassingStats(p){
 
-const s = p.stats || p;
+const s =
+p.stats ||
+p.statistics ||
+p;
 
 return Number(
 s.pass_att ??
 s.pass_attempts ??
-s.attempts ??
 s.att ??
+s.attempts ??
 0
 ) > 0;
 
@@ -419,7 +446,10 @@ s.att ??
 
 function hasRushingStats(p){
 
-const s = p.stats || p;
+const s =
+p.stats ||
+p.statistics ||
+p;
 
 return Number(
 s.rush_att ??
@@ -433,7 +463,10 @@ s.att ??
 
 function hasReceivingStats(p){
 
-const s = p.stats || p;
+const s =
+p.stats ||
+p.statistics ||
+p;
 
 return Number(
 s.rec ??
@@ -445,6 +478,7 @@ s.targets ??
 }
 
 function emptyRow(cols){
+
 return `
 <tr>
 <td class="empty" colspan="${cols}">
@@ -452,6 +486,7 @@ No stats listed
 </td>
 </tr>
 `;
+
 }
 
 function makePlayerLink(name){
@@ -472,10 +507,15 @@ await fetch(`/data/nfl/seasons/${season}.json?v=${Date.now()}`);
 
 const seasonData = await seasonRes.json();
 
-const games = seasonData.games || seasonData || [];
+const games =
+seasonData.games ||
+seasonData ||
+[];
 
 const game = games.find(
-g => String(val(g.game_id,g.id,g.game)) === String(gameID)
+g => String(
+val(g.game_id,g.id,g.game)
+) === String(gameID)
 );
 
 if(!game){
@@ -498,14 +538,23 @@ val(game.team1,game.home_team,game.home);
 const team2 =
 val(game.team2,game.away_team,game.away);
 
-const team1Code = TEAM_MAP[team1] || team1;
-const team2Code = TEAM_MAP[team2] || team2;
+const team1Code =
+TEAM_MAP[team1] || team1;
+
+const team2Code =
+TEAM_MAP[team2] || team2;
 
 const score1 =
-parseInt(val(game.score1,game.home_score,0),10);
+parseInt(
+val(game.score1,game.home_score,0),
+10
+);
 
 const score2 =
-parseInt(val(game.score2,game.away_score,0),10);
+parseInt(
+val(game.score2,game.away_score,0),
+10
+);
 
 let winner, loser, ws, ls;
 
@@ -563,18 +612,43 @@ document.getElementById("scoreTable").innerHTML = `
 </tr>
 `;
 
-document.getElementById("passingTeam1").innerText = team1;
-document.getElementById("passingTeam2").innerText = team2;
+document.getElementById("passingTeam1").innerText =
+team1;
 
-document.getElementById("rushingTeam1").innerText = team1;
-document.getElementById("rushingTeam2").innerText = team2;
+document.getElementById("passingTeam2").innerText =
+team2;
 
-document.getElementById("receivingTeam1").innerText = team1;
-document.getElementById("receivingTeam2").innerText = team2;
+document.getElementById("rushingTeam1").innerText =
+team1;
 
-const passing = box.passing || [];
-const rushing = box.rushing || [];
-const receiving = box.receiving || [];
+document.getElementById("rushingTeam2").innerText =
+team2;
+
+document.getElementById("receivingTeam1").innerText =
+team1;
+
+document.getElementById("receivingTeam2").innerText =
+team2;
+
+/* IMPORTANT */
+/* USE MERGED PLAYER ARRAYS */
+/* THIS FIXES OLD + NEW JSON */
+
+const passing = [
+...(box.passing || [])
+];
+
+const rushing = [
+...(box.rushing || []),
+...(box.players || []),
+...(box.player_stats || [])
+];
+
+const receiving = [
+...(box.receiving || []),
+...(box.players || []),
+...(box.player_stats || [])
+];
 
 /* PASSING */
 
@@ -585,12 +659,16 @@ passing
 .filter(hasPassingStats)
 .forEach(p=>{
 
-const s = p.stats || p;
+const s =
+p.stats ||
+p.statistics ||
+p;
 
 const name = playerName(p);
 
 const row = `
 <tr>
+
 <td class="team">
 ${makePlayerLink(name)}
 </td>
@@ -628,6 +706,7 @@ s.pass_rating,
 s.rating,
 s.rtg
 )}</td>
+
 </tr>
 `;
 
@@ -654,16 +733,20 @@ passingHTML2 || emptyRow(7);
 let rushingHTML1 = "";
 let rushingHTML2 = "";
 
-rushing.forEach(p=>{
+rushing
+.filter(hasRushingStats)
+.forEach(p=>{
 
-const s = p.stats || p;
+const s =
+p.stats ||
+p.statistics ||
+p;
 
 const name = playerName(p);
 
-if(!hasRushingStats(p)) return;
-
 const row = `
 <tr>
+
 <td class="team">
 ${makePlayerLink(name)}
 </td>
@@ -693,6 +776,7 @@ s.rush_long,
 s.long,
 s.lng
 )}</td>
+
 </tr>
 `;
 
@@ -719,16 +803,20 @@ rushingHTML2 || emptyRow(5);
 let receivingHTML1 = "";
 let receivingHTML2 = "";
 
-receiving.forEach(p=>{
+receiving
+.filter(hasReceivingStats)
+.forEach(p=>{
 
-const s = p.stats || p;
+const s =
+p.stats ||
+p.statistics ||
+p;
 
 const name = playerName(p);
 
-if(!hasReceivingStats(p)) return;
-
 const row = `
 <tr>
+
 <td class="team">
 ${makePlayerLink(name)}
 </td>
@@ -756,6 +844,7 @@ s.rec_long,
 s.long,
 s.lng
 )}</td>
+
 </tr>
 `;
 
