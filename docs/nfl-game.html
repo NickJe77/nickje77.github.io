@@ -339,25 +339,23 @@ return name
 
 function hasPassingStats(s){
 return (
+Number(s.pass_cmp || 0) > 0 ||
 Number(s.pass_att || 0) > 0 ||
-Number(s.pass_yds || 0) > 0 ||
-Number(s.pass_td || 0) > 0
+Number(s.pass_yds || 0) > 0
 );
 }
 
 function hasRushingStats(s){
 return (
 Number(s.rush_att || 0) > 0 ||
-Number(s.rush_yds || 0) > 0 ||
-Number(s.rush_td || 0) > 0
+Number(s.rush_yds || 0) > 0
 );
 }
 
 function hasReceivingStats(s){
 return (
 Number(s.rec || 0) > 0 ||
-Number(s.rec_yds || 0) > 0 ||
-Number(s.rec_td || 0) > 0
+Number(s.rec_yds || 0) > 0
 );
 }
 
@@ -374,6 +372,14 @@ if(!game) return;
 
 const boxRes = await fetch(`/data/nfl/boxscores/${season}/${gameID}.json`);
 const box = await boxRes.json();
+
+/* ALL PLAYERS COME FROM PASSING ARRAY */
+
+const players = [
+...(box.passing || []),
+...(box.rushing || []),
+...(box.receiving || [])
+];
 
 const score1 = parseInt(game.score1 || 0);
 const score2 = parseInt(game.score2 || 0);
@@ -435,15 +441,29 @@ document.getElementById("rushingTeam2").innerText = game.team2;
 document.getElementById("receivingTeam1").innerText = game.team1;
 document.getElementById("receivingTeam2").innerText = game.team2;
 
+/* TEAM CODES */
+
+const team1Code = players[0]?.stats?.team || "";
+
+let team2Code = "";
+
+for(const p of players){
+
+const t = p.stats?.team || "";
+
+if(t !== team1Code){
+team2Code = t;
+break;
+}
+
+}
+
 /* PASSING */
 
 let passingHTML1 = "";
 let passingHTML2 = "";
 
-const passingTeam1Code =
-(box.passing?.[0]?.stats?.team || "").trim();
-
-(box.passing || [])
+players
 .filter(p => hasPassingStats(p.stats || {}))
 .forEach(p=>{
 
@@ -451,14 +471,12 @@ const s = p.stats || {};
 
 const row = `
 <tr>
-
 <td class="team">
 <a class="player-link"
 href="nfl-player.html?player=${slugify(p.player)}">
 ${p.player}
 </a>
 </td>
-
 <td>${s.team || ""}</td>
 <td>${s.pass_cmp || ""}</td>
 <td>${s.pass_att || ""}</td>
@@ -466,11 +484,10 @@ ${p.player}
 <td>${s.pass_td || ""}</td>
 <td>${s.pass_int || ""}</td>
 <td>${s.pass_rating || ""}</td>
-
 </tr>
 `;
 
-if(s.team === passingTeam1Code){
+if(s.team === team1Code){
 passingHTML1 += row;
 }else{
 passingHTML2 += row;
@@ -486,10 +503,7 @@ document.getElementById("passingTable2").innerHTML = passingHTML2;
 let rushingHTML1 = "";
 let rushingHTML2 = "";
 
-const rushingTeam1Code =
-(box.rushing?.[0]?.stats?.team || "").trim();
-
-(box.rushing || [])
+players
 .filter(p => hasRushingStats(p.stats || {}))
 .forEach(p=>{
 
@@ -497,24 +511,21 @@ const s = p.stats || {};
 
 const row = `
 <tr>
-
 <td class="team">
 <a class="player-link"
 href="nfl-player.html?player=${slugify(p.player)}">
 ${p.player}
 </a>
 </td>
-
 <td>${s.team || ""}</td>
 <td>${s.rush_att || ""}</td>
 <td>${s.rush_yds || ""}</td>
 <td>${s.rush_td || ""}</td>
 <td>${s.rush_long || ""}</td>
-
 </tr>
 `;
 
-if(s.team === rushingTeam1Code){
+if(s.team === team1Code){
 rushingHTML1 += row;
 }else{
 rushingHTML2 += row;
@@ -530,10 +541,7 @@ document.getElementById("rushingTable2").innerHTML = rushingHTML2;
 let receivingHTML1 = "";
 let receivingHTML2 = "";
 
-const receivingTeam1Code =
-(box.receiving?.[0]?.stats?.team || "").trim();
-
-(box.receiving || [])
+players
 .filter(p => hasReceivingStats(p.stats || {}))
 .forEach(p=>{
 
@@ -541,24 +549,21 @@ const s = p.stats || {};
 
 const row = `
 <tr>
-
 <td class="team">
 <a class="player-link"
 href="nfl-player.html?player=${slugify(p.player)}">
 ${p.player}
 </a>
 </td>
-
 <td>${s.team || ""}</td>
 <td>${s.rec || ""}</td>
 <td>${s.rec_yds || ""}</td>
 <td>${s.rec_td || ""}</td>
 <td>${s.rec_long || ""}</td>
-
 </tr>
 `;
 
-if(s.team === receivingTeam1Code){
+if(s.team === team1Code){
 receivingHTML1 += row;
 }else{
 receivingHTML2 += row;
