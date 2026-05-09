@@ -49,18 +49,14 @@ TEAM_MAP = {
     "WAS":"Washington Nationals"
 }
 
-def team_name(name):
+def clean_team(name):
     return TEAM_MAP.get(name, name)
-
-# ---------------------------------------------------
-# FIX SINGLE GAME
-# ---------------------------------------------------
 
 def repair_game(game):
 
-    # ---------------------------------
-    # FIX TEAM STRUCTURE
-    # ---------------------------------
+    # -----------------------------
+    # TEAM FIXES
+    # -----------------------------
 
     if isinstance(game.get("home_team"), dict):
 
@@ -78,66 +74,56 @@ def repair_game(game):
         game["away_team"] = at.get("name", "")
         game["away_score"] = at.get("score", 0)
 
-    game["home_team"] = team_name(game.get("home_team"))
-    game["away_team"] = team_name(game.get("away_team"))
+    game["home_team"] = clean_team(game.get("home_team"))
+    game["away_team"] = clean_team(game.get("away_team"))
 
-    # ---------------------------------
-    # FORCE SCORES
-    # ---------------------------------
+    # -----------------------------
+    # SCORE FIX
+    # -----------------------------
 
     home_score = 0
     away_score = 0
 
-    try:
+    plays = (
+        game.get("liveData", {})
+        .get("plays", {})
+        .get("allPlays", [])
+    )
 
-        plays = (
-            game.get("liveData", {})
-            .get("plays", {})
-            .get("allPlays", [])
-        )
+    # WALK THROUGH ENTIRE GAME
+    # KEEP HIGHEST SCORE FOUND
 
-        if plays:
+    for play in plays:
 
-            # ---------------------------------
-            # WALK BACKWARDS THROUGH ALL PLAYS
-            # ---------------------------------
+        result = play.get("result", {})
 
-            for play in reversed(plays):
+        hs = result.get("homeScore")
+        aw = result.get("awayScore")
 
-                result = play.get("result", {})
+        if isinstance(hs, int):
+            if hs > home_score:
+                home_score = hs
 
-                hs = result.get("homeScore")
-                aw = result.get("awayScore")
+        if isinstance(aw, int):
+            if aw > away_score:
+                away_score = aw
 
-                if hs is not None or aw is not None:
+        # ALSO CHECK PLAY EVENTS
 
-                    if hs > home_score:
-                        home_score = hs
+        for ev in play.get("playEvents", []):
 
-                    if aw > away_score:
-                        away_score = aw
+            details = ev.get("details", {})
 
-                # ---------------------------------
-                # ALSO CHECK PLAY EVENTS
-                # ---------------------------------
+            hs = details.get("homeScore")
+            aw = details.get("awayScore")
 
-                for ev in play.get("playEvents", []):
+            if isinstance(hs, int):
+                if hs > home_score:
+                    home_score = hs
 
-                    details = ev.get("details", {})
-
-                    hs = details.get("homeScore")
-                    aw = details.get("awayScore")
-
-                    if hs is not None or aw is not None:
-
-                        if hs > home_score:
-                            home_score = hs
-
-                        if aw > away_score:
-                            away_score = aw
-
-    except Exception as e:
-        print("SCORE ERROR", e)
+            if isinstance(aw, int):
+                if aw > away_score:
+                    away_score = aw
 
     game["home_score"] = home_score
     game["away_score"] = away_score
@@ -156,7 +142,7 @@ for season in os.listdir(BOX_DIR):
     if not os.path.isdir(season_path):
         continue
 
-    print(f"\n--- FIXING BOXSCORES {season} ---")
+    print(f"\nFIXING BOXSCORES {season}")
 
     for file in glob(f"{season_path}/*.json"):
 
@@ -185,12 +171,12 @@ for file in glob(f"{SEASON_DIR}/*.json"):
 
         season = os.path.basename(file).replace(".json", "")
 
-        print(f"\n--- FIXING SEASON {season} ---")
+        print(f"\nFIXING SEASON {season}")
 
         with open(file, "r", encoding="utf-8") as f:
             games = json.load(f)
 
-        fixed_games = []
+        fixed = []
 
         for game in games:
 
@@ -208,10 +194,10 @@ for file in glob(f"{SEASON_DIR}/*.json"):
                 f"game={gid}&season={season}"
             )
 
-            fixed_games.append(game)
+            fixed.append(game)
 
         with open(file, "w", encoding="utf-8") as f:
-            json.dump(fixed_games, f, indent=2)
+            json.dump(fixed, f, indent=2)
 
         print("FIXED", file)
 
