@@ -58,9 +58,9 @@ def team_name(name):
 
 def repair_game(game):
 
-    # -----------------------------
-    # TEAM NAMES
-    # -----------------------------
+    # ---------------------------------
+    # FIX TEAM STRUCTURE
+    # ---------------------------------
 
     if isinstance(game.get("home_team"), dict):
 
@@ -81,57 +81,63 @@ def repair_game(game):
     game["home_team"] = team_name(game.get("home_team"))
     game["away_team"] = team_name(game.get("away_team"))
 
-    # -----------------------------
-    # FORCE SCORE FIELDS
-    # -----------------------------
+    # ---------------------------------
+    # FORCE SCORES
+    # ---------------------------------
 
     home_score = 0
     away_score = 0
 
-    # TRY LINESCORE
-
     try:
 
-        linescore = (
+        plays = (
             game.get("liveData", {})
-            .get("linescore", {})
-            .get("teams", {})
+            .get("plays", {})
+            .get("allPlays", [])
         )
 
-        if "home" in linescore:
-            home_score = linescore["home"].get("runs", 0)
+        if plays:
 
-        if "away" in linescore:
-            away_score = linescore["away"].get("runs", 0)
+            # ---------------------------------
+            # WALK BACKWARDS THROUGH ALL PLAYS
+            # ---------------------------------
 
-    except:
-        pass
+            for play in reversed(plays):
 
-    # FALLBACK TO LAST PLAY
+                result = play.get("result", {})
 
-    if home_score == 0 and away_score == 0:
+                hs = result.get("homeScore")
+                aw = result.get("awayScore")
 
-        try:
+                if hs is not None or aw is not None:
 
-            plays = (
-                game.get("liveData", {})
-                .get("plays", {})
-                .get("allPlays", [])
-            )
+                    if hs > home_score:
+                        home_score = hs
 
-            if plays:
+                    if aw > away_score:
+                        away_score = aw
 
-                last_play = plays[-1]
+                # ---------------------------------
+                # ALSO CHECK PLAY EVENTS
+                # ---------------------------------
 
-                result = last_play.get("result", {})
+                for ev in play.get("playEvents", []):
 
-                home_score = result.get("homeScore", 0)
-                away_score = result.get("awayScore", 0)
+                    details = ev.get("details", {})
 
-        except:
-            pass
+                    hs = details.get("homeScore")
+                    aw = details.get("awayScore")
 
-    # FORCE WRITE
+                    if hs is not None or aw is not None:
+
+                        if hs > home_score:
+                            home_score = hs
+
+                        if aw > away_score:
+                            away_score = aw
+
+    except Exception as e:
+        print("SCORE ERROR", e)
 
     game["home_score"] = home_score
     game["away_score"] = away_score
@@ -149,6 +155,8 @@ for season in os.listdir(BOX_DIR):
 
     if not os.path.isdir(season_path):
         continue
+
+    print(f"\n--- FIXING BOXSCORES {season} ---")
 
     for file in glob(f"{season_path}/*.json"):
 
@@ -175,16 +183,18 @@ for file in glob(f"{SEASON_DIR}/*.json"):
 
     try:
 
+        season = os.path.basename(file).replace(".json", "")
+
+        print(f"\n--- FIXING SEASON {season} ---")
+
         with open(file, "r", encoding="utf-8") as f:
             games = json.load(f)
 
-        fixed = []
+        fixed_games = []
 
         for game in games:
 
             game = repair_game(game)
-
-            season = os.path.basename(file).replace(".json", "")
 
             gid = (
                 game.get("game_id")
@@ -198,14 +208,14 @@ for file in glob(f"{SEASON_DIR}/*.json"):
                 f"game={gid}&season={season}"
             )
 
-            fixed.append(game)
+            fixed_games.append(game)
 
         with open(file, "w", encoding="utf-8") as f:
-            json.dump(fixed, f, indent=2)
+            json.dump(fixed_games, f, indent=2)
 
         print("FIXED", file)
 
     except Exception as e:
         print("FAILED", file, e)
 
-print("DONE")
+print("\nDONE")
