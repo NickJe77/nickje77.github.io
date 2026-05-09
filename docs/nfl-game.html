@@ -191,16 +191,13 @@ Loading...
 <h2>Final Score</h2>
 
 <table>
-
 <thead>
 <tr>
 <th class="team">Team</th>
 <th>Final</th>
 </tr>
 </thead>
-
 <tbody id="scoreTable"></tbody>
-
 </table>
 
 <h2>Passing</h2>
@@ -356,63 +353,14 @@ return String(name || "")
 
 }
 
-function val(...items){
+function makePlayerLink(name){
 
-for(const x of items){
-
-if(x !== undefined && x !== null && x !== ""){
-return x;
-}
-
-}
-
-return "";
-
-}
-
-function getPlayerTeam(p){
-
-const s = p.stats || p;
-
-return val(
-s.team,
-p.team,
-""
-);
-
-}
-
-function playerName(p){
-
-return val(
-p.player,
-p.name,
-"Unknown Player"
-);
-
-}
-
-function hasPassingStats(p){
-
-const s = p.stats || p;
-
-return Number(s.pass_att || 0) > 0;
-
-}
-
-function hasRushingStats(p){
-
-const s = p.stats || p;
-
-return Number(s.rush_att || 0) > 0;
-
-}
-
-function hasReceivingStats(p){
-
-const s = p.stats || p;
-
-return Number(s.rec || 0) > 0;
+return `
+<a class="player-link"
+href="nfl-player.html?player=${slugify(name)}">
+${name}
+</a>
+`;
 
 }
 
@@ -424,17 +372,6 @@ return `
 No stats listed
 </td>
 </tr>
-`;
-
-}
-
-function makePlayerLink(name){
-
-return `
-<a class="player-link"
-href="nfl-player.html?player=${slugify(name)}">
-${name}
-</a>
 `;
 
 }
@@ -469,17 +406,32 @@ await fetch(`/data/nfl/boxscores/${season}/${gameID}.json?v=${Date.now()}`);
 
 const box = await boxRes.json();
 
-const team1 = game.team1;
-const team2 = game.team2;
+const team1 =
+game.team1 ||
+game.home_team ||
+game.home;
+
+const team2 =
+game.team2 ||
+game.away_team ||
+game.away;
 
 const team1Code =
-TEAM_MAP[team1] || "";
+TEAM_MAP[team1] ||
+game.team1_code ||
+game.home_code ||
+game.home_team_code ||
+"";
 
 const team2Code =
-TEAM_MAP[team2] || "";
+TEAM_MAP[team2] ||
+game.team2_code ||
+game.away_code ||
+game.away_team_code ||
+"";
 
-const score1 = parseInt(game.score1 || 0);
-const score2 = parseInt(game.score2 || 0);
+const score1 = parseInt(game.score1 || game.home_score || 0);
+const score2 = parseInt(game.score2 || game.away_score || 0);
 
 let winner, loser, ws, ls;
 
@@ -502,7 +454,10 @@ ls = score1;
 document.getElementById("heroScore").innerHTML =
 `${winner} ${ws} — ${ls} ${loser}`;
 
-let roundText = game.week || "";
+let roundText =
+game.week ||
+game.round ||
+"";
 
 const lowerRound =
 String(roundText).toLowerCase();
@@ -545,56 +500,46 @@ document.getElementById("rushingTeam2").innerText = team2;
 document.getElementById("receivingTeam1").innerText = team1;
 document.getElementById("receivingTeam2").innerText = team2;
 
-/* IMPORTANT */
-/* YOUR JSON STORES EVERYTHING IN PASSING */
+/* EVERYTHING IS STORED IN PASSING */
 
-const passing = [
-...(box.passing || [])
-];
-
-const rushing = [
-...(box.passing || [])
-];
-
-const receiving = [
-...(box.passing || [])
-];
+const players = box.passing || [];
 
 /* PASSING */
 
 let passingHTML1 = "";
 let passingHTML2 = "";
 
-passing
-.filter(hasPassingStats)
-.forEach(p=>{
+players.forEach(p=>{
 
-const s = p.stats || p;
+const s = p.stats || {};
+
+if(Number(s.pass_att || 0) <= 0) return;
 
 const row = `
 <tr>
-
 <td class="team">
-${makePlayerLink(playerName(p))}
+${makePlayerLink(p.player)}
 </td>
-
 <td>${s.pass_cmp || ""}</td>
 <td>${s.pass_att || ""}</td>
 <td>${s.pass_yds || ""}</td>
 <td>${s.pass_td || ""}</td>
 <td>${s.pass_int || ""}</td>
 <td>${s.pass_rating || ""}</td>
-
 </tr>
 `;
 
-const team = getPlayerTeam(p);
-
-if(team === team1Code){
+if(
+s.team === team1Code ||
+s.team === team1
+){
 passingHTML1 += row;
 }
 
-if(team === team2Code){
+if(
+s.team === team2Code ||
+s.team === team2
+){
 passingHTML2 += row;
 }
 
@@ -611,34 +556,35 @@ passingHTML2 || emptyRow(7);
 let rushingHTML1 = "";
 let rushingHTML2 = "";
 
-rushing
-.filter(hasRushingStats)
-.forEach(p=>{
+players.forEach(p=>{
 
-const s = p.stats || p;
+const s = p.stats || {};
+
+if(Number(s.rush_att || 0) <= 0) return;
 
 const row = `
 <tr>
-
 <td class="team">
-${makePlayerLink(playerName(p))}
+${makePlayerLink(p.player)}
 </td>
-
 <td>${s.rush_att || ""}</td>
 <td>${s.rush_yds || ""}</td>
 <td>${s.rush_td || ""}</td>
 <td>${s.rush_long || ""}</td>
-
 </tr>
 `;
 
-const team = getPlayerTeam(p);
-
-if(team === team1Code){
+if(
+s.team === team1Code ||
+s.team === team1
+){
 rushingHTML1 += row;
 }
 
-if(team === team2Code){
+if(
+s.team === team2Code ||
+s.team === team2
+){
 rushingHTML2 += row;
 }
 
@@ -655,34 +601,35 @@ rushingHTML2 || emptyRow(5);
 let receivingHTML1 = "";
 let receivingHTML2 = "";
 
-receiving
-.filter(hasReceivingStats)
-.forEach(p=>{
+players.forEach(p=>{
 
-const s = p.stats || p;
+const s = p.stats || {};
+
+if(Number(s.rec || 0) <= 0) return;
 
 const row = `
 <tr>
-
 <td class="team">
-${makePlayerLink(playerName(p))}
+${makePlayerLink(p.player)}
 </td>
-
 <td>${s.rec || ""}</td>
 <td>${s.rec_yds || ""}</td>
 <td>${s.rec_td || ""}</td>
 <td>${s.rec_long || ""}</td>
-
 </tr>
 `;
 
-const team = getPlayerTeam(p);
-
-if(team === team1Code){
+if(
+s.team === team1Code ||
+s.team === team1
+){
 receivingHTML1 += row;
 }
 
-if(team === team2Code){
+if(
+s.team === team2Code ||
+s.team === team2
+){
 receivingHTML2 += row;
 }
 
