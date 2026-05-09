@@ -110,7 +110,7 @@ for file in season_files:
         for game in data:
 
             # ----------------------------------------
-            # CONVERT NESTED TEAM STRUCTURE
+            # FLATTEN TEAM STRUCTURE
             # ----------------------------------------
 
             if isinstance(game.get("home_team"), dict):
@@ -143,25 +143,35 @@ for file in season_files:
             if "away_score" not in game:
                 game["away_score"] = 0
 
+            # TRY LINESCORE FIRST
+
             linescore = game.get("liveData", {}).get("linescore", {})
             teams = linescore.get("teams", {})
 
             home = teams.get("home", {})
             away = teams.get("away", {})
 
-            if "runs" in home:
+            if isinstance(home, dict) and "runs" in home:
                 game["home_score"] = home["runs"]
 
-            if "runs" in away:
+            if isinstance(away, dict) and "runs" in away:
                 game["away_score"] = away["runs"]
 
-            # FALLBACK FROM PLAYS
+            # FALLBACK TO LAST PLAY SCORE
 
             if game["home_score"] == 0 and game["away_score"] == 0:
 
-                for play in game.get("liveData", {}).get("plays", {}).get("allPlays", []):
+                all_plays = (
+                    game.get("liveData", {})
+                    .get("plays", {})
+                    .get("allPlays", [])
+                )
 
-                    result = play.get("result", {})
+                if all_plays:
+
+                    last_play = all_plays[-1]
+
+                    result = last_play.get("result", {})
 
                     hs = result.get("homeScore")
                     aws = result.get("awayScore")
@@ -265,7 +275,7 @@ for season in os.listdir(BOXSCORE_DIR):
             changed = False
 
             # ----------------------------------------
-            # FLATTEN NESTED TEAMS
+            # FLATTEN TEAM STRUCTURE
             # ----------------------------------------
 
             if isinstance(game.get("home_team"), dict):
@@ -298,25 +308,35 @@ for season in os.listdir(BOXSCORE_DIR):
             if "away_score" not in game:
                 game["away_score"] = 0
 
+            # TRY LINESCORE FIRST
+
             linescore = game.get("liveData", {}).get("linescore", {})
             teams = linescore.get("teams", {})
 
             home = teams.get("home", {})
             away = teams.get("away", {})
 
-            if "runs" in home:
+            if isinstance(home, dict) and "runs" in home:
                 game["home_score"] = home["runs"]
 
-            if "runs" in away:
+            if isinstance(away, dict) and "runs" in away:
                 game["away_score"] = away["runs"]
 
-            # FALLBACK FROM PLAYS
+            # FALLBACK TO LAST PLAY SCORE
 
             if game["home_score"] == 0 and game["away_score"] == 0:
 
-                for play in game.get("liveData", {}).get("plays", {}).get("allPlays", []):
+                all_plays = (
+                    game.get("liveData", {})
+                    .get("plays", {})
+                    .get("allPlays", [])
+                )
 
-                    result = play.get("result", {})
+                if all_plays:
+
+                    last_play = all_plays[-1]
+
+                    result = last_play.get("result", {})
 
                     hs = result.get("homeScore")
                     aws = result.get("awayScore")
@@ -337,7 +357,7 @@ for season in os.listdir(BOXSCORE_DIR):
             )
 
             # ----------------------------------------
-            # TEAM FIXES
+            # TEAM NAMES
             # ----------------------------------------
 
             for field in [
@@ -350,7 +370,7 @@ for season in os.listdir(BOXSCORE_DIR):
                     game[field] = clean_team(game[field])
 
             # ----------------------------------------
-            # VENUE FIX
+            # VENUE
             # ----------------------------------------
 
             if "venue" in game:
