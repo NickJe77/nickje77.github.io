@@ -191,6 +191,7 @@ Loading...
 <h2>Final Score</h2>
 
 <table>
+
 <thead>
 <tr>
 <th class="team">Team</th>
@@ -369,49 +370,14 @@ return "";
 
 }
 
-function num(x){
-
-const n = Number(x);
-
-return Number.isFinite(n) ? n : 0;
-
-}
-
-function normalTeam(t){
-
-t = String(t || "").trim();
-
-return TEAM_MAP[t] || t;
-
-}
-
 function getPlayerTeam(p){
 
-const s =
-p.stats ||
-p.statistics ||
-p;
+const s = p.stats || p;
 
-return normalTeam(
-val(
-
-p.team,
-p.team_code,
-p.teamCode,
-p.played_for,
-p.playedFor,
-p.tm,
-p.team_abbr,
-
+return val(
 s.team,
-s.team_code,
-s.teamCode,
-s.played_for,
-s.playedFor,
-s.tm,
-s.team_abbr
-
-)
+p.team,
+""
 );
 
 }
@@ -421,59 +387,32 @@ function playerName(p){
 return val(
 p.player,
 p.name,
-p.player_name,
-p.playerName
+"Unknown Player"
 );
 
 }
 
 function hasPassingStats(p){
 
-const s =
-p.stats ||
-p.statistics ||
-p;
+const s = p.stats || p;
 
-return Number(
-s.pass_att ??
-s.pass_attempts ??
-s.att ??
-s.attempts ??
-0
-) > 0;
+return Number(s.pass_att || 0) > 0;
 
 }
 
 function hasRushingStats(p){
 
-const s =
-p.stats ||
-p.statistics ||
-p;
+const s = p.stats || p;
 
-return Number(
-s.rush_att ??
-s.rushing_att ??
-s.carries ??
-s.att ??
-0
-) > 0;
+return Number(s.rush_att || 0) > 0;
 
 }
 
 function hasReceivingStats(p){
 
-const s =
-p.stats ||
-p.statistics ||
-p;
+const s = p.stats || p;
 
-return Number(
-s.rec ??
-s.receptions ??
-s.targets ??
-0
-) > 0;
+return Number(s.rec || 0) > 0;
 
 }
 
@@ -513,9 +452,7 @@ seasonData ||
 [];
 
 const game = games.find(
-g => String(
-val(g.game_id,g.id,g.game)
-) === String(gameID)
+g => String(g.game_id) === String(gameID)
 );
 
 if(!game){
@@ -532,29 +469,17 @@ await fetch(`/data/nfl/boxscores/${season}/${gameID}.json?v=${Date.now()}`);
 
 const box = await boxRes.json();
 
-const team1 =
-val(game.team1,game.home_team,game.home);
-
-const team2 =
-val(game.team2,game.away_team,game.away);
+const team1 = game.team1;
+const team2 = game.team2;
 
 const team1Code =
-TEAM_MAP[team1] || team1;
+TEAM_MAP[team1] || "";
 
 const team2Code =
-TEAM_MAP[team2] || team2;
+TEAM_MAP[team2] || "";
 
-const score1 =
-parseInt(
-val(game.score1,game.home_score,0),
-10
-);
-
-const score2 =
-parseInt(
-val(game.score2,game.away_score,0),
-10
-);
+const score1 = parseInt(game.score1 || 0);
+const score2 = parseInt(game.score2 || 0);
 
 let winner, loser, ws, ls;
 
@@ -577,8 +502,7 @@ ls = score1;
 document.getElementById("heroScore").innerHTML =
 `${winner} ${ws} — ${ls} ${loser}`;
 
-let roundText =
-val(game.week,game.round,"");
+let roundText = game.week || "";
 
 const lowerRound =
 String(roundText).toLowerCase();
@@ -612,42 +536,28 @@ document.getElementById("scoreTable").innerHTML = `
 </tr>
 `;
 
-document.getElementById("passingTeam1").innerText =
-team1;
+document.getElementById("passingTeam1").innerText = team1;
+document.getElementById("passingTeam2").innerText = team2;
 
-document.getElementById("passingTeam2").innerText =
-team2;
+document.getElementById("rushingTeam1").innerText = team1;
+document.getElementById("rushingTeam2").innerText = team2;
 
-document.getElementById("rushingTeam1").innerText =
-team1;
-
-document.getElementById("rushingTeam2").innerText =
-team2;
-
-document.getElementById("receivingTeam1").innerText =
-team1;
-
-document.getElementById("receivingTeam2").innerText =
-team2;
+document.getElementById("receivingTeam1").innerText = team1;
+document.getElementById("receivingTeam2").innerText = team2;
 
 /* IMPORTANT */
-/* USE MERGED PLAYER ARRAYS */
-/* THIS FIXES OLD + NEW JSON */
+/* YOUR JSON STORES EVERYTHING IN PASSING */
 
 const passing = [
 ...(box.passing || [])
 ];
 
 const rushing = [
-...(box.rushing || []),
-...(box.players || []),
-...(box.player_stats || [])
+...(box.passing || [])
 ];
 
 const receiving = [
-...(box.receiving || []),
-...(box.players || []),
-...(box.player_stats || [])
+...(box.passing || [])
 ];
 
 /* PASSING */
@@ -659,64 +569,32 @@ passing
 .filter(hasPassingStats)
 .forEach(p=>{
 
-const s =
-p.stats ||
-p.statistics ||
-p;
-
-const name = playerName(p);
+const s = p.stats || p;
 
 const row = `
 <tr>
 
 <td class="team">
-${makePlayerLink(name)}
+${makePlayerLink(playerName(p))}
 </td>
 
-<td>${val(
-s.pass_cmp,
-s.cmp,
-s.completed
-)}</td>
-
-<td>${val(
-s.pass_att,
-s.pass_attempts,
-s.att
-)}</td>
-
-<td>${val(
-s.pass_yds,
-s.yards,
-s.yds
-)}</td>
-
-<td>${val(
-s.pass_td,
-s.td
-)}</td>
-
-<td>${val(
-s.pass_int,
-s.int
-)}</td>
-
-<td>${val(
-s.pass_rating,
-s.rating,
-s.rtg
-)}</td>
+<td>${s.pass_cmp || ""}</td>
+<td>${s.pass_att || ""}</td>
+<td>${s.pass_yds || ""}</td>
+<td>${s.pass_td || ""}</td>
+<td>${s.pass_int || ""}</td>
+<td>${s.pass_rating || ""}</td>
 
 </tr>
 `;
 
 const team = getPlayerTeam(p);
 
-if(team === team1Code || team === team1){
+if(team === team1Code){
 passingHTML1 += row;
 }
 
-if(team === team2Code || team === team2){
+if(team === team2Code){
 passingHTML2 += row;
 }
 
@@ -737,56 +615,30 @@ rushing
 .filter(hasRushingStats)
 .forEach(p=>{
 
-const s =
-p.stats ||
-p.statistics ||
-p;
-
-const name = playerName(p);
+const s = p.stats || p;
 
 const row = `
 <tr>
 
 <td class="team">
-${makePlayerLink(name)}
+${makePlayerLink(playerName(p))}
 </td>
 
-<td>${val(
-s.rush_att,
-s.rushing_att,
-s.carries,
-s.att
-)}</td>
-
-<td>${val(
-s.rush_yds,
-s.rushing_yds,
-s.yards,
-s.yds
-)}</td>
-
-<td>${val(
-s.rush_td,
-s.rushing_td,
-s.td
-)}</td>
-
-<td>${val(
-s.rush_long,
-s.long,
-s.lng
-)}</td>
+<td>${s.rush_att || ""}</td>
+<td>${s.rush_yds || ""}</td>
+<td>${s.rush_td || ""}</td>
+<td>${s.rush_long || ""}</td>
 
 </tr>
 `;
 
 const team = getPlayerTeam(p);
 
-if(team === team1Code || team === team1){
+if(team === team1Code){
 rushingHTML1 += row;
 }
 
-if(team === team2Code || team === team2){
+if(team === team2Code){
 rushingHTML2 += row;
 }
 
@@ -807,54 +659,30 @@ receiving
 .filter(hasReceivingStats)
 .forEach(p=>{
 
-const s =
-p.stats ||
-p.statistics ||
-p;
-
-const name = playerName(p);
+const s = p.stats || p;
 
 const row = `
 <tr>
 
 <td class="team">
-${makePlayerLink(name)}
+${makePlayerLink(playerName(p))}
 </td>
 
-<td>${val(
-s.rec,
-s.receptions
-)}</td>
-
-<td>${val(
-s.rec_yds,
-s.receiving_yds,
-s.yards,
-s.yds
-)}</td>
-
-<td>${val(
-s.rec_td,
-s.receiving_td,
-s.td
-)}</td>
-
-<td>${val(
-s.rec_long,
-s.long,
-s.lng
-)}</td>
+<td>${s.rec || ""}</td>
+<td>${s.rec_yds || ""}</td>
+<td>${s.rec_td || ""}</td>
+<td>${s.rec_long || ""}</td>
 
 </tr>
 `;
 
 const team = getPlayerTeam(p);
 
-if(team === team1Code || team === team1){
+if(team === team1Code){
 receivingHTML1 += row;
 }
 
-if(team === team2Code || team === team2){
+if(team === team2Code){
 receivingHTML2 += row;
 }
 
