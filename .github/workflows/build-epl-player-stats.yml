@@ -1,0 +1,136 @@
+name: Build EPL Player Stats
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-player-stats:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: |
+          pip install pandas requests beautifulsoup4 lxml
+
+      - name: Build player-stats.json
+        run: |
+
+          cat > build_player_stats.py << 'PYTHON'
+
+          import json
+          import os
+          import pandas as pd
+
+          BASE_DIR = "docs/data/epl"
+
+          os.makedirs(BASE_DIR, exist_ok=True)
+
+          OUTPUT_FILE = f"{BASE_DIR}/player-stats.json"
+
+          seasons = []
+
+          for year in range(1992, 2026):
+
+              start = year
+              end = str(year + 1)[-2:]
+
+              season = f"{start}-{end}"
+
+              seasons.append(season)
+
+          all_players = []
+
+          for season in seasons:
+
+              print(f"Processing {season}")
+
+              url = f"https://raw.githubusercontent.com/understat/understat-data/master/league/EPL/{season}.csv"
+
+              try:
+
+                  df = pd.read_csv(url)
+
+              except Exception as e:
+
+                  print(f"FAILED: {season}")
+                  print(e)
+                  continue
+
+              for _, row in df.iterrows():
+
+                  player = str(
+                      row.get("player_name", "")
+                  ).strip()
+
+                  if not player:
+                      continue
+
+                  team = str(
+                      row.get("team_title", "")
+                  ).strip()
+
+                  goals = int(
+                      row.get("goals", 0)
+                  )
+
+                  assists = int(
+                      row.get("assists", 0)
+                  )
+
+                  apps = int(
+                      row.get("games", 0)
+                  )
+
+                  minutes = int(
+                      row.get("time", 0)
+                  )
+
+                  all_players.append({
+
+                      "player": player,
+
+                      "team": team,
+
+                      "season": season,
+
+                      "goals": goals,
+
+                      "assists": assists,
+
+                      "appearances": apps,
+
+                      "minutes": minutes
+
+                  })
+
+          with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+              json.dump(all_players, f, indent=2, ensure_ascii=False)
+
+          print(f"Built {OUTPUT_FILE}")
+          print(f"Rows: {len(all_players)}")
+
+          PYTHON
+
+          python3 build_player_stats.py
+
+      - name: Commit player-stats.json
+        run: |
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add docs/data/epl/player-stats.json
+
+          git commit -m "Build EPL player-stats.json" || echo "No changes"
+
+          git push
