@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>EPL Season | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+
+body{
+    margin:0;
+    font-family:Inter,system-ui,Arial,sans-serif;
+    background:#f3f4f7;
+    color:#111;
+}
+
+.navbar{
+    display:flex;
+    justify-content:center;
+    gap:24px;
+    padding:16px;
+    background:white;
+    border-bottom:1px solid #ddd;
+    flex-wrap:wrap;
+}
+
+.navbar a{
+    text-decoration:none;
+    color:#0056d6;
+    font-weight:600;
+}
+
+.hero{
+    background:linear-gradient(135deg,#37003c,#963cff);
+    color:white;
+    padding:50px 20px;
+    text-align:center;
+}
+
+.hero h1{
+    margin:0;
+    font-size:48px;
+    font-weight:800;
+}
+
+.hero p{
+    margin-top:10px;
+    font-size:18px;
+    opacity:.95;
+}
+
+.container{
+    max-width:1400px;
+    margin:30px auto;
+    padding:0 20px;
+}
+
+.controls{
+    display:flex;
+    gap:16px;
+    flex-wrap:wrap;
+    margin-bottom:24px;
+}
+
+.controls select{
+    padding:12px 14px;
+    border-radius:10px;
+    border:1px solid #ddd;
+    font-size:15px;
+    background:white;
+}
+
+.card{
+    background:white;
+    border-radius:16px;
+    padding:20px;
+    box-shadow:0 3px 10px rgba(0,0,0,.08);
+}
+
+.section-title{
+    margin-top:0;
+    margin-bottom:20px;
+    font-size:28px;
+}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+}
+
+th{
+    background:#37003c;
+    color:white;
+    padding:12px;
+    font-size:14px;
+    text-align:center;
+}
+
+td{
+    padding:12px;
+    border-bottom:1px solid #eee;
+    text-align:center;
+    font-size:14px;
+}
+
+tr:nth-child(even){
+    background:#f7f9fc;
+}
+
+.match-row{
+    cursor:pointer;
+    transition:.15s ease;
+}
+
+.match-row:hover{
+    background:#e8f0ff !important;
+}
+
+.team-link{
+    color:#0056d6;
+    text-decoration:none;
+    font-weight:600;
+}
+
+.loading{
+    text-align:center;
+    padding:40px;
+    color:#666;
+    font-size:18px;
+}
+
+@media(max-width:900px){
+
+table{
+    font-size:12px;
+}
+
+th,td{
+    padding:8px;
+}
+
+.hero h1{
+    font-size:34px;
+}
+
+}
+
+</style>
+</head>
+<body>
+
+<div class="navbar">
+    <a href="/">Home</a>
+    <a href="/epl.html">EPL</a>
+    <a href="/nba.html">NBA</a>
+    <a href="/afl.html">AFL</a>
+    <a href="/baseball.html">Baseball</a>
+</div>
+
+<div class="hero">
+    <h1 id="seasonTitle">Loading...</h1>
+    <p>Premier League fixtures, scores and results</p>
+</div>
+
+<div class="container">
+
+    <div class="controls">
+        <select id="teamFilter">
+            <option value="">All Teams</option>
+        </select>
+
+        <select id="roundFilter">
+            <option value="">All Rounds</option>
+        </select>
+    </div>
+
+    <div class="card">
+
+        <h2 class="section-title">Matches</h2>
+
+        <div id="matchesContainer" class="loading">
+            Loading matches...
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+
+const params = new URLSearchParams(window.location.search);
+
+const season = params.get("season") || "2025-2026";
+
+document.getElementById("seasonTitle").textContent = `${season} EPL Season`;
+
+const matchesContainer = document.getElementById("matchesContainer");
+const teamFilter = document.getElementById("teamFilter");
+const roundFilter = document.getElementById("roundFilter");
+
+let allMatches = [];
+
+async function loadSeason(){
+
+    try{
+
+        const response = await fetch(`/data/epl/seasons/${season}.json`);
+
+        allMatches = await response.json();
+
+        buildFilters();
+
+        renderMatches();
+
+    }catch(err){
+
+        console.error(err);
+
+        matchesContainer.innerHTML = `
+            <div class="loading">
+                Failed to load season data
+            </div>
+        `;
+
+    }
+
+}
+
+function buildFilters(){
+
+    const teams = new Set();
+    const rounds = new Set();
+
+    allMatches.forEach(match => {
+
+        if(match.home_team) teams.add(match.home_team);
+        if(match.away_team) teams.add(match.away_team);
+        if(match.round) rounds.add(match.round);
+
+    });
+
+    [...teams].sort().forEach(team => {
+
+        const option = document.createElement("option");
+        option.value = team;
+        option.textContent = team;
+
+        teamFilter.appendChild(option);
+
+    });
+
+    [...rounds].sort().forEach(round => {
+
+        const option = document.createElement("option");
+        option.value = round;
+        option.textContent = round;
+
+        roundFilter.appendChild(option);
+
+    });
+
+}
+
+function renderMatches(){
+
+    let filtered = [...allMatches];
+
+    const team = teamFilter.value;
+    const round = roundFilter.value;
+
+    if(team){
+
+        filtered = filtered.filter(match =>
+            match.home_team === team ||
+            match.away_team === team
+        );
+
+    }
+
+    if(round){
+
+        filtered = filtered.filter(match =>
+            match.round === round
+        );
+
+    }
+
+    filtered.sort((a,b) => new Date(b.date) - new Date(a.date));
+
+    let html = `
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Round</th>
+                    <th>Home</th>
+                    <th>Score</th>
+                    <th>Away</th>
+                    <th>Venue</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    filtered.forEach(match => {
+
+        html += `
+            <tr class="match-row"
+                onclick="window.location.href='/epl-game.html?match=${match.match_id}&season=${season}'">
+
+                <td>${match.date || ''}</td>
+
+                <td>${match.round || ''}</td>
+
+                <td>
+                    <a class="team-link"
+                       href="/epl-team.html?team=${encodeURIComponent(match.home_team)}"
+                       onclick="event.stopPropagation()">
+                       ${match.home_team || ''}
+                    </a>
+                </td>
+
+                <td>
+                    <strong>
+                        ${match.home_score ?? '-'}
+                        -
+                        ${match.away_score ?? '-'}
+                    </strong>
+                </td>
+
+                <td>
+                    <a class="team-link"
+                       href="/epl-team.html?team=${encodeURIComponent(match.away_team)}"
+                       onclick="event.stopPropagation()">
+                       ${match.away_team || ''}
+                    </a>
+                </td>
+
+                <td>${match.venue || ''}</td>
+
+            </tr>
+        `;
+
+    });
+
+    html += `
+            </tbody>
+        </table>
+    `;
+
+    matchesContainer.innerHTML = html;
+
+}
+
+teamFilter.addEventListener("change", renderMatches);
+roundFilter.addEventListener("change", renderMatches);
+
+loadSeason();
+
+</script>
+
+</body>
+</html>
