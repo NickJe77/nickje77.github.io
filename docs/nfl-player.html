@@ -233,7 +233,7 @@ decodeURIComponent(
 params.get("player") || ""
 );
 
-const player =
+const playerSlug =
 String(rawPlayer)
 .trim()
 .toLowerCase()
@@ -294,6 +294,8 @@ try{
 const res =
 await fetch("/data/nfl/players/index.json");
 
+if(!res.ok) return;
+
 const data =
 await res.json();
 
@@ -334,7 +336,7 @@ window.location =
 
 async function loadPlayer(){
 
-if(!player){
+if(!playerSlug){
 
 document.getElementById("loading").innerHTML =
 "Player not found";
@@ -343,18 +345,18 @@ return;
 
 }
 
+/* ONLY LOAD CURRENT SEASON FIRST */
+
 const currentYear =
 new Date().getFullYear();
 
-/* MASSIVE SPEED FIX */
-
-const years = [];
-
-for(let y=currentYear;y>=2020;y--){
-
-years.push(y);
-
-}
+const years = [
+currentYear,
+currentYear - 1,
+currentYear - 2,
+currentYear - 3,
+currentYear - 4
+];
 
 for(const y of years){
 
@@ -391,6 +393,8 @@ if(!boxRes.ok) continue;
 const box =
 await boxRes.json();
 
+/* CRITICAL FIX */
+
 const players = [
 
 ...(box.passing || []),
@@ -398,6 +402,8 @@ const players = [
 ...(box.receiving || [])
 
 ];
+
+if(!players.length) continue;
 
 const teams = [
 ...new Set(
@@ -409,10 +415,12 @@ players
 
 players.forEach(p=>{
 
-const slug =
-slugify(p.player || "");
+if(!p.player) return;
 
-if(slug !== player) return;
+const slug =
+slugify(p.player);
+
+if(slug !== playerSlug) return;
 
 const s = p.stats || {};
 
