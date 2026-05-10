@@ -201,53 +201,17 @@ const roundFilter = document.getElementById("roundFilter");
 
 let allMatches = [];
 
-async function fetchSeasonData() {
-
-    const paths = [
-
-        `/data/epl/seasons/${season}.json`,
-        `/data/epl/seasons/${season}/index.json`,
-        `/data/epl/seasons/${season}/season.json`
-
-    ];
-
-    for(const path of paths){
-
-        try{
-
-            const response = await fetch(path);
-
-            if(response.ok){
-
-                const data = await response.json();
-
-                if(Array.isArray(data)){
-
-                    console.log("Loaded season from:", path);
-
-                    return data;
-
-                }
-
-            }
-
-        }catch(err){
-
-            console.log("Failed path:", path);
-
-        }
-
-    }
-
-    throw new Error("No valid season JSON found");
-
-}
-
 async function loadSeason(){
 
     try{
 
-        allMatches = await fetchSeasonData();
+        const response = await fetch(`/data/epl/seasons/${season}.json`);
+
+        if(!response.ok){
+            throw new Error("Season JSON not found");
+        }
+
+        allMatches = await response.json();
 
         buildFilters();
 
@@ -260,8 +224,6 @@ async function loadSeason(){
         matchesContainer.innerHTML = `
             <div class="loading">
                 Failed to load season data
-                <br><br>
-                Check your season JSON path structure
             </div>
         `;
 
@@ -328,10 +290,15 @@ function renderMatches(){
 
     }
 
-    filtered.sort((a,b) => new Date(b.date) - new Date(a.date));
+    filtered.sort((a,b) => {
+
+        return new Date(b.date || 0) - new Date(a.date || 0);
+
+    });
 
     let html = `
         <table>
+
             <thead>
                 <tr>
                     <th>Date</th>
@@ -342,6 +309,7 @@ function renderMatches(){
                     <th>Venue</th>
                 </tr>
             </thead>
+
             <tbody>
     `;
 
