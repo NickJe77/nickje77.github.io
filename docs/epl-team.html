@@ -126,16 +126,6 @@ tr:nth-child(even){
 background:#f8fbff;
 }
 
-.game-link{
-color:#0056d6;
-font-weight:800;
-text-decoration:none;
-}
-
-.game-link:hover{
-text-decoration:underline;
-}
-
 .loading,
 .error{
 padding:100px 20px;
@@ -276,144 +266,54 @@ throw new Error("No team selected");
 
 }
 
+/*
+THIS VERSION USES players.json
+BECAUSE YOU DEFINITELY HAVE THAT FILE
+*/
+
 async function loadTeam(){
 
 try{
 
-/*
-TRY MULTIPLE POSSIBLE FILES
-*/
+const response =
+await fetch("/data/epl/players.json");
 
-const possibleFiles = [
-"/data/epl/epl.json",
-"/data/epl/games.json",
-"/data/epl/matches.json",
-"/data/epl/results.json",
-"/data/epl/seasons/epl.json"
-];
+if(!response.ok){
 
-let games = [];
-
-for(const file of possibleFiles){
-
-try{
-
-const response = await fetch(file);
-
-if(response.ok){
-
-games = await response.json();
-
-if(Array.isArray(games) && games.length > 0){
-
-console.log("Loaded:",file);
-break;
+throw new Error("players.json not found");
 
 }
 
-}
+const data =
+await response.json();
 
-}catch(err){
-
-console.log("Failed:",file);
-
-}
-
-}
-
-if(!games.length){
-
-throw new Error("No game data found");
-
-}
-
-const teamGames = games.filter(game=>{
-
-const home =
-game.home_team ||
-game.home ||
-game.HomeTeam;
-
-const away =
-game.away_team ||
-game.away ||
-game.AwayTeam;
-
-return home === team || away === team;
-
-});
+const teamPlayers =
+data.filter(player=>
+(player.team || "").trim() === team
+);
 
 const seasons = [...new Set(
 
-teamGames.map(game=>
-
-game.season ||
-game.year ||
-game.Season
-
+teamPlayers.map(player=>
+player.season
 ).filter(Boolean)
 
-)];
+)].sort();
 
 let goals = 0;
 
-teamGames.forEach(game=>{
+teamPlayers.forEach(player=>{
 
-const home =
-game.home_team ||
-game.home ||
-game.HomeTeam;
-
-const away =
-game.away_team ||
-game.away ||
-game.AwayTeam;
-
-const homeGoals =
-Number(
-game.home_score ||
-game.home_goals ||
-game.FTHG ||
-0
-);
-
-const awayGoals =
-Number(
-game.away_score ||
-game.away_goals ||
-game.FTAG ||
-0
-);
-
-if(home === team){
-
-goals += homeGoals;
-
-}
-
-if(away === team){
-
-goals += awayGoals;
-
-}
+goals += Number(player.goals || 0);
 
 });
 
-const recentGames =
-teamGames
-.sort((a,b)=>{
-
-const dateA = new Date(
-a.date || a.Date || 0
-);
-
-const dateB = new Date(
-b.date || b.Date || 0
-);
-
-return dateB - dateA;
-
-})
+const topPlayers =
+[...teamPlayers]
+.sort((a,b)=>
+Number(b.goals || 0) -
+Number(a.goals || 0)
+)
 .slice(0,20);
 
 page.innerHTML = `
@@ -466,7 +366,7 @@ ${goals}
 <div class="section">
 
 <div class="section-title">
-Recent Matches
+Top Goal Scorers
 </div>
 
 <table>
@@ -474,88 +374,53 @@ Recent Matches
 <thead>
 
 <tr>
-<th>Date</th>
+<th>Player</th>
+<th>Goals</th>
+<th>Assists</th>
+<th>Apps</th>
 <th>Season</th>
-<th>Match</th>
-<th>Score</th>
 </tr>
 
 </thead>
 
 <tbody>
 
-${recentGames.map(game=>{
-
-const home =
-game.home_team ||
-game.home ||
-game.HomeTeam ||
-"-";
-
-const away =
-game.away_team ||
-game.away ||
-game.AwayTeam ||
-"-";
-
-const homeGoals =
-game.home_score ||
-game.home_goals ||
-game.FTHG ||
-0;
-
-const awayGoals =
-game.away_score ||
-game.away_goals ||
-game.FTAG ||
-0;
-
-const gameId =
-game.id ||
-game.match_id ||
-game.game_id ||
-"";
-
-return `
+${topPlayers.map(player=>`
 
 <tr>
 
 <td>
-${game.date || game.Date || "-"}
-</td>
-
-<td>
-${game.season || game.year || game.Season || "-"}
-</td>
-
-<td>
-
 <a
-class="game-link"
-href="epl-game.html?game=${encodeURIComponent(gameId)}"
+href="epl-player.html?player=${encodeURIComponent(player.player)}"
+style="
+font-weight:800;
+color:#0056d6;
+text-decoration:none;
+"
 >
-
-${home}
-vs
-${away}
-
+${player.player || "-"}
 </a>
-
 </td>
 
 <td>
+${player.goals || 0}
+</td>
 
-${homeGoals}
--
-${awayGoals}
+<td>
+${player.assists || 0}
+</td>
 
+<td>
+${player.appearances || 0}
+</td>
+
+<td>
+${player.season || "-"}
 </td>
 
 </tr>
 
-`;
-
-}).join("")}
+`).join("")}
 
 </tbody>
 
@@ -575,6 +440,10 @@ page.innerHTML = `
 
 <div class="error">
 Failed To Load Team Data
+<br><br>
+Check that this file exists:
+<br>
+/data/epl/players.json
 </div>
 
 `;
