@@ -237,7 +237,6 @@ const player =
 String(rawPlayer)
 .trim()
 .toLowerCase()
-.replace(/%20/g," ")
 .replace(/[^a-z0-9]+/g,"-")
 .replace(/^-|-$/g,"");
 
@@ -247,8 +246,6 @@ String(name || "")
 .toLowerCase()
 .replace(/[^a-z0-9]+/g,"-")
 .replace(/^-|-$/g,"");
-
-let allGames = [];
 
 const TEAM_MAP = {
 "ARI":"Arizona Cardinals",
@@ -286,6 +283,8 @@ const TEAM_MAP = {
 "WAS":"Washington Commanders"
 };
 
+let allGames = [];
+
 /* PLAYER LIST */
 
 async function loadPlayers(){
@@ -293,9 +292,10 @@ async function loadPlayers(){
 try{
 
 const res =
-await fetch("/data/nfl/players/index.json?v="+Date.now());
+await fetch("/data/nfl/players/index.json");
 
-const data = await res.json();
+const data =
+await res.json();
 
 const dl =
 document.getElementById("players");
@@ -311,15 +311,13 @@ dl.appendChild(opt);
 
 });
 
-}catch(e){
+}catch(err){
 
-console.log(e);
-
-}
+console.log(err);
 
 }
 
-/* SEARCH */
+}
 
 document.getElementById("playerInput")
 .addEventListener("change",()=>{
@@ -332,19 +330,28 @@ window.location =
 
 });
 
-/* LOAD DATA */
+/* LOAD PLAYER */
 
-async function loadAllGames(){
+async function loadPlayer(){
 
-const startYear = 1970;
-const endYear = new Date().getFullYear();
+if(!player){
 
-for(let y=startYear;y<=endYear;y++){
+document.getElementById("loading").innerHTML =
+"Player not found";
+
+return;
+
+}
+
+const currentYear =
+new Date().getFullYear();
+
+for(let y=1970;y<=currentYear;y++){
 
 try{
 
 const seasonRes =
-await fetch(`/data/nfl/seasons/${y}.json?v=${Date.now()}`);
+await fetch(`/data/nfl/seasons/${y}.json`);
 
 if(!seasonRes.ok) continue;
 
@@ -367,7 +374,7 @@ g.id;
 if(!gameId) continue;
 
 const boxRes =
-await fetch(`/data/nfl/boxscores/${y}/${gameId}.json?v=${Date.now()}`);
+await fetch(`/data/nfl/boxscores/${y}/${gameId}.json`);
 
 if(!boxRes.ok) continue;
 
@@ -375,8 +382,7 @@ const box =
 await boxRes.json();
 
 const players =
-box.passing ||
-[];
+box.passing || [];
 
 const teams = [
 ...new Set(
@@ -387,6 +393,11 @@ players
 ];
 
 players.forEach(p=>{
+
+const slug =
+slugify(p.player || "");
+
+if(slug !== player) return;
 
 const s = p.stats || {};
 
@@ -435,31 +446,34 @@ td:Number(s.rec_td || 0)
 
 });
 
-}catch(e){
+}catch(err){
 
-console.log(e);
-
-}
-
-}
-
-}catch(e){
-
-console.log(e);
+console.log(err);
 
 }
 
 }
 
-buildPlayer();
+}catch(err){
+
+console.log(err);
 
 }
 
-/* BUILD PLAYER */
+}
 
-function buildPlayer(){
+buildPage();
 
-if(!player){
+}
+
+/* BUILD PAGE */
+
+function buildPage(){
+
+document.getElementById("loading").style.display =
+"none";
+
+if(!allGames.length){
 
 document.getElementById("playerName").innerText =
 "Player Not Found";
@@ -468,67 +482,26 @@ return;
 
 }
 
-const nameMatch = n => {
-
-const slug =
-String(n || "")
-.trim()
-.toLowerCase()
-.replace(/[^a-z0-9]+/g,"-")
-.replace(/^-|-$/g,"");
-
-return slug === player;
-
-};
-
-let games = [];
-
-allGames.forEach(g=>{
-
-if(nameMatch(g.player)){
-
-games.push(g);
-
-}
-
-});
-
-if(!games.length){
-
-document.getElementById("loading").style.display = "none";
+document.getElementById("content").style.display =
+"block";
 
 document.getElementById("playerName").innerText =
-"Player Not Found";
+allGames[0].player;
 
-return;
-
-}
-
-document.getElementById("loading").style.display = "none";
-document.getElementById("content").style.display = "block";
-
-document.getElementById("playerName").innerText =
-games[0].player;
-
-setupFilters(games);
-
-render(games);
+setupFilters();
+render();
 
 }
 
 /* FILTERS */
 
-function setupFilters(games){
+function setupFilters(){
 
-const teamSet = new Set();
-const oppSet = new Set();
+const teams =
+[...new Set(allGames.map(g=>g.team))];
 
-games.forEach(g=>{
-
-teamSet.add(g.team);
-oppSet.add(g.opponent);
-
-});
+const opps =
+[...new Set(allGames.map(g=>g.opponent))];
 
 const teamFilter =
 document.getElementById("teamFilter");
@@ -536,37 +509,28 @@ document.getElementById("teamFilter");
 const oppFilter =
 document.getElementById("oppFilter");
 
-teamFilter.innerHTML =
-`<option value="">All Teams</option>`;
-
-oppFilter.innerHTML =
-`<option value="">All Opponents</option>`;
-
-teamSet.forEach(t=>{
+teams.forEach(t=>{
 
 teamFilter.innerHTML +=
-`<option>${t}</option>`;
+`<option value="${t}">${t}</option>`;
 
 });
 
-oppSet.forEach(t=>{
+opps.forEach(t=>{
 
 oppFilter.innerHTML +=
-`<option>${t}</option>`;
+`<option value="${t}">${t}</option>`;
 
 });
 
-teamFilter.onchange =
-()=>render(games);
-
-oppFilter.onchange =
-()=>render(games);
+teamFilter.onchange = render;
+oppFilter.onchange = render;
 
 }
 
 /* RENDER */
 
-function render(games){
+function render(){
 
 const teamVal =
 document.getElementById("teamFilter").value;
@@ -577,13 +541,13 @@ document.getElementById("oppFilter").value;
 const table =
 document.getElementById("gamesTable");
 
-table.innerHTML="";
+table.innerHTML = "";
 
 let totals = {
 games:0,
 passY:0,
 passTD:0,
-int:0,
+ints:0,
 rushY:0,
 rushTD:0,
 recY:0,
@@ -591,64 +555,45 @@ recTD:0
 };
 
 let highs = {
-passY:{v:0},
-passTD:{v:0},
-rushY:{v:0},
-recY:{v:0}
+passY:0,
+passYGame:null,
+rushY:0,
+rushYGame:null,
+recY:0,
+recYGame:null
 };
 
-let records = {
-g300:0,
-multiPassTD:0,
-rush100:0,
-rec100:0
-};
-
-games.forEach(g=>{
+allGames.forEach(g=>{
 
 if(teamVal && g.team !== teamVal) return;
 if(oppVal && g.opponent !== oppVal) return;
 
 totals.games++;
-
 totals.passY += g.passing.yards;
 totals.passTD += g.passing.td;
-totals.int += g.passing.int;
-
+totals.ints += g.passing.int;
 totals.rushY += g.rushing.yards;
 totals.rushTD += g.rushing.td;
-
 totals.recY += g.receiving.yards;
 totals.recTD += g.receiving.td;
 
-if(g.passing.yards > highs.passY.v)
-highs.passY={v:g.passing.yards,g};
+if(g.passing.yards > highs.passY){
+highs.passY = g.passing.yards;
+highs.passYGame = g;
+}
 
-if(g.passing.td > highs.passTD.v)
-highs.passTD={v:g.passing.td,g};
+if(g.rushing.yards > highs.rushY){
+highs.rushY = g.rushing.yards;
+highs.rushYGame = g;
+}
 
-if(g.rushing.yards > highs.rushY.v)
-highs.rushY={v:g.rushing.yards,g};
+if(g.receiving.yards > highs.recY){
+highs.recY = g.receiving.yards;
+highs.recYGame = g;
+}
 
-if(g.receiving.yards > highs.recY.v)
-highs.recY={v:g.receiving.yards,g};
-
-if(g.passing.yards >= 300)
-records.g300++;
-
-if(g.passing.td >= 3)
-records.multiPassTD++;
-
-if(g.rushing.yards >= 100)
-records.rush100++;
-
-if(g.receiving.yards >= 100)
-records.rec100++;
-
-const tr =
-document.createElement("tr");
-
-tr.innerHTML = `
+table.innerHTML += `
+<tr>
 <td>${g.date}</td>
 <td>${g.team}</td>
 <td>${g.opponent}</td>
@@ -660,132 +605,82 @@ tr.innerHTML = `
 <td>${g.rushing.td}</td>
 <td>${g.receiving.yards}</td>
 <td>${g.receiving.td}</td>
+</tr>
 `;
 
-table.appendChild(tr);
-
 });
-
-renderSummary(totals);
-renderHighs(highs);
-renderRecords(records);
-
-}
-
-/* SUMMARY */
-
-function renderSummary(t){
-
-const avg =
-v => t.games ?
-(v/t.games).toFixed(1) :
-0;
 
 document.getElementById("summary").innerHTML = `
 
 <div class="box">
 <b>Games</b>
-${t.games}
+${totals.games}
 </div>
 
 <div class="box">
 <b>Pass Yards</b>
-${t.passY}<br>
-${avg(t.passY)} avg
+${totals.passY}
 </div>
 
 <div class="box">
 <b>Pass TD</b>
-${t.passTD}
+${totals.passTD}
 </div>
 
 <div class="box">
 <b>INT</b>
-${t.int}
+${totals.ints}
 </div>
 
 <div class="box">
 <b>Rush Yards</b>
-${t.rushY}
+${totals.rushY}
 </div>
 
 <div class="box">
 <b>Rec Yards</b>
-${t.recY}
+${totals.recY}
 </div>
 
 `;
-
-}
-
-/* HIGHS */
-
-function highBox(title,obj){
-
-if(!obj.g) return "";
-
-return `
-
-<div class="box">
-
-<b>${title}</b>
-
-${obj.v}
-
-<br>
-
-vs ${obj.g.opponent}
-
-<br>
-
-${obj.g.date}
-
-</div>
-
-`;
-
-}
-
-function renderHighs(h){
 
 document.getElementById("highs").innerHTML = `
 
-${highBox("Pass Yards",h.passY)}
+<div class="box">
+<b>Pass Yards</b>
+${highs.passY}
+${highs.passYGame ? `<br>vs ${highs.passYGame.opponent}<br>${highs.passYGame.date}` : ""}
+</div>
 
-${highBox("Pass TD",h.passTD)}
+<div class="box">
+<b>Rush Yards</b>
+${highs.rushY}
+${highs.rushYGame ? `<br>vs ${highs.rushYGame.opponent}<br>${highs.rushYGame.date}` : ""}
+</div>
 
-${highBox("Rush Yards",h.rushY)}
-
-${highBox("Rec Yards",h.recY)}
+<div class="box">
+<b>Rec Yards</b>
+${highs.recY}
+${highs.recYGame ? `<br>vs ${highs.recYGame.opponent}<br>${highs.recYGame.date}` : ""}
+</div>
 
 `;
-
-}
-
-/* RECORDS */
-
-function renderRecords(r){
 
 document.getElementById("records").innerHTML = `
 
 <div class="box">
-<b>300+ Passing</b>
-${r.g300}
+<b>300+ Passing Games</b>
+${allGames.filter(g=>g.passing.yards >= 300).length}
 </div>
 
 <div class="box">
-<b>3+ Pass TD</b>
-${r.multiPassTD}
+<b>100+ Rushing Games</b>
+${allGames.filter(g=>g.rushing.yards >= 100).length}
 </div>
 
 <div class="box">
-<b>100 Rush</b>
-${r.rush100}
-</div>
-
-<div class="box">
-<b>100 Rec</b>
-${r.rec100}
+<b>100+ Receiving Games</b>
+${allGames.filter(g=>g.receiving.yards >= 100).length}
 </div>
 
 `;
@@ -793,7 +688,7 @@ ${r.rec100}
 }
 
 loadPlayers();
-loadAllGames();
+loadPlayer();
 
 </script>
 
