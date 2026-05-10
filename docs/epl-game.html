@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>EPL Match | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+
+body{
+    margin:0;
+    font-family:Inter,system-ui,Arial,sans-serif;
+    background:#f3f4f7;
+    color:#111;
+}
+
+.navbar{
+    display:flex;
+    justify-content:center;
+    gap:24px;
+    padding:16px;
+    background:white;
+    border-bottom:1px solid #ddd;
+    flex-wrap:wrap;
+}
+
+.navbar a{
+    text-decoration:none;
+    color:#0056d6;
+    font-weight:600;
+}
+
+.hero{
+    background:linear-gradient(135deg,#37003c,#963cff);
+    color:white;
+    padding:60px 20px;
+    text-align:center;
+}
+
+.teams{
+    font-size:40px;
+    font-weight:800;
+    margin-bottom:12px;
+}
+
+.score{
+    font-size:64px;
+    font-weight:900;
+}
+
+.details{
+    margin-top:16px;
+    font-size:18px;
+    opacity:.95;
+}
+
+.container{
+    max-width:1400px;
+    margin:30px auto;
+    padding:0 20px;
+}
+
+.grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:24px;
+}
+
+.card{
+    background:white;
+    border-radius:16px;
+    padding:24px;
+    box-shadow:0 3px 10px rgba(0,0,0,.08);
+}
+
+.card h2{
+    margin-top:0;
+    margin-bottom:20px;
+    font-size:28px;
+}
+
+.event-list{
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+}
+
+.event{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    background:#f3f7fd;
+    padding:14px;
+    border-radius:10px;
+}
+
+.event:nth-child(even){
+    background:#e7efff;
+}
+
+.minute{
+    font-weight:800;
+    color:#37003c;
+}
+
+.player-link{
+    color:#0056d6;
+    text-decoration:none;
+    font-weight:700;
+}
+
+.team-link{
+    color:white;
+    text-decoration:none;
+}
+
+.loading{
+    text-align:center;
+    padding:50px;
+    font-size:18px;
+    color:#666;
+}
+
+.empty{
+    color:#666;
+    padding:12px 0;
+}
+
+.info-table{
+    width:100%;
+    border-collapse:collapse;
+}
+
+.info-table td{
+    padding:14px;
+    border-bottom:1px solid #eee;
+}
+
+.info-table td:first-child{
+    font-weight:700;
+    width:180px;
+}
+
+@media(max-width:900px){
+
+.grid{
+    grid-template-columns:1fr;
+}
+
+.teams{
+    font-size:28px;
+}
+
+.score{
+    font-size:46px;
+}
+
+}
+
+</style>
+</head>
+<body>
+
+<div class="navbar">
+    <a href="/">Home</a>
+    <a href="/epl.html">EPL</a>
+    <a href="/nba.html">NBA</a>
+    <a href="/afl.html">AFL</a>
+    <a href="/baseball.html">Baseball</a>
+</div>
+
+<div class="hero">
+
+    <div class="teams" id="teams">
+        Loading Match...
+    </div>
+
+    <div class="score" id="score"></div>
+
+    <div class="details" id="details"></div>
+
+</div>
+
+<div class="container">
+
+    <div id="content" class="loading">
+        Loading match...
+    </div>
+
+</div>
+
+<script>
+
+const params = new URLSearchParams(window.location.search);
+
+const matchId = params.get("match");
+const season = params.get("season");
+
+const teamsEl = document.getElementById("teams");
+const scoreEl = document.getElementById("score");
+const detailsEl = document.getElementById("details");
+
+const content = document.getElementById("content");
+
+function slugify(name){
+
+    return name
+        .toLowerCase()
+        .replace(/\./g,'')
+        .replace(/'/g,'')
+        .replace(/"/g,'')
+        .replace(/\s+/g,'-');
+
+}
+
+async function loadMatch(){
+
+    try{
+
+        const response = await fetch(`/data/epl/matches/${season}/${matchId}.json`);
+
+        if(!response.ok){
+            throw new Error("Match not found");
+        }
+
+        const match = await response.json();
+
+        renderMatch(match);
+
+    }catch(err){
+
+        console.error(err);
+
+        content.innerHTML = `
+            <div class="loading">
+                Failed to load match
+            </div>
+        `;
+
+    }
+
+}
+
+function renderEvents(events, label){
+
+    if(!events || !events.length){
+
+        return `
+            <div class="empty">
+                No ${label}
+            </div>
+        `;
+
+    }
+
+    return `
+        <div class="event-list">
+
+            ${events.map(event => `
+
+                <div class="event">
+
+                    <div>
+
+                        <a class="player-link"
+                           href="/epl-player.html?player=${slugify(event.player)}">
+
+                           ${event.player || ''}
+
+                        </a>
+
+                        ${event.penalty ? ' (P)' : ''}
+                        ${event.own_goal ? ' (OG)' : ''}
+
+                    </div>
+
+                    <div class="minute">
+
+                        ${event.minute || ''}'
+
+                    </div>
+
+                </div>
+
+            `).join('')}
+
+        </div>
+    `;
+
+}
+
+function renderMatch(match){
+
+    document.title = `${match.home_team} vs ${match.away_team} | EPL Match`;
+
+    teamsEl.innerHTML = `
+        <a class="team-link"
+           href="/epl-team.html?team=${encodeURIComponent(match.home_team)}">
+
+           ${match.home_team}
+
+        </a>
+
+        vs
+
+        <a class="team-link"
+           href="/epl-team.html?team=${encodeURIComponent(match.away_team)}">
+
+           ${match.away_team}
+
+        </a>
+    `;
+
+    scoreEl.textContent = `
+        ${match.home_score ?? '-'}
+        -
+        ${match.away_score ?? '-'}
+    `;
+
+    detailsEl.innerHTML = `
+        ${match.date || ''}
+        ${match.venue ? ` • ${match.venue}` : ''}
+    `;
+
+    content.innerHTML = `
+
+        <div class="grid">
+
+            <div class="card">
+
+                <h2>Goalscorers</h2>
+
+                ${renderEvents(match.scorers, 'goalscorers')}
+
+            </div>
+
+            <div class="card">
+
+                <h2>Match Information</h2>
+
+                <table class="info-table">
+
+                    <tr>
+                        <td>Home Team</td>
+                        <td>${match.home_team || ''}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Away Team</td>
+                        <td>${match.away_team || ''}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Score</td>
+                        <td>
+                            ${match.home_score ?? '-'}
+                            -
+                            ${match.away_score ?? '-'}
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td>Date</td>
+                        <td>${match.date || ''}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Venue</td>
+                        <td>${match.venue || ''}</td>
+                    </tr>
+
+                </table>
+
+            </div>
+
+            <div class="card">
+
+                <h2>Yellow Cards</h2>
+
+                ${renderEvents(match.yellow_cards, 'yellow cards')}
+
+            </div>
+
+            <div class="card">
+
+                <h2>Red Cards</h2>
+
+                ${renderEvents(match.red_cards, 'red cards')}
+
+            </div>
+
+        </div>
+
+    `;
+
+}
+
+loadMatch();
+
+</script>
+
+</body>
+</html>
