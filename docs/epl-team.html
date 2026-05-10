@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>EPL Team | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+
+body{
+font-family:Inter,system-ui,Arial,sans-serif;
+margin:0;
+background:#f3f4f7;
+color:#111;
+}
+
+.navbar{
+display:flex;
+justify-content:center;
+gap:24px;
+padding:16px;
+background:white;
+border-bottom:1px solid #ddd;
+flex-wrap:wrap;
+}
+
+.navbar a{
+text-decoration:none;
+font-weight:700;
+color:#0056d6;
+}
+
+.hero{
+padding:70px 20px;
+color:white;
+text-align:center;
+position:relative;
+overflow:hidden;
+}
+
+.hero::after{
+content:"";
+position:absolute;
+inset:0;
+background:rgba(0,0,0,.12);
+}
+
+.hero-content{
+position:relative;
+z-index:2;
+}
+
+.team-name{
+font-size:68px;
+font-weight:900;
+margin:0;
+line-height:1;
+}
+
+.team-sub{
+margin-top:14px;
+font-size:22px;
+font-weight:700;
+opacity:.95;
+}
+
+.container{
+max-width:1500px;
+margin:30px auto;
+padding:0 20px 50px;
+}
+
+.stats-grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+gap:20px;
+margin-bottom:30px;
+}
+
+.stat-card{
+background:white;
+border-radius:18px;
+padding:24px;
+box-shadow:0 2px 10px rgba(0,0,0,.08);
+}
+
+.stat-label{
+font-size:14px;
+font-weight:800;
+text-transform:uppercase;
+color:#666;
+margin-bottom:12px;
+letter-spacing:.5px;
+}
+
+.stat-value{
+font-size:42px;
+font-weight:900;
+line-height:1;
+}
+
+.section{
+background:white;
+border-radius:18px;
+padding:26px;
+margin-bottom:28px;
+box-shadow:0 2px 10px rgba(0,0,0,.08);
+}
+
+.section-title{
+font-size:34px;
+font-weight:900;
+margin-bottom:22px;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+}
+
+th{
+background:#f0f3f8;
+padding:14px;
+font-size:14px;
+text-transform:uppercase;
+letter-spacing:.5px;
+text-align:left;
+}
+
+td{
+padding:14px;
+border-bottom:1px solid #ececec;
+font-weight:600;
+}
+
+tr:nth-child(even){
+background:#f8fbff;
+}
+
+.player-link{
+color:#0056d6;
+font-weight:800;
+text-decoration:none;
+}
+
+.player-link:hover{
+text-decoration:underline;
+}
+
+.loading{
+text-align:center;
+font-size:24px;
+font-weight:800;
+padding:80px 20px;
+}
+
+.error{
+text-align:center;
+font-size:24px;
+font-weight:800;
+padding:80px 20px;
+color:#d90429;
+}
+
+.season-list{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+gap:16px;
+}
+
+.season-card{
+background:#f6f8fc;
+border-radius:14px;
+padding:18px;
+}
+
+.season-year{
+font-size:28px;
+font-weight:900;
+margin-bottom:8px;
+}
+
+.season-meta{
+font-size:16px;
+font-weight:700;
+color:#555;
+}
+
+@media(max-width:900px){
+
+.team-name{
+font-size:42px;
+}
+
+.team-sub{
+font-size:18px;
+}
+
+.section-title{
+font-size:28px;
+}
+
+.stat-value{
+font-size:34px;
+}
+
+table{
+font-size:14px;
+display:block;
+overflow-x:auto;
+white-space:nowrap;
+}
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="navbar">
+<a href="/">Home</a>
+<a href="/epl.html">EPL</a>
+<a href="/epl-teams.html">Teams</a>
+<a href="/nba.html">NBA</a>
+<a href="/afl.html">AFL</a>
+</div>
+
+<div id="pageContent">
+
+<div class="loading">
+Loading Team...
+</div>
+
+</div>
+
+<script>
+
+const TEAM_COLOURS = {
+
+"Arsenal":"linear-gradient(135deg,#EF0107,#9C0000)",
+"Aston Villa":"linear-gradient(135deg,#670E36,#95BFE5)",
+"Barnsley":"linear-gradient(135deg,#B5121B,#7A0000)",
+"Birmingham City":"linear-gradient(135deg,#0057B8,#003B7A)",
+"Blackburn Rovers":"linear-gradient(135deg,#0094D9,#004B87)",
+"Blackpool":"linear-gradient(135deg,#FF7F00,#000000)",
+"Bolton Wanderers":"linear-gradient(135deg,#ffffff,#1B458F)",
+"Bournemouth":"linear-gradient(135deg,#DA291C,#000000)",
+"Bradford City":"linear-gradient(135deg,#B5121B,#F4C542)",
+"Brentford":"linear-gradient(135deg,#E30613,#111111)",
+"Brighton & Hove Albion":"linear-gradient(135deg,#0057B8,#FFFFFF)",
+"Burnley":"linear-gradient(135deg,#6C1D45,#99D6EA)",
+"Cardiff City":"linear-gradient(135deg,#0070B5,#FFFFFF)",
+"Charlton Athletic":"linear-gradient(135deg,#D71920,#111111)",
+"Chelsea":"linear-gradient(135deg,#034694,#001C58)",
+"Coventry City":"linear-gradient(135deg,#87CEEB,#005BAC)",
+"Crystal Palace":"linear-gradient(135deg,#1B458F,#C4122E)",
+"Derby County":"linear-gradient(135deg,#FFFFFF,#000000)",
+"Everton":"linear-gradient(135deg,#003399,#001C58)",
+"Fulham":"linear-gradient(135deg,#FFFFFF,#000000)",
+"Huddersfield Town":"linear-gradient(135deg,#0E63AD,#FFFFFF)",
+"Hull City":"linear-gradient(135deg,#F0A500,#000000)",
+"Ipswich Town":"linear-gradient(135deg,#005BAC,#FFFFFF)",
+"Leeds United":"linear-gradient(135deg,#FFCD00,#1D428A)",
+"Leicester City":"linear-gradient(135deg,#003090,#FDBE11)",
+"Liverpool":"linear-gradient(135deg,#C8102E,#00B2A9)",
+"Luton Town":"linear-gradient(135deg,#FF6B00,#002D72)",
+"Manchester City":"linear-gradient(135deg,#6CABDD,#1C2C5B)",
+"Manchester United":"linear-gradient(135deg,#DA291C,#FBE122)",
+"Middlesbrough":"linear-gradient(135deg,#D71920,#FFFFFF)",
+"Newcastle United":"linear-gradient(135deg,#000000,#666666)",
+"Norwich City":"linear-gradient(135deg,#FFF200,#00A650)",
+"Nottingham Forest":"linear-gradient(135deg,#DD0000,#FFFFFF)",
+"Oldham Athletic":"linear-gradient(135deg,#1B75BC,#FFFFFF)",
+"Portsmouth":"linear-gradient(135deg,#003DA5,#FFFFFF)",
+"Queens Park Rangers":"linear-gradient(135deg,#005CAB,#FFFFFF)",
+"Reading":"linear-gradient(135deg,#0054A6,#FFFFFF)",
+"Sheffield United":"linear-gradient(135deg,#EE2737,#111111)",
+"Sheffield Wednesday":"linear-gradient(135deg,#0067B1,#FFFFFF)",
+"Southampton":"linear-gradient(135deg,#D71920,#FFFFFF)",
+"Stoke City":"linear-gradient(135deg,#E03A3E,#FFFFFF)",
+"Sunderland":"linear-gradient(135deg,#EB172B,#FFFFFF)",
+"Swansea City":"linear-gradient(135deg,#FFFFFF,#000000)",
+"Swindon Town":"linear-gradient(135deg,#E4002B,#FFFFFF)",
+"Tottenham Hotspur":"linear-gradient(135deg,#132257,#FFFFFF)",
+"Watford":"linear-gradient(135deg,#FBEE23,#ED2127)",
+"West Bromwich Albion":"linear-gradient(135deg,#122F67,#FFFFFF)",
+"West Ham United":"linear-gradient(135deg,#7A263A,#1BB1E7)",
+"Wigan Athletic":"linear-gradient(135deg,#005BAC,#FFFFFF)",
+"Wimbledon":"linear-gradient(135deg,#1E3A8A,#F4C542)",
+"Wolverhampton Wanderers":"linear-gradient(135deg,#FDB913,#231F20)"
+
+};
+
+const params = new URLSearchParams(window.location.search);
+
+const team =
+params.get("team");
+
+const content =
+document.getElementById("pageContent");
+
+if(!team){
+
+content.innerHTML = `
+<div class="error">
+No team selected
+</div>
+`;
+
+throw new Error("No team selected");
+
+}
+
+const heroColour =
+TEAM_COLOURS[team] ||
+"linear-gradient(135deg,#222,#666)";
+
+async function loadTeamData(){
+
+try{
+
+const response =
+await fetch("/data/epl/players.json");
+
+const players =
+await response.json();
+
+const teamPlayers =
+players.filter(p=>
+p.team === team
+);
+
+const seasons =
+[...new Set(
+teamPlayers.map(p=>p.season)
+)]
+.sort((a,b)=>b-a);
+
+const totalGoals =
+teamPlayers.reduce((sum,p)=>
+sum + (Number(p.goals)||0)
+,0);
+
+const totalAssists =
+teamPlayers.reduce((sum,p)=>
+sum + (Number(p.assists)||0)
+,0);
+
+const totalAppearances =
+teamPlayers.reduce((sum,p)=>
+sum + (Number(p.appearances)||0)
+,0);
+
+const topScorers =
+[...teamPlayers]
+.sort((a,b)=>
+(Number(b.goals)||0) -
+(Number(a.goals)||0)
+)
+.slice(0,15);
+
+content.innerHTML = `
+
+<div
+class="hero"
+style="background:${heroColour};"
+>
+
+<div class="hero-content">
+
+<h1 class="team-name">
+${team}
+</h1>
+
+<div class="team-sub">
+Premier League Club Profile
+</div>
+
+</div>
+
+</div>
+
+<div class="container">
+
+<div class="stats-grid">
+
+<div class="stat-card">
+<div class="stat-label">
+Premier League Seasons
+</div>
+<div class="stat-value">
+${seasons.length}
+</div>
+</div>
+
+<div class="stat-card">
+<div class="stat-label">
+Players Listed
+</div>
+<div class="stat-value">
+${teamPlayers.length}
+</div>
+</div>
+
+<div class="stat-card">
+<div class="stat-label">
+Total Goals
+</div>
+<div class="stat-value">
+${totalGoals}
+</div>
+</div>
+
+<div class="stat-card">
+<div class="stat-label">
+Total Assists
+</div>
+<div class="stat-value">
+${totalAssists}
+</div>
+</div>
+
+<div class="stat-card">
+<div class="stat-label">
+Appearances
+</div>
+<div class="stat-value">
+${totalAppearances}
+</div>
+</div>
+
+</div>
+
+<div class="section">
+
+<div class="section-title">
+Top Goal Scorers
+</div>
+
+<table>
+
+<thead>
+<tr>
+<th>Player</th>
+<th>Goals</th>
+<th>Assists</th>
+<th>Apps</th>
+<th>Season</th>
+</tr>
+</thead>
+
+<tbody>
+
+${topScorers.map(player=>`
+
+<tr>
+
+<td>
+
+<a
+class="player-link"
+href="epl-player.html?player=${encodeURIComponent(player.player)}"
+>
+
+${player.player}
+
+</a>
+
+</td>
+
+<td>${player.goals || 0}</td>
+<td>${player.assists || 0}</td>
+<td>${player.appearances || 0}</td>
+<td>${player.season || "-"}</td>
+
+</tr>
+
+`).join("")}
+
+</tbody>
+
+</table>
+
+</div>
+
+<div class="section">
+
+<div class="section-title">
+Premier League Seasons
+</div>
+
+<div class="season-list">
+
+${seasons.map(season=>`
+
+<div class="season-card">
+
+<div class="season-year">
+${season}
+</div>
+
+<div class="season-meta">
+
+${teamPlayers.filter(p=>
+p.season == season
+).length} Players Listed
+
+</div>
+
+</div>
+
+`).join("")}
+
+</div>
+
+</div>
+
+</div>
+
+`;
+
+}catch(err){
+
+console.error(err);
+
+content.innerHTML = `
+
+<div class="error">
+Failed to load team data
+</div>
+
+`;
+
+}
+
+}
+
+loadTeamData();
+
+</script>
+
+</body>
+</html>
