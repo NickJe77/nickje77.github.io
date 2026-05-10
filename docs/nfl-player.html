@@ -247,42 +247,6 @@ String(name || "")
 .replace(/[^a-z0-9]+/g,"-")
 .replace(/^-|-$/g,"");
 
-const TEAM_MAP = {
-"ARI":"Arizona Cardinals",
-"ATL":"Atlanta Falcons",
-"BAL":"Baltimore Ravens",
-"BUF":"Buffalo Bills",
-"CAR":"Carolina Panthers",
-"CHI":"Chicago Bears",
-"CIN":"Cincinnati Bengals",
-"CLE":"Cleveland Browns",
-"DAL":"Dallas Cowboys",
-"DEN":"Denver Broncos",
-"DET":"Detroit Lions",
-"GB":"Green Bay Packers",
-"HOU":"Houston Texans",
-"IND":"Indianapolis Colts",
-"JAX":"Jacksonville Jaguars",
-"KAN":"Kansas City Chiefs",
-"KC":"Kansas City Chiefs",
-"LAC":"Los Angeles Chargers",
-"LAR":"Los Angeles Rams",
-"LV":"Las Vegas Raiders",
-"MIA":"Miami Dolphins",
-"MIN":"Minnesota Vikings",
-"NE":"New England Patriots",
-"NO":"New Orleans Saints",
-"NYG":"New York Giants",
-"NYJ":"New York Jets",
-"PHI":"Philadelphia Eagles",
-"PIT":"Pittsburgh Steelers",
-"SEA":"Seattle Seahawks",
-"SF":"San Francisco 49ers",
-"TB":"Tampa Bay Buccaneers",
-"TEN":"Tennessee Titans",
-"WAS":"Washington Commanders"
-};
-
 let allGames = [];
 
 /* PLAYER LIST */
@@ -292,7 +256,7 @@ async function loadPlayers(){
 try{
 
 const res =
-await fetch("/data/nfl/players/index.json");
+await fetch("/data/nfl/players/index.json?v="+Date.now());
 
 if(!res.ok) return;
 
@@ -332,7 +296,7 @@ window.location =
 
 });
 
-/* LOAD PLAYER */
+/* LOAD PLAYER JSON */
 
 async function loadPlayer(){
 
@@ -345,147 +309,39 @@ return;
 
 }
 
-/* ONLY LOAD CURRENT SEASON FIRST */
-
-const currentYear =
-new Date().getFullYear();
-
-const years = [
-currentYear,
-currentYear - 1,
-currentYear - 2,
-currentYear - 3,
-currentYear - 4
-];
-
-for(const y of years){
-
 try{
 
-const seasonRes =
-await fetch(`/data/nfl/seasons/${y}.json`);
+const res =
+await fetch(`/data/nfl/players/${playerSlug}.json?v=${Date.now()}`);
 
-if(!seasonRes.ok) continue;
+if(!res.ok){
 
-const seasonData =
-await seasonRes.json();
+document.getElementById("loading").style.display =
+"none";
 
-const games =
-seasonData.games ||
-seasonData ||
-[];
+document.getElementById("playerName").innerText =
+"Player Not Found";
 
-for(const g of games){
-
-try{
-
-const gameId =
-g.game_id ||
-g.id;
-
-if(!gameId) continue;
-
-const boxRes =
-await fetch(`/data/nfl/boxscores/${y}/${gameId}.json`);
-
-if(!boxRes.ok) continue;
-
-const box =
-await boxRes.json();
-
-/* CRITICAL FIX */
-
-const players = [
-
-...(box.passing || []),
-...(box.rushing || []),
-...(box.receiving || [])
-
-];
-
-if(!players.length) continue;
-
-const teams = [
-...new Set(
-players
-.map(p => (p.stats || {}).team)
-.filter(Boolean)
-)
-];
-
-players.forEach(p=>{
-
-if(!p.player) return;
-
-const slug =
-slugify(p.player);
-
-if(slug !== playerSlug) return;
-
-const s = p.stats || {};
-
-const team =
-s.team || "";
-
-const opponent =
-teams.find(t => t !== team) || "";
-
-allGames.push({
-
-date:
-g.date || "",
-
-team:
-TEAM_MAP[team] || team,
-
-opponent:
-TEAM_MAP[opponent] || opponent,
-
-game_type:
-g.game_type ||
-g.type ||
-"Regular Season",
-
-player:
-p.player || "",
-
-passing:{
-yards:Number(s.pass_yds || 0),
-td:Number(s.pass_td || 0),
-int:Number(s.pass_int || 0)
-},
-
-rushing:{
-yards:Number(s.rush_yds || 0),
-td:Number(s.rush_td || 0)
-},
-
-receiving:{
-yards:Number(s.rec_yds || 0),
-td:Number(s.rec_td || 0)
-}
-
-});
-
-});
-
-}catch(err){
-
-console.log(err);
+return;
 
 }
 
-}
-
-}catch(err){
-
-console.log(err);
-
-}
-
-}
+allGames =
+await res.json();
 
 buildPage();
+
+}catch(err){
+
+console.log(err);
+
+document.getElementById("loading").style.display =
+"none";
+
+document.getElementById("playerName").innerText =
+"Player Not Found";
+
+}
 
 }
 
@@ -509,7 +365,7 @@ document.getElementById("content").style.display =
 "block";
 
 document.getElementById("playerName").innerText =
-allGames[0].player;
+allGames[0].player || "Player";
 
 setupFilters();
 render();
@@ -592,42 +448,44 @@ if(teamVal && g.team !== teamVal) return;
 if(oppVal && g.opponent !== oppVal) return;
 
 totals.games++;
-totals.passY += g.passing.yards;
-totals.passTD += g.passing.td;
-totals.ints += g.passing.int;
-totals.rushY += g.rushing.yards;
-totals.rushTD += g.rushing.td;
-totals.recY += g.receiving.yards;
-totals.recTD += g.receiving.td;
+totals.passY += Number(g.passing?.yards || 0);
+totals.passTD += Number(g.passing?.td || 0);
+totals.ints += Number(g.passing?.int || 0);
 
-if(g.passing.yards > highs.passY){
-highs.passY = g.passing.yards;
+totals.rushY += Number(g.rushing?.yards || 0);
+totals.rushTD += Number(g.rushing?.td || 0);
+
+totals.recY += Number(g.receiving?.yards || 0);
+totals.recTD += Number(g.receiving?.td || 0);
+
+if(Number(g.passing?.yards || 0) > highs.passY){
+highs.passY = Number(g.passing?.yards || 0);
 highs.passYGame = g;
 }
 
-if(g.rushing.yards > highs.rushY){
-highs.rushY = g.rushing.yards;
+if(Number(g.rushing?.yards || 0) > highs.rushY){
+highs.rushY = Number(g.rushing?.yards || 0);
 highs.rushYGame = g;
 }
 
-if(g.receiving.yards > highs.recY){
-highs.recY = g.receiving.yards;
+if(Number(g.receiving?.yards || 0) > highs.recY){
+highs.recY = Number(g.receiving?.yards || 0);
 highs.recYGame = g;
 }
 
 table.innerHTML += `
 <tr>
-<td>${g.date}</td>
-<td>${g.team}</td>
-<td>${g.opponent}</td>
-<td>${g.game_type}</td>
-<td>${g.passing.yards}</td>
-<td>${g.passing.td}</td>
-<td>${g.passing.int}</td>
-<td>${g.rushing.yards}</td>
-<td>${g.rushing.td}</td>
-<td>${g.receiving.yards}</td>
-<td>${g.receiving.td}</td>
+<td>${g.date || ""}</td>
+<td>${g.team || ""}</td>
+<td>${g.opponent || ""}</td>
+<td>${g.game_type || ""}</td>
+<td>${g.passing?.yards || 0}</td>
+<td>${g.passing?.td || 0}</td>
+<td>${g.passing?.int || 0}</td>
+<td>${g.rushing?.yards || 0}</td>
+<td>${g.rushing?.td || 0}</td>
+<td>${g.receiving?.yards || 0}</td>
+<td>${g.receiving?.td || 0}</td>
 </tr>
 `;
 
@@ -693,17 +551,17 @@ document.getElementById("records").innerHTML = `
 
 <div class="box">
 <b>300+ Passing Games</b>
-${allGames.filter(g=>g.passing.yards >= 300).length}
+${allGames.filter(g=>Number(g.passing?.yards || 0) >= 300).length}
 </div>
 
 <div class="box">
 <b>100+ Rushing Games</b>
-${allGames.filter(g=>g.rushing.yards >= 100).length}
+${allGames.filter(g=>Number(g.rushing?.yards || 0) >= 100).length}
 </div>
 
 <div class="box">
 <b>100+ Receiving Games</b>
-${allGames.filter(g=>g.receiving.yards >= 100).length}
+${allGames.filter(g=>Number(g.receiving?.yards || 0) >= 100).length}
 </div>
 
 `;
