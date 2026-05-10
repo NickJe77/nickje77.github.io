@@ -51,7 +51,7 @@ body{
 }
 
 .container{
-    max-width:1400px;
+    max-width:1500px;
     margin:30px auto;
     padding:0 20px;
 }
@@ -74,13 +74,13 @@ body{
 .card{
     background:white;
     border-radius:16px;
-    padding:20px;
+    padding:24px;
     box-shadow:0 3px 10px rgba(0,0,0,.08);
 }
 
 .section-title{
     margin-top:0;
-    margin-bottom:20px;
+    margin-bottom:24px;
     font-size:28px;
 }
 
@@ -92,20 +92,20 @@ table{
 th{
     background:#37003c;
     color:white;
-    padding:12px;
+    padding:14px;
     font-size:14px;
     text-align:center;
 }
 
 td{
-    padding:12px;
+    padding:14px;
     border-bottom:1px solid #eee;
     text-align:center;
-    font-size:14px;
+    font-size:15px;
 }
 
 tr:nth-child(even){
-    background:#f7f9fc;
+    background:#f3f7fd;
 }
 
 .match-row{
@@ -114,13 +114,18 @@ tr:nth-child(even){
 }
 
 .match-row:hover{
-    background:#e8f0ff !important;
+    background:#dfeaff !important;
 }
 
 .team-link{
     color:#0056d6;
     text-decoration:none;
-    font-weight:600;
+    font-weight:700;
+}
+
+.score{
+    font-size:18px;
+    font-weight:800;
 }
 
 .loading{
@@ -132,16 +137,17 @@ tr:nth-child(even){
 
 @media(max-width:900px){
 
-table{
-    font-size:12px;
+.hero h1{
+    font-size:34px;
 }
 
 th,td{
     padding:8px;
+    font-size:12px;
 }
 
-.hero h1{
-    font-size:34px;
+.score{
+    font-size:15px;
 }
 
 }
@@ -166,13 +172,11 @@ th,td{
 <div class="container">
 
     <div class="controls">
+
         <select id="teamFilter">
             <option value="">All Teams</option>
         </select>
 
-        <select id="roundFilter">
-            <option value="">All Rounds</option>
-        </select>
     </div>
 
     <div class="card">
@@ -197,7 +201,6 @@ document.getElementById("seasonTitle").textContent = `${season} EPL Season`;
 
 const matchesContainer = document.getElementById("matchesContainer");
 const teamFilter = document.getElementById("teamFilter");
-const roundFilter = document.getElementById("roundFilter");
 
 let allMatches = [];
 
@@ -234,19 +237,18 @@ async function loadSeason(){
 function buildFilters(){
 
     const teams = new Set();
-    const rounds = new Set();
 
     allMatches.forEach(match => {
 
         if(match.home_team) teams.add(match.home_team);
         if(match.away_team) teams.add(match.away_team);
-        if(match.round) rounds.add(match.round);
 
     });
 
     [...teams].sort().forEach(team => {
 
         const option = document.createElement("option");
+
         option.value = team;
         option.textContent = team;
 
@@ -254,14 +256,20 @@ function buildFilters(){
 
     });
 
-    [...rounds].sort().forEach(round => {
+}
 
-        const option = document.createElement("option");
-        option.value = round;
-        option.textContent = round;
+function formatDate(dateStr){
 
-        roundFilter.appendChild(option);
+    if(!dateStr) return "";
 
+    const date = new Date(dateStr);
+
+    if(isNaN(date)) return dateStr;
+
+    return date.toLocaleDateString('en-AU',{
+        day:'numeric',
+        month:'short',
+        year:'numeric'
     });
 
 }
@@ -271,21 +279,12 @@ function renderMatches(){
     let filtered = [...allMatches];
 
     const team = teamFilter.value;
-    const round = roundFilter.value;
 
     if(team){
 
         filtered = filtered.filter(match =>
             match.home_team === team ||
             match.away_team === team
-        );
-
-    }
-
-    if(round){
-
-        filtered = filtered.filter(match =>
-            match.round === round
         );
 
     }
@@ -300,14 +299,15 @@ function renderMatches(){
         <table>
 
             <thead>
+
                 <tr>
                     <th>Date</th>
-                    <th>Round</th>
                     <th>Home</th>
                     <th>Score</th>
                     <th>Away</th>
                     <th>Venue</th>
                 </tr>
+
             </thead>
 
             <tbody>
@@ -319,35 +319,41 @@ function renderMatches(){
             <tr class="match-row"
                 onclick="window.location.href='/epl-game.html?match=${match.match_id}&season=${season}'">
 
-                <td>${match.date || ''}</td>
-
-                <td>${match.round || ''}</td>
+                <td>
+                    ${formatDate(match.date)}
+                </td>
 
                 <td>
                     <a class="team-link"
                        href="/epl-team.html?team=${encodeURIComponent(match.home_team)}"
                        onclick="event.stopPropagation()">
+
                        ${match.home_team || ''}
+
                     </a>
                 </td>
 
-                <td>
-                    <strong>
-                        ${match.home_score ?? '-'}
-                        -
-                        ${match.away_score ?? '-'}
-                    </strong>
+                <td class="score">
+
+                    ${match.home_score ?? '-'}
+                    -
+                    ${match.away_score ?? '-'}
+
                 </td>
 
                 <td>
                     <a class="team-link"
                        href="/epl-team.html?team=${encodeURIComponent(match.away_team)}"
                        onclick="event.stopPropagation()">
+
                        ${match.away_team || ''}
+
                     </a>
                 </td>
 
-                <td>${match.venue || ''}</td>
+                <td>
+                    ${match.venue || ''}
+                </td>
 
             </tr>
         `;
@@ -364,7 +370,6 @@ function renderMatches(){
 }
 
 teamFilter.addEventListener("change", renderMatches);
-roundFilter.addEventListener("change", renderMatches);
 
 loadSeason();
 
