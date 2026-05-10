@@ -204,4 +204,4 @@ index_path = f"{PLAYERS_DIR}/index.json"
 with open(index_path, "w", encoding="utf-8") as f:
     json.dump(sorted(player_names), f, indent=2)
 
-print(f"Built {len(players)} NFL player files") s
+print(f"Built {len(players)} NFL player files")
