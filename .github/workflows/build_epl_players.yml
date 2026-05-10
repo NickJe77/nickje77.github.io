@@ -1,0 +1,177 @@
+name: Build EPL Players
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build EPL player files
+        run: |
+          python << 'EOF'
+          import os
+          import json
+          from collections import defaultdict
+
+          BASE = "docs/data/epl"
+          MATCHES_DIR = f"{BASE}/matches"
+          PLAYERS_DIR = f"{BASE}/players"
+
+          os.makedirs(PLAYERS_DIR, exist_ok=True)
+
+          players_index = {}
+          player_matches = defaultdict(list)
+
+          def slugify(name):
+              return (
+                  name.lower()
+                  .replace(".", "")
+                  .replace("'", "")
+                  .replace('"', "")
+                  .replace("/", "-")
+                  .replace(" ", "-")
+              )
+
+          for root, _, files in os.walk(MATCHES_DIR):
+              for file in files:
+                  if not file.endswith(".json"):
+                      continue
+
+                  path = os.path.join(root, file)
+
+                  try:
+                      with open(path, "r", encoding="utf-8") as f:
+                          match = json.load(f)
+                  except:
+                      continue
+
+                  season = match.get("season", "")
+                  date = match.get("date", "")
+                  home_team = match.get("home_team", "")
+                  away_team = match.get("away_team", "")
+                  match_id = match.get("match_id", file.replace(".json", ""))
+
+                  scorers = match.get("scorers", [])
+                  yellow_cards = match.get("yellow_cards", [])
+                  red_cards = match.get("red_cards", [])
+
+                  player_stats = defaultdict(lambda: {
+                      "goals": 0,
+                      "yellow_cards": 0,
+                      "red_cards": 0,
+                      "team": ""
+                  })
+
+                  for s in scorers:
+                      player = s.get("player")
+                      if not player:
+                          continue
+
+                      player_stats[player]["goals"] += 1
+                      player_stats[player]["team"] = s.get("team", "")
+
+                  for y in yellow_cards:
+                      player = y.get("player")
+                      if not player:
+                          continue
+
+                      player_stats[player]["yellow_cards"] += 1
+                      player_stats[player]["team"] = y.get("team", "")
+
+                  for r in red_cards:
+                      player = r.get("player")
+                      if not player:
+                          continue
+
+                      player_stats[player]["red_cards"] += 1
+                      player_stats[player]["team"] = r.get("team", "")
+
+                  for player, stats in player_stats.items():
+                      slug = slugify(player)
+
+                      team = stats["team"]
+
+                      opponent = away_team if team == home_team else home_team
+
+                      player_matches[player].append({
+                          "season": season,
+                          "date": date,
+                          "team": team,
+                          "opponent": opponent,
+                          "goals": stats["goals"],
+                          "yellow_cards": stats["yellow_cards"],
+                          "red_cards": stats["red_cards"],
+                          "match_id": match_id
+                      })
+
+                      if player not in players_index:
+                          players_index[player] = {
+                              "name": player,
+                              "slug": slug,
+                              "teams": set(),
+                              "first_season": season,
+                              "last_season": season
+                          }
+
+                      players_index[player]["teams"].add(team)
+
+                      if season and season < players_index[player]["first_season"]:
+                          players_index[player]["first_season"] = season
+
+                      if season and season > players_index[player]["last_season"]:
+                          players_index[player]["last_season"] = season
+
+          # Save player files
+          for player, matches in player_matches.items():
+              slug = slugify(player)
+
+              output = {
+                  "player": player,
+                  "slug": slug,
+                  "matches": sorted(matches, key=lambda x: x.get("date", ""))
+              }
+
+              with open(f"{PLAYERS_DIR}/{slug}.json", "w", encoding="utf-8") as f:
+                  json.dump(output, f, ensure_ascii=False, indent=2)
+
+          # Save players.json
+          index_output = []
+
+          for p in players_index.values():
+              index_output.append({
+                  "name": p["name"],
+                  "slug": p["slug"],
+                  "teams": sorted(list(p["teams"])),
+                  "first_season": p["first_season"],
+                  "last_season": p["last_season"]
+              })
+
+          index_output = sorted(index_output, key=lambda x: x["name"])
+
+          with open(f"{BASE}/players.json", "w", encoding="utf-8") as f:
+              json.dump(index_output, f, ensure_ascii=False, indent=2)
+
+          print(f"Built {len(index_output)} EPL players")
+          EOF
+
+      - name: Commit EPL player files
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
+          git add docs/data/epl/players
+          git add docs/data/epl/players.json
+
+          git commit -m "Build EPL player database" || echo "No changes"
+
+          git push
