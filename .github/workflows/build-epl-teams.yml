@@ -10,7 +10,7 @@ jobs:
 
     steps:
 
-      - name: Checkout Repo
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Create EPL Teams Builder
+      - name: Build teams.json
         run: |
 
           cat > build_epl_teams.py << 'PYTHON'
@@ -29,63 +29,83 @@ jobs:
 
           BASE_DIR = "docs/data/epl"
 
+          PLAYERS_FILE = f"{BASE_DIR}/players.json"
+
           OUTPUT_FILE = f"{BASE_DIR}/teams.json"
 
-          POSSIBLE_FILES = [
-              f"{BASE_DIR}/players.json",
-              f"{BASE_DIR}/epl_players.json",
-              f"{BASE_DIR}/player_stats.json"
-          ]
+          if not os.path.exists(PLAYERS_FILE):
+              raise Exception("players.json missing")
 
-          players_data = []
+          with open(PLAYERS_FILE, "r", encoding="utf-8") as f:
+              data = json.load(f)
 
-          for file in POSSIBLE_FILES:
-
-              if os.path.exists(file):
-
-                  print(f"Loading {file}")
-
-                  with open(file, "r", encoding="utf-8") as f:
-                      data = json.load(f)
-
-                      if isinstance(data, list):
-                          players_data = data
-                          break
-
-          if not players_data:
-              print("No players.json found")
-              raise SystemExit
-
-          TEAM_FIXES = {
-
-              "Brighton":"Brighton & Hove Albion",
-              "Spurs":"Tottenham Hotspur",
-              "Tottenham":"Tottenham Hotspur",
-              "Man City":"Manchester City",
-              "Man Utd":"Manchester United",
-              "Man United":"Manchester United",
-              "Wolves":"Wolverhampton Wanderers",
-              "Newcastle":"Newcastle United",
-              "West Ham":"West Ham United",
-              "West Brom":"West Bromwich Albion",
-              "QPR":"Queens Park Rangers"
-
-          }
+          print(f"Loaded {len(data)} rows")
 
           teams = {}
 
-          for row in players_data:
+          def get_team(row):
 
-              team = (
-                  row.get("team")
-                  or row.get("club")
-                  or ""
-              ).strip()
+              possible = [
+                  row.get("team"),
+                  row.get("club"),
+                  row.get("squad"),
+                  row.get("Team"),
+                  row.get("Club"),
+                  row.get("Squad")
+              ]
+
+              for p in possible:
+
+                  if p and str(p).strip():
+                      return str(p).strip()
+
+              return None
+
+          def get_player(row):
+
+              possible = [
+                  row.get("player"),
+                  row.get("name"),
+                  row.get("Player"),
+                  row.get("Name")
+              ]
+
+              for p in possible:
+
+                  if p and str(p).strip():
+                      return str(p).strip()
+
+              return None
+
+          def get_season(row):
+
+              possible = [
+                  row.get("season"),
+                  row.get("Season"),
+                  row.get("year"),
+                  row.get("Year")
+              ]
+
+              for p in possible:
+
+                  if p and str(p).strip():
+                      return str(p).strip()
+
+              return None
+
+          def to_int(v):
+
+              try:
+                  return int(float(v))
+              except:
+                  return 0
+
+          for row in data:
+
+              team = get_team(row)
 
               if not team:
                   continue
-
-              team = TEAM_FIXES.get(team, team)
 
               if team not in teams:
 
@@ -104,84 +124,81 @@ jobs:
                       })
                   }
 
-              season = str(
-                  row.get("season")
-                  or row.get("year")
-                  or ""
-              ).strip()
+              season = get_season(row)
 
               if season:
                   teams[team]["seasons_set"].add(season)
 
-              goals = int(row.get("goals", 0) or 0)
-              assists = int(row.get("assists", 0) or 0)
-              apps = int(
-                  row.get("appearances", 0)
-                  or row.get("apps", 0)
-                  or 0
+              goals = to_int(
+                  row.get("goals")
+                  or row.get("Goals")
+                  or row.get("gls")
+                  or row.get("Gls")
+              )
+
+              assists = to_int(
+                  row.get("assists")
+                  or row.get("Assists")
+                  or row.get("ast")
+                  or row.get("Ast")
+              )
+
+              apps = to_int(
+                  row.get("appearances")
+                  or row.get("apps")
+                  or row.get("Appearances")
+                  or row.get("Apps")
+                  or row.get("matches")
               )
 
               teams[team]["goals"] += goals
               teams[team]["assists"] += assists
               teams[team]["appearances"] += apps
 
-              player_name = (
-                  row.get("player")
-                  or row.get("name")
-                  or ""
-              ).strip()
+              player_name = get_player(row)
 
               if not player_name:
                   continue
 
-              player_entry = teams[team]["players"][player_name]
+              p = teams[team]["players"][player_name]
 
-              player_entry["player"] = player_name
-              player_entry["goals"] += goals
-              player_entry["assists"] += assists
-              player_entry["appearances"] += apps
+              p["player"] = player_name
+              p["goals"] += goals
+              p["assists"] += assists
+              p["appearances"] += apps
 
               if season:
-                  player_entry["seasons"].add(season)
+                  p["seasons"].add(season)
 
           output = []
 
           for team_name, info in teams.items():
 
-              top_scorers = sorted(
+              scorers = sorted(
                   info["players"].values(),
                   key=lambda x: x["goals"],
                   reverse=True
               )[:20]
 
-              top_scorers_clean = []
+              top_scorers = []
 
-              for p in top_scorers:
+              for s in scorers:
 
-                  seasons = sorted(list(p["seasons"]))
-
-                  top_scorers_clean.append({
-                      "player": p["player"],
-                      "goals": p["goals"],
-                      "assists": p["assists"],
-                      "appearances": p["appearances"],
-                      "seasons": seasons
+                  top_scorers.append({
+                      "player": s["player"],
+                      "goals": s["goals"],
+                      "assists": s["assists"],
+                      "appearances": s["appearances"],
+                      "seasons": sorted(list(s["seasons"]))
                   })
 
               output.append({
-
                   "team": team_name,
-
                   "seasons": len(info["seasons_set"]),
-
                   "goals": info["goals"],
-
                   "assists": info["assists"],
-
                   "appearances": info["appearances"],
-
-                  "top_scorers": top_scorers_clean
-
+                  "top_scorers": top_scorers
               })
 
           output = sorted(output, key=lambda x: x["team"])
@@ -189,21 +206,20 @@ jobs:
           os.makedirs(BASE_DIR, exist_ok=True)
 
           with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-              json.dump(output, f, indent=2, ensure_ascii=False)
+              json.dump(output, f, indent=2)
 
           print(f"Built {OUTPUT_FILE}")
           print(f"Teams: {len(output)}")
 
           PYTHON
 
-      - name: Run EPL Teams Builder
-        run: python3 build_epl_teams.py
+          python3 build_epl_teams.py
 
-      - name: Commit Teams JSON
+      - name: Commit
         run: |
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
 
           git add docs/data/epl/teams.json
 
