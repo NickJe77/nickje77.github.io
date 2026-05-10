@@ -468,39 +468,7 @@ String(team || "")
 .trim()
 .toUpperCase();
 
-if(team.includes("ARIZONA")) return "ARI";
-if(team.includes("ATLANTA")) return "ATL";
-if(team.includes("BALTIMORE")) return "BAL";
-if(team.includes("BUFFALO")) return "BUF";
-if(team.includes("CAROLINA")) return "CAR";
-if(team.includes("CHICAGO")) return "CHI";
-if(team.includes("CINCINNATI")) return "CIN";
-if(team.includes("CLEVELAND")) return "CLE";
 if(team.includes("DALLAS")) return "DAL";
-if(team.includes("DENVER")) return "DEN";
-if(team.includes("DETROIT")) return "DET";
-if(team.includes("GREEN BAY")) return "GB";
-if(team.includes("HOUSTON")) return "HOU";
-if(team.includes("INDIANAPOLIS")) return "IND";
-if(team.includes("JACKSONVILLE")) return "JAX";
-if(team.includes("KANSAS CITY")) return "KC";
-if(team.includes("RAIDERS")) return "LV";
-if(team.includes("CHARGERS")) return "LAC";
-if(team.includes("RAMS")) return "LAR";
-if(team.includes("MIAMI")) return "MIA";
-if(team.includes("MINNESOTA")) return "MIN";
-if(team.includes("PATRIOTS")) return "NE";
-if(team.includes("SAINTS")) return "NO";
-if(team.includes("GIANTS")) return "NYG";
-if(team.includes("JETS")) return "NYJ";
-if(team.includes("EAGLES")) return "PHI";
-if(team.includes("STEELERS")) return "PIT";
-if(team.includes("49ERS")) return "SF";
-if(team.includes("SEAHAWKS")) return "SEA";
-if(team.includes("BUCCANEERS")) return "TB";
-if(team.includes("TITANS")) return "TEN";
-if(team.includes("COMMANDERS")) return "WAS";
-
 if(team === "NWE") return "NE";
 if(team === "KAN") return "KC";
 if(team === "NOR") return "NO";
@@ -535,29 +503,20 @@ break;
 const colours =
 TEAM_COLOURS[latestTeam] || ["#013369","#d50a0a"];
 
-const hero =
-document.getElementById("hero");
-
-hero.style.background = `
+document.getElementById("hero").style.background = `
 radial-gradient(circle at top right, rgba(255,255,255,.08), transparent 35%),
 linear-gradient(135deg, ${colours[0]} 0%, ${colours[1]} 100%)
 `;
 
 document.getElementById("heroSub").innerHTML =
-latestTeam
-? `${getTeamName(latestTeam)} Career Statistics`
-: "NFL Career Statistics";
+`${getTeamName(latestTeam)} Career Statistics`;
 
 }
 
 async function loadPlayers(){
 
-try{
-
 const res =
 await fetch("/data/nfl/players/index.json?v="+Date.now());
-
-if(!res.ok) return;
 
 const data =
 await res.json();
@@ -576,12 +535,6 @@ dl.appendChild(opt);
 
 });
 
-}catch(err){
-
-console.log(err);
-
-}
-
 }
 
 document.getElementById("playerInput")
@@ -597,31 +550,8 @@ window.location =
 
 async function loadPlayer(){
 
-if(!playerSlug){
-
-document.getElementById("loading").innerHTML =
-"Player not found";
-
-return;
-
-}
-
-try{
-
 const res =
 await fetch(`/data/nfl/players/${playerSlug}.json?v=${Date.now()}`);
-
-if(!res.ok){
-
-document.getElementById("loading").style.display =
-"none";
-
-document.getElementById("playerName").innerText =
-"Player Not Found";
-
-return;
-
-}
 
 playerData =
 await res.json();
@@ -631,33 +561,12 @@ playerData.games || [];
 
 buildPage();
 
-}catch(err){
-
-console.log(err);
-
-document.getElementById("loading").style.display =
-"none";
-
-document.getElementById("playerName").innerText =
-"Player Not Found";
-
-}
-
 }
 
 function buildPage(){
 
 document.getElementById("loading").style.display =
 "none";
-
-if(!allGames.length){
-
-document.getElementById("playerName").innerText =
-"Player Not Found";
-
-return;
-
-}
 
 document.getElementById("content").style.display =
 "block";
@@ -668,6 +577,7 @@ playerData.name || "Player";
 applyTeamTheme();
 
 setupFilters();
+
 render();
 
 }
@@ -680,28 +590,25 @@ const teams =
 const opps =
 [...new Set(allGames.map(g=>g.opponent).filter(Boolean))];
 
-const teamFilter =
-document.getElementById("teamFilter");
-
-const oppFilter =
-document.getElementById("oppFilter");
-
 teams.forEach(t=>{
 
-teamFilter.innerHTML +=
+document.getElementById("teamFilter").innerHTML +=
 `<option value="${t}">${getTeamName(t)}</option>`;
 
 });
 
 opps.forEach(t=>{
 
-oppFilter.innerHTML +=
+document.getElementById("oppFilter").innerHTML +=
 `<option value="${t}">${getTeamName(t)}</option>`;
 
 });
 
-teamFilter.onchange = render;
-oppFilter.onchange = render;
+document.getElementById("teamFilter").onchange =
+render;
+
+document.getElementById("oppFilter").onchange =
+render;
 
 }
 
@@ -723,7 +630,19 @@ games:0,
 passY:0,
 passTD:0,
 ints:0,
-rushY:0
+rushY:0,
+rushTD:0,
+recY:0,
+recTD:0
+};
+
+let highs = {
+passY:0,
+passYGame:null,
+rushY:0,
+rushYGame:null,
+recY:0,
+recYGame:null
 };
 
 allGames.forEach(g=>{
@@ -740,13 +659,32 @@ totals.passY += Number(stats.pass_yds || 0);
 totals.passTD += Number(stats.pass_td || 0);
 totals.ints += Number(stats.pass_int || 0);
 totals.rushY += Number(stats.rush_yds || 0);
+totals.rushTD += Number(stats.rush_td || 0);
+totals.recY += Number(stats.rec_yds || 0);
+totals.recTD += Number(stats.rec_td || 0);
+
+if(Number(stats.pass_yds || 0) > highs.passY){
+highs.passY = Number(stats.pass_yds || 0);
+highs.passYGame = g;
+}
+
+if(Number(stats.rush_yds || 0) > highs.rushY){
+highs.rushY = Number(stats.rush_yds || 0);
+highs.rushYGame = g;
+}
+
+if(Number(stats.rec_yds || 0) > highs.recY){
+highs.recY = Number(stats.rec_yds || 0);
+highs.recYGame = g;
+}
 
 table.innerHTML += `
 <tr>
 <td>${g.date || ""}</td>
 <td>${g.season || ""}</td>
 <td>
-<a class="team-link" href="/nfl-team.html?team=${encodeURIComponent(g.team || "")}">
+<a class="team-link"
+href="/nfl-team.html?team=${encodeURIComponent(g.team || "")}">
 ${getTeamName(g.team || "")}
 </a>
 </td>
@@ -788,6 +726,68 @@ document.getElementById("summary").innerHTML = `
 <div class="box">
 <b>Rush Yards</b>
 <div class="big-stat">${totals.rushY}</div>
+</div>
+
+`;
+
+document.getElementById("highs").innerHTML = `
+
+<div class="box">
+<b>Pass Yards</b>
+<div class="big-stat">${highs.passY}</div>
+<div class="sub-stat">
+${getTeamName(highs.passYGame?.opponent || "")}<br>
+${highs.passYGame?.date || ""}
+</div>
+</div>
+
+<div class="box">
+<b>Rush Yards</b>
+<div class="big-stat">${highs.rushY}</div>
+<div class="sub-stat">
+${getTeamName(highs.rushYGame?.opponent || "")}<br>
+${highs.rushYGame?.date || ""}
+</div>
+</div>
+
+<div class="box">
+<b>Rec Yards</b>
+<div class="big-stat">${highs.recY}</div>
+<div class="sub-stat">
+${getTeamName(highs.recYGame?.opponent || "")}<br>
+${highs.recYGame?.date || ""}
+</div>
+</div>
+
+`;
+
+document.getElementById("records").innerHTML = `
+
+<div class="box">
+<b>300+ Passing Games</b>
+<div class="big-stat">
+${allGames.filter(g =>
+Number((g.stats || {}).pass_yds || 0) >= 300
+).length}
+</div>
+</div>
+
+<div class="box">
+<b>3+ Passing TD Games</b>
+<div class="big-stat">
+${allGames.filter(g =>
+Number((g.stats || {}).pass_td || 0) >= 3
+).length}
+</div>
+</div>
+
+<div class="box">
+<b>100+ Rush Yard Games</b>
+<div class="big-stat">
+${allGames.filter(g =>
+Number((g.stats || {}).rush_yds || 0) >= 100
+).length}
+</div>
 </div>
 
 `;
