@@ -248,6 +248,7 @@ String(name || "")
 .replace(/^-|-$/g,"");
 
 let allGames = [];
+let playerData = {};
 
 /* PLAYER LIST */
 
@@ -326,8 +327,11 @@ return;
 
 }
 
-allGames =
+playerData =
 await res.json();
+
+allGames =
+playerData.games || [];
 
 buildPage();
 
@@ -365,7 +369,7 @@ document.getElementById("content").style.display =
 "block";
 
 document.getElementById("playerName").innerText =
-allGames[0].player || "Player";
+playerData.name || "Player";
 
 setupFilters();
 render();
@@ -377,10 +381,10 @@ render();
 function setupFilters(){
 
 const teams =
-[...new Set(allGames.map(g=>g.team))];
+[...new Set(allGames.map(g=>g.team).filter(Boolean))];
 
 const opps =
-[...new Set(allGames.map(g=>g.opponent))];
+[...new Set(allGames.map(g=>g.opponent).filter(Boolean))];
 
 const teamFilter =
 document.getElementById("teamFilter");
@@ -447,29 +451,33 @@ allGames.forEach(g=>{
 if(teamVal && g.team !== teamVal) return;
 if(oppVal && g.opponent !== oppVal) return;
 
+const stats =
+g.stats || {};
+
 totals.games++;
-totals.passY += Number(g.passing?.yards || 0);
-totals.passTD += Number(g.passing?.td || 0);
-totals.ints += Number(g.passing?.int || 0);
 
-totals.rushY += Number(g.rushing?.yards || 0);
-totals.rushTD += Number(g.rushing?.td || 0);
+totals.passY += Number(stats.pass_yds || 0);
+totals.passTD += Number(stats.pass_td || 0);
+totals.ints += Number(stats.pass_int || 0);
 
-totals.recY += Number(g.receiving?.yards || 0);
-totals.recTD += Number(g.receiving?.td || 0);
+totals.rushY += Number(stats.rush_yds || 0);
+totals.rushTD += Number(stats.rush_td || 0);
 
-if(Number(g.passing?.yards || 0) > highs.passY){
-highs.passY = Number(g.passing?.yards || 0);
+totals.recY += Number(stats.rec_yds || 0);
+totals.recTD += Number(stats.rec_td || 0);
+
+if(Number(stats.pass_yds || 0) > highs.passY){
+highs.passY = Number(stats.pass_yds || 0);
 highs.passYGame = g;
 }
 
-if(Number(g.rushing?.yards || 0) > highs.rushY){
-highs.rushY = Number(g.rushing?.yards || 0);
+if(Number(stats.rush_yds || 0) > highs.rushY){
+highs.rushY = Number(stats.rush_yds || 0);
 highs.rushYGame = g;
 }
 
-if(Number(g.receiving?.yards || 0) > highs.recY){
-highs.recY = Number(g.receiving?.yards || 0);
+if(Number(stats.rec_yds || 0) > highs.recY){
+highs.recY = Number(stats.rec_yds || 0);
 highs.recYGame = g;
 }
 
@@ -478,14 +486,14 @@ table.innerHTML += `
 <td>${g.date || ""}</td>
 <td>${g.team || ""}</td>
 <td>${g.opponent || ""}</td>
-<td>${g.game_type || ""}</td>
-<td>${g.passing?.yards || 0}</td>
-<td>${g.passing?.td || 0}</td>
-<td>${g.passing?.int || 0}</td>
-<td>${g.rushing?.yards || 0}</td>
-<td>${g.rushing?.td || 0}</td>
-<td>${g.receiving?.yards || 0}</td>
-<td>${g.receiving?.td || 0}</td>
+<td>${g.section || ""}</td>
+<td>${stats.pass_yds || 0}</td>
+<td>${stats.pass_td || 0}</td>
+<td>${stats.pass_int || 0}</td>
+<td>${stats.rush_yds || 0}</td>
+<td>${stats.rush_td || 0}</td>
+<td>${stats.rec_yds || 0}</td>
+<td>${stats.rec_td || 0}</td>
 </tr>
 `;
 
@@ -530,19 +538,19 @@ document.getElementById("highs").innerHTML = `
 <div class="box">
 <b>Pass Yards</b>
 ${highs.passY}
-${highs.passYGame ? `<br>vs ${highs.passYGame.opponent}<br>${highs.passYGame.date}` : ""}
+${highs.passYGame ? `<br>${highs.passYGame.date}` : ""}
 </div>
 
 <div class="box">
 <b>Rush Yards</b>
 ${highs.rushY}
-${highs.rushYGame ? `<br>vs ${highs.rushYGame.opponent}<br>${highs.rushYGame.date}` : ""}
+${highs.rushYGame ? `<br>${highs.rushYGame.date}` : ""}
 </div>
 
 <div class="box">
 <b>Rec Yards</b>
 ${highs.recY}
-${highs.recYGame ? `<br>vs ${highs.recYGame.opponent}<br>${highs.recYGame.date}` : ""}
+${highs.recYGame ? `<br>${highs.recYGame.date}` : ""}
 </div>
 
 `;
@@ -551,17 +559,17 @@ document.getElementById("records").innerHTML = `
 
 <div class="box">
 <b>300+ Passing Games</b>
-${allGames.filter(g=>Number(g.passing?.yards || 0) >= 300).length}
+${allGames.filter(g=>Number((g.stats || {}).pass_yds || 0) >= 300).length}
 </div>
 
 <div class="box">
 <b>100+ Rushing Games</b>
-${allGames.filter(g=>Number(g.rushing?.yards || 0) >= 100).length}
+${allGames.filter(g=>Number((g.stats || {}).rush_yds || 0) >= 100).length}
 </div>
 
 <div class="box">
 <b>100+ Receiving Games</b>
-${allGames.filter(g=>Number(g.receiving?.yards || 0) >= 100).length}
+${allGames.filter(g=>Number((g.stats || {}).rec_yds || 0) >= 100).length}
 </div>
 
 `;
