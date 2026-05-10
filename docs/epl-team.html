@@ -126,6 +126,16 @@ tr:nth-child(even){
 background:#f8fbff;
 }
 
+.player-link{
+font-weight:800;
+color:#0056d6;
+text-decoration:none;
+}
+
+.player-link:hover{
+text-decoration:underline;
+}
+
 .loading,
 .error{
 padding:100px 20px;
@@ -248,6 +258,22 @@ const TEAM_COLOURS = {
 
 };
 
+const TEAM_FIXES = {
+
+"brighton":"brighton & hove albion",
+"spurs":"tottenham hotspur",
+"tottenham":"tottenham hotspur",
+"man city":"manchester city",
+"man utd":"manchester united",
+"man united":"manchester united",
+"wolves":"wolverhampton wanderers",
+"newcastle":"newcastle united",
+"west ham":"west ham united",
+"west brom":"west bromwich albion",
+"qpr":"queens park rangers"
+
+};
+
 const params = new URLSearchParams(window.location.search);
 
 const team = params.get("team");
@@ -266,11 +292,6 @@ throw new Error("No team selected");
 
 }
 
-/*
-THIS VERSION USES players.json
-BECAUSE YOU DEFINITELY HAVE THAT FILE
-*/
-
 async function loadTeam(){
 
 try{
@@ -287,10 +308,43 @@ throw new Error("players.json not found");
 const data =
 await response.json();
 
+const pageTeam =
+(team || "")
+.toLowerCase()
+.trim();
+
+const fixedPage =
+TEAM_FIXES[pageTeam] || pageTeam;
+
 const teamPlayers =
-data.filter(player=>
-(player.team || "").trim() === team
-);
+data.filter(player=>{
+
+const playerTeam =
+(player.team || "")
+.toLowerCase()
+.trim();
+
+const fixedPlayer =
+TEAM_FIXES[playerTeam] || playerTeam;
+
+if(playerTeam === pageTeam){
+return true;
+}
+
+if(fixedPlayer === fixedPage){
+return true;
+}
+
+if(
+playerTeam.includes(pageTeam) ||
+pageTeam.includes(playerTeam)
+){
+return true;
+}
+
+return false;
+
+});
 
 const seasons = [...new Set(
 
@@ -390,16 +444,16 @@ ${topPlayers.map(player=>`
 <tr>
 
 <td>
+
 <a
+class="player-link"
 href="epl-player.html?player=${encodeURIComponent(player.player)}"
-style="
-font-weight:800;
-color:#0056d6;
-text-decoration:none;
-"
 >
+
 ${player.player || "-"}
+
 </a>
+
 </td>
 
 <td>
@@ -441,7 +495,7 @@ page.innerHTML = `
 <div class="error">
 Failed To Load Team Data
 <br><br>
-Check that this file exists:
+Check:
 <br>
 /data/epl/players.json
 </div>
