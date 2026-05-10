@@ -33,8 +33,8 @@ color:#0056d6;
 
 .hero{
 padding:80px 20px;
-color:white;
 text-align:center;
+color:white;
 }
 
 .hero h1{
@@ -59,10 +59,10 @@ padding:0 20px 50px;
 
 .stats-grid{
 display:grid;
-grid-template-columns:repeat(2,minmax(240px,320px));
+grid-template-columns:repeat(2,minmax(260px,340px));
 gap:24px;
-margin-bottom:30px;
 justify-content:center;
+margin-bottom:30px;
 }
 
 .stat-card{
@@ -136,7 +136,8 @@ text-decoration:none;
 text-decoration:underline;
 }
 
-.loading{
+.loading,
+.error{
 padding:100px 20px;
 text-align:center;
 font-size:28px;
@@ -144,10 +145,6 @@ font-weight:900;
 }
 
 .error{
-padding:100px 20px;
-text-align:center;
-font-size:28px;
-font-weight:900;
 color:#d90429;
 }
 
@@ -166,7 +163,7 @@ grid-template-columns:1fr;
 }
 
 .section-title{
-font-size:32px;
+font-size:30px;
 }
 
 .stat-value{
@@ -283,36 +280,120 @@ async function loadTeam(){
 
 try{
 
-const response =
-await fetch("/data/epl/epl.json");
+/*
+TRY MULTIPLE POSSIBLE FILES
+*/
 
-const games =
-await response.json();
+const possibleFiles = [
+"/data/epl/epl.json",
+"/data/epl/games.json",
+"/data/epl/matches.json",
+"/data/epl/results.json",
+"/data/epl/seasons/epl.json"
+];
 
-const teamGames =
-games.filter(game=>
-game.home_team === team ||
-game.away_team === team
-);
+let games = [];
 
-const seasons =
-[...new Set(
-teamGames.map(g=>g.season)
-)].sort();
+for(const file of possibleFiles){
+
+try{
+
+const response = await fetch(file);
+
+if(response.ok){
+
+games = await response.json();
+
+if(Array.isArray(games) && games.length > 0){
+
+console.log("Loaded:",file);
+break;
+
+}
+
+}
+
+}catch(err){
+
+console.log("Failed:",file);
+
+}
+
+}
+
+if(!games.length){
+
+throw new Error("No game data found");
+
+}
+
+const teamGames = games.filter(game=>{
+
+const home =
+game.home_team ||
+game.home ||
+game.HomeTeam;
+
+const away =
+game.away_team ||
+game.away ||
+game.AwayTeam;
+
+return home === team || away === team;
+
+});
+
+const seasons = [...new Set(
+
+teamGames.map(game=>
+
+game.season ||
+game.year ||
+game.Season
+
+).filter(Boolean)
+
+)];
 
 let goals = 0;
 
 teamGames.forEach(game=>{
 
-if(game.home_team === team){
+const home =
+game.home_team ||
+game.home ||
+game.HomeTeam;
 
-goals += Number(game.home_score || 0);
+const away =
+game.away_team ||
+game.away ||
+game.AwayTeam;
+
+const homeGoals =
+Number(
+game.home_score ||
+game.home_goals ||
+game.FTHG ||
+0
+);
+
+const awayGoals =
+Number(
+game.away_score ||
+game.away_goals ||
+game.FTAG ||
+0
+);
+
+if(home === team){
+
+goals += homeGoals;
 
 }
 
-if(game.away_team === team){
+if(away === team){
 
-goals += Number(game.away_score || 0);
+goals += awayGoals;
 
 }
 
@@ -320,16 +401,28 @@ goals += Number(game.away_score || 0);
 
 const recentGames =
 teamGames
-.sort((a,b)=>
-new Date(b.date) - new Date(a.date)
-)
+.sort((a,b)=>{
+
+const dateA = new Date(
+a.date || a.Date || 0
+);
+
+const dateB = new Date(
+b.date || b.Date || 0
+);
+
+return dateB - dateA;
+
+})
 .slice(0,20);
 
 page.innerHTML = `
 
 <div
 class="hero"
-style="background:${TEAM_COLOURS[team] || 'linear-gradient(135deg,#111,#555)'};"
+style="
+background:${TEAM_COLOURS[team] || 'linear-gradient(135deg,#111,#555)'};
+"
 >
 
 <h1>${team}</h1>
@@ -391,28 +484,60 @@ Recent Matches
 
 <tbody>
 
-${recentGames.map(game=>`
+${recentGames.map(game=>{
+
+const home =
+game.home_team ||
+game.home ||
+game.HomeTeam ||
+"-";
+
+const away =
+game.away_team ||
+game.away ||
+game.AwayTeam ||
+"-";
+
+const homeGoals =
+game.home_score ||
+game.home_goals ||
+game.FTHG ||
+0;
+
+const awayGoals =
+game.away_score ||
+game.away_goals ||
+game.FTAG ||
+0;
+
+const gameId =
+game.id ||
+game.match_id ||
+game.game_id ||
+"";
+
+return `
 
 <tr>
 
 <td>
-${game.date || "-"}
+${game.date || game.Date || "-"}
 </td>
 
 <td>
-${game.season || "-"}
+${game.season || game.year || game.Season || "-"}
 </td>
 
 <td>
 
 <a
 class="game-link"
-href="epl-game.html?game=${encodeURIComponent(game.id || game.match_id)}"
+href="epl-game.html?game=${encodeURIComponent(gameId)}"
 >
 
-${game.home_team}
+${home}
 vs
-${game.away_team}
+${away}
 
 </a>
 
@@ -420,15 +545,17 @@ ${game.away_team}
 
 <td>
 
-${game.home_score || 0}
+${homeGoals}
 -
-${game.away_score || 0}
+${awayGoals}
 
 </td>
 
 </tr>
 
-`).join("")}
+`;
+
+}).join("")}
 
 </tbody>
 
