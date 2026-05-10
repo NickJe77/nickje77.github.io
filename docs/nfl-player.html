@@ -123,6 +123,14 @@ tbody tr:hover{
 background:#dbeafe;
 }
 
+.loading{
+text-align:center;
+font-size:22px;
+font-weight:700;
+padding:50px;
+color:#013369;
+}
+
 @media(max-width:700px){
 
 .hero h1{
@@ -175,6 +183,12 @@ min-width:1000px;
 
 </div>
 
+<div id="loading" class="loading">
+Loading player data...
+</div>
+
+<div id="content" style="display:none;">
+
 <div class="section-title">Career Summary</div>
 <div class="summary" id="summary"></div>
 
@@ -208,21 +222,28 @@ min-width:1000px;
 
 </div>
 
+</div>
+
 <script>
 
 const params = new URLSearchParams(window.location.search);
 
-let player = decodeURIComponent(
+const rawPlayer =
+decodeURIComponent(
 params.get("player") || ""
 );
 
-player = player
+const player =
+String(rawPlayer)
+.trim()
 .toLowerCase()
+.replace(/%20/g," ")
 .replace(/[^a-z0-9]+/g,"-")
 .replace(/^-|-$/g,"");
 
 const slugify = name =>
 String(name || "")
+.trim()
 .toLowerCase()
 .replace(/[^a-z0-9]+/g,"-")
 .replace(/^-|-$/g,"");
@@ -290,7 +311,11 @@ dl.appendChild(opt);
 
 });
 
-}catch{}
+}catch(e){
+
+console.log(e);
+
+}
 
 }
 
@@ -307,7 +332,7 @@ window.location =
 
 });
 
-/* LOAD ALL DATA */
+/* LOAD DATA */
 
 async function loadAllGames(){
 
@@ -320,6 +345,8 @@ try{
 
 const seasonRes =
 await fetch(`/data/nfl/seasons/${y}.json?v=${Date.now()}`);
+
+if(!seasonRes.ok) continue;
 
 const seasonData =
 await seasonRes.json();
@@ -341,6 +368,8 @@ if(!gameId) continue;
 
 const boxRes =
 await fetch(`/data/nfl/boxscores/${y}/${gameId}.json?v=${Date.now()}`);
+
+if(!boxRes.ok) continue;
 
 const box =
 await boxRes.json();
@@ -406,11 +435,19 @@ td:Number(s.rec_td || 0)
 
 });
 
-}catch{}
+}catch(e){
+
+console.log(e);
 
 }
 
-}catch{}
+}
+
+}catch(e){
+
+console.log(e);
+
+}
 
 }
 
@@ -422,12 +459,20 @@ buildPlayer();
 
 function buildPlayer(){
 
-if(!player) return;
+if(!player){
+
+document.getElementById("playerName").innerText =
+"Player Not Found";
+
+return;
+
+}
 
 const nameMatch = n => {
 
 const slug =
 String(n || "")
+.trim()
 .toLowerCase()
 .replace(/[^a-z0-9]+/g,"-")
 .replace(/^-|-$/g,"");
@@ -450,12 +495,17 @@ games.push(g);
 
 if(!games.length){
 
+document.getElementById("loading").style.display = "none";
+
 document.getElementById("playerName").innerText =
 "Player Not Found";
 
 return;
 
 }
+
+document.getElementById("loading").style.display = "none";
+document.getElementById("content").style.display = "block";
 
 document.getElementById("playerName").innerText =
 games[0].player;
