@@ -197,6 +197,14 @@ text-decoration:none;
 text-decoration:underline;
 }
 
+.loading{
+text-align:center;
+font-size:32px;
+font-weight:900;
+padding:80px;
+color:#013369;
+}
+
 @media(max-width:900px){
 
 .hero h1{
@@ -237,6 +245,12 @@ NFL Franchise Statistics
 </div>
 
 <div class="container">
+
+<div id="loading" class="loading">
+Loading team leaders...
+</div>
+
+<div id="content" style="display:none;">
 
 <div class="section">
 
@@ -324,6 +338,8 @@ Top Receiving Leaders
 <tbody id="receivingTable"></tbody>
 
 </table>
+
+</div>
 
 </div>
 
@@ -426,7 +442,30 @@ radial-gradient(circle at top right, rgba(255,255,255,.08), transparent 35%),
 linear-gradient(135deg, ${colours[0]} 0%, ${colours[1]} 100%)
 `;
 
+function normalizeTeam(team){
+
+team =
+String(team || "")
+.trim()
+.toUpperCase();
+
+if(team === "NWE") return "NE";
+if(team === "KAN") return "KC";
+if(team === "NOR") return "NO";
+if(team === "SFO") return "SF";
+if(team === "TAM") return "TB";
+if(team === "SDG") return "LAC";
+if(team === "STL") return "LAR";
+if(team === "RAI") return "LV";
+if(team === "GNB") return "GB";
+
+return team;
+
+}
+
 async function loadPlayers(){
+
+try{
 
 const res =
 await fetch("/data/nfl/players/index.json?v="+Date.now());
@@ -476,10 +515,8 @@ recTD:0
 
 games.forEach(g=>{
 
-const team =
-String(g.team || "")
-.trim()
-.toUpperCase();
+let team =
+normalizeTeam(g.team || "");
 
 if(team !== teamCode) return;
 
@@ -498,9 +535,7 @@ totals.recTD += Number(s.rec_td || 0);
 
 });
 
-if(
-totals.games > 0
-){
+if(totals.games > 0){
 
 playerTotals.push(totals);
 
@@ -516,9 +551,30 @@ console.log(err);
 
 buildPage(playerTotals);
 
+}catch(err){
+
+console.log(err);
+
+}
+
 }
 
 function buildPage(data){
+
+document.getElementById("loading").style.display =
+"none";
+
+document.getElementById("content").style.display =
+"block";
+
+if(!data.length){
+
+document.getElementById("leadersGrid").innerHTML =
+"<div>No data found.</div>";
+
+return;
+
+}
 
 const passLeader =
 [...data].sort((a,b)=>b.passY-a.passY)[0];
