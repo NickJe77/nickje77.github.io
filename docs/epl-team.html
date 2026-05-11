@@ -32,14 +32,14 @@ color:#0056d6;
 }
 
 .hero{
-padding:34px 20px;
+padding:36px 20px;
 text-align:center;
 color:white;
 }
 
 .hero h1{
 margin:0;
-font-size:42px;
+font-size:46px;
 font-weight:900;
 line-height:1;
 }
@@ -59,21 +59,21 @@ padding:0 16px 40px;
 
 .stats-grid{
 display:grid;
-grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
 gap:14px;
-margin-bottom:20px;
+margin-bottom:22px;
 }
 
 .stat-card{
 background:white;
-border-radius:14px;
-padding:18px;
+border-radius:16px;
+padding:20px;
 box-shadow:0 2px 8px rgba(0,0,0,.05);
 text-align:center;
 }
 
 .stat-value{
-font-size:28px;
+font-size:32px;
 font-weight:900;
 line-height:1;
 margin-bottom:8px;
@@ -90,29 +90,35 @@ color:#666;
 .section{
 background:white;
 border-radius:18px;
-padding:20px;
+padding:22px;
 margin-bottom:22px;
 box-shadow:0 2px 8px rgba(0,0,0,.05);
 }
 
 .section-title{
-font-size:22px;
+font-size:24px;
 font-weight:900;
-margin-bottom:16px;
+margin-bottom:18px;
 }
 
 .filters{
-margin-bottom:14px;
+margin-bottom:18px;
 }
 
 select{
-padding:10px 14px;
-border-radius:8px;
+padding:12px 14px;
+border-radius:10px;
 border:1px solid #ccc;
 font-size:14px;
 font-weight:800;
 background:white;
-min-width:240px;
+min-width:260px;
+}
+
+.tables-grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+gap:18px;
 }
 
 table{
@@ -155,12 +161,31 @@ text-decoration:underline;
 .error{
 padding:120px 20px;
 text-align:center;
-font-size:32px;
+font-size:34px;
 font-weight:900;
 }
 
 .error{
 color:#d90429;
+}
+
+.games-table td{
+font-size:13px;
+}
+
+.result-win{
+font-weight:900;
+color:#008000;
+}
+
+.result-loss{
+font-weight:900;
+color:#d90429;
+}
+
+.result-draw{
+font-weight:900;
+color:#d68910;
 }
 
 @media(max-width:900px){
@@ -231,10 +256,12 @@ const TEAM_COLOURS = {
 "Manchester City":"linear-gradient(135deg,#6CABDD,#1C2C5B)",
 "Manchester United":"linear-gradient(135deg,#DA291C,#FBE122)",
 "Newcastle United":"linear-gradient(135deg,#111111,#666666)",
+"Norwich City":"linear-gradient(135deg,#00A650,#FFF200)",
 "Nottingham Forest":"linear-gradient(135deg,#DD0000,#FFFFFF)",
 "Southampton":"linear-gradient(135deg,#D71920,#FFFFFF)",
 "Tottenham Hotspur":"linear-gradient(135deg,#132257,#FFFFFF)",
 "West Ham United":"linear-gradient(135deg,#7A263A,#1BB1E7)",
+"Wimbledon":"linear-gradient(135deg,#003399,#FFCC00)",
 "Wolverhampton Wanderers":"linear-gradient(135deg,#FDB913,#231F20)"
 
 };
@@ -255,11 +282,44 @@ await fetch("/data/epl/teams.json");
 const teams =
 await teamsResponse.json();
 
-const seasonsResponse =
-await fetch("/data/epl/seasons.json");
+const seasons = [];
 
-const seasons =
-await seasonsResponse.json();
+for(let start=1992; start<=2026; start++){
+
+const end = start + 1;
+
+const seasonId = `${start}-${end}`;
+
+try{
+
+const res =
+await fetch(`/data/epl/seasons/${seasonId}.json`);
+
+if(res.ok){
+
+const data = await res.json();
+
+if(Array.isArray(data)){
+
+data.forEach(g=>{
+
+g.season = seasonId;
+
+});
+
+seasons.push(...data);
+
+}
+
+}
+
+}catch(err){
+
+console.log("Missing season",seasonId);
+
+}
+
+}
 
 const team =
 teams.find(t=>{
@@ -287,12 +347,7 @@ return;
 
 const allGames = [];
 
-seasons.forEach(season=>{
-
-const games =
-season.games || [];
-
-games.forEach(game=>{
+seasons.forEach(game=>{
 
 const home =
 (game.home_team || "").trim();
@@ -308,8 +363,6 @@ away === team.team
 allGames.push(game);
 
 }
-
-});
 
 });
 
@@ -343,6 +396,8 @@ let draws = 0;
 let losses = 0;
 let goals = 0;
 
+const filteredGames = [];
+
 allGames.forEach(game=>{
 
 const home =
@@ -370,6 +425,8 @@ opponentName !== opponent
 return;
 }
 
+filteredGames.push(game);
+
 games++;
 
 const teamGoals =
@@ -395,7 +452,8 @@ games,
 wins,
 draws,
 losses,
-goals
+goals,
+filteredGames
 };
 
 }
@@ -455,31 +513,19 @@ Number(player.red_cards || player.red || 0);
 const topScorers =
 Object.entries(playerTotals)
 .sort((a,b)=>b[1].goals - a[1].goals)
-.slice(0,10)
-.map(p=>[
-p[0],
-p[1].goals
-]);
+.slice(0,10);
 
 const yellowCards =
 Object.entries(playerTotals)
 .sort((a,b)=>b[1].yellow - a[1].yellow)
-.slice(0,10)
-.map(p=>[
-p[0],
-p[1].yellow
-]);
+.slice(0,10);
 
 const redCards =
 Object.entries(playerTotals)
 .sort((a,b)=>b[1].red - a[1].red)
-.slice(0,10)
-.map(p=>[
-p[0],
-p[1].red
-]);
+.slice(0,10);
 
-function buildRows(rows){
+function buildRows(rows,type){
 
 if(rows.length === 0){
 
@@ -510,11 +556,89 @@ ${player[0]}
 
 </td>
 
-<td>${player[1]}</td>
+<td>${player[1][type]}</td>
 
 </tr>
 
 `).join("");
+
+}
+
+function buildGamesRows(games){
+
+if(games.length === 0){
+
+return `
+<tr>
+<td colspan="5">
+No games found
+</td>
+</tr>
+`;
+
+}
+
+return games
+.slice(0,50)
+.map(game=>{
+
+const isHome =
+game.home_team === team.team;
+
+const teamGoals =
+isHome
+? Number(game.home_score || 0)
+: Number(game.away_score || 0);
+
+const oppGoals =
+isHome
+? Number(game.away_score || 0)
+: Number(game.home_score || 0);
+
+let resultClass = "result-draw";
+let resultText = "D";
+
+if(teamGoals > oppGoals){
+resultClass = "result-win";
+resultText = "W";
+}else if(teamGoals < oppGoals){
+resultClass = "result-loss";
+resultText = "L";
+}
+
+const opponent =
+isHome
+? game.away_team
+: game.home_team;
+
+return `
+
+<tr>
+
+<td>${game.season || ""}</td>
+
+<td>${opponent}</td>
+
+<td>${teamGoals}-${oppGoals}</td>
+
+<td class="${resultClass}">
+${resultText}
+</td>
+
+<td>
+<a
+class="player-link"
+href="/epl-game.html?match=${game.match_id}"
+>
+View
+</a>
+</td>
+
+</tr>
+
+`;
+
+}).join("");
 
 }
 
@@ -632,6 +756,8 @@ ${allStats.goals}
 
 </div>
 
+<div class="tables-grid">
+
 <div class="section">
 
 <div class="section-title">
@@ -651,7 +777,7 @@ Leading Scorers
 
 <tbody>
 
-${buildRows(topScorers)}
+${buildRows(topScorers,"goals")}
 
 </tbody>
 
@@ -671,14 +797,14 @@ Yellow Card Leaders
 
 <tr>
 <th>Player</th>
-<th>Yellow Cards</th>
+<th>Yellow</th>
 </tr>
 
 </thead>
 
 <tbody>
 
-${buildRows(yellowCards)}
+${buildRows(yellowCards,"yellow")}
 
 </tbody>
 
@@ -698,14 +824,48 @@ Red Card Leaders
 
 <tr>
 <th>Player</th>
-<th>Red Cards</th>
+<th>Red</th>
 </tr>
 
 </thead>
 
 <tbody>
 
-${buildRows(redCards)}
+${buildRows(redCards,"red")}
+
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+
+<div class="section">
+
+<div class="section-title">
+Results Vs Selected Opponent
+</div>
+
+<table class="games-table">
+
+<thead>
+
+<tr>
+
+<th>Season</th>
+<th>Opponent</th>
+<th>Score</th>
+<th>Result</th>
+<th></th>
+
+</tr>
+
+</thead>
+
+<tbody id="gamesBody">
+
+${buildGamesRows(allStats.filteredGames)}
 
 </tbody>
 
@@ -739,6 +899,9 @@ stats.losses;
 
 document.getElementById("oppGoals").textContent =
 stats.goals;
+
+document.getElementById("gamesBody").innerHTML =
+buildGamesRows(stats.filteredGames);
 
 });
 
