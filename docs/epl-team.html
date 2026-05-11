@@ -249,17 +249,17 @@ async function loadTeam(){
 
 try{
 
-const response =
+const teamsResponse =
 await fetch("/data/epl/teams.json");
 
 const teams =
-await response.json();
+await teamsResponse.json();
 
-const playersResponse =
-await fetch("/data/epl/players.json");
+const seasonsResponse =
+await fetch("/data/epl/seasons.json");
 
-const players =
-await playersResponse.json();
+const seasons =
+await seasonsResponse.json();
 
 const team =
 teams.find(t=>{
@@ -285,153 +285,198 @@ return;
 
 }
 
-const allOpponents = [
+const allGames = [];
+
+seasons.forEach(season=>{
+
+const games =
+season.games || [];
+
+games.forEach(game=>{
+
+const home =
+(game.home_team || "").trim();
+
+const away =
+(game.away_team || "").trim();
+
+if(
+home === team.team ||
+away === team.team
+){
+
+allGames.push(game);
+
+}
+
+});
+
+});
+
+const opponents = [
+
+"All Opponents",
 
 ...new Set(
 
-teams
-.map(t=>t.team || t.name)
-.filter(Boolean)
+allGames.map(g=>{
+
+if(g.home_team === team.team){
+
+return g.away_team;
+
+}
+
+return g.home_team;
+
+})
 
 )
 
-]
-.sort();
+].filter(Boolean).sort();
 
-allOpponents.unshift("All Opponents");
+function buildHeadToHead(opponent){
 
-const opponentStats = {};
+let games = 0;
+let wins = 0;
+let draws = 0;
+let losses = 0;
+let goals = 0;
 
-allOpponents.forEach(opponent=>{
+allGames.forEach(game=>{
 
-if(opponent === "All Opponents"){
+const home =
+game.home_team;
 
-opponentStats[opponent] = {
+const away =
+game.away_team;
 
-games:team.games || 0,
-wins:team.wins || 0,
-draws:team.draws || 0,
-losses:team.losses || 0,
-goals:team.goals || 0
+const homeGoals =
+Number(game.home_score || 0);
 
-};
+const awayGoals =
+Number(game.away_score || 0);
 
-}else{
+const isTeamHome =
+home === team.team;
 
-opponentStats[opponent] = {
-
-games:Math.floor(Math.random()*80)+10,
-wins:Math.floor(Math.random()*30),
-draws:Math.floor(Math.random()*20),
-losses:Math.floor(Math.random()*30),
-goals:Math.floor(Math.random()*100)
-
-};
-
-}
-
-});
-
-const teamPlayers = players.filter(p=>{
-
-const possibleTeams = [
-
-p.team,
-p.club,
-p.current_team,
-p.squad,
-p.team_name,
-p.Team,
-p.Club
-
-]
-.filter(Boolean)
-.map(v=>
-v.toString()
-.trim()
-.toLowerCase()
-);
-
-const currentTeam =
-(team.team || "")
-.toString()
-.trim()
-.toLowerCase();
-
-return possibleTeams.some(t=>{
-
-if(t === currentTeam) return true;
+const opponentName =
+isTeamHome ? away : home;
 
 if(
-t.includes(currentTeam) ||
-currentTeam.includes(t)
+opponent !== "All Opponents" &&
+opponentName !== opponent
 ){
-return true;
+return;
 }
 
-const aliases = {
+games++;
 
-"man united":"manchester united",
-"man utd":"manchester united",
-"man city":"manchester city",
-"spurs":"tottenham hotspur",
-"wolves":"wolverhampton wanderers",
-"newcastle":"newcastle united",
-"forest":"nottingham forest"
+const teamGoals =
+isTeamHome ? homeGoals : awayGoals;
+
+const oppGoals =
+isTeamHome ? awayGoals : homeGoals;
+
+goals += teamGoals;
+
+if(teamGoals > oppGoals){
+wins++;
+}else if(teamGoals < oppGoals){
+losses++;
+}else{
+draws++;
+}
+
+});
+
+return {
+games,
+wins,
+draws,
+losses,
+goals
+};
+
+}
+
+const allStats =
+buildHeadToHead("All Opponents");
+
+const playerTotals = {};
+
+allGames.forEach(game=>{
+
+const homePlayers =
+game.home_players || [];
+
+const awayPlayers =
+game.away_players || [];
+
+const relevantPlayers =
+game.home_team === team.team
+? homePlayers
+: awayPlayers;
+
+relevantPlayers.forEach(player=>{
+
+const playerName =
+player.player ||
+player.name ||
+player.player_name;
+
+if(!playerName) return;
+
+if(!playerTotals[playerName]){
+
+playerTotals[playerName] = {
+
+goals:0,
+yellow:0,
+red:0
 
 };
 
-const fixedT =
-aliases[t] || t;
+}
 
-const fixedCurrent =
-aliases[currentTeam] || currentTeam;
+playerTotals[playerName].goals +=
+Number(player.goals || 0);
 
-return fixedT === fixedCurrent;
+playerTotals[playerName].yellow +=
+Number(player.yellow_cards || player.yellow || 0);
+
+playerTotals[playerName].red +=
+Number(player.red_cards || player.red || 0);
 
 });
 
 });
-
-console.log("CURRENT TEAM:");
-console.log(team.team);
-
-console.log("PLAYERS FOUND:");
-console.log(teamPlayers.length);
-
-console.log(teamPlayers.slice(0,20));
 
 const topScorers =
-[...teamPlayers]
-.sort((a,b)=>(Number(b.goals)||0) - (Number(a.goals)||0))
+Object.entries(playerTotals)
+.sort((a,b)=>b[1].goals - a[1].goals)
 .slice(0,10)
 .map(p=>[
-p.player || p.name || p.player_name,
-Number(p.goals) || 0
+p[0],
+p[1].goals
 ]);
 
 const yellowCards =
-[...teamPlayers]
-.sort((a,b)=>
-(Number(b.yellow_cards)||Number(b.yellow)||0) -
-(Number(a.yellow_cards)||Number(a.yellow)||0)
-)
+Object.entries(playerTotals)
+.sort((a,b)=>b[1].yellow - a[1].yellow)
 .slice(0,10)
 .map(p=>[
-p.player || p.name || p.player_name,
-Number(p.yellow_cards) || Number(p.yellow) || 0
+p[0],
+p[1].yellow
 ]);
 
 const redCards =
-[...teamPlayers]
-.sort((a,b)=>
-(Number(b.red_cards)||Number(b.red)||0) -
-(Number(a.red_cards)||Number(a.red)||0)
-)
+Object.entries(playerTotals)
+.sort((a,b)=>b[1].red - a[1].red)
 .slice(0,10)
 .map(p=>[
-p.player || p.name || p.player_name,
-Number(p.red_cards) || Number(p.red) || 0
+p[0],
+p[1].red
 ]);
 
 function buildRows(rows){
@@ -500,27 +545,27 @@ Premier League Club Profile
 </div>
 
 <div class="stat-card">
-<div class="stat-value">${team.games || 0}</div>
+<div class="stat-value">${allStats.games}</div>
 <div class="stat-label">Games</div>
 </div>
 
 <div class="stat-card">
-<div class="stat-value">${team.goals || 0}</div>
+<div class="stat-value">${allStats.goals}</div>
 <div class="stat-label">Goals</div>
 </div>
 
 <div class="stat-card">
-<div class="stat-value">${team.wins || 0}</div>
+<div class="stat-value">${allStats.wins}</div>
 <div class="stat-label">Wins</div>
 </div>
 
 <div class="stat-card">
-<div class="stat-value">${team.draws || 0}</div>
+<div class="stat-value">${allStats.draws}</div>
 <div class="stat-label">Draws</div>
 </div>
 
 <div class="stat-card">
-<div class="stat-value">${team.losses || 0}</div>
+<div class="stat-value">${allStats.losses}</div>
 <div class="stat-label">Losses</div>
 </div>
 
@@ -532,7 +577,7 @@ Premier League Club Profile
 
 <select id="oppositionSelect">
 
-${allOpponents.map(o=>`
+${opponents.map(o=>`
 <option value="${o}">
 ${o}
 </option>
@@ -550,35 +595,35 @@ Vs Selected Opponent
 
 <div class="stat-card">
 <div class="stat-value" id="oppGames">
-${team.games || 0}
+${allStats.games}
 </div>
 <div class="stat-label">Games</div>
 </div>
 
 <div class="stat-card">
 <div class="stat-value" id="oppWins">
-${team.wins || 0}
+${allStats.wins}
 </div>
 <div class="stat-label">Wins</div>
 </div>
 
 <div class="stat-card">
 <div class="stat-value" id="oppDraws">
-${team.draws || 0}
+${allStats.draws}
 </div>
 <div class="stat-label">Draws</div>
 </div>
 
 <div class="stat-card">
 <div class="stat-value" id="oppLosses">
-${team.losses || 0}
+${allStats.losses}
 </div>
 <div class="stat-label">Losses</div>
 </div>
 
 <div class="stat-card">
 <div class="stat-value" id="oppGoals">
-${team.goals || 0}
+${allStats.goals}
 </div>
 <div class="stat-label">Goals</div>
 </div>
@@ -677,11 +722,8 @@ document.getElementById("oppositionSelect");
 
 oppositionSelect.addEventListener("change",()=>{
 
-const opponent =
-oppositionSelect.value;
-
 const stats =
-opponentStats[opponent];
+buildHeadToHead(oppositionSelect.value);
 
 document.getElementById("oppGames").textContent =
 stats.games;
