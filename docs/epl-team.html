@@ -53,16 +53,15 @@ opacity:.95;
 
 .container{
 max-width:1500px;
-margin:34px auto;
-padding:0 20px 50px;
+margin:36px auto;
+padding:0 20px 60px;
 }
 
 .stats-grid{
 display:grid;
-grid-template-columns:repeat(2,minmax(260px,340px));
+grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
 gap:24px;
-justify-content:center;
-margin-bottom:30px;
+margin-bottom:34px;
 }
 
 .stat-card{
@@ -70,6 +69,7 @@ background:white;
 border-radius:20px;
 padding:30px;
 box-shadow:0 2px 12px rgba(0,0,0,.08);
+text-align:center;
 }
 
 .stat-label{
@@ -82,7 +82,7 @@ margin-bottom:14px;
 }
 
 .stat-value{
-font-size:58px;
+font-size:56px;
 font-weight:900;
 line-height:1;
 }
@@ -96,7 +96,7 @@ box-shadow:0 2px 12px rgba(0,0,0,.08);
 }
 
 .section-title{
-font-size:42px;
+font-size:40px;
 font-weight:900;
 margin-bottom:24px;
 }
@@ -109,31 +109,21 @@ border-collapse:collapse;
 th{
 background:#eef2f7;
 padding:16px;
-text-align:left;
 font-size:14px;
 font-weight:900;
 text-transform:uppercase;
+text-align:left;
 }
 
 td{
 padding:16px;
 border-bottom:1px solid #ececec;
-font-weight:600;
 font-size:16px;
+font-weight:600;
 }
 
 tr:nth-child(even){
 background:#f8fbff;
-}
-
-.player-link{
-font-weight:800;
-color:#0056d6;
-text-decoration:none;
-}
-
-.player-link:hover{
-text-decoration:underline;
 }
 
 .loading,
@@ -158,16 +148,12 @@ font-size:48px;
 font-size:18px;
 }
 
-.stats-grid{
-grid-template-columns:1fr;
-}
-
 .section-title{
 font-size:30px;
 }
 
 .stat-value{
-font-size:46px;
+font-size:42px;
 }
 
 table{
@@ -188,6 +174,7 @@ white-space:nowrap;
 <a href="/">Home</a>
 <a href="/epl.html">EPL</a>
 <a href="/epl-teams.html">Teams</a>
+<a href="/epl-players.html">Players</a>
 <a href="/nba.html">NBA</a>
 <a href="/afl.html">AFL</a>
 </div>
@@ -258,29 +245,13 @@ const TEAM_COLOURS = {
 
 };
 
-const TEAM_FIXES = {
-
-"brighton":"brighton & hove albion",
-"spurs":"tottenham hotspur",
-"tottenham":"tottenham hotspur",
-"man city":"manchester city",
-"man utd":"manchester united",
-"man united":"manchester united",
-"wolves":"wolverhampton wanderers",
-"newcastle":"newcastle united",
-"west ham":"west ham united",
-"west brom":"west bromwich albion",
-"qpr":"queens park rangers"
-
-};
-
 const params = new URLSearchParams(window.location.search);
 
-const team = params.get("team");
+const teamName = params.get("team");
 
 const page = document.getElementById("page");
 
-if(!team){
+if(!teamName){
 
 page.innerHTML = `
 <div class="error">
@@ -288,7 +259,7 @@ No Team Selected
 </div>
 `;
 
-throw new Error("No team selected");
+throw new Error("No Team Selected");
 
 }
 
@@ -297,89 +268,46 @@ async function loadTeam(){
 try{
 
 const response =
-await fetch("/data/epl/players.json");
+await fetch("/data/epl/teams.json");
 
 if(!response.ok){
 
-throw new Error("players.json not found");
+throw new Error("teams.json missing");
 
 }
 
-const data =
+const teams =
 await response.json();
 
-const pageTeam =
-(team || "")
-.toLowerCase()
-.trim();
+const team =
+teams.find(t=>
+t.team === teamName
+);
 
-const fixedPage =
-TEAM_FIXES[pageTeam] || pageTeam;
+if(!team){
 
-const teamPlayers =
-data.filter(player=>{
+page.innerHTML = `
+<div class="error">
+Team Not Found
+</div>
+`;
 
-const playerTeam =
-(player.team || "")
-.toLowerCase()
-.trim();
+return;
 
-const fixedPlayer =
-TEAM_FIXES[playerTeam] || playerTeam;
-
-if(playerTeam === pageTeam){
-return true;
 }
-
-if(fixedPlayer === fixedPage){
-return true;
-}
-
-if(
-playerTeam.includes(pageTeam) ||
-pageTeam.includes(playerTeam)
-){
-return true;
-}
-
-return false;
-
-});
-
-const seasons = [...new Set(
-
-teamPlayers.map(player=>
-player.season
-).filter(Boolean)
-
-)].sort();
-
-let goals = 0;
-
-teamPlayers.forEach(player=>{
-
-goals += Number(player.goals || 0);
-
-});
-
-const topPlayers =
-[...teamPlayers]
-.sort((a,b)=>
-Number(b.goals || 0) -
-Number(a.goals || 0)
-)
-.slice(0,20);
 
 page.innerHTML = `
 
 <div
 class="hero"
 style="
-background:${TEAM_COLOURS[team] || 'linear-gradient(135deg,#111,#555)'};
+background:${TEAM_COLOURS[team.team] || 'linear-gradient(135deg,#111,#555)'};
 "
 >
 
-<h1>${team}</h1>
+<h1>
+${team.team}
+</h1>
 
 <p>
 Premier League Club Profile
@@ -394,11 +322,11 @@ Premier League Club Profile
 <div class="stat-card">
 
 <div class="stat-label">
-Premier League Seasons
+Seasons
 </div>
 
 <div class="stat-value">
-${seasons.length}
+${team.seasons || 0}
 </div>
 
 </div>
@@ -406,11 +334,59 @@ ${seasons.length}
 <div class="stat-card">
 
 <div class="stat-label">
-Premier League Goals
+Games
 </div>
 
 <div class="stat-value">
-${goals}
+${team.games || 0}
+</div>
+
+</div>
+
+<div class="stat-card">
+
+<div class="stat-label">
+Goals
+</div>
+
+<div class="stat-value">
+${team.goals || 0}
+</div>
+
+</div>
+
+<div class="stat-card">
+
+<div class="stat-label">
+Wins
+</div>
+
+<div class="stat-value">
+${team.wins || 0}
+</div>
+
+</div>
+
+<div class="stat-card">
+
+<div class="stat-label">
+Draws
+</div>
+
+<div class="stat-value">
+${team.draws || 0}
+</div>
+
+</div>
+
+<div class="stat-card">
+
+<div class="stat-label">
+Losses
+</div>
+
+<div class="stat-value">
+${team.losses || 0}
 </div>
 
 </div>
@@ -420,61 +396,47 @@ ${goals}
 <div class="section">
 
 <div class="section-title">
-Top Goal Scorers
+Club Summary
 </div>
 
 <table>
 
-<thead>
-
-<tr>
-<th>Player</th>
-<th>Goals</th>
-<th>Assists</th>
-<th>Apps</th>
-<th>Season</th>
-</tr>
-
-</thead>
-
 <tbody>
 
-${topPlayers.map(player=>`
-
 <tr>
-
-<td>
-
-<a
-class="player-link"
-href="epl-player.html?player=${encodeURIComponent(player.player)}"
->
-
-${player.player || "-"}
-
-</a>
-
-</td>
-
-<td>
-${player.goals || 0}
-</td>
-
-<td>
-${player.assists || 0}
-</td>
-
-<td>
-${player.appearances || 0}
-</td>
-
-<td>
-${player.season || "-"}
-</td>
-
+<td><strong>Club</strong></td>
+<td>${team.team}</td>
 </tr>
 
-`).join("")}
+<tr>
+<td><strong>Premier League Seasons</strong></td>
+<td>${team.seasons || 0}</td>
+</tr>
+
+<tr>
+<td><strong>Games Played</strong></td>
+<td>${team.games || 0}</td>
+</tr>
+
+<tr>
+<td><strong>Total Goals</strong></td>
+<td>${team.goals || 0}</td>
+</tr>
+
+<tr>
+<td><strong>Wins</strong></td>
+<td>${team.wins || 0}</td>
+</tr>
+
+<tr>
+<td><strong>Draws</strong></td>
+<td>${team.draws || 0}</td>
+</tr>
+
+<tr>
+<td><strong>Losses</strong></td>
+<td>${team.losses || 0}</td>
+</tr>
 
 </tbody>
 
@@ -494,10 +456,6 @@ page.innerHTML = `
 
 <div class="error">
 Failed To Load Team Data
-<br><br>
-Check:
-<br>
-/data/epl/players.json
 </div>
 
 `;
