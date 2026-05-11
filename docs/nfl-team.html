@@ -467,15 +467,24 @@ async function loadPlayers(){
 
 try{
 
-const res =
+const indexRes =
 await fetch("/data/nfl/players/index.json?v="+Date.now());
 
+if(!indexRes.ok){
+
+document.getElementById("loading").innerHTML =
+"Unable to load players index";
+
+return;
+
+}
+
 const players =
-await res.json();
+await indexRes.json();
 
 const playerTotals = [];
 
-for(const player of players){
+const promises = players.map(async(player)=>{
 
 try{
 
@@ -488,7 +497,7 @@ player
 const pres =
 await fetch(`/data/nfl/players/${slug}.json?v=${Date.now()}`);
 
-if(!pres.ok) continue;
+if(!pres.ok) return null;
 
 const pdata =
 await pres.json();
@@ -537,23 +546,38 @@ totals.recTD += Number(s.rec_td || 0);
 
 if(totals.games > 0){
 
-playerTotals.push(totals);
+return totals;
 
 }
+
+return null;
 
 }catch(err){
 
 console.log(err);
+return null;
 
 }
 
-}
+});
+
+const results =
+await Promise.all(promises);
+
+results.forEach(r=>{
+
+if(r) playerTotals.push(r);
+
+});
 
 buildPage(playerTotals);
 
 }catch(err){
 
 console.log(err);
+
+document.getElementById("loading").innerHTML =
+"Failed to load team data";
 
 }
 
