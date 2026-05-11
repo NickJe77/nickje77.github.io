@@ -1,23 +1,11 @@
 import os
 import json
-import shutil
 from collections import defaultdict
 
 PLAYERS_DIR = "docs/data/epl/players"
 OUTPUT_FILE = "docs/data/epl/team_stats.json"
-BACKUP_FILE = "docs/data/epl/team_stats.backup.json"
-TMP_FILE = "docs/data/epl/team_stats.tmp.json"
 
 team_data = {}
-
-def to_int(v):
-    try:
-        return int(v)
-    except Exception:
-        try:
-            return int(float(v))
-        except Exception:
-            return 0
 
 def ensure_team(team):
     if team not in team_data:
@@ -25,17 +13,24 @@ def ensure_team(team):
             "team": team,
             "top_scorers": defaultdict(int),
             "yellow_cards": defaultdict(int),
-            "red_cards": defaultdict(int),
+            "red_cards": defaultdict(int)
         }
 
-if not os.path.isdir(PLAYERS_DIR):
-    raise SystemExit(f"ERROR: missing folder {PLAYERS_DIR}")
+def to_int(v):
+    try:
+        return int(float(v))
+    except:
+        return 0
 
-player_files = [f for f in os.listdir(PLAYERS_DIR) if f.endswith(".json")]
+player_files = [
+    f for f in os.listdir(PLAYERS_DIR)
+    if f.endswith(".json")
+]
 
 print(f"Player files found: {len(player_files)}")
 
 for filename in sorted(player_files):
+
     path = os.path.join(PLAYERS_DIR, filename)
 
     try:
@@ -45,17 +40,29 @@ for filename in sorted(player_files):
         print(f"Skipping {filename}: {e}")
         continue
 
-    player_name = str(data.get("player") or data.get("name") or "").strip()
+    player_name = (
+        data.get("player")
+        or data.get("name")
+        or ""
+    ).strip()
+
+    if not player_name:
+        continue
+
     matches = data.get("matches", [])
 
-    if not player_name or not isinstance(matches, list):
+    if not isinstance(matches, list):
         continue
 
     for match in matches:
+
         if not isinstance(match, dict):
             continue
 
-        team = str(match.get("team") or "").strip()
+        team = (
+            match.get("team")
+            or ""
+        ).strip()
 
         if not team:
             continue
@@ -76,57 +83,67 @@ for filename in sorted(player_files):
             team_data[team]["red_cards"][player_name] += reds
 
 final_output = []
-total_scorers = 0
-total_yellows = 0
-total_reds = 0
 
 for team in sorted(team_data):
+
     data = team_data[team]
 
-    scorers = sorted(data["top_scorers"].items(), key=lambda x: x[1], reverse=True)
-    yellows = sorted(data["yellow_cards"].items(), key=lambda x: x[1], reverse=True)
-    reds = sorted(data["red_cards"].items(), key=lambda x: x[1], reverse=True)
+    scorers = sorted(
+        data["top_scorers"].items(),
+        key=lambda x: x[1],
+        reverse=True
+    )
 
-    total_scorers += len(scorers)
-    total_yellows += len(yellows)
-    total_reds += len(reds)
+    yellows = sorted(
+        data["yellow_cards"].items(),
+        key=lambda x: x[1],
+        reverse=True
+    )
+
+    reds = sorted(
+        data["red_cards"].items(),
+        key=lambda x: x[1],
+        reverse=True
+    )
 
     final_output.append({
         "team": team,
+
         "top_scorers": [
-            {"player": player, "goals": goals}
-            for player, goals in scorers[:10]
+            {
+                "player": player,
+                "goals": total
+            }
+            for player, total in scorers[:10]
         ],
+
         "yellow_cards": [
-            {"player": player, "yellow": yellow}
-            for player, yellow in yellows[:10]
+            {
+                "player": player,
+                "yellow": total
+            }
+            for player, total in yellows[:10]
         ],
+
         "red_cards": [
-            {"player": player, "red": red}
-            for player, red in reds[:10]
-        ],
+            {
+                "player": player,
+                "red": total
+            }
+            for player, total in reds[:10]
+        ]
     })
 
-print(f"Teams built: {len(final_output)}")
-print(f"Scorers found: {total_scorers}")
-print(f"Yellow-card players found: {total_yellows}")
-print(f"Red-card players found: {total_reds}")
-
-if len(final_output) == 0:
-    raise SystemExit("ERROR: no teams built. Refusing to overwrite team_stats.json.")
-
-if total_scorers == 0 and total_yellows == 0 and total_reds == 0:
-    raise SystemExit("ERROR: no stats found. Refusing to overwrite team_stats.json.")
-
-os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
-
-if os.path.exists(OUTPUT_FILE):
-    shutil.copyfile(OUTPUT_FILE, BACKUP_FILE)
-    print(f"Backup saved: {BACKUP_FILE}")
-
-with open(TMP_FILE, "w", encoding="utf-8") as f:
+with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
     json.dump(final_output, f, indent=2, ensure_ascii=False)
 
-os.replace(TMP_FILE, OUTPUT_FILE)
+print(f"Recovered {OUTPUT_FILE}")
+print(f"Teams built: {len(final_output)}")
 
-print(f"SUCCESS: rebuilt {OUTPUT_FILE}")
+for t in final_output[:5]:
+    print(
+        t["team"],
+        len(t["top_scorers"]),
+        len(t["yellow_cards"]),
+        len(t["red_cards"])
+    )
