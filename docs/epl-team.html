@@ -32,14 +32,14 @@ color:#0056d6;
 }
 
 .hero{
-padding:36px 20px;
+padding:40px 20px;
 text-align:center;
 color:white;
 }
 
 .hero h1{
 margin:0;
-font-size:46px;
+font-size:48px;
 font-weight:900;
 line-height:1;
 }
@@ -53,15 +53,15 @@ opacity:.95;
 
 .container{
 max-width:1450px;
-margin:22px auto;
-padding:0 16px 40px;
+margin:24px auto;
+padding:0 16px 50px;
 }
 
 .stats-grid{
 display:grid;
 grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
-gap:14px;
-margin-bottom:22px;
+gap:16px;
+margin-bottom:24px;
 }
 
 .stat-card{
@@ -73,7 +73,7 @@ text-align:center;
 }
 
 .stat-value{
-font-size:32px;
+font-size:34px;
 font-weight:900;
 line-height:1;
 margin-bottom:8px;
@@ -266,11 +266,26 @@ const TEAM_COLOURS = {
 
 };
 
+function slugify(str){
+
+return (str || "")
+.toLowerCase()
+.replace(/&/g,"and")
+.replace(/[^a-z0-9]+/g,"-")
+.replace(/^-|-$/g,"");
+
+}
+
 const params = new URLSearchParams(window.location.search);
 
-const teamName = params.get("team");
+const rawTeam =
+params.get("team") || "";
 
-const page = document.getElementById("page");
+const teamSlug =
+slugify(rawTeam);
+
+const page =
+document.getElementById("page");
 
 async function loadTeam(){
 
@@ -278,6 +293,12 @@ try{
 
 const teamsResponse =
 await fetch("/data/epl/teams.json");
+
+if(!teamsResponse.ok){
+
+throw new Error("teams.json missing");
+
+}
 
 const teams =
 await teamsResponse.json();
@@ -297,13 +318,14 @@ await fetch(`/data/epl/seasons/${seasonId}.json`);
 
 if(res.ok){
 
-const data = await res.json();
+const data =
+await res.json();
 
 if(Array.isArray(data)){
 
-data.forEach(g=>{
+data.forEach(game=>{
 
-g.season = seasonId;
+game.season = seasonId;
 
 });
 
@@ -327,9 +349,7 @@ teams.find(t=>{
 const name =
 t.team || t.name || "";
 
-return (
-name.toLowerCase() === teamName.toLowerCase()
-);
+return slugify(name) === teamSlug;
 
 });
 
@@ -345,26 +365,27 @@ return;
 
 }
 
-const allGames = [];
+const allGames =
+seasons.filter(game=>{
 
-seasons.forEach(game=>{
-
-const home =
-(game.home_team || "").trim();
-
-const away =
-(game.away_team || "").trim();
-
-if(
-home === team.team ||
-away === team.team
-){
-
-allGames.push(game);
-
-}
+return (
+game.home_team === team.team ||
+game.away_team === team.team
+);
 
 });
+
+if(allGames.length === 0){
+
+page.innerHTML = `
+<div class="error">
+No Games Found
+</div>
+`;
+
+return;
+
+}
 
 const opponents = [
 
@@ -372,15 +393,11 @@ const opponents = [
 
 ...new Set(
 
-allGames.map(g=>{
+allGames.map(game=>{
 
-if(g.home_team === team.team){
-
-return g.away_team;
-
-}
-
-return g.home_team;
+return game.home_team === team.team
+? game.away_team
+: game.home_team;
 
 })
 
@@ -388,7 +405,7 @@ return g.home_team;
 
 ].filter(Boolean).sort();
 
-function buildHeadToHead(opponent){
+function buildStats(opponent){
 
 let games = 0;
 let wins = 0;
@@ -400,27 +417,17 @@ const filteredGames = [];
 
 allGames.forEach(game=>{
 
-const home =
-game.home_team;
-
-const away =
-game.away_team;
-
-const homeGoals =
-Number(game.home_score || 0);
-
-const awayGoals =
-Number(game.away_score || 0);
-
-const isTeamHome =
-home === team.team;
+const isHome =
+game.home_team === team.team;
 
 const opponentName =
-isTeamHome ? away : home;
+isHome
+? game.away_team
+: game.home_team;
 
 if(
 opponent !== "All Opponents" &&
-opponentName !== opponent
+opponent !== opponentName
 ){
 return;
 }
@@ -430,10 +437,14 @@ filteredGames.push(game);
 games++;
 
 const teamGoals =
-isTeamHome ? homeGoals : awayGoals;
+isHome
+? Number(game.home_score || 0)
+: Number(game.away_score || 0);
 
 const oppGoals =
-isTeamHome ? awayGoals : homeGoals;
+isHome
+? Number(game.away_score || 0)
+: Number(game.home_score || 0);
 
 goals += teamGoals;
 
@@ -458,69 +469,61 @@ filteredGames
 
 }
 
-const allStats =
-buildHeadToHead("All Opponents");
-
 const playerTotals = {};
 
 allGames.forEach(game=>{
 
-const homePlayers =
-game.home_players || [];
+const isHome =
+game.home_team === team.team;
 
-const awayPlayers =
-game.away_players || [];
+const players =
+isHome
+? (game.home_players || [])
+: (game.away_players || []);
 
-const relevantPlayers =
-game.home_team === team.team
-? homePlayers
-: awayPlayers;
+players.forEach(player=>{
 
-relevantPlayers.forEach(player=>{
-
-const playerName =
+const name =
 player.player ||
 player.name ||
 player.player_name;
 
-if(!playerName) return;
+if(!name) return;
 
-if(!playerTotals[playerName]){
+if(!playerTotals[name]){
 
-playerTotals[playerName] = {
-
+playerTotals[name] = {
 goals:0,
 yellow:0,
 red:0
-
 };
 
 }
 
-playerTotals[playerName].goals +=
+playerTotals[name].goals +=
 Number(player.goals || 0);
 
-playerTotals[playerName].yellow +=
+playerTotals[name].yellow +=
 Number(player.yellow_cards || player.yellow || 0);
 
-playerTotals[playerName].red +=
+playerTotals[name].red +=
 Number(player.red_cards || player.red || 0);
 
 });
 
 });
 
-const topScorers =
+const scorers =
 Object.entries(playerTotals)
 .sort((a,b)=>b[1].goals - a[1].goals)
 .slice(0,10);
 
-const yellowCards =
+const yellows =
 Object.entries(playerTotals)
 .sort((a,b)=>b[1].yellow - a[1].yellow)
 .slice(0,10);
 
-const redCards =
+const reds =
 Object.entries(playerTotals)
 .sort((a,b)=>b[1].red - a[1].red)
 .slice(0,10);
@@ -532,7 +535,7 @@ if(rows.length === 0){
 return `
 <tr>
 <td colspan="2">
-No player data found
+No Player Data
 </td>
 </tr>
 `;
@@ -564,14 +567,14 @@ ${player[0]}
 
 }
 
-function buildGamesRows(games){
+function buildGameRows(games){
 
 if(games.length === 0){
 
 return `
 <tr>
 <td colspan="5">
-No games found
+No Games Found
 </td>
 </tr>
 `;
@@ -595,21 +598,25 @@ isHome
 ? Number(game.away_score || 0)
 : Number(game.home_score || 0);
 
-let resultClass = "result-draw";
-let resultText = "D";
-
-if(teamGoals > oppGoals){
-resultClass = "result-win";
-resultText = "W";
-}else if(teamGoals < oppGoals){
-resultClass = "result-loss";
-resultText = "L";
-}
-
 const opponent =
 isHome
 ? game.away_team
 : game.home_team;
+
+let result = "D";
+let resultClass = "result-draw";
+
+if(teamGoals > oppGoals){
+
+result = "W";
+resultClass = "result-win";
+
+}else if(teamGoals < oppGoals){
+
+result = "L";
+resultClass = "result-loss";
+
+}
 
 return `
 
@@ -622,16 +629,20 @@ return `
 <td>${teamGoals}-${oppGoals}</td>
 
 <td class="${resultClass}">
-${resultText}
+${result}
 </td>
 
 <td>
+
 <a
 class="player-link"
 href="/epl-game.html?match=${game.match_id}"
 >
+
 View
+
 </a>
+
 </td>
 
 </tr>
@@ -641,6 +652,9 @@ View
 }).join("");
 
 }
+
+const allStats =
+buildStats("All Opponents");
 
 page.innerHTML = `
 
@@ -664,18 +678,8 @@ Premier League Club Profile
 <div class="stats-grid">
 
 <div class="stat-card">
-<div class="stat-value">${team.seasons || 0}</div>
-<div class="stat-label">Seasons</div>
-</div>
-
-<div class="stat-card">
-<div class="stat-value">${allStats.games}</div>
+<div class="stat-value">${allGames.length}</div>
 <div class="stat-label">Games</div>
-</div>
-
-<div class="stat-card">
-<div class="stat-value">${allStats.goals}</div>
-<div class="stat-label">Goals</div>
 </div>
 
 <div class="stat-card">
@@ -693,6 +697,11 @@ Premier League Club Profile
 <div class="stat-label">Losses</div>
 </div>
 
+<div class="stat-card">
+<div class="stat-value">${allStats.goals}</div>
+<div class="stat-label">Goals</div>
+</div>
+
 </div>
 
 <div class="section">
@@ -701,18 +710,14 @@ Premier League Club Profile
 
 <select id="oppositionSelect">
 
-${opponents.map(o=>`
-<option value="${o}">
-${o}
+${opponents.map(team=>`
+<option value="${team}">
+${team}
 </option>
 `).join("")}
 
 </select>
 
-</div>
-
-<div class="section-title">
-Vs Selected Opponent
 </div>
 
 <div class="stats-grid">
@@ -777,7 +782,7 @@ Leading Scorers
 
 <tbody>
 
-${buildRows(topScorers,"goals")}
+${buildRows(scorers,"goals")}
 
 </tbody>
 
@@ -804,7 +809,7 @@ Yellow Card Leaders
 
 <tbody>
 
-${buildRows(yellowCards,"yellow")}
+${buildRows(yellows,"yellow")}
 
 </tbody>
 
@@ -831,7 +836,7 @@ Red Card Leaders
 
 <tbody>
 
-${buildRows(redCards,"red")}
+${buildRows(reds,"red")}
 
 </tbody>
 
@@ -865,7 +870,7 @@ Results Vs Selected Opponent
 
 <tbody id="gamesBody">
 
-${buildGamesRows(allStats.filteredGames)}
+${buildGameRows(allStats.filteredGames)}
 
 </tbody>
 
@@ -883,7 +888,7 @@ document.getElementById("oppositionSelect");
 oppositionSelect.addEventListener("change",()=>{
 
 const stats =
-buildHeadToHead(oppositionSelect.value);
+buildStats(oppositionSelect.value);
 
 document.getElementById("oppGames").textContent =
 stats.games;
@@ -901,7 +906,7 @@ document.getElementById("oppGoals").textContent =
 stats.goals;
 
 document.getElementById("gamesBody").innerHTML =
-buildGamesRows(stats.filteredGames);
+buildGameRows(stats.filteredGames);
 
 });
 
