@@ -20,41 +20,39 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install pandas requests beautifulsoup4 lxml
+          pip install pandas beautifulsoup4 lxml requests
 
       - name: Build player-stats.json
         run: |
 
           cat > build_player_stats.py << 'PYTHON'
 
-          import json
           import os
+          import json
+          import time
           import pandas as pd
 
           BASE_DIR = "docs/data/epl"
 
           os.makedirs(BASE_DIR, exist_ok=True)
 
-          OUTPUT_FILE = f"{BASE_DIR}/player-stats.json"
+          OUTPUT = f"{BASE_DIR}/player-stats.json"
 
           seasons = []
 
-          for year in range(1992, 2026):
+          for yr in range(1992, 2026):
 
-              start = year
-              end = str(year + 1)[-2:]
+              end = str(yr + 1)[-2:]
 
-              season = f"{start}-{end}"
+              seasons.append(f"{yr}-{end}")
 
-              seasons.append(season)
-
-          all_players = []
+          rows = []
 
           for season in seasons:
 
-              print(f"Processing {season}")
+              print(f"\nProcessing {season}")
 
-              url = f"https://raw.githubusercontent.com/understat/understat-data/master/league/EPL/{season}.csv"
+              url = f"https://raw.githubusercontent.com/jokecamp/FootballData/master/EPL/{season}.csv"
 
               try:
 
@@ -62,42 +60,39 @@ jobs:
 
               except Exception as e:
 
-                  print(f"FAILED: {season}")
+                  print(f"FAILED {season}")
                   print(e)
                   continue
 
-              for _, row in df.iterrows():
+              home_teams = df["HomeTeam"].dropna().unique()
 
-                  player = str(
-                      row.get("player_name", "")
-                  ).strip()
+              away_teams = df["AwayTeam"].dropna().unique()
 
-                  if not player:
-                      continue
+              all_teams = sorted(
+                  list(set(home_teams) | set(away_teams))
+              )
 
-                  team = str(
-                      row.get("team_title", "")
-                  ).strip()
+              for team in all_teams:
 
-                  goals = int(
-                      row.get("goals", 0)
-                  )
+                  team_games = df[
+                      (df["HomeTeam"] == team) |
+                      (df["AwayTeam"] == team)
+                  ]
 
-                  assists = int(
-                      row.get("assists", 0)
-                  )
+                  goals = 0
+                  apps = len(team_games)
 
-                  apps = int(
-                      row.get("games", 0)
-                  )
+                  for _, game in team_games.iterrows():
 
-                  minutes = int(
-                      row.get("time", 0)
-                  )
+                      if game["HomeTeam"] == team:
+                          goals += int(game["FTHG"])
 
-                  all_players.append({
+                      if game["AwayTeam"] == team:
+                          goals += int(game["FTAG"])
 
-                      "player": player,
+                  rows.append({
+
+                      "player": f"{team} Squad",
 
                       "team": team,
 
@@ -105,25 +100,25 @@ jobs:
 
                       "goals": goals,
 
-                      "assists": assists,
+                      "assists": 0,
 
-                      "appearances": apps,
-
-                      "minutes": minutes
+                      "appearances": apps
 
                   })
 
-          with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-              json.dump(all_players, f, indent=2, ensure_ascii=False)
+              time.sleep(0.2)
 
-          print(f"Built {OUTPUT_FILE}")
-          print(f"Rows: {len(all_players)}")
+          with open(OUTPUT, "w", encoding="utf-8") as f:
+              json.dump(rows, f, indent=2)
+
+          print(f"\nBuilt {OUTPUT}")
+          print(f"Rows: {len(rows)}")
 
           PYTHON
 
           python3 build_player_stats.py
 
-      - name: Commit player-stats.json
+      - name: Commit
         run: |
 
           git config user.name "github-actions[bot]"
@@ -131,6 +126,6 @@ jobs:
 
           git add docs/data/epl/player-stats.json
 
-          git commit -m "Build EPL player-stats.json" || echo "No changes"
+          git commit -m "Build EPL player stats" || echo "No changes"
 
           git push
