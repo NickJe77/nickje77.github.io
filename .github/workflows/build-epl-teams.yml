@@ -1,4 +1,4 @@
-name: Build EPL Teams
+name: Build EPL Teams JSON
 
 on:
   workflow_dispatch:
@@ -29,186 +29,136 @@ jobs:
 
           BASE_DIR = "docs/data/epl"
 
-          PLAYERS_FILE = f"{BASE_DIR}/players.json"
+          OUTPUT = f"{BASE_DIR}/teams.json"
 
-          OUTPUT_FILE = f"{BASE_DIR}/teams.json"
+          POSSIBLE_FILES = [
 
-          if not os.path.exists(PLAYERS_FILE):
-              raise Exception("players.json missing")
+              f"{BASE_DIR}/epl.json",
+              f"{BASE_DIR}/games.json",
+              f"{BASE_DIR}/matches.json",
+              f"{BASE_DIR}/results.json"
 
-          with open(PLAYERS_FILE, "r", encoding="utf-8") as f:
-              data = json.load(f)
+          ]
 
-          print(f"Loaded {len(data)} rows")
+          games = []
 
-          teams = {}
+          for file in POSSIBLE_FILES:
 
-          def get_team(row):
+              if os.path.exists(file):
 
-              possible = [
-                  row.get("team"),
-                  row.get("club"),
-                  row.get("squad"),
-                  row.get("Team"),
-                  row.get("Club"),
-                  row.get("Squad")
-              ]
+                  print(f"Loading {file}")
 
-              for p in possible:
+                  with open(file, "r", encoding="utf-8") as f:
+                      games = json.load(f)
 
-                  if p and str(p).strip():
-                      return str(p).strip()
+                  break
 
-              return None
+          if not games:
 
-          def get_player(row):
+              raise Exception("NO EPL GAME FILE FOUND")
 
-              possible = [
-                  row.get("player"),
-                  row.get("name"),
-                  row.get("Player"),
-                  row.get("Name")
-              ]
+          print(f"Loaded {len(games)} games")
 
-              for p in possible:
+          teams = defaultdict(lambda: {
+              "team": "",
+              "seasons": set(),
+              "goals": 0,
+              "wins": 0,
+              "draws": 0,
+              "losses": 0,
+              "games": 0
+          })
 
-                  if p and str(p).strip():
-                      return str(p).strip()
+          for game in games:
 
-              return None
+              home = (
+                  game.get("home_team")
+                  or game.get("home")
+                  or game.get("HomeTeam")
+                  or ""
+              ).strip()
 
-          def get_season(row):
+              away = (
+                  game.get("away_team")
+                  or game.get("away")
+                  or game.get("AwayTeam")
+                  or ""
+              ).strip()
 
-              possible = [
-                  row.get("season"),
-                  row.get("Season"),
-                  row.get("year"),
-                  row.get("Year")
-              ]
-
-              for p in possible:
-
-                  if p and str(p).strip():
-                      return str(p).strip()
-
-              return None
-
-          def to_int(v):
-
-              try:
-                  return int(float(v))
-              except:
-                  return 0
-
-          for row in data:
-
-              team = get_team(row)
-
-              if not team:
+              if not home or not away:
                   continue
 
-              if team not in teams:
+              season = (
+                  str(game.get("season"))
+                  or str(game.get("Season"))
+                  or ""
+              ).strip()
 
-                  teams[team] = {
-                      "team": team,
-                      "seasons_set": set(),
-                      "goals": 0,
-                      "assists": 0,
-                      "appearances": 0,
-                      "players": defaultdict(lambda: {
-                          "player": "",
-                          "goals": 0,
-                          "assists": 0,
-                          "appearances": 0,
-                          "seasons": set()
-                      })
-                  }
-
-              season = get_season(row)
-
-              if season:
-                  teams[team]["seasons_set"].add(season)
-
-              goals = to_int(
-                  row.get("goals")
-                  or row.get("Goals")
-                  or row.get("gls")
-                  or row.get("Gls")
+              home_goals = int(
+                  game.get("home_score")
+                  or game.get("FTHG")
+                  or 0
               )
 
-              assists = to_int(
-                  row.get("assists")
-                  or row.get("Assists")
-                  or row.get("ast")
-                  or row.get("Ast")
+              away_goals = int(
+                  game.get("away_score")
+                  or game.get("FTAG")
+                  or 0
               )
 
-              apps = to_int(
-                  row.get("appearances")
-                  or row.get("apps")
-                  or row.get("Appearances")
-                  or row.get("Apps")
-                  or row.get("matches")
-              )
+              for t in [home, away]:
+                  teams[t]["team"] = t
+                  teams[t]["games"] += 1
 
-              teams[team]["goals"] += goals
-              teams[team]["assists"] += assists
-              teams[team]["appearances"] += apps
+                  if season:
+                      teams[t]["seasons"].add(season)
 
-              player_name = get_player(row)
+              teams[home]["goals"] += home_goals
+              teams[away]["goals"] += away_goals
 
-              if not player_name:
-                  continue
+              if home_goals > away_goals:
 
-              p = teams[team]["players"][player_name]
+                  teams[home]["wins"] += 1
+                  teams[away]["losses"] += 1
 
-              p["player"] = player_name
-              p["goals"] += goals
-              p["assists"] += assists
-              p["appearances"] += apps
+              elif away_goals > home_goals:
 
-              if season:
-                  p["seasons"].add(season)
+                  teams[away]["wins"] += 1
+                  teams[home]["losses"] += 1
+
+              else:
+
+                  teams[home]["draws"] += 1
+                  teams[away]["draws"] += 1
 
           output = []
 
-          for team_name, info in teams.items():
-
-              scorers = sorted(
-                  info["players"].values(),
-                  key=lambda x: x["goals"],
-                  reverse=True
-              )[:20]
-
-              top_scorers = []
-
-              for s in scorers:
-
-                  top_scorers.append({
-                      "player": s["player"],
-                      "goals": s["goals"],
-                      "assists": s["assists"],
-                      "appearances": s["appearances"],
-                      "seasons": sorted(list(s["seasons"]))
-                  })
+          for team, data in teams.items():
 
               output.append({
-                  "team": team_name,
-                  "seasons": len(info["seasons_set"]),
-                  "goals": info["goals"],
-                  "assists": info["assists"],
-                  "appearances": info["appearances"],
-                  "top_scorers": top_scorers
+
+                  "team": team,
+
+                  "seasons": len(data["seasons"]),
+
+                  "games": data["games"],
+
+                  "goals": data["goals"],
+
+                  "wins": data["wins"],
+
+                  "draws": data["draws"],
+
+                  "losses": data["losses"]
+
               })
 
           output = sorted(output, key=lambda x: x["team"])
 
-          os.makedirs(BASE_DIR, exist_ok=True)
-
-          with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+          with open(OUTPUT, "w", encoding="utf-8") as f:
               json.dump(output, f, indent=2)
 
-          print(f"Built {OUTPUT_FILE}")
+          print(f"Built {OUTPUT}")
           print(f"Teams: {len(output)}")
 
           PYTHON
@@ -218,8 +168,8 @@ jobs:
       - name: Commit
         run: |
 
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add docs/data/epl/teams.json
 
