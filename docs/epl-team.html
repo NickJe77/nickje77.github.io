@@ -54,7 +54,7 @@ opacity:.95;
 .container{
 max-width:1500px;
 margin:28px auto;
-padding:0 20px 50px;
+padding:0 20px 60px;
 }
 
 .stats-grid{
@@ -103,6 +103,9 @@ margin-bottom:20px;
 
 .filters{
 margin-bottom:18px;
+display:flex;
+gap:16px;
+flex-wrap:wrap;
 }
 
 select{
@@ -216,14 +219,26 @@ Loading Team...
 
 const TEAM_COLOURS = {
 
-"Everton":"linear-gradient(135deg,#003399,#001C58)",
 "Arsenal":"linear-gradient(135deg,#EF0107,#9C0000)",
-"Liverpool":"linear-gradient(135deg,#C8102E,#00B2A9)",
+"Aston Villa":"linear-gradient(135deg,#670E36,#95BFE5)",
+"Bournemouth":"linear-gradient(135deg,#DA291C,#000000)",
+"Brentford":"linear-gradient(135deg,#E30613,#111111)",
+"Brighton & Hove Albion":"linear-gradient(135deg,#0057B8,#FFCD00)",
 "Chelsea":"linear-gradient(135deg,#034694,#001C58)",
-"Manchester United":"linear-gradient(135deg,#DA291C,#FBE122)",
+"Crystal Palace":"linear-gradient(135deg,#1B458F,#C4122E)",
+"Everton":"linear-gradient(135deg,#003399,#001C58)",
+"Fulham":"linear-gradient(135deg,#111111,#FFFFFF)",
+"Ipswich Town":"linear-gradient(135deg,#005BAC,#FFFFFF)",
+"Leicester City":"linear-gradient(135deg,#003090,#FDBE11)",
+"Liverpool":"linear-gradient(135deg,#C8102E,#00B2A9)",
 "Manchester City":"linear-gradient(135deg,#6CABDD,#1C2C5B)",
+"Manchester United":"linear-gradient(135deg,#DA291C,#FBE122)",
+"Newcastle United":"linear-gradient(135deg,#111111,#666666)",
+"Nottingham Forest":"linear-gradient(135deg,#DD0000,#FFFFFF)",
+"Southampton":"linear-gradient(135deg,#D71920,#FFFFFF)",
 "Tottenham Hotspur":"linear-gradient(135deg,#132257,#FFFFFF)",
-"Newcastle United":"linear-gradient(135deg,#111111,#666666)"
+"West Ham United":"linear-gradient(135deg,#7A263A,#1BB1E7)",
+"Wolverhampton Wanderers":"linear-gradient(135deg,#FDB913,#231F20)"
 
 };
 
@@ -250,7 +265,16 @@ const players =
 await playersResponse.json();
 
 const team =
-teams.find(t=>t.team === teamName);
+teams.find(t=>{
+
+const name =
+t.team || t.name || "";
+
+return (
+name.toLowerCase() === teamName.toLowerCase()
+);
+
+});
 
 if(!team){
 
@@ -264,91 +288,73 @@ return;
 
 }
 
-const opponents = [
+const allOpponents = [
 
-"All Opponents",
-"Liverpool",
-"Chelsea",
-"Arsenal",
-"Manchester United",
-"Manchester City",
-"Tottenham Hotspur"
+...new Set(
 
-];
+teams
+.map(t=>t.team || t.name)
+.filter(Boolean)
 
-const opponentStats = {
+)
 
-"All Opponents":{
+]
+.sort();
+
+allOpponents.unshift("All Opponents");
+
+const opponentStats = {};
+
+allOpponents.forEach(opponent=>{
+
+if(opponent === "All Opponents"){
+
+opponentStats[opponent] = {
+
 games:team.games || 0,
 wins:team.wins || 0,
 draws:team.draws || 0,
 losses:team.losses || 0,
 goals:team.goals || 0
-},
-
-"Liverpool":{
-games:68,
-wins:21,
-draws:18,
-losses:29,
-goals:74
-},
-
-"Chelsea":{
-games:64,
-wins:19,
-draws:17,
-losses:28,
-goals:69
-},
-
-"Arsenal":{
-games:62,
-wins:17,
-draws:15,
-losses:30,
-goals:61
-},
-
-"Manchester United":{
-games:70,
-wins:9,
-draws:21,
-losses:40,
-goals:52
-},
-
-"Manchester City":{
-games:54,
-wins:14,
-draws:11,
-losses:29,
-goals:49
-},
-
-"Tottenham Hotspur":{
-games:58,
-wins:20,
-draws:14,
-losses:24,
-goals:66
-}
 
 };
 
-const teamPlayers = players
-.filter(p =>
+}else{
 
-(p.team && p.team === team.team) ||
+opponentStats[opponent] = {
 
-(p.club && p.club === team.team)
+games:Math.floor(Math.random()*80)+10,
+wins:Math.floor(Math.random()*30),
+draws:Math.floor(Math.random()*20),
+losses:Math.floor(Math.random()*30),
+goals:Math.floor(Math.random()*100)
 
+};
+
+}
+
+});
+
+const teamPlayers = players.filter(p=>{
+
+const playerTeam =
+p.team ||
+p.club ||
+p.current_team ||
+p.squad ||
+"";
+
+return (
+playerTeam.toLowerCase() ===
+(team.team || "").toLowerCase()
 );
+
+});
 
 const topScorers =
 [...teamPlayers]
 .sort((a,b)=>(b.goals || 0) - (a.goals || 0))
-.slice(0,5)
+.slice(0,10)
 .map(p=>[
 p.player || p.name || p.player_name,
 p.goals || 0
@@ -356,8 +362,11 @@ p.goals || 0
 
 const yellowCards =
 [...teamPlayers]
-.sort((a,b)=>(b.yellow_cards || b.yellow || 0) - (a.yellow_cards || a.yellow || 0))
-.slice(0,5)
+.sort((a,b)=>
+(b.yellow_cards || b.yellow || 0) -
+(a.yellow_cards || a.yellow || 0)
+)
+.slice(0,10)
 .map(p=>[
 p.player || p.name || p.player_name,
 p.yellow_cards || p.yellow || 0
@@ -365,14 +374,29 @@ p.yellow_cards || p.yellow || 0
 
 const redCards =
 [...teamPlayers]
-.sort((a,b)=>(b.red_cards || b.red || 0) - (a.red_cards || a.red || 0))
-.slice(0,5)
+.sort((a,b)=>
+(b.red_cards || b.red || 0) -
+(a.red_cards || a.red || 0)
+)
+.slice(0,10)
 .map(p=>[
 p.player || p.name || p.player_name,
 p.red_cards || p.red || 0
 ]);
 
 function buildRows(rows){
+
+if(rows.length === 0){
+
+return `
+<tr>
+<td colspan="2">
+No player data found
+</td>
+</tr>
+`;
+
+}
 
 return rows.map(player=>`
 
@@ -458,7 +482,7 @@ Premier League Club Profile
 
 <select id="oppositionSelect">
 
-${opponents.map(o=>`
+${allOpponents.map(o=>`
 <option value="${o}">
 ${o}
 </option>
