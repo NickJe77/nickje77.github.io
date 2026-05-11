@@ -101,6 +101,20 @@ font-weight:900;
 margin-bottom:18px;
 }
 
+.filters{
+margin-bottom:18px;
+}
+
+select{
+padding:12px 14px;
+border-radius:10px;
+border:1px solid #ccc;
+font-size:14px;
+font-weight:800;
+background:white;
+min-width:260px;
+}
+
 .tables-grid{
 display:grid;
 grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
@@ -363,13 +377,13 @@ const currentTeamStats =
 teamStatsData.find(t=>t.team === team.team);
 
 const scorers =
-currentTeamStats?.top_scorers || [];
+(currentTeamStats?.top_scorers || []).slice(0,10);
 
 const yellows =
-currentTeamStats?.yellow_cards || [];
+(currentTeamStats?.yellow_cards || []).slice(0,10);
 
 const reds =
-currentTeamStats?.red_cards || [];
+(currentTeamStats?.red_cards || []).slice(0,10);
 
 const allGames =
 seasons.filter(game=>{
@@ -381,15 +395,54 @@ game.away_team === team.team
 
 });
 
+const opponents = [
+
+"All Opponents",
+
+...new Set(
+
+allGames.map(game=>{
+
+return game.home_team === team.team
+? game.away_team
+: game.home_team;
+
+})
+
+)
+
+].filter(Boolean).sort();
+
+function buildStats(opponent){
+
+let games = 0;
 let wins = 0;
 let draws = 0;
 let losses = 0;
 let goals = 0;
 
+const filteredGames = [];
+
 allGames.forEach(game=>{
 
 const isHome =
 game.home_team === team.team;
+
+const opponentName =
+isHome
+? game.away_team
+: game.home_team;
+
+if(
+opponent !== "All Opponents" &&
+opponent !== opponentName
+){
+return;
+}
+
+filteredGames.push(game);
+
+games++;
 
 const teamGoals =
 isHome
@@ -412,6 +465,20 @@ draws++;
 }
 
 });
+
+return {
+games,
+wins,
+draws,
+losses,
+goals,
+filteredGames
+};
+
+}
+
+const overallStats =
+buildStats("All Opponents");
 
 function buildRows(rows,valueKey){
 
@@ -554,23 +621,80 @@ Premier League Club Profile
 </div>
 
 <div class="stat-card">
-<div class="stat-value">${wins}</div>
+<div class="stat-value">${overallStats.wins}</div>
 <div class="stat-label">Wins</div>
 </div>
 
 <div class="stat-card">
-<div class="stat-value">${draws}</div>
+<div class="stat-value">${overallStats.draws}</div>
 <div class="stat-label">Draws</div>
 </div>
 
 <div class="stat-card">
-<div class="stat-value">${losses}</div>
+<div class="stat-value">${overallStats.losses}</div>
 <div class="stat-label">Losses</div>
 </div>
 
 <div class="stat-card">
-<div class="stat-value">${goals}</div>
+<div class="stat-value">${overallStats.goals}</div>
 <div class="stat-label">Goals</div>
+</div>
+
+</div>
+
+<div class="section">
+
+<div class="filters">
+
+<select id="oppositionSelect">
+
+${opponents.map(team=>`
+<option value="${team}">
+${team}
+</option>
+`).join("")}
+
+</select>
+
+</div>
+
+<div class="stats-grid">
+
+<div class="stat-card">
+<div class="stat-value" id="oppGames">
+${overallStats.games}
+</div>
+<div class="stat-label">Games</div>
+</div>
+
+<div class="stat-card">
+<div class="stat-value" id="oppWins">
+${overallStats.wins}
+</div>
+<div class="stat-label">Wins</div>
+</div>
+
+<div class="stat-card">
+<div class="stat-value" id="oppDraws">
+${overallStats.draws}
+</div>
+<div class="stat-label">Draws</div>
+</div>
+
+<div class="stat-card">
+<div class="stat-value" id="oppLosses">
+${overallStats.losses}
+</div>
+<div class="stat-label">Losses</div>
+</div>
+
+<div class="stat-card">
+<div class="stat-value" id="oppGoals">
+${overallStats.goals}
+</div>
+<div class="stat-label">Goals</div>
+</div>
+
 </div>
 
 </div>
@@ -657,7 +781,7 @@ ${buildRows(reds,"red")}
 <div class="section">
 
 <div class="section-title">
-Recent Results
+Results Vs Selected Opponent
 </div>
 
 <table class="games-table">
@@ -673,9 +797,9 @@ Recent Results
 
 </thead>
 
-<tbody>
+<tbody id="gamesBody">
 
-${buildGameRows(allGames)}
+${buildGameRows(overallStats.filteredGames)}
 
 </tbody>
 
@@ -686,6 +810,34 @@ ${buildGameRows(allGames)}
 </div>
 
 `;
+
+const oppositionSelect =
+document.getElementById("oppositionSelect");
+
+oppositionSelect.addEventListener("change",()=>{
+
+const stats =
+buildStats(oppositionSelect.value);
+
+document.getElementById("oppGames").textContent =
+stats.games;
+
+document.getElementById("oppWins").textContent =
+stats.wins;
+
+document.getElementById("oppDraws").textContent =
+stats.draws;
+
+document.getElementById("oppLosses").textContent =
+stats.losses;
+
+document.getElementById("oppGoals").textContent =
+stats.goals;
+
+document.getElementById("gamesBody").innerHTML =
+buildGameRows(stats.filteredGames);
+
+});
 
 }catch(err){
 
