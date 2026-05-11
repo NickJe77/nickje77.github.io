@@ -33,73 +33,19 @@ jobs:
 
           import json
           import glob
+          import os
           from collections import defaultdict
 
           BASE_DIR = "docs/data/epl"
 
           OUTPUT = f"{BASE_DIR}/teams.json"
 
-          json_files = glob.glob(
-              f"{BASE_DIR}/**/*.json",
+          files = glob.glob(
+              f"{BASE_DIR}/matches/**/*.json",
               recursive=True
           )
 
-          print(f"FOUND {len(json_files)} JSON FILES")
-
-          games = []
-
-          # ---------------------------------
-          # FIND MATCH FILES
-          # ---------------------------------
-
-          for file in json_files:
-
-              if "teams.json" in file:
-                  continue
-
-              if "players.json" in file:
-                  continue
-
-              if "player-stats.json" in file:
-                  continue
-
-              try:
-
-                  with open(file, "r", encoding="utf-8") as f:
-                      data = json.load(f)
-
-                  if not isinstance(data, list):
-                      continue
-
-                  if not data:
-                      continue
-
-                  first = data[0]
-
-                  keys = list(first.keys())
-
-                  joined = " ".join(keys).lower()
-
-                  if (
-                      "home" in joined or
-                      "away" in joined or
-                      "hometeam" in joined
-                  ):
-
-                      print(f"USING: {file}")
-
-                      games.extend(data)
-
-              except Exception as e:
-
-                  print(f"SKIP {file}")
-                  print(e)
-
-          print(f"TOTAL GAMES: {len(games)}")
-
-          # ---------------------------------
-          # TEAM STORAGE
-          # ---------------------------------
+          print(f"FOUND {len(files)} MATCH FILES")
 
           teams = defaultdict(lambda: {
               "team": "",
@@ -111,147 +57,101 @@ jobs:
               "losses": 0
           })
 
-          # ---------------------------------
-          # PROCESS GAMES
-          # ---------------------------------
+          for file in files:
 
-          for game in games:
+              try:
 
-              home = (
-                  game.get("home_team")
-                  or game.get("home")
-                  or game.get("HomeTeam")
-                  or ""
-              ).strip()
+                  with open(file, "r", encoding="utf-8") as f:
+                      game = json.load(f)
 
-              away = (
-                  game.get("away_team")
-                  or game.get("away")
-                  or game.get("AwayTeam")
-                  or ""
-              ).strip()
+                  # -------------------------
+                  # TEAMS
+                  # -------------------------
 
-              if not home or not away:
-                  continue
+                  home = str(
+                      game.get("home_team", "")
+                  ).strip()
 
-              # ---------------------------------
-              # SEASON LOGIC
-              # ---------------------------------
+                  away = str(
+                      game.get("away_team", "")
+                  ).strip()
 
-              season = (
-                  game.get("season")
-                  or game.get("Season")
-                  or ""
-              )
+                  if not home or not away:
+                      continue
 
-              if not season:
+                  # -------------------------
+                  # SEASON FROM FOLDER
+                  # -------------------------
 
-                  raw_date = (
-                      game.get("date")
-                      or game.get("Date")
-                      or ""
+                  parts = file.replace("\\", "/").split("/")
+
+                  season = ""
+
+                  for p in parts:
+
+                      if "-" in p and len(p) == 9:
+
+                          season = p
+                          break
+
+                  # -------------------------
+                  # SCORES
+                  # -------------------------
+
+                  home_goals = int(
+                      game.get("home_score", 0)
                   )
 
-                  raw_date = str(raw_date).strip()
+                  away_goals = int(
+                      game.get("away_score", 0)
+                  )
 
-                  year = None
-                  month = None
+                  # -------------------------
+                  # TEAM COUNTS
+                  # -------------------------
 
-                  # YYYY-MM-DD
-                  if "-" in raw_date:
+                  for t in [home, away]:
 
-                      parts = raw_date.split("-")
+                      teams[t]["team"] = t
+                      teams[t]["games"] += 1
 
-                      try:
+                      if season:
+                          teams[t]["seasons"].add(season)
 
-                          year = int(parts[0])
-                          month = int(parts[1])
+                  # -------------------------
+                  # GOALS
+                  # -------------------------
 
-                      except:
-                          pass
+                  teams[home]["goals"] += home_goals
+                  teams[away]["goals"] += away_goals
 
-                  # DD/MM/YYYY
-                  elif "/" in raw_date:
+                  # -------------------------
+                  # RESULTS
+                  # -------------------------
 
-                      parts = raw_date.split("/")
+                  if home_goals > away_goals:
 
-                      try:
+                      teams[home]["wins"] += 1
+                      teams[away]["losses"] += 1
 
-                          if len(parts[2]) == 4:
+                  elif away_goals > home_goals:
 
-                              year = int(parts[2])
-                              month = int(parts[1])
+                      teams[away]["wins"] += 1
+                      teams[home]["losses"] += 1
 
-                      except:
-                          pass
+                  else:
 
-                  # BUILD SEASON
-                  if year and month:
+                      teams[home]["draws"] += 1
+                      teams[away]["draws"] += 1
 
-                      if month >= 7:
-                          season = f"{year}-{str(year+1)[-2:]}"
-                      else:
-                          season = f"{year-1}-{str(year)[-2:]}"
+              except Exception as e:
 
-              season = str(season).strip()
+                  print(f"FAILED: {file}")
+                  print(e)
 
-              # ---------------------------------
-              # GOALS
-              # ---------------------------------
-
-              home_goals = int(
-                  game.get("home_score")
-                  or game.get("FTHG")
-                  or 0
-              )
-
-              away_goals = int(
-                  game.get("away_score")
-                  or game.get("FTAG")
-                  or 0
-              )
-
-              # ---------------------------------
-              # TEAM COUNTS
-              # ---------------------------------
-
-              for t in [home, away]:
-
-                  teams[t]["team"] = t
-                  teams[t]["games"] += 1
-
-                  if season:
-                      teams[t]["seasons"].add(season)
-
-              # ---------------------------------
-              # GOALS
-              # ---------------------------------
-
-              teams[home]["goals"] += home_goals
-              teams[away]["goals"] += away_goals
-
-              # ---------------------------------
-              # RESULTS
-              # ---------------------------------
-
-              if home_goals > away_goals:
-
-                  teams[home]["wins"] += 1
-                  teams[away]["losses"] += 1
-
-              elif away_goals > home_goals:
-
-                  teams[away]["wins"] += 1
-                  teams[home]["losses"] += 1
-
-              else:
-
-                  teams[home]["draws"] += 1
-                  teams[away]["draws"] += 1
-
-          # ---------------------------------
+          # -------------------------
           # OUTPUT
-          # ---------------------------------
+          # -------------------------
 
           output = []
 
