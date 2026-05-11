@@ -266,12 +266,10 @@ const TEAM_COLOURS = {
 "Manchester City":"linear-gradient(135deg,#6CABDD,#1C2C5B)",
 "Manchester United":"linear-gradient(135deg,#DA291C,#FBE122)",
 "Newcastle United":"linear-gradient(135deg,#111111,#666666)",
-"Norwich City":"linear-gradient(135deg,#00A650,#FFF200)",
 "Nottingham Forest":"linear-gradient(135deg,#DD0000,#FFFFFF)",
 "Southampton":"linear-gradient(135deg,#D71920,#FFFFFF)",
 "Tottenham Hotspur":"linear-gradient(135deg,#132257,#FFFFFF)",
 "West Ham United":"linear-gradient(135deg,#7A263A,#1BB1E7)",
-"Wimbledon":"linear-gradient(135deg,#003399,#FFCC00)",
 "Wolverhampton Wanderers":"linear-gradient(135deg,#FDB913,#231F20)"
 
 };
@@ -307,11 +305,11 @@ await fetch("/data/epl/teams.json");
 const teams =
 await teamsResponse.json();
 
-const playersResponse =
+const playersIndexResponse =
 await fetch("/data/epl/players.json");
 
 const playersData =
-await playersResponse.json();
+await playersIndexResponse.json();
 
 const seasons = [];
 
@@ -397,6 +395,70 @@ return;
 
 }
 
+const playerTotals = {};
+
+for(const player of playersData){
+
+const slug =
+player.slug ||
+slugify(player.player || player.name);
+
+if(!slug) continue;
+
+try{
+
+const res =
+await fetch(`/data/epl/players/${slug}.json`);
+
+if(!res.ok) continue;
+
+const fullPlayer =
+await res.json();
+
+const matches =
+fullPlayer.matches || [];
+
+matches.forEach(match=>{
+
+if(match.team !== team.team){
+return;
+}
+
+const playerName =
+fullPlayer.player ||
+fullPlayer.name;
+
+if(!playerName) return;
+
+if(!playerTotals[playerName]){
+
+playerTotals[playerName] = {
+goals:0,
+yellow:0,
+red:0
+};
+
+}
+
+playerTotals[playerName].goals +=
+Number(match.goals || 0);
+
+playerTotals[playerName].yellow +=
+Number(match.yellow_cards || 0);
+
+playerTotals[playerName].red +=
+Number(match.red_cards || 0);
+
+});
+
+}catch(err){
+
+console.log("Missing player file",slug);
+
+}
+
+}
+
 const opponents = [
 
 "All Opponents",
@@ -478,48 +540,6 @@ filteredGames
 };
 
 }
-
-const playerTotals = {};
-
-playersData.forEach(player=>{
-
-const matches =
-player.matches || [];
-
-matches.forEach(match=>{
-
-if(match.team !== team.team){
-return;
-}
-
-const playerName =
-player.player ||
-player.name;
-
-if(!playerName) return;
-
-if(!playerTotals[playerName]){
-
-playerTotals[playerName] = {
-goals:0,
-yellow:0,
-red:0
-};
-
-}
-
-playerTotals[playerName].goals +=
-Number(match.goals || 0);
-
-playerTotals[playerName].yellow +=
-Number(match.yellow_cards || 0);
-
-playerTotals[playerName].red +=
-Number(match.red_cards || 0);
-
-});
-
-});
 
 const scorers =
 Object.entries(playerTotals)
@@ -704,63 +724,6 @@ Premier League Club Profile
 
 </div>
 
-<div class="section">
-
-<div class="filters">
-
-<select id="oppositionSelect">
-
-${opponents.map(team=>`
-<option value="${team}">
-${team}
-</option>
-`).join("")}
-
-</select>
-
-</div>
-
-<div class="stats-grid">
-
-<div class="stat-card">
-<div class="stat-value" id="oppGames">
-${allStats.games}
-</div>
-<div class="stat-label">Games</div>
-</div>
-
-<div class="stat-card">
-<div class="stat-value" id="oppWins">
-${allStats.wins}
-</div>
-<div class="stat-label">Wins</div>
-</div>
-
-<div class="stat-card">
-<div class="stat-value" id="oppDraws">
-${allStats.draws}
-</div>
-<div class="stat-label">Draws</div>
-</div>
-
-<div class="stat-card">
-<div class="stat-value" id="oppLosses">
-${allStats.losses}
-</div>
-<div class="stat-label">Losses</div>
-</div>
-
-<div class="stat-card">
-<div class="stat-value" id="oppGoals">
-${allStats.goals}
-</div>
-<div class="stat-label">Goals</div>
-</div>
-
-</div>
-
-</div>
-
 <div class="tables-grid">
 
 <div class="section">
@@ -772,12 +735,10 @@ Leading Scorers
 <table>
 
 <thead>
-
 <tr>
 <th>Player</th>
 <th>Goals</th>
 </tr>
-
 </thead>
 
 <tbody>
@@ -799,12 +760,10 @@ Yellow Card Leaders
 <table>
 
 <thead>
-
 <tr>
 <th>Player</th>
 <th>Yellow</th>
 </tr>
-
 </thead>
 
 <tbody>
@@ -826,12 +785,10 @@ Red Card Leaders
 <table>
 
 <thead>
-
 <tr>
 <th>Player</th>
 <th>Red</th>
 </tr>
-
 </thead>
 
 <tbody>
@@ -857,19 +814,17 @@ Results Vs Selected Opponent
 <thead>
 
 <tr>
-
 <th>Season</th>
 <th>Opponent</th>
 <th>Score</th>
 <th>Result</th>
-
 </tr>
 
 </thead>
 
-<tbody id="gamesBody">
+<tbody>
 
-${buildGameRows(allStats.filteredGames)}
+${buildGameRows(allGames)}
 
 </tbody>
 
@@ -880,34 +835,6 @@ ${buildGameRows(allStats.filteredGames)}
 </div>
 
 `;
-
-const oppositionSelect =
-document.getElementById("oppositionSelect");
-
-oppositionSelect.addEventListener("change",()=>{
-
-const stats =
-buildStats(oppositionSelect.value);
-
-document.getElementById("oppGames").textContent =
-stats.games;
-
-document.getElementById("oppWins").textContent =
-stats.wins;
-
-document.getElementById("oppDraws").textContent =
-stats.draws;
-
-document.getElementById("oppLosses").textContent =
-stats.losses;
-
-document.getElementById("oppGoals").textContent =
-stats.goals;
-
-document.getElementById("gamesBody").innerHTML =
-buildGameRows(stats.filteredGames);
-
-});
 
 }catch(err){
 
