@@ -138,16 +138,6 @@ font-weight:900;
 color:#d90429;
 }
 
-.player-link{
-text-decoration:none;
-font-weight:800;
-color:#0056d6;
-}
-
-.player-link:hover{
-text-decoration:underline;
-}
-
 .result-win{
 color:#009944;
 font-weight:900;
@@ -236,11 +226,11 @@ async function loadTeam(){
 
 try{
 
-const teamsResponse =
+const response =
 await fetch("/data/epl/teams.json");
 
 const teams =
-await teamsResponse.json();
+await response.json();
 
 const team =
 teams.find(t=>t.team === teamName);
@@ -257,150 +247,6 @@ return;
 
 }
 
-const matchFiles = [];
-
-for(let yr=1992; yr<=2025; yr++){
-
-const end =
-String(yr+1).slice(-2);
-
-const season =
-`${yr}-${end}`;
-
-for(let i=1;i<=500;i++){
-
-const num =
-String(i).padStart(4,"0");
-
-matchFiles.push(
-`/data/epl/matches/${season}/${season}_${num}.json`
-);
-
-}
-
-}
-
-const topScorers = {};
-const yellowCards = {};
-const redCards = {};
-
-const recentMatches = [];
-
-for(const file of matchFiles){
-
-try{
-
-const res = await fetch(file);
-
-if(!res.ok) continue;
-
-const game = await res.json();
-
-const home = game.home_team || "";
-const away = game.away_team || "";
-
-if(
-home !== teamName &&
-away !== teamName
-){
-continue;
-}
-
-const homeGoals =
-Number(game.home_score || 0);
-
-const awayGoals =
-Number(game.away_score || 0);
-
-const opponent =
-home === teamName
-? away
-: home;
-
-let result = "D";
-
-if(home === teamName){
-
-if(homeGoals > awayGoals) result = "W";
-if(homeGoals < awayGoals) result = "L";
-
-}else{
-
-if(awayGoals > homeGoals) result = "W";
-if(awayGoals < homeGoals) result = "L";
-
-}
-
-recentMatches.push({
-
-opponent,
-result,
-score:
-`${homeGoals}-${awayGoals}`
-
-});
-
-(game.scorers || []).forEach(s=>{
-
-const scorer =
-typeof s === "string"
-? s
-: s.player || s.name || "";
-
-if(!scorer) return;
-
-topScorers[scorer] =
-(topScorers[scorer] || 0) + 1;
-
-});
-
-(game.yellow_cards || []).forEach(c=>{
-
-const player =
-typeof c === "string"
-? c
-: c.player || c.name || "";
-
-if(!player) return;
-
-yellowCards[player] =
-(yellowCards[player] || 0) + 1;
-
-});
-
-(game.red_cards || []).forEach(c=>{
-
-const player =
-typeof c === "string"
-? c
-: c.player || c.name || "";
-
-if(!player) return;
-
-redCards[player] =
-(redCards[player] || 0) + 1;
-
-});
-
-}catch(err){}
-
-}
-
-const scorersTable =
-Object.entries(topScorers)
-.sort((a,b)=>b[1]-a[1])
-.slice(0,20);
-
-const yellowTable =
-Object.entries(yellowCards)
-.sort((a,b)=>b[1]-a[1])
-.slice(0,10);
-
-const redTable =
-Object.entries(redCards)
-.sort((a,b)=>b[1]-a[1])
-.slice(0,10);
-
 page.innerHTML = `
 
 <div
@@ -412,7 +258,9 @@ background:${TEAM_COLOURS[team.team] || 'linear-gradient(135deg,#111,#555)'};
 
 <h1>${team.team}</h1>
 
-<p>Premier League Club Profile</p>
+<p>
+Premier League Club Profile
+</p>
 
 </div>
 
@@ -455,130 +303,47 @@ background:${TEAM_COLOURS[team.team] || 'linear-gradient(135deg,#111,#555)'};
 <div class="section">
 
 <div class="section-title">
-Top Scorers
+Club Summary
 </div>
 
 <table>
 
-<thead>
-
-<tr>
-<th>Player</th>
-<th>Goals</th>
-</tr>
-
-</thead>
-
 <tbody>
 
-${scorersTable.map(s=>`
-
 <tr>
-
-<td>
-<a
-class="player-link"
-href="/epl-player.html?player=${encodeURIComponent(s[0])}"
->
-${s[0]}
-</a>
-</td>
-
-<td>${s[1]}</td>
-
+<td><strong>Club</strong></td>
+<td>${team.team}</td>
 </tr>
 
-`).join("")}
-
-</tbody>
-
-</table>
-
-</div>
-
-<div class="section">
-
-<div class="section-title">
-Card Leaders
-</div>
-
-<table>
-
-<thead>
-
 <tr>
-<th>Player</th>
-<th>Yellow Cards</th>
-<th>Red Cards</th>
+<td><strong>Premier League Seasons</strong></td>
+<td>${team.seasons}</td>
 </tr>
 
-</thead>
-
-<tbody>
-
-${yellowTable.map(y=>`
-
 <tr>
-
-<td>${y[0]}</td>
-
-<td>${y[1]}</td>
-
-<td>${redCards[y[0]] || 0}</td>
-
+<td><strong>Games Played</strong></td>
+<td>${team.games}</td>
 </tr>
 
-`).join("")}
-
-</tbody>
-
-</table>
-
-</div>
-
-<div class="section">
-
-<div class="section-title">
-Recent Matches
-</div>
-
-<table>
-
-<thead>
-
 <tr>
-<th>Opponent</th>
-<th>Score</th>
-<th>Result</th>
+<td><strong>Total Goals</strong></td>
+<td>${team.goals}</td>
 </tr>
 
-</thead>
-
-<tbody>
-
-${recentMatches.slice(-20).reverse().map(g=>`
-
 <tr>
-
-<td>
-vs ${g.opponent}
-</td>
-
-<td>
-${g.score}
-</td>
-
-<td class="
-${g.result==="W" ? "result-win" : ""}
-${g.result==="L" ? "result-loss" : ""}
-${g.result==="D" ? "result-draw" : ""}
-">
-${g.result}
-</td>
-
+<td><strong>Wins</strong></td>
+<td>${team.wins}</td>
 </tr>
 
-`).join("")}
+<tr>
+<td><strong>Draws</strong></td>
+<td>${team.draws}</td>
+</tr>
+
+<tr>
+<td><strong>Losses</strong></td>
+<td>${team.losses}</td>
+</tr>
 
 </tbody>
 
