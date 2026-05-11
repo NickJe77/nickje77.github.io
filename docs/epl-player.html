@@ -32,37 +32,80 @@ color:#0056d6;
 }
 
 .hero{
-padding:80px 20px;
+padding:50px 20px;
 text-align:center;
 color:white;
+position:relative;
 }
 
 .hero h1{
 margin:0;
-font-size:72px;
+font-size:60px;
 font-weight:900;
 line-height:1;
 }
 
 .hero p{
-margin-top:16px;
-font-size:24px;
+margin-top:14px;
+font-size:20px;
 font-weight:700;
 opacity:.95;
 }
 
+.search-wrap{
+max-width:520px;
+margin:28px auto 0;
+position:relative;
+}
+
+.search-input{
+width:100%;
+padding:16px 18px;
+border-radius:14px;
+border:none;
+font-size:18px;
+font-weight:700;
+box-sizing:border-box;
+outline:none;
+}
+
+.search-results{
+position:absolute;
+top:100%;
+left:0;
+right:0;
+background:white;
+border-radius:0 0 14px 14px;
+overflow:hidden;
+box-shadow:0 8px 24px rgba(0,0,0,.18);
+z-index:999;
+display:none;
+}
+
+.search-item{
+padding:14px 18px;
+border-bottom:1px solid #eee;
+cursor:pointer;
+font-weight:700;
+color:#111;
+}
+
+.search-item:hover{
+background:#f3f6fb;
+}
+
 .container{
 max-width:1500px;
-margin:36px auto;
-padding:0 20px 70px;
+margin:28px auto;
+padding:0 20px 60px;
 }
 
 .section{
 background:white;
-border-radius:24px;
-padding:34px;
-margin-bottom:34px;
-box-shadow:0 2px 12px rgba(0,0,0,.08);
+border-radius:22px;
+padding:26px;
+margin-bottom:30px;
+box-shadow:0 2px 10px rgba(0,0,0,.06);
 }
 
 .section-title{
@@ -70,49 +113,49 @@ font-size:18px;
 font-weight:900;
 letter-spacing:1px;
 text-transform:uppercase;
-margin-bottom:24px;
+margin-bottom:22px;
 color:#666;
 }
 
 .stats-grid{
 display:grid;
-grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
-gap:22px;
+grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+gap:18px;
 }
 
 .stat-card{
 background:#f4f7fb;
-border-radius:20px;
-padding:30px;
+border-radius:18px;
+padding:24px;
 text-align:center;
 border:1px solid #dde3ea;
 }
 
 .stat-value{
-font-size:54px;
+font-size:42px;
 font-weight:900;
 line-height:1;
-margin-bottom:12px;
+margin-bottom:10px;
 }
 
 .stat-label{
-font-size:17px;
+font-size:15px;
 font-weight:700;
 color:#555;
 }
 
 .filters{
-margin-bottom:28px;
+margin-bottom:20px;
 }
 
 select{
-padding:14px 18px;
-border-radius:12px;
+padding:12px 16px;
+border-radius:10px;
 border:1px solid #ccc;
-font-size:16px;
+font-size:15px;
 font-weight:800;
 background:white;
-min-width:280px;
+min-width:260px;
 }
 
 table{
@@ -122,17 +165,17 @@ border-collapse:collapse;
 
 th{
 background:#e8edf3;
-padding:18px;
+padding:16px;
 text-align:left;
-font-size:14px;
+font-size:13px;
 font-weight:900;
 text-transform:uppercase;
 }
 
 td{
-padding:18px;
+padding:16px;
 border-bottom:1px solid #ececec;
-font-size:16px;
+font-size:15px;
 font-weight:600;
 }
 
@@ -180,15 +223,19 @@ color:#d90429;
 @media(max-width:900px){
 
 .hero h1{
-font-size:46px;
+font-size:40px;
 }
 
 .hero p{
-font-size:18px;
+font-size:16px;
+}
+
+.search-input{
+font-size:16px;
 }
 
 .stat-value{
-font-size:42px;
+font-size:34px;
 }
 
 table{
@@ -200,7 +247,6 @@ white-space:nowrap;
 }
 
 </style>
-
 </head>
 
 <body>
@@ -232,7 +278,8 @@ const TEAM_COLOURS = {
 "Chelsea":"linear-gradient(135deg,#034694,#001C58)",
 "Manchester United":"linear-gradient(135deg,#DA291C,#FBE122)",
 "Manchester City":"linear-gradient(135deg,#6CABDD,#1C2C5B)",
-"Tottenham Hotspur":"linear-gradient(135deg,#132257,#FFFFFF)"
+"Tottenham Hotspur":"linear-gradient(135deg,#132257,#FFFFFF)",
+"Newcastle United":"linear-gradient(135deg,#111111,#666666)"
 
 };
 
@@ -246,27 +293,33 @@ async function loadPlayer(){
 
 try{
 
-const response =
+const playersResponse =
 await fetch("/data/epl/players.json");
 
 const players =
-await response.json();
+await playersResponse.json();
+
+const seasonsResponse =
+await fetch("/data/epl/seasons.json");
+
+const seasons =
+await seasonsResponse.json();
 
 const player =
-players.find(p =>
+players.find(p => {
 
-(p.player && p.player.toLowerCase() === playerName.toLowerCase()) ||
+const name =
+p.player || p.name || p.player_name;
 
-(p.name && p.name.toLowerCase() === playerName.toLowerCase()) ||
-
-(p.player_name && p.player_name.toLowerCase() === playerName.toLowerCase())
-
+return (
+name &&
+playerName &&
+name.toLowerCase() === playerName.toLowerCase()
 );
 
-if(!player){
+});
 
-console.log("Player requested:", playerName);
-console.log("Available sample:", players.slice(0,5));
+if(!player){
 
 page.innerHTML = `
 <div class="error">
@@ -282,78 +335,105 @@ const playerDisplayName =
 player.player || player.name || player.player_name;
 
 const playerClub =
-player.team || player.club || "Everton";
+player.team || player.club || "Unknown";
 
-const opponents = [
+const allGames = [];
 
-"All Opponents",
-"Liverpool",
-"Chelsea",
-"Arsenal",
-"Manchester United",
-"Manchester City",
-"Tottenham Hotspur"
+seasons.forEach(season=>{
 
-];
+if(!season.games) return;
 
-const allGames = [
+season.games.forEach(game=>{
 
-{
-season:"2006-07",
-opponent:"Liverpool",
-result:"W",
-score:"3-0",
-goals:1,
-assists:0,
-yellow:0,
-red:0
-},
+const homePlayers =
+game.home_players || [];
 
-{
-season:"2007-08",
-opponent:"Chelsea",
-result:"D",
-score:"1-1",
-goals:0,
-assists:1,
-yellow:1,
-red:0
-},
+const awayPlayers =
+game.away_players || [];
 
-{
-season:"2008-09",
-opponent:"Arsenal",
-result:"L",
-score:"1-2",
-goals:1,
-assists:0,
-yellow:0,
-red:0
-},
+const combined =
+[...homePlayers,...awayPlayers];
 
-{
-season:"2009-10",
-opponent:"Liverpool",
-result:"W",
-score:"2-0",
-goals:2,
-assists:1,
-yellow:0,
-red:0
-},
+combined.forEach(p=>{
 
-{
-season:"2010-11",
-opponent:"Chelsea",
-result:"L",
-score:"0-1",
-goals:0,
-assists:0,
-yellow:1,
-red:0
+const name =
+p.player || p.name || p.player_name;
+
+if(
+name &&
+name.toLowerCase() === playerDisplayName.toLowerCase()
+){
+
+const isHome =
+homePlayers.includes(p);
+
+const opponent =
+isHome
+? game.away_team
+: game.home_team;
+
+const team =
+isHome
+? game.home_team
+: game.away_team;
+
+const homeGoals =
+game.home_score || 0;
+
+const awayGoals =
+game.away_score || 0;
+
+let result = "D";
+
+if(
+(isHome && homeGoals > awayGoals) ||
+(!isHome && awayGoals > homeGoals)
+){
+result = "W";
 }
 
-];
+if(
+(isHome && homeGoals < awayGoals) ||
+(!isHome && awayGoals < homeGoals)
+){
+result = "L";
+}
+
+allGames.push({
+
+season:
+season.season || season.year || "",
+
+team,
+
+opponent,
+
+result,
+
+score:
+`${homeGoals}-${awayGoals}`,
+
+goals:
+p.goals || 0,
+
+assists:
+p.assists || 0,
+
+yellow:
+p.yellow_cards || p.yellow || 0,
+
+red:
+p.red_cards || p.red || 0
+
+});
+
+}
+
+});
+
+});
+
+});
 
 function calculateStats(games){
 
@@ -380,6 +460,11 @@ games.reduce((sum,g)=>sum + g.red,0)
 const careerStats =
 calculateStats(allGames);
 
+const opponents = [
+"All Opponents",
+...new Set(allGames.map(g=>g.opponent))
+].sort();
+
 page.innerHTML = `
 
 <div
@@ -394,6 +479,23 @@ background:${TEAM_COLOURS[playerClub] || 'linear-gradient(135deg,#111,#444)'};
 <p>
 Premier League Player Profile
 </p>
+
+<div class="search-wrap">
+
+<input
+type="text"
+class="search-input"
+id="playerSearch"
+placeholder="Search player..."
+autocomplete="off"
+>
+
+<div
+class="search-results"
+id="searchResults"
+></div>
+
+</div>
 
 </div>
 
@@ -528,6 +630,7 @@ Match Log
 
 <tr>
 <th>Season</th>
+<th>Team</th>
 <th>Opponent</th>
 <th>Result</th>
 <th>Score</th>
@@ -565,6 +668,8 @@ matchBody.innerHTML = games.map(game=>`
 
 <td>${game.season}</td>
 
+<td>${game.team}</td>
+
 <td>
 
 <a
@@ -572,7 +677,7 @@ class="team-link"
 href="/epl-team.html?team=${encodeURIComponent(game.opponent)}"
 >
 
-vs ${game.opponent}
+${game.opponent}
 
 </a>
 
@@ -649,6 +754,79 @@ updateOpponentStats(filteredGames);
 updatePage();
 
 opponentSelect.addEventListener("change",updatePage);
+
+const playerSearch =
+document.getElementById("playerSearch");
+
+const searchResults =
+document.getElementById("searchResults");
+
+playerSearch.addEventListener("input",()=>{
+
+const value =
+playerSearch.value.toLowerCase().trim();
+
+if(!value){
+
+searchResults.style.display = "none";
+searchResults.innerHTML = "";
+return;
+
+}
+
+const matches =
+players.filter(p=>{
+
+const name =
+p.player || p.name || p.player_name || "";
+
+return name.toLowerCase().includes(value);
+
+}).slice(0,8);
+
+if(matches.length === 0){
+
+searchResults.style.display = "none";
+return;
+
+}
+
+searchResults.innerHTML =
+matches.map(p=>{
+
+const name =
+p.player || p.name || p.player_name;
+
+return `
+
+<div
+class="search-item"
+onclick="
+window.location.href='/epl-player.html?player=${encodeURIComponent(name)}'
+"
+>
+
+${name}
+
+</div>
+
+`;
+
+}).join("");
+
+searchResults.style.display = "block";
+
+});
+
+document.addEventListener("click",(e)=>{
+
+if(!e.target.closest(".search-wrap")){
+
+searchResults.style.display = "none";
+
+}
+
+});
 
 }catch(err){
 
