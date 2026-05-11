@@ -101,20 +101,6 @@ font-weight:900;
 margin-bottom:18px;
 }
 
-.filters{
-margin-bottom:18px;
-}
-
-select{
-padding:12px 14px;
-border-radius:10px;
-border:1px solid #ccc;
-font-size:14px;
-font-weight:800;
-background:white;
-min-width:260px;
-}
-
 .tables-grid{
 display:grid;
 grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
@@ -305,11 +291,11 @@ await fetch("/data/epl/teams.json");
 const teams =
 await teamsResponse.json();
 
-const playersIndexResponse =
-await fetch("/data/epl/players.json");
+const statsResponse =
+await fetch("/data/epl/team_stats.json");
 
-const playersData =
-await playersIndexResponse.json();
+const teamStatsData =
+await statsResponse.json();
 
 const seasons = [];
 
@@ -373,6 +359,18 @@ return;
 
 }
 
+const currentTeamStats =
+teamStatsData.find(t=>t.team === team.team);
+
+const scorers =
+currentTeamStats?.top_scorers || [];
+
+const yellows =
+currentTeamStats?.yellow_cards || [];
+
+const reds =
+currentTeamStats?.red_cards || [];
+
 const allGames =
 seasons.filter(game=>{
 
@@ -383,130 +381,15 @@ game.away_team === team.team
 
 });
 
-if(allGames.length === 0){
-
-page.innerHTML = `
-<div class="error">
-No Games Found
-</div>
-`;
-
-return;
-
-}
-
-const playerTotals = {};
-
-for(const player of playersData){
-
-const slug =
-player.slug ||
-slugify(player.player || player.name);
-
-if(!slug) continue;
-
-try{
-
-const res =
-await fetch(`/data/epl/players/${slug}.json`);
-
-if(!res.ok) continue;
-
-const fullPlayer =
-await res.json();
-
-const matches =
-fullPlayer.matches || [];
-
-matches.forEach(match=>{
-
-if(match.team !== team.team){
-return;
-}
-
-const playerName =
-fullPlayer.player ||
-fullPlayer.name;
-
-if(!playerName) return;
-
-if(!playerTotals[playerName]){
-
-playerTotals[playerName] = {
-goals:0,
-yellow:0,
-red:0
-};
-
-}
-
-playerTotals[playerName].goals +=
-Number(match.goals || 0);
-
-playerTotals[playerName].yellow +=
-Number(match.yellow_cards || 0);
-
-playerTotals[playerName].red +=
-Number(match.red_cards || 0);
-
-});
-
-}catch(err){
-
-console.log("Missing player file",slug);
-
-}
-
-}
-
-const opponents = [
-
-"All Opponents",
-
-...new Set(
-
-allGames.map(game=>{
-
-return game.home_team === team.team
-? game.away_team
-: game.home_team;
-
-})
-
-)
-
-].filter(Boolean).sort();
-
-function buildStats(opponent){
-
-let games = 0;
 let wins = 0;
 let draws = 0;
 let losses = 0;
 let goals = 0;
 
-const filteredGames = [];
-
 allGames.forEach(game=>{
 
 const isHome =
 game.home_team === team.team;
-
-const opponentName =
-isHome
-? game.away_team
-: game.home_team;
-
-if(
-opponent !== "All Opponents" &&
-opponent !== opponentName
-){
-return;
-}
-
-filteredGames.push(game);
-
-games++;
 
 const teamGoals =
 isHome
@@ -530,36 +413,7 @@ draws++;
 
 });
 
-return {
-games,
-wins,
-draws,
-losses,
-goals,
-filteredGames
-};
-
-}
-
-const scorers =
-Object.entries(playerTotals)
-.filter(p=>p[1].goals > 0)
-.sort((a,b)=>b[1].goals - a[1].goals)
-.slice(0,10);
-
-const yellows =
-Object.entries(playerTotals)
-.filter(p=>p[1].yellow > 0)
-.sort((a,b)=>b[1].yellow - a[1].yellow)
-.slice(0,10);
-
-const reds =
-Object.entries(playerTotals)
-.filter(p=>p[1].red > 0)
-.sort((a,b)=>b[1].red - a[1].red)
-.slice(0,10);
-
-function buildRows(rows,type){
+function buildRows(rows,valueKey){
 
 if(rows.length === 0){
 
@@ -581,16 +435,16 @@ return rows.map(player=>`
 
 <a
 class="player-link"
-href="/epl-player.html?player=${encodeURIComponent(player[0])}"
+href="/epl-player.html?player=${encodeURIComponent(player.player)}"
 >
 
-${player[0]}
+${player.player}
 
 </a>
 
 </td>
 
-<td>${player[1][type]}</td>
+<td>${player[valueKey]}</td>
 
 </tr>
 
@@ -673,9 +527,6 @@ ${result}
 
 }
 
-const allStats =
-buildStats("All Opponents");
-
 page.innerHTML = `
 
 <div
@@ -703,22 +554,22 @@ Premier League Club Profile
 </div>
 
 <div class="stat-card">
-<div class="stat-value">${allStats.wins}</div>
+<div class="stat-value">${wins}</div>
 <div class="stat-label">Wins</div>
 </div>
 
 <div class="stat-card">
-<div class="stat-value">${allStats.draws}</div>
+<div class="stat-value">${draws}</div>
 <div class="stat-label">Draws</div>
 </div>
 
 <div class="stat-card">
-<div class="stat-value">${allStats.losses}</div>
+<div class="stat-value">${losses}</div>
 <div class="stat-label">Losses</div>
 </div>
 
 <div class="stat-card">
-<div class="stat-value">${allStats.goals}</div>
+<div class="stat-value">${goals}</div>
 <div class="stat-label">Goals</div>
 </div>
 
@@ -806,7 +657,7 @@ ${buildRows(reds,"red")}
 <div class="section">
 
 <div class="section-title">
-Results Vs Selected Opponent
+Recent Results
 </div>
 
 <table class="games-table">
