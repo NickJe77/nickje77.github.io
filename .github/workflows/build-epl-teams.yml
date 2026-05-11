@@ -1,755 +1,261 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<script src="/js/analytics.js"></script>
-<meta charset="UTF-8">
-<title>NFL Team | The Sporting Almanac</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<style>
-
-body{
-margin:0;
-font-family:Inter,system-ui,Arial,sans-serif;
-background:#edf1f5;
-color:#111827;
-}
-
-.navbar{
-display:flex;
-justify-content:center;
-gap:30px;
-padding:14px;
-background:white;
-border-bottom:1px solid #dbe2ea;
-font-weight:700;
-position:sticky;
-top:0;
-z-index:1000;
-}
-
-.navbar a{
-text-decoration:none;
-color:#013369;
-font-size:15px;
-transition:.2s;
-}
-
-.navbar a:hover{
-color:#d50a0a;
-}
-
-.hero{
-padding:70px 20px 60px;
-text-align:center;
-color:white;
-position:relative;
-overflow:hidden;
-}
-
-.hero::after{
-content:"";
-position:absolute;
-width:500px;
-height:500px;
-background:rgba(255,255,255,.06);
-border-radius:50%;
-top:-220px;
-right:-120px;
-}
-
-.hero h1{
-margin:0;
-font-size:72px;
-font-weight:900;
-letter-spacing:-2px;
-position:relative;
-z-index:2;
-}
-
-.hero p{
-margin-top:14px;
-font-size:20px;
-font-weight:700;
-opacity:.95;
-position:relative;
-z-index:2;
-}
-
-.container{
-max-width:1320px;
-margin:-35px auto 40px;
-padding:0 20px;
-position:relative;
-z-index:5;
-}
-
-.section{
-background:white;
-border-radius:28px;
-padding:30px;
-margin-bottom:28px;
-box-shadow:0 10px 35px rgba(0,0,0,.10);
-}
-
-.section-title{
-font-size:24px;
-font-weight:900;
-margin-bottom:24px;
-color:#0f172a;
-text-transform:uppercase;
-letter-spacing:1px;
-border-left:6px solid #013369;
-padding-left:14px;
-}
-
-.leaders-grid{
-display:grid;
-grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
-gap:22px;
-}
-
-.leader-card{
-background:linear-gradient(180deg,#ffffff,#f8fbff);
-border:1px solid #e6edf5;
-border-radius:22px;
-padding:24px;
-box-shadow:0 6px 20px rgba(0,0,0,.05);
-}
-
-.leader-label{
-font-size:13px;
-font-weight:800;
-text-transform:uppercase;
-letter-spacing:1px;
-margin-bottom:14px;
-color:#013369;
-}
-
-.leader-player{
-font-size:28px;
-font-weight:900;
-line-height:1.15;
-margin-bottom:10px;
-}
-
-.leader-player a{
-text-decoration:none;
-color:#111827;
-}
-
-.leader-player a:hover{
-color:#013369;
-}
-
-.leader-stat{
-font-size:46px;
-font-weight:900;
-letter-spacing:-2px;
-}
-
-.table-wrap{
-overflow-x:auto;
-border-radius:18px;
-border:1px solid #dce3ec;
-}
-
-table{
-width:100%;
-border-collapse:collapse;
-min-width:900px;
-background:white;
-}
-
-th{
-background:#013369;
-color:white;
-padding:16px 12px;
-font-size:13px;
-font-weight:800;
-text-transform:uppercase;
-letter-spacing:1px;
-}
-
-td{
-padding:15px 12px;
-border-bottom:1px solid #edf2f7;
-font-size:15px;
-text-align:center;
-font-weight:600;
-}
-
-tbody tr:nth-child(even){
-background:#f4f8fd;
-}
-
-tbody tr:hover{
-background:#e7f0ff;
-}
-
-.player-link{
-font-weight:800;
-color:#013369;
-text-decoration:none;
-}
-
-.player-link:hover{
-text-decoration:underline;
-}
-
-.loading{
-text-align:center;
-font-size:32px;
-font-weight:900;
-padding:80px;
-color:#013369;
-}
-
-@media(max-width:900px){
-
-.hero h1{
-font-size:44px;
-}
-
-.container{
-padding:0 12px;
-}
+name: Build EPL Teams JSON
 
-.section{
-padding:22px;
-border-radius:20px;
-}
+on:
 
-}
+  workflow_dispatch:
 
-</style>
+  push:
+    paths:
+      - "docs/data/epl/**"
 
-</head>
+  schedule:
+    - cron: "0 6 * * *"
 
-<body>
+jobs:
+  build-epl-teams:
 
-<div class="navbar">
-<a href="/">Home</a>
-<a href="/nfl.html">NFL</a>
-<a href="/nfl-teams.html">Teams</a>
-</div>
+    runs-on: ubuntu-latest
 
-<div class="hero" id="hero">
+    steps:
 
-<h1 id="teamName">Loading Team...</h1>
+      - name: Checkout
+        uses: actions/checkout@v4
 
-<p>
-NFL Franchise Statistics
-</p>
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-</div>
+      - name: Build teams.json
+        run: |
 
-<div class="container">
+          cat > build_epl_teams.py << 'PYTHON'
 
-<div id="loading" class="loading">
-Loading team leaders...
-</div>
+          import json
+          import os
+          import glob
+          from collections import defaultdict
 
-<div id="content" style="display:none;">
+          BASE_DIR = "docs/data/epl"
 
-<div class="section">
+          OUTPUT = f"{BASE_DIR}/teams.json"
 
-<div class="section-title">
-All-Time Leaders
-</div>
+          json_files = glob.glob(f"{BASE_DIR}/**/*.json", recursive=True)
 
-<div class="leaders-grid" id="leadersGrid"></div>
+          print(f"FOUND {len(json_files)} JSON FILES")
 
-</div>
+          games = []
 
-<div class="section">
+          for file in json_files:
 
-<div class="section-title">
-Top Passing Leaders
-</div>
+              if "teams.json" in file:
+                  continue
 
-<div class="table-wrap">
+              if "players.json" in file:
+                  continue
 
-<table>
+              if "player-stats.json" in file:
+                  continue
 
-<thead>
-<tr>
-<th>Player</th>
-<th>Pass Yards</th>
-<th>Pass TD</th>
-<th>Games</th>
-</tr>
-</thead>
-
-<tbody id="passingTable"></tbody>
-
-</table>
-
-</div>
-
-</div>
-
-<div class="section">
-
-<div class="section-title">
-Top Rushing Leaders
-</div>
-
-<div class="table-wrap">
-
-<table>
-
-<thead>
-<tr>
-<th>Player</th>
-<th>Rush Yards</th>
-<th>Rush TD</th>
-<th>Games</th>
-</tr>
-</thead>
-
-<tbody id="rushingTable"></tbody>
-
-</table>
-
-</div>
-
-</div>
-
-<div class="section">
-
-<div class="section-title">
-Top Receiving Leaders
-</div>
-
-<div class="table-wrap">
-
-<table>
-
-<thead>
-<tr>
-<th>Player</th>
-<th>Rec Yards</th>
-<th>Rec TD</th>
-<th>Games</th>
-</tr>
-</thead>
-
-<tbody id="receivingTable"></tbody>
-
-</table>
-
-</div>
-
-</div>
-
-</div>
-
-</div>
-
-<script>
-
-const params =
-new URLSearchParams(window.location.search);
-
-const teamCode =
-String(params.get("team") || "")
-.trim()
-.toUpperCase();
-
-const TEAM_NAMES = {
-
-"ARI":"Arizona Cardinals",
-"ATL":"Atlanta Falcons",
-"BAL":"Baltimore Ravens",
-"BUF":"Buffalo Bills",
-"CAR":"Carolina Panthers",
-"CHI":"Chicago Bears",
-"CIN":"Cincinnati Bengals",
-"CLE":"Cleveland Browns",
-"DAL":"Dallas Cowboys",
-"DEN":"Denver Broncos",
-"DET":"Detroit Lions",
-"GB":"Green Bay Packers",
-"HOU":"Houston Texans",
-"IND":"Indianapolis Colts",
-"JAX":"Jacksonville Jaguars",
-"KC":"Kansas City Chiefs",
-"LV":"Las Vegas Raiders",
-"LAC":"Los Angeles Chargers",
-"LAR":"Los Angeles Rams",
-"MIA":"Miami Dolphins",
-"MIN":"Minnesota Vikings",
-"NE":"New England Patriots",
-"NO":"New Orleans Saints",
-"NYG":"New York Giants",
-"NYJ":"New York Jets",
-"PHI":"Philadelphia Eagles",
-"PIT":"Pittsburgh Steelers",
-"SF":"San Francisco 49ers",
-"SEA":"Seattle Seahawks",
-"TB":"Tampa Bay Buccaneers",
-"TEN":"Tennessee Titans",
-"WAS":"Washington Commanders"
-
-};
-
-const TEAM_COLOURS = {
-
-"ARI":["#97233F","#000000"],
-"ATL":["#A71930","#000000"],
-"BAL":["#241773","#000000"],
-"BUF":["#00338D","#C60C30"],
-"CAR":["#0085CA","#101820"],
-"CHI":["#0B162A","#C83803"],
-"CIN":["#FB4F14","#000000"],
-"CLE":["#311D00","#FF3C00"],
-"DAL":["#041E42","#0C2340"],
-"DEN":["#FB4F14","#002244"],
-"DET":["#0076B6","#B0B7BC"],
-"GB":["#203731","#FFB612"],
-"HOU":["#03202F","#A71930"],
-"IND":["#002C5F","#A2AAAD"],
-"JAX":["#006778","#101820"],
-"KC":["#E31837","#FFB81C"],
-"LV":["#000000","#A5ACAF"],
-"LAC":["#0080C6","#FFC20E"],
-"LAR":["#003594","#FFA300"],
-"MIA":["#008E97","#FC4C02"],
-"MIN":["#4F2683","#FFC62F"],
-"NE":["#002244","#C60C30"],
-"NO":["#101820","#D3BC8D"],
-"NYG":["#0B2265","#A71930"],
-"NYJ":["#125740","#000000"],
-"PHI":["#004C54","#A5ACAF"],
-"PIT":["#FFB612","#101820"],
-"SF":["#AA0000","#B3995D"],
-"SEA":["#002244","#69BE28"],
-"TB":["#D50A0A","#34302B"],
-"TEN":["#0C2340","#4B92DB"],
-"WAS":["#5A1414","#FFB612"]
-
-};
+              try:
 
-document.getElementById("teamName").innerText =
-TEAM_NAMES[teamCode] || teamCode;
+                  with open(file, "r", encoding="utf-8") as f:
+                      data = json.load(f)
 
-const colours =
-TEAM_COLOURS[teamCode] || ["#013369","#d50a0a"];
+                  if not isinstance(data, list):
+                      continue
 
-document.getElementById("hero").style.background = `
-radial-gradient(circle at top right, rgba(255,255,255,.08), transparent 35%),
-linear-gradient(135deg, ${colours[0]} 0%, ${colours[1]} 100%)
-`;
+                  if not data:
+                      continue
 
-function normalizeTeam(team){
+                  first = data[0]
 
-team =
-String(team || "")
-.trim()
-.toUpperCase();
+                  keys = list(first.keys())
 
-if(team === "NWE") return "NE";
-if(team === "KAN") return "KC";
-if(team === "NOR") return "NO";
-if(team === "SFO") return "SF";
-if(team === "TAM") return "TB";
-if(team === "SDG") return "LAC";
-if(team === "STL") return "LAR";
-if(team === "RAI") return "LV";
-if(team === "GNB") return "GB";
+                  joined = " ".join(keys).lower()
 
-return team;
+                  if (
+                      "home" in joined or
+                      "away" in joined or
+                      "hometeam" in joined
+                  ):
 
-}
+                      print(f"USING: {file}")
 
-async function loadPlayers(){
+                      games.extend(data)
 
-try{
+              except Exception as e:
 
-const indexRes =
-await fetch("/data/nfl/players/index.json?v="+Date.now());
+                  print(f"SKIP {file}")
+                  print(e)
 
-if(!indexRes.ok){
+          print(f"TOTAL GAMES: {len(games)}")
 
-document.getElementById("loading").innerHTML =
-"Unable to load players index";
+          teams = defaultdict(lambda: {
+              "team": "",
+              "seasons": set(),
+              "games": 0,
+              "goals": 0,
+              "wins": 0,
+              "draws": 0,
+              "losses": 0
+          })
 
-return;
+          for game in games:
 
-}
+              home = (
+                  game.get("home_team")
+                  or game.get("home")
+                  or game.get("HomeTeam")
+                  or ""
+              ).strip()
 
-const players =
-await indexRes.json();
+              away = (
+                  game.get("away_team")
+                  or game.get("away")
+                  or game.get("AwayTeam")
+                  or ""
+              ).strip()
 
-const playerTotals = [];
+              if not home or not away:
+                  continue
 
-const promises = players.map(async(player)=>{
+              # -------------------------
+              # SEASON LOGIC
+              # -------------------------
 
-try{
+              season = (
+                  game.get("season")
+                  or game.get("Season")
+                  or ""
+              )
 
-const slug =
-player
-.toLowerCase()
-.replace(/[^a-z0-9]+/g,"-")
-.replace(/^-|-$/g,"");
+              if not season:
 
-const pres =
-await fetch(`/data/nfl/players/${slug}.json?v=${Date.now()}`);
+                  raw_date = (
+                      game.get("date")
+                      or game.get("Date")
+                      or ""
+                  )
 
-if(!pres.ok) return null;
+                  if raw_date:
 
-const pdata =
-await pres.json();
+                      try:
 
-const games =
-pdata.games || [];
+                          year = int(str(raw_date)[:4])
 
-let totals = {
+                          month = int(str(raw_date)[5:7])
 
-player:pdata.name || player,
-slug:slug,
-games:0,
+                          if month >= 7:
+                              season = f"{year}-{str(year+1)[-2:]}"
+                          else:
+                              season = f"{year-1}-{str(year)[-2:]}"
 
-passY:0,
-passTD:0,
+                      except:
+                          season = ""
 
-rushY:0,
-rushTD:0,
+              season = str(season).strip()
 
-recY:0,
-recTD:0
+              # -------------------------
+              # SCORES
+              # -------------------------
 
-};
+              home_goals = int(
+                  game.get("home_score")
+                  or game.get("FTHG")
+                  or 0
+              )
 
-games.forEach(g=>{
+              away_goals = int(
+                  game.get("away_score")
+                  or game.get("FTAG")
+                  or 0
+              )
 
-let team =
-normalizeTeam(g.team || "");
+              # -------------------------
+              # TEAM BASE
+              # -------------------------
 
-if(team !== teamCode) return;
+              for t in [home, away]:
 
-const s = g.stats || {};
+                  teams[t]["team"] = t
+                  teams[t]["games"] += 1
 
-totals.games++;
+                  if season:
+                      teams[t]["seasons"].add(season)
 
-totals.passY += Number(s.pass_yds || 0);
-totals.passTD += Number(s.pass_td || 0);
+              # -------------------------
+              # GOALS
+              # -------------------------
 
-totals.rushY += Number(s.rush_yds || 0);
-totals.rushTD += Number(s.rush_td || 0);
+              teams[home]["goals"] += home_goals
+              teams[away]["goals"] += away_goals
 
-totals.recY += Number(s.rec_yds || 0);
-totals.recTD += Number(s.rec_td || 0);
+              # -------------------------
+              # RESULTS
+              # -------------------------
 
-});
+              if home_goals > away_goals:
 
-if(totals.games > 0){
+                  teams[home]["wins"] += 1
+                  teams[away]["losses"] += 1
 
-return totals;
+              elif away_goals > home_goals:
 
-}
+                  teams[away]["wins"] += 1
+                  teams[home]["losses"] += 1
 
-return null;
+              else:
 
-}catch(err){
+                  teams[home]["draws"] += 1
+                  teams[away]["draws"] += 1
 
-console.log(err);
-return null;
+          # -------------------------
+          # OUTPUT
+          # -------------------------
 
-}
+          output = []
 
-});
+          for team, data in teams.items():
 
-const results =
-await Promise.all(promises);
+              output.append({
 
-results.forEach(r=>{
+                  "team": team,
 
-if(r) playerTotals.push(r);
+                  "seasons": len(data["seasons"]),
 
-});
+                  "games": data["games"],
 
-buildPage(playerTotals);
+                  "goals": data["goals"],
 
-}catch(err){
+                  "wins": data["wins"],
 
-console.log(err);
+                  "draws": data["draws"],
 
-document.getElementById("loading").innerHTML =
-"Failed to load team data";
+                  "losses": data["losses"]
 
-}
+              })
 
-}
+          output = sorted(output, key=lambda x: x["team"])
 
-function buildPage(data){
+          with open(OUTPUT, "w", encoding="utf-8") as f:
+              json.dump(output, f, indent=2)
 
-document.getElementById("loading").style.display =
-"none";
+          print(f"BUILT {OUTPUT}")
+          print(f"TEAMS: {len(output)}")
 
-document.getElementById("content").style.display =
-"block";
+          PYTHON
 
-if(!data.length){
+          python3 build_epl_teams.py
 
-document.getElementById("leadersGrid").innerHTML =
-"<div>No data found.</div>";
+      - name: Commit teams.json
+        run: |
 
-return;
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-}
+          git add docs/data/epl/teams.json
 
-const passLeader =
-[...data].sort((a,b)=>b.passY-a.passY)[0];
+          git commit -m "Update EPL teams.json" || echo "No changes"
 
-const rushLeader =
-[...data].sort((a,b)=>b.rushY-a.rushY)[0];
-
-const recLeader =
-[...data].sort((a,b)=>b.recY-a.recY)[0];
-
-document.getElementById("leadersGrid").innerHTML = `
-
-<div class="leader-card">
-
-<div class="leader-label">
-Passing Leader
-</div>
-
-<div class="leader-player">
-<a href="/nfl-player.html?player=${passLeader.slug}">
-${passLeader.player}
-</a>
-</div>
-
-<div class="leader-stat">
-${passLeader.passY.toLocaleString()}
-</div>
-
-</div>
-
-<div class="leader-card">
-
-<div class="leader-label">
-Rushing Leader
-</div>
-
-<div class="leader-player">
-<a href="/nfl-player.html?player=${rushLeader.slug}">
-${rushLeader.player}
-</a>
-</div>
-
-<div class="leader-stat">
-${rushLeader.rushY.toLocaleString()}
-</div>
-
-</div>
-
-<div class="leader-card">
-
-<div class="leader-label">
-Receiving Leader
-</div>
-
-<div class="leader-player">
-<a href="/nfl-player.html?player=${recLeader.slug}">
-${recLeader.player}
-</a>
-</div>
-
-<div class="leader-stat">
-${recLeader.recY.toLocaleString()}
-</div>
-
-</div>
-
-`;
-
-const passing =
-[...data]
-.sort((a,b)=>b.passY-a.passY)
-.slice(0,20);
-
-passing.forEach(p=>{
-
-document.getElementById("passingTable").innerHTML += `
-<tr>
-
-<td>
-<a class="player-link"
-href="/nfl-player.html?player=${p.slug}">
-${p.player}
-</a>
-</td>
-
-<td>${p.passY.toLocaleString()}</td>
-<td>${p.passTD}</td>
-<td>${p.games}</td>
-
-</tr>
-`;
-
-});
-
-const rushing =
-[...data]
-.sort((a,b)=>b.rushY-a.rushY)
-.slice(0,20);
-
-rushing.forEach(p=>{
-
-document.getElementById("rushingTable").innerHTML += `
-<tr>
-
-<td>
-<a class="player-link"
-href="/nfl-player.html?player=${p.slug}">
-${p.player}
-</a>
-</td>
-
-<td>${p.rushY.toLocaleString()}</td>
-<td>${p.rushTD}</td>
-<td>${p.games}</td>
-
-</tr>
-`;
-
-});
-
-const receiving =
-[...data]
-.sort((a,b)=>b.recY-a.recY)
-.slice(0,20);
-
-receiving.forEach(p=>{
-
-document.getElementById("receivingTable").innerHTML += `
-<tr>
-
-<td>
-<a class="player-link"
-href="/nfl-player.html?player=${p.slug}">
-${p.player}
-</a>
-</td>
-
-<td>${p.recY.toLocaleString()}</td>
-<td>${p.recTD}</td>
-<td>${p.games}</td>
-
-</tr>
-`;
-
-});
-
-}
-
-loadPlayers();
-
-</script>
-
-</body>
-</html>
+          git push
