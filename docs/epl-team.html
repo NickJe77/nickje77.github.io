@@ -299,57 +299,62 @@ async function loadTeam(){
 
 try{
 
-const teamsResponse =
-await fetch("/data/epl/teams.json");
+const [
+teamsResponse,
+statsResponse
+] = await Promise.all([
+fetch("/data/epl/teams.json"),
+fetch("/data/epl/team_stats.json")
+]);
 
 const teams =
 await teamsResponse.json();
 
-const statsResponse =
-await fetch("/data/epl/team_stats.json");
-
 const teamStatsData =
 await statsResponse.json();
 
-const seasons = [];
+const seasonIds = [];
 
 for(let start=1992; start<=2026; start++){
 
-const end = start + 1;
+seasonIds.push(`${start}-${start+1}`);
 
-const seasonId = `${start}-${end}`;
+}
+
+const seasonPromises = seasonIds.map(async seasonId => {
 
 try{
 
 const res =
 await fetch(`/data/epl/seasons/${seasonId}.json`);
 
-if(res.ok){
+if(!res.ok) return [];
 
 const data =
 await res.json();
 
-if(Array.isArray(data)){
+if(!Array.isArray(data)) return [];
 
-data.forEach(game=>{
-
-game.season = seasonId;
-
-});
-
-seasons.push(...data);
-
-}
-
-}
+return data.map(game => ({
+...game,
+season: seasonId
+}));
 
 }catch(err){
 
-console.log("Missing season",seasonId);
+console.log("Missing season", seasonId);
+
+return [];
 
 }
 
-}
+});
+
+const seasonResults =
+await Promise.all(seasonPromises);
+
+const seasons =
+seasonResults.flat();
 
 const team =
 teams.find(t=>{
