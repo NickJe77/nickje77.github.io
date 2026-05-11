@@ -25,48 +25,69 @@ jobs:
 
           import json
           import os
+          import glob
           from collections import defaultdict
 
           BASE_DIR = "docs/data/epl"
 
           OUTPUT = f"{BASE_DIR}/teams.json"
 
-          POSSIBLE_FILES = [
+          json_files = glob.glob(f"{BASE_DIR}/**/*.json", recursive=True)
 
-              f"{BASE_DIR}/epl.json",
-              f"{BASE_DIR}/games.json",
-              f"{BASE_DIR}/matches.json",
-              f"{BASE_DIR}/results.json"
-
-          ]
+          print(f"FOUND {len(json_files)} JSON FILES")
 
           games = []
 
-          for file in POSSIBLE_FILES:
+          for file in json_files:
 
-              if os.path.exists(file):
+              if "teams.json" in file:
+                  continue
 
-                  print(f"Loading {file}")
+              if "players.json" in file:
+                  continue
+
+              try:
 
                   with open(file, "r", encoding="utf-8") as f:
-                      games = json.load(f)
+                      data = json.load(f)
 
-                  break
+                  if not isinstance(data, list):
+                      continue
 
-          if not games:
+                  if not data:
+                      continue
 
-              raise Exception("NO EPL GAME FILE FOUND")
+                  first = data[0]
 
-          print(f"Loaded {len(games)} games")
+                  keys = list(first.keys())
+
+                  joined = " ".join(keys).lower()
+
+                  if (
+                      "home" in joined or
+                      "away" in joined or
+                      "hometeam" in joined
+                  ):
+
+                      print(f"USING: {file}")
+
+                      games.extend(data)
+
+              except Exception as e:
+
+                  print(f"SKIP {file}")
+                  print(e)
+
+          print(f"TOTAL GAMES: {len(games)}")
 
           teams = defaultdict(lambda: {
               "team": "",
               "seasons": set(),
+              "games": 0,
               "goals": 0,
               "wins": 0,
               "draws": 0,
-              "losses": 0,
-              "games": 0
+              "losses": 0
           })
 
           for game in games:
@@ -88,9 +109,9 @@ jobs:
               if not home or not away:
                   continue
 
-              season = (
-                  str(game.get("season"))
-                  or str(game.get("Season"))
+              season = str(
+                  game.get("season")
+                  or game.get("Season")
                   or ""
               ).strip()
 
@@ -107,6 +128,7 @@ jobs:
               )
 
               for t in [home, away]:
+
                   teams[t]["team"] = t
                   teams[t]["games"] += 1
 
@@ -158,8 +180,8 @@ jobs:
           with open(OUTPUT, "w", encoding="utf-8") as f:
               json.dump(output, f, indent=2)
 
-          print(f"Built {OUTPUT}")
-          print(f"Teams: {len(output)}")
+          print(f"BUILT {OUTPUT}")
+          print(f"TEAMS: {len(output)}")
 
           PYTHON
 
