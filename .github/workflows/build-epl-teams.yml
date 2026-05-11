@@ -32,7 +32,6 @@ jobs:
           cat > build_epl_teams.py << 'PYTHON'
 
           import json
-          import os
           import glob
           from collections import defaultdict
 
@@ -40,11 +39,18 @@ jobs:
 
           OUTPUT = f"{BASE_DIR}/teams.json"
 
-          json_files = glob.glob(f"{BASE_DIR}/**/*.json", recursive=True)
+          json_files = glob.glob(
+              f"{BASE_DIR}/**/*.json",
+              recursive=True
+          )
 
           print(f"FOUND {len(json_files)} JSON FILES")
 
           games = []
+
+          # ---------------------------------
+          # FIND MATCH FILES
+          # ---------------------------------
 
           for file in json_files:
 
@@ -91,6 +97,10 @@ jobs:
 
           print(f"TOTAL GAMES: {len(games)}")
 
+          # ---------------------------------
+          # TEAM STORAGE
+          # ---------------------------------
+
           teams = defaultdict(lambda: {
               "team": "",
               "seasons": set(),
@@ -100,6 +110,10 @@ jobs:
               "draws": 0,
               "losses": 0
           })
+
+          # ---------------------------------
+          # PROCESS GAMES
+          # ---------------------------------
 
           for game in games:
 
@@ -120,9 +134,9 @@ jobs:
               if not home or not away:
                   continue
 
-              # -------------------------
+              # ---------------------------------
               # SEASON LOGIC
-              # -------------------------
+              # ---------------------------------
 
               season = (
                   game.get("season")
@@ -138,27 +152,52 @@ jobs:
                       or ""
                   )
 
-                  if raw_date:
+                  raw_date = str(raw_date).strip()
+
+                  year = None
+                  month = None
+
+                  # YYYY-MM-DD
+                  if "-" in raw_date:
+
+                      parts = raw_date.split("-")
 
                       try:
 
-                          year = int(str(raw_date)[:4])
-
-                          month = int(str(raw_date)[5:7])
-
-                          if month >= 7:
-                              season = f"{year}-{str(year+1)[-2:]}"
-                          else:
-                              season = f"{year-1}-{str(year)[-2:]}"
+                          year = int(parts[0])
+                          month = int(parts[1])
 
                       except:
-                          season = ""
+                          pass
+
+                  # DD/MM/YYYY
+                  elif "/" in raw_date:
+
+                      parts = raw_date.split("/")
+
+                      try:
+
+                          if len(parts[2]) == 4:
+
+                              year = int(parts[2])
+                              month = int(parts[1])
+
+                      except:
+                          pass
+
+                  # BUILD SEASON
+                  if year and month:
+
+                      if month >= 7:
+                          season = f"{year}-{str(year+1)[-2:]}"
+                      else:
+                          season = f"{year-1}-{str(year)[-2:]}"
 
               season = str(season).strip()
 
-              # -------------------------
-              # SCORES
-              # -------------------------
+              # ---------------------------------
+              # GOALS
+              # ---------------------------------
 
               home_goals = int(
                   game.get("home_score")
@@ -172,9 +211,9 @@ jobs:
                   or 0
               )
 
-              # -------------------------
-              # TEAM BASE
-              # -------------------------
+              # ---------------------------------
+              # TEAM COUNTS
+              # ---------------------------------
 
               for t in [home, away]:
 
@@ -184,16 +223,16 @@ jobs:
                   if season:
                       teams[t]["seasons"].add(season)
 
-              # -------------------------
+              # ---------------------------------
               # GOALS
-              # -------------------------
+              # ---------------------------------
 
               teams[home]["goals"] += home_goals
               teams[away]["goals"] += away_goals
 
-              # -------------------------
+              # ---------------------------------
               # RESULTS
-              # -------------------------
+              # ---------------------------------
 
               if home_goals > away_goals:
 
@@ -210,9 +249,9 @@ jobs:
                   teams[home]["draws"] += 1
                   teams[away]["draws"] += 1
 
-          # -------------------------
+          # ---------------------------------
           # OUTPUT
-          # -------------------------
+          # ---------------------------------
 
           output = []
 
@@ -236,7 +275,10 @@ jobs:
 
               })
 
-          output = sorted(output, key=lambda x: x["team"])
+          output = sorted(
+              output,
+              key=lambda x: x["team"]
+          )
 
           with open(OUTPUT, "w", encoding="utf-8") as f:
               json.dump(output, f, indent=2)
