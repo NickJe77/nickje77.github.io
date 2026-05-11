@@ -8,7 +8,9 @@ OUTPUT_FILE = "docs/data/epl/team_stats.json"
 team_data = {}
 
 def ensure_team(team):
+
     if team not in team_data:
+
         team_data[team] = {
             "team": team,
             "top_scorers": defaultdict(int),
@@ -42,7 +44,20 @@ for filename in os.listdir(PLAYERS_DIR):
 
     matches = player.get("matches", [])
 
+    seen_matches = set()
+
     for match in matches:
+
+        match_id = (
+            str(match.get("match_id", ""))
+            + "_"
+            + str(match.get("team", ""))
+        )
+
+        if match_id in seen_matches:
+            continue
+
+        seen_matches.add(match_id)
 
         team = (
             match.get("team")
@@ -54,17 +69,35 @@ for filename in os.listdir(PLAYERS_DIR):
 
         ensure_team(team)
 
-        goals = int(match.get("goals", 0) or 0)
+        goals = int(
+            match.get("goals", 0)
+            or 0
+        )
+
         yellow = int(
             match.get("yellow_cards", 0)
             or match.get("yellow", 0)
             or 0
         )
+
         red = int(
             match.get("red_cards", 0)
             or match.get("red", 0)
             or 0
         )
+
+        # sanity protection
+        if yellow < 0:
+            yellow = 0
+
+        if red < 0:
+            red = 0
+
+        if yellow > 2:
+            yellow = 0
+
+        if red > 2:
+            red = 0
 
         team_data[team]["top_scorers"][player_name] += goals
         team_data[team]["yellow_cards"][player_name] += yellow
@@ -97,30 +130,39 @@ for team, data in sorted(team_data.items()):
         "team": team,
 
         "top_scorers": [
+
             {
                 "player": p,
                 "goals": g
             }
+
             for p, g in scorers
             if g > 0
+
         ],
 
         "yellow_cards": [
+
             {
                 "player": p,
                 "yellow": y
             }
+
             for p, y in yellows
             if y > 0
+
         ],
 
         "red_cards": [
+
             {
                 "player": p,
                 "red": r
             }
+
             for p, r in reds
             if r > 0
+
         ]
 
     })
@@ -131,6 +173,11 @@ os.makedirs(
 )
 
 with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-    json.dump(final_output, f, indent=2)
+
+    json.dump(
+        final_output,
+        f,
+        indent=2
+    )
 
 print(f"Built {OUTPUT_FILE}")
