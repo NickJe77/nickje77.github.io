@@ -1,235 +1,33 @@
-name: EPL Team Stats Builder
+name: Rebuild EPL team stats
 
 on:
   workflow_dispatch:
 
-  push:
-    paths:
-      - 'docs/data/epl/seasons/**'
-
 jobs:
   build-team-stats:
-
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Build team_stats.json
-
-        run: |
-
-          python << 'EOF'
-
-          import os
-          import json
-          from collections import defaultdict
-
-          SEASONS_DIR = "docs/data/epl/seasons"
-          OUTPUT_FILE = "docs/data/epl/team_stats.json"
-
-          team_data = {}
-
-          def ensure_team(team):
-              if team not in team_data:
-                  team_data[team] = {
-                      "team": team,
-                      "top_scorers": defaultdict(int),
-                      "yellow_cards": defaultdict(int),
-                      "red_cards": defaultdict(int)
-                  }
-
-          def to_int(value):
-              try:
-                  return int(value or 0)
-              except:
-                  return 0
-
-          def get_player_name(player):
-              return (
-                  player.get("player")
-                  or player.get("name")
-                  or player.get("player_name")
-                  or ""
-              ).strip()
-
-          def get_players(game, side):
-              return (
-                  game.get(f"{side}_players")
-                  or game.get(f"{side}_player_stats")
-                  or game.get(f"{side}_lineup")
-                  or []
-              )
-
-          for filename in sorted(os.listdir(SEASONS_DIR)):
-
-              if not filename.endswith(".json"):
-                  continue
-
-              path = os.path.join(SEASONS_DIR, filename)
-
-              try:
-                  with open(path, "r", encoding="utf-8") as f:
-                      games = json.load(f)
-              except Exception as e:
-                  print(f"Skipping {filename}: {e}")
-                  continue
-
-              if not isinstance(games, list):
-                  continue
-
-              for game in games:
-
-                  for side in ["home", "away"]:
-
-                      team = (
-                          game.get(f"{side}_team")
-                          or game.get(f"{side}Team")
-                          or ""
-                      ).strip()
-
-                      if not team:
-                          continue
-
-                      ensure_team(team)
-
-                      players = get_players(game, side)
-
-                      if not isinstance(players, list):
-                          continue
-
-                      seen_in_match = set()
-
-                      for player in players:
-
-                          if not isinstance(player, dict):
-                              continue
-
-                          player_name = get_player_name(player)
-
-                          if not player_name:
-                              continue
-
-                          key = (
-                              str(game.get("match_id") or game.get("id") or game.get("game_id") or ""),
-                              team,
-                              player_name
-                          )
-
-                          if key in seen_in_match:
-                              continue
-
-                          seen_in_match.add(key)
-
-                          goals = to_int(
-                              player.get("goals")
-                              or player.get("goal")
-                              or 0
-                          )
-
-                          yellow = to_int(
-                              player.get("yellow_cards")
-                              or player.get("yellow")
-                              or player.get("yc")
-                              or 0
-                          )
-
-                          red = to_int(
-                              player.get("red_cards")
-                              or player.get("red")
-                              or player.get("rc")
-                              or 0
-                          )
-
-                          if yellow < 0 or yellow > 2:
-                              yellow = 0
-
-                          if red < 0 or red > 1:
-                              red = 0
-
-                          team_data[team]["top_scorers"][player_name] += goals
-                          team_data[team]["yellow_cards"][player_name] += yellow
-                          team_data[team]["red_cards"][player_name] += red
-
-          final_output = []
-
-          for team, data in sorted(team_data.items()):
-
-              scorers = sorted(
-                  data["top_scorers"].items(),
-                  key=lambda x: x[1],
-                  reverse=True
-              )
-
-              yellows = sorted(
-                  data["yellow_cards"].items(),
-                  key=lambda x: x[1],
-                  reverse=True
-              )
-
-              reds = sorted(
-                  data["red_cards"].items(),
-                  key=lambda x: x[1],
-                  reverse=True
-              )
-
-              final_output.append({
-                  "team": team,
-
-                  "top_scorers": [
-                      {
-                          "player": player,
-                          "goals": total
-                      }
-                      for player, total in scorers
-                      if total > 0
-                  ][:25],
-
-                  "yellow_cards": [
-                      {
-                          "player": player,
-                          "yellow": total
-                      }
-                      for player, total in yellows
-                      if total > 0
-                  ][:25],
-
-                  "red_cards": [
-                      {
-                          "player": player,
-                          "red": total
-                      }
-                      for player, total in reds
-                      if total > 0
-                  ][:25]
-              })
-
-          os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
-
-          with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-              json.dump(final_output, f, indent=2, ensure_ascii=False)
-
-          print(f"Built {OUTPUT_FILE}")
-          print(f"Teams: {len(final_output)}")
-
-          EOF
+        run: python3 scripts/build_epl_team_stats.py
 
       - name: Commit updated stats
-
         run: |
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add docs/data/epl/team_stats.json
 
           git commit -m "Rebuild EPL team stats" || echo "No changes"
+
+          git pull --rebase origin main || echo "Nothing to pull"
 
           git push
