@@ -4,8 +4,10 @@ import requests
 from datetime import datetime, timedelta
 
 NBA_DIR = "docs/data/nba/2025"
+PLAYERS_DIR = "docs/data/nba/players"
 
 os.makedirs(NBA_DIR, exist_ok=True)
+os.makedirs(PLAYERS_DIR, exist_ok=True)
 
 headers = {
     "User-Agent": "Mozilla/5.0",
@@ -78,7 +80,6 @@ while start <= today:
                 f"{game_id}.json"
             )
 
-            # SAFE SKIP / REPAIR LOGIC
             if game_id in existing_ids:
 
                 try:
@@ -103,7 +104,6 @@ while start <= today:
                         existing_game.get("away_team", "")
                     )
 
-                    # ONLY SKIP GOOD FILES
                     if (
                         existing_players
                         and home_team
@@ -354,5 +354,93 @@ with open(
 
     json.dump(players_list, f, indent=2)
 
-print("PLAYERS UPDATED")
+print("PLAYERS.JSON UPDATED")
+
+# BUILD INDIVIDUAL PLAYER FILES
+
+print("BUILDING PLAYER FILES")
+
+player_games = {}
+
+for filename in os.listdir(NBA_DIR):
+
+    if not filename.endswith(".json"):
+        continue
+
+    path = os.path.join(NBA_DIR, filename)
+
+    try:
+
+        with open(path, "r", encoding="utf-8") as f:
+            game = json.load(f)
+
+        game_id = game.get("game_id", "")
+        date = game.get("date", "")
+
+        home_team = game.get("home_team", "")
+        away_team = game.get("away_team", "")
+
+        for p in game.get("players", []):
+
+            name = p.get("player", "").strip()
+
+            if not name:
+                continue
+
+            slug = (
+                name.lower()
+                .replace(".", "")
+                .replace("'", "")
+                .replace(" ", "-")
+            )
+
+            if slug not in player_games:
+
+                player_games[slug] = {
+                    "name": name,
+                    "games": []
+                }
+
+            team = p.get("team", "")
+
+            opp = (
+                away_team
+                if team == home_team
+                else home_team
+            )
+
+            player_games[slug]["games"].append({
+
+                "game_id": game_id,
+                "date": date,
+                "season": 2025,
+                "team": team,
+                "opp": opp,
+
+                "pts": p.get("points", 0),
+                "reb": p.get("rebounds", 0),
+                "ast": p.get("assists", 0),
+                "stl": p.get("steals", 0),
+                "blk": p.get("blocks", 0),
+
+                "game_type": "regular season"
+            })
+
+    except Exception as e:
+
+        print(f"FAILED PLAYER FILE {filename}")
+        print(str(e))
+
+for slug, pdata in player_games.items():
+
+    out_path = os.path.join(
+        PLAYERS_DIR,
+        f"{slug}.json"
+    )
+
+    with open(out_path, "w", encoding="utf-8") as f:
+
+        json.dump(pdata, f, indent=2)
+
+print("PLAYER FILES UPDATED")
 print("DONE")
