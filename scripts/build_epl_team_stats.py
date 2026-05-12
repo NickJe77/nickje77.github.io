@@ -27,6 +27,8 @@ def to_int(v):
 def clean(v):
     return str(v or "").strip()
 
+seen = set()
+
 player_files = sorted(
     f for f in os.listdir(PLAYERS_DIR)
     if f.endswith(".json")
@@ -73,6 +75,30 @@ for filename in player_files:
         if not team:
             continue
 
+        opponent = clean(
+            match.get("opponent")
+            or match.get("opp")
+            or match.get("against")
+        )
+
+        date = clean(
+            match.get("date")
+            or match.get("match_date")
+            or match.get("game_date")
+        )
+
+        dedupe_key = (
+            player_name.lower(),
+            team.lower(),
+            opponent.lower(),
+            date
+        )
+
+        if dedupe_key in seen:
+            continue
+
+        seen.add(dedupe_key)
+
         ensure_team(team)
 
         goals = to_int(
@@ -92,15 +118,15 @@ for filename in player_files:
             or match.get("rc")
         )
 
-        # HARD FILTERS FOR CORRUPTED DUPLICATES
+        # PER MATCH SANITY ONLY
 
         if goals < 0 or goals > 6:
             goals = 0
 
-        if yellow < 0 or yellow > 15:
+        if yellow < 0 or yellow > 2:
             yellow = 0
 
-        if red < 0 or red > 3:
+        if red < 0 or red > 1:
             red = 0
 
         if goals > 0:
@@ -150,24 +176,19 @@ for team in sorted(team_data):
         "yellow_cards": [
             {
                 "player": p,
-                "yellow": min(v, 15)
+                "yellow": v
             }
             for p, v in yellows[:10]
-            if v <= 15
         ],
 
         "red_cards": [
             {
                 "player": p,
-                "red": min(v, 3)
+                "red": v
             }
             for p, v in reds[:10]
-            if v <= 3
         ]
     })
-
-if not final_output:
-    raise SystemExit("ERROR: no teams built")
 
 os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
 
@@ -176,4 +197,4 @@ with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
 
 print(f"Built {OUTPUT_FILE}")
 print(f"Teams written: {len(final_output)}")
-print("DONE")
+print(f"Unique player-match rows counted: {len(seen)}")
