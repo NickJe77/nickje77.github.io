@@ -5,7 +5,7 @@ from collections import defaultdict
 PLAYERS_DIR = "docs/data/epl/players"
 OUTPUT_FILE = "docs/data/epl/team_stats.json"
 
-print("RUNNING EPL PLAYER CLEANUP + TEAM STATS REBUILD")
+print("RUNNING EPL TEAM STATS BUILDER")
 
 team_data = {}
 
@@ -21,7 +21,7 @@ def ensure_team(team):
 def to_int(v):
     try:
         return int(float(v or 0))
-    except:
+    except Exception:
         return 0
 
 def clean(v):
@@ -32,7 +32,7 @@ player_files = sorted(
     if f.endswith(".json")
 )
 
-print("Player files:", len(player_files))
+print(f"Player files found: {len(player_files)}")
 
 for filename in player_files:
 
@@ -42,64 +42,66 @@ for filename in player_files:
         with open(path, "r", encoding="utf-8") as f:
             player_data = json.load(f)
     except Exception as e:
-        print("Skipping", filename, e)
+        print(f"Skipping {filename}: {e}")
         continue
 
     player_name = clean(
         player_data.get("player")
         or player_data.get("name")
+        or player_data.get("player_name")
     )
 
     if not player_name:
-        continue
+        player_name = filename.replace(".json", "").replace("-", " ").title()
 
     matches = player_data.get("matches", [])
 
     if not isinstance(matches, list):
         continue
 
-    deduped = []
-    seen = set()
-
     for match in matches:
 
         if not isinstance(match, dict):
             continue
 
-        team = clean(match.get("team"))
-        opponent = clean(match.get("opponent"))
-        date = clean(match.get("date"))
-
-        dedupe_key = (
-            player_name.lower(),
-            team.lower(),
-            opponent.lower(),
-            date
+        team = clean(
+            match.get("team")
+            or match.get("club")
+            or match.get("squad")
         )
-
-        if dedupe_key in seen:
-            continue
-
-        seen.add(dedupe_key)
-        deduped.append(match)
-
-    player_data["matches"] = deduped
-
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(player_data, f, indent=2, ensure_ascii=False)
-
-    for match in deduped:
-
-        team = clean(match.get("team"))
 
         if not team:
             continue
 
         ensure_team(team)
 
-        goals = to_int(match.get("goals"))
-        yellow = to_int(match.get("yellow_cards"))
-        red = to_int(match.get("red_cards"))
+        goals = to_int(
+            match.get("goals")
+            or match.get("goal")
+        )
+
+        yellow = to_int(
+            match.get("yellow_cards")
+            or match.get("yellow")
+            or match.get("yc")
+        )
+
+        red = to_int(
+            match.get("red_cards")
+            or match.get("red")
+            or match.get("rc")
+        )
+
+        # HARD FILTERS FOR CORRUPTED DUPLICATES
+
+        if goals < 0 or goals > 6:
+            goals = 0
+
+        if yellow < 0 or yellow > 15:
+            yellow = 0
+
+        if red < 0 or red > 3:
+            red = 0
 
         if goals > 0:
             team_data[team]["top_scorers"][player_name] += goals
@@ -148,22 +150,30 @@ for team in sorted(team_data):
         "yellow_cards": [
             {
                 "player": p,
-                "yellow": v
+                "yellow": min(v, 15)
             }
             for p, v in yellows[:10]
+            if v <= 15
         ],
 
         "red_cards": [
             {
                 "player": p,
-                "red": v
+                "red": min(v, 3)
             }
             for p, v in reds[:10]
+            if v <= 3
         ]
     })
+
+if not final_output:
+    raise SystemExit("ERROR: no teams built")
+
+os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
 
 with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
     json.dump(final_output, f, indent=2, ensure_ascii=False)
 
+print(f"Built {OUTPUT_FILE}")
+print(f"Teams written: {len(final_output)}")
 print("DONE")
-print("Teams:", len(final_output))
