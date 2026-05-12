@@ -5,13 +5,32 @@ import requests
 
 SEASON = "2026"
 
-SEASON_DIR = f"docs/data/nba/{SEASON}"
-BOX_DIR = f"docs/data/nba/boxscores/{SEASON}"
+BASE_DIR = os.getcwd()
+
+SEASON_DIR = os.path.join(
+    BASE_DIR,
+    "docs",
+    "data",
+    "nba",
+    SEASON
+)
+
+BOX_DIR = os.path.join(
+    BASE_DIR,
+    "docs",
+    "data",
+    "nba",
+    "boxscores",
+    SEASON
+)
 
 os.makedirs(SEASON_DIR, exist_ok=True)
 os.makedirs(BOX_DIR, exist_ok=True)
 
-INDEX_FILE = f"{SEASON_DIR}/index.json"
+INDEX_FILE = os.path.join(SEASON_DIR, "index.json")
+
+print("SEASON DIR:", SEASON_DIR)
+print("BOX DIR:", BOX_DIR)
 
 HEADERS = {
     "User-Agent": (
@@ -41,12 +60,13 @@ def fetch_json(url):
         if r.status_code == 200:
             return r.json()
 
+        print("BAD STATUS:", r.status_code)
+
     except Exception as e:
         print("REQUEST ERROR:", e)
 
     return None
 
-# 2025-26 regular season IDs
 START_ID = 1
 END_ID = 1500
 
@@ -56,14 +76,14 @@ for num in range(START_ID, END_ID + 1):
 
     game_file = f"{game_id}.json"
 
-    print(f"FETCHING {game_id}")
+    print(f"FETCHING {game_file}")
 
-    boxscore_url = (
+    url = (
         "https://cdn.nba.com/static/json/liveData/boxscore/"
         f"boxscore_{game_id}.json"
     )
 
-    data = fetch_json(boxscore_url)
+    data = fetch_json(url)
 
     if not data:
         continue
@@ -71,6 +91,19 @@ for num in range(START_ID, END_ID + 1):
     game = data.get("game", {})
 
     if not game:
+        continue
+
+    out_path = os.path.join(BOX_DIR, game_file)
+
+    try:
+
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
+        print("SAVED:", out_path)
+
+    except Exception as e:
+        print("WRITE ERROR:", e)
         continue
 
     home_team = (
@@ -89,13 +122,6 @@ for num in range(START_ID, END_ID + 1):
         or ""
     )
 
-    out_path = os.path.join(BOX_DIR, game_file)
-
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-
-    print(f"SAVED {game_file}")
-
     games.append({
         "game_id": game_id,
         "game_file": game_file,
@@ -110,13 +136,11 @@ games.sort(
     key=lambda x: (x.get("date", ""), x.get("game_id", ""))
 )
 
-if len(games) < 1000:
-    raise SystemExit(
-        f"ABORTED - ONLY {len(games)} GAMES FOUND"
-    )
+print("TOTAL GAMES:", len(games))
 
 with open(INDEX_FILE, "w", encoding="utf-8") as f:
     json.dump(games, f, indent=2)
 
-print("\nDONE")
-print("TOTAL GAMES:", len(games))
+print("INDEX WRITTEN:", INDEX_FILE)
+
+print("DONE")
