@@ -4,14 +4,14 @@ import requests
 from glob import glob
 
 SEASON_DIR = "docs/data/nba/2026"
-BOXSCORE_DIR = "docs/data/nba/boxscores/2026"
 
 os.makedirs(SEASON_DIR, exist_ok=True)
-os.makedirs(BOXSCORE_DIR, exist_ok=True)
 
-print("NBA 2026 REBUILD STARTED")
+print("RESTORING NBA 2026")
 
-schedule_files = sorted(glob(f"{SEASON_DIR}/*.json"))
+headers = {
+    "User-Agent": "Mozilla/5.0"
+}
 
 def safe_int(v):
     try:
@@ -19,28 +19,30 @@ def safe_int(v):
     except:
         return 0
 
-headers = {
-    "User-Agent": "Mozilla/5.0"
-}
+files = sorted(glob(f"{SEASON_DIR}/*.json"))
 
-for existing in schedule_files:
+for path in files:
 
     try:
 
-        with open(existing, "r", encoding="utf-8") as f:
-            old_game = json.load(f)
+        with open(path, "r", encoding="utf-8") as f:
+            existing = json.load(f)
 
         game_id = (
-            old_game.get("game_id")
-            or old_game.get("gameId")
+            existing.get("game_id")
+            or existing.get("gameId")
         )
 
         if not game_id:
+            print(f"NO GAME ID: {path}")
             continue
 
         print(f"FETCHING {game_id}")
 
-        url = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
+        url = (
+            "https://cdn.nba.com/static/json/liveData/"
+            f"boxscore/boxscore_{game_id}.json"
+        )
 
         res = requests.get(url, headers=headers, timeout=30)
 
@@ -66,8 +68,12 @@ for existing in schedule_files:
         ).strip()
 
         output = {
-            "game_id": game.get("gameId", game_id),
-            "date": game.get("gameEt", ""),
+            "game_id": game_id,
+            "date": (
+                game.get("gameEt")
+                or game.get("gameTimeUTC")
+                or ""
+            ),
             "game_type": "Regular Season",
 
             "home_team": home_team,
@@ -101,6 +107,9 @@ for existing in schedule_files:
 
                 full_name = f"{first} {last}".strip()
 
+                if not full_name:
+                    continue
+
                 output["players"].append({
 
                     "player": full_name,
@@ -113,7 +122,9 @@ for existing in schedule_files:
                         safe_int(stats.get("points")),
 
                     "rebounds":
-                        safe_int(stats.get("reboundsTotal")),
+                        safe_int(
+                            stats.get("reboundsTotal")
+                        ),
 
                     "assists":
                         safe_int(stats.get("assists")),
@@ -128,19 +139,14 @@ for existing in schedule_files:
                         safe_int(stats.get("turnovers"))
                 })
 
-        out_file = os.path.join(
-            SEASON_DIR,
-            f"{game_id}.json"
-        )
-
-        with open(out_file, "w", encoding="utf-8") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(output, f, indent=2)
 
-        print(f"UPDATED {game_id}")
+        print(f"FIXED {game_id}")
 
     except Exception as e:
 
-        print(f"ERROR {existing}")
+        print(f"ERROR: {path}")
         print(e)
 
-print("NBA 2026 REBUILD COMPLETE")
+print("DONE")
