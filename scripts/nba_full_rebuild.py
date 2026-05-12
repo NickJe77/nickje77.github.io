@@ -33,14 +33,29 @@ print("SEASON DIR:", SEASON_DIR)
 print("BOX DIR:", BOX_DIR)
 
 HEADERS = {
+    "Host": "cdn.nba.com",
+    "Connection": "keep-alive",
+    "Pragma": "no-cache",
+    "Cache-Control": "no-cache",
+    "sec-ch-ua": '"Google Chrome";v="136", "Chromium";v="136", "Not.A/Brand";v="24"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"macOS"',
+    "Upgrade-Insecure-Requests": "1",
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/136.0 Safari/537.36"
+        "Chrome/136.0.0.0 Safari/537.36"
     ),
-    "Referer": "https://www.nba.com/",
-    "Origin": "https://www.nba.com",
-    "Accept": "application/json"
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;q=0.9,"
+        "image/avif,image/webp,image/apng,*/*;q=0.8"
+    ),
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-User": "?1",
+    "Sec-Fetch-Dest": "document",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.nba.com/"
 }
 
 session = requests.Session()
@@ -54,7 +69,7 @@ def fetch_json(url):
         r = session.get(
             url,
             headers=HEADERS,
-            timeout=15
+            timeout=20
         )
 
         if r.status_code == 200:
@@ -63,7 +78,7 @@ def fetch_json(url):
         print("BAD STATUS:", r.status_code)
 
         if r.status_code == 403:
-            time.sleep(2)
+            time.sleep(5)
 
     except Exception as e:
 
@@ -71,10 +86,10 @@ def fetch_json(url):
 
     return None
 
-# RESUME FROM WHERE IT STARTED FAILING
+# RESUME FROM LAST GOOD FILE
 START_ID = 1231
 
-# SAFE MAX
+# SAFE UPPER LIMIT
 END_ID = 1500
 
 for num in range(START_ID, END_ID + 1):
@@ -85,7 +100,7 @@ for num in range(START_ID, END_ID + 1):
 
     out_path = os.path.join(BOX_DIR, game_file)
 
-    # SKIP FILES ALREADY SAVED
+    # SKIP EXISTING FILES
     if os.path.exists(out_path):
 
         print(f"SKIPPING {game_file}")
@@ -146,8 +161,8 @@ for num in range(START_ID, END_ID + 1):
         "date": game_date
     })
 
-    # FASTER BUT SAFE
-    time.sleep(0.5)
+    # SLOWER REQUEST RATE
+    time.sleep(2)
 
 # REBUILD INDEX FROM ALL SAVED FILES
 all_games = []
