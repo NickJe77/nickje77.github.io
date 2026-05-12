@@ -9,15 +9,11 @@ PLAYERS_DIR = "docs/data/nba/players"
 os.makedirs(NBA_DIR, exist_ok=True)
 os.makedirs(PLAYERS_DIR, exist_ok=True)
 
-session = requests.Session()
-
-session.headers.update({
-    "User-Agent": "Mozilla/5.0",
-    "Referer": "https://www.nba.com/",
-    "Origin": "https://www.nba.com"
-})
-
 print("NBA PLAYOFF SAFE UPDATER")
+
+headers = {
+    "User-Agent": "Mozilla/5.0"
+}
 
 existing_ids = set()
 
@@ -31,10 +27,10 @@ for f in os.listdir(NBA_DIR):
 
 print(f"EXISTING GAMES: {len(existing_ids)}")
 
-today = datetime.utcnow()
-
-# ONLY CHECK AFTER LAST GAME YOU HAVE
+# START AFTER YOUR LAST GAME
 start = datetime(2026, 5, 4)
+
+today = datetime.utcnow()
 
 def safe_int(v):
     try:
@@ -50,57 +46,38 @@ while start <= today:
 
     try:
 
-        schedule_url = (
-            "https://stats.nba.com/stats/"
-            f"scheduleleaguev2?"
-            f"GameDate={date_str}"
-            f"&LeagueID=00"
+        scoreboard_url = (
+            "https://cdn.nba.com/static/json/liveData/"
+            f"scoreboard/todaysScoreboard_{date_str}.json"
         )
 
-        r = session.get(
-            schedule_url,
-            timeout=60
+        r = requests.get(
+            scoreboard_url,
+            headers=headers,
+            timeout=30
         )
 
         if r.status_code != 200:
 
-            print(f"BAD SCHEDULE {date_str}")
+            print(f"NO SCOREBOARD {date_str}")
 
             start += timedelta(days=1)
             continue
 
         data = r.json()
 
-        result_sets = data.get("resultSets", [])
+        games = (
+            data.get("scoreboard", {})
+            .get("games", [])
+        )
 
-        if not result_sets:
+        print(f"GAMES FOUND: {len(games)}")
 
-            start += timedelta(days=1)
-            continue
+        for g in games:
 
-        result = result_sets[0]
-
-        headers_row = result.get("headers", [])
-        rows = result.get("rowSet", [])
-
-        if "GAME_ID" not in headers_row:
-
-            start += timedelta(days=1)
-            continue
-
-        game_id_index = headers_row.index("GAME_ID")
-
-        for row in rows:
-
-            try:
-
-                game_id = str(
-                    row[game_id_index]
-                )
-
-            except:
-
-                continue
+            game_id = str(
+                g.get("gameId", "")
+            )
 
             if not game_id:
                 continue
@@ -109,6 +86,8 @@ while start <= today:
                 NBA_DIR,
                 f"{game_id}.json"
             )
+
+            repair = False
 
             if game_id in existing_ids:
 
@@ -124,42 +103,32 @@ while start <= today:
 
                     if isinstance(existing_game, list):
 
-                        print(f"REPAIR LIST {game_id}")
+                        repair = True
+
+                    elif not existing_game.get("players"):
+
+                        repair = True
+
+                    elif not existing_game.get("home_team"):
+
+                        repair = True
+
+                    elif not existing_game.get("away_team"):
+
+                        repair = True
 
                     else:
 
-                        existing_players = (
-                            existing_game.get("players", [])
-                        )
-
-                        home_team = (
-                            existing_game.get(
-                                "home_team",
-                                ""
-                            )
-                        )
-
-                        away_team = (
-                            existing_game.get(
-                                "away_team",
-                                ""
-                            )
-                        )
-
-                        if (
-                            existing_players
-                            and home_team
-                            and away_team
-                        ):
-
-                            print(f"SKIP GOOD {game_id}")
-                            continue
-
-                    print(f"REPAIRING {game_id}")
+                        print(f"SKIP GOOD {game_id}")
+                        continue
 
                 except:
 
-                    print(f"REBUILDING {game_id}")
+                    repair = True
+
+            if repair:
+
+                print(f"REPAIRING {game_id}")
 
             else:
 
@@ -170,9 +139,10 @@ while start <= today:
                 f"boxscore/boxscore_{game_id}.json"
             )
 
-            b = session.get(
+            b = requests.get(
                 box_url,
-                timeout=60
+                headers=headers,
+                timeout=30
             )
 
             if b.status_code != 200:
@@ -316,7 +286,7 @@ while start <= today:
 
     start += timedelta(days=1)
 
-# BUILD PLAYERS.JSON
+# PLAYERS.JSON
 
 print("BUILDING PLAYERS")
 
@@ -390,7 +360,7 @@ with open(
 
 print("PLAYERS.JSON UPDATED")
 
-# BUILD PLAYER FILES
+# PLAYER FILES
 
 print("BUILDING PLAYER FILES")
 
@@ -461,9 +431,7 @@ for filename in os.listdir(NBA_DIR):
                 "reb": p.get("rebounds", 0),
                 "ast": p.get("assists", 0),
                 "stl": p.get("steals", 0),
-                "blk": p.get("blocks", 0),
-
-                "game_type": "playoffs"
+                "blk": p.get("blocks", 0)
             })
 
     except Exception as e:
