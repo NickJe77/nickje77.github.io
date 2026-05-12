@@ -3,17 +3,13 @@ import json
 import requests
 
 NBA_DIR = "docs/data/nba/2025"
-PLAYERS_DIR = "docs/data/nba/players"
-
-os.makedirs(NBA_DIR, exist_ok=True)
-os.makedirs(PLAYERS_DIR, exist_ok=True)
 
 headers = {
     "User-Agent": "Mozilla/5.0",
     "Referer": "https://www.nba.com/"
 }
 
-print("NBA PLAYOFF IMPORTER")
+print("NBA EXACT SCHEMA IMPORTER")
 
 def safe_int(v):
     try:
@@ -60,17 +56,17 @@ for game_id in PLAYOFF_IDS:
 
     try:
 
-        existing_path = os.path.join(
+        out_path = os.path.join(
             NBA_DIR,
             f"{game_id}.json"
         )
 
-        if os.path.exists(existing_path):
+        if os.path.exists(out_path):
 
             try:
 
                 with open(
-                    existing_path,
+                    out_path,
                     "r",
                     encoding="utf-8"
                 ) as ef:
@@ -89,15 +85,15 @@ for game_id in PLAYOFF_IDS:
             except:
                 pass
 
-        print(f"ADDING {game_id}")
+        print(f"IMPORTING {game_id}")
 
-        box_url = (
+        url = (
             "https://cdn.nba.com/static/json/liveData/"
             f"boxscore/boxscore_{game_id}.json"
         )
 
         r = requests.get(
-            box_url,
+            url,
             headers=headers,
             timeout=30
         )
@@ -148,11 +144,6 @@ for game_id in PLAYOFF_IDS:
                 game.get("arena", {})
                 .get("arenaName", ""),
 
-            "attendance":
-                safe_int(
-                    game.get("attendance")
-                ),
-
             "players": []
         }
 
@@ -162,9 +153,6 @@ for game_id in PLAYOFF_IDS:
         ]:
 
             for p in side.get("players", []):
-
-                if p.get("played") != "1":
-                    continue
 
                 stats = p.get(
                     "statistics",
@@ -181,13 +169,16 @@ for game_id in PLAYOFF_IDS:
 
                 output["players"].append({
 
+                    # EXACT WORKING SCHEMA
+
                     "player": full_name,
+
                     "team": team_name,
 
                     "minutes":
                         stats.get(
                             "minutesCalculated",
-                            ""
+                            "0:00"
                         ),
 
                     "points":
@@ -224,7 +215,7 @@ for game_id in PLAYOFF_IDS:
                 })
 
         with open(
-            existing_path,
+            out_path,
             "w",
             encoding="utf-8"
         ) as f:
@@ -235,235 +226,11 @@ for game_id in PLAYOFF_IDS:
                 indent=2
             )
 
-        print(f"ADDED {game_id}")
+        print(f"DONE {game_id}")
 
     except Exception as e:
 
         print(f"FAILED {game_id}")
         print(str(e))
 
-# BUILD PLAYERS.JSON
-
-print("BUILDING PLAYERS")
-
-players = {}
-
-for filename in os.listdir(NBA_DIR):
-
-    if not filename.endswith(".json"):
-        continue
-
-    if filename == "games.json":
-        continue
-
-    path = os.path.join(
-        NBA_DIR,
-        filename
-    )
-
-    try:
-
-        with open(
-            path,
-            "r",
-            encoding="utf-8"
-        ) as f:
-
-            game = json.load(f)
-
-        if isinstance(game, list):
-            continue
-
-        for p in game.get("players", []):
-
-            name = p.get(
-                "player",
-                ""
-            ).strip()
-
-            if not name:
-                continue
-
-            if name not in players:
-
-                players[name] = {
-                    "player": name,
-                    "team": p.get("team", ""),
-                    "games": 0,
-                    "points": 0,
-                    "rebounds": 0,
-                    "assists": 0,
-                    "steals": 0,
-                    "blocks": 0,
-                    "turnovers": 0
-                }
-
-            players[name]["games"] += 1
-            players[name]["points"] += int(
-                p.get("points", 0)
-            )
-            players[name]["rebounds"] += int(
-                p.get("rebounds", 0)
-            )
-            players[name]["assists"] += int(
-                p.get("assists", 0)
-            )
-            players[name]["steals"] += int(
-                p.get("steals", 0)
-            )
-            players[name]["blocks"] += int(
-                p.get("blocks", 0)
-            )
-            players[name]["turnovers"] += int(
-                p.get("turnovers", 0)
-            )
-
-    except Exception as e:
-
-        print(f"FAILED PLAYER BUILD {filename}")
-        print(str(e))
-
-players_list = sorted(
-    players.values(),
-    key=lambda x: x["points"],
-    reverse=True
-)
-
-with open(
-    "docs/data/nba/players.json",
-    "w",
-    encoding="utf-8"
-) as f:
-
-    json.dump(
-        players_list,
-        f,
-        indent=2
-    )
-
-print("PLAYERS.JSON UPDATED")
-
-# BUILD PLAYER FILES
-
-print("BUILDING PLAYER FILES")
-
-player_games = {}
-
-for filename in os.listdir(NBA_DIR):
-
-    if not filename.endswith(".json"):
-        continue
-
-    if filename == "games.json":
-        continue
-
-    path = os.path.join(
-        NBA_DIR,
-        filename
-    )
-
-    try:
-
-        with open(
-            path,
-            "r",
-            encoding="utf-8"
-        ) as f:
-
-            game = json.load(f)
-
-        if isinstance(game, list):
-            continue
-
-        game_id = game.get("game_id", "")
-        date = game.get("date", "")
-
-        home_team = game.get(
-            "home_team",
-            ""
-        )
-
-        away_team = game.get(
-            "away_team",
-            ""
-        )
-
-        for p in game.get("players", []):
-
-            name = p.get(
-                "player",
-                ""
-            ).strip()
-
-            if not name:
-                continue
-
-            slug = (
-                name.lower()
-                .replace(".", "")
-                .replace("'", "")
-                .replace(" ", "-")
-            )
-
-            if slug not in player_games:
-
-                player_games[slug] = {
-                    "name": name,
-                    "games": []
-                }
-
-            team = p.get("team", "")
-
-            opp = (
-                away_team
-                if team == home_team
-                else home_team
-            )
-
-            player_games[slug]["games"].append({
-
-                "game_id": game_id,
-                "date": date,
-                "season": 2025,
-                "team": team,
-                "opp": opp,
-
-                "pts": p.get("points", 0),
-                "reb": p.get("rebounds", 0),
-                "ast": p.get("assists", 0),
-                "stl": p.get("steals", 0),
-                "blk": p.get("blocks", 0),
-
-                "game_type":
-                    game.get(
-                        "game_type",
-                        "Playoffs"
-                    )
-            })
-
-    except Exception as e:
-
-        print(f"FAILED PLAYER FILE {filename}")
-        print(str(e))
-
-for slug, pdata in player_games.items():
-
-    out_path = os.path.join(
-        PLAYERS_DIR,
-        f"{slug}.json"
-    )
-
-    with open(
-        out_path,
-        "w",
-        encoding="utf-8"
-    ) as f:
-
-        json.dump(
-            pdata,
-            f,
-            indent=2
-        )
-
-print("PLAYER FILES UPDATED")
 print("DONE")
