@@ -3,6 +3,7 @@ import json
 import time
 import random
 import requests
+from datetime import datetime, timedelta
 
 SEASON = "2026"
 
@@ -48,57 +49,85 @@ HEADERS = {
 
 session = requests.Session()
 
-def fetch_game(game_id):
+games = []
 
-    url = (
-        "https://stats.nba.com/stats/boxscoretraditionalv2"
-        f"?GameID={game_id}"
-        "&StartPeriod=0"
-        "&EndPeriod=10"
-        "&StartRange=0"
-        "&EndRange=28800"
-        "&RangeType=0"
-    )
+def get_json(url):
 
-    for attempt in range(5):
+    try:
 
-        try:
+        r = session.get(
+            url,
+            headers=HEADERS,
+            timeout=30
+        )
 
-            r = session.get(
-                url,
-                headers=HEADERS,
-                timeout=30
-            )
+        if r.status_code == 200:
+            return r.json()
 
-            if r.status_code == 200:
-                return r.json()
+        print("STATUS:", r.status_code)
 
-            print(f"{game_id} STATUS {r.status_code}")
+    except Exception as e:
 
-            if r.status_code == 403:
-
-                wait = 20 + (attempt * 20)
-
-                print(f"403 WAIT {wait}s")
-
-                time.sleep(wait)
-
-        except Exception as e:
-
-            print(f"{game_id} ERROR", e)
-
-        time.sleep(random.uniform(3, 6))
+        print("REQUEST ERROR:", e)
 
     return None
 
-games = []
+# BUILD REAL GAME IDS FROM SCHEDULE
+start_date = datetime(2025, 10, 1)
+end_date = datetime.now()
 
-START_ID = 1
-END_ID = 1500
+found_ids = set()
 
-for num in range(START_ID, END_ID + 1):
+current = start_date
 
-    game_id = f"00225{num:05d}"
+while current <= end_date:
+
+    date_str = current.strftime("%m/%d/%Y")
+
+    print(f"\nSCHEDULE {date_str}")
+
+    url = (
+        "https://stats.nba.com/stats/scoreboardv2"
+        f"?DayOffset=0&GameDate={date_str}&LeagueID=00"
+    )
+
+    data = get_json(url)
+
+    if not data:
+        current += timedelta(days=1)
+        time.sleep(5)
+        continue
+
+    result_sets = data.get("resultSets", [])
+
+    if not result_sets:
+        current += timedelta(days=1)
+        continue
+
+    rows = result_sets[0].get("rowSet", [])
+
+    for row in rows:
+
+        try:
+
+            game_id = str(row[2])
+
+            if game_id:
+                found_ids.add(game_id)
+
+        except Exception:
+            pass
+
+    print("TOTAL IDS:", len(found_ids))
+
+    current += timedelta(days=1)
+
+    time.sleep(random.uniform(2, 5))
+
+print("\nREAL GAMES FOUND:", len(found_ids))
+
+# DOWNLOAD ONLY REAL GAMES
+for game_id in sorted(found_ids):
 
     filename = f"{game_id}.json"
 
@@ -112,9 +141,19 @@ for num in range(START_ID, END_ID + 1):
 
     print("FETCH", filename)
 
-    data = fetch_game(game_id)
+    url = (
+        "https://cdn.nba.com/static/json/liveData/boxscore/"
+        f"boxscore_{game_id}.json"
+    )
+
+    data = get_json(url)
 
     if not data:
+        continue
+
+    game = data.get("game", {})
+
+    if not game:
         continue
 
     try:
@@ -128,32 +167,40 @@ for num in range(START_ID, END_ID + 1):
 
         continue
 
+    home_team = (
+        game.get("homeTeam", {})
+        .get("teamName", "")
+    )
+
+    away_team = (
+        game.get("awayTeam", {})
+        .get("teamName", "")
+    )
+
+    game_date = (
+        game.get("gameEt")
+        or game.get("gameTimeUTC")
+        or ""
+    )
+
     games.append({
         "game_id": game_id,
-        "game_file": filename
+        "game_file": filename,
+        "home_team": home_team,
+        "away_team": away_team,
+        "date": game_date
     })
 
-    time.sleep(random.uniform(4, 8))
+    print("SAVED", filename)
 
-# REBUILD INDEX FROM FILES
-index_games = []
+    time.sleep(random.uniform(2, 4))
 
-files = sorted(
-    f for f in os.listdir(BOX_DIR)
-    if f.endswith(".json")
+games.sort(
+    key=lambda x: (x.get("date", ""), x.get("game_id", ""))
 )
 
-for filename in files:
-
-    game_id = filename.replace(".json", "")
-
-    index_games.append({
-        "game_id": game_id,
-        "game_file": filename
-    })
-
 with open(INDEX_FILE, "w", encoding="utf-8") as f:
-    json.dump(index_games, f, indent=2)
+    json.dump(games, f, indent=2)
 
-print("TOTAL FILES:", len(index_games))
-print("DONE")
+print("\nDONE")
+print("TOTAL GAMES:", len(games))
