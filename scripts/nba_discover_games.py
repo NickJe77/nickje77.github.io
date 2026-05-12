@@ -1,63 +1,82 @@
-import requests
-import json
 import os
+import json
+import requests
 from datetime import datetime
 
-BASE_DIR = "docs/data/nba"
-SCHEDULE_URL = "https://cdn.nba.com/static/json/staticData/scheduleLeagueV2.json"
+OUTPUT_DIR = "docs/data/nba/2026"
+INDEX_FILE = f"{OUTPUT_DIR}/index.json"
 
-os.makedirs(BASE_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 print("NBA discover games starting")
 
-r = requests.get(SCHEDULE_URL, timeout=30)
-if r.status_code != 200:
+URL = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/136.0 Safari/537.36"
+    ),
+    "Accept": "application/json",
+    "Referer": "https://www.nba.com/",
+    "Origin": "https://www.nba.com"
+}
+
+try:
+
+    response = requests.get(
+        URL,
+        headers=HEADERS,
+        timeout=30
+    )
+
+    print("Status:", response.status_code)
+
+    response.raise_for_status()
+
+    data = response.json()
+
+except Exception as e:
+
     print("Failed to download NBA schedule")
+    print("ERROR:", str(e))
     raise SystemExit(1)
 
-data = r.json()
-game_dates = data.get("leagueSchedule", {}).get("gameDates", [])
+games = data.get("scoreboard", {}).get("games", [])
 
-season_games = {}
+print(f"Games found: {len(games)}")
 
-for d in game_dates:
-    for g in d.get("games", []):
-        game_id = str(g.get("gameId", "")).strip()
-        game_date = g.get("gameDateEst", "").strip()
+out_games = []
 
-        if not game_id or not game_date:
-            continue
+for game in games:
 
-        # skip preseason
-        if game_id.startswith("001"):
-            continue
+    game_id = str(game.get("gameId", "")).strip()
 
-        try:
-            dt = datetime.fromisoformat(game_date.replace("Z", ""))
-        except Exception:
-            continue
+    if not game_id:
+        continue
 
-        # NBA season folder = season start year
-        if dt.month >= 10:
-            season = dt.year
-        else:
-            season = dt.year - 1
+    home_team = (
+        game.get("homeTeam", {})
+        .get("teamName", "")
+    )
 
-        season_games.setdefault(season, set()).add(game_id)
+    away_team = (
+        game.get("awayTeam", {})
+        .get("teamName", "")
+    )
 
-for season, games in season_games.items():
-    season_dir = os.path.join(BASE_DIR, str(season))
-    os.makedirs(season_dir, exist_ok=True)
-
-    index_path = os.path.join(season_dir, "index.json")
-    index = {
-        "season": season,
-        "games": sorted(games)
+    game_data = {
+        "game_id": game_id,
+        "home_team": home_team,
+        "away_team": away_team,
+        "game_file": f"{game_id}.json"
     }
 
-    with open(index_path, "w", encoding="utf-8") as f:
-        json.dump(index, f, indent=2)
+    out_games.append(game_data)
 
-    print(f"Updated {index_path} with {len(index['games'])} games")
+with open(INDEX_FILE, "w", encoding="utf-8") as f:
+    json.dump(out_games, f, indent=2)
 
-print("NBA discover games finished")
+print(f"Saved {len(out_games)} games")
+print("Done")
