@@ -5,6 +5,8 @@ from collections import defaultdict
 PLAYERS_DIR = "docs/data/epl/players"
 OUTPUT_FILE = "docs/data/epl/team_stats.json"
 
+print("RUNNING FINAL DEDUPE VERSION")
+
 team_data = {}
 
 def ensure_team(team):
@@ -19,7 +21,7 @@ def ensure_team(team):
 def to_int(v):
     try:
         return int(float(v or 0))
-    except Exception:
+    except:
         return 0
 
 seen_matches = set()
@@ -29,7 +31,7 @@ player_files = [
     if f.endswith(".json")
 ]
 
-print(f"Player files found: {len(player_files)}")
+print("Player files:", len(player_files))
 
 for filename in sorted(player_files):
 
@@ -39,7 +41,7 @@ for filename in sorted(player_files):
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
     except Exception as e:
-        print(f"Skipping {filename}: {e}")
+        print("Skipping", filename, e)
         continue
 
     player_name = (
@@ -68,22 +70,16 @@ for filename in sorted(player_files):
 
         match_id = str(
             match.get("match_id")
-            or match.get("game_id")
-            or match.get("id")
             or ""
         ).strip()
 
-        goals = to_int(match.get("goals"))
-        yellow = to_int(match.get("yellow_cards"))
-        red = to_int(match.get("red_cards"))
+        if not match_id:
+            continue
 
         dedupe_key = (
             player_name,
             team,
-            match_id,
-            goals,
-            yellow,
-            red
+            match_id
         )
 
         if dedupe_key in seen_matches:
@@ -92,6 +88,10 @@ for filename in sorted(player_files):
         seen_matches.add(dedupe_key)
 
         ensure_team(team)
+
+        goals = to_int(match.get("goals"))
+        yellow = to_int(match.get("yellow_cards"))
+        red = to_int(match.get("red_cards"))
 
         if goals > 0:
             team_data[team]["top_scorers"][player_name] += goals
@@ -154,11 +154,9 @@ for team in sorted(team_data):
         ]
     })
 
-os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
-
 with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
     json.dump(final_output, f, indent=2, ensure_ascii=False)
 
-print(f"Built {OUTPUT_FILE}")
-print(f"Teams: {len(final_output)}")
-print(f"Unique match records counted: {len(seen_matches)}")
+print("SUCCESS")
+print("Teams:", len(final_output))
+print("Unique matches counted:", len(seen_matches))
