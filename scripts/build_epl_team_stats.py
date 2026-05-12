@@ -1,11 +1,11 @@
 import os
 import json
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 PLAYERS_DIR = "docs/data/epl/players"
 OUTPUT_FILE = "docs/data/epl/team_stats.json"
 
-print("RUNNING EPL TEAM STATS BUILDER")
+print("RUNNING EPL TEAM STATS BUILDER - PLAYER TOTAL FALLBACK VERSION")
 
 team_data = {}
 
@@ -27,8 +27,6 @@ def to_int(v):
 def clean(v):
     return str(v or "").strip()
 
-seen = set()
-
 player_files = sorted(
     f for f in os.listdir(PLAYERS_DIR)
     if f.endswith(".json")
@@ -37,7 +35,6 @@ player_files = sorted(
 print(f"Player files found: {len(player_files)}")
 
 for filename in player_files:
-
     path = os.path.join(PLAYERS_DIR, filename)
 
     try:
@@ -56,13 +53,29 @@ for filename in player_files:
     if not player_name:
         player_name = filename.replace(".json", "").replace("-", " ").title()
 
+    player_total_goals = to_int(player_data.get("goals"))
+    player_total_yellow = to_int(player_data.get("yellow_cards"))
+    player_total_red = to_int(player_data.get("red_cards"))
+
     matches = player_data.get("matches", [])
 
     if not isinstance(matches, list):
         continue
 
-    for match in matches:
+    seen = set()
+    team_counter = Counter()
 
+    match_goal_total = 0
+    match_yellow_total = 0
+    match_red_total = 0
+
+    player_team_stats = defaultdict(lambda: {
+        "goals": 0,
+        "yellow": 0,
+        "red": 0
+    })
+
+    for match in matches:
         if not isinstance(match, dict):
             continue
 
@@ -98,8 +111,7 @@ for filename in player_files:
             continue
 
         seen.add(dedupe_key)
-
-        ensure_team(team)
+        team_counter[team] += 1
 
         goals = to_int(
             match.get("goals")
@@ -118,8 +130,6 @@ for filename in player_files:
             or match.get("rc")
         )
 
-        # PER MATCH SANITY ONLY
-
         if goals < 0 or goals > 6:
             goals = 0
 
@@ -129,19 +139,43 @@ for filename in player_files:
         if red < 0 or red > 1:
             red = 0
 
-        if goals > 0:
-            team_data[team]["top_scorers"][player_name] += goals
+        player_team_stats[team]["goals"] += goals
+        player_team_stats[team]["yellow"] += yellow
+        player_team_stats[team]["red"] += red
 
-        if yellow > 0:
-            team_data[team]["yellow_cards"][player_name] += yellow
+        match_goal_total += goals
+        match_yellow_total += yellow
+        match_red_total += red
 
-        if red > 0:
-            team_data[team]["red_cards"][player_name] += red
+    if not team_counter:
+        continue
+
+    primary_team = team_counter.most_common(1)[0][0]
+
+    if player_total_goals > match_goal_total:
+        player_team_stats[primary_team]["goals"] += player_total_goals - match_goal_total
+
+    if player_total_yellow > match_yellow_total:
+        player_team_stats[primary_team]["yellow"] += player_total_yellow - match_yellow_total
+
+    if player_total_red > match_red_total:
+        player_team_stats[primary_team]["red"] += player_total_red - match_red_total
+
+    for team, stats in player_team_stats.items():
+        ensure_team(team)
+
+        if stats["goals"] > 0:
+            team_data[team]["top_scorers"][player_name] += stats["goals"]
+
+        if stats["yellow"] > 0:
+            team_data[team]["yellow_cards"][player_name] += stats["yellow"]
+
+        if stats["red"] > 0:
+            team_data[team]["red_cards"][player_name] += stats["red"]
 
 final_output = []
 
 for team in sorted(team_data):
-
     data = team_data[team]
 
     scorers = sorted(
@@ -164,28 +198,16 @@ for team in sorted(team_data):
 
     final_output.append({
         "team": team,
-
         "top_scorers": [
-            {
-                "player": p,
-                "goals": v
-            }
+            {"player": p, "goals": v}
             for p, v in scorers[:10]
         ],
-
         "yellow_cards": [
-            {
-                "player": p,
-                "yellow": v
-            }
+            {"player": p, "yellow": v}
             for p, v in yellows[:10]
         ],
-
         "red_cards": [
-            {
-                "player": p,
-                "red": v
-            }
+            {"player": p, "red": v}
             for p, v in reds[:10]
         ]
     })
@@ -197,4 +219,3 @@ with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
 
 print(f"Built {OUTPUT_FILE}")
 print(f"Teams written: {len(final_output)}")
-print(f"Unique player-match rows counted: {len(seen)}")
