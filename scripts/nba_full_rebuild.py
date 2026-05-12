@@ -9,10 +9,13 @@ PLAYERS_DIR = "docs/data/nba/players"
 os.makedirs(NBA_DIR, exist_ok=True)
 os.makedirs(PLAYERS_DIR, exist_ok=True)
 
-headers = {
+session = requests.Session()
+
+session.headers.update({
     "User-Agent": "Mozilla/5.0",
-    "Referer": "https://www.nba.com/"
-}
+    "Referer": "https://www.nba.com/",
+    "Origin": "https://www.nba.com"
+})
 
 print("NBA SAFE REPAIR UPDATER")
 
@@ -47,30 +50,43 @@ while start <= today:
     try:
 
         schedule_url = (
-            "https://cdn.nba.com/static/json/liveData/"
-            f"scoreboard/todaysScoreboard_{date_str}.json"
+            "https://stats.nba.com/stats/"
+            f"scheduleleaguev2?"
+            f"GameDate={date_str}"
+            f"&LeagueID=00"
         )
 
-        r = requests.get(
+        r = session.get(
             schedule_url,
-            headers=headers,
-            timeout=30
+            timeout=60
         )
 
         if r.status_code != 200:
+
+            print(f"BAD SCHEDULE {date_str}")
             start += timedelta(days=1)
             continue
 
         data = r.json()
 
-        games = (
-            data.get("scoreboard", {})
-            .get("games", [])
-        )
+        result_sets = data.get("resultSets", [])
 
-        for g in games:
+        if not result_sets:
 
-            game_id = g.get("gameId")
+            start += timedelta(days=1)
+            continue
+
+        rows = result_sets[0].get("rowSet", [])
+
+        for row in rows:
+
+            try:
+
+                game_id = str(row[5])
+
+            except:
+
+                continue
 
             if not game_id:
                 continue
@@ -92,26 +108,38 @@ while start <= today:
 
                         existing_game = json.load(ef)
 
-                    existing_players = (
-                        existing_game.get("players", [])
-                    )
+                    if isinstance(existing_game, list):
 
-                    home_team = (
-                        existing_game.get("home_team", "")
-                    )
+                        print(f"REPAIR LIST {game_id}")
 
-                    away_team = (
-                        existing_game.get("away_team", "")
-                    )
+                    else:
 
-                    if (
-                        existing_players
-                        and home_team
-                        and away_team
-                    ):
+                        existing_players = (
+                            existing_game.get("players", [])
+                        )
 
-                        print(f"SKIP GOOD {game_id}")
-                        continue
+                        home_team = (
+                            existing_game.get(
+                                "home_team",
+                                ""
+                            )
+                        )
+
+                        away_team = (
+                            existing_game.get(
+                                "away_team",
+                                ""
+                            )
+                        )
+
+                        if (
+                            existing_players
+                            and home_team
+                            and away_team
+                        ):
+
+                            print(f"SKIP GOOD {game_id}")
+                            continue
 
                     print(f"REPAIRING {game_id}")
 
@@ -128,10 +156,9 @@ while start <= today:
                 f"boxscore/boxscore_{game_id}.json"
             )
 
-            b = requests.get(
+            b = session.get(
                 box_url,
-                headers=headers,
-                timeout=30
+                timeout=60
             )
 
             if b.status_code != 200:
@@ -175,10 +202,13 @@ while start <= today:
                     safe_int(away.get("score")),
 
                 "arena":
-                    game.get("arena", {}).get("arenaName", ""),
+                    game.get("arena", {})
+                    .get("arenaName", ""),
 
                 "attendance":
-                    safe_int(game.get("attendance")),
+                    safe_int(
+                        game.get("attendance")
+                    ),
 
                 "players": []
             }
@@ -193,7 +223,9 @@ while start <= today:
                     if p.get("played") != "1":
                         continue
 
-                    stats = p.get("statistics", {})
+                    stats = (
+                        p.get("statistics", {})
+                    )
 
                     full_name = (
                         f"{p.get('firstName', '')} "
@@ -281,12 +313,18 @@ for filename in os.listdir(NBA_DIR):
     if not filename.endswith(".json"):
         continue
 
+    if filename == "games.json":
+        continue
+
     path = os.path.join(NBA_DIR, filename)
 
     try:
 
         with open(path, "r", encoding="utf-8") as f:
             game = json.load(f)
+
+        if isinstance(game, list):
+            continue
 
         for p in game.get("players", []):
 
@@ -367,12 +405,18 @@ for filename in os.listdir(NBA_DIR):
     if not filename.endswith(".json"):
         continue
 
+    if filename == "games.json":
+        continue
+
     path = os.path.join(NBA_DIR, filename)
 
     try:
 
         with open(path, "r", encoding="utf-8") as f:
             game = json.load(f)
+
+        if isinstance(game, list):
+            continue
 
         game_id = game.get("game_id", "")
         date = game.get("date", "")
