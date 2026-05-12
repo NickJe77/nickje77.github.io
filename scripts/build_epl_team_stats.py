@@ -1,11 +1,11 @@
 import os
 import json
-from collections import defaultdict, Counter
+from collections import defaultdict
 
 PLAYERS_DIR = "docs/data/epl/players"
 OUTPUT_FILE = "docs/data/epl/team_stats.json"
 
-print("RUNNING EPL TEAM STATS BUILDER - PLAYER TOTAL FALLBACK VERSION")
+print("RUNNING EPL TEAM STATS BUILDER - MATCH_ID VERSION")
 
 team_data = {}
 
@@ -15,17 +15,20 @@ def ensure_team(team):
             "team": team,
             "top_scorers": defaultdict(int),
             "yellow_cards": defaultdict(int),
-            "red_cards": defaultdict(int)
+            "red_cards": defaultdict(int),
         }
 
-def to_int(v):
+def to_int(value):
     try:
-        return int(float(v or 0))
+        return int(float(value or 0))
     except Exception:
         return 0
 
-def clean(v):
-    return str(v or "").strip()
+def clean(value):
+    return str(value or "").strip()
+
+if not os.path.isdir(PLAYERS_DIR):
+    raise SystemExit(f"Missing folder: {PLAYERS_DIR}")
 
 player_files = sorted(
     f for f in os.listdir(PLAYERS_DIR)
@@ -33,6 +36,8 @@ player_files = sorted(
 )
 
 print(f"Player files found: {len(player_files)}")
+
+debug_ferguson_reds = 0
 
 for filename in player_files:
     path = os.path.join(PLAYERS_DIR, filename)
@@ -53,27 +58,12 @@ for filename in player_files:
     if not player_name:
         player_name = filename.replace(".json", "").replace("-", " ").title()
 
-    player_total_goals = to_int(player_data.get("goals"))
-    player_total_yellow = to_int(player_data.get("yellow_cards"))
-    player_total_red = to_int(player_data.get("red_cards"))
-
     matches = player_data.get("matches", [])
 
     if not isinstance(matches, list):
         continue
 
-    seen = set()
-    team_counter = Counter()
-
-    match_goal_total = 0
-    match_yellow_total = 0
-    match_red_total = 0
-
-    player_team_stats = defaultdict(lambda: {
-        "goals": 0,
-        "yellow": 0,
-        "red": 0
-    })
+    seen_match_ids = set()
 
     for match in matches:
         if not isinstance(match, dict):
@@ -88,47 +78,29 @@ for filename in player_files:
         if not team:
             continue
 
-        opponent = clean(
-            match.get("opponent")
-            or match.get("opp")
-            or match.get("against")
-        )
+        match_id = clean(match.get("match_id"))
 
-        date = clean(
-            match.get("date")
-            or match.get("match_date")
-            or match.get("game_date")
-        )
+        if match_id:
+            dedupe_key = match_id
+        else:
+            dedupe_key = "|".join([
+                clean(match.get("season")),
+                clean(match.get("date")),
+                team,
+                clean(match.get("opponent")),
+                str(to_int(match.get("goals"))),
+                str(to_int(match.get("yellow_cards"))),
+                str(to_int(match.get("red_cards"))),
+            ])
 
-        dedupe_key = (
-            player_name.lower(),
-            team.lower(),
-            opponent.lower(),
-            date
-        )
-
-        if dedupe_key in seen:
+        if dedupe_key in seen_match_ids:
             continue
 
-        seen.add(dedupe_key)
-        team_counter[team] += 1
+        seen_match_ids.add(dedupe_key)
 
-        goals = to_int(
-            match.get("goals")
-            or match.get("goal")
-        )
-
-        yellow = to_int(
-            match.get("yellow_cards")
-            or match.get("yellow")
-            or match.get("yc")
-        )
-
-        red = to_int(
-            match.get("red_cards")
-            or match.get("red")
-            or match.get("rc")
-        )
+        goals = to_int(match.get("goals") or match.get("goal"))
+        yellow = to_int(match.get("yellow_cards") or match.get("yellow") or match.get("yc"))
+        red = to_int(match.get("red_cards") or match.get("red") or match.get("rc"))
 
         if goals < 0 or goals > 6:
             goals = 0
@@ -139,77 +111,43 @@ for filename in player_files:
         if red < 0 or red > 1:
             red = 0
 
-        player_team_stats[team]["goals"] += goals
-        player_team_stats[team]["yellow"] += yellow
-        player_team_stats[team]["red"] += red
-
-        match_goal_total += goals
-        match_yellow_total += yellow
-        match_red_total += red
-
-    if not team_counter:
-        continue
-
-    primary_team = team_counter.most_common(1)[0][0]
-
-    if player_total_goals > match_goal_total:
-        player_team_stats[primary_team]["goals"] += player_total_goals - match_goal_total
-
-    if player_total_yellow > match_yellow_total:
-        player_team_stats[primary_team]["yellow"] += player_total_yellow - match_yellow_total
-
-    if player_total_red > match_red_total:
-        player_team_stats[primary_team]["red"] += player_total_red - match_red_total
-
-    for team, stats in player_team_stats.items():
         ensure_team(team)
 
-        if stats["goals"] > 0:
-            team_data[team]["top_scorers"][player_name] += stats["goals"]
+        if goals > 0:
+            team_data[team]["top_scorers"][player_name] += goals
 
-        if stats["yellow"] > 0:
-            team_data[team]["yellow_cards"][player_name] += stats["yellow"]
+        if yellow > 0:
+            team_data[team]["yellow_cards"][player_name] += yellow
 
-        if stats["red"] > 0:
-            team_data[team]["red_cards"][player_name] += stats["red"]
+        if red > 0:
+            team_data[team]["red_cards"][player_name] += red
+
+        if player_name == "Duncan Ferguson":
+            debug_ferguson_reds += red
 
 final_output = []
 
 for team in sorted(team_data):
     data = team_data[team]
 
-    scorers = sorted(
-        data["top_scorers"].items(),
-        key=lambda x: x[1],
-        reverse=True
-    )
-
-    yellows = sorted(
-        data["yellow_cards"].items(),
-        key=lambda x: x[1],
-        reverse=True
-    )
-
-    reds = sorted(
-        data["red_cards"].items(),
-        key=lambda x: x[1],
-        reverse=True
-    )
+    scorers = sorted(data["top_scorers"].items(), key=lambda x: x[1], reverse=True)
+    yellows = sorted(data["yellow_cards"].items(), key=lambda x: x[1], reverse=True)
+    reds = sorted(data["red_cards"].items(), key=lambda x: x[1], reverse=True)
 
     final_output.append({
         "team": team,
         "top_scorers": [
-            {"player": p, "goals": v}
-            for p, v in scorers[:10]
+            {"player": player, "goals": total}
+            for player, total in scorers[:10]
         ],
         "yellow_cards": [
-            {"player": p, "yellow": v}
-            for p, v in yellows[:10]
+            {"player": player, "yellow": total}
+            for player, total in yellows[:10]
         ],
         "red_cards": [
-            {"player": p, "red": v}
-            for p, v in reds[:10]
-        ]
+            {"player": player, "red": total}
+            for player, total in reds[:10]
+        ],
     })
 
 os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
@@ -219,3 +157,4 @@ with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
 
 print(f"Built {OUTPUT_FILE}")
 print(f"Teams written: {len(final_output)}")
+print(f"Duncan Ferguson reds counted: {debug_ferguson_reds}")
