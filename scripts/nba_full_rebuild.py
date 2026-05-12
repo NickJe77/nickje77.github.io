@@ -76,16 +76,31 @@ while start <= today:
             start += timedelta(days=1)
             continue
 
-        rows = result_sets[0].get("rowSet", [])
+        result = result_sets[0]
+
+        headers_row = result.get("headers", [])
+        rows = result.get("rowSet", [])
+
+        if "GAME_ID" not in headers_row:
+
+            print(f"NO GAME_ID HEADER {date_str}")
+            start += timedelta(days=1)
+            continue
+
+        game_id_index = headers_row.index("GAME_ID")
 
         for row in rows:
 
             try:
 
-                game_id = str(row[5])
+                game_id = str(
+                    row[game_id_index]
+                )
 
-            except:
+            except Exception as e:
 
+                print("BAD ROW")
+                print(str(e))
                 continue
 
             if not game_id:
@@ -348,30 +363,12 @@ for filename in os.listdir(NBA_DIR):
                 }
 
             players[name]["games"] += 1
-
-            players[name]["points"] += int(
-                p.get("points", 0)
-            )
-
-            players[name]["rebounds"] += int(
-                p.get("rebounds", 0)
-            )
-
-            players[name]["assists"] += int(
-                p.get("assists", 0)
-            )
-
-            players[name]["steals"] += int(
-                p.get("steals", 0)
-            )
-
-            players[name]["blocks"] += int(
-                p.get("blocks", 0)
-            )
-
-            players[name]["turnovers"] += int(
-                p.get("turnovers", 0)
-            )
+            players[name]["points"] += int(p.get("points", 0))
+            players[name]["rebounds"] += int(p.get("rebounds", 0))
+            players[name]["assists"] += int(p.get("assists", 0))
+            players[name]["steals"] += int(p.get("steals", 0))
+            players[name]["blocks"] += int(p.get("blocks", 0))
+            players[name]["turnovers"] += int(p.get("turnovers", 0))
 
     except Exception as e:
 
