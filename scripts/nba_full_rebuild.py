@@ -12,7 +12,7 @@ headers = {
     "Referer": "https://www.nba.com/"
 }
 
-print("NBA SAFE UPDATER")
+print("NBA SAFE REPAIR UPDATER")
 
 existing_ids = set()
 
@@ -73,12 +73,55 @@ while start <= today:
             if not game_id:
                 continue
 
+            existing_path = os.path.join(
+                NBA_DIR,
+                f"{game_id}.json"
+            )
+
+            # SAFE SKIP / REPAIR LOGIC
             if game_id in existing_ids:
 
-                print(f"SKIP {game_id}")
-                continue
+                try:
 
-            print(f"NEW GAME {game_id}")
+                    with open(
+                        existing_path,
+                        "r",
+                        encoding="utf-8"
+                    ) as ef:
+
+                        existing_game = json.load(ef)
+
+                    existing_players = (
+                        existing_game.get("players", [])
+                    )
+
+                    home_team = (
+                        existing_game.get("home_team", "")
+                    )
+
+                    away_team = (
+                        existing_game.get("away_team", "")
+                    )
+
+                    # ONLY SKIP GOOD FILES
+                    if (
+                        existing_players
+                        and home_team
+                        and away_team
+                    ):
+
+                        print(f"SKIP GOOD {game_id}")
+                        continue
+
+                    print(f"REPAIRING {game_id}")
+
+                except:
+
+                    print(f"REBUILDING {game_id}")
+
+            else:
+
+                print(f"NEW GAME {game_id}")
 
             box_url = (
                 "https://cdn.nba.com/static/json/liveData/"
@@ -157,6 +200,9 @@ while start <= today:
                         f"{p.get('familyName', '')}"
                     ).strip()
 
+                    if not full_name:
+                        continue
+
                     output["players"].append({
 
                         "player": full_name,
@@ -201,13 +247,8 @@ while start <= today:
                             )
                     })
 
-            out_path = os.path.join(
-                NBA_DIR,
-                f"{game_id}.json"
-            )
-
             with open(
-                out_path,
+                existing_path,
                 "w",
                 encoding="utf-8"
             ) as f:
@@ -218,7 +259,7 @@ while start <= today:
                     indent=2
                 )
 
-            print(f"ADDED {game_id}")
+            print(f"UPDATED {game_id}")
 
             existing_ids.add(game_id)
 
