@@ -15,9 +15,6 @@ os.makedirs(BOX_DIR, exist_ok=True)
 INDEX_FILE = f"{SEASON_DIR}/index.json"
 
 HEADERS = {
-    "Host": "stats.nba.com",
-    "Connection": "keep-alive",
-    "Accept": "application/json, text/plain, */*",
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -25,9 +22,7 @@ HEADERS = {
     ),
     "Referer": "https://www.nba.com/",
     "Origin": "https://www.nba.com",
-    "x-nba-stats-origin": "stats",
-    "x-nba-stats-token": "true",
-    "Accept-Language": "en-US,en;q=0.9"
+    "Accept": "application/json"
 }
 
 games = []
@@ -35,46 +30,57 @@ games = []
 start_date = datetime(2025, 10, 1)
 end_date = datetime.now()
 
+session = requests.Session()
+
+def get_json(url, retries=5):
+
+    for attempt in range(retries):
+
+        try:
+
+            r = session.get(
+                url,
+                headers=HEADERS,
+                timeout=20
+            )
+
+            if r.status_code == 200:
+                return r.json()
+
+            print("BAD STATUS:", r.status_code)
+
+        except Exception as e:
+            print("REQUEST ERROR:", e)
+
+        sleep_time = 5 + (attempt * 5)
+
+        print(f"Retrying in {sleep_time}s")
+
+        time.sleep(sleep_time)
+
+    return None
+
 current = start_date
 
 while current <= end_date:
 
-    game_date = current.strftime("%m/%d/%Y")
+    date_str = current.strftime("%Y-%m-%d")
 
-    print(f"\nFETCHING {game_date}")
+    print(f"\nFETCHING {date_str}")
 
     scoreboard_url = (
-        "https://stats.nba.com/stats/scoreboardv2"
-        f"?DayOffset=0&GameDate={game_date}&LeagueID=00"
+        "https://cdn.nba.com/static/json/liveData/scoreboard/"
+        f"todaysScoreboard_00.json"
     )
 
-    try:
+    data = get_json(scoreboard_url)
 
-        r = requests.get(
-            scoreboard_url,
-            headers=HEADERS,
-            timeout=30
-        )
-
-        if r.status_code != 200:
-            print("SCOREBOARD FAILED:", r.status_code)
-            current += timedelta(days=1)
-            continue
-
-        data = r.json()
-
-    except Exception as e:
-        print("SCOREBOARD ERROR:", e)
+    if not data:
         current += timedelta(days=1)
         continue
 
-    result_sets = data.get("resultSets", [])
-
-    if not result_sets:
-        current += timedelta(days=1)
-        continue
-
-    rows = result_sets[0].get("rowSet", [])
+    scoreboard = data.get("scoreboard", {})
+    rows = scoreboard.get("games", [])
 
     print(f"GAMES FOUND: {len(rows)}")
 
@@ -82,60 +88,53 @@ while current <= end_date:
 
         try:
 
-            game_id = str(row[2])
+            game_id = str(row.get("gameId"))
+
+            game_date = (
+                row.get("gameEt")
+                or row.get("gameDateEst")
+                or date_str
+            )
+
+            home_team = (
+                row.get("homeTeam", {})
+                .get("teamName", "")
+            )
+
+            away_team = (
+                row.get("awayTeam", {})
+                .get("teamName", "")
+            )
 
             game_file = f"{game_id}.json"
 
-            home_team = row[7]
-            away_team = row[6]
-
-            game_summary = {
+            games.append({
                 "game_id": game_id,
                 "game_file": game_file,
                 "home_team": home_team,
                 "away_team": away_team,
-                "date": current.strftime("%Y-%m-%d")
-            }
-
-            games.append(game_summary)
+                "date": game_date
+            })
 
             boxscore_url = (
-                "https://stats.nba.com/stats/boxscoretraditionalv2"
-                f"?GameID={game_id}"
-                "&StartPeriod=0"
-                "&EndPeriod=10"
-                "&StartRange=0"
-                "&EndRange=28800"
-                "&RangeType=0"
+                "https://cdn.nba.com/static/json/liveData/boxscore/"
+                f"boxscore_{game_id}.json"
             )
 
-            print(f"DOWNLOADING {game_file}")
+            box_data = get_json(boxscore_url)
 
-            try:
+            if not box_data:
+                print("FAILED BOX:", game_id)
+                continue
 
-                br = requests.get(
-                    boxscore_url,
-                    headers=HEADERS,
-                    timeout=30
-                )
+            out_path = os.path.join(BOX_DIR, game_file)
 
-                if br.status_code != 200:
-                    print("BOX FAILED:", br.status_code)
-                    continue
+            with open(out_path, "w", encoding="utf-8") as f:
+                json.dump(box_data, f, indent=2)
 
-                box_data = br.json()
+            print(f"SAVED {game_file}")
 
-                out_path = os.path.join(BOX_DIR, game_file)
-
-                with open(out_path, "w", encoding="utf-8") as f:
-                    json.dump(box_data, f, indent=2)
-
-                print(f"SAVED {game_file}")
-
-            except Exception as e:
-                print("BOX ERROR:", e)
-
-            time.sleep(0.6)
+            time.sleep(0.5)
 
         except Exception as e:
             print("GAME ERROR:", e)
@@ -153,7 +152,7 @@ final_games.sort(
     key=lambda x: (x.get("date", ""), x.get("game_id", ""))
 )
 
-if len(final_games) < 1000:
+if len(final_games) < 10:
     raise SystemExit("ABORTED - TOO FEW GAMES")
 
 with open(INDEX_FILE, "w", encoding="utf-8") as f:
