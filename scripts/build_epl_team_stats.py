@@ -2,10 +2,10 @@ import os
 import json
 from collections import defaultdict
 
-BASE_DIR = "docs/data/epl"
+PLAYERS_DIR = "docs/data/epl/players"
 OUTPUT_FILE = "docs/data/epl/team_stats.json"
 
-print("RUNNING EPL TEAM STATS BUILDER - DIRECT PLAYER STATS VERSION")
+print("RUNNING EPL TEAM STATS BUILDER - PLAYER FILE VERSION")
 
 team_data = {}
 
@@ -33,7 +33,7 @@ def ensure_team(team):
             "red_cards": defaultdict(int),
         }
 
-def add_stat(team, player, goals=0, yellow=0, red=0):
+def add_stats(team, player, goals=0, yellow=0, red=0):
 
     team = clean(team)
     player = clean(player)
@@ -56,197 +56,98 @@ def add_stat(team, player, goals=0, yellow=0, red=0):
     if red > 0:
         team_data[team]["red_cards"][player] += red
 
-def process_player(team, player):
+player_files = sorted(
+    f for f in os.listdir(PLAYERS_DIR)
+    if f.endswith(".json")
+)
 
-    if not isinstance(player, dict):
-        return
+print(f"PLAYER FILES FOUND: {len(player_files)}")
 
-    name = clean(
-        player.get("player")
-        or player.get("name")
-        or player.get("player_name")
-    )
+for filename in player_files:
 
-    if not name:
-        return
-
-    goals = (
-        player.get("goals")
-        or player.get("goal")
-        or player.get("gls")
-    )
-
-    yellow = (
-        player.get("yellow_cards")
-        or player.get("yellow")
-        or player.get("yc")
-        or player.get("bookings")
-    )
-
-    red = (
-        player.get("red_cards")
-        or player.get("red")
-        or player.get("rc")
-    )
-
-    add_stat(team, name, goals, yellow, red)
-
-def process_match(match):
-
-    if not isinstance(match, dict):
-        return
-
-    home = clean(
-        match.get("home_team")
-        or match.get("home")
-        or match.get("homeTeam")
-        or match.get("team1")
-    )
-
-    away = clean(
-        match.get("away_team")
-        or match.get("away")
-        or match.get("awayTeam")
-        or match.get("team2")
-    )
-
-    ensure_team(home)
-    ensure_team(away)
-
-    # MOST IMPORTANT SECTION
-    # handles player_stats.home / away
-
-    player_stats = match.get("player_stats")
-
-    if isinstance(player_stats, dict):
-
-        home_players = (
-            player_stats.get("home")
-            or player_stats.get(home)
-            or []
-        )
-
-        away_players = (
-            player_stats.get("away")
-            or player_stats.get(away)
-            or []
-        )
-
-        for p in home_players:
-            process_player(home, p)
-
-        for p in away_players:
-            process_player(away, p)
-
-    # handles lineups.home / away
-
-    lineups = match.get("lineups")
-
-    if isinstance(lineups, dict):
-
-        home_players = (
-            lineups.get("home")
-            or lineups.get(home)
-            or []
-        )
-
-        away_players = (
-            lineups.get("away")
-            or lineups.get(away)
-            or []
-        )
-
-        for p in home_players:
-            process_player(home, p)
-
-        for p in away_players:
-            process_player(away, p)
-
-    # handles flat players array
-
-    players = match.get("players")
-
-    if isinstance(players, list):
-
-        for p in players:
-
-            if not isinstance(p, dict):
-                continue
-
-            team = clean(
-                p.get("team")
-                or p.get("club")
-                or p.get("side")
-            )
-
-            process_player(team, p)
-
-def process_file(path):
+    path = os.path.join(PLAYERS_DIR, filename)
 
     try:
         with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+            player_data = json.load(f)
 
     except Exception as e:
-        print(f"Skipping {path}: {e}")
-        return 0
-
-    count = 0
-
-    if isinstance(data, list):
-
-        for item in data:
-            process_match(item)
-            count += 1
-
-    elif isinstance(data, dict):
-
-        for key in [
-            "matches",
-            "games",
-            "fixtures"
-        ]:
-
-            if isinstance(data.get(key), list):
-
-                for match in data[key]:
-                    process_match(match)
-                    count += 1
-
-                return count
-
-        process_match(data)
-        count += 1
-
-    return count
-
-json_files = []
-
-for root, dirs, files in os.walk(BASE_DIR):
-
-    if "/players" in root.replace("\\", "/"):
+        print(f"Skipping {filename}: {e}")
         continue
 
-    for file in files:
+    player_name = clean(
+        player_data.get("player")
+        or player_data.get("name")
+        or player_data.get("player_name")
+    )
 
-        if not file.endswith(".json"):
-            continue
-
-        if file == "team_stats.json":
-            continue
-
-        json_files.append(
-            os.path.join(root, file)
+    if not player_name:
+        player_name = (
+            filename
+            .replace(".json", "")
+            .replace("-", " ")
+            .title()
         )
 
-json_files = sorted(json_files)
+    matches = player_data.get("matches")
 
-print(f"JSON files found: {len(json_files)}")
+    if not isinstance(matches, list):
+        continue
 
-total = 0
+    seen = set()
 
-for path in json_files:
-    total += process_file(path)
+    for match in matches:
+
+        if not isinstance(match, dict):
+            continue
+
+        team = clean(
+            match.get("team")
+            or match.get("club")
+            or match.get("squad")
+        )
+
+        if not team:
+            continue
+
+        # IMPORTANT FIX
+        # only dedupe on REAL match ids
+
+        match_id = clean(match.get("match_id"))
+
+        if match_id:
+
+            if match_id in seen:
+                continue
+
+            seen.add(match_id)
+
+        goals = (
+            match.get("goals")
+            or match.get("goal")
+            or match.get("gls")
+        )
+
+        yellow = (
+            match.get("yellow_cards")
+            or match.get("yellow")
+            or match.get("yc")
+            or match.get("bookings")
+        )
+
+        red = (
+            match.get("red_cards")
+            or match.get("red")
+            or match.get("rc")
+        )
+
+        add_stats(
+            team,
+            player_name,
+            goals,
+            yellow,
+            red
+        )
 
 final_output = []
 
@@ -318,6 +219,21 @@ with open(
         ensure_ascii=False
     )
 
-print(f"Built {OUTPUT_FILE}")
-print(f"Teams written: {len(final_output)}")
-print(f"Matches scanned: {total}")
+print(f"BUILT {OUTPUT_FILE}")
+print(f"TEAMS WRITTEN: {len(final_output)}")
+
+for team in final_output:
+
+    if team["team"].lower() == "everton":
+
+        print("\nEVERTON RED CARDS")
+
+        for p in team["red_cards"]:
+            print(p)
+
+        print("\nEVERTON GOALS")
+
+        for p in team["top_scorers"]:
+            print(p)
+
+        break
