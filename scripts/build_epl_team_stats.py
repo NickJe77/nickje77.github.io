@@ -5,7 +5,7 @@ from collections import defaultdict
 BASE_DIR = "docs/data/epl"
 OUTPUT_FILE = "docs/data/epl/team_stats.json"
 
-print("RUNNING EPL TEAM STATS BUILDER - MATCH DATA SOURCE VERSION")
+print("RUNNING EPL TEAM STATS BUILDER - FINAL CARD FIX VERSION")
 
 team_data = {}
 
@@ -20,8 +20,10 @@ def to_int(v):
 
 def ensure_team(team):
     team = clean(team)
+
     if not team:
         return
+
     if team not in team_data:
         team_data[team] = {
             "team": team,
@@ -30,34 +32,56 @@ def ensure_team(team):
             "red_cards": defaultdict(int),
         }
 
-def add_goal(team, player, goals=1):
+def add_goal(team, player, value=1):
     team = clean(team)
     player = clean(player)
-    goals = to_int(goals)
-    if not team or not player or goals <= 0:
-        return
-    ensure_team(team)
-    team_data[team]["top_scorers"][player] += goals
 
-def add_yellow(team, player, cards=1):
+    if not team or not player:
+        return
+
+    value = to_int(value)
+
+    if value <= 0:
+        return
+
+    ensure_team(team)
+
+    team_data[team]["top_scorers"][player] += value
+
+def add_yellow(team, player, value=1):
     team = clean(team)
     player = clean(player)
-    cards = to_int(cards)
-    if not team or not player or cards <= 0:
-        return
-    ensure_team(team)
-    team_data[team]["yellow_cards"][player] += cards
 
-def add_red(team, player, cards=1):
+    if not team or not player:
+        return
+
+    value = to_int(value)
+
+    if value <= 0:
+        return
+
+    ensure_team(team)
+
+    team_data[team]["yellow_cards"][player] += value
+
+def add_red(team, player, value=1):
     team = clean(team)
     player = clean(player)
-    cards = to_int(cards)
-    if not team or not player or cards <= 0:
-        return
-    ensure_team(team)
-    team_data[team]["red_cards"][player] += cards
 
-def get_team_names(match):
+    if not team or not player:
+        return
+
+    value = to_int(value)
+
+    if value <= 0:
+        return
+
+    ensure_team(team)
+
+    team_data[team]["red_cards"][player] += value
+
+def get_teams(match):
+
     home = clean(
         match.get("home_team")
         or match.get("home")
@@ -78,209 +102,190 @@ def get_team_names(match):
 
     return home, away
 
-def normalise_team(raw_team, home, away):
-    t = clean(raw_team)
+def normalise_team(raw, home, away):
 
-    if not t:
-        return ""
+    t = clean(raw).lower()
 
-    low = t.lower()
-
-    if low in ["home", "h", "team1"]:
+    if t in ["home", "h", "team1"]:
         return home
 
-    if low in ["away", "a", "team2"]:
+    if t in ["away", "a", "team2"]:
         return away
 
-    return t
+    return clean(raw)
 
-def handle_scorers(match):
-    home, away = get_team_names(match)
+def process_event(event, home, away):
 
-    scorer_keys = [
+    if not isinstance(event, dict):
+        return
+
+    player = clean(
+        event.get("player")
+        or event.get("name")
+        or event.get("player_name")
+        or event.get("scorer")
+    )
+
+    team = normalise_team(
+        event.get("team")
+        or event.get("club")
+        or event.get("side"),
+        home,
+        away
+    )
+
+    if not player or not team:
+        return
+
+    event_type = clean(
+        event.get("type")
+        or event.get("event")
+        or event.get("kind")
+        or event.get("card")
+    ).lower()
+
+    # GOALS
+    if (
+        "goal" in event_type
+        and "own" not in event_type
+    ):
+        add_goal(team, player, 1)
+
+    # YELLOWS
+    if (
+        "yellow" in event_type
+        or event_type in ["yc", "y"]
+        or "booking" in event_type
+    ):
+        add_yellow(team, player, 1)
+
+    # REDS
+    if (
+        "red" in event_type
+        or event_type in ["rc", "r"]
+        or "second yellow" in event_type
+        or "2nd yellow" in event_type
+    ):
+        add_red(team, player, 1)
+
+def process_player_stats(player, home, away):
+
+    if not isinstance(player, dict):
+        return
+
+    name = clean(
+        player.get("player")
+        or player.get("name")
+        or player.get("player_name")
+    )
+
+    team = normalise_team(
+        player.get("team")
+        or player.get("club")
+        or player.get("side"),
+        home,
+        away
+    )
+
+    if not name or not team:
+        return
+
+    goals = (
+        player.get("goals")
+        or player.get("goal")
+    )
+
+    yellow = (
+        player.get("yellow_cards")
+        or player.get("yellow")
+        or player.get("yc")
+        or player.get("bookings")
+    )
+
+    red = (
+        player.get("red_cards")
+        or player.get("red")
+        or player.get("rc")
+    )
+
+    add_goal(team, name, goals)
+    add_yellow(team, name, yellow)
+    add_red(team, name, red)
+
+def process_match(match):
+
+    if not isinstance(match, dict):
+        return
+
+    home, away = get_teams(match)
+
+    ensure_team(home)
+    ensure_team(away)
+
+    # EVENT BASED
+    for key in [
+        "events",
+        "incidents",
         "scorers",
         "goals",
-        "goal_scorers",
-        "events",
-        "incidents",
-    ]
-
-    for key in scorer_keys:
-        items = match.get(key)
-
-        if not isinstance(items, list):
-            continue
-
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-
-            event_type = clean(
-                item.get("type")
-                or item.get("event")
-                or item.get("kind")
-            ).lower()
-
-            if key in ["events", "incidents"]:
-                if "goal" not in event_type and event_type not in ["g"]:
-                    continue
-
-                if "own" in event_type:
-                    continue
-
-            player = clean(
-                item.get("player")
-                or item.get("scorer")
-                or item.get("name")
-                or item.get("player_name")
-            )
-
-            team = normalise_team(
-                item.get("team")
-                or item.get("club")
-                or item.get("side"),
-                home,
-                away
-            )
-
-            if not player or not team:
-                continue
-
-            add_goal(team, player, 1)
-
-def handle_cards(match):
-    home, away = get_team_names(match)
-
-    card_keys = [
         "cards",
-        "bookings",
-        "events",
-        "incidents",
-    ]
+        "bookings"
+    ]:
 
-    for key in card_keys:
         items = match.get(key)
 
-        if not isinstance(items, list):
-            continue
+        if isinstance(items, list):
 
-        for item in items:
-            if not isinstance(item, dict):
-                continue
+            for item in items:
+                process_event(item, home, away)
 
-            player = clean(
-                item.get("player")
-                or item.get("name")
-                or item.get("player_name")
-            )
-
-            team = normalise_team(
-                item.get("team")
-                or item.get("club")
-                or item.get("side"),
-                home,
-                away
-            )
-
-            if not player or not team:
-                continue
-
-            card = clean(
-                item.get("card")
-                or item.get("type")
-                or item.get("event")
-                or item.get("kind")
-            ).lower()
-
-            if "yellow" in card or card in ["yc", "y"]:
-                add_yellow(team, player, 1)
-
-            elif "red" in card or card in ["rc", "r"]:
-                add_red(team, player, 1)
-
-def handle_player_stats(match):
-    home, away = get_team_names(match)
-
-    possible_keys = [
+    # PLAYER BASED
+    for key in [
         "players",
         "player_stats",
-        "lineups",
         "stats",
-    ]
+        "lineups"
+    ]:
 
-    for key in possible_keys:
         block = match.get(key)
 
         if isinstance(block, list):
+
             for p in block:
-                if not isinstance(p, dict):
-                    continue
-
-                player = clean(
-                    p.get("player")
-                    or p.get("name")
-                    or p.get("player_name")
-                )
-
-                team = normalise_team(
-                    p.get("team")
-                    or p.get("club")
-                    or p.get("side"),
-                    home,
-                    away
-                )
-
-                if not player or not team:
-                    continue
-
-                add_goal(team, player, p.get("goals") or p.get("goal"))
-                add_yellow(team, player, p.get("yellow_cards") or p.get("yellow") or p.get("yc"))
-                add_red(team, player, p.get("red_cards") or p.get("red") or p.get("rc"))
+                process_player_stats(p, home, away)
 
         elif isinstance(block, dict):
-            for side_key, players in block.items():
-                team = normalise_team(side_key, home, away)
+
+            for side, players in block.items():
 
                 if not isinstance(players, list):
                     continue
 
+                fixed_team = normalise_team(
+                    side,
+                    home,
+                    away
+                )
+
                 for p in players:
+
                     if not isinstance(p, dict):
                         continue
 
-                    player = clean(
-                        p.get("player")
-                        or p.get("name")
-                        or p.get("player_name")
+                    p["team"] = fixed_team
+
+                    process_player_stats(
+                        p,
+                        home,
+                        away
                     )
 
-                    if not player or not team:
-                        continue
+def process_file(path):
 
-                    add_goal(team, player, p.get("goals") or p.get("goal"))
-                    add_yellow(team, player, p.get("yellow_cards") or p.get("yellow") or p.get("yc"))
-                    add_red(team, player, p.get("red_cards") or p.get("red") or p.get("rc"))
-
-def process_match(match):
-    if not isinstance(match, dict):
-        return
-
-    home, away = get_team_names(match)
-
-    if home:
-        ensure_team(home)
-
-    if away:
-        ensure_team(away)
-
-    handle_scorers(match)
-    handle_cards(match)
-    handle_player_stats(match)
-
-def process_json_file(path):
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
+
     except Exception as e:
         print(f"Skipping {path}: {e}")
         return 0
@@ -288,59 +293,64 @@ def process_json_file(path):
     count = 0
 
     if isinstance(data, list):
-        for item in data:
-            process_match(item)
+
+        for match in data:
+            process_match(match)
             count += 1
 
     elif isinstance(data, dict):
-        if isinstance(data.get("matches"), list):
-            for match in data["matches"]:
-                process_match(match)
-                count += 1
 
-        elif isinstance(data.get("games"), list):
-            for match in data["games"]:
-                process_match(match)
-                count += 1
+        for key in [
+            "matches",
+            "games",
+            "fixtures"
+        ]:
 
-        elif isinstance(data.get("fixtures"), list):
-            for match in data["fixtures"]:
-                process_match(match)
-                count += 1
+            if isinstance(data.get(key), list):
 
-        else:
-            process_match(data)
-            count += 1
+                for match in data[key]:
+                    process_match(match)
+                    count += 1
+
+                return count
+
+        process_match(data)
+        count += 1
 
     return count
 
 json_files = []
 
 for root, dirs, files in os.walk(BASE_DIR):
+
     if "/players" in root.replace("\\", "/"):
         continue
 
     for file in files:
+
         if not file.endswith(".json"):
             continue
 
         if file == "team_stats.json":
             continue
 
-        json_files.append(os.path.join(root, file))
+        json_files.append(
+            os.path.join(root, file)
+        )
 
 json_files = sorted(json_files)
 
 print(f"JSON files found: {len(json_files)}")
 
-total_matches = 0
+total = 0
 
 for path in json_files:
-    total_matches += process_json_file(path)
+    total += process_file(path)
 
 final_output = []
 
 for team in sorted(team_data):
+
     data = team_data[team]
 
     scorers = sorted(
@@ -363,35 +373,66 @@ for team in sorted(team_data):
 
     final_output.append({
         "team": team,
+
         "top_scorers": [
-            {"player": player, "goals": total}
-            for player, total in scorers[:10]
+            {
+                "player": p,
+                "goals": g
+            }
+            for p, g in scorers[:10]
         ],
+
         "yellow_cards": [
-            {"player": player, "yellow": total}
-            for player, total in yellows[:10]
+            {
+                "player": p,
+                "yellow": y
+            }
+            for p, y in yellows[:10]
         ],
+
         "red_cards": [
-            {"player": player, "red": total}
-            for player, total in reds[:10]
+            {
+                "player": p,
+                "red": r
+            }
+            for p, r in reds[:10]
         ],
     })
 
-os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
+os.makedirs(
+    os.path.dirname(OUTPUT_FILE),
+    exist_ok=True
+)
 
-with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-    json.dump(final_output, f, indent=2, ensure_ascii=False)
+with open(
+    OUTPUT_FILE,
+    "w",
+    encoding="utf-8"
+) as f:
+
+    json.dump(
+        final_output,
+        f,
+        indent=2,
+        ensure_ascii=False
+    )
 
 print(f"Built {OUTPUT_FILE}")
 print(f"Teams written: {len(final_output)}")
-print(f"Match records scanned: {total_matches}")
+print(f"Matches scanned: {total}")
 
 for team in final_output:
+
     if team["team"].lower() == "everton":
-        print("Everton top red cards:")
-        for p in team["red_cards"]:
-            print(p)
-        print("Everton top scorers:")
-        for p in team["top_scorers"]:
-            print(p)
+
+        print("\nEVERTON RED CARDS")
+
+        for row in team["red_cards"]:
+            print(row)
+
+        print("\nEVERTON YELLOW CARDS")
+
+        for row in team["yellow_cards"]:
+            print(row)
+
         break
