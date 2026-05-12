@@ -25,14 +25,11 @@ HEADERS = {
     "Accept": "application/json"
 }
 
-games = []
-
-start_date = datetime(2025, 10, 1)
-end_date = datetime.now()
-
 session = requests.Session()
 
-def get_json(url, retries=5):
+games = []
+
+def fetch_json(url, retries=5):
 
     for attempt in range(retries):
 
@@ -52,35 +49,40 @@ def get_json(url, retries=5):
         except Exception as e:
             print("REQUEST ERROR:", e)
 
-        sleep_time = 5 + (attempt * 5)
+        wait = 5 + (attempt * 5)
 
-        print(f"Retrying in {sleep_time}s")
+        print(f"Retrying in {wait}s")
 
-        time.sleep(sleep_time)
+        time.sleep(wait)
 
     return None
+
+start_date = datetime(2025, 10, 1)
+end_date = datetime.now()
 
 current = start_date
 
 while current <= end_date:
 
-    date_str = current.strftime("%Y-%m-%d")
+    ymd = current.strftime("%Y%m%d")
 
-    print(f"\nFETCHING {date_str}")
+    print(f"\nFETCHING {ymd}")
 
     scoreboard_url = (
         "https://cdn.nba.com/static/json/liveData/scoreboard/"
-        f"todaysScoreboard_00.json"
+        f"todaysScoreboard_{ymd}.json"
     )
 
-    data = get_json(scoreboard_url)
+    data = fetch_json(scoreboard_url)
 
     if not data:
         current += timedelta(days=1)
         continue
 
-    scoreboard = data.get("scoreboard", {})
-    rows = scoreboard.get("games", [])
+    rows = (
+        data.get("scoreboard", {})
+        .get("games", [])
+    )
 
     print(f"GAMES FOUND: {len(rows)}")
 
@@ -90,11 +92,10 @@ while current <= end_date:
 
             game_id = str(row.get("gameId"))
 
-            game_date = (
-                row.get("gameEt")
-                or row.get("gameDateEst")
-                or date_str
-            )
+            if not game_id:
+                continue
+
+            game_file = f"{game_id}.json"
 
             home_team = (
                 row.get("homeTeam", {})
@@ -106,14 +107,12 @@ while current <= end_date:
                 .get("teamName", "")
             )
 
-            game_file = f"{game_id}.json"
-
             games.append({
                 "game_id": game_id,
                 "game_file": game_file,
                 "home_team": home_team,
                 "away_team": away_team,
-                "date": game_date
+                "date": current.strftime("%Y-%m-%d")
             })
 
             boxscore_url = (
@@ -121,7 +120,7 @@ while current <= end_date:
                 f"boxscore_{game_id}.json"
             )
 
-            box_data = get_json(boxscore_url)
+            box_data = fetch_json(boxscore_url)
 
             if not box_data:
                 print("FAILED BOX:", game_id)
@@ -134,7 +133,7 @@ while current <= end_date:
 
             print(f"SAVED {game_file}")
 
-            time.sleep(0.5)
+            time.sleep(0.4)
 
         except Exception as e:
             print("GAME ERROR:", e)
@@ -152,11 +151,13 @@ final_games.sort(
     key=lambda x: (x.get("date", ""), x.get("game_id", ""))
 )
 
-if len(final_games) < 10:
+print("TOTAL UNIQUE GAMES:", len(final_games))
+
+if len(final_games) < 1000:
     raise SystemExit("ABORTED - TOO FEW GAMES")
 
 with open(INDEX_FILE, "w", encoding="utf-8") as f:
     json.dump(final_games, f, indent=2)
 
 print("\nDONE")
-print("TOTAL GAMES:", len(final_games))
+print(f"TOTAL GAMES: {len(final_games)}")
