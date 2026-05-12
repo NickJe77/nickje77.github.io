@@ -1,7 +1,6 @@
 import os
 import json
 import requests
-from datetime import datetime, timedelta
 
 NBA_DIR = "docs/data/nba/2025"
 PLAYERS_DIR = "docs/data/nba/players"
@@ -9,28 +8,12 @@ PLAYERS_DIR = "docs/data/nba/players"
 os.makedirs(NBA_DIR, exist_ok=True)
 os.makedirs(PLAYERS_DIR, exist_ok=True)
 
-print("NBA PLAYOFF SAFE UPDATER")
-
 headers = {
-    "User-Agent": "Mozilla/5.0"
+    "User-Agent": "Mozilla/5.0",
+    "Referer": "https://www.nba.com/"
 }
 
-existing_ids = set()
-
-for f in os.listdir(NBA_DIR):
-
-    if f.endswith(".json"):
-
-        existing_ids.add(
-            f.replace(".json", "")
-        )
-
-print(f"EXISTING GAMES: {len(existing_ids)}")
-
-# START AFTER YOUR LAST GAME
-start = datetime(2026, 5, 4)
-
-today = datetime.utcnow()
+print("NBA PLAYOFF IMPORTER")
 
 def safe_int(v):
     try:
@@ -38,255 +21,228 @@ def safe_int(v):
     except:
         return 0
 
-while start <= today:
+PLAYOFF_IDS = [
 
-    date_str = start.strftime("%Y-%m-%d")
+    "0042500101",
+    "0042500102",
+    "0042500103",
+    "0042500104",
+    "0042500105",
+    "0042500106",
+    "0042500107",
 
-    print(f"CHECKING {date_str}")
+    "0042500201",
+    "0042500202",
+    "0042500203",
+    "0042500204",
+    "0042500205",
+    "0042500206",
+    "0042500207",
+
+    "0042500301",
+    "0042500302",
+    "0042500303",
+    "0042500304",
+    "0042500305",
+    "0042500306",
+    "0042500307",
+
+    "0042500401",
+    "0042500402",
+    "0042500403",
+    "0042500404",
+    "0042500405",
+    "0042500406",
+    "0042500407"
+]
+
+for game_id in PLAYOFF_IDS:
 
     try:
 
-        scoreboard_url = (
+        existing_path = os.path.join(
+            NBA_DIR,
+            f"{game_id}.json"
+        )
+
+        if os.path.exists(existing_path):
+
+            try:
+
+                with open(
+                    existing_path,
+                    "r",
+                    encoding="utf-8"
+                ) as ef:
+
+                    existing = json.load(ef)
+
+                if (
+                    existing.get("players")
+                    and existing.get("home_team")
+                    and existing.get("away_team")
+                ):
+
+                    print(f"SKIP GOOD {game_id}")
+                    continue
+
+            except:
+                pass
+
+        print(f"ADDING {game_id}")
+
+        box_url = (
             "https://cdn.nba.com/static/json/liveData/"
-            f"scoreboard/todaysScoreboard_{date_str}.json"
+            f"boxscore/boxscore_{game_id}.json"
         )
 
         r = requests.get(
-            scoreboard_url,
+            box_url,
             headers=headers,
             timeout=30
         )
 
         if r.status_code != 200:
 
-            print(f"NO SCOREBOARD {date_str}")
-
-            start += timedelta(days=1)
+            print(f"BAD BOX {game_id}")
             continue
 
-        data = r.json()
+        raw = r.json()
 
-        games = (
-            data.get("scoreboard", {})
-            .get("games", [])
-        )
+        game = raw.get("game", {})
 
-        print(f"GAMES FOUND: {len(games)}")
+        home = game.get("homeTeam", {})
+        away = game.get("awayTeam", {})
 
-        for g in games:
+        home_team = (
+            f"{home.get('teamCity', '')} "
+            f"{home.get('teamName', '')}"
+        ).strip()
 
-            game_id = str(
-                g.get("gameId", "")
-            )
+        away_team = (
+            f"{away.get('teamCity', '')} "
+            f"{away.get('teamName', '')}"
+        ).strip()
 
-            if not game_id:
-                continue
+        output = {
 
-            existing_path = os.path.join(
-                NBA_DIR,
-                f"{game_id}.json"
-            )
+            "game_id": game_id,
 
-            repair = False
+            "date":
+                game.get("gameEt")
+                or game.get("gameTimeUTC")
+                or "",
 
-            if game_id in existing_ids:
+            "game_type": "Playoffs",
 
-                try:
+            "home_team": home_team,
+            "away_team": away_team,
 
-                    with open(
-                        existing_path,
-                        "r",
-                        encoding="utf-8"
-                    ) as ef:
+            "home_score":
+                safe_int(home.get("score")),
 
-                        existing_game = json.load(ef)
+            "away_score":
+                safe_int(away.get("score")),
 
-                    if isinstance(existing_game, list):
+            "arena":
+                game.get("arena", {})
+                .get("arenaName", ""),
 
-                        repair = True
+            "attendance":
+                safe_int(
+                    game.get("attendance")
+                ),
 
-                    elif not existing_game.get("players"):
+            "players": []
+        }
 
-                        repair = True
+        for side, team_name in [
+            (home, home_team),
+            (away, away_team)
+        ]:
 
-                    elif not existing_game.get("home_team"):
+            for p in side.get("players", []):
 
-                        repair = True
+                if p.get("played") != "1":
+                    continue
 
-                    elif not existing_game.get("away_team"):
-
-                        repair = True
-
-                    else:
-
-                        print(f"SKIP GOOD {game_id}")
-                        continue
-
-                except:
-
-                    repair = True
-
-            if repair:
-
-                print(f"REPAIRING {game_id}")
-
-            else:
-
-                print(f"NEW GAME {game_id}")
-
-            box_url = (
-                "https://cdn.nba.com/static/json/liveData/"
-                f"boxscore/boxscore_{game_id}.json"
-            )
-
-            b = requests.get(
-                box_url,
-                headers=headers,
-                timeout=30
-            )
-
-            if b.status_code != 200:
-
-                print(f"BAD BOX {game_id}")
-                continue
-
-            raw = b.json()
-
-            game = raw.get("game", {})
-
-            home = game.get("homeTeam", {})
-            away = game.get("awayTeam", {})
-
-            home_team = (
-                f"{home.get('teamCity', '')} "
-                f"{home.get('teamName', '')}"
-            ).strip()
-
-            away_team = (
-                f"{away.get('teamCity', '')} "
-                f"{away.get('teamName', '')}"
-            ).strip()
-
-            output = {
-
-                "game_id": game_id,
-
-                "date":
-                    game.get("gameEt")
-                    or game.get("gameTimeUTC")
-                    or "",
-
-                "home_team": home_team,
-                "away_team": away_team,
-
-                "home_score":
-                    safe_int(home.get("score")),
-
-                "away_score":
-                    safe_int(away.get("score")),
-
-                "arena":
-                    game.get("arena", {})
-                    .get("arenaName", ""),
-
-                "attendance":
-                    safe_int(
-                        game.get("attendance")
-                    ),
-
-                "players": []
-            }
-
-            for side, team_name in [
-                (home, home_team),
-                (away, away_team)
-            ]:
-
-                for p in side.get("players", []):
-
-                    if p.get("played") != "1":
-                        continue
-
-                    stats = (
-                        p.get("statistics", {})
-                    )
-
-                    full_name = (
-                        f"{p.get('firstName', '')} "
-                        f"{p.get('familyName', '')}"
-                    ).strip()
-
-                    if not full_name:
-                        continue
-
-                    output["players"].append({
-
-                        "player": full_name,
-                        "team": team_name,
-
-                        "minutes":
-                            stats.get(
-                                "minutesCalculated",
-                                ""
-                            ),
-
-                        "points":
-                            safe_int(
-                                stats.get("points")
-                            ),
-
-                        "rebounds":
-                            safe_int(
-                                stats.get(
-                                    "reboundsTotal"
-                                )
-                            ),
-
-                        "assists":
-                            safe_int(
-                                stats.get("assists")
-                            ),
-
-                        "steals":
-                            safe_int(
-                                stats.get("steals")
-                            ),
-
-                        "blocks":
-                            safe_int(
-                                stats.get("blocks")
-                            ),
-
-                        "turnovers":
-                            safe_int(
-                                stats.get("turnovers")
-                            )
-                    })
-
-            with open(
-                existing_path,
-                "w",
-                encoding="utf-8"
-            ) as f:
-
-                json.dump(
-                    output,
-                    f,
-                    indent=2
+                stats = p.get(
+                    "statistics",
+                    {}
                 )
 
-            print(f"UPDATED {game_id}")
+                full_name = (
+                    f"{p.get('firstName', '')} "
+                    f"{p.get('familyName', '')}"
+                ).strip()
 
-            existing_ids.add(game_id)
+                if not full_name:
+                    continue
+
+                output["players"].append({
+
+                    "player": full_name,
+                    "team": team_name,
+
+                    "minutes":
+                        stats.get(
+                            "minutesCalculated",
+                            ""
+                        ),
+
+                    "points":
+                        safe_int(
+                            stats.get("points")
+                        ),
+
+                    "rebounds":
+                        safe_int(
+                            stats.get(
+                                "reboundsTotal"
+                            )
+                        ),
+
+                    "assists":
+                        safe_int(
+                            stats.get("assists")
+                        ),
+
+                    "steals":
+                        safe_int(
+                            stats.get("steals")
+                        ),
+
+                    "blocks":
+                        safe_int(
+                            stats.get("blocks")
+                        ),
+
+                    "turnovers":
+                        safe_int(
+                            stats.get("turnovers")
+                        )
+                })
+
+        with open(
+            existing_path,
+            "w",
+            encoding="utf-8"
+        ) as f:
+
+            json.dump(
+                output,
+                f,
+                indent=2
+            )
+
+        print(f"ADDED {game_id}")
 
     except Exception as e:
 
-        print(f"FAILED {date_str}")
+        print(f"FAILED {game_id}")
         print(str(e))
 
-    start += timedelta(days=1)
-
-# PLAYERS.JSON
+# BUILD PLAYERS.JSON
 
 print("BUILDING PLAYERS")
 
@@ -300,11 +256,19 @@ for filename in os.listdir(NBA_DIR):
     if filename == "games.json":
         continue
 
-    path = os.path.join(NBA_DIR, filename)
+    path = os.path.join(
+        NBA_DIR,
+        filename
+    )
 
     try:
 
-        with open(path, "r", encoding="utf-8") as f:
+        with open(
+            path,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
             game = json.load(f)
 
         if isinstance(game, list):
@@ -312,7 +276,10 @@ for filename in os.listdir(NBA_DIR):
 
         for p in game.get("players", []):
 
-            name = p.get("player", "").strip()
+            name = p.get(
+                "player",
+                ""
+            ).strip()
 
             if not name:
                 continue
@@ -332,12 +299,24 @@ for filename in os.listdir(NBA_DIR):
                 }
 
             players[name]["games"] += 1
-            players[name]["points"] += int(p.get("points", 0))
-            players[name]["rebounds"] += int(p.get("rebounds", 0))
-            players[name]["assists"] += int(p.get("assists", 0))
-            players[name]["steals"] += int(p.get("steals", 0))
-            players[name]["blocks"] += int(p.get("blocks", 0))
-            players[name]["turnovers"] += int(p.get("turnovers", 0))
+            players[name]["points"] += int(
+                p.get("points", 0)
+            )
+            players[name]["rebounds"] += int(
+                p.get("rebounds", 0)
+            )
+            players[name]["assists"] += int(
+                p.get("assists", 0)
+            )
+            players[name]["steals"] += int(
+                p.get("steals", 0)
+            )
+            players[name]["blocks"] += int(
+                p.get("blocks", 0)
+            )
+            players[name]["turnovers"] += int(
+                p.get("turnovers", 0)
+            )
 
     except Exception as e:
 
@@ -356,11 +335,15 @@ with open(
     encoding="utf-8"
 ) as f:
 
-    json.dump(players_list, f, indent=2)
+    json.dump(
+        players_list,
+        f,
+        indent=2
+    )
 
 print("PLAYERS.JSON UPDATED")
 
-# PLAYER FILES
+# BUILD PLAYER FILES
 
 print("BUILDING PLAYER FILES")
 
@@ -374,11 +357,19 @@ for filename in os.listdir(NBA_DIR):
     if filename == "games.json":
         continue
 
-    path = os.path.join(NBA_DIR, filename)
+    path = os.path.join(
+        NBA_DIR,
+        filename
+    )
 
     try:
 
-        with open(path, "r", encoding="utf-8") as f:
+        with open(
+            path,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
             game = json.load(f)
 
         if isinstance(game, list):
@@ -387,12 +378,22 @@ for filename in os.listdir(NBA_DIR):
         game_id = game.get("game_id", "")
         date = game.get("date", "")
 
-        home_team = game.get("home_team", "")
-        away_team = game.get("away_team", "")
+        home_team = game.get(
+            "home_team",
+            ""
+        )
+
+        away_team = game.get(
+            "away_team",
+            ""
+        )
 
         for p in game.get("players", []):
 
-            name = p.get("player", "").strip()
+            name = p.get(
+                "player",
+                ""
+            ).strip()
 
             if not name:
                 continue
@@ -431,7 +432,13 @@ for filename in os.listdir(NBA_DIR):
                 "reb": p.get("rebounds", 0),
                 "ast": p.get("assists", 0),
                 "stl": p.get("steals", 0),
-                "blk": p.get("blocks", 0)
+                "blk": p.get("blocks", 0),
+
+                "game_type":
+                    game.get(
+                        "game_type",
+                        "Playoffs"
+                    )
             })
 
     except Exception as e:
@@ -446,9 +453,17 @@ for slug, pdata in player_games.items():
         f"{slug}.json"
     )
 
-    with open(out_path, "w", encoding="utf-8") as f:
+    with open(
+        out_path,
+        "w",
+        encoding="utf-8"
+    ) as f:
 
-        json.dump(pdata, f, indent=2)
+        json.dump(
+            pdata,
+            f,
+            indent=2
+        )
 
 print("PLAYER FILES UPDATED")
 print("DONE")
