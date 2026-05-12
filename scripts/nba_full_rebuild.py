@@ -47,47 +47,34 @@ session = requests.Session()
 
 games = []
 
-def fetch_json(url, retries=5):
+def fetch_json(url):
 
-    for attempt in range(retries):
+    try:
 
-        try:
+        r = session.get(
+            url,
+            headers=HEADERS,
+            timeout=15
+        )
 
-            r = session.get(
-                url,
-                headers=HEADERS,
-                timeout=20
-            )
+        if r.status_code == 200:
+            return r.json()
 
-            if r.status_code == 200:
-                return r.json()
+        print("BAD STATUS:", r.status_code)
 
-            print("BAD STATUS:", r.status_code)
+        if r.status_code == 403:
+            time.sleep(2)
 
-            if r.status_code == 403:
+    except Exception as e:
 
-                wait = 30 + (attempt * 30)
-
-                print(f"403 BLOCKED - WAITING {wait}s")
-
-                time.sleep(wait)
-
-        except Exception as e:
-
-            print("REQUEST ERROR:", e)
-
-            wait = 15 + (attempt * 15)
-
-            print(f"WAITING {wait}s")
-
-            time.sleep(wait)
+        print("REQUEST ERROR:", e)
 
     return None
 
-# RESUME FROM WHERE IT STARTED BLOCKING
+# RESUME FROM WHERE IT STARTED FAILING
 START_ID = 1231
 
-# SAFE BUFFER ABOVE CURRENT NBA GAME COUNTS
+# SAFE MAX
 END_ID = 1500
 
 for num in range(START_ID, END_ID + 1):
@@ -96,46 +83,12 @@ for num in range(START_ID, END_ID + 1):
 
     game_file = f"{game_id}.json"
 
-    existing_path = os.path.join(BOX_DIR, game_file)
+    out_path = os.path.join(BOX_DIR, game_file)
 
-    # SKIP EXISTING FILES
-    if os.path.exists(existing_path):
+    # SKIP FILES ALREADY SAVED
+    if os.path.exists(out_path):
 
-        print(f"SKIPPING EXISTING {game_file}")
-
-        try:
-
-            with open(existing_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-
-            game = data.get("game", {})
-
-            home_team = (
-                game.get("homeTeam", {})
-                .get("teamName", "")
-            )
-
-            away_team = (
-                game.get("awayTeam", {})
-                .get("teamName", "")
-            )
-
-            game_date = (
-                game.get("gameEt")
-                or game.get("gameTimeUTC")
-                or ""
-            )
-
-            games.append({
-                "game_id": game_id,
-                "game_file": game_file,
-                "home_team": home_team,
-                "away_team": away_team,
-                "date": game_date
-            })
-
-        except Exception:
-            pass
+        print(f"SKIPPING {game_file}")
 
         continue
 
@@ -158,10 +111,10 @@ for num in range(START_ID, END_ID + 1):
 
     try:
 
-        with open(existing_path, "w", encoding="utf-8") as f:
+        with open(out_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
 
-        print("SAVED:", existing_path)
+        print(f"SAVED {game_file}")
 
     except Exception as e:
 
@@ -193,10 +146,10 @@ for num in range(START_ID, END_ID + 1):
         "date": game_date
     })
 
-    # SLOWER REQUEST RATE TO AVOID 403 BLOCKS
-    time.sleep(1.5)
+    # FASTER BUT SAFE
+    time.sleep(0.5)
 
-# REBUILD INDEX FROM ALL FILES ON DISK
+# REBUILD INDEX FROM ALL SAVED FILES
 all_games = []
 
 files = sorted(
