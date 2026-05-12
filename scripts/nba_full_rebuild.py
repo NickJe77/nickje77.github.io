@@ -1,98 +1,85 @@
 import os
 import json
+from glob import glob
 
-SEASON = "2026"
+INPUT_DIR = "docs/data/nba/boxscores/2026"
+OUTPUT_DIR = "docs/data/nba/2026"
 
-BASE_DIR = os.getcwd()
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-BOX_DIR = os.path.join(
-    BASE_DIR,
-    "docs",
-    "data",
-    "nba",
-    "boxscores",
-    SEASON
-)
+print("NORMALIZING NBA 2026 TO OLD FORMAT")
 
-SEASON_DIR = os.path.join(
-    BASE_DIR,
-    "docs",
-    "data",
-    "nba",
-    SEASON
-)
+def safe_int(v):
+    try:
+        return int(v)
+    except:
+        return 0
 
-INDEX_FILE = os.path.join(
-    SEASON_DIR,
-    "index.json"
-)
+files = glob(f"{INPUT_DIR}/*.json")
 
-os.makedirs(BOX_DIR, exist_ok=True)
-os.makedirs(SEASON_DIR, exist_ok=True)
-
-print("READING EXISTING FILES")
-
-games = []
-
-files = sorted(
-    f for f in os.listdir(BOX_DIR)
-    if f.endswith(".json")
-)
-
-print(f"FILES FOUND: {len(files)}")
-
-for filename in files:
-
-    path = os.path.join(BOX_DIR, filename)
+for path in files:
 
     try:
-
         with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+            raw = json.load(f)
+
+        game = raw.get("game", {})
+
+        home = raw.get("homeTeam", {})
+        away = raw.get("awayTeam", {})
+
+        output = {
+            "game_id": game.get("gameId", ""),
+            "date": game.get("gameTimeUTC", ""),
+            "game_type": "Regular Season",
+            "home_team": home.get("teamName", ""),
+            "away_team": away.get("teamName", ""),
+            "home_score": safe_int(home.get("score")),
+            "away_score": safe_int(away.get("score")),
+            "arena": (
+                game.get("arena", {}).get("arenaName", "")
+            ),
+            "players": []
+        }
+
+        for side, team_name in [
+            (home, home.get("teamName", "")),
+            (away, away.get("teamName", ""))
+        ]:
+
+            players = side.get("players", [])
+
+            for p in players:
+
+                stats = p.get("statistics", {})
+
+                output["players"].append({
+                    "player": (
+                        f"{p.get('firstName', '')} "
+                        f"{p.get('familyName', '')}"
+                    ).strip(),
+                    "team": team_name,
+                    "minutes": stats.get("minutes", "0:00"),
+                    "points": safe_int(stats.get("points")),
+                    "rebounds": safe_int(stats.get("reboundsTotal")),
+                    "assists": safe_int(stats.get("assists")),
+                    "steals": safe_int(stats.get("steals")),
+                    "blocks": safe_int(stats.get("blocks")),
+                    "turnovers": safe_int(stats.get("turnovers"))
+                })
+
+        out_file = os.path.join(
+            OUTPUT_DIR,
+            f"{output['game_id']}.json"
+        )
+
+        with open(out_file, "w", encoding="utf-8") as f:
+            json.dump(output, f, indent=2)
+
+        print(f"Fixed {output['game_id']}")
 
     except Exception as e:
+        print(f"FAILED {path}")
+        print(e)
 
-        print("BAD FILE:", filename, e)
-
-        continue
-
-    game = data.get("game", {})
-
-    if not game:
-        continue
-
-    game_id = filename.replace(".json", "")
-
-    home_team = (
-        game.get("homeTeam", {})
-        .get("teamName", "")
-    )
-
-    away_team = (
-        game.get("awayTeam", {})
-        .get("teamName", "")
-    )
-
-    game_date = (
-        game.get("gameEt")
-        or game.get("gameTimeUTC")
-        or ""
-    )
-
-    games.append({
-        "game_id": game_id,
-        "game_file": filename,
-        "home_team": home_team,
-        "away_team": away_team,
-        "date": game_date
-    })
-
-games.sort(
-    key=lambda x: (x.get("date", ""), x.get("game_id", ""))
-)
-
-with open(INDEX_FILE, "w", encoding="utf-8") as f:
-    json.dump(games, f, indent=2)
-
-print(f"INDEX BUILT: {len(games)} games")
 print("DONE")
