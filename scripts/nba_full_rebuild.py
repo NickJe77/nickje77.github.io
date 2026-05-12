@@ -5,11 +5,15 @@ from glob import glob
 
 NBA_DIR = "docs/data/nba/2026"
 
-headers = {
-    "User-Agent": "Mozilla/5.0"
-}
+print("FIXING NBA 2026")
 
-print("FIXING NBA 2026 FILES")
+session = requests.Session()
+
+session.headers.update({
+    "User-Agent": "Mozilla/5.0",
+    "Referer": "https://www.nba.com/",
+    "Origin": "https://www.nba.com"
+})
 
 def safe_int(v):
     try:
@@ -35,26 +39,24 @@ for path in files:
             print(f"NO GAME ID: {path}")
             continue
 
-        print(f"FETCHING {game_id}")
-
         url = (
             "https://cdn.nba.com/static/json/liveData/"
             f"boxscore/boxscore_{game_id}.json"
         )
 
-        r = requests.get(
-            url,
-            headers=headers,
-            timeout=60
-        )
+        print(f"DOWNLOADING {game_id}")
+
+        r = session.get(url, timeout=60)
 
         if r.status_code != 200:
-            print(f"BAD STATUS {game_id}")
+
+            print(f"STATUS {r.status_code} {game_id}")
+            print(url)
+
             continue
 
         raw = r.json()
 
-        # CORRECT STRUCTURE
         game = raw.get("game", {})
 
         home = game.get("homeTeam", {})
@@ -71,6 +73,7 @@ for path in files:
         ).strip()
 
         fixed = {
+
             "game_id": game_id,
 
             "date":
@@ -101,9 +104,7 @@ for path in files:
             (away, away_team)
         ]:
 
-            players = side.get("players", [])
-
-            for p in players:
+            for p in side.get("players", []):
 
                 if p.get("played") != "1":
                     continue
