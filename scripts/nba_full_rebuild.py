@@ -2,7 +2,6 @@ import os
 import json
 import time
 import requests
-from datetime import datetime, timedelta
 
 SEASON = "2026"
 
@@ -29,135 +28,95 @@ session = requests.Session()
 
 games = []
 
-def fetch_json(url, retries=5):
+def fetch_json(url):
 
-    for attempt in range(retries):
+    try:
 
-        try:
+        r = session.get(
+            url,
+            headers=HEADERS,
+            timeout=20
+        )
 
-            r = session.get(
-                url,
-                headers=HEADERS,
-                timeout=20
-            )
+        if r.status_code == 200:
+            return r.json()
 
-            if r.status_code == 200:
-                return r.json()
-
-            print("BAD STATUS:", r.status_code)
-
-        except Exception as e:
-            print("REQUEST ERROR:", e)
-
-        wait = 5 + (attempt * 5)
-
-        print(f"Retrying in {wait}s")
-
-        time.sleep(wait)
+    except Exception as e:
+        print("REQUEST ERROR:", e)
 
     return None
 
-start_date = datetime(2025, 10, 1)
-end_date = datetime.now()
+# 2025-26 regular season IDs
+START_ID = 1
+END_ID = 1500
 
-current = start_date
+for num in range(START_ID, END_ID + 1):
 
-while current <= end_date:
+    game_id = f"00225{num:05d}"
 
-    ymd = current.strftime("%Y%m%d")
+    game_file = f"{game_id}.json"
 
-    print(f"\nFETCHING {ymd}")
+    print(f"FETCHING {game_id}")
 
-    scoreboard_url = (
-        "https://cdn.nba.com/static/json/liveData/scoreboard/"
-        f"todaysScoreboard_{ymd}.json"
+    boxscore_url = (
+        "https://cdn.nba.com/static/json/liveData/boxscore/"
+        f"boxscore_{game_id}.json"
     )
 
-    data = fetch_json(scoreboard_url)
+    data = fetch_json(boxscore_url)
 
     if not data:
-        current += timedelta(days=1)
         continue
 
-    rows = (
-        data.get("scoreboard", {})
-        .get("games", [])
+    game = data.get("game", {})
+
+    if not game:
+        continue
+
+    home_team = (
+        game.get("homeTeam", {})
+        .get("teamName", "")
     )
 
-    print(f"GAMES FOUND: {len(rows)}")
+    away_team = (
+        game.get("awayTeam", {})
+        .get("teamName", "")
+    )
 
-    for row in rows:
+    game_date = (
+        game.get("gameEt")
+        or game.get("gameTimeUTC")
+        or ""
+    )
 
-        try:
+    out_path = os.path.join(BOX_DIR, game_file)
 
-            game_id = str(row.get("gameId"))
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
 
-            if not game_id:
-                continue
+    print(f"SAVED {game_file}")
 
-            game_file = f"{game_id}.json"
+    games.append({
+        "game_id": game_id,
+        "game_file": game_file,
+        "home_team": home_team,
+        "away_team": away_team,
+        "date": game_date
+    })
 
-            home_team = (
-                row.get("homeTeam", {})
-                .get("teamName", "")
-            )
+    time.sleep(0.2)
 
-            away_team = (
-                row.get("awayTeam", {})
-                .get("teamName", "")
-            )
-
-            games.append({
-                "game_id": game_id,
-                "game_file": game_file,
-                "home_team": home_team,
-                "away_team": away_team,
-                "date": current.strftime("%Y-%m-%d")
-            })
-
-            boxscore_url = (
-                "https://cdn.nba.com/static/json/liveData/boxscore/"
-                f"boxscore_{game_id}.json"
-            )
-
-            box_data = fetch_json(boxscore_url)
-
-            if not box_data:
-                print("FAILED BOX:", game_id)
-                continue
-
-            out_path = os.path.join(BOX_DIR, game_file)
-
-            with open(out_path, "w", encoding="utf-8") as f:
-                json.dump(box_data, f, indent=2)
-
-            print(f"SAVED {game_file}")
-
-            time.sleep(0.4)
-
-        except Exception as e:
-            print("GAME ERROR:", e)
-
-    current += timedelta(days=1)
-
-unique = {}
-
-for g in games:
-    unique[g["game_id"]] = g
-
-final_games = list(unique.values())
-
-final_games.sort(
+games.sort(
     key=lambda x: (x.get("date", ""), x.get("game_id", ""))
 )
 
-print("TOTAL UNIQUE GAMES:", len(final_games))
-
-if len(final_games) < 1000:
-    raise SystemExit("ABORTED - TOO FEW GAMES")
+if len(games) < 1000:
+    raise SystemExit(
+        f"ABORTED - ONLY {len(games)} GAMES FOUND"
+    )
 
 with open(INDEX_FILE, "w", encoding="utf-8") as f:
-    json.dump(final_games, f, indent=2)
+    json.dump(games, f, indent=2)
 
 print("\nDONE")
-print(f"TOTAL GAMES: {len(final_games)}")
+print("TOTAL GAMES:", len(games))
