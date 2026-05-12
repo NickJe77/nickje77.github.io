@@ -15,10 +15,19 @@ os.makedirs(BOX_DIR, exist_ok=True)
 INDEX_FILE = f"{SEASON_DIR}/index.json"
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0",
+    "Host": "stats.nba.com",
+    "Connection": "keep-alive",
+    "Accept": "application/json, text/plain, */*",
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/136.0 Safari/537.36"
+    ),
     "Referer": "https://www.nba.com/",
     "Origin": "https://www.nba.com",
-    "Accept": "application/json"
+    "x-nba-stats-origin": "stats",
+    "x-nba-stats-token": "true",
+    "Accept-Language": "en-US,en;q=0.9"
 }
 
 games = []
@@ -48,14 +57,14 @@ while current <= end_date:
         )
 
         if r.status_code != 200:
-            print("FAILED:", r.status_code)
+            print("SCOREBOARD FAILED:", r.status_code)
             current += timedelta(days=1)
             continue
 
         data = r.json()
 
     except Exception as e:
-        print("ERROR:", e)
+        print("SCOREBOARD ERROR:", e)
         current += timedelta(days=1)
         continue
 
@@ -91,29 +100,42 @@ while current <= end_date:
             games.append(game_summary)
 
             boxscore_url = (
-                "https://cdn.nba.com/static/json/liveData/boxscore/"
-                f"boxscore_{game_id}.json"
+                "https://stats.nba.com/stats/boxscoretraditionalv2"
+                f"?GameID={game_id}"
+                "&StartPeriod=0"
+                "&EndPeriod=10"
+                "&StartRange=0"
+                "&EndRange=28800"
+                "&RangeType=0"
             )
 
             print(f"DOWNLOADING {game_file}")
 
-            br = requests.get(
-                boxscore_url,
-                headers=HEADERS,
-                timeout=30
-            )
+            try:
 
-            if br.status_code == 200:
+                br = requests.get(
+                    boxscore_url,
+                    headers=HEADERS,
+                    timeout=30
+                )
+
+                if br.status_code != 200:
+                    print("BOX FAILED:", br.status_code)
+                    continue
+
+                box_data = br.json()
 
                 out_path = os.path.join(BOX_DIR, game_file)
 
                 with open(out_path, "w", encoding="utf-8") as f:
-                    json.dump(br.json(), f, indent=2)
+                    json.dump(box_data, f, indent=2)
 
-            else:
-                print("BOX FAILED:", br.status_code)
+                print(f"SAVED {game_file}")
 
-            time.sleep(0.5)
+            except Exception as e:
+                print("BOX ERROR:", e)
+
+            time.sleep(0.6)
 
         except Exception as e:
             print("GAME ERROR:", e)
