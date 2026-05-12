@@ -17,7 +17,7 @@ session.headers.update({
     "Origin": "https://www.nba.com"
 })
 
-print("NBA SAFE REPAIR UPDATER")
+print("NBA PLAYOFF SAFE UPDATER")
 
 existing_ids = set()
 
@@ -33,7 +33,8 @@ print(f"EXISTING GAMES: {len(existing_ids)}")
 
 today = datetime.utcnow()
 
-start = datetime(2025, 10, 1)
+# ONLY CHECK AFTER LAST GAME YOU HAVE
+start = datetime(2026, 5, 4)
 
 def safe_int(v):
     try:
@@ -64,6 +65,7 @@ while start <= today:
         if r.status_code != 200:
 
             print(f"BAD SCHEDULE {date_str}")
+
             start += timedelta(days=1)
             continue
 
@@ -83,7 +85,6 @@ while start <= today:
 
         if "GAME_ID" not in headers_row:
 
-            print(f"NO GAME_ID HEADER {date_str}")
             start += timedelta(days=1)
             continue
 
@@ -97,10 +98,8 @@ while start <= today:
                     row[game_id_index]
                 )
 
-            except Exception as e:
+            except:
 
-                print("BAD ROW")
-                print(str(e))
                 continue
 
             if not game_id:
@@ -391,7 +390,7 @@ with open(
 
 print("PLAYERS.JSON UPDATED")
 
-# BUILD INDIVIDUAL PLAYER FILES
+# BUILD PLAYER FILES
 
 print("BUILDING PLAYER FILES")
 
@@ -464,7 +463,7 @@ for filename in os.listdir(NBA_DIR):
                 "stl": p.get("steals", 0),
                 "blk": p.get("blocks", 0),
 
-                "game_type": "regular season"
+                "game_type": "playoffs"
             })
 
     except Exception as e:
