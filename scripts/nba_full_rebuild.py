@@ -5,9 +5,7 @@ from glob import glob
 
 SEASON_DIR = "docs/data/nba/2026"
 
-os.makedirs(SEASON_DIR, exist_ok=True)
-
-print("RESTORING NBA 2026")
+print("FIXING NBA 2026")
 
 headers = {
     "User-Agent": "Mozilla/5.0"
@@ -34,26 +32,32 @@ for path in files:
         )
 
         if not game_id:
-            print(f"NO GAME ID: {path}")
+            print(f"SKIP NO GAME ID: {path}")
             continue
 
-        print(f"FETCHING {game_id}")
+        print(f"DOWNLOADING {game_id}")
 
         url = (
-            "https://cdn.nba.com/static/json/liveData/"
+            f"https://cdn.nba.com/static/json/liveData/"
             f"boxscore/boxscore_{game_id}.json"
         )
 
-        res = requests.get(url, headers=headers, timeout=30)
+        r = requests.get(
+            url,
+            headers=headers,
+            timeout=60
+        )
 
-        if res.status_code != 200:
-            print(f"FAILED {game_id}")
+        if r.status_code != 200:
+            print(f"BAD STATUS {game_id} {r.status_code}")
             continue
 
-        raw = res.json()
+        raw = r.json()
 
+        # NBA RESPONSE IS NESTED HERE
         game = raw.get("game", {})
 
+        # THESE ARE INSIDE game
         home = game.get("homeTeam", {})
         away = game.get("awayTeam", {})
 
@@ -69,11 +73,12 @@ for path in files:
 
         output = {
             "game_id": game_id,
-            "date": (
+
+            "date":
                 game.get("gameEt")
                 or game.get("gameTimeUTC")
-                or ""
-            ),
+                or "",
+
             "game_type": "Regular Season",
 
             "home_team": home_team,
@@ -96,16 +101,17 @@ for path in files:
             (away, away_team)
         ]:
 
+            # PLAYERS ARE HERE
             players = side.get("players", [])
 
             for p in players:
 
                 stats = p.get("statistics", {})
 
-                first = p.get("firstName", "")
-                last = p.get("familyName", "")
-
-                full_name = f"{first} {last}".strip()
+                full_name = (
+                    f"{p.get('firstName', '')} "
+                    f"{p.get('familyName', '')}"
+                ).strip()
 
                 if not full_name:
                     continue
@@ -127,16 +133,24 @@ for path in files:
                         ),
 
                     "assists":
-                        safe_int(stats.get("assists")),
+                        safe_int(
+                            stats.get("assists")
+                        ),
 
                     "steals":
-                        safe_int(stats.get("steals")),
+                        safe_int(
+                            stats.get("steals")
+                        ),
 
                     "blocks":
-                        safe_int(stats.get("blocks")),
+                        safe_int(
+                            stats.get("blocks")
+                        ),
 
                     "turnovers":
-                        safe_int(stats.get("turnovers"))
+                        safe_int(
+                            stats.get("turnovers")
+                        )
                 })
 
         with open(path, "w", encoding="utf-8") as f:
@@ -146,7 +160,7 @@ for path in files:
 
     except Exception as e:
 
-        print(f"ERROR: {path}")
-        print(e)
+        print(f"FAILED {path}")
+        print(str(e))
 
 print("DONE")
