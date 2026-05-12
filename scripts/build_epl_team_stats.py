@@ -5,7 +5,7 @@ from collections import defaultdict
 BASE_DIR = "docs/data/epl"
 OUTPUT_FILE = "docs/data/epl/team_stats.json"
 
-print("RUNNING EPL TEAM STATS BUILDER - FINAL CARD FIX VERSION")
+print("RUNNING EPL TEAM STATS BUILDER - DIRECT PLAYER STATS VERSION")
 
 team_data = {}
 
@@ -19,6 +19,7 @@ def to_int(v):
         return 0
 
 def ensure_team(team):
+
     team = clean(team)
 
     if not team:
@@ -32,143 +33,30 @@ def ensure_team(team):
             "red_cards": defaultdict(int),
         }
 
-def add_goal(team, player, value=1):
+def add_stat(team, player, goals=0, yellow=0, red=0):
+
     team = clean(team)
     player = clean(player)
 
     if not team or not player:
         return
 
-    value = to_int(value)
-
-    if value <= 0:
-        return
-
     ensure_team(team)
 
-    team_data[team]["top_scorers"][player] += value
+    goals = to_int(goals)
+    yellow = to_int(yellow)
+    red = to_int(red)
 
-def add_yellow(team, player, value=1):
-    team = clean(team)
-    player = clean(player)
+    if goals > 0:
+        team_data[team]["top_scorers"][player] += goals
 
-    if not team or not player:
-        return
+    if yellow > 0:
+        team_data[team]["yellow_cards"][player] += yellow
 
-    value = to_int(value)
+    if red > 0:
+        team_data[team]["red_cards"][player] += red
 
-    if value <= 0:
-        return
-
-    ensure_team(team)
-
-    team_data[team]["yellow_cards"][player] += value
-
-def add_red(team, player, value=1):
-    team = clean(team)
-    player = clean(player)
-
-    if not team or not player:
-        return
-
-    value = to_int(value)
-
-    if value <= 0:
-        return
-
-    ensure_team(team)
-
-    team_data[team]["red_cards"][player] += value
-
-def get_teams(match):
-
-    home = clean(
-        match.get("home_team")
-        or match.get("home")
-        or match.get("homeTeam")
-        or match.get("team1")
-    )
-
-    away = clean(
-        match.get("away_team")
-        or match.get("away")
-        or match.get("awayTeam")
-        or match.get("team2")
-    )
-
-    if isinstance(match.get("teams"), dict):
-        home = home or clean(match["teams"].get("home"))
-        away = away or clean(match["teams"].get("away"))
-
-    return home, away
-
-def normalise_team(raw, home, away):
-
-    t = clean(raw).lower()
-
-    if t in ["home", "h", "team1"]:
-        return home
-
-    if t in ["away", "a", "team2"]:
-        return away
-
-    return clean(raw)
-
-def process_event(event, home, away):
-
-    if not isinstance(event, dict):
-        return
-
-    player = clean(
-        event.get("player")
-        or event.get("name")
-        or event.get("player_name")
-        or event.get("scorer")
-    )
-
-    team = normalise_team(
-        event.get("team")
-        or event.get("club")
-        or event.get("side"),
-        home,
-        away
-    )
-
-    if not player or not team:
-        return
-
-    event_type = clean(
-        event.get("type")
-        or event.get("event")
-        or event.get("kind")
-        or event.get("card")
-    ).lower()
-
-    # GOALS
-    if (
-        "goal" in event_type
-        and "own" not in event_type
-    ):
-        add_goal(team, player, 1)
-
-    # YELLOWS
-    if (
-        "yellow" in event_type
-        or event_type in ["yc", "y"]
-        or "booking" in event_type
-    ):
-        add_yellow(team, player, 1)
-
-    # REDS
-    if (
-        "red" in event_type
-        or event_type in ["rc", "r"]
-        or "second yellow" in event_type
-        or "2nd yellow" in event_type
-    ):
-        add_red(team, player, 1)
-
-def process_player_stats(player, home, away):
+def process_player(team, player):
 
     if not isinstance(player, dict):
         return
@@ -179,20 +67,13 @@ def process_player_stats(player, home, away):
         or player.get("player_name")
     )
 
-    team = normalise_team(
-        player.get("team")
-        or player.get("club")
-        or player.get("side"),
-        home,
-        away
-    )
-
-    if not name or not team:
+    if not name:
         return
 
     goals = (
         player.get("goals")
         or player.get("goal")
+        or player.get("gls")
     )
 
     yellow = (
@@ -208,77 +89,97 @@ def process_player_stats(player, home, away):
         or player.get("rc")
     )
 
-    add_goal(team, name, goals)
-    add_yellow(team, name, yellow)
-    add_red(team, name, red)
+    add_stat(team, name, goals, yellow, red)
 
 def process_match(match):
 
     if not isinstance(match, dict):
         return
 
-    home, away = get_teams(match)
+    home = clean(
+        match.get("home_team")
+        or match.get("home")
+        or match.get("homeTeam")
+        or match.get("team1")
+    )
+
+    away = clean(
+        match.get("away_team")
+        or match.get("away")
+        or match.get("awayTeam")
+        or match.get("team2")
+    )
 
     ensure_team(home)
     ensure_team(away)
 
-    # EVENT BASED
-    for key in [
-        "events",
-        "incidents",
-        "scorers",
-        "goals",
-        "cards",
-        "bookings"
-    ]:
+    # MOST IMPORTANT SECTION
+    # handles player_stats.home / away
 
-        items = match.get(key)
+    player_stats = match.get("player_stats")
 
-        if isinstance(items, list):
+    if isinstance(player_stats, dict):
 
-            for item in items:
-                process_event(item, home, away)
+        home_players = (
+            player_stats.get("home")
+            or player_stats.get(home)
+            or []
+        )
 
-    # PLAYER BASED
-    for key in [
-        "players",
-        "player_stats",
-        "stats",
-        "lineups"
-    ]:
+        away_players = (
+            player_stats.get("away")
+            or player_stats.get(away)
+            or []
+        )
 
-        block = match.get(key)
+        for p in home_players:
+            process_player(home, p)
 
-        if isinstance(block, list):
+        for p in away_players:
+            process_player(away, p)
 
-            for p in block:
-                process_player_stats(p, home, away)
+    # handles lineups.home / away
 
-        elif isinstance(block, dict):
+    lineups = match.get("lineups")
 
-            for side, players in block.items():
+    if isinstance(lineups, dict):
 
-                if not isinstance(players, list):
-                    continue
+        home_players = (
+            lineups.get("home")
+            or lineups.get(home)
+            or []
+        )
 
-                fixed_team = normalise_team(
-                    side,
-                    home,
-                    away
-                )
+        away_players = (
+            lineups.get("away")
+            or lineups.get(away)
+            or []
+        )
 
-                for p in players:
+        for p in home_players:
+            process_player(home, p)
 
-                    if not isinstance(p, dict):
-                        continue
+        for p in away_players:
+            process_player(away, p)
 
-                    p["team"] = fixed_team
+    # handles flat players array
 
-                    process_player_stats(
-                        p,
-                        home,
-                        away
-                    )
+    players = match.get("players")
+
+    if isinstance(players, list):
+
+        for p in players:
+
+            if not isinstance(p, dict):
+                continue
+
+            team = clean(
+                p.get("team")
+                or p.get("club")
+                or p.get("side")
+            )
+
+            process_player(team, p)
 
 def process_file(path):
 
@@ -294,8 +195,8 @@ def process_file(path):
 
     if isinstance(data, list):
 
-        for match in data:
-            process_match(match)
+        for item in data:
+            process_match(item)
             count += 1
 
     elif isinstance(data, dict):
@@ -420,19 +321,3 @@ with open(
 print(f"Built {OUTPUT_FILE}")
 print(f"Teams written: {len(final_output)}")
 print(f"Matches scanned: {total}")
-
-for team in final_output:
-
-    if team["team"].lower() == "everton":
-
-        print("\nEVERTON RED CARDS")
-
-        for row in team["red_cards"]:
-            print(row)
-
-        print("\nEVERTON YELLOW CARDS")
-
-        for row in team["yellow_cards"]:
-            print(row)
-
-        break
