@@ -1,0 +1,52 @@
+name: Basketball NBA Full Scraper
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "Start season"
+        required: true
+        default: "1976"
+      end:
+        description: "End season"
+        required: true
+        default: "2025"
+      overwrite:
+        description: "Overwrite existing boxscore files? true/false"
+        required: true
+        default: "false"
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install packages
+        run: |
+          pip install requests beautifulsoup4 lxml
+
+      - name: Run scraper
+        run: |
+          if [ "${{ github.event.inputs.overwrite }}" = "true" ]; then
+            python scripts/nba_full_rebuild.py --start "${{ github.event.inputs.start }}" --end "${{ github.event.inputs.end }}" --overwrite
+          else
+            python scripts/nba_full_rebuild.py --start "${{ github.event.inputs.start }}" --end "${{ github.event.inputs.end }}"
+          fi
+
+      - name: Commit basketball data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add docs/data/basketball
+
+          git commit -m "Rebuild basketball NBA data" || echo "No changes"
+          git pull --rebase origin main || echo "Nothing to pull"
+          git push
