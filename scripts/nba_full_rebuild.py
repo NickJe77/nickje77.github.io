@@ -2,10 +2,13 @@ import os
 import json
 from glob import glob
 
-BASE_DIR = "docs/data/nba"
+BASE_DIR = "docs/data/basketball"
+OUTPUT_DIR = "docs/data/basketball/seasons"
 
-print("NBA LEGACY STRUCTURE REBUILD")
+print("BASKETBALL LEGACY STRUCTURE REBUILD")
 print("=" * 80)
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def load_json(path):
     try:
@@ -28,12 +31,8 @@ def extract_games(raw, source_file):
 
     games = []
 
-    # -----------------------------
-    # SINGLE GAME FILE
-    # -----------------------------
     if isinstance(raw, dict):
 
-        # DIRECT GAME FILE
         if any(k in raw for k in [
             "home_team",
             "away_team",
@@ -44,13 +43,9 @@ def extract_games(raw, source_file):
         ]):
             games.append(raw)
 
-        # NESTED GAMES ARRAY
         elif "games" in raw and isinstance(raw["games"], list):
             games.extend(raw["games"])
 
-    # -----------------------------
-    # ARRAY OF GAMES
-    # -----------------------------
     elif isinstance(raw, list):
         games.extend(raw)
 
@@ -79,7 +74,6 @@ def extract_games(raw, source_file):
             or ""
         )
 
-        # MUST HAVE BOTH TEAMS
         if not home_team or not away_team:
             continue
 
@@ -150,6 +144,8 @@ def extract_games(raw, source_file):
 season_dirs = sorted([
     d for d in os.listdir(BASE_DIR)
     if os.path.isdir(os.path.join(BASE_DIR, d))
+    and d != "seasons"
+    and d != "boxscores"
 ])
 
 grand_total = 0
@@ -170,7 +166,6 @@ for season in season_dirs:
         recursive=True
     )
 
-    # REMOVE NON GAME FILES
     json_files = [
         x for x in json_files
         if not any(bad in x.lower() for bad in [
@@ -197,7 +192,6 @@ for season in season_dirs:
 
         rebuilt.extend(games)
 
-    # REMOVE DUPLICATES
     deduped = {}
 
     for g in rebuilt:
@@ -205,18 +199,19 @@ for season in season_dirs:
 
     rebuilt = list(deduped.values())
 
-    # SORT
     rebuilt.sort(key=lambda x: x.get("date", ""))
 
-    # SAVE
-    index_path = os.path.join(season_path, "index.json")
+    output_file = os.path.join(
+        OUTPUT_DIR,
+        f"{season}.json"
+    )
 
-    save_json(index_path, rebuilt)
+    save_json(output_file, rebuilt)
 
     print(f"REBUILT {len(rebuilt)} GAMES")
 
     grand_total += len(rebuilt)
 
 print("\n" + "=" * 80)
-print(f"TOTAL NBA GAMES INDEXED: {grand_total}")
-print("NBA REBUILD COMPLETE")
+print(f"TOTAL BASKETBALL GAMES INDEXED: {grand_total}")
+print("BASKETBALL REBUILD COMPLETE")
