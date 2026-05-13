@@ -2,7 +2,10 @@ import os
 import json
 from glob import glob
 
-BASE_DIR = "docs/data/basketball"
+# READ FROM EXISTING NBA DATA
+BASE_DIR = "docs/data/nba"
+
+# OUTPUT TO NEW BASKETBALL STRUCTURE
 OUTPUT_DIR = "docs/data/basketball/seasons"
 
 print("BASKETBALL LEGACY STRUCTURE REBUILD")
@@ -31,8 +34,12 @@ def extract_games(raw, source_file):
 
     games = []
 
+    # -----------------------------------
+    # SINGLE GAME OBJECT
+    # -----------------------------------
     if isinstance(raw, dict):
 
+        # DIRECT GAME
         if any(k in raw for k in [
             "home_team",
             "away_team",
@@ -43,9 +50,13 @@ def extract_games(raw, source_file):
         ]):
             games.append(raw)
 
+        # NESTED GAMES ARRAY
         elif "games" in raw and isinstance(raw["games"], list):
             games.extend(raw["games"])
 
+    # -----------------------------------
+    # LIST OF GAMES
+    # -----------------------------------
     elif isinstance(raw, list):
         games.extend(raw)
 
@@ -74,6 +85,7 @@ def extract_games(raw, source_file):
             or ""
         )
 
+        # MUST HAVE BOTH TEAMS
         if not home_team or not away_team:
             continue
 
@@ -119,9 +131,10 @@ def extract_games(raw, source_file):
 
         playoff = any(x in blob for x in [
             "playoff",
+            "playoffs",
             "nba finals",
             "conference finals",
-            "semifinals",
+            "conference semifinals",
             "round 1",
             "round 2",
             "play-in"
@@ -141,11 +154,16 @@ def extract_games(raw, source_file):
 
     return cleaned
 
+# -----------------------------------
+# FIND SEASONS
+# -----------------------------------
+
 season_dirs = sorted([
     d for d in os.listdir(BASE_DIR)
     if os.path.isdir(os.path.join(BASE_DIR, d))
-    and d != "seasons"
     and d != "boxscores"
+    and d != "players"
+    and d != "teams"
 ])
 
 grand_total = 0
@@ -161,11 +179,13 @@ for season in season_dirs:
         recursive=True
     )
 
+    # ALSO SEARCH GLOBAL BOXSCORES
     json_files += glob(
         os.path.join(BASE_DIR, "boxscores", season, "**", "*.json"),
         recursive=True
     )
 
+    # REMOVE NON GAME FILES
     json_files = [
         x for x in json_files
         if not any(bad in x.lower() for bad in [
@@ -192,6 +212,7 @@ for season in season_dirs:
 
         rebuilt.extend(games)
 
+    # REMOVE DUPLICATES
     deduped = {}
 
     for g in rebuilt:
@@ -199,8 +220,10 @@ for season in season_dirs:
 
     rebuilt = list(deduped.values())
 
+    # SORT BY DATE
     rebuilt.sort(key=lambda x: x.get("date", ""))
 
+    # OUTPUT FILE
     output_file = os.path.join(
         OUTPUT_DIR,
         f"{season}.json"
