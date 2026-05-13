@@ -2,9 +2,11 @@ import os
 import json
 
 NBA_DIR = "docs/data/nba/2025"
-INDEX_FILE = os.path.join(NBA_DIR, "index.json")
 
-print("BUILDING NBA INDEX")
+# THIS IS THE FILE YOUR SITE IS MOST LIKELY USING
+MASTER_FILE = "docs/data/nba/2025.json"
+
+print("BUILDING NBA MASTER FILE")
 
 games = []
 
@@ -23,35 +25,24 @@ for filename in sorted(os.listdir(NBA_DIR)):
         with open(path, "r", encoding="utf-8") as f:
             game = json.load(f)
 
-    except Exception as e:
+    except Exception:
 
         print(f"BAD JSON {filename}")
         continue
 
-    # ============================================
-    # SKIP LIST FILES
-    # ============================================
-
     if isinstance(game, list):
-
-        print(f"SKIP ARRAY FILE {filename}")
         continue
 
     if not isinstance(game, dict):
-
-        print(f"SKIP INVALID {filename}")
         continue
 
-    game_id = game.get("game_id", "")
-
-    if not game_id:
-
-        print(f"NO GAME ID {filename}")
+    if not game.get("game_id"):
         continue
 
     games.append({
 
-        "game_id": game_id,
+        "game_id":
+            game.get("game_id", ""),
 
         "date":
             game.get("date", ""),
@@ -74,13 +65,10 @@ for filename in sorted(os.listdir(NBA_DIR)):
         "arena":
             game.get("arena", ""),
 
+        # IMPORTANT
         "file":
-            filename
+            f"2025/{filename}"
     })
-
-# ============================================
-# SORT NEWEST FIRST
-# ============================================
 
 games.sort(
     key=lambda x: x.get("date", ""),
@@ -88,7 +76,7 @@ games.sort(
 )
 
 with open(
-    INDEX_FILE,
+    MASTER_FILE,
     "w",
     encoding="utf-8"
 ) as f:
