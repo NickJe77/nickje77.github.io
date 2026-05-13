@@ -2,18 +2,18 @@ import os
 import json
 
 NBA_DIR = "docs/data/nba/2025"
-INDEX_FILE = os.path.join(NBA_DIR, "index.json")
+GAMES_FILE = os.path.join(NBA_DIR, "games.json")
 
-print("BUILDING NBA INDEX")
+print("BUILDING games.json")
 
-game_ids = []
+games = []
 
 for filename in sorted(os.listdir(NBA_DIR)):
 
     if not filename.endswith(".json"):
         continue
 
-    if filename == "index.json":
+    if filename in ["games.json", "index.json"]:
         continue
 
     path = os.path.join(NBA_DIR, filename)
@@ -28,41 +28,34 @@ for filename in sorted(os.listdir(NBA_DIR)):
         print(f"BAD JSON {filename}")
         continue
 
-    # SKIP ARRAYS
     if isinstance(game, list):
         continue
 
     if not isinstance(game, dict):
         continue
 
-    game_id = game.get("game_id")
-
-    if not game_id:
+    if not game.get("game_id"):
         continue
 
-    game_ids.append(game_id)
+    games.append(game)
 
-# REMOVE DUPLICATES
-game_ids = list(dict.fromkeys(game_ids))
-
-# SORT
-game_ids.sort()
-
-output = {
-    "games": game_ids
-}
+# SORT BY DATE
+games.sort(
+    key=lambda x: x.get("date", ""),
+    reverse=True
+)
 
 with open(
-    INDEX_FILE,
+    GAMES_FILE,
     "w",
     encoding="utf-8"
 ) as f:
 
     json.dump(
-        output,
+        games,
         f,
         indent=2
     )
 
-print(f"BUILT {len(game_ids)} GAMES")
+print(f"BUILT {len(games)} GAMES")
 print("DONE")
