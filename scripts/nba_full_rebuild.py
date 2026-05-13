@@ -25,12 +25,28 @@ for filename in sorted(os.listdir(NBA_DIR)):
 
     except Exception as e:
 
-        print(f"BAD FILE {filename}")
+        print(f"BAD JSON {filename}")
+        continue
+
+    # ============================================
+    # SKIP LIST FILES
+    # ============================================
+
+    if isinstance(game, list):
+
+        print(f"SKIP ARRAY FILE {filename}")
+        continue
+
+    if not isinstance(game, dict):
+
+        print(f"SKIP INVALID {filename}")
         continue
 
     game_id = game.get("game_id", "")
 
     if not game_id:
+
+        print(f"NO GAME ID {filename}")
         continue
 
     games.append({
@@ -62,7 +78,10 @@ for filename in sorted(os.listdir(NBA_DIR)):
             filename
     })
 
+# ============================================
 # SORT NEWEST FIRST
+# ============================================
+
 games.sort(
     key=lambda x: x.get("date", ""),
     reverse=True
