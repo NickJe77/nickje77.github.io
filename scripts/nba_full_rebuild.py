@@ -1,122 +1,63 @@
 import os
 import json
 
-BASE_DIR = "docs/data/nba"
+SEASON_DIR = "docs/data/nba/2026"
+GAMES_FILE = os.path.join(SEASON_DIR, "games.json")
 
-print("RECOVERING NBA games.json FILES")
+print("FIXING NBA 2026")
 
-for season in os.listdir(BASE_DIR):
+games = []
 
-    season_dir = os.path.join(BASE_DIR, season)
+for filename in os.listdir(SEASON_DIR):
 
-    if not os.path.isdir(season_dir):
+    if not filename.endswith(".json"):
         continue
 
-    print(f"PROCESSING {season}")
+    if filename in ["games.json", "index.json"]:
+        continue
 
-    games = []
+    # ONLY ALLOW 2026 NBA IDS
+    if not (
+        filename.startswith("00226")
+        or filename.startswith("00426")
+    ):
+        print(f"REMOVING BAD FILE FROM INDEX: {filename}")
+        continue
 
-    for filename in os.listdir(season_dir):
-
-        if not filename.endswith(".json"):
-            continue
-
-        if filename in ["games.json", "index.json"]:
-            continue
-
-        path = os.path.join(season_dir, filename)
-
-        try:
-
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-
-        except Exception:
-            continue
-
-        # ====================================
-        # HANDLE ARRAY FILES
-        # ====================================
-
-        if isinstance(data, list):
-
-            for g in data:
-
-                if not isinstance(g, dict):
-                    continue
-
-                # MUST LOOK LIKE A GAME
-                if (
-                    g.get("home_team")
-                    or g.get("away_team")
-                    or g.get("players")
-                ):
-                    games.append(g)
-
-            continue
-
-        # ====================================
-        # HANDLE SINGLE GAME FILES
-        # ====================================
-
-        if isinstance(data, dict):
-
-            if (
-                data.get("home_team")
-                or data.get("away_team")
-                or data.get("players")
-            ):
-                games.append(data)
-
-    # ====================================
-    # REMOVE DUPLICATES
-    # ====================================
-
-    seen = set()
-    cleaned = []
-
-    for g in games:
-
-        gid = str(g.get("game_id", ""))
-
-        if gid and gid in seen:
-            continue
-
-        if gid:
-            seen.add(gid)
-
-        cleaned.append(g)
-
-    # ====================================
-    # SORT IF POSSIBLE
-    # ====================================
+    path = os.path.join(SEASON_DIR, filename)
 
     try:
 
-        cleaned.sort(
-            key=lambda x: x.get("date", "")
-        )
+        with open(path, "r", encoding="utf-8") as f:
+            game = json.load(f)
 
-    except:
-        pass
+    except Exception:
+        continue
 
-    out_path = os.path.join(
-        season_dir,
-        "games.json"
+    if not isinstance(game, dict):
+        continue
+
+    if not game.get("home_team"):
+        continue
+
+    games.append(game)
+
+# SORT BY DATE
+games.sort(
+    key=lambda x: x.get("date", "")
+)
+
+with open(
+    GAMES_FILE,
+    "w",
+    encoding="utf-8"
+) as f:
+
+    json.dump(
+        games,
+        f,
+        indent=2
     )
 
-    with open(
-        out_path,
-        "w",
-        encoding="utf-8"
-    ) as f:
-
-        json.dump(
-            cleaned,
-            f,
-            indent=2
-        )
-
-    print(f"{season} -> {len(cleaned)} games")
-
+print(f"BUILT {len(games)} CLEAN 2026 GAMES")
 print("DONE")
