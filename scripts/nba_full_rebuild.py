@@ -1,73 +1,90 @@
 import os
 import json
 
-NBA_DIR = "docs/data/nba/2025"
-GAMES_FILE = os.path.join(NBA_DIR, "games.json")
+BASE_DIR = "docs/data/nba"
 
-print("BUILDING CLEAN 2025 GAMES FILE")
+print("REBUILDING NBA SEASON FILES")
 
-games = []
+for season in os.listdir(BASE_DIR):
 
-for filename in sorted(os.listdir(NBA_DIR)):
+    season_dir = os.path.join(BASE_DIR, season)
 
-    if not filename.endswith(".json"):
+    if not os.path.isdir(season_dir):
         continue
 
-    if filename in ["games.json", "index.json"]:
+    if not season.isdigit():
         continue
 
-    path = os.path.join(NBA_DIR, filename)
+    games = []
 
-    try:
+    print(f"PROCESSING {season}")
 
-        with open(path, "r", encoding="utf-8") as f:
-            game = json.load(f)
+    for filename in os.listdir(season_dir):
 
-    except Exception:
+        if not filename.endswith(".json"):
+            continue
 
-        print(f"BAD JSON {filename}")
-        continue
+        if filename in ["games.json", "index.json"]:
+            continue
 
-    if isinstance(game, list):
-        continue
+        path = os.path.join(season_dir, filename)
 
-    if not isinstance(game, dict):
-        continue
+        try:
 
-    game_id = str(game.get("game_id", ""))
+            with open(path, "r", encoding="utf-8") as f:
+                game = json.load(f)
 
-    if not game_id:
-        continue
+        except:
+            continue
 
-    # ==========================================
-    # KEEP ONLY 2025/26 SEASON IDS
-    # ==========================================
+        if not isinstance(game, dict):
+            continue
 
-    if not (
-        game_id.startswith("00225")
-        or game_id.startswith("00425")
-    ):
-        continue
+        game_id = str(game.get("game_id", ""))
 
-    games.append(game)
+        if not game_id:
+            continue
 
-# SORT BY DATE
-games.sort(
-    key=lambda x: x.get("date", ""),
-    reverse=True
-)
+        # REGULAR SEASON
+        if game_id.startswith("002"):
 
-with open(
-    GAMES_FILE,
-    "w",
-    encoding="utf-8"
-) as f:
+            game_season = game_id[3:5]
 
-    json.dump(
-        games,
-        f,
-        indent=2
+        # PLAYOFFS
+        elif game_id.startswith("004"):
+
+            game_season = game_id[3:5]
+
+        else:
+            continue
+
+        # ONLY MATCHING SEASON
+        if game_season != season[-2:]:
+            continue
+
+        games.append(game)
+
+    games.sort(
+        key=lambda x: x.get("date", "")
     )
 
-print(f"BUILT {len(games)} GAMES")
+    out_file = os.path.join(
+        season_dir,
+        "games.json"
+    )
+
+    with open(
+        out_file,
+        "w",
+        encoding="utf-8"
+    ) as f:
+
+        json.dump(
+            games,
+            f,
+            indent=2
+        )
+
+    print(f"{season} = {len(games)} games")
+
 print("DONE")
