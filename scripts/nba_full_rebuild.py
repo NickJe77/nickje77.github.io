@@ -2,13 +2,11 @@ import os
 import json
 
 NBA_DIR = "docs/data/nba/2025"
+INDEX_FILE = os.path.join(NBA_DIR, "index.json")
 
-# THIS IS THE FILE YOUR SITE IS MOST LIKELY USING
-MASTER_FILE = "docs/data/nba/2025.json"
+print("BUILDING NBA INDEX")
 
-print("BUILDING NBA MASTER FILE")
-
-games = []
+game_ids = []
 
 for filename in sorted(os.listdir(NBA_DIR)):
 
@@ -30,62 +28,41 @@ for filename in sorted(os.listdir(NBA_DIR)):
         print(f"BAD JSON {filename}")
         continue
 
+    # SKIP ARRAYS
     if isinstance(game, list):
         continue
 
     if not isinstance(game, dict):
         continue
 
-    if not game.get("game_id"):
+    game_id = game.get("game_id")
+
+    if not game_id:
         continue
 
-    games.append({
+    game_ids.append(game_id)
 
-        "game_id":
-            game.get("game_id", ""),
+# REMOVE DUPLICATES
+game_ids = list(dict.fromkeys(game_ids))
 
-        "date":
-            game.get("date", ""),
+# SORT
+game_ids.sort()
 
-        "game_type":
-            game.get("game_type", ""),
-
-        "home_team":
-            game.get("home_team", ""),
-
-        "away_team":
-            game.get("away_team", ""),
-
-        "home_score":
-            game.get("home_score", 0),
-
-        "away_score":
-            game.get("away_score", 0),
-
-        "arena":
-            game.get("arena", ""),
-
-        # IMPORTANT
-        "file":
-            f"2025/{filename}"
-    })
-
-games.sort(
-    key=lambda x: x.get("date", ""),
-    reverse=True
-)
+output = {
+    "games": game_ids
+}
 
 with open(
-    MASTER_FILE,
+    INDEX_FILE,
     "w",
     encoding="utf-8"
 ) as f:
 
     json.dump(
-        games,
+        output,
         f,
         indent=2
     )
 
-print(f"BUILT {len(games)} GAMES")
+print(f"BUILT {len(game_ids)} GAMES")
 print("DONE")
