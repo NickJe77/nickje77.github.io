@@ -4,7 +4,7 @@ import json
 NBA_DIR = "docs/data/nba/2025"
 GAMES_FILE = os.path.join(NBA_DIR, "games.json")
 
-print("BUILDING games.json")
+print("BUILDING CLEAN 2025 GAMES FILE")
 
 games = []
 
@@ -34,7 +34,19 @@ for filename in sorted(os.listdir(NBA_DIR)):
     if not isinstance(game, dict):
         continue
 
-    if not game.get("game_id"):
+    game_id = str(game.get("game_id", ""))
+
+    if not game_id:
+        continue
+
+    # ==========================================
+    # KEEP ONLY 2025/26 SEASON IDS
+    # ==========================================
+
+    if not (
+        game_id.startswith("00225")
+        or game_id.startswith("00425")
+    ):
         continue
 
     games.append(game)
