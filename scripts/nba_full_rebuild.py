@@ -4,9 +4,19 @@ from glob import glob
 
 BASE_DIR = "docs/data/nba"
 
-print("REBUILDING NBA SEASON INDEXES FROM EXISTING GAME FILES")
-print("NO GAME FILES WILL BE OVERWRITTEN")
-print("=" * 60)
+print("NBA HARD REBUILD STARTED")
+print("=" * 70)
+
+def load_json(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return None
+
+def save_json(path, data):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
 def safe_int(v):
     try:
@@ -14,214 +24,207 @@ def safe_int(v):
     except:
         return 0
 
-def load_json(path):
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"FAILED TO LOAD {path}: {e}")
-        return None
-
-def save_json(path, data):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-
-season_folders = sorted([
+season_dirs = sorted([
     d for d in os.listdir(BASE_DIR)
     if os.path.isdir(os.path.join(BASE_DIR, d))
 ])
 
-total_games = 0
+for season in season_dirs:
 
-for season in season_folders:
+    print(f"\nPROCESSING {season}")
 
     season_path = os.path.join(BASE_DIR, season)
 
-    print(f"\nPROCESSING SEASON {season}")
-
-    # RECURSIVE SEARCH
-    possible_paths = [
+    all_json = glob(
         os.path.join(season_path, "**", "*.json"),
+        recursive=True
+    )
+
+    # ALSO SCAN GLOBAL BOXSCORE AREA
+    global_boxscores = glob(
         os.path.join(BASE_DIR, "boxscores", season, "**", "*.json"),
-    ]
+        recursive=True
+    )
 
-    game_files = []
+    all_json.extend(global_boxscores)
 
-    for p in possible_paths:
-        game_files.extend(glob(p, recursive=True))
-
-    # REMOVE NON-GAME FILES
-    game_files = [
-        g for g in game_files
-        if not any(x in os.path.basename(g).lower() for x in [
-            "index",
-            "players",
-            "teams",
-            "standings",
-            "schedule"
+    # REMOVE NON GAME FILES
+    all_json = [
+        x for x in all_json
+        if not any(bad in x.lower() for bad in [
+            "index.json",
+            "players.json",
+            "teams.json",
+            "standings.json",
+            "schedule.json"
         ])
     ]
 
-    unique_files = sorted(list(set(game_files)))
+    print(f"FOUND {len(all_json)} JSON FILES")
 
-    print(f"FOUND {len(unique_files)} GAME FILES")
+    rebuilt = []
 
-    rebuilt_games = []
+    for path in all_json:
 
-    for game_file in unique_files:
+        raw = load_json(path)
 
-        raw = load_json(game_file)
-
-        if not raw:
+        if raw is None:
             continue
 
-        games_to_process = []
+        # -----------------------------------------
+        # HANDLE LIST FILES
+        # -----------------------------------------
 
-        # SINGLE GAME OBJECT
-        if isinstance(raw, dict):
-            games_to_process = [raw]
+        if isinstance(raw, list):
 
-        # LIST OF GAMES
-        elif isinstance(raw, list):
-            games_to_process = raw
+            for game in raw:
 
-        else:
-            continue
-
-        for game in games_to_process:
-
-            if not isinstance(game, dict):
-                continue
-
-            try:
-
-                # TEAMS
-                home_team = (
-                    game.get("home_team")
-                    or game.get("home")
-                    or game.get("team1")
-                    or game.get("homeTeam")
-                    or game.get("home_team_name")
-                    or game.get("homeTeamName")
-                    or ""
-                )
-
-                away_team = (
-                    game.get("away_team")
-                    or game.get("away")
-                    or game.get("team2")
-                    or game.get("awayTeam")
-                    or game.get("away_team_name")
-                    or game.get("awayTeamName")
-                    or ""
-                )
-
-                # SCORES
-                home_score = (
-                    game.get("home_score")
-                    or game.get("homeScore")
-                    or game.get("score1")
-                    or game.get("home_points")
-                    or game.get("homePoints")
-                    or 0
-                )
-
-                away_score = (
-                    game.get("away_score")
-                    or game.get("awayScore")
-                    or game.get("score2")
-                    or game.get("away_points")
-                    or game.get("awayPoints")
-                    or 0
-                )
-
-                # DATE
-                date = (
-                    game.get("date")
-                    or game.get("game_date")
-                    or game.get("start_date")
-                    or game.get("datetime")
-                    or game.get("gameDate")
-                    or ""
-                )
-
-                # GAME ID
-                game_id = (
-                    game.get("game_id")
-                    or game.get("id")
-                    or game.get("gamePk")
-                    or os.path.splitext(os.path.basename(game_file))[0]
-                )
-
-                # VENUE
-                venue = (
-                    game.get("venue")
-                    or game.get("arena")
-                    or game.get("stadium")
-                    or ""
-                )
-
-                # GAME TYPE
-                playoff = False
-
-                text_blob = json.dumps(game).lower()
-
-                playoff_terms = [
-                    "playoff",
-                    "playoffs",
-                    "western conference finals",
-                    "eastern conference finals",
-                    "nba finals",
-                    "conference semifinals",
-                    "conference quarterfinals",
-                    "play in",
-                    "play-in",
-                    "round 1",
-                    "round 2"
-                ]
-
-                if any(x in text_blob for x in playoff_terms):
-                    playoff = True
-
-                # SKIP BROKEN ENTRIES
-                if not home_team and not away_team:
+                if not isinstance(game, dict):
                     continue
 
-                rebuilt_games.append({
-                    "game_id": str(game_id),
-                    "date": date,
-                    "home_team": home_team,
-                    "away_team": away_team,
-                    "home_score": safe_int(home_score),
-                    "away_score": safe_int(away_score),
-                    "venue": venue,
-                    "playoff": playoff,
-                    "game_file": os.path.basename(game_file)
+                # VERY IMPORTANT:
+                # ONLY ACCEPT ACTUAL GAMES
+                possible_home = (
+                    game.get("home_team")
+                    or game.get("homeTeam")
+                    or game.get("home")
+                    or game.get("team1")
+                    or ""
+                )
+
+                possible_away = (
+                    game.get("away_team")
+                    or game.get("awayTeam")
+                    or game.get("away")
+                    or game.get("team2")
+                    or ""
+                )
+
+                if not possible_home or not possible_away:
+                    continue
+
+                rebuilt.append({
+                    "game_id": str(
+                        game.get("game_id")
+                        or game.get("id")
+                        or game.get("gamePk")
+                        or os.path.splitext(os.path.basename(path))[0]
+                    ),
+                    "date": (
+                        game.get("date")
+                        or game.get("game_date")
+                        or game.get("datetime")
+                        or ""
+                    ),
+                    "home_team": possible_home,
+                    "away_team": possible_away,
+                    "home_score": safe_int(
+                        game.get("home_score")
+                        or game.get("homeScore")
+                        or game.get("score1")
+                        or 0
+                    ),
+                    "away_score": safe_int(
+                        game.get("away_score")
+                        or game.get("awayScore")
+                        or game.get("score2")
+                        or 0
+                    ),
+                    "venue": (
+                        game.get("venue")
+                        or game.get("arena")
+                        or ""
+                    ),
+                    "type": (
+                        "Playoffs"
+                        if "playoff" in json.dumps(game).lower()
+                        else "Regular Season"
+                    ),
+                    "game_file": os.path.basename(path)
                 })
 
-            except Exception as e:
-                print(f"FAILED PROCESSING GAME IN {game_file}: {e}")
+        # -----------------------------------------
+        # HANDLE SINGLE GAME FILES
+        # -----------------------------------------
 
+        elif isinstance(raw, dict):
+
+            possible_home = (
+                raw.get("home_team")
+                or raw.get("homeTeam")
+                or raw.get("home")
+                or raw.get("team1")
+                or ""
+            )
+
+            possible_away = (
+                raw.get("away_team")
+                or raw.get("awayTeam")
+                or raw.get("away")
+                or raw.get("team2")
+                or ""
+            )
+
+            if not possible_home or not possible_away:
+                continue
+
+            rebuilt.append({
+                "game_id": str(
+                    raw.get("game_id")
+                    or raw.get("id")
+                    or raw.get("gamePk")
+                    or os.path.splitext(os.path.basename(path))[0]
+                ),
+                "date": (
+                    raw.get("date")
+                    or raw.get("game_date")
+                    or raw.get("datetime")
+                    or ""
+                ),
+                "home_team": possible_home,
+                "away_team": possible_away,
+                "home_score": safe_int(
+                    raw.get("home_score")
+                    or raw.get("homeScore")
+                    or raw.get("score1")
+                    or 0
+                ),
+                "away_score": safe_int(
+                    raw.get("away_score")
+                    or raw.get("awayScore")
+                    or raw.get("score2")
+                    or 0
+                ),
+                "venue": (
+                    raw.get("venue")
+                    or raw.get("arena")
+                    or ""
+                ),
+                "type": (
+                    "Playoffs"
+                    if "playoff" in json.dumps(raw).lower()
+                    else "Regular Season"
+                ),
+                "game_file": os.path.basename(path)
+            })
+
+    # -----------------------------------------
     # REMOVE DUPLICATES
+    # -----------------------------------------
+
     deduped = {}
 
-    for g in rebuilt_games:
-        deduped[g["game_id"]] = g
+    for game in rebuilt:
+        deduped[game["game_id"]] = game
 
-    rebuilt_games = list(deduped.values())
+    rebuilt = list(deduped.values())
 
-    # SORT BY DATE
-    rebuilt_games.sort(key=lambda x: x.get("date", ""))
+    rebuilt.sort(key=lambda x: x.get("date", ""))
 
-    # SAVE INDEX
     index_path = os.path.join(season_path, "index.json")
 
-    save_json(index_path, rebuilt_games)
+    save_json(index_path, rebuilt)
 
-    print(f"REBUILT index.json WITH {len(rebuilt_games)} GAMES")
+    print(f"REBUILT {len(rebuilt)} GAMES")
 
-    total_games += len(rebuilt_games)
-
-print("\n" + "=" * 60)
-print(f"TOTAL GAMES INDEXED: {total_games}")
-print("NBA REBUILD COMPLETE")
+print("\nNBA HARD REBUILD COMPLETE")
