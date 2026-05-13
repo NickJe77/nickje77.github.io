@@ -3,12 +3,8 @@ name: EPL Team Stats Builder
 on:
   workflow_dispatch:
 
-  push:
-    paths:
-      - 'docs/data/epl/players/**'
-
 jobs:
-  build-team-stats:
+  rebuild:
     runs-on: ubuntu-latest
 
     steps:
@@ -18,9 +14,9 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - name: Build EPL Team Stats
+      - name: Build Team Stats
         run: |
 
           cat > build_epl_team_stats.py << 'PYTHON'
@@ -34,6 +30,7 @@ jobs:
           print("REBUILDING EPL TEAM STATS")
 
           team_data = {}
+          processed = set()
 
           def ensure_team(team):
               if team not in team_data:
@@ -41,7 +38,7 @@ jobs:
                       "team": team,
                       "top_scorers": defaultdict(int),
                       "yellow_cards": defaultdict(int),
-                      "red_cards": defaultdict(int),
+                      "red_cards": defaultdict(int)
                   }
 
           def clean(v):
@@ -53,35 +50,24 @@ jobs:
               except:
                   return 0
 
-          def is_red_card(card_text):
+          def add_goal(team, player, amount):
+              if amount > 0:
+                  team_data[team]["top_scorers"][player] += amount
 
-              text = clean(card_text).lower()
+          def add_yellow(team, player, amount):
+              if amount > 0:
+                  team_data[team]["yellow_cards"][player] += amount
 
-              red_terms = [
-                  "red",
-                  "red card",
-                  "straight red",
-                  "second yellow red",
-                  "2nd yellow red"
-              ]
+          def add_red(team, player, amount):
+              if amount > 0:
+                  team_data[team]["red_cards"][player] += amount
 
-              for term in red_terms:
-                  if term in text:
-                      return True
-
-              if text == "yellow":
-                  return False
-
-              return False
-
-          processed = set()
-
-          player_files = sorted(
+          files = sorted(
               f for f in os.listdir(PLAYERS_DIR)
               if f.endswith(".json")
           )
 
-          for filename in player_files:
+          for filename in files:
 
               path = os.path.join(PLAYERS_DIR, filename)
 
@@ -103,12 +89,6 @@ jobs:
 
               for match in matches:
 
-                  match_id = clean(
-                      match.get("match_id") or
-                      match.get("game_id") or
-                      match.get("id")
-                  )
-
                   team = clean(
                       match.get("team") or
                       player.get("team")
@@ -119,13 +99,12 @@ jobs:
 
                   ensure_team(team)
 
-                  goals = to_int(
-                      match.get("goals") or
-                      match.get("g")
+                  match_id = clean(
+                      match.get("match_id") or
+                      match.get("game_id") or
+                      match.get("id") or
+                      match.get("match")
                   )
-
-                  if goals > 0:
-                      team_data[team]["top_scorers"][player_name] += goals
 
                   unique_key = f"{player_name}_{match_id}"
 
@@ -134,35 +113,90 @@ jobs:
 
                   processed.add(unique_key)
 
-                  yellow = to_int(
-                      match.get("yellow_cards") or
-                      match.get("yellow") or
-                      match.get("yc")
+                  # ------------------------
+                  # GOALS
+                  # ------------------------
+
+                  goals = 0
+
+                  goals += to_int(match.get("goals"))
+                  goals += to_int(match.get("g"))
+
+                  stats = match.get("stats", {})
+
+                  if isinstance(stats, dict):
+                      goals += to_int(stats.get("goals"))
+
+                  add_goal(team, player_name, goals)
+
+                  # ------------------------
+                  # YELLOWS
+                  # ------------------------
+
+                  yellows = 0
+
+                  yellows += to_int(match.get("yellow"))
+                  yellows += to_int(match.get("yellow_cards"))
+                  yellows += to_int(match.get("yc"))
+
+                  if isinstance(stats, dict):
+                      yellows += to_int(stats.get("yellow"))
+                      yellows += to_int(stats.get("yellow_cards"))
+
+                  # ------------------------
+                  # REDS
+                  # ------------------------
+
+                  reds = 0
+
+                  reds += to_int(match.get("red"))
+                  reds += to_int(match.get("red_cards"))
+                  reds += to_int(match.get("rc"))
+
+                  if isinstance(stats, dict):
+                      reds += to_int(stats.get("red"))
+                      reds += to_int(stats.get("red_cards"))
+
+                  # ------------------------
+                  # EVENT SCAN
+                  # ------------------------
+
+                  events = (
+                      match.get("events")
+                      or match.get("cards")
+                      or []
                   )
 
-                  if yellow > 0:
-                      team_data[team]["yellow_cards"][player_name] += yellow
+                  if isinstance(events, list):
 
-                  red_total = 0
+                      found_red = False
+                      found_yellow = False
 
-                  explicit_red = to_int(
-                      match.get("red_cards") or
-                      match.get("red") or
-                      match.get("rc")
-                  )
+                      for ev in events:
 
-                  red_total += explicit_red
+                          text = json.dumps(ev).lower()
 
-                  card_text = clean(
-                      match.get("card") or
-                      match.get("card_type")
-                  )
+                          if (
+                              "red card" in text
+                              or "straight red" in text
+                              or '"red"' in text
+                          ):
+                              found_red = True
 
-                  if is_red_card(card_text):
-                      red_total += 1
+                          if (
+                              "yellow" in text
+                              and "second yellow red" not in text
+                          ):
+                              found_yellow = True
 
-                  if red_total > 0:
-                      team_data[team]["red_cards"][player_name] += red_total
+                      if found_red:
+                          reds += 1
+
+                      if found_yellow:
+                          yellows += 1
+
+                  add_yellow(team, player_name, yellows)
+                  add_red(team, player_name, reds)
 
           output = []
 
@@ -205,12 +239,12 @@ jobs:
               json.dump(output, f, indent=2)
 
           print("DONE")
-          print(f"Saved: {OUTPUT_FILE}")
+          print(f"SAVED -> {OUTPUT_FILE}")
           PYTHON
 
           python build_epl_team_stats.py
 
-      - name: Commit Changes
+      - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
