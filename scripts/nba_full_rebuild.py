@@ -1,240 +1,448 @@
 import os
+import re
 import json
-from glob import glob
+import time
+import argparse
+from datetime import datetime
+from urllib.parse import urljoin
 
-# READ FROM EXISTING NBA DATA
-BASE_DIR = "docs/data/nba"
+import requests
+from bs4 import BeautifulSoup, Comment
 
-# OUTPUT TO NEW BASKETBALL STRUCTURE
-OUTPUT_DIR = "docs/data/basketball/seasons"
+START_SEASON = 1976
+CURRENT_SEASON = datetime.now().year if datetime.now().month >= 8 else datetime.now().year - 1
 
-print("BASKETBALL LEGACY STRUCTURE REBUILD")
-print("=" * 80)
+OUT_BASE = "docs/data/basketball"
+SEASONS_DIR = os.path.join(OUT_BASE, "seasons")
+BOXSCORES_DIR = os.path.join(OUT_BASE, "boxscores")
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+BBR = "https://www.basketball-reference.com"
 
-def load_json(path):
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+}
+
+TEAM_MAP = {
+    "ATL": "Atlanta Hawks", "BOS": "Boston Celtics", "BRK": "Brooklyn Nets",
+    "NJN": "New Jersey Nets", "CHO": "Charlotte Hornets", "CHH": "Charlotte Hornets",
+    "CHA": "Charlotte Bobcats", "CHI": "Chicago Bulls", "CLE": "Cleveland Cavaliers",
+    "DAL": "Dallas Mavericks", "DEN": "Denver Nuggets", "DET": "Detroit Pistons",
+    "GSW": "Golden State Warriors", "HOU": "Houston Rockets", "IND": "Indiana Pacers",
+    "LAC": "Los Angeles Clippers", "SDC": "San Diego Clippers", "BUF": "Buffalo Braves",
+    "LAL": "Los Angeles Lakers", "MEM": "Memphis Grizzlies", "VAN": "Vancouver Grizzlies",
+    "MIA": "Miami Heat", "MIL": "Milwaukee Bucks", "MIN": "Minnesota Timberwolves",
+    "NOH": "New Orleans Hornets", "NOK": "New Orleans/Oklahoma City Hornets",
+    "NOP": "New Orleans Pelicans", "NYK": "New York Knicks", "OKC": "Oklahoma City Thunder",
+    "SEA": "Seattle SuperSonics", "ORL": "Orlando Magic", "PHI": "Philadelphia 76ers",
+    "PHO": "Phoenix Suns", "POR": "Portland Trail Blazers", "SAC": "Sacramento Kings",
+    "KCK": "Kansas City Kings", "KCO": "Kansas City-Omaha Kings", "CIN": "Cincinnati Royals",
+    "SAS": "San Antonio Spurs", "TOR": "Toronto Raptors", "UTA": "Utah Jazz",
+    "NOJ": "New Orleans Jazz", "WAS": "Washington Wizards", "WSB": "Washington Bullets",
+}
+
+def ensure_dirs():
+    os.makedirs(SEASONS_DIR, exist_ok=True)
+    os.makedirs(BOXSCORES_DIR, exist_ok=True)
+
+def get(url, sleep=4):
+    print(f"GET {url}")
+    time.sleep(sleep)
+    r = requests.get(url, headers=HEADERS, timeout=45)
+    if r.status_code != 200:
+        print(f"BAD STATUS {r.status_code}: {url}")
         return None
+    return r.text
 
-def save_json(path, data):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+def soup_from_html(html):
+    return BeautifulSoup(html, "html.parser")
+
+def clean(text):
+    return re.sub(r"\s+", " ", str(text or "")).strip()
 
 def safe_int(v):
     try:
-        return int(float(v))
-    except:
+        if v in ("", None):
+            return 0
+        return int(float(str(v).replace(",", "")))
+    except Exception:
         return 0
 
-def extract_games(raw, source_file):
+def table_from_soup_or_comments(soup, table_id):
+    table = soup.find("table", id=table_id)
+    if table:
+        return table
+
+    for c in soup.find_all(string=lambda t: isinstance(t, Comment)):
+        if table_id in c:
+            csoup = BeautifulSoup(c, "html.parser")
+            table = csoup.find("table", id=table_id)
+            if table:
+                return table
+
+    return None
+
+def parse_schedule_table(html, season_start, game_type):
+    soup = soup_from_html(html)
+    table = soup.find("table", id="schedule")
+    if not table:
+        return []
 
     games = []
 
-    # -----------------------------------
-    # SINGLE GAME OBJECT
-    # -----------------------------------
-    if isinstance(raw, dict):
-
-        # DIRECT GAME
-        if any(k in raw for k in [
-            "home_team",
-            "away_team",
-            "homeTeam",
-            "awayTeam",
-            "team1",
-            "team2"
-        ]):
-            games.append(raw)
-
-        # NESTED GAMES ARRAY
-        elif "games" in raw and isinstance(raw["games"], list):
-            games.extend(raw["games"])
-
-    # -----------------------------------
-    # LIST OF GAMES
-    # -----------------------------------
-    elif isinstance(raw, list):
-        games.extend(raw)
-
-    cleaned = []
-
-    for g in games:
-
-        if not isinstance(g, dict):
+    for row in table.select("tbody tr"):
+        if "thead" in row.get("class", []):
             continue
 
-        home_team = (
-            g.get("home_team")
-            or g.get("homeTeam")
-            or g.get("home")
-            or g.get("team1")
-            or g.get("home_team_name")
-            or ""
-        )
-
-        away_team = (
-            g.get("away_team")
-            or g.get("awayTeam")
-            or g.get("away")
-            or g.get("team2")
-            or g.get("away_team_name")
-            or ""
-        )
-
-        # MUST HAVE BOTH TEAMS
-        if not home_team or not away_team:
+        box = row.find("td", {"data-stat": "box_score_text"})
+        if not box or not box.find("a"):
             continue
 
-        game_id = (
-            g.get("game_id")
-            or g.get("id")
-            or g.get("gamePk")
-            or os.path.splitext(os.path.basename(source_file))[0]
-        )
+        href = box.find("a").get("href", "")
+        if not href:
+            continue
 
-        date = (
-            g.get("date")
-            or g.get("game_date")
-            or g.get("datetime")
-            or g.get("start_date")
-            or ""
-        )
+        boxscore_url = urljoin(BBR, href)
+        game_id = os.path.splitext(os.path.basename(href))[0]
 
-        venue = (
-            g.get("venue")
-            or g.get("arena")
-            or g.get("stadium")
-            or ""
-        )
+        date = clean(row.find(["th", "td"], {"data-stat": "date_game"}).get_text(" ", strip=True)) if row.find(["th", "td"], {"data-stat": "date_game"}) else ""
 
-        home_score = (
-            g.get("home_score")
-            or g.get("homeScore")
-            or g.get("score1")
-            or g.get("home_points")
-            or 0
-        )
+        away_team = clean(row.find("td", {"data-stat": "visitor_team_name"}).get_text(" ", strip=True)) if row.find("td", {"data-stat": "visitor_team_name"}) else ""
+        home_team = clean(row.find("td", {"data-stat": "home_team_name"}).get_text(" ", strip=True)) if row.find("td", {"data-stat": "home_team_name"}) else ""
 
-        away_score = (
-            g.get("away_score")
-            or g.get("awayScore")
-            or g.get("score2")
-            or g.get("away_points")
-            or 0
-        )
+        away_score = safe_int(row.find("td", {"data-stat": "visitor_pts"}).get_text(" ", strip=True)) if row.find("td", {"data-stat": "visitor_pts"}) else 0
+        home_score = safe_int(row.find("td", {"data-stat": "home_pts"}).get_text(" ", strip=True)) if row.find("td", {"data-stat": "home_pts"}) else 0
 
-        blob = json.dumps(g).lower()
+        venue = clean(row.find("td", {"data-stat": "arena_name"}).get_text(" ", strip=True)) if row.find("td", {"data-stat": "arena_name"}) else ""
+        attendance = safe_int(row.find("td", {"data-stat": "attendance"}).get_text(" ", strip=True)) if row.find("td", {"data-stat": "attendance"}) else 0
 
-        playoff = any(x in blob for x in [
-            "playoff",
-            "playoffs",
-            "nba finals",
-            "conference finals",
-            "conference semifinals",
-            "round 1",
-            "round 2",
-            "play-in"
-        ])
+        winner = home_team if home_score > away_score else away_team if away_score > home_score else ""
 
-        cleaned.append({
-            "game_id": str(game_id),
+        games.append({
+            "game_id": game_id,
             "date": date,
+            "season": season_start,
+            "type": game_type,
+            "game_type": game_type,
             "home_team": home_team,
             "away_team": away_team,
-            "home_score": safe_int(home_score),
-            "away_score": safe_int(away_score),
+            "home_score": home_score,
+            "away_score": away_score,
+            "winner": winner,
+            "score": f"{away_score} – {home_score}",
             "venue": venue,
-            "playoff": playoff,
-            "game_file": os.path.basename(source_file)
+            "attendance": attendance,
+            "boxscore_url": boxscore_url,
+            "game_file": f"{game_id}.json"
         })
 
-    return cleaned
+    return games
 
-# -----------------------------------
-# FIND SEASONS
-# -----------------------------------
+def get_regular_games(season_start):
+    bbr_year = season_start + 1
+    first_url = f"{BBR}/leagues/NBA_{bbr_year}_games.html"
+    html = get(first_url)
+    if not html:
+        return []
 
-season_dirs = sorted([
-    d for d in os.listdir(BASE_DIR)
-    if os.path.isdir(os.path.join(BASE_DIR, d))
-    and d != "boxscores"
-    and d != "players"
-    and d != "teams"
-])
+    soup = soup_from_html(html)
 
-grand_total = 0
+    urls = [first_url]
 
-for season in season_dirs:
+    filt = soup.find("div", class_="filter")
+    if filt:
+        for a in filt.find_all("a", href=True):
+            u = urljoin(BBR, a["href"])
+            if f"NBA_{bbr_year}_games" in u and u not in urls:
+                urls.append(u)
 
-    season_path = os.path.join(BASE_DIR, season)
+    all_games = []
 
-    print(f"\nPROCESSING {season}")
+    for url in urls:
+        page = html if url == first_url else get(url)
+        if not page:
+            continue
+        all_games.extend(parse_schedule_table(page, season_start, "Regular Season"))
 
-    json_files = glob(
-        os.path.join(season_path, "**", "*.json"),
-        recursive=True
-    )
+    return all_games
 
-    # ALSO SEARCH GLOBAL BOXSCORES
-    json_files += glob(
-        os.path.join(BASE_DIR, "boxscores", season, "**", "*.json"),
-        recursive=True
-    )
+def get_playoff_games(season_start):
+    bbr_year = season_start + 1
+    url = f"{BBR}/playoffs/NBA_{bbr_year}_games.html"
+    html = get(url)
 
-    # REMOVE NON GAME FILES
-    json_files = [
-        x for x in json_files
-        if not any(bad in x.lower() for bad in [
-            "index.json",
-            "players.json",
-            "teams.json",
-            "standings.json",
-            "schedule.json"
-        ])
-    ]
+    if html:
+        games = parse_schedule_table(html, season_start, "Playoffs")
+        if games:
+            return games
 
-    print(f"FOUND {len(json_files)} JSON FILES")
+    fallback = f"{BBR}/playoffs/NBA_{bbr_year}.html"
+    html = get(fallback)
+    if not html:
+        return []
 
-    rebuilt = []
+    soup = soup_from_html(html)
 
-    for jf in json_files:
+    games = []
+    seen = set()
 
-        raw = load_json(jf)
-
-        if raw is None:
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        if "/boxscores/" not in href or not href.endswith(".html"):
             continue
 
-        games = extract_games(raw, jf)
+        boxscore_url = urljoin(BBR, href)
+        game_id = os.path.splitext(os.path.basename(href))[0]
 
-        rebuilt.extend(games)
+        if game_id in seen:
+            continue
+        seen.add(game_id)
 
-    # REMOVE DUPLICATES
+        games.append({
+            "game_id": game_id,
+            "date": "",
+            "season": season_start,
+            "type": "Playoffs",
+            "game_type": "Playoffs",
+            "home_team": "",
+            "away_team": "",
+            "home_score": 0,
+            "away_score": 0,
+            "winner": "",
+            "score": "",
+            "venue": "",
+            "attendance": 0,
+            "boxscore_url": boxscore_url,
+            "game_file": f"{game_id}.json"
+        })
+
+    return games
+
+def parse_line_score(soup):
+    table = soup.find("table", id="line_score")
+    if not table:
+        return {}
+
+    teams = []
+
+    for tr in table.select("tbody tr"):
+        th = tr.find("th")
+        if not th:
+            continue
+
+        team_code = clean(th.get_text(" ", strip=True))
+        pts_cell = tr.find("td", {"data-stat": "pts"})
+        pts = safe_int(pts_cell.get_text(" ", strip=True)) if pts_cell else 0
+
+        teams.append({
+            "team_code": team_code,
+            "team": TEAM_MAP.get(team_code, team_code),
+            "score": pts
+        })
+
+    if len(teams) >= 2:
+        return {
+            "away_team": teams[0]["team"],
+            "home_team": teams[1]["team"],
+            "away_score": teams[0]["score"],
+            "home_score": teams[1]["score"]
+        }
+
+    return {}
+
+def parse_meta(soup):
+    meta = {
+        "date": "",
+        "venue": "",
+        "attendance": 0
+    }
+
+    scorebox = soup.find("div", class_="scorebox_meta")
+    if not scorebox:
+        return meta
+
+    parts = [clean(x.get_text(" ", strip=True)) for x in scorebox.find_all("div")]
+
+    for p in parts:
+        if re.search(r"\b\d{4}\b", p) and not meta["date"]:
+            meta["date"] = p
+
+        if "Arena:" in p:
+            meta["venue"] = clean(p.replace("Arena:", ""))
+
+        if "Attendance:" in p:
+            meta["attendance"] = safe_int(p.replace("Attendance:", ""))
+
+    return meta
+
+def parse_basic_table(soup, team_code):
+    table_id = f"box-{team_code}-game-basic"
+    table = table_from_soup_or_comments(soup, table_id)
+    if not table:
+        return []
+
+    players = []
+
+    for tr in table.select("tbody tr"):
+        if "thead" in tr.get("class", []):
+            continue
+
+        th = tr.find("th", {"data-stat": "player"})
+        if not th:
+            continue
+
+        name = clean(th.get_text(" ", strip=True))
+        if not name or name.lower() == "reserves":
+            continue
+
+        row = {
+            "player": name,
+            "team_code": team_code,
+            "team": TEAM_MAP.get(team_code, team_code),
+        }
+
+        for td in tr.find_all("td"):
+            stat = td.get("data-stat")
+            if not stat:
+                continue
+            row[stat] = clean(td.get_text(" ", strip=True))
+
+        players.append(row)
+
+    return players
+
+def parse_boxscore(game):
+    html = get(game["boxscore_url"], sleep=5)
+    if not html:
+        return None
+
+    soup = soup_from_html(html)
+
+    line = parse_line_score(soup)
+    meta = parse_meta(soup)
+
+    box = dict(game)
+
+    for k, v in line.items():
+        if v not in ("", 0, None):
+            box[k] = v
+
+    for k, v in meta.items():
+        if v not in ("", 0, None):
+            box[k] = v
+
+    winner = box["home_team"] if box["home_score"] > box["away_score"] else box["away_team"] if box["away_score"] > box["home_score"] else ""
+
+    box["winner"] = winner
+    box["score"] = f'{box["away_score"]} – {box["home_score"]}'
+    box["playoff"] = box["type"] == "Playoffs"
+
+    team_codes = []
+    for table in soup.find_all("table"):
+        tid = table.get("id", "")
+        m = re.match(r"box-([A-Z0-9]{3})-game-basic", tid)
+        if m:
+            team_codes.append(m.group(1))
+
+    team_codes = list(dict.fromkeys(team_codes))
+
+    players = []
+    for code in team_codes:
+        players.extend(parse_basic_table(soup, code))
+
+    box["players"] = players
+
+    return box
+
+def load_existing(path):
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return None
+    return None
+
+def save(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+def build_season(season_start, overwrite=False):
+    print("\n" + "=" * 80)
+    print(f"BUILDING BASKETBALL / NBA SEASON {season_start}")
+    print("=" * 80)
+
+    regular = get_regular_games(season_start)
+    playoffs = get_playoff_games(season_start)
+
+    games = regular + playoffs
+
     deduped = {}
-
-    for g in rebuilt:
+    for g in games:
         deduped[g["game_id"]] = g
 
-    rebuilt = list(deduped.values())
+    games = list(deduped.values())
+    games.sort(key=lambda x: x.get("date", ""))
 
-    # SORT BY DATE
-    rebuilt.sort(key=lambda x: x.get("date", ""))
+    season_box_dir = os.path.join(BOXSCORES_DIR, str(season_start))
+    os.makedirs(season_box_dir, exist_ok=True)
 
-    # OUTPUT FILE
-    output_file = os.path.join(
-        OUTPUT_DIR,
-        f"{season}.json"
-    )
+    index = []
 
-    save_json(output_file, rebuilt)
+    for i, game in enumerate(games, start=1):
+        out_file = os.path.join(season_box_dir, game["game_file"])
 
-    print(f"REBUILT {len(rebuilt)} GAMES")
+        existing = load_existing(out_file)
 
-    grand_total += len(rebuilt)
+        if existing and not overwrite:
+            box = existing
+            print(f"[{season_start}] {i}/{len(games)} EXISTS {game['game_id']}")
+        else:
+            print(f"[{season_start}] {i}/{len(games)} SCRAPE {game['game_id']} {game['type']}")
+            box = parse_boxscore(game)
 
-print("\n" + "=" * 80)
-print(f"TOTAL BASKETBALL GAMES INDEXED: {grand_total}")
-print("BASKETBALL REBUILD COMPLETE")
+            if not box:
+                print(f"FAILED BOXSCORE {game['game_id']}")
+                continue
+
+            save(out_file, box)
+
+        index.append({
+            "game_id": box.get("game_id", game["game_id"]),
+            "date": box.get("date", game.get("date", "")),
+            "season": season_start,
+            "type": box.get("type", game.get("type", "")),
+            "game_type": box.get("game_type", game.get("game_type", "")),
+            "home_team": box.get("home_team", game.get("home_team", "")),
+            "away_team": box.get("away_team", game.get("away_team", "")),
+            "home_score": safe_int(box.get("home_score", game.get("home_score", 0))),
+            "away_score": safe_int(box.get("away_score", game.get("away_score", 0))),
+            "winner": box.get("winner", game.get("winner", "")),
+            "score": box.get("score", game.get("score", "")),
+            "venue": box.get("venue", game.get("venue", "")),
+            "attendance": safe_int(box.get("attendance", game.get("attendance", 0))),
+            "playoff": box.get("playoff", game.get("type") == "Playoffs"),
+            "game_file": game["game_file"]
+        })
+
+    season_file = os.path.join(SEASONS_DIR, f"{season_start}.json")
+    save(season_file, index)
+
+    print(f"SAVED {season_file} WITH {len(index)} GAMES")
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--start", type=int, default=START_SEASON)
+    parser.add_argument("--end", type=int, default=CURRENT_SEASON)
+    parser.add_argument("--overwrite", action="store_true")
+    args = parser.parse_args()
+
+    ensure_dirs()
+
+    for season in range(args.start, args.end + 1):
+        build_season(season, overwrite=args.overwrite)
+
+    print("\nCOMPLETE")
+
+if __name__ == "__main__":
+    main()
