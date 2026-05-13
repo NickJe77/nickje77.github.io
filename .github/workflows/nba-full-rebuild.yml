@@ -3,56 +3,32 @@ name: NBA Full Rebuild
 on:
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   rebuild:
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout repo
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install packages
-        run: |
-          pip install requests
-
       - name: Run NBA rebuild
         run: |
           python scripts/nba_full_rebuild.py
 
-      - name: Check recovered files
+      - name: Commit rebuilt indexes
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          echo "BOX SCORE COUNT"
+          git add docs/data/nba/**/index.json
 
-          find docs/data/nba/boxscores/2026 -name "*.json" | wc -l
+          git commit -m "Rebuild NBA indexes" || echo "No changes"
 
-          echo "FIRST FILES"
+          git pull --rebase origin main || echo "Nothing to pull"
 
-          ls docs/data/nba/boxscores/2026 | head
-
-      - name: Commit rebuilt NBA files
-        run: |
-
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-
-          git checkout main
-
-          git add docs/data/nba
-
-          git status
-
-          git commit -m "Restore NBA boxscores" || echo "No changes"
-
-          git push origin main
+          git push
