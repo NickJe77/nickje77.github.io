@@ -3,16 +3,19 @@ import json
 
 BASE_DIR = "docs/data/nba"
 
-print("REBUILDING NBA SEASON FILES")
+print("REBUILDING MODERN NBA SEASONS")
 
-for season in os.listdir(BASE_DIR):
+MODERN_SEASONS = [
+    "2024",
+    "2025",
+    "2026"
+]
+
+for season in MODERN_SEASONS:
 
     season_dir = os.path.join(BASE_DIR, season)
 
     if not os.path.isdir(season_dir):
-        continue
-
-    if not season.isdigit():
         continue
 
     games = []
@@ -45,22 +48,31 @@ for season in os.listdir(BASE_DIR):
         if not game_id:
             continue
 
-        # REGULAR SEASON
-        if game_id.startswith("002"):
+        # ONLY KEEP MATCHING SEASON
 
-            game_season = game_id[3:5]
+        if season == "2024":
 
-        # PLAYOFFS
-        elif game_id.startswith("004"):
+            if not (
+                game_id.startswith("00224")
+                or game_id.startswith("00424")
+            ):
+                continue
 
-            game_season = game_id[3:5]
+        elif season == "2025":
 
-        else:
-            continue
+            if not (
+                game_id.startswith("00225")
+                or game_id.startswith("00425")
+            ):
+                continue
 
-        # ONLY MATCHING SEASON
-        if game_season != season[-2:]:
-            continue
+        elif season == "2026":
+
+            if not (
+                game_id.startswith("00226")
+                or game_id.startswith("00426")
+            ):
+                continue
 
         games.append(game)
 
