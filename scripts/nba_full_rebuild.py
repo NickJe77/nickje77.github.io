@@ -1,10 +1,10 @@
 import os
 import json
 
-SEASON_DIR = "docs/data/nba/2026"
+SEASON_DIR = "docs/data/nba/2025"
 GAMES_FILE = os.path.join(SEASON_DIR, "games.json")
 
-print("FIXING NBA 2026")
+print("FIXING NBA CURRENT SEASON")
 
 games = []
 
@@ -16,12 +16,12 @@ for filename in os.listdir(SEASON_DIR):
     if filename in ["games.json", "index.json"]:
         continue
 
-    # ONLY ALLOW 2026 NBA IDS
+    # KEEP ONLY CURRENT SEASON IDS
     if not (
-        filename.startswith("00226")
-        or filename.startswith("00426")
+        filename.startswith("00225")
+        or filename.startswith("00425")
     ):
-        print(f"REMOVING BAD FILE FROM INDEX: {filename}")
+        print(f"SKIPPING {filename}")
         continue
 
     path = os.path.join(SEASON_DIR, filename)
@@ -31,7 +31,7 @@ for filename in os.listdir(SEASON_DIR):
         with open(path, "r", encoding="utf-8") as f:
             game = json.load(f)
 
-    except Exception:
+    except:
         continue
 
     if not isinstance(game, dict):
@@ -42,7 +42,6 @@ for filename in os.listdir(SEASON_DIR):
 
     games.append(game)
 
-# SORT BY DATE
 games.sort(
     key=lambda x: x.get("date", "")
 )
@@ -59,5 +58,5 @@ with open(
         indent=2
     )
 
-print(f"BUILT {len(games)} CLEAN 2026 GAMES")
+print(f"BUILT {len(games)} CLEAN GAMES")
 print("DONE")
