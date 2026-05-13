@@ -5,26 +5,11 @@ from collections import defaultdict
 PLAYERS_DIR = "docs/data/epl/players"
 OUTPUT_FILE = "docs/data/epl/team_stats.json"
 
-print("RUNNING EPL TEAM STATS BUILDER - PLAYER FILE VERSION")
+print("REBUILDING EPL TEAM STATS")
 
 team_data = {}
 
-def clean(v):
-    return str(v or "").strip()
-
-def to_int(v):
-    try:
-        return int(float(v or 0))
-    except Exception:
-        return 0
-
 def ensure_team(team):
-
-    team = clean(team)
-
-    if not team:
-        return
-
     if team not in team_data:
         team_data[team] = {
             "team": team,
@@ -33,35 +18,41 @@ def ensure_team(team):
             "red_cards": defaultdict(int),
         }
 
-def add_stats(team, player, goals=0, yellow=0, red=0):
+def clean(v):
+    return str(v or "").strip()
 
-    team = clean(team)
-    player = clean(player)
+def to_int(v):
+    try:
+        return int(float(v))
+    except:
+        return 0
 
-    if not team or not player:
-        return
+def is_red_card(card_text):
+    text = clean(card_text).lower()
 
-    ensure_team(team)
+    red_terms = [
+        "red",
+        "red card",
+        "straight red",
+        "second yellow red",
+        "2nd yellow red"
+    ]
 
-    goals = to_int(goals)
-    yellow = to_int(yellow)
-    red = to_int(red)
+    for term in red_terms:
+        if term in text:
+            return True
 
-    if goals > 0:
-        team_data[team]["top_scorers"][player] += goals
+    if text == "yellow":
+        return False
 
-    if yellow > 0:
-        team_data[team]["yellow_cards"][player] += yellow
+    return False
 
-    if red > 0:
-        team_data[team]["red_cards"][player] += red
+processed = set()
 
 player_files = sorted(
     f for f in os.listdir(PLAYERS_DIR)
     if f.endswith(".json")
 )
-
-print(f"PLAYER FILES FOUND: {len(player_files)}")
 
 for filename in player_files:
 
@@ -69,171 +60,128 @@ for filename in player_files:
 
     try:
         with open(path, "r", encoding="utf-8") as f:
-            player_data = json.load(f)
-
-    except Exception as e:
-        print(f"Skipping {filename}: {e}")
+            player = json.load(f)
+    except Exception:
         continue
 
     player_name = clean(
-        player_data.get("player")
-        or player_data.get("name")
-        or player_data.get("player_name")
+        player.get("player") or
+        player.get("name")
     )
 
     if not player_name:
-        player_name = (
-            filename
-            .replace(".json", "")
-            .replace("-", " ")
-            .title()
-        )
-
-    matches = player_data.get("matches")
-
-    if not isinstance(matches, list):
         continue
 
-    seen = set()
+    matches = player.get("matches", [])
 
     for match in matches:
 
-        if not isinstance(match, dict):
-            continue
+        match_id = clean(
+            match.get("match_id") or
+            match.get("game_id") or
+            match.get("id")
+        )
 
         team = clean(
-            match.get("team")
-            or match.get("club")
-            or match.get("squad")
+            match.get("team") or
+            player.get("team")
         )
 
         if not team:
             continue
 
-        # IMPORTANT FIX
-        # only dedupe on REAL match ids
+        ensure_team(team)
 
-        match_id = clean(match.get("match_id"))
-
-        if match_id:
-
-            if match_id in seen:
-                continue
-
-            seen.add(match_id)
-
-        goals = (
-            match.get("goals")
-            or match.get("goal")
-            or match.get("gls")
+        # goals
+        goals = to_int(
+            match.get("goals") or
+            match.get("g")
         )
 
-        yellow = (
-            match.get("yellow_cards")
-            or match.get("yellow")
-            or match.get("yc")
-            or match.get("bookings")
+        if goals > 0:
+            team_data[team]["top_scorers"][player_name] += goals
+
+        # unique match/player key
+        unique_key = f"{player_name}_{match_id}"
+
+        if unique_key in processed:
+            continue
+
+        processed.add(unique_key)
+
+        # yellow cards
+        yellow = to_int(
+            match.get("yellow_cards") or
+            match.get("yellow") or
+            match.get("yc")
         )
 
-        red = (
-            match.get("red_cards")
-            or match.get("red")
-            or match.get("rc")
+        if yellow > 0:
+            team_data[team]["yellow_cards"][player_name] += yellow
+
+        # red cards
+        red_total = 0
+
+        # explicit red fields
+        explicit_red = to_int(
+            match.get("red_cards") or
+            match.get("red") or
+            match.get("rc")
         )
 
-        add_stats(
-            team,
-            player_name,
-            goals,
-            yellow,
-            red
+        red_total += explicit_red
+
+        # card event text
+        card_text = clean(
+            match.get("card") or
+            match.get("card_type")
         )
 
-final_output = []
+        if is_red_card(card_text):
+            red_total += 1
 
-for team in sorted(team_data):
+        if red_total > 0:
+            team_data[team]["red_cards"][player_name] += red_total
 
-    data = team_data[team]
+output = []
+
+for team, data in sorted(team_data.items()):
 
     scorers = sorted(
         data["top_scorers"].items(),
-        key=lambda x: x[1],
-        reverse=True
-    )
+        key=lambda x: (-x[1], x[0])
+    )[:20]
 
     yellows = sorted(
         data["yellow_cards"].items(),
-        key=lambda x: x[1],
-        reverse=True
-    )
+        key=lambda x: (-x[1], x[0])
+    )[:20]
 
     reds = sorted(
         data["red_cards"].items(),
-        key=lambda x: x[1],
-        reverse=True
-    )
+        key=lambda x: (-x[1], x[0])
+    )[:20]
 
-    final_output.append({
+    output.append({
         "team": team,
-
         "top_scorers": [
-            {
-                "player": p,
-                "goals": g
-            }
-            for p, g in scorers[:10]
+            {"player": p, "goals": g}
+            for p, g in scorers
         ],
-
         "yellow_cards": [
-            {
-                "player": p,
-                "yellow": y
-            }
-            for p, y in yellows[:10]
+            {"player": p, "yellow": y}
+            for p, y in yellows
         ],
-
         "red_cards": [
-            {
-                "player": p,
-                "red": r
-            }
-            for p, r in reds[:10]
-        ],
+            {"player": p, "red": r}
+            for p, r in reds
+        ]
     })
 
-os.makedirs(
-    os.path.dirname(OUTPUT_FILE),
-    exist_ok=True
-)
+os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
 
-with open(
-    OUTPUT_FILE,
-    "w",
-    encoding="utf-8"
-) as f:
+with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+    json.dump(output, f, indent=2)
 
-    json.dump(
-        final_output,
-        f,
-        indent=2,
-        ensure_ascii=False
-    )
-
-print(f"BUILT {OUTPUT_FILE}")
-print(f"TEAMS WRITTEN: {len(final_output)}")
-
-for team in final_output:
-
-    if team["team"].lower() == "everton":
-
-        print("\nEVERTON RED CARDS")
-
-        for p in team["red_cards"]:
-            print(p)
-
-        print("\nEVERTON GOALS")
-
-        for p in team["top_scorers"]:
-            print(p)
-
-        break
+print("DONE")
+print(f"Saved: {OUTPUT_FILE}")
