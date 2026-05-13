@@ -39,26 +39,26 @@ for season in season_folders:
 
     print(f"\nPROCESSING SEASON {season}")
 
+    # RECURSIVE SEARCH
     possible_paths = [
-        os.path.join(season_path, "*.json"),
-        os.path.join(season_path, "games", "*.json"),
-        os.path.join(season_path, "boxscores", "*.json"),
-        os.path.join(BASE_DIR, "boxscores", season, "*.json"),
+        os.path.join(season_path, "**", "*.json"),
+        os.path.join(BASE_DIR, "boxscores", season, "**", "*.json"),
     ]
 
     game_files = []
 
     for p in possible_paths:
-        game_files.extend(glob(p))
+        game_files.extend(glob(p, recursive=True))
 
-    # REMOVE INDEX / PLAYER / TEAM FILES
+    # REMOVE NON-GAME FILES
     game_files = [
         g for g in game_files
         if not any(x in os.path.basename(g).lower() for x in [
             "index",
             "players",
             "teams",
-            "standings"
+            "standings",
+            "schedule"
         ])
     ]
 
@@ -77,11 +77,11 @@ for season in season_folders:
 
         games_to_process = []
 
-        # HANDLE SINGLE OBJECT
+        # SINGLE GAME OBJECT
         if isinstance(raw, dict):
             games_to_process = [raw]
 
-        # HANDLE LIST OF GAMES
+        # LIST OF GAMES
         elif isinstance(raw, list):
             games_to_process = raw
 
@@ -95,13 +95,14 @@ for season in season_folders:
 
             try:
 
-                # TEAM NAMES
+                # TEAMS
                 home_team = (
                     game.get("home_team")
                     or game.get("home")
                     or game.get("team1")
                     or game.get("homeTeam")
                     or game.get("home_team_name")
+                    or game.get("homeTeamName")
                     or ""
                 )
 
@@ -111,6 +112,7 @@ for season in season_folders:
                     or game.get("team2")
                     or game.get("awayTeam")
                     or game.get("away_team_name")
+                    or game.get("awayTeamName")
                     or ""
                 )
 
@@ -120,6 +122,7 @@ for season in season_folders:
                     or game.get("homeScore")
                     or game.get("score1")
                     or game.get("home_points")
+                    or game.get("homePoints")
                     or 0
                 )
 
@@ -128,6 +131,7 @@ for season in season_folders:
                     or game.get("awayScore")
                     or game.get("score2")
                     or game.get("away_points")
+                    or game.get("awayPoints")
                     or 0
                 )
 
@@ -137,6 +141,7 @@ for season in season_folders:
                     or game.get("game_date")
                     or game.get("start_date")
                     or game.get("datetime")
+                    or game.get("gameDate")
                     or ""
                 )
 
@@ -156,7 +161,7 @@ for season in season_folders:
                     or ""
                 )
 
-                # PLAYOFF DETECTION
+                # GAME TYPE
                 playoff = False
 
                 text_blob = json.dumps(game).lower()
@@ -178,6 +183,10 @@ for season in season_folders:
                 if any(x in text_blob for x in playoff_terms):
                     playoff = True
 
+                # SKIP BROKEN ENTRIES
+                if not home_team and not away_team:
+                    continue
+
                 rebuilt_games.append({
                     "game_id": str(game_id),
                     "date": date,
@@ -195,6 +204,7 @@ for season in season_folders:
 
     # REMOVE DUPLICATES
     deduped = {}
+
     for g in rebuilt_games:
         deduped[g["game_id"]] = g
 
