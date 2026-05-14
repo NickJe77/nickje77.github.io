@@ -1,84 +1,170 @@
 import os
 import json
 
-SEASONS_DIR = "docs/data/epl/seasons"
+MATCHES_DIR = "docs/data/epl/matches"
+PLAYERS_DIR = "docs/data/epl/players"
 
-print("DEBUGGING EPL SEASON STRUCTURE")
+print("BUILDING EPL PLAYERS FROM MATCH FILES")
 
-season_files = sorted(
-    f for f in os.listdir(SEASONS_DIR)
-    if f.endswith(".json")
-)
+os.makedirs(PLAYERS_DIR, exist_ok=True)
 
-if not season_files:
-    raise Exception("NO SEASON FILES FOUND")
+players = {}
 
-for season_file in season_files:
+def clean(v):
+    return str(v or "").strip()
 
-    season_path = os.path.join(SEASONS_DIR, season_file)
+def to_int(v):
+    try:
+        return int(float(v))
+    except:
+        return 0
 
-    print(f"\nREADING: {season_file}")
+match_files = []
+
+for root, dirs, files in os.walk(MATCHES_DIR):
+
+    for file in files:
+
+        if file.endswith(".json"):
+
+            match_files.append(
+                os.path.join(root, file)
+            )
+
+print(f"FOUND {len(match_files)} MATCH FILES")
+
+for path in sorted(match_files):
 
     try:
-        with open(season_path, "r", encoding="utf-8") as f:
-            games = json.load(f)
-    except Exception as e:
-        print("FAILED TO LOAD JSON")
-        print(e)
+        with open(path, "r", encoding="utf-8") as f:
+            game = json.load(f)
+    except Exception:
         continue
 
-    print(f"TYPE: {type(games)}")
+    match_id = clean(
+        game.get("match_id") or
+        game.get("id")
+    )
 
-    if isinstance(games, dict):
+    season = clean(game.get("season"))
+    date = clean(game.get("date"))
 
-        print("\nTOP LEVEL KEYS:")
-        print(list(games.keys())[:50])
+    home_team = clean(game.get("home_team"))
+    away_team = clean(game.get("away_team"))
 
-        # try common wrappers
-        possible_lists = [
-            games.get("games"),
-            games.get("matches"),
-            games.get("fixtures"),
-            games.get("data")
-        ]
+    possible_sections = [
+        game.get("home_players"),
+        game.get("away_players"),
+        game.get("players"),
+        game.get("player_stats")
+    ]
 
-        found = False
+    all_players = []
 
-        for item in possible_lists:
+    for section in possible_sections:
 
-            if isinstance(item, list) and item:
+        if isinstance(section, list):
+            all_players.extend(section)
 
-                print("\nFOUND GAME LIST")
+        elif isinstance(section, dict):
 
-                game = item[0]
+            for _, vals in section.items():
 
-                print("\nGAME KEYS:")
-                print(list(game.keys())[:100])
+                if isinstance(vals, list):
+                    all_players.extend(vals)
 
-                print("\nFULL SAMPLE GAME:")
-                print(json.dumps(game, indent=2)[:10000])
+    for p in all_players:
 
-                found = True
-                break
-
-        if found:
-            break
-
-    elif isinstance(games, list):
-
-        print(f"\nTOTAL GAMES: {len(games)}")
-
-        if not games:
+        if not isinstance(p, dict):
             continue
 
-        game = games[0]
+        player_name = clean(
+            p.get("player") or
+            p.get("name")
+        )
 
-        print("\nGAME KEYS:")
-        print(list(game.keys())[:100])
+        if not player_name:
+            continue
 
-        print("\nFULL SAMPLE GAME:")
-        print(json.dumps(game, indent=2)[:10000])
+        slug = (
+            player_name.lower()
+            .replace("'", "")
+            .replace(".", "")
+            .replace(" ", "-")
+        )
 
-        break
+        team = clean(p.get("team"))
 
-print("\nDONE")
+        if not team:
+
+            side = clean(p.get("side")).lower()
+
+            if side == "home":
+                team = home_team
+            elif side == "away":
+                team = away_team
+
+        opponent = away_team if team == home_team else home_team
+
+        goals = to_int(
+            p.get("goals") or
+            p.get("g")
+        )
+
+        yellows = to_int(
+            p.get("yellow_cards") or
+            p.get("yellow") or
+            p.get("yc")
+        )
+
+        reds = to_int(
+            p.get("red_cards") or
+            p.get("red") or
+            p.get("rc")
+        )
+
+        # FIX IMPOSSIBLE VALUES
+
+        if yellows < 0:
+            yellows = 0
+
+        if yellows > 2:
+            yellows = 2
+
+        if reds < 0:
+            reds = 0
+
+        if reds > 1:
+            reds = 1
+
+        if slug not in players:
+
+            players[slug] = {
+                "player": player_name,
+                "slug": slug,
+                "matches": []
+            }
+
+        players[slug]["matches"].append({
+            "season": season,
+            "date": date,
+            "team": team,
+            "opponent": opponent,
+            "goals": goals,
+            "yellow_cards": yellows,
+            "red_cards": reds,
+            "match_id": match_id
+        })
+
+for slug, data in players.items():
+
+    output_path = os.path.join(
+        PLAYERS_DIR,
+        f"{slug}.json"
+    )
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+print("DONE")
+print(f"BUILT {len(players)} PLAYERS")
