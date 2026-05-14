@@ -1,186 +1,151 @@
 import os
 import json
-import shutil
+import re
 
 MATCHES_DIR = "docs/data/epl/matches"
-PLAYERS_DIR = "docs/data/epl/players"
 
-print("REBUILDING EPL PLAYERS")
-
-# WIPE OLD CORRUPTED FILES
-
-if os.path.exists(PLAYERS_DIR):
-    shutil.rmtree(PLAYERS_DIR)
-
-os.makedirs(PLAYERS_DIR, exist_ok=True)
-
-players = {}
+print("FIXING EPL CARD DATA")
 
 def clean(v):
     return str(v or "").strip()
 
-def slugify(name):
-    return (
-        clean(name)
-        .lower()
-        .replace(".", "")
-        .replace("'", "")
-        .replace(" ", "-")
+def extract_player_name(entry):
+
+    # already structured
+    if isinstance(entry, dict):
+
+        return clean(
+            entry.get("player")
+            or entry.get("name")
+        )
+
+    text = clean(entry)
+
+    # remove minutes
+    text = re.sub(r"\(\d+\)", "", text)
+
+    # remove card text
+    text = re.sub(
+        r"yellow card|red card|second yellow",
+        "",
+        text,
+        flags=re.I
     )
 
-def ensure_player(name):
+    # remove commas/numbers
+    text = re.sub(r"[\d']", "", text)
 
-    slug = slugify(name)
+    return text.strip()
 
-    if slug not in players:
-
-        players[slug] = {
-            "player": name,
-            "slug": slug,
-            "matches": {}
-        }
-
-    return slug
-
-match_files = []
+fixed_files = 0
 
 for root, dirs, files in os.walk(MATCHES_DIR):
 
     for file in files:
 
-        if file.endswith(".json"):
+        if not file.endswith(".json"):
+            continue
 
-            match_files.append(
-                os.path.join(root, file)
+        path = os.path.join(root, file)
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                game = json.load(f)
+        except Exception:
+            continue
+
+        changed = False
+
+        # -----------------------------
+        # FIX YELLOWS
+        # -----------------------------
+
+        clean_yellows = []
+
+        for y in game.get("yellow_cards", []):
+
+            player = extract_player_name(y)
+
+            if not player:
+                continue
+
+            if isinstance(y, dict):
+
+                team = clean(y.get("team"))
+
+            else:
+                team = ""
+
+            clean_yellows.append({
+                "player": player,
+                "team": team
+            })
+
+        if clean_yellows:
+            game["yellow_cards"] = clean_yellows
+            changed = True
+
+        # -----------------------------
+        # FIX REDS
+        # -----------------------------
+
+        clean_reds = []
+
+        for r in game.get("red_cards", []):
+
+            player = extract_player_name(r)
+
+            if not player:
+                continue
+
+            if isinstance(r, dict):
+
+                team = clean(r.get("team"))
+
+            else:
+                team = ""
+
+            clean_reds.append({
+                "player": player,
+                "team": team
+            })
+
+        if clean_reds:
+            game["red_cards"] = clean_reds
+            changed = True
+
+        # -----------------------------
+        # DEDUPE REDS
+        # -----------------------------
+
+        seen = set()
+        deduped_reds = []
+
+        for r in game.get("red_cards", []):
+
+            key = (
+                clean(r.get("player")).lower(),
+                clean(r.get("team")).lower()
             )
 
-print(f"FOUND {len(match_files)} MATCH FILES")
+            if key in seen:
+                continue
 
-for path in sorted(match_files):
+            seen.add(key)
+            deduped_reds.append(r)
 
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            game = json.load(f)
-    except Exception:
-        continue
+        game["red_cards"] = deduped_reds
 
-    match_id = clean(
-        game.get("match_id")
-        or os.path.basename(path).replace(".json", "")
-    )
+        # -----------------------------
+        # SAVE
+        # -----------------------------
 
-    season = clean(
-        os.path.basename(os.path.dirname(path))
-    )
+        if changed:
 
-    home_team = clean(game.get("home_team"))
-    away_team = clean(game.get("away_team"))
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(game, f, indent=2)
 
-    # GOALS
+            fixed_files += 1
 
-    for scorer in game.get("scorers", []):
-
-        player = clean(scorer.get("player"))
-
-        if not player:
-            continue
-
-        slug = ensure_player(player)
-
-        team = clean(scorer.get("team"))
-
-        opponent = away_team if team == home_team else home_team
-
-        if match_id not in players[slug]["matches"]:
-
-            players[slug]["matches"][match_id] = {
-                "season": season,
-                "team": team,
-                "opponent": opponent,
-                "goals": 0,
-                "yellow_cards": 0,
-                "red_cards": 0,
-                "match_id": match_id
-            }
-
-        players[slug]["matches"][match_id]["goals"] += 1
-
-    # YELLOWS
-
-    for yellow in game.get("yellow_cards", []):
-
-        player = clean(yellow.get("player"))
-
-        if not player:
-            continue
-
-        slug = ensure_player(player)
-
-        team = clean(yellow.get("team"))
-
-        opponent = away_team if team == home_team else home_team
-
-        if match_id not in players[slug]["matches"]:
-
-            players[slug]["matches"][match_id] = {
-                "season": season,
-                "team": team,
-                "opponent": opponent,
-                "goals": 0,
-                "yellow_cards": 0,
-                "red_cards": 0,
-                "match_id": match_id
-            }
-
-        if players[slug]["matches"][match_id]["yellow_cards"] < 2:
-            players[slug]["matches"][match_id]["yellow_cards"] += 1
-
-    # REDS
-
-    for red in game.get("red_cards", []):
-
-        player = clean(red.get("player"))
-
-        if not player:
-            continue
-
-        slug = ensure_player(player)
-
-        team = clean(red.get("team"))
-
-        opponent = away_team if team == home_team else home_team
-
-        if match_id not in players[slug]["matches"]:
-
-            players[slug]["matches"][match_id] = {
-                "season": season,
-                "team": team,
-                "opponent": opponent,
-                "goals": 0,
-                "yellow_cards": 0,
-                "red_cards": 0,
-                "match_id": match_id
-            }
-
-        players[slug]["matches"][match_id]["red_cards"] = 1
-
-# SAVE
-
-for slug, data in players.items():
-
-    output = {
-        "player": data["player"],
-        "slug": data["slug"],
-        "matches": list(data["matches"].values())
-    }
-
-    output_path = os.path.join(
-        PLAYERS_DIR,
-        f"{slug}.json"
-    )
-
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(output, f, indent=2)
-
+print(f"FIXED FILES: {fixed_files}")
 print("DONE")
-print(f"BUILT {len(players)} PLAYERS")
