@@ -9,9 +9,26 @@ TEAM_STATS_FILE = "docs/data/epl/team_stats.json"
 
 print("STARTING HARD RESET")
 
-# -----------------------------------
-# WIPE PLAYER FILES
-# -----------------------------------
+# -------------------------------------------------
+# CLEAN
+# -------------------------------------------------
+
+def clean(v):
+    return str(v or "").strip()
+
+def slugify(name):
+
+    return (
+        clean(name)
+        .lower()
+        .replace(".", "")
+        .replace("'", "")
+        .replace(" ", "-")
+    )
+
+# -------------------------------------------------
+# REMOVE OLD PLAYER FILES
+# -------------------------------------------------
 
 if os.path.exists(PLAYERS_DIR):
 
@@ -21,9 +38,9 @@ if os.path.exists(PLAYERS_DIR):
 
 os.makedirs(PLAYERS_DIR, exist_ok=True)
 
-# -----------------------------------
+# -------------------------------------------------
 # REMOVE BAD CARD DATA
-# -----------------------------------
+# -------------------------------------------------
 
 fixed_matches = 0
 
@@ -44,6 +61,7 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         except Exception:
             continue
 
+        # wipe corrupted cards
         game["yellow_cards"] = []
         game["red_cards"] = []
 
@@ -54,24 +72,11 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
 print(f"FIXED MATCH FILES: {fixed_matches}")
 
-# -----------------------------------
-# REBUILD PLAYERS FROM SCORERS ONLY
-# -----------------------------------
+# -------------------------------------------------
+# BUILD PLAYER FILES
+# -------------------------------------------------
 
 players = {}
-
-def clean(v):
-    return str(v or "").strip()
-
-def slugify(name):
-
-    return (
-        clean(name)
-        .lower()
-        .replace(".", "")
-        .replace("'", "")
-        .replace(" ", "-")
-    )
 
 def ensure_player(name):
 
@@ -123,7 +128,12 @@ for path in sorted(match_files):
     home_team = clean(game.get("home_team"))
     away_team = clean(game.get("away_team"))
 
-    for scorer in game.get("scorers", []):
+    scorers = game.get("scorers", [])
+
+    if not isinstance(scorers, list):
+        scorers = []
+
+    for scorer in scorers:
 
         if not isinstance(scorer, dict):
             continue
@@ -161,16 +171,22 @@ for path in sorted(match_files):
 
         players[slug]["matches"][match_id]["goals"] += 1
 
-# -----------------------------------
+print(f"BUILT PLAYERS: {len(players)}")
+
+# -------------------------------------------------
 # SAVE PLAYER FILES
-# -----------------------------------
+# -------------------------------------------------
 
 for slug, data in players.items():
+
+    matches = list(
+        data["matches"].values()
+    )
 
     output = {
         "player": data["player"],
         "slug": data["slug"],
-        "matches": list(data["matches"].values())
+        "matches": matches
     }
 
     output_path = os.path.join(
@@ -181,11 +197,11 @@ for slug, data in players.items():
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(output, f, indent=2)
 
-print(f"BUILT PLAYERS: {len(players)}")
+print("PLAYER FILES SAVED")
 
-# -----------------------------------
-# REBUILD TEAM STATS
-# -----------------------------------
+# -------------------------------------------------
+# BUILD TEAM STATS
+# -------------------------------------------------
 
 team_data = {}
 
@@ -196,26 +212,50 @@ def ensure_team(team):
         team_data[team] = {
             "team": team,
             "top_scorers": defaultdict(int),
-            "yellow_cards": defaultdict(int),
-            "red_cards": defaultdict(int)
+            "yellow_cards": [],
+            "red_cards": []
         }
 
 for slug, player_data in players.items():
 
-    player_name = player_data["player"]
+    player_name = clean(
+        player_data.get("player")
+    )
 
-    for match in player_data["matches"]:
+    matches = player_data.get("matches", {})
 
-        team = clean(match.get("team"))
+    # dict safety
+    if isinstance(matches, dict):
+        matches = list(matches.values())
+
+    if not isinstance(matches, list):
+        continue
+
+    for match in matches:
+
+        if not isinstance(match, dict):
+            continue
+
+        team = clean(
+            match.get("team")
+        )
 
         if not team:
             continue
 
         ensure_team(team)
 
-        goals = int(match.get("goals", 0))
+        goals = int(
+            match.get("goals", 0)
+        )
 
-        team_data[team]["top_scorers"][player_name] += goals
+        if goals > 0:
+
+            team_data[team]["top_scorers"][player_name] += goals
+
+# -------------------------------------------------
+# SAVE TEAM STATS
+# -------------------------------------------------
 
 output = []
 
@@ -227,6 +267,7 @@ for team, data in sorted(team_data.items()):
     )[:20]
 
     output.append({
+
         "team": team,
 
         "top_scorers": [
@@ -240,10 +281,11 @@ for team, data in sorted(team_data.items()):
         "yellow_cards": [],
 
         "red_cards": []
+
     })
 
 with open(TEAM_STATS_FILE, "w", encoding="utf-8") as f:
     json.dump(output, f, indent=2)
 
-print("REBUILT TEAM STATS")
+print("TEAM STATS SAVED")
 print("DONE")
