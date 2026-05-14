@@ -1,11 +1,16 @@
 import os
 import json
-from collections import defaultdict
+import shutil
 
 MATCHES_DIR = "docs/data/epl/matches"
 PLAYERS_DIR = "docs/data/epl/players"
 
-print("BUILDING EPL PLAYER FILES")
+print("REBUILDING EPL PLAYERS")
+
+# WIPE OLD CORRUPTED FILES
+
+if os.path.exists(PLAYERS_DIR):
+    shutil.rmtree(PLAYERS_DIR)
 
 os.makedirs(PLAYERS_DIR, exist_ok=True)
 
@@ -71,25 +76,18 @@ for path in sorted(match_files):
     home_team = clean(game.get("home_team"))
     away_team = clean(game.get("away_team"))
 
-    # -----------------------------------
     # GOALS
-    # -----------------------------------
 
-    scorers = game.get("scorers", [])
+    for scorer in game.get("scorers", []):
 
-    for s in scorers:
+        player = clean(scorer.get("player"))
 
-        if not isinstance(s, dict):
+        if not player:
             continue
 
-        player_name = clean(s.get("player"))
+        slug = ensure_player(player)
 
-        if not player_name:
-            continue
-
-        slug = ensure_player(player_name)
-
-        team = clean(s.get("team"))
+        team = clean(scorer.get("team"))
 
         opponent = away_team if team == home_team else home_team
 
@@ -107,25 +105,18 @@ for path in sorted(match_files):
 
         players[slug]["matches"][match_id]["goals"] += 1
 
-    # -----------------------------------
     # YELLOWS
-    # -----------------------------------
 
-    yellows = game.get("yellow_cards", [])
+    for yellow in game.get("yellow_cards", []):
 
-    for y in yellows:
+        player = clean(yellow.get("player"))
 
-        if not isinstance(y, dict):
+        if not player:
             continue
 
-        player_name = clean(y.get("player"))
+        slug = ensure_player(player)
 
-        if not player_name:
-            continue
-
-        slug = ensure_player(player_name)
-
-        team = clean(y.get("team"))
+        team = clean(yellow.get("team"))
 
         opponent = away_team if team == home_team else home_team
 
@@ -144,25 +135,18 @@ for path in sorted(match_files):
         if players[slug]["matches"][match_id]["yellow_cards"] < 2:
             players[slug]["matches"][match_id]["yellow_cards"] += 1
 
-    # -----------------------------------
     # REDS
-    # -----------------------------------
 
-    reds = game.get("red_cards", [])
+    for red in game.get("red_cards", []):
 
-    for r in reds:
+        player = clean(red.get("player"))
 
-        if not isinstance(r, dict):
+        if not player:
             continue
 
-        player_name = clean(r.get("player"))
+        slug = ensure_player(player)
 
-        if not player_name:
-            continue
-
-        slug = ensure_player(player_name)
-
-        team = clean(r.get("team"))
+        team = clean(red.get("team"))
 
         opponent = away_team if team == home_team else home_team
 
@@ -178,26 +162,16 @@ for path in sorted(match_files):
                 "match_id": match_id
             }
 
-        # clamp to max 1 red per match
         players[slug]["matches"][match_id]["red_cards"] = 1
 
-# -----------------------------------
 # SAVE
-# -----------------------------------
 
 for slug, data in players.items():
-
-    matches = list(data["matches"].values())
-
-    matches = sorted(
-        matches,
-        key=lambda x: x["match_id"]
-    )
 
     output = {
         "player": data["player"],
         "slug": data["slug"],
-        "matches": matches
+        "matches": list(data["matches"].values())
     }
 
     output_path = os.path.join(
