@@ -178,6 +178,12 @@ for path in sorted(match_files):
         else:
             teams[away]["losses"] += 1
 
+    # =====================================================
+    # GOALS
+    # =====================================================
+
+    scorer_seen = set()
+
     for scorer in game.get("scorers", []) or []:
 
         if not isinstance(scorer, dict):
@@ -185,9 +191,21 @@ for path in sorted(match_files):
 
         name = clean(scorer.get("player"))
         team = clean(scorer.get("team"))
+        minute = clean(scorer.get("minute"))
 
         if not name:
             continue
+
+        scorer_key = (
+            name.lower(),
+            minute,
+            team.lower()
+        )
+
+        if scorer_key in scorer_seen:
+            continue
+
+        scorer_seen.add(scorer_key)
 
         opponent = away if team == home else home
 
@@ -204,6 +222,10 @@ for path in sorted(match_files):
         )
 
         players[slug]["matches"][match_id]["goals"] += 1
+
+    # =====================================================
+    # YELLOWS
+    # =====================================================
 
     yellow_seen = set()
 
@@ -248,6 +270,10 @@ for path in sorted(match_files):
 
             players[slug]["matches"][match_id]["yellow_cards"] += 1
 
+    # =====================================================
+    # REDS
+    # =====================================================
+
     red_seen = set()
 
     for red in game.get("red_cards", []) or []:
@@ -291,15 +317,27 @@ for path in sorted(match_files):
 
             players[slug]["matches"][match_id]["red_cards"] = 1
 
+# =========================================================
+# BUILD PLAYERS
+# =========================================================
+
 player_index = []
 
 team_stats = {}
 
 for slug, pdata in sorted(players.items()):
 
-    matches = list(pdata["matches"].values())
+    matches = {
+        m["match_id"]: m
+        for m in pdata["matches"].values()
+    }.values()
 
-    goals = sum(int(m.get("goals", 0)) for m in matches)
+    matches = list(matches)
+
+    goals = sum(
+        int(m.get("goals", 0))
+        for m in matches
+    )
 
     yellows = sum(
         int(m.get("yellow_cards", 0))
@@ -364,6 +402,10 @@ for slug, pdata in sorted(players.items()):
 
         team_stats[team]["red_cards"][pdata["player"]] += int(m.get("red_cards", 0))
 
+# =========================================================
+# TEAM OUTPUT
+# =========================================================
+
 teams_out = sorted(
     teams.values(),
     key=lambda x: x["team"]
@@ -413,6 +455,10 @@ for team, data in sorted(team_stats.items()):
             if r > 0
         ]
     })
+
+# =========================================================
+# SAVE FILES
+# =========================================================
 
 with open(
     f"{TMP_DIR}/players.json",
