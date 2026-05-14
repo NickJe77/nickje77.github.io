@@ -39,8 +39,9 @@ def make_driver():
         "--disable-blink-features=AutomationControlled"
     )
 
+    options.add_argument("--headless=new")
+
     driver = uc.Chrome(
-        version_main=147,
         use_subprocess=True,
         options=options
     )
@@ -48,7 +49,6 @@ def make_driver():
     driver.set_page_load_timeout(120)
 
     return driver
-
 
 DRIVER = make_driver()
 
@@ -75,7 +75,7 @@ def get_html(url):
 
             if "verify you are human" in html.lower():
 
-                print("⚠️ BLOCKED — WAITING 60s")
+                print("BLOCKED — WAITING")
 
                 time.sleep(60)
 
@@ -85,7 +85,7 @@ def get_html(url):
 
         except Exception as e:
 
-            print("⚠️ DRIVER RESTART")
+            print("RESTARTING DRIVER")
             print(e)
 
             try:
@@ -98,7 +98,7 @@ def get_html(url):
             DRIVER = make_driver()
 
 # =========================================================
-# FIND EPL TABLE
+# TABLE
 # =========================================================
 
 def get_schedule_table(soup):
@@ -137,16 +137,16 @@ def get_schedule_table(soup):
     return None
 
 # =========================================================
-# CLEAN TEXT
+# CLEAN
 # =========================================================
 
 def clean_text(text):
 
-    return re.sub(r"\s+", " ", text or "").strip()
-
-# =========================================================
-# CLEAN MINUTE
-# =========================================================
+    return re.sub(
+        r"\s+",
+        " ",
+        text or ""
+    ).strip()
 
 def clean_minute(text):
 
@@ -176,7 +176,10 @@ def parse_match(soup):
         "red_cards": []
     }
 
-    scorebox = soup.find("div", class_="scorebox")
+    scorebox = soup.find(
+        "div",
+        class_="scorebox"
+    )
 
     if not scorebox:
         return data
@@ -199,7 +202,10 @@ def parse_match(soup):
         if a:
 
             name = clean_text(
-                a.get_text(" ", strip=True)
+                a.get_text(
+                    " ",
+                    strip=True
+                )
             )
 
             if name:
@@ -224,11 +230,15 @@ def parse_match(soup):
         try:
 
             data["home_score"] = int(
-                scores[0].get_text(strip=True)
+                scores[0].get_text(
+                    strip=True
+                )
             )
 
             data["away_score"] = int(
-                scores[1].get_text(strip=True)
+                scores[1].get_text(
+                    strip=True
+                )
             )
 
         except:
@@ -250,7 +260,10 @@ def parse_match(soup):
     for ev in event_divs:
 
         text = clean_text(
-            ev.get_text(" ", strip=True)
+            ev.get_text(
+                " ",
+                strip=True
+            )
         )
 
         lower = text.lower()
@@ -266,7 +279,10 @@ def parse_match(soup):
             continue
 
         player = clean_text(
-            links[0].get_text(" ", strip=True)
+            links[0].get_text(
+                " ",
+                strip=True
+            )
         )
 
         if not player:
@@ -381,4 +397,116 @@ def parse_match(soup):
 
     return data
 
-print("DONE")
+# =========================================================
+# START
+# =========================================================
+
+SEASONS = {}
+
+for start_year in range(1992, 2026):
+
+    end_year = start_year + 1
+
+    season = f"{start_year}-{end_year}"
+
+    SEASONS[season] = (
+        f"https://fbref.com/en/comps/9/"
+        f"{season}/schedule/"
+        f"{season}-Premier-League-Scores-and-Fixtures"
+    )
+
+for season, season_url in SEASONS.items():
+
+    print(f"\nBUILDING {season}")
+
+    html = get_html(season_url)
+
+    soup = BeautifulSoup(
+        html,
+        "html.parser"
+    )
+
+    table = get_schedule_table(soup)
+
+    if not table:
+        print("NO TABLE")
+        continue
+
+    tbody = table.find("tbody")
+
+    if not tbody:
+        continue
+
+    os.makedirs(
+        f"{MATCH_DIR}/{season}",
+        exist_ok=True
+    )
+
+    count = 1
+
+    for row in tbody.find_all("tr"):
+
+        report = row.find(
+            "td",
+            {"data-stat": "match_report"}
+        )
+
+        if not report:
+            continue
+
+        a = report.find(
+            "a",
+            href=True
+        )
+
+        if not a:
+            continue
+
+        match_url = BASE + a["href"]
+
+        print("SCRAPING", match_url)
+
+        try:
+
+            html = get_html(match_url)
+
+            soup = BeautifulSoup(
+                html,
+                "html.parser"
+            )
+
+            data = parse_match(soup)
+
+            data["url"] = match_url
+
+            with open(
+                f"{MATCH_DIR}/{season}/{season}_{count:04d}.json",
+                "w",
+                encoding="utf-8"
+            ) as f:
+
+                json.dump(
+                    data,
+                    f,
+                    indent=2
+                )
+
+            count += 1
+
+        except Exception as e:
+
+            print("FAILED", e)
+
+        time.sleep(
+            random.uniform(
+                MIN_SLEEP,
+                MAX_SLEEP
+            )
+        )
+
+try:
+    DRIVER.quit()
+except:
+    pass
+
+print("\nDONE")
