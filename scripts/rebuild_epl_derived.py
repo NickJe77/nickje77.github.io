@@ -10,7 +10,7 @@ PLAYERS_DIR = f"{OUT_DIR}/players"
 TMP_DIR = "docs/data/epl_derived_tmp"
 TMP_PLAYERS_DIR = f"{TMP_DIR}/players"
 
-print("REBUILDING EPL DERIVED FILES WITH CARDS")
+print("REBUILDING EPL DERIVED FILES")
 
 def clean(v):
     return str(v or "").strip()
@@ -27,6 +27,7 @@ def slugify(v):
     )
 
 def ensure_player(players, name):
+
     slug = slugify(name)
 
     if slug not in players:
@@ -39,7 +40,9 @@ def ensure_player(players, name):
     return slug
 
 def ensure_match(players, slug, match_id, season, date, team, opponent):
+
     if match_id not in players[slug]["matches"]:
+
         players[slug]["matches"][match_id] = {
             "season": season,
             "date": date,
@@ -71,18 +74,25 @@ teams = defaultdict(lambda: {
 match_files = []
 
 for root, dirs, files in os.walk(MATCHES_DIR):
+
     for file in files:
+
         if file.endswith(".json"):
             match_files.append(os.path.join(root, file))
 
 print(f"FOUND MATCH FILES: {len(match_files)}")
 
+seen_matches = set()
+
 for path in sorted(match_files):
 
     try:
+
         with open(path, "r", encoding="utf-8") as f:
             game = json.load(f)
+
     except Exception as e:
+
         print(f"SKIP BAD JSON: {path} {e}")
         continue
 
@@ -90,6 +100,14 @@ for path in sorted(match_files):
         game.get("match_id")
         or os.path.basename(path).replace(".json", "")
     )
+
+    if not match_id:
+        continue
+
+    if match_id in seen_matches:
+        continue
+
+    seen_matches.add(match_id)
 
     season = clean(
         game.get("season")
@@ -109,10 +127,11 @@ for path in sorted(match_files):
     )
 
     home_score = game.get("home_score")
-    away_score = game.get("away_score")
 
     if home_score is None:
         home_score = game.get("score_home")
+
+    away_score = game.get("away_score")
 
     if away_score is None:
         away_score = game.get("score_away")
@@ -128,6 +147,7 @@ for path in sorted(match_files):
         away_score = 0
 
     if home:
+
         teams[home]["team"] = home
         teams[home]["games"] += 1
         teams[home]["goals_for"] += home_score
@@ -135,12 +155,15 @@ for path in sorted(match_files):
 
         if home_score > away_score:
             teams[home]["wins"] += 1
+
         elif home_score == away_score:
             teams[home]["draws"] += 1
+
         else:
             teams[home]["losses"] += 1
 
     if away:
+
         teams[away]["team"] = away
         teams[away]["games"] += 1
         teams[away]["goals_for"] += away_score
@@ -148,12 +171,15 @@ for path in sorted(match_files):
 
         if away_score > home_score:
             teams[away]["wins"] += 1
+
         elif away_score == home_score:
             teams[away]["draws"] += 1
+
         else:
             teams[away]["losses"] += 1
 
     for scorer in game.get("scorers", []) or []:
+
         if not isinstance(scorer, dict):
             continue
 
@@ -166,13 +192,23 @@ for path in sorted(match_files):
         opponent = away if team == home else home
 
         slug = ensure_player(players, name)
-        ensure_match(players, slug, match_id, season, date, team, opponent)
+
+        ensure_match(
+            players,
+            slug,
+            match_id,
+            season,
+            date,
+            team,
+            opponent
+        )
 
         players[slug]["matches"][match_id]["goals"] += 1
 
     yellow_seen = set()
 
     for yellow in game.get("yellow_cards", []) or []:
+
         if not isinstance(yellow, dict):
             continue
 
@@ -183,7 +219,11 @@ for path in sorted(match_files):
         if not name:
             continue
 
-        key = (name.lower(), team.lower(), minute)
+        key = (
+            name.lower(),
+            team.lower(),
+            minute
+        )
 
         if key in yellow_seen:
             continue
@@ -193,14 +233,25 @@ for path in sorted(match_files):
         opponent = away if team == home else home
 
         slug = ensure_player(players, name)
-        ensure_match(players, slug, match_id, season, date, team, opponent)
+
+        ensure_match(
+            players,
+            slug,
+            match_id,
+            season,
+            date,
+            team,
+            opponent
+        )
 
         if players[slug]["matches"][match_id]["yellow_cards"] < 2:
+
             players[slug]["matches"][match_id]["yellow_cards"] += 1
 
     red_seen = set()
 
     for red in game.get("red_cards", []) or []:
+
         if not isinstance(red, dict):
             continue
 
@@ -211,7 +262,11 @@ for path in sorted(match_files):
         if not name:
             continue
 
-        key = (name.lower(), team.lower(), minute)
+        key = (
+            name.lower(),
+            team.lower(),
+            minute
+        )
 
         if key in red_seen:
             continue
@@ -221,11 +276,23 @@ for path in sorted(match_files):
         opponent = away if team == home else home
 
         slug = ensure_player(players, name)
-        ensure_match(players, slug, match_id, season, date, team, opponent)
 
-        players[slug]["matches"][match_id]["red_cards"] = 1
+        ensure_match(
+            players,
+            slug,
+            match_id,
+            season,
+            date,
+            team,
+            opponent
+        )
+
+        if players[slug]["matches"][match_id]["red_cards"] == 0:
+
+            players[slug]["matches"][match_id]["red_cards"] = 1
 
 player_index = []
+
 team_stats = {}
 
 for slug, pdata in sorted(players.items()):
@@ -233,8 +300,16 @@ for slug, pdata in sorted(players.items()):
     matches = list(pdata["matches"].values())
 
     goals = sum(int(m.get("goals", 0)) for m in matches)
-    yellows = sum(int(m.get("yellow_cards", 0)) for m in matches)
-    reds = sum(int(m.get("red_cards", 0)) for m in matches)
+
+    yellows = sum(
+        int(m.get("yellow_cards", 0))
+        for m in matches
+    )
+
+    reds = sum(
+        int(m.get("red_cards", 0))
+        for m in matches
+    )
 
     output = {
         "player": pdata["player"],
@@ -250,7 +325,13 @@ for slug, pdata in sorted(players.items()):
         "w",
         encoding="utf-8"
     ) as f:
-        json.dump(output, f, indent=2)
+
+        json.dump(
+            output,
+            f,
+            indent=2,
+            ensure_ascii=False
+        )
 
     player_index.append({
         "player": pdata["player"],
@@ -269,6 +350,7 @@ for slug, pdata in sorted(players.items()):
             continue
 
         if team not in team_stats:
+
             team_stats[team] = {
                 "team": team,
                 "top_scorers": defaultdict(int),
@@ -277,7 +359,9 @@ for slug, pdata in sorted(players.items()):
             }
 
         team_stats[team]["top_scorers"][pdata["player"]] += int(m.get("goals", 0))
+
         team_stats[team]["yellow_cards"][pdata["player"]] += int(m.get("yellow_cards", 0))
+
         team_stats[team]["red_cards"][pdata["player"]] += int(m.get("red_cards", 0))
 
 teams_out = sorted(
@@ -290,6 +374,7 @@ team_stats_out = []
 for team, data in sorted(team_stats.items()):
 
     team_stats_out.append({
+
         "team": team,
 
         "top_scorers": [
@@ -329,14 +414,44 @@ for team, data in sorted(team_stats.items()):
         ]
     })
 
-with open(f"{TMP_DIR}/players.json", "w", encoding="utf-8") as f:
-    json.dump(player_index, f, indent=2)
+with open(
+    f"{TMP_DIR}/players.json",
+    "w",
+    encoding="utf-8"
+) as f:
 
-with open(f"{TMP_DIR}/teams.json", "w", encoding="utf-8") as f:
-    json.dump(teams_out, f, indent=2)
+    json.dump(
+        player_index,
+        f,
+        indent=2,
+        ensure_ascii=False
+    )
 
-with open(f"{TMP_DIR}/team_stats.json", "w", encoding="utf-8") as f:
-    json.dump(team_stats_out, f, indent=2)
+with open(
+    f"{TMP_DIR}/teams.json",
+    "w",
+    encoding="utf-8"
+) as f:
+
+    json.dump(
+        teams_out,
+        f,
+        indent=2,
+        ensure_ascii=False
+    )
+
+with open(
+    f"{TMP_DIR}/team_stats.json",
+    "w",
+    encoding="utf-8"
+) as f:
+
+    json.dump(
+        team_stats_out,
+        f,
+        indent=2,
+        ensure_ascii=False
+    )
 
 print(f"PLAYERS BUILT: {len(players)}")
 print(f"TEAMS BUILT: {len(teams_out)}")
@@ -346,9 +461,21 @@ if os.path.exists(PLAYERS_DIR):
     shutil.rmtree(PLAYERS_DIR)
 
 shutil.move(TMP_PLAYERS_DIR, PLAYERS_DIR)
-shutil.move(f"{TMP_DIR}/players.json", f"{OUT_DIR}/players.json")
-shutil.move(f"{TMP_DIR}/teams.json", f"{OUT_DIR}/teams.json")
-shutil.move(f"{TMP_DIR}/team_stats.json", f"{OUT_DIR}/team_stats.json")
+
+shutil.move(
+    f"{TMP_DIR}/players.json",
+    f"{OUT_DIR}/players.json"
+)
+
+shutil.move(
+    f"{TMP_DIR}/teams.json",
+    f"{OUT_DIR}/teams.json"
+)
+
+shutil.move(
+    f"{TMP_DIR}/team_stats.json",
+    f"{OUT_DIR}/team_stats.json"
+)
 
 shutil.rmtree(TMP_DIR, ignore_errors=True)
 
