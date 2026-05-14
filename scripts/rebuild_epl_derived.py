@@ -3,7 +3,7 @@ import json
 import shutil
 from collections import defaultdict
 
-MATCHES_DIR = "docs/data/epl/matches"
+SEASONS_DIR = "docs/data/epl/seasons"
 OUT_DIR = "docs/data/epl"
 
 PLAYERS_DIR = f"{OUT_DIR}/players"
@@ -11,7 +11,7 @@ PLAYERS_DIR = f"{OUT_DIR}/players"
 TMP_DIR = "docs/data/epl_tmp"
 TMP_PLAYERS_DIR = f"{TMP_DIR}/players"
 
-print("REBUILDING EPL DERIVED FILES - SAFE VERSION")
+print("REBUILDING EPL DERIVED FILES FROM SEASON FILES")
 
 # =========================================================
 # CLEANERS
@@ -32,7 +32,7 @@ def slugify(v):
     )
 
 # =========================================================
-# TEMP OUTPUT
+# TEMP
 # =========================================================
 
 if os.path.exists(TMP_DIR):
@@ -60,331 +60,354 @@ team_reds = defaultdict(lambda: defaultdict(int))
 seen_match_ids = set()
 
 # =========================================================
-# LOAD MATCH FILES
+# LOAD SEASON FILES
 # =========================================================
 
-match_files = []
+season_files = []
 
-for root, dirs, files in os.walk(MATCHES_DIR):
+for file in os.listdir(SEASONS_DIR):
 
-    for file in files:
+    if file.endswith(".json"):
+        season_files.append(
+            os.path.join(SEASONS_DIR, file)
+        )
 
-        if file.endswith(".json"):
-            match_files.append(os.path.join(root, file))
-
-print(f"MATCH FILES FOUND: {len(match_files)}")
+print(f"SEASON FILES FOUND: {len(season_files)}")
 
 # =========================================================
-# PROCESS MATCHES
+# PROCESS SEASONS
 # =========================================================
 
-for path in sorted(match_files):
+for path in sorted(season_files):
+
+    print("PROCESSING", path)
 
     try:
 
         with open(path, "r", encoding="utf-8") as f:
-            game = json.load(f)
+            season_json = json.load(f)
 
     except Exception as e:
 
         print("BAD JSON:", path, e)
         continue
 
-    match_id = clean(
-        game.get("match_id")
-        or os.path.basename(path).replace(".json", "")
+    games = season_json.get("games", [])
+
+    season = clean(
+        season_json.get("season")
     )
 
-    if not match_id:
-        continue
+    for game in games:
 
-    # GLOBAL MATCH DEDUPE
-    if match_id in seen_match_ids:
-        continue
-
-    seen_match_ids.add(match_id)
-
-    season = clean(game.get("season"))
-
-    date = clean(game.get("date"))
-
-    home = clean(
-        game.get("home_team")
-        or game.get("home")
-    )
-
-    away = clean(
-        game.get("away_team")
-        or game.get("away")
-    )
-
-    home_score = (
-        game.get("home_score")
-        if game.get("home_score") is not None
-        else game.get("score_home")
-    )
-
-    away_score = (
-        game.get("away_score")
-        if game.get("away_score") is not None
-        else game.get("score_away")
-    )
-
-    try:
-        home_score = int(home_score or 0)
-    except:
-        home_score = 0
-
-    try:
-        away_score = int(away_score or 0)
-    except:
-        away_score = 0
-
-    # =====================================================
-    # TEAM TOTALS
-    # =====================================================
-
-    for t in [home, away]:
-
-        if not t:
-            continue
-
-        if t not in teams:
-
-            teams[t] = {
-                "team": t,
-                "games": 0,
-                "wins": 0,
-                "draws": 0,
-                "losses": 0,
-                "goals_for": 0,
-                "goals_against": 0
-            }
-
-    if home:
-
-        teams[home]["games"] += 1
-        teams[home]["goals_for"] += home_score
-        teams[home]["goals_against"] += away_score
-
-        if home_score > away_score:
-            teams[home]["wins"] += 1
-        elif home_score == away_score:
-            teams[home]["draws"] += 1
-        else:
-            teams[home]["losses"] += 1
-
-    if away:
-
-        teams[away]["games"] += 1
-        teams[away]["goals_for"] += away_score
-        teams[away]["goals_against"] += home_score
-
-        if away_score > home_score:
-            teams[away]["wins"] += 1
-        elif away_score == home_score:
-            teams[away]["draws"] += 1
-        else:
-            teams[away]["losses"] += 1
-
-    # =====================================================
-    # GOALS
-    # =====================================================
-
-    scorer_seen = set()
-
-    for scorer in game.get("scorers", []) or []:
-
-        if not isinstance(scorer, dict):
-            continue
-
-        player = clean(scorer.get("player"))
-        team = clean(scorer.get("team"))
-        minute = clean(scorer.get("minute"))
-
-        if not player:
-            continue
-
-        dedupe_key = (
-            player.lower(),
-            team.lower(),
-            minute
+        match_id = clean(
+            game.get("match_id")
+            or game.get("id")
         )
 
-        if dedupe_key in scorer_seen:
+        if not match_id:
             continue
 
-        scorer_seen.add(dedupe_key)
+        # =================================================
+        # GLOBAL MATCH DEDUPE
+        # =================================================
 
-        slug = slugify(player)
-
-        opponent = away if team == home else home
-
-        if slug not in players:
-
-            players[slug] = {
-                "player": player,
-                "slug": slug
-            }
-
-        if match_id not in player_match_data[slug]:
-
-            player_match_data[slug][match_id] = {
-                "match_id": match_id,
-                "season": season,
-                "date": date,
-                "team": team,
-                "opponent": opponent,
-                "goals": 0,
-                "yellow_cards": 0,
-                "red_cards": 0
-            }
-
-        player_match_data[slug][match_id]["goals"] += 1
-
-        player_goal_matches[slug].add(match_id)
-
-        team_scorers[team][player] += 1
-
-    # =====================================================
-    # YELLOWS
-    # =====================================================
-
-    yellow_seen = set()
-
-    for yellow in game.get("yellow_cards", []) or []:
-
-        if not isinstance(yellow, dict):
+        if match_id in seen_match_ids:
             continue
 
-        player = clean(yellow.get("player"))
-        team = clean(yellow.get("team"))
-        minute = clean(yellow.get("minute"))
+        seen_match_ids.add(match_id)
 
-        if not player:
-            continue
+        date = clean(game.get("date"))
 
-        dedupe_key = (
-            player.lower(),
-            team.lower(),
-            minute
+        home = clean(
+            game.get("home_team")
+            or game.get("home")
         )
 
-        if dedupe_key in yellow_seen:
-            continue
-
-        yellow_seen.add(dedupe_key)
-
-        slug = slugify(player)
-
-        opponent = away if team == home else home
-
-        if slug not in players:
-
-            players[slug] = {
-                "player": player,
-                "slug": slug
-            }
-
-        if match_id not in player_match_data[slug]:
-
-            player_match_data[slug][match_id] = {
-                "match_id": match_id,
-                "season": season,
-                "date": date,
-                "team": team,
-                "opponent": opponent,
-                "goals": 0,
-                "yellow_cards": 0,
-                "red_cards": 0
-            }
-
-        # MAX 2 yellows per match
-        if player_match_data[slug][match_id]["yellow_cards"] < 2:
-
-            player_match_data[slug][match_id]["yellow_cards"] += 1
-
-        player_yellow_matches[slug].add(match_id)
-
-        team_yellows[team][player] += 1
-
-    # =====================================================
-    # REDS
-    # =====================================================
-
-    red_seen = set()
-
-    for red in game.get("red_cards", []) or []:
-
-        if not isinstance(red, dict):
-            continue
-
-        player = clean(red.get("player"))
-        team = clean(red.get("team"))
-        minute = clean(red.get("minute"))
-
-        if not player:
-            continue
-
-        dedupe_key = (
-            player.lower(),
-            team.lower(),
-            minute
+        away = clean(
+            game.get("away_team")
+            or game.get("away")
         )
 
-        if dedupe_key in red_seen:
-            continue
+        home_score = (
+            game.get("home_score")
+            if game.get("home_score") is not None
+            else game.get("score_home")
+        )
 
-        red_seen.add(dedupe_key)
+        away_score = (
+            game.get("away_score")
+            if game.get("away_score") is not None
+            else game.get("score_away")
+        )
 
-        slug = slugify(player)
+        try:
+            home_score = int(home_score or 0)
+        except:
+            home_score = 0
 
-        opponent = away if team == home else home
+        try:
+            away_score = int(away_score or 0)
+        except:
+            away_score = 0
 
-        if slug not in players:
+        # ================================================
+        # TEAMS
+        # ================================================
 
-            players[slug] = {
-                "player": player,
-                "slug": slug
-            }
+        for t in [home, away]:
 
-        if match_id not in player_match_data[slug]:
+            if not t:
+                continue
 
-            player_match_data[slug][match_id] = {
-                "match_id": match_id,
-                "season": season,
-                "date": date,
-                "team": team,
-                "opponent": opponent,
-                "goals": 0,
-                "yellow_cards": 0,
-                "red_cards": 0
-            }
+            if t not in teams:
 
-        # MAX 1 RED PER MATCH
-        player_match_data[slug][match_id]["red_cards"] = 1
+                teams[t] = {
+                    "team": t,
+                    "games": 0,
+                    "wins": 0,
+                    "draws": 0,
+                    "losses": 0,
+                    "goals_for": 0,
+                    "goals_against": 0
+                }
 
-        player_red_matches[slug].add(match_id)
+        if home:
 
-        # IMPORTANT:
-        # only count once per player per match
-        team_reds[team][player] = len(player_red_matches[slug])
+            teams[home]["games"] += 1
+            teams[home]["goals_for"] += home_score
+            teams[home]["goals_against"] += away_score
+
+            if home_score > away_score:
+                teams[home]["wins"] += 1
+
+            elif home_score == away_score:
+                teams[home]["draws"] += 1
+
+            else:
+                teams[home]["losses"] += 1
+
+        if away:
+
+            teams[away]["games"] += 1
+            teams[away]["goals_for"] += away_score
+            teams[away]["goals_against"] += home_score
+
+            if away_score > home_score:
+                teams[away]["wins"] += 1
+
+            elif away_score == home_score:
+                teams[away]["draws"] += 1
+
+            else:
+                teams[away]["losses"] += 1
+
+        # ================================================
+        # GOALS
+        # ================================================
+
+        scorer_seen = set()
+
+        for scorer in game.get("scorers", []) or []:
+
+            if not isinstance(scorer, dict):
+                continue
+
+            player = clean(scorer.get("player"))
+            team = clean(scorer.get("team"))
+            minute = clean(scorer.get("minute"))
+
+            if not player:
+                continue
+
+            dedupe_key = (
+                player.lower(),
+                team.lower(),
+                minute
+            )
+
+            if dedupe_key in scorer_seen:
+                continue
+
+            scorer_seen.add(dedupe_key)
+
+            slug = slugify(player)
+
+            opponent = away if team == home else home
+
+            if slug not in players:
+
+                players[slug] = {
+                    "player": player,
+                    "slug": slug
+                }
+
+            if match_id not in player_match_data[slug]:
+
+                player_match_data[slug][match_id] = {
+                    "match_id": match_id,
+                    "season": season,
+                    "date": date,
+                    "team": team,
+                    "opponent": opponent,
+                    "goals": 0,
+                    "yellow_cards": 0,
+                    "red_cards": 0
+                }
+
+            player_match_data[slug][match_id]["goals"] += 1
+
+            player_goal_matches[slug].add(match_id)
+
+            team_scorers[team][player] += 1
+
+        # ================================================
+        # YELLOWS
+        # ================================================
+
+        yellow_seen = set()
+
+        for yellow in game.get("yellow_cards", []) or []:
+
+            if not isinstance(yellow, dict):
+                continue
+
+            player = clean(yellow.get("player"))
+            team = clean(yellow.get("team"))
+            minute = clean(yellow.get("minute"))
+
+            if not player:
+                continue
+
+            dedupe_key = (
+                player.lower(),
+                team.lower(),
+                minute
+            )
+
+            if dedupe_key in yellow_seen:
+                continue
+
+            yellow_seen.add(dedupe_key)
+
+            slug = slugify(player)
+
+            opponent = away if team == home else home
+
+            if slug not in players:
+
+                players[slug] = {
+                    "player": player,
+                    "slug": slug
+                }
+
+            if match_id not in player_match_data[slug]:
+
+                player_match_data[slug][match_id] = {
+                    "match_id": match_id,
+                    "season": season,
+                    "date": date,
+                    "team": team,
+                    "opponent": opponent,
+                    "goals": 0,
+                    "yellow_cards": 0,
+                    "red_cards": 0
+                }
+
+            if player_match_data[slug][match_id]["yellow_cards"] < 2:
+
+                player_match_data[slug][match_id]["yellow_cards"] += 1
+
+            player_yellow_matches[slug].add(match_id)
+
+            team_yellows[team][player] += 1
+
+        # ================================================
+        # REDS
+        # ================================================
+
+        red_seen = set()
+
+        for red in game.get("red_cards", []) or []:
+
+            if not isinstance(red, dict):
+                continue
+
+            player = clean(red.get("player"))
+            team = clean(red.get("team"))
+            minute = clean(red.get("minute"))
+
+            if not player:
+                continue
+
+            dedupe_key = (
+                player.lower(),
+                team.lower(),
+                minute
+            )
+
+            if dedupe_key in red_seen:
+                continue
+
+            red_seen.add(dedupe_key)
+
+            slug = slugify(player)
+
+            opponent = away if team == home else home
+
+            if slug not in players:
+
+                players[slug] = {
+                    "player": player,
+                    "slug": slug
+                }
+
+            if match_id not in player_match_data[slug]:
+
+                player_match_data[slug][match_id] = {
+                    "match_id": match_id,
+                    "season": season,
+                    "date": date,
+                    "team": team,
+                    "opponent": opponent,
+                    "goals": 0,
+                    "yellow_cards": 0,
+                    "red_cards": 0
+                }
+
+            # ONLY 1 RED MAX PER MATCH
+            player_match_data[slug][match_id]["red_cards"] = 1
+
+            player_red_matches[slug].add(match_id)
+
+            team_reds[team][player] = len(
+                player_red_matches[slug]
+            )
 
 # =========================================================
-# BUILD PLAYER FILES
+# PLAYER FILES
 # =========================================================
 
 players_index = []
 
 for slug, pdata in sorted(players.items()):
 
-    matches = list(player_match_data[slug].values())
+    matches = list(
+        player_match_data[slug].values()
+    )
 
-    goals = sum(m["goals"] for m in matches)
+    goals = sum(
+        m["goals"]
+        for m in matches
+    )
 
-    yellow_cards = len(player_yellow_matches[slug])
+    yellow_cards = len(
+        player_yellow_matches[slug]
+    )
 
-    red_cards = len(player_red_matches[slug])
+    red_cards = len(
+        player_red_matches[slug]
+    )
 
     player_output = {
         "player": pdata["player"],
@@ -418,7 +441,7 @@ for slug, pdata in sorted(players.items()):
     })
 
 # =========================================================
-# BUILD TEAM STATS
+# TEAM STATS
 # =========================================================
 
 team_stats_output = []
@@ -464,7 +487,7 @@ for team in sorted(team_scorers.keys()):
     })
 
 # =========================================================
-# SAVE OUTPUT
+# SAVE
 # =========================================================
 
 with open(
