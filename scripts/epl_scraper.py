@@ -25,23 +25,20 @@ def make_driver():
 
     options = uc.ChromeOptions()
 
+    options.add_argument("--headless=new")
+
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--window-size=1400,1000")
-
     options.add_argument("--disable-gpu")
-    options.add_argument("--disable-renderer-backgrounding")
-    options.add_argument("--disable-background-timer-throttling")
-    options.add_argument("--disable-backgrounding-occluded-windows")
-    options.add_argument("--disable-features=Translate")
 
     options.add_argument(
         "--disable-blink-features=AutomationControlled"
     )
 
-    options.add_argument("--headless=new")
+    options.add_argument("--window-size=1400,1000")
 
     driver = uc.Chrome(
+        version_main=147,
         use_subprocess=True,
         options=options
     )
@@ -75,7 +72,7 @@ def get_html(url):
 
             if "verify you are human" in html.lower():
 
-                print("BLOCKED — WAITING")
+                print("BLOCKED")
 
                 time.sleep(60)
 
