@@ -1,35 +1,86 @@
-name: Rebuild EPL Derived Files
+name: Extract EPL ZIP
 
 on:
   workflow_dispatch:
 
 jobs:
-  rebuild:
+  extract:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout Repo
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Rebuild EPL Derived Files
+      - name: Install unzip
         run: |
-          python scripts/rebuild_epl_derived.py
+          sudo apt-get update
+          sudo apt-get install -y unzip
 
-      - name: Commit EPL Derived Files
+      - name: Show Repo Structure
         run: |
+          echo "ROOT"
+          ls
+
+          echo ""
+          echo "DOCS/DATA"
+          ls docs/data || true
+
+          echo ""
+          echo "DOCS/DATA/EPL"
+          ls docs/data/epl || true
+
+      - name: Extract EPL ZIP
+        run: |
+
+          mkdir -p docs/data/epl
+
+          unzip -o docs/data/epl/epl.zip -d docs/data/
+
+          # Fix nested folders if zip contains epl/epl
+          if [ -d "docs/data/epl/epl" ]; then
+
+            mv docs/data/epl/epl/* docs/data/epl/ || true
+
+            rm -rf docs/data/epl/epl
+
+          fi
+
+      - name: Remove Mac Junk
+        run: |
+
+          find docs/data/epl -name "__MACOSX" -type d -exec rm -rf {} + || true
+
+          find docs/data/epl -name ".DS_Store" -type f -delete || true
+
+      - name: Remove ZIP
+        run: |
+          rm -f docs/data/epl/epl.zip
+
+      - name: Verify EPL Structure
+        run: |
+
+          echo "EPL ROOT"
+          ls docs/data/epl
+
+          echo ""
+          echo "MATCHES"
+          ls docs/data/epl/matches | head || true
+
+          echo ""
+          echo "SEASONS"
+          ls docs/data/epl/seasons | head || true
+
+      - name: Commit EPL Files
+        run: |
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add docs/data/epl/players
-          git add docs/data/epl/players.json
-          git add docs/data/epl/teams.json
-          git add docs/data/epl/team_stats.json
+          git add docs/data/epl
 
-          git commit -m "Rebuild EPL derived files" || echo "No changes"
+          git commit -m "Extract EPL dataset" || echo "No changes"
+
+          git pull --rebase origin main || true
 
           git push
