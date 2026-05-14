@@ -1,62 +1,212 @@
 import os
 import json
+from collections import defaultdict
 
 MATCHES_DIR = "docs/data/epl/matches"
+PLAYERS_DIR = "docs/data/epl/players"
 
-print("DEBUGGING MATCH FILES")
+print("BUILDING EPL PLAYER FILES")
 
-found = False
+os.makedirs(PLAYERS_DIR, exist_ok=True)
+
+players = {}
+
+def clean(v):
+    return str(v or "").strip()
+
+def slugify(name):
+    return (
+        clean(name)
+        .lower()
+        .replace(".", "")
+        .replace("'", "")
+        .replace(" ", "-")
+    )
+
+def ensure_player(name):
+
+    slug = slugify(name)
+
+    if slug not in players:
+
+        players[slug] = {
+            "player": name,
+            "slug": slug,
+            "matches": {}
+        }
+
+    return slug
+
+match_files = []
 
 for root, dirs, files in os.walk(MATCHES_DIR):
 
-    for file in sorted(files):
+    for file in files:
 
-        if not file.endswith(".json"):
+        if file.endswith(".json"):
+
+            match_files.append(
+                os.path.join(root, file)
+            )
+
+print(f"FOUND {len(match_files)} MATCH FILES")
+
+for path in sorted(match_files):
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            game = json.load(f)
+    except Exception:
+        continue
+
+    match_id = clean(
+        game.get("match_id")
+        or os.path.basename(path).replace(".json", "")
+    )
+
+    season = clean(
+        os.path.basename(os.path.dirname(path))
+    )
+
+    home_team = clean(game.get("home_team"))
+    away_team = clean(game.get("away_team"))
+
+    # -----------------------------------
+    # GOALS
+    # -----------------------------------
+
+    scorers = game.get("scorers", [])
+
+    for s in scorers:
+
+        if not isinstance(s, dict):
             continue
 
-        path = os.path.join(root, file)
+        player_name = clean(s.get("player"))
 
-        print(f"\nREADING: {path}")
-
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except Exception as e:
-            print(e)
+        if not player_name:
             continue
 
-        print("\nTYPE:")
-        print(type(data))
+        slug = ensure_player(player_name)
 
-        if isinstance(data, dict):
+        team = clean(s.get("team"))
 
-            print("\nTOP LEVEL KEYS:")
-            print(list(data.keys())[:200])
+        opponent = away_team if team == home_team else home_team
 
-            print("\nFULL SAMPLE:")
-            print(json.dumps(data, indent=2)[:20000])
+        if match_id not in players[slug]["matches"]:
 
-            found = True
-            break
+            players[slug]["matches"][match_id] = {
+                "season": season,
+                "team": team,
+                "opponent": opponent,
+                "goals": 0,
+                "yellow_cards": 0,
+                "red_cards": 0,
+                "match_id": match_id
+            }
 
-        elif isinstance(data, list):
+        players[slug]["matches"][match_id]["goals"] += 1
 
-            print(f"\nLIST LENGTH: {len(data)}")
+    # -----------------------------------
+    # YELLOWS
+    # -----------------------------------
 
-            if data:
+    yellows = game.get("yellow_cards", [])
 
-                item = data[0]
+    for y in yellows:
 
-                print("\nITEM KEYS:")
-                print(list(item.keys())[:200])
+        if not isinstance(y, dict):
+            continue
 
-                print("\nFULL SAMPLE ITEM:")
-                print(json.dumps(item, indent=2)[:20000])
+        player_name = clean(y.get("player"))
 
-                found = True
-                break
+        if not player_name:
+            continue
 
-    if found:
-        break
+        slug = ensure_player(player_name)
 
-print("\nDONE")
+        team = clean(y.get("team"))
+
+        opponent = away_team if team == home_team else home_team
+
+        if match_id not in players[slug]["matches"]:
+
+            players[slug]["matches"][match_id] = {
+                "season": season,
+                "team": team,
+                "opponent": opponent,
+                "goals": 0,
+                "yellow_cards": 0,
+                "red_cards": 0,
+                "match_id": match_id
+            }
+
+        if players[slug]["matches"][match_id]["yellow_cards"] < 2:
+            players[slug]["matches"][match_id]["yellow_cards"] += 1
+
+    # -----------------------------------
+    # REDS
+    # -----------------------------------
+
+    reds = game.get("red_cards", [])
+
+    for r in reds:
+
+        if not isinstance(r, dict):
+            continue
+
+        player_name = clean(r.get("player"))
+
+        if not player_name:
+            continue
+
+        slug = ensure_player(player_name)
+
+        team = clean(r.get("team"))
+
+        opponent = away_team if team == home_team else home_team
+
+        if match_id not in players[slug]["matches"]:
+
+            players[slug]["matches"][match_id] = {
+                "season": season,
+                "team": team,
+                "opponent": opponent,
+                "goals": 0,
+                "yellow_cards": 0,
+                "red_cards": 0,
+                "match_id": match_id
+            }
+
+        # clamp to max 1 red per match
+        players[slug]["matches"][match_id]["red_cards"] = 1
+
+# -----------------------------------
+# SAVE
+# -----------------------------------
+
+for slug, data in players.items():
+
+    matches = list(data["matches"].values())
+
+    matches = sorted(
+        matches,
+        key=lambda x: x["match_id"]
+    )
+
+    output = {
+        "player": data["player"],
+        "slug": data["slug"],
+        "matches": matches
+    }
+
+    output_path = os.path.join(
+        PLAYERS_DIR,
+        f"{slug}.json"
+    )
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(output, f, indent=2)
+
+print("DONE")
+print(f"BUILT {len(players)} PLAYERS")
