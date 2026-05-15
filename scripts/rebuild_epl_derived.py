@@ -45,12 +45,15 @@ teams = {}
 
 team_scorers = defaultdict(lambda: defaultdict(int))
 team_yellows = defaultdict(lambda: defaultdict(int))
-team_reds = defaultdict(lambda: defaultdict(int))
 
-yellow_seen = set()
+# IMPORTANT:
+# hard global dedupe for reds
+player_red_match_seen = set()
+
+team_red_totals = defaultdict(lambda: defaultdict(int))
 
 # =====================================================
-# LOAD MATCH FILES
+# LOAD MATCHES
 # =====================================================
 
 match_files = []
@@ -65,7 +68,7 @@ for root, dirs, files in os.walk(MATCHES_DIR):
                 os.path.join(root, file)
             )
 
-print("MATCH FILES FOUND:", len(match_files))
+print("MATCH FILES:", len(match_files))
 
 # =====================================================
 # PROCESS MATCHES
@@ -140,6 +143,8 @@ for path in sorted(match_files):
     # YELLOWS
     # =================================================
 
+    yellow_seen = set()
+
     for yellow in game.get("yellow_cards", []):
 
         if not isinstance(yellow, dict):
@@ -184,8 +189,6 @@ for path in sorted(match_files):
     # REDS
     # =================================================
 
-    match_red_players = set()
-
     for red in game.get("red_cards", []):
 
         if not isinstance(red, dict):
@@ -197,17 +200,17 @@ for path in sorted(match_files):
         if not player or not team:
             continue
 
-        player_key = (
+        # HARD GLOBAL DEDUPE
+        red_key = (
             f"{match_key}|"
             f"{player.lower()}|"
             f"{team.lower()}"
         )
 
-        # ONLY 1 RED PER PLAYER PER MATCH
-        if player_key in match_red_players:
+        if red_key in player_red_match_seen:
             continue
 
-        match_red_players.add(player_key)
+        player_red_match_seen.add(red_key)
 
         slug = slugify(player)
 
@@ -221,9 +224,13 @@ for path in sorted(match_files):
                 "red_cards": 0
             }
 
-        players[slug]["red_cards"] += 1
+        # IMPORTANT:
+        # NEVER increment blindly
+        players[slug]["red_cards"] = (
+            players[slug]["red_cards"] + 1
+        )
 
-        team_reds[team][player] += 1
+        team_red_totals[team][player] += 1
 
 # =====================================================
 # TEAM STATS
@@ -265,7 +272,7 @@ for team in sorted(teams.keys()):
                 "red_cards": r
             }
             for p, r in sorted(
-                team_reds[team].items(),
+                team_red_totals[team].items(),
                 key=lambda x: (-x[1], x[0])
             )[:20]
         ]
@@ -295,7 +302,7 @@ for slug, pdata in players.items():
     players_index.append(pdata)
 
 # =====================================================
-# SAVE OUTPUTS
+# SAVE
 # =====================================================
 
 with open(
@@ -325,4 +332,5 @@ with open(
     )
 
 print("PLAYER FILES:", len(os.listdir(PLAYERS_DIR)))
+print("TOTAL PLAYERS:", len(players))
 print("DONE")
