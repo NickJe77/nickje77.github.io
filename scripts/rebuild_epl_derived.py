@@ -3,22 +3,22 @@ import json
 
 SEASONS_DIR = "docs/data/epl/seasons"
 
-print("INSPECTING EPL JSON STRUCTURE")
+print("DEBUGGING EPL DATA")
 
 files = sorted([
     f for f in os.listdir(SEASONS_DIR)
     if f.endswith(".json")
 ])
 
-print("FILES:", len(files))
+print("FILES FOUND:", len(files))
 
 for filename in files:
 
     path = os.path.join(SEASONS_DIR, filename)
 
-    print("\n===================================================")
+    print("\n================================================")
     print("FILE:", filename)
-    print("===================================================")
+    print("================================================")
 
     try:
 
@@ -27,29 +27,40 @@ for filename in files:
 
     except Exception as e:
 
-        print("BAD FILE:", e)
+        print("FAILED:", e)
         continue
 
-    print("TOP LEVEL TYPE:", type(data))
+    print("TYPE:", type(data))
+
+    # ---------------------------------------------------
+    # DICT FORMAT
+    # ---------------------------------------------------
 
     if isinstance(data, dict):
 
         print("TOP LEVEL KEYS:")
         print(list(data.keys())[:50])
 
-        if "games" in data:
+        games = data.get("games", [])
 
-            games = data["games"]
+        print("GAMES TYPE:", type(games))
+        print("GAME COUNT:", len(games))
 
-            print("GAMES TYPE:", type(games))
-            print("GAME COUNT:", len(games))
+        if games:
 
-            if games:
+            first = games[0]
 
-                print("\nFIRST GAME:")
-                print(json.dumps(games[0], indent=2)[:10000])
+            print("\nFIRST GAME KEYS:")
+            print(list(first.keys()))
 
-                break
+            print("\nFIRST GAME:")
+            print(json.dumps(first, indent=2)[:10000])
+
+            break
+
+    # ---------------------------------------------------
+    # LIST FORMAT
+    # ---------------------------------------------------
 
     elif isinstance(data, list):
 
@@ -57,11 +68,18 @@ for filename in files:
 
         if data:
 
+            first = data[0]
+
             print("\nFIRST ITEM TYPE:")
-            print(type(data[0]))
+            print(type(first))
+
+            if isinstance(first, dict):
+
+                print("\nFIRST ITEM KEYS:")
+                print(list(first.keys()))
 
             print("\nFIRST ITEM:")
-            print(json.dumps(data[0], indent=2)[:10000])
+            print(json.dumps(first, indent=2)[:10000])
 
             break
 
