@@ -581,6 +581,23 @@ for file in os.listdir(TMP_PLAYERS_DIR):
         os.path.join(PLAYERS_DIR, file)
     )
 
+# =========================================================
+# DEBUG
+# =========================================================
+
+print("PLAYERS FOUND:", len(players))
+print("PLAYER MATCH DATA:", len(player_match_data))
+print("GOAL PLAYERS:", len(player_goal_matches))
+print("YELLOW PLAYERS:", len(player_yellow_matches))
+print("RED PLAYERS:", len(player_red_matches))
+
+print("TMP PLAYER FILES:")
+print(os.listdir(TMP_PLAYERS_DIR)[:20])
+
+# =========================================================
+# CLEANUP
+# =========================================================
+
 shutil.rmtree(TMP_DIR, ignore_errors=True)
 
 print("DONE")
