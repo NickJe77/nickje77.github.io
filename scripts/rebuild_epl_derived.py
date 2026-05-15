@@ -1,10 +1,10 @@
 import os
 import json
-from collections import defaultdict
 
 MATCHES_DIR = "docs/data/epl/matches"
 
-seen = defaultdict(list)
+seen = {}
+deleted = 0
 
 for root, dirs, files in os.walk(MATCHES_DIR):
 
@@ -31,21 +31,18 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         if not url:
             continue
 
-        seen[url].append(path)
+        if url in seen:
 
-duplicates = 0
+            print("DELETING DUPLICATE:")
+            print(path)
 
-for url, paths in seen.items():
+            os.remove(path)
 
-    if len(paths) > 1:
+            deleted += 1
 
-        duplicates += 1
+        else:
 
-        print("\n====================================")
-        print(url)
-        print("COPIES:", len(paths))
+            seen[url] = path
 
-        for p in paths[:20]:
-            print(p)
-
-print("\nTOTAL DUPLICATED MATCHES:", duplicates)
+print("\nTOTAL DELETED:", deleted)
+print("TOTAL UNIQUE:", len(seen))
