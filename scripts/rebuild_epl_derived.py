@@ -4,7 +4,7 @@ from collections import defaultdict
 
 MATCHES_DIR = "docs/data/epl/matches"
 
-player_matches = defaultdict(list)
+seen = defaultdict(list)
 
 for root, dirs, files in os.walk(MATCHES_DIR):
 
@@ -26,21 +26,26 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         if not isinstance(game, dict):
             continue
 
-        reds = game.get("red_cards", [])
+        url = str(game.get("url", "")).strip()
 
-        for red in reds:
+        if not url:
+            continue
 
-            if not isinstance(red, dict):
-                continue
+        seen[url].append(path)
 
-            player = str(
-                red.get("player", "")
-            ).strip()
+duplicates = 0
 
-            if player != "Freddie Ljungberg":
-                continue
+for url, paths in seen.items():
 
-            print("\n====================================")
-            print(path)
-            print(json.dumps(red, indent=2))
-            print("====================================")
+    if len(paths) > 1:
+
+        duplicates += 1
+
+        print("\n====================================")
+        print(url)
+        print("COPIES:", len(paths))
+
+        for p in paths[:20]:
+            print(p)
+
+print("\nTOTAL DUPLICATED MATCHES:", duplicates)
