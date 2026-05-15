@@ -48,7 +48,6 @@ team_yellows = defaultdict(lambda: defaultdict(int))
 team_reds = defaultdict(lambda: defaultdict(int))
 
 yellow_seen = set()
-red_seen = set()
 
 # =====================================================
 # LOAD MATCH FILES
@@ -185,6 +184,8 @@ for path in sorted(match_files):
     # REDS
     # =================================================
 
+    match_red_players = set()
+
     for red in game.get("red_cards", []):
 
         if not isinstance(red, dict):
@@ -192,22 +193,21 @@ for path in sorted(match_files):
 
         player = clean(red.get("player"))
         team = clean(red.get("team"))
-        minute = clean(red.get("minute"))
 
         if not player or not team:
             continue
 
-        red_key = (
+        player_key = (
             f"{match_key}|"
             f"{player.lower()}|"
-            f"{team.lower()}|"
-            f"{minute}"
+            f"{team.lower()}"
         )
 
-        if red_key in red_seen:
+        # ONLY 1 RED PER PLAYER PER MATCH
+        if player_key in match_red_players:
             continue
 
-        red_seen.add(red_key)
+        match_red_players.add(player_key)
 
         slug = slugify(player)
 
