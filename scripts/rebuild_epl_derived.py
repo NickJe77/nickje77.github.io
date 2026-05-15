@@ -3,21 +3,22 @@ import json
 
 SEASONS_DIR = "docs/data/epl/seasons"
 
-print("DEBUGGING EPL SEASON STRUCTURE")
+print("INSPECTING EPL JSON STRUCTURE")
 
-season_files = sorted([
-    os.path.join(SEASONS_DIR, f)
-    for f in os.listdir(SEASONS_DIR)
+files = sorted([
+    f for f in os.listdir(SEASONS_DIR)
     if f.endswith(".json")
 ])
 
-print(f"FOUND {len(season_files)} SEASON FILES")
+print("FILES:", len(files))
 
-for path in season_files:
+for filename in files:
 
-    print("\n================================================")
-    print("FILE:", path)
-    print("================================================")
+    path = os.path.join(SEASONS_DIR, filename)
+
+    print("\n===================================================")
+    print("FILE:", filename)
+    print("===================================================")
 
     try:
 
@@ -26,49 +27,41 @@ for path in season_files:
 
     except Exception as e:
 
-        print("FAILED TO LOAD:", e)
+        print("BAD FILE:", e)
         continue
 
-    print("\nTOP LEVEL TYPE:")
-    print(type(data))
-
-    # =====================================================
-    # DICT FORMAT
-    # =====================================================
+    print("TOP LEVEL TYPE:", type(data))
 
     if isinstance(data, dict):
 
-        print("\nTOP LEVEL KEYS:")
+        print("TOP LEVEL KEYS:")
         print(list(data.keys())[:50])
 
-        games = data.get("games")
+        if "games" in data:
 
-        print("\nGAMES TYPE:")
-        print(type(games))
+            games = data["games"]
 
-        if isinstance(games, list) and games:
+            print("GAMES TYPE:", type(games))
+            print("GAME COUNT:", len(games))
 
-            print("\nFIRST GAME SAMPLE:")
-            print(json.dumps(games[0], indent=2)[:5000])
+            if games:
 
-            break
+                print("\nFIRST GAME:")
+                print(json.dumps(games[0], indent=2)[:10000])
 
-    # =====================================================
-    # LIST FORMAT
-    # =====================================================
+                break
 
     elif isinstance(data, list):
 
-        print("\nLIST LENGTH:")
-        print(len(data))
+        print("LIST LENGTH:", len(data))
 
         if data:
 
             print("\nFIRST ITEM TYPE:")
             print(type(data[0]))
 
-            print("\nFIRST GAME SAMPLE:")
-            print(json.dumps(data[0], indent=2)[:5000])
+            print("\nFIRST ITEM:")
+            print(json.dumps(data[0], indent=2)[:10000])
 
             break
 
