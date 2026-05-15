@@ -26,15 +26,17 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         if not isinstance(game, dict):
             continue
 
-        url = str(game.get("url", "")).strip()
+        key = (
+            str(game.get("date", "")).strip(),
+            str(game.get("home_team", "")).strip(),
+            str(game.get("away_team", "")).strip(),
+            str(game.get("home_score", "")).strip(),
+            str(game.get("away_score", "")).strip()
+        )
 
-        if not url:
-            continue
+        if key in seen:
 
-        if url in seen:
-
-            print("DELETING DUPLICATE:")
-            print(path)
+            print("DELETING:", path)
 
             os.remove(path)
 
@@ -42,7 +44,7 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
         else:
 
-            seen[url] = path
+            seen[key] = path
 
 print("\nTOTAL DELETED:", deleted)
-print("TOTAL UNIQUE:", len(seen))
+print("TOTAL UNIQUE MATCHES:", len(seen))
