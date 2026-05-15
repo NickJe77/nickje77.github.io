@@ -37,8 +37,6 @@ def slugify(v):
 
 os.makedirs(OUT_DIR, exist_ok=True)
 os.makedirs(PLAYERS_DIR, exist_ok=True)
-os.makedirs(TMP_DIR, exist_ok=True)
-os.makedirs(TMP_PLAYERS_DIR, exist_ok=True)
 
 # =========================================================
 # RESET TEMP
@@ -47,6 +45,7 @@ os.makedirs(TMP_PLAYERS_DIR, exist_ok=True)
 if os.path.exists(TMP_DIR):
     shutil.rmtree(TMP_DIR)
 
+os.makedirs(TMP_DIR, exist_ok=True)
 os.makedirs(TMP_PLAYERS_DIR, exist_ok=True)
 
 # =========================================================
@@ -230,7 +229,11 @@ for path in sorted(season_files):
 
         scorer_seen = set()
 
-        for scorer in game.get("scorers", []) or []:
+        for scorer in (
+            game.get("scorers")
+            or game.get("goals")
+            or []
+        ):
 
             if not isinstance(scorer, dict):
                 continue
@@ -289,7 +292,11 @@ for path in sorted(season_files):
 
         yellow_seen = set()
 
-        for yellow in game.get("yellow_cards", []) or []:
+        for yellow in (
+            game.get("yellow_cards")
+            or game.get("yellows")
+            or []
+        ):
 
             if not isinstance(yellow, dict):
                 continue
@@ -350,7 +357,11 @@ for path in sorted(season_files):
 
         red_seen = set()
 
-        for red in game.get("red_cards", []) or []:
+        for red in (
+            game.get("red_cards")
+            or game.get("reds")
+            or []
+        ):
 
             if not isinstance(red, dict):
                 continue
@@ -397,7 +408,7 @@ for path in sorted(season_files):
                     "red_cards": 0
                 }
 
-            # ONLY 1 RED MAX PER MATCH
+            # MAX 1 RED PER MATCH
             player_match_data[slug][match_id]["red_cards"] = 1
 
             player_red_matches[slug].add(match_id)
@@ -509,11 +520,11 @@ for team in sorted(team_scorers.keys()):
     })
 
 # =========================================================
-# SAVE
+# SAVE FILES
 # =========================================================
 
 with open(
-    f"{TMP_DIR}/players.json",
+    f"{OUT_DIR}/players.json",
     "w",
     encoding="utf-8"
 ) as f:
@@ -526,7 +537,7 @@ with open(
     )
 
 with open(
-    f"{TMP_DIR}/teams.json",
+    f"{OUT_DIR}/teams.json",
     "w",
     encoding="utf-8"
 ) as f:
@@ -542,7 +553,7 @@ with open(
     )
 
 with open(
-    f"{TMP_DIR}/team_stats.json",
+    f"{OUT_DIR}/team_stats.json",
     "w",
     encoding="utf-8"
 ) as f:
@@ -555,7 +566,7 @@ with open(
     )
 
 # =========================================================
-# MOVE INTO PLACE
+# PLAYER FILES
 # =========================================================
 
 if os.path.exists(PLAYERS_DIR):
@@ -569,21 +580,6 @@ for file in os.listdir(TMP_PLAYERS_DIR):
         os.path.join(TMP_PLAYERS_DIR, file),
         os.path.join(PLAYERS_DIR, file)
     )
-
-shutil.move(
-    f"{TMP_DIR}/players.json",
-    f"{OUT_DIR}/players.json"
-)
-
-shutil.move(
-    f"{TMP_DIR}/teams.json",
-    f"{OUT_DIR}/teams.json"
-)
-
-shutil.move(
-    f"{TMP_DIR}/team_stats.json",
-    f"{OUT_DIR}/team_stats.json"
-)
 
 shutil.rmtree(TMP_DIR, ignore_errors=True)
 
