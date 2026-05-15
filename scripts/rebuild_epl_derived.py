@@ -47,11 +47,8 @@ team_scorers = defaultdict(lambda: defaultdict(int))
 team_yellows = defaultdict(lambda: defaultdict(int))
 team_reds = defaultdict(lambda: defaultdict(int))
 
-red_seen = set()
-yellow_seen = set()
-
 # =====================================================
-# LOAD MATCHES
+# LOAD ALL MATCH FILES
 # =====================================================
 
 match_files = []
@@ -66,7 +63,7 @@ for root, dirs, files in os.walk(MATCHES_DIR):
                 os.path.join(root, file)
             )
 
-print("MATCH FILES:", len(match_files))
+print("MATCH FILES FOUND:", len(match_files))
 
 # =====================================================
 # PROCESS MATCHES
@@ -98,22 +95,20 @@ for path in sorted(match_files):
         if team not in teams:
 
             teams[team] = {
-                "team": team,
-                "top_scorers": defaultdict(int),
-                "yellow_cards": defaultdict(int),
-                "red_cards": defaultdict(int)
+                "team": team
             }
 
-    match_id = clean(
-        game.get("url")
-        or os.path.basename(path)
-    )
-
     # =================================================
-    # GOALS
+    # SCORERS
     # =================================================
 
-    for scorer in game.get("scorers", []):
+    scorers = game.get("scorers", [])
+
+    if scorers:
+
+        print("SCORERS FOUND:", path, len(scorers))
+
+    for scorer in scorers:
 
         if not isinstance(scorer, dict):
             continue
@@ -121,7 +116,7 @@ for path in sorted(match_files):
         player = clean(scorer.get("player"))
         team = clean(scorer.get("team"))
 
-        if not player:
+        if not player or not team:
             continue
 
         slug = slugify(player)
@@ -144,7 +139,9 @@ for path in sorted(match_files):
     # YELLOWS
     # =================================================
 
-    for yellow in game.get("yellow_cards", []):
+    yellows = game.get("yellow_cards", [])
+
+    for yellow in yellows:
 
         if not isinstance(yellow, dict):
             continue
@@ -152,15 +149,8 @@ for path in sorted(match_files):
         player = clean(yellow.get("player"))
         team = clean(yellow.get("team"))
 
-        if not player:
+        if not player or not team:
             continue
-
-        key = f"{match_id}_{player}_yellow"
-
-        if key in yellow_seen:
-            continue
-
-        yellow_seen.add(key)
 
         slug = slugify(player)
 
@@ -182,7 +172,9 @@ for path in sorted(match_files):
     # REDS
     # =================================================
 
-    for red in game.get("red_cards", []):
+    reds = game.get("red_cards", [])
+
+    for red in reds:
 
         if not isinstance(red, dict):
             continue
@@ -190,15 +182,8 @@ for path in sorted(match_files):
         player = clean(red.get("player"))
         team = clean(red.get("team"))
 
-        if not player:
+        if not player or not team:
             continue
-
-        key = f"{match_id}_{player}_red"
-
-        if key in red_seen:
-            continue
-
-        red_seen.add(key)
 
         slug = slugify(player)
 
@@ -217,7 +202,53 @@ for path in sorted(match_files):
         team_reds[team][player] += 1
 
 # =====================================================
-# PLAYER FILES
+# BUILD TEAM STATS
+# =====================================================
+
+team_stats = []
+
+for team in sorted(teams.keys()):
+
+    team_stats.append({
+
+        "team": team,
+
+        "top_scorers": [
+            {
+                "player": p,
+                "goals": g
+            }
+            for p, g in sorted(
+                team_scorers[team].items(),
+                key=lambda x: (-x[1], x[0])
+            )[:20]
+        ],
+
+        "yellow_cards": [
+            {
+                "player": p,
+                "yellow_cards": y
+            }
+            for p, y in sorted(
+                team_yellows[team].items(),
+                key=lambda x: (-x[1], x[0])
+            )[:20]
+        ],
+
+        "red_cards": [
+            {
+                "player": p,
+                "red_cards": r
+            }
+            for p, r in sorted(
+                team_reds[team].items(),
+                key=lambda x: (-x[1], x[0])
+            )[:20]
+        ]
+    })
+
+# =====================================================
+# SAVE PLAYER FILES
 # =====================================================
 
 players_index = []
@@ -240,53 +271,7 @@ for slug, pdata in players.items():
     players_index.append(pdata)
 
 # =====================================================
-# TEAM STATS
-# =====================================================
-
-team_stats = []
-
-for team_name, data in teams.items():
-
-    team_stats.append({
-
-        "team": team_name,
-
-        "top_scorers": [
-            {
-                "player": p,
-                "goals": g
-            }
-            for p, g in sorted(
-                data["top_scorers"].items(),
-                key=lambda x: (-x[1], x[0])
-            )[:20]
-        ],
-
-        "yellow_cards": [
-            {
-                "player": p,
-                "yellow_cards": y
-            }
-            for p, y in sorted(
-                data["yellow_cards"].items(),
-                key=lambda x: (-x[1], x[0])
-            )[:20]
-        ],
-
-        "red_cards": [
-            {
-                "player": p,
-                "red_cards": r
-            }
-            for p, r in sorted(
-                data["red_cards"].items(),
-                key=lambda x: (-x[1], x[0])
-            )[:20]
-        ]
-    })
-
-# =====================================================
-# SAVE
+# SAVE OUTPUTS
 # =====================================================
 
 with open(
@@ -315,5 +300,12 @@ with open(
         ensure_ascii=False
     )
 
+print("PLAYERS:", len(players))
 print("PLAYER FILES:", len(os.listdir(PLAYERS_DIR)))
+
+print("ARSENAL REDS:")
+for t in team_stats:
+    if t["team"] == "Arsenal":
+        print(t["red_cards"][:10])
+
 print("DONE")
