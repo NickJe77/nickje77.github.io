@@ -92,13 +92,38 @@ for path in sorted(season_files):
         print("BAD JSON:", path, e)
         continue
 
-    games = season_json.get("games", [])
+    # =====================================================
+    # SUPPORT BOTH JSON STRUCTURES
+    # =====================================================
 
-    season = clean(
-        season_json.get("season")
-    )
+    if isinstance(season_json, dict):
+
+        games = season_json.get("games", [])
+
+        season = clean(
+            season_json.get("season")
+            or os.path.basename(path).replace(".json", "")
+        )
+
+    elif isinstance(season_json, list):
+
+        games = season_json
+
+        season = clean(
+            os.path.basename(path).replace(".json", "")
+        )
+
+    else:
+        continue
+
+    # =====================================================
+    # PROCESS GAMES
+    # =====================================================
 
     for game in games:
+
+        if not isinstance(game, dict):
+            continue
 
         match_id = clean(
             game.get("match_id")
