@@ -1,341 +1,54 @@
 import os
 import json
-import shutil
 from collections import defaultdict
 
 MATCHES_DIR = "docs/data/epl/matches"
-OUT_DIR = "docs/data/epl"
-PLAYERS_DIR = f"{OUT_DIR}/players"
 
-print("REBUILDING EPL FROM MATCH FILES")
-
-# =====================================================
-# RESET
-# =====================================================
-
-if os.path.exists(PLAYERS_DIR):
-    shutil.rmtree(PLAYERS_DIR)
-
-os.makedirs(PLAYERS_DIR, exist_ok=True)
-
-# =====================================================
-# HELPERS
-# =====================================================
-
-def clean(v):
-    return str(v or "").strip()
-
-def slugify(v):
-    return (
-        clean(v)
-        .lower()
-        .replace("&", "and")
-        .replace(".", "")
-        .replace("'", "")
-        .replace("/", "-")
-        .replace(" ", "-")
-    )
-
-# =====================================================
-# STORAGE
-# =====================================================
-
-players = {}
-teams = {}
-
-team_scorers = defaultdict(lambda: defaultdict(int))
-team_yellows = defaultdict(lambda: defaultdict(int))
-team_reds = defaultdict(lambda: defaultdict(int))
-
-yellow_seen = set()
-player_red_match_seen = set()
-seen_matches = set()
-
-# =====================================================
-# LOAD MATCH FILES
-# =====================================================
-
-match_files = []
+player_reds = defaultdict(list)
 
 for root, dirs, files in os.walk(MATCHES_DIR):
 
     for file in files:
 
-        if file.endswith(".json"):
-
-            full_path = os.path.join(root, file)
-
-            print(full_path)
-
-            match_files.append(full_path)
-
-print("MATCH FILES:", len(match_files))
-
-# =====================================================
-# PROCESS MATCHES
-# =====================================================
-
-for path in sorted(match_files):
-
-    try:
-
-        with open(path, "r", encoding="utf-8") as f:
-            game = json.load(f)
-
-    except Exception as e:
-
-        print("FAILED:", path, e)
-        continue
-
-    if not isinstance(game, dict):
-        continue
-
-    match_key = clean(
-        game.get("url")
-        or os.path.basename(path)
-    )
-
-    # =================================================
-    # GLOBAL MATCH DEDUPE
-    # =================================================
-
-    if match_key in seen_matches:
-        continue
-
-    seen_matches.add(match_key)
-
-    home = clean(game.get("home_team"))
-    away = clean(game.get("away_team"))
-
-    if not home or not away:
-        continue
-
-    for team in [home, away]:
-
-        if team not in teams:
-
-            teams[team] = {
-                "team": team
-            }
-
-    # =================================================
-    # GOALS
-    # =================================================
-
-    for scorer in game.get("scorers", []):
-
-        if not isinstance(scorer, dict):
+        if not file.endswith(".json"):
             continue
 
-        player = clean(scorer.get("player"))
-        team = clean(scorer.get("team"))
+        path = os.path.join(root, file)
 
-        if not player or not team:
+        try:
+
+            with open(path, "r", encoding="utf-8") as f:
+                game = json.load(f)
+
+        except:
             continue
 
-        slug = slugify(player)
+        reds = game.get("red_cards", [])
 
-        if slug not in players:
+        for red in reds:
 
-            players[slug] = {
-                "player": player,
-                "slug": slug,
-                "goals": 0,
-                "yellow_cards": 0,
-                "red_cards": 0
-            }
+            if not isinstance(red, dict):
+                continue
 
-        players[slug]["goals"] += 1
+            player = str(red.get("player", "")).strip()
 
-        team_scorers[team][player] += 1
+            if not player:
+                continue
 
-    # =================================================
-    # YELLOWS
-    # =================================================
+            player_reds[player].append(path)
 
-    for yellow in game.get("yellow_cards", []):
+# SHOW CRAZY TOTALS
 
-        if not isinstance(yellow, dict):
-            continue
+for player, matches in sorted(
+    player_reds.items(),
+    key=lambda x: -len(x[1])
+):
 
-        player = clean(yellow.get("player"))
-        team = clean(yellow.get("team"))
-        minute = clean(yellow.get("minute"))
+    if len(matches) > 10:
 
-        if not player or not team:
-            continue
+        print("\n================================================")
+        print(player, len(matches))
+        print("================================================")
 
-        yellow_key = (
-            f"{match_key}|"
-            f"{player.lower()}|"
-            f"{team.lower()}|"
-            f"{minute}"
-        )
-
-        if yellow_key in yellow_seen:
-            continue
-
-        yellow_seen.add(yellow_key)
-
-        slug = slugify(player)
-
-        if slug not in players:
-
-            players[slug] = {
-                "player": player,
-                "slug": slug,
-                "goals": 0,
-                "yellow_cards": 0,
-                "red_cards": 0
-            }
-
-        players[slug]["yellow_cards"] += 1
-
-        team_yellows[team][player] += 1
-
-    # =================================================
-    # REDS
-    # =================================================
-
-    for red in game.get("red_cards", []):
-
-        if not isinstance(red, dict):
-            continue
-
-        player = clean(red.get("player"))
-        team = clean(red.get("team"))
-
-        if not player or not team:
-            continue
-
-        red_key = (
-            f"{match_key}|"
-            f"{player.lower()}|"
-            f"{team.lower()}"
-        )
-
-        # ONLY ONE RED PER PLAYER PER MATCH
-        if red_key in player_red_match_seen:
-            continue
-
-        player_red_match_seen.add(red_key)
-
-        slug = slugify(player)
-
-        if slug not in players:
-
-            players[slug] = {
-                "player": player,
-                "slug": slug,
-                "goals": 0,
-                "yellow_cards": 0,
-                "red_cards": 0
-            }
-
-        players[slug]["red_cards"] += 1
-
-        team_reds[team][player] += 1
-
-# =====================================================
-# TEAM STATS
-# =====================================================
-
-team_stats = []
-
-for team in sorted(teams.keys()):
-
-    team_stats.append({
-
-        "team": team,
-
-        "top_scorers": [
-            {
-                "player": p,
-                "goals": g
-            }
-            for p, g in sorted(
-                team_scorers[team].items(),
-                key=lambda x: (-x[1], x[0])
-            )[:20]
-        ],
-
-        "yellow_cards": [
-            {
-                "player": p,
-                "yellow_cards": y
-            }
-            for p, y in sorted(
-                team_yellows[team].items(),
-                key=lambda x: (-x[1], x[0])
-            )[:20]
-        ],
-
-        "red_cards": [
-            {
-                "player": p,
-                "red_cards": r
-            }
-            for p, r in sorted(
-                team_reds[team].items(),
-                key=lambda x: (-x[1], x[0])
-            )[:20]
-        ]
-    })
-
-# =====================================================
-# PLAYER FILES
-# =====================================================
-
-players_index = []
-
-for slug, pdata in players.items():
-
-    with open(
-        f"{PLAYERS_DIR}/{slug}.json",
-        "w",
-        encoding="utf-8"
-    ) as f:
-
-        json.dump(
-            pdata,
-            f,
-            indent=2,
-            ensure_ascii=False
-        )
-
-    players_index.append(pdata)
-
-# =====================================================
-# SAVE
-# =====================================================
-
-with open(
-    f"{OUT_DIR}/players.json",
-    "w",
-    encoding="utf-8"
-) as f:
-
-    json.dump(
-        players_index,
-        f,
-        indent=2,
-        ensure_ascii=False
-    )
-
-with open(
-    f"{OUT_DIR}/team_stats.json",
-    "w",
-    encoding="utf-8"
-) as f:
-
-    json.dump(
-        team_stats,
-        f,
-        indent=2,
-        ensure_ascii=False
-    )
-
-print("PLAYER FILES:", len(os.listdir(PLAYERS_DIR)))
-print("TOTAL PLAYERS:", len(players))
-print("TOTAL UNIQUE MATCHES:", len(seen_matches))
-print("DONE")
+        for m in matches[:50]:
+            print(m)
