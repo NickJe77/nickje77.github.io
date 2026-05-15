@@ -45,15 +45,14 @@ teams = {}
 
 team_scorers = defaultdict(lambda: defaultdict(int))
 team_yellows = defaultdict(lambda: defaultdict(int))
+team_reds = defaultdict(lambda: defaultdict(int))
 
-# IMPORTANT:
-# hard global dedupe for reds
+yellow_seen = set()
 player_red_match_seen = set()
-
-team_red_totals = defaultdict(lambda: defaultdict(int))
+seen_matches = set()
 
 # =====================================================
-# LOAD MATCHES
+# LOAD MATCH FILES
 # =====================================================
 
 match_files = []
@@ -64,9 +63,11 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
         if file.endswith(".json"):
 
-            match_files.append(
-                os.path.join(root, file)
-            )
+            full_path = os.path.join(root, file)
+
+            print(full_path)
+
+            match_files.append(full_path)
 
 print("MATCH FILES:", len(match_files))
 
@@ -89,6 +90,20 @@ for path in sorted(match_files):
     if not isinstance(game, dict):
         continue
 
+    match_key = clean(
+        game.get("url")
+        or os.path.basename(path)
+    )
+
+    # =================================================
+    # GLOBAL MATCH DEDUPE
+    # =================================================
+
+    if match_key in seen_matches:
+        continue
+
+    seen_matches.add(match_key)
+
     home = clean(game.get("home_team"))
     away = clean(game.get("away_team"))
 
@@ -102,11 +117,6 @@ for path in sorted(match_files):
             teams[team] = {
                 "team": team
             }
-
-    match_key = clean(
-        game.get("url")
-        or os.path.basename(path)
-    )
 
     # =================================================
     # GOALS
@@ -142,8 +152,6 @@ for path in sorted(match_files):
     # =================================================
     # YELLOWS
     # =================================================
-
-    yellow_seen = set()
 
     for yellow in game.get("yellow_cards", []):
 
@@ -200,13 +208,13 @@ for path in sorted(match_files):
         if not player or not team:
             continue
 
-        # HARD GLOBAL DEDUPE
         red_key = (
             f"{match_key}|"
             f"{player.lower()}|"
             f"{team.lower()}"
         )
 
+        # ONLY ONE RED PER PLAYER PER MATCH
         if red_key in player_red_match_seen:
             continue
 
@@ -224,13 +232,9 @@ for path in sorted(match_files):
                 "red_cards": 0
             }
 
-        # IMPORTANT:
-        # NEVER increment blindly
-        players[slug]["red_cards"] = (
-            players[slug]["red_cards"] + 1
-        )
+        players[slug]["red_cards"] += 1
 
-        team_red_totals[team][player] += 1
+        team_reds[team][player] += 1
 
 # =====================================================
 # TEAM STATS
@@ -272,7 +276,7 @@ for team in sorted(teams.keys()):
                 "red_cards": r
             }
             for p, r in sorted(
-                team_red_totals[team].items(),
+                team_reds[team].items(),
                 key=lambda x: (-x[1], x[0])
             )[:20]
         ]
@@ -333,4 +337,5 @@ with open(
 
 print("PLAYER FILES:", len(os.listdir(PLAYERS_DIR)))
 print("TOTAL PLAYERS:", len(players))
+print("TOTAL UNIQUE MATCHES:", len(seen_matches))
 print("DONE")
