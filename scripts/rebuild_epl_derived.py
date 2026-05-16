@@ -81,13 +81,15 @@ seen_matches = set()
 
 match_files = []
 
-for file in os.listdir(MATCHES_DIR):
+for root, dirs, files in os.walk(MATCHES_DIR):
 
-    if file.endswith(".json"):
+    for file in files:
 
-        match_files.append(
-            os.path.join(MATCHES_DIR, file)
-        )
+        if file.endswith(".json"):
+
+            match_files.append(
+                os.path.join(root, file)
+            )
 
 print("MATCH FILES:", len(match_files))
 
@@ -246,13 +248,18 @@ for path in sorted(match_files):
             red.get("team")
         )
 
+        minute = clean(
+            red.get("minute")
+        )
+
         if not player or not team:
             continue
 
         red_key = (
             f"{match_key}|"
             f"{player.lower()}|"
-            f"{team.lower()}"
+            f"{team.lower()}|"
+            f"{minute}"
         )
 
         if red_key in red_seen:
