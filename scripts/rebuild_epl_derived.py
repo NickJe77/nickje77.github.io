@@ -4,7 +4,9 @@ import shutil
 from collections import defaultdict
 
 MATCHES_DIR = "docs/data/epl/matches"
+
 OUT_DIR = "docs/data/epl"
+
 PLAYERS_DIR = f"{OUT_DIR}/players"
 
 print("BUILDING EPL DERIVED FILES")
@@ -26,6 +28,7 @@ def clean(v):
     return str(v or "").strip()
 
 def slugify(v):
+
     return (
         clean(v)
         .lower()
@@ -35,6 +38,30 @@ def slugify(v):
         .replace("/", "-")
         .replace(" ", "-")
     )
+
+# =====================================================
+# PLAYER NAME FIXES
+# =====================================================
+
+NAME_FIXES = {
+
+    "Fredrik Ljungberg": "Freddie Ljungberg",
+    "F. Ljungberg": "Freddie Ljungberg",
+
+    "Thierry Henry ": "Thierry Henry",
+
+    "Robert Pires": "Robert Pirès",
+
+    "Son Heung Min": "Son Heung-min",
+    "Heung Min Son": "Son Heung-min"
+
+}
+
+def fix_name(name):
+
+    name = clean(name)
+
+    return NAME_FIXES.get(name, name)
 
 # =====================================================
 # STORAGE
@@ -47,9 +74,6 @@ team_yellows = defaultdict(lambda: defaultdict(int))
 team_reds = defaultdict(lambda: defaultdict(int))
 
 seen_matches = set()
-
-# HARD LIMIT
-MAX_REASONABLE_REDS = 8
 
 # =====================================================
 # LOAD MATCH FILES
@@ -80,7 +104,9 @@ for path in sorted(match_files):
         with open(path, "r", encoding="utf-8") as f:
             game = json.load(f)
 
-    except Exception:
+    except Exception as e:
+
+        print("FAILED:", path, e)
         continue
 
     if not isinstance(game, dict):
@@ -89,6 +115,8 @@ for path in sorted(match_files):
     required = [
         "home_team",
         "away_team",
+        "home_score",
+        "away_score",
         "scorers",
         "yellow_cards",
         "red_cards"
@@ -101,6 +129,10 @@ for path in sorted(match_files):
         game.get("url")
         or os.path.basename(path)
     )
+
+    # =================================================
+    # DEDUPE MATCHES
+    # =================================================
 
     if match_key in seen_matches:
         continue
@@ -116,8 +148,13 @@ for path in sorted(match_files):
         if not isinstance(scorer, dict):
             continue
 
-        player = clean(scorer.get("player"))
-        team = clean(scorer.get("team"))
+        player = fix_name(
+            scorer.get("player")
+        )
+
+        team = clean(
+            scorer.get("team")
+        )
 
         if not player or not team:
             continue
@@ -149,9 +186,17 @@ for path in sorted(match_files):
         if not isinstance(yellow, dict):
             continue
 
-        player = clean(yellow.get("player"))
-        team = clean(yellow.get("team"))
-        minute = clean(yellow.get("minute"))
+        player = fix_name(
+            yellow.get("player")
+        )
+
+        team = clean(
+            yellow.get("team")
+        )
+
+        minute = clean(
+            yellow.get("minute")
+        )
 
         if not player or not team:
             continue
@@ -195,8 +240,13 @@ for path in sorted(match_files):
         if not isinstance(red, dict):
             continue
 
-        player = clean(red.get("player"))
-        team = clean(red.get("team"))
+        player = fix_name(
+            red.get("player")
+        )
+
+        team = clean(
+            red.get("team")
+        )
 
         if not player or not team:
             continue
@@ -224,12 +274,9 @@ for path in sorted(match_files):
                 "red_cards": 0
             }
 
-        # HARD CAP
-        if players[slug]["red_cards"] < MAX_REASONABLE_REDS:
+        players[slug]["red_cards"] += 1
 
-            players[slug]["red_cards"] += 1
-
-            team_reds[team][player] += 1
+        team_reds[team][player] += 1
 
 # =====================================================
 # TEAM STATS
@@ -341,4 +388,7 @@ with open(
         ensure_ascii=False
     )
 
+print("PLAYER FILES:", len(os.listdir(PLAYERS_DIR)))
+print("TOTAL PLAYERS:", len(players))
+print("TOTAL UNIQUE MATCHES:", len(seen_matches))
 print("DONE")
