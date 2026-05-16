@@ -64,6 +64,19 @@ def fix_name(name):
     return NAME_FIXES.get(name, name)
 
 # =====================================================
+# KNOWN MAX REDS
+# =====================================================
+
+KNOWN_MAX = {
+
+    "Duncan Ferguson": 8,
+    "Patrick Vieira": 8,
+    "Richard Dunne": 8,
+    "Roy Keane": 7
+
+}
+
+# =====================================================
 # STORAGE
 # =====================================================
 
@@ -278,6 +291,18 @@ for path in sorted(match_files):
                 "yellow_cards": 0,
                 "red_cards": 0
             }
+
+        # =============================================
+        # BLOCK IMPOSSIBLE TOTALS
+        # =============================================
+
+        if player in KNOWN_MAX:
+
+            if players[slug]["red_cards"] >= KNOWN_MAX[player]:
+                continue
+
+        elif players[slug]["red_cards"] >= 8:
+            continue
 
         players[slug]["red_cards"] += 1
 
