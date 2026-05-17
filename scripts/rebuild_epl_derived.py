@@ -1,12 +1,37 @@
 import os
 import json
-from collections import defaultdict
 
 MATCHES_DIR = "docs/data/epl/matches"
 
-print("SCANNING RED CARD EVENTS")
+print("FIXING EPL RED CARD EVENTS")
 
-player_totals = defaultdict(int)
+fixed_matches = 0
+removed_events = 0
+
+# =====================================================
+# VALID RED CARD WORDS
+# =====================================================
+
+VALID_RED_WORDS = [
+    "red",
+    "sent off",
+    "dismissed"
+]
+
+INVALID_RED_WORDS = [
+    "yellow",
+    "booking",
+    "booked",
+    "foul",
+    "penalty",
+    "goal",
+    "substitution",
+    "offside"
+]
+
+# =====================================================
+# FILES
+# =====================================================
 
 for root, dirs, files in os.walk(MATCHES_DIR):
 
@@ -28,18 +53,16 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         if not isinstance(game, dict):
             continue
 
-        home = str(game.get("home_team", "")).strip()
-        away = str(game.get("away_team", "")).strip()
+        original_reds = game.get("red_cards", [])
 
-        date = str(
-            game.get("date")
-            or game.get("match_date")
-            or ""
-        ).strip()
+        if not isinstance(original_reds, list):
+            continue
 
-        seen_in_match = set()
+        cleaned_reds = []
 
-        for red in game.get("red_cards", []):
+        seen = set()
+
+        for red in original_reds:
 
             if not isinstance(red, dict):
                 continue
@@ -59,77 +82,78 @@ for root, dirs, files in os.walk(MATCHES_DIR):
                 or ""
             ).strip()
 
-            description = str(
+            desc = str(
                 red.get("description")
                 or red.get("detail")
                 or red.get("type")
                 or ""
-            ).strip()
+            ).lower().strip()
 
             if not player:
+                removed_events += 1
                 continue
 
-            key = (
-                f"{player}|"
-                f"{team}"
-            )
+            # =================================================
+            # REMOVE OBVIOUS NON-REDS
+            # =================================================
 
-            # SHOW DUPLICATE REDS INSIDE SAME MATCH
+            if desc:
 
-            if key in seen_in_match:
+                bad = False
 
-                print("\n===================================")
-                print("DUPLICATE RED IN MATCH")
-                print("FILE:", path)
-                print("DATE:", date)
-                print("MATCH:", home, "vs", away)
-                print("PLAYER:", player)
-                print("TEAM:", team)
-                print("MINUTE:", minute)
-                print("DESC:", description)
+                for word in INVALID_RED_WORDS:
 
-            seen_in_match.add(key)
+                    if word in desc:
+                        bad = True
+                        break
 
-        # NORMAL TOTALS
+                if bad:
+                    removed_events += 1
+                    continue
 
-        counted = set()
+                valid = False
 
-        for red in game.get("red_cards", []):
+                for word in VALID_RED_WORDS:
 
-            if not isinstance(red, dict):
-                continue
+                    if word in desc:
+                        valid = True
+                        break
 
-            player = str(
-                red.get("player")
-                or ""
-            ).strip()
+                if not valid:
+                    removed_events += 1
+                    continue
 
-            team = str(
-                red.get("team")
-                or ""
-            ).strip()
-
-            if not player:
-                continue
+            # =================================================
+            # ONE RED PER PLAYER PER MATCH
+            # =================================================
 
             key = f"{player}|{team}"
 
-            if key in counted:
+            if key in seen:
+                removed_events += 1
                 continue
 
-            counted.add(key)
+            seen.add(key)
 
-            player_totals[player] += 1
+            cleaned_reds.append(red)
 
-print("\n===================================")
-print("TOP RED CARD TOTALS")
-print("===================================")
+        # =================================================
+        # SAVE CLEANED FILE
+        # =================================================
 
-for player, total in sorted(
-    player_totals.items(),
-    key=lambda x: -x[1]
-)[:50]:
+        game["red_cards"] = cleaned_reds
 
-    print(player, "-", total)
+        with open(path, "w", encoding="utf-8") as f:
 
-print("\nDONE")
+            json.dump(
+                game,
+                f,
+                indent=2,
+                ensure_ascii=False
+            )
+
+        fixed_matches += 1
+
+print("MATCHES FIXED:", fixed_matches)
+print("RED EVENTS REMOVED:", removed_events)
+print("DONE")
