@@ -1,20 +1,14 @@
 import os
 import json
-import shutil
 from collections import defaultdict
 
 MATCHES_DIR = "docs/data/epl/matches"
+
 OUT_DIR = "docs/data/epl"
+
 PLAYERS_DIR = f"{OUT_DIR}/players"
 
-print("SAFE EPL REBUILD")
-
-# =====================================================
-# RESET DERIVED ONLY
-# =====================================================
-
-if os.path.exists(PLAYERS_DIR):
-    shutil.rmtree(PLAYERS_DIR)
+print("NON-DESTRUCTIVE EPL REBUILD")
 
 os.makedirs(PLAYERS_DIR, exist_ok=True)
 
@@ -38,21 +32,48 @@ def slugify(v):
     )
 
 # =====================================================
-# STORAGE
+# EXISTING PLAYERS
 # =====================================================
 
 players = {}
+
+for file in os.listdir(PLAYERS_DIR):
+
+    if not file.endswith(".json"):
+        continue
+
+    path = os.path.join(
+        PLAYERS_DIR,
+        file
+    )
+
+    try:
+
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        slug = clean(
+            data.get("slug")
+            or file.replace(".json", "")
+        )
+
+        players[slug] = data
+
+    except:
+        continue
+
+# =====================================================
+# TEAM STORAGE
+# =====================================================
 
 team_scorers = defaultdict(lambda: defaultdict(int))
 team_yellows = defaultdict(lambda: defaultdict(int))
 team_reds = defaultdict(lambda: defaultdict(int))
 
-career_reds = defaultdict(int)
-
 seen_matches = set()
 
 # =====================================================
-# LOAD MATCHES
+# MATCH FILES
 # =====================================================
 
 match_files = []
@@ -80,9 +101,7 @@ for path in sorted(match_files):
         with open(path, "r", encoding="utf-8") as f:
             game = json.load(f)
 
-    except Exception as e:
-
-        print("FAILED:", path, e)
+    except:
         continue
 
     if not isinstance(game, dict):
@@ -99,7 +118,7 @@ for path in sorted(match_files):
     seen_matches.add(match_key)
 
     # =================================================
-    # GOALS
+    # SCORERS
     # =================================================
 
     for scorer in game.get("scorers", []):
@@ -130,7 +149,9 @@ for path in sorted(match_files):
                 "red_cards": 0
             }
 
-        players[slug]["goals"] += 1
+        players[slug]["goals"] = (
+            players[slug].get("goals", 0) + 1
+        )
 
         team_scorers[team][player] += 1
 
@@ -160,9 +181,7 @@ for path in sorted(match_files):
         if not player or not team:
             continue
 
-        ykey = (
-            f"{player}|{minute}"
-        )
+        ykey = f"{player}|{minute}"
 
         if ykey in yellow_seen:
             continue
@@ -181,7 +200,9 @@ for path in sorted(match_files):
                 "red_cards": 0
             }
 
-        players[slug]["yellow_cards"] += 1
+        players[slug]["yellow_cards"] = (
+            players[slug].get("yellow_cards", 0) + 1
+        )
 
         team_yellows[team][player] += 1
 
@@ -211,10 +232,6 @@ for path in sorted(match_files):
         if not player or not team:
             continue
 
-        # =============================================
-        # CLEAN MINUTE
-        # =============================================
-
         digits = ""
 
         for c in minute_raw:
@@ -227,30 +244,15 @@ for path in sorted(match_files):
         except:
             minute = 90
 
-        # =============================================
-        # FAKE RED FILTERS
-        # =============================================
-
-        # Most corruption = yellows copied as reds
-
         if minute < 55:
             continue
 
-        # duplicate same player same match
-
-        rkey = (
-            f"{player}|{minute}"
-        )
+        rkey = f"{player}|{minute}"
 
         if rkey in red_seen:
             continue
 
         red_seen.add(rkey)
-
-        # impossible career totals
-
-        if career_reds[player] >= 8:
-            continue
 
         slug = slugify(player)
 
@@ -264,27 +266,69 @@ for path in sorted(match_files):
                 "red_cards": 0
             }
 
-        players[slug]["red_cards"] += 1
+        current_reds = players[slug].get(
+            "red_cards",
+            0
+        )
 
-        career_reds[player] += 1
+        if current_reds >= 8:
+            continue
+
+        players[slug]["red_cards"] = (
+            current_reds + 1
+        )
 
         team_reds[team][player] += 1
 
 # =====================================================
-# TEAM STATS
+# SAVE PLAYERS
 # =====================================================
+
+players_index = []
+
+for slug, pdata in players.items():
+
+    path = f"{PLAYERS_DIR}/{slug}.json"
+
+    with open(path, "w", encoding="utf-8") as f:
+
+        json.dump(
+            pdata,
+            f,
+            indent=2,
+            ensure_ascii=False
+        )
+
+    players_index.append(pdata)
+
+# =====================================================
+# SAVE INDEXES
+# =====================================================
+
+with open(
+    f"{OUT_DIR}/players.json",
+    "w",
+    encoding="utf-8"
+) as f:
+
+    json.dump(
+        players_index,
+        f,
+        indent=2,
+        ensure_ascii=False
+    )
 
 team_stats = []
 
 all_teams = set()
 
-for t in team_scorers.keys():
+for t in team_scorers:
     all_teams.add(t)
 
-for t in team_yellows.keys():
+for t in team_yellows:
     all_teams.add(t)
 
-for t in team_reds.keys():
+for t in team_reds:
     all_teams.add(t)
 
 for team in sorted(all_teams):
@@ -326,46 +370,6 @@ for team in sorted(all_teams):
             )[:20]
         ]
     })
-
-# =====================================================
-# SAVE PLAYERS
-# =====================================================
-
-players_index = []
-
-for slug, pdata in players.items():
-
-    with open(
-        f"{PLAYERS_DIR}/{slug}.json",
-        "w",
-        encoding="utf-8"
-    ) as f:
-
-        json.dump(
-            pdata,
-            f,
-            indent=2,
-            ensure_ascii=False
-        )
-
-    players_index.append(pdata)
-
-# =====================================================
-# SAVE
-# =====================================================
-
-with open(
-    f"{OUT_DIR}/players.json",
-    "w",
-    encoding="utf-8"
-) as f:
-
-    json.dump(
-        players_index,
-        f,
-        indent=2,
-        ensure_ascii=False
-    )
 
 with open(
     f"{OUT_DIR}/team_stats.json",
