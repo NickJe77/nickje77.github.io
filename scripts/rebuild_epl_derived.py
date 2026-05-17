@@ -170,10 +170,7 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             if not player or not team:
                 continue
 
-            key = (
-                f"{match_url}|{team}|"
-                f"{player}|{minute}"
-            )
+            key = f"{match_url}|{team}|{player}|{minute}"
 
             if key in scorer_seen:
                 continue
@@ -190,8 +187,6 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         # YELLOWS
         # =================================================
 
-        yellow_lookup = set()
-
         yellow_seen = set()
 
         for yellow in game.get("yellow_cards", []):
@@ -206,12 +201,7 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             if not player or not team:
                 continue
 
-            key = (
-                f"{match_url}|{team}|"
-                f"{player}|{minute}"
-            )
-
-            yellow_lookup.add(key)
+            key = f"{match_url}|{team}|{player}|{minute}"
 
             if key in yellow_seen:
                 continue
@@ -226,9 +216,10 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
         # =================================================
         # REDS
+        # ONE RED MAX PER PLAYER PER MATCH
         # =================================================
 
-        red_seen = set()
+        player_red_taken = set()
 
         for red in game.get("red_cards", []):
 
@@ -237,7 +228,6 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
             player = clean(red.get("player"))
             team = clean(red.get("team"))
-            minute = clean(red.get("minute"))
 
             desc = clean(
                 red.get("description")
@@ -248,19 +238,7 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             if not player or not team:
                 continue
 
-            key = (
-                f"{match_url}|{team}|"
-                f"{player}|{minute}"
-            )
-
-            if key in red_seen:
-                continue
-
-            red_seen.add(key)
-
-            # =================================================
-            # FILTER SECOND YELLOWS
-            # =================================================
+            # skip second yellows
 
             if "second yellow" in desc:
                 continue
@@ -271,11 +249,18 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             if "yellow/red" in desc:
                 continue
 
-            # same exact yellow event
-            # usually corruption
+            # ONE RED PER PLAYER PER MATCH
 
-            if key in yellow_lookup:
+            red_key = (
+                f"{match_url}|"
+                f"{team}|"
+                f"{player}"
+            )
+
+            if red_key in player_red_taken:
                 continue
+
+            player_red_taken.add(red_key)
 
             slug = ensure_player(player)
 
