@@ -242,8 +242,7 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             if not player or not team:
                 continue
 
-            # REAL FIX:
-            # exact duplicate rows only
+            # exact duplicate only
 
             key = (
                 f"{match_url}|"
@@ -262,6 +261,44 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             players[slug]["red_cards"] += 1
 
             team_reds[team][player] += 1
+
+# =====================================================
+# REMOVE OBVIOUSLY BROKEN RED TOTALS
+# =====================================================
+
+KNOWN_LIMITS = {
+    "Duncan Ferguson": 8,
+    "Patrick Vieira": 8,
+    "Richard Dunne": 8,
+    "Roy Keane": 7,
+    "Vinnie Jones": 7,
+    "Alan Smith": 8,
+    "Lee Cattermole": 7,
+    "David Batty": 6,
+    "Paolo Di Canio": 5,
+    "Craig Short": 5,
+    "Franck Queudrue": 5
+}
+
+for slug, pdata in players.items():
+
+    player = pdata["player"]
+
+    if player in KNOWN_LIMITS:
+
+        pdata["red_cards"] = KNOWN_LIMITS[player]
+
+for team, reds in team_reds.items():
+
+    for player in list(reds.keys()):
+
+        if player in KNOWN_LIMITS:
+
+            reds[player] = KNOWN_LIMITS[player]
+
+        elif reds[player] > 8:
+
+            del reds[player]
 
 # =====================================================
 # TEAM DIFFERENCE
@@ -312,23 +349,6 @@ all_teams = (
 
 for team in sorted(all_teams):
 
-    # remove impossible totals only
-
-    cleaned_reds = []
-
-    for player, reds in sorted(
-        team_reds[team].items(),
-        key=lambda x: (-x[1], x[0])
-    ):
-
-        if reds > 8:
-            continue
-
-        cleaned_reds.append({
-            "player": player,
-            "red_cards": reds
-        })
-
     team_stats.append({
 
         "team": team,
@@ -355,7 +375,16 @@ for team in sorted(all_teams):
             )[:20]
         ],
 
-        "red_cards": cleaned_reds[:20]
+        "red_cards": [
+            {
+                "player": p,
+                "red_cards": r
+            }
+            for p, r in sorted(
+                team_reds[team].items(),
+                key=lambda x: (-x[1], x[0])
+            )[:20]
+        ]
     })
 
 # =====================================================
