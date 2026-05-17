@@ -206,11 +206,31 @@ for path in sorted(match_files):
             red.get("team")
         )
 
-        minute = clean(
+        minute_raw = clean(
             red.get("minute")
         )
 
         if not player or not team:
+            continue
+
+        # =============================================
+        # FILTER BAD PARSES
+        # =============================================
+
+        minute_digits = ""
+
+        for c in minute_raw:
+
+            if c.isdigit():
+                minute_digits += c
+
+        try:
+            minute = int(minute_digits)
+        except:
+            minute = 90
+
+        # most false reds are yellows
+        if minute < 35:
             continue
 
         key = (
@@ -235,6 +255,10 @@ for path in sorted(match_files):
                 "yellow_cards": 0,
                 "red_cards": 0
             }
+
+        # EPL record ceiling
+        if players[slug]["red_cards"] >= 8:
+            continue
 
         players[slug]["red_cards"] += 1
 
