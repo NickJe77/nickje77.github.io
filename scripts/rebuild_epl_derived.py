@@ -30,10 +30,21 @@ def slugify(v):
     )
 
 # =====================================================
-# EXISTING PLAYERS
+# STORAGE
 # =====================================================
 
 players = {}
+career_reds = defaultdict(int)
+
+team_scorers = defaultdict(lambda: defaultdict(int))
+team_yellows = defaultdict(lambda: defaultdict(int))
+team_reds = defaultdict(lambda: defaultdict(int))
+
+seen_matches = set()
+
+# =====================================================
+# EXISTING PLAYERS
+# =====================================================
 
 for file in os.listdir(PLAYERS_DIR):
 
@@ -65,18 +76,6 @@ for file in os.listdir(PLAYERS_DIR):
 
     except:
         continue
-
-# =====================================================
-# STORAGE
-# =====================================================
-
-team_scorers = defaultdict(lambda: defaultdict(int))
-team_yellows = defaultdict(lambda: defaultdict(int))
-team_reds = defaultdict(lambda: defaultdict(int))
-
-career_reds = defaultdict(int)
-
-seen_matches = set()
 
 # =====================================================
 # LOAD MATCHES
@@ -238,10 +237,6 @@ for path in sorted(match_files):
         if not player or not team:
             continue
 
-        # =============================================
-        # CLEAN MINUTE
-        # =============================================
-
         digits = ""
 
         for c in minute_raw:
@@ -254,20 +249,17 @@ for path in sorted(match_files):
         except:
             minute = 90
 
-        # =============================================
-        # ONLY FILTER EXTREME BAD PARSES
-        # =============================================
-
-        # impossible red minute
+        # impossible parse only
 
         if minute <= 1:
             continue
 
-        # duplicate same player same minute same match
+        # ONLY exact duplicate same match
 
         rkey = (
             f"{match_key}|"
             f"{player}|"
+            f"{team}|"
             f"{minute}"
         )
 
@@ -276,7 +268,7 @@ for path in sorted(match_files):
 
         red_seen.add(rkey)
 
-        # impossible EPL career totals
+        # EPL record ceiling
 
         if career_reds[player] >= 8:
             continue
