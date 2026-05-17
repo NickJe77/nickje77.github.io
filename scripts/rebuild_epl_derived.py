@@ -8,31 +8,6 @@ print("FIXING EPL RED CARD EVENTS")
 fixed_matches = 0
 removed_events = 0
 
-# =====================================================
-# VALID / INVALID WORDS
-# =====================================================
-
-VALID_RED_WORDS = [
-    "red",
-    "sent off",
-    "dismissed"
-]
-
-INVALID_RED_WORDS = [
-    "yellow",
-    "booking",
-    "booked",
-    "foul",
-    "penalty",
-    "goal",
-    "substitution",
-    "offside"
-]
-
-# =====================================================
-# FILES
-# =====================================================
-
 for root, dirs, files in os.walk(MATCHES_DIR):
 
     for file in sorted(files):
@@ -53,16 +28,15 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         if not isinstance(game, dict):
             continue
 
-        original_reds = game.get("red_cards", [])
+        reds = game.get("red_cards", [])
 
-        if not isinstance(original_reds, list):
+        if not isinstance(reds, list):
             continue
 
-        cleaned_reds = []
-
+        cleaned = []
         seen = set()
 
-        for red in original_reds:
+        for red in reds:
 
             if not isinstance(red, dict):
                 removed_events += 1
@@ -78,24 +52,12 @@ for root, dirs, files in os.walk(MATCHES_DIR):
                 or ""
             ).strip()
 
-            minute = str(
-                red.get("minute")
-                or ""
-            ).strip()
-
-            desc = str(
-                red.get("description")
-                or red.get("detail")
-                or red.get("type")
-                or ""
-            ).lower().strip()
-
             if not player:
                 removed_events += 1
                 continue
 
             # =================================================
-            # ONE RED PER PLAYER PER MATCH
+            # ONLY ONE RED PER PLAYER PER MATCH
             # =================================================
 
             key = f"{player}|{team}"
@@ -104,61 +66,15 @@ for root, dirs, files in os.walk(MATCHES_DIR):
                 removed_events += 1
                 continue
 
-            # =================================================
-            # EMPTY DESCRIPTIONS
-            # =================================================
-
-            # keep ONLY first empty entry
-
-            if not desc:
-
-                seen.add(key)
-
-                cleaned_reds.append(red)
-
-                continue
-
-            # =================================================
-            # INVALID WORDS
-            # =================================================
-
-            invalid = False
-
-            for word in INVALID_RED_WORDS:
-
-                if word in desc:
-                    invalid = True
-                    break
-
-            if invalid:
-                removed_events += 1
-                continue
-
-            # =================================================
-            # MUST CONTAIN RED WORDS
-            # =================================================
-
-            valid = False
-
-            for word in VALID_RED_WORDS:
-
-                if word in desc:
-                    valid = True
-                    break
-
-            if not valid:
-                removed_events += 1
-                continue
-
             seen.add(key)
 
-            cleaned_reds.append(red)
+            cleaned.append({
+                "player": player,
+                "team": team,
+                "minute": red.get("minute", "")
+            })
 
-        # =================================================
-        # SAVE FILE
-        # =================================================
-
-        game["red_cards"] = cleaned_reds
+        game["red_cards"] = cleaned
 
         with open(path, "w", encoding="utf-8") as f:
 
