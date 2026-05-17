@@ -1,23 +1,36 @@
 import os
 import json
+from collections import defaultdict
 
 MATCHES_DIR = "docs/data/epl/matches"
 OUT_DIR = "docs/data/epl"
+PLAYERS_DIR = f"{OUT_DIR}/players"
 
-TEAMS_FILE = f"{OUT_DIR}/teams.json"
-
-print("REBUILDING EPL TEAMS")
+os.makedirs(PLAYERS_DIR, exist_ok=True)
 
 teams = {}
 
-seen_matches = set()
+players = {}
 
-# =====================================================
-# HELPERS
-# =====================================================
+team_scorers = defaultdict(lambda: defaultdict(int))
+team_yellows = defaultdict(lambda: defaultdict(int))
+team_reds = defaultdict(lambda: defaultdict(int))
+
+seen_matches = set()
 
 def clean(v):
     return str(v or "").strip()
+
+def slugify(v):
+    return (
+        clean(v)
+        .lower()
+        .replace("&", "and")
+        .replace(".", "")
+        .replace("'", "")
+        .replace("/", "-")
+        .replace(" ", "-")
+    )
 
 def ensure_team(team):
 
@@ -35,127 +48,160 @@ def ensure_team(team):
             "points": 0
         }
 
-# =====================================================
-# LOAD MATCHES
-# =====================================================
-
-match_files = []
-
 for root, dirs, files in os.walk(MATCHES_DIR):
 
     for file in files:
 
-        if file.endswith(".json"):
+        if not file.endswith(".json"):
+            continue
 
-            match_files.append(
-                os.path.join(root, file)
-            )
+        path = os.path.join(root, file)
 
-print("MATCH FILES:", len(match_files))
+        try:
 
-# =====================================================
-# PROCESS
-# =====================================================
+            with open(path, "r", encoding="utf-8") as f:
+                game = json.load(f)
 
-for path in sorted(match_files):
+        except:
+            continue
 
-    try:
+        if not isinstance(game, dict):
+            continue
 
-        with open(path, "r", encoding="utf-8") as f:
-            game = json.load(f)
-
-    except Exception as e:
-
-        print("FAILED:", path, e)
-        continue
-
-    if not isinstance(game, dict):
-        continue
-
-    home_team = clean(
-        game.get("home_team")
-    )
-
-    away_team = clean(
-        game.get("away_team")
-    )
-
-    if not home_team or not away_team:
-        continue
-
-    match_key = clean(
-        game.get("url")
-        or f"{home_team}_{away_team}_{os.path.basename(path)}"
-    )
-
-    if match_key in seen_matches:
-        continue
-
-    seen_matches.add(match_key)
-
-    ensure_team(home_team)
-    ensure_team(away_team)
-
-    try:
-        home_score = int(
-            game.get("home_score", 0)
+        match_key = clean(
+            game.get("url")
+            or os.path.basename(path)
         )
-    except:
-        home_score = 0
 
-    try:
-        away_score = int(
-            game.get("away_score", 0)
-        )
-    except:
-        away_score = 0
+        if match_key in seen_matches:
+            continue
 
-    # =================================================
-    # GAMES
-    # =================================================
+        seen_matches.add(match_key)
 
-    teams[home_team]["games"] += 1
-    teams[away_team]["games"] += 1
+        home = clean(game.get("home_team"))
+        away = clean(game.get("away_team"))
 
-    # =================================================
-    # GOALS
-    # =================================================
+        if not home or not away:
+            continue
 
-    teams[home_team]["goals_for"] += home_score
-    teams[home_team]["goals_against"] += away_score
+        ensure_team(home)
+        ensure_team(away)
 
-    teams[away_team]["goals_for"] += away_score
-    teams[away_team]["goals_against"] += home_score
+        try:
+            hs = int(game.get("home_score", 0))
+        except:
+            hs = 0
 
-    # =================================================
-    # RESULTS
-    # =================================================
+        try:
+            aw = int(game.get("away_score", 0))
+        except:
+            aw = 0
 
-    if home_score > away_score:
+        teams[home]["games"] += 1
+        teams[away]["games"] += 1
 
-        teams[home_team]["wins"] += 1
-        teams[home_team]["points"] += 3
+        teams[home]["goals_for"] += hs
+        teams[home]["goals_against"] += aw
 
-        teams[away_team]["losses"] += 1
+        teams[away]["goals_for"] += aw
+        teams[away]["goals_against"] += hs
 
-    elif away_score > home_score:
+        if hs > aw:
 
-        teams[away_team]["wins"] += 1
-        teams[away_team]["points"] += 3
+            teams[home]["wins"] += 1
+            teams[home]["points"] += 3
 
-        teams[home_team]["losses"] += 1
+            teams[away]["losses"] += 1
 
-    else:
+        elif aw > hs:
 
-        teams[home_team]["draws"] += 1
-        teams[away_team]["draws"] += 1
+            teams[away]["wins"] += 1
+            teams[away]["points"] += 3
 
-        teams[home_team]["points"] += 1
-        teams[away_team]["points"] += 1
+            teams[home]["losses"] += 1
 
-# =====================================================
-# GOAL DIFFERENCE
-# =====================================================
+        else:
+
+            teams[home]["draws"] += 1
+            teams[away]["draws"] += 1
+
+            teams[home]["points"] += 1
+            teams[away]["points"] += 1
+
+        for scorer in game.get("scorers", []):
+
+            if not isinstance(scorer, dict):
+                continue
+
+            player = clean(scorer.get("player"))
+            team = clean(scorer.get("team"))
+
+            if not player or not team:
+                continue
+
+            slug = slugify(player)
+
+            players.setdefault(slug, {
+                "player": player,
+                "slug": slug,
+                "goals": 0,
+                "yellow_cards": 0,
+                "red_cards": 0
+            })
+
+            players[slug]["goals"] += 1
+
+            team_scorers[team][player] += 1
+
+        for yellow in game.get("yellow_cards", []):
+
+            if not isinstance(yellow, dict):
+                continue
+
+            player = clean(yellow.get("player"))
+            team = clean(yellow.get("team"))
+
+            if not player or not team:
+                continue
+
+            slug = slugify(player)
+
+            players.setdefault(slug, {
+                "player": player,
+                "slug": slug,
+                "goals": 0,
+                "yellow_cards": 0,
+                "red_cards": 0
+            })
+
+            players[slug]["yellow_cards"] += 1
+
+            team_yellows[team][player] += 1
+
+        for red in game.get("red_cards", []):
+
+            if not isinstance(red, dict):
+                continue
+
+            player = clean(red.get("player"))
+            team = clean(red.get("team"))
+
+            if not player or not team:
+                continue
+
+            slug = slugify(player)
+
+            players.setdefault(slug, {
+                "player": player,
+                "slug": slug,
+                "goals": 0,
+                "yellow_cards": 0,
+                "red_cards": 0
+            })
+
+            players[slug]["red_cards"] += 1
+
+            team_reds[team][player] += 1
 
 for team in teams.values():
 
@@ -164,37 +210,119 @@ for team in teams.values():
         - team["goals_against"]
     )
 
-# =====================================================
-# SORT
-# =====================================================
+players_index = []
 
-output = sorted(
-    teams.values(),
-    key=lambda x: (
-        -x["points"],
-        -x["goal_difference"],
-        -x["goals_for"],
-        x["team"]
-    )
+for slug, pdata in players.items():
+
+    with open(
+        f"{PLAYERS_DIR}/{slug}.json",
+        "w",
+        encoding="utf-8"
+    ) as f:
+
+        json.dump(
+            pdata,
+            f,
+            indent=2,
+            ensure_ascii=False
+        )
+
+    players_index.append(pdata)
+
+team_stats = []
+
+all_teams = (
+    set(teams.keys())
+    | set(team_scorers.keys())
+    | set(team_yellows.keys())
+    | set(team_reds.keys())
 )
 
-# =====================================================
-# SAVE
-# =====================================================
+for team in sorted(all_teams):
+
+    team_stats.append({
+
+        "team": team,
+
+        "top_scorers": [
+            {
+                "player": p,
+                "goals": g
+            }
+            for p, g in sorted(
+                team_scorers[team].items(),
+                key=lambda x: (-x[1], x[0])
+            )[:20]
+        ],
+
+        "yellow_cards": [
+            {
+                "player": p,
+                "yellow_cards": y
+            }
+            for p, y in sorted(
+                team_yellows[team].items(),
+                key=lambda x: (-x[1], x[0])
+            )[:20]
+        ],
+
+        "red_cards": [
+            {
+                "player": p,
+                "red_cards": r
+            }
+            for p, r in sorted(
+                team_reds[team].items(),
+                key=lambda x: (-x[1], x[0])
+            )[:20]
+        ]
+    })
 
 with open(
-    TEAMS_FILE,
+    f"{OUT_DIR}/players.json",
     "w",
     encoding="utf-8"
 ) as f:
 
     json.dump(
-        output,
+        players_index,
         f,
         indent=2,
         ensure_ascii=False
     )
 
-print("TEAMS:", len(output))
-print("MATCHES:", len(seen_matches))
+with open(
+    f"{OUT_DIR}/teams.json",
+    "w",
+    encoding="utf-8"
+) as f:
+
+    json.dump(
+        sorted(
+            teams.values(),
+            key=lambda x: (
+                -x["points"],
+                -x["goal_difference"],
+                -x["goals_for"],
+                x["team"]
+            )
+        ),
+        f,
+        indent=2,
+        ensure_ascii=False
+    )
+
+with open(
+    f"{OUT_DIR}/team_stats.json",
+    "w",
+    encoding="utf-8"
+) as f:
+
+    json.dump(
+        team_stats,
+        f,
+        indent=2,
+        ensure_ascii=False
+    )
+
 print("DONE")
