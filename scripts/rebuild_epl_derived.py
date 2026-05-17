@@ -15,7 +15,7 @@ team_scorers = defaultdict(lambda: defaultdict(int))
 team_yellows = defaultdict(lambda: defaultdict(int))
 team_reds = defaultdict(lambda: defaultdict(int))
 
-processed_files = set()
+processed_matches = set()
 
 # =====================================================
 # HELPERS
@@ -81,15 +81,6 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
         path = os.path.join(root, file)
 
-        # =================================================
-        # FILE DEDUPE ONLY
-        # =================================================
-
-        if path in processed_files:
-            continue
-
-        processed_files.add(path)
-
         try:
 
             with open(path, "r", encoding="utf-8") as f:
@@ -107,16 +98,48 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         if not home or not away:
             continue
 
+        date = clean(
+            game.get("date")
+            or game.get("match_date")
+        )
+
+        season = clean(
+            game.get("season")
+            or game.get("year")
+            or path.split("/")[-2]
+        )
+
+        home_score = clean(game.get("home_score"))
+        away_score = clean(game.get("away_score"))
+
+        # =================================================
+        # TRUE MATCH DEDUPE
+        # =================================================
+
+        match_key = (
+            f"{season}|"
+            f"{date}|"
+            f"{home}|"
+            f"{away}|"
+            f"{home_score}|"
+            f"{away_score}"
+        )
+
+        if match_key in processed_matches:
+            continue
+
+        processed_matches.add(match_key)
+
         ensure_team(home)
         ensure_team(away)
 
         try:
-            hs = int(game.get("home_score", 0) or 0)
+            hs = int(home_score or 0)
         except:
             hs = 0
 
         try:
-            aw = int(game.get("away_score", 0) or 0)
+            aw = int(away_score or 0)
         except:
             aw = 0
 
@@ -215,7 +238,7 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
         # =================================================
         # REDS
-        # ONE RED PER PLAYER PER FILE
+        # ONE RED PER PLAYER PER MATCH
         # =================================================
 
         red_seen = set()
@@ -231,12 +254,12 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             if not player or not team:
                 continue
 
-            key = f"{player}|{team}"
+            red_key = f"{player}|{team}"
 
-            if key in red_seen:
+            if red_key in red_seen:
                 continue
 
-            red_seen.add(key)
+            red_seen.add(red_key)
 
             slug = ensure_player(player)
 
@@ -382,6 +405,5 @@ with open(
         ensure_ascii=False
     )
 
-print("MATCH FILES:", len(processed_files))
-print("PLAYERS:", len(players))
+print("MATCHES:", len(processed_matches))
 print("DONE")
