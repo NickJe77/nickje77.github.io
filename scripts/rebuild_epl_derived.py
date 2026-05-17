@@ -15,8 +15,7 @@ team_scorers = defaultdict(lambda: defaultdict(int))
 team_yellows = defaultdict(lambda: defaultdict(int))
 team_reds = defaultdict(lambda: defaultdict(int))
 
-# THIS FIXES DUPLICATE MATCHES
-processed_match_ids = set()
+processed_files = set()
 
 # =====================================================
 # HELPERS
@@ -75,12 +74,21 @@ def ensure_player(player):
 
 for root, dirs, files in os.walk(MATCHES_DIR):
 
-    for file in files:
+    for file in sorted(files):
 
         if not file.endswith(".json"):
             continue
 
         path = os.path.join(root, file)
+
+        # =================================================
+        # FILE DEDUPE ONLY
+        # =================================================
+
+        if path in processed_files:
+            continue
+
+        processed_files.add(path)
 
         try:
 
@@ -98,26 +106,6 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
         if not home or not away:
             continue
-
-        date = clean(
-            game.get("date")
-            or game.get("match_date")
-        )
-
-        # =================================================
-        # TRUE MATCH DEDUPE
-        # =================================================
-
-        match_id = (
-            f"{date}|"
-            f"{home}|"
-            f"{away}"
-        )
-
-        if match_id in processed_match_ids:
-            continue
-
-        processed_match_ids.add(match_id)
 
         ensure_team(home)
         ensure_team(away)
@@ -167,6 +155,8 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         # GOALS
         # =================================================
 
+        scorer_seen = set()
+
         for scorer in game.get("scorers", []):
 
             if not isinstance(scorer, dict):
@@ -174,9 +164,17 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
             player = clean(scorer.get("player"))
             team = clean(scorer.get("team"))
+            minute = clean(scorer.get("minute"))
 
             if not player or not team:
                 continue
+
+            key = f"{player}|{team}|{minute}"
+
+            if key in scorer_seen:
+                continue
+
+            scorer_seen.add(key)
 
             slug = ensure_player(player)
 
@@ -188,6 +186,8 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         # YELLOWS
         # =================================================
 
+        yellow_seen = set()
+
         for yellow in game.get("yellow_cards", []):
 
             if not isinstance(yellow, dict):
@@ -195,9 +195,17 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
             player = clean(yellow.get("player"))
             team = clean(yellow.get("team"))
+            minute = clean(yellow.get("minute"))
 
             if not player or not team:
                 continue
+
+            key = f"{player}|{team}|{minute}"
+
+            if key in yellow_seen:
+                continue
+
+            yellow_seen.add(key)
 
             slug = ensure_player(player)
 
@@ -207,10 +215,10 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
         # =================================================
         # REDS
-        # ONE RED PER PLAYER PER MATCH
+        # ONE RED PER PLAYER PER FILE
         # =================================================
 
-        match_reds_taken = set()
+        red_seen = set()
 
         for red in game.get("red_cards", []):
 
@@ -223,12 +231,12 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             if not player or not team:
                 continue
 
-            red_key = f"{player}|{team}"
+            key = f"{player}|{team}"
 
-            if red_key in match_reds_taken:
+            if key in red_seen:
                 continue
 
-            match_reds_taken.add(red_key)
+            red_seen.add(key)
 
             slug = ensure_player(player)
 
@@ -374,5 +382,6 @@ with open(
         ensure_ascii=False
     )
 
-print("MATCHES:", len(processed_match_ids))
+print("MATCH FILES:", len(processed_files))
+print("PLAYERS:", len(players))
 print("DONE")
