@@ -1,34 +1,59 @@
 import os
 import json
+import shutil
 from collections import defaultdict
 
 MATCHES_DIR = "docs/data/epl/matches"
 
-print("FIXING FALSE RED CARDS")
+OUT_DIR = "docs/data/epl"
+
+PLAYERS_DIR = f"{OUT_DIR}/players"
+
+print("SAFE EPL REBUILD")
 
 # =====================================================
-# KNOWN FALSE RED CARD PATTERN
-# =====================================================
-#
-# Your dataset clearly has:
-# - yellow cards copied into red_cards
-# - especially older seasons
-#
-# Real EPL red cards are usually:
-# - single events
-# - late in games
-# - not repeated constantly
-#
-# This script removes obvious fake reds:
-#
-# 1. duplicate reds for same player same match
-# 2. reds before 35th minute
-# 3. matches with 3+ reds
-# 4. players with absurd career totals
-#
+# RESET DERIVED ONLY
 # =====================================================
 
-player_red_totals = defaultdict(int)
+if os.path.exists(PLAYERS_DIR):
+    shutil.rmtree(PLAYERS_DIR)
+
+os.makedirs(PLAYERS_DIR, exist_ok=True)
+
+# =====================================================
+# HELPERS
+# =====================================================
+
+def clean(v):
+    return str(v or "").strip()
+
+def slugify(v):
+
+    return (
+        clean(v)
+        .lower()
+        .replace("&", "and")
+        .replace(".", "")
+        .replace("'", "")
+        .replace("/", "-")
+        .replace(" ", "-")
+    )
+
+# =====================================================
+# STORAGE
+# =====================================================
+
+players = {}
+
+team_scorers = defaultdict(lambda: defaultdict(int))
+team_yellows = defaultdict(lambda: defaultdict(int))
+team_reds = defaultdict(lambda: defaultdict(int))
+
+seen_matches = set()
+
+# =====================================================
+# LOAD MATCH FILES
+# =====================================================
 
 match_files = []
 
@@ -45,153 +70,286 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 print("MATCH FILES:", len(match_files))
 
 # =====================================================
-# PASS 1
-# COUNT TOTALS
+# PROCESS
 # =====================================================
 
-for path in match_files:
+for path in sorted(match_files):
 
     try:
 
         with open(path, "r", encoding="utf-8") as f:
             game = json.load(f)
 
-    except:
+    except Exception as e:
+
+        print("FAILED:", path, e)
         continue
 
-    reds = game.get("red_cards", [])
-
-    if not isinstance(reds, list):
+    if not isinstance(game, dict):
         continue
 
-    seen = set()
+    match_key = clean(
+        game.get("url")
+        or os.path.basename(path)
+    )
 
-    for red in reds:
+    if match_key in seen_matches:
+        continue
+
+    seen_matches.add(match_key)
+
+    # =================================================
+    # SCORERS
+    # =================================================
+
+    for scorer in game.get("scorers", []):
+
+        if not isinstance(scorer, dict):
+            continue
+
+        player = clean(
+            scorer.get("player")
+        )
+
+        team = clean(
+            scorer.get("team")
+        )
+
+        if not player or not team:
+            continue
+
+        slug = slugify(player)
+
+        if slug not in players:
+
+            players[slug] = {
+                "player": player,
+                "slug": slug,
+                "goals": 0,
+                "yellow_cards": 0,
+                "red_cards": 0
+            }
+
+        players[slug]["goals"] += 1
+
+        team_scorers[team][player] += 1
+
+    # =================================================
+    # YELLOWS
+    # =================================================
+
+    seen_yellows = set()
+
+    for yellow in game.get("yellow_cards", []):
+
+        if not isinstance(yellow, dict):
+            continue
+
+        player = clean(
+            yellow.get("player")
+        )
+
+        team = clean(
+            yellow.get("team")
+        )
+
+        minute = clean(
+            yellow.get("minute")
+        )
+
+        if not player or not team:
+            continue
+
+        key = (
+            f"{match_key}|"
+            f"{player}|"
+            f"{minute}"
+        )
+
+        if key in seen_yellows:
+            continue
+
+        seen_yellows.add(key)
+
+        slug = slugify(player)
+
+        if slug not in players:
+
+            players[slug] = {
+                "player": player,
+                "slug": slug,
+                "goals": 0,
+                "yellow_cards": 0,
+                "red_cards": 0
+            }
+
+        players[slug]["yellow_cards"] += 1
+
+        team_yellows[team][player] += 1
+
+    # =================================================
+    # REDS
+    # =================================================
+
+    seen_reds = set()
+
+    for red in game.get("red_cards", []):
 
         if not isinstance(red, dict):
             continue
 
-        player = str(
-            red.get("player", "")
-        ).strip()
+        player = clean(
+            red.get("player")
+        )
 
-        if not player:
+        team = clean(
+            red.get("team")
+        )
+
+        minute = clean(
+            red.get("minute")
+        )
+
+        if not player or not team:
             continue
 
-        if player in seen:
+        key = (
+            f"{match_key}|"
+            f"{player}|"
+            f"{minute}"
+        )
+
+        if key in seen_reds:
             continue
 
-        seen.add(player)
+        seen_reds.add(key)
 
-        player_red_totals[player] += 1
+        slug = slugify(player)
+
+        if slug not in players:
+
+            players[slug] = {
+                "player": player,
+                "slug": slug,
+                "goals": 0,
+                "yellow_cards": 0,
+                "red_cards": 0
+            }
+
+        players[slug]["red_cards"] += 1
+
+        team_reds[team][player] += 1
 
 # =====================================================
-# PASS 2
-# CLEAN FILES
+# TEAM STATS
 # =====================================================
 
-fixed = 0
+team_stats = []
 
-for path in match_files:
+all_teams = set()
 
-    try:
+for t in team_scorers.keys():
+    all_teams.add(t)
 
-        with open(path, "r", encoding="utf-8") as f:
-            game = json.load(f)
+for t in team_yellows.keys():
+    all_teams.add(t)
 
-    except:
-        continue
+for t in team_reds.keys():
+    all_teams.add(t)
 
-    reds = game.get("red_cards", [])
+for team in sorted(all_teams):
 
-    if not isinstance(reds, list):
-        continue
+    team_stats.append({
 
-    cleaned = []
+        "team": team,
 
-    seen_players = set()
+        "top_scorers": [
+            {
+                "player": p,
+                "goals": g
+            }
+            for p, g in sorted(
+                team_scorers[team].items(),
+                key=lambda x: (-x[1], x[0])
+            )[:20]
+        ],
 
-    for red in reds:
+        "yellow_cards": [
+            {
+                "player": p,
+                "yellow_cards": y
+            }
+            for p, y in sorted(
+                team_yellows[team].items(),
+                key=lambda x: (-x[1], x[0])
+            )[:20]
+        ],
 
-        if not isinstance(red, dict):
-            continue
+        "red_cards": [
+            {
+                "player": p,
+                "red_cards": r
+            }
+            for p, r in sorted(
+                team_reds[team].items(),
+                key=lambda x: (-x[1], x[0])
+            )[:20]
+        ]
+    })
 
-        player = str(
-            red.get("player", "")
-        ).strip()
+# =====================================================
+# SAVE PLAYERS
+# =====================================================
 
-        if not player:
-            continue
+players_index = []
 
-        # =============================================
-        # DUPLICATE PLAYER SAME MATCH
-        # =============================================
+for slug, pdata in players.items():
 
-        if player in seen_players:
-            continue
+    with open(
+        f"{PLAYERS_DIR}/{slug}.json",
+        "w",
+        encoding="utf-8"
+    ) as f:
 
-        seen_players.add(player)
+        json.dump(
+            pdata,
+            f,
+            indent=2,
+            ensure_ascii=False
+        )
 
-        # =============================================
-        # ABSURD CAREER TOTAL
-        # =============================================
+    players_index.append(pdata)
 
-        if player_red_totals[player] > 8:
-            continue
+# =====================================================
+# SAVE INDEXES
+# =====================================================
 
-        # =============================================
-        # MINUTE FILTER
-        # =============================================
+with open(
+    f"{OUT_DIR}/players.json",
+    "w",
+    encoding="utf-8"
+) as f:
 
-        minute_raw = str(
-            red.get("minute", "")
-        ).strip()
+    json.dump(
+        players_index,
+        f,
+        indent=2,
+        ensure_ascii=False
+    )
 
-        minute_digits = ""
+with open(
+    f"{OUT_DIR}/team_stats.json",
+    "w",
+    encoding="utf-8"
+) as f:
 
-        for c in minute_raw:
+    json.dump(
+        team_stats,
+        f,
+        indent=2,
+        ensure_ascii=False
+    )
 
-            if c.isdigit():
-                minute_digits += c
-
-        try:
-            minute = int(minute_digits)
-        except:
-            minute = 90
-
-        # Most fake reds in your data are
-        # actually yellow cards early in matches
-
-        if minute < 35:
-            continue
-
-        cleaned.append(red)
-
-    # =============================================
-    # TOO MANY REDS IN ONE MATCH
-    # =============================================
-
-    if len(cleaned) > 2:
-        cleaned = cleaned[:2]
-
-    # =============================================
-    # SAVE
-    # =============================================
-
-    if cleaned != reds:
-
-        game["red_cards"] = cleaned
-
-        with open(path, "w", encoding="utf-8") as f:
-
-            json.dump(
-                game,
-                f,
-                indent=2,
-                ensure_ascii=False
-            )
-
-        fixed += 1
-
-print("FILES FIXED:", fixed)
+print("PLAYERS:", len(players))
+print("MATCHES:", len(seen_matches))
 print("DONE")
