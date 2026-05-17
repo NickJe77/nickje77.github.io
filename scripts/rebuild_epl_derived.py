@@ -9,7 +9,6 @@ PLAYERS_DIR = f"{OUT_DIR}/players"
 os.makedirs(PLAYERS_DIR, exist_ok=True)
 
 teams = {}
-
 players = {}
 
 team_scorers = defaultdict(lambda: defaultdict(int))
@@ -17,6 +16,8 @@ team_yellows = defaultdict(lambda: defaultdict(int))
 team_reds = defaultdict(lambda: defaultdict(int))
 
 seen_matches = set()
+seen_reds = set()
+seen_yellows = set()
 
 def clean(v):
     return str(v or "").strip()
@@ -128,6 +129,10 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             teams[home]["points"] += 1
             teams[away]["points"] += 1
 
+        # =================================================
+        # SCORERS
+        # =================================================
+
         for scorer in game.get("scorers", []):
 
             if not isinstance(scorer, dict):
@@ -153,6 +158,10 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
             team_scorers[team][player] += 1
 
+        # =================================================
+        # YELLOWS
+        # =================================================
+
         for yellow in game.get("yellow_cards", []):
 
             if not isinstance(yellow, dict):
@@ -160,9 +169,22 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
             player = clean(yellow.get("player"))
             team = clean(yellow.get("team"))
+            minute = clean(yellow.get("minute"))
 
             if not player or not team:
                 continue
+
+            ykey = (
+                f"{match_key}|"
+                f"{player}|"
+                f"{team}|"
+                f"{minute}"
+            )
+
+            if ykey in seen_yellows:
+                continue
+
+            seen_yellows.add(ykey)
 
             slug = slugify(player)
 
@@ -178,6 +200,10 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
             team_yellows[team][player] += 1
 
+        # =================================================
+        # REDS
+        # =================================================
+
         for red in game.get("red_cards", []):
 
             if not isinstance(red, dict):
@@ -185,8 +211,26 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
             player = clean(red.get("player"))
             team = clean(red.get("team"))
+            minute = clean(red.get("minute"))
 
             if not player or not team:
+                continue
+
+            rkey = (
+                f"{match_key}|"
+                f"{player}|"
+                f"{team}|"
+                f"{minute}"
+            )
+
+            if rkey in seen_reds:
+                continue
+
+            seen_reds.add(rkey)
+
+            # skip if exact same yellow exists
+
+            if rkey.replace("red", "yellow") in seen_yellows:
                 continue
 
             slug = slugify(player)
@@ -203,12 +247,26 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
             team_reds[team][player] += 1
 
-for team in teams.values():
+# =====================================================
+# MANUAL FIXES
+# =====================================================
 
-    team["goal_difference"] = (
-        team["goals_for"]
-        - team["goals_against"]
-    )
+duncan_slug = slugify("Duncan Ferguson")
+
+players.setdefault(duncan_slug, {
+    "player": "Duncan Ferguson",
+    "slug": duncan_slug,
+    "goals": 0,
+    "yellow_cards": 0,
+    "red_cards": 0
+})
+
+players[duncan_slug]["red_cards"] = 8
+team_reds["Everton"]["Duncan Ferguson"] = 8
+
+# =====================================================
+# SAVE PLAYERS
+# =====================================================
 
 players_index = []
 
@@ -228,6 +286,10 @@ for slug, pdata in players.items():
         )
 
     players_index.append(pdata)
+
+# =====================================================
+# TEAM STATS
+# =====================================================
 
 team_stats = []
 
@@ -277,6 +339,10 @@ for team in sorted(all_teams):
             )[:20]
         ]
     })
+
+# =====================================================
+# SAVE
+# =====================================================
 
 with open(
     f"{OUT_DIR}/players.json",
