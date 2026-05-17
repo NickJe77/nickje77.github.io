@@ -16,8 +16,6 @@ team_yellows = defaultdict(lambda: defaultdict(int))
 team_reds = defaultdict(lambda: defaultdict(int))
 
 seen_matches = set()
-seen_reds = set()
-seen_yellows = set()
 
 def clean(v):
     return str(v or "").strip()
@@ -29,6 +27,7 @@ def slugify(v):
         .replace("&", "and")
         .replace(".", "")
         .replace("'", "")
+        .replace("’", "")
         .replace("/", "-")
         .replace(" ", "-")
     )
@@ -48,6 +47,26 @@ def ensure_team(team):
             "goal_difference": 0,
             "points": 0
         }
+
+def ensure_player(player):
+
+    slug = slugify(player)
+
+    if slug not in players:
+
+        players[slug] = {
+            "player": player,
+            "slug": slug,
+            "goals": 0,
+            "yellow_cards": 0,
+            "red_cards": 0
+        }
+
+    return slug
+
+# =====================================================
+# MATCH FILES
+# =====================================================
 
 for root, dirs, files in os.walk(MATCHES_DIR):
 
@@ -69,15 +88,15 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         if not isinstance(game, dict):
             continue
 
-        match_key = clean(
+        match_url = clean(
             game.get("url")
             or os.path.basename(path)
         )
 
-        if match_key in seen_matches:
+        if match_url in seen_matches:
             continue
 
-        seen_matches.add(match_key)
+        seen_matches.add(match_url)
 
         home = clean(game.get("home_team"))
         away = clean(game.get("away_team"))
@@ -89,12 +108,12 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         ensure_team(away)
 
         try:
-            hs = int(game.get("home_score", 0))
+            hs = int(game.get("home_score", 0) or 0)
         except:
             hs = 0
 
         try:
-            aw = int(game.get("away_score", 0))
+            aw = int(game.get("away_score", 0) or 0)
         except:
             aw = 0
 
@@ -133,6 +152,8 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         # SCORERS
         # =================================================
 
+        scorer_seen = set()
+
         for scorer in game.get("scorers", []):
 
             if not isinstance(scorer, dict):
@@ -140,19 +161,24 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
             player = clean(scorer.get("player"))
             team = clean(scorer.get("team"))
+            minute = clean(scorer.get("minute"))
 
             if not player or not team:
                 continue
 
-            slug = slugify(player)
+            key = (
+                f"{match_url}|"
+                f"{team}|"
+                f"{player}|"
+                f"{minute}"
+            )
 
-            players.setdefault(slug, {
-                "player": player,
-                "slug": slug,
-                "goals": 0,
-                "yellow_cards": 0,
-                "red_cards": 0
-            })
+            if key in scorer_seen:
+                continue
+
+            scorer_seen.add(key)
+
+            slug = ensure_player(player)
 
             players[slug]["goals"] += 1
 
@@ -161,6 +187,8 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         # =================================================
         # YELLOWS
         # =================================================
+
+        yellow_seen = set()
 
         for yellow in game.get("yellow_cards", []):
 
@@ -174,27 +202,19 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             if not player or not team:
                 continue
 
-            ykey = (
-                f"{match_key}|"
-                f"{player}|"
+            key = (
+                f"{match_url}|"
                 f"{team}|"
+                f"{player}|"
                 f"{minute}"
             )
 
-            if ykey in seen_yellows:
+            if key in yellow_seen:
                 continue
 
-            seen_yellows.add(ykey)
+            yellow_seen.add(key)
 
-            slug = slugify(player)
-
-            players.setdefault(slug, {
-                "player": player,
-                "slug": slug,
-                "goals": 0,
-                "yellow_cards": 0,
-                "red_cards": 0
-            })
+            slug = ensure_player(player)
 
             players[slug]["yellow_cards"] += 1
 
@@ -203,6 +223,8 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         # =================================================
         # REDS
         # =================================================
+
+        red_seen = set()
 
         for red in game.get("red_cards", []):
 
@@ -216,53 +238,38 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             if not player or not team:
                 continue
 
-            rkey = (
-                f"{match_key}|"
-                f"{player}|"
+            key = (
+                f"{match_url}|"
                 f"{team}|"
+                f"{player}|"
                 f"{minute}"
             )
 
-            if rkey in seen_reds:
+            if key in red_seen:
                 continue
 
-            seen_reds.add(rkey)
+            red_seen.add(key)
 
-            # skip if exact same yellow exists
-
-            if rkey.replace("red", "yellow") in seen_yellows:
+            # skip if same exact yellow exists
+            if key in yellow_seen:
                 continue
 
-            slug = slugify(player)
-
-            players.setdefault(slug, {
-                "player": player,
-                "slug": slug,
-                "goals": 0,
-                "yellow_cards": 0,
-                "red_cards": 0
-            })
+            slug = ensure_player(player)
 
             players[slug]["red_cards"] += 1
 
             team_reds[team][player] += 1
 
 # =====================================================
-# MANUAL FIXES
+# TEAM DIFFERENTIAL
 # =====================================================
 
-duncan_slug = slugify("Duncan Ferguson")
+for team in teams.values():
 
-players.setdefault(duncan_slug, {
-    "player": "Duncan Ferguson",
-    "slug": duncan_slug,
-    "goals": 0,
-    "yellow_cards": 0,
-    "red_cards": 0
-})
-
-players[duncan_slug]["red_cards"] = 8
-team_reds["Everton"]["Duncan Ferguson"] = 8
+    team["goal_difference"] = (
+        team["goals_for"]
+        - team["goals_against"]
+    )
 
 # =====================================================
 # SAVE PLAYERS
@@ -270,7 +277,7 @@ team_reds["Everton"]["Duncan Ferguson"] = 8
 
 players_index = []
 
-for slug, pdata in players.items():
+for slug, pdata in sorted(players.items()):
 
     with open(
         f"{PLAYERS_DIR}/{slug}.json",
@@ -341,7 +348,7 @@ for team in sorted(all_teams):
     })
 
 # =====================================================
-# SAVE
+# SAVE FILES
 # =====================================================
 
 with open(
@@ -391,4 +398,7 @@ with open(
         ensure_ascii=False
     )
 
+print("MATCHES:", len(seen_matches))
+print("PLAYERS:", len(players))
+print("TEAMS:", len(teams))
 print("DONE")
