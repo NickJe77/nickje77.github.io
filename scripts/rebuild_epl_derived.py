@@ -229,7 +229,7 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         # ONE RED PER PLAYER PER MATCH
         # =================================================
 
-        player_red_taken = set()
+        match_reds_taken = set()
 
         for red in game.get("red_cards", []):
 
@@ -244,14 +244,13 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
             red_key = (
                 f"{match_url}|"
-                f"{team}|"
                 f"{player}"
             )
 
-            if red_key in player_red_taken:
+            if red_key in match_reds_taken:
                 continue
 
-            player_red_taken.add(red_key)
+            match_reds_taken.add(red_key)
 
             slug = ensure_player(player)
 
