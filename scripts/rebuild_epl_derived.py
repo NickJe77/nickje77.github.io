@@ -65,7 +65,7 @@ def ensure_player(player):
     return slug
 
 # =====================================================
-# MATCH FILES
+# MATCHES
 # =====================================================
 
 for root, dirs, files in os.walk(MATCHES_DIR):
@@ -149,7 +149,7 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             teams[away]["points"] += 1
 
         # =================================================
-        # SCORERS
+        # GOALS
         # =================================================
 
         scorer_seen = set()
@@ -250,10 +250,6 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
             red_seen.add(key)
 
-            # skip if same exact yellow exists
-            if key in yellow_seen:
-                continue
-
             slug = ensure_player(player)
 
             players[slug]["red_cards"] += 1
@@ -261,7 +257,7 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             team_reds[team][player] += 1
 
 # =====================================================
-# TEAM DIFFERENTIAL
+# FIX TEAM STATS
 # =====================================================
 
 for team in teams.values():
@@ -348,7 +344,7 @@ for team in sorted(all_teams):
     })
 
 # =====================================================
-# SAVE FILES
+# SAVE
 # =====================================================
 
 with open(
@@ -398,7 +394,4 @@ with open(
         ensure_ascii=False
     )
 
-print("MATCHES:", len(seen_matches))
-print("PLAYERS:", len(players))
-print("TEAMS:", len(teams))
 print("DONE")
