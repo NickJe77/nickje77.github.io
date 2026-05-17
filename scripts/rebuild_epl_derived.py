@@ -9,7 +9,7 @@ fixed_matches = 0
 removed_events = 0
 
 # =====================================================
-# VALID RED CARD WORDS
+# VALID / INVALID WORDS
 # =====================================================
 
 VALID_RED_WORDS = [
@@ -35,7 +35,7 @@ INVALID_RED_WORDS = [
 
 for root, dirs, files in os.walk(MATCHES_DIR):
 
-    for file in files:
+    for file in sorted(files):
 
         if not file.endswith(".json"):
             continue
@@ -65,6 +65,7 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         for red in original_reds:
 
             if not isinstance(red, dict):
+                removed_events += 1
                 continue
 
             player = str(
@@ -94,36 +95,6 @@ for root, dirs, files in os.walk(MATCHES_DIR):
                 continue
 
             # =================================================
-            # REMOVE OBVIOUS NON-REDS
-            # =================================================
-
-            if desc:
-
-                bad = False
-
-                for word in INVALID_RED_WORDS:
-
-                    if word in desc:
-                        bad = True
-                        break
-
-                if bad:
-                    removed_events += 1
-                    continue
-
-                valid = False
-
-                for word in VALID_RED_WORDS:
-
-                    if word in desc:
-                        valid = True
-                        break
-
-                if not valid:
-                    removed_events += 1
-                    continue
-
-            # =================================================
             # ONE RED PER PLAYER PER MATCH
             # =================================================
 
@@ -133,12 +104,58 @@ for root, dirs, files in os.walk(MATCHES_DIR):
                 removed_events += 1
                 continue
 
+            # =================================================
+            # EMPTY DESCRIPTIONS
+            # =================================================
+
+            # keep ONLY first empty entry
+
+            if not desc:
+
+                seen.add(key)
+
+                cleaned_reds.append(red)
+
+                continue
+
+            # =================================================
+            # INVALID WORDS
+            # =================================================
+
+            invalid = False
+
+            for word in INVALID_RED_WORDS:
+
+                if word in desc:
+                    invalid = True
+                    break
+
+            if invalid:
+                removed_events += 1
+                continue
+
+            # =================================================
+            # MUST CONTAIN RED WORDS
+            # =================================================
+
+            valid = False
+
+            for word in VALID_RED_WORDS:
+
+                if word in desc:
+                    valid = True
+                    break
+
+            if not valid:
+                removed_events += 1
+                continue
+
             seen.add(key)
 
             cleaned_reds.append(red)
 
         # =================================================
-        # SAVE CLEANED FILE
+        # SAVE FILE
         # =================================================
 
         game["red_cards"] = cleaned_reds
