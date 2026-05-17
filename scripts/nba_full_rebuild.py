@@ -7,7 +7,7 @@ from datetime import datetime
 from urllib.parse import urljoin
 
 import requests
-from bs4 import BeautifulSoup, Comment
+from bs4 import BeautifulSoup
 
 START_SEASON = 1976
 CURRENT_SEASON = datetime.now().year if datetime.now().month >= 8 else datetime.now().year - 1
@@ -19,64 +19,49 @@ BOXSCORES_DIR = os.path.join(OUT_BASE, "boxscores")
 BBR = "https://www.basketball-reference.com"
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0"
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.google.com/"
 }
 
+session = requests.Session()
+
 TEAM_MAP = {
-    "ATL": "Atlanta Hawks",
-    "BOS": "Boston Celtics",
-    "BRK": "Brooklyn Nets",
-    "CHI": "Chicago Bulls",
-    "CLE": "Cleveland Cavaliers",
-    "DAL": "Dallas Mavericks",
-    "DEN": "Denver Nuggets",
-    "DET": "Detroit Pistons",
-    "GSW": "Golden State Warriors",
-    "HOU": "Houston Rockets",
-    "IND": "Indiana Pacers",
-    "LAC": "Los Angeles Clippers",
-    "LAL": "Los Angeles Lakers",
-    "MEM": "Memphis Grizzlies",
-    "MIA": "Miami Heat",
-    "MIL": "Milwaukee Bucks",
-    "MIN": "Minnesota Timberwolves",
-    "NOP": "New Orleans Pelicans",
-    "NYK": "New York Knicks",
-    "OKC": "Oklahoma City Thunder",
-    "ORL": "Orlando Magic",
-    "PHI": "Philadelphia 76ers",
-    "PHO": "Phoenix Suns",
-    "POR": "Portland Trail Blazers",
-    "SAC": "Sacramento Kings",
-    "SAS": "San Antonio Spurs",
-    "TOR": "Toronto Raptors",
-    "UTA": "Utah Jazz",
-    "WAS": "Washington Wizards"
+    "ATL":"Atlanta Hawks",
+    "BOS":"Boston Celtics",
+    "BRK":"Brooklyn Nets",
+    "CHI":"Chicago Bulls",
+    "CLE":"Cleveland Cavaliers",
+    "DAL":"Dallas Mavericks",
+    "DEN":"Denver Nuggets",
+    "DET":"Detroit Pistons",
+    "GSW":"Golden State Warriors",
+    "HOU":"Houston Rockets",
+    "IND":"Indiana Pacers",
+    "LAC":"Los Angeles Clippers",
+    "LAL":"Los Angeles Lakers",
+    "MEM":"Memphis Grizzlies",
+    "MIA":"Miami Heat",
+    "MIL":"Milwaukee Bucks",
+    "MIN":"Minnesota Timberwolves",
+    "NOP":"New Orleans Pelicans",
+    "NYK":"New York Knicks",
+    "OKC":"Oklahoma City Thunder",
+    "ORL":"Orlando Magic",
+    "PHI":"Philadelphia 76ers",
+    "PHO":"Phoenix Suns",
+    "POR":"Portland Trail Blazers",
+    "SAC":"Sacramento Kings",
+    "SAS":"San Antonio Spurs",
+    "TOR":"Toronto Raptors",
+    "UTA":"Utah Jazz",
+    "WAS":"Washington Wizards",
 }
 
 def ensure_dirs():
     os.makedirs(SEASONS_DIR, exist_ok=True)
     os.makedirs(BOXSCORES_DIR, exist_ok=True)
-
-def get(url, sleep=4):
-    print(f"GET {url}")
-    time.sleep(sleep)
-
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=60)
-
-        if r.status_code != 200:
-            print(f"BAD STATUS {r.status_code}")
-            return None
-
-        return r.text
-
-    except Exception as e:
-        print(f"REQUEST FAILED: {e}")
-        return None
-
-def soup_from_html(html):
-    return BeautifulSoup(html, "html.parser")
 
 def clean(text):
     return re.sub(r"\s+", " ", str(text or "")).strip()
@@ -88,21 +73,63 @@ def safe_int(v):
         return 0
 
 def save_json(path, data):
+
     os.makedirs(os.path.dirname(path), exist_ok=True)
 
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 def load_json(path):
+
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except:
         return None
 
+def get(url, sleep=8):
+
+    print(f"GET {url}")
+
+    time.sleep(sleep)
+
+    try:
+
+        r = session.get(
+            url,
+            headers=HEADERS,
+            timeout=60
+        )
+
+        if r.status_code == 403:
+
+            print("403 BLOCKED - RETRYING")
+
+            time.sleep(20)
+
+            r = session.get(
+                url,
+                headers=HEADERS,
+                timeout=60
+            )
+
+        if r.status_code != 200:
+
+            print(f"BAD STATUS {r.status_code}")
+
+            return None
+
+        return r.text
+
+    except Exception as e:
+
+        print(f"REQUEST FAILED: {e}")
+
+        return None
+
 def parse_schedule_table(html, season_start, game_type):
 
-    soup = soup_from_html(html)
+    soup = BeautifulSoup(html, "html.parser")
 
     table = soup.find("table", id="schedule")
 
@@ -129,23 +156,23 @@ def parse_schedule_table(html, season_start, game_type):
         game_id = os.path.splitext(os.path.basename(href))[0]
 
         away_team = clean(
-            row.find("td", {"data-stat": "visitor_team_name"}).get_text(" ", strip=True)
+            row.find("td", {"data-stat":"visitor_team_name"}).get_text(" ", strip=True)
         )
 
         home_team = clean(
-            row.find("td", {"data-stat": "home_team_name"}).get_text(" ", strip=True)
+            row.find("td", {"data-stat":"home_team_name"}).get_text(" ", strip=True)
         )
 
         away_score = safe_int(
-            row.find("td", {"data-stat": "visitor_pts"}).get_text(" ", strip=True)
+            row.find("td", {"data-stat":"visitor_pts"}).get_text(" ", strip=True)
         )
 
         home_score = safe_int(
-            row.find("td", {"data-stat": "home_pts"}).get_text(" ", strip=True)
+            row.find("td", {"data-stat":"home_pts"}).get_text(" ", strip=True)
         )
 
         date = clean(
-            row.find(["td", "th"], {"data-stat": "date_game"}).get_text(" ", strip=True)
+            row.find(["td","th"], {"data-stat":"date_game"}).get_text(" ", strip=True)
         )
 
         games.append({
@@ -176,7 +203,7 @@ def get_regular_games(season_start):
     if not html:
         return []
 
-    soup = soup_from_html(html)
+    soup = BeautifulSoup(html, "html.parser")
 
     urls = [url]
 
@@ -216,16 +243,18 @@ def get_playoff_games(season_start):
     if not html:
         return []
 
-    return parse_schedule_table(html, season_start, "Playoffs")
+    return parse_schedule_table(
+        html,
+        season_start,
+        "Playoffs"
+    )
 
 def parse_boxscore(game):
 
-    html = get(game["boxscore_url"], sleep=5)
+    html = get(game["boxscore_url"], sleep=10)
 
     if not html:
         return None
-
-    soup = soup_from_html(html)
 
     return {
         **game,
@@ -252,6 +281,12 @@ def build_season(season_start, overwrite=False):
     games = list(deduped.values())
 
     games.sort(key=lambda x: x["date"])
+
+    if len(games) == 0:
+
+        print(f"NO GAMES FOUND FOR {season_start}")
+
+        return
 
     season_box_dir = os.path.join(
         BOXSCORES_DIR,
@@ -303,6 +338,12 @@ def build_season(season_start, overwrite=False):
             "game_file": box["game_file"]
         })
 
+    if len(index) == 0:
+
+        print(f"SKIPPING EMPTY SEASON {season_start}")
+
+        return
+
     season_file = os.path.join(
         SEASONS_DIR,
         f"{season_start}.json"
@@ -310,11 +351,7 @@ def build_season(season_start, overwrite=False):
 
     save_json(season_file, index)
 
-    print(f"SAVED {season_file}")
-
-    # ------------------------------------------------
-    # CHECKPOINT SAVE AFTER EVERY SEASON
-    # ------------------------------------------------
+    print(f"SAVED {season_file} WITH {len(index)} GAMES")
 
     print(f"CHECKPOINT COMMIT FOR {season_start}")
 
@@ -345,7 +382,10 @@ def main():
 
     for season in range(args.start, args.end + 1):
 
-        build_season(season, overwrite=args.overwrite)
+        build_season(
+            season,
+            overwrite=args.overwrite
+        )
 
     print("COMPLETE")
 
