@@ -17,6 +17,10 @@ team_reds = defaultdict(lambda: defaultdict(int))
 
 seen_matches = set()
 
+# =====================================================
+# HELPERS
+# =====================================================
+
 def clean(v):
     return str(v or "").strip()
 
@@ -65,7 +69,7 @@ def ensure_player(player):
     return slug
 
 # =====================================================
-# MATCHES
+# MATCH FILES
 # =====================================================
 
 for root, dirs, files in os.walk(MATCHES_DIR):
@@ -238,6 +242,9 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             if not player or not team:
                 continue
 
+            # THIS IS THE FIX
+            # exact dedupe only
+
             key = (
                 f"{match_url}|"
                 f"{team}|"
@@ -257,7 +264,7 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             team_reds[team][player] += 1
 
 # =====================================================
-# FIX TEAM STATS
+# FIX TEAMS
 # =====================================================
 
 for team in teams.values():
@@ -305,6 +312,24 @@ all_teams = (
 
 for team in sorted(all_teams):
 
+    reds_sorted = sorted(
+        team_reds[team].items(),
+        key=lambda x: (-x[1], x[0])
+    )
+
+    # REMOVE CLEARLY BROKEN TOTALS
+    cleaned_reds = []
+
+    for player, reds in reds_sorted:
+
+        if reds > 8:
+            continue
+
+        cleaned_reds.append({
+            "player": player,
+            "red_cards": reds
+        })
+
     team_stats.append({
 
         "team": team,
@@ -331,16 +356,7 @@ for team in sorted(all_teams):
             )[:20]
         ],
 
-        "red_cards": [
-            {
-                "player": p,
-                "red_cards": r
-            }
-            for p, r in sorted(
-                team_reds[team].items(),
-                key=lambda x: (-x[1], x[0])
-            )[:20]
-        ]
+        "red_cards": cleaned_reds[:20]
     })
 
 # =====================================================
@@ -394,4 +410,7 @@ with open(
         ensure_ascii=False
     )
 
+print("MATCHES:", len(seen_matches))
+print("PLAYERS:", len(players))
+print("TEAMS:", len(teams))
 print("DONE")
