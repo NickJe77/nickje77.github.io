@@ -69,7 +69,7 @@ def ensure_player(player):
     return slug
 
 # =====================================================
-# MATCHES
+# MATCH FILES
 # =====================================================
 
 for root, dirs, files in os.walk(MATCHES_DIR):
@@ -170,7 +170,12 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             if not player or not team:
                 continue
 
-            key = f"{match_url}|{team}|{player}|{minute}"
+            key = (
+                f"{match_url}|"
+                f"{team}|"
+                f"{player}|"
+                f"{minute}"
+            )
 
             if key in scorer_seen:
                 continue
@@ -201,7 +206,12 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             if not player or not team:
                 continue
 
-            key = f"{match_url}|{team}|{player}|{minute}"
+            key = (
+                f"{match_url}|"
+                f"{team}|"
+                f"{player}|"
+                f"{minute}"
+            )
 
             if key in yellow_seen:
                 continue
@@ -216,7 +226,7 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
         # =================================================
         # REDS
-        # ONE RED MAX PER PLAYER PER MATCH
+        # ONE RED PER PLAYER PER MATCH
         # =================================================
 
         player_red_taken = set()
@@ -229,27 +239,8 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             player = clean(red.get("player"))
             team = clean(red.get("team"))
 
-            desc = clean(
-                red.get("description")
-                or red.get("type")
-                or red.get("detail")
-            ).lower()
-
             if not player or not team:
                 continue
-
-            # skip second yellows
-
-            if "second yellow" in desc:
-                continue
-
-            if "2nd yellow" in desc:
-                continue
-
-            if "yellow/red" in desc:
-                continue
-
-            # ONE RED PER PLAYER PER MATCH
 
             red_key = (
                 f"{match_url}|"
