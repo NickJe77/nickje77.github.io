@@ -3,9 +3,7 @@ import json
 from collections import defaultdict
 
 MATCHES_DIR = "docs/data/epl/matches"
-
 OUT_DIR = "docs/data/epl"
-
 PLAYERS_DIR = f"{OUT_DIR}/players"
 
 print("NON-DESTRUCTIVE EPL REBUILD")
@@ -57,23 +55,31 @@ for file in os.listdir(PLAYERS_DIR):
             or file.replace(".json", "")
         )
 
-        players[slug] = data
+        players[slug] = {
+            "player": data.get("player", ""),
+            "slug": slug,
+            "goals": 0,
+            "yellow_cards": 0,
+            "red_cards": 0
+        }
 
     except:
         continue
 
 # =====================================================
-# TEAM STORAGE
+# STORAGE
 # =====================================================
 
 team_scorers = defaultdict(lambda: defaultdict(int))
 team_yellows = defaultdict(lambda: defaultdict(int))
 team_reds = defaultdict(lambda: defaultdict(int))
 
+career_reds = defaultdict(int)
+
 seen_matches = set()
 
 # =====================================================
-# MATCH FILES
+# LOAD MATCHES
 # =====================================================
 
 match_files = []
@@ -91,7 +97,7 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 print("MATCH FILES:", len(match_files))
 
 # =====================================================
-# PROCESS MATCHES
+# PROCESS
 # =====================================================
 
 for path in sorted(match_files):
@@ -118,7 +124,7 @@ for path in sorted(match_files):
     seen_matches.add(match_key)
 
     # =================================================
-    # SCORERS
+    # GOALS
     # =================================================
 
     for scorer in game.get("scorers", []):
@@ -149,9 +155,7 @@ for path in sorted(match_files):
                 "red_cards": 0
             }
 
-        players[slug]["goals"] = (
-            players[slug].get("goals", 0) + 1
-        )
+        players[slug]["goals"] += 1
 
         team_scorers[team][player] += 1
 
@@ -181,7 +185,11 @@ for path in sorted(match_files):
         if not player or not team:
             continue
 
-        ykey = f"{player}|{minute}"
+        ykey = (
+            f"{match_key}|"
+            f"{player}|"
+            f"{minute}"
+        )
 
         if ykey in yellow_seen:
             continue
@@ -200,9 +208,7 @@ for path in sorted(match_files):
                 "red_cards": 0
             }
 
-        players[slug]["yellow_cards"] = (
-            players[slug].get("yellow_cards", 0) + 1
-        )
+        players[slug]["yellow_cards"] += 1
 
         team_yellows[team][player] += 1
 
@@ -232,6 +238,10 @@ for path in sorted(match_files):
         if not player or not team:
             continue
 
+        # =============================================
+        # CLEAN MINUTE
+        # =============================================
+
         digits = ""
 
         for c in minute_raw:
@@ -244,15 +254,32 @@ for path in sorted(match_files):
         except:
             minute = 90
 
-        if minute < 55:
+        # =============================================
+        # ONLY FILTER EXTREME BAD PARSES
+        # =============================================
+
+        # impossible red minute
+
+        if minute <= 1:
             continue
 
-        rkey = f"{player}|{minute}"
+        # duplicate same player same minute same match
+
+        rkey = (
+            f"{match_key}|"
+            f"{player}|"
+            f"{minute}"
+        )
 
         if rkey in red_seen:
             continue
 
         red_seen.add(rkey)
+
+        # impossible EPL career totals
+
+        if career_reds[player] >= 8:
+            continue
 
         slug = slugify(player)
 
@@ -266,17 +293,9 @@ for path in sorted(match_files):
                 "red_cards": 0
             }
 
-        current_reds = players[slug].get(
-            "red_cards",
-            0
-        )
+        players[slug]["red_cards"] += 1
 
-        if current_reds >= 8:
-            continue
-
-        players[slug]["red_cards"] = (
-            current_reds + 1
-        )
+        career_reds[player] += 1
 
         team_reds[team][player] += 1
 
@@ -288,9 +307,11 @@ players_index = []
 
 for slug, pdata in players.items():
 
-    path = f"{PLAYERS_DIR}/{slug}.json"
-
-    with open(path, "w", encoding="utf-8") as f:
+    with open(
+        f"{PLAYERS_DIR}/{slug}.json",
+        "w",
+        encoding="utf-8"
+    ) as f:
 
         json.dump(
             pdata,
