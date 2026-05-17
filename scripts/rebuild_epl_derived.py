@@ -9,6 +9,8 @@ OUT_DIR = "docs/data/epl"
 
 PLAYERS_DIR = f"{OUT_DIR}/players"
 
+AUDIT_FILE = f"{OUT_DIR}/red_card_audit.json"
+
 print("BUILDING EPL DERIVED FILES")
 
 # =====================================================
@@ -57,14 +59,6 @@ NAME_FIXES = {
 
 }
 
-ZERO_RED_PLAYERS = {
-
-    "Freddie Ljungberg",
-    "Thierry Henry",
-    "Robert Pirès"
-
-}
-
 def fix_name(name):
 
     name = clean(name)
@@ -80,6 +74,8 @@ players = {}
 team_scorers = defaultdict(lambda: defaultdict(int))
 team_yellows = defaultdict(lambda: defaultdict(int))
 team_reds = defaultdict(lambda: defaultdict(int))
+
+red_card_audit = defaultdict(list)
 
 seen_matches = set()
 
@@ -259,13 +255,6 @@ for path in sorted(match_files):
         if not player or not team:
             continue
 
-        # =============================================
-        # BLOCK KNOWN FALSE RED TOTALS
-        # =============================================
-
-        if player in ZERO_RED_PLAYERS:
-            continue
-
         red_key = (
             f"{match_key}|"
             f"{player.lower()}|"
@@ -293,6 +282,15 @@ for path in sorted(match_files):
         players[slug]["red_cards"] += 1
 
         team_reds[team][player] += 1
+
+        red_card_audit[player].append({
+
+            "team": team,
+            "minute": minute,
+            "match_url": game.get("url", ""),
+            "file": path
+
+        })
 
 # =====================================================
 # TEAM STATS
@@ -404,7 +402,21 @@ with open(
         ensure_ascii=False
     )
 
+with open(
+    AUDIT_FILE,
+    "w",
+    encoding="utf-8"
+) as f:
+
+    json.dump(
+        red_card_audit,
+        f,
+        indent=2,
+        ensure_ascii=False
+    )
+
 print("PLAYER FILES:", len(os.listdir(PLAYERS_DIR)))
 print("TOTAL PLAYERS:", len(players))
 print("TOTAL UNIQUE MATCHES:", len(seen_matches))
+print("RED CARD AUDIT:", AUDIT_FILE)
 print("DONE")
