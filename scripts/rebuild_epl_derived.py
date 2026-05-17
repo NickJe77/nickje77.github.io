@@ -4,9 +4,7 @@ import shutil
 from collections import defaultdict
 
 MATCHES_DIR = "docs/data/epl/matches"
-
 OUT_DIR = "docs/data/epl"
-
 PLAYERS_DIR = f"{OUT_DIR}/players"
 
 print("SAFE EPL REBUILD")
@@ -49,10 +47,12 @@ team_scorers = defaultdict(lambda: defaultdict(int))
 team_yellows = defaultdict(lambda: defaultdict(int))
 team_reds = defaultdict(lambda: defaultdict(int))
 
+career_reds = defaultdict(int)
+
 seen_matches = set()
 
 # =====================================================
-# LOAD MATCH FILES
+# LOAD MATCHES
 # =====================================================
 
 match_files = []
@@ -70,7 +70,7 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 print("MATCH FILES:", len(match_files))
 
 # =====================================================
-# PROCESS
+# PROCESS MATCHES
 # =====================================================
 
 for path in sorted(match_files):
@@ -99,7 +99,7 @@ for path in sorted(match_files):
     seen_matches.add(match_key)
 
     # =================================================
-    # SCORERS
+    # GOALS
     # =================================================
 
     for scorer in game.get("scorers", []):
@@ -138,7 +138,7 @@ for path in sorted(match_files):
     # YELLOWS
     # =================================================
 
-    seen_yellows = set()
+    yellow_seen = set()
 
     for yellow in game.get("yellow_cards", []):
 
@@ -160,16 +160,14 @@ for path in sorted(match_files):
         if not player or not team:
             continue
 
-        key = (
-            f"{match_key}|"
-            f"{player}|"
-            f"{minute}"
+        ykey = (
+            f"{player}|{minute}"
         )
 
-        if key in seen_yellows:
+        if ykey in yellow_seen:
             continue
 
-        seen_yellows.add(key)
+        yellow_seen.add(ykey)
 
         slug = slugify(player)
 
@@ -191,7 +189,7 @@ for path in sorted(match_files):
     # REDS
     # =================================================
 
-    seen_reds = set()
+    red_seen = set()
 
     for red in game.get("red_cards", []):
 
@@ -214,35 +212,45 @@ for path in sorted(match_files):
             continue
 
         # =============================================
-        # FILTER BAD PARSES
+        # CLEAN MINUTE
         # =============================================
 
-        minute_digits = ""
+        digits = ""
 
         for c in minute_raw:
 
             if c.isdigit():
-                minute_digits += c
+                digits += c
 
         try:
-            minute = int(minute_digits)
+            minute = int(digits)
         except:
             minute = 90
 
-        # most false reds are yellows
-        if minute < 35:
+        # =============================================
+        # FAKE RED FILTERS
+        # =============================================
+
+        # Most corruption = yellows copied as reds
+
+        if minute < 55:
             continue
 
-        key = (
-            f"{match_key}|"
-            f"{player}|"
-            f"{minute}"
+        # duplicate same player same match
+
+        rkey = (
+            f"{player}|{minute}"
         )
 
-        if key in seen_reds:
+        if rkey in red_seen:
             continue
 
-        seen_reds.add(key)
+        red_seen.add(rkey)
+
+        # impossible career totals
+
+        if career_reds[player] >= 8:
+            continue
 
         slug = slugify(player)
 
@@ -256,11 +264,9 @@ for path in sorted(match_files):
                 "red_cards": 0
             }
 
-        # EPL record ceiling
-        if players[slug]["red_cards"] >= 8:
-            continue
-
         players[slug]["red_cards"] += 1
+
+        career_reds[player] += 1
 
         team_reds[team][player] += 1
 
@@ -345,7 +351,7 @@ for slug, pdata in players.items():
     players_index.append(pdata)
 
 # =====================================================
-# SAVE INDEXES
+# SAVE
 # =====================================================
 
 with open(
