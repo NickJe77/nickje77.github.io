@@ -69,7 +69,7 @@ def ensure_player(player):
     return slug
 
 # =====================================================
-# MATCH FILES
+# MATCHES
 # =====================================================
 
 for root, dirs, files in os.walk(MATCHES_DIR):
@@ -171,10 +171,8 @@ for root, dirs, files in os.walk(MATCHES_DIR):
                 continue
 
             key = (
-                f"{match_url}|"
-                f"{team}|"
-                f"{player}|"
-                f"{minute}"
+                f"{match_url}|{team}|"
+                f"{player}|{minute}"
             )
 
             if key in scorer_seen:
@@ -192,6 +190,8 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         # YELLOWS
         # =================================================
 
+        yellow_lookup = set()
+
         yellow_seen = set()
 
         for yellow in game.get("yellow_cards", []):
@@ -207,11 +207,11 @@ for root, dirs, files in os.walk(MATCHES_DIR):
                 continue
 
             key = (
-                f"{match_url}|"
-                f"{team}|"
-                f"{player}|"
-                f"{minute}"
+                f"{match_url}|{team}|"
+                f"{player}|{minute}"
             )
+
+            yellow_lookup.add(key)
 
             if key in yellow_seen:
                 continue
@@ -239,16 +239,18 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             team = clean(red.get("team"))
             minute = clean(red.get("minute"))
 
+            desc = clean(
+                red.get("description")
+                or red.get("type")
+                or red.get("detail")
+            ).lower()
+
             if not player or not team:
                 continue
 
-            # exact duplicate only
-
             key = (
-                f"{match_url}|"
-                f"{team}|"
-                f"{player}|"
-                f"{minute}"
+                f"{match_url}|{team}|"
+                f"{player}|{minute}"
             )
 
             if key in red_seen:
@@ -256,49 +258,30 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
             red_seen.add(key)
 
+            # =================================================
+            # FILTER SECOND YELLOWS
+            # =================================================
+
+            if "second yellow" in desc:
+                continue
+
+            if "2nd yellow" in desc:
+                continue
+
+            if "yellow/red" in desc:
+                continue
+
+            # same exact yellow event
+            # usually corruption
+
+            if key in yellow_lookup:
+                continue
+
             slug = ensure_player(player)
 
             players[slug]["red_cards"] += 1
 
             team_reds[team][player] += 1
-
-# =====================================================
-# REMOVE OBVIOUSLY BROKEN RED TOTALS
-# =====================================================
-
-KNOWN_LIMITS = {
-    "Duncan Ferguson": 8,
-    "Patrick Vieira": 8,
-    "Richard Dunne": 8,
-    "Roy Keane": 7,
-    "Vinnie Jones": 7,
-    "Alan Smith": 8,
-    "Lee Cattermole": 7,
-    "David Batty": 6,
-    "Paolo Di Canio": 5,
-    "Craig Short": 5,
-    "Franck Queudrue": 5
-}
-
-for slug, pdata in players.items():
-
-    player = pdata["player"]
-
-    if player in KNOWN_LIMITS:
-
-        pdata["red_cards"] = KNOWN_LIMITS[player]
-
-for team, reds in team_reds.items():
-
-    for player in list(reds.keys()):
-
-        if player in KNOWN_LIMITS:
-
-            reds[player] = KNOWN_LIMITS[player]
-
-        elif reds[player] > 8:
-
-            del reds[player]
 
 # =====================================================
 # TEAM DIFFERENCE
@@ -438,7 +421,4 @@ with open(
         ensure_ascii=False
     )
 
-print("MATCHES:", len(seen_matches))
-print("PLAYERS:", len(players))
-print("TEAMS:", len(teams))
 print("DONE")
