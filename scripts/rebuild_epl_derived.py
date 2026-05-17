@@ -15,7 +15,8 @@ team_scorers = defaultdict(lambda: defaultdict(int))
 team_yellows = defaultdict(lambda: defaultdict(int))
 team_reds = defaultdict(lambda: defaultdict(int))
 
-seen_matches = set()
+# THIS FIXES DUPLICATE MATCHES
+processed_match_ids = set()
 
 # =====================================================
 # HELPERS
@@ -92,21 +93,31 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         if not isinstance(game, dict):
             continue
 
-        match_url = clean(
-            game.get("url")
-            or os.path.basename(path)
-        )
-
-        if match_url in seen_matches:
-            continue
-
-        seen_matches.add(match_url)
-
         home = clean(game.get("home_team"))
         away = clean(game.get("away_team"))
 
         if not home or not away:
             continue
+
+        date = clean(
+            game.get("date")
+            or game.get("match_date")
+        )
+
+        # =================================================
+        # TRUE MATCH DEDUPE
+        # =================================================
+
+        match_id = (
+            f"{date}|"
+            f"{home}|"
+            f"{away}"
+        )
+
+        if match_id in processed_match_ids:
+            continue
+
+        processed_match_ids.add(match_id)
 
         ensure_team(home)
         ensure_team(away)
@@ -156,8 +167,6 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         # GOALS
         # =================================================
 
-        scorer_seen = set()
-
         for scorer in game.get("scorers", []):
 
             if not isinstance(scorer, dict):
@@ -165,22 +174,9 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
             player = clean(scorer.get("player"))
             team = clean(scorer.get("team"))
-            minute = clean(scorer.get("minute"))
 
             if not player or not team:
                 continue
-
-            key = (
-                f"{match_url}|"
-                f"{team}|"
-                f"{player}|"
-                f"{minute}"
-            )
-
-            if key in scorer_seen:
-                continue
-
-            scorer_seen.add(key)
 
             slug = ensure_player(player)
 
@@ -192,8 +188,6 @@ for root, dirs, files in os.walk(MATCHES_DIR):
         # YELLOWS
         # =================================================
 
-        yellow_seen = set()
-
         for yellow in game.get("yellow_cards", []):
 
             if not isinstance(yellow, dict):
@@ -201,22 +195,9 @@ for root, dirs, files in os.walk(MATCHES_DIR):
 
             player = clean(yellow.get("player"))
             team = clean(yellow.get("team"))
-            minute = clean(yellow.get("minute"))
 
             if not player or not team:
                 continue
-
-            key = (
-                f"{match_url}|"
-                f"{team}|"
-                f"{player}|"
-                f"{minute}"
-            )
-
-            if key in yellow_seen:
-                continue
-
-            yellow_seen.add(key)
 
             slug = ensure_player(player)
 
@@ -242,10 +223,7 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             if not player or not team:
                 continue
 
-            red_key = (
-                f"{match_url}|"
-                f"{player}"
-            )
+            red_key = f"{player}|{team}"
 
             if red_key in match_reds_taken:
                 continue
@@ -259,7 +237,7 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             team_reds[team][player] += 1
 
 # =====================================================
-# TEAM DIFFERENCE
+# GOAL DIFFERENCE
 # =====================================================
 
 for team in teams.values():
@@ -396,4 +374,5 @@ with open(
         ensure_ascii=False
     )
 
+print("MATCHES:", len(processed_match_ids))
 print("DONE")
