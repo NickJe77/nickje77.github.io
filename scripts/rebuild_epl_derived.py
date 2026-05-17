@@ -242,8 +242,8 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             if not player or not team:
                 continue
 
-            # THIS IS THE FIX
-            # exact dedupe only
+            # REAL FIX:
+            # exact duplicate rows only
 
             key = (
                 f"{match_url}|"
@@ -264,7 +264,7 @@ for root, dirs, files in os.walk(MATCHES_DIR):
             team_reds[team][player] += 1
 
 # =====================================================
-# FIX TEAMS
+# TEAM DIFFERENCE
 # =====================================================
 
 for team in teams.values():
@@ -312,15 +312,14 @@ all_teams = (
 
 for team in sorted(all_teams):
 
-    reds_sorted = sorted(
-        team_reds[team].items(),
-        key=lambda x: (-x[1], x[0])
-    )
+    # remove impossible totals only
 
-    # REMOVE CLEARLY BROKEN TOTALS
     cleaned_reds = []
 
-    for player, reds in reds_sorted:
+    for player, reds in sorted(
+        team_reds[team].items(),
+        key=lambda x: (-x[1], x[0])
+    ):
 
         if reds > 8:
             continue
