@@ -3,16 +3,15 @@ name: Build EPL Data
 on:
   push:
     paths:
-      # Only runs when match files are added or changed
       - "docs/data/epl/matches/**"
-  workflow_dispatch:  # Allows manual trigger from the Actions tab
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write  # Needed to push the generated JSON files back
+      contents: write
 
     steps:
       - name: Checkout repo
@@ -23,26 +22,32 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Debug - inspect matches with red cards
+      - name: Debug - count West Ham red cards manually
         run: |
           python3 - <<'EOF'
           import json, glob
 
+          yellow_total = 0
+          red_total = 0
+          red_matches = []
+
           files = sorted(glob.glob("docs/data/epl/matches/2025-2026/*.json"))
-          shown = 0
+          print(f"Scanning {len(files)} files in 2025-2026...\n")
+
           for f in files:
               data = json.load(open(f))
-              if data.get("red_cards"):
-                  print(f"FILE: {f}")
-                  print(f"  yellow_cards: {data.get('yellow_cards')}")
-                  print(f"  red_cards:    {data.get('red_cards')}")
-                  print()
-                  shown += 1
-                  if shown >= 5:
-                      break
+              reds = [c for c in (data.get("red_cards") or []) if c.get("team") == "West Ham United"]
+              yellows = [c for c in (data.get("yellow_cards") or []) if c.get("team") == "West Ham United"]
+              if reds:
+                  red_total += len(reds)
+                  red_matches.append((f, reds))
+              yellow_total += len(yellows)
 
-          if shown == 0:
-              print("No matches with red cards found in 2025-2026")
+          print(f"West Ham yellow cards: {yellow_total}")
+          print(f"West Ham red cards:    {red_total}")
+          print(f"\nMatches with red cards:")
+          for f, reds in red_matches:
+              print(f"  {f}: {reds}")
           EOF
 
       - name: Run build script
@@ -55,6 +60,5 @@ jobs:
           git add docs/data/epl/players.json \
                   docs/data/epl/teams.json \
                   docs/data/epl/team-stats.json
-          # Only commit if something actually changed
           git diff --cached --quiet || git commit -m "chore: rebuild EPL data [skip ci]"
           git push
