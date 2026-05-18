@@ -8,27 +8,24 @@ and generates three output files:
   - docs/data/epl/teams.json
   - docs/data/epl/team-stats.json
 
+Place this file in the scripts/ folder.
 Run from the root of your GitHub repo (nickje77.github.io/)
 """
 
 import json
-import os
 import sys
 from pathlib import Path
-from collections import defaultdict
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-# Script lives in scripts/ but paths are relative to the repo root.
-# GitHub Actions runs from the repo root, so these paths work as-is.
+# Script lives in scripts/ — resolve repo root one level up
 REPO_ROOT   = Path(__file__).parent.parent
-MATCHES_DIR = REPO_ROOT / "docs/data/epl/matches"
-OUT_DIR     = REPO_ROOT / "docs/data/epl"
+MATCHES_DIR = REPO_ROOT / "docs" / "data" / "epl" / "matches"
+OUT_DIR     = REPO_ROOT / "docs" / "data" / "epl"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def collect_json_files(directory: Path) -> list[Path]:
-    """Recursively collect every .json file under a directory."""
+def collect_json_files(directory: Path) -> list:
     if not directory.exists():
         print(f"❌  Matches directory not found: {directory}", file=sys.stderr)
         sys.exit(1)
@@ -36,17 +33,15 @@ def collect_json_files(directory: Path) -> list[Path]:
 
 
 def season_from_path(file_path: Path) -> str:
-    """Derive a season string from the file path, e.g. '1993-1994'."""
     parts = file_path.parts
     try:
-        matches_index = parts.index("matches")
-        return parts[matches_index + 1]
+        idx = list(parts).index("matches")
+        return parts[idx + 1]
     except (ValueError, IndexError):
         return "unknown"
 
 
 def write_json(file_path: Path, data):
-    """Write JSON to a file, creating directories as needed."""
     file_path.parent.mkdir(parents=True, exist_ok=True)
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
@@ -84,15 +79,38 @@ def make_player(name: str) -> dict:
     }
 
 
+def get_or_create_team_stats(team_stats_map, team, season):
+    key = f"{team}|{season}"
+    if key not in team_stats_map:
+        team_stats_map[key] = make_team_stats(team, season)
+    return team_stats_map[key]
+
+
+def get_or_create_player(players_map, name):
+    if name not in players_map:
+        players_map[name] = make_player(name)
+    return players_map[name]
+
+
+def add_team_if_missing(player, team):
+    if team and team not in player["teams"]:
+        player["teams"].append(team)
+
+
+def add_season_if_missing(player, season):
+    if season and season not in player["seasons"]:
+        player["seasons"].append(season)
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
     match_files = collect_json_files(MATCHES_DIR)
     print(f"📂  Found {len(match_files)} match file(s) in {MATCHES_DIR}\n")
 
-    players_map   = {}   # name → player record
-    teams_set     = set()
-    team_stats_map = {}  # "team|season" → stats record
+    players_map    = {}
+    teams_set      = set()
+    team_stats_map = {}
 
     for file_path in match_files:
         try:
@@ -103,25 +121,20 @@ def main():
             continue
 
         season     = season_from_path(file_path)
-        home_team  = match.get("home_team", "")
-        away_team  = match.get("away_team", "")
-        home_score = match.get("home_score", 0) or 0
-        away_score = match.get("away_score", 0) or 0
+        home_team  = (match.get("home_team") or "").strip()
+        away_team  = (match.get("away_team") or "").strip()
+        home_score = match.get("home_score") or 0
+        away_score = match.get("away_score") or 0
 
-        # ── Register teams ────────────────────────────────────────────────────
         teams_set.add(home_team)
         teams_set.add(away_team)
 
-        # ── Team stats ────────────────────────────────────────────────────────
+        # ── Team stats: wins/draws/losses/goals ───────────────────────────────
         for team, scored, conceded in [
             (home_team, home_score, away_score),
             (away_team, away_score, home_score),
         ]:
-            key = f"{team}|{season}"
-            if key not in team_stats_map:
-                team_stats_map[key] = make_team_stats(team, season)
-
-            s = team_stats_map[key]
+            s = get_or_create_team_stats(team_stats_map, team, season)
             s["played"]        += 1
             s["goals_for"]     += scored
             s["goals_against"] += conceded
@@ -138,32 +151,50 @@ def main():
             if conceded == 0:
                 s["clean_sheets"] += 1
 
-        # ── Cards per team ────────────────────────────────────────────────────
-        for card in match.get("yellow_cards", []):
-            key = f"{card.get('team', '')}|{season}"
-            if key in team_stats_map:
-                team_stats_map[key]["yellow_cards"] += 1
+        # ── Yellow cards ──────────────────────────────────────────────────────
+        for card in match.get("yellow_cards") or []:
+            team = (card.get("team") or "").strip()
+            name = (card.get("player") or "").strip()
 
-        for card in match.get("red_cards", []):
-            key = f"{card.get('team', '')}|{season}"
-            if key in team_stats_map:
-                team_stats_map[key]["red_cards"] += 1
+            # Team stats
+            if team:
+                s = get_or_create_team_stats(team_stats_map, team, season)
+                s["yellow_cards"] += 1
 
-        # ── Players from scorers ──────────────────────────────────────────────
-        for scorer in match.get("scorers", []):
-            name = scorer.get("player", "").strip()
-            team = scorer.get("team", "")
+            # Player stats
+            if name:
+                p = get_or_create_player(players_map, name)
+                add_team_if_missing(p, team)
+                add_season_if_missing(p, season)
+                p["yellow_cards"] += 1
+
+        # ── Red cards ─────────────────────────────────────────────────────────
+        for card in match.get("red_cards") or []:
+            team = (card.get("team") or "").strip()
+            name = (card.get("player") or "").strip()
+
+            # Team stats
+            if team:
+                s = get_or_create_team_stats(team_stats_map, team, season)
+                s["red_cards"] += 1
+
+            # Player stats
+            if name:
+                p = get_or_create_player(players_map, name)
+                add_team_if_missing(p, team)
+                add_season_if_missing(p, season)
+                p["red_cards"] += 1
+
+        # ── Scorers ───────────────────────────────────────────────────────────
+        for scorer in match.get("scorers") or []:
+            name = (scorer.get("player") or "").strip()
+            team = (scorer.get("team") or "").strip()
             if not name:
                 continue
 
-            if name not in players_map:
-                players_map[name] = make_player(name)
-
-            p = players_map[name]
-            if team not in p["teams"]:
-                p["teams"].append(team)
-            if season not in p["seasons"]:
-                p["seasons"].append(season)
+            p = get_or_create_player(players_map, name)
+            add_team_if_missing(p, team)
+            add_season_if_missing(p, season)
 
             if scorer.get("own_goal"):
                 p["own_goals"] += 1
@@ -172,38 +203,13 @@ def main():
             else:
                 p["goals"] += 1
 
-        # ── Players from cards ────────────────────────────────────────────────
-        for card in match.get("yellow_cards", []):
-            name = card.get("player", "").strip()
-            team = card.get("team", "")
-            if not name:
-                continue
-            if name not in players_map:
-                players_map[name] = make_player(name)
-            p = players_map[name]
-            if team not in p["teams"]:     p["teams"].append(team)
-            if season not in p["seasons"]: p["seasons"].append(season)
-            p["yellow_cards"] += 1
-
-        for card in match.get("red_cards", []):
-            name = card.get("player", "").strip()
-            team = card.get("team", "")
-            if not name:
-                continue
-            if name not in players_map:
-                players_map[name] = make_player(name)
-            p = players_map[name]
-            if team not in p["teams"]:     p["teams"].append(team)
-            if season not in p["seasons"]: p["seasons"].append(season)
-            p["red_cards"] += 1
-
     # ── Finalise goal difference ──────────────────────────────────────────────
     for s in team_stats_map.values():
         s["goal_difference"] = s["goals_for"] - s["goals_against"]
 
     # ── Build output arrays ───────────────────────────────────────────────────
-    players   = sorted(players_map.values(), key=lambda p: p["name"])
-    teams     = [{"name": t} for t in sorted(teams_set)]
+    players    = sorted(players_map.values(), key=lambda p: p["name"])
+    teams      = [{"name": t} for t in sorted(teams_set) if t]
     team_stats = sorted(
         team_stats_map.values(),
         key=lambda s: (s["season"], s["team"])
@@ -215,7 +221,7 @@ def main():
     write_json(OUT_DIR / "teams.json",      teams)
     write_json(OUT_DIR / "team-stats.json", team_stats)
 
-    print(f"\n🏆  Done! Processed {len(match_files)} matches → {len(players)} players, {len(teams)} teams.")
+    print(f"\n🏆  Done! {len(match_files)} matches → {len(players)} players, {len(teams)} teams.")
 
 
 if __name__ == "__main__":
