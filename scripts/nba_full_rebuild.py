@@ -2,7 +2,6 @@ import os
 import re
 import json
 import time
-import random
 import argparse
 from datetime import datetime
 from urllib.parse import urljoin
@@ -21,6 +20,7 @@ BOXSCORES_DIR = os.path.join(OUT_BASE, "boxscores")
 BBR = "https://www.basketball-reference.com"
 
 HEADERS = {
+    "User-Agent": "Mozilla/5.0",
     "Accept-Language": "en-US,en;q=0.9",
     "Referer": "https://www.google.com/"
 }
@@ -59,12 +59,6 @@ TEAM_MAP = {
     "WAS":"Washington Wizards",
 }
 
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
-]
-
 def ensure_dirs():
 
     os.makedirs(SEASONS_DIR, exist_ok=True)
@@ -100,49 +94,30 @@ def load_json(path):
     except:
         return None
 
-def get(url, sleep_min=4, sleep_max=9):
+def get(url, sleep=1.75):
 
-    delay = random.uniform(sleep_min, sleep_max)
+    time.sleep(sleep)
 
-    print(f"SLEEP {round(delay,2)}s -> {url}")
-
-    time.sleep(delay)
-
-    retries = 6
+    retries = 3
 
     for attempt in range(retries):
 
         try:
 
-            headers = HEADERS.copy()
-
-            headers["User-Agent"] = random.choice(USER_AGENTS)
-
             r = session.get(
                 url,
-                headers=headers,
-                timeout=90
+                headers=HEADERS,
+                timeout=60
             )
 
             if r.status_code == 200:
-
-                if "verify you are human" in r.text.lower():
-
-                    print("HUMAN VERIFICATION PAGE")
-
-                    time.sleep(30)
-
-                    continue
-
                 return r.text
 
             if r.status_code == 403:
 
-                wait = random.randint(20, 60)
+                print(f"403 BLOCKED {url}")
 
-                print(f"403 BLOCKED -> WAIT {wait}s")
-
-                time.sleep(wait)
+                time.sleep(8)
 
                 continue
 
@@ -154,7 +129,7 @@ def get(url, sleep_min=4, sleep_max=9):
 
             print(f"REQUEST FAILED {e}")
 
-            time.sleep(15)
+            time.sleep(5)
 
     return None
 
@@ -321,10 +296,7 @@ def parse_boxscore(game):
 
         team_code = tid.replace("_basic", "").upper()
 
-        team_name = TEAM_MAP.get(
-            team_code,
-            team_code
-        )
+        team_name = TEAM_MAP.get(team_code, team_code)
 
         for row in tbody.find_all("tr"):
 
@@ -388,10 +360,7 @@ def parse_boxscore(game):
 
             if a and a.get("href"):
 
-                player_url = urljoin(
-                    BBR,
-                    a["href"]
-                )
+                player_url = urljoin(BBR, a["href"])
 
             pdata = {
                 "player": player_name,
@@ -535,11 +504,11 @@ def build_season(season_start, overwrite=False):
 
     index = []
 
-    futures = []
-
-    MAX_WORKERS = 1
+    MAX_WORKERS = 2
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+
+        futures = []
 
         for game in games:
 
@@ -587,7 +556,7 @@ def build_season(season_start, overwrite=False):
                     "game_file": box["game_file"]
                 })
 
-                if completed % 10 == 0:
+                if completed % 25 == 0:
                     print(f"{season_start}: {completed}/{len(games)} completed")
 
             except Exception as e:
@@ -609,31 +578,15 @@ def main():
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument(
-        "--start",
-        type=int,
-        default=START_SEASON
-    )
-
-    parser.add_argument(
-        "--end",
-        type=int,
-        default=CURRENT_SEASON
-    )
-
-    parser.add_argument(
-        "--overwrite",
-        action="store_true"
-    )
+    parser.add_argument("--start", type=int, default=START_SEASON)
+    parser.add_argument("--end", type=int, default=CURRENT_SEASON)
+    parser.add_argument("--overwrite", action="store_true")
 
     args = parser.parse_args()
 
     ensure_dirs()
 
-    for season in range(
-        args.start,
-        args.end + 1
-    ):
+    for season in range(args.start, args.end + 1):
 
         build_season(
             season,
