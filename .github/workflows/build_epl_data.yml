@@ -23,19 +23,27 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Debug - count files by season folder
+      - name: Debug - inspect matches with red cards
         run: |
-          echo "=== Season folders found ==="
-          ls docs/data/epl/matches/
-          echo ""
-          echo "=== File count per season ==="
-          for dir in docs/data/epl/matches/*/; do
-            count=$(find "$dir" -name "*.json" | wc -l)
-            echo "$count  $dir"
-          done
-          echo ""
-          echo "=== Total ==="
-          find docs/data/epl/matches -name "*.json" | wc -l
+          python3 - <<'EOF'
+          import json, glob
+
+          files = sorted(glob.glob("docs/data/epl/matches/2025-2026/*.json"))
+          shown = 0
+          for f in files:
+              data = json.load(open(f))
+              if data.get("red_cards"):
+                  print(f"FILE: {f}")
+                  print(f"  yellow_cards: {data.get('yellow_cards')}")
+                  print(f"  red_cards:    {data.get('red_cards')}")
+                  print()
+                  shown += 1
+                  if shown >= 5:
+                      break
+
+          if shown == 0:
+              print("No matches with red cards found in 2025-2026")
+          EOF
 
       - name: Run build script
         run: python scripts/build_epl_data.py
