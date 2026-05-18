@@ -5,6 +5,7 @@ import time
 import argparse
 from datetime import datetime
 from urllib.parse import urljoin
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 from bs4 import BeautifulSoup
@@ -19,8 +20,7 @@ BOXSCORES_DIR = os.path.join(OUT_BASE, "boxscores")
 BBR = "https://www.basketball-reference.com"
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "User-Agent": "Mozilla/5.0",
     "Accept-Language": "en-US,en;q=0.9",
     "Referer": "https://www.google.com/"
 }
@@ -60,13 +60,16 @@ TEAM_MAP = {
 }
 
 def ensure_dirs():
+
     os.makedirs(SEASONS_DIR, exist_ok=True)
     os.makedirs(BOXSCORES_DIR, exist_ok=True)
 
 def clean(text):
+
     return re.sub(r"\s+", " ", str(text or "")).strip()
 
 def safe_int(v):
+
     try:
         return int(float(str(v).replace(",", "")))
     except:
@@ -76,8 +79,12 @@ def save_json(path, data):
 
     os.makedirs(os.path.dirname(path), exist_ok=True)
 
-    with open(path, "w", encoding="utf-8") as f:
+    temp = path + ".tmp"
+
+    with open(temp, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
+    os.replace(temp, path)
 
 def load_json(path):
 
@@ -87,9 +94,7 @@ def load_json(path):
     except:
         return None
 
-def get(url, sleep=8):
-
-    print(f"GET {url}")
+def get(url, sleep=0.35):
 
     time.sleep(sleep)
 
@@ -103,9 +108,9 @@ def get(url, sleep=8):
 
         if r.status_code == 403:
 
-            print("403 BLOCKED - RETRYING")
+            print(f"403 BLOCKED {url}")
 
-            time.sleep(20)
+            time.sleep(5)
 
             r = session.get(
                 url,
@@ -115,7 +120,7 @@ def get(url, sleep=8):
 
         if r.status_code != 200:
 
-            print(f"BAD STATUS {r.status_code}")
+            print(f"BAD STATUS {r.status_code} {url}")
 
             return None
 
@@ -123,7 +128,7 @@ def get(url, sleep=8):
 
     except Exception as e:
 
-        print(f"REQUEST FAILED: {e}")
+        print(f"REQUEST FAILED {e}")
 
         return None
 
@@ -143,17 +148,24 @@ def parse_schedule_table(html, season_start, game_type):
         if "thead" in row.get("class", []):
             continue
 
-        box = row.find("td", {"data-stat": "box_score_text"})
+        box = row.find("td", {"data-stat":"box_score_text"})
 
-        if not box or not box.find("a"):
+        if not box:
             continue
 
-        href = box.find("a").get("href", "")
+        a = box.find("a")
+
+        if not a:
+            continue
+
+        href = a.get("href", "")
 
         if not href:
             continue
 
-        game_id = os.path.splitext(os.path.basename(href))[0]
+        game_id = os.path.splitext(
+            os.path.basename(href)
+        )[0]
 
         away_team = clean(
             row.find("td", {"data-stat":"visitor_team_name"}).get_text(" ", strip=True)
@@ -185,7 +197,7 @@ def parse_schedule_table(html, season_start, game_type):
             "home_score": home_score,
             "away_score": away_score,
             "winner": home_team if home_score > away_score else away_team,
-            "score": f"{away_score} – {home_score}",
+            "score": f"{away_score} - {home_score}",
             "boxscore_url": urljoin(BBR, href),
             "game_file": f"{game_id}.json"
         })
@@ -210,6 +222,7 @@ def get_regular_games(season_start):
     filt = soup.find("div", class_="filter")
 
     if filt:
+
         for a in filt.find_all("a", href=True):
 
             u = urljoin(BBR, a["href"])
@@ -227,7 +240,11 @@ def get_regular_games(season_start):
             continue
 
         all_games.extend(
-            parse_schedule_table(page, season_start, "Regular Season")
+            parse_schedule_table(
+                page,
+                season_start,
+                "Regular Season"
+            )
         )
 
     return all_games
@@ -251,16 +268,210 @@ def get_playoff_games(season_start):
 
 def parse_boxscore(game):
 
-    html = get(game["boxscore_url"], sleep=10)
+    html = get(game["boxscore_url"], sleep=0.35)
 
     if not html:
         return None
 
+    soup = BeautifulSoup(html, "html.parser")
+
+    players = []
+    team_totals = []
+    inactive_players = []
+
+    all_tables = soup.find_all("table")
+
+    for table in all_tables:
+
+        tid = table.get("id", "")
+
+        if not tid.endswith("_basic"):
+            continue
+
+        tbody = table.find("tbody")
+
+        if not tbody:
+            continue
+
+        team_code = tid.replace("_basic", "").upper()
+
+        team_name = TEAM_MAP.get(
+            team_code,
+            team_code
+        )
+
+        for row in tbody.find_all("tr"):
+
+            if "thead" in row.get("class", []):
+                continue
+
+            player_cell = row.find(
+                "th",
+                {"data-stat":"player"}
+            )
+
+            if not player_cell:
+                continue
+
+            player_name = clean(
+                player_cell.get_text(" ", strip=True)
+            )
+
+            if player_name == "":
+                continue
+
+            if player_name.lower() == "team totals":
+
+                totals = {
+                    "team": team_name
+                }
+
+                for td in row.find_all("td"):
+
+                    stat = td.get("data-stat", "")
+
+                    val = clean(
+                        td.get_text(" ", strip=True)
+                    )
+
+                    totals[stat] = val
+
+                team_totals.append(totals)
+
+                continue
+
+            if player_name.lower() == "reserves":
+                continue
+
+            mp = row.find("td", {"data-stat":"mp"})
+
+            inactive = False
+
+            if mp:
+
+                mp_text = clean(
+                    mp.get_text(" ", strip=True)
+                )
+
+                if mp_text == "":
+                    inactive = True
+
+            player_url = ""
+
+            a = player_cell.find("a")
+
+            if a and a.get("href"):
+
+                player_url = urljoin(
+                    BBR,
+                    a["href"]
+                )
+
+            pdata = {
+                "player": player_name,
+                "team": team_name,
+                "player_url": player_url,
+                "inactive": inactive
+            }
+
+            for td in row.find_all("td"):
+
+                stat = td.get("data-stat", "")
+
+                val = clean(
+                    td.get_text(" ", strip=True)
+                )
+
+                pdata[stat] = val
+
+            players.append(pdata)
+
+            if inactive:
+                inactive_players.append(player_name)
+
+    attendance = 0
+
+    try:
+
+        text = soup.get_text("\n", strip=True)
+
+        m = re.search(
+            r"Attendance:\s*([\d,]+)",
+            text
+        )
+
+        if m:
+            attendance = safe_int(m.group(1))
+
+    except:
+        pass
+
+    arena = ""
+
+    try:
+
+        text = soup.get_text("\n", strip=True)
+
+        m = re.search(
+            r"Arena:\s*(.*?)\n",
+            text
+        )
+
+        if m:
+            arena = clean(m.group(1))
+
+    except:
+        pass
+
+    officials = []
+
+    try:
+
+        text = soup.get_text("\n", strip=True)
+
+        m = re.search(
+            r"Officials:\s*(.*?)\n",
+            text,
+            re.I
+        )
+
+        if m:
+
+            officials = [
+                clean(x)
+                for x in m.group(1).split(",")
+                if clean(x)
+            ]
+
+    except:
+        pass
+
     return {
         **game,
         "playoff": game["type"] == "Playoffs",
-        "players": []
+        "arena": arena,
+        "attendance": attendance,
+        "officials": officials,
+        "inactive_players": inactive_players,
+        "team_totals": team_totals,
+        "players": players
     }
+
+def process_game(game, out_file, overwrite=False):
+
+    existing = load_json(out_file)
+
+    if existing and not overwrite:
+        return existing
+
+    box = parse_boxscore(game)
+
+    if not box:
+        return None
+
+    save_json(out_file, box)
+
+    return box
 
 def build_season(season_start, overwrite=False):
 
@@ -269,6 +480,7 @@ def build_season(season_start, overwrite=False):
     print("=" * 80)
 
     regular = get_regular_games(season_start)
+
     playoffs = get_playoff_games(season_start)
 
     games = regular + playoffs
@@ -297,52 +509,66 @@ def build_season(season_start, overwrite=False):
 
     index = []
 
-    for i, game in enumerate(games, start=1):
+    futures = []
 
-        out_file = os.path.join(
-            season_box_dir,
-            game["game_file"]
-        )
+    MAX_WORKERS = 8
 
-        existing = load_json(out_file)
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
 
-        if existing and not overwrite:
+        for game in games:
 
-            print(f"[{season_start}] {i}/{len(games)} EXISTS")
+            out_file = os.path.join(
+                season_box_dir,
+                game["game_file"]
+            )
 
-            box = existing
+            futures.append(
+                executor.submit(
+                    process_game,
+                    game,
+                    out_file,
+                    overwrite
+                )
+            )
 
-        else:
+        completed = 0
 
-            print(f"[{season_start}] {i}/{len(games)} SCRAPE {game['game_id']}")
+        for future in as_completed(futures):
 
-            box = parse_boxscore(game)
+            completed += 1
 
-            if not box:
-                continue
+            try:
 
-            save_json(out_file, box)
+                box = future.result()
 
-        index.append({
-            "game_id": box["game_id"],
-            "date": box["date"],
-            "season": season_start,
-            "type": box["type"],
-            "home_team": box["home_team"],
-            "away_team": box["away_team"],
-            "home_score": box["home_score"],
-            "away_score": box["away_score"],
-            "winner": box["winner"],
-            "score": box["score"],
-            "playoff": box["playoff"],
-            "game_file": box["game_file"]
-        })
+                if not box:
+                    continue
 
-    if len(index) == 0:
+                index.append({
+                    "game_id": box["game_id"],
+                    "date": box["date"],
+                    "season": season_start,
+                    "type": box["type"],
+                    "home_team": box["home_team"],
+                    "away_team": box["away_team"],
+                    "home_score": box["home_score"],
+                    "away_score": box["away_score"],
+                    "winner": box["winner"],
+                    "score": box["score"],
+                    "playoff": box["playoff"],
+                    "arena": box.get("arena", ""),
+                    "attendance": box.get("attendance", 0),
+                    "game_file": box["game_file"]
+                })
 
-        print(f"SKIPPING EMPTY SEASON {season_start}")
+                if completed % 25 == 0:
+                    print(f"{season_start}: {completed}/{len(games)} completed")
 
-        return
+            except Exception as e:
+
+                print(f"THREAD FAILED {e}")
+
+    index.sort(key=lambda x: x["date"])
 
     season_file = os.path.join(
         SEASONS_DIR,
@@ -353,34 +579,35 @@ def build_season(season_start, overwrite=False):
 
     print(f"SAVED {season_file} WITH {len(index)} GAMES")
 
-    print(f"CHECKPOINT COMMIT FOR {season_start}")
-
-    os.system("git config user.name 'github-actions[bot]'")
-    os.system("git config user.email '41898282+github-actions[bot]@users.noreply.github.com'")
-
-    os.system("git add docs/data/basketball")
-
-    os.system(f'git commit -m "Checkpoint basketball season {season_start}" || true')
-
-    os.system("git pull --rebase origin main || true")
-
-    os.system("git push || true")
-
 def main():
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--start", type=int, default=START_SEASON)
+    parser.add_argument(
+        "--start",
+        type=int,
+        default=START_SEASON
+    )
 
-    parser.add_argument("--end", type=int, default=CURRENT_SEASON)
+    parser.add_argument(
+        "--end",
+        type=int,
+        default=CURRENT_SEASON
+    )
 
-    parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument(
+        "--overwrite",
+        action="store_true"
+    )
 
     args = parser.parse_args()
 
     ensure_dirs()
 
-    for season in range(args.start, args.end + 1):
+    for season in range(
+        args.start,
+        args.end + 1
+    ):
 
         build_season(
             season,
