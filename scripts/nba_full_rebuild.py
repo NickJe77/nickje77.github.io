@@ -2,6 +2,7 @@ import os
 import re
 import json
 import time
+import random
 import argparse
 from datetime import datetime
 from urllib.parse import urljoin
@@ -20,7 +21,6 @@ BOXSCORES_DIR = os.path.join(OUT_BASE, "boxscores")
 BBR = "https://www.basketball-reference.com"
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0",
     "Accept-Language": "en-US,en;q=0.9",
     "Referer": "https://www.google.com/"
 }
@@ -59,6 +59,12 @@ TEAM_MAP = {
     "WAS":"Washington Wizards",
 }
 
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
+]
+
 def ensure_dirs():
 
     os.makedirs(SEASONS_DIR, exist_ok=True)
@@ -94,37 +100,53 @@ def load_json(path):
     except:
         return None
 
-def get(url, sleep=2.5):
+def get(url, sleep_min=4, sleep_max=9):
 
-    time.sleep(sleep)
+    delay = random.uniform(sleep_min, sleep_max)
 
-    retries = 5
+    print(f"SLEEP {round(delay,2)}s -> {url}")
+
+    time.sleep(delay)
+
+    retries = 6
 
     for attempt in range(retries):
 
         try:
 
+            headers = HEADERS.copy()
+
+            headers["User-Agent"] = random.choice(USER_AGENTS)
+
             r = session.get(
                 url,
-                headers=HEADERS,
-                timeout=60
+                headers=headers,
+                timeout=90
             )
 
             if r.status_code == 200:
+
+                if "verify you are human" in r.text.lower():
+
+                    print("HUMAN VERIFICATION PAGE")
+
+                    time.sleep(30)
+
+                    continue
+
                 return r.text
 
             if r.status_code == 403:
 
-                wait = 10 * (attempt + 1)
+                wait = random.randint(20, 60)
 
-                print(f"403 BLOCKED {url}")
-                print(f"WAITING {wait}s")
+                print(f"403 BLOCKED -> WAIT {wait}s")
 
                 time.sleep(wait)
 
                 continue
 
-            print(f"BAD STATUS {r.status_code} {url}")
+            print(f"BAD STATUS {r.status_code}")
 
             return None
 
@@ -132,7 +154,7 @@ def get(url, sleep=2.5):
 
             print(f"REQUEST FAILED {e}")
 
-            time.sleep(5)
+            time.sleep(15)
 
     return None
 
@@ -272,7 +294,7 @@ def get_playoff_games(season_start):
 
 def parse_boxscore(game):
 
-    html = get(game["boxscore_url"], sleep=2.5)
+    html = get(game["boxscore_url"])
 
     if not html:
         return None
@@ -515,7 +537,7 @@ def build_season(season_start, overwrite=False):
 
     futures = []
 
-    MAX_WORKERS = 3
+    MAX_WORKERS = 1
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
 
@@ -565,7 +587,7 @@ def build_season(season_start, overwrite=False):
                     "game_file": box["game_file"]
                 })
 
-                if completed % 25 == 0:
+                if completed % 10 == 0:
                     print(f"{season_start}: {completed}/{len(games)} completed")
 
             except Exception as e:
