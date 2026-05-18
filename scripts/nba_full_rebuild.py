@@ -94,23 +94,15 @@ def load_json(path):
     except:
         return None
 
-def get(url, sleep=0.35):
+def get(url, sleep=2.5):
 
     time.sleep(sleep)
 
-    try:
+    retries = 5
 
-        r = session.get(
-            url,
-            headers=HEADERS,
-            timeout=60
-        )
+    for attempt in range(retries):
 
-        if r.status_code == 403:
-
-            print(f"403 BLOCKED {url}")
-
-            time.sleep(5)
+        try:
 
             r = session.get(
                 url,
@@ -118,19 +110,31 @@ def get(url, sleep=0.35):
                 timeout=60
             )
 
-        if r.status_code != 200:
+            if r.status_code == 200:
+                return r.text
+
+            if r.status_code == 403:
+
+                wait = 10 * (attempt + 1)
+
+                print(f"403 BLOCKED {url}")
+                print(f"WAITING {wait}s")
+
+                time.sleep(wait)
+
+                continue
 
             print(f"BAD STATUS {r.status_code} {url}")
 
             return None
 
-        return r.text
+        except Exception as e:
 
-    except Exception as e:
+            print(f"REQUEST FAILED {e}")
 
-        print(f"REQUEST FAILED {e}")
+            time.sleep(5)
 
-        return None
+    return None
 
 def parse_schedule_table(html, season_start, game_type):
 
@@ -268,7 +272,7 @@ def get_playoff_games(season_start):
 
 def parse_boxscore(game):
 
-    html = get(game["boxscore_url"], sleep=0.35)
+    html = get(game["boxscore_url"], sleep=2.5)
 
     if not html:
         return None
@@ -511,7 +515,7 @@ def build_season(season_start, overwrite=False):
 
     futures = []
 
-    MAX_WORKERS = 8
+    MAX_WORKERS = 3
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
 
