@@ -16,7 +16,7 @@ import random
 from pathlib import Path
 
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Comment
 
 # ---------------------------------------------------------------------------
 # Config
@@ -145,7 +145,21 @@ STAT_COLUMNS = [
 ]
 
 
-def parse_player_table(table) -> list[dict]:
+def uncomment_html(soup: BeautifulSoup) -> BeautifulSoup:
+    """
+    Basketball Reference wraps most of its tables in HTML comments to reduce
+    initial page weight. BeautifulSoup can't find them until we strip the
+    comment markers and re-parse those sections.
+    """
+    for comment in soup.find_all(string=lambda t: isinstance(t, Comment)):
+        # Only bother with comments that contain table markup
+        if "<table" in comment:
+            new_soup = BeautifulSoup(comment, "lxml")
+            comment.replace_with(new_soup)
+    return soup
+
+
+
     """Parse a single team's basic boxscore table into a list of player dicts."""
     players = []
     tbody = table.find("tbody")
@@ -162,12 +176,20 @@ def parse_player_table(table) -> list[dict]:
             continue
 
         name = name_td.get_text(strip=True)
-        if not name or name.lower() in ("", "did not play", "did not dress",
-                                        "not with team", "player suspended"):
-            reason_td = row.find("td", {"data-stat": "reason"})
-            reason = reason_td.get_text(strip=True) if reason_td else "DNP"
-            if name:
-                players.append({"player": name, "dnp": reason})
+        if not name:
+            continue
+
+        # Check if this player did not play — reason is in the "reason" td,
+        # or sometimes the "mp" td contains the reason string directly.
+        reason_td = row.find("td", {"data-stat": "reason"})
+        mp_td = row.find("td", {"data-stat": "mp"})
+        mp_val = mp_td.get_text(strip=True) if mp_td else ""
+        dnp_strings = ("did not play", "did not dress", "not with team",
+                       "player suspended", "dnp")
+        if reason_td or mp_val.lower() in dnp_strings:
+            reason = (reason_td.get_text(strip=True) if reason_td
+                      else mp_val or "DNP")
+            players.append({"player": name, "dnp": reason})
             continue
 
         player_id = ""
@@ -209,6 +231,10 @@ def scrape_boxscore(game: dict) -> dict | None:
         return None
 
     soup = BeautifulSoup(r.text, "lxml")
+
+    # Basketball Reference hides most tables inside HTML comments.
+    # Uncomment them so BeautifulSoup can find them normally.
+    soup = uncomment_html(soup)
 
     # Extract game ID from URL  e.g. /boxscores/202310240BOS.html
     game_id = re.search(r"/boxscores/([^/]+)\.html", url)
