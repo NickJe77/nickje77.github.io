@@ -9,7 +9,6 @@ Usage:
 
 import argparse
 import json
-import os
 import re
 import time
 import random
@@ -33,35 +32,19 @@ HEADERS = {
     )
 }
 
-# Be polite — Basketball Reference rate-limits aggressively
-MIN_DELAY = 3.5   # seconds between requests
+MIN_DELAY = 3.5
 MAX_DELAY = 6.0
 
+STAT_COLUMNS = [
+    "mp",
+    "fg", "fga", "fg_pct",
+    "fg3", "fg3a", "fg3_pct",
+    "ft", "fta", "ft_pct",
+    "orb", "drb", "trb",
+    "ast", "stl", "blk", "tov", "pf", "pts",
+    "plus_minus",
+]
 
-def polite_get(url: str, retries: int = 4) -> requests.Response:
-    """GET with retries and polite delays."""
-    for attempt in range(retries):
-        time.sleep(random.uniform(MIN_DELAY, MAX_DELAY))
-        try:
-            r = requests.get(url, headers=HEADERS, timeout=30)
-            if r.status_code == 429:
-                wait = 60 * (attempt + 1)
-                print(f"  Rate limited. Waiting {wait}s …")
-                time.sleep(wait)
-                continue
-            r.raise_for_status()
-            return r
-        except requests.RequestException as e:
-            if attempt == retries - 1:
-                raise
-            print(f"  Request error ({e}), retrying in 15s …")
-            time.sleep(15)
-    raise RuntimeError(f"Failed to fetch {url} after {retries} retries")
-
-
-# ---------------------------------------------------------------------------
-# Schedule scraping
-# ---------------------------------------------------------------------------
 MONTHS = [
     "october", "november", "december",
     "january", "february", "march",
@@ -69,12 +52,33 @@ MONTHS = [
 ]
 
 
-def get_game_urls_for_season(season: int) -> list[dict]:
-    """
-    Return list of {date, home, away, url} dicts for every regular-season
-    and playoff game in `season` (the year the season ends, e.g. 2024).
-    Caches schedule JSON to SCHEDULE_DIR.
-    """
+# ---------------------------------------------------------------------------
+# HTTP helper
+# ---------------------------------------------------------------------------
+def polite_get(url, retries=4):
+    for attempt in range(retries):
+        time.sleep(random.uniform(MIN_DELAY, MAX_DELAY))
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=30)
+            if r.status_code == 429:
+                wait = 60 * (attempt + 1)
+                print(f"  Rate limited. Waiting {wait}s ...")
+                time.sleep(wait)
+                continue
+            r.raise_for_status()
+            return r
+        except requests.RequestException as e:
+            if attempt == retries - 1:
+                raise
+            print(f"  Request error ({e}), retrying in 15s ...")
+            time.sleep(15)
+    raise RuntimeError(f"Failed to fetch {url} after {retries} retries")
+
+
+# ---------------------------------------------------------------------------
+# Schedule scraping
+# ---------------------------------------------------------------------------
+def get_game_urls_for_season(season):
     cache_path = SCHEDULE_DIR / f"{season}.json"
     if cache_path.exists():
         with open(cache_path) as f:
@@ -97,22 +101,14 @@ def get_game_urls_for_season(season: int) -> list[dict]:
         for row in table.find("tbody").find_all("tr"):
             if row.get("class") and "thead" in row.get("class"):
                 continue
-            cells = row.find_all(["td", "th"])
-            if len(cells) < 5:
-                continue
-
             box_link = row.find("td", {"data-stat": "box_score_text"})
             if not box_link or not box_link.find("a"):
-                continue  # game not yet played
-
+                continue
             date_th = row.find("th", {"data-stat": "date_game"})
-            date = date_th.get_text(strip=True) if date_th else ""
-
             visitor = row.find("td", {"data-stat": "visitor_team_name"})
             home = row.find("td", {"data-stat": "home_team_name"})
-
             games.append({
-                "date": date,
+                "date": date_th.get_text(strip=True) if date_th else "",
                 "away": visitor.get_text(strip=True) if visitor else "",
                 "home": home.get_text(strip=True) if home else "",
                 "url": BASE_URL + box_link.find("a")["href"],
@@ -127,47 +123,33 @@ def get_game_urls_for_season(season: int) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Boxscore parsing
+# HTML comment expander  (MUST be defined before parse_player_table)
 # ---------------------------------------------------------------------------
-STAT_COLUMNS = [
-    "mp",                          # minutes played
-    "fg", "fga", "fg_pct",        # field goals
-    "fg3", "fg3a", "fg3_pct",     # 3-pointers
-    "ft", "fta", "ft_pct",        # free throws
-    "orb", "drb", "trb",          # rebounds
-    "ast",                         # assists
-    "stl",                         # steals
-    "blk",                         # blocks
-    "tov",                         # turnovers
-    "pf",                          # personal fouls
-    "pts",                         # points
-    "plus_minus",
-]
-
-
-def uncomment_html(soup: BeautifulSoup) -> BeautifulSoup:
+def uncomment_html(soup):
     """
-    Basketball Reference wraps most of its tables in HTML comments to reduce
-    initial page weight. BeautifulSoup can't find them until we strip the
-    comment markers and re-parse those sections.
+    Basketball Reference wraps its stats tables inside HTML comments.
+    BeautifulSoup skips comments, so tables appear missing without this step.
+    We find every comment containing table markup and splice it back into
+    the parse tree as real HTML.
     """
     for comment in soup.find_all(string=lambda t: isinstance(t, Comment)):
-        # Only bother with comments that contain table markup
         if "<table" in comment:
             new_soup = BeautifulSoup(comment, "lxml")
             comment.replace_with(new_soup)
     return soup
 
 
-
-    """Parse a single team's basic boxscore table into a list of player dicts."""
+# ---------------------------------------------------------------------------
+# Player table parser  (defined after uncomment_html)
+# ---------------------------------------------------------------------------
+def parse_player_table(table):
+    """Parse one team's basic boxscore table into a list of player stat dicts."""
     players = []
     tbody = table.find("tbody")
     if not tbody:
         return players
 
     for row in tbody.find_all("tr"):
-        # Skip section headers (e.g. "Starters" / "Reserves")
         if row.get("class") and "thead" in row.get("class"):
             continue
 
@@ -179,16 +161,14 @@ def uncomment_html(soup: BeautifulSoup) -> BeautifulSoup:
         if not name:
             continue
 
-        # Check if this player did not play — reason is in the "reason" td,
-        # or sometimes the "mp" td contains the reason string directly.
+        # DNP detection
         reason_td = row.find("td", {"data-stat": "reason"})
         mp_td = row.find("td", {"data-stat": "mp"})
         mp_val = mp_td.get_text(strip=True) if mp_td else ""
-        dnp_strings = ("did not play", "did not dress", "not with team",
+        dnp_phrases = ("did not play", "did not dress", "not with team",
                        "player suspended", "dnp")
-        if reason_td or mp_val.lower() in dnp_strings:
-            reason = (reason_td.get_text(strip=True) if reason_td
-                      else mp_val or "DNP")
+        if reason_td or mp_val.lower() in dnp_phrases:
+            reason = reason_td.get_text(strip=True) if reason_td else (mp_val or "DNP")
             players.append({"player": name, "dnp": reason})
             continue
 
@@ -198,31 +178,30 @@ def uncomment_html(soup: BeautifulSoup) -> BeautifulSoup:
             m = re.search(r"/players/\w/(\w+)\.html", a_tag["href"])
             player_id = m.group(1) if m else ""
 
-        stats: dict = {"player": name, "player_id": player_id}
+        stats = {"player": name, "player_id": player_id}
         for stat in STAT_COLUMNS:
             td = row.find("td", {"data-stat": stat})
             if td is None:
                 stats[stat] = None
                 continue
             val = td.get_text(strip=True)
-            if val in ("", "—", "-"):
+            if val in ("", "\u2014", "-"):
                 stats[stat] = None
             else:
                 try:
                     stats[stat] = float(val) if "." in val else int(val)
                 except ValueError:
-                    stats[stat] = val  # keep as string (e.g. mp = "32:14")
+                    stats[stat] = val
 
         players.append(stats)
 
     return players
 
 
-def scrape_boxscore(game: dict) -> dict | None:
-    """
-    Download and parse a boxscore page.
-    Returns a structured dict or None on failure.
-    """
+# ---------------------------------------------------------------------------
+# Boxscore scraper
+# ---------------------------------------------------------------------------
+def scrape_boxscore(game):
     url = game["url"]
     try:
         r = polite_get(url)
@@ -231,30 +210,24 @@ def scrape_boxscore(game: dict) -> dict | None:
         return None
 
     soup = BeautifulSoup(r.text, "lxml")
+    soup = uncomment_html(soup)  # expand hidden tables
 
-    # Basketball Reference hides most tables inside HTML comments.
-    # Uncomment them so BeautifulSoup can find them normally.
-    soup = uncomment_html(soup)
+    game_id_match = re.search(r"/boxscores/([^/]+)\.html", url)
+    game_id = game_id_match.group(1) if game_id_match else url.split("/")[-1]
 
-    # Extract game ID from URL  e.g. /boxscores/202310240BOS.html
-    game_id = re.search(r"/boxscores/([^/]+)\.html", url)
-    game_id = game_id.group(1) if game_id else url.split("/")[-1]
-
-    # Score line
-    score_rows = soup.select("div#scoring table tr")
-    final_scores: dict = {}
+    # Linescore
+    final_scores = {}
     linescore = soup.find("table", {"id": "line_score"})
     if linescore:
-        headers_row = linescore.find("thead").find_all("tr")[-1]
-        qs = [th.get_text(strip=True) for th in headers_row.find_all("th")][1:]
+        thead_rows = linescore.find("thead").find_all("tr")
+        quarter_headers = [th.get_text(strip=True) for th in thead_rows[-1].find_all("th")][1:]
         for row in linescore.find("tbody").find_all("tr"):
             cells = row.find_all(["th", "td"])
             team_name = cells[0].get_text(strip=True)
             q_vals = [c.get_text(strip=True) for c in cells[1:]]
-            final_scores[team_name] = dict(zip(qs, q_vals))
+            final_scores[team_name] = dict(zip(quarter_headers, q_vals))
 
-    # Team abbreviations from the basic boxscore table IDs
-    # Tables are named  box-{TEAM}-game-basic
+    # Player tables
     team_tables = {}
     for table in soup.find_all("table", id=re.compile(r"^box-\w+-game-basic$")):
         m = re.match(r"box-(\w+)-game-basic", table["id"])
@@ -262,14 +235,11 @@ def scrape_boxscore(game: dict) -> dict | None:
             team_tables[m.group(1)] = table
 
     if len(team_tables) < 2:
-        print(f"  WARNING: only {len(team_tables)} team table(s) found for {game_id}")
+        print(f"  WARNING: only {len(team_tables)} team table(s) for {game_id}")
 
-    teams_data = {}
-    for abbr, table in team_tables.items():
-        teams_data[abbr] = parse_player_table(table)
+    teams_data = {abbr: parse_player_table(tbl) for abbr, tbl in team_tables.items()}
 
-    # Game metadata
-    meta: dict = {
+    meta = {
         "game_id": game_id,
         "date": game["date"],
         "away": game["away"],
@@ -279,7 +249,6 @@ def scrape_boxscore(game: dict) -> dict | None:
         "teams": teams_data,
     }
 
-    # Attendance / arena from #content > div.scorebox
     scorebox = soup.find("div", class_="scorebox")
     if scorebox:
         meta_div = scorebox.find("div", class_="scorebox_meta")
@@ -330,7 +299,7 @@ def main():
                 total_skipped += 1
                 continue
 
-            print(f"  [{i}/{len(games)}] {game['date']} {game['away']} @ {game['home']} …", end=" ")
+            print(f"  [{i}/{len(games)}] {game['date']} {game['away']} @ {game['home']} ...", end=" ", flush=True)
 
             data = scrape_boxscore(game)
             if data is None:
