@@ -1,5 +1,4 @@
 name: Basketball NBA Full Scraper
-
 on:
   workflow_dispatch:
     inputs:
@@ -20,7 +19,6 @@ jobs:
   scrape:
     runs-on: ubuntu-latest
     timeout-minutes: 360
-
     steps:
       - uses: actions/checkout@v4
 
@@ -32,21 +30,28 @@ jobs:
         run: |
           pip install requests beautifulsoup4 lxml
 
+      - name: Clear schedule cache
+        run: |
+          rm -f docs/data/basketball/schedules/*.json
+
       - name: Run scraper
         run: |
           if [ "${{ github.event.inputs.overwrite }}" = "true" ]; then
-            python scripts/nba_full_rebuild.py --start "${{ github.event.inputs.start }}" --end "${{ github.event.inputs.end }}" --overwrite
+            python scripts/nba_full_rebuild.py \
+              --start "${{ github.event.inputs.start }}" \
+              --end "${{ github.event.inputs.end }}" \
+              --overwrite
           else
-            python scripts/nba_full_rebuild.py --start "${{ github.event.inputs.start }}" --end "${{ github.event.inputs.end }}"
+            python scripts/nba_full_rebuild.py \
+              --start "${{ github.event.inputs.start }}" \
+              --end "${{ github.event.inputs.end }}"
           fi
 
       - name: Commit basketball data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
           git add docs/data/basketball
-
-          git commit -m "Rebuild basketball NBA data" || echo "No changes"
+          git commit -m "Rebuild basketball NBA data ${{ github.event.inputs.start }}-${{ github.event.inputs.end }}" || echo "No changes"
           git pull --rebase origin main || echo "Nothing to pull"
           git push
