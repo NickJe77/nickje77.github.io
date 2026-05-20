@@ -273,6 +273,19 @@ def scrape_boxscore(game):
 
 
 # ---------------------------------------------------------------------------
+# File validation helper
+# ---------------------------------------------------------------------------
+def file_has_players(path):
+    """Return True only if the JSON file exists and contains at least one player."""
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        return any(len(v) > 0 for v in data.get("teams", {}).values())
+    except Exception:
+        return False
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main():
@@ -300,7 +313,7 @@ def main():
             game_id = game["url"].split("/")[-1].replace(".html", "")
             out_path = season_dir / f"{game_id}.json"
 
-            if out_path.exists() and not args.overwrite:
+            if out_path.exists() and not args.overwrite and file_has_players(out_path):
                 total_skipped += 1
                 continue
 
