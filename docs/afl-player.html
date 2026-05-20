@@ -33,19 +33,16 @@ tbody tr:nth-child(even){background:#f2f7ff;}
 tbody tr{cursor:pointer;}
 tbody tr:hover{background:#e8f0ff;}
 .reset-sort{margin-top:10px;padding:6px 12px;border-radius:6px;border:1px solid #aaa;cursor:pointer;}
-
-/* Disambiguation styles */
 .disambig{background:white;border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.08);padding:30px;margin-bottom:20px;}
 .disambig h2{margin:0 0 8px;font-size:22px;color:#333;}
 .disambig p{color:#666;margin:0 0 20px;}
 .disambig-options{display:flex;flex-wrap:wrap;gap:14px;}
-.disambig-card{display:flex;align-items:center;gap:14px;padding:16px 22px;border-radius:12px;border:2px solid #dde3ec;text-decoration:none;color:#333;font-size:17px;font-weight:600;background:#f9fbff;transition:border-color .15s,box-shadow .15s;}
+.disambig-card{display:flex;align-items:center;gap:10px;padding:16px 22px;border-radius:12px;border:2px solid #dde3ec;text-decoration:none;color:#333;font-size:17px;font-weight:600;background:#f9fbff;transition:border-color .15s,box-shadow .15s;}
 .disambig-card:hover{border-color:#0056d6;box-shadow:0 4px 14px rgba(0,86,214,.12);}
-.disambig-stripe{height:32px;width:60px;border-radius:6px;border:1px solid #ccc;flex-shrink:0;}
+.disambig-stripe{height:32px;width:44px;border-radius:6px;border:1px solid #ccc;flex-shrink:0;}
 </style>
 
 </head>
-
 <body>
 
 <div class="navbar">
@@ -60,7 +57,6 @@ tbody tr:hover{background:#e8f0ff;}
 <h1 id="playerName"></h1>
 <div id="teamStripe" class="team-stripes" style="display:none"></div>
 </div>
-
 <div>
 <input id="playerSearch" list="playerList" placeholder="Search player...">
 <datalist id="playerList"></datalist>
@@ -68,17 +64,13 @@ tbody tr:hover{background:#e8f0ff;}
 </div>
 
 <div id="summary">
-
 <select id="opponentSelect" class="opponent-select" style="display:none">
 <option value="all">All Opponents</option>
 </select>
-
 <div class="section-title" id="careerLabel" style="display:none">Career Summary</div>
 <div class="stats" id="careerStats"></div>
-
 <div class="section-title" id="opponentLabel" style="display:none">Vs Selected Opponent</div>
 <div class="stats" id="opponentStats"></div>
-
 </div>
 
 <button class="reset-sort" id="resetBtn" style="display:none" onclick="resetSort()">Reset Sort</button>
@@ -102,111 +94,142 @@ tbody tr:hover{background:#e8f0ff;}
 
 <script>
 
-const teamColours={
-"Adelaide":"#002b5c,#e21937",
-"Brisbane":"#7c0a02,#fdb827",
-"Carlton":"#031a29,#ffffff",
-"Collingwood":"#000000,#ffffff",
-"Essendon":"#cc2031,#000000",
-"Fremantle":"#2a0f5a,#ffffff",
-"Geelong":"#002b5c,#ffffff",
-"Gold Coast":"#c8102e,#fdb827",
-"GWS":"#f37021,#333333",
-"Hawthorn":"#4b2c20,#fdb827",
-"Melbourne":"#001a33,#c8102e",
-"North Melbourne":"#003a8f,#ffffff",
-"Port Adelaide":"#008aab,#000000",
-"Richmond":"#ffd100,#000000",
-"St Kilda":"#ed1b2e,#000000",
-"Sydney":"#e1251b,#ffffff",
-"West Coast":"#003087,#f2a900",
-"Western Bulldogs":"#003087,#c8102e"
+// ─── Add new duplicate-name players here ───────────────────────────────────
+// Each inner array is ONE distinct person, listing all clubs they played for.
+const DISAMBIG_GROUPS = {
+  "Will Hayes": [
+    ["Western Bulldogs", "Carlton"],
+    ["Collingwood"]
+  ],
+};
+// ────────────────────────────────────────────────────────────────────────────
+
+const teamColours = {
+  "Adelaide":         "#002b5c,#e21937",
+  "Brisbane":         "#7c0a02,#fdb827",
+  "Carlton":          "#031a29,#ffffff",
+  "Collingwood":      "#000000,#ffffff",
+  "Essendon":         "#cc2031,#000000",
+  "Fremantle":        "#2a0f5a,#ffffff",
+  "Geelong":          "#002b5c,#ffffff",
+  "Gold Coast":       "#c8102e,#fdb827",
+  "GWS":              "#f37021,#333333",
+  "Hawthorn":         "#4b2c20,#fdb827",
+  "Melbourne":        "#001a33,#c8102e",
+  "North Melbourne":  "#003a8f,#ffffff",
+  "Port Adelaide":    "#008aab,#000000",
+  "Richmond":         "#ffd100,#000000",
+  "St Kilda":         "#ed1b2e,#000000",
+  "Sydney":           "#e1251b,#ffffff",
+  "West Coast":       "#003087,#f2a900",
+  "Western Bulldogs": "#003087,#c8102e"
 };
 
-const playerSearchEl=document.getElementById("playerSearch");
-const playerList=document.getElementById("playerList");
-const opponentSelect=document.getElementById("opponentSelect");
-const rows=document.getElementById("rows");
+const playerSearchEl = document.getElementById("playerSearch");
+const playerList     = document.getElementById("playerList");
+const opponentSelect = document.getElementById("opponentSelect");
+const rows           = document.getElementById("rows");
 
-const params=new URLSearchParams(location.search);
-const playerName=params.get("name")||"";
-const playerTeam=params.get("team")||"";
+const params     = new URLSearchParams(location.search);
+const playerName = params.get("name") || "";
+const playerTeam = params.get("team") || "";
 
-document.getElementById("playerName").textContent=playerName||"Select a player";
+document.getElementById("playerName").textContent = playerName || "Select a player";
 
-let allGames=[],currentGames=[],sortDir=-1,sortKey=null;
+let allGames = [], currentGames = [], sortDir = -1, sortKey = null;
 
-const years=[];
-for(let y=1990;y<=2026;y++) years.push(y);
+const years = [];
+for (let y = 1990; y <= 2026; y++) years.push(y);
 
 Promise.all(
-  years.map(y=>fetch(`/data/afl/afl_${y}.json`).then(r=>r.json()).catch(()=>[]))
-).then(data=>{
+  years.map(y => fetch(`/data/afl/afl_${y}.json`).then(r => r.json()).catch(() => []))
+).then(data => {
 
-  allGames=data.flat();
+  allGames = data.flat();
 
-  // Build datalist — show "Name (Team)" for duplicate names
-  const nameCount={};
-  allGames.forEach(g=>{
-    nameCount[g.player]=(nameCount[g.player]||new Set()).add(g.played_for);
+  // Build datalist
+  const nameToTeams = {};
+  allGames.forEach(g => {
+    if (!nameToTeams[g.player]) nameToTeams[g.player] = new Set();
+    nameToTeams[g.player].add(g.played_for);
   });
 
-  const uniquePlayers=[...new Map(
-    allGames.map(g=>[`${g.player}||${g.played_for}`,g])
-  ).values()].sort((a,b)=>a.player.localeCompare(b.player));
+  const datalistOptions = new Set();
+  Object.keys(nameToTeams).sort().forEach(name => {
+    if (DISAMBIG_GROUPS[name]) {
+      DISAMBIG_GROUPS[name].forEach(group => {
+        const groupHasData = group.some(t => nameToTeams[name].has(t));
+        if (groupHasData) {
+          const label = group.length === 1
+            ? `${name} (${group[0]})`
+            : `${name} (${group.join(" / ")})`;
+          datalistOptions.add(label);
+        }
+      });
+    } else {
+      if (nameToTeams[name].size > 1) {
+        nameToTeams[name].forEach(team => datalistOptions.add(`${name} (${team})`));
+      } else {
+        datalistOptions.add(name);
+      }
+    }
+  });
 
-  playerList.innerHTML="";
-  uniquePlayers.forEach(g=>{
-    const isDupe=nameCount[g.player] && nameCount[g.player].size>1;
-    const o=document.createElement("option");
-    o.value=isDupe?`${g.player} (${g.played_for})`:g.player;
+  playerList.innerHTML = "";
+  [...datalistOptions].forEach(label => {
+    const o = document.createElement("option");
+    o.value = label;
     playerList.appendChild(o);
   });
 
-  if(!playerName) return;
+  if (!playerName) return;
 
-  const allMatchingGames=allGames.filter(p=>p.player===playerName);
+  const allMatchingGames = allGames.filter(p => p.player === playerName);
+  if (!allMatchingGames.length) return;
 
-  if(!allMatchingGames.length) return;
+  // Disambiguation logic
+  if (DISAMBIG_GROUPS[playerName]) {
+    const teamsInData = new Set(allMatchingGames.map(g => g.played_for));
+    const validGroups = DISAMBIG_GROUPS[playerName].filter(group =>
+      group.some(t => teamsInData.has(t))
+    );
 
-  // Find distinct teams this player name belongs to
-  const distinctTeams=[...new Set(allMatchingGames.map(g=>g.played_for))];
+    if (validGroups.length > 1 && !playerTeam) {
+      showDisambiguation(playerName, validGroups);
+      return;
+    }
 
-  // Ambiguous: same name, multiple distinct players (different teams), no team chosen
-  if(distinctTeams.length>1 && !playerTeam){
-    showDisambiguation(playerName, distinctTeams);
-    return;
+    const chosenTeams = playerTeam.split("/").map(s => s.trim());
+    const matchedGroup = DISAMBIG_GROUPS[playerName].find(group =>
+      chosenTeams.every(t => group.includes(t)) || group.some(t => chosenTeams.includes(t))
+    ) || validGroups[0];
+
+    currentGames = allMatchingGames.filter(p => matchedGroup.includes(p.played_for));
+
+  } else {
+    currentGames = playerTeam
+      ? allMatchingGames.filter(p => p.played_for === playerTeam)
+      : allMatchingGames;
   }
 
-  // Filter by team if specified
-  currentGames=playerTeam
-    ? allMatchingGames.filter(p=>p.played_for===playerTeam)
-    : allMatchingGames;
+  if (!currentGames.length) return;
 
-  if(!currentGames.length) return;
-
-  // Update heading if team qualifier needed
-  if(playerTeam){
-    document.getElementById("playerName").textContent=`${playerName} (${playerTeam})`;
+  // Team stripe — most recent game
+  let latestGame = currentGames[0];
+  currentGames.forEach(g => { if (g.season > latestGame.season) latestGame = g; });
+  const team = latestGame.played_for;
+  if (teamColours[team]) {
+    const c = teamColours[team].split(",");
+    const stripe = document.getElementById("teamStripe");
+    stripe.style.background = `linear-gradient(90deg,${c[0]} 50%,${c[1]} 50%)`;
+    stripe.style.display = "block";
   }
 
-  // Team stripe — use latest season's team
-  let latestGame=currentGames[0];
-  currentGames.forEach(g=>{ if(g.season>latestGame.season) latestGame=g; });
-  const team=latestGame.played_for;
-  if(teamColours[team]){
-    const c=teamColours[team].split(",");
-    const stripe=document.getElementById("teamStripe");
-    stripe.style.background=`linear-gradient(90deg,${c[0]} 50%,${c[1]} 50%)`;
-    stripe.style.display="block";
-  }
-
-  // Show table & controls
-  document.getElementById("mainTable").style.display="";
-  document.getElementById("resetBtn").style.display="";
-  document.getElementById("opponentSelect").style.display="";
-  document.getElementById("careerLabel").style.display="";
-  document.getElementById("opponentLabel").style.display="";
+  document.getElementById("mainTable").style.display      = "";
+  document.getElementById("resetBtn").style.display       = "";
+  document.getElementById("opponentSelect").style.display = "";
+  document.getElementById("careerLabel").style.display    = "";
+  document.getElementById("opponentLabel").style.display  = "";
 
   setupOpponents(currentGames);
   renderCareer(currentGames);
@@ -215,114 +238,138 @@ Promise.all(
 
 });
 
-function showDisambiguation(name, teams){
-  document.getElementById("playerName").textContent=name;
-  document.getElementById("summary").innerHTML=`
+function showDisambiguation(name, groups) {
+  document.getElementById("playerName").textContent = name;
+  document.getElementById("summary").innerHTML = `
     <div class="disambig">
       <h2>Multiple players named "${name}"</h2>
       <p>Select the player you're looking for:</p>
       <div class="disambig-options">
-        ${teams.map(team=>{
-          const stripe=getStripeStyle(team);
-          return `<a class="disambig-card" href="afl-player.html?name=${encodeURIComponent(name)}&team=${encodeURIComponent(team)}">
-            <div class="disambig-stripe" style="${stripe}"></div>
-            ${name} <span style="color:#888;font-weight:400;margin-left:6px;">(${team})</span>
+        ${groups.map(group => {
+          const teamParam = group.join("/");
+          const stripes = group.map(t =>
+            `<div class="disambig-stripe" style="${getStripeStyle(t)}"></div>`
+          ).join("");
+          return `<a class="disambig-card" href="afl-player.html?name=${encodeURIComponent(name)}&team=${encodeURIComponent(teamParam)}">
+            ${stripes}
+            ${name}&ensp;<span style="color:#888;font-weight:400;">(${group.join(" / ")})</span>
           </a>`;
         }).join("")}
       </div>
     </div>`;
 }
 
-function getStripeStyle(team){
-  if(!teamColours[team]) return "background:#eee;";
-  const c=teamColours[team].split(",");
-  return `background:linear-gradient(90deg,${c[0]} 50%,${c[1]} 50%);border:1px solid #ccc;`;
+function getStripeStyle(team) {
+  if (!teamColours[team]) return "background:#eee;";
+  const c = teamColours[team].split(",");
+  return `background:linear-gradient(90deg,${c[0]} 50%,${c[1]} 50%);`;
 }
 
-function setupOpponents(games){
-  opponentSelect.innerHTML=`<option value="all">All Opponents</option>`;
-  [...new Set(games.map(g=>g.played_against))].sort().forEach(o=>{
-    const opt=document.createElement("option");
-    opt.value=o; opt.textContent=o;
+function setupOpponents(games) {
+  opponentSelect.innerHTML = `<option value="all">All Opponents</option>`;
+  [...new Set(games.map(g => g.played_against))].sort().forEach(o => {
+    const opt = document.createElement("option");
+    opt.value = o; opt.textContent = o;
     opponentSelect.appendChild(opt);
   });
-  opponentSelect.onchange=()=>{
-    let f=games;
-    if(opponentSelect.value!=="all")
-      f=games.filter(g=>g.played_against===opponentSelect.value);
+  opponentSelect.onchange = () => {
+    let f = games;
+    if (opponentSelect.value !== "all")
+      f = games.filter(g => g.played_against === opponentSelect.value);
     renderOpponent(f);
     renderTable(f);
   };
 }
 
-function renderCareer(g){ renderStats(g,"careerStats"); }
-function renderOpponent(g){ renderStats(g,"opponentStats"); }
+function renderCareer(g)   { renderStats(g, "careerStats"); }
+function renderOpponent(g) { renderStats(g, "opponentStats"); }
 
-function renderStats(g,id){
-  if(!g.length){ document.getElementById(id).innerHTML=""; return; }
-  const games=g.length;
-  const dTotal=g.reduce((a,x)=>a+(+x.D||0),0);
-  const gTotal=g.reduce((a,x)=>a+(+x.G||0),0);
-  const bestD=Math.max(...g.map(x=>+x.D||0));
-  const bestG=Math.max(...g.map(x=>+x.G||0));
-  const bestDCount=g.filter(x=>(+x.D||0)===bestD).length;
-  const bestGCount=g.filter(x=>(+x.G||0)===bestG).length;
-  document.getElementById(id).innerHTML=`
+function renderStats(g, id) {
+  if (!g.length) { document.getElementById(id).innerHTML = ""; return; }
+  const games  = g.length;
+  const dTotal = g.reduce((a, x) => a + (+x.D || 0), 0);
+  const gTotal = g.reduce((a, x) => a + (+x.G || 0), 0);
+  const bestD  = Math.max(...g.map(x => +x.D || 0));
+  const bestG  = Math.max(...g.map(x => +x.G || 0));
+  const bestDCount = g.filter(x => (+x.D || 0) === bestD).length;
+  const bestGCount = g.filter(x => (+x.G || 0) === bestG).length;
+  document.getElementById(id).innerHTML = `
     <div class="stat-box"><strong>${games}</strong><span>Games</span></div>
     <div class="stat-box">
       <strong>${bestD}</strong><span>Best Disposals</span>
-      ${bestDCount>1?`<div class="sub">(${bestDCount} times)</div>`:""}
+      ${bestDCount > 1 ? `<div class="sub">(${bestDCount} times)</div>` : ""}
     </div>
     <div class="stat-box">
       <strong>${bestG}</strong><span>Best Goals</span>
-      ${bestGCount>1?`<div class="sub">(${bestGCount} times)</div>`:""}
+      ${bestGCount > 1 ? `<div class="sub">(${bestGCount} times)</div>` : ""}
     </div>
-    <div class="stat-box"><strong>${(dTotal/games).toFixed(1)}</strong><span>Avg Disposals</span></div>
-    <div class="stat-box"><strong>${(gTotal/games).toFixed(2)}</strong><span>Avg Goals</span></div>`;
+    <div class="stat-box"><strong>${(dTotal / games).toFixed(1)}</strong><span>Avg Disposals</span></div>
+    <div class="stat-box"><strong>${(gTotal / games).toFixed(2)}</strong><span>Avg Goals</span></div>`;
 }
 
-function renderTable(g){
-  rows.innerHTML="";
-  g.forEach(p=>{
-    const tr=document.createElement("tr");
-    tr.onclick=()=>location.href=`afl-game.html?match=${encodeURIComponent(p.match_id)}`;
-    tr.innerHTML=`
+function renderTable(g) {
+  rows.innerHTML = "";
+  g.forEach(p => {
+    const tr = document.createElement("tr");
+    tr.onclick = () => location.href = `afl-game.html?match=${encodeURIComponent(p.match_id)}`;
+    tr.innerHTML = `
       <td>${p.season}</td>
       <td>${p.round}</td>
       <td class="left">${p.played_for}</td>
       <td>${p.played_against}</td>
-      <td>${p.D||0}</td>
-      <td>${p.G||0}</td>
-      <td>${p.B||0}</td>`;
+      <td>${p.D || 0}</td>
+      <td>${p.G || 0}</td>
+      <td>${p.B || 0}</td>`;
     rows.appendChild(tr);
   });
 }
 
-function sortTable(key){
-  if(sortKey===key) sortDir*=-1;
-  else{ sortKey=key; sortDir=-1; }
-  currentGames.sort((a,b)=>((a[key]||0)-(b[key]||0))*sortDir);
+function sortTable(key) {
+  if (sortKey === key) sortDir *= -1;
+  else { sortKey = key; sortDir = -1; }
+  currentGames.sort((a, b) => ((a[key] || 0) - (b[key] || 0)) * sortDir);
   renderTable(currentGames);
 }
 
-function resetSort(){
-  currentGames=allGames.filter(p=>
-    p.player===playerName && (!playerTeam||p.played_for===playerTeam)
-  );
-  renderTable(currentGames);
-}
-
-playerSearchEl.onchange=e=>{
-  const val=e.target.value;
-  const match=val.match(/^(.+?) \(([^)]+)\)$/);
-  if(match){
-    location.href=`afl-player.html?name=${encodeURIComponent(match[1])}&team=${encodeURIComponent(match[2])}`;
+function resetSort() {
+  const allMatchingGames = allGames.filter(p => p.player === playerName);
+  if (DISAMBIG_GROUPS[playerName] && playerTeam) {
+    const chosenTeams = playerTeam.split("/").map(s => s.trim());
+    const matchedGroup = DISAMBIG_GROUPS[playerName].find(group =>
+      chosenTeams.every(t => group.includes(t)) || group.some(t => chosenTeams.includes(t))
+    );
+    currentGames = matchedGroup
+      ? allMatchingGames.filter(p => matchedGroup.includes(p.played_for))
+      : allMatchingGames;
   } else {
-    location.href=`afl-player.html?name=${encodeURIComponent(val)}`;
+    currentGames = playerTeam
+      ? allMatchingGames.filter(p => p.played_for === playerTeam)
+      : allMatchingGames;
+  }
+  renderTable(currentGames);
+}
+
+playerSearchEl.onchange = e => {
+  const val = e.target.value.trim();
+  const match = val.match(/^(.+?)\s+\((.+)\)$/);
+  if (match) {
+    const name  = match[1].trim();
+    const teams = match[2].split("/").map(s => s.trim());
+    if (DISAMBIG_GROUPS[name]) {
+      const group = DISAMBIG_GROUPS[name].find(g =>
+        teams.every(t => g.includes(t)) || g.some(t => teams.includes(t))
+      );
+      if (group) {
+        location.href = `afl-player.html?name=${encodeURIComponent(name)}&team=${encodeURIComponent(group.join("/"))}`;
+        return;
+      }
+    }
+    location.href = `afl-player.html?name=${encodeURIComponent(name)}&team=${encodeURIComponent(teams[0])}`;
+  } else {
+    location.href = `afl-player.html?name=${encodeURIComponent(val)}`;
   }
 };
 
 </script>
 
 </body>
-</html>
