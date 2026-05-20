@@ -19,79 +19,29 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Fix false red cards
+      - name: Debug - inspect bad West Ham matches
         run: |
           python3 - <<'EOF'
-          import json
-          from pathlib import Path
+          import json, glob
 
-          MATCHES_DIR = Path("docs/data/epl/matches")
+          # Check a sample of the known bad matches
+          bad_matches = [
+              "docs/data/epl/matches/2025-2026/2025-2026_0060.json",
+              "docs/data/epl/matches/2025-2026/2025-2026_0063.json",
+              "docs/data/epl/matches/2025-2026/2025-2026_0081.json",
+              "docs/data/epl/matches/2025-2026/2025-2026_0148.json",
+          ]
 
-          fixed_files = 0
-          fixed_cards = 0
-          skipped     = 0
-
-          all_files = sorted(MATCHES_DIR.rglob("*.json"))
-          print(f"📂  Scanning {len(all_files)} match files...\n")
-
-          for path in all_files:
+          for f in bad_matches:
               try:
-                  with open(path, encoding="utf-8") as f:
-                      match = json.load(f)
-
-                  yellow_cards = match.get("yellow_cards") or []
-                  red_cards    = match.get("red_cards") or []
-
-                  if not red_cards:
-                      continue
-
-                  # Build set of (player, minute) from yellow cards
-                  yellow_keys = set()
-                  for card in yellow_cards:
-                      player = (card.get("player") or "").strip()
-                      minute = card.get("minute")
-                      if player and minute is not None:
-                          yellow_keys.add((player, minute))
-
-                  # Keep only true reds
-                  true_reds = []
-                  removed   = []
-
-                  for card in red_cards:
-                      player = (card.get("player") or "").strip()
-                      minute = card.get("minute")
-                      if (player, minute) in yellow_keys:
-                          removed.append(card)
-                      else:
-                          true_reds.append(card)
-
-                  if not removed:
-                      continue
-
-                  for card in removed:
-                      print(
-                          f"  🔧 {path.name}: Removed false red — "
-                          f"{card.get('player')} ({card.get('team')}) min {card.get('minute')}"
-                      )
-                      fixed_cards += 1
-
-                  match["red_cards"] = true_reds
-
-                  with open(path, "w", encoding="utf-8") as f:
-                      json.dump(match, f, indent=2, ensure_ascii=False)
-
-                  fixed_files += 1
-
-              except (json.JSONDecodeError, OSError) as e:
-                  print(f"⚠️  Skipping {path.name}: {e}")
-                  skipped += 1
-
-          print()
-          print("─" * 50)
-          print(f"Files fixed:        {fixed_files}")
-          print(f"False reds removed: {fixed_cards}")
-          print(f"Files skipped:      {skipped}")
-          print(f"Files unchanged:    {len(all_files) - fixed_files - skipped}")
+                  data = json.load(open(f))
+                  print(f"FILE: {f}")
+                  print(f"  home: {data.get('home_team')} vs away: {data.get('away_team')}")
+                  print(f"  yellow_cards: {data.get('yellow_cards')}")
+                  print(f"  red_cards:    {data.get('red_cards')}")
+                  print()
+              except Exception as e:
+                  print(f"ERROR reading {f}: {e}")
           EOF
 
       - name: Rebuild EPL data
@@ -101,9 +51,8 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/data/epl/matches/
           git add docs/data/epl/players.json \
                   docs/data/epl/teams.json \
                   docs/data/epl/team-stats.json
-          git diff --cached --quiet || git commit -m "fix: remove false red cards from EPL match files [skip ci]"
+          git diff --cached --quiet || git commit -m "chore: rebuild EPL data [skip ci]"
           git push
