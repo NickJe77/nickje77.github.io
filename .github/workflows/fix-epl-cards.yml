@@ -1,0 +1,109 @@
+name: Fix EPL Cards
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Fix false red cards
+        run: |
+          python3 - <<'EOF'
+          import json
+          from pathlib import Path
+
+          MATCHES_DIR = Path("docs/data/epl/matches")
+
+          fixed_files = 0
+          fixed_cards = 0
+          skipped     = 0
+
+          all_files = sorted(MATCHES_DIR.rglob("*.json"))
+          print(f"📂  Scanning {len(all_files)} match files...\n")
+
+          for path in all_files:
+              try:
+                  with open(path, encoding="utf-8") as f:
+                      match = json.load(f)
+
+                  yellow_cards = match.get("yellow_cards") or []
+                  red_cards    = match.get("red_cards") or []
+
+                  if not red_cards:
+                      continue
+
+                  # Build set of (player, minute) from yellow cards
+                  yellow_keys = set()
+                  for card in yellow_cards:
+                      player = (card.get("player") or "").strip()
+                      minute = card.get("minute")
+                      if player and minute is not None:
+                          yellow_keys.add((player, minute))
+
+                  # Keep only true reds
+                  true_reds = []
+                  removed   = []
+
+                  for card in red_cards:
+                      player = (card.get("player") or "").strip()
+                      minute = card.get("minute")
+                      if (player, minute) in yellow_keys:
+                          removed.append(card)
+                      else:
+                          true_reds.append(card)
+
+                  if not removed:
+                      continue
+
+                  for card in removed:
+                      print(
+                          f"  🔧 {path.name}: Removed false red — "
+                          f"{card.get('player')} ({card.get('team')}) min {card.get('minute')}"
+                      )
+                      fixed_cards += 1
+
+                  match["red_cards"] = true_reds
+
+                  with open(path, "w", encoding="utf-8") as f:
+                      json.dump(match, f, indent=2, ensure_ascii=False)
+
+                  fixed_files += 1
+
+              except (json.JSONDecodeError, OSError) as e:
+                  print(f"⚠️  Skipping {path.name}: {e}")
+                  skipped += 1
+
+          print()
+          print("─" * 50)
+          print(f"Files fixed:        {fixed_files}")
+          print(f"False reds removed: {fixed_cards}")
+          print(f"Files skipped:      {skipped}")
+          print(f"Files unchanged:    {len(all_files) - fixed_files - skipped}")
+          EOF
+
+      - name: Rebuild EPL data
+        run: python scripts/build_epl_data.py
+
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/data/epl/matches/
+          git add docs/data/epl/players.json \
+                  docs/data/epl/teams.json \
+                  docs/data/epl/team-stats.json
+          git diff --cached --quiet || git commit -m "fix: remove false red cards from EPL match files [skip ci]"
+          git push
