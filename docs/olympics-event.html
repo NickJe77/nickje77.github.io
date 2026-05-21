@@ -12,7 +12,6 @@ body{
     margin:0;
     background:#f5f5f5;
 }
-
 .navbar{
     display:flex;
     justify-content:center;
@@ -25,7 +24,6 @@ body{
     text-decoration:none;
     font-weight:600;
 }
-
 .hero{
     background:linear-gradient(90deg,#0085C7,#F4C300,#000,#009F3D,#DF0024);
     color:white;
@@ -34,21 +32,17 @@ body{
 }
 .hero h1{margin:0 0 6px;}
 .hero p{margin:0;opacity:0.9;}
-
 .container{
     max-width:800px;
     margin:30px auto;
     padding:0 10px;
 }
-
-/* MEDALS */
 .podium{
     display:grid;
     grid-template-columns:repeat(3,1fr);
     gap:16px;
     margin-bottom:40px;
 }
-
 .medal-card{
     background:white;
     border-radius:10px;
@@ -64,24 +58,26 @@ body{
 .medal-card.gold  { border-top:5px solid gold; }
 .medal-card.silver{ border-top:5px solid silver; }
 .medal-card.bronze{ border-top:5px solid #cd7f32; }
-
+.medal-card .country-heading{
+    font-size:13px;
+    font-weight:700;
+    color:#444;
+    margin:10px 0 4px;
+}
 .medal-card a{
     display:block;
     color:#1a56db;
     text-decoration:none;
-    padding:4px 0;
+    padding:3px 0;
     font-size:15px;
 }
 .medal-card a:hover{ text-decoration:underline; }
-
-/* HISTORY */
 .history h2{
     font-size:18px;
     margin-bottom:12px;
     border-bottom:2px solid #ddd;
     padding-bottom:6px;
 }
-
 table{
     width:100%;
     border-collapse:collapse;
@@ -98,14 +94,20 @@ th{
 td{
     padding:10px;
     border-bottom:1px solid #eee;
+    vertical-align:top;
 }
 tbody tr:nth-child(even){ background:#f9f9f9; }
 tbody tr:hover{ background:#f0f4ff; cursor:pointer; }
-
 .gold-text  { color:#c9a400; font-weight:700; }
 .silver-text{ color:#888;    font-weight:700; }
 .bronze-text{ color:#b87333; font-weight:700; }
-
+.country-tag{
+    font-size:11px;
+    color:#999;
+    font-weight:400;
+    display:block;
+    margin-top:2px;
+}
 .back{
     display:inline-block;
     margin-bottom:20px;
@@ -114,7 +116,6 @@ tbody tr:hover{ background:#f0f4ff; cursor:pointer; }
     font-weight:600;
 }
 .back:hover{ text-decoration:underline; }
-
 .no-results{
     text-align:center;
     color:#888;
@@ -164,7 +165,7 @@ tbody tr:hover{ background:#f0f4ff; cursor:pointer; }
 </div>
 
 <script>
-const params   = new URLSearchParams(window.location.search);
+const params    = new URLSearchParams(window.location.search);
 const eventName = decodeURIComponent(params.get("event") || "");
 const eventYear = parseInt(params.get("year") || "0");
 
@@ -177,10 +178,8 @@ fetch("/data/olympics/summer_olympic_medals.json")
 
 function build(data){
 
-    // All rows matching this event name (across all years)
     const eventRows = data.filter(r =>
-        (r.event || "").trim() === eventName &&
-        (r.sport || "")  // any sport
+        (r.event || "").trim() === eventName
     );
 
     if(!eventRows.length){
@@ -189,17 +188,19 @@ function build(data){
         return;
     }
 
-    // Group by year → { gold:[], silver:[], bronze:[] }
+    // Group by year → { gold:[{name,country}], silver:[], bronze:[] }
     const byYear = {};
     eventRows.forEach(r => {
         const y = r.year;
         const m = (r.medal || "").toUpperCase();
         if(!["GOLD","SILVER","BRONZE"].includes(m)) return;
         if(!byYear[y]) byYear[y] = { gold:[], silver:[], bronze:[] };
-        byYear[y][m.toLowerCase()].push((r.athlete || "").trim());
+        byYear[y][m.toLowerCase()].push({
+            name:    (r.athlete || "").trim(),
+            country: (r.country || "").trim()
+        });
     });
 
-    // Render podium for the selected year
     const selected = byYear[eventYear];
     if(selected){
         renderPodium(selected);
@@ -208,24 +209,34 @@ function build(data){
             `<div class="no-results" style="grid-column:1/-1">No data for ${eventYear}.</div>`;
     }
 
-    // Render history table — all years, newest first
     const years = Object.keys(byYear).map(Number).sort((a,b) => b - a);
     renderHistory(years, byYear);
 }
 
+function groupByCountry(athletes){
+    const map = {};
+    athletes.forEach(a => {
+        if(!map[a.country]) map[a.country] = [];
+        map[a.country].push(a.name);
+    });
+    return map;
+}
+
 function renderPodium(yr){
     const medals = ["gold","silver","bronze"];
-    document.getElementById("podium").innerHTML = medals.map(m => `
-        <div class="medal-card ${m}">
-            <h3>${m}</h3>
-            ${yr[m].length
-                ? yr[m].map(a =>
-                    `<a href="olympics-athlete.html?name=${encodeURIComponent(a)}">${a}</a>`
-                  ).join("")
-                : "<span style='color:#aaa'>—</span>"
-            }
-        </div>
-    `).join("");
+    document.getElementById("podium").innerHTML = medals.map(m => {
+        const grouped = groupByCountry(yr[m]);
+        const entries = Object.entries(grouped);
+        const html = entries.length
+            ? entries.map(([country, names]) => `
+                <div class="country-heading">${country}</div>
+                ${names.map(n =>
+                    `<a href="olympics-athlete.html?name=${encodeURIComponent(n)}">${n}</a>`
+                ).join("")}
+              `).join("")
+            : "<span style='color:#aaa'>—</span>";
+        return `<div class="medal-card ${m}"><h3>${m}</h3>${html}</div>`;
+    }).join("");
 }
 
 function renderHistory(years, byYear){
@@ -233,20 +244,25 @@ function renderHistory(years, byYear){
     tb.innerHTML = "";
 
     years.forEach(y => {
-        const yr  = byYear[y];
-        const tr  = document.createElement("tr");
-        const isSelected = y === eventYear;
+        const yr = byYear[y];
+        const tr = document.createElement("tr");
+        if(y === eventYear) tr.style.background = "#e8f0ff";
 
-        if(isSelected) tr.style.background = "#e8f0ff";
+        function formatCell(athletes){
+            if(!athletes.length) return "—";
+            const map = groupByCountry(athletes);
+            return Object.entries(map).map(([country, names]) =>
+                `${names.join(", ")}<span class="country-tag">${country}</span>`
+            ).join("");
+        }
 
         tr.innerHTML = `
             <td><b>${y}</b></td>
-            <td class="gold-text"  >${yr.gold.join(", ")   || "—"}</td>
-            <td class="silver-text">${yr.silver.join(", ") || "—"}</td>
-            <td class="bronze-text">${yr.bronze.join(", ") || "—"}</td>
+            <td class="gold-text"  >${formatCell(yr.gold)}</td>
+            <td class="silver-text">${formatCell(yr.silver)}</td>
+            <td class="bronze-text">${formatCell(yr.bronze)}</td>
         `;
 
-        // Clicking a row navigates to that year's edition
         tr.style.cursor = "pointer";
         tr.onclick = () => {
             window.location.href =
