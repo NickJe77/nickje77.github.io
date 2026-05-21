@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Olympic Event | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+    font-family:system-ui,Arial,sans-serif;
+    margin:0;
+    background:#f5f5f5;
+}
+
+.navbar{
+    display:flex;
+    justify-content:center;
+    gap:20px;
+    padding:15px;
+    background:#111;
+}
+.navbar a{
+    color:white;
+    text-decoration:none;
+    font-weight:600;
+}
+
+.hero{
+    background:linear-gradient(90deg,#0085C7,#F4C300,#000,#009F3D,#DF0024);
+    color:white;
+    text-align:center;
+    padding:30px;
+}
+.hero h1{margin:0 0 6px;}
+.hero p{margin:0;opacity:0.9;}
+
+.container{
+    max-width:800px;
+    margin:30px auto;
+    padding:0 10px;
+}
+
+/* MEDALS */
+.podium{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:16px;
+    margin-bottom:40px;
+}
+
+.medal-card{
+    background:white;
+    border-radius:10px;
+    padding:16px;
+    text-align:center;
+}
+.medal-card h3{
+    margin:0 0 12px;
+    font-size:16px;
+    text-transform:uppercase;
+    letter-spacing:1px;
+}
+.medal-card.gold  { border-top:5px solid gold; }
+.medal-card.silver{ border-top:5px solid silver; }
+.medal-card.bronze{ border-top:5px solid #cd7f32; }
+
+.medal-card a{
+    display:block;
+    color:#1a56db;
+    text-decoration:none;
+    padding:4px 0;
+    font-size:15px;
+}
+.medal-card a:hover{ text-decoration:underline; }
+
+/* HISTORY */
+.history h2{
+    font-size:18px;
+    margin-bottom:12px;
+    border-bottom:2px solid #ddd;
+    padding-bottom:6px;
+}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+    background:white;
+    border-radius:10px;
+    overflow:hidden;
+}
+th{
+    background:#111;
+    color:white;
+    padding:10px;
+    text-align:left;
+}
+td{
+    padding:10px;
+    border-bottom:1px solid #eee;
+}
+tbody tr:nth-child(even){ background:#f9f9f9; }
+tbody tr:hover{ background:#f0f4ff; cursor:pointer; }
+
+.gold-text  { color:#c9a400; font-weight:700; }
+.silver-text{ color:#888;    font-weight:700; }
+.bronze-text{ color:#b87333; font-weight:700; }
+
+.back{
+    display:inline-block;
+    margin-bottom:20px;
+    color:#1a56db;
+    text-decoration:none;
+    font-weight:600;
+}
+.back:hover{ text-decoration:underline; }
+
+.no-results{
+    text-align:center;
+    color:#888;
+    padding:40px;
+    background:white;
+    border-radius:10px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+    <a href="/">Home</a>
+    <a href="/olympics.html">Olympics</a>
+    <a href="/olympics-medals.html">Medal Table</a>
+    <a href="/olympics-events.html">Events</a>
+    <a href="/olympics-athletes.html">Athletes</a>
+</div>
+
+<div class="hero">
+    <h1 id="hero-event">Loading...</h1>
+    <p id="hero-year"></p>
+</div>
+
+<div class="container">
+
+    <a class="back" href="javascript:history.back()">← Back</a>
+
+    <div class="podium" id="podium"></div>
+
+    <div class="history">
+        <h2>All Editions</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Year</th>
+                    <th>Gold</th>
+                    <th>Silver</th>
+                    <th>Bronze</th>
+                </tr>
+            </thead>
+            <tbody id="history-body"></tbody>
+        </table>
+    </div>
+
+</div>
+
+<script>
+const params   = new URLSearchParams(window.location.search);
+const eventName = decodeURIComponent(params.get("event") || "");
+const eventYear = parseInt(params.get("year") || "0");
+
+document.getElementById("hero-event").innerText = eventName || "Olympic Event";
+document.getElementById("hero-year").innerText  = eventYear || "";
+
+fetch("/data/olympics/summer_olympic_medals.json")
+.then(r => r.json())
+.then(data => build(data));
+
+function build(data){
+
+    // All rows matching this event name (across all years)
+    const eventRows = data.filter(r =>
+        (r.event || "").trim() === eventName &&
+        (r.sport || "")  // any sport
+    );
+
+    if(!eventRows.length){
+        document.getElementById("podium").innerHTML =
+            `<div class="no-results" style="grid-column:1/-1">No data found for this event.</div>`;
+        return;
+    }
+
+    // Group by year → { gold:[], silver:[], bronze:[] }
+    const byYear = {};
+    eventRows.forEach(r => {
+        const y = r.year;
+        const m = (r.medal || "").toUpperCase();
+        if(!["GOLD","SILVER","BRONZE"].includes(m)) return;
+        if(!byYear[y]) byYear[y] = { gold:[], silver:[], bronze:[] };
+        byYear[y][m.toLowerCase()].push((r.athlete || "").trim());
+    });
+
+    // Render podium for the selected year
+    const selected = byYear[eventYear];
+    if(selected){
+        renderPodium(selected);
+    } else {
+        document.getElementById("podium").innerHTML =
+            `<div class="no-results" style="grid-column:1/-1">No data for ${eventYear}.</div>`;
+    }
+
+    // Render history table — all years, newest first
+    const years = Object.keys(byYear).map(Number).sort((a,b) => b - a);
+    renderHistory(years, byYear);
+}
+
+function renderPodium(yr){
+    const medals = ["gold","silver","bronze"];
+    document.getElementById("podium").innerHTML = medals.map(m => `
+        <div class="medal-card ${m}">
+            <h3>${m}</h3>
+            ${yr[m].length
+                ? yr[m].map(a =>
+                    `<a href="olympics-athlete.html?name=${encodeURIComponent(a)}">${a}</a>`
+                  ).join("")
+                : "<span style='color:#aaa'>—</span>"
+            }
+        </div>
+    `).join("");
+}
+
+function renderHistory(years, byYear){
+    const tb = document.getElementById("history-body");
+    tb.innerHTML = "";
+
+    years.forEach(y => {
+        const yr  = byYear[y];
+        const tr  = document.createElement("tr");
+        const isSelected = y === eventYear;
+
+        if(isSelected) tr.style.background = "#e8f0ff";
+
+        tr.innerHTML = `
+            <td><b>${y}</b></td>
+            <td class="gold-text"  >${yr.gold.join(", ")   || "—"}</td>
+            <td class="silver-text">${yr.silver.join(", ") || "—"}</td>
+            <td class="bronze-text">${yr.bronze.join(", ") || "—"}</td>
+        `;
+
+        // Clicking a row navigates to that year's edition
+        tr.style.cursor = "pointer";
+        tr.onclick = () => {
+            window.location.href =
+                `olympics-event.html?event=${encodeURIComponent(eventName)}&year=${y}`;
+        };
+
+        tb.appendChild(tr);
+    });
+}
+</script>
+
+</body>
+</html>
