@@ -3,12 +3,11 @@
 <head>
   <script src="/js/analytics.js"></script>
 <meta charset="UTF-8">
-<title>Olympic Athlete | The Sporting Almanac</title>
+<title>Olympic Athletes | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <style>
 body{font-family:system-ui,Arial,sans-serif;margin:0;padding:20px;}
-h1{text-align:center;}
+h1{text-align:center;margin:20px 0;}
 
 .navbar{
   display:flex;justify-content:center;gap:22px;
@@ -16,129 +15,200 @@ h1{text-align:center;}
 }
 .navbar a{color:#0056d6;text-decoration:none;}
 
-.summary{
-  max-width:600px;margin:20px auto;
-  display:grid;grid-template-columns:repeat(4,1fr);
-  text-align:center;gap:10px;
+.controls{text-align:center;margin:20px 0;}
+input,select{
+  padding:10px;border-radius:8px;border:1px solid #ccc;margin:5px;
 }
-.card{
-  background:#f5f7ff;padding:12px;border-radius:8px;font-weight:600;
-}
-.card span{display:block;font-size:22px;}
 
+/* TABLE */
 table{
-  width:100%;max-width:900px;margin:20px auto;
+  width:100%;max-width:1000px;margin:20px auto;
   border-collapse:collapse;
 }
-th{background:#111;color:#fff;padding:10px;}
-td{padding:10px;border-bottom:1px solid #ddd;text-align:center;}
-td.event{text-align:left;}
+th{
+  background:#111;color:#fff;padding:10px;cursor:pointer;
+}
+td{
+  padding:10px;border-bottom:1px solid #ddd;text-align:center;
+}
+td:first-child{text-align:left;}
 
 tbody tr:nth-child(even){background:#f2f6ff;}
-.gold{color:#c9a400;font-weight:700;}
-.silver{color:#888;font-weight:700;}
-.bronze{color:#b87333;font-weight:700;}
+tr:hover{background:#e6edff;}
+
+a{color:#1a56db;text-decoration:none;}
 </style>
 </head>
-
 <body>
-
 <div class="navbar">
   <a href="./index.html">Home</a>
   <a href="./olympics.html">Olympics</a>
-  <a href="./olympics-athletes.html">Athletes</a>
 </div>
-
-<h1 id="name">Loading...</h1>
-
-<div class="summary" id="summary"></div>
-
+<h1>Olympic Athletes</h1>
+<div class="controls">
+  <input id="search" placeholder="Search athlete...">
+  <select id="countryFilter"><option value="">All countries</option></select>
+</div>
 <table>
 <thead>
 <tr>
-  <th>Year</th>
-  <th>Sport</th>
-  <th>Event</th>
-  <th>Medal</th>
+  <th onclick="setSort('name')">Athlete</th>
+  <th onclick="setSort('country')">Country</th>
+  <th onclick="setSort('gold')">Gold</th>
+  <th onclick="setSort('silver')">Silver</th>
+  <th onclick="setSort('bronze')">Bronze</th>
+  <th onclick="setSort('total')">Total</th>
 </tr>
 </thead>
 <tbody id="table-body"></tbody>
 </table>
-
 <script>
 
-const params = new URLSearchParams(window.location.search);
-const athleteName = decodeURIComponent(params.get("name")||"");
+let athletes = [];
+let filtered = [];
+let currentSort = { key:"gold", asc:false };
 
-document.getElementById("name").innerText = athleteName;
+/* LOAD — merge main medals + relay results */
+Promise.all([
+  fetch("/data/olympics/summer_olympic_medals.json").then(r=>r.json()),
+  fetch("/data/olympics/olympic_relay_results.json").then(r=>r.json())
+]).then(([main, relays]) => build([...main, ...relays]));
 
-/* LOAD */
-fetch("/data/olympics/summer_olympic_medals.json")
-.then(r=>r.json())
-.then(data=>build(data));
-
-function clean(v){ return (v||"").toString().trim(); }
+function clean(v){
+  if(!v) return "";
+  const x = String(v).trim();
+  if(["","nan","null","undefined"].includes(x.toLowerCase())) return "";
+  return x;
+}
 
 /* BUILD */
 function build(data){
 
-  let rows = data.filter(r=>{
+  const map = {};
 
-    // ❌ REMOVE 2022
-    if(Number(r.year) === 2022) return false;
+  data.forEach(row=>{
 
-    return clean(r.athlete) === athleteName;
+    // ❌ REMOVE WINTER OLYMPICS
+    if(Number(row.year) === 2022) return;
+
+    const nameRaw = clean(row.athlete);
+    if(!nameRaw) return;
+
+    const key = nameRaw.toLowerCase();
+    const country = clean(row.country) || "Unknown";
+    const medal = clean(row.medal).toUpperCase();
+
+    if(!map[key]){
+      map[key] = {
+        name: toTitle(nameRaw),
+        raw: nameRaw,
+        country,
+        gold:0, silver:0, bronze:0, total:0,
+        relaysSeen: new Set()
+      };
+    }
+
+    // Relay rows have 4 athletes per medal — only count it once per athlete
+    // per unique year + event + medal combination
+    const eventName = clean(row.event) || "";
+    if(/relay/i.test(eventName)){
+      const relayKey = `${row.year}|${eventName}|${medal}`;
+      if(map[key].relaysSeen.has(relayKey)) return;
+      map[key].relaysSeen.add(relayKey);
+    }
+
+    if(medal==="GOLD") map[key].gold++;
+    if(medal==="SILVER") map[key].silver++;
+    if(medal==="BRONZE") map[key].bronze++;
+
+    map[key].total = map[key].gold + map[key].silver + map[key].bronze;
+
   });
 
-  rows.sort((a,b)=>a.year-b.year);
+  athletes = Object.values(map);
 
-  let g=0,s=0,b=0;
+  buildCountryFilter();
+  applyFilters();
+}
 
-  rows.forEach(r=>{
-    const m = (r.medal||"").toUpperCase();
-    if(m==="GOLD") g++;
-    if(m==="SILVER") s++;
-    if(m==="BRONZE") b++;
+function toTitle(n){
+  return n.toLowerCase().split(" ")
+    .map(x=>x.charAt(0).toUpperCase()+x.slice(1))
+    .join(" ");
+}
+
+/* COUNTRY */
+function buildCountryFilter(){
+  const set = [...new Set(athletes.map(a=>a.country))].sort();
+  const sel = document.getElementById("countryFilter");
+
+  set.forEach(c=>{
+    const o = document.createElement("option");
+    o.value=c;o.textContent=c;
+    sel.appendChild(o);
+  });
+}
+
+/* FILTER */
+function applyFilters(){
+  const q = document.getElementById("search").value.toLowerCase();
+  const c = document.getElementById("countryFilter").value;
+
+  filtered = athletes.filter(a=>{
+    return a.name.toLowerCase().includes(q) &&
+           (!c || a.country===c);
   });
 
-  renderSummary(g,s,b,g+s+b);
-  renderTable(rows);
+  sort();
+  render();
 }
 
-/* SUMMARY */
-function renderSummary(g,s,b,t){
-  document.getElementById("summary").innerHTML=`
-    <div class="card">Gold<span>${g}</span></div>
-    <div class="card">Silver<span>${s}</span></div>
-    <div class="card">Bronze<span>${b}</span></div>
-    <div class="card">Total<span>${t}</span></div>
-  `;
+/* SORT */
+function setSort(k){
+  if(currentSort.key===k) currentSort.asc=!currentSort.asc;
+  else{currentSort.key=k;currentSort.asc=false;}
+  sort(); render();
 }
 
-/* TABLE */
-function renderTable(rows){
+function sort(){
+  const {key,asc} = currentSort;
 
+  filtered.sort((a,b)=>{
+    if(typeof a[key]==="string"){
+      return asc ? a[key].localeCompare(b[key]) : b[key].localeCompare(a[key]);
+    }
+    return asc ? a[key]-b[key] : b[key]-a[key];
+  });
+}
+
+/* RENDER */
+function render(){
   const tb = document.getElementById("table-body");
   tb.innerHTML="";
 
-  rows.forEach(r=>{
-
-    const medal = (r.medal||"").toUpperCase();
-
+  filtered.forEach(a=>{
     const tr=document.createElement("tr");
 
     tr.innerHTML=`
-      <td>${r.year}</td>
-      <td>${clean(r.sport)}</td>
-      <td class="event">${clean(r.event)}</td>
-      <td class="${medal.toLowerCase()}">${medal}</td>
+      <td>
+        <a href="olympics-athlete.html?name=${encodeURIComponent(a.raw)}">
+          ${a.name}
+        </a>
+      </td>
+      <td>${a.country}</td>
+      <td>${a.gold}</td>
+      <td>${a.silver}</td>
+      <td>${a.bronze}</td>
+      <td>${a.total}</td>
     `;
 
     tb.appendChild(tr);
   });
 }
 
-</script>
+document.getElementById("search").addEventListener("input",applyFilters);
+document.getElementById("countryFilter").addEventListener("change",applyFilters);
 
+</script>
 </body>
 </html>
