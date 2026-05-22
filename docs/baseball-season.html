@@ -292,3 +292,351 @@ td{
     <!-- HERO -->
 
     <div class="hero">
+        <h1 id="heroTitle">MLB Season</h1>
+    </div>
+
+    <!-- YEARS -->
+
+    <div class="year-tabs" id="yearTabs"></div>
+
+    <!-- FILTERS -->
+
+    <div class="filters">
+        <input
+            type="text"
+            id="searchInput"
+            placeholder="Search team or venue…"
+            oninput="applyFilters()"
+        />
+        <select id="statusFilter" onchange="applyFilters()">
+            <option value="">All statuses</option>
+            <option value="Final">Final</option>
+            <option value="Live">Live</option>
+            <option value="Scheduled">Scheduled</option>
+            <option value="Postponed">Postponed</option>
+        </select>
+        <span class="filter-count" id="filterCount"></span>
+    </div>
+
+    <!-- TABLE -->
+
+    <div class="table-wrap">
+
+        <table>
+
+            <thead>
+                <tr>
+                    <th onclick="sortBy('date')">Date <span class="sort-arrow" id="sort-date">↕</span></th>
+                    <th onclick="sortBy('away_team')">Away <span class="sort-arrow" id="sort-away_team">↕</span></th>
+                    <th onclick="sortBy('home_team')">Home <span class="sort-arrow" id="sort-home_team">↕</span></th>
+                    <th>Score</th>
+                    <th onclick="sortBy('venue')">Venue <span class="sort-arrow" id="sort-venue">↕</span></th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+
+            <tbody id="gamesBody"></tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+<script>
+
+const params = new URLSearchParams(window.location.search);
+
+let season = params.get("season") || "2026";
+
+document.getElementById("heroTitle").innerText =
+    `MLB ${season} Season`;
+
+const years = [];
+
+for(let y = 2026; y >= 1901; y--){
+    years.push(String(y));
+}
+
+let allGames = [];
+let sortKey = "date";
+let sortDir = 1;
+
+const TEAM_NAMES = {
+    "ARI": "Arizona Diamondbacks",
+    "ATL": "Atlanta Braves",
+    "BAL": "Baltimore Orioles",
+    "BOS": "Boston Red Sox",
+    "CHC": "Chicago Cubs",
+    "CHW": "Chicago White Sox",
+    "CIN": "Cincinnati Reds",
+    "CLE": "Cleveland Guardians",
+    "COL": "Colorado Rockies",
+    "DET": "Detroit Tigers",
+    "HOU": "Houston Astros",
+    "KAN": "Kansas City Royals",
+    "LAA": "Los Angeles Angels",
+    "LAD": "Los Angeles Dodgers",
+    "MIA": "Miami Marlins",
+    "MIL": "Milwaukee Brewers",
+    "MIN": "Minnesota Twins",
+    "NYM": "New York Mets",
+    "NYY": "New York Yankees",
+    "ATH": "Athletics",
+    "PHI": "Philadelphia Phillies",
+    "PIT": "Pittsburgh Pirates",
+    "SD":  "San Diego Padres",
+    "SEA": "Seattle Mariners",
+    "SF":  "San Francisco Giants",
+    "STL": "St. Louis Cardinals",
+    "TB":  "Tampa Bay Rays",
+    "TEX": "Texas Rangers",
+    "TOR": "Toronto Blue Jays",
+    "WSH": "Washington Nationals",
+    "ANA": "Los Angeles Angels",
+    "CAL": "California Angels",
+    "FLA": "Florida Marlins",
+    "MON": "Montreal Expos",
+    "OAK": "Oakland Athletics",
+    "SFN": "San Francisco Giants",
+    "SDN": "San Diego Padres",
+    "SLN": "St. Louis Cardinals",
+    "NYN": "New York Mets",
+    "NYA": "New York Yankees",
+    "CHN": "Chicago Cubs",
+    "CHA": "Chicago White Sox",
+    "KCA": "Kansas City Royals",
+    "LAN": "Los Angeles Dodgers",
+    "TBA": "Tampa Bay Rays",
+    "WAS": "Washington Nationals"
+};
+
+const VENUE_NAMES = {
+    "ANA01": "Angel Stadium",
+    "ARL01": "Rangers Ballpark",
+    "ARL02": "Globe Life Field",
+    "ATL01": "Atlanta-Fulton County Stadium",
+    "ATL02": "Turner Field",
+    "ATL03": "Truist Park",
+    "BAL01": "Memorial Stadium",
+    "BAL02": "Oriole Park at Camden Yards",
+    "BOS01": "Fenway Park",
+    "CHI01": "Wrigley Field",
+    "CHI02": "Comiskey Park",
+    "CHI03": "Guaranteed Rate Field",
+    "CIN01": "Riverfront Stadium",
+    "CIN02": "Great American Ball Park",
+    "CLE01": "Cleveland Stadium",
+    "CLE02": "Jacobs Field",
+    "CLE03": "Progressive Field",
+    "COL01": "Mile High Stadium",
+    "COL02": "Coors Field",
+    "DEN01": "Coors Field",
+    "DET01": "Tiger Stadium",
+    "DET02": "Comerica Park",
+    "FLO01": "Joe Robbie Stadium",
+    "FLO02": "Marlins Park",
+    "FLO03": "loanDepot park",
+    "HOU01": "Houston Astrodome",
+    "HOU02": "Minute Maid Park",
+    "HOU03": "Minute Maid Park",
+    "KAN01": "Kauffman Stadium",
+    "LAN01": "Dodger Stadium",
+    "LAN02": "Dodger Stadium",
+    "MIA01": "loanDepot park",
+    "MIL01": "County Stadium",
+    "MIL02": "American Family Field",
+    "MIN01": "Metropolitan Stadium",
+    "MIN02": "Hubert H. Humphrey Metrodome",
+    "MIN03": "Target Field",
+    "MON01": "Jarry Park",
+    "MON02": "Olympic Stadium",
+    "NYC01": "Polo Grounds",
+    "NYC14": "Citi Field",
+    "NYC15": "Shea Stadium",
+    "NYC16": "Yankee Stadium",
+    "NYC17": "Yankee Stadium",
+    "OAK01": "Oakland Coliseum",
+    "PHI01": "Veterans Stadium",
+    "PHI02": "Citizens Bank Park",
+    "PIT01": "Forbes Field",
+    "PIT02": "Three Rivers Stadium",
+    "PIT03": "PNC Park",
+    "SAC01": "Sutter Health Park",
+    "SDG01": "San Diego Stadium",
+    "SDG02": "Petco Park",
+    "SEA01": "Kingdome",
+    "SEA02": "T-Mobile Park",
+    "SEA03": "T-Mobile Park",
+    "SFO01": "Candlestick Park",
+    "SFO02": "Oracle Park",
+    "SFO03": "Oracle Park",
+    "SJU01": "Hiram Bithorn Stadium",
+    "STL01": "Sportsman's Park",
+    "STL02": "Busch Stadium",
+    "STL03": "Busch Stadium",
+    "TBY01": "Tropicana Field",
+    "TOR01": "Exhibition Stadium",
+    "TOR02": "Rogers Centre",
+    "WAS01": "Griffith Stadium",
+    "WAS02": "RFK Stadium",
+    "WAS03": "Nationals Park"
+};
+
+function resolveTeamName(game, side){
+    const nameKey = side + "_team";
+    const codeKey = side + "_code";
+    const raw  = game[nameKey] || "";
+    const code = game[codeKey] || "";
+    if(raw && raw.includes(" ")){
+        return { name: raw, code: code || raw };
+    }
+    const lookup = raw || code;
+    return {
+        name: TEAM_NAMES[lookup] || lookup,
+        code: lookup
+    };
+}
+
+function resolveVenue(game){
+    const v = game.venue || "";
+    if(v && !v.includes(" ")){
+        return VENUE_NAMES[v] || v;
+    }
+    return v;
+}
+
+function statusBadge(status){
+    if(!status) return "";
+    const lower = status.toLowerCase();
+    let cls = "";
+    if(lower.includes("final")) cls = "final";
+    else if(lower.includes("live") || lower.includes("progress")) cls = "live";
+    return `<span class="status-badge ${cls}">${status}</span>`;
+}
+
+function renderYearTabs(){
+    const wrap = document.getElementById("yearTabs");
+    wrap.innerHTML = "";
+    years.forEach(year => {
+        const div = document.createElement("div");
+        div.className = "year-tab" + (year === season ? " active" : "");
+        div.innerText = year;
+        div.onclick = () => {
+            window.location.href = `baseball-season.html?season=${year}`;
+        };
+        wrap.appendChild(div);
+    });
+}
+
+function sortBy(key){
+    if(sortKey === key){
+        sortDir *= -1;
+    } else {
+        sortKey = key;
+        sortDir = 1;
+    }
+    document.querySelectorAll(".sort-arrow").forEach(el => el.innerText = "↕");
+    const arrow = document.getElementById(`sort-${key}`);
+    if(arrow) arrow.innerText = sortDir === 1 ? "↑" : "↓";
+    applyFilters();
+}
+
+function applyFilters(){
+    const search = document.getElementById("searchInput").value.toLowerCase();
+    const status = document.getElementById("statusFilter").value.toLowerCase();
+
+    let filtered = allGames.filter(game => {
+        const home  = resolveTeamName(game, "home");
+        const away  = resolveTeamName(game, "away");
+        const venue = resolveVenue(game);
+        const matchSearch = !search || [
+            home.name, home.code,
+            away.name, away.code,
+            venue,
+            game.date || ""
+        ].some(v => v.toLowerCase().includes(search));
+        const matchStatus = !status ||
+            (game.status || "").toLowerCase().includes(status);
+        return matchSearch && matchStatus;
+    });
+
+    filtered.sort((a, b) => {
+        let av = a[sortKey] || "";
+        let bv = b[sortKey] || "";
+        return av < bv ? -sortDir : av > bv ? sortDir : 0;
+    });
+
+    renderGames(filtered);
+}
+
+async function loadSeason(){
+    try{
+        const res = await fetch(`/data/baseball/seasons/${season}.json`);
+        if(!res.ok) throw new Error("Season not found");
+        allGames = await res.json();
+        applyFilters();
+    } catch(err){
+        console.error(err);
+        document.getElementById("gamesBody").innerHTML =
+            `<tr><td colspan="6" class="no-results">Could not load season data.</td></tr>`;
+    }
+}
+
+function getGameFile(game){
+    return game.game_file || game.filename || game.file || "";
+}
+
+function renderGames(games){
+    const body = document.getElementById("gamesBody");
+    document.getElementById("filterCount").innerText =
+        `${games.length} game${games.length !== 1 ? "s" : ""}`;
+
+    if(!games.length){
+        body.innerHTML =
+            `<tr><td colspan="6" class="no-results">No games match your search.</td></tr>`;
+        return;
+    }
+
+    body.innerHTML = "";
+
+    games.forEach(game => {
+        const home     = resolveTeamName(game, "home");
+        const away     = resolveTeamName(game, "away");
+        const venue    = resolveVenue(game);
+        const gameFile = getGameFile(game);
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${game.date || ""}</td>
+            <td>
+                <div class="team-cell">
+                    <span class="team-name">${away.name}</span>
+                    <span class="team-code">${away.code}</span>
+                </div>
+            </td>
+            <td>
+                <div class="team-cell">
+                    <span class="team-name">${home.name}</span>
+                    <span class="team-code">${home.code}</span>
+                </div>
+            </td>
+            <td class="score">${game.away_score ?? 0} – ${game.home_score ?? 0}</td>
+            <td>${venue}</td>
+            <td>${statusBadge(game.status)}</td>
+        `;
+        tr.onclick = () => {
+            if(!gameFile) return;
+            window.location.href =
+                `baseball-game.html?season=${season}&game=${encodeURIComponent(gameFile)}`;
+        };
+        body.appendChild(tr);
+    });
+}
+
+renderYearTabs();
+loadSeason();
+
+</script>
+
+</body>
+</html>
