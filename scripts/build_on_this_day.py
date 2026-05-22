@@ -9,6 +9,9 @@ print("BUILDING ON THIS DAY - FINAL (AFL HIGH STATS FIX)")
 BASE = Path("docs/data")
 OUTPUT = BASE / "on_this_day.json"
 
+# Path to the historical events CSV
+HISTORICAL_CSV = Path("docs/onthisday.csv")
+
 data_out = {}
 seen = set()
 
@@ -76,6 +79,67 @@ def add_event(d, sport, text):
         "year": d.year,
         "text": text
     })
+
+# -----------------------
+# HISTORICAL CSV (onthisday.csv)
+# Columns: date (Jan-01), year, sport, event
+# -----------------------
+def process_historical_csv(file):
+    if not file.exists():
+        print(f"WARNING: Historical CSV not found at {file}")
+        return
+
+    month_map = {
+        "Jan": "01", "Feb": "02", "Mar": "03", "Apr": "04",
+        "May": "05", "Jun": "06", "Jul": "07", "Aug": "08",
+        "Sep": "09", "Oct": "10", "Nov": "11", "Dec": "12"
+    }
+
+    loaded = 0
+    skipped = 0
+
+    try:
+        with open(file, newline="", encoding="utf-8-sig", errors="ignore") as f:
+            reader = csv.DictReader(f)
+
+            for row in reader:
+                raw_date = (row.get("date") or "").strip()   # e.g. "Jan-01"
+                raw_year = (row.get("year") or "").strip()
+                sport    = (row.get("sport") or "").strip()
+                event    = (row.get("event") or "").strip()
+
+                if not raw_date or not raw_year or not sport or not event:
+                    skipped += 1
+                    continue
+
+                # Parse "Jan-01" → datetime
+                parts = raw_date.split("-")
+                if len(parts) != 2:
+                    skipped += 1
+                    continue
+
+                month_str, day_str = parts
+                month_num = month_map.get(month_str)
+                if not month_num:
+                    skipped += 1
+                    continue
+
+                try:
+                    year = int(raw_year)
+                    day  = int(day_str)
+                    d    = datetime(year, int(month_num), day)
+                except ValueError:
+                    skipped += 1
+                    continue
+
+                add_event(d, sport, event)
+                loaded += 1
+
+    except Exception as e:
+        print(f"ERROR reading historical CSV: {e}")
+        return
+
+    print(f"Historical CSV: {loaded} events loaded, {skipped} skipped")
 
 # -----------------------
 # HORSE RACING
@@ -296,6 +360,10 @@ def process_generic_file(file, sport):
 # -----------------------
 # MAIN LOOP
 # -----------------------
+
+# Load historical CSV first so live data can overwrite/extend
+process_historical_csv(HISTORICAL_CSV)
+
 for file in BASE.rglob("*"):
     if not file.is_file():
         continue
