@@ -86,6 +86,37 @@ body{
     color:white;
 }
 
+/* ---------------- FILTERS ---------------- */
+
+.filters{
+    display:flex;
+    gap:10px;
+    margin-bottom:16px;
+    flex-wrap:wrap;
+    align-items:center;
+}
+
+.filters input,
+.filters select{
+    padding:8px 12px;
+    border:1px solid #dce3eb;
+    border-radius:10px;
+    font-size:13px;
+    font-family:inherit;
+    background:white;
+    outline:none;
+}
+
+.filters input{
+    width:200px;
+}
+
+.filter-count{
+    font-size:12px;
+    color:#666;
+    margin-left:auto;
+}
+
 /* ---------------- TABLE ---------------- */
 
 .table-wrap{
@@ -104,13 +135,25 @@ table{
 th{
     background:#0056d6;
     color:white;
-    padding:12px;
+    padding:12px 14px;
     text-align:left;
     font-size:13px;
+    cursor:pointer;
+    user-select:none;
+    white-space:nowrap;
+}
+
+th:hover{
+    background:#0047b8;
+}
+
+th .sort-arrow{
+    margin-left:4px;
+    opacity:0.6;
 }
 
 td{
-    padding:12px;
+    padding:12px 14px;
     border-bottom:1px solid #edf2f7;
     font-size:13px;
 }
@@ -130,6 +173,50 @@ tbody tr:hover{
 
 .score{
     font-weight:700;
+    white-space:nowrap;
+}
+
+.team-cell{
+    display:flex;
+    flex-direction:column;
+}
+
+.team-name{
+    font-weight:600;
+}
+
+.team-code{
+    font-size:11px;
+    color:#888;
+}
+
+.status-badge{
+    display:inline-block;
+    font-size:10px;
+    font-weight:700;
+    padding:2px 6px;
+    border-radius:6px;
+    background:#eef2ff;
+    color:#4361ee;
+    margin-left:6px;
+    vertical-align:middle;
+}
+
+.status-badge.final{
+    background:#e8f5e9;
+    color:#2e7d32;
+}
+
+.status-badge.live{
+    background:#fff3e0;
+    color:#e65100;
+}
+
+.no-results{
+    text-align:center;
+    padding:40px;
+    color:#999;
+    font-size:14px;
 }
 
 /* ---------------- MOBILE ---------------- */
@@ -180,6 +267,10 @@ td{
     padding:8px 6px;
 }
 
+.filters input{
+    width:140px;
+}
+
 }
 
 </style>
@@ -201,174 +292,3 @@ td{
     <!-- HERO -->
 
     <div class="hero">
-        <h1 id="heroTitle">MLB Season</h1>
-    </div>
-
-    <!-- YEARS -->
-
-    <div class="year-tabs" id="yearTabs"></div>
-
-    <!-- TABLE -->
-
-    <div class="table-wrap">
-
-        <table>
-
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Away</th>
-                    <th>Home</th>
-                    <th>Score</th>
-                    <th>Venue</th>
-                </tr>
-            </thead>
-
-            <tbody id="gamesBody"></tbody>
-
-        </table>
-
-    </div>
-
-</div>
-
-<script>
-
-const params = new URLSearchParams(window.location.search);
-
-let season = params.get("season") || "2026";
-
-document.getElementById("heroTitle").innerText =
-    `MLB ${season} Season`;
-
-const years = [];
-
-for(let y=2026; y>=1901; y--){
-    years.push(String(y));
-}
-
-/* ---------------- YEAR TABS ---------------- */
-
-function renderYearTabs(){
-
-    const wrap = document.getElementById("yearTabs");
-
-    wrap.innerHTML = "";
-
-    years.forEach(year=>{
-
-        const div = document.createElement("div");
-
-        div.className =
-            "year-tab" +
-            (year === season ? " active" : "");
-
-        div.innerText = year;
-
-        div.onclick = ()=>{
-            window.location.href =
-                `baseball-season.html?season=${year}`;
-        };
-
-        wrap.appendChild(div);
-
-    });
-
-}
-
-/* ---------------- LOAD ---------------- */
-
-async function loadSeason(){
-
-    try{
-
-        const res = await fetch(
-            `/data/baseball/seasons/${season}.json`
-        );
-
-        if(!res.ok){
-            throw new Error("Season not found");
-        }
-
-        const games = await res.json();
-
-        renderGames(games);
-
-    }catch(err){
-
-        console.error(err);
-
-    }
-
-}
-
-/* ---------------- GAME FILE ---------------- */
-
-function getGameFile(game){
-
-    if(game.game_file)
-        return game.game_file;
-
-    if(game.filename)
-        return game.filename;
-
-    if(game.file)
-        return game.file;
-
-    return "";
-
-}
-
-/* ---------------- TABLE ---------------- */
-
-function renderGames(games){
-
-    const body =
-        document.getElementById("gamesBody");
-
-    body.innerHTML = "";
-
-    games.forEach(game=>{
-
-        const tr = document.createElement("tr");
-
-        const gameFile = getGameFile(game);
-
-        tr.innerHTML = `
-            <td>${game.date || ""}</td>
-
-            <td>${game.away_team || ""}</td>
-
-            <td>${game.home_team || ""}</td>
-
-            <td class="score">
-                ${(game.away_score ?? 0)}
-                -
-                ${(game.home_score ?? 0)}
-            </td>
-
-            <td>${game.venue || ""}</td>
-        `;
-
-        tr.onclick = ()=>{
-
-            if(!gameFile) return;
-
-            window.location.href =
-                `baseball-game.html?season=${season}&game=${encodeURIComponent(gameFile)}`;
-
-        };
-
-        body.appendChild(tr);
-
-    });
-
-}
-
-renderYearTabs();
-loadSeason();
-
-</script>
-
-</body>
-</html>
