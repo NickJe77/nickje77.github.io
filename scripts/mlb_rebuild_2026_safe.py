@@ -11,36 +11,36 @@ BOXSCORE_DIR = f"{BASE_DIR}/boxscores/{SEASON}"
 os.makedirs(BOXSCORE_DIR, exist_ok=True)
 
 TEAM_ID_MAP = {
-    109:"ARI",
-    144:"ATL",
-    110:"BAL",
-    111:"BOS",
-    112:"CHC",
-    145:"CHW",
-    113:"CIN",
-    114:"CLE",
-    115:"COL",
-    116:"DET",
-    117:"HOU",
-    118:"KAN",
-    108:"LAA",
-    119:"LAD",
-    146:"MIA",
-    158:"MIL",
-    142:"MIN",
-    121:"NYM",
-    147:"NYY",
-    133:"ATH",
-    143:"PHI",
-    134:"PIT",
-    135:"SD",
-    136:"SEA",
-    137:"SF",
-    138:"STL",
-    139:"TB",
-    140:"TEX",
-    141:"TOR",
-    120:"WSH"
+    109: "ARI",
+    144: "ATL",
+    110: "BAL",
+    111: "BOS",
+    112: "CHC",
+    145: "CHW",
+    113: "CIN",
+    114: "CLE",
+    115: "COL",
+    116: "DET",
+    117: "HOU",
+    118: "KAN",
+    108: "LAA",
+    119: "LAD",
+    146: "MIA",
+    158: "MIL",
+    142: "MIN",
+    121: "NYM",
+    147: "NYY",
+    133: "ATH",
+    143: "PHI",
+    134: "PIT",
+    135: "SD",
+    136: "SEA",
+    137: "SF",
+    138: "STL",
+    139: "TB",
+    140: "TEX",
+    141: "TOR",
+    120: "WSH"
 }
 
 print("Downloading MLB 2026 schedule...")
@@ -98,6 +98,16 @@ for date_block in schedule_data.get("dates", []):
             live_data = requests.get(live_url).json()
 
             # -------------------------
+            # DEBUG (remove once scores look correct)
+            # -------------------------
+
+            print(f"  [{status}] {away_team} @ {home_team}")
+            linescore_check = live_data.get("liveData", {}).get("linescore", {})
+            home_runs_raw = linescore_check.get("teams", {}).get("home", {}).get("runs", "MISSING")
+            away_runs_raw = linescore_check.get("teams", {}).get("away", {}).get("runs", "MISSING")
+            print(f"  liveData linescore runs — home: {home_runs_raw}, away: {away_runs_raw}")
+
+            # -------------------------
             # SCORES
             # -------------------------
 
@@ -106,21 +116,16 @@ for date_block in schedule_data.get("dates", []):
 
             try:
                 linescore = live_data["liveData"]["linescore"]
+                home_score = linescore["teams"]["home"].get("runs", 0) or 0
+                away_score = linescore["teams"]["away"].get("runs", 0) or 0
 
-                home_score = (
-                    linescore["teams"]["home"]["runs"]
-                )
-
-                away_score = (
-                    linescore["teams"]["away"]["runs"]
-                )
-
-            except:
+            except (KeyError, TypeError) as e:
+                print(f"  liveData score parse failed: {e}, falling back to schedule data")
                 try:
-                    home_score = home.get("score", 0)
-                    away_score = away.get("score", 0)
-                except:
-                    pass
+                    home_score = home.get("score", 0) or 0
+                    away_score = away.get("score", 0) or 0
+                except (KeyError, TypeError) as e2:
+                    print(f"  Schedule score parse also failed: {e2}, defaulting to 0-0")
 
             # -------------------------
             # FILENAME
@@ -175,7 +180,7 @@ for date_block in schedule_data.get("dates", []):
                     indent=2
                 )
 
-            print(f"Saved {filename}")
+            print(f"  Saved {filename} ({away_score}-{home_score})")
 
             # -------------------------
             # SEASON ENTRY
@@ -201,7 +206,7 @@ for date_block in schedule_data.get("dates", []):
             })
 
         except Exception as e:
-            print("FAILED:", e)
+            print(f"FAILED game {game.get('gamePk', '?')}: {e}")
 
 # -------------------------
 # SORT
