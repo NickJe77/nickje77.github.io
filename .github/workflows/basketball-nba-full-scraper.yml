@@ -28,13 +28,13 @@ jobs:
 
       - name: Install packages
         run: |
-          pip install requests beautifulsoup4 lxml
-
-      - name: Clear schedule cache
-        run: |
-          rm -f docs/data/basketball/schedules/*.json
+          pip install requests beautifulsoup4 lxml boto3
 
       - name: Run scraper
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           if [ "${{ github.event.inputs.overwrite }}" = "true" ]; then
             python scripts/nba_full_rebuild.py \
@@ -47,11 +47,11 @@ jobs:
               --end "${{ github.event.inputs.end }}"
           fi
 
-      - name: Commit basketball data
+      - name: Commit schedules
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/data/basketball
-          git commit -m "Rebuild basketball NBA data ${{ github.event.inputs.start }}-${{ github.event.inputs.end }}" || echo "No changes"
+          git add docs/data/basketball/schedules
+          git commit -m "Update NBA schedules ${{ github.event.inputs.start }}-${{ github.event.inputs.end }}" || echo "No changes"
           git pull --rebase origin main || echo "Nothing to pull"
           git push
