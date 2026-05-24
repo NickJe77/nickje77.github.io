@@ -1,7 +1,7 @@
 """
 nba_full_rebuild.py
 Scrapes full NBA boxscores (player stats) from Basketball Reference.
-Saves one JSON file per game under docs/data/basketball/boxscores/
+Uploads one JSON file per game to Cloudflare R2.
 Usage:
     python scripts/nba_full_rebuild.py --start 1976 --end 2025
     python scripts/nba_full_rebuild.py --start 2024 --end 2025 --overwrite
@@ -12,17 +12,25 @@ import json
 import re
 import time
 import random
+import os
+import io
 from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup, Comment
+import boto3
+from botocore.config import Config
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-BASE_URL = "https://www.basketball-reference.com"
-OUTPUT_DIR = Path("docs/data/basketball/boxscores")
+BASE_URL     = "https://www.basketball-reference.com"
 SCHEDULE_DIR = Path("docs/data/basketball/schedules")
+
+R2_BUCKET      = "sporting-almanac-data"
+R2_ENDPOINT    = os.environ["R2_ENDPOINT"]
+R2_ACCESS_KEY  = os.environ["R2_ACCESS_KEY_ID"]
+R2_SECRET_KEY  = os.environ["R2_SECRET_ACCESS_KEY"]
 
 HEADERS = {
     "User-Agent": (
@@ -55,6 +63,50 @@ DNP_PHRASES = frozenset([
     "did not play", "did not dress", "not with team",
     "player suspended", "dnp",
 ])
+
+
+# ---------------------------------------------------------------------------
+# R2 client
+# ---------------------------------------------------------------------------
+def get_r2_client():
+    return boto3.client(
+        "s3",
+        endpoint_url=R2_ENDPOINT,
+        aws_access_key_id=R2_ACCESS_KEY,
+        aws_secret_access_key=R2_SECRET_KEY,
+        config=Config(signature_version="s3v4"),
+        region_name="auto",
+    )
+
+
+def r2_key_exists(client, key):
+    try:
+        client.head_object(Bucket=R2_BUCKET, Key=key)
+        return True
+    except client.exceptions.ClientError:
+        return False
+    except Exception:
+        return False
+
+
+def r2_upload(client, key, data: dict):
+    body = json.dumps(data, indent=2).encode("utf-8")
+    client.put_object(
+        Bucket=R2_BUCKET,
+        Key=key,
+        Body=body,
+        ContentType="application/json",
+    )
+
+
+def r2_file_has_players(client, key):
+    """Return True only if the R2 object exists and has player data."""
+    try:
+        obj = client.get_object(Bucket=R2_BUCKET, Key=key)
+        data = json.loads(obj["Body"].read())
+        return any(len(v) > 0 for v in data.get("teams", {}).values())
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -110,13 +162,13 @@ def get_game_urls_for_season(season):
             if not box_link or not box_link.find("a"):
                 continue
             date_th = row.find("th", {"data-stat": "date_game"})
-            visitor = row.find("td", {"data-stat": "visitor_team_name"})
-            home = row.find("td", {"data-stat": "home_team_name"})
+            visitor  = row.find("td", {"data-stat": "visitor_team_name"})
+            home     = row.find("td", {"data-stat": "home_team_name"})
             games.append({
-                "date": date_th.get_text(strip=True) if date_th else "",
-                "away": visitor.get_text(strip=True) if visitor else "",
-                "home": home.get_text(strip=True) if home else "",
-                "url": BASE_URL + box_link.find("a")["href"],
+                "date":  date_th.get_text(strip=True) if date_th else "",
+                "away":  visitor.get_text(strip=True) if visitor else "",
+                "home":  home.get_text(strip=True) if home else "",
+                "url":   BASE_URL + box_link.find("a")["href"],
             })
 
     SCHEDULE_DIR.mkdir(parents=True, exist_ok=True)
@@ -131,7 +183,6 @@ def get_game_urls_for_season(season):
 # HTML comment expander
 # ---------------------------------------------------------------------------
 def uncomment_html(soup):
-    """Expand tables hidden inside HTML comments (used on some BR pages)."""
     for comment in soup.find_all(string=lambda t: isinstance(t, Comment)):
         if "<table" in comment:
             new_soup = BeautifulSoup(comment, "lxml")
@@ -143,14 +194,12 @@ def uncomment_html(soup):
 # Player table parser
 # ---------------------------------------------------------------------------
 def parse_player_table(table):
-    """Parse one team's basic boxscore table into a list of player stat dicts."""
     players = []
     tbody = table.find("tbody")
     if not tbody:
         return players
 
     for row in tbody.find_all("tr"):
-        # Skip in-table section headers ("Starters" / "Reserves")
         if row.get("class") and "thead" in row.get("class"):
             continue
 
@@ -162,21 +211,15 @@ def parse_player_table(table):
         if not name:
             continue
 
-        # DNP detection: only treat as DNP if the reason cell has actual text,
-        # OR if the mp cell contains a known DNP phrase.
-        # Do NOT trigger on an empty reason cell — older seasons have the
-        # <td data-stat="reason"> element present on every row, just blank.
-        reason_td = row.find("td", {"data-stat": "reason"})
+        reason_td  = row.find("td", {"data-stat": "reason"})
         reason_text = reason_td.get_text(strip=True) if reason_td else ""
-
-        mp_td = row.find("td", {"data-stat": "mp"})
-        mp_val = mp_td.get_text(strip=True) if mp_td else ""
+        mp_td      = row.find("td", {"data-stat": "mp"})
+        mp_val     = mp_td.get_text(strip=True) if mp_td else ""
 
         if reason_text or mp_val.lower() in DNP_PHRASES:
             players.append({"player": name, "dnp": reason_text or mp_val or "DNP"})
             continue
 
-        # Player ID from href
         player_id = ""
         a_tag = name_td.find("a")
         if a_tag and a_tag.get("href"):
@@ -196,7 +239,7 @@ def parse_player_table(table):
                 try:
                     stats[stat] = float(val) if "." in val else int(val)
                 except ValueError:
-                    stats[stat] = val  # e.g. mp stored as "32:14"
+                    stats[stat] = val
 
         players.append(stats)
 
@@ -220,19 +263,17 @@ def scrape_boxscore(game):
     game_id_match = re.search(r"/boxscores/([^/]+)\.html", url)
     game_id = game_id_match.group(1) if game_id_match else url.split("/")[-1]
 
-    # Linescore
     final_scores = {}
     linescore = soup.find("table", {"id": "line_score"})
     if linescore:
-        thead_rows = linescore.find("thead").find_all("tr")
+        thead_rows     = linescore.find("thead").find_all("tr")
         quarter_headers = [th.get_text(strip=True) for th in thead_rows[-1].find_all("th")][1:]
         for row in linescore.find("tbody").find_all("tr"):
-            cells = row.find_all(["th", "td"])
+            cells     = row.find_all(["th", "td"])
             team_name = cells[0].get_text(strip=True)
-            q_vals = [c.get_text(strip=True) for c in cells[1:]]
+            q_vals    = [c.get_text(strip=True) for c in cells[1:]]
             final_scores[team_name] = dict(zip(quarter_headers, q_vals))
 
-    # Player tables
     team_tables = {}
     for table in soup.find_all("table", id=re.compile(r"^box-\w+-game-basic$")):
         m = re.match(r"box-(\w+)-game-basic", table["id"])
@@ -245,13 +286,13 @@ def scrape_boxscore(game):
     teams_data = {abbr: parse_player_table(tbl) for abbr, tbl in team_tables.items()}
 
     meta = {
-        "game_id": game_id,
-        "date": game["date"],
-        "away": game["away"],
-        "home": game["home"],
-        "url": url,
+        "game_id":   game_id,
+        "date":      game["date"],
+        "away":      game["away"],
+        "home":      game["home"],
+        "url":       url,
         "linescore": final_scores,
-        "teams": teams_data,
+        "teams":     teams_data,
     }
 
     scorebox = soup.find("div", class_="scorebox")
@@ -273,47 +314,32 @@ def scrape_boxscore(game):
 
 
 # ---------------------------------------------------------------------------
-# File validation helper
-# ---------------------------------------------------------------------------
-def file_has_players(path):
-    """Return True only if the JSON file exists and contains at least one player."""
-    try:
-        with open(path) as f:
-            data = json.load(f)
-        return any(len(v) > 0 for v in data.get("teams", {}).values())
-    except Exception:
-        return False
-
-
-# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--start", type=int, default=1976)
-    parser.add_argument("--end", type=int, default=2025)
+    parser.add_argument("--start",     type=int, default=1976)
+    parser.add_argument("--end",       type=int, default=2025)
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     SCHEDULE_DIR.mkdir(parents=True, exist_ok=True)
+
+    r2 = get_r2_client()
 
     total_scraped = 0
     total_skipped = 0
-    total_errors = 0
+    total_errors  = 0
 
     for season in range(args.start, args.end + 1):
         print(f"\n=== Season {season} ===")
         games = get_game_urls_for_season(season)
 
-        season_dir = OUTPUT_DIR / str(season)
-        season_dir.mkdir(parents=True, exist_ok=True)
-
         for i, game in enumerate(games, 1):
             game_id = game["url"].split("/")[-1].replace(".html", "")
-            out_path = season_dir / f"{game_id}.json"
+            r2_key  = f"basketball/boxscores/{season}/{game_id}.json"
 
-            if out_path.exists() and not args.overwrite and file_has_players(out_path):
+            if not args.overwrite and r2_file_has_players(r2, r2_key):
                 total_skipped += 1
                 continue
 
@@ -325,8 +351,12 @@ def main():
                 total_errors += 1
                 continue
 
-            with open(out_path, "w") as f:
-                json.dump(data, f, indent=2)
+            try:
+                r2_upload(r2, r2_key, data)
+            except Exception as e:
+                print(f"UPLOAD ERROR: {e}")
+                total_errors += 1
+                continue
 
             total_scraped += 1
             player_count = sum(len(v) for v in data["teams"].values())
