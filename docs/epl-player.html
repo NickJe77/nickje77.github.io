@@ -144,10 +144,6 @@ font-weight:700;
 color:#555;
 }
 
-.filters{
-margin-bottom:20px;
-}
-
 select{
 padding:12px 16px;
 border-radius:10px;
@@ -182,10 +178,6 @@ font-weight:600;
 tr:nth-child(even){
 background:#f8fbff;
 }
-
-.result-win{ color:#0a8f3d; font-weight:900; }
-.result-draw{ color:#e67e22; font-weight:900; }
-.result-loss{ color:#d90429; font-weight:900; }
 
 .team-link{
 text-decoration:none;
@@ -236,14 +228,32 @@ table{ display:block; overflow-x:auto; white-space:nowrap; }
 <script>
 
 const TEAM_COLOURS = {
-"Everton":"linear-gradient(135deg,#003399,#001C58)",
 "Arsenal":"linear-gradient(135deg,#EF0107,#9C0000)",
-"Liverpool":"linear-gradient(135deg,#C8102E,#00B2A9)",
+"Aston Villa":"linear-gradient(135deg,#95BFE5,#670E36)",
+"Brentford":"linear-gradient(135deg,#e30613,#ffd700)",
+"Brighton & Hove Albion":"linear-gradient(135deg,#0057B8,#FFFFFF)",
+"Burnley":"linear-gradient(135deg,#6C1D45,#99D6EA)",
 "Chelsea":"linear-gradient(135deg,#034694,#001C58)",
-"Manchester United":"linear-gradient(135deg,#DA291C,#FBE122)",
+"Crystal Palace":"linear-gradient(135deg,#1B458F,#C4122E)",
+"Everton":"linear-gradient(135deg,#003399,#001C58)",
+"Fulham":"linear-gradient(135deg,#CC0000,#000000)",
+"Ipswich Town":"linear-gradient(135deg,#0044A9,#FFFFFF)",
+"Leeds United":"linear-gradient(135deg,#1D428A,#FFCD00)",
+"Leicester City":"linear-gradient(135deg,#003090,#FDBE11)",
+"Liverpool":"linear-gradient(135deg,#C8102E,#00B2A9)",
+"Luton Town":"linear-gradient(135deg,#F78F1E,#FFFFFF)",
 "Manchester City":"linear-gradient(135deg,#6CABDD,#1C2C5B)",
+"Manchester United":"linear-gradient(135deg,#DA291C,#FBE122)",
+"Manchester Utd":"linear-gradient(135deg,#DA291C,#FBE122)",
+"Newcastle United":"linear-gradient(135deg,#111111,#666666)",
+"Nottingham Forest":"linear-gradient(135deg,#DD0000,#FFFFFF)",
+"Sheffield United":"linear-gradient(135deg,#EE2737,#000000)",
+"Southampton":"linear-gradient(135deg,#D71920,#130C0E)",
 "Tottenham Hotspur":"linear-gradient(135deg,#132257,#FFFFFF)",
-"Newcastle United":"linear-gradient(135deg,#111111,#666666)"
+"Watford":"linear-gradient(135deg,#FBEE23,#ED2127)",
+"West Ham United":"linear-gradient(135deg,#7A263A,#1BB1E7)",
+"Wolverhampton Wanderers":"linear-gradient(135deg,#FDB913,#231F20)",
+"Wolves":"linear-gradient(135deg,#FDB913,#231F20)"
 };
 
 function slugify(name){
@@ -251,7 +261,7 @@ function slugify(name){
         .toLowerCase()
         .replace(/\./g,'')
         .replace(/'/g,'')
-        .replace(/'/g,'')
+        .replace(/\u2019/g,'')
         .replace(/"/g,'')
         .replace(/\s+/g,'-');
 }
@@ -267,53 +277,33 @@ async function loadPlayer(){
         page.innerHTML = '<div class="loading">Loading player data...</div>';
 
         const res = await fetch("/data/epl/players.json");
-
-        if(!res.ok){
-            throw new Error(`players.json returned ${res.status}`);
-        }
-
+        if(!res.ok) throw new Error(`players.json returned ${res.status}`);
         const players = await res.json();
-
-        page.innerHTML = '<div class="loading">Finding player...</div>';
 
         const player = players.find(p => slugify(p.name) === playerSlug);
 
         if(!player){
-            // Show closest matches to help debug
-            const close = players
-                .filter(p => slugify(p.name).includes(playerSlug.split('-')[0]))
-                .slice(0,5)
-                .map(p => p.name)
-                .join(', ');
-
-            page.innerHTML = `
-                <div class="error">
-                    Player Not Found<br>
-                    <small style="font-size:16px;color:#666;">
-                        Slug: "${playerSlug}"<br>
-                        ${close ? `Similar: ${close}` : 'No similar names found'}
-                    </small>
-                </div>
-            `;
+            page.innerHTML = `<div class="error">Player Not Found</div>`;
             return;
         }
 
         const playerDisplayName = player.name;
-        const playerClub = (player.teams && player.teams[player.teams.length - 1]) || "Unknown";
+        const playerSeasons     = player.seasons || [];
+        const playerTeams       = player.teams   || [];
+
+        // Most recent team for header colour
+        const currentTeam = playerTeams[playerTeams.length - 1] || "Unknown";
+        const heroGradient = TEAM_COLOURS[currentTeam] || 'linear-gradient(135deg,#111,#444)';
 
         page.innerHTML = `
-
-            <div class="hero" style="background:${TEAM_COLOURS[playerClub] || 'linear-gradient(135deg,#111,#444)'};">
-
+            <div class="hero" style="background:${heroGradient};">
                 <h1>${playerDisplayName}</h1>
                 <p>Premier League Player Profile</p>
-
                 <div class="search-wrap">
                     <input type="text" class="search-input" id="playerSearch"
                            placeholder="Search player..." autocomplete="off">
                     <div class="search-results" id="searchResults"></div>
                 </div>
-
             </div>
 
             <div class="container">
@@ -321,63 +311,36 @@ async function loadPlayer(){
                 <div class="section">
                     <div class="section-title">Career Summary</div>
                     <div class="stats-grid">
-
                         <div class="stat-card">
-                            <div class="stat-value" style="font-size:22px;">${playerClub}</div>
+                            <div class="stat-value" style="font-size:22px;">${currentTeam}</div>
                             <div class="stat-label">Club</div>
                         </div>
-
                         <div class="stat-card">
-                            <div class="stat-value">${player.seasons ? player.seasons.length : 0}</div>
+                            <div class="stat-value">${playerSeasons.length}</div>
                             <div class="stat-label">Seasons</div>
                         </div>
-
                         <div class="stat-card">
                             <div class="stat-value">${player.goals || 0}</div>
-                            <div class="stat-label">Goals</div>
+                            <div class="stat-label">Career Goals</div>
                         </div>
-
                         <div class="stat-card">
                             <div class="stat-value">${player.penalties || 0}</div>
                             <div class="stat-label">Penalties</div>
                         </div>
-
                         <div class="stat-card">
                             <div class="stat-value">${player.yellow_cards || 0}</div>
                             <div class="stat-label">Yellow Cards</div>
                         </div>
-
                         <div class="stat-card">
                             <div class="stat-value">${player.red_cards || 0}</div>
                             <div class="stat-label">Red Cards</div>
                         </div>
-
                     </div>
                 </div>
 
                 <div class="section">
-                    <div class="section-title">Seasons</div>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Season</th>
-                                <th>Team</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${(player.seasons || []).map((s, i) => `
-                                <tr>
-                                    <td>
-                                        <a class="team-link"
-                                           href="/epl-season.html?season=${s}">
-                                           ${s}
-                                        </a>
-                                    </td>
-                                    <td>${(player.teams && player.teams[i]) || playerClub}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
+                    <div class="section-title">Season by Season</div>
+                    <div class="loading" id="seasonTableContainer">Loading season stats...</div>
                 </div>
 
             </div>
@@ -389,47 +352,45 @@ async function loadPlayer(){
 
         playerSearch.addEventListener("input", () => {
             const value = playerSearch.value.toLowerCase().trim();
-            if(!value){
-                searchResults.style.display = "none";
-                return;
-            }
+            if(!value){ searchResults.style.display = "none"; return; }
             const matches = players
                 .filter(p => (p.name || '').toLowerCase().includes(value))
                 .slice(0, 8);
-
-            if(!matches.length){
-                searchResults.style.display = "none";
-                return;
-            }
-
+            if(!matches.length){ searchResults.style.display = "none"; return; }
             searchResults.innerHTML = matches.map(p => `
                 <div class="search-item"
                      onclick="window.location.href='/epl-player.html?player=${encodeURIComponent(slugify(p.name))}'">
                     ${p.name}
                 </div>
             `).join('');
-
             searchResults.style.display = "block";
         });
 
         document.addEventListener("click", e => {
-            if(!e.target.closest(".search-wrap")){
-                searchResults.style.display = "none";
-            }
+            if(!e.target.closest(".search-wrap")) searchResults.style.display = "none";
         });
 
-    }catch(err){
+        // Load season stats from season JSON files
+        const seasonContainer = document.getElementById("seasonTableContainer");
 
-        console.error(err);
-        page.innerHTML = `<div class="error">Failed To Load Player Data<br><small style="font-size:16px;color:#666;">${err.message}</small></div>`;
+        const seasonStats = await Promise.all(playerSeasons.map(async (seasonId, i) => {
+            try{
+                const r = await fetch(`/data/epl/seasons/${seasonId}.json`);
+                if(!r.ok) return { seasonId, team: playerTeams[i] || currentTeam, goals: 0, penalties: 0, yellowCards: 0, redCards: 0 };
+                const data = await r.json();
+                const games = data.games || data;
 
-    }
+                let goals = 0, penalties = 0, yellowCards = 0, redCards = 0;
 
-}
-
-loadPlayer();
-
-</script>
-
-</body>
-</html>
+                games.forEach(game => {
+                    (game.scorers || []).forEach(s => {
+                        if(slugify(s.player) === playerSlug){
+                            if(!s.own_goal) goals++;
+                            if(s.penalty)   penalties++;
+                        }
+                    });
+                    (game.yellow_cards || []).forEach(s => {
+                        if(slugify(s.player) === playerSlug) yellowCards++;
+                    });
+                    (game.red_cards || []).forEach(s => {
+                        if(slugify(s.player) ===
