@@ -64,7 +64,7 @@ tr:nth-child(even){background:#f3f7fd;}
 
 <script>
 const START_YEAR = 1992;
-const END_YEAR   = 2025; // update this each new season
+const END_YEAR   = 2024; // update each new season
 
 function buildSeasonList() {
   const seasons = [];
@@ -102,7 +102,8 @@ async function loadSeason() {
   try {
     const response = await fetch(`/data/epl/seasons/${currentSeason}.json`);
     if (!response.ok) throw new Error("Season JSON not found");
-    allMatches = await response.json();
+    const data = await response.json();
+    allMatches = data.games || data;
     buildFilters();
     renderMatches();
   } catch (err) {
@@ -114,8 +115,8 @@ async function loadSeason() {
 function buildFilters() {
   const teams = new Set();
   allMatches.forEach(m => {
-    if (m.home_team) teams.add(m.home_team);
-    if (m.away_team) teams.add(m.away_team);
+    if (m.home) teams.add(m.home);
+    if (m.away) teams.add(m.away);
   });
   [...teams].sort().forEach(team => {
     const opt = document.createElement("option");
@@ -129,7 +130,12 @@ function renderMatches() {
   let filtered = [...allMatches];
   const team = teamFilter.value;
   if (team) {
-    filtered = filtered.filter(m => m.home_team === team || m.away_team === team);
+    filtered = filtered.filter(m => m.home === team || m.away === team);
+  }
+
+  if (filtered.length === 0) {
+    matchesContainer.innerHTML = '<div class="loading">No matches found</div>';
+    return;
   }
 
   let html = `
@@ -140,6 +146,7 @@ function renderMatches() {
           <th>Home</th>
           <th>Score</th>
           <th>Away</th>
+          <th>Venue</th>
         </tr>
       </thead>
       <tbody>
@@ -148,25 +155,26 @@ function renderMatches() {
   filtered.forEach(match => {
     html += `
       <tr class="match-row"
-          onclick="window.location.href='/epl-game.html?match=${match.match_id}&season=${currentSeason}'">
+          onclick="window.location.href='/epl-game.html?match=${encodeURIComponent(match.match_id)}&season=${encodeURIComponent(currentSeason)}'">
         <td>${match.date || ''}</td>
         <td>
           <a class="team-link"
-             href="/epl-team.html?team=${encodeURIComponent(match.home_team)}"
+             href="/epl-team.html?team=${encodeURIComponent(match.home)}"
              onclick="event.stopPropagation()">
-            ${match.home_team || ''}
+            ${match.home || ''}
           </a>
         </td>
         <td class="score">
-          ${match.home_score ?? '-'} - ${match.away_score ?? '-'}
+          ${match.score_home ?? '-'} - ${match.score_away ?? '-'}
         </td>
         <td>
           <a class="team-link"
-             href="/epl-team.html?team=${encodeURIComponent(match.away_team)}"
+             href="/epl-team.html?team=${encodeURIComponent(match.away)}"
              onclick="event.stopPropagation()">
-            ${match.away_team || ''}
+            ${match.away || ''}
           </a>
         </td>
+        <td>${match.venue || ''}</td>
       </tr>
     `;
   });
