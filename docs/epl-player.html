@@ -183,20 +183,9 @@ tr:nth-child(even){
 background:#f8fbff;
 }
 
-.result-win{
-color:#0a8f3d;
-font-weight:900;
-}
-
-.result-draw{
-color:#e67e22;
-font-weight:900;
-}
-
-.result-loss{
-color:#d90429;
-font-weight:900;
-}
+.result-win{ color:#0a8f3d; font-weight:900; }
+.result-draw{ color:#e67e22; font-weight:900; }
+.result-loss{ color:#d90429; font-weight:900; }
 
 .team-link{
 text-decoration:none;
@@ -216,34 +205,14 @@ font-size:32px;
 font-weight:900;
 }
 
-.error{
-color:#d90429;
-}
+.error{ color:#d90429; }
 
 @media(max-width:900px){
-
-.hero h1{
-font-size:40px;
-}
-
-.hero p{
-font-size:16px;
-}
-
-.search-input{
-font-size:16px;
-}
-
-.stat-value{
-font-size:34px;
-}
-
-table{
-display:block;
-overflow-x:auto;
-white-space:nowrap;
-}
-
+.hero h1{ font-size:40px; }
+.hero p{ font-size:16px; }
+.search-input{ font-size:16px; }
+.stat-value{ font-size:34px; }
+table{ display:block; overflow-x:auto; white-space:nowrap; }
 }
 
 </style>
@@ -278,31 +247,189 @@ const TEAM_COLOURS = {
 };
 
 function slugify(name){
-    return name
+    return (name || '')
         .toLowerCase()
         .replace(/\./g,'')
+        .replace(/'/g,'')
         .replace(/'/g,'')
         .replace(/"/g,'')
         .replace(/\s+/g,'-');
 }
 
-const params = new URLSearchParams(window.location.search);
-const playerSlug = params.get("player");
-const page = document.getElementById("page");
+const params     = new URLSearchParams(window.location.search);
+const playerSlug = params.get("player") || '';
+const page       = document.getElementById("page");
 
 async function loadPlayer(){
 
     try{
 
-        const playersResponse = await fetch("/data/epl/players.json");
-        const players = await playersResponse.json();
+        page.innerHTML = '<div class="loading">Loading player data...</div>';
 
-        // Match by slugifying the name from players.json
-        const player = players.find(p => slugify(p.name || '') === playerSlug);
+        const res = await fetch("/data/epl/players.json");
+
+        if(!res.ok){
+            throw new Error(`players.json returned ${res.status}`);
+        }
+
+        const players = await res.json();
+
+        page.innerHTML = '<div class="loading">Finding player...</div>';
+
+        const player = players.find(p => slugify(p.name) === playerSlug);
 
         if(!player){
-            page.innerHTML = `<div class="error">Player Not Found</div>`;
+            // Show closest matches to help debug
+            const close = players
+                .filter(p => slugify(p.name).includes(playerSlug.split('-')[0]))
+                .slice(0,5)
+                .map(p => p.name)
+                .join(', ');
+
+            page.innerHTML = `
+                <div class="error">
+                    Player Not Found<br>
+                    <small style="font-size:16px;color:#666;">
+                        Slug: "${playerSlug}"<br>
+                        ${close ? `Similar: ${close}` : 'No similar names found'}
+                    </small>
+                </div>
+            `;
             return;
         }
 
         const playerDisplayName = player.name;
+        const playerClub = (player.teams && player.teams[player.teams.length - 1]) || "Unknown";
+
+        page.innerHTML = `
+
+            <div class="hero" style="background:${TEAM_COLOURS[playerClub] || 'linear-gradient(135deg,#111,#444)'};">
+
+                <h1>${playerDisplayName}</h1>
+                <p>Premier League Player Profile</p>
+
+                <div class="search-wrap">
+                    <input type="text" class="search-input" id="playerSearch"
+                           placeholder="Search player..." autocomplete="off">
+                    <div class="search-results" id="searchResults"></div>
+                </div>
+
+            </div>
+
+            <div class="container">
+
+                <div class="section">
+                    <div class="section-title">Career Summary</div>
+                    <div class="stats-grid">
+
+                        <div class="stat-card">
+                            <div class="stat-value" style="font-size:22px;">${playerClub}</div>
+                            <div class="stat-label">Club</div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-value">${player.seasons ? player.seasons.length : 0}</div>
+                            <div class="stat-label">Seasons</div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-value">${player.goals || 0}</div>
+                            <div class="stat-label">Goals</div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-value">${player.penalties || 0}</div>
+                            <div class="stat-label">Penalties</div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-value">${player.yellow_cards || 0}</div>
+                            <div class="stat-label">Yellow Cards</div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-value">${player.red_cards || 0}</div>
+                            <div class="stat-label">Red Cards</div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Seasons</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Season</th>
+                                <th>Team</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${(player.seasons || []).map((s, i) => `
+                                <tr>
+                                    <td>
+                                        <a class="team-link"
+                                           href="/epl-season.html?season=${s}">
+                                           ${s}
+                                        </a>
+                                    </td>
+                                    <td>${(player.teams && player.teams[i]) || playerClub}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+        `;
+
+        // Search
+        const playerSearch  = document.getElementById("playerSearch");
+        const searchResults = document.getElementById("searchResults");
+
+        playerSearch.addEventListener("input", () => {
+            const value = playerSearch.value.toLowerCase().trim();
+            if(!value){
+                searchResults.style.display = "none";
+                return;
+            }
+            const matches = players
+                .filter(p => (p.name || '').toLowerCase().includes(value))
+                .slice(0, 8);
+
+            if(!matches.length){
+                searchResults.style.display = "none";
+                return;
+            }
+
+            searchResults.innerHTML = matches.map(p => `
+                <div class="search-item"
+                     onclick="window.location.href='/epl-player.html?player=${encodeURIComponent(slugify(p.name))}'">
+                    ${p.name}
+                </div>
+            `).join('');
+
+            searchResults.style.display = "block";
+        });
+
+        document.addEventListener("click", e => {
+            if(!e.target.closest(".search-wrap")){
+                searchResults.style.display = "none";
+            }
+        });
+
+    }catch(err){
+
+        console.error(err);
+        page.innerHTML = `<div class="error">Failed To Load Player Data<br><small style="font-size:16px;color:#666;">${err.message}</small></div>`;
+
+    }
+
+}
+
+loadPlayer();
+
+</script>
+
+</body>
+</html>
