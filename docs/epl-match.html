@@ -34,29 +34,35 @@ body{
 .hero{
     background:linear-gradient(135deg,#37003c,#963cff);
     color:white;
-    padding:40px 20px;
+    padding:60px 20px;
     text-align:center;
 }
 
-.hero-score{
-    font-size:54px;
+.teams{
+    font-size:40px;
     font-weight:800;
-    margin-top:10px;
+    margin-bottom:12px;
 }
 
-.hero-teams{
-    font-size:34px;
-    font-weight:700;
+.score{
+    font-size:64px;
+    font-weight:900;
 }
 
-.hero-details{
-    margin-top:12px;
-    font-size:16px;
+.details{
+    margin-top:16px;
+    font-size:22px;
     opacity:.95;
 }
 
+.venue{
+    margin-top:8px;
+    font-size:20px;
+    opacity:.9;
+}
+
 .container{
-    max-width:1200px;
+    max-width:1400px;
     margin:30px auto;
     padding:0 20px;
 }
@@ -76,8 +82,8 @@ body{
 
 .card h2{
     margin-top:0;
-    margin-bottom:18px;
-    font-size:26px;
+    margin-bottom:20px;
+    font-size:28px;
 }
 
 .event-list{
@@ -90,46 +96,29 @@ body{
     display:flex;
     justify-content:space-between;
     align-items:center;
-    padding:12px 14px;
+    background:#f3f7fd;
+    padding:14px;
     border-radius:10px;
-    background:#f7f9fc;
 }
 
 .event:nth-child(even){
-    background:#edf3ff;
+    background:#e7efff;
 }
 
 .minute{
     font-weight:800;
     color:#37003c;
-    min-width:60px;
 }
 
 .player-link{
     color:#0056d6;
     text-decoration:none;
-    font-weight:600;
+    font-weight:700;
 }
 
 .team-link{
-    color:#0056d6;
+    color:white;
     text-decoration:none;
-    font-weight:700;
-}
-
-.info-table{
-    width:100%;
-    border-collapse:collapse;
-}
-
-.info-table td{
-    padding:12px;
-    border-bottom:1px solid #eee;
-}
-
-.info-table td:first-child{
-    font-weight:700;
-    width:180px;
 }
 
 .loading{
@@ -141,7 +130,7 @@ body{
 
 .empty{
     color:#666;
-    padding:10px 0;
+    padding:12px 0;
 }
 
 @media(max-width:900px){
@@ -150,12 +139,20 @@ body{
     grid-template-columns:1fr;
 }
 
-.hero-score{
-    font-size:40px;
+.teams{
+    font-size:28px;
 }
 
-.hero-teams{
-    font-size:24px;
+.score{
+    font-size:46px;
+}
+
+.details{
+    font-size:18px;
+}
+
+.venue{
+    font-size:16px;
 }
 
 }
@@ -173,47 +170,37 @@ body{
 </div>
 
 <div class="hero">
-
-    <div class="hero-teams" id="heroTeams">
-        Loading Match...
-    </div>
-
-    <div class="hero-score" id="heroScore"></div>
-
-    <div class="hero-details" id="heroDetails"></div>
-
+    <div class="teams" id="teams">Loading Match...</div>
+    <div class="score" id="score"></div>
+    <div class="details" id="details"></div>
+    <div class="venue" id="venue"></div>
 </div>
 
 <div class="container">
-
-    <div id="content" class="loading">
-        Loading match data...
-    </div>
-
+    <div id="content" class="loading">Loading match...</div>
 </div>
 
 <script>
 
-const params = new URLSearchParams(window.location.search);
+const params     = new URLSearchParams(window.location.search);
+const matchId    = params.get("match");
+const season     = params.get("season");
+const matchDate  = params.get("date")  || '';
+const matchVenue = params.get("venue") || '';
 
-const matchId = params.get("match");
-const season = params.get("season");
-
-const heroTeams = document.getElementById("heroTeams");
-const heroScore = document.getElementById("heroScore");
-const heroDetails = document.getElementById("heroDetails");
-
-const content = document.getElementById("content");
+const teamsEl   = document.getElementById("teams");
+const scoreEl   = document.getElementById("score");
+const detailsEl = document.getElementById("details");
+const venueEl   = document.getElementById("venue");
+const content   = document.getElementById("content");
 
 function slugify(name){
-
     return name
         .toLowerCase()
         .replace(/\./g,'')
         .replace(/'/g,'')
         .replace(/"/g,'')
         .replace(/\s+/g,'-');
-
 }
 
 async function loadMatch(){
@@ -222,6 +209,10 @@ async function loadMatch(){
 
         const response = await fetch(`/data/epl/matches/${season}/${matchId}.json`);
 
+        if(!response.ok){
+            throw new Error("Match not found");
+        }
+
         const match = await response.json();
 
         renderMatch(match);
@@ -229,60 +220,33 @@ async function loadMatch(){
     }catch(err){
 
         console.error(err);
-
-        content.innerHTML = `
-            <div class="loading">
-                Failed to load match data
-            </div>
-        `;
+        content.innerHTML = `<div class="loading">Failed to load match</div>`;
 
     }
 
 }
 
-function renderEventList(events, type){
+function renderEvents(events, label){
 
     if(!events || !events.length){
-
-        return `<div class="empty">No ${type} recorded</div>`;
-
+        return `<div class="empty">No ${label}</div>`;
     }
 
     return `
         <div class="event-list">
-
             ${events.map(event => `
-
                 <div class="event">
-
                     <div>
-
                         <a class="player-link"
                            href="/epl-player.html?player=${slugify(event.player)}">
                            ${event.player || ''}
                         </a>
-
-                        ${event.team ? `
-                            <span>
-                                (
-                                <a class="team-link"
-                                   href="/epl-team.html?team=${encodeURIComponent(event.team)}">
-                                   ${event.team}
-                                </a>
-                                )
-                            </span>
-                        ` : ''}
-
+                        ${event.penalty ? ' (P)' : ''}
+                        ${event.own_goal ? ' (OG)' : ''}
                     </div>
-
-                    <div class="minute">
-                        ${event.minute || ''}'
-                    </div>
-
+                    <div class="minute">${event.minute || ''}'</div>
                 </div>
-
             `).join('')}
-
         </div>
     `;
 
@@ -292,97 +256,41 @@ function renderMatch(match){
 
     document.title = `${match.home_team} vs ${match.away_team} | EPL Match`;
 
-    heroTeams.innerHTML = `
+    teamsEl.innerHTML = `
         <a class="team-link"
            href="/epl-team.html?team=${encodeURIComponent(match.home_team)}">
            ${match.home_team}
         </a>
-
         vs
-
         <a class="team-link"
            href="/epl-team.html?team=${encodeURIComponent(match.away_team)}">
            ${match.away_team}
         </a>
     `;
 
-    heroScore.textContent = `
-        ${match.home_score ?? '-'}
-        -
-        ${match.away_score ?? '-'}
-    `;
-
-    heroDetails.innerHTML = `
-        ${match.date || ''}
-        ${match.round ? ` • ${match.round}` : ''}
-        ${match.venue ? ` • ${match.venue}` : ''}
-    `;
+    scoreEl.textContent = `${match.home_score ?? '-'} - ${match.away_score ?? '-'}`;
+    detailsEl.textContent = match.date  || matchDate;
+    venueEl.textContent   = match.venue || matchVenue;
 
     content.innerHTML = `
-
         <div class="grid">
 
             <div class="card">
-
                 <h2>Goalscorers</h2>
-
-                ${renderEventList(match.scorers, 'goalscorers')}
-
+                ${renderEvents(match.scorers, 'goalscorers')}
             </div>
 
             <div class="card">
-
-                <h2>Match Information</h2>
-
-                <table class="info-table">
-
-                    <tr>
-                        <td>Date</td>
-                        <td>${match.date || ''}</td>
-                    </tr>
-
-                    <tr>
-                        <td>Round</td>
-                        <td>${match.round || ''}</td>
-                    </tr>
-
-                    <tr>
-                        <td>Venue</td>
-                        <td>${match.venue || ''}</td>
-                    </tr>
-
-                    <tr>
-                        <td>Attendance</td>
-                        <td>${match.attendance || ''}</td>
-                    </tr>
-
-                    <tr>
-                        <td>Referee</td>
-                        <td>${match.referee || ''}</td>
-                    </tr>
-
-                </table>
-
-            </div>
-
-            <div class="card">
-
                 <h2>Yellow Cards</h2>
-
-                ${renderEventList(match.yellow_cards, 'yellow cards')}
-
+                ${renderEvents(match.yellow_cards, 'yellow cards')}
             </div>
 
             <div class="card">
-
                 <h2>Red Cards</h2>
-
-                ${renderEventList(match.red_cards, 'red cards')}
-
+                ${renderEvents(match.red_cards, 'red cards')}
             </div>
 
         </div>
-
     `;
 
 }
