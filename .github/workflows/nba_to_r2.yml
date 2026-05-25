@@ -1,0 +1,95 @@
+name: Upload Boxscores to R2
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "Start season"
+        required: true
+        default: "1976"
+      end:
+        description: "End season"
+        required: true
+        default: "2025"
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install packages
+        run: pip install boto3
+
+      - name: Upload to R2
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          python << 'PYEOF'
+          import boto3
+          import json
+          import os
+          from pathlib import Path
+          from botocore.config import Config
+
+          r2 = boto3.client(
+              "s3",
+              endpoint_url=os.environ["R2_ENDPOINT"],
+              aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+              config=Config(signature_version="s3v4"),
+              region_name="auto",
+          )
+
+          start = int("${{ github.event.inputs.start }}")
+          end   = int("${{ github.event.inputs.end }}")
+
+          total_uploaded = 0
+          total_skipped  = 0
+          total_errors   = 0
+
+          for season in range(start, end + 1):
+              season_dir = Path(f"docs/data/basketball/boxscores/{season}")
+              if not season_dir.exists():
+                  print(f"Season {season}: no local files, skipping")
+                  continue
+
+              files = list(season_dir.glob("*.json"))
+              print(f"Season {season}: {len(files)} files")
+
+              for f in files:
+                  key = f"basketball/boxscores/{season}/{f.name}"
+                  try:
+                      # Check if already in R2
+                      try:
+                          r2.head_object(Bucket="sporting-almanac-data", Key=key)
+                          total_skipped += 1
+                          continue
+                      except:
+                          pass
+
+                      with open(f) as fp:
+                          data = json.load(fp)
+
+                      r2.put_object(
+                          Bucket="sporting-almanac-data",
+                          Key=key,
+                          Body=json.dumps(data).encode("utf-8"),
+                          ContentType="application/json",
+                      )
+                      total_uploaded += 1
+                      if total_uploaded % 100 == 0:
+                          print(f"  Uploaded {total_uploaded} files so far...")
+
+                  except Exception as e:
+                      print(f"  ERROR {f.name}: {e}")
+                      total_errors += 1
+
+          print(f"\nDone. Uploaded: {total_uploaded} | Skipped: {total_skipped} | Errors: {total_errors}")
+          PYEOF
