@@ -14,16 +14,21 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install git-filter-repo
-        run: pip install git-filter-repo
-
-      - name: Remove basketball boxscores from history
+      - name: Install BFG
         run: |
-          git filter-repo --force --path docs/data/basketball/boxscores --invert-paths
+          wget -q https://repo1.maven.org/maven2/com/madgag/bfg/1.14.0/bfg-1.14.0.jar -O bfg.jar
+          java -version
 
-      - name: Restore remote and force push
+      - name: Run BFG to remove boxscores folder from history
+        run: |
+          java -jar bfg.jar --delete-folders boxscores --no-blob-protection .
+
+      - name: Clean and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+          git config http.postBuffer 524288000
+          git reflog expire --expire=now --all
+          git gc --prune=now --aggressive
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
           git push origin main --force
