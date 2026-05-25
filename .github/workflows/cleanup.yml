@@ -2,6 +2,9 @@ name: Purge Large Files From History
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   purge:
     runs-on: ubuntu-latest
@@ -9,6 +12,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install git-filter-repo
         run: pip install git-filter-repo
@@ -17,7 +21,12 @@ jobs:
         run: |
           git filter-repo --force --path docs/data/basketball/boxscores --invert-paths
 
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+
       - name: Force push clean history
         run: |
-          git remote add origin-clean https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-          git push origin-clean --force --all
+          git push origin main --force
