@@ -2,35 +2,30 @@ import requests
 import csv
 import json
 import os
+from datetime import date
 
 # 🔴 WRITE DIRECTLY HERE
 BASE = "docs/data/tennis/seasons"
-
 ATP_URL = "https://raw.githubusercontent.com/JeffSackmann/tennis_atp/master/atp_matches_2024.csv"
 WTA_URL = "https://raw.githubusercontent.com/JeffSackmann/tennis_wta/master/wta_matches_2024.csv"
-
 
 def fetch(url, gender):
     r = requests.get(url, timeout=60)
     r.raise_for_status()
-
     reader = csv.DictReader(r.text.splitlines())
     matches = []
-
     for row in reader:
         td = row.get("tourney_date", "")
         if len(td) == 8 and td.isdigit():
-            date = f"{td[:4]}-{td[4:6]}-{td[6:8]}"
+            date_str = f"{td[:4]}-{td[4:6]}-{td[6:8]}"
         else:
-            date = td
-
+            date_str = td
         winner = row.get("winner_name", "")
         loser = row.get("loser_name", "")
         tournament = row.get("tourney_name", "")
-
         matches.append({
-            "match_id": f"{date}_{tournament}_{winner}_{loser}".replace(" ", "_").lower(),
-            "date": date,
+            "match_id": f"{date_str}_{tournament}_{winner}_{loser}".replace(" ", "_").lower(),
+            "date": date_str,
             "tournament": tournament,
             "surface": row.get("surface", ""),
             "round": row.get("round", ""),
@@ -41,9 +36,7 @@ def fetch(url, gender):
             "score": row.get("score", ""),
             "gender": gender
         })
-
     return matches
-
 
 def shift_year(matches, new_year):
     out = []
@@ -55,31 +48,35 @@ def shift_year(matches, new_year):
         out.append(nm)
     return out
 
+def filter_past(matches, year):
+    """Remove matches that haven't happened yet (only applies to current year)."""
+    today = date.today().isoformat()
+    current_year = str(date.today().year)
+    if year != current_year:
+        return matches
+    return [m for m in matches if m["date"] <= today]
 
 def save(year, data):
     os.makedirs(BASE, exist_ok=True)
     with open(f"{BASE}/{year}.json", "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
-
 def main():
     print("Fetching ATP...")
     atp = fetch(ATP_URL, "M")
-
     print("Fetching WTA...")
     wta = fetch(WTA_URL, "F")
-
     all_matches = atp + wta
-
     print("Building seasons...")
-    data_2025 = shift_year(all_matches, "2025")
-    data_2026 = shift_year(all_matches, "2026")
 
-    save("2025", data_2025)
-    save("2026", data_2026)
+    for new_year in ["2025", "2026"]:
+        shifted = shift_year(all_matches, new_year)
+        filtered = filter_past(shifted, new_year)
+        removed = len(shifted) - len(filtered)
+        save(new_year, filtered)
+        print(f"  {new_year}.json: {len(filtered)} matches" + (f" ({removed} future removed)" if removed else ""))
 
     print("✅ DONE — files in seasons folder")
-
 
 if __name__ == "__main__":
     main()
