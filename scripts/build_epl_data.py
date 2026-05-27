@@ -17,7 +17,6 @@ import sys
 from pathlib import Path
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-# Script lives in scripts/ — resolve repo root one level up
 REPO_ROOT   = Path(__file__).parent.parent
 MATCHES_DIR = REPO_ROOT / "docs" / "data" / "epl" / "matches"
 OUT_DIR     = REPO_ROOT / "docs" / "data" / "epl"
@@ -76,6 +75,9 @@ def make_player(name: str) -> dict:
         "own_goals": 0,
         "yellow_cards": 0,
         "red_cards": 0,
+        # season_stats: list of per-season breakdowns
+        # each entry: { season, team, goals, penalties, own_goals, yellow_cards, red_cards, goals_by_opponent: {team: count} }
+        "season_stats": []
     }
 
 
@@ -90,6 +92,24 @@ def get_or_create_player(players_map, name):
     if name not in players_map:
         players_map[name] = make_player(name)
     return players_map[name]
+
+
+def get_or_create_player_season(player, season, team):
+    for s in player["season_stats"]:
+        if s["season"] == season:
+            return s
+    entry = {
+        "season": season,
+        "team": team,
+        "goals": 0,
+        "penalties": 0,
+        "own_goals": 0,
+        "yellow_cards": 0,
+        "red_cards": 0,
+        "goals_by_opponent": {}
+    }
+    player["season_stats"].append(entry)
+    return entry
 
 
 def add_team_if_missing(player, team):
@@ -129,7 +149,7 @@ def main():
         teams_set.add(home_team)
         teams_set.add(away_team)
 
-        # ── Team stats: wins/draws/losses/goals ───────────────────────────────
+        # ── Team stats ────────────────────────────────────────────────────────
         for team, scored, conceded in [
             (home_team, home_score, away_score),
             (away_team, away_score, home_score),
@@ -156,34 +176,34 @@ def main():
             team = (card.get("team") or "").strip()
             name = (card.get("player") or "").strip()
 
-            # Team stats
             if team:
                 s = get_or_create_team_stats(team_stats_map, team, season)
                 s["yellow_cards"] += 1
 
-            # Player stats
             if name:
                 p = get_or_create_player(players_map, name)
                 add_team_if_missing(p, team)
                 add_season_if_missing(p, season)
                 p["yellow_cards"] += 1
+                ps = get_or_create_player_season(p, season, team)
+                ps["yellow_cards"] += 1
 
         # ── Red cards ─────────────────────────────────────────────────────────
         for card in match.get("red_cards") or []:
             team = (card.get("team") or "").strip()
             name = (card.get("player") or "").strip()
 
-            # Team stats
             if team:
                 s = get_or_create_team_stats(team_stats_map, team, season)
                 s["red_cards"] += 1
 
-            # Player stats
             if name:
                 p = get_or_create_player(players_map, name)
                 add_team_if_missing(p, team)
                 add_season_if_missing(p, season)
                 p["red_cards"] += 1
+                ps = get_or_create_player_season(p, season, team)
+                ps["red_cards"] += 1
 
         # ── Scorers ───────────────────────────────────────────────────────────
         for scorer in match.get("scorers") or []:
@@ -192,20 +212,42 @@ def main():
             if not name:
                 continue
 
+            # Work out the opponent
+            if team == home_team:
+                opponent = away_team
+            elif team == away_team:
+                opponent = home_team
+            else:
+                opponent = ""
+
             p = get_or_create_player(players_map, name)
             add_team_if_missing(p, team)
             add_season_if_missing(p, season)
+            ps = get_or_create_player_season(p, season, team)
 
             if scorer.get("own_goal"):
                 p["own_goals"] += 1
+                ps["own_goals"] += 1
             elif scorer.get("penalty"):
                 p["penalties"] += 1
+                p["goals"] += 1
+                ps["penalties"] += 1
+                ps["goals"] += 1
+                if opponent:
+                    ps["goals_by_opponent"][opponent] = ps["goals_by_opponent"].get(opponent, 0) + 1
             else:
                 p["goals"] += 1
+                ps["goals"] += 1
+                if opponent:
+                    ps["goals_by_opponent"][opponent] = ps["goals_by_opponent"].get(opponent, 0) + 1
 
     # ── Finalise goal difference ──────────────────────────────────────────────
     for s in team_stats_map.values():
         s["goal_difference"] = s["goals_for"] - s["goals_against"]
+
+    # ── Sort season_stats by season for each player ───────────────────────────
+    for p in players_map.values():
+        p["season_stats"].sort(key=lambda s: s["season"])
 
     # ── Build output arrays ───────────────────────────────────────────────────
     players    = sorted(players_map.values(), key=lambda p: p["name"])
