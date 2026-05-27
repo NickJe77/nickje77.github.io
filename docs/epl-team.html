@@ -210,6 +210,21 @@ async function loadTeam(){
       });
 
     const topScorers  = [...teamPlayers].sort((a,b) => b.goals - a.goals).filter(p => p.goals > 0).slice(0, 10);
+
+    // Build top scorers with penalty breakdown
+    const topScorersDetailed = [...teamPlayers]
+      .map(p => {
+        const goals = (p.season_stats || [])
+          .filter(s => s.team === teamName)
+          .reduce((sum, s) => sum + (s.goals || 0), 0);
+        const pens = (p.season_stats || [])
+          .filter(s => s.team === teamName)
+          .reduce((sum, s) => sum + (s.penalties || 0), 0);
+        return { name: p.name, goals, pens };
+      })
+      .filter(p => p.goals > 0)
+      .sort((a,b) => b.goals - a.goals)
+      .slice(0, 10);
     const topYellows  = [...teamPlayers].sort((a,b) => b.yellows - a.yellows).filter(p => p.yellows > 0).slice(0, 10);
     const topReds     = [...teamPlayers].sort((a,b) => b.reds - a.reds).filter(p => p.reds > 0).slice(0, 10);
 
@@ -286,6 +301,21 @@ async function loadTeam(){
         </div>
 
         <div class="section">
+          <div class="section-title">Top 10 Scorers</div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Player</th>
+                <th>Goals</th>
+                <th>Penalties</th>
+              </tr>
+            </thead>
+            <tbody id="topScorersBody"></tbody>
+          </table>
+        </div>
+
+        <div class="section">
           <div class="section-title">Results by Opponent</div>
           <div class="filters">
             <select id="opponentSelect">
@@ -293,7 +323,7 @@ async function loadTeam(){
               ${opponents.map(o => `<option value="${o}">${o}</option>`).join('')}
             </select>
           </div>
-          <div class="stats-grid">
+          <div class="stats-grid" style="margin-top:20px;">
             <div class="stat-card"><div class="stat-value" id="oGames">${overall.games}</div><div class="stat-label">Games</div></div>
             <div class="stat-card"><div class="stat-value" id="oWins">${overall.wins}</div><div class="stat-label">Wins</div></div>
             <div class="stat-card"><div class="stat-value" id="oDraws">${overall.draws}</div><div class="stat-label">Draws</div></div>
@@ -332,6 +362,22 @@ async function loadTeam(){
 
       </div>
     `;
+
+    // Populate top scorers table
+    const topScorersBody = document.getElementById("topScorersBody");
+    if(topScorersBody){
+      if(!topScorersDetailed.length){
+        topScorersBody.innerHTML = `<tr><td colspan="4">No data available</td></tr>`;
+      } else {
+        topScorersBody.innerHTML = topScorersDetailed.map((p, i) => `
+          <tr>
+            <td>${i + 1}</td>
+            <td><a class="player-link" href="/epl-player.html?player=${encodeURIComponent(slugify(p.name))}">${p.name}</a></td>
+            <td>${p.goals}</td>
+            <td>${p.pens}</td>
+          </tr>`).join('');
+      }
+    }
 
     document.getElementById("opponentSelect").addEventListener("change", e => {
       const opp = e.target.value;
