@@ -24,6 +24,8 @@ body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#eef1f5;co
 .stat-card{background:#f4f7fb;border-radius:18px;padding:24px;text-align:center;border:1px solid #dde3ea;}
 .stat-value{font-size:42px;font-weight:900;line-height:1;margin-bottom:10px;}
 .stat-label{font-size:15px;font-weight:700;color:#555;}
+.controls{margin-bottom:20px;}
+.controls select{padding:12px 16px;border-radius:10px;border:1px solid #ccc;font-size:15px;font-weight:700;background:white;min-width:220px;}
 table{width:100%;border-collapse:collapse;}
 th{background:#e8edf3;padding:16px;text-align:left;font-size:13px;font-weight:900;text-transform:uppercase;}
 td{padding:16px;border-bottom:1px solid #ececec;font-size:15px;font-weight:600;}
@@ -143,10 +145,17 @@ async function loadPlayer(){
     }
 
     const playerDisplayName = player.name;
-    const playerSeasons     = player.seasons || [];
-    const playerTeams       = player.teams   || [];
+    const playerTeams       = player.teams || [];
+    const seasonStats       = player.season_stats || [];
     const currentTeam       = playerTeams[playerTeams.length - 1] || "Unknown";
     const heroGradient      = TEAM_COLOURS[currentTeam] || 'linear-gradient(135deg,#111,#444)';
+
+    // Collect all opponents this player has scored against
+    const opponentSet = new Set();
+    seasonStats.forEach(s => {
+      Object.keys(s.goals_by_opponent || {}).forEach(opp => opponentSet.add(opp));
+    });
+    const opponents = [...opponentSet].sort();
 
     page.innerHTML = `
       <div class="hero" style="background:${heroGradient};">
@@ -169,7 +178,7 @@ async function loadPlayer(){
               <div class="stat-label">Club</div>
             </div>
             <div class="stat-card">
-              <div class="stat-value">${playerSeasons.length}</div>
+              <div class="stat-value">${seasonStats.length}</div>
               <div class="stat-label">Seasons</div>
             </div>
             <div class="stat-card">
@@ -193,7 +202,13 @@ async function loadPlayer(){
 
         <div class="section">
           <div class="section-title">Season by Season</div>
-          <div id="seasonTableContainer" class="loading">Loading season stats...</div>
+          <div class="controls">
+            <select id="opponentFilter">
+              <option value="">All Opponents</option>
+              ${opponents.map(o => `<option value="${o}">${o}</option>`).join('')}
+            </select>
+          </div>
+          <div id="seasonTableContainer"></div>
         </div>
 
       </div>
@@ -223,75 +238,55 @@ async function loadPlayer(){
       if(!e.target.closest(".search-wrap")) searchResults.style.display = "none";
     });
 
-    // Season by season stats
-    const seasonContainer = document.getElementById("seasonTableContainer");
+    // Render season table
+    function renderTable(){
+      const opponent = document.getElementById("opponentFilter").value;
+      const container = document.getElementById("seasonTableContainer");
 
-    const seasonStats = await Promise.all(playerSeasons.map(async (seasonId, i) => {
-      try{
-        const r = await fetch(`/data/epl/seasons/${seasonId}.json`);
-        if(!r.ok) return { seasonId, team: playerTeams[i] || currentTeam, goals: 0, penalties: 0, yellowCards: 0, redCards: 0 };
-        const data = await r.json();
-        const games = data.games || data;
-
-        let goals = 0, penalties = 0, yellowCards = 0, redCards = 0;
-
-        games.forEach(game => {
-          (game.scorers || []).forEach(s => {
-            if(slugify(s.player) === playerSlug){
-              if(!s.own_goal) goals++;
-              if(s.penalty)   penalties++;
-            }
-          });
-          (game.yellow_cards || []).forEach(s => {
-            if(slugify(s.player) === playerSlug) yellowCards++;
-          });
-          (game.red_cards || []).forEach(s => {
-            if(slugify(s.player) === playerSlug) redCards++;
-          });
-        });
-
-        return { seasonId, team: playerTeams[i] || currentTeam, goals, penalties, yellowCards, redCards };
-
-      }catch(err){
-        return { seasonId, team: playerTeams[i] || currentTeam, goals: 0, penalties: 0, yellowCards: 0, redCards: 0 };
+      if(!seasonStats.length){
+        container.innerHTML = '<p>No season data available.</p>';
+        return;
       }
-    }));
 
-    if(!seasonStats.length){
-      seasonContainer.innerHTML = '<p>No season data available.</p>';
-      return;
+      let html = `
+        <table>
+          <thead>
+            <tr>
+              <th>Season</th>
+              <th>Club</th>
+              <th>Goals${opponent ? ' vs ' + opponent : ''}</th>
+              <th>Penalties</th>
+              <th>Yellow Cards</th>
+              <th>Red Cards</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      // Show most recent season first
+      [...seasonStats].reverse().forEach(s => {
+        const goals = opponent
+          ? (s.goals_by_opponent || {})[opponent] || 0
+          : s.goals || 0;
+
+        html += `
+          <tr>
+            <td><a class="team-link" href="/epl-season.html?season=${encodeURIComponent(s.season)}">${s.season}</a></td>
+            <td><a class="team-link" href="/epl-team.html?team=${encodeURIComponent(s.team)}">${s.team}</a></td>
+            <td>${goals}</td>
+            <td>${opponent ? '-' : (s.penalties || 0)}</td>
+            <td>${opponent ? '-' : (s.yellow_cards || 0)}</td>
+            <td>${opponent ? '-' : (s.red_cards || 0)}</td>
+          </tr>
+        `;
+      });
+
+      html += `</tbody></table>`;
+      container.innerHTML = html;
     }
 
-    let tableHtml = `
-      <table>
-        <thead>
-          <tr>
-            <th>Season</th>
-            <th>Club</th>
-            <th>Goals</th>
-            <th>Penalties</th>
-            <th>Yellow Cards</th>
-            <th>Red Cards</th>
-          </tr>
-        </thead>
-        <tbody>
-    `;
-
-    seasonStats.forEach(s => {
-      tableHtml += `
-        <tr>
-          <td><a class="team-link" href="/epl-season.html?season=${encodeURIComponent(s.seasonId)}">${s.seasonId}</a></td>
-          <td><a class="team-link" href="/epl-team.html?team=${encodeURIComponent(s.team)}">${s.team}</a></td>
-          <td>${s.goals}</td>
-          <td>${s.penalties}</td>
-          <td>${s.yellowCards}</td>
-          <td>${s.redCards}</td>
-        </tr>
-      `;
-    });
-
-    tableHtml += `</tbody></table>`;
-    seasonContainer.innerHTML = tableHtml;
+    document.getElementById("opponentFilter").addEventListener("change", renderTable);
+    renderTable();
 
   }catch(err){
     console.error(err);
