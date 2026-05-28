@@ -41,18 +41,15 @@ tr:nth-child(even){background:#f8fbff;}
   .hero h1{font-size:36px;}
   .section-title{font-size:22px;}
   .stat-value{font-size:26px;}
+  .tables-grid{grid-template-columns:1fr;}
+  table{display:block;overflow-x:auto;}
   .games-table{display:block;width:100%;}
   .games-table thead{display:none;}
   .games-table tbody{display:block;width:100%;}
   .games-table tr{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:12px;border-bottom:2px solid #ddd;background:white !important;}
   .games-table tr:nth-child(even){background:#f8fbff !important;}
   .games-table td{display:block;border:none;padding:4px 8px;font-size:14px;}
-  .games-table td:nth-child(1):before{content:"Season: ";font-weight:900;color:#666;font-size:12px;display:block;}
-  .games-table td:nth-child(2):before{content:"Opponent: ";font-weight:900;color:#666;font-size:12px;display:block;}
-  .games-table td:nth-child(3):before{content:"Score: ";font-weight:900;color:#666;font-size:12px;display:block;}
   .games-table td:nth-child(4){font-size:22px;text-align:right;}
-  .tables-grid{grid-template-columns:1fr;}
-  table{display:block;overflow-x:auto;}
 }
 </style>
 </head>
@@ -137,13 +134,12 @@ function slugify(str){
 }
 
 const params   = new URLSearchParams(window.location.search);
-const rawTeam  = params.get("team") || "";
-const teamName = rawTeam; // team name passed directly in URL
+const teamName = params.get("team") || "";
 const page     = document.getElementById("page");
 
 async function loadTeam(){
   try{
-    // Load all data in parallel
+
     const [playersRes, teamStatsRes] = await Promise.all([
       fetch("/data/epl/players.json"),
       fetch("/data/epl/team-stats.json")
@@ -155,7 +151,6 @@ async function loadTeam(){
     const players      = await playersRes.json();
     const allTeamStats = await teamStatsRes.json();
 
-    // Get all seasons for this team from team-stats.json
     const teamSeasonStats = allTeamStats.filter(s => s.team === teamName);
 
     if(!teamSeasonStats.length){
@@ -163,7 +158,6 @@ async function loadTeam(){
       return;
     }
 
-    // Load season JSON files to get match results
     const seasonIds = [...new Set(teamSeasonStats.map(s => s.season))].sort();
 
     const seasonResults = await Promise.all(seasonIds.map(async seasonId => {
@@ -180,55 +174,32 @@ async function loadTeam(){
 
     const allGames = seasonResults.flat();
 
-    // Overall stats across all seasons
     const totals = teamSeasonStats.reduce((acc, s) => {
-      acc.played       += s.played       || 0;
-      acc.wins         += s.wins         || 0;
-      acc.draws        += s.draws        || 0;
-      acc.losses       += s.losses       || 0;
-      acc.goals_for    += s.goals_for    || 0;
-      acc.goals_against+= s.goals_against|| 0;
-      acc.yellow_cards += s.yellow_cards || 0;
-      acc.red_cards    += s.red_cards    || 0;
+      acc.played        += s.played        || 0;
+      acc.wins          += s.wins          || 0;
+      acc.draws         += s.draws         || 0;
+      acc.losses        += s.losses        || 0;
+      acc.goals_for     += s.goals_for     || 0;
+      acc.goals_against += s.goals_against || 0;
+      acc.yellow_cards  += s.yellow_cards  || 0;
+      acc.red_cards     += s.red_cards     || 0;
       return acc;
     }, { played:0, wins:0, draws:0, losses:0, goals_for:0, goals_against:0, yellow_cards:0, red_cards:0 });
 
-    // Top scorers for this team from players.json
     const teamPlayers = players
       .filter(p => p.teams && p.teams.includes(teamName))
       .map(p => {
-        const goals = (p.season_stats || [])
-          .filter(s => s.team === teamName)
-          .reduce((sum, s) => sum + (s.goals || 0), 0);
-        const yellows = (p.season_stats || [])
-          .filter(s => s.team === teamName)
-          .reduce((sum, s) => sum + (s.yellow_cards || 0), 0);
-        const reds = (p.season_stats || [])
-          .filter(s => s.team === teamName)
-          .reduce((sum, s) => sum + (s.red_cards || 0), 0);
-        return { name: p.name, goals, yellows, reds };
+        const goals   = (p.season_stats || []).filter(s => s.team === teamName).reduce((sum,s) => sum+(s.goals||0), 0);
+        const pens    = (p.season_stats || []).filter(s => s.team === teamName).reduce((sum,s) => sum+(s.penalties||0), 0);
+        const yellows = (p.season_stats || []).filter(s => s.team === teamName).reduce((sum,s) => sum+(s.yellow_cards||0), 0);
+        const reds    = (p.season_stats || []).filter(s => s.team === teamName).reduce((sum,s) => sum+(s.red_cards||0), 0);
+        return { name: p.name, goals, pens, yellows, reds };
       });
 
-    const topScorers  = [...teamPlayers].sort((a,b) => b.goals - a.goals).filter(p => p.goals > 0).slice(0, 10);
+    const topScorers = [...teamPlayers].sort((a,b) => b.goals - a.goals).filter(p => p.goals > 0).slice(0,10);
+    const topYellows = [...teamPlayers].sort((a,b) => b.yellows - a.yellows).filter(p => p.yellows > 0).slice(0,10);
+    const topReds    = [...teamPlayers].sort((a,b) => b.reds - a.reds).filter(p => p.reds > 0).slice(0,10);
 
-    // Build top scorers with penalty breakdown
-    const topScorersDetailed = [...teamPlayers]
-      .map(p => {
-        const goals = (p.season_stats || [])
-          .filter(s => s.team === teamName)
-          .reduce((sum, s) => sum + (s.goals || 0), 0);
-        const pens = (p.season_stats || [])
-          .filter(s => s.team === teamName)
-          .reduce((sum, s) => sum + (s.penalties || 0), 0);
-        return { name: p.name, goals, pens };
-      })
-      .filter(p => p.goals > 0)
-      .sort((a,b) => b.goals - a.goals)
-      .slice(0, 10);
-    const topYellows  = [...teamPlayers].sort((a,b) => b.yellows - a.yellows).filter(p => p.yellows > 0).slice(0, 10);
-    const topReds     = [...teamPlayers].sort((a,b) => b.reds - a.reds).filter(p => p.reds > 0).slice(0, 10);
-
-    // Opponents list
     const opponentSet = new Set();
     allGames.forEach(g => opponentSet.add(g.home === teamName ? g.away : g.home));
     const opponents = [...opponentSet].sort();
@@ -237,7 +208,6 @@ async function loadTeam(){
       const filtered = opponent
         ? allGames.filter(g => (g.home === teamName ? g.away : g.home) === opponent)
         : allGames;
-
       let wins=0, draws=0, losses=0, goals=0;
       filtered.forEach(g => {
         const tf = g.home === teamName ? Number(g.score_home||0) : Number(g.score_away||0);
@@ -247,16 +217,15 @@ async function loadTeam(){
         else if(tf < of) losses++;
         else draws++;
       });
-
       return { games: filtered.length, wins, draws, losses, goals, filtered };
     }
 
     function gameRows(games){
       if(!games.length) return `<tr><td colspan="4">No games found</td></tr>`;
-      return [...games].reverse().slice(0, 100).map(g => {
+      return [...games].reverse().slice(0,100).map(g => {
         const isHome = g.home === teamName;
-        const tf = isHome ? Number(g.score_home||0) : Number(g.score_away||0);
-        const of = isHome ? Number(g.score_away||0) : Number(g.score_home||0);
+        const tf  = isHome ? Number(g.score_home||0) : Number(g.score_away||0);
+        const of  = isHome ? Number(g.score_away||0) : Number(g.score_home||0);
         const opp = isHome ? g.away : g.home;
         const res = tf > of ? 'W' : tf < of ? 'L' : 'D';
         const cls = tf > of ? 'result-win' : tf < of ? 'result-loss' : 'result-draw';
@@ -278,7 +247,7 @@ async function loadTeam(){
         </tr>`).join('');
     }
 
-    const overall = buildGameStats(null);
+    const overall      = buildGameStats(null);
     const heroGradient = TEAM_COLOURS[teamName] || 'linear-gradient(135deg,#111,#555)';
 
     page.innerHTML = `
@@ -300,19 +269,34 @@ async function loadTeam(){
           <div class="stat-card"><div class="stat-value">${totals.red_cards}</div><div class="stat-label">Red Cards</div></div>
         </div>
 
-        <div class="section">
-          <div class="section-title">Top 10 Scorers</div>
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Player</th>
-                <th>Goals</th>
-                <th>Penalties</th>
-              </tr>
-            </thead>
-            <tbody id="topScorersBody"></tbody>
-          </table>
+        <div class="tables-grid">
+          <div class="section">
+            <div class="section-title">Top Scorers</div>
+            <table>
+              <thead><tr><th>Player</th><th>Goals</th><th>Penalties</th></tr></thead>
+              <tbody>${topScorers.map(p => `
+                <tr>
+                  <td><a class="player-link" href="/epl-player.html?player=${encodeURIComponent(slugify(p.name))}">${p.name}</a></td>
+                  <td>${p.goals}</td>
+                  <td>${p.pens}</td>
+                </tr>`).join('') || '<tr><td colspan="3">No data</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+          <div class="section">
+            <div class="section-title">Yellow Card Leaders</div>
+            <table>
+              <thead><tr><th>Player</th><th>Yellow</th></tr></thead>
+              <tbody>${playerRows(topYellows, 'yellows')}</tbody>
+            </table>
+          </div>
+          <div class="section">
+            <div class="section-title">Red Card Leaders</div>
+            <table>
+              <thead><tr><th>Player</th><th>Red</th></tr></thead>
+              <tbody>${playerRows(topReds, 'reds')}</tbody>
+            </table>
+          </div>
         </div>
 
         <div class="section">
@@ -336,58 +320,18 @@ async function loadTeam(){
           </table>
         </div>
 
-        <div class="tables-grid">
-          <div class="section">
-            <div class="section-title">Top Scorers</div>
-            <table>
-              <thead><tr><th>Player</th><th>Goals</th></tr></thead>
-              <tbody>${playerRows(topScorers, 'goals')}</tbody>
-            </table>
-          </div>
-          <div class="section">
-            <div class="section-title">Yellow Card Leaders</div>
-            <table>
-              <thead><tr><th>Player</th><th>Yellow</th></tr></thead>
-              <tbody>${playerRows(topYellows, 'yellows')}</tbody>
-            </table>
-          </div>
-          <div class="section">
-            <div class="section-title">Red Card Leaders</div>
-            <table>
-              <thead><tr><th>Player</th><th>Red</th></tr></thead>
-              <tbody>${playerRows(topReds, 'reds')}</tbody>
-            </table>
-          </div>
-        </div>
-
       </div>
     `;
 
-    // Populate top scorers table
-    const topScorersBody = document.getElementById("topScorersBody");
-    if(topScorersBody){
-      if(!topScorersDetailed.length){
-        topScorersBody.innerHTML = `<tr><td colspan="4">No data available</td></tr>`;
-      } else {
-        topScorersBody.innerHTML = topScorersDetailed.map((p, i) => `
-          <tr>
-            <td>${i + 1}</td>
-            <td><a class="player-link" href="/epl-player.html?player=${encodeURIComponent(slugify(p.name))}">${p.name}</a></td>
-            <td>${p.goals}</td>
-            <td>${p.pens}</td>
-          </tr>`).join('');
-      }
-    }
-
     document.getElementById("opponentSelect").addEventListener("change", e => {
-      const opp = e.target.value;
+      const opp   = e.target.value;
       const stats = buildGameStats(opp || null);
-      document.getElementById("oGames").textContent   = stats.games;
-      document.getElementById("oWins").textContent    = stats.wins;
-      document.getElementById("oDraws").textContent   = stats.draws;
-      document.getElementById("oLosses").textContent  = stats.losses;
-      document.getElementById("oGoals").textContent   = stats.goals;
-      document.getElementById("gamesBody").innerHTML  = gameRows(stats.filtered);
+      document.getElementById("oGames").textContent  = stats.games;
+      document.getElementById("oWins").textContent   = stats.wins;
+      document.getElementById("oDraws").textContent  = stats.draws;
+      document.getElementById("oLosses").textContent = stats.losses;
+      document.getElementById("oGoals").textContent  = stats.goals;
+      document.getElementById("gamesBody").innerHTML = gameRows(stats.filtered);
     });
 
   }catch(err){
