@@ -1,0 +1,57 @@
+name: Basketball NBA Full Scraper
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "Start season"
+        required: true
+        default: "1976"
+      end:
+        description: "End season"
+        required: true
+        default: "2025"
+      overwrite:
+        description: "Overwrite existing boxscore files? true/false"
+        required: true
+        default: "false"
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install packages
+        run: |
+          pip install requests beautifulsoup4 lxml boto3
+
+      - name: Run scraper
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          if [ "${{ github.event.inputs.overwrite }}" = "true" ]; then
+            python scripts/nba_full_rebuild.py \
+              --start "${{ github.event.inputs.start }}" \
+              --end "${{ github.event.inputs.end }}" \
+              --overwrite
+          else
+            python scripts/nba_full_rebuild.py \
+              --start "${{ github.event.inputs.start }}" \
+              --end "${{ github.event.inputs.end }}"
+          fi
+
+      - name: Commit schedules
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/data/basketball/schedules
+          git commit -m "Update NBA schedules ${{ github.event.inputs.start }}-${{ github.event.inputs.end }}" || echo "No changes"
+          git pull --rebase origin main || echo "Nothing to pull"
+          git push
