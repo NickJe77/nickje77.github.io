@@ -304,9 +304,9 @@ function playerSlug(p){
     return firstTeam ? `${name}--${firstTeam}` : name;
 }
 
-const params     = new URLSearchParams(window.location.search);
-const slugParam  = params.get("player") || '';
-const page       = document.getElementById("page");
+const params    = new URLSearchParams(window.location.search);
+const slugParam = params.get("player") || '';
+const page      = document.getElementById("page");
 
 async function loadPlayer(){
 
@@ -318,7 +318,16 @@ async function loadPlayer(){
         if(!res.ok) throw new Error(`players.json returned ${res.status}`);
         const players = await res.json();
 
-        const player = players.find(p => playerSlug(p) === slugParam);
+        // Try exact slug match first (name--team), then fall back to name only
+        let player = players.find(p => playerSlug(p) === slugParam);
+        if(!player){
+            player = players.find(p => slugify(p.name) === slugParam);
+        }
+        // If still not found, try matching just the name part before --
+        if(!player){
+            const namePart = slugParam.split('--')[0];
+            player = players.find(p => slugify(p.name) === namePart);
+        }
 
         if(!player){
             page.innerHTML = `<div class="error">Player Not Found</div>`;
