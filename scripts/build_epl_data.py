@@ -21,9 +21,6 @@ REPO_ROOT   = Path(__file__).parent.parent
 MATCHES_DIR = REPO_ROOT / "docs" / "data" / "epl" / "matches"
 OUT_DIR     = REPO_ROOT / "docs" / "data" / "epl"
 
-# Max season gap before treating same-name player as a different person
-MAX_SEASON_GAP = 3
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -41,13 +38,6 @@ def season_from_path(file_path: Path) -> str:
         return parts[idx + 1]
     except (ValueError, IndexError):
         return "unknown"
-
-
-def season_start_year(season: str) -> int:
-    try:
-        return int(season.split("-")[0])
-    except (ValueError, IndexError):
-        return 0
 
 
 def write_json(file_path: Path, data):
@@ -96,36 +86,40 @@ def get_or_create_team_stats(team_stats_map, team, season):
     return team_stats_map[key]
 
 
-def find_player_key(players_map, name, team, season):
+def find_player_key(players_map, name, team):
     """
-    Find the right player entry for this name+team+season combination.
-    If a player with this name exists but has a large season gap, create a new entry.
+    Find the right player entry using name + team.
+    - If we've seen this exact name+team combo before, return that key.
+    - If we've seen this name with a different team, check if that player
+      already has this team in their teams list (i.e. they moved clubs).
+      If so, use that key.
+    - Otherwise create a new key for this name+team combo.
     """
-    season_year = season_start_year(season)
-
     # Collect all existing entries for this name
     matching_keys = [k for k in players_map if k == name or k.startswith(f"{name}|")]
 
     if not matching_keys:
-        return name
+        # First time we see this name — use name|team as key
+        return f"{name}|{team}" if team else name
 
-    # Check each existing entry to see if this season fits
+    # Check if any existing entry already has this team
     for key in matching_keys:
         p = players_map[key]
-        if not p["seasons"]:
+        if team in p["teams"]:
             return key
 
-        existing_years = [season_start_year(s) for s in p["seasons"]]
-        min_year = min(existing_years)
-        max_year = max(existing_years)
+    # Check if there's only one entry and it has no team yet
+    if len(matching_keys) == 1:
+        p = players_map[matching_keys[0]]
+        if not p["teams"]:
+            return matching_keys[0]
 
-        # If this season is within MAX_SEASON_GAP of the existing range, it's the same player
-        if (season_year >= min_year - MAX_SEASON_GAP and
-                season_year <= max_year + MAX_SEASON_GAP):
-            return key
+    # This name+team combo hasn't been seen before
+    # It could be the same player at a new club, or a different player
+    # Use name|team as a new unique key
+    new_key = f"{name}|{team}" if team else name
 
-    # No existing entry fits — create a new disambiguated key
-    new_key = f"{name}|{team}" if team else f"{name}|{season_year}"
+    # If that key already exists (shouldn't normally happen), make it unique
     counter = 2
     base_key = new_key
     while new_key in players_map:
@@ -135,11 +129,19 @@ def find_player_key(players_map, name, team, season):
     return new_key
 
 
+# Track which player key a name+team maps to so cards can find the right player
+# even when card events don't always have team info
+name_team_to_key = {}
+
+
 def get_or_create_player(players_map, name, team, season):
-    key = find_player_key(players_map, name, team, season)
+    key = find_player_key(players_map, name, team)
     if key not in players_map:
         players_map[key] = make_player(name)
-    return players_map[key]
+    # Cache this name+team -> key mapping
+    if team:
+        name_team_to_key[(name, team)] = key
+    return players_map[key], key
 
 
 def get_or_create_player_season(player, season, team):
@@ -229,7 +231,7 @@ def main():
                 s["yellow_cards"] += 1
 
             if name:
-                p = get_or_create_player(players_map, name, team, season)
+                p, key = get_or_create_player(players_map, name, team, season)
                 add_team_if_missing(p, team)
                 add_season_if_missing(p, season)
                 p["yellow_cards"] += 1
@@ -246,7 +248,7 @@ def main():
                 s["red_cards"] += 1
 
             if name:
-                p = get_or_create_player(players_map, name, team, season)
+                p, key = get_or_create_player(players_map, name, team, season)
                 add_team_if_missing(p, team)
                 add_season_if_missing(p, season)
                 p["red_cards"] += 1
@@ -267,7 +269,7 @@ def main():
             else:
                 opponent = ""
 
-            p = get_or_create_player(players_map, name, team, season)
+            p, key = get_or_create_player(players_map, name, team, season)
             add_team_if_missing(p, team)
             add_season_if_missing(p, season)
             ps = get_or_create_player_season(p, season, team)
