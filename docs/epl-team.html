@@ -133,6 +133,12 @@ function slugify(str){
     .replace(/^-|-$/g,"");
 }
 
+function playerSlug(p){
+  const name      = slugify(p.name || '');
+  const firstTeam = slugify((p.teams && p.teams[0]) || '');
+  return firstTeam ? `${name}--${firstTeam}` : name;
+}
+
 const params   = new URLSearchParams(window.location.search);
 const teamName = params.get("team") || "";
 const page     = document.getElementById("page");
@@ -193,7 +199,7 @@ async function loadTeam(){
         const pens    = (p.season_stats || []).filter(s => s.team === teamName).reduce((sum,s) => sum+(s.penalties||0), 0);
         const yellows = (p.season_stats || []).filter(s => s.team === teamName).reduce((sum,s) => sum+(s.yellow_cards||0), 0);
         const reds    = (p.season_stats || []).filter(s => s.team === teamName).reduce((sum,s) => sum+(s.red_cards||0), 0);
-        return { name: p.name, goals, pens, yellows, reds };
+        return { name: p.name, teams: p.teams, goals, pens, yellows, reds };
       });
 
     const topScorers = [...teamPlayers].sort((a,b) => b.goals - a.goals).filter(p => p.goals > 0).slice(0,10);
@@ -242,7 +248,7 @@ async function loadTeam(){
       if(!list.length) return `<tr><td colspan="2">No data</td></tr>`;
       return list.map(p => `
         <tr>
-          <td><a class="player-link" href="/epl-player.html?player=${encodeURIComponent(slugify(p.name))}">${p.name}</a></td>
+          <td><a class="player-link" href="/epl-player.html?player=${encodeURIComponent(playerSlug(p))}">${p.name}</a></td>
           <td>${p[valueKey]}</td>
         </tr>`).join('');
     }
@@ -276,7 +282,7 @@ async function loadTeam(){
               <thead><tr><th>Player</th><th>Goals</th><th>Penalties</th></tr></thead>
               <tbody>${topScorers.map(p => `
                 <tr>
-                  <td><a class="player-link" href="/epl-player.html?player=${encodeURIComponent(slugify(p.name))}">${p.name}</a></td>
+                  <td><a class="player-link" href="/epl-player.html?player=${encodeURIComponent(playerSlug(p))}">${p.name}</a></td>
                   <td>${p.goals}</td>
                   <td>${p.pens}</td>
                 </tr>`).join('') || '<tr><td colspan="3">No data</td></tr>'}
