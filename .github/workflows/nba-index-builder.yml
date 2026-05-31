@@ -25,7 +25,7 @@ jobs:
       - name: Install packages
         run: pip install boto3
 
-      - name: Build season indexes
+      - name: Build season and player indexes
         env:
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -35,6 +35,7 @@ jobs:
           import boto3
           import json
           import os
+          from collections import defaultdict
           from botocore.config import Config
 
           r2 = boto3.client(
@@ -50,27 +51,35 @@ jobs:
           start  = int("${{ github.event.inputs.start }}")
           end    = int("${{ github.event.inputs.end }}")
 
+          # player_id -> { name, player_id, games: [...] }
+          players = defaultdict(lambda: {"name": "", "player_id": "", "games": []})
+
           for season in range(start, end + 1):
-              print(f"Building index for {season}...")
+              print(f"Processing season {season}...")
               prefix = f"basketball/boxscores/{season}/"
 
               paginator = r2.get_paginator("list_objects_v2")
               pages = paginator.paginate(Bucket=BUCKET, Prefix=prefix)
 
-              games = []
+              season_games = []
+
               for page in pages:
                   for obj in page.get("Contents", []):
                       key = obj["Key"]
                       try:
                           data = json.loads(r2.get_object(Bucket=BUCKET, Key=key)["Body"].read())
 
-                          # linescore keys are team abbreviations e.g. NOJ, ATL
-                          # game_id ends with home team abbr e.g. 197510230ATL
-                          linescore  = data.get("linescore", {})
-                          game_id    = data.get("game_id", "")
+                          game_id   = data.get("game_id", "")
+                          date      = data.get("date", "")
+                          home_team = data.get("home", "")
+                          away_team = data.get("away", "")
+                          arena     = data.get("arena", "")
+                          linescore = data.get("linescore", {})
+                          teams     = data.get("teams", {})
+
+                          # Get scores using game_id ending with home abbr
                           home_score = None
                           away_score = None
-
                           for abbr, quarters in linescore.items():
                               try:
                                   score = int(quarters.get("T", 0))
@@ -81,28 +90,93 @@ jobs:
                               else:
                                   away_score = score
 
-                          games.append({
+                          season_games.append({
                               "game_id":    game_id,
-                              "date":       data.get("date", ""),
-                              "away":       data.get("away", ""),
-                              "home":       data.get("home", ""),
+                              "date":       date,
+                              "away":       away_team,
+                              "home":       home_team,
                               "away_score": away_score,
                               "home_score": home_score,
-                              "arena":      data.get("arena", ""),
+                              "arena":      arena,
                           })
+
+                          # Build player game entries
+                          abbrs = list(teams.keys())
+                          for abbr, team_players in teams.items():
+                              # Determine which team this abbr is
+                              if game_id.endswith(abbr):
+                                  team_name = home_team
+                                  opp_name  = away_team
+                              else:
+                                  team_name = away_team
+                                  opp_name  = home_team
+
+                              for p in team_players:
+                                  if p.get("dnp") or not p.get("player_id"):
+                                      continue
+
+                                  pid  = p["player_id"]
+                                  name = p.get("player", "")
+
+                                  players[pid]["name"]      = name
+                                  players[pid]["player_id"] = pid
+
+                                  players[pid]["games"].append({
+                                      "season":     season,
+                                      "game_id":    game_id,
+                                      "date":       date,
+                                      "team":       team_name,
+                                      "opp":        opp_name,
+                                      "home_score": home_score,
+                                      "away_score": away_score,
+                                      "mp":         p.get("mp"),
+                                      "pts":        p.get("pts"),
+                                      "reb":        p.get("trb"),
+                                      "ast":        p.get("ast"),
+                                      "stl":        p.get("stl"),
+                                      "blk":        p.get("blk"),
+                                      "tov":        p.get("tov"),
+                                      "fg":         p.get("fg"),
+                                      "fga":        p.get("fga"),
+                                      "fg_pct":     p.get("fg_pct"),
+                                      "fg3":        p.get("fg3"),
+                                      "fg3a":       p.get("fg3a"),
+                                      "fg3_pct":    p.get("fg3_pct"),
+                                      "ft":         p.get("ft"),
+                                      "fta":        p.get("fta"),
+                                      "ft_pct":     p.get("ft_pct"),
+                                      "orb":        p.get("orb"),
+                                      "drb":        p.get("drb"),
+                                      "pf":         p.get("pf"),
+                                      "plus_minus": p.get("plus_minus"),
+                                  })
+
                       except Exception as e:
                           print(f"  Error reading {key}: {e}")
 
-              games.sort(key=lambda g: g["date"])
-
+              # Sort season games by date and upload season index
+              season_games.sort(key=lambda g: g["date"])
               index_key = f"basketball/indexes/{season}.json"
               r2.put_object(
                   Bucket=BUCKET,
                   Key=index_key,
-                  Body=json.dumps(games, indent=2).encode("utf-8"),
+                  Body=json.dumps(season_games, indent=2).encode("utf-8"),
                   ContentType="application/json",
               )
-              print(f"  Season {season}: {len(games)} games indexed")
+              print(f"  Season {season}: {len(season_games)} games indexed")
 
-          print("Done!")
+          # Upload player files
+          print(f"\nUploading {len(players)} player files...")
+          for pid, player in players.items():
+              # Sort games by date
+              player["games"].sort(key=lambda g: g["date"])
+              player_key = f"basketball/players/{pid}.json"
+              r2.put_object(
+                  Bucket=BUCKET,
+                  Key=player_key,
+                  Body=json.dumps(player, indent=2).encode("utf-8"),
+                  ContentType="application/json",
+              )
+
+          print(f"Done! {len(players)} players uploaded.")
           PYEOF
