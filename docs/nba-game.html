@@ -66,7 +66,7 @@ const STAT_LABELS = {
   mp:         "MIN",
   pts:        "PTS",
   ast:        "AST",
-  trb:        "REB",
+  reb:        "REB",
   stl:        "STL",
   blk:        "BLK",
   tov:        "TOV",
@@ -87,14 +87,6 @@ const STAT_LABELS = {
 
 const STAT_KEYS = Object.keys(STAT_LABELS);
 
-function slugify(str){
-  return (str || '')
-    .toLowerCase()
-    .replace(/\./g,'')
-    .replace(/'/g,'')
-    .replace(/\s+/g,'-');
-}
-
 async function loadGame(){
   try{
     const res = await fetch(`${R2}/basketball/boxscores/${season}/${gameId}.json`);
@@ -114,26 +106,22 @@ function renderGame(data){
   const homeTeam  = data.home      || "";
   const awayTeam  = data.away      || "";
   const teams     = data.teams     || {};
+  const abbrs     = Object.keys(linescore);
 
-  // Match scores using game_id ending with home team abbreviation
   let homeScore = "–";
   let awayScore = "–";
-  const abbrs   = Object.keys(linescore);
-
   abbrs.forEach(abbr => {
-    const quarters = linescore[abbr];
-    const total    = quarters.T || "–";
-    if(gameId.endsWith(abbr)){
-      homeScore = total;
-    } else {
-      awayScore = total;
-    }
+    const total = linescore[abbr].T || "–";
+    if(gameId.endsWith(abbr)) homeScore = total;
+    else awayScore = total;
   });
 
-  // Get quarters for linescore table
   const quarters = abbrs.length > 0
     ? Object.keys(linescore[abbrs[0]]).filter(k => k !== "T")
     : [];
+
+  const homeAbbr = abbrs.find(a =>  gameId.endsWith(a));
+  const awayAbbr = abbrs.find(a => !gameId.endsWith(a));
 
   document.title = `${awayTeam} @ ${homeTeam} | NBA`;
 
@@ -143,8 +131,7 @@ function renderGame(data){
     <div class="meta">${data.date || ""}${data.arena ? " • " + data.arena : ""}</div>
   `;
 
-  // Linescore table
-  let linescoreHtml = `
+  const linescoreHtml = `
     <table class="linescore">
       <thead>
         <tr>
@@ -156,28 +143,21 @@ function renderGame(data){
       <tbody>
         <tr>
           <td class="team-name">${awayTeam}</td>
-          ${quarters.map(q => {
-            const abbr = abbrs.find(a => !gameId.endsWith(a));
-            return `<td>${abbr ? (linescore[abbr][q] || "–") : "–"}</td>`;
-          }).join("")}
+          ${quarters.map(q => `<td>${awayAbbr ? (linescore[awayAbbr][q] || "–") : "–"}</td>`).join("")}
           <td class="total">${awayScore}</td>
         </tr>
         <tr>
           <td class="team-name">${homeTeam}</td>
-          ${quarters.map(q => {
-            const abbr = abbrs.find(a => gameId.endsWith(a));
-            return `<td>${abbr ? (linescore[abbr][q] || "–") : "–"}</td>`;
-          }).join("")}
+          ${quarters.map(q => `<td>${homeAbbr ? (linescore[homeAbbr][q] || "–") : "–"}</td>`).join("")}
           <td class="total">${homeScore}</td>
         </tr>
       </tbody>
     </table>
   `;
 
-  // Player tables — away team first then home team
   const teamOrder = [
-    { name: awayTeam, abbr: abbrs.find(a => !gameId.endsWith(a)) },
-    { name: homeTeam, abbr: abbrs.find(a =>  gameId.endsWith(a)) },
+    { name: awayTeam, abbr: awayAbbr },
+    { name: homeTeam, abbr: homeAbbr },
   ];
 
   const teamTables = teamOrder.map(({ name, abbr }) => {
@@ -188,11 +168,14 @@ function renderGame(data){
     const rows = active.map(p => `
       <tr>
         <td class="player-name">
-          <a class="player-link" href="/nba-player.html?player=${encodeURIComponent(slugify(p.player))}&id=${encodeURIComponent(p.player_id || '')}">
+          <a class="player-link" href="/nba-player.html?id=${encodeURIComponent(p.player_id || '')}">
             ${p.player || ""}
           </a>
         </td>
-        ${STAT_KEYS.map(k => `<td>${p[k] != null ? p[k] : "–"}</td>`).join("")}
+        ${STAT_KEYS.map(k => {
+          const val = k === "reb" ? p["trb"] : p[k];
+          return `<td>${val != null ? val : "–"}</td>`;
+        }).join("")}
       </tr>
     `).join("");
 
@@ -213,10 +196,7 @@ function renderGame(data){
               ${STAT_KEYS.map(k => `<th>${STAT_LABELS[k]}</th>`).join("")}
             </tr>
           </thead>
-          <tbody>
-            ${rows}
-            ${dnpRows}
-          </tbody>
+          <tbody>${rows}${dnpRows}</tbody>
         </table>
       </div>
     `;
