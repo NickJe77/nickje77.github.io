@@ -54,7 +54,6 @@ jobs:
               print(f"Building index for {season}...")
               prefix = f"basketball/boxscores/{season}/"
 
-              # List all boxscore files for this season
               paginator = r2.get_paginator("list_objects_v2")
               pages = paginator.paginate(Bucket=BUCKET, Prefix=prefix)
 
@@ -64,24 +63,26 @@ jobs:
                       key = obj["Key"]
                       try:
                           data = json.loads(r2.get_object(Bucket=BUCKET, Key=key)["Body"].read())
-                          
-                          # Get scores from linescore
+
+                          # linescore keys are team abbreviations e.g. NOJ, ATL
+                          # game_id ends with home team abbr e.g. 197510230ATL
+                          linescore  = data.get("linescore", {})
+                          game_id    = data.get("game_id", "")
                           home_score = None
                           away_score = None
-                          linescore  = data.get("linescore", {})
-                          if linescore:
-                              teams = list(linescore.keys())
-                              if len(teams) >= 2:
-                                  home_data = linescore.get(data.get("home", ""), {})
-                                  away_data = linescore.get(data.get("away", ""), {})
-                                  try:
-                                      home_score = int(home_data.get("T", 0))
-                                      away_score = int(away_data.get("T", 0))
-                                  except (ValueError, TypeError):
-                                      pass
+
+                          for abbr, quarters in linescore.items():
+                              try:
+                                  score = int(quarters.get("T", 0))
+                              except (ValueError, TypeError):
+                                  score = None
+                              if game_id.endswith(abbr):
+                                  home_score = score
+                              else:
+                                  away_score = score
 
                           games.append({
-                              "game_id":    data.get("game_id", ""),
+                              "game_id":    game_id,
                               "date":       data.get("date", ""),
                               "away":       data.get("away", ""),
                               "home":       data.get("home", ""),
@@ -92,10 +93,8 @@ jobs:
                       except Exception as e:
                           print(f"  Error reading {key}: {e}")
 
-              # Sort by date
               games.sort(key=lambda g: g["date"])
 
-              # Upload index to R2
               index_key = f"basketball/indexes/{season}.json"
               r2.put_object(
                   Bucket=BUCKET,
