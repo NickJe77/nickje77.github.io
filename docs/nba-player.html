@@ -9,16 +9,22 @@
 body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#f4f6f8;color:#111;}
 .navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;background:#fff;font-weight:600;}
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-.hero{background:linear-gradient(90deg,#1D428A,#C8102E);color:white;padding:40px 20px;text-align:center;}
+.hero{padding:40px 20px;text-align:center;color:white;}
 .hero h1{margin:0;font-size:48px;font-weight:900;}
 .hero p{margin:8px 0 0;font-size:16px;opacity:.9;}
+.search-wrap{max-width:400px;margin:20px auto 0;position:relative;}
+.search-input{width:100%;padding:14px 16px;border-radius:12px;border:none;font-size:16px;font-weight:600;box-sizing:border-box;outline:none;}
+.search-results{position:absolute;top:100%;left:0;right:0;background:white;border-radius:0 0 12px 12px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:999;display:none;max-height:300px;overflow-y:auto;}
+.search-item{padding:12px 16px;cursor:pointer;font-weight:700;color:#111;border-bottom:1px solid #eee;}
+.search-item:hover{background:#f3f6fb;}
+.search-item small{color:#666;font-weight:500;margin-left:8px;}
 .page-wrap{max-width:1200px;margin:30px auto;padding:0 20px 60px;}
 .section-card{background:#fff;border-radius:14px;padding:24px;box-shadow:0 4px 12px rgba(0,0,0,.05);margin-bottom:24px;}
 .section-title{font-size:13px;font-weight:800;letter-spacing:1px;color:#666;margin-bottom:16px;text-transform:uppercase;}
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:14px;}
 .stat-box{background:#eef3ff;border-radius:14px;padding:16px;text-align:center;}
 .stat-box span{display:block;font-size:28px;font-weight:800;line-height:1;margin-bottom:6px;color:#0b3ea9;}
-.stat-box small{color:#666;font-size:12px;display:block;margin-top:4px;}
+.stat-box small{color:#666;font-size:11px;display:block;margin-top:4px;}
 .filters-bar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:18px;}
 .filter-group{display:flex;align-items:center;gap:8px;font-weight:700;color:#003a99;}
 select{padding:10px 12px;border-radius:10px;border:1px solid #ccc;font-size:14px;background:#fff;}
@@ -45,7 +51,7 @@ tbody tr:hover{background:#eaf2ff;cursor:pointer;}
   <a href="/nba.html">NBA</a>
 </div>
 
-<div id="hero" class="hero">
+<div id="hero" class="hero" style="background:linear-gradient(90deg,#1D428A,#C8102E);">
   <div class="loading">Loading player...</div>
 </div>
 
@@ -112,160 +118,208 @@ tbody tr:hover{background:#eaf2ff;cursor:pointer;}
 <script>
 const R2 = "https://pub-68c8b4322a9d4d7f9b875047b45ac7c6.r2.dev";
 
+const TEAM_COLOURS = {
+  "Atlanta Hawks":             "linear-gradient(90deg,#E03A3E,#C1D32F)",
+  "Boston Celtics":            "linear-gradient(90deg,#007A33,#BA9653)",
+  "Brooklyn Nets":             "linear-gradient(90deg,#000000,#777777)",
+  "Charlotte Hornets":         "linear-gradient(90deg,#1D1160,#00788C)",
+  "Chicago Bulls":             "linear-gradient(90deg,#CE1141,#000000)",
+  "Cleveland Cavaliers":       "linear-gradient(90deg,#860038,#FDBB30)",
+  "Dallas Mavericks":          "linear-gradient(90deg,#00538C,#002B5E)",
+  "Denver Nuggets":            "linear-gradient(90deg,#0E2240,#FEC524)",
+  "Detroit Pistons":           "linear-gradient(90deg,#C8102E,#1D42BA)",
+  "Golden State Warriors":     "linear-gradient(90deg,#1D428A,#FFC72C)",
+  "Houston Rockets":           "linear-gradient(90deg,#CE1141,#000000)",
+  "Indiana Pacers":            "linear-gradient(90deg,#002D62,#FDBB30)",
+  "LA Clippers":               "linear-gradient(90deg,#C8102E,#1D428A)",
+  "Los Angeles Clippers":      "linear-gradient(90deg,#C8102E,#1D428A)",
+  "Los Angeles Lakers":        "linear-gradient(90deg,#552583,#FDB927)",
+  "Memphis Grizzlies":         "linear-gradient(90deg,#5D76A9,#12173F)",
+  "Miami Heat":                "linear-gradient(90deg,#98002E,#F9A01B)",
+  "Milwaukee Bucks":           "linear-gradient(90deg,#00471B,#EEE1C6)",
+  "Minnesota Timberwolves":    "linear-gradient(90deg,#0C2340,#236192)",
+  "New Jersey Nets":           "linear-gradient(90deg,#000000,#777777)",
+  "New Orleans Hornets":       "linear-gradient(90deg,#002B5C,#F9A01B)",
+  "New Orleans Jazz":          "linear-gradient(90deg,#002B5C,#F9A01B)",
+  "New Orleans Pelicans":      "linear-gradient(90deg,#0C2340,#C8102E)",
+  "New York Knicks":           "linear-gradient(90deg,#006BB6,#F58426)",
+  "Oklahoma City Thunder":     "linear-gradient(90deg,#007AC1,#EF3B24)",
+  "Orlando Magic":             "linear-gradient(90deg,#0077C0,#C4CED4)",
+  "Philadelphia 76ers":        "linear-gradient(90deg,#006BB6,#ED174C)",
+  "Phoenix Suns":              "linear-gradient(90deg,#1D1160,#E56020)",
+  "Portland Trail Blazers":    "linear-gradient(90deg,#E03A3E,#000000)",
+  "Sacramento Kings":          "linear-gradient(90deg,#5A2D81,#63727A)",
+  "San Antonio Spurs":         "linear-gradient(90deg,#000000,#C4CED4)",
+  "Seattle SuperSonics":       "linear-gradient(90deg,#00653A,#FFC200)",
+  "Toronto Raptors":           "linear-gradient(90deg,#CE1141,#000000)",
+  "Utah Jazz":                 "linear-gradient(90deg,#002B5C,#F9A01B)",
+  "Vancouver Grizzlies":       "linear-gradient(90deg,#29727C,#E43C40)",
+  "Washington Bullets":        "linear-gradient(90deg,#002B5C,#E31837)",
+  "Washington Wizards":        "linear-gradient(90deg,#002B5C,#E31837)",
+};
+
 const params   = new URLSearchParams(location.search);
 const playerId = params.get("id");
 
-const heroEl      = document.getElementById("hero");
-const pageWrap    = document.getElementById("page-wrap");
-const teamFilter  = document.getElementById("teamFilter");
-const oppFilter   = document.getElementById("oppFilter");
-const gamesBody   = document.getElementById("gamesBody");
+const heroEl     = document.getElementById("hero");
+const pageWrap   = document.getElementById("page-wrap");
+const teamFilter = document.getElementById("teamFilter");
+const oppFilter  = document.getElementById("oppFilter");
+const gamesBody  = document.getElementById("gamesBody");
 
-let allGames = [];
+let allGames    = [];
+let playerIndex = [];
 
 function n(v){ return v != null ? v : "–"; }
 function num(v){ return v != null ? Number(v) : 0; }
 
 function calcStats(games){
-  let pts=0, reb=0, ast=0, stl=0, blk=0, tov=0;
-  let hPts=0, hReb=0, hAst=0, hStl=0, hBlk=0;
-  let hPtsGame="", hRebGame="", hAstGame="", hStlGame="", hBlkGame="";
-  let triples=0;
-
+  let pts=0,reb=0,ast=0,stl=0,blk=0,tov=0,triples=0;
+  let hPts=0,hReb=0,hAst=0,hStl=0,hBlk=0;
+  let hPtsGame="",hRebGame="",hAstGame="",hStlGame="",hBlkGame="";
   games.forEach(g => {
-    const p = num(g.pts), r = num(g.reb), a = num(g.ast),
-          s = num(g.stl), b = num(g.blk), t = num(g.tov);
-    pts+=p; reb+=r; ast+=a; stl+=s; blk+=b; tov+=t;
-    if(p>hPts){hPts=p; hPtsGame=`vs ${g.opp} (${g.date})`;}
-    if(r>hReb){hReb=r; hRebGame=`vs ${g.opp} (${g.date})`;}
-    if(a>hAst){hAst=a; hAstGame=`vs ${g.opp} (${g.date})`;}
-    if(s>hStl){hStl=s; hStlGame=`vs ${g.opp} (${g.date})`;}
-    if(b>hBlk){hBlk=b; hBlkGame=`vs ${g.opp} (${g.date})`;}
+    const p=num(g.pts),r=num(g.reb),a=num(g.ast),s=num(g.stl),b=num(g.blk),t=num(g.tov);
+    pts+=p;reb+=r;ast+=a;stl+=s;blk+=b;tov+=t;
+    if(p>hPts){hPts=p;hPtsGame=`vs ${g.opp} (${g.date})`;}
+    if(r>hReb){hReb=r;hRebGame=`vs ${g.opp} (${g.date})`;}
+    if(a>hAst){hAst=a;hAstGame=`vs ${g.opp} (${g.date})`;}
+    if(s>hStl){hStl=s;hStlGame=`vs ${g.opp} (${g.date})`;}
+    if(b>hBlk){hBlk=b;hBlkGame=`vs ${g.opp} (${g.date})`;}
     let cats=0;
-    if(p>=10)cats++; if(r>=10)cats++; if(a>=10)cats++;
-    if(cats>=3) triples++;
+    if(p>=10)cats++;if(r>=10)cats++;if(a>=10)cats++;
+    if(cats>=3)triples++;
   });
-
-  return { games: games.length, pts, reb, ast, stl, blk, tov, triples,
-           hPts, hReb, hAst, hStl, hBlk,
-           hPtsGame, hRebGame, hAstGame, hStlGame, hBlkGame };
+  return {games:games.length,pts,reb,ast,stl,blk,tov,triples,
+          hPts,hReb,hAst,hStl,hBlk,hPtsGame,hRebGame,hAstGame,hStlGame,hBlkGame};
 }
 
-function statBox(val, label, note=""){
-  return `<div class="stat-box"><span>${val}</span>${label}${note ? `<small>${note}</small>` : ""}</div>`;
+function statBox(val,label,note=""){
+  return `<div class="stat-box"><span>${val}</span>${label}${note?`<small>${note}</small>`:""}</div>`;
 }
 
-function renderStats(stats, totalsId, avgsId, highsId){
-  const g = stats.games || 1;
-  document.getElementById(totalsId).innerHTML =
-    statBox(stats.games,"Games") +
-    statBox(stats.pts,"PTS") +
-    statBox(stats.reb,"REB") +
-    statBox(stats.ast,"AST") +
-    statBox(stats.stl,"STL") +
-    statBox(stats.blk,"BLK") +
-    statBox(stats.tov,"TOV") +
-    statBox(stats.triples,"Triple Doubles");
-
-  document.getElementById(avgsId).innerHTML =
-    statBox((stats.pts/g).toFixed(1),"Avg PTS") +
-    statBox((stats.reb/g).toFixed(1),"Avg REB") +
-    statBox((stats.ast/g).toFixed(1),"Avg AST") +
-    statBox((stats.stl/g).toFixed(1),"Avg STL") +
+function renderStats(stats,totalsId,avgsId,highsId){
+  const g=stats.games||1;
+  document.getElementById(totalsId).innerHTML=
+    statBox(stats.games,"Games")+statBox(stats.pts,"PTS")+statBox(stats.reb,"REB")+
+    statBox(stats.ast,"AST")+statBox(stats.stl,"STL")+statBox(stats.blk,"BLK")+
+    statBox(stats.tov,"TOV")+statBox(stats.triples,"Triple Doubles");
+  document.getElementById(avgsId).innerHTML=
+    statBox((stats.pts/g).toFixed(1),"Avg PTS")+statBox((stats.reb/g).toFixed(1),"Avg REB")+
+    statBox((stats.ast/g).toFixed(1),"Avg AST")+statBox((stats.stl/g).toFixed(1),"Avg STL")+
     statBox((stats.blk/g).toFixed(1),"Avg BLK");
-
-  document.getElementById(highsId).innerHTML =
-    statBox(stats.hPts,"Best PTS",stats.hPtsGame) +
-    statBox(stats.hReb,"Best REB",stats.hRebGame) +
-    statBox(stats.hAst,"Best AST",stats.hAstGame) +
-    statBox(stats.hStl,"Best STL",stats.hStlGame) +
+  document.getElementById(highsId).innerHTML=
+    statBox(stats.hPts,"Best PTS",stats.hPtsGame)+statBox(stats.hReb,"Best REB",stats.hRebGame)+
+    statBox(stats.hAst,"Best AST",stats.hAstGame)+statBox(stats.hStl,"Best STL",stats.hStlGame)+
     statBox(stats.hBlk,"Best BLK",stats.hBlkGame);
 }
 
 function renderGames(games){
-  gamesBody.innerHTML = games.map(g => `
+  gamesBody.innerHTML=games.map(g=>`
     <tr onclick="window.location.href='/nba-game.html?season=${g.season}&game=${g.game_id}'">
-      <td>${g.season}</td>
-      <td>${g.date || ""}</td>
-      <td>${g.team || ""}</td>
-      <td>${g.opp || ""}</td>
-      <td>${n(g.pts)}</td>
-      <td>${n(g.reb)}</td>
-      <td>${n(g.ast)}</td>
-      <td>${n(g.stl)}</td>
-      <td>${n(g.blk)}</td>
-      <td>${n(g.tov)}</td>
-      <td>${n(g.fg)}</td>
-      <td>${n(g.fga)}</td>
-      <td>${g.fg_pct != null ? Number(g.fg_pct).toFixed(3) : "–"}</td>
-      <td>${n(g.fg3)}</td>
-      <td>${n(g.fg3a)}</td>
-      <td>${n(g.ft)}</td>
-      <td>${n(g.fta)}</td>
-      <td>${n(g.mp)}</td>
-      <td>${n(g.plus_minus)}</td>
+      <td>${g.season}</td><td>${g.date||""}</td><td>${g.team||""}</td><td>${g.opp||""}</td>
+      <td>${n(g.pts)}</td><td>${n(g.reb)}</td><td>${n(g.ast)}</td><td>${n(g.stl)}</td>
+      <td>${n(g.blk)}</td><td>${n(g.tov)}</td><td>${n(g.fg)}</td><td>${n(g.fga)}</td>
+      <td>${g.fg_pct!=null?Number(g.fg_pct).toFixed(3):"–"}</td>
+      <td>${n(g.fg3)}</td><td>${n(g.fg3a)}</td><td>${n(g.ft)}</td><td>${n(g.fta)}</td>
+      <td>${n(g.mp)}</td><td>${n(g.plus_minus)}</td>
     </tr>
   `).join("");
 }
 
 function updateFiltered(){
-  const team = teamFilter.value;
-  const opp  = oppFilter.value;
-  let filtered = allGames;
-  if(team !== "ALL") filtered = filtered.filter(g => g.team === team);
-  if(opp  !== "ALL") filtered = filtered.filter(g => g.opp  === opp);
-  renderStats(calcStats(filtered), "filteredTotals", "filteredAverages", "filteredHighs");
+  const team=teamFilter.value,opp=oppFilter.value;
+  let filtered=allGames;
+  if(team!=="ALL")filtered=filtered.filter(g=>g.team===team);
+  if(opp!=="ALL")filtered=filtered.filter(g=>g.opp===opp);
+  renderStats(calcStats(filtered),"filteredTotals","filteredAverages","filteredHighs");
   renderGames(filtered);
+}
+
+function buildSearch(){
+  const searchInput  = document.getElementById("playerSearch");
+  const searchResults= document.getElementById("searchResults");
+
+  searchInput.addEventListener("input",()=>{
+    const val=searchInput.value.toLowerCase().trim();
+    if(!val){searchResults.style.display="none";return;}
+    const matches=playerIndex.filter(p=>(p.name||"").toLowerCase().includes(val)).slice(0,10);
+    if(!matches.length){searchResults.style.display="none";return;}
+    searchResults.innerHTML=matches.map(p=>`
+      <div class="search-item" onclick="window.location.href='/nba-player.html?id=${encodeURIComponent(p.id)}'">
+        ${p.name}<small>${p.last_team||""}</small>
+      </div>
+    `).join("");
+    searchResults.style.display="block";
+  });
+
+  document.addEventListener("click",e=>{
+    if(!e.target.closest(".search-wrap"))searchResults.style.display="none";
+  });
 }
 
 async function loadPlayer(){
   if(!playerId){
-    heroEl.innerHTML = `<div class="error">No player specified</div>`;
+    heroEl.innerHTML=`<div class="error">No player specified</div>`;
     return;
   }
 
   try{
-    const res = await fetch(`${R2}/basketball/players/${playerId}.json`);
+    // Load player index for search
+    fetch(`${R2}/basketball/players/index.json`)
+      .then(r=>r.json())
+      .then(data=>{
+        playerIndex=data;
+        buildSearch();
+      })
+      .catch(()=>{});
+
+    const res=await fetch(`${R2}/basketball/players/${playerId}.json`);
     if(!res.ok) throw new Error("Player not found");
-    const data = await res.json();
+    const data=await res.json();
 
-    const name = data.name || playerId;
-    document.title = `${name} | NBA Player`;
+    const name=data.name||playerId;
+    document.title=`${name} | NBA Player`;
 
-    heroEl.innerHTML = `
+    allGames=(data.games||[]).slice().reverse();
+
+    // Get last team for colour
+    const lastTeam = allGames.length ? allGames[0].team : "";
+    const gradient = TEAM_COLOURS[lastTeam] || "linear-gradient(90deg,#1D428A,#C8102E)";
+
+    heroEl.style.background=gradient;
+    heroEl.innerHTML=`
       <h1>${name}</h1>
-      <p>NBA Career Stats</p>
+      <p>${lastTeam || "NBA Career Stats"}</p>
+      <div class="search-wrap">
+        <input type="text" id="playerSearch" class="search-input" placeholder="Search another player..." autocomplete="off">
+        <div class="search-results" id="searchResults"></div>
+      </div>
     `;
 
-    allGames = (data.games || []).slice().reverse(); // latest first
+    // Rebuild search after hero is rendered
+    fetch(`${R2}/basketball/players/index.json`)
+      .then(r=>r.json())
+      .then(idx=>{playerIndex=idx;buildSearch();})
+      .catch(()=>{});
 
-    // Build filters
-    const teams = [...new Set(allGames.map(g => g.team).filter(Boolean))].sort();
-    const opps  = [...new Set(allGames.map(g => g.opp).filter(Boolean))].sort();
+    const teams=[...new Set(allGames.map(g=>g.team).filter(Boolean))].sort();
+    const opps =[...new Set(allGames.map(g=>g.opp).filter(Boolean))].sort();
 
-    teams.forEach(t => {
-      const o = document.createElement("option");
-      o.value = t; o.textContent = t;
-      teamFilter.appendChild(o);
-    });
-    opps.forEach(t => {
-      const o = document.createElement("option");
-      o.value = t; o.textContent = t;
-      oppFilter.appendChild(o);
-    });
+    teams.forEach(t=>{const o=document.createElement("option");o.value=t;o.textContent=t;teamFilter.appendChild(o);});
+    opps.forEach(t=>{const o=document.createElement("option");o.value=t;o.textContent=t;oppFilter.appendChild(o);});
 
-    teamFilter.addEventListener("change", updateFiltered);
-    oppFilter.addEventListener("change",  updateFiltered);
+    teamFilter.addEventListener("change",updateFiltered);
+    oppFilter.addEventListener("change",updateFiltered);
 
-    renderStats(calcStats(allGames), "careerTotals", "careerAverages", "careerHighs");
-    renderStats(calcStats(allGames), "filteredTotals", "filteredAverages", "filteredHighs");
+    renderStats(calcStats(allGames),"careerTotals","careerAverages","careerHighs");
+    renderStats(calcStats(allGames),"filteredTotals","filteredAverages","filteredHighs");
     renderGames(allGames);
 
-    pageWrap.style.display = "block";
+    pageWrap.style.display="block";
 
   }catch(err){
     console.error(err);
-    heroEl.innerHTML = `<div class="error">Player not found</div>`;
+    heroEl.innerHTML=`<div class="error">Player not found</div>`;
   }
 }
 
