@@ -1,0 +1,109 @@
+name: Build NBA Season Indexes
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "Start season"
+        required: true
+        default: "1976"
+      end:
+        description: "End season"
+        required: true
+        default: "2025"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install packages
+        run: pip install boto3
+
+      - name: Build season indexes
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          python << 'PYEOF'
+          import boto3
+          import json
+          import os
+          from botocore.config import Config
+
+          r2 = boto3.client(
+              "s3",
+              endpoint_url=os.environ["R2_ENDPOINT"],
+              aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+              config=Config(signature_version="s3v4"),
+              region_name="auto",
+          )
+
+          BUCKET = "sporting-almanac-data"
+          start  = int("${{ github.event.inputs.start }}")
+          end    = int("${{ github.event.inputs.end }}")
+
+          for season in range(start, end + 1):
+              print(f"Building index for {season}...")
+              prefix = f"basketball/boxscores/{season}/"
+
+              # List all boxscore files for this season
+              paginator = r2.get_paginator("list_objects_v2")
+              pages = paginator.paginate(Bucket=BUCKET, Prefix=prefix)
+
+              games = []
+              for page in pages:
+                  for obj in page.get("Contents", []):
+                      key = obj["Key"]
+                      try:
+                          data = json.loads(r2.get_object(Bucket=BUCKET, Key=key)["Body"].read())
+                          
+                          # Get scores from linescore
+                          home_score = None
+                          away_score = None
+                          linescore  = data.get("linescore", {})
+                          if linescore:
+                              teams = list(linescore.keys())
+                              if len(teams) >= 2:
+                                  home_data = linescore.get(data.get("home", ""), {})
+                                  away_data = linescore.get(data.get("away", ""), {})
+                                  try:
+                                      home_score = int(home_data.get("T", 0))
+                                      away_score = int(away_data.get("T", 0))
+                                  except (ValueError, TypeError):
+                                      pass
+
+                          games.append({
+                              "game_id":    data.get("game_id", ""),
+                              "date":       data.get("date", ""),
+                              "away":       data.get("away", ""),
+                              "home":       data.get("home", ""),
+                              "away_score": away_score,
+                              "home_score": home_score,
+                              "arena":      data.get("arena", ""),
+                          })
+                      except Exception as e:
+                          print(f"  Error reading {key}: {e}")
+
+              # Sort by date
+              games.sort(key=lambda g: g["date"])
+
+              # Upload index to R2
+              index_key = f"basketball/indexes/{season}.json"
+              r2.put_object(
+                  Bucket=BUCKET,
+                  Key=index_key,
+                  Body=json.dumps(games, indent=2).encode("utf-8"),
+                  ContentType="application/json",
+              )
+              print(f"  Season {season}: {len(games)} games indexed")
+
+          print("Done!")
+          PYEOF
