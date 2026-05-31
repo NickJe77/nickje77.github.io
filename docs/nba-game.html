@@ -14,22 +14,23 @@ body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#f4f6f8;co
 .hero .score{font-size:72px;font-weight:900;margin:10px 0;}
 .hero .meta{font-size:16px;opacity:.85;margin-top:8px;}
 .page-wrap{max-width:1400px;margin:30px auto;padding:0 20px 60px;}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;}
-.card{background:#fff;border-radius:14px;padding:24px;box-shadow:0 4px 12px rgba(0,0,0,.05);}
-.card h2{margin:0 0 16px;font-size:22px;font-weight:800;}
+.linescore{width:100%;border-collapse:collapse;margin-bottom:24px;font-size:14px;}
+.linescore th,.linescore td{padding:10px 12px;border:1px solid #ddd;text-align:center;}
+.linescore th{background:#1D428A;color:white;font-weight:800;}
+.linescore .team-name{text-align:left;font-weight:800;}
+.linescore .total{font-weight:900;font-size:16px;}
+.team-section{background:#fff;border-radius:14px;padding:24px;box-shadow:0 4px 12px rgba(0,0,0,.05);margin-bottom:24px;}
+.team-section h2{margin:0 0 16px;font-size:22px;font-weight:800;}
 table{width:100%;border-collapse:collapse;font-size:13px;}
 th{background:#eef3ff;padding:10px 8px;font-weight:800;text-align:center;}
 td{padding:10px 8px;border-bottom:1px solid #eee;text-align:center;}
 tr:nth-child(even){background:#f8faff;}
 .player-name{text-align:left;font-weight:700;}
+.player-link{color:#0056d6;text-decoration:none;font-weight:700;}
+.player-link:hover{text-decoration:underline;}
+.dnp{color:#999;font-style:italic;}
 .loading{text-align:center;padding:60px;font-size:18px;color:#666;}
-.linescore{width:100%;border-collapse:collapse;margin-bottom:24px;font-size:14px;}
-.linescore th,.linescore td{padding:10px 12px;border:1px solid #ddd;text-align:center;}
-.linescore th{background:#1D428A;color:white;font-weight:800;}
-.linescore tr:nth-child(even){background:#f8faff;}
-.team-total{font-weight:900;background:#eef3ff !important;}
 @media(max-width:900px){
-  .grid{grid-template-columns:1fr;}
   .hero h1{font-size:24px;}
   .hero .score{font-size:48px;}
   table{display:block;overflow-x:auto;}
@@ -58,7 +59,7 @@ const params = new URLSearchParams(location.search);
 const season = params.get("season");
 const gameId = params.get("game");
 
-const heroEl   = document.getElementById("hero");
+const heroEl    = document.getElementById("hero");
 const contentEl = document.getElementById("content");
 
 const STAT_LABELS = {
@@ -86,6 +87,14 @@ const STAT_LABELS = {
 
 const STAT_KEYS = Object.keys(STAT_LABELS);
 
+function slugify(str){
+  return (str || '')
+    .toLowerCase()
+    .replace(/\./g,'')
+    .replace(/'/g,'')
+    .replace(/\s+/g,'-');
+}
+
 async function loadGame(){
   try{
     const res = await fetch(`${R2}/basketball/boxscores/${season}/${gameId}.json`);
@@ -94,92 +103,109 @@ async function loadGame(){
     renderGame(data);
   }catch(err){
     console.error(err);
-    heroEl.innerHTML   = `<div class="loading">Failed to load game</div>`;
+    heroEl.innerHTML    = `<div class="loading">Failed to load game</div>`;
     contentEl.innerHTML = "";
   }
 }
 
-function getScore(data){
-  const linescore = data.linescore || {};
-  const homeTeam  = data.home || "";
-  const awayTeam  = data.away || "";
-  const homeData  = linescore[homeTeam] || {};
-  const awayData  = linescore[awayTeam] || {};
-  return {
-    home: homeData.T || "–",
-    away: awayData.T || "–",
-  };
-}
-
 function renderGame(data){
-  const score    = getScore(data);
-  const homeTeam = data.home || "";
-  const awayTeam = data.away || "";
+  const linescore = data.linescore || {};
+  const gameId    = data.game_id   || "";
+  const homeTeam  = data.home      || "";
+  const awayTeam  = data.away      || "";
+  const teams     = data.teams     || {};
+
+  // Match scores using game_id ending with home team abbreviation
+  let homeScore = "–";
+  let awayScore = "–";
+  const abbrs   = Object.keys(linescore);
+
+  abbrs.forEach(abbr => {
+    const quarters = linescore[abbr];
+    const total    = quarters.T || "–";
+    if(gameId.endsWith(abbr)){
+      homeScore = total;
+    } else {
+      awayScore = total;
+    }
+  });
+
+  // Get quarters for linescore table
+  const quarters = abbrs.length > 0
+    ? Object.keys(linescore[abbrs[0]]).filter(k => k !== "T")
+    : [];
 
   document.title = `${awayTeam} @ ${homeTeam} | NBA`;
 
   heroEl.innerHTML = `
     <h1>${awayTeam} @ ${homeTeam}</h1>
-    <div class="score">${score.away} – ${score.home}</div>
+    <div class="score">${awayScore} – ${homeScore}</div>
     <div class="meta">${data.date || ""}${data.arena ? " • " + data.arena : ""}</div>
   `;
 
   // Linescore table
-  const linescore  = data.linescore || {};
-  const homeData   = linescore[homeTeam] || {};
-  const awayData   = linescore[awayTeam] || {};
-  const quarters   = Object.keys(homeData).filter(k => k !== "T");
-
   let linescoreHtml = `
     <table class="linescore">
       <thead>
         <tr>
-          <th>Team</th>
+          <th style="text-align:left;">Team</th>
           ${quarters.map(q => `<th>${q}</th>`).join("")}
           <th>Total</th>
         </tr>
       </thead>
       <tbody>
         <tr>
-          <td style="text-align:left;font-weight:800;">${awayTeam}</td>
-          ${quarters.map(q => `<td>${awayData[q] || "–"}</td>`).join("")}
-          <td class="team-total">${score.away}</td>
+          <td class="team-name">${awayTeam}</td>
+          ${quarters.map(q => {
+            const abbr = abbrs.find(a => !gameId.endsWith(a));
+            return `<td>${abbr ? (linescore[abbr][q] || "–") : "–"}</td>`;
+          }).join("")}
+          <td class="total">${awayScore}</td>
         </tr>
         <tr>
-          <td style="text-align:left;font-weight:800;">${homeTeam}</td>
-          ${quarters.map(q => `<td>${homeData[q] || "–"}</td>`).join("")}
-          <td class="team-total">${score.home}</td>
+          <td class="team-name">${homeTeam}</td>
+          ${quarters.map(q => {
+            const abbr = abbrs.find(a => gameId.endsWith(a));
+            return `<td>${abbr ? (linescore[abbr][q] || "–") : "–"}</td>`;
+          }).join("")}
+          <td class="total">${homeScore}</td>
         </tr>
       </tbody>
     </table>
   `;
 
-  // Player stats tables
-  const teams      = data.teams || {};
-  const teamAbbrs  = Object.keys(teams);
+  // Player tables — away team first then home team
+  const teamOrder = [
+    { name: awayTeam, abbr: abbrs.find(a => !gameId.endsWith(a)) },
+    { name: homeTeam, abbr: abbrs.find(a =>  gameId.endsWith(a)) },
+  ];
 
-  const teamTables = teamAbbrs.map(abbr => {
-    const players = teams[abbr] || [];
+  const teamTables = teamOrder.map(({ name, abbr }) => {
+    const players = (abbr && teams[abbr]) ? teams[abbr] : [];
     const active  = players.filter(p => !p.dnp);
-    const dnp     = players.filter(p => p.dnp);
+    const dnp     = players.filter(p =>  p.dnp);
 
     const rows = active.map(p => `
       <tr>
-        <td class="player-name">${p.player || ""}</td>
+        <td class="player-name">
+          <a class="player-link" href="/nba-player.html?player=${encodeURIComponent(slugify(p.player))}&id=${encodeURIComponent(p.player_id || '')}">
+            ${p.player || ""}
+          </a>
+        </td>
         ${STAT_KEYS.map(k => `<td>${p[k] != null ? p[k] : "–"}</td>`).join("")}
       </tr>
     `).join("");
 
     const dnpRows = dnp.map(p => `
       <tr>
-        <td class="player-name">${p.player || ""}</td>
-        <td colspan="${STAT_KEYS.length}" style="text-align:left;color:#999;">${p.dnp}</td>
+        <td class="player-name dnp">${p.player || ""}</td>
+        <td colspan="${STAT_KEYS.length}" style="text-align:left;" class="dnp">${p.dnp}</td>
       </tr>
     `).join("");
 
     return `
-      <div class="card">
-        <h2>${abbr}</h2>
+      <div class="team-section">
+        <h2>${name}</h2>
         <table>
           <thead>
             <tr>
@@ -196,12 +222,7 @@ function renderGame(data){
     `;
   }).join("");
 
-  contentEl.innerHTML = `
-    ${linescoreHtml}
-    <div class="grid">
-      ${teamTables}
-    </div>
-  `;
+  contentEl.innerHTML = linescoreHtml + teamTables;
 }
 
 loadGame();
