@@ -148,7 +148,16 @@ def main():
             print(f"⚠️   Skipping invalid file: {file_path} ({e})")
             continue
 
-        season     = season_from_path(file_path)
+        season = season_from_path(file_path)
+
+        # Skip seasons before 1988-1989
+        try:
+            start_year = int(season.split("-")[0])
+            if start_year < 1988:
+                continue
+        except (ValueError, IndexError):
+            pass
+
         home_team  = (match.get("home_team") or "").strip()
         away_team  = (match.get("away_team") or "").strip()
         home_score = match.get("home_score") or 0
