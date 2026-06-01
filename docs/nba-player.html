@@ -291,3 +291,76 @@ function buildSearch(){
     const val=searchInput.value.toLowerCase().trim();
     if(!val){searchResults.style.display="none";return;}
     const matches=playerIndex.filter(p=>(p.name||"").toLowerCase().includes(val)).slice(0,10);
+    if(!matches.length){searchResults.style.display="none";return;}
+    searchResults.innerHTML=matches.map(p=>`
+      <div class="search-item" onclick="window.location.href='/nba-player.html?id=${encodeURIComponent(p.id)}'">
+        ${p.name}<small>${p.last_team||""}</small>
+      </div>
+    `).join("");
+    searchResults.style.display="block";
+  });
+
+  document.addEventListener("click",e=>{
+    if(!e.target.closest(".search-wrap"))searchResults.style.display="none";
+  });
+}
+
+async function loadPlayer(){
+  if(!playerId){
+    heroEl.innerHTML=`<div class="error">No player specified</div>`;
+    return;
+  }
+
+  try{
+    const res=await fetch(`${R2}/basketball/players/${playerId}.json`);
+    if(!res.ok) throw new Error("Player not found");
+    const data=await res.json();
+
+    const name=data.name||playerId;
+    document.title=`${name} | NBA Player`;
+
+    allGames=(data.games||[]).slice().reverse();
+
+    const lastTeam = allGames.length ? allGames[0].team : "";
+    const gradient = TEAM_COLOURS[lastTeam] || "linear-gradient(90deg,#1D428A,#C8102E)";
+
+    heroEl.style.background=gradient;
+    heroEl.innerHTML=`
+      <h1>${name}</h1>
+      <p>${lastTeam || "NBA Career Stats"}</p>
+      <div class="search-wrap">
+        <input type="text" id="playerSearch" class="search-input" placeholder="Search another player..." autocomplete="off">
+        <div class="search-results" id="searchResults"></div>
+      </div>
+    `;
+
+    fetch(`${R2}/basketball/players/index.json`)
+      .then(r=>r.json())
+      .then(idx=>{playerIndex=idx;buildSearch();})
+      .catch(()=>{});
+
+    const teams=[...new Set(allGames.map(g=>g.team).filter(Boolean))].sort();
+    const opps =[...new Set(allGames.map(g=>g.opp).filter(Boolean))].sort();
+
+    teams.forEach(t=>{const o=document.createElement("option");o.value=t;o.textContent=t;teamFilter.appendChild(o);});
+    opps.forEach(t=>{const o=document.createElement("option");o.value=t;o.textContent=t;oppFilter.appendChild(o);});
+
+    teamFilter.addEventListener("change",updateFiltered);
+    oppFilter.addEventListener("change",updateFiltered);
+
+    renderStats(calcStats(allGames),"careerTotals","careerAverages","careerHighs");
+    renderStats(calcStats(allGames),"filteredTotals","filteredAverages","filteredHighs");
+    renderSeasons(allGames);
+
+    pageWrap.style.display="block";
+
+  }catch(err){
+    console.error(err);
+    heroEl.innerHTML=`<div class="error">Player not found</div>`;
+  }
+}
+
+loadPlayer();
+</script>
+</body>
+</html>
