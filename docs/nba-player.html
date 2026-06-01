@@ -31,11 +31,14 @@ select{padding:10px 12px;border-radius:10px;border:1px solid #ccc;font-size:14px
 .table-wrap{background:#fff;border-radius:14px;box-shadow:0 4px 12px rgba(0,0,0,.05);overflow:hidden;}
 .table-header{padding:20px 22px 10px;font-size:13px;font-weight:800;letter-spacing:1px;color:#666;text-transform:uppercase;}
 .table-scroll{overflow-x:auto;}
-table{width:100%;border-collapse:collapse;font-size:14px;min-width:700px;}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:900px;}
 th,td{padding:12px 10px;border-bottom:1px solid #eee;text-align:center;white-space:nowrap;}
 th{background:#eef3ff;color:#003a99;font-weight:800;}
+th small{display:block;font-size:10px;font-weight:600;color:#6680cc;margin-top:2px;}
 tbody tr:nth-child(even){background:#f8faff;}
-tbody tr:hover{background:#eaf2ff;cursor:pointer;}
+tbody tr:hover{background:#eaf2ff;}
+.season-total{font-weight:800;}
+.season-avg{color:#666;font-size:12px;}
 .loading{text-align:center;padding:60px;font-size:18px;color:#666;}
 .error{text-align:center;padding:60px;font-size:18px;color:#d00;}
 @media(max-width:800px){
@@ -82,33 +85,32 @@ tbody tr:hover{background:#eaf2ff;cursor:pointer;}
   </div>
 
   <div class="table-wrap">
-    <div class="table-header">Game Log</div>
+    <div class="table-header">Season Log</div>
     <div class="table-scroll">
       <table>
         <thead>
           <tr>
             <th>Season</th>
-            <th>Date</th>
             <th>Team</th>
-            <th>Opponent</th>
-            <th>PTS</th>
-            <th>REB</th>
-            <th>AST</th>
-            <th>STL</th>
-            <th>BLK</th>
-            <th>TOV</th>
+            <th>GP</th>
+            <th>PTS<small>per game</small></th>
+            <th>REB<small>per game</small></th>
+            <th>AST<small>per game</small></th>
+            <th>STL<small>per game</small></th>
+            <th>BLK<small>per game</small></th>
+            <th>TOV<small>per game</small></th>
+            <th>FG%</th>
+            <th>3P%</th>
+            <th>FT%</th>
             <th>FG</th>
             <th>FGA</th>
-            <th>FG%</th>
             <th>3P</th>
             <th>3PA</th>
             <th>FT</th>
             <th>FTA</th>
-            <th>MIN</th>
-            <th>+/-</th>
           </tr>
         </thead>
-        <tbody id="gamesBody"></tbody>
+        <tbody id="seasonsBody"></tbody>
       </table>
     </div>
   </div>
@@ -165,13 +167,15 @@ const heroEl     = document.getElementById("hero");
 const pageWrap   = document.getElementById("page-wrap");
 const teamFilter = document.getElementById("teamFilter");
 const oppFilter  = document.getElementById("oppFilter");
-const gamesBody  = document.getElementById("gamesBody");
+const seasonsBody= document.getElementById("seasonsBody");
 
 let allGames    = [];
 let playerIndex = [];
 
 function n(v){ return v != null ? v : "–"; }
 function num(v){ return v != null ? Number(v) : 0; }
+function pct(made, att){ return att > 0 ? (made/att).toFixed(3) : "–"; }
+function avg(total, games){ return games > 0 ? (total/games).toFixed(1) : "–"; }
 
 function calcStats(games){
   let pts=0,reb=0,ast=0,stl=0,blk=0,tov=0,triples=0;
@@ -213,15 +217,59 @@ function renderStats(stats,totalsId,avgsId,highsId){
     statBox(stats.hBlk,"Best BLK",stats.hBlkGame);
 }
 
-function renderGames(games){
-  gamesBody.innerHTML=games.map(g=>`
-    <tr onclick="window.location.href='/nba-game.html?season=${g.season}&game=${g.game_id}'">
-      <td>${g.season}</td><td>${g.date||""}</td><td>${g.team||""}</td><td>${g.opp||""}</td>
-      <td>${n(g.pts)}</td><td>${n(g.reb)}</td><td>${n(g.ast)}</td><td>${n(g.stl)}</td>
-      <td>${n(g.blk)}</td><td>${n(g.tov)}</td><td>${n(g.fg)}</td><td>${n(g.fga)}</td>
-      <td>${g.fg_pct!=null?Number(g.fg_pct).toFixed(3):"–"}</td>
-      <td>${n(g.fg3)}</td><td>${n(g.fg3a)}</td><td>${n(g.ft)}</td><td>${n(g.fta)}</td>
-      <td>${n(g.mp)}</td><td>${n(g.plus_minus)}</td>
+function buildSeasonRows(games){
+  // Group by season+team
+  const map = {};
+  games.forEach(g => {
+    const key = `${g.season}||${g.team||""}`;
+    if(!map[key]){
+      map[key] = {
+        season: g.season, team: g.team||"",
+        gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, tov:0,
+        fg:0, fga:0, fg3:0, fg3a:0, ft:0, fta:0
+      };
+    }
+    const s = map[key];
+    s.gp++;
+    s.pts  += num(g.pts);
+    s.reb  += num(g.reb);
+    s.ast  += num(g.ast);
+    s.stl  += num(g.stl);
+    s.blk  += num(g.blk);
+    s.tov  += num(g.tov);
+    s.fg   += num(g.fg);
+    s.fga  += num(g.fga);
+    s.fg3  += num(g.fg3);
+    s.fg3a += num(g.fg3a);
+    s.ft   += num(g.ft);
+    s.fta  += num(g.fta);
+  });
+
+  return Object.values(map).sort((a,b) => b.season - a.season);
+}
+
+function renderSeasons(games){
+  const rows = buildSeasonRows(games);
+  seasonsBody.innerHTML = rows.map(s => `
+    <tr>
+      <td>${s.season}-${parseInt(s.season)+1}</td>
+      <td>${s.team}</td>
+      <td>${s.gp}</td>
+      <td><span class="season-total">${s.pts}</span> <span class="season-avg">(${avg(s.pts,s.gp)})</span></td>
+      <td><span class="season-total">${s.reb}</span> <span class="season-avg">(${avg(s.reb,s.gp)})</span></td>
+      <td><span class="season-total">${s.ast}</span> <span class="season-avg">(${avg(s.ast,s.gp)})</span></td>
+      <td><span class="season-total">${s.stl}</span> <span class="season-avg">(${avg(s.stl,s.gp)})</span></td>
+      <td><span class="season-total">${s.blk}</span> <span class="season-avg">(${avg(s.blk,s.gp)})</span></td>
+      <td><span class="season-total">${s.tov}</span> <span class="season-avg">(${avg(s.tov,s.gp)})</span></td>
+      <td>${pct(s.fg,s.fga)}</td>
+      <td>${pct(s.fg3,s.fg3a)}</td>
+      <td>${pct(s.ft,s.fta)}</td>
+      <td>${s.fg}</td>
+      <td>${s.fga}</td>
+      <td>${s.fg3}</td>
+      <td>${s.fg3a}</td>
+      <td>${s.ft}</td>
+      <td>${s.fta}</td>
     </tr>
   `).join("");
 }
@@ -232,7 +280,7 @@ function updateFiltered(){
   if(team!=="ALL")filtered=filtered.filter(g=>g.team===team);
   if(opp!=="ALL")filtered=filtered.filter(g=>g.opp===opp);
   renderStats(calcStats(filtered),"filteredTotals","filteredAverages","filteredHighs");
-  renderGames(filtered);
+  renderSeasons(filtered);
 }
 
 function buildSearch(){
@@ -243,87 +291,3 @@ function buildSearch(){
     const val=searchInput.value.toLowerCase().trim();
     if(!val){searchResults.style.display="none";return;}
     const matches=playerIndex.filter(p=>(p.name||"").toLowerCase().includes(val)).slice(0,10);
-    if(!matches.length){searchResults.style.display="none";return;}
-    searchResults.innerHTML=matches.map(p=>`
-      <div class="search-item" onclick="window.location.href='/nba-player.html?id=${encodeURIComponent(p.id)}'">
-        ${p.name}<small>${p.last_team||""}</small>
-      </div>
-    `).join("");
-    searchResults.style.display="block";
-  });
-
-  document.addEventListener("click",e=>{
-    if(!e.target.closest(".search-wrap"))searchResults.style.display="none";
-  });
-}
-
-async function loadPlayer(){
-  if(!playerId){
-    heroEl.innerHTML=`<div class="error">No player specified</div>`;
-    return;
-  }
-
-  try{
-    // Load player index for search
-    fetch(`${R2}/basketball/players/index.json`)
-      .then(r=>r.json())
-      .then(data=>{
-        playerIndex=data;
-        buildSearch();
-      })
-      .catch(()=>{});
-
-    const res=await fetch(`${R2}/basketball/players/${playerId}.json`);
-    if(!res.ok) throw new Error("Player not found");
-    const data=await res.json();
-
-    const name=data.name||playerId;
-    document.title=`${name} | NBA Player`;
-
-    allGames=(data.games||[]).slice().reverse();
-
-    // Get last team for colour
-    const lastTeam = allGames.length ? allGames[0].team : "";
-    const gradient = TEAM_COLOURS[lastTeam] || "linear-gradient(90deg,#1D428A,#C8102E)";
-
-    heroEl.style.background=gradient;
-    heroEl.innerHTML=`
-      <h1>${name}</h1>
-      <p>${lastTeam || "NBA Career Stats"}</p>
-      <div class="search-wrap">
-        <input type="text" id="playerSearch" class="search-input" placeholder="Search another player..." autocomplete="off">
-        <div class="search-results" id="searchResults"></div>
-      </div>
-    `;
-
-    // Rebuild search after hero is rendered
-    fetch(`${R2}/basketball/players/index.json`)
-      .then(r=>r.json())
-      .then(idx=>{playerIndex=idx;buildSearch();})
-      .catch(()=>{});
-
-    const teams=[...new Set(allGames.map(g=>g.team).filter(Boolean))].sort();
-    const opps =[...new Set(allGames.map(g=>g.opp).filter(Boolean))].sort();
-
-    teams.forEach(t=>{const o=document.createElement("option");o.value=t;o.textContent=t;teamFilter.appendChild(o);});
-    opps.forEach(t=>{const o=document.createElement("option");o.value=t;o.textContent=t;oppFilter.appendChild(o);});
-
-    teamFilter.addEventListener("change",updateFiltered);
-    oppFilter.addEventListener("change",updateFiltered);
-
-    renderStats(calcStats(allGames),"careerTotals","careerAverages","careerHighs");
-    renderStats(calcStats(allGames),"filteredTotals","filteredAverages","filteredHighs");
-    renderGames(allGames);
-
-    pageWrap.style.display="block";
-
-  }catch(err){
-    console.error(err);
-    heroEl.innerHTML=`<div class="error">Player not found</div>`;
-  }
-}
-
-loadPlayer();
-</script>
-</body>
-</html>
