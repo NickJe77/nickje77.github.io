@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>La Liga Season | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:#f3f4f7;color:#111;}
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:white;border-bottom:1px solid #ddd;flex-wrap:wrap;}
+.navbar a{text-decoration:none;color:#0056d6;font-weight:600;}
+.hero{background:linear-gradient(135deg,#c60b1e,#f1bf00);color:white;padding:50px 20px;text-align:center;}
+.hero h1{margin:0;font-size:48px;font-weight:800;}
+.hero p{margin-top:10px;font-size:18px;opacity:.95;}
+.container{max-width:1500px;margin:30px auto;padding:0 20px;}
+.controls{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px;}
+.controls select{padding:12px 14px;border-radius:10px;border:1px solid #ddd;font-size:15px;background:white;}
+.card{background:white;border-radius:16px;padding:24px;box-shadow:0 3px 10px rgba(0,0,0,.08);}
+.section-title{margin-top:0;margin-bottom:24px;font-size:28px;}
+table{width:100%;border-collapse:collapse;}
+th{background:#c60b1e;color:white;padding:14px;font-size:14px;text-align:center;}
+td{padding:14px;border-bottom:1px solid #eee;text-align:center;font-size:15px;}
+tr:nth-child(even){background:#fffbf0;}
+.match-row{cursor:pointer;transition:.15s ease;}
+.match-row:hover{background:#dfeaff !important;}
+.team-link{color:#0056d6;text-decoration:none;font-weight:700;}
+.score{font-size:18px;font-weight:800;}
+.loading{text-align:center;padding:40px;color:#666;font-size:18px;}
+@media(max-width:900px){
+  .hero h1{font-size:34px;}
+  th,td{padding:8px;font-size:12px;}
+  .score{font-size:15px;}
+}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="/">Home</a>
+  <a href="/epl.html">EPL</a>
+  <a href="/laliga.html">La Liga</a>
+  <a href="/nba.html">NBA</a>
+  <a href="/afl.html">AFL</a>
+  <a href="/baseball.html">Baseball</a>
+</div>
+
+<div class="hero">
+  <h1 id="seasonTitle">Loading...</h1>
+  <p>La Liga fixtures, scores and results</p>
+</div>
+
+<div class="container">
+
+  <div class="controls">
+    <select id="seasonSelect"></select>
+    <select id="teamFilter"><option value="">All Teams</option></select>
+  </div>
+
+  <div class="card">
+    <h2 class="section-title">Matches</h2>
+    <div id="matchesContainer" class="loading">Loading matches...</div>
+  </div>
+
+</div>
+
+<script>
+const START_YEAR = 1929;
+const END_YEAR   = 2025;
+
+function buildSeasonList() {
+  const seasons = [];
+  for (let y = END_YEAR; y >= START_YEAR; y--) {
+    seasons.push(`${y}-${y + 1}`);
+  }
+  return seasons;
+}
+
+const params  = new URLSearchParams(window.location.search);
+const seasons = buildSeasonList();
+
+let currentSeason = params.get("season") || seasons[0];
+if (!seasons.includes(currentSeason)) currentSeason = seasons[0];
+
+const seasonSelect     = document.getElementById("seasonSelect");
+const teamFilter       = document.getElementById("teamFilter");
+const matchesContainer = document.getElementById("matchesContainer");
+
+seasons.forEach(s => {
+  const opt = document.createElement("option");
+  opt.value = s;
+  opt.textContent = s;
+  if (s === currentSeason) opt.selected = true;
+  seasonSelect.appendChild(opt);
+});
+
+let allMatches = [];
+
+async function loadSeason() {
+  document.getElementById("seasonTitle").textContent = `${currentSeason} La Liga Season`;
+  matchesContainer.innerHTML = '<div class="loading">Loading matches...</div>';
+  teamFilter.innerHTML = '<option value="">All Teams</option>';
+
+  try {
+    const response = await fetch(`/data/laliga/seasons/${currentSeason}.json`);
+    if (!response.ok) throw new Error("Season JSON not found");
+    const data = await response.json();
+    allMatches = data.games || data;
+    buildFilters();
+    renderMatches();
+  } catch (err) {
+    console.error(err);
+    matchesContainer.innerHTML = '<div class="loading">Failed to load season data</div>';
+  }
+}
+
+function buildFilters() {
+  const teams = new Set();
+  allMatches.forEach(m => {
+    if (m.home) teams.add(m.home);
+    if (m.away) teams.add(m.away);
+  });
+  [...teams].sort().forEach(team => {
+    const opt = document.createElement("option");
+    opt.value = team;
+    opt.textContent = team;
+    teamFilter.appendChild(opt);
+  });
+}
+
+function renderMatches() {
+  let filtered = [...allMatches];
+  const team = teamFilter.value;
+  if (team) {
+    filtered = filtered.filter(m => m.home === team || m.away === team);
+  }
+
+  if (filtered.length === 0) {
+    matchesContainer.innerHTML = '<div class="loading">No matches found</div>';
+    return;
+  }
+
+  let html = `
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Home</th>
+          <th>Score</th>
+          <th>Away</th>
+          <th>Venue</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  filtered.forEach(match => {
+    const url = `/laliga-game.html?match=${encodeURIComponent(match.match_id)}&season=${encodeURIComponent(currentSeason)}&date=${encodeURIComponent(match.date || '')}&venue=${encodeURIComponent(match.venue || '')}`;
+    html += `
+      <tr class="match-row" onclick="window.location.href='${url}'">
+        <td>${match.date || ''}</td>
+        <td>
+          <a class="team-link"
+             href="/laliga-team.html?team=${encodeURIComponent(match.home)}"
+             onclick="event.stopPropagation()">
+            ${match.home || ''}
+          </a>
+        </td>
+        <td class="score">
+          ${match.score_home ?? '-'} - ${match.score_away ?? '-'}
+        </td>
+        <td>
+          <a class="team-link"
+             href="/laliga-team.html?team=${encodeURIComponent(match.away)}"
+             onclick="event.stopPropagation()">
+            ${match.away || ''}
+          </a>
+        </td>
+        <td>${match.venue || ''}</td>
+      </tr>
+    `;
+  });
+
+  html += `</tbody></table>`;
+  matchesContainer.innerHTML = html;
+}
+
+seasonSelect.addEventListener("change", () => {
+  currentSeason = seasonSelect.value;
+  const url = new URL(window.location);
+  url.searchParams.set("season", currentSeason);
+  window.history.pushState({}, "", url);
+  loadSeason();
+});
+
+teamFilter.addEventListener("change", renderMatches);
+
+loadSeason();
+</script>
+
+</body>
+</html>
