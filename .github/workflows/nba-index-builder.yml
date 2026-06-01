@@ -35,8 +35,8 @@ jobs:
           import boto3
           import json
           import os
-          from collections import defaultdict
           from botocore.config import Config
+          from botocore.exceptions import ClientError
 
           r2 = boto3.client(
               "s3",
@@ -59,22 +59,26 @@ jobs:
                   ContentType="application/json",
               )
 
+          # Global player store across all seasons
+          all_players = {}
+
           for season in range(start, end + 1):
-              print(f"Processing season {season}...", flush=True)
+              print(f"\n=== Season {season} ===", flush=True)
               prefix = f"basketball/boxscores/{season}/"
 
               paginator = r2.get_paginator("list_objects_v2")
               pages = paginator.paginate(Bucket=BUCKET, Prefix=prefix)
 
-              season_games = []
+              season_games   = []
               season_players = {}
+              file_count     = 0
 
               for page in pages:
                   for obj in page.get("Contents", []):
                       key = obj["Key"]
+                      file_count += 1
                       try:
                           data = json.loads(r2.get_object(Bucket=BUCKET, Key=key)["Body"].read())
-
                           game_id   = data.get("game_id", "")
                           date      = data.get("date", "")
                           home_team = data.get("home", "")
@@ -96,88 +100,75 @@ jobs:
                                   away_score = score
 
                           season_games.append({
-                              "game_id":    game_id,
-                              "date":       date,
-                              "away":       away_team,
-                              "home":       home_team,
-                              "away_score": away_score,
-                              "home_score": home_score,
-                              "arena":      arena,
+                              "game_id": game_id, "date": date,
+                              "away": away_team, "home": home_team,
+                              "away_score": away_score, "home_score": home_score,
+                              "arena": arena,
                           })
 
                           for abbr, team_players in teams.items():
-                              if game_id.endswith(abbr):
-                                  team_name = home_team
-                                  opp_name  = away_team
-                              else:
-                                  team_name = away_team
-                                  opp_name  = home_team
+                              team_name = home_team if game_id.endswith(abbr) else away_team
+                              opp_name  = away_team if game_id.endswith(abbr) else home_team
 
                               for p in team_players:
                                   if p.get("dnp") or not p.get("player_id"):
                                       continue
-
                                   pid  = p["player_id"]
                                   name = p.get("player", "")
-
                                   if pid not in season_players:
                                       season_players[pid] = {"name": name, "player_id": pid, "games": []}
-
                                   season_players[pid]["games"].append({
-                                      "season":     season,
-                                      "game_id":    game_id,
-                                      "date":       date,
-                                      "team":       team_name,
-                                      "opp":        opp_name,
-                                      "home_score": home_score,
-                                      "away_score": away_score,
-                                      "mp":         p.get("mp"),
-                                      "pts":        p.get("pts"),
-                                      "reb":        p.get("trb"),
-                                      "ast":        p.get("ast"),
-                                      "stl":        p.get("stl"),
-                                      "blk":        p.get("blk"),
-                                      "tov":        p.get("tov"),
-                                      "fg":         p.get("fg"),
-                                      "fga":        p.get("fga"),
-                                      "fg_pct":     p.get("fg_pct"),
-                                      "fg3":        p.get("fg3"),
-                                      "fg3a":       p.get("fg3a"),
-                                      "fg3_pct":    p.get("fg3_pct"),
-                                      "ft":         p.get("ft"),
-                                      "fta":        p.get("fta"),
-                                      "ft_pct":     p.get("ft_pct"),
-                                      "orb":        p.get("orb"),
-                                      "drb":        p.get("drb"),
-                                      "pf":         p.get("pf"),
-                                      "plus_minus": p.get("plus_minus"),
+                                      "season": season, "game_id": game_id, "date": date,
+                                      "team": team_name, "opp": opp_name,
+                                      "home_score": home_score, "away_score": away_score,
+                                      "mp": p.get("mp"), "pts": p.get("pts"),
+                                      "reb": p.get("trb"), "ast": p.get("ast"),
+                                      "stl": p.get("stl"), "blk": p.get("blk"),
+                                      "tov": p.get("tov"), "fg": p.get("fg"),
+                                      "fga": p.get("fga"), "fg_pct": p.get("fg_pct"),
+                                      "fg3": p.get("fg3"), "fg3a": p.get("fg3a"),
+                                      "fg3_pct": p.get("fg3_pct"), "ft": p.get("ft"),
+                                      "fta": p.get("fta"), "ft_pct": p.get("ft_pct"),
+                                      "orb": p.get("orb"), "drb": p.get("drb"),
+                                      "pf": p.get("pf"), "plus_minus": p.get("plus_minus"),
                                   })
-
                       except Exception as e:
-                          print(f"  Error reading {key}: {e}", flush=True)
+                          print(f"  ERROR {key}: {e}", flush=True)
+
+              print(f"  {file_count} files, {len(season_games)} games, {len(season_players)} players", flush=True)
 
               season_games.sort(key=lambda g: g["date"])
               upload(f"basketball/indexes/{season}.json", season_games)
-              print(f"  Season index done: {len(season_games)} games", flush=True)
+              print(f"  Season index uploaded", flush=True)
 
-              print(f"  Uploading {len(season_players)} player files...", flush=True)
-              uploaded = 0
-              for pid, player_data in season_players.items():
-                  player_key = f"basketball/players/{pid}.json"
-                  # Try to get existing player file and merge
-                  try:
-                      existing = json.loads(r2.get_object(Bucket=BUCKET, Key=player_key)["Body"].read())
-                      existing_ids = {g["game_id"] for g in existing.get("games", [])}
-                      new_games = [g for g in player_data["games"] if g["game_id"] not in existing_ids]
-                      existing["games"].extend(new_games)
-                      existing["games"].sort(key=lambda g: g["date"])
-                      upload(player_key, existing)
-                  except:
-                      player_data["games"].sort(key=lambda g: g["date"])
-                      upload(player_key, player_data)
-                  uploaded += 1
+              for pid, pdata in season_players.items():
+                  if pid in all_players:
+                      existing_ids = {g["game_id"] for g in all_players[pid]["games"]}
+                      for g in pdata["games"]:
+                          if g["game_id"] not in existing_ids:
+                              all_players[pid]["games"].append(g)
+                  else:
+                      all_players[pid] = pdata
 
-              print(f"  Players uploaded: {uploaded}", flush=True)
+              for pid, pdata in all_players.items():
+                  pdata["games"].sort(key=lambda g: g["date"])
+                  upload(f"basketball/players/{pid}.json", pdata)
 
+              print(f"  Player files uploaded: {len(all_players)}", flush=True)
+
+          # Build and upload player index
+          print(f"\nBuilding player index...", flush=True)
+          player_index = []
+          for pid, pdata in all_players.items():
+              games = pdata.get("games", [])
+              last_team = games[-1]["team"] if games else ""
+              player_index.append({
+                  "id":        pid,
+                  "name":      pdata["name"],
+                  "last_team": last_team,
+              })
+          player_index.sort(key=lambda p: p["name"])
+          upload("basketball/players/index.json", player_index)
+          print(f"Player index uploaded: {len(player_index)} players", flush=True)
           print("All done!", flush=True)
           PYEOF
