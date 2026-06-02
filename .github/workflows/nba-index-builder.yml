@@ -59,8 +59,15 @@ jobs:
                   ContentType="application/json; charset=utf-8",
               )
 
-          # Global player store across all seasons
-          all_players = {}
+          def read_existing_player(pid):
+              """Read existing player file from R2, return empty structure if not found."""
+              try:
+                  obj = r2.get_object(Bucket=BUCKET, Key=f"basketball/players/{pid}.json")
+                  return json.loads(obj["Body"].read().decode("utf-8"))
+              except ClientError as e:
+                  if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
+                      return None
+                  raise
 
           for season in range(start, end + 1):
               print(f"\n=== Season {season} ===", flush=True)
@@ -141,32 +148,44 @@ jobs:
               upload(f"basketball/indexes/{season}.json", season_games)
               print(f"  Season index uploaded", flush=True)
 
-              for pid, pdata in season_players.items():
-                  if pid in all_players:
-                      existing_ids = {g["game_id"] for g in all_players[pid]["games"]}
-                      for g in pdata["games"]:
+              # For each player in this season, read existing R2 file and merge
+              for pid, new_data in season_players.items():
+                  existing = read_existing_player(pid)
+                  if existing:
+                      existing_ids = {g["game_id"] for g in existing.get("games", [])}
+                      for g in new_data["games"]:
                           if g["game_id"] not in existing_ids:
-                              all_players[pid]["games"].append(g)
+                              existing["games"].append(g)
+                      existing["games"].sort(key=lambda g: g["date"])
+                      upload(f"basketball/players/{pid}.json", existing)
                   else:
-                      all_players[pid] = pdata
+                      new_data["games"].sort(key=lambda g: g["date"])
+                      upload(f"basketball/players/{pid}.json", new_data)
 
-              for pid, pdata in all_players.items():
-                  pdata["games"].sort(key=lambda g: g["date"])
-                  upload(f"basketball/players/{pid}.json", pdata)
+              print(f"  Players uploaded: {len(season_players)}", flush=True)
 
-              print(f"  Player files uploaded: {len(all_players)}", flush=True)
-
-          # Build and upload player index
-          print(f"\nBuilding player index...", flush=True)
+          # Rebuild player index from all player files
+          print(f"\nRebuilding player index...", flush=True)
+          paginator = r2.get_paginator("list_objects_v2")
+          pages = paginator.paginate(Bucket=BUCKET, Prefix="basketball/players/", Delimiter="/")
           player_index = []
-          for pid, pdata in all_players.items():
-              games     = pdata.get("games", [])
-              last_team = games[-1]["team"] if games else ""
-              player_index.append({
-                  "id":        pid,
-                  "name":      pdata["name"],
-                  "last_team": last_team,
-              })
+          for page in pages:
+              for obj in page.get("Contents", []):
+                  key = obj["Key"]
+                  if key.endswith("index.json"):
+                      continue
+                  try:
+                      pdata = json.loads(r2.get_object(Bucket=BUCKET, Key=key)["Body"].read().decode("utf-8"))
+                      games = pdata.get("games", [])
+                      last_team = games[-1]["team"] if games else ""
+                      player_index.append({
+                          "id":        pdata.get("player_id", ""),
+                          "name":      pdata.get("name", ""),
+                          "last_team": last_team,
+                      })
+                  except Exception as e:
+                      print(f"  Error reading {key}: {e}", flush=True)
+
           player_index.sort(key=lambda p: p["name"])
           upload("basketball/players/index.json", player_index)
           print(f"Player index uploaded: {len(player_index)} players", flush=True)
