@@ -103,50 +103,28 @@ const teamStripes={
 "North Melbourne":"repeating-linear-gradient(90deg,#0A2E8A 0 24px,#ffffff 24px 48px,#0A2E8A 48px 72px)"
 };
 
-const params   = new URLSearchParams(location.search);
-const matchId  = params.get("match");
-const yearParam= params.get("year");
-const homeParam= params.get("home");
-const awayParam= params.get("away");
-const roundParam=params.get("round");
-const startYear= 1965;
-const endYear  = new Date().getFullYear();
+const params    = new URLSearchParams(location.search);
+const yearParam = params.get("year");
+const homeParam = params.get("home");
+const awayParam = params.get("away");
+const roundParam= params.get("round");
 
 async function loadGame(){
-  // Try the specified year first
-  if(yearParam){
-    const game = await fetchGame(yearParam);
-    if(game){ buildGame(yearParam, game); return; }
+  if(!yearParam || !homeParam || !awayParam || !roundParam){
+    document.getElementById("title").textContent = "Game not found";
+    return;
   }
-  // Fall back: scan all years
-  for(let y = startYear; y <= endYear; y++){
-    const game = await fetchGame(y);
-    if(game){ buildGame(y, game); return; }
-  }
-}
-
-async function fetchGame(year){
   try{
-    const res  = await fetch(`/data/afl/afl_${year}.json`);
-    if(!res.ok) return null;
+    const res  = await fetch(`/data/afl/afl_${yearParam}.json`);
+    if(!res.ok) return;
     const data = await res.json();
-
-    if(homeParam && awayParam && roundParam){
-      const byTeams = data.filter(x =>
-        x.home_team === homeParam &&
-        x.away_team === awayParam &&
-        x.round     === roundParam
-      );
-      if(byTeams.length) return byTeams;
-    }
-
-    if(matchId){
-      const byId = data.filter(x => x.match_id && String(x.match_id) === String(matchId));
-      if(byId.length) return byId;
-    }
-
-    return null;
-  }catch(e){ return null; }
+    const game = data.filter(x =>
+      x.home_team === homeParam &&
+      x.away_team === awayParam &&
+      x.round     === roundParam
+    );
+    if(game.length) buildGame(yearParam, game);
+  }catch(e){ console.error(e); }
 }
 
 function formatQtr(val){
