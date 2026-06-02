@@ -4,7 +4,6 @@
   <script src="/js/analytics.js"></script>
 <meta charset="UTF-8">
 <title>AFL Player Profile</title>
-
 <style>
 body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f4f6f8;}
 .navbar{display:flex;justify-content:center;gap:22px;padding:14px 0;background:#fff;border-bottom:1px solid #ddd;font-weight:600;}
@@ -33,6 +32,7 @@ tbody tr:nth-child(even){background:#f2f7ff;}
 tbody tr{cursor:pointer;}
 tbody tr:hover{background:#e8f0ff;}
 .reset-sort{margin-top:10px;padding:6px 12px;border-radius:6px;border:1px solid #aaa;cursor:pointer;}
+.loading{color:#888;font-style:italic;padding:20px;}
 .disambig{background:white;border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.08);padding:30px;margin-bottom:20px;}
 .disambig h2{margin:0 0 8px;font-size:22px;color:#333;}
 .disambig p{color:#666;margin:0 0 20px;}
@@ -41,17 +41,13 @@ tbody tr:hover{background:#e8f0ff;}
 .disambig-card:hover{border-color:#0056d6;box-shadow:0 4px 14px rgba(0,86,214,.12);}
 .disambig-stripe{height:32px;width:44px;border-radius:6px;border:1px solid #ccc;flex-shrink:0;}
 </style>
-
 </head>
 <body>
-
 <div class="navbar">
 <a href="/index.html">Home</a>
 <a href="/afl.html">AFL</a>
 </div>
-
 <div class="page">
-
 <div class="top-bar">
 <div class="name-wrap">
 <h1 id="playerName"></h1>
@@ -62,22 +58,17 @@ tbody tr:hover{background:#e8f0ff;}
 <datalist id="playerList"></datalist>
 </div>
 </div>
-
 <div id="summary">
-<select id="opponentSelect" class="opponent-select" style="display:none">
-<option value="all">All Opponents</option>
-</select>
+<select id="opponentSelect" class="opponent-select" style="display:none"><option value="all">All Opponents</option></select>
 <div class="section-title" id="careerLabel" style="display:none">Career Summary</div>
 <div class="stats" id="careerStats"></div>
 <div class="section-title" id="opponentLabel" style="display:none">Vs Selected Opponent</div>
 <div class="stats" id="opponentStats"></div>
 </div>
-
+<div id="loadingMsg" class="loading"></div>
 <button class="reset-sort" id="resetBtn" style="display:none" onclick="resetSort()">Reset Sort</button>
-
 <table id="mainTable" style="display:none">
-<thead>
-<tr>
+<thead><tr>
 <th onclick="sortTable('season')">Season</th>
 <th onclick="sortTable('round')">Round</th>
 <th>Team</th>
@@ -86,47 +77,30 @@ tbody tr:hover{background:#e8f0ff;}
 <th onclick="sortTable('G')">G</th>
 <th onclick="sortTable('B')">B</th>
 <th onclick="sortTable('BR')">BR</th>
-</tr>
-</thead>
+</tr></thead>
 <tbody id="rows"></tbody>
 </table>
-
 </div>
 
 <script>
-
 const DISAMBIG_GROUPS = {
-  "Will Hayes": [
-    ["Western Bulldogs", "Carlton"],
-    ["Collingwood"]
-  ],
+  "Will Hayes": [["Western Bulldogs","Carlton"],["Collingwood"]],
 };
 
 const teamColours = {
-  "Adelaide":         "#002b5c,#e21937",
-  "Brisbane":         "#7c0a02,#fdb827",
-  "Carlton":          "#031a29,#ffffff",
-  "Collingwood":      "#000000,#ffffff",
-  "Essendon":         "#cc2031,#000000",
-  "Fremantle":        "#2a0f5a,#ffffff",
-  "Geelong":          "#002b5c,#ffffff",
-  "Gold Coast":       "#c8102e,#fdb827",
-  "GWS":              "#f37021,#333333",
-  "Hawthorn":         "#4b2c20,#fdb827",
-  "Melbourne":        "#001a33,#c8102e",
-  "North Melbourne":  "#003a8f,#ffffff",
-  "Port Adelaide":    "#008aab,#000000",
-  "Richmond":         "#ffd100,#000000",
-  "St Kilda":         "#ed1b2e,#000000",
-  "Sydney":           "#e1251b,#ffffff",
-  "West Coast":       "#003087,#f2a900",
-  "Western Bulldogs": "#003087,#c8102e"
+  "Adelaide":"#002b5c,#e21937","Brisbane":"#7c0a02,#fdb827","Carlton":"#031a29,#ffffff",
+  "Collingwood":"#000000,#ffffff","Essendon":"#cc2031,#000000","Fremantle":"#2a0f5a,#ffffff",
+  "Geelong":"#002b5c,#ffffff","Gold Coast":"#c8102e,#fdb827","GWS":"#f37021,#333333",
+  "Hawthorn":"#4b2c20,#fdb827","Melbourne":"#001a33,#c8102e","North Melbourne":"#003a8f,#ffffff",
+  "Port Adelaide":"#008aab,#000000","Richmond":"#ffd100,#000000","St Kilda":"#ed1b2e,#000000",
+  "Sydney":"#e1251b,#ffffff","West Coast":"#003087,#f2a900","Western Bulldogs":"#003087,#c8102e"
 };
 
 const playerSearchEl = document.getElementById("playerSearch");
 const playerList     = document.getElementById("playerList");
 const opponentSelect = document.getElementById("opponentSelect");
 const rows           = document.getElementById("rows");
+const loadingMsg     = document.getElementById("loadingMsg");
 
 const params     = new URLSearchParams(location.search);
 const playerName = params.get("name") || "";
@@ -135,77 +109,75 @@ const playerTeam = params.get("team") || "";
 document.getElementById("playerName").textContent = playerName || "Select a player";
 
 let allGames = [], currentGames = [], sortDir = -1, sortKey = null;
+const startYear = 1965, endYear = new Date().getFullYear();
 
-const years = [];
-for (let y = 1965; y <= new Date().getFullYear(); y++) years.push(y);
+// Load all years in batches of 5 to avoid overwhelming the browser
+async function loadAllYears() {
+  loadingMsg.textContent = "Loading data...";
+  const years = [];
+  for (let y = startYear; y <= endYear; y++) years.push(y);
 
-Promise.all(
-  years.map(y => fetch(`/data/afl/afl_${y}.json`).then(r => r.json()).catch(() => []))
-).then(data => {
+  const batchSize = 5;
+  for (let i = 0; i < years.length; i += batchSize) {
+    const batch = years.slice(i, i + batchSize);
+    const results = await Promise.all(
+      batch.map(y => fetch(`/data/afl/afl_${y}.json`).then(r => r.json()).catch(() => []))
+    );
+    results.forEach(d => allGames = allGames.concat(d));
+    loadingMsg.textContent = `Loading data... ${Math.min(i + batchSize, years.length)}/${years.length} years`;
+  }
 
-  allGames = data.flat();
+  loadingMsg.textContent = "";
+  buildDatalist();
+  if (playerName) findAndShowPlayer();
+}
 
+function buildDatalist() {
   const nameToTeams = {};
   allGames.forEach(g => {
     if (!nameToTeams[g.player]) nameToTeams[g.player] = new Set();
     nameToTeams[g.player].add(g.played_for);
   });
-
-  const datalistOptions = new Set();
+  const opts = new Set();
   Object.keys(nameToTeams).sort().forEach(name => {
     if (DISAMBIG_GROUPS[name]) {
       DISAMBIG_GROUPS[name].forEach(group => {
-        const groupHasData = group.some(t => nameToTeams[name].has(t));
-        if (groupHasData) {
-          const label = group.length === 1
-            ? `${name} (${group[0]})`
-            : `${name} (${group.join(" / ")})`;
-          datalistOptions.add(label);
+        if (group.some(t => nameToTeams[name].has(t))) {
+          opts.add(group.length === 1 ? `${name} (${group[0]})` : `${name} (${group.join(" / ")})`);
         }
       });
     } else {
-      datalistOptions.add(name);
+      opts.add(name);
     }
   });
-
   playerList.innerHTML = "";
-  [...datalistOptions].forEach(label => {
+  [...opts].forEach(label => {
     const o = document.createElement("option");
     o.value = label;
     playerList.appendChild(o);
   });
+}
 
-  if (!playerName) return;
-
+function findAndShowPlayer() {
   const allMatchingGames = allGames.filter(p => p.player === playerName);
   if (!allMatchingGames.length) return;
 
   if (DISAMBIG_GROUPS[playerName]) {
     const teamsInData = new Set(allMatchingGames.map(g => g.played_for));
-    const validGroups = DISAMBIG_GROUPS[playerName].filter(group =>
-      group.some(t => teamsInData.has(t))
-    );
-
-    if (validGroups.length > 1 && !playerTeam) {
-      showDisambiguation(playerName, validGroups);
-      return;
-    }
-
+    const validGroups = DISAMBIG_GROUPS[playerName].filter(group => group.some(t => teamsInData.has(t)));
+    if (validGroups.length > 1 && !playerTeam) { showDisambiguation(playerName, validGroups); return; }
     const chosenTeams = playerTeam.split("/").map(s => s.trim());
     const matchedGroup = DISAMBIG_GROUPS[playerName].find(group =>
       chosenTeams.every(t => group.includes(t)) || group.some(t => chosenTeams.includes(t))
     ) || validGroups[0];
-
     currentGames = allMatchingGames.filter(p => matchedGroup.includes(p.played_for));
-
   } else {
     currentGames = allMatchingGames;
   }
 
   if (!currentGames.length) return;
 
-  let latestGame = currentGames[0];
-  currentGames.forEach(g => { if (g.season > latestGame.season) latestGame = g; });
+  let latestGame = currentGames.reduce((a, g) => g.season > a.season ? g : a, currentGames[0]);
   const team = latestGame.played_for;
   if (teamColours[team]) {
     const c = teamColours[team].split(",");
@@ -224,25 +196,18 @@ Promise.all(
   renderCareer(currentGames);
   renderOpponent([]);
   renderTable(currentGames);
-
-});
+}
 
 function showDisambiguation(name, groups) {
-  document.getElementById("playerName").textContent = name;
   document.getElementById("summary").innerHTML = `
     <div class="disambig">
       <h2>Multiple players named "${name}"</h2>
       <p>Select the player you're looking for:</p>
       <div class="disambig-options">
         ${groups.map(group => {
-          const teamParam = group.join("/");
-          const stripes = group.map(t =>
-            `<div class="disambig-stripe" style="${getStripeStyle(t)}"></div>`
-          ).join("");
-          return `<a class="disambig-card" href="afl-player.html?name=${encodeURIComponent(name)}&team=${encodeURIComponent(teamParam)}">
-            ${stripes}
-            ${name}&ensp;<span style="color:#888;font-weight:400;">(${group.join(" / ")})</span>
-          </a>`;
+          const stripes = group.map(t => `<div class="disambig-stripe" style="${getStripeStyle(t)}"></div>`).join("");
+          return `<a class="disambig-card" href="afl-player.html?name=${encodeURIComponent(name)}&team=${encodeURIComponent(group.join("/"))}">
+            ${stripes}${name}&ensp;<span style="color:#888;font-weight:400;">(${group.join(" / ")})</span></a>`;
         }).join("")}
       </div>
     </div>`;
@@ -257,16 +222,12 @@ function getStripeStyle(team) {
 function setupOpponents(games) {
   opponentSelect.innerHTML = `<option value="all">All Opponents</option>`;
   [...new Set(games.map(g => g.played_against))].sort().forEach(o => {
-    const opt = document.createElement("option");
-    opt.value = o; opt.textContent = o;
+    const opt = document.createElement("option"); opt.value = o; opt.textContent = o;
     opponentSelect.appendChild(opt);
   });
   opponentSelect.onchange = () => {
-    let f = games;
-    if (opponentSelect.value !== "all")
-      f = games.filter(g => g.played_against === opponentSelect.value);
-    renderOpponent(f);
-    renderTable(f);
+    let f = opponentSelect.value === "all" ? games : games.filter(g => g.played_against === opponentSelect.value);
+    renderOpponent(f); renderTable(f);
   };
 }
 
@@ -275,44 +236,30 @@ function renderOpponent(g) { renderStats(g, "opponentStats"); }
 
 function renderStats(g, id) {
   if (!g.length) { document.getElementById(id).innerHTML = ""; return; }
-  const games  = g.length;
-  const dTotal = g.reduce((a, x) => a + (+x.D || 0), 0);
-  const gTotal = g.reduce((a, x) => a + (+x.G || 0), 0);
-  const brTotal = g.reduce((a, x) => a + (+x.BR || 0), 0);
-  const bestD  = Math.max(...g.map(x => +x.D || 0));
-  const bestG  = Math.max(...g.map(x => +x.G || 0));
-
-  const bestDGames = g.filter(x => (+x.D || 0) === bestD);
-  const bestGGames = g.filter(x => (+x.G || 0) === bestG);
-
-  function bestDetail(games) {
-    if (games.length === 1) {
-      const x = games[0];
-      return `<div class="sub">vs ${x.played_against}<br>${x.round}, ${x.season}</div>`;
-    }
-    return `<div class="sub">(${games.length} times)</div>`;
+  const games = g.length;
+  const dTotal = g.reduce((a,x) => a+(+x.D||0), 0);
+  const gTotal = g.reduce((a,x) => a+(+x.G||0), 0);
+  const brTotal= g.reduce((a,x) => a+(+x.BR||0), 0);
+  const bestD  = Math.max(...g.map(x => +x.D||0));
+  const bestG  = Math.max(...g.map(x => +x.G||0));
+  const bestDGames = g.filter(x => (+x.D||0) === bestD);
+  const bestGGames = g.filter(x => (+x.G||0) === bestG);
+  function bestDetail(arr) {
+    if (arr.length===1) return `<div class="sub">vs ${arr[0].played_against}<br>${arr[0].round}, ${arr[0].season}</div>`;
+    return `<div class="sub">(${arr.length} times)</div>`;
   }
-
   document.getElementById(id).innerHTML = `
     <div class="stat-box"><strong>${games}</strong><span>Games</span></div>
-    <div class="stat-box">
-      <strong>${bestD}</strong><span>Best Disposals</span>
-      ${bestDetail(bestDGames)}
-    </div>
-    <div class="stat-box">
-      <strong>${bestG}</strong><span>Best Goals</span>
-      ${bestDetail(bestGGames)}
-    </div>
-    <div class="stat-box"><strong>${(dTotal / games).toFixed(1)}</strong><span>Avg Disposals</span></div>
-    <div class="stat-box"><strong>${(gTotal / games).toFixed(2)}</strong><span>Avg Goals</span></div>
+    <div class="stat-box"><strong>${bestD}</strong><span>Best Disposals</span>${bestDetail(bestDGames)}</div>
+    <div class="stat-box"><strong>${bestG}</strong><span>Best Goals</span>${bestDetail(bestGGames)}</div>
+    <div class="stat-box"><strong>${(dTotal/games).toFixed(1)}</strong><span>Avg Disposals</span></div>
+    <div class="stat-box"><strong>${(gTotal/games).toFixed(2)}</strong><span>Avg Goals</span></div>
     <div class="stat-box"><strong>${brTotal}</strong><span>Brownlow Votes</span></div>
-    <div class="stat-box"><strong>${(brTotal / games).toFixed(2)}</strong><span>Avg Brownlow</span></div>`;
+    <div class="stat-box"><strong>${(brTotal/games).toFixed(2)}</strong><span>Avg Brownlow</span></div>`;
 }
 
 function gameLink(p) {
-  if (p.match_id) {
-    return `afl-game.html?match=${encodeURIComponent(p.match_id)}&year=${p.season}`;
-  }
+  if (p.match_id) return `afl-game.html?match=${encodeURIComponent(p.match_id)}&year=${p.season}`;
   return `afl-game.html?year=${p.season}&home=${encodeURIComponent(p.home_team)}&away=${encodeURIComponent(p.away_team)}&round=${encodeURIComponent(p.round)}`;
 }
 
@@ -321,39 +268,25 @@ function renderTable(g) {
   g.forEach(p => {
     const tr = document.createElement("tr");
     tr.onclick = () => location.href = gameLink(p);
-    tr.innerHTML = `
-      <td>${p.season}</td>
-      <td>${p.round}</td>
-      <td class="left">${p.played_for}</td>
-      <td>${p.played_against}</td>
-      <td>${p.D || 0}</td>
-      <td>${p.G || 0}</td>
-      <td>${p.B || 0}</td>
-      <td>${p.BR || 0}</td>`;
+    tr.innerHTML = `<td>${p.season}</td><td>${p.round}</td><td class="left">${p.played_for}</td><td>${p.played_against}</td><td>${p.D||0}</td><td>${p.G||0}</td><td>${p.B||0}</td><td>${p.BR||0}</td>`;
     rows.appendChild(tr);
   });
 }
 
 function sortTable(key) {
-  if (sortKey === key) sortDir *= -1;
-  else { sortKey = key; sortDir = -1; }
-  currentGames.sort((a, b) => ((a[key] || 0) - (b[key] || 0)) * sortDir);
+  if (sortKey===key) sortDir*=-1; else { sortKey=key; sortDir=-1; }
+  currentGames.sort((a,b) => ((a[key]||0)-(b[key]||0))*sortDir);
   renderTable(currentGames);
 }
 
 function resetSort() {
-  const allMatchingGames = allGames.filter(p => p.player === playerName);
+  const all = allGames.filter(p => p.player===playerName);
   if (DISAMBIG_GROUPS[playerName] && playerTeam) {
-    const chosenTeams = playerTeam.split("/").map(s => s.trim());
+    const chosenTeams = playerTeam.split("/").map(s=>s.trim());
     const matchedGroup = DISAMBIG_GROUPS[playerName].find(group =>
-      chosenTeams.every(t => group.includes(t)) || group.some(t => chosenTeams.includes(t))
-    );
-    currentGames = matchedGroup
-      ? allMatchingGames.filter(p => matchedGroup.includes(p.played_for))
-      : allMatchingGames;
-  } else {
-    currentGames = allMatchingGames;
-  }
+      chosenTeams.every(t=>group.includes(t))||group.some(t=>chosenTeams.includes(t)));
+    currentGames = matchedGroup ? all.filter(p=>matchedGroup.includes(p.played_for)) : all;
+  } else { currentGames = all; }
   renderTable(currentGames);
 }
 
@@ -361,16 +294,10 @@ playerSearchEl.onchange = e => {
   const val = e.target.value.trim();
   const match = val.match(/^(.+?)\s+\((.+)\)$/);
   if (match) {
-    const name  = match[1].trim();
-    const teams = match[2].split("/").map(s => s.trim());
+    const name = match[1].trim(), teams = match[2].split("/").map(s=>s.trim());
     if (DISAMBIG_GROUPS[name]) {
-      const group = DISAMBIG_GROUPS[name].find(g =>
-        teams.every(t => g.includes(t)) || g.some(t => teams.includes(t))
-      );
-      if (group) {
-        location.href = `afl-player.html?name=${encodeURIComponent(name)}&team=${encodeURIComponent(group.join("/"))}`;
-        return;
-      }
+      const group = DISAMBIG_GROUPS[name].find(g => teams.every(t=>g.includes(t))||g.some(t=>teams.includes(t)));
+      if (group) { location.href=`afl-player.html?name=${encodeURIComponent(name)}&team=${encodeURIComponent(group.join("/"))}`; return; }
     }
     location.href = `afl-player.html?name=${encodeURIComponent(name)}&team=${encodeURIComponent(teams[0])}`;
   } else {
@@ -378,7 +305,7 @@ playerSearchEl.onchange = e => {
   }
 };
 
+loadAllYears();
 </script>
-
 </body>
 </html>
