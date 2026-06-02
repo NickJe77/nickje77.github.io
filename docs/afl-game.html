@@ -1,124 +1,87 @@
 <!DOCTYPE html>
-
 <html>
 <head>
   <script src="/js/analytics.js"></script>
 <meta charset="UTF-8">
 <title>AFL Game</title>
-
 <style>
 body{font-family:system-ui,Arial;margin:0;background:#f4f6f8;}
 .navbar{display:flex;justify-content:center;gap:22px;padding:14px 0;background:#fff;border-bottom:1px solid #ddd;font-weight:600;}
 .navbar a{color:#0056d6;text-decoration:none;font-size:17px;}
 .navbar a:hover{text-decoration:underline;}
-
 .page{max-width:1200px;margin:auto;padding:25px;}
 h1{text-align:center;margin-bottom:6px;}
 .meta{text-align:center;color:#555;margin-bottom:12px;}
 .final-score{text-align:center;font-size:22px;font-weight:700;margin-bottom:10px;}
-
 .qtr-scores{text-align:center;margin-bottom:20px;font-size:14px;color:#333;}
 .qtr-scores table{margin:0 auto;border-collapse:collapse;}
 .qtr-scores th,.qtr-scores td{padding:5px 14px;border:1px solid #ddd;text-align:center;}
 .qtr-scores th{background:#f3f6fb;font-weight:600;}
 .qtr-scores td.team-name{text-align:left;font-weight:600;}
-
 .teams-wrap{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
 @media(max-width:800px){.teams-wrap{grid-template-columns:1fr;}}
-
 .team-box{background:#fff;border-radius:14px;box-shadow:0 4px 12px rgba(0,0,0,.08);overflow:hidden;}
-
 .team-header{padding:12px;text-align:center;font-weight:700;font-size:18px;}
 .team-stripe{height:16px;margin:0 12px 12px;border-radius:6px;border:1px solid #ccc;}
 .brownlow{padding:6px 12px 12px;font-size:13px;color:#555;text-align:center;min-height:22px;}
 .brownlow strong{color:#333;}
-
 table{width:100%;border-collapse:collapse;}
 th,td{border:1px solid #ddd;padding:6px 8px;text-align:center;font-size:14px;}
 th{background:#f3f6fb;cursor:pointer;user-select:none;}
 td.left{text-align:left;font-weight:600;}
 tbody tr{cursor:pointer;}
 tbody tr:hover{background:#e8f0ff;}
-
 .sort-indicator{font-size:11px;margin-left:4px;}
 </style>
-
 </head>
-
 <body>
-
 <div class="navbar">
 <a href="index.html">Home</a>
 <a href="afl.html">AFL</a>
 </div>
-
 <div class="page">
-
 <h1 id="title"></h1>
 <div class="meta" id="venueLine"></div>
 <div class="final-score" id="finalScore"></div>
-
 <div class="qtr-scores">
   <table id="qtrTable">
     <thead>
-      <tr>
-        <th>Team</th>
-        <th>Q1</th>
-        <th>Q2</th>
-        <th>Q3</th>
-        <th>Q4</th>
-        <th>Total</th>
-      </tr>
+      <tr><th>Team</th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>Total</th></tr>
     </thead>
     <tbody id="qtrRows"></tbody>
   </table>
 </div>
-
 <div class="teams-wrap">
-
 <div class="team-box">
 <div class="team-header" id="teamAName"></div>
 <div class="team-stripe" id="teamAStripe"></div>
 <div class="brownlow" id="teamABrownlow"></div>
 <table id="teamATable">
-<thead>
-<tr>
+<thead><tr>
 <th data-col="player">Player</th>
-<th data-col="K">K</th>
-<th data-col="HB">H</th>
-<th data-col="D">D</th>
-<th data-col="G">G</th>
-<th data-col="B">B</th>
-</tr>
-</thead>
+<th data-col="K">K</th><th data-col="HB">H</th><th data-col="D">D</th>
+<th data-col="G">G</th><th data-col="B">B</th>
+</tr></thead>
 <tbody id="teamARows"></tbody>
 </table>
 </div>
-
 <div class="team-box">
 <div class="team-header" id="teamBName"></div>
 <div class="team-stripe" id="teamBStripe"></div>
 <div class="brownlow" id="teamBBrownlow"></div>
 <table id="teamBTable">
-<thead>
-<tr>
+<thead><tr>
 <th data-col="player">Player</th>
-<th data-col="K">K</th>
-<th data-col="HB">H</th>
-<th data-col="D">D</th>
-<th data-col="G">G</th>
-<th data-col="B">B</th>
-</tr>
-</thead>
+<th data-col="K">K</th><th data-col="HB">H</th><th data-col="D">D</th>
+<th data-col="G">G</th><th data-col="B">B</th>
+</tr></thead>
 <tbody id="teamBRows"></tbody>
 </table>
 </div>
-
 </div>
 </div>
 
 <script>
-
 const teamStripes={
 "Carlton":"repeating-linear-gradient(90deg,#001A3D 0 24px,#ffffff 24px 48px,#001A3D 48px 72px)",
 "Collingwood":"repeating-linear-gradient(90deg,#000000 0 24px,#ffffff 24px 48px,#000000 48px 72px)",
@@ -140,82 +103,92 @@ const teamStripes={
 "North Melbourne":"repeating-linear-gradient(90deg,#0A2E8A 0 24px,#ffffff 24px 48px,#0A2E8A 48px 72px)"
 };
 
-const params=new URLSearchParams(location.search);
-const matchId=params.get("match");
-const startYear=1965;
-const endYear=new Date().getFullYear();
+const params   = new URLSearchParams(location.search);
+const matchId  = params.get("match");
+const yearParam= params.get("year");
+const homeParam= params.get("home");
+const awayParam= params.get("away");
+const roundParam=params.get("round");
+const startYear= 1965;
+const endYear  = new Date().getFullYear();
 
 async function loadGame(){
-  const year=params.get("year");
-  if(year){
-    try{
-      const res=await fetch(`/data/afl/afl_${year}.json`);
-      if(res.ok){
-        const data=await res.json();
-        const game=data.filter(x=>String(x.match_id)===String(matchId));
-        if(game.length){ buildGame(year,game); return; }
-      }
-    }catch(e){console.error(e);}
+  // Try the specified year first
+  if(yearParam){
+    const game = await fetchGame(yearParam);
+    if(game){ buildGame(yearParam, game); return; }
   }
-  for(let y=startYear;y<=endYear;y++){
-    try{
-      const res=await fetch(`/data/afl/afl_${y}.json`);
-      if(!res.ok) continue;
-      const data=await res.json();
-      const game=data.filter(x=>String(x.match_id)===String(matchId));
-      if(game.length){ buildGame(y,game); return; }
-    }catch(e){}
+  // Fall back: scan all years
+  for(let y = startYear; y <= endYear; y++){
+    const game = await fetchGame(y);
+    if(game){ buildGame(y, game); return; }
   }
+}
+
+async function fetchGame(year){
+  try{
+    const res  = await fetch(`/data/afl/afl_${year}.json`);
+    if(!res.ok) return null;
+    const data = await res.json();
+
+    // Match by match_id if available
+    if(matchId){
+      const byId = data.filter(x => x.match_id && String(x.match_id) === String(matchId));
+      if(byId.length) return byId;
+    }
+
+    // Match by home+away+round for fitzRoy data (no match_id)
+    if(homeParam && awayParam && roundParam){
+      const byTeams = data.filter(x =>
+        x.home_team === homeParam &&
+        x.away_team === awayParam &&
+        x.round     === roundParam
+      );
+      if(byTeams.length) return byTeams;
+    }
+
+    return null;
+  }catch(e){ return null; }
 }
 
 function formatQtr(val){
   if(!val && val!==0) return "-";
-  const s=String(val);
-  const parts=s.split(".");
-  const g=parseInt(parts[0]||0);
-  const b=parseInt(parts[1]||0);
-  const total=g*6+b;
-  return `${g}.${b} (${total})`;
+  const s=String(val), parts=s.split(".");
+  const g=parseInt(parts[0]||0), b=parseInt(parts[1]||0);
+  return `${g}.${b} (${g*6+b})`;
 }
 
-function buildGame(season,game){
-  const info=game[0];
-  const teams=[...new Set(game.map(p=>p.played_for))];
-  const teamA=teams[0];
-  const teamB=teams[1];
-  const teamAPlayers=game.filter(p=>p.played_for===teamA);
-  const teamBPlayers=game.filter(p=>p.played_for===teamB);
+function buildGame(season, game){
+  const info = game[0];
+  const teams= [...new Set(game.map(p=>p.played_for))];
+  const teamA= teams[0], teamB= teams[1];
+  const teamAPlayers= game.filter(p=>p.played_for===teamA);
+  const teamBPlayers= game.filter(p=>p.played_for===teamB);
 
-  const isHome=teamA===info.home_team;
-  const teamAQ=isHome
+  const isHome = teamA===info.home_team;
+  const teamAQ = isHome
     ?{q1:info.home_q1,q2:info.home_q2,q3:info.home_q3,q4:info.home_q4,total:info.home_points}
     :{q1:info.away_q1,q2:info.away_q2,q3:info.away_q3,q4:info.away_q4,total:info.away_points};
-  const teamBQ=isHome
+  const teamBQ = isHome
     ?{q1:info.away_q1,q2:info.away_q2,q3:info.away_q3,q4:info.away_q4,total:info.away_points}
     :{q1:info.home_q1,q2:info.home_q2,q3:info.home_q3,q4:info.home_q4,total:info.home_points};
 
   document.getElementById("title").textContent=`${season} – ${info.round}: ${teamA} vs ${teamB}`;
-  const attendance=info.crowd?`· Attendance: ${Number(info.crowd).toLocaleString()}`:"";
-  document.getElementById("venueLine").textContent=`Venue: ${info.venue} ${attendance} · ${info.date}`;
+  const att = info.crowd ? ` · Attendance: ${Number(info.crowd).toLocaleString()}` : "";
+  document.getElementById("venueLine").textContent=`Venue: ${info.venue}${att} · ${info.date}`;
   document.getElementById("finalScore").textContent=`${teamA} ${teamAQ.total} – ${teamBQ.total} ${teamB}`;
 
-  // Quarter scores table
-  const qtrRows=document.getElementById("qtrRows");
-  qtrRows.innerHTML=`
+  document.getElementById("qtrRows").innerHTML=`
     <tr>
       <td class="team-name">${teamA}</td>
-      <td>${formatQtr(teamAQ.q1)}</td>
-      <td>${formatQtr(teamAQ.q2)}</td>
-      <td>${formatQtr(teamAQ.q3)}</td>
-      <td>${formatQtr(teamAQ.q4)}</td>
+      <td>${formatQtr(teamAQ.q1)}</td><td>${formatQtr(teamAQ.q2)}</td>
+      <td>${formatQtr(teamAQ.q3)}</td><td>${formatQtr(teamAQ.q4)}</td>
       <td><strong>${teamAQ.total}</strong></td>
     </tr>
     <tr>
       <td class="team-name">${teamB}</td>
-      <td>${formatQtr(teamBQ.q1)}</td>
-      <td>${formatQtr(teamBQ.q2)}</td>
-      <td>${formatQtr(teamBQ.q3)}</td>
-      <td>${formatQtr(teamBQ.q4)}</td>
+      <td>${formatQtr(teamBQ.q1)}</td><td>${formatQtr(teamBQ.q2)}</td>
+      <td>${formatQtr(teamBQ.q3)}</td><td>${formatQtr(teamBQ.q4)}</td>
       <td><strong>${teamBQ.total}</strong></td>
     </tr>`;
 
@@ -224,7 +197,6 @@ function buildGame(season,game){
   document.getElementById("teamAStripe").style.background=teamStripes[teamA]||"#999";
   document.getElementById("teamBStripe").style.background=teamStripes[teamB]||"#999";
 
-  // Brownlow votes
   function brownlowText(players){
     const voted=players.filter(p=>p.BR>0).sort((a,b)=>b.BR-a.BR);
     if(!voted.length) return "";
@@ -246,11 +218,8 @@ function renderTable(tbodyId,players,tableId){
     tr.onclick=()=>location.href=`afl-player.html?name=${encodeURIComponent(p.player)}`;
     tr.innerHTML=`
       <td class="left">${p.player}</td>
-      <td>${p.K||0}</td>
-      <td>${p.HB||0}</td>
-      <td>${p.D||0}</td>
-      <td>${p.G||0}</td>
-      <td>${p.B||0}</td>`;
+      <td>${p.K||0}</td><td>${p.HB||0}</td><td>${p.D||0}</td>
+      <td>${p.G||0}</td><td>${p.B||0}</td>`;
     tbody.appendChild(tr);
   });
   enableSorting(tableId,players);
@@ -272,18 +241,16 @@ function enableSorting(tableId,players){
         return asc?(a[col]||0)-(b[col]||0):(b[col]||0)-(a[col]||0);
       });
       headers.forEach(h=>h.querySelector(".sort-indicator")?.remove());
-      const indicator=document.createElement("span");
-      indicator.className="sort-indicator";
-      indicator.textContent=!asc?"▼":"▲";
-      th.appendChild(indicator);
+      const ind=document.createElement("span");
+      ind.className="sort-indicator";
+      ind.textContent=!asc?"▼":"▲";
+      th.appendChild(ind);
       renderTable(table.querySelector("tbody").id,players,tableId);
     };
   });
 }
 
 loadGame();
-
 </script>
-
 </body>
 </html>
