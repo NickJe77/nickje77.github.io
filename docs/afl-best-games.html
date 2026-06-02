@@ -5,63 +5,26 @@
 <meta charset="UTF-8">
 <title>AFL Best Individual Games | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <link rel="stylesheet" href="style.css">
-
 <style>
-body{
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
-               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  margin:0;
-}
-
-.navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px 0;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
-}
+body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;margin:0;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;font-weight:600;}
 .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
-
-.page-wrap{
-  max-width:1000px;
-  margin:0 auto;
-  padding:30px 20px;
-}
-
+.page-wrap{max-width:1000px;margin:0 auto;padding:30px 20px;}
 h1{text-align:center;margin-bottom:10px;}
 p{text-align:center;color:#555;margin-bottom:25px;}
-
-select{
-  padding:10px 14px;
-  font-size:16px;
-  border-radius:8px;
-  margin-bottom:20px;
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-}
-th,td{
-  border-bottom:1px solid #ddd;
-  padding:8px 10px;
-  text-align:left;
-}
+select{padding:10px 14px;font-size:16px;border-radius:8px;margin-bottom:20px;}
+table{width:100%;border-collapse:collapse;}
+th,td{border-bottom:1px solid #ddd;padding:8px 10px;text-align:left;}
 th{background:#f0f0f0;}
 .rank{width:50px;text-align:center;font-weight:700;}
 .stat{width:80px;text-align:center;font-weight:700;}
-
-tbody tr:nth-child(even) td{
-  background:#f3f7ff;
-}
+tbody tr:nth-child(even) td{background:#f3f7ff;}
+tbody tr{cursor:pointer;}
+tbody tr:hover td{background:#e8f0ff;}
 </style>
 </head>
-
 <body>
-
 <div class="navbar">
   <a href="index.html">Home</a>
   <a href="racing.html">Racing</a>
@@ -70,12 +33,9 @@ tbody tr:nth-child(even) td{
   <a href="cricket.html">Cricket</a>
   <a href="f1.html">F1</a>
 </div>
-
 <div class="page-wrap">
-
-<h1>Best Individual Games (AFL Era)</h1>
-<p>Top 10 individual performances since 1990.</p>
-
+<h1>Best Individual Games (VFL/AFL Era)</h1>
+<p>Top 10 individual performances since 1965.</p>
 <div style="text-align:center;">
   Show top 10 by:
   <select id="statSelect" disabled>
@@ -86,11 +46,8 @@ tbody tr:nth-child(even) td{
     <option value="M">Marks</option>
     <option value="HO">Hit Outs</option>
   </select>
-  <div id="loadingMsg" style="margin-top:10px;color:#888;">
-    Loading AFL data…
-  </div>
+  <div id="loadingMsg" style="margin-top:10px;color:#888;">Loading AFL data…</div>
 </div>
-
 <table>
   <thead>
     <tr>
@@ -105,37 +62,23 @@ tbody tr:nth-child(even) td{
   </thead>
   <tbody id="tableBody"></tbody>
 </table>
-
 </div>
-
 <script>
 const statSelect = document.getElementById("statSelect");
-const tableBody = document.getElementById("tableBody");
+const tableBody  = document.getElementById("tableBody");
 const loadingMsg = document.getElementById("loadingMsg");
-
 let allData = [];
 let dataLoaded = false;
 
 async function loadAllSeasons(){
-  const startYear = 1990;
+  const startYear = 1965;
   const endYear = new Date().getFullYear();
-
   const requests = [];
-
   for(let y=startYear; y<=endYear; y++){
-    requests.push(
-      fetch(`data/afl/afl_${y}.json`)
-        .then(r => r.ok ? r.json() : [])
-        .catch(()=>[])
-    );
+    requests.push(fetch(`data/afl/afl_${y}.json`).then(r=>r.ok?r.json():[]).catch(()=>[]));
   }
-
   const results = await Promise.all(requests);
-
-  results.forEach(seasonData=>{
-    seasonData.forEach(r=> allData.push(r));
-  });
-
+  results.forEach(s => s.forEach(r => allData.push(r)));
   dataLoaded = true;
   statSelect.disabled = false;
   loadingMsg.style.display = "none";
@@ -150,21 +93,21 @@ function cleanRound(val){
   return String(val).replace(/^Round\s*/i, "");
 }
 
+function gameLink(r){
+  return `afl-game.html?year=${r.season}&home=${encodeURIComponent(r.home_team)}&away=${encodeURIComponent(r.away_team)}&round=${encodeURIComponent(r.round)}`;
+}
+
 function updateTable(){
   if(!dataLoaded) return;
-
   const stat = statSelect.value;
-
   const rows = allData
     .filter(r => Number(r[stat]) > 0)
-    .sort((a,b)=> Number(b[stat]) - Number(a[stat]))
+    .sort((a,b) => Number(b[stat]) - Number(a[stat]))
     .slice(0,10);
-
   tableBody.innerHTML = "";
-
   rows.forEach((r,i)=>{
-    const tr=document.createElement("tr");
-
+    const tr = document.createElement("tr");
+    tr.onclick = () => location.href = gameLink(r);
     tr.innerHTML = `
       <td class="rank">${i+1}</td>
       <td>${r.player}</td>
@@ -172,13 +115,10 @@ function updateTable(){
       <td>${r.played_against}</td>
       <td>${r.season}</td>
       <td>${cleanRound(r.round)}</td>
-      <td class="stat">${r[stat]}</td>
-    `;
-
+      <td class="stat">${r[stat]}</td>`;
     tableBody.appendChild(tr);
   });
 }
 </script>
-
 </body>
 </html>
