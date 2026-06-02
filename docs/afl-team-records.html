@@ -4,480 +4,209 @@
   <script src="/js/analytics.js"></script>
 <meta charset="UTF-8">
 <title>AFL Squad Records | The Sporting Almanac</title>
-
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
-
 <style>
-body{
-  font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  margin:0;
-  background:#f4f6f8;
-}
-.navbar{
-  display:flex;justify-content:center;gap:22px;
-  padding:14px 0;background:#fff;border-bottom:1px solid #ddd;
-  font-weight:600;
-}
+body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f4f6f8;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:14px 0;background:#fff;border-bottom:1px solid #ddd;font-weight:600;}
 .navbar a{color:#0056d6;text-decoration:none;font-size:17px;}
 .navbar a:hover{text-decoration:underline;}
-
 .page{max-width:1400px;margin:0 auto;padding:25px;}
 h1{margin:0 0 18px 0;font-size:34px;}
-
-.controls{
-  display:flex;gap:20px;margin-bottom:22px;
-  flex-wrap:wrap;align-items:center;
-}
-select{
-  padding:10px 14px;border-radius:10px;border:1px solid #ccc;
-  font-size:16px;background:white;
-}
-button{
-  padding:10px 14px;border:none;border-radius:8px;
-  background:#0056d6;color:white;font-weight:600;cursor:pointer;
-}
+.controls{display:flex;gap:20px;margin-bottom:22px;flex-wrap:wrap;align-items:center;}
+select{padding:10px 14px;border-radius:10px;border:1px solid #ccc;font-size:16px;background:white;}
+button{padding:10px 14px;border:none;border-radius:8px;background:#0056d6;color:white;font-weight:600;cursor:pointer;}
 button:hover{background:#003f9a;}
-
-table{
-  border-collapse:collapse;width:100%;
-  background:white;border-radius:12px;overflow:hidden;
-  box-shadow:0 3px 10px rgba(0,0,0,.06);
-}
+table{border-collapse:collapse;width:100%;background:white;border-radius:12px;overflow:hidden;box-shadow:0 3px 10px rgba(0,0,0,.06);}
 th,td{border:1px solid #ddd;padding:9px;text-align:center;}
 th{background:#eef3fb;font-weight:600;}
 td.left{text-align:left;font-weight:600;}
 tbody tr:nth-child(even){background:#f2f7ff;}
-
 .smallnote{font-size:13px;color:#5c6f8c;margin-top:10px;}
 </style>
 </head>
-
 <body>
-
 <div class="navbar">
   <a href="/index.html">Home</a>
   <a href="/afl.html">AFL</a>
 </div>
-
 <div class="page">
-
 <h1>AFL Squad Records</h1>
-
 <div class="controls">
-<label>
-Teams:
-<select id="teamSelect"></select>
-</label>
-
-<label>
-Opponent:
-<select id="opponentSelect">
-<option value="all">All Opponents</option>
-</select>
-</label>
-
+<label>Teams: <select id="teamSelect"></select></label>
+<label>Opponent: <select id="opponentSelect"><option value="all">All Opponents</option></select></label>
 <button onclick="exportExcel()">Export Excel</button>
 <button onclick="exportPDF()">Export PDF</button>
 </div>
-
 <table id="recordsTable">
-
 <thead>
 <tr>
 <th rowspan="2">Player</th>
 <th colspan="8">Career Best</th>
 <th colspan="6">Vs Opponent</th>
 </tr>
-
 <tr>
-
 <th>D</th><th>Opp</th><th>Rnd</th><th>Yr</th>
 <th>G</th><th>Opp</th><th>Rnd</th><th>Yr</th>
-
 <th>D</th><th>Rnd</th><th>Yr</th>
 <th>G</th><th>Rnd</th><th>Yr</th>
-
 </tr>
 </thead>
-
 <tbody id="rows"></tbody>
 </table>
-
-<div class="smallnote">
-If a career-best occurs multiple times it shows like <b>32 (x2)</b> and Opp/Rnd/Yr are left blank.
+<div class="smallnote">If a career-best occurs multiple times it shows like <b>32 (x2)</b> and Opp/Rnd/Yr are left blank.</div>
 </div>
-
-</div>
-
 <script>
-
-let allGames = [];
-let playerIndex = {};
-let roster = [];
-let csvData = [];
-
-const teamSelect = document.getElementById("teamSelect");
-const opponentSelect = document.getElementById("opponentSelect");
-const rows = document.getElementById("rows");
+let allGames=[], playerIndex={}, roster=[], csvData=[];
+const teamSelect=document.getElementById("teamSelect");
+const opponentSelect=document.getElementById("opponentSelect");
+const rows=document.getElementById("rows");
 
 function tokenizeName(name){
-return String(name || "")
-.toLowerCase()
-.replace(/['’]/g,"")
-.replace(/\./g,"")
-.replace(/-/g," ")
-.replace(/\s+/g," ")
-.trim()
-.split(" ")
-.filter(Boolean);
+  return String(name||"").toLowerCase().replace(/['']/g,"").replace(/\./g,"").replace(/-/g," ").replace(/\s+/g," ").trim().split(" ").filter(Boolean);
 }
-
 function nameKeys(name){
-
-const toksRaw = tokenizeName(name);
-const toks = toksRaw.filter(t => t.length > 1);
-
-if(toks.length === 0) return new Set();
-
-const first = toks[0];
-const last = toks[toks.length-1];
-
-const keys = new Set();
-
-keys.add(toks.join(" "));
-keys.add(`${first} ${last}`);
-
-if(toks.length >= 3){
-const last2 = toks[toks.length-2];
-keys.add(`${first} ${last2} ${last}`);
+  const toksRaw=tokenizeName(name);
+  const toks=toksRaw.filter(t=>t.length>1);
+  if(toks.length===0) return new Set();
+  const first=toks[0], last=toks[toks.length-1];
+  const keys=new Set();
+  keys.add(toks.join(" "));
+  keys.add(`${first} ${last}`);
+  if(toks.length>=3) keys.add(`${first} ${toks[toks.length-2]} ${last}`);
+  return keys;
 }
-
-return keys;
-}
-
 function gameDedupKey(g){
-
-const id = g.match_id || g.game_id || g.id || "";
-if(id) return String(id);
-
-return [
-g.season ?? "",
-g.round ?? "",
-g.played_against ?? "",
-g.player ?? "",
-g.D ?? "",
-g.G ?? ""
-].join("|");
-
+  return [g.season??"",g.round??"",g.played_against??"",g.player??"",g.D??"",g.G??""].join("|");
 }
-
 function cleanRound(r){
-return String(r || "")
-.replace(/round/i,"")
-.replace(/r/i,"")
-.trim();
+  return String(r||"").replace(/round/i,"").replace(/r/i,"").trim();
 }
 
-const years = [];
-for(let y = 1990; y <= new Date().getFullYear(); y++) years.push(y);
+const years=[];
+for(let y=1965;y<=new Date().getFullYear();y++) years.push(y);
 
 Promise.all(
-
-years.map(y =>
-fetch(`/data/afl/afl_${y}.json`)
-.then(r => r.json())
-.catch(() => [])
-)
-
-).then(data => {
-
-allGames = data.flat();
-
-playerIndex = {};
-
-allGames.forEach(g => {
-
-const keys = nameKeys(g.player);
-
-keys.forEach(k => {
-
-if(!playerIndex[k]) playerIndex[k] = [];
-playerIndex[k].push(g);
-
-});
-
-});
-
-loadRoster();
-
+  years.map(y=>fetch(`/data/afl/afl_${y}.json`).then(r=>r.json()).catch(()=>[]))
+).then(data=>{
+  allGames=data.flat();
+  playerIndex={};
+  allGames.forEach(g=>{
+    const key = g.player;
+    if(!playerIndex[key]) playerIndex[key]=[];
+    playerIndex[key].push(g);
+  });
+  loadRoster();
 });
 
 async function loadRoster(){
-
-const res = await fetch("/data/afl/afl-team-lists.csv");
-const text = await res.text();
-
-const lines = text.trim().split(/\r?\n/);
-
-csvData = [];
-
-lines.forEach(line => {
-
-const parts = line.split(",");
-if(parts.length < 2) return;
-
-const player = parts[0].replace(/"/g,"").trim();
-const team = parts[1].replace(/"/g,"").trim();
-
-if(player.toLowerCase() === "player") return;
-
-if(player && team){
-csvData.push({player,team});
-}
-
-});
-
-buildTeams();
-buildOpponents();
-
+  const res=await fetch("/data/afl/afl-team-lists.csv");
+  const text=await res.text();
+  csvData=[];
+  text.trim().split(/\r?\n/).forEach(line=>{
+    const parts=line.split(",");
+    if(parts.length<2) return;
+    const player=parts[0].replace(/"/g,"").trim();
+    const team=parts[1].replace(/"/g,"").trim();
+    if(player.toLowerCase()==="player") return;
+    if(player&&team) csvData.push({player,team});
+  });
+  buildTeams();
+  buildOpponents();
 }
 
 function buildTeams(){
-
-teamSelect.innerHTML="";
-
-const teams = [...new Set(csvData.map(r=>r.team))].sort();
-
-teams.forEach(t=>{
-
-const opt=document.createElement("option");
-opt.value=t;
-opt.textContent=t;
-
-teamSelect.appendChild(opt);
-
-});
-
-teamSelect.onchange=loadTeam;
-
-loadTeam();
-
+  teamSelect.innerHTML="";
+  [...new Set(csvData.map(r=>r.team))].sort().forEach(t=>{
+    const opt=document.createElement("option");
+    opt.value=t; opt.textContent=t;
+    teamSelect.appendChild(opt);
+  });
+  teamSelect.onchange=loadTeam;
+  loadTeam();
 }
 
 function buildOpponents(){
-
-const keepAll = opponentSelect.querySelector('option[value="all"]');
-
-opponentSelect.innerHTML="";
-opponentSelect.appendChild(keepAll);
-
-const opp = [...new Set(allGames.map(g=>g.played_against).filter(Boolean))].sort();
-
-opp.forEach(o=>{
-
-const opt=document.createElement("option");
-opt.value=o;
-opt.textContent=o;
-
-opponentSelect.appendChild(opt);
-
-});
-
-opponentSelect.onchange=renderTable;
-
+  const keepAll=opponentSelect.querySelector('option[value="all"]');
+  opponentSelect.innerHTML="";
+  opponentSelect.appendChild(keepAll);
+  [...new Set(allGames.map(g=>g.played_against).filter(Boolean))].sort().forEach(o=>{
+    const opt=document.createElement("option");
+    opt.value=o; opt.textContent=o;
+    opponentSelect.appendChild(opt);
+  });
+  opponentSelect.onchange=renderTable;
 }
 
 function loadTeam(){
-
-const team = teamSelect.value;
-
-roster = csvData
-.filter(r=>r.team===team)
-.map(r=>r.player);
-
-renderTable();
-
+  roster=csvData.filter(r=>r.team===teamSelect.value).map(r=>r.player);
+  renderTable();
 }
 
 function bestGameWithOpponent(games,stat){
-
-let max=0;
-let bestGames=[];
-
-games.forEach(g=>{
-
-const val=Number(g[stat]||0);
-
-if(val>max){
-max=val;
-bestGames=[g];
-}
-
-else if(val===max && val!==0){
-bestGames.push(g);
-}
-
-});
-
-if(max===0) return ["0","","",""];
-
-if(bestGames.length>1){
-
-return [`${max} (x${bestGames.length})`,"","",""];
-
-}
-
-const g=bestGames[0];
-
-return [
-String(max),
-g.played_against ?? "",
-cleanRound(g.round),
-g.season ?? ""
-];
-
+  let max=0, bestGames=[];
+  games.forEach(g=>{
+    const val=Number(g[stat]||0);
+    if(val>max){max=val;bestGames=[g];}
+    else if(val===max&&val!==0) bestGames.push(g);
+  });
+  if(max===0) return ["0","","",""];
+  if(bestGames.length>1) return [`${max} (x${bestGames.length})`,"","",""];
+  const g=bestGames[0];
+  return [String(max),g.played_against??"",cleanRound(g.round),g.season??""];
 }
 
 function bestGameSimple(games,stat){
-
-let max=0;
-let bestGames=[];
-
-games.forEach(g=>{
-
-const val=Number(g[stat]||0);
-
-if(val>max){
-max=val;
-bestGames=[g];
-}
-
-else if(val===max && val!==0){
-bestGames.push(g);
-}
-
-});
-
-if(max===0) return ["0","",""];
-
-if(bestGames.length>1){
-
-return [`${max} (x${bestGames.length})`,"",""];
-
-}
-
-const g=bestGames[0];
-
-return [
-String(max),
-cleanRound(g.round),
-g.season ?? ""
-];
-
+  let max=0, bestGames=[];
+  games.forEach(g=>{
+    const val=Number(g[stat]||0);
+    if(val>max){max=val;bestGames=[g];}
+    else if(val===max&&val!==0) bestGames.push(g);
+  });
+  if(max===0) return ["0","",""];
+  if(bestGames.length>1) return [`${max} (x${bestGames.length})`,"",""];
+  const g=bestGames[0];
+  return [String(max),cleanRound(g.round),g.season??""];
 }
 
 function gamesForRosterName(player){
-
-const keys=nameKeys(player);
-
-const seen=new Set();
-const out=[];
-
-keys.forEach(k=>{
-
-const list=playerIndex[k] || [];
-
-list.forEach(g=>{
-
-const dk=gameDedupKey(g);
-
-if(seen.has(dk)) return;
-
-seen.add(dk);
-
-out.push(g);
-
-});
-
-});
-
-return out;
-
+  return playerIndex[player] || [];
 }
 
 function renderTable(){
-
-rows.innerHTML="";
-
-const opp=opponentSelect.value;
-
-roster.forEach(player=>{
-
-const playerGames=gamesForRosterName(player);
-
-const bestD=bestGameWithOpponent(playerGames,"D");
-const bestG=bestGameWithOpponent(playerGames,"G");
-
-let vsGames;
-
-if(opp==="all") vsGames=playerGames;
-else vsGames=playerGames.filter(g=>g.played_against===opp);
-
-const oppD=bestGameSimple(vsGames,"D");
-const oppG=bestGameSimple(vsGames,"G");
-
-const tr=document.createElement("tr");
-
-tr.innerHTML=`
-<td class="left">${player}</td>
-
-<td>${bestD[0]}</td><td>${bestD[1]}</td><td>${bestD[2]}</td><td>${bestD[3]}</td>
-<td>${bestG[0]}</td><td>${bestG[1]}</td><td>${bestG[2]}</td><td>${bestG[3]}</td>
-
-<td>${oppD[0]}</td><td>${oppD[1]}</td><td>${oppD[2]}</td>
-<td>${oppG[0]}</td><td>${oppG[1]}</td><td>${oppG[2]}</td>
-`;
-
-rows.appendChild(tr);
-
-});
-
+  rows.innerHTML="";
+  const opp=opponentSelect.value;
+  roster.forEach(player=>{
+    const playerGames=gamesForRosterName(player);
+    const bestD=bestGameWithOpponent(playerGames,"D");
+    const bestG=bestGameWithOpponent(playerGames,"G");
+    const vsGames=opp==="all"?playerGames:playerGames.filter(g=>g.played_against===opp);
+    const oppD=bestGameSimple(vsGames,"D");
+    const oppG=bestGameSimple(vsGames,"G");
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td class="left">${player}</td>
+      <td>${bestD[0]}</td><td>${bestD[1]}</td><td>${bestD[2]}</td><td>${bestD[3]}</td>
+      <td>${bestG[0]}</td><td>${bestG[1]}</td><td>${bestG[2]}</td><td>${bestG[3]}</td>
+      <td>${oppD[0]}</td><td>${oppD[1]}</td><td>${oppD[2]}</td>
+      <td>${oppG[0]}</td><td>${oppG[1]}</td><td>${oppG[2]}</td>`;
+    rows.appendChild(tr);
+  });
 }
 
 function exportExcel(){
-
-const table=document.getElementById("recordsTable");
-
-const wb=XLSX.utils.table_to_book(table,{sheet:"AFL Records"});
-
-XLSX.writeFile(wb,"afl_squad_records.xlsx");
-
+  const wb=XLSX.utils.table_to_book(document.getElementById("recordsTable"),{sheet:"AFL Records"});
+  XLSX.writeFile(wb,"afl_squad_records.xlsx");
 }
-
 function exportPDF(){
-
-const {jsPDF}=window.jspdf;
-
-const doc=new jsPDF({orientation:"landscape"});
-
-doc.text("AFL Squad Records",14,15);
-
-doc.autoTable({
-html:"#recordsTable",
-startY:20,
-theme:"grid",
-styles:{fontSize:7,cellPadding:2}
-});
-
-doc.save("afl_squad_records.pdf");
-
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:"landscape"});
+  doc.text("AFL Squad Records",14,15);
+  doc.autoTable({html:"#recordsTable",startY:20,theme:"grid",styles:{fontSize:7,cellPadding:2}});
+  doc.save("afl_squad_records.pdf");
 }
-
 </script>
-
 </body>
 </html>
