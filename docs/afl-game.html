@@ -14,8 +14,14 @@ body{font-family:system-ui,Arial;margin:0;background:#f4f6f8;}
 
 .page{max-width:1200px;margin:auto;padding:25px;}
 h1{text-align:center;margin-bottom:6px;}
-.meta{text-align:center;color:#555;margin-bottom:18px;}
-.final-score{text-align:center;font-size:22px;font-weight:700;margin-bottom:20px;}
+.meta{text-align:center;color:#555;margin-bottom:12px;}
+.final-score{text-align:center;font-size:22px;font-weight:700;margin-bottom:10px;}
+
+.qtr-scores{text-align:center;margin-bottom:20px;font-size:14px;color:#333;}
+.qtr-scores table{margin:0 auto;border-collapse:collapse;}
+.qtr-scores th,.qtr-scores td{padding:5px 14px;border:1px solid #ddd;text-align:center;}
+.qtr-scores th{background:#f3f6fb;font-weight:600;}
+.qtr-scores td.team-name{text-align:left;font-weight:600;}
 
 .teams-wrap{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
 @media(max-width:800px){.teams-wrap{grid-template-columns:1fr;}}
@@ -24,6 +30,8 @@ h1{text-align:center;margin-bottom:6px;}
 
 .team-header{padding:12px;text-align:center;font-weight:700;font-size:18px;}
 .team-stripe{height:16px;margin:0 12px 12px;border-radius:6px;border:1px solid #ccc;}
+.brownlow{padding:6px 12px 12px;font-size:13px;color:#555;text-align:center;min-height:22px;}
+.brownlow strong{color:#333;}
 
 table{width:100%;border-collapse:collapse;}
 th,td{border:1px solid #ddd;padding:6px 8px;text-align:center;font-size:14px;}
@@ -50,11 +58,28 @@ tbody tr:hover{background:#e8f0ff;}
 <div class="meta" id="venueLine"></div>
 <div class="final-score" id="finalScore"></div>
 
+<div class="qtr-scores">
+  <table id="qtrTable">
+    <thead>
+      <tr>
+        <th>Team</th>
+        <th>Q1</th>
+        <th>Q2</th>
+        <th>Q3</th>
+        <th>Q4</th>
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody id="qtrRows"></tbody>
+  </table>
+</div>
+
 <div class="teams-wrap">
 
 <div class="team-box">
 <div class="team-header" id="teamAName"></div>
 <div class="team-stripe" id="teamAStripe"></div>
+<div class="brownlow" id="teamABrownlow"></div>
 <table id="teamATable">
 <thead>
 <tr>
@@ -73,6 +98,7 @@ tbody tr:hover{background:#e8f0ff;}
 <div class="team-box">
 <div class="team-header" id="teamBName"></div>
 <div class="team-stripe" id="teamBStripe"></div>
+<div class="brownlow" id="teamBBrownlow"></div>
 <table id="teamBTable">
 <thead>
 <tr>
@@ -116,153 +142,143 @@ const teamStripes={
 
 const params=new URLSearchParams(location.search);
 const matchId=params.get("match");
-
-const startYear=1990;
+const startYear=1965;
 const endYear=new Date().getFullYear();
 
 async function loadGame(){
-
-const year=params.get("year");
-
-if(year){
-  try{
-    const res=await fetch(`/data/afl/afl_${year}.json`);
-    if(res.ok){
+  const year=params.get("year");
+  if(year){
+    try{
+      const res=await fetch(`/data/afl/afl_${year}.json`);
+      if(res.ok){
+        const data=await res.json();
+        const game=data.filter(x=>String(x.match_id)===String(matchId));
+        if(game.length){ buildGame(year,game); return; }
+      }
+    }catch(e){console.error(e);}
+  }
+  for(let y=startYear;y<=endYear;y++){
+    try{
+      const res=await fetch(`/data/afl/afl_${y}.json`);
+      if(!res.ok) continue;
       const data=await res.json();
       const game=data.filter(x=>String(x.match_id)===String(matchId));
-      if(game.length){
-        buildGame(year,game);
-        return;
-      }
-    }
-  }catch(e){console.error(e);}
+      if(game.length){ buildGame(y,game); return; }
+    }catch(e){}
+  }
 }
 
-for(let y=startYear;y<=endYear;y++){
-  try{
-    const res=await fetch(`/data/afl/afl_${y}.json`);
-    if(!res.ok) continue;
-
-    const data=await res.json();
-    const game=data.filter(x=>String(x.match_id)===String(matchId));
-
-    if(game.length){
-      buildGame(y,game);
-      return;
-    }
-
-  }catch(e){}
-}
-
+function formatQtr(val){
+  if(!val && val!==0) return "-";
+  const s=String(val);
+  const parts=s.split(".");
+  const g=parseInt(parts[0]||0);
+  const b=parseInt(parts[1]||0);
+  const total=g*6+b;
+  return `${g}.${b} (${total})`;
 }
 
 function buildGame(season,game){
+  const info=game[0];
+  const teams=[...new Set(game.map(p=>p.played_for))];
+  const teamA=teams[0];
+  const teamB=teams[1];
+  const teamAPlayers=game.filter(p=>p.played_for===teamA);
+  const teamBPlayers=game.filter(p=>p.played_for===teamB);
 
-const info=game[0];
+  const isHome=teamA===info.home_team;
+  const teamAQ=isHome
+    ?{q1:info.home_q1,q2:info.home_q2,q3:info.home_q3,q4:info.home_q4,total:info.home_points}
+    :{q1:info.away_q1,q2:info.away_q2,q3:info.away_q3,q4:info.away_q4,total:info.away_points};
+  const teamBQ=isHome
+    ?{q1:info.away_q1,q2:info.away_q2,q3:info.away_q3,q4:info.away_q4,total:info.away_points}
+    :{q1:info.home_q1,q2:info.home_q2,q3:info.home_q3,q4:info.home_q4,total:info.home_points};
 
-const teams=[...new Set(game.map(p=>p.played_for))];
+  document.getElementById("title").textContent=`${season} – ${info.round}: ${teamA} vs ${teamB}`;
+  const attendance=info.crowd?`· Attendance: ${Number(info.crowd).toLocaleString()}`:"";
+  document.getElementById("venueLine").textContent=`Venue: ${info.venue} ${attendance} · ${info.date}`;
+  document.getElementById("finalScore").textContent=`${teamA} ${teamAQ.total} – ${teamBQ.total} ${teamB}`;
 
-const teamA=teams[0];
-const teamB=teams[1];
+  // Quarter scores table
+  const qtrRows=document.getElementById("qtrRows");
+  qtrRows.innerHTML=`
+    <tr>
+      <td class="team-name">${teamA}</td>
+      <td>${formatQtr(teamAQ.q1)}</td>
+      <td>${formatQtr(teamAQ.q2)}</td>
+      <td>${formatQtr(teamAQ.q3)}</td>
+      <td>${formatQtr(teamAQ.q4)}</td>
+      <td><strong>${teamAQ.total}</strong></td>
+    </tr>
+    <tr>
+      <td class="team-name">${teamB}</td>
+      <td>${formatQtr(teamBQ.q1)}</td>
+      <td>${formatQtr(teamBQ.q2)}</td>
+      <td>${formatQtr(teamBQ.q3)}</td>
+      <td>${formatQtr(teamBQ.q4)}</td>
+      <td><strong>${teamBQ.total}</strong></td>
+    </tr>`;
 
-const teamAPlayers=game.filter(p=>p.played_for===teamA);
-const teamBPlayers=game.filter(p=>p.played_for===teamB);
+  document.getElementById("teamAName").textContent=teamA;
+  document.getElementById("teamBName").textContent=teamB;
+  document.getElementById("teamAStripe").style.background=teamStripes[teamA]||"#999";
+  document.getElementById("teamBStripe").style.background=teamStripes[teamB]||"#999";
 
-/* ✅ FIXED SCORE */
-const teamAScore=info.home_points;
-const teamBScore=info.away_points;
+  // Brownlow votes
+  function brownlowText(players){
+    const voted=players.filter(p=>p.BR>0).sort((a,b)=>b.BR-a.BR);
+    if(!voted.length) return "";
+    return "<strong>Brownlow Votes:</strong> "+voted.map(p=>`${p.BR}: ${p.player}`).join(", ");
+  }
+  document.getElementById("teamABrownlow").innerHTML=brownlowText(teamAPlayers);
+  document.getElementById("teamBBrownlow").innerHTML=brownlowText(teamBPlayers);
 
-document.getElementById("title").textContent=
-`${season} – ${info.round}: ${teamA} vs ${teamB}`;
-
-document.getElementById("venueLine").textContent=
-`Venue: ${info.venue} · Crowd: ${Number(info.crowd||0).toLocaleString()}`;
-
-document.getElementById("finalScore").textContent=
-`${teamA} ${teamAScore} – ${teamBScore} ${teamB}`;
-
-document.getElementById("teamAName").textContent=teamA;
-document.getElementById("teamBName").textContent=teamB;
-
-document.getElementById("teamAStripe").style.background=teamStripes[teamA]||"#999";
-document.getElementById("teamBStripe").style.background=teamStripes[teamB]||"#999";
-
-renderTable("teamARows",teamAPlayers,"teamATable");
-renderTable("teamBRows",teamBPlayers,"teamBTable");
-
+  renderTable("teamARows",teamAPlayers,"teamATable");
+  renderTable("teamBRows",teamBPlayers,"teamBTable");
 }
 
 function renderTable(tbodyId,players,tableId){
-
-players.sort((a,b)=>b.D-a.D);
-
-const tbody=document.getElementById(tbodyId);
-tbody.innerHTML="";
-
-players.forEach(p=>{
-
-const tr=document.createElement("tr");
-
-tr.onclick=()=>location.href=`afl-player.html?name=${encodeURIComponent(p.player)}`;
-
-tr.innerHTML=`
-<td class="left">${p.player}</td>
-<td>${p.K||0}</td>
-<td>${p.HB||0}</td>
-<td>${p.D||0}</td>
-<td>${p.G||0}</td>
-<td>${p.B||0}</td>`;
-
-tbody.appendChild(tr);
-
-});
-
-enableSorting(tableId,players);
-
+  players.sort((a,b)=>b.D-a.D);
+  const tbody=document.getElementById(tbodyId);
+  tbody.innerHTML="";
+  players.forEach(p=>{
+    const tr=document.createElement("tr");
+    tr.onclick=()=>location.href=`afl-player.html?name=${encodeURIComponent(p.player)}`;
+    tr.innerHTML=`
+      <td class="left">${p.player}</td>
+      <td>${p.K||0}</td>
+      <td>${p.HB||0}</td>
+      <td>${p.D||0}</td>
+      <td>${p.G||0}</td>
+      <td>${p.B||0}</td>`;
+    tbody.appendChild(tr);
+  });
+  enableSorting(tableId,players);
 }
 
 function enableSorting(tableId,players){
-
-const table=document.getElementById(tableId);
-const headers=table.querySelectorAll("th");
-
-let sortState={};
-
-headers.forEach(th=>{
-
-th.onclick=()=>{
-
-const col=th.dataset.col;
-if(!col) return;
-
-const asc=sortState[col]===true;
-
-sortState={};
-sortState[col]=!asc;
-
-players.sort((a,b)=>{
-
-if(col==="player")
-return asc?a.player.localeCompare(b.player):b.player.localeCompare(a.player);
-
-return asc?(a[col]||0)-(b[col]||0):(b[col]||0)-(a[col]||0);
-
-});
-
-headers.forEach(h=>h.querySelector(".sort-indicator")?.remove());
-
-const indicator=document.createElement("span");
-indicator.className="sort-indicator";
-indicator.textContent=!asc?"▼":"▲";
-
-th.appendChild(indicator);
-
-renderTable(table.querySelector("tbody").id,players,tableId);
-
-};
-
-});
-
+  const table=document.getElementById(tableId);
+  const headers=table.querySelectorAll("th");
+  let sortState={};
+  headers.forEach(th=>{
+    th.onclick=()=>{
+      const col=th.dataset.col;
+      if(!col) return;
+      const asc=sortState[col]===true;
+      sortState={};
+      sortState[col]=!asc;
+      players.sort((a,b)=>{
+        if(col==="player") return asc?a.player.localeCompare(b.player):b.player.localeCompare(a.player);
+        return asc?(a[col]||0)-(b[col]||0):(b[col]||0)-(a[col]||0);
+      });
+      headers.forEach(h=>h.querySelector(".sort-indicator")?.remove());
+      const indicator=document.createElement("span");
+      indicator.className="sort-indicator";
+      indicator.textContent=!asc?"▼":"▲";
+      th.appendChild(indicator);
+      renderTable(table.querySelector("tbody").id,players,tableId);
+    };
+  });
 }
 
 loadGame();
