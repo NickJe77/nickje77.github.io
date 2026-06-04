@@ -67,11 +67,9 @@ for(let y = 2026; y >= 1977; y--){
 seasonSelect.onchange = () => {
   const val = seasonSelect.value;
   if(val) loadSeason(parseInt(val));
-  else { out.innerHTML = ""; loadSeason(2026); }
 };
 
 function groupIntoSeries(games){
-  // Sort by date first
   games.sort((a,b) => new Date(a.date) - new Date(b.date));
 
   const series = [];
@@ -79,18 +77,15 @@ function groupIntoSeries(games){
 
   games.forEach((g, i) => {
     if(used.has(i)) return;
-
     const key     = [g.home, g.away].sort().join("|");
     const current = [g];
     used.add(i);
 
-    // Find consecutive games between same two teams within 20 days
     for(let j = i+1; j < games.length; j++){
       if(used.has(j)) continue;
-      const g2  = games[j];
+      const g2   = games[j];
       const key2 = [g2.home, g2.away].sort().join("|");
       if(key2 !== key) continue;
-
       const daysDiff = (new Date(g2.date) - new Date(current[current.length-1].date)) / 86400000;
       if(daysDiff <= 20){
         current.push(g2);
@@ -98,7 +93,10 @@ function groupIntoSeries(games){
       }
     }
 
-    series.push(current);
+    // Only include series with 2+ games — single games are regular season
+    if(current.length >= 2){
+      series.push(current);
+    }
   });
 
   return series;
@@ -106,7 +104,6 @@ function groupIntoSeries(games){
 
 function renderSeason(season, games){
   const playoffGames = games.filter(g => g.playoff);
-
   if(!playoffGames.length) return null;
 
   const label   = `${season-1}-${season}`;
@@ -119,6 +116,12 @@ function renderSeason(season, games){
   seriesBlock.className = "series-block";
 
   const allSeries = groupIntoSeries(playoffGames);
+
+  if(!allSeries.length){
+    const msg = document.createElement("p");
+    msg.textContent = "No playoff series found.";
+    seriesBlock.appendChild(msg);
+  }
 
   allSeries.forEach(seriesGames => {
     const teams = [...new Set([
@@ -182,7 +185,7 @@ async function loadSeason(season){
       block.open = true;
       out.appendChild(block);
     } else {
-      out.innerHTML = `<div class="loading">No playoff games found for this season.</div>`;
+      out.innerHTML = `<div class="loading">No playoff games found.</div>`;
     }
   }catch(err){
     out.innerHTML = `<div class="loading">Failed to load season.</div>`;
