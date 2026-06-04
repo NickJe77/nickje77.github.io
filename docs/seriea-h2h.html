@@ -133,6 +133,16 @@ const TEAM_COLOURS = {
   "Vicenza":        "linear-gradient(135deg,#CC0000,#FFFFFF)",
 };
 
+const NAME_ALIASES = {
+  "Internazionale": ["Internazionale", "Inter"],
+  "Inter":          ["Internazionale", "Inter"],
+};
+
+function matchesTeam(gameName, teamName){
+  const aliases = NAME_ALIASES[teamName] || [teamName];
+  return aliases.includes(gameName);
+}
+
 function slugify(str){
   return (str || "")
     .toLowerCase()
@@ -201,7 +211,7 @@ async function loadH2H(){
         const data = await r.json();
         const games = Array.isArray(data) ? data : (data.games || []);
         return games
-          .filter(g => (g.home === team1 && g.away === team2) || (g.home === team2 && g.away === team1))
+          .filter(g => (matchesTeam(g.home, team1) && matchesTeam(g.away, team2)) || (matchesTeam(g.home, team2) && matchesTeam(g.away, team1)))
           .map(g => ({...g, season: sid}));
       }catch(e){ return []; }
     }));
@@ -211,7 +221,7 @@ async function loadH2H(){
     function calcStats(team){
       let wins=0, draws=0, losses=0, goals=0, goalsAgainst=0;
       h2hGames.forEach(g => {
-        const isHome = g.home === team;
+        const isHome = matchesTeam(g.home, team);
         const tf = isHome ? Number(g.score_home||0) : Number(g.score_away||0);
         const of = isHome ? Number(g.score_away||0) : Number(g.score_home||0);
         goals += tf;
@@ -232,7 +242,12 @@ async function loadH2H(){
         .map(p => {
           const goals = (p.season_stats || [])
             .filter(s => s.team === team)
-            .reduce((sum, s) => sum + ((s.goals_by_opponent || {})[opponent] || 0), 0);
+            .reduce((sum, s) => {
+              const opp_goals = Object.entries(s.goals_by_opponent || {})
+                .filter(([k]) => matchesTeam(k, opponent))
+                .reduce((a, [,v]) => a + v, 0);
+              return sum + opp_goals;
+            }, 0);
           return { name: p.name, goals };
         })
         .filter(p => p.goals > 0)
@@ -258,7 +273,7 @@ async function loadH2H(){
     function gameRows(){
       if(!h2hGames.length) return `<tr><td colspan="5">No matches found</td></tr>`;
       return [...h2hGames].reverse().map(g => {
-        const t1home = g.home === team1;
+        const t1home = matchesTeam(g.home, team1);
         const sh   = Number(g.score_home || 0);
         const sa   = Number(g.score_away || 0);
         const t1g  = t1home ? sh : sa;
