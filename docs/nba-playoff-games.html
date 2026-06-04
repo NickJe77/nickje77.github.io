@@ -57,7 +57,6 @@ const R2 = "https://pub-68c8b4322a9d4d7f9b875047b45ac7c6.r2.dev";
 const seasonSelect = document.getElementById("seasonSelect");
 const out          = document.getElementById("out");
 
-// Build season dropdown
 for(let y = 2026; y >= 1977; y--){
   const opt = document.createElement("option");
   opt.value = y;
@@ -68,40 +67,60 @@ for(let y = 2026; y >= 1977; y--){
 seasonSelect.onchange = () => {
   const val = seasonSelect.value;
   if(val) loadSeason(parseInt(val));
-  else loadAll();
+  else { out.innerHTML = ""; loadSeason(2026); }
 };
 
-function groupBySeries(games){
-  const map = {};
-  games.forEach(g => {
-    const key = [g.home, g.away].sort().join("|");
-    if(!map[key]) map[key] = [];
-    map[key].push(g);
+function groupIntoSeries(games){
+  // Sort by date first
+  games.sort((a,b) => new Date(a.date) - new Date(b.date));
+
+  const series = [];
+  const used   = new Set();
+
+  games.forEach((g, i) => {
+    if(used.has(i)) return;
+
+    const key     = [g.home, g.away].sort().join("|");
+    const current = [g];
+    used.add(i);
+
+    // Find consecutive games between same two teams within 20 days
+    for(let j = i+1; j < games.length; j++){
+      if(used.has(j)) continue;
+      const g2  = games[j];
+      const key2 = [g2.home, g2.away].sort().join("|");
+      if(key2 !== key) continue;
+
+      const daysDiff = (new Date(g2.date) - new Date(current[current.length-1].date)) / 86400000;
+      if(daysDiff <= 20){
+        current.push(g2);
+        used.add(j);
+      }
+    }
+
+    series.push(current);
   });
-  return map;
+
+  return series;
 }
 
 function renderSeason(season, games){
-  const playoffGames = games
-    .filter(g => g.playoff)
-    .sort((a,b) => new Date(a.date) - new Date(b.date));
+  const playoffGames = games.filter(g => g.playoff);
 
   if(!playoffGames.length) return null;
 
-  const label = `${season-1}-${season}`;
+  const label   = `${season-1}-${season}`;
   const details = document.createElement("details");
   const summary = document.createElement("summary");
   summary.textContent = label;
   details.appendChild(summary);
 
-  const seriesMap = groupBySeries(playoffGames);
-
   const seriesBlock = document.createElement("div");
   seriesBlock.className = "series-block";
 
-  Object.values(seriesMap).forEach(seriesGames => {
-    seriesGames.sort((a,b) => new Date(a.date) - new Date(b.date));
+  const allSeries = groupIntoSeries(playoffGames);
 
+  allSeries.forEach(seriesGames => {
     const teams = [...new Set([
       ...seriesGames.map(g => g.home),
       ...seriesGames.map(g => g.away)
@@ -128,7 +147,8 @@ function renderSeason(season, games){
 
     const tbody = table.querySelector("tbody");
     seriesGames.forEach(g => {
-      const winner = g.home_score > g.away_score ? g.home : g.away_score > g.home_score ? g.away : "–";
+      const winner = g.home_score > g.away_score ? g.home
+                   : g.away_score > g.home_score ? g.away : "–";
       const tr = document.createElement("tr");
       tr.onclick = () => {
         window.location.href = `/nba-game.html?season=${season}&game=${g.game_id}`;
@@ -169,31 +189,6 @@ async function loadSeason(season){
   }
 }
 
-async function loadAll(){
-  out.innerHTML = `<div class="loading">Loading all playoff seasons...</div>`;
-
-  const seasons = [];
-  for(let y = 2026; y >= 1977; y--) seasons.push(y);
-
-  const results = await Promise.allSettled(
-    seasons.map(s =>
-      fetch(`${R2}/basketball/indexes/${s}.json`)
-        .then(r => r.ok ? r.json() : [])
-        .then(games => ({ season: s, games }))
-        .catch(() => ({ season: s, games: [] }))
-    )
-  );
-
-  out.innerHTML = "";
-  results.forEach(r => {
-    if(r.status === "fulfilled"){
-      const block = renderSeason(r.value.season, r.value.games);
-      if(block) out.appendChild(block);
-    }
-  });
-}
-
-// Default — load most recent season
 loadSeason(2026);
 seasonSelect.value = "2026";
 </script>
