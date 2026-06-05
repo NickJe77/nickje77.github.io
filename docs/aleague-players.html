@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>A-League Players | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#f3f4f7;color:#111;}
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:white;border-bottom:1px solid #ddd;flex-wrap:wrap;}
+.navbar a{text-decoration:none;font-weight:700;color:#0056d6;}
+.hero{background:linear-gradient(135deg,#002f6c,#0057b8);color:white;padding:70px 20px;text-align:center;}
+.hero h1{margin:0;font-size:64px;font-weight:900;}
+.hero p{margin-top:14px;font-size:22px;font-weight:600;opacity:.95;}
+.container{max-width:1600px;margin:40px auto;padding:0 20px 60px;}
+.search-wrap{margin-bottom:28px;display:flex;justify-content:center;}
+#playerSearch{width:100%;max-width:520px;padding:16px 18px;font-size:18px;border-radius:14px;border:1px solid #d7dbe3;outline:none;font-family:Inter,system-ui,Arial,sans-serif;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.05);}
+#playerSearch:focus{border-color:#002f6c;box-shadow:0 0 0 4px rgba(0,47,108,.15);}
+.player-count{margin-bottom:24px;font-size:18px;font-weight:700;color:#555;text-align:center;}
+.players-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:20px;}
+.player-card{background:white;border-radius:16px;padding:24px;text-decoration:none;color:#111;box-shadow:0 2px 10px rgba(0,0,0,.08);transition:.2s ease;display:block;}
+.player-card:hover{transform:translateY(-4px);box-shadow:0 8px 24px rgba(0,0,0,.14);}
+.player-name{font-size:20px;font-weight:900;margin-bottom:8px;}
+.player-meta{font-size:14px;color:#666;font-weight:600;}
+.player-stats{display:flex;gap:16px;margin-top:12px;}
+.player-stat{text-align:center;}
+.player-stat-value{font-size:22px;font-weight:900;color:#002f6c;}
+.player-stat-label{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;}
+.no-results{text-align:center;font-size:22px;font-weight:800;padding:60px 20px;color:#666;display:none;}
+.loading{text-align:center;padding:60px;font-size:18px;color:#666;}
+@media(max-width:900px){
+  .hero h1{font-size:42px;}
+  .hero p{font-size:18px;}
+}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="/">Home</a>
+  <a href="/aleague.html">A-League</a>
+  <a href="/aleague-teams.html">Teams</a>
+  <a href="/nba.html">NBA</a>
+  <a href="/afl.html">AFL</a>
+</div>
+
+<div class="hero">
+  <h1>A-League Players</h1>
+  <p>Every player in A-League history from 2005 to present</p>
+</div>
+
+<div class="container">
+  <div class="search-wrap">
+    <input type="text" id="playerSearch" placeholder="Search players...">
+  </div>
+  <div class="player-count" id="playerCount"></div>
+  <div class="players-grid" id="playersGrid">
+    <div class="loading">Loading players...</div>
+  </div>
+  <div class="no-results" id="noResults">No players found</div>
+</div>
+
+<script>
+
+function slugify(str){
+  return (str || '')
+    .toLowerCase()
+    .replace(/&/g,'and')
+    .replace(/[^a-z0-9]+/g,'-')
+    .replace(/^-|-$/g,'');
+}
+
+function playerSlug(p){
+  const name      = slugify(p.name || '');
+  const firstTeam = slugify((p.teams && p.teams[0]) || '');
+  return firstTeam ? `${name}--${firstTeam}` : name;
+}
+
+const grid      = document.getElementById("playersGrid");
+const search    = document.getElementById("playerSearch");
+const count     = document.getElementById("playerCount");
+const noResults = document.getElementById("noResults");
+
+let allPlayers = [];
+
+async function loadPlayers(){
+  try{
+    const res = await fetch("/data/aleague/players.json");
+    if(!res.ok) throw new Error("Failed to load players");
+    allPlayers = await res.json();
+    renderPlayers();
+  }catch(err){
+    grid.innerHTML = `<div class="loading">Failed to load players</div>`;
+    console.error(err);
+  }
+}
+
+function renderPlayers(filter=""){
+  const filtered = allPlayers.filter(p =>
+    (p.name || '').toLowerCase().includes(filter.toLowerCase()) ||
+    (p.teams || []).some(t => t.toLowerCase().includes(filter.toLowerCase()))
+  );
+
+  count.textContent = `${filtered.length} Players`;
+
+  if(filtered.length === 0){
+    noResults.style.display = "block";
+    grid.innerHTML = "";
+    return;
+  }
+
+  noResults.style.display = "none";
+
+  grid.innerHTML = filtered.map(p => {
+    const team = (p.teams && p.teams[p.teams.length - 1]) || '';
+    return `
+      <a class="player-card" href="/aleague-player.html?player=${encodeURIComponent(playerSlug(p))}">
+        <div class="player-name">${p.name}</div>
+        <div class="player-meta">${team}</div>
+        <div class="player-stats">
+          <div class="player-stat">
+            <div class="player-stat-value">${p.goals || 0}</div>
+            <div class="player-stat-label">Goals</div>
+          </div>
+          <div class="player-stat">
+            <div class="player-stat-value">${p.seasons ? p.seasons.length : 0}</div>
+            <div class="player-stat-label">Seasons</div>
+          </div>
+          <div class="player-stat">
+            <div class="player-stat-value">${p.yellow_cards || 0}</div>
+            <div class="player-stat-label">Yellows</div>
+          </div>
+          <div class="player-stat">
+            <div class="player-stat-value">${p.red_cards || 0}</div>
+            <div class="player-stat-label">Reds</div>
+          </div>
+        </div>
+      </a>
+    `;
+  }).join('');
+}
+
+search.addEventListener("input", e => renderPlayers(e.target.value));
+
+loadPlayers();
+
+</script>
+
+</body>
+</html>
