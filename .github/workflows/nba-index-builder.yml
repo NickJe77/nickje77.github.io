@@ -35,6 +35,8 @@ jobs:
           import boto3
           import json
           import os
+          from datetime import datetime
+          from collections import defaultdict
           from botocore.config import Config
           from botocore.exceptions import ClientError
 
@@ -59,8 +61,16 @@ jobs:
                   ContentType="application/json; charset=utf-8",
               )
 
+          def is_playoff(date_str):
+              try:
+                  d = datetime.strptime(date_str, "%a, %b %d, %Y")
+                  if d.month in (5, 6): return True
+                  if d.month == 4 and d.day >= 16: return True
+                  return False
+              except:
+                  return False
+
           def read_existing_player(pid):
-              """Read existing player file from R2, return empty structure if not found."""
               try:
                   obj = r2.get_object(Bucket=BUCKET, Key=f"basketball/players/{pid}.json")
                   return json.loads(obj["Body"].read().decode("utf-8"))
@@ -80,6 +90,12 @@ jobs:
               season_players = {}
               file_count     = 0
 
+              # For leaders: track per-player season totals (regular season only)
+              player_season_stats = defaultdict(lambda: {
+                  "name": "", "pid": "",
+                  "pts": 0, "reb": 0, "ast": 0, "stl": 0, "blk": 0, "gp": 0
+              })
+
               for page in pages:
                   for obj in page.get("Contents", []):
                       key = obj["Key"]
@@ -93,6 +109,7 @@ jobs:
                           arena     = data.get("arena", "")
                           linescore = data.get("linescore", {})
                           teams     = data.get("teams", {})
+                          playoff   = is_playoff(date)
 
                           home_score = None
                           away_score = None
@@ -110,7 +127,7 @@ jobs:
                               "game_id": game_id, "date": date,
                               "away": away_team, "home": home_team,
                               "away_score": away_score, "home_score": home_score,
-                              "arena": arena,
+                              "arena": arena, "playoff": playoff,
                           })
 
                           for abbr, team_players in teams.items():
@@ -122,11 +139,14 @@ jobs:
                                       continue
                                   pid  = p["player_id"]
                                   name = p.get("player", "")
+
                                   if pid not in season_players:
                                       season_players[pid] = {"name": name, "player_id": pid, "games": []}
+
                                   season_players[pid]["games"].append({
                                       "season": season, "game_id": game_id, "date": date,
                                       "team": team_name, "opp": opp_name,
+                                      "playoff": playoff,
                                       "home_score": home_score, "away_score": away_score,
                                       "mp": p.get("mp"), "pts": p.get("pts"),
                                       "reb": p.get("trb"), "ast": p.get("ast"),
@@ -139,16 +159,30 @@ jobs:
                                       "orb": p.get("orb"), "drb": p.get("drb"),
                                       "pf": p.get("pf"), "plus_minus": p.get("plus_minus"),
                                   })
+
+                                  # Accumulate regular season stats for leaders
+                                  if not playoff:
+                                      ps = player_season_stats[pid]
+                                      ps["name"] = name
+                                      ps["pid"]  = pid
+                                      ps["gp"]   += 1
+                                      ps["pts"]  += p.get("pts") or 0
+                                      ps["reb"]  += p.get("trb") or 0
+                                      ps["ast"]  += p.get("ast") or 0
+                                      ps["stl"]  += p.get("stl") or 0
+                                      ps["blk"]  += p.get("blk") or 0
+
                       except Exception as e:
                           print(f"  ERROR {key}: {e}", flush=True)
 
               print(f"  {file_count} files, {len(season_games)} games, {len(season_players)} players", flush=True)
 
+              # Upload season index
               season_games.sort(key=lambda g: g["date"])
               upload(f"basketball/indexes/{season}.json", season_games)
               print(f"  Season index uploaded", flush=True)
 
-              # For each player in this season, read existing R2 file and merge
+              # Upload player files
               for pid, new_data in season_players.items():
                   existing = read_existing_player(pid)
                   if existing:
@@ -164,7 +198,33 @@ jobs:
 
               print(f"  Players uploaded: {len(season_players)}", flush=True)
 
-          # Rebuild player index from all player files
+              # Build season leaders (min 20 games)
+              qualified = [p for p in player_season_stats.values() if p["gp"] >= 20]
+
+              def leader(stat):
+                  best = max(qualified, key=lambda p: p[stat] / p["gp"] if p["gp"] > 0 else 0, default=None)
+                  if not best: return None
+                  return {
+                      "player":    best["name"],
+                      "player_id": best["pid"],
+                      "total":     best[stat],
+                      "gp":        best["gp"],
+                      "avg":       round(best[stat] / best["gp"], 1)
+                  }
+
+              leaders = {
+                  "season":   season,
+                  "points":   leader("pts"),
+                  "rebounds": leader("reb"),
+                  "assists":  leader("ast"),
+                  "steals":   leader("stl"),
+                  "blocks":   leader("blk"),
+              }
+
+              upload(f"basketball/leaders/{season}.json", leaders)
+              print(f"  Leaders uploaded", flush=True)
+
+          # Rebuild player index
           print(f"\nRebuilding player index...", flush=True)
           paginator = r2.get_paginator("list_objects_v2")
           pages = paginator.paginate(Bucket=BUCKET, Prefix="basketball/players/", Delimiter="/")
@@ -176,7 +236,7 @@ jobs:
                       continue
                   try:
                       pdata = json.loads(r2.get_object(Bucket=BUCKET, Key=key)["Body"].read().decode("utf-8"))
-                      games = pdata.get("games", [])
+                      games     = pdata.get("games", [])
                       last_team = games[-1]["team"] if games else ""
                       player_index.append({
                           "id":        pdata.get("player_id", ""),
