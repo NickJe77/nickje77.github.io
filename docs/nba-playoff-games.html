@@ -44,11 +44,11 @@ tbody tr:hover{background:#eaf0ff;}
 
   <div class="filters">
     <select id="seasonSelect">
-      <option value="">All Seasons</option>
+      <option value="">Select Season</option>
     </select>
   </div>
 
-  <div id="out"><div class="loading">Loading...</div></div>
+  <div id="out"><div class="loading">Select a season above.</div></div>
 </div>
 
 <script>
@@ -70,35 +70,35 @@ seasonSelect.onchange = () => {
 };
 
 function groupIntoSeries(games){
-  games.sort((a,b) => new Date(a.date) - new Date(b.date));
-
-  const series = [];
-  const used   = new Set();
-
-  games.forEach((g, i) => {
-    if(used.has(i)) return;
-    const key     = [g.home, g.away].sort().join("|");
-    const current = [g];
-    used.add(i);
-
-    for(let j = i+1; j < games.length; j++){
-      if(used.has(j)) continue;
-      const g2   = games[j];
-      const key2 = [g2.home, g2.away].sort().join("|");
-      if(key2 !== key) continue;
-      const daysDiff = (new Date(g2.date) - new Date(current[current.length-1].date)) / 86400000;
-      if(daysDiff <= 20){
-        current.push(g2);
-        used.add(j);
-      }
-    }
-
-    // Only include series with 2+ games — single games are regular season
-    if(current.length >= 2){
-      series.push(current);
-    }
+  // Group all games by team pair first
+  const pairMap = {};
+  games.forEach(g => {
+    const key = [g.home, g.away].sort().join("|");
+    if(!pairMap[key]) pairMap[key] = [];
+    pairMap[key].push(g);
   });
 
+  const series = [];
+
+  Object.values(pairMap).forEach(pairGames => {
+    pairGames.sort((a,b) => new Date(a.date) - new Date(b.date));
+
+    // Split into separate series if gap > 20 days between games
+    let current = [pairGames[0]];
+    for(let i = 1; i < pairGames.length; i++){
+      const daysDiff = (new Date(pairGames[i].date) - new Date(pairGames[i-1].date)) / 86400000;
+      if(daysDiff > 20){
+        if(current.length >= 2) series.push(current);
+        current = [pairGames[i]];
+      } else {
+        current.push(pairGames[i]);
+      }
+    }
+    if(current.length >= 2) series.push(current);
+  });
+
+  // Sort all series by their first game date
+  series.sort((a,b) => new Date(a[0].date) - new Date(b[0].date));
   return series;
 }
 
@@ -119,6 +119,7 @@ function renderSeason(season, games){
 
   if(!allSeries.length){
     const msg = document.createElement("p");
+    msg.style.color = "#666";
     msg.textContent = "No playoff series found.";
     seriesBlock.appendChild(msg);
   }
@@ -131,7 +132,7 @@ function renderSeason(season, games){
 
     const title = document.createElement("div");
     title.className = "series-title";
-    title.textContent = teams.join(" vs ");
+    title.textContent = `${teams[0]} vs ${teams[1] || ""}`;
     seriesBlock.appendChild(title);
 
     const table = document.createElement("table");
@@ -192,6 +193,7 @@ async function loadSeason(season){
   }
 }
 
+// Default to most recent season
 loadSeason(2026);
 seasonSelect.value = "2026";
 </script>
