@@ -1,15 +1,8 @@
 #!/usr/bin/env python3
 """
 build_aleague_data.py
-
-Reads all match JSON files from docs/data/aleague/matches/<season>/*.json
-and generates three output files:
-  - docs/data/aleague/players.json
-  - docs/data/aleague/teams.json
-  - docs/data/aleague/team-stats.json
-
-Place this file in the scripts/ folder.
-Run from the root of your GitHub repo.
+Reads all match JSON files and generates players.json, teams.json, team-stats.json
+Queensland Roar -> Brisbane Roar, Melbourne Heart -> Melbourne City at data level.
 """
 
 import json
@@ -20,7 +13,6 @@ REPO_ROOT   = Path(__file__).parent.parent
 MATCHES_DIR = REPO_ROOT / "docs" / "data" / "aleague" / "matches"
 OUT_DIR     = REPO_ROOT / "docs" / "data" / "aleague"
 
-# Normalise historical name changes at data level
 TEAM_NAME_MAP = {
     "Queensland Roar": "Brisbane Roar",
     "Melbourne Heart": "Melbourne City",
@@ -96,10 +88,14 @@ def main():
     match_files = collect_json_files(MATCHES_DIR)
     print(f"Found {len(match_files)} match files\n")
 
+    # Track processed match_ids to prevent double-counting
+    seen_match_ids = set()
+
     players_map    = {}
     teams_set      = set()
     team_stats_map = {}
     skipped = 0
+    duplicates = 0
     goals_counted = 0
     own_goals_counted = 0
 
@@ -111,6 +107,13 @@ def main():
             print(f"Skipping {file_path}: {e}")
             skipped += 1
             continue
+
+        # Skip duplicate match IDs
+        match_id = match.get("match_id") or str(file_path)
+        if match_id in seen_match_ids:
+            duplicates += 1
+            continue
+        seen_match_ids.add(match_id)
 
         season    = season_from_path(file_path)
         home_team = normalise_team(match.get("home_team") or "")
@@ -197,7 +200,12 @@ def main():
     write_json(OUT_DIR / "teams.json",      teams)
     write_json(OUT_DIR / "team-stats.json", team_stats)
 
-    print(f"\nDone! {len(match_files)-skipped} matches, {len(players)} players, {goals_counted} goals, {own_goals_counted} own goals")
+    print(f"\nDone!")
+    print(f"  {len(match_files)-skipped} matches processed")
+    print(f"  {duplicates} duplicates skipped")
+    print(f"  {skipped} files skipped")
+    print(f"  {len(players)} players")
+    print(f"  {goals_counted} goals, {own_goals_counted} own goals")
 
 if __name__ == "__main__":
     main()
