@@ -30,6 +30,7 @@ tr:nth-child(even){background:#f8fbff;}
 .player-link:hover{text-decoration:underline;}
 .loading,.error{padding:120px 20px;text-align:center;font-size:34px;font-weight:900;}
 .error{color:#d90429;}
+.progress{padding:60px 20px;text-align:center;font-size:18px;font-weight:700;color:#555;}
 .games-table tr{transition:.15s;cursor:pointer;}
 .games-table tr:hover{background:#dfefff !important;}
 .games-table td{font-size:15px;padding:16px 12px;}
@@ -115,24 +116,23 @@ function playerSlug(p){
 const params   = new URLSearchParams(window.location.search);
 const teamName = params.get("team") || "";
 const page     = document.getElementById("page");
-
 const teamAliases = NAME_ALIASES[teamName] || [teamName];
 
-// Helper: get home/away team name from a game object
-// handles both {home, away} and {home_team, away_team} formats
-function gameHome(g){ return g.home || g.home_team || ""; }
-function gameAway(g){ return g.away || g.away_team || ""; }
-function gameScoreHome(g){ return Number(g.score_home != null ? g.score_home : (g.home_score != null ? g.home_score : 0)); }
-function gameScoreAway(g){ return Number(g.score_away != null ? g.score_away : (g.away_score != null ? g.away_score : 0)); }
+const SEASONS = [
+  "2005-06","2006-07","2007-08","2008-09","2009-10",
+  "2010-11","2011-12","2012-13","2013-14","2014-15",
+  "2015-16","2016-17","2017-18","2018-19","2019-20",
+  "2020-21","2021-22","2022-23","2023-24","2024-25","2025-26",
+];
 
 async function loadTeam(){
   try{
+    page.innerHTML = `<div class="progress">Loading players...</div>`;
 
     const [playersRes, teamStatsRes] = await Promise.all([
       fetch("/data/aleague/players.json"),
       fetch("/data/aleague/team-stats.json")
     ]);
-
     if(!playersRes.ok)   throw new Error("players.json failed");
     if(!teamStatsRes.ok) throw new Error("team-stats.json failed");
 
@@ -140,34 +140,62 @@ async function loadTeam(){
     const allTeamStats = await teamStatsRes.json();
 
     const teamSeasonStats = allTeamStats.filter(s => teamAliases.includes(s.team));
-
     if(!teamSeasonStats.length){
       page.innerHTML = `<div class="error">Team Not Found</div>`;
       return;
     }
 
-    const SEASONS = [
-      "2005-06","2006-07","2007-08","2008-09","2009-10",
-      "2010-11","2011-12","2012-13","2013-14","2014-15",
-      "2015-16","2016-17","2017-18","2018-19","2019-20",
-      "2020-21","2021-22","2022-23","2023-24","2024-25",
-      "2025-26",
-    ];
+    // Load all season index files to get match_ids
+    page.innerHTML = `<div class="progress">Loading season data...</div>`;
 
-    const seasonResults = await Promise.all(SEASONS.map(async seasonId => {
+    const seasonIndexes = await Promise.all(SEASONS.map(async sid => {
       try{
-        const r = await fetch(`/data/aleague/seasons/${seasonId}.json`);
-        if(!r.ok) return [];
+        const r = await fetch(`/data/aleague/seasons/${sid}.json`);
+        if(!r.ok) return { season: sid, games: [] };
         const data = await r.json();
         const games = Array.isArray(data) ? data : (data.games || []);
-        return games
-          .filter(g => teamAliases.includes(gameHome(g)) || teamAliases.includes(gameAway(g)))
-          .map(g => ({ ...g, season: seasonId }));
-      }catch(e){ return []; }
+        return { season: sid, games };
+      }catch(e){ return { season: sid, games: [] }; }
     }));
 
-    const allGames = seasonResults.flat();
+    // Build list of all match_ids we need to load
+    const matchRefs = [];
+    seasonIndexes.forEach(({ season, games }) => {
+      games.forEach(g => {
+        if(g.match_id) matchRefs.push({ match_id: g.match_id, season });
+      });
+    });
 
+    // Load individual match files in batches of 20
+    page.innerHTML = `<div class="progress">Loading match files (0 / ${matchRefs.length})...</div>`;
+
+    const allGames = [];
+    const BATCH = 20;
+    for(let i = 0; i < matchRefs.length; i += BATCH){
+      const batch = matchRefs.slice(i, i + BATCH);
+      const results = await Promise.all(batch.map(async ({ match_id, season }) => {
+        try{
+          const seasonPart = match_id.split('_')[0];
+          const r = await fetch(`/data/aleague/matches/${seasonPart}/${match_id}.json`);
+          if(!r.ok) return null;
+          const g = await r.json();
+          return { ...g, season };
+        }catch(e){ return null; }
+      }));
+      results.forEach(g => {
+        if(!g) return;
+        const home = g.home_team || "";
+        const away = g.away_team || "";
+        if(teamAliases.includes(home) || teamAliases.includes(away)){
+          allGames.push(g);
+        }
+      });
+      if(i % 100 === 0){
+        page.innerHTML = `<div class="progress">Loading match files (${Math.min(i+BATCH, matchRefs.length)} / ${matchRefs.length})...</div>`;
+      }
+    }
+
+    // Totals from team-stats
     const totals = teamSeasonStats.reduce((acc, s) => {
       acc.played        += s.played        || 0;
       acc.wins          += s.wins          || 0;
@@ -180,6 +208,7 @@ async function loadTeam(){
       return acc;
     }, { played:0, wins:0, draws:0, losses:0, goals_for:0, goals_against:0, yellow_cards:0, red_cards:0 });
 
+    // Player stats
     const teamPlayers = players
       .filter(p => p.teams && p.teams.some(t => teamAliases.includes(t)))
       .map(p => {
@@ -191,15 +220,14 @@ async function loadTeam(){
         return { name: p.name, teams: p.teams, goals, pens, yellows, reds };
       });
 
-    const topScorers = [...teamPlayers].sort((a,b) => b.goals - a.goals).filter(p => p.goals > 0).slice(0,10);
-    const topYellows = [...teamPlayers].sort((a,b) => b.yellows - a.yellows).filter(p => p.yellows > 0).slice(0,10);
-    const topReds    = [...teamPlayers].sort((a,b) => b.reds - a.reds).filter(p => p.reds > 0).slice(0,10);
+    const topScorers = [...teamPlayers].sort((a,b) => b.goals-a.goals).filter(p=>p.goals>0).slice(0,10);
+    const topYellows = [...teamPlayers].sort((a,b) => b.yellows-a.yellows).filter(p=>p.yellows>0).slice(0,10);
+    const topReds    = [...teamPlayers].sort((a,b) => b.reds-a.reds).filter(p=>p.reds>0).slice(0,10);
 
+    // Opponents from actual match data
     const opponentSet = new Set();
     allGames.forEach(g => {
-      const home = gameHome(g);
-      const away = gameAway(g);
-      const opp = teamAliases.includes(home) ? away : home;
+      const opp = teamAliases.includes(g.home_team) ? g.away_team : g.home_team;
       if(opp) opponentSet.add(opp);
     });
     const opponents = [...opponentSet].sort();
@@ -207,20 +235,18 @@ async function loadTeam(){
     function buildGameStats(opponent){
       const filtered = opponent
         ? allGames.filter(g => {
-            const home = gameHome(g);
-            const away = gameAway(g);
-            const opp = teamAliases.includes(home) ? away : home;
+            const opp = teamAliases.includes(g.home_team) ? g.away_team : g.home_team;
             return opp === opponent;
           })
         : allGames;
       let wins=0, draws=0, losses=0, goals=0;
       filtered.forEach(g => {
-        const isHome = teamAliases.includes(gameHome(g));
-        const tf = isHome ? gameScoreHome(g) : gameScoreAway(g);
-        const of = isHome ? gameScoreAway(g) : gameScoreHome(g);
+        const isHome = teamAliases.includes(g.home_team);
+        const tf = Number(isHome ? g.home_score : g.away_score) || 0;
+        const of = Number(isHome ? g.away_score : g.home_score) || 0;
         goals += tf;
-        if(tf > of) wins++;
-        else if(tf < of) losses++;
+        if(tf>of) wins++;
+        else if(tf<of) losses++;
         else draws++;
       });
       return { games: filtered.length, wins, draws, losses, goals, filtered };
@@ -229,12 +255,12 @@ async function loadTeam(){
     function gameRows(games){
       if(!games.length) return `<tr><td colspan="4">No games found</td></tr>`;
       return [...games].reverse().slice(0,100).map(g => {
-        const isHome = teamAliases.includes(gameHome(g));
-        const tf  = isHome ? gameScoreHome(g) : gameScoreAway(g);
-        const of  = isHome ? gameScoreAway(g) : gameScoreHome(g);
-        const opp = isHome ? gameAway(g) : gameHome(g);
-        const res = tf > of ? 'W' : tf < of ? 'L' : 'D';
-        const cls = tf > of ? 'result-win' : tf < of ? 'result-loss' : 'result-draw';
+        const isHome = teamAliases.includes(g.home_team);
+        const tf  = Number(isHome ? g.home_score : g.away_score) || 0;
+        const of  = Number(isHome ? g.away_score : g.home_score) || 0;
+        const opp = isHome ? g.away_team : g.home_team;
+        const res = tf>of?'W':tf<of?'L':'D';
+        const cls = tf>of?'result-win':tf<of?'result-loss':'result-draw';
         return `<tr onclick="window.location.href='/aleague-game.html?match=${encodeURIComponent(g.match_id)}&season=${encodeURIComponent(g.season)}'">
           <td>${g.season}</td>
           <td>${opp}</td>
@@ -261,9 +287,7 @@ async function loadTeam(){
         <h1>${teamName}</h1>
         <p>A-League Club Profile</p>
       </div>
-
       <div class="container">
-
         <div class="stats-grid">
           <div class="stat-card"><div class="stat-value">${totals.played}</div><div class="stat-label">Played</div></div>
           <div class="stat-card"><div class="stat-value">${totals.wins}</div><div class="stat-label">Wins</div></div>
@@ -274,18 +298,16 @@ async function loadTeam(){
           <div class="stat-card"><div class="stat-value">${totals.yellow_cards}</div><div class="stat-label">Yellow Cards</div></div>
           <div class="stat-card"><div class="stat-value">${totals.red_cards}</div><div class="stat-label">Red Cards</div></div>
         </div>
-
         <div class="tables-grid">
           <div class="section">
             <div class="section-title">Top Scorers</div>
             <table>
               <thead><tr><th>Player</th><th>Goals</th><th>Penalties</th></tr></thead>
-              <tbody>${topScorers.map(p => `
+              <tbody>${topScorers.map(p=>`
                 <tr>
                   <td><a class="player-link" href="/aleague-player.html?player=${encodeURIComponent(playerSlug(p))}">${p.name}</a></td>
-                  <td>${p.goals}</td>
-                  <td>${p.pens}</td>
-                </tr>`).join('') || '<tr><td colspan="3">No data</td></tr>'}
+                  <td>${p.goals}</td><td>${p.pens}</td>
+                </tr>`).join('')||'<tr><td colspan="3">No data</td></tr>'}
               </tbody>
             </table>
           </div>
@@ -293,24 +315,23 @@ async function loadTeam(){
             <div class="section-title">Yellow Card Leaders</div>
             <table>
               <thead><tr><th>Player</th><th>Yellow</th></tr></thead>
-              <tbody>${playerRows(topYellows, 'yellows')}</tbody>
+              <tbody>${playerRows(topYellows,'yellows')}</tbody>
             </table>
           </div>
           <div class="section">
             <div class="section-title">Red Card Leaders</div>
             <table>
               <thead><tr><th>Player</th><th>Red</th></tr></thead>
-              <tbody>${playerRows(topReds, 'reds')}</tbody>
+              <tbody>${playerRows(topReds,'reds')}</tbody>
             </table>
           </div>
         </div>
-
         <div class="section">
           <div class="section-title">Results by Opponent</div>
           <div class="filters">
             <select id="opponentSelect">
               <option value="">All Opponents</option>
-              ${opponents.map(o => `<option value="${o}">${o}</option>`).join('')}
+              ${opponents.map(o=>`<option value="${o}">${o}</option>`).join('')}
             </select>
           </div>
           <div class="stats-grid" style="margin-top:20px;">
@@ -325,13 +346,12 @@ async function loadTeam(){
             <tbody id="gamesBody">${gameRows(overall.filtered)}</tbody>
           </table>
         </div>
-
       </div>
     `;
 
     document.getElementById("opponentSelect").addEventListener("change", e => {
       const opp   = e.target.value;
-      const stats = buildGameStats(opp || null);
+      const stats = buildGameStats(opp||null);
       document.getElementById("oGames").textContent  = stats.games;
       document.getElementById("oWins").textContent   = stats.wins;
       document.getElementById("oDraws").textContent  = stats.draws;
@@ -347,7 +367,6 @@ async function loadTeam(){
 }
 
 loadTeam();
-
 </script>
 </body>
 </html>
