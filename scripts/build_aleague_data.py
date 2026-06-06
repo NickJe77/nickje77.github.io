@@ -3,14 +3,13 @@
 build_aleague_data.py
 
 Reads all match JSON files from docs/data/aleague/matches/<season>/*.json
-and generates four output files:
+and generates three output files:
   - docs/data/aleague/players.json
   - docs/data/aleague/teams.json
   - docs/data/aleague/team-stats.json
-  - docs/data/aleague/match-records.json
 
 Place this file in the scripts/ folder.
-Run from the root of your GitHub repo (nickje77.github.io/)
+Run from the root of your GitHub repo.
 """
 
 import json
@@ -18,10 +17,9 @@ import sys
 from pathlib import Path
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-REPO_ROOT    = Path(__file__).parent.parent
-MATCHES_DIR  = REPO_ROOT / "docs" / "data" / "aleague" / "matches"
-OUT_DIR      = REPO_ROOT / "docs" / "data" / "aleague"
-HISTORY_FILE = OUT_DIR / "player-history.json"
+REPO_ROOT   = Path(__file__).parent.parent
+MATCHES_DIR = REPO_ROOT / "docs" / "data" / "aleague" / "matches"
+OUT_DIR     = REPO_ROOT / "docs" / "data" / "aleague"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -47,6 +45,19 @@ def write_json(file_path: Path, data):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     print(f"✅  Written: {file_path}")
+
+
+def clean_name(name) -> str:
+    """Normalise player name — strip whitespace, collapse internal spaces."""
+    if not name:
+        return ""
+    return " ".join(str(name).split())
+
+
+def get_scorer_name(scorer: dict) -> str:
+    """Handle both 'player' and 'name' keys for scorer name."""
+    name = scorer.get("player") or scorer.get("name") or ""
+    return clean_name(name)
 
 
 def make_team_stats(team: str, season: str) -> dict:
@@ -89,48 +100,15 @@ def get_or_create_team_stats(team_stats_map, team, season):
     return team_stats_map[key]
 
 
-def find_player_key(players_map, name, team):
-    matching_keys = [k for k in players_map if k == name or k.startswith(f"{name}|")]
-
-    if not matching_keys:
-        return f"{name}|{team}" if team else name
-
-    for key in matching_keys:
-        p = players_map[key]
-        if team in p["teams"]:
-            return key
-
-    if len(matching_keys) == 1:
-        p = players_map[matching_keys[0]]
-        if not p["teams"]:
-            return matching_keys[0]
-
-    new_key = f"{name}|{team}" if team else name
-
-    counter = 2
-    base_key = new_key
-    while new_key in players_map:
-        new_key = f"{base_key}_{counter}"
-        counter += 1
-
-    return new_key
-
-
-name_team_to_key = {}
-
-
-def get_or_create_player(players_map, name, team, season):
-    key = find_player_key(players_map, name, team)
-    if key not in players_map:
-        players_map[key] = make_player(name)
-    if team:
-        name_team_to_key[(name, team)] = key
-    return players_map[key], key
+def get_or_create_player(players_map, name):
+    if name not in players_map:
+        players_map[name] = make_player(name)
+    return players_map[name]
 
 
 def get_or_create_player_season(player, season, team):
     for s in player["season_stats"]:
-        if s["season"] == season:
+        if s["season"] == season and s["team"] == team:
             return s
     entry = {
         "season": season,
@@ -165,7 +143,10 @@ def main():
     players_map    = {}
     teams_set      = set()
     team_stats_map = {}
-    all_matches    = []
+
+    skipped = 0
+    goals_counted = 0
+    own_goals_counted = 0
 
     for file_path in match_files:
         try:
@@ -173,45 +154,22 @@ def main():
                 match = json.load(f)
         except (json.JSONDecodeError, OSError) as e:
             print(f"⚠️   Skipping invalid file: {file_path} ({e})")
+            skipped += 1
             continue
 
         season     = season_from_path(file_path)
-        home_team  = (match.get("home_team") or "").strip()
-        away_team  = (match.get("away_team") or "").strip()
+        home_team  = clean_name(match.get("home_team") or "")
+        away_team  = clean_name(match.get("away_team") or "")
         home_score = match.get("home_score") or 0
         away_score = match.get("away_score") or 0
 
-        # Collect for match records
-        if home_team and away_team and home_score is not None and away_score is not None:
-            all_matches.append({
-                "season": season,
-                "date": match.get("date", ""),
-                "home_team": home_team,
-                "away_team": away_team,
-                "home_score": home_score,
-                "away_score": away_score,
-                "venue": match.get("venue", ""),
-            })
+        # Skip matches with no team data
+        if not home_team or not away_team:
+            skipped += 1
+            continue
 
         teams_set.add(home_team)
         teams_set.add(away_team)
-
-        # ── Lineup players ────────────────────────────────────────────────────
-        for player_name in match.get("home_lineup") or []:
-            player_name = player_name.strip()
-            if player_name:
-                p, _ = get_or_create_player(players_map, player_name, home_team, season)
-                add_team_if_missing(p, home_team)
-                add_season_if_missing(p, season)
-                get_or_create_player_season(p, season, home_team)
-
-        for player_name in match.get("away_lineup") or []:
-            player_name = player_name.strip()
-            if player_name:
-                p, _ = get_or_create_player(players_map, player_name, away_team, season)
-                add_team_if_missing(p, away_team)
-                add_season_if_missing(p, season)
-                get_or_create_player_season(p, season, away_team)
 
         # ── Team stats ────────────────────────────────────────────────────────
         for team, scored, conceded in [
@@ -222,7 +180,6 @@ def main():
             s["played"]        += 1
             s["goals_for"]     += scored
             s["goals_against"] += conceded
-
             if scored > conceded:
                 s["wins"]   += 1
                 s["points"] += 3
@@ -231,78 +188,101 @@ def main():
                 s["points"] += 1
             else:
                 s["losses"] += 1
-
             if conceded == 0:
                 s["clean_sheets"] += 1
 
-        # ── Yellow cards ──────────────────────────────────────────────────────
-        for card in match.get("yellow_cards") or []:
-            team = (card.get("team") or "").strip()
-            name = (card.get("player") or "").strip()
-
-            if team:
-                s = get_or_create_team_stats(team_stats_map, team, season)
-                s["yellow_cards"] += 1
-
-            if name:
-                p, key = get_or_create_player(players_map, name, team, season)
-                add_team_if_missing(p, team)
-                add_season_if_missing(p, season)
-                p["yellow_cards"] += 1
-                ps = get_or_create_player_season(p, season, team)
-                ps["yellow_cards"] += 1
-
-        # ── Red cards ─────────────────────────────────────────────────────────
-        for card in match.get("red_cards") or []:
-            team = (card.get("team") or "").strip()
-            name = (card.get("player") or "").strip()
-
-            if team:
-                s = get_or_create_team_stats(team_stats_map, team, season)
-                s["red_cards"] += 1
-
-            if name:
-                p, key = get_or_create_player(players_map, name, team, season)
-                add_team_if_missing(p, team)
-                add_season_if_missing(p, season)
-                p["red_cards"] += 1
-                ps = get_or_create_player_season(p, season, team)
-                ps["red_cards"] += 1
-
-        # ── Scorers ───────────────────────────────────────────────────────────
-        for scorer in match.get("scorers") or []:
-            name = (scorer.get("player") or "").strip()
-            team = (scorer.get("team") or "").strip()
+        # ── Goals ─────────────────────────────────────────────────────────────
+        scorers = match.get("scorers") or []
+        for scorer in scorers:
+            name = get_scorer_name(scorer)
             if not name:
                 continue
 
+            # Determine which team this scorer plays for
+            team = clean_name(scorer.get("team") or "")
+
+            # If team is blank, try to work it out from home/away
+            # (some older match files may not have team on scorer)
+            if not team:
+                # Can't reliably assign — skip rather than misattribute
+                continue
+
+            # Work out the opponent
             if team == home_team:
                 opponent = away_team
             elif team == away_team:
                 opponent = home_team
             else:
-                opponent = ""
+                # Team name doesn't match either side exactly —
+                # try case-insensitive match
+                if team.lower() == home_team.lower():
+                    opponent = away_team
+                    team = home_team
+                elif team.lower() == away_team.lower():
+                    opponent = home_team
+                    team = away_team
+                else:
+                    # Still no match — include goal but without opponent tracking
+                    opponent = ""
 
-            p, key = get_or_create_player(players_map, name, team, season)
+            p  = get_or_create_player(players_map, name)
             add_team_if_missing(p, team)
             add_season_if_missing(p, season)
             ps = get_or_create_player_season(p, season, team)
 
-            if scorer.get("own_goal"):
-                p["own_goals"] += 1
+            is_own_goal = scorer.get("own_goal", False)
+            is_penalty  = scorer.get("penalty", False)
+
+            if is_own_goal:
+                # Own goal — counts for the OTHER team's goals_for (already
+                # handled above via scoreline), but NOT for this player's goals
+                p["own_goals"]  += 1
                 ps["own_goals"] += 1
-            elif scorer.get("penalty"):
-                p["penalties"] += 1
-                p["goals"] += 1
-                ps["penalties"] += 1
-                ps["goals"] += 1
-                if opponent:
-                    ps["goals_by_opponent"][opponent] = ps["goals_by_opponent"].get(opponent, 0) + 1
+                own_goals_counted += 1
             else:
-                p["goals"] += 1
+                p["goals"]  += 1
                 ps["goals"] += 1
+                goals_counted += 1
+                if is_penalty:
+                    p["penalties"]  += 1
+                    ps["penalties"] += 1
                 if opponent:
-                    ps["goals_by_opponent"][opponent] = ps["goals_by_opponent"].get(opponent, 0) + 1
+                    ps["goals_by_opponent"][opponent] = (
+                        ps["goals_by_opponent"].get(opponent, 0) + 1
+                    )
+
+        # ── Cards ─────────────────────────────────────────────────────────────
+        for card in (match.get("yellow_cards") or []):
+            name = get_scorer_name(card)
+            if not name:
+                continue
+            team = clean_name(card.get("team") or "")
+            if not team:
+                continue
+            p  = get_or_create_player(players_map, name)
+            add_team_if_missing(p, team)
+            add_season_if_missing(p, season)
+            ps = get_or_create_player_season(p, season, team)
+            p["yellow_cards"]  += 1
+            ps["yellow_cards"] += 1
+            ts = get_or_create_team_stats(team_stats_map, team, season)
+            ts["yellow_cards"] += 1
+
+        for card in (match.get("red_cards") or []):
+            name = get_scorer_name(card)
+            if not name:
+                continue
+            team = clean_name(card.get("team") or "")
+            if not team:
+                continue
+            p  = get_or_create_player(players_map, name)
+            add_team_if_missing(p, team)
+            add_season_if_missing(p, season)
+            ps = get_or_create_player_season(p, season, team)
+            p["red_cards"]  += 1
+            ps["red_cards"] += 1
+            ts = get_or_create_team_stats(team_stats_map, team, season)
+            ts["red_cards"] += 1
 
     # ── Finalise goal difference ──────────────────────────────────────────────
     for s in team_stats_map.values():
@@ -311,29 +291,6 @@ def main():
     # ── Sort season_stats by season for each player ───────────────────────────
     for p in players_map.values():
         p["season_stats"].sort(key=lambda s: s["season"])
-
-    for p in players_map.values():
-        p["seasons"] = sorted(set(s["season"] for s in p["season_stats"]))
-
-    # ── Build match records ───────────────────────────────────────────────────
-    scored_matches = [m for m in all_matches if m["home_score"] is not None and m["away_score"] is not None]
-
-    biggest_wins = sorted(
-        [m for m in scored_matches if m["home_score"] != m["away_score"]],
-        key=lambda m: abs(m["home_score"] - m["away_score"]),
-        reverse=True
-    )[:20]
-
-    highest_scoring = sorted(
-        scored_matches,
-        key=lambda m: m["home_score"] + m["away_score"],
-        reverse=True
-    )[:20]
-
-    match_records = {
-        "biggest_wins": biggest_wins,
-        "highest_scoring": highest_scoring,
-    }
 
     # ── Build output arrays ───────────────────────────────────────────────────
     players    = sorted(players_map.values(), key=lambda p: p["name"])
@@ -345,12 +302,16 @@ def main():
 
     # ── Write output files ────────────────────────────────────────────────────
     print()
-    write_json(OUT_DIR / "players.json",       players)
-    write_json(OUT_DIR / "teams.json",         teams)
-    write_json(OUT_DIR / "team-stats.json",    team_stats)
-    write_json(OUT_DIR / "match-records.json", match_records)
+    write_json(OUT_DIR / "players.json",    players)
+    write_json(OUT_DIR / "teams.json",      teams)
+    write_json(OUT_DIR / "team-stats.json", team_stats)
 
-    print(f"\n🏆  Done! {len(match_files)} matches → {len(players)} players, {len(teams)} teams.")
+    print(f"\n🏆  Done!")
+    print(f"    {len(match_files) - skipped} matches processed ({skipped} skipped)")
+    print(f"    {len(players)} players")
+    print(f"    {len(teams)} teams")
+    print(f"    {goals_counted} goals counted")
+    print(f"    {own_goals_counted} own goals (excluded from player tallies)")
 
 
 if __name__ == "__main__":
