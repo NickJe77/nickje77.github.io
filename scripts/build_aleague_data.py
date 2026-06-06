@@ -17,9 +17,10 @@ import sys
 from pathlib import Path
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-REPO_ROOT   = Path(__file__).parent.parent
-MATCHES_DIR = REPO_ROOT / "docs" / "data" / "aleague" / "matches"
-OUT_DIR     = REPO_ROOT / "docs" / "data" / "aleague"
+REPO_ROOT    = Path(__file__).parent.parent
+MATCHES_DIR  = REPO_ROOT / "docs" / "data" / "aleague" / "matches"
+OUT_DIR      = REPO_ROOT / "docs" / "data" / "aleague"
+HISTORY_FILE = OUT_DIR / "player-history.json"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -70,6 +71,7 @@ def make_player(name: str) -> dict:
         "name": name,
         "teams": [],
         "seasons": [],
+        "appearances": 0,
         "goals": 0,
         "penalties": 0,
         "own_goals": 0,
@@ -180,6 +182,23 @@ def main():
         teams_set.add(home_team)
         teams_set.add(away_team)
 
+        # ── Lineup players — add season for every player who played ──────────
+        for player_name in match.get("home_lineup") or []:
+            player_name = player_name.strip()
+            if player_name:
+                p, _ = get_or_create_player(players_map, player_name, home_team, season)
+                add_team_if_missing(p, home_team)
+                add_season_if_missing(p, season)
+                get_or_create_player_season(p, season, home_team)
+
+        for player_name in match.get("away_lineup") or []:
+            player_name = player_name.strip()
+            if player_name:
+                p, _ = get_or_create_player(players_map, player_name, away_team, season)
+                add_team_if_missing(p, away_team)
+                add_season_if_missing(p, season)
+                get_or_create_player_season(p, season, away_team)
+
         # ── Team stats ────────────────────────────────────────────────────────
         for team, scored, conceded in [
             (home_team, home_score, away_score),
@@ -278,6 +297,11 @@ def main():
     # ── Sort season_stats by season for each player ───────────────────────────
     for p in players_map.values():
         p["season_stats"].sort(key=lambda s: s["season"])
+
+    # ── Accurate seasons: use season_stats which covers every season a player
+    # had any recorded event. Already populated above — just ensure sorted.
+    for p in players_map.values():
+        p["seasons"] = sorted(set(s["season"] for s in p["season_stats"]))
 
     # ── Build output arrays ───────────────────────────────────────────────────
     players    = sorted(players_map.values(), key=lambda p: p["name"])
