@@ -80,12 +80,14 @@ function recordTable(rows, cols){
 
 async function loadRecords(){
   try{
-    const [playersRes, teamStatsRes] = await Promise.all([
+    const [playersRes, teamStatsRes, matchRecordsRes] = await Promise.all([
       fetch('/data/aleague/players.json'),
-      fetch('/data/aleague/team-stats.json')
+      fetch('/data/aleague/team-stats.json'),
+      fetch('/data/aleague/match-records.json'),
     ]);
     const players      = await playersRes.json();
     const allTeamStats = await teamStatsRes.json();
+    const matchRecords = await matchRecordsRes.json();
 
     // ── PLAYER RECORDS ───────────────────────────────────────────────────────
 
@@ -115,11 +117,6 @@ async function loadRecords(){
       .sort((a,b) => b.red_cards - a.red_cards)
       .slice(0,10)
       .map(p => ({ rank:'', name: playerLink(p.name), red_cards: p.red_cards }));
-
-    const mostSeasons = [...players]
-      .sort((a,b) => b.seasons.length - a.seasons.length)
-      .slice(0,10)
-      .map(p => ({ rank:'', name: playerLink(p.name), seasons: p.seasons.length, teams: p.teams.join(', ') }));
 
     // ── TEAM RECORDS ─────────────────────────────────────────────────────────
 
@@ -169,50 +166,20 @@ async function loadRecords(){
       .slice(0,10)
       .map(t => ({ rank:'', team: teamLink(t.team), clean_sheets: t.clean_sheets, seasons: t.seasons }));
 
-    // ── MATCH RECORDS ────────────────────────────────────────────────────────
+    // ── MATCH RECORDS from match-records.json ────────────────────────────────
 
-    const seasonIds = [];
-    for(let y = 2005; y <= 2025; y++){
-      seasonIds.push(`${y}-${y+1}`);
-    }
+    const biggestWins = (matchRecords.biggest_wins || []).slice(0,10).map(g => {
+      const diff = Math.abs(g.home_score - g.away_score);
+      const winner = g.home_score > g.away_score ? g.home_team : g.away_team;
+      const loser  = g.home_score > g.away_score ? g.away_team : g.home_team;
+      return { rank:'', winner: teamLink(winner), loser: teamLink(loser), score: `${g.home_score}-${g.away_score}`, season: g.season, margin: diff };
+    });
 
-    const allGames = [];
-    await Promise.all(seasonIds.map(async sid => {
-      try{
-        const r = await fetch(`/data/aleague/seasons/${sid}.json`);
-        if(!r.ok) return;
-        const data = await r.json();
-        const games = Array.isArray(data) ? data : (data.games||[]);
-        games.forEach(g => {
-          if(g.score_home != null && g.score_away != null){
-            allGames.push({...g, season: sid});
-          }
-        });
-      }catch(e){}
+    const highestScoring = (matchRecords.highest_scoring || []).slice(0,10).map(g => ({
+      rank:'', home: teamLink(g.home_team), away: teamLink(g.away_team),
+      score: `${g.home_score}-${g.away_score}`, season: g.season,
+      total: g.home_score + g.away_score
     }));
-
-    const biggestWins = allGames
-      .map(g => {
-        const diff = Math.abs(Number(g.score_home) - Number(g.score_away));
-        const winner = Number(g.score_home) > Number(g.score_away) ? g.home : g.away;
-        const loser  = Number(g.score_home) > Number(g.score_away) ? g.away : g.home;
-        return { diff, winner, loser, score: `${g.score_home}-${g.score_away}`, season: g.season };
-      })
-      .filter(g => g.diff > 0)
-      .sort((a,b) => b.diff - a.diff)
-      .slice(0,10)
-      .map(g => ({ rank:'', winner: teamLink(g.winner), loser: teamLink(g.loser), score: g.score, season: g.season, margin: g.diff }));
-
-    const highestScoring = allGames
-      .map(g => ({
-        total: Number(g.score_home) + Number(g.score_away),
-        home: g.home, away: g.away,
-        score: `${g.score_home}-${g.score_away}`,
-        season: g.season
-      }))
-      .sort((a,b) => b.total - a.total)
-      .slice(0,10)
-      .map(g => ({ rank:'', home: teamLink(g.home), away: teamLink(g.away), score: g.score, season: g.season, total: g.total }));
 
     // ── RENDER ───────────────────────────────────────────────────────────────
 
@@ -225,7 +192,6 @@ async function loadRecords(){
       { title:'⚽ Most Goals in a Season', table: recordTable(topSeasonGoals, [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'season',label:'Season'},{key:'team',label:'Club'},{key:'goals',label:'Goals'}]) },
       { title:'🟨 Most Career Yellow Cards', table: recordTable(careerYellows, [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'yellow_cards',label:'Yellows'}]) },
       { title:'🟥 Most Career Red Cards', table: recordTable(careerReds, [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'red_cards',label:'Reds'}]) },
-      { title:'📅 Most A-League Seasons', table: recordTable(mostSeasons, [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'seasons',label:'Seasons'},{key:'teams',label:'Clubs'}]) },
       { title:'🏆 Most All-Time Wins', table: recordTable(mostWins, [{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'wins',label:'Wins'},{key:'played',label:'Played'},{key:'seasons',label:'Seasons'}]) },
       { title:'🏆 Most Wins in a Season', table: recordTable(mostWinsSeason, [{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'season',label:'Season'},{key:'wins',label:'Wins'},{key:'points',label:'Points'}]) },
       { title:'⚽ Most Goals in a Season (Team)', table: recordTable(mostGoalsSeason, [{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'season',label:'Season'},{key:'goals',label:'Goals'}]) },
