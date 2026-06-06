@@ -91,7 +91,6 @@ const TEAM_COLOURS = {
   "North Queensland Fury":    "linear-gradient(135deg,#FF6600,#CC4400)",
 };
 
-// Name aliases for Brisbane Roar / Melbourne City name changes
 const NAME_ALIASES = {
   "Brisbane Roar":   ["Brisbane Roar", "Queensland Roar"],
   "Queensland Roar": ["Brisbane Roar", "Queensland Roar"],
@@ -117,8 +116,14 @@ const params   = new URLSearchParams(window.location.search);
 const teamName = params.get("team") || "";
 const page     = document.getElementById("page");
 
-// All names this team has used (handles renames)
 const teamAliases = NAME_ALIASES[teamName] || [teamName];
+
+// Helper: get home/away team name from a game object
+// handles both {home, away} and {home_team, away_team} formats
+function gameHome(g){ return g.home || g.home_team || ""; }
+function gameAway(g){ return g.away || g.away_team || ""; }
+function gameScoreHome(g){ return Number(g.score_home != null ? g.score_home : (g.home_score != null ? g.home_score : 0)); }
+function gameScoreAway(g){ return Number(g.score_away != null ? g.score_away : (g.away_score != null ? g.away_score : 0)); }
 
 async function loadTeam(){
   try{
@@ -134,15 +139,12 @@ async function loadTeam(){
     const players      = await playersRes.json();
     const allTeamStats = await teamStatsRes.json();
 
-    // Match stats under any alias
     const teamSeasonStats = allTeamStats.filter(s => teamAliases.includes(s.team));
 
     if(!teamSeasonStats.length){
       page.innerHTML = `<div class="error">Team Not Found</div>`;
       return;
     }
-
-    const seasonIds = [...new Set(teamSeasonStats.map(s => s.season))].sort();
 
     const SEASONS = [
       "2005-06","2006-07","2007-08","2008-09","2009-10",
@@ -159,7 +161,7 @@ async function loadTeam(){
         const data = await r.json();
         const games = Array.isArray(data) ? data : (data.games || []);
         return games
-          .filter(g => teamAliases.includes(g.home) || teamAliases.includes(g.away))
+          .filter(g => teamAliases.includes(gameHome(g)) || teamAliases.includes(gameAway(g)))
           .map(g => ({ ...g, season: seasonId }));
       }catch(e){ return []; }
     }));
@@ -195,23 +197,27 @@ async function loadTeam(){
 
     const opponentSet = new Set();
     allGames.forEach(g => {
-      const opp = teamAliases.includes(g.home) ? g.away : g.home;
-      opponentSet.add(opp);
+      const home = gameHome(g);
+      const away = gameAway(g);
+      const opp = teamAliases.includes(home) ? away : home;
+      if(opp) opponentSet.add(opp);
     });
     const opponents = [...opponentSet].sort();
 
     function buildGameStats(opponent){
       const filtered = opponent
         ? allGames.filter(g => {
-            const opp = teamAliases.includes(g.home) ? g.away : g.home;
+            const home = gameHome(g);
+            const away = gameAway(g);
+            const opp = teamAliases.includes(home) ? away : home;
             return opp === opponent;
           })
         : allGames;
       let wins=0, draws=0, losses=0, goals=0;
       filtered.forEach(g => {
-        const isHome = teamAliases.includes(g.home);
-        const tf = isHome ? Number(g.score_home||0) : Number(g.score_away||0);
-        const of = isHome ? Number(g.score_away||0) : Number(g.score_home||0);
+        const isHome = teamAliases.includes(gameHome(g));
+        const tf = isHome ? gameScoreHome(g) : gameScoreAway(g);
+        const of = isHome ? gameScoreAway(g) : gameScoreHome(g);
         goals += tf;
         if(tf > of) wins++;
         else if(tf < of) losses++;
@@ -223,10 +229,10 @@ async function loadTeam(){
     function gameRows(games){
       if(!games.length) return `<tr><td colspan="4">No games found</td></tr>`;
       return [...games].reverse().slice(0,100).map(g => {
-        const isHome = teamAliases.includes(g.home);
-        const tf  = isHome ? Number(g.score_home||0) : Number(g.score_away||0);
-        const of  = isHome ? Number(g.score_away||0) : Number(g.score_home||0);
-        const opp = isHome ? g.away : g.home;
+        const isHome = teamAliases.includes(gameHome(g));
+        const tf  = isHome ? gameScoreHome(g) : gameScoreAway(g);
+        const of  = isHome ? gameScoreAway(g) : gameScoreHome(g);
+        const opp = isHome ? gameAway(g) : gameHome(g);
         const res = tf > of ? 'W' : tf < of ? 'L' : 'D';
         const cls = tf > of ? 'result-win' : tf < of ? 'result-loss' : 'result-draw';
         return `<tr onclick="window.location.href='/aleague-game.html?match=${encodeURIComponent(g.match_id)}&season=${encodeURIComponent(g.season)}'">
