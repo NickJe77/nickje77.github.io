@@ -3,10 +3,11 @@
 build_aleague_data.py
 
 Reads all match JSON files from docs/data/aleague/matches/<season>/*.json
-and generates three output files:
+and generates four output files:
   - docs/data/aleague/players.json
   - docs/data/aleague/teams.json
   - docs/data/aleague/team-stats.json
+  - docs/data/aleague/match-records.json
 
 Place this file in the scripts/ folder.
 Run from the root of your GitHub repo (nickje77.github.io/)
@@ -164,6 +165,7 @@ def main():
     players_map    = {}
     teams_set      = set()
     team_stats_map = {}
+    all_matches    = []
 
     for file_path in match_files:
         try:
@@ -179,10 +181,22 @@ def main():
         home_score = match.get("home_score") or 0
         away_score = match.get("away_score") or 0
 
+        # Collect for match records
+        if home_team and away_team and home_score is not None and away_score is not None:
+            all_matches.append({
+                "season": season,
+                "date": match.get("date", ""),
+                "home_team": home_team,
+                "away_team": away_team,
+                "home_score": home_score,
+                "away_score": away_score,
+                "venue": match.get("venue", ""),
+            })
+
         teams_set.add(home_team)
         teams_set.add(away_team)
 
-        # ── Lineup players — add season for every player who played ──────────
+        # ── Lineup players ────────────────────────────────────────────────────
         for player_name in match.get("home_lineup") or []:
             player_name = player_name.strip()
             if player_name:
@@ -298,10 +312,28 @@ def main():
     for p in players_map.values():
         p["season_stats"].sort(key=lambda s: s["season"])
 
-    # ── Accurate seasons: use season_stats which covers every season a player
-    # had any recorded event. Already populated above — just ensure sorted.
     for p in players_map.values():
         p["seasons"] = sorted(set(s["season"] for s in p["season_stats"]))
+
+    # ── Build match records ───────────────────────────────────────────────────
+    scored_matches = [m for m in all_matches if m["home_score"] is not None and m["away_score"] is not None]
+
+    biggest_wins = sorted(
+        [m for m in scored_matches if m["home_score"] != m["away_score"]],
+        key=lambda m: abs(m["home_score"] - m["away_score"]),
+        reverse=True
+    )[:20]
+
+    highest_scoring = sorted(
+        scored_matches,
+        key=lambda m: m["home_score"] + m["away_score"],
+        reverse=True
+    )[:20]
+
+    match_records = {
+        "biggest_wins": biggest_wins,
+        "highest_scoring": highest_scoring,
+    }
 
     # ── Build output arrays ───────────────────────────────────────────────────
     players    = sorted(players_map.values(), key=lambda p: p["name"])
@@ -313,9 +345,10 @@ def main():
 
     # ── Write output files ────────────────────────────────────────────────────
     print()
-    write_json(OUT_DIR / "players.json",    players)
-    write_json(OUT_DIR / "teams.json",      teams)
-    write_json(OUT_DIR / "team-stats.json", team_stats)
+    write_json(OUT_DIR / "players.json",       players)
+    write_json(OUT_DIR / "teams.json",         teams)
+    write_json(OUT_DIR / "team-stats.json",    team_stats)
+    write_json(OUT_DIR / "match-records.json", match_records)
 
     print(f"\n🏆  Done! {len(match_files)} matches → {len(players)} players, {len(teams)} teams.")
 
