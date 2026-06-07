@@ -26,10 +26,11 @@ jobs:
           import boto3
           import json
           import os
+          import re
           import time
           import random
           import requests
-          from bs4 import BeautifulSoup
+          from bs4 import BeautifulSoup, Comment
           from botocore.config import Config
 
           r2 = boto3.client(
@@ -70,27 +71,42 @@ jobs:
                   r.raise_for_status()
                   soup = BeautifulSoup(r.text, "lxml")
 
+                  # Uncomment all hidden tables
+                  for comment in soup.find_all(string=lambda t: isinstance(t, Comment)):
+                      if "<table" in str(comment):
+                          new_soup = BeautifulSoup(str(comment), "lxml")
+                          comment.replace_with(new_soup)
+
                   season_data = {"season": year, "teams": []}
 
-                  # All-NBA tables have ids like all_nba, all_nba_2, all_nba_3
-                  for team_num in range(1, 4):
-                      table_id = f"all_nba_{team_num}" if team_num > 1 else "all_nba"
-                      table    = soup.find("table", {"id": table_id})
-                      if not table:
-                          # Try finding by caption
-                          for t in soup.find_all("table"):
-                              cap = t.find("caption")
-                              if cap and f"{team_num}" in cap.get_text() and "All-NBA" in cap.get_text():
-                                  table = t
-                                  break
+                  # Find All-NBA tables by id
+                  for table in soup.find_all("table"):
+                      tid = table.get("id", "")
+                      cap = table.find("caption")
+                      cap_text = cap.get_text() if cap else ""
 
-                      if not table:
+                      is_allnba = (
+                          "all_nba" in tid.lower() or
+                          ("All-NBA" in cap_text and "Defensive" not in cap_text)
+                      )
+                      if not is_allnba:
                           continue
+
+                      # Determine team number from caption or id
+                      team_num = 1
+                      for n, label in [(1,"First"),(2,"Second"),(3,"Third")]:
+                          if label in cap_text or f"_{n}" in tid:
+                              team_num = n
+                              break
 
                       team_name = f"{team_num}{'st' if team_num==1 else 'nd' if team_num==2 else 'rd'} Team"
                       players   = []
 
-                      for row in table.find("tbody").find_all("tr"):
+                      tbody = table.find("tbody")
+                      if not tbody:
+                          continue
+
+                      for row in tbody.find_all("tr"):
                           player_td = row.find("td", {"data-stat": "player"})
                           if not player_td:
                               continue
@@ -99,10 +115,9 @@ jobs:
                               continue
 
                           pid = ""
-                          if player_td.find("a"):
-                              href = player_td.find("a").get("href", "")
-                              import re
-                              m = re.search(r"/players/\w/(\w+)\.html", href)
+                          link = player_td.find("a")
+                          if link:
+                              m = re.search(r"/players/\w/(\w+)\.html", link.get("href",""))
                               if m:
                                   pid = m.group(1)
 
@@ -115,7 +130,10 @@ jobs:
                           players.append({"player": name, "player_id": pid, "pos": pos})
 
                       if players:
-                          season_data["teams"].append({"team": team_name, "players": players})
+                          # Avoid duplicate teams
+                          existing = [t for t in season_data["teams"] if t["team"] == team_name]
+                          if not existing:
+                              season_data["teams"].append({"team": team_name, "players": players})
 
                   if season_data["teams"]:
                       all_seasons.append(season_data)
@@ -126,7 +144,6 @@ jobs:
               except Exception as e:
                   print(f"  ERROR: {e}", flush=True)
 
-          # Upload single combined file
           r2.put_object(
               Bucket=BUCKET,
               Key="basketball/allnba.json",
