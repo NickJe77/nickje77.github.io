@@ -29,12 +29,10 @@ tr:hover{background:#e9f0ff;}
 </style>
 </head>
 <body>
-
 <div class="navbar">
   <a href="/">Home</a>
   <a href="/nba.html">NBA</a>
 </div>
-
 <div class="page-wrap">
   <div class="hero">
     <h1>NBA Season Leaders</h1>
@@ -60,20 +58,28 @@ tr:hover{background:#e9f0ff;}
     </table>
   </div>
 </div>
-
 <script>
 const R2 = "https://pub-68c8b4322a9d4d7f9b875047b45ac7c6.r2.dev";
-
-const rowsEl  = document.getElementById("rows");
-const searchEl= document.getElementById("search");
-
+const rowsEl   = document.getElementById("rows");
+const searchEl = document.getElementById("search");
 let allLeaders = [];
+
+function fixName(str){
+  if(!str) return str;
+  try{
+    const bytes = new Uint8Array(str.length);
+    for(let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xff;
+    const decoded = new TextDecoder('utf-8').decode(bytes);
+    if(decoded.includes('\ufffd')) return str;
+    return decoded;
+  }catch(e){ return str; }
+}
 
 function playerCell(stat){
   if(!stat || !stat.player) return "–";
   return `
     <a class="player-link" href="/nba-player.html?id=${encodeURIComponent(stat.player_id)}">
-      ${stat.player}
+      ${fixName(stat.player)}
     </a>
     <span class="avg">${stat.avg} avg</span>
   `;
@@ -82,16 +88,13 @@ function playerCell(stat){
 function render(){
   const needle = (searchEl.value || "").toLowerCase();
   rowsEl.innerHTML = "";
-
   const filtered = needle
     ? allLeaders.filter(s => JSON.stringify(s).toLowerCase().includes(needle))
     : allLeaders;
-
   if(!filtered.length){
     rowsEl.innerHTML = `<tr><td colspan="6" class="loading">No results found.</td></tr>`;
     return;
   }
-
   filtered.forEach(s => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -109,7 +112,6 @@ function render(){
 async function load(){
   try{
     const seasons = Array.from({length: 50}, (_,i) => 1977 + i);
-
     const results = await Promise.allSettled(
       seasons.map(s =>
         fetch(`${R2}/basketball/leaders/${s}.json`)
@@ -117,12 +119,10 @@ async function load(){
           .catch(() => null)
       )
     );
-
     allLeaders = results
       .filter(r => r.status === "fulfilled" && r.value)
       .map(r => r.value)
       .sort((a,b) => b.season - a.season);
-
     render();
   }catch(e){
     rowsEl.innerHTML = `<tr><td colspan="6" class="loading">Unable to load data.</td></tr>`;
