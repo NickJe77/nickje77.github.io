@@ -67,17 +67,17 @@ jobs:
               print(f"Scraping {year}...", flush=True)
               time.sleep(random.uniform(4, 7))
               try:
-                  url = f"https://www.basketball-reference.com/awards/awards_{year}.html"
-                  r   = requests.get(url, headers=HEADERS, timeout=30)
-                  r.raise_for_status()
+                  url  = f"https://www.basketball-reference.com/awards/awards_{year}.html"
+                  resp = requests.get(url, headers=HEADERS, timeout=30)
+                  resp.raise_for_status()
+                  html = resp.text
 
                   # Uncomment hidden tables
-                  html = re.sub(r'<!--(.*?)-->', lambda m: m.group(1) if '<table' in m.group(1) else m.group(0), html=r.text, flags=re.DOTALL)
+                  html = re.sub(r'<!--(.*?)-->', lambda m: m.group(1) if '<table' in m.group(1) else m.group(0), html, flags=re.DOTALL)
                   soup = BeautifulSoup(html, "lxml")
 
                   season_data = {"season": year, "teams": []}
 
-                  # Find All-NBA table — it contains voting data with team columns
                   for table in soup.find_all("table"):
                       cap = table.find("caption")
                       if not cap:
@@ -86,17 +86,8 @@ jobs:
                       if "All-NBA" not in cap_text or "Defensive" in cap_text or "Rookie" in cap_text:
                           continue
 
-                      # Get headers to find team columns (1st, 2nd, 3rd)
-                      headers = []
-                      thead = table.find("thead")
-                      if thead:
-                          for th in thead.find_all("th"):
-                              headers.append(th.get_text(strip=True))
+                      print(f"  Found: {cap_text.strip()}", flush=True)
 
-                      print(f"  Found table: {cap_text.strip()}, headers: {headers[:10]}", flush=True)
-
-                      # Parse rows - each row is a player with votes
-                      # The team column tells us which team they made
                       tbody = table.find("tbody")
                       if not tbody:
                           continue
@@ -104,7 +95,7 @@ jobs:
                       team_players = {1: [], 2: [], 3: []}
 
                       for row in tbody.find_all("tr"):
-                          if row.get("class") and "thead" in row.get("class", []):
+                          if "thead" in row.get("class", []):
                               continue
 
                           player_td = row.find("td", {"data-stat": "player"})
@@ -124,20 +115,20 @@ jobs:
                           pos_td = row.find("td", {"data-stat": "pos"})
                           pos = pos_td.get_text(strip=True) if pos_td else ""
 
-                          # Check which team they made
-                          team_td = row.find("td", {"data-stat": "award"})
-                          if not team_td:
-                              team_td = row.find("td", {"data-stat": "team"})
-
+                          # Find which team they made - check all tds for team info
                           team_num = None
-                          if team_td:
-                              team_text = team_td.get_text(strip=True)
-                              if "1" in team_text or "First" in team_text:
-                                  team_num = 1
-                              elif "2" in team_text or "Second" in team_text:
-                                  team_num = 2
-                              elif "3" in team_text or "Third" in team_text:
-                                  team_num = 3
+                          for td in row.find_all("td"):
+                              stat = td.get("data-stat", "")
+                              val  = td.get_text(strip=True)
+                              if stat in ("award", "team", "all_nba_team", "award_value"):
+                                  if "1" in val or "First" in val:
+                                      team_num = 1
+                                  elif "2" in val or "Second" in val:
+                                      team_num = 2
+                                  elif "3" in val or "Third" in val:
+                                      team_num = 3
+                                  if team_num:
+                                      break
 
                           if pid in NAME_FIX:
                               name = NAME_FIX[pid]
@@ -145,18 +136,24 @@ jobs:
                           if team_num:
                               team_players[team_num].append({"player": name, "player_id": pid, "pos": pos})
 
+                      # Print first row data stats for debugging
+                      first_row = tbody.find("tr")
+                      if first_row:
+                          stats = [td.get("data-stat","") for td in first_row.find_all("td")]
+                          print(f"  Row data-stats: {stats[:10]}", flush=True)
+
                       for num in [1, 2, 3]:
                           if team_players[num]:
                               label = f"{num}{'st' if num==1 else 'nd' if num==2 else 'rd'} Team"
                               season_data["teams"].append({"team": label, "players": team_players[num]})
 
-                      break  # Only process first All-NBA table
+                      break
 
                   if season_data["teams"]:
                       all_seasons.append(season_data)
-                      print(f"  {len(season_data['teams'])} teams, players: {[len(t['players']) for t in season_data['teams']]}", flush=True)
+                      print(f"  {len(season_data['teams'])} teams: {[len(t['players']) for t in season_data['teams']]}", flush=True)
                   else:
-                      print(f"  No All-NBA data found", flush=True)
+                      print(f"  No data found", flush=True)
 
               except Exception as e:
                   print(f"  ERROR: {e}", flush=True)
