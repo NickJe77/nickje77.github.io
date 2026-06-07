@@ -26,7 +26,6 @@ jobs:
           import boto3
           import json
           import os
-          from collections import defaultdict
           from botocore.config import Config
 
           r2 = boto3.client(
@@ -40,23 +39,46 @@ jobs:
 
           BUCKET = "sporting-almanac-data"
 
+          # Known correct names by player_id
+          CORRECT_NAMES = {
+              "doncilu01": "Luka Dončić",
+              "jokicni01": "Nikola Jokić",
+              "bogdaibo01": "Bogdan Bogdanović",
+              "vucevni01": "Nikola Vučević",
+              "porzikri01": "Kristaps Porziņģis",
+              "zubaciv01": "Ivica Zubac",
+              "saricda01": "Dario Šarić",
+              "nurkiju01": "Jusuf Nurkić",
+              "tobiasc01": "Clint Capela",
+              "hezonja01": "Mario Hezonja",
+              "bertaal01": "Alperen Şengün",
+              "sengunal01": "Alperen Şengün",
+              "wembavi01": "Victor Wembanyama",
+              "topicni01": "Nikola Topić",
+          }
+
+          def fix_name(name, player_id):
+              if player_id in CORRECT_NAMES:
+                  return CORRECT_NAMES[player_id]
+              if not name: return name
+              try:
+                  fixed = name.encode('latin-1').decode('utf-8')
+                  if fixed != name:
+                      return fixed
+              except:
+                  pass
+              return name
+
           def upload(key, data):
               r2.put_object(
                   Bucket=BUCKET,
                   Key=key,
-                  Body=json.dumps(data, ensure_ascii=True).encode("utf-8"),
-                  ContentType="application/json",
+                  Body=json.dumps(data, ensure_ascii=False).encode("utf-8"),
+                  ContentType="application/json; charset=utf-8",
               )
 
-          def fix_name(s):
-              if not s: return s
-              try:
-                  return s.encode('latin-1').decode('utf-8')
-              except:
-                  return s
-
           print("Loading player index...", flush=True)
-          idx = json.loads(r2.get_object(Bucket=BUCKET, Key="basketball/players/index.json")["Body"].read())
+          idx = json.loads(r2.get_object(Bucket=BUCKET, Key="basketball/players/index.json")["Body"].read().decode("utf-8"))
           print(f"Found {len(idx)} players", flush=True)
 
           players = []
@@ -66,11 +88,9 @@ jobs:
               if i % 500 == 0:
                   print(f"  Processing player {i}/{len(idx)}...", flush=True)
               try:
-                  data = json.loads(r2.get_object(Bucket=BUCKET, Key=f"basketball/players/{p['id']}.json")["Body"].read())
+                  data = json.loads(r2.get_object(Bucket=BUCKET, Key=f"basketball/players/{p['id']}.json")["Body"].read().decode("utf-8"))
                   games = [g for g in data.get("games", []) if not g.get("playoff")]
-
-                  if not games:
-                      continue
+                  if not games: continue
 
                   gp   = len(games)
                   pts  = sum(g.get("pts") or 0 for g in games)
@@ -85,12 +105,10 @@ jobs:
                   ft   = sum(g.get("ft")  or 0 for g in games)
                   fta  = sum(g.get("fta") or 0 for g in games)
 
-                  # Triple doubles
                   td = sum(1 for g in games if
                       sum(1 for v in [g.get("pts",0), g.get("reb",0), g.get("ast",0),
                                       g.get("stl",0), g.get("blk",0)] if (v or 0) >= 10) >= 3)
 
-                  # Total minutes
                   total_min = 0
                   for g in games:
                       mp = g.get("mp") or ""
@@ -100,42 +118,34 @@ jobs:
                       except:
                           pass
 
+                  raw_name = data.get("name", p.get("name", ""))
+                  name     = fix_name(raw_name, p["id"])
+
                   players.append({
-                      "id":        p["id"],
-                      "name":      fix_name(data.get("name", p["name"])),
-                      "gp":        gp,
-                      "pts":       pts,
-                      "reb":       reb,
-                      "ast":       ast,
-                      "stl":       stl,
-                      "blk":       blk,
-                      "td":        td,
-                      "fg":        fg,
-                      "fga":       fga,
-                      "fg3":       fg3,
-                      "fg3a":      fg3a,
-                      "ft":        ft,
-                      "fta":       fta,
-                      "min":       round(total_min),
-                      "pts_pg":    round(pts/gp, 2) if gp else 0,
-                      "reb_pg":    round(reb/gp, 2) if gp else 0,
-                      "ast_pg":    round(ast/gp, 2) if gp else 0,
-                      "stl_pg":    round(stl/gp, 2) if gp else 0,
-                      "blk_pg":    round(blk/gp, 2) if gp else 0,
-                      "pts_36":    round(pts/total_min*36, 2) if total_min > 500 else 0,
-                      "reb_36":    round(reb/total_min*36, 2) if total_min > 500 else 0,
-                      "ast_36":    round(ast/total_min*36, 2) if total_min > 500 else 0,
-                      "stl_36":    round(stl/total_min*36, 2) if total_min > 500 else 0,
-                      "blk_36":    round(blk/total_min*36, 2) if total_min > 500 else 0,
+                      "id":     p["id"],
+                      "name":   name,
+                      "gp":     gp,
+                      "pts":    pts, "reb": reb, "ast": ast, "stl": stl, "blk": blk, "td": td,
+                      "fg":     fg,  "fga": fga, "fg3": fg3, "fg3a": fg3a, "ft": ft, "fta": fta,
+                      "min":    round(total_min),
+                      "pts_pg": round(pts/gp, 2) if gp else 0,
+                      "reb_pg": round(reb/gp, 2) if gp else 0,
+                      "ast_pg": round(ast/gp, 2) if gp else 0,
+                      "stl_pg": round(stl/gp, 2) if gp else 0,
+                      "blk_pg": round(blk/gp, 2) if gp else 0,
+                      "pts_36": round(pts/total_min*36, 2) if total_min > 500 else 0,
+                      "reb_36": round(reb/total_min*36, 2) if total_min > 500 else 0,
+                      "ast_36": round(ast/total_min*36, 2) if total_min > 500 else 0,
+                      "stl_36": round(stl/total_min*36, 2) if total_min > 500 else 0,
+                      "blk_36": round(blk/total_min*36, 2) if total_min > 500 else 0,
                   })
               except Exception as e:
                   errors += 1
 
           print(f"Processed {len(players)} players, {errors} errors", flush=True)
 
-          # Minimum 200 games for totals/per game, 500 mins for per 36
-          qualified     = [p for p in players if p["gp"] >= 200]
-          qualified_36  = [p for p in players if p["min"] >= 500]
+          qualified    = [p for p in players if p["gp"] >= 200]
+          qualified_36 = [p for p in players if p["min"] >= 500]
 
           def top15(lst, key):
               return [{"player": p["name"], "player_id": p["id"], "gp": p["gp"], "value": p[key]}
@@ -167,5 +177,5 @@ jobs:
           }
 
           upload("basketball/stat-leaders.json", stat_leaders)
-          print("Stat leaders uploaded!", flush=True)
+          print("Done!", flush=True)
           PYEOF
