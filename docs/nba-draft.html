@@ -62,10 +62,12 @@ td:nth-child(1),td:nth-child(2){width:60px;text-align:center;font-weight:600;}
 </div>
 
 <script>
+const R2         = "https://pub-68c8b4322a9d4d7f9b875047b45ac7c6.r2.dev";
 const rows       = document.getElementById("rows");
 const yearSelect = document.getElementById("yearSelect");
 const q          = document.getElementById("q");
 let data         = [];
+let playerIndex  = [];
 
 function fixName(str){
   if(!str) return str;
@@ -78,7 +80,20 @@ function fixName(str){
   }catch(e){ return str; }
 }
 
-for(let y = 2025; y >= 1947; y--){
+// Load player index for name matching
+fetch(`${R2}/basketball/players/index.json`)
+  .then(r => r.json())
+  .then(idx => { playerIndex = idx; })
+  .catch(() => {});
+
+function findPlayerId(name){
+  if(!name || !playerIndex.length) return null;
+  const needle = name.toLowerCase().trim();
+  const match  = playerIndex.find(p => (p.name || "").toLowerCase().trim() === needle);
+  return match ? match.id : null;
+}
+
+for(let y = 2025; y >= 1975; y--){
   const opt = document.createElement("option");
   opt.value = y;
   opt.textContent = y;
@@ -92,9 +107,9 @@ async function loadYear(year){
     const res = await fetch(`/data/basketball/nba_draft/${year}.json`);
     if(!res.ok) throw new Error("Not found");
     const json = await res.json();
-    if(Array.isArray(json)) data = json;
-    else if(json.players) data = json.players;
-    else if(json.picks)   data = json.picks;
+    if(Array.isArray(json))    data = json;
+    else if(json.players)      data = json.players;
+    else if(json.picks)        data = json.picks;
     else data = [];
     render();
   }catch(e){
@@ -117,20 +132,22 @@ function render(){
     return;
   }
 
-  rows.innerHTML = filtered.map(p => `
-    <tr>
-      <td>${p.pick || ""}</td>
-      <td>${p.round || ""}</td>
-      <td>
-        ${p.player_id
-          ? `<a class="player-link" href="/nba-player.html?id=${encodeURIComponent(p.player_id)}">${fixName(p.player || "")}</a>`
-          : fixName(p.player || "")
-        }
-      </td>
-      <td>${p.team || ""}</td>
-      <td>${p.college || ""}</td>
-    </tr>
-  `).join("");
+  rows.innerHTML = filtered.map(p => {
+    const name     = fixName(p.player || "");
+    const pid      = p.player_id || findPlayerId(p.player);
+    const nameCell = pid
+      ? `<a class="player-link" href="/nba-player.html?id=${encodeURIComponent(pid)}">${name}</a>`
+      : name;
+    return `
+      <tr>
+        <td>${p.pick || ""}</td>
+        <td>${p.round || ""}</td>
+        <td>${nameCell}</td>
+        <td>${p.team || ""}</td>
+        <td>${p.college || ""}</td>
+      </tr>
+    `;
+  }).join("");
 }
 
 yearSelect.onchange = () => loadYear(yearSelect.value);
