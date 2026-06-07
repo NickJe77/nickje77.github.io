@@ -30,7 +30,7 @@ jobs:
           import time
           import random
           import requests
-          from bs4 import BeautifulSoup, Comment
+          from bs4 import BeautifulSoup
           from botocore.config import Config
 
           r2 = boto3.client(
@@ -58,32 +58,8 @@ jobs:
               "wembavi01": "Victor Wembanyama",
               "topicni01": "Nikola Topić",
               "zubaciv01": "Ivica Zubac",
+              "avdijade01": "Deni Avdija",
           }
-
-          def parse_table(table):
-              players = []
-              tbody = table.find("tbody")
-              if not tbody:
-                  return players
-              for row in tbody.find_all("tr"):
-                  player_td = row.find("td", {"data-stat": "player"})
-                  if not player_td:
-                      continue
-                  name = player_td.get_text(strip=True)
-                  if not name:
-                      continue
-                  pid = ""
-                  link = player_td.find("a")
-                  if link:
-                      m = re.search(r"/players/\w/(\w+)\.html", link.get("href",""))
-                      if m:
-                          pid = m.group(1)
-                  pos_td = row.find("td", {"data-stat": "pos"})
-                  pos = pos_td.get_text(strip=True) if pos_td else ""
-                  if pid in NAME_FIX:
-                      name = NAME_FIX[pid]
-                  players.append({"player": name, "player_id": pid, "pos": pos})
-              return players
 
           all_seasons = []
 
@@ -95,60 +71,90 @@ jobs:
                   r   = requests.get(url, headers=HEADERS, timeout=30)
                   r.raise_for_status()
 
-                  # Uncomment hidden tables in raw HTML first
-                  html = r.text
-                  html = re.sub(r'<!--\s*(<table.*?</table>)\s*-->', r'\1', html, flags=re.DOTALL)
+                  # Uncomment hidden tables
+                  html = re.sub(r'<!--(.*?)-->', lambda m: m.group(1) if '<table' in m.group(1) else m.group(0), html=r.text, flags=re.DOTALL)
                   soup = BeautifulSoup(html, "lxml")
 
                   season_data = {"season": year, "teams": []}
 
-                  # Try direct table IDs first: awards_all_nba, awards_all_nba_2, awards_all_nba_3
-                  # or all_nba, all_nba_2, all_nba_3
-                  for team_num in [1, 2, 3]:
-                      team_name = f"{team_num}{'st' if team_num==1 else 'nd' if team_num==2 else 'rd'} Team"
-                      table = None
-
-                      # Try various ID patterns
-                      ids_to_try = [
-                          f"all_nba" if team_num == 1 else f"all_nba_{team_num}",
-                          f"awards_all_nba" if team_num == 1 else f"awards_all_nba_{team_num}",
-                          f"all-nba-{team_num}",
-                      ]
-                      for tid in ids_to_try:
-                          table = soup.find("table", {"id": tid})
-                          if table:
-                              break
-
-                      # If no ID match, search by caption
-                      if not table:
-                          for t in soup.find_all("table"):
-                              cap = t.find("caption")
-                              if not cap:
-                                  continue
-                              cap_text = cap.get_text()
-                              if "All-NBA" not in cap_text or "Defensive" in cap_text:
-                                  continue
-                              # Match team number
-                              if team_num == 1 and ("First" in cap_text or "1st" in cap_text or cap_text.count("All-NBA") and "Second" not in cap_text and "Third" not in cap_text):
-                                  table = t
-                                  break
-                              elif team_num == 2 and ("Second" in cap_text or "2nd" in cap_text):
-                                  table = t
-                                  break
-                              elif team_num == 3 and ("Third" in cap_text or "3rd" in cap_text):
-                                  table = t
-                                  break
-
-                      if not table:
+                  # Find All-NBA table — it contains voting data with team columns
+                  for table in soup.find_all("table"):
+                      cap = table.find("caption")
+                      if not cap:
+                          continue
+                      cap_text = cap.get_text()
+                      if "All-NBA" not in cap_text or "Defensive" in cap_text or "Rookie" in cap_text:
                           continue
 
-                      players = parse_table(table)
-                      if players:
-                          season_data["teams"].append({"team": team_name, "players": players})
+                      # Get headers to find team columns (1st, 2nd, 3rd)
+                      headers = []
+                      thead = table.find("thead")
+                      if thead:
+                          for th in thead.find_all("th"):
+                              headers.append(th.get_text(strip=True))
+
+                      print(f"  Found table: {cap_text.strip()}, headers: {headers[:10]}", flush=True)
+
+                      # Parse rows - each row is a player with votes
+                      # The team column tells us which team they made
+                      tbody = table.find("tbody")
+                      if not tbody:
+                          continue
+
+                      team_players = {1: [], 2: [], 3: []}
+
+                      for row in tbody.find_all("tr"):
+                          if row.get("class") and "thead" in row.get("class", []):
+                              continue
+
+                          player_td = row.find("td", {"data-stat": "player"})
+                          if not player_td:
+                              continue
+                          name = player_td.get_text(strip=True)
+                          if not name:
+                              continue
+
+                          pid = ""
+                          link = player_td.find("a")
+                          if link:
+                              m = re.search(r"/players/\w/(\w+)\.html", link.get("href",""))
+                              if m:
+                                  pid = m.group(1)
+
+                          pos_td = row.find("td", {"data-stat": "pos"})
+                          pos = pos_td.get_text(strip=True) if pos_td else ""
+
+                          # Check which team they made
+                          team_td = row.find("td", {"data-stat": "award"})
+                          if not team_td:
+                              team_td = row.find("td", {"data-stat": "team"})
+
+                          team_num = None
+                          if team_td:
+                              team_text = team_td.get_text(strip=True)
+                              if "1" in team_text or "First" in team_text:
+                                  team_num = 1
+                              elif "2" in team_text or "Second" in team_text:
+                                  team_num = 2
+                              elif "3" in team_text or "Third" in team_text:
+                                  team_num = 3
+
+                          if pid in NAME_FIX:
+                              name = NAME_FIX[pid]
+
+                          if team_num:
+                              team_players[team_num].append({"player": name, "player_id": pid, "pos": pos})
+
+                      for num in [1, 2, 3]:
+                          if team_players[num]:
+                              label = f"{num}{'st' if num==1 else 'nd' if num==2 else 'rd'} Team"
+                              season_data["teams"].append({"team": label, "players": team_players[num]})
+
+                      break  # Only process first All-NBA table
 
                   if season_data["teams"]:
                       all_seasons.append(season_data)
-                      print(f"  {len(season_data['teams'])} teams found", flush=True)
+                      print(f"  {len(season_data['teams'])} teams, players: {[len(t['players']) for t in season_data['teams']]}", flush=True)
                   else:
                       print(f"  No All-NBA data found", flush=True)
 
