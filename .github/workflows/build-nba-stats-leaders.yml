@@ -1,0 +1,171 @@
+name: Build NBA Stat Leaders
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install packages
+        run: pip install boto3
+
+      - name: Build stat leaders
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          python << 'PYEOF'
+          import boto3
+          import json
+          import os
+          from collections import defaultdict
+          from botocore.config import Config
+
+          r2 = boto3.client(
+              "s3",
+              endpoint_url=os.environ["R2_ENDPOINT"],
+              aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+              config=Config(signature_version="s3v4"),
+              region_name="auto",
+          )
+
+          BUCKET = "sporting-almanac-data"
+
+          def upload(key, data):
+              r2.put_object(
+                  Bucket=BUCKET,
+                  Key=key,
+                  Body=json.dumps(data, ensure_ascii=True).encode("utf-8"),
+                  ContentType="application/json",
+              )
+
+          def fix_name(s):
+              if not s: return s
+              try:
+                  return s.encode('latin-1').decode('utf-8')
+              except:
+                  return s
+
+          print("Loading player index...", flush=True)
+          idx = json.loads(r2.get_object(Bucket=BUCKET, Key="basketball/players/index.json")["Body"].read())
+          print(f"Found {len(idx)} players", flush=True)
+
+          players = []
+          errors  = 0
+
+          for i, p in enumerate(idx):
+              if i % 500 == 0:
+                  print(f"  Processing player {i}/{len(idx)}...", flush=True)
+              try:
+                  data = json.loads(r2.get_object(Bucket=BUCKET, Key=f"basketball/players/{p['id']}.json")["Body"].read())
+                  games = [g for g in data.get("games", []) if not g.get("playoff")]
+
+                  if not games:
+                      continue
+
+                  gp   = len(games)
+                  pts  = sum(g.get("pts") or 0 for g in games)
+                  reb  = sum(g.get("reb") or 0 for g in games)
+                  ast  = sum(g.get("ast") or 0 for g in games)
+                  stl  = sum(g.get("stl") or 0 for g in games)
+                  blk  = sum(g.get("blk") or 0 for g in games)
+                  fg   = sum(g.get("fg")  or 0 for g in games)
+                  fga  = sum(g.get("fga") or 0 for g in games)
+                  fg3  = sum(g.get("fg3") or 0 for g in games)
+                  fg3a = sum(g.get("fg3a")or 0 for g in games)
+                  ft   = sum(g.get("ft")  or 0 for g in games)
+                  fta  = sum(g.get("fta") or 0 for g in games)
+
+                  # Triple doubles
+                  td = sum(1 for g in games if
+                      sum(1 for v in [g.get("pts",0), g.get("reb",0), g.get("ast",0),
+                                      g.get("stl",0), g.get("blk",0)] if (v or 0) >= 10) >= 3)
+
+                  # Total minutes
+                  total_min = 0
+                  for g in games:
+                      mp = g.get("mp") or ""
+                      try:
+                          parts = str(mp).split(":")
+                          total_min += int(parts[0]) + int(parts[1])/60 if len(parts)==2 else float(parts[0])
+                      except:
+                          pass
+
+                  players.append({
+                      "id":        p["id"],
+                      "name":      fix_name(data.get("name", p["name"])),
+                      "gp":        gp,
+                      "pts":       pts,
+                      "reb":       reb,
+                      "ast":       ast,
+                      "stl":       stl,
+                      "blk":       blk,
+                      "td":        td,
+                      "fg":        fg,
+                      "fga":       fga,
+                      "fg3":       fg3,
+                      "fg3a":      fg3a,
+                      "ft":        ft,
+                      "fta":       fta,
+                      "min":       round(total_min),
+                      "pts_pg":    round(pts/gp, 2) if gp else 0,
+                      "reb_pg":    round(reb/gp, 2) if gp else 0,
+                      "ast_pg":    round(ast/gp, 2) if gp else 0,
+                      "stl_pg":    round(stl/gp, 2) if gp else 0,
+                      "blk_pg":    round(blk/gp, 2) if gp else 0,
+                      "pts_36":    round(pts/total_min*36, 2) if total_min > 500 else 0,
+                      "reb_36":    round(reb/total_min*36, 2) if total_min > 500 else 0,
+                      "ast_36":    round(ast/total_min*36, 2) if total_min > 500 else 0,
+                      "stl_36":    round(stl/total_min*36, 2) if total_min > 500 else 0,
+                      "blk_36":    round(blk/total_min*36, 2) if total_min > 500 else 0,
+                  })
+              except Exception as e:
+                  errors += 1
+
+          print(f"Processed {len(players)} players, {errors} errors", flush=True)
+
+          # Minimum 200 games for totals/per game, 500 mins for per 36
+          qualified     = [p for p in players if p["gp"] >= 200]
+          qualified_36  = [p for p in players if p["min"] >= 500]
+
+          def top15(lst, key):
+              return [{"player": p["name"], "player_id": p["id"], "gp": p["gp"], "value": p[key]}
+                      for p in sorted(lst, key=lambda x: x[key], reverse=True)[:15]]
+
+          stat_leaders = {
+              "totals": {
+                  "points":         top15(qualified, "pts"),
+                  "rebounds":       top15(qualified, "reb"),
+                  "assists":        top15(qualified, "ast"),
+                  "steals":         top15(qualified, "stl"),
+                  "blocks":         top15(qualified, "blk"),
+                  "triple_doubles": top15(qualified, "td"),
+              },
+              "per_game": {
+                  "points":         top15(qualified, "pts_pg"),
+                  "rebounds":       top15(qualified, "reb_pg"),
+                  "assists":        top15(qualified, "ast_pg"),
+                  "steals":         top15(qualified, "stl_pg"),
+                  "blocks":         top15(qualified, "blk_pg"),
+              },
+              "per_36": {
+                  "points":         top15(qualified_36, "pts_36"),
+                  "rebounds":       top15(qualified_36, "reb_36"),
+                  "assists":        top15(qualified_36, "ast_36"),
+                  "steals":         top15(qualified_36, "stl_36"),
+                  "blocks":         top15(qualified_36, "blk_36"),
+              },
+          }
+
+          upload("basketball/stat-leaders.json", stat_leaders)
+          print("Stat leaders uploaded!", flush=True)
+          PYEOF
