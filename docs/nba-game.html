@@ -62,6 +62,21 @@ const gameId = params.get("game");
 const heroEl    = document.getElementById("hero");
 const contentEl = document.getElementById("content");
 
+// Fix UTF-8 names that were stored with wrong encoding
+function fixName(str){
+  if(!str) return str;
+  try{
+    const bytes = new Uint8Array(str.length);
+    for(let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xff;
+    const decoded = new TextDecoder('utf-8').decode(bytes);
+    // If decoding produced replacement chars, return original
+    if(decoded.includes('\ufffd')) return str;
+    return decoded;
+  }catch(e){
+    return str;
+  }
+}
+
 const STAT_LABELS = {
   mp:         "MIN",
   pts:        "PTS",
@@ -169,7 +184,7 @@ function renderGame(data){
       <tr>
         <td class="player-name">
           <a class="player-link" href="/nba-player.html?id=${encodeURIComponent(p.player_id || '')}">
-            ${p.player || ""}
+            ${fixName(p.player || "")}
           </a>
         </td>
         ${STAT_KEYS.map(k => {
@@ -181,7 +196,7 @@ function renderGame(data){
 
     const dnpRows = dnp.map(p => `
       <tr>
-        <td class="player-name dnp">${p.player || ""}</td>
+        <td class="player-name dnp">${fixName(p.player || "")}</td>
         <td colspan="${STAT_KEYS.length}" style="text-align:left;" class="dnp">${p.dnp}</td>
       </tr>
     `).join("");
