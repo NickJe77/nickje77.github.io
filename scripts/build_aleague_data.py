@@ -2,6 +2,8 @@
 """
 build_aleague_data.py
 Reads all match JSON files and generates players.json, teams.json, team-stats.json
+Also rebuilds season JSONs with home, away, score_home, score_away fields
+so the team page loads fast (same structure as EPL season JSONs).
 Queensland Roar -> Brisbane Roar, Melbourne Heart -> Melbourne City at data level.
 """
 
@@ -11,6 +13,7 @@ from pathlib import Path
 
 REPO_ROOT   = Path(__file__).parent.parent
 MATCHES_DIR = REPO_ROOT / "docs" / "data" / "aleague" / "matches"
+SEASONS_DIR = REPO_ROOT / "docs" / "data" / "aleague" / "seasons"
 OUT_DIR     = REPO_ROOT / "docs" / "data" / "aleague"
 
 TEAM_NAME_MAP = {
@@ -84,19 +87,61 @@ def get_name(d):
     name = d.get("player") or d.get("name") or ""
     return " ".join(str(name).split())
 
+def rebuild_season_jsons(match_data):
+    """
+    Update season JSON files with home, away, score_home, score_away
+    so the team page loads fast — same structure as EPL season JSONs.
+    Uses match_data dict already built during main processing.
+    """
+    if not SEASONS_DIR.exists():
+        return
+
+    for season_file in sorted(SEASONS_DIR.glob("*.json")):
+        season_id = season_file.stem
+        try:
+            with open(season_file, encoding="utf-8") as f:
+                data = json.load(f)
+        except:
+            continue
+
+        games = data.get("games", data) if isinstance(data, dict) else data
+        updated = 0
+
+        for game in games:
+            match_id = game.get("match_id")
+            if not match_id or match_id not in match_data:
+                continue
+            m = match_data[match_id]
+            game["home"]       = m["home"]
+            game["away"]       = m["away"]
+            game["score_home"] = m["score_home"]
+            game["score_away"] = m["score_away"]
+            game["date"]       = m["date"]
+            updated += 1
+
+        if isinstance(data, dict):
+            data["games"] = games
+            out = data
+        else:
+            out = games
+
+        with open(season_file, "w", encoding="utf-8") as f:
+            json.dump(out, f, indent=2, ensure_ascii=False)
+
+        print(f"  Season {season_id}: {updated} games updated")
+
 def main():
     match_files = collect_json_files(MATCHES_DIR)
     print(f"Found {len(match_files)} match files\n")
 
-    # Track processed match_ids to prevent double-counting
     seen_match_ids = set()
-
     players_map    = {}
     teams_set      = set()
     team_stats_map = {}
-    skipped = 0
-    duplicates = 0
-    goals_counted = 0
+    match_data     = {}  # match_id -> {home, away, score_home, score_away, date}
+    skipped        = 0
+    duplicates     = 0
+    goals_counted  = 0
     own_goals_counted = 0
 
     for file_path in match_files:
@@ -108,7 +153,6 @@ def main():
             skipped += 1
             continue
 
-        # Skip duplicate match IDs
         match_id = match.get("match_id") or str(file_path)
         if match_id in seen_match_ids:
             duplicates += 1
@@ -124,6 +168,15 @@ def main():
         if not home_team or not away_team:
             skipped += 1
             continue
+
+        # Store for season JSON rebuild
+        match_data[match_id] = {
+            "home":       home_team,
+            "away":       away_team,
+            "score_home": home_score,
+            "score_away": away_score,
+            "date":       match.get("date", ""),
+        }
 
         teams_set.add(home_team)
         teams_set.add(away_team)
@@ -144,11 +197,9 @@ def main():
 
         for scorer in (match.get("scorers") or []):
             name = get_name(scorer)
-            if not name:
-                continue
+            if not name: continue
             team = normalise_team(scorer.get("team") or "")
-            if not team:
-                continue
+            if not team: continue
             opponent = away_team if team == home_team else (home_team if team == away_team else "")
             p  = get_or_create_player(players_map, name)
             add_team_if_missing(p, team)
@@ -199,6 +250,9 @@ def main():
     write_json(OUT_DIR / "players.json",    players)
     write_json(OUT_DIR / "teams.json",      teams)
     write_json(OUT_DIR / "team-stats.json", team_stats)
+
+    print(f"\nRebuilding season JSONs...")
+    rebuild_season_jsons(match_data)
 
     print(f"\nDone!")
     print(f"  {len(match_files)-skipped} matches processed")
