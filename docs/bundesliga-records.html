@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Bundesliga Records | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#f3f4f7;color:#111;}
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:white;border-bottom:1px solid #ddd;flex-wrap:wrap;}
+.navbar a{text-decoration:none;color:#0056d6;font-weight:600;}
+.hero{background:linear-gradient(135deg,#d20515,#a50010);color:white;padding:60px 20px;text-align:center;}
+.hero h1{margin:0;font-size:52px;font-weight:800;}
+.hero p{margin-top:14px;font-size:18px;opacity:.95;}
+.container{max-width:1400px;margin:30px auto;padding:0 20px 60px;}
+.records-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:24px;}
+.section{background:white;border-radius:20px;padding:24px;box-shadow:0 3px 10px rgba(0,0,0,.07);}
+.section-title{font-size:20px;font-weight:900;margin:0 0 18px;color:#d20515;display:flex;align-items:center;gap:10px;}
+table{border-collapse:collapse;white-space:nowrap;}
+th{background:#fde8e8;padding:12px 14px;font-size:12px;font-weight:900;text-transform:uppercase;text-align:center;color:#a50010;}
+td{padding:12px 14px;border-bottom:1px solid #ececec;font-size:14px;font-weight:600;text-align:center;white-space:nowrap;}
+tr:nth-child(even){background:#fff5f5;}
+.rank{font-weight:900;color:#d20515;}
+.link{text-decoration:none;font-weight:800;color:#0056d6;}
+.link:hover{text-decoration:underline;}
+.loading{text-align:center;padding:60px;font-size:18px;color:#666;}
+.section{overflow-x:auto;}
+@media(max-width:768px){
+  .hero h1{font-size:36px;}
+  .records-grid{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="/">Home</a>
+  <a href="/bundesliga.html">Bundesliga</a>
+  <a href="/bundesliga-teams.html">Teams</a>
+  <a href="/bundesliga-players.html">Players</a>
+  <a href="/nba.html">NBA</a>
+  <a href="/afl.html">AFL</a>
+</div>
+
+<div class="hero">
+  <h1>Bundesliga Records</h1>
+  <p>All-time Bundesliga records</p>
+</div>
+
+<div class="container">
+  <div class="loading" id="loadingMsg">Loading records...</div>
+  <div class="records-grid" id="recordsGrid" style="display:none;"></div>
+</div>
+
+<script>
+
+function slugify(str){
+  return (str||'').toLowerCase().replace(/\./g,'').replace(/'/g,'').replace(/\u2019/g,'').replace(/"/g,'').replace(/\s+/g,'-');
+}
+
+function playerLink(name){
+  return `<a class="link" href="/bundesliga-player.html?player=${encodeURIComponent(slugify(name))}">${name}</a>`;
+}
+
+function teamLink(name){
+  return `<a class="link" href="/bundesliga-team.html?team=${encodeURIComponent(name)}">${name}</a>`;
+}
+
+function shortSeason(s){
+  if(!s) return s;
+  const m = s.match(/^(\d{4})-(\d{4})$/);
+  if(m) return m[1] + '-' + m[2].slice(2);
+  return s;
+}
+
+function recordTable(rows, cols){
+  const heads = cols.map(c => `<th>${c.label}</th>`).join('');
+  const body  = rows.map((r, i) => {
+    const cells = cols.map(c => {
+      if(c.key === 'rank') return `<td class="rank">${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</td>`;
+      return `<td>${r[c.key]}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+  return `<table><thead><tr>${heads}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+async function loadRecords(){
+  try{
+    const [playersRes, teamStatsRes, matchRecordsRes] = await Promise.all([
+      fetch('/data/bundesliga/players.json'),
+      fetch('/data/bundesliga/team-stats.json'),
+      fetch('/data/bundesliga/match-records.json'),
+    ]);
+    const players      = await playersRes.json();
+    const allTeamStats = await teamStatsRes.json();
+    const matchRecords = await matchRecordsRes.json();
+
+    // ── PLAYER RECORDS ───────────────────────────────────────────────────────
+
+    const careerGoals = [...players]
+      .filter(p => p.goals > 0)
+      .sort((a,b) => b.goals - a.goals)
+      .slice(0,10)
+      .map(p => ({ rank:'', name: playerLink(p.name), goals: p.goals }));
+
+    const seasonGoals = [];
+    players.forEach(p => {
+      (p.season_stats||[]).forEach(s => {
+        if(s.goals > 0) seasonGoals.push({ name: playerLink(p.name), season: shortSeason(s.season), team: teamLink(s.team), goals: s.goals });
+      });
+    });
+    seasonGoals.sort((a,b) => b.goals - a.goals);
+    const topSeasonGoals = seasonGoals.slice(0,10).map(r => ({rank:'', ...r}));
+
+    const careerYellows = [...players]
+      .filter(p => p.yellow_cards > 0)
+      .sort((a,b) => b.yellow_cards - a.yellow_cards)
+      .slice(0,10)
+      .map(p => ({ rank:'', name: playerLink(p.name), yellow_cards: p.yellow_cards }));
+
+    const careerReds = [...players]
+      .filter(p => p.red_cards > 0)
+      .sort((a,b) => b.red_cards - a.red_cards)
+      .slice(0,10)
+      .map(p => ({ rank:'', name: playerLink(p.name), red_cards: p.red_cards }));
+
+    // ── TEAM RECORDS ─────────────────────────────────────────────────────────
+
+    const teamTotals = {};
+    allTeamStats.forEach(s => {
+      if(!teamTotals[s.team]) teamTotals[s.team] = { team: s.team, played:0, wins:0, draws:0, losses:0, goals_for:0, goals_against:0, points:0, seasons:0, clean_sheets:0 };
+      const t = teamTotals[s.team];
+      t.played        += s.played        || 0;
+      t.wins          += s.wins          || 0;
+      t.draws         += s.draws         || 0;
+      t.losses        += s.losses        || 0;
+      t.goals_for     += s.goals_for     || 0;
+      t.goals_against += s.goals_against || 0;
+      t.points        += s.points        || 0;
+      t.clean_sheets  += s.clean_sheets  || 0;
+      t.seasons++;
+    });
+    const teams = Object.values(teamTotals);
+
+    const mostWins = [...teams]
+      .sort((a,b) => b.wins - a.wins)
+      .slice(0,10)
+      .map(t => ({ rank:'', team: teamLink(t.team), wins: t.wins, played: t.played, seasons: t.seasons }));
+
+    const mostWinsSeason = [...allTeamStats]
+      .sort((a,b) => b.wins - a.wins)
+      .slice(0,10)
+      .map(s => ({ rank:'', team: teamLink(s.team), season: shortSeason(s.season), wins: s.wins, points: s.points }));
+
+    const mostGoalsSeason = [...allTeamStats]
+      .sort((a,b) => b.goals_for - a.goals_for)
+      .slice(0,10)
+      .map(s => ({ rank:'', team: teamLink(s.team), season: shortSeason(s.season), goals: s.goals_for }));
+
+    const mostGoalsAllTime = [...teams]
+      .sort((a,b) => b.goals_for - a.goals_for)
+      .slice(0,10)
+      .map(t => ({ rank:'', team: teamLink(t.team), goals: t.goals_for, seasons: t.seasons }));
+
+    const mostCleanSheetsSeason = [...allTeamStats]
+      .sort((a,b) => b.clean_sheets - a.clean_sheets)
+      .slice(0,10)
+      .map(s => ({ rank:'', team: teamLink(s.team), season: shortSeason(s.season), clean_sheets: s.clean_sheets }));
+
+    const mostCleanSheetsAllTime = [...teams]
+      .sort((a,b) => b.clean_sheets - a.clean_sheets)
+      .slice(0,10)
+      .map(t => ({ rank:'', team: teamLink(t.team), clean_sheets: t.clean_sheets, seasons: t.seasons }));
+
+    // ── MATCH RECORDS ────────────────────────────────────────────────────────
+
+    const biggestWins = (matchRecords.biggest_wins || []).slice(0,10).map(g => {
+      const diff   = Math.abs(g.home_score - g.away_score);
+      const winner = g.home_score > g.away_score ? g.home_team : g.away_team;
+      const loser  = g.home_score > g.away_score ? g.away_team : g.home_team;
+      return { rank:'', winner: teamLink(winner), loser: teamLink(loser), score: `${g.home_score}-${g.away_score}`, season: shortSeason(g.season), margin: diff };
+    });
+
+    const highestScoring = (matchRecords.highest_scoring || []).slice(0,10).map(g => ({
+      rank:'', home: teamLink(g.home_team), away: teamLink(g.away_team),
+      score: `${g.home_score}-${g.away_score}`, season: shortSeason(g.season),
+      total: g.home_score + g.away_score
+    }));
+
+    // ── RENDER ───────────────────────────────────────────────────────────────
+
+    const grid = document.getElementById('recordsGrid');
+    grid.style.display = 'grid';
+    document.getElementById('loadingMsg').style.display = 'none';
+
+    const sections = [
+      { title:'⚽ Most Career Goals', table: recordTable(careerGoals, [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'goals',label:'Goals'}]) },
+      { title:'⚽ Most Goals in a Season', table: recordTable(topSeasonGoals, [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'season',label:'Season'},{key:'team',label:'Club'},{key:'goals',label:'Goals'}]) },
+      { title:'🟨 Most Career Yellow Cards', table: recordTable(careerYellows, [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'yellow_cards',label:'Yellows'}]) },
+      { title:'🟥 Most Career Red Cards', table: recordTable(careerReds, [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'red_cards',label:'Reds'}]) },
+      { title:'🏆 Most All-Time Wins', table: recordTable(mostWins, [{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'wins',label:'Wins'},{key:'played',label:'Played'},{key:'seasons',label:'Seasons'}]) },
+      { title:'🏆 Most Wins in a Season', table: recordTable(mostWinsSeason, [{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'season',label:'Season'},{key:'wins',label:'Wins'},{key:'points',label:'Points'}]) },
+      { title:'⚽ Most Goals in a Season (Team)', table: recordTable(mostGoalsSeason, [{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'season',label:'Season'},{key:'goals',label:'Goals'}]) },
+      { title:'⚽ Most All-Time Goals (Team)', table: recordTable(mostGoalsAllTime, [{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'goals',label:'Goals'},{key:'seasons',label:'Seasons'}]) },
+      { title:'🧤 Most Clean Sheets in a Season', table: recordTable(mostCleanSheetsSeason, [{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'season',label:'Season'},{key:'clean_sheets',label:'Clean Sheets'}]) },
+      { title:'🧤 Most All-Time Clean Sheets', table: recordTable(mostCleanSheetsAllTime, [{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'clean_sheets',label:'Clean Sheets'},{key:'seasons',label:'Seasons'}]) },
+      { title:'💥 Biggest Winning Margins', table: recordTable(biggestWins, [{key:'rank',label:'#'},{key:'winner',label:'Winner'},{key:'loser',label:'Loser'},{key:'score',label:'Score'},{key:'season',label:'Season'},{key:'margin',label:'Margin'}]) },
+      { title:'🔥 Highest Scoring Matches', table: recordTable(highestScoring, [{key:'rank',label:'#'},{key:'home',label:'Home'},{key:'away',label:'Away'},{key:'score',label:'Score'},{key:'season',label:'Season'},{key:'total',label:'Total Goals'}]) },
+    ];
+
+    grid.innerHTML = sections.map(s => `
+      <div class="section">
+        <div class="section-title">${s.title}</div>
+        ${s.table}
+      </div>
+    `).join('');
+
+  }catch(err){
+    console.error(err);
+    document.getElementById('loadingMsg').textContent = 'Failed to load records';
+  }
+}
+
+loadRecords();
+</script>
+</body>
+</html>
