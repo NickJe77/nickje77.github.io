@@ -1,0 +1,93 @@
+name: Fix Player Name Encoding
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install packages
+        run: pip install boto3
+
+      - name: Fix name encoding in all R2 files
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          python << 'PYEOF'
+          import boto3
+          import json
+          import os
+          from botocore.config import Config
+          from botocore.exceptions import ClientError
+
+          r2 = boto3.client(
+              "s3",
+              endpoint_url=os.environ["R2_ENDPOINT"],
+              aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+              config=Config(signature_version="s3v4"),
+              region_name="auto",
+          )
+
+          BUCKET = "sporting-almanac-data"
+
+          def fix_name(s):
+              if not s: return s
+              try:
+                  fixed = s.encode('latin-1').decode('utf-8')
+                  # Only return fixed if it actually changed something meaningful
+                  if fixed != s:
+                      return fixed
+                  return s
+              except:
+                  return s
+
+          def fix_obj(obj):
+              if isinstance(obj, dict):
+                  return {k: fix_obj(v) for k, v in obj.items()}
+              elif isinstance(obj, list):
+                  return [fix_obj(i) for i in obj]
+              elif isinstance(obj, str):
+                  return fix_name(obj)
+              return obj
+
+          def upload(key, data):
+              r2.put_object(
+                  Bucket=BUCKET,
+                  Key=key,
+                  Body=json.dumps(data, ensure_ascii=False).encode("utf-8"),
+                  ContentType="application/json; charset=utf-8",
+              )
+
+          # Fix boxscore files
+          print("Fixing boxscore files...", flush=True)
+          for prefix in ["basketball/boxscores/", "basketball/players/", "basketball/leaders/", "basketball/indexes/"]:
+              print(f"  Processing {prefix}...", flush=True)
+              paginator = r2.get_paginator("list_objects_v2")
+              count = 0
+              for page in paginator.paginate(Bucket=BUCKET, Prefix=prefix):
+                  for obj in page.get("Contents", []):
+                      key = obj["Key"]
+                      try:
+                          raw  = r2.get_object(Bucket=BUCKET, Key=key)["Body"].read()
+                          data = json.loads(raw.decode("utf-8"))
+                          fixed = fix_obj(data)
+                          upload(key, fixed)
+                          count += 1
+                          if count % 1000 == 0:
+                              print(f"    {count} files fixed...", flush=True)
+                      except Exception as e:
+                          print(f"    Error on {key}: {e}", flush=True)
+              print(f"  Done: {count} files", flush=True)
+
+          print("All done!", flush=True)
+          PYEOF
