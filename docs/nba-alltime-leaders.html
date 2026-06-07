@@ -34,18 +34,15 @@ tr:hover{background:#e9f0ff;}
 </style>
 </head>
 <body>
-
 <div class="navbar">
   <a href="/">Home</a>
   <a href="/nba.html">NBA</a>
 </div>
-
 <div class="page-wrap">
   <div class="hero">
     <h1>NBA Statistical Leaders</h1>
     <div class="subtitle">Since 1976 • Top 15 • Regular Season</div>
   </div>
-
   <div class="controls">
     <div class="mode-buttons">
       <button data-mode="totals" class="active">Totals</button>
@@ -61,7 +58,6 @@ tr:hover{background:#e9f0ff;}
       <button data-stat="triple_doubles">Triple Doubles</button>
     </div>
   </div>
-
   <div class="table-card">
     <table>
       <thead>
@@ -78,17 +74,14 @@ tr:hover{background:#e9f0ff;}
     </table>
   </div>
 </div>
-
 <script>
 const R2 = "https://pub-68c8b4322a9d4d7f9b875047b45ac7c6.r2.dev";
-
 let data = null;
 let mode = "totals";
 let stat = "points";
-
-const rowsEl       = document.getElementById("rows");
-const modeButtons  = [...document.querySelectorAll(".mode-buttons button")];
-const statButtons  = [...document.querySelectorAll(".stat-buttons button")];
+const rowsEl      = document.getElementById("rows");
+const modeButtons = [...document.querySelectorAll(".mode-buttons button")];
+const statButtons = [...document.querySelectorAll(".stat-buttons button")];
 
 function fixName(str){
   if(!str) return str;
@@ -96,8 +89,12 @@ function fixName(str){
     const bytes = new Uint8Array(str.length);
     for(let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xff;
     const decoded = new TextDecoder('utf-8').decode(bytes);
+    // If result has replacement chars, the original was already correct unicode
     if(decoded.includes('\ufffd')) return str;
-    return decoded;
+    // If result has fewer non-ASCII chars it was double-encoded, use decoded
+    const origNonAscii = [...str].filter(c => c.charCodeAt(0) > 127).length;
+    const decNonAscii  = [...decoded].filter(c => c.charCodeAt(0) > 127).length;
+    return decNonAscii <= origNonAscii ? decoded : str;
   }catch(e){ return str; }
 }
 
@@ -106,9 +103,7 @@ modeButtons.forEach(b => {
     modeButtons.forEach(x => x.classList.remove("active"));
     b.classList.add("active");
     mode = b.dataset.mode;
-    // Hide triple doubles for per_game and per_36
-    document.querySelector('[data-stat="triple_doubles"]').style.display =
-      mode === "totals" ? "" : "none";
+    document.querySelector('[data-stat="triple_doubles"]').style.display = mode === "totals" ? "" : "none";
     if(mode !== "totals" && stat === "triple_doubles"){
       stat = "points";
       statButtons.forEach(x => x.classList.remove("active"));
@@ -134,7 +129,7 @@ function render(){
     return;
   }
   data[mode][stat].forEach((r, i) => {
-    const tr = document.createElement("tr");
+    const tr   = document.createElement("tr");
     const name = fixName(r.player);
     tr.innerHTML = `
       <td class="rank">${i+1}</td>
@@ -156,7 +151,6 @@ async function load(){
     rowsEl.innerHTML = `<tr><td colspan="4" class="loading">Unable to load data.</td></tr>`;
   }
 }
-
 load();
 </script>
 </body>
