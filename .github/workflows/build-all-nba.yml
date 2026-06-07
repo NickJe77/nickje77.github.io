@@ -60,6 +60,31 @@ jobs:
               "zubaciv01": "Ivica Zubac",
           }
 
+          def parse_table(table):
+              players = []
+              tbody = table.find("tbody")
+              if not tbody:
+                  return players
+              for row in tbody.find_all("tr"):
+                  player_td = row.find("td", {"data-stat": "player"})
+                  if not player_td:
+                      continue
+                  name = player_td.get_text(strip=True)
+                  if not name:
+                      continue
+                  pid = ""
+                  link = player_td.find("a")
+                  if link:
+                      m = re.search(r"/players/\w/(\w+)\.html", link.get("href",""))
+                      if m:
+                          pid = m.group(1)
+                  pos_td = row.find("td", {"data-stat": "pos"})
+                  pos = pos_td.get_text(strip=True) if pos_td else ""
+                  if pid in NAME_FIX:
+                      name = NAME_FIX[pid]
+                  players.append({"player": name, "player_id": pid, "pos": pos})
+              return players
+
           all_seasons = []
 
           for year in range(1976, 2027):
@@ -69,71 +94,57 @@ jobs:
                   url = f"https://www.basketball-reference.com/awards/awards_{year}.html"
                   r   = requests.get(url, headers=HEADERS, timeout=30)
                   r.raise_for_status()
-                  soup = BeautifulSoup(r.text, "lxml")
 
-                  # Uncomment all hidden tables
-                  for comment in soup.find_all(string=lambda t: isinstance(t, Comment)):
-                      if "<table" in str(comment):
-                          new_soup = BeautifulSoup(str(comment), "lxml")
-                          comment.replace_with(new_soup)
+                  # Uncomment hidden tables in raw HTML first
+                  html = r.text
+                  html = re.sub(r'<!--\s*(<table.*?</table>)\s*-->', r'\1', html, flags=re.DOTALL)
+                  soup = BeautifulSoup(html, "lxml")
 
                   season_data = {"season": year, "teams": []}
 
-                  # Find All-NBA tables by id
-                  for table in soup.find_all("table"):
-                      tid = table.get("id", "")
-                      cap = table.find("caption")
-                      cap_text = cap.get_text() if cap else ""
+                  # Try direct table IDs first: awards_all_nba, awards_all_nba_2, awards_all_nba_3
+                  # or all_nba, all_nba_2, all_nba_3
+                  for team_num in [1, 2, 3]:
+                      team_name = f"{team_num}{'st' if team_num==1 else 'nd' if team_num==2 else 'rd'} Team"
+                      table = None
 
-                      is_allnba = (
-                          "all_nba" in tid.lower() or
-                          ("All-NBA" in cap_text and "Defensive" not in cap_text)
-                      )
-                      if not is_allnba:
-                          continue
-
-                      # Determine team number from caption or id
-                      team_num = 1
-                      for n, label in [(1,"First"),(2,"Second"),(3,"Third")]:
-                          if label in cap_text or f"_{n}" in tid:
-                              team_num = n
+                      # Try various ID patterns
+                      ids_to_try = [
+                          f"all_nba" if team_num == 1 else f"all_nba_{team_num}",
+                          f"awards_all_nba" if team_num == 1 else f"awards_all_nba_{team_num}",
+                          f"all-nba-{team_num}",
+                      ]
+                      for tid in ids_to_try:
+                          table = soup.find("table", {"id": tid})
+                          if table:
                               break
 
-                      team_name = f"{team_num}{'st' if team_num==1 else 'nd' if team_num==2 else 'rd'} Team"
-                      players   = []
+                      # If no ID match, search by caption
+                      if not table:
+                          for t in soup.find_all("table"):
+                              cap = t.find("caption")
+                              if not cap:
+                                  continue
+                              cap_text = cap.get_text()
+                              if "All-NBA" not in cap_text or "Defensive" in cap_text:
+                                  continue
+                              # Match team number
+                              if team_num == 1 and ("First" in cap_text or "1st" in cap_text or cap_text.count("All-NBA") and "Second" not in cap_text and "Third" not in cap_text):
+                                  table = t
+                                  break
+                              elif team_num == 2 and ("Second" in cap_text or "2nd" in cap_text):
+                                  table = t
+                                  break
+                              elif team_num == 3 and ("Third" in cap_text or "3rd" in cap_text):
+                                  table = t
+                                  break
 
-                      tbody = table.find("tbody")
-                      if not tbody:
+                      if not table:
                           continue
 
-                      for row in tbody.find_all("tr"):
-                          player_td = row.find("td", {"data-stat": "player"})
-                          if not player_td:
-                              continue
-                          name = player_td.get_text(strip=True)
-                          if not name:
-                              continue
-
-                          pid = ""
-                          link = player_td.find("a")
-                          if link:
-                              m = re.search(r"/players/\w/(\w+)\.html", link.get("href",""))
-                              if m:
-                                  pid = m.group(1)
-
-                          pos_td = row.find("td", {"data-stat": "pos"})
-                          pos    = pos_td.get_text(strip=True) if pos_td else ""
-
-                          if pid in NAME_FIX:
-                              name = NAME_FIX[pid]
-
-                          players.append({"player": name, "player_id": pid, "pos": pos})
-
+                      players = parse_table(table)
                       if players:
-                          # Avoid duplicate teams
-                          existing = [t for t in season_data["teams"] if t["team"] == team_name]
-                          if not existing:
-                              season_data["teams"].append({"team": team_name, "players": players})
+                          season_data["teams"].append({"team": team_name, "players": players})
 
                   if season_data["teams"]:
                       all_seasons.append(season_data)
