@@ -1,0 +1,137 @@
+name: Build All-NBA Teams
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install packages
+        run: pip install requests beautifulsoup4 lxml boto3
+
+      - name: Scrape All-NBA teams
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          python << 'PYEOF'
+          import boto3
+          import json
+          import os
+          import time
+          import random
+          import requests
+          from bs4 import BeautifulSoup
+          from botocore.config import Config
+
+          r2 = boto3.client(
+              "s3",
+              endpoint_url=os.environ["R2_ENDPOINT"],
+              aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+              config=Config(signature_version="s3v4"),
+              region_name="auto",
+          )
+
+          BUCKET  = "sporting-almanac-data"
+          HEADERS = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"}
+
+          NAME_FIX = {
+              "doncilu01": "Luka Dončić",
+              "jokicni01": "Nikola Jokić",
+              "bogdaibo01": "Bogdan Bogdanović",
+              "vucevni01": "Nikola Vučević",
+              "porzikri01": "Kristaps Porziņģis",
+              "nurkiju01": "Jusuf Nurkić",
+              "saricda01": "Dario Šarić",
+              "hezonja01": "Mario Hezonja",
+              "sengunal01": "Alperen Şengün",
+              "wembavi01": "Victor Wembanyama",
+              "topicni01": "Nikola Topić",
+              "zubaciv01": "Ivica Zubac",
+          }
+
+          all_seasons = []
+
+          for year in range(1976, 2027):
+              print(f"Scraping {year}...", flush=True)
+              time.sleep(random.uniform(4, 7))
+              try:
+                  url = f"https://www.basketball-reference.com/awards/awards_{year}.html"
+                  r   = requests.get(url, headers=HEADERS, timeout=30)
+                  r.raise_for_status()
+                  soup = BeautifulSoup(r.text, "lxml")
+
+                  season_data = {"season": year, "teams": []}
+
+                  # All-NBA tables have ids like all_nba, all_nba_2, all_nba_3
+                  for team_num in range(1, 4):
+                      table_id = f"all_nba_{team_num}" if team_num > 1 else "all_nba"
+                      table    = soup.find("table", {"id": table_id})
+                      if not table:
+                          # Try finding by caption
+                          for t in soup.find_all("table"):
+                              cap = t.find("caption")
+                              if cap and f"{team_num}" in cap.get_text() and "All-NBA" in cap.get_text():
+                                  table = t
+                                  break
+
+                      if not table:
+                          continue
+
+                      team_name = f"{team_num}{'st' if team_num==1 else 'nd' if team_num==2 else 'rd'} Team"
+                      players   = []
+
+                      for row in table.find("tbody").find_all("tr"):
+                          player_td = row.find("td", {"data-stat": "player"})
+                          if not player_td:
+                              continue
+                          name = player_td.get_text(strip=True)
+                          if not name:
+                              continue
+
+                          pid = ""
+                          if player_td.find("a"):
+                              href = player_td.find("a").get("href", "")
+                              import re
+                              m = re.search(r"/players/\w/(\w+)\.html", href)
+                              if m:
+                                  pid = m.group(1)
+
+                          pos_td = row.find("td", {"data-stat": "pos"})
+                          pos    = pos_td.get_text(strip=True) if pos_td else ""
+
+                          if pid in NAME_FIX:
+                              name = NAME_FIX[pid]
+
+                          players.append({"player": name, "player_id": pid, "pos": pos})
+
+                      if players:
+                          season_data["teams"].append({"team": team_name, "players": players})
+
+                  if season_data["teams"]:
+                      all_seasons.append(season_data)
+                      print(f"  {len(season_data['teams'])} teams found", flush=True)
+                  else:
+                      print(f"  No All-NBA data found", flush=True)
+
+              except Exception as e:
+                  print(f"  ERROR: {e}", flush=True)
+
+          # Upload single combined file
+          r2.put_object(
+              Bucket=BUCKET,
+              Key="basketball/allnba.json",
+              Body=json.dumps(all_seasons, ensure_ascii=False).encode("utf-8"),
+              ContentType="application/json; charset=utf-8",
+          )
+          print(f"Done! {len(all_seasons)} seasons uploaded.", flush=True)
+          PYEOF
