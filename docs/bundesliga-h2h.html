@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Bundesliga Head to Head | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#eef1f5;color:#111;}
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:white;border-bottom:1px solid #ddd;flex-wrap:wrap;}
+.navbar a{text-decoration:none;font-weight:800;color:#0056d6;}
+.hero{background:linear-gradient(135deg,#d20515,#a50010);color:white;padding:50px 20px;text-align:center;}
+.hero h1{margin:0;font-size:48px;font-weight:900;}
+.hero p{margin-top:10px;font-size:16px;opacity:.85;}
+.picker{display:flex;align-items:center;justify-content:center;gap:20px;flex-wrap:wrap;margin-top:30px;}
+.picker select{padding:14px 18px;border-radius:12px;border:none;font-size:16px;font-weight:800;min-width:240px;background:white;color:#111;}
+.vs{font-size:28px;font-weight:900;color:white;}
+.btn{padding:14px 32px;border-radius:12px;border:none;background:#a50010;color:white;font-size:16px;font-weight:900;cursor:pointer;transition:.2s;}
+.btn:hover{background:#7a000b;}
+.container{max-width:1400px;margin:30px auto;padding:0 20px 60px;}
+.h2h-header{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;margin-bottom:30px;}
+.team-banner{border-radius:20px;padding:30px 20px;text-align:center;color:white;}
+.team-banner h2{margin:0;font-size:36px;font-weight:900;}
+.team-banner p{margin:6px 0 0;font-size:14px;opacity:.85;}
+.h2h-score{background:white;border-radius:20px;padding:24px;text-align:center;box-shadow:0 3px 12px rgba(0,0,0,.08);}
+.h2h-score-nums{display:flex;justify-content:center;align-items:center;gap:16px;font-size:52px;font-weight:900;line-height:1;}
+.h2h-score-label{font-size:13px;font-weight:900;text-transform:uppercase;color:#888;margin-top:8px;letter-spacing:.5px;}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;margin-bottom:24px;}
+.stat-card{background:white;border-radius:16px;padding:20px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.05);}
+.stat-value{font-size:32px;font-weight:900;line-height:1;margin-bottom:6px;}
+.stat-label{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;color:#666;}
+.section{background:white;border-radius:20px;padding:24px;margin-bottom:24px;box-shadow:0 2px 8px rgba(0,0,0,.05);}
+.section-title{font-size:22px;font-weight:900;margin-bottom:18px;}
+.tables-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;margin-bottom:24px;}
+table{width:100%;border-collapse:collapse;}
+th{background:#e9eef5;padding:12px;font-size:12px;font-weight:900;text-transform:uppercase;text-align:left;}
+td{padding:12px;border-bottom:1px solid #ececec;font-size:14px;font-weight:700;}
+tr:nth-child(even){background:#f8fbff;}
+.player-link{text-decoration:none;font-weight:800;color:#0056d6;}
+.player-link:hover{text-decoration:underline;}
+.games-table tr{cursor:pointer;transition:.15s;}
+.games-table tr:hover{background:#fde8e8 !important;}
+.result-win{font-weight:900;color:#008000;font-size:18px;}
+.result-loss{font-weight:900;color:#d90429;font-size:18px;}
+.result-draw{font-weight:900;color:#d68910;font-size:18px;}
+.loading{text-align:center;padding:60px;font-size:20px;color:#666;}
+.error{text-align:center;padding:60px;font-size:24px;font-weight:900;color:#d90429;}
+.hidden{display:none;}
+@media(max-width:900px){
+  .hero h1{font-size:32px;}
+  .h2h-header{grid-template-columns:1fr;text-align:center;}
+  .vs{display:none;}
+  .h2h-score-nums{font-size:40px;}
+  .team-banner h2{font-size:26px;}
+  .picker{flex-direction:column;gap:12px;}
+  .picker select{min-width:280px;width:100%;}
+  .games-table thead{display:none;}
+  .games-table tbody{display:block;}
+  .games-table tr{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:12px;border-bottom:2px solid #ddd;background:white !important;}
+  .games-table tr:nth-child(even){background:#f8fbff !important;}
+  .games-table td{display:block;border:none;padding:4px 8px;font-size:14px;}
+  .games-table td:nth-child(4){font-size:22px;text-align:right;}
+}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="/">Home</a>
+  <a href="/bundesliga.html">Bundesliga</a>
+  <a href="/bundesliga-teams.html">Teams</a>
+  <a href="/bundesliga-players.html">Players</a>
+  <a href="/nba.html">NBA</a>
+  <a href="/afl.html">AFL</a>
+</div>
+
+<div class="hero">
+  <h1>Head to Head</h1>
+  <p>Compare any two clubs in Bundesliga history</p>
+  <div class="picker">
+    <select id="team1Select"><option value="">Select Team 1...</option></select>
+    <div class="vs">VS</div>
+    <select id="team2Select"><option value="">Select Team 2...</option></select>
+    <button class="btn" onclick="loadH2H()">Compare</button>
+  </div>
+</div>
+
+<div class="container">
+  <div id="results" class="hidden"></div>
+</div>
+
+<script>
+
+const TEAM_COLOURS = {
+  "Bayern Munich":          "linear-gradient(135deg,#DC052D,#0066B2)",
+  "Borussia Dortmund":      "linear-gradient(135deg,#FDE100,#000000)",
+  "Bayer Leverkusen":       "linear-gradient(135deg,#E32221,#000000)",
+  "RB Leipzig":             "linear-gradient(135deg,#DD0741,#001A3C)",
+  "Borussia Mönchengladbach": "linear-gradient(135deg,#000000,#FFFFFF)",
+  "Eintracht Frankfurt":    "linear-gradient(135deg,#E1000F,#000000)",
+  "VfB Stuttgart":          "linear-gradient(135deg,#E32219,#FFFFFF)",
+  "SC Freiburg":            "linear-gradient(135deg,#E8000D,#000000)",
+  "Union Berlin":           "linear-gradient(135deg,#EB1923,#005CA9)",
+  "Werder Bremen":          "linear-gradient(135deg,#1D9053,#FFFFFF)",
+  "Hoffenheim":             "linear-gradient(135deg,#1961AC,#FFFFFF)",
+  "Wolfsburg":              "linear-gradient(135deg,#65B32E,#003F2D)",
+  "Augsburg":               "linear-gradient(135deg,#BA3733,#007A3D)",
+  "Mainz 05":               "linear-gradient(135deg,#C3001E,#FFFFFF)",
+  "Köln":                   "linear-gradient(135deg,#FF0000,#FFFFFF)",
+  "Hertha Berlin":          "linear-gradient(135deg,#003CA6,#FFFFFF)",
+  "Hamburger SV":           "linear-gradient(135deg,#0B4EA2,#FFFFFF)",
+  "Schalke 04":             "linear-gradient(135deg,#004D9D,#FFFFFF)",
+  "Hannover 96":            "linear-gradient(135deg,#009F4D,#000000)",
+  "Darmstadt 98":           "linear-gradient(135deg,#003F86,#FFFFFF)",
+  "Heidenheim":             "linear-gradient(135deg,#E8000D,#003F86)",
+  "Holstein Kiel":          "linear-gradient(135deg,#D00B16,#003D8F)",
+  "St. Pauli":              "linear-gradient(135deg,#5B1213,#FFFFFF)",
+};
+
+function slugify(str){
+  return (str || "")
+    .toLowerCase()
+    .replace(/&/g,"and")
+    .replace(/[^a-z0-9]+/g,"-")
+    .replace(/^-|-$/g,"");
+}
+
+let allPlayers   = [];
+let allTeamStats = [];
+
+async function init(){
+  try{
+    const [teamsRes, playersRes, statsRes] = await Promise.all([
+      fetch("/data/bundesliga/teams.json"),
+      fetch("/data/bundesliga/players.json"),
+      fetch("/data/bundesliga/team-stats.json")
+    ]);
+    const teams  = await teamsRes.json();
+    allPlayers   = await playersRes.json();
+    allTeamStats = await statsRes.json();
+
+    const teamNames = teams.map(t => t.name || t.team).filter(Boolean).sort();
+    const sel1 = document.getElementById("team1Select");
+    const sel2 = document.getElementById("team2Select");
+
+    teamNames.forEach(name => {
+      sel1.innerHTML += `<option value="${name}">${name}</option>`;
+      sel2.innerHTML += `<option value="${name}">${name}</option>`;
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    if(params.get("team1")) sel1.value = params.get("team1");
+    if(params.get("team2")) sel2.value = params.get("team2");
+    if(params.get("team1") && params.get("team2")) loadH2H();
+
+  }catch(err){
+    console.error(err);
+  }
+}
+
+async function loadH2H(){
+  const team1 = document.getElementById("team1Select").value;
+  const team2 = document.getElementById("team2Select").value;
+
+  if(!team1 || !team2){ alert("Please select both teams"); return; }
+  if(team1 === team2){ alert("Please select two different teams"); return; }
+
+  const url = new URL(window.location);
+  url.searchParams.set("team1", team1);
+  url.searchParams.set("team2", team2);
+  window.history.pushState({}, "", url);
+
+  const results = document.getElementById("results");
+  results.className = "";
+  results.innerHTML = '<div class="loading">Loading head to head data...</div>';
+
+  try{
+    const allSeasonIds = [
+      "2004-05","2005-06","2006-07","2007-08","2008-09","2009-10",
+      "2010-11","2011-12","2012-13","2013-14","2014-15",
+      "2015-16","2016-17","2017-18","2018-19","2019-20",
+      "2020-21","2021-22","2022-23","2023-24","2024-25",
+      "2025-26",
+    ];
+
+    const seasonData = await Promise.all(allSeasonIds.map(async sid => {
+      try{
+        const r = await fetch(`/data/bundesliga/seasons/${sid}.json`);
+        if(!r.ok) return [];
+        const data = await r.json();
+        const games = Array.isArray(data) ? data : (data.games || []);
+        return games
+          .filter(g => (g.home === team1 && g.away === team2) || (g.home === team2 && g.away === team1))
+          .map(g => ({...g, season: sid}));
+      }catch(e){ return []; }
+    }));
+
+    const h2hGames = seasonData.flat();
+
+    function calcStats(team){
+      let wins=0, draws=0, losses=0, goals=0, goalsAgainst=0;
+      h2hGames.forEach(g => {
+        const isHome = g.home === team;
+        const tf = isHome ? Number(g.score_home||0) : Number(g.score_away||0);
+        const of = isHome ? Number(g.score_away||0) : Number(g.score_home||0);
+        goals += tf; goalsAgainst += of;
+        if(tf > of) wins++;
+        else if(tf < of) losses++;
+        else draws++;
+      });
+      return { wins, draws, losses, goals, goalsAgainst };
+    }
+
+    const s1 = calcStats(team1);
+    const s2 = calcStats(team2);
+
+    function getScorers(team, opponent){
+      return allPlayers
+        .filter(p => p.teams && p.teams.includes(team))
+        .map(p => {
+          const goals = (p.season_stats || [])
+            .filter(s => s.team === team)
+            .reduce((sum, s) => sum + ((s.goals_by_opponent || {})[opponent] || 0), 0);
+          return { name: p.name, goals };
+        })
+        .filter(p => p.goals > 0)
+        .sort((a,b) => b.goals - a.goals)
+        .slice(0, 10);
+    }
+
+    const scorers1 = getScorers(team1, team2);
+    const scorers2 = getScorers(team2, team1);
+
+    const grad1 = TEAM_COLOURS[team1] || 'linear-gradient(135deg,#111,#444)';
+    const grad2 = TEAM_COLOURS[team2] || 'linear-gradient(135deg,#111,#444)';
+
+    function scorerRows(list){
+      if(!list.length) return `<tr><td colspan="2">No data</td></tr>`;
+      return list.map(p => `
+        <tr>
+          <td><a class="player-link" href="/bundesliga-player.html?player=${encodeURIComponent(slugify(p.name))}">${p.name}</a></td>
+          <td>${p.goals}</td>
+        </tr>`).join('');
+    }
+
+    function gameRows(){
+      if(!h2hGames.length) return `<tr><td colspan="5">No matches found</td></tr>`;
+      return [...h2hGames].reverse().map(g => {
+        const isHome = g.home === team1;
+        const sh = Number(g.score_home||0);
+        const sa = Number(g.score_away||0);
+        const t1g = isHome ? sh : sa;
+        const t2g = isHome ? sa : sh;
+        const res = t1g > t2g ? 'W' : t1g < t2g ? 'L' : 'D';
+        const cls = t1g > t2g ? 'result-win' : t1g < t2g ? 'result-loss' : 'result-draw';
+        return `
+          <tr onclick="window.location.href='/bundesliga-game.html?match=${encodeURIComponent(g.match_id)}&season=${encodeURIComponent(g.season)}'">
+            <td>${g.season}</td>
+            <td>${g.home}</td>
+            <td>${sh} - ${sa}</td>
+            <td>${g.away}</td>
+            <td class="${cls}">${res}</td>
+          </tr>`;
+      }).join('');
+    }
+
+    results.innerHTML = `
+
+      <div class="h2h-header">
+        <div class="team-banner" style="background:${grad1};">
+          <h2>${team1}</h2>
+          <p>${s1.wins}W ${s1.draws}D ${s1.losses}L</p>
+        </div>
+        <div class="h2h-score">
+          <div class="h2h-score-nums">
+            <span style="color:#008000">${s1.wins}</span>
+            <span style="color:#888;font-size:32px">-</span>
+            <span style="color:#888;font-size:32px">${s1.draws}</span>
+            <span style="color:#888;font-size:32px">-</span>
+            <span style="color:#d90429">${s2.wins}</span>
+          </div>
+          <div class="h2h-score-label">${h2hGames.length} meetings</div>
+        </div>
+        <div class="team-banner" style="background:${grad2};">
+          <h2>${team2}</h2>
+          <p>${s2.wins}W ${s2.draws}D ${s2.losses}L</p>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-value">${h2hGames.length}</div><div class="stat-label">Meetings</div></div>
+        <div class="stat-card"><div class="stat-value">${s1.wins}</div><div class="stat-label">${team1} Wins</div></div>
+        <div class="stat-card"><div class="stat-value">${s1.draws}</div><div class="stat-label">Draws</div></div>
+        <div class="stat-card"><div class="stat-value">${s2.wins}</div><div class="stat-label">${team2} Wins</div></div>
+        <div class="stat-card"><div class="stat-value">${s1.goals}</div><div class="stat-label">${team1} Goals</div></div>
+        <div class="stat-card"><div class="stat-value">${s2.goals}</div><div class="stat-label">${team2} Goals</div></div>
+      </div>
+
+      <div class="tables-grid">
+        <div class="section">
+          <div class="section-title">⚽ ${team1} Top Scorers</div>
+          <table>
+            <thead><tr><th>Player</th><th>Goals vs ${team2}</th></tr></thead>
+            <tbody>${scorerRows(scorers1)}</tbody>
+          </table>
+        </div>
+        <div class="section">
+          <div class="section-title">⚽ ${team2} Top Scorers</div>
+          <table>
+            <thead><tr><th>Player</th><th>Goals vs ${team1}</th></tr></thead>
+            <tbody>${scorerRows(scorers2)}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">All Meetings</div>
+        <table class="games-table">
+          <thead>
+            <tr>
+              <th>Season</th>
+              <th>Home</th>
+              <th>Score</th>
+              <th>Away</th>
+              <th>${team1} Result</th>
+            </tr>
+          </thead>
+          <tbody>${gameRows()}</tbody>
+        </table>
+      </div>
+    `;
+
+  }catch(err){
+    console.error(err);
+    results.innerHTML = `<div class="error">Failed to load head to head data</div>`;
+  }
+}
+
+init();
+</script>
+</body>
+</html>
