@@ -30,7 +30,6 @@ tr:nth-child(even){background:#f8fbff;}
 .player-link:hover{text-decoration:underline;}
 .loading,.error{padding:120px 20px;text-align:center;font-size:34px;font-weight:900;}
 .error{color:#d90429;}
-.progress{padding:60px 20px;text-align:center;font-size:18px;font-weight:700;color:#555;}
 .games-table tr{transition:.15s;cursor:pointer;}
 .games-table tr:hover{background:#dfefff !important;}
 .games-table td{font-size:15px;padding:16px 12px;}
@@ -74,10 +73,8 @@ tr:nth-child(even){background:#f8fbff;}
 const TEAM_COLOURS = {
   "Adelaide United":          "linear-gradient(135deg,#EF0107,#9C0000)",
   "Brisbane Roar":            "linear-gradient(135deg,#F47920,#CC5500)",
-  "Queensland Roar":          "linear-gradient(135deg,#F47920,#CC5500)",
   "Central Coast Mariners":   "linear-gradient(135deg,#F7941D,#003087)",
   "Melbourne City":           "linear-gradient(135deg,#6CABDD,#1C2C5B)",
-  "Melbourne Heart":          "linear-gradient(135deg,#CC0033,#880022)",
   "Melbourne Victory":        "linear-gradient(135deg,#001489,#000055)",
   "Newcastle Jets":           "linear-gradient(135deg,#003087,#001C58)",
   "New Zealand Knights":      "linear-gradient(135deg,#111111,#333333)",
@@ -92,43 +89,30 @@ const TEAM_COLOURS = {
   "North Queensland Fury":    "linear-gradient(135deg,#FF6600,#CC4400)",
 };
 
+// Teams that have aliases — used for filtering players and stats only
+// Game data in season JSONs is already normalised to the current name
 const NAME_ALIASES = {
-  "Brisbane Roar":   ["Brisbane Roar", "Queensland Roar"],
-  "Queensland Roar": ["Brisbane Roar", "Queensland Roar"],
-  "Melbourne City":  ["Melbourne City", "Melbourne Heart"],
-  "Melbourne Heart": ["Melbourne City", "Melbourne Heart"],
+  "Brisbane Roar":  ["Brisbane Roar", "Queensland Roar"],
+  "Melbourne City": ["Melbourne City", "Melbourne Heart"],
 };
 
 function slugify(str){
-  return (str || "")
-    .toLowerCase()
-    .replace(/&/g,"and")
-    .replace(/[^a-z0-9]+/g,"-")
-    .replace(/^-|-$/g,"");
+  return (str||"").toLowerCase().replace(/&/g,"and").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
 }
 
 function playerSlug(p){
-  const name      = slugify(p.name || '');
-  const firstTeam = slugify((p.teams && p.teams[0]) || '');
+  const name      = slugify(p.name||'');
+  const firstTeam = slugify((p.teams&&p.teams[0])||'');
   return firstTeam ? `${name}--${firstTeam}` : name;
 }
 
-const params   = new URLSearchParams(window.location.search);
-const teamName = params.get("team") || "";
-const page     = document.getElementById("page");
+const params      = new URLSearchParams(window.location.search);
+const teamName    = params.get("team") || "";
+const page        = document.getElementById("page");
 const teamAliases = NAME_ALIASES[teamName] || [teamName];
-
-const SEASONS = [
-  "2005-06","2006-07","2007-08","2008-09","2009-10",
-  "2010-11","2011-12","2012-13","2013-14","2014-15",
-  "2015-16","2016-17","2017-18","2018-19","2019-20",
-  "2020-21","2021-22","2022-23","2023-24","2024-25","2025-26",
-];
 
 async function loadTeam(){
   try{
-    page.innerHTML = `<div class="progress">Loading players...</div>`;
-
     const [playersRes, teamStatsRes] = await Promise.all([
       fetch("/data/aleague/players.json"),
       fetch("/data/aleague/team-stats.json")
@@ -145,57 +129,23 @@ async function loadTeam(){
       return;
     }
 
-    // Load all season index files to get match_ids
-    page.innerHTML = `<div class="progress">Loading season data...</div>`;
+    const seasonIds = [...new Set(teamSeasonStats.map(s => s.season))].sort();
 
-    const seasonIndexes = await Promise.all(SEASONS.map(async sid => {
+    // Load only the seasons this team played in — same as EPL page
+    const seasonResults = await Promise.all(seasonIds.map(async seasonId => {
       try{
-        const r = await fetch(`/data/aleague/seasons/${sid}.json`);
-        if(!r.ok) return { season: sid, games: [] };
+        const r = await fetch(`/data/aleague/seasons/${seasonId}.json`);
+        if(!r.ok) return [];
         const data = await r.json();
         const games = Array.isArray(data) ? data : (data.games || []);
-        return { season: sid, games };
-      }catch(e){ return { season: sid, games: [] }; }
+        return games
+          .filter(g => g.home === teamName || g.away === teamName)
+          .map(g => ({ ...g, season: seasonId }));
+      }catch(e){ return []; }
     }));
 
-    // Build list of all match_ids we need to load
-    const matchRefs = [];
-    seasonIndexes.forEach(({ season, games }) => {
-      games.forEach(g => {
-        if(g.match_id) matchRefs.push({ match_id: g.match_id, season });
-      });
-    });
+    const allGames = seasonResults.flat();
 
-    // Load individual match files in batches of 20
-    page.innerHTML = `<div class="progress">Loading match files (0 / ${matchRefs.length})...</div>`;
-
-    const allGames = [];
-    const BATCH = 20;
-    for(let i = 0; i < matchRefs.length; i += BATCH){
-      const batch = matchRefs.slice(i, i + BATCH);
-      const results = await Promise.all(batch.map(async ({ match_id, season }) => {
-        try{
-          const seasonPart = match_id.split('_')[0];
-          const r = await fetch(`/data/aleague/matches/${seasonPart}/${match_id}.json`);
-          if(!r.ok) return null;
-          const g = await r.json();
-          return { ...g, season };
-        }catch(e){ return null; }
-      }));
-      results.forEach(g => {
-        if(!g) return;
-        const home = g.home_team || "";
-        const away = g.away_team || "";
-        if(teamAliases.includes(home) || teamAliases.includes(away)){
-          allGames.push(g);
-        }
-      });
-      if(i % 100 === 0){
-        page.innerHTML = `<div class="progress">Loading match files (${Math.min(i+BATCH, matchRefs.length)} / ${matchRefs.length})...</div>`;
-      }
-    }
-
-    // Totals from team-stats
     const totals = teamSeasonStats.reduce((acc, s) => {
       acc.played        += s.played        || 0;
       acc.wins          += s.wins          || 0;
@@ -208,15 +158,14 @@ async function loadTeam(){
       return acc;
     }, { played:0, wins:0, draws:0, losses:0, goals_for:0, goals_against:0, yellow_cards:0, red_cards:0 });
 
-    // Player stats
     const teamPlayers = players
       .filter(p => p.teams && p.teams.some(t => teamAliases.includes(t)))
       .map(p => {
-        const relevantStats = (p.season_stats || []).filter(s => teamAliases.includes(s.team));
-        const goals   = relevantStats.reduce((sum,s) => sum+(s.goals||0), 0);
-        const pens    = relevantStats.reduce((sum,s) => sum+(s.penalties||0), 0);
-        const yellows = relevantStats.reduce((sum,s) => sum+(s.yellow_cards||0), 0);
-        const reds    = relevantStats.reduce((sum,s) => sum+(s.red_cards||0), 0);
+        const stats   = (p.season_stats||[]).filter(s => teamAliases.includes(s.team));
+        const goals   = stats.reduce((sum,s) => sum+(s.goals||0), 0);
+        const pens    = stats.reduce((sum,s) => sum+(s.penalties||0), 0);
+        const yellows = stats.reduce((sum,s) => sum+(s.yellow_cards||0), 0);
+        const reds    = stats.reduce((sum,s) => sum+(s.red_cards||0), 0);
         return { name: p.name, teams: p.teams, goals, pens, yellows, reds };
       });
 
@@ -224,26 +173,18 @@ async function loadTeam(){
     const topYellows = [...teamPlayers].sort((a,b) => b.yellows-a.yellows).filter(p=>p.yellows>0).slice(0,10);
     const topReds    = [...teamPlayers].sort((a,b) => b.reds-a.reds).filter(p=>p.reds>0).slice(0,10);
 
-    // Opponents from actual match data
     const opponentSet = new Set();
-    allGames.forEach(g => {
-      const opp = teamAliases.includes(g.home_team) ? g.away_team : g.home_team;
-      if(opp) opponentSet.add(opp);
-    });
+    allGames.forEach(g => opponentSet.add(g.home === teamName ? g.away : g.home));
     const opponents = [...opponentSet].sort();
 
     function buildGameStats(opponent){
       const filtered = opponent
-        ? allGames.filter(g => {
-            const opp = teamAliases.includes(g.home_team) ? g.away_team : g.home_team;
-            return opp === opponent;
-          })
+        ? allGames.filter(g => (g.home === teamName ? g.away : g.home) === opponent)
         : allGames;
       let wins=0, draws=0, losses=0, goals=0;
       filtered.forEach(g => {
-        const isHome = teamAliases.includes(g.home_team);
-        const tf = Number(isHome ? g.home_score : g.away_score) || 0;
-        const of = Number(isHome ? g.away_score : g.home_score) || 0;
+        const tf = g.home === teamName ? Number(g.score_home||0) : Number(g.score_away||0);
+        const of = g.home === teamName ? Number(g.score_away||0) : Number(g.score_home||0);
         goals += tf;
         if(tf>of) wins++;
         else if(tf<of) losses++;
@@ -255,10 +196,10 @@ async function loadTeam(){
     function gameRows(games){
       if(!games.length) return `<tr><td colspan="4">No games found</td></tr>`;
       return [...games].reverse().slice(0,100).map(g => {
-        const isHome = teamAliases.includes(g.home_team);
-        const tf  = Number(isHome ? g.home_score : g.away_score) || 0;
-        const of  = Number(isHome ? g.away_score : g.home_score) || 0;
-        const opp = isHome ? g.away_team : g.home_team;
+        const isHome = g.home === teamName;
+        const tf  = isHome ? Number(g.score_home||0) : Number(g.score_away||0);
+        const of  = isHome ? Number(g.score_away||0) : Number(g.score_home||0);
+        const opp = isHome ? g.away : g.home;
         const res = tf>of?'W':tf<of?'L':'D';
         const cls = tf>of?'result-win':tf<of?'result-loss':'result-draw';
         return `<tr onclick="window.location.href='/aleague-game.html?match=${encodeURIComponent(g.match_id)}&season=${encodeURIComponent(g.season)}'">
