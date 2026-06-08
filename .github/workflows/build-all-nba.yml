@@ -61,6 +61,10 @@ jobs:
               "avdijade01": "Deni Avdija",
           }
 
+          def to_int(val):
+              try: return int(val)
+              except: return 0
+
           all_seasons = []
 
           for year in range(1976, 2027):
@@ -71,8 +75,6 @@ jobs:
                   resp = requests.get(url, headers=HEADERS, timeout=30)
                   resp.raise_for_status()
                   html = resp.text
-
-                  # Uncomment hidden tables
                   html = re.sub(r'<!--(.*?)-->', lambda m: m.group(1) if '<table' in m.group(1) else m.group(0), html, flags=re.DOTALL)
                   soup = BeautifulSoup(html, "lxml")
 
@@ -85,8 +87,6 @@ jobs:
                       cap_text = cap.get_text()
                       if "All-NBA" not in cap_text or "Defensive" in cap_text or "Rookie" in cap_text:
                           continue
-
-                      print(f"  Found: {cap_text.strip()}", flush=True)
 
                       tbody = table.find("tbody")
                       if not tbody:
@@ -115,32 +115,25 @@ jobs:
                           pos_td = row.find("td", {"data-stat": "pos"})
                           pos = pos_td.get_text(strip=True) if pos_td else ""
 
-                          # Find which team they made - check all tds for team info
-                          team_num = None
-                          for td in row.find_all("td"):
-                              stat = td.get("data-stat", "")
-                              val  = td.get_text(strip=True)
-                              if stat in ("award", "team", "all_nba_team", "award_value"):
-                                  if "1" in val or "First" in val:
-                                      team_num = 1
-                                  elif "2" in val or "Second" in val:
-                                      team_num = 2
-                                  elif "3" in val or "Third" in val:
-                                      team_num = 3
-                                  if team_num:
-                                      break
+                          # Determine team from which vote column has the highest value
+                          v1 = to_int(row.find("td", {"data-stat": "first_team_votes"}) and row.find("td", {"data-stat": "first_team_votes"}).get_text(strip=True))
+                          v2 = to_int(row.find("td", {"data-stat": "second_team_votes"}) and row.find("td", {"data-stat": "second_team_votes"}).get_text(strip=True))
+                          v3 = to_int(row.find("td", {"data-stat": "third_team_votes"}) and row.find("td", {"data-stat": "third_team_votes"}).get_text(strip=True))
+
+                          if v1 == 0 and v2 == 0 and v3 == 0:
+                              continue
+
+                          if v1 >= v2 and v1 >= v3:
+                              team_num = 1
+                          elif v2 >= v1 and v2 >= v3:
+                              team_num = 2
+                          else:
+                              team_num = 3
 
                           if pid in NAME_FIX:
                               name = NAME_FIX[pid]
 
-                          if team_num:
-                              team_players[team_num].append({"player": name, "player_id": pid, "pos": pos})
-
-                      # Print first row data stats for debugging
-                      first_row = tbody.find("tr")
-                      if first_row:
-                          stats = [td.get("data-stat","") for td in first_row.find_all("td")]
-                          print(f"  Row data-stats: {stats[:10]}", flush=True)
+                          team_players[team_num].append({"player": name, "player_id": pid, "pos": pos})
 
                       for num in [1, 2, 3]:
                           if team_players[num]:
