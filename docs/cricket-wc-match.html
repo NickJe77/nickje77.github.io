@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+  <meta charset="UTF-8">
+  <title>World Cup Match | The Sporting Almanac</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: Inter, system-ui, Arial, sans-serif; margin: 0; background: #ffffff; }
+    .navbar { display: flex; justify-content: center; gap: 22px; padding: 16px 0; border-bottom: 1px solid #ddd; font-weight: 600; }
+    .navbar a { color: #0056d6; text-decoration: none; font-size: 18px; }
+    .page-wrap { max-width: 1200px; margin: auto; padding: 30px 20px; }
+    .hero { background: linear-gradient(90deg, #004d00, #006400); color: white; padding: 40px 50px; border-radius: 24px; margin-bottom: 25px; }
+    .hero h1 { margin: 0; font-size: 46px; }
+    .hero p { margin-top: 10px; font-size: 18px; opacity: 0.95; }
+    h2 { margin-top: 40px; color: #004d00; }
+    h3 { margin-top: 20px; color: #004d00; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border-bottom: 1px solid #ddd; padding: 8px 10px; }
+    th { background: #f3f6fb; }
+    td.num { text-align: right; }
+    tr:nth-child(even) { background: #f6fbf6; }
+    .note { margin-top: 6px; font-size: 13px; color: #555; }
+    a.player-link { color: #004d00; text-decoration: none; font-weight: 500; }
+    a.player-link:hover { text-decoration: underline; }
+    .nav-matches { display: flex; justify-content: space-between; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 14px; }
+    .nav-matches a { color: #004d00; font-weight: 600; text-decoration: none; }
+    .nav-matches a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="cricket-wc.html">World Cup</a>
+</div>
+<div class="page-wrap">
+  <div class="hero">
+    <h1 id="matchTitle">Loading match…</h1>
+    <p id="statusText"></p>
+  </div>
+  <div id="inningsContainer"></div>
+  <div class="nav-matches">
+    <span id="prevMatch"></span>
+    <span id="nextMatch"></span>
+  </div>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const file   = params.get("file");
+const code   = params.get("code");
+
+const basePath = "data/cricket/world-cup/scorecards/";
+
+function playerLink(name) {
+  if (!name) return "";
+  return `<a class="player-link" href="cricket-wc-player.html?player=${encodeURIComponent(name)}">${name}</a>`;
+}
+
+function formatDate(d) {
+  if (!d) return "";
+  const [day, mon, yr] = d.split("/");
+  const dt = new Date(`${yr}-${mon}-${day}`);
+  return isNaN(dt) ? d : dt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+if (!file || !code) {
+  document.getElementById("matchTitle").textContent = "Missing match data";
+} else {
+  fetch(`${basePath}${file}.json`)
+    .then(r => r.json())
+    .then(data => {
+      const matches = data.matches || [];
+      const idx     = matches.findIndex(m => m.match_code === code);
+      if (idx === -1) { document.getElementById("matchTitle").textContent = "Match not found"; return; }
+
+      const match = matches[idx];
+      const sc    = match.scorecard;
+      const info  = sc.match_info || {};
+
+      document.title = `${match.teams} | World Cup | The Sporting Almanac`;
+      document.getElementById("matchTitle").textContent = match.teams;
+      document.getElementById("statusText").textContent = [
+        info["Venue"]            ? info["Venue"] : match.ground,
+        formatDate(match.date),
+        match.result,
+        info["Player of Match"]  ? "Player of the Match: " + info["Player of Match"] : "",
+        info["Toss"]             ? "Toss: " + info["Toss"] : "",
+      ].filter(Boolean).join("  •  ");
+
+      renderInnings(sc.innings, match);
+
+      // Prev / next
+      const prev = idx > 0 ? matches[idx - 1] : null;
+      const next = idx < matches.length - 1 ? matches[idx + 1] : null;
+      document.getElementById("prevMatch").innerHTML = prev
+        ? `<a href="cricket-wc-match.html?file=${encodeURIComponent(file)}&code=${prev.match_code}">← ${prev.teams}</a>` : "";
+      document.getElementById("nextMatch").innerHTML = next
+        ? `<a href="cricket-wc-match.html?file=${encodeURIComponent(file)}&code=${next.match_code}">${next.teams} →</a>` : "";
+    })
+    .catch(() => { document.getElementById("matchTitle").textContent = "Error loading match."; });
+}
+
+function renderInnings(innings, match) {
+  const container = document.getElementById("inningsContainer");
+  container.innerHTML = "";
+
+  innings.forEach((inn, i) => {
+    const otherInn  = innings.find((x, j) => j !== i);
+    const bowlTeam  = otherInn?.team || "";
+
+    // Score string
+    const wkts  = inn.wickets !== null ? inn.wickets : (inn.batting.length >= 11 ? "all out" : "");
+    const score = inn.total !== null
+      ? (wkts === "all out" ? `${inn.total} all out` : `${inn.total}${wkts !== "" ? "/" + wkts : ""}`)
+      : "—";
+
+    let html = `
+      <h2>${inn.team || "Innings " + (i + 1)}</h2>
+      <p><strong>${score}</strong> (${inn.overs ?? "—"} ov @ ${inn.run_rate ?? "—"} rpo)</p>
+      <table>
+        <tr>
+          <th>Batter</th><th>How out</th>
+          <th class="num">R</th><th class="num">B</th>
+          <th class="num">4s</th><th class="num">6s</th><th class="num">SR</th>
+        </tr>`;
+
+    inn.batting.forEach(b => {
+      const sr = b.strike_rate != null ? Number(b.strike_rate).toFixed(2) : "—";
+      html += `
+        <tr>
+          <td>${playerLink(b.batsman)}${b.is_captain ? " <small>(c)</small>" : ""}${b.is_keeper ? " <small>(wk)</small>" : ""}</td>
+          <td style="color:#666;font-size:13px">${b.dismissal || "not out"}</td>
+          <td class="num"><strong>${b.runs}</strong></td>
+          <td class="num">${b.balls_faced ?? "—"}</td>
+          <td class="num">${b.fours ?? "—"}</td>
+          <td class="num">${b.sixes ?? "—"}</td>
+          <td class="num">${sr}</td>
+        </tr>`;
+    });
+
+    html += `</table>`;
+
+    if (inn.extras) {
+      html += `<div class="note">Extras: ${inn.extras.description} — ${inn.extras.runs}</div>`;
+    }
+
+    if (inn.did_not_bat && inn.did_not_bat.length) {
+      html += `<div class="note">Did not bat: ${inn.did_not_bat.map(playerLink).join(", ")}</div>`;
+    }
+
+    if (inn.fall_of_wickets && inn.fall_of_wickets.length) {
+      html += `<div class="note">Fall of wickets: ${inn.fall_of_wickets.map(f => `${f.wicket}-${f.runs} (${f.batsman})`).join(", ")}</div>`;
+    }
+
+    if (inn.bowling && inn.bowling.length) {
+      html += `
+        <h3>Bowling${bowlTeam ? " — " + bowlTeam : ""}</h3>
+        <table>
+          <tr><th>Bowler</th><th class="num">O</th><th class="num">M</th><th class="num">R</th><th class="num">W</th><th class="num">Econ</th></tr>`;
+      inn.bowling.forEach(b => {
+        html += `
+          <tr>
+            <td>${playerLink(b.bowler)}</td>
+            <td class="num">${b.overs}</td>
+            <td class="num">${b.maidens ?? "—"}</td>
+            <td class="num">${b.runs ?? "—"}</td>
+            <td class="num"><strong>${b.wickets ?? "—"}</strong></td>
+            <td class="num">${b.economy != null ? Number(b.economy).toFixed(2) : "—"}</td>
+          </tr>`;
+      });
+      html += `</table>`;
+    }
+
+    container.innerHTML += html;
+  });
+}
+</script>
+</body>
+</html>
