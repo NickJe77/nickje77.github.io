@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+  <meta charset="UTF-8">
+  <title>World Cup All-Time Leaders | The Sporting Almanac</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: Inter, system-ui, Arial, sans-serif; margin: 0; background: #ffffff; }
+    .navbar { display: flex; justify-content: center; gap: 22px; padding: 16px 0; border-bottom: 1px solid #ddd; font-weight: 600; }
+    .navbar a { color: #0056d6; text-decoration: none; font-size: 18px; }
+    .page-wrap { max-width: 1200px; margin: 0 auto; padding: 30px 20px; }
+    .hero { background: linear-gradient(90deg, #004d00, #006400); color: white; padding: 40px 50px; border-radius: 24px; margin-bottom: 25px; }
+    .hero h1 { margin: 0; font-size: 46px; }
+    .hero p { margin-top: 10px; font-size: 20px; opacity: 0.95; }
+    .tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+    .tab { padding: 10px 16px; border-radius: 10px; border: none; cursor: pointer; background: #003300; color: white; font-size: 15px; }
+    .tab.active { background: #2e7d32; }
+    .tab:hover:not(.active) { background: #005000; }
+    table { width: 100%; border-collapse: collapse; font-size: 15px; }
+    th, td { border-bottom: 1px solid #ddd; padding: 10px 12px; text-align: left; }
+    th { background: #f3f6fb; }
+    tr:nth-child(even) { background: #f6fbf6; }
+  </style>
+</head>
+<body>
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+</div>
+<div class="page-wrap">
+  <div class="hero">
+    <h1>World Cup All-Time Leaders</h1>
+    <p>Top 10 players in major statistical categories across all tournaments.</p>
+  </div>
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('runs', this)">Run Scorers</button>
+    <button class="tab" onclick="showTab('wickets', this)">Wicket Takers</button>
+    <button class="tab" onclick="showTab('sr', this)">Strike Rate (5+ matches)</button>
+    <button class="tab" onclick="showTab('avg', this)">Batting Average (5+ matches)</button>
+    <button class="tab" onclick="showTab('econ', this)">Economy (10+ matches)</button>
+  </div>
+  <table>
+    <thead><tr id="tableHead"></tr></thead>
+    <tbody id="leaderTable"></tbody>
+  </table>
+</div>
+
+<script>
+const TOURNAMENTS = [
+  { year: "1975", file: "wc_1975" },
+  { year: "1979", file: "wc_1979" },
+  { year: "1983", file: "wc_1983" },
+  { year: "1987", file: "wc_1987_1988" },
+  { year: "1992", file: "wc_1991_1992" },
+  { year: "1996", file: "wc_1995_1996" },
+  { year: "1999", file: "wc_1999" },
+  { year: "2003", file: "wc_2002_2003" },
+  { year: "2007", file: "wc_2006_2007" },
+  { year: "2011", file: "wc_2010_2011" },
+  { year: "2015", file: "wc_2014_2015" },
+  { year: "2019", file: "wc_2019" },
+  { year: "2023", file: "wc_2023" },
+];
+
+const basePath = "data/cricket/world-cup/scorecards/";
+const leaders  = {};
+
+function playerLink(name) {
+  return `<a href="cricket-wc-player.html?player=${encodeURIComponent(name)}" style="color:#004d00;text-decoration:none;font-weight:500;">${name}</a>`;
+}
+
+Promise.all(
+  TOURNAMENTS.map(t =>
+    fetch(`${basePath}${t.file}.json`)
+      .then(r => r.json())
+      .then(data => data.matches || [])
+      .catch(() => [])
+  )
+).then(allMatches => {
+  const batting  = {};  // name -> {runs, balls, innings, outs}
+  const bowling  = {};  // name -> {wickets, runs, overs, matches}
+
+  allMatches.forEach(matches => {
+    matches.forEach(m => {
+      const sc = m.scorecard;
+      if (!sc || !sc.innings) return;
+      sc.innings.forEach(inn => {
+        inn.batting.forEach(b => {
+          if (!batting[b.batsman]) batting[b.batsman] = { runs: 0, balls: 0, innings: 0, outs: 0 };
+          batting[b.batsman].runs    += b.runs || 0;
+          batting[b.batsman].balls   += b.balls_faced || 0;
+          batting[b.batsman].innings += 1;
+          if (b.dismissal && b.dismissal !== "not out") batting[b.batsman].outs++;
+        });
+        inn.bowling.forEach(b => {
+          if (!bowling[b.bowler]) bowling[b.bowler] = { wickets: 0, runs: 0, overs: 0, matches: 0 };
+          bowling[b.bowler].wickets += b.wickets || 0;
+          bowling[b.bowler].runs    += b.runs    || 0;
+          bowling[b.bowler].overs   += b.overs   || 0;
+          bowling[b.bowler].matches += 1;
+        });
+      });
+    });
+  });
+
+  // Runs
+  leaders.runs = Object.entries(batting)
+    .sort((a, b) => b[1].runs - a[1].runs).slice(0, 10)
+    .map(([p, v], i) => [i + 1, playerLink(p), v.runs, v.innings]);
+
+  // Wickets
+  leaders.wickets = Object.entries(bowling)
+    .sort((a, b) => b[1].wickets - a[1].wickets).slice(0, 10)
+    .map(([p, v], i) => [i + 1, playerLink(p), v.wickets, v.matches]);
+
+  // Strike rate (min 5 innings)
+  leaders.sr = Object.entries(batting)
+    .filter(([, v]) => v.innings >= 5 && v.balls >= 50)
+    .map(([p, v]) => [p, (v.runs / v.balls * 100)])
+    .sort((a, b) => b[1] - a[1]).slice(0, 10)
+    .map(([p, v], i) => [i + 1, playerLink(p), v.toFixed(2)]);
+
+  // Batting average (min 5 innings)
+  leaders.avg = Object.entries(batting)
+    .filter(([, v]) => v.innings >= 5 && v.outs >= 3)
+    .map(([p, v]) => [p, v.runs / v.outs])
+    .sort((a, b) => b[1] - a[1]).slice(0, 10)
+    .map(([p, v], i) => [i + 1, playerLink(p), v.toFixed(2)]);
+
+  // Economy (min 10 bowling appearances)
+  leaders.econ = Object.entries(bowling)
+    .filter(([, v]) => v.matches >= 10 && v.overs >= 50)
+    .map(([p, v]) => [p, v.runs / v.overs])
+    .sort((a, b) => a[1] - b[1]).slice(0, 10)
+    .map(([p, v], i) => [i + 1, playerLink(p), v.toFixed(2)]);
+
+  render("runs");
+});
+
+const HEADERS = {
+  runs:    ["Rank", "Player", "Runs",     "Innings"],
+  wickets: ["Rank", "Player", "Wickets",  "Matches"],
+  sr:      ["Rank", "Player", "Strike Rate", ""],
+  avg:     ["Rank", "Player", "Average",  ""],
+  econ:    ["Rank", "Player", "Economy",  ""],
+};
+
+function showTab(type, btn) {
+  document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  render(type);
+}
+
+function render(type) {
+  document.getElementById("tableHead").innerHTML =
+    HEADERS[type].map(h => `<th>${h}</th>`).join("");
+  const tbody = document.getElementById("leaderTable");
+  tbody.innerHTML = "";
+  (leaders[type] || []).forEach(r => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = r.map(c => `<td>${c}</td>`).join("");
+    tbody.appendChild(tr);
+  });
+}
+</script>
+</body>
+</html>
