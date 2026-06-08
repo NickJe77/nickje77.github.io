@@ -1,353 +1,270 @@
-name: NBA Daily Update
-on:
-  schedule:
-    - cron: '0 10 * * *'  # 10am UTC = 8pm AEST
-  workflow_dispatch:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Ligue 1 Player | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#eef1f5;color:#111;}
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:white;border-bottom:1px solid #ddd;flex-wrap:wrap;}
+.navbar a{text-decoration:none;font-weight:800;color:#0056d6;}
+.hero{padding:50px 20px;text-align:center;color:white;position:relative;}
+.hero h1{margin:0;font-size:60px;font-weight:900;line-height:1;}
+.hero p{margin-top:14px;font-size:20px;font-weight:700;opacity:.95;}
+.search-wrap{max-width:520px;margin:28px auto 0;position:relative;}
+.search-input{width:100%;padding:16px 18px;border-radius:14px;border:none;font-size:18px;font-weight:700;box-sizing:border-box;outline:none;}
+.search-results{position:absolute;top:100%;left:0;right:0;background:white;border-radius:0 0 14px 14px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:999;display:none;}
+.search-item{padding:14px 18px;border-bottom:1px solid #eee;cursor:pointer;font-weight:700;color:#111;}
+.search-item:hover{background:#f3f6fb;}
+.search-item small{color:#666;font-weight:600;margin-left:8px;}
+.container{max-width:1500px;margin:28px auto;padding:0 20px 60px;}
+.section{background:white;border-radius:22px;padding:26px;margin-bottom:30px;box-shadow:0 2px 10px rgba(0,0,0,.06);}
+.section-title{font-size:18px;font-weight:900;letter-spacing:1px;text-transform:uppercase;margin-bottom:22px;color:#666;}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:18px;}
+.stat-card{background:#f4f7fb;border-radius:18px;padding:24px;text-align:center;border:1px solid #dde3ea;}
+.stat-value{font-size:42px;font-weight:900;line-height:1;margin-bottom:10px;}
+.stat-label{font-size:15px;font-weight:700;color:#555;}
+table{width:100%;border-collapse:collapse;}
+th{background:#e8edf3;padding:16px;text-align:left;font-size:13px;font-weight:900;text-transform:uppercase;}
+td{padding:16px;border-bottom:1px solid #ececec;font-size:15px;font-weight:600;}
+tr:nth-child(even){background:#f0f4ff;}
+.team-link{text-decoration:none;font-weight:800;color:#0056d6;}
+.team-link:hover{text-decoration:underline;}
+.loading,.error{padding:120px 20px;text-align:center;font-size:32px;font-weight:900;}
+.error{color:#d90429;}
+@media(max-width:900px){
+  .hero h1{font-size:40px;}
+  .hero p{font-size:16px;}
+  .search-input{font-size:16px;}
+  .stat-value{font-size:34px;}
+  table{display:block;overflow-x:auto;white-space:nowrap;}
+}
+</style>
+</head>
+<body>
 
-jobs:
-  update:
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@v4
+<div class="navbar">
+  <a href="/">Home</a>
+  <a href="/epl.html">EPL</a>
+  <a href="/ligue1.html">Ligue 1</a>
+  <a href="/ligue1-teams.html">Teams</a>
+  <a href="/ligue1-players.html">Players</a>
+  <a href="/nba.html">NBA</a>
+  <a href="/afl.html">AFL</a>
+</div>
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+<div id="page">
+  <div class="loading">Loading Player...</div>
+</div>
 
-      - name: Install packages
-        run: pip install nba_api boto3
+<script>
 
-      - name: Run daily NBA update
-        env:
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        run: |
-          python << 'PYEOF'
-          import boto3
-          import json
-          import os
-          import time
-          import re
-          from datetime import datetime, timedelta
-          from botocore.config import Config
-          from botocore.exceptions import ClientError
+const TEAM_COLOURS = {
+  "AJ Auxerre":               "linear-gradient(135deg,#001E62,#FFFFFF)",
+  "Ajaccio":                  "linear-gradient(135deg,#E30613,#FFFFFF)",
+  "Angers SCO":               "linear-gradient(135deg,#000000,#FFFFFF)",
+  "AS Monaco":                "linear-gradient(135deg,#E4002B,#FFFFFF)",
+  "AS Saint-Étienne":         "linear-gradient(135deg,#006633,#FFFFFF)",
+  "Bastia":                   "linear-gradient(135deg,#003087,#FFFFFF)",
+  "Bordeaux":                 "linear-gradient(135deg,#002B5C,#C8A84B)",
+  "Brest":                    "linear-gradient(135deg,#E30613,#FFFFFF)",
+  "Caen":                     "linear-gradient(135deg,#003087,#FFFFFF)",
+  "Clermont Foot":            "linear-gradient(135deg,#E4002B,#003087)",
+  "Dijon FCO":                "linear-gradient(135deg,#CC0000,#000000)",
+  "EA Guingamp":              "linear-gradient(135deg,#CC0000,#000000)",
+  "Evian Thonon Gaillard":    "linear-gradient(135deg,#004A97,#FFFFFF)",
+  "FC Lorient":               "linear-gradient(135deg,#F7941D,#000000)",
+  "FC Metz":                  "linear-gradient(135deg,#8B0000,#000000)",
+  "FC Nantes":                "linear-gradient(135deg,#F7C300,#006437)",
+  "FC Sochaux-Montbéliard":   "linear-gradient(135deg,#FFD700,#003DA5)",
+  "Grenoble Foot 38":         "linear-gradient(135deg,#003DA5,#FFFFFF)",
+  "Istres":                   "linear-gradient(135deg,#003DA5,#CC0000)",
+  "Le Havre AC":              "linear-gradient(135deg,#003DA5,#FFFFFF)",
+  "Lens":                     "linear-gradient(135deg,#CC0000,#F7C300)",
+  "Lille OSC":                "linear-gradient(135deg,#CC0000,#003DA5)",
+  "Lorient":                  "linear-gradient(135deg,#F7941D,#000000)",
+  "Lyon":                     "linear-gradient(135deg,#003DA5,#CC0000)",
+  "Marseille":                "linear-gradient(135deg,#009BDE,#FFFFFF)",
+  "Metz":                     "linear-gradient(135deg,#8B0000,#000000)",
+  "Monaco":                   "linear-gradient(135deg,#E4002B,#FFFFFF)",
+  "Montpellier HSC":          "linear-gradient(135deg,#003DA5,#F7941D)",
+  "Nancy":                    "linear-gradient(135deg,#CC0000,#FFFFFF)",
+  "Nantes":                   "linear-gradient(135deg,#F7C300,#006437)",
+  "Nice":                     "linear-gradient(135deg,#CC0000,#000000)",
+  "Nîmes Olympique":          "linear-gradient(135deg,#CC0000,#000000)",
+  "OGC Nice":                 "linear-gradient(135deg,#CC0000,#000000)",
+  "Olympique Lyonnais":       "linear-gradient(135deg,#003DA5,#CC0000)",
+  "Olympique de Marseille":   "linear-gradient(135deg,#009BDE,#FFFFFF)",
+  "Paris Saint-Germain":      "linear-gradient(135deg,#003087,#CC0000)",
+  "PSG":                      "linear-gradient(135deg,#003087,#CC0000)",
+  "Reims":                    "linear-gradient(135deg,#CC0000,#FFFFFF)",
+  "Rennes":                   "linear-gradient(135deg,#CC0000,#000000)",
+  "Stade Brestois 29":        "linear-gradient(135deg,#E30613,#FFFFFF)",
+  "Stade de Reims":           "linear-gradient(135deg,#CC0000,#FFFFFF)",
+  "Stade Malherbe Caen":      "linear-gradient(135deg,#003087,#CC0000)",
+  "Stade Rennais FC":         "linear-gradient(135deg,#CC0000,#000000)",
+  "Strasbourg":               "linear-gradient(135deg,#003DA5,#FFFFFF)",
+  "RC Lens":                  "linear-gradient(135deg,#CC0000,#F7C300)",
+  "RC Strasbourg Alsace":     "linear-gradient(135deg,#003DA5,#FFFFFF)",
+  "Toulouse FC":              "linear-gradient(135deg,#5B2D8E,#FFFFFF)",
+  "Troyes":                   "linear-gradient(135deg,#003DA5,#FFFFFF)",
+  "Valenciennes FC":          "linear-gradient(135deg,#CC0000,#000000)",
+  "Valenciennes":             "linear-gradient(135deg,#CC0000,#000000)",
+};
 
-          import pandas as pd
-          from nba_api.stats.endpoints import leaguegamelog, boxscoretraditionalv2
+function slugify(str){
+  return (str || '')
+    .toLowerCase()
+    .replace(/&/g,'and')
+    .replace(/[^a-z0-9]+/g,'-')
+    .replace(/^-|-$/g,'');
+}
 
-          r2 = boto3.client(
-              "s3",
-              endpoint_url=os.environ["R2_ENDPOINT"],
-              aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
-              aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
-              config=Config(signature_version="s3v4"),
-              region_name="auto",
-          )
+function playerSlug(p){
+  const name      = slugify(p.name || '');
+  const firstTeam = slugify((p.teams && p.teams[0]) || '');
+  return firstTeam ? `${name}--${firstTeam}` : name;
+}
 
-          BUCKET = "sporting-almanac-data"
-          now    = datetime.utcnow()
-          SEASON = now.year if now.month >= 10 else now.year
-          SEASON_STR = f"{SEASON-1}-{str(SEASON)[2:]}"  # e.g. "2025-26"
+const params    = new URLSearchParams(window.location.search);
+const slugParam = params.get("player") || '';
+const page      = document.getElementById("page");
 
-          def upload(key, data):
-              r2.put_object(
-                  Bucket=BUCKET,
-                  Key=key,
-                  Body=json.dumps(data, ensure_ascii=True).encode("utf-8"),
-                  ContentType="application/json",
-              )
+async function loadPlayer(){
+  try{
+    page.innerHTML = '<div class="loading">Loading player data...</div>';
 
-          def get_json(key):
-              try:
-                  obj = r2.get_object(Bucket=BUCKET, Key=key)
-                  return json.loads(obj["Body"].read().decode("utf-8"))
-              except ClientError as e:
-                  if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
-                      return None
-                  raise
+    const res = await fetch("/data/ligue1/players.json");
+    if(!res.ok) throw new Error(`players.json returned ${res.status}`);
+    const players = await res.json();
 
-          def is_playoff(date_str):
-              try:
-                  d = datetime.strptime(date_str, "%Y-%m-%d")
-                  if d.month in (5, 6): return True
-                  if d.month == 4 and d.day >= 16: return True
-                  return False
-              except:
-                  return False
+    let player = players.find(p => playerSlug(p) === slugParam);
+    if(!player) player = players.find(p => slugify(p.name) === slugParam);
+    if(!player){
+      const namePart = slugParam.split('--')[0];
+      player = players.find(p => slugify(p.name) === namePart);
+    }
 
-          print(f"NBA Daily Update — Season {SEASON_STR}", flush=True)
+    if(!player){
+      page.innerHTML = `<div class="error">Player Not Found</div>`;
+      return;
+    }
 
-          # Load existing season index
-          season_index = get_json(f"basketball/indexes/{SEASON}.json") or []
-          existing_ids = {g["game_id"] for g in season_index}
-          print(f"Existing games in index: {len(existing_ids)}", flush=True)
+    const playerDisplayName = player.name;
+    const currentTeam       = (player.teams && player.teams[player.teams.length - 1]) || "Unknown";
+    const heroGradient      = TEAM_COLOURS[currentTeam] || 'linear-gradient(135deg,#001489,#0033cc)';
 
-          # Get all games for current season from NBA API
-          print("Fetching game log...", flush=True)
-          time.sleep(1)
-          gamelog = leaguegamelog.LeagueGameLog(
-              season=SEASON_STR,
-              season_type_all_star="Regular Season",
-              timeout=60
-          )
-          reg_games = gamelog.get_data_frames()[0]
+    page.innerHTML = `
+      <div class="hero" style="background:${heroGradient};">
+        <h1>${playerDisplayName}</h1>
+        <p>Ligue 1 Player Profile</p>
+        <div class="search-wrap">
+          <input type="text" class="search-input" id="playerSearch"
+                 placeholder="Search player..." autocomplete="off">
+          <div class="search-results" id="searchResults"></div>
+        </div>
+      </div>
 
-          time.sleep(1)
-          playoff_log = leaguegamelog.LeagueGameLog(
-              season=SEASON_STR,
-              season_type_all_star="Playoffs",
-              timeout=60
-          )
-          playoff_games = playoff_log.get_data_frames()[0]
+      <div class="container">
 
-          all_games_df = pd.concat([reg_games, playoff_games]) if len(playoff_games) > 0 else reg_games
+        <div class="section">
+          <div class="section-title">Career Summary</div>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-value" style="font-size:22px;">${currentTeam}</div>
+              <div class="stat-label">Club</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value">${player.seasons ? player.seasons.length : 0}</div>
+              <div class="stat-label">Seasons</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value">${player.goals || 0}</div>
+              <div class="stat-label">Goals</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value">${player.penalties || 0}</div>
+              <div class="stat-label">Penalties</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value">${player.yellow_cards || 0}</div>
+              <div class="stat-label">Yellow Cards</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value">${player.red_cards || 0}</div>
+              <div class="stat-label">Red Cards</div>
+            </div>
+          </div>
+        </div>
 
-          all_games_df = pd.concat([reg_games, playoff_games]) if len(playoff_games) > 0 else reg_games
+        <div class="section">
+          <div class="section-title">Season by Season</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Season</th>
+                <th>Team</th>
+                <th>Goals</th>
+                <th>Penalties</th>
+                <th>Yellow Cards</th>
+                <th>Red Cards</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(player.season_stats || []).map(s => `
+                <tr>
+                  <td><a class="team-link" href="/ligue1-season.html?season=${s.season}">${s.season}</a></td>
+                  <td><a class="team-link" href="/ligue1-team.html?team=${encodeURIComponent(s.team)}">${s.team || ''}</a></td>
+                  <td>${s.goals || 0}</td>
+                  <td>${s.penalties || 0}</td>
+                  <td>${s.yellow_cards || 0}</td>
+                  <td>${s.red_cards || 0}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
 
-          # Get unique game IDs
-          all_game_ids = all_games_df['GAME_ID'].unique().tolist()
-          print(f"Total games from NBA API: {len(all_game_ids)}", flush=True)
+      </div>
+    `;
 
-          # Find new games
-          # NBA game IDs are like 0022500001, BBRef uses different format
-          # We need to map them - NBA ID is stored in our index
-          new_game_ids = [gid for gid in all_game_ids if gid not in existing_ids]
-          print(f"New games to process: {len(new_game_ids)}", flush=True)
+    const playerSearch  = document.getElementById("playerSearch");
+    const searchResults = document.getElementById("searchResults");
 
-          if not new_game_ids:
-              print("No new games. Done!", flush=True)
-              exit(0)
+    playerSearch.addEventListener("input", () => {
+      const value = playerSearch.value.toLowerCase().trim();
+      if(!value){ searchResults.style.display = "none"; return; }
 
-          scraped      = []
-          player_updates = {}
+      const matches = players
+        .filter(p => (p.name || '').toLowerCase().includes(value))
+        .slice(0, 8);
 
-          NBA_TEAMS = {
-              1610612737: "Atlanta Hawks", 1610612738: "Boston Celtics",
-              1610612751: "Brooklyn Nets", 1610612766: "Charlotte Hornets",
-              1610612741: "Chicago Bulls", 1610612739: "Cleveland Cavaliers",
-              1610612742: "Dallas Mavericks", 1610612743: "Denver Nuggets",
-              1610612765: "Detroit Pistons", 1610612744: "Golden State Warriors",
-              1610612745: "Houston Rockets", 1610612754: "Indiana Pacers",
-              1610612746: "LA Clippers", 1610612747: "Los Angeles Lakers",
-              1610612763: "Memphis Grizzlies", 1610612748: "Miami Heat",
-              1610612749: "Milwaukee Bucks", 1610612750: "Minnesota Timberwolves",
-              1610612740: "New Orleans Pelicans", 1610612752: "New York Knicks",
-              1610612760: "Oklahoma City Thunder", 1610612753: "Orlando Magic",
-              1610612755: "Philadelphia 76ers", 1610612756: "Phoenix Suns",
-              1610612757: "Portland Trail Blazers", 1610612758: "Sacramento Kings",
-              1610612759: "San Antonio Spurs", 1610612761: "Toronto Raptors",
-              1610612762: "Utah Jazz", 1610612764: "Washington Wizards",
-          }
+      if(!matches.length){ searchResults.style.display = "none"; return; }
 
-          for game_id in new_game_ids:
-              print(f"Processing {game_id}...", flush=True)
-              time.sleep(2)
-              try:
-                  box = boxscoretraditionalv2.BoxScoreTraditionalV2(
-                      game_id=game_id,
-                      timeout=60
-                  )
-                  dfs = box.get_data_frames()
-                  player_df = dfs[0]  # Player stats
-                  team_df   = dfs[1]  # Team stats
-                  summary   = dfs[4] if len(dfs) > 4 else None  # Game summary
+      searchResults.innerHTML = matches.map(p => `
+        <div class="search-item"
+             onclick="window.location.href='/ligue1-player.html?player=${encodeURIComponent(playerSlug(p))}'">
+          ${p.name}
+          <small>${(p.teams && p.teams[0]) || ''}</small>
+        </div>
+      `).join('');
 
-                  if player_df.empty:
-                      print(f"  No player data", flush=True)
-                      continue
+      searchResults.style.display = "block";
+    });
 
-                  # Get game info
-                  game_row = all_games_df[all_games_df['GAME_ID'] == game_id].iloc[0]
-                  date_str  = str(game_row['GAME_DATE'])[:10]  # YYYY-MM-DD
-                  playoff   = is_playoff(date_str)
+    document.addEventListener("click", e => {
+      if(!e.target.closest(".search-wrap")) searchResults.style.display = "none";
+    });
 
-                  # Get team names and scores from team_df
-                  away_row  = team_df[team_df['TEAM_ID'] == team_df.iloc[0]['TEAM_ID']].iloc[0]
-                  home_row  = team_df[team_df['TEAM_ID'] == team_df.iloc[1]['TEAM_ID']].iloc[0]
+  }catch(err){
+    console.error(err);
+    page.innerHTML = `<div class="error">Failed To Load Player Data</div>`;
+  }
+}
 
-                  away_team  = NBA_TEAMS.get(int(away_row['TEAM_ID']), away_row['TEAM_CITY'] + " " + away_row['TEAM_NAME'])
-                  home_team  = NBA_TEAMS.get(int(home_row['TEAM_ID']), home_row['TEAM_CITY'] + " " + home_row['TEAM_NAME'])
-                  away_score = int(away_row['PTS']) if away_row['PTS'] else None
-                  home_score = int(home_row['PTS']) if home_row['PTS'] else None
+loadPlayer();
 
-                  # Build linescore from period scores if available
-                  linescore = {}
-
-                  # Build player stats
-                  teams_data = {}
-                  for _, prow in player_df.iterrows():
-                      team_id   = int(prow['TEAM_ID'])
-                      team_name = NBA_TEAMS.get(team_id, str(prow['TEAM_CITY']) + " " + str(prow['TEAM_NICKNAME']))
-                      abbr      = str(prow['TEAM_ABBREVIATION'])
-
-                      if abbr not in teams_data:
-                          teams_data[abbr] = []
-
-                      pid  = str(prow['PLAYER_ID'])
-                      name = str(prow['PLAYER_NAME'])
-
-                      def safe(val):
-                          if val is None or (isinstance(val, float) and val != val):
-                              return None
-                          try: return int(val) if int(val) == val else float(val)
-                          except: return None
-
-                      teams_data[abbr].append({
-                          "player":      name,
-                          "player_id":   pid,
-                          "mp":          str(prow['MIN']) if prow['MIN'] else None,
-                          "fg":          safe(prow['FGM']),
-                          "fga":         safe(prow['FGA']),
-                          "fg_pct":      safe(prow['FG_PCT']),
-                          "fg3":         safe(prow['FG3M']),
-                          "fg3a":        safe(prow['FG3A']),
-                          "fg3_pct":     safe(prow['FG3_PCT']),
-                          "ft":          safe(prow['FTM']),
-                          "fta":         safe(prow['FTA']),
-                          "ft_pct":      safe(prow['FT_PCT']),
-                          "orb":         safe(prow['OREB']),
-                          "drb":         safe(prow['DREB']),
-                          "trb":         safe(prow['REB']),
-                          "ast":         safe(prow['AST']),
-                          "stl":         safe(prow['STL']),
-                          "blk":         safe(prow['BLK']),
-                          "tov":         safe(prow['TO']),
-                          "pf":          safe(prow['PF']),
-                          "pts":         safe(prow['PTS']),
-                          "plus_minus":  safe(prow['PLUS_MINUS']),
-                      })
-
-                      # Collect player updates
-                      if pid not in player_updates:
-                          player_updates[pid] = {"name": name, "player_id": pid, "games": []}
-
-                      is_home = team_id == int(home_row['TEAM_ID'])
-                      player_updates[pid]["games"].append({
-                          "season":     SEASON,
-                          "game_id":    game_id,
-                          "date":       date_str,
-                          "team":       home_team if is_home else away_team,
-                          "opp":        away_team if is_home else home_team,
-                          "playoff":    playoff,
-                          "home_score": home_score,
-                          "away_score": away_score,
-                          "mp":         str(prow['MIN']) if prow['MIN'] else None,
-                          "pts":        safe(prow['PTS']),
-                          "reb":        safe(prow['REB']),
-                          "ast":        safe(prow['AST']),
-                          "stl":        safe(prow['STL']),
-                          "blk":        safe(prow['BLK']),
-                          "tov":        safe(prow['TO']),
-                          "fg":         safe(prow['FGM']),
-                          "fga":        safe(prow['FGA']),
-                          "fg_pct":     safe(prow['FG_PCT']),
-                          "fg3":        safe(prow['FG3M']),
-                          "fg3a":       safe(prow['FG3A']),
-                          "fg3_pct":    safe(prow['FG3_PCT']),
-                          "ft":         safe(prow['FTM']),
-                          "fta":        safe(prow['FTA']),
-                          "ft_pct":     safe(prow['FT_PCT']),
-                          "orb":        safe(prow['OREB']),
-                          "drb":        safe(prow['DREB']),
-                          "pf":         safe(prow['PF']),
-                          "plus_minus": safe(prow['PLUS_MINUS']),
-                      })
-
-                  boxscore_data = {
-                      "game_id":   game_id,
-                      "date":      date_str,
-                      "away":      away_team,
-                      "home":      home_team,
-                      "linescore": linescore,
-                      "teams":     teams_data,
-                  }
-
-                  upload(f"basketball/boxscores/{SEASON}/{game_id}.json", boxscore_data)
-
-                  scraped.append({
-                      "game_id":    game_id,
-                      "date":       date_str,
-                      "away":       away_team,
-                      "home":       home_team,
-                      "away_score": away_score,
-                      "home_score": home_score,
-                      "arena":      "",
-                      "playoff":    playoff,
-                  })
-
-                  print(f"  Done: {away_team} @ {home_team} {away_score}-{home_score}", flush=True)
-
-              except Exception as e:
-                  import traceback
-                  print(f"  ERROR: {e}", flush=True)
-                  traceback.print_exc()
-
-          print(f"\nScraped {len(scraped)} new games", flush=True)
-
-          if not scraped:
-              print("Nothing to update. Done!", flush=True)
-              exit(0)
-
-          # Update season index
-          season_index.extend(scraped)
-          season_index.sort(key=lambda g: g["date"])
-          upload(f"basketball/indexes/{SEASON}.json", season_index)
-          print(f"Season index updated: {len(season_index)} total games", flush=True)
-
-          # Update player files
-          print(f"Updating {len(player_updates)} player files...", flush=True)
-          for pid, new_data in player_updates.items():
-              existing = get_json(f"basketball/players/{pid}.json")
-              if existing:
-                  existing_ids_set = {g["game_id"] for g in existing.get("games", [])}
-                  for g in new_data["games"]:
-                      if g["game_id"] not in existing_ids_set:
-                          existing["games"].append(g)
-                  existing["games"].sort(key=lambda g: g["date"])
-                  upload(f"basketball/players/{pid}.json", existing)
-              else:
-                  new_data["games"].sort(key=lambda g: g["date"])
-                  upload(f"basketball/players/{pid}.json", new_data)
-
-          print("Player files updated", flush=True)
-
-          # Update season leaders
-          print("Updating season leaders...", flush=True)
-          player_season_stats = {}
-          for pid in player_updates.keys():
-              try:
-                  pdata = get_json(f"basketball/players/{pid}.json")
-                  if not pdata: continue
-                  games = [g for g in pdata.get("games", []) if g.get("season") == SEASON and not g.get("playoff")]
-                  if not games: continue
-                  gp  = len(games)
-                  pts = sum(g.get("pts") or 0 for g in games)
-                  reb = sum(g.get("reb") or 0 for g in games)
-                  ast = sum(g.get("ast") or 0 for g in games)
-                  stl = sum(g.get("stl") or 0 for g in games)
-                  blk = sum(g.get("blk") or 0 for g in games)
-                  player_season_stats[pid] = {
-                      "name": pdata.get("name",""), "pid": pid,
-                      "gp": gp, "pts": pts, "reb": reb, "ast": ast, "stl": stl, "blk": blk,
-                  }
-              except: pass
-
-          qualified = [p for p in player_season_stats.values() if p["gp"] >= 20]
-
-          def leader(stat):
-              best = max(qualified, key=lambda p: p[stat]/p["gp"] if p["gp"]>0 else 0, default=None)
-              if not best: return None
-              return {"player": best["name"], "player_id": best["pid"],
-                      "total": best[stat], "gp": best["gp"],
-                      "avg": round(best[stat]/best["gp"], 1)}
-
-          upload(f"basketball/leaders/{SEASON}.json", {
-              "season": SEASON,
-              "points": leader("pts"), "rebounds": leader("reb"),
-              "assists": leader("ast"), "steals": leader("stl"), "blocks": leader("blk"),
-          })
-          print("Season leaders updated", flush=True)
-          print("All done!", flush=True)
-          PYEOF
+</script>
+</body>
+</html>
