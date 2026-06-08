@@ -54,7 +54,7 @@ jobs:
               "nurkiju01": "Jusuf Nurkić",
               "saricda01": "Dario Šarić",
               "hezonja01": "Mario Hezonja",
-              "sengunal01": "Alperen Şengün",
+              "sengual01": "Alperen Şengün",
               "wembavi01": "Victor Wembanyama",
               "topicni01": "Nikola Topić",
               "zubaciv01": "Ivica Zubac",
@@ -115,30 +115,40 @@ jobs:
                           pos_td = row.find("td", {"data-stat": "pos"})
                           pos = pos_td.get_text(strip=True) if pos_td else ""
 
-                          # Determine team from which vote column has the highest value
-                          v1 = to_int(row.find("td", {"data-stat": "first_team_votes"}) and row.find("td", {"data-stat": "first_team_votes"}).get_text(strip=True))
-                          v2 = to_int(row.find("td", {"data-stat": "second_team_votes"}) and row.find("td", {"data-stat": "second_team_votes"}).get_text(strip=True))
-                          v3 = to_int(row.find("td", {"data-stat": "third_team_votes"}) and row.find("td", {"data-stat": "third_team_votes"}).get_text(strip=True))
+                          def get_votes(stat):
+                              td = row.find("td", {"data-stat": stat})
+                              return to_int(td.get_text(strip=True)) if td else 0
+
+                          v1 = get_votes("first_team_votes")
+                          v2 = get_votes("second_team_votes")
+                          v3 = get_votes("third_team_votes")
 
                           if v1 == 0 and v2 == 0 and v3 == 0:
                               continue
 
                           if v1 >= v2 and v1 >= v3:
                               team_num = 1
-                          elif v2 >= v1 and v2 >= v3:
+                              votes = v1
+                          elif v2 >= v3:
                               team_num = 2
+                              votes = v2
                           else:
                               team_num = 3
+                              votes = v3
 
                           if pid in NAME_FIX:
                               name = NAME_FIX[pid]
 
-                          team_players[team_num].append({"player": name, "player_id": pid, "pos": pos})
+                          team_players[team_num].append({"player": name, "player_id": pid, "pos": pos, "votes": votes})
 
                       for num in [1, 2, 3]:
                           if team_players[num]:
                               label = f"{num}{'st' if num==1 else 'nd' if num==2 else 'rd'} Team"
-                              season_data["teams"].append({"team": label, "players": team_players[num]})
+                              # Sort by votes descending, take top 5
+                              sorted_players = sorted(team_players[num], key=lambda x: x.get("votes",0), reverse=True)[:5]
+                              # Remove votes from output
+                              clean = [{"player": p["player"], "player_id": p["player_id"], "pos": p["pos"]} for p in sorted_players]
+                              season_data["teams"].append({"team": label, "players": clean})
 
                       break
 
