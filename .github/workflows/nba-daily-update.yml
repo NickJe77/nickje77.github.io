@@ -116,18 +116,38 @@ jobs:
                           date_str = text
                           break
 
-              # Get linescore
+              # Get linescore - try multiple table IDs
               linescore = {}
-              ls_table = soup.find("table", id="line_score")
+              ls_table = soup.find("table", id="line_score") or soup.find("table", id="linescore")
+              if not ls_table:
+                  for t in soup.find_all("table"):
+                      cap = t.find("caption")
+                      if cap and "score" in cap.get_text().lower():
+                          ls_table = t
+                          break
               if ls_table:
-                  headers = [th.get_text(strip=True) for th in ls_table.find("thead").find_all("th")][1:]
-                  for row in ls_table.find("tbody").find_all("tr"):
-                      cells = row.find_all(["td","th"])
-                      if not cells:
-                          continue
-                      abbr = cells[0].get_text(strip=True)
-                      vals = [c.get_text(strip=True) for c in cells[1:]]
-                      linescore[abbr] = dict(zip(headers, vals))
+                  thead = ls_table.find("thead")
+                  tbody = ls_table.find("tbody")
+                  if thead and tbody:
+                      headers = [th.get_text(strip=True) for th in thead.find_all("th")][1:]
+                      for row in tbody.find_all("tr"):
+                          cells = row.find_all(["td","th"])
+                          if not cells:
+                              continue
+                          abbr = cells[0].get_text(strip=True)
+                          vals = [c.get_text(strip=True) for c in cells[1:]]
+                          linescore[abbr] = dict(zip(headers, vals))
+              
+              # Fallback: get scores from scorebox score divs
+              if not linescore:
+                  score_divs = scorebox.find_all("div", class_="score")
+                  abbr_links = scorebox.find_all("a", href=re.compile(r"/teams/"))
+                  if len(score_divs) >= 2 and len(abbr_links) >= 2:
+                      away_abbr = re.search(r"/teams/(\w+)/", abbr_links[0]["href"])
+                      home_abbr = re.search(r"/teams/(\w+)/", abbr_links[1]["href"])
+                      if away_abbr and home_abbr:
+                          linescore[away_abbr.group(1)] = {"T": score_divs[0].get_text(strip=True)}
+                          linescore[home_abbr.group(1)] = {"T": score_divs[1].get_text(strip=True)}
 
               # Get player stats from box score tables
               teams_data = {}
