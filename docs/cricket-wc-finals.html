@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+  <meta charset="UTF-8">
+  <title>ICC World Cup Finals | The Sporting Almanac</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: Inter, system-ui, Arial; margin: 0; background: #ffffff; }
+    .navbar { display: flex; justify-content: center; gap: 22px; padding: 16px 0; border-bottom: 1px solid #ddd; font-weight: 600; }
+    .navbar a { color: #0056d6; text-decoration: none; font-size: 18px; }
+    .page-wrap { max-width: 1200px; margin: auto; padding: 30px 20px; }
+    .hero { background: linear-gradient(90deg, #004d00, #006400); color: white; padding: 40px 50px; border-radius: 24px; margin-bottom: 25px; }
+    .hero h1 { margin: 0; font-size: 46px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 12px; border-bottom: 1px solid #ddd; }
+    th { background: #f3f6fb; }
+    tr:nth-child(even) { background: #f6fbf6; }
+    tr:hover { background: #d6ecd6; cursor: pointer; }
+    .winner { font-weight: 600; color: #1a7f37; }
+    .runnerup { color: #b42318; }
+  </style>
+</head>
+<body>
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="cricket.html">Cricket</a>
+</div>
+<div class="page-wrap">
+  <div class="hero">
+    <h1>ICC World Cup Finals</h1>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Year</th>
+        <th>Winner</th>
+        <th>Runner-up</th>
+        <th>Result</th>
+        <th>Date</th>
+        <th>Venue</th>
+      </tr>
+    </thead>
+    <tbody id="finalsTable"></tbody>
+  </table>
+</div>
+
+<script>
+const FINALS = [
+  { year: "1975", file: "wc_1975",      code: "0081" },
+  { year: "1979", file: "wc_1979",      code: "0096" },
+  { year: "1983", file: "wc_1983",      code: "0124" },
+  { year: "1987", file: "wc_1987_1988", code: "0313" },
+  { year: "1992", file: "wc_1991_1992", code: "0375" },
+  { year: "1996", file: "wc_1995_1996", code: "0431" },
+  { year: "1999", file: "wc_1999",      code: "0500" },
+  { year: "2003", file: "wc_2002_2003", code: "0588" },
+  { year: "2007", file: "wc_2006_2007", code: "0692" },
+  { year: "2011", file: "wc_2010_2011", code: "0827" },
+  { year: "2015", file: "wc_2014_2015", code: "0933" },
+  { year: "2019", file: "wc_2019",      code: "1056" },
+  { year: "2023", file: "wc_2023",      code: "1164" },
+];
+
+const basePath  = "data/cricket/world-cup/scorecards/";
+const tableBody = document.getElementById("finalsTable");
+
+function formatDate(d) {
+  if (!d) return "—";
+  const [day, mon, yr] = d.split("/");
+  const dt = new Date(`${yr}-${mon}-${day}`);
+  return isNaN(dt) ? d : dt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+Promise.all(
+  FINALS.map(f =>
+    fetch(`${basePath}${f.file}.json`)
+      .then(r => r.json())
+      .then(data => {
+        const match = (data.matches || []).find(m => m.match_code === f.code);
+        return { f, match };
+      })
+      .catch(() => ({ f, match: null }))
+  )
+).then(results => {
+  tableBody.innerHTML = "";
+  results.forEach(({ f, match }) => {
+    if (!match) return;
+    const parts    = match.teams.split(" v ");
+    const result   = match.result || "—";
+    const winner   = parts.find(t => result.includes(t + " won")) || "—";
+    const runnerUp = parts.find(t => t !== winner) || "—";
+    const info     = match.scorecard?.match_info || {};
+    const venue    = info["Venue"] || match.ground || "—";
+
+    const tr = document.createElement("tr");
+    tr.onclick = () => {
+      window.location.href = `cricket-wc-match.html?file=${encodeURIComponent(f.file)}&code=${f.code}`;
+    };
+    tr.innerHTML = `
+      <td>${f.year}</td>
+      <td class="winner">${winner}</td>
+      <td class="runnerup">${runnerUp}</td>
+      <td>${result}</td>
+      <td>${formatDate(match.date)}</td>
+      <td>${venue}</td>
+    `;
+    tableBody.appendChild(tr);
+  });
+});
+</script>
+</body>
+</html>
