@@ -86,48 +86,16 @@ def get_or_create_team_stats(team_stats_map, team, season):
     return team_stats_map[key]
 
 
-def find_player_key(players_map, name, team):
-    matching_keys = [k for k in players_map if k == name or k.startswith(f"{name}|")]
-
-    if not matching_keys:
-        return f"{name}|{team}" if team else name
-
-    for key in matching_keys:
-        p = players_map[key]
-        if team in p["teams"]:
-            return key
-
-    if len(matching_keys) == 1:
-        p = players_map[matching_keys[0]]
-        if not p["teams"]:
-            return matching_keys[0]
-
-    new_key = f"{name}|{team}" if team else name
-
-    counter = 2
-    base_key = new_key
-    while new_key in players_map:
-        new_key = f"{base_key}_{counter}"
-        counter += 1
-
-    return new_key
-
-
-name_team_to_key = {}
-
-
 def get_or_create_player(players_map, name, team, season):
-    key = find_player_key(players_map, name, team)
-    if key not in players_map:
-        players_map[key] = make_player(name)
-    if team:
-        name_team_to_key[(name, team)] = key
-    return players_map[key], key
+    """Always key by name alone — one record per player regardless of club."""
+    if name not in players_map:
+        players_map[name] = make_player(name)
+    return players_map[name]
 
 
 def get_or_create_player_season(player, season, team):
     for s in player["season_stats"]:
-        if s["season"] == season:
+        if s["season"] == season and s["team"] == team:
             return s
     entry = {
         "season": season,
@@ -210,7 +178,7 @@ def main():
                 s["yellow_cards"] += 1
 
             if name:
-                p, key = get_or_create_player(players_map, name, team, season)
+                p = get_or_create_player(players_map, name, team, season)
                 add_team_if_missing(p, team)
                 add_season_if_missing(p, season)
                 p["yellow_cards"] += 1
@@ -226,7 +194,7 @@ def main():
                 s["red_cards"] += 1
 
             if name:
-                p, key = get_or_create_player(players_map, name, team, season)
+                p = get_or_create_player(players_map, name, team, season)
                 add_team_if_missing(p, team)
                 add_season_if_missing(p, season)
                 p["red_cards"] += 1
@@ -246,7 +214,7 @@ def main():
             else:
                 opponent = ""
 
-            p, key = get_or_create_player(players_map, name, team, season)
+            p = get_or_create_player(players_map, name, team, season)
             add_team_if_missing(p, team)
             add_season_if_missing(p, season)
             ps = get_or_create_player_season(p, season, team)
