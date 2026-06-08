@@ -61,9 +61,14 @@ jobs:
               "avdijade01": "Deni Avdija",
           }
 
-          def to_int(val):
-              try: return int(val)
-              except: return 0
+          def td_int(row, stat):
+              td = row.find("td", {"data-stat": stat})
+              if not td:
+                  return 0
+              try:
+                  return int(td.get_text(strip=True))
+              except:
+                  return 0
 
           all_seasons = []
 
@@ -92,12 +97,11 @@ jobs:
                       if not tbody:
                           continue
 
-                      team_players = {1: [], 2: [], 3: []}
-
+                      # Collect all players with their vote counts
+                      all_players = []
                       for row in tbody.find_all("tr"):
                           if "thead" in row.get("class", []):
                               continue
-
                           player_td = row.find("td", {"data-stat": "player"})
                           if not player_td:
                               continue
@@ -115,40 +119,41 @@ jobs:
                           pos_td = row.find("td", {"data-stat": "pos"})
                           pos = pos_td.get_text(strip=True) if pos_td else ""
 
-                          def get_votes(stat):
-                              td = row.find("td", {"data-stat": stat})
-                              return to_int(td.get_text(strip=True)) if td else 0
-
-                          v1 = get_votes("first_team_votes")
-                          v2 = get_votes("second_team_votes")
-                          v3 = get_votes("third_team_votes")
+                          v1 = td_int(row, "first_team_votes")
+                          v2 = td_int(row, "second_team_votes")
+                          v3 = td_int(row, "third_team_votes")
 
                           if v1 == 0 and v2 == 0 and v3 == 0:
                               continue
 
-                          if v1 >= v2 and v1 >= v3:
-                              team_num = 1
-                              votes = v1
-                          elif v2 >= v3:
-                              team_num = 2
-                              votes = v2
-                          else:
-                              team_num = 3
-                              votes = v3
-
                           if pid in NAME_FIX:
                               name = NAME_FIX[pid]
 
-                          team_players[team_num].append({"player": name, "player_id": pid, "pos": pos, "votes": votes})
+                          all_players.append({
+                              "player": name, "player_id": pid, "pos": pos,
+                              "v1": v1, "v2": v2, "v3": v3
+                          })
 
-                      for num in [1, 2, 3]:
-                          if team_players[num]:
+                      # Assign each player to their best team
+                      # Sort each team's candidates by that team's votes desc, take top 5
+                      team1 = sorted([p for p in all_players if p["v1"] > p["v2"] and p["v1"] > p["v3"] and p["v1"] > 0],
+                                     key=lambda x: x["v1"], reverse=True)[:5]
+                      team1_ids = {p["player_id"] for p in team1}
+
+                      team2 = sorted([p for p in all_players if p["player_id"] not in team1_ids and p["v2"] >= p["v3"] and p["v2"] > 0],
+                                     key=lambda x: x["v2"], reverse=True)[:5]
+                      team2_ids = team1_ids | {p["player_id"] for p in team2}
+
+                      team3 = sorted([p for p in all_players if p["player_id"] not in team2_ids and p["v3"] > 0],
+                                     key=lambda x: x["v3"], reverse=True)[:5]
+
+                      def clean(players):
+                          return [{"player": p["player"], "player_id": p["player_id"], "pos": p["pos"]} for p in players]
+
+                      for num, team in [(1, team1), (2, team2), (3, team3)]:
+                          if team:
                               label = f"{num}{'st' if num==1 else 'nd' if num==2 else 'rd'} Team"
-                              # Sort by votes descending, take top 5
-                              sorted_players = sorted(team_players[num], key=lambda x: x.get("votes",0), reverse=True)[:5]
-                              # Remove votes from output
-                              clean = [{"player": p["player"], "player_id": p["player_id"], "pos": p["pos"]} for p in sorted_players]
-                              season_data["teams"].append({"team": label, "players": clean})
+                              season_data["teams"].append({"team": label, "players": clean(team)})
 
                       break
 
