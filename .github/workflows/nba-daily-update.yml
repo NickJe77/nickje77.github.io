@@ -1,7 +1,7 @@
 name: NBA Daily Update
 on:
   schedule:
-    - cron: '0 10 * * *'
+    - cron: '0 10 * * *'  # 10am UTC = 8pm AEST
   workflow_dispatch:
 
 jobs:
@@ -18,7 +18,33 @@ jobs:
       - name: Install packages
         run: pip install requests beautifulsoup4 lxml boto3
 
-      - name: Run daily NBA update
+      - name: Scrape new games
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          # Work out current season (year season ends)
+          MONTH=$(date -u +'%m')
+          YEAR=$(date -u +'%Y')
+          if [ "$MONTH" -ge 10 ]; then
+            SEASON=$((YEAR + 1))
+          else
+            SEASON=$YEAR
+          fi
+          echo "Current season: $SEASON"
+          python scripts/nba_full_rebuild.py --start $SEASON --end $SEASON
+
+      - name: Commit schedules
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/data/basketball/schedules
+          git diff --staged --quiet || git commit -m "Update NBA schedules $(date -u +'%Y-%m-%d')"
+          git pull --rebase origin main || true
+          git push || true
+
+      - name: Rebuild season index and player files
         env:
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -28,12 +54,7 @@ jobs:
           import boto3
           import json
           import os
-          import re
-          import time
-          import random
-          import requests
-          from bs4 import BeautifulSoup, Comment
-          from datetime import datetime, timedelta
+          from datetime import datetime
           from botocore.config import Config
           from botocore.exceptions import ClientError
 
@@ -48,16 +69,7 @@ jobs:
 
           BUCKET = "sporting-almanac-data"
           now    = datetime.utcnow()
-          SEASON = now.year if now.month >= 10 else now.year
-
-          HEADERS = {
-              "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-              "Accept-Language": "en-US,en;q=0.5",
-              "Accept-Encoding": "gzip, deflate, br",
-              "Connection": "keep-alive",
-              "Referer": "https://www.basketball-reference.com/",
-          }
+          SEASON = (now.year + 1) if now.month >= 10 else now.year
 
           def upload(key, data):
               r2.put_object(
@@ -81,302 +93,94 @@ jobs:
               except: pass
               return False
 
-          def get_schedule_urls(season):
-              urls = []
-              months = ["october","november","december","january","february","march","april","may","june"]
-              for month in months:
+          print(f"Rebuilding indexes for season {SEASON}...", flush=True)
+
+          season_games   = []
+          season_players = {}
+
+          paginator = r2.get_paginator("list_objects_v2")
+          for page in paginator.paginate(Bucket=BUCKET, Prefix=f"basketball/boxscores/{SEASON}/"):
+              for obj in page.get("Contents", []):
+                  key = obj["Key"]
                   try:
-                      time.sleep(random.uniform(3, 5))
-                      url  = f"https://www.basketball-reference.com/leagues/NBA_{season}_games-{month}.html"
-                      resp = requests.get(url, headers=HEADERS, timeout=30)
-                      if not resp.ok: continue
-                      soup = BeautifulSoup(resp.text, "lxml")
-                      for row in soup.find_all("tr"):
-                          box_td = row.find("td", {"data-stat": "box_score_text"})
-                          if not box_td: continue
-                          link = box_td.find("a")
-                          if not link: continue
-                          href = link.get("href","")
-                          m    = re.search(r"/boxscores/(\w+)\.html", href)
-                          if m:
-                              urls.append({"game_id": m.group(1), "url": f"https://www.basketball-reference.com{href}"})
-                  except: pass
-              return urls
+                      data      = json.loads(r2.get_object(Bucket=BUCKET, Key=key)["Body"].read().decode("utf-8"))
+                      game_id   = data.get("game_id", "")
+                      date      = data.get("date", "")
+                      home_team = data.get("home", "")
+                      away_team = data.get("away", "")
+                      linescore = data.get("linescore", {})
+                      teams     = data.get("teams", {})
+                      playoff   = is_playoff(date)
 
-          def scrape_boxscore(url, game_id):
-              time.sleep(random.uniform(4, 7))
-              resp = requests.get(url, headers=HEADERS, timeout=30)
-              print(f"  HTTP {resp.status_code}", flush=True)
-              resp.raise_for_status()
-              html = resp.text
+                      # linescore keys are team abbreviations, game_id ends with home abbr
+                      home_score = away_score = None
+                      for abbr, quarters in linescore.items():
+                          try: score = int(quarters.get("T", 0))
+                          except: score = None
+                          if game_id.endswith(abbr): home_score = score
+                          else: away_score = score
 
-              # Uncomment hidden tables
-              html = re.sub(r'<!--(.*?)-->', lambda m: m.group(1) if '<table' in m.group(1) else m.group(0), html, flags=re.DOTALL)
-              soup = BeautifulSoup(html, "lxml")
-
-              scorebox = soup.find("div", class_="scorebox")
-              if not scorebox:
-                  print(f"  No scorebox found", flush=True)
-                  return None
-              print(f"  SCOREBOX HTML: {str(scorebox)[:3000]}", flush=True)
-
-              # Get teams from performer divs
-              team_divs = scorebox.find_all("div", itemprop="performer")
-              if len(team_divs) >= 2:
-                  away_name = team_divs[0].find("a").get_text(strip=True) if team_divs[0].find("a") else ""
-                  home_name = team_divs[1].find("a").get_text(strip=True) if team_divs[1].find("a") else ""
-              else:
-                  # Fallback to strong tags
-                  strong_tags = scorebox.find_all("strong")
-                  away_name = strong_tags[0].get_text(strip=True) if len(strong_tags) > 0 else ""
-                  home_name = strong_tags[1].get_text(strip=True) if len(strong_tags) > 1 else ""
-
-              # Get scores — try every possible method
-              away_score = None
-              home_score = None
-
-              # Method 1: div class="score"
-              score_divs = scorebox.find_all("div", class_="score")
-              if len(score_divs) >= 2:
-                  try: away_score = int(score_divs[0].get_text(strip=True))
-                  except: pass
-                  try: home_score = int(score_divs[1].get_text(strip=True))
-                  except: pass
-
-              # Method 2: find all divs with only digits > 50 (scores are typically 80-140)
-              if away_score is None or home_score is None:
-                  candidate_scores = []
-                  for div in scorebox.find_all("div"):
-                      txt = div.get_text(strip=True)
-                      if txt.isdigit() and 50 <= int(txt) <= 200:
-                          candidate_scores.append(int(txt))
-                  if len(candidate_scores) >= 2:
-                      away_score = candidate_scores[0]
-                      home_score = candidate_scores[1]
-                  print(f"  Score candidates: {candidate_scores[:5]}", flush=True)
-
-              # Method 3: linescore table total column
-              if away_score is None or home_score is None:
-                  ls_table = soup.find("table", id="line_score")
-                  if ls_table:
-                      rows = ls_table.find("tbody").find_all("tr")
-                      if len(rows) >= 2:
-                          try:
-                              away_score = int(rows[0].find("td", {"data-stat": "T"}).get_text(strip=True))
-                              home_score = int(rows[1].find("td", {"data-stat": "T"}).get_text(strip=True))
-                          except: pass
-
-              print(f"  Scores: {away_score} - {home_score}", flush=True)
-
-              # Get date
-              date_str = ""
-              meta_div = scorebox.find("div", class_="scorebox_meta")
-              if meta_div:
-                  for div in meta_div.find_all("div"):
-                      txt = div.get_text(strip=True)
-                      if re.match(r'\w+,\s+\w+\s+\d+,\s+\d{4}', txt):
-                          date_str = txt
-                          break
-
-              # Get linescore
-              linescore = {}
-              ls_table = soup.find("table", id="line_score")
-              if ls_table:
-                  thead = ls_table.find("thead")
-                  tbody = ls_table.find("tbody")
-                  if thead and tbody:
-                      headers = [th.get_text(strip=True) for th in thead.find_all("th")][1:]
-                      for row in tbody.find_all("tr"):
-                          cells = row.find_all(["td","th"])
-                          if not cells: continue
-                          abbr = cells[0].get_text(strip=True)
-                          vals = [c.get_text(strip=True) for c in cells[1:]]
-                          linescore[abbr] = dict(zip(headers, vals))
-
-              # If no linescore from table, use scores directly
-              if not linescore and away_score is not None and home_score is not None:
-                  # Get team abbreviations from URL
-                  home_abbr = game_id[-3:]
-                  linescore[home_abbr] = {"T": str(home_score)}
-                  # Away abbr from team links
-                  team_links = scorebox.find_all("a", href=re.compile(r"/teams/[A-Z]+/"))
-                  if team_links:
-                      m = re.search(r"/teams/([A-Z]+)/", team_links[0]["href"])
-                      if m:
-                          away_abbr = m.group(1)
-                          linescore[away_abbr] = {"T": str(away_score)}
-
-              # Get player stats
-              teams_data = {}
-              for table in soup.find_all("table", id=re.compile(r"box-.*-game-basic")):
-                  m = re.search(r"box-(\w+)-game-basic", table["id"])
-                  if not m: continue
-                  abbr    = m.group(1).upper()
-                  players = []
-                  for row in table.find("tbody").find_all("tr"):
-                      if "thead" in row.get("class", []): continue
-                      th = row.find("th")
-                      if not th: continue
-                      name = th.get_text(strip=True)
-                      if not name or name == "Team Totals": continue
-                      pid = ""
-                      if th.find("a"):
-                          hm = re.search(r"/players/\w/(\w+)\.html", th.find("a").get("href",""))
-                          if hm: pid = hm.group(1)
-
-                      def cell(stat):
-                          td = row.find("td", {"data-stat": stat})
-                          return td.get_text(strip=True) if td else None
-
-                      dnp = cell("reason")
-                      if dnp:
-                          players.append({"player": name, "player_id": pid, "dnp": dnp})
-                          continue
-
-                      def num(stat):
-                          v = cell(stat)
-                          if v is None or v == "": return None
-                          try: return float(v) if "." in str(v) else int(v)
-                          except: return None
-
-                      players.append({
-                          "player": name, "player_id": pid,
-                          "mp": cell("mp"), "fg": num("fg"), "fga": num("fga"),
-                          "fg_pct": num("fg_pct"), "fg3": num("fg3"), "fg3a": num("fg3a"),
-                          "fg3_pct": num("fg3_pct"), "ft": num("ft"), "fta": num("fta"),
-                          "ft_pct": num("ft_pct"), "orb": num("orb"), "drb": num("drb"),
-                          "trb": num("trb"), "ast": num("ast"), "stl": num("stl"),
-                          "blk": num("blk"), "tov": num("tov"), "pf": num("pf"),
-                          "pts": num("pts"), "plus_minus": num("plus_minus"),
+                      season_games.append({
+                          "game_id": game_id, "date": date,
+                          "away": away_team, "home": home_team,
+                          "away_score": away_score, "home_score": home_score,
+                          "arena": data.get("arena", ""), "playoff": playoff,
                       })
-                  teams_data[abbr] = players
 
-              return {
-                  "game_id": game_id, "date": date_str,
-                  "away": away_name, "home": home_name,
-                  "linescore": linescore, "teams": teams_data,
-              }
+                      for abbr, team_players in teams.items():
+                          team_name = home_team if game_id.endswith(abbr) else away_team
+                          opp_name  = away_team if game_id.endswith(abbr) else home_team
+                          for p in team_players:
+                              if p.get("dnp") or not p.get("player_id"): continue
+                              pid = p["player_id"]
+                              if pid not in season_players:
+                                  season_players[pid] = {"name": p.get("player",""), "player_id": pid, "games": []}
+                              season_players[pid]["games"].append({
+                                  "season": SEASON, "game_id": game_id, "date": date,
+                                  "team": team_name, "opp": opp_name, "playoff": playoff,
+                                  "home_score": home_score, "away_score": away_score,
+                                  "mp": p.get("mp"), "pts": p.get("pts"), "reb": p.get("trb"),
+                                  "ast": p.get("ast"), "stl": p.get("stl"), "blk": p.get("blk"),
+                                  "tov": p.get("tov"), "fg": p.get("fg"), "fga": p.get("fga"),
+                                  "fg_pct": p.get("fg_pct"), "fg3": p.get("fg3"), "fg3a": p.get("fg3a"),
+                                  "fg3_pct": p.get("fg3_pct"), "ft": p.get("ft"), "fta": p.get("fta"),
+                                  "ft_pct": p.get("ft_pct"), "orb": p.get("orb"), "drb": p.get("drb"),
+                                  "pf": p.get("pf"), "plus_minus": p.get("plus_minus"),
+                              })
+                  except Exception as e:
+                      print(f"  Error {key}: {e}", flush=True)
 
-          # Load existing index
-          print(f"NBA Daily Update — Season {SEASON}", flush=True)
-          season_index = get_json(f"basketball/indexes/{SEASON}.json") or []
-          existing_ids = {g["game_id"] for g in season_index}
-          print(f"Existing games: {len(existing_ids)}", flush=True)
+          season_games.sort(key=lambda g: g["date"])
+          upload(f"basketball/indexes/{SEASON}.json", season_games)
+          print(f"Season index: {len(season_games)} games", flush=True)
 
-          # Get schedule
-          print("Fetching schedule...", flush=True)
-          schedule   = get_schedule_urls(SEASON)
-          new_games  = [g for g in schedule if g["game_id"] not in existing_ids]
-          print(f"New games to scrape: {len(new_games)}", flush=True)
-
-          if not new_games:
-              print("No new games. Done!", flush=True)
-              exit(0)
-
-          scraped        = []
-          player_updates = {}
-
-          for game in new_games:
-              gid = game["game_id"]
-              print(f"Scraping {gid}...", flush=True)
-              try:
-                  data = scrape_boxscore(game["url"], gid)
-                  if not data:
-                      continue
-
-                  linescore  = data.get("linescore", {})
-                  home_score = away_score = None
-                  for abbr, quarters in linescore.items():
-                      try: score = int(quarters.get("T", 0))
-                      except: score = None
-                      if gid.endswith(abbr): home_score = score
-                      else: away_score = score
-
-                  playoff = is_playoff(data.get("date",""))
-                  upload(f"basketball/boxscores/{SEASON}/{gid}.json", data)
-
-                  scraped.append({
-                      "game_id": gid, "date": data.get("date",""),
-                      "away": data.get("away",""), "home": data.get("home",""),
-                      "away_score": away_score, "home_score": home_score,
-                      "arena": "", "playoff": playoff,
-                  })
-
-                  # Collect player updates
-                  for abbr, players in data.get("teams", {}).items():
-                      team_name = data["home"] if gid.endswith(abbr) else data["away"]
-                      opp_name  = data["away"] if gid.endswith(abbr) else data["home"]
-                      for p in players:
-                          if p.get("dnp") or not p.get("player_id"): continue
-                          pid = p["player_id"]
-                          if pid not in player_updates:
-                              player_updates[pid] = {"name": p["player"], "player_id": pid, "games": []}
-                          player_updates[pid]["games"].append({
-                              "season": SEASON, "game_id": gid, "date": data.get("date",""),
-                              "team": team_name, "opp": opp_name, "playoff": playoff,
-                              "home_score": home_score, "away_score": away_score,
-                              "mp": p.get("mp"), "pts": p.get("pts"), "reb": p.get("trb"),
-                              "ast": p.get("ast"), "stl": p.get("stl"), "blk": p.get("blk"),
-                              "tov": p.get("tov"), "fg": p.get("fg"), "fga": p.get("fga"),
-                              "fg_pct": p.get("fg_pct"), "fg3": p.get("fg3"), "fg3a": p.get("fg3a"),
-                              "fg3_pct": p.get("fg3_pct"), "ft": p.get("ft"), "fta": p.get("fta"),
-                              "ft_pct": p.get("ft_pct"), "orb": p.get("orb"), "drb": p.get("drb"),
-                              "pf": p.get("pf"), "plus_minus": p.get("plus_minus"),
-                          })
-
-                  print(f"  Done: {data.get('away','')} @ {data.get('home','')} {away_score}-{home_score}", flush=True)
-
-              except Exception as e:
-                  import traceback
-                  print(f"  ERROR: {e}", flush=True)
-                  traceback.print_exc()
-
-          print(f"\nScraped {len(scraped)} new games", flush=True)
-
-          if not scraped:
-              print("Nothing to update. Done!", flush=True)
-              exit(0)
-
-          # Update season index
-          season_index.extend(scraped)
-          season_index.sort(key=lambda g: g["date"])
-          upload(f"basketball/indexes/{SEASON}.json", season_index)
-          print(f"Season index: {len(season_index)} games", flush=True)
-
-          # Update player files
-          for pid, new_data in player_updates.items():
+          for pid, new_data in season_players.items():
               existing = get_json(f"basketball/players/{pid}.json")
               if existing:
-                  existing_ids_set = {g["game_id"] for g in existing.get("games", [])}
+                  existing_ids = {g["game_id"] for g in existing.get("games", [])}
                   for g in new_data["games"]:
-                      if g["game_id"] not in existing_ids_set:
+                      if g["game_id"] not in existing_ids:
                           existing["games"].append(g)
                   existing["games"].sort(key=lambda g: g["date"])
                   upload(f"basketball/players/{pid}.json", existing)
               else:
                   new_data["games"].sort(key=lambda g: g["date"])
                   upload(f"basketball/players/{pid}.json", new_data)
-          print(f"Player files updated: {len(player_updates)}", flush=True)
+          print(f"Player files: {len(season_players)}", flush=True)
 
-          # Update season leaders
-          player_season_stats = {}
-          for pid in player_updates.keys():
-              try:
-                  pdata = get_json(f"basketball/players/{pid}.json")
-                  if not pdata: continue
-                  games = [g for g in pdata.get("games",[]) if g.get("season")==SEASON and not g.get("playoff")]
-                  if len(games) < 20: continue
-                  gp  = len(games)
-                  pts = sum(g.get("pts") or 0 for g in games)
-                  reb = sum(g.get("reb") or 0 for g in games)
-                  ast = sum(g.get("ast") or 0 for g in games)
-                  stl = sum(g.get("stl") or 0 for g in games)
-                  blk = sum(g.get("blk") or 0 for g in games)
-                  player_season_stats[pid] = {"name": pdata.get("name",""), "pid": pid,
-                      "gp": gp, "pts": pts, "reb": reb, "ast": ast, "stl": stl, "blk": blk}
-              except: pass
-
-          qualified = [p for p in player_season_stats.values() if p["gp"] >= 20]
+          # Season leaders
+          qualified = []
+          for pid, pdata in season_players.items():
+              games = [g for g in pdata["games"] if not g.get("playoff")]
+              if len(games) < 20: continue
+              gp  = len(games)
+              pts = sum(g.get("pts") or 0 for g in games)
+              reb = sum(g.get("reb") or 0 for g in games)
+              ast = sum(g.get("ast") or 0 for g in games)
+              stl = sum(g.get("stl") or 0 for g in games)
+              blk = sum(g.get("blk") or 0 for g in games)
+              qualified.append({"name": pdata["name"], "pid": pid,
+                  "gp": gp, "pts": pts, "reb": reb, "ast": ast, "stl": stl, "blk": blk})
 
           def leader(stat):
               best = max(qualified, key=lambda p: p[stat]/p["gp"] if p["gp"]>0 else 0, default=None)
