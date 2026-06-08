@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+  <meta charset="UTF-8">
+  <title>World Cup Player | The Sporting Almanac</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: Inter, system-ui, Arial, sans-serif; margin: 0; background: #f6f7f9; }
+    .navbar { display: flex; justify-content: center; gap: 24px; padding: 16px 0; background: #fff; border-bottom: 1px solid #ddd; font-weight: 600; }
+    .navbar a { color: #0056d6; text-decoration: none; font-size: 18px; }
+    .page { max-width: 1200px; margin: 30px auto; padding: 0 20px; }
+    .hero { background: linear-gradient(90deg, #004d00, #006400); color: white; padding: 40px; border-radius: 24px; }
+    .hero h1 { margin: 0; font-size: 38px; }
+    .tabs { display: flex; gap: 10px; margin-top: 20px; }
+    .tab { padding: 10px 16px; background: #eee; border-radius: 10px; cursor: pointer; user-select: none; }
+    .tab.active { background: #006400; color: #fff; }
+    .controls { margin-top: 20px; }
+    .controls select { padding: 10px; border-radius: 10px; border: 1px solid #ccc; background: #fff; font-size: 16px; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-top: 20px; }
+    .stat { background: #fff; padding: 18px; border-radius: 14px; text-align: center; }
+    .stat h3 { margin: 0 0 6px; font-size: 30px; }
+    .stat small { display: block; margin-top: 6px; color: #666; font-size: 13px; }
+    .table-wrap { margin-top: 30px; background: #fff; border-radius: 14px; overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: center; }
+    th { background: #f1f4f8; }
+    tbody tr:nth-child(even) { background: #f4fbf4; }
+    td a { color: #004d00; text-decoration: none; font-weight: 600; }
+    td a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="cricket-wc.html">World Cup</a>
+</div>
+<div class="page">
+  <div class="hero">
+    <h1 id="playerName">Loading…</h1>
+  </div>
+  <div class="tabs">
+    <div class="tab active" id="batTab">Batting</div>
+    <div class="tab" id="bowlTab">Bowling</div>
+  </div>
+  <div class="controls">
+    <select id="oppFilter"><option value="">All Opponents</option></select>
+  </div>
+  <div class="stats" id="careerStats"></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr id="tableHead"></tr></thead>
+      <tbody id="gamesTable"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(async function () {
+  const player = new URLSearchParams(location.search).get("player") || "";
+  document.getElementById("playerName").textContent = player || "Player not found";
+  document.title = `${player} | World Cup | The Sporting Almanac`;
+
+  if (!player) return;
+
+  const TOURNAMENTS = [
+    { year: "1975", file: "wc_1975" },
+    { year: "1979", file: "wc_1979" },
+    { year: "1983", file: "wc_1983" },
+    { year: "1987", file: "wc_1987_1988" },
+    { year: "1992", file: "wc_1991_1992" },
+    { year: "1996", file: "wc_1995_1996" },
+    { year: "1999", file: "wc_1999" },
+    { year: "2003", file: "wc_2002_2003" },
+    { year: "2007", file: "wc_2006_2007" },
+    { year: "2011", file: "wc_2010_2011" },
+    { year: "2015", file: "wc_2014_2015" },
+    { year: "2019", file: "wc_2019" },
+    { year: "2023", file: "wc_2023" },
+  ];
+
+  const basePath = "data/cricket/world-cup/scorecards/";
+  let batting = [], bowling = [];
+  const opponents = new Set();
+
+  const results = await Promise.all(
+    TOURNAMENTS.map(t =>
+      fetch(`${basePath}${t.file}.json`)
+        .then(r => r.json())
+        .then(data => ({ t, matches: data.matches || [] }))
+        .catch(() => ({ t, matches: [] }))
+    )
+  );
+
+  results.forEach(({ t, matches }) => {
+    matches.forEach(m => {
+      const sc = m.scorecard;
+      if (!sc || !sc.innings) return;
+
+      sc.innings.forEach((inn, innIdx) => {
+        const battingTeam = inn.team || "";
+        // Opponent is the other innings' team
+        const oppInning = sc.innings.find((x, i) => i !== innIdx);
+        const opp = oppInning?.team || "";
+        if (opp) opponents.add(opp);
+
+        // Batting
+        const batEntry = inn.batting.find(b => b.batsman === player);
+        if (batEntry) {
+          batting.push({
+            year:     t.year,
+            file:     t.file,
+            code:     m.match_code,
+            date:     m.date,
+            opp,
+            runs:     batEntry.runs || 0,
+            balls:    batEntry.balls_faced || 0,
+            sr:       batEntry.strike_rate || 0,
+            fours:    batEntry.fours || 0,
+            sixes:    batEntry.sixes || 0,
+            dismissal: batEntry.dismissal || "not out",
+          });
+        }
+
+        // Bowling
+        const bowlEntry = inn.bowling.find(b => b.bowler === player);
+        if (bowlEntry) {
+          bowling.push({
+            year:    t.year,
+            file:    t.file,
+            code:    m.match_code,
+            date:    m.date,
+            opp,
+            wkts:    bowlEntry.wickets || 0,
+            runs:    bowlEntry.runs || 0,
+            overs:   bowlEntry.overs || 0,
+            econ:    bowlEntry.economy || 0,
+            maidens: bowlEntry.maidens || 0,
+          });
+        }
+      });
+    });
+  });
+
+  // Populate opponent filter
+  const filter = document.getElementById("oppFilter");
+  [...opponents].sort().forEach(o => {
+    const opt = document.createElement("option");
+    opt.value = o; opt.textContent = o;
+    filter.appendChild(opt);
+  });
+
+  let mode = "bat";
+
+  function matchLink(file, code, label) {
+    return `<a href="cricket-wc-match.html?file=${encodeURIComponent(file)}&code=${encodeURIComponent(code)}">${label}</a>`;
+  }
+
+  function render() {
+    const opp = filter.value;
+
+    if (mode === "bat") {
+      const data = batting.filter(g => !opp || g.opp === opp);
+      const totalRuns  = data.reduce((a, b) => a + b.runs, 0);
+      const totalBalls = data.reduce((a, b) => a + b.balls, 0);
+      const sr = totalBalls ? (totalRuns / totalBalls * 100).toFixed(1) : "0.0";
+      const avg = data.filter(g => g.dismissal !== "not out").length
+        ? (totalRuns / data.filter(g => g.dismissal !== "not out").length).toFixed(2)
+        : totalRuns + "*";
+      const hs = data.reduce((max, g) => g.runs > max.runs ? g : max, { runs: 0, opp: "" });
+      const hundreds = data.filter(g => g.runs >= 100).length;
+      const fifties  = data.filter(g => g.runs >= 50 && g.runs < 100).length;
+
+      document.getElementById("careerStats").innerHTML = `
+        <div class="stat"><h3>${data.length}</h3><span>Innings</span></div>
+        <div class="stat"><h3>${totalRuns}</h3><span>Runs</span></div>
+        <div class="stat"><h3>${avg}</h3><span>Average</span></div>
+        <div class="stat"><h3>${sr}</h3><span>Strike Rate</span></div>
+        <div class="stat"><h3>${hs.runs}</h3><span>Highest Score</span><small>vs ${hs.opp}</small></div>
+        <div class="stat"><h3>${hundreds}</h3><span>100s</span></div>
+        <div class="stat"><h3>${fifties}</h3><span>50s</span></div>
+      `;
+
+      document.getElementById("tableHead").innerHTML = `
+        <th>Year</th><th>Date</th><th>Opponent</th>
+        <th>Runs</th><th>Balls</th><th>4s</th><th>6s</th><th>SR</th><th>Dismissal</th><th></th>
+      `;
+
+      document.getElementById("gamesTable").innerHTML = data.map(g => `
+        <tr>
+          <td>${g.year}</td>
+          <td>${formatDate(g.date)}</td>
+          <td>${g.opp}</td>
+          <td><strong>${g.runs}</strong></td>
+          <td>${g.balls}</td>
+          <td>${g.fours}</td>
+          <td>${g.sixes}</td>
+          <td>${Number(g.sr).toFixed(2)}</td>
+          <td style="font-size:13px;color:#666">${g.dismissal}</td>
+          <td>${matchLink(g.file, g.code, "→")}</td>
+        </tr>`).join("");
+
+    } else {
+      const data = bowling.filter(g => !opp || g.opp === opp);
+      const totalWkts = data.reduce((a, b) => a + b.wkts, 0);
+      const totalRuns = data.reduce((a, b) => a + b.runs, 0);
+      const totalOvers = data.reduce((a, b) => a + b.overs, 0);
+      const econ = totalOvers ? (totalRuns / totalOvers).toFixed(2) : "0.00";
+      const avg  = totalWkts ? (totalRuns / totalWkts).toFixed(2) : "—";
+      const best = data.reduce((b, g) => g.wkts > b.wkts || (g.wkts === b.wkts && g.runs < b.runs) ? g : b, { wkts: 0, runs: 999 });
+
+      document.getElementById("careerStats").innerHTML = `
+        <div class="stat"><h3>${data.length}</h3><span>Innings</span></div>
+        <div class="stat"><h3>${totalWkts}</h3><span>Wickets</span></div>
+        <div class="stat"><h3>${avg}</h3><span>Average</span></div>
+        <div class="stat"><h3>${econ}</h3><span>Economy</span></div>
+        <div class="stat"><h3>${best.wkts}/${best.runs}</h3><span>Best Figures</span><small>vs ${best.opp || ""}</small></div>
+      `;
+
+      document.getElementById("tableHead").innerHTML = `
+        <th>Year</th><th>Date</th><th>Opponent</th>
+        <th>Wkts</th><th>Runs</th><th>Overs</th><th>Maidens</th><th>Econ</th><th></th>
+      `;
+
+      document.getElementById("gamesTable").innerHTML = data.map(g => `
+        <tr>
+          <td>${g.year}</td>
+          <td>${formatDate(g.date)}</td>
+          <td>${g.opp}</td>
+          <td><strong>${g.wkts}</strong></td>
+          <td>${g.runs}</td>
+          <td>${g.overs}</td>
+          <td>${g.maidens}</td>
+          <td>${Number(g.econ).toFixed(2)}</td>
+          <td>${matchLink(g.file, g.code, "→")}</td>
+        </tr>`).join("");
+    }
+  }
+
+  document.getElementById("batTab").onclick = () => {
+    mode = "bat";
+    document.getElementById("batTab").classList.add("active");
+    document.getElementById("bowlTab").classList.remove("active");
+    render();
+  };
+  document.getElementById("bowlTab").onclick = () => {
+    mode = "bowl";
+    document.getElementById("bowlTab").classList.add("active");
+    document.getElementById("batTab").classList.remove("active");
+    render();
+  };
+  filter.onchange = render;
+  render();
+
+  function formatDate(d) {
+    if (!d) return "—";
+    const [day, mon, yr] = d.split("/");
+    const dt = new Date(`${yr}-${mon}-${day}`);
+    return isNaN(dt) ? d : dt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  }
+})();
+</script>
+</body>
+</html>
