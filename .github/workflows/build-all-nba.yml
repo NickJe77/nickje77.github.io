@@ -136,16 +136,22 @@ jobs:
 
                       # Assign each player to their best team
                       # Sort each team's candidates by that team's votes desc, take top 5
-                      team1 = sorted([p for p in all_players if p["v1"] > p["v2"] and p["v1"] > p["v3"] and p["v1"] > 0],
-                                     key=lambda x: x["v1"], reverse=True)[:5]
-                      team1_ids = {p["player_id"] for p in team1}
+                      # Assign to best team, fill each team to 5 in order
+                      assigned = {}
+                      remaining = list(all_players)
 
-                      team2 = sorted([p for p in all_players if p["player_id"] not in team1_ids and p["v2"] >= p["v3"] and p["v2"] > 0],
-                                     key=lambda x: x["v2"], reverse=True)[:5]
-                      team2_ids = team1_ids | {p["player_id"] for p in team2}
+                      for team_num, vote_key in [(1, "v1"), (2, "v2"), (3, "v3")]:
+                          candidates = sorted(
+                              [p for p in remaining if p[vote_key] > 0],
+                              key=lambda x: x[vote_key], reverse=True
+                          )[:5]
+                          assigned[team_num] = candidates
+                          assigned_ids = {p["player_id"] for p in candidates}
+                          remaining = [p for p in remaining if p["player_id"] not in assigned_ids]
 
-                      team3 = sorted([p for p in all_players if p["player_id"] not in team2_ids and p["v3"] > 0],
-                                     key=lambda x: x["v3"], reverse=True)[:5]
+                      team1 = assigned.get(1, [])
+                      team2 = assigned.get(2, [])
+                      team3 = assigned.get(3, [])
 
                       def clean(players):
                           return [{"player": p["player"], "player_id": p["player_id"], "pos": p["pos"]} for p in players]
