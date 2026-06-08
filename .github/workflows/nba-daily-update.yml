@@ -83,25 +83,28 @@ jobs:
               time.sleep(random.uniform(4, 7))
               resp = requests.get(url, headers=HEADERS, timeout=30)
               resp.raise_for_status()
-              soup = BeautifulSoup(resp.text, "lxml")
+              html = resp.text
 
               # Uncomment hidden tables
-              for comment in soup.find_all(string=lambda t: isinstance(t, Comment)):
-                  if "<table" in str(comment):
-                      soup_fragment = BeautifulSoup(str(comment), "lxml")
-                      comment.replace_with(soup_fragment)
+              html = re.sub(r"<!--(.*?)-->", lambda m: m.group(1) if "<table" in m.group(1) else m.group(0), html, flags=re.DOTALL)
+              soup = BeautifulSoup(html, "lxml")
 
               scorebox = soup.find("div", class_="scorebox")
               if not scorebox:
+                  print(f"  No scorebox found, page title: {soup.title.get_text() if soup.title else 'none'}", flush=True)
                   return None
 
               # Get teams
               team_divs = scorebox.find_all("div", itemprop="performer")
               if len(team_divs) < 2:
-                  return None
+                  # Try alternative structure
+                  team_divs = scorebox.find_all("strong")
+                  print(f"  Using alternative team detection, found {len(team_divs)} strong tags", flush=True)
+                  if len(team_divs) < 2:
+                      return None
 
-              away_name = team_divs[0].find("a").get_text(strip=True) if team_divs[0].find("a") else ""
-              home_name = team_divs[1].find("a").get_text(strip=True) if team_divs[1].find("a") else ""
+              away_name = team_divs[0].find("a").get_text(strip=True) if team_divs[0].find("a") else team_divs[0].get_text(strip=True)
+              home_name = team_divs[1].find("a").get_text(strip=True) if team_divs[1].find("a") else team_divs[1].get_text(strip=True)
 
               # Get date
               date_div = scorebox.find("div", class_="scorebox_meta")
