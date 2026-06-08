@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Ligue 1 Team | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#eef1f5;color:#111;}
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:white;border-bottom:1px solid #ddd;flex-wrap:wrap;}
+.navbar a{text-decoration:none;font-weight:800;color:#0056d6;}
+.hero{padding:42px 20px;text-align:center;color:white;}
+.hero h1{margin:0;font-size:52px;font-weight:900;line-height:1;}
+.hero p{margin-top:12px;font-size:16px;font-weight:700;opacity:.95;}
+.container{max-width:1450px;margin:24px auto;padding:0 16px 50px;}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:24px;}
+.stat-card{background:white;border-radius:18px;padding:22px;box-shadow:0 2px 8px rgba(0,0,0,.05);text-align:center;}
+.stat-value{font-size:36px;font-weight:900;line-height:1;margin-bottom:8px;}
+.stat-label{font-size:11px;font-weight:900;letter-spacing:.6px;text-transform:uppercase;color:#666;}
+.section{background:white;border-radius:20px;padding:22px;margin-bottom:22px;box-shadow:0 2px 8px rgba(0,0,0,.05);}
+.section-title{font-size:26px;font-weight:900;margin-bottom:18px;}
+.filters{margin-bottom:18px;}
+select{padding:12px 14px;border-radius:10px;border:1px solid #ccc;font-size:14px;font-weight:800;background:white;min-width:260px;}
+.tables-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;margin-bottom:22px;}
+table{width:100%;border-collapse:collapse;}
+th{background:#f0f4ff;padding:12px;font-size:12px;font-weight:900;text-transform:uppercase;text-align:left;}
+td{padding:12px;border-bottom:1px solid #ececec;font-size:14px;font-weight:700;}
+tr:nth-child(even){background:#f8faff;}
+.player-link{text-decoration:none;font-weight:800;color:#0056d6;}
+.player-link:hover{text-decoration:underline;}
+.loading,.error{padding:120px 20px;text-align:center;font-size:34px;font-weight:900;}
+.error{color:#d90429;}
+.games-table tr{transition:.15s;cursor:pointer;}
+.games-table tr:hover{background:#dfefff !important;}
+.games-table td{font-size:15px;padding:16px 12px;}
+.games-table th{font-size:13px;padding:14px 12px;}
+.result-win{font-weight:900;color:#008000;font-size:18px;}
+.result-loss{font-weight:900;color:#d90429;font-size:18px;}
+.result-draw{font-weight:900;color:#d68910;font-size:18px;}
+@media(max-width:900px){
+  .hero h1{font-size:36px;}
+  .section-title{font-size:22px;}
+  .stat-value{font-size:26px;}
+  .tables-grid{grid-template-columns:1fr;}
+  table{display:block;overflow-x:auto;}
+  .games-table{display:block;width:100%;}
+  .games-table thead{display:none;}
+  .games-table tbody{display:block;width:100%;}
+  .games-table tr{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:12px;border-bottom:2px solid #ddd;background:white !important;}
+  .games-table tr:nth-child(even){background:#f8faff !important;}
+  .games-table td{display:block;border:none;padding:4px 8px;font-size:14px;}
+  .games-table td:nth-child(4){font-size:22px;text-align:right;}
+}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="/">Home</a>
+  <a href="/epl.html">EPL</a>
+  <a href="/ligue1.html">Ligue 1</a>
+  <a href="/ligue1-teams.html">Teams</a>
+  <a href="/ligue1-players.html">Players</a>
+  <a href="/nba.html">NBA</a>
+  <a href="/afl.html">AFL</a>
+</div>
+
+<div id="page">
+  <div class="loading">Loading Team...</div>
+</div>
+
+<script>
+
+const TEAM_COLOURS = {
+  "AJ Auxerre":               "linear-gradient(135deg,#001E62,#FFFFFF)",
+  "Ajaccio":                  "linear-gradient(135deg,#E30613,#FFFFFF)",
+  "Angers SCO":               "linear-gradient(135deg,#000000,#FFFFFF)",
+  "AS Monaco":                "linear-gradient(135deg,#E4002B,#FFFFFF)",
+  "AS Saint-Étienne":         "linear-gradient(135deg,#006633,#FFFFFF)",
+  "Bastia":                   "linear-gradient(135deg,#003087,#FFFFFF)",
+  "Bordeaux":                 "linear-gradient(135deg,#002B5C,#C8A84B)",
+  "Brest":                    "linear-gradient(135deg,#E30613,#FFFFFF)",
+  "Caen":                     "linear-gradient(135deg,#003087,#FFFFFF)",
+  "Clermont Foot":            "linear-gradient(135deg,#E4002B,#003087)",
+  "Dijon FCO":                "linear-gradient(135deg,#CC0000,#000000)",
+  "EA Guingamp":              "linear-gradient(135deg,#CC0000,#000000)",
+  "Evian Thonon Gaillard":    "linear-gradient(135deg,#004A97,#FFFFFF)",
+  "FC Lorient":               "linear-gradient(135deg,#F7941D,#000000)",
+  "FC Metz":                  "linear-gradient(135deg,#8B0000,#000000)",
+  "FC Nantes":                "linear-gradient(135deg,#F7C300,#006437)",
+  "FC Sochaux-Montbéliard":   "linear-gradient(135deg,#FFD700,#003DA5)",
+  "Grenoble Foot 38":         "linear-gradient(135deg,#003DA5,#FFFFFF)",
+  "Istres":                   "linear-gradient(135deg,#003DA5,#CC0000)",
+  "Le Havre AC":              "linear-gradient(135deg,#003DA5,#FFFFFF)",
+  "Lens":                     "linear-gradient(135deg,#CC0000,#F7C300)",
+  "Lille OSC":                "linear-gradient(135deg,#CC0000,#003DA5)",
+  "Lorient":                  "linear-gradient(135deg,#F7941D,#000000)",
+  "Lyon":                     "linear-gradient(135deg,#003DA5,#CC0000)",
+  "Marseille":                "linear-gradient(135deg,#009BDE,#FFFFFF)",
+  "Metz":                     "linear-gradient(135deg,#8B0000,#000000)",
+  "Monaco":                   "linear-gradient(135deg,#E4002B,#FFFFFF)",
+  "Montpellier HSC":          "linear-gradient(135deg,#003DA5,#F7941D)",
+  "Nancy":                    "linear-gradient(135deg,#CC0000,#FFFFFF)",
+  "Nantes":                   "linear-gradient(135deg,#F7C300,#006437)",
+  "Nice":                     "linear-gradient(135deg,#CC0000,#000000)",
+  "Nîmes Olympique":          "linear-gradient(135deg,#CC0000,#000000)",
+  "OGC Nice":                 "linear-gradient(135deg,#CC0000,#000000)",
+  "Olympique Lyonnais":       "linear-gradient(135deg,#003DA5,#CC0000)",
+  "Olympique de Marseille":   "linear-gradient(135deg,#009BDE,#FFFFFF)",
+  "Paris Saint-Germain":      "linear-gradient(135deg,#003087,#CC0000)",
+  "PSG":                      "linear-gradient(135deg,#003087,#CC0000)",
+  "Reims":                    "linear-gradient(135deg,#CC0000,#FFFFFF)",
+  "Rennes":                   "linear-gradient(135deg,#CC0000,#000000)",
+  "Stade Brestois 29":        "linear-gradient(135deg,#E30613,#FFFFFF)",
+  "Stade de Reims":           "linear-gradient(135deg,#CC0000,#FFFFFF)",
+  "Stade Malherbe Caen":      "linear-gradient(135deg,#003087,#CC0000)",
+  "Stade Rennais FC":         "linear-gradient(135deg,#CC0000,#000000)",
+  "Strasbourg":               "linear-gradient(135deg,#003DA5,#FFFFFF)",
+  "RC Lens":                  "linear-gradient(135deg,#CC0000,#F7C300)",
+  "RC Strasbourg Alsace":     "linear-gradient(135deg,#003DA5,#FFFFFF)",
+  "Toulouse FC":              "linear-gradient(135deg,#5B2D8E,#FFFFFF)",
+  "Troyes":                   "linear-gradient(135deg,#003DA5,#FFFFFF)",
+  "Valenciennes FC":          "linear-gradient(135deg,#CC0000,#000000)",
+  "Valenciennes":             "linear-gradient(135deg,#CC0000,#000000)",
+};
+
+function slugify(str){
+  return (str || "")
+    .toLowerCase()
+    .replace(/&/g,"and")
+    .replace(/[^a-z0-9]+/g,"-")
+    .replace(/^-|-$/g,"");
+}
+
+function playerSlug(p){
+  const name      = slugify(p.name || '');
+  const firstTeam = slugify((p.teams && p.teams[0]) || '');
+  return firstTeam ? `${name}--${firstTeam}` : name;
+}
+
+const params   = new URLSearchParams(window.location.search);
+const teamName = params.get("team") || "";
+const page     = document.getElementById("page");
+
+async function loadTeam(){
+  try{
+
+    const [playersRes, teamStatsRes] = await Promise.all([
+      fetch("/data/ligue1/players.json"),
+      fetch("/data/ligue1/team-stats.json")
+    ]);
+
+    if(!playersRes.ok)   throw new Error("players.json failed");
+    if(!teamStatsRes.ok) throw new Error("team-stats.json failed");
+
+    const players      = await playersRes.json();
+    const allTeamStats = await teamStatsRes.json();
+
+    const teamSeasonStats = allTeamStats.filter(s => s.team === teamName);
+
+    if(!teamSeasonStats.length){
+      page.innerHTML = `<div class="error">Team Not Found</div>`;
+      return;
+    }
+
+    const seasonIds = [...new Set(teamSeasonStats.map(s => s.season))].sort();
+
+    const seasonResults = await Promise.all(seasonIds.map(async seasonId => {
+      try{
+        const r = await fetch(`/data/ligue1/seasons/${seasonId}.json`);
+        if(!r.ok) return [];
+        const data = await r.json();
+        const games = Array.isArray(data) ? data : (data.games || []);
+        return games
+          .filter(g => g.home === teamName || g.away === teamName)
+          .map(g => ({ ...g, season: seasonId }));
+      }catch(e){ return []; }
+    }));
+
+    const allGames = seasonResults.flat();
+
+    const totals = teamSeasonStats.reduce((acc, s) => {
+      acc.played        += s.played        || 0;
+      acc.wins          += s.wins          || 0;
+      acc.draws         += s.draws         || 0;
+      acc.losses        += s.losses        || 0;
+      acc.goals_for     += s.goals_for     || 0;
+      acc.goals_against += s.goals_against || 0;
+      acc.yellow_cards  += s.yellow_cards  || 0;
+      acc.red_cards     += s.red_cards     || 0;
+      return acc;
+    }, { played:0, wins:0, draws:0, losses:0, goals_for:0, goals_against:0, yellow_cards:0, red_cards:0 });
+
+    const teamPlayers = players
+      .filter(p => p.teams && p.teams.includes(teamName))
+      .map(p => {
+        const goals   = (p.season_stats || []).filter(s => s.team === teamName).reduce((sum,s) => sum+(s.goals||0), 0);
+        const pens    = (p.season_stats || []).filter(s => s.team === teamName).reduce((sum,s) => sum+(s.penalties||0), 0);
+        const yellows = (p.season_stats || []).filter(s => s.team === teamName).reduce((sum,s) => sum+(s.yellow_cards||0), 0);
+        const reds    = (p.season_stats || []).filter(s => s.team === teamName).reduce((sum,s) => sum+(s.red_cards||0), 0);
+        return { name: p.name, teams: p.teams, goals, pens, yellows, reds };
+      });
+
+    const topScorers = [...teamPlayers].sort((a,b) => b.goals - a.goals).filter(p => p.goals > 0).slice(0,10);
+    const topYellows = [...teamPlayers].sort((a,b) => b.yellows - a.yellows).filter(p => p.yellows > 0).slice(0,10);
+    const topReds    = [...teamPlayers].sort((a,b) => b.reds - a.reds).filter(p => p.reds > 0).slice(0,10);
+
+    const opponentSet = new Set();
+    allGames.forEach(g => opponentSet.add(g.home === teamName ? g.away : g.home));
+    const opponents = [...opponentSet].sort();
+
+    function buildGameStats(opponent){
+      const filtered = opponent
+        ? allGames.filter(g => (g.home === teamName ? g.away : g.home) === opponent)
+        : allGames;
+      let wins=0, draws=0, losses=0, goals=0;
+      filtered.forEach(g => {
+        const tf = g.home === teamName ? Number(g.score_home||0) : Number(g.score_away||0);
+        const of = g.home === teamName ? Number(g.score_away||0) : Number(g.score_home||0);
+        goals += tf;
+        if(tf > of) wins++;
+        else if(tf < of) losses++;
+        else draws++;
+      });
+      return { games: filtered.length, wins, draws, losses, goals, filtered };
+    }
+
+    function gameRows(games){
+      if(!games.length) return `<tr><td colspan="4">No games found</td></tr>`;
+      return [...games].reverse().slice(0,100).map(g => {
+        const isHome = g.home === teamName;
+        const tf  = isHome ? Number(g.score_home||0) : Number(g.score_away||0);
+        const of  = isHome ? Number(g.score_away||0) : Number(g.score_home||0);
+        const opp = isHome ? g.away : g.home;
+        const res = tf > of ? 'W' : tf < of ? 'L' : 'D';
+        const cls = tf > of ? 'result-win' : tf < of ? 'result-loss' : 'result-draw';
+        return `<tr onclick="window.location.href='/ligue1-game.html?match=${encodeURIComponent(g.match_id)}&season=${encodeURIComponent(g.season)}'">
+          <td>${g.season}</td>
+          <td>${opp}</td>
+          <td>${tf}-${of}</td>
+          <td class="${cls}">${res}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    function playerRows(list, valueKey){
+      if(!list.length) return `<tr><td colspan="2">No data</td></tr>`;
+      return list.map(p => `
+        <tr>
+          <td><a class="player-link" href="/ligue1-player.html?player=${encodeURIComponent(playerSlug(p))}">${p.name}</a></td>
+          <td>${p[valueKey]}</td>
+        </tr>`).join('');
+    }
+
+    const overall      = buildGameStats(null);
+    const heroGradient = TEAM_COLOURS[teamName] || 'linear-gradient(135deg,#001489,#0033cc)';
+
+    page.innerHTML = `
+      <div class="hero" style="background:${heroGradient};">
+        <h1>${teamName}</h1>
+        <p>Ligue 1 Club Profile</p>
+      </div>
+
+      <div class="container">
+
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-value">${totals.played}</div><div class="stat-label">Played</div></div>
+          <div class="stat-card"><div class="stat-value">${totals.wins}</div><div class="stat-label">Wins</div></div>
+          <div class="stat-card"><div class="stat-value">${totals.draws}</div><div class="stat-label">Draws</div></div>
+          <div class="stat-card"><div class="stat-value">${totals.losses}</div><div class="stat-label">Losses</div></div>
+          <div class="stat-card"><div class="stat-value">${totals.goals_for}</div><div class="stat-label">Goals For</div></div>
+          <div class="stat-card"><div class="stat-value">${totals.goals_against}</div><div class="stat-label">Goals Against</div></div>
+          <div class="stat-card"><div class="stat-value">${totals.yellow_cards}</div><div class="stat-label">Yellow Cards</div></div>
+          <div class="stat-card"><div class="stat-value">${totals.red_cards}</div><div class="stat-label">Red Cards</div></div>
+        </div>
+
+        <div class="tables-grid">
+          <div class="section">
+            <div class="section-title">Top Scorers</div>
+            <table>
+              <thead><tr><th>Player</th><th>Goals</th><th>Penalties</th></tr></thead>
+              <tbody>${topScorers.map(p => `
+                <tr>
+                  <td><a class="player-link" href="/ligue1-player.html?player=${encodeURIComponent(playerSlug(p))}">${p.name}</a></td>
+                  <td>${p.goals}</td>
+                  <td>${p.pens}</td>
+                </tr>`).join('') || '<tr><td colspan="3">No data</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+          <div class="section">
+            <div class="section-title">Yellow Card Leaders</div>
+            <table>
+              <thead><tr><th>Player</th><th>Yellow</th></tr></thead>
+              <tbody>${playerRows(topYellows, 'yellows')}</tbody>
+            </table>
+          </div>
+          <div class="section">
+            <div class="section-title">Red Card Leaders</div>
+            <table>
+              <thead><tr><th>Player</th><th>Red</th></tr></thead>
+              <tbody>${playerRows(topReds, 'reds')}</tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Results by Opponent</div>
+          <div class="filters">
+            <select id="opponentSelect">
+              <option value="">All Opponents</option>
+              ${opponents.map(o => `<option value="${o}">${o}</option>`).join('')}
+            </select>
+          </div>
+          <div class="stats-grid" style="margin-top:20px;">
+            <div class="stat-card"><div class="stat-value" id="oGames">${overall.games}</div><div class="stat-label">Games</div></div>
+            <div class="stat-card"><div class="stat-value" id="oWins">${overall.wins}</div><div class="stat-label">Wins</div></div>
+            <div class="stat-card"><div class="stat-value" id="oDraws">${overall.draws}</div><div class="stat-label">Draws</div></div>
+            <div class="stat-card"><div class="stat-value" id="oLosses">${overall.losses}</div><div class="stat-label">Losses</div></div>
+            <div class="stat-card"><div class="stat-value" id="oGoals">${overall.goals}</div><div class="stat-label">Goals</div></div>
+          </div>
+          <table class="games-table">
+            <thead><tr><th>Season</th><th>Opponent</th><th>Score</th><th>Result</th></tr></thead>
+            <tbody id="gamesBody">${gameRows(overall.filtered)}</tbody>
+          </table>
+        </div>
+
+      </div>
+    `;
+
+    document.getElementById("opponentSelect").addEventListener("change", e => {
+      const opp   = e.target.value;
+      const stats = buildGameStats(opp || null);
+      document.getElementById("oGames").textContent  = stats.games;
+      document.getElementById("oWins").textContent   = stats.wins;
+      document.getElementById("oDraws").textContent  = stats.draws;
+      document.getElementById("oLosses").textContent = stats.losses;
+      document.getElementById("oGoals").textContent  = stats.goals;
+      document.getElementById("gamesBody").innerHTML = gameRows(stats.filtered);
+    });
+
+  }catch(err){
+    console.error(err);
+    page.innerHTML = `<div class="error">Failed to load team data</div>`;
+  }
+}
+
+loadTeam();
+
+</script>
+</body>
+</html>
