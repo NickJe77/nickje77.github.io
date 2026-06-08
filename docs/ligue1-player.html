@@ -1,0 +1,353 @@
+name: NBA Daily Update
+on:
+  schedule:
+    - cron: '0 10 * * *'  # 10am UTC = 8pm AEST
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install packages
+        run: pip install nba_api boto3
+
+      - name: Run daily NBA update
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          python << 'PYEOF'
+          import boto3
+          import json
+          import os
+          import time
+          import re
+          from datetime import datetime, timedelta
+          from botocore.config import Config
+          from botocore.exceptions import ClientError
+
+          import pandas as pd
+          from nba_api.stats.endpoints import leaguegamelog, boxscoretraditionalv2
+
+          r2 = boto3.client(
+              "s3",
+              endpoint_url=os.environ["R2_ENDPOINT"],
+              aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+              config=Config(signature_version="s3v4"),
+              region_name="auto",
+          )
+
+          BUCKET = "sporting-almanac-data"
+          now    = datetime.utcnow()
+          SEASON = now.year if now.month >= 10 else now.year
+          SEASON_STR = f"{SEASON-1}-{str(SEASON)[2:]}"  # e.g. "2025-26"
+
+          def upload(key, data):
+              r2.put_object(
+                  Bucket=BUCKET,
+                  Key=key,
+                  Body=json.dumps(data, ensure_ascii=True).encode("utf-8"),
+                  ContentType="application/json",
+              )
+
+          def get_json(key):
+              try:
+                  obj = r2.get_object(Bucket=BUCKET, Key=key)
+                  return json.loads(obj["Body"].read().decode("utf-8"))
+              except ClientError as e:
+                  if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
+                      return None
+                  raise
+
+          def is_playoff(date_str):
+              try:
+                  d = datetime.strptime(date_str, "%Y-%m-%d")
+                  if d.month in (5, 6): return True
+                  if d.month == 4 and d.day >= 16: return True
+                  return False
+              except:
+                  return False
+
+          print(f"NBA Daily Update — Season {SEASON_STR}", flush=True)
+
+          # Load existing season index
+          season_index = get_json(f"basketball/indexes/{SEASON}.json") or []
+          existing_ids = {g["game_id"] for g in season_index}
+          print(f"Existing games in index: {len(existing_ids)}", flush=True)
+
+          # Get all games for current season from NBA API
+          print("Fetching game log...", flush=True)
+          time.sleep(1)
+          gamelog = leaguegamelog.LeagueGameLog(
+              season=SEASON_STR,
+              season_type_all_star="Regular Season",
+              timeout=60
+          )
+          reg_games = gamelog.get_data_frames()[0]
+
+          time.sleep(1)
+          playoff_log = leaguegamelog.LeagueGameLog(
+              season=SEASON_STR,
+              season_type_all_star="Playoffs",
+              timeout=60
+          )
+          playoff_games = playoff_log.get_data_frames()[0]
+
+          all_games_df = pd.concat([reg_games, playoff_games]) if len(playoff_games) > 0 else reg_games
+
+          all_games_df = pd.concat([reg_games, playoff_games]) if len(playoff_games) > 0 else reg_games
+
+          # Get unique game IDs
+          all_game_ids = all_games_df['GAME_ID'].unique().tolist()
+          print(f"Total games from NBA API: {len(all_game_ids)}", flush=True)
+
+          # Find new games
+          # NBA game IDs are like 0022500001, BBRef uses different format
+          # We need to map them - NBA ID is stored in our index
+          new_game_ids = [gid for gid in all_game_ids if gid not in existing_ids]
+          print(f"New games to process: {len(new_game_ids)}", flush=True)
+
+          if not new_game_ids:
+              print("No new games. Done!", flush=True)
+              exit(0)
+
+          scraped      = []
+          player_updates = {}
+
+          NBA_TEAMS = {
+              1610612737: "Atlanta Hawks", 1610612738: "Boston Celtics",
+              1610612751: "Brooklyn Nets", 1610612766: "Charlotte Hornets",
+              1610612741: "Chicago Bulls", 1610612739: "Cleveland Cavaliers",
+              1610612742: "Dallas Mavericks", 1610612743: "Denver Nuggets",
+              1610612765: "Detroit Pistons", 1610612744: "Golden State Warriors",
+              1610612745: "Houston Rockets", 1610612754: "Indiana Pacers",
+              1610612746: "LA Clippers", 1610612747: "Los Angeles Lakers",
+              1610612763: "Memphis Grizzlies", 1610612748: "Miami Heat",
+              1610612749: "Milwaukee Bucks", 1610612750: "Minnesota Timberwolves",
+              1610612740: "New Orleans Pelicans", 1610612752: "New York Knicks",
+              1610612760: "Oklahoma City Thunder", 1610612753: "Orlando Magic",
+              1610612755: "Philadelphia 76ers", 1610612756: "Phoenix Suns",
+              1610612757: "Portland Trail Blazers", 1610612758: "Sacramento Kings",
+              1610612759: "San Antonio Spurs", 1610612761: "Toronto Raptors",
+              1610612762: "Utah Jazz", 1610612764: "Washington Wizards",
+          }
+
+          for game_id in new_game_ids:
+              print(f"Processing {game_id}...", flush=True)
+              time.sleep(2)
+              try:
+                  box = boxscoretraditionalv2.BoxScoreTraditionalV2(
+                      game_id=game_id,
+                      timeout=60
+                  )
+                  dfs = box.get_data_frames()
+                  player_df = dfs[0]  # Player stats
+                  team_df   = dfs[1]  # Team stats
+                  summary   = dfs[4] if len(dfs) > 4 else None  # Game summary
+
+                  if player_df.empty:
+                      print(f"  No player data", flush=True)
+                      continue
+
+                  # Get game info
+                  game_row = all_games_df[all_games_df['GAME_ID'] == game_id].iloc[0]
+                  date_str  = str(game_row['GAME_DATE'])[:10]  # YYYY-MM-DD
+                  playoff   = is_playoff(date_str)
+
+                  # Get team names and scores from team_df
+                  away_row  = team_df[team_df['TEAM_ID'] == team_df.iloc[0]['TEAM_ID']].iloc[0]
+                  home_row  = team_df[team_df['TEAM_ID'] == team_df.iloc[1]['TEAM_ID']].iloc[0]
+
+                  away_team  = NBA_TEAMS.get(int(away_row['TEAM_ID']), away_row['TEAM_CITY'] + " " + away_row['TEAM_NAME'])
+                  home_team  = NBA_TEAMS.get(int(home_row['TEAM_ID']), home_row['TEAM_CITY'] + " " + home_row['TEAM_NAME'])
+                  away_score = int(away_row['PTS']) if away_row['PTS'] else None
+                  home_score = int(home_row['PTS']) if home_row['PTS'] else None
+
+                  # Build linescore from period scores if available
+                  linescore = {}
+
+                  # Build player stats
+                  teams_data = {}
+                  for _, prow in player_df.iterrows():
+                      team_id   = int(prow['TEAM_ID'])
+                      team_name = NBA_TEAMS.get(team_id, str(prow['TEAM_CITY']) + " " + str(prow['TEAM_NICKNAME']))
+                      abbr      = str(prow['TEAM_ABBREVIATION'])
+
+                      if abbr not in teams_data:
+                          teams_data[abbr] = []
+
+                      pid  = str(prow['PLAYER_ID'])
+                      name = str(prow['PLAYER_NAME'])
+
+                      def safe(val):
+                          if val is None or (isinstance(val, float) and val != val):
+                              return None
+                          try: return int(val) if int(val) == val else float(val)
+                          except: return None
+
+                      teams_data[abbr].append({
+                          "player":      name,
+                          "player_id":   pid,
+                          "mp":          str(prow['MIN']) if prow['MIN'] else None,
+                          "fg":          safe(prow['FGM']),
+                          "fga":         safe(prow['FGA']),
+                          "fg_pct":      safe(prow['FG_PCT']),
+                          "fg3":         safe(prow['FG3M']),
+                          "fg3a":        safe(prow['FG3A']),
+                          "fg3_pct":     safe(prow['FG3_PCT']),
+                          "ft":          safe(prow['FTM']),
+                          "fta":         safe(prow['FTA']),
+                          "ft_pct":      safe(prow['FT_PCT']),
+                          "orb":         safe(prow['OREB']),
+                          "drb":         safe(prow['DREB']),
+                          "trb":         safe(prow['REB']),
+                          "ast":         safe(prow['AST']),
+                          "stl":         safe(prow['STL']),
+                          "blk":         safe(prow['BLK']),
+                          "tov":         safe(prow['TO']),
+                          "pf":          safe(prow['PF']),
+                          "pts":         safe(prow['PTS']),
+                          "plus_minus":  safe(prow['PLUS_MINUS']),
+                      })
+
+                      # Collect player updates
+                      if pid not in player_updates:
+                          player_updates[pid] = {"name": name, "player_id": pid, "games": []}
+
+                      is_home = team_id == int(home_row['TEAM_ID'])
+                      player_updates[pid]["games"].append({
+                          "season":     SEASON,
+                          "game_id":    game_id,
+                          "date":       date_str,
+                          "team":       home_team if is_home else away_team,
+                          "opp":        away_team if is_home else home_team,
+                          "playoff":    playoff,
+                          "home_score": home_score,
+                          "away_score": away_score,
+                          "mp":         str(prow['MIN']) if prow['MIN'] else None,
+                          "pts":        safe(prow['PTS']),
+                          "reb":        safe(prow['REB']),
+                          "ast":        safe(prow['AST']),
+                          "stl":        safe(prow['STL']),
+                          "blk":        safe(prow['BLK']),
+                          "tov":        safe(prow['TO']),
+                          "fg":         safe(prow['FGM']),
+                          "fga":        safe(prow['FGA']),
+                          "fg_pct":     safe(prow['FG_PCT']),
+                          "fg3":        safe(prow['FG3M']),
+                          "fg3a":       safe(prow['FG3A']),
+                          "fg3_pct":    safe(prow['FG3_PCT']),
+                          "ft":         safe(prow['FTM']),
+                          "fta":        safe(prow['FTA']),
+                          "ft_pct":     safe(prow['FT_PCT']),
+                          "orb":        safe(prow['OREB']),
+                          "drb":        safe(prow['DREB']),
+                          "pf":         safe(prow['PF']),
+                          "plus_minus": safe(prow['PLUS_MINUS']),
+                      })
+
+                  boxscore_data = {
+                      "game_id":   game_id,
+                      "date":      date_str,
+                      "away":      away_team,
+                      "home":      home_team,
+                      "linescore": linescore,
+                      "teams":     teams_data,
+                  }
+
+                  upload(f"basketball/boxscores/{SEASON}/{game_id}.json", boxscore_data)
+
+                  scraped.append({
+                      "game_id":    game_id,
+                      "date":       date_str,
+                      "away":       away_team,
+                      "home":       home_team,
+                      "away_score": away_score,
+                      "home_score": home_score,
+                      "arena":      "",
+                      "playoff":    playoff,
+                  })
+
+                  print(f"  Done: {away_team} @ {home_team} {away_score}-{home_score}", flush=True)
+
+              except Exception as e:
+                  import traceback
+                  print(f"  ERROR: {e}", flush=True)
+                  traceback.print_exc()
+
+          print(f"\nScraped {len(scraped)} new games", flush=True)
+
+          if not scraped:
+              print("Nothing to update. Done!", flush=True)
+              exit(0)
+
+          # Update season index
+          season_index.extend(scraped)
+          season_index.sort(key=lambda g: g["date"])
+          upload(f"basketball/indexes/{SEASON}.json", season_index)
+          print(f"Season index updated: {len(season_index)} total games", flush=True)
+
+          # Update player files
+          print(f"Updating {len(player_updates)} player files...", flush=True)
+          for pid, new_data in player_updates.items():
+              existing = get_json(f"basketball/players/{pid}.json")
+              if existing:
+                  existing_ids_set = {g["game_id"] for g in existing.get("games", [])}
+                  for g in new_data["games"]:
+                      if g["game_id"] not in existing_ids_set:
+                          existing["games"].append(g)
+                  existing["games"].sort(key=lambda g: g["date"])
+                  upload(f"basketball/players/{pid}.json", existing)
+              else:
+                  new_data["games"].sort(key=lambda g: g["date"])
+                  upload(f"basketball/players/{pid}.json", new_data)
+
+          print("Player files updated", flush=True)
+
+          # Update season leaders
+          print("Updating season leaders...", flush=True)
+          player_season_stats = {}
+          for pid in player_updates.keys():
+              try:
+                  pdata = get_json(f"basketball/players/{pid}.json")
+                  if not pdata: continue
+                  games = [g for g in pdata.get("games", []) if g.get("season") == SEASON and not g.get("playoff")]
+                  if not games: continue
+                  gp  = len(games)
+                  pts = sum(g.get("pts") or 0 for g in games)
+                  reb = sum(g.get("reb") or 0 for g in games)
+                  ast = sum(g.get("ast") or 0 for g in games)
+                  stl = sum(g.get("stl") or 0 for g in games)
+                  blk = sum(g.get("blk") or 0 for g in games)
+                  player_season_stats[pid] = {
+                      "name": pdata.get("name",""), "pid": pid,
+                      "gp": gp, "pts": pts, "reb": reb, "ast": ast, "stl": stl, "blk": blk,
+                  }
+              except: pass
+
+          qualified = [p for p in player_season_stats.values() if p["gp"] >= 20]
+
+          def leader(stat):
+              best = max(qualified, key=lambda p: p[stat]/p["gp"] if p["gp"]>0 else 0, default=None)
+              if not best: return None
+              return {"player": best["name"], "player_id": best["pid"],
+                      "total": best[stat], "gp": best["gp"],
+                      "avg": round(best[stat]/best["gp"], 1)}
+
+          upload(f"basketball/leaders/{SEASON}.json", {
+              "season": SEASON,
+              "points": leader("pts"), "rebounds": leader("reb"),
+              "assists": leader("ast"), "steals": leader("stl"), "blocks": leader("blk"),
+          })
+          print("Season leaders updated", flush=True)
+          print("All done!", flush=True)
+          PYEOF
