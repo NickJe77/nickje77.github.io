@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Ligue 1 Teams | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{ font-family:Inter,system-ui,Arial,sans-serif; margin:0; background:#f3f4f7; color:#111; }
+.navbar{ display:flex; justify-content:center; gap:24px; padding:16px; background:white; border-bottom:1px solid #ddd; flex-wrap:wrap; }
+.navbar a{ text-decoration:none; font-weight:700; color:#0056d6; }
+.hero{ background:linear-gradient(135deg,#001489,#0033cc); color:white; padding:70px 20px; text-align:center; }
+.hero h1{ margin:0; font-size:64px; font-weight:900; }
+.hero p{ margin-top:14px; font-size:22px; font-weight:600; opacity:.95; }
+.container{ max-width:1600px; margin:40px auto; padding:0 20px; }
+.search-wrap{ margin-bottom:28px; display:flex; justify-content:center; }
+#teamSearch{ width:100%; max-width:520px; padding:16px 18px; font-size:18px; border-radius:14px; border:1px solid #d7dbe3; outline:none; font-family:Inter,system-ui,Arial,sans-serif; font-weight:600; box-shadow:0 2px 8px rgba(0,0,0,.05); }
+#teamSearch:focus{ border-color:#0033cc; box-shadow:0 0 0 4px rgba(0,51,204,.15); }
+.team-count{ margin-bottom:24px; font-size:18px; font-weight:700; color:#555; text-align:center; }
+.teams-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:24px; }
+.team-card{ background:white; border-radius:18px; overflow:hidden; text-decoration:none; color:#111; box-shadow:0 2px 10px rgba(0,0,0,.08); transition:.2s ease; display:block; }
+.team-card:hover{ transform:translateY(-4px); box-shadow:0 8px 24px rgba(0,0,0,.14); }
+.team-band{ height:10px; width:100%; }
+.team-content{ padding:28px 22px; }
+.team-name{ font-size:30px; font-weight:900; margin-bottom:10px; line-height:1.15; }
+.team-meta{ font-size:16px; color:#666; font-weight:600; }
+.no-results{ text-align:center; font-size:22px; font-weight:800; padding:60px 20px; color:#666; display:none; }
+@media(max-width:900px){ .hero h1{ font-size:42px; } .hero p{ font-size:18px; } .team-name{ font-size:24px; } }
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="/">Home</a>
+  <a href="/epl.html">EPL</a>
+  <a href="/ligue1.html">Ligue 1</a>
+  <a href="/nba.html">NBA</a>
+  <a href="/afl.html">AFL</a>
+  <a href="/baseball.html">Baseball</a>
+</div>
+
+<div class="hero">
+  <h1>Ligue 1 Teams</h1>
+  <p>Every club to play in Ligue 1</p>
+</div>
+
+<div class="container">
+  <div class="search-wrap">
+    <input type="text" id="teamSearch" placeholder="Search teams...">
+  </div>
+  <div class="team-count" id="teamCount"></div>
+  <div class="teams-grid" id="teamsGrid"></div>
+  <div class="no-results" id="noResults">No teams found</div>
+</div>
+
+<script>
+const TEAMS = [
+  { name:"AJ Auxerre",          colour:"linear-gradient(90deg,#001E62,#FFFFFF)" },
+  { name:"Ajaccio",             colour:"linear-gradient(90deg,#E30613,#FFFFFF)" },
+  { name:"Angers SCO",          colour:"linear-gradient(90deg,#000000,#FFFFFF)" },
+  { name:"AS Monaco",           colour:"linear-gradient(90deg,#E4002B,#FFFFFF)" },
+  { name:"AS Saint-Étienne",    colour:"linear-gradient(90deg,#006633,#FFFFFF)" },
+  { name:"Bastia",              colour:"linear-gradient(90deg,#003087,#FFFFFF)" },
+  { name:"Bordeaux",            colour:"linear-gradient(90deg,#002B5C,#FFFFFF)" },
+  { name:"Brest",               colour:"linear-gradient(90deg,#E30613,#FFFFFF)" },
+  { name:"Caen",                colour:"linear-gradient(90deg,#003087,#FFFFFF)" },
+  { name:"Clermont Foot",       colour:"linear-gradient(90deg,#E4002B,#003087)" },
+  { name:"Dijon FCO",           colour:"linear-gradient(90deg,#E4002B,#FFFFFF)" },
+  { name:"Evian TG",            colour:"linear-gradient(90deg,#007AC2,#FFFFFF)" },
+  { name:"Grenoble Foot 38",    colour:"linear-gradient(90deg,#003087,#FFFFFF)" },
+  { name:"Gueugnon",            colour:"linear-gradient(90deg,#E4002B,#FFFFFF)" },
+  { name:"GFC Ajaccio",         colour:"linear-gradient(90deg,#003087,#FFCC00)" },
+  { name:"Istres",              colour:"linear-gradient(90deg,#003087,#FFFFFF)" },
+  { name:"Le Havre AC",         colour:"linear-gradient(90deg,#009EE0,#FFFFFF)" },
+  { name:"Lens",                colour:"linear-gradient(90deg,#E4002B,#FFCC00)" },
+  { name:"Lille OSC",           colour:"linear-gradient(90deg,#E4002B,#003087)" },
+  { name:"Lorient",             colour:"linear-gradient(90deg,#F7A800,#000000)" },
+  { name:"Lyon",                colour:"linear-gradient(90deg,#DA291C,#003087)" },
+  { name:"Marseille",           colour:"linear-gradient(90deg,#009EE0,#FFFFFF)" },
+  { name:"Metz",                colour:"linear-gradient(90deg,#8B1A4A,#FFCC00)" },
+  { name:"Montpellier HSC",     colour:"linear-gradient(90deg,#003087,#F7A800)" },
+  { name:"Nancy",               colour:"linear-gradient(90deg,#E4002B,#FFFFFF)" },
+  { name:"Nantes",              colour:"linear-gradient(90deg,#FFCC00,#007A33)" },
+  { name:"Nice",                colour:"linear-gradient(90deg,#E4002B,#000000)" },
+  { name:"Nîmes Olympique",     colour:"linear-gradient(90deg,#E4002B,#000000)" },
+  { name:"Paris Saint-Germain", colour:"linear-gradient(90deg,#003087,#DA291C)" },
+  { name:"Reims",               colour:"linear-gradient(90deg,#DA291C,#FFFFFF)" },
+  { name:"Rennes",              colour:"linear-gradient(90deg,#DA291C,#000000)" },
+  { name:"Rodez AF",            colour:"linear-gradient(90deg,#E4002B,#FFCC00)" },
+  { name:"Sedan",               colour:"linear-gradient(90deg,#DA291C,#FFFFFF)" },
+  { name:"Sochaux",             colour:"linear-gradient(90deg,#003087,#FFCC00)" },
+  { name:"Strasbourg",          colour:"linear-gradient(90deg,#003087,#FFFFFF)" },
+  { name:"Toulouse FC",         colour:"linear-gradient(90deg,#6B2D8B,#FFFFFF)" },
+  { name:"Troyes AC",           colour:"linear-gradient(90deg,#003087,#FFFFFF)" },
+  { name:"Valenciennes FC",     colour:"linear-gradient(90deg,#E4002B,#FFFFFF)" },
+  { name:"Vannes OC",           colour:"linear-gradient(90deg,#DA291C,#FFFFFF)" },
+];
+
+const grid      = document.getElementById("teamsGrid");
+const search    = document.getElementById("teamSearch");
+const count     = document.getElementById("teamCount");
+const noResults = document.getElementById("noResults");
+
+function renderTeams(filter=""){
+  grid.innerHTML = "";
+  const filtered = TEAMS
+    .sort((a,b) => a.name.localeCompare(b.name))
+    .filter(t => t.name.toLowerCase().includes(filter.toLowerCase()));
+
+  count.innerHTML = `${filtered.length} Teams`;
+
+  if(!filtered.length){ noResults.style.display="block"; return; }
+  noResults.style.display = "none";
+
+  filtered.forEach(team => {
+    grid.innerHTML += `
+      <a class="team-card" href="ligue1-team.html?team=${encodeURIComponent(team.name)}">
+        <div class="team-band" style="background:${team.colour};"></div>
+        <div class="team-content">
+          <div class="team-name">${team.name}</div>
+          <div class="team-meta">View club stats, results and players</div>
+        </div>
+      </a>`;
+  });
+}
+
+search.addEventListener("input", e => renderTeams(e.target.value));
+renderTeams();
+</script>
+
+</body>
+</html>
