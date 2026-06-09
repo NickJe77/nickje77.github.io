@@ -106,7 +106,6 @@ function loadYear(year){
 function buildMatchesFromPlayers(){
   const map = {};
   rawData.forEach(p=>{
-    // Use match_id if available, otherwise home+away+round
     const key = `${canonicalRound(p.round)}|${p.home_team}|${p.away_team}`;
 
     if(!map[key]){
@@ -141,13 +140,18 @@ function buildTeamSelector(){
 
 function buildRoundButtons(){
   roundBar.innerHTML = "";
-  const rounds = [...new Set(matches.map(r=>canonicalRound(r.round)))];
-  const numeric = rounds.filter(r=>/^Round\s*\d+/i.test(r))
-    .map(r=>({label:r, num:+r.match(/\d+/)[0]}))
-    .sort((a,b)=>a.num-b.num);
+  const rounds = [...new Set(matches.map(m => canonicalRound(m.round)))];
+
+  // FIX: match any round label containing a number (handles "0", "1", "Round 5", etc.)
+  const numeric = rounds
+    .filter(r => /\d+/.test(r) && !finalsRounds.includes(r))
+    .map(r => ({ label: r, num: +r.match(/\d+/)[0] }))
+    .sort((a, b) => a.num - b.num);
+
   addRoundButton("All Rounds", true);
-  numeric.forEach(r=>addRoundButton(r.label));
-  finalsRounds.forEach(r=>addRoundButton(r));
+  numeric.forEach(r => addRoundButton(r.label));
+  // Only add finals buttons that actually exist in the data
+  finalsRounds.forEach(r => { if (rounds.includes(r)) addRoundButton(r); });
 }
 
 function addRoundButton(label, active=false){
@@ -174,9 +178,13 @@ function getStars(match){
 }
 
 function getRunningLadderMatches(){
-  if(currentRound==="ALL") return matches.filter(m=>/^Round\s*\d+/i.test(m.round));
+  if(currentRound==="ALL") return matches.filter(m=>/\d+/.test(m.round) && !finalsRounds.includes(m.round));
   const n = +currentRound.match(/\d+/)?.[0];
-  return matches.filter(m=>(+m.round.match(/\d+/)?.[0])<=n);
+  if(isNaN(n)) return [];
+  return matches.filter(m => {
+    const mn = +m.round.match(/\d+/)?.[0];
+    return !isNaN(mn) && mn <= n && !finalsRounds.includes(m.round);
+  });
 }
 
 function renderMatches(){
