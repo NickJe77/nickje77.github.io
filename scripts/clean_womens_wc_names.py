@@ -47,11 +47,18 @@ def clean_name(name: str) -> str:
 
     return NORMALISATIONS.get(name, name)
 
+def clean_venue(venue: str) -> str:
+    if not venue:
+        return venue
+    return venue.replace(" (Neutral Site)", "").strip()
+
 def clean_game(game: dict) -> dict:
     if "home" in game:
         game["home"] = clean_name(game["home"])
     if "away" in game:
         game["away"] = clean_name(game["away"])
+    if "venue" in game:
+        game["venue"] = clean_venue(game["venue"])
     return game
 
 def main():
