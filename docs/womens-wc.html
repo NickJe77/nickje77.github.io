@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Women's World Cup | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:#f3f4f7;color:#111;}
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:white;border-bottom:1px solid #ddd;flex-wrap:wrap;}
+.navbar a{text-decoration:none;color:#0056d6;font-weight:600;}
+.hero{background:linear-gradient(135deg,#4b0082,#9b30ff);color:white;padding:60px 20px;text-align:center;}
+.hero h1{margin:0;font-size:52px;font-weight:800;}
+.hero p{margin-top:14px;font-size:18px;opacity:.95;}
+.container{max-width:1400px;margin:30px auto;padding:0 20px;}
+.search-box{max-width:600px;margin:0 auto 40px auto;}
+.search-box input{width:100%;padding:16px;border-radius:12px;border:none;font-size:16px;box-sizing:border-box;box-shadow:0 2px 8px rgba(0,0,0,.08);}
+.section-title{font-size:30px;margin-bottom:20px;font-weight:800;}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:20px;}
+.tile{background:white;border-radius:16px;overflow:hidden;text-decoration:none;color:#111;box-shadow:0 3px 10px rgba(0,0,0,.08);transition:.2s ease;}
+.tile:hover{transform:translateY(-4px);box-shadow:0 8px 24px rgba(0,0,0,.15);}
+.tile-header{background:linear-gradient(135deg,#4b0082,#9b30ff);color:white;padding:24px;text-align:center;}
+.tile-header h2{margin:0;font-size:28px;}
+.tile-body{padding:20px;}
+.tile-body p{margin:8px 0;color:#555;font-size:15px;}
+.quick-links{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-bottom:50px;}
+.quick-link{background:white;border-radius:14px;padding:28px;text-decoration:none;color:#111;box-shadow:0 3px 10px rgba(0,0,0,.08);transition:.2s ease;}
+.quick-link:hover{transform:translateY(-3px);}
+.quick-link h3{margin-top:0;margin-bottom:10px;color:#4b0082;}
+.records-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:24px;margin-bottom:50px;}
+.record-section{background:white;border-radius:20px;padding:24px;box-shadow:0 3px 10px rgba(0,0,0,.07);overflow-x:auto;}
+.record-section h3{font-size:18px;font-weight:900;margin:0 0 16px;color:#4b0082;}
+table{border-collapse:collapse;width:100%;white-space:nowrap;}
+th{background:#f0e8ff;padding:10px 12px;font-size:12px;font-weight:900;text-transform:uppercase;text-align:left;color:#4b0082;}
+td{padding:10px 12px;border-bottom:1px solid #ececec;font-size:13px;font-weight:600;}
+tr:nth-child(even){background:#faf5ff;}
+.rank{font-weight:900;color:#7b20d2;text-align:center;}
+.link{text-decoration:none;font-weight:800;color:#0056d6;}
+.link:hover{text-decoration:underline;}
+.footer{margin-top:60px;padding:30px;text-align:center;color:#666;font-size:14px;}
+.loading{text-align:center;padding:50px;font-size:18px;color:#666;}
+@media(max-width:768px){.hero h1{font-size:36px;}.section-title{font-size:24px;}.records-grid{grid-template-columns:1fr;}.quick-links{grid-template-columns:repeat(2,1fr);}}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="/">Home</a>
+  <a href="/womens-wc.html">Women's WC</a>
+  <a href="/nba.html">NBA</a>
+  <a href="/afl.html">AFL</a>
+</div>
+
+<div class="hero">
+  <h1>Women's World Cup</h1>
+  <p>Complete Women's World Cup history, results, players and statistics from 1991 to present.</p>
+</div>
+
+<div class="container">
+
+  <div class="search-box">
+    <input type="text" id="playerSearch" placeholder="Search Women's World Cup players..." list="playersList">
+    <datalist id="playersList"></datalist>
+  </div>
+
+  <div class="quick-links">
+    <a class="quick-link" href="/womens-wc-teams.html">
+      <h3>Nations</h3>
+      <p>Browse every nation in Women's World Cup history.</p>
+    </a>
+    <a class="quick-link" href="/womens-wc-players.html">
+      <h3>Players</h3>
+      <p>Search Women's World Cup player profiles.</p>
+    </a>
+    <a class="quick-link" href="/womens-wc-records.html">
+      <h3>Records</h3>
+      <p>All-time Women's World Cup records and statistics.</p>
+    </a>
+    <a class="quick-link" href="/womens-wc-h2h.html">
+      <h3>Head to Head</h3>
+      <p>Compare any two nations across all tournaments.</p>
+    </a>
+  </div>
+
+  <h2 class="section-title">Tournaments</h2>
+  <div id="tournamentsContainer" class="tiles"></div>
+
+  <h2 class="section-title" style="margin-top:50px;">Records</h2>
+  <div id="recordsGrid" class="records-grid">
+    <div class="loading">Loading records...</div>
+  </div>
+
+</div>
+
+<div class="footer">© The Sporting Almanac</div>
+
+<script>
+
+const TOURNAMENTS = ["2023","2019","2015","2011","2007","2003","1999","1995","1991"];
+const DATA_BASE   = "/data/women's-wc/womens-world-cup";
+
+const TOURNAMENT_HOSTS = {
+  "2023": "Australia & New Zealand",
+  "2019": "France",
+  "2015": "Canada",
+  "2011": "Germany",
+  "2007": "China",
+  "2003": "United States",
+  "1999": "United States",
+  "1995": "Sweden",
+  "1991": "China",
+};
+
+function slugify(name){
+  return (name||'').toLowerCase().replace(/\./g,'').replace(/'/g,'').replace(/\u2019/g,'').replace(/"/g,'').replace(/\s+/g,'-');
+}
+
+function playerLink(name){
+  return `<a class="link" href="/womens-wc-player.html?player=${encodeURIComponent(slugify(name))}">${name}</a>`;
+}
+
+function teamLink(name){
+  return `<a class="link" href="/womens-wc-team.html?team=${encodeURIComponent(name)}">${name}</a>`;
+}
+
+function recordTable(rows, cols){
+  const heads = cols.map(c=>`<th>${c.label}</th>`).join('');
+  const body  = rows.map((r,i)=>{
+    const cells = cols.map(c=>{
+      if(c.key==='rank') return `<td class="rank">${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</td>`;
+      return `<td>${r[c.key]}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+  return `<table><thead><tr>${heads}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+async function loadRecords(){
+  try{
+    const [playersRes, teamStatsRes] = await Promise.all([
+      fetch(`${DATA_BASE}/players.json`),
+      fetch(`${DATA_BASE}/team-stats.json`),
+    ]);
+    const players      = await playersRes.json();
+    const allTeamStats = await teamStatsRes.json();
+
+    const careerGoals = [...players].filter(p=>p.goals>0).sort((a,b)=>b.goals-a.goals).slice(0,10)
+      .map(p=>({rank:'',name:playerLink(p.name),goals:p.goals,tournaments:p.seasons.length}));
+
+    const tournamentGoals = [];
+    players.forEach(p=>{
+      (p.season_stats||[]).forEach(s=>{
+        if(s.goals>0) tournamentGoals.push({name:playerLink(p.name),tournament:s.season,nation:teamLink(s.team),goals:s.goals});
+      });
+    });
+    tournamentGoals.sort((a,b)=>b.goals-a.goals);
+    const topTournamentGoals = tournamentGoals.slice(0,10).map(r=>({rank:'',...r}));
+
+    const careerYellows = [...players].filter(p=>p.yellow_cards>0).sort((a,b)=>b.yellow_cards-a.yellow_cards).slice(0,10)
+      .map(p=>({rank:'',name:playerLink(p.name),yellow_cards:p.yellow_cards}));
+
+    const careerReds = [...players].filter(p=>p.red_cards>0).sort((a,b)=>b.red_cards-a.red_cards).slice(0,10)
+      .map(p=>({rank:'',name:playerLink(p.name),red_cards:p.red_cards}));
+
+    const teamTotals = {};
+    allTeamStats.forEach(s=>{
+      if(!teamTotals[s.team]) teamTotals[s.team]={team:s.team,played:0,wins:0,goals_for:0,clean_sheets:0,tournaments:0};
+      const t=teamTotals[s.team];
+      t.played+=s.played||0; t.wins+=s.wins||0;
+      t.goals_for+=s.goals_for||0; t.clean_sheets+=s.clean_sheets||0; t.tournaments++;
+    });
+    const teams = Object.values(teamTotals);
+
+    const mostWins = [...teams].sort((a,b)=>b.wins-a.wins).slice(0,10)
+      .map(t=>({rank:'',team:teamLink(t.team),wins:t.wins,played:t.played,tournaments:t.tournaments}));
+
+    const mostGoalsAllTime = [...teams].sort((a,b)=>b.goals_for-a.goals_for).slice(0,10)
+      .map(t=>({rank:'',team:teamLink(t.team),goals:t.goals_for,tournaments:t.tournaments}));
+
+    const sections = [
+      {title:'⚽ Most Career Goals',         table:recordTable(careerGoals,       [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'goals',label:'Goals'},{key:'tournaments',label:'Tournaments'}])},
+      {title:'⚽ Most Goals in a Tournament', table:recordTable(topTournamentGoals,[{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'tournament',label:'Year'},{key:'nation',label:'Nation'},{key:'goals',label:'Goals'}])},
+      {title:'🟨 Most Career Yellow Cards',   table:recordTable(careerYellows,     [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'yellow_cards',label:'Yellows'}])},
+      {title:'🟥 Most Career Red Cards',      table:recordTable(careerReds,        [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'red_cards',label:'Reds'}])},
+      {title:'🏆 Most All-Time Wins',         table:recordTable(mostWins,          [{key:'rank',label:'#'},{key:'team',label:'Nation'},{key:'wins',label:'Wins'},{key:'played',label:'Played'},{key:'tournaments',label:'Tournaments'}])},
+      {title:'⚽ Most All-Time Goals (Nation)',table:recordTable(mostGoalsAllTime,  [{key:'rank',label:'#'},{key:'team',label:'Nation'},{key:'goals',label:'Goals'},{key:'tournaments',label:'Tournaments'}])},
+    ];
+
+    document.getElementById('recordsGrid').innerHTML = sections.map(s=>`
+      <div class="record-section">
+        <h3>${s.title}</h3>
+        ${s.table}
+      </div>
+    `).join('');
+
+  }catch(err){
+    console.error(err);
+    document.getElementById('recordsGrid').innerHTML = '<div class="loading">Failed to load records</div>';
+  }
+}
+
+function loadTournaments(){
+  const container = document.getElementById("tournamentsContainer");
+  TOURNAMENTS.forEach(year => {
+    const tile = document.createElement("a");
+    tile.className = "tile";
+    tile.href = `/womens-wc-seasons.html?season=${year}`;
+    tile.innerHTML = `
+      <div class="tile-header"><h2>${year}</h2></div>
+      <div class="tile-body"><p>Hosted by ${TOURNAMENT_HOSTS[year] || ''}.</p></div>
+    `;
+    container.appendChild(tile);
+  });
+}
+
+async function loadPlayers(){
+  try{
+    const response = await fetch(`${DATA_BASE}/players.json`);
+    const players  = await response.json();
+    const datalist = document.getElementById("playersList");
+    players.forEach(player=>{
+      const option = document.createElement("option");
+      option.value = player.name;
+      datalist.appendChild(option);
+    });
+  }catch(err){
+    console.error("Failed to load players", err);
+  }
+}
+
+document.getElementById("playerSearch").addEventListener("change", async (e)=>{
+  const value = e.target.value.trim().toLowerCase();
+  if(!value) return;
+  try{
+    const response = await fetch(`${DATA_BASE}/players.json`);
+    const players  = await response.json();
+    const found    = players.find(p=>p.name.toLowerCase()===value);
+    if(found) window.location.href = `/womens-wc-player.html?player=${slugify(found.name)}`;
+  }catch(err){
+    console.error(err);
+  }
+});
+
+loadTournaments();
+loadPlayers();
+loadRecords();
+
+</script>
+</body>
+</html>
