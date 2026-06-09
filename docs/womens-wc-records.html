@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Women's World Cup Records | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#f3f4f7;color:#111;}
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:white;border-bottom:1px solid #ddd;flex-wrap:wrap;}
+.navbar a{text-decoration:none;color:#0056d6;font-weight:600;}
+.hero{background:linear-gradient(135deg,#4b0082,#9b30ff);color:white;padding:60px 20px;text-align:center;}
+.hero h1{margin:0;font-size:52px;font-weight:800;}
+.hero p{margin-top:14px;font-size:18px;opacity:.95;}
+.container{max-width:1400px;margin:30px auto;padding:0 20px 60px;}
+.records-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:24px;}
+.section{background:white;border-radius:20px;padding:24px;box-shadow:0 3px 10px rgba(0,0,0,.07);overflow-x:auto;}
+.section-title{font-size:20px;font-weight:900;margin:0 0 18px;color:#4b0082;display:flex;align-items:center;gap:10px;}
+table{border-collapse:collapse;white-space:nowrap;}
+th{background:#f0e8ff;padding:12px 14px;font-size:12px;font-weight:900;text-transform:uppercase;text-align:center;color:#4b0082;}
+td{padding:12px 14px;border-bottom:1px solid #ececec;font-size:14px;font-weight:600;text-align:center;white-space:nowrap;}
+tr:nth-child(even){background:#faf5ff;}
+.rank{font-weight:900;color:#7b20d2;}
+.link{text-decoration:none;font-weight:800;color:#0056d6;}
+.link:hover{text-decoration:underline;}
+.loading{text-align:center;padding:60px;font-size:18px;color:#666;}
+@media(max-width:768px){
+  .hero h1{font-size:36px;}
+  .records-grid{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="/">Home</a>
+  <a href="/womens-wc.html">Women's WC</a>
+  <a href="/womens-wc-teams.html">Teams</a>
+  <a href="/womens-wc-players.html">Players</a>
+  <a href="/nba.html">NBA</a>
+  <a href="/afl.html">AFL</a>
+</div>
+
+<div class="hero">
+  <h1>Women's World Cup Records</h1>
+  <p>All-time Women's World Cup records from 1991 to present</p>
+</div>
+
+<div class="container">
+  <div class="loading" id="loadingMsg">Loading records...</div>
+  <div class="records-grid" id="recordsGrid" style="display:none;"></div>
+</div>
+
+<script>
+
+const TOURNAMENT_IDS = ["1991","1995","1999","2003","2007","2011","2015","2019","2023"];
+const DATA_BASE = "/data/women's-wc/womens-world-cup";
+
+function slugify(str){
+  return (str||'').toLowerCase().replace(/\./g,'').replace(/'/g,'').replace(/\u2019/g,'').replace(/"/g,'').replace(/\s+/g,'-');
+}
+
+function playerLink(name){
+  return `<a class="link" href="/womens-wc-player.html?player=${encodeURIComponent(slugify(name))}">${name}</a>`;
+}
+
+function teamLink(name){
+  return `<a class="link" href="/womens-wc-team.html?team=${encodeURIComponent(name)}">${name}</a>`;
+}
+
+function recordTable(rows, cols){
+  const heads = cols.map(c => `<th>${c.label}</th>`).join('');
+  const body  = rows.map((r, i) => {
+    const cells = cols.map(c => {
+      if(c.key === 'rank') return `<td class="rank">${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</td>`;
+      return `<td>${r[c.key]}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+  return `<table><thead><tr>${heads}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+async function loadRecords(){
+  try{
+    const [playersRes, teamStatsRes] = await Promise.all([
+      fetch(`${DATA_BASE}/players.json`),
+      fetch(`${DATA_BASE}/team-stats.json`),
+    ]);
+    const players      = await playersRes.json();
+    const allTeamStats = await teamStatsRes.json();
+
+    // ── PLAYER RECORDS ───────────────────────────────────────────────────────
+
+    const careerGoals = [...players]
+      .filter(p => p.goals > 0)
+      .sort((a,b) => b.goals - a.goals)
+      .slice(0,10)
+      .map(p => ({ rank:'', name: playerLink(p.name), goals: p.goals, tournaments: p.seasons.length }));
+
+    const tournamentGoals = [];
+    players.forEach(p => {
+      (p.season_stats||[]).forEach(s => {
+        if(s.goals > 0) tournamentGoals.push({ name: playerLink(p.name), tournament: s.season, nation: teamLink(s.team), goals: s.goals });
+      });
+    });
+    tournamentGoals.sort((a,b) => b.goals - a.goals);
+    const topTournamentGoals = tournamentGoals.slice(0,10).map(r => ({rank:'', ...r}));
+
+    const careerYellows = [...players]
+      .filter(p => p.yellow_cards > 0)
+      .sort((a,b) => b.yellow_cards - a.yellow_cards)
+      .slice(0,10)
+      .map(p => ({ rank:'', name: playerLink(p.name), yellow_cards: p.yellow_cards, tournaments: p.seasons.length }));
+
+    const careerReds = [...players]
+      .filter(p => p.red_cards > 0)
+      .sort((a,b) => b.red_cards - a.red_cards)
+      .slice(0,10)
+      .map(p => ({ rank:'', name: playerLink(p.name), red_cards: p.red_cards, tournaments: p.seasons.length }));
+
+    const mostTournaments = [...players]
+      .sort((a,b) => b.seasons.length - a.seasons.length)
+      .slice(0,10)
+      .map(p => ({ rank:'', name: playerLink(p.name), tournaments: p.seasons.length, nations: p.teams.join(', ') }));
+
+    // ── TEAM RECORDS ─────────────────────────────────────────────────────────
+
+    const teamTotals = {};
+    allTeamStats.forEach(s => {
+      if(!teamTotals[s.team]) teamTotals[s.team] = { team: s.team, played:0, wins:0, draws:0, losses:0, goals_for:0, goals_against:0, points:0, tournaments:0, clean_sheets:0 };
+      const t = teamTotals[s.team];
+      t.played        += s.played        || 0;
+      t.wins          += s.wins          || 0;
+      t.draws         += s.draws         || 0;
+      t.losses        += s.losses        || 0;
+      t.goals_for     += s.goals_for     || 0;
+      t.goals_against += s.goals_against || 0;
+      t.points        += s.points        || 0;
+      t.clean_sheets  += s.clean_sheets  || 0;
+      t.tournaments++;
+    });
+    const teams = Object.values(teamTotals);
+
+    const mostWins = [...teams]
+      .sort((a,b) => b.wins - a.wins)
+      .slice(0,10)
+      .map(t => ({ rank:'', team: teamLink(t.team), wins: t.wins, played: t.played, tournaments: t.tournaments }));
+
+    const mostWinsTournament = [...allTeamStats]
+      .sort((a,b) => b.wins - a.wins)
+      .slice(0,10)
+      .map(s => ({ rank:'', team: teamLink(s.team), tournament: s.season, wins: s.wins, points: s.points }));
+
+    const mostGoalsTournament = [...allTeamStats]
+      .sort((a,b) => b.goals_for - a.goals_for)
+      .slice(0,10)
+      .map(s => ({ rank:'', team: teamLink(s.team), tournament: s.season, goals: s.goals_for }));
+
+    const mostGoalsAllTime = [...teams]
+      .sort((a,b) => b.goals_for - a.goals_for)
+      .slice(0,10)
+      .map(t => ({ rank:'', team: teamLink(t.team), goals: t.goals_for, tournaments: t.tournaments }));
+
+    const mostCleanSheetsTournament = [...allTeamStats]
+      .sort((a,b) => b.clean_sheets - a.clean_sheets)
+      .slice(0,10)
+      .map(s => ({ rank:'', team: teamLink(s.team), tournament: s.season, clean_sheets: s.clean_sheets }));
+
+    const mostCleanSheetsAllTime = [...teams]
+      .sort((a,b) => b.clean_sheets - a.clean_sheets)
+      .slice(0,10)
+      .map(t => ({ rank:'', team: teamLink(t.team), clean_sheets: t.clean_sheets, tournaments: t.tournaments }));
+
+    // ── MATCH RECORDS (loaded from season files) ─────────────────────────────
+
+    const allGames = [];
+    await Promise.all(TOURNAMENT_IDS.map(async tid => {
+      try{
+        const r = await fetch(`${DATA_BASE}/seasons/${tid}.json`);
+        if(!r.ok) return;
+        const data = await r.json();
+        const games = Array.isArray(data) ? data : (data.games || []);
+        games.forEach(g => {
+          if(g.score_home != null && g.score_away != null){
+            allGames.push({...g, season: tid});
+          }
+        });
+      }catch(e){}
+    }));
+
+    const biggestWins = allGames
+      .map(g => {
+        const diff   = Math.abs(Number(g.score_home) - Number(g.score_away));
+        const winner = Number(g.score_home) > Number(g.score_away) ? g.home : g.away;
+        const loser  = Number(g.score_home) > Number(g.score_away) ? g.away : g.home;
+        return { diff, winner, loser, score: `${g.score_home}-${g.score_away}`, season: g.season };
+      })
+      .filter(g => g.diff > 0)
+      .sort((a,b) => b.diff - a.diff)
+      .slice(0,10)
+      .map(g => ({ rank:'', winner: teamLink(g.winner), loser: teamLink(g.loser), score: g.score, tournament: g.season, margin: g.diff }));
+
+    const highestScoring = allGames
+      .map(g => ({
+        total: Number(g.score_home) + Number(g.score_away),
+        home: g.home, away: g.away,
+        score: `${g.score_home}-${g.score_away}`,
+        season: g.season
+      }))
+      .sort((a,b) => b.total - a.total)
+      .slice(0,10)
+      .map(g => ({ rank:'', home: teamLink(g.home), away: teamLink(g.away), score: g.score, tournament: g.season, total: g.total }));
+
+    // ── RENDER ───────────────────────────────────────────────────────────────
+
+    const grid = document.getElementById('recordsGrid');
+    grid.style.display = 'grid';
+    document.getElementById('loadingMsg').style.display = 'none';
+
+    const sections = [
+      { title:'⚽ Most Career Goals',                  table: recordTable(careerGoals,              [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'goals',label:'Goals'},{key:'tournaments',label:'Tournaments'}]) },
+      { title:'⚽ Most Goals in a Tournament',          table: recordTable(topTournamentGoals,        [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'tournament',label:'Year'},{key:'nation',label:'Nation'},{key:'goals',label:'Goals'}]) },
+      { title:'🟨 Most Career Yellow Cards',            table: recordTable(careerYellows,            [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'yellow_cards',label:'Yellows'},{key:'tournaments',label:'Tournaments'}]) },
+      { title:'🟥 Most Career Red Cards',               table: recordTable(careerReds,               [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'red_cards',label:'Reds'},{key:'tournaments',label:'Tournaments'}]) },
+      { title:'📅 Most Tournaments Played',             table: recordTable(mostTournaments,          [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'tournaments',label:'Tournaments'},{key:'nations',label:'Nations'}]) },
+      { title:'🏆 Most All-Time Wins',                  table: recordTable(mostWins,                 [{key:'rank',label:'#'},{key:'team',label:'Nation'},{key:'wins',label:'Wins'},{key:'played',label:'Played'},{key:'tournaments',label:'Tournaments'}]) },
+      { title:'🏆 Most Wins in a Tournament',           table: recordTable(mostWinsTournament,       [{key:'rank',label:'#'},{key:'team',label:'Nation'},{key:'tournament',label:'Year'},{key:'wins',label:'Wins'},{key:'points',label:'Points'}]) },
+      { title:'⚽ Most Goals in a Tournament (Nation)', table: recordTable(mostGoalsTournament,      [{key:'rank',label:'#'},{key:'team',label:'Nation'},{key:'tournament',label:'Year'},{key:'goals',label:'Goals'}]) },
+      { title:'⚽ Most All-Time Goals (Nation)',        table: recordTable(mostGoalsAllTime,          [{key:'rank',label:'#'},{key:'team',label:'Nation'},{key:'goals',label:'Goals'},{key:'tournaments',label:'Tournaments'}]) },
+      { title:'🧤 Most Clean Sheets in a Tournament',  table: recordTable(mostCleanSheetsTournament,[{key:'rank',label:'#'},{key:'team',label:'Nation'},{key:'tournament',label:'Year'},{key:'clean_sheets',label:'Clean Sheets'}]) },
+      { title:'🧤 Most All-Time Clean Sheets',         table: recordTable(mostCleanSheetsAllTime,    [{key:'rank',label:'#'},{key:'team',label:'Nation'},{key:'clean_sheets',label:'Clean Sheets'},{key:'tournaments',label:'Tournaments'}]) },
+      { title:'💥 Biggest Winning Margins',             table: recordTable(biggestWins,              [{key:'rank',label:'#'},{key:'winner',label:'Winner'},{key:'loser',label:'Loser'},{key:'score',label:'Score'},{key:'tournament',label:'Year'},{key:'margin',label:'Margin'}]) },
+      { title:'🔥 Highest Scoring Matches',             table: recordTable(highestScoring,           [{key:'rank',label:'#'},{key:'home',label:'Home'},{key:'away',label:'Away'},{key:'score',label:'Score'},{key:'tournament',label:'Year'},{key:'total',label:'Total Goals'}]) },
+    ];
+
+    grid.innerHTML = sections.map(s => `
+      <div class="section">
+        <div class="section-title">${s.title}</div>
+        ${s.table}
+      </div>
+    `).join('');
+
+  }catch(err){
+    console.error(err);
+    document.getElementById('loadingMsg').textContent = 'Failed to load records';
+  }
+}
+
+loadRecords();
+</script>
+</body>
+</html>
