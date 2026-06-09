@@ -10,9 +10,20 @@
     .navbar { display: flex; justify-content: center; gap: 22px; padding: 16px 0; border-bottom: 1px solid #ddd; font-weight: 600; }
     .navbar a { color: #0056d6; text-decoration: none; font-size: 18px; }
     .page-wrap { max-width: 1200px; margin: 0 auto; padding: 30px 20px; }
-    .hero { background: linear-gradient(90deg, #004d00, #006400); color: white; padding: 40px 50px; border-radius: 24px; margin-bottom: 20px; }
+    .hero { background: linear-gradient(90deg, #004d00, #006400); color: white; padding: 40px 50px; border-radius: 24px; margin-bottom: 24px; }
     .hero h1 { margin: 0; font-size: 46px; }
     .hero p { margin-top: 10px; font-size: 18px; opacity: 0.95; }
+    .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 32px; }
+    @media(min-width: 900px) { .stats-grid { grid-template-columns: repeat(4, 1fr); } }
+    .stat-card.full-width { grid-column: 1 / -1; max-width: 280px; margin: 0 auto; width: 100%; }
+    @media(min-width: 900px) { .stat-card.full-width { grid-column: auto; max-width: none; margin: 0; } }
+    .stat-card { background: #f0f9f0; border: 1px solid #c8e6c9; border-radius: 14px; padding: 18px 20px; }
+    .stat-card h3 { margin: 0 0 12px; font-size: 15px; color: #004d00; text-transform: uppercase; letter-spacing: 0.04em; }
+    .stat-card ol { margin: 0; padding-left: 20px; }
+    .stat-card li { font-size: 14px; padding: 3px 0; color: #222; }
+    .stat-card li span { float: right; font-weight: 700; color: #004d00; }
+    .stat-card a { color: #004d00; text-decoration: none; }
+    .stat-card a:hover { text-decoration: underline; }
     table { width: 100%; border-collapse: collapse; font-size: 15px; }
     th, td { border-bottom: 1px solid #ddd; padding: 12px 14px; text-align: left; }
     th { background: #f3f6fb; }
@@ -24,6 +35,7 @@
     .badge.win  { color: #1a7f37; }
     .badge.loss { color: #b42318; }
     .badge.nr   { color: #555; }
+    h2 { color: #004d00; margin: 0 0 16px; }
   </style>
 </head>
 <body>
@@ -39,14 +51,31 @@
     <h1 id="teamName">Team</h1>
     <p>Click any match to open the full scorecard.</p>
   </div>
+
+  <div class="stats-grid" id="statsGrid" style="display:none">
+    <div class="stat-card">
+      <h3>🏏 Top Run Scorers</h3>
+      <ol id="topRuns"></ol>
+    </div>
+    <div class="stat-card">
+      <h3>⚡ Top Wicket Takers</h3>
+      <ol id="topWickets"></ol>
+    </div>
+    <div class="stat-card">
+      <h3>🧤 Catches & Stumpings</h3>
+      <ol id="topFielding"></ol>
+    </div>
+    <div class="stat-card full-width">
+      <h3>💨 Best Strike Rate <small style="font-weight:400;font-size:11px">(min 100 balls)</small></h3>
+      <ol id="topSR"></ol>
+    </div>
+  </div>
+
+  <h2>Match Results</h2>
   <table>
     <thead>
       <tr>
-        <th>Year</th>
-        <th>Date</th>
-        <th>Opponent</th>
-        <th>Ground</th>
-        <th>Result</th>
+        <th>Year</th><th>Date</th><th>Opponent</th><th>Ground</th><th>Result</th>
       </tr>
     </thead>
     <tbody id="matchesTable"></tbody>
@@ -86,6 +115,10 @@ Promise.all(
   )
 ).then(results => {
   const rows = [];
+  const runs     = {};  // player -> total runs
+  const balls    = {};  // player -> total balls
+  const wickets  = {};  // player -> total wickets
+  const fielding = {};  // player -> catches + stumpings
 
   results.forEach(({ t, matches }) => {
     matches.forEach(m => {
@@ -95,16 +128,85 @@ Promise.all(
       const t2 = parts[1].trim();
       if (t1 !== team && t2 !== team) return;
 
-      const opponent = t1 === team ? t2 : t1;
-      const result   = m.result || "";
-      let resultText = "No result", resultClass = "nr";
-      if (result.includes(team + " won"))     { resultText = "Won";  resultClass = "win"; }
-      else if (result.includes(" won"))       { resultText = "Lost"; resultClass = "loss"; }
-
+      const opponent    = t1 === team ? t2 : t1;
+      const result      = m.result || "";
+      let resultText    = "No result", resultClass = "nr";
+      if (result.includes(team + " won"))  { resultText = "Won";  resultClass = "win"; }
+      else if (result.includes(" won"))    { resultText = "Lost"; resultClass = "loss"; }
       rows.push({ year: t.year, file: t.file, code: m.match_code, date: m.date, opponent, ground: m.ground, resultText, resultClass });
+
+      // Stats from innings
+      const sc = m.scorecard;
+      if (!sc || !sc.innings) return;
+
+      sc.innings.forEach(inn => {
+        const isTeamBatting  = inn.team === team;
+        const isTeamBowling  = !isTeamBatting;
+
+        if (isTeamBatting) {
+          // Batting stats
+          inn.batting.forEach(b => {
+            if (!b.batsman || b.batsman === "[unknown]") return;
+            runs[b.batsman]  = (runs[b.batsman]  || 0) + (b.runs || 0);
+            balls[b.batsman] = (balls[b.batsman] || 0) + (b.balls_faced || 0);
+          });
+          // Catches from fielding (team players catching for opponents)
+        }
+
+        if (isTeamBowling) {
+          // Bowling stats
+          inn.bowling.forEach(b => {
+            if (!b.bowler) return;
+            wickets[b.bowler] = (wickets[b.bowler] || 0) + (b.wickets || 0);
+          });
+        }
+
+        // Fielding: catches & stumpings from dismissals in any innings
+        // When this team is bowling, the fielders are from this team
+        if (isTeamBowling) {
+          inn.batting.forEach(b => {
+            const d = b.dismissal || "";
+            // "c FielderName b Bowler" or "st FielderName b Bowler"
+            const catchM  = d.match(/^c\s+([^b]+?)\s+b\s+/i);
+            const stumpM  = d.match(/^st\s+([^b]+?)\s+b\s+/i);
+            const fielder = (catchM || stumpM)?.[1]?.trim();
+            if (fielder && fielder !== "" && fielder !== "sub") {
+              fielding[fielder] = (fielding[fielder] || 0) + 1;
+            }
+          });
+        }
+      });
     });
   });
 
+  // Render stats cards
+  function playerLink(name) {
+    return `<a href="cricket-wc-player.html?player=${encodeURIComponent(name)}">${name}</a>`;
+  }
+
+  function renderList(elId, entries, valFn) {
+    const top5 = entries.slice(0, 5);
+    document.getElementById(elId).innerHTML = top5.map(([name, val]) =>
+      `<li>${playerLink(name)} <span>${valFn(val)}</span></li>`
+    ).join("") || "<li>No data</li>";
+  }
+
+  const topRuns = Object.entries(runs).sort((a,b) => b[1]-a[1]);
+  const topWkts = Object.entries(wickets).sort((a,b) => b[1]-a[1]);
+  const topFld  = Object.entries(fielding).sort((a,b) => b[1]-a[1]);
+  const topSR   = Object.entries(runs)
+    .filter(([p]) => (balls[p] || 0) >= 100)
+    .map(([p, r]) => [p, r / (balls[p] || 1) * 100])
+    .sort((a,b) => b[1]-a[1]);
+
+  renderList("topRuns",    topRuns, v => v + " runs");
+  renderList("topWickets", topWkts, v => v + " wkts");
+  renderList("topFielding",topFld,  v => v);
+  renderList("topSR",      topSR,   v => v.toFixed(2));
+
+  document.getElementById("statsGrid").style.display = "grid";
+
+  // Render matches table
   const tableBody = document.getElementById("matchesTable");
   if (!rows.length) {
     tableBody.innerHTML = `<tr><td colspan="5">No matches found for ${escapeHtml(team)}.</td></tr>`;
