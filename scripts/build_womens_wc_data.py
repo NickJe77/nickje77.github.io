@@ -18,8 +18,8 @@ from pathlib import Path
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 REPO_ROOT   = Path(__file__).parent.parent
-MATCHES_DIR = REPO_ROOT / "docs" / "data" / "women's-wc" / "matches"
-OUT_DIR     = REPO_ROOT / "docs" / "data" / "women's-wc"
+MATCHES_DIR = REPO_ROOT / "docs" / "data" / "women's-wc" / "womens-world-cup" / "matches"
+OUT_DIR     = REPO_ROOT / "docs" / "data" / "women's-wc" / "womens-world-cup"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
