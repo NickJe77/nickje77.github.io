@@ -648,7 +648,7 @@ function addHorse(name) {
   // Default style from historical data
   const defaultStyle = data[0] === 'l' ? 'leader' : data[0] === 'o' ? 'on_pace' : data[0] === 'm' ? 'midfield' : data[0] === 'b' ? 'back' : 'midfield';
   
-  field.push({ name, userStyle: defaultStyle, data, detail });
+  field.push({ name, userStyle: defaultStyle, data, detail, barrier: null });
   searchInput.value = '';
   autocomplete.style.display = 'none';
   renderField();
@@ -665,11 +665,18 @@ function addHorseManual(name) {
     userStyle: 'midfield',
     data: ['', null, null, 0, 0, null, null, null, 0, 0, {}],
     detail: [],
-    manual: true
+    manual: true,
+    barrier: null
   });
   searchInput.value = '';
   autocomplete.style.display = 'none';
   renderField();
+}
+
+function setBarrier(idx, val) {
+  const b = parseInt(val);
+  field[idx].barrier = (b > 0) ? b : null;
+  // Don't re-render — just store value silently
 }
 
 function removeHorse(idx) {
@@ -710,10 +717,18 @@ function renderField() {
         <span class="horse-stats">${h.manual ? '<span style="color:var(--sand);opacity:0.6;font-size:10px;border:1px solid rgba(200,169,110,0.4);border-radius:3px;padding:1px 5px;letter-spacing:1px">MANUAL</span>' : d[4]+'R · '+(d[1] ? d[1].toFixed(1)+'s/km' : '—')}</span>
         <button class="remove-btn" onclick="removeHorse(${i})">✕</button>
       </div>
-      <div class="style-selector">
-        ${['leader','on_pace','midfield','back'].map(s => 
-          `<button class="style-btn ${h.userStyle === s ? 'active-'+s : ''}" onclick="setStyle(${i},'${s}')">${s === 'on_pace' ? 'On Pace' : s.charAt(0).toUpperCase()+s.slice(1)}</button>`
-        ).join('')}
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <label style="font-size:11px;color:var(--sand);letter-spacing:1px;text-transform:uppercase;white-space:nowrap">Barrier</label>
+          <input type="number" min="1" max="30" value="${h.barrier || ''}" placeholder="—"
+            onchange="setBarrier(${i}, this.value)"
+            style="width:52px;background:rgba(255,255,255,0.07);border:1px solid rgba(200,169,110,0.3);border-radius:4px;padding:4px 6px;color:var(--chalk);font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;text-align:center;outline:none;">
+        </div>
+        <div style="flex:1;display:flex;gap:4px;flex-wrap:wrap;">
+          ${['leader','on_pace','midfield','back'].map(s => 
+            `<button class="style-btn ${h.userStyle === s ? 'active-'+s : ''}" onclick="setStyle(${i},'${s}')">${s === 'on_pace' ? 'On Pace' : s.charAt(0).toUpperCase()+s.slice(1)}</button>`
+          ).join('')}
+        </div>
       </div>
       ${sugLabel ? `<div class="style-suggest">${sugLabel}</div>` : ''}
     </div>`;
@@ -721,6 +736,98 @@ function renderField() {
 }
 
 // ===== SIMULATION =====
+// Track width profiles — how much barriers matter
+// scale 0-10: 10 = very bias to inside, 0 = neutral
+const TRACK_PROFILES = {
+  // Victoria
+  'MVALL': {bias: 9, width: 'tight',  note: 'Tight turning, very wide barrier penalty'},
+  'CAUL':  {bias: 7, width: 'medium', note: 'Inside favoured, especially sprint trips'},
+  'FLEM':  {bias: 4, width: 'wide',   note: 'Wide track, barriers less important'},
+  'SAND':  {bias: 6, width: 'medium', note: 'Moderate bias to inside'},
+  'BALN':  {bias: 8, width: 'tight',  note: 'Tight track, high barrier bias'},
+  'BENV':  {bias: 6, width: 'medium', note: 'Moderate bias'},
+  'KYNE':  {bias: 7, width: 'medium', note: 'Inside favoured'},
+  'SEYM':  {bias: 6, width: 'medium', note: 'Moderate bias'},
+  'SALE':  {bias: 5, width: 'medium', note: 'Fairly neutral'},
+  'WANR':  {bias: 7, width: 'tight',  note: 'Tight, inside favoured'},
+  'NARC':  {bias: 6, width: 'medium', note: 'Moderate bias'},
+  'ECHV':  {bias: 5, width: 'medium', note: 'Fairly neutral'},
+  'HAMN':  {bias: 6, width: 'medium', note: 'Moderate bias'},
+  'WGGA':  {bias: 5, width: 'medium', note: 'Fairly neutral'},
+  // NSW
+  'RAND':  {bias: 5, width: 'wide',   note: 'Wide track, moderate bias'},
+  'ROSE':  {bias: 6, width: 'medium', note: 'Inside advantage'},
+  'WARW':  {bias: 7, width: 'medium', note: 'Inside favoured'},
+  'CDNS':  {bias: 6, width: 'medium', note: 'Moderate bias'},
+  'GWSD':  {bias: 5, width: 'medium', note: 'Fairly neutral'},
+  'KAMP':  {bias: 7, width: 'tight',  note: 'Tight, inside favoured'},
+  'SCST':  {bias: 5, width: 'medium', note: 'Fairly neutral'},
+  'TMWR':  {bias: 6, width: 'medium', note: 'Moderate bias'},
+  'MUSS':  {bias: 8, width: 'tight',  note: 'Very tight, inside very favoured'},
+  // QLD
+  'EAFS':  {bias: 6, width: 'medium', note: 'Moderate bias'},
+  'DOOM':  {bias: 5, width: 'wide',   note: 'Wide track, fairly neutral'},
+  'GCST':  {bias: 6, width: 'medium', note: 'Moderate bias'},
+  'IPSW':  {bias: 7, width: 'medium', note: 'Inside favoured'},
+  'TOWN':  {bias: 6, width: 'medium', note: 'Moderate bias'},
+  'MKAY':  {bias: 5, width: 'medium', note: 'Fairly neutral'},
+  // SA
+  'MOPR':  {bias: 6, width: 'medium', note: 'Moderate bias'},
+  'MTGR':  {bias: 7, width: 'tight',  note: 'Tight track, inside favoured'},
+  // WA
+  'PERT':  {bias: 5, width: 'wide',   note: 'Wide track, fairly neutral'},
+  'BELU':  {bias: 6, width: 'medium', note: 'Moderate bias'},
+};
+
+function getTrackProfile(code) {
+  return TRACK_PROFILES[code] || {bias: 5, width: 'medium', note: 'Standard track'};
+}
+
+function getBarrierPenalty(barrier, style, totalRunners, trackBias) {
+  if (!barrier || !totalRunners) return {penalty: 0, risk: null};
+  
+  const barrierPct = barrier / totalRunners; // 0=inside, 1=outside
+  const biasScale = trackBias / 10; // 0-1
+
+  // Wide barrier base penalty — increases with track bias
+  let penalty = 0;
+  let risk = null;
+
+  if (barrierPct > 0.75) {
+    // Very wide draw
+    penalty = -8 * biasScale;
+    risk = 'high';
+  } else if (barrierPct > 0.5) {
+    // Wide-ish
+    penalty = -4 * biasScale;
+    risk = 'medium';
+  } else if (barrierPct <= 0.25) {
+    // Inside — small bonus
+    penalty = 3 * biasScale;
+    risk = 'low';
+  } else {
+    risk = 'low';
+  }
+
+  // Running style modifier
+  // Leaders from wide barrier must cross or lead wide — uses energy
+  if (style === 'leader') {
+    if (barrierPct > 0.5) penalty -= 5 * biasScale;   // must cross field or lead wide
+    if (barrierPct <= 0.2) penalty += 3;               // perfect leader draw
+  }
+  // On pace from wide — has to push forward through traffic
+  if (style === 'on_pace' && barrierPct > 0.6) penalty -= 3 * biasScale;
+  // Back markers less affected by wide draws — they settle anyway
+  if (style === 'back') {
+    penalty *= 0.3; // greatly reduced barrier effect
+    risk = barrierPct > 0.75 ? 'medium' : 'low'; // still some effect (wide run in straight)
+  }
+  // Midfield from wide — gets caught 3-4 wide, costs lengths
+  if (style === 'midfield' && barrierPct > 0.65) penalty -= 2 * biasScale;
+
+  return {penalty: Math.round(penalty * 10) / 10, risk};
+}
+
 async function runSimulation() {
   if (field.length < 2) return;
 
@@ -809,11 +916,19 @@ async function runSimulation() {
       score = score * 0.7 + drySpd * 0.3;
     }
     
-    // Track affinity boost
+    // Barrier draw penalty/bonus
     const trackCode = document.getElementById('track-code').value.toUpperCase().trim();
+    const trackProfile = getTrackProfile(trackCode);
+    const barrierResult = getBarrierPenalty(h.barrier, style, field.length, trackProfile.bias);
+    score += barrierResult.penalty;
+    h.barrierRisk = barrierResult.risk;
+    h.barrierPenalty = barrierResult.penalty;
+
+    // Track affinity boost
+    const trackCodeForAffinity = trackCode;
     const trackRecord = h.data[10];
-    if (trackCode && trackRecord && trackRecord[trackCode]) {
-      const tr = trackRecord[trackCode];
+    if (trackCodeForAffinity && trackRecord && trackRecord[trackCodeForAffinity]) {
+      const tr = trackRecord[trackCodeForAffinity];
       const trRuns = tr[0];
       const trAffinity = tr[3]; // positive = performs better here
       const trWins = tr[2];
@@ -908,6 +1023,7 @@ function renderResults(pace, dist, cond, track) {
           return `<div class="track-lane">
             <span class="lane-num">${h.index+1}</span>
             <span class="lane-name" style="font-size:13px">${h.name}</span>
+            ${h.barrier ? `<span style="font-family:'Barlow Condensed',sans-serif;font-size:12px;color:${h.barrierRisk==='high'?'#ff7777':h.barrierRisk==='medium'?'#ffaa55':'rgba(245,240,232,0.4)'};min-width:28px">B${h.barrier}</span>` : ''}
             <div class="lane-bar-wrap">
               <div class="lane-bar" style="width:${pct}%;background:${color};">
                 <span style="font-size:10px;font-family:'Barlow Condensed',sans-serif;letter-spacing:0.5px">${h.userStyle === 'on_pace' ? 'ON PACE' : h.userStyle.toUpperCase()}</span>
@@ -931,6 +1047,7 @@ function renderResults(pace, dist, cond, track) {
             <th>Horse</th>
             <th>Running Style</th>
             <th>Rating</th>
+            <th>Barrier</th>
             <th>Going</th>
             <th>Track</th>
             <th>Speed Index</th>
@@ -947,6 +1064,7 @@ function renderResults(pace, dist, cond, track) {
               <td style="font-weight:600;font-family:'Barlow Condensed',sans-serif;font-size:15px">${h.name}</td>
               <td><span class="style-pill ${pillCls}">${h.userStyle === 'on_pace' ? 'On Pace' : h.userStyle.charAt(0).toUpperCase()+h.userStyle.slice(1)}</span></td>
               <td style="color:var(--sand)">${h.data[3] && h.data[3] > 0 ? h.data[3] : '—'}</td>
+              <td>${h.barrier ? `<span style="font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;color:${h.barrierRisk==='high'?'#ff7777':h.barrierRisk==='medium'?'#ffaa55':'var(--chalk)'}">${h.barrier}</span>${h.barrierRisk==='high'?' <span style="font-size:10px;color:#ff7777">WIDE</span>':h.barrierRisk==='medium'?' <span style="font-size:10px;color:#ffaa55">WIDE-ISH</span>':''}` : '<span style="color:rgba(245,240,232,0.2)">—</span>'}</td>
               <td>${h.data[7] != null ? `<span style="font-size:11px">${h.data[7] > 0.5 ? '💧' : h.data[7] < -0.5 ? '🌞' : '〰'}</span>` : '<span style="color:rgba(245,240,232,0.2);font-size:11px">—</span>'}</td>
               <td>${(() => { const tc = document.getElementById('track-code').value.toUpperCase().trim(); const tr = h.data[10] && tc && h.data[10][tc]; return tr ? `<span style="font-size:11px;color:${tr[3]>0.5?'#88dd88':tr[3]<-0.5?'#ff8888':'rgba(245,240,232,0.5)'}">${tr[0]}R ${tr[2]}W${tr[3]>0.5?' ✓':tr[3]<-0.5?' ✗':''}</span>` : '<span style="color:rgba(245,240,232,0.2);font-size:11px">—</span>'; })()}</td>
               <td>
