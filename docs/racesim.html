@@ -514,6 +514,27 @@
           <input type="text" id="track-code" placeholder="e.g. CAUL" maxlength="6" style="text-transform:uppercase">
         </div>
       </div>
+
+      <!-- Rail / Best Going -->
+      <div style="margin-top:14px;">
+        <div class="section-title" style="margin-bottom:10px;">Best Going in Straight</div>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <div style="flex:1">
+            <label style="display:block;font-size:11px;color:var(--sand);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">From (m)</label>
+            <input type="number" id="rail-from" min="0" max="20" value="0" step="1"
+              style="width:100%;background:rgba(255,255,255,0.07);border:1px solid rgba(200,169,110,0.3);border-radius:4px;padding:7px 10px;color:var(--chalk);font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;text-align:center;outline:none;"
+              oninput="updateRailLabel()">
+          </div>
+          <div style="color:rgba(245,240,232,0.3);font-size:18px;padding-top:18px;">—</div>
+          <div style="flex:1">
+            <label style="display:block;font-size:11px;color:var(--sand);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">To (m)</label>
+            <input type="number" id="rail-to" min="0" max="20" value="0" step="1"
+              style="width:100%;background:rgba(255,255,255,0.07);border:1px solid rgba(200,169,110,0.3);border-radius:4px;padding:7px 10px;color:var(--chalk);font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;text-align:center;outline:none;"
+              oninput="updateRailLabel()">
+          </div>
+        </div>
+        <div id="rail-label" style="margin-top:7px;font-size:12px;color:rgba(245,240,232,0.4);font-style:italic;text-align:center;">No rail advantage — neutral</div>
+      </div>
     </div>
 
     <!-- Add Horse -->
@@ -748,6 +769,72 @@ function renderField() {
 }
 
 // ===== SIMULATION =====
+function updateRailLabel() {
+  const from = parseInt(document.getElementById('rail-from').value) || 0;
+  const to = parseInt(document.getElementById('rail-to').value) || 0;
+  const label = document.getElementById('rail-label');
+  if (from === 0 && to === 0) {
+    label.textContent = 'No rail advantage — neutral';
+    label.style.color = 'rgba(245,240,232,0.4)';
+    return;
+  }
+  const mid = (from + to) / 2;
+  if (mid <= 5) {
+    label.textContent = `Inside ${from}–${to}m advantage — favours leaders & low barriers`;
+    label.style.color = '#88dd88';
+  } else if (mid >= 14) {
+    label.textContent = `Outside ${from}–${to}m advantage — favours wide closers`;
+    label.style.color = '#8ab4f8';
+  } else {
+    label.textContent = `Middle ${from}–${to}m advantage — fairly even`;
+    label.style.color = '#ffd464';
+  }
+}
+
+function getRailAdvantage(barrier, style, totalRunners, railFrom, railTo) {
+  // No advantage set
+  if (railFrom === 0 && railTo === 0) return 0;
+
+  const railMid = (railFrom + railTo) / 2;
+  const railWidth = Math.max(1, railTo - railFrom);
+
+  // Estimate where this horse will be in the straight (in metres from rail)
+  // Based on barrier and running style
+  let straightPos = 0;
+  if (!barrier || !totalRunners) {
+    // No barrier — estimate from style
+    straightPos = style === 'leader' ? 2 : style === 'on_pace' ? 4 : style === 'midfield' ? 7 : 10;
+  } else {
+    const barrierPct = barrier / totalRunners;
+    // Leaders tend to find the inside regardless of barrier
+    // Back markers tend to come widest
+    if (style === 'leader') {
+      straightPos = 1 + barrierPct * 3; // leaders usually find inside
+    } else if (style === 'on_pace') {
+      straightPos = 2 + barrierPct * 5;
+    } else if (style === 'midfield') {
+      straightPos = 3 + barrierPct * 8;
+    } else { // back
+      straightPos = 4 + barrierPct * 12; // closers often come widest
+    }
+  }
+
+  // How close is this horse's straight position to the advantaged ground?
+  const distFromAdvantage = Math.abs(straightPos - railMid);
+  const maxEffect = railWidth + 4; // effect falls off outside the strip
+
+  if (distFromAdvantage <= railWidth / 2) {
+    // Right in the sweet spot
+    return 8;
+  } else if (distFromAdvantage <= maxEffect) {
+    // Partial advantage
+    return Math.round((1 - distFromAdvantage / maxEffect) * 8);
+  } else {
+    // Outside the advantage zone — slight penalty if going is notably different
+    return railWidth >= 4 ? -3 : -1;
+  }
+}
+
 // Track width profiles — how much barriers matter
 // scale 0-10: 10 = very bias to inside, 0 = neutral
 const TRACK_PROFILES = {
@@ -928,6 +1015,13 @@ async function runSimulation() {
       score = score * 0.7 + drySpd * 0.3;
     }
     
+    // Rail / best going advantage
+    const railFrom = parseInt(document.getElementById('rail-from').value) || 0;
+    const railTo = parseInt(document.getElementById('rail-to').value) || 0;
+    const railBonus = getRailAdvantage(h.barrier, style, field.length, railFrom, railTo);
+    score += railBonus;
+    h.railBonus = railBonus;
+
     // Weight penalty/bonus
     const avgWeight = h.data[11];
     const carriedWeight = h.weight;
@@ -1010,10 +1104,12 @@ async function runSimulation() {
     margin: i === 0 ? 0 : Math.round((winner.score - h.score) * 0.08 * 10) / 10
   }));
   
-  renderResults(pace, dist, cond, track);
+  const railFromVal = parseInt(document.getElementById('rail-from').value) || 0;
+  const railToVal = parseInt(document.getElementById('rail-to').value) || 0;
+  renderResults(pace, dist, cond, track, railFromVal, railToVal);
 }
 
-function renderResults(pace, dist, cond, track) {
+function renderResults(pace, dist, cond, track, railFrom, railTo) {
   const panel = document.getElementById('right-panel');
   
   const paceClass = pace === 'hot' ? 'pace-hot' : pace === 'genuine' ? 'pace-genuine' : 'pace-slow';
@@ -1053,6 +1149,7 @@ function renderResults(pace, dist, cond, track) {
             <span class="lane-num">${h.index+1}</span>
             <span class="lane-name" style="font-size:13px">${h.name}</span>
             ${h.barrier ? `<span style="font-family:'Barlow Condensed',sans-serif;font-size:12px;color:${h.barrierRisk==='high'?'#ff7777':h.barrierRisk==='medium'?'#ffaa55':'rgba(245,240,232,0.4)'};min-width:28px">B${h.barrier}</span>` : ''}
+            ${h.railBonus >= 6 ? '<span style="font-size:10px;color:#88dd88">🌿SWEET</span>' : h.railBonus <= -2 ? '<span style="font-size:10px;color:rgba(245,240,232,0.3)">↔ WIDE</span>' : ''}
             <div class="lane-bar-wrap">
               <div class="lane-bar" style="width:${pct}%;background:${color};">
                 <span style="font-size:10px;font-family:'Barlow Condensed',sans-serif;letter-spacing:0.5px">${h.userStyle === 'on_pace' ? 'ON PACE' : h.userStyle.toUpperCase()}</span>
