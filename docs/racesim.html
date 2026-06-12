@@ -213,6 +213,37 @@
   .style-btn.active-midfield { background: var(--midfield-col); color: white; border-color: var(--midfield-col); }
   .style-btn.active-back { background: var(--back-col); color: white; border-color: var(--back-col); }
 
+  .special-btn {
+    flex: 1;
+    padding: 5px 6px;
+    border: 1px solid rgba(200,169,110,0.25);
+    border-radius: 4px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    background: rgba(255,255,255,0.04);
+    color: rgba(245,240,232,0.5);
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .special-btn:hover { background: rgba(255,255,255,0.1); }
+  .active-rails {
+    background: rgba(100,220,150,0.2) !important;
+    color: #66dd99 !important;
+    border-color: #66dd99 !important;
+  }
+  .active-box {
+    background: rgba(255,200,80,0.2) !important;
+    color: #ffcc44 !important;
+    border-color: #ffcc44 !important;
+  }
+  .active-none {
+    background: rgba(255,255,255,0.06) !important;
+    color: rgba(245,240,232,0.4) !important;
+  }
+
   .style-suggest {
     font-size: 11px;
     color: rgba(245,240,232,0.4);
@@ -548,7 +579,10 @@
 
     <!-- Field -->
     <div id="field-section" style="display:none;">
-      <div class="section-title">Field <span id="field-count" style="color:rgba(245,240,232,0.4);font-weight:400"></span></div>
+      <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;">
+    <span>Field <span id="field-count" style="color:rgba(245,240,232,0.4);font-weight:400"></span></span>
+    <button onclick="autoSuggestPositions()" style="font-size:11px;padding:3px 8px;background:rgba(200,169,110,0.1);border:1px solid rgba(200,169,110,0.3);border-radius:4px;color:var(--sand);cursor:pointer;font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;" title="Auto-suggest which horse is most likely to get the rails run and box seat based on barriers and running style">✨ Auto-suggest</button>
+  </div>
       <div id="field-list"></div>
     </div>
 
@@ -669,7 +703,7 @@ function addHorse(name) {
   // Default style from historical data
   const defaultStyle = data[0] === 'l' ? 'leader' : data[0] === 'o' ? 'on_pace' : data[0] === 'm' ? 'midfield' : data[0] === 'b' ? 'back' : 'midfield';
   
-  field.push({ name, userStyle: defaultStyle, data, detail, barrier: null, weight: null });
+  field.push({ name, userStyle: defaultStyle, data, detail, barrier: null, weight: null, specialPos: null });
   searchInput.value = '';
   autocomplete.style.display = 'none';
   renderField();
@@ -688,7 +722,8 @@ function addHorseManual(name) {
     detail: [],
     manual: true,
     barrier: null,
-    weight: null
+    weight: null,
+    specialPos: null
   });
   searchInput.value = '';
   autocomplete.style.display = 'none';
@@ -699,6 +734,18 @@ function setBarrier(idx, val) {
   const b = parseInt(val);
   field[idx].barrier = (b > 0) ? b : null;
   // Don't re-render — just store value silently
+}
+
+function setSpecialPos(idx, pos) {
+  // Only one horse can hold rails, only one can hold box seat at a time
+  if (pos === 'rails') {
+    field.forEach((h, i) => { if (h.specialPos === 'rails') h.specialPos = null; });
+  }
+  if (pos === 'box') {
+    field.forEach((h, i) => { if (h.specialPos === 'box') h.specialPos = null; });
+  }
+  field[idx].specialPos = pos;
+  renderField();
 }
 
 function setWeight(idx, val) {
@@ -713,6 +760,41 @@ function removeHorse(idx) {
 
 function setStyle(idx, style) {
   field[idx].userStyle = style;
+  renderField();
+}
+
+function autoSuggestPositions() {
+  if (field.length < 2) return;
+
+  // Clear existing special positions
+  field.forEach(h => h.specialPos = null);
+
+  // Score each horse for likelihood of rails run
+  // Best candidate: low barrier + on_pace or midfield style
+  // (leaders lead, don't get rails run behind the speed)
+  const styleScore = { on_pace: 3, midfield: 2, leader: 0, back: 0 };
+
+  const railsCandidates = field
+    .map((h, i) => {
+      const barrierScore = h.barrier ? Math.max(0, 10 - h.barrier) : 3;
+      const sty = styleScore[h.userStyle] || 0;
+      return { idx: i, score: barrierScore + sty * 2 };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  // Rails run: top candidate (must be on_pace or midfield to be realistic)
+  const railsWinner = railsCandidates.find(c =>
+    field[c.idx].userStyle === 'on_pace' || field[c.idx].userStyle === 'midfield'
+  );
+  if (railsWinner) field[railsWinner.idx].specialPos = 'rails';
+
+  // Box seat: second best candidate, different horse, ideally also on_pace/midfield
+  const boxWinner = railsCandidates.find(c =>
+    c.idx !== (railsWinner ? railsWinner.idx : -1) &&
+    (field[c.idx].userStyle === 'on_pace' || field[c.idx].userStyle === 'midfield' || field[c.idx].userStyle === 'leader')
+  );
+  if (boxWinner) field[boxWinner.idx].specialPos = 'box';
+
   renderField();
 }
 
@@ -764,6 +846,23 @@ function renderField() {
         </div>
       </div>
       ${sugLabel ? `<div class="style-suggest">${sugLabel}</div>` : ''}
+      <div style="display:flex;gap:6px;margin-top:8px;">
+        <button onclick="setSpecialPos(${i}, 'rails')"
+          class="special-btn ${h.specialPos === 'rails' ? 'active-rails' : ''}"
+          title="Horse gets the coveted rails run — saves lengths, suits on-pace/midfield runners">
+          🔒 Rails Run
+        </button>
+        <button onclick="setSpecialPos(${i}, 'box')"
+          class="special-btn ${h.specialPos === 'box' ? 'active-box' : ''}"
+          title="Horse sits in box seat — one off the fence, perfect trailing position">
+          📦 Box Seat
+        </button>
+        <button onclick="setSpecialPos(${i}, null)"
+          class="special-btn ${!h.specialPos ? 'active-none' : ''}"
+          title="No special position advantage">
+          — None
+        </button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -1015,6 +1114,21 @@ async function runSimulation() {
       score = score * 0.7 + drySpd * 0.3;
     }
     
+    // Rails run / box seat bonus
+    h.specialLabel = null;
+    if (h.specialPos === 'rails') {
+      // Rails run: saves ~2-3 lengths, massive advantage
+      // Worth more at longer distances and on tight tracks
+      const railsBonus = dist >= 1600 ? 14 : dist >= 1200 ? 11 : 8;
+      score += railsBonus;
+      h.specialLabel = '🔒 RAILS';
+    } else if (h.specialPos === 'box') {
+      // Box seat: one off the fence, perfect cover — very valuable
+      const boxBonus = dist >= 1600 ? 10 : dist >= 1200 ? 8 : 6;
+      score += boxBonus;
+      h.specialLabel = '📦 BOX';
+    }
+
     // Rail / best going advantage
     const railFrom = parseInt(document.getElementById('rail-from').value) || 0;
     const railTo = parseInt(document.getElementById('rail-to').value) || 0;
@@ -1150,6 +1264,7 @@ function renderResults(pace, dist, cond, track, railFrom, railTo) {
             <span class="lane-name" style="font-size:13px">${h.name}</span>
             ${h.barrier ? `<span style="font-family:'Barlow Condensed',sans-serif;font-size:12px;color:${h.barrierRisk==='high'?'#ff7777':h.barrierRisk==='medium'?'#ffaa55':'rgba(245,240,232,0.4)'};min-width:28px">B${h.barrier}</span>` : ''}
             ${h.railBonus >= 6 ? '<span style="font-size:10px;color:#88dd88">🌿SWEET</span>' : h.railBonus <= -2 ? '<span style="font-size:10px;color:rgba(245,240,232,0.3)">↔ WIDE</span>' : ''}
+            ${h.specialLabel ? `<span style="font-size:10px;color:${h.specialPos==='rails'?'#66dd99':'#ffcc44'};font-weight:700">${h.specialLabel}</span>` : ''}
             <div class="lane-bar-wrap">
               <div class="lane-bar" style="width:${pct}%;background:${color};">
                 <span style="font-size:10px;font-family:'Barlow Condensed',sans-serif;letter-spacing:0.5px">${h.userStyle === 'on_pace' ? 'ON PACE' : h.userStyle.toUpperCase()}</span>
@@ -1174,6 +1289,7 @@ function renderResults(pace, dist, cond, track, railFrom, railTo) {
             <th>Running Style</th>
             <th>Rating</th>
             <th>Barrier</th>
+            <th>Position</th>
             <th>Weight</th>
             <th>Going</th>
             <th>Track</th>
@@ -1191,6 +1307,7 @@ function renderResults(pace, dist, cond, track, railFrom, railTo) {
               <td style="font-weight:600;font-family:'Barlow Condensed',sans-serif;font-size:15px">${h.name}</td>
               <td><span class="style-pill ${pillCls}">${h.userStyle === 'on_pace' ? 'On Pace' : h.userStyle.charAt(0).toUpperCase()+h.userStyle.slice(1)}</span></td>
               <td style="color:var(--sand)">${h.data[3] && h.data[3] > 0 ? h.data[3] : '—'}</td>
+              <td>${h.specialLabel ? `<span style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:700;padding:2px 7px;border-radius:4px;background:${h.specialPos==='rails'?'rgba(100,220,150,0.2)':'rgba(255,200,80,0.2)'};color:${h.specialPos==='rails'?'#66dd99':'#ffcc44'};border:1px solid ${h.specialPos==='rails'?'#66dd99':'#ffcc44'}">${h.specialLabel}</span>` : '<span style="color:rgba(245,240,232,0.15);font-size:11px">—</span>'}</td>
               <td>${h.barrier ? `<span style="font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;color:${h.barrierRisk==='high'?'#ff7777':h.barrierRisk==='medium'?'#ffaa55':'var(--chalk)'}">${h.barrier}</span>${h.barrierRisk==='high'?' <span style="font-size:10px;color:#ff7777">WIDE</span>':h.barrierRisk==='medium'?' <span style="font-size:10px;color:#ffaa55">WIDE-ISH</span>':''}` : '<span style="color:rgba(245,240,232,0.2)">—</span>'}</td>
               <td>${(() => {
                 const cw = h.weight; const aw = h.data[11];
