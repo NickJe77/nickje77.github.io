@@ -15,6 +15,7 @@ import random
 import os
 import io
 from pathlib import Path
+from datetime import datetime
 
 import requests
 from bs4 import BeautifulSoup, Comment
@@ -135,9 +136,15 @@ def polite_get(url, retries=4):
 # ---------------------------------------------------------------------------
 # Schedule scraping
 # ---------------------------------------------------------------------------
-def get_game_urls_for_season(season):
+def get_game_urls_for_season(season, force_refresh=False):
     cache_path = SCHEDULE_DIR / f"{season}.json"
-    if cache_path.exists():
+    now = datetime.utcnow()
+    current_season = (now.year + 1) if now.month >= 10 else now.year
+
+    # Always re-fetch the current season — the cached file misses newly
+    # scheduled playoff games added since it was last written.
+    # Past seasons are stable so we keep the cache for those.
+    if cache_path.exists() and season != current_season and not force_refresh:
         with open(cache_path) as f:
             return json.load(f)
 
@@ -211,10 +218,10 @@ def parse_player_table(table):
         if not name:
             continue
 
-        reason_td  = row.find("td", {"data-stat": "reason"})
+        reason_td   = row.find("td", {"data-stat": "reason"})
         reason_text = reason_td.get_text(strip=True) if reason_td else ""
-        mp_td      = row.find("td", {"data-stat": "mp"})
-        mp_val     = mp_td.get_text(strip=True) if mp_td else ""
+        mp_td       = row.find("td", {"data-stat": "mp"})
+        mp_val      = mp_td.get_text(strip=True) if mp_td else ""
 
         if reason_text or mp_val.lower() in DNP_PHRASES:
             players.append({"player": name, "dnp": reason_text or mp_val or "DNP"})
@@ -266,7 +273,7 @@ def scrape_boxscore(game):
     final_scores = {}
     linescore = soup.find("table", {"id": "line_score"})
     if linescore:
-        thead_rows     = linescore.find("thead").find_all("tr")
+        thead_rows      = linescore.find("thead").find_all("tr")
         quarter_headers = [th.get_text(strip=True) for th in thead_rows[-1].find_all("th")][1:]
         for row in linescore.find("tbody").find_all("tr"):
             cells     = row.find_all(["th", "td"])
