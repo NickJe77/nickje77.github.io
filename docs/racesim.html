@@ -495,6 +495,122 @@
 
   .no-data { color: rgba(245,240,232,0.35); font-style: italic; font-size: 12px; }
 
+  /* LIVE SPEED MAP */
+  .live-map-wrap {
+    background: linear-gradient(180deg, #1a2a10 0%, #111808 100%);
+    border: 1px solid rgba(200,169,110,0.2);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .live-map-header {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: rgba(255,255,255,0.04);
+    border-bottom: 1px solid rgba(200,169,110,0.15);
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 12px;
+    letter-spacing: 1px;
+    color: rgba(245,240,232,0.4);
+    text-transform: uppercase;
+  }
+  .live-map-row {
+    display: flex;
+    align-items: center;
+    padding: 7px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    gap: 10px;
+    transition: background 0.2s;
+  }
+  .live-map-row:last-child { border-bottom: none; }
+  .live-map-row:hover { background: rgba(255,255,255,0.03); }
+  .lm-barrier {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 900;
+    font-size: 15px;
+    min-width: 28px;
+    text-align: center;
+    color: rgba(245,240,232,0.5);
+  }
+  .lm-name {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    min-width: 160px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+  }
+  .lm-track {
+    flex: 1;
+    position: relative;
+    height: 28px;
+  }
+  .lm-horse {
+    position: absolute;
+    height: 24px;
+    top: 2px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: white;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    transition: left 0.4s ease, width 0.4s ease;
+    cursor: default;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+  .lm-badge {
+    font-size: 10px;
+    margin-left: 4px;
+    opacity: 0.9;
+  }
+  .lm-legend {
+    display: flex;
+    gap: 14px;
+    padding: 10px 16px;
+    background: rgba(255,255,255,0.02);
+    border-top: 1px solid rgba(200,169,110,0.1);
+    flex-wrap: wrap;
+  }
+  .lm-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size:11px;
+    color: rgba(245,240,232,0.45);
+  }
+  .lm-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+  }
+  .lm-pace-summary {
+    padding: 10px 16px;
+    background: rgba(255,255,255,0.02);
+    border-top: 1px solid rgba(200,169,110,0.1);
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 12px;
+  }
+  .lm-pace-stat {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: rgba(245,240,232,0.5);
+  }
+  .lm-pace-num {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 18px;
+    font-weight: 900;
+  }
+
   @media print {
     .left-panel, .header-badge, .export-btn, .run-btn, .search-wrap { display: none !important; }
     .app { grid-template-columns: 1fr; }
@@ -592,10 +708,18 @@
 
   <!-- RIGHT PANEL -->
   <div class="right-panel" id="right-panel">
-    <div class="empty-state">
+    <div class="empty-state" id="empty-state">
       <div class="empty-icon">🏇</div>
       <div class="empty-text">Add horses to build your field</div>
       <div style="font-size:13px;color:rgba(245,240,232,0.3);">Search and add runners, assign their running position, then simulate</div>
+    </div>
+    <div id="live-map-panel" style="display:none;">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;color:var(--sand);margin-bottom:4px;">LIVE SPEED MAP</div>
+      <div style="font-size:12px;color:rgba(245,240,232,0.4);margin-bottom:16px;">Updates as you build your field — adjust barriers and styles to reshape the race</div>
+      <div id="live-map-container"></div>
+      <div style="margin-top:16px;padding:10px 14px;background:rgba(255,255,255,0.03);border-radius:6px;font-size:11px;color:rgba(245,240,232,0.35);">
+        💡 Tip: Assign barriers and running styles on the left to see how the race will unfold. Use Rails Run and Box Seat buttons to mark key positions, then hit <strong style="color:var(--sand)">Run Race</strong> to simulate.
+      </div>
     </div>
   </div>
 </div>
@@ -733,7 +857,7 @@ function addHorseManual(name) {
 function setBarrier(idx, val) {
   const b = parseInt(val);
   field[idx].barrier = (b > 0) ? b : null;
-  // Don't re-render — just store value silently
+  renderLiveMap(); // update map live as barriers are entered
 }
 
 function setSpecialPos(idx, pos) {
@@ -761,6 +885,138 @@ function removeHorse(idx) {
 function setStyle(idx, style) {
   field[idx].userStyle = style;
   renderField();
+}
+
+function renderLiveMap() {
+  const panel = document.getElementById('live-map-panel');
+  const emptyState = document.getElementById('empty-state');
+  const container = document.getElementById('live-map-container');
+
+  if (!field.length) {
+    panel.style.display = 'none';
+    emptyState.style.display = 'flex';
+    return;
+  }
+  panel.style.display = 'block';
+  emptyState.style.display = 'none';
+
+  const styleColors = {
+    leader: 'var(--leader-col)',
+    on_pace: 'var(--onpace-col)',
+    midfield: 'var(--midfield-col)',
+    back: 'var(--back-col)'
+  };
+
+  const styleOrder = { leader: 0, on_pace: 1, midfield: 2, back: 3 };
+
+  // Assign lateral positions based on barrier within each style group
+  // Each style group gets a section of the track
+  // Within each group, horses are ordered by barrier (lower = closer to rail)
+  const groups = { leader: [], on_pace: [], midfield: [], back: [] };
+  field.forEach((h, i) => {
+    const g = h.userStyle || 'midfield';
+    groups[g].push({ ...h, fieldIdx: i });
+  });
+
+  // Sort each group by barrier (no barrier = middle of group)
+  Object.keys(groups).forEach(g => {
+    groups[g].sort((a, b) => {
+      const ba = a.barrier || 999;
+      const bb = b.barrier || 999;
+      return ba - bb;
+    });
+  });
+
+  // Build ordered list for display
+  // Each horse gets: lateral offset (% from inside) and style group
+  // Track is 20m wide. Leaders run 0-4m, On Pace 0-8m, Midfield 3-12m, Back 5-16m
+  // Within each group, space horses evenly
+  const positioned = [];
+
+  const groupRanges = {
+    leader:   [0, 4],
+    on_pace:  [0, 8],
+    midfield: [3, 13],
+    back:     [5, 18]
+  };
+
+  Object.entries(groups).forEach(([g, horses]) => {
+    if (!horses.length) return;
+    const [rMin, rMax] = groupRanges[g];
+    horses.forEach((h, idx) => {
+      // Position within the group based on barrier rank
+      const lateral = horses.length === 1
+        ? rMin + (rMax - rMin) * 0.3
+        : rMin + (rMax - rMin) * (idx / (horses.length - 1 || 1)) * 0.85;
+      positioned.push({ ...h, lateral: Math.round(lateral * 10) / 10, group: g });
+    });
+  });
+
+  // Sort for display — leaders first, then on pace, midfield, back
+  // Within each group, sort by lateral (rail to wide)
+  positioned.sort((a, b) => {
+    const so = styleOrder[a.group] - styleOrder[b.group];
+    if (so !== 0) return so;
+    return a.lateral - b.lateral;
+  });
+
+  // Count styles for pace summary
+  const styleCounts = { leader: 0, on_pace: 0, midfield: 0, back: 0 };
+  field.forEach(h => { if (styleCounts[h.userStyle] !== undefined) styleCounts[h.userStyle]++; });
+  const leaderCount = styleCounts.leader;
+  const paceDesc = leaderCount === 0 ? 'No clear leader — tactical race likely'
+    : leaderCount === 1 ? 'Single leader — likely to control tempo'
+    : leaderCount === 2 ? 'Two leaders — contested pace expected'
+    : `${leaderCount} leaders — hot pace anticipated`;
+
+  const trackWidth = 20; // metres
+
+  container.innerHTML = `
+    <div class="live-map-wrap">
+      <div class="live-map-header">
+        <span>← Rail (0m)</span>
+        <span>RACE SHAPE</span>
+        <span>Wide (20m) →</span>
+      </div>
+      ${positioned.map(h => {
+        const leftPct = (h.lateral / trackWidth) * 100;
+        const color = styleColors[h.group] || '#888';
+        const barrierLabel = h.barrier ? `B${h.barrier}` : '?';
+        const specialBadge = h.specialPos === 'rails' ? ' 🔒' : h.specialPos === 'box' ? ' 📦' : '';
+        const barrierColor = !h.barrier ? 'rgba(245,240,232,0.3)'
+          : h.barrier <= 4 ? '#88dd88'
+          : h.barrier <= 8 ? 'rgba(245,240,232,0.7)'
+          : h.barrier <= 12 ? '#ffaa55'
+          : '#ff7777';
+
+        return `<div class="live-map-row">
+          <span class="lm-barrier" style="color:${barrierColor}">${barrierLabel}</span>
+          <span class="lm-name" style="color:${color}">${h.name}</span>
+          <div class="lm-track">
+            <div class="lm-horse" style="left:${Math.max(0, Math.min(leftPct, 82))}%;background:${color};min-width:60px;max-width:140px;">
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px">${h.name.split(' ')[0]}</span>
+              <span class="lm-badge">${specialBadge || ''}</span>
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+      <div class="lm-legend">
+        <div class="lm-legend-item"><div class="lm-legend-dot" style="background:var(--leader-col)"></div>Leader</div>
+        <div class="lm-legend-item"><div class="lm-legend-dot" style="background:var(--onpace-col)"></div>On Pace</div>
+        <div class="lm-legend-item"><div class="lm-legend-dot" style="background:var(--midfield-col)"></div>Midfield</div>
+        <div class="lm-legend-item"><div class="lm-legend-dot" style="background:var(--back-col)"></div>Back</div>
+        <div class="lm-legend-item" style="margin-left:auto"><span style="color:#88dd88">B1-4 inside</span></div>
+        <div class="lm-legend-item"><span style="color:#ffaa55">B9-12</span></div>
+        <div class="lm-legend-item"><span style="color:#ff7777">B13+ wide</span></div>
+      </div>
+      <div class="lm-pace-summary">
+        <div class="lm-pace-stat"><span class="lm-pace-num" style="color:var(--leader-col)">${styleCounts.leader}</span> Leader${styleCounts.leader !== 1 ? 's' : ''}</div>
+        <div class="lm-pace-stat"><span class="lm-pace-num" style="color:var(--onpace-col)">${styleCounts.on_pace}</span> On Pace</div>
+        <div class="lm-pace-stat"><span class="lm-pace-num" style="color:var(--midfield-col)">${styleCounts.midfield}</span> Midfield</div>
+        <div class="lm-pace-stat"><span class="lm-pace-num" style="color:var(--back-col)">${styleCounts.back}</span> Back</div>
+        <div class="lm-pace-stat" style="margin-left:auto;font-style:italic;color:rgba(245,240,232,0.4)">${paceDesc}</div>
+      </div>
+    </div>`;
 }
 
 function autoSuggestPositions() {
@@ -814,6 +1070,7 @@ function renderField() {
   runBtn.disabled = field.length < 2;
   countEl.textContent = `(${field.length})`;
   
+  renderLiveMap();
   list.innerHTML = field.map((h, i) => {
     const d = h.data;
     const sug = d[0] === 'l' ? 'leader' : d[0] === 'o' ? 'on_pace' : d[0] === 'm' ? 'midfield' : d[0] === 'b' ? 'back' : null;
