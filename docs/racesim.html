@@ -658,7 +658,7 @@
         </div>
         <div class="setting-item">
           <label>Track Code</label>
-          <input type="text" id="track-code" placeholder="e.g. CAUL" maxlength="6" style="text-transform:uppercase">
+          <input type="text" id="track-code" placeholder="e.g. CAUL" maxlength="6" style="text-transform:uppercase" oninput="renderLiveMap()">
         </div>
       </div>
 
@@ -900,121 +900,215 @@ function renderLiveMap() {
   panel.style.display = 'block';
   emptyState.style.display = 'none';
 
-  const styleColors = {
-    leader: 'var(--leader-col)',
-    on_pace: 'var(--onpace-col)',
-    midfield: 'var(--midfield-col)',
-    back: 'var(--back-col)'
+  const trackCode = document.getElementById('track-code').value.toUpperCase().trim();
+
+  // Track direction lookup
+  // VIC, SA, TAS, WA = anti-clockwise | NSW, QLD, ACT = clockwise
+  // Source: Racing Australia / state racing bodies
+  const TRACK_DIR = {
+    // ── VICTORIA (anti-clockwise) ──
+    FLEM:'AC', CAUL:'AC', MVALL:'AC', SAND:'AC', MORN:'AC', BALN:'AC',
+    SEYM:'AC', KYNE:'AC', BENV:'AC', SALE:'AC', WANR:'AC', NARC:'AC',
+    HAMN:'AC', ECHV:'AC', WANG:'AC', BENL:'AC', ARMD:'AC', BALL:'AC',
+    STAW:'AC', AVOC:'AC', TRAR:'AC', WDVL:'AC', SURT:'AC', WYCH:'AC',
+    MILD:'AC', NHIL:'AC', HDON:'AC', CAST:'AC', HLLS:'AC', MOE:'AC',
+    GEEL:'AC', CRAN:'AC', HEAL:'AC', BKVA:'AC', LARA:'AC', YEA:'AC',
+    WERR:'AC', MORV:'AC', WOND:'AC', NTHN:'AC', NOOR:'AC',
+    // ── NEW SOUTH WALES (clockwise) ──
+    RAND:'CW', ROSE:'CW', WARW:'CW', KENS:'CW', CANT:'CW', HAWK:'CW',
+    GOSF:'CW', NEWC:'CW', TMRE:'CW', TAMW:'CW', DUBBO:'CW', WAGA:'CW',
+    WAGG:'CW', ORAN:'CW', BATH:'CW', COFF:'CW', GRAF:'CW', LISMORE:'CW',
+    LISM:'CW', SCNE:'CW', MUSWB:'CW', GRIF:'CW', YUNG:'CW', QUIR:'CW',
+    NARR:'CW', GUND:'CW', WYNG:'CW', COWR:'CW', MUND:'CW', TUMB:'CW',
+    WENT:'CW', MOUL:'CW', WEAN:'CW', WIND:'CW', CDNA:'CW', SCPT:'CW',
+    NOWR:'CW', HTON:'CW', FORB:'CW', DROU:'CW', COOT:'CW', PARK:'CW',
+    GOUL:'CW', YASS:'CW', TAREE:'CW', PORT:'CW', TUNC:'CW', WALG:'CW',
+    BONG:'CW', BOMB:'CW', TBUT:'CW', GILG:'CW', DUBB:'CW',
+    // ── QUEENSLAND (clockwise) ──
+    DOOM:'CW', GCST:'CW', IPSW:'CW', TOWN:'CW', MKAY:'CW', ROCK:'CW',
+    TBAH:'CW', GLAD:'CW', MACK:'CW', GAYN:'CW', ROMA:'CW', DALB:'CW',
+    WARW:'CW', GYMP:'CW', NOOL:'CW', BEAU:'CW', CHAR:'CW', EMER:'CW',
+    LONG:'CW', THUR:'CW', ISIS:'CW', CHIN:'CW', INGH:'CW', THAN:'CW',
+    TOOD:'CW', RICC:'CW', CLMO:'CW', YEPP:'CW', TABM:'CW',
+    // ── ACT (clockwise) ──
+    CANB:'CW',
+    // ── SOUTH AUSTRALIA (anti-clockwise) ──
+    MOPR:'AC', GAWL:'AC', MTNG:'AC', PENS:'AC', NARC:'AC', BORD:'AC',
+    LCHP:'AC', QORN:'AC', SALS:'AC', MNGI:'AC', WKBL:'AC', PORT:'AC',
+    RENM:'AC', LURA:'AC', MEND:'AC',
+    // ── WESTERN AUSTRALIA (anti-clockwise) ──
+    PERT:'AC', BELM:'AC', PINJ:'AC', PENT:'AC', BELU:'AC', KALG:'AC',
+    ALBY:'AC', GERR:'AC', BUNB:'AC', MAND:'AC', NARR:'AC', ESPR:'AC',
+    YORK:'AC', NMAN:'AC', MERT:'AC',
+    // ── TASMANIA (anti-clockwise) ──
+    LAUN:'AC', HOB:'AC', DEVS:'AC', BVLE:'AC', ELRM:'AC',
+    // ── NORTHERN TERRITORY ──
+    DRWN:'CW', ALICE:'CW',
+    // ── NEW ZEALAND (mostly anti-clockwise, Ellerslie is clockwise) ──
+    AUCK:'AC', WELL:'AC', CHCH:'AC', TAUR:'AC', WHAN:'AC', HAST:'AC',
+    ELLS:'CW',
   };
 
-  const styleOrder = { leader: 0, on_pace: 1, midfield: 2, back: 3 };
+  const dir = TRACK_DIR[trackCode] || null;
+  const isAntiClockwise = dir === 'AC';
+  const dirLabel = trackCode
+    ? (dir === 'AC' ? `${trackCode} — Anti-clockwise` : dir === 'CW' ? `${trackCode} — Clockwise` : `${trackCode} — Direction unknown`)
+    : 'No track selected';
 
-  // Assign lateral positions based on barrier within each style group
-  // Each style group gets a section of the track
-  // Within each group, horses are ordered by barrier (lower = closer to rail)
+  // Style groups in order left→right
+  const groupDefs = [
+    { key: 'leader',    label: 'Leader',      color: 'var(--leader-col)',    bg: 'rgba(232,93,53,0.08)'   },
+    { key: 'on_pace',   label: 'Pace',         color: 'var(--onpace-col)',    bg: 'rgba(232,160,32,0.08)'  },
+    { key: 'midfield',  label: 'Midfield',     color: 'var(--midfield-col)',  bg: 'rgba(74,144,217,0.08)'  },
+    { key: 'back',      label: 'Back Marker',  color: 'var(--back-col)',      bg: 'rgba(123,94,167,0.08)'  },
+  ];
+
+  // Sort horses into groups
   const groups = { leader: [], on_pace: [], midfield: [], back: [] };
   field.forEach((h, i) => {
     const g = h.userStyle || 'midfield';
-    groups[g].push({ ...h, fieldIdx: i });
+    if (groups[g]) groups[g].push({ ...h, fieldIdx: i });
   });
 
-  // Sort each group by barrier (no barrier = middle of group)
+  // Within each group, sort by barrier
+  // Low barrier = inside (row 1), high barrier = outside (row 2+)
+  // Anti-clockwise: same — low barrier still goes to rail
   Object.keys(groups).forEach(g => {
-    groups[g].sort((a, b) => {
-      const ba = a.barrier || 999;
-      const bb = b.barrier || 999;
-      return ba - bb;
-    });
+    groups[g].sort((a, b) => (a.barrier || 99) - (b.barrier || 99));
   });
 
-  // Build ordered list for display
-  // Each horse gets: lateral offset (% from inside) and style group
-  // Track is 20m wide. Leaders run 0-4m, On Pace 0-8m, Midfield 3-12m, Back 5-16m
-  // Within each group, space horses evenly
-  const positioned = [];
+  // Max horses in any group (for height calc)
+  const maxInGroup = Math.max(...Object.values(groups).map(g => g.length), 1);
+  // Each horse gets two rows within col: inside (1) and outside (2) alternating
+  // We'll stack them vertically within each column, innermost at bottom (closest to rail)
 
-  const groupRanges = {
-    leader:   [0, 4],
-    on_pace:  [0, 8],
-    midfield: [3, 13],
-    back:     [5, 18]
-  };
-
-  Object.entries(groups).forEach(([g, horses]) => {
-    if (!horses.length) return;
-    const [rMin, rMax] = groupRanges[g];
-    horses.forEach((h, idx) => {
-      // Position within the group based on barrier rank
-      const lateral = horses.length === 1
-        ? rMin + (rMax - rMin) * 0.3
-        : rMin + (rMax - rMin) * (idx / (horses.length - 1 || 1)) * 0.85;
-      positioned.push({ ...h, lateral: Math.round(lateral * 10) / 10, group: g });
-    });
-  });
-
-  // Sort for display — leaders first, then on pace, midfield, back
-  // Within each group, sort by lateral (rail to wide)
-  positioned.sort((a, b) => {
-    const so = styleOrder[a.group] - styleOrder[b.group];
-    if (so !== 0) return so;
-    return a.lateral - b.lateral;
-  });
-
-  // Count styles for pace summary
   const styleCounts = { leader: 0, on_pace: 0, midfield: 0, back: 0 };
   field.forEach(h => { if (styleCounts[h.userStyle] !== undefined) styleCounts[h.userStyle]++; });
   const leaderCount = styleCounts.leader;
-  const paceDesc = leaderCount === 0 ? 'No clear leader — tactical race likely'
-    : leaderCount === 1 ? 'Single leader — likely to control tempo'
-    : leaderCount === 2 ? 'Two leaders — contested pace expected'
-    : `${leaderCount} leaders — hot pace anticipated`;
+  const paceDesc = leaderCount === 0 ? 'No clear leader — tactical race'
+    : leaderCount === 1 ? 'Single leader — likely controls tempo'
+    : leaderCount === 2 ? 'Two leaders — contested pace'
+    : `${leaderCount} leaders — hot pace`;
 
-  const trackWidth = 20; // metres
+  // Barrier colour helper
+  function barrierColor(b) {
+    if (!b) return '#888';
+    if (b <= 4) return '#66cc77';
+    if (b <= 8) return '#cccc66';
+    if (b <= 12) return '#cc8844';
+    return '#cc4444';
+  }
+
+  // Rail label based on direction
+  const railLabel = isAntiClockwise ? '← Rail (inside)' : 'Rail (inside) →';
+  const wideLabel = isAntiClockwise ? 'Wide →' : '← Wide';
 
   container.innerHTML = `
-    <div class="live-map-wrap">
-      <div class="live-map-header">
-        <span>← Rail (0m)</span>
-        <span>RACE SHAPE</span>
-        <span>Wide (20m) →</span>
-      </div>
-      ${positioned.map(h => {
-        const leftPct = (h.lateral / trackWidth) * 100;
-        const color = styleColors[h.group] || '#888';
-        const barrierLabel = h.barrier ? `B${h.barrier}` : '?';
-        const specialBadge = h.specialPos === 'rails' ? ' 🔒' : h.specialPos === 'box' ? ' 📦' : '';
-        const barrierColor = !h.barrier ? 'rgba(245,240,232,0.3)'
-          : h.barrier <= 4 ? '#88dd88'
-          : h.barrier <= 8 ? 'rgba(245,240,232,0.7)'
-          : h.barrier <= 12 ? '#ffaa55'
-          : '#ff7777';
+    <div class="live-map-wrap" style="overflow:hidden;">
 
-        return `<div class="live-map-row">
-          <span class="lm-barrier" style="color:${barrierColor}">${barrierLabel}</span>
-          <span class="lm-name" style="color:${color}">${h.name}</span>
-          <div class="lm-track">
-            <div class="lm-horse" style="left:${Math.max(0, Math.min(leftPct, 82))}%;background:${color};min-width:60px;max-width:140px;">
-              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px">${h.name.split(' ')[0]}</span>
-              <span class="lm-badge">${specialBadge || ''}</span>
-            </div>
-          </div>
-        </div>`;
-      }).join('')}
-      <div class="lm-legend">
-        <div class="lm-legend-item"><div class="lm-legend-dot" style="background:var(--leader-col)"></div>Leader</div>
-        <div class="lm-legend-item"><div class="lm-legend-dot" style="background:var(--onpace-col)"></div>On Pace</div>
-        <div class="lm-legend-item"><div class="lm-legend-dot" style="background:var(--midfield-col)"></div>Midfield</div>
-        <div class="lm-legend-item"><div class="lm-legend-dot" style="background:var(--back-col)"></div>Back</div>
-        <div class="lm-legend-item" style="margin-left:auto"><span style="color:#88dd88">B1-4 inside</span></div>
-        <div class="lm-legend-item"><span style="color:#ffaa55">B9-12</span></div>
-        <div class="lm-legend-item"><span style="color:#ff7777">B13+ wide</span></div>
+      <!-- Direction bar -->
+      <div style="background:rgba(0,0,0,0.3);padding:8px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(200,169,110,0.15)">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;color:var(--sand);letter-spacing:1px;">${dirLabel}</div>
+        <div style="font-size:11px;color:rgba(245,240,232,0.35);">${dir === 'AC' ? '⟲ Anti-clockwise' : dir === 'CW' ? '⟳ Clockwise' : trackCode ? '❓ Direction unknown' : ''}</div>
       </div>
+
+      <!-- Rail indicators -->
+      <!-- Anti-clockwise (VIC/SA/WA/TAS): horses turn left, rail is on the LEFT of the map -->
+      <!-- Clockwise (NSW/QLD/ACT): horses turn right, rail is on the RIGHT of the map -->
+      <div style="display:flex;justify-content:space-between;padding:4px 16px;font-size:11px;color:rgba(245,240,232,0.35);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;border-bottom:1px solid rgba(200,169,110,0.1)">
+        <span style="color:${isAntiClockwise ? '#88dd88' : 'rgba(245,240,232,0.25)'}">${isAntiClockwise ? '🔒 RAIL (inside)' : 'WIDE'}</span>
+        <span style="color:rgba(245,240,232,0.2)">← position in running →</span>
+        <span style="color:${!isAntiClockwise ? '#88dd88' : 'rgba(245,240,232,0.25)'}">${isAntiClockwise ? 'WIDE' : 'RAIL (inside) 🔒'}</span>
+      </div>
+
+      <!-- Main map grid -->
+      <div style="display:flex;min-height:${Math.max(180, maxInGroup * 90 + 60)}px;">
+        ${(isAntiClockwise ? groupDefs : [...groupDefs].reverse()).map(gd => {
+          const horses = groups[gd.key];
+          const colWidth = 100 / groupDefs.length;
+          // Reverse so innermost (lowest barrier) is at bottom of column
+          const sorted = [...horses];
+          // Bottom = inside (rail), Top = outside
+          // We render top to bottom, so reverse for display
+          const display = [...sorted].reverse();
+
+          return `<div style="flex:1;background:${gd.bg};border-right:1px solid rgba(255,255,255,0.05);display:flex;flex-direction:column;justify-content:flex-end;padding:10px 8px 10px 8px;position:relative;min-width:0;">
+            <!-- Horses stacked bottom=inside, top=outside -->
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              ${display.map((h, idx) => {
+                // Anti-clockwise: inside = bottom of column (last after reverse) = lowest barrier
+                // Clockwise: inside = top of column (first after reverse) = lowest barrier  
+                const isInside = isAntiClockwise ? idx === display.length - 1 : idx === 0;
+                const specialBadge = h.specialPos === 'rails' ? ' 🔒' : h.specialPos === 'box' ? ' 📦' : '';
+                const bc = barrierColor(h.barrier);
+                const shortName = h.name.length > 14 ? h.name.substring(0,13)+'…' : h.name;
+                return `<div style="
+                  background:${gd.color};
+                  border-radius:6px;
+                  padding:6px 8px;
+                  display:flex;
+                  align-items:center;
+                  gap:6px;
+                  box-shadow:0 2px 8px rgba(0,0,0,0.35);
+                  border:${isInside && h.specialPos === 'rails' ? '2px solid #66dd99' : h.specialPos === 'box' ? '2px solid #ffcc44' : '1px solid rgba(255,255,255,0.15)'};
+                  position:relative;
+                ">
+                  <!-- Barrier circle -->
+                  <div style="
+                    width:24px;height:24px;border-radius:50%;
+                    background:rgba(0,0,0,0.5);
+                    border:2px solid ${bc};
+                    display:flex;align-items:center;justify-content:center;
+                    font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:12px;
+                    color:${bc};flex-shrink:0;
+                  ">${h.barrier || '?'}</div>
+                  <!-- Name -->
+                  <div style="min-width:0;flex:1;">
+                    <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${shortName}${specialBadge}</div>
+                  </div>
+                </div>`;
+              }).join('')}
+              ${!horses.length ? `<div style="color:rgba(255,255,255,0.15);font-size:12px;text-align:center;padding:20px 0;font-style:italic;">None</div>` : ''}
+            </div>
+            <!-- Column label at bottom -->
+            <div style="margin-top:12px;text-align:center;font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:700;letter-spacing:1px;color:${gd.color};text-transform:uppercase;border-top:1px solid rgba(255,255,255,0.08);padding-top:8px;">
+              ${gd.label}
+              <div style="font-size:18px;font-weight:900;color:rgba(255,255,255,0.6);">${horses.length}</div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+
+      <!-- Inside/outside labels -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid rgba(200,169,110,0.1);">
+        ${(isAntiClockwise ? groupDefs : [...groupDefs].reverse()).map(gd => {
+          const horses = groups[gd.key];
+          const n = horses.length;
+          return `<div style="padding:5px 8px;text-align:center;font-size:10px;color:rgba(245,240,232,0.3);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;border-right:1px solid rgba(255,255,255,0.04);">
+            ${n >= 2 ? `<span style="color:rgba(255,255,255,0.5)">${isAntiClockwise ? '↑ Wide · Rail ↓' : '↑ Rail · Wide ↓'}</span>` : ''}
+            ${n === 0 ? '—' : ''}
+          </div>`;
+        }).join('')}
+      </div>
+
+      <!-- Pace summary -->
       <div class="lm-pace-summary">
-        <div class="lm-pace-stat"><span class="lm-pace-num" style="color:var(--leader-col)">${styleCounts.leader}</span> Leader${styleCounts.leader !== 1 ? 's' : ''}</div>
-        <div class="lm-pace-stat"><span class="lm-pace-num" style="color:var(--onpace-col)">${styleCounts.on_pace}</span> On Pace</div>
-        <div class="lm-pace-stat"><span class="lm-pace-num" style="color:var(--midfield-col)">${styleCounts.midfield}</span> Midfield</div>
-        <div class="lm-pace-stat"><span class="lm-pace-num" style="color:var(--back-col)">${styleCounts.back}</span> Back</div>
+        <div class="lm-pace-stat"><span class="lm-pace-num" style="color:var(--leader-col)">${styleCounts.leader}</span>&nbsp;Leader${styleCounts.leader !== 1 ? 's' : ''}</div>
+        <div class="lm-pace-stat"><span class="lm-pace-num" style="color:var(--onpace-col)">${styleCounts.on_pace}</span>&nbsp;On Pace</div>
+        <div class="lm-pace-stat"><span class="lm-pace-num" style="color:var(--midfield-col)">${styleCounts.midfield}</span>&nbsp;Midfield</div>
+        <div class="lm-pace-stat"><span class="lm-pace-num" style="color:var(--back-col)">${styleCounts.back}</span>&nbsp;Back</div>
         <div class="lm-pace-stat" style="margin-left:auto;font-style:italic;color:rgba(245,240,232,0.4)">${paceDesc}</div>
+      </div>
+
+      <!-- Barrier legend -->
+      <div style="display:flex;gap:14px;padding:8px 16px;background:rgba(0,0,0,0.2);flex-wrap:wrap;align-items:center;">
+        <span style="font-size:10px;color:rgba(245,240,232,0.3);letter-spacing:1px;text-transform:uppercase;">Barrier:</span>
+        <span style="font-size:11px;color:#66cc77;">● 1–4 Inside</span>
+        <span style="font-size:11px;color:#cccc66;">● 5–8</span>
+        <span style="font-size:11px;color:#cc8844;">● 9–12</span>
+        <span style="font-size:11px;color:#cc4444;">● 13+ Wide</span>
+        <span style="font-size:11px;color:#66dd99;margin-left:auto;">🔒 Rails Run</span>
+        <span style="font-size:11px;color:#ffcc44;">📦 Box Seat</span>
       </div>
     </div>`;
 }
