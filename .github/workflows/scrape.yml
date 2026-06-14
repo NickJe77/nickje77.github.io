@@ -1,52 +1,41 @@
 name: Scrape World Cup 2026
 
 on:
-  # Run every day at 06:00 UTC (covers overnight US matches)
   schedule:
-    - cron: "0 6 * * *"
-
-  # Also run after any match-day afternoon session (18:00 UTC)
-  # Uncomment if you want a second daily run:
-  # schedule:
-  #   - cron: "0 18 * * *"
-
-  # Allow manual trigger from the GitHub Actions tab
-  workflow_dispatch:
+    - cron: "0 6 * * *"   # 06:00 UTC daily
+  workflow_dispatch:        # manual trigger from Actions tab
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     permissions:
-      contents: write   # needed to push the updated JSON
+      contents: write
 
     steps:
-      # ── 1. Check out the repo ───────────────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── 2. Set up Python ────────────────────────────────────────────────────
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
 
-      # ── 3. Install dependencies ─────────────────────────────────────────────
-      - name: Install dependencies
-        run: pip install requests beautifulsoup4
+      - name: Install Python dependencies
+        run: pip install playwright beautifulsoup4
 
-      # ── 4. Run the scraper ──────────────────────────────────────────────────
+      - name: Install Playwright browsers
+        run: playwright install chromium --with-deps
+
       - name: Run FBref scraper
         run: python scripts/scrape_fbref.py
 
-      # ── 5. Commit & push if data changed ────────────────────────────────────
       - name: Commit updated data
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/data/world-cup.json
-          # Only commit if the file actually changed
           git diff --cached --quiet || git commit -m "chore: update World Cup 2026 results [$(date -u '+%Y-%m-%d %H:%M UTC')]"
           git push
