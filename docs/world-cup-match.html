@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>World Cup Match | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
+
+<style>
+body{font-family:Inter,system-ui,Arial;margin:0;background:white;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px;border-bottom:1px solid #ddd;font-weight:600;}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+.page-wrap{max-width:1200px;margin:0 auto;padding:30px 20px;}
+
+.match-header{border:1px solid #ddd;border-radius:10px;padding:18px;margin-bottom:24px;background:#fafafa;text-align:center;}
+.match-header h1{margin:0 0 8px 0;font-size:28px;}
+.match-header .round-label{font-size:13px;color:#555;margin-bottom:4px;}
+.match-header .winner-label{font-size:14px;color:#555;margin-top:8px;}
+
+.section-title{font-weight:700;font-size:16px;margin:24px 0 10px;}
+
+.match{
+border:1px solid #ddd;
+border-radius:10px;
+padding:14px;
+margin-bottom:12px;
+background:white;
+}
+.match h3{margin:0 0 6px 0;}
+.small{font-size:13px;color:#555;}
+
+.team-link{color:#0056d6;text-decoration:none;font-weight:600;}
+.team-link:hover{text-decoration:underline;}
+
+.back-link{display:inline-block;margin-bottom:20px;color:#0056d6;font-weight:600;text-decoration:none;font-size:14px;}
+.back-link:hover{text-decoration:underline;}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="football.html">Football</a>
+<a href="football-world-cup.html">World Cup</a>
+<a href="world-cup-countries.html">Countries</a>
+</div>
+
+<div class="page-wrap">
+<a class="back-link" href="javascript:history.back()">← Back</a>
+<div id="output"></div>
+</div>
+
+<script>
+const COUNTRY_PAGE="world-cup-country.html";
+
+const params=new URLSearchParams(location.search);
+const yearQ =params.get("year")  ||"";
+const roundQ=params.get("round") ||"";
+const team1Q=params.get("team1") ||"";
+const team2Q=params.get("team2") ||"";
+
+const countryCodes={
+"Brazil":"BR","Germany":"DE","West Germany":"DE","FRG":"DE",
+"Italy":"IT","Argentina":"AR","France":"FR",
+"England":"GB","Spain":"ES","Netherlands":"NL","Uruguay":"UY","Portugal":"PT",
+"Belgium":"BE","Croatia":"HR","Mexico":"MX","USA":"US","United States":"US",
+"Japan":"JP","South Korea":"KR","Korea Republic":"KR","Australia":"AU",
+"Austria":"AT","Switzerland":"CH","Sweden":"SE","Norway":"NO","Denmark":"DK",
+"Poland":"PL","Czech Republic":"CZ","Czechia":"CZ","Russia":"RU",
+"Ukraine":"UA","Turkey":"TR","Greece":"GR","Scotland":"GB","Wales":"GB",
+"Ireland":"IE","Northern Ireland":"GB","Morocco":"MA","Cameroon":"CM",
+"Nigeria":"NG","Ghana":"GH","Senegal":"SN","Tunisia":"TN","Algeria":"DZ",
+"Iran":"IR","Iraq":"IQ","Saudi Arabia":"SA","Qatar":"QA","China":"CN",
+"South Africa":"ZA","New Zealand":"NZ","Canada":"CA",
+"Costa Rica":"CR","Honduras":"HN","Panama":"PA","Jamaica":"JM",
+"Trinidad and Tobago":"TT","Colombia":"CO","Chile":"CL","Peru":"PE",
+"Paraguay":"PY","Ecuador":"EC","Bolivia":"BO","Venezuela":"VE",
+"Serbia":"RS","Ivory Coast":"CI","Cape Verde":"CV","DR Congo":"CD",
+"Uzbekistan":"UZ","Jordan":"JO","Curaçao":"CW","Egypt":"EG","Georgia":"GE",
+"Albania":"AL","Bosnia and Herzegovina":"BA","Bosnia & Herzegovina":"BA",
+"Haiti":"HT","Mali":"ML","Finland":"FI","Iceland":"IS","Hungary":"HU",
+};
+
+function flagEmoji(code){
+ if(!code) return "";
+ return code.replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt()));
+}
+function getFlag(name){ return flagEmoji(countryCodes[name]||""); }
+
+fetch("data/world-cup.json",{cache:"no-store"})
+.then(r=>r.json())
+.then(data=>render(data));
+
+function render(data){
+ // Find the anchor row for this match
+ const anchor=data.find(r=>
+  r.Team===team1Q && r.Team__1===team2Q &&
+  String(r.Year)===yearQ && r.Round===roundQ
+ );
+
+ const out=document.getElementById("output");
+
+ if(!anchor){
+  out.innerHTML="<p>Match not found.</p>";
+  return;
+ }
+
+ // Collect all rows for this match (anchor + following blank-team rows)
+ const anchorIdx=data.indexOf(anchor);
+ const rows=[anchor];
+ for(let i=anchorIdx+1;i<data.length;i++){
+  if(data[i].Team!=="") break;
+  rows.push(data[i]);
+ }
+
+ const team1 =anchor.Team;
+ const team2 =anchor.Team__1;
+ const score =anchor["Final Score"]||"";
+ const winner=anchor["Winnning Team"]||"";
+ const round =anchor.Round||"";
+
+ document.title=`${team1} vs ${team2} ${yearQ} | The Sporting Almanac`;
+
+ // ── Header ────────────────────────────────────────────────────────────────
+ out.innerHTML=`
+  <div class="match-header">
+   <div class="round-label">${yearQ} FIFA World Cup · ${round}</div>
+   <h1>${getFlag(team1)} ${team1} ${score} ${team2} ${getFlag(team2)}</h1>
+   <div class="winner-label">${winner ? "Winner: "+winner+" "+getFlag(winner) : score ? "Draw" : "Result pending"}</div>
+  </div>`;
+
+ // ── Goals ─────────────────────────────────────────────────────────────────
+ const goalRows=rows.filter(r=>r.Scorers);
+ if(goalRows.length){
+  out.innerHTML+=`<div class="section-title">Goals</div>`;
+  goalRows.forEach(r=>{
+   out.innerHTML+=`
+    <div class="match">
+     <h3>${r.Scorers}</h3>
+     <div class="small">Minute: ${r["Time scored"]||"–"} &nbsp;·&nbsp; Score: ${r["Progess Score"]||"–"}</div>
+    </div>`;
+  });
+ }
+
+ // ── Cards ─────────────────────────────────────────────────────────────────
+ const yellow=anchor["Yellow Cards"]||"";
+ const red   =anchor["Red Cards"]   ||"";
+ if(yellow||red){
+  out.innerHTML+=`<div class="section-title">Cards</div>`;
+  if(yellow){
+   out.innerHTML+=`<div class="match"><h3>🟨 Yellow Cards</h3><div class="small">${yellow}</div></div>`;
+  }
+  if(red){
+   out.innerHTML+=`<div class="match"><h3>🟥 Red Cards</h3><div class="small">${red}</div></div>`;
+  }
+ }
+
+ // ── Referee ───────────────────────────────────────────────────────────────
+ if(anchor.Referee){
+  out.innerHTML+=`
+   <div class="section-title">Referee</div>
+   <div class="match"><h3>${anchor.Referee}</h3></div>`;
+ }
+}
+</script>
+
+</body>
+</html>
