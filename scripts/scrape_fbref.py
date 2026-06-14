@@ -1,36 +1,49 @@
 """
-FBref 2026 World Cup Scraper
-=============================
-Uses Playwright (headless Chromium) to bypass FBref's bot detection.
-Scrapes every 2026 World Cup match and merges results into
-docs/data/world-cup.json in the exact same row-per-event format
-as the existing historical data.
+2026 World Cup Data Fetcher — football-data.org API
+=====================================================
+Replaces the FBref scraper (which was blocked by Cloudflare).
+Uses the free football-data.org REST API — no scraping, no bot detection.
 
-Usage:
-  pip install playwright beautifulsoup4
-  playwright install chromium
-  python scripts/scrape_fbref.py
+Setup (one time):
+  1. Register free at https://www.football-data.org/client/register
+  2. Copy your API token
+  3. Add it as a GitHub secret named FD_API_TOKEN
+
+Local usage:
+  pip install requests
+  FD_API_TOKEN=your_token python scripts/scrape_fbref.py
+
+GitHub Actions sets FD_API_TOKEN automatically from your repo secret.
 """
 
 import json
+import os
 import re
-import time
 import sys
+import time
 from pathlib import Path
 
-from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+import requests
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 
-BASE         = "https://fbref.com"
-FIXTURES_URL = f"{BASE}/en/comps/1/schedule/World-Cup-Scores-and-Fixtures"
-HOST         = "Canada/Mexico/United States"
-YEAR         = 2026
-DATA_FILE    = Path(__file__).parent.parent / "docs" / "data" / "world-cup.json"
+API_BASE  = "https://api.football-data.org/v4"
+COMP_CODE = "WC"          # football-data.org code for FIFA World Cup
+HOST      = "Canada/Mexico/United States"
+YEAR      = 2026
+DATA_FILE = Path(__file__).parent.parent / "docs" / "data" / "world-cup.json"
 
-# Seconds between page loads — be polite, avoid bans
-DELAY = 6
+TOKEN = os.environ.get("FD_API_TOKEN", "")
+if not TOKEN:
+    print("ERROR: FD_API_TOKEN environment variable is not set.")
+    print("  Register free at https://www.football-data.org/client/register")
+    print("  Then: export FD_API_TOKEN=your_token")
+    sys.exit(1)
+
+HEADERS = {"X-Auth-Token": TOKEN}
+
+# Rate limit: free tier = 10 req/min  →  wait 7s between calls to be safe
+DELAY = 7
 
 # ── Lookups ────────────────────────────────────────────────────────────────────
 
@@ -78,264 +91,158 @@ COUNTRY_CODES: dict[str, str] = {
     "Bosnia and Herzegovina":"BIH","Georgia":"GEO","Albania":"ALB",
 }
 
-# ── Playwright browser wrapper ─────────────────────────────────────────────────
+# ── API helpers ────────────────────────────────────────────────────────────────
 
-_browser = None
-_page    = None
-
-def init_browser(pw):
-    global _browser, _page
-    _browser = pw.chromium.launch(headless=True)
-    context  = _browser.new_context(
-        user_agent=(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
-        ),
-        viewport={"width": 1280, "height": 900},
-        locale="en-US",
-    )
-    # Block images/fonts/media to speed things up
-    context.route(
-        "**/*",
-        lambda route: route.abort()
-        if route.request.resource_type in ("image", "media", "font", "stylesheet")
-        else route.continue_(),
-    )
-    _page = context.new_page()
-
-
-def fetch_html(url: str) -> BeautifulSoup:
-    """Load a page with Playwright and return parsed HTML."""
-    global _page
-    print(f"  FETCH {url}")
-    try:
-        _page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-        # Wait for the main content table to appear
-        try:
-            _page.wait_for_selector("table", timeout=10_000)
-        except PWTimeout:
-            pass
-    except PWTimeout:
-        print("    ⚠ Page load timeout — using whatever loaded")
-
-    html = _page.content()
+def api_get(path: str) -> dict:
+    url = f"{API_BASE}{path}"
+    print(f"  API {url}")
+    r = requests.get(url, headers=HEADERS, timeout=15)
+    if r.status_code == 429:
+        print("    Rate limited — waiting 60s")
+        time.sleep(60)
+        r = requests.get(url, headers=HEADERS, timeout=15)
+    r.raise_for_status()
     time.sleep(DELAY)
-    return BeautifulSoup(html, "html.parser")
+    return r.json()
 
 
-# ── Pure helpers ───────────────────────────────────────────────────────────────
-
-def code(team: str) -> str:
-    return COUNTRY_CODES.get(team, team[:3].upper())
-
-
-def federation(team: str) -> str:
+def fed(team: str) -> str:
     return FEDERATIONS.get(team, "")
 
 
-def parse_minute(raw: str) -> int | str:
-    raw = str(raw).strip().rstrip("'′")
-    if not raw:
-        return ""
-    m = re.match(r"^(\d+)(?:\+(\d+))?", raw)
-    if not m:
-        return raw
-    return int(m.group(1)) + (int(m.group(2)) if m.group(2) else 0)
+def cc(team: str) -> str:
+    return COUNTRY_CODES.get(team, team[:3].upper())
 
 
-def parse_score(score: str) -> tuple[int, int]:
-    m = re.match(r"(\d+)\s*[–\-]\s*(\d+)", score or "")
-    return (int(m.group(1)), int(m.group(2))) if m else (-1, -1)
+# ── Match → rows ───────────────────────────────────────────────────────────────
 
+def match_to_rows(match: dict, events: list[dict]) -> list[dict]:
+    """
+    Convert one football-data.org match + its events into your JSON row format.
+    Returns a list of rows (one per goal, header fields on first row only).
+    """
+    home = match["homeTeam"]["name"]
+    away = match["awayTeam"]["name"]
 
-def winner_from_score(team1: str, team2: str, score: str) -> str:
-    clean = re.sub(r"\s*\(.*?\)", "", score or "")
-    clean = re.sub(r"\s*(a\.?e\.?t\.?|aet|pens?\.?)", "", clean, flags=re.I).strip()
-    g1, g2 = parse_score(clean)
-    if g1 == -1:
-        return ""
-    if g1 > g2:
-        return team1
-    if g2 > g1:
-        return team2
-    pen = re.search(r"\((\d+)[–\-](\d+)\)", score or "")
-    if pen:
-        p1, p2 = int(pen.group(1)), int(pen.group(2))
-        return team1 if p1 > p2 else team2
-    return ""
+    # Score
+    ft   = match.get("score", {}).get("fullTime", {})
+    hg   = ft.get("home")
+    ag   = ft.get("away")
 
+    # Handle AET / penalties
+    extra = match.get("score", {}).get("extraTime", {})
+    pens  = match.get("score", {}).get("penalties", {})
+    duration = match.get("score", {}).get("duration", "REGULAR")
 
-# ── Schedule page ──────────────────────────────────────────────────────────────
+    if hg is None or ag is None:
+        score_str = ""
+    else:
+        score_str = f"{hg}-{ag}"
+        if duration == "EXTRA_TIME":
+            score_str += " aet"
+        if pens.get("home") is not None:
+            score_str += f" ({pens['home']}-{pens['away']} pens)"
 
-def get_match_links(soup: BeautifulSoup) -> list[dict]:
-    """Parse the fixtures page and return match metadata + report URLs."""
-    # FBref sometimes hides the table inside an HTML comment
-    table = soup.find("table", id=re.compile(r"sched"))
-    if not table:
-        for comment in soup.find_all(string=re.compile(r"<table")):
-            inner = BeautifulSoup(str(comment), "html.parser")
-            table = inner.find("table", id=re.compile(r"sched"))
-            if table:
-                break
+    # Winner
+    winner_code = match.get("score", {}).get("winner")  # HOME_TEAM / AWAY_TEAM / DRAW
+    if winner_code == "HOME_TEAM":
+        winner = home
+    elif winner_code == "AWAY_TEAM":
+        winner = away
+    else:
+        winner = ""
 
-    if not table:
-        print("  ⚠ Schedule table not found — dumping page snippet for debug:")
-        print(soup.get_text()[:500])
-        return []
+    win_fed = fed(winner) if winner else ""
 
-    matches = []
-    for row in table.find_all("tr"):
-        cells = {td.get("data-stat"): td for td in row.find_all(["td", "th"])}
-        if not cells:
-            continue
+    # Round label
+    stage = match.get("stage", "")
+    group = match.get("group", "")
+    rnd   = _round_label(stage, group)
 
-        home_cell  = cells.get("home_team") or cells.get("squad_a")
-        away_cell  = cells.get("away_team") or cells.get("squad_b")
-        score_cell = cells.get("score")
-        rnd_cell   = cells.get("round") or cells.get("comp_round")
+    # Separate goal events and card events
+    goals: list[dict] = []
+    yellow: list[str] = []
+    red: list[str]    = []
 
-        if not (home_cell and away_cell):
-            continue
+    for ev in events:
+        t    = ev.get("type", "")
+        name = ev.get("player", {}).get("name", "") if ev.get("player") else ""
+        team = ev.get("team", {}).get("name", "") if ev.get("team") else ""
+        minute = ev.get("minute", "")
+        extra_min = ev.get("extraMinute")
+        if extra_min:
+            minute = (minute or 0) + extra_min
 
-        team1 = home_cell.get_text(strip=True)
-        team2 = away_cell.get_text(strip=True)
-        if not team1 or not team2:
-            continue
+        if t == "GOAL":
+            detail = ev.get("detail", "")
+            og  = " (OG)"   if detail == "Own Goal"     else ""
+            pen = " (pen.)" if detail == "Penalty"       else ""
+            goals.append({"player": name + og + pen, "team": team, "minute": minute})
 
-        score = score_cell.get_text(strip=True) if score_cell else ""
-        rnd   = rnd_cell.get_text(strip=True)   if rnd_cell   else "Unknown"
+        elif t == "CARD":
+            detail = ev.get("detail", "")
+            label  = f"{name} ({cc(team)})"
+            if "YELLOW" in detail.upper():
+                yellow.append(label)
+            elif "RED" in detail.upper():
+                red.append(label)
 
-        match_url = ""
-        if score_cell:
-            a = score_cell.find("a", href=re.compile(r"/en/matches/"))
-            if a:
-                match_url = BASE + a["href"]
+    # Sort goals by minute
+    goals.sort(key=lambda g: g["minute"] if isinstance(g["minute"], int) else 9999)
 
-        matches.append({
-            "round": rnd, "team1": team1, "team2": team2,
-            "score": score, "match_url": match_url,
-        })
-
-    return matches
-
-
-# ── Match report page ──────────────────────────────────────────────────────────
-
-def scrape_match_report(match: dict, soup: BeautifulSoup) -> list[dict]:
-    team1, team2 = match["team1"], match["team2"]
-    score, rnd   = match["score"], match["round"]
-
-    # ── Goal events ───────────────────────────────────────────────────────────
-    events: list[dict] = []
-
-    # Method 1: div#events_wrap or similar event timeline
-    events_div = soup.find("div", id=re.compile(r"events?_wrap|event"))
-    if events_div:
-        for ev in events_div.find_all("div", class_=re.compile(r"event")):
-            text = ev.get_text(" ", strip=True)
-            if not re.search(r"goal|⚽", text, re.I):
-                continue
-            classes = " ".join(ev.get("class", []))
-            is_home = bool(re.search(r"home|team_a|a_", classes))
-            team = team1 if is_home else team2
-            min_m = re.search(r"(\d{1,3}(?:\+\d+)?)'?", text)
-            minute = parse_minute(min_m.group(1)) if min_m else ""
-            player = re.sub(r"\d{1,3}(?:\+\d+)?'?|[⚽🟨🟥]", "", text).strip(" ,–")
-            og  = " (OG)"  if re.search(r"own.goal|o\.g\.", player, re.I) else ""
-            pen = " (pen.)" if re.search(r"pen\.|penalty",  player, re.I) else ""
-            player = re.sub(r"own.goal|o\.g\.|pen\.|penalty", "", player, flags=re.I).strip()
-            if player:
-                events.append({"player": player + og + pen, "team": team, "minute": minute})
-
-    # Method 2: shots table (data-stat="outcome" == "Goal")
-    if not events:
-        for tbl in soup.find_all("table", id=re.compile(r"shot")):
-            for row in tbl.find_all("tr"):
-                cells = {td.get("data-stat"): td for td in row.find_all("td")}
-                if not cells.get("outcome"):
-                    continue
-                if cells["outcome"].get_text(strip=True) != "Goal":
-                    continue
-                player = cells["player"].get_text(strip=True) if cells.get("player") else ""
-                minute = parse_minute(cells["minute"].get_text(strip=True) if cells.get("minute") else "")
-                squad  = cells["squad"].get_text(strip=True)  if cells.get("squad")  else ""
-                if player:
-                    events.append({"player": player, "team": squad, "minute": minute})
-
-    # ── Cards ─────────────────────────────────────────────────────────────────
-    yellow_cards: list[str] = []
-    red_cards: list[str]    = []
-
-    for tbl in soup.find_all("table", id=re.compile(r"misc")):
-        for row in tbl.find_all("tr"):
-            cells = {td.get("data-stat"): td for td in row.find_all("td")}
-            if not cells.get("player"):
-                continue
-            pname  = cells["player"].get_text(strip=True)
-            nation = cells["squad"].get_text(strip=True) if cells.get("squad") else ""
-            yel    = cells["cards_yellow"].get_text(strip=True) if cells.get("cards_yellow") else "0"
-            red    = cells["cards_red"].get_text(strip=True)    if cells.get("cards_red")    else "0"
-            if yel not in ("", "0"):
-                yellow_cards.append(f"{pname} ({code(nation)})")
-            if red not in ("", "0"):
-                red_cards.append(f"{pname} ({code(nation)})")
-
-    # ── Referee ───────────────────────────────────────────────────────────────
-    referee = ""
-    text = soup.get_text(" ")
-    m = re.search(r"Referee[:\s]+([A-ZÀ-Ž][^\n,<]{3,40})", text)
-    if m:
-        referee = m.group(1).strip()
-
-    return _build_rows(team1, team2, score, rnd, events, yellow_cards, red_cards, referee)
-
-
-# ── Row builder ────────────────────────────────────────────────────────────────
-
-def _build_rows(team1, team2, score, rnd, events, yellow_cards, red_cards, referee) -> list[dict]:
-    winner  = winner_from_score(team1, team2, score)
-    win_fed = federation(winner) if winner else ""
-
-    events.sort(key=lambda e: e["minute"] if isinstance(e["minute"], int) else 9999)
-
+    # Build rows
     h = a = 0
     rows: list[dict] = []
     first = True
 
-    for ev in events:
-        if ev["team"] == team1:
+    for g in goals:
+        if g["team"] == home:
             h += 1
         else:
             a += 1
         rows.append({
             "Year": YEAR,  "Host": HOST,  "Round": rnd,
-            "Team":             team1  if first else "",
-            "Team__1":          team2  if first else "",
-            "Final Score":      score  if first else "",
-            "Winnning Team":    winner if first else "",
+            "Team":               home    if first else "",
+            "Team__1":            away    if first else "",
+            "Final Score":        score_str if first else "",
+            "Winnning Team":      winner  if first else "",
             "Winning Federation": win_fed if first else "",
-            "Scorers":          f"{ev['player']} ({code(ev['team'])})",
-            "Time scored":      ev["minute"],
-            "Progess Score":    f"{h}-{a}",
-            "Yellow Cards":     "; ".join(yellow_cards) if first else "",
-            "Red Cards":        "; ".join(red_cards)    if first else "",
-            "Referee":          referee if first else "",
+            "Scorers":            f"{g['player']} ({cc(g['team'])})",
+            "Time scored":        g["minute"],
+            "Progess Score":      f"{h}-{a}",
+            "Yellow Cards":       "; ".join(yellow) if first else "",
+            "Red Cards":          "; ".join(red)    if first else "",
+            "Referee":            "" if first else "",  # not in free tier
         })
         first = False
 
+    # No goals yet (unplayed or 0-0): emit one header row
     if not rows:
         rows = [{
             "Year": YEAR, "Host": HOST, "Round": rnd,
-            "Team": team1, "Team__1": team2,
-            "Final Score": score, "Winnning Team": winner,
+            "Team": home, "Team__1": away,
+            "Final Score": score_str, "Winnning Team": winner,
             "Winning Federation": win_fed,
             "Scorers": "", "Time scored": "", "Progess Score": "",
-            "Yellow Cards": "; ".join(yellow_cards),
-            "Red Cards":    "; ".join(red_cards),
-            "Referee": referee,
+            "Yellow Cards": "; ".join(yellow),
+            "Red Cards":    "; ".join(red),
+            "Referee": "",
         }]
+
     return rows
+
+
+def _round_label(stage: str, group: str) -> str:
+    stage_map = {
+        "GROUP_STAGE":        f"Group {group.replace('GROUP_', '')}" if group else "Group Stage",
+        "LAST_32":            "Round of 32",
+        "LAST_16":            "Round of 16",
+        "QUARTER_FINALS":     "Quarter-final",
+        "SEMI_FINALS":        "Semi-final",
+        "THIRD_PLACE":        "Third place",
+        "FINAL":              "Final",
+    }
+    return stage_map.get(stage, stage.replace("_", " ").title())
 
 
 # ── JSON merge ─────────────────────────────────────────────────────────────────
@@ -355,6 +262,7 @@ def save(data: list[dict]) -> None:
 
 
 def merge(existing: list[dict], new_rows: list[dict]) -> list[dict]:
+    """Keep all historical rows, replace any existing 2026 rows."""
     historical = [r for r in existing if str(r.get("Year")) != "2026"]
     return historical + new_rows
 
@@ -363,65 +271,64 @@ def merge(existing: list[dict], new_rows: list[dict]) -> list[dict]:
 
 def main() -> None:
     print("=" * 60)
-    print("FIFA World Cup 2026 — FBref Scraper (Playwright)")
+    print("FIFA World Cup 2026 — football-data.org API")
     print("=" * 60)
 
-    with sync_playwright() as pw:
-        init_browser(pw)
+    # 1. Fetch all matches for the World Cup
+    print("\n[1] Fetching all WC matches…")
+    data = api_get(f"/competitions/{COMP_CODE}/matches")
+    matches = data.get("matches", [])
+    print(f"    Got {len(matches)} matches")
 
-        print("\n[1] Fetching match schedule…")
-        soup = fetch_html(FIXTURES_URL)
-        matches = get_match_links(soup)
+    if not matches:
+        print("No matches returned — check your token or competition code.")
+        sys.exit(1)
 
-        if not matches:
-            print("No matches found — aborting.")
-            sys.exit(1)
+    # 2. For each FINISHED match, fetch its events
+    print("\n[2] Fetching events for completed matches…")
+    all_new_rows: list[dict] = []
+    finished = [m for m in matches if m.get("status") == "FINISHED"]
+    print(f"    {len(finished)} completed matches to process")
 
-        print(f"    Found {len(matches)} matches on schedule page")
+    for i, match in enumerate(finished, 1):
+        home  = match["homeTeam"]["name"]
+        away  = match["awayTeam"]["name"]
+        mid   = match["id"]
+        stage = match.get("stage", "")
+        group = match.get("group", "")
+        print(f"\n  [{i}/{len(finished)}] {home} vs {away}  ({_round_label(stage, group)})")
 
-        print(f"\n[2] Scraping match reports…")
-        all_new_rows: list[dict] = []
+        try:
+            ev_data = api_get(f"/matches/{mid}")
+            events  = ev_data.get("match", {}).get("goals", [])
+            # football-data.org v4: goals are a top-level key in the match detail
+            if not events:
+                events = ev_data.get("goals", [])
+            # Also grab bookings for cards
+            bookings = ev_data.get("match", {}).get("bookings", []) or ev_data.get("bookings", [])
+            # Merge goals + bookings into one events list with a "type" field
+            all_events = []
+            for g in events:
+                all_events.append({**g, "type": "GOAL"})
+            for b in bookings:
+                all_events.append({**b, "type": "CARD"})
+        except Exception as e:
+            print(f"    ✗ Events fetch failed: {e} — using match summary only")
+            all_events = []
 
-        for i, match in enumerate(matches, 1):
-            label = f"{match['team1']} vs {match['team2']} ({match['round']})"
-            print(f"\n  [{i}/{len(matches)}] {label}")
+        rows = match_to_rows(match, all_events)
+        all_new_rows.extend(rows)
+        goals = sum(1 for r in rows if r["Scorers"])
+        print(f"    → {goals} goal(s), {len(rows)} row(s)")
 
-            # Skip unplayed matches
-            if not match["score"] or match["score"].strip() in ("", "-"):
-                print("    → No score yet, skipping")
-                continue
-
-            if not match["match_url"]:
-                print("    → No report URL, recording header only")
-                all_new_rows.extend(_build_rows(
-                    match["team1"], match["team2"], match["score"],
-                    match["round"], [], [], [], ""
-                ))
-                continue
-
-            try:
-                report_soup = fetch_html(match["match_url"])
-                rows = scrape_match_report(match, report_soup)
-                all_new_rows.extend(rows)
-                goals = sum(1 for r in rows if r["Scorers"])
-                print(f"    → {goals} goal(s), {len(rows)} row(s)")
-            except Exception as e:
-                print(f"    ✗ Error: {e} — recording header only")
-                all_new_rows.extend(_build_rows(
-                    match["team1"], match["team2"], match["score"],
-                    match["round"], [], [], [], ""
-                ))
-
-        _browser.close()
-
+    # 3. Merge & save
     print(f"\n[3] Merging with existing data…")
     existing = load_existing()
     merged   = merge(existing, all_new_rows)
     save(merged)
 
-    goals   = sum(1 for r in all_new_rows if r["Scorers"])
-    headers = sum(1 for r in all_new_rows if r["Team"])
-    print(f"    2026 matches: {headers}  |  goal events: {goals}")
+    total_goals = sum(1 for r in all_new_rows if r["Scorers"])
+    print(f"    2026 matches: {len(finished)}  |  goal events: {total_goals}")
 
 
 if __name__ == "__main__":
