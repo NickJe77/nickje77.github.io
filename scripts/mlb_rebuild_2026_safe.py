@@ -45,22 +45,36 @@ TEAM_ID_MAP = {
 
 print("Downloading MLB 2026 schedule...")
 
-schedule_url = (
-    f"https://statsapi.mlb.com/api/v1/schedule?"
-    f"sportId=1&season={SEASON}&gameType=R"
-    f"&hydrate=linescore,team"
-    f"&startDate={SEASON}-03-01&endDate={SEASON}-11-01"
-    f"&limit=2500"
-)
+month_ranges = [
+    ("2026-03-25", "2026-03-31"),
+    ("2026-04-01", "2026-04-30"),
+    ("2026-05-01", "2026-05-31"),
+    ("2026-06-01", "2026-06-30"),
+    ("2026-07-01", "2026-07-31"),
+    ("2026-08-01", "2026-08-31"),
+    ("2026-09-01", "2026-09-30"),
+    ("2026-10-01", "2026-10-05"),
+]
 
-schedule_data = requests.get(schedule_url).json()
+all_dates = {}
 
-total_dates = len(schedule_data.get("dates", []))
-print(f"Got {total_dates} date blocks from API")
+for start, end in month_ranges:
+    url = (
+        f"https://statsapi.mlb.com/api/v1/schedule?"
+        f"sportId=1&season={SEASON}&gameType=R"
+        f"&hydrate=linescore,team"
+        f"&startDate={start}&endDate={end}"
+    )
+    data = requests.get(url).json()
+    for date_block in data.get("dates", []):
+        all_dates[date_block["date"]] = date_block
+    print(f"  {start} to {end}: {len(data.get('dates', []))} dates")
+
+print(f"Total date blocks: {len(all_dates)}")
 
 season_games = []
 
-for date_block in schedule_data.get("dates", []):
+for date_block in all_dates.values():
 
     game_date = date_block.get("date")
 
