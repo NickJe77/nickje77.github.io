@@ -22,7 +22,7 @@ TEAM_ID_MAP = {
     115: "COL",
     116: "DET",
     117: "HOU",
-    118: "KAN",
+    118: "KC",
     108: "LAA",
     119: "LAD",
     146: "MIA",
@@ -47,7 +47,8 @@ print("Downloading MLB 2026 schedule...")
 
 schedule_url = (
     f"https://statsapi.mlb.com/api/v1/schedule?"
-    f"sportId=1&season={SEASON}"
+    f"sportId=1&season={SEASON}&gameType=R"
+    f"&hydrate=linescore,team"
 )
 
 schedule_data = requests.get(schedule_url).json()
@@ -76,15 +77,44 @@ for date_block in schedule_data.get("dates", []):
             home_code = TEAM_ID_MAP.get(home_id, "UNK")
             away_code = TEAM_ID_MAP.get(away_id, "UNK")
 
-            venue = (
-                game.get("venue", {})
-                .get("name", "")
-            )
+            venue = game.get("venue", {}).get("name", "")
 
-            status = (
-                game.get("status", {})
-                .get("detailedState", "")
-            )
+            status = game.get("status", {}).get("detailedState", "")
+            abstract_state = game.get("status", {}).get("abstractGameState", "")
+
+            filename = f"{game_date}_{away_code}_{home_code}.json"
+            filepath = os.path.join(BOXSCORE_DIR, filename)
+
+            # -------------------------
+            # SKIP EXISTING FILES
+            # -------------------------
+
+            if os.path.exists(filepath):
+                print(f"  Skipping {filename} (already exists)")
+                with open(filepath, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+                season_games.append({
+                    "game_id": existing["game_id"],
+                    "date": existing["date"],
+                    "home_team": existing["home_team"]["name"],
+                    "away_team": existing["away_team"]["name"],
+                    "home_code": existing["home_team"]["code"],
+                    "away_code": existing["away_team"]["code"],
+                    "home_score": existing["home_team"]["score"],
+                    "away_score": existing["away_team"]["score"],
+                    "venue": existing["venue"],
+                    "status": existing["status"],
+                    "game_file": filename
+                })
+                continue
+
+            # -------------------------
+            # SKIP NON-FINAL GAMES
+            # -------------------------
+
+            if abstract_state != "Final":
+                print(f"  Skipping {filename} (not final: {status})")
+                continue
 
             # -------------------------
             # LIVE DATA
@@ -96,16 +126,6 @@ for date_block in schedule_data.get("dates", []):
             )
 
             live_data = requests.get(live_url).json()
-
-            # -------------------------
-            # DEBUG (remove once scores look correct)
-            # -------------------------
-
-            print(f"  [{status}] {away_team} @ {home_team}")
-            linescore_check = live_data.get("liveData", {}).get("linescore", {})
-            home_runs_raw = linescore_check.get("teams", {}).get("home", {}).get("runs", "MISSING")
-            away_runs_raw = linescore_check.get("teams", {}).get("away", {}).get("runs", "MISSING")
-            print(f"  liveData linescore runs — home: {home_runs_raw}, away: {away_runs_raw}")
 
             # -------------------------
             # SCORES
@@ -126,19 +146,6 @@ for date_block in schedule_data.get("dates", []):
                     away_score = away.get("score", 0) or 0
                 except (KeyError, TypeError) as e2:
                     print(f"  Schedule score parse also failed: {e2}, defaulting to 0-0")
-
-            # -------------------------
-            # FILENAME
-            # -------------------------
-
-            filename = (
-                f"{game_date}_{away_code}_{home_code}.json"
-            )
-
-            filepath = os.path.join(
-                BOXSCORE_DIR,
-                filename
-            )
 
             # -------------------------
             # GAME JSON
@@ -162,10 +169,7 @@ for date_block in schedule_data.get("dates", []):
                     "score": away_score
                 },
 
-                "liveData": live_data.get(
-                    "liveData",
-                    {}
-                )
+                "liveData": live_data.get("liveData", {})
             }
 
             # -------------------------
@@ -173,12 +177,7 @@ for date_block in schedule_data.get("dates", []):
             # -------------------------
 
             with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(
-                    game_json,
-                    f,
-                    ensure_ascii=False,
-                    indent=2
-                )
+                json.dump(game_json, f, ensure_ascii=False, indent=2)
 
             print(f"  Saved {filename} ({away_score}-{home_score})")
 
@@ -189,19 +188,14 @@ for date_block in schedule_data.get("dates", []):
             season_games.append({
                 "game_id": game_pk,
                 "date": game_date,
-
                 "home_team": home_team,
                 "away_team": away_team,
-
                 "home_code": home_code,
                 "away_code": away_code,
-
                 "home_score": home_score,
                 "away_score": away_score,
-
                 "venue": venue,
                 "status": status,
-
                 "game_file": filename
             })
 
@@ -212,24 +206,14 @@ for date_block in schedule_data.get("dates", []):
 # SORT
 # -------------------------
 
-season_games.sort(
-    key=lambda x: (
-        x["date"],
-        x["away_team"]
-    )
-)
+season_games.sort(key=lambda x: (x["date"], x["away_team"]))
 
 # -------------------------
 # SAVE SEASON FILE
 # -------------------------
 
 with open(SEASON_FILE, "w", encoding="utf-8") as f:
-    json.dump(
-        season_games,
-        f,
-        ensure_ascii=False,
-        indent=2
-    )
+    json.dump(season_games, f, ensure_ascii=False, indent=2)
 
 print("")
 print("DONE")
