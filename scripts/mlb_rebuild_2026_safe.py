@@ -51,7 +51,6 @@ print(f"Total date blocks: {len(all_dates)}")
 
 season_games = []
 saved = 0
-skipped_exists = 0
 skipped_not_final = 0
 failed = 0
 
@@ -90,40 +89,12 @@ for date_block in sorted(all_dates.values(), key=lambda x: x["date"]):
             filename = f"{game_date}_{away_code}_{home_code}.json"
             filepath = os.path.join(BOXSCORE_DIR, filename)
 
-            # --- Already on disk: load and add to season_games ---
-            if os.path.exists(filepath):
-                with open(filepath, "r", encoding="utf-8") as f:
-                    existing = json.load(f)
-
-                if existing.get("status") != "Final":
-                    skipped_not_final += 1
-                    continue
-
-                skipped_exists += 1
-                h = existing["home_team"]
-                a = existing["away_team"]
-
-                season_games.append({
-                    "game_id": existing["game_id"],
-                    "date": existing["date"],
-                    "home_team": h["name"] if isinstance(h, dict) else h,
-                    "away_team": a["name"] if isinstance(a, dict) else a,
-                    "home_code": h.get("code", home_code) if isinstance(h, dict) else home_code,
-                    "away_code": a.get("code", away_code) if isinstance(a, dict) else away_code,
-                    "home_score": h.get("score", 0) if isinstance(h, dict) else existing.get("home_score", 0),
-                    "away_score": a.get("score", 0) if isinstance(a, dict) else existing.get("away_score", 0),
-                    "venue": existing.get("venue", venue),
-                    "status": existing.get("status", status),
-                    "game_file": filename
-                })
-                continue
-
-            # --- Not on disk: skip if not final ---
+            # --- Skip games not yet final ---
             if abstract_state != "Final":
                 skipped_not_final += 1
                 continue
 
-            # --- Fetch live data ---
+            # --- Fetch live data for all final games ---
             live_url = (
                 f"https://statsapi.mlb.com/api/v1.1/game/"
                 f"{game_pk}/feed/live"
@@ -199,8 +170,7 @@ with open(SEASON_FILE, "w", encoding="utf-8") as f:
 
 print("")
 print("DONE")
-print(f"  Saved new:        {saved}")
-print(f"  Already on disk:  {skipped_exists}")
-print(f"  Not final yet:    {skipped_not_final}")
-print(f"  Failed:           {failed}")
+print(f"  Saved:          {saved}")
+print(f"  Not final yet:  {skipped_not_final}")
+print(f"  Failed:         {failed}")
 print(f"  Total in season file: {len(season_games)}")
