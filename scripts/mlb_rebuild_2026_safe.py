@@ -38,7 +38,6 @@ for start, end in month_ranges:
     url = (
         f"https://statsapi.mlb.com/api/v1/schedule?"
         f"sportId=1&season={SEASON}&gameType=R"
-        f"&hydrate=linescore,team"
         f"&startDate={start}&endDate={end}"
     )
     data = requests.get(url).json()
@@ -62,25 +61,24 @@ for date_block in all_dates.values():
         try:
 
             game_pk = game.get("gamePk")
-
             home = game["teams"]["home"]
             away = game["teams"]["away"]
 
-            if not isinstance(home.get("team"), dict) or not isinstance(away.get("team"), dict):
-                print(f"  Skipping {game_pk} (malformed team data)")
+            if not isinstance(home, dict) or not isinstance(away, dict):
                 continue
 
-            home_team = home["team"]["name"]
-            away_team = away["team"]["name"]
+            home_team = home.get("team", {}).get("name", "UNK")
+            away_team = away.get("team", {}).get("name", "UNK")
+            home_id = home.get("team", {}).get("id")
+            away_id = away.get("team", {}).get("id")
 
-            home_id = home["team"]["id"]
-            away_id = away["team"]["id"]
+            if not home_id or not away_id:
+                continue
 
             home_code = TEAM_ID_MAP.get(home_id, "UNK")
             away_code = TEAM_ID_MAP.get(away_id, "UNK")
 
             venue = game.get("venue", {}).get("name", "")
-
             status = game.get("status", {}).get("detailedState", "")
             abstract_state = game.get("status", {}).get("abstractGameState", "")
 
@@ -118,7 +116,7 @@ for date_block in all_dates.values():
             live_data = requests.get(live_url).json()
 
             if not isinstance(live_data, dict) or "liveData" not in live_data:
-                print(f"  Unexpected live_data for {game_pk}: {type(live_data)}")
+                print(f"  Unexpected live_data for {game_pk}")
                 continue
 
             home_score = 0
@@ -128,13 +126,12 @@ for date_block in all_dates.values():
                 linescore = live_data["liveData"]["linescore"]
                 home_score = linescore["teams"]["home"].get("runs", 0) or 0
                 away_score = linescore["teams"]["away"].get("runs", 0) or 0
-            except (KeyError, TypeError) as e:
-                print(f"  liveData score parse failed: {e}, falling back to schedule data")
+            except (KeyError, TypeError):
                 try:
                     home_score = home.get("score", 0) or 0
                     away_score = away.get("score", 0) or 0
-                except (KeyError, TypeError) as e2:
-                    print(f"  Schedule score parse also failed: {e2}, defaulting to 0-0")
+                except (KeyError, TypeError):
+                    pass
 
             game_json = {
                 "game_id": game_pk,
