@@ -80,6 +80,10 @@ for date_block in all_dates.values():
 
     for game in date_block.get("games", []):
 
+        if not isinstance(game, dict):
+            print(f"  Skipping malformed game entry: {game}")
+            continue
+
         try:
 
             game_pk = game.get("gamePk")
@@ -145,6 +149,10 @@ for date_block in all_dates.values():
             )
 
             live_data = requests.get(live_url).json()
+
+            if not isinstance(live_data, dict) or "liveData" not in live_data:
+                print(f"  Unexpected live_data for {game_pk}: {type(live_data)}")
+                continue
 
             # -------------------------
             # SCORES
