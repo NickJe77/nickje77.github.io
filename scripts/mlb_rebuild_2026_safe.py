@@ -9,6 +9,7 @@ SEASON_FILE = f"{BASE_DIR}/seasons/{SEASON}.json"
 BOXSCORE_DIR = f"{BASE_DIR}/boxscores/{SEASON}"
 
 os.makedirs(BOXSCORE_DIR, exist_ok=True)
+os.makedirs(f"{BASE_DIR}/seasons", exist_ok=True)
 
 TEAM_ID_MAP = {
     109: "ARI", 144: "ATL", 110: "BAL", 111: "BOS", 112: "CHC",
@@ -48,6 +49,10 @@ for start, end in month_ranges:
 print(f"Total date blocks: {len(all_dates)}")
 
 season_games = []
+saved = 0
+skipped_exists = 0
+skipped_not_final = 0
+failed = 0
 
 for date_block in all_dates.values():
 
@@ -59,7 +64,6 @@ for date_block in all_dates.values():
             continue
 
         try:
-
             game_pk = game.get("gamePk")
             home = game["teams"]["home"]
             away = game["teams"]["away"]
@@ -85,38 +89,47 @@ for date_block in all_dates.values():
             filename = f"{game_date}_{away_code}_{home_code}.json"
             filepath = os.path.join(BOXSCORE_DIR, filename)
 
+            # --- Handle already-downloaded files (supports both old flat and new dict schema) ---
             if os.path.exists(filepath):
                 print(f"  Skipping {filename} (already exists)")
+                skipped_exists += 1
                 with open(filepath, "r", encoding="utf-8") as f:
                     existing = json.load(f)
+
+                h = existing["home_team"]
+                a = existing["away_team"]
+
                 season_games.append({
                     "game_id": existing["game_id"],
                     "date": existing["date"],
-                    "home_team": existing["home_team"]["name"],
-                    "away_team": existing["away_team"]["name"],
-                    "home_code": existing["home_team"]["code"],
-                    "away_code": existing["away_team"]["code"],
-                    "home_score": existing["home_team"]["score"],
-                    "away_score": existing["away_team"]["score"],
-                    "venue": existing["venue"],
-                    "status": existing["status"],
+                    "home_team": h["name"] if isinstance(h, dict) else h,
+                    "away_team": a["name"] if isinstance(a, dict) else a,
+                    "home_code": h.get("code", home_code) if isinstance(h, dict) else home_code,
+                    "away_code": a.get("code", away_code) if isinstance(a, dict) else away_code,
+                    "home_score": h.get("score", 0) if isinstance(h, dict) else existing.get("home_score", 0),
+                    "away_score": a.get("score", 0) if isinstance(a, dict) else existing.get("away_score", 0),
+                    "venue": existing.get("venue", venue),
+                    "status": existing.get("status", status),
                     "game_file": filename
                 })
                 continue
 
+            # --- Skip games not yet final ---
             if abstract_state != "Final":
                 print(f"  Skipping {filename} (not final: {status})")
+                skipped_not_final += 1
                 continue
 
+            # --- Fetch live data ---
             live_url = (
                 f"https://statsapi.mlb.com/api/v1.1/game/"
                 f"{game_pk}/feed/live"
             )
-
             live_data = requests.get(live_url).json()
 
             if not isinstance(live_data, dict) or "liveData" not in live_data:
                 print(f"  Unexpected live_data for {game_pk}")
+                failed += 1
                 continue
 
             home_score = 0
@@ -155,6 +168,7 @@ for date_block in all_dates.values():
                 json.dump(game_json, f, ensure_ascii=False, indent=2)
 
             print(f"  Saved {filename} ({away_score}-{home_score})")
+            saved += 1
 
             season_games.append({
                 "game_id": game_pk,
@@ -171,7 +185,8 @@ for date_block in all_dates.values():
             })
 
         except Exception as e:
-            print(f"FAILED game {game.get('gamePk', '?')}: {e}")
+            print(f"  FAILED game {game.get('gamePk', '?')}: {e}")
+            failed += 1
 
 season_games.sort(key=lambda x: (x["date"], x["away_team"]))
 
@@ -180,4 +195,8 @@ with open(SEASON_FILE, "w", encoding="utf-8") as f:
 
 print("")
 print("DONE")
-print(f"Saved {len(season_games)} games")
+print(f"  Saved new:       {saved}")
+print(f"  Already existed: {skipped_exists}")
+print(f"  Not final yet:   {skipped_not_final}")
+print(f"  Failed:          {failed}")
+print(f"  Total in season file: {len(season_games)}")
