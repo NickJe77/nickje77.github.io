@@ -49,9 +49,14 @@ schedule_url = (
     f"https://statsapi.mlb.com/api/v1/schedule?"
     f"sportId=1&season={SEASON}&gameType=R"
     f"&hydrate=linescore,team"
+    f"&startDate={SEASON}-03-01&endDate={SEASON}-11-01"
+    f"&limit=2500"
 )
 
 schedule_data = requests.get(schedule_url).json()
+
+total_dates = len(schedule_data.get("dates", []))
+print(f"Got {total_dates} date blocks from API")
 
 season_games = []
 
