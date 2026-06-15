@@ -1,6 +1,7 @@
 import requests
 import json
 import os
+import time
 
 BASE_DIR = "docs/data/baseball"
 SEASON = "2026"
@@ -54,7 +55,7 @@ skipped_exists = 0
 skipped_not_final = 0
 failed = 0
 
-for date_block in all_dates.values():
+for date_block in sorted(all_dates.values(), key=lambda x: x["date"]):
 
     game_date = date_block.get("date")
 
@@ -89,13 +90,16 @@ for date_block in all_dates.values():
             filename = f"{game_date}_{away_code}_{home_code}.json"
             filepath = os.path.join(BOXSCORE_DIR, filename)
 
-            # --- Handle already-downloaded files (supports both old flat and new dict schema) ---
+            # --- Already on disk: load and add to season_games ---
             if os.path.exists(filepath):
-                print(f"  Skipping {filename} (already exists)")
-                skipped_exists += 1
                 with open(filepath, "r", encoding="utf-8") as f:
                     existing = json.load(f)
 
+                if existing.get("status") != "Final":
+                    skipped_not_final += 1
+                    continue
+
+                skipped_exists += 1
                 h = existing["home_team"]
                 a = existing["away_team"]
 
@@ -114,9 +118,8 @@ for date_block in all_dates.values():
                 })
                 continue
 
-            # --- Skip games not yet final ---
+            # --- Not on disk: skip if not final ---
             if abstract_state != "Final":
-                print(f"  Skipping {filename} (not final: {status})")
                 skipped_not_final += 1
                 continue
 
@@ -126,6 +129,7 @@ for date_block in all_dates.values():
                 f"{game_pk}/feed/live"
             )
             live_data = requests.get(live_url).json()
+            time.sleep(0.2)
 
             if not isinstance(live_data, dict) or "liveData" not in live_data:
                 print(f"  Unexpected live_data for {game_pk}")
@@ -195,8 +199,8 @@ with open(SEASON_FILE, "w", encoding="utf-8") as f:
 
 print("")
 print("DONE")
-print(f"  Saved new:       {saved}")
-print(f"  Already existed: {skipped_exists}")
-print(f"  Not final yet:   {skipped_not_final}")
-print(f"  Failed:          {failed}")
+print(f"  Saved new:        {saved}")
+print(f"  Already on disk:  {skipped_exists}")
+print(f"  Not final yet:    {skipped_not_final}")
+print(f"  Failed:           {failed}")
 print(f"  Total in season file: {len(season_games)}")
