@@ -212,6 +212,8 @@
   .style-btn.active-on_pace { background: var(--onpace-col); color: white; border-color: var(--onpace-col); }
   .style-btn.active-midfield { background: var(--midfield-col); color: white; border-color: var(--midfield-col); }
   .style-btn.active-back { background: var(--back-col); color: white; border-color: var(--back-col); }
+  .style-btn.active-off_pace { background: #c87820; color: white; border-color: #c87820; }
+  .style-btn.active-off_midfield { background: #3a6ab0; color: white; border-color: #3a6ab0; }
 
   .special-btn {
     flex: 1;
@@ -414,7 +416,9 @@
   }
   .pill-leader { background: var(--leader-col); color: white; }
   .pill-on_pace { background: var(--onpace-col); color: white; }
+  .pill-off_pace { background: #c87820; color: white; }
   .pill-midfield { background: var(--midfield-col); color: white; }
+  .pill-off_midfield { background: #3a6ab0; color: white; }
   .pill-back { background: var(--back-col); color: white; }
 
   .score-bar-wrap { width: 100px; background: rgba(255,255,255,0.1); border-radius: 3px; height: 8px; }
@@ -648,37 +652,44 @@
             <option value="slow">Slow</option>
           </select>
         </div>
-        <div class="setting-item">
-          <label>Track</label>
+        <div class="setting-item" style="grid-column:1/-1;">
+          <label>Track Condition</label>
           <select id="track-cond">
             <option value="Good">Good</option>
             <option value="Soft">Soft</option>
             <option value="Heavy">Heavy</option>
           </select>
         </div>
-        <div class="setting-item">
-          <label>Track Code</label>
-          <input type="text" id="track-code" placeholder="e.g. CAUL" maxlength="6" style="text-transform:uppercase" oninput="renderLiveMap()">
+
+        <div class="setting-item" style="grid-column:1/-1;">
+          <label>Meeting</label>
+          <select id="meeting-select" onchange="onMeetingChange()" style="width:100%;background:rgba(255,255,255,0.07);border:1px solid rgba(200,169,110,0.3);border-radius:4px;padding:7px 10px;color:var(--chalk);font-family:'Barlow',sans-serif;font-size:13px;outline:none;">
+            <option value="">— Load Fields first —</option>
+          </select>
         </div>
         <div class="setting-item" style="grid-column:1/-1;">
-          <label>Today's Race Grade</label>
-          <select id="race-grade">
-            <option value="MDN:1">Maiden</option>
-            <option value="CL1:3">Class 1</option>
-            <option value="HCP:6" selected>Handicap / BM56-58</option>
-            <option value="BM62:12">BM62</option>
-            <option value="BM64:13">BM64</option>
-            <option value="BM70:14">BM70</option>
-            <option value="BM78:15">BM78</option>
-            <option value="BM85:16">BM85</option>
-            <option value="OPEN:14">Open</option>
-            <option value="LR:19">Listed (LR)</option>
-            <option value="G3:20">Group 3</option>
-            <option value="G2:21">Group 2</option>
-            <option value="G1:22">Group 1</option>
+          <label>Race</label>
+          <select id="race-select" style="width:100%;background:rgba(255,255,255,0.07);border:1px solid rgba(200,169,110,0.3);border-radius:4px;padding:7px 10px;color:var(--chalk);font-family:'Barlow',sans-serif;font-size:13px;outline:none;">
+            <option value="">— Select Meeting first —</option>
           </select>
         </div>
       </div>
+      <!-- Hidden grade used by sim -->
+      <select id="race-grade" style="display:none">
+        <option value="MDN:1">Maiden</option>
+        <option value="CL1:3">Class 1</option>
+        <option value="HCP:6" selected>Handicap / BM56-58</option>
+        <option value="BM62:12">BM62</option>
+        <option value="BM64:13">BM64</option>
+        <option value="BM70:14">BM70</option>
+        <option value="BM78:15">BM78</option>
+        <option value="BM85:16">BM85</option>
+        <option value="OPEN:14">Open</option>
+        <option value="LR:19">Listed (LR)</option>
+        <option value="G3:20">Group 3</option>
+        <option value="G2:21">Group 2</option>
+        <option value="G1:22">Group 1</option>
+      </select>
 
       <!-- Rail / Best Going -->
       <div style="margin-top:14px;">
@@ -705,6 +716,17 @@
     <!-- Add Horse -->
     <div>
       <div class="section-title">Add Runners</div>
+
+      <!-- Auto-load from API -->
+      <div style="margin-bottom:12px;">
+        <button onclick="loadFieldsFromAPI()" id="load-api-btn"
+          style="width:100%;background:rgba(200,169,110,0.15);border:1px solid rgba(200,169,110,0.3);border-radius:6px;padding:10px;color:var(--sand);font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;letter-spacing:1px;cursor:pointer;">
+          📡 Load Today's Fields
+        </button>
+      </div>
+
+      <div id="field-load-banner" style="display:none;background:rgba(100,220,150,0.1);border:1px solid rgba(100,220,150,0.3);border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#88dd88;"></div>
+
       <div class="search-wrap">
         <input type="text" class="search-input" id="horse-search" placeholder="Search horse name..." autocomplete="off">
         <div class="autocomplete" id="autocomplete" style="display:none;"></div>
@@ -720,7 +742,8 @@
       <div id="field-list"></div>
     </div>
 
-    <button class="run-btn" id="run-btn" disabled onclick="runSimulation()">▶ Run Race</button>
+    <button onclick="onRaceChange();" style="width:100%;background:rgba(200,169,110,0.15);border:2px solid var(--sand);border-radius:8px;padding:12px;font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:900;letter-spacing:2px;color:var(--sand);cursor:pointer;margin-bottom:8px;">📂 LOAD RACE</button>
+<button class="run-btn" id="run-btn" disabled onclick="runSimulation()">▶ Run Race</button>
 
   </div>
 
@@ -794,6 +817,20 @@ document.getElementById('db-count').textContent = Object.keys(ALL_HORSES).length
 // ===== STATE =====
 let field = []; // [{name, userStyle, data}]
 let results = null;
+let currentTrackCode = '';
+
+// Case-insensitive horse lookup - RA returns ALL CAPS, DB has Title Case
+const HORSES_LOWER = {};
+Object.keys(ALL_HORSES).forEach(k => { HORSES_LOWER[k.toLowerCase()] = k; });
+function lookupHorse(name) {
+  if (!name) return null;
+  // Try exact match first
+  if (ALL_HORSES[name]) return name;
+  // Try lowercase match
+  const lower = name.toLowerCase();
+  const matched = HORSES_LOWER[lower];
+  return matched || null;
+}
 
 // ===== SEARCH =====
 const searchInput = document.getElementById('horse-search');
@@ -845,7 +882,7 @@ function addHorse(name) {
   // Default style from historical data
   const defaultStyle = data[0] === 'l' ? 'leader' : data[0] === 'o' ? 'on_pace' : data[0] === 'm' ? 'midfield' : data[0] === 'b' ? 'back' : 'midfield';
   
-  field.push({ name, userStyle: defaultStyle, data, detail, barrier: null, weight: null, specialPos: null });
+  field.push({ name, userStyle: defaultStyle, data, detail, barrier: null, weight: null, specialPos: null, scratched: false, jockey: '', trainer: '' });
   searchInput.value = '';
   autocomplete.style.display = 'none';
   renderField();
@@ -890,6 +927,226 @@ function setSpecialPos(idx, pos) {
   renderField();
 }
 
+function setScratch(idx, scratched) {
+  field[idx].scratched = scratched;
+  renderField();
+}
+
+// Loaded fields database: { "WANG": { meeting:"Wangaratta", races: { 1: {...}, 2: {...} } } }
+let loadedFields = {};
+
+const API_URL = 'https://api.thesportingalmanac.com';
+
+async function loadFieldsFromAPI() {
+  const btn = document.getElementById('load-api-btn');
+  const banner = document.getElementById('field-load-banner');
+  btn.textContent = '⏳ Loading fields...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch(API_URL + '/fields');
+    if (!res.ok) throw new Error('Server error ' + res.status);
+    const data = await res.json();
+
+    loadedFields = data;
+    buildMeetingDropdown();
+    btn.textContent = '✓ Fields Loaded';
+  } catch(e) {
+    banner.innerHTML = '❌ Could not load fields: ' + e.message;
+    banner.style.display = 'block';
+    banner.style.background = 'rgba(255,80,80,0.1)';
+    banner.style.borderColor = 'rgba(255,80,80,0.3)';
+    banner.style.color = '#ff8888';
+    btn.textContent = '📡 Load Today's Fields';
+    btn.disabled = false;
+  }
+}
+
+function loadMultipleJSON(input) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+
+  const out = document.getElementById('field-load-banner');
+  out.style.display = 'block';
+  out.innerHTML = 'Loading ' + files.length + ' files...';
+
+  loadedFields = {};
+  let loaded = 0;
+
+  files.forEach(function(file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const data = JSON.parse(e.target.result);
+        const track = data.track || file.name.split('-')[0];
+        const meetingName = data.meeting || track;
+        if (!loadedFields[track]) {
+          loadedFields[track] = { meeting: meetingName, state: data.state || '', races: {} };
+        }
+        loadedFields[track].races[String(data.race_num)] = data;
+      } catch(err) {
+        // skip bad files
+      }
+      loaded++;
+      if (loaded === files.length) {
+        buildMeetingDropdown();
+      }
+    };
+    reader.readAsText(file);
+  });
+}
+
+function buildMeetingDropdown() {
+  const sel = document.getElementById('meeting-select');
+  const raceSel = document.getElementById('race-select');
+  const banner = document.getElementById('field-load-banner');
+
+  // Sort meetings alphabetically
+  const tracks = Object.keys(loadedFields).sort((a,b) => 
+    loadedFields[a].meeting.localeCompare(loadedFields[b].meeting));
+
+  sel.innerHTML = '<option value="">— Select Meeting —</option>' +
+    tracks.map(t => {
+      const m = loadedFields[t];
+      const raceCount = Object.keys(m.races).length;
+      return `<option value="${t}">${m.meeting} (${m.state}) — ${raceCount} races</option>`;
+    }).join('');
+
+  raceSel.innerHTML = '<option value="">— Select Race —</option>';
+
+  const totalRaces = Object.values(loadedFields).reduce((s,m) => s + Object.keys(m.races).length, 0);
+  banner.innerHTML = `✓ Loaded <strong>${totalRaces} races</strong> across <strong>${tracks.length} meetings</strong>`;
+  banner.style.display = 'block';
+}
+
+function onMeetingChange() {
+  const track = document.getElementById('meeting-select').value;
+  const raceSel = document.getElementById('race-select');
+
+  // Always reset race dropdown and clear field when meeting changes
+  raceSel.innerHTML = '<option value="">— Select Race —</option>';
+  raceSel.value = '';
+  field = [];
+  renderField();
+
+  if (!track || !loadedFields[track]) return;
+
+  const meeting = loadedFields[track];
+  const races = Object.values(meeting.races).sort((a,b) => a.race_num - b.race_num);
+
+  raceSel.innerHTML = '<option value="">— Select Race —</option>' +
+    races.map(r => {
+      const grade = r.grade && r.grade !== 'HCP' ? ` [${r.grade}]` : '';
+      const dist = r.distance ? ` ${r.distance}m` : '';
+      const active = (r.runners || []).filter(h => !h.scratched).length;
+      return `<option value="${r.race_num}">R${r.race_num}${dist}${grade} — ${active} runners — ${r.race_name || ''}</option>`;
+    }).join('');
+  raceSel.selectedIndex = 0;
+}
+
+function onRaceChange() {
+  const meetSel = document.getElementById('meeting-select');
+  const raceSel = document.getElementById('race-select');
+  const track = meetSel.options[meetSel.selectedIndex].value;
+  const raceNum = parseInt(raceSel.options[raceSel.selectedIndex].value);
+  console.log('track='+track+' raceNum='+raceNum+' selectedIndex='+raceSel.selectedIndex);
+  if (!track || !raceNum) return;
+  const meeting = loadedFields[track];
+  if (!meeting) { console.log('no meeting found for track: '+track); return; }
+  console.log('available races:', Object.keys(meeting.races));
+  // Keys may be stored as strings or numbers
+  const data = meeting.races[String(raceNum)];
+  if (!data) { console.log('no data for race '+raceNum+' keys='+JSON.stringify(Object.keys(meeting.races))); return; }
+  populateFieldFromData(data);
+}
+
+function populateFieldFromData(data) {
+  field = [];
+  
+  try { if (data.distance) document.getElementById('race-dist').value = data.distance; } catch(e) { console.log('step1a error:'+e); }
+  
+  if (data.track) currentTrackCode = data.track;
+
+  try {
+    if (data.track_condition) {
+      const cond = data.track_condition.toLowerCase();
+      const condSel = document.getElementById('track-cond');
+      if (cond.includes('heavy')) condSel.value = 'Heavy';
+      else if (cond.includes('soft')) condSel.value = 'Soft';
+      else condSel.value = 'Good';
+    }
+  } catch(e) { console.log('step3a error:'+e); }
+
+  try {
+    if (data.grade) {
+      const gradeMap = {'G1':'G1:22','G2':'G2:21','G3':'G3:20','LR':'LR:19','BM85':'BM85:16','BM78':'BM78:15','BM70':'BM70:14','BM64':'BM64:13','BM62':'BM62:12','OPEN':'OPEN:14','MDN':'MDN:1','CL1':'CL1:3','CL2':'CL2:5','CL3':'CL3:7','HCP':'HCP:6','MDW':'MDW:8','PROV':'PROV:10'};
+      const sel = document.getElementById('race-grade');
+      const mapped = gradeMap[data.grade] || 'HCP:6';
+      for (let opt of sel.options) { if (opt.value === mapped) { sel.value = mapped; break; } }
+    }
+  } catch(e) { console.log('step4a error:'+e); }
+
+  const runners = data.runners || [];
+  
+  runners.forEach(function(r) {
+    try {
+      const name = r.horse || r.name || '';
+      if (!name) return;
+      const matchedName = lookupHorse(name);
+      const dbData = matchedName ? ALL_HORSES[matchedName] : ['', null, null, 0, 0, null, null, null, 0, 0, {}, null, 'HCP', 'HCP', 6, 6];
+      const inDB = !!matchedName;
+      const sty = dbData[0];
+      const defaultStyle = sty === 'l' ? 'leader' : sty === 'o' ? 'on_pace' : sty === 'm' ? 'midfield' : sty === 'b' ? 'back' : 'midfield';
+      const weight = r.weight ? parseFloat(r.weight) : (dbData[11] || null);
+      field.push({
+        name: name,
+        userStyle: defaultStyle,
+        data: dbData,
+        detail: [],
+        barrier: r.barrier ? parseInt(r.barrier) : null,
+        weight: weight,
+        specialPos: null,
+        scratched: r.scratched || false,
+        jockey: r.jockey || '',
+        trainer: r.trainer || '',
+        manual: !inDB
+      });
+    } catch(e) { console.log('runner error:'+e); }
+  });
+
+
+  try {
+    const banner = document.getElementById('field-load-banner');
+    const inDB = field.filter(function(h){return !h.manual;}).length;
+    banner.innerHTML = '✓ Loaded <strong>'+field.length+' runners</strong> — '+inDB+' found in database';
+    banner.style.display = 'block';
+  } catch(e) { console.log('banner error:'+e); }
+
+  // Directly update DOM - bypass renderField entirely
+  const fs = document.getElementById('field-section');
+  const fl = document.getElementById('field-list');
+  const rb = document.getElementById('run-btn');
+  const fc = document.getElementById('field-count');
+  
+  fl.innerHTML = field.map(function(h,i) {
+    var btns = ['leader','on_pace','off_pace','midfield','off_midfield','back'].map(function(s){
+      var L={leader:'Leader',on_pace:'Pace',off_pace:'Off Pace',midfield:'Midfield',off_midfield:'Off Mid',back:'Back'};
+      var active = h.userStyle===s ? 'active-'+s : '';
+      return '<button class="style-btn '+active+'" onclick="setStyle('+i+',&quot;'+s+'&quot;)">'+L[s]+'</button>';
+    }).join('');
+    return '<div class="field-horse"><div class="field-horse-header"><span class="horse-num">'+(i+1)+'</span><span class="horse-name" style="flex:1">'+h.name+'</span><button class="remove-btn" onclick="removeHorse('+i+')">✕</button></div><div class="style-selector">'+btns+'</div></div>';
+  }).join('');
+  
+  fs.style.cssText = 'display:block !important';
+  rb.disabled = field.length < 2;
+  fc.textContent = '('+field.length+')';
+  
+  renderLiveMap();
+  console.log('step9: done, section='+fs.style.display+' horses='+fl.children.length);
+}
+
+
+
 function setWeight(idx, val) {
   const w = parseFloat(val);
   field[idx].weight = (w > 0) ? w : null;
@@ -918,7 +1175,7 @@ function renderLiveMap() {
   panel.style.display = 'block';
   emptyState.style.display = 'none';
 
-  const trackCode = document.getElementById('track-code').value.toUpperCase().trim();
+  const trackCode = currentTrackCode.toUpperCase().trim();
 
   // Track direction lookup
   // VIC, SA, TAS, WA = anti-clockwise | NSW, QLD, ACT = clockwise
@@ -975,14 +1232,16 @@ function renderLiveMap() {
 
   // Style groups in order left→right
   const groupDefs = [
-    { key: 'leader',    label: 'Leader',      color: 'var(--leader-col)',    bg: 'rgba(232,93,53,0.08)'   },
-    { key: 'on_pace',   label: 'Pace',         color: 'var(--onpace-col)',    bg: 'rgba(232,160,32,0.08)'  },
-    { key: 'midfield',  label: 'Midfield',     color: 'var(--midfield-col)',  bg: 'rgba(74,144,217,0.08)'  },
-    { key: 'back',      label: 'Back Marker',  color: 'var(--back-col)',      bg: 'rgba(123,94,167,0.08)'  },
+    { key: 'leader',       label: 'Leader',      color: 'var(--leader-col)',   bg: 'rgba(232,93,53,0.08)'  },
+    { key: 'on_pace',      label: 'Pace',         color: 'var(--onpace-col)',   bg: 'rgba(232,160,32,0.08)' },
+    { key: 'off_pace',     label: 'Off Pace',     color: '#c87820',             bg: 'rgba(200,120,32,0.08)' },
+    { key: 'midfield',     label: 'Midfield',     color: 'var(--midfield-col)', bg: 'rgba(74,144,217,0.08)' },
+    { key: 'off_midfield', label: 'Off Midfield', color: '#3a6ab0',             bg: 'rgba(58,106,176,0.08)' },
+    { key: 'back',         label: 'Back Marker',  color: 'var(--back-col)',     bg: 'rgba(123,94,167,0.08)' },
   ];
 
   // Sort horses into groups
-  const groups = { leader: [], on_pace: [], midfield: [], back: [] };
+  const groups = { leader: [], on_pace: [], off_pace: [], midfield: [], off_midfield: [], back: [] };
   field.forEach((h, i) => {
     const g = h.userStyle || 'midfield';
     if (groups[g]) groups[g].push({ ...h, fieldIdx: i });
@@ -1000,7 +1259,7 @@ function renderLiveMap() {
   // Each horse gets two rows within col: inside (1) and outside (2) alternating
   // We'll stack them vertically within each column, innermost at bottom (closest to rail)
 
-  const styleCounts = { leader: 0, on_pace: 0, midfield: 0, back: 0 };
+  const styleCounts = { leader: 0, on_pace: 0, off_pace: 0, midfield: 0, off_midfield: 0, back: 0 };
   field.forEach(h => { if (styleCounts[h.userStyle] !== undefined) styleCounts[h.userStyle]++; });
   const leaderCount = styleCounts.leader;
   const paceDesc = leaderCount === 0 ? 'No clear leader — tactical race'
@@ -1050,7 +1309,10 @@ function renderLiveMap() {
           // We render top to bottom, so reverse for display
           const display = [...sorted].reverse();
 
-          return `<div style="flex:1;background:${gd.bg};border-right:1px solid rgba(255,255,255,0.05);display:flex;flex-direction:column;justify-content:flex-end;padding:10px 8px 10px 8px;position:relative;min-width:0;">
+          return `<div style="flex:1;background:${gd.bg};border-right:1px solid rgba(255,255,255,0.05);display:flex;flex-direction:column;justify-content:flex-end;padding:10px 8px 10px 8px;position:relative;min-width:0;"
+  ondragover="event.preventDefault();this.style.outline='2px solid ${gd.color}'"
+  ondragleave="this.style.outline='none'"
+  ondrop="event.preventDefault();this.style.outline='none';moveHorseToGroup(event,'${gd.key}')">
             <!-- Horses stacked bottom=inside, top=outside -->
             <div style="display:flex;flex-direction:column;gap:8px;">
               ${display.map((h, idx) => {
@@ -1060,7 +1322,9 @@ function renderLiveMap() {
                 const specialBadge = h.specialPos === 'rails' ? ' 🔒' : h.specialPos === 'box' ? ' 📦' : '';
                 const bc = barrierColor(h.barrier);
                 const shortName = h.name.length > 14 ? h.name.substring(0,13)+'…' : h.name;
-                return `<div style="
+                return `<div draggable="true"
+                  ondragstart="event.dataTransfer.setData('horseName',encodeURIComponent('${h.name}'));event.dataTransfer.setData('fromGroup','${gd.key}')"
+                  style="
                   background:${gd.color};
                   border-radius:6px;
                   padding:6px 8px;
@@ -1070,6 +1334,7 @@ function renderLiveMap() {
                   box-shadow:0 2px 8px rgba(0,0,0,0.35);
                   border:${isInside && h.specialPos === 'rails' ? '2px solid #66dd99' : h.specialPos === 'box' ? '2px solid #ffcc44' : '1px solid rgba(255,255,255,0.15)'};
                   position:relative;
+                  cursor:grab;
                 ">
                   <!-- Barrier circle -->
                   <div style="
@@ -1098,7 +1363,7 @@ function renderLiveMap() {
       </div>
 
       <!-- Inside/outside labels -->
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid rgba(200,169,110,0.1);">
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);border-top:1px solid rgba(200,169,110,0.1);">
         ${(isAntiClockwise ? groupDefs : [...groupDefs].reverse()).map(gd => {
           const horses = groups[gd.key];
           const n = horses.length;
@@ -1111,9 +1376,11 @@ function renderLiveMap() {
 
       <!-- Pace summary -->
       <div class="lm-pace-summary">
-        <div class="lm-pace-stat"><span class="lm-pace-num" style="color:var(--leader-col)">${styleCounts.leader}</span>&nbsp;Leader${styleCounts.leader !== 1 ? 's' : ''}</div>
-        <div class="lm-pace-stat"><span class="lm-pace-num" style="color:var(--onpace-col)">${styleCounts.on_pace}</span>&nbsp;On Pace</div>
-        <div class="lm-pace-stat"><span class="lm-pace-num" style="color:var(--midfield-col)">${styleCounts.midfield}</span>&nbsp;Midfield</div>
+        <div class="lm-pace-stat"><span class="lm-pace-num" style="color:var(--leader-col)">${styleCounts.leader}</span>&nbsp;Leader</div>
+        <div class="lm-pace-stat"><span class="lm-pace-num" style="color:var(--onpace-col)">${styleCounts.on_pace}</span>&nbsp;Pace</div>
+        <div class="lm-pace-stat"><span class="lm-pace-num" style="color:#c87820">${styleCounts.off_pace}</span>&nbsp;Off Pace</div>
+        <div class="lm-pace-stat"><span class="lm-pace-num" style="color:var(--midfield-col)">${styleCounts.midfield}</span>&nbsp;Mid</div>
+        <div class="lm-pace-stat"><span class="lm-pace-num" style="color:#3a6ab0">${styleCounts.off_midfield}</span>&nbsp;Off Mid</div>
         <div class="lm-pace-stat"><span class="lm-pace-num" style="color:var(--back-col)">${styleCounts.back}</span>&nbsp;Back</div>
         <div class="lm-pace-stat" style="margin-left:auto;font-style:italic;color:rgba(245,240,232,0.4)">${paceDesc}</div>
       </div>
@@ -1129,6 +1396,16 @@ function renderLiveMap() {
         <span style="font-size:11px;color:#ffcc44;">📦 Box Seat</span>
       </div>
     </div>`;
+}
+
+function moveHorseToGroup(event, newGroup) {
+  const horseName = decodeURIComponent(event.dataTransfer.getData('horseName'));
+  if (!horseName) return;
+  const horse = field.find(h => h.name === horseName);
+  if (horse) {
+    horse.userStyle = newGroup;
+    renderField();
+  }
 }
 
 function autoSuggestPositions() {
@@ -1179,6 +1456,7 @@ function renderField() {
   }
   
   section.style.display = 'block';
+  section.removeAttribute('hidden');
   runBtn.disabled = field.length < 2;
   countEl.textContent = `(${field.length})`;
   
@@ -1190,9 +1468,13 @@ function renderField() {
     
     return `<div class="field-horse">
       <div class="field-horse-header">
-        <span class="horse-num">${i+1}</span>
-        <span class="horse-name">${h.name}</span>
+        <span class="horse-num" style="${h.scratched ? 'color:rgba(245,240,232,0.2);text-decoration:line-through' : ''}">${i+1}</span>
+        <span class="horse-name" style="${h.scratched ? 'color:rgba(245,240,232,0.25);text-decoration:line-through' : ''}">${h.name}</span>
         <span class="horse-stats">${h.manual ? '<span style="color:var(--sand);opacity:0.6;font-size:10px;border:1px solid rgba(200,169,110,0.4);border-radius:3px;padding:1px 5px;letter-spacing:1px">MANUAL</span>' : d[4]+'R · '+(d[1] ? d[1].toFixed(1)+'s/km' : '—')}</span>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:${h.scratched ? '#ff7777' : 'rgba(245,240,232,0.3)'};white-space:nowrap;" title="Mark as scratched">
+          <input type="checkbox" ${h.scratched ? 'checked' : ''} onchange="setScratch(${i}, this.checked)" style="accent-color:#ff7777;cursor:pointer;">
+          SCR
+        </label>
         <button class="remove-btn" onclick="removeHorse(${i})">✕</button>
       </div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
@@ -1207,12 +1489,14 @@ function renderField() {
           <input type="number" min="48" max="65" step="0.5" value="${h.weight || (h.data[11] ? h.data[11] : '')}" placeholder="${h.data[11] ? h.data[11]+'kg' : '—'}"
             onchange="setWeight(${i}, this.value)"
             style="width:62px;background:rgba(255,255,255,0.07);border:1px solid rgba(200,169,110,0.3);border-radius:4px;padding:4px 6px;color:var(--chalk);font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;text-align:center;outline:none;">
+          ${h.weight && h.data[11] ? `<span style="font-size:11px;color:${h.weight - h.data[11] <= -1 ? '#88dd88' : h.weight - h.data[11] >= 1 ? '#ff8888' : 'rgba(245,240,232,0.3)'};">${h.weight - h.data[11] > 0 ? '+' : ''}${(h.weight - h.data[11]).toFixed(1)}</span>` : ''}
         </div>
-        <div style="flex:1;display:flex;gap:4px;flex-wrap:wrap;">
-          ${['leader','on_pace','midfield','back'].map(s => 
-            `<button class="style-btn ${h.userStyle === s ? 'active-'+s : ''}" onclick="setStyle(${i},'${s}')">${s === 'on_pace' ? 'On Pace' : s.charAt(0).toUpperCase()+s.slice(1)}</button>`
-          ).join('')}
-        </div>
+      </div>
+      <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:8px;">
+        ${['leader','on_pace','off_pace','midfield','off_midfield','back'].map(s => {
+          const labels = {leader:'Leader',on_pace:'Pace',off_pace:'Off Pace',midfield:'Midfield',off_midfield:'Off Mid',back:'Back'};
+          return `<button class="style-btn ${h.userStyle === s ? 'active-'+s : ''}" onclick="setStyle(${i},'${s}')" style="flex:1;min-width:48px;font-size:11px;">${labels[s]}</button>`;
+        }).join('')}
       </div>
       ${sugLabel ? `<div class="style-suggest">${sugLabel}</div>` : ''}
       <div style="display:flex;gap:6px;margin-top:8px;">
@@ -1409,7 +1693,8 @@ async function runSimulation() {
   // Attach detail data to field horses now that DETAIL is loaded
   field.forEach(h => {
     if (!h.detail || h.detail.length === 0) {
-      h.detail = DETAIL[h.name] || [];
+      const mn = lookupHorse(h.name);
+      h.detail = mn ? (DETAIL[mn] || []) : [];
     }
   });
 
@@ -1419,10 +1704,19 @@ async function runSimulation() {
   const pace = document.getElementById('race-pace').value;
   const dist = parseInt(document.getElementById('race-dist').value) || 1200;
   const cond = document.getElementById('track-cond').value;
-  const track = document.getElementById('track-code').value.toUpperCase();
+  const track = currentTrackCode.toUpperCase();
   
   // Score each horse
-  const scored = field.map((h, i) => {
+  // Filter out scratched horses
+  const activeField = field.filter(h => !h.scratched);
+  if (activeField.length < 2) {
+    alert('Not enough runners — remove scratchings or add more horses.');
+    btn.textContent = origText;
+    btn.disabled = false;
+    return;
+  }
+
+  const scored = activeField.map((h, i) => {
     const d = h.data;
     const style = h.userStyle;
     
@@ -1444,14 +1738,14 @@ async function runSimulation() {
     // Hot pace: leaders tire, closers benefit
     // Slow pace: leaders dominate, closers disadvantaged
     const paceAdj = {
-      hot: { leader: -18, on_pace: -8, midfield: +8, back: +15 },
-      genuine: { leader: -5, on_pace: +5, midfield: +2, back: -2 },
-      slow: { leader: +15, on_pace: +8, midfield: -5, back: -15 }
+      hot:     { leader: -18, on_pace: -10, off_pace: -5, midfield: +6,  off_midfield: +10, back: +15 },
+      genuine: { leader:  -5, on_pace:  +5, off_pace: +3, midfield: +2,  off_midfield:  -1, back:  -2 },
+      slow:    { leader: +15, on_pace:  +8, off_pace: +4, midfield: -3,  off_midfield:  -8, back: -15 }
     };
     score += (paceAdj[pace][style] || 0);
     
     // Multiple leaders: creates hot pace scenario internally
-    const leaderCount = field.filter(f => f.userStyle === 'leader').length;
+    const leaderCount = activeField.filter(f => f.userStyle === 'leader' || f.userStyle === 'on_pace').length;
     if (style === 'leader' && leaderCount >= 3) score -= 8;
     if (style === 'on_pace' && leaderCount >= 3 && pace === 'hot') score += 5;
     
@@ -1501,7 +1795,7 @@ async function runSimulation() {
     // Rail / best going advantage
     const railFrom = parseInt(document.getElementById('rail-from').value) || 0;
     const railTo = parseInt(document.getElementById('rail-to').value) || 0;
-    const railBonus = getRailAdvantage(h.barrier, style, field.length, railFrom, railTo);
+    const railBonus = getRailAdvantage(h.barrier, style, activeField.length, railFrom, railTo);
     score += railBonus;
     h.railBonus = railBonus;
 
@@ -1550,9 +1844,9 @@ async function runSimulation() {
     }
 
     // Barrier draw penalty/bonus
-    const trackCode = document.getElementById('track-code').value.toUpperCase().trim();
+    const trackCode = currentTrackCode.toUpperCase().trim();
     const trackProfile = getTrackProfile(trackCode);
-    const barrierResult = getBarrierPenalty(h.barrier, style, field.length, trackProfile.bias);
+    const barrierResult = getBarrierPenalty(h.barrier, style, activeField.length, trackProfile.bias);
     score += barrierResult.penalty;
     h.barrierRisk = barrierResult.risk;
     h.barrierPenalty = barrierResult.penalty;
@@ -1723,7 +2017,7 @@ function renderResults(pace, dist, cond, track, railFrom, railTo) {
                 return `<span style="font-size:11px;color:${gradeColor[h.lastGrade]||'#aaa'}">${h.lastGrade}</span><span style="font-size:10px;color:${col};margin-left:3px">${arrow}${tag}</span>`;
               })()}</td>
               <td>${h.data[7] != null ? `<span style="font-size:11px">${h.data[7] > 0.5 ? '💧' : h.data[7] < -0.5 ? '🌞' : '〰'}</span>` : '<span style="color:rgba(245,240,232,0.2);font-size:11px">—</span>'}</td>
-              <td>${(() => { const tc = document.getElementById('track-code').value.toUpperCase().trim(); const tr = h.data[10] && tc && h.data[10][tc]; return tr ? `<span style="font-size:11px;color:${tr[3]>0.5?'#88dd88':tr[3]<-0.5?'#ff8888':'rgba(245,240,232,0.5)'}">${tr[0]}R ${tr[2]}W${tr[3]>0.5?' ✓':tr[3]<-0.5?' ✗':''}</span>` : '<span style="color:rgba(245,240,232,0.2);font-size:11px">—</span>'; })()}</td>
+              <td>${(() => { const tc = currentTrackCode.toUpperCase().trim(); const tr = h.data[10] && tc && h.data[10][tc]; return tr ? `<span style="font-size:11px;color:${tr[3]>0.5?'#88dd88':tr[3]<-0.5?'#ff8888':'rgba(245,240,232,0.5)'}">${tr[0]}R ${tr[2]}W${tr[3]>0.5?' ✓':tr[3]<-0.5?' ✗':''}</span>` : '<span style="color:rgba(245,240,232,0.2);font-size:11px">—</span>'; })()}</td>
               <td>
                 <div style="display:flex;align-items:center;gap:8px">
                   <div class="score-bar-wrap"><div class="score-bar" style="width:${scorePct}%"></div></div>
@@ -1774,7 +2068,7 @@ function renderResults(pace, dist, cond, track, railFrom, railTo) {
               ${h.data[6] != null ? `<span style="font-size:11px;padding:2px 7px;border-radius:3px;background:rgba(255,220,100,0.15);color:#ffd464;border:1px solid rgba(255,220,100,0.2)">☀️ Dry: ${h.data[6].toFixed(2)}</span>` : ''}
               ${h.data[5] != null ? `<span style="font-size:11px;padding:2px 7px;border-radius:3px;background:rgba(100,160,255,0.15);color:#8ab4f8;border:1px solid rgba(100,160,255,0.2)">🌧 Wet: ${h.data[5].toFixed(2)}</span>` : ''}
               ${h.data[7] != null ? `<span style="font-size:11px;padding:2px 7px;border-radius:3px;background:${h.data[7] > 0.5 ? 'rgba(100,160,255,0.2)' : h.data[7] < -0.5 ? 'rgba(255,220,100,0.2)' : 'rgba(255,255,255,0.08)'};color:${h.data[7] > 0.5 ? '#8ab4f8' : h.data[7] < -0.5 ? '#ffd464' : 'rgba(245,240,232,0.5)'}">${h.data[7] > 0.5 ? '💧 Wet tracker' : h.data[7] < -0.5 ? '🌞 Dry tracker' : '〰 Versatile'}</span>` : ''}
-              ${(() => { const tc = document.getElementById('track-code').value.toUpperCase().trim(); const tr = h.data[10] && tc && h.data[10][tc]; return tr ? `<span style="font-size:11px;padding:2px 7px;border-radius:3px;background:${tr[3]>0.5?'rgba(100,220,100,0.2)':tr[3]<-0.5?'rgba(220,80,80,0.2)':'rgba(255,255,255,0.08)'};color:${tr[3]>0.5?'#88dd88':tr[3]<-0.5?'#ff8888':'rgba(245,240,232,0.5)'}">📍 ${tc}: ${tr[0]}R ${tr[2]}W ${tr[3]>0.5?'✓ Loves it':tr[3]<-0.5?'✗ Struggles':''}</span>` : ''; })()}
+              ${(() => { const tc = currentTrackCode.toUpperCase().trim(); const tr = h.data[10] && tc && h.data[10][tc]; return tr ? `<span style="font-size:11px;padding:2px 7px;border-radius:3px;background:${tr[3]>0.5?'rgba(100,220,100,0.2)':tr[3]<-0.5?'rgba(220,80,80,0.2)':'rgba(255,255,255,0.08)'};color:${tr[3]>0.5?'#88dd88':tr[3]<-0.5?'#ff8888':'rgba(245,240,232,0.5)'}">📍 ${tc}: ${tr[0]}R ${tr[2]}W ${tr[3]>0.5?'✓ Loves it':tr[3]<-0.5?'✗ Struggles':''}</span>` : ''; })()}
               ${h.data[11] ? `<span style="font-size:11px;padding:2px 7px;border-radius:3px;background:rgba(255,255,255,0.06);color:rgba(245,240,232,0.5)">⚖️ Avg ${h.data[11]}kg${h.weight && h.weightDiff !== null ? (h.weightDiff <= -2 ? ` → <span style="color:#88dd88">${h.weight}kg ▼LIGHT</span>` : h.weightDiff >= 2 ? ` → <span style="color:#ff8888">${h.weight}kg ▲HEAVY</span>` : ` → ${h.weight}kg`) : ''}</span>` : ''}
             </div>
             <div class="form-runs">${runRows}</div>
