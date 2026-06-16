@@ -5,208 +5,125 @@
 <meta charset="UTF-8">
 <title>NRL Head to Head</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <style>
 body{font-family:Inter,Arial;margin:0;background:#f4f6f8;}
-
-.navbar{
-  display:flex;
-  justify-content:center;
-  gap:24px;
-  padding:16px;
-  background:white;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
-}
-
-.navbar a{
-  text-decoration:none;
-  color:#0056d6;
-}
-
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:white;border-bottom:1px solid #ddd;font-weight:600;}
+.navbar a{text-decoration:none;color:#0056d6;}
 .page{max-width:1200px;margin:auto;padding:30px;}
-
 h1{margin-bottom:20px;}
-
-.select-row{
-  display:flex;
-  gap:20px;
-  margin-bottom:20px;
-}
-
-select{
-  flex:1;
-  padding:12px;
-  border-radius:10px;
-  border:1px solid #ddd;
-  font-size:16px;
-}
-
-button{
-  padding:12px 22px;
-  background:#0056d6;
-  color:white;
-  border:none;
-  border-radius:10px;
-  font-size:16px;
-  font-weight:600;
-  cursor:pointer;
-}
-
-.card{
-  background:white;
-  border-radius:14px;
-  padding:20px;
-  margin-top:20px;
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-  margin-top:15px;
-}
-
-th,td{
-  padding:10px;
-  border-bottom:1px solid #eee;
-  text-align:left;
-  font-size:14px;
-}
-
-th{
-  background:#f0f2f5;
-}
+.select-row{display:flex;gap:20px;margin-bottom:20px;}
+select{flex:1;padding:12px;border-radius:10px;border:1px solid #ddd;font-size:16px;}
+button{padding:12px 22px;background:#0056d6;color:white;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;}
+.card{background:white;border-radius:14px;padding:20px;margin-top:20px;}
+table{width:100%;border-collapse:collapse;margin-top:15px;}
+th,td{padding:10px;border-bottom:1px solid #eee;text-align:left;font-size:14px;}
+th{background:#f0f2f5;}
+tbody tr:hover{background:#eaf3ff;cursor:pointer;}
 </style>
 </head>
 <body>
-
 <nav class="navbar">
   <a href="index.html">Home</a>
   <a href="nrl.html">NRL</a>
 </nav>
-
 <div class="page">
-
 <h1>NRL Head to Head</h1>
-
 <div class="select-row">
   <select id="team1"></select>
   <select id="team2"></select>
 </div>
-
 <button onclick="compare()">Compare</button>
-
 <div id="results"></div>
-
 </div>
-
 <script>
-
-let allData=[];
+let allMatches = [];
 
 fetch("data/nrl/index.json")
 .then(r=>r.json())
 .then(index=>{
-
-  const fetches=index.seasons.map(s=>
-    fetch("data/nrl/seasons/"+s+".json").then(r=>r.json())
+  return Promise.all(
+    index.seasons.map(s=>
+      fetch("data/nrl/seasons/"+s+".json").then(r=>r.json())
+    )
   );
-
-  Promise.all(fetches).then(results=>{
-    results.forEach(season=>allData.push(...season));
-    buildTeamDropdowns();
-  });
-
+})
+.then(results=>{
+  results.forEach(season => allMatches.push(...season));
+  buildTeamDropdowns();
 });
 
 function buildTeamDropdowns(){
-
-  const teams=[...new Set(allData.map(d=>d.played_for))].sort();
-
-  const t1=document.getElementById("team1");
-  const t2=document.getElementById("team2");
-
-  teams.forEach(team=>{
-    const opt1=document.createElement("option");
-    opt1.value=team;
-    opt1.textContent=team;
-    t1.appendChild(opt1);
-
-    const opt2=document.createElement("option");
-    opt2.value=team;
-    opt2.textContent=team;
-    t2.appendChild(opt2);
+  const teams = [...new Set(allMatches.flatMap(m=>[m.home_team, m.away_team]))].sort();
+  ["team1","team2"].forEach(id=>{
+    const sel = document.getElementById(id);
+    teams.forEach(t=>{
+      const opt = document.createElement("option");
+      opt.value = opt.textContent = t;
+      sel.appendChild(opt);
+    });
   });
+}
 
+function getWinner(m){
+  if(m.home_points > m.away_points) return m.home_team;
+  if(m.away_points > m.home_points) return m.away_team;
+  return null;
 }
 
 function compare(){
+  const team1 = document.getElementById("team1").value;
+  const team2 = document.getElementById("team2").value;
+  if(team1 === team2) return;
 
-  const team1=document.getElementById("team1").value;
-  const team2=document.getElementById("team2").value;
+  const matches = allMatches.filter(m=>
+    (m.home_team===team1 && m.away_team===team2) ||
+    (m.home_team===team2 && m.away_team===team1)
+  );
 
-  if(team1===team2) return;
+  const team1Wins = matches.filter(m=>getWinner(m)===team1).length;
+  const team2Wins = matches.filter(m=>getWinner(m)===team2).length;
+  const draws     = matches.filter(m=>getWinner(m)===null).length;
 
-  const games=[...new Set(
-    allData
-      .filter(d=> (d.home_team===team1 && d.away_team===team2) ||
-                  (d.home_team===team2 && d.away_team===team1))
-      .map(d=>d.match_id)
-  )];
+  const totalPts  = matches.reduce((a,m)=>a+(m.home_points||0)+(m.away_points||0),0);
+  const avg       = matches.length ? (totalPts/matches.length).toFixed(1) : 0;
 
-  const matches=games.map(id=>{
-    const rows=allData.filter(d=>d.match_id===id);
-    return rows[0];
-  });
-
-  const team1Wins=matches.filter(m=>m.winner===team1).length;
-  const team2Wins=matches.filter(m=>m.winner===team2).length;
-
-  let totalPoints=0;
-  matches.forEach(m=>{
-    totalPoints+=(m.home_points||0)+(m.away_points||0);
-  });
-
-  const avg=matches.length? (totalPoints/matches.length).toFixed(1):0;
-
-  const container=document.getElementById("results");
-
-  container.innerHTML=`
+  document.getElementById("results").innerHTML = `
     <div class="card">
       <h2>${team1} vs ${team2}</h2>
-      <p>Games: ${matches.length} |
-      ${team1} wins: ${team1Wins} |
-      ${team2} wins: ${team2Wins}</p>
-      <p><strong>Average total points:</strong> ${avg}</p>
-
+      <p>Games: ${matches.length} &nbsp;|&nbsp;
+         ${team1} wins: ${team1Wins} &nbsp;|&nbsp;
+         ${team2} wins: ${team2Wins} &nbsp;|&nbsp;
+         Draws: ${draws}</p>
+      <p><strong>Average total points per game:</strong> ${avg}</p>
       <table>
         <thead>
           <tr>
             <th>Season</th>
             <th>Round</th>
+            <th>Date</th>
             <th>Venue</th>
-            <th>Match</th>
+            <th>Home</th>
             <th>Score</th>
+            <th>Away</th>
           </tr>
         </thead>
         <tbody>
           ${matches.map(m=>`
-            <tr>
+            <tr onclick="window.location='nrl-game.html?season=${m.season}&match=${m.match_id}'">
               <td>${m.season}</td>
-              <td>${m.round}</td>
+              <td>${m.round||""}</td>
+              <td>${m.date||""}</td>
               <td>${m.venue||""}</td>
-              <td>${m.home_team} v ${m.away_team}</td>
+              <td>${m.home_team}</td>
               <td>${m.home_points} - ${m.away_points}</td>
+              <td>${m.away_team}</td>
             </tr>
           `).join("")}
         </tbody>
       </table>
     </div>
   `;
-
 }
-
 </script>
-
 </body>
 </html>
