@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Test Cricket Scorecards | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+
+body{
+  font-family:Inter,system-ui,Arial,sans-serif;
+  margin:0;
+  background:#f4f8fc;
+}
+
+.navbar{
+  display:flex;
+  justify-content:center;
+  gap:24px;
+  padding:16px;
+  background:#fff;
+  border-bottom:1px solid #ddd;
+  font-weight:600;
+}
+
+.navbar a{
+  color:#0056d6;
+  text-decoration:none;
+  font-size:18px;
+}
+
+.navbar a:hover{text-decoration:underline;}
+
+.page{
+  max-width:1200px;
+  margin:auto;
+  padding:30px 20px 60px;
+}
+
+.hero{
+  background:linear-gradient(135deg,#0d3320,#1a6b3c);
+  color:white;
+  padding:40px;
+  border-radius:26px;
+  margin-bottom:22px;
+}
+
+.hero h1{margin:0;font-size:42px;}
+.hero p{margin-top:10px;font-size:18px;opacity:.95;}
+
+/* YEAR BUTTONS */
+.year-grid{
+  display:flex;
+  flex-wrap:wrap;
+  gap:12px;
+  margin:10px 0 22px;
+}
+
+.year-btn{
+  background:linear-gradient(135deg,#0d3320,#1a6b3c);
+  color:white;
+  padding:10px 20px;
+  border-radius:12px;
+  font-weight:700;
+  font-size:16px;
+  cursor:pointer;
+  transition:.15s;
+}
+
+.year-btn:hover{
+  transform:translateY(-2px);
+  box-shadow:0 6px 16px rgba(0,0,0,.15);
+}
+
+.year-btn.active{
+  background:linear-gradient(135deg,#2d9e5f,#3ec878);
+}
+
+/* MATCH TABLE */
+.table-wrap{
+  background:#fff;
+  border-radius:14px;
+  overflow:hidden;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:14px;
+}
+
+th{
+  background:linear-gradient(135deg,#0d3320,#1a6b3c);
+  color:#fff;
+  padding:12px;
+  text-align:left;
+}
+
+td{
+  padding:12px;
+  border-bottom:1px solid #e5e7eb;
+}
+
+tr:nth-child(even){background:#f4f8fc;}
+
+tr.match-row{cursor:pointer;}
+tr.match-row:hover{background:#d6ede0;}
+
+.note{
+  margin-top:10px;
+  font-size:13px;
+  color:#666;
+}
+
+/* SCORECARD MODAL */
+.modal-overlay{
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.5);
+  z-index:100;
+  overflow-y:auto;
+  padding:30px 20px;
+}
+
+.modal-overlay.open{display:block;}
+
+.modal{
+  background:#fff;
+  border-radius:18px;
+  max-width:900px;
+  margin:0 auto;
+  overflow:hidden;
+}
+
+.modal-header{
+  background:linear-gradient(135deg,#0d3320,#1a6b3c);
+  color:#fff;
+  padding:20px 24px;
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+}
+
+.modal-header h2{margin:0;font-size:18px;line-height:1.3;}
+.modal-header p{margin:6px 0 0;font-size:13px;opacity:.85;}
+
+.modal-close{
+  background:rgba(255,255,255,.2);
+  border:none;
+  color:#fff;
+  font-size:20px;
+  width:32px;height:32px;
+  border-radius:8px;
+  cursor:pointer;
+  flex-shrink:0;
+  line-height:32px;
+  text-align:center;
+}
+.modal-close:hover{background:rgba(255,255,255,.35);}
+
+.modal-result{
+  padding:12px 24px;
+  background:#eef6f0;
+  font-weight:600;
+  font-size:14px;
+  color:#0d3320;
+  border-bottom:1px solid #ddd;
+}
+.modal-result.draw{background:#fdf6d8;color:#7a6000;}
+.modal-result.abandoned{background:#eee;color:#555;}
+
+.modal-body{padding:20px 24px;}
+
+/* INNINGS TABS */
+.innings-tabs{
+  display:flex;
+  gap:0;
+  border-bottom:2px solid #eee;
+  margin-bottom:0;
+  overflow-x:auto;
+}
+.innings-tab{
+  padding:9px 16px;
+  font-size:13px;font-weight:600;color:#999;
+  cursor:pointer;
+  border-bottom:2px solid transparent;
+  margin-bottom:-2px;
+  transition:all .12s;
+  white-space:nowrap;
+}
+.innings-tab:hover{color:#1a6b3c;}
+.innings-tab.active{color:#0d3320;border-bottom-color:#1a6b3c;}
+.innings-panel{display:none;padding-top:16px;}
+.innings-panel.active{display:block;}
+
+.innings-summary{
+  display:flex;align-items:baseline;gap:10px;
+  margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #eee;
+}
+.innings-team{font-size:16px;font-weight:700;color:#0d3320;}
+.innings-total{font-size:24px;font-weight:700;color:#1a6b3c;font-variant-numeric:tabular-nums;}
+.innings-overs{font-size:13px;color:#888;}
+
+.section-label{
+  font-size:11px;font-weight:700;letter-spacing:1px;
+  color:#aaa;text-transform:uppercase;margin:14px 0 6px;
+}
+
+.data-table{width:100%;border-collapse:collapse;font-size:13px;}
+.data-table th{
+  text-align:left;padding:6px 8px;font-size:11px;font-weight:700;
+  letter-spacing:.5px;color:#888;text-transform:uppercase;
+  border-bottom:1px solid #ddd;white-space:nowrap;
+}
+.data-table th.r{text-align:right;}
+.data-table td{padding:6px 8px;border-bottom:1px solid #f2f2f2;vertical-align:top;line-height:1.4;}
+.data-table td.r{text-align:right;font-variant-numeric:tabular-nums;font-family:'SF Mono',Consolas,monospace;font-size:12px;}
+.data-table tr:last-child td{border-bottom:none;}
+.data-table tr:hover td{background:#f5f9f6;}
+
+.player-name{font-weight:600;color:#1a1a1a;}
+.badge{display:inline-block;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;margin-left:4px;vertical-align:middle;}
+.badge-c{background:#fff3cd;color:#856404;}
+.badge-k{background:#cfe2ff;color:#084298;}
+.dismissal{color:#888;font-size:12px;}
+.not-out{color:#1a5c30;font-weight:600;}
+.num-big{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;font-family:'SF Mono',Consolas,monospace;}
+.num-zero{color:#ccc;}
+.extras-row td{color:#666;font-style:italic;}
+.total-row td{background:#eef6f0;font-weight:700;}
+.wkts-pos{color:#1a6b3c;font-weight:700;}
+
+.fow-grid{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;}
+.fow-item{
+  background:#f5f9f6;border:1px solid #c8e0d0;border-radius:4px;
+  padding:3px 7px;font-size:11px;font-variant-numeric:tabular-nums;
+}
+.fow-wkt{font-weight:700;color:#1a6b3c;}
+.fow-runs{font-weight:600;}
+.fow-bat{color:#888;font-size:10px;display:block;margin-top:1px;}
+.divider{border:none;border-top:1px solid #eee;margin:16px 0;}
+
+footer{
+  text-align:center;
+  padding:24px 20px;
+  font-size:12px;
+  color:#aaa;
+  border-top:1px solid #eee;
+  margin-top:40px;
+}
+footer a{color:#888;text-decoration:none;}
+footer a:hover{text-decoration:underline;}
+
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+</div>
+
+<div class="page">
+
+  <div class="hero">
+    <h1>Test Cricket Scorecards</h1>
+    <p>Full innings-by-innings scorecards from 1970 onwards.</p>
+  </div>
+
+  <div class="year-grid" id="yearGrid"></div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Test #</th>
+          <th>Date</th>
+          <th>Series</th>
+          <th>Venue</th>
+          <th>Result</th>
+        </tr>
+      </thead>
+      <tbody id="matchTable">
+        <tr><td colspan="5" style="color:#aaa;padding:20px;">Select a year above</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div id="note" class="note"></div>
+
+</div>
+
+<!-- SCORECARD MODAL -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <div>
+        <h2 id="modalTitle"></h2>
+        <p id="modalMeta"></p>
+      </div>
+      <button class="modal-close" onclick="closeModalDirect()">✕</button>
+    </div>
+    <div class="modal-result" id="modalResult"></div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<footer>
+  Scorecard data sourced from <a href="https://www.howstat.com" target="_blank">howstat.com</a>
+</footer>
+
+<script>
+const BASE = 'https://nickje77.github.io/docs/data/test_cricket';
+let currentData = null;
+
+function resultClass(result) {
+  if (!result) return '';
+  const r = result.toLowerCase();
+  if (r.includes('abandoned') || r.includes('no result')) return 'abandoned';
+  if (r.includes('drawn') || r.includes('draw')) return 'draw';
+  return '';
+}
+
+function dedupeByName(arr, key) {
+  const seen = new Set();
+  return arr.filter(item => {
+    if (seen.has(item[key])) return false;
+    seen.add(item[key]); return true;
+  });
+}
+
+function formatTotal(inn) {
+  if (inn.wickets === null || inn.wickets === undefined || inn.wickets === 10) return `${inn.total}`;
+  return `${inn.total}/${inn.wickets}d`;
+}
+
+// Build year buttons
+const yearGrid = document.getElementById('yearGrid');
+for (let y = 1970; y <= 2026; y++) {
+  const btn = document.createElement('div');
+  btn.className = 'year-btn';
+  btn.textContent = y;
+  btn.onclick = () => loadYear(y);
+  yearGrid.appendChild(btn);
+}
+
+async function loadYear(year) {
+  // Update active button
+  document.querySelectorAll('.year-btn').forEach(b => {
+    b.classList.toggle('active', b.textContent == year);
+  });
+  document.getElementById('matchTable').innerHTML =
+    `<tr><td colspan="5" style="color:#aaa;padding:20px;">Loading ${year}…</td></tr>`;
+  document.getElementById('note').textContent = '';
+
+  try {
+    const res = await fetch(`${BASE}/tests_${year}.json`);
+    if (!res.ok) throw new Error();
+    currentData = await res.json();
+    renderTable(currentData.matches, year);
+  } catch {
+    document.getElementById('matchTable').innerHTML =
+      `<tr><td colspan="5" style="color:#aaa;padding:20px;">No data available for ${year}</td></tr>`;
+  }
+}
+
+function renderTable(matches, year) {
+  if (!matches?.length) {
+    document.getElementById('matchTable').innerHTML =
+      `<tr><td colspan="5" style="color:#aaa;padding:20px;">No matches found</td></tr>`;
+    return;
+  }
+  document.getElementById('matchTable').innerHTML = matches.map((m, i) => {
+    const series = m.scorecard?.match_info?.Series || m.teams || '';
+    const testNo = m.scorecard?.match_info?.['Match No.'] || `#${m.match_number}`;
+    const venue = m.ground || m.scorecard?.match_info?.Venue || '';
+    return `<tr class="match-row" onclick="openScorecard(${i})">
+      <td>${testNo}</td>
+      <td>${m.date || ''}</td>
+      <td>${series}</td>
+      <td>${venue}</td>
+      <td>${m.result || '—'}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('note').textContent = `${year} · ${matches.length} match${matches.length !== 1 ? 'es' : ''}`;
+}
+
+function openScorecard(idx) {
+  const match = currentData.matches[idx];
+  const sc = match.scorecard;
+  const info = sc?.match_info || {};
+  const innings = sc?.innings || [];
+  const rc = resultClass(match.result);
+
+  document.getElementById('modalTitle').textContent = sc?.title || match.teams;
+  document.getElementById('modalMeta').textContent =
+    [match.date, match.ground || info.Venue].filter(Boolean).join(' · ');
+  const resultEl = document.getElementById('modalResult');
+  resultEl.textContent = '🏏 ' + (match.result || '');
+  resultEl.className = 'modal-result ' + rc;
+
+  const tabLabels = innings.map((inn, i) => {
+    const nth = innings.slice(0, i + 1).filter(x => x.team === inn.team).length;
+    return `${inn.team} ${nth === 1 ? '1st' : '2nd'}`;
+  });
+
+  document.getElementById('modalBody').innerHTML = `
+    <div class="innings-tabs">
+      ${tabLabels.map((lbl, i) => `<div class="innings-tab ${i===0?'active':''}" onclick="switchTab(${i})">${lbl}</div>`).join('')}
+    </div>
+    ${innings.map((inn, i) => renderInnings(inn, i)).join('')}
+  `;
+
+  document.getElementById('modalOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function switchTab(idx) {
+  document.querySelectorAll('.innings-tab').forEach((t, i) => t.classList.toggle('active', i===idx));
+  document.querySelectorAll('.innings-panel').forEach((p, i) => p.classList.toggle('active', i===idx));
+}
+
+function closeModal(e) {
+  if (e.target === document.getElementById('modalOverlay')) closeModalDirect();
+}
+
+function closeModalDirect() {
+  document.getElementById('modalOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function renderInnings(inn, idx) {
+  const batting = inn.batting || [];
+  const bowling = dedupeByName(inn.bowling || [], 'bowler');
+  const fow = inn.fall_of_wickets || [];
+  const extras = inn.extras;
+  const dnb = inn.did_not_bat || [];
+
+  const battingRows = batting.map(b => {
+    const isNotOut = (b.dismissal||'').toLowerCase().includes('not out');
+    const badges = [
+      b.is_captain ? '<span class="badge badge-c">C</span>' : '',
+      b.is_keeper  ? '<span class="badge badge-k">WK</span>' : '',
+    ].join('');
+    return `<tr>
+      <td><span class="player-name">${b.batsman}${badges}</span><br>
+          <span class="dismissal ${isNotOut?'not-out':''}">${b.dismissal||''}</span></td>
+      <td class="r num-big ${b.runs===0?'num-zero':''}">${b.runs}</td>
+      <td class="r">${b.balls_faced??'-'}</td>
+      <td class="r">${b.fours??'-'}</td>
+      <td class="r">${b.sixes??'-'}</td>
+      <td class="r">${b.strike_rate!=null?b.strike_rate.toFixed(1):'-'}</td>
+    </tr>`;
+  }).join('');
+
+  const extrasRow = extras ? `<tr class="extras-row">
+    <td>Extras <small style="color:#bbb">${extras.description||''}</small></td>
+    <td class="r num-big">${extras.runs}</td>
+    <td class="r" colspan="4"></td>
+  </tr>` : '';
+
+  const totalRow = `<tr class="total-row">
+    <td>Total <small style="font-weight:400;color:#666">(${inn.overs} ov · RR ${inn.run_rate})</small></td>
+    <td class="r num-big" style="color:#0d3320">${formatTotal(inn)}</td>
+    <td class="r" colspan="4"></td>
+  </tr>`;
+
+  const dnbRow = dnb.length ? `<tr><td colspan="6" style="color:#999;font-size:12px;padding-top:6px;">
+    Did not bat: ${dnb.join(', ')}</td></tr>` : '';
+
+  const bowlingRows = bowling.map(b => `<tr>
+    <td><span class="player-name">${b.bowler}</span></td>
+    <td class="r">${b.overs}</td>
+    <td class="r">${b.maidens}</td>
+    <td class="r">${b.runs}</td>
+    <td class="r num-big ${b.wickets>0?'wkts-pos':'num-zero'}">${b.wickets}</td>
+    <td class="r">${b.economy!=null?b.economy.toFixed(2):'-'}</td>
+  </tr>`).join('');
+
+  const fowHTML = fow.length ? `
+    <div class="section-label">Fall of Wickets</div>
+    <div class="fow-grid">${fow.map(f=>`
+      <div class="fow-item">
+        <span class="fow-wkt">${f.wicket}W</span> <span class="fow-runs">${f.runs}</span>
+        <span class="fow-bat">${f.batsman}</span>
+      </div>`).join('')}
+    </div>` : '';
+
+  return `<div class="innings-panel ${idx===0?'active':''}" id="innings-${idx}">
+    <div class="innings-summary">
+      <span class="innings-team">${inn.team}</span>
+      <span class="innings-total">${formatTotal(inn)}</span>
+      <span class="innings-overs">(${inn.overs} overs)</span>
+    </div>
+    <div class="section-label">Batting</div>
+    <table class="data-table">
+      <thead><tr>
+        <th>Batsman</th><th class="r">R</th><th class="r">B</th>
+        <th class="r">4s</th><th class="r">6s</th><th class="r">SR</th>
+      </tr></thead>
+      <tbody>${battingRows}${extrasRow}${totalRow}${dnbRow}</tbody>
+    </table>
+    ${fowHTML}
+    <hr class="divider">
+    <div class="section-label">Bowling</div>
+    <table class="data-table">
+      <thead><tr>
+        <th>Bowler</th><th class="r">O</th><th class="r">M</th>
+        <th class="r">R</th><th class="r">W</th><th class="r">Econ</th>
+      </tr></thead>
+      <tbody>${bowlingRows}</tbody>
+    </table>
+  </div>`;
+}
+</script>
+
+</body>
+</html>
