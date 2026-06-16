@@ -17,7 +17,7 @@ jobs:
           cd docs/data/nrl
           unzip -o all_seasons.json.zip
 
-      - name: Split into season files
+      - name: Split into season files and create index
         run: |
           python3 - << 'PYEOF'
           import json, os
@@ -33,7 +33,11 @@ jobs:
               with open(path, "w", encoding="utf-8") as f:
                   json.dump(matches, f)
               print("%s: %d matches" % (season, len(matches)))
-          print("Done. %d seasons." % len(by_season))
+          # Write index.json
+          seasons = sorted(by_season.keys())
+          with open("docs/data/nrl/index.json", "w", encoding="utf-8") as f:
+              json.dump({"seasons": seasons}, f)
+          print("index.json: %d seasons" % len(seasons))
           PYEOF
 
       - name: Remove large JSON
@@ -43,6 +47,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/data/nrl/seasons/
+          git add docs/data/nrl/seasons/ docs/data/nrl/index.json
           git diff --cached --quiet || git commit -m "Split NRL data into per-season files"
           git push
