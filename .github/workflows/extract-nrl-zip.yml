@@ -18,7 +18,23 @@ jobs:
           unzip -o all_seasons.json.zip
 
       - name: Split into season files
-        run: python split_nrl_seasons.py
+        run: |
+          python3 - << 'PYEOF'
+          import json, os
+          os.makedirs("docs/data/nrl/seasons", exist_ok=True)
+          with open("docs/data/nrl/all_seasons.json", encoding="utf-8") as f:
+              all_matches = json.load(f)
+          by_season = {}
+          for match in all_matches:
+              season = str(match.get("season") or match.get("year") or "unknown")
+              by_season.setdefault(season, []).append(match)
+          for season, matches in sorted(by_season.items()):
+              path = "docs/data/nrl/seasons/%s.json" % season
+              with open(path, "w", encoding="utf-8") as f:
+                  json.dump(matches, f)
+              print("%s: %d matches" % (season, len(matches)))
+          print("Done. %d seasons." % len(by_season))
+          PYEOF
 
       - name: Remove large JSON
         run: rm docs/data/nrl/all_seasons.json
