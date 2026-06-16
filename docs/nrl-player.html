@@ -173,6 +173,8 @@ tbody tr:hover{
 .numeric{
   text-align:center;
 }
+
+.status{margin:10px 0;color:#666;}
 </style>
 </head>
 
@@ -186,7 +188,7 @@ tbody tr:hover{
 <div class="page">
 
 <div class="player-header">
-  <h1 id="playerName"></h1>
+  <h1 id="playerName">Loading...</h1>
   <div class="search-container">
     <input type="text" id="searchBox" placeholder="Search player...">
     <div id="suggestions" class="suggestions"></div>
@@ -194,6 +196,7 @@ tbody tr:hover{
 </div>
 
 <div class="team-bar" id="teamBar"></div>
+<div class="status" id="status"></div>
 
 <div>
   <select id="teamSelect" class="select"></select>
@@ -230,82 +233,89 @@ const params = new URLSearchParams(window.location.search);
 const player = params.get("player");
 
 const playerNameEl = document.getElementById("playerName");
-const teamBar = document.getElementById("teamBar");
-const teamSelect = document.getElementById("teamSelect");
-const oppSelect = document.getElementById("oppSelect");
-const careerCards = document.getElementById("careerCards");
-const oppCards = document.getElementById("oppCards");
-const searchBox = document.getElementById("searchBox");
-const suggestions = document.getElementById("suggestions");
+const teamBar      = document.getElementById("teamBar");
+const teamSelect   = document.getElementById("teamSelect");
+const oppSelect    = document.getElementById("oppSelect");
+const careerCards  = document.getElementById("careerCards");
+const oppCards     = document.getElementById("oppCards");
+const searchBox    = document.getElementById("searchBox");
+const suggestions  = document.getElementById("suggestions");
+const statusEl     = document.getElementById("status");
 
 let games = [];
 let allPlayers = new Set();
 let currentSort = null;
 let sortAsc = false;
 
-if(player){
-  playerNameEl.textContent = player;
-}
+if(player) playerNameEl.textContent = player;
 
 const teamColours = {
-  "Brisbane":"linear-gradient(90deg,#6F2C91,#FDBB30)",
-  "Melbourne":"linear-gradient(90deg,#5A2D81,#002B5C)",
-  "Canberra":"linear-gradient(90deg,#00643C,#0054A6)",
-  "Penrith":"linear-gradient(90deg,#000000,#00A3E0,#D50032)",
-  "Souths":"linear-gradient(90deg,#00643C,#C8102E)",
-  "Sydney":"linear-gradient(90deg,#002B5C,#C8102E)",
-  "Manly":"linear-gradient(90deg,#800000,#ffffff)",
-  "Parramatta":"linear-gradient(90deg,#003DA5,#FDBB30)",
-  "Canterbury":"linear-gradient(90deg,#0033A0,#ffffff)",
-  "Cronulla":"linear-gradient(90deg,#00A3E0,#000000)",
-  "Warriors":"linear-gradient(90deg,#111111,#8A1538)",
-  "Gold Coast":"linear-gradient(90deg,#00205B,#FFDD00)",
-  "North Queensland":"linear-gradient(90deg,#00205B,#FDBB30)",
-  "Newcastle":"linear-gradient(90deg,#003E7E,#C8102E)",
-  "Wests":"linear-gradient(90deg,#F04E23,#000000)",
-  "Dragons":"linear-gradient(90deg,#E2231A,#ffffff)"
+  "Brisbane Broncos":"linear-gradient(90deg,#6F2C91,#FDBB30)",
+  "Melbourne Storm":"linear-gradient(90deg,#5A2D81,#002B5C)",
+  "Canberra Raiders":"linear-gradient(90deg,#00643C,#0054A6)",
+  "Penrith Panthers":"linear-gradient(90deg,#000000,#00A3E0,#D50032)",
+  "South Sydney Rabbitohs":"linear-gradient(90deg,#00643C,#C8102E)",
+  "Sydney Roosters":"linear-gradient(90deg,#002B5C,#C8102E)",
+  "Manly-Warringah Sea Eagles":"linear-gradient(90deg,#800000,#ffffff)",
+  "Parramatta Eels":"linear-gradient(90deg,#003DA5,#FDBB30)",
+  "Canterbury-Bankstown Bulldogs":"linear-gradient(90deg,#0033A0,#ffffff)",
+  "Cronulla-Sutherland Sharks":"linear-gradient(90deg,#00A3E0,#000000)",
+  "New Zealand Warriors":"linear-gradient(90deg,#111111,#8A1538)",
+  "Gold Coast Titans":"linear-gradient(90deg,#00205B,#FFDD00)",
+  "North Queensland Cowboys":"linear-gradient(90deg,#00205B,#FDBB30)",
+  "Newcastle Knights":"linear-gradient(90deg,#003E7E,#C8102E)",
+  "Wests Tigers":"linear-gradient(90deg,#F04E23,#000000)",
+  "St. George Illawarra Dragons":"linear-gradient(90deg,#E2231A,#ffffff)"
 };
 
 fetch("data/nrl/index.json")
 .then(r=>r.json())
 .then(index=>{
+  statusEl.textContent = "Loading player data...";
   return Promise.all(
     index.seasons.map(y=>
       fetch("data/nrl/seasons/"+y+".json")
       .then(r=>r.json())
-      .then(rows=>{
-        rows.forEach(row=>{
-          allPlayers.add(row.player);
-          if(row.player === player){
-            games.push({
-              season:y,
-              team:row.played_for,
-              opp:row.played_against,
-              tries:row.tries,
-              goals:row.goals_made,
-              points:row.points
-            });
-          }
+      .then(matches=>{
+        matches.forEach(match=>{
+          const opp_home = match.away_team;
+          const opp_away = match.home_team;
+          (match.players || []).forEach(p=>{
+            allPlayers.add(p.player);
+            if(p.player === player){
+              const opp = p.played_for === match.home_team ? opp_home : opp_away;
+              games.push({
+                season: match.season || y,
+                team: p.played_for,
+                opp: opp,
+                tries: p.tries || 0,
+                goals: (p.conversions || 0) + (p.penalty_goals || 0),
+                points: p.points || 0
+              });
+            }
+          });
         });
       })
     )
   );
 })
 .then(()=>{
-  if(!games.length) return;
+  statusEl.textContent = "";
+
+  if(!games.length){
+    playerNameEl.textContent = player || "Player not found";
+    return;
+  }
 
   const teamCount = {};
   games.forEach(g=>{
-    teamCount[g.team] = (teamCount[g.team] || 0) + 1;
+    teamCount[g.team] = (teamCount[g.team]||0)+1;
   });
-
-  const mainTeam = Object.keys(teamCount)
-    .sort((a,b)=>teamCount[b]-teamCount[a])[0];
-
+  const mainTeam = Object.keys(teamCount).sort((a,b)=>teamCount[b]-teamCount[a])[0];
   teamBar.style.background = teamColours[mainTeam] || "#ccc";
 
   const teams = [...new Set(games.map(g=>g.team))];
-  const opps = [...new Set(games.map(g=>g.opp))];
+  const opps  = [...new Set(games.map(g=>g.opp))];
 
   teamSelect.innerHTML =
     `<option value="all">All Teams</option>` +
@@ -316,35 +326,26 @@ fetch("data/nrl/index.json")
     opps.map(o=>`<option>${o}</option>`).join("");
 
   teamSelect.onchange = render;
-  oppSelect.onchange = render;
+  oppSelect.onchange  = render;
 
   render();
 });
 
 function render(){
   let filtered = games;
-
-  if(teamSelect.value !== "all")
-    filtered = filtered.filter(g=>g.team===teamSelect.value);
-
-  if(oppSelect.value !== "all")
-    filtered = filtered.filter(g=>g.opp===oppSelect.value);
-
-  // ✅ FIX: Career stays full career
+  if(teamSelect.value !== "all") filtered = filtered.filter(g=>g.team===teamSelect.value);
+  if(oppSelect.value !== "all")  filtered = filtered.filter(g=>g.opp===oppSelect.value);
   renderCareer(games);
-
-  // unchanged
   renderOpp(filtered);
   renderTable(filtered);
 }
 
 function renderCareer(data){
-  const totalGames = data.length;
-  const totalTries = data.reduce((a,b)=>a+b.tries,0);
-  const totalGoals = data.reduce((a,b)=>a+b.goals,0);
+  const totalGames  = data.length;
+  const totalTries  = data.reduce((a,b)=>a+b.tries,0);
+  const totalGoals  = data.reduce((a,b)=>a+b.goals,0);
   const totalPoints = data.reduce((a,b)=>a+b.points,0);
-  const avgPoints = totalGames ? (totalPoints/totalGames).toFixed(2) : 0;
-
+  const avgPoints   = totalGames ? (totalPoints/totalGames).toFixed(2) : 0;
   careerCards.innerHTML = `
   <div class="card"><h2>${totalGames}</h2><div>Games</div></div>
   <div class="card"><h2>${totalTries}</h2><div>Total Tries</div></div>
@@ -355,11 +356,10 @@ function renderCareer(data){
 }
 
 function renderOpp(data){
-  const gamesCount = data.length;
-  const bestPoints = Math.max(...data.map(g=>g.points),0);
+  const gamesCount  = data.length;
+  const bestPoints  = data.length ? Math.max(...data.map(g=>g.points)) : 0;
   const totalPoints = data.reduce((a,b)=>a+b.points,0);
-  const avgPoints = gamesCount ? (totalPoints/gamesCount).toFixed(2) : 0;
-
+  const avgPoints   = gamesCount ? (totalPoints/gamesCount).toFixed(2) : 0;
   oppCards.innerHTML = `
   <div class="card"><h2>${gamesCount}</h2><div>Games</div></div>
   <div class="card"><h2>${bestPoints}</h2><div>Best Points</div></div>
@@ -368,8 +368,7 @@ function renderOpp(data){
 }
 
 function renderTable(data){
-  const tbody = document.getElementById("gameTable");
-  tbody.innerHTML = data.map(g=>`
+  document.getElementById("gameTable").innerHTML = data.map(g=>`
     <tr>
       <td>${g.season}</td>
       <td>${g.team}</td>
@@ -384,13 +383,11 @@ function renderTable(data){
 function sortTable(key){
   sortAsc = currentSort === key ? !sortAsc : false;
   currentSort = key;
-
   games.sort((a,b)=>{
-    if(a[key] < b[key]) return sortAsc ? -1 : 1;
-    if(a[key] > b[key]) return sortAsc ? 1 : -1;
+    if(a[key]<b[key]) return sortAsc?-1:1;
+    if(a[key]>b[key]) return sortAsc?1:-1;
     return 0;
   });
-
   render();
 }
 
@@ -401,69 +398,38 @@ function resetSort(){
 }
 
 let searchTimeout = null;
-
 searchBox.addEventListener("input", function(){
-
   clearTimeout(searchTimeout);
-
   searchTimeout = setTimeout(()=>{
-
     const value = this.value.trim().toLowerCase();
     suggestions.innerHTML = "";
-
-    if(value.length < 2){
-      suggestions.style.display = "none";
-      return;
-    }
-
+    if(value.length < 2){ suggestions.style.display="none"; return; }
     const all = [...allPlayers];
-
-    const startsWith = all.filter(name =>
-      name.toLowerCase().startsWith(value)
-    );
-
-    const contains = all.filter(name =>
-      !name.toLowerCase().startsWith(value) &&
-      name.toLowerCase().includes(value)
-    );
-
-    const matches = [...startsWith, ...contains]
-      .slice(0,10);
-
+    const startsWith = all.filter(n=>n.toLowerCase().startsWith(value));
+    const contains   = all.filter(n=>!n.toLowerCase().startsWith(value)&&n.toLowerCase().includes(value));
+    const matches    = [...startsWith,...contains].slice(0,10);
     matches.forEach(name=>{
       const div = document.createElement("div");
       div.textContent = name;
-      div.onclick = ()=>{
-        window.location =
-          "nrl-player.html?player=" +
-          encodeURIComponent(name);
-      };
+      div.onclick = ()=>{ window.location="nrl-player.html?player="+encodeURIComponent(name); };
       suggestions.appendChild(div);
     });
-
-    suggestions.style.display =
-      matches.length ? "block" : "none";
-
+    suggestions.style.display = matches.length?"block":"none";
   }, 120);
 });
 
 searchBox.addEventListener("keydown", function(e){
-  if(e.key === "Enter"){
+  if(e.key==="Enter"){
     const value = this.value.trim();
     if(!value) return;
-    window.location =
-      "nrl-player.html?player=" +
-      encodeURIComponent(value);
+    window.location = "nrl-player.html?player="+encodeURIComponent(value);
   }
 });
 
 document.addEventListener("click", function(e){
-  if(!e.target.closest(".search-container")){
-    suggestions.style.display = "none";
-  }
+  if(!e.target.closest(".search-container")) suggestions.style.display="none";
 });
 
 </script>
-
 </body>
 </html>
