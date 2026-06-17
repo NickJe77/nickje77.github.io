@@ -168,6 +168,7 @@ th{
   text-align:left;
 }
 
+th.num{text-align:right;}
 td{padding:12px;border-bottom:1px solid #eee;}
 td.num{text-align:right;font-variant-numeric:tabular-nums;font-family:'SF Mono',Consolas,monospace;}
 tr:nth-child(even){background:#f4f8fc;}
@@ -340,6 +341,40 @@ function loadH2H() {
     const date = m.date || '';
     const testNo = info['Match No.'] || `#${m.match_number}`;
 
+    // Build surname lookup from batting arrays in this match
+    const surnameMap = {};
+    const fullNameSet = new Set();
+    innings.forEach(inn => {
+      (inn.batting || []).forEach(b => {
+        const full = b.batsman.trim();
+        fullNameSet.add(full);
+        const parts = full.split(/\s+/);
+        const surname = parts[parts.length - 1].toLowerCase();
+        if (!surnameMap[surname]) surnameMap[surname] = [];
+        if (!surnameMap[surname].includes(full)) surnameMap[surname].push(full);
+      });
+    });
+
+    function resolveFielder(raw) {
+      const clean = raw.replace(/^†/, '').trim();
+      if (fullNameSet.has(clean)) return clean;
+      const parts = clean.split(/\s+/);
+      const surname = parts[parts.length - 1].toLowerCase();
+      const candidates = surnameMap[surname] || [];
+      if (candidates.length === 0) return null;
+      if (candidates.length === 1) return candidates[0];
+      if (parts.length > 1) {
+        const initials = parts.slice(0, -1).map(p => p[0].toUpperCase()).join('');
+        for (const candidate of candidates) {
+          const cParts = candidate.split(/\s+/);
+          const cInitials = cParts.slice(0, -1).map(p => p[0].toUpperCase()).join('');
+          if (cInitials === initials) return candidate;
+          if (cInitials[0] === initials[0]) return candidate;
+        }
+      }
+      return candidates[0];
+    }
+
     innings.forEach(inn => {
       // Batting
       (inn.batting || []).forEach(b => {
@@ -369,22 +404,25 @@ function loadH2H() {
         });
       });
 
-      // Fielding — parse dismissals
+      // Fielding — parse dismissals with full name resolution
       (inn.batting || []).forEach(b => {
-        const d = (b.dismissal || '').toLowerCase();
-        // catch: "c PlayerName b Bowler" or "c †PlayerName b Bowler"
-        const catchMatch = d.match(/^c\s+[†]?([^b]+?)\s+b\s+/);
+        const d = (b.dismissal || '');
+        if (/^c\s*&\s*b/i.test(d)) return;
+        const catchMatch = d.match(/^c\s+([†]?[^\s].*?)\s+b\s+/i);
         if (catchMatch) {
-          const fielder = catchMatch[1].trim();
-          if (!fielding[fielder]) fielding[fielder] = { catches: 0, stumpings: 0 };
-          fielding[fielder].catches++;
+          const f = resolveFielder(catchMatch[1].trim());
+          if (f) {
+            if (!fielding[f]) fielding[f] = { catches: 0, stumpings: 0 };
+            fielding[f].catches++;
+          }
         }
-        // stumping: "st †PlayerName b Bowler"
-        const stumpMatch = d.match(/^st\s+[†]?([^b]+?)\s+b\s+/);
+        const stumpMatch = d.match(/^st\s+([†]?[^\s].*?)\s+b\s+/i);
         if (stumpMatch) {
-          const fielder = stumpMatch[1].trim();
-          if (!fielding[fielder]) fielding[fielder] = { catches: 0, stumpings: 0 };
-          fielding[fielder].stumpings++;
+          const f = resolveFielder(stumpMatch[1].trim());
+          if (f) {
+            if (!fielding[f]) fielding[f] = { catches: 0, stumpings: 0 };
+            fielding[f].stumpings++;
+          }
         }
       });
     });
