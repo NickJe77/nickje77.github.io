@@ -51,6 +51,24 @@ td.team { text-align:left; font-weight:600; white-space:nowrap; width:190px; }
 const startYear = 1965;
 const endYear = 2026;
 
+// Normalise historical team name variants to a single canonical name
+const TEAM_ALIASES = {
+  "Brisbane":               "Brisbane Lions",
+  "GWS":                    "GWS GIANTS",
+  "Greater Western Sydney": "GWS GIANTS",
+  "Footscray":              "Western Bulldogs",
+  "West Coast":             "West Coast Eagles",
+  "Gold Coast":             "Gold Coast SUNS",
+  "Sydney":                 "Sydney Swans",
+  "Kangaroos":              "North Melbourne",
+  "Fitzroy":                "Fitzroy",       // historical — keep as-is
+  "University":             "University",    // historical — keep as-is
+};
+
+function normaliseTeam(name) {
+  return TEAM_ALIASES[(name || "").trim()] ?? (name || "").trim();
+}
+
 const yearBar    = document.getElementById("yearBar");
 const teamSelect = document.getElementById("teamSelect");
 const roundBar   = document.getElementById("roundBar");
@@ -109,16 +127,18 @@ function loadYear(year){
 }
 
 function buildMatchesFromPlayers(){
-  // Primary map: keyed by round|home|away to collect players
+  // Primary map: keyed by round|home|away (with normalised team names) to collect players
   const map = {};
   rawData.forEach(p=>{
-    const key = `${canonicalRound(p.round)}|${p.home_team}|${p.away_team}`;
+    const home = normaliseTeam(p.home_team);
+    const away = normaliseTeam(p.away_team);
+    const key = `${canonicalRound(p.round)}|${home}|${away}`;
     if(!map[key]){
       map[key]={
         match_id:    p.match_id || null,
         round:       canonicalRound(p.round),
-        home_team:   p.home_team,
-        away_team:   p.away_team,
+        home_team:   home,
+        away_team:   away,
         home_points: p.home_points,
         away_points: p.away_points,
         players:     [],
@@ -130,15 +150,15 @@ function buildMatchesFromPlayers(){
     map[key].players.push(p);
   });
 
-  // Deduplicate: same game (home+away+scores) appearing in multiple rounds
-  // Keep the entry with the LOWEST round number (the dupe is always echoed into the next round)
+  // Deduplicate: same game (normalised home+away+scores) appearing under multiple round labels.
+  // Sort teams so home/away order doesn't cause misses; keep entry with the LOWEST round number.
   const gameMap = {};
   Object.values(map).forEach(m=>{
-    const gameKey = `${m.home_team}|${m.away_team}|${m.home_points}|${m.away_points}`;
+    const teamKey = [m.home_team, m.away_team].sort().join("|");
+    const gameKey = `${teamKey}|${m.home_points}|${m.away_points}`;
     if(!gameMap[gameKey]){
       gameMap[gameKey] = m;
     } else {
-      // Keep whichever has the lower round number
       if(roundNum(m.round) < roundNum(gameMap[gameKey].round)){
         gameMap[gameKey] = m;
       }
@@ -249,7 +269,7 @@ function buildLadder(rows){
 
   const arr = Object.values(ladder)
     .map(t=>{t.p=t.ag?((t.f/t.ag)*100).toFixed(1):"0.0";return t;})
-    .sort((a,b)=>b.w-a.w||b.p-a.p);
+    .sort((a,b)=>(b.w-a.w)||((b.d-a.d)*0.5)||(b.p-a.p));
 
   let html = "<table><tr><th>#</th><th>Team</th><th>W</th><th>L</th><th>D</th><th>%</th></tr>";
   arr.forEach((t,i)=>{
