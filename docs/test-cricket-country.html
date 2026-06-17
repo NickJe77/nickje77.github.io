@@ -46,7 +46,6 @@ body{
 .hero h1{margin:0;font-size:42px;}
 .hero p{margin-top:10px;font-size:18px;opacity:.9;}
 
-/* SELECTOR */
 .selector-wrap{
   display:flex;
   align-items:center;
@@ -81,7 +80,6 @@ body{
 
 .go-btn:hover{background:#145c32;transform:translateY(-1px);}
 
-/* RECORD BANNER */
 .record-banner{
   display:grid;
   grid-template-columns:repeat(4,1fr);
@@ -100,7 +98,6 @@ body{
 .record-card .big{font-size:42px;font-weight:800;color:#0d3320;line-height:1;}
 .record-card .lbl{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#aaa;margin-top:6px;}
 
-/* HOME/AWAY */
 .split-grid{
   display:grid;
   grid-template-columns:1fr 1fr;
@@ -117,10 +114,7 @@ body{
 
 .split-card h3{margin:0 0 14px;font-size:15px;font-weight:700;color:#0d3320;}
 
-.split-stats{
-  display:flex;
-  gap:0;
-}
+.split-stats{display:flex;gap:0;}
 
 .split-stat{
   flex:1;
@@ -133,7 +127,6 @@ body{
 .split-stat .n{font-size:28px;font-weight:800;color:#1a6b3c;}
 .split-stat .l{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#aaa;margin-top:2px;}
 
-/* SECTION */
 .section-title{
   margin:28px 0 12px;
   font-weight:700;
@@ -143,7 +136,6 @@ body{
   text-transform:uppercase;
 }
 
-/* TABLE */
 .table-wrap{
   background:#fff;
   border-radius:14px;
@@ -187,7 +179,6 @@ tr:hover td{background:#d6ede0;}
 
 .loading{padding:40px;text-align:center;color:#aaa;font-size:15px;}
 
-/* WIN BADGE */
 .win{color:#1a6b3c;font-weight:700;}
 .loss{color:#b91c1c;font-weight:700;}
 .draw{color:#92400e;font-weight:700;}
@@ -283,16 +274,13 @@ function resultForTeam(match, team) {
   return 'loss';
 }
 
-// Determine if match is home for team based on venue vs known home grounds
-// Since we don't have a home ground list, we use series string
 function isHome(match, team) {
   const series = (match.scorecard?.match_info?.Series || match.teams || '').toLowerCase();
-  // Series usually formatted as "Country v Country" — first team is home
   const parts = series.split(' v ');
   if (parts.length >= 2) {
     return parts[0].trim().toLowerCase().includes(team.toLowerCase().split(' ')[0]);
   }
-  return null; // unknown
+  return null;
 }
 
 function loadCountry() {
@@ -362,52 +350,59 @@ function loadCountry() {
     const opp = teams.find(t => t !== team) || '—';
 
     innings.forEach(inn => {
-      (inn.batting || []).forEach(b => {
-        highScores.push({
-          player: b.batsman, team: inn.team, opp,
-          runs: b.runs, balls: b.balls_faced,
-          notOut: (b.dismissal||'').toLowerCase().includes('not out'),
-          date, series, testNo
+      // Batting — only innings where the selected team is batting
+      if (inn.team === team) {
+        (inn.batting || []).forEach(b => {
+          highScores.push({
+            player: b.batsman, opp,
+            runs: b.runs, balls: b.balls_faced,
+            notOut: (b.dismissal||'').toLowerCase().includes('not out'),
+            date, series, testNo
+          });
         });
-      });
 
-      const bowlSeen = new Set();
-      (inn.bowling || []).forEach(b => {
-        const k = `${b.bowler}-${b.overs}-${b.runs}-${b.wickets}`;
-        if (bowlSeen.has(k)) return;
-        bowlSeen.add(k);
-        bestBowling.push({
-          player: b.bowler, opp,
-          wickets: b.wickets, runs: b.runs,
-          overs: b.overs, economy: b.economy,
-          date, series, testNo
+        // Fielding — parse dismissals from the OPPONENT's batting innings
+        // (selected team's fielders take catches when opponent bats)
+      }
+
+      // Bowling — only innings where the selected team is bowling
+      // i.e. the opponent is batting, so inn.team !== team
+      if (inn.team !== team) {
+        const bowlSeen = new Set();
+        (inn.bowling || []).forEach(b => {
+          const k = `${b.bowler}-${b.overs}-${b.runs}-${b.wickets}`;
+          if (bowlSeen.has(k)) return;
+          bowlSeen.add(k);
+          bestBowling.push({
+            player: b.bowler, opp,
+            wickets: b.wickets, runs: b.runs,
+            overs: b.overs, economy: b.economy,
+            date, series, testNo
+          });
         });
-      });
 
-      (inn.batting || []).forEach(b => {
-        const d = (b.dismissal||'').toLowerCase();
-        const catchMatch = d.match(/^c\s+[†]?([^b]+?)\s+b\s+/);
-        if (catchMatch) {
-          const f = catchMatch[1].trim();
-          if (!fielding[f]) fielding[f] = {catches:0,stumpings:0};
-          fielding[f].catches++;
-        }
-        const stumpMatch = d.match(/^st\s+[†]?([^b]+?)\s+b\s+/);
-        if (stumpMatch) {
-          const f = stumpMatch[1].trim();
-          if (!fielding[f]) fielding[f] = {catches:0,stumpings:0};
-          fielding[f].stumpings++;
-        }
-      });
+        // Fielding — selected team fields when opponent bats
+        (inn.batting || []).forEach(b => {
+          const d = (b.dismissal||'').toLowerCase();
+          const catchMatch = d.match(/^c\s+[†]?([^b]+?)\s+b\s+/);
+          if (catchMatch) {
+            const f = catchMatch[1].trim();
+            if (!fielding[f]) fielding[f] = {catches:0,stumpings:0};
+            fielding[f].catches++;
+          }
+          const stumpMatch = d.match(/^st\s+[†]?([^b]+?)\s+b\s+/);
+          if (stumpMatch) {
+            const f = stumpMatch[1].trim();
+            if (!fielding[f]) fielding[f] = {catches:0,stumpings:0};
+            fielding[f].stumpings++;
+          }
+        });
+      }
     });
   });
 
-  // Filter batting/bowling to team only
-  const teamBatting = highScores.filter(s => s.team === team);
-  const teamBowling = bestBowling; // bowler team not tracked, show all innings vs this team's opponents
-
-  teamBatting.sort((a,b) => b.runs - a.runs);
-  teamBowling.sort((a,b) => b.wickets - a.wickets || a.runs - b.runs);
+  highScores.sort((a,b) => b.runs - a.runs);
+  bestBowling.sort((a,b) => b.wickets - a.wickets || a.runs - b.runs);
 
   const fieldingList = Object.entries(fielding)
     .map(([name,f]) => ({name,...f,total:f.catches+f.stumpings}))
@@ -420,7 +415,6 @@ function loadCountry() {
 
   document.getElementById('results').innerHTML = `
 
-    <!-- OVERALL RECORD -->
     <div class="record-banner">
       <div class="record-card">
         <div class="big">${matches.length}</div>
@@ -440,7 +434,6 @@ function loadCountry() {
       </div>
     </div>
 
-    <!-- HOME / AWAY -->
     <div class="split-grid">
       <div class="split-card">
         <h3>🏠 Home Record (${homeTotal} Tests)</h3>
@@ -460,28 +453,6 @@ function loadCountry() {
       </div>
     </div>
 
-    <!-- RECORD BY OPPONENT -->
-    <div class="section-title">Record by Opponent</div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr>
-          <th>Opponent</th>
-          <th class="num">Tests</th>
-          <th class="num">Won</th>
-          <th class="num">Lost</th>
-          <th class="num">Drawn</th>
-        </tr></thead>
-        <tbody>${oppList.map(([opp,r]) => `<tr>
-          <td>${opp}</td>
-          <td class="num">${r.total}</td>
-          <td class="num win">${r.w}</td>
-          <td class="num loss">${r.l}</td>
-          <td class="num draw">${r.d}</td>
-        </tr>`).join('')}</tbody>
-      </table>
-    </div>
-
-    <!-- HIGHEST SCORES -->
     <div class="section-title">Highest Individual Scores</div>
     <div class="table-wrap">
       <table>
@@ -490,7 +461,7 @@ function loadCountry() {
           <th class="num">Runs</th><th class="num">Balls</th>
           <th>Date</th><th>Series</th>
         </tr></thead>
-        <tbody>${teamBatting.slice(0,20).map(s => `<tr>
+        <tbody>${highScores.slice(0,20).map(s => `<tr>
           <td>${s.player}</td>
           <td>${s.opp}</td>
           <td class="num"><strong>${s.runs}${s.notOut?'*':''}</strong></td>
@@ -501,7 +472,6 @@ function loadCountry() {
       </table>
     </div>
 
-    <!-- BEST BOWLING -->
     <div class="section-title">Best Bowling Figures</div>
     <div class="table-wrap">
       <table>
@@ -511,7 +481,7 @@ function loadCountry() {
           <th class="num">O</th><th class="num">Econ</th>
           <th>Date</th><th>Series</th>
         </tr></thead>
-        <tbody>${teamBowling.filter(b=>b.wickets>0).slice(0,20).map(b => `<tr>
+        <tbody>${bestBowling.filter(b=>b.wickets>0).slice(0,20).map(b => `<tr>
           <td>${b.player}</td>
           <td>${b.opp}</td>
           <td class="num"><strong>${b.wickets}/${b.runs}</strong></td>
@@ -524,7 +494,6 @@ function loadCountry() {
       </table>
     </div>
 
-    <!-- BEST FIELDING -->
     <div class="section-title">Best Fielding</div>
     <div class="table-wrap">
       <table>
@@ -543,7 +512,6 @@ function loadCountry() {
       </table>
     </div>
 
-    <!-- RECORD BY OPPONENT -->
     <div class="section-title">Record by Opponent</div>
     <div class="table-wrap">
       <table>
@@ -564,7 +532,6 @@ function loadCountry() {
       </table>
     </div>
 
-    <!-- MATCH LIST -->
     <div class="section-title">All Matches</div>
     <div class="table-wrap">
       <table>
