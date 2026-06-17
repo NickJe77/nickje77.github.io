@@ -286,17 +286,58 @@ async function buildPlayerIndex() {
       if (!res.ok) return;
       const data = await res.json();
       (data.matches || []).forEach((match, idx) => {
-        (match.scorecard?.innings || []).forEach(inn => {
+        const innings = match.scorecard?.innings || [];
+
+        // Build surname lookup from batting arrays for this match
+        const surnameMap = {};
+        const fullNameSet = new Set();
+        innings.forEach(inn => {
+          (inn.batting || []).forEach(b => {
+            const full = b.batsman.trim();
+            fullNameSet.add(full);
+            const parts = full.split(/\s+/);
+            const surname = parts[parts.length - 1].toLowerCase();
+            if (!surnameMap[surname]) surnameMap[surname] = [];
+            if (!surnameMap[surname].includes(full)) surnameMap[surname].push(full);
+          });
+        });
+
+        function resolveName(raw) {
+          const clean = raw.trim();
+          if (fullNameSet.has(clean)) return clean;
+          const parts = clean.split(/\s+/);
+          const surname = parts[parts.length - 1].toLowerCase();
+          const candidates = surnameMap[surname] || [];
+          if (candidates.length === 0) return clean; // keep as-is
+          if (candidates.length === 1) return candidates[0];
+          if (parts.length > 1) {
+            const initials = parts.slice(0, -1).map(p => p[0].toUpperCase()).join('');
+            for (const candidate of candidates) {
+              const cParts = candidate.split(/\s+/);
+              const cInitials = cParts.slice(0, -1).map(p => p[0].toUpperCase()).join('');
+              if (cInitials === initials) return candidate;
+              if (cInitials[0] === initials[0]) return candidate;
+            }
+          }
+          return candidates[0];
+        }
+
+        innings.forEach(inn => {
+          // Index batters by full name (already correct)
           (inn.batting || []).forEach(b => {
             const name = b.batsman;
             if (!allPlayers[name]) allPlayers[name] = [];
-            // avoid duplicates
             if (!allPlayers[name].find(e => e.year === year && e.matchIdx === idx)) {
               allPlayers[name].push({ year, matchIdx: idx, match });
             }
           });
+
+          // Index bowlers — resolve abbreviated names to full names
+          const bowlSeen = new Set();
           (inn.bowling || []).forEach(b => {
-            const name = b.bowler;
+            if (bowlSeen.has(b.bowler)) return;
+            bowlSeen.add(b.bowler);
+            const name = resolveName(b.bowler);
             if (!allPlayers[name]) allPlayers[name] = [];
             if (!allPlayers[name].find(e => e.year === year && e.matchIdx === idx)) {
               allPlayers[name].push({ year, matchIdx: idx, match });
@@ -318,9 +359,16 @@ searchInput.addEventListener('input', () => {
   const matches = Object.keys(allPlayers).filter(n => n.toLowerCase().includes(q)).slice(0, 20);
   if (!matches.length) { searchResults.style.display = 'none'; return; }
   searchResults.innerHTML = matches.map(n =>
-    `<div class="search-result-item" onclick="selectPlayer('${n.replace(/'/g,"\\'")}'">${n}</div>`
+    `<div class="search-result-item" data-name="${n.replace(/"/g,'&quot;')}">${n}</div>`
   ).join('');
   searchResults.style.display = 'block';
+});
+
+searchResults.addEventListener('click', e => {
+  const item = e.target.closest('.search-result-item');
+  if (!item) return;
+  const name = item.dataset.name;
+  selectPlayer(name);
 });
 
 document.addEventListener('click', e => {
@@ -355,12 +403,46 @@ function loadPlayer(name) {
     const date = match.date || '';
     const testNo = info['Match No.'] || `#${match.match_number}`;
 
+    // Build surname resolver for this match
+    const surnameMap = {};
+    const fullNameSet = new Set();
     innings.forEach(inn => {
-      const opp = inn.team === name ? null : inn.team; // we'll get opp from series
-      const battingEntry = (inn.batting || []).find(b => b.batsman === name);
-      const bowlingEntries = (inn.bowling || []).filter(b => b.bowler === name);
+      (inn.batting || []).forEach(b => {
+        const full = b.batsman.trim();
+        fullNameSet.add(full);
+        const parts = full.split(/\s+/);
+        const surname = parts[parts.length - 1].toLowerCase();
+        if (!surnameMap[surname]) surnameMap[surname] = [];
+        if (!surnameMap[surname].includes(full)) surnameMap[surname].push(full);
+      });
+    });
 
-      // Determine opponent — the other team in the innings list
+    function resolveName(raw) {
+      const clean = raw.trim();
+      if (fullNameSet.has(clean)) return clean;
+      const parts = clean.split(/\s+/);
+      const surname = parts[parts.length - 1].toLowerCase();
+      const candidates = surnameMap[surname] || [];
+      if (candidates.length === 0) return clean;
+      if (candidates.length === 1) return candidates[0];
+      if (parts.length > 1) {
+        const initials = parts.slice(0, -1).map(p => p[0].toUpperCase()).join('');
+        for (const candidate of candidates) {
+          const cParts = candidate.split(/\s+/);
+          const cInitials = cParts.slice(0, -1).map(p => p[0].toUpperCase()).join('');
+          if (cInitials === initials) return candidate;
+          if (cInitials[0] === initials[0]) return candidate;
+        }
+      }
+      return candidates[0];
+    }
+
+    innings.forEach(inn => {
+      const battingEntry = (inn.batting || []).find(b => b.batsman === name);
+      // Match bowling by resolving the bowler name
+      const bowlingEntries = (inn.bowling || []).filter(b => resolveName(b.bowler) === name);
+
+      // Determine opponent
       const teams = innings.map(i => i.team).filter((v,i,a)=>a.indexOf(v)===i);
       const opponent = teams.find(t => t !== inn.team) || '—';
 
