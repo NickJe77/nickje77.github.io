@@ -349,8 +349,35 @@ function loadCountry() {
     const teams = getTeams(m);
     const opp = teams.find(t => t !== team) || '—';
 
+    // Build a surname -> full name lookup from ALL batting entries in this match
+    // e.g. "healy" -> "Ian Healy", "marsh" -> "Rod Marsh"
+    const nameLookup = {};
     innings.forEach(inn => {
-      // Batting — only innings where the selected team is batting
+      (inn.batting || []).forEach(b => {
+        const full = b.batsman;
+        const parts = full.trim().split(/\s+/);
+        const surname = parts[parts.length - 1].toLowerCase();
+        nameLookup[surname] = full;
+        // Also index by full lowercase for exact matches
+        nameLookup[full.toLowerCase()] = full;
+      });
+    });
+
+    function resolveFielder(raw) {
+      // raw might be "Healy", "IA Healy", "healy", "†Healy" etc
+      const clean = raw.replace(/^†/, '').trim();
+      // Try exact lowercase match first
+      if (nameLookup[clean.toLowerCase()]) return nameLookup[clean.toLowerCase()];
+      // Try surname only (last word)
+      const parts = clean.split(/\s+/);
+      const surname = parts[parts.length - 1].toLowerCase();
+      if (nameLookup[surname]) return nameLookup[surname];
+      // Fall back to capitalising what we have
+      return clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    }
+
+    innings.forEach(inn => {
+      // Batting — only when selected team is batting
       if (inn.team === team) {
         (inn.batting || []).forEach(b => {
           highScores.push({
@@ -360,13 +387,9 @@ function loadCountry() {
             date, series, testNo
           });
         });
-
-        // Fielding — parse dismissals from the OPPONENT's batting innings
-        // (selected team's fielders take catches when opponent bats)
       }
 
-      // Bowling — only innings where the selected team is bowling
-      // i.e. the opponent is batting, so inn.team !== team
+      // Bowling + fielding — when opponent is batting (selected team bowling/fielding)
       if (inn.team !== team) {
         const bowlSeen = new Set();
         (inn.bowling || []).forEach(b => {
@@ -381,20 +404,26 @@ function loadCountry() {
           });
         });
 
-        // Fielding — selected team fields when opponent bats
+        // Fielding — parse dismissal text, resolve to full names
         (inn.batting || []).forEach(b => {
-          const d = (b.dismissal||'').toLowerCase();
-          const catchMatch = d.match(/^c\s+[†]?([^b]+?)\s+b\s+/);
+          const d = (b.dismissal || '');
+          // Catch: "c Healy b Warne" or "c †Healy b Warne"
+          const catchMatch = d.match(/^c\s+([†]?\S+(?:\s+\S+)?)\s+b\s+/i);
           if (catchMatch) {
-            const f = catchMatch[1].trim();
-            if (!fielding[f]) fielding[f] = {catches:0,stumpings:0};
-            fielding[f].catches++;
+            const f = resolveFielder(catchMatch[1].trim());
+            if (f && f !== '&') {
+              if (!fielding[f]) fielding[f] = {catches:0,stumpings:0};
+              fielding[f].catches++;
+            }
           }
-          const stumpMatch = d.match(/^st\s+[†]?([^b]+?)\s+b\s+/);
+          // Stumping: "st †Healy b Warne"
+          const stumpMatch = d.match(/^st\s+([†]?\S+(?:\s+\S+)?)\s+b\s+/i);
           if (stumpMatch) {
-            const f = stumpMatch[1].trim();
-            if (!fielding[f]) fielding[f] = {catches:0,stumpings:0};
-            fielding[f].stumpings++;
+            const f = resolveFielder(stumpMatch[1].trim());
+            if (f && f !== '&') {
+              if (!fielding[f]) fielding[f] = {catches:0,stumpings:0};
+              fielding[f].stumpings++;
+            }
           }
         });
       }
@@ -497,6 +526,12 @@ function loadCountry() {
     <div class="section-title">Best Fielding</div>
     <div class="table-wrap">
       <table>
+        <colgroup>
+          <col style="width:50%">
+          <col style="width:17%">
+          <col style="width:17%">
+          <col style="width:16%">
+        </colgroup>
         <thead><tr>
           <th>Player</th>
           <th class="num">Catches</th>
