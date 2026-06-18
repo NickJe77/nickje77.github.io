@@ -413,7 +413,7 @@ function openScorecard(idx) {
     <div class="innings-tabs">
       ${tabLabels.map((lbl, i) => `<div class="innings-tab ${i===0?'active':''}" onclick="switchTab(${i})">${lbl}</div>`).join('')}
     </div>
-    ${innings.map((inn, i) => renderInnings(inn, i)).join('')}
+    ${innings.map((inn, i) => renderInnings(inn, i, innings)).join('')}
   `;
 
   document.getElementById('modalOverlay').classList.add('open');
@@ -434,8 +434,43 @@ function closeModalDirect() {
   document.body.style.overflow = '';
 }
 
-function renderInnings(inn, idx) {
+function renderInnings(inn, idx, allInnings) {
   const batting = inn.batting || [];
+
+  // Build surname lookup from ALL innings in this match
+  const surnameMap = {};
+  const fullNameSet = new Set();
+  (allInnings || [inn]).forEach(i => {
+    (i.batting || []).forEach(b => {
+      const full = b.batsman.trim();
+      fullNameSet.add(full);
+      const parts = full.split(/\s+/);
+      const surname = parts[parts.length - 1].toLowerCase();
+      if (!surnameMap[surname]) surnameMap[surname] = [];
+      if (!surnameMap[surname].includes(full)) surnameMap[surname].push(full);
+    });
+  });
+
+  function resolveName(raw) {
+    const clean = raw.trim();
+    if (fullNameSet.has(clean)) return clean;
+    const parts = clean.split(/\s+/);
+    const surname = parts[parts.length - 1].toLowerCase();
+    const candidates = surnameMap[surname] || [];
+    if (candidates.length === 0) return clean;
+    if (candidates.length === 1) return candidates[0];
+    if (parts.length > 1) {
+      const initials = parts.slice(0, -1).map(p => p[0].toUpperCase()).join('');
+      for (const candidate of candidates) {
+        const cParts = candidate.split(/\s+/);
+        const cInitials = cParts.slice(0, -1).map(p => p[0].toUpperCase()).join('');
+        if (cInitials === initials) return candidate;
+        if (cInitials[0] === initials[0]) return candidate;
+      }
+    }
+    return candidates[0];
+  }
+
   const bowling = dedupeByName(inn.bowling || [], 'bowler');
   const fow = inn.fall_of_wickets || [];
   const extras = inn.extras;
@@ -474,7 +509,7 @@ function renderInnings(inn, idx) {
     Did not bat: ${dnb.join(', ')}</td></tr>` : '';
 
   const bowlingRows = bowling.map(b => `<tr>
-    <td><span class="player-name">${b.bowler}</span></td>
+    <td><span class="player-name">${resolveName(b.bowler)}</span></td>
     <td class="r">${b.overs}</td>
     <td class="r">${b.maidens}</td>
     <td class="r">${b.runs}</td>
