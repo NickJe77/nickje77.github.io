@@ -1,0 +1,53 @@
+name: Extract UCL Zip
+on:
+  workflow_dispatch:
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Inspect zip structure
+        run: unzip -l docs/data/ucl/ucl.zip | head -40
+
+      - name: Extract UCL zip
+        run: unzip -o docs/data/ucl/ucl.zip -d docs/data/temp_extract
+
+      - name: Move to correct folder
+        run: |
+          # Find the actual root inside the zip (handles nested folders)
+          EXTRACTED_ROOT=$(find docs/data/temp_extract -name "matches" -type d | head -1 | xargs dirname)
+
+          if [ -z "$EXTRACTED_ROOT" ]; then
+            echo "ERROR: Could not find 'matches' directory in extracted content"
+            find docs/data/temp_extract
+            exit 1
+          fi
+
+          echo "Found root at: $EXTRACTED_ROOT"
+          rm -rf docs/data/ucl/matches docs/data/__MACOSX
+          mv "$EXTRACTED_ROOT"/* docs/data/ucl/
+          rm -rf docs/data/temp_extract
+
+      - name: Verify structure
+        run: |
+          echo "----- UCL ROOT -----"
+          ls docs/data/ucl/
+
+          echo "----- MATCHES -----"
+          if [ ! -d docs/data/ucl/matches ]; then
+            echo "ERROR: matches directory not found"
+            exit 1
+          fi
+          find docs/data/ucl/matches | head -20
+
+      - name: Commit extracted files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/data/ucl/
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "Extract UCL data"
+          git push origin HEAD
