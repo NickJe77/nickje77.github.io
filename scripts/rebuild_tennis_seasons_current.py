@@ -16,9 +16,11 @@ def make_urls(year):
         f"https://raw.githubusercontent.com/JeffSackmann/tennis_wta/master/wta_matches_{year}.csv",
     )
 
+HEADERS = {"User-Agent": "tennis-seasons-updater/1.0 (github-actions)"}
+
 def fetch(url, gender):
     """Fetch and parse a JeffSackmann CSV. Returns [] if the file doesn't exist yet."""
-    r = requests.get(url, timeout=60)
+    r = requests.get(url, timeout=60, headers=HEADERS)
     if r.status_code == 404:
         print(f"  ⚠️  Not found (404): {url}")
         return []
