@@ -1,85 +1,91 @@
-document.addEventListener("DOMContentLoaded", () => {
-  const tbody = document.querySelector("tbody");
+/* Royal Ascot Archive — royal-ascot.js
+   Data source: royal-ascot-results.json (same directory)
+   To add new results: edit royal-ascot-results.json only.
+*/
 
+(function () {
+  const tbody = document.querySelector("tbody");
   const yearFilter = document.getElementById("yearFilter");
   const raceFilter = document.getElementById("raceFilter");
   const winnerFilter = document.getElementById("winnerFilter");
   const jockeyFilter = document.getElementById("jockeyFilter");
-
   const raceList = document.getElementById("raceList");
   const winnerList = document.getElementById("winnerList");
   const jockeyList = document.getElementById("jockeyList");
 
-  let allRows = [];
+  let DATA = [];
 
-  console.log("Royal Ascot JS loaded");
+  function normalize(r) {
+    return {
+      year:    r.YEAR    || r.year,
+      race:    (r.RACE    || r.race    || "").trim(),
+      winner:  (r.WINNER  || r.winner  || "").trim(),
+      trainer: (r.TRAINER || r.trainer || "").trim(),
+      jockey:  (r.JOCKEY  || r.jockey  || "").trim(),
+      sp:      (r.SP      || r.sp      || "").trim()
+    };
+  }
 
-  // JSON must be in SAME folder as this file
-  fetch("royal-ascot.json")
-    .then(res => res.json())
-    .then(data => {
-      console.log("Rows loaded:", data.length);
+  function populate() {
+    const years = [...new Set(DATA.map(r => r.year))].sort((a, b) => b - a);
+    years.forEach(y => {
+      const o = document.createElement("option");
+      o.value = y; o.textContent = y;
+      yearFilter.appendChild(o);
+    });
 
-      allRows = data.sort((a, b) => b.year - a.year);
+    const fill = (list, field) => {
+      [...new Set(DATA.map(r => r[field]).filter(Boolean))].sort()
+        .forEach(v => { const o = document.createElement("option"); o.value = v; list.appendChild(o); });
+    };
+    fill(raceList, "race");
+    fill(winnerList, "winner");
+    fill(jockeyList, "jockey");
+  }
 
-      populateFilters(allRows);
-      renderTable(allRows);
+  function render() {
+    const year   = yearFilter.value;
+    const race   = raceFilter.value.toLowerCase().trim();
+    const winner = winnerFilter.value.toLowerCase().trim();
+    const jockey = jockeyFilter.value.toLowerCase().trim();
+
+    const filtered = DATA.filter(r =>
+      (!year   || r.year == year) &&
+      (!race   || r.race.toLowerCase().includes(race)) &&
+      (!winner || r.winner.toLowerCase().includes(winner)) &&
+      (!jockey || r.jockey.toLowerCase().includes(jockey))
+    ).sort((a, b) => b.year - a.year || a.race.localeCompare(b.race));
+
+    tbody.innerHTML = filtered.length
+      ? filtered.map(r => `<tr>
+          <td>${r.year}</td>
+          <td>${r.race}</td>
+          <td><strong>${r.winner}</strong></td>
+          <td>${r.trainer}</td>
+          <td>${r.jockey}</td>
+          <td>${r.sp}</td>
+        </tr>`).join("")
+      : `<tr><td colspan="6" style="text-align:center;color:#888;padding:24px">No results match your filters.</td></tr>`;
+  }
+
+  yearFilter.addEventListener("change", render);
+  raceFilter.addEventListener("input", render);
+  winnerFilter.addEventListener("input", render);
+  jockeyFilter.addEventListener("input", render);
+
+  fetch("royal-ascot-results.json")
+    .then(r => {
+      if (!r.ok) throw new Error("Could not load results data");
+      return r.json();
+    })
+    .then(json => {
+      DATA = json.map(normalize);
+      populate();
+      render();
     })
     .catch(err => {
-      console.error("Royal Ascot JSON load FAILED:", err);
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#c00;padding:24px">
+        Failed to load results. ${err.message}
+      </td></tr>`;
     });
-
-  function populateFilters(data) {
-    const years = [...new Set(data.map(r => r.year))].sort((a,b)=>b-a);
-    const races = [...new Set(data.map(r => r.race))].sort();
-    const winners = [...new Set(data.map(r => r.winner))].sort();
-    const jockeys = [...new Set(data.map(r => r.jockey))].sort();
-
-    years.forEach(y => yearFilter.innerHTML += `<option value="${y}">${y}</option>`);
-    races.forEach(r => raceList.innerHTML += `<option value="${r}">`);
-    winners.forEach(w => winnerList.innerHTML += `<option value="${w}">`);
-    jockeys.forEach(j => jockeyList.innerHTML += `<option value="${j}">`);
-  }
-
-  function applyFilters() {
-    const y = yearFilter.value;
-    const r = raceFilter.value.toLowerCase();
-    const w = winnerFilter.value.toLowerCase();
-    const j = jockeyFilter.value.toLowerCase();
-
-    const filtered = allRows.filter(row =>
-      (!y || row.year == y) &&
-      (!r || row.race.toLowerCase().includes(r)) &&
-      (!w || row.winner.toLowerCase().includes(w)) &&
-      (!j || row.jockey.toLowerCase().includes(j))
-    );
-
-    renderTable(filtered);
-  }
-
-  function renderTable(rows) {
-    tbody.innerHTML = "";
-
-    const fragment = document.createDocumentFragment();
-
-    rows.forEach(r => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${r.year}</td>
-        <td>${r.race}</td>
-        <td>${r.winner}</td>
-        <td>${r.trainer || ""}</td>
-        <td>${r.jockey || ""}</td>
-        <td>${r.sp || ""}</td>
-      `;
-      fragment.appendChild(tr);
-    });
-
-    tbody.appendChild(fragment);
-  }
-
-  yearFilter.addEventListener("change", applyFilters);
-  raceFilter.addEventListener("input", applyFilters);
-  winnerFilter.addEventListener("input", applyFilters);
-  jockeyFilter.addEventListener("input", applyFilters);
-});
+})();
