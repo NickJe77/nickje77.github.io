@@ -1,7 +1,4 @@
-/* Royal Ascot Archive — royal-ascot.js
-   Data source: royal-ascot-results.json (same directory)
-   To add new results: edit royal-ascot-results.json only.
-*/
+/* Royal Ascot Archive — royal-ascot.js */
 
 (function () {
   const tbody = document.querySelector("tbody");
@@ -33,7 +30,6 @@
       o.value = y; o.textContent = y;
       yearFilter.appendChild(o);
     });
-
     const fill = (list, field) => {
       [...new Set(DATA.map(r => r[field]).filter(Boolean))].sort()
         .forEach(v => { const o = document.createElement("option"); o.value = v; list.appendChild(o); });
@@ -73,19 +69,14 @@
   winnerFilter.addEventListener("input", render);
   jockeyFilter.addEventListener("input", render);
 
-  fetch("royal-ascot-results.json")
-    .then(r => {
-      if (!r.ok) throw new Error("Could not load results data");
-      return r.json();
-    })
+  fetch("royal-ascot.json")
+    .then(r => r.json())
     .then(json => {
       DATA = json.map(normalize);
       populate();
       render();
     })
-    .catch(err => {
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#c00;padding:24px">
-        Failed to load results. ${err.message}
-      </td></tr>`;
+    .catch(() => {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#c00;padding:24px">Failed to load results.</td></tr>`;
     });
 })();
