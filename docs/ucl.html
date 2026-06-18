@@ -155,13 +155,6 @@ body{
     font-size:14px;
 }
 
-.loading{
-    text-align:center;
-    padding:50px;
-    font-size:18px;
-    color:#666;
-}
-
 @media(max-width:768px){
 
 .hero h1{
@@ -195,9 +188,9 @@ body{
 <div class="container">
 
     <div class="search-box">
-        <input 
-            type="text" 
-            id="playerSearch" 
+        <input
+            type="text"
+            id="playerSearch"
             placeholder="Search UCL players..."
             list="playersList"
         >
@@ -230,9 +223,7 @@ body{
 
     <h2 class="section-title">Seasons</h2>
 
-    <div id="seasonsContainer" class="tiles">
-        <div class="loading">Loading UCL seasons...</div>
-    </div>
+    <div id="seasonsContainer" class="tiles"></div>
 
 </div>
 
@@ -259,65 +250,63 @@ function slugify(name){
 
 const seasonsContainer = document.getElementById("seasonsContainer");
 
-async function loadSeasons(){
+function loadSeasons(){
+    const seasons = [];
+    for(let year = 1955; year <= 2025; year++){
+        seasons.push(buildSeasonId(year));
+    }
+    seasons.reverse();
 
-    seasonsContainer.innerHTML = `<div class="loading">Loading UCL seasons...</div>`;
-
-    try{
-
-        const seasons = [];
-
-        for(let year=1955; year<=2025; year++){
-            seasons.push(buildSeasonId(year));
-        }
-
-        seasons.reverse();
-
-        seasonsContainer.innerHTML = "";
-
-        seasons.forEach(season => {
-
-            const tile = document.createElement("a");
-            tile.className = "tile";
-            tile.href = `/ucl-season.html?season=${season}`;
-
-            tile.innerHTML = `
-                <div class="tile-header">
-                    <h2>${season}</h2>
-                </div>
-
-                <div class="tile-body">
-                    <p>Champions League season statistics and fixtures.</p>
-                </div>
-            `;
-
-            seasonsContainer.appendChild(tile);
-
-        });
-
-    }catch(err){
-
-        seasonsContainer.innerHTML = `
-            <div class="loading">
-                Failed to load seasons
+    seasons.forEach(season => {
+        const tile = document.createElement("a");
+        tile.className = "tile";
+        tile.href = `/ucl-season.html?season=${season}`;
+        tile.innerHTML = `
+            <div class="tile-header">
+                <h2>${season}</h2>
+            </div>
+            <div class="tile-body">
+                <p>Champions League season statistics and fixtures.</p>
             </div>
         `;
-
-        console.error(err);
-
-    }
-
+        seasonsContainer.appendChild(tile);
+    });
 }
 
 async function loadPlayers(){
-
     try{
-
         const response = await fetch('/data/ucl/players.json');
         const players = await response.json();
-
         const datalist = document.getElementById("playersList");
-
         players.forEach(player => {
+            const option = document.createElement("option");
+            option.value = player.name;
+            datalist.appendChild(option);
+        });
+    }catch(err){
+        console.error("Failed to load players", err);
+    }
+}
 
-            const option =
+document.getElementById("playerSearch").addEventListener("change", async (e) => {
+    const value = e.target.value.trim().toLowerCase();
+    if(!value) return;
+    try{
+        const response = await fetch('/data/ucl/players.json');
+        const players = await response.json();
+        const found = players.find(p => p.name.toLowerCase() === value);
+        if(found){
+            window.location.href = `/ucl-player.html?player=${slugify(found.name)}`;
+        }
+    }catch(err){
+        console.error(err);
+    }
+});
+
+loadSeasons();
+loadPlayers();
+
+</script>
+
+</body>
+</html>
