@@ -1,52 +1,40 @@
 name: Tennis Updater
-
 on:
   workflow_dispatch:
   schedule:
     - cron: "0 6 * * *"
-
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
     steps:
       # CHECKOUT
       - name: Checkout
         uses: actions/checkout@v4
-
       # 🔥 IMPORTANT: make sure we have full history (prevents rebase issues)
       - name: Fetch full history
         run: |
           git fetch --unshallow || true
-
       # PYTHON
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       # DEPENDENCIES
       - name: Install dependencies
         run: |
           pip install requests
-
       # RUN SCRIPT
       - name: Run Tennis Script
         run: |
           python scripts/rebuild_tennis_seasons_current.py
-
       # COMMIT + PUSH (FIXED)
       - name: Commit changes
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-
-          git add docs/data/tennis/seasons/2025.json
-          git add docs/data/tennis/seasons/2026.json
-
-          git commit -m "Update tennis seasons (2025 & 2026)" || echo "No changes"
-
-          # 🔥 THIS IS THE FIX
+          git add docs/data/tennis/seasons/
+          git commit -m "Update tennis seasons ($(date +'%Y-%m-%d'))" || echo "No changes"
           git pull --rebase origin main || git pull origin main
-
           git push
