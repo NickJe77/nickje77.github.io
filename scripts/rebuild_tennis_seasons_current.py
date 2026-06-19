@@ -17,6 +17,24 @@ PREV_YEAR = CURRENT_YEAR - 1
 
 HEADERS = {"User-Agent": "tennis-seasons-updater/1.0 (github-actions)"}
 
+ROUND_MAP = {
+    "1st round":    "R64",
+    "2nd round":    "R32",
+    "3rd round":    "R16",
+    "4th round":    "R8",
+    "quarterfinal": "QF",
+    "quarterfinals":"QF",
+    "semifinal":    "SF",
+    "semifinals":   "SF",
+    "final":        "F",
+    "the final":    "F",
+    "robin":        "RR",
+    "round robin":  "RR",
+}
+
+def normalise_round(r):
+    return ROUND_MAP.get(str(r).strip().lower(), str(r).strip())
+
 def make_urls(year):
     return {
         "M": f"http://www.tennis-data.co.uk/{year}/{year}.xlsx",
@@ -37,38 +55,54 @@ def fetch(url, gender):
         return []
 
     headers = [str(h).strip() if h is not None else "" for h in rows[0]]
+    print(f"    Columns: {headers}")
 
-    def col(row, name, default=""):
-        try:
-            v = row[headers.index(name)]
-            return v if v is not None else default
-        except (ValueError, IndexError):
-            return default
+    def col(row, *names):
+        for name in names:
+            try:
+                v = row[headers.index(name)]
+                if v is not None and str(v).strip() != "":
+                    return str(v).strip()
+            except (ValueError, IndexError):
+                pass
+        return ""
 
     gender_char = "m" if gender == "M" else "f"
 
     matches = []
     for row in rows[1:]:
         raw_date = col(row, "Date")
-        if raw_date is None or raw_date == "":
+        if not raw_date:
             continue
 
+        # Date may be a datetime object
         if hasattr(raw_date, "strftime"):
             date_str = raw_date.strftime("%Y-%m-%d")
         else:
             date_str = str(raw_date).strip()[:10]
 
-        winner     = str(col(row, "Winner") or "").strip()
-        loser      = str(col(row, "Loser")  or "").strip()
-        tournament = str(col(row, "Tournament") or "").strip()
-        surface    = str(col(row, "Surface") or "").strip()
-        round_     = str(col(row, "Round")   or "").strip()
-        score      = str(col(row, "Score")   or "").strip()
+        winner     = col(row, "Winner")
+        loser      = col(row, "Loser")
+        tournament = col(row, "Tournament")
+        surface    = col(row, "Surface", "Court")
+        round_raw  = col(row, "Round")
+        round_     = normalise_round(round_raw)
+
+        # Score — tennis-data.co.uk stores it across set columns W1/L1, W2/L2 etc
+        # Try "Score" first, then reconstruct from set columns
+        score = col(row, "Score", "score")
+        if not score:
+            sets = []
+            for i in range(1, 6):
+                w = col(row, f"W{i}")
+                l = col(row, f"L{i}")
+                if w and l:
+                    sets.append(f"{w}-{l}")
+            score = " ".join(sets)
 
         if not winner or not loser:
             continue
 
-        # Match the existing match_id format: {year}_{gender_char}_{date}_{tournament}_{round}_{winner}_{loser}
         tournament_slug = tournament.replace(" ", "-").lower()
         winner_slug     = winner.replace(" ", "-").lower()
         loser_slug      = loser.replace(" ", "-").lower()
@@ -89,7 +123,6 @@ def fetch(url, gender):
             "loser":        loser,
             "score":        score,
             "gender":       gender,
-            # Extra fields the frontend expects — zeroed out as tennis-data.co.uk doesn't provide them
             "best_of":      3,
             "draw_size":    0,
             "minutes":      0,
@@ -115,7 +148,6 @@ def filter_past(matches, year):
 def save(year, matches):
     os.makedirs(BASE, exist_ok=True)
     path = f"{BASE}/{year}.json"
-    # Wrap in {"matches": [...]} to match existing format
     with open(path, "w", encoding="utf-8") as f:
         json.dump({"matches": matches}, f, indent=2)
     print(f"  ✅ Saved {path} ({len(matches)} matches)")
