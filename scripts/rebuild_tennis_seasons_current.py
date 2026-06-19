@@ -46,6 +46,8 @@ STATIC_NAMES = {
     "merida aguilar d.": "Daniel Merida Aguilar",
     "van de zandschulp b.": "Botic Van De Zandschulp",
     "tiafoe f.": "Frances Tiafoe",
+    "draxl l.": "Leandro Riedi",
+    "budkov kjaer n.": "Nicola Budkov Kjaer",
     "fils a.": "Arthur Fils",
     "muller a.": "Alexandre Muller",
     "cazaux a.": "Arthur Cazaux",
