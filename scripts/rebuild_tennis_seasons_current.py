@@ -48,6 +48,8 @@ STATIC_NAMES = {
     "tiafoe f.": "Frances Tiafoe",
     "draxl l.": "Leandro Riedi",
     "budkov kjaer n.": "Nicola Budkov Kjaer",
+    "maristany g.": "Guiomar Maristany",
+    "bouzas maneiro j.": "Julia Bouzas Maneiro",
     "fils a.": "Arthur Fils",
     "muller a.": "Alexandre Muller",
     "cazaux a.": "Arthur Cazaux",
