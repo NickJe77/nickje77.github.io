@@ -17,6 +17,9 @@ PREV_YEAR = CURRENT_YEAR - 1
 
 HEADERS = {"User-Agent": "tennis-seasons-updater/1.0 (github-actions)"}
 
+# Static fallback lookup for players not in historical data
+STATIC_LOOKUP_PATH = "scripts/player_names.json"
+
 ROUND_MAP = {
     "1st round":     "R64",
     "2nd round":     "R32",
@@ -37,21 +40,23 @@ def normalise_round(r):
 
 
 def build_name_lookup():
-    """
-    Scan all existing season JSON files and build a lookup:
-      "tiafoe f." -> "Frances Tiafoe"
-    Key is lowercased abbreviated form (lastname + initial), value is full name.
-    """
     lookup = {}
 
+    # Load static fallback first (lowest priority)
+    if os.path.isfile(STATIC_LOOKUP_PATH):
+        with open(STATIC_LOOKUP_PATH, encoding="utf-8") as f:
+            lookup.update(json.load(f))
+        print(f"  📖 Static lookup loaded: {len(lookup)} entries")
+    else:
+        print(f"  ⚠️  No static lookup found at {STATIC_LOOKUP_PATH}")
+
+    # Scan historical JSONs (higher priority — overrides static)
     if not os.path.isdir(BASE):
-        print("  ⚠️  No existing season files found for name lookup.")
         return lookup
 
-    for filename in os.listdir(BASE):
+    for filename in sorted(os.listdir(BASE)):
         if not filename.endswith(".json"):
             continue
-        # Skip the years we're about to rebuild
         year = filename.replace(".json", "")
         if year in [str(CURRENT_YEAR), str(PREV_YEAR)]:
             continue
@@ -67,24 +72,19 @@ def build_name_lookup():
                         continue
                     parts = full_name.split()
                     if len(parts) >= 2:
-                        # Build abbreviated key: "Lastname F."
                         abbrev = f"{parts[-1]} {parts[0][0].upper()}."
-                        key = abbrev.lower()
-                        if key not in lookup:
-                            lookup[key] = full_name
+                        lookup[abbrev.lower()] = full_name
         except Exception as e:
             print(f"  ⚠️  Could not read {filename}: {e}")
 
-    print(f"  📖 Name lookup built: {len(lookup)} entries")
+    print(f"  📖 Total name lookup entries: {len(lookup)}")
     return lookup
 
 
 def resolve_name(abbrev, lookup):
-    """Try to resolve an abbreviated name like 'Tiafoe F.' to a full name."""
     if not abbrev:
         return abbrev
-    key = abbrev.strip().lower()
-    return lookup.get(key, abbrev)  # Fall back to abbreviated if not found
+    return lookup.get(abbrev.strip().lower(), abbrev)
 
 
 def make_urls(year):
@@ -132,16 +132,12 @@ def fetch(url, gender, name_lookup):
         else:
             date_str = str(raw_date).strip()[:10]
 
-        winner_raw = col(row, "Winner")
-        loser_raw  = col(row, "Loser")
-
-        winner     = resolve_name(winner_raw, name_lookup)
-        loser      = resolve_name(loser_raw, name_lookup)
+        winner     = resolve_name(col(row, "Winner"), name_lookup)
+        loser      = resolve_name(col(row, "Loser"),  name_lookup)
         tournament = col(row, "Tournament")
         surface    = col(row, "Surface", "Court")
         round_     = normalise_round(col(row, "Round"))
 
-        # Reconstruct score from set columns W1/L1, W2/L2 etc
         score = col(row, "Score", "score")
         if not score:
             sets = []
