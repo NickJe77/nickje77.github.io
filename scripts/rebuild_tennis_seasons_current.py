@@ -18,22 +18,74 @@ PREV_YEAR = CURRENT_YEAR - 1
 HEADERS = {"User-Agent": "tennis-seasons-updater/1.0 (github-actions)"}
 
 ROUND_MAP = {
-    "1st round":    "R64",
-    "2nd round":    "R32",
-    "3rd round":    "R16",
-    "4th round":    "R8",
-    "quarterfinal": "QF",
-    "quarterfinals":"QF",
-    "semifinal":    "SF",
-    "semifinals":   "SF",
-    "final":        "F",
-    "the final":    "F",
-    "robin":        "RR",
-    "round robin":  "RR",
+    "1st round":     "R64",
+    "2nd round":     "R32",
+    "3rd round":     "R16",
+    "4th round":     "R8",
+    "quarterfinal":  "QF",
+    "quarterfinals": "QF",
+    "semifinal":     "SF",
+    "semifinals":    "SF",
+    "final":         "F",
+    "the final":     "F",
+    "round robin":   "RR",
+    "robin":         "RR",
 }
 
 def normalise_round(r):
     return ROUND_MAP.get(str(r).strip().lower(), str(r).strip())
+
+
+def build_name_lookup():
+    """
+    Scan all existing season JSON files and build a lookup:
+      "tiafoe f." -> "Frances Tiafoe"
+    Key is lowercased abbreviated form (lastname + initial), value is full name.
+    """
+    lookup = {}
+
+    if not os.path.isdir(BASE):
+        print("  ⚠️  No existing season files found for name lookup.")
+        return lookup
+
+    for filename in os.listdir(BASE):
+        if not filename.endswith(".json"):
+            continue
+        # Skip the years we're about to rebuild
+        year = filename.replace(".json", "")
+        if year in [str(CURRENT_YEAR), str(PREV_YEAR)]:
+            continue
+        path = os.path.join(BASE, filename)
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            matches = data.get("matches", data) if isinstance(data, dict) else data
+            for m in matches:
+                for field in ("winner", "loser", "player1", "player2"):
+                    full_name = m.get(field, "").strip()
+                    if not full_name or len(full_name) < 3:
+                        continue
+                    parts = full_name.split()
+                    if len(parts) >= 2:
+                        # Build abbreviated key: "Lastname F."
+                        abbrev = f"{parts[-1]} {parts[0][0].upper()}."
+                        key = abbrev.lower()
+                        if key not in lookup:
+                            lookup[key] = full_name
+        except Exception as e:
+            print(f"  ⚠️  Could not read {filename}: {e}")
+
+    print(f"  📖 Name lookup built: {len(lookup)} entries")
+    return lookup
+
+
+def resolve_name(abbrev, lookup):
+    """Try to resolve an abbreviated name like 'Tiafoe F.' to a full name."""
+    if not abbrev:
+        return abbrev
+    key = abbrev.strip().lower()
+    return lookup.get(key, abbrev)  # Fall back to abbreviated if not found
+
 
 def make_urls(year):
     return {
@@ -41,7 +93,8 @@ def make_urls(year):
         "F": f"http://www.tennis-data.co.uk/{year}w/{year}w.xlsx",
     }
 
-def fetch(url, gender):
+
+def fetch(url, gender, name_lookup):
     r = requests.get(url, timeout=60, headers=HEADERS)
     if r.status_code == 404:
         print(f"  ⚠️  Not found (404): {url}")
@@ -55,7 +108,6 @@ def fetch(url, gender):
         return []
 
     headers = [str(h).strip() if h is not None else "" for h in rows[0]]
-    print(f"    Columns: {headers}")
 
     def col(row, *names):
         for name in names:
@@ -75,21 +127,21 @@ def fetch(url, gender):
         if not raw_date:
             continue
 
-        # Date may be a datetime object
         if hasattr(raw_date, "strftime"):
             date_str = raw_date.strftime("%Y-%m-%d")
         else:
             date_str = str(raw_date).strip()[:10]
 
-        winner     = col(row, "Winner")
-        loser      = col(row, "Loser")
+        winner_raw = col(row, "Winner")
+        loser_raw  = col(row, "Loser")
+
+        winner     = resolve_name(winner_raw, name_lookup)
+        loser      = resolve_name(loser_raw, name_lookup)
         tournament = col(row, "Tournament")
         surface    = col(row, "Surface", "Court")
-        round_raw  = col(row, "Round")
-        round_     = normalise_round(round_raw)
+        round_     = normalise_round(col(row, "Round"))
 
-        # Score — tennis-data.co.uk stores it across set columns W1/L1, W2/L2 etc
-        # Try "Score" first, then reconstruct from set columns
+        # Reconstruct score from set columns W1/L1, W2/L2 etc
         score = col(row, "Score", "score")
         if not score:
             sets = []
@@ -106,32 +158,31 @@ def fetch(url, gender):
         tournament_slug = tournament.replace(" ", "-").lower()
         winner_slug     = winner.replace(" ", "-").lower()
         loser_slug      = loser.replace(" ", "-").lower()
-        round_slug      = round_.lower()
         year_str        = date_str[:4]
 
-        match_id = f"{year_str}_{gender_char}_{date_str}_{tournament_slug}_{round_slug}_{winner_slug}_{loser_slug}"
+        match_id = f"{year_str}_{gender_char}_{date_str}_{tournament_slug}_{round_.lower()}_{winner_slug}_{loser_slug}"
 
         matches.append({
-            "match_id":     match_id,
-            "date":         date_str,
-            "tournament":   tournament,
-            "surface":      surface,
-            "round":        round_,
-            "player1":      winner,
-            "player2":      loser,
-            "winner":       winner,
-            "loser":        loser,
-            "score":        score,
-            "gender":       gender,
-            "best_of":      3,
-            "draw_size":    0,
-            "minutes":      0,
+            "match_id":      match_id,
+            "date":          date_str,
+            "tournament":    tournament,
+            "surface":       surface,
+            "round":         round_,
+            "player1":       winner,
+            "player2":       loser,
+            "winner":        winner,
+            "loser":         loser,
+            "score":         score,
+            "gender":        gender,
+            "best_of":       3,
+            "draw_size":     0,
+            "minutes":       0,
             "tourney_level": "",
-            "tourney_id":   "",
-            "w_ace":   0, "w_df":    0, "w_svpt":  0, "w_1stIn":  0,
-            "w_1stWon":0, "w_2ndWon":0, "w_SvGms": 0, "w_bpSaved":0, "w_bpFaced":0,
-            "l_ace":   0, "l_df":    0, "l_svpt":  0, "l_1stIn":  0,
-            "l_1stWon":0, "l_2ndWon":0, "l_SvGms": 0, "l_bpSaved":0, "l_bpFaced":0,
+            "tourney_id":    "",
+            "w_ace": 0, "w_df": 0, "w_svpt": 0, "w_1stIn": 0,
+            "w_1stWon": 0, "w_2ndWon": 0, "w_SvGms": 0, "w_bpSaved": 0, "w_bpFaced": 0,
+            "l_ace": 0, "l_df": 0, "l_svpt": 0, "l_1stIn": 0,
+            "l_1stWon": 0, "l_2ndWon": 0, "l_SvGms": 0, "l_bpSaved": 0, "l_bpFaced": 0,
         })
 
     wb.close()
@@ -153,7 +204,7 @@ def save(year, matches):
     print(f"  ✅ Saved {path} ({len(matches)} matches)")
 
 
-def build_season(year):
+def build_season(year, name_lookup):
     print(f"\n📅 Building {year}...")
     urls = make_urls(year)
     all_matches = []
@@ -161,7 +212,7 @@ def build_season(year):
     for gender, url in urls.items():
         label = "ATP" if gender == "M" else "WTA"
         print(f"  Fetching {label} {year}...")
-        matches = fetch(url, gender)
+        matches = fetch(url, gender, name_lookup)
         print(f"    → {len(matches)} matches")
         all_matches.extend(matches)
 
@@ -178,8 +229,11 @@ def build_season(year):
 
 
 def main():
-    build_season(CURRENT_YEAR)
-    build_season(PREV_YEAR)
+    print("🔍 Building name lookup from historical data...")
+    name_lookup = build_name_lookup()
+
+    build_season(CURRENT_YEAR, name_lookup)
+    build_season(PREV_YEAR, name_lookup)
     print("\n✅ DONE — files written to", BASE)
 
 
