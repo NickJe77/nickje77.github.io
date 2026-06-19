@@ -1,12 +1,70 @@
 #!/usr/bin/env python3
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
 REPO_ROOT   = Path(os.environ.get("GITHUB_WORKSPACE", str(Path(__file__).parent.parent)))
 MATCHES_DIR = REPO_ROOT / "docs" / "data" / "ucl" / "matches"
 OUT_DIR     = REPO_ROOT / "docs" / "data" / "ucl"
+
+# Normalise inconsistent team names in the source data
+TEAM_NAME_MAP = {
+    "Man Utd":          "Manchester United",
+    "Man United":       "Manchester United",
+    "B. Dortmund":      "Borussia Dortmund",
+    "Dortmund":         "Borussia Dortmund",
+    "Bayern":           "Bayern Munich",
+    "FC Bayern":        "Bayern Munich",
+    "FC Bayern Munich": "Bayern Munich",
+    "Paris":            "Paris Saint-Germain",
+    "PSG":              "Paris Saint-Germain",
+    "Inter":            "Internazionale",
+    "Inter Milan":      "Internazionale",
+    "FC Internazionale":"Internazionale",
+    "Atletico":         "Atletico Madrid",
+    "Atlético Madrid":  "Atletico Madrid",
+    "Atlético":         "Atletico Madrid",
+    "S. Bratislava":    "Slovan Bratislava",
+    "Crvena Zvezda":    "Red Star Belgrade",
+    "CSKA Sofia":       "CSKA Sofia",
+    "B. Munich":        "Bayern Munich",
+    "AC Milan":         "AC Milan",
+    "Milan":            "AC Milan",
+    "Juventus FC":      "Juventus",
+    "FCB":              "Barcelona",
+    "FC Barcelona":     "Barcelona",
+    "Real":             "Real Madrid",
+    "FC Porto":         "Porto",
+    "FC Valencia":      "Valencia",
+    "Bayer Leverkusen": "Leverkusen",
+    "Bayer 04":         "Leverkusen",
+    "Olympique Lyon":   "Lyon",
+    "Olympique de Marseille": "Marseille",
+    "AS Roma":          "Roma",
+    "SS Lazio":         "Lazio",
+    "ACF Fiorentina":   "Fiorentina",
+    "AFC Ajax":         "Ajax",
+    "PSV":              "PSV Eindhoven",
+    "Sporting":         "Sporting CP",
+    "Sporting Lisbon":  "Sporting CP",
+    "Zenit":            "Zenit St. Petersburg",
+    "FK Crvena zvezda": "Red Star Belgrade",
+    "Red Bull Salzburg":"Red Bull Salzburg",
+    "RB Salzburg":      "Red Bull Salzburg",
+    "Shakhtar":         "Shakhtar Donetsk",
+    "Celtic FC":        "Celtic",
+    "Rangers FC":       "Rangers",
+    "Benfica":          "Benfica",
+    "SL Benfica":       "Benfica",
+    "Galatasaray SK":   "Galatasaray",
+    "Club Brugge KV":   "Club Brugge",
+}
+
+def normalise_team(name: str) -> str:
+    name = (name or "").strip()
+    return TEAM_NAME_MAP.get(name, name)
 
 
 def collect_json_files(directory: Path) -> list:
@@ -20,7 +78,11 @@ def season_from_path(file_path: Path) -> str:
     parts = file_path.parts
     try:
         idx = list(parts).index("matches")
-        return parts[idx + 1]
+        raw = parts[idx + 1]
+        # Normalise "2002-2003" -> "2002-03"
+        if re.match(r'^\d{4}-\d{4}$', raw):
+            raw = raw[:4] + '-' + raw[6:]
+        return raw
     except (ValueError, IndexError):
         return "unknown"
 
@@ -73,15 +135,12 @@ def get_or_create_team_stats(team_stats_map, team, season):
 
 def find_player_key(players_map, name, team):
     matching_keys = [k for k in players_map if k == name or k.startswith(f"{name}|")]
-
     if not matching_keys:
         return f"{name}|{team}" if team else name
-
     for key in matching_keys:
         p = players_map[key]
         if team in p["teams"]:
             return key
-
     return matching_keys[0]
 
 
@@ -99,7 +158,7 @@ def get_or_create_player(players_map, name, team, season):
 
 def get_or_create_player_season(player, season, team):
     for s in player["season_stats"]:
-        if s["season"] == season:
+        if s["season"] == season and s["team"] == team:
             return s
     entry = {
         "season": season,
@@ -143,10 +202,13 @@ def main():
 
         season = season_from_path(file_path)
 
-        home_team  = (match.get("home_team") or "").strip()
-        away_team  = (match.get("away_team") or "").strip()
+        home_team  = normalise_team(match.get("home_team") or match.get("home") or "")
+        away_team  = normalise_team(match.get("away_team") or match.get("away") or "")
         home_score = match.get("home_score") or 0
         away_score = match.get("away_score") or 0
+
+        if not home_team or not away_team:
+            continue
 
         teams_set.add(home_team)
         teams_set.add(away_team)
@@ -171,7 +233,7 @@ def main():
                 s["clean_sheets"] += 1
 
         for card in match.get("yellow_cards") or []:
-            team = (card.get("team") or "").strip()
+            team = normalise_team((card.get("team") or "").strip())
             name = (card.get("player") or "").strip()
             if team:
                 s = get_or_create_team_stats(team_stats_map, team, season)
@@ -185,7 +247,7 @@ def main():
                 ps["yellow_cards"] += 1
 
         for card in match.get("red_cards") or []:
-            team = (card.get("team") or "").strip()
+            team = normalise_team((card.get("team") or "").strip())
             name = (card.get("player") or "").strip()
             if team:
                 s = get_or_create_team_stats(team_stats_map, team, season)
@@ -200,7 +262,7 @@ def main():
 
         for scorer in match.get("scorers") or []:
             name = (scorer.get("player") or "").strip()
-            team = (scorer.get("team") or "").strip()
+            team = normalise_team((scorer.get("team") or "").strip())
             if not name:
                 continue
             if team == home_team:
