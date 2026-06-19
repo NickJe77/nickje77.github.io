@@ -17,8 +17,116 @@ PREV_YEAR = CURRENT_YEAR - 1
 
 HEADERS = {"User-Agent": "tennis-seasons-updater/1.0 (github-actions)"}
 
-# Static fallback lookup for players not in historical data
-STATIC_LOOKUP_PATH = "scripts/player_names.json"
+STATIC_NAMES = {
+    "tirante t.a.": "Tomas Agustin Tirante",
+    "llamas ruiz p.": "Pedro Llamas Ruiz",
+    "gea a.": "Adrian Gea",
+    "davidovich fokina a.": "Alejandro Davidovich Fokina",
+    "cina f.": "Flavio Cobolli",
+    "zheng m.": "Zheng Juncheng",
+    "pavlovic l.": "Luca Pavlovic",
+    "royer v.": "Valentin Royer",
+    "mpetshi g.": "Giovanni Mpetshi Perricard",
+    "carreno busta p.": "Pablo Carreno Busta",
+    "de minaur a.": "Alex De Minaur",
+    "van assche l.": "Luca Van Assche",
+    "jodar r.": "Rodrigo Jodar",
+    "bautista agut r.": "Roberto Bautista Agut",
+    "de jong j.": "Jesper De Jong",
+    "ugo carabelli c.": "Camilo Ugo Carabelli",
+    "faurel t.": "Titouan Faurel",
+    "diaz acosta f.": "Facundo Diaz Acosta",
+    "zhang zh.": "Zhang Zhizhen",
+    "prado angelo j.c.": "Juan Carlos Prado Angelo",
+    "struff j.l.": "Jan-Lennard Struff",
+    "cerundolo j.m.": "Juan Manuel Cerundolo",
+    "auger-aliassime f.": "Felix Auger-Aliassime",
+    "tabur c.": "Clement Tabur",
+    "kouame m.": "Mathis Hamou",
+    "merida aguilar d.": "Daniel Merida Aguilar",
+    "van de zandschulp b.": "Botic Van De Zandschulp",
+    "tiafoe f.": "Frances Tiafoe",
+    "fils a.": "Arthur Fils",
+    "muller a.": "Alexandre Muller",
+    "cazaux a.": "Arthur Cazaux",
+    "baez s.": "Sebastian Baez",
+    "cerundolo f.": "Francisco Cerundolo",
+    "tabilo a.": "Alejandro Tabilo",
+    "shelton b.": "Ben Shelton",
+    "rune h.": "Holger Rune",
+    "ruud c.": "Casper Ruud",
+    "zverev a.": "Alexander Zverev",
+    "alcaraz c.": "Carlos Alcaraz",
+    "sinner j.": "Jannik Sinner",
+    "medvedev d.": "Daniil Medvedev",
+    "tsitsipas s.": "Stefanos Tsitsipas",
+    "hurkacz h.": "Hubert Hurkacz",
+    "rublev a.": "Andrey Rublev",
+    "fritz t.": "Taylor Fritz",
+    "paul t.": "Tommy Paul",
+    "nakashima b.": "Brandon Nakashima",
+    "kokkinakis t.": "Thanasi Kokkinakis",
+    "duckworth j.": "James Duckworth",
+    "rinderknech a.": "Arthur Rinderknech",
+    "fonseca j.": "Joao Fonseca",
+    "mensik j.": "Jakub Mensik",
+    "berrettini m.": "Matteo Berrettini",
+    "sonego l.": "Lorenzo Sonego",
+    "musetti l.": "Lorenzo Musetti",
+    "navone m.": "Mariano Navone",
+    "humbert u.": "Ugo Humbert",
+    "halys q.": "Quentin Halys",
+    "blockx a.": "Alexander Blockx",
+    "medjedovic h.": "Hamad Medjedovic",
+    "borges n.": "Nuno Borges",
+    "prizmic d.": "Dino Prizmic",
+    "michelsen a.": "Alex Michelsen",
+    "basavareddy n.": "Nishesh Basavareddy",
+    "trungelliti m.": "Marco Trungelliti",
+    "machac t.": "Tomas Machac",
+    "kecmanovic m.": "Miomir Kecmanovic",
+    "khachanov k.": "Karen Khachanov",
+    "djokovic n.": "Novak Djokovic",
+    "wawrinka s.": "Stan Wawrinka",
+    "lehecka j.": "Jiri Lehecka",
+    "shevchenko a.": "Alexander Shevchenko",
+    "rodionov j.": "Jurij Rodionov",
+    "fucsovics m.": "Marton Fucsovics",
+    "kovacevic a.": "Aleksandar Kovacevic",
+    "swiatek i.": "Iga Swiatek",
+    "sabalenka a.": "Aryna Sabalenka",
+    "gauff c.": "Coco Gauff",
+    "rybakina e.": "Elena Rybakina",
+    "pegula j.": "Jessica Pegula",
+    "keys m.": "Madison Keys",
+    "collins d.": "Danielle Collins",
+    "navarro e.": "Emma Navarro",
+    "andreeva m.": "Mirra Andreeva",
+    "paolini j.": "Jasmine Paolini",
+    "badosa p.": "Paula Badosa",
+    "haddad maia b.": "Beatriz Haddad Maia",
+    "muchova k.": "Karolina Muchova",
+    "vondrousova m.": "Marketa Vondrousova",
+    "ostapenko j.": "Jelena Ostapenko",
+    "kasatkina d.": "Daria Kasatkina",
+    "sakkari m.": "Maria Sakkari",
+    "garcia c.": "Caroline Garcia",
+    "azarenka v.": "Victoria Azarenka",
+    "jabeur o.": "Ons Jabeur",
+    "fernandez l.": "Leylah Fernandez",
+    "raducanu e.": "Emma Raducanu",
+    "kostyuk m.": "Marta Kostyuk",
+    "mertens e.": "Elise Mertens",
+    "bouzkova m.": "Marie Bouzkova",
+    "tauson c.": "Clara Tauson",
+    "linette m.": "Magda Linette",
+    "putintseva y.": "Yulia Putintseva",
+    "potapova a.": "Anastasia Potapova",
+    "alexandrova e.": "Ekaterina Alexandrova",
+    "samsonova l.": "Liudmila Samsonova",
+    "zheng q.": "Qinwen Zheng",
+    "wang x.": "Xinyu Wang",
+}
 
 ROUND_MAP = {
     "1st round":     "R64",
@@ -40,17 +148,8 @@ def normalise_round(r):
 
 
 def build_name_lookup():
-    lookup = {}
+    lookup = dict(STATIC_NAMES)
 
-    # Load static fallback first (lowest priority)
-    if os.path.isfile(STATIC_LOOKUP_PATH):
-        with open(STATIC_LOOKUP_PATH, encoding="utf-8") as f:
-            lookup.update(json.load(f))
-        print(f"  📖 Static lookup loaded: {len(lookup)} entries")
-    else:
-        print(f"  ⚠️  No static lookup found at {STATIC_LOOKUP_PATH}")
-
-    # Scan historical JSONs (higher priority — overrides static)
     if not os.path.isdir(BASE):
         return lookup
 
@@ -77,7 +176,7 @@ def build_name_lookup():
         except Exception as e:
             print(f"  ⚠️  Could not read {filename}: {e}")
 
-    print(f"  📖 Total name lookup entries: {len(lookup)}")
+    print(f"  📖 Name lookup: {len(lookup)} entries")
     return lookup
 
 
@@ -225,7 +324,7 @@ def build_season(year, name_lookup):
 
 
 def main():
-    print("🔍 Building name lookup from historical data...")
+    print("🔍 Building name lookup...")
     name_lookup = build_name_lookup()
 
     build_season(CURRENT_YEAR, name_lookup)
