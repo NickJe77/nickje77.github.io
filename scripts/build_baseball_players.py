@@ -324,3 +324,17 @@ for player_name, games in players.items():
     count += 1
 
 print(f"BUILT {count} PLAYER FILES")
+
+# ======================================================
+# BUILD PLAYERS INDEX
+# ======================================================
+
+index = sorted(
+    [{"name": name, "player_id": slugify(name)} for name in players.keys()],
+    key=lambda x: x["name"]
+)
+
+with open(f"{BASE}/players.json", "w", encoding="utf-8") as f:
+    json.dump(index, f, indent=2, ensure_ascii=False)
+
+print(f"BUILT INDEX WITH {len(index)} PLAYERS")
