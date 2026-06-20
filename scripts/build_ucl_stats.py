@@ -9,57 +9,52 @@ REPO_ROOT   = Path(os.environ.get("GITHUB_WORKSPACE", str(Path(__file__).parent.
 MATCHES_DIR = REPO_ROOT / "docs" / "data" / "ucl" / "matches"
 OUT_DIR     = REPO_ROOT / "docs" / "data" / "ucl"
 
-# Normalise inconsistent team names in the source data
 TEAM_NAME_MAP = {
-    "Man Utd":          "Manchester United",
-    "Man United":       "Manchester United",
-    "B. Dortmund":      "Borussia Dortmund",
-    "Dortmund":         "Borussia Dortmund",
-    "Bayern":           "Bayern Munich",
-    "FC Bayern":        "Bayern Munich",
-    "FC Bayern Munich": "Bayern Munich",
-    "Paris":            "Paris Saint-Germain",
-    "PSG":              "Paris Saint-Germain",
-    "Inter":            "Internazionale",
-    "Inter Milan":      "Internazionale",
-    "FC Internazionale":"Internazionale",
-    "Atletico":         "Atletico Madrid",
-    "Atlético Madrid":  "Atletico Madrid",
-    "Atlético":         "Atletico Madrid",
-    "S. Bratislava":    "Slovan Bratislava",
-    "Crvena Zvezda":    "Red Star Belgrade",
-    "CSKA Sofia":       "CSKA Sofia",
-    "B. Munich":        "Bayern Munich",
-    "AC Milan":         "AC Milan",
-    "Milan":            "AC Milan",
-    "Juventus FC":      "Juventus",
-    "FCB":              "Barcelona",
-    "FC Barcelona":     "Barcelona",
-    "Real":             "Real Madrid",
-    "FC Porto":         "Porto",
-    "FC Valencia":      "Valencia",
-    "Bayer Leverkusen": "Leverkusen",
-    "Bayer 04":         "Leverkusen",
-    "Olympique Lyon":   "Lyon",
-    "Olympique de Marseille": "Marseille",
-    "AS Roma":          "Roma",
-    "SS Lazio":         "Lazio",
-    "ACF Fiorentina":   "Fiorentina",
-    "AFC Ajax":         "Ajax",
-    "PSV":              "PSV Eindhoven",
-    "Sporting":         "Sporting CP",
-    "Sporting Lisbon":  "Sporting CP",
-    "Zenit":            "Zenit St. Petersburg",
-    "FK Crvena zvezda": "Red Star Belgrade",
-    "Red Bull Salzburg":"Red Bull Salzburg",
-    "RB Salzburg":      "Red Bull Salzburg",
-    "Shakhtar":         "Shakhtar Donetsk",
-    "Celtic FC":        "Celtic",
-    "Rangers FC":       "Rangers",
-    "Benfica":          "Benfica",
-    "SL Benfica":       "Benfica",
-    "Galatasaray SK":   "Galatasaray",
-    "Club Brugge KV":   "Club Brugge",
+    "Man Utd":                    "Manchester United",
+    "Man United":                 "Manchester United",
+    "B. Dortmund":                "Borussia Dortmund",
+    "Dortmund":                   "Borussia Dortmund",
+    "Bayern":                     "Bayern Munich",
+    "FC Bayern":                  "Bayern Munich",
+    "FC Bayern Munich":           "Bayern Munich",
+    "B. Munich":                  "Bayern Munich",
+    "Paris":                      "Paris Saint-Germain",
+    "PSG":                        "Paris Saint-Germain",
+    "Inter":                      "Internazionale",
+    "Inter Milan":                "Internazionale",
+    "FC Internazionale":          "Internazionale",
+    "Atletico":                   "Atletico Madrid",
+    "Atlético Madrid":            "Atletico Madrid",
+    "Atlético":                   "Atletico Madrid",
+    "S. Bratislava":              "Slovan Bratislava",
+    "Crvena Zvezda":              "Red Star Belgrade",
+    "FK Crvena zvezda":           "Red Star Belgrade",
+    "Milan":                      "AC Milan",
+    "Juventus FC":                "Juventus",
+    "FCB":                        "Barcelona",
+    "FC Barcelona":               "Barcelona",
+    "Real":                       "Real Madrid",
+    "FC Porto":                   "Porto",
+    "FC Valencia":                "Valencia",
+    "Bayer Leverkusen":           "Leverkusen",
+    "Bayer 04":                   "Leverkusen",
+    "Olympique Lyon":             "Lyon",
+    "Olympique de Marseille":     "Marseille",
+    "AS Roma":                    "Roma",
+    "SS Lazio":                   "Lazio",
+    "ACF Fiorentina":             "Fiorentina",
+    "AFC Ajax":                   "Ajax",
+    "PSV":                        "PSV Eindhoven",
+    "Sporting":                   "Sporting CP",
+    "Sporting Lisbon":            "Sporting CP",
+    "Zenit":                      "Zenit St. Petersburg",
+    "RB Salzburg":                "Red Bull Salzburg",
+    "Shakhtar":                   "Shakhtar Donetsk",
+    "Celtic FC":                  "Celtic",
+    "Rangers FC":                 "Rangers",
+    "SL Benfica":                 "Benfica",
+    "Galatasaray SK":             "Galatasaray",
+    "Club Brugge KV":             "Club Brugge",
 }
 
 def normalise_team(name: str) -> str:
@@ -79,9 +74,11 @@ def season_from_path(file_path: Path) -> str:
     try:
         idx = list(parts).index("matches")
         raw = parts[idx + 1]
-        # Normalise "2002-2003" -> "2002-03"
-        if re.match(r'^\d{4}-\d{4}$', raw):
-            raw = raw[:4] + '-' + raw[6:]
+        # Normalise any long format to 2-digit year suffix
+        # e.g. "2002-2003" -> "2002-03", "2002-003" -> "2002-03"
+        m = re.match(r'^(\d{4})-\d*(\d{2})$', raw)
+        if m:
+            raw = f"{m.group(1)}-{m.group(2)}"
         return raw
     except (ValueError, IndexError):
         return "unknown"
