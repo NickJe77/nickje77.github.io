@@ -279,7 +279,7 @@ for player_name, games in players.items():
     }
 
     with open(f"{PLAYERS_DIR}/{slug}.json", "w", encoding="utf-8") as f:
-        json.dump(out, f, indent=2, ensure_ascii=False)
+        json.dump(out, f, ensure_ascii=False)
 
     count += 1
 
@@ -295,6 +295,6 @@ index = sorted(
 )
 
 with open(f"{BASE}/players.json", "w", encoding="utf-8") as f:
-    json.dump(index, f, indent=2, ensure_ascii=False)
+    json.dump(index, f, ensure_ascii=False)
 
 print(f"BUILT INDEX WITH {len(index)} PLAYERS")
