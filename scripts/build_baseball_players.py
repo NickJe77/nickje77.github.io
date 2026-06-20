@@ -1,4 +1,5 @@
 import os
+import csv
 import json
 import glob
 from collections import defaultdict
@@ -48,11 +49,30 @@ TEAM_MAP = {
 }
 
 # ======================================================
+# RETROSHEET PLAYER ID LOOKUP
+# ======================================================
+
+RETRO_PLAYERS = {}
+
+biofile_path = "docs/data/baseball/biofile0.csv"
+
+if os.path.exists(biofile_path):
+    with open(biofile_path, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            pid = row.get("id", "").strip()
+            name = row.get("fullname", "").strip()
+            if pid and name:
+                RETRO_PLAYERS[pid] = name
+    print(f"LOADED {len(RETRO_PLAYERS)} RETROSHEET PLAYERS")
+else:
+    print("WARNING: biofile0.csv not found, old boxscores will be skipped")
+
+# ======================================================
 # HELPERS
 # ======================================================
 
 def slugify(name):
-
     return (
         str(name)
         .lower()
@@ -65,15 +85,11 @@ def slugify(name):
     )
 
 def add_game(players, player, game):
-
     if not player:
         return
-
     player = str(player).strip()
-
     if player.lower() in ["team", "totals"]:
         return
-
     players[player].append(game)
 
 # ======================================================
@@ -97,19 +113,15 @@ print(f"FOUND {len(files)} BOXSCORES")
 for file in files:
 
     try:
-
         with open(file, "r", encoding="utf-8") as f:
             game = json.load(f)
-
     except Exception:
         continue
 
     season = str(game.get("season", ""))
-
     date = game.get("date", "")
-
-    home_team = game.get("home_team", "")
-    away_team = game.get("away_team", "")
+    home_team = game.get("home_team", "") or game.get("home_code", "")
+    away_team = game.get("away_team", "") or game.get("away_code", "")
 
     # ==================================================
     # RAW 2026 MLB API STYLE
@@ -118,7 +130,6 @@ for file in files:
     if "liveData" in game:
 
         try:
-
             box = (
                 game.get("liveData", {})
                 .get("boxscore", {})
@@ -128,31 +139,13 @@ for file in files:
             home = box.get("home", {})
             away = box.get("away", {})
 
-            home_players = home.get("players", {})
-            away_players = away.get("players", {})
-
-            # ------------------------------------------
-            # HOME
-            # ------------------------------------------
-
-            for pid, pdata in home_players.items():
-
+            for pid, pdata in home.get("players", {}).items():
                 person = pdata.get("person", {})
-                stats = (
-                    pdata.get("stats", {})
-                    .get("batting", {})
-                )
-
+                stats = pdata.get("stats", {}).get("batting", {})
                 player = person.get("fullName")
-
                 add_game(players, player, {
-
-                    "date": date,
-                    "season": season,
-
-                    "team": home_team,
-                    "opponent": away_team,
-
+                    "date": date, "season": season,
+                    "team": home_team, "opponent": away_team,
                     "AB": stats.get("atBats", 0),
                     "R": stats.get("runs", 0),
                     "H": stats.get("hits", 0),
@@ -160,31 +153,15 @@ for file in files:
                     "HR": stats.get("homeRuns", 0),
                     "BB": stats.get("baseOnBalls", 0),
                     "SO": stats.get("strikeOuts", 0)
-
                 })
 
-            # ------------------------------------------
-            # AWAY
-            # ------------------------------------------
-
-            for pid, pdata in away_players.items():
-
+            for pid, pdata in away.get("players", {}).items():
                 person = pdata.get("person", {})
-                stats = (
-                    pdata.get("stats", {})
-                    .get("batting", {})
-                )
-
+                stats = pdata.get("stats", {}).get("batting", {})
                 player = person.get("fullName")
-
                 add_game(players, player, {
-
-                    "date": date,
-                    "season": season,
-
-                    "team": away_team,
-                    "opponent": home_team,
-
+                    "date": date, "season": season,
+                    "team": away_team, "opponent": home_team,
                     "AB": stats.get("atBats", 0),
                     "R": stats.get("runs", 0),
                     "H": stats.get("hits", 0),
@@ -192,67 +169,78 @@ for file in files:
                     "HR": stats.get("homeRuns", 0),
                     "BB": stats.get("baseOnBalls", 0),
                     "SO": stats.get("strikeOuts", 0)
-
                 })
 
         except Exception as e:
-
-            print(f"FAILED RAW {file}")
-            print(e)
+            print(f"FAILED RAW {file}: {e}")
 
     # ==================================================
-    # OLD STRUCTURE
+    # OLD STRUCTURE (home_batting / away_batting arrays)
     # ==================================================
 
-    else:
+    elif "home_batting" in game or "away_batting" in game:
 
         try:
-
-            home_batting = game.get("home_batting", [])
-            away_batting = game.get("away_batting", [])
-
-            for p in home_batting:
-
+            for p in game.get("home_batting", []):
                 add_game(players, p.get("player"), {
-
-                    "date": date,
-                    "season": season,
-
-                    "team": home_team,
-                    "opponent": away_team,
-
-                    "AB": p.get("AB", 0),
-                    "R": p.get("R", 0),
-                    "H": p.get("H", 0),
-                    "RBI": p.get("RBI", 0),
-                    "HR": p.get("HR", 0),
-                    "BB": p.get("BB", 0),
+                    "date": date, "season": season,
+                    "team": home_team, "opponent": away_team,
+                    "AB": p.get("AB", 0), "R": p.get("R", 0),
+                    "H": p.get("H", 0), "RBI": p.get("RBI", 0),
+                    "HR": p.get("HR", 0), "BB": p.get("BB", 0),
                     "SO": p.get("SO", 0)
-
                 })
-
-            for p in away_batting:
-
+            for p in game.get("away_batting", []):
                 add_game(players, p.get("player"), {
-
-                    "date": date,
-                    "season": season,
-
-                    "team": away_team,
-                    "opponent": home_team,
-
-                    "AB": p.get("AB", 0),
-                    "R": p.get("R", 0),
-                    "H": p.get("H", 0),
-                    "RBI": p.get("RBI", 0),
-                    "HR": p.get("HR", 0),
-                    "BB": p.get("BB", 0),
+                    "date": date, "season": season,
+                    "team": away_team, "opponent": home_team,
+                    "AB": p.get("AB", 0), "R": p.get("R", 0),
+                    "H": p.get("H", 0), "RBI": p.get("RBI", 0),
+                    "HR": p.get("HR", 0), "BB": p.get("BB", 0),
                     "SO": p.get("SO", 0)
-
                 })
-
         except Exception:
             continue
+
+    # ==================================================
+    # RETROSHEET EVENT FORMAT
+    # ==================================================
+
+    elif "events" in game:
+
+        if not RETRO_PLAYERS:
+            continue
+
+        try:
+            seen_batters = {"home": set(), "away": set()}
+
+            for event in game.get("events", []):
+                if not isinstance(event, list) or event[0] != "play":
+                    continue
+
+                # [play, inning, half, batter_id, count, pitches, result]
+                half = event[2]       # "0" = away batting, "1" = home batting
+                batter_id = event[3]
+
+                side = "away" if half == "0" else "home"
+                team = away_team if side == "away" else home_team
+                opponent = home_team if side == "away" else away_team
+
+                name = RETRO_PLAYERS.get(batter_id)
+                if not name:
+                    continue
+
+                if batter_id not in seen_batters[side]:
+                    seen_batters[side].add(batter_id)
+                    add_game(players, name, {
+                        "date": date, "season": season,
+                        "team": team, "opponent": opponent,
+                        "AB": 0, "R": 0, "H": 0,
+                        "RBI": 0, "HR": 0, "BB": 0, "SO": 0
+                    })
+
+        except Exception as e:
+            print(f"FAILED RETRO {file}: {e}")
 
 # ======================================================
 # BUILD PLAYER FILES
@@ -264,62 +252,32 @@ for player_name, games in players.items():
 
     slug = slugify(player_name)
 
-    games.sort(
-        key=lambda x: x.get("date", ""),
-        reverse=True
-    )
+    games.sort(key=lambda x: x.get("date", ""), reverse=True)
 
-    totals = {
-        "games": len(games),
-        "AB": 0,
-        "R": 0,
-        "H": 0,
-        "RBI": 0,
-        "HR": 0,
-        "BB": 0,
-        "SO": 0
-    }
+    totals = {"games": len(games), "AB": 0, "R": 0, "H": 0,
+              "RBI": 0, "HR": 0, "BB": 0, "SO": 0}
 
     for g in games:
-
         totals["AB"] += int(g.get("AB", 0) or 0)
-        totals["R"] += int(g.get("R", 0) or 0)
-        totals["H"] += int(g.get("H", 0) or 0)
+        totals["R"]  += int(g.get("R", 0) or 0)
+        totals["H"]  += int(g.get("H", 0) or 0)
         totals["RBI"] += int(g.get("RBI", 0) or 0)
         totals["HR"] += int(g.get("HR", 0) or 0)
         totals["BB"] += int(g.get("BB", 0) or 0)
         totals["SO"] += int(g.get("SO", 0) or 0)
 
-    avg = (
-        totals["H"] / totals["AB"]
-        if totals["AB"] else 0
-    )
-
+    avg = totals["H"] / totals["AB"] if totals["AB"] else 0
     totals["AVG"] = f"{avg:.3f}"
 
     out = {
-
         "name": player_name,
         "slug": slug,
-
         "career": totals,
-
         "games": games
-
     }
 
-    with open(
-        f"{PLAYERS_DIR}/{slug}.json",
-        "w",
-        encoding="utf-8"
-    ) as f:
-
-        json.dump(
-            out,
-            f,
-            indent=2,
-            ensure_ascii=False
-        )
+    with open(f"{PLAYERS_DIR}/{slug}.json", "w", encoding="utf-8") as f:
+        json.dump(out, f, indent=2, ensure_ascii=False)
 
     count += 1
 
