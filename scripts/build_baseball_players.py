@@ -61,7 +61,9 @@ if os.path.exists(biofile_path):
         reader = csv.DictReader(f)
         for row in reader:
             pid = row.get("id", "").strip()
-            name = row.get("fullname", "").strip()
+            first = row.get("usename", "").strip()
+            last = row.get("lastname", "").strip()
+            name = f"{first} {last}" if first and last else ""
             if pid and name:
                 RETRO_PLAYERS[pid] = name
     print(f"LOADED {len(RETRO_PLAYERS)} RETROSHEET PLAYERS")
