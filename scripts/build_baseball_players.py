@@ -9,7 +9,10 @@ BASE = "docs/data/baseball"
 BOX_DIR = f"{BASE}/boxscores"
 PLAYERS_DIR = f"{BASE}/players"
 
-os.makedirs(PLAYERS_DIR, exist_ok=True)
+import shutil
+if os.path.exists(PLAYERS_DIR):
+    shutil.rmtree(PLAYERS_DIR)
+os.makedirs(PLAYERS_DIR)
 
 # ======================================================
 # TEAM MAP
