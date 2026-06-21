@@ -92,6 +92,12 @@ tbody tr:hover{
   font-weight:700;
   text-decoration:none;
 }
+
+.loading{
+  padding:20px;
+  font-weight:700;
+  color:#555;
+}
 </style>
 </head>
 <body>
@@ -106,6 +112,8 @@ tbody tr:hover{
   <div class="card">
     <a class="back" href="baseball.html">← Back to Baseball</a>
   </div>
+
+  <div id="loadingMsg" class="loading" style="display:none">Loading...</div>
 
   <table>
     <thead>
@@ -129,6 +137,7 @@ tbody tr:hover{
 const teamSelect = document.getElementById("teamSelect");
 const tb = document.getElementById("tb");
 const title = document.getElementById("title");
+const loadingMsg = document.getElementById("loadingMsg");
 
 let years = [];
 let franchises = [];
@@ -136,8 +145,6 @@ let tableData = [];
 let sortState = {};
 
 async function init(){
-
-  // FIXED: relative paths
   years = await (await fetch("data/baseball/index.json")).json();
   franchises = await (await fetch("data/baseball/teams.json")).json();
 
@@ -153,10 +160,7 @@ async function init(){
   teamSelect.addEventListener("change", buildFranchise);
 
   document.querySelectorAll("th").forEach(th=>{
-    th.addEventListener("click", ()=>{
-      const col = th.dataset.col;
-      sortTable(col);
-    });
+    th.addEventListener("click", ()=>sortTable(th.dataset.col));
   });
 }
 
@@ -173,39 +177,34 @@ async function buildFranchise(){
 
   const franchise = franchises.find(f=>f.id === franchiseId);
   title.textContent = `Franchise History – ${franchise.name}`;
+  loadingMsg.style.display = "block";
+  tb.innerHTML = "";
 
-  tableData = [];
+  const results = await Promise.all(
+    years.map(year =>
+      fetch(`data/baseball/team_seasons/${year}.json`)
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null)
+        .then(seasonData => {
+          if(!seasonData) return null;
+          let W=0,L=0,RS=0,RA=0,played=false;
+          franchise.codes.forEach(code=>{
+            if(seasonData[code]){
+              const data=seasonData[code];
+              W+=data.W; L+=data.L; RS+=data.RS; RA+=data.RA;
+              played=true;
+            }
+          });
+          if(!played) return null;
+          const PCT=(W+L)>0 ? +(W/(W+L)).toFixed(3) : 0;
+          return {season:+year,W,L,PCT,RS,RA,DIFF:RS-RA};
+        })
+    )
+  );
 
-  for(const year of years){
-
-    try{
-
-      const seasonData = await (await fetch(`data/baseball/team_seasons/${year}.json`)).json();
-
-      let W=0,L=0,RS=0,RA=0;
-      let played=false;
-
-      franchise.codes.forEach(code=>{
-        if(seasonData[code]){
-          const data = seasonData[code];
-          W+=data.W;
-          L+=data.L;
-          RS+=data.RS;
-          RA+=data.RA;
-          played=true;
-        }
-      });
-
-      if(!played) continue;
-
-      const PCT = (W+L)>0 ? +(W/(W+L)).toFixed(3) : 0;
-      const DIFF = RS-RA;
-
-      tableData.push({season:+year,W,L,PCT,RS,RA,DIFF});
-
-    }catch(e){}
-  }
-
+  tableData = results.filter(Boolean);
+  tableData.sort((a,b)=>b.season-a.season);
+  loadingMsg.style.display = "none";
   renderTable();
 }
 
@@ -227,21 +226,10 @@ function renderTable(){
 }
 
 function sortTable(col){
-
-  if(!sortState[col]){
-    sortState[col]="desc";
-  }else{
-    sortState[col]=sortState[col]==="desc"?"asc":"desc";
-  }
-
-  tableData.sort((a,b)=>{
-    if(sortState[col]==="desc"){
-      return b[col]-a[col];
-    }else{
-      return a[col]-b[col];
-    }
-  });
-
+  sortState[col] = sortState[col]==="desc" ? "asc" : "desc";
+  tableData.sort((a,b)=>
+    sortState[col]==="desc" ? b[col]-a[col] : a[col]-b[col]
+  );
   renderTable();
 }
 
