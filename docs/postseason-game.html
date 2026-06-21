@@ -95,7 +95,11 @@ function buildTable(players,nameMap){
 
   players.forEach(p=>{
     const name=nameMap[p.id]||p.id;
-    html+=`<tr><td><a class="player-link" href="baseball-player.html?player=${p.id}">${name}</a></td>`;
+    const slug=name.toLowerCase()
+      .replace(/\./g,"").replace(/'/g,"").replace(/,/g,"")
+      .replace(/ jr$/,"-jr").replace(/ sr$/,"-sr")
+      .replace(/ /g,"-");
+    html+=`<tr><td><a class="player-link" href="baseball-player.html?player=${encodeURIComponent(slug)}">${name}</a></td>`;
     keys.forEach(k=>html+=`<td>${p.stats[k]??""}</td>`);
     html+="</tr>";
   });
@@ -116,35 +120,44 @@ if(!box||!metaAll){document.getElementById("title").innerText="Game Not Found";r
 const meta=metaAll.find(g=>g.game_id===gameId);
 if(!meta){document.getElementById("title").innerText="Game Not Found";return;}
 
-const playersList=await fetchJSON(`/data/baseball/players.json`);
-const teams=await fetchJSON(`/data/baseball/teams.json`);
-const parks=await fetchCSV(`/data/baseball/ballparks.csv`);
+const [playersList, teams, parks, bioResp] = await Promise.all([
+  fetchJSON(`/data/baseball/players.json`),
+  fetchJSON(`/data/baseball/teams.json`),
+  fetchCSV(`/data/baseball/ballparks.csv`),
+  fetch(`/data/baseball/biofile0.csv`).then(r=>r.ok?r.text():null)
+]);
 
 const nameMap={};
+
+// From players.json (slug-based)
 playersList?.forEach(p=>nameMap[p.player_id]=p.name);
+
+// From biofile0.csv (Retrosheet ID-based)
+if(bioResp){
+  bioResp.split('\n').slice(1).forEach(line=>{
+    const cols=line.split(',');
+    if(cols[0]&&cols[1]&&cols[2]){
+      nameMap[cols[0].trim()]=`${cols[2].trim()} ${cols[1].trim()}`;
+    }
+  });
+}
 
 const teamMap={};
 teams?.forEach(t=>{
-  t.codes?.forEach(c=>{
-    teamMap[c]=t.name;
-  });
+  t.codes?.forEach(c=>{ teamMap[c]=t.name; });
 });
 
 const parkMap={};
-parks?.slice(1).forEach(r=>parkMap[r[0]]=r[1]);
+parks?.slice(1).forEach(r=>{ if(r[0]) parkMap[r[0]]=r[1]; });
 
 const homeName=teamMap[meta.home]||meta.home;
 const awayName=teamMap[meta.away]||meta.away;
 
 document.getElementById("title").innerText=`${awayName} @ ${homeName}`;
-document.getElementById("scoreline").innerText=
-`${awayName} ${meta.away_score} – ${homeName} ${meta.home_score}`;
+document.getElementById("scoreline").innerText=`${awayName} ${meta.away_score} – ${homeName} ${meta.home_score}`;
 document.getElementById("subtitle").innerText=meta.date||"";
-document.getElementById("venueLine").innerText=
-meta.venue&&parkMap[meta.venue]?`Venue: ${parkMap[meta.venue]}`:"";
-
-document.getElementById("details").innerHTML =
-`Attendance: ${meta.attendance ? meta.attendance.toLocaleString() : "N/A"}`;
+document.getElementById("venueLine").innerText=meta.venue&&parkMap[meta.venue]?`Venue: ${parkMap[meta.venue]}`:"";
+document.getElementById("details").innerHTML=`Attendance: ${meta.attendance?meta.attendance.toLocaleString():"N/A"}`;
 
 const battingItems=Object.entries(box.batting||{});
 const midB=Math.floor(battingItems.length/2);
