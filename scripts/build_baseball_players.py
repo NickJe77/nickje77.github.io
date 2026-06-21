@@ -55,10 +55,14 @@ TEAM_MAP = {
     "KC":"Kansas City Royals",
     "KCA":"Kansas City Royals",
     "LAA":"Los Angeles Angels",
+    "ANA":"Los Angeles Angels",
+    "CAL":"California Angels",
     "LAD":"Los Angeles Dodgers",
     "LAN":"Los Angeles Dodgers",
     "MIA":"Miami Marlins",
+    "FLO":"Florida Marlins",
     "MIL":"Milwaukee Brewers",
+    "MLN":"Milwaukee Braves",
     "MIN":"Minnesota Twins",
     "NYM":"New York Mets",
     "NYN":"New York Mets",
@@ -66,6 +70,7 @@ TEAM_MAP = {
     "NYA":"New York Yankees",
     "ATH":"Athletics",
     "OAK":"Athletics",
+    "PHA":"Philadelphia Athletics",
     "PHI":"Philadelphia Phillies",
     "PIT":"Pittsburgh Pirates",
     "SD":"San Diego Padres",
@@ -82,15 +87,19 @@ TEAM_MAP = {
     "WSH":"Washington Nationals",
     "WAS":"Washington Nationals",
     "MON":"Montreal Expos",
-    "MON":"Montreal Expos",
-    "FLO":"Florida Marlins",
     "BRO":"Brooklyn Dodgers",
     "BSN":"Boston Braves",
     "NY1":"New York Giants",
-    "PHA":"Philadelphia Athletics",
     "SLA":"St Louis Browns",
     "WS1":"Washington Senators",
-    "CLE":"Cleveland Indians",
+    "WS2":"Washington Senators",
+    "KC1":"Kansas City Athletics",
+    "SE1":"Seattle Pilots",
+    "CL4":"Cleveland Spiders",
+    "LS3":"Louisville Colonels",
+    "RC1":"Rochester Broncos",
+    "BLN":"Baltimore Orioles",
+    "CLE":"Cleveland Guardians",
 }
 
 # ======================================================
@@ -144,14 +153,15 @@ def add_game(players, player, game):
 players = defaultdict(list)
 
 # ======================================================
-# PARSE EVENT FILES (EBA/EBN)
+# PARSE EVENT FILES - only EBN (National) OR EBA (American)
+# to avoid duplicates. We use both but deduplicate by game_id + player
 # ======================================================
 
-event_files = glob.glob(f"{EVENTS_DIR}/**/*.[Ee][Bb][AaNn]", recursive=True)
-event_files += glob.glob(f"{EVENTS_DIR}/*.[Ee][Bb][AaNn]")
-event_files += glob.glob(f"{EVENTS_DIR}/boxes/*.[Ee][Bb][AaNn]")
-
+event_files = glob.glob(f"{EVENTS_DIR}/boxes/*.[Ee][Bb][AaNn]")
 print(f"FOUND {len(event_files)} EVENT FILES")
+
+# Track game+player combos to avoid duplicates from EBA+EBN overlap
+seen = set()
 
 for ef in event_files:
     try:
@@ -173,22 +183,30 @@ for ef in event_files:
                         current_game["home"] = parts_line[2]
 
                 elif parts_line[0] == "stat" and parts_line[1] == "bline":
-                    # stat,bline,playerid,team(0=away/1=home),batorder,seq,AB,R,H,2B,3B,HR,RBI,SH,SF,HBP,BB,IBB,K,...
                     if len(parts_line) < 17:
                         continue
                     pid = parts_line[2]
-                    side = parts_line[3]  # 0=away, 1=home
-                    seq = parts_line[5]   # seq > 1 means sub appearance, skip to avoid dups
+                    side = parts_line[3]
+                    seq = parts_line[5]
 
                     if seq != "1":
                         continue
+
+                    # Deduplicate: same game + same player
+                    game_id = current_game.get("id", "")
+                    dedup_key = f"{game_id}:{pid}"
+                    if dedup_key in seen:
+                        continue
+                    seen.add(dedup_key)
 
                     name = RETRO_PLAYERS.get(pid)
                     if not name:
                         continue
 
-                    team = current_game.get("away") if side == "0" else current_game.get("home")
-                    opponent = current_game.get("home") if side == "0" else current_game.get("away")
+                    team_code = current_game.get("away") if side == "0" else current_game.get("home")
+                    opp_code = current_game.get("home") if side == "0" else current_game.get("away")
+                    team = TEAM_MAP.get(team_code, team_code)
+                    opponent = TEAM_MAP.get(opp_code, opp_code)
                     date = current_game.get("date", "")
                     season = date[:4] if date else ""
 
@@ -208,20 +226,15 @@ for ef in event_files:
                         "season": season,
                         "team": team,
                         "opponent": opponent,
-                        "AB": ab,
-                        "R": r,
-                        "H": h,
-                        "RBI": rbi,
-                        "HR": hr,
-                        "BB": bb,
-                        "SO": so
+                        "AB": ab, "R": r, "H": h,
+                        "RBI": rbi, "HR": hr, "BB": bb, "SO": so
                     })
 
     except Exception as e:
         print(f"FAILED EVENT FILE {ef}: {e}")
 
 # ======================================================
-# PARSE JSON BOXSCORES (modern + old structure)
+# PARSE JSON BOXSCORES
 # ======================================================
 
 json_files = glob.glob(f"{BOX_DIR}/**/*.json", recursive=True)
@@ -236,8 +249,8 @@ for file in json_files:
 
     season = str(game.get("season", ""))
     date = game.get("date", "")
-    home_team = game.get("home_team", "") or game.get("home_code", "")
-    away_team = game.get("away_team", "") or game.get("away_code", "")
+    home_team = TEAM_MAP.get(game.get("home_team", "") or game.get("home_code", ""), game.get("home_team", "") or game.get("home_code", ""))
+    away_team = TEAM_MAP.get(game.get("away_team", "") or game.get("away_code", ""), game.get("away_team", "") or game.get("away_code", ""))
 
     if "liveData" in game:
         try:
