@@ -7,333 +7,134 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body{
-font-family:Inter,system-ui,Arial;
-margin:0;
-background:#f4f6f8;
-}
-
-.navbar{
-display:flex;
-justify-content:center;
-gap:24px;
-padding:16px 0;
-background:white;
-border-bottom:1px solid #ddd;
-font-weight:600;
-}
-
-.navbar a{
-text-decoration:none;
-color:#0056d6;
-}
-
-.page{
-max-width:1200px;
-margin:auto;
-padding:20px;
-}
-
-.hero{
-background:linear-gradient(90deg,#002D72,#C8102E);
-color:white;
-padding:30px;
-border-radius:22px;
-margin-bottom:20px;
-}
-
-.hero h1{
-margin:0;
-font-size:40px;
-}
-
-.controls{
-background:#fff;
-padding:18px;
-border-radius:16px;
-margin-bottom:28px;
-display:flex;
-justify-content:center;
-}
-
-.controls select{
-font-size:18px;
-padding:10px 20px;
-border-radius:12px;
-border:1px solid #ddd;
-font-weight:700;
-min-width:160px;
-cursor:pointer;
-}
-
-.sectionTitle{
-font-size:24px;
-font-weight:900;
-margin:30px 0 12px;
-text-align:center;
-}
-
-table{
-width:100%;
-border-collapse:collapse;
-background:#fff;
-border-radius:16px;
-overflow:hidden;
-margin-bottom:35px;
-}
-
-th,td{
-padding:12px;
-border-bottom:1px solid #eee;
-text-align:center;
-}
-
-th{
-background:#002D72;
-color:#fff;
-}
-
-tbody tr:nth-child(even){
-background:#eaf3ff;
-}
-
-.playerLink{
-color:#0056d6;
-font-weight:700;
-cursor:pointer;
-}
+body{font-family:Inter,system-ui,Arial;margin:0;background:#f4f6f8;}
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px 0;background:white;border-bottom:1px solid #ddd;font-weight:600;}
+.navbar a{text-decoration:none;color:#0056d6;}
+.page{max-width:1200px;margin:auto;padding:20px;}
+.hero{background:linear-gradient(90deg,#002D72,#C8102E);color:white;padding:30px;border-radius:22px;margin-bottom:20px;}
+.hero h1{margin:0;font-size:40px;}
+.controls{background:#fff;padding:18px;border-radius:16px;margin-bottom:28px;display:flex;justify-content:center;}
+.controls select{font-size:18px;padding:10px 20px;border-radius:12px;border:1px solid #ddd;font-weight:700;min-width:160px;cursor:pointer;}
+.sectionTitle{font-size:24px;font-weight:900;margin:30px 0 12px;text-align:center;}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:16px;overflow:hidden;margin-bottom:35px;}
+th,td{padding:12px;border-bottom:1px solid #eee;text-align:center;}
+th{background:#002D72;color:#fff;}
+tbody tr:nth-child(even){background:#eaf3ff;}
+.playerLink{color:#0056d6;font-weight:700;cursor:pointer;}
+.loading{text-align:center;padding:40px;font-size:20px;font-weight:700;color:#555;}
 </style>
 </head>
 <body>
 
 <div class="navbar">
-<a href="index.html">Home</a>
-<a href="baseball.html">Baseball</a>
-<a href="baseball-seasons.html">Seasons</a>
-<a href="baseball-players.html">Players</a>
-<a href="baseball-standings.html">Standings</a>
-<a href="baseball-leaders.html">Leaders</a>
+  <a href="index.html">Home</a>
+  <a href="baseball.html">Baseball</a>
+  <a href="baseball-seasons.html">Seasons</a>
+  <a href="baseball-players.html">Players</a>
+  <a href="baseball-standings.html">Standings</a>
+  <a href="baseball-leaders.html">Leaders</a>
 </div>
 
 <div class="page">
 
-<div class="hero">
-<h1>Yearly Leaders</h1>
-</div>
+  <div class="hero">
+    <h1>Yearly Leaders</h1>
+  </div>
 
-<div class="controls">
-<select id="yearSel"></select>
-</div>
+  <div class="controls">
+    <select id="yearSel"></select>
+  </div>
 
-<div id="leadersContainer"></div>
+  <div id="leadersContainer"><div class="loading">Loading...</div></div>
 
 </div>
 
 <script>
 
-let TEAM_MAP = {};
-
 async function init(){
+  const years = await fetch("data/baseball/index.json").then(r=>r.json());
+  years.sort((a,b)=>b-a);
 
-// Load team master
-const franchises =
-await fetch("data/baseball/teams.json").then(r=>r.json());
-
-franchises.forEach(f=>{
-f.codes.forEach(code=>{
-TEAM_MAP[code] = f.name;
-});
-});
-
-// Load seasons
-const years =
-await fetch("data/baseball/index.json").then(r=>r.json());
-
-years.sort((a,b)=>b-a);
-
-const sel=document.getElementById("yearSel");
-sel.innerHTML = years.map(y=>`<option>${y}</option>`).join("");
-sel.onchange = ()=> loadYear(parseInt(sel.value));
-
-loadYear(years[0]);
+  const sel = document.getElementById("yearSel");
+  sel.innerHTML = years.map(y=>`<option>${y}</option>`).join("");
+  sel.onchange = ()=> loadYear(parseInt(sel.value));
+  loadYear(years[0]);
 }
 
 async function loadYear(year){
-
-const players =
-await fetch(`data/baseball/players/${year}.json`)
-.then(r=>r.json());
-
-renderLeaders(players);
+  document.getElementById("leadersContainer").innerHTML = '<div class="loading">Loading...</div>';
+  try {
+    const players = await fetch(`data/baseball/seasons/${year}.json`).then(r=>r.json());
+    renderLeaders(players);
+  } catch(e) {
+    document.getElementById("leadersContainer").innerHTML = '<div class="loading">No data for this season.</div>';
+  }
 }
 
 function renderLeaders(players){
+  const container = document.getElementById("leadersContainer");
+  container.innerHTML = "";
 
-const container=document.getElementById("leadersContainer");
-container.innerHTML="";
+  const maxGames = Math.max(...players.map(p=>p.games||0));
+  const minAB = Math.ceil(maxGames * 3.1);
 
-/* Determine games played for qualification */
-const maxGames = Math.max(...players.map(p=>p.games||0));
-const minPA = Math.ceil(maxGames * 3.1);
-const minIP = maxGames;
+  function makeTable(title, data, statLabel){
+    if(!data.length) return;
+    let html = `<div class="sectionTitle">${title}</div><table><thead><tr><th>Rank</th><th>Player</th><th>Team</th><th>${statLabel}</th></tr></thead><tbody>`;
+    data.forEach((p,i)=>{
+      html += `<tr>
+        <td>${i+1}</td>
+        <td class="playerLink" onclick="location.href='baseball-player.html?player=${encodeURIComponent(p.player_id)}'">${p.player_name}</td>
+        <td>${p.team||""}</td>
+        <td>${p.display}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+    container.innerHTML += html;
+  }
 
-function table(title, data, stat){
+  function top(arr, valueFn, filterFn, n=10){
+    let list = filterFn ? arr.filter(filterFn) : [...arr];
+    list = list.map(p=>({...p, ...valueFn(p)}));
+    list.sort((a,b)=>b.sortVal - a.sortVal);
+    return list.slice(0,n);
+  }
 
-if(!data.length) return;
+  // Batting Average
+  makeTable("Batting Average", top(players,
+    p=>{ const avg=p.AB ? p.H/p.AB : 0; return {sortVal:avg, display:avg.toFixed(3)}; },
+    p=>p.AB>=minAB
+  ), "AVG");
 
-let html = `
-<div class="sectionTitle">${title}</div>
-<table>
-<thead>
-<tr>
-<th>Rank</th>
-<th>Player</th>
-<th>Team</th>
-<th>${stat}</th>
-</tr>
-</thead>
-<tbody>
-`;
+  // Home Runs
+  makeTable("Home Runs", top(players,
+    p=>({sortVal:p.HR||0, display:p.HR||0})
+  ), "HR");
 
-data.forEach((p,i)=>{
-html+=`
-<tr>
-<td>${i+1}</td>
-<td class="playerLink"
-onclick="location.href='baseball-player.html?player=${encodeURIComponent(p.player_id)}'">
-${p.player_name}
-</td>
-<td>${TEAM_MAP[p.team] || p.team}</td>
-<td>${p.display}</td>
-</tr>
-`;
-});
+  // RBI
+  makeTable("RBI", top(players,
+    p=>({sortVal:p.RBI||0, display:p.RBI||0})
+  ), "RBI");
 
-html+=`</tbody></table>`;
-container.innerHTML+=html;
-}
+  // Hits
+  makeTable("Hits", top(players,
+    p=>({sortVal:p.H||0, display:p.H||0})
+  ), "H");
 
-function top(arr, calc, qualify=null){
+  // Walks
+  makeTable("Walks", top(players,
+    p=>({sortVal:p.BB||0, display:p.BB||0})
+  ), "BB");
 
-let list = qualify ? arr.filter(qualify) : [...arr];
-list = list.map(calc);
-list.sort((a,b)=>b.value-a.value);
-return list.slice(0,10);
-}
+  // Strikeouts (batting)
+  makeTable("Strikeouts", top(players,
+    p=>({sortVal:p.SO||0, display:p.SO||0})
+  ), "SO");
 
-/* ---------- BATTING ---------- */
-
-table("Batting Average",
-top(players,
-p=>{
-if(!p.at_bats) return {...p,value:0,display:"0.000"};
-const avg = p.hits/p.at_bats;
-return {...p, value:avg, display:avg.toFixed(3)};
-},
-p=>p.plate_appearances>=minPA && p.at_bats>0),
-"AVG"
-);
-
-table("Home Runs",
-top(players,p=>({...p,value:p.home_runs||0,display:p.home_runs||0})),
-"HR"
-);
-
-table("RBIs",
-top(players,p=>({...p,value:p.rbis||0,display:p.rbis||0})),
-"RBI"
-);
-
-table("Hits",
-top(players,p=>({...p,value:p.hits||0,display:p.hits||0})),
-"H"
-);
-
-table("Walks",
-top(players,p=>({...p,value:p.walks||0,display:p.walks||0})),
-"BB"
-);
-
-table("Strikeouts",
-top(players,p=>({...p,value:p.strikeouts||0,display:p.strikeouts||0})),
-"SO"
-);
-
-table("On-Base %",
-top(players,
-p=>{
-if(!p.plate_appearances) return {...p,value:0,display:"0.000"};
-const obp=(p.hits+p.walks)/p.plate_appearances;
-return {...p,value:obp,display:obp.toFixed(3)};
-},
-p=>p.plate_appearances>=minPA),
-"OBP"
-);
-
-table("Slugging %",
-top(players,
-p=>{
-if(!p.at_bats) return {...p,value:0,display:"0.000"};
-const slg=(p.total_bases||0)/p.at_bats;
-return {...p,value:slg,display:slg.toFixed(3)};
-},
-p=>p.plate_appearances>=minPA),
-"SLG"
-);
-
-table("OPS",
-top(players,
-p=>{
-if(!p.plate_appearances || !p.at_bats) return {...p,value:0,display:"0.000"};
-const obp=(p.hits+p.walks)/p.plate_appearances;
-const slg=(p.total_bases||0)/p.at_bats;
-const ops=obp+slg;
-return {...p,value:ops,display:ops.toFixed(3)};
-},
-p=>p.plate_appearances>=minPA),
-"OPS"
-);
-
-/* ---------- PITCHING ---------- */
-
-table("Wins",
-top(players,p=>({...p,value:p.wins||0,display:p.wins||0})),
-"W"
-);
-
-table("ERA",
-top(players,
-p=>{
-if(!p.innings_pitched || p.innings_pitched===0)
-return {...p,value:999,display:"-"};
-const era=(p.earned_runs*9)/p.innings_pitched;
-return {...p,value:-era,display:era.toFixed(2)};
-},
-p=>p.innings_pitched>=minIP),
-"ERA"
-);
-
-table("Strikeouts (Pitching)",
-top(players,p=>({...p,value:p.pitcher_strikeouts||0,display:p.pitcher_strikeouts||0})),
-"SO"
-);
-
-table("Saves",
-top(players,p=>({...p,value:p.saves||0,display:p.saves||0})),
-"SV"
-);
-
-table("WHIP",
-top(players,
-p=>{
-if(!p.innings_pitched) return {...p,value:999,display:"-"};
-const whip=(p.walks_allowed+p.hits_allowed)/p.innings_pitched;
-return {...p,value:-whip,display:whip.toFixed(2)};
-},
-p=>p.innings_pitched>=minIP),
-"WHIP"
-);
-
+  // Runs
+  makeTable("Runs", top(players,
+    p=>({sortVal:p.R||0, display:p.R||0})
+  ), "R");
 }
 
 init();
