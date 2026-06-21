@@ -356,3 +356,43 @@ with open(f"{BASE}/players.json", "w", encoding="utf-8") as f:
     json.dump(index, f, ensure_ascii=False)
 
 print(f"BUILT INDEX WITH {len(index)} PLAYERS")
+
+# ======================================================
+# BUILD PER-SEASON LEADER FILES
+# ======================================================
+
+SEASONS_DIR = f"{BASE}/seasons"
+os.makedirs(SEASONS_DIR, exist_ok=True)
+
+# Aggregate stats per player per season
+season_data = defaultdict(lambda: defaultdict(lambda: {
+    "player_name": "", "player_id": "", "team": "",
+    "games": 0, "AB": 0, "R": 0, "H": 0,
+    "RBI": 0, "HR": 0, "BB": 0, "SO": 0
+}))
+
+for player_name, games in players.items():
+    slug = slugify(player_name)
+    for g in games:
+        season = str(g.get("season", ""))
+        if not season:
+            continue
+        row = season_data[season][slug]
+        row["player_name"] = player_name
+        row["player_id"] = slug
+        row["team"] = g.get("team", "")
+        row["games"] += 1
+        row["AB"]  += int(g.get("AB", 0) or 0)
+        row["R"]   += int(g.get("R", 0) or 0)
+        row["H"]   += int(g.get("H", 0) or 0)
+        row["RBI"] += int(g.get("RBI", 0) or 0)
+        row["HR"]  += int(g.get("HR", 0) or 0)
+        row["BB"]  += int(g.get("BB", 0) or 0)
+        row["SO"]  += int(g.get("SO", 0) or 0)
+
+for season, season_players in season_data.items():
+    out = list(season_players.values())
+    with open(f"{SEASONS_DIR}/{season}.json", "w", encoding="utf-8") as f:
+        json.dump(out, f, ensure_ascii=False)
+
+print(f"BUILT {len(season_data)} SEASON FILES")
