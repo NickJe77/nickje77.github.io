@@ -249,8 +249,12 @@ for file in json_files:
 
     season = str(game.get("season", ""))
     date = game.get("date", "")
-    home_team = TEAM_MAP.get(game.get("home_team", "") or game.get("home_code", ""), game.get("home_team", "") or game.get("home_code", ""))
-    away_team = TEAM_MAP.get(game.get("away_team", "") or game.get("away_code", ""), game.get("away_team", "") or game.get("away_code", ""))
+    raw_home = game.get("home_team", "") or game.get("home_code", "")
+    if isinstance(raw_home, dict): raw_home = raw_home.get("name", "") or raw_home.get("code", "")
+    home_team = TEAM_MAP.get(raw_home, raw_home)
+    raw_away = game.get("away_team", "") or game.get("away_code", "")
+    if isinstance(raw_away, dict): raw_away = raw_away.get("name", "") or raw_away.get("code", "")
+    away_team = TEAM_MAP.get(raw_away, raw_away)
 
     if "liveData" in game:
         try:
