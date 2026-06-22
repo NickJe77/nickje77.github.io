@@ -112,7 +112,19 @@ document.getElementById("playerName").textContent = playerName || "Select a play
 let allGames = [], currentGames = [], sortDir = -1, sortKey = null;
 const startYear = 1965, endYear = new Date().getFullYear();
 
-// Load all years in batches of 5 to avoid overwhelming the browser
+function normalizeDashes(str) {
+  return str ? str.replace(/[\u2013\u2014]/g, '-') : str;
+}
+
+function normalizeGame(g) {
+  if (g.player)        g.player        = normalizeDashes(g.player);
+  if (g.played_for)    g.played_for    = normalizeDashes(g.played_for);
+  if (g.played_against)g.played_against= normalizeDashes(g.played_against);
+  if (g.home_team)     g.home_team     = normalizeDashes(g.home_team);
+  if (g.away_team)     g.away_team     = normalizeDashes(g.away_team);
+  return g;
+}
+
 async function loadAllYears() {
   loadingMsg.textContent = "Loading data...";
   const years = [];
@@ -124,7 +136,10 @@ async function loadAllYears() {
     const results = await Promise.all(
       batch.map(y => fetch(`/data/afl/afl_${y}.json`).then(r => r.json()).catch(() => []))
     );
-    results.forEach(d => allGames = allGames.concat(d));
+    results.forEach(d => {
+      d.forEach(g => normalizeGame(g));
+      allGames = allGames.concat(d);
+    });
     loadingMsg.textContent = `Loading data... ${Math.min(i + batchSize, years.length)}/${years.length} years`;
   }
 
