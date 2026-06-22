@@ -294,12 +294,25 @@ const TEAM_COLOURS = {
 };
 
 function slugify(str){
-    str = (str || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
-    return str
+    return (str || '')
         .toLowerCase()
-        .replace(/&/g,'and')
-        .replace(/[^a-z0-9]+/g,'-')
-        .replace(/^-|-$/g,'');
+        .replace(/\./g,'')
+        .replace(/'/g,'')
+        .replace(/\u2019/g,'')
+        .replace(/"/g,'')
+        .replace(/\s+/g,'-');
+}
+
+function slugifyAscii(str){
+    return (str || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g,'')
+        .toLowerCase()
+        .replace(/\./g,'')
+        .replace(/'/g,'')
+        .replace(/\u2019/g,'')
+        .replace(/"/g,'')
+        .replace(/\s+/g,'-');
 }
 
 function playerSlug(p){
@@ -308,12 +321,34 @@ function playerSlug(p){
     return firstTeam ? `${name}--${firstTeam}` : name;
 }
 
-function allPlayerSlugs(p){
-    const name = slugify(p.name || '');
-    const slugs = new Set();
-    slugs.add(name);
-    (p.teams || []).forEach(t => slugs.add(`${name}--${slugify(t)}`));
-    return slugs;
+function findPlayer(players, slugParam){
+    const normalised = slugParam.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+
+    // Try exact slug match
+    let found = players.find(p => playerSlug(p) === slugParam);
+    if(found) return found;
+
+    // Try with normalised incoming slug
+    found = players.find(p => playerSlug(p) === normalised);
+    if(found) return found;
+
+    // Try ascii slugify of player name
+    found = players.find(p => {
+        const name = slugifyAscii(p.name);
+        const team = slugifyAscii((p.teams && p.teams[0]) || '');
+        const full = team ? `${name}--${team}` : name;
+        return full === normalised || full === slugParam;
+    });
+    if(found) return found;
+
+    // Try name part only
+    const namePart = normalised.split('--')[0];
+    found = players.find(p => slugifyAscii(p.name) === namePart);
+    if(found) return found;
+
+    const namePartRaw = slugParam.split('--')[0];
+    found = players.find(p => slugify(p.name) === namePartRaw);
+    return found || null;
 }
 
 const params    = new URLSearchParams(window.location.search);
@@ -330,14 +365,7 @@ async function loadPlayer(){
         if(!res.ok) throw new Error(`players.json returned ${res.status}`);
         const players = await res.json();
 
-        // Try all possible slugs for each player
-        let player = players.find(p => allPlayerSlugs(p).has(slugParam));
-
-        // Fallback: match just the name part before --
-        if(!player){
-            const namePart = slugParam.split('--')[0];
-            player = players.find(p => slugify(p.name) === namePart);
-        }
+        const player = findPlayer(players, slugParam);
 
         if(!player){
             page.innerHTML = `<div class="error">Player Not Found</div>`;
