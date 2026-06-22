@@ -307,6 +307,14 @@ function playerSlug(p){
     return firstTeam ? `${name}--${firstTeam}` : name;
 }
 
+function allPlayerSlugs(p){
+    const name = slugify(p.name || '');
+    const slugs = new Set();
+    slugs.add(name);
+    (p.teams || []).forEach(t => slugs.add(`${name}--${slugify(t)}`));
+    return slugs;
+}
+
 const params    = new URLSearchParams(window.location.search);
 const slugParam = params.get("player") || '';
 const page      = document.getElementById("page");
@@ -321,10 +329,10 @@ async function loadPlayer(){
         if(!res.ok) throw new Error(`players.json returned ${res.status}`);
         const players = await res.json();
 
-        let player = players.find(p => playerSlug(p) === slugParam);
-        if(!player){
-            player = players.find(p => slugify(p.name) === slugParam);
-        }
+        // Try all possible slugs for each player
+        let player = players.find(p => allPlayerSlugs(p).has(slugParam));
+
+        // Fallback: match just the name part before --
         if(!player){
             const namePart = slugParam.split('--')[0];
             player = players.find(p => slugify(p.name) === namePart);
