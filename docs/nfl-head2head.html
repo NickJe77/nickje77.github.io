@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>NFL Head to Head | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#eef1f5;color:#111;}
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:white;border-bottom:1px solid #ddd;flex-wrap:wrap;}
+.navbar a{text-decoration:none;font-weight:800;color:#013369;}
+.navbar a:hover{color:#d50a0a;}
+.hero{background:linear-gradient(135deg,#013369,#d50a0a);color:white;padding:50px 20px;text-align:center;}
+.hero h1{margin:0;font-size:48px;font-weight:900;}
+.hero p{margin-top:10px;font-size:16px;opacity:.85;}
+.picker{display:flex;align-items:center;justify-content:center;gap:20px;flex-wrap:wrap;margin-top:30px;}
+.picker select{padding:14px 18px;border-radius:12px;border:none;font-size:16px;font-weight:800;min-width:240px;background:white;color:#111;}
+.vs{font-size:28px;font-weight:900;color:white;}
+.btn{padding:14px 32px;border-radius:12px;border:none;background:#d50a0a;color:white;font-size:16px;font-weight:900;cursor:pointer;transition:.2s;}
+.btn:hover{background:#a50010;}
+.container{max-width:1400px;margin:30px auto;padding:0 20px 60px;}
+.h2h-header{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;margin-bottom:30px;}
+.team-banner{border-radius:20px;padding:30px 20px;text-align:center;color:white;}
+.team-banner h2{margin:0;font-size:36px;font-weight:900;}
+.team-banner p{margin:6px 0 0;font-size:14px;opacity:.85;}
+.h2h-score{background:white;border-radius:20px;padding:24px;text-align:center;box-shadow:0 3px 12px rgba(0,0,0,.08);}
+.h2h-score-nums{display:flex;justify-content:center;align-items:center;gap:16px;font-size:52px;font-weight:900;line-height:1;}
+.h2h-score-label{font-size:13px;font-weight:900;text-transform:uppercase;color:#888;margin-top:8px;letter-spacing:.5px;}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;margin-bottom:24px;}
+.stat-card{background:white;border-radius:16px;padding:20px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.05);}
+.stat-value{font-size:32px;font-weight:900;line-height:1;margin-bottom:6px;}
+.stat-label{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;color:#666;}
+.section{background:white;border-radius:20px;padding:24px;margin-bottom:24px;box-shadow:0 2px 8px rgba(0,0,0,.05);}
+.section-title{font-size:22px;font-weight:900;margin-bottom:18px;}
+table{width:100%;border-collapse:collapse;}
+th{background:#e9eef5;padding:12px;font-size:12px;font-weight:900;text-transform:uppercase;text-align:left;}
+td{padding:12px;border-bottom:1px solid #ececec;font-size:14px;font-weight:700;}
+tr:nth-child(even){background:#f8fbff;}
+.games-table tr{cursor:pointer;transition:.15s;}
+.games-table tr:hover{background:#fde8e8 !important;}
+.result-win{font-weight:900;color:#008000;font-size:18px;}
+.result-loss{font-weight:900;color:#d90429;font-size:18px;}
+.result-draw{font-weight:900;color:#d68910;font-size:18px;}
+.week-badge{display:inline-block;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:900;text-transform:uppercase;background:#013369;color:white;letter-spacing:.5px;}
+.week-badge.playoff{background:#d50a0a;}
+.loading{text-align:center;padding:60px;font-size:20px;color:#666;}
+.error{text-align:center;padding:60px;font-size:24px;font-weight:900;color:#d90429;}
+.hidden{display:none;}
+@media(max-width:900px){
+  .hero h1{font-size:32px;}
+  .h2h-header{grid-template-columns:1fr;text-align:center;}
+  .vs{display:none;}
+  .h2h-score-nums{font-size:40px;}
+  .team-banner h2{font-size:26px;}
+  .picker{flex-direction:column;gap:12px;}
+  .picker select{min-width:280px;width:100%;}
+  .games-table thead{display:none;}
+  .games-table tbody{display:block;}
+  .games-table tr{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:12px;border-bottom:2px solid #ddd;background:white !important;}
+  .games-table tr:nth-child(even){background:#f8fbff !important;}
+  .games-table td{display:block;border:none;padding:4px 8px;font-size:14px;}
+}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="/">Home</a>
+  <a href="/nfl.html">NFL</a>
+  <a href="/nfl-teams.html">Teams</a>
+</div>
+
+<div class="hero">
+  <h1>Head to Head</h1>
+  <p>Compare any two franchises in NFL history</p>
+  <div class="picker">
+    <select id="team1Select"><option value="">Select Team 1...</option></select>
+    <div class="vs">VS</div>
+    <select id="team2Select"><option value="">Select Team 2...</option></select>
+    <button class="btn" onclick="loadH2H()">Compare</button>
+  </div>
+</div>
+
+<div class="container">
+  <div id="results" class="hidden"></div>
+</div>
+
+<script>
+
+// Current franchise names (what the dropdowns show)
+const CURRENT_TEAMS = [
+  "Arizona Cardinals","Atlanta Falcons","Baltimore Ravens","Buffalo Bills",
+  "Carolina Panthers","Chicago Bears","Cincinnati Bengals","Cleveland Browns",
+  "Dallas Cowboys","Denver Broncos","Detroit Lions","Green Bay Packers",
+  "Houston Texans","Indianapolis Colts","Jacksonville Jaguars","Kansas City Chiefs",
+  "Las Vegas Raiders","Los Angeles Chargers","Los Angeles Rams","Miami Dolphins",
+  "Minnesota Vikings","New England Patriots","New Orleans Saints","New York Giants",
+  "New York Jets","Philadelphia Eagles","Pittsburgh Steelers","San Francisco 49ers",
+  "Seattle Seahawks","Tampa Bay Buccaneers","Tennessee Titans","Washington Commanders"
+];
+
+// Map every historical name → current franchise name
+const FRANCHISE_MAP = {
+  // Raiders
+  "Oakland Raiders":"Las Vegas Raiders",
+  "Los Angeles Raiders":"Las Vegas Raiders",
+  "Las Vegas Raiders":"Las Vegas Raiders",
+  // Chargers
+  "San Diego Chargers":"Los Angeles Chargers",
+  "Los Angeles Chargers":"Los Angeles Chargers",
+  // Rams
+  "Los Angeles Rams":"Los Angeles Rams",
+  "St. Louis Rams":"Los Angeles Rams",
+  "Cleveland Rams":"Los Angeles Rams",
+  // Patriots
+  "Boston Patriots":"New England Patriots",
+  "New England Patriots":"New England Patriots",
+  // Colts
+  "Baltimore Colts":"Indianapolis Colts",
+  "Indianapolis Colts":"Indianapolis Colts",
+  // Cardinals
+  "Chicago Cardinals":"Arizona Cardinals",
+  "St. Louis Cardinals":"Arizona Cardinals",
+  "Phoenix Cardinals":"Arizona Cardinals",
+  "Arizona Cardinals":"Arizona Cardinals",
+  // Titans
+  "Houston Oilers":"Tennessee Titans",
+  "Tennessee Oilers":"Tennessee Titans",
+  "Tennessee Titans":"Tennessee Titans",
+  // Commanders
+  "Washington Redskins":"Washington Commanders",
+  "Washington Football Team":"Washington Commanders",
+  "Washington Commanders":"Washington Commanders",
+  // Ravens (Browns history is separate — Ravens are a new franchise)
+  "Baltimore Ravens":"Baltimore Ravens",
+  // Texans are a new franchise (2002), no historical aliases
+  "Houston Texans":"Houston Texans",
+  // All other stable franchises
+  "Atlanta Falcons":"Atlanta Falcons",
+  "Buffalo Bills":"Buffalo Bills",
+  "Carolina Panthers":"Carolina Panthers",
+  "Chicago Bears":"Chicago Bears",
+  "Cincinnati Bengals":"Cincinnati Bengals",
+  "Cleveland Browns":"Cleveland Browns",
+  "Dallas Cowboys":"Dallas Cowboys",
+  "Denver Broncos":"Denver Broncos",
+  "Detroit Lions":"Detroit Lions",
+  "Green Bay Packers":"Green Bay Packers",
+  "Jacksonville Jaguars":"Jacksonville Jaguars",
+  "Kansas City Chiefs":"Kansas City Chiefs",
+  "Miami Dolphins":"Miami Dolphins",
+  "Minnesota Vikings":"Minnesota Vikings",
+  "New Orleans Saints":"New Orleans Saints",
+  "New York Giants":"New York Giants",
+  "New York Jets":"New York Jets",
+  "Philadelphia Eagles":"Philadelphia Eagles",
+  "Pittsburgh Steelers":"Pittsburgh Steelers",
+  "San Francisco 49ers":"San Francisco 49ers",
+  "Seattle Seahawks":"Seattle Seahawks",
+  "Tampa Bay Buccaneers":"Tampa Bay Buccaneers",
+};
+
+const TEAM_COLOURS = {
+  "Arizona Cardinals":    ["#97233F","#000000"],
+  "Atlanta Falcons":      ["#A71930","#000000"],
+  "Baltimore Ravens":     ["#241773","#9E7C0C"],
+  "Buffalo Bills":        ["#00338D","#C60C30"],
+  "Carolina Panthers":    ["#0085CA","#101820"],
+  "Chicago Bears":        ["#0B162A","#C83803"],
+  "Cincinnati Bengals":   ["#FB4F14","#000000"],
+  "Cleveland Browns":     ["#311D00","#FF3C00"],
+  "Dallas Cowboys":       ["#041E42","#869397"],
+  "Denver Broncos":       ["#FB4F14","#002244"],
+  "Detroit Lions":        ["#0076B6","#B0B7BC"],
+  "Green Bay Packers":    ["#203731","#FFB612"],
+  "Houston Texans":       ["#03202F","#A71930"],
+  "Indianapolis Colts":   ["#002C5F","#A2AAAD"],
+  "Jacksonville Jaguars": ["#006778","#101820"],
+  "Kansas City Chiefs":   ["#E31837","#FFB81C"],
+  "Las Vegas Raiders":    ["#000000","#A5ACAF"],
+  "Los Angeles Chargers": ["#0080C6","#FFC20E"],
+  "Los Angeles Rams":     ["#003594","#FFA300"],
+  "Miami Dolphins":       ["#008E97","#FC4C02"],
+  "Minnesota Vikings":    ["#4F2683","#FFC62F"],
+  "New England Patriots": ["#002244","#C60C30"],
+  "New Orleans Saints":   ["#101820","#D3BC8D"],
+  "New York Giants":      ["#0B2265","#A71930"],
+  "New York Jets":        ["#125740","#000000"],
+  "Philadelphia Eagles":  ["#004C54","#A5ACAF"],
+  "Pittsburgh Steelers":  ["#FFB612","#101820"],
+  "San Francisco 49ers":  ["#AA0000","#B3995D"],
+  "Seattle Seahawks":     ["#002244","#69BE28"],
+  "Tampa Bay Buccaneers": ["#D50A0A","#34302B"],
+  "Tennessee Titans":     ["#0C2340","#4B92DB"],
+  "Washington Commanders":["#5A1414","#FFB612"],
+};
+
+// Seasons from 1970 to current
+const ALL_SEASONS = [];
+for(let y = 1970; y <= 2025; y++) ALL_SEASONS.push(y);
+
+const PLAYOFF_WEEKS = new Set(["wildcard","division","confchamp","superbowl","nfccg","afccg","divisional","championship"]);
+
+function normalizeName(name){
+  return FRANCHISE_MAP[name] || name;
+}
+
+function isPlayoff(week){
+  return PLAYOFF_WEEKS.has(String(week || "").toLowerCase().replace(/[^a-z]/g,""));
+}
+
+// Populate dropdowns
+const sel1 = document.getElementById("team1Select");
+const sel2 = document.getElementById("team2Select");
+CURRENT_TEAMS.forEach(name => {
+  sel1.innerHTML += `<option value="${name}">${name}</option>`;
+  sel2.innerHTML += `<option value="${name}">${name}</option>`;
+});
+
+// Pre-fill from URL params
+const params = new URLSearchParams(window.location.search);
+if(params.get("team1")) sel1.value = params.get("team1");
+if(params.get("team2")) sel2.value = params.get("team2");
+if(params.get("team1") && params.get("team2")) loadH2H();
+
+async function loadH2H(){
+  const team1 = sel1.value;
+  const team2 = sel2.value;
+
+  if(!team1 || !team2){ alert("Please select both teams"); return; }
+  if(team1 === team2){ alert("Please select two different teams"); return; }
+
+  const url = new URL(window.location);
+  url.searchParams.set("team1", team1);
+  url.searchParams.set("team2", team2);
+  window.history.pushState({}, "", url);
+
+  const results = document.getElementById("results");
+  results.className = "";
+  results.innerHTML = '<div class="loading">Loading head to head data...</div>';
+
+  try{
+    // Fetch all seasons in parallel
+    const seasonResults = await Promise.all(ALL_SEASONS.map(async yr => {
+      try{
+        const r = await fetch(`/data/nfl/seasons/${yr}.json`);
+        if(!r.ok) return [];
+        const data = await r.json();
+        const games = data.games || (Array.isArray(data) ? data : []);
+        return games
+          .filter(g => {
+            const t1 = normalizeName(g.team1);
+            const t2 = normalizeName(g.team2);
+            return (t1 === team1 && t2 === team2) || (t1 === team2 && t2 === team1);
+          })
+          .map(g => ({...g, season: yr}));
+      }catch(e){ return []; }
+    }));
+
+    const h2hGames = seasonResults.flat();
+
+    // Split regular season vs playoffs
+    const regularGames = h2hGames.filter(g => !isPlayoff(g.week));
+    const playoffGames = h2hGames.filter(g =>  isPlayoff(g.week));
+
+    function calcStats(team, games){
+      let wins=0, draws=0, losses=0, points=0, pointsAgainst=0;
+      games.forEach(g => {
+        const isT1 = normalizeName(g.team1) === team;
+        const tf = isT1 ? Number(g.score1||0) : Number(g.score2||0);
+        const of = isT1 ? Number(g.score2||0) : Number(g.score1||0);
+        points += tf; pointsAgainst += of;
+        if(tf > of) wins++;
+        else if(tf < of) losses++;
+        else draws++;
+      });
+      return { wins, draws, losses, points, pointsAgainst };
+    }
+
+    const s1all = calcStats(team1, h2hGames);
+    const s2all = calcStats(team2, h2hGames);
+    const s1reg = calcStats(team1, regularGames);
+    const s2reg = calcStats(team2, regularGames);
+    const s1po  = calcStats(team1, playoffGames);
+    const s2po  = calcStats(team2, playoffGames);
+
+    const c1 = TEAM_COLOURS[team1] || ["#013369","#d50a0a"];
+    const c2 = TEAM_COLOURS[team2] || ["#013369","#d50a0a"];
+    const grad1 = `linear-gradient(135deg,${c1[0]},${c1[1]})`;
+    const grad2 = `linear-gradient(135deg,${c2[0]},${c2[1]})`;
+
+    function gameRows(){
+      if(!h2hGames.length) return `<tr><td colspan="6" style="text-align:center">No meetings found</td></tr>`;
+      return [...h2hGames].reverse().map(g => {
+        const isT1 = normalizeName(g.team1) === team1;
+        const s1  = Number(g.score1||0);
+        const s2  = Number(g.score2||0);
+        const t1pts = isT1 ? s1 : s2;
+        const t2pts = isT1 ? s2 : s1;
+        const res = t1pts > t2pts ? 'W' : t1pts < t2pts ? 'L' : 'T';
+        const cls = t1pts > t2pts ? 'result-win' : t1pts < t2pts ? 'result-loss' : 'result-draw';
+        const playoff = isPlayoff(g.week);
+        const weekLabel = playoff
+          ? `<span class="week-badge playoff">${g.week}</span>`
+          : `<span class="week-badge">Wk ${g.week}</span>`;
+        const home = normalizeName(g.team1);
+        const away = normalizeName(g.team2);
+        return `<tr onclick="window.location.href='/nfl-game.html?game=${encodeURIComponent(g.game_id)}'">
+          <td>${g.season}</td>
+          <td>${weekLabel}</td>
+          <td>${home}</td>
+          <td style="font-size:18px;font-weight:900;text-align:center">${s1} – ${s2}</td>
+          <td>${away}</td>
+          <td class="${cls}">${res}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    const biggestWin = [...h2hGames].filter(g => {
+      const isT1 = normalizeName(g.team1) === team1;
+      const tf = isT1 ? Number(g.score1||0) : Number(g.score2||0);
+      const of = isT1 ? Number(g.score2||0) : Number(g.score1||0);
+      return tf > of;
+    }).sort((a,b) => {
+      const marginA = Math.abs(Number(a.score1)-Number(a.score2));
+      const marginB = Math.abs(Number(b.score1)-Number(b.score2));
+      return marginB - marginA;
+    })[0];
+
+    const biggestLoss = [...h2hGames].filter(g => {
+      const isT1 = normalizeName(g.team1) === team1;
+      const tf = isT1 ? Number(g.score1||0) : Number(g.score2||0);
+      const of = isT1 ? Number(g.score2||0) : Number(g.score1||0);
+      return of > tf;
+    }).sort((a,b) => {
+      const marginA = Math.abs(Number(a.score1)-Number(a.score2));
+      const marginB = Math.abs(Number(b.score1)-Number(b.score2));
+      return marginB - marginA;
+    })[0];
+
+    function scoreStr(g){ return `${g.score1}–${g.score2} (${g.season})`; }
+
+    results.innerHTML = `
+
+      <div class="h2h-header">
+        <div class="team-banner" style="background:${grad1}">
+          <h2>${team1}</h2>
+          <p>${s1all.wins}W ${s1all.draws}T ${s1all.losses}L</p>
+        </div>
+        <div class="h2h-score">
+          <div class="h2h-score-nums">
+            <span style="color:#008000">${s1all.wins}</span>
+            <span style="color:#888;font-size:32px">–</span>
+            <span style="color:#aaa;font-size:32px">${s1all.draws}</span>
+            <span style="color:#888;font-size:32px">–</span>
+            <span style="color:#d90429">${s2all.wins}</span>
+          </div>
+          <div class="h2h-score-label">${h2hGames.length} meetings</div>
+        </div>
+        <div class="team-banner" style="background:${grad2}">
+          <h2>${team2}</h2>
+          <p>${s2all.wins}W ${s2all.draws}T ${s2all.losses}L</p>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value">${h2hGames.length}</div>
+          <div class="stat-label">All Meetings</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${regularGames.length}</div>
+          <div class="stat-label">Regular Season</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${playoffGames.length}</div>
+          <div class="stat-label">Playoff Games</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${s1all.points}</div>
+          <div class="stat-label">${team1} Points</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${s2all.points}</div>
+          <div class="stat-label">${team2} Points</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${h2hGames.length ? (s1all.points / h2hGames.length).toFixed(1) : '–'}</div>
+          <div class="stat-label">${team1} Avg Pts</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${h2hGames.length ? (s2all.points / h2hGames.length).toFixed(1) : '–'}</div>
+          <div class="stat-label">${team2} Avg Pts</div>
+        </div>
+      </div>
+
+      ${regularGames.length || playoffGames.length ? `
+      <div class="stats-grid" style="margin-bottom:24px">
+        <div class="stat-card">
+          <div class="stat-value" style="font-size:20px">Regular Season</div>
+          <div class="stat-label" style="margin-top:8px">${team1}: ${s1reg.wins}W ${s1reg.draws}T ${s1reg.losses}L &nbsp;|&nbsp; ${team2}: ${s2reg.wins}W ${s2reg.draws}T ${s2reg.losses}L</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="font-size:20px">Playoffs</div>
+          <div class="stat-label" style="margin-top:8px">${team1}: ${s1po.wins}W ${s1po.losses}L &nbsp;|&nbsp; ${team2}: ${s2po.wins}W ${s2po.losses}L</div>
+        </div>
+        ${biggestWin ? `<div class="stat-card">
+          <div class="stat-value" style="font-size:16px">${biggestWin.score1}–${biggestWin.score2}</div>
+          <div class="stat-label">${team1} Biggest Win (${biggestWin.season})</div>
+        </div>` : ''}
+        ${biggestLoss ? `<div class="stat-card">
+          <div class="stat-value" style="font-size:16px">${biggestLoss.score1}–${biggestLoss.score2}</div>
+          <div class="stat-label">${team1} Biggest Loss (${biggestLoss.season})</div>
+        </div>` : ''}
+      </div>` : ''}
+
+      <div class="section">
+        <div class="section-title">All Meetings</div>
+        <div style="overflow-x:auto">
+          <table class="games-table">
+            <thead>
+              <tr>
+                <th>Season</th>
+                <th>Week</th>
+                <th>Home</th>
+                <th style="text-align:center">Score</th>
+                <th>Away</th>
+                <th>${team1} Result</th>
+              </tr>
+            </thead>
+            <tbody>${gameRows()}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+  }catch(err){
+    console.error(err);
+    results.innerHTML = `<div class="error">Failed to load head to head data</div>`;
+  }
+}
+</script>
+</body>
+</html>
