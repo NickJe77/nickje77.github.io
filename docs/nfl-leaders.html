@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>NFL Yearly Leaders | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#edf1f5;color:#111827;}
+.navbar{display:flex;justify-content:center;gap:24px;padding:16px;background:white;border-bottom:1px solid #ddd;flex-wrap:wrap;}
+.navbar a{text-decoration:none;font-weight:800;color:#013369;}
+.navbar a:hover{color:#d50a0a;}
+.hero{background:linear-gradient(135deg,#013369,#d50a0a);color:white;padding:40px 20px;text-align:center;}
+.hero h1{margin:0;font-size:42px;font-weight:900;}
+.controls{background:white;padding:20px;display:flex;justify-content:center;gap:16px;flex-wrap:wrap;border-bottom:1px solid #ddd;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.07);}
+.controls select{font-size:16px;padding:10px 18px;border-radius:12px;border:1px solid #ddd;font-weight:700;min-width:140px;cursor:pointer;background:white;}
+.container{max-width:1300px;margin:30px auto;padding:0 20px 60px;}
+.sections-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:24px;}
+.section{background:white;border-radius:20px;padding:24px;box-shadow:0 2px 10px rgba(0,0,0,.06);}
+.section-title{font-size:18px;font-weight:900;margin-bottom:16px;color:#0f172a;text-transform:uppercase;letter-spacing:.5px;border-left:5px solid #013369;padding-left:12px;}
+table{width:100%;border-collapse:collapse;}
+th{background:#013369;color:white;padding:10px 12px;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;text-align:left;}
+td{padding:10px 12px;border-bottom:1px solid #edf2f7;font-size:14px;font-weight:600;}
+tr:nth-child(even) td{background:#f4f8fd;}
+.rank{color:#888;font-weight:900;width:30px;}
+.player-link{color:#013369;font-weight:800;text-decoration:none;cursor:pointer;}
+.player-link:hover{text-decoration:underline;}
+.stat-val{font-weight:900;text-align:right;color:#0f172a;}
+.loading{text-align:center;padding:80px;font-size:20px;font-weight:700;color:#555;}
+.error{text-align:center;padding:60px;font-size:18px;color:#d90429;font-weight:700;}
+.progress{text-align:center;padding:40px;}
+.progress-bar-wrap{background:#e2e8f0;border-radius:99px;height:10px;max-width:400px;margin:12px auto 0;}
+.progress-bar{background:#013369;height:10px;border-radius:99px;transition:width .2s;}
+.progress-text{font-size:15px;font-weight:700;color:#555;}
+@media(max-width:700px){
+  .sections-grid{grid-template-columns:1fr;}
+  .hero h1{font-size:30px;}
+}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="/">Home</a>
+  <a href="/nfl.html">NFL</a>
+  <a href="/nfl-teams.html">Teams</a>
+  <a href="/nfl-leaders.html">Leaders</a>
+</div>
+
+<div class="hero">
+  <h1>NFL Yearly Leaders</h1>
+</div>
+
+<div class="controls">
+  <select id="yearSel"></select>
+</div>
+
+<div class="container">
+  <div id="leadersContainer"><div class="loading">Loading...</div></div>
+</div>
+
+<script>
+
+const SEASONS = [];
+for(let y = 1970; y <= 2025; y++) SEASONS.push(y);
+
+function normalizeTeam(team){
+  team = String(team || "").trim().toUpperCase();
+  const map = {
+    "NWE":"NE","KAN":"KC","NOR":"NO","SFO":"SF","TAM":"TB",
+    "SDG":"LAC","STL":"LAR","RAI":"LV","GNB":"GB","OAK":"LV",
+    "PHX":"ARI","HTX":"HOU","CLT":"IND"
+  };
+  return map[team] || team;
+}
+
+// Populate year selector
+const sel = document.getElementById("yearSel");
+// Reverse so newest first
+[...SEASONS].reverse().forEach(y => {
+  sel.innerHTML += `<option value="${y}">${y} Season</option>`;
+});
+sel.onchange = () => loadYear(parseInt(sel.value));
+
+// Start with most recent
+loadYear(SEASONS[SEASONS.length - 1]);
+
+async function loadYear(year){
+  const container = document.getElementById("leadersContainer");
+  container.innerHTML = `
+    <div class="progress">
+      <div class="progress-text">Loading player data for ${year}...</div>
+      <div class="progress-bar-wrap"><div class="progress-bar" id="pbar" style="width:0%"></div></div>
+    </div>`;
+
+  try{
+    // Load the players index
+    const indexRes = await fetch("/data/nfl/players.json?v="+Date.now());
+    if(!indexRes.ok) throw new Error("Could not load players index");
+    const allPlayers = await indexRes.json();
+
+    // Filter to players who played in this year
+    const seasonPlayers = allPlayers.filter(p =>
+      (p.seasons || []).includes(year)
+    );
+
+    if(!seasonPlayers.length){
+      container.innerHTML = `<div class="error">No player data found for ${year}.</div>`;
+      return;
+    }
+
+    const totals = [];
+    let done = 0;
+
+    const promises = seasonPlayers.map(async p => {
+      try{
+        const res = await fetch(`/data/nfl/players/${p.player_id}.json?v=${Date.now()}`);
+        if(!res.ok) return;
+        const data = await res.json();
+
+        const games = (data.games || []).filter(g => Number(g.season) === year);
+
+        let passY=0, passTD=0, passAtt=0, passCmp=0, passInt=0;
+        let rushY=0, rushTD=0, rushAtt=0;
+        let recY=0, recTD=0, rec=0, targets=0;
+        const seenGames = new Set();
+        let gameCount = 0;
+        let team = "";
+
+        games.forEach(g => {
+          const s = g.stats || {};
+          if(!seenGames.has(g.game_id)){
+            seenGames.add(g.game_id);
+            gameCount++;
+            if(s.team) team = s.team;
+          }
+          passY   += Number(s.pass_yds || 0);
+          passTD  += Number(s.pass_td  || 0);
+          passAtt += Number(s.pass_att || 0);
+          passCmp += Number(s.pass_cmp || 0);
+          passInt += Number(s.pass_int || 0);
+          rushY   += Number(s.rush_yds || 0);
+          rushTD  += Number(s.rush_td  || 0);
+          rushAtt += Number(s.rush_att || 0);
+          recY    += Number(s.rec_yds  || 0);
+          recTD   += Number(s.rec_td   || 0);
+          rec     += Number(s.rec      || 0);
+          targets += Number(s.targets  || 0);
+        });
+
+        if(gameCount > 0){
+          totals.push({
+            player_id: p.player_id,
+            name: data.name || p.name,
+            team: normalizeTeam(team),
+            games: gameCount,
+            passY, passTD, passAtt, passCmp, passInt,
+            rushY, rushTD, rushAtt,
+            recY, recTD, rec, targets
+          });
+        }
+      }catch(e){ /* skip */ }
+
+      done++;
+      const pct = Math.round((done / seasonPlayers.length) * 100);
+      const bar = document.getElementById("pbar");
+      if(bar) bar.style.width = pct + "%";
+    });
+
+    await Promise.all(promises);
+    renderLeaders(totals, year);
+
+  }catch(err){
+    console.error(err);
+    container.innerHTML = `<div class="error">Failed to load data for ${year}.</div>`;
+  }
+}
+
+function renderLeaders(players, year){
+  const container = document.getElementById("leadersContainer");
+  container.innerHTML = "";
+
+  function top(arr, sortFn, filterFn, n=15){
+    let list = filterFn ? arr.filter(filterFn) : [...arr];
+    return list.sort(sortFn).slice(0, n);
+  }
+
+  function pLink(p){
+    return `<a class="player-link" href="/nfl-player.html?player=${encodeURIComponent(p.player_id)}">${p.name}</a>`;
+  }
+
+  function makeSection(title, data, cols){
+    if(!data.length) return "";
+    let rows = data.map((p, i) => {
+      const cells = cols.map(c => `<td class="${c.cls||''}">${c.fn(p)}</td>`).join('');
+      return `<tr><td class="rank">${i+1}</td>${cells}</tr>`;
+    }).join('');
+    const heads = cols.map(c => `<th>${c.label}</th>`).join('');
+    return `
+      <div class="section">
+        <div class="section-title">${title}</div>
+        <table>
+          <thead><tr><th>#</th>${heads}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  // Min attempts for rate stats
+  const minPassAtt = 14 * 14; // ~14 attempts per game over 14 games
+  const minRushAtt = 50;
+
+  const passers   = players.filter(p => p.passAtt >= minPassAtt);
+  const rushers   = players.filter(p => p.rushAtt >= minRushAtt);
+  const receivers = players.filter(p => p.rec > 0);
+  const anyPass   = players.filter(p => p.passY > 0);
+  const anyRush   = players.filter(p => p.rushY > 0);
+  const anyRec    = players.filter(p => p.recY > 0);
+
+  const sections = [
+
+    makeSection("Passing Yards",
+      top(anyPass, (a,b) => b.passY - a.passY),
+      [
+        {label:"Player", fn: p => pLink(p)},
+        {label:"Team",   fn: p => p.team},
+        {label:"Yards",  fn: p => p.passY.toLocaleString(), cls:"stat-val"},
+        {label:"TD",     fn: p => p.passTD, cls:"stat-val"},
+      ]
+    ),
+
+    makeSection("Passing Touchdowns",
+      top(anyPass, (a,b) => b.passTD - a.passTD),
+      [
+        {label:"Player", fn: p => pLink(p)},
+        {label:"Team",   fn: p => p.team},
+        {label:"TD",     fn: p => p.passTD, cls:"stat-val"},
+        {label:"Yards",  fn: p => p.passY.toLocaleString(), cls:"stat-val"},
+      ]
+    ),
+
+    makeSection("Passer Rating",
+      top(passers, (a,b) => b._rating - a._rating).map(p => {
+        // NFL passer rating formula
+        const a_ = Math.min(Math.max((p.passCmp/p.passAtt - .3) * 5, 0), 2.375);
+        const b_ = Math.min(Math.max((p.passY/p.passAtt - 3) * .25, 0), 2.375);
+        const c_ = Math.min(Math.max((p.passTD/p.passAtt) * 20, 0), 2.375);
+        const d_ = Math.min(Math.max(2.375 - (p.passInt/p.passAtt) * 25, 0), 2.375);
+        p._rating = ((a_+b_+c_+d_)/6)*100;
+        return p;
+      }).sort((a,b) => b._rating - a._rating).slice(0,15),
+      [
+        {label:"Player",  fn: p => pLink(p)},
+        {label:"Team",    fn: p => p.team},
+        {label:"Rating",  fn: p => (p._rating||0).toFixed(1), cls:"stat-val"},
+        {label:"Att",     fn: p => p.passAtt, cls:"stat-val"},
+      ]
+    ),
+
+    makeSection("Completion %",
+      top(passers, (a,b) => (b.passCmp/b.passAtt) - (a.passCmp/a.passAtt)),
+      [
+        {label:"Player", fn: p => pLink(p)},
+        {label:"Team",   fn: p => p.team},
+        {label:"Cmp%",   fn: p => p.passAtt ? ((p.passCmp/p.passAtt)*100).toFixed(1)+"%" : "–", cls:"stat-val"},
+        {label:"Att",    fn: p => p.passAtt, cls:"stat-val"},
+      ]
+    ),
+
+    makeSection("Rushing Yards",
+      top(anyRush, (a,b) => b.rushY - a.rushY),
+      [
+        {label:"Player", fn: p => pLink(p)},
+        {label:"Team",   fn: p => p.team},
+        {label:"Yards",  fn: p => p.rushY.toLocaleString(), cls:"stat-val"},
+        {label:"TD",     fn: p => p.rushTD, cls:"stat-val"},
+      ]
+    ),
+
+    makeSection("Rushing Touchdowns",
+      top(anyRush, (a,b) => b.rushTD - a.rushTD),
+      [
+        {label:"Player", fn: p => pLink(p)},
+        {label:"Team",   fn: p => p.team},
+        {label:"TD",     fn: p => p.rushTD, cls:"stat-val"},
+        {label:"Yards",  fn: p => p.rushY.toLocaleString(), cls:"stat-val"},
+      ]
+    ),
+
+    makeSection("Yards Per Carry",
+      top(rushers, (a,b) => (b.rushY/b.rushAtt) - (a.rushY/a.rushAtt)),
+      [
+        {label:"Player", fn: p => pLink(p)},
+        {label:"Team",   fn: p => p.team},
+        {label:"YPC",    fn: p => p.rushAtt ? (p.rushY/p.rushAtt).toFixed(1) : "–", cls:"stat-val"},
+        {label:"Att",    fn: p => p.rushAtt, cls:"stat-val"},
+      ]
+    ),
+
+    makeSection("Receiving Yards",
+      top(anyRec, (a,b) => b.recY - a.recY),
+      [
+        {label:"Player", fn: p => pLink(p)},
+        {label:"Team",   fn: p => p.team},
+        {label:"Yards",  fn: p => p.recY.toLocaleString(), cls:"stat-val"},
+        {label:"TD",     fn: p => p.recTD, cls:"stat-val"},
+      ]
+    ),
+
+    makeSection("Receiving Touchdowns",
+      top(anyRec, (a,b) => b.recTD - a.recTD),
+      [
+        {label:"Player", fn: p => pLink(p)},
+        {label:"Team",   fn: p => p.team},
+        {label:"TD",     fn: p => p.recTD, cls:"stat-val"},
+        {label:"Yards",  fn: p => p.recY.toLocaleString(), cls:"stat-val"},
+      ]
+    ),
+
+    makeSection("Receptions",
+      top(anyRec, (a,b) => b.rec - a.rec),
+      [
+        {label:"Player", fn: p => pLink(p)},
+        {label:"Team",   fn: p => p.team},
+        {label:"Rec",    fn: p => p.rec, cls:"stat-val"},
+        {label:"Yards",  fn: p => p.recY.toLocaleString(), cls:"stat-val"},
+      ]
+    ),
+
+    makeSection("Yards Per Reception",
+      top(receivers, (a,b) => (b.recY/b.rec) - (a.recY/a.rec)),
+      [
+        {label:"Player", fn: p => pLink(p)},
+        {label:"Team",   fn: p => p.team},
+        {label:"YPR",    fn: p => p.rec ? (p.recY/p.rec).toFixed(1) : "–", cls:"stat-val"},
+        {label:"Rec",    fn: p => p.rec, cls:"stat-val"},
+      ]
+    ),
+
+    makeSection("Interceptions Thrown",
+      top(anyPass, (a,b) => b.passInt - a.passInt),
+      [
+        {label:"Player", fn: p => pLink(p)},
+        {label:"Team",   fn: p => p.team},
+        {label:"INT",    fn: p => p.passInt, cls:"stat-val"},
+        {label:"Att",    fn: p => p.passAtt, cls:"stat-val"},
+      ]
+    ),
+
+  ].filter(Boolean);
+
+  container.innerHTML = `<div class="sections-grid">${sections.join('')}</div>`;
+}
+
+</script>
+</body>
+</html>
