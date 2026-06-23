@@ -14,34 +14,30 @@ body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;background:#edf1f5;co
 .hero h1{margin:0;font-size:42px;font-weight:900;}
 .hero p{margin-top:8px;font-size:16px;opacity:.85;}
 .controls{background:white;padding:16px 20px;display:flex;justify-content:center;align-items:center;gap:16px;flex-wrap:wrap;border-bottom:1px solid #ddd;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.07);}
-.controls select{font-size:15px;padding:10px 16px;border-radius:12px;border:1px solid #ddd;font-weight:700;cursor:pointer;background:white;}
 .controls label{font-weight:800;font-size:14px;color:#013369;}
+.controls select{font-size:15px;padding:10px 16px;border-radius:12px;border:1px solid #ddd;font-weight:700;cursor:pointer;background:white;}
 .container{max-width:1300px;margin:30px auto;padding:0 20px 60px;}
-.sections-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:24px;}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:24px;}
 .section{background:white;border-radius:20px;padding:24px;box-shadow:0 2px 10px rgba(0,0,0,.06);}
 .section-title{font-size:18px;font-weight:900;margin-bottom:16px;color:#0f172a;text-transform:uppercase;letter-spacing:.5px;border-left:5px solid #013369;padding-left:12px;}
 table{width:100%;border-collapse:collapse;}
 th{background:#013369;color:white;padding:10px 12px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;text-align:left;}
-td{padding:10px 12px;border-bottom:1px solid #edf2f7;font-size:13px;font-weight:600;vertical-align:middle;}
+td{padding:10px 12px;border-bottom:1px solid #edf2f7;font-size:13px;font-weight:600;vertical-align:top;}
 tr:nth-child(even) td{background:#f4f8fd;}
 tbody tr:hover td{background:#e7f0ff;cursor:pointer;}
-.rank{color:#888;font-weight:900;width:28px;text-align:center;}
-.player-link{color:#013369;font-weight:800;text-decoration:none;}
-.player-link:hover{text-decoration:underline;}
-.stat-val{font-weight:900;text-align:right;color:#0f172a;font-size:16px;}
-.meta{color:#666;font-size:12px;margin-top:2px;}
-.badge{display:inline-block;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;background:#013369;color:white;}
-.badge.playoff{background:#d50a0a;}
+.rank{color:#888;font-weight:900;text-align:center;width:28px;}
+.stat-val{font-weight:900;text-align:right;font-size:16px;color:#0f172a;white-space:nowrap;}
+.plink{color:#013369;font-weight:800;text-decoration:none;}
+.plink:hover{text-decoration:underline;}
+.meta{color:#666;font-size:11px;margin-top:2px;}
+.badge{display:inline-block;padding:1px 6px;border-radius:5px;font-size:10px;font-weight:900;text-transform:uppercase;background:#013369;color:white;}
+.badge.po{background:#d50a0a;}
 .loading{text-align:center;padding:80px;font-size:20px;font-weight:700;color:#555;}
-.error{text-align:center;padding:60px;font-size:18px;color:#d90429;font-weight:700;}
-@media(max-width:700px){
-  .sections-grid{grid-template-columns:1fr;}
-  .hero h1{font-size:28px;}
-}
+.error{text-align:center;padding:60px;font-size:16px;color:#d90429;font-weight:700;}
+@media(max-width:700px){.grid{grid-template-columns:1fr;}.hero h1{font-size:28px;}}
 </style>
 </head>
 <body>
-
 <div class="navbar">
   <a href="/">Home</a>
   <a href="/nfl.html">NFL</a>
@@ -49,124 +45,90 @@ tbody tr:hover td{background:#e7f0ff;cursor:pointer;}
   <a href="/nfl-leaders.html">Leaders</a>
   <a href="/nfl-records.html">Records</a>
 </div>
-
 <div class="hero">
   <h1>Single Game Records</h1>
   <p>The greatest individual performances in NFL history</p>
 </div>
-
 <div class="controls">
   <label>Filter:</label>
-  <select id="gameTypeSel">
+  <select id="gameTypeSel" onchange="render()">
     <option value="all">All Games</option>
     <option value="regular">Regular Season Only</option>
     <option value="playoff">Playoffs Only</option>
   </select>
-
-    <option value="all">All Eras</option>
-    <option value="1970">1970s</option>
-    <option value="1980">1980s</option>
-    <option value="1990">1990s</option>
-    <option value="2000">2000s</option>
-    <option value="2010">2010s</option>
-    <option value="2020">2020s</option>
-  </select>
 </div>
-
 <div class="container">
-  <div id="recordsContainer"><div class="loading">Loading...</div></div>
+  <div id="out"><div class="loading">Loading...</div></div>
 </div>
-
 <script>
+var DATA = {};
 
-let rawRecords = {};
+fetch('/data/nfl/game-records.json')
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    DATA = d.records || {};
+    render();
+  })
+  .catch(function(e){
+    document.getElementById('out').innerHTML = '<div class="error">Failed to load game-records.json<br>' + e + '</div>';
+  });
 
-async function init(){
-  // Try multiple path variants to handle different hosting setups
-  const paths = [
-    "/data/nfl/game-records.json",
-    "data/nfl/game-records.json",
-    "/docs/data/nfl/game-records.json",
-  ];
-  for(const path of paths){
-    try{
-      const res = await fetch(path);
-      if(!res.ok) continue;
-      const data = await res.json();
-      rawRecords = data.records || {};
-      render();
-      return;
-    }catch(e){ continue; }
+function filter(list) {
+  var gt = document.getElementById('gameTypeSel').value;
+  var out = [];
+  for (var i = 0; i < list.length; i++) {
+    var r = list[i];
+    if (gt === 'regular' && r.playoff) continue;
+    if (gt === 'playoff' && !r.playoff) continue;
+    out.push(r);
+    if (out.length >= 10) break;
   }
-  document.getElementById("recordsContainer").innerHTML =
-    `<div class="error">Could not load game-records.json.<br>Tried: ${paths.join(", ")}</div>`;
+  return out;
 }
 
-document.getElementById("gameTypeSel").onchange = render;
-
-function filtered(list){
-  const gameType = document.getElementById("gameTypeSel").value;
-  return (list||[]).filter(r => {
-    if(gameType === "regular" && r.playoff) return false;
-    if(gameType === "playoff" && !r.playoff) return false;
-    return true;
-  }).slice(0, 10);
-}).slice(0, 10);
+function badge(r) {
+  if (r.playoff) return '<span class="badge po">' + (r.week || 'PO') + '</span>';
+  return '<span class="badge">Wk ' + r.week + '</span>';
 }
 
-function pLink(r){
-  return `<a class="player-link" href="/nfl-player.html?player=${encodeURIComponent(r.player_id)}">${r.name}</a>`;
+function section(title, key, statFn, colLabel) {
+  var list = DATA[key];
+  if (!list || !list.length) return '';
+  var rows = filter(list);
+  if (!rows.length) return '';
+  var html = '<div class="section"><div class="section-title">' + title + '</div><table>';
+  html += '<thead><tr><th>#</th><th>Player</th><th>' + colLabel + '</th></tr></thead><tbody>';
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    html += '<tr onclick="location.href=\'/nfl-player.html?player=' + encodeURIComponent(r.player_id) + '\'">';
+    html += '<td class="rank">' + (i+1) + '</td>';
+    html += '<td><a class="plink" href="/nfl-player.html?player=' + encodeURIComponent(r.player_id) + '">' + r.name + '</a>';
+    html += '<div class="meta">' + r.team + ' vs ' + r.opponent + ' &middot; ' + r.season + ' ' + badge(r) + '</div></td>';
+    html += '<td class="stat-val">' + statFn(r) + '</td>';
+    html += '</tr>';
+  }
+  html += '</tbody></table></div>';
+  return html;
 }
 
-function weekBadge(r){
-  return r.playoff
-    ? `<span class="badge playoff">${r.week||"PO"}</span>`
-    : `<span class="badge">Wk ${r.week}</span>`;
+function render() {
+  if (!Object.keys(DATA).length) return;
+  var html = '<div class="grid">'
+    + section('Most Passing Yards',        'pass_yds',  function(r){return r.pass_yds.toLocaleString();}, 'Yards')
+    + section('Most Passing Touchdowns',   'pass_td',   function(r){return r.pass_td;},                   'TD')
+    + section('Most Passing Attempts',     'pass_att',  function(r){return r.pass_att;},                  'Att')
+    + section('Most Interceptions Thrown', 'pass_int',  function(r){return r.pass_int;},                  'INT')
+    + section('Most Rushing Yards',        'rush_yds',  function(r){return r.rush_yds.toLocaleString();}, 'Yards')
+    + section('Most Rushing Touchdowns',   'rush_td',   function(r){return r.rush_td;},                   'TD')
+    + section('Most Rushing Attempts',     'rush_att',  function(r){return r.rush_att;},                  'Att')
+    + section('Most Receiving Yards',      'rec_yds',   function(r){return r.rec_yds.toLocaleString();},  'Yards')
+    + section('Most Receiving Touchdowns', 'rec_td',    function(r){return r.rec_td;},                    'TD')
+    + section('Most Receptions',           'rec',       function(r){return r.rec;},                       'Rec')
+    + section('Most Total Yards',          'total_yds', function(r){return r.total_yds.toLocaleString();},'Yards')
+    + section('Most Total Touchdowns',     'total_td',  function(r){return r.total_td;},                  'TD')
+    + '</div>';
+  document.getElementById('out').innerHTML = html || '<div class="error">No records match this filter.</div>';
 }
-
-function makeSection(title, key, statFn, colLabel){
-  const data = filtered(rawRecords[key]);
-  if(!data.length) return "";
-  const rows = data.map((r,i) => `
-    <tr onclick="window.location.href='/nfl-player.html?player=${encodeURIComponent(r.player_id)}'">
-      <td class="rank">${i+1}</td>
-      <td>
-        ${pLink(r)}
-        <div class="meta">${r.team} vs ${r.opponent} &middot; ${r.season} ${weekBadge(r)}</div>
-      </td>
-      <td class="stat-val">${statFn(r)}</td>
-    </tr>`).join('');
-  return `
-    <div class="section">
-      <div class="section-title">${title}</div>
-      <table>
-        <thead><tr><th>#</th><th>Player</th><th>${colLabel}</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
-}
-
-function render(){
-  const sections = [
-    makeSection("Most Passing Yards",       "pass_yds",  r => r.pass_yds.toLocaleString(), "Yards"),
-    makeSection("Most Passing Touchdowns",  "pass_td",   r => r.pass_td,                    "TD"),
-    makeSection("Most Passing Attempts",    "pass_att",  r => r.pass_att,                  "Att"),
-    makeSection("Most Interceptions",       "pass_int",  r => r.pass_int,                  "INT"),
-    makeSection("Most Rushing Yards",       "rush_yds",  r => r.rush_yds.toLocaleString(), "Yards"),
-    makeSection("Most Rushing Touchdowns",  "rush_td",   r => r.rush_td,                    "TD"),
-    makeSection("Most Rushing Attempts",    "rush_att",  r => r.rush_att,                  "Att"),
-    makeSection("Most Receiving Yards",     "rec_yds",   r => r.rec_yds.toLocaleString(),  "Yards"),
-    makeSection("Most Receiving Touchdowns","rec_td",    r => r.rec_td,                     "TD"),
-    makeSection("Most Receptions",          "rec",       r => r.rec,                       "Rec"),
-    makeSection("Most Total Yards",         "total_yds", r => r.total_yds.toLocaleString(),"Yards"),
-    makeSection("Most Total Touchdowns",    "total_td",  r => r.total_td,                   "TD"),
-  ].filter(Boolean).join('');
-
-  document.getElementById("recordsContainer").innerHTML =
-    sections || `<div class="error">No records match this filter.</div>`;
-}
-
-init();
 </script>
 </body>
 </html>
