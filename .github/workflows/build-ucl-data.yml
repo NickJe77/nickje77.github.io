@@ -11,14 +11,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Run build script
+      - name: Write build script
         run: |
-          python3 - << 'PYEOF'
+          cat > /tmp/build_ucl.py << 'EOF'
 import json, os, re, sys
 from pathlib import Path
 
 MATCHES_DIR = Path("docs/data/ucl/matches")
-OUT_DIR     = Path("docs/data/ucl")
+OUT_DIR = Path("docs/data/ucl")
 
 TEAM_NAME_MAP = {
     "Man Utd": "Manchester United", "Man United": "Manchester United",
@@ -53,13 +53,11 @@ def season_from_path(fp):
         idx = list(parts).index("matches")
         raw = parts[idx + 1]
         m = re.match(r'^(\d{4})-\d*(\d{2})$', raw)
-        if m: raw = m.group(1) + "-" + m.group(2)
+        if m:
+            raw = m.group(1) + "-" + m.group(2)
         return raw
-    except: return "unknown"
-
-def get_or_create(d, key, factory):
-    if key not in d: d[key] = factory()
-    return d[key]
+    except:
+        return "unknown"
 
 def make_ts(team, season):
     return {"team": team, "season": season, "played": 0, "wins": 0, "draws": 0,
@@ -77,37 +75,52 @@ def make_ps(season, team):
 
 def find_player(pm, name, team):
     keys = [k for k in pm if k == name or k.startswith(name + "|")]
-    if not keys: return name + "|" + team if team else name
+    if not keys:
+        return name + "|" + team if team else name
     for k in keys:
-        if team in pm[k]["teams"]: return k
+        if team in pm[k]["teams"]:
+            return k
     return keys[0]
 
 def get_player(pm, name, team):
     key = find_player(pm, name, team)
-    if key not in pm: pm[key] = make_player(name)
+    if key not in pm:
+        pm[key] = make_player(name)
     return pm[key], key
 
 def get_ps(player, season, team):
     for s in player["season_stats"]:
-        if s["season"] == season and s["team"] == team: return s
+        if s["season"] == season and s["team"] == team:
+            return s
     e = make_ps(season, team)
     player["season_stats"].append(e)
     return e
 
 def add_team(p, t):
-    if t and t not in p["teams"]: p["teams"].append(t)
+    if t and t not in p["teams"]:
+        p["teams"].append(t)
 
 def add_season(p, s):
-    if s and s not in p["seasons"]: p["seasons"].append(s)
+    if s and s not in p["seasons"]:
+        p["seasons"].append(s)
 
 def resolve_team(raw, name, home, away, lineup_map, known):
     t = nt(raw)
-    if t: return t
-    if name in lineup_map: return lineup_map[name]
+    if t:
+        return t
+    if name in lineup_map:
+        return lineup_map[name]
     if name in known:
         prev = known[name]
-        if prev == home or prev == away: return prev
+        if prev == home or prev == away:
+            return prev
     return ""
+
+def get_or_create_ts(ts_map, team, season):
+    key = f"{team}|{season}"
+    if key not in ts_map:
+        ts_map[key] = make_ts(team, season)
+    return ts_map[key]
 
 files = sorted(MATCHES_DIR.rglob("*.json"))
 print(f"Found {len(files)} match files")
@@ -119,8 +132,10 @@ known = {}
 
 for fp in files:
     try:
-        with open(fp, encoding="utf-8") as f: match = json.load(f)
-    except: continue
+        with open(fp, encoding="utf-8") as f:
+            match = json.load(f)
+    except:
+        continue
 
     season = season_from_path(fp)
     home = nt(match.get("home_team") or match.get("home") or "")
@@ -128,79 +143,104 @@ for fp in files:
     hs = match.get("home_score") or 0
     as_ = match.get("away_score") or 0
 
-    if not home or not away: continue
-    teams_set.add(home); teams_set.add(away)
+    if not home or not away:
+        continue
+    teams_set.add(home)
+    teams_set.add(away)
 
     lineup_map = {}
     for n in match.get("home_lineup") or []:
-        if n: lineup_map[n.strip()] = home
+        if n:
+            lineup_map[n.strip()] = home
     for n in match.get("away_lineup") or []:
-        if n: lineup_map[n.strip()] = away
+        if n:
+            lineup_map[n.strip()] = away
 
     for team, scored, conceded in [(home, hs, as_), (away, as_, hs)]:
-        key = f"{team}|{season}"
-        s = get_or_create(ts_map, key, lambda: make_ts(team, season))
-        s["played"] += 1; s["goals_for"] += scored; s["goals_against"] += conceded
-        if scored > conceded: s["wins"] += 1; s["points"] += 3
-        elif scored == conceded: s["draws"] += 1; s["points"] += 1
-        else: s["losses"] += 1
-        if conceded == 0: s["clean_sheets"] += 1
+        s = get_or_create_ts(ts_map, team, season)
+        s["played"] += 1
+        s["goals_for"] += scored
+        s["goals_against"] += conceded
+        if scored > conceded:
+            s["wins"] += 1
+            s["points"] += 3
+        elif scored == conceded:
+            s["draws"] += 1
+            s["points"] += 1
+        else:
+            s["losses"] += 1
+        if conceded == 0:
+            s["clean_sheets"] += 1
 
     for pname, team in lineup_map.items():
-        if not pname or not team: continue
+        if not pname or not team:
+            continue
         known[pname] = team
         p, k = get_player(pm, pname, team)
-        add_team(p, team); add_season(p, season)
+        add_team(p, team)
+        add_season(p, season)
         p["games"] += 1
         ps = get_ps(p, season, team)
         ps["games"] += 1
 
     for card in match.get("yellow_cards") or []:
         name = (card.get("player") or "").strip()
-        if not name: continue
+        if not name:
+            continue
         team = resolve_team(card.get("team") or "", name, home, away, lineup_map, known)
-        if not team: continue
+        if not team:
+            continue
         known[name] = team
-        ts_map.get(f"{team}|{season}", {}).update({}) 
-        s = get_or_create(ts_map, f"{team}|{season}", lambda: make_ts(team, season))
-        s["yellow_cards"] += 1
+        get_or_create_ts(ts_map, team, season)["yellow_cards"] += 1
         p, k = get_player(pm, name, team)
-        add_team(p, team); add_season(p, season)
+        add_team(p, team)
+        add_season(p, season)
         p["yellow_cards"] += 1
         get_ps(p, season, team)["yellow_cards"] += 1
 
     for card in match.get("red_cards") or []:
         name = (card.get("player") or "").strip()
-        if not name: continue
+        if not name:
+            continue
         team = resolve_team(card.get("team") or "", name, home, away, lineup_map, known)
-        if not team: continue
+        if not team:
+            continue
         known[name] = team
-        s = get_or_create(ts_map, f"{team}|{season}", lambda: make_ts(team, season))
-        s["red_cards"] += 1
+        get_or_create_ts(ts_map, team, season)["red_cards"] += 1
         p, k = get_player(pm, name, team)
-        add_team(p, team); add_season(p, season)
+        add_team(p, team)
+        add_season(p, season)
         p["red_cards"] += 1
         get_ps(p, season, team)["red_cards"] += 1
 
     for scorer in match.get("scorers") or []:
         name = (scorer.get("player") or "").strip()
-        if not name: continue
+        if not name:
+            continue
         team = resolve_team(scorer.get("team") or "", name, home, away, lineup_map, known)
-        if not team: continue
+        if not team:
+            continue
         known[name] = team
         opp = away if team == home else (home if team == away else "")
         p, k = get_player(pm, name, team)
-        add_team(p, team); add_season(p, season)
+        add_team(p, team)
+        add_season(p, season)
         ps = get_ps(p, season, team)
         if scorer.get("own_goal"):
-            p["own_goals"] += 1; ps["own_goals"] += 1
+            p["own_goals"] += 1
+            ps["own_goals"] += 1
         elif scorer.get("penalty"):
-            p["penalties"] += 1; p["goals"] += 1
-            ps["penalties"] += 1; ps["goals"] += 1
-            if opp: ps["goals_by_opponent"][opp] = ps["goals_by_opponent"].get(opp, 0) + 1
+            p["penalties"] += 1
+            p["goals"] += 1
+            ps["penalties"] += 1
+            ps["goals"] += 1
+            if opp:
+                ps["goals_by_opponent"][opp] = ps["goals_by_opponent"].get(opp, 0) + 1
         else:
-            p["goals"] += 1; ps["goals"] += 1
-            if opp: ps["goals_by_opponent"][opp] = ps["goals_by_opponent"].get(opp, 0) + 1
+            p["goals"] += 1
+            ps["goals"] += 1
+            if opp:
+                ps["goals_by_opponent"][opp] = ps["goals_by_opponent"].get(opp, 0) + 1
 
 for s in ts_map.values():
     s["goal_difference"] = s["goals_for"] - s["goals_against"]
@@ -212,12 +252,16 @@ teams = [{"name": t} for t in sorted(teams_set) if t]
 team_stats = sorted(ts_map.values(), key=lambda s: (s["season"], s["team"]))
 
 OUT_DIR.mkdir(parents=True, exist_ok=True)
-with open(OUT_DIR / "players.json", "w", encoding="utf-8") as f: json.dump(players, f, indent=2, ensure_ascii=False)
-with open(OUT_DIR / "teams.json", "w", encoding="utf-8") as f: json.dump(teams, f, indent=2, ensure_ascii=False)
-with open(OUT_DIR / "team-stats.json", "w", encoding="utf-8") as f: json.dump(team_stats, f, indent=2, ensure_ascii=False)
+with open(OUT_DIR / "players.json", "w", encoding="utf-8") as f:
+    json.dump(players, f, indent=2, ensure_ascii=False)
+with open(OUT_DIR / "teams.json", "w", encoding="utf-8") as f:
+    json.dump(teams, f, indent=2, ensure_ascii=False)
+with open(OUT_DIR / "team-stats.json", "w", encoding="utf-8") as f:
+    json.dump(team_stats, f, indent=2, ensure_ascii=False)
 print(f"Done! {len(files)} matches -> {len(players)} players, {len(teams)} teams.")
-PYEOF
-
+EOF
+      - name: Run build script
+        run: python3 /tmp/build_ucl.py
       - name: Debug output
         run: |
           echo "--- ucl dir ---"
