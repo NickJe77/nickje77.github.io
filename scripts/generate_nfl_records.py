@@ -33,8 +33,11 @@ TEAM_MAP = {
 }
 
 PLAYOFF_WEEKS = {
-    "wildcard", "wild card", "wild-card", "division", "divisional",
-    "confchamp", "nfccg", "afccg", "championship", "superbowl",
+    # Exact values seen in season JSON files (case-insensitive after stripping)
+    "wildcard", "wildcardround",
+    "division", "divisional", "divisionalround",
+    "confchamp", "nfccg", "afccg", "conferencechampionship", "championship",
+    "superbowl", "superbowlgame",
 }
 
 def normalize_team(t):
@@ -42,9 +45,10 @@ def normalize_team(t):
     return TEAM_MAP.get(t, t)
 
 def is_playoff(week, game_type=""):
-    w = str(week or "").lower().replace(" ", "").replace("-", "")
+    # Strip spaces, hyphens, underscores and lowercase before matching
+    w = str(week or "").lower().replace(" ", "").replace("-", "").replace("_", "")
     gt = str(game_type or "").lower()
-    return w in PLAYOFF_WEEKS or "playoff" in gt or "post" in gt
+    return w in PLAYOFF_WEEKS or "playoff" in gt or "post" in gt or "super" in w
 
 def safe_int(v):
     try:
