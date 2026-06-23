@@ -1,52 +1,28 @@
 name: Build EPL Data
 on:
-  push:
-    paths:
-      - "docs/data/epl/matches/**"
   workflow_dispatch:
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-      - name: Debug - count West Ham red cards manually
-        run: |
-          python3 - <<'EOF'
-          import json, glob
-          yellow_total = 0
-          red_total = 0
-          red_matches = []
-          files = sorted(glob.glob("docs/data/epl/matches/2025-2026/*.json"))
-          print(f"Scanning {len(files)} files in 2025-2026...\n")
-          for f in files:
-              data = json.load(open(f))
-              reds = [c for c in (data.get("red_cards") or []) if c.get("team") == "West Ham United"]
-              yellows = [c for c in (data.get("yellow_cards") or []) if c.get("team") == "West Ham United"]
-              if reds:
-                  red_total += len(reds)
-                  red_matches.append((f, reds))
-              yellow_total += len(yellows)
-          print(f"West Ham yellow cards: {yellow_total}")
-          print(f"West Ham red cards:    {red_total}")
-          print(f"\nMatches with red cards:")
-          for f, reds in red_matches:
-              print(f"  {f}: {reds}")
-          EOF
+          python-version: '3.11'
       - name: Run build script
-        run: python scripts/build_epl_data.py
-      - name: Commit and push generated files
         run: |
-          git config user.name  "github-actions[bot]"
+          python3 -c "import base64; open('/tmp/build_epl.py','w',encoding='utf-8').write(base64.b64decode('aW1wb3J0IGpzb24sIG9zLCByZSwgc3lzCmZyb20gcGF0aGxpYiBpbXBvcnQgUGF0aAoKTUFUQ0hFU19ESVIgPSBQYXRoKCJkb2NzL2RhdGEvZXBsL21hdGNoZXMiKQpPVVRfRElSID0gUGF0aCgiZG9jcy9kYXRhL2VwbCIpCgpkZWYgc2Vhc29uX2Zyb21fcGF0aChmcCk6CiAgICBwYXJ0cyA9IGZwLnBhcnRzCiAgICB0cnk6CiAgICAgICAgaWR4ID0gbGlzdChwYXJ0cykuaW5kZXgoIm1hdGNoZXMiKQogICAgICAgIHJldHVybiBwYXJ0c1tpZHggKyAxXQogICAgZXhjZXB0OgogICAgICAgIHJldHVybiAidW5rbm93biIKCmRlZiBtYWtlX3RzKHRlYW0sIHNlYXNvbik6CiAgICByZXR1cm4geyJ0ZWFtIjogdGVhbSwgInNlYXNvbiI6IHNlYXNvbiwgInBsYXllZCI6IDAsICJ3aW5zIjogMCwgImRyYXdzIjogMCwKICAgICAgICAgICAgImxvc3NlcyI6IDAsICJnb2Fsc19mb3IiOiAwLCAiZ29hbHNfYWdhaW5zdCI6IDAsICJnb2FsX2RpZmZlcmVuY2UiOiAwLAogICAgICAgICAgICAicG9pbnRzIjogMCwgImNsZWFuX3NoZWV0cyI6IDAsICJ5ZWxsb3dfY2FyZHMiOiAwLCAicmVkX2NhcmRzIjogMH0KCmRlZiBtYWtlX3BsYXllcihuYW1lKToKICAgIHJldHVybiB7Im5hbWUiOiBuYW1lLCAidGVhbXMiOiBbXSwgInNlYXNvbnMiOiBbXSwgImdhbWVzIjogMCwgImdvYWxzIjogMCwKICAgICAgICAgICAgInBlbmFsdGllcyI6IDAsICJvd25fZ29hbHMiOiAwLCAieWVsbG93X2NhcmRzIjogMCwgInJlZF9jYXJkcyI6IDAsCiAgICAgICAgICAgICJzZWFzb25fc3RhdHMiOiBbXX0KCmRlZiBtYWtlX3BzKHNlYXNvbiwgdGVhbSk6CiAgICByZXR1cm4geyJzZWFzb24iOiBzZWFzb24sICJ0ZWFtIjogdGVhbSwgImdhbWVzIjogMCwgImdvYWxzIjogMCwgInBlbmFsdGllcyI6IDAsCiAgICAgICAgICAgICJvd25fZ29hbHMiOiAwLCAieWVsbG93X2NhcmRzIjogMCwgInJlZF9jYXJkcyI6IDAsICJnb2Fsc19ieV9vcHBvbmVudCI6IHt9fQoKZGVmIGZpbmRfcGxheWVyKHBtLCBuYW1lLCB0ZWFtKToKICAgIGtleXMgPSBbayBmb3IgayBpbiBwbSBpZiBrID09IG5hbWUgb3Igay5zdGFydHN3aXRoKG5hbWUgKyAifCIpXQogICAgaWYgbm90IGtleXM6CiAgICAgICAgcmV0dXJuIG5hbWUgKyAifCIgKyB0ZWFtIGlmIHRlYW0gZWxzZSBuYW1lCiAgICBmb3IgayBpbiBrZXlzOgogICAgICAgIGlmIHRlYW0gaW4gcG1ba11bInRlYW1zIl06CiAgICAgICAgICAgIHJldHVybiBrCiAgICByZXR1cm4ga2V5c1swXQoKZGVmIGdldF9wbGF5ZXIocG0sIG5hbWUsIHRlYW0pOgogICAga2V5ID0gZmluZF9wbGF5ZXIocG0sIG5hbWUsIHRlYW0pCiAgICBpZiBrZXkgbm90IGluIHBtOgogICAgICAgIHBtW2tleV0gPSBtYWtlX3BsYXllcihuYW1lKQogICAgcmV0dXJuIHBtW2tleV0sIGtleQoKZGVmIGdldF9wcyhwbGF5ZXIsIHNlYXNvbiwgdGVhbSk6CiAgICBmb3IgcyBpbiBwbGF5ZXJbInNlYXNvbl9zdGF0cyJdOgogICAgICAgIGlmIHNbInNlYXNvbiJdID09IHNlYXNvbiBhbmQgc1sidGVhbSJdID09IHRlYW06CiAgICAgICAgICAgIHJldHVybiBzCiAgICBlID0gbWFrZV9wcyhzZWFzb24sIHRlYW0pCiAgICBwbGF5ZXJbInNlYXNvbl9zdGF0cyJdLmFwcGVuZChlKQogICAgcmV0dXJuIGUKCmRlZiBhZGRfdGVhbShwLCB0KToKICAgIGlmIHQgYW5kIHQgbm90IGluIHBbInRlYW1zIl06CiAgICAgICAgcFsidGVhbXMiXS5hcHBlbmQodCkKCmRlZiBhZGRfc2Vhc29uKHAsIHMpOgogICAgaWYgcyBhbmQgcyBub3QgaW4gcFsic2Vhc29ucyJdOgogICAgICAgIHBbInNlYXNvbnMiXS5hcHBlbmQocykKCmRlZiBnZXRfb3JfY3JlYXRlX3RzKHRzX21hcCwgdGVhbSwgc2Vhc29uKToKICAgIGtleSA9IGYie3RlYW19fHtzZWFzb259IgogICAgaWYga2V5IG5vdCBpbiB0c19tYXA6CiAgICAgICAgdHNfbWFwW2tleV0gPSBtYWtlX3RzKHRlYW0sIHNlYXNvbikKICAgIHJldHVybiB0c19tYXBba2V5XQoKZmlsZXMgPSBzb3J0ZWQoTUFUQ0hFU19ESVIucmdsb2IoIiouanNvbiIpKQpwcmludChmIkZvdW5kIHtsZW4oZmlsZXMpfSBtYXRjaCBmaWxlcyIpCgpwbSA9IHt9CnRzX21hcCA9IHt9CnRlYW1zX3NldCA9IHNldCgpCgpmb3IgZnAgaW4gZmlsZXM6CiAgICB0cnk6CiAgICAgICAgd2l0aCBvcGVuKGZwLCBlbmNvZGluZz0idXRmLTgiKSBhcyBmOgogICAgICAgICAgICBtYXRjaCA9IGpzb24ubG9hZChmKQogICAgZXhjZXB0OgogICAgICAgIGNvbnRpbnVlCgogICAgc2Vhc29uID0gc2Vhc29uX2Zyb21fcGF0aChmcCkKICAgIGhvbWUgPSAobWF0Y2guZ2V0KCJob21lX3RlYW0iKSBvciBtYXRjaC5nZXQoImhvbWUiKSBvciAiIikuc3RyaXAoKQogICAgYXdheSA9IChtYXRjaC5nZXQoImF3YXlfdGVhbSIpIG9yIG1hdGNoLmdldCgiYXdheSIpIG9yICIiKS5zdHJpcCgpCiAgICBocyA9IG1hdGNoLmdldCgiaG9tZV9zY29yZSIpIG9yIDAKICAgIGFzXyA9IG1hdGNoLmdldCgiYXdheV9zY29yZSIpIG9yIDAKCiAgICBpZiBub3QgaG9tZSBvciBub3QgYXdheToKICAgICAgICBjb250aW51ZQogICAgdGVhbXNfc2V0LmFkZChob21lKQogICAgdGVhbXNfc2V0LmFkZChhd2F5KQoKICAgIGxpbmV1cF9tYXAgPSB7fQogICAgZm9yIG4gaW4gbWF0Y2guZ2V0KCJob21lX2xpbmV1cCIpIG9yIFtdOgogICAgICAgIGlmIG46CiAgICAgICAgICAgIGxpbmV1cF9tYXBbbi5zdHJpcCgpXSA9IGhvbWUKICAgIGZvciBuIGluIG1hdGNoLmdldCgiYXdheV9saW5ldXAiKSBvciBbXToKICAgICAgICBpZiBuOgogICAgICAgICAgICBsaW5ldXBfbWFwW24uc3RyaXAoKV0gPSBhd2F5CgogICAgZm9yIHRlYW0sIHNjb3JlZCwgY29uY2VkZWQgaW4gWyhob21lLCBocywgYXNfKSwgKGF3YXksIGFzXywgaHMpXToKICAgICAgICBzID0gZ2V0X29yX2NyZWF0ZV90cyh0c19tYXAsIHRlYW0sIHNlYXNvbikKICAgICAgICBzWyJwbGF5ZWQiXSArPSAxCiAgICAgICAgc1siZ29hbHNfZm9yIl0gKz0gc2NvcmVkCiAgICAgICAgc1siZ29hbHNfYWdhaW5zdCJdICs9IGNvbmNlZGVkCiAgICAgICAgaWYgc2NvcmVkID4gY29uY2VkZWQ6CiAgICAgICAgICAgIHNbIndpbnMiXSArPSAxCiAgICAgICAgICAgIHNbInBvaW50cyJdICs9IDMKICAgICAgICBlbGlmIHNjb3JlZCA9PSBjb25jZWRlZDoKICAgICAgICAgICAgc1siZHJhd3MiXSArPSAxCiAgICAgICAgICAgIHNbInBvaW50cyJdICs9IDEKICAgICAgICBlbHNlOgogICAgICAgICAgICBzWyJsb3NzZXMiXSArPSAxCiAgICAgICAgaWYgY29uY2VkZWQgPT0gMDoKICAgICAgICAgICAgc1siY2xlYW5fc2hlZXRzIl0gKz0gMQoKICAgIGZvciBwbmFtZSwgdGVhbSBpbiBsaW5ldXBfbWFwLml0ZW1zKCk6CiAgICAgICAgaWYgbm90IHBuYW1lIG9yIG5vdCB0ZWFtOgogICAgICAgICAgICBjb250aW51ZQogICAgICAgIHAsIGsgPSBnZXRfcGxheWVyKHBtLCBwbmFtZSwgdGVhbSkKICAgICAgICBhZGRfdGVhbShwLCB0ZWFtKQogICAgICAgIGFkZF9zZWFzb24ocCwgc2Vhc29uKQogICAgICAgIHBbImdhbWVzIl0gKz0gMQogICAgICAgIHBzID0gZ2V0X3BzKHAsIHNlYXNvbiwgdGVhbSkKICAgICAgICBwc1siZ2FtZXMiXSArPSAxCgogICAgZm9yIGNhcmQgaW4gbWF0Y2guZ2V0KCJ5ZWxsb3dfY2FyZHMiKSBvciBbXToKICAgICAgICBuYW1lID0gKGNhcmQuZ2V0KCJwbGF5ZXIiKSBvciAiIikuc3RyaXAoKQogICAgICAgIHRlYW0gPSAoY2FyZC5nZXQoInRlYW0iKSBvciAiIikuc3RyaXAoKQogICAgICAgIGlmIG5vdCBuYW1lIG9yIG5vdCB0ZWFtOgogICAgICAgICAgICBjb250aW51ZQogICAgICAgIGdldF9vcl9jcmVhdGVfdHModHNfbWFwLCB0ZWFtLCBzZWFzb24pWyJ5ZWxsb3dfY2FyZHMiXSArPSAxCiAgICAgICAgcCwgayA9IGdldF9wbGF5ZXIocG0sIG5hbWUsIHRlYW0pCiAgICAgICAgYWRkX3RlYW0ocCwgdGVhbSkKICAgICAgICBhZGRfc2Vhc29uKHAsIHNlYXNvbikKICAgICAgICBwWyJ5ZWxsb3dfY2FyZHMiXSArPSAxCiAgICAgICAgZ2V0X3BzKHAsIHNlYXNvbiwgdGVhbSlbInllbGxvd19jYXJkcyJdICs9IDEKCiAgICBmb3IgY2FyZCBpbiBtYXRjaC5nZXQoInJlZF9jYXJkcyIpIG9yIFtdOgogICAgICAgIG5hbWUgPSAoY2FyZC5nZXQoInBsYXllciIpIG9yICIiKS5zdHJpcCgpCiAgICAgICAgdGVhbSA9IChjYXJkLmdldCgidGVhbSIpIG9yICIiKS5zdHJpcCgpCiAgICAgICAgaWYgbm90IG5hbWUgb3Igbm90IHRlYW06CiAgICAgICAgICAgIGNvbnRpbnVlCiAgICAgICAgZ2V0X29yX2NyZWF0ZV90cyh0c19tYXAsIHRlYW0sIHNlYXNvbilbInJlZF9jYXJkcyJdICs9IDEKICAgICAgICBwLCBrID0gZ2V0X3BsYXllcihwbSwgbmFtZSwgdGVhbSkKICAgICAgICBhZGRfdGVhbShwLCB0ZWFtKQogICAgICAgIGFkZF9zZWFzb24ocCwgc2Vhc29uKQogICAgICAgIHBbInJlZF9jYXJkcyJdICs9IDEKICAgICAgICBnZXRfcHMocCwgc2Vhc29uLCB0ZWFtKVsicmVkX2NhcmRzIl0gKz0gMQoKICAgIGZvciBzY29yZXIgaW4gbWF0Y2guZ2V0KCJzY29yZXJzIikgb3IgW106CiAgICAgICAgbmFtZSA9IChzY29yZXIuZ2V0KCJwbGF5ZXIiKSBvciAiIikuc3RyaXAoKQogICAgICAgIHRlYW0gPSAoc2NvcmVyLmdldCgidGVhbSIpIG9yICIiKS5zdHJpcCgpCiAgICAgICAgaWYgbm90IG5hbWU6CiAgICAgICAgICAgIGNvbnRpbnVlCiAgICAgICAgb3BwID0gYXdheSBpZiB0ZWFtID09IGhvbWUgZWxzZSAoaG9tZSBpZiB0ZWFtID09IGF3YXkgZWxzZSAiIikKICAgICAgICBwLCBrID0gZ2V0X3BsYXllcihwbSwgbmFtZSwgdGVhbSkKICAgICAgICBhZGRfdGVhbShwLCB0ZWFtKQogICAgICAgIGFkZF9zZWFzb24ocCwgc2Vhc29uKQogICAgICAgIHBzID0gZ2V0X3BzKHAsIHNlYXNvbiwgdGVhbSkKICAgICAgICBpZiBzY29yZXIuZ2V0KCJvd25fZ29hbCIpOgogICAgICAgICAgICBwWyJvd25fZ29hbHMiXSArPSAxCiAgICAgICAgICAgIHBzWyJvd25fZ29hbHMiXSArPSAxCiAgICAgICAgZWxpZiBzY29yZXIuZ2V0KCJwZW5hbHR5Iik6CiAgICAgICAgICAgIHBbInBlbmFsdGllcyJdICs9IDEKICAgICAgICAgICAgcFsiZ29hbHMiXSArPSAxCiAgICAgICAgICAgIHBzWyJwZW5hbHRpZXMiXSArPSAxCiAgICAgICAgICAgIHBzWyJnb2FscyJdICs9IDEKICAgICAgICAgICAgaWYgb3BwOgogICAgICAgICAgICAgICAgcHNbImdvYWxzX2J5X29wcG9uZW50Il1bb3BwXSA9IHBzWyJnb2Fsc19ieV9vcHBvbmVudCJdLmdldChvcHAsIDApICsgMQogICAgICAgIGVsc2U6CiAgICAgICAgICAgIHBbImdvYWxzIl0gKz0gMQogICAgICAgICAgICBwc1siZ29hbHMiXSArPSAxCiAgICAgICAgICAgIGlmIG9wcDoKICAgICAgICAgICAgICAgIHBzWyJnb2Fsc19ieV9vcHBvbmVudCJdW29wcF0gPSBwc1siZ29hbHNfYnlfb3Bwb25lbnQiXS5nZXQob3BwLCAwKSArIDEKCmZvciBzIGluIHRzX21hcC52YWx1ZXMoKToKICAgIHNbImdvYWxfZGlmZmVyZW5jZSJdID0gc1siZ29hbHNfZm9yIl0gLSBzWyJnb2Fsc19hZ2FpbnN0Il0KZm9yIHAgaW4gcG0udmFsdWVzKCk6CiAgICBwWyJzZWFzb25fc3RhdHMiXS5zb3J0KGtleT1sYW1iZGEgczogc1sic2Vhc29uIl0pCgpwbGF5ZXJzID0gc29ydGVkKHBtLnZhbHVlcygpLCBrZXk9bGFtYmRhIHA6IHBbIm5hbWUiXSkKdGVhbXMgPSBbeyJuYW1lIjogdH0gZm9yIHQgaW4gc29ydGVkKHRlYW1zX3NldCkgaWYgdF0KdGVhbV9zdGF0cyA9IHNvcnRlZCh0c19tYXAudmFsdWVzKCksIGtleT1sYW1iZGEgczogKHNbInNlYXNvbiJdLCBzWyJ0ZWFtIl0pKQoKT1VUX0RJUi5ta2RpcihwYXJlbnRzPVRydWUsIGV4aXN0X29rPVRydWUpCndpdGggb3BlbihPVVRfRElSIC8gInBsYXllcnMuanNvbiIsICJ3IiwgZW5jb2Rpbmc9InV0Zi04IikgYXMgZjoKICAgIGpzb24uZHVtcChwbGF5ZXJzLCBmLCBpbmRlbnQ9MiwgZW5zdXJlX2FzY2lpPUZhbHNlKQp3aXRoIG9wZW4oT1VUX0RJUiAvICJ0ZWFtcy5qc29uIiwgInciLCBlbmNvZGluZz0idXRmLTgiKSBhcyBmOgogICAganNvbi5kdW1wKHRlYW1zLCBmLCBpbmRlbnQ9MiwgZW5zdXJlX2FzY2lpPUZhbHNlKQp3aXRoIG9wZW4oT1VUX0RJUiAvICJ0ZWFtLXN0YXRzLmpzb24iLCAidyIsIGVuY29kaW5nPSJ1dGYtOCIpIGFzIGY6CiAgICBqc29uLmR1bXAodGVhbV9zdGF0cywgZiwgaW5kZW50PTIsIGVuc3VyZV9hc2NpaT1GYWxzZSkKcHJpbnQoZiJEb25lISB7bGVuKGZpbGVzKX0gbWF0Y2hlcyAtPiB7bGVuKHBsYXllcnMpfSBwbGF5ZXJzLCB7bGVuKHRlYW1zKX0gdGVhbXMuIikK').decode('utf-8'))"
+          python3 /tmp/build_epl.py
+      - name: Debug output
+        run: ls docs/data/epl/
+      - name: Commit output files
+        run: |
+          git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/data/epl/players.json \
-                  docs/data/epl/teams.json \
-                  docs/data/epl/team-stats.json
-          git diff --cached --quiet || git commit -m "chore: rebuild EPL data [skip ci]"
-          git push
+          git add docs/data/epl/players.json docs/data/epl/teams.json docs/data/epl/team-stats.json
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "Build EPL data"
+          git pull --rebase origin main
+          git push origin HEAD
