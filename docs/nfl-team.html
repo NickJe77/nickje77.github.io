@@ -442,308 +442,192 @@ radial-gradient(circle at top right, rgba(255,255,255,.08), transparent 35%),
 linear-gradient(135deg, ${colours[0]} 0%, ${colours[1]} 100%)
 `;
 
+// Normalise legacy/relocated team codes to current codes
 function normalizeTeam(team){
-
-team =
-String(team || "")
-.trim()
-.toUpperCase();
-
-if(team === "NWE") return "NE";
-if(team === "KAN") return "KC";
-if(team === "NOR") return "NO";
-if(team === "SFO") return "SF";
-if(team === "TAM") return "TB";
-if(team === "SDG") return "LAC";
-if(team === "STL") return "LAR";
-if(team === "RAI") return "LV";
-if(team === "GNB") return "GB";
-
-return team;
-
+  team = String(team || "").trim().toUpperCase();
+  const map = {
+    "NWE":"NE","KAN":"KC","NOR":"NO","SFO":"SF","TAM":"TB",
+    "SDG":"LAC","STL":"LAR","RAI":"LV","GNB":"GB","OAK":"LV",
+    "PHX":"ARI","HTX":"HOU","CLT":"IND","NLS":"NO"
+  };
+  return map[team] || team;
 }
 
 async function loadPlayers(){
 
-try{
+  try{
 
-const indexRes =
-await fetch("/data/nfl/players/index.json?v="+Date.now());
+    // FIX: correct path is /data/nfl/players.json (not players/index.json)
+    const indexRes =
+      await fetch("/data/nfl/players.json?v="+Date.now());
 
-if(!indexRes.ok){
+    if(!indexRes.ok){
+      document.getElementById("loading").innerHTML =
+        "Unable to load players index";
+      return;
+    }
 
-document.getElementById("loading").innerHTML =
-"Unable to load players index";
+    const players = await indexRes.json();
 
-return;
+    // Filter to only players who have ever played for this team
+    // using the teams[] array in the index — avoids fetching every player file
+    const teamPlayers = players.filter(p =>
+      (p.teams || []).some(t => normalizeTeam(t) === teamCode)
+    );
 
-}
+    const playerTotals = [];
 
-const players =
-await indexRes.json();
+    const promises = teamPlayers.map(async(player) => {
 
-const playerTotals = [];
+      try{
 
-const promises = players.map(async(player)=>{
+        const slug = player.player_id;
 
-try{
+        const pres =
+          await fetch(`/data/nfl/players/${slug}.json?v=${Date.now()}`);
 
-const slug =
-player
-.toLowerCase()
-.replace(/[^a-z0-9]+/g,"-")
-.replace(/^-|-$/g,"");
+        if(!pres.ok) return null;
 
-const pres =
-await fetch(`/data/nfl/players/${slug}.json?v=${Date.now()}`);
+        const pdata = await pres.json();
 
-if(!pres.ok) return null;
+        const games = pdata.games || [];
 
-const pdata =
-await pres.json();
+        let totals = {
+          player: pdata.name || player.name,
+          slug: slug,
+          games: 0,
+          passY: 0, passTD: 0,
+          rushY: 0, rushTD: 0,
+          recY:  0, recTD:  0
+        };
 
-const games =
-pdata.games || [];
+        // Track unique games to avoid double-counting (a player can appear
+        // in multiple sections — passing, rushing, receiving — per game)
+        const seenGames = new Set();
 
-let totals = {
+        games.forEach(g => {
 
-player:pdata.name || player,
-slug:slug,
-games:0,
+          const s = g.stats || {};
 
-passY:0,
-passTD:0,
+          // FIX: match on s.team (the code field) not g.team (full name)
+          const gameTeam = normalizeTeam(s.team || "");
+          if(gameTeam !== teamCode) return;
 
-rushY:0,
-rushTD:0,
+          // Count each game_id only once toward the games total
+          if(!seenGames.has(g.game_id)){
+            seenGames.add(g.game_id);
+            totals.games++;
+          }
 
-recY:0,
-recTD:0
+          totals.passY  += Number(s.pass_yds || 0);
+          totals.passTD += Number(s.pass_td  || 0);
+          totals.rushY  += Number(s.rush_yds || 0);
+          totals.rushTD += Number(s.rush_td  || 0);
+          totals.recY   += Number(s.rec_yds  || 0);
+          totals.recTD  += Number(s.rec_td   || 0);
 
-};
+        });
 
-games.forEach(g=>{
+        if(totals.games > 0) return totals;
+        return null;
 
-let team =
-normalizeTeam(g.team || "");
+      }catch(err){
+        console.log(err);
+        return null;
+      }
 
-if(team !== teamCode) return;
+    });
 
-const s = g.stats || {};
+    const results = await Promise.all(promises);
+    results.forEach(r => { if(r) playerTotals.push(r); });
 
-totals.games++;
+    buildPage(playerTotals);
 
-totals.passY += Number(s.pass_yds || 0);
-totals.passTD += Number(s.pass_td || 0);
+  }catch(err){
 
-totals.rushY += Number(s.rush_yds || 0);
-totals.rushTD += Number(s.rush_td || 0);
+    console.log(err);
+    document.getElementById("loading").innerHTML =
+      "Failed to load team data";
 
-totals.recY += Number(s.rec_yds || 0);
-totals.recTD += Number(s.rec_td || 0);
-
-});
-
-if(totals.games > 0){
-
-return totals;
-
-}
-
-return null;
-
-}catch(err){
-
-console.log(err);
-return null;
-
-}
-
-});
-
-const results =
-await Promise.all(promises);
-
-results.forEach(r=>{
-
-if(r) playerTotals.push(r);
-
-});
-
-buildPage(playerTotals);
-
-}catch(err){
-
-console.log(err);
-
-document.getElementById("loading").innerHTML =
-"Failed to load team data";
-
-}
+  }
 
 }
 
 function buildPage(data){
 
-document.getElementById("loading").style.display =
-"none";
+  document.getElementById("loading").style.display = "none";
+  document.getElementById("content").style.display  = "block";
 
-document.getElementById("content").style.display =
-"block";
+  if(!data.length){
+    document.getElementById("leadersGrid").innerHTML =
+      "<div>No data found.</div>";
+    return;
+  }
 
-if(!data.length){
+  const passLeader = [...data].sort((a,b) => b.passY - a.passY)[0];
+  const rushLeader = [...data].sort((a,b) => b.rushY - a.rushY)[0];
+  const recLeader  = [...data].sort((a,b) => b.recY  - a.recY )[0];
 
-document.getElementById("leadersGrid").innerHTML =
-"<div>No data found.</div>";
+  document.getElementById("leadersGrid").innerHTML = `
 
-return;
+    <div class="leader-card">
+      <div class="leader-label">Passing Leader</div>
+      <div class="leader-player">
+        <a href="/nfl-player.html?player=${passLeader.slug}">${passLeader.player}</a>
+      </div>
+      <div class="leader-stat">${passLeader.passY.toLocaleString()}</div>
+    </div>
 
-}
+    <div class="leader-card">
+      <div class="leader-label">Rushing Leader</div>
+      <div class="leader-player">
+        <a href="/nfl-player.html?player=${rushLeader.slug}">${rushLeader.player}</a>
+      </div>
+      <div class="leader-stat">${rushLeader.rushY.toLocaleString()}</div>
+    </div>
 
-const passLeader =
-[...data].sort((a,b)=>b.passY-a.passY)[0];
+    <div class="leader-card">
+      <div class="leader-label">Receiving Leader</div>
+      <div class="leader-player">
+        <a href="/nfl-player.html?player=${recLeader.slug}">${recLeader.player}</a>
+      </div>
+      <div class="leader-stat">${recLeader.recY.toLocaleString()}</div>
+    </div>
 
-const rushLeader =
-[...data].sort((a,b)=>b.rushY-a.rushY)[0];
+  `;
 
-const recLeader =
-[...data].sort((a,b)=>b.recY-a.recY)[0];
+  const passing = [...data].sort((a,b) => b.passY - a.passY).slice(0,20);
+  passing.forEach(p => {
+    document.getElementById("passingTable").innerHTML += `
+      <tr>
+        <td><a class="player-link" href="/nfl-player.html?player=${p.slug}">${p.player}</a></td>
+        <td>${p.passY.toLocaleString()}</td>
+        <td>${p.passTD}</td>
+        <td>${p.games}</td>
+      </tr>`;
+  });
 
-document.getElementById("leadersGrid").innerHTML = `
+  const rushing = [...data].sort((a,b) => b.rushY - a.rushY).slice(0,20);
+  rushing.forEach(p => {
+    document.getElementById("rushingTable").innerHTML += `
+      <tr>
+        <td><a class="player-link" href="/nfl-player.html?player=${p.slug}">${p.player}</a></td>
+        <td>${p.rushY.toLocaleString()}</td>
+        <td>${p.rushTD}</td>
+        <td>${p.games}</td>
+      </tr>`;
+  });
 
-<div class="leader-card">
-
-<div class="leader-label">
-Passing Leader
-</div>
-
-<div class="leader-player">
-<a href="/nfl-player.html?player=${passLeader.slug}">
-${passLeader.player}
-</a>
-</div>
-
-<div class="leader-stat">
-${passLeader.passY.toLocaleString()}
-</div>
-
-</div>
-
-<div class="leader-card">
-
-<div class="leader-label">
-Rushing Leader
-</div>
-
-<div class="leader-player">
-<a href="/nfl-player.html?player=${rushLeader.slug}">
-${rushLeader.player}
-</a>
-</div>
-
-<div class="leader-stat">
-${rushLeader.rushY.toLocaleString()}
-</div>
-
-</div>
-
-<div class="leader-card">
-
-<div class="leader-label">
-Receiving Leader
-</div>
-
-<div class="leader-player">
-<a href="/nfl-player.html?player=${recLeader.slug}">
-${recLeader.player}
-</a>
-</div>
-
-<div class="leader-stat">
-${recLeader.recY.toLocaleString()}
-</div>
-
-</div>
-
-`;
-
-const passing =
-[...data]
-.sort((a,b)=>b.passY-a.passY)
-.slice(0,20);
-
-passing.forEach(p=>{
-
-document.getElementById("passingTable").innerHTML += `
-<tr>
-
-<td>
-<a class="player-link"
-href="/nfl-player.html?player=${p.slug}">
-${p.player}
-</a>
-</td>
-
-<td>${p.passY.toLocaleString()}</td>
-<td>${p.passTD}</td>
-<td>${p.games}</td>
-
-</tr>
-`;
-
-});
-
-const rushing =
-[...data]
-.sort((a,b)=>b.rushY-a.rushY)
-.slice(0,20);
-
-rushing.forEach(p=>{
-
-document.getElementById("rushingTable").innerHTML += `
-<tr>
-
-<td>
-<a class="player-link"
-href="/nfl-player.html?player=${p.slug}">
-${p.player}
-</a>
-</td>
-
-<td>${p.rushY.toLocaleString()}</td>
-<td>${p.rushTD}</td>
-<td>${p.games}</td>
-
-</tr>
-`;
-
-});
-
-const receiving =
-[...data]
-.sort((a,b)=>b.recY-a.recY)
-.slice(0,20);
-
-receiving.forEach(p=>{
-
-document.getElementById("receivingTable").innerHTML += `
-<tr>
-
-<td>
-<a class="player-link"
-href="/nfl-player.html?player=${p.slug}">
-${p.player}
-</a>
-</td>
-
-<td>${p.recY.toLocaleString()}</td>
-<td>${p.recTD}</td>
-<td>${p.games}</td>
-
-</tr>
-`;
-
-});
+  const receiving = [...data].sort((a,b) => b.recY - a.recY).slice(0,20);
+  receiving.forEach(p => {
+    document.getElementById("receivingTable").innerHTML += `
+      <tr>
+        <td><a class="player-link" href="/nfl-player.html?player=${p.slug}">${p.player}</a></td>
+        <td>${p.recY.toLocaleString()}</td>
+        <td>${p.recTD}</td>
+        <td>${p.games}</td>
+      </tr>`;
+  });
 
 }
 
