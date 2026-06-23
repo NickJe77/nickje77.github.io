@@ -17,7 +17,7 @@ import sys
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
-DOCS_DIR     = os.path.join(SCRIPT_DIR, "docs")          # adjust if needed
+DOCS_DIR     = SCRIPT_DIR          # script lives inside docs/
 PLAYERS_DIR  = os.path.join(DOCS_DIR, "data", "nfl", "players")
 INDEX_FILE   = os.path.join(DOCS_DIR, "data", "nfl", "players.json")
 OUTPUT_FILE  = os.path.join(DOCS_DIR, "data", "nfl", "game-records.json")
