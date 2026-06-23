@@ -29,19 +29,14 @@ tbody tr:hover td{background:#e7f0ff;cursor:pointer;}
 .player-link{color:#013369;font-weight:800;text-decoration:none;}
 .player-link:hover{text-decoration:underline;}
 .stat-val{font-weight:900;text-align:right;color:#0f172a;font-size:16px;}
-.meta{color:#666;font-size:12px;}
+.meta{color:#666;font-size:12px;margin-top:2px;}
 .badge{display:inline-block;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;background:#013369;color:white;}
 .badge.playoff{background:#d50a0a;}
 .loading{text-align:center;padding:80px;font-size:20px;font-weight:700;color:#555;}
-.progress{text-align:center;padding:40px;}
-.progress-bar-wrap{background:#e2e8f0;border-radius:99px;height:10px;max-width:400px;margin:12px auto 0;}
-.progress-bar{background:#013369;height:10px;border-radius:99px;transition:width .15s;}
-.progress-text{font-size:15px;font-weight:700;color:#555;}
 .error{text-align:center;padding:60px;font-size:18px;color:#d90429;font-weight:700;}
 @media(max-width:700px){
   .sections-grid{grid-template-columns:1fr;}
   .hero h1{font-size:28px;}
-  .controls{gap:10px;}
 }
 </style>
 </head>
@@ -67,7 +62,7 @@ tbody tr:hover td{background:#e7f0ff;cursor:pointer;}
     <option value="regular">Regular Season Only</option>
     <option value="playoff">Playoffs Only</option>
   </select>
-  <select id="eraSel">
+
     <option value="all">All Eras</option>
     <option value="1970">1970s</option>
     <option value="1980">1980s</option>
@@ -79,228 +74,91 @@ tbody tr:hover td{background:#e7f0ff;cursor:pointer;}
 </div>
 
 <div class="container">
-  <div id="recordsContainer"><div class="loading">Loading player data — this may take a moment...</div></div>
+  <div id="recordsContainer"><div class="loading">Loading...</div></div>
 </div>
 
 <script>
 
-const PLAYOFF_WEEKS = new Set(["wildcard","division","confchamp","superbowl","nfccg","afccg","divisional","championship","wild card","wild-card"]);
+let rawRecords = {};
 
-function isPlayoff(week){
-  return PLAYOFF_WEEKS.has(String(week||"").toLowerCase().replace(/[^a-z]/g,""));
-}
-
-function normalizeTeam(t){
-  t = String(t||"").trim().toUpperCase();
-  const map={"NWE":"NE","KAN":"KC","NOR":"NO","SFO":"SF","TAM":"TB","SDG":"LAC","STL":"LAR","RAI":"LV","GNB":"GB","OAK":"LV","PHX":"ARI","HTX":"HOU","CLT":"IND"};
-  return map[t]||t;
-}
-
-// All raw game records stored here after loading
-let allRecords = [];
-
-async function loadAll(){
-  const container = document.getElementById("recordsContainer");
+async function init(){
   try{
-    const indexRes = await fetch("/data/nfl/players.json?v="+Date.now());
-    if(!indexRes.ok) throw new Error("Index load failed");
-    const allPlayers = await indexRes.json();
-
-    let done = 0;
-    const total = allPlayers.length;
-
-    const promises = allPlayers.map(async p => {
-      try{
-        const res = await fetch(`/data/nfl/players/${p.player_id}.json?v=${Date.now()}`);
-        if(!res.ok) return;
-        const data = await res.json();
-
-        (data.games||[]).forEach(g => {
-          const s = g.stats || {};
-          allRecords.push({
-            player_id: p.player_id,
-            name: data.name || p.name,
-            team: normalizeTeam(s.team||""),
-            opponent: g.opponent || "",
-            date: g.date || "",
-            season: Number(g.season||0),
-            game_id: g.game_id || "",
-            game_type: g.game_type || "",
-            week: g.week || "",
-            playoff: isPlayoff(g.week) || String(g.game_type||"").toLowerCase().includes("playoff") || String(g.game_type||"").toLowerCase().includes("post"),
-            passY:   Number(s.pass_yds||0),
-            passTD:  Number(s.pass_td||0),
-            passAtt: Number(s.pass_att||0),
-            passCmp: Number(s.pass_cmp||0),
-            passInt: Number(s.pass_int||0),
-            rushY:   Number(s.rush_yds||0),
-            rushTD:  Number(s.rush_td||0),
-            rushAtt: Number(s.rush_att||0),
-            recY:    Number(s.rec_yds||0),
-            recTD:   Number(s.rec_td||0),
-            rec:     Number(s.rec||0),
-          });
-        });
-      }catch(e){}
-
-      done++;
-      const pct = Math.round((done/total)*100);
-      const bar = document.getElementById("pbar");
-      if(bar) bar.style.width = pct+"%";
-      const txt = document.getElementById("ptext");
-      if(txt) txt.textContent = `Loading players... ${done} / ${total}`;
-    });
-
-    container.innerHTML = `
-      <div class="progress">
-        <div class="progress-text" id="ptext">Loading players...</div>
-        <div class="progress-bar-wrap"><div class="progress-bar" id="pbar" style="width:0%"></div></div>
-      </div>`;
-
-    await Promise.all(promises);
-    renderRecords();
-
-  }catch(err){
-    console.error(err);
-    container.innerHTML = `<div class="error">Failed to load player data.</div>`;
+    const res = await fetch("/data/nfl/game-records.json?v="+Date.now());
+    if(!res.ok) throw new Error("Not found");
+    const data = await res.json();
+    rawRecords = data.records || {};
+    render();
+  }catch(e){
+    document.getElementById("recordsContainer").innerHTML =
+      `<div class="error">Could not load records data.<br>Make sure game-records.json has been generated.</div>`;
   }
 }
 
-function getFiltered(){
-  const gameType = document.getElementById("gameTypeSel").value;
-  const era      = document.getElementById("eraSel").value;
+document.getElementById("gameTypeSel").onchange = render;
 
-  return allRecords.filter(r => {
+function filtered(list){
+  const gameType = document.getElementById("gameTypeSel").value;
+  return (list||[]).filter(r => {
     if(gameType === "regular" && r.playoff) return false;
     if(gameType === "playoff" && !r.playoff) return false;
-    if(era !== "all"){
-      const decade = Math.floor(r.season / 10) * 10;
-      if(decade !== parseInt(era)) return false;
-    }
     return true;
-  });
+  }).slice(0, 10);
+}).slice(0, 10);
 }
 
-function renderRecords(){
-  const records = getFiltered();
-  const container = document.getElementById("recordsContainer");
+function pLink(r){
+  return `<a class="player-link" href="/nfl-player.html?player=${encodeURIComponent(r.player_id)}">${r.name}</a>`;
+}
 
-  if(!records.length){
-    container.innerHTML = `<div class="error">No records found for this filter.</div>`;
-    return;
-  }
+function weekBadge(r){
+  return r.playoff
+    ? `<span class="badge playoff">${r.week||"PO"}</span>`
+    : `<span class="badge">Wk ${r.week}</span>`;
+}
 
-  function top(sortFn, filterFn, n=10){
-    let list = filterFn ? records.filter(filterFn) : [...records];
-    return list.sort(sortFn).slice(0,n);
-  }
+function makeSection(title, key, statFn, colLabel){
+  const data = filtered(rawRecords[key]);
+  if(!data.length) return "";
+  const rows = data.map((r,i) => `
+    <tr onclick="window.location.href='/nfl-player.html?player=${encodeURIComponent(r.player_id)}'">
+      <td class="rank">${i+1}</td>
+      <td>
+        ${pLink(r)}
+        <div class="meta">${r.team} vs ${r.opponent} &middot; ${r.season} ${weekBadge(r)}</div>
+      </td>
+      <td class="stat-val">${statFn(r)}</td>
+    </tr>`).join('');
+  return `
+    <div class="section">
+      <div class="section-title">${title}</div>
+      <table>
+        <thead><tr><th>#</th><th>Player</th><th>${colLabel}</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
 
-  function pLink(r){
-    return `<a class="player-link" href="/nfl-player.html?player=${encodeURIComponent(r.player_id)}">${r.name}</a>`;
-  }
-
-  function weekBadge(r){
-    return r.playoff
-      ? `<span class="badge playoff">${r.week||"PO"}</span>`
-      : `<span class="badge">Wk ${r.week}</span>`;
-  }
-
-  function gameMeta(r){
-    return `<div class="meta">${r.team} vs ${r.opponent} &middot; ${r.season} ${weekBadge(r)}</div>`;
-  }
-
-  function makeSection(title, data, statFn, label){
-    if(!data.length) return "";
-    const rows = data.map((r,i) => `
-      <tr onclick="window.location.href='/nfl-player.html?player=${encodeURIComponent(r.player_id)}'">
-        <td class="rank">${i+1}</td>
-        <td>${pLink(r)}${gameMeta(r)}</td>
-        <td class="stat-val">${statFn(r)}</td>
-      </tr>`).join('');
-    return `
-      <div class="section">
-        <div class="section-title">${title}</div>
-        <table>
-          <thead><tr><th>#</th><th>Player</th><th>${label}</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>`;
-  }
-
+function render(){
   const sections = [
+    makeSection("Most Passing Yards",       "pass_yds",  r => r.pass_yds.toLocaleString(), "Yards"),
+    makeSection("Most Passing Touchdowns",  "pass_td",   r => r.pass_td,                    "TD"),
+    makeSection("Most Passing Attempts",    "pass_att",  r => r.pass_att,                  "Att"),
+    makeSection("Most Interceptions",       "pass_int",  r => r.pass_int,                  "INT"),
+    makeSection("Most Rushing Yards",       "rush_yds",  r => r.rush_yds.toLocaleString(), "Yards"),
+    makeSection("Most Rushing Touchdowns",  "rush_td",   r => r.rush_td,                    "TD"),
+    makeSection("Most Rushing Attempts",    "rush_att",  r => r.rush_att,                  "Att"),
+    makeSection("Most Receiving Yards",     "rec_yds",   r => r.rec_yds.toLocaleString(),  "Yards"),
+    makeSection("Most Receiving Touchdowns","rec_td",    r => r.rec_td,                     "TD"),
+    makeSection("Most Receptions",          "rec",       r => r.rec,                       "Rec"),
+    makeSection("Most Total Yards",         "total_yds", r => r.total_yds.toLocaleString(),"Yards"),
+    makeSection("Most Total Touchdowns",    "total_td",  r => r.total_td,                   "TD"),
+  ].filter(Boolean).join('');
 
-    makeSection("Most Passing Yards",
-      top((a,b)=>b.passY-a.passY, r=>r.passY>0),
-      r => r.passY.toLocaleString()+" yds", "Yards"
-    ),
-
-    makeSection("Most Passing Touchdowns",
-      top((a,b)=>b.passTD-a.passTD, r=>r.passTD>0),
-      r => r.passTD+" TD", "TD"
-    ),
-
-    makeSection("Most Rushing Yards",
-      top((a,b)=>b.rushY-a.rushY, r=>r.rushY>0),
-      r => r.rushY.toLocaleString()+" yds", "Yards"
-    ),
-
-    makeSection("Most Rushing Touchdowns",
-      top((a,b)=>b.rushTD-a.rushTD, r=>r.rushTD>0),
-      r => r.rushTD+" TD", "TD"
-    ),
-
-    makeSection("Most Receiving Yards",
-      top((a,b)=>b.recY-a.recY, r=>r.recY>0),
-      r => r.recY.toLocaleString()+" yds", "Yards"
-    ),
-
-    makeSection("Most Receiving Touchdowns",
-      top((a,b)=>b.recTD-a.recTD, r=>r.recTD>0),
-      r => r.recTD+" TD", "TD"
-    ),
-
-    makeSection("Most Receptions",
-      top((a,b)=>b.rec-a.rec, r=>r.rec>0),
-      r => r.rec+" rec", "Rec"
-    ),
-
-    makeSection("Most Passing Attempts",
-      top((a,b)=>b.passAtt-a.passAtt, r=>r.passAtt>0),
-      r => r.passAtt+" att", "Att"
-    ),
-
-    makeSection("Most Rushing Attempts",
-      top((a,b)=>b.rushAtt-a.rushAtt, r=>r.rushAtt>0),
-      r => r.rushAtt+" att", "Att"
-    ),
-
-    makeSection("Most Interceptions Thrown",
-      top((a,b)=>b.passInt-a.passInt, r=>r.passInt>0),
-      r => r.passInt+" INT", "INT"
-    ),
-
-    makeSection("Most Total Touchdowns",
-      top((a,b)=>(b.passTD+b.rushTD+b.recTD)-(a.passTD+a.rushTD+a.recTD), r=>(r.passTD+r.rushTD+r.recTD)>0),
-      r => (r.passTD+r.rushTD+r.recTD)+" TD", "TD"
-    ),
-
-    makeSection("Most Total Yards",
-      top((a,b)=>(b.passY+b.rushY+b.recY)-(a.passY+a.rushY+a.recY), r=>(r.passY+r.rushY+r.recY)>0),
-      r => (r.passY+r.rushY+r.recY).toLocaleString()+" yds", "Yards"
-    ),
-
-  ].filter(Boolean);
-
-  container.innerHTML = `<div class="sections-grid">${sections.join('')}</div>`;
+  document.getElementById("recordsContainer").innerHTML =
+    sections || `<div class="error">No records match this filter.</div>`;
 }
 
-// Filter change handlers
-document.getElementById("gameTypeSel").onchange = renderRecords;
-document.getElementById("eraSel").onchange = renderRecords;
-
-// Kick off load
-loadAll();
-
+init();
 </script>
 </body>
 </html>
