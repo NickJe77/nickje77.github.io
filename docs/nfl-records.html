@@ -82,16 +82,24 @@ tbody tr:hover td{background:#e7f0ff;cursor:pointer;}
 let rawRecords = {};
 
 async function init(){
-  try{
-    const res = await fetch("/data/nfl/game-records.json?v="+Date.now());
-    if(!res.ok) throw new Error("Not found");
-    const data = await res.json();
-    rawRecords = data.records || {};
-    render();
-  }catch(e){
-    document.getElementById("recordsContainer").innerHTML =
-      `<div class="error">Could not load records data.<br>Make sure game-records.json has been generated.</div>`;
+  // Try multiple path variants to handle different hosting setups
+  const paths = [
+    "/data/nfl/game-records.json",
+    "data/nfl/game-records.json",
+    "/docs/data/nfl/game-records.json",
+  ];
+  for(const path of paths){
+    try{
+      const res = await fetch(path);
+      if(!res.ok) continue;
+      const data = await res.json();
+      rawRecords = data.records || {};
+      render();
+      return;
+    }catch(e){ continue; }
   }
+  document.getElementById("recordsContainer").innerHTML =
+    `<div class="error">Could not load game-records.json.<br>Tried: ${paths.join(", ")}</div>`;
 }
 
 document.getElementById("gameTypeSel").onchange = render;
