@@ -68,6 +68,29 @@ def main():
 
     print(f"Found {len(index)} players in index.")
 
+    # Build a game_id -> week lookup from season files so we can tag playoff games
+    print("Building week lookup from season files...")
+    SEASONS_DIR = os.path.join(DOCS_DIR, "data", "nfl", "seasons")
+    game_week_map = {}  # game_id -> {"week": ..., "playoff": bool}
+    if os.path.isdir(SEASONS_DIR):
+        for fname in os.listdir(SEASONS_DIR):
+            if not fname.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(SEASONS_DIR, fname), encoding="utf-8") as f:
+                    sdata = json.load(f)
+                for g in sdata.get("games", []):
+                    gid = g.get("game_id", "")
+                    week = str(g.get("week", ""))
+                    if gid:
+                        game_week_map[gid] = {
+                            "week": week,
+                            "playoff": is_playoff(week)
+                        }
+            except Exception:
+                pass
+    print(f"Week lookup built: {len(game_week_map)} games indexed.")
+
     all_game_rows = []
     errors = 0
 
@@ -107,7 +130,11 @@ def main():
             if not any([pass_yds, pass_td, rush_yds, rush_td, rec_yds, rec_td, rec]):
                 continue
 
-            playoff = is_playoff(g.get("week", ""), g.get("game_type", ""))
+            gid = g.get("game_id", "")
+            week_info = game_week_map.get(gid, {})
+            week = week_info.get("week") or str(g.get("week", "") or s.get("week", "") or "")
+            game_type = str(g.get("game_type", "") or s.get("game_type", "") or "")
+            playoff = week_info.get("playoff", False) or is_playoff(week, game_type)
 
             all_game_rows.append({
                 "player_id": player_id,
@@ -117,7 +144,7 @@ def main():
                 "season":    safe_int(g.get("season")),
                 "date":      g.get("date", ""),
                 "game_id":   g.get("game_id", ""),
-                "week":      str(g.get("week", "")),
+                "week":      week,
                 "playoff":   playoff,
                 "pass_yds":  pass_yds,
                 "pass_td":   pass_td,
