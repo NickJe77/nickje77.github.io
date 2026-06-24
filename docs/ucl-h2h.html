@@ -150,6 +150,7 @@ const TEAM_COLOURS = {
 
 function slugify(str){
   return (str || "")
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/&/g,"and")
     .replace(/[^a-z0-9]+/g,"-")
@@ -189,18 +190,6 @@ async function init(){
   }
 }
 
-const NAME_ALIASES = {
-  "Internazionale": ["Internazionale", "Inter Milan"],
-  "Inter Milan":    ["Internazionale", "Inter Milan"],
-  "Borussia Mönchengladbach": ["Borussia Mönchengladbach", "Mönchengladbach"],
-  "Mönchengladbach": ["Borussia Mönchengladbach", "Mönchengladbach"],
-};
-
-function matchesTeam(gameName, teamName){
-  const aliases = NAME_ALIASES[teamName] || [teamName];
-  return aliases.includes(gameName);
-}
-
 async function loadH2H(){
   const team1 = document.getElementById("team1Select").value;
   const team2 = document.getElementById("team2Select").value;
@@ -224,8 +213,12 @@ async function loadH2H(){
   results.innerHTML = '<div class="loading">Loading head to head data...</div>';
 
   try{
+    // Build all season IDs in correct format e.g. 1955-56, 1992-93
     const allSeasonIds = [];
-    for(let y = 1992; y <= 2025; y++) allSeasonIds.push(`${y}-${y+1}`);
+    for(let y = 1955; y <= 2025; y++){
+      const suffix = String(y + 1).slice(-2);
+      allSeasonIds.push(`${y}-${suffix}`);
+    }
 
     const seasonData = await Promise.all(allSeasonIds.map(async sid => {
       try{
@@ -234,11 +227,10 @@ async function loadH2H(){
         const data = await r.json();
         const games = Array.isArray(data) ? data : (data.games || []);
         return games
-          .filter(g => (matchesTeam(g.home, team1) && matchesTeam(g.away, team2)) || (matchesTeam(g.home, team2) && matchesTeam(g.away, team1)))
+          .filter(g => (g.home === team1 && g.away === team2) || (g.home === team2 && g.away === team1))
           .map(g => ({...g, season: sid}));
       }catch(e){ return []; }
     }));
-    const sharedSeasons = allSeasonIds;
 
     const h2hGames = seasonData.flat();
 
@@ -274,20 +266,6 @@ async function loadH2H(){
         .slice(0, 10);
     }
 
-    function getCardLeaders(team, cardType){
-      return allPlayers
-        .filter(p => p.teams && p.teams.includes(team))
-        .map(p => {
-          const cards = (p.season_stats || [])
-            .filter(s => s.team === team && sharedSeasons.includes(s.season))
-            .reduce((sum, s) => sum + (s[cardType] || 0), 0);
-          return { name: p.name, cards };
-        })
-        .filter(p => p.cards > 0)
-        .sort((a,b) => b.cards - a.cards)
-        .slice(0, 10);
-    }
-
     const scorers1 = getScorers(team1, team2);
     const scorers2 = getScorers(team2, team1);
 
@@ -306,21 +284,19 @@ async function loadH2H(){
     function gameRows(){
       if(!h2hGames.length) return `<tr><td colspan="5">No matches found</td></tr>`;
       return [...h2hGames].reverse().map(g => {
+        const sh  = Number(g.score_home || 0);
+        const sa  = Number(g.score_away || 0);
         const t1home = g.home === team1;
-        const home = g.home;
-        const away = g.away;
-        const sh   = Number(g.score_home || 0);
-        const sa   = Number(g.score_away || 0);
-        const t1g  = t1home ? sh : sa;
-        const t2g  = t1home ? sa : sh;
+        const t1g = t1home ? sh : sa;
+        const t2g = t1home ? sa : sh;
         const res1 = t1g > t2g ? 'W' : t1g < t2g ? 'L' : 'D';
         const cls  = t1g > t2g ? 'result-win' : t1g < t2g ? 'result-loss' : 'result-draw';
         return `
           <tr onclick="window.location.href='/ucl-game.html?match=${encodeURIComponent(g.match_id)}&season=${encodeURIComponent(g.season)}'">
             <td>${g.season}</td>
-            <td>${home}</td>
+            <td>${g.home}</td>
             <td>${sh} - ${sa}</td>
-            <td>${away}</td>
+            <td>${g.away}</td>
             <td class="${cls}">${res1}</td>
           </tr>`;
       }).join('');
