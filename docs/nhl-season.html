@@ -76,7 +76,6 @@
   <div class="controls">
     <div class="tabs">
       <button class="tab active" onclick="setTab('results',this)">Results</button>
-      <button class="tab" onclick="setTab('standings',this)">Standings</button>
     </div>
     <select id="teamFilter" onchange="renderResults()"><option value="">All Teams</option></select>
     <select id="typeFilter" onchange="renderResults()">
@@ -98,17 +97,7 @@
     </div>
   </div>
 
-  <div id="standingsSection" class="section" style="display:none">
-    <div class="section-title">Standings</div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr>
-          <th>#</th><th>Team</th><th>GP</th><th>W</th><th>L</th><th>PTS</th><th>GF</th><th>GA</th><th>DIFF</th>
-        </tr></thead>
-        <tbody id="standingsBody"></tbody>
-      </table>
-    </div>
-  </div>
+
 </div>
 
 <script>
@@ -146,21 +135,14 @@ document.getElementById('nextLink').href = '/nhl-season.html?season=' + (season+
 document.getElementById('prevLink').innerText = '\u2190 ' + (season-1) + '\u2013' + String(season).slice(2);
 document.getElementById('nextLink').innerText = (season+1) + '\u2013' + String(season+2).slice(2) + ' \u2192';
 
-function setTab(tab, el){
-  currentTab = tab;
-  document.querySelectorAll('.tab').forEach(function(b){ b.classList.remove('active'); });
-  el.classList.add('active');
-  document.getElementById('resultsSection').style.display   = tab === 'results'   ? '' : 'none';
-  document.getElementById('standingsSection').style.display = tab === 'standings' ? '' : 'none';
-  if(tab === 'standings') renderStandings();
-}
+function setTab(tab,el){}
 
 fetch('/data/nhl/seasons/' + season + '.json')
   .then(function(r){ return r.json(); })
   .then(function(games){
     allGames = games;
-    var reg = games.filter(function(g){ return g.game_type === 'R'; });
-    var po  = games.filter(function(g){ return g.game_type === 'P'; });
+    var reg = games.filter(function(g){ return gameType(g) === 'R'; });
+    var po  = games.filter(function(g){ return gameType(g) === 'P'; });
     var goals = games.reduce(function(s,g){ return s + (g.home_score||0) + (g.away_score||0); }, 0);
     var avg = games.length ? (goals/games.length).toFixed(1) : '–';
 
@@ -193,12 +175,25 @@ function sbox(label, val){
   return '<div class="stat-box"><b>'+label+'</b><div class="stat-num">'+val+'</div></div>';
 }
 
+function gameType(g){
+  // Derive from game_type field if present, otherwise from game_id
+  if(g.game_type) return g.game_type;
+  var id = String(g.game_id || '');
+  if(id.length >= 6){
+    var t = id.slice(-6, -4);  // digits 5-6 from left in 10-digit id
+    // Actually digits 5&6 of the full id: 2025020001 -> '02' = regular, '03' = playoff
+    var typeCode = id.substring(4, 6);
+    if(typeCode === '03') return 'P';
+  }
+  return 'R';
+}
+
 function getFiltered(){
   var tv = document.getElementById('teamFilter').value;
   var ty = document.getElementById('typeFilter').value;
   return allGames.filter(function(g){
     if(tv && g.home_team !== tv && g.away_team !== tv) return false;
-    if(ty && g.game_type !== ty) return false;
+    if(ty && gameType(g) !== ty) return false;
     return true;
   });
 }
@@ -211,7 +206,7 @@ function renderResults(){
   }
   var rows = games.map(function(g){
     var score = (g.home_score != null && g.away_score != null) ? g.home_score + ' – ' + g.away_score : '–';
-    var badge = g.game_type === 'P'
+    var badge = gameType(g) === 'P'
       ? '<span class="badge badge-po">Playoff</span>'
       : '<span class="badge badge-reg">Regular</span>';
     return '<tr>' +
@@ -227,7 +222,7 @@ function renderResults(){
 }
 
 function renderStandings(){
-  var reg = allGames.filter(function(g){ return g.game_type === 'R'; });
+  var reg = allGames.filter(function(g){ return gameType(g) === 'R'; });
   var rec = {};
   reg.forEach(function(g){
     if(!g.home_team||!g.away_team) return;
