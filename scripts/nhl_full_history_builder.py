@@ -2,8 +2,11 @@
 """
 NHL Full History Builder (1967 → now)
 
-Fetches regular season games via club-schedule-season (fast, one call per team)
-AND playoff games via date-by-date schedule scan (April-June of the following year).
+Regular season: club-schedule-season endpoint (one call per team)
+Playoffs: probe game IDs directly using NHL ID format:
+  {season_start}030{round}{series}{game}
+  e.g. 2019030111 = 2019 season, round 1, series 1, game 1
+  Rounds 1-4, series 1-8, games 1-7
 
 Output: docs/data/nhl/seasons/{year}.json
 """
@@ -12,7 +15,6 @@ import requests
 import json
 import time
 from pathlib import Path
-from datetime import datetime, timedelta
 
 print("NHL FULL HISTORY BUILDER (1967 → NOW)")
 
@@ -37,17 +39,13 @@ def get(url):
     return {}
 
 def get_all_teams_for_season(year):
-    url = f"https://api-web.nhle.com/v1/standings/{year+1}-04-01"
-    try:
-        data = get(url)
-        teams = set()
-        for entry in data.get("standings", []):
-            abbrev = entry.get("teamAbbrev", {}).get("default", "")
-            if abbrev:
-                teams.add(abbrev)
-        return list(teams)
-    except:
-        return []
+    data = get(f"https://api-web.nhle.com/v1/standings/{year+1}-04-01")
+    teams = set()
+    for entry in data.get("standings", []):
+        abbrev = entry.get("teamAbbrev", {}).get("default", "")
+        if abbrev:
+            teams.add(abbrev)
+    return list(teams)
 
 FALLBACK_TEAMS = [
     "MTL","TOR","BOS","CHI","DET","NYR","PHI","PIT","STL",
@@ -93,29 +91,52 @@ def fetch_regular_season(year, seen):
         time.sleep(0.1)
     return games
 
-def fetch_playoffs(year, seen):
-    """Scan Apr 1 – Sep 30 of the following calendar year for playoff games.
-    Extended to September to cover bubble seasons (e.g. 2019-20 played Aug-Sep 2020).
+def fetch_playoffs_by_id(year, seen):
+    """
+    Probe playoff game IDs directly using the NHL ID format:
+      {year}{year+1}030{round}{series_padded}{game}
+    Rounds 1-4, up to 8 series per round, up to 7 games per series.
+    Only ~224 possible IDs per season — very fast.
     """
     games = []
-    current = datetime(year + 1, 4, 1)
-    end     = datetime(year + 1, 9, 30)
-    while current <= end:
-        date_str = current.strftime("%Y-%m-%d")
-        data = get(f"https://api-web.nhle.com/v1/schedule/{date_str}")
-        for week in data.get("gameWeek", []):
-            for game in week.get("games", []):
-                gid = game.get("id")
-                if game.get("gameType") != 3:
+    season_id = f"{year}{year+1}"
+
+    for round_num in range(1, 5):        # rounds 1-4
+        for series_num in range(1, 9):   # up to 8 series per round
+            for game_num in range(1, 8): # up to 7 games per series
+                # NHL playoff ID format: YYYYYYYYO3RRSSGG
+                # e.g. 2024030111 = round 1, series 1, game 1
+                game_id = int(f"{season_id}030{round_num}{series_num}{game_num}")
+
+                if game_id in seen:
                     continue
-                if not gid or gid in seen:
+
+                data = get(f"https://api-web.nhle.com/v1/gamecenter/{game_id}/boxscore")
+                if not data or not data.get("homeTeam"):
+                    # No game at this ID — series is done, skip remaining games
+                    break
+
+                home = data.get("homeTeam", {})
+                away = data.get("awayTeam", {})
+                state = data.get("gameState", "")
+
+                if state in ("FUT", "PRE"):
                     continue
-                parsed = parse_game(game)
-                if parsed:
-                    seen.add(gid)
-                    games.append(parsed)
-        time.sleep(0.2)
-        current += timedelta(days=1)
+
+                parsed = {
+                    "game_id":    game_id,
+                    "date":       data.get("gameDate", ""),
+                    "game_type":  "P",
+                    "home_team":  home.get("abbrev", ""),
+                    "away_team":  away.get("abbrev", ""),
+                    "home_score": home.get("score"),
+                    "away_score": away.get("score"),
+                    "venue":      data.get("venue", {}).get("default", ""),
+                }
+                seen.add(game_id)
+                games.append(parsed)
+                time.sleep(0.1)
+
     return games
 
 # ── Main loop ────────────────────────────────────────────────────────────────
@@ -138,7 +159,7 @@ for year in range(START_YEAR, END_YEAR + 1):
         # Has regular season but missing playoffs — patch
         print(f"\n=== PATCHING PLAYOFFS {year}-{year+1} ===")
         seen = set(g["game_id"] for g in existing)
-        po = fetch_playoffs(year, seen)
+        po = fetch_playoffs_by_id(year, seen)
         print(f"  → {len(po)} playoff games found")
         if po:
             all_games = sorted(existing + po, key=lambda g: g.get("date") or "")
@@ -150,7 +171,7 @@ for year in range(START_YEAR, END_YEAR + 1):
     seen = set()
     reg = fetch_regular_season(year, seen)
     print(f"  Regular: {len(reg)}")
-    po  = fetch_playoffs(year, seen)
+    po  = fetch_playoffs_by_id(year, seen)
     print(f"  Playoffs: {len(po)}")
     all_games = sorted(reg + po, key=lambda g: g.get("date") or "")
     out_file.write_text(json.dumps(all_games, indent=2))
