@@ -2,10 +2,14 @@ name: NHL Full History Builder
 
 on:
   workflow_dispatch:
+  # Optionally run nightly to pick up current season games
+  # schedule:
+  #   - cron: '0 8 * * *'
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 300  # 5 hours — enough for full history
 
     steps:
       - name: Checkout
@@ -17,21 +21,18 @@ jobs:
           python-version: "3.11"
 
       - name: Install deps
-        run: |
-          pip install requests
+        run: pip install requests
 
       - name: Ensure folders exist
-        run: |
-          mkdir -p docs/data/nhl/seasons
+        run: mkdir -p docs/data/nhl/seasons
 
-      - name: Build ALL seasons
-        run: |
-          python scripts/nhl_full_history_builder.py
+      - name: Build all seasons
+        run: python scripts/nhl_full_history_builder.py
 
-      - name: Commit
+      - name: Commit results
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add docs/data/nhl/seasons
-          git commit -m "Build NHL full history" || echo "No changes"
+          git diff --cached --quiet || git commit -m "Build NHL full history $(date -u +%Y-%m-%d)"
           git push
