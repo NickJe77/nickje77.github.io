@@ -94,19 +94,19 @@ def fetch_regular_season(year, seen):
 def fetch_playoffs_by_id(year, seen):
     """
     Probe playoff game IDs directly using the NHL ID format:
-      {year}{year+1}030{round}{series_padded}{game}
+      {year}03{round}{series}{game}
+    e.g. 2024030111 = 2024 season, playoff, round 1, series 1, game 1
     Rounds 1-4, up to 8 series per round, up to 7 games per series.
     Only ~224 possible IDs per season — very fast.
     """
     games = []
-    season_id = f"{year}{year+1}"
 
     for round_num in range(1, 5):        # rounds 1-4
         for series_num in range(1, 9):   # up to 8 series per round
             for game_num in range(1, 8): # up to 7 games per series
-                # NHL playoff ID format: YYYYYYYYO3RRSSGG
-                # e.g. 2024030111 = round 1, series 1, game 1
-                game_id = int(f"{season_id}030{round_num}{series_num}{game_num}")
+                # NHL playoff ID format: YYYY03RRSSGG
+                # e.g. 2024030111 = 2024-25 season, round 1, series 1, game 1
+                game_id = int(f"{year}030{round_num}{series_num}{game_num}")
 
                 if game_id in seen:
                     continue
