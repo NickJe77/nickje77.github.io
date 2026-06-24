@@ -156,6 +156,24 @@ for year in range(START_YEAR, END_YEAR + 1):
             print(f"SKIP {year} ({len(existing)} games incl. playoffs)")
             continue
 
+        # Backfill game_type from game_id for all existing games missing it
+        changed = False
+        for g in existing:
+            if not g.get("game_type"):
+                gid = str(g.get("game_id", ""))
+                g["game_type"] = "P" if len(gid) >= 6 and gid[4:6] == "03" else "R"
+                changed = True
+
+        if changed:
+            out_file.write_text(json.dumps(existing, indent=2))
+            print(f"  Backfilled game_type for {year}")
+
+        # Re-check playoffs after backfill
+        has_playoffs = any(g.get("game_type") == "P" for g in existing)
+        if has_playoffs:
+            print(f"SKIP {year} (playoffs now present after backfill)")
+            continue
+
         # Has regular season but missing playoffs — patch
         print(f"\n=== PATCHING PLAYOFFS {year}-{year+1} ===")
         seen = set(g["game_id"] for g in existing)
