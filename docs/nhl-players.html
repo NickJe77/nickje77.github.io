@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>NHL Players | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-N8J9ZPKDDH"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-N8J9ZPKDDH');</script>
+<link rel="stylesheet" href="style.css">
+<style>
+body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f4f6f8;color:#111;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;background:#fff;font-weight:600;}
+.navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+.navbar a:hover{text-decoration:underline;}
+.hero{background:linear-gradient(135deg,#041E42,#0072CE);color:white;padding:70px 20px;text-align:center;}
+.hero h1{margin:0;font-size:64px;font-weight:900;letter-spacing:-2px;}
+.hero p{margin-top:14px;font-size:22px;font-weight:600;opacity:.88;}
+.container{max-width:1600px;margin:40px auto;padding:0 20px 60px;}
+.search-wrap{margin-bottom:28px;display:flex;justify-content:center;gap:12px;flex-wrap:wrap;}
+#playerSearch{width:100%;max-width:480px;padding:16px 18px;font-size:18px;border-radius:14px;border:1px solid #d7dbe3;outline:none;font-family:inherit;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.05);}
+#playerSearch:focus{border-color:#041E42;box-shadow:0 0 0 4px rgba(4,30,66,.12);}
+#posFilter{padding:14px 16px;font-size:16px;border-radius:14px;border:1px solid #d7dbe3;font-weight:700;background:white;cursor:pointer;}
+.player-count{margin-bottom:24px;font-size:18px;font-weight:700;color:#555;text-align:center;}
+.players-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:18px;}
+.player-card{background:white;border-radius:16px;padding:22px;text-decoration:none;color:#111;box-shadow:0 2px 10px rgba(0,0,0,.07);transition:.2s ease;display:block;}
+.player-card:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,.13);}
+.player-name{font-size:18px;font-weight:900;margin-bottom:6px;}
+.player-meta{font-size:13px;color:#666;font-weight:600;margin-bottom:12px;}
+.player-stats{display:flex;gap:14px;flex-wrap:wrap;}
+.player-stat{text-align:center;}
+.player-stat-value{font-size:20px;font-weight:900;color:#041E42;}
+.player-stat-label{font-size:10px;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:.5px;}
+.no-results{text-align:center;font-size:22px;font-weight:800;padding:60px 20px;color:#666;display:none;}
+.loading{text-align:center;padding:60px;font-size:18px;color:#666;}
+@media(max-width:900px){
+  .hero h1{font-size:42px;}
+  .hero p{font-size:18px;}
+}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="nba.html">NBA</a>
+  <a href="nhl.html">NHL</a>
+</div>
+
+<div class="hero">
+  <h1>NHL Players</h1>
+  <p>Every player in NHL history from 1967 to present</p>
+</div>
+
+<div class="container">
+  <div class="search-wrap">
+    <input type="text" id="playerSearch" placeholder="Search players...">
+    <select id="posFilter">
+      <option value="">All Positions</option>
+      <option value="C">Centre</option>
+      <option value="L">Left Wing</option>
+      <option value="R">Right Wing</option>
+      <option value="D">Defence</option>
+      <option value="G">Goalie</option>
+    </select>
+  </div>
+  <div class="player-count" id="playerCount"></div>
+  <div class="players-grid" id="playersGrid">
+    <div class="loading">Loading players...</div>
+  </div>
+  <div class="no-results" id="noResults">No players found</div>
+</div>
+
+<script>
+var TEAM_NAMES = {
+  "ANA":"Anaheim Ducks","ARI":"Arizona Coyotes","BOS":"Boston Bruins",
+  "BUF":"Buffalo Sabres","CGY":"Calgary Flames","CAR":"Carolina Hurricanes",
+  "CHI":"Chicago Blackhawks","COL":"Colorado Avalanche","CBJ":"Columbus Blue Jackets",
+  "DAL":"Dallas Stars","DET":"Detroit Red Wings","EDM":"Edmonton Oilers",
+  "FLA":"Florida Panthers","LAK":"Los Angeles Kings","MIN":"Minnesota Wild",
+  "MTL":"Montreal Canadiens","NSH":"Nashville Predators","NJD":"New Jersey Devils",
+  "NYI":"New York Islanders","NYR":"New York Rangers","OTT":"Ottawa Senators",
+  "PHI":"Philadelphia Flyers","PIT":"Pittsburgh Penguins","SJS":"San Jose Sharks",
+  "SEA":"Seattle Kraken","STL":"St. Louis Blues","TBL":"Tampa Bay Lightning",
+  "TOR":"Toronto Maple Leafs","UTA":"Utah Hockey Club","VAN":"Vancouver Canucks",
+  "VGK":"Vegas Golden Knights","WSH":"Washington Capitals","WPG":"Winnipeg Jets"
+};
+function tn(code){ return TEAM_NAMES[code] || code; }
+
+var grid      = document.getElementById('playersGrid');
+var search    = document.getElementById('playerSearch');
+var posFilter = document.getElementById('posFilter');
+var countEl   = document.getElementById('playerCount');
+var noResults = document.getElementById('noResults');
+
+var allPlayers = [];
+
+fetch('/data/nhl/players.json')
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    allPlayers = data;
+    render();
+  })
+  .catch(function(){
+    grid.innerHTML = '<div class="loading">Failed to load players. Make sure the player builder has run.</div>';
+  });
+
+search.addEventListener('input', render);
+posFilter.addEventListener('change', render);
+
+function render(){
+  var q   = search.value.toLowerCase().trim();
+  var pos = posFilter.value;
+
+  var filtered = allPlayers.filter(function(p){
+    if(q && !(p.name||'').toLowerCase().includes(q) &&
+       !(p.teams||[]).some(function(t){ return tn(t).toLowerCase().includes(q); })) return false;
+    if(pos && (p.position||'').toUpperCase() !== pos) return false;
+    return true;
+  });
+
+  countEl.textContent = filtered.length.toLocaleString() + ' Players';
+
+  if(!filtered.length){
+    noResults.style.display = 'block';
+    grid.innerHTML = '';
+    return;
+  }
+  noResults.style.display = 'none';
+
+  // Show top 200 for performance — search narrows it down
+  var show = filtered.slice(0, 200);
+
+  grid.innerHTML = show.map(function(p){
+    var lastTeam = (p.teams && p.teams.length) ? tn(p.teams[p.teams.length-1]) : '';
+    var pos = p.position || '';
+    var seasons = (p.seasons || []).length;
+    var goals   = p.career_goals   || 0;
+    var assists = p.career_assists || 0;
+    var points  = p.career_points  || 0;
+    var gp      = p.career_gp     || 0;
+
+    return '<a class="player-card" href="/nhl-player.html?player='+encodeURIComponent(p.id)+'">' +
+      '<div class="player-name">'+p.name+'</div>' +
+      '<div class="player-meta">'+(pos ? pos+' · ' : '')+lastTeam+'</div>' +
+      '<div class="player-stats">' +
+        '<div class="player-stat"><div class="player-stat-value">'+gp+'</div><div class="player-stat-label">GP</div></div>' +
+        (goals > 0 ? '<div class="player-stat"><div class="player-stat-value">'+goals+'</div><div class="player-stat-label">Goals</div></div>' : '') +
+        (assists > 0 ? '<div class="player-stat"><div class="player-stat-value">'+assists+'</div><div class="player-stat-label">Assists</div></div>' : '') +
+        (points > 0 ? '<div class="player-stat"><div class="player-stat-value">'+points+'</div><div class="player-stat-label">Points</div></div>' : '') +
+        '<div class="player-stat"><div class="player-stat-value">'+seasons+'</div><div class="player-stat-label">Seasons</div></div>' +
+      '</div>' +
+    '</a>';
+  }).join('');
+
+  if(filtered.length > 200){
+    grid.innerHTML += '<div style="text-align:center;padding:20px;color:#888;font-weight:700;">Showing 200 of '+filtered.length.toLocaleString()+' — search to narrow results</div>';
+  }
+}
+</script>
+</body>
+</html>
