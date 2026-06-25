@@ -26,8 +26,10 @@ SEASONS_DIR  = Path("docs/data/nhl/seasons")
 PLAYERS_DIR  = Path("docs/data/nhl/players")
 PLAYERS_DIR.mkdir(parents=True, exist_ok=True)
 
-START_YEAR = 1967
-END_YEAR   = 2025
+import sys
+# Accept optional year range args: python nhl_player_builder.py 1967 1980
+START_YEAR = int(sys.argv[1]) if len(sys.argv) > 1 else 1967
+END_YEAR   = int(sys.argv[2]) if len(sys.argv) > 2 else 2025
 
 # Load existing player index if present
 PLAYERS_INDEX_FILE = Path("docs/data/nhl/players.json")
