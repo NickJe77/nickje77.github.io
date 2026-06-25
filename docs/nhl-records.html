@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+  <meta charset="UTF-8">
+  <title>NHL Records | The Sporting Almanac</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-N8J9ZPKDDH"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-N8J9ZPKDDH');</script>
+  <link rel="stylesheet" href="style.css">
+  <style>
+  body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f4f6f8;color:#111;}
+  .navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;background:#fff;font-weight:600;position:sticky;top:0;z-index:100;}
+  .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+  .navbar a:hover{text-decoration:underline;}
+  .hero{background:linear-gradient(135deg,#041E42,#0072CE);color:white;padding:56px 20px 44px;text-align:center;}
+  .hero h1{margin:0;font-size:48px;font-weight:900;letter-spacing:-1px;}
+  .hero p{margin:12px 0 0;font-size:17px;opacity:.88;}
+  .container{max-width:1400px;margin:30px auto;padding:0 20px 60px;}
+  .records-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:24px;}
+  .section{background:white;border-radius:20px;padding:24px;box-shadow:0 3px 10px rgba(0,0,0,.07);overflow-x:auto;}
+  .section-title{font-size:19px;font-weight:900;margin:0 0 16px;color:#041E42;border-left:5px solid #0072CE;padding-left:12px;}
+  table{border-collapse:collapse;width:100%;white-space:nowrap;}
+  th{background:#041E42;color:white;padding:11px 12px;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;text-align:left;}
+  td{padding:11px 12px;border-bottom:1px solid #edf2f7;font-size:14px;font-weight:500;}
+  tr:nth-child(even) td{background:#f4f8fd;}
+  tr:hover td{background:#e8f2ff;}
+  .rank{font-weight:900;color:#0072CE;text-align:center;width:32px;}
+  .tlink{text-decoration:none;font-weight:800;color:#0056d6;}
+  .tlink:hover{text-decoration:underline;}
+  .loading{text-align:center;padding:80px;font-size:18px;font-weight:700;color:#555;}
+  .progress-wrap{background:#e2e8f0;border-radius:99px;height:8px;max-width:400px;margin:12px auto 0;}
+  .progress-bar{background:#041E42;height:8px;border-radius:99px;transition:width .15s;}
+  @media(max-width:768px){
+    .hero h1{font-size:34px;}
+    .records-grid{grid-template-columns:1fr;}
+  }
+  </style>
+</head>
+<body>
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="nba.html">NBA</a>
+  <a href="nhl.html">NHL</a>
+</div>
+
+<div class="hero">
+  <h1>NHL Records</h1>
+  <p>All-time NHL records from 1967 to present</p>
+</div>
+
+<div class="container">
+  <div class="loading" id="loadingMsg">
+    Loading records...
+    <div class="progress-wrap"><div class="progress-bar" id="pbar" style="width:0%"></div></div>
+  </div>
+  <div class="records-grid" id="recordsGrid" style="display:none"></div>
+</div>
+
+<script>
+var TEAM_NAMES = {
+  "ANA":"Anaheim Ducks","ARI":"Arizona Coyotes","ATL":"Atlanta Thrashers",
+  "BOS":"Boston Bruins","BUF":"Buffalo Sabres","CGY":"Calgary Flames",
+  "CAR":"Carolina Hurricanes","CHI":"Chicago Blackhawks","COL":"Colorado Avalanche",
+  "CBJ":"Columbus Blue Jackets","DAL":"Dallas Stars","DET":"Detroit Red Wings",
+  "EDM":"Edmonton Oilers","FLA":"Florida Panthers","LAK":"Los Angeles Kings",
+  "MIN":"Minnesota Wild","MTL":"Montreal Canadiens","NSH":"Nashville Predators",
+  "NJD":"New Jersey Devils","NYI":"New York Islanders","NYR":"New York Rangers",
+  "OTT":"Ottawa Senators","PHI":"Philadelphia Flyers","PHX":"Phoenix Coyotes",
+  "PIT":"Pittsburgh Penguins","SJS":"San Jose Sharks","SEA":"Seattle Kraken",
+  "STL":"St. Louis Blues","TBL":"Tampa Bay Lightning","TOR":"Toronto Maple Leafs",
+  "UTA":"Utah Hockey Club","VAN":"Vancouver Canucks","VGK":"Vegas Golden Knights",
+  "WSH":"Washington Capitals","WPG":"Winnipeg Jets",
+  "QUE":"Quebec Nordiques","HFD":"Hartford Whalers","MNS":"Minnesota North Stars",
+  "KCS":"Kansas City Scouts","CLR":"Colorado Rockies","OAK":"Oakland Seals",
+  "CAL":"California Golden Seals","CLE":"Cleveland Barons","ATF":"Atlanta Flames",
+  "CGS":"California Golden Seals","WIN":"Winnipeg Jets (old)"
+};
+
+function tn(code){ return TEAM_NAMES[code] || code; }
+function tlink(code){
+  return '<a class="tlink" href="/nhl-franchise.html?team='+encodeURIComponent(code)+'">'+tn(code)+'</a>';
+}
+function slink(season){
+  return '<a class="tlink" href="/nhl-season.html?season='+season+'">'+season+'–'+String(season+1).slice(2)+'</a>';
+}
+function gtype(g){
+  if(g.game_type) return g.game_type;
+  return String(g.game_id||'').slice(4,6)==='03'?'P':'R';
+}
+function medal(i){ return i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1; }
+
+function makeTable(rows, cols){
+  var head = cols.map(function(c){ return '<th>'+c.label+'</th>'; }).join('');
+  var body = rows.map(function(r, i){
+    return '<tr>'+cols.map(function(c){
+      if(c.key==='rank') return '<td class="rank">'+medal(i)+'</td>';
+      return '<td>'+r[c.key]+'</td>';
+    }).join('')+'</tr>';
+  }).join('');
+  return '<table><thead><tr>'+head+'</tr></thead><tbody>'+body+'</tbody></table>';
+}
+
+function section(title, tableHtml){
+  return '<div class="section"><div class="section-title">'+title+'</div>'+tableHtml+'</div>';
+}
+
+fetch('/data/nhl/index.json')
+  .then(function(r){ return r.json(); })
+  .then(function(index){
+    var seasons = index.filter(function(s){ return s.games > 0; });
+    var done = 0;
+    var allGames = [];
+
+    var promises = seasons.map(function(s){
+      return fetch('/data/nhl/seasons/'+s.season+'.json')
+        .then(function(r){ return r.json(); })
+        .then(function(games){
+          games.forEach(function(g){ g._season = s.season; allGames.push(g); });
+        }).catch(function(){})
+        .finally(function(){
+          done++;
+          document.getElementById('pbar').style.width = Math.round((done/seasons.length)*100)+'%';
+        });
+    });
+
+    return Promise.all(promises).then(function(){ return allGames; });
+  })
+  .then(function(allGames){
+    var regGames = allGames.filter(function(g){ return gtype(g)==='R'; });
+    var poGames  = allGames.filter(function(g){ return gtype(g)==='P'; });
+
+    // ── Team season records ───────────────────────────────────────────────
+    var teamSeasons = {}; // key = team+season
+
+    regGames.forEach(function(g){
+      [
+        {team: g.home_team, gf: g.home_score||0, ga: g.away_score||0},
+        {team: g.away_team, gf: g.away_score||0, ga: g.home_score||0}
+      ].forEach(function(side){
+        var k = side.team+'|'+g._season;
+        if(!teamSeasons[k]) teamSeasons[k] = {team:side.team, season:g._season, w:0, l:0, gf:0, ga:0, gp:0};
+        var r = teamSeasons[k];
+        r.gp++; r.gf+=side.gf; r.ga+=side.ga;
+        if(side.gf>side.ga) r.w++;
+        else if(side.ga>side.gf) r.l++;
+      });
+    });
+
+    var tsArr = Object.values(teamSeasons).filter(function(r){ return r.gp >= 40; });
+
+    // Most wins in a season
+    var mostWinsSeason = tsArr.slice().sort(function(a,b){ return b.w-a.w; }).slice(0,10)
+      .map(function(r){ return {rank:'',team:tlink(r.team),season:slink(r.season),w:r.w,gp:r.gp,pct:(r.w/r.gp*100).toFixed(1)+'%'}; });
+
+    // Most goals in a season
+    var mostGoalsSeason = tsArr.slice().sort(function(a,b){ return b.gf-a.gf; }).slice(0,10)
+      .map(function(r){ return {rank:'',team:tlink(r.team),season:slink(r.season),gf:r.gf,gp:r.gp,avg:(r.gf/r.gp).toFixed(2)}; });
+
+    // Fewest goals against in a season
+    var fewestGA = tsArr.slice().sort(function(a,b){ return a.ga-b.ga; }).slice(0,10)
+      .map(function(r){ return {rank:'',team:tlink(r.team),season:slink(r.season),ga:r.ga,gp:r.gp,avg:(r.ga/r.gp).toFixed(2)}; });
+
+    // Best win % in a season
+    var bestPct = tsArr.slice().sort(function(a,b){ return (b.w/b.gp)-(a.w/a.gp); }).slice(0,10)
+      .map(function(r){ return {rank:'',team:tlink(r.team),season:slink(r.season),w:r.w,gp:r.gp,pct:(r.w/r.gp*100).toFixed(1)+'%'}; });
+
+    // ── All-time team totals ───────────────────────────────────────────────
+    var teamTotals = {};
+    regGames.forEach(function(g){
+      [
+        {team: g.home_team, gf: g.home_score||0, ga: g.away_score||0},
+        {team: g.away_team, gf: g.away_score||0, ga: g.home_score||0}
+      ].forEach(function(side){
+        if(!teamTotals[side.team]) teamTotals[side.team]={team:side.team,w:0,l:0,gf:0,ga:0,gp:0};
+        var r = teamTotals[side.team];
+        r.gp++; r.gf+=side.gf; r.ga+=side.ga;
+        if(side.gf>side.ga) r.w++;
+        else if(side.ga>side.gf) r.l++;
+      });
+    });
+    var ttArr = Object.values(teamTotals).filter(function(r){ return r.gp >= 100; });
+
+    var mostWinsAllTime = ttArr.slice().sort(function(a,b){ return b.w-a.w; }).slice(0,10)
+      .map(function(r){ return {rank:'',team:tlink(r.team),w:r.w,gp:r.gp,pct:(r.w/r.gp*100).toFixed(1)+'%'}; });
+
+    var mostGoalsAllTime = ttArr.slice().sort(function(a,b){ return b.gf-a.gf; }).slice(0,10)
+      .map(function(r){ return {rank:'',team:tlink(r.team),gf:r.gf,gp:r.gp,avg:(r.gf/r.gp).toFixed(2)}; });
+
+    // ── Single game records ───────────────────────────────────────────────
+
+    // Highest scoring games
+    var highScoring = allGames.filter(function(g){
+      return g.home_score!=null && g.away_score!=null;
+    }).map(function(g){
+      return {g:g, total:(g.home_score||0)+(g.away_score||0)};
+    }).sort(function(a,b){ return b.total-a.total; }).slice(0,10)
+      .map(function(r){
+        return {rank:'',home:tlink(r.g.home_team),score:r.g.home_score+' – '+r.g.away_score,
+          away:tlink(r.g.away_team),season:slink(r.g._season),total:r.total,type:gtype(r.g)==='P'?'Playoff':'Regular'};
+      });
+
+    // Biggest winning margins
+    var bigMargins = allGames.filter(function(g){
+      return g.home_score!=null && g.away_score!=null;
+    }).map(function(g){
+      var margin = Math.abs((g.home_score||0)-(g.away_score||0));
+      var winner = g.home_score>g.away_score ? g.home_team : g.away_team;
+      var loser  = g.home_score>g.away_score ? g.away_team : g.home_team;
+      return {winner:winner,loser:loser,score:g.home_score+' – '+g.away_score,season:g._season,margin:margin,type:gtype(g)==='P'?'Playoff':'Regular'};
+    }).sort(function(a,b){ return b.margin-a.margin; }).slice(0,10)
+      .map(function(r){
+        return {rank:'',winner:tlink(r.winner),loser:tlink(r.loser),score:r.score,
+          season:slink(r.season),margin:r.margin,type:r.type};
+      });
+
+    // Most goals by one team in a game
+    var mostGoalsGame = allGames.filter(function(g){
+      return g.home_score!=null && g.away_score!=null;
+    }).flatMap(function(g){
+      return [
+        {team:g.home_team,opp:g.away_team,gf:g.home_score||0,ga:g.away_score||0,season:g._season,type:gtype(g)},
+        {team:g.away_team,opp:g.home_team,gf:g.away_score||0,ga:g.home_score||0,season:g._season,type:gtype(g)}
+      ];
+    }).sort(function(a,b){ return b.gf-a.gf; }).slice(0,10)
+      .map(function(r){
+        return {rank:'',team:tlink(r.team),opp:tlink(r.opp),gf:r.gf,ga:r.ga,
+          score:r.gf+' – '+r.ga,season:slink(r.season),type:r.type==='P'?'Playoff':'Regular'};
+      });
+
+    // ── Playoff records ───────────────────────────────────────────────────
+    var poTeamTotals = {};
+    poGames.forEach(function(g){
+      [
+        {team:g.home_team,gf:g.home_score||0,ga:g.away_score||0},
+        {team:g.away_team,gf:g.away_score||0,ga:g.home_score||0}
+      ].forEach(function(side){
+        if(!poTeamTotals[side.team]) poTeamTotals[side.team]={team:side.team,w:0,l:0,gf:0,ga:0,gp:0};
+        var r=poTeamTotals[side.team];
+        r.gp++; r.gf+=side.gf; r.ga+=side.ga;
+        if(side.gf>side.ga) r.w++;
+        else if(side.ga>side.gf) r.l++;
+      });
+    });
+    var poArr = Object.values(poTeamTotals).filter(function(r){ return r.gp>=10; });
+
+    var mostPoWins = poArr.slice().sort(function(a,b){ return b.w-a.w; }).slice(0,10)
+      .map(function(r){ return {rank:'',team:tlink(r.team),w:r.w,l:r.l,gp:r.gp}; });
+
+    // ── Render ────────────────────────────────────────────────────────────
+    var sections = [
+      section('🏆 Most Wins in a Season', makeTable(mostWinsSeason,
+        [{key:'rank',label:'#'},{key:'team',label:'Team'},{key:'season',label:'Season'},{key:'w',label:'W'},{key:'gp',label:'GP'},{key:'pct',label:'Win%'}])),
+      section('🏆 Most All-Time Wins', makeTable(mostWinsAllTime,
+        [{key:'rank',label:'#'},{key:'team',label:'Team'},{key:'w',label:'W'},{key:'gp',label:'GP'},{key:'pct',label:'Win%'}])),
+      section('⚡ Best Win % in a Season', makeTable(bestPct,
+        [{key:'rank',label:'#'},{key:'team',label:'Team'},{key:'season',label:'Season'},{key:'w',label:'W'},{key:'gp',label:'GP'},{key:'pct',label:'Win%'}])),
+      section('🥅 Most Goals in a Season', makeTable(mostGoalsSeason,
+        [{key:'rank',label:'#'},{key:'team',label:'Team'},{key:'season',label:'Season'},{key:'gf',label:'GF'},{key:'gp',label:'GP'},{key:'avg',label:'Avg'}])),
+      section('🥅 Most All-Time Goals', makeTable(mostGoalsAllTime,
+        [{key:'rank',label:'#'},{key:'team',label:'Team'},{key:'gf',label:'GF'},{key:'gp',label:'GP'},{key:'avg',label:'Avg'}])),
+      section('🛡️ Fewest Goals Against in a Season', makeTable(fewestGA,
+        [{key:'rank',label:'#'},{key:'team',label:'Team'},{key:'season',label:'Season'},{key:'ga',label:'GA'},{key:'gp',label:'GP'},{key:'avg',label:'Avg'}])),
+      section('🔥 Highest Scoring Games', makeTable(highScoring,
+        [{key:'rank',label:'#'},{key:'home',label:'Home'},{key:'score',label:'Score'},{key:'away',label:'Away'},{key:'season',label:'Season'},{key:'total',label:'Total'},{key:'type',label:'Type'}])),
+      section('💥 Biggest Winning Margins', makeTable(bigMargins,
+        [{key:'rank',label:'#'},{key:'winner',label:'Winner'},{key:'loser',label:'Loser'},{key:'score',label:'Score'},{key:'season',label:'Season'},{key:'margin',label:'Margin'},{key:'type',label:'Type'}])),
+      section('🥅 Most Goals by One Team in a Game', makeTable(mostGoalsGame,
+        [{key:'rank',label:'#'},{key:'team',label:'Team'},{key:'opp',label:'Opponent'},{key:'score',label:'Score'},{key:'season',label:'Season'},{key:'type',label:'Type'}])),
+      section('🏒 Most All-Time Playoff Wins', makeTable(mostPoWins,
+        [{key:'rank',label:'#'},{key:'team',label:'Team'},{key:'w',label:'W'},{key:'l',label:'L'},{key:'gp',label:'GP'}])),
+    ];
+
+    document.getElementById('loadingMsg').style.display = 'none';
+    var grid = document.getElementById('recordsGrid');
+    grid.style.display = 'grid';
+    grid.innerHTML = sections.join('');
+  })
+  .catch(function(err){
+    document.getElementById('loadingMsg').textContent = 'Failed to load records.';
+    console.error(err);
+  });
+</script>
+</body>
+</html>
