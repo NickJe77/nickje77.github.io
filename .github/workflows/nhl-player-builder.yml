@@ -2,9 +2,15 @@ name: NHL Player Stats Builder
 
 on:
   workflow_dispatch:
-  # Run nightly to pick up new games during the season
-  schedule:
-    - cron: '0 9 * * *'
+    inputs:
+      start_year:
+        description: 'Start year (e.g. 1967)'
+        required: true
+        default: '1967'
+      end_year:
+        description: 'End year (e.g. 1980)'
+        required: true
+        default: '1980'
 
 jobs:
   build:
@@ -26,13 +32,14 @@ jobs:
       - name: Ensure folders exist
         run: mkdir -p docs/data/nhl/players
 
-      - name: Build player stats
-        run: python scripts/nhl_player_builder.py
+      - name: Build player stats (${{ github.event.inputs.start_year }}–${{ github.event.inputs.end_year }})
+        run: python scripts/nhl_player_builder.py ${{ github.event.inputs.start_year }} ${{ github.event.inputs.end_year }}
 
       - name: Commit results
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add docs/data/nhl/players docs/data/nhl/players.json
-          git diff --cached --quiet || git commit -m "Update NHL player stats $(date -u +%Y-%m-%d)"
+          git diff --cached --quiet || git commit -m "NHL player stats ${{ github.event.inputs.start_year }}-${{ github.event.inputs.end_year }}"
+          git pull --rebase origin main
           git push
