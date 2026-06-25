@@ -70,60 +70,50 @@ def toi_to_seconds(toi_str):
         return 0
 
 def parse_player_stats(player, game_id, date, season, game_type, team_abbrev):
-    """Extract stats from a player object in the boxscore."""
-    pid   = str(player.get("playerId", ""))
-    name  = player.get("name", {}).get("default", "") or \
-            player.get("firstName", {}).get("default", "") + " " + \
-            player.get("lastName", {}).get("default", "")
-    name  = name.strip()
-    pos   = player.get("position", "")
+    """Extract stats from a player object in the NHL API boxscore."""
+    pid  = str(player.get("playerId", ""))
+    name = (player.get("name", {}) or {}).get("default", "").strip()
+    pos  = player.get("position", "")
 
-    s = player  # stats are at top level in NHL API boxscore
-
-    goals             = int(s.get("goals", 0) or 0)
-    assists           = int(s.get("assists", 0) or 0)
-    points            = goals + assists
-    plus_minus        = int(s.get("plusMinus", 0) or 0)
-    shots             = int(s.get("shots", 0) or 0)
-    hits              = int(s.get("hits", 0) or 0)
-    blocked           = int(s.get("blockedShots", 0) or 0)
-    pim               = int(s.get("pim", 0) or 0)
-    pp_goals          = int(s.get("powerPlayGoals", 0) or 0)
-    pp_assists        = int(s.get("powerPlayAssists", 0) or 0) if "powerPlayAssists" in s else 0
-    sh_goals          = int(s.get("shorthandedGoals", 0) or 0)
-    sh_assists        = int(s.get("shorthandedAssists", 0) or 0) if "shorthandedAssists" in s else 0
-    fo_wins           = int(s.get("faceoffWins", 0) or 0)
-    fo_losses         = int(s.get("faceoffLosses", 0) or 0) if "faceoffLosses" in s \
-                        else max(0, int(s.get("faceoffTaken", 0) or 0) - fo_wins)
-    toi               = toi_to_seconds(s.get("toi", ""))
-    pp_toi            = toi_to_seconds(s.get("powerPlayToi", "") or s.get("ppToi", ""))
-    sh_toi            = toi_to_seconds(s.get("shorthandedToi", "") or s.get("shToi", ""))
+    goals      = int(player.get("goals", 0) or 0)
+    assists    = int(player.get("assists", 0) or 0)
+    points     = goals + assists
+    plus_minus = int(player.get("plusMinus", 0) or 0)
+    shots      = int(player.get("sog", 0) or 0)
+    hits       = int(player.get("hits", 0) or 0)
+    blocked    = int(player.get("blockedShots", 0) or 0)
+    pim        = int(player.get("pim", 0) or 0)
+    pp_goals   = int(player.get("powerPlayGoals", 0) or 0)
+    shifts     = int(player.get("shifts", 0) or 0)
+    giveaways  = int(player.get("giveaways", 0) or 0)
+    takeaways  = int(player.get("takeaways", 0) or 0)
+    fo_pctg    = float(player.get("faceoffWinningPctg", 0) or 0)
+    toi        = toi_to_seconds(player.get("toi", ""))
 
     return {
         "player_id": pid,
         "name":      name,
         "position":  pos,
     }, {
-        "game_id":      game_id,
-        "date":         date,
-        "season":       season,
-        "game_type":    game_type,
-        "team":         team_abbrev,
-        "goals":        goals,
-        "assists":      assists,
-        "points":       points,
-        "plus_minus":   plus_minus,
-        "shots":        shots,
-        "hits":         hits,
-        "blocked":      blocked,
-        "pim":          pim,
-        "pp_goals":     pp_goals,
-        "pp_assists":   pp_assists,
-        "sh_goals":     sh_goals,
-        "sh_assists":   sh_assists,
-        "fo_pctg":      fo_pctg,
-        "shifts":       shifts,
-        "toi":          toi,
+        "game_id":    game_id,
+        "date":       date,
+        "season":     season,
+        "game_type":  game_type,
+        "team":       team_abbrev,
+        "goals":      goals,
+        "assists":    assists,
+        "points":     points,
+        "plus_minus": plus_minus,
+        "shots":      shots,
+        "hits":       hits,
+        "blocked":    blocked,
+        "pim":        pim,
+        "pp_goals":   pp_goals,
+        "shifts":     shifts,
+        "giveaways":  giveaways,
+        "takeaways":  takeaways,
+        "fo_pctg":    fo_pctg,
+        "toi":        toi,
     }
 
 def fetch_boxscore_players(game_id, date, season, game_type):
