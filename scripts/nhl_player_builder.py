@@ -121,11 +121,9 @@ def parse_player_stats(player, game_id, date, season, game_type, team_abbrev):
         "pp_assists":   pp_assists,
         "sh_goals":     sh_goals,
         "sh_assists":   sh_assists,
-        "fo_wins":      fo_wins,
-        "fo_losses":    fo_losses,
+        "fo_pctg":      fo_pctg,
+        "shifts":       shifts,
         "toi":          toi,
-        "pp_toi":       pp_toi,
-        "sh_toi":       sh_toi,
     }
 
 def fetch_boxscore_players(game_id, date, season, game_type):
@@ -135,14 +133,18 @@ def fetch_boxscore_players(game_id, date, season, game_type):
     if not data:
         return []
 
-    results = []
-    for side in ["homeTeam", "awayTeam"]:
-        team_data = data.get(side, {})
-        team_abbrev = team_data.get("abbrev", "")
-        players_section = team_data.get("players", {})
+    # Top-level team info for abbrev
+    home_abbrev = data.get("homeTeam", {}).get("abbrev", "")
+    away_abbrev = data.get("awayTeam", {}).get("abbrev", "")
 
-        # API returns players grouped by position
-        for position_group in players_section.values():
+    # Player stats are under playerByGameStats.homeTeam / awayTeam
+    pgs = data.get("playerByGameStats", {})
+
+    results = []
+    for side, abbrev in [("homeTeam", home_abbrev), ("awayTeam", away_abbrev)]:
+        side_data = pgs.get(side, {})
+        # Grouped by position: forwards, defense, goalies
+        for position_group in side_data.values():
             if not isinstance(position_group, list):
                 continue
             for player in position_group:
@@ -150,7 +152,7 @@ def fetch_boxscore_players(game_id, date, season, game_type):
                     continue
                 try:
                     pinfo, pstats = parse_player_stats(
-                        player, game_id, date, season, game_type, team_abbrev
+                        player, game_id, date, season, game_type, abbrev
                     )
                     if pinfo["player_id"]:
                         results.append((pinfo, pstats))
