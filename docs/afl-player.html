@@ -56,6 +56,27 @@ td.top8-badge{font-size:11px;color:#2a7a2a;font-weight:700;}
 .disambig-card{display:flex;align-items:center;gap:10px;padding:16px 22px;border-radius:12px;border:2px solid #dde3ec;text-decoration:none;color:#333;font-size:17px;font-weight:600;background:#f9fbff;transition:border-color .15s,box-shadow .15s;}
 .disambig-card:hover{border-color:#0056d6;box-shadow:0 4px 14px rgba(0,86,214,.12);}
 .disambig-stripe{height:32px;width:44px;border-radius:6px;border:1px solid #ccc;flex-shrink:0;}
+
+/* ── Duo section ── */
+#duoSection{background:white;border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.08);padding:25px 30px;margin-bottom:20px;display:none;}
+.duo-header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+.duo-header h2{margin:0;font-size:20px;font-weight:700;}
+#duoSearch{padding:9px 13px;border-radius:9px;border:1px solid #ccc;font-size:15px;width:260px;max-width:100%;}
+.duo-stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-top:14px;}
+.duo-stat{background:linear-gradient(180deg,#f5f0ff,#ede6fb);border-radius:12px;padding:14px 10px;text-align:center;box-shadow:inset 0 0 0 1px #cfc0e8;}
+.duo-stat strong{display:block;font-size:28px;font-weight:700;color:#3b007a;margin-bottom:3px;}
+.duo-stat span{font-size:13px;color:#555;}
+.duo-win-bar{margin-top:14px;background:#e8e0f5;border-radius:8px;height:12px;overflow:hidden;}
+.duo-win-fill{height:100%;background:linear-gradient(90deg,#7b2cbf,#9d4edd);border-radius:8px;transition:width .4s;}
+.duo-bar-label{display:flex;justify-content:space-between;font-size:12px;color:#666;margin-top:4px;}
+.duo-empty{color:#999;font-style:italic;margin-top:8px;font-size:14px;}
+.duo-games-list{margin-top:16px;max-height:260px;overflow-y:auto;border:1px solid #e0d6f5;border-radius:10px;}
+.duo-games-list table{box-shadow:none;border-radius:0;}
+.duo-games-list th{font-size:12px;padding:6px 8px;background:#f3eeff;}
+.duo-games-list td{font-size:13px;padding:6px 8px;}
+.duo-result-W{color:#1a7f37;font-weight:700;}
+.duo-result-L{color:#c0392b;font-weight:700;}
+.duo-result-D{color:#888;font-weight:700;}
 </style>
 </head>
 <body>
@@ -83,6 +104,17 @@ td.top8-badge{font-size:11px;color:#2a7a2a;font-weight:700;}
 <div class="section-title" id="top8Label" style="display:none">Top 8 Split (at time of game)</div>
 <div class="top8-split" id="top8Split"></div>
 </div>
+
+<!-- ── DUO SECTION ── -->
+<div id="duoSection">
+  <div class="duo-header">
+    <h2>Duo Record</h2>
+    <input id="duoSearch" list="duoList" placeholder="Search teammate…">
+    <datalist id="duoList"></datalist>
+  </div>
+  <div id="duoContent"><p class="duo-empty">Start typing a teammate's name above.</p></div>
+</div>
+
 <div id="loadingMsg" class="loading"></div>
 <button class="reset-sort" id="resetBtn" style="display:none" onclick="resetSort()">Reset Sort</button>
 <table id="mainTable" style="display:none">
@@ -134,6 +166,12 @@ document.getElementById("playerName").textContent = playerName || "Select a play
 
 let allGames = [], currentGames = [], sortDir = -1, sortKey = null;
 let top8BySeasonRound = {};
+
+// gameKey → { home_score, away_score, home_team, away_team }
+let gameResultMap = {};
+// gameKey → Set of player names who played
+let gameRosterMap = {};
+
 const startYear = 1965, endYear = new Date().getFullYear();
 
 function normalizeDashes(str) {
@@ -150,7 +188,10 @@ function normalizeGame(g) {
   return g;
 }
 
-// Convert round string to a sortable number
+function gameKey(g) {
+  return `${g.season}__${g.round}__${g.home_team}__${g.away_team}`;
+}
+
 function roundOrder(r) {
   if (!r) return 999;
   if (/^R(\d+)$/i.test(r)) return parseInt(r.slice(1));
@@ -159,10 +200,7 @@ function roundOrder(r) {
   return fi >= 0 ? 100 + fi : 999;
 }
 
-// Build a lookup: top8BySeasonRound[season][roundKey] = Set of teams in top 8
-// We use all game results from the season's data to compute rolling standings
 function buildTop8Lookup(yearGames) {
-  // Group games by season
   const bySeason = {};
   yearGames.forEach(g => {
     if (!g.season || !g.home_team || !g.away_team) return;
@@ -171,29 +209,19 @@ function buildTop8Lookup(yearGames) {
   });
 
   Object.entries(bySeason).forEach(([season, games]) => {
-    // Deduplicate game results (we need unique match results, not per-player rows)
     const matchResults = {};
     games.forEach(g => {
       const key = `${g.season}_${g.round}_${g.home_team}_${g.away_team}`;
       if (!matchResults[key]) matchResults[key] = g;
     });
     const matches = Object.values(matchResults);
-
-    // Get sorted unique rounds
     const roundsInSeason = [...new Set(matches.map(g => g.round))].sort((a,b) => roundOrder(a)-roundOrder(b));
-
-    // Build cumulative standings up to (but not including) each round
     if (!top8BySeasonRound[season]) top8BySeasonRound[season] = {};
-
     const wins = {}, draws = {}, losses = {}, pf = {}, pa = {};
     const initTeam = t => { if (!wins[t]) { wins[t]=0; draws[t]=0; losses[t]=0; pf[t]=0; pa[t]=0; } };
-
     roundsInSeason.forEach(round => {
-      // Record top 8 BEFORE this round's games are played
       const standings = computeStandings(wins, draws, losses, pf, pa);
       top8BySeasonRound[season][round] = new Set(standings.slice(0,8).map(s=>s.team));
-
-      // Now process this round's results
       matches.filter(g => g.round === round).forEach(g => {
         initTeam(g.home_team); initTeam(g.away_team);
         const hs = +(g.home_score||0), as = +(g.away_score||0);
@@ -223,6 +251,25 @@ function isTop8(game) {
   return set.has(game.played_against);
 }
 
+// Build gameResultMap and gameRosterMap from all loaded games
+function buildGameMaps(yearGames) {
+  yearGames.forEach(g => {
+    const k = gameKey(g);
+    if (!gameResultMap[k]) {
+      gameResultMap[k] = {
+        home_team: g.home_team,
+        away_team: g.away_team,
+        home_score: +(g.home_score||0),
+        away_score: +(g.away_score||0),
+        season: g.season,
+        round: g.round
+      };
+    }
+    if (!gameRosterMap[k]) gameRosterMap[k] = new Set();
+    if (g.player) gameRosterMap[k].add(g.player);
+  });
+}
+
 async function loadAllYears() {
   loadingMsg.textContent = "Loading data...";
   const years = [];
@@ -243,6 +290,7 @@ async function loadAllYears() {
   }
 
   buildTop8Lookup(allYearGames);
+  buildGameMaps(allYearGames);
   loadingMsg.textContent = "";
   buildDatalist();
   if (playerName) findAndShowPlayer();
@@ -308,12 +356,14 @@ function findAndShowPlayer() {
   document.getElementById("careerLabel").style.display    = "";
   document.getElementById("opponentLabel").style.display  = "";
   document.getElementById("top8Label").style.display      = "";
+  document.getElementById("duoSection").style.display     = "";
 
   setupOpponents(currentGames);
   renderCareer(currentGames);
   renderOpponent([]);
   renderTop8Split(currentGames);
   renderTable(currentGames);
+  setupDuo(currentGames);
 }
 
 function showDisambiguation(name, groups) {
@@ -464,6 +514,146 @@ playerSearchEl.onchange = e => {
     location.href = `afl-player.html?name=${encodeURIComponent(val)}`;
   }
 };
+
+// ── DUO LOGIC ──────────────────────────────────────────────────────────────
+
+function setupDuo(mainPlayerGames) {
+  // Build set of game keys the main player appeared in
+  const mainPlayerKeys = new Set(mainPlayerGames.map(g => gameKey(g)));
+
+  // Find all teammates: players who share at least one game key with the main player
+  // and played for the same team in that game
+  const teammateNames = new Set();
+  mainPlayerGames.forEach(g => {
+    const k = gameKey(g);
+    const roster = gameRosterMap[k];
+    if (roster) {
+      roster.forEach(name => {
+        if (name !== playerName) {
+          // Check if they played for the same team in this game
+          // We need to look at allGames for this key + name
+          teammateNames.add(name);
+        }
+      });
+    }
+  });
+
+  // Populate duo datalist
+  const duoList = document.getElementById("duoList");
+  duoList.innerHTML = "";
+  [...teammateNames].sort().forEach(name => {
+    const o = document.createElement("option");
+    o.value = name;
+    duoList.appendChild(o);
+  });
+
+  const duoSearch = document.getElementById("duoSearch");
+  duoSearch.oninput = () => {
+    const val = duoSearch.value.trim();
+    if (!val) {
+      document.getElementById("duoContent").innerHTML = '<p class="duo-empty">Start typing a teammate\'s name above.</p>';
+      return;
+    }
+    renderDuo(val, mainPlayerGames);
+  };
+  duoSearch.onchange = () => {
+    const val = duoSearch.value.trim();
+    if (val) renderDuo(val, mainPlayerGames);
+  };
+}
+
+function getGameResult(g) {
+  // Returns 'W', 'L', or 'D' from main player's perspective
+  const k = gameKey(g);
+  const result = gameResultMap[k];
+  if (!result) return null;
+  const hs = result.home_score, as = result.away_score;
+  const myTeam = g.played_for;
+  const isHome = myTeam === result.home_team;
+  const myScore = isHome ? hs : as;
+  const theirScore = isHome ? as : hs;
+  if (myScore > theirScore) return 'W';
+  if (myScore < theirScore) return 'L';
+  return 'D';
+}
+
+function renderDuo(teammateName, mainPlayerGames) {
+  const duoContent = document.getElementById("duoContent");
+
+  // Find games where BOTH players appeared AND played for the same team
+  // We check: same game key, teammate is in the roster, and teammate's played_for matches main player's played_for
+  const teammateGames = allGames.filter(g => g.player === teammateName);
+  const teammateKeyToGame = {};
+  teammateGames.forEach(g => { teammateKeyToGame[gameKey(g)] = g; });
+
+  const sharedGames = mainPlayerGames.filter(g => {
+    const k = gameKey(g);
+    const tmGame = teammateKeyToGame[k];
+    // Must exist and be on the same team
+    return tmGame && tmGame.played_for === g.played_for;
+  });
+
+  if (!sharedGames.length) {
+    duoContent.innerHTML = `<p class="duo-empty">No shared games found for <strong>${teammateName}</strong> and <strong>${playerName}</strong> on the same team. Make sure the name matches exactly.</p>`;
+    return;
+  }
+
+  let wins = 0, losses = 0, draws = 0;
+  sharedGames.forEach(g => {
+    const r = getGameResult(g);
+    if (r === 'W') wins++;
+    else if (r === 'L') losses++;
+    else if (r === 'D') draws++;
+  });
+
+  const total = sharedGames.length;
+  const winPct = total ? ((wins / total) * 100).toFixed(1) : '0.0';
+  const barW = total ? (wins / total * 100) : 0;
+
+  // Sort shared games by season desc, then round
+  const sorted = [...sharedGames].sort((a,b) => {
+    if (b.season !== a.season) return b.season - a.season;
+    return roundOrder(a.round) - roundOrder(b.round);
+  });
+
+  const gameRows = sorted.map(g => {
+    const r = getGameResult(g);
+    const rClass = r === 'W' ? 'duo-result-W' : r === 'L' ? 'duo-result-L' : 'duo-result-D';
+    const k = gameKey(g);
+    const res = gameResultMap[k];
+    const scoreStr = res ? `${res.home_score}–${res.away_score}` : '';
+    return `<tr onclick="location.href='${gameLink(g)}'" style="cursor:pointer">
+      <td>${g.season}</td>
+      <td>${g.round}</td>
+      <td style="text-align:left">${g.played_for}</td>
+      <td>${g.played_against}</td>
+      <td>${scoreStr}</td>
+      <td class="${rClass}">${r||'?'}</td>
+    </tr>`;
+  }).join('');
+
+  duoContent.innerHTML = `
+    <div style="font-size:15px;color:#555;margin-bottom:12px;">
+      <strong style="color:#3b007a">${playerName}</strong> &amp; <strong style="color:#3b007a">${teammateName}</strong> — together on the same team
+    </div>
+    <div class="duo-stats-grid">
+      <div class="duo-stat"><strong>${total}</strong><span>Games together</span></div>
+      <div class="duo-stat"><strong>${wins}</strong><span>Wins</span></div>
+      <div class="duo-stat"><strong>${losses}</strong><span>Losses</span></div>
+      <div class="duo-stat"><strong>${draws}</strong><span>Draws</span></div>
+      <div class="duo-stat"><strong>${winPct}%</strong><span>Win %</span></div>
+    </div>
+    <div class="duo-win-bar" title="${winPct}% wins">
+      <div class="duo-win-fill" style="width:${barW}%"></div>
+    </div>
+    <div class="duo-bar-label"><span>${wins}W / ${losses}L${draws ? ' / '+draws+'D' : ''}</span><span>${winPct}%</span></div>
+    <div class="duo-games-list">
+      <table>
+        <thead><tr><th>Season</th><th>Round</th><th>Team</th><th>Opponent</th><th>Score</th><th>Result</th></tr></thead>
+        <tbody>${gameRows}</tbody>
+      </table>
+    </div>`;
+}
 
 loadAllYears();
 </script>
