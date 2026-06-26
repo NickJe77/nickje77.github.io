@@ -24,6 +24,20 @@ h1{font-size:38px;margin:0;}
 .stat-box strong{display:block;font-size:26px;margin-bottom:4px;}
 .stat-box span{font-size:14px;color:#555;}
 .stat-box .sub{margin-top:6px;font-size:12px;color:#666;line-height:1.5;}
+.top8-split{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px;}
+.top8-card{border-radius:12px;padding:16px 14px;}
+.top8-card.top8{background:#eef7ee;box-shadow:inset 0 0 0 1px #b6ddb6;}
+.top8-card.non-top8{background:#fef6ee;box-shadow:inset 0 0 0 1px #f0d8b6;}
+.top8-card .t8-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;}
+.top8-card.top8 .t8-label{color:#2a7a2a;}
+.top8-card.non-top8 .t8-label{color:#a05a10;}
+.top8-mini{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;}
+.top8-mini strong{display:block;font-size:20px;font-weight:700;margin-bottom:2px;}
+.top8-card.top8 .top8-mini strong{color:#1a5c1a;}
+.top8-card.non-top8 .top8-mini strong{color:#7a4010;}
+.top8-mini span{font-size:11px;color:#666;}
+.top8-games{margin-top:8px;font-size:12px;text-align:center;color:#888;}
+@media(max-width:600px){.top8-split{grid-template-columns:1fr;}}
 table{border-collapse:collapse;width:100%;background:white;border-radius:10px;overflow:hidden;box-shadow:0 3px 10px rgba(0,0,0,.06);}
 th,td{border:1px solid #ddd;padding:8px;text-align:center;}
 th{cursor:pointer;background:#eef3fb;}
@@ -31,6 +45,8 @@ td.left{text-align:left;font-weight:600;}
 tbody tr:nth-child(even){background:#f2f7ff;}
 tbody tr{cursor:pointer;}
 tbody tr:hover{background:#e8f0ff;}
+td.top8-game{background:#eef7ee !important;}
+td.top8-badge{font-size:11px;color:#2a7a2a;font-weight:700;}
 .reset-sort{margin-top:10px;padding:6px 12px;border-radius:6px;border:1px solid #aaa;cursor:pointer;}
 .loading{color:#888;font-style:italic;padding:20px;}
 .disambig{background:white;border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.08);padding:30px;margin-bottom:20px;}
@@ -64,6 +80,8 @@ tbody tr:hover{background:#e8f0ff;}
 <div class="stats" id="careerStats"></div>
 <div class="section-title" id="opponentLabel" style="display:none">Vs Selected Opponent</div>
 <div class="stats" id="opponentStats"></div>
+<div class="section-title" id="top8Label" style="display:none">Top 8 Split (at time of game)</div>
+<div class="top8-split" id="top8Split"></div>
 </div>
 <div id="loadingMsg" class="loading"></div>
 <button class="reset-sort" id="resetBtn" style="display:none" onclick="resetSort()">Reset Sort</button>
@@ -73,6 +91,7 @@ tbody tr:hover{background:#e8f0ff;}
 <th onclick="sortTable('round')">Round</th>
 <th>Team</th>
 <th>Opponent</th>
+<th>Top 8?</th>
 <th onclick="sortTable('D')">D</th>
 <th onclick="sortTable('G')">G</th>
 <th onclick="sortTable('B')">B</th>
@@ -114,6 +133,7 @@ const playerTeam = params.get("team") || "";
 document.getElementById("playerName").textContent = playerName || "Select a player";
 
 let allGames = [], currentGames = [], sortDir = -1, sortKey = null;
+let top8BySeasonRound = {};
 const startYear = 1965, endYear = new Date().getFullYear();
 
 function normalizeDashes(str) {
@@ -130,11 +150,85 @@ function normalizeGame(g) {
   return g;
 }
 
+// Convert round string to a sortable number
+function roundOrder(r) {
+  if (!r) return 999;
+  if (/^R(\d+)$/i.test(r)) return parseInt(r.slice(1));
+  const finals = ['EF','SF','QF','PF','GF'];
+  const fi = finals.indexOf(r.toUpperCase());
+  return fi >= 0 ? 100 + fi : 999;
+}
+
+// Build a lookup: top8BySeasonRound[season][roundKey] = Set of teams in top 8
+// We use all game results from the season's data to compute rolling standings
+function buildTop8Lookup(yearGames) {
+  // Group games by season
+  const bySeason = {};
+  yearGames.forEach(g => {
+    if (!g.season || !g.home_team || !g.away_team) return;
+    if (!bySeason[g.season]) bySeason[g.season] = [];
+    bySeason[g.season].push(g);
+  });
+
+  Object.entries(bySeason).forEach(([season, games]) => {
+    // Deduplicate game results (we need unique match results, not per-player rows)
+    const matchResults = {};
+    games.forEach(g => {
+      const key = `${g.season}_${g.round}_${g.home_team}_${g.away_team}`;
+      if (!matchResults[key]) matchResults[key] = g;
+    });
+    const matches = Object.values(matchResults);
+
+    // Get sorted unique rounds
+    const roundsInSeason = [...new Set(matches.map(g => g.round))].sort((a,b) => roundOrder(a)-roundOrder(b));
+
+    // Build cumulative standings up to (but not including) each round
+    if (!top8BySeasonRound[season]) top8BySeasonRound[season] = {};
+
+    const wins = {}, draws = {}, losses = {}, pf = {}, pa = {};
+    const initTeam = t => { if (!wins[t]) { wins[t]=0; draws[t]=0; losses[t]=0; pf[t]=0; pa[t]=0; } };
+
+    roundsInSeason.forEach(round => {
+      // Record top 8 BEFORE this round's games are played
+      const standings = computeStandings(wins, draws, losses, pf, pa);
+      top8BySeasonRound[season][round] = new Set(standings.slice(0,8).map(s=>s.team));
+
+      // Now process this round's results
+      matches.filter(g => g.round === round).forEach(g => {
+        initTeam(g.home_team); initTeam(g.away_team);
+        const hs = +(g.home_score||0), as = +(g.away_score||0);
+        pf[g.home_team] += hs; pa[g.home_team] += as;
+        pf[g.away_team] += as; pa[g.away_team] += hs;
+        if (hs > as) { wins[g.home_team]++; losses[g.away_team]++; }
+        else if (as > hs) { wins[g.away_team]++; losses[g.home_team]++; }
+        else { draws[g.home_team]++; draws[g.away_team]++; }
+      });
+    });
+  });
+}
+
+function computeStandings(wins, draws, losses, pf, pa) {
+  return Object.keys(wins).map(team => {
+    const pts = wins[team]*4 + draws[team]*2;
+    const pct = pa[team] ? (pf[team]/pa[team]*100) : 0;
+    return { team, pts, pct };
+  }).sort((a,b) => b.pts-a.pts || b.pct-a.pct);
+}
+
+function isTop8(game) {
+  const s = top8BySeasonRound[game.season];
+  if (!s) return false;
+  const set = s[game.round];
+  if (!set) return false;
+  return set.has(game.played_against);
+}
+
 async function loadAllYears() {
   loadingMsg.textContent = "Loading data...";
   const years = [];
   for (let y = startYear; y <= endYear; y++) years.push(y);
 
+  const allYearGames = [];
   const batchSize = 5;
   for (let i = 0; i < years.length; i += batchSize) {
     const batch = years.slice(i, i + batchSize);
@@ -142,12 +236,13 @@ async function loadAllYears() {
       batch.map(y => fetch(`/data/afl/afl_${y}.json`).then(r => r.json()).catch(() => []))
     );
     results.forEach(d => {
-      d.forEach(g => normalizeGame(g));
+      d.forEach(g => { normalizeGame(g); allYearGames.push(g); });
       allGames = allGames.concat(d);
     });
     loadingMsg.textContent = `Loading data... ${Math.min(i + batchSize, years.length)}/${years.length} years`;
   }
 
+  buildTop8Lookup(allYearGames);
   loadingMsg.textContent = "";
   buildDatalist();
   if (playerName) findAndShowPlayer();
@@ -212,10 +307,12 @@ function findAndShowPlayer() {
   document.getElementById("opponentSelect").style.display = "";
   document.getElementById("careerLabel").style.display    = "";
   document.getElementById("opponentLabel").style.display  = "";
+  document.getElementById("top8Label").style.display      = "";
 
   setupOpponents(currentGames);
   renderCareer(currentGames);
   renderOpponent([]);
+  renderTop8Split(currentGames);
   renderTable(currentGames);
 }
 
@@ -281,6 +378,45 @@ function renderStats(g, id) {
     <div class="stat-box"><strong>${br3}</strong><span>3 Vote Games</span></div>`;
 }
 
+function renderTop8Split(games) {
+  const t8  = games.filter(g => isTop8(g));
+  const nt8 = games.filter(g => !isTop8(g));
+  const el = document.getElementById("top8Split");
+
+  function miniStats(g) {
+    if (!g.length) return { d:'—', goals:'—', br:'—', n:0 };
+    const n = g.length;
+    return {
+      d: (g.reduce((a,x)=>a+(+x.D||0),0)/n).toFixed(1),
+      goals: (g.reduce((a,x)=>a+(+x.G||0),0)/n).toFixed(2),
+      br: (g.reduce((a,x)=>a+(+x.BR||0),0)/n).toFixed(2),
+      n
+    };
+  }
+
+  const s1 = miniStats(t8), s2 = miniStats(nt8);
+
+  el.innerHTML = `
+    <div class="top8-card top8">
+      <div class="t8-label">▲ vs top 8 opponents</div>
+      <div class="top8-mini">
+        <div><strong>${s1.d}</strong><span>Avg disposals</span></div>
+        <div><strong>${s1.goals}</strong><span>Avg goals</span></div>
+        <div><strong>${s1.br}</strong><span>Avg Brownlow</span></div>
+      </div>
+      <div class="top8-games">${s1.n} game${s1.n===1?'':'s'}</div>
+    </div>
+    <div class="top8-card non-top8">
+      <div class="t8-label">▽ vs non-top 8 opponents</div>
+      <div class="top8-mini">
+        <div><strong>${s2.d}</strong><span>Avg disposals</span></div>
+        <div><strong>${s2.goals}</strong><span>Avg goals</span></div>
+        <div><strong>${s2.br}</strong><span>Avg Brownlow</span></div>
+      </div>
+      <div class="top8-games">${s2.n} game${s2.n===1?'':'s'}</div>
+    </div>`;
+}
+
 function gameLink(p) {
   return `afl-game.html?year=${p.season}&home=${encodeURIComponent(p.home_team)}&away=${encodeURIComponent(p.away_team)}&round=${encodeURIComponent(p.round)}`;
 }
@@ -288,9 +424,11 @@ function gameLink(p) {
 function renderTable(g) {
   rows.innerHTML = "";
   g.forEach(p => {
+    const t8 = isTop8(p);
     const tr = document.createElement("tr");
+    if (t8) tr.style.background = "#eef7ee";
     tr.onclick = () => location.href = gameLink(p);
-    tr.innerHTML = `<td>${p.season}</td><td>${p.round}</td><td class="left">${p.played_for}</td><td>${p.played_against}</td><td>${p.D||0}</td><td>${p.G||0}</td><td>${p.B||0}</td><td>${p.BR||0}</td>`;
+    tr.innerHTML = `<td>${p.season}</td><td>${p.round}</td><td class="left">${p.played_for}</td><td>${p.played_against}</td><td class="${t8?'top8-badge':''}">${t8?'Top 8':''}</td><td>${p.D||0}</td><td>${p.G||0}</td><td>${p.B||0}</td><td>${p.BR||0}</td>`;
     rows.appendChild(tr);
   });
 }
