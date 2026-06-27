@@ -281,8 +281,11 @@ async function loadAllYears() {
       batch.map(y => fetch('/data/afl/afl_'+y+'.json').then(r=>r.ok?r.json():[]).catch(()=>[]))
     );
     results.forEach(d => {
-      d.forEach(g => { normalizeGame(g); allYearGames.push(g); });
-      allGames = allGames.concat(d);
+      d.forEach(g => {
+        normalizeGame(g);
+        allYearGames.push(g);
+        allGames.push(g);
+      });
     });
     loadingMsg.textContent = 'Loading data... '+Math.min(i+batchSize,years.length)+'/'+years.length+' years';
   }
@@ -368,10 +371,9 @@ function findAndShowPlayer() {
   renderOpponent([]);
   renderTop8Split(currentGames);
   renderTable(currentGames);
-  // Deduplicate currentGames by game key before passing to duo
   const _duoSeen = new Set();
   const dedupedForDuo = currentGames.filter(g => {
-    const k = gameKey(g);
+    const k = g.season+'|'+g.round+'|'+g.played_for+'|'+g.played_against+'|'+g.home_points+'|'+g.away_points;
     if (_duoSeen.has(k)) return false;
     _duoSeen.add(k);
     return true;
@@ -552,13 +554,20 @@ function renderDuo(teammateName, mainPlayerGames) {
     return;
   }
 
+  // Build a set of game keys where teammate played with main player on same team
+  // Build set of season+round+played_against where teammate played for same team
+  const teammateKeys = new Set();
+  allGames.forEach(g => {
+    if (g.player === teammateName && g.played_for === (mainPlayerGames[0]&&mainPlayerGames[0].played_for)) {
+      teammateKeys.add(g.season+'|'+g.round+'|'+g.played_against);
+    }
+  });
+
   const seenKeys = new Set();
   const sharedGames = mainPlayerGames.filter(g => {
     const k = g.season+'|'+g.round+'|'+g.played_against;
     if (seenKeys.has(k)) return false;
-    const gk = gameKey(g);
-    const teamRoster = gameRosterMap[gk] && gameRosterMap[gk][g.played_for];
-    if (teamRoster && teamRoster.has(teammateName)) {
+    if (teammateKeys.has(k)) {
       seenKeys.add(k);
       return true;
     }
