@@ -192,8 +192,9 @@ function gameKey(g) {
 function roundOrder(r) {
   if (!r) return 999;
   if (/^R(\d+)$/i.test(r)) return parseInt(r.slice(1));
-  const finals = ['EF','SF','QF','PF','GF'];
-  const fi = finals.indexOf(r.toUpperCase());
+  const nm = r.match(/\d+/); if (nm) return parseInt(nm[0]);
+  const finals = ['EF','SF','QF','PF','GF','Elimination Final','Semi Final','Qualifying Final','Preliminary Final','Grand Final'];
+  const fi = finals.findIndex(f => r.toLowerCase().includes(f.toLowerCase()));
   return fi >= 0 ? 100 + fi : 999;
 }
 
@@ -253,7 +254,7 @@ function buildGameMaps(yearGames) {
     if (!gameResultMap[k]) {
       gameResultMap[k] = {
         home_team: g.home_team, away_team: g.away_team,
-        home_score: +(g.home_score||0), away_score: +(g.away_score||0)
+        home_score: +(g.home_points||g.home_score||0), away_score: +(g.away_points||g.away_score||0)
       };
     }
     if (!gameRosterMap[k]) gameRosterMap[k] = {};
@@ -522,8 +523,16 @@ function getGameResult(g) {
   const result = gameResultMap[k];
   if (!result) return null;
   const isHome = g.played_for === result.home_team;
-  const myScore = isHome ? result.home_score : result.away_score;
-  const theirScore = isHome ? result.away_score : result.home_score;
+  const myScore = isHome ? +result.home_score : +result.away_score;
+  const theirScore = isHome ? +result.away_score : +result.home_score;
+  // If scores are missing/zero, fall back to winner field on the game row itself
+  if (!myScore && !theirScore) {
+    const winner = g.winner || g.winning_team || "";
+    if (!winner) return null;
+    if (winner === g.played_for) return 'W';
+    if (winner === g.played_against) return 'L';
+    return 'D';
+  }
   if (myScore > theirScore) return 'W';
   if (myScore < theirScore) return 'L';
   return 'D';
@@ -566,7 +575,7 @@ function renderDuo(teammateName, mainPlayerGames) {
     const r = getGameResult(g);
     const rClass = r==='W' ? 'duo-result-W' : r==='L' ? 'duo-result-L' : 'duo-result-D';
     const res = gameResultMap[gameKey(g)];
-    const score = res ? res.home_score+'-'+res.away_score : '';
+    const score = res ? (res.home_score||0)+'-'+(res.away_score||0) : '';
     return '<tr onclick="location.href=\''+gameLink(g)+'\'" style="cursor:pointer">'+
       '<td>'+g.season+'</td><td>'+g.round+'</td>'+
       '<td style="text-align:left">'+g.played_for+'</td>'+
