@@ -181,7 +181,6 @@ function normalizeGame(g) {
   if (g.played_against) g.played_against = normalizeDashes(g.played_against);
   if (g.home_team)      g.home_team      = normalizeDashes(g.home_team);
   if (g.away_team)      g.away_team      = normalizeDashes(g.away_team);
-  // Gary Ablett Sr played pre-2000, Jnr post-2000
   if (g.player === 'Gary Ablett' && g.season >= 2000) g.player = 'Gary Ablett Jnr';
   if (g.player && PLAYER_NAME_ALIASES[g.player]) g.player = PLAYER_NAME_ALIASES[g.player];
   return g;
@@ -289,14 +288,6 @@ async function loadAllYears() {
     });
     loadingMsg.textContent = 'Loading data... '+Math.min(i+batchSize,years.length)+'/'+years.length+' years';
   }
-  // Deduplicate allGames: one row per player per game
-  const _seen = new Set();
-  allGames = allGames.filter(g => {
-    const k = g.player+'|'+g.season+'|'+g.round+'|'+g.home_team+'|'+g.away_team;
-    if (_seen.has(k)) return false;
-    _seen.add(k);
-    return true;
-  });
   buildTop8Lookup(allYearGames);
   buildGameMaps(allYearGames);
   loadingMsg.textContent = "";
@@ -371,14 +362,7 @@ function findAndShowPlayer() {
   renderOpponent([]);
   renderTop8Split(currentGames);
   renderTable(currentGames);
-  const _duoSeen = new Set();
-  const dedupedForDuo = currentGames.filter(g => {
-    const k = g.season+'|'+g.round+'|'+g.played_for+'|'+g.played_against+'|'+g.home_points+'|'+g.away_points;
-    if (_duoSeen.has(k)) return false;
-    _duoSeen.add(k);
-    return true;
-  });
-  setupDuo(dedupedForDuo);
+  setupDuo(currentGames);
 }
 
 function showDisambiguation(name, groups) {
@@ -517,7 +501,6 @@ playerSearchEl.onchange = e => {
 // ── DUO LOGIC ──────────────────────────────────────────────────────────────
 
 function setupDuo(mainPlayerGames) {
-  // Build datalist of teammates: players who share a game key AND played for the same team
   const teammateNames = new Set();
   mainPlayerGames.forEach(g => {
     const k = gameKey(g);
@@ -536,11 +519,13 @@ function setupDuo(mainPlayerGames) {
   });
 
   const duoSearch = document.getElementById("duoSearch");
+  duoSearch.value = "";
+  document.getElementById("duoContent").innerHTML = '<p class="duo-empty">Start typing a teammate\'s name above.</p>';
   duoSearch.oninput = () => renderDuo(duoSearch.value.trim(), mainPlayerGames);
 }
 
 function getGameResult(g) {
-  const myPts = g.played_for === g.home_team ? +(g.home_points||0) : +(g.away_points||0);
+  const myPts    = g.played_for === g.home_team ? +(g.home_points||0) : +(g.away_points||0);
   const theirPts = g.played_for === g.home_team ? +(g.away_points||0) : +(g.home_points||0);
   if (myPts > theirPts) return 'W';
   if (myPts < theirPts) return 'L';
@@ -554,28 +539,22 @@ function renderDuo(teammateName, mainPlayerGames) {
     return;
   }
 
-  // Build a set of game keys where teammate played with main player on same team
-  // Build set of season+round+played_against where teammate played for same team
-  const teammateKeys = new Set();
-  allGames.forEach(g => {
-    if (g.player === teammateName && g.played_for === (mainPlayerGames[0]&&mainPlayerGames[0].played_for)) {
-      teammateKeys.add(g.season+'|'+g.round+'|'+g.played_against);
-    }
-  });
-
+  // Use gameRosterMap to find shared games — avoids scanning allGames and any dedup issues
   const seenKeys = new Set();
   const sharedGames = mainPlayerGames.filter(g => {
-    const k = g.season+'|'+g.round+'|'+g.played_against;
-    if (seenKeys.has(k)) return false;
-    if (teammateKeys.has(k)) {
-      seenKeys.add(k);
+    const gk = gameKey(g);
+    const dedupeKey = g.season+'|'+g.round+'|'+g.played_against;
+    if (seenKeys.has(dedupeKey)) return false;
+    const roster = gameRosterMap[gk] && gameRosterMap[gk][g.played_for];
+    if (roster && roster.has(teammateName)) {
+      seenKeys.add(dedupeKey);
       return true;
     }
     return false;
   });
 
   if (!sharedGames.length) {
-    duoContent.innerHTML = '<p class="duo-empty">No shared games found for <strong>'+teammateName+'</strong>. Check the spelling matches exactly.</p>';
+    duoContent.innerHTML = '<p class="duo-empty">No shared games found for <strong>'+teammateName+'</strong>.</p>';
     return;
   }
 
@@ -596,11 +575,10 @@ function renderDuo(teammateName, mainPlayerGames) {
   const gameRows = sorted.map(g => {
     const r = getGameResult(g);
     const rClass = r==='W' ? 'duo-result-W' : r==='L' ? 'duo-result-L' : 'duo-result-D';
-    const res = gameResultMap[gameKey(g)];
     const isHomeTeam = g.played_for === g.home_team;
-    const myPts = isHomeTeam ? g.home_points : g.away_points;
+    const myPts    = isHomeTeam ? g.home_points : g.away_points;
     const theirPts = isHomeTeam ? g.away_points : g.home_points;
-    const score = myPts != null ? myPts+'-'+theirPts : '';
+    const score = (myPts != null && theirPts != null) ? myPts+'-'+theirPts : '';
     return '<tr onclick="location.href=\''+gameLink(g)+'\'" style="cursor:pointer">'+
       '<td>'+g.season+'</td><td>'+g.round+'</td>'+
       '<td style="text-align:left">'+g.played_for+'</td>'+
