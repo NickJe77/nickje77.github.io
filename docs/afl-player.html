@@ -188,7 +188,7 @@ function normalizeGame(g) {
 }
 
 function gameKey(g) {
-  // Use season+round+both teams sorted so key is consistent regardless of which player row
+  if (g.match_id && g.match_id !== '{}' && g.match_id !== '') return String(g.match_id);
   const teams = [g.home_team, g.away_team].sort().join('__');
   return g.season + '__' + g.round + '__' + teams;
 }
@@ -320,7 +320,14 @@ function buildDatalist() {
 }
 
 function findAndShowPlayer() {
-  const allMatchingGames = allGames.filter(p => p.player === playerName);
+  const _amSeen = new Set();
+  const allMatchingGames = allGames.filter(p => {
+    if (p.player !== playerName) return false;
+    const k = gameKey(p);
+    if (_amSeen.has(k)) return false;
+    _amSeen.add(k);
+    return true;
+  });
   if (!allMatchingGames.length) return;
 
   if (DISAMBIG_GROUPS[playerName]) {
@@ -553,6 +560,8 @@ function renderDuo(teammateName, mainPlayerGames) {
     return;
   }
 
+  console.log('mainPlayerGames count:', mainPlayerGames.length);
+  console.log('first 5 keys:', mainPlayerGames.slice(0,5).map(g => gameKey(g)));
   // Games where both players were on the same team - deduplicate by game key
   const seenKeys = new Set();
   const sharedGames = mainPlayerGames.filter(g => {
