@@ -37,11 +37,10 @@ tr:nth-child(even){background:#f8fbff;}
 .result-win{font-weight:900;color:#008000;font-size:18px;}
 .result-loss{font-weight:900;color:#d90429;font-size:18px;}
 .result-draw{font-weight:900;color:#d68910;font-size:18px;}
-/* Teammates section */
 .duo-search-wrap{display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
 #duoPlayerInput{padding:12px 14px;border-radius:10px;border:1px solid #ccc;font-size:14px;font-weight:700;width:280px;max-width:100%;}
-.duo-table th:last-child,.duo-table td:last-child{text-align:right;}
-.duo-table td:first-child{font-weight:800;color:#0056d6;}
+.duo-table td:nth-child(2),.duo-table td:nth-child(4),.duo-table td:nth-child(5),.duo-table td:nth-child(6){text-align:right;}
+.duo-table th:nth-child(2),.duo-table th:nth-child(4),.duo-table th:nth-child(5),.duo-table th:nth-child(6){text-align:right;}
 @media(max-width:900px){
   .hero h1{font-size:36px;}
   .section-title{font-size:22px;}
@@ -143,7 +142,6 @@ const params   = new URLSearchParams(window.location.search);
 const teamName = params.get("team")||"";
 const page     = document.getElementById("page");
 
-// Global storage for teammates logic
 let _allGames=[], _players=[];
 
 async function loadTeam(){
@@ -190,12 +188,18 @@ async function loadTeam(){
     },{played:0,wins:0,draws:0,losses:0,goals_for:0,goals_against:0,yellow_cards:0,red_cards:0});
 
     const teamPlayers=players.filter(p=>p.teams&&p.teams.includes(teamName)).map(p=>{
-      const goals  =(p.season_stats||[]).filter(s=>s.team===teamName).reduce((sum,s)=>sum+(s.goals||0),0);
-      const pens   =(p.season_stats||[]).filter(s=>s.team===teamName).reduce((sum,s)=>sum+(s.penalties||0),0);
-      const yellows=(p.season_stats||[]).filter(s=>s.team===teamName).reduce((sum,s)=>sum+(s.yellow_cards||0),0);
-      const reds   =(p.season_stats||[]).filter(s=>s.team===teamName).reduce((sum,s)=>sum+(s.red_cards||0),0);
-      return {name:p.name,teams:p.teams,goals,pens,yellows,reds};
+      const ss=(p.season_stats||[]).filter(s=>s.team===teamName);
+      const goals  =ss.reduce((sum,s)=>sum+(s.goals||0),0);
+      const pens   =ss.reduce((sum,s)=>sum+(s.penalties||0),0);
+      const yellows=ss.reduce((sum,s)=>sum+(s.yellow_cards||0),0);
+      const reds   =ss.reduce((sum,s)=>sum+(s.red_cards||0),0);
+      const clubGames=ss.reduce((sum,s)=>sum+(s.games||0),0);
+      return {name:p.name,teams:p.teams,goals,pens,yellows,reds,clubGames};
     });
+
+    // Build a lookup: player name -> total club games
+    const playerClubGames = {};
+    teamPlayers.forEach(p=>{ playerClubGames[p.name]=p.clubGames; });
 
     const topScorers=[...teamPlayers].sort((a,b)=>b.goals-a.goals).filter(p=>p.goals>0).slice(0,10);
     const topYellows=[...teamPlayers].sort((a,b)=>b.yellows-a.yellows).filter(p=>p.yellows>0).slice(0,10);
@@ -244,15 +248,8 @@ async function loadTeam(){
       </tr>`).join('');
     }
 
-    // Build teammates data from allGames
-    // Each game has a lineup or we derive from players.json season_stats
-    // We'll use players who played for this team in the same season to compute co-appearances
-    // Key: match_id+season → set of players
-    // We build this from players.json season_stats which tells us which seasons each player was here
-    // Then pair players who shared the same season, counting shared games from allGames
-
-    // Build per-season player lists from players.json
-    const seasonPlayers = {}; // season -> [player names]
+    // Build per-season player lists
+    const seasonPlayers = {};
     players.forEach(p => {
       (p.season_stats||[]).forEach(s => {
         if(s.team===teamName && s.games>0){
@@ -262,10 +259,7 @@ async function loadTeam(){
       });
     });
 
-    // For each game, find which players were active that season for this team
-    // Then count pair co-appearances and wins
-    const pairGames  = {}; // "P1|||P2" -> {games, wins}
-
+    const pairGames = {};
     allGames.forEach(g => {
       const roster = seasonPlayers[g.season] || [];
       if(roster.length < 2) return;
@@ -273,7 +267,6 @@ async function loadTeam(){
       const tf = isHome ? Number(g.score_home||0) : Number(g.score_away||0);
       const of = isHome ? Number(g.score_away||0) : Number(g.score_home||0);
       const won = tf > of;
-
       const sorted = [...roster].sort();
       for(let i=0;i<sorted.length;i++){
         for(let j=i+1;j<sorted.length;j++){
@@ -285,15 +278,26 @@ async function loadTeam(){
       }
     });
 
-    // Sort by games desc, top 20
     const topPairs = Object.entries(pairGames)
       .sort((a,b)=>b[1].games-a[1].games)
       .slice(0,20)
       .map(([key,{games,wins}])=>{
         const [p1,p2]=key.split('|||');
         const winPct = games ? ((wins/games)*100).toFixed(1) : '0.0';
-        return {p1,p2,games,wins,winPct};
+        const p1games = playerClubGames[p1] || 0;
+        const p2games = playerClubGames[p2] || 0;
+        return {p1,p2,p1games,p2games,games,wins,winPct};
       });
+
+    function duoRows(pairs){
+      if(!pairs.length) return `<tr><td colspan="4">No data</td></tr>`;
+      return pairs.map(r=>`<tr>
+        <td><a class="player-link" href="/epl-player.html?player=${encodeURIComponent(playerSlug({name:r.p1,teams:[teamName]}))}">${r.p1}</a></td>
+        <td><a class="player-link" href="/epl-player.html?player=${encodeURIComponent(playerSlug({name:r.p2,teams:[teamName]}))}">${r.p2}</a></td>
+        <td style="text-align:right">${r.games}</td>
+        <td style="text-align:right">${r.winPct}%</td>
+      </tr>`).join('');
+    }
 
     const overall=buildGameStats(null);
     const heroGradient=TEAM_COLOURS[teamName]||'linear-gradient(135deg,#111,#555)';
@@ -344,26 +348,39 @@ async function loadTeam(){
           </div>
         </div>
 
-        <!-- TEAMMATES SECTION -->
-        <div class="section">
-          <div class="section-title">Most Games as Teammates</div>
-          <div class="duo-search-wrap">
-            <input id="duoPlayerInput" list="duoPlayerList" placeholder="Filter by player name…">
-            <datalist id="duoPlayerList">
-              ${[...new Set(topPairs.flatMap(p=>[p.p1,p.p2]))].sort().map(n=>`<option value="${n}">`).join('')}
-            </datalist>
+        <div class="tables-grid">
+          <div class="section">
+            <div class="section-title">Most Appearances</div>
+            <table>
+              <thead><tr><th>Player</th><th style="text-align:right">Club Games</th></tr></thead>
+              <tbody>
+                ${[...teamPlayers].sort((a,b)=>b.clubGames-a.clubGames).filter(p=>p.clubGames>0).slice(0,10).map(p=>`<tr>
+                  <td><a class="player-link" href="/epl-player.html?player=${encodeURIComponent(playerSlug(p))}">${p.name}</a></td>
+                  <td style="text-align:right">${p.clubGames}</td>
+                </tr>`).join('')||'<tr><td colspan="2">No data</td></tr>'}
+              </tbody>
+            </table>
           </div>
-          <table class="duo-table" id="duoTable">
-            <thead><tr><th>Players</th><th>Games</th><th>Win %</th></tr></thead>
-            <tbody id="duoBody">
-              ${topPairs.map(r=>`<tr>
-                <td>${r.p1} &amp; ${r.p2}</td>
-                <td>${r.games}</td>
-                <td>${r.winPct}%</td>
-              </tr>`).join('')}
-            </tbody>
-          </table>
-          <p style="font-size:12px;color:#888;margin-top:10px;">Based on players sharing the same season at this club. Top 20 pairs by games together.</p>
+          <div class="section">
+            <div class="section-title">Most Games as Teammates</div>
+            <div class="duo-search-wrap">
+              <input id="duoPlayerInput" list="duoPlayerList" placeholder="Filter by player name…">
+              <datalist id="duoPlayerList">
+                ${[...new Set(topPairs.flatMap(p=>[p.p1,p.p2]))].sort().map(n=>`<option value="${n}">`).join('')}
+              </datalist>
+            </div>
+            <table class="duo-table" id="duoTable">
+              <thead>
+                <tr>
+                  <th>Player</th>
+                  <th>Teammate</th>
+                  <th style="text-align:right">Together</th>
+                  <th style="text-align:right">Win %</th>
+                </tr>
+              </thead>
+              <tbody id="duoBody">${duoRows(topPairs)}</tbody>
+            </table>
+          </div>
         </div>
 
         <div class="section">
@@ -388,7 +405,6 @@ async function loadTeam(){
         </div>
       </div>`;
 
-    // Opponent filter
     document.getElementById("opponentSelect").addEventListener("change",e=>{
       const opp=e.target.value;
       const stats=buildGameStats(opp||null);
@@ -400,17 +416,12 @@ async function loadTeam(){
       document.getElementById("gamesBody").innerHTML=gameRows(stats.filtered);
     });
 
-    // Duo player filter
     document.getElementById("duoPlayerInput").addEventListener("input",e=>{
       const val=e.target.value.trim().toLowerCase();
       const filtered=val
         ?topPairs.filter(r=>r.p1.toLowerCase().includes(val)||r.p2.toLowerCase().includes(val))
         :topPairs;
-      document.getElementById("duoBody").innerHTML=filtered.map(r=>`<tr>
-        <td>${r.p1} &amp; ${r.p2}</td>
-        <td>${r.games}</td>
-        <td>${r.winPct}%</td>
-      </tr>`).join('');
+      document.getElementById("duoBody").innerHTML=duoRows(filtered);
     });
 
   }catch(err){
