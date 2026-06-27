@@ -547,24 +547,15 @@ function getGameResult(g) {
 }
 
 function renderDuo(teammateName, mainPlayerGames) {
-  // Deduplicate mainPlayerGames by game key first
-  const _seenMain = new Set();
-  mainPlayerGames = mainPlayerGames.filter(g => {
-    const k = gameKey(g);
-    if (_seenMain.has(k)) return false;
-    _seenMain.add(k);
-    return true;
-  });
   const duoContent = document.getElementById("duoContent");
   if (!teammateName) {
     duoContent.innerHTML = '<p class="duo-empty">Start typing a teammate\'s name above.</p>';
     return;
   }
 
-  // Deduplicate using date_iso+played_for+played_against
   const seenKeys = new Set();
   const sharedGames = mainPlayerGames.filter(g => {
-    const k = (g.date_iso||g.season+'|'+g.round) + '|' + g.played_against;
+    const k = g.season+'|'+g.round+'|'+g.played_against;
     if (seenKeys.has(k)) return false;
     const gk = gameKey(g);
     const teamRoster = gameRosterMap[gk] && gameRosterMap[gk][g.played_for];
@@ -592,15 +583,7 @@ function renderDuo(teammateName, mainPlayerGames) {
   const winPct = ((wins / total) * 100).toFixed(1);
   const barW = (wins / total * 100);
 
-  // Deduplicate by game key for display too
-  const seenDisplay = new Set();
-  const dedupedGames = sharedGames.filter(g => {
-    const k = gameKey(g);
-    if (seenDisplay.has(k)) return false;
-    seenDisplay.add(k);
-    return true;
-  });
-  const sorted = [...dedupedGames].sort((a,b) => b.season - a.season || roundOrder(a.round) - roundOrder(b.round));
+  const sorted = [...sharedGames].sort((a,b) => b.season - a.season || roundOrder(a.round) - roundOrder(b.round));
 
   const gameRows = sorted.map(g => {
     const r = getGameResult(g);
