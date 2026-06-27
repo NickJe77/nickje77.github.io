@@ -519,23 +519,13 @@ function setupDuo(mainPlayerGames) {
 }
 
 function getGameResult(g) {
-  const k = gameKey(g);
-  const result = gameResultMap[k];
-  if (!result) return null;
-  const isHome = g.played_for === result.home_team;
-  const myScore = isHome ? +result.home_score : +result.away_score;
-  const theirScore = isHome ? +result.away_score : +result.home_score;
-  // If scores are missing/zero, fall back to winner field on the game row itself
-  if (!myScore && !theirScore) {
-    const winner = g.winner || g.winning_team || "";
-    if (!winner) return null;
-    if (winner === g.played_for) return 'W';
-    if (winner === g.played_against) return 'L';
-    return 'D';
-  }
-  if (myScore > theirScore) return 'W';
-  if (myScore < theirScore) return 'L';
-  return 'D';
+  // Each game row already has margin + home_team, so derive result directly
+  const margin = +g.margin;
+  if (isNaN(margin)) return null;
+  const isHome = g.played_for === g.home_team;
+  if (margin === 0) return 'D';
+  if (isHome) return margin > 0 ? 'W' : 'L';
+  return margin < 0 ? 'W' : 'L';
 }
 
 function renderDuo(teammateName, mainPlayerGames) {
@@ -575,7 +565,7 @@ function renderDuo(teammateName, mainPlayerGames) {
     const r = getGameResult(g);
     const rClass = r==='W' ? 'duo-result-W' : r==='L' ? 'duo-result-L' : 'duo-result-D';
     const res = gameResultMap[gameKey(g)];
-    const score = res ? (res.home_score||0)+'-'+(res.away_score||0) : '';
+    const score = g.home_points != null ? g.home_points+'-'+g.away_points : '';
     return '<tr onclick="location.href=\''+gameLink(g)+'\'" style="cursor:pointer">'+
       '<td>'+g.season+'</td><td>'+g.round+'</td>'+
       '<td style="text-align:left">'+g.played_for+'</td>'+
