@@ -248,35 +248,37 @@ async function loadTeam(){
       </tr>`).join('');
     }
 
-    // Build per-season player lists
-    const seasonPlayers = {};
-    players.forEach(p => {
-      (p.season_stats||[]).forEach(s => {
-        if(s.team===teamName && s.games>0){
-          if(!seasonPlayers[s.season]) seasonPlayers[s.season]=[];
-          seasonPlayers[s.season].push(p.name);
-        }
-      });
-    });
-
+    // Fetch actual lineups from match report JSONs and compute real co-appearances
     const pairGames = {};
-    allGames.forEach(g => {
-      const roster = seasonPlayers[g.season] || [];
-      if(roster.length < 2) return;
-      const isHome = g.home === teamName;
-      const tf = isHome ? Number(g.score_home||0) : Number(g.score_away||0);
-      const of = isHome ? Number(g.score_away||0) : Number(g.score_home||0);
-      const won = tf > of;
-      const sorted = [...roster].sort();
-      for(let i=0;i<sorted.length;i++){
-        for(let j=i+1;j<sorted.length;j++){
-          const key = sorted[i]+'|||'+sorted[j];
-          if(!pairGames[key]) pairGames[key]={games:0,wins:0};
-          pairGames[key].games++;
-          if(won) pairGames[key].wins++;
+    const playerGameCount = {}; // real appearances from lineups
+
+    await Promise.all(allGames.map(async g => {
+      try {
+        const r = await fetch(`/data/epl/matches/${g.season}/${g.match_id}.json`);
+        if (!r.ok) return;
+        const match = await r.json();
+        const isHome = g.home === teamName;
+        const lineup = isHome ? (match.home_lineup||[]) : (match.away_lineup||[]);
+        const names = lineup.map(p => p.name).filter(Boolean);
+        if (names.length < 2) return;
+
+        const tf = isHome ? Number(g.score_home||0) : Number(g.score_away||0);
+        const of = isHome ? Number(g.score_away||0) : Number(g.score_home||0);
+        const won = tf > of;
+
+        names.forEach(n => { playerGameCount[n] = (playerGameCount[n]||0) + 1; });
+
+        const sorted = [...names].sort();
+        for (let i = 0; i < sorted.length; i++) {
+          for (let j = i+1; j < sorted.length; j++) {
+            const key = sorted[i]+'|||'+sorted[j];
+            if (!pairGames[key]) pairGames[key] = {games:0, wins:0};
+            pairGames[key].games++;
+            if (won) pairGames[key].wins++;
+          }
         }
-      }
-    });
+      } catch(e) { /* skip missing match files */ }
+    }));
 
     const topPairs = Object.entries(pairGames)
       .sort((a,b)=>b[1].games-a[1].games)
@@ -284,8 +286,8 @@ async function loadTeam(){
       .map(([key,{games,wins}])=>{
         const [p1,p2]=key.split('|||');
         const winPct = games ? ((wins/games)*100).toFixed(1) : '0.0';
-        const p1games = playerClubGames[p1] || 0;
-        const p2games = playerClubGames[p2] || 0;
+        const p1games = playerGameCount[p1] || playerClubGames[p1] || 0;
+        const p2games = playerGameCount[p2] || playerClubGames[p2] || 0;
         return {p1,p2,p1games,p2games,games,wins,winPct};
       });
 
@@ -354,9 +356,11 @@ async function loadTeam(){
             <table>
               <thead><tr><th>Player</th><th style="text-align:right">Club Games</th></tr></thead>
               <tbody>
-                ${[...teamPlayers].sort((a,b)=>b.clubGames-a.clubGames).filter(p=>p.clubGames>0).slice(0,10).map(p=>`<tr>
+                ${[...teamPlayers].sort((a,b)=>
+                  (playerGameCount[b.name]||b.clubGames)-(playerGameCount[a.name]||a.clubGames)
+                ).filter(p=>(playerGameCount[p.name]||p.clubGames)>0).slice(0,10).map(p=>`<tr>
                   <td><a class="player-link" href="/epl-player.html?player=${encodeURIComponent(playerSlug(p))}">${p.name}</a></td>
-                  <td style="text-align:right">${p.clubGames}</td>
+                  <td style="text-align:right">${playerGameCount[p.name]||p.clubGames}</td>
                 </tr>`).join('')||'<tr><td colspan="2">No data</td></tr>'}
               </tbody>
             </table>
