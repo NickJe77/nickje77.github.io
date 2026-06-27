@@ -269,6 +269,7 @@ function buildGameMaps(yearGames) {
 }
 
 async function loadAllYears() {
+  if (allGames.length) return;
   loadingMsg.textContent = "Loading data...";
   const years = [];
   for (let y = startYear; y <= endYear; y++) years.push(y);
@@ -319,14 +320,7 @@ function buildDatalist() {
 }
 
 function findAndShowPlayer() {
-  const _amSeen = new Set();
-  const allMatchingGames = allGames.filter(p => {
-    if (p.player !== playerName) return false;
-    const k = gameKey(p);
-    if (_amSeen.has(k)) return false;
-    _amSeen.add(k);
-    return true;
-  });
+  const allMatchingGames = allGames.filter(p => p.player === playerName);
   if (!allMatchingGames.length) return;
 
   if (DISAMBIG_GROUPS[playerName]) {
@@ -559,14 +553,13 @@ function renderDuo(teammateName, mainPlayerGames) {
     return;
   }
 
-  console.log('mainPlayerGames count:', mainPlayerGames.length);
-  console.log('first 5 keys:', mainPlayerGames.slice(0,5).map(g => gameKey(g)));
-  // Games where both players were on the same team - deduplicate by game key
+  // Deduplicate using season+round+played_against which is unique per game from main player's view
   const seenKeys = new Set();
   const sharedGames = mainPlayerGames.filter(g => {
-    const k = gameKey(g);
+    const k = g.season + '|' + g.round + '|' + g.played_against;
     if (seenKeys.has(k)) return false;
-    const teamRoster = gameRosterMap[k] && gameRosterMap[k][g.played_for];
+    const gk = gameKey(g);
+    const teamRoster = gameRosterMap[gk] && gameRosterMap[gk][g.played_for];
     if (teamRoster && teamRoster.has(teammateName)) {
       seenKeys.add(k);
       return true;
