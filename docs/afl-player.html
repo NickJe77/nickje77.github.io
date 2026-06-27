@@ -57,8 +57,8 @@ td.top8-badge{font-size:11px;color:#2a7a2a;font-weight:700;}
 .disambig-card:hover{border-color:#0056d6;box-shadow:0 4px 14px rgba(0,86,214,.12);}
 .disambig-stripe{height:32px;width:44px;border-radius:6px;border:1px solid #ccc;flex-shrink:0;}
 
-/* ── Duo section ── */
-#duoSection{background:white;border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.08);padding:25px 30px;margin-bottom:20px;display:none;}
+/* DUO SECTION */
+#duoSection{background:white;border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.08);padding:25px 30px;margin-bottom:20px;}
 .duo-header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
 .duo-header h2{margin:0;font-size:20px;font-weight:700;}
 #duoSearch{padding:9px 13px;border-radius:9px;border:1px solid #ccc;font-size:15px;width:260px;max-width:100%;}
@@ -105,11 +105,11 @@ td.top8-badge{font-size:11px;color:#2a7a2a;font-weight:700;}
 <div class="top8-split" id="top8Split"></div>
 </div>
 
-<!-- ── DUO SECTION ── -->
-<div id="duoSection">
+<!-- DUO SECTION -->
+<div id="duoSection" style="display:none">
   <div class="duo-header">
-    <h2>Duo Record</h2>
-    <input id="duoSearch" list="duoList" placeholder="Search teammate…">
+    <h2>Duo Record with Teammate</h2>
+    <input id="duoSearch" list="duoList" placeholder="Search teammate...">
     <datalist id="duoList"></datalist>
   </div>
   <div id="duoContent"><p class="duo-empty">Start typing a teammate's name above.</p></div>
@@ -166,10 +166,7 @@ document.getElementById("playerName").textContent = playerName || "Select a play
 
 let allGames = [], currentGames = [], sortDir = -1, sortKey = null;
 let top8BySeasonRound = {};
-
-// gameKey → { home_score, away_score, home_team, away_team }
 let gameResultMap = {};
-// gameKey → Set of player names who played
 let gameRosterMap = {};
 
 const startYear = 1965, endYear = new Date().getFullYear();
@@ -189,7 +186,7 @@ function normalizeGame(g) {
 }
 
 function gameKey(g) {
-  return `${g.season}__${g.round}__${g.home_team}__${g.away_team}`;
+  return g.season + '__' + g.round + '__' + g.home_team + '__' + g.away_team;
 }
 
 function roundOrder(r) {
@@ -207,11 +204,10 @@ function buildTop8Lookup(yearGames) {
     if (!bySeason[g.season]) bySeason[g.season] = [];
     bySeason[g.season].push(g);
   });
-
   Object.entries(bySeason).forEach(([season, games]) => {
     const matchResults = {};
     games.forEach(g => {
-      const key = `${g.season}_${g.round}_${g.home_team}_${g.away_team}`;
+      const key = g.season+'_'+g.round+'_'+g.home_team+'_'+g.away_team;
       if (!matchResults[key]) matchResults[key] = g;
     });
     const matches = Object.values(matchResults);
@@ -251,22 +247,20 @@ function isTop8(game) {
   return set.has(game.played_against);
 }
 
-// Build gameResultMap and gameRosterMap from all loaded games
 function buildGameMaps(yearGames) {
   yearGames.forEach(g => {
     const k = gameKey(g);
     if (!gameResultMap[k]) {
       gameResultMap[k] = {
-        home_team: g.home_team,
-        away_team: g.away_team,
-        home_score: +(g.home_score||0),
-        away_score: +(g.away_score||0),
-        season: g.season,
-        round: g.round
+        home_team: g.home_team, away_team: g.away_team,
+        home_score: +(g.home_score||0), away_score: +(g.away_score||0)
       };
     }
-    if (!gameRosterMap[k]) gameRosterMap[k] = new Set();
-    if (g.player) gameRosterMap[k].add(g.player);
+    if (!gameRosterMap[k]) gameRosterMap[k] = {};
+    if (g.player) {
+      if (!gameRosterMap[k][g.played_for]) gameRosterMap[k][g.played_for] = new Set();
+      gameRosterMap[k][g.played_for].add(g.player);
+    }
   });
 }
 
@@ -274,21 +268,19 @@ async function loadAllYears() {
   loadingMsg.textContent = "Loading data...";
   const years = [];
   for (let y = startYear; y <= endYear; y++) years.push(y);
-
   const allYearGames = [];
   const batchSize = 5;
   for (let i = 0; i < years.length; i += batchSize) {
     const batch = years.slice(i, i + batchSize);
     const results = await Promise.all(
-      batch.map(y => fetch(`/data/afl/afl_${y}.json`).then(r => r.json()).catch(() => []))
+      batch.map(y => fetch('/data/afl/afl_'+y+'.json').then(r => r.json()).catch(() => []))
     );
     results.forEach(d => {
       d.forEach(g => { normalizeGame(g); allYearGames.push(g); });
       allGames = allGames.concat(d);
     });
-    loadingMsg.textContent = `Loading data... ${Math.min(i + batchSize, years.length)}/${years.length} years`;
+    loadingMsg.textContent = 'Loading data... '+Math.min(i+batchSize,years.length)+'/'+years.length+' years';
   }
-
   buildTop8Lookup(allYearGames);
   buildGameMaps(allYearGames);
   loadingMsg.textContent = "";
@@ -307,7 +299,7 @@ function buildDatalist() {
     if (DISAMBIG_GROUPS[name]) {
       DISAMBIG_GROUPS[name].forEach(group => {
         if (group.some(t => nameToTeams[name].has(t))) {
-          opts.add(group.length === 1 ? `${name} (${group[0]})` : `${name} (${group.join(" / ")})`);
+          opts.add(group.length === 1 ? name+' ('+group[0]+')' : name+' ('+group.join(" / ")+')');
         }
       });
     } else {
@@ -346,7 +338,7 @@ function findAndShowPlayer() {
   if (teamColours[team]) {
     const c = teamColours[team].split(",");
     const stripe = document.getElementById("teamStripe");
-    stripe.style.background = `linear-gradient(90deg,${c[0]} 50%,${c[1]} 50%)`;
+    stripe.style.background = 'linear-gradient(90deg,'+c[0]+' 50%,'+c[1]+' 50%)';
     stripe.style.display = "block";
   }
 
@@ -367,28 +359,23 @@ function findAndShowPlayer() {
 }
 
 function showDisambiguation(name, groups) {
-  document.getElementById("summary").innerHTML = `
-    <div class="disambig">
-      <h2>Multiple players named "${name}"</h2>
-      <p>Select the player you're looking for:</p>
-      <div class="disambig-options">
-        ${groups.map(group => {
-          const stripes = group.map(t => `<div class="disambig-stripe" style="${getStripeStyle(t)}"></div>`).join("");
-          return `<a class="disambig-card" href="afl-player.html?name=${encodeURIComponent(name)}&team=${encodeURIComponent(group.join("/"))}">
-            ${stripes}${name}&ensp;<span style="color:#888;font-weight:400;">(${group.join(" / ")})</span></a>`;
-        }).join("")}
-      </div>
-    </div>`;
+  document.getElementById("summary").innerHTML =
+    '<div class="disambig"><h2>Multiple players named "'+name+'"</h2><p>Select the player you\'re looking for:</p><div class="disambig-options">'+
+    groups.map(group => {
+      const stripes = group.map(t => '<div class="disambig-stripe" style="'+getStripeStyle(t)+'"></div>').join("");
+      return '<a class="disambig-card" href="afl-player.html?name='+encodeURIComponent(name)+'&team='+encodeURIComponent(group.join("/"))+'">'+stripes+name+'&ensp;<span style="color:#888;font-weight:400;">('+group.join(" / ")+')</span></a>';
+    }).join("")+
+    '</div></div>';
 }
 
 function getStripeStyle(team) {
   if (!teamColours[team]) return "background:#eee;";
   const c = teamColours[team].split(",");
-  return `background:linear-gradient(90deg,${c[0]} 50%,${c[1]} 50%);`;
+  return 'background:linear-gradient(90deg,'+c[0]+' 50%,'+c[1]+' 50%);';
 }
 
 function setupOpponents(games) {
-  opponentSelect.innerHTML = `<option value="all">All Opponents</option>`;
+  opponentSelect.innerHTML = '<option value="all">All Opponents</option>';
   [...new Set(games.map(g => g.played_against))].sort().forEach(o => {
     const opt = document.createElement("option"); opt.value = o; opt.textContent = o;
     opponentSelect.appendChild(opt);
@@ -413,26 +400,25 @@ function renderStats(g, id) {
   const bestDGames = g.filter(x => (+x.D||0) === bestD);
   const bestGGames = g.filter(x => (+x.G||0) === bestG);
   function bestDetail(arr) {
-    if (arr.length===1) return `<div class="sub">vs ${arr[0].played_against}<br>${arr[0].round}, ${arr[0].season}</div>`;
-    return `<div class="sub">(${arr.length} times)</div>`;
+    if (arr.length===1) return '<div class="sub">vs '+arr[0].played_against+'<br>'+arr[0].round+', '+arr[0].season+'</div>';
+    return '<div class="sub">('+arr.length+' times)</div>';
   }
   const br3 = g.filter(x => (+x.BR||0) === 3).length;
-  document.getElementById(id).innerHTML = `
-    <div class="stat-box"><strong>${games}</strong><span>Games</span></div>
-    <div class="stat-box"><strong>${bestD}</strong><span>Best Disposals</span>${bestDetail(bestDGames)}</div>
-    <div class="stat-box"><strong>${bestG}</strong><span>Best Goals</span>${bestDetail(bestGGames)}</div>
-    <div class="stat-box"><strong>${(dTotal/games).toFixed(1)}</strong><span>Avg Disposals</span></div>
-    <div class="stat-box"><strong>${(gTotal/games).toFixed(2)}</strong><span>Avg Goals</span></div>
-    <div class="stat-box"><strong>${brTotal}</strong><span>Brownlow Votes</span></div>
-    <div class="stat-box"><strong>${(brTotal/games).toFixed(2)}</strong><span>Avg Brownlow</span></div>
-    <div class="stat-box"><strong>${br3}</strong><span>3 Vote Games</span></div>`;
+  document.getElementById(id).innerHTML =
+    '<div class="stat-box"><strong>'+games+'</strong><span>Games</span></div>'+
+    '<div class="stat-box"><strong>'+bestD+'</strong><span>Best Disposals</span>'+bestDetail(bestDGames)+'</div>'+
+    '<div class="stat-box"><strong>'+bestG+'</strong><span>Best Goals</span>'+bestDetail(bestGGames)+'</div>'+
+    '<div class="stat-box"><strong>'+(dTotal/games).toFixed(1)+'</strong><span>Avg Disposals</span></div>'+
+    '<div class="stat-box"><strong>'+(gTotal/games).toFixed(2)+'</strong><span>Avg Goals</span></div>'+
+    '<div class="stat-box"><strong>'+brTotal+'</strong><span>Brownlow Votes</span></div>'+
+    '<div class="stat-box"><strong>'+(brTotal/games).toFixed(2)+'</strong><span>Avg Brownlow</span></div>'+
+    '<div class="stat-box"><strong>'+br3+'</strong><span>3 Vote Games</span></div>';
 }
 
 function renderTop8Split(games) {
   const t8  = games.filter(g => isTop8(g));
   const nt8 = games.filter(g => !isTop8(g));
   const el = document.getElementById("top8Split");
-
   function miniStats(g) {
     if (!g.length) return { d:'—', goals:'—', br:'—', n:0 };
     const n = g.length;
@@ -443,32 +429,22 @@ function renderTop8Split(games) {
       n
     };
   }
-
   const s1 = miniStats(t8), s2 = miniStats(nt8);
-
-  el.innerHTML = `
-    <div class="top8-card top8">
-      <div class="t8-label">▲ vs top 8 opponents</div>
-      <div class="top8-mini">
-        <div><strong>${s1.d}</strong><span>Avg disposals</span></div>
-        <div><strong>${s1.goals}</strong><span>Avg goals</span></div>
-        <div><strong>${s1.br}</strong><span>Avg Brownlow</span></div>
-      </div>
-      <div class="top8-games">${s1.n} game${s1.n===1?'':'s'}</div>
-    </div>
-    <div class="top8-card non-top8">
-      <div class="t8-label">▽ vs non-top 8 opponents</div>
-      <div class="top8-mini">
-        <div><strong>${s2.d}</strong><span>Avg disposals</span></div>
-        <div><strong>${s2.goals}</strong><span>Avg goals</span></div>
-        <div><strong>${s2.br}</strong><span>Avg Brownlow</span></div>
-      </div>
-      <div class="top8-games">${s2.n} game${s2.n===1?'':'s'}</div>
-    </div>`;
+  el.innerHTML =
+    '<div class="top8-card top8"><div class="t8-label">▲ vs top 8 opponents</div><div class="top8-mini">'+
+    '<div><strong>'+s1.d+'</strong><span>Avg disposals</span></div>'+
+    '<div><strong>'+s1.goals+'</strong><span>Avg goals</span></div>'+
+    '<div><strong>'+s1.br+'</strong><span>Avg Brownlow</span></div>'+
+    '</div><div class="top8-games">'+s1.n+' game'+(s1.n===1?'':'s')+'</div></div>'+
+    '<div class="top8-card non-top8"><div class="t8-label">▽ vs non-top 8 opponents</div><div class="top8-mini">'+
+    '<div><strong>'+s2.d+'</strong><span>Avg disposals</span></div>'+
+    '<div><strong>'+s2.goals+'</strong><span>Avg goals</span></div>'+
+    '<div><strong>'+s2.br+'</strong><span>Avg Brownlow</span></div>'+
+    '</div><div class="top8-games">'+s2.n+' game'+(s2.n===1?'':'s')+'</div></div>';
 }
 
 function gameLink(p) {
-  return `afl-game.html?year=${p.season}&home=${encodeURIComponent(p.home_team)}&away=${encodeURIComponent(p.away_team)}&round=${encodeURIComponent(p.round)}`;
+  return 'afl-game.html?year='+p.season+'&home='+encodeURIComponent(p.home_team)+'&away='+encodeURIComponent(p.away_team)+'&round='+encodeURIComponent(p.round);
 }
 
 function renderTable(g) {
@@ -478,7 +454,7 @@ function renderTable(g) {
     const tr = document.createElement("tr");
     if (t8) tr.style.background = "#eef7ee";
     tr.onclick = () => location.href = gameLink(p);
-    tr.innerHTML = `<td>${p.season}</td><td>${p.round}</td><td class="left">${p.played_for}</td><td>${p.played_against}</td><td class="${t8?'top8-badge':''}">${t8?'Top 8':''}</td><td>${p.D||0}</td><td>${p.G||0}</td><td>${p.B||0}</td><td>${p.BR||0}</td>`;
+    tr.innerHTML = '<td>'+p.season+'</td><td>'+p.round+'</td><td class="left">'+p.played_for+'</td><td>'+p.played_against+'</td><td class="'+(t8?'top8-badge':'')+'">'+(t8?'Top 8':'')+'</td><td>'+(p.D||0)+'</td><td>'+(p.G||0)+'</td><td>'+(p.B||0)+'</td><td>'+(p.BR||0)+'</td>';
     rows.appendChild(tr);
   });
 }
@@ -507,38 +483,27 @@ playerSearchEl.onchange = e => {
     const name = match[1].trim(), teams = match[2].split("/").map(s=>s.trim());
     if (DISAMBIG_GROUPS[name]) {
       const group = DISAMBIG_GROUPS[name].find(g => teams.every(t=>g.includes(t))||g.some(t=>teams.includes(t)));
-      if (group) { location.href=`afl-player.html?name=${encodeURIComponent(name)}&team=${encodeURIComponent(group.join("/"))}`; return; }
+      if (group) { location.href='afl-player.html?name='+encodeURIComponent(name)+'&team='+encodeURIComponent(group.join("/")); return; }
     }
-    location.href = `afl-player.html?name=${encodeURIComponent(name)}&team=${encodeURIComponent(teams[0])}`;
+    location.href = 'afl-player.html?name='+encodeURIComponent(name)+'&team='+encodeURIComponent(teams[0]);
   } else {
-    location.href = `afl-player.html?name=${encodeURIComponent(val)}`;
+    location.href = 'afl-player.html?name='+encodeURIComponent(val);
   }
 };
 
 // ── DUO LOGIC ──────────────────────────────────────────────────────────────
 
 function setupDuo(mainPlayerGames) {
-  // Build set of game keys the main player appeared in
-  const mainPlayerKeys = new Set(mainPlayerGames.map(g => gameKey(g)));
-
-  // Find all teammates: players who share at least one game key with the main player
-  // and played for the same team in that game
+  // Build datalist of teammates: players who share a game key AND played for the same team
   const teammateNames = new Set();
   mainPlayerGames.forEach(g => {
     const k = gameKey(g);
-    const roster = gameRosterMap[k];
-    if (roster) {
-      roster.forEach(name => {
-        if (name !== playerName) {
-          // Check if they played for the same team in this game
-          // We need to look at allGames for this key + name
-          teammateNames.add(name);
-        }
-      });
+    const teamRoster = gameRosterMap[k] && gameRosterMap[k][g.played_for];
+    if (teamRoster) {
+      teamRoster.forEach(name => { if (name !== playerName) teammateNames.add(name); });
     }
   });
 
-  // Populate duo datalist
   const duoList = document.getElementById("duoList");
   duoList.innerHTML = "";
   [...teammateNames].sort().forEach(name => {
@@ -548,30 +513,17 @@ function setupDuo(mainPlayerGames) {
   });
 
   const duoSearch = document.getElementById("duoSearch");
-  duoSearch.oninput = () => {
-    const val = duoSearch.value.trim();
-    if (!val) {
-      document.getElementById("duoContent").innerHTML = '<p class="duo-empty">Start typing a teammate\'s name above.</p>';
-      return;
-    }
-    renderDuo(val, mainPlayerGames);
-  };
-  duoSearch.onchange = () => {
-    const val = duoSearch.value.trim();
-    if (val) renderDuo(val, mainPlayerGames);
-  };
+  duoSearch.oninput = () => renderDuo(duoSearch.value.trim(), mainPlayerGames);
+  duoSearch.onchange = () => renderDuo(duoSearch.value.trim(), mainPlayerGames);
 }
 
 function getGameResult(g) {
-  // Returns 'W', 'L', or 'D' from main player's perspective
   const k = gameKey(g);
   const result = gameResultMap[k];
   if (!result) return null;
-  const hs = result.home_score, as = result.away_score;
-  const myTeam = g.played_for;
-  const isHome = myTeam === result.home_team;
-  const myScore = isHome ? hs : as;
-  const theirScore = isHome ? as : hs;
+  const isHome = g.played_for === result.home_team;
+  const myScore = isHome ? result.home_score : result.away_score;
+  const theirScore = isHome ? result.away_score : result.home_score;
   if (myScore > theirScore) return 'W';
   if (myScore < theirScore) return 'L';
   return 'D';
@@ -579,22 +531,20 @@ function getGameResult(g) {
 
 function renderDuo(teammateName, mainPlayerGames) {
   const duoContent = document.getElementById("duoContent");
+  if (!teammateName) {
+    duoContent.innerHTML = '<p class="duo-empty">Start typing a teammate\'s name above.</p>';
+    return;
+  }
 
-  // Find games where BOTH players appeared AND played for the same team
-  // We check: same game key, teammate is in the roster, and teammate's played_for matches main player's played_for
-  const teammateGames = allGames.filter(g => g.player === teammateName);
-  const teammateKeyToGame = {};
-  teammateGames.forEach(g => { teammateKeyToGame[gameKey(g)] = g; });
-
+  // Games where both players were on the same team
   const sharedGames = mainPlayerGames.filter(g => {
     const k = gameKey(g);
-    const tmGame = teammateKeyToGame[k];
-    // Must exist and be on the same team
-    return tmGame && tmGame.played_for === g.played_for;
+    const teamRoster = gameRosterMap[k] && gameRosterMap[k][g.played_for];
+    return teamRoster && teamRoster.has(teammateName);
   });
 
   if (!sharedGames.length) {
-    duoContent.innerHTML = `<p class="duo-empty">No shared games found for <strong>${teammateName}</strong> and <strong>${playerName}</strong> on the same team. Make sure the name matches exactly.</p>`;
+    duoContent.innerHTML = '<p class="duo-empty">No shared games found for <strong>'+teammateName+'</strong>. Check the spelling matches exactly.</p>';
     return;
   }
 
@@ -603,56 +553,43 @@ function renderDuo(teammateName, mainPlayerGames) {
     const r = getGameResult(g);
     if (r === 'W') wins++;
     else if (r === 'L') losses++;
-    else if (r === 'D') draws++;
+    else draws++;
   });
 
   const total = sharedGames.length;
-  const winPct = total ? ((wins / total) * 100).toFixed(1) : '0.0';
-  const barW = total ? (wins / total * 100) : 0;
+  const winPct = ((wins / total) * 100).toFixed(1);
+  const barW = (wins / total * 100);
 
-  // Sort shared games by season desc, then round
-  const sorted = [...sharedGames].sort((a,b) => {
-    if (b.season !== a.season) return b.season - a.season;
-    return roundOrder(a.round) - roundOrder(b.round);
-  });
+  const sorted = [...sharedGames].sort((a,b) => b.season - a.season || roundOrder(a.round) - roundOrder(b.round));
 
   const gameRows = sorted.map(g => {
     const r = getGameResult(g);
-    const rClass = r === 'W' ? 'duo-result-W' : r === 'L' ? 'duo-result-L' : 'duo-result-D';
-    const k = gameKey(g);
-    const res = gameResultMap[k];
-    const scoreStr = res ? `${res.home_score}–${res.away_score}` : '';
-    return `<tr onclick="location.href='${gameLink(g)}'" style="cursor:pointer">
-      <td>${g.season}</td>
-      <td>${g.round}</td>
-      <td style="text-align:left">${g.played_for}</td>
-      <td>${g.played_against}</td>
-      <td>${scoreStr}</td>
-      <td class="${rClass}">${r||'?'}</td>
-    </tr>`;
+    const rClass = r==='W' ? 'duo-result-W' : r==='L' ? 'duo-result-L' : 'duo-result-D';
+    const res = gameResultMap[gameKey(g)];
+    const score = res ? res.home_score+'-'+res.away_score : '';
+    return '<tr onclick="location.href=\''+gameLink(g)+'\'" style="cursor:pointer">'+
+      '<td>'+g.season+'</td><td>'+g.round+'</td>'+
+      '<td style="text-align:left">'+g.played_for+'</td>'+
+      '<td>'+g.played_against+'</td>'+
+      '<td>'+score+'</td>'+
+      '<td class="'+rClass+'">'+r+'</td></tr>';
   }).join('');
 
-  duoContent.innerHTML = `
-    <div style="font-size:15px;color:#555;margin-bottom:12px;">
-      <strong style="color:#3b007a">${playerName}</strong> &amp; <strong style="color:#3b007a">${teammateName}</strong> — together on the same team
-    </div>
-    <div class="duo-stats-grid">
-      <div class="duo-stat"><strong>${total}</strong><span>Games together</span></div>
-      <div class="duo-stat"><strong>${wins}</strong><span>Wins</span></div>
-      <div class="duo-stat"><strong>${losses}</strong><span>Losses</span></div>
-      <div class="duo-stat"><strong>${draws}</strong><span>Draws</span></div>
-      <div class="duo-stat"><strong>${winPct}%</strong><span>Win %</span></div>
-    </div>
-    <div class="duo-win-bar" title="${winPct}% wins">
-      <div class="duo-win-fill" style="width:${barW}%"></div>
-    </div>
-    <div class="duo-bar-label"><span>${wins}W / ${losses}L${draws ? ' / '+draws+'D' : ''}</span><span>${winPct}%</span></div>
-    <div class="duo-games-list">
-      <table>
-        <thead><tr><th>Season</th><th>Round</th><th>Team</th><th>Opponent</th><th>Score</th><th>Result</th></tr></thead>
-        <tbody>${gameRows}</tbody>
-      </table>
-    </div>`;
+  duoContent.innerHTML =
+    '<div style="font-size:15px;color:#555;margin-bottom:12px;">'+
+    '<strong style="color:#3b007a">'+playerName+'</strong> &amp; <strong style="color:#3b007a">'+teammateName+'</strong> — games played together on the same team</div>'+
+    '<div class="duo-stats-grid">'+
+    '<div class="duo-stat"><strong>'+total+'</strong><span>Games together</span></div>'+
+    '<div class="duo-stat"><strong>'+wins+'</strong><span>Wins</span></div>'+
+    '<div class="duo-stat"><strong>'+losses+'</strong><span>Losses</span></div>'+
+    '<div class="duo-stat"><strong>'+draws+'</strong><span>Draws</span></div>'+
+    '<div class="duo-stat"><strong>'+winPct+'%</strong><span>Win %</span></div>'+
+    '</div>'+
+    '<div class="duo-win-bar"><div class="duo-win-fill" style="width:'+barW+'%"></div></div>'+
+    '<div class="duo-bar-label"><span>'+wins+'W / '+losses+'L'+(draws?' / '+draws+'D':'')+'</span><span>'+winPct+'%</span></div>'+
+    '<div class="duo-games-list"><table>'+
+    '<thead><tr><th>Season</th><th>Round</th><th>Team</th><th>Opponent</th><th>Score</th><th>Result</th></tr></thead>'+
+    '<tbody>'+gameRows+'</tbody></table></div>';
 }
 
 loadAllYears();
