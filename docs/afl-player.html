@@ -185,7 +185,7 @@ const opponentSelect = document.getElementById("opponentSelect");
 const rows           = document.getElementById("rows");
 const loadingMsg     = document.getElementById("loadingMsg");
 const params     = new URLSearchParams(location.search);
-const playerName = params.get("name") || "";
+const playerName = normalizeName(params.get("name") || "");
 const playerTeam = params.get("team") || "";
 document.getElementById("playerName").textContent = playerName || "Select a player";
 let allGames = [], currentGames = [], sortDir = -1, sortKey = null;
@@ -203,8 +203,19 @@ function escapeHtml(s){
 function normalizeDashes(str) {
   return str ? str.replace(/[\u2013\u2014]/g, '-') : str;
 }
+// Canonicalises a PLAYER name so the same person can't split into duplicates:
+// - curly apostrophe -> straight   (O\u2019Sullivan -> O'Sullivan)
+// - missing apostrophe in O' surnames -> inserted   (OSullivan -> O'Sullivan)
+// Leaves ordinary names (Oliver, Oscar, ...) untouched.
+function normalizeName(str) {
+  if (!str) return str;
+  str = normalizeDashes(str);
+  str = str.replace(/\u2019/g, "'");
+  str = str.replace(/\bO([A-Z][a-z])/g, "O'$1");
+  return str;
+}
 function normalizeGame(g) {
-  if (g.player)         g.player         = normalizeDashes(g.player);
+  if (g.player)         g.player         = normalizeName(g.player);
   if (g.played_for)     g.played_for     = normalizeDashes(g.played_for);
   if (g.played_against) g.played_against = normalizeDashes(g.played_against);
   if (g.home_team)      g.home_team      = normalizeDashes(g.home_team);
