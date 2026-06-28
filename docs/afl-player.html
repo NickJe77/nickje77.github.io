@@ -394,49 +394,31 @@ function setupOpponents(games) {
 
 // --- Teammates logic ---
 function setupTeammates(games) {
-  // Build a lookup: "season__round__team" -> player's game object
-  const playerGameLookup = new Map();
-  games.forEach(g => {
-    playerGameLookup.set(g.season + '__' + g.round + '__' + g.played_for, g);
-  });
-
-  // Scan all games to find players sharing the same season + round + team
-  const teammateMap = new Map(); // teammate name -> array of the player's game objects
+  const myKeys = new Set(games.map(g => g.season + "__" + g.round + "__" + g.played_for));
+  const teammateMap = new Map();
   allGames.forEach(g => {
     if (g.player === playerName) return;
-    const key = g.season + '__' + g.round + '__' + g.played_for;
-    const myGame = playerGameLookup.get(key);
+    const key = g.season + "__" + g.round + "__" + g.played_for;
+    if (!myKeys.has(key)) return;
+    const myGame = games.find(x => x.season === g.season && x.round === g.round && x.played_for === g.played_for);
     if (!myGame) return;
     if (!teammateMap.has(g.player)) teammateMap.set(g.player, []);
-    // avoid duplicates (same game added twice)
     const arr = teammateMap.get(g.player);
-    if (!arr.find(x => x.season === myGame.season && x.round === myGame.round)) {
-      arr.push(myGame);
-    }
+    if (!arr.some(x => x.season === myGame.season && x.round === myGame.round)) arr.push(myGame);
   });
-
-  const teammateGameKeys = teammateMap;
-  if (teammateGameKeys.size === 0) return;
-
+  document.getElementById("teammatesSection").style.display = "";
   const select = document.getElementById("teammateSelect");
-  select.innerHTML = '<option value="">— Choose a teammate —</option>';
-  [...teammateGameKeys.keys()].sort().forEach(name => {
+  select.innerHTML = '<option value="">— Choose a teammate (' + teammateMap.size + ' found) —</option>';
+  [...teammateMap.keys()].sort().forEach(name => {
     const opt = document.createElement("option");
     opt.value = name;
-    opt.textContent = name + ' (' + teammateGameKeys.get(name).length + ' games)';
+    opt.textContent = name + " (" + teammateMap.get(name).length + " games)";
     select.appendChild(opt);
   });
-
-  document.getElementById("teammatesSection").style.display = "";
-
   select.onchange = () => {
     const chosen = select.value;
-    if (!chosen) {
-      document.getElementById("teammateStats").innerHTML = "";
-      document.getElementById("teammateTable").style.display = "none";
-      return;
-    }
-    renderTeammateStats(chosen, teammateGameKeys.get(chosen));
+    if (!chosen) { document.getElementById("teammateStats").innerHTML = ""; document.getElementById("teammateTable").style.display = "none"; return; }
+    renderTeammateStats(chosen, teammateMap.get(chosen));
   };
 }
 
