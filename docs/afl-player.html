@@ -63,6 +63,8 @@ td.top8-badge{font-size:11px;color:#2a7a2a;font-weight:700;}
 .teammate-controls{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
 .teammate-controls label{font-size:14px;font-weight:600;color:#555;}
 #teammateSelect{padding:8px 12px;border-radius:8px;border:1px solid #ccc;font-size:15px;width:260px;}
+.teammate-names{text-align:center;font-size:22px;font-weight:700;color:#2a2a2a;margin-bottom:16px;display:none;}
+.teammate-names .amp{color:#9a8ad0;margin:0 10px;font-weight:600;}
 .teammate-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:18px;}
 .tstat-box{border-radius:12px;padding:14px 10px;text-align:center;}
 .tstat-box.games{background:linear-gradient(180deg,#f9fbff,#eef3fb);box-shadow:inset 0 0 0 1px #dde3ec;}
@@ -125,6 +127,7 @@ td.top8-badge{font-size:11px;color:#2a7a2a;font-weight:700;}
       <option value="">— Choose a teammate —</option>
     </select>
   </div>
+  <div class="teammate-names" id="teammateHeader"></div>
   <div class="teammate-stats" id="teammateStats"></div>
   <div id="teammateTable">
     <div class="section-title" style="margin-top:12px;">Games Together</div>
@@ -189,6 +192,9 @@ let top8BySeasonRound = {};
 let gameResultMap = {};
 let gameRosterMap = {};
 const startYear = 1965, endYear = new Date().getFullYear();
+function escapeHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 function normalizeDashes(str) {
   return str ? str.replace(/[\u2013\u2014]/g, '-') : str;
 }
@@ -415,9 +421,20 @@ function setupTeammates(games) {
     opt.textContent = name + " (" + teammateMap.get(name).length + " games)";
     select.appendChild(opt);
   });
+  // reset display when switching players
+  document.getElementById("teammateHeader").style.display = "none";
+  document.getElementById("teammateHeader").innerHTML = "";
+  document.getElementById("teammateStats").innerHTML = "";
+  document.getElementById("teammateTable").style.display = "none";
   select.onchange = () => {
     const chosen = select.value;
-    if (!chosen) { document.getElementById("teammateStats").innerHTML = ""; document.getElementById("teammateTable").style.display = "none"; return; }
+    if (!chosen) {
+      document.getElementById("teammateHeader").style.display = "none";
+      document.getElementById("teammateHeader").innerHTML = "";
+      document.getElementById("teammateStats").innerHTML = "";
+      document.getElementById("teammateTable").style.display = "none";
+      return;
+    }
     renderTeammateStats(chosen, teammateMap.get(chosen));
   };
 }
@@ -446,6 +463,11 @@ function renderTeammateStats(name, sharedGames) {
   });
   const total = sharedGames.length;
   const winPct = total > 0 ? ((wins + draws * 0.5) / total * 100).toFixed(1) : '—';
+
+  // The two players' names
+  const header = document.getElementById("teammateHeader");
+  header.innerHTML = escapeHtml(playerName) + '<span class="amp">&amp;</span>' + escapeHtml(name);
+  header.style.display = "block";
 
   document.getElementById("teammateStats").innerHTML =
     '<div class="tstat-box games"><strong>'+total+'</strong><span>Games Together</span></div>'+
