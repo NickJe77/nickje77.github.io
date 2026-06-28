@@ -394,20 +394,28 @@ function setupOpponents(games) {
 
 // --- Teammates logic ---
 function setupTeammates(games) {
-  // For each game the player played, find teammates on the same team using gameRosterMap
-  const teammateGameKeys = new Map(); // teammate name -> Set of game keys played together
-
+  // Build a lookup: "season__round__team" -> player's game object
+  const playerGameLookup = new Map();
   games.forEach(g => {
-    const k = gameKey(g);
-    const roster = gameRosterMap[k] && gameRosterMap[k][g.played_for];
-    if (!roster) return;
-    roster.forEach(name => {
-      if (name === playerName) return;
-      if (!teammateGameKeys.has(name)) teammateGameKeys.set(name, []);
-      teammateGameKeys.get(name).push(g);
-    });
+    playerGameLookup.set(g.season + '__' + g.round + '__' + g.played_for, g);
   });
 
+  // Scan all games to find players sharing the same season + round + team
+  const teammateMap = new Map(); // teammate name -> array of the player's game objects
+  allGames.forEach(g => {
+    if (g.player === playerName) return;
+    const key = g.season + '__' + g.round + '__' + g.played_for;
+    const myGame = playerGameLookup.get(key);
+    if (!myGame) return;
+    if (!teammateMap.has(g.player)) teammateMap.set(g.player, []);
+    // avoid duplicates (same game added twice)
+    const arr = teammateMap.get(g.player);
+    if (!arr.find(x => x.season === myGame.season && x.round === myGame.round)) {
+      arr.push(myGame);
+    }
+  });
+
+  const teammateGameKeys = teammateMap;
   if (teammateGameKeys.size === 0) return;
 
   const select = document.getElementById("teammateSelect");
