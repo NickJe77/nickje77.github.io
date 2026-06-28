@@ -56,6 +56,38 @@ td.top8-badge{font-size:11px;color:#2a7a2a;font-weight:700;}
 .disambig-card{display:flex;align-items:center;gap:10px;padding:16px 22px;border-radius:12px;border:2px solid #dde3ec;text-decoration:none;color:#333;font-size:17px;font-weight:600;background:#f9fbff;transition:border-color .15s,box-shadow .15s;}
 .disambig-card:hover{border-color:#0056d6;box-shadow:0 4px 14px rgba(0,86,214,.12);}
 .disambig-stripe{height:32px;width:44px;border-radius:6px;border:1px solid #ccc;flex-shrink:0;}
+
+/* Teammates section */
+#teammatesSection{background:white;border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.08);padding:25px 30px;margin-bottom:20px;display:none;}
+#teammatesSection .section-title{margin-top:0;}
+.teammate-controls{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
+.teammate-controls label{font-size:14px;font-weight:600;color:#555;}
+#teammateSelect{padding:8px 12px;border-radius:8px;border:1px solid #ccc;font-size:15px;width:260px;}
+.teammate-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:18px;}
+.tstat-box{border-radius:12px;padding:14px 10px;text-align:center;}
+.tstat-box.games{background:linear-gradient(180deg,#f9fbff,#eef3fb);box-shadow:inset 0 0 0 1px #dde3ec;}
+.tstat-box.wins{background:linear-gradient(180deg,#f0fbf0,#d8f0d8);box-shadow:inset 0 0 0 1px #b6ddb6;}
+.tstat-box.losses{background:linear-gradient(180deg,#fff5f5,#fde0e0);box-shadow:inset 0 0 0 1px #f0b6b6;}
+.tstat-box.draws{background:linear-gradient(180deg,#fffbf0,#faefd8);box-shadow:inset 0 0 0 1px #e8d8a0;}
+.tstat-box.winpct{background:linear-gradient(180deg,#f5f0ff,#e8d8ff);box-shadow:inset 0 0 0 1px #c8b0ee;}
+.tstat-box strong{display:block;font-size:26px;font-weight:700;margin-bottom:4px;}
+.tstat-box.wins strong{color:#1a6b1a;}
+.tstat-box.losses strong{color:#b01a1a;}
+.tstat-box.draws strong{color:#7a6010;}
+.tstat-box.winpct strong{color:#4a1a9a;}
+.tstat-box span{font-size:13px;color:#666;}
+#teammateTable{display:none;}
+#teammateTable table{margin-top:0;}
+#teammateTable th{background:#f0eaff;}
+#teammateTable tbody tr:nth-child(even){background:#f8f4ff;}
+#teammateTable tbody tr:hover{background:#ede4ff;}
+.win-row td{background:#eef7ee !important;}
+.loss-row td{background:#fef2f2 !important;}
+.draw-row td{background:#fffbee !important;}
+.result-badge{font-size:12px;font-weight:700;padding:2px 7px;border-radius:5px;}
+.result-badge.W{background:#d0edcc;color:#1a5c1a;}
+.result-badge.L{background:#fddcdc;color:#8c1a1a;}
+.result-badge.D{background:#fef3cc;color:#6b5010;}
 </style>
 </head>
 <body>
@@ -83,6 +115,33 @@ td.top8-badge{font-size:11px;color:#2a7a2a;font-weight:700;}
 <div class="section-title" id="top8Label" style="display:none">Top 8 Split (at time of game)</div>
 <div class="top8-split" id="top8Split"></div>
 </div>
+
+<!-- Teammates Section -->
+<div id="teammatesSection">
+  <div class="section-title">Teammates</div>
+  <div class="teammate-controls">
+    <label for="teammateSelect">Select teammate:</label>
+    <select id="teammateSelect">
+      <option value="">— Choose a teammate —</option>
+    </select>
+  </div>
+  <div class="teammate-stats" id="teammateStats"></div>
+  <div id="teammateTable">
+    <div class="section-title" style="margin-top:12px;">Games Together</div>
+    <table>
+      <thead><tr>
+        <th>Season</th>
+        <th>Round</th>
+        <th>Team</th>
+        <th>Opponent</th>
+        <th>Result</th>
+        <th>Score</th>
+      </tr></thead>
+      <tbody id="teammateRows"></tbody>
+    </table>
+  </div>
+</div>
+
 <div id="loadingMsg" class="loading"></div>
 <button class="reset-sort" id="resetBtn" style="display:none" onclick="resetSort()">Reset Sort</button>
 <table id="mainTable" style="display:none">
@@ -305,6 +364,7 @@ function findAndShowPlayer() {
   renderOpponent([]);
   renderTop8Split(currentGames);
   renderTable(currentGames);
+  setupTeammates(currentGames);
 }
 function showDisambiguation(name, groups) {
   document.getElementById("summary").innerHTML =
@@ -331,6 +391,101 @@ function setupOpponents(games) {
     renderOpponent(f); renderTable(f);
   };
 }
+
+// --- Teammates logic ---
+function setupTeammates(games) {
+  // For each game the player played, find teammates on the same team using gameRosterMap
+  const teammateGameKeys = new Map(); // teammate name -> Set of game keys played together
+
+  games.forEach(g => {
+    const k = gameKey(g);
+    const roster = gameRosterMap[k] && gameRosterMap[k][g.played_for];
+    if (!roster) return;
+    roster.forEach(name => {
+      if (name === playerName) return;
+      if (!teammateGameKeys.has(name)) teammateGameKeys.set(name, []);
+      teammateGameKeys.get(name).push(g);
+    });
+  });
+
+  if (teammateGameKeys.size === 0) return;
+
+  const select = document.getElementById("teammateSelect");
+  select.innerHTML = '<option value="">— Choose a teammate —</option>';
+  [...teammateGameKeys.keys()].sort().forEach(name => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name + ' (' + teammateGameKeys.get(name).length + ' games)';
+    select.appendChild(opt);
+  });
+
+  document.getElementById("teammatesSection").style.display = "";
+
+  select.onchange = () => {
+    const chosen = select.value;
+    if (!chosen) {
+      document.getElementById("teammateStats").innerHTML = "";
+      document.getElementById("teammateTable").style.display = "none";
+      return;
+    }
+    renderTeammateStats(chosen, teammateGameKeys.get(chosen));
+  };
+}
+
+function getGameResult(g) {
+  const k = gameKey(g);
+  const res = gameResultMap[k];
+  if (!res) return { result: '?', score: '?' };
+  const playerTeamIsHome = res.home_team === g.played_for;
+  const teamScore  = playerTeamIsHome ? res.home_score : res.away_score;
+  const oppScore   = playerTeamIsHome ? res.away_score : res.home_score;
+  let result;
+  if (teamScore > oppScore) result = 'W';
+  else if (teamScore < oppScore) result = 'L';
+  else result = 'D';
+  return { result, score: teamScore + ' – ' + oppScore };
+}
+
+function renderTeammateStats(name, sharedGames) {
+  let wins = 0, losses = 0, draws = 0;
+  sharedGames.forEach(g => {
+    const { result } = getGameResult(g);
+    if (result === 'W') wins++;
+    else if (result === 'L') losses++;
+    else if (result === 'D') draws++;
+  });
+  const total = sharedGames.length;
+  const winPct = total > 0 ? ((wins + draws * 0.5) / total * 100).toFixed(1) : '—';
+
+  document.getElementById("teammateStats").innerHTML =
+    '<div class="tstat-box games"><strong>'+total+'</strong><span>Games Together</span></div>'+
+    '<div class="tstat-box wins"><strong>'+wins+'</strong><span>Wins</span></div>'+
+    '<div class="tstat-box losses"><strong>'+losses+'</strong><span>Losses</span></div>'+
+    '<div class="tstat-box draws"><strong>'+draws+'</strong><span>Draws</span></div>'+
+    '<div class="tstat-box winpct"><strong>'+winPct+'%</strong><span>Win %</span></div>';
+
+  const tbody = document.getElementById("teammateRows");
+  tbody.innerHTML = "";
+  // Sort chronologically
+  const sorted = [...sharedGames].sort((a,b) => a.season !== b.season ? a.season-b.season : roundOrder(a.round)-roundOrder(b.round));
+  sorted.forEach(g => {
+    const { result, score } = getGameResult(g);
+    const tr = document.createElement("tr");
+    tr.className = result==='W'?'win-row':result==='L'?'loss-row':result==='D'?'draw-row':'';
+    tr.onclick = () => location.href = gameLink(g);
+    tr.innerHTML =
+      '<td>'+g.season+'</td>'+
+      '<td>'+g.round+'</td>'+
+      '<td class="left">'+g.played_for+'</td>'+
+      '<td>'+g.played_against+'</td>'+
+      '<td><span class="result-badge '+result+'">'+result+'</span></td>'+
+      '<td>'+score+'</td>';
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById("teammateTable").style.display = "";
+}
+
 function renderCareer(g)   { renderStats(g, "careerStats"); }
 function renderOpponent(g) { renderStats(g, "opponentStats"); }
 function renderStats(g, id) {
