@@ -58,7 +58,7 @@ td.top8-badge{font-size:11px;color:#2a7a2a;font-weight:700;}
 .disambig-stripe{height:32px;width:44px;border-radius:6px;border:1px solid #ccc;flex-shrink:0;}
 
 /* Teammates section */
-#teammatesSection{background:white;border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.08);padding:25px 30px;margin-bottom:20px;display:none;}
+#teammatesSection{background:white;border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.08);padding:25px 30px;margin-bottom:20px;}
 #teammatesSection .section-title{margin-top:0;}
 .teammate-controls{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
 .teammate-controls label{font-size:14px;font-weight:600;color:#555;}
@@ -119,7 +119,7 @@ td.top8-badge{font-size:11px;color:#2a7a2a;font-weight:700;}
 </div>
 
 <!-- Teammates Section -->
-<div id="teammatesSection">
+<div id="teammatesSection" style="display:none">
   <div class="section-title">Teammates</div>
   <div class="teammate-controls">
     <label for="teammateSelect">Select teammate:</label>
@@ -400,20 +400,34 @@ function setupOpponents(games) {
 
 // --- Teammates logic ---
 function setupTeammates(games) {
-  const myKeys = new Set(games.map(g => g.season + "__" + g.round + "__" + g.played_for));
+  const section = document.getElementById("teammatesSection");
+  const select  = document.getElementById("teammateSelect");
+  // Always reveal the section once a player is loaded, no matter what happens below.
+  section.style.display = "block";
+  // Reset sub-elements.
+  document.getElementById("teammateHeader").style.display = "none";
+  document.getElementById("teammateHeader").innerHTML = "";
+  document.getElementById("teammateStats").innerHTML = "";
+  document.getElementById("teammateTable").style.display = "none";
+
   const teammateMap = new Map();
-  allGames.forEach(g => {
-    if (g.player === playerName) return;
-    const key = g.season + "__" + g.round + "__" + g.played_for;
-    if (!myKeys.has(key)) return;
-    const myGame = games.find(x => x.season === g.season && x.round === g.round && x.played_for === g.played_for);
-    if (!myGame) return;
-    if (!teammateMap.has(g.player)) teammateMap.set(g.player, []);
-    const arr = teammateMap.get(g.player);
-    if (!arr.some(x => x.season === myGame.season && x.round === myGame.round)) arr.push(myGame);
-  });
-  document.getElementById("teammatesSection").style.display = "block";
-  const select = document.getElementById("teammateSelect");
+  try {
+    // Build an O(1) lookup of the chosen player's games by team+round+season.
+    const myGameByKey = new Map();
+    games.forEach(g => { myGameByKey.set(g.season + "__" + g.round + "__" + g.played_for, g); });
+    // Single pass over all games: anyone sharing a key is a teammate in that match.
+    allGames.forEach(g => {
+      if (!g || g.player === playerName) return;
+      const myGame = myGameByKey.get(g.season + "__" + g.round + "__" + g.played_for);
+      if (!myGame) return;
+      let arr = teammateMap.get(g.player);
+      if (!arr) { arr = []; teammateMap.set(g.player, arr); }
+      if (!arr.some(x => x.season === myGame.season && x.round === myGame.round)) arr.push(myGame);
+    });
+  } catch (err) {
+    console.error("Teammates build failed:", err);
+  }
+
   select.innerHTML = '<option value="">— Choose a teammate (' + teammateMap.size + ' found) —</option>';
   [...teammateMap.keys()].sort().forEach(name => {
     const opt = document.createElement("option");
@@ -421,11 +435,12 @@ function setupTeammates(games) {
     opt.textContent = name + " (" + teammateMap.get(name).length + " games)";
     select.appendChild(opt);
   });
-  // reset display when switching players
-  document.getElementById("teammateHeader").style.display = "none";
-  document.getElementById("teammateHeader").innerHTML = "";
-  document.getElementById("teammateStats").innerHTML = "";
-  document.getElementById("teammateTable").style.display = "none";
+
+  if (teammateMap.size === 0) {
+    document.getElementById("teammateStats").innerHTML =
+      '<div style="grid-column:1/-1;color:#aaa;font-style:italic;text-align:center;padding:14px;">No teammates found in the data for this player.</div>';
+  }
+
   select.onchange = () => {
     const chosen = select.value;
     if (!chosen) {
@@ -435,7 +450,11 @@ function setupTeammates(games) {
       document.getElementById("teammateTable").style.display = "none";
       return;
     }
-    renderTeammateStats(chosen, teammateMap.get(chosen));
+    try {
+      renderTeammateStats(chosen, teammateMap.get(chosen) || []);
+    } catch (err) {
+      console.error("Teammate render failed:", err);
+    }
   };
 }
 
