@@ -102,3 +102,16 @@ for i, f in enumerate(files):
 # Final save
 NAMES_FILE.write_text(json.dumps(names, separators=(",", ":")))
 print(f"\nDONE — {updated} files updated, {skipped} skipped, {len(names)} names cached")
+
+# Also update players.json index with full names
+PLAYERS_INDEX = Path("docs/data/nhl/players.json")
+if PLAYERS_INDEX.exists():
+    players = json.loads(PLAYERS_INDEX.read_text())
+    updated_index = 0
+    for p in players:
+        pid = str(p.get("id", ""))
+        if pid in names and needs_full_name(p.get("name", "")):
+            p["name"] = names[pid]
+            updated_index += 1
+    PLAYERS_INDEX.write_text(json.dumps(players, separators=(",", ":")))
+    print(f"Updated {updated_index} names in players.json")
