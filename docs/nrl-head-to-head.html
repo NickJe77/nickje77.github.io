@@ -36,8 +36,35 @@ tbody tr:hover{background:#eaf3ff;cursor:pointer;}
 <div id="results"></div>
 </div>
 <script>
-let allMatches = [];
+// ── Team-name canonicalisation ──────────────────────────────────────────────
+// Across seasons the data spells some clubs differently (hyphen vs space, a
+// short form, or an old franchise name). Map each variant to ONE canonical name
+// so the dropdown lists each club once and head-to-heads count every game
+// regardless of which spelling a given season used.
+//
+// Only clear same-club variants are merged below. Genuinely separate historical
+// clubs are deliberately NOT merged (e.g. Gold Coast Chargers ≠ Gold Coast
+// Titans; Balmain Tigers / Western Suburbs Magpies ≠ Wests Tigers; St George
+// Dragons is the pre-1999 club, kept apart from St George-Illawarra Dragons).
+//
+// The last three are franchise *renames* — judgment calls. If you'd rather keep
+// any of them as separate historical entries, delete that line.
+const TEAM_ALIASES = {
+  // hyphen / short-form variants of the same current club
+  "Bulldogs":                       "Canterbury-Bankstown Bulldogs",
+  "Canterbury Bankstown Bulldogs":  "Canterbury-Bankstown Bulldogs",
+  "Sharks":                         "Cronulla-Sutherland Sharks",
+  "Cronulla Sutherland Sharks":     "Cronulla-Sutherland Sharks",
+  "Manly Warringah Sea Eagles":     "Manly-Warringah Sea Eagles",
+  "St George Illawarra Dragons":    "St George-Illawarra Dragons",
+  // same franchise, historically renamed (judgment calls)
+  "Auckland Warriors":              "New Zealand Warriors",
+  "Warriors":                       "New Zealand Warriors",
+  "Sydney City Roosters":           "Sydney Roosters",
+};
+function canonTeam(name){ return TEAM_ALIASES[name] || name; }
 
+let allMatches = [];
 fetch("data/nrl/index.json")
 .then(r=>r.json())
 .then(index=>{
@@ -51,9 +78,11 @@ fetch("data/nrl/index.json")
   results.forEach(season => allMatches.push(...season));
   buildTeamDropdowns();
 });
-
 function buildTeamDropdowns(){
-  const teams = [...new Set(allMatches.flatMap(m=>[m.home_team, m.away_team]))].sort();
+  // dedupe on the canonical name so each club appears once
+  const teams = [...new Set(
+    allMatches.flatMap(m=>[canonTeam(m.home_team), canonTeam(m.away_team)])
+  )].sort();
   ["team1","team2"].forEach(id=>{
     const sel = document.getElementById(id);
     teams.forEach(t=>{
@@ -63,30 +92,25 @@ function buildTeamDropdowns(){
     });
   });
 }
-
 function getWinner(m){
   if(m.home_points > m.away_points) return m.home_team;
   if(m.away_points > m.home_points) return m.away_team;
   return null;
 }
-
 function compare(){
   const team1 = document.getElementById("team1").value;
   const team2 = document.getElementById("team2").value;
   if(team1 === team2) return;
-
-  const matches = allMatches.filter(m=>
-    (m.home_team===team1 && m.away_team===team2) ||
-    (m.home_team===team2 && m.away_team===team1)
-  );
-
-  const team1Wins = matches.filter(m=>getWinner(m)===team1).length;
-  const team2Wins = matches.filter(m=>getWinner(m)===team2).length;
+  // match on canonical names so all spellings of each club are included
+  const matches = allMatches.filter(m=>{
+    const h = canonTeam(m.home_team), a = canonTeam(m.away_team);
+    return (h===team1 && a===team2) || (h===team2 && a===team1);
+  });
+  const team1Wins = matches.filter(m=>canonTeam(getWinner(m))===team1).length;
+  const team2Wins = matches.filter(m=>canonTeam(getWinner(m))===team2).length;
   const draws     = matches.filter(m=>getWinner(m)===null).length;
-
   const totalPts  = matches.reduce((a,m)=>a+(m.home_points||0)+(m.away_points||0),0);
   const avg       = matches.length ? (totalPts/matches.length).toFixed(1) : 0;
-
   document.getElementById("results").innerHTML = `
     <div class="card">
       <h2>${team1} vs ${team2}</h2>
@@ -108,7 +132,10 @@ function compare(){
           </tr>
         </thead>
         <tbody>
-          ${matches.map(m=>`
+          ${matches
+            .slice()
+            .sort((a,b)=> (a.season-b.season) || String(a.round).localeCompare(String(b.round)))
+            .map(m=>`
             <tr onclick="window.location='nrl-game.html?season=${m.season}&match=${m.match_id}'">
               <td>${m.season}</td>
               <td>${m.round||""}</td>
