@@ -26,6 +26,31 @@ SEASONS_DIR  = Path("docs/data/nhl/seasons")
 BOXSCORE_DIR = Path("docs/data/nhl/boxscores")
 BOXSCORE_DIR.mkdir(parents=True, exist_ok=True)
 
+# Cache of player_id -> full name to avoid repeat API calls
+PLAYER_NAMES = {}
+PLAYER_NAMES_FILE = Path("docs/data/nhl/player_names.json")
+if PLAYER_NAMES_FILE.exists():
+    PLAYER_NAMES = json.loads(PLAYER_NAMES_FILE.read_text())
+    print(f"Loaded {len(PLAYER_NAMES)} cached player names")
+
+def get_full_name(player_id):
+    """Fetch full name from NHL API, cache result."""
+    pid = str(player_id)
+    if pid in PLAYER_NAMES:
+        return PLAYER_NAMES[pid]
+    data = get(f"{BASE_URL}/player/{pid}/landing")
+    if data:
+        first = (data.get("firstName") or {}).get("default", "")
+        last  = (data.get("lastName")  or {}).get("default", "")
+        name  = (first + " " + last).strip()
+        if name:
+            PLAYER_NAMES[pid] = name
+            return name
+    return ""
+
+def save_name_cache():
+    PLAYER_NAMES_FILE.write_text(json.dumps(PLAYER_NAMES, separators=(",", ":")))
+
 START_YEAR = int(sys.argv[1]) if len(sys.argv) > 1 else 1967
 END_YEAR   = int(sys.argv[2]) if len(sys.argv) > 2 else 2025
 
@@ -53,7 +78,7 @@ def toi_to_seconds(toi_str):
 def parse_skater(p):
     return {
         "id":           p.get("playerId"),
-        "name":         (p.get("name") or {}).get("default", ""),
+        "name":         get_full_name(p.get("playerId")) or (p.get("name") or {}).get("default", ""),
         "number":       p.get("sweaterNumber"),
         "position":     p.get("position"),
         "goals":        p.get("goals", 0),
@@ -76,7 +101,7 @@ def parse_skater(p):
 def parse_goalie(p):
     return {
         "id":             p.get("playerId"),
-        "name":           (p.get("name") or {}).get("default", ""),
+        "name":           get_full_name(p.get("playerId")) or (p.get("name") or {}).get("default", ""),
         "number":         p.get("sweaterNumber"),
         "position":       "G",
         "saves":          p.get("saveShotsAgainst", 0),
@@ -218,4 +243,9 @@ for year in range(START_YEAR, END_YEAR + 1):
 
         time.sleep(0.15)
 
+    # Save name cache after each season
+    save_name_cache()
+    print(f"  Name cache: {len(PLAYER_NAMES)} players")
+
 print(f"\nDONE — {total_saved} saved, {total_skipped} skipped")
+save_name_cache()
