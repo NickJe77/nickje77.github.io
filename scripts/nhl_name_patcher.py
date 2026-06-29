@@ -53,11 +53,18 @@ def fetch_name(pid):
     return name
 
 def needs_full_name(name):
-    """Detect abbreviated names like 'Z. Benson' or 'A. Ekblad'"""
+    """Detect names that need replacing: empty, numeric IDs, abbreviated, or single word"""
     if not name:
         return True
+    # Numeric ID being used as name
+    if name.strip().isdigit():
+        return True
     parts = name.split()
-    if len(parts) >= 2 and len(parts[0]) <= 2 and parts[0].endswith('.'):
+    # Single word (no surname)
+    if len(parts) < 2:
+        return True
+    # Abbreviated first name like 'Z. Benson'
+    if len(parts[0]) <= 2 and parts[0].endswith('.'):
         return True
     return False
 
@@ -103,15 +110,19 @@ for i, f in enumerate(files):
 NAMES_FILE.write_text(json.dumps(names, separators=(",", ":")))
 print(f"\nDONE — {updated} files updated, {skipped} skipped, {len(names)} names cached")
 
-# Also update players.json index with full names
+# Update players.json index with full names
 PLAYERS_INDEX = Path("docs/data/nhl/players.json")
 if PLAYERS_INDEX.exists():
     players = json.loads(PLAYERS_INDEX.read_text())
     updated_index = 0
     for p in players:
         pid = str(p.get("id", ""))
-        if pid in names and needs_full_name(p.get("name", "")):
-            p["name"] = names[pid]
+        # Try both string and int key formats
+        full = names.get(pid) or names.get(int(pid) if pid.isdigit() else pid)
+        if full:
+            p["name"] = full
             updated_index += 1
     PLAYERS_INDEX.write_text(json.dumps(players, separators=(",", ":")))
     print(f"Updated {updated_index} names in players.json")
+else:
+    print("players.json not found — skipping index update")
