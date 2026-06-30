@@ -85,6 +85,9 @@ function tn(code){ return TEAM_NAMES[code] || code; }
 function tlink(code){
   return '<a class="tlink" href="/nhl-franchise.html?team='+encodeURIComponent(code)+'">'+tn(code)+'</a>';
 }
+function plink(id, name){
+  return '<a class="tlink" href="/nhl-player.html?player='+encodeURIComponent(id)+'">'+name+'</a>';
+}
 function slink(season){
   return '<a class="tlink" href="/nhl-season.html?season='+season+'">'+season+'–'+String(season+1).slice(2)+'</a>';
 }
@@ -108,6 +111,44 @@ function makeTable(rows, cols){
 function section(title, tableHtml){
   return '<div class="section"><div class="section-title">'+title+'</div>'+tableHtml+'</div>';
 }
+
+// Load player records (pre-generated)
+var playerRecordsHtml = '';
+fetch('/data/nhl/player-records.json')
+  .then(function(r){ return r.json(); })
+  .then(function(pr){
+    function ptable(rows, valueKey, valueLabel, extraCols){
+      var cols = [{key:'rank',label:'#'},{key:'player',label:'Player'},{key:'team',label:'Team'}];
+      if(extraCols) cols = cols.concat(extraCols);
+      cols.push({key:'value',label:valueLabel});
+      var mapped = rows.map(function(r){
+        var row = {
+          player: plink(r.id, r.name),
+          team: tlink(r.team || (r.teams||[])[0] || ''),
+          value: r[valueKey],
+        };
+        if(r.season != null) row.season = slink(r.season);
+        return row;
+      });
+      if(extraCols && extraCols.some(function(c){return c.key==='season';})){
+        cols = [{key:'rank',label:'#'},{key:'player',label:'Player'},{key:'season',label:'Season'},{key:'team',label:'Team'},{key:'value',label:valueLabel}];
+      }
+      return makeTable(mapped, cols);
+    }
+
+    playerRecordsHtml =
+      section('🥅 Most Career Goals', ptable(pr.career.goals, 'goals', 'Goals')) +
+      section('🎯 Most Career Assists', ptable(pr.career.assists, 'assists', 'Assists')) +
+      section('⭐ Most Career Points', ptable(pr.career.points, 'points', 'Points')) +
+      section('🥊 Most Career PIM', ptable(pr.career.pim, 'pim', 'PIM')) +
+      section('💪 Most Career Hits', ptable(pr.career.hits, 'hits', 'Hits')) +
+      section('🥅 Most Goals in a Season', ptable(pr.season.goals, 'goals', 'Goals', [{key:'season',label:'Season'}])) +
+      section('🎯 Most Assists in a Season', ptable(pr.season.assists, 'assists', 'Assists', [{key:'season',label:'Season'}])) +
+      section('⭐ Most Points in a Season', ptable(pr.season.points, 'points', 'Points', [{key:'season',label:'Season'}])) +
+      section('🔥 Most Points in a Single Game', ptable(pr.single_game.points, 'points', 'Points', [{key:'season',label:'Season'}])) +
+      section('🥅 Most Goals in a Single Game', ptable(pr.single_game.goals, 'goals', 'Goals', [{key:'season',label:'Season'}]));
+  })
+  .catch(function(){ playerRecordsHtml = '<div class="section">Player records unavailable.</div>'; });
 
 fetch('/data/nhl/index.json')
   .then(function(r){ return r.json(); })
@@ -278,7 +319,17 @@ fetch('/data/nhl/index.json')
     document.getElementById('loadingMsg').style.display = 'none';
     var grid = document.getElementById('recordsGrid');
     grid.style.display = 'grid';
-    grid.innerHTML = sections.join('');
+    // Player records load separately and may finish before or after team records
+    var waitForPlayerRecords = setInterval(function(){
+      if(playerRecordsHtml){
+        clearInterval(waitForPlayerRecords);
+        grid.innerHTML = playerRecordsHtml + sections.join('');
+      }
+    }, 50);
+    setTimeout(function(){
+      clearInterval(waitForPlayerRecords);
+      if(!grid.innerHTML) grid.innerHTML = sections.join('');
+    }, 5000);
   })
   .catch(function(err){
     document.getElementById('loadingMsg').textContent = 'Failed to load records.';
