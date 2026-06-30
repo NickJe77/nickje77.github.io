@@ -15,104 +15,22 @@
   --text:#111;
   --line:#e5e7eb;
 }
-
-body{
-  margin:0;
-  font-family:Inter,system-ui,Arial;
-  background:var(--bg);
-  color:var(--text);
-}
-
-.navbar{
-  display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:16px;
-  background:#fff;
-  border-bottom:1px solid #ddd;
-  font-weight:600;
-}
-
-.navbar a{
-  text-decoration:none;
-  color:#0056d6;
-}
-
-.page{
-  max-width:1200px;
-  margin:auto;
-  padding:20px;
-}
-
-.hero{
-  background:linear-gradient(90deg,var(--nrl-dark),var(--nrl-green));
-  color:white;
-  padding:40px;
-  border-radius:18px;
-  margin-bottom:20px;
-}
-
-.hero h1{
-  margin:0;
-  font-size:42px;
-}
-
-.subtitle{
-  opacity:.85;
-  margin-top:6px;
-}
-
-.controls{
-  display:flex;
-  justify-content:flex-end;
-  margin-bottom:14px;
-}
-
-select{
-  padding:10px;
-  border-radius:8px;
-  border:1px solid #ccc;
-  font-size:14px;
-}
-
-.table-wrap{
-  background:var(--card);
-  border-radius:14px;
-  overflow:hidden;
-  box-shadow:0 4px 18px rgba(0,0,0,.05);
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-}
-
-th, td{
-  padding:14px;
-  text-align:left;
-  border-bottom:1px solid var(--line);
-  font-size:14px;
-}
-
-th{
-  background:#fafafa;
-  font-weight:700;
-}
-
-.numeric{
-  text-align:center;
-}
-
-tr:hover{
-  background:#f0f9f6;
-  cursor:pointer;
-}
-
-.loading{
-  text-align:center;
-  padding:40px;
-  font-size:18px;
-}
+body{margin:0;font-family:Inter,system-ui,Arial;background:var(--bg);color:var(--text);}
+.navbar{display:flex;justify-content:center;gap:22px;padding:16px;background:#fff;border-bottom:1px solid #ddd;font-weight:600;}
+.navbar a{text-decoration:none;color:#0056d6;}
+.page{max-width:1200px;margin:auto;padding:20px;}
+.hero{background:linear-gradient(90deg,var(--nrl-dark),var(--nrl-green));color:white;padding:40px;border-radius:18px;margin-bottom:20px;}
+.hero h1{margin:0;font-size:42px;}
+.subtitle{opacity:.85;margin-top:6px;}
+.controls{display:flex;justify-content:flex-end;margin-bottom:14px;}
+select{padding:10px;border-radius:8px;border:1px solid #ccc;font-size:14px;}
+.table-wrap{background:var(--card);border-radius:14px;overflow:hidden;box-shadow:0 4px 18px rgba(0,0,0,.05);}
+table{width:100%;border-collapse:collapse;}
+th, td{padding:14px;text-align:left;border-bottom:1px solid var(--line);font-size:14px;}
+th{background:#fafafa;font-weight:700;}
+.numeric{text-align:center;}
+tr:hover{background:#f0f9f6;cursor:pointer;}
+.loading{text-align:center;padding:40px;font-size:18px;}
 </style>
 </head>
 
@@ -166,6 +84,9 @@ const startYear = 1998;
 const currentYear = new Date().getFullYear();
 let allPerformances = [];
 
+// season files store full ISO timestamps for recent games — show just the date
+function fmtDate(d){ return d ? String(d).split("T")[0] : ""; }
+
 async function loadAllSeasons(){
 
   let files = [];
@@ -185,18 +106,30 @@ async function loadAllSeasons(){
 
     if(!seasonData || !Array.isArray(seasonData)) return;
 
-    seasonData.forEach(row => {
+    // each entry is a MATCH; the per-player rows live in match.players[]
+    seasonData.forEach(match => {
 
-      allPerformances.push({
-        season: row.season,
-        date: row.date_iso,
-        match_id: row.match_id,
-        player: row.player,
-        team: row.played_for,
-        opponent: row.played_against,
-        tries: row.tries || 0,
-        goals: row.goals_made || 0,
-        points: row.points || 0
+      const players = match.players || [];
+      players.forEach(pl => {
+
+        const team     = pl.played_for;
+        // no played_against in the data — derive the opponent from the match teams
+        const opponent = team === match.home_team ? match.away_team : match.home_team;
+        // "goals" = 2-point kicks (conversions + penalty goals)
+        const goals    = (pl.conversions || 0) + (pl.penalty_goals || 0);
+
+        allPerformances.push({
+          season:   match.season,
+          date:     match.date,
+          match_id: match.match_id,
+          player:   pl.player,
+          team:     team,
+          opponent: opponent,
+          tries:    pl.tries  || 0,
+          goals:    goals,
+          points:   pl.points || 0
+        });
+
       });
 
     });
@@ -209,15 +142,13 @@ async function loadAllSeasons(){
 function sortPerformances(type){
 
   if(type === "points_desc"){
-    allPerformances.sort((a,b)=>b.points - a.points);
+    allPerformances.sort((a,b)=>b.points - a.points || b.tries - a.tries);
   }
-
   if(type === "tries_desc"){
-    allPerformances.sort((a,b)=>b.tries - a.tries);
+    allPerformances.sort((a,b)=>b.tries - a.tries || b.points - a.points);
   }
-
   if(type === "goals_desc"){
-    allPerformances.sort((a,b)=>b.goals - a.goals);
+    allPerformances.sort((a,b)=>b.goals - a.goals || b.points - a.points);
   }
 
   renderTable();
@@ -234,7 +165,7 @@ function renderTable(){
 
     tr.innerHTML = `
       <td>${p.season}</td>
-      <td>${p.date}</td>
+      <td>${fmtDate(p.date)}</td>
       <td>${p.player}</td>
       <td>${p.team}</td>
       <td>${p.opponent}</td>
