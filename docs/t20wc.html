@@ -115,6 +115,7 @@ a{
   font-weight:600;
   text-decoration:none;
 }
+.muted{color:#666;font-weight:400;}
 </style>
 </head>
 <body>
@@ -128,7 +129,7 @@ a{
 <h1>T20 World Cup — Match Results by Season</h1>
 </div>
 <div id="yearGrid" class="year-grid"></div>
-<h2>Matches</h2>
+<h2 id="seasonHeading">Matches</h2>
 <table>
 <thead>
 <tr>
@@ -148,67 +149,99 @@ const yearGrid=document.getElementById("yearGrid");
 const tableBody=document.getElementById("matchesTable");
 let seasons=[];
 
+// The data folder also contains qualifiers and regional qualifiers. Keep only
+// the main tournament — cricsheet labels it one of these three event names.
+const MAIN_EVENTS=new Set(["icc world twenty20","world t20","icc men's t20 world cup"]);
+function normName(n){
+  return String(n==null?"":n).toLowerCase().replace(/[\u2019']/g,"'").replace(/\s+/g," ").trim();
+}
+function isMainTournament(info){
+  const e=info&&info.event;
+  const name=normName(e&&(e.name!==undefined?e.name:e));
+  if(!name) return false;
+  if(name.includes("qualif")||name.includes("region")) return false;   // drop qualifiers
+  return MAIN_EVENTS.has(name);
+}
+
 loadSeasons();
 
 async function loadSeasons(){
-const files=await fetch(INDEX).then(r=>r.json());
-for(const file of files){
-const matches=await fetch(BASE+file).then(r=>r.json());
-seasons.push({file:file,year:file.match(/\d{4}/)[0],matches:matches});
-}
-seasons.sort((a,b)=>b.year-a.year);
-buildButtons();
-showSeason(0);
+  const files=await fetch(INDEX).then(r=>r.json());
+  for(const file of files){
+    const matches=await fetch(BASE+file).then(r=>r.json());
+    // keep only main-tournament matches, but preserve each match's ORIGINAL
+    // index in the file so the detail-page links still resolve correctly
+    const main=[];
+    matches.forEach((m,i)=>{ if(isMainTournament(m.info)) main.push({m,i}); });
+    if(!main.length) continue;                       // skip qualifier-only years
+    main.sort((a,b)=>String(a.m.info.dates[0]).localeCompare(String(b.m.info.dates[0])));
+    seasons.push({file:file,year:file.match(/\d{4}/)[0],matches:main});
+  }
+  seasons.sort((a,b)=>b.year-a.year);
+  buildButtons();
+  if(seasons.length) showSeason(0);
 }
 
 function buildButtons(){
-yearGrid.innerHTML="";
-seasons.forEach((season,index)=>{
-const btn=document.createElement("button");
-btn.className="year-btn";
-btn.textContent=season.year;
-if(index===0) btn.classList.add("active");
-btn.onclick=()=>{
-document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
-btn.classList.add("active");
-showSeason(index);
-};
-yearGrid.appendChild(btn);
-});
+  yearGrid.innerHTML="";
+  seasons.forEach((season,index)=>{
+    const btn=document.createElement("button");
+    btn.className="year-btn";
+    btn.textContent=season.year;
+    if(index===0) btn.classList.add("active");
+    btn.onclick=()=>{
+      document.querySelectorAll(".year-btn").forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      showSeason(index);
+    };
+    yearGrid.appendChild(btn);
+  });
 }
 
 function showSeason(index){
-const season=seasons[index];
-renderMatches(season.matches,season.file);
+  const season=seasons[index];
+  document.getElementById("seasonHeading").textContent=`${season.year} — ${season.matches.length} matches`;
+  renderMatches(season.matches,season.file);
 }
 
-function renderMatches(matches,file){
-tableBody.innerHTML="";
-matches.forEach((match,i)=>{
-const date=formatDate(match.info.dates[0]);
-const teams=match.info.teams.join(" vs ");
-const venue=match.info.venue||"—";
-let result="—";
-if(match.info.outcome?.winner){
-if(match.info.outcome.by?.runs)
-result=`${match.info.outcome.winner} won by ${match.info.outcome.by.runs} runs`;
-else if(match.info.outcome.by?.wickets)
-result=`${match.info.outcome.winner} won by ${match.info.outcome.by.wickets} wickets`;
+function renderMatches(list,file){
+  tableBody.innerHTML="";
+  list.forEach(({m,i})=>{
+    const info=m.info;
+    const date=formatDate(info.dates[0]);
+    const teams=(info.teams||[]).join(" vs ");
+    const venue=info.venue||"—";
+    const result=describeOutcome(info.outcome);
+    const link=`t20wc-match.html?file=${file}&match=${i}`;  // original file index
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${date}</td>
+      <td><a href="${link}">${teams}</a></td>
+      <td>${venue}</td>
+      <td>${result}</td>
+    `;
+    tableBody.appendChild(tr);
+  });
 }
-const link=`t20wc-match.html?file=${file}&match=${i}`;
-const tr=document.createElement("tr");
-tr.innerHTML=`
-<td>${date}</td>
-<td><a href="${link}">${teams}</a></td>
-<td>${venue}</td>
-<td>${result}</td>
-`;
-tableBody.appendChild(tr);
-});
+
+function describeOutcome(o){
+  if(!o) return "—";
+  if(o.winner){
+    if(o.by&&o.by.runs)    return `${o.winner} won by ${o.by.runs} run${o.by.runs===1?"":"s"}`;
+    if(o.by&&o.by.wickets) return `${o.winner} won by ${o.by.wickets} wicket${o.by.wickets===1?"":"s"}`;
+    return `${o.winner} won`;
+  }
+  if(o.result){
+    const r=o.result.toString();
+    let txt=r.charAt(0).toUpperCase()+r.slice(1);            // "tie" / "no result" / "draw"
+    if(o.eliminator) txt+=` (${o.eliminator} won super over)`;
+    return `<span class="muted">${txt}</span>`;
+  }
+  return "—";
 }
 
 function formatDate(d){
-return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+  return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
 }
 </script>
 </body>
