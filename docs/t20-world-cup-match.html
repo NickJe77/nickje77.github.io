@@ -50,7 +50,10 @@ const season=params.get("season");
 const id=params.get("id");
 
 const MATCH_PATH="data/t20-world-cup/matches/";
-const NAME_MAP_PATH="data/t20-world-cup/players-name.json";
+const NAME_MAP_PATH="data/t20-world-cup/matches/players-name.json";
+
+// dismissals credited to the bowler (run outs etc. are NOT)
+const BOWLER_WKTS=new Set(["bowled","caught","lbw","stumped","caught and bowled","hit wicket"]);
 
 let NAME_MAP=null;
 
@@ -90,6 +93,7 @@ function getMatchesArray(data){
 
 function deriveTeams(match){
   const info=match?.info || {};
+  if(Array.isArray(info.teams) && info.teams.length>=2) return [info.teams[0],info.teams[1]];
   if(info.players){
     const keys=Object.keys(info.players);
     if(keys.length>=2) return [keys[0],keys[1]];
@@ -157,6 +161,9 @@ function renderMatch(match){
     if(outcome.by?.runs) resultText=`${outcome.winner} won by ${outcome.by.runs} runs`;
     else if(outcome.by?.wickets) resultText=`${outcome.winner} won by ${outcome.by.wickets} wickets`;
     else resultText=`${outcome.winner} won`;
+  }else if(outcome?.result){
+    resultText=outcome.result.charAt(0).toUpperCase()+outcome.result.slice(1);
+    if(outcome.eliminator) resultText+=` (${outcome.eliminator} won super over)`;
   }
 
   container.innerHTML=`
@@ -204,24 +211,29 @@ function renderMatch(match){
         extrasBreakdown.p+=penalty;
         extrasTotal+=wides+noballs+byes+legbyes+penalty;
 
-        const legal=!wides&&!noballs;
+        const legal=!wides&&!noballs;   // counts towards the over / bowler
+        const faced=!wides;             // batter faces everything except a wide
 
         if(!batting[batter]) batting[batter]={runs:0,balls:0,fours:0,sixes:0,out:null};
         batting[batter].runs+=d.runs?.batter||0;
         if((d.runs?.batter||0)===4) batting[batter].fours++;
         if((d.runs?.batter||0)===6) batting[batter].sixes++;
-        if(legal){ batting[batter].balls++; legalBalls++; }
+        if(faced) batting[batter].balls++;
+        if(legal) legalBalls++;
 
         if(!bowling[bowler]) bowling[bowler]={runs:0,balls:0,wickets:0};
         if(legal) bowling[bowler].balls++;
-        bowling[bowler].runs+=d.runs?.total||0;
+        // byes and leg-byes are NOT charged to the bowler
+        bowling[bowler].runs+=(d.runs?.total||0)-byes-legbyes;
         runs+=d.runs?.total||0;
 
         if(d.wickets){
           d.wickets.forEach(w=>{
             wickets++;
-            if(batting[w.player_out]) batting[w.player_out].out=dismissalText(w,bowler);
-            bowling[bowler].wickets++;
+            if(!batting[w.player_out]) batting[w.player_out]={runs:0,balls:0,fours:0,sixes:0,out:null};
+            batting[w.player_out].out=dismissalText(w,bowler);
+            // only credit the bowler for bowler-type dismissals (not run outs)
+            if(BOWLER_WKTS.has(w.kind)) bowling[bowler].wickets++;
             fow.push(`${runs}/${wickets} (${playerLink(w.player_out)})`);
           });
         }
