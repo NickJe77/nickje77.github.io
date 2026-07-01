@@ -89,17 +89,22 @@ tr:nth-child(even){background:#f8fbff;}
 const folder="data/t20-world-cup/matches/";
 const params=new URLSearchParams(window.location.search);
 const player=params.get("player");
-document.getElementById("playerName").innerText=player||"Select a player";
 
 let allMatches=[];           // this player's per-match batting + bowling
 let allPlayersSet=new Set(); // every player name, for the search box
 let mode="batting";
+let nameMap={};              // short name -> full name (player-names.json)
+const disp=n=>nameMap[n]||n; // display full name, fall back to the short form
+document.getElementById("playerName").textContent=player?disp(player):"Select a player";
 
 // bowler is credited with these dismissal kinds (run outs etc. are not)
 const BOWLER_WKTS=new Set(["bowled","caught","lbw","stumped","caught and bowled","hit wicket"]);
 
 /* ---------- load & aggregate ---------- */
 async function loadMatches(){
+  try{ nameMap=await fetch(folder+"player-names.json").then(r=>r.json()); }catch{ nameMap={}; }
+  document.getElementById("playerName").textContent=player?disp(player):"Select a player";
+
   let files;
   try{ files=await fetch(folder+"index.json").then(r=>r.json()); }
   catch{ document.getElementById("matchRows").innerHTML=`<tr><td class="empty">Could not load data.</td></tr>`; return; }
@@ -179,13 +184,14 @@ document.getElementById("playerSearch").oninput=function(){
   dd.innerHTML="";
   if(!val){ dd.style.display="none"; return; }
   (window._allPlayers||[])
-    .filter(p=>p.toLowerCase().includes(val))
+    .filter(p=>p.toLowerCase().includes(val) || disp(p).toLowerCase().includes(val))
+    .sort((a,b)=>disp(a).localeCompare(disp(b)))
     .slice(0,50)
     .forEach(p=>{
       const div=document.createElement("div");
       div.className="searchItem";
-      div.innerText=p;
-      div.onclick=()=>{ window.location="t20-world-cup-player.html?player="+encodeURIComponent(p); };
+      div.textContent=disp(p);   // show full name
+      div.onclick=()=>{ window.location="t20-world-cup-player.html?player="+encodeURIComponent(p); }; // key by short name
       dd.appendChild(div);
     });
   dd.style.display="block";
