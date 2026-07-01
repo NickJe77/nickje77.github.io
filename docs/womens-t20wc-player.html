@@ -1,144 +1,137 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
   <script src="/js/analytics.js"></script>
+
 <meta charset="UTF-8">
 <title>Women's T20 World Cup Player | The Sporting Almanac</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="style.css">
 
 <style>
 
 body{
 font-family:Inter,system-ui,Arial;
 margin:0;
-background:#fff;
+background:#f4f6f8;
 }
 
 .navbar{
 display:flex;
 justify-content:center;
-gap:22px;
+gap:24px;
 padding:16px;
 border-bottom:1px solid #ddd;
-font-weight:600;
 background:#fff;
-}
-
-.navbar a{
-color:#0056d6;
-text-decoration:none;
+font-weight:600;
 }
 
 .page{
 max-width:1200px;
-margin:auto;
-padding:30px 20px;
+margin:30px auto;
+padding:0 20px;
 }
 
 /* UNIFIED HERO */
 
 .hero{
 background:linear-gradient(90deg,#7b1fa2,#e91e63);
-color:white;
+color:#fff;
 padding:30px;
-border-radius:20px;
+border-radius:18px;
+margin-bottom:20px;
 display:flex;
 justify-content:space-between;
-align-items:flex-start;
+}
+
+/* CONTROLS */
+
+.controls{
+display:flex;
+gap:10px;
 margin-bottom:20px;
+flex-wrap:wrap;
 }
 
-/* SEARCH */
-
-.search{
-padding:10px;
+button{
+padding:8px 16px;
 border-radius:8px;
-border:none;
-width:240px;
-}
-
-.dropdown{
-position:absolute;
-background:white;
 border:1px solid #ccc;
-max-height:240px;
-overflow-y:auto;
-display:none;
-width:240px;
-border-radius:8px;
-box-shadow:0 4px 12px rgba(0,0,0,0.15);
-}
-
-.dropdown div{
-padding:8px;
 cursor:pointer;
 }
 
-.dropdown div:hover{
-background:#eef3ff;
+/* UNIFIED ACTIVE BUTTON */
+
+button.active{
+background:#e91e63;
+color:#fff;
+border:none;
 }
 
 /* SUMMARY BOXES */
 
-.box-grid{
+.summaryGrid{
 display:grid;
 grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
-gap:10px;
-margin-bottom:20px;
+gap:14px;
+margin-bottom:25px;
 }
 
 .box{
-background:#eef3ff;
-padding:12px;
-border-radius:10px;
+background:#fff;
+padding:16px;
+border-radius:12px;
 text-align:center;
 }
 
-.value{
-font-size:20px;
+.box .value{
+font-size:22px;
 font-weight:700;
-color:#7b1fa2;
 }
 
-.label{
-font-size:12px;
+.box .label{
+font-size:13px;
+color:#666;
 }
 
 /* TABLE */
 
 table{
 width:100%;
+background:#fff;
 border-collapse:collapse;
 }
 
-th,td{
-padding:8px;
-border-bottom:1px solid #ddd;
+th{
+padding:10px;
+border-bottom:2px solid #ddd;
+text-align:center;
 }
 
-th{
-background:#eef3ff;
-color:#7b1fa2;
-font-weight:700;
+td{
+padding:10px;
+border-bottom:1px solid #eee;
+text-align:center;
 }
+
+/* UNIFIED ROW STRIPING */
 
 tr:nth-child(even){
 background:#eef3ff;
 }
 
-/* CLICKABLE ROW */
+/* HOVER */
 
-.match-row{
+.clickableRow:hover{
+background:#dbe6ff;
 cursor:pointer;
 }
 
-.match-row:hover{
-background:#fce4ec;
-}
-
 </style>
-</head>
 
+</head>
 <body>
 
 <div class="navbar">
@@ -150,42 +143,29 @@ background:#fce4ec;
 <div class="page">
 
 <div class="hero">
-
-<div>
-<h1 id="playerName">Loading...</h1>
+<h1 id="playerName"></h1>
 </div>
 
-<div style="position:relative;">
-<input id="playerSearch" class="search" placeholder="Search player">
-<div id="searchDropdown" class="dropdown"></div>
-</div>
+<div class="controls">
+
+<select id="oppSelect">
+<option value="All">All opposition</option>
+</select>
+
+<button id="batBtn" class="active">Batting</button> <button id="bowlBtn">Bowling</button>
 
 </div>
 
-<select id="oppositionFilter"></select>
+<h3>Career Summary</h3>
+<div id="careerBoxes" class="summaryGrid"></div>
 
-<h3>Career</h3>
-<div id="careerBoxes" class="box-grid"></div>
-
-<h3>vs Opposition</h3>
-<div id="oppBoxes" class="box-grid"></div>
+<h3>Vs Opposition</h3>
+<div id="oppBoxes" class="summaryGrid"></div>
 
 <table>
 
-<thead>
-<tr>
-<th>Date</th>
-<th>Opponent</th>
-<th>Venue</th>
-<th>Runs</th>
-<th>Balls</th>
-<th>SR</th>
-<th>Wickets</th>
-<th>Figures</th>
-</tr>
-</thead>
-
-<tbody id="matchTable"></tbody>
+<thead id="thead"></thead>
+<tbody id="tbody"></tbody>
 
 </table>
 
@@ -193,330 +173,282 @@ background:#fce4ec;
 
 <script>
 
-const BASE="data/womens-t20-world-cup/matches/";
-
-let allMatches=[];
-let nameMap={};
-let currentPlayer="";
-let currentOpp="All";
-
-init();
-
-async function init(){
-
-nameMap=await fetch(BASE+"player-names.json").then(r=>r.json());
-
-const files=await fetch(BASE+"index.json").then(r=>r.json());
-
-for(const file of files){
-
-const matches=await fetch(BASE+file).then(r=>r.json());
-
-matches.forEach((m,i)=>{
-
-m._file=file;
-m._index=i;
-
-allMatches.push(m);
-
-});
-
-}
-
-buildSearch();
+const folder="data/womens-t20-world-cup/matches/";
 
 const params=new URLSearchParams(location.search);
 
-loadPlayer(params.get("player") || Object.keys(nameMap)[0]);
+const player=params.get("player");
+
+let nameMap={};
+
+playerName.innerText=player;
+
+let mode="bat";
+
+const BOWLER_WKTS=["bowled","caught","lbw","stumped","caught and bowled","hit wicket"];
+
+let matches=[];
+
+
+/* BUTTONS */
+
+batBtn.onclick=()=>{mode="bat";setActive();render();};
+bowlBtn.onclick=()=>{mode="bowl";setActive();render();};
+
+function setActive(){
+
+batBtn.classList.toggle("active",mode==="bat");
+bowlBtn.classList.toggle("active",mode==="bowl");
 
 }
 
-function buildSearch(){
 
-const input=document.getElementById("playerSearch");
-const drop=document.getElementById("searchDropdown");
+/* LOAD */
 
-input.oninput=()=>{
+async function load(){
 
-drop.innerHTML="";
+nameMap=await fetch(folder+"player-names.json?v="+Date.now()).then(r=>r.json()).catch(()=>({}));
+playerName.innerText=nameMap[player]||player;
 
-Object.keys(nameMap)
-.filter(p=>nameMap[p].toLowerCase().includes(input.value.toLowerCase()))
-.slice(0,20)
-.forEach(p=>{
+const files=await fetch(folder+"index.json").then(r=>r.json());
 
-const div=document.createElement("div");
-div.innerText=nameMap[p];
+for(const file of files){
 
-div.onclick=()=>location="?player="+encodeURIComponent(p);
+const season=await fetch(folder+file).then(r=>r.json());
 
-drop.appendChild(div);
+season.forEach((match,idx)=>{
+
+let team=null;
+
+for(const t in match.info.players){
+
+if(match.info.players[t].includes(player)){
+
+team=t;
+break;
+
+}
+
+}
+
+if(!team) return;
+
+const opponent=match.info.teams.find(t=>t!==team);
+
+let batRuns=0,batBalls=0,out=false;
+
+let bowlRuns=0,bowlBalls=0,bowlWickets=0;
+
+match.innings.forEach(inn=>{
+
+inn.overs.forEach(over=>{
+
+over.deliveries.forEach(d=>{
+
+const legalBall=!d.extras?.wides&&!d.extras?.noballs;
+const facedBall=!d.extras?.wides;
+
+if(d.batter===player){
+
+batRuns+=d.runs.batter;
+if(facedBall) batBalls++;
+
+if(d.wickets)
+d.wickets.forEach(w=>{
+if(w.player_out===player) out=true;
+});
+
+}
+
+if(d.bowler===player){
+
+bowlRuns+=d.runs.batter+(d.extras?.wides||0)+(d.extras?.noballs||0);
+if(legalBall) bowlBalls++;
+
+if(d.wickets)
+d.wickets.forEach(w=>{
+if(BOWLER_WKTS.includes(w.kind)) bowlWickets++;
+});
+
+}
 
 });
 
-drop.style.display="block";
+});
 
-};
+});
+
+matches.push({
+
+date:match.info.dates[0],
+opponent,
+venue:match.info.venue,
+
+batRuns,
+batBalls,
+out,
+
+bowlRuns,
+bowlBalls,
+bowlWickets,
+
+file,
+matchIndex:idx
+
+});
+
+});
 
 }
 
-function loadPlayer(player){
-
-currentPlayer=player;
-
-document.getElementById("playerName").innerText=nameMap[player];
-
-buildOppFilter();
-
+populateOpp();
 render();
 
 }
 
-function buildOppFilter(){
+function populateOpp(){
 
-const select=document.getElementById("oppositionFilter");
+const opps=[...new Set(matches.map(m=>m.opponent))];
 
-const opps=new Set(["All"]);
+opps.sort().forEach(o=>oppSelect.innerHTML+=`<option>${o}</option>`);
 
-allMatches.forEach(m=>{
-
-if(matchHasPlayer(m)){
-
-const opp=getOpponent(m);
-
-if(opp) opps.add(opp);
+oppSelect.onchange=render;
 
 }
 
-});
 
-select.innerHTML="";
-
-opps.forEach(o=>{
-
-const opt=document.createElement("option");
-
-opt.value=o;
-opt.text=o;
-
-select.appendChild(opt);
-
-});
-
-select.onchange=()=>{
-
-currentOpp=select.value;
-
-render();
-
-};
-
-}
+/* RENDER */
 
 function render(){
 
-const careerMatches=allMatches.filter(matchHasPlayer);
+const opp=oppSelect.value;
 
-const oppMatches=careerMatches.filter(m=>currentOpp==="All"||getOpponent(m)===currentOpp);
+const filtered=
+opp==="All"?matches:matches.filter(m=>m.opponent===opp);
 
-renderBoxes(careerMatches,"careerBoxes");
+renderBoxes(matches,"careerBoxes");
+renderBoxes(filtered,"oppBoxes");
 
-renderBoxes(oppMatches,"oppBoxes");
-
-renderTable(oppMatches);
-
-}
-
-function renderBoxes(matches,id){
-
-let runs=0,balls=0,wkts=0,runsCon=0,bowBalls=0;
-
-let fifties=0,hundreds=0,high=0;
-
-let bestWkts=0,bestRuns=999;
-
-matches.forEach(m=>{
-
-let matchRuns=0;
-
-let matchWkts=0;
-let matchRunsCon=0;
-
-m.innings.forEach(inn=>{
-
-inn.overs.forEach(o=>{
-
-o.deliveries.forEach(d=>{
-
-if(d.batter===currentPlayer){
-
-runs+=d.runs.batter;
-matchRuns+=d.runs.batter;
-balls++;
+renderTable(filtered);
 
 }
 
-if(d.bowler===currentPlayer){
 
-runsCon+=d.runs.total;
-matchRunsCon+=d.runs.total;
+/* SUMMARY */
 
-if(!d.extras?.wides&&!d.extras?.noballs)
-bowBalls++;
+function renderBoxes(data,target){
 
-if(d.wickets){
+if(mode==="bat"){
 
-wkts+=d.wickets.length;
-matchWkts+=d.wickets.length;
+const runs=sum(data,x=>x.batRuns);
+const balls=sum(data,x=>x.batBalls);
+const outs=data.filter(x=>x.out).length;
+
+const best=Math.max(...data.map(x=>x.batRuns),0);
+
+const fifties=data.filter(x=>x.batRuns>=50&&x.batRuns<100).length;
+const hundreds=data.filter(x=>x.batRuns>=100).length;
+
+document.getElementById(target).innerHTML=
+
+box("Matches",data.length)+
+box("Runs",runs)+
+box("Average",outs?(runs/outs).toFixed(2):"—")+
+box("Strike Rate",balls?(runs/balls*100).toFixed(1):"—")+
+box("50s",fifties)+
+box("100s",hundreds)+
+box("Best",best);
+
+}
+else{
+
+const wkts=sum(data,x=>x.bowlWickets);
+const runs=sum(data,x=>x.bowlRuns);
+const balls=sum(data,x=>x.bowlBalls);
+
+const best=Math.max(...data.map(x=>x.bowlWickets),0);
+
+document.getElementById(target).innerHTML=
+
+box("Matches",data.length)+
+box("Wickets",wkts)+
+box("Average",wkts?(runs/wkts).toFixed(2):"—")+
+box("Economy",balls?(runs/(balls/6)).toFixed(2):"—")+
+box("Strike Rate",wkts?(balls/wkts).toFixed(1):"—")+
+box("Best",best);
 
 }
 
 }
 
-});
 
-});
+/* TABLE */
 
-});
+function renderTable(data){
 
-if(matchRuns>=50) fifties++;
+if(mode==="bat"){
 
-if(matchRuns>=100) hundreds++;
+thead.innerHTML=
+`<tr>
+<th>Date</th><th>Opp</th><th>Venue</th>
+<th>Runs</th><th>Balls</th><th>SR</th>
+</tr>`;
 
-if(matchRuns>high) high=matchRuns;
+tbody.innerHTML=data.map(m=>
+`<tr class="clickableRow"
+onclick="location.href='womens-t20-world-cup-match.html?file=${folder}${m.file}&match=${m.matchIndex}'">
+<td>${m.date}</td>
+<td>${m.opponent}</td>
+<td>${m.venue}</td>
+<td>${m.batRuns}</td>
+<td>${m.batBalls}</td>
+<td>${m.batBalls?(m.batRuns/m.batBalls*100).toFixed(1):""}</td>
+</tr>`).join("");
 
-if(matchWkts>bestWkts||(matchWkts===bestWkts && matchRunsCon<bestRuns)){
+}
+else{
 
-bestWkts=matchWkts;
-bestRuns=matchRunsCon;
+thead.innerHTML=
+`<tr>
+<th>Date</th><th>Opp</th><th>Venue</th>
+<th>Overs</th><th>Runs</th><th>Wkts</th><th>Econ</th>
+</tr>`;
+
+tbody.innerHTML=data.map(m=>
+`<tr class="clickableRow"
+onclick="location.href='womens-t20-world-cup-match.html?file=${folder}${m.file}&match=${m.matchIndex}'">
+<td>${m.date}</td>
+<td>${m.opponent}</td>
+<td>${m.venue}</td>
+<td>${Math.floor(m.bowlBalls/6)}.${m.bowlBalls%6}</td>
+<td>${m.bowlRuns}</td>
+<td>${m.bowlWickets}</td>
+<td>${m.bowlBalls?(m.bowlRuns/(m.bowlBalls/6)).toFixed(2):""}</td>
+</tr>`).join("");
 
 }
 
-});
+}
 
-const avg=balls?(runs/balls).toFixed(1):0;
 
-const sr=balls?(runs/balls*100).toFixed(1):0;
+/* HELPERS */
 
-const bowlAvg=wkts?(runsCon/wkts).toFixed(1):0;
+function box(label,value){
 
-const econ=bowBalls?(runsCon/(bowBalls/6)).toFixed(1):0;
-
-document.getElementById(id).innerHTML=`
-
-<div class="box"><div class="value">${matches.length}</div><div class="label">Matches</div></div>
-
-<div class="box"><div class="value">${runs}</div><div class="label">Runs</div></div>
-
-<div class="box"><div class="value">${avg}</div><div class="label">Average</div></div>
-
-<div class="box"><div class="value">${sr}</div><div class="label">Strike Rate</div></div>
-
-<div class="box"><div class="value">${high}</div><div class="label">Highest</div></div>
-
-<div class="box"><div class="value">${fifties}</div><div class="label">50s</div></div>
-
-<div class="box"><div class="value">${hundreds}</div><div class="label">100s</div></div>
-
-<div class="box"><div class="value">${wkts}</div><div class="label">Wickets</div></div>
-
-<div class="box"><div class="value">${bowlAvg}</div><div class="label">Bowl Avg</div></div>
-
-<div class="box"><div class="value">${econ}</div><div class="label">Economy</div></div>
-
-<div class="box"><div class="value">${bestWkts}/${bestRuns===999?0:bestRuns}</div><div class="label">Best</div></div>
-
-`;
+return `<div class="box">
+<div class="value">${value}</div>
+<div class="label">${label}</div>
+</div>`;
 
 }
 
-function renderTable(matches){
+function sum(arr,fn){
 
-const tbody=document.getElementById("matchTable");
-
-tbody.innerHTML="";
-
-matches.forEach(m=>{
-
-let runs=0,balls=0,wkts=0,runsCon=0;
-
-m.innings.forEach(inn=>{
-
-inn.overs.forEach(o=>{
-
-o.deliveries.forEach(d=>{
-
-if(d.batter===currentPlayer){
-
-runs+=d.runs.batter;
-balls++;
+return arr.reduce((a,b)=>a+fn(b),0);
 
 }
 
-if(d.bowler===currentPlayer){
-
-runsCon+=d.runs.total;
-
-if(d.wickets)
-wkts+=d.wickets.length;
-
-}
-
-});
-
-});
-
-});
-
-const tr=document.createElement("tr");
-
-tr.className="match-row";
-
-tr.onclick=()=>location=`womens-t20-world-cup-match.html?file=${m._file}&match=${m._index}`;
-
-tr.innerHTML=`
-
-<td>${formatDate(m.info.dates[0])}</td>
-
-<td>${getOpponent(m)}</td>
-
-<td>${m.info.venue}</td>
-
-<td>${runs}</td>
-
-<td>${balls}</td>
-
-<td>${balls?(runs/balls*100).toFixed(1):0}</td>
-
-<td>${wkts}</td>
-
-<td>${wkts}/${runsCon}</td>
-
-`;
-
-tbody.appendChild(tr);
-
-});
-
-}
-
-function matchHasPlayer(m){
-
-return Object.values(m.info.players).flat().includes(currentPlayer);
-
-}
-
-function getOpponent(m){
-
-return Object.keys(m.info.players).find(t=>!m.info.players[t].includes(currentPlayer));
-
-}
-
-function formatDate(d){
-
-return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
-
-}
+load();
 
 </script>
 
