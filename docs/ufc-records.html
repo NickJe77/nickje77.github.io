@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+  <meta charset="UTF-8">
+  <title>UFC Records | The Sporting Almanac</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="style.css">
+  <style>
+  body{font-family:Inter,system-ui,-apple-system,sans-serif;margin:0;background:#f4f6f8;color:#111;}
+  .navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;background:#fff;font-weight:600;position:sticky;top:0;z-index:100;}
+  .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+  .navbar a:hover{text-decoration:underline;}
+  .hero{background:linear-gradient(135deg,#1a1a1a,#c8102e);color:white;padding:52px 20px 44px;text-align:center;}
+  .hero h1{margin:0;font-size:52px;font-weight:900;letter-spacing:-2px;}
+  .hero p{margin:12px 0 0;font-size:17px;opacity:.88;}
+  .container{max-width:1400px;margin:30px auto;padding:0 20px 60px;}
+  .records-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:24px;}
+  .section{background:white;border-radius:20px;padding:24px;box-shadow:0 3px 10px rgba(0,0,0,.07);overflow-x:auto;}
+  .section-title{font-size:18px;font-weight:900;margin:0 0 16px;color:#1a1a1a;border-left:5px solid #c8102e;padding-left:12px;}
+  table{border-collapse:collapse;width:100%;white-space:nowrap;}
+  th{background:#1a1a1a;color:white;padding:11px 12px;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;text-align:left;}
+  td{padding:11px 12px;border-bottom:1px solid #edf2f7;font-size:14px;font-weight:500;}
+  tr:nth-child(even) td{background:#f8f9fb;}
+  tr:hover td{background:#fde8e8;}
+  .rank{font-weight:900;color:#c8102e;text-align:center;width:32px;}
+  .flink{text-decoration:none;font-weight:800;color:#0056d6;}
+  .flink:hover{text-decoration:underline;}
+  .loading{text-align:center;padding:80px;font-size:18px;font-weight:700;color:#888;}
+  .progress-wrap{background:#e2e8f0;border-radius:99px;height:8px;max-width:400px;margin:12px auto 0;}
+  .progress-bar{background:#c8102e;height:8px;border-radius:99px;transition:width .15s;}
+  </style>
+</head>
+<body>
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="ufc.html">UFC</a>
+  <a href="ufc-events.html">Events</a>
+  <a href="ufc-fighters.html">Fighters</a>
+</div>
+<div class="hero">
+  <h1>UFC Records</h1>
+  <p>All-time UFC records and statistics</p>
+</div>
+<div class="container">
+  <div class="loading" id="loadingMsg">
+    Loading records...
+    <div class="progress-wrap"><div class="progress-bar" id="pbar" style="width:0%"></div></div>
+  </div>
+  <div class="records-grid" id="recordsGrid" style="display:none"></div>
+</div>
+<script>
+function medal(i){ return i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1; }
+function flink(id, name){ return '<a class="flink" href="/ufc-fighter.html?id='+id+'">'+name+'</a>'; }
+
+function makeTable(rows, cols){
+  var head = cols.map(function(c){ return '<th>'+c.label+'</th>'; }).join('');
+  var body = rows.map(function(r,i){
+    return '<tr>'+cols.map(function(c){
+      if(c.key==='rank') return '<td class="rank">'+medal(i)+'</td>';
+      return '<td>'+r[c.key]+'</td>';
+    }).join('')+'</tr>';
+  }).join('');
+  return '<table><thead><tr>'+head+'</tr></thead><tbody>'+body+'</tbody></table>';
+}
+
+function section(title, tableHtml){
+  return '<div class="section"><div class="section-title">'+title+'</div>'+tableHtml+'</div>';
+}
+
+Promise.all([
+  fetch('/data/ufc/fighters.json').then(function(r){ return r.json(); }),
+  fetch('/data/ufc/events.json').then(function(r){ return r.json(); })
+]).then(function(results){
+  var fightersIndex = results[0];
+  var eventsIndex   = results[1];
+
+  // Build fighter stats from their individual files
+  var done = 0;
+  var total = fightersIndex.length;
+  var fighterStats = [];
+
+  var promises = fightersIndex.map(function(f){
+    return fetch('/data/ufc/fighters/'+f.id+'.json')
+      .then(function(r){ return r.json(); })
+      .then(function(fights){
+        var w=0,l=0,ko=0,sub=0,dec=0,fin=0;
+        fights.forEach(function(fight){
+          if(fight.result==='W'){
+            w++;
+            var m=(fight.method||'').toUpperCase();
+            if(m.includes('KO')||m.includes('TKO')){ ko++; fin++; }
+            else if(m.includes('SUB')){ sub++; fin++; }
+            else dec++;
+          } else if(fight.result==='L') l++;
+        });
+        fighterStats.push({
+          id: f.id, name: f.name, weight_class: f.weight_class||'',
+          fights: fights.length, wins: w, losses: l,
+          ko_wins: ko, sub_wins: sub, dec_wins: dec, finishes: fin,
+          win_pct: fights.length ? (w/fights.length*100).toFixed(1) : 0,
+        });
+      }).catch(function(){})
+      .finally(function(){
+        done++;
+        var bar = document.getElementById('pbar');
+        if(bar) bar.style.width = Math.round((done/total)*100)+'%';
+      });
+  });
+
+  return Promise.all(promises).then(function(){ return fighterStats; });
+}).then(function(stats){
+  function top10(key, reverse){
+    return stats.slice().sort(function(a,b){ return reverse ? a[key]-b[key] : b[key]-a[key]; }).slice(0,10)
+      .map(function(f){ return Object.assign({fighter: flink(f.id,f.name)}, f); });
+  }
+
+  var sections = [
+    section('🏆 Most UFC Wins', makeTable(top10('wins'), [
+      {key:'rank',label:'#'},{key:'fighter',label:'Fighter'},{key:'weight_class',label:'Class'},
+      {key:'wins',label:'W'},{key:'losses',label:'L'},{key:'fights',label:'Fights'}])),
+    section('💥 Most KO/TKO Wins', makeTable(top10('ko_wins'), [
+      {key:'rank',label:'#'},{key:'fighter',label:'Fighter'},{key:'ko_wins',label:'KO/TKO'},{key:'wins',label:'Total W'}])),
+    section('🤼 Most Submission Wins', makeTable(top10('sub_wins'), [
+      {key:'rank',label:'#'},{key:'fighter',label:'Fighter'},{key:'sub_wins',label:'Subs'},{key:'wins',label:'Total W'}])),
+    section('⚖️ Most Decisions', makeTable(top10('dec_wins'), [
+      {key:'rank',label:'#'},{key:'fighter',label:'Fighter'},{key:'dec_wins',label:'Decisions'},{key:'wins',label:'Total W'}])),
+    section('🔥 Most Finishes', makeTable(top10('finishes'), [
+      {key:'rank',label:'#'},{key:'fighter',label:'Fighter'},{key:'finishes',label:'Finishes'},{key:'fights',label:'Fights'}])),
+    section('📊 Most UFC Fights', makeTable(top10('fights'), [
+      {key:'rank',label:'#'},{key:'fighter',label:'Fighter'},{key:'fights',label:'Fights'},{key:'wins',label:'W'},{key:'losses',label:'L'}])),
+  ];
+
+  document.getElementById('loadingMsg').style.display = 'none';
+  var grid = document.getElementById('recordsGrid');
+  grid.style.display = 'grid';
+  grid.innerHTML = sections.join('');
+}).catch(function(){
+  document.getElementById('loadingMsg').textContent = 'Failed to load records.';
+});
+</script>
+</body>
+</html>
