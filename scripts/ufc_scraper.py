@@ -216,6 +216,7 @@ for i, eref in enumerate(all_event_refs):
     fights = fetch_event(eid)
     if fights is None:
         continue
+    fights = [f for f in fights if f.get("completed")]
 
     event_data = {
         "id":     eid,
