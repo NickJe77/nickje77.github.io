@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+  <meta charset="UTF-8">
+  <title>UFC Event | The Sporting Almanac</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="style.css">
+  <style>
+  body{font-family:Inter,system-ui,-apple-system,sans-serif;margin:0;background:#f4f6f8;color:#111;}
+  .navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;background:#fff;font-weight:600;position:sticky;top:0;z-index:100;}
+  .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+  .navbar a:hover{text-decoration:underline;}
+  .hero{background:linear-gradient(135deg,#1a1a1a,#c8102e);color:white;padding:52px 20px 44px;text-align:center;}
+  .hero h1{margin:0;font-size:46px;font-weight:900;letter-spacing:-1px;line-height:1.1;}
+  .hero p{margin:10px 0 0;font-size:16px;opacity:.85;font-weight:600;}
+  .page-wrap{max-width:1000px;margin:0 auto;padding:28px 20px 60px;}
+  .section{background:white;border-radius:16px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,.06);margin-bottom:20px;}
+  .section-title{font-size:16px;font-weight:900;letter-spacing:1px;text-transform:uppercase;margin:0 0 18px;border-left:5px solid #c8102e;padding-left:12px;color:#555;}
+  .fight-card{border-radius:14px;overflow:hidden;margin-bottom:12px;border:1px solid #eee;}
+  .fight-header{background:#f8f9fb;padding:8px 16px;font-size:11px;font-weight:800;text-transform:uppercase;color:#888;letter-spacing:.5px;display:flex;justify-content:space-between;}
+  .fight-body{padding:16px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;}
+  .fighter-side{display:flex;flex-direction:column;}
+  .fighter-side.right{align-items:flex-end;text-align:right;}
+  .fighter-name{font-size:18px;font-weight:900;}
+  .fighter-name a{color:#0056d6;text-decoration:none;}
+  .fighter-name a:hover{text-decoration:underline;}
+  .fighter-result{font-size:13px;font-weight:800;margin-top:4px;}
+  .result-W{color:#16a34a;}
+  .result-L{color:#dc2626;}
+  .result-NC{color:#888;}
+  .fight-middle{text-align:center;}
+  .fight-method{font-size:14px;font-weight:900;color:#111;}
+  .fight-detail{font-size:12px;color:#888;margin-top:3px;}
+  .fight-time{font-size:12px;color:#888;}
+  .main-event .fight-card{border:2px solid #c8102e;}
+  .main-event .fight-header{background:#fde8e8;color:#c8102e;}
+  .segment-label{font-size:13px;font-weight:900;text-transform:uppercase;color:#c8102e;letter-spacing:1px;margin:20px 0 10px;}
+  .loading{text-align:center;padding:60px;font-size:18px;font-weight:700;color:#888;}
+  .error{text-align:center;padding:60px;font-size:18px;color:#d00;font-weight:700;}
+  </style>
+</head>
+<body>
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="ufc.html">UFC</a>
+  <a href="ufc-events.html">Events</a>
+  <a href="ufc-fighters.html">Fighters</a>
+  <a href="ufc-records.html">Records</a>
+</div>
+<div id="hero" class="hero"><div class="loading">Loading event...</div></div>
+<div id="pageWrap" class="page-wrap" style="display:none"></div>
+
+<script>
+var params  = new URLSearchParams(location.search);
+var eventId = params.get('id');
+
+if(!eventId){
+  document.getElementById('hero').innerHTML = '<div class="error">No event specified.</div>';
+} else {
+  fetch('/data/ufc/events/'+eventId+'.json')
+    .then(function(r){ if(!r.ok) throw new Error(); return r.json(); })
+    .then(render)
+    .catch(function(){
+      document.getElementById('hero').innerHTML = '<div class="error">Event not found.</div>';
+    });
+}
+
+function render(ev){
+  document.title = ev.name + ' | UFC | The Sporting Almanac';
+  document.getElementById('hero').innerHTML =
+    '<h1>'+ev.name+'</h1>'+
+    '<p>'+ev.date+(ev.venue?' · '+ev.venue:'')+'</p>';
+
+  // Group fights by card segment
+  var segments = {};
+  var segOrder = [];
+  (ev.fights||[]).forEach(function(f){
+    var seg = f.card_segment || 'Fight Card';
+    if(!segments[seg]){ segments[seg]=[]; segOrder.push(seg); }
+    segments[seg].push(f);
+  });
+
+  var html = '';
+
+  // Preferred segment order
+  var order = ['Main Card','Prelims','Early Prelims','Prelim Card','Fight Card'];
+  var sortedSegs = segOrder.sort(function(a,b){
+    var ai = order.indexOf(a), bi = order.indexOf(b);
+    if(ai===-1) ai=99; if(bi===-1) bi=99;
+    return ai-bi;
+  });
+
+  sortedSegs.forEach(function(seg, si){
+    var fights = segments[seg];
+    html += '<div class="section">';
+    html += '<div class="section-title">'+seg+'</div>';
+    fights.forEach(function(f, fi){
+      var isMain = si===0 && fi===0;
+      var f1 = (f.fighters||[])[0] || {};
+      var f2 = (f.fighters||[])[1] || {};
+
+      html += '<div class="fight-card'+(isMain?' main-event':'')+'">';
+      html += '<div class="fight-header">'+
+        '<span>'+f.weight_class+'</span>'+
+        '<span>'+(f.format||'')+'</span>'+
+        '</div>';
+      html += '<div class="fight-body">';
+
+      // Fighter 1
+      html += '<div class="fighter-side">'+
+        '<div class="fighter-name"><a href="/ufc-fighter.html?id='+f1.id+'">'+f1.name+'</a></div>'+
+        (f.completed?'<div class="fighter-result result-'+(f1.winner?'W':'L')+'">'+(f1.winner?'WIN':'LOSS')+'</div>':'')+
+        '</div>';
+
+      // Middle
+      html += '<div class="fight-middle">'+
+        '<div style="font-size:22px;font-weight:900;color:#ccc">VS</div>'+
+        (f.completed?
+          '<div class="fight-method">'+f.method+'</div>'+
+          (f.method_detail?'<div class="fight-detail">'+f.method_detail+'</div>':'')+
+          '<div class="fight-time">R'+f.round+' '+f.time+'</div>'
+        :'')+
+        '</div>';
+
+      // Fighter 2
+      html += '<div class="fighter-side right">'+
+        '<div class="fighter-name"><a href="/ufc-fighter.html?id='+f2.id+'">'+f2.name+'</a></div>'+
+        (f.completed?'<div class="fighter-result result-'+(f2.winner?'W':'L')+'">'+(f2.winner?'WIN':'LOSS')+'</div>':'')+
+        '</div>';
+
+      html += '</div></div>'; // fight-body, fight-card
+    });
+    html += '</div>'; // section
+  });
+
+  if(!html) html = '<div class="loading">No fight data available yet.</div>';
+
+  var wrap = document.getElementById('pageWrap');
+  wrap.innerHTML = html;
+  wrap.style.display = 'block';
+}
+</script>
+</body>
+</html>
