@@ -1,0 +1,44 @@
+name: Rugby Union Scraper
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_year:
+        description: 'Start year (e.g. 2000)'
+        required: true
+        default: '2000'
+      end_year:
+        description: 'End year (e.g. 2026)'
+        required: true
+        default: '2026'
+  schedule:
+    - cron: '0 10 * * 1'  # Every Monday
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install requests
+
+      - name: Scrape Rugby Union data
+        run: python scripts/rugby_scraper.py ${{ github.event.inputs.start_year || '2000' }} ${{ github.event.inputs.end_year || '2026' }}
+
+      - name: Commit results
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add docs/data/rugby
+          git diff --cached --quiet || git commit -m "Update Rugby Union data ${{ github.event.inputs.start_year || '2000' }}-${{ github.event.inputs.end_year || '2026' }}"
+          git pull origin main --no-rebase --no-edit
+          git push
