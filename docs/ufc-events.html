@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+  <meta charset="UTF-8">
+  <title>UFC Events | The Sporting Almanac</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="style.css">
+  <style>
+  body{font-family:Inter,system-ui,-apple-system,sans-serif;margin:0;background:#f4f6f8;color:#111;}
+  .navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;background:#fff;font-weight:600;position:sticky;top:0;z-index:100;}
+  .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+  .navbar a:hover{text-decoration:underline;}
+  .hero{background:linear-gradient(135deg,#1a1a1a,#c8102e);color:white;padding:48px 20px 40px;text-align:center;}
+  .hero h1{margin:0;font-size:52px;font-weight:900;letter-spacing:-2px;}
+  .hero p{margin:10px 0 0;font-size:17px;opacity:.88;}
+  .page-wrap{max-width:1200px;margin:0 auto;padding:28px 20px 60px;}
+  .controls{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;align-items:center;}
+  .controls input{padding:10px 16px;border-radius:12px;border:1px solid #ddd;font-size:15px;font-weight:600;flex:1;min-width:200px;}
+  .controls select{padding:10px 14px;border-radius:12px;border:1px solid #ddd;font-size:14px;font-weight:700;background:white;}
+  .count{font-size:14px;font-weight:700;color:#888;}
+  .event-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;}
+  .event-card{background:white;border-radius:16px;padding:20px;text-decoration:none;color:#111;box-shadow:0 2px 8px rgba(0,0,0,.06);transition:.2s;border-left:5px solid #c8102e;display:block;}
+  .event-card:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.12);}
+  .event-card-name{font-size:17px;font-weight:900;margin-bottom:6px;}
+  .event-card-meta{font-size:13px;color:#888;}
+  .event-card-date{font-size:13px;font-weight:800;color:#c8102e;margin-top:8px;}
+  .loading{text-align:center;padding:60px;font-size:18px;font-weight:700;color:#888;}
+  </style>
+</head>
+<body>
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="ufc.html">UFC</a>
+  <a href="ufc-fighters.html">Fighters</a>
+  <a href="ufc-records.html">Records</a>
+</div>
+<div class="hero">
+  <h1>UFC Events</h1>
+  <p>Every UFC event from 1993 to present</p>
+</div>
+<div class="page-wrap">
+  <div class="controls">
+    <input type="text" id="search" placeholder="Search events..." oninput="render()">
+    <select id="yearFilter" onchange="render()"><option value="">All Years</option></select>
+    <div class="count" id="count"></div>
+  </div>
+  <div class="event-grid" id="grid"><div class="loading">Loading events...</div></div>
+</div>
+<script>
+var allEvents = [];
+
+fetch('/data/ufc/events.json')
+  .then(function(r){ return r.json(); })
+  .then(function(events){
+    allEvents = events;
+    var years = [...new Set(events.map(function(e){ return e.year; }).filter(Boolean))].sort().reverse();
+    var yf = document.getElementById('yearFilter');
+    years.forEach(function(y){ yf.innerHTML += '<option value="'+y+'">'+y+'</option>'; });
+    render();
+  });
+
+function render(){
+  var q    = document.getElementById('search').value.toLowerCase().trim();
+  var year = document.getElementById('yearFilter').value;
+  var filtered = allEvents.filter(function(e){
+    if(q && !(e.name||'').toLowerCase().includes(q) && !(e.venue||'').toLowerCase().includes(q)) return false;
+    if(year && String(e.year) !== year) return false;
+    return true;
+  });
+  document.getElementById('count').innerText = filtered.length.toLocaleString() + ' events';
+  document.getElementById('grid').innerHTML = filtered.map(function(e){
+    return '<a class="event-card" href="/ufc-event.html?id='+e.id+'">'+
+      '<div class="event-card-name">'+e.name+'</div>'+
+      '<div class="event-card-meta">'+(e.venue||'–')+(e.fights?' · '+e.fights+' fights':'')+'</div>'+
+      '<div class="event-card-date">'+e.date+'</div>'+
+      '</a>';
+  }).join('') || '<div class="loading">No events found</div>';
+}
+</script>
+</body>
+</html>
