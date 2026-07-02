@@ -38,13 +38,13 @@ START_YEAR = int(sys.argv[1]) if len(sys.argv) > 1 else 2000
 END_YEAR   = int(sys.argv[2]) if len(sys.argv) > 2 else 2026
 
 COMPETITIONS = [
-    {"id": "164205", "name": "Rugby World Cup",                "slug": "world-cup"},
-    {"id": "180659", "name": "Six Nations",                    "slug": "six-nations"},
-    {"id": "244293", "name": "The Rugby Championship",         "slug": "rugby-championship"},
-    {"id": "242041", "name": "Super Rugby Pacific",            "slug": "super-rugby-pacific"},
-    {"id": "267979", "name": "Gallagher Premiership",          "slug": "premiership"},
-    {"id": "270557", "name": "United Rugby Championship",      "slug": "urc"},
-    {"id": "271937", "name": "European Rugby Champions Cup",   "slug": "champions-cup"},
+    {"id": "164205", "name": "Rugby World Cup",                "slug": "world-cup",          "start": 1987},
+    {"id": "180659", "name": "Six Nations",                    "slug": "six-nations",         "start": 1978},
+    {"id": "244293", "name": "The Rugby Championship",         "slug": "rugby-championship",  "start": 1996},
+    {"id": "242041", "name": "Super Rugby Pacific",            "slug": "super-rugby-pacific", "start": 1996},
+    {"id": "267979", "name": "Gallagher Premiership",          "slug": "premiership",         "start": 1998},
+    {"id": "270557", "name": "United Rugby Championship",      "slug": "urc",                 "start": 2008},
+    {"id": "271937", "name": "European Rugby Champions Cup",   "slug": "champions-cup",       "start": 2008},
 ]
 
 def get(url, retries=3):
@@ -141,7 +141,8 @@ for comp in COMPETITIONS:
 
     season_index = []
 
-    for year in range(START_YEAR, END_YEAR + 1):
+    comp_start = comp.get('start', START_YEAR)
+    for year in range(min(START_YEAR, comp_start), END_YEAR + 1):
         out_file = league_dir / f"{year}.json"
 
         # Load existing
