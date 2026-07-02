@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+  <meta charset="UTF-8">
+  <title>UFC Fighter | The Sporting Almanac</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="style.css">
+  <style>
+  body{font-family:Inter,system-ui,-apple-system,sans-serif;margin:0;background:#f4f6f8;color:#111;}
+  .navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;background:#fff;font-weight:600;position:sticky;top:0;z-index:100;}
+  .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+  .navbar a:hover{text-decoration:underline;}
+  .hero{background:linear-gradient(135deg,#1a1a1a,#c8102e);color:white;padding:48px 20px 40px;text-align:center;}
+  .hero h1{margin:0;font-size:56px;font-weight:900;letter-spacing:-2px;line-height:1;}
+  .hero-nickname{font-size:22px;color:rgba(255,255,255,.7);font-style:italic;margin:6px 0 0;}
+  .hero-meta{font-size:15px;opacity:.85;margin-top:10px;font-weight:600;}
+  .search-wrap{max-width:400px;margin:20px auto 0;position:relative;}
+  .search-input{width:100%;padding:12px 16px;border-radius:12px;border:none;font-size:15px;font-weight:600;box-sizing:border-box;outline:none;}
+  .search-results{position:absolute;top:100%;left:0;right:0;background:white;border-radius:0 0 12px 12px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:999;display:none;max-height:280px;overflow-y:auto;}
+  .search-item{padding:12px 16px;cursor:pointer;font-weight:700;color:#111;border-bottom:1px solid #eee;}
+  .search-item:hover{background:#f3f6fb;}
+  .page-wrap{max-width:1100px;margin:0 auto;padding:28px 20px 60px;}
+  .profile-grid{display:grid;grid-template-columns:auto 1fr;gap:28px;align-items:start;margin-bottom:24px;}
+  .headshot{width:140px;height:140px;border-radius:16px;object-fit:cover;background:#eee;}
+  .headshot-placeholder{width:140px;height:140px;border-radius:16px;background:linear-gradient(135deg,#1a1a1a,#c8102e);display:flex;align-items:center;justify-content:center;font-size:56px;}
+  .record-big{font-size:48px;font-weight:900;letter-spacing:-2px;}
+  .record-label{font-size:13px;color:#888;font-weight:700;margin-top:4px;}
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:24px;}
+  .stat-box{background:white;border-radius:12px;padding:16px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,.05);}
+  .stat-box span{display:block;font-size:26px;font-weight:900;color:#111;margin-bottom:4px;}
+  .stat-box label{font-size:11px;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:.5px;}
+  .section{background:white;border-radius:16px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,.06);margin-bottom:20px;}
+  .section-title{font-size:14px;font-weight:900;letter-spacing:1px;text-transform:uppercase;margin:0 0 16px;border-left:5px solid #c8102e;padding-left:12px;color:#555;}
+  table{width:100%;border-collapse:collapse;}
+  th{background:#1a1a1a;color:white;padding:11px 12px;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;text-align:left;}
+  td{padding:11px 12px;border-bottom:1px solid #edf2f7;font-size:14px;}
+  tr:nth-child(even) td{background:#f8f9fb;}
+  tr:hover td{background:#fde8e8;}
+  .tlink{color:#0056d6;font-weight:700;text-decoration:none;}
+  .tlink:hover{text-decoration:underline;}
+  .result-W{color:#16a34a;font-weight:900;}
+  .result-L{color:#dc2626;font-weight:900;}
+  .result-NC{color:#888;font-weight:700;}
+  .method-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:800;}
+  .method-KO{background:#fde8e8;color:#c8102e;}
+  .method-Sub{background:#e8f5e8;color:#16a34a;}
+  .method-Dec{background:#e8f0fc;color:#0056d6;}
+  .loading,.error{text-align:center;padding:80px;font-size:22px;font-weight:900;}
+  .error{color:#d00;}
+  @media(max-width:600px){.profile-grid{grid-template-columns:1fr;}.hero h1{font-size:36px;}}
+  </style>
+</head>
+<body>
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="ufc.html">UFC</a>
+  <a href="ufc-events.html">Events</a>
+  <a href="ufc-fighters.html">Fighters</a>
+  <a href="ufc-records.html">Records</a>
+</div>
+<div id="hero" class="hero"><div class="loading">Loading fighter...</div></div>
+<div id="pageWrap" class="page-wrap" style="display:none"></div>
+
+<script>
+var params    = new URLSearchParams(location.search);
+var fighterId = params.get('id');
+var allFighters = [];
+
+fetch('/data/ufc/fighters.json')
+  .then(function(r){ return r.json(); })
+  .then(function(d){ allFighters = d; })
+  .catch(function(){});
+
+if(!fighterId){
+  document.getElementById('hero').innerHTML = '<div class="error">No fighter specified.</div>';
+} else {
+  Promise.all([
+    fetch('/data/ufc/fighters/'+fighterId+'.json').then(function(r){ if(!r.ok) throw new Error(); return r.json(); }),
+    fetch('/data/ufc/fighters.json').then(function(r){ return r.json(); })
+  ]).then(function(results){
+    var fights = results[0];
+    var index  = results[1];
+    var info   = index.find(function(f){ return f.id===fighterId; }) || {};
+    render(info, fights);
+  }).catch(function(){
+    document.getElementById('hero').innerHTML = '<div class="error">Fighter not found.</div>';
+  });
+}
+
+function methodClass(method){
+  if(!method) return '';
+  var m = method.toUpperCase();
+  if(m.includes('KO') || m.includes('TKO')) return 'method-KO';
+  if(m.includes('SUB')) return 'method-Sub';
+  return 'method-Dec';
+}
+
+function render(info, fights){
+  var name     = info.name || fighterId;
+  var nickname = info.nickname || '';
+  var wc       = info.weight_class || '';
+  var nat      = info.nationality || '';
+
+  document.title = name + ' | UFC | The Sporting Almanac';
+
+  // Record
+  var wins=0, losses=0, nc=0;
+  var koWins=0, subWins=0, decWins=0;
+  fights.forEach(function(f){
+    if(f.result==='W'){ wins++;
+      if((f.method||'').toUpperCase().includes('KO')) koWins++;
+      else if((f.method||'').toUpperCase().includes('SUB')) subWins++;
+      else decWins++;
+    }
+    else if(f.result==='L') losses++;
+    else nc++;
+  });
+
+  var headshotHtml = info.headshot
+    ? '<img class="headshot" src="'+info.headshot+'" alt="'+name+'">'
+    : '<div class="headshot-placeholder">🥊</div>';
+
+  document.getElementById('hero').innerHTML =
+    '<h1>'+name+'</h1>'+
+    (nickname?'<div class="hero-nickname">"'+nickname+'"</div>':'')+
+    '<div class="hero-meta">'+[wc,nat].filter(Boolean).join(' · ')+'</div>'+
+    '<div class="search-wrap">'+
+      '<input type="text" id="srch" class="search-input" placeholder="Search another fighter..." autocomplete="off">'+
+      '<div class="search-results" id="srchRes"></div>'+
+    '</div>';
+
+  // Build search
+  var srch = document.getElementById('srch');
+  var srchRes = document.getElementById('srchRes');
+  srch.addEventListener('input', function(){
+    var q = this.value.toLowerCase().trim();
+    if(!q){ srchRes.style.display='none'; return; }
+    var matches = allFighters.filter(function(f){ return (f.name||'').toLowerCase().includes(q); }).slice(0,8);
+    if(!matches.length){ srchRes.style.display='none'; return; }
+    srchRes.innerHTML = matches.map(function(f){
+      return '<div class="search-item" onclick="location.href=\'/ufc-fighter.html?id='+f.id+'\'">'+
+        f.name+(f.nickname?' "'+f.nickname+'"':'')+
+        '<small style="color:#888;margin-left:8px">'+f.weight_class+'</small></div>';
+    }).join('');
+    srchRes.style.display='block';
+  });
+  document.addEventListener('click',function(e){ if(!e.target.closest('.search-wrap')) srchRes.style.display='none'; });
+
+  var html =
+    '<div class="section">'+
+      '<div class="profile-grid">'+
+        headshotHtml+
+        '<div>'+
+          '<div class="record-big">'+wins+'–'+losses+(nc?'–'+nc:'')+'</div>'+
+          '<div class="record-label">Win–Loss'+(nc?' ('+nc+' NC)':'')+'</div>'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="stats-grid">'+
+      sbox(wins,'Wins')+sbox(losses,'Losses')+
+      sbox(koWins,'KO/TKO')+sbox(subWins,'Submissions')+sbox(decWins,'Decisions')+
+      (info.height?sbox(info.height,'Height'):'')+
+      (info.weight?sbox(info.weight,'Weight'):'')+
+      (info.reach?sbox(info.reach,'Reach'):'')+
+      (info.stance?sbox(info.stance,'Stance'):'')+
+    '</div>'+
+    '<div class="section">'+
+      '<div class="section-title">Fight History</div>'+
+      '<div style="overflow-x:auto"><table>'+
+        '<thead><tr><th>Date</th><th>Event</th><th>Opponent</th><th>Result</th><th>Method</th><th>Round</th><th>Time</th><th>Class</th></tr></thead>'+
+        '<tbody>'+
+        fights.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); }).map(function(f){
+          return '<tr>'+
+            '<td>'+f.date+'</td>'+
+            '<td><a class="tlink" href="/ufc-event.html?id='+f.event_id+'">'+f.event_name+'</a></td>'+
+            '<td><a class="tlink" href="/ufc-fighter.html?id='+f.opponent_id+'">'+f.opponent+'</a></td>'+
+            '<td class="result-'+f.result+'">'+f.result+'</td>'+
+            '<td><span class="method-badge '+methodClass(f.method)+'">'+f.method+'</span>'+
+              (f.method_detail?' <span style="color:#888;font-size:12px">'+f.method_detail+'</span>':'')+
+            '</td>'+
+            '<td>'+f.round+'</td>'+
+            '<td>'+f.time+'</td>'+
+            '<td>'+f.weight_class+'</td>'+
+            '</tr>';
+        }).join('')+
+        '</tbody></table></div>'+
+    '</div>';
+
+  var wrap = document.getElementById('pageWrap');
+  wrap.innerHTML = html;
+  wrap.style.display = 'block';
+}
+
+function sbox(val, label){
+  return '<div class="stat-box"><span>'+val+'</span><label>'+label+'</label></div>';
+}
+</script>
+</body>
+</html>
