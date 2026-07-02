@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+  <meta charset="UTF-8">
+  <title>Rugby Player | The Sporting Almanac</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="style.css">
+  <style>
+  body{font-family:Inter,system-ui,-apple-system,sans-serif;margin:0;background:#f4f6f8;color:#111;}
+  .navbar{display:flex;justify-content:center;gap:22px;padding:16px 0;border-bottom:1px solid #ddd;background:#fff;font-weight:600;position:sticky;top:0;z-index:100;}
+  .navbar a{color:#0056d6;text-decoration:none;font-size:18px;}
+  .navbar a:hover{text-decoration:underline;}
+  .hero{background:linear-gradient(135deg,#1a3a1a,#2d7a2d);color:white;padding:48px 20px 40px;text-align:center;}
+  .hero h1{margin:0;font-size:52px;font-weight:900;letter-spacing:-2px;line-height:1;}
+  .hero p{margin:10px 0 0;font-size:16px;opacity:.88;font-weight:600;}
+  .search-wrap{max-width:400px;margin:20px auto 0;position:relative;}
+  .search-input{width:100%;padding:12px 16px;border-radius:12px;border:none;font-size:15px;font-weight:600;box-sizing:border-box;outline:none;}
+  .search-results{position:absolute;top:100%;left:0;right:0;background:white;border-radius:0 0 12px 12px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:999;display:none;max-height:280px;overflow-y:auto;}
+  .search-item{padding:12px 16px;cursor:pointer;font-weight:700;color:#111;border-bottom:1px solid #eee;}
+  .search-item:hover{background:#f0faf0;}
+  .page-wrap{max-width:1200px;margin:0 auto;padding:28px 20px 60px;}
+  .section-card{background:#fff;border-radius:14px;padding:24px;box-shadow:0 4px 12px rgba(0,0,0,.05);margin-bottom:24px;}
+  .section-title{font-size:13px;font-weight:800;letter-spacing:1px;color:#666;margin-bottom:16px;text-transform:uppercase;border-left:4px solid #2d7a2d;padding-left:10px;}
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:12px;}
+  .stat-box{background:#f0faf0;border-radius:12px;padding:14px;text-align:center;}
+  .stat-box span{display:block;font-size:26px;font-weight:800;line-height:1;margin-bottom:4px;color:#1a3a1a;}
+  .stat-box label{color:#666;font-size:11px;display:block;font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
+  .filters-bar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:18px;}
+  .filter-group{display:flex;align-items:center;gap:8px;font-weight:700;color:#1a3a1a;}
+  select{padding:9px 12px;border-radius:10px;border:1px solid #ccc;font-size:14px;background:#fff;}
+  .table-scroll{overflow-x:auto;}
+  table{width:100%;border-collapse:collapse;font-size:14px;min-width:900px;}
+  th,td{padding:11px 10px;border-bottom:1px solid #eee;text-align:center;white-space:nowrap;}
+  th{background:#1a3a1a;color:white;font-weight:800;font-size:12px;text-transform:uppercase;}
+  tbody tr:nth-child(even){background:#f8faf8;}
+  tbody tr:hover{background:#e8f5e8;}
+  .tlink{color:#0056d6;font-weight:700;text-decoration:none;}
+  .tlink:hover{text-decoration:underline;}
+  .loading,.error{text-align:center;padding:80px;font-size:22px;font-weight:900;}
+  .error{color:#d00;}
+  </style>
+</head>
+<body>
+<div class="navbar">
+  <a href="index.html">Home</a>
+  <a href="rugby.html">Rugby Union</a>
+  <a href="rugby-players.html">Players</a>
+</div>
+<div id="hero" class="hero"><div class="loading">Loading player...</div></div>
+<div id="pageWrap" class="page-wrap" style="display:none"></div>
+
+<script>
+var COMP_NAMES = {
+  "164205":"Rugby World Cup","180659":"Six Nations","244293":"The Rugby Championship",
+  "242041":"Super Rugby Pacific","267979":"Gallagher Premiership",
+  "270557":"United Rugby Championship","271937":"European Rugby Champions Cup"
+};
+
+var params   = new URLSearchParams(location.search);
+var playerId = params.get('id');
+var allPlayers = [];
+
+fetch('/data/rugby/players.json').then(function(r){ return r.json(); }).then(function(d){ allPlayers=d; }).catch(function(){});
+
+if(!playerId){
+  document.getElementById('hero').innerHTML = '<div class="error">No player specified.</div>';
+} else {
+  Promise.all([
+    fetch('/data/rugby/players/'+playerId+'.json').then(function(r){ if(!r.ok) throw new Error(); return r.json(); }),
+    fetch('/data/rugby/players.json').then(function(r){ return r.json(); })
+  ]).then(function(res){
+    render(res[0], res[1].find(function(p){ return p.id===playerId; })||{});
+  }).catch(function(){
+    document.getElementById('hero').innerHTML = '<div class="error">Player not found.</div>';
+  });
+}
+
+function num(v){ return Number(v)||0; }
+
+function render(matches, info){
+  var name = info.name || playerId;
+  var pos  = info.position || '';
+
+  document.title = name + ' | Rugby Union | The Sporting Almanac';
+  document.getElementById('hero').innerHTML =
+    '<h1>'+name+'</h1>'+
+    '<p>'+(pos||'')+(info.height?' · '+info.height:'')+(info.dob?' · Born '+info.dob.slice(0,10):'')+'</p>'+
+    '<div class="search-wrap">'+
+      '<input type="text" id="srch" class="search-input" placeholder="Search another player..." autocomplete="off">'+
+      '<div class="search-results" id="srchRes"></div>'+
+    '</div>';
+
+  var srch = document.getElementById('srch');
+  var srchRes = document.getElementById('srchRes');
+  srch.addEventListener('input', function(){
+    var q=this.value.toLowerCase().trim();
+    if(!q){srchRes.style.display='none';return;}
+    var ms=allPlayers.filter(function(p){return (p.name||'').toLowerCase().includes(q);}).slice(0,8);
+    if(!ms.length){srchRes.style.display='none';return;}
+    srchRes.innerHTML=ms.map(function(p){
+      return '<div class="search-item" onclick="location.href=\'/rugby-player.html?id='+p.id+'\'">'+p.name+'<small style="color:#888;margin-left:8px">'+p.position+'</small></div>';
+    }).join('');
+    srchRes.style.display='block';
+  });
+  document.addEventListener('click',function(e){if(!e.target.closest('.search-wrap'))srchRes.style.display='none';});
+
+  // Career totals
+  var gp=0,tries=0,points=0,tackles=0,metres=0,clean_breaks=0,yellow=0,red=0,assists=0,penalties=0;
+  var hTries=0,hPoints=0,hMetres=0,hTriesGame='',hPointsGame='',hMetresGame='';
+
+  matches.forEach(function(m){
+    gp++; tries+=num(m.tries); points+=num(m.points);
+    tackles+=num(m.tackles); metres+=num(m.metres);
+    clean_breaks+=num(m.clean_breaks); yellow+=num(m.yellow_cards);
+    red+=num(m.red_cards); assists+=num(m.try_assists); penalties+=num(m.penalties);
+    if(num(m.tries)>hTries){hTries=num(m.tries);hTriesGame=m.team+' v '+m.opponent+' '+m.date;}
+    if(num(m.points)>hPoints){hPoints=num(m.points);hPointsGame=m.team+' v '+m.opponent+' '+m.date;}
+    if(num(m.metres)>hMetres){hMetres=num(m.metres);hMetresGame=m.team+' v '+m.opponent+' '+m.date;}
+  });
+
+  function sbox(val,label,note){
+    return '<div class="stat-box"><span>'+val+'</span><label>'+label+'</label>'+(note?'<small style="color:#888;font-size:10px;display:block;margin-top:3px">'+note+'</small>':'')+'</div>';
+  }
+
+  var rows = matches.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); }).map(function(m){
+    return '<tr>'+
+      '<td>'+m.date+'</td>'+
+      '<td>'+(COMP_NAMES[m.competition]||m.competition)+'</td>'+
+      '<td>'+m.team+'</td>'+
+      '<td>'+m.opponent+'</td>'+
+      '<td>'+(m.starter?'Start':'Rep')+'</td>'+
+      '<td>'+num(m.tries)+'</td>'+
+      '<td>'+num(m.points)+'</td>'+
+      '<td>'+num(m.tackles)+'</td>'+
+      '<td>'+num(m.metres)+'</td>'+
+      '<td>'+num(m.runs)+'</td>'+
+      '<td>'+num(m.clean_breaks)+'</td>'+
+      '<td>'+num(m.defenders_beaten)+'</td>'+
+      '<td>'+num(m.try_assists)+'</td>'+
+      '<td>'+num(m.passes)+'</td>'+
+      '<td>'+num(m.kicks)+'</td>'+
+      '<td>'+num(m.penalties)+'</td>'+
+      '<td>'+num(m.yellow_cards)+'</td>'+
+      '<td>'+num(m.minutes)+'</td>'+
+      '</tr>';
+  }).join('');
+
+  var html =
+    '<div class="section-card">'+
+      '<div class="section-title">Career Summary</div>'+
+      '<div class="stats-grid">'+
+        sbox(gp,'Matches')+sbox(tries,'Tries')+sbox(points,'Points')+
+        sbox(tackles,'Tackles')+sbox(metres,'Metres')+sbox(clean_breaks,'Clean Breaks')+
+        sbox(assists,'Try Assists')+sbox(yellow,'Yellow Cards')+sbox(red,'Red Cards')+
+      '</div>'+
+      '<div class="stats-grid">'+
+        sbox(hTries,'Best Tries',hTriesGame)+
+        sbox(hPoints,'Best Points',hPointsGame)+
+        sbox(hMetres,'Best Metres',hMetresGame)+
+      '</div>'+
+    '</div>'+
+    '<div class="section-card">'+
+      '<div class="section-title">Match Log</div>'+
+      '<div class="table-scroll"><table>'+
+        '<thead><tr>'+
+          '<th>Date</th><th>Competition</th><th>Team</th><th>Opponent</th><th>Role</th>'+
+          '<th>T</th><th>Pts</th><th>Tkl</th><th>Mtrs</th><th>Runs</th>'+
+          '<th>CB</th><th>DB</th><th>TA</th><th>Pass</th><th>Kicks</th>'+
+          '<th>Pen</th><th>YC</th><th>Mins</th>'+
+        '</tr></thead>'+
+        '<tbody>'+(rows||'<tr><td colspan="18" style="text-align:center;color:#888">No match data</td></tr>')+'</tbody>'+
+      '</table></div>'+
+    '</div>';
+
+  var wrap = document.getElementById('pageWrap');
+  wrap.innerHTML = html;
+  wrap.style.display = 'block';
+}
+</script>
+</body>
+</html>
