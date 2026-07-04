@@ -32,6 +32,11 @@
   .match-meta{text-align:center;font-size:12px;color:#888;margin-top:6px;}
   .winner-badge{font-size:11px;font-weight:800;color:#2d7a2d;text-transform:uppercase;}
   .loading{text-align:center;padding:60px;font-size:18px;font-weight:700;color:#888;}
+  .standings-table{width:100%;border-collapse:collapse;font-size:14px;}
+  .standings-table th{background:#1a3a1a;color:white;padding:10px 12px;text-align:center;font-size:12px;font-weight:800;text-transform:uppercase;}
+  .standings-table td{padding:10px 12px;border-bottom:1px solid #eee;text-align:center;}
+  .standings-table tr:nth-child(even) td{background:#f8faf8;}
+  .standings-table .leader-row td{background:#e8f5e8;font-weight:700;}
   </style>
 </head>
 <body>
@@ -78,6 +83,59 @@ fetch('/data/rugby/'+compId+'/index.json')
     }
   });
 
+function buildStandings(matches){
+  var teams = {};
+  matches.forEach(function(m){
+    if(!m.home_team || !m.away_team) return;
+    if(m.home_score === '' || m.away_score === '') return;
+    [m.home_team, m.away_team].forEach(function(t){ if(!teams[t]) teams[t]={team:t,p:0,w:0,d:0,l:0,pf:0,pa:0,pts:0}; });
+    var hs = parseInt(m.home_score)||0, as = parseInt(m.away_score)||0;
+    teams[m.home_team].p++; teams[m.away_team].p++;
+    teams[m.home_team].pf+=hs; teams[m.home_team].pa+=as;
+    teams[m.away_team].pf+=as; teams[m.away_team].pa+=hs;
+    if(hs>as){
+      teams[m.home_team].w++; teams[m.home_team].pts+=4;
+      teams[m.away_team].l++;
+    } else if(as>hs){
+      teams[m.away_team].w++; teams[m.away_team].pts+=4;
+      teams[m.home_team].l++;
+    } else {
+      teams[m.home_team].d++; teams[m.home_team].pts+=2;
+      teams[m.away_team].d++; teams[m.away_team].pts+=2;
+    }
+    // Bonus point for 4+ tries (approximated from score diff)
+    if(hs>=28 && hs-as>=7) teams[m.home_team].pts+=1;
+    if(as>=28 && as-hs>=7) teams[m.away_team].pts+=1;
+    // Losing bonus point (within 7)
+    if(hs<as && as-hs<=7) teams[m.home_team].pts+=1;
+    if(as<hs && hs-as<=7) teams[m.away_team].pts+=1;
+  });
+
+  var rows = Object.values(teams).sort(function(a,b){ return b.pts-a.pts||b.w-a.w||(b.pf-b.pa)-(a.pf-a.pa); });
+  if(!rows.length) return '';
+
+  var leader = rows[0].team;
+  var tableHtml = '<div class="section" style="margin-bottom:20px">'+
+    '<div class="section-title">Standings</div>'+
+    '<div style="overflow-x:auto"><table class="standings-table">'+
+    '<thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>PF</th><th>PA</th><th>Diff</th><th>Pts</th></tr></thead>'+
+    '<tbody>'+
+    rows.map(function(r,i){
+      var diff = r.pf-r.pa;
+      return '<tr'+(i===0?' class="leader-row"':'')+'>'+
+        '<td>'+(i+1)+'</td>'+
+        '<td style="text-align:left;font-weight:700">'+r.team+'</td>'+
+        '<td>'+r.p+'</td><td>'+r.w+'</td><td>'+r.d+'</td><td>'+r.l+'</td>'+
+        '<td>'+r.pf+'</td><td>'+r.pa+'</td>'+
+        '<td>'+(diff>=0?'+':'')+diff+'</td>'+
+        '<td><strong>'+r.pts+'</strong></td>'+
+        '</tr>';
+    }).join('')+
+    '</tbody></table></div></div>';
+
+  return {html: tableHtml, leader: leader};
+}
+
 function loadSeason(year, btn){
   currentYear = year;
   document.querySelectorAll('.season-tab').forEach(function(b){ b.classList.remove('active'); });
@@ -93,12 +151,26 @@ function loadSeason(year, btn){
         return;
       }
 
-      var html = '<div class="section"><div class="section-title">'+year+' Season — '+matches.length+' matches</div>';
+      // Build standings
+      var standings = buildStandings(matches);
+      var leader = standings ? standings.leader : '';
 
+      // Winner banner
+      var banner = '';
+      if(leader){
+        banner = '<div style="background:linear-gradient(135deg,#1a3a1a,#2d7a2d);color:white;border-radius:16px;padding:24px;text-align:center;margin-bottom:20px">'+
+          '<div style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;opacity:.8">'+year+' Season Champion</div>'+
+          '<div style="font-size:36px;font-weight:900;margin-top:8px">'+leader+'</div>'+
+          '</div>';
+      }
+
+      var standingsHtml = standings ? standings.html : '';
+
+      var matchesHtml = '<div class="section"><div class="section-title">'+year+' Results — '+matches.length+' matches</div>';
       matches.slice().reverse().forEach(function(m){
         var hw = m.winner === m.home_team;
         var aw = m.winner === m.away_team;
-        html += '<div class="match-card">'+
+        matchesHtml += '<div class="match-card">'+
           '<div class="match-grid">'+
             '<div>'+
               '<div class="team-name">'+(hw?'<strong>':'')+m.home_team+(hw?'</strong>':'')+'</div>'+
@@ -115,9 +187,9 @@ function loadSeason(year, btn){
           '</div>'+
           '</div>';
       });
+      matchesHtml += '</div>';
 
-      html += '</div>';
-      document.getElementById('matchesSection').innerHTML = html;
+      document.getElementById('matchesSection').innerHTML = banner + standingsHtml + matchesHtml;
     })
     .catch(function(){
       document.getElementById('matchesSection').innerHTML = '<div class="loading">Failed to load season data.</div>';
