@@ -63,6 +63,10 @@ var COMP_NAMES = {
   "270557":"United Rugby Championship","271937":"European Rugby Champions Cup"
 };
 
+// Round-robin competitions where table determines champion
+// Finals-based competitions show the final match winner instead
+var ROUND_ROBIN = {"180659":true, "244293":true}; // World Cup (164205) uses finals
+
 compName = COMP_NAMES[compId] || 'Rugby Union';
 document.title = compName + ' | The Sporting Almanac';
 document.getElementById('hero').innerHTML = '<h1>'+compName+'</h1><p>All seasons and results</p>';
@@ -151,20 +155,32 @@ function loadSeason(year, btn){
         return;
       }
 
-      // Build standings
-      var standings = buildStandings(matches);
-      var leader = standings ? standings.leader : '';
-
-      // Winner banner
+      // Build standings or find final winner
       var banner = '';
-      if(leader){
-        banner = '<div style="background:linear-gradient(135deg,#1a3a1a,#2d7a2d);color:white;border-radius:16px;padding:24px;text-align:center;margin-bottom:20px">'+
-          '<div style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;opacity:.8">'+year+' Season Champion</div>'+
-          '<div style="font-size:36px;font-weight:900;margin-top:8px">'+leader+'</div>'+
-          '</div>';
-      }
+      var standingsHtml = '';
 
-      var standingsHtml = standings ? standings.html : '';
+      if(ROUND_ROBIN[compId]){
+        var standings = buildStandings(matches);
+        var leader = standings ? standings.leader : '';
+        standingsHtml = standings ? standings.html : '';
+        if(leader){
+          banner = '<div style="background:linear-gradient(135deg,#1a3a1a,#2d7a2d);color:white;border-radius:16px;padding:24px;text-align:center;margin-bottom:20px">'+
+            '<div style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;opacity:.8">'+year+' Champion</div>'+
+            '<div style="font-size:36px;font-weight:900;margin-top:8px">'+leader+'</div>'+
+            '</div>';
+        }
+      } else {
+        // Finals-based: show the last completed match winner as champion
+        var completed = matches.filter(function(m){ return m.winner; });
+        var finalMatch = completed.length ? completed[completed.length-1] : null;
+        if(finalMatch && finalMatch.winner){
+          banner = '<div style="background:linear-gradient(135deg,#1a3a1a,#2d7a2d);color:white;border-radius:16px;padding:24px;text-align:center;margin-bottom:20px">'+
+            '<div style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;opacity:.8">'+year+' Champion</div>'+
+            '<div style="font-size:36px;font-weight:900;margin-top:8px">'+finalMatch.winner+'</div>'+
+            '<div style="font-size:14px;opacity:.8;margin-top:6px">'+finalMatch.home_team+' '+finalMatch.home_score+' – '+finalMatch.away_score+' '+finalMatch.away_team+'</div>'+
+            '</div>';
+        }
+      }
 
       var matchesHtml = '<div class="section"><div class="section-title">'+year+' Results — '+matches.length+' matches</div>';
       matches.slice().reverse().forEach(function(m){
