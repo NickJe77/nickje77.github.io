@@ -38,21 +38,48 @@ body{margin:0;font-family:var(--body);background:var(--bg);color:var(--ink);-web
 
 .page{max-width:1180px;margin:0 auto;padding:26px 20px 70px;}
 
-/* ── Hero ─────────────────────────────────────────────── */
-.hero{
+/* ── Scorebug (matches NRL game page) ─────────────────── */
+.scorebug{
   position:relative;background:linear-gradient(160deg,var(--board-2),var(--board));
-  border-radius:var(--radius);overflow:hidden;color:#fff;text-align:center;
+  border-radius:var(--radius);overflow:hidden;color:#fff;
   box-shadow:0 18px 40px -18px rgba(10,16,24,.55);
-  margin-bottom:26px;padding:26px 26px 30px;
+  margin-bottom:26px;
 }
-.hero .eyebrow{
-  font-family:var(--body);font-size:11.5px;font-weight:600;letter-spacing:.16em;
-  text-transform:uppercase;color:var(--accent);margin-bottom:10px;
+.scorebug .eyebrow{
+  text-align:center;font-family:var(--body);font-size:11.5px;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.55);
+  padding:18px 16px 0;
 }
-h1{margin:0 0 8px;font-family:var(--display);font-weight:600;font-size:clamp(20px,3.2vw,30px);letter-spacing:.01em;text-transform:uppercase;color:#fff;}
-.meta{color:rgba(255,255,255,.55);font-size:12.5px;font-weight:600;letter-spacing:.02em;margin-bottom:16px;}
-.final-score{
-  font-family:var(--display);font-weight:600;font-size:clamp(22px,4vw,34px);letter-spacing:.01em;color:#fff;
+.bug-grid{
+  display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
+  gap:10px;padding:14px 30px 30px;
+}
+.bug-team{display:flex;align-items:center;gap:16px;min-width:0;}
+.bug-team.home{justify-content:flex-end;text-align:right;}
+.bug-team.away{justify-content:flex-start;text-align:left;}
+.bug-team .tname{
+  font-family:var(--display);font-weight:600;font-size:clamp(18px,3vw,30px);
+  line-height:1.04;letter-spacing:.01em;text-transform:uppercase;
+}
+.crest{width:8px;align-self:stretch;min-height:54px;border-radius:6px;flex:0 0 auto;}
+.bug-score{
+  display:flex;align-items:center;gap:14px;font-family:var(--display);font-weight:600;
+  font-size:clamp(40px,9vw,72px);line-height:1;letter-spacing:.01em;
+}
+.bug-score .sc{font-variant-numeric:tabular-nums;}
+.bug-score .sc.lose{color:rgba(255,255,255,.42);font-weight:500;}
+.bug-score .dash{color:rgba(255,255,255,.3);font-weight:400;}
+.ft-badge{
+  position:absolute;top:16px;right:18px;font-family:var(--body);font-size:10.5px;
+  font-weight:700;letter-spacing:.12em;color:rgba(255,255,255,.85);
+  border:1px solid var(--board-line);border-radius:999px;padding:4px 10px;
+}
+.not-found-msg{padding:60px 30px;text-align:center;font-family:var(--display);font-size:22px;letter-spacing:.01em;text-transform:uppercase;}
+
+@media(max-width:820px){
+  .bug-grid{grid-template-columns:1fr;gap:18px;padding:10px 18px 26px;}
+  .bug-team.home,.bug-team.away{justify-content:center;text-align:center;}
+  .crest{min-height:30px;}
 }
 
 /* ── Quarter scores ───────────────────────────────────── */
@@ -103,11 +130,25 @@ tbody tr:hover td{background:#f0f6ff;}
 </nav>
 <div class="page">
 
-<div class="hero">
-  <div class="eyebrow">AFL</div>
-  <h1 id="title"></h1>
-  <div class="meta" id="venueLine"></div>
-  <div class="final-score" id="finalScore"></div>
+<div class="scorebug" id="scorebug">
+  <span class="ft-badge">FULL TIME</span>
+  <div class="eyebrow" id="eyebrowLine"></div>
+  <div class="bug-grid" id="bugGrid">
+    <div class="bug-team home">
+      <div class="tname" id="teamAHeroName"></div>
+      <div class="crest" id="crestA"></div>
+    </div>
+    <div class="bug-score">
+      <span class="sc" id="scoreA"></span>
+      <span class="dash">–</span>
+      <span class="sc" id="scoreB"></span>
+    </div>
+    <div class="bug-team away">
+      <div class="crest" id="crestB"></div>
+      <div class="tname" id="teamBHeroName"></div>
+    </div>
+  </div>
+  <div class="not-found-msg" id="notFoundMsg" style="display:none"></div>
 </div>
 
 <div class="qtr-scores">
@@ -201,6 +242,26 @@ const teamStripes={
   "Adelaide":          "repeating-linear-gradient(90deg,#002B5C 0 24px,#FFD200 24px 48px,#CC2031 48px 72px)",
 };
 
+/* Solid crest colours for the scorebug bars (separate from the multi-stripe
+   guernsey gradients above, which stay on the team-box sections further down) */
+const crestColours={
+  "Adelaide Crows":"#002B5C","Brisbane Lions":"#7A1739","Carlton":"#041E42",
+  "Collingwood":"#1A1A1A","Essendon":"#CC2031","Fremantle":"#582C83",
+  "Geelong":"#14498C","Geelong Cats":"#14498C","Gold Coast SUNS":"#F7941D","GWS GIANTS":"#F26522",
+  "Hawthorn":"#7A4B23","Melbourne":"#0F1E63","North Melbourne":"#2C63B7",
+  "Port Adelaide":"#008E97","Richmond":"#FFD200","St Kilda":"#8B0000",
+  "Sydney Swans":"#EF3340","West Coast Eagles":"#003C71","Western Bulldogs":"#C8102E",
+  "Adelaide":"#002B5C",
+};
+function crestColour(team){ return crestColours[team] || "#5a6472"; }
+
+function showNotFound(msg){
+  document.getElementById("bugGrid").style.display = "none";
+  const nf = document.getElementById("notFoundMsg");
+  nf.textContent = msg;
+  nf.style.display = "block";
+}
+
 const params     = new URLSearchParams(location.search);
 const yearParam  = params.get("year");
 const homeParam  = normaliseTeam(params.get("home"));
@@ -209,12 +270,12 @@ const roundParam = canonicalRound(params.get("round"));
 
 async function loadGame(){
   if(!yearParam || !homeParam || !awayParam || !roundParam){
-    document.getElementById("title").textContent = "Game not found";
+    showNotFound("Game not found");
     return;
   }
   try{
     const res  = await fetch(`/data/afl/afl_${yearParam}.json?v=${Date.now()}`, {cache:'no-store'});
-    if(!res.ok){ document.getElementById("title").textContent = "Data not found"; return; }
+    if(!res.ok){ showNotFound("Data not found"); return; }
     const data = await res.json();
 
     // Normalise the raw data's team names and round before comparing
@@ -227,13 +288,11 @@ async function loadGame(){
     if(game.length){
       buildGame(yearParam, game);
     } else {
-      document.getElementById("title").textContent = "Game not found";
-      document.getElementById("venueLine").textContent =
-        `${roundParam}: ${homeParam} vs ${awayParam} (${yearParam})`;
+      showNotFound(`Game not found — ${roundParam}: ${homeParam} vs ${awayParam} (${yearParam})`);
     }
   }catch(e){
     console.error(e);
-    document.getElementById("title").textContent = "Error loading game data";
+    showNotFound("Error loading game data");
   }
 }
 
@@ -255,15 +314,23 @@ function buildGame(season, game){
   const teamAQ = {q1:info.home_q1, q2:info.home_q2, q3:info.home_q3, q4:info.home_q4, total:info.home_points};
   const teamBQ = {q1:info.away_q1, q2:info.away_q2, q3:info.away_q3, q4:info.away_q4, total:info.away_points};
 
-  document.getElementById("title").textContent = `${season} – ${canonicalRound(info.round)}: ${teamA} vs ${teamB}`;
   const att = info.crowd ? ` · Attendance: ${Number(info.crowd).toLocaleString()}` : "";
-  document.getElementById("venueLine").textContent = `${info.venue}${att} · ${info.date}`;
+  document.getElementById("eyebrowLine").textContent =
+    `${canonicalRound(info.round)} · ${info.date}${att} · ${info.venue}`;
 
-  const winner = +teamAQ.total > +teamBQ.total ? teamA
-               : +teamBQ.total > +teamAQ.total ? teamB
-               : null;
-  document.getElementById("finalScore").textContent =
-    `${teamA} ${teamAQ.total} – ${teamBQ.total} ${teamB}${winner ? ` (${winner} won)` : " (Draw)"}`;
+  document.getElementById("teamAHeroName").textContent = teamA;
+  document.getElementById("teamBHeroName").textContent = teamB;
+  document.getElementById("crestA").style.background = crestColour(teamA);
+  document.getElementById("crestB").style.background = crestColour(teamB);
+
+  const aWin = +teamAQ.total > +teamBQ.total;
+  const bWin = +teamBQ.total > +teamAQ.total;
+  const scoreAEl = document.getElementById("scoreA");
+  const scoreBEl = document.getElementById("scoreB");
+  scoreAEl.textContent = teamAQ.total;
+  scoreBEl.textContent = teamBQ.total;
+  scoreAEl.classList.toggle("lose", bWin);
+  scoreBEl.classList.toggle("lose", aWin);
 
   document.getElementById("qtrRows").innerHTML = `
     <tr>
