@@ -218,6 +218,31 @@ let sortState={home:{},away:{}};
 const params=new URLSearchParams(location.search);
 const season=params.get("season"), matchId=params.get("match");
 
+/* ── FIX: merge duplicate player entries (same name, same team) into one row,
+   summing numeric stat fields instead of rendering each entry separately. ── */
+function dedupePlayers(players){
+  const map = new Map();
+  players.forEach(p=>{
+    const key = (p.player||"").trim().toLowerCase();
+    if(!map.has(key)){
+      map.set(key, {...p});
+    } else {
+      const existing = map.get(key);
+      Object.keys(p).forEach(k=>{
+        const val = p[k];
+        if(typeof val === "number" || (val!=="" && !isNaN(val) && val!==null)){
+          if(k!=="jersey"){ // don't sum jersey numbers, just keep the first
+            existing[k] = (Number(existing[k])||0) + (Number(val)||0);
+          }
+        }
+      });
+      // Prefer a populated jersey number if the first entry lacked one
+      if(!existing.jersey && p.jersey) existing.jersey = p.jersey;
+    }
+  });
+  return [...map.values()];
+}
+
 async function loadGame(){
   try{
     const res=await fetch(`data/nrl/seasons/${season}.json`);
@@ -238,8 +263,10 @@ function hasData(group, players){
 function render(){
   const home=game.home_team, away=game.away_team;
   const players=game.players||[];
-  homePlayers=players.filter(p=>p.played_for===home);
-  awayPlayers=players.filter(p=>p.played_for===away);
+
+  /* FIX: filter as before, then dedupe by player name before anything else uses these arrays */
+  homePlayers=dedupePlayers(players.filter(p=>p.played_for===home));
+  awayPlayers=dedupePlayers(players.filter(p=>p.played_for===away));
   const all=[...homePlayers,...awayPlayers];
 
   availGroups=Object.keys(STAT_GROUPS).filter(g=>hasData(g,all));
