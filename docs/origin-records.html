@@ -138,8 +138,11 @@ tbody tr:hover td{background:#f9fbfd;}
 <script>
 function tryPoints(year){ return year < 1983 ? 3 : 4; }
 
-function teamTags(teamsSet){
-  return [...teamsSet].sort().map(t => `<span class="team-tag ${t.toLowerCase()}">${t}</span>`).join(" ");
+function primaryTeamTag(teamCounts){
+  const qld = teamCounts.QLD || 0;
+  const nsw = teamCounts.NSW || 0;
+  const team = qld >= nsw ? "QLD" : "NSW";
+  return `<span class="team-tag ${team.toLowerCase()}">${team}</span>`;
 }
 
 function buildStats(data){
@@ -147,7 +150,7 @@ function buildStats(data){
   const matchPerformances = [];
 
   function ensure(name){
-    if(!playerStats[name]) playerStats[name] = { name, games:0, wins:0, tries:0, points:0, teams:new Set() };
+    if(!playerStats[name]) playerStats[name] = { name, games:0, wins:0, tries:0, points:0, teams:{QLD:0, NSW:0} };
     return playerStats[name];
   }
 
@@ -161,7 +164,7 @@ function buildStats(data){
         if(!p.name) return;
         const s = ensure(p.name);
         s.games++;
-        s.teams.add(side);
+        s.teams[side] = (s.teams[side] || 0) + 1;
         if(m.winner === side) s.wins++;
       });
 
@@ -169,7 +172,7 @@ function buildStats(data){
       scorers.forEach(sc => {
         if(!sc.player) return;
         const s = ensure(sc.player);
-        s.teams.add(side);
+        s.teams[side] = (s.teams[side] || 0) + 1;
         let pts = 0;
         if(sc.type === "try"){ s.tries++; pts = tp; }
         else if(sc.type === "goal"){
@@ -201,7 +204,7 @@ function renderLeaderboard(title, unit, rows, valueKey, valueLabel){
   const body = rows.map((r,i) => `
     <tr>
       <td class="rank">${i+1}</td>
-      <td class="player">${r.name}<div>${teamTags(r.teams)}</div></td>
+      <td class="player">${r.name}<div>${primaryTeamTag(r.teams)}</div></td>
       ${hideGP ? "" : `<td class="num">${r.games}</td>`}
       <td class="value">${r[valueKey]}</td>
     </tr>`).join("");
