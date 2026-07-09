@@ -1,0 +1,41 @@
+name: Update Player Games Index
+
+on:
+  schedule:
+    # Every Monday at 03:00 UTC (~1-2pm AEST/AEDT, after a weekend of footy)
+    - cron: '0 3 * * 1'
+  workflow_dispatch: {}  # lets you trigger it manually from the Actions tab
+  push:
+    paths:
+      - 'docs/data/afl/afl_*.json'
+      - '!docs/data/afl/player_games_index.json'
+
+permissions:
+  contents: write
+
+jobs:
+  update-index:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Build player games index
+        run: python3 scripts/build_player_games_index.py docs/data/afl docs/data/afl/player_games_index.json
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/data/afl/player_games_index.json
+          if git diff --staged --quiet; then
+            echo "No changes to player_games_index.json — skipping commit."
+          else
+            git commit -m "Auto-update player games index"
+            git push
+          fi
