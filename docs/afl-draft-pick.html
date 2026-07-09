@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+<meta charset="UTF-8" />
+<title>AFL Draft Pick History | The Sporting Almanac</title>
+<link rel="stylesheet" href="style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+:root{
+  --bg:#eceff3;
+  --surface:#ffffff;
+  --ink:#0f141a;
+  --muted:#69727c;
+  --faint:#9aa3ad;
+  --line:#e3e8ee;
+  --board:#0a0a0a;
+  --board-2:#1a1a1a;
+  --accent:#e0b94a;
+  --accent-soft:rgba(224,185,74,.18);
+  --display:'Oswald',system-ui,sans-serif;
+  --body:'Inter',system-ui,sans-serif;
+  --radius:16px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:var(--body);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
+
+.navbar{display:flex;justify-content:center;gap:26px;padding:15px;background:#fff;border-bottom:1px solid var(--line);font-weight:600;font-size:14px;}
+.navbar a{text-decoration:none;color:var(--ink);opacity:.7;transition:opacity .15s;}
+.navbar a:hover{opacity:1;}
+.navbar a.current{opacity:1;color:var(--accent);}
+
+.page-wrap{max-width:1180px;margin:0 auto;padding:26px 20px 70px;}
+
+h1{
+  font-family:var(--display);font-weight:600;font-size:clamp(24px,4vw,34px);
+  letter-spacing:.01em;text-transform:uppercase;margin:0;
+}
+
+.hero{
+  position:relative;background:linear-gradient(160deg,var(--board-2),var(--board));
+  border-radius:var(--radius);overflow:hidden;color:#fff;
+  box-shadow:0 18px 40px -18px rgba(10,16,24,.55);
+  margin-bottom:26px;padding:22px 26px 26px;
+}
+.hero .eyebrow{
+  font-family:var(--body);font-size:11.5px;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--accent);
+  margin-bottom:8px;
+}
+.hero h1{color:#fff;}
+.hero .sub{margin-top:10px;font-size:14px;color:rgba(255,255,255,.7);font-weight:600;}
+
+.controls{display:flex;gap:14px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
+select,input{
+  padding:10px 16px;border-radius:999px;border:1px solid var(--line);background:var(--surface);
+  font-family:var(--body);font-size:13px;font-weight:600;color:var(--ink);
+  cursor:pointer;
+}
+select{min-width:120px;}
+input{min-width:80px;cursor:text;text-align:center;}
+select:hover,input:hover{border-color:var(--faint);}
+input:focus,select:focus{outline:none;border-color:var(--accent);}
+.controls label{font-size:13px;font-weight:600;color:var(--muted);}
+
+.table-wrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:auto;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th,td{padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;}
+thead th{
+  background:#f7f9fb;font-family:var(--body);font-weight:600;font-size:11px;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--muted);text-align:center;
+}
+th.left-h,td.left{text-align:left;}
+td{text-align:center;color:#27313c;font-variant-numeric:tabular-nums;}
+td.year{font-weight:700;color:var(--faint);}
+td.player{text-align:left;font-weight:700;color:var(--ink);cursor:pointer;}
+td.player:hover{color:var(--accent);text-decoration:underline;}
+td.club{text-align:left;font-weight:600;}
+tbody tr:hover td{background:#f9fbfd;}
+
+.loading{text-align:center;padding:60px 20px;color:var(--muted);font-size:15px;}
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="afl-draft.html" class="current">AFL Draft</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="f1.html">F1</a>
+</nav>
+
+<div class="page-wrap">
+
+<div class="hero">
+  <div class="eyebrow">AFL DRAFT</div>
+  <h1 id="heroTitle">Pick History</h1>
+  <div class="sub" id="subLine"></div>
+</div>
+
+<div class="controls">
+  <label for="pickInput">Pick number:</label>
+  <input id="pickInput" type="number" min="1" value="1">
+</div>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>Year</th>
+      <th class="left-h">Club</th>
+      <th class="left-h">Player</th>
+      <th class="left-h">Original Club</th>
+    </tr>
+  </thead>
+  <tbody id="tableBody"><tr><td colspan="4" class="loading">Loading draft data…</td></tr></tbody>
+</table>
+</div>
+
+</div>
+
+<script>
+const heroTitle  = document.getElementById("heroTitle");
+const subLine    = document.getElementById("subLine");
+const tableBody  = document.getElementById("tableBody");
+const pickInput  = document.getElementById("pickInput");
+
+let allPicks = [];
+
+const params = new URLSearchParams(location.search);
+const initialPick = parseInt(params.get("pick"), 10);
+if(initialPick > 0) pickInput.value = initialPick;
+
+fetch("data/afl/afl_draft.json")
+  .then(r => { if(!r.ok) throw new Error("no data"); return r.json(); })
+  .then(data => {
+    allPicks = data || [];
+    if(!allPicks.length){
+      tableBody.innerHTML = `<tr><td colspan="4" class="loading">No draft data found in data/afl/afl_draft.json.</td></tr>`;
+      return;
+    }
+    render();
+  })
+  .catch(() => {
+    tableBody.innerHTML = `<tr><td colspan="4" class="loading">Couldn't load data/afl/afl_draft.json.</td></tr>`;
+  });
+
+pickInput.oninput = () => {
+  render();
+  const url = new URL(location);
+  url.searchParams.set("pick", pickInput.value);
+  history.replaceState(null, "", url);
+};
+
+function playerLink(name){
+  return `afl-player.html?name=${encodeURIComponent(name)}`;
+}
+
+function render(){
+  const pickNumber = parseInt(pickInput.value, 10);
+  heroTitle.textContent = pickNumber > 0 ? `Pick ${pickNumber}` : "Pick History";
+
+  if(!(pickNumber > 0)){
+    tableBody.innerHTML = `<tr><td colspan="4" class="loading">Enter a pick number.</td></tr>`;
+    subLine.textContent = "";
+    return;
+  }
+
+  const picks = allPicks
+    .filter(p => p.pick_number === pickNumber)
+    .sort((a,b) => (a.year||0) - (b.year||0));
+
+  subLine.textContent = `${picks.length} player${picks.length===1?"":"s"} taken at pick ${pickNumber} since ${picks.length ? picks[0].year : "1981"}`;
+
+  if(!picks.length){
+    tableBody.innerHTML = `<tr><td colspan="4" class="loading">No players found at pick ${pickNumber}.</td></tr>`;
+    return;
+  }
+
+  tableBody.innerHTML = picks.map(p => {
+    const originalClubs = (p.original_clubs && p.original_clubs.length) ? p.original_clubs.join(" / ") : "";
+    return `
+    <tr>
+      <td class="year">${p.year ?? ""}</td>
+      <td class="club">${p.club || ""}</td>
+      <td class="player" onclick="location.href='${playerLink(p.player_name)}'">${p.player_name || ""}</td>
+      <td class="left">${originalClubs}</td>
+    </tr>`;
+  }).join("");
+}
+</script>
+</body>
+</html>
