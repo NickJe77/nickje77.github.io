@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+  <script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Origin Game | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eceff3;
+  --surface:#ffffff;
+  --ink:#0f141a;
+  --muted:#69727c;
+  --faint:#9aa3ad;
+  --line:#e3e8ee;
+  --board:#0a0a0a;
+  --board-2:#1a1a1a;
+  --board-line:rgba(255,255,255,.10);
+  --accent:#e0b94a;
+  --accent-soft:rgba(224,185,74,.18);
+  --display:'Oswald',system-ui,sans-serif;
+  --body:'Inter',system-ui,sans-serif;
+  --radius:16px;
+
+  --qld:#8b1538;
+  --nsw:#0f3d8c;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:var(--body);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
+
+.navbar{display:flex;justify-content:center;gap:26px;padding:15px;background:#fff;border-bottom:1px solid var(--line);font-weight:600;font-size:14px;}
+.navbar a{text-decoration:none;color:var(--ink);opacity:.7;transition:opacity .15s;}
+.navbar a:hover{opacity:1;}
+.navbar a.current{opacity:1;color:var(--accent);}
+
+.page{max-width:1180px;margin:0 auto;padding:26px 20px 70px;}
+
+/* ── Scorebug ─────────────────────────────────────────── */
+.scorebug{
+  position:relative;background:linear-gradient(160deg,var(--board-2),var(--board));
+  border-radius:var(--radius);overflow:hidden;color:#fff;
+  box-shadow:0 18px 40px -18px rgba(10,16,24,.55);
+  margin-bottom:26px;
+}
+.scorebug .eyebrow{
+  text-align:center;font-family:var(--body);font-size:11.5px;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.55);
+  padding:18px 16px 0;
+}
+.bug-grid{
+  display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
+  gap:10px;padding:14px 30px 30px;
+}
+.bug-team{display:flex;align-items:center;gap:16px;min-width:0;}
+.bug-team.home{justify-content:flex-end;text-align:right;}
+.bug-team.away{justify-content:flex-start;text-align:left;}
+.bug-team .tname{
+  font-family:var(--display);font-weight:600;font-size:clamp(18px,3vw,30px);
+  line-height:1.04;letter-spacing:.01em;text-transform:uppercase;
+}
+.crest{width:8px;align-self:stretch;min-height:54px;border-radius:6px;flex:0 0 auto;}
+.bug-score{
+  display:flex;align-items:center;gap:14px;font-family:var(--display);font-weight:600;
+  font-size:clamp(40px,9vw,72px);line-height:1;letter-spacing:.01em;
+}
+.bug-score .sc{font-variant-numeric:tabular-nums;}
+.bug-score .sc.lose{color:rgba(255,255,255,.42);font-weight:500;}
+.bug-score .dash{color:rgba(255,255,255,.3);font-weight:400;}
+.ft-badge{
+  position:absolute;top:16px;right:18px;font-family:var(--body);font-size:10.5px;
+  font-weight:700;letter-spacing:.12em;color:rgba(255,255,255,.85);
+  border:1px solid var(--board-line);border-radius:999px;padding:4px 10px;
+}
+.potm-badge{
+  position:absolute;top:16px;left:18px;font-family:var(--body);font-size:10.5px;
+  font-weight:700;letter-spacing:.04em;color:rgba(255,255,255,.85);
+}
+.potm-badge b{color:var(--accent);text-transform:none;letter-spacing:0;}
+.not-found-msg{padding:60px 30px;text-align:center;font-family:var(--display);font-size:22px;letter-spacing:.01em;text-transform:uppercase;}
+
+@media(max-width:820px){
+  .bug-grid{grid-template-columns:1fr;gap:18px;padding:10px 18px 26px;}
+  .bug-team.home,.bug-team.away{justify-content:center;text-align:center;}
+  .crest{min-height:30px;}
+  .potm-badge{position:static;display:block;text-align:center;padding-top:14px;}
+}
+
+/* ── Halftime/Fulltime table ──────────────────────────── */
+.qtr-scores{margin-bottom:24px;}
+.qtr-scores .table-wrap{
+  max-width:480px;margin:0 auto;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius);overflow:hidden;
+}
+.qtr-scores table{width:100%;border-collapse:collapse;}
+.qtr-scores th,.qtr-scores td{padding:9px 14px;border-bottom:1px solid var(--line);text-align:center;font-size:13px;}
+.qtr-scores th{
+  background:#f7f9fb;font-family:var(--body);font-weight:600;font-size:11px;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--muted);
+}
+.qtr-scores td{color:#27313c;font-variant-numeric:tabular-nums;}
+.qtr-scores td.team-name{text-align:left;font-weight:700;color:var(--ink);}
+.qtr-scores tr:last-child td{border-bottom:none;}
+
+/* ── Team boxes ───────────────────────────────────────── */
+.teams-wrap{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+@media(max-width:800px){.teams-wrap{grid-template-columns:1fr;}}
+.team-box{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;}
+.team-header{
+  padding:15px 18px 6px;text-align:center;font-family:var(--display);font-weight:600;font-size:17px;
+  letter-spacing:.02em;text-transform:uppercase;color:var(--ink);
+}
+.team-stripe{height:8px;margin:0 18px 14px;border-radius:6px;border:1px solid var(--line);}
+.scorers{padding:0 18px 14px;font-size:12.5px;color:var(--muted);text-align:center;min-height:18px;line-height:1.6;}
+.scorers strong{color:var(--ink);}
+.scorers .stype{color:var(--faint);}
+
+.coach-line{padding:0 18px 16px;font-size:11.5px;color:var(--muted);text-align:center;}
+.coach-line b{color:var(--ink);}
+
+table{width:100%;border-collapse:collapse;}
+th,td{border-bottom:1px solid var(--line);padding:9px 8px;text-align:center;font-size:13px;}
+th{
+  background:#f7f9fb;font-family:var(--body);font-weight:600;font-size:11px;
+  letter-spacing:.04em;text-transform:uppercase;color:var(--muted);
+}
+td.left{text-align:left;font-weight:700;color:var(--ink);}
+td.left .club{display:block;font-weight:500;color:var(--faint);font-size:11px;}
+td.left .cap{color:var(--accent);font-weight:700;}
+td{color:#27313c;font-variant-numeric:tabular-nums;}
+tbody tr.bench td{color:var(--muted);}
+tbody tr.bench-divider td{
+  background:#f7f9fb;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--faint);text-align:left;padding:6px 8px;
+}
+
+.notes-card{
+  margin-top:20px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:16px 20px;font-size:13px;color:var(--muted);line-height:1.6;
+}
+.notes-card b{color:var(--ink);}
+</style>
+</head>
+<body>
+<nav class="navbar">
+<a href="index.html">Home</a>
+<a href="afl.html">AFL</a>
+<a href="origin.html" class="current">Origin</a>
+</nav>
+<div class="page">
+
+<div class="scorebug" id="scorebug">
+  <span class="ft-badge">FULL TIME</span>
+  <span class="potm-badge" id="potmBadge"></span>
+  <div class="eyebrow" id="eyebrowLine"></div>
+  <div class="bug-grid" id="bugGrid">
+    <div class="bug-team home">
+      <div class="tname" id="teamAHeroName"></div>
+      <div class="crest" id="crestA"></div>
+    </div>
+    <div class="bug-score">
+      <span class="sc" id="scoreA"></span>
+      <span class="dash">–</span>
+      <span class="sc" id="scoreB"></span>
+    </div>
+    <div class="bug-team away">
+      <div class="crest" id="crestB"></div>
+      <div class="tname" id="teamBHeroName"></div>
+    </div>
+  </div>
+  <div class="not-found-msg" id="notFoundMsg" style="display:none"></div>
+</div>
+
+<div class="qtr-scores">
+  <div class="table-wrap">
+  <table id="qtrTable">
+    <thead>
+      <tr><th>Team</th><th>Half Time</th><th>Full Time</th></tr>
+    </thead>
+    <tbody id="qtrRows"></tbody>
+  </table>
+  </div>
+</div>
+
+<div class="teams-wrap">
+<div class="team-box">
+<div class="team-header" id="teamAName"></div>
+<div class="team-stripe" id="teamAStripe"></div>
+<div class="scorers" id="teamAScorers"></div>
+<table id="teamATable">
+<thead><tr><th>No.</th><th class="left-h">Player</th><th>Position</th></tr></thead>
+<tbody id="teamARows"></tbody>
+</table>
+<div class="coach-line" id="teamACoach"></div>
+</div>
+<div class="team-box">
+<div class="team-header" id="teamBName"></div>
+<div class="team-stripe" id="teamBStripe"></div>
+<div class="scorers" id="teamBScorers"></div>
+<table id="teamBTable">
+<thead><tr><th>No.</th><th class="left-h">Player</th><th>Position</th></tr></thead>
+<tbody id="teamBRows"></tbody>
+</table>
+<div class="coach-line" id="teamBCoach"></div>
+</div>
+</div>
+
+<div class="notes-card" id="notesCard" style="display:none"></div>
+
+</div>
+
+<script>
+const TEAM_META = {
+  QLD: { label: "Queensland", colour: "#8b1538" },
+  NSW: { label: "New South Wales", colour: "#0f3d8c" },
+};
+
+function showNotFound(msg){
+  document.getElementById("bugGrid").style.display = "none";
+  const nf = document.getElementById("notFoundMsg");
+  nf.textContent = msg;
+  nf.style.display = "block";
+}
+
+const params    = new URLSearchParams(location.search);
+const yearParam = params.get("year");
+const gameParam = params.get("game");
+
+async function loadGame(){
+  if(!yearParam || !gameParam){
+    showNotFound("Game not found");
+    return;
+  }
+  try{
+    const res = await fetch(`data/nrl/origin_results.json?v=${Date.now()}`, {cache:'no-store'});
+    if(!res.ok){ showNotFound("Data not found"); return; }
+    const data = await res.json();
+
+    const match = data.find(m =>
+      String(m.year) === String(yearParam) &&
+      String(m.game_number) === String(gameParam)
+    );
+
+    if(match){
+      buildGame(match);
+    } else {
+      showNotFound(`Game not found — ${yearParam} Game ${gameParam}`);
+    }
+  }catch(e){
+    console.error(e);
+    showNotFound("Error loading game data");
+  }
+}
+
+function buildGame(m){
+  const qldScore = (m.score && m.score.QLD) ?? 0;
+  const nswScore = (m.score && m.score.NSW) ?? 0;
+  const htQld = (m.halftime_score && m.halftime_score.QLD);
+  const htNsw = (m.halftime_score && m.halftime_score.NSW);
+
+  const metaParts = [
+    `Game ${m.game_number || ""}`,
+    m.date,
+    m.venue,
+    m.referee ? `Ref: ${m.referee}` : null,
+    m.attendance ? `Crowd: ${Number(m.attendance).toLocaleString()}` : null
+  ].filter(Boolean);
+  document.getElementById("eyebrowLine").textContent = `${yearParam} State of Origin · ${metaParts.join(" · ")}`;
+
+  if(m.player_of_match){
+    document.getElementById("potmBadge").innerHTML = `POTM: <b>${m.player_of_match}</b>`;
+  }
+
+  document.getElementById("teamAHeroName").textContent = TEAM_META.QLD.label;
+  document.getElementById("teamBHeroName").textContent = TEAM_META.NSW.label;
+  document.getElementById("crestA").style.background = TEAM_META.QLD.colour;
+  document.getElementById("crestB").style.background = TEAM_META.NSW.colour;
+
+  const qldWin = qldScore > nswScore;
+  const nswWin = nswScore > qldScore;
+  const scoreAEl = document.getElementById("scoreA");
+  const scoreBEl = document.getElementById("scoreB");
+  scoreAEl.textContent = qldScore;
+  scoreBEl.textContent = nswScore;
+  scoreAEl.classList.toggle("lose", nswWin);
+  scoreBEl.classList.toggle("lose", qldWin);
+
+  document.getElementById("qtrRows").innerHTML = `
+    <tr>
+      <td class="team-name">Queensland</td>
+      <td>${htQld ?? "-"}</td>
+      <td><strong>${qldScore}</strong></td>
+    </tr>
+    <tr>
+      <td class="team-name">New South Wales</td>
+      <td>${htNsw ?? "-"}</td>
+      <td><strong>${nswScore}</strong></td>
+    </tr>`;
+
+  document.getElementById("teamAName").textContent = TEAM_META.QLD.label;
+  document.getElementById("teamBName").textContent = TEAM_META.NSW.label;
+  document.getElementById("teamAStripe").style.background = TEAM_META.QLD.colour;
+  document.getElementById("teamBStripe").style.background = TEAM_META.NSW.colour;
+
+  function scorerLine(entry){
+    let s = entry.player || "";
+    if(entry.detail) s += ` (${entry.detail})`;
+    return s;
+  }
+  function scorersText(scorers){
+    if(!scorers || !scorers.length) return "";
+    const tries = scorers.filter(s => s.type === "try").map(scorerLine);
+    const goals = scorers.filter(s => s.type === "goal").map(scorerLine);
+    const fgs   = scorers.filter(s => s.type === "field_goal").map(scorerLine);
+    let out = "";
+    if(tries.length) out += `<div><span class="stype">Tries:</span> ${tries.join(", ")}</div>`;
+    if(goals.length) out += `<div><span class="stype">Goals:</span> ${goals.join(", ")}</div>`;
+    if(fgs.length)   out += `<div><span class="stype">Field Goals:</span> ${fgs.join(", ")}</div>`;
+    return out;
+  }
+  document.getElementById("teamAScorers").innerHTML = scorersText(m.scorers && m.scorers.QLD) || `<span style="color:var(--faint)">No scorers recorded</span>`;
+  document.getElementById("teamBScorers").innerHTML = scorersText(m.scorers && m.scorers.NSW) || `<span style="color:var(--faint)">No scorers recorded</span>`;
+
+  function renderLineup(tbodyId, lineup){
+    const tbody = document.getElementById(tbodyId);
+    tbody.innerHTML = "";
+    if(!lineup || !lineup.length){
+      tbody.innerHTML = `<tr><td colspan="3" style="color:var(--faint)">No lineup recorded</td></tr>`;
+      return;
+    }
+    const starting = lineup.filter(p => !p.bench);
+    const bench    = lineup.filter(p => p.bench);
+
+    const row = p => `
+      <tr class="${p.bench ? 'bench' : ''}">
+        <td>${p.jersey ?? ""}</td>
+        <td class="left">${p.name}${p.captain ? ' <span class="cap">(c)</span>' : ''}${p.club ? `<span class="club">${p.club}</span>` : ''}</td>
+        <td>${p.position || ""}</td>
+      </tr>`;
+
+    let html = starting.map(row).join("");
+    if(bench.length){
+      html += `<tr class="bench-divider"><td colspan="3">Interchange</td></tr>`;
+      html += bench.map(row).join("");
+    }
+    tbody.innerHTML = html;
+  }
+  renderLineup("teamARows", m.teams && m.teams.QLD && m.teams.QLD.lineup);
+  renderLineup("teamBRows", m.teams && m.teams.NSW && m.teams.NSW.lineup);
+
+  const qldCoach = m.teams && m.teams.QLD && m.teams.QLD.coach;
+  const nswCoach = m.teams && m.teams.NSW && m.teams.NSW.coach;
+  document.getElementById("teamACoach").innerHTML = qldCoach ? `Coach: <b>${qldCoach}</b>` : "";
+  document.getElementById("teamBCoach").innerHTML = nswCoach ? `Coach: <b>${nswCoach}</b>` : "";
+
+  if(m.notes){
+    const nc = document.getElementById("notesCard");
+    nc.innerHTML = `<b>Match notes:</b> ${m.notes}`;
+    nc.style.display = "block";
+  }
+}
+
+loadGame();
+</script>
+</body>
+</html>
