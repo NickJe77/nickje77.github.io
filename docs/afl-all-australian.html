@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+<meta charset="UTF-8" />
+<title>AFL All-Australian Teams | The Sporting Almanac</title>
+<link rel="stylesheet" href="style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+:root{
+  --bg:#eceff3;
+  --surface:#ffffff;
+  --ink:#0f141a;
+  --muted:#69727c;
+  --faint:#9aa3ad;
+  --line:#e3e8ee;
+  --board:#0c130f;
+  --board-2:#161f16;
+  --accent:#c99a3d;
+  --accent-soft:rgba(201,154,61,.16);
+  --display:'Oswald',system-ui,sans-serif;
+  --body:'Inter',system-ui,sans-serif;
+  --radius:16px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:var(--body);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
+
+.navbar{display:flex;justify-content:center;gap:26px;padding:15px;background:#fff;border-bottom:1px solid var(--line);font-weight:600;font-size:14px;}
+.navbar a{text-decoration:none;color:var(--ink);opacity:.7;transition:opacity .15s;}
+.navbar a:hover{opacity:1;}
+.navbar a.current{opacity:1;color:var(--accent);}
+
+.page-wrap{max-width:1000px;margin:0 auto;padding:26px 20px 70px;}
+
+h1{
+  font-family:var(--display);font-weight:600;font-size:clamp(24px,4vw,34px);
+  letter-spacing:.01em;text-transform:uppercase;margin:0;
+}
+
+.hero{
+  position:relative;background:linear-gradient(160deg,var(--board-2),var(--board));
+  border-radius:var(--radius);overflow:hidden;color:#fff;
+  box-shadow:0 18px 40px -18px rgba(10,16,24,.55);
+  margin-bottom:26px;padding:22px 26px 26px;
+}
+.hero .eyebrow{
+  font-family:var(--body);font-size:11.5px;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--accent);
+  margin-bottom:8px;
+}
+.hero h1{color:#fff;}
+.hero .sub{margin-top:10px;font-size:14px;color:rgba(255,255,255,.7);font-weight:600;}
+
+.controls{display:flex;gap:14px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
+select{
+  padding:10px 16px;border-radius:999px;border:1px solid var(--line);background:var(--surface);
+  font-family:var(--body);font-size:13px;font-weight:600;color:var(--ink);min-width:120px;
+  cursor:pointer;
+}
+select:hover{border-color:var(--faint);}
+select:focus{outline:none;border-color:var(--accent);}
+
+.table-wrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:auto;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th,td{padding:10px 12px;border-bottom:1px solid var(--line);}
+thead th{
+  background:#f7f9fb;font-family:var(--body);font-weight:600;font-size:11px;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--muted);text-align:left;
+}
+th.center,td.center{text-align:center;}
+td{color:#27313c;font-variant-numeric:tabular-nums;}
+td.pos{text-align:center;font-weight:700;color:var(--muted);width:50px;}
+td.player{font-weight:700;color:var(--ink);cursor:pointer;}
+td.player:hover{color:var(--accent);text-decoration:underline;}
+td.player .cap{color:var(--accent);font-weight:700;margin-left:4px;}
+td.club{font-weight:600;}
+tbody tr:hover td{background:#f9fbfd;}
+
+.loading{text-align:center;padding:60px 20px;color:var(--muted);font-size:15px;}
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <a href="index.html">Home</a>
+  <a href="racing.html">Racing</a>
+  <a href="afl.html">AFL</a>
+  <a href="afl-all-australian.html" class="current">All-Australian</a>
+  <a href="football.html">Football</a>
+  <a href="cricket.html">Cricket</a>
+  <a href="f1.html">F1</a>
+</nav>
+
+<div class="page-wrap">
+
+<div class="hero">
+  <div class="eyebrow">AFL</div>
+  <h1 id="heroTitle">All-Australian Team</h1>
+  <div class="sub" id="subLine"></div>
+</div>
+
+<div class="controls">
+  <select id="yearSelect"><option>Loading…</option></select>
+</div>
+
+<div class="table-wrap">
+<table>
+  <thead id="tableHead">
+    <tr>
+      <th class="center">Pos</th>
+      <th>Player</th>
+      <th>Club</th>
+      <th class="center">Age</th>
+      <th class="center">Times AA</th>
+    </tr>
+  </thead>
+  <tbody id="tableBody"><tr><td colspan="5" class="loading">Loading All-Australian data…</td></tr></tbody>
+</table>
+</div>
+
+</div>
+
+<script>
+const yearSelect = document.getElementById("yearSelect");
+const tableBody  = document.getElementById("tableBody");
+const heroTitle  = document.getElementById("heroTitle");
+const subLine    = document.getElementById("subLine");
+
+let allSelections = [];
+let currentYear = null;
+
+fetch("data/afl/all_australian_results.json")
+  .then(r => { if(!r.ok) throw new Error("no data"); return r.json(); })
+  .then(data => {
+    allSelections = data || [];
+    const years = [...new Set(allSelections.map(s => s.year))].sort((a,b) => b - a);
+
+    if(!years.length){
+      tableBody.innerHTML = `<tr><td colspan="5" class="loading">No All-Australian data found in data/afl/all_australian_results.json.</td></tr>`;
+      return;
+    }
+
+    yearSelect.innerHTML = "";
+    years.forEach(y => {
+      const opt = document.createElement("option");
+      opt.value = y; opt.textContent = y;
+      yearSelect.appendChild(opt);
+    });
+    yearSelect.onchange = () => { currentYear = Number(yearSelect.value); render(); };
+    currentYear = years[0];
+    render();
+  })
+  .catch(() => {
+    tableBody.innerHTML = `<tr><td colspan="5" class="loading">Couldn't load data/afl/all_australian_results.json.</td></tr>`;
+  });
+
+const tableHead  = document.getElementById("tableHead");
+
+function playerLink(name){
+  return `afl-player.html?name=${encodeURIComponent(name)}`;
+}
+
+function render(){
+  if(currentYear == null) return;
+  heroTitle.textContent = currentYear + " All-Australian Team";
+  yearSelect.value = currentYear;
+
+  const selections = allSelections.filter(s => s.year === currentYear);
+  const hasPositions = selections.some(s => s.position);
+
+  subLine.textContent = hasPositions
+    ? `${selections.length} player${selections.length===1?"":"s"} selected`
+    : `${selections.length} player${selections.length===1?"":"s"} named — squad only, positions weren't announced this year`;
+
+  tableHead.innerHTML = hasPositions
+    ? `<tr><th class="center">Pos</th><th>Player</th><th>Club</th><th class="center">Age</th><th class="center">Times AA</th></tr>`
+    : `<tr><th>Player</th><th>Club</th><th class="center">Age</th><th class="center">Times AA</th></tr>`;
+
+  if(!selections.length){
+    tableBody.innerHTML = `<tr><td colspan="5" class="loading">No selections found for ${currentYear}.</td></tr>`;
+    return;
+  }
+
+  tableBody.innerHTML = selections.map(s => {
+    const posCell = hasPositions ? `<td class="pos">${s.position || ""}</td>` : "";
+    return `
+    <tr>
+      ${posCell}
+      <td class="player" onclick="location.href='${playerLink(s.player_name)}'">${s.player_name || ""}${s.captain ? ' <span class="cap">(C)</span>' : ""}</td>
+      <td class="club">${s.club || ""}</td>
+      <td class="center">${s.age ?? ""}</td>
+      <td class="center">${s.career_times_aa ?? ""}</td>
+    </tr>`;
+  }).join("");
+}
+</script>
+</body>
+</html>
