@@ -184,9 +184,23 @@ function clubLink(club){
   return `afl-draft-club.html?club=${encodeURIComponent(club)}`;
 }
 
-function gamesFor(playerName){
+function gamesFor(playerName, draftYear){
   const entry = gamesIndex[playerName];
-  return entry ? entry.total_games : null;
+  if(!entry) return null;
+  // Only count games from the draft year onward — any games before a
+  // player's own draft year can only belong to a different, unrelated
+  // person who happens to share the same name (a real namesake, not
+  // this player), since summing their ALL-TIME total would otherwise
+  // wrongly attribute a stranger's career to a brand-new draftee.
+  let games = 0;
+  let found = false;
+  for(const [year, count] of Object.entries(entry.seasons || {})){
+    if(Number(year) >= draftYear){
+      games += count;
+      found = true;
+    }
+  }
+  return found ? games : null;
 }
 
 function render(){
@@ -220,7 +234,7 @@ function render(){
 
   tableBody.innerHTML = picks.map(p => {
     const originalClubs = (p.original_clubs && p.original_clubs.length) ? p.original_clubs.join(" / ") : "";
-    const games = gamesFor(p.player_name);
+    const games = gamesFor(p.player_name, p.year);
     return `
     <tr>
       <td class="pick" onclick="location.href='${pickLink(p.pick_number)}'">${p.pick_number ?? ""}</td>
