@@ -93,8 +93,7 @@ tbody tr.totals td{border-top:2px solid var(--line);font-weight:700;}
 .linescore-wrap table{font-size:13px;}
 .linescore-wrap td.total{font-weight:700;}
 
-.boxscores{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
-@media (max-width:760px){.boxscores{grid-template-columns:1fr;}}
+.boxscores{display:grid;grid-template-columns:1fr;gap:20px;}
 
 .meta-row{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:20px;font-size:13px;color:var(--muted);}
 .meta-row strong{color:var(--ink);}
@@ -131,6 +130,7 @@ tbody tr.totals td{border-top:2px solid var(--line);font-weight:700;}
 
 <div class="controls">
   <select id="yearSelect"><option>Loading…</option></select>
+  <select id="gameSelect" hidden></select>
 </div>
 
 <div id="lineScoreWrap"></div>
@@ -178,7 +178,7 @@ fetch("data/nba/allstar.json")
       opt.value = y; opt.textContent = y;
       yearSelect.appendChild(opt);
     });
-    yearSelect.onchange = () => { currentYear = yearSelect.value; render(); };
+    yearSelect.onchange = () => { currentYear = yearSelect.value; currentGameNumber = null; render(); };
     currentYear = years[0];
     render();
   })
@@ -189,9 +189,20 @@ fetch("data/nba/allstar.json")
 function renderLineScore(table){
   if(!table || !table.rows || !table.rows.length) { lineScoreWrap.innerHTML = ""; return; }
   const cols = Object.keys(table.rows[0] || {}).filter(k => k !== 'team' && k !== 'col_0');
+  const rows = table.rows.filter(r => (r.team || r.col_0) && !/scoring/i.test(Object.values(r).join(' ')));
+
+  // Some years (2025/2026 target-score mini-tournament games) only record
+  // a single continuous scoring period, so every non-total column equals
+  // the total - showing that as a "quarter breakdown" would be misleading
+  // since we don't actually have separate period data for those games.
+  const periodCols = cols.filter(c => c.toUpperCase() !== 'T');
+  const isRedundant = periodCols.length > 0 && rows.every(r =>
+    periodCols.every(c => !r[c] || r[c] === r['T'])
+  );
+  if (isRedundant) { lineScoreWrap.innerHTML = ""; return; }
+
   const headerRow = `<tr><th></th>${cols.map(c => `<th class="center">${esc(c)}</th>`).join('')}</tr>`;
-  const bodyRows = table.rows
-    .filter(r => (r.team || r.col_0) && !/scoring/i.test(Object.values(r).join(' ')))
+  const bodyRows = rows
     .map(r => {
       const label = r.team || r.col_0 || '';
       return `<tr><td class="club">${esc(label)}</td>${cols.map(c => `<td class="center${c.toUpperCase()==='T' ? ' total':''}">${esc(r[c] ?? '')}</td>`).join('')}</tr>`;
@@ -223,6 +234,17 @@ function renderBoxTable(table, teamLabel, teamScore){
     </div>`;
 }
 
+let currentGameNumber = null;
+const gameSelect = document.getElementById('gameSelect');
+
+function getActiveGame(yearObj){
+  if(yearObj.games && yearObj.games.length){
+    const found = yearObj.games.find(g => g.game_number === currentGameNumber);
+    return found || yearObj.games[yearObj.games.length - 1];
+  }
+  return { game_info: yearObj.game_info, tables: yearObj.tables };
+}
+
 function render(){
   if(currentYear == null || !DATA) return;
   const yearObj = DATA[currentYear];
@@ -234,10 +256,28 @@ function render(){
     heroTitle.textContent = "All-Star Game";
     subLine.textContent = "";
     mvpLine.textContent = "";
+    gameSelect.hidden = true;
     return;
   }
 
-  const gi = yearObj.game_info || {};
+  // Tournament years (2025+) have multiple games - show a selector,
+  // defaulting to the Final so this matches every other year by default.
+  if(yearObj.games && yearObj.games.length > 1){
+    gameSelect.hidden = false;
+    gameSelect.innerHTML = yearObj.games.map(g =>
+      `<option value="${g.game_number}">${esc(g.label)}</option>`
+    ).join('');
+    if(currentGameNumber == null || !yearObj.games.some(g => g.game_number === currentGameNumber)){
+      currentGameNumber = yearObj.games[yearObj.games.length - 1].game_number;
+    }
+    gameSelect.value = currentGameNumber;
+  } else {
+    gameSelect.hidden = true;
+    currentGameNumber = null;
+  }
+
+  const activeGame = getActiveGame(yearObj);
+  const gi = activeGame.game_info || {};
   const teams = gi.teams || [];
   const [a, b] = teams;
 
@@ -248,10 +288,10 @@ function render(){
   subLine.textContent = metaParts.join(' · ');
   mvpLine.textContent = gi.mvp ? `MVP: ${gi.mvp}` : '';
 
-  const lineScoreTable = (yearObj.tables || []).find(t => t.table_id === 'line_score');
+  const lineScoreTable = (activeGame.tables || []).find(t => t.table_id === 'line_score');
   renderLineScore(lineScoreTable);
 
-  const rosterTables = (yearObj.tables || []).filter(t => t.table_id !== 'line_score' && t.rows && t.rows.length);
+  const rosterTables = (activeGame.tables || []).filter(t => t.table_id !== 'line_score' && t.rows && t.rows.length);
 
   if(!rosterTables.length){
     content.innerHTML = `<div class="loading">No box score available for ${esc(currentYear)}.</div>`;
@@ -265,6 +305,12 @@ function render(){
 
   content.innerHTML = `<div class="boxscores">${boxHtml}</div>`;
 }
+
+gameSelect.addEventListener('change', () => {
+  currentGameNumber = Number(gameSelect.value);
+  render();
+});
+
 </script>
 </body>
 </html>
