@@ -116,9 +116,10 @@ tbody tr:hover td{background:#f9fbfd;}
       <th>Pick</th>
       <th class="left-h">Player</th>
       <th class="left-h">Original Club</th>
+      <th>Games</th>
     </tr>
   </thead>
-  <tbody id="tableBody"><tr><td colspan="4" class="loading">Loading draft data…</td></tr></tbody>
+  <tbody id="tableBody"><tr><td colspan="5" class="loading">Loading draft data…</td></tr></tbody>
 </table>
 </div>
 
@@ -133,36 +134,38 @@ const q           = document.getElementById("q");
 
 let allPicks = [];
 let currentClub = null;
+let gamesIndex = {};
 
 const params = new URLSearchParams(location.search);
 const initialClub = params.get("club");
 
-fetch("data/afl/afl_draft.json")
-  .then(r => { if(!r.ok) throw new Error("no data"); return r.json(); })
-  .then(data => {
-    allPicks = data || [];
-    const clubs = [...new Set(allPicks.map(p => p.club).filter(Boolean))].sort();
+Promise.all([
+  fetch("data/afl/afl_draft.json").then(r => r.ok ? r.json() : []),
+  fetch("data/afl/player_games_index.json").then(r => r.ok ? r.json() : {}).catch(() => ({}))
+]).then(([draftData, gamesData]) => {
+  allPicks = draftData || [];
+  gamesIndex = gamesData || {};
+  const clubs = [...new Set(allPicks.map(p => p.club).filter(Boolean))].sort();
 
-    if(!clubs.length){
-      tableBody.innerHTML = `<tr><td colspan="4" class="loading">No draft data found in data/afl/afl_draft.json.</td></tr>`;
-      return;
-    }
+  if(!clubs.length){
+    tableBody.innerHTML = `<tr><td colspan="5" class="loading">No draft data found in data/afl/afl_draft.json.</td></tr>`;
+    return;
+  }
 
-    clubSelect.innerHTML = "";
-    clubs.forEach(c => {
-      const opt = document.createElement("option");
-      opt.value = c; opt.textContent = c;
-      clubSelect.appendChild(opt);
-    });
-    clubSelect.onchange = () => { currentClub = clubSelect.value; updateUrl(); render(); };
-
-    currentClub = (initialClub && clubs.includes(initialClub)) ? initialClub : clubs[0];
-    clubSelect.value = currentClub;
-    render();
-  })
-  .catch(() => {
-    tableBody.innerHTML = `<tr><td colspan="4" class="loading">Couldn't load data/afl/afl_draft.json.</td></tr>`;
+  clubSelect.innerHTML = "";
+  clubs.forEach(c => {
+    const opt = document.createElement("option");
+    opt.value = c; opt.textContent = c;
+    clubSelect.appendChild(opt);
   });
+  clubSelect.onchange = () => { currentClub = clubSelect.value; updateUrl(); render(); };
+
+  currentClub = (initialClub && clubs.includes(initialClub)) ? initialClub : clubs[0];
+  clubSelect.value = currentClub;
+  render();
+}).catch(() => {
+  tableBody.innerHTML = `<tr><td colspan="5" class="loading">Couldn't load data/afl/afl_draft.json.</td></tr>`;
+});
 
 q.oninput = render;
 
@@ -178,6 +181,11 @@ function playerLink(name){
 
 function pickLink(pickNumber){
   return `afl-draft-pick.html?pick=${encodeURIComponent(pickNumber)}`;
+}
+
+function gamesFor(playerName){
+  const entry = gamesIndex[playerName];
+  return entry ? entry.total_games : null;
 }
 
 function render(){
@@ -203,18 +211,20 @@ function render(){
     : `${picks.length} pick${picks.length===1?"":"s"} recorded`;
 
   if(!picks.length){
-    tableBody.innerHTML = `<tr><td colspan="4" class="loading">No picks found.</td></tr>`;
+    tableBody.innerHTML = `<tr><td colspan="5" class="loading">No picks found.</td></tr>`;
     return;
   }
 
   tableBody.innerHTML = picks.map(p => {
     const originalClubs = (p.original_clubs && p.original_clubs.length) ? p.original_clubs.join(" / ") : "";
+    const games = gamesFor(p.player_name);
     return `
     <tr>
       <td class="year">${p.year ?? ""}</td>
       <td class="pick" onclick="location.href='${pickLink(p.pick_number)}'">${p.pick_number ?? ""}</td>
       <td class="player" onclick="location.href='${playerLink(p.player_name)}'">${p.player_name || ""}</td>
       <td class="left">${originalClubs}</td>
+      <td>${games ?? "—"}</td>
     </tr>`;
   }).join("");
 }
