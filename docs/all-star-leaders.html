@@ -176,6 +176,15 @@ fetch("data/nba/allstar.json")
     tableBody.innerHTML = `<tr><td colspan="3" class="loading">Couldn't load data/nba/allstar.json.</td></tr>`;
   });
 
+function allTablesForYear(yearObj){
+  // Tournament years (2025+) have multiple games (semifinals + final).
+  // Flatten across all of them so semifinal appearances aren't undercounted.
+  if(yearObj.games && yearObj.games.length){
+    return yearObj.games.flatMap(g => g.tables || []);
+  }
+  return yearObj.tables || [];
+}
+
 function computeLeaders(data){
   const map = {};
   function ensure(name){
@@ -183,7 +192,7 @@ function computeLeaders(data){
     return map[name];
   }
   Object.values(data).forEach(yearObj => {
-    (yearObj.tables || []).forEach(t => {
+    allTablesForYear(yearObj).forEach(t => {
       if(t.table_id === 'line_score' || !t.rows) return;
       t.rows.forEach(row => {
         const name = row.player;
@@ -197,6 +206,8 @@ function computeLeaders(data){
         p.blk += toNum(row.blk);
       });
     });
+    // MVP is only awarded for the Final, which is what top-level
+    // game_info always represents (for every year, tournament or not).
     const mvpText = yearObj.game_info && yearObj.game_info.mvp;
     if(mvpText){
       mvpText.split(/\s+and\s+/i).map(s => s.trim()).filter(Boolean).forEach(name => {
