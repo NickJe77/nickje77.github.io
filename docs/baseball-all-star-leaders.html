@@ -144,6 +144,14 @@ const LEADER_CATEGORIES = [
 function esc(s){
   return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 }
+// Retrosheet full names are "First Middle Last" (sometimes multiple
+// middle names) - keep just first and last for display.
+function shortName(fullName){
+  if(!fullName) return fullName;
+  const parts = fullName.trim().split(/\s+/);
+  if(parts.length <= 2) return fullName;
+  return `${parts[0]} ${parts[parts.length - 1]}`;
+}
 function toNum(v){
   if (typeof v !== "string" && typeof v !== "number") return 0;
   const n = parseFloat(String(v).replace(/,/g, ""));
@@ -183,7 +191,7 @@ function computeLeaders(data){
       ["National League", "American League"].forEach(league => {
         ((game.batting || {})[league] || []).forEach(row => {
           if (!row.player_id || row.player === "Totals") return;
-          const p = ensure(row.player_id, row.full_name || row.player);
+          const p = ensure(row.player_id, shortName(row.full_name) || row.player);
           p.games += 1;
           p.h += toNum(row.H);
           p.r += toNum(row.R);
@@ -191,7 +199,7 @@ function computeLeaders(data){
         });
         ((game.pitching || {})[league] || []).forEach(row => {
           if (!row.player_id || row.player === "Totals") return;
-          const p = ensure(row.player_id, row.full_name || row.player);
+          const p = ensure(row.player_id, shortName(row.full_name) || row.player);
           p.games += 1;
           p.so_pitching += toNum(row.SO);
           if (row.decision && row.decision.startsWith("W")) p.wins += 1;
