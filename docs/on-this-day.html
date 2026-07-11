@@ -320,16 +320,28 @@ function parseCSV(text){
 
 async function loadRacingByDate(){
   const res = await fetch(RACING_CSV_URL);
-  if(!res.ok) throw new Error(`${res.status}`);
-  const text = await res.text();
+  if(!res.ok) throw new Error(`Fetching ${RACING_CSV_URL} returned HTTP ${res.status}`);
+  let text = await res.text();
+  text = text.replace(/^\uFEFF/, ""); // strip BOM if present (common in Excel-exported CSVs)
+
   const rows = parseCSV(text);
-  if(!rows.length) return {};
+  if(!rows.length) throw new Error(`${RACING_CSV_URL} loaded but appears empty (0 rows)`);
 
   const header = rows[0].map(h => h.trim());
   const idx = {};
   header.forEach((h, i) => { idx[h] = i; });
 
+  const required = ["Date", "Race", "Winner", "Jockey", "Trainer"];
+  const missing = required.filter(col => !(col in idx));
+  if(missing.length){
+    throw new Error(
+      `CSV header mismatch. Expected columns including: ${required.join(", ")}. ` +
+      `Missing: ${missing.join(", ")}. Actual header row found: [${header.join(" | ")}]`
+    );
+  }
+
   const byDate = {};
+  let skipped = 0;
   for(let i = 1; i < rows.length; i++){
     const r = rows[i];
     const dateStr = (r[idx["Date"]] || "").trim();
@@ -340,11 +352,11 @@ async function loadRacingByDate(){
     const jockey = (r[idx["Jockey"]] || "").trim();
     const trainer = (r[idx["Trainer"]] || "").trim();
 
-    if(!dateStr || !race || !winner) continue;
+    if(!dateStr || !race || !winner){ skipped++; continue; }
     const parts = dateStr.split("/");
-    if(parts.length !== 3) continue;
+    if(parts.length !== 3){ skipped++; continue; }
     const day = parseInt(parts[0], 10), month = parseInt(parts[1], 10), year = parseInt(parts[2], 10);
-    if(!day || !month || !year) continue;
+    if(!day || !month || !year){ skipped++; continue; }
 
     const key = String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
     const text2 = `${winner} wins the ${race}` + (track ? ` at ${track}.` : ".");
@@ -357,7 +369,27 @@ async function loadRacingByDate(){
   }
 
   Object.values(byDate).forEach(arr => arr.sort((a, b) => a.year - b.year));
-  return byDate;
+
+  const totalEvents = Object.values(byDate).reduce((sum, arr) => sum + arr.length, 0);
+  if(totalEvents === 0){
+    throw new Error(`Parsed ${rows.length - 1} data row(s) but produced 0 usable events (all skipped). Header found: [${header.join(" | ")}]`);
+  }
+
+  return { byDate, totalEvents, daysCount: Object.keys(byDate).length, skipped };
+}
+
+function showDiagnostic(message, isError){
+  let el = document.getElementById("racingDiagnostic");
+  if(!el){
+    el = document.createElement("div");
+    el.id = "racingDiagnostic";
+    el.style.cssText = "max-width:900px;margin:0 auto 20px;padding:12px 16px;border-radius:10px;font-family:monospace;font-size:12.5px;white-space:pre-wrap;";
+    document.querySelector(".page-wrap").insertBefore(el, document.querySelector(".calendar"));
+  }
+  el.style.background = isError ? "#fde8e8" : "#e8f5e9";
+  el.style.border = `1px solid ${isError ? "#e53e3e" : "#38a169"}`;
+  el.style.color = isError ? "#742a2a" : "#22543d";
+  el.textContent = message;
 }
 
 fetch(DATA_URL)
@@ -365,16 +397,23 @@ fetch(DATA_URL)
   .then(async d=>{
     DATA = d;
     try {
-      const racingByDate = await loadRacingByDate();
-      Object.keys(racingByDate).forEach(key => {
+      const result = await loadRacingByDate();
+      Object.keys(result.byDate).forEach(key => {
         if(!DATA[key]) DATA[key] = {};
-        DATA[key]["Racing"] = racingByDate[key];
+        DATA[key]["Racing"] = result.byDate[key];
       });
+      showDiagnostic(
+        `Racing CSV loaded OK: ${result.totalEvents} events across ${result.daysCount} calendar days (${result.skipped} rows skipped as unusable).`,
+        false
+      );
     } catch(err) {
-      console.warn("Couldn't load racing CSV:", err);
+      showDiagnostic(`Racing CSV failed to load: ${err.message}`, true);
     }
     renderCalendar();
     renderPage(selectedDate);
+  })
+  .catch(err => {
+    showDiagnostic(`Couldn't load ${DATA_URL}: ${err.message}`, true);
   });
 
 document.getElementById("prevMonth").onclick=()=>{
