@@ -179,6 +179,17 @@ fetch(DATA_URL)
     tableBody.innerHTML = `<tr><td colspan="3" class="loading">Couldn't load ${DATA_URL}.</td></tr>`;
   });
 
+function winningLeague(lineScore){
+  if(!lineScore || !lineScore.length) return null;
+  const nl = lineScore.find(r => r.team === "NL");
+  const al = lineScore.find(r => r.team === "AL");
+  if(!nl || !al) return null;
+  const nlR = toNum(nl.R), alR = toNum(al.R);
+  if(nlR > alR) return "National League";
+  if(alR > nlR) return "American League";
+  return null; // tie - e.g. the real 2002 All-Star Game - no one credited
+}
+
 function computeLeaders(data){
   const map = {};
   function ensure(id, name){
@@ -188,6 +199,8 @@ function computeLeaders(data){
 
   Object.values(data).forEach(yearObj => {
     (yearObj.games || []).forEach(game => {
+      const winner = winningLeague(game.line_score);
+
       ["National League", "American League"].forEach(league => {
         ((game.batting || {})[league] || []).forEach(row => {
           if (!row.player_id || row.player === "Totals") return;
@@ -196,13 +209,14 @@ function computeLeaders(data){
           p.h += toNum(row.H);
           p.r += toNum(row.R);
           p.rbi += toNum(row.RBI);
+          if (league === winner) p.wins += 1;
         });
         ((game.pitching || {})[league] || []).forEach(row => {
           if (!row.player_id || row.player === "Totals") return;
           const p = ensure(row.player_id, shortName(row.full_name) || row.player);
           p.games += 1;
           p.so_pitching += toNum(row.SO);
-          if (row.decision && row.decision.startsWith("W")) p.wins += 1;
+          if (league === winner) p.wins += 1;
         });
       });
     });
