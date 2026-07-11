@@ -187,6 +187,7 @@ h1{
 
 <script>
 const DATA_URL = "data/on_this_day.json";
+const RACING_CSV_URL = "data/australia-stakes.csv";
 
 let DATA = {};
 let currentDate = new Date();
@@ -229,19 +230,16 @@ function renderSportTabs(date){
 // Only shows fields that are actually present, so non-racing sports are
 // unaffected.
 function renderConnections(e){
-  const jockey = e.jockey ?? e.Jockey;
-  const trainer = e.trainer ?? e.Trainer;
   const parts = [];
-  if(jockey) parts.push(`<strong>Jockey:</strong> ${esc(jockey)}`);
-  if(trainer) parts.push(`<strong>Trainer:</strong> ${esc(trainer)}`);
+  if(e.jockey) parts.push(`<strong>Jockey:</strong> ${esc(e.jockey)}`);
+  if(e.trainer) parts.push(`<strong>Trainer:</strong> ${esc(e.trainer)}`);
   if(!parts.length) return "";
   return `<div class="connections">${parts.join(" &middot; ")}</div>`;
 }
 
 function renderGradeBadge(e){
-  const grade = e.grade ?? e.Grade ?? e["Race Grade"];
-  if(!grade) return "";
-  return ` <span class="grade-badge">${esc(grade)}</span>`;
+  if(!e.grade) return "";
+  return ` <span class="grade-badge">${esc(e.grade)}</span>`;
 }
 
 function renderPage(date){
@@ -295,10 +293,86 @@ function renderCalendar(){
   }
 }
 
+// ── Racing data, built live from the CSV (no separate JSON needed) ──
+
+function parseCSV(text){
+  // Handles quoted fields with embedded commas, e.g. "Rothmans 100,000"
+  const rows = [];
+  let row = [], field = "", inQuotes = false;
+  for(let i=0; i<text.length; i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){
+        if(text[i+1] === '"'){ field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else {
+      if(c === '"') inQuotes = true;
+      else if(c === ",") { row.push(field); field = ""; }
+      else if(c === "\r") { /* skip */ }
+      else if(c === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
+      else field += c;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r => r.length > 1 || r[0] !== "");
+}
+
+async function loadRacingByDate(){
+  const res = await fetch(RACING_CSV_URL);
+  if(!res.ok) throw new Error(`${res.status}`);
+  const text = await res.text();
+  const rows = parseCSV(text);
+  if(!rows.length) return {};
+
+  const header = rows[0].map(h => h.trim());
+  const idx = {};
+  header.forEach((h, i) => { idx[h] = i; });
+
+  const byDate = {};
+  for(let i = 1; i < rows.length; i++){
+    const r = rows[i];
+    const dateStr = (r[idx["Date"]] || "").trim();
+    const race = (r[idx["Race"]] || "").trim();
+    const track = (r[idx["Track"]] || "").trim();
+    const winner = (r[idx["Winner"]] || "").trim();
+    const grade = (r[idx["Race Grade"]] || "").trim();
+    const jockey = (r[idx["Jockey"]] || "").trim();
+    const trainer = (r[idx["Trainer"]] || "").trim();
+
+    if(!dateStr || !race || !winner) continue;
+    const parts = dateStr.split("/");
+    if(parts.length !== 3) continue;
+    const day = parseInt(parts[0], 10), month = parseInt(parts[1], 10), year = parseInt(parts[2], 10);
+    if(!day || !month || !year) continue;
+
+    const key = String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+    const text2 = `${winner} wins the ${race}` + (track ? ` at ${track}.` : ".");
+    const event = { year, text: text2 };
+    if(jockey) event.jockey = jockey;
+    if(trainer) event.trainer = trainer;
+    if(grade) event.grade = grade;
+
+    (byDate[key] = byDate[key] || []).push(event);
+  }
+
+  Object.values(byDate).forEach(arr => arr.sort((a, b) => a.year - b.year));
+  return byDate;
+}
+
 fetch(DATA_URL)
   .then(r=>r.json())
-  .then(d=>{
-    DATA=d;
+  .then(async d=>{
+    DATA = d;
+    try {
+      const racingByDate = await loadRacingByDate();
+      Object.keys(racingByDate).forEach(key => {
+        if(!DATA[key]) DATA[key] = {};
+        DATA[key]["Racing"] = racingByDate[key];
+      });
+    } catch(err) {
+      console.warn("Couldn't load racing CSV:", err);
+    }
     renderCalendar();
     renderPage(selectedDate);
   });
