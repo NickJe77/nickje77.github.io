@@ -242,7 +242,7 @@ tbody tr.is-winner td{
 
   <table>
     <thead>
-      <tr>
+      <tr id="tableHeadRow">
         <th>Round</th>
         <th>Player</th>
         <th>Team</th>
@@ -329,29 +329,83 @@ Promise.all([
 
   yearSelect.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join("");
   yearSelect.value = years[0];
-  yearSelect.onchange = () => render(yearSelect.value);
 
   const clubs = [...new Set(nominees.map(n => n.Team).filter(Boolean))].sort();
   clubSelect.innerHTML = `<option value="">All Clubs</option>` +
     clubs.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
-  clubSelect.onchange = () => render(yearSelect.value);
 
-  render(years[0]);
+  clubSelect.onchange = () => {
+    yearSelect.disabled = !!clubSelect.value;
+    render();
+  };
+  yearSelect.onchange = () => render();
+
+  render();
 })
 .catch(err => {
-  nomineesTable.innerHTML = `<tr><td colspan="3" class="loading">Couldn't load Rising Star data.</td></tr>`;
+  nomineesTable.innerHTML = `<tr><td colspan="4" class="loading">Couldn't load Rising Star data.</td></tr>`;
   console.error(err);
 });
 
-function render(year){
-  const winner = winnersByYear[year];
+function render(){
   const club = clubSelect.value;
-  let nominees = (nomineesByYear[year] || []).slice()
-    .sort((a,b) => Number(b.Round) - Number(a.Round));
 
   if(club){
-    nominees = nominees.filter(n => n.Team === club);
+    renderClubMode(club);
+  } else {
+    renderYearMode(yearSelect.value);
   }
+}
+
+function renderClubMode(club){
+  winnerCard.innerHTML = "";
+
+  const rows = [];
+  years.forEach(y => {
+    (nomineesByYear[y] || []).forEach(n => {
+      if(n.Team === club) rows.push(n);
+    });
+  });
+  rows.sort((a,b) => (Number(b.Year) - Number(a.Year)) || (Number(b.Round) - Number(a.Round)));
+
+  const winCount = rows.filter(n => {
+    const w = winnersByYear[n.Year];
+    return w && w.Player === n.Player;
+  }).length;
+
+  winnerCard.innerHTML = `
+    <div class="winner-card empty">
+      ${esc(club)}: ${rows.length} nomination${rows.length !== 1 ? "s" : ""}, ${winCount} Rising Star win${winCount !== 1 ? "s" : ""}
+    </div>`;
+
+  document.getElementById("tableHeadRow").innerHTML = `
+    <th>Year</th><th>Round</th><th>Player</th><th>Team</th>`;
+
+  if(!rows.length){
+    nomineesTable.innerHTML = `<tr><td colspan="4" class="loading">No nominees found for ${esc(club)}.</td></tr>`;
+    return;
+  }
+
+  nomineesTable.innerHTML = rows.map(n => {
+    const w = winnersByYear[n.Year];
+    const isWinner = w && w.Player === n.Player;
+    return `
+      <tr class="${isWinner ? "is-winner" : ""}">
+        <td>${esc(n.Year)}</td>
+        <td>${esc(n.Round)}</td>
+        <td>${esc(n.Player)}${isWinner ? '<span class="badge">Winner</span>' : ""}</td>
+        <td>${esc(n.Team)}</td>
+      </tr>`;
+  }).join("");
+}
+
+function renderYearMode(year){
+  const winner = winnersByYear[year];
+  const nominees = (nomineesByYear[year] || []).slice()
+    .sort((a,b) => Number(b.Round) - Number(a.Round));
+
+  document.getElementById("tableHeadRow").innerHTML = `
+    <th>Round</th><th>Player</th><th>Team</th>`;
 
   if(winner){
     winnerCard.innerHTML = `
