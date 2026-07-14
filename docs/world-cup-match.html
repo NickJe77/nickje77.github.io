@@ -152,6 +152,11 @@ function flagEmoji(code){
 }
 function getFlag(name){ return flagEmoji(countryCodes[name]||""); }
 
+// Parses a raw "Final Score" string into a normalized shape.
+// Handles three formats seen in the data:
+//   "4-1"            plain regulation score
+//   "3-3 aet"        score after extra time (no shootout digits stored)
+//   "(3) 1-1 (4)"     score with penalty shootout digits included
 function parseScore(score){
  const raw = (score||"").trim();
  if(!raw) return null;
@@ -160,19 +165,29 @@ function parseScore(score){
  if(shootoutMatch){
   return {
    reg: [parseInt(shootoutMatch[2],10), parseInt(shootoutMatch[3],10)],
-   shootout: [parseInt(shootoutMatch[1],10), parseInt(shootoutMatch[4],10)]
+   shootout: [parseInt(shootoutMatch[1],10), parseInt(shootoutMatch[4],10)],
+   aet: true
+  };
+ }
+
+ const aetMatch = raw.match(/^(\d+)\s*[-–]\s*(\d+)\s*aet$/i);
+ if(aetMatch){
+  return {
+   reg: [parseInt(aetMatch[1],10), parseInt(aetMatch[2],10)],
+   shootout: null,
+   aet: true
   };
  }
 
  const plainMatch = raw.match(/(\d+)\s*[-–]\s*(\d+)/);
  if(plainMatch){
-  return { reg: [parseInt(plainMatch[1],10), parseInt(plainMatch[2],10)], shootout: null };
+  return { reg: [parseInt(plainMatch[1],10), parseInt(plainMatch[2],10)], shootout: null, aet: false };
  }
 
  return null;
 }
 
-// Parses a raw scorer string like "Mohamed Hany (OG) (AUS)" into its
+// Parses a raw scorer string like "Manuel Rosas (MEX) (OG)" into its
 // parts, separating the own-goal marker from the player's name so the
 // Goals section can render it cleanly instead of dumping the raw string
 // with "(OG)" stuck in the middle of the name.
@@ -218,22 +233,35 @@ function render(data){
  const team1 =anchor.Team;
  const team2 =anchor.Team__1;
  const score =anchor["Final Score"]||"";
- const winner=anchor["Winnning Team"]||"";
+ const winnerField=anchor["Winnning Team"]||"";
  const round =anchor.Round||"";
 
  document.title=`${team1} vs ${team2} ${yearQ} | The Sporting Almanac`;
 
  const parsed = parseScore(score);
 
- let resolvedWinner = winner;
+ // "Winnning Team" can be: a real team name, the literal string "Draw"
+ // (used for group-stage ties), or empty (winner must be derived, which
+ // happens for shootout matches where the JSON leaves this field blank).
+ const isExplicitDraw = winnerField.trim().toLowerCase() === "draw";
+ let resolvedWinner = isExplicitDraw ? "" : winnerField;
  let penaltyNote = "";
+
  if(parsed && parsed.shootout){
+  // Modern format: exact shootout digits are present in the data.
   const [p1, p2] = parsed.shootout;
   if(!resolvedWinner){
    if(p1 > p2) resolvedWinner = team1;
    else if(p2 > p1) resolvedWinner = team2;
   }
   penaltyNote = ` — won ${Math.max(p1,p2)}–${Math.min(p1,p2)} on penalties`;
+ } else if(parsed && parsed.aet && !isExplicitDraw && resolvedWinner && parsed.reg[0] === parsed.reg[1]){
+  // Historical "X-X aet" format: the data doesn't store the actual
+  // shootout score, but a level score after extra time plus a named
+  // winner means it was decided on penalties.
+  penaltyNote = " — won on penalties (after extra time)";
+ } else if(parsed && parsed.aet && resolvedWinner){
+  penaltyNote = " (after extra time)";
  }
 
  const team1Lost = resolvedWinner && resolvedWinner !== team1;
@@ -243,7 +271,9 @@ function render(data){
    ? `<span class="sc ${team1Lost?'lose':''}">${parsed.reg[0]}</span><span class="dash">–</span><span class="sc ${team2Lost?'lose':''}">${parsed.reg[1]}</span>`
    : `<span class="raw">${score || 'vs'}</span>`;
 
- const winnerLine = resolvedWinner
+ const winnerLine = isExplicitDraw
+   ? "Draw"
+   : resolvedWinner
    ? `Winner: ${resolvedWinner} ${getFlag(resolvedWinner)}${penaltyNote}`
    : (parsed && parsed.reg[0] === parsed.reg[1]) ? "Draw"
    : score ? "Draw" : "Result pending";
