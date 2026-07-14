@@ -94,6 +94,7 @@ body{font-family:var(--body);margin:0;background:var(--bg);color:var(--ink);-web
 }
 .match h3{margin:0 0 6px;font-family:var(--display);font-weight:600;font-size:16px;color:var(--ink);}
 .small{font-size:12.5px;color:var(--muted);font-weight:600;}
+.og-tag{color:var(--league);font-weight:700;font-size:12px;letter-spacing:.03em;text-transform:uppercase;margin-left:6px;}
 
 .team-link{color:var(--league);text-decoration:none;font-weight:700;}
 .team-link:hover{color:var(--accent);text-decoration:underline;}
@@ -151,18 +152,10 @@ function flagEmoji(code){
 }
 function getFlag(name){ return flagEmoji(countryCodes[name]||""); }
 
-// Handles two raw "Final Score" formats seen in the data:
-//   "2-1"              -> normal result, no shootout
-//   "(2) 1-1 (4)"       -> regulation score 1-1 (a draw), decided (2) v (4) on penalties
-// The old version just grabbed "the first two digit groups anywhere in the
-// string", which meant a shootout match like the one above showed "2-1" —
-// the (2) from the shootout and the "1" from "1-1" — instead of the real
-// 1-1 scoreline, and never surfaced the actual penalty result at all.
 function parseScore(score){
  const raw = (score||"").trim();
  if(!raw) return null;
 
- // Shootout format: optional "(P1)" then "A-B" then optional "(P2)"
  const shootoutMatch = raw.match(/^\((\d+)\)\s*(\d+)\s*[-–]\s*(\d+)\s*\((\d+)\)$/);
  if(shootoutMatch){
   return {
@@ -171,7 +164,6 @@ function parseScore(score){
   };
  }
 
- // Plain "A-B" (ignoring any trailing note like " aet")
  const plainMatch = raw.match(/(\d+)\s*[-–]\s*(\d+)/);
  if(plainMatch){
   return { reg: [parseInt(plainMatch[1],10), parseInt(plainMatch[2],10)], shootout: null };
@@ -180,12 +172,26 @@ function parseScore(score){
  return null;
 }
 
+// Parses a raw scorer string like "Mohamed Hany (OG) (AUS)" into its
+// parts, separating the own-goal marker from the player's name so the
+// Goals section can render it cleanly instead of dumping the raw string
+// with "(OG)" stuck in the middle of the name.
+function parseScorerDisplay(str){
+ if(!str) return {name:"",isOwnGoal:false};
+ let s=String(str).trim();
+ let isOwnGoal=false;
+ if(/\(\s*OG\s*\)/i.test(s)){
+  isOwnGoal=true;
+  s=s.replace(/\s*\(\s*OG\s*\)\s*/i, " ").replace(/\s+/g," ").trim();
+ }
+ return {name:s, isOwnGoal};
+}
+
 fetch("data/world-cup.json",{cache:"no-store"})
 .then(r=>r.json())
 .then(data=>render(data));
 
 function render(data){
- // Find the anchor row for this match
  const anchor=data.find(r=>
   r.Team===team1Q && r.Team__1===team2Q &&
   String(r.Year)===yearQ && r.Round===roundQ
@@ -202,7 +208,6 @@ function render(data){
   return;
  }
 
- // Collect all rows for this match (anchor + following blank-team rows)
  const anchorIdx=data.indexOf(anchor);
  const rows=[anchor];
  for(let i=anchorIdx+1;i<data.length;i++){
@@ -218,13 +223,8 @@ function render(data){
 
  document.title=`${team1} vs ${team2} ${yearQ} | The Sporting Almanac`;
 
- // ── Scorebug header ──────────────────────────────────────────────────────
  const parsed = parseScore(score);
 
- // The data's "Winnning Team" field is often blank for shootout matches
- // (regulation time was a draw), so if we can see a penalty score and no
- // winner was given, work out the actual winner from who scored more
- // penalties instead of wrongly reporting the match as a draw.
  let resolvedWinner = winner;
  let penaltyNote = "";
  if(parsed && parsed.shootout){
@@ -270,9 +270,10 @@ function render(data){
  if(goalRows.length){
   out.innerHTML+=`<div class="section-title">Goals</div>`;
   goalRows.forEach(r=>{
+   const parsedScorer=parseScorerDisplay(r.Scorers);
    out.innerHTML+=`
     <div class="match">
-     <h3>${r.Scorers}</h3>
+     <h3>${parsedScorer.name}${parsedScorer.isOwnGoal ? '<span class="og-tag">OG</span>' : ''}</h3>
      <div class="small">Minute: ${r["Time scored"]||"–"} &nbsp;·&nbsp; Score: ${r["Progess Score"]||"–"}</div>
     </div>`;
   });
