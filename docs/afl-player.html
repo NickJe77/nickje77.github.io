@@ -238,8 +238,15 @@ const DISAMBIG_GROUPS = {
   "Will Hayes": [["Western Bulldogs","Carlton"],["Collingwood"]],
   "Josh Kennedy": [["West Coast","Carlton"],["Sydney","Hawthorn"]],
 };
+// Confirmed same-player aliases: data-source variant name -> canonical name.
+// Everything on the left gets folded into the name on the right wherever
+// it appears (roster lookups, teammates, search, stat totals, etc).
+// Add new confirmed pairs here as they're found — see findPotentialDuplicateNames()
+// below for a tool that surfaces candidates for review instead of hunting by eye.
 const PLAYER_NAME_ALIASES = {
   "Luke D-Uniacke": "Luke Davies-Uniacke",
+  "Cooper D-Tytler": "Cooper Duff-Tytler",
+  "Bailey Williams": "Bailey J. Williams",
 };
 const teamColours = {
   "Adelaide":"#002b5c,#e21937","Brisbane":"#7c0a02,#fdb827","Carlton":"#031a29,#ffffff",
@@ -395,6 +402,13 @@ async function loadAllYears() {
   loadingMsg.textContent = "";
   buildDatalist();
   if (playerName) findAndShowPlayer();
+  // Dev tool: append ?finddupes=1 to the URL to scan the loaded data for
+  // players who are probably the same person under two different name
+  // spellings (missed by PLAYER_NAME_ALIASES so far). Results print to the
+  // console as a table for manual review — nothing here changes live data,
+  // it's purely a discovery aid so new aliases can be found in bulk instead
+  // of one screenshot at a time.
+  if (params.get('finddupes') === '1') findPotentialDuplicateNames();
 }
 function buildDatalist() {
   const nameToTeams = {};
@@ -700,6 +714,95 @@ playerSearchEl.onchange = e => {
     location.href = 'afl-player.html?name='+encodeURIComponent(val);
   }
 };
+
+// ---------------------------------------------------------------------
+// Duplicate-name discovery tool (dev aid, not used on normal page loads)
+// ---------------------------------------------------------------------
+// Rationale: individual name-collision bugs (Cooper D-Tytler / Cooper
+// Duff-Tytler, Bailey Williams / Bailey J. Williams) keep surfacing one at
+// a time because there's no way to see the whole list at once. This scans
+// every name that has ever appeared in the loaded data and flags pairs
+// that are probably the same person:
+//   - they share at least one club, AND
+//   - their seasons overlap or are back-to-back (so it's plausible to be
+//     one uninterrupted career, not two different eras), AND
+//   - the names look alike: either every token (first/last/etc, split on
+//     spaces and hyphens) of the shorter name is a prefix of the matching
+//     token in the longer name (catches truncation like "D-Tytler" vs
+//     "Duff-Tytler"), or the full names are within edit-distance 2 of each
+//     other (catches near-misses like "Bailey Williams" vs "Bailey J.
+//     Williams" once punctuation/spacing is stripped).
+// This does NOT auto-merge anything — it only prints candidates to the
+// console for a human to confirm before adding them to PLAYER_NAME_ALIASES.
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i-1] === b[j-1]
+        ? dp[i-1][j-1]
+        : 1 + Math.min(dp[i-1][j-1], dp[i-1][j], dp[i][j-1]);
+    }
+  }
+  return dp[m][n];
+}
+function nameTokens(s) {
+  return s.replace(/[.,]/g, '').split(/[\s-]+/).filter(Boolean);
+}
+function tokensLookLikeTruncation(a, b) {
+  const ta = nameTokens(a), tb = nameTokens(b);
+  if (ta.length !== tb.length) return false;
+  let anyDiffers = false;
+  for (let i = 0; i < ta.length; i++) {
+    const x = ta[i], y = tb[i];
+    if (x.toLowerCase() === y.toLowerCase()) continue;
+    const shorter = x.length < y.length ? x : y;
+    const longer  = x.length < y.length ? y : x;
+    if (shorter.length < 1 || !longer.toLowerCase().startsWith(shorter.toLowerCase())) return false;
+    anyDiffers = true;
+  }
+  return anyDiffers;
+}
+function findPotentialDuplicateNames() {
+  const byName = {};
+  allGames.forEach(g => {
+    if (!g.player) return;
+    if (!byName[g.player]) byName[g.player] = { teams: new Set(), seasons: [] };
+    byName[g.player].teams.add(g.played_for);
+    byName[g.player].seasons.push(+g.season);
+  });
+  const names = Object.keys(byName);
+  const candidates = [];
+  for (let i = 0; i < names.length; i++) {
+    for (let j = i + 1; j < names.length; j++) {
+      const a = names[i], b = names[j];
+      const infoA = byName[a], infoB = byName[b];
+      const sharesTeam = [...infoA.teams].some(t => infoB.teams.has(t));
+      if (!sharesTeam) continue;
+      const minA = Math.min(...infoA.seasons), maxA = Math.max(...infoA.seasons);
+      const minB = Math.min(...infoB.seasons), maxB = Math.max(...infoB.seasons);
+      const seasonsCompatible = minA <= maxB + 1 && minB <= maxA + 1;
+      if (!seasonsCompatible) continue;
+      const truncation = tokensLookLikeTruncation(a, b);
+      const dist = levenshtein(a.toLowerCase().replace(/[.,]/g,''), b.toLowerCase().replace(/[.,]/g,''));
+      if (truncation || (dist > 0 && dist <= 2)) {
+        candidates.push({
+          nameA: a, nameB: b,
+          teamsA: [...infoA.teams].join('/'), teamsB: [...infoB.teams].join('/'),
+          gamesA: infoA.seasons.length, gamesB: infoB.seasons.length,
+          reason: truncation ? 'prefix/truncation' : 'edit-distance ' + dist
+        });
+      }
+    }
+  }
+  candidates.sort((x, y) => (x.reason.startsWith('prefix') === y.reason.startsWith('prefix') ? 0 : x.reason.startsWith('prefix') ? -1 : 1));
+  console.log('Scanned ' + names.length + ' distinct player names.');
+  console.log(candidates.length + ' potential duplicate pair(s) found — review before adding to PLAYER_NAME_ALIASES:');
+  console.table(candidates);
+  return candidates;
+}
 loadAllYears();
 </script>
 </body>
