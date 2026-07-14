@@ -100,6 +100,12 @@ body{font-family:var(--body);margin:0;background:var(--bg);color:var(--ink);-web
 let team=new URLSearchParams(location.search).get("team");
 
 /* ---------- NORMALISE ---------- */
+// Beyond the West Germany/Germany merge, the source data contains plain
+// spelling typos for a handful of teams (confirmed by checking that both
+// spellings only ever appear as row-level entries for the same country,
+// never as opponents of each other): "Netherands", "Paraquay",
+// "El Slavador" and "Yugolsavia". Left unfixed, a team's appearances and
+// goals were being split across two names and silently undercounted.
 function normalizeTeam(name){
  if(!name) return "";
  let n=String(name).replace(/\u00A0/g," ").trim();
@@ -109,6 +115,11 @@ function normalizeTeam(name){
  if(k==="frg") return "Germany";
  if(k.includes("federal republic")) return "Germany";
  if(k.includes("fr germany")) return "Germany";
+
+ if(k==="netherands") return "Netherlands";
+ if(k==="paraquay") return "Paraguay";
+ if(k==="el slavador") return "El Salvador";
+ if(k==="yugolsavia") return "Yugoslavia";
 
  return n;
 }
@@ -121,19 +132,40 @@ if(!team){
 }
 
 /* ---------- COUNTRY CODE MAP ---------- */
+// Rebuilt against the actual tags found in the Yellow/Red Cards column
+// (verified by cross-checking every distinct tag in the data). The old
+// map only covered ~60 modern FIFA codes and several didn't even match
+// what the data uses (e.g. Nigeria is tagged "NGR" here, not "NGA";
+// Trinidad and Tobago is "TRI", not "TTO"; USA appears as bare "US" in
+// some rows). Historical/defunct teams (Czechoslovakia, Soviet Union,
+// East Germany, Yugoslavia, Serbia & Montenegro, apartheid-era South
+// Africa's "RRSA" tag) and a few lowercase/typo tags ("rus") were
+// missing entirely, which meant their players' cards were silently
+// dropped from every leaderboard. Lookups are done case-insensitively.
 const codeMap={
-BRA:"Brazil",ITA:"Italy",ARG:"Argentina",FRA:"France",ENG:"England",ESP:"Spain",
-GER:"Germany",NED:"Netherlands",URU:"Uruguay",POR:"Portugal",BEL:"Belgium",
-CRO:"Croatia",MEX:"Mexico",USA:"USA",JPN:"Japan",KOR:"South Korea",
-AUS:"Australia",AUT:"Austria",SUI:"Switzerland",SWE:"Sweden",NOR:"Norway",
-DEN:"Denmark",POL:"Poland",CZE:"Czech Republic",RUS:"Russia",UKR:"Ukraine",
-TUR:"Turkey",GRE:"Greece",SCO:"Scotland",WAL:"Wales",IRL:"Ireland",
-MAR:"Morocco",CMR:"Cameroon",NGA:"Nigeria",GHA:"Ghana",SEN:"Senegal",
-TUN:"Tunisia",ALG:"Algeria",IRN:"Iran",IRQ:"Iraq",KSA:"Saudi Arabia",
-QAT:"Qatar",CHN:"China",RSA:"South Africa",NZL:"New Zealand",CAN:"Canada",
-CRC:"Costa Rica",HON:"Honduras",PAN:"Panama",JAM:"Jamaica",TTO:"Trinidad and Tobago",
-COL:"Colombia",CHI:"Chile",PER:"Peru",PAR:"Paraguay",ECU:"Ecuador",BOL:"Bolivia",VEN:"Venezuela"
+ALG:"Algeria",DZA:"Algeria",ANG:"Angola",ARG:"Argentina",AUS:"Australia",AUT:"Austria",
+BEL:"Belgium",BIH:"Bosnia & Herzegovina",BOS:"Bosnia & Herzegovina",BOL:"Bolivia",
+BRA:"Brazil",BUL:"Bulgaria",CAB:"Cabo Verde",CAN:"Canada",CHI:"Chile",CHN:"China PR",
+CIV:"Ivory Coast",CMR:"Cameroon",COD:"Congo DR",CON:"Congo DR",COL:"Colombia",
+CR:"Croatia",CRO:"Croatia",CRC:"Costa Rica",CUW:"Curaçao",CZE:"Czech Republic",
+DEN:"Denmark",ECU:"Ecuador",EGY:"Egypt",ENG:"England",ESP:"Spain",FRA:"France",
+GDR:"East Germany",GER:"Germany",GHA:"Ghana",HAI:"Haiti",HON:"Honduras",HUN:"Hungary",
+IRA:"Iran",IRN:"Iran",IRL:"Republic Of Ireland",IRQ:"Iraq",IRS:"Iceland",ISL:"Iceland",
+ISR:"Israel",ITA:"Italy",JAM:"Jamaica",JOR:"Jordan",JPN:"Japan",KOR:"South Korea",
+KSA:"Saudi Arabia",KUW:"Kuwait",MAR:"Morocco",MEX:"Mexico",NED:"Netherlands",
+NGR:"Nigeria",NIR:"Northern Ireland",NOR:"Norway",NZL:"New Zealand",PAN:"Panama",
+PAR:"Paraguay",PER:"Peru",POL:"Poland",POR:"Portugal",PRK:"North Korea",QAT:"Qatar",
+ROM:"Romania",RRSA:"South Africa",RSA:"South Africa",RUS:"Russia",SCG:"Serbia and Montenegro",
+SCO:"Scotland",SEN:"Senegal",SLV:"El Salvador",SRB:"Serbia",SUI:"Switzerland",
+SVK:"Slovakia",SVN:"Slovenia",SWE:"Sweden",TCH:"Czechoslovakia",TOG:"Togo",
+TRI:"Trinidad and Tobago",TUN:"Tunisia",TUR:"Turkey",UAE:"United Arab Emirates",
+UKR:"Ukraine",URS:"Soviet Union",URU:"Uruguay",US:"United States",USA:"United States",
+UZB:"Uzbekistan",VEN:"Venezuela",WAL:"Wales",YUG:"Yugoslavia",ZAI:"Zaire"
 };
+function lookupCode(tag){
+ if(!tag) return "";
+ return codeMap[String(tag).toUpperCase()]||"";
+}
 
 /* ---------- HELPERS ---------- */
 
@@ -180,6 +212,16 @@ function resolveWinner(m){
  return m.winner;
 }
 
+// "Winnning Team" is either a real team name, or the literal string
+// "Draw" (used for group-stage ties) — that literal value was being fed
+// straight into resolveWinner() and displayed as "Winner: Draw" as if
+// "Draw" were a team. Same root cause as the match-detail page.
+function displayResult(m){
+ if(m.winner && m.winner.trim().toLowerCase()==="draw") return "Draw";
+ const w=resolveWinner(m);
+ return w || "Draw";
+}
+
 function parseProgress(p){
  if(!p) return null;
  const s=String(p).trim();
@@ -191,28 +233,34 @@ function parseProgress(p){
  return [x,y];
 }
 
-// Parses a scorer/card string like "Mohamed Hany (OG) (AUS)" into its
-// parts. FIX: strings can carry TWO trailing parenthetical groups - an
-// own-goal marker "(OG)" AND the country tag "(AUS)" - not just one.
-// The old regex only captured the LAST "(...)" as the tag, which left
-// "(OG)" stuck inside the name ("Mohamed Hany (OG)") instead of being
-// recognised as a separate own-goal flag. Now we strip an "(OG)" marker
-// first (case-insensitively, wherever it appears) before extracting the
-// trailing country tag, and expose it as isOwnGoal on the result.
+// Parses a scorer/card string like "Manuel Rosas (MEX) (OG)" or
+// "Gianluca Pagliuca (ITA) (GK)" into its parts. Strings can carry a
+// trailing marker in ADDITION to the country tag: "(OG)" for own goals,
+// "(GK)" for goalkeepers booked/sent off. The old regex only captured
+// the LAST "(...)" group, so for "(ITA) (GK)" it grabbed "GK" as the
+// tag and lost the actual country. Both markers are stripped up front
+// (case-insensitively, wherever they appear) before extracting the
+// trailing country tag.
 function parseEvent(str){
  if(!str) return null;
  let s=str.trim();
  if(!s) return null;
 
  let isOwnGoal=false;
+ let isGoalkeeper=false;
+
  if(/\(\s*OG\s*\)/i.test(s)){
   isOwnGoal=true;
   s=s.replace(/\s*\(\s*OG\s*\)\s*/i, " ").replace(/\s+/g," ").trim();
  }
+ if(/\(\s*GK\s*\)/i.test(s)){
+  isGoalkeeper=true;
+  s=s.replace(/\s*\(\s*GK\s*\)\s*/i, " ").replace(/\s+/g," ").trim();
+ }
 
  const m=s.match(/^(.*?)\s*\(([^)]+)\)$/);
- if(m) return {name:m[1].trim(),tag:m[2].trim(),isOwnGoal};
- return {name:s,tag:null,isOwnGoal};
+ if(m) return {name:m[1].trim(),tag:m[2].trim(),isOwnGoal,isGoalkeeper};
+ return {name:s,tag:null,isOwnGoal,isGoalkeeper};
 }
 
 function whoScored(prev,curr){
@@ -308,7 +356,7 @@ function render(team,data){
     if(e.yellow){
      e.yellow.split(";").forEach(entry=>{
       const p=parseEvent(entry.trim());
-      const country=codeMap[p&&p.tag]||"";
+      const country=lookupCode(p&&p.tag);
       if(p&&p.name&&country===team){
        y[p.name]=(y[p.name]||0)+1;
       }
@@ -318,7 +366,7 @@ function render(team,data){
     if(e.red){
      e.red.split(";").forEach(entry=>{
       const p=parseEvent(entry.trim());
-      const country=codeMap[p&&p.tag]||"";
+      const country=lookupCode(p&&p.tag);
       if(p&&p.name&&country===team){
        rr[p.name]=(rr[p.name]||0)+1;
       }
@@ -356,12 +404,11 @@ function render(team,data){
 
   html+=`<div class="year-section"><h2>${year}</h2>`;
   ym.forEach(m=>{
-   const mWinner = resolveWinner(m);
    html+=`
     <a class="match" style="display:block;text-decoration:none;color:inherit;" href="world-cup-match.html?year=${encodeURIComponent(m.year)}&round=${encodeURIComponent(m.round)}&team1=${encodeURIComponent(m.team1)}&team2=${encodeURIComponent(m.team2)}">
      <h3>${m.team1} ${m.score} ${m.team2}</h3>
      <div class="small">${m.round}</div>
-     <div class="small">Winner: ${mWinner || "Draw"}</div>
+     <div class="small">${displayResult(m)==="Draw" ? "Draw" : `Winner: ${displayResult(m)}`}</div>
     </a>`;
   });
   html+=`</div>`;
