@@ -108,9 +108,18 @@ def scrape_stage(year, stage_number, stage_url, total_distance):
         youth = stage.youth("rider_name")
         departure = stage.departure()
         arrival = stage.arrival()
-    except ExpectedParsingError:
-        # Stage hasn't happened / results not posted yet — not an error,
-        # just means there's nothing new to add today.
+    except ExpectedParsingError as e:
+        # Could genuinely mean "stage hasn't happened yet" — but could also
+        # mean the page structure didn't match what we expected for a
+        # completed stage. Log which one so it's not a silent guess.
+        print(f"  Stage {stage_number} ({stage_url}): no results yet, or "
+              f"parse failed — {type(e).__name__}: {e}")
+        return None
+    except Exception as e:
+        # Anything else (network error, unexpected HTML, etc) — surface it
+        # loudly rather than treating it the same as "not finished yet".
+        print(f"  Stage {stage_number} ({stage_url}): UNEXPECTED ERROR "
+              f"— {type(e).__name__}: {e}")
         return None
 
     winner_row = next((r for r in results if r.get("rank") == 1), None)
@@ -177,6 +186,10 @@ def main():
 
     race = Race(f"race/tour-de-france/{args.year}/overview")
     stage_rows = race.stages()  # ordered list of {date, stage_name, stage_url, ...}
+    print(f"Race.stages() returned {len(stage_rows)} stage(s) for {args.year}.")
+    for i, row in enumerate(stage_rows, start=1):
+        print(f"  {i}. {row.get('date')} — {row.get('stage_name')} "
+              f"({row.get('stage_url')})")
 
     added = []
     for i, row in enumerate(stage_rows, start=1):
