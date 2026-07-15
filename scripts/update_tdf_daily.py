@@ -324,6 +324,18 @@ def main():
                 "White jersey": None,
                 "Leader": None,
             }
+        elif not entry.get("Winner of stage"):
+            # The stage page itself parsed fine, but no individual winner
+            # was found — most likely a TTT (team time trial), where the
+            # results table is keyed by team, not by rider, so our
+            # rider-focused results() parsing comes up empty. stages_winners()
+            # already has exactly this case covered (it showed the team name
+            # for stage 1's TTT), so use that instead of leaving it null.
+            fallback_winner = winners_table[i - 1].get("rider_name")
+            if fallback_winner:
+                print(f"  Stage {i}: no individual winner found (likely a "
+                      f"TTT) — using stages_winners() value: {fallback_winner}")
+                entry["Winner of stage"] = fallback_winner
         stages.append(entry)
         added.append(entry)
         print(f"Added stage {i}: {entry['Start']} -> {entry['End']}, "
