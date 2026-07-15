@@ -55,6 +55,32 @@ def first_or_none(table, field):
     return table[0].get(field)
 
 
+def get_race(year):
+    """procyclingstats serves a race's page at different URL suffixes
+    depending on whether the race is finished: completed years live at
+    .../overview, but an in-progress or upcoming race (like the current
+    Tour) is served at .../start (or sometimes just the bare year URL)
+    instead. Hitting the wrong one doesn't error — it just silently
+    returns a page with no "Stages" table, which is what was happening
+    here. Try each candidate and use whichever actually has stage data."""
+    candidates = [
+        f"race/tour-de-france/{year}/overview",
+        f"race/tour-de-france/{year}/start",
+        f"race/tour-de-france/{year}",
+    ]
+    for path in candidates:
+        try:
+            race = Race(path)
+            stage_rows = race.stages()
+        except Exception as e:
+            print(f"  Tried {path}: failed — {type(e).__name__}: {e}")
+            continue
+        print(f"  Tried {path}: found {len(stage_rows)} stage(s)")
+        if stage_rows:
+            return race, stage_rows
+    return None, []
+
+
 def get_total_distance(year, cache_path):
     """Total race distance barely matters day-to-day (it's the same for
     every stage row within a year), so this is computed once and cached
@@ -66,8 +92,7 @@ def get_total_distance(year, cache_path):
     if key in cache:
         return cache[key]
 
-    race = Race(f"race/tour-de-france/{year}/overview")
-    stage_rows = race.stages()
+    race, stage_rows = get_race(year)
     total = 0.0
     for row in stage_rows:
         try:
@@ -96,31 +121,42 @@ def save_indented(path, data):
     path.write_text(json.dumps(data, indent=2))
 
 
+def _safe(label, fn, stage_number):
+    """Runs a single field-parsing call in isolation. A failure here means
+    that one table/field wasn't available or didn't parse — it does NOT
+    mean the whole stage is unfinished, so this returns None for just that
+    field instead of aborting the entire stage entry."""
+    try:
+        return fn()
+    except Exception as e:
+        print(f"    Stage {stage_number}: couldn't parse '{label}' — "
+              f"{type(e).__name__}: {e}")
+        return None
+
+
 def scrape_stage(year, stage_number, stage_url, total_distance):
-    """Returns a dict matching the stages.json schema, or None if the
-    stage hasn't actually finished yet (results table not published)."""
+    """Returns a dict matching the stages.json schema, or None only if the
+    stage page itself can't be loaded at all (e.g. genuinely doesn't exist
+    yet). Individual fields that fail to parse are set to None rather than
+    discarding the whole stage."""
     try:
         stage = Stage(stage_url)
-        results = stage.results("rider_name", "team_name", "rank")
-        gc = stage.gc("rider_name")
-        points = stage.points("rider_name")
-        kom = stage.kom("rider_name")
-        youth = stage.youth("rider_name")
-        departure = stage.departure()
-        arrival = stage.arrival()
     except ExpectedParsingError as e:
-        # Could genuinely mean "stage hasn't happened yet" — but could also
-        # mean the page structure didn't match what we expected for a
-        # completed stage. Log which one so it's not a silent guess.
-        print(f"  Stage {stage_number} ({stage_url}): no results yet, or "
-              f"parse failed — {type(e).__name__}: {e}")
+        print(f"  Stage {stage_number} ({stage_url}): page not available — "
+              f"{type(e).__name__}: {e}")
         return None
     except Exception as e:
-        # Anything else (network error, unexpected HTML, etc) — surface it
-        # loudly rather than treating it the same as "not finished yet".
         print(f"  Stage {stage_number} ({stage_url}): UNEXPECTED ERROR "
               f"— {type(e).__name__}: {e}")
         return None
+
+    departure = _safe("departure", stage.departure, stage_number)
+    arrival = _safe("arrival", stage.arrival, stage_number)
+    results = _safe("results", lambda: stage.results("rider_name", "team_name", "rank"), stage_number) or []
+    gc = _safe("gc", lambda: stage.gc("rider_name"), stage_number) or []
+    points = _safe("points", lambda: stage.points("rider_name"), stage_number) or []
+    kom = _safe("kom", lambda: stage.kom("rider_name"), stage_number) or []
+    youth = _safe("youth", lambda: stage.youth("rider_name"), stage_number) or []
 
     winner_row = next((r for r in results if r.get("rank") == 1), None)
     winner = None
@@ -184,22 +220,51 @@ def main():
 
     total_distance = get_total_distance(args.year, cache_path)
 
-    race = Race(f"race/tour-de-france/{args.year}/overview")
-    stage_rows = race.stages()  # ordered list of {date, stage_name, stage_url, ...}
-    print(f"Race.stages() returned {len(stage_rows)} stage(s) for {args.year}.")
+    race, stage_rows = get_race(args.year)
+    if race is None:
+        print(f"Could not find a working race page for {args.year} "
+              f"(tried overview/start/bare-year URLs). Nothing to do.")
+        return
+    print(f"Found {len(stage_rows)} stage(s) on the schedule for {args.year}.")
     for i, row in enumerate(stage_rows, start=1):
         print(f"  {i}. {row.get('date')} — {row.get('stage_name')} "
               f"({row.get('stage_url')})")
 
+    # stages_winners() only lists stages that have actually finished, so its
+    # length is a reliable "how many stages are done" count — much sturdier
+    # than treating a single Stage() parse failure as "nothing left to do",
+    # which could wrongly halt the whole run on one bad page.
+    winners_table = race.stages_winners("stage_name", "rider_name")
+    completed_count = len(winners_table)
+    print(f"stages_winners() reports {completed_count} completed stage(s).")
+
     added = []
-    for i, row in enumerate(stage_rows, start=1):
+    for i, row in enumerate(stage_rows[:completed_count], start=1):
         if (args.year, float(i)) in already_have:
             continue
         entry = scrape_stage(args.year, i, row["stage_url"], total_distance)
         if entry is None:
-            # Stage hasn't finished yet — stop here, remaining stages are
-            # further in the future too.
-            break
+            # stages_winners() said this stage is done, but the detailed
+            # stage page still failed to parse — a real bug worth knowing
+            # about, not silently treated as "not finished yet". Fall back
+            # to at least recording the winner from stages_winners() so we
+            # don't lose the one thing we do know.
+            fallback_winner = winners_table[i - 1].get("rider_name")
+            print(f"  Falling back to stages_winners() winner for stage "
+                  f"{i}: {fallback_winner}")
+            entry = {
+                "Year": args.year,
+                "TotalTDFDistance": total_distance,
+                "Stages": float(i),
+                "Start": None,
+                "End": None,
+                "Winner of stage": fallback_winner,
+                "Yellow Jersey": None,
+                "Green jersey": None,
+                "Polka-dot jersey": None,
+                "White jersey": None,
+                "Leader": None,
+            }
         stages.append(entry)
         added.append(entry)
         print(f"Added stage {i}: {entry['Start']} -> {entry['End']}, "
