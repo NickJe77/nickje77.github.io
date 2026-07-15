@@ -291,15 +291,50 @@ function normalizeName(str) {
   str = str.replace(/\bO([A-Z][a-z])/g, "O'$1");
   return str;
 }
+// Finals rounds show up in the data under multiple spellings for the same
+// round ("Round EF" vs "Elimination Final", etc). Left as-is, those get
+// treated as two different rounds: the same match ends up listed twice in
+// a player's game log (double-counting every stat total) and can throw off
+// the top-8 ladder calc by inventing an extra round. This maps every known
+// variant to one canonical label so they collapse into a single round.
+const ROUND_NAME_CANONICAL = {
+  'ef': 'Elimination Final', 'round ef': 'Elimination Final', 'elimination final': 'Elimination Final',
+  'sf': 'Semi Final',        'round sf': 'Semi Final',        'semi final': 'Semi Final',
+  'qf': 'Qualifying Final',  'round qf': 'Qualifying Final',  'qualifying final': 'Qualifying Final',
+  'pf': 'Preliminary Final', 'round pf': 'Preliminary Final', 'preliminary final': 'Preliminary Final',
+  'gf': 'Grand Final',       'round gf': 'Grand Final',       'grand final': 'Grand Final',
+};
+function normalizeRound(r) {
+  if (!r) return r;
+  const key = r.trim().toLowerCase();
+  return ROUND_NAME_CANONICAL[key] || r.trim();
+}
 function normalizeGame(g) {
   if (g.player)         g.player         = normalizeName(g.player);
   if (g.played_for)     g.played_for     = normalizeDashes(g.played_for);
   if (g.played_against) g.played_against = normalizeDashes(g.played_against);
   if (g.home_team)      g.home_team      = normalizeDashes(g.home_team);
   if (g.away_team)      g.away_team      = normalizeDashes(g.away_team);
+  if (g.round)           g.round          = normalizeRound(g.round);
   if (g.player === 'Gary Ablett' && g.season >= 2000) g.player = 'Gary Ablett Jnr';
   if (g.player && PLAYER_NAME_ALIASES[g.player]) g.player = PLAYER_NAME_ALIASES[g.player];
   return g;
+}
+// After round-name canonicalization, two records that only differed by
+// round spelling ("Round EF" vs "Elimination Final") now have identical
+// season+round+played_for+played_against — a true duplicate of the same
+// match. This collapses those down to one record so stats aren't double
+// counted, keeping the first occurrence seen.
+function dedupeGames(games) {
+  const seen = new Set();
+  const out = [];
+  games.forEach(g => {
+    const key = g.season + '__' + g.round + '__' + g.played_for + '__' + g.played_against;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(g);
+  });
+  return out;
 }
 function gameKey(g) {
   const teams = [g.home_team, g.away_team].sort().join('__');
@@ -446,9 +481,9 @@ function findAndShowPlayer() {
     const matchedGroup = DISAMBIG_GROUPS[playerName].find(group =>
       chosenTeams.every(t => group.includes(t)) || group.some(t => chosenTeams.includes(t))
     ) || validGroups[0];
-    currentGames = allMatchingGames.filter(p => matchedGroup.includes(p.played_for));
+    currentGames = dedupeGames(allMatchingGames.filter(p => matchedGroup.includes(p.played_for)));
   } else {
-    currentGames = allMatchingGames;
+    currentGames = dedupeGames(allMatchingGames);
   }
   if (!currentGames.length) return;
   let latestGame = currentGames.reduce((a, g) => g.season > a.season ? g : a, currentGames[0]);
@@ -696,8 +731,8 @@ function resetSort() {
     const chosenTeams = playerTeam.split("/").map(s=>s.trim());
     const matchedGroup = DISAMBIG_GROUPS[playerName].find(group =>
       chosenTeams.every(t=>group.includes(t))||group.some(t=>chosenTeams.includes(t)));
-    currentGames = matchedGroup ? all.filter(p=>matchedGroup.includes(p.played_for)) : all;
-  } else { currentGames = all; }
+    currentGames = dedupeGames(matchedGroup ? all.filter(p=>matchedGroup.includes(p.played_for)) : all);
+  } else { currentGames = dedupeGames(all); }
   renderTable(currentGames);
 }
 playerSearchEl.onchange = e => {
