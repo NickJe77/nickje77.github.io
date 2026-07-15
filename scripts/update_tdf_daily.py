@@ -251,10 +251,16 @@ def main():
     # the detailed page failed to parse — those have Start=None and only a
     # winner name (or not even that). Treat those as incomplete/retryable
     # rather than "already have", so a successful scrape this time replaces
-    # them instead of being skipped forever.
+    # them instead of being skipped forever. A genuinely finished stage
+    # always has a winner, so also treat a null "Winner of stage" as
+    # incomplete — the last run wrote several entries with real Start/End
+    # but a null winner (because the results table specifically failed to
+    # parse while departure/arrival succeeded), which the Start-only check
+    # wouldn't have caught.
     stages = [
         r for r in stages
-        if not (r["Year"] == args.year and r.get("Start") is None)
+        if not (r["Year"] == args.year and
+                (r.get("Start") is None or r.get("Winner of stage") is None))
     ]
     already_have = {
         (row["Year"], row["Stages"]) for row in stages if row["Year"] == args.year
@@ -272,13 +278,24 @@ def main():
 
     total_distance = get_total_distance(args.year, cache_path, race)
 
-    # stages_winners() only lists stages that have actually finished, so its
-    # length is a reliable "how many stages are done" count — much sturdier
-    # than treating a single Stage() parse failure as "nothing left to do",
-    # which could wrongly halt the whole run on one bad page.
+    # stages_winners() turns out to list a row for every SCHEDULED stage,
+    # not just completed ones — future stages just have a blank winner
+    # cell. So row-count alone isn't a reliable "how many are done" signal
+    # (this is what caused it to wrongly report all 21 as complete on the
+    # last run, including a stage 11 days out). Count only the leading rows
+    # that actually have a winner name.
     winners_table = race.stages_winners("stage_name", "rider_name")
-    completed_count = len(winners_table)
-    print(f"stages_winners() reports {completed_count} completed stage(s).")
+    print(f"stages_winners() returned {len(winners_table)} row(s):")
+    for row in winners_table:
+        print(f"  {row.get('stage_name')}: {row.get('rider_name')!r}")
+
+    completed_count = 0
+    for row in winners_table:
+        if row.get("rider_name"):
+            completed_count += 1
+        else:
+            break
+    print(f"-> Treating {completed_count} stage(s) as actually completed.")
 
     added = []
     for i, row in enumerate(stage_rows[:completed_count], start=1):
