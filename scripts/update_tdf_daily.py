@@ -45,6 +45,60 @@ from procyclingstats.errors import ExpectedParsingError
 REQUEST_DELAY_SECONDS = 3
 
 
+def name_from_rider_url(rider_url):
+    """procyclingstats' free-text rider_name comes back as 'Surname
+    Firstname' (e.g. 'Pogačar Tadej', 'del Toro Isaac') — the opposite
+    order from every existing name in this dataset ('Tadej Pogacar').
+    Rather than guess how to re-split that string (multi-word surnames
+    like 'van der Poel' make that fragile), this reads the rider's PCS
+    profile URL slug instead (e.g. 'rider/tadej-pogacar'), which is
+    already ASCII-normalized and in firstname-lastname order.
+
+    Every word gets Title-Cased, including things that look like
+    nobiliary particles ('van', 'der', 'del') — verified against a broad
+    sample of the actual historical data ('Wout Van Aert', 'Jonas
+    Vingegaard Hansen', 'Egan Bernal Gomez'), which capitalizes every
+    word with no exceptions. An earlier version of this kept particles
+    lowercase based on general cycling-name convention rather than
+    actually checking this dataset, which was the wrong call for this
+    specific dataset — matching what's already there matters more than
+    what's "more correct" in general."""
+    if not rider_url:
+        return None
+    slug = rider_url.rstrip("/").split("/")[-1]
+    parts = slug.split("-")
+    words = [p.capitalize() for p in parts if p]
+    return " ".join(words) if words else None
+
+
+def format_team_name(team_name):
+    """Matches the historical convention seen throughout the existing
+    data: plain Python .title() casing applied directly to the raw team
+    name, with its original punctuation and spacing left untouched
+    ('Lidl-Trek' stays 'Lidl-Trek', 'Jumbo - Visma' stays 'Jumbo - Visma',
+    'Deceuninck - Quick - Step' stays as-is). An earlier version of this
+    also replaced hyphens/pipes with spaces before title-casing, which
+    doesn't match the real data — verified by sampling actual historical
+    rows rather than assuming from a single early example."""
+    if not team_name:
+        return team_name
+    return team_name.title()
+
+
+def format_winners_row(row):
+    """stages_winners() rows are either an individual rider (has a
+    rider_url we can derive the canonical Firstname-Surname name from) or
+    a team win like a TTT (no rider_url — team_name-style formatting
+    instead, e.g. 'Team Visma | Lease a Bike' -> 'Team Visma Lease A Bike'
+    to match the historical team-name convention)."""
+    if not row:
+        return None
+    name = name_from_rider_url(row.get("rider_url"))
+    if name:
+        return name
+    return format_team_name(row.get("rider_name"))
+
+
 def fmt_with_team(rider_name, team_name):
     """Matches the existing data's stage-winner format:
     'Jasper Philipsen  (Alpecin-Deceuninck)' — note the double space."""
@@ -53,12 +107,6 @@ def fmt_with_team(rider_name, team_name):
     if team_name:
         return f"{rider_name}  ({team_name})"
     return rider_name
-
-
-def first_or_none(table, field):
-    if not table:
-        return None
-    return table[0].get(field)
 
 
 def get_race(year):
@@ -117,7 +165,12 @@ def get_total_distance(year, cache_path, race):
     if cache_path.exists():
         cache = json.loads(cache_path.read_text())
     key = str(year)
-    if key in cache:
+    # Only trust a cached value if it's a real positive distance. An early
+    # run once cached 0 here (every stage request failed before cloudscraper
+    # was installed, so the old sum-of-stages approach summed to zero) and
+    # that 0 got silently reused forever afterwards, ending up baked into
+    # live stage data as TotalTDFDistance:0. Guard against that repeating.
+    if key in cache and cache[key]:
         return cache[key]
 
     total = None
@@ -185,16 +238,28 @@ def scrape_stage(year, stage_number, stage_url, total_distance):
 
     departure = _safe("departure", stage.departure, stage_number)
     arrival = _safe("arrival", stage.arrival, stage_number)
-    results = _safe("results", lambda: stage.results("rider_name", "team_name", "rank"), stage_number) or []
-    gc = _safe("gc", lambda: stage.gc("rider_name"), stage_number) or []
-    points = _safe("points", lambda: stage.points("rider_name"), stage_number) or []
-    kom = _safe("kom", lambda: stage.kom("rider_name"), stage_number) or []
-    youth = _safe("youth", lambda: stage.youth("rider_name"), stage_number) or []
+    results = _safe("results", lambda: stage.results("rider_name", "rider_url", "team_name", "rank"), stage_number) or []
+    gc = _safe("gc", lambda: stage.gc("rider_name", "rider_url"), stage_number) or []
+    points = _safe("points", lambda: stage.points("rider_name", "rider_url"), stage_number) or []
+    kom = _safe("kom", lambda: stage.kom("rider_name", "rider_url"), stage_number) or []
+    youth = _safe("youth", lambda: stage.youth("rider_name", "rider_url"), stage_number) or []
+
+    def canonical_name(row):
+        """Prefer the URL-slug-derived name (correct order, ASCII); fall
+        back to the raw scraped name (wrong order, but better than
+        nothing) if the row has no URL for some reason."""
+        name = name_from_rider_url(row.get("rider_url"))
+        return name or row.get("rider_name")
 
     winner_row = next((r for r in results if r.get("rank") == 1), None)
     winner = None
     if winner_row:
-        winner = fmt_with_team(winner_row.get("rider_name"), winner_row.get("team_name"))
+        winner = fmt_with_team(canonical_name(winner_row), format_team_name(winner_row.get("team_name")))
+
+    def first_name_or_none(table):
+        if not table:
+            return None
+        return canonical_name(table[0])
 
     return {
         "Year": year,
@@ -203,10 +268,10 @@ def scrape_stage(year, stage_number, stage_url, total_distance):
         "Start": departure,
         "End": arrival,
         "Winner of stage": winner,
-        "Yellow Jersey": first_or_none(gc, "rider_name"),
-        "Green jersey": first_or_none(points, "rider_name"),
-        "Polka-dot jersey": first_or_none(kom, "rider_name"),
-        "White jersey": first_or_none(youth, "rider_name"),
+        "Yellow Jersey": first_name_or_none(gc),
+        "Green jersey": first_name_or_none(points),
+        "Polka-dot jersey": first_name_or_none(kom),
+        "White jersey": first_name_or_none(youth),
         "Leader": None,
     }
 
@@ -237,6 +302,11 @@ def main():
     ap.add_argument("--data-dir", default="docs/data/cycling")
     ap.add_argument("--dry-run", action="store_true",
                      help="Print what would change without writing files")
+    ap.add_argument("--force-refresh", action="store_true",
+                     help="Discard ALL existing entries for --year (not just "
+                          "incomplete ones) and re-scrape everything. Use "
+                          "this once after a fix that changes formatting of "
+                          "already-committed data.")
     args = ap.parse_args()
 
     data_dir = Path(args.data_dir)
@@ -247,21 +317,26 @@ def main():
     stages = load_json(stages_path)
     riders = load_json(riders_path)
 
-    # A previous run may have written "fallback" entries for stages where
-    # the detailed page failed to parse — those have Start=None and only a
-    # winner name (or not even that). Treat those as incomplete/retryable
-    # rather than "already have", so a successful scrape this time replaces
-    # them instead of being skipped forever. A genuinely finished stage
-    # always has a winner, so also treat a null "Winner of stage" as
-    # incomplete — the last run wrote several entries with real Start/End
-    # but a null winner (because the results table specifically failed to
-    # parse while departure/arrival succeeded), which the Start-only check
-    # wouldn't have caught.
-    stages = [
-        r for r in stages
-        if not (r["Year"] == args.year and
-                (r.get("Start") is None or r.get("Winner of stage") is None))
-    ]
+    if args.force_refresh:
+        print(f"--force-refresh set: discarding ALL existing {args.year} "
+              f"entries and re-scraping the whole year.")
+        stages = [r for r in stages if r["Year"] != args.year]
+    else:
+        # A previous run may have written "fallback" entries for stages
+        # where the detailed page failed to parse — those have Start=None
+        # and only a winner name (or not even that). Treat those as
+        # incomplete/retryable rather than "already have", so a successful
+        # scrape this time replaces them instead of being skipped forever.
+        # A genuinely finished stage always has a winner, so also treat a
+        # null "Winner of stage" as incomplete — an earlier run wrote
+        # several entries with real Start/End but a null winner (results
+        # table specifically failed to parse while departure/arrival
+        # succeeded), which a Start-only check wouldn't have caught.
+        stages = [
+            r for r in stages
+            if not (r["Year"] == args.year and
+                    (r.get("Start") is None or r.get("Winner of stage") is None))
+        ]
     already_have = {
         (row["Year"], row["Stages"]) for row in stages if row["Year"] == args.year
     }
@@ -284,7 +359,7 @@ def main():
     # (this is what caused it to wrongly report all 21 as complete on the
     # last run, including a stage 11 days out). Count only the leading rows
     # that actually have a winner name.
-    winners_table = race.stages_winners("stage_name", "rider_name")
+    winners_table = race.stages_winners("stage_name", "rider_name", "rider_url")
     print(f"stages_winners() returned {len(winners_table)} row(s):")
     for row in winners_table:
         print(f"  {row.get('stage_name')}: {row.get('rider_name')!r}")
@@ -308,7 +383,7 @@ def main():
             # about, not silently treated as "not finished yet". Fall back
             # to at least recording the winner from stages_winners() so we
             # don't lose the one thing we do know.
-            fallback_winner = winners_table[i - 1].get("rider_name")
+            fallback_winner = format_winners_row(winners_table[i - 1])
             print(f"  Falling back to stages_winners() winner for stage "
                   f"{i}: {fallback_winner}")
             entry = {
@@ -331,7 +406,7 @@ def main():
             # rider-focused results() parsing comes up empty. stages_winners()
             # already has exactly this case covered (it showed the team name
             # for stage 1's TTT), so use that instead of leaving it null.
-            fallback_winner = winners_table[i - 1].get("rider_name")
+            fallback_winner = format_winners_row(winners_table[i - 1])
             if fallback_winner:
                 print(f"  Stage {i}: no individual winner found (likely a "
                       f"TTT) — using stages_winners() value: {fallback_winner}")
