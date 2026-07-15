@@ -277,8 +277,25 @@ const DATA_VERSION = Date.now();
 function escapeHtml(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+// Several clubs have been renamed over AFL history while remaining the same
+// continuous entity. Left unmapped, a player's career splits across two
+// "teams" (and the same final can double up under both names). Note: this
+// deliberately does NOT fold Fitzroy into Brisbane — Fitzroy ceased to exist
+// as a club when it merged with Brisbane Bears to form the Brisbane Lions in
+// 1996, so it's a genuinely distinct historical entity, not a rename.
 function normalizeDashes(str) {
   return str ? str.replace(/[\u2013\u2014]/g, '-') : str;
+}
+const TEAM_NAME_CANONICAL = {
+  'footscray': 'Western Bulldogs',
+  'south melbourne': 'Sydney',
+  'brisbane bears': 'Brisbane',
+  'kangaroos': 'North Melbourne',
+};
+function normalizeTeam(t) {
+  if (!t) return t;
+  const dashed = normalizeDashes(t).trim();
+  return TEAM_NAME_CANONICAL[dashed.toLowerCase()] || dashed;
 }
 // Canonicalises a PLAYER name so the same person can't split into duplicates:
 // - curly apostrophe -> straight   (O\u2019Sullivan -> O'Sullivan)
@@ -311,10 +328,10 @@ function normalizeRound(r) {
 }
 function normalizeGame(g) {
   if (g.player)         g.player         = normalizeName(g.player);
-  if (g.played_for)     g.played_for     = normalizeDashes(g.played_for);
-  if (g.played_against) g.played_against = normalizeDashes(g.played_against);
-  if (g.home_team)      g.home_team      = normalizeDashes(g.home_team);
-  if (g.away_team)      g.away_team      = normalizeDashes(g.away_team);
+  if (g.played_for)     g.played_for     = normalizeTeam(g.played_for);
+  if (g.played_against) g.played_against = normalizeTeam(g.played_against);
+  if (g.home_team)      g.home_team      = normalizeTeam(g.home_team);
+  if (g.away_team)      g.away_team      = normalizeTeam(g.away_team);
   if (g.round)           g.round          = normalizeRound(g.round);
   if (g.player === 'Gary Ablett' && g.season >= 2000) g.player = 'Gary Ablett Jnr';
   if (g.player && PLAYER_NAME_ALIASES[g.player]) g.player = PLAYER_NAME_ALIASES[g.player];
