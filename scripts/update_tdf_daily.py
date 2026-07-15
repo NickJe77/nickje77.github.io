@@ -63,6 +63,12 @@ def get_race(year):
     instead. Hitting the wrong one doesn't error — it just silently
     returns a page with no "Stages" table, which is what was happening
     here. Try each candidate and use whichever actually has stage data."""
+    try:
+        import procyclingstats.scraper as pcs_scraper
+        print(f"  cloudscraper active: {pcs_scraper.HAS_CLOUDSCRAPER}")
+    except Exception:
+        pass
+
     candidates = [
         f"race/tour-de-france/{year}/overview",
         f"race/tour-de-france/{year}/start",
@@ -76,6 +82,18 @@ def get_race(year):
             print(f"  Tried {path}: failed — {type(e).__name__}: {e}")
             continue
         print(f"  Tried {path}: found {len(stage_rows)} stage(s)")
+        if not stage_rows:
+            # Dump a bit of what we actually got back, so a second failure
+            # shows *why* instead of just *that*.
+            try:
+                raw = race.html.html
+                print(f"    Raw HTML length: {len(raw)} chars")
+                print(f"    Contains 'Stages' text: {'Stages' in raw}")
+                print(f"    Contains 'Just a moment': {'Just a moment' in raw}")
+                print(f"    Contains 'Attention Required': {'Attention Required' in raw}")
+                print(f"    First 300 chars: {raw[:300]!r}")
+            except Exception as e:
+                print(f"    Could not inspect raw HTML: {e}")
         if stage_rows:
             return race, stage_rows
     return None, []
