@@ -32,11 +32,17 @@ Requires: pip install procyclingstats
 """
 import argparse
 import json
-import sys
+import re
+import time
 from pathlib import Path
 
 from procyclingstats import Race, Stage
 from procyclingstats.errors import ExpectedParsingError
+
+# Seconds to wait between each stage-page request. The previous run hit
+# Cloudflare's rate limit partway through a 21-stage backfill; this trades
+# a bit of runtime for staying comfortably under whatever that threshold is.
+REQUEST_DELAY_SECONDS = 3
 
 
 def fmt_with_team(rider_name, team_name):
@@ -99,10 +105,14 @@ def get_race(year):
     return None, []
 
 
-def get_total_distance(year, cache_path):
-    """Total race distance barely matters day-to-day (it's the same for
-    every stage row within a year), so this is computed once and cached
-    rather than re-summed on every run."""
+def get_total_distance(year, cache_path, race):
+    """Total race distance is printed directly on the race page itself
+    ('Total distance: 3290.3') so this reads it as plain text off the
+    already-fetched race page — no extra HTTP requests needed. (An earlier
+    version of this summed each of the 21 individual stage pages instead,
+    which doubled the request count for a run and was the actual cause of
+    hitting Cloudflare's rate limit partway through — not worth repeating.)
+    Cached so repeat runs don't even need to re-parse it."""
     cache = {}
     if cache_path.exists():
         cache = json.loads(cache_path.read_text())
@@ -110,15 +120,20 @@ def get_total_distance(year, cache_path):
     if key in cache:
         return cache[key]
 
-    race, stage_rows = get_race(year)
-    total = 0.0
-    for row in stage_rows:
-        try:
-            s = Stage(row["stage_url"])
-            total += s.distance() or 0.0
-        except ExpectedParsingError:
-            continue
-    total = round(total)
+    total = None
+    try:
+        text = race.html.text()
+        m = re.search(r'Total distance:\s*([\d.]+)', text)
+        if m:
+            total = round(float(m.group(1)))
+    except Exception as e:
+        print(f"  Could not read total distance from race page: {e}")
+
+    if total is None:
+        print("  WARNING: couldn't find 'Total distance' on the race page. "
+              "Stage entries will be written with TotalTDFDistance=None; "
+              "you can patch this in manually or re-run once it's fixable.")
+
     cache[key] = total
     cache_path.write_text(json.dumps(cache, indent=2))
     return total
@@ -232,11 +247,18 @@ def main():
     stages = load_json(stages_path)
     riders = load_json(riders_path)
 
+    # A previous run may have written "fallback" entries for stages where
+    # the detailed page failed to parse — those have Start=None and only a
+    # winner name (or not even that). Treat those as incomplete/retryable
+    # rather than "already have", so a successful scrape this time replaces
+    # them instead of being skipped forever.
+    stages = [
+        r for r in stages
+        if not (r["Year"] == args.year and r.get("Start") is None)
+    ]
     already_have = {
         (row["Year"], row["Stages"]) for row in stages if row["Year"] == args.year
     }
-
-    total_distance = get_total_distance(args.year, cache_path)
 
     race, stage_rows = get_race(args.year)
     if race is None:
@@ -247,6 +269,8 @@ def main():
     for i, row in enumerate(stage_rows, start=1):
         print(f"  {i}. {row.get('date')} — {row.get('stage_name')} "
               f"({row.get('stage_url')})")
+
+    total_distance = get_total_distance(args.year, cache_path, race)
 
     # stages_winners() only lists stages that have actually finished, so its
     # length is a reliable "how many stages are done" count — much sturdier
@@ -287,6 +311,7 @@ def main():
         added.append(entry)
         print(f"Added stage {i}: {entry['Start']} -> {entry['End']}, "
               f"winner: {entry['Winner of stage']}")
+        time.sleep(REQUEST_DELAY_SECONDS)
 
     if not added:
         print(f"No new completed stages found for {args.year}.")
