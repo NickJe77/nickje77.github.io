@@ -216,6 +216,7 @@ td.top8-badge{font-size:11px;color:#2a7a2a;font-weight:700;}
 
 <div id="loadingMsg" class="loading"></div>
 <button class="reset-sort" id="resetBtn" style="display:none" onclick="resetSort()">Reset Sort</button>
+<select id="yearSelect" class="opponent-select" style="display:none"><option value="all">All Years</option></select>
 <div class="table-wrap">
 <table id="mainTable" style="display:none">
 <thead><tr>
@@ -237,6 +238,7 @@ td.top8-badge{font-size:11px;color:#2a7a2a;font-weight:700;}
 const DISAMBIG_GROUPS = {
   "Will Hayes": [["Western Bulldogs","Carlton"],["Collingwood"]],
   "Josh Kennedy": [["West Coast","Carlton"],["Sydney","Hawthorn"]],
+  "Tom Lynch": [["St Kilda","Adelaide"],["Gold Coast","Richmond"]],
 };
 // Confirmed same-player aliases: data-source variant name -> canonical name.
 // Everything on the left gets folded into the name on the right wherever
@@ -273,6 +275,7 @@ function stripeGradient(team) {
 const playerSearchEl = document.getElementById("playerSearch");
 const playerList     = document.getElementById("playerList");
 const opponentSelect = document.getElementById("opponentSelect");
+const yearSelect      = document.getElementById("yearSelect");
 const rows           = document.getElementById("rows");
 const loadingMsg     = document.getElementById("loadingMsg");
 const params     = new URLSearchParams(location.search);
@@ -501,6 +504,17 @@ function buildDatalist() {
     playerList.appendChild(o);
   });
 }
+// Combined filter state for the game log: year + opponent filters compose
+// together (both can be active at once) rather than one overriding the other.
+let selectedYear = "all";
+let selectedOpponent = "all";
+function applyFilters() {
+  let f = currentGames;
+  if (selectedYear !== "all") f = f.filter(g => String(g.season) === selectedYear);
+  if (selectedOpponent !== "all") f = f.filter(g => g.played_against === selectedOpponent);
+  renderOpponent(selectedOpponent === "all" ? [] : f);
+  renderTable(f);
+}
 function findAndShowPlayer() {
   const allMatchingGames = allGames.filter(p => p.player === playerName);
   if (!allMatchingGames.length) return;
@@ -527,10 +541,14 @@ function findAndShowPlayer() {
   document.getElementById("mainTable").style.display      = "";
   document.getElementById("resetBtn").style.display       = "";
   document.getElementById("opponentSelect").style.display = "";
+  document.getElementById("yearSelect").style.display      = "";
   document.getElementById("careerLabel").style.display    = "";
   document.getElementById("opponentLabel").style.display  = "";
   document.getElementById("top8Label").style.display      = "";
+  selectedYear = "all";
+  selectedOpponent = "all";
   setupOpponents(currentGames);
+  setupYearSelect(currentGames);
   renderCareer(currentGames);
   renderOpponent([]);
   renderTop8Split(currentGames);
@@ -557,8 +575,19 @@ function setupOpponents(games) {
     opponentSelect.appendChild(opt);
   });
   opponentSelect.onchange = () => {
-    let f = opponentSelect.value === "all" ? games : games.filter(g => g.played_against === opponentSelect.value);
-    renderOpponent(f); renderTable(f);
+    selectedOpponent = opponentSelect.value;
+    applyFilters();
+  };
+}
+function setupYearSelect(games) {
+  yearSelect.innerHTML = '<option value="all">All Years</option>';
+  [...new Set(games.map(g => g.season))].sort((a,b) => b - a).forEach(y => {
+    const opt = document.createElement("option"); opt.value = String(y); opt.textContent = y;
+    yearSelect.appendChild(opt);
+  });
+  yearSelect.onchange = () => {
+    selectedYear = yearSelect.value;
+    applyFilters();
   };
 }
 
@@ -752,7 +781,7 @@ function renderTable(g) {
 function sortTable(key) {
   if (sortKey===key) sortDir*=-1; else { sortKey=key; sortDir=-1; }
   currentGames.sort((a,b) => ((a[key]||0)-(b[key]||0))*sortDir);
-  renderTable(currentGames);
+  applyFilters();
 }
 function resetSort() {
   const all = allGames.filter(p => p.player===playerName);
@@ -762,7 +791,11 @@ function resetSort() {
       chosenTeams.every(t=>group.includes(t))||group.some(t=>chosenTeams.includes(t)));
     currentGames = dedupeGames(matchedGroup ? all.filter(p=>matchedGroup.includes(p.played_for)) : all);
   } else { currentGames = dedupeGames(all); }
-  renderTable(currentGames);
+  selectedYear = "all";
+  selectedOpponent = "all";
+  yearSelect.value = "all";
+  opponentSelect.value = "all";
+  applyFilters();
 }
 playerSearchEl.onchange = e => {
   const val = e.target.value.trim();
