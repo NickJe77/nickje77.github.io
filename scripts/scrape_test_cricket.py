@@ -52,6 +52,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 def make_driver():
     options = uc.ChromeOptions()
+    options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1400,1000")
@@ -61,7 +62,11 @@ def make_driver():
     options.add_argument("--disable-backgrounding-occluded-windows")
     options.add_argument("--disable-features=Translate")
     options.add_argument("--disable-blink-features=AutomationControlled")
-    driver = uc.Chrome(version_main=149, use_subprocess=True, options=options)
+    # No version_main pin -- let undetected_chromedriver auto-detect
+    # whatever Chrome version is actually installed on the runner
+    # (browser-actions/setup-chrome installs "stable", which won't
+    # reliably be any specific version we hardcode here).
+    driver = uc.Chrome(use_subprocess=True, options=options)
     driver.set_page_load_timeout(120)
     return driver
 
