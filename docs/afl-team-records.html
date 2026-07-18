@@ -196,6 +196,75 @@ function cleanRound(r){
   return String(r||"").replace(/round\s*/i,"").trim();
 }
 
+// ── Data normalization ──────────────────────────────────────
+// Same fixes already proven on afl-player.html, applied here too. This
+// page was loading raw afl_YYYY.json data directly with none of this,
+// which is why game tallies were coming out wrong: finals rounds that
+// appear under two labels ("Round EF" and "Elimination Final") were
+// being counted as two separate games, and a handful of players whose
+// name is truncated inconsistently in the source data ("Cooper D-Tytler"
+// vs "Cooper Duff-Tytler") were being split into two different people.
+function normalizeDashes(str){
+  return str ? str.replace(/[\u2013\u2014]/g, '-') : str;
+}
+const TEAM_NAME_CANONICAL = {
+  'footscray': 'Western Bulldogs',
+  'south melbourne': 'Sydney',
+  'brisbane bears': 'Brisbane',
+  'kangaroos': 'North Melbourne',
+};
+function normalizeTeam(t){
+  if(!t) return t;
+  const dashed = normalizeDashes(t).trim();
+  return TEAM_NAME_CANONICAL[dashed.toLowerCase()] || dashed;
+}
+function normalizeName(str){
+  if(!str) return str;
+  str = normalizeDashes(str);
+  str = str.replace(/\u2019/g, "'");
+  str = str.replace(/\bO([A-Z][a-z])/g, "O'$1");
+  return str;
+}
+const ROUND_NAME_CANONICAL = {
+  'ef': 'Elimination Final', 'round ef': 'Elimination Final', 'elimination final': 'Elimination Final',
+  'sf': 'Semi Final',        'round sf': 'Semi Final',        'semi final': 'Semi Final',
+  'qf': 'Qualifying Final',  'round qf': 'Qualifying Final',  'qualifying final': 'Qualifying Final',
+  'pf': 'Preliminary Final', 'round pf': 'Preliminary Final', 'preliminary final': 'Preliminary Final',
+  'gf': 'Grand Final',       'round gf': 'Grand Final',       'grand final': 'Grand Final',
+};
+function normalizeRoundName(r){
+  if(!r) return r;
+  const key = r.trim().toLowerCase();
+  return ROUND_NAME_CANONICAL[key] || r.trim();
+}
+const PLAYER_NAME_ALIASES = {
+  "Luke D-Uniacke": "Luke Davies-Uniacke",
+  "Cooper D-Tytler": "Cooper Duff-Tytler",
+  "Bailey Williams": "Bailey J. Williams",
+};
+function normalizeGame(g){
+  if(g.player)         g.player         = normalizeName(g.player);
+  if(g.played_for)     g.played_for     = normalizeTeam(g.played_for);
+  if(g.played_against) g.played_against = normalizeTeam(g.played_against);
+  if(g.home_team)      g.home_team      = normalizeTeam(g.home_team);
+  if(g.away_team)      g.away_team      = normalizeTeam(g.away_team);
+  if(g.round)           g.round          = normalizeRoundName(g.round);
+  if(g.player === 'Gary Ablett' && g.season >= 2000) g.player = 'Gary Ablett Jnr';
+  if(g.player && PLAYER_NAME_ALIASES[g.player]) g.player = PLAYER_NAME_ALIASES[g.player];
+  return g;
+}
+function dedupeAllGames(games){
+  const seen = new Set();
+  const out = [];
+  games.forEach(g=>{
+    const key = g.player+'__'+g.season+'__'+g.round+'__'+g.played_for+'__'+g.played_against;
+    if(seen.has(key)) return;
+    seen.add(key);
+    out.push(g);
+  });
+  return out;
+}
+
 const years=[];
 for(let y=1965;y<=new Date().getFullYear();y++) years.push(y);
 
@@ -204,7 +273,7 @@ recLoadingMsg.textContent="Loading data...";
 Promise.all(
   years.map(y=>fetch('/data/afl/afl_'+y+'.json').then(r=>r.json()).catch(()=>[]))
 ).then(data=>{
-  allGames=data.flat();
+  allGames=dedupeAllGames(data.flat().map(normalizeGame));
   playerIndex={};
   allGames.forEach(g=>{
     if(!playerIndex[g.player]) playerIndex[g.player]=[];
