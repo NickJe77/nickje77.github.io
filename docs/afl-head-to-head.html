@@ -150,6 +150,43 @@ function setLastN(n){
 function norm(s){return (s||"").trim().toLowerCase();}
 function displayName(k){return teamMap[k]||k;}
 
+// Several AFL venues have been renamed multiple times through
+// sponsorship deals while remaining the same physical ground -- left
+// unmapped, head-to-head stats "at this venue" fragment across what
+// looks like several different grounds. Same approach as the club-rename
+// fix on afl-player.html, applied to venues instead of teams.
+const VENUE_NAME_CANONICAL = {
+  "docklands stadium": "Marvel Stadium",
+  "etihad stadium": "Marvel Stadium",
+  "telstra dome": "Marvel Stadium",
+  "kardinia park": "GMHBA Stadium",
+  "skilled stadium": "GMHBA Stadium",
+  "simonds stadium": "GMHBA Stadium",
+  "football park": "AAMI Stadium",
+  "carrara stadium": "Heritage Bank Stadium",
+  "metricon stadium": "Heritage Bank Stadium",
+  "people first stadium": "Heritage Bank Stadium",
+  "sydney showground stadium": "Engie Stadium",
+  "spotless stadium": "Engie Stadium",
+  "giants stadium": "Engie Stadium",
+  "york park": "UTAS Stadium",
+  "aurora stadium": "UTAS Stadium",
+  "bellerive oval": "Blundstone Arena",
+  "princes park": "Ikon Park",
+  "optus oval": "Ikon Park",
+  "western oval": "Whitten Oval",
+  "vfl park": "Waverley Park",
+  "stadium australia": "Accor Stadium",
+  "anz stadium": "Accor Stadium",
+  "marrara oval": "TIO Stadium",
+  "traeger park": "TIO Traeger Park",
+};
+function canonicalVenue(v){
+  if(!v) return v;
+  const key = norm(v);
+  return VENUE_NAME_CANONICAL[key] || v;
+}
+
 async function loadAllSeasons(){
   const startYear=2017;
   const LAST_YEAR=2026;
@@ -183,6 +220,7 @@ async function loadAllSeasons(){
         const a=m.teamA;
         const b=m.teamB;
         let cleanVenue=m.venue?m.venue.split(",")[0].trim():"";
+        cleanVenue=canonicalVenue(cleanVenue);
         allMatches.push({
           match_id: m.match_id,
           season: m.season,
@@ -278,178 +316,6 @@ function renderTable(games,a,b,filterTeam){
   });
   html+=`</tbody></table>
     </div>`;
-  results.innerHTML=html;
-}
-</script>
-</body>
-</html><div class="navbar">
-<a href="index.html">Home</a>
-<a href="afl.html">AFL</a>
-</div>
-<div class="page-wrap">
-<h1>AFL Head to Head</h1>
-<div class="selector-grid">
-<div class="selector-box"><select id="team1"></select></div>
-<div class="selector-box"><select id="team2"></select></div>
-<div class="selector-box"><select id="venue"><option value="">All Venues</option></select></div>
-</div>
-<div class="filter-row">
-  <label>Last:</label>
-  <button class="last-n-btn" data-n="5" onclick="setLastN(5)">5</button>
-  <button class="last-n-btn" data-n="10" onclick="setLastN(10)">10</button>
-  <button class="last-n-btn" data-n="20" onclick="setLastN(20)">20</button>
-  <button class="last-n-btn active" data-n="0" onclick="setLastN(0)">All</button>
-</div>
-<button class="compare-btn" onclick="compare()">Compare</button>
-<div id="results" class="results-box">Loading AFL database…</div>
-</div>
-<script>
-const team1=document.getElementById("team1");
-const team2=document.getElementById("team2");
-const venueSelect=document.getElementById("venue");
-const results=document.getElementById("results");
-let allMatches=[];
-let teamMap={};
-let currentGames=[];
-let lastN=0;
-
-function setLastN(n){
-  lastN=n;
-  document.querySelectorAll('.last-n-btn').forEach(b=>{
-    b.classList.toggle('active', Number(b.dataset.n)===n);
-  });
-  if(currentGames.length) renderTable(currentGames, team1.value, team2.value, null);
-}
-
-function norm(s){return (s||"").trim().toLowerCase();}
-function displayName(k){return teamMap[k]||k;}
-
-async function loadAllSeasons(){
-  const startYear=2017;
-  const LAST_YEAR=2026;
-  const teamSet=new Set();
-  const venueSet=new Set();
-  allMatches=[];
-  for(let y=startYear;y<=LAST_YEAR;y++){
-    try{
-      const res=await fetch(`/data/afl/afl_${y}.json`);
-      if(!res.ok) continue;
-      const raw=await res.json();
-      if(!Array.isArray(raw)) continue;
-      const matchMap={};
-      raw.forEach(r=>{
-        const mid = r.match_id && typeof r.match_id === 'number' ? String(r.match_id) : null;
-        const key = mid ? mid : `${r.round}|${r.home_team}|${r.away_team}`;
-        if(!matchMap[key]){
-          matchMap[key]={
-            match_id: key,
-            season: Number(r.season)||y,
-            round: r.round,
-            venue: r.venue,
-            teamA: r.home_team,
-            teamB: r.away_team,
-            scoreA: Number(r.home_points),
-            scoreB: Number(r.away_points)
-          };
-        }
-      });
-      Object.values(matchMap).forEach(m=>{
-        const a=m.teamA;
-        const b=m.teamB;
-        let cleanVenue=m.venue?m.venue.split(",")[0].trim():"";
-        allMatches.push({
-          match_id: m.match_id,
-          season: m.season,
-          round: m.round,
-          venue: cleanVenue,
-          home: a,
-          away: b,
-          scoreA: m.scoreA,
-          scoreB: m.scoreB
-        });
-        teamSet.add(a);
-        teamSet.add(b);
-        if(cleanVenue) venueSet.add(cleanVenue);
-      });
-    }catch(e){console.log("Failed year",y,e);}
-  }
-  const teams=[...teamSet].sort();
-  team1.innerHTML=`<option value="">Select team</option>`;
-  team2.innerHTML=`<option value="">Select team</option>`;
-  teams.forEach(t=>{
-    team1.innerHTML+=`<option value="${t}">${t}</option>`;
-    team2.innerHTML+=`<option value="${t}">${t}</option>`;
-  });
-  const venues=[...venueSet].sort();
-  venueSelect.innerHTML=`<option value="">All Venues</option>`;
-  venues.forEach(v=>{ venueSelect.innerHTML+=`<option value="${v}">${v}</option>`; });
-  results.innerHTML="Select two teams and click Compare.";
-}
-
-loadAllSeasons();
-
-function compare(){
-  const a=team1.value, b=team2.value;
-  const selectedVenue=venueSelect.value;
-  if(!a||!b) return;
-  let games=allMatches.filter(g=>(g.home===a&&g.away===b)||(g.home===b&&g.away===a));
-  if(selectedVenue) games=games.filter(g=>g.venue===selectedVenue);
-  games.sort((x,y)=>y.season-x.season);
-  currentGames=games;
-  renderTable(games,a,b,null);
-}
-
-function filterWins(team){
-  renderTable(currentGames,team1.value,team2.value,team);
-}
-
-function renderTable(games,a,b,filterTeam){
-  const displayGames = lastN > 0 ? games.slice(0, lastN) : games;
-
-  let totalPoints=0, count=0, winsA=0, winsB=0;
-  displayGames.forEach(g=>{
-    if(g.scoreA==null||g.scoreB==null) return;
-    totalPoints+=(g.scoreA+g.scoreB); count++;
-    if(g.home===a){ if(g.scoreA>g.scoreB) winsA++; else if(g.scoreB>g.scoreA) winsB++; }
-    else{ if(g.scoreA>g.scoreB) winsB++; else if(g.scoreB>g.scoreA) winsA++; }
-  });
-  let avg=count?(totalPoints/count).toFixed(1):"-";
-
-  let filteredGames=displayGames;
-  if(filterTeam==="A") filteredGames=displayGames.filter(g=>g.home===a?g.scoreA>g.scoreB:g.scoreB>g.scoreA);
-  if(filterTeam==="B") filteredGames=displayGames.filter(g=>g.home===a?g.scoreB>g.scoreA:g.scoreA>g.scoreB);
-
-  function gLink(g){
-    const raw=g.match_id;
-    if(raw && !raw.includes("|")){
-      return `afl-game.html?match=${encodeURIComponent(raw)}&year=${g.season}`;
-    }
-    return `afl-game.html?year=${g.season}&round=${encodeURIComponent(g.round)}&home=${encodeURIComponent(g.home)}&away=${encodeURIComponent(g.away)}`;
-  }
-
-  const rangeLabel = lastN > 0 ? ` (last ${lastN} games)` : "";
-  let html=`
-    <h3>${a} vs ${b}${rangeLabel}</h3>
-    <div class="summary">
-      <div onclick="filterWins('A')">${a} Wins<br>${winsA}</div>
-      <div>Average Score<br>${avg}</div>
-      <div onclick="filterWins('B')">${b} Wins<br>${winsB}</div>
-    </div>
-    <p>Total games: ${filteredGames.length}</p>
-    <table><thead><tr>
-      <th>Season</th><th>Round</th><th>Venue</th><th>Match</th>
-      <th class="numeric">Score</th><th class="numeric">Margin</th>
-    </tr></thead><tbody>`;
-  filteredGames.forEach(g=>{
-    const margin=g.scoreA!=null&&g.scoreB!=null?Math.abs(g.scoreA-g.scoreB):"";
-    html+=`<tr onclick="window.location='${gLink(g)}'">
-      <td>${g.season}</td><td>${g.round}</td><td>${g.venue}</td>
-      <td>${g.home} v ${g.away}</td>
-      <td class="numeric">${g.scoreA} - ${g.scoreB}</td>
-      <td class="numeric">${margin}</td>
-    </tr>`;
-  });
-  html+=`</tbody></table>`;
   results.innerHTML=html;
 }
 </script>
