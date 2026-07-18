@@ -31,7 +31,13 @@ BASE = "https://www.thethirdturn.com"
 INDEX_PAGE = f"{BASE}/wiki/NASCAR_Cup_Series_Central"
 MIN_SLEEP = 3
 MAX_SLEEP = 6
-HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; research script)"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Connection": "keep-alive",
+}
 
 
 def clean(text):
@@ -42,6 +48,10 @@ def get_soup(url, retries=3):
     for attempt in range(retries):
         try:
             resp = requests.get(url, headers=HEADERS, timeout=30)
+            if resp.status_code != 200:
+                print(f"  WARNING: HTTP {resp.status_code} for {url}, attempt {attempt+1}/{retries}")
+                print(f"    Response headers: {dict(resp.headers)}")
+                print(f"    Body snippet: {resp.text[:300]!r}")
             resp.raise_for_status()
             return BeautifulSoup(resp.text, "html.parser")
         except Exception as e:
