@@ -199,16 +199,14 @@ h1{
         <th>St</th>
         <th>#</th>
         <th>Driver</th>
-        <th>Sponsor</th>
-        <th>Make</th>
+        <th>Team</th>
+        <th>Time</th>
         <th>Laps</th>
-        <th>Led</th>
-        <th>Status</th>
         <th>Pts</th>
       </tr>
     </thead>
     <tbody id="results">
-      <tr><td colspan="10" class="loading">Loading results...</td></tr>
+      <tr><td colspan="8" class="loading">Loading results...</td></tr>
     </tbody>
   </table>
   </div>
@@ -222,11 +220,11 @@ h1{
 // -------------------------
 const params = new URLSearchParams(window.location.search);
 const year = parseInt(params.get("year"));
-const raceNum = params.get("race");
+const raceUrl = params.get("url");
 
-if(!year || isNaN(year) || !raceNum){
+if(!year || isNaN(year) || !raceUrl){
   document.getElementById("title").textContent = "No race selected";
-  throw new Error("Missing year or race parameter");
+  throw new Error("Missing year or url parameter");
 }
 
 function driverLink(name){
@@ -238,7 +236,8 @@ function driverLink(name){
 // -------------------------
 // LOAD SEASON DATA (season file contains every race, incl. this one)
 // -------------------------
-fetch(`/data/supercars/supercars_${year}.json`)
+// Updated for the new supercars.com-sourced schema.
+fetch(`/data/supercars/supercars_official_${year}.json`)
   .then(res => {
     if(!res.ok) throw new Error("Fetch failed");
     return res.json();
@@ -250,7 +249,7 @@ fetch(`/data/supercars/supercars_${year}.json`)
     }
 
     const races = data.races;
-    const idx = races.findIndex(r => String(r.race_num) === String(raceNum));
+    const idx = races.findIndex(r => r.url === raceUrl);
     const race = races[idx];
 
     if(!race){
@@ -263,41 +262,48 @@ fetch(`/data/supercars/supercars_${year}.json`)
     const nextRace = races[idx + 1];
     if(prevRace){
       const prev = document.getElementById("prev");
-      prev.textContent = "← Race " + prevRace.race_num;
-      prev.href = `./supercars-race.html?year=${year}&race=${prevRace.race_num}`;
+      prev.textContent = "← " + (prevRace.event_name || "Previous") + " " + (prevRace.race_label || "");
+      prev.href = `./supercars-race.html?year=${year}&url=${encodeURIComponent(prevRace.url)}`;
     }
     if(nextRace){
       const next = document.getElementById("next");
-      next.textContent = "Race " + nextRace.race_num + " →";
-      next.href = `./supercars-race.html?year=${year}&race=${nextRace.race_num}`;
+      next.textContent = (nextRace.event_name || "Next") + " " + (nextRace.race_label || "") + " →";
+      next.href = `./supercars-race.html?year=${year}&url=${encodeURIComponent(nextRace.url)}`;
     }
 
     document.getElementById("title").textContent =
-      race.info && race.info.title ? race.info.title : `${year} — Race ${race.race_num}`;
-    document.getElementById("race-meta").textContent =
-      [race.date, race.track_text].filter(Boolean).join(" — ");
+      [race.event_name, race.race_label].filter(Boolean).join(" — ") || `${year} Race`;
+    document.getElementById("race-meta").textContent = "";
 
     const tbody = document.getElementById("results");
     tbody.innerHTML = "";
 
     if(!Array.isArray(race.results) || race.results.length === 0){
-      tbody.innerHTML = '<tr><td colspan="10" class="loading">No results recorded for this race.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="loading">No results recorded for this race.</td></tr>';
       return;
     }
 
-    race.results.forEach(r => {
+    // finishing_position is a string ("1","2",...,"-" for DNF) -- sort
+    // numerically, pushing "-"/non-numeric values to the end.
+    const sorted = [...race.results].sort((a,b) => {
+      const an = parseInt(a.finishing_position, 10);
+      const bn = parseInt(b.finishing_position, 10);
+      const aVal = isNaN(an) ? 999 : an;
+      const bVal = isNaN(bn) ? 999 : bn;
+      return aVal - bVal;
+    });
+
+    sorted.forEach(r => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${r["Fin"] || ""}</td>
-        <td>${r["St"] || ""}</td>
-        <td>${r["#"] || ""}</td>
-        <td>${driverLink(r["Driver"])}</td>
-        <td>${r["Sponsor"] || ""}</td>
-        <td>${r["Make"] || ""}</td>
-        <td>${r["Laps"] || ""}</td>
-        <td>${r["Led"] || ""}</td>
-        <td>${r["Status"] || ""}</td>
-        <td>${r["Pts"] || ""}</td>
+        <td>${r.finishing_position || ""}</td>
+        <td>${r.starting_position || ""}</td>
+        <td>${r.car_number || ""}</td>
+        <td>${driverLink(r.driver_name)}</td>
+        <td>${r.team_name || ""}</td>
+        <td>${r.race_time || ""}</td>
+        <td>${r.laps || ""}</td>
+        <td>${r.points || ""}</td>
       `;
       tbody.appendChild(tr);
     });
