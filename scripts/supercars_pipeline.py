@@ -183,10 +183,10 @@ def scrape_season(year):
 # ── Index building ───────────────────────────────────────────────────
 
 def load_season_files(data_dir):
-    paths = sorted(glob.glob(os.path.join(data_dir, "supercars_official_*.json")))
+    paths = sorted(glob.glob(os.path.join(data_dir, "supercars_*.json")))
     seasons = []
     for path in paths:
-        m = re.search(r"supercars_official_(\d{4})\.json$", path)
+        m = re.search(r"supercars_(\d{4})\.json$", path)
         if not m:
             continue
         year = int(m.group(1))
@@ -200,37 +200,67 @@ def build_index(seasons):
     return [{"year": year, "races": len(data.get("races", []))} for year, data in seasons]
 
 
+def normalize_result(result):
+    """Handles both the new (supercars.com) schema and the old
+    (thethirdturn.com) schema that earlier seasons use, so drivers.json
+    stays consistent regardless of which era a season came from."""
+    is_new_schema = "driver_name" in result
+
+    if is_new_schema:
+        name = (result.get("driver_name") or "").strip()
+        return {
+            "name": name, "driver_url": result.get("driver_url"),
+            "finishing_position": result.get("finishing_position"),
+            "starting_position": result.get("starting_position"),
+            "car_number": result.get("car_number"),
+            "team_name": result.get("team_name"),
+            "race_time": result.get("race_time"),
+            "laps": result.get("laps"), "points": result.get("points"),
+        }
+    else:
+        name = (result.get("Driver") or "").strip()
+        return {
+            "name": name, "driver_url": None,
+            "finishing_position": result.get("Fin"),
+            "starting_position": result.get("St"), "car_number": result.get("#"),
+            "team_name": None, "race_time": None,
+            "laps": result.get("Laps"), "points": result.get("Pts"),
+        }
+
+
 def build_drivers(seasons):
     drivers = {}
     for year, data in seasons:
         for race in data.get("races", []):
-            event_name = race.get("event_name")
-            race_label = race.get("race_label")
+            event_name = race.get("event_name") or race.get("track_text")
+            race_label = race.get("race_label") or race.get("race_num")
             race_url = race.get("url")
-            for result in race.get("results", []):
-                name = (result.get("driver_name") or "").strip()
+            for raw_result in race.get("results", []):
+                r = normalize_result(raw_result)
+                name = r["name"]
                 if not name:
                     continue
                 entry = drivers.setdefault(name, {
                     "starts": 0, "wins": 0, "races": [],
-                    "driver_url": result.get("driver_url"),
+                    "driver_url": r["driver_url"],
                 })
                 entry["starts"] += 1
-                position = result.get("finishing_position")
-                if position == "1":
+                if str(r["finishing_position"]) == "1":
                     entry["wins"] += 1
+                if not entry["driver_url"] and r["driver_url"]:
+                    entry["driver_url"] = r["driver_url"]
                 entry["races"].append({
                     "year": year,
                     "event_name": event_name,
                     "race_label": race_label,
                     "url": race_url,
-                    "finishing_position": position,
-                    "starting_position": result.get("starting_position"),
-                    "car_number": result.get("car_number"),
-                    "team_name": result.get("team_name"),
-                    "race_time": result.get("race_time"),
-                    "laps": result.get("laps"),
-                    "points": result.get("points"),
+                    "finishing_position": r["finishing_position"],
+                    "starting_position": r["starting_position"],
+                    "car_number": r["car_number"],
+                    "team_name": r["team_name"],
+                    "race_time": r["race_time"],
+                    "laps": r["laps"],
+                    "points": r["points"],
                 })
     out = [{"name": n, "driver_url": e["driver_url"], "starts": e["starts"],
             "wins": e["wins"], "races": e["races"]} for n, e in drivers.items()]
@@ -247,7 +277,7 @@ def main():
     args = ap.parse_args()
 
     os.makedirs(args.data_dir, exist_ok=True)
-    out_path = os.path.join(args.data_dir, f"supercars_official_{args.year}.json")
+    out_path = os.path.join(args.data_dir, f"supercars_{args.year}.json")
 
     print("=" * 60)
     print(f"STEP 1: Scrape {args.year}")
