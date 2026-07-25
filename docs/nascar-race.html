@@ -250,6 +250,17 @@ fetch(`/data/nascar/nascar_${year}.json`)
     }
 
     const races = data.races;
+
+    // Same broken-data signal as nascar-season.html: every result showing
+    // finishing_position 0 means the scraper picked up a qualifying/heat
+    // session instead of the real feature race (confirmed case: the
+    // season-opening Clash exhibition event).
+    function hasValidResults(race) {
+      const results = race.results || [];
+      if (results.length === 0) return false;
+      return results.some(r => r.finishing_position != null && r.finishing_position !== 0);
+    }
+
     const idx = races.findIndex(r => String(r.race_id) === String(raceId));
     const race = races[idx];
 
@@ -258,9 +269,21 @@ fetch(`/data/nascar/nascar_${year}.json`)
       return;
     }
 
-    // Prev/next race within the same season
-    const prevRace = races[idx - 1];
-    const nextRace = races[idx + 1];
+    if(!hasValidResults(race)){
+      document.getElementById("title").textContent = race.race_name || "Race data unavailable";
+      document.getElementById("race-meta").textContent =
+        "This race's results couldn't be reliably scraped (likely an exhibition/qualifying event) and have been hidden.";
+      document.getElementById("results").innerHTML =
+        '<tr><td colspan="9" class="loading">No reliable results available for this race.</td></tr>';
+      return;
+    }
+
+    // Prev/next only ever consider races with valid data, so browsing
+    // never lands on a broken one.
+    const validRaces = races.filter(hasValidResults);
+    const validIdx = validRaces.findIndex(r => String(r.race_id) === String(raceId));
+    const prevRace = validRaces[validIdx - 1];
+    const nextRace = validRaces[validIdx + 1];
     if(prevRace){
       const prev = document.getElementById("prev");
       prev.textContent = "← " + (prevRace.race_name || "Previous");

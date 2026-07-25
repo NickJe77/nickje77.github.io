@@ -250,7 +250,19 @@ fetch(`/data/nascar/nascar_${year}.json`)
     const tbody = document.getElementById("races");
     tbody.innerHTML = "";
 
-    data.races.forEach(r => {
+    // Some races (e.g. the season-opening Clash exhibition event) have
+    // broken data where every result shows finishing_position 0 -- this
+    // happens when the scraper picks up a qualifying/heat session
+    // instead of the actual feature race. If EVERY result in a race is
+    // like this, skip listing the race entirely rather than showing a
+    // table full of zeros.
+    function hasValidResults(race) {
+      const results = race.results || [];
+      if (results.length === 0) return false;
+      return results.some(r => r.finishing_position != null && r.finishing_position !== 0);
+    }
+
+    data.races.filter(hasValidResults).forEach(r => {
       const winnerEntry = (r.results || []).find(x => x.finishing_position === 1);
       const winner = winnerEntry ? winnerEntry.driver_fullname : "";
       const tr = document.createElement("tr");
