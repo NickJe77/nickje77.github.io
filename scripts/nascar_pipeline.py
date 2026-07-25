@@ -90,15 +90,27 @@ def get_season_race_urls(year):
     schedule_url = f"{BASE}/nascar-cup-series/{year}/schedule/"
     print(f"GET (browser) {schedule_url}")
 
+    # CHROME_PATH, if set, points at the exact Chrome binary to use --
+    # e.g. set by a CI workflow to whatever browser-actions/setup-chrome
+    # actually installed. Avoids guessing a version_main number that only
+    # happens to match one specific machine's Chrome (that broke this
+    # exact way in CI: pinning to 150 -- correct on a local Mac -- didn't
+    # match whatever "stable" resolved to on the GitHub Actions runner).
+    chrome_path = os.environ.get("CHROME_PATH")
+
     for attempt in range(3):
         driver = None
         try:
             options = uc.ChromeOptions()
             options.add_argument("--window-size=1400,1000")
-            # Pinned to confirmed real Chrome version -- update via
-            # chrome://version if this ever breaks. use_subprocess=False
-            # -- True caused "target window already closed" crashes.
-            driver = uc.Chrome(version_main=150, options=options)
+            if chrome_path:
+                print(f"  Using explicit Chrome binary: {chrome_path}")
+                driver = uc.Chrome(browser_executable_path=chrome_path, options=options)
+            else:
+                # Local/desktop use: no CHROME_PATH set, pin to the
+                # confirmed real Chrome version on this machine -- update
+                # via chrome://version if this ever breaks.
+                driver = uc.Chrome(version_main=150, options=options)
             driver.set_page_load_timeout(120)
 
             driver.get(schedule_url)
