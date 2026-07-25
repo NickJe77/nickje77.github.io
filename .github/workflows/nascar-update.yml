@@ -1,19 +1,20 @@
-name: Update NASCAR Data
+name: Rebuild NASCAR Index
 
+# Runs automatically whenever you upload/update a nascar_official_*.json
+# file, or you can trigger it manually. No scraping happens here at all
+# -- that runs on your Desktop. This just rebuilds index.json and
+# drivers.json from whatever season files already exist in the repo.
 on:
-  schedule:
-    - cron: '0 9 * * *'   # daily, 09:00 UTC
+  push:
+    paths:
+      - 'docs/data/nascar/nascar_official_*.json'
   workflow_dispatch:
-    inputs:
-      year:
-        description: 'Year to scrape (defaults to current year)'
-        required: false
 
 permissions:
   contents: write
 
 jobs:
-  update:
+  rebuild:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,37 +23,15 @@ jobs:
         with:
           python-version: '3.12'
 
-      # nascar_pipeline.py needs a REAL Chrome browser (Selenium) for the
-      # schedule page specifically. Installing Google's own
-      # google-chrome-stable package directly via apt rather than the
-      # browser-actions/setup-chrome action -- that action's "stable"
-      # option turned out to install Chromium, not actual Google Chrome,
-      # which undetected_chromedriver doesn't reliably work with. This
-      # installs to the standard /usr/bin/google-chrome-stable path.
-      - name: Install Google Chrome
+      - name: Rebuild index.json and drivers.json
         run: |
-          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
-          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
-          google-chrome-stable --version
-
-      - name: Install dependencies
-        run: pip install setuptools undetected-chromedriver requests beautifulsoup4
-
-      - name: Run pipeline (scrape + rebuild index)
-        env:
-          CHROME_PATH: /usr/bin/google-chrome-stable
-        run: |
-          YEAR="${{ github.event.inputs.year }}"
-          if [ -z "$YEAR" ]; then YEAR=$(date +%Y); fi
-          python3 scripts/nascar_pipeline.py --year "$YEAR" --data-dir docs/data/nascar
+          python3 scripts/build_nascar_official_index.py --data-dir docs/data/nascar --out-dir docs/data/nascar
 
       - name: Commit changes if any
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/data/nascar/
+          git add docs/data/nascar/index.json docs/data/nascar/drivers.json
           git diff --cached --quiet && echo "No changes to commit" && exit 0
-          git commit -m "Auto-update NASCAR data"
+          git commit -m "Rebuild NASCAR index.json and drivers.json"
           git push
