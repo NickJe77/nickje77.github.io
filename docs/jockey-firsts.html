@@ -138,9 +138,7 @@ body{ font-size:15px; font-family:var(--body); background:var(--bg); color:var(-
       <option value="win-date-desc">Sort: First win (newest first)</option>
     </select>
 
-    <select id="yearFilter" onchange="applyFilters()">
-      <option value="">Year</option>
-    </select>
+    <input type="text" id="dateSearch" placeholder="Date (e.g. 25/7)" oninput="applyFilters()">
 
     <input list="raceList" id="raceSearch" placeholder="Race (e.g. Bletchingly Stakes)" oninput="applyFilters()">
     <datalist id="raceList"></datalist>
@@ -171,7 +169,7 @@ body{ font-size:15px; font-family:var(--body); background:var(--bg); color:var(-
 <script>
 const milestoneFilter = document.getElementById("milestoneFilter");
 const sortFilter = document.getElementById("sortFilter");
-const yearFilter = document.getElementById("yearFilter");
+const dateSearch = document.getElementById("dateSearch");
 const raceSearch = document.getElementById("raceSearch");
 const raceList = document.getElementById("raceList");
 const jockeySearch = document.getElementById("jockeySearch");
@@ -202,14 +200,15 @@ function parseCSV(text){
    wins it's the race name (e.g. "Bletchingly Stakes"). Either way
    it's treated as the searchable "race" text for that field. */
 function splitEntry(str){
-  if(!str) return { horse:"", race:"", year:"" };
+  if(!str) return { horse:"", race:"", day:"", month:"" };
   const parts = str.split(" - ");
   const horse = parts[0] || "";
   const race = parts.length >= 3 ? parts.slice(1, -1).join(" - ") : (parts[1] || "");
   const dateStr = parts[parts.length - 1] || "";
-  const m = dateStr.match(/(\d{4})/);
-  const year = m ? m[1] : "";
-  return { horse, race, year };
+  const m = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  const day = m ? String(parseInt(m[1], 10)) : "";
+  const month = m ? String(parseInt(m[2], 10)) : "";
+  return { horse, race, day, month };
 }
 
 fetch("/data/jockeys.csv")
@@ -227,7 +226,7 @@ fetch("/data/jockeys.csv")
         jockey: r["jockey"] || "",
         firstWin, firstStakes, firstG1,
         races: [winParts.race, stakesParts.race, g1Parts.race].filter(Boolean),
-        years: [winParts.year, stakesParts.year, g1Parts.year].filter(Boolean)
+        dates: [winParts, stakesParts, g1Parts].filter(p => p.day && p.month)
       };
     });
 
@@ -238,20 +237,15 @@ fetch("/data/jockeys.csv")
 function populateFilters(data){
   const jockeys = new Set();
   const races = new Set();
-  const years = new Set();
   data.forEach(r=>{
     if(r.jockey) jockeys.add(r.jockey);
     r.races.forEach(race => races.add(race));
-    r.years.forEach(year => years.add(year));
   });
   [...jockeys].sort().forEach(v=>{
     jockeyList.appendChild(new Option(v,v));
   });
   [...races].sort().forEach(v=>{
     raceList.appendChild(new Option(v,v));
-  });
-  [...years].sort((a,b)=>b-a).forEach(v=>{
-    yearFilter.appendChild(new Option(v,v));
   });
 }
 
@@ -279,8 +273,15 @@ function escapeHtml(s){
 function applyFilters(){
   const m = milestoneFilter.value;
   const j = jockeySearch.value.toLowerCase();
-  const y = yearFilter.value;
+  const d = dateSearch.value.trim();
   const r = raceSearch.value.toLowerCase();
+
+  let targetDay = "", targetMonth = "";
+  const dm = d.match(/^(\d{1,2})\s*\/\s*(\d{1,2})$/);
+  if(dm){
+    targetDay = String(parseInt(dm[1], 10));
+    targetMonth = String(parseInt(dm[2], 10));
+  }
 
   let filtered = allData.filter(row=>{
     const matchesMilestone =
@@ -289,9 +290,9 @@ function applyFilters(){
       (m === "g1" && row.firstG1) ||
       (m === "none" && !row.firstStakes && !row.firstG1);
     const matchesJockey = !j || row.jockey.toLowerCase().includes(j);
-    const matchesYear = !y || row.years.includes(y);
+    const matchesDate = !dm || row.dates.some(dt => dt.day === targetDay && dt.month === targetMonth);
     const matchesRace = !r || row.races.some(race => race.toLowerCase().includes(r));
-    return matchesMilestone && matchesJockey && matchesYear && matchesRace;
+    return matchesMilestone && matchesJockey && matchesDate && matchesRace;
   });
 
   const sortVal = sortFilter.value;
