@@ -97,6 +97,7 @@ def get_season_race_urls(year):
     # exact way in CI: pinning to 150 -- correct on a local Mac -- didn't
     # match whatever "stable" resolved to on the GitHub Actions runner).
     chrome_path = os.environ.get("CHROME_PATH")
+    print(f"CHROME_PATH env var: {chrome_path!r}")
 
     for attempt in range(3):
         driver = None
@@ -104,6 +105,15 @@ def get_season_race_urls(year):
             options = uc.ChromeOptions()
             options.add_argument("--window-size=1400,1000")
             if chrome_path:
+                # CI (GitHub Actions) runs as root, and Chrome refuses to
+                # start at all as root without --no-sandbox.
+                # --disable-dev-shm-usage avoids crashes from the small
+                # /dev/shm typically available in CI containers. Neither
+                # flag is used for local desktop runs below -- they were
+                # deliberately removed there after causing instability on
+                # macOS; that doesn't apply to this CI-only path.
+                options.add_argument("--no-sandbox")
+                options.add_argument("--disable-dev-shm-usage")
                 print(f"  Using explicit Chrome binary: {chrome_path}")
                 driver = uc.Chrome(browser_executable_path=chrome_path, options=options)
             else:
