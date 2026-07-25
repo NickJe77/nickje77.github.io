@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Jockey Firsts | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="racing.css">
+<link rel="stylesheet" href="archive.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg:#eceff3;
+  --surface:#ffffff;
+  --ink:#0f141a;
+  --muted:#69727c;
+  --faint:#9aa3ad;
+  --line:#e3e8ee;
+  --board:#0c130f;
+  --board-2:#161f16;
+  --accent:#c99a3d;
+  --accent-soft:rgba(201,154,61,.16);
+  --display:'Oswald',system-ui,sans-serif;
+  --body:'Inter',system-ui,sans-serif;
+  --radius:16px;
+}
+*{box-sizing:border-box;}
+body{ font-size:15px; font-family:var(--body); background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased; }
+
+/* ── Global nav (fetched separately; style defensively to match) ── */
+#global-nav nav{display:flex;justify-content:center;gap:22px;padding:15px;background:#fff;border-bottom:1px solid var(--line);font-weight:600;font-size:13.5px;}
+#global-nav nav a{text-decoration:none;color:var(--ink);opacity:.7;transition:opacity .15s;}
+#global-nav nav a:hover{opacity:1;}
+
+/* ── Hero ─────────────────────────────────────────────── */
+.page-hero{
+  position:relative;background:linear-gradient(160deg,var(--board-2),var(--board));
+  border-radius:0;overflow:hidden;color:#fff;min-height:180px;
+  display:flex;align-items:center;justify-content:center;text-align:center;
+}
+.page-hero img{display:none;}
+.hero-text{
+  position:static;padding:44px 20px;font-family:var(--display);font-weight:600;
+  font-size:clamp(22px,4vw,36px);letter-spacing:.02em;text-transform:uppercase;color:#fff;
+}
+
+/* ── Filters ──────────────────────────────────────────── */
+.filters-wrapper{max-width:1200px;margin:22px auto;padding:0 20px;}
+.filters-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+.jockey-row{grid-column:1/-1;display:flex;justify-content:center;margin-top:8px;}
+.jockey-row input{width:100%;max-width:260px;font-size:14px;}
+
+.filters-row select,
+.filters-row input{
+  font-family:var(--body);font-size:14px;font-weight:600;padding:10px 16px;border-radius:999px;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink);width:100%;
+}
+.filters-row select:hover,
+.filters-row input:hover{border-color:var(--faint);}
+.filters-row select:focus,
+.filters-row input:focus{outline:none;border-color:var(--accent);}
+
+#resultCount{
+  text-align:center;font-weight:600;margin-top:14px;font-size:13px;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.04em;
+}
+
+/* ── Table ────────────────────────────────────────────── */
+.table-container{
+  max-width:1200px;margin:20px auto 70px;padding:0 20px;overflow-x:auto;
+}
+.results-table{
+  width:100%;border-collapse:collapse;min-width:800px;font-size:13.5px;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
+}
+.results-table th,
+.results-table td{padding:11px 12px;border-bottom:1px solid var(--line);text-align:left;}
+.results-table th{
+  background:#f7f9fb;font-family:var(--body);font-weight:600;font-size:11px;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--muted);cursor:pointer;white-space:nowrap;user-select:none;
+}
+.results-table th:hover{color:var(--ink);}
+.results-table th .arrow{display:inline-block;margin-left:4px;opacity:.35;font-size:10px;}
+.results-table th.sorted .arrow{opacity:1;color:var(--accent);}
+.results-table td{color:#27313c;font-variant-numeric:tabular-nums;}
+.results-table tbody tr:hover td{background:#f0f6ff;}
+.results-table td .horse{font-weight:600;color:#1b232c;}
+.results-table td .meta{color:var(--muted);}
+.results-table td.empty-cell{color:var(--faint);}
+
+/* MOBILE */
+@media (max-width: 768px) {
+  body{ font-size:14px; }
+
+  .filters-row{ grid-template-columns:1fr; }
+
+  .jockey-row input{ max-width:100%; font-size:14px; }
+
+  .filters-row select,
+  .filters-row input{ font-size:14px; }
+
+  .results-table{ font-size:13px; }
+
+  .results-table th,
+  .results-table td{ padding:10px; }
+
+  #resultCount{ font-size:12.5px; }
+}
+</style>
+</head>
+
+<body class="archive-page">
+
+<!-- NAV BAR -->
+<div id="global-nav"></div>
+
+<div class="page-hero">
+  <div class="hero-text">JOCKEY FIRSTS — CAREER MILESTONES</div>
+</div>
+
+<div class="filters-wrapper">
+  <div class="filters-row">
+    <select id="milestoneFilter" onchange="applyFilters()">
+      <option value="">All jockeys</option>
+      <option value="stakes">Has a stakes win</option>
+      <option value="g1">Has a G1 win</option>
+      <option value="none">No stakes/G1 win yet</option>
+    </select>
+
+    <select id="sortFilter" onchange="applyFilters()">
+      <option value="jockey-asc">Sort: Jockey A–Z</option>
+      <option value="jockey-desc">Sort: Jockey Z–A</option>
+      <option value="win-date">Sort: First win (oldest first)</option>
+      <option value="win-date-desc">Sort: First win (newest first)</option>
+    </select>
+
+    <select id="yearFilter" onchange="applyFilters()">
+      <option value="">Year</option>
+    </select>
+
+    <input list="raceList" id="raceSearch" placeholder="Race (e.g. Bletchingly Stakes)" oninput="applyFilters()">
+    <datalist id="raceList"></datalist>
+
+    <div class="jockey-row">
+      <input list="jockeyList" id="jockeySearch" placeholder="Jockey" oninput="applyFilters()">
+      <datalist id="jockeyList"></datalist>
+    </div>
+  </div>
+
+  <div id="resultCount">Results: 0</div>
+</div>
+
+<div class="table-container">
+  <table class="results-table">
+    <thead>
+      <tr>
+        <th data-col="jockey" class="sorted">Jockey <span class="arrow">▲</span></th>
+        <th data-col="firstWin">First Win <span class="arrow">▲</span></th>
+        <th data-col="firstStakes">First Stakes Win <span class="arrow">▲</span></th>
+        <th data-col="firstG1">First G1 Win <span class="arrow">▲</span></th>
+      </tr>
+    </thead>
+    <tbody id="results-body"></tbody>
+  </table>
+</div>
+
+<script>
+const milestoneFilter = document.getElementById("milestoneFilter");
+const sortFilter = document.getElementById("sortFilter");
+const yearFilter = document.getElementById("yearFilter");
+const raceSearch = document.getElementById("raceSearch");
+const raceList = document.getElementById("raceList");
+const jockeySearch = document.getElementById("jockeySearch");
+const jockeyList = document.getElementById("jockeyList");
+
+const tableBody = document.getElementById("results-body");
+const resultCount = document.getElementById("resultCount");
+
+let allData = [];
+
+function parseCSV(text){
+  text = text.replace(/^\uFEFF/, "");
+  const lines = text.trim().replace(/\r/g,"").split("\n");
+  const headers = lines[0].split(",").map(h=>h.trim());
+
+  return lines.slice(1).map(line=>{
+    const values = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
+    let obj = {};
+    headers.forEach((h,i)=>{
+      obj[h] = (values[i]||"").replace(/^"|"$/g,"").trim();
+    });
+    return obj;
+  });
+}
+
+/* Splits a "Horse - Race/Track - Date" entry into parts.
+   For "first win" the middle segment is a track; for stakes/G1
+   wins it's the race name (e.g. "Bletchingly Stakes"). Either way
+   it's treated as the searchable "race" text for that field. */
+function splitEntry(str){
+  if(!str) return { horse:"", race:"", year:"" };
+  const parts = str.split(" - ");
+  const horse = parts[0] || "";
+  const race = parts.length >= 3 ? parts.slice(1, -1).join(" - ") : (parts[1] || "");
+  const dateStr = parts[parts.length - 1] || "";
+  const m = dateStr.match(/(\d{4})/);
+  const year = m ? m[1] : "";
+  return { horse, race, year };
+}
+
+fetch("/docs/data/jockeys.csv")
+  .then(res => res.text())
+  .then(text => {
+    const rows = parseCSV(text);
+    allData = rows.map(r => {
+      const firstWin = r["first win"] || "";
+      const firstStakes = r["first stakes win"] || "";
+      const firstG1 = r["first g1 win"] || "";
+      const winParts = splitEntry(firstWin);
+      const stakesParts = splitEntry(firstStakes);
+      const g1Parts = splitEntry(firstG1);
+      return {
+        jockey: r["jockey"] || "",
+        firstWin, firstStakes, firstG1,
+        races: [winParts.race, stakesParts.race, g1Parts.race].filter(Boolean),
+        years: [winParts.year, stakesParts.year, g1Parts.year].filter(Boolean)
+      };
+    });
+
+    populateFilters(allData);
+    applyFilters();
+  });
+
+function populateFilters(data){
+  const jockeys = new Set();
+  const races = new Set();
+  const years = new Set();
+  data.forEach(r=>{
+    if(r.jockey) jockeys.add(r.jockey);
+    r.races.forEach(race => races.add(race));
+    r.years.forEach(year => years.add(year));
+  });
+  [...jockeys].sort().forEach(v=>{
+    jockeyList.appendChild(new Option(v,v));
+  });
+  [...races].sort().forEach(v=>{
+    raceList.appendChild(new Option(v,v));
+  });
+  [...years].sort((a,b)=>b-a).forEach(v=>{
+    yearFilter.appendChild(new Option(v,v));
+  });
+}
+
+function extractDate(str){
+  const m = (str||"").match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(!m) return null;
+  return new Date(parseInt(m[3]), parseInt(m[2])-1, parseInt(m[1])).getTime();
+}
+
+function formatRecord(str){
+  if(!str) return '<span class="empty-cell">—</span>';
+  const parts = str.split(" - ");
+  if(parts.length >= 2){
+    const horse = parts[0];
+    const rest = parts.slice(1).join(" - ");
+    return `<span class="horse">${escapeHtml(horse)}</span> <span class="meta">— ${escapeHtml(rest)}</span>`;
+  }
+  return escapeHtml(str);
+}
+
+function escapeHtml(s){
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function applyFilters(){
+  const m = milestoneFilter.value;
+  const j = jockeySearch.value.toLowerCase();
+  const y = yearFilter.value;
+  const r = raceSearch.value.toLowerCase();
+
+  let filtered = allData.filter(row=>{
+    const matchesMilestone =
+      !m ||
+      (m === "stakes" && row.firstStakes) ||
+      (m === "g1" && row.firstG1) ||
+      (m === "none" && !row.firstStakes && !row.firstG1);
+    const matchesJockey = !j || row.jockey.toLowerCase().includes(j);
+    const matchesYear = !y || row.years.includes(y);
+    const matchesRace = !r || row.races.some(race => race.toLowerCase().includes(r));
+    return matchesMilestone && matchesJockey && matchesYear && matchesRace;
+  });
+
+  const sortVal = sortFilter.value;
+  filtered.sort((a,b)=>{
+    if(sortVal === "jockey-asc") return a.jockey.localeCompare(b.jockey);
+    if(sortVal === "jockey-desc") return b.jockey.localeCompare(a.jockey);
+    if(sortVal === "win-date" || sortVal === "win-date-desc"){
+      const ad = extractDate(a.firstWin);
+      const bd = extractDate(b.firstWin);
+      const dir = sortVal === "win-date" ? 1 : -1;
+      if(ad === null && bd === null) return 0;
+      if(ad === null) return 1;
+      if(bd === null) return -1;
+      return (ad - bd) * dir;
+    }
+    return 0;
+  });
+
+  renderTable(filtered);
+}
+
+function renderTable(data){
+  tableBody.innerHTML = "";
+
+  data.forEach(r=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(r.jockey)}</td>
+      <td>${formatRecord(r.firstWin)}</td>
+      <td>${formatRecord(r.firstStakes)}</td>
+      <td>${formatRecord(r.firstG1)}</td>
+    `;
+    tableBody.appendChild(tr);
+  });
+
+  resultCount.textContent = "Results: " + data.length;
+}
+
+/* Column header click-to-sort, mirrored onto the sort dropdown */
+document.querySelectorAll(".results-table th[data-col]").forEach(th=>{
+  th.addEventListener("click", ()=>{
+    const col = th.dataset.col;
+    document.querySelectorAll(".results-table th").forEach(h=>{
+      h.classList.remove("sorted");
+      const a = h.querySelector(".arrow");
+      if(a) a.textContent = "▲";
+    });
+    th.classList.add("sorted");
+
+    if(col === "jockey"){
+      sortFilter.value = sortFilter.value === "jockey-asc" ? "jockey-desc" : "jockey-asc";
+      th.querySelector(".arrow").textContent = sortFilter.value === "jockey-asc" ? "▲" : "▼";
+    } else if(col === "firstWin"){
+      sortFilter.value = sortFilter.value === "win-date" ? "win-date-desc" : "win-date";
+      th.querySelector(".arrow").textContent = sortFilter.value === "win-date" ? "▲" : "▼";
+    }
+    applyFilters();
+  });
+});
+
+/* LOAD NAV BAR */
+fetch("g1-archive.html")
+  .then(res => res.text())
+  .then(html => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    const nav = doc.querySelector("nav");
+    if(nav){
+      document.getElementById("global-nav").innerHTML = nav.outerHTML;
+    }
+  });
+</script>
+
+</body>
+</html>
