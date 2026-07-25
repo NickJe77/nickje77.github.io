@@ -22,24 +22,27 @@ jobs:
         with:
           python-version: '3.12'
 
-      # nascar_pipeline.py needs a real Chrome browser (Selenium) for
-      # the schedule page specifically. "id: setup-chrome" lets us
-      # capture the exact binary path this step installs, so the script
-      # can point Selenium at it directly instead of guessing a version
-      # number (which broke: a version pinned to match a local Mac's
-      # Chrome doesn't match whatever "stable" resolves to here).
-      - name: Set up Chrome
-        id: setup-chrome
-        uses: browser-actions/setup-chrome@v1
-        with:
-          chrome-version: stable
+      # nascar_pipeline.py needs a REAL Chrome browser (Selenium) for the
+      # schedule page specifically. Installing Google's own
+      # google-chrome-stable package directly via apt rather than the
+      # browser-actions/setup-chrome action -- that action's "stable"
+      # option turned out to install Chromium, not actual Google Chrome,
+      # which undetected_chromedriver doesn't reliably work with. This
+      # installs to the standard /usr/bin/google-chrome-stable path.
+      - name: Install Google Chrome
+        run: |
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+          google-chrome-stable --version
 
       - name: Install dependencies
         run: pip install setuptools undetected-chromedriver requests beautifulsoup4
 
       - name: Run pipeline (scrape + rebuild index)
         env:
-          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+          CHROME_PATH: /usr/bin/google-chrome-stable
         run: |
           YEAR="${{ github.event.inputs.year }}"
           if [ -z "$YEAR" ]; then YEAR=$(date +%Y); fi
