@@ -23,8 +23,13 @@ jobs:
           python-version: '3.12'
 
       # nascar_pipeline.py needs a real Chrome browser (Selenium) for
-      # the schedule page specifically.
+      # the schedule page specifically. "id: setup-chrome" lets us
+      # capture the exact binary path this step installs, so the script
+      # can point Selenium at it directly instead of guessing a version
+      # number (which broke: a version pinned to match a local Mac's
+      # Chrome doesn't match whatever "stable" resolves to here).
       - name: Set up Chrome
+        id: setup-chrome
         uses: browser-actions/setup-chrome@v1
         with:
           chrome-version: stable
@@ -33,6 +38,8 @@ jobs:
         run: pip install setuptools undetected-chromedriver requests beautifulsoup4
 
       - name: Run pipeline (scrape + rebuild index)
+        env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
         run: |
           YEAR="${{ github.event.inputs.year }}"
           if [ -z "$YEAR" ]; then YEAR=$(date +%Y); fi
