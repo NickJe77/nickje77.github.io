@@ -44,12 +44,30 @@ def get_client():
     )
 
 
+def get_existing_keys(client):
+    """Lists every key already in R2 under the baseball/ prefix, so a
+    re-run after a timeout skips everything already uploaded instead of
+    starting over from scratch. One paginated list call covers this in
+    ~340 requests total (1000 keys per page) rather than one HEAD
+    request per file."""
+    existing = set()
+    paginator = client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=BUCKET_NAME, Prefix=f"{R2_PREFIX}/"):
+        for obj in page.get("Contents", []):
+            existing.add(obj["Key"])
+    return existing
+
+
 def main():
     if not os.path.isdir(LOCAL_ROOT):
         print(f"Could not find {LOCAL_ROOT} -- this must run after actions/checkout, from the repo root.")
         sys.exit(1)
 
     client = get_client()
+
+    print("Checking R2 for files already uploaded (so a re-run after a timeout resumes instead of restarting)...")
+    existing_keys = get_existing_keys(client)
+    print(f"Found {len(existing_keys)} file(s) already in R2.")
 
     all_files = []
     for dirpath, _, filenames in os.walk(LOCAL_ROOT):
@@ -60,11 +78,21 @@ def main():
 
     print(f"Found {len(all_files)} file(s) under {LOCAL_ROOT}.")
 
-    failed = []
-    for i, local_path in enumerate(all_files, 1):
+    todo = []
+    for local_path in all_files:
         rel_path = os.path.relpath(local_path, LOCAL_ROOT)
         r2_key = f"{R2_PREFIX}/{rel_path}".replace(os.sep, "/")
+        if r2_key not in existing_keys:
+            todo.append((local_path, rel_path, r2_key))
 
+    print(f"{len(all_files) - len(todo)} already uploaded, {len(todo)} remaining this run.")
+
+    if not todo:
+        print("Nothing left to do.")
+        return
+
+    failed = []
+    for i, (local_path, rel_path, r2_key) in enumerate(todo, 1):
         content_type, _ = mimetypes.guess_type(local_path)
         extra_args = {"ContentType": content_type} if content_type else {}
 
@@ -75,9 +103,9 @@ def main():
             print(f"  FAILED: {rel_path} -- {e}")
 
         if i % 1000 == 0:
-            print(f"[{i}/{len(all_files)}] uploaded")
+            print(f"[{i}/{len(todo)}] uploaded")
 
-    print(f"\nDone. {len(all_files) - len(failed)} succeeded, {len(failed)} failed.")
+    print(f"\nDone. {len(todo) - len(failed)} succeeded, {len(failed)} failed.")
     if failed:
         for rel_path, err in failed[:20]:
             print(f"  {rel_path}: {err}")
