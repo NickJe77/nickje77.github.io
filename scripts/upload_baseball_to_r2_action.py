@@ -11,6 +11,8 @@ Uses the same secret names already configured in this repo:
 import mimetypes
 import os
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import boto3
 from botocore.config import Config
@@ -18,6 +20,7 @@ from botocore.config import Config
 BUCKET_NAME = "sporting-almanac-data"
 LOCAL_ROOT = "docs/data/baseball"
 R2_PREFIX = "baseball"
+NUM_WORKERS = 24
 
 
 def get_client():
@@ -39,7 +42,7 @@ def get_client():
         endpoint_url=endpoint,
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
-        config=Config(signature_version="s3v4", max_pool_connections=20),
+        config=Config(signature_version="s3v4", max_pool_connections=NUM_WORKERS * 2),
         region_name="auto",
     )
 
@@ -91,19 +94,39 @@ def main():
         print("Nothing left to do.")
         return
 
-    failed = []
-    for i, (local_path, rel_path, r2_key) in enumerate(todo, 1):
+    def upload_one(args):
+        local_path, rel_path, r2_key = args
         content_type, _ = mimetypes.guess_type(local_path)
         extra_args = {"ContentType": content_type} if content_type else {}
+        last_error = None
+        for attempt in range(3):
+            try:
+                client.upload_file(local_path, BUCKET_NAME, r2_key, ExtraArgs=extra_args)
+                return rel_path, True, None
+            except Exception as e:
+                last_error = e
+                time.sleep(1 * (attempt + 1))
+        return rel_path, False, str(last_error)
 
-        try:
-            client.upload_file(local_path, BUCKET_NAME, r2_key, ExtraArgs=extra_args)
-        except Exception as e:
-            failed.append((rel_path, str(e)))
-            print(f"  FAILED: {rel_path} -- {e}")
+    failed = []
+    done_count = 0
+    start_time = time.time()
 
-        if i % 1000 == 0:
-            print(f"[{i}/{len(todo)}] uploaded")
+    with ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
+        futures = [executor.submit(upload_one, item) for item in todo]
+        for future in as_completed(futures):
+            rel_path, success, error = future.result()
+            done_count += 1
+            if not success:
+                failed.append((rel_path, error))
+                print(f"  FAILED: {rel_path} -- {error}")
+
+            if done_count % 1000 == 0:
+                elapsed = time.time() - start_time
+                rate = done_count / elapsed
+                remaining = len(todo) - done_count
+                eta_min = (remaining / rate) / 60 if rate > 0 else 0
+                print(f"[{done_count}/{len(todo)}] {rate:.1f} files/sec, ~{eta_min:.0f} min remaining")
 
     print(f"\nDone. {len(todo) - len(failed)} succeeded, {len(failed)} failed.")
     if failed:
