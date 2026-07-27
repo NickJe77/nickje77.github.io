@@ -361,7 +361,7 @@ print(f"BUILT INDEX WITH {len(index)} PLAYERS")
 # BUILD PER-SEASON LEADER FILES
 # ======================================================
 
-SEASONS_DIR = f"{BASE}/seasons"
+SEASONS_DIR = f"{BASE}/season_leaders"
 os.makedirs(SEASONS_DIR, exist_ok=True)
 
 # Aggregate stats per player per season
