@@ -263,6 +263,20 @@ const games =
 await fetch(`${R2}/baseball/seasons/${year}.json`)
 .then(r=>r.json());
 
+// Some historical seasons have player-stats data sitting at this path
+// instead of a game schedule (a pre-existing data issue). Detect it
+// before computing standings from fields that won't exist.
+const looksLikeGameData = Array.isArray(games) && games.length > 0
+    && games[0] && typeof games[0] === "object"
+    && "date" in games[0] && "home_score" in games[0];
+
+if(!looksLikeGameData){
+    const msg = `<tr><td colspan="7" style="text-align:center;padding:20px;">Standings aren't available yet for this season.</td></tr>`;
+    document.getElementById("tbAL").innerHTML = msg;
+    document.getElementById("tbNL").innerHTML = msg;
+    return;
+}
+
 let standings = {};
 
 games.forEach(g=>{

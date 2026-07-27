@@ -552,7 +552,26 @@ async function loadSeason(){
     try{
         const res = await fetch(`${R2}/baseball/seasons/${season}.json`);
         if(!res.ok) throw new Error("Season not found");
-        allGames = await res.json();
+        const data = await res.json();
+
+        // Some historical seasons have the wrong data sitting at this
+        // path (player-level batting stats instead of a game schedule --
+        // a pre-existing data issue, not something specific to this
+        // page). Detect it by checking for the fields a real game
+        // record must have, and show a clear message instead of
+        // rendering a table full of blank/fake "0-0" rows.
+        const looksLikeGameData = Array.isArray(data) && data.length > 0
+            && data[0] && typeof data[0] === "object"
+            && "date" in data[0] && "home_team" in data[0];
+
+        if(!looksLikeGameData){
+            document.getElementById("gamesBody").innerHTML =
+                `<tr><td colspan="5" class="no-results">Game-by-game schedule data isn't available yet for this season.</td></tr>`;
+            document.getElementById("filterCount").innerText = "";
+            return;
+        }
+
+        allGames = data;
         applyFilters();
     } catch(err){
         console.error(err);

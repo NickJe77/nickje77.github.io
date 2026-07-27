@@ -1,30 +1,30 @@
 name: MLB 2026 Safe Rebuild
+
 on:
   workflow_dispatch:
   schedule:
     - cron: "0 6 * * *"
-permissions:
-  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
       - name: Install dependencies
         run: |
-          pip install requests
-      - name: Run MLB scraper
+          pip install requests boto3
+
+      - name: Run MLB scraper (writes straight to R2, nothing committed to git)
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           python scripts/mlb_rebuild_2026_safe.py
-      - name: Commit MLB updates
-        run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add docs/data/baseball/
-          git diff --staged --quiet || git commit -m "Update MLB 2026 data"
-          git push origin main --force
