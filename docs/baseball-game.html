@@ -167,9 +167,9 @@ td{font-size:12.5px;padding:7px 6px;}
                             <tr>
                                 <th>Player</th>
                                 <th>AB</th>
-                                <th>R</th>
                                 <th>H</th>
-                                <th>RBI</th>
+                                <th>BB</th>
+                                <th>SO</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -185,9 +185,9 @@ td{font-size:12.5px;padding:7px 6px;}
                             <tr>
                                 <th>Player</th>
                                 <th>AB</th>
-                                <th>R</th>
                                 <th>H</th>
-                                <th>RBI</th>
+                                <th>BB</th>
+                                <th>SO</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -204,7 +204,7 @@ td{font-size:12.5px;padding:7px 6px;}
                                 <th>Pitcher</th>
                                 <th>IP</th>
                                 <th>H</th>
-                                <th>ER</th>
+                                <th>BB</th>
                                 <th>SO</th>
                             </tr>
                         </thead>
@@ -222,7 +222,7 @@ td{font-size:12.5px;padding:7px 6px;}
                                 <th>Pitcher</th>
                                 <th>IP</th>
                                 <th>H</th>
-                                <th>ER</th>
+                                <th>BB</th>
                                 <th>SO</th>
                             </tr>
                         </thead>
@@ -359,6 +359,20 @@ function renderGame(game){
 
     document.title = `${awayName} @ ${homeName} | The Sporting Almanac`;
 
+    // away_batting/home_batting/away_pitching/home_pitching are flat
+    // arrays built from real historical data (games/YYYY/ folder) --
+    // present for both historical games and 2026 (added alongside the
+    // modern liveData structure, which some 2026 pages may still use
+    // elsewhere). Falls back to the old liveData-based structure if
+    // those aren't present yet (e.g. before this augmentation runs).
+    if(Array.isArray(game.away_batting) || Array.isArray(game.home_batting)){
+        renderBattingFlat(game.away_batting || [], document.querySelector("#awayBatting tbody"));
+        renderBattingFlat(game.home_batting || [], document.querySelector("#homeBatting tbody"));
+        renderPitchingFlat(game.away_pitching || [], document.querySelector("#awayPitching tbody"));
+        renderPitchingFlat(game.home_pitching || [], document.querySelector("#homePitching tbody"));
+        return;
+    }
+
     const box = game.liveData?.boxscore;
 
     if(box && box.teams){
@@ -373,6 +387,44 @@ function renderGame(game){
         document.querySelector("#awayPitching tbody").innerHTML = msg;
         document.querySelector("#homePitching tbody").innerHTML = msg;
     }
+}
+
+function renderBattingFlat(players, tbody){
+    tbody.innerHTML = "";
+    if(!players.length){
+        tbody.innerHTML = `<tr><td colspan="5" class="no-stats">Box score stats not available for this game.</td></tr>`;
+        return;
+    }
+    players.forEach(p => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td><a href="baseball-player.html?player=${encodeURIComponent(p.name)}">${p.name}</a></td>
+            <td>${p.AB ?? 0}</td>
+            <td>${p.H ?? 0}</td>
+            <td>${p.BB ?? 0}</td>
+            <td>${p.SO ?? 0}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function renderPitchingFlat(players, tbody){
+    tbody.innerHTML = "";
+    if(!players.length){
+        tbody.innerHTML = `<tr><td colspan="5" class="no-stats">Box score stats not available for this game.</td></tr>`;
+        return;
+    }
+    players.forEach(p => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td><a href="baseball-player.html?player=${encodeURIComponent(p.name)}">${p.name}</a></td>
+            <td>${p.IP ?? "0.0"}</td>
+            <td>${p.H ?? 0}</td>
+            <td>${p.BB ?? 0}</td>
+            <td>${p.SO ?? 0}</td>
+        `;
+        tbody.appendChild(tr);
+    });
 }
 
 function renderBatting(players, tbody){
