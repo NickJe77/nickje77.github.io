@@ -67,16 +67,26 @@ def load_team_map(client):
     return code_map
 
 
-def season_already_rebuilt(client, year):
+def season_already_rebuilt(client, year, team_map):
     """Checks whether seasons/YYYY.json already has the correct
-    game-schedule shape, so finished years get skipped on a re-run."""
+    game-schedule shape AND is already MLB-only, so finished years get
+    skipped on a re-run but years still containing Negro League/All-Star
+    games (from before the MLB-only filter was added) get reprocessed."""
     key = f"{R2_PREFIX}/seasons/{year}.json"
     try:
         obj = client.get_object(Bucket=BUCKET_NAME, Key=key)
         data = json.loads(obj["Body"].read())
-        return (isinstance(data, list) and len(data) > 0
+        if not (isinstance(data, list) and len(data) > 0
                 and isinstance(data[0], dict)
-                and "date" in data[0] and "home_score" in data[0])
+                and "date" in data[0] and "home_score" in data[0]):
+            return False
+        # Every code must be a real MLB team -- if any game slipped
+        # through from before this filter existed, treat the year as
+        # not yet correctly rebuilt.
+        for g in data:
+            if g.get("home_code") not in team_map or g.get("away_code") not in team_map:
+                return False
+        return True
     except Exception:
         return False
 
@@ -106,10 +116,13 @@ def fetch_and_extract(client, key, team_map):
     if not all([home_code, away_code, date]) or home_score is None or away_score is None:
         return None, "missing required field"
 
-    # Always resolve names from the code via teams.json, rather than
-    # trusting the file's own home_team/away_team field -- confirmed
-    # inconsistent across years (sometimes a full name, sometimes just
-    # the bare code).
+    # MLB-only: both teams must be genuine MLB franchises per
+    # teams.json. This excludes Negro League games, All-Star games
+    # (ASE/ASF/ASP/ASW-style codes), and other non-regular-season
+    # exhibition games that were mixed into the same boxscore data.
+    if home_code not in team_map or away_code not in team_map:
+        return None, "non-MLB game (excluded by design)"
+
     home_team = team_map.get(home_code, home_code)
     away_team = team_map.get(away_code, away_code)
 
@@ -133,10 +146,11 @@ def rebuild_year(client, team_map, year):
     keys = list_boxscore_keys(client, year)
     if not keys:
         print(f"  {year}: no boxscore files found, skipping.")
-        return 0, 0
+        return 0, 0, 0
 
     games = []
     failed = 0
+    excluded = 0
 
     with ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
         futures = {executor.submit(fetch_and_extract, client, k, team_map): k for k in keys}
@@ -144,6 +158,8 @@ def rebuild_year(client, team_map, year):
             result, error = future.result()
             if result:
                 games.append(result)
+            elif error == "non-MLB game (excluded by design)":
+                excluded += 1
             else:
                 failed += 1
 
@@ -155,8 +171,8 @@ def rebuild_year(client, team_map, year):
         Body=body, ContentType="application/json",
     )
 
-    print(f"  {year}: {len(games)} game(s) rebuilt, {failed} failed")
-    return len(games), failed
+    print(f"  {year}: {len(games)} MLB game(s) rebuilt, {excluded} non-MLB game(s) excluded, {failed} failed")
+    return len(games), failed, excluded
 
 
 def main():
@@ -169,18 +185,20 @@ def main():
     start_time = time.time()
     total_games = 0
     total_failed = 0
+    total_excluded = 0
     years_done = 0
     years_skipped = 0
 
     for year in YEARS:
-        if season_already_rebuilt(client, year):
+        if season_already_rebuilt(client, year, team_map):
             years_skipped += 1
             continue
 
         print(f"Rebuilding {year}...")
-        games, failed = rebuild_year(client, team_map, year)
+        games, failed, excluded = rebuild_year(client, team_map, year)
         total_games += games
         total_failed += failed
+        total_excluded += excluded
         years_done += 1
 
         elapsed = time.time() - start_time
@@ -188,7 +206,8 @@ def main():
               f"{elapsed/60:.1f} min elapsed]")
 
     print(f"\nDone this run. {years_done} year(s) rebuilt, {years_skipped} already "
-          f"had correct data, {total_games} total game(s), {total_failed} failed.")
+          f"had correct MLB-only data, {total_games} total MLB game(s), "
+          f"{total_excluded} non-MLB game(s) excluded, {total_failed} failed.")
 
 
 if __name__ == "__main__":
