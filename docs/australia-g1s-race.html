@@ -120,11 +120,11 @@ tbody tr:hover td{ background:#f9fbfd; }
 
   <div class="winners-grid">
     <div>
-      <div class="section-title">Previous Winners</div>
+      <div class="section-title">G1 Winners Prior</div>
       <div class="table-wrap" id="prevWinners"><div class="loading">Loading...</div></div>
     </div>
     <div>
-      <div class="section-title">Subsequent Winners</div>
+      <div class="section-title">Subsequent G1 Winners</div>
       <div class="table-wrap" id="nextWinners"><div class="loading">Loading...</div></div>
     </div>
   </div>
@@ -176,6 +176,9 @@ fetch("/data/australia-g1s.csv")
 
     if(thisRunning.length === 0){
       document.getElementById("title").textContent = "Race not found";
+      document.getElementById("results").innerHTML = '<tr><td colspan="8" class="loading">No result found for this race/date.</td></tr>';
+      document.getElementById("prevWinners").innerHTML = '<div class="loading">Race not found.</div>';
+      document.getElementById("nextWinners").innerHTML = '<div class="loading">Race not found.</div>';
       return;
     }
 
@@ -213,21 +216,44 @@ fetch("/data/australia-g1s.csv")
       tbody.appendChild(tr);
     });
 
-    // Every winner of this race across every year, sorted chronologically,
-    // used to build both the previous/subsequent winners lists and the
-    // prev/next running navigation.
+    // For every horse that actually ran in THIS field, check their
+    // complete G1 win record across every race (not just this one) --
+    // any win dated before this running goes in "G1 Winners Prior",
+    // any win dated after goes in "Subsequent G1 Winners". A horse can
+    // appear in both if they'd already won a G1 coming in AND went on
+    // to win another one later.
+    const thisSortableForField = dateToSortable(raceDate);
+    const fieldHorses = [...new Set(thisRunning.map(r => r.HORSE))];
+    const priorWins = [];
+    const subsequentWins = [];
+
+    fieldHorses.forEach(horse => {
+      const thisHorsesWins = allData.filter(r => r.HORSE === horse && r.FINISH === "1");
+      thisHorsesWins.forEach(w => {
+        // Exclude this exact running from counting as its own prior/subsequent win.
+        if(w.RACE === raceName && w.DATE === raceDate) return;
+        const wSortable = dateToSortable(w.DATE);
+        if(wSortable < thisSortableForField){
+          priorWins.push(w);
+        } else if(wSortable > thisSortableForField){
+          subsequentWins.push(w);
+        }
+      });
+    });
+
+    priorWins.sort((a,b) => dateToSortable(b.DATE) - dateToSortable(a.DATE));       // most recent first
+    subsequentWins.sort((a,b) => dateToSortable(a.DATE) - dateToSortable(b.DATE));  // chronological
+
+    renderFieldWinnersList(priorWins, "prevWinners");
+    renderFieldWinnersList(subsequentWins, "nextWinners");
+
+    // Every winner of this race across every year, used only for the
+    // prev/next RUNNING navigation (unrelated to the two lists above).
     const allWinnersOfThisRace = allData
       .filter(r => r.RACE === raceName && r.FINISH === "1")
       .sort((a,b) => dateToSortable(a.DATE) - dateToSortable(b.DATE));
 
-    const thisSortable = dateToSortable(raceDate);
     const currentIdx = allWinnersOfThisRace.findIndex(r => r.DATE === raceDate);
-
-    const previous = allWinnersOfThisRace.filter(r => dateToSortable(r.DATE) < thisSortable);
-    const subsequent = allWinnersOfThisRace.filter(r => dateToSortable(r.DATE) > thisSortable);
-
-    renderWinnersList(previous.slice().reverse(), "prevWinners");
-    renderWinnersList(subsequent, "nextWinners");
 
     // Prev/next running navigation
     if(currentIdx > 0){
@@ -242,9 +268,16 @@ fetch("/data/australia-g1s.csv")
       nextEl.textContent = n.DATE + " →";
       nextEl.href = `australia-g1s-race.html?race=${encodeURIComponent(raceName)}&date=${encodeURIComponent(n.DATE)}`;
     }
+  })
+  .catch(err => {
+    console.error(err);
+    document.getElementById("title").textContent = "Error loading race data";
+    document.getElementById("results").innerHTML = '<tr><td colspan="8" class="loading">Could not load data.</td></tr>';
+    document.getElementById("prevWinners").innerHTML = '<div class="loading">Could not load data.</div>';
+    document.getElementById("nextWinners").innerHTML = '<div class="loading">Could not load data.</div>';
   });
 
-function renderWinnersList(winners, elementId){
+function renderFieldWinnersList(winners, elementId){
   const container = document.getElementById(elementId);
   container.innerHTML = "";
   if(winners.length === 0){
@@ -254,10 +287,10 @@ function renderWinnersList(winners, elementId){
   winners.forEach(r => {
     const div = document.createElement("div");
     div.className = "winner-row";
-    div.innerHTML = `<span class="winner-year">${r.DATE}</span><span>${horseLink(r.HORSE)}</span>`;
+    div.innerHTML = `<span class="winner-year">${r.DATE}</span><span>${horseLink(r.HORSE)} — ${r.RACE}</span>`;
     div.onclick = (e) => {
       if(e.target.tagName !== "A"){
-        window.location.href = `australia-g1s-race.html?race=${encodeURIComponent(raceName)}&date=${encodeURIComponent(r.DATE)}`;
+        window.location.href = `australia-g1s-race.html?race=${encodeURIComponent(r.RACE)}&date=${encodeURIComponent(r.DATE)}`;
       }
     };
     container.appendChild(div);
