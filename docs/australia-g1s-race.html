@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Race Result | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="racing.css">
+<link rel="stylesheet" href="archive.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg:#eceff3; --surface:#ffffff; --ink:#0f141a; --muted:#69727c; --faint:#9aa3ad;
+  --line:#e3e8ee; --board:#0c130f; --board-2:#161f16; --accent:#c99a3d;
+  --accent-soft:rgba(201,154,61,.16); --win-bg:#e6f4ea; --win-text:#1e7a3d;
+  --display:'Oswald',system-ui,sans-serif; --body:'Inter',system-ui,sans-serif; --radius:16px;
+}
+*{box-sizing:border-box;}
+body{ font-size:15px; font-family:var(--body); background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased; margin:0; }
+
+#global-nav nav{display:flex;justify-content:center;gap:22px;padding:15px;background:#fff;border-bottom:1px solid var(--line);font-weight:600;font-size:13.5px;}
+#global-nav nav a{text-decoration:none;color:var(--ink);opacity:.7;transition:opacity .15s;}
+#global-nav nav a:hover{opacity:1;}
+
+.page{ max-width:1100px; margin:0 auto; padding:26px 20px 70px; }
+
+.hero{
+  position:relative; background:linear-gradient(160deg,var(--board-2),var(--board)); color:#fff;
+  border-radius:var(--radius); margin-bottom:22px; box-shadow:0 18px 40px -18px rgba(10,16,24,.55);
+  padding:24px 28px;
+}
+.eyebrow{
+  font-family:var(--body); font-size:11.5px; font-weight:600; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--accent); margin-bottom:14px; text-align:center;
+}
+.nav-header{ display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.nav-header a{
+  color:rgba(255,255,255,.75); text-decoration:none; font-family:var(--body); font-weight:600;
+  font-size:13px; white-space:nowrap; transition:color .15s;
+}
+.nav-header a:hover{ color:var(--accent); }
+.nav-header a:empty{ visibility:hidden; }
+h1{
+  margin:0; text-align:center; flex:1; font-family:var(--display); font-weight:600;
+  font-size:clamp(20px,4vw,30px); letter-spacing:.01em; text-transform:uppercase; color:#fff;
+}
+.race-meta{ text-align:center; color:rgba(255,255,255,.65); font-size:12.5px; margin-top:10px; }
+
+.section-title{
+  font-family:var(--display); font-weight:600; font-size:16px; text-transform:uppercase;
+  letter-spacing:.02em; color:var(--ink); margin:26px 0 10px;
+}
+
+.table-wrap{ overflow-x:auto; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); }
+table{ width:100%; border-collapse:collapse; min-width:700px; }
+th, td{ padding:11px 14px; text-align:left; font-size:13.5px; border-bottom:1px solid var(--line); white-space:nowrap; }
+th{ background:#f7f9fb; color:var(--muted); font-family:var(--body); font-weight:600; font-size:11px; letter-spacing:.04em; text-transform:uppercase; }
+td{ color:#27313c; font-variant-numeric:tabular-nums; }
+td:first-child{ font-weight:700; color:var(--ink); }
+tbody tr:last-child td{ border-bottom:none; }
+tbody tr:hover td{ background:#f9fbfd; }
+.win td{ background:var(--win-bg) !important; font-weight:600; color:var(--win-text); }
+.win td:first-child{ color:var(--win-text); }
+
+.winners-grid{ display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:10px; }
+@media (max-width:768px){ .winners-grid{ grid-template-columns:1fr; } }
+
+.winner-row{ padding:10px 14px; border-bottom:1px solid var(--line); font-size:13.5px; display:flex; justify-content:space-between; cursor:pointer; }
+.winner-row:hover{ background:#f9fbfd; }
+.winner-row:last-child{ border-bottom:none; }
+.winner-year{ font-weight:700; color:var(--muted); }
+.current-row{ background:var(--accent-soft); font-weight:700; }
+
+.horse-link{ color:var(--ink); text-decoration:none; }
+.horse-link:hover{ color:var(--accent); }
+
+.loading{ text-align:center; color:var(--muted); font-style:italic; padding:20px; }
+</style>
+</head>
+
+<body>
+
+<div id="global-nav"></div>
+
+<div class="page">
+
+  <div class="hero">
+    <div class="eyebrow">Australian Group 1s</div>
+    <div class="nav-header">
+      <a id="prev"></a>
+      <h1 id="title">Loading...</h1>
+      <a id="next"></a>
+    </div>
+    <div class="race-meta" id="race-meta"></div>
+  </div>
+
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Fin</th>
+        <th>Horse</th>
+        <th>Wgt</th>
+        <th>Marg</th>
+        <th>SP</th>
+        <th>Jockey</th>
+        <th>Trainer</th>
+        <th>Age</th>
+      </tr>
+    </thead>
+    <tbody id="results">
+      <tr><td colspan="8" class="loading">Loading...</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="winners-grid">
+    <div>
+      <div class="section-title">Previous Winners</div>
+      <div class="table-wrap" id="prevWinners"><div class="loading">Loading...</div></div>
+    </div>
+    <div>
+      <div class="section-title">Subsequent Winners</div>
+      <div class="table-wrap" id="nextWinners"><div class="loading">Loading...</div></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+
+const params = new URLSearchParams(window.location.search);
+const raceName = params.get("race");
+const raceDate = params.get("date");
+
+if(!raceName || !raceDate){
+  document.getElementById("title").textContent = "No race selected";
+  throw new Error("Missing race or date parameter");
+}
+
+function parseCSV(text){
+  text = text.replace(/^\uFEFF/, "");
+  const lines = text.trim().replace(/\r/g,"").split("\n");
+  const headers = lines[0].split(",").map(h=>h.trim());
+  return lines.slice(1).map(line=>{
+    const values = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
+    let obj = {};
+    headers.forEach((h,i)=>{ obj[h] = (values[i]||"").replace(/^"|"$/g,"").trim(); });
+    return obj;
+  });
+}
+
+function dateToSortable(d){
+  const [day, month, year] = d.split("/").map(Number);
+  return year * 10000 + month * 100 + day;
+}
+
+function horseLink(name){
+  if(!name) return "";
+  return `<a class="horse-link" href="australia-g1s-horse.html?horse=${encodeURIComponent(name)}">${name}</a>`;
+}
+
+fetch("/data/australia-g1s.csv")
+  .then(res => res.text())
+  .then(text => {
+    const allData = parseCSV(text);
+
+    // This exact running: same race name AND same date (race+year alone
+    // isn't safe -- confirmed a real case of one race being abandoned
+    // and rerun within the same year on a different date).
+    const thisRunning = allData.filter(r => r.RACE === raceName && r.DATE === raceDate);
+
+    if(thisRunning.length === 0){
+      document.getElementById("title").textContent = "Race not found";
+      return;
+    }
+
+    const venue = thisRunning[0].VENUE;
+    const runners = thisRunning[0].RUNNERS;
+
+    document.getElementById("title").textContent = `${raceName} — ${raceDate}`;
+    document.getElementById("race-meta").textContent = `${venue} — ${runners} runners`;
+
+    // Full field, sorted by finishing position (non-numeric finishes
+    // like DQ/F/FF/LP/LR sort to the end).
+    const sorted = [...thisRunning].sort((a,b) => {
+      const an = parseInt(a.FINISH, 10);
+      const bn = parseInt(b.FINISH, 10);
+      const aVal = isNaN(an) ? 999 : an;
+      const bVal = isNaN(bn) ? 999 : bn;
+      return aVal - bVal;
+    });
+
+    const tbody = document.getElementById("results");
+    tbody.innerHTML = "";
+    sorted.forEach(r => {
+      const tr = document.createElement("tr");
+      if(r.FINISH === "1") tr.classList.add("win");
+      tr.innerHTML = `
+        <td>${r.FINISH}</td>
+        <td>${horseLink(r.HORSE)}</td>
+        <td>${r.WGT}</td>
+        <td>${r.MARG}</td>
+        <td>${r.SP}</td>
+        <td>${r.JOCKEY}</td>
+        <td>${r.TRAINER}</td>
+        <td>${r.AGE}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    // Every winner of this race across every year, sorted chronologically,
+    // used to build both the previous/subsequent winners lists and the
+    // prev/next running navigation.
+    const allWinnersOfThisRace = allData
+      .filter(r => r.RACE === raceName && r.FINISH === "1")
+      .sort((a,b) => dateToSortable(a.DATE) - dateToSortable(b.DATE));
+
+    const thisSortable = dateToSortable(raceDate);
+    const currentIdx = allWinnersOfThisRace.findIndex(r => r.DATE === raceDate);
+
+    const previous = allWinnersOfThisRace.filter(r => dateToSortable(r.DATE) < thisSortable);
+    const subsequent = allWinnersOfThisRace.filter(r => dateToSortable(r.DATE) > thisSortable);
+
+    renderWinnersList(previous.slice().reverse(), "prevWinners");
+    renderWinnersList(subsequent, "nextWinners");
+
+    // Prev/next running navigation
+    if(currentIdx > 0){
+      const p = allWinnersOfThisRace[currentIdx - 1];
+      const prevEl = document.getElementById("prev");
+      prevEl.textContent = "← " + p.DATE;
+      prevEl.href = `australia-g1s-race.html?race=${encodeURIComponent(raceName)}&date=${encodeURIComponent(p.DATE)}`;
+    }
+    if(currentIdx >= 0 && currentIdx < allWinnersOfThisRace.length - 1){
+      const n = allWinnersOfThisRace[currentIdx + 1];
+      const nextEl = document.getElementById("next");
+      nextEl.textContent = n.DATE + " →";
+      nextEl.href = `australia-g1s-race.html?race=${encodeURIComponent(raceName)}&date=${encodeURIComponent(n.DATE)}`;
+    }
+  });
+
+function renderWinnersList(winners, elementId){
+  const container = document.getElementById(elementId);
+  container.innerHTML = "";
+  if(winners.length === 0){
+    container.innerHTML = '<div class="loading">None on record.</div>';
+    return;
+  }
+  winners.forEach(r => {
+    const div = document.createElement("div");
+    div.className = "winner-row";
+    div.innerHTML = `<span class="winner-year">${r.DATE}</span><span>${horseLink(r.HORSE)}</span>`;
+    div.onclick = (e) => {
+      if(e.target.tagName !== "A"){
+        window.location.href = `australia-g1s-race.html?race=${encodeURIComponent(raceName)}&date=${encodeURIComponent(r.DATE)}`;
+      }
+    };
+    container.appendChild(div);
+  });
+}
+
+/* LOAD NAV BAR */
+fetch("g1-archive.html")
+  .then(res => res.text())
+  .then(html => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    const nav = doc.querySelector("nav");
+    if(nav){ document.getElementById("global-nav").innerHTML = nav.outerHTML; }
+  });
+
+</script>
+
+</body>
+</html>
